@@ -190,7 +190,10 @@ API Request
 ### セッション/トークン（NextAuth.js）
 - **有効期限**: 24時間
 - **セッションストレージ**: ブラウザメモリ（JWT方式）
-- **セキュアフラグ**: HttpOnly, Secure, SameSite=Strict（NextAuth.jsが自動設定）
+- **Cookie設定**: 厳密（HttpOnly: true, Secure: true, SameSite: 'strict'）
+  - HttpOnly: JavaScriptからアクセス不可
+  - Secure: HTTPS必須（本番環境）
+  - SameSite: 'strict' - CSRF対策
 
 ### その他
 - **Rate Limiting**: 3回までの試行制限（ログイン・OTP検証）

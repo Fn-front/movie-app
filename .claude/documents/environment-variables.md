@@ -66,6 +66,22 @@ NEXTAUTH_URL=http://localhost:3000  # 本番: https://yourdomain.com
 NEXTAUTH_DEBUG=true  # 本番環境ではfalse
 ```
 
+**Cookie設定（NextAuth.js設定ファイルで実装）:**
+```typescript
+// app/api/auth/[...nextauth]/route.ts
+cookies: {
+  sessionToken: {
+    name: `__Secure-next-auth.session-token`,
+    options: {
+      httpOnly: true,    // JavaScriptからアクセス不可
+      sameSite: 'strict', // CSRF対策
+      path: '/',
+      secure: true,      // HTTPS必須（本番環境）
+    },
+  },
+}
+```
+
 ---
 
 ### メール送信（Resend）
@@ -254,8 +270,8 @@ export function validateEnv() {
 ### 認証（NextAuth.js）
 - [x] **セッション有効期限**: 24時間 - 確定
 - [x] **セッションストレージ**: ブラウザメモリ（JWT方式） - 確定
-- [ ] **NEXTAUTH_SECRET**: 生成方法は決定？（openssl rand -base64 32）
-- [ ] **Cookie設定**: HttpOnly/Secure/SameSiteの設定は？（NextAuth.jsが自動設定）
+- [x] **NEXTAUTH_SECRET**: openssl rand -base64 32で生成 - 確定
+- [x] **Cookie設定**: 厳密（HttpOnly: true, Secure: true, SameSite: 'strict'）- 確定
 
 ### 本番環境
 - [ ] **Vercel**: プロジェクト作成済み？

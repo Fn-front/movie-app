@@ -144,6 +144,7 @@ UI Re-render
 - **認証**: NextAuth.js v5 (App Router対応)
   - セッション有効期限: 24時間
   - セッションストレージ: ブラウザメモリ（JWT方式）
+  - Cookie設定: 厳密（HttpOnly: true, Secure: true, SameSite: 'strict'）
 - **レート制限**: 3回までの試行制限
 - **CSRF対策**: 厳し目の基本設定（NextAuth.js + カスタムトークン）
 

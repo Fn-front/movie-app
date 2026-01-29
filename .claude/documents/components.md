@@ -1,5 +1,19 @@
 # コンポーネント一覧
 
+## 技術スタック
+
+**UIライブラリ**: Radix UI（ヘッドレスUI）
+- 各コンポーネントはRadix UIのプリミティブを拡張してカスタマイズ
+- SCSS Modulesでスタイリング
+- アクセシビリティ標準準拠（WAI-ARIA）
+- TypeScript完全対応
+
+**フォームバリデーション**: react-hook-form + zod
+- フォームコンポーネントはreact-hook-formと統合
+- zodでバリデーションスキーマ定義
+
+---
+
 ## コンポーネント分類
 
 ### Common（共通コンポーネント）
@@ -14,6 +28,10 @@
 ---
 
 ## Common Components
+
+**実装方針:**
+- Radix UIプリミティブをベースに、SCSS Modulesでカスタムスタイリング
+- 各コンポーネントはプロジェクト固有のデザインシステムに準拠
 
 ### Button
 ボタンコンポーネント
@@ -63,6 +81,8 @@
 ### Select
 セレクトボックス
 
+**ベース**: `@radix-ui/react-select`
+
 **Props:**
 - `value`: string
 - `onChange`: (value: string) => void
@@ -107,12 +127,20 @@
 ### Modal / Dialog
 モーダルダイアログ
 
+**ベース**: `@radix-ui/react-dialog`
+
 **Props:**
 - `isOpen`: boolean
 - `onClose`: () => void
 - `title`: string
 - `children`: ReactNode
 - `size`: 'sm' | 'md' | 'lg' | 'xl'
+
+**機能:**
+- ESCキーで閉じる（Radix UI標準）
+- オーバーレイクリックで閉じる
+- フォーカストラップ（モーダル内でフォーカス固定）
+- スクロールロック
 
 **使用例:**
 ```tsx
@@ -131,6 +159,8 @@
 ### Toast
 トースト通知コンポーネント
 
+**ベース**: `@radix-ui/react-toast`
+
 **Props:**
 - `message`: string
 - `type`: 'error' | 'warning' | 'info' | 'success'
@@ -145,6 +175,12 @@
   - info: 青
   - success: 緑
 - 自動消滅（5秒）
+
+**機能:**
+- スワイプで閉じる（Radix UI標準）
+- アニメーション（スライドイン/アウト）
+- 複数同時表示対応（スタック表示）
+- スクリーンリーダー対応
 
 **使用例:**
 ```tsx
@@ -561,9 +597,16 @@ const posterUrl = getTMDbImageUrl(movie.poster_path, 'w500');
 - [ ] **カスタムフック**: どの処理をフックに切り出すか？
 
 ### UIライブラリ
-- [ ] **ヘッドレスUI**: Radix UI / Headless UI使用する？
+- [x] **ヘッドレスUI**: Radix UI - 確定（拡張してカスタマイズ）
 - [ ] **アイコン**: React Icons / Heroicons / 自作SVG?
 - [ ] **アニメーション**: Framer Motion使用する？
+
+**Radix UIの利点:**
+- アクセシビリティ標準準拠（WAI-ARIA）
+- ヘッドレスUI（スタイリングの自由度が高い）
+- react-hook-formとの相性が良い
+- TypeScript完全対応
+- キーボードナビゲーション組み込み済み
 
 ### パフォーマンス
 - [ ] **React.memo**: どのコンポーネントにメモ化を適用するか？
@@ -571,9 +614,16 @@ const posterUrl = getTMDbImageUrl(movie.poster_path, 'w500');
 - [ ] **遅延ロード**: 画像の遅延読み込み戦略は？
 
 ### アクセシビリティ
-- [ ] **ARIA属性**: 各コンポーネントのARIA対応は？
-- [ ] **キーボード操作**: Tab/Enter/Escapeキー対応は？
-- [ ] **スクリーンリーダー**: 音声読み上げ対応は？
+- [x] **ARIA属性**: Radix UIに標準搭載（WAI-ARIA準拠）- 確定
+- [x] **キーボード操作**: Radix UIに標準搭載（Tab/Enter/Escape等）- 確定
+- [x] **スクリーンリーダー**: Radix UIに標準搭載 - 確定
+- [ ] **追加のアクセシビリティ対応**: カスタムコンポーネント用の追加実装は？
+
+**Radix UIのアクセシビリティ機能:**
+- フォーカス管理（Focus Trap、Focus Lock）
+- キーボードナビゲーション（矢印キー、Tab、Enter、Escape）
+- ARIA属性の自動設定（role, aria-label, aria-describedby等）
+- スクリーンリーダー対応（Live Regions、Announcements）
 
 ### テスト
 - [ ] **単体テスト**: Jest + React Testing Library?

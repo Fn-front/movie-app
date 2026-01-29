@@ -6,6 +6,7 @@
 - **Framework**: Next.js 15.5.11 (App Router)
 - **言語**: TypeScript 5.x
 - **スタイリング**: SCSS Modules
+- **UIライブラリ**: Radix UI（ヘッドレスUI、拡張してカスタマイズ）
 - **状態管理**: Zustand
 - **HTTP Client**: axios
 - **フォームバリデーション**: react-hook-form + zod

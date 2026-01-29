@@ -6,11 +6,18 @@
 - [x] Next.js 15プロジェクト作成
 - [x] TypeScript設定
 - [x] ESLint/Prettier設定
+- [ ] Radix UI導入
+  - [ ] 必要なパッケージインストール（@radix-ui/react-*）
+  - [ ] 基本設定・スタイリング方針確立
+- [ ] react-hook-form + zodセットアップ
 - [ ] デザインシステムのSCSS変数作成
-- [ ] 共通コンポーネントの基礎実装
-  - Button, Input, Select
-  - Card, Modal
-  - Toast（エラー通知用、5秒表示）
+- [ ] 共通コンポーネントの基礎実装（Radix UIベース）
+  - Button
+  - Input（フォーム統合）
+  - Select（@radix-ui/react-select）
+  - Card
+  - Modal（@radix-ui/react-dialog）
+  - Toast（@radix-ui/react-toast、エラー通知用、5秒表示）
   - Loading
 
 ### データベース・認証基盤
@@ -18,6 +25,7 @@
   - [x] データベース: Supabase (PostgreSQL)
   - [x] ORM: Supabase SDK
   - [x] 状態管理: Zustand
+  - [x] UIライブラリ: Radix UI（拡張してカスタマイズ）
   - [x] 認証: NextAuth.js v5
   - [x] HTTP Client: axios
   - [x] フォームバリデーション: react-hook-form + zod

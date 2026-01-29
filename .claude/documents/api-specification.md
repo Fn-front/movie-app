@@ -378,7 +378,10 @@ AIによるおすすめ映画取得
 - [x] **初回取得範囲**: 今日から3ヶ月先 - 確定
 - [x] **バッチ更新**: 1日1回、全件の評価・人気度を更新 - 確定
 - [x] **ページネーション**: 20件/ページ - 確定
-- [ ] **画像URL**: TMDb画像ベースURLの管理方法は？
+- [x] **画像URL**: クライアント側で生成 - 確定
+  - ベースURL: `NEXT_PUBLIC_TMDB_IMAGE_BASE_URL`（環境変数）
+  - サイズ指定: コンポーネントで柔軟に指定（w500, w780, original等）
+  - 生成例: `${NEXT_PUBLIC_TMDB_IMAGE_BASE_URL}/w500${poster_path}`
 - [ ] **Cron Secret**: Vercel Cron Jobs用のシークレットキーは？
 
 ### エラーハンドリング

@@ -96,7 +96,13 @@
 - [ ] ジャンル・評価表示
 
 ### 画像最適化
+- [ ] 画像URLユーティリティ関数実装（`lib/utils/image.ts`）
+  - getTMDbImageUrl関数
+  - 画像サイズ型定義（ImageSize）
+  - 環境変数からベースURL取得
 - [ ] Next.js Imageコンポーネント活用
+  - 各コンポーネントでgetTMDbImageUrl使用
+  - プレースホルダー画像設定
 - [ ] 遅延ロード実装
 - [ ] プレースホルダー実装
 

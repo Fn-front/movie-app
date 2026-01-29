@@ -398,6 +398,58 @@ OTP検証フォーム
 
 ---
 
+## ユーティリティ関数
+
+### getTMDbImageUrl
+TMDb画像URLを生成するヘルパー関数
+
+**場所:** `lib/utils/image.ts`
+
+**シグネチャ:**
+```typescript
+type ImageSize = 'w92' | 'w154' | 'w185' | 'w342' | 'w500' | 'w780' | 'original';
+
+function getTMDbImageUrl(
+  path: string | null,
+  size: ImageSize = 'w500'
+): string | null;
+```
+
+**実装:**
+```typescript
+export function getTMDbImageUrl(
+  path: string | null,
+  size: ImageSize = 'w500'
+): string | null {
+  if (!path) return null;
+
+  const baseUrl = process.env.NEXT_PUBLIC_TMDB_IMAGE_BASE_URL;
+  return `${baseUrl}/${size}${path}`;
+}
+```
+
+**使用例:**
+```tsx
+// MovieTileコンポーネント内
+const posterUrl = getTMDbImageUrl(movie.poster_path, 'w500');
+
+<Image
+  src={posterUrl || '/placeholder.jpg'}
+  alt={movie.title}
+  width={500}
+  height={750}
+/>
+```
+
+**画像サイズガイド:**
+- `w92`: サムネイル（ウォッチリストアイテム）
+- `w185`: 小さいポスター
+- `w500`: 通常のポスター（一覧画面）
+- `w780`: 大きいポスター（詳細画面）
+- `original`: オリジナルサイズ
+
+---
+
 ## 確認が必要な事項
 
 ### コンポーネント設計

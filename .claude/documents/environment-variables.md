@@ -32,23 +32,23 @@ NEXT_PUBLIC_TMDB_IMAGE_BASE_URL=https://image.tmdb.org/t/p
 
 ---
 
-### データベース接続
+### データベース接続（Supabase）
 
 ```bash
-# Database URL（PostgreSQL or Supabase）
-DATABASE_URL=postgresql://user:password@localhost:5432/movie_app
-
-# Connection Pool設定（オプション）
-DATABASE_POOL_MIN=2
-DATABASE_POOL_MAX=10
-```
-
-**Supabaseを使う場合:**
-```bash
+# Supabase Project URL
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+
+# Supabase Anonymous Key（公開可能）
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
+
+# Supabase Service Role Key（秘密、サーバー側のみ）
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 ```
+
+**取得方法:**
+1. https://supabase.com/ でプロジェクト作成
+2. Settings > API でURL・Keyを取得
+3. ANON_KEYはクライアント公開OK、SERVICE_ROLE_KEYは秘密
 
 ---
 
@@ -174,13 +174,10 @@ NEXT_PUBLIC_TMDB_API_KEY=your_tmdb_api_key_here
 NEXT_PUBLIC_TMDB_BASE_URL=https://api.themoviedb.org/3
 NEXT_PUBLIC_TMDB_IMAGE_BASE_URL=https://image.tmdb.org/t/p
 
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/movie_app
-
-# or Supabase
-# NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-# NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
-# SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 
 # Authentication (NextAuth.js)
 NEXTAUTH_SECRET=your_nextauth_secret_here_minimum_32_chars
@@ -252,9 +249,9 @@ export function validateEnv() {
 - [ ] **OpenAI API Key**: 将来的に必要？今は不要？
 
 ### データベース
-- [ ] **PostgreSQL or Supabase**: どちらを使用するか決定？
-- [ ] **接続プール**: 必要なサイズは？
-- [ ] **SSL接続**: 必要？不要？
+- [x] **PostgreSQL or Supabase**: Supabase - 確定
+- [x] **接続方式**: Supabase SDK使用 - 確定
+- [ ] **Row Level Security**: RLSポリシー設計は？
 
 ### 認証（NextAuth.js）
 - [x] **セッション有効期限**: 24時間 - 確定

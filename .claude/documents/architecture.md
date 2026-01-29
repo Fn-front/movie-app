@@ -6,16 +6,16 @@
 - **Framework**: Next.js 15.5.11 (App Router)
 - **言語**: TypeScript 5.x
 - **スタイリング**: SCSS Modules
-- **状態管理**: React Context API / useState/useReducer
+- **状態管理**: Zustand
 - **HTTP Client**: axios
 
 ### バックエンド
-- **Framework**: Next.js API Routes
+- **Framework**: Next.js API Routes + Supabase Edge Functions
 - **認証**: NextAuth.js v5 (App Router対応)
-- **ORM**: Prisma (検討中)
+- **ORM**: Supabase SDK
 
 ### データベース
-- **DB**: PostgreSQL (検討中) / Supabase (検討中)
+- **DB**: Supabase (PostgreSQL)
 
 ### 外部API
 - **TMDb API**: 映画情報取得
@@ -24,6 +24,8 @@
 ### インフラ
 - **ホスティング**: Vercel
 - **環境変数管理**: Vercel Environment Variables
+- **データベースホスティング**: Supabase
+- **画像最適化**: Next.js Image Optimization（自動WebP変換、遅延ロード、スケルトン）
 
 ## アーキテクチャパターン
 
@@ -114,36 +116,58 @@ UI Re-render
 
 ## 確定した技術選定
 
+### データ層
+- **データベース**: Supabase (PostgreSQL)
+- **ORM**: Supabase SDK
+- **状態管理**: Zustand
+
+### バックエンド
 - **HTTP Client**: axios
 - **認証**: NextAuth.js v5 (App Router対応)
   - セッション有効期限: 24時間
   - セッションストレージ: ブラウザメモリ（JWT方式）
 - **レート制限**: 3回までの試行制限
+- **CSRF対策**: 厳し目の基本設定（NextAuth.js + カスタムトークン）
+
+### インフラ・デプロイ
+- **ホスティング**: Vercel
 - **API Key管理**: 環境変数（.env）で管理
+- **コード分割**: しない（バンドルサイズ最適化のみ）
+
+### キャッシュ・パフォーマンス
 - **キャッシュ戦略**:
   - 一覧画面: DBキャッシュあり（movie_cacheテーブル、差分更新方式）
   - 詳細画面: キャッシュなし（都度TMDb API取得）
   - 検索機能: キャッシュなし（都度TMDb API取得）
   - 初回取得範囲: 今日から3ヶ月先
   - バッチ更新: 1日1回（午前3時JST）
+- **画像最適化**: Next.js Image Optimization
+  - 自動WebP変換
+  - 遅延ロード（lazy loading）
+  - スケルトンUI表示
 - **ページネーション**: 20件/ページ
 - **言語設定**: 日本語のみ（ja-JP固定）
 
 ## 確認が必要な事項
 
 ### 技術選定
-- [ ] **データベース**: PostgreSQL直接 or Supabase?
-- [ ] **ORM**: Prisma or Drizzle or Supabase SDK?
-- [ ] **状態管理**: Context API or Zustand or Jotai?
-- [ ] **メール送信**: Resend or SendGrid or AWS SES?
+- [x] **データベース**: Supabase - 確定
+- [x] **ORM**: Supabase SDK - 確定
+- [x] **状態管理**: Zustand - 確定
+- [ ] **メール送信**: Resend or SendGrid or AWS SES?（推奨: Resend）
 
 ### インフラ
-- [ ] **ホスティング**: Vercel確定？他の選択肢は？
-- [ ] **画像最適化**: Next.js Image Optimization or Cloudinary?
+- [x] **ホスティング**: Vercel - 確定
+- [x] **画像最適化**: Next.js Image Optimization - 確定
 
 ### セキュリティ
-- [ ] **CSRF対策**: NextAuth.jsで自動対応されるが、追加設定は？
+- [x] **CSRF対策**: 厳し目の基本設定 - 確定（NextAuth.js + カスタムトークン）
 
 ### パフォーマンス
-- [ ] **画像最適化**: WebP対応？遅延ロード？
-- [ ] **コード分割**: 動的import戦略は？
+- [x] **画像最適化**: 遅延ロード + スケルトンUI - 確定
+- [x] **コード分割**: しない - 確定（バンドルサイズ最適化のみ）
+
+### Supabase設定
+- [ ] **Row Level Security (RLS)**: ポリシー設計は？
+- [ ] **Realtime機能**: ウォッチリストに使用する？
+- [ ] **Storage**: 画像アップロード機能は必要？（現状TMDbのみ）

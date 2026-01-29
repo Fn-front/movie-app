@@ -15,17 +15,34 @@
 
 ### データベース・認証基盤
 - [x] **技術選定を確定**
+  - [x] データベース: Supabase (PostgreSQL)
+  - [x] ORM: Supabase SDK
+  - [x] 状態管理: Zustand
   - [x] 認証: NextAuth.js v5
   - [x] HTTP Client: axios
   - [x] レート制限: 3回
-  - [ ] データベース: PostgreSQL vs Supabase（残課題）
+  - [x] ホスティング: Vercel
+  - [x] CSRF対策: 厳し目の基本設定
+  - [x] コード分割: しない
+  - [ ] メール送信: Resend / SendGrid / AWS SES
+- [ ] Supabaseプロジェクト作成
+  - [ ] Supabaseアカウント作成
+  - [ ] 新規プロジェクト作成
+  - [ ] 接続情報取得（URL, ANON_KEY, SERVICE_ROLE_KEY）
 - [ ] NextAuth.js v5設定
   - [ ] Credentials Providerセットアップ
-  - [ ] データベースアダプター設定
+  - [ ] Supabaseアダプター検討
   - [ ] Session/Callbacks設定
+  - [ ] CSRF対策強化設定
 - [ ] データベーススキーマ実装
-- [ ] マイグレーションツール設定
-- [ ] 環境変数設定（NEXTAUTH_SECRET等）
+  - [ ] Supabase SQL Editorでテーブル作成
+  - [ ] Row Level Security (RLS) ポリシー設定
+  - [ ] インデックス作成
+- [ ] 環境変数設定
+  - NEXTAUTH_SECRET
+  - NEXT_PUBLIC_SUPABASE_URL
+  - NEXT_PUBLIC_SUPABASE_ANON_KEY
+  - SUPABASE_SERVICE_ROLE_KEY
 
 ### TMDb API連携
 - [ ] TMDb APIキー取得

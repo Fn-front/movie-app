@@ -1,5 +1,13 @@
 # データベース設計
 
+## プラットフォーム
+
+**Supabase (PostgreSQL)**
+- Supabase SDK for データアクセス
+- Row Level Security (RLS) でセキュリティ管理
+- UUID生成: `gen_random_uuid()`
+- タイムスタンプ: `now()`
+
 ## テーブル設計
 
 ### users（ユーザー）
@@ -7,17 +15,23 @@
 
 | カラム名 | 型 | NULL | デフォルト | 説明 |
 |---------|-----|------|-----------|------|
-| id | UUID | NOT NULL | uuid_generate_v4() | ユーザーID（主キー） |
+| id | UUID | NOT NULL | gen_random_uuid() | ユーザーID（主キー） |
 | email | VARCHAR(255) | NOT NULL | - | メールアドレス（ユニーク） |
 | password_hash | VARCHAR(255) | NOT NULL | - | ハッシュ化されたパスワード |
 | name | VARCHAR(100) | NULL | - | ユーザー名 |
 | avatar_url | TEXT | NULL | - | アバター画像URL |
 | is_verified | BOOLEAN | NOT NULL | false | メール認証済みフラグ |
-| created_at | TIMESTAMP | NOT NULL | NOW() | 作成日時 |
-| updated_at | TIMESTAMP | NOT NULL | NOW() | 更新日時 |
+| created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
+| updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |
 
 **インデックス:**
 - `email` (UNIQUE)
+
+**RLS (Row Level Security):**
+- SELECT: 自分のレコードのみ閲覧可能
+- UPDATE: 自分のレコードのみ更新可能
+- DELETE: 自分のレコードのみ削除可能
+- INSERT: 公開（新規登録用）
 
 ---
 
@@ -176,9 +190,10 @@ reviews (N)
 ## 確認が必要な事項
 
 ### データベース選定
-- [ ] **PostgreSQL直接 or Supabase?**
-  - Supabaseの場合、RLSポリシーをどう設定するか？
-  - 直接接続の場合、ホスティング先は？
+- [x] **PostgreSQL直接 or Supabase**: Supabase - 確定
+  - Supabase SDK使用
+  - Row Level Security (RLS) で各テーブルを保護
+  - [ ] RLSポリシー詳細設計は？
 
 ### セキュリティ
 - [ ] **パスワードハッシュアルゴリズム**: bcrypt or argon2?

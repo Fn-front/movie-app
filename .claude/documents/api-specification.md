@@ -201,15 +201,22 @@ OTP検証
 ---
 
 ### GET /api/movies/search
-映画検索（キャッシュなし、都度TMDb API取得）
+映画検索（フィルタリング対応、キャッシュなし、都度TMDb API取得）
 
 **Query Parameters:**
 - `query` (required): 検索キーワード
 - `page` (optional): ページ番号（デフォルト: 1）
+- `genre` (optional): ジャンルID（カンマ区切りで複数指定可: `28,12`）
+- `year` (optional): 公開年（YYYY形式: `2024`）
+- `vote_average_gte` (optional): 最低評価（0-10: `7.0`）
 
 **内部処理フロー:**
-1. TMDb API（`/search/movie`）を直接呼び出し
-2. 検索結果をそのまま返却（DBには保存しない）
+1. TMDb API（`/search/movie` + `/discover/movie`）を呼び出し
+2. フィルターパラメータをTMDb APIに渡す
+   - `with_genres`: ジャンルフィルター
+   - `primary_release_year`: 年代フィルター
+   - `vote_average.gte`: 評価フィルター
+3. 検索結果をそのまま返却（DBには保存しない）
 
 **Response (200 OK):**
 ```json
@@ -475,4 +482,7 @@ AIによるおすすめ映画取得
 ### 将来的な拡張
 - [x] **ソート順**: 公開日順・人気順・評価順 - 確定（セレクトボタンで切り替え）
 - [x] **レビュー機能**: 機能のみ実装予定（将来拡張用）
-- [ ] **フィルタリング**: ジャンル・年代などのフィルターは必要？
+- [x] **フィルタリング**: 検索機能に統合 - 確定
+  - ジャンルフィルター（複数選択可）
+  - 年代フィルター（公開年）
+  - 評価フィルター（最低評価）

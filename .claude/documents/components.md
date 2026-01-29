@@ -323,6 +323,42 @@ showToast({
 
 ---
 
+### MovieFilter
+映画フィルターコンポーネント（検索機能用）
+
+**Props:**
+- `onFilterChange`: (filters: FilterOptions) => void
+- `genres`: Array<{ id: number; name: string }>
+
+**FilterOptions型:**
+```typescript
+type FilterOptions = {
+  genre?: number[];     // ジャンルID配列
+  year?: number;        // 公開年
+  vote_average_gte?: number;  // 最低評価
+}
+```
+
+**表示内容:**
+- ジャンル選択（マルチセレクト）
+- 年代選択（ドロップダウン）
+- 評価選択（スライダー or ドロップダウン）
+- フィルタークリアボタン
+
+**使用例:**
+```tsx
+<MovieFilter
+  onFilterChange={handleFilterChange}
+  genres={[
+    { id: 28, name: 'アクション' },
+    { id: 12, name: 'アドベンチャー' },
+    { id: 35, name: 'コメディ' }
+  ]}
+/>
+```
+
+---
+
 ### LoginForm
 ログインフォーム
 

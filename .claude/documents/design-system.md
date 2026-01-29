@@ -1,37 +1,60 @@
 # デザインシステム
 
+**デザインコンセプト: Backlog風のクリーン&プロフェッショナル**
+- シンプルで洗練された色使い
+- 視認性の高いコントラスト
+- ビジネスツールとしての信頼感
+
+---
+
 ## カラーパレット
 
-### プライマリカラー
-映画・エンターテイメントをイメージした深みのある色
+### プライマリカラー（ブルー系）
+メインアクション、リンク、重要な要素に使用
 
 ```scss
-$primary-900: #1a0f2e;  // 最も濃い
-$primary-800: #2d1b4e;
-$primary-700: #3f276d;
-$primary-600: #52348d;
-$primary-500: #6441a5;  // メイン
-$primary-400: #8566b8;
-$primary-300: #a68cca;
-$primary-200: #c7b2dd;
-$primary-100: #e8d9ef;
-$primary-50:  #f4edf7;   // 最も薄い
+$primary-900: #004a7c;  // 最も濃い
+$primary-800: #005a94;
+$primary-700: #006bac;
+$primary-600: #0d7ec4;
+$primary-500: #2390d6;  // メイン（Backlog風ブルー）
+$primary-400: #4ca3dd;
+$primary-300: #75b7e5;
+$primary-200: #9ecbed;
+$primary-100: #c7dff5;
+$primary-50:  #e8f3fb;   // 最も薄い
 ```
 
-### セカンダリカラー
-アクセント・強調用
+### セカンダリカラー（オレンジ系）
+アクセント・強調・進行中ステータス用
 
 ```scss
-$secondary-900: #b8860b;
-$secondary-800: #d4a017;
-$secondary-700: #f0b923;
-$secondary-600: #ffc83d;  // メイン（ゴールド）
-$secondary-500: #ffd35c;
-$secondary-400: #ffde7c;
-$secondary-300: #ffe99c;
-$secondary-200: #fff4bd;
-$secondary-100: #fffadd;
-$secondary-50:  #fffef5;
+$secondary-900: #cc7700;
+$secondary-800: #e68600;
+$secondary-700: #ff9500;
+$secondary-600: #ff9600;  // メイン（Backlog風オレンジ）
+$secondary-500: #ffa31a;
+$secondary-400: #ffb044;
+$secondary-300: #ffbd6e;
+$secondary-200: #ffca98;
+$secondary-100: #ffd7c2;
+$secondary-50:  #fff0e5;
+```
+
+### ダークブルーグレー（ナビゲーション・サイドバー用）
+ヘッダー・サイドバー・フッター用の落ち着いた色
+
+```scss
+$dark-blue-900: #1a2332;
+$dark-blue-800: #232d3f;
+$dark-blue-700: #2d3748;
+$dark-blue-600: #2f3e51;  // メイン（Backlog風サイドバー）
+$dark-blue-500: #3d4f65;
+$dark-blue-400: #546479;
+$dark-blue-300: #6b798d;
+$dark-blue-200: #8895a8;
+$dark-blue-100: #a5b1c2;
+$dark-blue-50:  #dce1e8;
 ```
 
 ### グレースケール
@@ -300,8 +323,9 @@ $z-index-tooltip:   1070;
 ## 確認が必要な事項
 
 ### カラーパレット
-- [ ] **プライマリカラー**: 紫系でよいか？他の候補は？
-- [ ] **セカンダリカラー**: ゴールドでよいか？
+- [x] **プライマリカラー**: Backlog風ブルー系（#2390d6）- 確定
+- [x] **セカンダリカラー**: Backlog風オレンジ系（#ff9600）- 確定
+- [x] **ナビゲーション**: ダークブルーグレー（#2f3e51）- 確定
 - [ ] **ダークモード**: 対応する？その場合の色設定は？
 
 ### タイポグラフィ

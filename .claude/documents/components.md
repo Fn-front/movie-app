@@ -622,14 +622,26 @@ const posterUrl = getTMDbImageUrl(movie.poster_path, 'w500');
 ## 確認が必要な事項
 
 ### コンポーネント設計
-- [ ] **状態管理**: どのコンポーネントでuseStateを使うか？
+- [x] **ロジック分離**: ロジックはカスタムhooksに分離 - 確定
 - [ ] **Props vs Context**: ユーザー情報はProps渡し？Context？
-- [ ] **カスタムフック**: どの処理をフックに切り出すか？
+- [x] **カスタムフック**: ビジネスロジック・状態管理は全てhooksに切り出す - 確定
+
+**設計原則:**
+- コンポーネント: UIレンダリングのみに専念
+- カスタムフック: データ取得、状態管理、ビジネスロジック
+- 例:
+  - `useAuth()` - 認証状態管理
+  - `useMovies()` - 映画データ取得・キャッシュ
+  - `useWatchlist()` - ウォッチリスト操作
+  - `useToast()` - トースト通知管理
 
 ### UIライブラリ
 - [x] **ヘッドレスUI**: Radix UI - 確定（拡張してカスタマイズ）
-- [ ] **アイコン**: React Icons / Heroicons / 自作SVG?
-- [ ] **アニメーション**: Framer Motion使用する？
+- [x] **アイコン**: React Icons - 確定
+- [x] **アニメーション**: 基本的に行わない - 確定
+  - styleでopacity程度の軽微な変化のみ
+  - transition: opacity 0.2s ease等のシンプルなCSS
+  - パフォーマンスとシンプルさを優先
 
 **Radix UIの利点:**
 - アクセシビリティ標準準拠（WAI-ARIA）
@@ -638,10 +650,74 @@ const posterUrl = getTMDbImageUrl(movie.poster_path, 'w500');
 - TypeScript完全対応
 - キーボードナビゲーション組み込み済み
 
+**React Iconsの利点:**
+- 豊富なアイコンセット（Font Awesome、Material Design等）
+- Tree-shakingで必要なアイコンのみバンドル
+- TypeScript対応
+- 使用例: `<FiSearch />`, `<FiUser />`, `<FiHeart />`
+
 ### パフォーマンス
-- [ ] **React.memo**: どのコンポーネントにメモ化を適用するか？
+- [x] **React.memo**: 必ず実施 - 確定
+  - 全ての再利用可能なコンポーネントにReact.memoを適用
+  - propsの比較関数は必要に応じて実装
+  - 特に重要: MovieTile, WatchlistItem等の繰り返しレンダリングされるコンポーネント
+- [x] **useCallback**: 必ず実施 - 確定
+  - コールバック関数は全てuseCallbackでメモ化
+  - 子コンポーネントに渡す関数は必ずuseCallback
+  - 依存配列を適切に設定
 - [ ] **仮想化**: 大量の映画リストに仮想スクロール必要？
-- [ ] **遅延ロード**: 画像の遅延読み込み戦略は？
+- [x] **遅延ロード**: Next.js Image + lazy loading - 確定（画像最適化で実装済み）
+
+**memo化の対象コンポーネント:**
+- 繰り返しレンダリング: MovieTile, WatchlistItem, ReviewItem
+- 共通コンポーネント: Button, Input, Select, Card, Modal, Toast
+- レイアウト: Header, Sidebar
+- 大きなコンポーネント: MovieDetail, Calendar
+
+**パフォーマンス最適化の実装例:**
+```typescript
+import { memo, useCallback } from 'react';
+
+type Props = {
+  movie: Movie;
+  onWatchlistAdd: (movieId: number) => void;
+};
+
+export const MovieTile = memo(({ movie, onWatchlistAdd }: Props) => {
+  // コールバックをuseCallbackでメモ化
+  const handleClick = useCallback(() => {
+    onWatchlistAdd(movie.id);
+  }, [movie.id, onWatchlistAdd]);
+
+  return (
+    <Card onClick={handleClick}>
+      {/* ... */}
+    </Card>
+  );
+});
+
+// 親コンポーネント
+export const MovieList = () => {
+  const [watchlist, setWatchlist] = useState<number[]>([]);
+
+  // 子コンポーネントに渡す関数をuseCallbackでメモ化
+  const handleWatchlistAdd = useCallback((movieId: number) => {
+    setWatchlist(prev => [...prev, movieId]);
+  }, []);
+
+  return (
+    <>
+      {movies.map(movie => (
+        <MovieTile
+          key={movie.id}
+          movie={movie}
+          onWatchlistAdd={handleWatchlistAdd}
+        />
+      ))}
+    </>
+  );
+};
+```
 
 ### アクセシビリティ
 - [x] **ARIA属性**: Radix UIに標準搭載（WAI-ARIA準拠）- 確定
@@ -656,11 +732,44 @@ const posterUrl = getTMDbImageUrl(movie.poster_path, 'w500');
 - スクリーンリーダー対応（Live Regions、Announcements）
 
 ### テスト
-- [ ] **単体テスト**: Jest + React Testing Library?
-- [ ] **E2Eテスト**: Playwright / Cypress?
-- [ ] **Storybookv: コンポーネントカタログ作成する？
+- [x] **単体テスト**: Jest + React Testing Library - 確定
+- [x] **E2Eテスト**: Playwright - 確定
+- [ ] **Storybook**: コンポーネントカタログ作成する？
+- [x] **カバレッジ目標**: 80%以上 - 確定
+
+**テスト方針:**
+- 共通コンポーネント: 単体テスト必須
+- カスタムフック: 単体テスト必須
+- ページ・フィーチャー: E2Eテスト
+- API Routes: 統合テスト
 
 ### 命名規則
-- [ ] **ファイル名**: PascalCase? kebab-case?
-- [ ] **CSS Modules**: `.module.scss`使用する？
-- [ ] **Props型**: 型定義ファイルを分離する？
+- [x] **変数・関数**: lowerCamelCase - 確定
+- [x] **コンポーネントファイル名**: PascalCase - 確定
+- [x] **CSS Modules**: `.module.scss`使用 - 確定
+- [x] **Props型**: 同一ファイル内で定義 - 確定
+
+**命名規則詳細:**
+```typescript
+// コンポーネント: PascalCase
+export const MovieTile = () => {};
+
+// 変数・関数: lowerCamelCase
+const movieData = useMovies();
+const handleClick = () => {};
+
+// カスタムフック: use + PascalCase
+export const useAuth = () => {};
+
+// 型定義: PascalCase（同一ファイル）
+type MovieTileProps = {
+  movie: Movie;
+  onClick: () => void;
+};
+
+// ファイル名
+// - コンポーネント: MovieTile.tsx
+// - フック: useAuth.ts
+// - 型: types.ts
+// - スタイル: MovieTile.module.scss
+```

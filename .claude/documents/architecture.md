@@ -7,9 +7,12 @@
 - **言語**: TypeScript 5.x
 - **スタイリング**: SCSS Modules
 - **UIライブラリ**: Radix UI（ヘッドレスUI、拡張してカスタマイズ）
+- **アイコン**: React Icons
 - **状態管理**: Zustand
 - **HTTP Client**: axios
 - **フォームバリデーション**: react-hook-form + zod
+- **アニメーション**: なし（opacity等のCSS transitionのみ）
+- **パフォーマンス最適化**: React.memo + useCallback必須適用
 
 ### バックエンド
 - **Framework**: Next.js API Routes + Supabase Edge Functions
@@ -58,9 +61,21 @@ src/
 │   ├── auth/            # 認証関連
 │   └── utils/           # 汎用ユーティリティ
 ├── types/               # TypeScript型定義
-├── hooks/               # カスタムフック
+├── hooks/               # カスタムフック（ビジネスロジック分離）
+│   ├── useAuth.ts      # 認証状態管理
+│   ├── useMovies.ts    # 映画データ取得・キャッシュ
+│   ├── useWatchlist.ts # ウォッチリスト操作
+│   └── useToast.ts     # トースト通知管理
 └── styles/              # グローバルスタイル
 ```
+
+**設計原則:**
+- **コンポーネント**: UIレンダリングのみ（React.memo必須）
+- **カスタムフック**: データ取得、状態管理、ビジネスロジック
+- **命名規則**: lowerCamelCase（変数・関数）、PascalCase（コンポーネント・型）
+- **ファイル名**: PascalCase（コンポーネント）、lowerCamelCase（フック）
+- **スタイル**: SCSS Modules（`.module.scss`）
+- **アニメーション**: なし（opacity等のCSS transitionのみ）
 
 ### データフロー
 ```

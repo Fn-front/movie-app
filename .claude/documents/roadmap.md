@@ -6,19 +6,28 @@
 - [x] Next.js 15プロジェクト作成
 - [x] TypeScript設定
 - [x] ESLint/Prettier設定
-- [ ] Radix UI導入
-  - [ ] 必要なパッケージインストール（@radix-ui/react-*）
-  - [ ] 基本設定・スタイリング方針確立
-- [ ] react-hook-form + zodセットアップ
-- [ ] デザインシステムのSCSS変数作成
-- [ ] 共通コンポーネントの基礎実装（Radix UIベース）
-  - Button
-  - Input（フォーム統合）
-  - Select（@radix-ui/react-select）
-  - Card
-  - Modal（@radix-ui/react-dialog）
-  - Toast（@radix-ui/react-toast、エラー通知用、5秒表示）
-  - Loading
+- [ ] 必要なパッケージインストール
+  - [ ] Radix UI（@radix-ui/react-select, react-dialog, react-toast）
+  - [ ] React Icons
+  - [ ] react-hook-form + zod
+  - [ ] その他依存関係
+- [ ] 基本設定・スタイリング方針確立
+  - [ ] SCSS Modules設定
+  - [ ] デザインシステムのSCSS変数作成
+  - [ ] 命名規則ドキュメント整備（lowerCamelCase）
+- [ ] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）
+  - [ ] Button（React.memo）
+  - [ ] Input（フォーム統合、React.memo）
+  - [ ] Select（@radix-ui/react-select、React.memo）
+  - [ ] Card（React.memo）
+  - [ ] Modal（@radix-ui/react-dialog、React.memo）
+  - [ ] Toast（@radix-ui/react-toast、5秒表示、React.memo）
+  - [ ] Loading（全画面オーバーレイ対応、React.memo）
+- [ ] カスタムフック基礎実装
+  - [ ] useToast（トースト通知管理）
+  - [ ] useAuth（認証状態管理）
+  - [ ] useMovies（映画データ取得）
+  - [ ] useWatchlist（ウォッチリスト操作）
 
 ### データベース・認証基盤
 - [x] **技術選定を確定**
@@ -26,6 +35,7 @@
   - [x] ORM: Supabase SDK
   - [x] 状態管理: Zustand
   - [x] UIライブラリ: Radix UI（拡張してカスタマイズ）
+  - [x] アイコン: React Icons
   - [x] 認証: NextAuth.js v5
   - [x] HTTP Client: axios
   - [x] フォームバリデーション: react-hook-form + zod
@@ -36,6 +46,10 @@
   - [x] メール送信: Resend
   - [x] Supabase Realtime: 使用しない
   - [x] Supabase Storage: 使用しない
+  - [x] アニメーション: なし（opacity等のCSS transitionのみ）
+  - [x] パフォーマンス: React.memo + useCallback必須適用
+  - [x] 命名規則: lowerCamelCase
+  - [x] テスト: Jest + React Testing Library + Playwright
 - [ ] Supabaseプロジェクト作成
   - [ ] Supabaseアカウント作成
   - [ ] 新規プロジェクト作成
@@ -268,17 +282,17 @@
 - [ ] タブレットレイアウト最適化
 - [ ] サイドバーのモバイル対応（ハンバーガーメニュー）
 
-### アニメーション
-- [ ] ページ遷移アニメーション
-- [ ] モーダル開閉アニメーション
-- [ ] ホバーエフェクト
-- [ ] ローディングアニメーション
+### スタイリング改善
+- [ ] ホバーエフェクト（opacity変化等）
+- [ ] フォーカス状態のスタイリング
+- [ ] トランジション効果（opacity 0.2s ease等）
+- [ ] カラーコントラスト確認
 
 ### アクセシビリティ
-- [ ] ARIA属性追加
-- [ ] キーボード操作対応
-- [ ] フォーカス管理
-- [ ] カラーコントラスト確認
+- [x] ARIA属性: Radix UIで自動対応 - 確定
+- [x] キーボード操作: Radix UIで自動対応 - 確定
+- [x] フォーカス管理: Radix UIで自動対応 - 確定
+- [ ] 追加のアクセシビリティ対応（カスタムコンポーネント用）
 
 ---
 
@@ -286,15 +300,25 @@
 
 ### テスト実装
 - [ ] 単体テスト（Jest + React Testing Library）
-- [ ] API Routeテスト
+  - [ ] 共通コンポーネントのテスト
+  - [ ] カスタムフックのテスト（useAuth, useMovies等）
+  - [ ] バリデーションロジックのテスト（zodスキーマ）
+- [ ] 統合テスト
+  - [ ] API Routeテスト
+  - [ ] 認証フローテスト
 - [ ] E2Eテスト（Playwright）
-- [ ] カバレッジ80%以上
+  - [ ] ユーザー登録・ログインフロー
+  - [ ] 映画一覧・詳細表示
+  - [ ] ウォッチリスト操作
+- [ ] カバレッジ80%以上達成
 
 ### パフォーマンス最適化
-- [ ] Lighthouse監査
+- [x] React.memo適用 - 確定（全コンポーネント）
+- [x] useCallback適用 - 確定（全コールバック関数）
+- [ ] Lighthouse監査（目標スコア90以上）
 - [ ] バンドルサイズ最適化
-- [ ] 画像最適化確認
-- [ ] キャッシュ戦略確認
+- [ ] 画像最適化確認（Next.js Image）
+- [ ] キャッシュ戦略確認（movie_cache差分更新）
 
 ### セキュリティ監査
 - [ ] 脆弱性スキャン

@@ -67,8 +67,34 @@
 
 ---
 
-### ~~movie_cache（映画情報キャッシュ）~~
-**使用しない** - キャッシュ戦略「キャッシュしない」のため、このテーブルは実装しない
+### movie_cache（映画情報キャッシュ）
+TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面用）
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | INTEGER | NOT NULL | - | TMDb映画ID（主キー） |
+| title | VARCHAR(255) | NOT NULL | - | 映画タイトル |
+| poster_path | VARCHAR(255) | NULL | - | ポスター画像パス |
+| backdrop_path | VARCHAR(255) | NULL | - | 背景画像パス |
+| release_date | DATE | NULL | - | 公開日 |
+| overview | TEXT | NULL | - | 概要 |
+| vote_average | DECIMAL(3,1) | NULL | - | 評価平均 |
+| popularity | DECIMAL(10,3) | NULL | - | 人気度 |
+| genre_ids | JSONB | NULL | - | ジャンルID配列 |
+| cached_at | TIMESTAMP | NOT NULL | NOW() | 初回キャッシュ日時 |
+| updated_at | TIMESTAMP | NOT NULL | NOW() | 最終更新日時 |
+
+**インデックス:**
+- `release_date` - 公開日順ソート用
+- `popularity` - 人気順ソート用
+- `cached_at` - 差分取得時の最新日時確認用
+- `updated_at` - バッチ更新管理用
+
+**キャッシュ戦略:**
+- 初回取得: 今日から3ヶ月先の映画を取得
+- 差分取得: MAX(cached_at)以降の新作映画のみ取得
+- バッチ更新: 1日1回、全件の評価・人気度を更新
+- 詳細画面: キャッシュを使わず都度TMDb APIから取得
 
 ---
 
@@ -127,7 +153,10 @@ user_preferences (1)
 - [ ] **トークン再生成**: 何回まで許可するか？
 
 ### パフォーマンス
-- [x] **movie_cacheテーブル**: 実装しない - 確定（キャッシュ戦略: キャッシュしない）
+- [x] **movie_cacheテーブル**: 実装する - 確定（一覧画面用、差分更新方式）
+- [x] **キャッシュ取得範囲**: 初回は今日から3ヶ月先 - 確定
+- [x] **バッチ更新頻度**: 1日1回 - 確定
+- [x] **ページネーション**: 20件/ページ - 確定
 - [x] **watchlistテーブル**: 映画IDと画像URLを保存 - 確定
 - [ ] **インデックス追加**: 他に必要なインデックスは？
 

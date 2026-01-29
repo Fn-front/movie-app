@@ -88,6 +88,16 @@ AWS_SES_FROM_EMAIL=noreply@yourdomain.com
 
 ---
 
+### Vercel Cron Jobs（バッチ更新用）
+
+```bash
+# Cron Secret（バッチ更新API認証用）
+# 生成: openssl rand -base64 32
+CRON_SECRET=your_cron_secret_here_minimum_32_chars
+```
+
+---
+
 ### OpenAI（将来的なレコメンド機能用）
 
 ```bash
@@ -183,6 +193,9 @@ MAIL_FROM=noreply@yourdomain.com
 # Rate Limiting
 RATE_LIMIT_MAX_ATTEMPTS=3
 RATE_LIMIT_LOCK_DURATION=1800000
+
+# Vercel Cron Jobs
+CRON_SECRET=your_cron_secret_here_minimum_32_chars
 
 # OpenAI (Future)
 # OPENAI_API_KEY=sk-xxxxxxxxxxxx

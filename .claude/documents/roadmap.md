@@ -65,14 +65,24 @@
 
 ## フェーズ3: 映画情報表示（1-2週間）
 
+### データベーススキーマ実装
+- [ ] movie_cacheテーブル作成
+  - id, title, poster_path, backdrop_path, release_date, overview, vote_average, popularity, genre_ids
+  - cached_at, updated_at
+  - インデックス: release_date, popularity, cached_at, updated_at
+
 ### ホーム画面
 - [ ] レイアウト実装（Header + Sidebar + Content）
 - [ ] MovieTileコンポーネント実装
 - [ ] 映画一覧取得API実装（`/api/movies`）
-  - axiosでTMDb API呼び出し
-  - サーバー側でAPIキー秘匿
+  - DBから最新映画取得日時確認（MAX(cached_at)）
+  - その日時以降の新作のみTMDb APIで取得（差分更新）
+    - primary_release_date.gte, primary_release_date.lte（今日から3ヶ月先）
+    - language=ja-JP, region=JP
+  - 取得した新作をDBに保存（UPSERT）
+  - DBから指定ページの映画を返却（20件/ページ）
 - [ ] 公開日順ソート実装
-- [ ] ページネーション実装
+- [ ] ページネーション実装（20件/ページ）
 - [ ] ローディング状態実装（axios interceptors活用）
 - [ ] エラーハンドリング（axios error handling）
 
@@ -80,6 +90,8 @@
 - [ ] Modalコンポーネント実装
 - [ ] MovieDetailコンポーネント実装
 - [ ] 映画詳細取得API実装（`/api/movies/:id`）
+  - キャッシュなし、都度TMDb API呼び出し
+  - リアルタイム情報取得（runtime, genres, cast, crew, videos等）
 - [ ] 背景画像・ポスター表示
 - [ ] ジャンル・評価表示
 
@@ -87,6 +99,16 @@
 - [ ] Next.js Imageコンポーネント活用
 - [ ] 遅延ロード実装
 - [ ] プレースホルダー実装
+
+### バッチ更新機能
+- [ ] 映画キャッシュ更新API実装（`/api/cron/update-movies`）
+  - DBの全映画ID取得
+  - 100件ずつバッチでTMDb APIから最新情報取得
+  - vote_average, popularity を更新
+  - Cron Secret認証実装
+- [ ] Vercel Cron Jobs設定
+  - 実行スケジュール: 毎日午前3時（JST）
+  - CRON_SECRET環境変数設定
 
 ---
 
@@ -134,6 +156,7 @@
 
 ### 検索API
 - [ ] 検索API実装（`/api/movies/search`）
+  - キャッシュなし、都度TMDb検索API呼び出し
   - axiosでTMDb検索API呼び出し
   - サーバー側でAPIキー秘匿
 - [ ] TMDb検索APIとの連携

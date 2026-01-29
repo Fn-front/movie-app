@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx eslint:*)",
+      "Bash(node --version:*)",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__click",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__evaluate_script",
+      "mcp__chrome-devtools__fill",
+      "Bash(PORT=3001 npm run dev:*)",
+      "mcp__chrome-devtools__list_console_messages",
+      "mcp__chrome-devtools__press_key",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ee8516110e7f8bebb43edad90a97addb4942f7ab supabase db push:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ee8516110e7f8bebb43edad90a97addb4942f7ab npx supabase db push:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ee8516110e7f8bebb43edad90a97addb4942f7ab supabase functions deploy:*)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_ee8516110e7f8bebb43edad90a97addb4942f7ab npx supabase:*)",
+      "Bash(curl:*)",
+      "mcp__chrome-devtools__list_network_requests",
+      "Bash(wc:*)",
+      "mcp__chrome-devtools__wait_for",
+      "Bash(npm view:*)",
+      "Bash(rm:*)",
+      "Bash(npm install)",
+      "Bash(cat:*)",
+      "Bash(git commit:*)",
+      "Bash(git pull:*)",
+      "Bash(git config:*)",
+      "Bash(git log:*)",
+      "Bash(git rebase:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git show-ref:*)",
+      "Bash(git push:*)",
+      "Bash(git update-ref:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

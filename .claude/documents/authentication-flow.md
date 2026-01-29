@@ -214,7 +214,7 @@ API Request
 - [ ] **Callbacks**: session/jwt callbacksの設定は？
 
 ### メール送信
-- [ ] **メール送信サービス**: Resend / SendGrid / AWS SES?
+- [x] **メール送信サービス**: Resend - 確定
 - [ ] **メールテンプレート**: HTMLメールのデザインは？
 - [ ] **送信元メールアドレス**: ドメイン設定は完了している？
 - [ ] **メール到達率**: SPF/DKIM/DMARC設定は？

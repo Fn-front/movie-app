@@ -24,7 +24,7 @@
   - [x] ホスティング: Vercel
   - [x] CSRF対策: 厳し目の基本設定
   - [x] コード分割: しない
-  - [ ] メール送信: Resend / SendGrid / AWS SES
+  - [x] メール送信: Resend
 - [ ] Supabaseプロジェクト作成
   - [ ] Supabaseアカウント作成
   - [ ] 新規プロジェクト作成
@@ -61,7 +61,7 @@
 - [ ] カスタム登録API実装（`/api/auth/register`）
 - [ ] パスワードハッシュ化実装（bcrypt）
 - [ ] メール送信機能実装
-  - メールサービス選定（Resend/SendGrid/AWS SES）
+  - Resend API統合
   - OTPメールテンプレート作成
 - [ ] OTP検証フォームUI実装
 - [ ] OTP検証API実装（`/api/auth/verify-otp`）

@@ -68,23 +68,21 @@ NEXTAUTH_DEBUG=true  # 本番環境ではfalse
 
 ---
 
-### メール送信
+### メール送信（Resend）
 
 ```bash
-# Resendを使う場合
+# Resend API Key
 RESEND_API_KEY=re_xxxxxxxxxxxx
+
+# メール送信元アドレス
 MAIL_FROM=noreply@yourdomain.com
-
-# SendGridを使う場合
-SENDGRID_API_KEY=SG.xxxxxxxxxxxx
-SENDGRID_FROM_EMAIL=noreply@yourdomain.com
-
-# AWS SESを使う場合
-AWS_SES_ACCESS_KEY_ID=xxxxxxxxxxxx
-AWS_SES_SECRET_ACCESS_KEY=xxxxxxxxxxxx
-AWS_SES_REGION=ap-northeast-1
-AWS_SES_FROM_EMAIL=noreply@yourdomain.com
 ```
+
+**取得方法:**
+1. https://resend.com/ でアカウント作成
+2. API Keys > Create API Key でキー取得
+3. ドメイン認証を完了（DNS設定が必要）
+4. Vercel統合が可能（推奨）
 
 ---
 
@@ -183,7 +181,7 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 NEXTAUTH_SECRET=your_nextauth_secret_here_minimum_32_chars
 NEXTAUTH_URL=http://localhost:3000
 
-# Email
+# Email (Resend)
 RESEND_API_KEY=re_xxxxxxxxxxxx
 MAIL_FROM=noreply@yourdomain.com
 

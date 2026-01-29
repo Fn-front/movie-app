@@ -13,6 +13,7 @@
 - **Framework**: Next.js API Routes + Supabase Edge Functions
 - **認証**: NextAuth.js v5 (App Router対応)
 - **ORM**: Supabase SDK
+- **メール送信**: Resend
 
 ### データベース
 - **DB**: Supabase (PostgreSQL)
@@ -154,7 +155,7 @@ UI Re-render
 - [x] **データベース**: Supabase - 確定
 - [x] **ORM**: Supabase SDK - 確定
 - [x] **状態管理**: Zustand - 確定
-- [ ] **メール送信**: Resend or SendGrid or AWS SES?（推奨: Resend）
+- [x] **メール送信**: Resend - 確定
 
 ### インフラ
 - [x] **ホスティング**: Vercel - 確定

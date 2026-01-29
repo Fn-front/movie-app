@@ -35,7 +35,9 @@
       "Bash(git filter-branch:*)",
       "Bash(git show-ref:*)",
       "Bash(git push:*)",
-      "Bash(git update-ref:*)"
+      "Bash(git update-ref:*)",
+      "WebSearch",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

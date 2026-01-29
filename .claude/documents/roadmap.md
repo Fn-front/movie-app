@@ -20,11 +20,14 @@
   - [x] 状態管理: Zustand
   - [x] 認証: NextAuth.js v5
   - [x] HTTP Client: axios
+  - [x] フォームバリデーション: react-hook-form + zod
   - [x] レート制限: 3回
   - [x] ホスティング: Vercel
   - [x] CSRF対策: 厳し目の基本設定
   - [x] コード分割: しない
   - [x] メール送信: Resend
+  - [x] Supabase Realtime: 使用しない
+  - [x] Supabase Storage: 使用しない
 - [ ] Supabaseプロジェクト作成
   - [ ] Supabaseアカウント作成
   - [ ] 新規プロジェクト作成
@@ -55,32 +58,50 @@
 ## フェーズ2: 認証機能（1-2週間）
 
 ### 新規登録フロー（NextAuth.js Credentials Provider）
-- [ ] 登録フォームUI実装
-- [ ] バリデーション実装
+- [ ] 登録フォームUI実装（react-hook-form）
+- [ ] バリデーションスキーマ実装（zod）
+  - メールアドレス形式チェック
+  - パスワードポリシー: 8文字以上、英字（大文字・小文字）+ 数字必須
 - [ ] NextAuth.js Credentials Provider設定
 - [ ] カスタム登録API実装（`/api/auth/register`）
 - [ ] パスワードハッシュ化実装（bcrypt）
 - [ ] メール送信機能実装
   - Resend API統合
-  - OTPメールテンプレート作成
+  - OTPメールテンプレート作成（6桁数字、10分有効期限）
 - [ ] OTP検証フォームUI実装
 - [ ] OTP検証API実装（`/api/auth/verify-otp`）
+  - 3回失敗で30分ロック
+  - 再発行は5分間隔
 - [ ] axiosインスタンスでAPI呼び出し
 
 ### ログイン・セッション管理（NextAuth.js）
-- [ ] ログインフォームUI実装
+- [ ] ログインフォームUI実装（react-hook-form + zod）
 - [ ] NextAuth.js signIn()統合
-- [ ] Session Callbacksカスタマイズ
+- [ ] Session Callbacksカスタマイズ（JWT、24時間有効期限）
 - [ ] NextAuth.js Middlewareでルート保護
 - [ ] axiosインターセプターでセッション管理
+
+### パスワード管理機能
+- [ ] パスワードリセット機能実装
+  - パスワード忘れた画面UI実装
+  - リセットトークン生成API実装（`/api/auth/forgot-password`）
+  - リセットメール送信（Resend）
+  - 新パスワード設定画面UI実装
+  - パスワード更新API実装（`/api/auth/reset-password`）
+- [ ] パスワード変更機能実装
+  - アカウント設定画面実装
+  - パスワード変更フォームUI実装（react-hook-form + zod）
+  - パスワード変更API実装（`/api/user/change-password`）
+  - 現在のパスワード確認
+  - 新パスワードバリデーション（8文字以上、英字大小 + 数字）
 
 ### セキュリティ対策
 - [ ] レート制限実装（3回までの試行制限）
   - ログイン: 3回失敗で30分ロック
   - OTP検証: 3回失敗で30分ロック
-- [ ] CSRF対策（NextAuth.jsで自動対応）
+- [ ] CSRF対策（NextAuth.jsで自動対応 + カスタムトークン）
 - [ ] XSS対策
-- [ ] パスワードポリシー実装
+- [ ] パスワードポリシー実装（zod schemaで実装済み）
 
 ---
 

@@ -8,6 +8,7 @@
 - **スタイリング**: SCSS Modules
 - **状態管理**: Zustand
 - **HTTP Client**: axios
+- **フォームバリデーション**: react-hook-form + zod
 
 ### バックエンド
 - **Framework**: Next.js API Routes + Supabase Edge Functions
@@ -170,5 +171,5 @@ UI Re-render
 
 ### Supabase設定
 - [ ] **Row Level Security (RLS)**: ポリシー設計は？
-- [ ] **Realtime機能**: ウォッチリストに使用する？
-- [ ] **Storage**: 画像アップロード機能は必要？（現状TMDbのみ）
+- [x] **Realtime機能**: 使用しない - 確定
+- [x] **Storage**: 使用しない（画像はTMDbのみ）- 確定

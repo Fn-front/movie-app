@@ -56,6 +56,28 @@
 
 ---
 
+### password_reset_tokens（パスワードリセット）
+パスワードリセット用のトークン管理
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | トークンID（主キー） |
+| user_id | UUID | NOT NULL | - | ユーザーID（外部キー） |
+| token | VARCHAR(64) | NOT NULL | - | リセットトークン（ハッシュ化） |
+| expires_at | TIMESTAMP | NOT NULL | - | 有効期限（1時間） |
+| is_used | BOOLEAN | NOT NULL | false | 使用済みフラグ |
+| created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
+
+**インデックス:**
+- `token` (UNIQUE)
+- `user_id`
+- `expires_at`
+
+**外部キー:**
+- `user_id` -> `users(id)` ON DELETE CASCADE
+
+---
+
 ### watchlist（見たい映画リスト）
 ユーザーの見たい映画を管理（映画IDと画像URLを保存）
 
@@ -167,24 +189,19 @@ users (1) ----< (N) watchlist
   |
   | (1)
   |
-  V
-  | (1)
-  |
-otp_tokens (N)
+  +----< (N) otp_tokens
   |
   | (1)
   |
-  V
-  | (1)
-  |
-user_preferences (1)
+  +----< (N) password_reset_tokens
   |
   | (1)
   |
-  V
+  +---- (1) user_preferences
+  |
   | (1)
   |
-reviews (N)
+  +----< (N) reviews
 ```
 
 ## 確認が必要な事項
@@ -196,10 +213,11 @@ reviews (N)
   - [ ] RLSポリシー詳細設計は？
 
 ### セキュリティ
-- [ ] **パスワードハッシュアルゴリズム**: bcrypt or argon2?
-- [ ] **OTPコード**: 6桁数字 or 英数字混合?
-- [ ] **OTP有効期限**: 何分に設定するか？(推奨: 10分)
-- [ ] **トークン再生成**: 何回まで許可するか？
+- [x] **パスワードハッシュアルゴリズム**: bcrypt - 確定
+- [x] **OTPコード**: 6桁数字 - 確定
+- [x] **OTP有効期限**: 10分 - 確定
+- [x] **OTP再発行間隔**: 5分 - 確定
+- [x] **パスワードポリシー**: 8文字以上、英字（大文字・小文字）+ 数字必須 - 確定
 
 ### パフォーマンス
 - [x] **movie_cacheテーブル**: 実装する - 確定（一覧画面用、差分更新方式）

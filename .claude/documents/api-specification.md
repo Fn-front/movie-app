@@ -114,6 +114,92 @@ OTP検証
 
 ---
 
+### POST /api/auth/forgot-password
+パスワードリセット要求
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "パスワードリセット用のメールを送信しました"
+}
+```
+
+**Error Responses:**
+- `404 Not Found`: メールアドレスが登録されていない（セキュリティのため同じメッセージを返す）
+
+**備考:**
+- リセットトークンは1時間有効
+- メールにリセット用URLを送信（例: /reset-password?token=xxx）
+
+---
+
+### POST /api/auth/reset-password
+パスワードリセット実行
+
+**Request Body:**
+```json
+{
+  "token": "reset-token-here",
+  "newPassword": "newPassword123"
+}
+```
+
+**Validation:**
+- パスワード: 8文字以上、英字（大文字・小文字）+ 数字必須（react-hook-form + zodで検証）
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "パスワードを変更しました"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: トークンが無効または期限切れ
+- `400 Bad Request`: パスワードポリシー違反
+
+---
+
+### POST /api/user/change-password
+パスワード変更（ログイン済みユーザー）
+
+**認証**: NextAuth.jsセッション必須
+
+**Request Body:**
+```json
+{
+  "currentPassword": "oldPassword123",
+  "newPassword": "newPassword456"
+}
+```
+
+**Validation:**
+- パスワード: 8文字以上、英字（大文字・小文字）+ 数字必須（react-hook-form + zodで検証）
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "パスワードを変更しました"
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized`: 未ログイン
+- `400 Bad Request`: 現在のパスワードが間違っている
+- `400 Bad Request`: 新しいパスワードがポリシー違反
+
+---
+
 ## 映画API
 
 ### GET /api/movies

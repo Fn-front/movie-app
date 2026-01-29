@@ -188,9 +188,9 @@ API Request
 - **試行回数制限**: 3回失敗でアカウントロック（30分）
 
 ### セッション/トークン（NextAuth.js）
-- **有効期限**: Session: 24時間（NextAuth.js管理）
+- **有効期限**: 24時間
+- **セッションストレージ**: ブラウザメモリ（JWT方式）
 - **セキュアフラグ**: HttpOnly, Secure, SameSite=Strict（NextAuth.jsが自動設定）
-- **セッションストレージ**: データベース
 
 ### その他
 - **Rate Limiting**: 3回までの試行制限（ログイン・OTP検証）
@@ -208,7 +208,8 @@ API Request
 ## 確認が必要な事項
 
 ### NextAuth.js設定
-- [ ] **セッションストレージ**: データベースアダプター設定は？
+- [x] **セッションストレージ**: ブラウザメモリ（JWT方式）- 確定
+- [x] **セッション有効期限**: 24時間 - 確定
 - [ ] **Credentials Provider**: カスタム認証ロジックの実装方法は？
 - [ ] **Callbacks**: session/jwt callbacksの設定は？
 

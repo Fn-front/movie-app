@@ -43,13 +43,17 @@
 ---
 
 ### watchlist（見たい映画リスト）
-ユーザーの見たい映画を管理
+ユーザーの見たい映画を管理（映画IDと画像URLを保存）
 
 | カラム名 | 型 | NULL | デフォルト | 説明 |
 |---------|-----|------|-----------|------|
 | id | UUID | NOT NULL | uuid_generate_v4() | レコードID（主キー） |
 | user_id | UUID | NOT NULL | - | ユーザーID（外部キー） |
 | tmdb_movie_id | INTEGER | NOT NULL | - | TMDb映画ID |
+| title | VARCHAR(255) | NOT NULL | - | 映画タイトル |
+| poster_path | VARCHAR(255) | NULL | - | ポスター画像パス |
+| backdrop_path | VARCHAR(255) | NULL | - | 背景画像パス |
+| release_date | DATE | NULL | - | 公開日 |
 | added_at | TIMESTAMP | NOT NULL | NOW() | 追加日時 |
 | notes | TEXT | NULL | - | メモ（将来的に使用） |
 
@@ -63,27 +67,8 @@
 
 ---
 
-### movie_cache（映画情報キャッシュ）
-TMDb APIから取得した映画情報をキャッシュ（オプション）
-
-| カラム名 | 型 | NULL | デフォルト | 説明 |
-|---------|-----|------|-----------|------|
-| id | INTEGER | NOT NULL | - | TMDb映画ID（主キー） |
-| title | VARCHAR(255) | NOT NULL | - | 映画タイトル |
-| title_ja | VARCHAR(255) | NULL | - | 日本語タイトル |
-| overview | TEXT | NULL | - | 概要 |
-| release_date | DATE | NULL | - | 公開日 |
-| poster_path | VARCHAR(255) | NULL | - | ポスター画像パス |
-| backdrop_path | VARCHAR(255) | NULL | - | 背景画像パス |
-| vote_average | DECIMAL(3,1) | NULL | - | 評価平均 |
-| popularity | DECIMAL(10,3) | NULL | - | 人気度 |
-| cached_at | TIMESTAMP | NOT NULL | NOW() | キャッシュ日時 |
-| updated_at | TIMESTAMP | NOT NULL | NOW() | 更新日時 |
-
-**インデックス:**
-- `release_date` - 公開日順ソート用
-- `popularity` - 人気順ソート用
-- `updated_at` - キャッシュ期限管理用
+### ~~movie_cache（映画情報キャッシュ）~~
+**使用しない** - キャッシュ戦略「キャッシュしない」のため、このテーブルは実装しない
 
 ---
 
@@ -142,9 +127,8 @@ user_preferences (1)
 - [ ] **トークン再生成**: 何回まで許可するか？
 
 ### パフォーマンス
-- [ ] **movie_cacheテーブル**: 実装する？しない？
-  - 実装する場合、キャッシュ期限は？(推奨: 24時間)
-  - TMDb APIの制限を考慮
+- [x] **movie_cacheテーブル**: 実装しない - 確定（キャッシュ戦略: キャッシュしない）
+- [x] **watchlistテーブル**: 映画IDと画像URLを保存 - 確定
 - [ ] **インデックス追加**: 他に必要なインデックスは？
 
 ### データ管理

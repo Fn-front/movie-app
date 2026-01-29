@@ -233,6 +233,7 @@ export function validateEnv() {
 ## 確認が必要な事項
 
 ### API Keys
+- [x] **API Key管理**: 環境変数（.env）で管理 - 確定
 - [ ] **TMDb API Key**: 取得済み？
 - [ ] **Resend/SendGrid/AWS SES**: どれを使用するか決定？
 - [ ] **OpenAI API Key**: 将来的に必要？今は不要？
@@ -242,10 +243,11 @@ export function validateEnv() {
 - [ ] **接続プール**: 必要なサイズは？
 - [ ] **SSL接続**: 必要？不要？
 
-### 認証
-- [ ] **JWT Secret**: 生成方法は決定？
-- [ ] **Cookie設定**: HttpOnly/Secure/SameSiteの設定は？
-- [ ] **トークン有効期限**: デフォルト値は適切？
+### 認証（NextAuth.js）
+- [x] **セッション有効期限**: 24時間 - 確定
+- [x] **セッションストレージ**: ブラウザメモリ（JWT方式） - 確定
+- [ ] **NEXTAUTH_SECRET**: 生成方法は決定？（openssl rand -base64 32）
+- [ ] **Cookie設定**: HttpOnly/Secure/SameSiteの設定は？（NextAuth.jsが自動設定）
 
 ### 本番環境
 - [ ] **Vercel**: プロジェクト作成済み？

@@ -211,10 +211,25 @@ showToast({
 **Props:**
 - `size`: 'sm' | 'md' | 'lg'
 - `fullScreen`: boolean
+- `message`: string (optional) - ローディング中のメッセージ
+
+**表示内容:**
+- ローディングサークル（スピナー）
+- オプションでメッセージ表示
+
+**fullScreen時の動作:**
+- 全画面オーバーレイで背景を暗くする
+- 画面操作を完全にブロック（z-index最大値）
+- 中央にローディングサークル表示
+- 認証処理・API呼び出し中に使用
 
 **使用例:**
 ```tsx
-<Loading size="lg" fullScreen />
+// 全画面ローディング（認証処理中など）
+<Loading size="lg" fullScreen message="ログイン中..." />
+
+// インラインローディング（コンポーネント内）
+<Loading size="md" />
 ```
 
 ---

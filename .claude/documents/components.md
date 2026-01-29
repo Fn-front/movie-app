@@ -445,15 +445,30 @@ type FilterOptions = {
 ### OTPVerification
 OTP検証フォーム
 
+**フォーム**: react-hook-form + zod
+
 **Props:**
 - `onSubmit`: (otp: string) => Promise<void>
 - `onResend`: () => Promise<void>
 - `email`: string
 
 **表示内容:**
-- 6桁OTP入力フィールド
+- 6桁OTP入力フィールド（1つの入力欄方式）
+  - type="text"
+  - maxLength={6}
+  - pattern="[0-9]{6}"
+  - プレースホルダー: "123456"
 - 検証ボタン
-- 再送信ボタン
+- 再送信ボタン（5分間隔制限）
+
+**バリデーション（zod）:**
+```typescript
+const otpSchema = z.object({
+  otp: z.string()
+    .length(6, '6桁の数字を入力してください')
+    .regex(/^[0-9]{6}$/, '数字のみ入力可能です')
+});
+```
 
 **使用例:**
 ```tsx

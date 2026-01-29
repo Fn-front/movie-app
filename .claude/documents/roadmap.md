@@ -76,7 +76,10 @@
 - [ ] メール送信機能実装
   - Resend API統合
   - OTPメールテンプレート作成（6桁数字、10分有効期限）
-- [ ] OTP検証フォームUI実装
+- [ ] OTP検証フォームUI実装（react-hook-form + zod）
+  - 1つの入力欄方式（maxLength=6、pattern="[0-9]{6}"）
+  - zodバリデーション（6桁数字チェック）
+  - 再送信ボタン（5分間隔制限）
 - [ ] OTP検証API実装（`/api/auth/verify-otp`）
   - 3回失敗で30分ロック
   - 再発行は5分間隔

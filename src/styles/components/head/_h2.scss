@@ -1,0 +1,13 @@
+.c_h2 {
+  font-size: 2rem;
+
+  &+* {
+    margin-top: 16px;
+  }
+}
+
+* {
+  &+.c_h2{
+    margin-top: 32px;
+  }
+}

@@ -1,0 +1,13 @@
+// foundation
+@use './foundation/_reset';
+
+// layout
+@use './layout/_global_container';
+@use './layout/_main';
+@use './layout/_container';
+
+// components
+@use './components/head/h2';
+
+// global
+@use './global/_global';

@@ -214,8 +214,96 @@ API Request
 - [x] **セッションストレージ**: ブラウザメモリ（JWT方式）- 確定
 - [x] **セッション有効期限**: 24時間 - 確定
 - [x] **Credentials Provider**: メールアドレス + パスワード認証 - 確定
-- [ ] **Callbacks**: session/jwt callbacksの設定は？
+- [x] **Callbacks**: session/jwt callbacksの設定完了 - 確定
 - [x] **フォームバリデーション**: react-hook-form + zod - 確定
+
+**NextAuth.js Callbacks設計:**
+
+```typescript
+// app/api/auth/[...nextauth]/route.ts
+import NextAuth from "next-auth"
+import CredentialsProvider from "next-auth/providers/credentials"
+
+export const authOptions = {
+  providers: [
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" }
+      },
+      async authorize(credentials) {
+        // ユーザー認証ロジック（省略）
+        // 成功時に返すユーザーオブジェクト
+        return {
+          id: user.id,           // UUID
+          email: user.email,
+          name: user.name,
+          isVerified: user.is_verified
+        }
+      }
+    })
+  ],
+
+  callbacks: {
+    // JWTコールバック: トークンにユーザー情報を追加
+    async jwt({ token, user }) {
+      if (user) {
+        token.userId = user.id
+        token.email = user.email
+        token.name = user.name
+        token.isVerified = user.isVerified
+      }
+      return token
+    },
+
+    // セッションコールバック: クライアントに返すセッション情報
+    async session({ session, token }) {
+      session.user = {
+        id: token.userId,
+        email: token.email,
+        name: token.name,
+        isVerified: token.isVerified
+      }
+      return session
+    }
+  },
+
+  session: {
+    strategy: "jwt",
+    maxAge: 24 * 60 * 60, // 24時間
+  },
+
+  cookies: {
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'strict',
+        path: '/',
+        secure: true,
+      },
+    },
+  },
+}
+
+const handler = NextAuth(authOptions)
+export { handler as GET, handler as POST }
+```
+
+**セッションオブジェクト構造:**
+```typescript
+// クライアント側で取得できるセッション
+{
+  user: {
+    id: "uuid",              // ユーザーID
+    email: "user@example.com",
+    name: "ユーザー名",
+    isVerified: true         // メール認証済みフラグ
+  },
+  expires: "2025-01-31T00:00:00.000Z"
+}
+```
 
 ### メール送信
 - [x] **メール送信サービス**: Resend - 確定

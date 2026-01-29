@@ -199,6 +199,38 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 
 ---
 
+### rate_limits（レート制限管理）
+ログイン試行、OTP検証などのレート制限を管理
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
+| identifier | VARCHAR(255) | NOT NULL | - | 識別子（IPアドレス or ユーザーID） |
+| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（login, otp_verify, otp_resend） |
+| attempts | INTEGER | NOT NULL | 0 | 試行回数 |
+| locked_until | TIMESTAMP | NULL | - | ロック解除時刻 |
+| last_attempt_at | TIMESTAMP | NOT NULL | now() | 最終試行時刻 |
+| created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
+| updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |
+
+**インデックス:**
+- `identifier, action_type` (UNIQUE) - 重複防止
+- `locked_until` - ロック解除チェック用
+
+**制約:**
+- `action_type` は 'login', 'otp_verify', 'otp_resend' のいずれか（ENUM型 or CHECK制約）
+
+**レート制限ルール:**
+- **login**: 3回失敗で30分ロック
+- **otp_verify**: 3回失敗で30分ロック
+- **otp_resend**: 5分間隔で再送信可能
+
+**クリーンアップ:**
+- ロック解除時刻を過ぎたレコードは定期的に削除（Vercel Cron Jobs）
+- または、レコード取得時に`locked_until < now()`をチェックして自動リセット
+
+---
+
 ## ER図（概念図）
 
 ```
@@ -221,13 +253,220 @@ users (1) ----< (N) watchlist
   +----< (N) reviews
 ```
 
+---
+
+## Row Level Security (RLS) ポリシー
+
+### users テーブル
+
+```sql
+-- RLS有効化
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: 自分のレコードのみ閲覧可能
+CREATE POLICY "Users can view own data"
+  ON users FOR SELECT
+  USING (auth.uid() = id);
+
+-- INSERT: 公開（新規登録用）
+CREATE POLICY "Anyone can insert users"
+  ON users FOR INSERT
+  WITH CHECK (true);
+
+-- UPDATE: 自分のレコードのみ更新可能
+CREATE POLICY "Users can update own data"
+  ON users FOR UPDATE
+  USING (auth.uid() = id);
+
+-- DELETE: 自分のレコードのみ削除可能
+CREATE POLICY "Users can delete own data"
+  ON users FOR DELETE
+  USING (auth.uid() = id);
+```
+
+---
+
+### otp_tokens テーブル
+
+```sql
+-- RLS有効化
+ALTER TABLE otp_tokens ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: 自分のトークンのみ閲覧可能
+CREATE POLICY "Users can view own OTP tokens"
+  ON otp_tokens FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- INSERT: 公開（新規登録時）
+CREATE POLICY "Anyone can insert OTP tokens"
+  ON otp_tokens FOR INSERT
+  WITH CHECK (true);
+
+-- UPDATE: 自分のトークンのみ更新可能
+CREATE POLICY "Users can update own OTP tokens"
+  ON otp_tokens FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- DELETE: 自分のトークンのみ削除可能
+CREATE POLICY "Users can delete own OTP tokens"
+  ON otp_tokens FOR DELETE
+  USING (auth.uid() = user_id);
+```
+
+---
+
+### password_reset_tokens テーブル
+
+```sql
+-- RLS有効化
+ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: 自分のトークンのみ閲覧可能
+CREATE POLICY "Users can view own reset tokens"
+  ON password_reset_tokens FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- INSERT: 公開（パスワードリセット要求時）
+CREATE POLICY "Anyone can insert reset tokens"
+  ON password_reset_tokens FOR INSERT
+  WITH CHECK (true);
+
+-- UPDATE: 自分のトークンのみ更新可能
+CREATE POLICY "Users can update own reset tokens"
+  ON password_reset_tokens FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- DELETE: 自分のトークンのみ削除可能
+CREATE POLICY "Users can delete own reset tokens"
+  ON password_reset_tokens FOR DELETE
+  USING (auth.uid() = user_id);
+```
+
+---
+
+### watchlist テーブル
+
+```sql
+-- RLS有効化
+ALTER TABLE watchlist ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: 自分のウォッチリストのみ閲覧可能（論理削除済みを除外）
+CREATE POLICY "Users can view own watchlist"
+  ON watchlist FOR SELECT
+  USING (auth.uid() = user_id AND deleted_at IS NULL);
+
+-- INSERT: 自分のウォッチリストのみ追加可能
+CREATE POLICY "Users can insert own watchlist"
+  ON watchlist FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- UPDATE: 自分のウォッチリストのみ更新可能
+CREATE POLICY "Users can update own watchlist"
+  ON watchlist FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- DELETE: 自分のウォッチリストのみ削除可能（論理削除）
+CREATE POLICY "Users can delete own watchlist"
+  ON watchlist FOR DELETE
+  USING (auth.uid() = user_id);
+```
+
+---
+
+### movie_cache テーブル
+
+```sql
+-- RLS有効化
+ALTER TABLE movie_cache ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: 全員閲覧可能（公開データ）
+CREATE POLICY "Anyone can view movie cache"
+  ON movie_cache FOR SELECT
+  USING (true);
+
+-- INSERT/UPDATE/DELETE: サーバーサイドのみ（Service Role Key使用）
+-- アプリケーション側で制御（クライアントからは操作不可）
+```
+
+---
+
+### user_preferences テーブル
+
+```sql
+-- RLS有効化
+ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: 自分の設定のみ閲覧可能
+CREATE POLICY "Users can view own preferences"
+  ON user_preferences FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- INSERT: 自分の設定のみ追加可能
+CREATE POLICY "Users can insert own preferences"
+  ON user_preferences FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- UPDATE: 自分の設定のみ更新可能
+CREATE POLICY "Users can update own preferences"
+  ON user_preferences FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- DELETE: 自分の設定のみ削除可能
+CREATE POLICY "Users can delete own preferences"
+  ON user_preferences FOR DELETE
+  USING (auth.uid() = user_id);
+```
+
+---
+
+### reviews テーブル
+
+```sql
+-- RLS有効化
+ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: 全員閲覧可能（公開レビュー）
+CREATE POLICY "Anyone can view reviews"
+  ON reviews FOR SELECT
+  USING (true);
+
+-- INSERT: 認証済みユーザーのみ投稿可能
+CREATE POLICY "Authenticated users can insert reviews"
+  ON reviews FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- UPDATE: 自分のレビューのみ更新可能
+CREATE POLICY "Users can update own reviews"
+  ON reviews FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- DELETE: 自分のレビューのみ削除可能
+CREATE POLICY "Users can delete own reviews"
+  ON reviews FOR DELETE
+  USING (auth.uid() = user_id);
+```
+
+---
+
+### rate_limits テーブル
+
+```sql
+-- RLS有効化
+ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
+
+-- SELECT/INSERT/UPDATE/DELETE: サーバーサイドのみ
+-- クライアントからは一切アクセス不可（Service Role Key使用）
+```
+
+---
+
 ## 確認が必要な事項
 
 ### データベース選定
 - [x] **PostgreSQL直接 or Supabase**: Supabase - 確定
   - Supabase SDK使用
   - Row Level Security (RLS) で各テーブルを保護
-  - [ ] RLSポリシー詳細設計は？
+  - [x] RLSポリシー詳細設計: 完了（auth.uid()ベースのポリシー）- 確定
 
 ### セキュリティ
 - [x] **パスワードハッシュアルゴリズム**: bcrypt - 確定

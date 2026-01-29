@@ -15,6 +15,97 @@
 
 ---
 
+## レスポンスフォーマット
+
+### 成功レスポンス
+
+```typescript
+{
+  success: true,
+  data?: any,           // オプション: 返すデータがある場合
+  message?: string      // オプション: ユーザー向けメッセージ
+}
+```
+
+### エラーレスポンス（統一フォーマット）
+
+```typescript
+{
+  success: false,
+  error: {
+    code: string,       // エラーコード（英大文字スネークケース）
+    message: string,    // ユーザー向けエラーメッセージ（日本語）
+    details?: any       // オプション: 追加情報（試行回数、フィールドエラー等）
+  }
+}
+```
+
+**エラーコード一覧:**
+
+| HTTPステータス | エラーコード | message例 | details例 |
+|--------------|------------|----------|----------|
+| 400 | VALIDATION_ERROR | "入力内容に誤りがあります" | { fields: {...} } |
+| 400 | INVALID_OTP | "OTPコードが間違っています" | { attemptsLeft: 2 } |
+| 400 | OTP_EXPIRED | "OTPコードの有効期限が切れました" | - |
+| 401 | UNAUTHORIZED | "認証が必要です" | - |
+| 401 | INVALID_CREDENTIALS | "メールアドレスまたはパスワードが正しくありません" | - |
+| 403 | FORBIDDEN | "アクセス権限がありません" | - |
+| 403 | EMAIL_NOT_VERIFIED | "メールアドレスが未認証です" | - |
+| 404 | NOT_FOUND | "リソースが見つかりません" | - |
+| 404 | USER_NOT_FOUND | "ユーザーが見つかりません" | - |
+| 409 | CONFLICT | "すでに登録済みのメールアドレスです" | - |
+| 429 | RATE_LIMIT_EXCEEDED | "試行回数の上限に達しました。30分後に再度お試しください" | { retryAfter: 1800 } |
+| 429 | TOO_MANY_REQUESTS | "リクエストが多すぎます。しばらく待ってから再度お試しください" | - |
+| 500 | INTERNAL_SERVER_ERROR | "サーバーエラーが発生しました" | - |
+| 500 | DATABASE_ERROR | "データベースエラーが発生しました" | - |
+| 503 | SERVICE_UNAVAILABLE | "サービスが一時的に利用できません" | - |
+
+**エラーレスポンス例:**
+
+```json
+// バリデーションエラー
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "入力内容に誤りがあります",
+    "details": {
+      "fields": {
+        "email": "メールアドレスの形式が正しくありません",
+        "password": "パスワードは8文字以上、英字（大文字・小文字）と数字を含む必要があります"
+      }
+    }
+  }
+}
+
+// レート制限エラー
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "試行回数の上限に達しました。30分後に再度お試しください",
+    "details": {
+      "retryAfter": 1800,
+      "lockedUntil": "2025-01-30T12:30:00.000Z"
+    }
+  }
+}
+
+// OTP検証エラー
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_OTP",
+    "message": "OTPコードが間違っています",
+    "details": {
+      "attemptsLeft": 2
+    }
+  }
+}
+```
+
+---
+
 ## 認証API
 
 ### POST /api/auth/register

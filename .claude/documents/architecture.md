@@ -25,6 +25,9 @@
 
 ### 外部API
 - **TMDb API**: 映画情報取得
+  - **レート制限**: 50リクエスト/秒、20コネクション/IP
+  - **注意**: 旧制限（40リクエスト/10秒）は2019年12月に廃止
+  - **対策**: バッチ処理時の並列リクエスト数を制限（同時10リクエスト程度）
 - **OpenAI API**: 将来的なレコメンド機能用
 
 ### インフラ
@@ -137,21 +140,33 @@ UI Re-render
 ### データ層
 - **データベース**: Supabase (PostgreSQL)
 - **ORM**: Supabase SDK
-- **状態管理**: Zustand
+- **状態管理**: Zustand（クライアント状態のみ）
+  - グローバルUI状態（モーダル開閉、サイドバー表示等）
+  - ユーザー設定（テーマ、言語等）
+  - 一時的なクライアント状態
+  - **サーバーステート除外**: TMDb APIデータ、ユーザーデータ、ウォッチリストはカスタムフックで管理
 
 ### バックエンド
-- **HTTP Client**: axios
+- **HTTP Client**:
+  - **外部API（TMDb API）**: axios（インターセプター、タイムアウト設定）
+  - **内部API Routes**: fetch（Next.js標準、Server Actions優先）
+  - **使い分け理由**: axiosは外部API用の高機能クライアント、内部APIはNext.js標準のfetchで十分
 - **認証**: NextAuth.js v5 (App Router対応)
   - セッション有効期限: 24時間
   - セッションストレージ: ブラウザメモリ（JWT方式）
   - Cookie設定: 厳密（HttpOnly: true, Secure: true, SameSite: 'strict'）
-- **レート制限**: 3回までの試行制限
+- **レート制限**: 3回までの試行制限（DBテーブルで管理）
 - **CSRF対策**: 厳し目の基本設定（NextAuth.js + カスタムトークン）
 
 ### インフラ・デプロイ
 - **ホスティング**: Vercel
 - **API Key管理**: 環境変数（.env）で管理
 - **コード分割**: しない（バンドルサイズ最適化のみ）
+- **エラー監視・ロギング**: Vercel Logs集約
+  - console.error()でエラー出力 → Vercel Logsに自動収集
+  - Vercel DashboardでRuntime Logs確認
+  - 将来的にSentry導入を検討（予算次第）
+  - ログレベル: error（本番）、info（開発）
 
 ### キャッシュ・パフォーマンス
 - **キャッシュ戦略**:

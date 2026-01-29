@@ -734,7 +734,7 @@ export const MovieList = () => {
 ### テスト
 - [x] **単体テスト**: Jest + React Testing Library - 確定
 - [x] **E2Eテスト**: Playwright - 確定
-- [ ] **Storybook**: コンポーネントカタログ作成する？
+- [x] **Storybook**: 実施 - 確定
 - [x] **カバレッジ目標**: 80%以上 - 確定
 
 **テスト方針:**
@@ -742,6 +742,12 @@ export const MovieList = () => {
 - カスタムフック: 単体テスト必須
 - ページ・フィーチャー: E2Eテスト
 - API Routes: 統合テスト
+
+**Storybook方針:**
+- 共通コンポーネント（common/）は全てストーリー作成
+- 機能コンポーネント（features/）は主要なもののみ
+- デザインシステムのドキュメント化
+- インタラクションテスト活用
 
 ### 命名規則
 - [x] **変数・関数**: lowerCamelCase - 確定

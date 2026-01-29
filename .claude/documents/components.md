@@ -60,6 +60,32 @@
 
 ---
 
+### Select
+セレクトボックス
+
+**Props:**
+- `value`: string
+- `onChange`: (value: string) => void
+- `options`: Array<{ value: string; label: string }>
+- `placeholder`: string
+- `disabled`: boolean
+
+**使用例:**
+```tsx
+<Select
+  value={selectedSort}
+  onChange={setSortBy}
+  options={[
+    { value: 'release_date', label: '公開日順' },
+    { value: 'popularity', label: '人気順' },
+    { value: 'vote_average', label: '評価順' }
+  ]}
+  placeholder="並び替え"
+/>
+```
+
+---
+
 ### Card
 カードコンテナ
 
@@ -98,6 +124,47 @@
 >
   <MovieDetail movieId={selectedMovieId} />
 </Modal>
+```
+
+---
+
+### Toast
+トースト通知コンポーネント
+
+**Props:**
+- `message`: string
+- `type`: 'error' | 'warning' | 'info' | 'success'
+- `duration`: number（デフォルト: 5000ms）
+- `onClose`: () => void
+
+**表示内容:**
+- メッセージテキスト
+- タイプに応じた色分け
+  - error: 赤
+  - warning: 黄
+  - info: 青
+  - success: 緑
+- 自動消滅（5秒）
+
+**使用例:**
+```tsx
+<Toast
+  message="メールアドレスの形式が不正です"
+  type="error"
+  duration={5000}
+  onClose={handleCloseToast}
+/>
+```
+
+**グローバル使用:**
+```tsx
+// Context経由でグローバル管理
+const { showToast } = useToast();
+
+showToast({
+  message: 'ログインに成功しました',
+  type: 'success'
+});
 ```
 
 ---

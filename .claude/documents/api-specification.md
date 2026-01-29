@@ -117,11 +117,15 @@ OTP検証
 ## 映画API
 
 ### GET /api/movies
-映画一覧取得（公開日順、DBキャッシュ使用）
+映画一覧取得（ソート可能、DBキャッシュ使用）
 
 **Query Parameters:**
 - `page` (optional): ページ番号（デフォルト: 1）
 - `limit` (optional): 取得件数（デフォルト: 20）
+- `sort_by` (optional): ソート順（デフォルト: release_date）
+  - `release_date`: 公開日順（新しい順）
+  - `popularity`: 人気順（高い順）
+  - `vote_average`: 評価順（高い順）
 
 **内部処理フロー:**
 1. DBから最新映画の取得日時を確認 (`SELECT MAX(cached_at) FROM movie_cache`)
@@ -130,7 +134,7 @@ OTP検証
    - `primary_release_date.lte`: 今日から3ヶ月先
    - `language=ja-JP`, `region=JP`
 3. 取得した新作をDBに追加（UPSERT）
-4. DBから指定ページの映画を返却
+4. DBから指定ページの映画を返却（sort_byパラメータに応じてソート）
 
 **Response (200 OK):**
 ```json
@@ -332,9 +336,72 @@ OTP検証
 
 ---
 
-## 将来的なAPI（OpenAIレコメンド機能）
+## 将来的なAPI
 
-### POST /api/recommendations
+### レビュー機能
+
+#### GET /api/movies/:id/reviews
+映画のレビュー一覧取得
+
+**Query Parameters:**
+- `page` (optional): ページ番号（デフォルト: 1）
+- `limit` (optional): 取得件数（デフォルト: 10）
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "reviews": [
+      {
+        "id": "review-uuid",
+        "user": {
+          "id": "user-uuid",
+          "name": "ユーザー名",
+          "avatar_url": "https://..."
+        },
+        "rating": 4.5,
+        "comment": "素晴らしい映画でした！",
+        "created_at": "2026-01-29T10:00:00Z"
+      }
+    ],
+    "pagination": { /* ページネーション情報 */ }
+  }
+}
+```
+
+#### POST /api/movies/:id/reviews
+映画にレビューを投稿
+
+**認証**: 必須
+
+**Request Body:**
+```json
+{
+  "rating": 4.5,
+  "comment": "素晴らしい映画でした！"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "success": true,
+  "message": "レビューを投稿しました",
+  "data": {
+    "id": "review-uuid",
+    "rating": 4.5,
+    "comment": "素晴らしい映画でした！",
+    "created_at": "2026-01-29T10:00:00Z"
+  }
+}
+```
+
+---
+
+### OpenAIレコメンド機能
+
+#### POST /api/recommendations
 AIによるおすすめ映画取得
 
 **認証**: 必須
@@ -385,7 +452,7 @@ AIによるおすすめ映画取得
 - [ ] **Cron Secret**: Vercel Cron Jobs用のシークレットキーは？
 
 ### エラーハンドリング
-- [ ] **統一エラーフォーマット**: 決定しているか？
+- [x] **統一エラーフォーマット**: 確定
   ```json
   {
     "success": false,
@@ -396,13 +463,16 @@ AIによるおすすめ映画取得
     }
   }
   ```
-- [ ] **エラーログ**: どこに出力するか？
+- [x] **エラーログ**: トースト表示（5秒間） - 確定
+  - クライアント側でトーストコンポーネント使用
+  - 自動消滅時間: 5秒
+  - エラーの種類に応じて色分け（error, warning, info）
 
 ### パフォーマンス
 - [x] **ページネーション**: 20件/ページ - 確定
-- [ ] **画像最適化**: Next.js Image APIを使うか？
+- [x] **画像最適化**: Next.js Image使用 - 確定
 
 ### 将来的な拡張
-- [ ] **ソート順**: 公開日順以外に人気順・評価順は必要？
+- [x] **ソート順**: 公開日順・人気順・評価順 - 確定（セレクトボタンで切り替え）
+- [x] **レビュー機能**: 機能のみ実装予定（将来拡張用）
 - [ ] **フィルタリング**: ジャンル・年代などのフィルターは必要？
-- [ ] **レビュー機能**: ユーザーレビューAPIは必要？

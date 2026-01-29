@@ -8,6 +8,10 @@
 - [x] ESLint/Prettier設定
 - [ ] デザインシステムのSCSS変数作成
 - [ ] 共通コンポーネントの基礎実装
+  - Button, Input, Select
+  - Card, Modal
+  - Toast（エラー通知用、5秒表示）
+  - Loading
 
 ### データベース・認証基盤
 - [x] **技術選定を確定**
@@ -81,10 +85,16 @@
     - language=ja-JP, region=JP
   - 取得した新作をDBに保存（UPSERT）
   - DBから指定ページの映画を返却（20件/ページ）
-- [ ] 公開日順ソート実装
+  - sort_byパラメータ対応（release_date, popularity, vote_average）
+- [ ] ソート機能実装
+  - Selectコンポーネント実装
+  - ソート選択肢：公開日順・人気順・評価順
+  - クエリパラメータでソート順を管理
 - [ ] ページネーション実装（20件/ページ）
 - [ ] ローディング状態実装（axios interceptors活用）
 - [ ] エラーハンドリング（axios error handling）
+  - トースト通知実装（5秒表示）
+  - エラータイプ別の色分け
 
 ### 映画詳細モーダル
 - [ ] Modalコンポーネント実装
@@ -101,10 +111,12 @@
   - 画像サイズ型定義（ImageSize）
   - 環境変数からベースURL取得
 - [ ] Next.js Imageコンポーネント活用
+  - next/imageを全画像表示に使用
   - 各コンポーネントでgetTMDbImageUrl使用
-  - プレースホルダー画像設定
-- [ ] 遅延ロード実装
-- [ ] プレースホルダー実装
+  - width/height指定で最適化
+  - プレースホルダー画像設定（blur/placeholder）
+- [ ] 遅延ロード実装（Next.js Imageのlazy loading）
+- [ ] WebP自動変換（Next.js Image自動対応）
 
 ### バッチ更新機能
 - [ ] 映画キャッシュ更新API実装（`/api/cron/update-movies`）
@@ -248,13 +260,27 @@
 - [ ] レコメンドUI実装
 - [ ] A/Bテスト
 
+### レビュー・評価機能
+- [ ] データベーススキーマ実装
+  - reviewsテーブル作成（id, user_id, movie_id, rating, comment, created_at）
+  - インデックス: movie_id, user_id
+- [ ] レビュー一覧取得API実装（`GET /api/movies/:id/reviews`）
+  - ページネーション対応（10件/ページ）
+  - axiosでクライアント側リクエスト
+- [ ] レビュー投稿API実装（`POST /api/movies/:id/reviews`）
+  - NextAuth.jsで認証チェック
+  - バリデーション（rating: 0.5-5.0, comment: 500文字以内）
+  - 重複投稿チェック
+- [ ] レビューコンポーネント実装
+  - ReviewListコンポーネント
+  - ReviewFormコンポーネント
+  - 星評価入力UI
+- [ ] 映画詳細モーダルにレビューセクション追加
+
 ### その他機能
 - [ ] ソーシャルログイン（Google/Twitter）
   - NextAuth.js OAuth Providers設定
   - Google Provider / Twitter Provider追加
-- [ ] レビュー・評価機能
-  - axiosでAPI連携
-  - NextAuth.jsで認証チェック
 - [ ] シェア機能
 - [ ] ダークモード
 - [ ] 通知機能（公開日リマインダー）

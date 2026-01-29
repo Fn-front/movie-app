@@ -119,6 +119,33 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 
 ---
 
+### reviews（レビュー・評価）
+将来的なレビュー機能用のユーザーレビューデータ
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | uuid_generate_v4() | レコードID（主キー） |
+| user_id | UUID | NOT NULL | - | ユーザーID（外部キー） |
+| tmdb_movie_id | INTEGER | NOT NULL | - | TMDb映画ID |
+| rating | DECIMAL(2,1) | NOT NULL | - | 評価（0.5-5.0） |
+| comment | TEXT | NULL | - | レビューコメント（500文字以内） |
+| created_at | TIMESTAMP | NOT NULL | NOW() | 投稿日時 |
+| updated_at | TIMESTAMP | NOT NULL | NOW() | 更新日時 |
+
+**インデックス:**
+- `tmdb_movie_id` - 映画別レビュー取得用
+- `user_id, tmdb_movie_id` (UNIQUE) - 重複投稿防止
+- `created_at` - 新着順ソート用
+
+**外部キー:**
+- `user_id` -> `users(id)` ON DELETE CASCADE
+
+**制約:**
+- `rating` は 0.5 から 5.0 の範囲（CHECK制約）
+- `comment` は 500文字以内
+
+---
+
 ## ER図（概念図）
 
 ```
@@ -137,6 +164,13 @@ otp_tokens (N)
   | (1)
   |
 user_preferences (1)
+  |
+  | (1)
+  |
+  V
+  | (1)
+  |
+reviews (N)
 ```
 
 ## 確認が必要な事項

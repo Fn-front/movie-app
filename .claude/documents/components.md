@@ -723,13 +723,21 @@ export const MovieList = () => {
 - [x] **ARIA属性**: Radix UIに標準搭載（WAI-ARIA準拠）- 確定
 - [x] **キーボード操作**: Radix UIに標準搭載（Tab/Enter/Escape等）- 確定
 - [x] **スクリーンリーダー**: Radix UIに標準搭載 - 確定
-- [ ] **追加のアクセシビリティ対応**: カスタムコンポーネント用の追加実装は？
+- [x] **カラーコントラスト**: WCAG AA基準を満たす - 確定
+- [x] **フォーカス表示**: キーボード操作時の視覚的フィードバック実装 - 確定
+- [x] **ARIAラベル**: 全インタラクティブ要素に実装 - 確定
 
 **Radix UIのアクセシビリティ機能:**
 - フォーカス管理（Focus Trap、Focus Lock）
 - キーボードナビゲーション（矢印キー、Tab、Enter、Escape）
 - ARIA属性の自動設定（role, aria-label, aria-describedby等）
 - スクリーンリーダー対応（Live Regions、Announcements）
+
+**カスタムコンポーネントのアクセシビリティ要件:**
+- すべてのボタン・リンクにaria-label追加
+- フォーカス時に明確なアウトライン表示（outline: 2px solid $primary-500）
+- カラーコントラスト比4.5:1以上（テキスト）、3:1以上（UI要素）
+- キーボードのみで全操作可能
 
 ### テスト
 - [x] **単体テスト**: Jest + React Testing Library - 確定

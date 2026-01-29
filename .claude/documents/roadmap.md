@@ -15,14 +15,19 @@
   - [ ] SCSS Modules設定
   - [ ] デザインシステムのSCSS変数作成
   - [ ] 命名規則ドキュメント整備（lowerCamelCase）
+  - [ ] アクセシビリティ設定
+    - [ ] カラーコントラストWCAG AA基準確認
+    - [ ] フォーカス表示スタイル実装（outline: 2px solid $primary-500）
+    - [ ] レスポンシブ設定（最小幅375px、モバイルファースト）
 - [ ] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）
-  - [ ] Button（React.memo）
-  - [ ] Input（フォーム統合、React.memo）
-  - [ ] Select（@radix-ui/react-select、React.memo）
+  - [ ] Button（React.memo + aria-label）
+  - [ ] Input（フォーム統合、React.memo + aria-label）
+  - [ ] Select（@radix-ui/react-select、React.memo + aria-label）
   - [ ] Card（React.memo）
-  - [ ] Modal（@radix-ui/react-dialog、React.memo）
-  - [ ] Toast（@radix-ui/react-toast、5秒表示、React.memo）
-  - [ ] Loading（全画面オーバーレイ対応、React.memo）
+  - [ ] Modal（@radix-ui/react-dialog、React.memo + aria-label）
+  - [ ] Toast（@radix-ui/react-toast、5秒表示、React.memo + aria-label）
+  - [ ] Loading（全画面オーバーレイ対応、React.memo + aria-label）
+  - [ ] 全インタラクティブ要素にaria-label実装
 - [ ] カスタムフック基礎実装
   - [ ] useToast（トースト通知管理）
   - [ ] useAuth（認証状態管理）

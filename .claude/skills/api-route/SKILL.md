@@ -21,7 +21,7 @@ argument-hint: <route-path>
 ### ファイル配置
 
 ```
-src/app/api/watchlist/add/
+src/app/api/<route-path>/
 └── route.ts
 ```
 

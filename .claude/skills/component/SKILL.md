@@ -2,7 +2,7 @@
 name: component
 description: Create a React component following project conventions
 disable-model-invocation: true
-argument-hint: <component-name> [options]
+argument-hint: <componentName> [options]
 ---
 
 # Reactコンポーネント作成スキル
@@ -21,27 +21,27 @@ argument-hint: <component-name> [options]
 ### ファイル構成
 
 ```
-src/components/movieCard/
-├── movieCard.tsx        # メインコンポーネント
-├── movieCard.module.scss # スタイル（必要な場合）
-└── useMovieCard.ts       # カスタムフック（ロジック分離）
+src/components/<componentName>/
+├── <componentName>.tsx        # メインコンポーネント
+├── <componentName>.module.scss # スタイル（必要な場合）
+└── use<ComponentName>.ts       # カスタムフック（ロジック分離）
 ```
 
 ### コンポーネントテンプレート
 
 ```typescript
 import React, { memo } from 'react';
-import styles from './movieCard.module.scss';
+import styles from './<componentName>.module.scss';
 
-interface MovieCardProps {
+interface <ComponentName>Props {
   // propsの型定義
 }
 
-export const MovieCard = memo<MovieCardProps>(({
+export const <ComponentName> = memo<<ComponentName>Props>(({
   // props
 }) => {
   // カスタムフックを使用してロジックを分離
-  // const { state, handlers } = useMovieCard(props);
+  // const { state, handlers } = use<ComponentName>(props);
 
   return (
     <div className={styles.container}>
@@ -50,7 +50,7 @@ export const MovieCard = memo<MovieCardProps>(({
   );
 });
 
-MovieCard.displayName = 'MovieCard';
+<ComponentName>.displayName = '<ComponentName>';
 ```
 
 ### カスタムフックテンプレート
@@ -58,11 +58,11 @@ MovieCard.displayName = 'MovieCard';
 ```typescript
 import { useCallback, useMemo } from 'react';
 
-interface UseMovieCardProps {
+interface Use<ComponentName>Props {
   // フックが受け取るprops
 }
 
-export const useMovieCard = (props: UseMovieCardProps) => {
+export const use<ComponentName> = (props: Use<ComponentName>Props) => {
   // ステート管理
 
   // イベントハンドラーは必ずuseCallbackでメモ化

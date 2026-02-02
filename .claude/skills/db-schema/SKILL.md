@@ -2,7 +2,7 @@
 name: db-schema
 description: Create a Supabase table definition with RLS policies
 disable-model-invocation: true
-argument-hint: <table-name>
+argument-hint: <tableName>
 ---
 
 # Supabaseテーブル定義スキル
@@ -233,7 +233,7 @@ WHERE id = $1;
 
 ```
 supabase/migrations/
-└── 20250202120000_create_watchlist.sql
+└── <timestamp>_create_<tableName>.sql
 ```
 
 ### マイグレーションファイル例

@@ -52,6 +52,24 @@
   - レート制限対策（50req/s）
   - 型定義・エラーハンドリング
 
+- `/middleware` - Next.js Middleware作成
+  - 認証チェック（NextAuth.js）
+  - リダイレクト処理
+  - Cookie/Header操作
+  - matcher設定
+
+- `/server-action` - Next.js Server Actions作成
+  - フォーム送信処理
+  - zodバリデーション
+  - revalidate処理
+  - 統一レスポンス形式
+
+- `/supabase-client` - Supabaseクライアント操作
+  - クライアント作成（anon/service role）
+  - CRUD操作・フィルタリング
+  - RLS対応クエリパターン
+  - エラーハンドリング
+
 ## 設計ドキュメント
 
 詳細な設計仕様は`.claude/documents/`を参照：

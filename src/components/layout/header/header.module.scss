@@ -1,0 +1,51 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_header {
+  position: sticky;
+  top: 0;
+  z-index: $z-index-header;
+  background-color: $background-paper;
+  border-bottom: $border-width-1 solid $border-color;
+  box-shadow: $shadow-sm;
+
+  // コンテナ
+  &__container {
+    display: flex;
+    align-items: center;
+    gap: $spacing-6;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: $spacing-4 $spacing-6;
+  }
+
+  // ロゴ
+  &__logo {
+    font-size: $font-size-2xl;
+    font-weight: $font-weight-bold;
+    color: $primary-500;
+    text-decoration: none;
+    transition: $transition-all;
+    flex-shrink: 0;
+
+    &:hover {
+      color: $primary-600;
+    }
+
+    &:focus-visible {
+      @include focus-visible;
+    }
+  }
+
+  // 検索バー
+  &__search {
+    flex: 1;
+    max-width: 600px;
+  }
+
+  // ユーザーメニュー
+  &__user {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+}

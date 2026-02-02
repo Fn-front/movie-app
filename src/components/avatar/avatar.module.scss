@@ -1,0 +1,62 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: $primary-500;
+  border-radius: $border-radius-full;
+  flex-shrink: 0;
+
+  // サイズ: Small
+  &__size__sm {
+    width: 32px;
+    height: 32px;
+  }
+
+  // サイズ: Medium
+  &__size__md {
+    width: 40px;
+    height: 40px;
+  }
+
+  // サイズ: Large
+  &__size__lg {
+    width: 64px;
+    height: 64px;
+  }
+
+  // 画像
+  &__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  // フォールバック文字
+  &__fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    font-weight: $font-weight-medium;
+    color: white;
+    user-select: none;
+
+    .c_avatar__size__sm & {
+      font-size: $font-size-sm;
+    }
+
+    .c_avatar__size__md & {
+      font-size: $font-size-base;
+    }
+
+    .c_avatar__size__lg & {
+      font-size: $font-size-xl;
+    }
+  }
+}

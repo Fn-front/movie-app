@@ -1,0 +1,92 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-2;
+
+  // ボタン（前へ・次へ）
+  &__button {
+    @include button-reset;
+    @include flex-center;
+
+    width: 40px;
+    height: 40px;
+    color: $text-primary;
+    background-color: transparent;
+    border: $border-width-1 solid $border-color;
+    border-radius: $border-radius-md;
+    transition: $transition-all;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background-color: rgba($primary-500, 0.1);
+      border-color: $primary-500;
+      color: $primary-500;
+    }
+
+    &:focus-visible {
+      @include focus-visible;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  // ページ番号のコンテナ
+  &__pages {
+    display: flex;
+    align-items: center;
+    gap: $spacing-1;
+  }
+
+  // ページ番号ボタン
+  &__page {
+    @include button-reset;
+    @include flex-center;
+
+    min-width: 40px;
+    height: 40px;
+    padding: 0 $spacing-3;
+    font-size: $font-size-base;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+    background-color: transparent;
+    border: $border-width-1 solid transparent;
+    border-radius: $border-radius-md;
+    transition: $transition-all;
+    cursor: pointer;
+
+    &:hover:not(&__active) {
+      background-color: rgba($primary-500, 0.1);
+      color: $primary-500;
+    }
+
+    &:focus-visible {
+      @include focus-visible;
+    }
+
+    // アクティブ状態
+    &__active {
+      color: white;
+      background-color: $primary-500;
+      border-color: $primary-500;
+    }
+  }
+
+  // 中略表示
+  &__ellipsis {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+    color: $text-secondary;
+    font-size: $font-size-base;
+    user-select: none;
+  }
+}

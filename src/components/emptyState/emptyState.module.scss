@@ -1,0 +1,42 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_empty_state {
+  @include flex-center;
+
+  flex-direction: column;
+  gap: $spacing-4;
+  padding: $spacing-12 $spacing-6;
+  text-align: center;
+
+  // アイコン
+  &__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    color: $text-secondary;
+  }
+
+  // タイトル
+  &__title {
+    margin: 0;
+    font-size: $font-size-xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+  }
+
+  // 説明
+  &__description {
+    margin: 0;
+    max-width: 400px;
+    font-size: $font-size-base;
+    color: $text-secondary;
+  }
+
+  // アクション
+  &__action {
+    margin-top: $spacing-2;
+  }
+}

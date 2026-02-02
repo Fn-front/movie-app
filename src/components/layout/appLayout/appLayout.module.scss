@@ -1,0 +1,43 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_app_layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: $background-default;
+
+  // ヘッダー
+  &__header {
+    position: sticky;
+    top: 0;
+    z-index: $z-index-header;
+  }
+
+  // ボディ（サイドバー + メインコンテンツ）
+  &__body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  // サイドバー
+  &__sidebar {
+    flex-shrink: 0;
+  }
+
+  // メインコンテンツ
+  &__main {
+    flex: 1;
+    overflow-y: auto;
+    padding: $spacing-6;
+    max-width: 1440px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  // フッター
+  &__footer {
+    margin-top: auto;
+  }
+}

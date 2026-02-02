@@ -1,0 +1,55 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_footer {
+  background-color: $background-paper;
+  border-top: $border-width-1 solid $border-color;
+  margin-top: auto;
+
+  // コンテナ
+  &__container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: $spacing-4;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: $spacing-6;
+  }
+
+  // コピーライト
+  &__copyright {
+    margin: 0;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+  }
+
+  // ナビゲーション
+  &__nav {
+    display: flex;
+    align-items: center;
+    gap: $spacing-6;
+  }
+
+  // リンク
+  &__link {
+    font-size: $font-size-sm;
+    color: $text-secondary;
+    text-decoration: none;
+    transition: $transition-all;
+
+    &:hover {
+      color: $primary-500;
+    }
+
+    &:focus-visible {
+      @include focus-visible;
+    }
+  }
+
+  // カスタムコンテンツ
+  &__custom {
+    margin-left: auto;
+  }
+}

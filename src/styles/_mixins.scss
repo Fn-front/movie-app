@@ -1,0 +1,158 @@
+// ============================================================
+// Mixins
+// ============================================================
+
+@use 'variables' as *;
+
+// ============================================================
+// レスポンシブデザイン
+// ============================================================
+
+// メディアクエリ（モバイルファースト）
+@mixin sm {
+  @media (min-width: $breakpoint-sm) {
+    @content;
+  }
+}
+
+@mixin md {
+  @media (min-width: $breakpoint-md) {
+    @content;
+  }
+}
+
+@mixin lg {
+  @media (min-width: $breakpoint-lg) {
+    @content;
+  }
+}
+
+@mixin xl {
+  @media (min-width: $breakpoint-xl) {
+    @content;
+  }
+}
+
+@mixin xxl {
+  @media (min-width: $breakpoint-2xl) {
+    @content;
+  }
+}
+
+// ============================================================
+// アクセシビリティ
+// ============================================================
+
+// フォーカス表示（WCAG AA準拠）
+@mixin focus-visible {
+  &:focus-visible {
+    outline: $border-width-2 solid $primary-500;
+    outline-offset: 2px;
+  }
+}
+
+// スクリーンリーダー専用テキスト
+@mixin sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+// ============================================================
+// レイアウト
+// ============================================================
+
+// Flexbox中央揃え
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// Flexbox縦方向中央揃え
+@mixin flex-center-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+// ============================================================
+// テキスト
+// ============================================================
+
+// テキスト省略（1行）
+@mixin text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// テキスト省略（複数行）
+@mixin text-truncate-multiline($lines: 2) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// ============================================================
+// ホバーエフェクト
+// ============================================================
+
+// 透明度変化ホバー
+@mixin hover-opacity($opacity: 0.8) {
+  transition: opacity $duration-fast $ease-in-out;
+
+  &:hover {
+    opacity: $opacity;
+  }
+}
+
+// シャドウ変化ホバー
+@mixin hover-shadow {
+  transition: box-shadow $duration-normal $ease-in-out;
+
+  &:hover {
+    box-shadow: $shadow-lg;
+  }
+}
+
+// ============================================================
+// ボタン
+// ============================================================
+
+// ボタンリセット
+@mixin button-reset {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+// ============================================================
+// カード
+// ============================================================
+
+// 基本カードスタイル
+@mixin card {
+  background-color: white;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-md;
+  padding: $spacing-6;
+  transition: $transition-shadow;
+
+  &:hover {
+    box-shadow: $shadow-lg;
+  }
+}

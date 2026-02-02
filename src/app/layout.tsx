@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import { Noto_Sans_JP } from 'next/font/google';
 
-import '@/styles/app.scss'
+import '@/styles/globals.scss';
 
 const noto = Noto_Sans_JP({
-  weight: ['400', '700'],
+  weight: ['300', '400', '500', '700'],
   style: 'normal',
   subsets: ['latin'],
 });

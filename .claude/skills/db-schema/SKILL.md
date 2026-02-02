@@ -233,7 +233,7 @@ WHERE id = $1;
 
 ```
 supabase/migrations/
-└── <timestamp>_create_<table_name>.sql
+└── 20250202120000_create_watchlist.sql
 ```
 
 ### マイグレーションファイル例

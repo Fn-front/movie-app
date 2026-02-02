@@ -11,10 +11,10 @@
   - [x] React Icons
   - [x] react-hook-form + zod
   - [x] その他依存関係
-- [ ] 環境設定ファイルの作成
-  - [ ] .env.exampleテンプレート作成（環境変数の雛形）
-  - [ ] next.config.js設定（TMDb画像ドメイン許可、SCSS設定）
-  - [ ] エラーページ実装（app/error.tsx, app/not-found.tsx）
+- [x] 環境設定ファイルの作成
+  - [x] .env.exampleテンプレート作成（環境変数の雛形）
+  - [x] next.config.js設定（TMDb画像ドメイン許可、SCSS設定）
+  - [x] エラーページ実装（app/error.tsx, app/not-found.tsx）
 - [ ] 基本設定・スタイリング方針確立
   - [ ] SCSS Modules設定
   - [ ] デザインシステムのSCSS変数作成

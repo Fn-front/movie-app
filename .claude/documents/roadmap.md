@@ -6,11 +6,11 @@
 - [x] Next.js 15プロジェクト作成
 - [x] TypeScript設定
 - [x] ESLint/Prettier設定
-- [ ] 必要なパッケージインストール
-  - [ ] Radix UI（@radix-ui/react-select, react-dialog, react-toast）
-  - [ ] React Icons
-  - [ ] react-hook-form + zod
-  - [ ] その他依存関係
+- [x] 必要なパッケージインストール
+  - [x] Radix UI（@radix-ui/react-select, react-dialog, react-toast）
+  - [x] React Icons
+  - [x] react-hook-form + zod
+  - [x] その他依存関係
 - [ ] 基本設定・スタイリング方針確立
   - [ ] SCSS Modules設定
   - [ ] デザインシステムのSCSS変数作成

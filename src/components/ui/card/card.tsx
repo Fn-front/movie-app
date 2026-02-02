@@ -108,7 +108,9 @@ export const CardHeader = memo<CardHeaderProps>(function CardHeader({
   className,
   ...props
 }) {
-  const classNames = [styles.c_card__header, className].filter(Boolean).join(' ');
+  const classNames = [styles.c_card__header, className]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div className={classNames} {...props}>
@@ -129,7 +131,11 @@ CardHeader.displayName = 'CardHeader';
  * </CardBody>
  * ```
  */
-export const CardBody = memo<CardBodyProps>(function CardBody({ children, className, ...props }) {
+export const CardBody = memo<CardBodyProps>(function CardBody({
+  children,
+  className,
+  ...props
+}) {
   const classNames = [styles.c_card__body, className].filter(Boolean).join(' ');
 
   return (
@@ -156,7 +162,9 @@ export const CardFooter = memo<CardFooterProps>(function CardFooter({
   className,
   ...props
 }) {
-  const classNames = [styles.c_card__footer, className].filter(Boolean).join(' ');
+  const classNames = [styles.c_card__footer, className]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div className={classNames} {...props}>

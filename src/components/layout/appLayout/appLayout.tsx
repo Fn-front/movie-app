@@ -11,7 +11,10 @@ import styles from './appLayout.module.scss';
 /**
  * AppLayoutコンポーネントのプロパティ
  */
-export interface AppLayoutProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
+export interface AppLayoutProps extends Omit<
+  HTMLAttributes<HTMLDivElement>,
+  'children'
+> {
   /** ヘッダーコンポーネント */
   header?: ReactNode;
   /** サイドバーコンポーネント */

@@ -107,35 +107,37 @@ export const Pagination = memo<PaginationProps>(function Pagination({
     return pages;
   }, [currentPage, totalPages, maxPageButtons]);
 
-  const wrapperClassNames = [styles.c_pagination, className].filter(Boolean).join(' ');
+  const wrapperClassNames = [styles.c_pagination, className]
+    .filter(Boolean)
+    .join(' ');
 
   if (totalPages <= 1) {
     return null;
   }
 
   return (
-    <nav className={wrapperClassNames} aria-label="ページネーション" {...props}>
+    <nav className={wrapperClassNames} aria-label='ページネーション' {...props}>
       <button
-        type="button"
+        type='button'
         className={styles.c_pagination__button}
         onClick={handlePrevious}
         disabled={currentPage === 1}
-        aria-label="前のページへ"
+        aria-label='前のページへ'
       >
         <svg
-          width="20"
-          height="20"
-          viewBox="0 0 20 20"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
+          width='20'
+          height='20'
+          viewBox='0 0 20 20'
+          fill='none'
+          xmlns='http://www.w3.org/2000/svg'
+          aria-hidden='true'
         >
           <path
-            d="M12.5 15L7.5 10L12.5 5"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            d='M12.5 15L7.5 10L12.5 5'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
           />
         </svg>
       </button>
@@ -144,16 +146,16 @@ export const Pagination = memo<PaginationProps>(function Pagination({
         {pageNumbers.map((page, index) =>
           page === 'ellipsis' ? (
             <span
-              key={`ellipsis-${index}`}
+              key={`ellipsis-${pageNumbers[index - 1]}`}
               className={styles.c_pagination__ellipsis}
-              aria-hidden="true"
+              aria-hidden='true'
             >
               ...
             </span>
           ) : (
             <button
               key={page}
-              type="button"
+              type='button'
               className={`${styles.c_pagination__page} ${
                 page === currentPage ? styles.c_pagination__page__active : ''
               }`}
@@ -168,26 +170,26 @@ export const Pagination = memo<PaginationProps>(function Pagination({
       </div>
 
       <button
-        type="button"
+        type='button'
         className={styles.c_pagination__button}
         onClick={handleNext}
         disabled={currentPage === totalPages}
-        aria-label="次のページへ"
+        aria-label='次のページへ'
       >
         <svg
-          width="20"
-          height="20"
-          viewBox="0 0 20 20"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden="true"
+          width='20'
+          height='20'
+          viewBox='0 0 20 20'
+          fill='none'
+          xmlns='http://www.w3.org/2000/svg'
+          aria-hidden='true'
         >
           <path
-            d="M7.5 15L12.5 10L7.5 5"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            d='M7.5 15L12.5 10L7.5 5'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
           />
         </svg>
       </button>

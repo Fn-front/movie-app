@@ -4,7 +4,7 @@
 
 'use client';
 
-import { type TextareaHTMLAttributes, forwardRef, memo } from 'react';
+import { type TextareaHTMLAttributes, forwardRef, memo, useId } from 'react';
 
 import styles from './textarea.module.scss';
 
@@ -47,7 +47,8 @@ const TextareaComponent = forwardRef<HTMLTextAreaElement, TextareaProps>(
     },
     ref,
   ) {
-    const textareaId = id || `textarea-${Math.random().toString(36).substr(2, 9)}`;
+    const generatedId = useId();
+    const textareaId = id || `textarea-${generatedId}`;
     const hasError = Boolean(error);
 
     const currentLength = typeof value === 'string' ? value.length : 0;
@@ -102,7 +103,11 @@ const TextareaComponent = forwardRef<HTMLTextAreaElement, TextareaProps>(
         )}
 
         {error && (
-          <p id={`${textareaId}-error`} className={styles.c_textarea__error} role="alert">
+          <p
+            id={`${textareaId}-error`}
+            className={styles.c_textarea__error}
+            role='alert'
+          >
             {error}
           </p>
         )}

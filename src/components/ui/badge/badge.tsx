@@ -11,7 +11,12 @@ import styles from './badge.module.scss';
 /**
  * Badgeのバリアント型
  */
-export type BadgeVariant = 'default' | 'primary' | 'success' | 'error' | 'warning';
+export type BadgeVariant =
+  | 'default'
+  | 'primary'
+  | 'success'
+  | 'error'
+  | 'warning';
 
 /**
  * Badgeのサイズ型
@@ -72,25 +77,25 @@ export const Badge = memo<BadgeProps>(function Badge({
       <span className={styles.c_badge__content}>{children}</span>
       {onRemove && (
         <button
-          type="button"
+          type='button'
           className={styles.c_badge__remove}
           onClick={onRemove}
-          aria-label="削除"
+          aria-label='削除'
         >
           <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
+            width='12'
+            height='12'
+            viewBox='0 0 12 12'
+            fill='none'
+            xmlns='http://www.w3.org/2000/svg'
+            aria-hidden='true'
           >
             <path
-              d="M9 3L3 9M3 3L9 9"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              d='M9 3L3 9M3 3L9 9'
+              stroke='currentColor'
+              strokeWidth='2'
+              strokeLinecap='round'
+              strokeLinejoin='round'
             />
           </svg>
         </button>

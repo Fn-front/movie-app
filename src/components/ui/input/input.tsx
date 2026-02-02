@@ -4,7 +4,13 @@
 
 'use client';
 
-import { type InputHTMLAttributes, type ReactNode, forwardRef, memo } from 'react';
+import {
+  type InputHTMLAttributes,
+  type ReactNode,
+  forwardRef,
+  memo,
+  useId,
+} from 'react';
 
 import styles from './input.module.scss';
 
@@ -46,7 +52,8 @@ const InputComponent = forwardRef<HTMLInputElement, InputProps>(
     },
     ref,
   ) {
-    const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
+    const generatedId = useId();
+    const inputId = id || `input-${generatedId}`;
     const hasError = Boolean(error);
 
     const inputClassNames = [

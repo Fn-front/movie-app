@@ -4,7 +4,7 @@
 
 'use client';
 
-import { type ReactNode, forwardRef, memo } from 'react';
+import { forwardRef, memo, useId } from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
 
 import styles from './select.module.scss';
@@ -72,7 +72,8 @@ const SelectComponent = forwardRef<HTMLButtonElement, SelectProps>(
     },
     ref,
   ) {
-    const selectId = id || `select-${Math.random().toString(36).substr(2, 9)}`;
+    const generatedId = useId();
+    const selectId = id || `select-${generatedId}`;
     const hasError = Boolean(error);
 
     const wrapperClassNames = [
@@ -100,7 +101,11 @@ const SelectComponent = forwardRef<HTMLButtonElement, SelectProps>(
           </label>
         )}
 
-        <SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
+        <SelectPrimitive.Root
+          value={value}
+          onValueChange={onValueChange}
+          disabled={disabled}
+        >
           <SelectPrimitive.Trigger
             ref={ref}
             id={selectId}
@@ -108,7 +113,11 @@ const SelectComponent = forwardRef<HTMLButtonElement, SelectProps>(
             aria-label={ariaLabel || label}
             aria-invalid={hasError}
             aria-describedby={
-              error ? `${selectId}-error` : helperText ? `${selectId}-helper` : undefined
+              error
+                ? `${selectId}-error`
+                : helperText
+                  ? `${selectId}-helper`
+                  : undefined
             }
           >
             <SelectPrimitive.Value placeholder={placeholder} />
@@ -132,7 +141,10 @@ const SelectComponent = forwardRef<HTMLButtonElement, SelectProps>(
           </SelectPrimitive.Trigger>
 
           <SelectPrimitive.Portal>
-            <SelectPrimitive.Content className={styles.c_select__content} position='popper'>
+            <SelectPrimitive.Content
+              className={styles.c_select__content}
+              position='popper'
+            >
               <SelectPrimitive.Viewport className={styles.c_select__viewport}>
                 {options.map((option) => (
                   <SelectPrimitive.Item
@@ -141,8 +153,12 @@ const SelectComponent = forwardRef<HTMLButtonElement, SelectProps>(
                     disabled={option.disabled}
                     className={styles.c_select__item}
                   >
-                    <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
-                    <SelectPrimitive.ItemIndicator className={styles.c_select__item_indicator}>
+                    <SelectPrimitive.ItemText>
+                      {option.label}
+                    </SelectPrimitive.ItemText>
+                    <SelectPrimitive.ItemIndicator
+                      className={styles.c_select__item_indicator}
+                    >
                       <svg
                         width='16'
                         height='16'
@@ -167,7 +183,11 @@ const SelectComponent = forwardRef<HTMLButtonElement, SelectProps>(
         </SelectPrimitive.Root>
 
         {error && (
-          <p id={`${selectId}-error`} className={styles.c_select__error} role='alert'>
+          <p
+            id={`${selectId}-error`}
+            className={styles.c_select__error}
+            role='alert'
+          >
             {error}
           </p>
         )}

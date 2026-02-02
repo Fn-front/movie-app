@@ -45,9 +45,13 @@ export const Sidebar = memo<SidebarProps>(function Sidebar({
 
   return (
     <aside className={classNames} {...props}>
-      {userSection && <div className={styles.c_sidebar__user}>{userSection}</div>}
+      {userSection && (
+        <div className={styles.c_sidebar__user}>{userSection}</div>
+      )}
 
-      {calendarButton && <div className={styles.c_sidebar__calendar}>{calendarButton}</div>}
+      {calendarButton && (
+        <div className={styles.c_sidebar__calendar}>{calendarButton}</div>
+      )}
 
       {watchlist && (
         <div className={styles.c_sidebar__watchlist}>

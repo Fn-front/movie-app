@@ -47,7 +47,10 @@ export const Loading = memo<LoadingProps>(function Loading({
   className,
   ...props
 }) {
-  const spinnerClassNames = [styles.c_loading__spinner, styles[`c_loading__spinner__${size}`]]
+  const spinnerClassNames = [
+    styles.c_loading__spinner,
+    styles[`c_loading__spinner__${size}`],
+  ]
     .filter(Boolean)
     .join(' ');
 

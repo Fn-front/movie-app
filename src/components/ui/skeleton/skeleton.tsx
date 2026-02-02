@@ -45,7 +45,11 @@ export const Skeleton = memo<SkeletonProps>(function Skeleton({
   style,
   ...props
 }) {
-  const classNames = [styles.c_skeleton, styles[`c_skeleton__variant__${variant}`], className]
+  const classNames = [
+    styles.c_skeleton,
+    styles[`c_skeleton__variant__${variant}`],
+    className,
+  ]
     .filter(Boolean)
     .join(' ');
 

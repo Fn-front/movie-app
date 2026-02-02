@@ -105,7 +105,11 @@ export const Modal = memo<ModalProps>(function Modal({
     [onOpenChange],
   );
 
-  const contentClassNames = [styles.c_modal__content, styles[`c_modal__content__${size}`], className]
+  const contentClassNames = [
+    styles.c_modal__content,
+    styles[`c_modal__content__${size}`],
+    className,
+  ]
     .filter(Boolean)
     .join(' ');
 
@@ -130,7 +134,9 @@ export const Modal = memo<ModalProps>(function Modal({
             <div className={styles.c_modal__header}>
               <div className={styles.c_modal__header_content}>
                 {title && (
-                  <Dialog.Title className={styles.c_modal__title}>{title}</Dialog.Title>
+                  <Dialog.Title className={styles.c_modal__title}>
+                    {title}
+                  </Dialog.Title>
                 )}
                 {description && (
                   <Dialog.Description className={styles.c_modal__description}>
@@ -180,8 +186,13 @@ Modal.displayName = 'Modal';
  * </ModalHeader>
  * ```
  */
-export const ModalHeader = memo<ModalHeaderProps>(function ModalHeader({ children, className }) {
-  const classNames = [styles.c_modal__header, className].filter(Boolean).join(' ');
+export const ModalHeader = memo<ModalHeaderProps>(function ModalHeader({
+  children,
+  className,
+}) {
+  const classNames = [styles.c_modal__header, className]
+    .filter(Boolean)
+    .join(' ');
 
   return <div className={classNames}>{children}</div>;
 });
@@ -198,8 +209,13 @@ ModalHeader.displayName = 'ModalHeader';
  * </ModalBody>
  * ```
  */
-export const ModalBody = memo<ModalBodyProps>(function ModalBody({ children, className }) {
-  const classNames = [styles.c_modal__body, className].filter(Boolean).join(' ');
+export const ModalBody = memo<ModalBodyProps>(function ModalBody({
+  children,
+  className,
+}) {
+  const classNames = [styles.c_modal__body, className]
+    .filter(Boolean)
+    .join(' ');
 
   return <div className={classNames}>{children}</div>;
 });
@@ -217,8 +233,13 @@ ModalBody.displayName = 'ModalBody';
  * </ModalFooter>
  * ```
  */
-export const ModalFooter = memo<ModalFooterProps>(function ModalFooter({ children, className }) {
-  const classNames = [styles.c_modal__footer, className].filter(Boolean).join(' ');
+export const ModalFooter = memo<ModalFooterProps>(function ModalFooter({
+  children,
+  className,
+}) {
+  const classNames = [styles.c_modal__footer, className]
+    .filter(Boolean)
+    .join(' ');
 
   return <div className={classNames}>{children}</div>;
 });

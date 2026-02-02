@@ -55,7 +55,9 @@ export const Header = memo<HeaderProps>(function Header({
           {logoText}
         </Link>
 
-        {searchBar && <div className={styles.c_header__search}>{searchBar}</div>}
+        {searchBar && (
+          <div className={styles.c_header__search}>{searchBar}</div>
+        )}
 
         {userMenu && <div className={styles.c_header__user}>{userMenu}</div>}
       </div>

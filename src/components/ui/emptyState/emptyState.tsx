@@ -44,13 +44,17 @@ export const EmptyState = memo<EmptyStateProps>(function EmptyState({
   className,
   ...props
 }) {
-  const classNames = [styles.c_empty_state, className].filter(Boolean).join(' ');
+  const classNames = [styles.c_empty_state, className]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div className={classNames} {...props}>
       {icon && <div className={styles.c_empty_state__icon}>{icon}</div>}
       <h3 className={styles.c_empty_state__title}>{title}</h3>
-      {description && <p className={styles.c_empty_state__description}>{description}</p>}
+      {description && (
+        <p className={styles.c_empty_state__description}>{description}</p>
+      )}
       {action && <div className={styles.c_empty_state__action}>{action}</div>}
     </div>
   );

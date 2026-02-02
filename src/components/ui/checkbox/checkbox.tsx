@@ -4,7 +4,7 @@
 
 'use client';
 
-import { type ReactNode, forwardRef, memo } from 'react';
+import { forwardRef, memo, useId } from 'react';
 import * as CheckboxPrimitive from '@radix-ui/react-checkbox';
 
 import styles from './checkbox.module.scss';
@@ -48,9 +48,12 @@ const CheckboxComponent = forwardRef<HTMLButtonElement, CheckboxProps>(
     },
     ref,
   ) {
-    const checkboxId = id || `checkbox-${Math.random().toString(36).substr(2, 9)}`;
+    const generatedId = useId();
+    const checkboxId = id || `checkbox-${generatedId}`;
 
-    const wrapperClassNames = [styles.c_checkbox, className].filter(Boolean).join(' ');
+    const wrapperClassNames = [styles.c_checkbox, className]
+      .filter(Boolean)
+      .join(' ');
 
     return (
       <div className={wrapperClassNames}>
@@ -66,19 +69,19 @@ const CheckboxComponent = forwardRef<HTMLButtonElement, CheckboxProps>(
         >
           <CheckboxPrimitive.Indicator className={styles.c_checkbox__indicator}>
             <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden="true"
+              width='12'
+              height='12'
+              viewBox='0 0 12 12'
+              fill='none'
+              xmlns='http://www.w3.org/2000/svg'
+              aria-hidden='true'
             >
               <path
-                d="M10 3L4.5 8.5L2 6"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                d='M10 3L4.5 8.5L2 6'
+                stroke='currentColor'
+                strokeWidth='2'
+                strokeLinecap='round'
+                strokeLinejoin='round'
               />
             </svg>
           </CheckboxPrimitive.Indicator>

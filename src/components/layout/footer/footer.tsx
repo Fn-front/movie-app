@@ -57,7 +57,11 @@ export const Footer = memo<FooterProps>(function Footer({
         {links && links.length > 0 && (
           <nav className={styles.c_footer__nav}>
             {links.map((link) => (
-              <Link key={link.href} href={link.href} className={styles.c_footer__link}>
+              <Link
+                key={link.href}
+                href={link.href}
+                className={styles.c_footer__link}
+              >
                 {link.label}
               </Link>
             ))}

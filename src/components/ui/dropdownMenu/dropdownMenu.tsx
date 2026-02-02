@@ -4,7 +4,7 @@
 
 'use client';
 
-import { type ReactNode, memo, useCallback } from 'react';
+import { type ReactNode, memo } from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 
 import styles from './dropdownMenu.module.scss';
@@ -66,7 +66,10 @@ export const DropdownMenu = memo<DropdownMenuProps>(function DropdownMenu({
 
   return (
     <DropdownMenuPrimitive.Root>
-      <DropdownMenuPrimitive.Trigger asChild className={styles.c_dropdown_menu__trigger}>
+      <DropdownMenuPrimitive.Trigger
+        asChild
+        className={styles.c_dropdown_menu__trigger}
+      >
         {trigger}
       </DropdownMenuPrimitive.Trigger>
 
@@ -76,19 +79,25 @@ export const DropdownMenu = memo<DropdownMenuProps>(function DropdownMenu({
           align={align}
           sideOffset={8}
         >
-          {items.map((item, index) => (
+          {items.map((item) => (
             <DropdownMenuPrimitive.Item
-              key={index}
+              key={item.label}
               className={`${styles.c_dropdown_menu__item} ${
-                item.destructive ? styles.c_dropdown_menu__item__destructive : ''
+                item.destructive
+                  ? styles.c_dropdown_menu__item__destructive
+                  : ''
               }`}
               onClick={item.onClick}
               disabled={item.disabled}
             >
               {item.icon && (
-                <span className={styles.c_dropdown_menu__icon}>{item.icon}</span>
+                <span className={styles.c_dropdown_menu__icon}>
+                  {item.icon}
+                </span>
               )}
-              <span className={styles.c_dropdown_menu__label}>{item.label}</span>
+              <span className={styles.c_dropdown_menu__label}>
+                {item.label}
+              </span>
             </DropdownMenuPrimitive.Item>
           ))}
         </DropdownMenuPrimitive.Content>

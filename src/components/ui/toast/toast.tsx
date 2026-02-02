@@ -64,7 +64,10 @@ export const ToastProvider = memo<ToastProviderProps>(function ToastProvider({
   duration = 5000,
 }) {
   return (
-    <ToastPrimitive.Provider swipeDirection={swipeDirection} duration={duration}>
+    <ToastPrimitive.Provider
+      swipeDirection={swipeDirection}
+      duration={duration}
+    >
       {children}
       <ToastPrimitive.Viewport className={styles.c_toast__viewport} />
     </ToastPrimitive.Provider>
@@ -205,7 +208,11 @@ export const Toast = memo<ToastProps>(function Toast({
       <div className={styles.c_toast__icon}>{getIcon()}</div>
 
       <div className={styles.c_toast__content}>
-        {title && <ToastPrimitive.Title className={styles.c_toast__title}>{title}</ToastPrimitive.Title>}
+        {title && (
+          <ToastPrimitive.Title className={styles.c_toast__title}>
+            {title}
+          </ToastPrimitive.Title>
+        )}
         {description && (
           <ToastPrimitive.Description className={styles.c_toast__description}>
             {description}

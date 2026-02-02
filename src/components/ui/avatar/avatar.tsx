@@ -17,7 +17,10 @@ export type AvatarSize = 'sm' | 'md' | 'lg';
 /**
  * Avatarコンポーネントのプロパティ
  */
-export interface AvatarProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'alt'> {
+export interface AvatarProps extends Omit<
+  ImgHTMLAttributes<HTMLImageElement>,
+  'src' | 'alt' | 'width' | 'height'
+> {
   /** 画像URL */
   src?: string | null;
   /** 代替テキスト */
@@ -59,11 +62,15 @@ export const Avatar = memo<AvatarProps>(function Avatar({
 
   const showFallback = !src || imageError;
 
-  const classNames = [styles.c_avatar, styles[`c_avatar__size__${size}`], className]
+  const classNames = [
+    styles.c_avatar,
+    styles[`c_avatar__size__${size}`],
+    className,
+  ]
     .filter(Boolean)
     .join(' ');
 
-  const sizeMap = {
+  const sizeMap: Record<AvatarSize, number> = {
     sm: 32,
     md: 40,
     lg: 64,
@@ -72,9 +79,9 @@ export const Avatar = memo<AvatarProps>(function Avatar({
   const imageSize = sizeMap[size];
 
   return (
-    <div className={classNames} role="img" aria-label={alt}>
+    <div className={classNames} role='img' aria-label={alt}>
       {showFallback ? (
-        <span className={styles.c_avatar__fallback} aria-hidden="true">
+        <span className={styles.c_avatar__fallback} aria-hidden='true'>
           {fallback || alt.charAt(0).toUpperCase()}
         </span>
       ) : (

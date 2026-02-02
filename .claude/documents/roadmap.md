@@ -29,13 +29,13 @@
   - [x] バリデーションヘルパー（isValidEmail, isValidPassword）
   - [x] エラーハンドリングヘルパー（handleApiError, formatErrorMessage）
   - [x] 文字列操作ヘルパー（truncate, capitalize）
-- [ ] 共通カスタムフックの実装
-  - [ ] useDebounce（入力遅延処理）
-  - [ ] useLocalStorage（ローカルストレージ管理）
-  - [ ] useMediaQuery（レスポンシブ判定）
-  - [ ] usePrevious（前回の値を保持）
-  - [ ] useClickOutside（外側クリック検知）
-  - [ ] useToggle（boolean状態管理）
+- [x] 共通カスタムフックの実装
+  - [x] useDebounce（入力遅延処理）
+  - [x] useLocalStorage（ローカルストレージ管理）
+  - [x] useMediaQuery（レスポンシブ判定）
+  - [x] usePrevious（前回の値を保持）
+  - [x] useClickOutside（外側クリック検知）
+  - [x] useToggle（boolean状態管理）
 - [ ] lib（ライブラリ・設定）の実装
   - [ ] Supabaseクライアント設定（lib/supabase/client.ts, server.ts）
   - [ ] TMDb APIクライアント設定（lib/api/tmdb.ts）

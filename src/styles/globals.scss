@@ -2,20 +2,13 @@
 @use 'mixins' as *;
 
 // ============================================================
-// グローバルスタイル
+// グローバルスタイル（デザインシステム固有）
 // ============================================================
+// 注意: リセットCSSはfoundation/_reset.scss（destyle.css）で適用済み
 
 // ============================================================
-// リセット・正規化
+// ベーススタイル
 // ============================================================
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
 
 html {
   font-size: 16px;
@@ -46,7 +39,6 @@ h6 {
   font-family: $font-family-heading;
   font-weight: $font-weight-bold;
   line-height: $line-height-tight;
-  margin: 0;
 }
 
 h1 {
@@ -73,13 +65,8 @@ h6 {
   font-size: $font-size-base;
 }
 
-p {
-  margin: 0;
-}
-
 a {
   color: $primary-500;
-  text-decoration: none;
   transition: $transition-color;
 
   &:hover {
@@ -96,20 +83,8 @@ a {
 // フォーム要素
 // ============================================================
 
-button,
-input,
-select,
-textarea {
-  font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
-}
-
 button {
-  cursor: pointer;
-
   &:disabled {
-    cursor: not-allowed;
     opacity: 0.5;
   }
 
@@ -124,25 +99,6 @@ textarea {
   &:focus-visible {
     @include focus-visible;
   }
-}
-
-// ============================================================
-// リスト
-// ============================================================
-
-ul,
-ol {
-  list-style: none;
-}
-
-// ============================================================
-// 画像
-// ============================================================
-
-img {
-  max-width: 100%;
-  height: auto;
-  display: block;
 }
 
 // ============================================================

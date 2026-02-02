@@ -88,6 +88,10 @@
 - アップグレード: `upgrade/<package-name>`
 - クリーンアップ: `cleanup/<cleanup-name>`
 
+**【必須】PR作成ルール**：
+- PR作成時は必ず`--assignee Fn-front`を指定してアサインする
+- 例: `gh pr create --title "タイトル" --body "本文" --assignee Fn-front`
+
 **作業フロー**：
 1. ブランチ作成 → 2. 実装 → 3. コミット → 4. PR作成 → 5. マージ
 

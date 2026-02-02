@@ -30,12 +30,7 @@ import { useEffect, useState } from 'react';
  */
 export function useMediaQuery(query: string): boolean {
   // サーバーサイドレンダリング対応
-  const [matches, setMatches] = useState<boolean>(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-    return window.matchMedia(query).matches;
-  });
+  const [matches, setMatches] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -45,6 +40,7 @@ export function useMediaQuery(query: string): boolean {
     const mediaQueryList = window.matchMedia(query);
 
     // 初期値を設定
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMatches(mediaQueryList.matches);
 
     // メディアクエリの変化を監視

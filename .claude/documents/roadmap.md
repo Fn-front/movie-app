@@ -79,24 +79,24 @@
   - [x] パフォーマンス: React.memo + useCallback必須適用
   - [x] 命名規則: lowerCamelCase
   - [x] テスト: Jest + React Testing Library + Playwright
-- [ ] Supabaseプロジェクト作成
-  - [ ] Supabaseアカウント作成
-  - [ ] 新規プロジェクト作成
-  - [ ] 接続情報取得（URL, ANON_KEY, SERVICE_ROLE_KEY）
+- [x] Supabaseプロジェクト作成
+  - [x] Supabaseアカウント作成
+  - [x] 新規プロジェクト作成
+  - [x] 接続情報取得（URL, ANON_KEY, SERVICE_ROLE_KEY）
 - [ ] NextAuth.js v5設定
   - [ ] Credentials Providerセットアップ
   - [ ] Supabaseアダプター検討
   - [ ] Session/Callbacks設定
   - [ ] CSRF対策強化設定
-- [ ] データベーススキーマ実装
-  - [ ] Supabase SQL Editorでテーブル作成
-  - [ ] Row Level Security (RLS) ポリシー設定
-  - [ ] インデックス作成
-- [ ] 環境変数設定
-  - NEXTAUTH_SECRET
-  - NEXT_PUBLIC_SUPABASE_URL
-  - NEXT_PUBLIC_SUPABASE_ANON_KEY
-  - SUPABASE_SERVICE_ROLE_KEY
+- [x] データベーススキーマ実装
+  - [x] Supabase migrationでテーブル作成（8テーブル）
+  - [x] Row Level Security (RLS) ポリシー設定
+  - [x] インデックス作成
+- [x] 環境変数設定（Supabase）
+  - [x] NEXT_PUBLIC_SUPABASE_URL
+  - [x] NEXT_PUBLIC_SUPABASE_ANON_KEY
+  - [x] SUPABASE_SERVICE_ROLE_KEY
+  - [ ] NEXTAUTH_SECRET（NextAuth.js設定時に生成）
 
 ### TMDb API連携
 - [ ] TMDb APIキー取得

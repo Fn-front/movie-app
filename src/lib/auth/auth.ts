@@ -7,6 +7,8 @@ import Credentials from 'next-auth/providers/credentials';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
+import { AUTH_ERROR_MESSAGES } from '@/constants';
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -36,11 +38,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!supabase) {
-          throw new Error('Database connection is not available');
+          throw new Error(AUTH_ERROR_MESSAGES.DB_CONNECTION_ERROR);
         }
 
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('メールアドレスとパスワードを入力してください');
+          throw new Error(AUTH_ERROR_MESSAGES.CREDENTIALS_REQUIRED);
         }
 
         const email = credentials.email as string;
@@ -54,12 +56,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           .single();
 
         if (error || !user) {
-          throw new Error('メールアドレスまたはパスワードが正しくありません');
+          throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
         // メール認証チェック
         if (!user.is_verified) {
-          throw new Error('メールアドレスが認証されていません');
+          throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
         }
 
         // パスワード照合
@@ -69,7 +71,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
 
         if (!isPasswordValid) {
-          throw new Error('メールアドレスまたはパスワードが正しくありません');
+          throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
         // 認証成功

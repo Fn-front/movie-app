@@ -42,12 +42,9 @@ const tmdbClient = axiosInstance.create({
 export async function getPopularMovies(
   page: number = 1,
 ): Promise<TMDbResponse<Movie>> {
-  const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    '/movie/popular',
-    {
-      params: { page },
-    },
-  );
+  const response = await tmdbClient.get<TMDbResponse<Movie>>('/movie/popular', {
+    params: { page },
+  });
   return response.data;
 }
 
@@ -129,17 +126,14 @@ export async function searchMovies(
 ): Promise<TMDbResponse<Movie>> {
   const { query, page = 1, year, genre } = params;
 
-  const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    '/search/movie',
-    {
-      params: {
-        query,
-        page,
-        year,
-        with_genres: genre,
-      },
+  const response = await tmdbClient.get<TMDbResponse<Movie>>('/search/movie', {
+    params: {
+      query,
+      page,
+      year,
+      with_genres: genre,
     },
-  );
+  });
   return response.data;
 }
 

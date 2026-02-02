@@ -23,7 +23,9 @@ axiosInstance.interceptors.request.use(
   (config) => {
     // 開発環境でリクエストログを出力
     if (process.env.NODE_ENV === 'development') {
-      console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
+      console.log(
+        `[API Request] ${config.method?.toUpperCase()} ${config.url}`,
+      );
     }
 
     return config;

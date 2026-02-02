@@ -83,20 +83,22 @@
   - [x] Supabaseアカウント作成
   - [x] 新規プロジェクト作成
   - [x] 接続情報取得（URL, ANON_KEY, SERVICE_ROLE_KEY）
-- [ ] NextAuth.js v5設定
-  - [ ] Credentials Providerセットアップ
-  - [ ] Supabaseアダプター検討
-  - [ ] Session/Callbacks設定
-  - [ ] CSRF対策強化設定
+- [x] NextAuth.js v5設定
+  - [x] Credentials Providerセットアップ
+  - [x] Supabaseとの統合（usersテーブル）
+  - [x] Session/Callbacks設定（JWT、24時間）
+  - [x] CSRF対策強化設定
+  - [x] 認証保護Middleware作成
 - [x] データベーススキーマ実装
   - [x] Supabase migrationでテーブル作成（8テーブル）
   - [x] Row Level Security (RLS) ポリシー設定
   - [x] インデックス作成
-- [x] 環境変数設定（Supabase）
+- [x] 環境変数設定
   - [x] NEXT_PUBLIC_SUPABASE_URL
   - [x] NEXT_PUBLIC_SUPABASE_ANON_KEY
   - [x] SUPABASE_SERVICE_ROLE_KEY
-  - [ ] NEXTAUTH_SECRET（NextAuth.js設定時に生成）
+  - [x] NEXTAUTH_SECRET
+  - [x] NEXTAUTH_URL
 
 ### TMDb API連携
 - [ ] TMDb APIキー取得

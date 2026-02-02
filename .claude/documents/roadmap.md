@@ -15,14 +15,14 @@
   - [x] .env.exampleテンプレート作成（環境変数の雛形）
   - [x] next.config.js設定（TMDb画像ドメイン許可、SCSS設定）
   - [x] エラーページ実装（app/error.tsx, app/not-found.tsx）
-- [ ] 基本設定・スタイリング方針確立
-  - [ ] SCSS Modules設定
-  - [ ] デザインシステムのSCSS変数作成
-  - [ ] 命名規則ドキュメント整備（lowerCamelCase）
-  - [ ] アクセシビリティ設定
-    - [ ] カラーコントラストWCAG AA基準確認
-    - [ ] フォーカス表示スタイル実装（outline: 2px solid $primary-500）
-    - [ ] レスポンシブ設定（最小幅375px、モバイルファースト）
+- [x] 基本設定・スタイリング方針確立
+  - [x] SCSS Modules設定
+  - [x] デザインシステムのSCSS変数作成
+  - [x] 命名規則ドキュメント整備（lowerCamelCase）
+  - [x] アクセシビリティ設定
+    - [x] カラーコントラストWCAG AA基準確認
+    - [x] フォーカス表示スタイル実装（outline: 2px solid $primary-500）
+    - [x] レスポンシブ設定（最小幅375px、モバイルファースト）
 - [ ] 共通関数（ユーティリティ）の実装
   - [ ] 画像URLユーティリティ（getTMDbImageUrl）
   - [ ] 日付フォーマット関数（formatDate, formatDateTime）

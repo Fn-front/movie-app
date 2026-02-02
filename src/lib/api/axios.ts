@@ -4,7 +4,7 @@
 
 import axios, { type AxiosError, type AxiosResponse } from 'axios';
 
-import { API } from '@/lib/constants';
+import { API } from '@/constants';
 
 /**
  * 基本Axiosインスタンス

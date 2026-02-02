@@ -2,7 +2,7 @@
  * TMDb API クライアント
  */
 
-import { API } from '@/lib/constants';
+import { API } from '@/constants';
 import type {
   Movie,
   MovieDetail,

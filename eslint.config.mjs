@@ -32,7 +32,7 @@ export default [
   {
     files: ['**/*.{js,jsx,ts,tsx}'],
     plugins: {
-      'react': reactPlugin,
+      react: reactPlugin,
       'react-hooks': reactHooksPlugin,
       '@next/next': nextPlugin,
     },
@@ -53,12 +53,15 @@ export default [
 
       // Import rules (using import-x for ESLint 9)
       'import-x/no-named-as-default': 'off',
-      'import-x/no-unresolved': ['error', {
-        ignore: ['\\.scss$', '\\.css$', '\\.(png|jpg|jpeg|gif|svg)$'],
-      }],
+      'import-x/no-unresolved': [
+        'error',
+        {
+          ignore: ['\\.scss$', '\\.css$', '\\.(png|jpg|jpeg|gif|svg)$'],
+        },
+      ],
 
       // Code style
-      'quotes': ['error', 'single', { avoidEscape: true }],
+      quotes: ['error', 'single', { avoidEscape: true }],
       'jsx-quotes': ['error', 'prefer-single'],
     },
     settings: {
@@ -70,11 +73,7 @@ export default [
           extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
         },
       },
-      'import-x/ignore': [
-        '\\.scss$',
-        '\\.css$',
-        '\\.(png|jpg|jpeg|gif|svg)$',
-      ],
+      'import-x/ignore': ['\\.scss$', '\\.css$', '\\.(png|jpg|jpeg|gif|svg)$'],
     },
   },
 ];

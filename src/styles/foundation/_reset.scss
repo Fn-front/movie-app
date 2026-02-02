@@ -242,16 +242,16 @@ textarea {
  */
 
 button,
-[type="button"],
-[type="reset"],
-[type="submit"] {
+[type='button'],
+[type='reset'],
+[type='submit'] {
   cursor: pointer;
 }
 
 button:disabled,
-[type="button"]:disabled,
-[type="reset"]:disabled,
-[type="submit"]:disabled {
+[type='button']:disabled,
+[type='reset']:disabled,
+[type='submit']:disabled {
   cursor: default;
 }
 
@@ -309,8 +309,8 @@ textarea {
  * Correct the cursor style of increment and decrement buttons in Chrome.
  */
 
-[type="number"]::-webkit-inner-spin-button,
-[type="number"]::-webkit-outer-spin-button {
+[type='number']::-webkit-inner-spin-button,
+[type='number']::-webkit-outer-spin-button {
   height: auto;
 }
 
@@ -318,7 +318,7 @@ textarea {
  * Correct the outline style in Safari.
  */
 
-[type="search"] {
+[type='search'] {
   outline-offset: -2px; /* 1 */
 }
 
@@ -326,7 +326,7 @@ textarea {
  * Remove the inner padding in Chrome and Safari on macOS.
  */
 
-[type="search"]::-webkit-search-decoration {
+[type='search']::-webkit-search-decoration {
   -webkit-appearance: none;
 }
 
@@ -343,7 +343,7 @@ textarea {
 /**
  * Fix appearance for Firefox
  */
-[type="number"] {
+[type='number'] {
   -moz-appearance: textfield;
 }
 

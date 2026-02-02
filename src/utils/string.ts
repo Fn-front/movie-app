@@ -22,7 +22,7 @@
 export function truncate(
   text: string | null | undefined,
   length: number,
-  ellipsis: string = '...'
+  ellipsis: string = '...',
 ): string | null {
   if (!text) return null;
 
@@ -179,7 +179,9 @@ export function toSnakeCase(text: string | null | undefined): string | null {
  * // => 'Hello World'
  * ```
  */
-export function normalizeWhitespace(text: string | null | undefined): string | null {
+export function normalizeWhitespace(
+  text: string | null | undefined,
+): string | null {
   if (!text) return null;
 
   return text.replace(/\s+/g, ' ').trim();
@@ -198,7 +200,8 @@ export function normalizeWhitespace(text: string | null | undefined): string | n
  * ```
  */
 export function generateRandomString(length: number): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const chars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
 
   for (let i = 0; i < length; i++) {
@@ -223,7 +226,7 @@ export function generateRandomString(length: number): string {
  */
 export function matches(
   text: string | null | undefined,
-  pattern: RegExp
+  pattern: RegExp,
 ): boolean {
   if (!text) return false;
 

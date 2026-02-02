@@ -25,14 +25,18 @@ export default function Error({ error, reset }: ErrorProps) {
         textAlign: 'center',
       }}
     >
-      <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem' }}>
+      <h1
+        style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem' }}
+      >
         エラーが発生しました
       </h1>
       <p style={{ marginBottom: '2rem', color: '#666' }}>
         申し訳ございません。予期しないエラーが発生しました。
       </p>
       {error.digest && (
-        <p style={{ fontSize: '0.875rem', color: '#999', marginBottom: '2rem' }}>
+        <p
+          style={{ fontSize: '0.875rem', color: '#999', marginBottom: '2rem' }}
+        >
           エラーID: {error.digest}
         </p>
       )}

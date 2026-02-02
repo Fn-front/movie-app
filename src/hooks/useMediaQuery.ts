@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 /**
  * メディアクエリの一致状態を管理する
@@ -29,33 +29,30 @@ import { useEffect, useState } from 'react';
  * ```
  */
 export function useMediaQuery(query: string): boolean {
-  // サーバーサイドレンダリング対応
-  const [matches, setMatches] = useState<boolean>(false);
-
-  useEffect(() => {
+  const subscribe = (callback: () => void) => {
     if (typeof window === 'undefined') {
-      return;
+      return () => {};
     }
 
     const mediaQueryList = window.matchMedia(query);
+    mediaQueryList.addEventListener('change', callback);
 
-    // 初期値を設定
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMatches(mediaQueryList.matches);
-
-    // メディアクエリの変化を監視
-    const handleChange = (event: MediaQueryListEvent) => {
-      setMatches(event.matches);
-    };
-
-    // リスナーを追加
-    mediaQueryList.addEventListener('change', handleChange);
-
-    // クリーンアップ
     return () => {
-      mediaQueryList.removeEventListener('change', handleChange);
+      mediaQueryList.removeEventListener('change', callback);
     };
-  }, [query]);
+  };
 
-  return matches;
+  const getSnapshot = () => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    return window.matchMedia(query).matches;
+  };
+
+  const getServerSnapshot = () => {
+    return false;
+  };
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }

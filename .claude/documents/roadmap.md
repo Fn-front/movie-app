@@ -19,6 +19,12 @@
     - [ ] カラーコントラストWCAG AA基準確認
     - [ ] フォーカス表示スタイル実装（outline: 2px solid $primary-500）
     - [ ] レスポンシブ設定（最小幅375px、モバイルファースト）
+- [ ] 共通関数（ユーティリティ）の実装
+  - [ ] 画像URLユーティリティ（getTMDbImageUrl）
+  - [ ] 日付フォーマット関数（formatDate, formatDateTime）
+  - [ ] バリデーションヘルパー（isValidEmail, isValidPassword）
+  - [ ] エラーハンドリングヘルパー（handleApiError, formatErrorMessage）
+  - [ ] 文字列操作ヘルパー（truncate, capitalize）
 - [ ] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）
   - [ ] Button（React.memo + aria-label）
   - [ ] Input（フォーム統合、React.memo + aria-label）

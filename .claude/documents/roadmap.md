@@ -25,6 +25,13 @@
   - [ ] バリデーションヘルパー（isValidEmail, isValidPassword）
   - [ ] エラーハンドリングヘルパー（handleApiError, formatErrorMessage）
   - [ ] 文字列操作ヘルパー（truncate, capitalize）
+- [ ] 共通カスタムフックの実装
+  - [ ] useDebounce（入力遅延処理）
+  - [ ] useLocalStorage（ローカルストレージ管理）
+  - [ ] useMediaQuery（レスポンシブ判定）
+  - [ ] usePrevious（前回の値を保持）
+  - [ ] useClickOutside（外側クリック検知）
+  - [ ] useToggle（boolean状態管理）
 - [ ] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）
   - [ ] Button（React.memo + aria-label）
   - [ ] Input（フォーム統合、React.memo + aria-label）

@@ -32,6 +32,13 @@
   - [ ] usePrevious（前回の値を保持）
   - [ ] useClickOutside（外側クリック検知）
   - [ ] useToggle（boolean状態管理）
+- [ ] lib（ライブラリ・設定）の実装
+  - [ ] Supabaseクライアント設定（lib/supabase/client.ts, server.ts）
+  - [ ] TMDb APIクライアント設定（lib/api/tmdb.ts）
+  - [ ] axiosインスタンス設定（lib/api/axios.ts）
+  - [ ] NextAuth.js設定（lib/auth/authOptions.ts）
+  - [ ] 定数定義（lib/constants/index.ts）
+  - [ ] 型定義（lib/types/index.ts）
 - [ ] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）
   - [ ] Button（React.memo + aria-label）
   - [ ] Input（フォーム統合、React.memo + aria-label）

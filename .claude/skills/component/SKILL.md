@@ -24,7 +24,8 @@ argument-hint: <componentName> [options]
 src/components/<componentName>/
 ├── <componentName>.tsx        # メインコンポーネント
 ├── <componentName>.module.scss # スタイル（必要な場合）
-└── use<ComponentName>.ts       # カスタムフック（ロジック分離）
+└── hooks/
+    └── use<ComponentName>.ts   # カスタムフック（ロジック分離）
 ```
 
 ### コンポーネントテンプレート

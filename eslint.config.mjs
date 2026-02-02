@@ -69,6 +69,10 @@ export default [
         version: 'detect',
       },
       'import-x/resolver': {
+        typescript: {
+          alwaysTryTypes: true,
+          project: './tsconfig.json',
+        },
         node: {
           extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
         },

@@ -176,7 +176,7 @@ export function isNotEmpty(value: string | null | undefined): boolean {
 export function isLengthInRange(
   value: string | null | undefined,
   min: number,
-  max?: number
+  max?: number,
 ): boolean {
   if (!value) return false;
 

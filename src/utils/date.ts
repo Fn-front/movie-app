@@ -23,7 +23,7 @@ import { ja } from 'date-fns/locale';
  */
 export function formatDate(
   date: Date | string | number | null | undefined,
-  formatString: string = 'yyyy年MM月dd日'
+  formatString: string = 'yyyy年MM月dd日',
 ): string | null {
   if (!date) return null;
 
@@ -54,7 +54,7 @@ export function formatDate(
  */
 export function formatDateTime(
   date: Date | string | number | null | undefined,
-  formatString: string = 'yyyy年MM月dd日 HH:mm'
+  formatString: string = 'yyyy年MM月dd日 HH:mm',
 ): string | null {
   return formatDate(date, formatString);
 }
@@ -75,7 +75,7 @@ export function formatDateTime(
  * ```
  */
 export function formatRelativeTime(
-  date: Date | string | number | null | undefined
+  date: Date | string | number | null | undefined,
 ): string | null {
   if (!date) return null;
 
@@ -115,7 +115,7 @@ export function formatRelativeTime(
  * ```
  */
 export function getYear(
-  date: Date | string | number | null | undefined
+  date: Date | string | number | null | undefined,
 ): number | null {
   if (!date) return null;
 

@@ -38,7 +38,6 @@ export function handleApiError(error: unknown): ErrorResponse {
   // Axiosエラー
   if (error instanceof AxiosError) {
     const statusCode = error.response?.status;
-    const message = error.response?.data?.message || error.message;
 
     return {
       message: formatErrorMessage(error),
@@ -206,7 +205,10 @@ export function isAuthError(error: unknown): boolean {
  * logError(error, { component: 'MovieList', action: 'fetchMovies' });
  * ```
  */
-export function logError(error: unknown, context?: Record<string, unknown>): void {
+export function logError(
+  error: unknown,
+  context?: Record<string, unknown>,
+): void {
   if (process.env.NODE_ENV === 'development') {
     console.group('🚨 Error Details');
     console.error('Error:', error);

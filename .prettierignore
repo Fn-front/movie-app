@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+
+# Claude Code
+.claude/
+
+# Cache
+.cache/
+
+# Misc
+.DS_Store
+*.log
+.env
+.env.local
+.env.production.local
+.env.development.local
+
+# Package manager
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

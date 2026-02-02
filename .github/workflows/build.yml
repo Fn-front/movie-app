@@ -1,4 +1,4 @@
-name: Nextjs Build
+name: Build
 
 on:
   pull_request:
@@ -7,8 +7,10 @@ on:
       - develop
       - 'feature/**'
       - 'release/**'
+
 jobs:
   build:
+    name: Next.js Build
     runs-on: ubuntu-latest
     steps:
       - name: checkout
@@ -19,7 +21,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      
+
       - name: Get date info
         id: date
         run: |
@@ -27,13 +29,13 @@ jobs:
 
       - name: cache-node-modules
         uses: actions/cache@v3
-        id: node_modules_cache_id
+        id: node_modules_cache
         env:
           cache-name: cache-node-modules
         with:
           path: '**/node_modules'
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
-      
+
       - name: cache-nextjs-build
         uses: actions/cache@v3
         with:
@@ -44,7 +46,7 @@ jobs:
             ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-
 
       - name: npm-install
-        if: ${{ steps.node_modules_cache_id.outputs.cache-hit != 'true' }}
+        if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
         run: npm i
 
       - name: app-build
@@ -55,5 +57,3 @@ jobs:
       - name: Clear old cache
         run: |
           find .next/cache -type f -mtime +30 -delete 2>/dev/null || true
-
-        

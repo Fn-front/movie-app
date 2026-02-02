@@ -24,9 +24,7 @@ export default function RootLayout({
       <body className={noto.className}>
         <div className='l_global_container'>
           <main className='l_main'>
-            <div className='l_container'>
-              {children}
-            </div>
+            <div className='l_container'>{children}</div>
           </main>
         </div>
       </body>

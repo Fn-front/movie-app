@@ -33,7 +33,7 @@ export type TMDbImageSize =
  */
 export function getTMDbImageUrl(
   path: string | null | undefined,
-  size: TMDbImageSize = 'w500'
+  size: TMDbImageSize = 'w500',
 ): string | null {
   if (!path) return null;
 
@@ -46,7 +46,9 @@ export function getTMDbImageUrl(
  * @param path - ポスター画像パス
  * @returns ポスター画像URL、またはnull
  */
-export function getTMDbPosterUrl(path: string | null | undefined): string | null {
+export function getTMDbPosterUrl(
+  path: string | null | undefined,
+): string | null {
   return getTMDbImageUrl(path, 'w500');
 }
 
@@ -56,7 +58,9 @@ export function getTMDbPosterUrl(path: string | null | undefined): string | null
  * @param path - バックドロップ画像パス
  * @returns バックドロップ画像URL、またはnull
  */
-export function getTMDbBackdropUrl(path: string | null | undefined): string | null {
+export function getTMDbBackdropUrl(
+  path: string | null | undefined,
+): string | null {
   return getTMDbImageUrl(path, 'original');
 }
 
@@ -71,7 +75,7 @@ export function getTMDbBackdropUrl(path: string | null | undefined): string | nu
 export function getPlaceholderImageUrl(
   width: number,
   height: number,
-  text?: string
+  text?: string,
 ): string {
   const displayText = text || `${width}x${height}`;
   return `https://placehold.co/${width}x${height}?text=${encodeURIComponent(displayText)}`;

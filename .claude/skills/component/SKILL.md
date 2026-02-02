@@ -22,10 +22,16 @@ argument-hint: <componentName> [options]
 
 ```
 src/components/<componentName>/
-├── <componentName>.tsx        # メインコンポーネント
-├── <componentName>.module.scss # スタイル（必要な場合）
-└── hooks/
-    └── use<ComponentName>.ts   # カスタムフック（ロジック分離）
+├── <componentName>.tsx         # メインコンポーネント
+├── <componentName>.module.scss  # スタイル（必要な場合）
+├── hooks/                       # カスタムフック（必要な場合）
+│   └── use<ComponentName>.ts
+├── types/                       # 型定義（必要な場合）
+│   └── index.ts
+├── utils/                       # ユーティリティ関数（必要な場合）
+│   └── index.ts
+└── constants/                   # 定数（必要な場合）
+    └── index.ts
 ```
 
 ### コンポーネントテンプレート

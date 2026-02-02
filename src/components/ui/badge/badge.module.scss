@@ -1,0 +1,85 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_badge {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-1;
+  font-weight: $font-weight-medium;
+  border-radius: $border-radius-full;
+  white-space: nowrap;
+  transition: $transition-all;
+
+  // サイズ: Small
+  &__size__sm {
+    padding: $spacing-1 $spacing-2;
+    font-size: $font-size-xs;
+  }
+
+  // サイズ: Medium
+  &__size__md {
+    padding: $spacing-2 $spacing-3;
+    font-size: $font-size-sm;
+  }
+
+  // バリアント: Default
+  &__variant__default {
+    background-color: $background-secondary;
+    color: $text-primary;
+  }
+
+  // バリアント: Primary
+  &__variant__primary {
+    background-color: rgba($primary-500, 0.1);
+    color: $primary-500;
+  }
+
+  // バリアント: Success
+  &__variant__success {
+    background-color: rgba($success-main, 0.1);
+    color: $success-main;
+  }
+
+  // バリアント: Error
+  &__variant__error {
+    background-color: rgba($error-main, 0.1);
+    color: $error-main;
+  }
+
+  // バリアント: Warning
+  &__variant__warning {
+    background-color: rgba($warning-main, 0.1);
+    color: $warning-main;
+  }
+
+  // 削除可能な場合
+  &__removable {
+    padding-right: $spacing-1;
+  }
+
+  // コンテンツ
+  &__content {
+    display: inline-block;
+  }
+
+  // 削除ボタン
+  &__remove {
+    @include button-reset;
+    @include flex-center;
+
+    width: 20px;
+    height: 20px;
+    border-radius: $border-radius-full;
+    transition: $transition-all;
+    cursor: pointer;
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.1);
+    }
+
+    &:focus-visible {
+      outline: 2px solid currentColor;
+      outline-offset: 2px;
+    }
+  }
+}

@@ -1,0 +1,69 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_card {
+  display: flex;
+  flex-direction: column;
+  background-color: $background-paper;
+  border: $border-width-1 solid $border-color;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-sm;
+  overflow: hidden;
+  transition: $transition-all;
+
+  // クリック可能
+  &__clickable {
+    cursor: pointer;
+
+    &:active {
+      transform: scale(0.98);
+    }
+  }
+
+  // ホバー効果
+  &__hoverable {
+    &:hover {
+      box-shadow: $shadow-md;
+      transform: translateY(-2px);
+    }
+  }
+
+  // パディングなし
+  &__no_padding {
+    .c_card__header,
+    .c_card__body,
+    .c_card__footer {
+      padding: 0;
+    }
+  }
+
+  // ボーダーなし
+  &__no_border {
+    border: none;
+  }
+
+  // シャドウなし
+  &__no_shadow {
+    box-shadow: none;
+  }
+
+  // ヘッダー
+  &__header {
+    padding: $spacing-4 $spacing-6;
+    border-bottom: $border-width-1 solid $border-color;
+    background-color: $background-paper;
+  }
+
+  // ボディ
+  &__body {
+    flex: 1;
+    padding: $spacing-6;
+  }
+
+  // フッター
+  &__footer {
+    padding: $spacing-4 $spacing-6;
+    border-top: $border-width-1 solid $border-color;
+    background-color: $background-paper;
+  }
+}

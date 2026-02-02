@@ -1,0 +1,197 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_toast {
+  // ビューポート
+  &__viewport {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    padding: $spacing-6;
+    gap: $spacing-3;
+    width: 390px;
+    max-width: 100vw;
+    margin: 0;
+    list-style: none;
+    z-index: $z-index-toast;
+    outline: none;
+  }
+
+  // トースト本体
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-4;
+  padding: $spacing-4 $spacing-5;
+  background-color: $background-paper;
+  border: $border-width-1 solid $border-color;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-lg;
+  min-width: 350px;
+
+  &[data-state='open'] {
+    animation: slideIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  &[data-state='closed'] {
+    animation: hide 100ms ease-in;
+  }
+
+  &[data-swipe='move'] {
+    transform: translateX(var(--radix-toast-swipe-move-x));
+  }
+
+  &[data-swipe='cancel'] {
+    transform: translateX(0);
+    transition: transform 200ms ease-out;
+  }
+
+  &[data-swipe='end'] {
+    animation: swipeOut 100ms ease-out;
+  }
+
+  // バリアント: Success
+  &__variant__success {
+    border-color: $success-main;
+
+    .c_toast__icon {
+      color: $success-main;
+    }
+  }
+
+  // バリアント: Error
+  &__variant__error {
+    border-color: $error-main;
+
+    .c_toast__icon {
+      color: $error-main;
+    }
+  }
+
+  // バリアント: Warning
+  &__variant__warning {
+    border-color: $warning-main;
+
+    .c_toast__icon {
+      color: $warning-main;
+    }
+  }
+
+  // バリアント: Info
+  &__variant__info {
+    border-color: $info-main;
+
+    .c_toast__icon {
+      color: $info-main;
+    }
+  }
+
+  // アイコン
+  &__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  // コンテンツ
+  &__content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-1;
+  }
+
+  // タイトル
+  &__title {
+    margin: 0;
+    font-size: $font-size-base;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+  }
+
+  // 説明
+  &__description {
+    margin: 0;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+  }
+
+  // アクション
+  &__action {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  // 閉じるボタン
+  &__close {
+    @include button-reset;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: $text-secondary;
+    border-radius: $border-radius-sm;
+    transition: $transition-all;
+    flex-shrink: 0;
+
+    &:hover {
+      background-color: rgba($text-primary, 0.05);
+      color: $text-primary;
+    }
+
+    &:focus-visible {
+      @include focus-visible;
+    }
+  }
+}
+
+// アニメーション
+@keyframes hide {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(calc(100% + $spacing-6));
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes swipeOut {
+  from {
+    transform: translateX(var(--radix-toast-swipe-end-x));
+  }
+
+  to {
+    transform: translateX(calc(100% + $spacing-6));
+  }
+}
+
+// スクリーンリーダー専用テキスト
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}

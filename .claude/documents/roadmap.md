@@ -43,15 +43,15 @@
   - [ ] NextAuth.js設定（lib/auth/authOptions.ts）
   - [x] 定数定義（lib/constants/index.ts）
   - [x] 型定義（lib/types/index.ts）
-- [ ] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）
-  - [ ] Button（React.memo + aria-label）
-  - [ ] Input（フォーム統合、React.memo + aria-label）
-  - [ ] Select（@radix-ui/react-select、React.memo + aria-label）
-  - [ ] Card（React.memo）
-  - [ ] Modal（@radix-ui/react-dialog、React.memo + aria-label）
-  - [ ] Toast（@radix-ui/react-toast、5秒表示、React.memo + aria-label）
-  - [ ] Loading（全画面オーバーレイ対応、React.memo + aria-label）
-  - [ ] 全インタラクティブ要素にaria-label実装
+- [x] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）
+  - [x] Button（React.memo + aria-label）
+  - [x] Input（フォーム統合、React.memo + aria-label）
+  - [x] Select（@radix-ui/react-select、React.memo + aria-label）
+  - [x] Card（React.memo）
+  - [x] Modal（@radix-ui/react-dialog、React.memo + aria-label）
+  - [x] Toast（@radix-ui/react-toast、5秒表示、React.memo + aria-label）
+  - [x] Loading（全画面オーバーレイ対応、React.memo + aria-label）
+  - [x] 全インタラクティブ要素にaria-label実装
 - [ ] カスタムフック基礎実装
   - [ ] useToast（トースト通知管理）
   - [ ] useAuth（認証状態管理）

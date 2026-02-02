@@ -1,0 +1,39 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_skeleton {
+  background: linear-gradient(
+    90deg,
+    $background-secondary 25%,
+    $background-paper 50%,
+    $background-secondary 75%
+  );
+  background-size: 200% 100%;
+  animation: loading 1.5s ease-in-out infinite;
+
+  // バリアント: Text
+  &__variant__text {
+    height: 1em;
+    border-radius: $border-radius-sm;
+  }
+
+  // バリアント: Rect
+  &__variant__rect {
+    border-radius: $border-radius-md;
+  }
+
+  // バリアント: Circle
+  &__variant__circle {
+    border-radius: $border-radius-full;
+  }
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}

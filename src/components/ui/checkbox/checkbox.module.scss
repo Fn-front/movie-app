@@ -1,0 +1,70 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-2;
+
+  // ルート（チェックボックス本体）
+  &__root {
+    @include button-reset;
+    @include flex-center;
+
+    width: 20px;
+    height: 20px;
+    background-color: $background-paper;
+    border: $border-width-1 solid $border-color;
+    border-radius: $border-radius-sm;
+    transition: $transition-all;
+    cursor: pointer;
+    flex-shrink: 0;
+
+    &:hover:not(:disabled) {
+      border-color: $primary-500;
+    }
+
+    &:focus-visible {
+      @include focus-visible;
+    }
+
+    &[data-state='checked'] {
+      background-color: $primary-500;
+      border-color: $primary-500;
+    }
+
+    &:disabled {
+      background-color: $background-disabled;
+      border-color: $border-color;
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+  }
+
+  // インジケーター（チェックマーク）
+  &__indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+
+  // ラベル
+  &__label {
+    font-size: $font-size-base;
+    color: $text-primary;
+    cursor: pointer;
+    user-select: none;
+
+    .c_checkbox__root:disabled + & {
+      color: $text-disabled;
+      cursor: not-allowed;
+    }
+  }
+
+  // 必須マーカー
+  &__required {
+    color: $error-main;
+    margin-left: $spacing-1;
+  }
+}

@@ -10,17 +10,21 @@ import bcrypt from 'bcryptjs';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+// ビルド時は警告のみ（実行時にエラーチェック）
 if (!supabaseUrl || !supabaseServiceKey) {
-  throw new Error('Supabase environment variables are not defined');
+  console.warn('Warning: Supabase environment variables are not defined');
 }
 
 // サービスロールキーでクライアント作成（RLSをバイパス）
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+const supabase =
+  supabaseUrl && supabaseServiceKey
+    ? createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      })
+    : null;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -31,6 +35,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
+        if (!supabase) {
+          throw new Error('Database connection is not available');
+        }
+
         if (!credentials?.email || !credentials?.password) {
           throw new Error('メールアドレスとパスワードを入力してください');
         }

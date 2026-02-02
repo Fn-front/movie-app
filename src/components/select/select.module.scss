@@ -1,0 +1,202 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_select {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+
+  // 全幅
+  &__full_width {
+    width: 100%;
+  }
+
+  // ラベル
+  &__label {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+    margin-bottom: $spacing-1;
+  }
+
+  // 必須マーカー
+  &__required {
+    color: $error-main;
+    margin-left: $spacing-1;
+  }
+
+  // トリガー（選択ボタン）
+  &__trigger {
+    @include button-reset;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: $spacing-3 $spacing-4;
+    font-family: $font-family-base;
+    font-size: $font-size-base;
+    color: $text-primary;
+    background-color: $background-paper;
+    border: $border-width-1 solid $border-color;
+    border-radius: $border-radius-md;
+    transition: $transition-all;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover:not(:disabled) {
+      border-color: $primary-500;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: $primary-500;
+      box-shadow: 0 0 0 3px rgba($primary-500, 0.1);
+    }
+
+    &[data-placeholder] {
+      color: $text-secondary;
+    }
+
+    // エラー状態
+    &__error {
+      border-color: $error-main;
+
+      &:hover:not(:disabled),
+      &:focus {
+        border-color: $error-main;
+        box-shadow: 0 0 0 3px rgba($error-main, 0.1);
+      }
+    }
+
+    // 無効状態
+    &__disabled {
+      background-color: $background-disabled;
+      color: $text-disabled;
+      cursor: not-allowed;
+    }
+  }
+
+  // アイコン
+  &__icon {
+    display: flex;
+    align-items: center;
+    color: $text-secondary;
+    transition: transform $transition-duration-base;
+
+    [data-state='open'] & {
+      transform: rotate(180deg);
+    }
+  }
+
+  // ドロップダウンコンテンツ
+  &__content {
+    overflow: hidden;
+    background-color: $background-paper;
+    border: $border-width-1 solid $border-color;
+    border-radius: $border-radius-md;
+    box-shadow: $shadow-lg;
+    z-index: $z-index-dropdown;
+
+    &[data-state='open'] {
+      animation: slideDownAndFade 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    &[data-state='closed'] {
+      animation: slideUpAndFade 200ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+  }
+
+  // ビューポート
+  &__viewport {
+    padding: $spacing-2;
+  }
+
+  // 選択肢
+  &__item {
+    @include button-reset;
+
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: $spacing-3 $spacing-4;
+    padding-left: $spacing-10;
+    font-size: $font-size-base;
+    color: $text-primary;
+    border-radius: $border-radius-sm;
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+    transition: $transition-all;
+
+    &:hover:not([data-disabled]) {
+      background-color: rgba($primary-500, 0.1);
+    }
+
+    &:focus {
+      background-color: rgba($primary-500, 0.1);
+    }
+
+    &[data-disabled] {
+      color: $text-disabled;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    &[data-state='checked'] {
+      color: $primary-500;
+      font-weight: $font-weight-medium;
+    }
+  }
+
+  // 選択インジケーター
+  &__item_indicator {
+    position: absolute;
+    left: $spacing-2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: $primary-500;
+  }
+
+  // エラーメッセージ
+  &__error {
+    font-size: $font-size-sm;
+    color: $error-main;
+    margin-top: $spacing-1;
+  }
+
+  // ヘルパーテキスト
+  &__helper {
+    font-size: $font-size-sm;
+    color: $text-secondary;
+    margin-top: $spacing-1;
+  }
+}
+
+// アニメーション
+@keyframes slideDownAndFade {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUpAndFade {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}

@@ -1,0 +1,161 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_modal {
+  // オーバーレイ
+  &__overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: $z-index-modal;
+    animation: overlayShow 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  // コンテンツ
+  &__content {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90vw;
+    max-width: 450px;
+    max-height: 85vh;
+    background-color: $background-paper;
+    border-radius: $border-radius-lg;
+    box-shadow: $shadow-xl;
+    z-index: $z-index-modal + 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: contentShow 200ms cubic-bezier(0.16, 1, 0.3, 1);
+
+    &:focus {
+      outline: none;
+    }
+
+    // サイズ
+    &__sm {
+      max-width: 350px;
+    }
+
+    &__md {
+      max-width: 500px;
+    }
+
+    &__lg {
+      max-width: 700px;
+    }
+
+    &__xl {
+      max-width: 900px;
+    }
+  }
+
+  // ヘッダー
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: $spacing-6;
+    border-bottom: $border-width-1 solid $border-color;
+    background-color: $background-paper;
+
+    &_content {
+      flex: 1;
+    }
+  }
+
+  // タイトル
+  &__title {
+    margin: 0;
+    font-size: $font-size-xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+  }
+
+  // 説明
+  &__description {
+    margin: $spacing-2 0 0;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+  }
+
+  // 閉じるボタン
+  &__close {
+    @include button-reset;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin-left: $spacing-4;
+    color: $text-secondary;
+    border-radius: $border-radius-md;
+    transition: $transition-all;
+    flex-shrink: 0;
+
+    &:hover {
+      background-color: rgba($text-primary, 0.05);
+      color: $text-primary;
+    }
+
+    &:focus-visible {
+      @include focus-visible;
+    }
+  }
+
+  // ボディ
+  &__body {
+    flex: 1;
+    padding: $spacing-6;
+    overflow-y: auto;
+  }
+
+  // フッター
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: $spacing-3;
+    padding: $spacing-6;
+    border-top: $border-width-1 solid $border-color;
+    background-color: $background-paper;
+  }
+}
+
+// アニメーション
+@keyframes overlayShow {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes contentShow {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+// スクリーンリーダー専用テキスト
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}

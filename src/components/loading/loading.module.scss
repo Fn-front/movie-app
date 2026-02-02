@@ -1,0 +1,105 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_loading {
+  @include flex-center;
+
+  flex-direction: column;
+  gap: $spacing-3;
+
+  // フルスクリーン
+  &__fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: $z-index-modal;
+  }
+
+  // オーバーレイ
+  &__overlay {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+
+  // コンテンツ
+  &__content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $spacing-3;
+  }
+
+  // スピナー
+  &__spinner {
+    display: inline-block;
+    animation: rotate 1.5s linear infinite;
+
+    svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    // サイズ: Small
+    &__sm {
+      width: 24px;
+      height: 24px;
+    }
+
+    // サイズ: Medium
+    &__md {
+      width: 40px;
+      height: 40px;
+    }
+
+    // サイズ: Large
+    &__lg {
+      width: 64px;
+      height: 64px;
+    }
+  }
+
+  // 円
+  &__circle {
+    stroke: $primary-500;
+    stroke-linecap: round;
+    animation: dash 1.5s ease-in-out infinite;
+  }
+
+  // ラベル
+  &__label {
+    margin: 0;
+    font-size: $font-size-base;
+    color: $text-primary;
+    text-align: center;
+
+    .c_loading__fullscreen & {
+      color: white;
+    }
+  }
+}
+
+// アニメーション
+@keyframes rotate {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes dash {
+  0% {
+    stroke-dasharray: 1, 150;
+    stroke-dashoffset: 0;
+  }
+
+  50% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -35;
+  }
+
+  100% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -124;
+  }
+}

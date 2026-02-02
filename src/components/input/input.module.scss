@@ -1,0 +1,126 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_input {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+
+  // 全幅
+  &__full_width {
+    width: 100%;
+  }
+
+  // ラベル
+  &__label {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+    margin-bottom: $spacing-1;
+  }
+
+  // 入力フィールドのラッパー
+  &__wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  // 入力フィールド
+  &__field {
+    @include input-reset;
+
+    width: 100%;
+    padding: $spacing-3 $spacing-4;
+    font-family: $font-family-base;
+    font-size: $font-size-base;
+    color: $text-primary;
+    background-color: $background-paper;
+    border: $border-width-1 solid $border-color;
+    border-radius: $border-radius-md;
+    transition: $transition-all;
+
+    &::placeholder {
+      color: $text-secondary;
+    }
+
+    &:hover:not(:disabled) {
+      border-color: $primary-500;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: $primary-500;
+      box-shadow: 0 0 0 3px rgba($primary-500, 0.1);
+    }
+
+    &:disabled {
+      background-color: $background-disabled;
+      color: $text-disabled;
+      cursor: not-allowed;
+    }
+
+    // エラー状態
+    &__error {
+      border-color: $error-main;
+
+      &:hover:not(:disabled),
+      &:focus {
+        border-color: $error-main;
+        box-shadow: 0 0 0 3px rgba($error-main, 0.1);
+      }
+    }
+
+    // 無効状態
+    &__disabled {
+      background-color: $background-disabled;
+      color: $text-disabled;
+      cursor: not-allowed;
+    }
+
+    // 左アイコンがある場合
+    &__with_left_icon {
+      padding-left: calc($spacing-10 + $spacing-2);
+    }
+
+    // 右アイコンがある場合
+    &__with_right_icon {
+      padding-right: calc($spacing-10 + $spacing-2);
+    }
+  }
+
+  // アイコン共通
+  &__icon {
+    &__left,
+    &__right {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: $text-secondary;
+      pointer-events: none;
+    }
+
+    &__left {
+      left: $spacing-3;
+    }
+
+    &__right {
+      right: $spacing-3;
+    }
+  }
+
+  // エラーメッセージ
+  &__error {
+    font-size: $font-size-sm;
+    color: $error-main;
+    margin-top: $spacing-1;
+  }
+
+  // ヘルパーテキスト
+  &__helper {
+    font-size: $font-size-sm;
+    color: $text-secondary;
+    margin-top: $spacing-1;
+  }
+}

@@ -23,12 +23,12 @@
     - [x] カラーコントラストWCAG AA基準確認
     - [x] フォーカス表示スタイル実装（outline: 2px solid $primary-500）
     - [x] レスポンシブ設定（最小幅375px、モバイルファースト）
-- [ ] 共通関数（ユーティリティ）の実装
-  - [ ] 画像URLユーティリティ（getTMDbImageUrl）
-  - [ ] 日付フォーマット関数（formatDate, formatDateTime）
-  - [ ] バリデーションヘルパー（isValidEmail, isValidPassword）
-  - [ ] エラーハンドリングヘルパー（handleApiError, formatErrorMessage）
-  - [ ] 文字列操作ヘルパー（truncate, capitalize）
+- [x] 共通関数（ユーティリティ）の実装
+  - [x] 画像URLユーティリティ（getTMDbImageUrl）
+  - [x] 日付フォーマット関数（formatDate, formatDateTime）
+  - [x] バリデーションヘルパー（isValidEmail, isValidPassword）
+  - [x] エラーハンドリングヘルパー（handleApiError, formatErrorMessage）
+  - [x] 文字列操作ヘルパー（truncate, capitalize）
 - [ ] 共通カスタムフックの実装
   - [ ] useDebounce（入力遅延処理）
   - [ ] useLocalStorage（ローカルストレージ管理）

@@ -14,8 +14,12 @@ export default auth((req) => {
   // 認証ページ
   const authPaths = ['/auth/signin', '/auth/signup', '/auth/verify-otp'];
 
-  const isProtectedPath = protectedPaths.some((path) => nextUrl.pathname.startsWith(path));
-  const isAuthPath = authPaths.some((path) => nextUrl.pathname.startsWith(path));
+  const isProtectedPath = protectedPaths.some((path) =>
+    nextUrl.pathname.startsWith(path),
+  );
+  const isAuthPath = authPaths.some((path) =>
+    nextUrl.pathname.startsWith(path),
+  );
 
   // 未認証で保護されたパスにアクセス → サインインページへリダイレクト
   if (isProtectedPath && !isAuthenticated) {

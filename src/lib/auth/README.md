@@ -118,9 +118,9 @@ export default function SignInForm() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <input type="email" name="email" required />
-      <input type="password" name="password" required />
-      <button type="submit">ログイン</button>
+      <input type='email' name='email' required />
+      <input type='password' name='password' required />
+      <button type='submit'>ログイン</button>
     </form>
   );
 }

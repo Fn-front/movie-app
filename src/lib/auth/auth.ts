@@ -55,7 +55,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         // パスワード照合
-        const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+        const isPasswordValid = await bcrypt.compare(
+          password,
+          user.password_hash,
+        );
 
         if (!isPasswordValid) {
           throw new Error('メールアドレスまたはパスワードが正しくありません');

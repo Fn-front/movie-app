@@ -11,6 +11,10 @@
   - [x] React Icons
   - [x] react-hook-form + zod
   - [x] その他依存関係
+- [ ] 環境設定ファイルの作成
+  - [ ] .env.exampleテンプレート作成（環境変数の雛形）
+  - [ ] next.config.js設定（TMDb画像ドメイン許可、SCSS設定）
+  - [ ] エラーページ実装（app/error.tsx, app/not-found.tsx）
 - [ ] 基本設定・スタイリング方針確立
   - [ ] SCSS Modules設定
   - [ ] デザインシステムのSCSS変数作成
@@ -19,6 +23,26 @@
     - [ ] カラーコントラストWCAG AA基準確認
     - [ ] フォーカス表示スタイル実装（outline: 2px solid $primary-500）
     - [ ] レスポンシブ設定（最小幅375px、モバイルファースト）
+- [ ] 共通関数（ユーティリティ）の実装
+  - [ ] 画像URLユーティリティ（getTMDbImageUrl）
+  - [ ] 日付フォーマット関数（formatDate, formatDateTime）
+  - [ ] バリデーションヘルパー（isValidEmail, isValidPassword）
+  - [ ] エラーハンドリングヘルパー（handleApiError, formatErrorMessage）
+  - [ ] 文字列操作ヘルパー（truncate, capitalize）
+- [ ] 共通カスタムフックの実装
+  - [ ] useDebounce（入力遅延処理）
+  - [ ] useLocalStorage（ローカルストレージ管理）
+  - [ ] useMediaQuery（レスポンシブ判定）
+  - [ ] usePrevious（前回の値を保持）
+  - [ ] useClickOutside（外側クリック検知）
+  - [ ] useToggle（boolean状態管理）
+- [ ] lib（ライブラリ・設定）の実装
+  - [ ] Supabaseクライアント設定（lib/supabase/client.ts, server.ts）
+  - [ ] TMDb APIクライアント設定（lib/api/tmdb.ts）
+  - [ ] axiosインスタンス設定（lib/api/axios.ts）
+  - [ ] NextAuth.js設定（lib/auth/authOptions.ts）
+  - [ ] 定数定義（lib/constants/index.ts）
+  - [ ] 型定義（lib/types/index.ts）
 - [ ] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）
   - [ ] Button（React.memo + aria-label）
   - [ ] Input（フォーム統合、React.memo + aria-label）

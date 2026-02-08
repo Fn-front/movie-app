@@ -12,6 +12,7 @@ import { Tabs } from '@/components/ui/tabs/tabs';
 import { Select } from '@/components/ui/select/select';
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { Button } from '@/components/ui/button/button';
+import { FilterIcon } from '@/components/icons';
 import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { MovieTile } from '@/features/home/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/features/home/movieTileSkeleton/movieTileSkeleton';
@@ -19,32 +20,6 @@ import { GenreFilterModal } from '@/features/home/genreFilterModal/genreFilterMo
 
 import { useHomePage } from './useHomePage';
 import styles from './homePage.module.scss';
-
-/**
- * FilterIconコンポーネント
- */
-const FilterIcon = memo(function FilterIcon() {
-  return (
-    <svg
-      width='18'
-      height='18'
-      viewBox='0 0 24 24'
-      fill='none'
-      xmlns='http://www.w3.org/2000/svg'
-      aria-hidden='true'
-    >
-      <path
-        d='M22 3H2l8 9.46V19l4 2v-8.54L22 3z'
-        stroke='currentColor'
-        strokeWidth='2'
-        strokeLinecap='round'
-        strokeLinejoin='round'
-      />
-    </svg>
-  );
-});
-
-FilterIcon.displayName = 'FilterIcon';
 
 /**
  * MovieContentコンポーネント

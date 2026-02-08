@@ -54,8 +54,9 @@ export function useHomePage(): UseHomePageReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<string>(DEFAULT_SORT);
-  const [releaseType, setReleaseType] =
-    useState<'theatrical' | 'streaming'>(DEFAULT_RELEASE_TYPE);
+  const [releaseType, setReleaseType] = useState<'theatrical' | 'streaming'>(
+    DEFAULT_RELEASE_TYPE,
+  );
   const [genres, setGenres] = useState<Record<number, string>>({});
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -78,9 +79,7 @@ export function useHomePage(): UseHomePageReturn {
             | 'vote_average',
           release_type: currentReleaseType,
           genre_ids:
-            currentGenreIds.length > 0
-              ? currentGenreIds.join(',')
-              : undefined,
+            currentGenreIds.length > 0 ? currentGenreIds.join(',') : undefined,
         });
         setMovies(response.data.movies);
         setPagination(response.data.pagination);

@@ -76,6 +76,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           image: user.avatar_url,
           role: user.role,
+          passwordChangedAt: user.password_changed_at || null,
         };
       },
     }),
@@ -100,11 +101,55 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.name = user.name;
         token.picture = user.image;
         token.role = user.role;
+        token.passwordChangedAt =
+          (user as unknown as { passwordChangedAt: string | null })
+            .passwordChangedAt ?? null;
+        token.lastPasswordCheck = Date.now();
       }
+
+      // パスワード変更によるセッション無効化チェック（5分間隔）
+      if (token.id && supabase && !token.invalidated) {
+        const now = Date.now();
+        const CHECK_INTERVAL = 5 * 60 * 1000; // 5分
+
+        if (now - (token.lastPasswordCheck || 0) > CHECK_INTERVAL) {
+          const { data } = await supabase
+            .from('users')
+            .select('password_changed_at')
+            .eq('id', token.id)
+            .single();
+
+          if (data?.password_changed_at) {
+            const dbChangedAt = new Date(data.password_changed_at).getTime();
+            const tokenChangedAt = token.passwordChangedAt
+              ? new Date(token.passwordChangedAt).getTime()
+              : 0;
+
+            if (dbChangedAt > tokenChangedAt) {
+              // パスワードが変更された — セッション無効化
+              token.invalidated = true;
+              return token;
+            }
+          }
+
+          token.lastPasswordCheck = now;
+        }
+      }
+
       return token;
     },
 
     async session({ session, token }) {
+      // 無効化されたトークンの場合、空のユーザー情報を返す
+      if (token.invalidated) {
+        session.user.id = '';
+        session.user.email = '';
+        session.user.name = null;
+        session.user.image = null;
+        session.user.role = '';
+        return session;
+      }
+
       // セッションにユーザー情報を追加
       if (token && session.user) {
         session.user.id = token.id as string;

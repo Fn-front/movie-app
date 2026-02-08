@@ -8,7 +8,7 @@ import { VALIDATION } from '@/constants';
 import { VALIDATION_MESSAGES } from '@/constants/auth';
 
 /**
- * パスワードバリデーション
+ * パスワードバリデーション（ポリシー付き）
  * - 8文字以上
  * - 大文字を含む
  * - 小文字を含む
@@ -85,4 +85,33 @@ export const registerApiSchema = z.object({
     .max(100, VALIDATION_MESSAGES.NAME_TOO_LONG)
     .optional()
     .or(z.literal('')),
+});
+
+/**
+ * パスワード変更フォームのバリデーションスキーマ
+ */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, VALIDATION_MESSAGES.PASSWORD_REQUIRED),
+    newPassword: passwordSchema,
+    confirmNewPassword: z
+      .string()
+      .min(1, VALIDATION_MESSAGES.CONFIRM_PASSWORD_REQUIRED),
+  })
+  .refine((data) => data.newPassword === data.confirmNewPassword, {
+    message: VALIDATION_MESSAGES.PASSWORD_MISMATCH,
+    path: ['confirmNewPassword'],
+  });
+
+/**
+ * パスワード変更フォームの型
+ */
+export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
+
+/**
+ * パスワード変更APIリクエストのバリデーションスキーマ
+ */
+export const changePasswordApiSchema = z.object({
+  currentPassword: z.string().min(1, VALIDATION_MESSAGES.PASSWORD_REQUIRED),
+  newPassword: passwordSchema,
 });

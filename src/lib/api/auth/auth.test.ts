@@ -3,7 +3,7 @@
  */
 
 import { axiosInstance } from '@/lib/axios/axios';
-import { registerUser } from './auth';
+import { registerUser, changePassword } from './auth';
 
 jest.mock('@/lib/axios/axios', () => ({
   axiosInstance: {
@@ -69,6 +69,39 @@ describe('auth API client', () => {
       mockPost.mockRejectedValue(new Error('Network Error'));
 
       await expect(registerUser(registerData)).rejects.toThrow('Network Error');
+    });
+  });
+
+  describe('changePassword', () => {
+    const changePasswordData = {
+      currentPassword: 'OldPassword1',
+      newPassword: 'NewPassword1',
+    };
+
+    it('パスワード変更に成功した場合、レスポンスデータを返す', async () => {
+      const mockResponse = {
+        data: {
+          success: true,
+          message: 'パスワードを変更しました。',
+        },
+      };
+      mockPost.mockResolvedValue(mockResponse);
+
+      const result = await changePassword(changePasswordData);
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/api/user/change-password',
+        changePasswordData,
+      );
+      expect(result).toEqual(mockResponse.data);
+    });
+
+    it('APIエラーの場合、例外をスローする', async () => {
+      mockPost.mockRejectedValue(new Error('Network Error'));
+
+      await expect(changePassword(changePasswordData)).rejects.toThrow(
+        'Network Error',
+      );
     });
   });
 });

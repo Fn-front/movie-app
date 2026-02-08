@@ -22,6 +22,7 @@
 | avatar_url | TEXT | NULL | - | アバター画像URL |
 | role | VARCHAR(20) | NOT NULL | 'user' | ユーザー権限（user / admin） |
 | is_verified | BOOLEAN | NOT NULL | false | メール認証済みフラグ |
+| password_changed_at | TIMESTAMP | NULL | - | パスワード最終変更日時 |
 | created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
 | updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |
 
@@ -166,10 +167,11 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 - `locked_until` - ロック解除チェック用
 
 **制約:**
-- `action_type` は 'login' （ENUM型 or CHECK制約）
+- `action_type` は 'login', 'change_password' 等（CHECK制約）
 
 **レート制限ルール:**
 - **login**: 3回失敗で30分ロック
+- **change_password**: 3回失敗で30分ロック
 
 **クリーンアップ:**
 - ロック解除時刻を過ぎたレコードは定期的に削除（Vercel Cron Jobs）

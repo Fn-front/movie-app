@@ -32,5 +32,8 @@ declare module 'next-auth/jwt' {
     name: string | null;
     picture: string | null;
     role: string;
+    passwordChangedAt: string | null;
+    lastPasswordCheck: number;
+    invalidated?: boolean;
   }
 }

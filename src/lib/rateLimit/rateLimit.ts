@@ -76,9 +76,7 @@ export async function checkRateLimit(
 
   // 最大試行回数に達した場合はロック
   if (data.attempts >= maxAttempts) {
-    const lockedUntil = new Date(
-      now.getTime() + windowMinutes * 60 * 1000,
-    );
+    const lockedUntil = new Date(now.getTime() + windowMinutes * 60 * 1000);
     await supabase
       .from('rate_limits')
       .update({

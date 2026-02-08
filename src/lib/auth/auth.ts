@@ -120,9 +120,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             .single();
 
           if (data?.password_changed_at) {
-            const dbChangedAt = new Date(
-              data.password_changed_at,
-            ).getTime();
+            const dbChangedAt = new Date(data.password_changed_at).getTime();
             const tokenChangedAt = token.passwordChangedAt
               ? new Date(token.passwordChangedAt).getTime()
               : 0;

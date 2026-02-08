@@ -92,9 +92,7 @@ export const registerApiSchema = z.object({
  */
 export const changePasswordSchema = z
   .object({
-    currentPassword: z
-      .string()
-      .min(1, VALIDATION_MESSAGES.PASSWORD_REQUIRED),
+    currentPassword: z.string().min(1, VALIDATION_MESSAGES.PASSWORD_REQUIRED),
     newPassword: passwordSchema,
     confirmNewPassword: z
       .string()

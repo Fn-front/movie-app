@@ -41,23 +41,26 @@ export const ChangePasswordForm = memo(function ChangePasswordForm() {
     },
   });
 
-  const onSubmit = useCallback(async (data: ChangePasswordFormData) => {
-    setApiError(null);
-    setSuccessMessage(null);
+  const onSubmit = useCallback(
+    async (data: ChangePasswordFormData) => {
+      setApiError(null);
+      setSuccessMessage(null);
 
-    try {
-      const response = await changePassword({
-        currentPassword: data.currentPassword,
-        newPassword: data.newPassword,
-      });
+      try {
+        const response = await changePassword({
+          currentPassword: data.currentPassword,
+          newPassword: data.newPassword,
+        });
 
-      setSuccessMessage(response.message);
-      reset();
-    } catch (error) {
-      const { message } = handleApiError(error);
-      setApiError(message ?? AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED);
-    }
-  }, [reset]);
+        setSuccessMessage(response.message);
+        reset();
+      } catch (error) {
+        const { message } = handleApiError(error);
+        setApiError(message ?? AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED);
+      }
+    },
+    [reset],
+  );
 
   return (
     <div className={styles.c_change_password_form}>

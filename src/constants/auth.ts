@@ -35,6 +35,35 @@ export const AUTH_ERROR_MESSAGES = {
 } as const;
 
 /**
+ * トースト通知タイトル
+ */
+export const TOAST_TITLES = {
+  /** ログイン成功 */
+  LOGIN_SUCCESS: 'ログイン成功',
+  /** ログインエラー */
+  LOGIN_ERROR: 'ログインエラー',
+  /** 登録完了 */
+  REGISTER_SUCCESS: '登録完了',
+  /** 登録エラー */
+  REGISTER_ERROR: '登録エラー',
+  /** パスワード変更完了 */
+  PASSWORD_CHANGE_SUCCESS: 'パスワード変更完了',
+  /** パスワード変更エラー */
+  PASSWORD_CHANGE_ERROR: 'パスワード変更エラー',
+} as const;
+
+/**
+ * トースト通知メッセージ
+ */
+export const TOAST_MESSAGES = {
+  /** ログイン成功時の説明 */
+  LOGIN_SUCCESS_DESCRIPTION: 'ホーム画面に移動します。',
+  /** 登録成功時の説明 */
+  REGISTER_SUCCESS_DESCRIPTION:
+    'アカウントが作成されました。ログインしてください。',
+} as const;
+
+/**
  * bcryptハッシュのコスト
  */
 export const BCRYPT_COST = 12;

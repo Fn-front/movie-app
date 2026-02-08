@@ -168,6 +168,8 @@ export const TMDB_ENDPOINTS = {
   GENRES: '/genre/movie/list',
   /** 映画ディスカバー */
   DISCOVER: '/discover/movie',
+  /** 映画キーワード */
+  MOVIE_KEYWORDS: (movieId: number | string) => `/movie/${movieId}/keywords`,
 } as const;
 
 /**

@@ -94,6 +94,9 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             {movie.vote_average.toFixed(1)}
           </span>
         )}
+        {movie.is_revival && (
+          <span className={styles.c_movie_tile__revival}>リバイバル</span>
+        )}
       </div>
       <div className={styles.c_movie_tile__info}>
         <h3 className={styles.c_movie_tile__title}>{movie.title}</h3>

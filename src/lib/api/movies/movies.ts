@@ -28,6 +28,8 @@ export interface MovieCacheItem {
   genre_ids: number[] | null;
   /** リリースタイプ */
   release_type: 'theatrical' | 'streaming';
+  /** リバイバル上映フラグ */
+  is_revival: boolean;
 }
 
 /**

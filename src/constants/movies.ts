@@ -71,3 +71,8 @@ export const EXCLUDED_KEYWORDS_PARAM = EXCLUDED_KEYWORD_IDS.join('|');
  * TMDb Discover APIで除外する原語（ISO 639-1）
  */
 export const EXCLUDED_LANGUAGES = ['ko', 'zh'] as const;
+
+/**
+ * 映画.com iCalフィードURL
+ */
+export const EIGA_ICAL_URL = 'https://eiga.com/movie/coming.ics';

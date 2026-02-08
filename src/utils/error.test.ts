@@ -28,7 +28,7 @@ function createAxiosError(
       statusText: 'Error',
       headers: {},
       config: { headers },
-    } as any,
+    } as unknown as import('axios').AxiosResponse,
   );
   return error;
 }

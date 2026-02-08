@@ -54,15 +54,14 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
     ? formatDate(movie.release_date)
     : null;
 
-  const genreText = useMemo(() => {
+  const genreNames = useMemo(() => {
     if (!genres || !movie.genre_ids || movie.genre_ids.length === 0) {
-      return null;
+      return [];
     }
     return movie.genre_ids
       .slice(0, 2)
       .map((id) => genres[id])
-      .filter(Boolean)
-      .join(', ');
+      .filter(Boolean);
   }, [genres, movie.genre_ids]);
 
   return (
@@ -100,8 +99,14 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       </div>
       <div className={styles.c_movie_tile__info}>
         <h3 className={styles.c_movie_tile__title}>{movie.title}</h3>
-        {genreText && (
-          <p className={styles.c_movie_tile__genres}>{genreText}</p>
+        {genreNames.length > 0 && (
+          <div className={styles.c_movie_tile__genres}>
+            {genreNames.map((name) => (
+              <span key={name} className={styles.c_movie_tile__genre_tag}>
+                {name}
+              </span>
+            ))}
+          </div>
         )}
         {formattedDate && (
           <p className={styles.c_movie_tile__date}>{formattedDate}</p>

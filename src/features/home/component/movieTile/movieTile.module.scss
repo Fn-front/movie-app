@@ -81,12 +81,21 @@
   }
 
   &__genres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-1;
     margin: 0;
+  }
+
+  &__genre_tag {
+    display: inline-block;
+    padding: 0 $spacing-2;
     font-size: $font-size-xs;
     color: $text-secondary;
-    overflow: hidden;
+    background-color: $background-secondary;
+    border-radius: $border-radius-full;
+    line-height: $line-height-loose;
     white-space: nowrap;
-    text-overflow: ellipsis;
   }
 
   &__date {

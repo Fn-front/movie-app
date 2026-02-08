@@ -195,16 +195,16 @@ const GenreFilterModalContent = memo<{
 
         <div className={styles.c_genre_filter__section}>
           <h3 className={styles.c_genre_filter__section_title}>ジャンル</h3>
-          <div className={styles.c_genre_filter__grid}>
+          <div className={styles.c_genre_filter__tag_grid}>
             {sortedGenres.map((genre) => (
-              <label key={genre.id} className={styles.c_genre_filter__item}>
+              <label key={genre.id} className={styles.c_genre_filter__tag}>
                 <input
                   type='checkbox'
                   checked={tempSelectedIds.includes(genre.id)}
                   onChange={() => handleToggle(genre.id)}
-                  className={styles.c_genre_filter__checkbox}
+                  className={styles.c_genre_filter__tag_input}
                 />
-                <span className={styles.c_genre_filter__label}>
+                <span className={styles.c_genre_filter__tag_label}>
                   {genre.name}
                 </span>
               </label>

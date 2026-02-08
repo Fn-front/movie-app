@@ -11,7 +11,9 @@ jest.mock('@/lib/axios/axios', () => ({
   },
 }));
 
-const mockPost = axiosInstance.post as jest.MockedFunction<typeof axiosInstance.post>;
+const mockPost = axiosInstance.post as jest.MockedFunction<
+  typeof axiosInstance.post
+>;
 
 describe('auth API client', () => {
   beforeEach(() => {
@@ -57,7 +59,10 @@ describe('auth API client', () => {
 
       await registerUser(dataWithoutName);
 
-      expect(mockPost).toHaveBeenCalledWith('/api/auth/register', dataWithoutName);
+      expect(mockPost).toHaveBeenCalledWith(
+        '/api/auth/register',
+        dataWithoutName,
+      );
     });
 
     it('APIエラーの場合、例外をスローする', async () => {

@@ -63,9 +63,15 @@ export const RegisterForm = memo(function RegisterForm() {
 
   return (
     <div className={styles.c_register_form}>
-      <Heading level={1} align='center'>新規登録</Heading>
+      <Heading level={1} align='center'>
+        新規登録
+      </Heading>
 
-      <form className={styles.c_register_form__body} onSubmit={handleSubmit(onSubmit)} noValidate>
+      <form
+        className={styles.c_register_form__body}
+        onSubmit={handleSubmit(onSubmit)}
+        noValidate
+      >
         <div className={styles.c_register_form__fields}>
           <Input
             label='メールアドレス'

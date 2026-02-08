@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button/button';
 import { registerSchema, type RegisterFormData } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, ROUTES } from '@/constants';
 import { registerUser } from '@/lib/api/auth/auth';
+import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import styles from './registerForm.module.scss';
 
@@ -24,6 +25,7 @@ import styles from './registerForm.module.scss';
  */
 export const RegisterForm = memo(function RegisterForm() {
   const router = useRouter();
+  const { toast } = useToast();
   const [apiError, setApiError] = useState<string | null>(null);
 
   const {
@@ -51,14 +53,25 @@ export const RegisterForm = memo(function RegisterForm() {
           name: data.name || undefined,
         });
 
-        // ログインページへ遷移
+        toast({
+          title: '登録完了',
+          description: 'アカウントが作成されました。ログインしてください。',
+          variant: 'success',
+        });
+
         router.push(ROUTES.LOGIN);
       } catch (error) {
         const { message } = handleApiError(error);
-        setApiError(message ?? AUTH_ERROR_MESSAGES.REGISTER_FAILED);
+        const errorMessage = message ?? AUTH_ERROR_MESSAGES.REGISTER_FAILED;
+        setApiError(errorMessage);
+        toast({
+          title: '登録エラー',
+          description: errorMessage,
+          variant: 'error',
+        });
       }
     },
-    [router],
+    [router, toast],
   );
 
   return (

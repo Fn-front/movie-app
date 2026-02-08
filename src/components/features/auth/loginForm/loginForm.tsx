@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { loginSchema, type LoginFormData } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, ROUTES } from '@/constants';
+import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import styles from './loginForm.module.scss';
 
@@ -24,6 +25,7 @@ import styles from './loginForm.module.scss';
  */
 export const LoginForm = memo(function LoginForm() {
   const router = useRouter();
+  const { toast } = useToast();
   const [apiError, setApiError] = useState<string | null>(null);
 
   const {
@@ -51,16 +53,32 @@ export const LoginForm = memo(function LoginForm() {
 
         if (result?.error) {
           setApiError(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          toast({
+            title: 'ログインエラー',
+            description: AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
+            variant: 'error',
+          });
           return;
         }
+
+        toast({
+          title: 'ログイン成功',
+          description: 'ホーム画面に移動します。',
+          variant: 'success',
+        });
 
         router.push(ROUTES.HOME);
       } catch (error) {
         const { message } = handleApiError(error);
         setApiError(message);
+        toast({
+          title: 'ログインエラー',
+          description: message ?? AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
+          variant: 'error',
+        });
       }
     },
-    [router],
+    [router, toast],
   );
 
   return (

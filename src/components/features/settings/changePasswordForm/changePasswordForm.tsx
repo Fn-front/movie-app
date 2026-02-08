@@ -17,6 +17,7 @@ import {
 } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES } from '@/constants';
 import { changePassword } from '@/lib/api/auth/auth';
+import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import styles from './changePasswordForm.module.scss';
 
@@ -24,6 +25,7 @@ import styles from './changePasswordForm.module.scss';
  * パスワード変更フォーム
  */
 export const ChangePasswordForm = memo(function ChangePasswordForm() {
+  const { toast } = useToast();
   const [apiError, setApiError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -53,13 +55,24 @@ export const ChangePasswordForm = memo(function ChangePasswordForm() {
         });
 
         setSuccessMessage(response.message);
+        toast({
+          title: 'パスワード変更完了',
+          description: response.message,
+          variant: 'success',
+        });
         reset();
       } catch (error) {
         const { message } = handleApiError(error);
-        setApiError(message ?? AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED);
+        const errorMessage = message ?? AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED;
+        setApiError(errorMessage);
+        toast({
+          title: 'パスワード変更エラー',
+          description: errorMessage,
+          variant: 'error',
+        });
       }
     },
-    [reset],
+    [reset, toast],
   );
 
   return (

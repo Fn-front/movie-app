@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Noto_Sans_JP } from 'next/font/google';
 
 import { AppSessionProvider } from '@/components/providers/sessionProvider';
+import { AppToastProvider } from '@/components/providers/toastProvider';
 import '@/styles/app.scss';
 
 const noto = Noto_Sans_JP({
@@ -24,11 +25,13 @@ export default function RootLayout({
     <html lang='ja'>
       <body className={noto.className}>
         <AppSessionProvider>
-          <div className='l_global_container'>
-            <main className='l_main'>
-              <div className='l_container'>{children}</div>
-            </main>
-          </div>
+          <AppToastProvider>
+            <div className='l_global_container'>
+              <main className='l_main'>
+                <div className='l_container'>{children}</div>
+              </main>
+            </div>
+          </AppToastProvider>
         </AppSessionProvider>
       </body>
     </html>

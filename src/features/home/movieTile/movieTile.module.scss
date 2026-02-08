@@ -1,0 +1,72 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_movie_tile {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: $transition-all;
+
+  &__poster {
+    position: relative;
+    aspect-ratio: 2 / 3;
+    overflow: hidden;
+    background-color: $background-secondary;
+  }
+
+  &__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &__no_image {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    font-size: $font-size-sm;
+    color: $text-disabled;
+  }
+
+  &__rating {
+    position: absolute;
+    top: $spacing-2;
+    right: $spacing-2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 28px;
+    padding: 0 $spacing-2;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-bold;
+    color: #ffffff;
+    background-color: $primary-500;
+    border-radius: $border-radius-md;
+  }
+
+  &__info {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-1;
+    padding: $spacing-3;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+    line-height: $line-height-tight;
+
+    @include text-truncate-multiline(2);
+  }
+
+  &__date {
+    margin: 0;
+    font-size: $font-size-xs;
+    color: $text-secondary;
+  }
+}

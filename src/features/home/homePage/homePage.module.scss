@@ -5,12 +5,43 @@
   flex-direction: column;
   gap: $spacing-6;
 
-  &__placeholder {
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $spacing-4;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: $font-size-2xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+  }
+
+  &__sort {
+    width: 180px;
+    flex-shrink: 0;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: $spacing-4;
+  }
+
+  &__empty {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 400px;
+    min-height: 200px;
     font-size: $font-size-lg;
     color: $text-secondary;
+  }
+
+  &__pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: $spacing-4;
   }
 }

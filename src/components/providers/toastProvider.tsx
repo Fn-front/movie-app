@@ -9,7 +9,7 @@
 import { memo, type ReactNode } from 'react';
 
 import { ToastProvider } from '@/components/ui/toast';
-import { ToastContainer } from '@/components/features/toast/toastContainer/toastContainer';
+import { ToastContainer } from '@/features/toast/toastContainer/toastContainer';
 
 interface AppToastProviderProps {
   children: ReactNode;

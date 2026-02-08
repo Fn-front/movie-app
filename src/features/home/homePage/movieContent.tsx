@@ -7,8 +7,8 @@
 'use client';
 
 import { memo, useMemo, useCallback } from 'react';
-import * as Tabs from '@radix-ui/react-tabs';
 
+import { Tabs } from '@/components/ui/tabs/tabs';
 import { Select } from '@/components/ui/select/select';
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { Button } from '@/components/ui/button/button';
@@ -94,19 +94,12 @@ export const MovieContent = memo(function MovieContent() {
 
   return (
     <div className={styles.c_home_page}>
-      <Tabs.Root value={releaseType} onValueChange={handleTabValueChange}>
-        <Tabs.List className={styles.c_home_page__tabs}>
-          {RELEASE_TYPE_OPTIONS.map((option) => (
-            <Tabs.Trigger
-              key={option.value}
-              value={option.value}
-              className={styles.c_home_page__tab}
-            >
-              {option.label}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
-      </Tabs.Root>
+      <Tabs
+        options={RELEASE_TYPE_OPTIONS}
+        value={releaseType}
+        onValueChange={handleTabValueChange}
+        aria-label='リリースタイプ'
+      />
 
       <div className={styles.c_home_page__toolbar}>
         <h2 className={styles.c_home_page__title}>公開予定の映画</h2>

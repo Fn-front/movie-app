@@ -2,8 +2,7 @@
  * 画像URLユーティリティ
  */
 
-// TMDb画像のベースURL
-const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
+import { API } from '@/constants';
 
 // 画像サイズ型定義
 export type TMDbImageSize =
@@ -37,7 +36,7 @@ export function getTMDbImageUrl(
 ): string | null {
   if (!path) return null;
 
-  return `${TMDB_IMAGE_BASE_URL}/${size}${path}`;
+  return `${API.TMDB_IMAGE_BASE_URL}/${size}${path}`;
 }
 
 /**

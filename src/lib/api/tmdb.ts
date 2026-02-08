@@ -2,7 +2,7 @@
  * TMDb API クライアント
  */
 
-import { API } from '@/constants';
+import { API, PAGINATION, TMDB_ENDPOINTS } from '@/constants';
 import type {
   Movie,
   MovieDetail,
@@ -10,28 +10,76 @@ import type {
   TMDbResponse,
 } from '@/lib/types';
 
-import { axiosInstance } from './axios';
+import axios, { type AxiosError } from 'axios';
 
 /**
- * TMDb APIキー
+ * TMDb API Read Access Token
  */
-const TMDB_API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
+const TMDB_ACCESS_TOKEN = process.env.NEXT_PUBLIC_TMDB_API_KEY;
 
-if (!TMDB_API_KEY) {
+if (!TMDB_ACCESS_TOKEN) {
   throw new Error('NEXT_PUBLIC_TMDB_API_KEY is not defined');
 }
+
+/** リトライ最大回数 */
+const MAX_RETRY_COUNT = 3;
+
+/** リトライ待機時間（ミリ秒） */
+const RETRY_DELAY = 1000;
 
 /**
  * TMDb専用Axiosインスタンス
  */
-const tmdbClient = axiosInstance.create({
+const tmdbClient = axios.create({
   baseURL: API.TMDB_BASE_URL,
+  headers: {
+    Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
+  },
   params: {
-    api_key: TMDB_API_KEY,
-    language: 'ja-JP',
-    region: 'JP',
+    language: API.TMDB_LANGUAGE,
+    region: API.TMDB_REGION,
   },
 });
+
+/** リトライ対象のHTTPステータスコード */
+const RETRYABLE_STATUS_CODES = [429, 503, 504];
+
+/**
+ * リトライ可能なエラー時の自動リトライインターセプター
+ * - 429: レート制限超過
+ * - 503: サービス一時停止
+ * - 504: タイムアウト
+ */
+tmdbClient.interceptors.response.use(undefined, async (error: AxiosError) => {
+  const config = error.config;
+  const status = error.response?.status;
+
+  if (!config || !status || !RETRYABLE_STATUS_CODES.includes(status)) {
+    return Promise.reject(error);
+  }
+
+  const retryCount = (config as { __retryCount?: number }).__retryCount ?? 0;
+
+  if (retryCount >= MAX_RETRY_COUNT) {
+    return Promise.reject(error);
+  }
+
+  (config as { __retryCount?: number }).__retryCount = retryCount + 1;
+
+  const retryAfter = error.response?.headers?.['retry-after'];
+  const delay = retryAfter ? Number(retryAfter) * 1000 : RETRY_DELAY;
+
+  await new Promise((resolve) => setTimeout(resolve, delay));
+
+  return tmdbClient(config);
+});
+
+/**
+ * ページ番号のバリデーション（TMDb APIは1〜500のみ有効）
+ */
+function validatePage(page: number): number {
+  return Math.max(1, Math.min(page, PAGINATION.MAX_PAGE));
+}
 
 /**
  * 人気映画を取得
@@ -42,8 +90,8 @@ const tmdbClient = axiosInstance.create({
 export async function getPopularMovies(
   page: number = 1,
 ): Promise<TMDbResponse<Movie>> {
-  const response = await tmdbClient.get<TMDbResponse<Movie>>('/movie/popular', {
-    params: { page },
+  const response = await tmdbClient.get<TMDbResponse<Movie>>(TMDB_ENDPOINTS.POPULAR, {
+    params: { page: validatePage(page) },
   });
   return response.data;
 }
@@ -58,9 +106,9 @@ export async function getUpcomingMovies(
   page: number = 1,
 ): Promise<TMDbResponse<Movie>> {
   const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    '/movie/upcoming',
+    TMDB_ENDPOINTS.UPCOMING,
     {
-      params: { page },
+      params: { page: validatePage(page) },
     },
   );
   return response.data;
@@ -76,9 +124,9 @@ export async function getNowPlayingMovies(
   page: number = 1,
 ): Promise<TMDbResponse<Movie>> {
   const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    '/movie/now_playing',
+    TMDB_ENDPOINTS.NOW_PLAYING,
     {
-      params: { page },
+      params: { page: validatePage(page) },
     },
   );
   return response.data;
@@ -94,9 +142,9 @@ export async function getTopRatedMovies(
   page: number = 1,
 ): Promise<TMDbResponse<Movie>> {
   const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    '/movie/top_rated',
+    TMDB_ENDPOINTS.TOP_RATED,
     {
-      params: { page },
+      params: { page: validatePage(page) },
     },
   );
   return response.data;
@@ -111,7 +159,7 @@ export async function getTopRatedMovies(
 export async function getMovieDetail(
   movieId: number | string,
 ): Promise<MovieDetail> {
-  const response = await tmdbClient.get<MovieDetail>(`/movie/${movieId}`);
+  const response = await tmdbClient.get<MovieDetail>(TMDB_ENDPOINTS.MOVIE_DETAIL(movieId));
   return response.data;
 }
 
@@ -126,10 +174,10 @@ export async function searchMovies(
 ): Promise<TMDbResponse<Movie>> {
   const { query, page = 1, year, genre } = params;
 
-  const response = await tmdbClient.get<TMDbResponse<Movie>>('/search/movie', {
+  const response = await tmdbClient.get<TMDbResponse<Movie>>(TMDB_ENDPOINTS.SEARCH, {
     params: {
       query,
-      page,
+      page: validatePage(page),
       year,
       with_genres: genre,
     },
@@ -143,7 +191,7 @@ export async function searchMovies(
  * @returns ジャンル一覧
  */
 export async function getGenres() {
-  const response = await tmdbClient.get('/genre/movie/list');
+  const response = await tmdbClient.get(TMDB_ENDPOINTS.GENRES);
   return response.data.genres;
 }
 
@@ -159,11 +207,11 @@ export async function getMoviesByGenre(
   page: number = 1,
 ): Promise<TMDbResponse<Movie>> {
   const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    '/discover/movie',
+    TMDB_ENDPOINTS.DISCOVER,
     {
       params: {
         with_genres: genreId,
-        page,
+        page: validatePage(page),
         sort_by: 'popularity.desc',
       },
     },

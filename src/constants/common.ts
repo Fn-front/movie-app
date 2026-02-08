@@ -10,6 +10,10 @@ export const API = {
   TMDB_BASE_URL: 'https://api.themoviedb.org/3',
   /** TMDb 画像 Base URL */
   TMDB_IMAGE_BASE_URL: 'https://image.tmdb.org/t/p',
+  /** TMDb API言語設定（ISO 639-1 + ISO 3166-1） */
+  TMDB_LANGUAGE: 'ja-JP',
+  /** TMDb APIリージョン設定（ISO 3166-1） */
+  TMDB_REGION: 'JP',
   /** APIリクエストタイムアウト（ミリ秒） */
   TIMEOUT: 30000,
   /** 1ページあたりの映画表示件数 */
@@ -124,6 +128,28 @@ export const ANIMATION = {
   MODAL_FADE_DURATION: 300,
   /** ページ遷移時間（ミリ秒） */
   PAGE_TRANSITION_DURATION: 200,
+} as const;
+
+/**
+ * TMDb APIエンドポイント
+ */
+export const TMDB_ENDPOINTS = {
+  /** 人気映画 */
+  POPULAR: '/movie/popular',
+  /** 公開予定映画 */
+  UPCOMING: '/movie/upcoming',
+  /** 上映中映画 */
+  NOW_PLAYING: '/movie/now_playing',
+  /** 高評価映画 */
+  TOP_RATED: '/movie/top_rated',
+  /** 映画詳細 */
+  MOVIE_DETAIL: (movieId: number | string) => `/movie/${movieId}`,
+  /** 映画検索 */
+  SEARCH: '/search/movie',
+  /** ジャンル一覧 */
+  GENRES: '/genre/movie/list',
+  /** 映画ディスカバー */
+  DISCOVER: '/discover/movie',
 } as const;
 
 /**

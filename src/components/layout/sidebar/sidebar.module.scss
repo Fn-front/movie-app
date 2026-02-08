@@ -39,7 +39,7 @@
       color: $text-primary;
     }
 
-    > *:not(&_title) {
+    &_content {
       flex: 1;
       overflow-y: auto;
     }

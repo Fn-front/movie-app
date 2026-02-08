@@ -5,6 +5,6 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  flex: 1;
+  min-height: 100vh;
   padding: $spacing-4;
 }

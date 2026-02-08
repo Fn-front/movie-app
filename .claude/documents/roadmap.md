@@ -38,8 +38,8 @@
   - [x] useToggle（boolean状態管理）
 - [x] lib（ライブラリ・設定）の実装
   - [x] Supabaseクライアント設定（lib/supabase/client.ts, server.ts）
-  - [x] TMDb APIクライアント設定（lib/api/tmdb.ts）
-  - [x] axiosインスタンス設定（lib/api/axios.ts）
+  - [x] TMDb APIクライアント設定（lib/tmdb/tmdb.ts）
+  - [x] axiosインスタンス設定（lib/axios/axios.ts）
   - [ ] NextAuth.js設定（lib/auth/authOptions.ts）
   - [x] 定数定義（lib/constants/index.ts）
   - [x] 型定義（lib/types/index.ts）

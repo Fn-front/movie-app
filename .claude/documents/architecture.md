@@ -60,8 +60,10 @@ src/
 │   ├── features/         # 機能別コンポーネント
 │   └── layouts/          # レイアウトコンポーネント
 ├── lib/                  # ユーティリティ・ヘルパー
-│   ├── api/             # API関連
-│   ├── auth/            # 認証関連
+│   ├── api/             # 内部APIクライアント（auth等）
+│   ├── axios/           # axiosインスタンス設定
+│   ├── auth/            # NextAuth.js認証設定
+│   ├── tmdb/            # TMDb APIクライアント
 │   └── utils/           # 汎用ユーティリティ
 ├── types/               # TypeScript型定義
 ├── hooks/               # カスタムフック（ビジネスロジック分離）

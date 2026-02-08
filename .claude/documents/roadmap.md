@@ -151,6 +151,13 @@
   - 再発行は5分間隔
 - [ ] axiosインスタンスでAPI呼び出し
 
+### 管理者ユーザー
+- [x] usersテーブルにroleカラム追加（デフォルト: 'user'、管理者: 'admin'）
+- [x] 管理者Seeder作成
+  - メール認証不要（OTPスキップ、is_verified = true で挿入）
+  - role = 'admin' で挿入
+  - Supabase SQLまたはスクリプトで管理者ユーザーを追加
+
 ### ログイン・セッション管理（NextAuth.js）
 - [ ] ログインフォームUI実装（react-hook-form + zod）
 - [ ] NextAuth.js signIn()統合

@@ -7,6 +7,7 @@
 'use client';
 
 import { memo, useMemo, useCallback } from 'react';
+import * as Tabs from '@radix-ui/react-tabs';
 
 import { Select } from '@/components/ui/select/select';
 import { Pagination } from '@/components/ui/pagination/pagination';
@@ -75,13 +76,12 @@ export const MovieContent = memo(function MovieContent() {
     [],
   );
 
-  const handleTabTheatrical = useCallback(() => {
-    handleReleaseTypeChange('theatrical');
-  }, [handleReleaseTypeChange]);
-
-  const handleTabStreaming = useCallback(() => {
-    handleReleaseTypeChange('streaming');
-  }, [handleReleaseTypeChange]);
+  const handleTabValueChange = useCallback(
+    (value: string) => {
+      handleReleaseTypeChange(value as 'theatrical' | 'streaming');
+    },
+    [handleReleaseTypeChange],
+  );
 
   const handleFilterModalOpenChange = useCallback(
     (open: boolean) => {
@@ -94,28 +94,19 @@ export const MovieContent = memo(function MovieContent() {
 
   return (
     <div className={styles.c_home_page}>
-      <div className={styles.c_home_page__tabs} role='tablist'>
-        {RELEASE_TYPE_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type='button'
-            role='tab'
-            aria-selected={releaseType === option.value}
-            className={`${styles.c_home_page__tab} ${
-              releaseType === option.value
-                ? styles.c_home_page__tab__active
-                : ''
-            }`}
-            onClick={
-              option.value === 'theatrical'
-                ? handleTabTheatrical
-                : handleTabStreaming
-            }
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <Tabs.Root value={releaseType} onValueChange={handleTabValueChange}>
+        <Tabs.List className={styles.c_home_page__tabs}>
+          {RELEASE_TYPE_OPTIONS.map((option) => (
+            <Tabs.Trigger
+              key={option.value}
+              value={option.value}
+              className={styles.c_home_page__tab}
+            >
+              {option.label}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+      </Tabs.Root>
 
       <div className={styles.c_home_page__toolbar}>
         <h2 className={styles.c_home_page__title}>公開予定の映画</h2>

@@ -31,7 +31,7 @@
       outline-offset: -2px;
     }
 
-    &__active {
+    &[data-state='active'] {
       color: $primary-500;
       border-bottom-color: $primary-500;
     }

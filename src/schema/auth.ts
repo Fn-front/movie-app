@@ -5,6 +5,7 @@
 import { z } from 'zod';
 
 import { VALIDATION } from '@/constants';
+import { VALIDATION_MESSAGES } from '@/constants/auth';
 
 /**
  * パスワードバリデーション
@@ -17,11 +18,11 @@ const passwordSchema = z
   .string()
   .min(
     VALIDATION.PASSWORD_MIN_LENGTH,
-    `パスワードは${VALIDATION.PASSWORD_MIN_LENGTH}文字以上で入力してください`,
+    VALIDATION_MESSAGES.PASSWORD_MIN_LENGTH(VALIDATION.PASSWORD_MIN_LENGTH),
   )
-  .regex(/[A-Z]/, 'パスワードに大文字を含めてください')
-  .regex(/[a-z]/, 'パスワードに小文字を含めてください')
-  .regex(/[0-9]/, 'パスワードに数字を含めてください');
+  .regex(/[A-Z]/, VALIDATION_MESSAGES.PASSWORD_UPPERCASE)
+  .regex(/[a-z]/, VALIDATION_MESSAGES.PASSWORD_LOWERCASE)
+  .regex(/[0-9]/, VALIDATION_MESSAGES.PASSWORD_NUMBER);
 
 /**
  * 新規登録フォームのバリデーションスキーマ
@@ -30,19 +31,21 @@ export const registerSchema = z
   .object({
     email: z
       .string()
-      .min(1, 'メールアドレスを入力してください')
-      .max(VALIDATION.EMAIL_MAX_LENGTH, 'メールアドレスが長すぎます')
-      .email('メールアドレスの形式が正しくありません'),
+      .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
+      .max(VALIDATION.EMAIL_MAX_LENGTH, VALIDATION_MESSAGES.EMAIL_TOO_LONG)
+      .email(VALIDATION_MESSAGES.EMAIL_INVALID),
     password: passwordSchema,
-    confirmPassword: z.string().min(1, 'パスワード（確認）を入力してください'),
+    confirmPassword: z
+      .string()
+      .min(1, VALIDATION_MESSAGES.CONFIRM_PASSWORD_REQUIRED),
     name: z
       .string()
-      .max(100, 'ユーザー名は100文字以内で入力してください')
+      .max(100, VALIDATION_MESSAGES.NAME_TOO_LONG)
       .optional()
       .or(z.literal('')),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: 'パスワードが一致しません',
+    message: VALIDATION_MESSAGES.PASSWORD_MISMATCH,
     path: ['confirmPassword'],
   });
 
@@ -57,13 +60,13 @@ export type RegisterFormData = z.infer<typeof registerSchema>;
 export const registerApiSchema = z.object({
   email: z
     .string()
-    .min(1, 'メールアドレスを入力してください')
-    .max(VALIDATION.EMAIL_MAX_LENGTH, 'メールアドレスが長すぎます')
-    .email('メールアドレスの形式が正しくありません'),
+    .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
+    .max(VALIDATION.EMAIL_MAX_LENGTH, VALIDATION_MESSAGES.EMAIL_TOO_LONG)
+    .email(VALIDATION_MESSAGES.EMAIL_INVALID),
   password: passwordSchema,
   name: z
     .string()
-    .max(100, 'ユーザー名は100文字以内で入力してください')
+    .max(100, VALIDATION_MESSAGES.NAME_TOO_LONG)
     .optional()
     .or(z.literal('')),
 });

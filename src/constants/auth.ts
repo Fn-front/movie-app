@@ -36,3 +36,30 @@ export const OTP_CONFIG = {
  * bcryptハッシュのコスト
  */
 export const BCRYPT_COST = 12;
+
+/**
+ * バリデーションメッセージ
+ */
+export const VALIDATION_MESSAGES = {
+  /** メールアドレス必須 */
+  EMAIL_REQUIRED: 'メールアドレスを入力してください',
+  /** メールアドレスが長すぎる */
+  EMAIL_TOO_LONG: 'メールアドレスが長すぎます',
+  /** メールアドレス形式不正 */
+  EMAIL_INVALID: 'メールアドレスの形式が正しくありません',
+  /** パスワード最小文字数 */
+  PASSWORD_MIN_LENGTH: (min: number) =>
+    `パスワードは${min}文字以上で入力してください`,
+  /** パスワードに大文字を含める */
+  PASSWORD_UPPERCASE: 'パスワードに大文字を含めてください',
+  /** パスワードに小文字を含める */
+  PASSWORD_LOWERCASE: 'パスワードに小文字を含めてください',
+  /** パスワードに数字を含める */
+  PASSWORD_NUMBER: 'パスワードに数字を含めてください',
+  /** パスワード確認必須 */
+  CONFIRM_PASSWORD_REQUIRED: 'パスワード（確認）を入力してください',
+  /** パスワード不一致 */
+  PASSWORD_MISMATCH: 'パスワードが一致しません',
+  /** ユーザー名が長すぎる */
+  NAME_TOO_LONG: 'ユーザー名は100文字以内で入力してください',
+} as const;

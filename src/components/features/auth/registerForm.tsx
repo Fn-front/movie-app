@@ -14,7 +14,7 @@ import { Heading } from '@/components/ui/heading/heading';
 import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { registerSchema, type RegisterFormData } from '@/schema/auth';
-import { ROUTES } from '@/constants';
+import { AUTH_ERROR_MESSAGES, ERROR_MESSAGES, ROUTES } from '@/constants';
 import styles from './registerForm.module.scss';
 
 /**
@@ -56,14 +56,14 @@ export const RegisterForm = memo(function RegisterForm() {
         const result = await response.json();
 
         if (!response.ok) {
-          setApiError(result.error?.message ?? '登録に失敗しました。');
+          setApiError(result.error?.message ?? AUTH_ERROR_MESSAGES.REGISTER_FAILED);
           return;
         }
 
         // ログインページへ遷移
         router.push(ROUTES.LOGIN);
       } catch {
-        setApiError('ネットワークエラーが発生しました。');
+        setApiError(ERROR_MESSAGES.NETWORK_ERROR);
       }
     },
     [router],

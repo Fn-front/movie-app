@@ -14,6 +14,8 @@ export const AUTH_ERROR_MESSAGES = {
   INVALID_CREDENTIALS: 'メールアドレスまたはパスワードが正しくありません。',
   /** メールアドレス重複エラー */
   EMAIL_ALREADY_EXISTS: '既に登録済みのメールアドレスです。',
+  /** 登録失敗 */
+  REGISTER_FAILED: '登録に失敗しました。',
   /** 登録成功 */
   REGISTER_SUCCESS: '登録が完了しました。',
   /** バリデーションエラー */

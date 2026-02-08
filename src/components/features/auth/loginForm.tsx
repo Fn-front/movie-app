@@ -15,7 +15,7 @@ import { Heading } from '@/components/ui/heading/heading';
 import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { loginSchema, type LoginFormData } from '@/schema/auth';
-import { ROUTES } from '@/constants';
+import { AUTH_ERROR_MESSAGES, ERROR_MESSAGES, ROUTES } from '@/constants';
 import styles from './loginForm.module.scss';
 
 /**
@@ -49,13 +49,13 @@ export const LoginForm = memo(function LoginForm() {
         });
 
         if (result?.error) {
-          setApiError('メールアドレスまたはパスワードが正しくありません。');
+          setApiError(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
           return;
         }
 
         router.push(ROUTES.HOME);
       } catch {
-        setApiError('ネットワークエラーが発生しました。');
+        setApiError(ERROR_MESSAGES.NETWORK_ERROR);
       }
     },
     [router],

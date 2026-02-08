@@ -212,3 +212,13 @@ export type Theme = 'light' | 'dark' | 'system';
  * 言語型
  */
 export type Language = 'ja' | 'en';
+
+/**
+ * アイコン共通プロパティ
+ */
+export interface IconProps {
+  /** アイコンサイズ（px） */
+  size?: number;
+  /** カスタムクラス名 */
+  className?: string;
+}

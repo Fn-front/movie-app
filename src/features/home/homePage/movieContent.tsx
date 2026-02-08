@@ -12,7 +12,7 @@ import { Tabs } from '@/components/ui/tabs/tabs';
 import { Select } from '@/components/ui/select/select';
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { Button } from '@/components/ui/button/button';
-import { FilterIcon } from '@/components/icons';
+import { FilterIcon } from '@/components/icons/filterIcon/filterIcon';
 import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { MovieTile } from '@/features/home/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/features/home/movieTileSkeleton/movieTileSkeleton';

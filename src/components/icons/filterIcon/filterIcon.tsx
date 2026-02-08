@@ -5,7 +5,7 @@
 import { memo } from 'react';
 import { LuFilter } from 'react-icons/lu';
 
-import type { IconProps } from './types';
+import type { IconProps } from '@/lib/types';
 
 /**
  * FilterIconコンポーネント

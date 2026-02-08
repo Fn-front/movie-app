@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Noto_Sans_JP } from 'next/font/google';
 
+import { AppSessionProvider } from '@/components/providers/sessionProvider';
 import '@/styles/app.scss';
 
 const noto = Noto_Sans_JP({
@@ -22,11 +23,13 @@ export default function RootLayout({
   return (
     <html lang='ja'>
       <body className={noto.className}>
-        <div className='l_global_container'>
-          <main className='l_main'>
-            <div className='l_container'>{children}</div>
-          </main>
-        </div>
+        <AppSessionProvider>
+          <div className='l_global_container'>
+            <main className='l_main'>
+              <div className='l_container'>{children}</div>
+            </main>
+          </div>
+        </AppSessionProvider>
       </body>
     </html>
   );

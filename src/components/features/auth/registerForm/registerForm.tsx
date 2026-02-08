@@ -10,10 +10,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { zodResolver } from '@hookform/resolvers/zod';
 
+import { Heading } from '@/components/ui/heading/heading';
 import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { registerSchema, type RegisterFormData } from '@/schema/auth';
-import { ROUTES } from '@/constants';
+import { AUTH_ERROR_MESSAGES, ROUTES } from '@/constants';
+import { registerUser } from '@/lib/api/auth/auth';
+import { handleApiError } from '@/utils/error';
 import styles from './registerForm.module.scss';
 
 /**
@@ -42,27 +45,17 @@ export const RegisterForm = memo(function RegisterForm() {
       setApiError(null);
 
       try {
-        const response = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: data.email,
-            password: data.password,
-            name: data.name || undefined,
-          }),
+        await registerUser({
+          email: data.email,
+          password: data.password,
+          name: data.name || undefined,
         });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          setApiError(result.error?.message ?? '登録に失敗しました。');
-          return;
-        }
 
         // ログインページへ遷移
         router.push(ROUTES.LOGIN);
-      } catch {
-        setApiError('ネットワークエラーが発生しました。');
+      } catch (error) {
+        const { message } = handleApiError(error);
+        setApiError(message ?? AUTH_ERROR_MESSAGES.REGISTER_FAILED);
       }
     },
     [router],
@@ -70,9 +63,15 @@ export const RegisterForm = memo(function RegisterForm() {
 
   return (
     <div className={styles.c_register_form}>
-      <h1 className={styles.c_register_form__title}>新規登録</h1>
+      <Heading level={1} align='center'>
+        新規登録
+      </Heading>
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <form
+        className={styles.c_register_form__body}
+        onSubmit={handleSubmit(onSubmit)}
+        noValidate
+      >
         <div className={styles.c_register_form__fields}>
           <Input
             label='メールアドレス'

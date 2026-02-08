@@ -55,6 +55,22 @@ export const registerSchema = z
 export type RegisterFormData = z.infer<typeof registerSchema>;
 
 /**
+ * ログインフォームのバリデーションスキーマ
+ */
+export const loginSchema = z.object({
+  email: z
+    .string()
+    .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
+    .email(VALIDATION_MESSAGES.EMAIL_INVALID),
+  password: z.string().min(1, VALIDATION_MESSAGES.PASSWORD_REQUIRED),
+});
+
+/**
+ * ログインフォームの型
+ */
+export type LoginFormData = z.infer<typeof loginSchema>;
+
+/**
  * 登録APIリクエストのバリデーションスキーマ
  */
 export const registerApiSchema = z.object({

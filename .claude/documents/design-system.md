@@ -249,6 +249,30 @@ $z-index-tooltip:   1070;
 
 ---
 
+## マージンルール
+
+**【必須】`margin-bottom` を使用しない**
+
+要素間の余白は、自身の `margin-bottom` ではなく**次の兄弟要素の `margin-top`** で確保する。
+
+```scss
+// NG
+.c_title {
+  margin-bottom: $spacing-8;
+}
+
+// OK
+.c_body {
+  margin-top: $spacing-8;
+}
+```
+
+**理由**:
+- 要素の削除・並び替え時にマージンの崩れを防ぐ
+- 各要素が自身の上側スペースを管理し、依存関係を単純化する
+
+---
+
 ## コンポーネント共通スタイル
 
 ### ボタン

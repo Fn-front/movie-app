@@ -1,4 +1,4 @@
-import { registerSchema, registerApiSchema } from './auth';
+import { registerSchema, registerApiSchema, loginSchema } from './auth';
 
 describe('registerSchema', () => {
   it('有効な入力でパースが成功する', () => {
@@ -80,6 +80,40 @@ describe('registerSchema', () => {
       email: 'test@example.com',
       password: 'Password1',
       confirmPassword: 'Password2',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('loginSchema', () => {
+  it('有効な入力でパースが成功する', () => {
+    const result = loginSchema.safeParse({
+      email: 'test@example.com',
+      password: 'Password1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('メールアドレスが空の場合エラーになる', () => {
+    const result = loginSchema.safeParse({
+      email: '',
+      password: 'Password1',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('メールアドレスの形式が不正な場合エラーになる', () => {
+    const result = loginSchema.safeParse({
+      email: 'invalid-email',
+      password: 'Password1',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('パスワードが空の場合エラーになる', () => {
+    const result = loginSchema.safeParse({
+      email: 'test@example.com',
+      password: '',
     });
     expect(result.success).toBe(false);
   });

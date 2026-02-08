@@ -103,16 +103,16 @@ $font-family-base:
 $font-family-heading: 'Noto Sans JP', sans-serif;
 $font-family-mono: 'Courier New', monospace;
 
-// フォントサイズ
-$font-size-xs: 0.75rem; // 12px
-$font-size-sm: 0.875rem; // 14px
-$font-size-base: 1rem; // 16px
-$font-size-lg: 1.125rem; // 18px
-$font-size-xl: 1.25rem; // 20px
-$font-size-2xl: 1.5rem; // 24px
-$font-size-3xl: 1.875rem; // 30px
-$font-size-4xl: 2.25rem; // 36px
-$font-size-5xl: 3rem; // 48px
+// フォントサイズ（1rem = 10px）
+$font-size-xs: 1.2rem; // 12px
+$font-size-sm: 1.4rem; // 14px
+$font-size-base: 1.6rem; // 16px
+$font-size-lg: 1.8rem; // 18px
+$font-size-xl: 2rem; // 20px
+$font-size-2xl: 2.4rem; // 24px
+$font-size-3xl: 3rem; // 30px
+$font-size-4xl: 3.6rem; // 36px
+$font-size-5xl: 4.8rem; // 48px
 
 // フォントウェイト
 $font-weight-light: 300;
@@ -130,18 +130,18 @@ $line-height-loose: 1.75;
 // ============================================================
 
 $spacing-0: 0;
-$spacing-1: 0.25rem; // 4px
-$spacing-2: 0.5rem; // 8px
-$spacing-3: 0.75rem; // 12px
-$spacing-4: 1rem; // 16px
-$spacing-5: 1.25rem; // 20px
-$spacing-6: 1.5rem; // 24px
-$spacing-8: 2rem; // 32px
-$spacing-10: 2.5rem; // 40px
-$spacing-12: 3rem; // 48px
-$spacing-16: 4rem; // 64px
-$spacing-20: 5rem; // 80px
-$spacing-24: 6rem; // 96px
+$spacing-1: 0.4rem; // 4px
+$spacing-2: 0.8rem; // 8px
+$spacing-3: 1.2rem; // 12px
+$spacing-4: 1.6rem; // 16px
+$spacing-5: 2rem; // 20px
+$spacing-6: 2.4rem; // 24px
+$spacing-8: 3.2rem; // 32px
+$spacing-10: 4rem; // 40px
+$spacing-12: 4.8rem; // 48px
+$spacing-16: 6.4rem; // 64px
+$spacing-20: 8rem; // 80px
+$spacing-24: 9.6rem; // 96px
 
 // ============================================================
 // ボーダー・角丸
@@ -155,11 +155,11 @@ $border-width-4: 4px;
 
 // ボーダー半径（角丸）
 $border-radius-none: 0;
-$border-radius-sm: 0.125rem; // 2px
-$border-radius-md: 0.25rem; // 4px
-$border-radius-lg: 0.5rem; // 8px
-$border-radius-xl: 0.75rem; // 12px
-$border-radius-2xl: 1rem; // 16px
+$border-radius-sm: 0.2rem; // 2px
+$border-radius-md: 0.4rem; // 4px
+$border-radius-lg: 0.8rem; // 8px
+$border-radius-xl: 1.2rem; // 12px
+$border-radius-2xl: 1.6rem; // 16px
 $border-radius-full: 9999px;
 
 // ============================================================

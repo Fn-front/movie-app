@@ -4,7 +4,7 @@
 
 import type { Metadata } from 'next';
 
-import { RegisterForm } from '@/components/features/auth/registerForm';
+import { RegisterForm } from '@/components/features/auth/registerForm/registerForm';
 
 export const metadata: Metadata = {
   title: '新規登録 | Movie App',

@@ -21,6 +21,22 @@ export const API = {
 } as const;
 
 /**
+ * HTTPステータスコード
+ */
+export const HTTP_STATUS = {
+  /** 成功（リソース作成） */
+  CREATED: 201,
+  /** クライアントエラー（バリデーション等） */
+  BAD_REQUEST: 400,
+  /** 認証エラー */
+  UNAUTHORIZED: 401,
+  /** リソース競合（重複登録等） */
+  CONFLICT: 409,
+  /** サーバー内部エラー */
+  INTERNAL_SERVER_ERROR: 500,
+} as const;
+
+/**
  * ローカルストレージキー
  */
 export const STORAGE_KEYS = {

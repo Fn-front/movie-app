@@ -9,6 +9,7 @@ import bcrypt from 'bcryptjs';
 
 import { registerApiSchema } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
+import { HTTP_STATUS } from '@/constants';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
             message: AUTH_ERROR_MESSAGES.DB_CONNECTION_ERROR,
           },
         },
-        { status: 500 },
+        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
       );
     }
 
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
             details: result.error.flatten().fieldErrors,
           },
         },
-        { status: 400 },
+        { status: HTTP_STATUS.BAD_REQUEST },
       );
     }
 
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
             message: AUTH_ERROR_MESSAGES.EMAIL_ALREADY_EXISTS,
           },
         },
-        { status: 409 },
+        { status: HTTP_STATUS.CONFLICT },
       );
     }
 
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
         data: { userId: newUser.id },
         message: AUTH_ERROR_MESSAGES.REGISTER_SUCCESS,
       },
-      { status: 201 },
+      { status: HTTP_STATUS.CREATED },
     );
   } catch (error) {
     console.error('Registration error:', error);
@@ -111,7 +112,7 @@ export async function POST(request: Request) {
           message: '登録処理中にエラーが発生しました。',
         },
       },
-      { status: 500 },
+      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
     );
   }
 }

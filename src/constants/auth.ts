@@ -14,6 +14,8 @@ export const AUTH_ERROR_MESSAGES = {
   INVALID_CREDENTIALS: 'メールアドレスまたはパスワードが正しくありません。',
   /** メールアドレス重複エラー */
   EMAIL_ALREADY_EXISTS: '既に登録済みのメールアドレスです。',
+  /** 登録失敗 */
+  REGISTER_FAILED: '登録に失敗しました。',
   /** 登録成功 */
   REGISTER_SUCCESS: '登録が完了しました。',
   /** バリデーションエラー */
@@ -46,6 +48,8 @@ export const VALIDATION_MESSAGES = {
   PASSWORD_NUMBER: 'パスワードに数字を含めてください',
   /** パスワード確認必須 */
   CONFIRM_PASSWORD_REQUIRED: 'パスワード（確認）を入力してください',
+  /** パスワード必須 */
+  PASSWORD_REQUIRED: 'パスワードを入力してください',
   /** パスワード不一致 */
   PASSWORD_MISMATCH: 'パスワードが一致しません',
   /** ユーザー名が長すぎる */

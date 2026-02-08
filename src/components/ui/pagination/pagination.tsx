@@ -53,6 +53,10 @@ export const Pagination = memo<PaginationProps>(function Pagination({
     [currentPage, totalPages, onPageChange],
   );
 
+  const handleFirst = useCallback(() => {
+    handlePageChange(1);
+  }, [handlePageChange]);
+
   const handlePrevious = useCallback(() => {
     handlePageChange(currentPage - 1);
   }, [currentPage, handlePageChange]);
@@ -60,6 +64,10 @@ export const Pagination = memo<PaginationProps>(function Pagination({
   const handleNext = useCallback(() => {
     handlePageChange(currentPage + 1);
   }, [currentPage, handlePageChange]);
+
+  const handleLast = useCallback(() => {
+    handlePageChange(totalPages);
+  }, [totalPages, handlePageChange]);
 
   // ページ番号の配列を生成（中略表示対応）
   const pageNumbers = useMemo(() => {
@@ -117,6 +125,37 @@ export const Pagination = memo<PaginationProps>(function Pagination({
 
   return (
     <nav className={wrapperClassNames} aria-label='ページネーション' {...props}>
+      <button
+        type='button'
+        className={styles.c_pagination__button}
+        onClick={handleFirst}
+        disabled={currentPage === 1}
+        aria-label='最初のページへ'
+      >
+        <svg
+          width='20'
+          height='20'
+          viewBox='0 0 20 20'
+          fill='none'
+          xmlns='http://www.w3.org/2000/svg'
+          aria-hidden='true'
+        >
+          <path
+            d='M15 15L10 10L15 5'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+          />
+          <path
+            d='M7 5L7 15'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+          />
+        </svg>
+      </button>
+
       <button
         type='button'
         className={styles.c_pagination__button}
@@ -190,6 +229,37 @@ export const Pagination = memo<PaginationProps>(function Pagination({
             strokeWidth='2'
             strokeLinecap='round'
             strokeLinejoin='round'
+          />
+        </svg>
+      </button>
+
+      <button
+        type='button'
+        className={styles.c_pagination__button}
+        onClick={handleLast}
+        disabled={currentPage === totalPages}
+        aria-label='最後のページへ'
+      >
+        <svg
+          width='20'
+          height='20'
+          viewBox='0 0 20 20'
+          fill='none'
+          xmlns='http://www.w3.org/2000/svg'
+          aria-hidden='true'
+        >
+          <path
+            d='M5 15L10 10L5 5'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+          />
+          <path
+            d='M13 5L13 15'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
           />
         </svg>
       </button>

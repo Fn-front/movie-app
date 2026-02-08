@@ -94,6 +94,9 @@ export async function GET(request: Request) {
       sort_by: searchParams.get('sort_by') ?? undefined,
       release_type: searchParams.get('release_type') ?? undefined,
       genre_ids: searchParams.get('genre_ids') ?? undefined,
+      release_date_gte: searchParams.get('release_date_gte') ?? undefined,
+      release_date_lte: searchParams.get('release_date_lte') ?? undefined,
+      is_revival: searchParams.get('is_revival') ?? undefined,
     });
 
     if (!queryResult.success) {
@@ -110,7 +113,15 @@ export async function GET(request: Request) {
       );
     }
 
-    const { page, sort_by, release_type, genre_ids } = queryResult.data;
+    const {
+      page,
+      sort_by,
+      release_type,
+      genre_ids,
+      release_date_gte,
+      release_date_lte,
+      is_revival,
+    } = queryResult.data;
 
     // ジャンルマップを取得
     const genreMap = await getGenreMap();
@@ -199,11 +210,25 @@ export async function GET(request: Request) {
           .filter((id) => !isNaN(id) && id > 0)
       : [];
 
-    // 総件数を取得（release_type + genre_idsフィルタ適用）
+    // 過去日除外: release_date_gteが指定されている場合は大きい方を使用
+    const today = formatDateToString(new Date());
+    const effectiveDateGte =
+      release_date_gte && release_date_gte > today ? release_date_gte : today;
+
+    // 総件数を取得（release_type + genre_ids + 日付 + リバイバルフィルタ適用）
     let countQuery = supabase
       .from('movie_cache')
       .select('id', { count: 'exact', head: true })
-      .eq('release_type', release_type);
+      .eq('release_type', release_type)
+      .gte('release_date', effectiveDateGte);
+
+    if (release_date_lte) {
+      countQuery = countQuery.lte('release_date', release_date_lte);
+    }
+
+    if (is_revival !== undefined) {
+      countQuery = countQuery.eq('is_revival', is_revival);
+    }
 
     if (genreIdArray.length > 0) {
       const orConditions = genreIdArray
@@ -214,13 +239,22 @@ export async function GET(request: Request) {
 
     const { count: totalItems } = await countQuery;
 
-    // ページ分のデータを取得（release_type + genre_idsフィルタ適用）
+    // ページ分のデータを取得（release_type + genre_ids + 日付 + リバイバルフィルタ適用）
     let dataQuery = supabase
       .from('movie_cache')
       .select('*')
       .eq('release_type', release_type)
+      .gte('release_date', effectiveDateGte)
       .order(sortColumn, { ascending, nullsFirst: false })
       .range(offset, offset + PAGINATION.ITEMS_PER_PAGE - 1);
+
+    if (release_date_lte) {
+      dataQuery = dataQuery.lte('release_date', release_date_lte);
+    }
+
+    if (is_revival !== undefined) {
+      dataQuery = dataQuery.eq('is_revival', is_revival);
+    }
 
     if (genreIdArray.length > 0) {
       const orConditions = genreIdArray

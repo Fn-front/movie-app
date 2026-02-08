@@ -40,6 +40,12 @@ export interface GetMoviesRequest {
   sort_by?: 'release_date' | 'popularity' | 'vote_average';
   release_type?: 'theatrical' | 'streaming';
   genre_ids?: string;
+  /** 公開日の開始日（YYYY-MM-DD） */
+  release_date_gte?: string;
+  /** 公開日の終了日（YYYY-MM-DD） */
+  release_date_lte?: string;
+  /** リバイバル上映フィルタ（trueでリバイバルのみ、falseで非リバイバルのみ） */
+  is_revival?: boolean;
 }
 
 /**

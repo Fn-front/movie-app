@@ -33,11 +33,13 @@ export const MovieContent = memo(function MovieContent() {
     releaseType,
     genres,
     selectedGenreIds,
+    dateRange,
+    isRevivalFilter,
     isFilterModalOpen,
     handlePageChange,
     handleSortChange,
     handleReleaseTypeChange,
-    handleGenreFilterApply,
+    handleFilterApply,
     handleFilterModalOpen,
     handleFilterModalClose,
   } = useHome();
@@ -83,14 +85,15 @@ export const MovieContent = memo(function MovieContent() {
             variant='ghost'
             size='sm'
             onClick={handleFilterModalOpen}
-            aria-label='ジャンルフィルター'
+            aria-label='フィルター'
             className={styles.c_home_page__filter_button}
           >
             <FilterIcon />
-            {selectedGenreIds.length > 0 && (
-              <span className={styles.c_home_page__filter_count}>
-                {selectedGenreIds.length}
-              </span>
+            {(selectedGenreIds.length > 0 ||
+              dateRange.gte ||
+              dateRange.lte ||
+              isRevivalFilter !== undefined) && (
+              <span className={styles.c_home_page__filter_count} />
             )}
           </Button>
           <Select
@@ -132,7 +135,9 @@ export const MovieContent = memo(function MovieContent() {
         onOpenChange={handleFilterModalOpenChange}
         genres={genres}
         selectedGenreIds={selectedGenreIds}
-        onApply={handleGenreFilterApply}
+        selectedDateRange={dateRange}
+        isRevivalFilter={isRevivalFilter}
+        onApply={handleFilterApply}
       />
     </div>
   );

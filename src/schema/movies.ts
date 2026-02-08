@@ -21,6 +21,18 @@ export const moviesQuerySchema = z.object({
     .default('release_date'),
   release_type: z.enum(['theatrical', 'streaming']).default('theatrical'),
   genre_ids: z.string().optional(),
+  release_date_gte: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, '日付はYYYY-MM-DD形式で指定してください')
+    .optional(),
+  release_date_lte: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, '日付はYYYY-MM-DD形式で指定してください')
+    .optional(),
+  is_revival: z
+    .enum(['true', 'false'])
+    .transform((val) => val === 'true')
+    .optional(),
 });
 
 /**

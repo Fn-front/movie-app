@@ -19,6 +19,8 @@ export const moviesQuerySchema = z.object({
   sort_by: z
     .enum(['release_date', 'popularity', 'vote_average'])
     .default('release_date'),
+  release_type: z.enum(['theatrical', 'streaming']).default('theatrical'),
+  genre_ids: z.string().optional(),
 });
 
 /**

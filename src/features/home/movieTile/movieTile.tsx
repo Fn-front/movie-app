@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 
 import { Card } from '@/components/ui/card/card';
@@ -21,6 +21,8 @@ import styles from './movieTile.module.scss';
 export interface MovieTileProps {
   /** 映画データ */
   movie: MovieCacheItem;
+  /** ジャンルマップ */
+  genres?: Record<number, string>;
   /** クリック時のコールバック */
   onClick?: (movieId: number) => void;
 }
@@ -30,6 +32,7 @@ export interface MovieTileProps {
  */
 export const MovieTile = memo<MovieTileProps>(function MovieTile({
   movie,
+  genres,
   onClick,
 }) {
   const handleClick = useCallback(() => {
@@ -50,6 +53,17 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   const formattedDate = movie.release_date
     ? formatDate(movie.release_date)
     : null;
+
+  const genreText = useMemo(() => {
+    if (!genres || !movie.genre_ids || movie.genre_ids.length === 0) {
+      return null;
+    }
+    return movie.genre_ids
+      .slice(0, 2)
+      .map((id) => genres[id])
+      .filter(Boolean)
+      .join(', ');
+  }, [genres, movie.genre_ids]);
 
   return (
     <Card
@@ -83,6 +97,9 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       </div>
       <div className={styles.c_movie_tile__info}>
         <h3 className={styles.c_movie_tile__title}>{movie.title}</h3>
+        {genreText && (
+          <p className={styles.c_movie_tile__genres}>{genreText}</p>
+        )}
         {formattedDate && (
           <p className={styles.c_movie_tile__date}>{formattedDate}</p>
         )}

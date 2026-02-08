@@ -25,3 +25,24 @@ export const CACHE_DURATION_HOURS = 6;
  * 映画取得範囲（何ヶ月先まで）
  */
 export const MOVIES_FETCH_MONTHS_AHEAD = 3;
+
+/**
+ * リリースタイプ選択肢
+ */
+export const RELEASE_TYPE_OPTIONS = [
+  { label: '劇場公開', value: 'theatrical' },
+  { label: 'ストリーミング', value: 'streaming' },
+] as const;
+
+/**
+ * デフォルトリリースタイプ
+ */
+export const DEFAULT_RELEASE_TYPE = 'theatrical' as const;
+
+/**
+ * TMDb APIのwith_release_typeパラメータへのマッピング
+ */
+export const RELEASE_TYPE_MAP: Record<string, string> = {
+  theatrical: '2|3',
+  streaming: '4',
+};

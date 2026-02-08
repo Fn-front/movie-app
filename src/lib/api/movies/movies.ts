@@ -26,6 +26,8 @@ export interface MovieCacheItem {
   popularity: number | null;
   /** ジャンルID配列 */
   genre_ids: number[] | null;
+  /** リリースタイプ */
+  release_type: 'theatrical' | 'streaming';
 }
 
 /**
@@ -34,6 +36,8 @@ export interface MovieCacheItem {
 export interface GetMoviesRequest {
   page?: number;
   sort_by?: 'release_date' | 'popularity' | 'vote_average';
+  release_type?: 'theatrical' | 'streaming';
+  genre_ids?: string;
 }
 
 /**
@@ -54,6 +58,7 @@ export interface GetMoviesResponse {
   data: {
     movies: MovieCacheItem[];
     pagination: PaginationInfo;
+    genres: Record<number, string>;
   };
 }
 

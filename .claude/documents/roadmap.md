@@ -212,7 +212,14 @@
 - [x] useHomePageフックでデータ取得・状態管理を実装
 - [x] スキーマ・APIクライアントのテストを追加
 
-### Step 3: 映画詳細モーダル（`feature/movie-detail-modal`）
+### Step 3: タブ切替 + ジャンル表示・フィルター（`feature/movie-tabs-filter`）
+- [x] 劇場公開・ストリーミングのタブ切替を追加
+- [x] MovieTileにジャンル表示を追加
+- [x] ソートSelectの左にフィルターボタンを追加
+- [x] ジャンルフィルターモーダルを作成（複数選択可）
+- [x] テストを追加
+
+### Step 4: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装
 - [ ] APIクライアントにgetMovieDetailを追加
 - [ ] useMovieDetailフックを作成
@@ -221,7 +228,7 @@
 - [ ] HomePageにモーダル統合（MovieTileクリックで表示）
 - [ ] テストを追加
 
-### Step 4: バッチ更新API（`feature/batch-update-movies`）
+### Step 5: バッチ更新API（`feature/batch-update-movies`）
 - [ ] Cron定数を追加
 - [ ] バッチ更新API（POST /api/cron/update-movies）を実装
 - [ ] Vercel Cron設定（vercel.json）を追加

@@ -1,6 +1,6 @@
 @use '@/styles/variables' as *;
 
-.c_genre_filter {
+.c_filter {
   &__modal {
     max-width: 600px;
   }
@@ -81,7 +81,7 @@
       border-color: $primary-500;
       background-color: $primary-50;
 
-      .c_genre_filter__label {
+      .c_filter__label {
         color: $primary-700;
         font-weight: $font-weight-medium;
       }
@@ -129,7 +129,7 @@
     user-select: none;
     transition: $transition-all;
 
-    .c_genre_filter__tag_input:checked + & {
+    .c_filter__tag_input:checked + & {
       color: $primary-700;
       background-color: $primary-50;
       border-color: $primary-500;

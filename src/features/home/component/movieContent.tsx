@@ -16,7 +16,7 @@ import { FilterIcon } from '@/components/icons/filterIcon/filterIcon';
 import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { MovieTile } from '@/features/home/component/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/features/home/component/movieTileSkeleton/movieTileSkeleton';
-import { GenreFilterModal } from '@/features/home/component/genreFilterModal/genreFilterModal';
+import { FilterModal } from '@/features/home/component/filterModal/filterModal';
 
 import { useHome } from '@/features/home/hooks/useHome';
 import styles from '@/features/home/home.module.scss';
@@ -130,7 +130,7 @@ export const MovieContent = memo(function MovieContent() {
         </div>
       )}
 
-      <GenreFilterModal
+      <FilterModal
         open={isFilterModalOpen}
         onOpenChange={handleFilterModalOpenChange}
         genres={genres}

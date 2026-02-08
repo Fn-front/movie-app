@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
 import { AUTH_ERROR_MESSAGES } from '@/constants';
+import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -48,6 +49,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = credentials.email as string;
         const password = credentials.password as string;
 
+        // レート制限チェック（emailベース: 3回失敗で30分ロック）
+        const rateLimitResult = await checkRateLimit(supabase, email, 'login');
+
+        if (!rateLimitResult.allowed) {
+          throw new Error(AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED);
+        }
+
         // ユーザー取得
         const { data: user, error } = await supabase
           .from('users')
@@ -69,7 +77,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
-        // 認証成功
+        // 認証成功 — レート制限リセット
+        await resetRateLimit(supabase, email, 'login');
+
         return {
           id: user.id,
           email: user.email,

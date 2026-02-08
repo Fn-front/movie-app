@@ -58,6 +58,27 @@
   - [ ] useMovies（映画データ取得）
   - [ ] useWatchlist（ウォッチリスト操作）
 
+### フェーズ1 単体テスト
+- [x] カスタムフックのテスト
+  - [x] useDebounce
+  - [x] useLocalStorage
+  - [x] useMediaQuery
+  - [x] usePrevious
+  - [x] useClickOutside
+  - [x] useToggle
+  - [x] useToast
+- [x] ユーティリティのテスト
+  - [x] date（formatDate, formatDateTime）
+  - [x] error（handleApiError, formatErrorMessage）
+  - [x] image（getTMDbImageUrl, getTMDbPosterUrl, getTMDbBackdropUrl）
+  - [x] string（truncate, capitalize）
+  - [x] validation（isValidEmail, isValidPassword）
+- [x] Zustandストアユーティリティのテスト
+  - [x] createStore
+  - [x] createPersistStore
+- [x] TMDb APIクライアントのテスト
+  - [x] tmdb.ts（各APIメソッド、リトライ処理、ページバリデーション）
+
 ### データベース・認証基盤
 - [x] **技術選定を確定**
   - [x] データベース: Supabase (PostgreSQL)

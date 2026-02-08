@@ -1,0 +1,49 @@
+name: Test
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'release/**'
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Jest Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: setup-node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: cache-node-modules
+        uses: actions/cache@v3
+        id: node_modules_cache
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: '**/node_modules'
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+
+      - name: npm-install
+        if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
+        run: npm i
+
+      - name: run-tests-changed
+        if: github.event_name == 'pull_request'
+        run: npx jest --changedSince=origin/main --passWithNoTests
+
+      - name: run-tests-all
+        if: github.event_name == 'push'
+        run: npx jest

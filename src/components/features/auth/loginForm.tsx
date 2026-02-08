@@ -11,6 +11,7 @@ import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { zodResolver } from '@hookform/resolvers/zod';
 
+import { Heading } from '@/components/ui/heading/heading';
 import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { loginSchema, type LoginFormData } from '@/schema/auth';
@@ -62,7 +63,7 @@ export const LoginForm = memo(function LoginForm() {
 
   return (
     <div className={styles.c_login_form}>
-      <h1 className={styles.c_login_form__title}>ログイン</h1>
+      <Heading level={1} align='center'>ログイン</Heading>
 
       <form className={styles.c_login_form__body} onSubmit={handleSubmit(onSubmit)} noValidate>
         <div className={styles.c_login_form__fields}>

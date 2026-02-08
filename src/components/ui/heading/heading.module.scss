@@ -1,0 +1,44 @@
+@use '@/styles/variables' as *;
+
+.c_heading {
+  font-family: $font-family-heading;
+  font-weight: $font-weight-bold;
+  line-height: $line-height-tight;
+  color: $gray-900;
+}
+
+.c_heading__level__1 {
+  font-size: $font-size-4xl;
+}
+
+.c_heading__level__2 {
+  font-size: $font-size-3xl;
+}
+
+.c_heading__level__3 {
+  font-size: $font-size-2xl;
+}
+
+.c_heading__level__4 {
+  font-size: $font-size-xl;
+}
+
+.c_heading__level__5 {
+  font-size: $font-size-lg;
+}
+
+.c_heading__level__6 {
+  font-size: $font-size-base;
+}
+
+.c_heading__align__left {
+  text-align: left;
+}
+
+.c_heading__align__center {
+  text-align: center;
+}
+
+.c_heading__align__right {
+  text-align: right;
+}

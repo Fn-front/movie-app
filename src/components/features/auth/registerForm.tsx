@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { zodResolver } from '@hookform/resolvers/zod';
 
+import { Heading } from '@/components/ui/heading/heading';
 import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { registerSchema, type RegisterFormData } from '@/schema/auth';
@@ -70,7 +71,7 @@ export const RegisterForm = memo(function RegisterForm() {
 
   return (
     <div className={styles.c_register_form}>
-      <h1 className={styles.c_register_form__title}>新規登録</h1>
+      <Heading level={1} align='center'>新規登録</Heading>
 
       <form className={styles.c_register_form__body} onSubmit={handleSubmit(onSubmit)} noValidate>
         <div className={styles.c_register_form__fields}>

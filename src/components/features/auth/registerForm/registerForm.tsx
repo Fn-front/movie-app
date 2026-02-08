@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { registerSchema, type RegisterFormData } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, ROUTES } from '@/constants';
+import { registerUser } from '@/lib/api/auth/auth';
 import { handleApiError } from '@/utils/error';
 import styles from './registerForm.module.scss';
 
@@ -44,28 +45,17 @@ export const RegisterForm = memo(function RegisterForm() {
       setApiError(null);
 
       try {
-        const response = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: data.email,
-            password: data.password,
-            name: data.name || undefined,
-          }),
+        await registerUser({
+          email: data.email,
+          password: data.password,
+          name: data.name || undefined,
         });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          setApiError(result.error?.message ?? AUTH_ERROR_MESSAGES.REGISTER_FAILED);
-          return;
-        }
 
         // ログインページへ遷移
         router.push(ROUTES.LOGIN);
       } catch (error) {
         const { message } = handleApiError(error);
-        setApiError(message);
+        setApiError(message ?? AUTH_ERROR_MESSAGES.REGISTER_FAILED);
       }
     },
     [router],

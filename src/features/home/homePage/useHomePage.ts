@@ -46,7 +46,10 @@ export function useHomePage(): UseHomePageReturn {
       try {
         const response = await getMovies({
           page: currentPage,
-          sort_by: currentSortBy as 'release_date' | 'popularity' | 'vote_average',
+          sort_by: currentSortBy as
+            | 'release_date'
+            | 'popularity'
+            | 'vote_average',
         });
         setMovies(response.data.movies);
         setPagination(response.data.pagination);
@@ -87,6 +90,14 @@ export function useHomePage(): UseHomePageReturn {
       handlePageChange,
       handleSortChange,
     }),
-    [movies, pagination, isLoading, page, sortBy, handlePageChange, handleSortChange],
+    [
+      movies,
+      pagination,
+      isLoading,
+      page,
+      sortBy,
+      handlePageChange,
+      handleSortChange,
+    ],
   );
 }

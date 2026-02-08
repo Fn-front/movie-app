@@ -56,16 +56,12 @@ export const MovieContent = memo(function MovieContent() {
         {isLoading ? (
           <MovieTileSkeleton />
         ) : (
-          movies.map((movie) => (
-            <MovieTile key={movie.id} movie={movie} />
-          ))
+          movies.map((movie) => <MovieTile key={movie.id} movie={movie} />)
         )}
       </div>
 
       {!isLoading && movies.length === 0 && (
-        <p className={styles.c_home_page__empty}>
-          表示する映画がありません。
-        </p>
+        <p className={styles.c_home_page__empty}>表示する映画がありません。</p>
       )}
 
       {pagination && pagination.totalPages > 1 && (

@@ -15,7 +15,12 @@ import { Heading } from '@/components/ui/heading/heading';
 import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { loginSchema, type LoginFormData } from '@/schema/auth';
-import { AUTH_ERROR_MESSAGES, ROUTES } from '@/constants';
+import {
+  AUTH_ERROR_MESSAGES,
+  TOAST_TITLES,
+  TOAST_MESSAGES,
+  ROUTES,
+} from '@/constants';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import styles from './loginForm.module.scss';
@@ -54,7 +59,7 @@ export const LoginForm = memo(function LoginForm() {
         if (result?.error) {
           setApiError(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
           toast({
-            title: 'ログインエラー',
+            title: TOAST_TITLES.LOGIN_ERROR,
             description: AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
             variant: 'error',
           });
@@ -62,8 +67,8 @@ export const LoginForm = memo(function LoginForm() {
         }
 
         toast({
-          title: 'ログイン成功',
-          description: 'ホーム画面に移動します。',
+          title: TOAST_TITLES.LOGIN_SUCCESS,
+          description: TOAST_MESSAGES.LOGIN_SUCCESS_DESCRIPTION,
           variant: 'success',
         });
 
@@ -72,7 +77,7 @@ export const LoginForm = memo(function LoginForm() {
         const { message } = handleApiError(error);
         setApiError(message);
         toast({
-          title: 'ログインエラー',
+          title: TOAST_TITLES.LOGIN_ERROR,
           description: message ?? AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
           variant: 'error',
         });

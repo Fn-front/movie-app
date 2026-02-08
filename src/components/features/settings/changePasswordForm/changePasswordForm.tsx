@@ -15,7 +15,7 @@ import {
   changePasswordSchema,
   type ChangePasswordFormData,
 } from '@/schema/auth';
-import { AUTH_ERROR_MESSAGES } from '@/constants';
+import { AUTH_ERROR_MESSAGES, TOAST_TITLES } from '@/constants';
 import { changePassword } from '@/lib/api/auth/auth';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
@@ -56,7 +56,7 @@ export const ChangePasswordForm = memo(function ChangePasswordForm() {
 
         setSuccessMessage(response.message);
         toast({
-          title: 'パスワード変更完了',
+          title: TOAST_TITLES.PASSWORD_CHANGE_SUCCESS,
           description: response.message,
           variant: 'success',
         });
@@ -67,7 +67,7 @@ export const ChangePasswordForm = memo(function ChangePasswordForm() {
           message ?? AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED;
         setApiError(errorMessage);
         toast({
-          title: 'パスワード変更エラー',
+          title: TOAST_TITLES.PASSWORD_CHANGE_ERROR,
           description: errorMessage,
           variant: 'error',
         });

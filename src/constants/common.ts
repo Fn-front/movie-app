@@ -34,6 +34,8 @@ export const HTTP_STATUS = {
   UNAUTHORIZED: 401,
   /** リソース競合（重複登録等） */
   CONFLICT: 409,
+  /** レート制限超過 */
+  TOO_MANY_REQUESTS: 429,
   /** サーバー内部エラー */
   INTERNAL_SERVER_ERROR: 500,
 } as const;

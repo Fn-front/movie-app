@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(100),
   avatar_url TEXT,
   is_verified BOOLEAN NOT NULL DEFAULT false,
+  password_changed_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT now(),
   updated_at TIMESTAMP NOT NULL DEFAULT now()
 );
@@ -142,7 +143,7 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   last_attempt_at TIMESTAMP NOT NULL DEFAULT now(),
   created_at TIMESTAMP NOT NULL DEFAULT now(),
   updated_at TIMESTAMP NOT NULL DEFAULT now(),
-  CONSTRAINT chk_action_type CHECK (action_type IN ('login', 'otp_verify', 'otp_resend'))
+  CONSTRAINT chk_action_type CHECK (action_type IN ('login', 'otp_verify', 'otp_resend', 'change_password'))
 );
 
 -- インデックス

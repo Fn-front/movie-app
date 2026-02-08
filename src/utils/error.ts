@@ -4,6 +4,8 @@
 
 import { AxiosError } from 'axios';
 
+import { HTTP_STATUS } from '@/constants';
+
 /**
  * エラーレスポンス型
  */
@@ -186,10 +188,10 @@ export function isNetworkError(error: unknown): boolean {
  */
 export function isAuthError(error: unknown): boolean {
   if (error instanceof AxiosError) {
-    return error.response?.status === 401;
+    return error.response?.status === HTTP_STATUS.UNAUTHORIZED;
   }
   if (error instanceof Response) {
-    return error.status === 401;
+    return error.status === HTTP_STATUS.UNAUTHORIZED;
   }
   return false;
 }

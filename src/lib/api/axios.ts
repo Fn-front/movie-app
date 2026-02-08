@@ -5,7 +5,7 @@
 import axios, { type AxiosError, type AxiosResponse } from 'axios';
 import { signOut } from 'next-auth/react';
 
-import { API, ROUTES } from '@/constants';
+import { API, HTTP_STATUS, ROUTES } from '@/constants';
 
 /**
  * 基本Axiosインスタンス
@@ -67,7 +67,7 @@ axiosInstance.interceptors.response.use(
     }
 
     // 認証エラー（401）の場合、セッションをクリアしてログインページにリダイレクト
-    if (error.response?.status === 401) {
+    if (error.response?.status === HTTP_STATUS.UNAUTHORIZED) {
       if (typeof window !== 'undefined') {
         signOut({ callbackUrl: ROUTES.LOGIN });
       }

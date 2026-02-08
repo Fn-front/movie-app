@@ -59,11 +59,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
-        // メール認証チェック
-        if (!user.is_verified) {
-          throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
-        }
-
         // パスワード照合
         const isPasswordValid = await bcrypt.compare(
           password,

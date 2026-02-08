@@ -12,7 +12,7 @@ export default auth((req) => {
   const protectedPaths = ['/dashboard', '/profile', '/watchlist'];
 
   // 認証ページ
-  const authPaths = ['/auth/signin', '/auth/signup', '/auth/verify-otp'];
+  const authPaths = ['/auth/signin', '/auth/signup'];
 
   const isProtectedPath = protectedPaths.some((path) =>
     nextUrl.pathname.startsWith(path),

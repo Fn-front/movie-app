@@ -59,8 +59,8 @@ export const RegisterForm = memo(function RegisterForm() {
           return;
         }
 
-        // OTP検証画面へ遷移
-        router.push(`${ROUTES.VERIFY_OTP}?userId=${result.data.userId}`);
+        // ログインページへ遷移
+        router.push(ROUTES.LOGIN);
       } catch {
         setApiError('ネットワークエラーが発生しました。');
       }

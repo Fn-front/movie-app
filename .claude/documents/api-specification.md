@@ -45,12 +45,9 @@
 | HTTPステータス | エラーコード | message例 | details例 |
 |--------------|------------|----------|----------|
 | 400 | VALIDATION_ERROR | "入力内容に誤りがあります" | { fields: {...} } |
-| 400 | INVALID_OTP | "OTPコードが間違っています" | { attemptsLeft: 2 } |
-| 400 | OTP_EXPIRED | "OTPコードの有効期限が切れました" | - |
 | 401 | UNAUTHORIZED | "認証が必要です" | - |
 | 401 | INVALID_CREDENTIALS | "メールアドレスまたはパスワードが正しくありません" | - |
 | 403 | FORBIDDEN | "アクセス権限がありません" | - |
-| 403 | EMAIL_NOT_VERIFIED | "メールアドレスが未認証です" | - |
 | 404 | NOT_FOUND | "リソースが見つかりません" | - |
 | 404 | USER_NOT_FOUND | "ユーザーが見つかりません" | - |
 | 409 | CONFLICT | "すでに登録済みのメールアドレスです" | - |
@@ -91,17 +88,6 @@
   }
 }
 
-// OTP検証エラー
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_OTP",
-    "message": "OTPコードが間違っています",
-    "details": {
-      "attemptsLeft": 2
-    }
-  }
-}
 ```
 
 ---
@@ -124,46 +110,14 @@
 ```json
 {
   "success": true,
-  "message": "OTPをメールに送信しました",
-  "userId": "uuid-here"
+  "message": "登録が完了しました",
+  "data": { "userId": "uuid-here" }
 }
 ```
 
 **Error Responses:**
 - `400 Bad Request`: バリデーションエラー
 - `409 Conflict`: すでに登録済みのメールアドレス
-
----
-
-### POST /api/auth/verify-otp
-OTP検証
-
-**Request Body:**
-```json
-{
-  "userId": "uuid-here",
-  "otp": "123456"
-}
-```
-
-**内部処理:**
-1. OTPの有効性チェック（有効期限、使用済みフラグ）
-2. 認証成功後、該当OTPトークンを物理削除（セキュリティ）
-3. ユーザーのis_verifiedフラグをtrueに更新
-4. セッショントークン生成
-
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "認証に成功しました",
-  "token": "jwt-token-or-session-id"
-}
-```
-
-**Error Responses:**
-- `400 Bad Request`: OTPが無効または期限切れ
-- `404 Not Found`: ユーザーが見つからない
 
 ---
 
@@ -194,7 +148,6 @@ OTP検証
 
 **Error Responses:**
 - `401 Unauthorized`: メールアドレスまたはパスワードが間違っている
-- `403 Forbidden`: メール認証が未完了
 
 ---
 
@@ -208,67 +161,6 @@ OTP検証
   "message": "ログアウトしました"
 }
 ```
-
----
-
-### POST /api/auth/forgot-password
-パスワードリセット要求
-
-**Request Body:**
-```json
-{
-  "email": "user@example.com"
-}
-```
-
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "パスワードリセット用のメールを送信しました"
-}
-```
-
-**Error Responses:**
-- `404 Not Found`: メールアドレスが登録されていない（セキュリティのため同じメッセージを返す）
-
-**備考:**
-- リセットトークンは1時間有効
-- メールにリセット用URLを送信（例: /reset-password?token=xxx）
-
----
-
-### POST /api/auth/reset-password
-パスワードリセット実行
-
-**Request Body:**
-```json
-{
-  "token": "reset-token-here",
-  "newPassword": "newPassword123"
-}
-```
-
-**Validation:**
-- パスワード: 8文字以上、英字（大文字・小文字）+ 数字必須（react-hook-form + zodで検証）
-
-**内部処理:**
-1. トークンの有効性チェック（有効期限、使用済みフラグ）
-2. パスワードをbcryptでハッシュ化
-3. ユーザーのパスワード更新
-4. 該当リセットトークンを物理削除（セキュリティ）
-
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "パスワードを変更しました"
-}
-```
-
-**Error Responses:**
-- `400 Bad Request`: トークンが無効または期限切れ
-- `400 Bad Request`: パスワードポリシー違反
 
 ---
 

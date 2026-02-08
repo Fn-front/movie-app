@@ -12,7 +12,7 @@ import { Header } from '@/components/layout/header/header';
 import { Sidebar } from '@/components/layout/sidebar/sidebar';
 import { Footer } from '@/components/layout/footer/footer';
 
-import { MovieContent } from './component/movieContent';
+import { MovieContent } from '@/features/home/component/movieContent';
 
 /**
  * HomePageコンポーネント

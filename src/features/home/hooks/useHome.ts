@@ -1,5 +1,5 @@
 /**
- * HomePageのカスタムフック
+ * Homeのカスタムフック
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -10,9 +10,9 @@ import { useToast } from '@/hooks/useToast';
 import { DEFAULT_SORT, DEFAULT_RELEASE_TYPE } from '@/constants';
 
 /**
- * useHomePageフックの戻り値
+ * useHomeフックの返り値
  */
-export interface UseHomePageReturn {
+export interface UseHomeReturn {
   /** 映画リスト */
   movies: MovieCacheItem[];
   /** ページネーション情報 */
@@ -46,9 +46,9 @@ export interface UseHomePageReturn {
 }
 
 /**
- * HomePageのカスタムフック
+ * Homeのカスタムフック
  */
-export function useHomePage(): UseHomePageReturn {
+export function useHome(): UseHomeReturn {
   const [movies, setMovies] = useState<MovieCacheItem[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);

@@ -143,7 +143,10 @@ export function useHome(): UseHomeReturn {
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const main = document.querySelector('main');
+    if (main) {
+      main.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, []);
 
   const handleSortChange = useCallback((value: string) => {

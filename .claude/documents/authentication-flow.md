@@ -29,11 +29,15 @@ POST /api/auth/register
   }
   ↓
 サーバー処理:
-  1. パスワードをハッシュ化（bcrypt/argon2）
-  2. usersテーブルに仮登録（is_verified = false）
-  3. 6桁のOTPコード生成
-  4. otp_tokensテーブルに保存（有効期限: 10分）
-  5. メール送信
+  1. メールアドレスで既存ユーザーを検索
+     a. 認証済み（is_verified = true）→ エラー「既に登録済みのメールアドレスです」
+     b. 未認証（is_verified = false）→ パスワードハッシュを上書き更新、新しいOTPを発行
+     c. 存在しない → 新規作成
+  2. パスワードをハッシュ化（bcrypt, cost=12）
+  3. usersテーブルに仮登録（is_verified = false）
+  4. 6桁のOTPコード生成
+  5. otp_tokensテーブルに保存（有効期限: 10分）
+  6. メール送信
   ↓
 レスポンス
   {
@@ -170,6 +174,31 @@ API Request
   有効 → 処理続行
   無効 → 401 Unauthorized
 ```
+
+---
+
+## 未認証アカウントの自動削除
+
+### ルール
+- 登録から**1時間以内**にメール認証（OTP検証）を完了しないアカウントは物理削除
+- 対象: `is_verified = false` かつ `created_at` が1時間以上前のレコード
+- 関連するotp_tokensも `ON DELETE CASCADE` で自動削除
+
+### 削除方法
+```sql
+DELETE FROM users
+WHERE is_verified = false
+  AND created_at < now() - INTERVAL '1 hour';
+```
+
+### 実行タイミング
+- Vercel Cron Jobs（毎時実行）または登録API呼び出し時にクリーンアップ
+
+### 未認証メールでの再登録
+- 同じメールアドレスで未認証アカウントが存在する場合、既存レコードを上書き更新する
+  - パスワードハッシュを新しい値に更新
+  - 古いOTPトークンを削除し、新しいOTPを発行
+  - ユーザーは再度OTP検証を行う
 
 ---
 

@@ -39,11 +39,13 @@ export const ROUTES = {
   /** ホーム */
   HOME: '/',
   /** ログイン */
-  LOGIN: '/login',
+  LOGIN: '/auth/signin',
   /** 新規登録 */
-  REGISTER: '/register',
+  REGISTER: '/auth/signup',
+  /** OTP検証 */
+  VERIFY_OTP: '/auth/verify-otp',
   /** パスワードリセット */
-  FORGOT_PASSWORD: '/forgot-password',
+  FORGOT_PASSWORD: '/auth/forgot-password',
   /** アカウント設定 */
   SETTINGS: '/settings',
   /** 映画詳細 */

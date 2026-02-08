@@ -148,7 +148,9 @@ const GenreFilterModalContent = memo<{
         </div>
 
         <div className={styles.c_genre_filter__section}>
-          <h3 className={styles.c_genre_filter__section_title}>リバイバル上映</h3>
+          <h3 className={styles.c_genre_filter__section_title}>
+            リバイバル上映
+          </h3>
           <fieldset className={styles.c_genre_filter__revival}>
             <legend className={styles.c_genre_filter__visually_hidden}>
               リバイバル上映フィルタ

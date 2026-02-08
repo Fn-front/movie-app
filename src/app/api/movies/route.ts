@@ -168,8 +168,7 @@ export async function GET(request: Request) {
         const excludedLangs: readonly string[] = EXCLUDED_LANGUAGES;
         const filteredResults = tmdbResponse.results.filter(
           (movie) =>
-            !movie.adult &&
-            !excludedLangs.includes(movie.original_language),
+            !movie.adult && !excludedLangs.includes(movie.original_language),
         );
 
         if (filteredResults.length === 0) continue;

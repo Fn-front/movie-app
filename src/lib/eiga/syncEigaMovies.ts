@@ -4,10 +4,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-import {
-  EXCLUDED_KEYWORD_IDS,
-  EXCLUDED_LANGUAGES,
-} from '@/constants/movies';
+import { EXCLUDED_KEYWORD_IDS, EXCLUDED_LANGUAGES } from '@/constants/movies';
 import { getMovieKeywordIds, searchMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
@@ -46,8 +43,7 @@ export function findBestMatch(
 
   // 除外フィルタ適用
   const filtered = candidates.filter(
-    (movie) =>
-      !movie.adult && !excludedLangs.includes(movie.original_language),
+    (movie) => !movie.adult && !excludedLangs.includes(movie.original_language),
   );
 
   if (filtered.length === 0) return null;
@@ -255,8 +251,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
       existingIds.add(cacheKey);
       result.added++;
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown error';
+      const message = error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`${eigaMovie.title}: ${message}`);
     }
   }

@@ -63,9 +63,7 @@ export function parseIcal(icalText: string): EigaMovie[] {
     const description = String(
       vevent.getFirstPropertyValue('description') ?? '',
     );
-    const urlMatch = description.match(
-      /https:\/\/eiga\.com\/movie\/\d+\//,
-    );
+    const urlMatch = description.match(/https:\/\/eiga\.com\/movie\/\d+\//);
     const eigaUrl = urlMatch ? urlMatch[0] : null;
 
     movies.push({ title: summary, releaseDate, eigaUrl });
@@ -90,9 +88,7 @@ export async function fetchOriginalTitle(
     });
 
     // 「原題または英題：」の後のテキストを抽出
-    const match = response.data.match(
-      /原題(?:または英題)?[：:]\s*([^<\n]+)/,
-    );
+    const match = response.data.match(/原題(?:または英題)?[：:]\s*([^<\n]+)/);
     if (match) return match[1].trim();
 
     // 「英題：」のみのパターン

@@ -20,6 +20,7 @@
 | password_hash | VARCHAR(255) | NOT NULL | - | ハッシュ化されたパスワード |
 | name | VARCHAR(100) | NULL | - | ユーザー名 |
 | avatar_url | TEXT | NULL | - | アバター画像URL |
+| role | VARCHAR(20) | NOT NULL | 'user' | ユーザー権限（user / admin） |
 | is_verified | BOOLEAN | NOT NULL | false | メール認証済みフラグ |
 | created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
 | updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |

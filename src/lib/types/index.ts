@@ -132,6 +132,8 @@ export interface User {
   name: string | null;
   /** アバター画像URL */
   image: string | null;
+  /** ユーザー権限 */
+  role: 'user' | 'admin';
   /** 作成日時 */
   created_at: string;
   /** 更新日時 */

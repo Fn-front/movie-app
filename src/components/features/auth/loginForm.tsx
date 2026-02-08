@@ -64,7 +64,7 @@ export const LoginForm = memo(function LoginForm() {
     <div className={styles.c_login_form}>
       <h1 className={styles.c_login_form__title}>ログイン</h1>
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <form className={styles.c_login_form__body} onSubmit={handleSubmit(onSubmit)} noValidate>
         <div className={styles.c_login_form__fields}>
           <Input
             label='メールアドレス'

@@ -11,8 +11,11 @@
   font-size: $font-size-2xl;
   font-weight: $font-weight-bold;
   text-align: center;
-  margin-bottom: $spacing-8;
   color: $gray-900;
+}
+
+.c_register_form__body {
+  margin-top: $spacing-8;
 }
 
 .c_register_form__fields {

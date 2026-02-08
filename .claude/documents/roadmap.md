@@ -101,10 +101,10 @@
   - [x] NEXTAUTH_URL
 
 ### TMDb API連携
-- [ ] TMDb APIキー取得
-- [ ] axiosインスタンス作成
-- [ ] API Client実装（lib/api/tmdb.ts）
-- [ ] 映画情報取得のテスト
+- [x] TMDb APIキー取得
+- [x] axiosインスタンス作成
+- [x] API Client実装（lib/api/tmdb.ts）
+- [x] 映画情報取得のテスト
 
 ---
 

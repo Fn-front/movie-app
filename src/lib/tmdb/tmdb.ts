@@ -207,6 +207,8 @@ export interface DiscoverMoviesParams {
   with_release_type?: string;
   /** ソート順 */
   sort_by?: string;
+  /** 除外するキーワードID（パイプ区切り） */
+  without_keywords?: string;
 }
 
 /**
@@ -224,6 +226,7 @@ export async function discoverMovies(
     {
       params: {
         page: validatePage(page),
+        include_adult: false,
         ...rest,
       },
     },

@@ -13,6 +13,7 @@ import {
   CACHE_DURATION_HOURS,
   MOVIES_FETCH_MONTHS_AHEAD,
   RELEASE_TYPE_MAP,
+  EXCLUDED_KEYWORDS_PARAM,
 } from '@/constants';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 
@@ -146,12 +147,20 @@ export async function GET(request: Request) {
           'release_date.lte': futureDateStr,
           with_release_type: withReleaseType,
           sort_by: 'popularity.desc',
+          without_keywords: EXCLUDED_KEYWORDS_PARAM,
         });
 
         if (tmdbResponse.results.length === 0) break;
 
+        // adultコンテンツを除外
+        const filteredResults = tmdbResponse.results.filter(
+          (movie) => !movie.adult,
+        );
+
+        if (filteredResults.length === 0) continue;
+
         // UPSERTでmovie_cacheに保存
-        const movieRows = tmdbResponse.results.map((movie) => ({
+        const movieRows = filteredResults.map((movie) => ({
           id: movie.id,
           title: movie.title,
           poster_path: movie.poster_path,

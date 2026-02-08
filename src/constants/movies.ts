@@ -46,3 +46,23 @@ export const RELEASE_TYPE_MAP: Record<string, string> = {
   theatrical: '2|3',
   streaming: '4',
 };
+
+/**
+ * TMDb Discover APIで除外するキーワードID
+ * 不適切コンテンツ（softcore, ポルノ, ピンク映画等）を除外する
+ */
+export const EXCLUDED_KEYWORD_IDS = [
+  155477, // softcore
+  190370, // erotic movie
+  10053, // sexploitation
+  445, // pornography
+  260863, // hardcore
+  198385, // hentai
+  161919, // adult animation
+  159551, // pink film
+] as const;
+
+/**
+ * TMDb Discover APIのwithout_keywordsパラメータ値
+ */
+export const EXCLUDED_KEYWORDS_PARAM = EXCLUDED_KEYWORD_IDS.join('|');

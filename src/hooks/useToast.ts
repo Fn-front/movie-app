@@ -8,7 +8,7 @@ import { useCallback } from 'react';
 
 import { ANIMATION } from '@/constants';
 import { createStore } from '@/lib/store';
-import type { ToastVariant } from '@/components/ui/toast';
+import type { ToastVariant } from '@/components/ui/toast/toast';
 
 /**
  * トースト通知データ

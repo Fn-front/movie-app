@@ -65,9 +65,15 @@ export const LoginForm = memo(function LoginForm() {
 
   return (
     <div className={styles.c_login_form}>
-      <Heading level={1} align='center'>ログイン</Heading>
+      <Heading level={1} align='center'>
+        ログイン
+      </Heading>
 
-      <form className={styles.c_login_form__body} onSubmit={handleSubmit(onSubmit)} noValidate>
+      <form
+        className={styles.c_login_form__body}
+        onSubmit={handleSubmit(onSubmit)}
+        noValidate
+      >
         <div className={styles.c_login_form__fields}>
           <Input
             label='メールアドレス'
@@ -112,10 +118,7 @@ export const LoginForm = memo(function LoginForm() {
 
       <p className={styles.c_login_form__footer}>
         アカウントをお持ちでない方は{' '}
-        <Link
-          href={ROUTES.REGISTER}
-          className={styles.c_login_form__link}
-        >
+        <Link href={ROUTES.REGISTER} className={styles.c_login_form__link}>
           新規登録
         </Link>
       </p>

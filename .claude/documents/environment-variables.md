@@ -84,24 +84,6 @@ cookies: {
 
 ---
 
-### メール送信（Resend）
-
-```bash
-# Resend API Key
-RESEND_API_KEY=re_xxxxxxxxxxxx
-
-# メール送信元アドレス
-MAIL_FROM=noreply@yourdomain.com
-```
-
-**取得方法:**
-1. https://resend.com/ でアカウント作成
-2. API Keys > Create API Key でキー取得
-3. ドメイン認証を完了（DNS設定が必要）
-4. Vercel統合が可能（推奨）
-
----
-
 ### Vercel Cron Jobs（バッチ更新用）
 
 ```bash
@@ -197,10 +179,6 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 NEXTAUTH_SECRET=your_nextauth_secret_here_minimum_32_chars
 NEXTAUTH_URL=http://localhost:3000
 
-# Email (Resend)
-RESEND_API_KEY=re_xxxxxxxxxxxx
-MAIL_FROM=noreply@yourdomain.com
-
 # Rate Limiting
 RATE_LIMIT_MAX_ATTEMPTS=3
 RATE_LIMIT_LOCK_DURATION=1800000
@@ -241,7 +219,6 @@ export function validateEnv() {
     'NEXT_PUBLIC_TMDB_API_KEY',
     'DATABASE_URL',
     'JWT_SECRET',
-    'RESEND_API_KEY',
   ];
 
   const missing = required.filter((key) => !process.env[key]);
@@ -259,7 +236,6 @@ export function validateEnv() {
 ### API Keys
 - [x] **API Key管理**: 環境変数（.env）で管理 - 確定
 - [ ] **TMDb API Key**: 取得済み？
-- [ ] **Resend/SendGrid/AWS SES**: どれを使用するか決定？
 - [ ] **OpenAI API Key**: 将来的に必要？今は不要？
 
 ### データベース

@@ -42,10 +42,6 @@ export const ROUTES = {
   LOGIN: '/auth/signin',
   /** 新規登録 */
   REGISTER: '/auth/signup',
-  /** OTP検証 */
-  VERIFY_OTP: '/auth/verify-otp',
-  /** パスワードリセット */
-  FORGOT_PASSWORD: '/auth/forgot-password',
   /** アカウント設定 */
   SETTINGS: '/settings',
   /** 映画詳細 */

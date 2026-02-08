@@ -36,59 +36,6 @@
 
 ---
 
-### otp_tokens（ワンタイムパスワード）
-新規登録時の認証トークン管理
-
-| カラム名 | 型 | NULL | デフォルト | 説明 |
-|---------|-----|------|-----------|------|
-| id | UUID | NOT NULL | uuid_generate_v4() | トークンID（主キー） |
-| user_id | UUID | NOT NULL | - | ユーザーID（外部キー） |
-| token | VARCHAR(6) | NOT NULL | - | 6桁のOTPコード |
-| expires_at | TIMESTAMP | NOT NULL | - | 有効期限 |
-| is_used | BOOLEAN | NOT NULL | false | 使用済みフラグ |
-| created_at | TIMESTAMP | NOT NULL | NOW() | 作成日時 |
-
-**インデックス:**
-- `user_id, token` (UNIQUE)
-- `expires_at`
-
-**外部キー:**
-- `user_id` -> `users(id)` ON DELETE CASCADE
-
-**アーカイブ機能: 物理削除**
-- OTP認証完了後（is_used = true）、該当レコードを物理削除
-- 削除タイミング: 認証成功直後のAPI呼び出し内で実行
-- 理由: セキュリティ（使用済みトークンの残留を防ぐ）
-
----
-
-### password_reset_tokens（パスワードリセット）
-パスワードリセット用のトークン管理
-
-| カラム名 | 型 | NULL | デフォルト | 説明 |
-|---------|-----|------|-----------|------|
-| id | UUID | NOT NULL | gen_random_uuid() | トークンID（主キー） |
-| user_id | UUID | NOT NULL | - | ユーザーID（外部キー） |
-| token | VARCHAR(64) | NOT NULL | - | リセットトークン（ハッシュ化） |
-| expires_at | TIMESTAMP | NOT NULL | - | 有効期限（1時間） |
-| is_used | BOOLEAN | NOT NULL | false | 使用済みフラグ |
-| created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
-
-**インデックス:**
-- `token` (UNIQUE)
-- `user_id`
-- `expires_at`
-
-**外部キー:**
-- `user_id` -> `users(id)` ON DELETE CASCADE
-
-**アーカイブ機能: 物理削除**
-- パスワードリセット完了後（is_used = true）、該当レコードを物理削除
-- 削除タイミング: パスワード更新成功直後のAPI呼び出し内で実行
-- 理由: セキュリティ（使用済みトークンの残留を防ぐ）
-
----
-
 ### watchlist（見たい映画リスト）
 ユーザーの見たい映画を管理（映画IDと画像URLを保存）
 
@@ -207,7 +154,7 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 |---------|-----|------|-----------|------|
 | id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
 | identifier | VARCHAR(255) | NOT NULL | - | 識別子（IPアドレス or ユーザーID） |
-| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（login, otp_verify, otp_resend） |
+| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（login） |
 | attempts | INTEGER | NOT NULL | 0 | 試行回数 |
 | locked_until | TIMESTAMP | NULL | - | ロック解除時刻 |
 | last_attempt_at | TIMESTAMP | NOT NULL | now() | 最終試行時刻 |
@@ -219,12 +166,10 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 - `locked_until` - ロック解除チェック用
 
 **制約:**
-- `action_type` は 'login', 'otp_verify', 'otp_resend' のいずれか（ENUM型 or CHECK制約）
+- `action_type` は 'login' （ENUM型 or CHECK制約）
 
 **レート制限ルール:**
 - **login**: 3回失敗で30分ロック
-- **otp_verify**: 3回失敗で30分ロック
-- **otp_resend**: 5分間隔で再送信可能
 
 **クリーンアップ:**
 - ロック解除時刻を過ぎたレコードは定期的に削除（Vercel Cron Jobs）
@@ -236,14 +181,6 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 
 ```
 users (1) ----< (N) watchlist
-  |
-  | (1)
-  |
-  +----< (N) otp_tokens
-  |
-  | (1)
-  |
-  +----< (N) password_reset_tokens
   |
   | (1)
   |
@@ -264,7 +201,7 @@ users (1) ----< (N) watchlist
 
 - **ユーザーデータ**: 自分のデータのみアクセス可能（`auth.uid() = user_id`）
 - **公開データ**: 全員閲覧可能（例: movie_cache）
-- **認証なしINSERT**: 新規登録・OTP発行で必要な場合のみ許可
+- **認証なしINSERT**: 新規登録で必要な場合のみ許可
 
 詳細なRLS SQL実装は `.claude/skills/db-schema` skillを参照してください。
 
@@ -280,10 +217,6 @@ users (1) ----< (N) watchlist
 - [x] **watchlist削除方式**: 論理削除 - 確定
   - deleted_atカラムで管理
   - 復元・分析用にデータ保持
-- [x] **認証トークンのアーカイブ**: 認証完了後に物理削除 - 確定
-  - OTPトークン: 認証成功直後に削除
-  - パスワードリセットトークン: パスワード更新成功直後に削除
-  - セキュリティ目的（使用済みトークンの残留防止）
 - [ ] **データバックアップ**: 未定（将来的に検討）
 
 ### 将来的な拡張

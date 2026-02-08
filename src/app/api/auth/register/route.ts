@@ -8,17 +8,10 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
 import { registerApiSchema } from '@/schema/auth';
-import { AUTH_ERROR_MESSAGES, OTP_CONFIG, BCRYPT_COST } from '@/constants/auth';
+import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-/**
- * 6桁のOTPコードを生成
- */
-function generateOtp(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
 
 export async function POST(request: Request) {
   try {
@@ -63,12 +56,11 @@ export async function POST(request: Request) {
     // 既存ユーザーチェック
     const { data: existingUser } = await supabase
       .from('users')
-      .select('id, is_verified')
+      .select('id')
       .eq('email', email)
       .single();
 
-    // 認証済みユーザーが存在する場合はエラー
-    if (existingUser?.is_verified) {
+    if (existingUser) {
       return NextResponse.json(
         {
           success: false,
@@ -84,71 +76,26 @@ export async function POST(request: Request) {
     // パスワードハッシュ化
     const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
-    let userId: string;
+    // 新規ユーザー作成（即時認証済み）
+    const { data: newUser, error: insertError } = await supabase
+      .from('users')
+      .insert({
+        email,
+        password_hash: passwordHash,
+        name: name || null,
+        is_verified: true,
+      })
+      .select('id')
+      .single();
 
-    if (existingUser) {
-      // 未認証ユーザーが存在する場合は上書き更新
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({
-          password_hash: passwordHash,
-          name: name || null,
-        })
-        .eq('id', existingUser.id);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      // 古いOTPトークンを削除
-      await supabase.from('otp_tokens').delete().eq('user_id', existingUser.id);
-
-      userId = existingUser.id;
-    } else {
-      // 新規ユーザー作成
-      const { data: newUser, error: insertError } = await supabase
-        .from('users')
-        .insert({
-          email,
-          password_hash: passwordHash,
-          name: name || null,
-        })
-        .select('id')
-        .single();
-
-      if (insertError || !newUser) {
-        throw insertError;
-      }
-
-      userId = newUser.id;
-    }
-
-    // OTP生成・保存
-    const otp = generateOtp();
-    const expiresAt = new Date(
-      Date.now() + OTP_CONFIG.EXPIRY_MINUTES * 60 * 1000,
-    );
-
-    const { error: otpError } = await supabase.from('otp_tokens').insert({
-      user_id: userId,
-      token: otp,
-      expires_at: expiresAt.toISOString(),
-    });
-
-    if (otpError) {
-      throw otpError;
-    }
-
-    // TODO: メール送信（次のPRで実装）
-    // 開発環境ではOTPをログに出力
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[DEV] OTP for ${email}: ${otp}`);
+    if (insertError || !newUser) {
+      throw insertError;
     }
 
     return NextResponse.json(
       {
         success: true,
-        data: { userId },
+        data: { userId: newUser.id },
         message: AUTH_ERROR_MESSAGES.REGISTER_SUCCESS,
       },
       { status: 201 },

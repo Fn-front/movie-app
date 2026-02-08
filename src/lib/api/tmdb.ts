@@ -90,9 +90,12 @@ function validatePage(page: number): number {
 export async function getPopularMovies(
   page: number = 1,
 ): Promise<TMDbResponse<Movie>> {
-  const response = await tmdbClient.get<TMDbResponse<Movie>>(TMDB_ENDPOINTS.POPULAR, {
-    params: { page: validatePage(page) },
-  });
+  const response = await tmdbClient.get<TMDbResponse<Movie>>(
+    TMDB_ENDPOINTS.POPULAR,
+    {
+      params: { page: validatePage(page) },
+    },
+  );
   return response.data;
 }
 
@@ -159,7 +162,9 @@ export async function getTopRatedMovies(
 export async function getMovieDetail(
   movieId: number | string,
 ): Promise<MovieDetail> {
-  const response = await tmdbClient.get<MovieDetail>(TMDB_ENDPOINTS.MOVIE_DETAIL(movieId));
+  const response = await tmdbClient.get<MovieDetail>(
+    TMDB_ENDPOINTS.MOVIE_DETAIL(movieId),
+  );
   return response.data;
 }
 
@@ -174,14 +179,17 @@ export async function searchMovies(
 ): Promise<TMDbResponse<Movie>> {
   const { query, page = 1, year, genre } = params;
 
-  const response = await tmdbClient.get<TMDbResponse<Movie>>(TMDB_ENDPOINTS.SEARCH, {
-    params: {
-      query,
-      page: validatePage(page),
-      year,
-      with_genres: genre,
+  const response = await tmdbClient.get<TMDbResponse<Movie>>(
+    TMDB_ENDPOINTS.SEARCH,
+    {
+      params: {
+        query,
+        page: validatePage(page),
+        year,
+        with_genres: genre,
+      },
     },
-  });
+  );
   return response.data;
 }
 

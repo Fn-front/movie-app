@@ -15,7 +15,8 @@ import { Heading } from '@/components/ui/heading/heading';
 import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { loginSchema, type LoginFormData } from '@/schema/auth';
-import { AUTH_ERROR_MESSAGES, ERROR_MESSAGES, ROUTES } from '@/constants';
+import { AUTH_ERROR_MESSAGES, ROUTES } from '@/constants';
+import { handleApiError } from '@/utils/error';
 import styles from './loginForm.module.scss';
 
 /**
@@ -54,8 +55,9 @@ export const LoginForm = memo(function LoginForm() {
         }
 
         router.push(ROUTES.HOME);
-      } catch {
-        setApiError(ERROR_MESSAGES.NETWORK_ERROR);
+      } catch (error) {
+        const { message } = handleApiError(error);
+        setApiError(message);
       }
     },
     [router],

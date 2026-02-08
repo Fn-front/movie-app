@@ -14,7 +14,8 @@ import { Heading } from '@/components/ui/heading/heading';
 import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { registerSchema, type RegisterFormData } from '@/schema/auth';
-import { AUTH_ERROR_MESSAGES, ERROR_MESSAGES, ROUTES } from '@/constants';
+import { AUTH_ERROR_MESSAGES, ROUTES } from '@/constants';
+import { handleApiError } from '@/utils/error';
 import styles from './registerForm.module.scss';
 
 /**
@@ -62,8 +63,9 @@ export const RegisterForm = memo(function RegisterForm() {
 
         // ログインページへ遷移
         router.push(ROUTES.LOGIN);
-      } catch {
-        setApiError(ERROR_MESSAGES.NETWORK_ERROR);
+      } catch (error) {
+        const { message } = handleApiError(error);
+        setApiError(message);
       }
     },
     [router],

@@ -1,0 +1,10 @@
+@use '@/styles/variables' as *;
+
+.l_settings {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  padding: $spacing-4;
+}

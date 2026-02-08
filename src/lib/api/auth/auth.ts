@@ -37,3 +37,35 @@ export async function registerUser(
   );
   return response.data;
 }
+
+/**
+ * パスワード変更リクエストの型
+ */
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+/**
+ * パスワード変更レスポンスの型
+ */
+export interface ChangePasswordResponse {
+  success: true;
+  message: string;
+}
+
+/**
+ * パスワード変更
+ *
+ * @param data - パスワード変更データ
+ * @returns パスワード変更レスポンス
+ */
+export async function changePassword(
+  data: ChangePasswordRequest,
+): Promise<ChangePasswordResponse> {
+  const response = await axiosInstance.post<ChangePasswordResponse>(
+    '/api/user/change-password',
+    data,
+  );
+  return response.data;
+}

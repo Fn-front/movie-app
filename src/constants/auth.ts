@@ -20,6 +20,14 @@ export const AUTH_ERROR_MESSAGES = {
   REGISTER_SUCCESS: '登録が完了しました。',
   /** バリデーションエラー */
   VALIDATION_ERROR: '入力内容に誤りがあります。',
+  /** 現在のパスワードが不正 */
+  CURRENT_PASSWORD_INCORRECT: '現在のパスワードが正しくありません。',
+  /** パスワード変更成功 */
+  PASSWORD_CHANGED: 'パスワードを変更しました。',
+  /** パスワード変更失敗 */
+  PASSWORD_CHANGE_FAILED: 'パスワードの変更に失敗しました。',
+  /** 未認証エラー */
+  UNAUTHORIZED: '認証が必要です。ログインしてください。',
 } as const;
 
 /**

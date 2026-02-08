@@ -24,6 +24,8 @@ export const API = {
  * HTTPステータスコード
  */
 export const HTTP_STATUS = {
+  /** 成功 */
+  OK: 200,
   /** 成功（リソース作成） */
   CREATED: 201,
   /** クライアントエラー（バリデーション等） */

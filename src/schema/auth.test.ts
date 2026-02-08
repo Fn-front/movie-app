@@ -1,4 +1,10 @@
-import { registerSchema, registerApiSchema, loginSchema } from './auth';
+import {
+  registerSchema,
+  registerApiSchema,
+  loginSchema,
+  changePasswordSchema,
+  changePasswordApiSchema,
+} from './auth';
 
 describe('registerSchema', () => {
   it('有効な入力でパースが成功する', () => {
@@ -135,5 +141,113 @@ describe('registerApiSchema', () => {
       password: 'Password1',
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe('changePasswordSchema', () => {
+  it('有効な入力でパースが成功する', () => {
+    const result = changePasswordSchema.safeParse({
+      currentPassword: 'OldPassword1',
+      newPassword: 'NewPassword1',
+      confirmNewPassword: 'NewPassword1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('現在のパスワードが空の場合エラーになる', () => {
+    const result = changePasswordSchema.safeParse({
+      currentPassword: '',
+      newPassword: 'NewPassword1',
+      confirmNewPassword: 'NewPassword1',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('新しいパスワードが8文字未満の場合エラーになる', () => {
+    const result = changePasswordSchema.safeParse({
+      currentPassword: 'OldPassword1',
+      newPassword: 'New1',
+      confirmNewPassword: 'New1',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('新しいパスワードに大文字がない場合エラーになる', () => {
+    const result = changePasswordSchema.safeParse({
+      currentPassword: 'OldPassword1',
+      newPassword: 'newpassword1',
+      confirmNewPassword: 'newpassword1',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('新しいパスワードに小文字がない場合エラーになる', () => {
+    const result = changePasswordSchema.safeParse({
+      currentPassword: 'OldPassword1',
+      newPassword: 'NEWPASSWORD1',
+      confirmNewPassword: 'NEWPASSWORD1',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('新しいパスワードに数字がない場合エラーになる', () => {
+    const result = changePasswordSchema.safeParse({
+      currentPassword: 'OldPassword1',
+      newPassword: 'NewPassword',
+      confirmNewPassword: 'NewPassword',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('新しいパスワードが一致しない場合エラーになる', () => {
+    const result = changePasswordSchema.safeParse({
+      currentPassword: 'OldPassword1',
+      newPassword: 'NewPassword1',
+      confirmNewPassword: 'NewPassword2',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('確認パスワードが空の場合エラーになる', () => {
+    const result = changePasswordSchema.safeParse({
+      currentPassword: 'OldPassword1',
+      newPassword: 'NewPassword1',
+      confirmNewPassword: '',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('changePasswordApiSchema', () => {
+  it('有効な入力でパースが成功する', () => {
+    const result = changePasswordApiSchema.safeParse({
+      currentPassword: 'OldPassword1',
+      newPassword: 'NewPassword1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('confirmNewPasswordフィールドがなくても成功する', () => {
+    const result = changePasswordApiSchema.safeParse({
+      currentPassword: 'OldPassword1',
+      newPassword: 'NewPassword1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('currentPasswordが空の場合エラーになる', () => {
+    const result = changePasswordApiSchema.safeParse({
+      currentPassword: '',
+      newPassword: 'NewPassword1',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('newPasswordがポリシーに違反する場合エラーになる', () => {
+    const result = changePasswordApiSchema.safeParse({
+      currentPassword: 'OldPassword1',
+      newPassword: 'short',
+    });
+    expect(result.success).toBe(false);
   });
 });

@@ -106,8 +106,9 @@ export async function GET(request: Request) {
       for (let p = 1; p <= maxPages; p++) {
         const tmdbResponse = await discoverMovies({
           page: p,
-          'primary_release_date.gte': today,
-          'primary_release_date.lte': futureDateStr,
+          'release_date.gte': today,
+          'release_date.lte': futureDateStr,
+          with_release_type: '2|3',
           sort_by: 'popularity.desc',
         });
 

@@ -199,10 +199,12 @@ export async function searchMovies(
 export interface DiscoverMoviesParams {
   /** ページ番号 */
   page?: number;
-  /** 公開日範囲（開始） */
-  'primary_release_date.gte'?: string;
-  /** 公開日範囲（終了） */
-  'primary_release_date.lte'?: string;
+  /** 地域別公開日範囲（開始） */
+  'release_date.gte'?: string;
+  /** 地域別公開日範囲（終了） */
+  'release_date.lte'?: string;
+  /** リリースタイプ（例: '2|3' で劇場公開のみ） */
+  with_release_type?: string;
   /** ソート順 */
   sort_by?: string;
 }

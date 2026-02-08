@@ -9,7 +9,7 @@ import { memo } from 'react';
 
 import { AppLayout } from '@/components/layout/appLayout/appLayout';
 
-import { MovieContent } from '@/features/home/component/movieContent';
+import { MovieContent } from '@/features/home/component/movieContent/movieContent';
 
 /**
  * HomePageコンポーネント

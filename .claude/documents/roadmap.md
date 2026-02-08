@@ -195,64 +195,38 @@
 
 ## フェーズ3: 映画情報表示（1-2週間）
 
-### データベーススキーマ実装
-- [ ] movie_cacheテーブル作成
-  - id, title, poster_path, backdrop_path, release_date, overview, vote_average, popularity, genre_ids
-  - cached_at, updated_at
-  - インデックス: release_date, popularity, cached_at, updated_at
+### Step 1: ホーム画面レイアウト（`feature/home-layout`）
+- [x] root layoutからl_global_container/l_main/l_containerラッパーを削除し簡素化
+- [x] auth/settingsレイアウトをmin-height: 100vhでセンタリング対応
+- [x] HomePageコンポーネント作成（AppLayout + Header/Sidebar/Footer）
+- [x] page.tsxをHomePageに接続しMetadata設定
 
-### ホーム画面
-- [ ] レイアウト実装（Header + Sidebar + Content）
-- [ ] MovieTileコンポーネント実装
-- [ ] 映画一覧取得API実装（`/api/movies`）
-  - DBから最新映画取得日時確認（MAX(cached_at)）
-  - その日時以降の新作のみTMDb APIで取得（差分更新）
-    - primary_release_date.gte, primary_release_date.lte（今日から3ヶ月先）
-    - language=ja-JP, region=JP
-  - 取得した新作をDBに保存（UPSERT）
-  - DBから指定ページの映画を返却（20件/ページ）
-  - sort_byパラメータ対応（release_date, popularity, vote_average）
-- [ ] ソート機能実装
-  - Selectコンポーネント実装
-  - ソート選択肢：公開日順・人気順・評価順
-  - クエリパラメータでソート順を管理
-- [ ] ページネーション実装（20件/ページ）
-- [ ] ローディング状態実装（axios interceptors活用）
-- [ ] エラーハンドリング（axios error handling）
-  - トースト通知実装（5秒表示）
-  - エラータイプ別の色分け
+### Step 2: 映画一覧API + MovieTile + ソート + ページネーション（`feature/home-layout`）
+- [x] TMDb APIクライアントにdiscoverMovies関数を追加
+- [x] 映画一覧API（GET /api/movies）をDBキャッシュ経由で実装
+- [x] 映画定数（SORT_OPTIONS, CACHE_DURATION_HOURS等）を追加
+- [x] moviesQuerySchemaバリデーションを追加
+- [x] APIクライアント（getMovies）を追加
+- [x] MovieTile/MovieTileSkeletonコンポーネントを作成
+- [x] HomePageにソートSelect・映画グリッド・Paginationを統合
+- [x] useHomePageフックでデータ取得・状態管理を実装
+- [x] スキーマ・APIクライアントのテストを追加
 
-### 映画詳細モーダル
-- [ ] Modalコンポーネント実装
-- [ ] MovieDetailコンポーネント実装
-- [ ] 映画詳細取得API実装（`/api/movies/:id`）
-  - キャッシュなし、都度TMDb API呼び出し
-  - リアルタイム情報取得（runtime, genres, cast, crew, videos等）
-- [ ] 背景画像・ポスター表示
-- [ ] ジャンル・評価表示
+### Step 3: 映画詳細モーダル（`feature/movie-detail-modal`）
+- [ ] 映画詳細API（GET /api/movies/:id）を実装
+- [ ] APIクライアントにgetMovieDetailを追加
+- [ ] useMovieDetailフックを作成
+- [ ] MovieDetailModalコンポーネントを作成
+- [ ] MovieDetailContentコンポーネントを作成（バックドロップ・ポスター・ジャンル・評価等）
+- [ ] HomePageにモーダル統合（MovieTileクリックで表示）
+- [ ] テストを追加
 
-### 画像最適化
-- [ ] 画像URLユーティリティ関数実装（`lib/utils/image.ts`）
-  - getTMDbImageUrl関数
-  - 画像サイズ型定義（ImageSize）
-  - 環境変数からベースURL取得
-- [ ] Next.js Imageコンポーネント活用
-  - next/imageを全画像表示に使用
-  - 各コンポーネントでgetTMDbImageUrl使用
-  - width/height指定で最適化
-  - プレースホルダー画像設定（blur/placeholder）
-- [ ] 遅延ロード実装（Next.js Imageのlazy loading）
-- [ ] WebP自動変換（Next.js Image自動対応）
-
-### バッチ更新機能
-- [ ] 映画キャッシュ更新API実装（`/api/cron/update-movies`）
-  - DBの全映画ID取得
-  - 100件ずつバッチでTMDb APIから最新情報取得
-  - vote_average, popularity を更新
-  - Cron Secret認証実装
-- [ ] Vercel Cron Jobs設定
-  - 実行スケジュール: 毎日午前3時（JST）
-  - CRON_SECRET環境変数設定
+### Step 4: バッチ更新API（`feature/batch-update-movies`）
+- [ ] Cron定数を追加
+- [ ] バッチ更新API（POST /api/cron/update-movies）を実装
+- [ ] Vercel Cron設定（vercel.json）を追加
+- [ ] .env.exampleにCRON_SECRETを追加
+- [ ] テストを追加
 
 ---
 

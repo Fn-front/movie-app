@@ -12,8 +12,8 @@ const noto = Noto_Sans_JP({
 });
 
 export const metadata: Metadata = {
-  title: 'テンプレ',
-  description: 'テンプレ',
+  title: 'Movie App',
+  description: '映画ウォッチリスト管理アプリケーション',
 };
 
 export default function RootLayout({
@@ -25,13 +25,7 @@ export default function RootLayout({
     <html lang='ja'>
       <body className={noto.className}>
         <AppSessionProvider>
-          <AppToastProvider>
-            <div className='l_global_container'>
-              <main className='l_main'>
-                <div className='l_container'>{children}</div>
-              </main>
-            </div>
-          </AppToastProvider>
+          <AppToastProvider>{children}</AppToastProvider>
         </AppSessionProvider>
       </body>
     </html>

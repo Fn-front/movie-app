@@ -1,7 +1,12 @@
+import type { Metadata } from 'next';
+
+import { HomePage } from '@/features/home/homePage/homePage';
+
+export const metadata: Metadata = {
+  title: 'ホーム | Movie App',
+  description: '公開予定の映画一覧を確認できます',
+};
+
 export default function Home() {
-  return (
-    <>
-      <h2 className='c_h2'>テンプレ</h2>
-    </>
-  );
+  return <HomePage />;
 }

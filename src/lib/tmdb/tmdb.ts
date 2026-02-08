@@ -194,6 +194,44 @@ export async function searchMovies(
 }
 
 /**
+ * Discoverパラメータ型
+ */
+export interface DiscoverMoviesParams {
+  /** ページ番号 */
+  page?: number;
+  /** 地域別公開日範囲（開始） */
+  'release_date.gte'?: string;
+  /** 地域別公開日範囲（終了） */
+  'release_date.lte'?: string;
+  /** リリースタイプ（例: '2|3' で劇場公開のみ） */
+  with_release_type?: string;
+  /** ソート順 */
+  sort_by?: string;
+}
+
+/**
+ * 映画をDiscoverで取得（公開日範囲指定対応）
+ *
+ * @param params - Discoverパラメータ
+ * @returns 映画リスト
+ */
+export async function discoverMovies(
+  params: DiscoverMoviesParams = {},
+): Promise<TMDbResponse<Movie>> {
+  const { page = 1, ...rest } = params;
+  const response = await tmdbClient.get<TMDbResponse<Movie>>(
+    TMDB_ENDPOINTS.DISCOVER,
+    {
+      params: {
+        page: validatePage(page),
+        ...rest,
+      },
+    },
+  );
+  return response.data;
+}
+
+/**
  * ジャンル一覧を取得
  *
  * @returns ジャンル一覧

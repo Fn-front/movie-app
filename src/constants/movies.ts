@@ -66,3 +66,8 @@ export const EXCLUDED_KEYWORD_IDS = [
  * TMDb Discover APIのwithout_keywordsパラメータ値
  */
 export const EXCLUDED_KEYWORDS_PARAM = EXCLUDED_KEYWORD_IDS.join('|');
+
+/**
+ * TMDb Discover APIで除外する原語（ISO 639-1）
+ */
+export const EXCLUDED_LANGUAGES = ['ko', 'zh'] as const;

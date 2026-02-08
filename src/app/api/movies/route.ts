@@ -14,6 +14,7 @@ import {
   MOVIES_FETCH_MONTHS_AHEAD,
   RELEASE_TYPE_MAP,
   EXCLUDED_KEYWORDS_PARAM,
+  EXCLUDED_LANGUAGES,
 } from '@/constants';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 
@@ -152,9 +153,12 @@ export async function GET(request: Request) {
 
         if (tmdbResponse.results.length === 0) break;
 
-        // adultコンテンツを除外
+        // adultコンテンツ・除外言語を除外
+        const excludedLangs: readonly string[] = EXCLUDED_LANGUAGES;
         const filteredResults = tmdbResponse.results.filter(
-          (movie) => !movie.adult,
+          (movie) =>
+            !movie.adult &&
+            !excludedLangs.includes(movie.original_language),
         );
 
         if (filteredResults.length === 0) continue;

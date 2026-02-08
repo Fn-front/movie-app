@@ -132,7 +132,7 @@
 
 - [x] 1. usersテーブルにroleカラム追加 + 管理者Seeder
 - [x] 2. 新規登録フロー（フォーム + API + パスワードハッシュ化）
-- [ ] 3. ログイン・セッション管理
+- [x] 3. ログイン・セッション管理
 - [ ] 4. パスワード変更機能
 - [ ] 5. セキュリティ対策（レート制限、CSRF、XSS）
 - [ ] 6. UX改善（ローディング、エラーメッセージ、自動遷移）
@@ -154,11 +154,11 @@
   - Supabase SQLまたはスクリプトで管理者ユーザーを追加
 
 ### ログイン・セッション管理（NextAuth.js）
-- [ ] ログインフォームUI実装（react-hook-form + zod）
-- [ ] NextAuth.js signIn()統合
-- [ ] Session Callbacksカスタマイズ（JWT、24時間有効期限）
-- [ ] NextAuth.js Middlewareでルート保護
-- [ ] axiosインターセプターでセッション管理
+- [x] ログインフォームUI実装（react-hook-form + zod）
+- [x] NextAuth.js signIn()統合
+- [x] Session Callbacksカスタマイズ（JWT、24時間有効期限）
+- [x] NextAuth.js Middlewareでルート保護
+- [x] axiosインターセプターでセッション管理
 
 ### パスワード変更機能
 - [ ] パスワード変更機能実装

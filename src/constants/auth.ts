@@ -46,6 +46,8 @@ export const VALIDATION_MESSAGES = {
   PASSWORD_NUMBER: 'パスワードに数字を含めてください',
   /** パスワード確認必須 */
   CONFIRM_PASSWORD_REQUIRED: 'パスワード（確認）を入力してください',
+  /** パスワード必須 */
+  PASSWORD_REQUIRED: 'パスワードを入力してください',
   /** パスワード不一致 */
   PASSWORD_MISMATCH: 'パスワードが一致しません',
   /** ユーザー名が長すぎる */

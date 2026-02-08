@@ -18,8 +18,8 @@ import { MovieTile } from '@/features/home/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/features/home/movieTileSkeleton/movieTileSkeleton';
 import { GenreFilterModal } from '@/features/home/genreFilterModal/genreFilterModal';
 
-import { useHomePage } from './useHomePage';
-import styles from './homePage.module.scss';
+import { useHomePage } from '../hooks/useHomePage';
+import styles from '../homePage.module.scss';
 
 /**
  * MovieContentコンポーネント

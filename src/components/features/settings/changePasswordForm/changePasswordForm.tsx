@@ -63,7 +63,8 @@ export const ChangePasswordForm = memo(function ChangePasswordForm() {
         reset();
       } catch (error) {
         const { message } = handleApiError(error);
-        const errorMessage = message ?? AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED;
+        const errorMessage =
+          message ?? AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED;
         setApiError(errorMessage);
         toast({
           title: 'パスワード変更エラー',

@@ -2,12 +2,15 @@
  * Homeのカスタムフック
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSession } from 'next-auth/react';
 
 import { getMovies } from '@/lib/api/movies/movies';
 import type { MovieCacheItem, PaginationInfo } from '@/lib/api/movies/movies';
+import { getSavedFilter, saveFilter } from '@/lib/api/filters/filters';
 import { useToast } from '@/hooks/useToast';
 import { DEFAULT_SORT, DEFAULT_RELEASE_TYPE } from '@/constants';
+import type { FilterConditions } from '@/schema/filters';
 
 /**
  * 日付範囲フィルタの型
@@ -62,6 +65,38 @@ export interface UseHomeReturn {
 }
 
 /**
+ * 現在のフィルター状態からFilterConditionsを構築
+ */
+function buildFilterConditions(
+  sortBy: string,
+  releaseType: 'theatrical' | 'streaming',
+  genreIds: number[],
+  dateRange: DateRange,
+  isRevival: boolean | undefined,
+): FilterConditions {
+  const conditions: FilterConditions = {};
+  if (sortBy !== DEFAULT_SORT) {
+    conditions.sort_by = sortBy as FilterConditions['sort_by'];
+  }
+  if (releaseType !== DEFAULT_RELEASE_TYPE) {
+    conditions.release_type = releaseType;
+  }
+  if (genreIds.length > 0) {
+    conditions.genre_ids = genreIds;
+  }
+  if (dateRange.gte) {
+    conditions.date_range_gte = dateRange.gte;
+  }
+  if (dateRange.lte) {
+    conditions.date_range_lte = dateRange.lte;
+  }
+  if (isRevival !== undefined) {
+    conditions.is_revival = isRevival;
+  }
+  return conditions;
+}
+
+/**
  * Homeのカスタムフック
  */
 export function useHome(): UseHomeReturn {
@@ -81,6 +116,10 @@ export function useHome(): UseHomeReturn {
   );
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const { toast } = useToast();
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === 'authenticated' && !!session?.user;
+  const savedFilterLoaded = useRef(false);
+  const initialFetchDone = useRef(false);
 
   const fetchMovies = useCallback(
     async (
@@ -122,7 +161,72 @@ export function useHome(): UseHomeReturn {
     [toast],
   );
 
+  // 初回マウント時に保存済みフィルターを読み込み
   useEffect(() => {
+    if (status === 'loading' || savedFilterLoaded.current) return;
+    savedFilterLoaded.current = true;
+
+    if (!isAuthenticated) {
+      // 未ログイン: デフォルトで映画取得
+      initialFetchDone.current = true;
+      fetchMovies(1, DEFAULT_SORT, DEFAULT_RELEASE_TYPE, [], {}, undefined);
+      return;
+    }
+
+    // ログイン済み: 保存フィルターを取得して適用
+    (async () => {
+      try {
+        const conditions = await getSavedFilter();
+        const hasConditions = Object.keys(conditions).length > 0;
+
+        if (hasConditions) {
+          const newSortBy = conditions.sort_by || DEFAULT_SORT;
+          const newReleaseType = conditions.release_type || DEFAULT_RELEASE_TYPE;
+          const newGenreIds = conditions.genre_ids || [];
+          const newDateRange: DateRange = {
+            gte: conditions.date_range_gte,
+            lte: conditions.date_range_lte,
+          };
+          const newIsRevival = conditions.is_revival;
+
+          setSortBy(newSortBy);
+          setReleaseType(newReleaseType);
+          setSelectedGenreIds(newGenreIds);
+          setDateRange(newDateRange);
+          setIsRevivalFilter(newIsRevival);
+
+          initialFetchDone.current = true;
+          fetchMovies(
+            1,
+            newSortBy,
+            newReleaseType,
+            newGenreIds,
+            newDateRange,
+            newIsRevival,
+          );
+        } else {
+          initialFetchDone.current = true;
+          fetchMovies(
+            1,
+            DEFAULT_SORT,
+            DEFAULT_RELEASE_TYPE,
+            [],
+            {},
+            undefined,
+          );
+        }
+      } catch {
+        // フィルター取得失敗時はデフォルトで映画取得
+        initialFetchDone.current = true;
+        fetchMovies(1, DEFAULT_SORT, DEFAULT_RELEASE_TYPE, [], {}, undefined);
+      }
+    })();
+  }, [status, isAuthenticated, fetchMovies]);
+
+  // state変更時の映画再取得（初回読み込み後のみ）
+  useEffect(() => {
+    if (!initialFetchDone.current) return;
+
     fetchMovies(
       page,
       sortBy,
@@ -141,6 +245,19 @@ export function useHome(): UseHomeReturn {
     fetchMovies,
   ]);
 
+  /**
+   * フィルター条件をfire-and-forgetで保存
+   */
+  const saveFilterIfAuthenticated = useCallback(
+    (conditions: FilterConditions) => {
+      if (!isAuthenticated) return;
+      saveFilter(conditions).catch(() => {
+        // fire-and-forget: 保存失敗は無視
+      });
+    },
+    [isAuthenticated],
+  );
+
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
     const main = document.querySelector('main');
@@ -149,17 +266,44 @@ export function useHome(): UseHomeReturn {
     }
   }, []);
 
-  const handleSortChange = useCallback((value: string) => {
-    setSortBy(value);
-    setPage(1);
-  }, []);
+  const handleSortChange = useCallback(
+    (value: string) => {
+      setSortBy(value);
+      setPage(1);
+      saveFilterIfAuthenticated(
+        buildFilterConditions(
+          value,
+          releaseType,
+          selectedGenreIds,
+          dateRange,
+          isRevivalFilter,
+        ),
+      );
+    },
+    [
+      releaseType,
+      selectedGenreIds,
+      dateRange,
+      isRevivalFilter,
+      saveFilterIfAuthenticated,
+    ],
+  );
 
   const handleReleaseTypeChange = useCallback(
     (value: 'theatrical' | 'streaming') => {
       setReleaseType(value);
       setPage(1);
+      saveFilterIfAuthenticated(
+        buildFilterConditions(
+          sortBy,
+          value,
+          selectedGenreIds,
+          dateRange,
+          isRevivalFilter,
+        ),
+      );
     },
-    [],
+    [sortBy, selectedGenreIds, dateRange, isRevivalFilter, saveFilterIfAuthenticated],
   );
 
   const handleFilterApply = useCallback(
@@ -173,8 +317,17 @@ export function useHome(): UseHomeReturn {
       setIsRevivalFilter(isRevival);
       setPage(1);
       setIsFilterModalOpen(false);
+      saveFilterIfAuthenticated(
+        buildFilterConditions(
+          sortBy,
+          releaseType,
+          genreIds,
+          newDateRange,
+          isRevival,
+        ),
+      );
     },
-    [],
+    [sortBy, releaseType, saveFilterIfAuthenticated],
   );
 
   const handleFilterModalOpen = useCallback(() => {

@@ -229,13 +229,12 @@
 - [x] テストを追加
 
 ### Step 5: フィルター条件保存機能（`feature/saved-filters`）
-- [ ] saved_filtersテーブルを作成（user_id, name, filter_conditions等）
-- [ ] RLSポリシー設定（ユーザーは自分のフィルターのみ操作可能）
-- [ ] フィルター保存API（POST /api/filters）を実装
-- [ ] フィルター一覧取得API（GET /api/filters）を実装
-- [ ] フィルター削除API（DELETE /api/filters/:id）を実装
-- [ ] FilterModalに保存・読み込みUIを追加
-- [ ] テストを追加
+- [x] saved_filtersテーブルを作成（user_id, filter_conditions等）
+- [x] RLSポリシー設定（ユーザーは自分のフィルターのみ操作可能）
+- [x] フィルター保存API（PUT /api/filters）を実装
+- [x] フィルター取得API（GET /api/filters）を実装
+- [x] useHomeで初回読み込み時にフィルター自動適用・変更時に自動保存
+- [x] テストを追加
 
 ### Step 6: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装

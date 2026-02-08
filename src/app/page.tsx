@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { HomePage } from '@/features/home/homePage/homePage';
+import { HomePage } from '@/features/home/home';
 
 export const metadata: Metadata = {
   title: 'ホーム | Movie App',

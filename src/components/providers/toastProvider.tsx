@@ -8,7 +8,7 @@
 
 import { memo, type ReactNode } from 'react';
 
-import { ToastProvider } from '@/components/ui/toast';
+import { ToastProvider } from '@/components/ui/toast/toast';
 import { ToastContainer } from '@/features/toast/toastContainer/toastContainer';
 
 interface AppToastProviderProps {

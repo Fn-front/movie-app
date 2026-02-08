@@ -14,12 +14,12 @@ import { Pagination } from '@/components/ui/pagination/pagination';
 import { Button } from '@/components/ui/button/button';
 import { FilterIcon } from '@/components/icons/filterIcon/filterIcon';
 import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
-import { MovieTile } from '@/features/home/movieTile/movieTile';
-import { MovieTileSkeleton } from '@/features/home/movieTileSkeleton/movieTileSkeleton';
-import { GenreFilterModal } from '@/features/home/genreFilterModal/genreFilterModal';
+import { MovieTile } from '@/features/home/component/movieTile/movieTile';
+import { MovieTileSkeleton } from '@/features/home/component/movieTileSkeleton/movieTileSkeleton';
+import { GenreFilterModal } from '@/features/home/component/genreFilterModal/genreFilterModal';
 
-import { useHomePage } from '../hooks/useHomePage';
-import styles from '../homePage.module.scss';
+import { useHome } from '@/features/home/hooks/useHome';
+import styles from '@/features/home/home.module.scss';
 
 /**
  * MovieContentコンポーネント
@@ -40,7 +40,7 @@ export const MovieContent = memo(function MovieContent() {
     handleGenreFilterApply,
     handleFilterModalOpen,
     handleFilterModalClose,
-  } = useHomePage();
+  } = useHome();
 
   const sortOptions = useMemo(
     () =>

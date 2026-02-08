@@ -8,7 +8,7 @@
 
 import { memo, useCallback } from 'react';
 
-import { Toast } from '@/components/ui/toast';
+import { Toast } from '@/components/ui/toast/toast';
 import { useToast } from '@/hooks/useToast';
 
 /**

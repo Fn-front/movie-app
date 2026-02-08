@@ -1,32 +1,26 @@
 /**
  * AppLayoutコンポーネント
+ * Header/Sidebar/Footerを内包する共通レイアウト
  */
 
 'use client';
 
-import { type HTMLAttributes, type ReactNode, memo } from 'react';
+import { type ReactNode, memo } from 'react';
+
+import { Header } from '@/components/layout/header/header';
+import { Sidebar } from '@/components/layout/sidebar/sidebar';
+import { Footer } from '@/components/layout/footer/footer';
 
 import styles from './appLayout.module.scss';
 
 /**
  * AppLayoutコンポーネントのプロパティ
  */
-export interface AppLayoutProps extends Omit<
-  HTMLAttributes<HTMLDivElement>,
-  'children'
-> {
-  /** ヘッダーコンポーネント */
-  header?: ReactNode;
-  /** サイドバーコンポーネント */
-  sidebar?: ReactNode;
-  /** フッターコンポーネント */
-  footer?: ReactNode;
+export interface AppLayoutProps {
   /** メインコンテンツ */
   children: ReactNode;
   /** サイドバーを表示するか */
   showSidebar?: boolean;
-  /** カスタムクラス名 */
-  className?: string;
 }
 
 /**
@@ -34,40 +28,34 @@ export interface AppLayoutProps extends Omit<
  *
  * @example
  * ```tsx
- * <AppLayout
- *   header={<Header ... />}
- *   sidebar={<Sidebar ... />}
- *   footer={<Footer ... />}
- *   showSidebar={isLoggedIn}
- * >
- *   <HomePage />
+ * <AppLayout>
+ *   <MovieContent />
  * </AppLayout>
  * ```
  */
 export const AppLayout = memo<AppLayoutProps>(function AppLayout({
-  header,
-  sidebar,
-  footer,
   children,
   showSidebar = true,
-  className,
-  ...props
 }) {
-  const classNames = [styles.c_app_layout, className].filter(Boolean).join(' ');
-
   return (
-    <div className={classNames} {...props}>
-      {header && <div className={styles.c_app_layout__header}>{header}</div>}
+    <div className={styles.c_app_layout}>
+      <div className={styles.c_app_layout__header}>
+        <Header />
+      </div>
 
       <div className={styles.c_app_layout__body}>
-        {showSidebar && sidebar && (
-          <div className={styles.c_app_layout__sidebar}>{sidebar}</div>
+        {showSidebar && (
+          <div className={styles.c_app_layout__sidebar}>
+            <Sidebar />
+          </div>
         )}
 
         <main className={styles.c_app_layout__main}>{children}</main>
       </div>
 
-      {footer && <div className={styles.c_app_layout__footer}>{footer}</div>}
+      <div className={styles.c_app_layout__footer}>
+        <Footer />
+      </div>
     </div>
   );
 });

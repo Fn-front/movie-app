@@ -19,6 +19,35 @@
     color: $text-primary;
   }
 
+  &__controls {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+    flex-shrink: 0;
+  }
+
+  &__filter_button {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: $spacing-1;
+  }
+
+  &__filter_count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 $spacing-1;
+    font-size: 1rem;
+    font-weight: $font-weight-bold;
+    color: #ffffff;
+    background-color: $primary-500;
+    border-radius: $border-radius-full;
+    line-height: 1;
+  }
+
   &__sort {
     width: 180px;
     flex-shrink: 0;

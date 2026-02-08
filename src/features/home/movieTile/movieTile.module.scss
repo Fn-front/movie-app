@@ -64,6 +64,15 @@
     @include text-truncate-multiline(2);
   }
 
+  &__genres {
+    margin: 0;
+    font-size: $font-size-xs;
+    color: $text-secondary;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
   &__date {
     margin: 0;
     font-size: $font-size-xs;

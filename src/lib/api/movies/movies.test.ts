@@ -35,6 +35,7 @@ describe('movies API client', () => {
               vote_average: 7.5,
               popularity: 100.0,
               genre_ids: [28, 12],
+              release_type: 'theatrical',
             },
           ],
           pagination: {
@@ -42,6 +43,10 @@ describe('movies API client', () => {
             totalPages: 5,
             totalItems: 100,
             itemsPerPage: 20,
+          },
+          genres: {
+            28: 'アクション',
+            12: 'アドベンチャー',
           },
         },
       },
@@ -58,6 +63,10 @@ describe('movies API client', () => {
       expect(result.data.movies).toHaveLength(1);
       expect(result.data.movies[0].title).toBe('テスト映画');
       expect(result.data.pagination.currentPage).toBe(1);
+      expect(result.data.genres).toEqual({
+        28: 'アクション',
+        12: 'アドベンチャー',
+      });
     });
 
     it('ページとソート指定で映画一覧を取得できること', async () => {
@@ -67,6 +76,46 @@ describe('movies API client', () => {
 
       expect(mockedAxios.get).toHaveBeenCalledWith('/api/movies', {
         params: { page: 2, sort_by: 'popularity' },
+      });
+    });
+
+    it('release_typeを指定して映画一覧を取得できること', async () => {
+      mockedAxios.get.mockResolvedValue(mockResponse);
+
+      await getMovies({ release_type: 'streaming' });
+
+      expect(mockedAxios.get).toHaveBeenCalledWith('/api/movies', {
+        params: { release_type: 'streaming' },
+      });
+    });
+
+    it('genre_idsを指定して映画一覧を取得できること', async () => {
+      mockedAxios.get.mockResolvedValue(mockResponse);
+
+      await getMovies({ genre_ids: '28,12' });
+
+      expect(mockedAxios.get).toHaveBeenCalledWith('/api/movies', {
+        params: { genre_ids: '28,12' },
+      });
+    });
+
+    it('全パラメータを指定して映画一覧を取得できること', async () => {
+      mockedAxios.get.mockResolvedValue(mockResponse);
+
+      await getMovies({
+        page: 2,
+        sort_by: 'popularity',
+        release_type: 'streaming',
+        genre_ids: '28,12,878',
+      });
+
+      expect(mockedAxios.get).toHaveBeenCalledWith('/api/movies', {
+        params: {
+          page: 2,
+          sort_by: 'popularity',
+          release_type: 'streaming',
+          genre_ids: '28,12,878',
+        },
       });
     });
 

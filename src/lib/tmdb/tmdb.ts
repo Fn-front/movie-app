@@ -169,6 +169,22 @@ export async function getMovieDetail(
 }
 
 /**
+ * 映画のキーワード一覧を取得
+ *
+ * @param movieId - 映画ID
+ * @returns キーワードID配列
+ */
+export async function getMovieKeywordIds(
+  movieId: number | string,
+): Promise<number[]> {
+  const response = await tmdbClient.get<{
+    id: number;
+    keywords: { id: number; name: string }[];
+  }>(TMDB_ENDPOINTS.MOVIE_KEYWORDS(movieId));
+  return response.data.keywords.map((k) => k.id);
+}
+
+/**
  * 映画を検索
  *
  * @param params - 検索パラメータ
@@ -207,6 +223,8 @@ export interface DiscoverMoviesParams {
   with_release_type?: string;
   /** ソート順 */
   sort_by?: string;
+  /** 除外するキーワードID（パイプ区切り） */
+  without_keywords?: string;
 }
 
 /**
@@ -224,6 +242,7 @@ export async function discoverMovies(
     {
       params: {
         page: validatePage(page),
+        include_adult: false,
         ...rest,
       },
     },

@@ -10,6 +10,14 @@ import { useToast } from '@/hooks/useToast';
 import { DEFAULT_SORT, DEFAULT_RELEASE_TYPE } from '@/constants';
 
 /**
+ * 日付範囲フィルタの型
+ */
+export interface DateRange {
+  gte?: string;
+  lte?: string;
+}
+
+/**
  * useHomeフックの返り値
  */
 export interface UseHomeReturn {
@@ -29,6 +37,10 @@ export interface UseHomeReturn {
   genres: Record<number, string>;
   /** 選択中のジャンルID */
   selectedGenreIds: number[];
+  /** 日付範囲フィルタ */
+  dateRange: DateRange;
+  /** リバイバルフィルタ */
+  isRevivalFilter: boolean | undefined;
   /** フィルターモーダル開閉状態 */
   isFilterModalOpen: boolean;
   /** ページ変更 */
@@ -37,8 +49,12 @@ export interface UseHomeReturn {
   handleSortChange: (value: string) => void;
   /** リリースタイプ変更 */
   handleReleaseTypeChange: (value: 'theatrical' | 'streaming') => void;
-  /** ジャンルフィルター適用 */
-  handleGenreFilterApply: (ids: number[]) => void;
+  /** フィルター適用（ジャンル + 日付 + リバイバル） */
+  handleFilterApply: (
+    genreIds: number[],
+    dateRange: DateRange,
+    isRevival: boolean | undefined,
+  ) => void;
   /** フィルターモーダルを開く */
   handleFilterModalOpen: () => void;
   /** フィルターモーダルを閉じる */
@@ -59,6 +75,10 @@ export function useHome(): UseHomeReturn {
   );
   const [genres, setGenres] = useState<Record<number, string>>({});
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
+  const [dateRange, setDateRange] = useState<DateRange>({});
+  const [isRevivalFilter, setIsRevivalFilter] = useState<boolean | undefined>(
+    undefined,
+  );
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const { toast } = useToast();
 
@@ -68,6 +88,8 @@ export function useHome(): UseHomeReturn {
       currentSortBy: string,
       currentReleaseType: 'theatrical' | 'streaming',
       currentGenreIds: number[],
+      currentDateRange: DateRange,
+      currentIsRevival: boolean | undefined,
     ) => {
       setIsLoading(true);
       try {
@@ -80,6 +102,9 @@ export function useHome(): UseHomeReturn {
           release_type: currentReleaseType,
           genre_ids:
             currentGenreIds.length > 0 ? currentGenreIds.join(',') : undefined,
+          release_date_gte: currentDateRange.gte || undefined,
+          release_date_lte: currentDateRange.lte || undefined,
+          is_revival: currentIsRevival,
         });
         setMovies(response.data.movies);
         setPagination(response.data.pagination);
@@ -98,12 +123,30 @@ export function useHome(): UseHomeReturn {
   );
 
   useEffect(() => {
-    fetchMovies(page, sortBy, releaseType, selectedGenreIds);
-  }, [page, sortBy, releaseType, selectedGenreIds, fetchMovies]);
+    fetchMovies(
+      page,
+      sortBy,
+      releaseType,
+      selectedGenreIds,
+      dateRange,
+      isRevivalFilter,
+    );
+  }, [
+    page,
+    sortBy,
+    releaseType,
+    selectedGenreIds,
+    dateRange,
+    isRevivalFilter,
+    fetchMovies,
+  ]);
 
   const handlePageChange = useCallback((newPage: number) => {
     setPage(newPage);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const main = document.querySelector('main');
+    if (main) {
+      main.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, []);
 
   const handleSortChange = useCallback((value: string) => {
@@ -119,11 +162,20 @@ export function useHome(): UseHomeReturn {
     [],
   );
 
-  const handleGenreFilterApply = useCallback((ids: number[]) => {
-    setSelectedGenreIds(ids);
-    setPage(1);
-    setIsFilterModalOpen(false);
-  }, []);
+  const handleFilterApply = useCallback(
+    (
+      genreIds: number[],
+      newDateRange: DateRange,
+      isRevival: boolean | undefined,
+    ) => {
+      setSelectedGenreIds(genreIds);
+      setDateRange(newDateRange);
+      setIsRevivalFilter(isRevival);
+      setPage(1);
+      setIsFilterModalOpen(false);
+    },
+    [],
+  );
 
   const handleFilterModalOpen = useCallback(() => {
     setIsFilterModalOpen(true);
@@ -143,11 +195,13 @@ export function useHome(): UseHomeReturn {
       releaseType,
       genres,
       selectedGenreIds,
+      dateRange,
+      isRevivalFilter,
       isFilterModalOpen,
       handlePageChange,
       handleSortChange,
       handleReleaseTypeChange,
-      handleGenreFilterApply,
+      handleFilterApply,
       handleFilterModalOpen,
       handleFilterModalClose,
     }),
@@ -160,11 +214,13 @@ export function useHome(): UseHomeReturn {
       releaseType,
       genres,
       selectedGenreIds,
+      dateRange,
+      isRevivalFilter,
       isFilterModalOpen,
       handlePageChange,
       handleSortChange,
       handleReleaseTypeChange,
-      handleGenreFilterApply,
+      handleFilterApply,
       handleFilterModalOpen,
       handleFilterModalClose,
     ],

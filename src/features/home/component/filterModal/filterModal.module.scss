@@ -1,0 +1,151 @@
+@use '@/styles/variables' as *;
+
+.c_filter {
+  &__modal {
+    max-width: 600px;
+  }
+
+  &__section {
+    margin-bottom: $spacing-5;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  &__section_title {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    margin-bottom: $spacing-3;
+  }
+
+  &__date_range {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+  }
+
+  &__date_field {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-1;
+    flex: 1;
+  }
+
+  &__date_label {
+    font-size: $font-size-xs;
+    color: $text-secondary;
+  }
+
+  &__date_input {
+    width: 100%;
+    padding: $spacing-2;
+    font-size: $font-size-sm;
+    border: $border-width-1 solid $border-color;
+    border-radius: $border-radius-md;
+    background-color: $background-paper;
+    color: $text-primary;
+
+    &:focus {
+      outline: none;
+      border-color: $primary-500;
+    }
+  }
+
+  &__date_separator {
+    font-size: $font-size-sm;
+    color: $text-secondary;
+    padding-top: $spacing-4;
+  }
+
+  &__revival {
+    display: flex;
+    gap: $spacing-2;
+    border: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  &__radio_item {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+    padding: $spacing-2 $spacing-4;
+    border: $border-width-1 solid $border-color;
+    border-radius: $border-radius-lg;
+    cursor: pointer;
+    transition: $transition-all;
+
+    &:has(input:checked) {
+      border-color: $primary-500;
+      background-color: $primary-50;
+
+      .c_filter__label {
+        color: $primary-700;
+        font-weight: $font-weight-medium;
+      }
+    }
+  }
+
+  &__radio {
+    display: none;
+  }
+
+  &__visually_hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  &__tag_grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-2;
+  }
+
+  &__tag {
+    cursor: pointer;
+  }
+
+  &__tag_input {
+    display: none;
+  }
+
+  &__tag_label {
+    display: inline-block;
+    padding: $spacing-1 $spacing-3;
+    font-size: $font-size-sm;
+    color: $text-primary;
+    background-color: $background-secondary;
+    border: $border-width-1 solid $border-color;
+    border-radius: $border-radius-full;
+    user-select: none;
+    transition: $transition-all;
+
+    .c_filter__tag_input:checked + & {
+      color: $primary-700;
+      background-color: $primary-50;
+      border-color: $primary-500;
+      font-weight: $font-weight-medium;
+    }
+  }
+
+  &__label {
+    font-size: $font-size-sm;
+    color: $text-primary;
+    user-select: none;
+  }
+
+  &__footer {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+  }
+}

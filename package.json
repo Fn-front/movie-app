@@ -31,6 +31,7 @@
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "date-fns": "^4.1.0",
+    "ical.js": "^2.2.1",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
     "react": "18.3.1",

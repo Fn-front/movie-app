@@ -219,7 +219,25 @@
 - [x] ジャンルフィルターモーダルを作成（複数選択可）
 - [x] テストを追加
 
-### Step 4: 映画詳細モーダル（`feature/movie-detail-modal`）
+### Step 4: 映画.com iCalフィードによるTMDbデータ補完（`feature/tmdb-integration`）
+- [x] ical.js依存関係を追加
+- [x] 映画.com iCalフィード定数を追加
+- [x] iCal取得・パース処理を実装（src/lib/eiga/eiga.ts）
+- [x] TMDb照合・DB補完ロジックを実装（src/lib/eiga/syncEigaMovies.ts）
+- [x] Cron APIルートを実装（src/app/api/cron/sync-movies/route.ts）
+- [x] Vercel Cron設定を追加（vercel.json）
+- [x] テストを追加
+
+### Step 5: フィルター条件保存機能（`feature/saved-filters`）
+- [ ] saved_filtersテーブルを作成（user_id, name, filter_conditions等）
+- [ ] RLSポリシー設定（ユーザーは自分のフィルターのみ操作可能）
+- [ ] フィルター保存API（POST /api/filters）を実装
+- [ ] フィルター一覧取得API（GET /api/filters）を実装
+- [ ] フィルター削除API（DELETE /api/filters/:id）を実装
+- [ ] FilterModalに保存・読み込みUIを追加
+- [ ] テストを追加
+
+### Step 6: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装
 - [ ] APIクライアントにgetMovieDetailを追加
 - [ ] useMovieDetailフックを作成
@@ -228,7 +246,7 @@
 - [ ] HomePageにモーダル統合（MovieTileクリックで表示）
 - [ ] テストを追加
 
-### Step 5: バッチ更新API（`feature/batch-update-movies`）
+### Step 7: バッチ更新API（`feature/batch-update-movies`）
 - [ ] Cron定数を追加
 - [ ] バッチ更新API（POST /api/cron/update-movies）を実装
 - [ ] Vercel Cron設定（vercel.json）を追加

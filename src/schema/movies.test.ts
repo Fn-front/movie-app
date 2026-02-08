@@ -115,6 +115,77 @@ describe('moviesQuerySchema', () => {
     });
   });
 
+  describe('release_date_gte', () => {
+    it('デフォルトでundefinedであること', () => {
+      const result = moviesQuerySchema.parse({});
+      expect(result.release_date_gte).toBeUndefined();
+    });
+
+    it('有効な日付形式を受け入れること', () => {
+      const result = moviesQuerySchema.parse({
+        release_date_gte: '2025-01-15',
+      });
+      expect(result.release_date_gte).toBe('2025-01-15');
+    });
+
+    it('無効な日付形式を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_gte: '2025/01/15',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('不完全な日付形式を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_gte: '2025-1-5',
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('release_date_lte', () => {
+    it('デフォルトでundefinedであること', () => {
+      const result = moviesQuerySchema.parse({});
+      expect(result.release_date_lte).toBeUndefined();
+    });
+
+    it('有効な日付形式を受け入れること', () => {
+      const result = moviesQuerySchema.parse({
+        release_date_lte: '2025-12-31',
+      });
+      expect(result.release_date_lte).toBe('2025-12-31');
+    });
+
+    it('無効な日付形式を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_lte: 'invalid',
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('is_revival', () => {
+    it('デフォルトでundefinedであること', () => {
+      const result = moviesQuerySchema.parse({});
+      expect(result.is_revival).toBeUndefined();
+    });
+
+    it('"true"をtrueに変換すること', () => {
+      const result = moviesQuerySchema.parse({ is_revival: 'true' });
+      expect(result.is_revival).toBe(true);
+    });
+
+    it('"false"をfalseに変換すること', () => {
+      const result = moviesQuerySchema.parse({ is_revival: 'false' });
+      expect(result.is_revival).toBe(false);
+    });
+
+    it('無効な値を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({ is_revival: 'yes' });
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe('複合テスト', () => {
     it('pageとsort_byの両方を受け入れること', () => {
       const result = moviesQuerySchema.parse({
@@ -131,11 +202,17 @@ describe('moviesQuerySchema', () => {
         sort_by: 'popularity',
         release_type: 'streaming',
         genre_ids: '28,12',
+        release_date_gte: '2025-01-01',
+        release_date_lte: '2025-06-30',
+        is_revival: 'true',
       });
       expect(result.page).toBe(2);
       expect(result.sort_by).toBe('popularity');
       expect(result.release_type).toBe('streaming');
       expect(result.genre_ids).toBe('28,12');
+      expect(result.release_date_gte).toBe('2025-01-01');
+      expect(result.release_date_lte).toBe('2025-06-30');
+      expect(result.is_revival).toBe(true);
     });
   });
 });

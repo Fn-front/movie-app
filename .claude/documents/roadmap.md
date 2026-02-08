@@ -53,7 +53,7 @@
   - [x] Loading（全画面オーバーレイ対応、React.memo + aria-label）
   - [x] 全インタラクティブ要素にaria-label実装
 - [ ] カスタムフック基礎実装
-  - [ ] useToast（トースト通知管理）
+  - [x] useToast（トースト通知管理）
   - [ ] useAuth（認証状態管理）
   - [ ] useMovies（映画データ取得）
   - [ ] useWatchlist（ウォッチリスト操作）

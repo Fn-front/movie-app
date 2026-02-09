@@ -12,7 +12,7 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { filterConditionsSchema } from '@/schema/filters';
-import { HTTP_STATUS, FILTER_ERROR_MESSAGES } from '@/constants';
+import { HTTP_STATUS, ERROR_CODE, FILTER_ERROR_MESSAGES } from '@/constants';
 
 export async function GET() {
   try {
@@ -51,7 +51,7 @@ export async function GET() {
       {
         success: false,
         error: {
-          code: 'SERVER_ERROR',
+          code: ERROR_CODE.SERVER_ERROR,
           message: FILTER_ERROR_MESSAGES.FETCH_FAILED,
         },
       },
@@ -79,7 +79,7 @@ export async function PUT(request: Request) {
         {
           success: false,
           error: {
-            code: 'VALIDATION_ERROR',
+            code: ERROR_CODE.VALIDATION_ERROR,
             message: FILTER_ERROR_MESSAGES.VALIDATION_ERROR,
             details: result.error.flatten().fieldErrors,
           },
@@ -115,7 +115,7 @@ export async function PUT(request: Request) {
       {
         success: false,
         error: {
-          code: 'SERVER_ERROR',
+          code: ERROR_CODE.SERVER_ERROR,
           message: FILTER_ERROR_MESSAGES.SAVE_FAILED,
         },
       },

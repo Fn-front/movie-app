@@ -12,7 +12,7 @@ import {
 } from '@/helpers/supabase';
 import { registerApiSchema } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
-import { HTTP_STATUS } from '@/constants';
+import { HTTP_STATUS, ERROR_CODE } from '@/constants';
 
 export async function POST(request: Request) {
   try {
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'VALIDATION_ERROR',
+            code: ERROR_CODE.VALIDATION_ERROR,
             message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
             details: result.error.flatten().fieldErrors,
           },
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'CONFLICT',
+            code: ERROR_CODE.CONFLICT,
             message: AUTH_ERROR_MESSAGES.EMAIL_ALREADY_EXISTS,
           },
         },
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
       {
         success: false,
         error: {
-          code: 'SERVER_ERROR',
+          code: ERROR_CODE.SERVER_ERROR,
           message: AUTH_ERROR_MESSAGES.REGISTER_SERVER_ERROR,
         },
       },

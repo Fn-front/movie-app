@@ -19,6 +19,7 @@ import {
   EXCLUDED_KEYWORDS_PARAM,
   EXCLUDED_LANGUAGES,
   MOVIES_ERROR_MESSAGES,
+  ERROR_CODE,
 } from '@/constants';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 
@@ -91,7 +92,7 @@ export async function GET(request: Request) {
         {
           success: false,
           error: {
-            code: 'VALIDATION_ERROR',
+            code: ERROR_CODE.VALIDATION_ERROR,
             message: MOVIES_ERROR_MESSAGES.INVALID_QUERY,
             details: queryResult.error.flatten().fieldErrors,
           },
@@ -281,7 +282,7 @@ export async function GET(request: Request) {
       {
         success: false,
         error: {
-          code: 'SERVER_ERROR',
+          code: ERROR_CODE.SERVER_ERROR,
           message: MOVIES_ERROR_MESSAGES.FETCH_FAILED,
         },
       },

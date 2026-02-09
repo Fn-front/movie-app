@@ -13,7 +13,7 @@ import {
 } from '@/helpers/supabase';
 import { changePasswordApiSchema } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
-import { HTTP_STATUS } from '@/constants';
+import { HTTP_STATUS, ERROR_CODE } from '@/constants';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
 const RATE_LIMIT_ACTION = 'change_password';
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'RATE_LIMIT_EXCEEDED',
+            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
             message: AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
             details: { retryAfter: rateLimitResult.retryAfter },
           },
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'VALIDATION_ERROR',
+            code: ERROR_CODE.VALIDATION_ERROR,
             message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
             details: result.error.flatten().fieldErrors,
           },
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'SERVER_ERROR',
+            code: ERROR_CODE.SERVER_ERROR,
             message: AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED,
           },
         },
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'BAD_REQUEST',
+            code: ERROR_CODE.BAD_REQUEST,
             message: AUTH_ERROR_MESSAGES.CURRENT_PASSWORD_INCORRECT,
           },
         },
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'BAD_REQUEST',
+            code: ERROR_CODE.BAD_REQUEST,
             message: AUTH_ERROR_MESSAGES.SAME_PASSWORD,
           },
         },
@@ -160,7 +160,7 @@ export async function POST(request: Request) {
       {
         success: false,
         error: {
-          code: 'SERVER_ERROR',
+          code: ERROR_CODE.SERVER_ERROR,
           message: AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED,
         },
       },

@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth/auth';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
-import { HTTP_STATUS } from '@/constants';
+import { HTTP_STATUS, ERROR_CODE } from '@/constants';
 
 /**
  * 認証済みセッションを取得
@@ -31,7 +31,7 @@ export function unauthorizedResponse() {
     {
       success: false,
       error: {
-        code: 'UNAUTHORIZED',
+        code: ERROR_CODE.UNAUTHORIZED,
         message: AUTH_ERROR_MESSAGES.UNAUTHORIZED,
       },
     },

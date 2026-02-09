@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
-import { HTTP_STATUS } from '@/constants';
+import { HTTP_STATUS, ERROR_CODE } from '@/constants';
 
 /**
  * Supabase service roleクライアントを作成
@@ -34,7 +34,7 @@ export function dbConnectionErrorResponse() {
     {
       success: false,
       error: {
-        code: 'SERVER_ERROR',
+        code: ERROR_CODE.SERVER_ERROR,
         message: AUTH_ERROR_MESSAGES.DB_CONNECTION_ERROR,
       },
     },

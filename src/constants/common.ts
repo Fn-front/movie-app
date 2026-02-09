@@ -59,6 +59,14 @@ export const ERROR_CODE = {
 } as const;
 
 /**
+ * Supabaseエラーコード
+ */
+export const SUPABASE_ERROR_CODE = {
+  /** レコードが見つからない（.single()で0件） */
+  NOT_FOUND: 'PGRST116',
+} as const;
+
+/**
  * ローカルストレージキー
  */
 export const STORAGE_KEYS = {

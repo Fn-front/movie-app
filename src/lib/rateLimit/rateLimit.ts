@@ -4,6 +4,8 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
+import { SUPABASE_ERROR_CODE } from '@/constants';
+
 /**
  * レート制限チェック結果
  */
@@ -37,7 +39,7 @@ export async function checkRateLimit(
     .single();
 
   // レコードが存在しない場合は新規作成
-  if (error && error.code === 'PGRST116') {
+  if (error && error.code === SUPABASE_ERROR_CODE.NOT_FOUND) {
     await supabase.from('rate_limits').insert({
       identifier,
       action_type: actionType,

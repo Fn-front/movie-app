@@ -12,7 +12,12 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { filterConditionsSchema } from '@/schema/filters';
-import { HTTP_STATUS, ERROR_CODE, FILTER_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  SUPABASE_ERROR_CODE,
+  FILTER_ERROR_MESSAGES,
+} from '@/constants';
 
 export async function GET() {
   try {
@@ -31,7 +36,7 @@ export async function GET() {
       .eq('user_id', session.user.id)
       .single();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error && error.code !== SUPABASE_ERROR_CODE.NOT_FOUND) {
       throw error;
     }
 

@@ -4,55 +4,29 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
-import { auth } from '@/lib/auth/auth';
+import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
+import {
+  createServiceRoleClient,
+  dbConnectionErrorResponse,
+} from '@/helpers/supabase';
 import { changePasswordApiSchema } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
-import { HTTP_STATUS } from '@/constants';
+import { HTTP_STATUS, ERROR_CODE } from '@/constants';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const RATE_LIMIT_ACTION = 'change_password';
 
 export async function POST(request: Request) {
   try {
     // 認証チェック
-    const session = await auth();
-
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'UNAUTHORIZED',
-            message: AUTH_ERROR_MESSAGES.UNAUTHORIZED,
-          },
-        },
-        { status: HTTP_STATUS.UNAUTHORIZED },
-      );
-    }
+    const session = await getAuthSession();
+    if (!session) return unauthorizedResponse();
 
     // Supabaseクライアント検証
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'SERVER_ERROR',
-            message: AUTH_ERROR_MESSAGES.DB_CONNECTION_ERROR,
-          },
-        },
-        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+    const supabase = createServiceRoleClient();
+    if (!supabase) return dbConnectionErrorResponse();
 
     // レート制限チェック
     const rateLimitResult = await checkRateLimit(
@@ -66,7 +40,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'RATE_LIMIT_EXCEEDED',
+            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
             message: AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
             details: { retryAfter: rateLimitResult.retryAfter },
           },
@@ -84,7 +58,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'VALIDATION_ERROR',
+            code: ERROR_CODE.VALIDATION_ERROR,
             message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
             details: result.error.flatten().fieldErrors,
           },
@@ -107,7 +81,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'SERVER_ERROR',
+            code: ERROR_CODE.SERVER_ERROR,
             message: AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED,
           },
         },
@@ -126,7 +100,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'BAD_REQUEST',
+            code: ERROR_CODE.BAD_REQUEST,
             message: AUTH_ERROR_MESSAGES.CURRENT_PASSWORD_INCORRECT,
           },
         },
@@ -145,7 +119,7 @@ export async function POST(request: Request) {
         {
           success: false,
           error: {
-            code: 'BAD_REQUEST',
+            code: ERROR_CODE.BAD_REQUEST,
             message: AUTH_ERROR_MESSAGES.SAME_PASSWORD,
           },
         },
@@ -186,7 +160,7 @@ export async function POST(request: Request) {
       {
         success: false,
         error: {
-          code: 'SERVER_ERROR',
+          code: ERROR_CODE.SERVER_ERROR,
           message: AUTH_ERROR_MESSAGES.PASSWORD_CHANGE_FAILED,
         },
       },

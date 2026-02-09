@@ -41,6 +41,32 @@ export const HTTP_STATUS = {
 } as const;
 
 /**
+ * APIエラーコード
+ */
+export const ERROR_CODE = {
+  /** サーバー内部エラー */
+  SERVER_ERROR: 'SERVER_ERROR',
+  /** 認証エラー */
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  /** バリデーションエラー */
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  /** クライアントエラー */
+  BAD_REQUEST: 'BAD_REQUEST',
+  /** レート制限超過 */
+  RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
+  /** リソース競合 */
+  CONFLICT: 'CONFLICT',
+} as const;
+
+/**
+ * Supabaseエラーコード
+ */
+export const SUPABASE_ERROR_CODE = {
+  /** レコードが見つからない（.single()で0件） */
+  NOT_FOUND: 'PGRST116',
+} as const;
+
+/**
  * ローカルストレージキー
  */
 export const STORAGE_KEYS = {

@@ -4,8 +4,11 @@
  */
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
+import {
+  createServiceRoleClient,
+  dbConnectionErrorResponse,
+} from '@/helpers/supabase';
 import { moviesQuerySchema } from '@/schema/movies';
 import {
   HTTP_STATUS,
@@ -15,11 +18,10 @@ import {
   RELEASE_TYPE_MAP,
   EXCLUDED_KEYWORDS_PARAM,
   EXCLUDED_LANGUAGES,
+  MOVIES_ERROR_MESSAGES,
+  ERROR_CODE,
 } from '@/constants';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 /**
  * ソートカラムのマッピング
@@ -70,22 +72,8 @@ async function getGenreMap(): Promise<Record<number, string>> {
 export async function GET(request: Request) {
   try {
     // Supabaseクライアント検証
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'SERVER_ERROR',
-            message: 'データベース接続に失敗しました。',
-          },
-        },
-        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+    const supabase = createServiceRoleClient();
+    if (!supabase) return dbConnectionErrorResponse();
 
     // クエリパラメータのバリデーション
     const { searchParams } = new URL(request.url);
@@ -104,8 +92,8 @@ export async function GET(request: Request) {
         {
           success: false,
           error: {
-            code: 'VALIDATION_ERROR',
-            message: 'クエリパラメータが不正です。',
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: MOVIES_ERROR_MESSAGES.INVALID_QUERY,
             details: queryResult.error.flatten().fieldErrors,
           },
         },
@@ -294,8 +282,8 @@ export async function GET(request: Request) {
       {
         success: false,
         error: {
-          code: 'SERVER_ERROR',
-          message: '映画データの取得中にエラーが発生しました。',
+          code: ERROR_CODE.SERVER_ERROR,
+          message: MOVIES_ERROR_MESSAGES.FETCH_FAILED,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

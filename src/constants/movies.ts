@@ -76,3 +76,13 @@ export const EXCLUDED_LANGUAGES = ['ko', 'zh'] as const;
  * 映画.com iCalフィードURL
  */
 export const EIGA_ICAL_URL = 'https://eiga.com/movie/coming.ics';
+
+/**
+ * 映画APIエラーメッセージ
+ */
+export const MOVIES_ERROR_MESSAGES = {
+  /** クエリパラメータ不正 */
+  INVALID_QUERY: 'クエリパラメータが不正です。',
+  /** 映画データ取得失敗 */
+  FETCH_FAILED: '映画データの取得中にエラーが発生しました。',
+} as const;

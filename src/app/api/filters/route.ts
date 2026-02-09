@@ -12,7 +12,7 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { filterConditionsSchema } from '@/schema/filters';
-import { HTTP_STATUS } from '@/constants';
+import { HTTP_STATUS, FILTER_ERROR_MESSAGES } from '@/constants';
 
 export async function GET() {
   try {
@@ -52,7 +52,7 @@ export async function GET() {
         success: false,
         error: {
           code: 'SERVER_ERROR',
-          message: 'フィルター条件の取得中にエラーが発生しました。',
+          message: FILTER_ERROR_MESSAGES.FETCH_FAILED,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
@@ -80,7 +80,7 @@ export async function PUT(request: Request) {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'フィルター条件が不正です。',
+            message: FILTER_ERROR_MESSAGES.VALIDATION_ERROR,
             details: result.error.flatten().fieldErrors,
           },
         },
@@ -116,7 +116,7 @@ export async function PUT(request: Request) {
         success: false,
         error: {
           code: 'SERVER_ERROR',
-          message: 'フィルター条件の保存中にエラーが発生しました。',
+          message: FILTER_ERROR_MESSAGES.SAVE_FAILED,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

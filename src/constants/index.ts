@@ -4,4 +4,5 @@
 
 export * from './auth';
 export * from './common';
+export * from './filters';
 export * from './movies';

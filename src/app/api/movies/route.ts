@@ -18,6 +18,7 @@ import {
   RELEASE_TYPE_MAP,
   EXCLUDED_KEYWORDS_PARAM,
   EXCLUDED_LANGUAGES,
+  MOVIES_ERROR_MESSAGES,
 } from '@/constants';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 
@@ -91,7 +92,7 @@ export async function GET(request: Request) {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'クエリパラメータが不正です。',
+            message: MOVIES_ERROR_MESSAGES.INVALID_QUERY,
             details: queryResult.error.flatten().fieldErrors,
           },
         },
@@ -281,7 +282,7 @@ export async function GET(request: Request) {
         success: false,
         error: {
           code: 'SERVER_ERROR',
-          message: '映画データの取得中にエラーが発生しました。',
+          message: MOVIES_ERROR_MESSAGES.FETCH_FAILED,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

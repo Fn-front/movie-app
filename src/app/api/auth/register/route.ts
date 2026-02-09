@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         success: false,
         error: {
           code: 'SERVER_ERROR',
-          message: '登録処理中にエラーが発生しました。',
+          message: AUTH_ERROR_MESSAGES.REGISTER_SERVER_ERROR,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

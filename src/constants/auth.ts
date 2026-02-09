@@ -32,6 +32,8 @@ export const AUTH_ERROR_MESSAGES = {
   RATE_LIMIT_EXCEEDED: 'しばらく時間をおいてから再度お試しください。',
   /** 新旧パスワード同一 */
   SAME_PASSWORD: '現在のパスワードと同じパスワードには変更できません。',
+  /** 登録処理サーバーエラー */
+  REGISTER_SERVER_ERROR: '登録処理中にエラーが発生しました。',
 } as const;
 
 /**

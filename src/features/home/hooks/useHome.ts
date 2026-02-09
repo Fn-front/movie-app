@@ -181,7 +181,8 @@ export function useHome(): UseHomeReturn {
 
         if (hasConditions) {
           const newSortBy = conditions.sort_by || DEFAULT_SORT;
-          const newReleaseType = conditions.release_type || DEFAULT_RELEASE_TYPE;
+          const newReleaseType =
+            conditions.release_type || DEFAULT_RELEASE_TYPE;
           const newGenreIds = conditions.genre_ids || [];
           const newDateRange: DateRange = {
             gte: conditions.date_range_gte,
@@ -206,14 +207,7 @@ export function useHome(): UseHomeReturn {
           );
         } else {
           initialFetchDone.current = true;
-          fetchMovies(
-            1,
-            DEFAULT_SORT,
-            DEFAULT_RELEASE_TYPE,
-            [],
-            {},
-            undefined,
-          );
+          fetchMovies(1, DEFAULT_SORT, DEFAULT_RELEASE_TYPE, [], {}, undefined);
         }
       } catch {
         // フィルター取得失敗時はデフォルトで映画取得
@@ -303,7 +297,13 @@ export function useHome(): UseHomeReturn {
         ),
       );
     },
-    [sortBy, selectedGenreIds, dateRange, isRevivalFilter, saveFilterIfAuthenticated],
+    [
+      sortBy,
+      selectedGenreIds,
+      dateRange,
+      isRevivalFilter,
+      saveFilterIfAuthenticated,
+    ],
   );
 
   const handleFilterApply = useCallback(

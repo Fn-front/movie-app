@@ -8,9 +8,7 @@ import { z } from 'zod';
  * フィルター条件のバリデーションスキーマ
  */
 export const filterConditionsSchema = z.object({
-  sort_by: z
-    .enum(['release_date', 'popularity', 'vote_average'])
-    .optional(),
+  sort_by: z.enum(['release_date', 'popularity', 'vote_average']).optional(),
   release_type: z.enum(['theatrical', 'streaming']).optional(),
   genre_ids: z.array(z.number().int().positive()).optional(),
   date_range_gte: z

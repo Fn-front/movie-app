@@ -21,9 +21,8 @@ export interface GetSavedFilterResponse {
  * @returns フィルター条件（未保存の場合は空オブジェクト）
  */
 export async function getSavedFilter(): Promise<FilterConditions> {
-  const response = await axiosInstance.get<GetSavedFilterResponse>(
-    '/api/filters',
-  );
+  const response =
+    await axiosInstance.get<GetSavedFilterResponse>('/api/filters');
   return response.data.data.filter_conditions;
 }
 

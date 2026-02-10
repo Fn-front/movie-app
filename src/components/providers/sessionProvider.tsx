@@ -7,6 +7,8 @@
 import { memo, type ReactNode } from 'react';
 import { SessionProvider } from 'next-auth/react';
 
+import { SessionExpiryHandler } from './sessionExpiryHandler';
+
 interface AppSessionProviderProps {
   children: ReactNode;
 }
@@ -14,7 +16,12 @@ interface AppSessionProviderProps {
 export const AppSessionProvider = memo(function AppSessionProvider({
   children,
 }: AppSessionProviderProps) {
-  return <SessionProvider>{children}</SessionProvider>;
+  return (
+    <SessionProvider>
+      <SessionExpiryHandler />
+      {children}
+    </SessionProvider>
+  );
 });
 
 AppSessionProvider.displayName = 'AppSessionProvider';

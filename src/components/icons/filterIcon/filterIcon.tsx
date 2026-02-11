@@ -3,7 +3,7 @@
  */
 
 import { memo } from 'react';
-import { LuFilter } from 'react-icons/lu';
+import { IoFilterOutline } from 'react-icons/io5';
 
 import type { IconProps } from '@/lib/types';
 
@@ -14,7 +14,7 @@ export const FilterIcon = memo<IconProps>(function FilterIcon({
   size = 18,
   className,
 }) {
-  return <LuFilter size={size} className={className} aria-hidden='true' />;
+  return <IoFilterOutline size={size} className={className} aria-hidden='true' />;
 });
 
 FilterIcon.displayName = 'FilterIcon';

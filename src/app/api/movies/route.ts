@@ -151,9 +151,7 @@ export async function GET(request: Request) {
       } else {
         fetchDateGte = today;
         const futureDate = new Date(now);
-        futureDate.setMonth(
-          futureDate.getMonth() + MOVIES_FETCH_MONTHS_AHEAD,
-        );
+        futureDate.setMonth(futureDate.getMonth() + MOVIES_FETCH_MONTHS_AHEAD);
         fetchDateLte = formatDateToString(futureDate);
       }
 
@@ -237,9 +235,7 @@ export async function GET(request: Request) {
       effectiveDateLte = release_date_lte || today;
     } else {
       effectiveDateGte =
-        release_date_gte && release_date_gte > today
-          ? release_date_gte
-          : today;
+        release_date_gte && release_date_gte > today ? release_date_gte : today;
       effectiveDateLte = release_date_lte;
     }
 

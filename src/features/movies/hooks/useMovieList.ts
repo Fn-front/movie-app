@@ -151,7 +151,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
         setMovies(response.data.movies);
         setPagination(response.data.pagination);
         setGenres(response.data.genres);
-      } catch (error) {
+      } catch {
         if (controller.signal.aborted) return;
         toast({
           title: 'エラー',

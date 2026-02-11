@@ -23,9 +23,12 @@ function getToday(): string {
  * release_date >= today（APIのデフォルト動作）
  */
 export function useUpcoming() {
-  const defaultDateRange: DateRange = useMemo(() => ({
-    gte: getToday(),
-  }), []);
+  const defaultDateRange: DateRange = useMemo(
+    () => ({
+      gte: getToday(),
+    }),
+    [],
+  );
 
   return useMovieList({ timeFrame: 'upcoming', defaultDateRange });
 }

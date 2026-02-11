@@ -47,7 +47,7 @@ export const SideNav = memo(function SideNav() {
   );
 
   return (
-    <nav className={styles.c_side_nav} aria-label="映画ナビゲーション">
+    <nav className={styles.c_side_nav} aria-label='映画ナビゲーション'>
       <ul className={styles.c_side_nav__list}>
         {navItems.map((item) => (
           <li key={item.href} className={styles.c_side_nav__item}>

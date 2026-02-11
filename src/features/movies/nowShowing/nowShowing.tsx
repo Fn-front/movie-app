@@ -19,7 +19,7 @@ export const NowShowingPage = memo(function NowShowingPage() {
 
   return (
     <AppLayout>
-      <MovieListContent title="公開中の映画" movieList={movieList} />
+      <MovieListContent title='公開中の映画' movieList={movieList} />
     </AppLayout>
   );
 });

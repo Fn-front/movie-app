@@ -86,17 +86,17 @@ export const MovieListContent = memo<MovieListContentProps>(
           options={RELEASE_TYPE_OPTIONS}
           value={releaseType}
           onValueChange={handleTabValueChange}
-          aria-label="リリースタイプ"
+          aria-label='リリースタイプ'
         />
 
         <div className={styles.c_movie_list__toolbar}>
           <h2 className={styles.c_movie_list__title}>{title}</h2>
           <div className={styles.c_movie_list__controls}>
             <Button
-              variant="ghost"
-              size="sm"
+              variant='ghost'
+              size='sm'
               onClick={handleFilterModalOpen}
-              aria-label="フィルター"
+              aria-label='フィルター'
               className={styles.c_movie_list__filter_button}
             >
               <FilterIcon />
@@ -111,7 +111,7 @@ export const MovieListContent = memo<MovieListContentProps>(
               options={sortOptions}
               value={sortBy}
               onValueChange={handleSortChange}
-              aria-label="ソート順を選択"
+              aria-label='ソート順を選択'
               className={styles.c_movie_list__sort}
             />
           </div>

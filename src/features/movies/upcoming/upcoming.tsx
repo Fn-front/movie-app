@@ -19,7 +19,7 @@ export const UpcomingPage = memo(function UpcomingPage() {
 
   return (
     <AppLayout>
-      <MovieListContent title="公開予定の映画" movieList={movieList} />
+      <MovieListContent title='公開予定の映画' movieList={movieList} />
     </AppLayout>
   );
 });

@@ -113,6 +113,7 @@ export function useMovieList(
   const isAuthenticated = status === 'authenticated' && !!session?.user;
   const savedFilterLoaded = useRef(false);
   const initialFetchDone = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchMovies = useCallback(
     async (
@@ -123,34 +124,46 @@ export function useMovieList(
       currentDateRange: DateRange,
       currentIsRevival: boolean | undefined,
     ) => {
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       setIsLoading(true);
       try {
-        const response = await getMovies({
-          page: currentPage,
-          sort_by: currentSortBy as
-            | 'release_date'
-            | 'popularity'
-            | 'vote_average',
-          sort_order: defaultSortOrder,
-          release_type: currentReleaseType,
-          time_frame: timeFrame,
-          genre_ids:
-            currentGenreIds.length > 0 ? currentGenreIds.join(',') : undefined,
-          release_date_gte: currentDateRange.gte || undefined,
-          release_date_lte: currentDateRange.lte || undefined,
-          is_revival: currentIsRevival,
-        });
+        const response = await getMovies(
+          {
+            page: currentPage,
+            sort_by: currentSortBy as
+              | 'release_date'
+              | 'popularity'
+              | 'vote_average',
+            sort_order: defaultSortOrder,
+            release_type: currentReleaseType,
+            time_frame: timeFrame,
+            genre_ids:
+              currentGenreIds.length > 0
+                ? currentGenreIds.join(',')
+                : undefined,
+            release_date_gte: currentDateRange.gte || undefined,
+            release_date_lte: currentDateRange.lte || undefined,
+            is_revival: currentIsRevival,
+          },
+          { signal: controller.signal },
+        );
         setMovies(response.data.movies);
         setPagination(response.data.pagination);
         setGenres(response.data.genres);
-      } catch {
+      } catch (error) {
+        if (controller.signal.aborted) return;
         toast({
           title: 'エラー',
           description: '映画データの取得に失敗しました。',
           variant: 'error',
         });
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     },
     [toast, timeFrame, defaultSortOrder],
@@ -195,16 +208,8 @@ export function useMovieList(
           setSelectedGenreIds(newGenreIds);
           setDateRange(newDateRange);
           setIsRevivalFilter(newIsRevival);
-
+          // state変更がuseEffectを再トリガーするのでfetchMoviesは呼ばない
           initialFetchDone.current = true;
-          fetchMovies(
-            1,
-            newSortBy,
-            newReleaseType,
-            newGenreIds,
-            newDateRange,
-            newIsRevival,
-          );
         } else {
           initialFetchDone.current = true;
           fetchMovies(

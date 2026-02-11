@@ -82,9 +82,11 @@ export interface GetMoviesResponse {
  */
 export async function getMovies(
   params: GetMoviesRequest = {},
+  options?: { signal?: AbortSignal },
 ): Promise<GetMoviesResponse> {
   const response = await axiosInstance.get<GetMoviesResponse>('/api/movies', {
     params,
+    signal: options?.signal,
   });
   return response.data;
 }

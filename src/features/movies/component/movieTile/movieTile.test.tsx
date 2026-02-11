@@ -3,33 +3,6 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MovieTile } from './movieTile';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
-// next/image のモック
-jest.mock('next/image', () => ({
-  __esModule: true,
-  default: ({
-    src,
-    alt,
-    width,
-    height,
-    className,
-  }: {
-    src: string;
-    alt: string;
-    width?: number;
-    height?: number;
-    className?: string;
-  }) => (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt={alt}
-      width={width}
-      height={height}
-      className={className}
-    />
-  ),
-}));
-
 // --- Helpers ---
 
 const createMockMovie = (
@@ -68,7 +41,7 @@ describe('MovieTile', () => {
       render(<MovieTile movie={createMockMovie()} genres={genres} />);
       const img = screen.getByAltText('テスト映画のポスター');
       expect(img).toBeInTheDocument();
-      expect(img).toHaveAttribute('src', expect.stringContaining('/test.jpg'));
+      expect(img).toHaveAttribute('src', expect.stringContaining('test.jpg'));
     });
 
     it('poster_pathがnullの場合No Imageが表示される', () => {

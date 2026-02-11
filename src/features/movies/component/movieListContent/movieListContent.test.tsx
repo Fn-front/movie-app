@@ -4,33 +4,6 @@ import { MovieListContent } from './movieListContent';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
-// next/image のモック
-jest.mock('next/image', () => ({
-  __esModule: true,
-  default: ({
-    src,
-    alt,
-    width,
-    height,
-    className,
-  }: {
-    src: string;
-    alt: string;
-    width?: number;
-    height?: number;
-    className?: string;
-  }) => (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt={alt}
-      width={width}
-      height={height}
-      className={className}
-    />
-  ),
-}));
-
 // --- Helpers ---
 
 const createMockMovie = (

@@ -40,6 +40,7 @@ export const MovieListContent = memo<MovieListContentProps>(
       movies,
       pagination,
       isLoading,
+      isTransitioning,
       sortBy,
       releaseType,
       genres,
@@ -119,7 +120,9 @@ export const MovieListContent = memo<MovieListContentProps>(
           </div>
         </div>
 
-        <div className={styles.c_movie_list__grid}>
+        <div
+          className={`${styles.c_movie_list__grid} ${isTransitioning ? styles['c_movie_list__grid--transitioning'] : ''}`}
+        >
           {isLoading ? (
             <MovieTileSkeleton />
           ) : (

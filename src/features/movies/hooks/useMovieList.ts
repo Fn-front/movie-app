@@ -5,7 +5,12 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+} from '@tanstack/react-query';
 
 import { getMovies } from '@/lib/api/movies/movies';
 import type { MovieCacheItem, PaginationInfo } from '@/lib/api/movies/movies';
@@ -39,6 +44,7 @@ export interface UseMovieListReturn {
   movies: MovieCacheItem[];
   pagination: PaginationInfo | null;
   isLoading: boolean;
+  isTransitioning: boolean;
   page: number;
   sortBy: string;
   releaseType: 'theatrical' | 'streaming';
@@ -183,6 +189,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     queryKey: movieKeys.list(moviesQueryParams),
     queryFn: ({ signal }) => getMovies(moviesQueryParams, { signal }),
     enabled: isFilterReady,
+    placeholderData: keepPreviousData,
   });
 
   // エラー時のトースト表示
@@ -197,7 +204,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   }, [moviesQuery.error, toast]);
 
   // フィルター保存のmutation
-  const saveFilterMutation = useMutation({
+  const { mutate: saveFilterMutate } = useMutation({
     mutationFn: saveFilter,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: filterKeys.saved });
@@ -207,9 +214,9 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const saveFilterIfAuthenticated = useCallback(
     (conditions: FilterConditions) => {
       if (!isAuthenticated) return;
-      saveFilterMutation.mutate(conditions);
+      saveFilterMutate(conditions);
     },
-    [isAuthenticated, saveFilterMutation],
+    [isAuthenticated, saveFilterMutate],
   );
 
   const handlePageChange = useCallback((newPage: number) => {
@@ -300,14 +307,16 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
 
   // サーバーステートの導出
   const pagination = moviesQuery.data?.data.pagination ?? null;
-  const isLoading =
-    !isFilterReady || moviesQuery.isLoading || moviesQuery.isFetching;
+  const isLoading = !isFilterReady || moviesQuery.isLoading;
+  const isTransitioning =
+    moviesQuery.isFetching && moviesQuery.isPlaceholderData;
 
   return useMemo(
     () => ({
       movies: moviesQuery.data?.data.movies ?? [],
       pagination,
       isLoading,
+      isTransitioning,
       page,
       sortBy,
       releaseType,
@@ -327,6 +336,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       moviesQuery.data,
       pagination,
       isLoading,
+      isTransitioning,
       page,
       sortBy,
       releaseType,

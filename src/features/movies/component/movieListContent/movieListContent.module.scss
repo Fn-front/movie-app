@@ -56,6 +56,12 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: $spacing-4;
+    transition: opacity 0.15s ease;
+
+    &--transitioning {
+      opacity: 0.5;
+      pointer-events: none;
+    }
   }
 
   &__empty {

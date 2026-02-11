@@ -31,20 +31,20 @@
   }
 
   &__rating {
-    position: absolute;
-    top: $spacing-2;
-    right: $spacing-2;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 36px;
-    height: 28px;
-    padding: 0 $spacing-2;
     font-size: $font-size-xs;
     font-weight: $font-weight-bold;
-    color: #ffffff;
-    background-color: $primary-500;
-    border-radius: $border-radius-md;
+
+    &__high {
+      color: $success-main;
+    }
+
+    &__mid {
+      color: $warning-main;
+    }
+
+    &__low {
+      color: $error-main;
+    }
   }
 
   &__revival {
@@ -65,8 +65,10 @@
 
   &__info {
     display: flex;
+    flex: 1;
     flex-direction: column;
     gap: $spacing-1;
+    height: 100%;
     padding: $spacing-3;
   }
 
@@ -90,12 +92,19 @@
   &__genre_tag {
     display: inline-block;
     padding: 0 $spacing-2;
-    font-size: $font-size-xs;
+    font-size: $font-size-2xs;
     color: $text-secondary;
     background-color: $background-secondary;
     border-radius: $border-radius-full;
     line-height: $line-height-loose;
     white-space: nowrap;
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
   }
 
   &__date {

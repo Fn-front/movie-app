@@ -10,16 +10,6 @@ jest.mock('@/features/movies/hooks/useMovieList', () => ({
   useMovieList: (options: UseMovieListOptions) => mockUseMovieList(options),
 }));
 
-// --- Helpers ---
-
-function getTodayString(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 // --- Tests ---
 
 describe('useUpcoming', () => {
@@ -35,18 +25,11 @@ describe('useUpcoming', () => {
     );
   });
 
-  it('defaultDateRange.gteに今日の日付が設定される', () => {
+  it('defaultDateRangeが空オブジェクトである（サーバー側で日付デフォルト処理）', () => {
     renderHook(() => useUpcoming());
 
     const options = mockUseMovieList.mock.calls[0][0] as UseMovieListOptions;
-    expect(options.defaultDateRange.gte).toBe(getTodayString());
-  });
-
-  it('defaultDateRange.lteは設定されない', () => {
-    renderHook(() => useUpcoming());
-
-    const options = mockUseMovieList.mock.calls[0][0] as UseMovieListOptions;
-    expect(options.defaultDateRange.lte).toBeUndefined();
+    expect(options.defaultDateRange).toEqual({});
   });
 
   it('defaultSortOrderは設定されない', () => {

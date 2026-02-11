@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { UpcomingPage } from '@/features/movies/upcoming/upcoming';
+import { UpcomingPageLoader } from './loader';
 
 export const metadata: Metadata = {
   title: '公開予定 | Movie App',
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function Upcoming() {
-  return <UpcomingPage />;
+  return <UpcomingPageLoader />;
 }

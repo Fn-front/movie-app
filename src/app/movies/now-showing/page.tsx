@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { NowShowingPage } from '@/features/movies/nowShowing/nowShowing';
+import { NowShowingPageLoader } from './loader';
 
 export const metadata: Metadata = {
   title: '公開中 | Movie App',
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function NowShowing() {
-  return <NowShowingPage />;
+  return <NowShowingPageLoader />;
 }

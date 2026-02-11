@@ -1,0 +1,14 @@
+/**
+ * TanStack Query クエリキーファクトリー
+ */
+
+import type { GetMoviesRequest } from '@/lib/api/movies/movies';
+
+export const movieKeys = {
+  all: ['movies'] as const,
+  list: (params: GetMoviesRequest) => ['movies', params] as const,
+};
+
+export const filterKeys = {
+  saved: ['savedFilter'] as const,
+};

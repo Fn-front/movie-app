@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Noto_Sans_JP } from 'next/font/google';
 
+import { AppQueryProvider } from '@/components/providers/queryProvider';
 import { AppSessionProvider } from '@/components/providers/sessionProvider';
 import { AppToastProvider } from '@/components/providers/toastProvider';
 import '@/styles/app.scss';
@@ -25,7 +26,9 @@ export default function RootLayout({
     <html lang='ja'>
       <body className={noto.className}>
         <AppSessionProvider>
-          <AppToastProvider>{children}</AppToastProvider>
+          <AppQueryProvider>
+            <AppToastProvider>{children}</AppToastProvider>
+          </AppQueryProvider>
         </AppSessionProvider>
       </body>
     </html>

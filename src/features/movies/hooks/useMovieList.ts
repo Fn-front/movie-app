@@ -176,14 +176,6 @@ export function useMovieList(
 
     if (!isAuthenticated) {
       initialFetchDone.current = true;
-      fetchMovies(
-        1,
-        DEFAULT_SORT,
-        DEFAULT_RELEASE_TYPE,
-        [],
-        defaultDateRange,
-        undefined,
-      );
       return;
     }
 

@@ -248,8 +248,8 @@
 - [x] テストを追加
 
 ### Step 7: React Strict Mode 有効化（`setup/strict-mode`）
-- [ ] layout.tsx に `<StrictMode>` を追加
-- [ ] 開発環境でEffect二重実行による既存バグがないか確認・修正
+- [x] next.config.mjs に `reactStrictMode: true` を追加
+- [x] 開発環境でEffect二重実行による既存バグがないか確認・修正
 
 ### Step 8: TanStack Query 導入（`setup/tanstack-query`）
 - [ ] @tanstack/react-query をインストール

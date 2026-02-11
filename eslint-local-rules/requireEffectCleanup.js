@@ -10,8 +10,7 @@ const requireEffectCleanup = {
   meta: {
     type: 'suggestion',
     docs: {
-      description:
-        'useEffect 内の非同期処理にはクリーンアップ関数を必須とする',
+      description: 'useEffect 内の非同期処理にはクリーンアップ関数を必須とする',
     },
     messages: {
       missingCleanup:

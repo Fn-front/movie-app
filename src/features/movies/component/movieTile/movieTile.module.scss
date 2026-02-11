@@ -31,20 +31,8 @@
   }
 
   &__rating {
-    position: absolute;
-    top: $spacing-2;
-    right: $spacing-2;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 36px;
-    height: 28px;
-    padding: 0 $spacing-2;
     font-size: $font-size-xs;
     font-weight: $font-weight-bold;
-    color: #ffffff;
-    background-color: $primary-500;
-    border-radius: $border-radius-md;
   }
 
   &__revival {
@@ -100,9 +88,15 @@
     white-space: nowrap;
   }
 
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+  }
+
   &__date {
     margin: 0;
-    margin-top: auto;
     font-size: $font-size-xs;
     color: $text-secondary;
   }

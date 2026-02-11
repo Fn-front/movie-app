@@ -88,11 +88,6 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
         ) : (
           <div className={styles.c_movie_tile__no_image}>No Image</div>
         )}
-        {movie.vote_average != null && movie.vote_average > 0 && (
-          <span className={styles.c_movie_tile__rating}>
-            {movie.vote_average.toFixed(1)}
-          </span>
-        )}
         {movie.is_revival && (
           <span className={styles.c_movie_tile__revival}>リバイバル</span>
         )}
@@ -108,9 +103,16 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             ))}
           </div>
         )}
-        {formattedDate && (
-          <p className={styles.c_movie_tile__date}>{formattedDate}</p>
-        )}
+        <div className={styles.c_movie_tile__footer}>
+          {formattedDate && (
+            <p className={styles.c_movie_tile__date}>{formattedDate}</p>
+          )}
+          {movie.vote_average != null && movie.vote_average > 0 && (
+            <span className={styles.c_movie_tile__rating}>
+              {movie.vote_average.toFixed(1)}
+            </span>
+          )}
+        </div>
       </div>
     </Card>
   );

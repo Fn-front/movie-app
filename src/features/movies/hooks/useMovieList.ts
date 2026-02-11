@@ -1,16 +1,22 @@
 /**
  * 映画一覧の共通カスタムフック
- * upcoming / nowShowing で共有するロジック
+ * upcoming / nowShowing / home で共有するロジック
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { getMovies } from '@/lib/api/movies/movies';
 import type { MovieCacheItem, PaginationInfo } from '@/lib/api/movies/movies';
 import { getSavedFilter, saveFilter } from '@/lib/api/filters/filters';
 import { useToast } from '@/hooks/useToast';
-import { DEFAULT_SORT, DEFAULT_RELEASE_TYPE } from '@/constants';
+import {
+  DEFAULT_SORT,
+  DEFAULT_RELEASE_TYPE,
+  movieKeys,
+  filterKeys,
+} from '@/constants';
 import type { FilterConditions } from '@/schema/filters';
 import type { DateRange } from '@/features/movies/types';
 
@@ -18,8 +24,8 @@ import type { DateRange } from '@/features/movies/types';
  * useMovieListフックのオプション
  */
 export interface UseMovieListOptions {
-  /** 時間枠 */
-  timeFrame: 'upcoming' | 'now_showing';
+  /** 時間枠（home では省略可） */
+  timeFrame?: 'upcoming' | 'now_showing';
   /** デフォルトのソート順 */
   defaultSortOrder?: 'asc' | 'desc';
   /** デフォルトの日付範囲（ページ固有） */
@@ -91,15 +97,11 @@ function buildFilterConditions(
 export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const { timeFrame, defaultSortOrder, defaultDateRange } = options;
 
-  const [movies, setMovies] = useState<MovieCacheItem[]>([]);
-  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<string>(DEFAULT_SORT);
   const [releaseType, setReleaseType] = useState<'theatrical' | 'streaming'>(
     DEFAULT_RELEASE_TYPE,
   );
-  const [genres, setGenres] = useState<Record<number, string>>({});
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
   const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange);
   const [isRevivalFilter, setIsRevivalFilter] = useState<boolean | undefined>(
@@ -109,152 +111,105 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const { toast } = useToast();
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated' && !!session?.user;
-  const savedFilterLoaded = useRef(false);
-  const initialFetchDone = useRef(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const savedFilterApplied = useRef(false);
+  const queryClient = useQueryClient();
 
-  const fetchMovies = useCallback(
-    async (
-      currentPage: number,
-      currentSortBy: string,
-      currentReleaseType: 'theatrical' | 'streaming',
-      currentGenreIds: number[],
-      currentDateRange: DateRange,
-      currentIsRevival: boolean | undefined,
-    ) => {
-      abortControllerRef.current?.abort();
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
+  // 保存済みフィルターの取得
+  const savedFilterQuery = useQuery({
+    queryKey: filterKeys.saved,
+    queryFn: getSavedFilter,
+    enabled: isAuthenticated,
+    staleTime: Infinity,
+  });
 
-      setIsLoading(true);
-      try {
-        const response = await getMovies(
-          {
-            page: currentPage,
-            sort_by: currentSortBy as
-              | 'release_date'
-              | 'popularity'
-              | 'vote_average',
-            sort_order: defaultSortOrder,
-            release_type: currentReleaseType,
-            time_frame: timeFrame,
-            genre_ids:
-              currentGenreIds.length > 0
-                ? currentGenreIds.join(',')
-                : undefined,
-            release_date_gte: currentDateRange.gte || undefined,
-            release_date_lte: currentDateRange.lte || undefined,
-            is_revival: currentIsRevival,
-          },
-          { signal: controller.signal },
-        );
-        setMovies(response.data.movies);
-        setPagination(response.data.pagination);
-        setGenres(response.data.genres);
-      } catch {
-        if (controller.signal.aborted) return;
-        toast({
-          title: 'エラー',
-          description: '映画データの取得に失敗しました。',
-          variant: 'error',
-        });
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    },
-    [toast, timeFrame, defaultSortOrder],
-  );
-
-  // 初回マウント時に保存済みフィルターを読み込み
+  // 保存済みフィルターをUIステートに1回だけ反映
+  // savedFilterQuery.dataはサーバー状態からUIローカル状態への初期同期のため、useEffect内のsetStateが必要
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (status === 'loading' || savedFilterLoaded.current) return;
-    savedFilterLoaded.current = true;
+    if (savedFilterApplied.current) return;
+    if (!savedFilterQuery.data) return;
 
-    if (!isAuthenticated) {
-      initialFetchDone.current = true;
-      return;
-    }
+    savedFilterApplied.current = true;
+    const conditions = savedFilterQuery.data;
+    const hasConditions = Object.keys(conditions).length > 0;
+    if (!hasConditions) return;
 
-    (async () => {
-      try {
-        const conditions = await getSavedFilter();
-        const hasConditions = Object.keys(conditions).length > 0;
+    setSortBy(conditions.sort_by || DEFAULT_SORT);
+    setReleaseType(conditions.release_type || DEFAULT_RELEASE_TYPE);
+    setSelectedGenreIds(conditions.genre_ids || []);
+    setDateRange({
+      gte: conditions.date_range_gte || defaultDateRange.gte,
+      lte: conditions.date_range_lte || defaultDateRange.lte,
+    });
+    setIsRevivalFilter(conditions.is_revival);
+  }, [savedFilterQuery.data, defaultDateRange]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-        if (hasConditions) {
-          const newSortBy = conditions.sort_by || DEFAULT_SORT;
-          const newReleaseType =
-            conditions.release_type || DEFAULT_RELEASE_TYPE;
-          const newGenreIds = conditions.genre_ids || [];
-          const newDateRange: DateRange = {
-            gte: conditions.date_range_gte || defaultDateRange.gte,
-            lte: conditions.date_range_lte || defaultDateRange.lte,
-          };
-          const newIsRevival = conditions.is_revival;
+  // フィルター準備完了の判定
+  const isFilterReady =
+    status !== 'loading' &&
+    (!isAuthenticated ||
+      savedFilterQuery.isFetched ||
+      savedFilterQuery.isError);
 
-          setSortBy(newSortBy);
-          setReleaseType(newReleaseType);
-          setSelectedGenreIds(newGenreIds);
-          setDateRange(newDateRange);
-          setIsRevivalFilter(newIsRevival);
-          // state変更がuseEffectを再トリガーするのでfetchMoviesは呼ばない
-          initialFetchDone.current = true;
-        } else {
-          initialFetchDone.current = true;
-          fetchMovies(
-            1,
-            DEFAULT_SORT,
-            DEFAULT_RELEASE_TYPE,
-            [],
-            defaultDateRange,
-            undefined,
-          );
-        }
-      } catch {
-        initialFetchDone.current = true;
-        fetchMovies(
-          1,
-          DEFAULT_SORT,
-          DEFAULT_RELEASE_TYPE,
-          [],
-          defaultDateRange,
-          undefined,
-        );
-      }
-    })();
-  }, [status, isAuthenticated, fetchMovies, defaultDateRange]);
-
-  // state変更時の映画再取得（初回読み込み後のみ）
-  useEffect(() => {
-    if (!initialFetchDone.current) return;
-
-    fetchMovies(
+  // 映画一覧クエリのパラメータを構築
+  const moviesQueryParams = useMemo(
+    () => ({
+      page,
+      sort_by: sortBy as 'release_date' | 'popularity' | 'vote_average',
+      sort_order: defaultSortOrder,
+      release_type: releaseType,
+      time_frame: timeFrame,
+      genre_ids:
+        selectedGenreIds.length > 0 ? selectedGenreIds.join(',') : undefined,
+      release_date_gte: dateRange.gte || undefined,
+      release_date_lte: dateRange.lte || undefined,
+      is_revival: isRevivalFilter,
+    }),
+    [
       page,
       sortBy,
+      defaultSortOrder,
       releaseType,
+      timeFrame,
       selectedGenreIds,
       dateRange,
       isRevivalFilter,
-    );
-  }, [
-    page,
-    sortBy,
-    releaseType,
-    selectedGenreIds,
-    dateRange,
-    isRevivalFilter,
-    fetchMovies,
-  ]);
+    ],
+  );
+
+  // 映画一覧の取得
+  const moviesQuery = useQuery({
+    queryKey: movieKeys.list(moviesQueryParams),
+    queryFn: ({ signal }) => getMovies(moviesQueryParams, { signal }),
+    enabled: isFilterReady,
+  });
+
+  // エラー時のトースト表示
+  useEffect(() => {
+    if (moviesQuery.error) {
+      toast({
+        title: 'エラー',
+        description: '映画データの取得に失敗しました。',
+        variant: 'error',
+      });
+    }
+  }, [moviesQuery.error, toast]);
+
+  // フィルター保存のmutation
+  const saveFilterMutation = useMutation({
+    mutationFn: saveFilter,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: filterKeys.saved });
+    },
+  });
 
   const saveFilterIfAuthenticated = useCallback(
     (conditions: FilterConditions) => {
       if (!isAuthenticated) return;
-      saveFilter(conditions).catch(() => {
-        // fire-and-forget: 保存失敗は無視
-      });
+      saveFilterMutation.mutate(conditions);
     },
-    [isAuthenticated],
+    [isAuthenticated, saveFilterMutation],
   );
 
   const handlePageChange = useCallback((newPage: number) => {
@@ -343,15 +298,20 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     setIsFilterModalOpen(false);
   }, []);
 
+  // サーバーステートの導出
+  const pagination = moviesQuery.data?.data.pagination ?? null;
+  const isLoading =
+    !isFilterReady || moviesQuery.isLoading || moviesQuery.isFetching;
+
   return useMemo(
     () => ({
-      movies,
+      movies: moviesQuery.data?.data.movies ?? [],
       pagination,
       isLoading,
       page,
       sortBy,
       releaseType,
-      genres,
+      genres: moviesQuery.data?.data.genres ?? {},
       selectedGenreIds,
       dateRange,
       isRevivalFilter,
@@ -364,13 +324,12 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       handleFilterModalClose,
     }),
     [
-      movies,
+      moviesQuery.data,
       pagination,
       isLoading,
       page,
       sortBy,
       releaseType,
-      genres,
       selectedGenreIds,
       dateRange,
       isRevivalFilter,

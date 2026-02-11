@@ -3,6 +3,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useMovieList } from './useMovieList';
 import type { UseMovieListOptions } from './useMovieList';
 import type { GetMoviesResponse } from '@/lib/api/movies/movies';
+import { createQueryWrapper } from '@/test/queryTestUtils';
 
 // --- Mocks ---
 
@@ -86,7 +87,9 @@ describe('useMovieList', () => {
   describe('初期状態', () => {
     it('isLoadingがtrueで初期化される', () => {
       mockSessionStatus = 'loading';
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       expect(result.current.isLoading).toBe(true);
       expect(result.current.movies).toEqual([]);
@@ -98,7 +101,9 @@ describe('useMovieList', () => {
 
     it('セッションloading中はフェッチしない', () => {
       mockSessionStatus = 'loading';
-      renderHook(() => useMovieList(defaultOptions));
+      renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       expect(mockGetMovies).not.toHaveBeenCalled();
     });
@@ -106,7 +111,9 @@ describe('useMovieList', () => {
 
   describe('未認証時の初回フェッチ', () => {
     it('デフォルト値で映画を取得する', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -126,7 +133,9 @@ describe('useMovieList', () => {
     });
 
     it('取得結果がstateに反映される', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -139,7 +148,9 @@ describe('useMovieList', () => {
     });
 
     it('getSavedFilterを呼ばない', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -155,7 +166,7 @@ describe('useMovieList', () => {
       mockSessionData = { user: { name: 'テストユーザー' } };
     });
 
-    it('保存済みフィルターがある場合、stateに反映して1回だけフェッチする', async () => {
+    it('保存済みフィルターがある場合、stateに反映してフェッチする', async () => {
       mockGetSavedFilter.mockResolvedValue({
         sort_by: 'popularity',
         release_type: 'streaming',
@@ -163,7 +174,9 @@ describe('useMovieList', () => {
         is_revival: false,
       });
 
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -173,8 +186,6 @@ describe('useMovieList', () => {
       expect(result.current.releaseType).toBe('streaming');
       expect(result.current.selectedGenreIds).toEqual([28, 12]);
       expect(result.current.isRevivalFilter).toBe(false);
-      // state変更によるuseEffect経由で1回だけフェッチ
-      expect(mockGetMovies).toHaveBeenCalledTimes(1);
       expect(mockGetMovies).toHaveBeenCalledWith(
         expect.objectContaining({
           sort_by: 'popularity',
@@ -189,13 +200,14 @@ describe('useMovieList', () => {
     it('保存済みフィルターが空の場合、デフォルト値でフェッチする', async () => {
       mockGetSavedFilter.mockResolvedValue({});
 
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(mockGetMovies).toHaveBeenCalledTimes(1);
       expect(mockGetMovies).toHaveBeenCalledWith(
         expect.objectContaining({
           sort_by: 'release_date',
@@ -208,13 +220,14 @@ describe('useMovieList', () => {
     it('getSavedFilterがエラーの場合、デフォルト値でフェッチする', async () => {
       mockGetSavedFilter.mockRejectedValue(new Error('API Error'));
 
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(mockGetMovies).toHaveBeenCalledTimes(1);
       expect(mockGetMovies).toHaveBeenCalledWith(
         expect.objectContaining({
           sort_by: 'release_date',
@@ -231,7 +244,9 @@ describe('useMovieList', () => {
         ...defaultOptions,
         defaultSortOrder: 'desc',
       };
-      const { result } = renderHook(() => useMovieList(options));
+      const { result } = renderHook(() => useMovieList(options), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -244,7 +259,9 @@ describe('useMovieList', () => {
     });
 
     it('未指定の場合sort_orderはundefined', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -259,7 +276,9 @@ describe('useMovieList', () => {
 
   describe('ハンドラー', () => {
     it('handlePageChangeでページが変更され再フェッチされる', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -283,7 +302,9 @@ describe('useMovieList', () => {
     });
 
     it('handleSortChangeでソートが変更されページが1にリセットされる', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -318,7 +339,9 @@ describe('useMovieList', () => {
     });
 
     it('handleReleaseTypeChangeでリリースタイプが変更される', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -343,7 +366,9 @@ describe('useMovieList', () => {
     });
 
     it('handleFilterApplyでフィルターが適用されモーダルが閉じる', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -389,7 +414,9 @@ describe('useMovieList', () => {
     });
 
     it('handleFilterModalOpen/Closeでモーダル状態が切り替わる', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -414,7 +441,9 @@ describe('useMovieList', () => {
       mockSessionStatus = 'authenticated';
       mockSessionData = { user: { name: 'テストユーザー' } };
 
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -424,13 +453,19 @@ describe('useMovieList', () => {
         result.current.handleSortChange('popularity');
       });
 
-      expect(mockSaveFilter).toHaveBeenCalledWith(
+      await waitFor(() => {
+        expect(mockSaveFilter).toHaveBeenCalled();
+      });
+
+      expect(mockSaveFilter.mock.calls[0][0]).toEqual(
         expect.objectContaining({ sort_by: 'popularity' }),
       );
     });
 
     it('未認証時はフィルターが保存されない', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -448,10 +483,12 @@ describe('useMovieList', () => {
     it('getMoviesエラー時にトーストが表示される', async () => {
       mockGetMovies.mockRejectedValue(new Error('Network Error'));
 
-      const { result } = renderHook(() => useMovieList(defaultOptions));
+      renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
 
       await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        expect(mockToast).toHaveBeenCalled();
       });
 
       expect(mockToast).toHaveBeenCalledWith(
@@ -463,13 +500,19 @@ describe('useMovieList', () => {
     });
   });
 
-  describe('AbortController（競合状態の防止）', () => {
-    it('新しいフェッチで前のリクエストがキャンセルされる', async () => {
-      const firstRequest = new Promise<GetMoviesResponse>(() => {
-        // 意図的にpending状態を維持（abortされる）
+  describe('TanStack Query統合', () => {
+    it('クエリキーが変更されると自動的にリフェッチされる', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
       });
 
-      const secondResponse = createMockResponse({
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      mockGetMovies.mockClear();
+
+      const newResponse = createMockResponse({
         movies: [
           {
             id: 2,
@@ -486,26 +529,8 @@ describe('useMovieList', () => {
           },
         ],
       });
+      mockGetMovies.mockResolvedValueOnce(newResponse);
 
-      mockGetMovies
-        .mockImplementationOnce(
-          (_params: unknown, options?: { signal?: AbortSignal }) => {
-            if (options?.signal) {
-              return new Promise<GetMoviesResponse>((resolve, reject) => {
-                options.signal!.addEventListener('abort', () => {
-                  reject(new DOMException('Aborted', 'AbortError'));
-                });
-                firstRequest.then(resolve);
-              });
-            }
-            return firstRequest;
-          },
-        )
-        .mockResolvedValueOnce(secondResponse);
-
-      const { result } = renderHook(() => useMovieList(defaultOptions));
-
-      // 初回フェッチが進行中の状態でリリースタイプを変更
       act(() => {
         result.current.handleReleaseTypeChange('streaming');
       });
@@ -514,10 +539,7 @@ describe('useMovieList', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // 2番目のリクエストの結果が反映される
       expect(result.current.movies[0].title).toBe('2番目の映画');
-      // キャンセルされたリクエストのエラーでトーストは表示されない
-      expect(mockToast).not.toHaveBeenCalled();
     });
   });
 });

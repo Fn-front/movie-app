@@ -252,12 +252,12 @@
 - [x] 開発環境でEffect二重実行による既存バグがないか確認・修正
 
 ### Step 8: TanStack Query 導入（`setup/tanstack-query`）
-- [ ] @tanstack/react-query をインストール
-- [ ] QueryClientProvider を設定
-- [ ] useMovieList を useQuery ベースにリファクタ（AbortController・競合状態・キャッシュを自動管理）
-- [ ] useHome の既存フェッチロジックを移行
-- [ ] getSavedFilter / saveFilter のフェッチを useQuery / useMutation に移行
-- [ ] テストを追加
+- [x] @tanstack/react-query をインストール
+- [x] QueryClientProvider を設定
+- [x] useMovieList を useQuery ベースにリファクタ（AbortController・競合状態・キャッシュを自動管理）
+- [x] useHome の既存フェッチロジックを移行
+- [x] getSavedFilter / saveFilter のフェッチを useQuery / useMutation に移行
+- [x] テストを追加
 
 ### Step 9: ESLint カスタムルール追加（`setup/eslint-async-effect`）
 - [ ] useEffect 内の非同期処理にクリーンアップ関数がない場合の警告ルールを追加

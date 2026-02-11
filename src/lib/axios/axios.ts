@@ -55,6 +55,11 @@ axiosInstance.interceptors.response.use(
     return response;
   },
   (error: AxiosError) => {
+    // キャンセルされたリクエストはログ不要
+    if (axios.isCancel(error)) {
+      return Promise.reject(error);
+    }
+
     // エラーログを出力
     if (process.env.NODE_ENV === 'development') {
       console.error('[API Response Error]', {

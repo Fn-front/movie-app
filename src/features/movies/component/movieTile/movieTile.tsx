@@ -54,6 +54,13 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
     ? formatDate(movie.release_date)
     : null;
 
+  const ratingClassName = useMemo(() => {
+    if (movie.vote_average == null || movie.vote_average <= 0) return '';
+    if (movie.vote_average >= 7) return styles.c_movie_tile__rating__high;
+    if (movie.vote_average >= 5) return styles.c_movie_tile__rating__mid;
+    return styles.c_movie_tile__rating__low;
+  }, [movie.vote_average]);
+
   const genreNames = useMemo(() => {
     if (!genres || !movie.genre_ids || movie.genre_ids.length === 0) {
       return [];
@@ -108,7 +115,9 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             <p className={styles.c_movie_tile__date}>{formattedDate}</p>
           )}
           {movie.vote_average != null && movie.vote_average > 0 && (
-            <span className={styles.c_movie_tile__rating}>
+            <span
+              className={`${styles.c_movie_tile__rating} ${ratingClassName}`}
+            >
               {movie.vote_average.toFixed(1)}
             </span>
           )}

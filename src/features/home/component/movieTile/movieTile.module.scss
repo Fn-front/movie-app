@@ -33,6 +33,18 @@
   &__rating {
     font-size: $font-size-xs;
     font-weight: $font-weight-bold;
+
+    &__high {
+      color: $success-main;
+    }
+
+    &__mid {
+      color: $warning-main;
+    }
+
+    &__low {
+      color: $error-main;
+    }
   }
 
   &__revival {

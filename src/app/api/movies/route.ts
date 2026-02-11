@@ -194,9 +194,7 @@ export async function GET(request: Request) {
           .neq('release_type', release_type);
 
         const existingOtherTypeIds = new Set(
-          (existingOtherType ?? []).map(
-            (row: { id: number }) => row.id,
-          ),
+          (existingOtherType ?? []).map((row: { id: number }) => row.id),
         );
 
         // TMDb discover APIで映画を取得（最大5ページ）

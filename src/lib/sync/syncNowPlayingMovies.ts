@@ -8,6 +8,8 @@ import {
   EXCLUDED_GENRE_IDS,
   EXCLUDED_KEYWORD_IDS,
   EXCLUDED_LANGUAGES,
+  MIN_POPULARITY,
+  MIN_VOTE_AVERAGE,
 } from '@/constants/movies';
 import { getMovieKeywordIds, getNowPlayingMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
@@ -80,6 +82,10 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
       return false;
     }
     if (movie.genre_ids.some((id) => excludedGenres.includes(id))) {
+      result.skipped++;
+      return false;
+    }
+    if (movie.vote_average < MIN_VOTE_AVERAGE || movie.popularity < MIN_POPULARITY) {
       result.skipped++;
       return false;
     }

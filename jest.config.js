@@ -25,6 +25,7 @@ const customJestConfig = {
   testMatch: [
     '<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/src/**/*.{spec,test}.{js,jsx,ts,tsx}',
+    '<rootDir>/eslint-local-rules/**/*.test.{js,jsx,ts,tsx}',
   ],
   coverageThreshold: {
     global: {

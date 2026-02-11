@@ -1,6 +1,9 @@
 /* eslint-disable no-undef */
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // React Strict Mode有効化（開発環境でEffect二重実行による潜在バグを検出）
+  reactStrictMode: true,
+
   // 画像最適化設定
   images: {
     remotePatterns: [

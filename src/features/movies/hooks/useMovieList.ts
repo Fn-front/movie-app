@@ -1,5 +1,6 @@
 /**
- * Homeのカスタムフック
+ * 映画一覧の共通カスタムフック
+ * upcoming / nowShowing で共有するロジック
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -13,50 +14,42 @@ import { DEFAULT_SORT, DEFAULT_RELEASE_TYPE } from '@/constants';
 import type { FilterConditions } from '@/schema/filters';
 import type { DateRange } from '@/features/movies/types';
 
-// DateRangeは共通型を再export
-export type { DateRange } from '@/features/movies/types';
+/**
+ * useMovieListフックのオプション
+ */
+export interface UseMovieListOptions {
+  /** 時間枠 */
+  timeFrame: 'upcoming' | 'now_showing';
+  /** デフォルトのソート順 */
+  defaultSortOrder?: 'asc' | 'desc';
+  /** デフォルトの日付範囲（ページ固有） */
+  defaultDateRange: DateRange;
+}
 
 /**
- * useHomeフックの返り値
+ * useMovieListフックの返り値
  */
-export interface UseHomeReturn {
-  /** 映画リスト */
+export interface UseMovieListReturn {
   movies: MovieCacheItem[];
-  /** ページネーション情報 */
   pagination: PaginationInfo | null;
-  /** ローディング状態 */
   isLoading: boolean;
-  /** 現在のページ */
   page: number;
-  /** ソート順 */
   sortBy: string;
-  /** リリースタイプ */
   releaseType: 'theatrical' | 'streaming';
-  /** ジャンルマップ */
   genres: Record<number, string>;
-  /** 選択中のジャンルID */
   selectedGenreIds: number[];
-  /** 日付範囲フィルタ */
   dateRange: DateRange;
-  /** リバイバルフィルタ */
   isRevivalFilter: boolean | undefined;
-  /** フィルターモーダル開閉状態 */
   isFilterModalOpen: boolean;
-  /** ページ変更 */
   handlePageChange: (page: number) => void;
-  /** ソート変更 */
   handleSortChange: (value: string) => void;
-  /** リリースタイプ変更 */
   handleReleaseTypeChange: (value: 'theatrical' | 'streaming') => void;
-  /** フィルター適用（ジャンル + 日付 + リバイバル） */
   handleFilterApply: (
     genreIds: number[],
     dateRange: DateRange,
     isRevival: boolean | undefined,
   ) => void;
-  /** フィルターモーダルを開く */
   handleFilterModalOpen: () => void;
-  /** フィルターモーダルを閉じる */
   handleFilterModalClose: () => void;
 }
 
@@ -93,9 +86,13 @@ function buildFilterConditions(
 }
 
 /**
- * Homeのカスタムフック
+ * 映画一覧の共通カスタムフック
  */
-export function useHome(): UseHomeReturn {
+export function useMovieList(
+  options: UseMovieListOptions,
+): UseMovieListReturn {
+  const { timeFrame, defaultSortOrder, defaultDateRange } = options;
+
   const [movies, setMovies] = useState<MovieCacheItem[]>([]);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -106,7 +103,7 @@ export function useHome(): UseHomeReturn {
   );
   const [genres, setGenres] = useState<Record<number, string>>({});
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
-  const [dateRange, setDateRange] = useState<DateRange>({});
+  const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange);
   const [isRevivalFilter, setIsRevivalFilter] = useState<boolean | undefined>(
     undefined,
   );
@@ -134,7 +131,9 @@ export function useHome(): UseHomeReturn {
             | 'release_date'
             | 'popularity'
             | 'vote_average',
+          sort_order: defaultSortOrder,
           release_type: currentReleaseType,
+          time_frame: timeFrame,
           genre_ids:
             currentGenreIds.length > 0 ? currentGenreIds.join(',') : undefined,
           release_date_gte: currentDateRange.gte || undefined,
@@ -154,7 +153,7 @@ export function useHome(): UseHomeReturn {
         setIsLoading(false);
       }
     },
-    [toast],
+    [toast, timeFrame, defaultSortOrder],
   );
 
   // 初回マウント時に保存済みフィルターを読み込み
@@ -163,13 +162,18 @@ export function useHome(): UseHomeReturn {
     savedFilterLoaded.current = true;
 
     if (!isAuthenticated) {
-      // 未ログイン: デフォルトで映画取得
       initialFetchDone.current = true;
-      fetchMovies(1, DEFAULT_SORT, DEFAULT_RELEASE_TYPE, [], {}, undefined);
+      fetchMovies(
+        1,
+        DEFAULT_SORT,
+        DEFAULT_RELEASE_TYPE,
+        [],
+        defaultDateRange,
+        undefined,
+      );
       return;
     }
 
-    // ログイン済み: 保存フィルターを取得して適用
     (async () => {
       try {
         const conditions = await getSavedFilter();
@@ -181,8 +185,8 @@ export function useHome(): UseHomeReturn {
             conditions.release_type || DEFAULT_RELEASE_TYPE;
           const newGenreIds = conditions.genre_ids || [];
           const newDateRange: DateRange = {
-            gte: conditions.date_range_gte,
-            lte: conditions.date_range_lte,
+            gte: conditions.date_range_gte || defaultDateRange.gte,
+            lte: conditions.date_range_lte || defaultDateRange.lte,
           };
           const newIsRevival = conditions.is_revival;
 
@@ -203,15 +207,28 @@ export function useHome(): UseHomeReturn {
           );
         } else {
           initialFetchDone.current = true;
-          fetchMovies(1, DEFAULT_SORT, DEFAULT_RELEASE_TYPE, [], {}, undefined);
+          fetchMovies(
+            1,
+            DEFAULT_SORT,
+            DEFAULT_RELEASE_TYPE,
+            [],
+            defaultDateRange,
+            undefined,
+          );
         }
       } catch {
-        // フィルター取得失敗時はデフォルトで映画取得
         initialFetchDone.current = true;
-        fetchMovies(1, DEFAULT_SORT, DEFAULT_RELEASE_TYPE, [], {}, undefined);
+        fetchMovies(
+          1,
+          DEFAULT_SORT,
+          DEFAULT_RELEASE_TYPE,
+          [],
+          defaultDateRange,
+          undefined,
+        );
       }
     })();
-  }, [status, isAuthenticated, fetchMovies]);
+  }, [status, isAuthenticated, fetchMovies, defaultDateRange]);
 
   // state変更時の映画再取得（初回読み込み後のみ）
   useEffect(() => {
@@ -235,9 +252,6 @@ export function useHome(): UseHomeReturn {
     fetchMovies,
   ]);
 
-  /**
-   * フィルター条件をfire-and-forgetで保存
-   */
   const saveFilterIfAuthenticated = useCallback(
     (conditions: FilterConditions) => {
       if (!isAuthenticated) return;

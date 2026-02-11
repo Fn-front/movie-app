@@ -38,7 +38,11 @@ export interface MovieCacheItem {
 export interface GetMoviesRequest {
   page?: number;
   sort_by?: 'release_date' | 'popularity' | 'vote_average';
+  /** ソート順（asc: 昇順、desc: 降順） */
+  sort_order?: 'asc' | 'desc';
   release_type?: 'theatrical' | 'streaming';
+  /** 時間枠（upcoming: 公開予定、now_showing: 公開中） */
+  time_frame?: 'upcoming' | 'now_showing';
   genre_ids?: string;
   /** 公開日の開始日（YYYY-MM-DD） */
   release_date_gte?: string;

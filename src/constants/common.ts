@@ -90,6 +90,10 @@ export const ROUTES = {
   REGISTER: '/auth/signup',
   /** アカウント設定 */
   SETTINGS: '/settings',
+  /** 公開予定 */
+  UPCOMING: '/movies/upcoming',
+  /** 公開中 */
+  NOW_SHOWING: '/movies/now-showing',
   /** 映画詳細 */
   MOVIE_DETAIL: (id: string | number) => `/movies/${id}`,
 } as const;

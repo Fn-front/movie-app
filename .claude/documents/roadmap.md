@@ -236,7 +236,18 @@
 - [x] useHomeで初回読み込み時にフィルター自動適用・変更時に自動保存
 - [x] テストを追加
 
-### Step 6: 映画詳細モーダル（`feature/movie-detail-modal`）
+### Step 6: サイドナビゲーション + 公開予定/公開中ページ分離（`feature/side-nav-movie-pages`）
+- [x] サイドナビゲーション（SideNav）コンポーネントを作成
+- [x] Sidebarにnavigationスロットを追加
+- [x] Movies API に time_frame パラメータを追加（upcoming / now_showing）
+- [x] /movies/upcoming ページ + upcomingドメイン（features/movies/upcoming）を作成
+- [x] /movies/now-showing ページ + nowShowingドメイン（features/movies/nowShowing）を作成
+- [x] 共有コンポーネントを features/movies/component/ に移動
+- [x] features/home から共有コンポーネントを features/movies/component/ に移動（home自体は残す）
+- [x] / は現状維持（リダイレクトなし）
+- [x] テストを追加
+
+### Step 7: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装
 - [ ] APIクライアントにgetMovieDetailを追加
 - [ ] useMovieDetailフックを作成
@@ -245,7 +256,7 @@
 - [ ] HomePageにモーダル統合（MovieTileクリックで表示）
 - [ ] テストを追加
 
-### Step 7: バッチ更新API（`feature/batch-update-movies`）
+### Step 8: バッチ更新API（`feature/batch-update-movies`）
 - [ ] Cron定数を追加
 - [ ] バッチ更新API（POST /api/cron/update-movies）を実装
 - [ ] Vercel Cron設定（vercel.json）を追加

@@ -58,6 +58,28 @@ export const RELEASE_TYPE_MAP: Record<string, string> = {
 };
 
 /**
+ * 映画フィルタリング: 最低評価スコア（これ未満は除外）
+ */
+export const MIN_VOTE_AVERAGE = 3;
+
+/**
+ * 映画フィルタリング: 最低人気度（評価済みでもこれ未満は除外）
+ */
+export const MIN_POPULARITY = 0.5;
+
+/**
+ * TMDb Discover APIで除外するジャンルID
+ */
+export const EXCLUDED_GENRE_IDS = [
+  10770, // TV Movie
+] as const;
+
+/**
+ * TMDb Discover APIのwithout_genresパラメータ値
+ */
+export const EXCLUDED_GENRES_PARAM = EXCLUDED_GENRE_IDS.join('|');
+
+/**
  * TMDb Discover APIで除外するキーワードID
  * 不適切コンテンツ（softcore, ポルノ, ピンク映画等）を除外する
  */

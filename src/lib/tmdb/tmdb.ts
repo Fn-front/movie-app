@@ -225,6 +225,8 @@ export interface DiscoverMoviesParams {
   sort_by?: string;
   /** 除外するキーワードID（パイプ区切り） */
   without_keywords?: string;
+  /** 除外するジャンルID（パイプ区切り） */
+  without_genres?: string;
 }
 
 /**

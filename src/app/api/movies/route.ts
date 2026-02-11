@@ -20,7 +20,10 @@ import {
   NOW_SHOWING_MONTHS_BACK,
   RELEASE_TYPE_MAP,
   EXCLUDED_KEYWORDS_PARAM,
+  EXCLUDED_GENRES_PARAM,
   EXCLUDED_LANGUAGES,
+  MIN_VOTE_AVERAGE,
+  MIN_POPULARITY,
   MOVIES_ERROR_MESSAGES,
   ERROR_CODE,
 } from '@/constants';
@@ -207,17 +210,22 @@ export async function GET(request: Request) {
             with_release_type: withReleaseType,
             sort_by: 'popularity.desc',
             without_keywords: EXCLUDED_KEYWORDS_PARAM,
+            without_genres: EXCLUDED_GENRES_PARAM,
           });
 
           if (tmdbResponse.results.length === 0) break;
 
-          // adultコンテンツ・除外言語・別release_typeで既存の映画を除外
+          // adultコンテンツ・除外言語・別release_typeで既存の映画・低品質コンテンツを除外
           const excludedLangs: readonly string[] = EXCLUDED_LANGUAGES;
           const filteredResults = tmdbResponse.results.filter(
             (movie) =>
               !movie.adult &&
               !excludedLangs.includes(movie.original_language) &&
-              !existingOtherTypeIds.has(movie.id),
+              !existingOtherTypeIds.has(movie.id) &&
+              movie.genre_ids &&
+              movie.genre_ids.length > 0 &&
+              movie.vote_average >= MIN_VOTE_AVERAGE &&
+              movie.popularity >= MIN_POPULARITY,
           );
 
           if (filteredResults.length === 0) continue;

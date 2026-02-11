@@ -99,13 +99,15 @@ export const MovieListContent = memo<MovieListContentProps>(
               aria-label='フィルター'
               className={styles.c_movie_list__filter_button}
             >
-              <FilterIcon />
-              {(selectedGenreIds.length > 0 ||
-                dateRange.gte ||
-                dateRange.lte ||
-                isRevivalFilter !== undefined) && (
-                <span className={styles.c_movie_list__filter_count} />
-              )}
+              <span className={styles.c_movie_list__filter_inner}>
+                <FilterIcon />
+                {(selectedGenreIds.length > 0 ||
+                  dateRange.gte ||
+                  dateRange.lte ||
+                  isRevivalFilter !== undefined) && (
+                  <span className={styles.c_movie_list__filter_count} />
+                )}
+              </span>
             </Button>
             <Select
               options={sortOptions}

@@ -76,7 +76,14 @@ export const Button = memo<ButtonProps>(function Button({
       {isLoading ? (
         <span className={styles.c_button__spinner} aria-hidden='true' />
       ) : null}
-      <span className={isLoading ? styles.c_button__content__hidden : ''}>
+      <span
+        className={[
+          styles.c_button__content,
+          isLoading && styles.c_button__content__hidden,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
         {children}
       </span>
     </button>

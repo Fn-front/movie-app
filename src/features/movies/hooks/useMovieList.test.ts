@@ -465,9 +465,8 @@ describe('useMovieList', () => {
 
   describe('AbortController（競合状態の防止）', () => {
     it('新しいフェッチで前のリクエストがキャンセルされる', async () => {
-      let resolveFirst: (value: GetMoviesResponse) => void;
-      const firstRequest = new Promise<GetMoviesResponse>((resolve) => {
-        resolveFirst = resolve;
+      const firstRequest = new Promise<GetMoviesResponse>(() => {
+        // 意図的にpending状態を維持（abortされる）
       });
 
       const secondResponse = createMockResponse({
@@ -489,17 +488,19 @@ describe('useMovieList', () => {
       });
 
       mockGetMovies
-        .mockImplementationOnce((_params: unknown, options?: { signal?: AbortSignal }) => {
-          if (options?.signal) {
-            return new Promise<GetMoviesResponse>((resolve, reject) => {
-              options.signal!.addEventListener('abort', () => {
-                reject(new DOMException('Aborted', 'AbortError'));
+        .mockImplementationOnce(
+          (_params: unknown, options?: { signal?: AbortSignal }) => {
+            if (options?.signal) {
+              return new Promise<GetMoviesResponse>((resolve, reject) => {
+                options.signal!.addEventListener('abort', () => {
+                  reject(new DOMException('Aborted', 'AbortError'));
+                });
+                firstRequest.then(resolve);
               });
-              firstRequest.then(resolve);
-            });
-          }
-          return firstRequest;
-        })
+            }
+            return firstRequest;
+          },
+        )
         .mockResolvedValueOnce(secondResponse);
 
       const { result } = renderHook(() => useMovieList(defaultOptions));

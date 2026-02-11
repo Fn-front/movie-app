@@ -154,11 +154,7 @@ describe('FilterModal', () => {
       });
 
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith(
-        [28],
-        { gte: '2026-05-01' },
-        true,
-      );
+      expect(onApply).toHaveBeenCalledWith([28], { gte: '2026-05-01' }, true);
     });
 
     it('クリアボタンで全フィルターがリセットされる', () => {

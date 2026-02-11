@@ -20,6 +20,7 @@ jest.mock('next/image', () => ({
     height?: number;
     className?: string;
   }) => (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={alt}
@@ -78,20 +79,14 @@ describe('MovieListContent', () => {
   describe('表示', () => {
     it('タイトルが表示される', () => {
       render(
-        <MovieListContent
-          title="公開予定"
-          movieList={createMockMovieList()}
-        />,
+        <MovieListContent title='公開予定' movieList={createMockMovieList()} />,
       );
       expect(screen.getByText('公開予定')).toBeInTheDocument();
     });
 
     it('リリースタイプのタブが表示される', () => {
       render(
-        <MovieListContent
-          title="公開予定"
-          movieList={createMockMovieList()}
-        />,
+        <MovieListContent title='公開予定' movieList={createMockMovieList()} />,
       );
       expect(screen.getByRole('tab', { name: '劇場公開' })).toBeInTheDocument();
       expect(
@@ -101,10 +96,7 @@ describe('MovieListContent', () => {
 
     it('フィルターボタンが表示される', () => {
       render(
-        <MovieListContent
-          title="公開予定"
-          movieList={createMockMovieList()}
-        />,
+        <MovieListContent title='公開予定' movieList={createMockMovieList()} />,
       );
       expect(
         screen.getByRole('button', { name: 'フィルター' }),
@@ -113,10 +105,7 @@ describe('MovieListContent', () => {
 
     it('ソート選択が表示される', () => {
       render(
-        <MovieListContent
-          title="公開予定"
-          movieList={createMockMovieList()}
-        />,
+        <MovieListContent title='公開予定' movieList={createMockMovieList()} />,
       );
       expect(
         screen.getByRole('combobox', { name: 'ソート順を選択' }),
@@ -128,7 +117,7 @@ describe('MovieListContent', () => {
     it('isLoading=trueの場合スケルトンが表示される', () => {
       const { container } = render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({ isLoading: true })}
         />,
       );
@@ -139,7 +128,7 @@ describe('MovieListContent', () => {
     it('isLoading=trueの場合映画タイルが表示されない', () => {
       render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({
             isLoading: true,
             movies: [createMockMovie()],
@@ -154,7 +143,7 @@ describe('MovieListContent', () => {
     it('映画が表示される', () => {
       render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({
             movies: [
               createMockMovie({ id: 1, title: '映画A' }),
@@ -170,7 +159,7 @@ describe('MovieListContent', () => {
     it('映画が空でローディングでない場合空メッセージが表示される', () => {
       render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({ movies: [], isLoading: false })}
         />,
       );
@@ -182,7 +171,7 @@ describe('MovieListContent', () => {
     it('映画がある場合空メッセージが表示されない', () => {
       render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({
             movies: [createMockMovie()],
           })}
@@ -198,7 +187,7 @@ describe('MovieListContent', () => {
     it('totalPages > 1の場合ページネーションが表示される', () => {
       render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({
             pagination: {
               currentPage: 1,
@@ -217,7 +206,7 @@ describe('MovieListContent', () => {
     it('totalPages = 1の場合ページネーションが表示されない', () => {
       render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({
             pagination: {
               currentPage: 1,
@@ -236,7 +225,7 @@ describe('MovieListContent', () => {
     it('paginationがnullの場合ページネーションが表示されない', () => {
       render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({ pagination: null })}
         />,
       );
@@ -250,7 +239,7 @@ describe('MovieListContent', () => {
     it('ジャンルが選択されている場合バッジが表示される', () => {
       const { container } = render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({ selectedGenreIds: [28] })}
         />,
       );
@@ -262,7 +251,7 @@ describe('MovieListContent', () => {
     it('日付範囲gteがある場合バッジが表示される', () => {
       const { container } = render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({
             dateRange: { gte: '2026-03-01' },
           })}
@@ -276,7 +265,7 @@ describe('MovieListContent', () => {
     it('isRevivalFilterが設定されている場合バッジが表示される', () => {
       const { container } = render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({ isRevivalFilter: false })}
         />,
       );
@@ -287,10 +276,7 @@ describe('MovieListContent', () => {
 
     it('フィルターが無効な場合バッジが表示されない', () => {
       const { container } = render(
-        <MovieListContent
-          title="公開予定"
-          movieList={createMockMovieList()}
-        />,
+        <MovieListContent title='公開予定' movieList={createMockMovieList()} />,
       );
       expect(
         container.querySelector('.c_movie_list__filter_count'),
@@ -303,7 +289,7 @@ describe('MovieListContent', () => {
       const handleReleaseTypeChange = jest.fn();
       render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({ handleReleaseTypeChange })}
         />,
       );
@@ -317,7 +303,7 @@ describe('MovieListContent', () => {
       const handleFilterModalOpen = jest.fn();
       render(
         <MovieListContent
-          title="公開予定"
+          title='公開予定'
           movieList={createMockMovieList({ handleFilterModalOpen })}
         />,
       );

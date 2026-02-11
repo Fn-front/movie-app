@@ -19,6 +19,7 @@ jest.mock('next/image', () => ({
     height?: number;
     className?: string;
   }) => (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={alt}
@@ -67,10 +68,7 @@ describe('MovieTile', () => {
       render(<MovieTile movie={createMockMovie()} genres={genres} />);
       const img = screen.getByAltText('テスト映画のポスター');
       expect(img).toBeInTheDocument();
-      expect(img).toHaveAttribute(
-        'src',
-        expect.stringContaining('/test.jpg'),
-      );
+      expect(img).toHaveAttribute('src', expect.stringContaining('/test.jpg'));
     });
 
     it('poster_pathがnullの場合No Imageが表示される', () => {
@@ -103,7 +101,10 @@ describe('MovieTile', () => {
 
     it('リバイバルバッジが表示される', () => {
       render(
-        <MovieTile movie={createMockMovie({ is_revival: true })} genres={genres} />,
+        <MovieTile
+          movie={createMockMovie({ is_revival: true })}
+          genres={genres}
+        />,
       );
       expect(screen.getByText('リバイバル')).toBeInTheDocument();
     });
@@ -132,7 +133,10 @@ describe('MovieTile', () => {
 
     it('genre_idsが空の場合ジャンルが表示されない', () => {
       render(
-        <MovieTile movie={createMockMovie({ genre_ids: [] })} genres={genres} />,
+        <MovieTile
+          movie={createMockMovie({ genre_ids: [] })}
+          genres={genres}
+        />,
       );
       expect(screen.queryByText('アクション')).not.toBeInTheDocument();
     });
@@ -148,7 +152,9 @@ describe('MovieTile', () => {
     });
 
     it('公開日がフォーマットされて表示される', () => {
-      render(<MovieTile movie={createMockMovie({ release_date: '2026-03-01' })} />);
+      render(
+        <MovieTile movie={createMockMovie({ release_date: '2026-03-01' })} />,
+      );
       expect(screen.getByText('2026年03月01日')).toBeInTheDocument();
     });
 

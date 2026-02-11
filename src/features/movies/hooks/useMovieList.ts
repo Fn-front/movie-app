@@ -88,9 +88,7 @@ function buildFilterConditions(
 /**
  * 映画一覧の共通カスタムフック
  */
-export function useMovieList(
-  options: UseMovieListOptions,
-): UseMovieListReturn {
+export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const { timeFrame, defaultSortOrder, defaultDateRange } = options;
 
   const [movies, setMovies] = useState<MovieCacheItem[]>([]);

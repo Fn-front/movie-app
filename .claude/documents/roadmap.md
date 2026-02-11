@@ -247,7 +247,23 @@
 - [x] / は現状維持（リダイレクトなし）
 - [x] テストを追加
 
-### Step 7: 映画詳細モーダル（`feature/movie-detail-modal`）
+### Step 7: React Strict Mode 有効化（`setup/strict-mode`）
+- [ ] layout.tsx に `<StrictMode>` を追加
+- [ ] 開発環境でEffect二重実行による既存バグがないか確認・修正
+
+### Step 8: TanStack Query 導入（`setup/tanstack-query`）
+- [ ] @tanstack/react-query をインストール
+- [ ] QueryClientProvider を設定
+- [ ] useMovieList を useQuery ベースにリファクタ（AbortController・競合状態・キャッシュを自動管理）
+- [ ] useHome の既存フェッチロジックを移行
+- [ ] getSavedFilter / saveFilter のフェッチを useQuery / useMutation に移行
+- [ ] テストを追加
+
+### Step 9: ESLint カスタムルール追加（`setup/eslint-async-effect`）
+- [ ] useEffect 内の非同期処理にクリーンアップ関数がない場合の警告ルールを追加
+- [ ] 既存コードの違反を修正
+
+### Step 10: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装
 - [ ] APIクライアントにgetMovieDetailを追加
 - [ ] useMovieDetailフックを作成
@@ -256,7 +272,7 @@
 - [ ] HomePageにモーダル統合（MovieTileクリックで表示）
 - [ ] テストを追加
 
-### Step 8: バッチ更新API（`feature/batch-update-movies`）
+### Step 11: バッチ更新API（`feature/batch-update-movies`）
 - [ ] Cron定数を追加
 - [ ] バッチ更新API（POST /api/cron/update-movies）を実装
 - [ ] Vercel Cron設定（vercel.json）を追加

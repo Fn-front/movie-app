@@ -260,8 +260,8 @@
 - [x] テストを追加
 
 ### Step 9: ESLint カスタムルール追加（`setup/eslint-async-effect`）
-- [ ] useEffect 内の非同期処理にクリーンアップ関数がない場合の警告ルールを追加
-- [ ] 既存コードの違反を修正
+- [x] useEffect 内の非同期処理にクリーンアップ関数がない場合の警告ルールを追加
+- [x] 既存コードの違反を修正
 
 ### Step 10: 公開中ページを now_playing API に移行（`feature/now-playing-sync`）
 - [x] movie_cache テーブルに is_now_playing カラムを追加

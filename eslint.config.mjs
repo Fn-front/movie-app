@@ -1,9 +1,13 @@
+import { createRequire } from 'module';
 import js from '@eslint/js';
 import nextPlugin from '@next/eslint-plugin-next';
 import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import importX from 'eslint-plugin-import-x';
 import tseslint from 'typescript-eslint';
+
+const require = createRequire(import.meta.url);
+const localRules = require('./eslint-local-rules');
 
 export default [
   // Ignore patterns
@@ -15,7 +19,8 @@ export default [
       'build/**',
       'dist/**',
       'next-env.d.ts',
-      'eslint.config.mjs', // Ignore config file itself
+      'eslint.config.mjs',
+      'eslint-local-rules/**',
     ],
   },
 
@@ -35,6 +40,7 @@ export default [
       react: reactPlugin,
       'react-hooks': reactHooksPlugin,
       '@next/next': nextPlugin,
+      local: localRules,
     },
     rules: {
       // React
@@ -59,6 +65,9 @@ export default [
           ignore: ['\\.scss$', '\\.css$', '\\.(png|jpg|jpeg|gif|svg)$'],
         },
       ],
+
+      // Custom rules
+      'local/require-effect-cleanup': 'warn',
 
       // Code style
       quotes: ['error', 'single', { avoidEscape: true }],

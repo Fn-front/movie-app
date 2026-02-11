@@ -263,7 +263,17 @@
 - [ ] useEffect 内の非同期処理にクリーンアップ関数がない場合の警告ルールを追加
 - [ ] 既存コードの違反を修正
 
-### Step 10: 映画詳細モーダル（`feature/movie-detail-modal`）
+### Step 10: 公開中ページを now_playing API に移行（`feature/now-playing-sync`）
+- [x] movie_cache テーブルに is_now_playing カラムを追加
+- [x] syncNowPlayingMovies ユーティリティを作成
+- [x] /api/cron/sync-now-playing エンドポイントを作成
+- [x] /api/movies の now_showing+theatrical ロジックを is_now_playing フラグに変更
+- [x] vercel.json に日次 Cron を追加
+- [x] useNowShowing フックを簡素化
+- [x] Now Playing 比較ページを削除
+- [x] テストを追加
+
+### Step 11: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装
 - [ ] APIクライアントにgetMovieDetailを追加
 - [ ] useMovieDetailフックを作成
@@ -272,7 +282,7 @@
 - [ ] HomePageにモーダル統合（MovieTileクリックで表示）
 - [ ] テストを追加
 
-### Step 11: バッチ更新API（`feature/batch-update-movies`）
+### Step 12: バッチ更新API（`feature/batch-update-movies`）
 - [ ] Cron定数を追加
 - [ ] バッチ更新API（POST /api/cron/update-movies）を実装
 - [ ] Vercel Cron設定（vercel.json）を追加

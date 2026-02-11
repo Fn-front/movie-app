@@ -83,14 +83,19 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 | vote_average | DECIMAL(3,1) | NULL | - | 評価平均 |
 | popularity | DECIMAL(10,3) | NULL | - | 人気度 |
 | genre_ids | JSONB | NULL | - | ジャンルID配列 |
+| release_type | VARCHAR(20) | NOT NULL | 'theatrical' | リリースタイプ（theatrical / streaming） |
+| is_revival | BOOLEAN | NOT NULL | false | リバイバル上映フラグ |
+| is_now_playing | BOOLEAN | NOT NULL | false | TMDb now_playing リスト掲載フラグ |
 | cached_at | TIMESTAMP | NOT NULL | NOW() | 初回キャッシュ日時 |
 | updated_at | TIMESTAMP | NOT NULL | NOW() | 最終更新日時 |
 
 **インデックス:**
+- `id, release_type` (UNIQUE) - 複合主キー
 - `release_date` - 公開日順ソート用
 - `popularity` - 人気順ソート用
 - `cached_at` - 差分取得時の最新日時確認用
 - `updated_at` - バッチ更新管理用
+- `is_now_playing` - Now Playing フィルタ用
 
 **キャッシュ戦略:**
 - 初回取得: 今日から3ヶ月先の映画を取得

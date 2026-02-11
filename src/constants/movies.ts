@@ -22,6 +22,11 @@ export const DEFAULT_SORT = 'release_date' as const;
 export const CACHE_DURATION_HOURS = 6;
 
 /**
+ * Now Playing キャッシュ有効時間（時間）
+ */
+export const NOW_PLAYING_CACHE_DURATION_HOURS = 24;
+
+/**
  * 映画取得範囲（何ヶ月先まで）
  */
 export const MOVIES_FETCH_MONTHS_AHEAD = 3;

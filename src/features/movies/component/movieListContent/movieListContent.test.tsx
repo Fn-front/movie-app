@@ -29,6 +29,7 @@ const createMockMovieList = (
   movies: [],
   pagination: null,
   isLoading: false,
+  isTransitioning: false,
   page: 1,
   sortBy: 'release_date',
   releaseType: 'theatrical',

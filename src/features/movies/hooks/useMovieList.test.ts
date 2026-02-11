@@ -535,11 +535,11 @@ describe('useMovieList', () => {
         result.current.handleReleaseTypeChange('streaming');
       });
 
+      // keepPreviousDataにより前のデータがプレースホルダーとして表示されるため、
+      // 新しいデータの到着を直接待機する
       await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        expect(result.current.movies[0]?.title).toBe('2番目の映画');
       });
-
-      expect(result.current.movies[0].title).toBe('2番目の映画');
     });
   });
 });

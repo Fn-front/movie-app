@@ -7,7 +7,6 @@
 
 import { memo } from 'react';
 
-import { AppLayout } from '@/components/layout/appLayout/appLayout';
 import { MovieListContent } from '@/features/movies/component/movieListContent/movieListContent';
 import { useUpcoming } from '@/features/movies/upcoming/hooks/useUpcoming';
 
@@ -17,11 +16,7 @@ import { useUpcoming } from '@/features/movies/upcoming/hooks/useUpcoming';
 export const UpcomingPage = memo(function UpcomingPage() {
   const movieList = useUpcoming();
 
-  return (
-    <AppLayout>
-      <MovieListContent title='公開予定の映画' movieList={movieList} />
-    </AppLayout>
-  );
+  return <MovieListContent title='公開予定の映画' movieList={movieList} />;
 });
 
 UpcomingPage.displayName = 'UpcomingPage';

@@ -123,6 +123,8 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   });
 
   // 保存済みフィルターをUIステートに1回だけ反映
+  // savedFilterQuery.dataはサーバー状態からUIローカル状態への初期同期のため、useEffect内のsetStateが必要
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (savedFilterApplied.current) return;
     if (!savedFilterQuery.data) return;
@@ -141,6 +143,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     });
     setIsRevivalFilter(conditions.is_revival);
   }, [savedFilterQuery.data, defaultDateRange]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // フィルター準備完了の判定
   const isFilterReady =
@@ -158,9 +161,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       release_type: releaseType,
       time_frame: timeFrame,
       genre_ids:
-        selectedGenreIds.length > 0
-          ? selectedGenreIds.join(',')
-          : undefined,
+        selectedGenreIds.length > 0 ? selectedGenreIds.join(',') : undefined,
       release_date_gte: dateRange.gte || undefined,
       release_date_lte: dateRange.lte || undefined,
       is_revival: isRevivalFilter,
@@ -298,20 +299,19 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   }, []);
 
   // サーバーステートの導出
-  const movies = moviesQuery.data?.data.movies ?? [];
   const pagination = moviesQuery.data?.data.pagination ?? null;
-  const genres = moviesQuery.data?.data.genres ?? {};
-  const isLoading = !isFilterReady || moviesQuery.isLoading || moviesQuery.isFetching;
+  const isLoading =
+    !isFilterReady || moviesQuery.isLoading || moviesQuery.isFetching;
 
   return useMemo(
     () => ({
-      movies,
+      movies: moviesQuery.data?.data.movies ?? [],
       pagination,
       isLoading,
       page,
       sortBy,
       releaseType,
-      genres,
+      genres: moviesQuery.data?.data.genres ?? {},
       selectedGenreIds,
       dateRange,
       isRevivalFilter,
@@ -324,13 +324,12 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       handleFilterModalClose,
     }),
     [
-      movies,
+      moviesQuery.data,
       pagination,
       isLoading,
       page,
       sortBy,
       releaseType,
-      genres,
       selectedGenreIds,
       dateRange,
       isRevivalFilter,

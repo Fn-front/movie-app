@@ -483,7 +483,7 @@ describe('useMovieList', () => {
     it('getMoviesエラー時にトーストが表示される', async () => {
       mockGetMovies.mockRejectedValue(new Error('Network Error'));
 
-      const { result } = renderHook(() => useMovieList(defaultOptions), {
+      renderHook(() => useMovieList(defaultOptions), {
         wrapper: createQueryWrapper(),
       });
 

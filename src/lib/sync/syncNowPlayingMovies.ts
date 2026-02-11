@@ -75,7 +75,11 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
       result.skipped++;
       return false;
     }
-    if (movie.genre_ids?.some((id) => excludedGenres.includes(id))) {
+    if (!movie.genre_ids || movie.genre_ids.length === 0) {
+      result.skipped++;
+      return false;
+    }
+    if (movie.genre_ids.some((id) => excludedGenres.includes(id))) {
       result.skipped++;
       return false;
     }

@@ -219,7 +219,9 @@ export async function GET(request: Request) {
             (movie) =>
               !movie.adult &&
               !excludedLangs.includes(movie.original_language) &&
-              !existingOtherTypeIds.has(movie.id),
+              !existingOtherTypeIds.has(movie.id) &&
+              movie.genre_ids &&
+              movie.genre_ids.length > 0,
           );
 
           if (filteredResults.length === 0) continue;

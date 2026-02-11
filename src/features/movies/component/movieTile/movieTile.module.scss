@@ -65,8 +65,10 @@
 
   &__info {
     display: flex;
+    flex: 1;
     flex-direction: column;
     gap: $spacing-1;
+    height: 100%;
     padding: $spacing-3;
   }
 

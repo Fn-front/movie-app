@@ -27,6 +27,11 @@ export const CACHE_DURATION_HOURS = 6;
 export const MOVIES_FETCH_MONTHS_AHEAD = 3;
 
 /**
+ * 公開中映画の取得範囲（何ヶ月前まで）
+ */
+export const NOW_SHOWING_MONTHS_BACK = 2;
+
+/**
  * リリースタイプ選択肢
  */
 export const RELEASE_TYPE_OPTIONS = [

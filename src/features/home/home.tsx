@@ -9,17 +9,11 @@ import { memo } from 'react';
 
 import { AppLayout } from '@/components/layout/appLayout/appLayout';
 
-import { MovieContent } from '@/features/home/component/movieContent/movieContent';
-
 /**
  * HomePageコンポーネント
  */
 export const HomePage = memo(function HomePage() {
-  return (
-    <AppLayout>
-      <MovieContent />
-    </AppLayout>
-  );
+  return <AppLayout>{null}</AppLayout>;
 });
 
 HomePage.displayName = 'HomePage';

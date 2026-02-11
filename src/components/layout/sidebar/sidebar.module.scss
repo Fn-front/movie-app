@@ -13,6 +13,12 @@
   overflow-y: auto;
   flex-shrink: 0;
 
+  // ナビゲーション
+  &__navigation {
+    padding-bottom: $spacing-4;
+    border-bottom: $border-width-1 solid $border-color;
+  }
+
   // ユーザーセクション
   &__user {
     padding-bottom: $spacing-4;

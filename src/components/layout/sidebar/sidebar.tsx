@@ -12,6 +12,8 @@ import styles from './sidebar.module.scss';
  * Sidebarコンポーネントのプロパティ
  */
 export interface SidebarProps extends HTMLAttributes<HTMLElement> {
+  /** ナビゲーション */
+  navigation?: ReactNode;
   /** ユーザーセクション */
   userSection?: ReactNode;
   /** カレンダーボタン */
@@ -28,6 +30,7 @@ export interface SidebarProps extends HTMLAttributes<HTMLElement> {
  * @example
  * ```tsx
  * <Sidebar
+ *   navigation={<SideNav />}
  *   userSection={<UserProfile user={user} />}
  *   calendarButton={<Button onClick={handleOpenCalendar}>カレンダー</Button>}
  *   watchlist={<WatchlistItems items={watchlistItems} />}
@@ -35,6 +38,7 @@ export interface SidebarProps extends HTMLAttributes<HTMLElement> {
  * ```
  */
 export const Sidebar = memo<SidebarProps>(function Sidebar({
+  navigation,
   userSection,
   calendarButton,
   watchlist,
@@ -45,6 +49,10 @@ export const Sidebar = memo<SidebarProps>(function Sidebar({
 
   return (
     <aside className={classNames} {...props}>
+      {navigation && (
+        <div className={styles.c_sidebar__navigation}>{navigation}</div>
+      )}
+
       {userSection && (
         <div className={styles.c_sidebar__user}>{userSection}</div>
       )}

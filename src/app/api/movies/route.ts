@@ -1,6 +1,7 @@
 /**
  * 映画一覧API
- * GET /api/movies?page=1&sort_by=release_date&release_type=theatrical&genre_ids=28,12
+ * GET /api/movies?time_frame=upcoming&page=1&sort_by=release_date&release_type=theatrical&genre_ids=28,12
+ * GET /api/movies?time_frame=now_showing&page=1&sort_by=release_date&release_type=theatrical
  */
 
 import { NextResponse } from 'next/server';
@@ -15,6 +16,7 @@ import {
   PAGINATION,
   CACHE_DURATION_HOURS,
   MOVIES_FETCH_MONTHS_AHEAD,
+  NOW_SHOWING_MONTHS_BACK,
   RELEASE_TYPE_MAP,
   EXCLUDED_KEYWORDS_PARAM,
   EXCLUDED_LANGUAGES,
@@ -80,7 +82,9 @@ export async function GET(request: Request) {
     const queryResult = moviesQuerySchema.safeParse({
       page: searchParams.get('page') ?? undefined,
       sort_by: searchParams.get('sort_by') ?? undefined,
+      sort_order: searchParams.get('sort_order') ?? undefined,
       release_type: searchParams.get('release_type') ?? undefined,
+      time_frame: searchParams.get('time_frame') ?? undefined,
       genre_ids: searchParams.get('genre_ids') ?? undefined,
       release_date_gte: searchParams.get('release_date_gte') ?? undefined,
       release_date_lte: searchParams.get('release_date_lte') ?? undefined,
@@ -104,7 +108,9 @@ export async function GET(request: Request) {
     const {
       page,
       sort_by,
+      sort_order,
       release_type,
+      time_frame,
       genre_ids,
       release_date_gte,
       release_date_lte,
@@ -132,9 +138,22 @@ export async function GET(request: Request) {
     // キャッシュが古い or 存在しない場合、TMDb APIから取得
     if (cacheExpired) {
       const today = formatDateToString(now);
-      const futureDate = new Date(now);
-      futureDate.setMonth(futureDate.getMonth() + MOVIES_FETCH_MONTHS_AHEAD);
-      const futureDateStr = formatDateToString(futureDate);
+
+      // time_frameに応じて日付範囲を決定
+      let fetchDateGte: string;
+      let fetchDateLte: string;
+
+      if (time_frame === 'now_showing') {
+        const pastDate = new Date(now);
+        pastDate.setMonth(pastDate.getMonth() - NOW_SHOWING_MONTHS_BACK);
+        fetchDateGte = formatDateToString(pastDate);
+        fetchDateLte = today;
+      } else {
+        fetchDateGte = today;
+        const futureDate = new Date(now);
+        futureDate.setMonth(futureDate.getMonth() + MOVIES_FETCH_MONTHS_AHEAD);
+        fetchDateLte = formatDateToString(futureDate);
+      }
 
       const withReleaseType = RELEASE_TYPE_MAP[release_type] || '2|3';
 
@@ -143,8 +162,8 @@ export async function GET(request: Request) {
       for (let p = 1; p <= maxPages; p++) {
         const tmdbResponse = await discoverMovies({
           page: p,
-          'release_date.gte': today,
-          'release_date.lte': futureDateStr,
+          'release_date.gte': fetchDateGte,
+          'release_date.lte': fetchDateLte,
           with_release_type: withReleaseType,
           sort_by: 'popularity.desc',
           without_keywords: EXCLUDED_KEYWORDS_PARAM,
@@ -186,7 +205,10 @@ export async function GET(request: Request) {
 
     // DBからソート順で映画を取得
     const sortColumn = SORT_COLUMN_MAP[sort_by] || 'release_date';
-    const ascending = sort_by === 'release_date';
+    // sort_order指定時はそれに従う。未指定時はrelease_dateのみ昇順
+    const ascending = sort_order
+      ? sort_order === 'asc'
+      : sort_by === 'release_date';
     const offset = (page - 1) * PAGINATION.ITEMS_PER_PAGE;
 
     // genre_idsのパース
@@ -197,10 +219,25 @@ export async function GET(request: Request) {
           .filter((id) => !isNaN(id) && id > 0)
       : [];
 
-    // 過去日除外: release_date_gteが指定されている場合は大きい方を使用
+    // time_frameに応じたDBクエリの日付範囲を決定
     const today = formatDateToString(new Date());
-    const effectiveDateGte =
-      release_date_gte && release_date_gte > today ? release_date_gte : today;
+    let effectiveDateGte: string;
+    let effectiveDateLte: string | undefined;
+
+    if (time_frame === 'now_showing') {
+      const pastDate = new Date();
+      pastDate.setMonth(pastDate.getMonth() - NOW_SHOWING_MONTHS_BACK);
+      const defaultGte = formatDateToString(pastDate);
+      effectiveDateGte =
+        release_date_gte && release_date_gte > defaultGte
+          ? release_date_gte
+          : defaultGte;
+      effectiveDateLte = release_date_lte || today;
+    } else {
+      effectiveDateGte =
+        release_date_gte && release_date_gte > today ? release_date_gte : today;
+      effectiveDateLte = release_date_lte;
+    }
 
     // 総件数を取得（release_type + genre_ids + 日付 + リバイバルフィルタ適用）
     let countQuery = supabase
@@ -209,8 +246,8 @@ export async function GET(request: Request) {
       .eq('release_type', release_type)
       .gte('release_date', effectiveDateGte);
 
-    if (release_date_lte) {
-      countQuery = countQuery.lte('release_date', release_date_lte);
+    if (effectiveDateLte) {
+      countQuery = countQuery.lte('release_date', effectiveDateLte);
     }
 
     if (is_revival !== undefined) {
@@ -235,8 +272,8 @@ export async function GET(request: Request) {
       .order(sortColumn, { ascending, nullsFirst: false })
       .range(offset, offset + PAGINATION.ITEMS_PER_PAGE - 1);
 
-    if (release_date_lte) {
-      dataQuery = dataQuery.lte('release_date', release_date_lte);
+    if (effectiveDateLte) {
+      dataQuery = dataQuery.lte('release_date', effectiveDateLte);
     }
 
     if (is_revival !== undefined) {

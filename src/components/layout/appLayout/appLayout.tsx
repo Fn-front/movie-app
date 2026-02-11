@@ -9,6 +9,7 @@ import { type ReactNode, memo } from 'react';
 
 import { Header } from '@/components/layout/header/header';
 import { Sidebar } from '@/components/layout/sidebar/sidebar';
+import { SideNav } from '@/components/layout/sideNav/sideNav';
 import { Footer } from '@/components/layout/footer/footer';
 
 import styles from './appLayout.module.scss';
@@ -46,7 +47,7 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
       <div className={styles.c_app_layout__body}>
         {showSidebar && (
           <div className={styles.c_app_layout__sidebar}>
-            <Sidebar />
+            <Sidebar navigation={<SideNav />} />
           </div>
         )}
 

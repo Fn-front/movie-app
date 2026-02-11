@@ -20,6 +20,7 @@ import {
   NOW_SHOWING_MONTHS_BACK,
   RELEASE_TYPE_MAP,
   EXCLUDED_KEYWORDS_PARAM,
+  EXCLUDED_GENRES_PARAM,
   EXCLUDED_LANGUAGES,
   MOVIES_ERROR_MESSAGES,
   ERROR_CODE,
@@ -207,6 +208,7 @@ export async function GET(request: Request) {
             with_release_type: withReleaseType,
             sort_by: 'popularity.desc',
             without_keywords: EXCLUDED_KEYWORDS_PARAM,
+            without_genres: EXCLUDED_GENRES_PARAM,
           });
 
           if (tmdbResponse.results.length === 0) break;

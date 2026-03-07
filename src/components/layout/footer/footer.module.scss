@@ -55,10 +55,8 @@
   &__attribution {
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: $spacing-3;
-    padding: $spacing-4 $spacing-6;
-    border-top: $border-width-1 solid $border-color;
+    margin-left: auto;
   }
 
   &__tmdb_logo {

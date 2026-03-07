@@ -299,7 +299,22 @@
 - [x] 既存Paginationコンポーネントの参照を削除
 - [x] テストを追加
 
-### Step 13: 映画詳細モーダル（`feature/movie-detail-modal`）
+### Step 13: TMDbアトリビューション表示（`feature/tmdb-attribution`）
+- [x] TMDb公式ロゴを取得し配置（自アプリロゴより小さく表示）
+- [x] アトリビューション文言を表示（「This product uses the TMDB API but is not endorsed or certified by TMDB」）
+- [x] フッターまたはAboutセクションにクレジットを配置
+- [x] テストを追加
+
+### Step 14: フィルター条件保存の不具合調査（`fix/saved-filters-investigation`）
+- [ ] 現在のフィルター保存・復元フローの動作確認
+- [ ] 保存されない条件の特定（ジャンル・日付範囲・リバイバル・ソート等）
+- [ ] API（GET/PUT /api/filters）のリクエスト・レスポンス検証
+- [ ] saved_filtersテーブルのデータ確認
+- [ ] 原因特定と修正方針の決定
+- [ ] 修正実装
+- [ ] テストを追加
+
+### Step 15: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装
 - [ ] APIクライアントにgetMovieDetailを追加
 - [ ] useMovieDetailフックを作成
@@ -308,7 +323,7 @@
 - [ ] HomePageにモーダル統合（MovieTileクリックで表示）
 - [ ] テストを追加
 
-### Step 14: バッチ更新API（`feature/batch-update-movies`）
+### Step 16: バッチ更新API（`feature/batch-update-movies`）
 - [ ] Cron定数を追加
 - [ ] バッチ更新API（POST /api/cron/update-movies）を実装
 - [ ] Vercel Cron設定（vercel.json）を追加

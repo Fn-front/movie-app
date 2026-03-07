@@ -5,6 +5,7 @@
 'use client';
 
 import { type HTMLAttributes, type ReactNode, memo } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 
 import styles from './footer.module.scss';
@@ -69,6 +70,20 @@ export const Footer = memo<FooterProps>(function Footer({
         )}
 
         {children && <div className={styles.c_footer__custom}>{children}</div>}
+      </div>
+
+      <div className={styles.c_footer__attribution}>
+        <Image
+          src='/tmdb-logo.svg'
+          alt='TMDB'
+          width={100}
+          height={8}
+          className={styles.c_footer__tmdb_logo}
+        />
+        <p className={styles.c_footer__attribution_text}>
+          This product uses the TMDB API but is not endorsed or certified by
+          TMDB.
+        </p>
       </div>
     </footer>
   );

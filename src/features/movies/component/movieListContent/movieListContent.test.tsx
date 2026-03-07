@@ -4,6 +4,12 @@ import { MovieListContent } from './movieListContent';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
+// --- Mocks ---
+
+jest.mock('@/hooks/useIntersectionObserver', () => ({
+  useIntersectionObserver: () => ({ current: null }),
+}));
+
 // --- Helpers ---
 
 const createMockMovie = (
@@ -27,10 +33,10 @@ const createMockMovieList = (
   overrides?: Partial<UseMovieListReturn>,
 ): UseMovieListReturn => ({
   movies: [],
-  pagination: null,
   isLoading: false,
-  isTransitioning: false,
-  page: 1,
+  isFetchingNextPage: false,
+  hasNextPage: false,
+  fetchNextPage: jest.fn(),
   sortBy: 'release_date',
   releaseType: 'theatrical',
   genres: { 28: 'アクション' },
@@ -38,7 +44,6 @@ const createMockMovieList = (
   dateRange: {},
   isRevivalFilter: undefined,
   isFilterModalOpen: false,
-  handlePageChange: jest.fn(),
   handleSortChange: jest.fn(),
   handleReleaseTypeChange: jest.fn(),
   handleFilterApply: jest.fn(),
@@ -111,6 +116,19 @@ describe('MovieListContent', () => {
       );
       expect(screen.queryByText('テスト映画')).not.toBeInTheDocument();
     });
+
+    it('isFetchingNextPage=trueの場合ローディングが表示される', () => {
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            isFetchingNextPage: true,
+            movies: [createMockMovie()],
+          })}
+        />,
+      );
+      expect(screen.getByText('読み込み中...')).toBeInTheDocument();
+    });
   });
 
   describe('映画一覧', () => {
@@ -153,58 +171,6 @@ describe('MovieListContent', () => {
       );
       expect(
         screen.queryByText('表示する映画がありません。'),
-      ).not.toBeInTheDocument();
-    });
-  });
-
-  describe('ページネーション', () => {
-    it('totalPages > 1の場合ページネーションが表示される', () => {
-      render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({
-            pagination: {
-              currentPage: 1,
-              totalPages: 3,
-              totalItems: 60,
-              itemsPerPage: 20,
-            },
-          })}
-        />,
-      );
-      expect(
-        screen.getByRole('navigation', { name: 'ページネーション' }),
-      ).toBeInTheDocument();
-    });
-
-    it('totalPages = 1の場合ページネーションが表示されない', () => {
-      render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({
-            pagination: {
-              currentPage: 1,
-              totalPages: 1,
-              totalItems: 10,
-              itemsPerPage: 20,
-            },
-          })}
-        />,
-      );
-      expect(
-        screen.queryByRole('navigation', { name: 'ページネーション' }),
-      ).not.toBeInTheDocument();
-    });
-
-    it('paginationがnullの場合ページネーションが表示されない', () => {
-      render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({ pagination: null })}
-        />,
-      );
-      expect(
-        screen.queryByRole('navigation', { name: 'ページネーション' }),
       ).not.toBeInTheDocument();
     });
   });

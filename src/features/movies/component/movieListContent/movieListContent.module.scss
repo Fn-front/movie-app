@@ -56,12 +56,6 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: $spacing-4;
-    transition: opacity 0.15s ease;
-
-    &--transitioning {
-      opacity: 0.5;
-      pointer-events: none;
-    }
   }
 
   &__empty {
@@ -73,9 +67,13 @@
     color: $text-secondary;
   }
 
-  &__pagination {
+  &__loading {
     display: flex;
     justify-content: center;
-    margin-top: $spacing-4;
+    padding: $spacing-6 0;
+  }
+
+  &__sentinel {
+    height: 1px;
   }
 }

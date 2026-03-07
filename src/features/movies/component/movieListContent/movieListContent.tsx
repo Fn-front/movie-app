@@ -1,6 +1,6 @@
 /**
  * MovieListContentコンポーネント
- * 映画一覧のコンテンツ部分（タブ・ソート・フィルター・グリッド・ページネーション）
+ * 映画一覧のコンテンツ部分（タブ・ソート・フィルター・グリッド・無限スクロール）
  * upcoming / nowShowing で共有する表示コンポーネント
  */
 
@@ -10,13 +10,14 @@ import { memo, useMemo, useCallback } from 'react';
 
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { Select } from '@/components/ui/select/select';
-import { Pagination } from '@/components/ui/pagination/pagination';
 import { Button } from '@/components/ui/button/button';
 import { FilterIcon } from '@/components/icons/filterIcon/filterIcon';
+import { Loading } from '@/components/ui/loading/loading';
 import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { MovieTile } from '@/features/movies/component/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/features/movies/component/movieTileSkeleton/movieTileSkeleton';
 import { FilterModal } from '@/features/movies/component/filterModal/filterModal';
+import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 
 import styles from './movieListContent.module.scss';
@@ -38,9 +39,10 @@ export const MovieListContent = memo<MovieListContentProps>(
   function MovieListContent({ title, movieList }) {
     const {
       movies,
-      pagination,
       isLoading,
-      isTransitioning,
+      isFetchingNextPage,
+      hasNextPage,
+      fetchNextPage,
       sortBy,
       releaseType,
       genres,
@@ -48,7 +50,6 @@ export const MovieListContent = memo<MovieListContentProps>(
       dateRange,
       isRevivalFilter,
       isFilterModalOpen,
-      handlePageChange,
       handleSortChange,
       handleReleaseTypeChange,
       handleFilterApply,
@@ -80,6 +81,10 @@ export const MovieListContent = memo<MovieListContentProps>(
       },
       [handleFilterModalClose],
     );
+
+    const loadMoreRef = useIntersectionObserver(fetchNextPage, {
+      enabled: hasNextPage && !isFetchingNextPage,
+    });
 
     return (
       <div className={styles.c_movie_list}>
@@ -120,9 +125,7 @@ export const MovieListContent = memo<MovieListContentProps>(
           </div>
         </div>
 
-        <div
-          className={`${styles.c_movie_list__grid} ${isTransitioning ? styles['c_movie_list__grid--transitioning'] : ''}`}
-        >
+        <div className={styles.c_movie_list__grid}>
           {isLoading ? (
             <MovieTileSkeleton />
           ) : (
@@ -138,15 +141,13 @@ export const MovieListContent = memo<MovieListContentProps>(
           </p>
         )}
 
-        {pagination && pagination.totalPages > 1 && (
-          <div className={styles.c_movie_list__pagination}>
-            <Pagination
-              currentPage={pagination.currentPage}
-              totalPages={pagination.totalPages}
-              onPageChange={handlePageChange}
-            />
+        {isFetchingNextPage && (
+          <div className={styles.c_movie_list__loading}>
+            <Loading size='sm' label='読み込み中...' />
           </div>
         )}
+
+        <div ref={loadMoreRef} className={styles.c_movie_list__sentinel} />
 
         <FilterModal
           open={isFilterModalOpen}

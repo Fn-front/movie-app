@@ -1,6 +1,6 @@
 /**
  * MovieContentコンポーネント
- * 映画一覧のコンテンツ部分（タブ・ソート・フィルター・グリッド・ページネーション）
+ * 映画一覧のコンテンツ部分（タブ・ソート・フィルター・グリッド・無限スクロール）
  * データ更新時のレンダリング範囲をこのコンポーネント内に限定する
  */
 
@@ -10,13 +10,14 @@ import { memo, useMemo, useCallback } from 'react';
 
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { Select } from '@/components/ui/select/select';
-import { Pagination } from '@/components/ui/pagination/pagination';
 import { Button } from '@/components/ui/button/button';
 import { FilterIcon } from '@/components/icons/filterIcon/filterIcon';
+import { Loading } from '@/components/ui/loading/loading';
 import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { MovieTile } from '@/features/home/component/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/features/home/component/movieTileSkeleton/movieTileSkeleton';
 import { FilterModal } from '@/features/home/component/filterModal/filterModal';
+import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 
 import { useHome } from '@/features/home/hooks/useHome';
 import styles from '@/features/home/home.module.scss';
@@ -27,8 +28,10 @@ import styles from '@/features/home/home.module.scss';
 export const MovieContent = memo(function MovieContent() {
   const {
     movies,
-    pagination,
     isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
     sortBy,
     releaseType,
     genres,
@@ -36,7 +39,6 @@ export const MovieContent = memo(function MovieContent() {
     dateRange,
     isRevivalFilter,
     isFilterModalOpen,
-    handlePageChange,
     handleSortChange,
     handleReleaseTypeChange,
     handleFilterApply,
@@ -68,6 +70,10 @@ export const MovieContent = memo(function MovieContent() {
     },
     [handleFilterModalClose],
   );
+
+  const loadMoreRef = useIntersectionObserver(fetchNextPage, {
+    enabled: hasNextPage && !isFetchingNextPage,
+  });
 
   return (
     <div className={styles.c_home_page}>
@@ -120,15 +126,13 @@ export const MovieContent = memo(function MovieContent() {
         <p className={styles.c_home_page__empty}>表示する映画がありません。</p>
       )}
 
-      {pagination && pagination.totalPages > 1 && (
-        <div className={styles.c_home_page__pagination}>
-          <Pagination
-            currentPage={pagination.currentPage}
-            totalPages={pagination.totalPages}
-            onPageChange={handlePageChange}
-          />
+      {isFetchingNextPage && (
+        <div className={styles.c_home_page__loading}>
+          <Loading size='sm' label='読み込み中...' />
         </div>
       )}
+
+      <div ref={loadMoreRef} className={styles.c_home_page__sentinel} />
 
       <FilterModal
         open={isFilterModalOpen}

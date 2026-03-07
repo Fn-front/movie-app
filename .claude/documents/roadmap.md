@@ -290,14 +290,14 @@
 - [x] テストを追加
 
 ### Step 12: 無限スクロール導入（`feature/infinite-scroll`）
-- [ ] /api/movies のレスポンスにカーソルベースまたはoffsetベースのページング情報を追加
-- [ ] useMovieList を useInfiniteQuery（TanStack Query）に移行
-- [ ] /movies/upcoming のページネーションを無限スクロール（20件ずつ）に変更
-- [ ] /movies/now-showing のページネーションを無限スクロール（20件ずつ）に変更
-- [ ] スクロール検知コンポーネントまたはIntersection Observer実装
-- [ ] ローディングインジケーター（追加読み込み中）を表示
-- [ ] 既存Paginationコンポーネントの参照を削除
-- [ ] テストを追加
+- [x] /api/movies のレスポンスにカーソルベースまたはoffsetベースのページング情報を追加
+- [x] useMovieList を useInfiniteQuery（TanStack Query）に移行
+- [x] /movies/upcoming のページネーションを無限スクロール（20件ずつ）に変更
+- [x] /movies/now-showing のページネーションを無限スクロール（20件ずつ）に変更
+- [x] スクロール検知コンポーネントまたはIntersection Observer実装
+- [x] ローディングインジケーター（追加読み込み中）を表示
+- [x] 既存Paginationコンポーネントの参照を削除
+- [x] テストを追加
 
 ### Step 13: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装

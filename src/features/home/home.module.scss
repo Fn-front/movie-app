@@ -68,9 +68,13 @@
     color: $text-secondary;
   }
 
-  &__pagination {
+  &__loading {
     display: flex;
     justify-content: center;
-    margin-top: $spacing-4;
+    padding: $spacing-6 0;
+  }
+
+  &__sentinel {
+    height: 1px;
   }
 }

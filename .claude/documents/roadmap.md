@@ -273,7 +273,33 @@
 - [x] Now Playing 比較ページを削除
 - [x] テストを追加
 
-### Step 11: 映画詳細モーダル（`feature/movie-detail-modal`）
+### Step 11: E2Eテスト導入（`setup/e2e-test`）
+- [x] Playwright設定の確認・調整（playwright.config.ts）
+- [x] 認証用fixture作成（e2e/fixtures/auth.ts）
+  - storageStateを使いログイン済みセッションを保存・再利用
+- [x] テスト用ヘルパー作成（e2e/helpers/testUser.ts）
+- [x] E2Eテスト作成
+  - [x] 認証フロー（e2e/auth/signin.spec.ts, signup.spec.ts）
+  - [x] 映画一覧 - 公開予定（e2e/movies/upcoming.spec.ts）
+  - [x] 映画一覧 - 公開中（e2e/movies/nowShowing.spec.ts）
+  - [x] サイドナビゲーション（e2e/navigation/sideNav.spec.ts）
+  - [x] 設定ページ（e2e/settings/settings.spec.ts）
+- [x] GitHub Actions E2Eワークフロー作成（.github/workflows/e2e.yml）
+  - Next.jsビルド → サーバー起動 → Playwright実行
+  - 失敗時にトレース・スクリーンショットをartifact保存
+- [x] テストを追加
+
+### Step 12: 無限スクロール導入（`feature/infinite-scroll`）
+- [ ] /api/movies のレスポンスにカーソルベースまたはoffsetベースのページング情報を追加
+- [ ] useMovieList を useInfiniteQuery（TanStack Query）に移行
+- [ ] /movies/upcoming のページネーションを無限スクロール（20件ずつ）に変更
+- [ ] /movies/now-showing のページネーションを無限スクロール（20件ずつ）に変更
+- [ ] スクロール検知コンポーネントまたはIntersection Observer実装
+- [ ] ローディングインジケーター（追加読み込み中）を表示
+- [ ] 既存Paginationコンポーネントの参照を削除
+- [ ] テストを追加
+
+### Step 13: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装
 - [ ] APIクライアントにgetMovieDetailを追加
 - [ ] useMovieDetailフックを作成
@@ -282,7 +308,7 @@
 - [ ] HomePageにモーダル統合（MovieTileクリックで表示）
 - [ ] テストを追加
 
-### Step 12: バッチ更新API（`feature/batch-update-movies`）
+### Step 14: バッチ更新API（`feature/batch-update-movies`）
 - [ ] Cron定数を追加
 - [ ] バッチ更新API（POST /api/cron/update-movies）を実装
 - [ ] Vercel Cron設定（vercel.json）を追加

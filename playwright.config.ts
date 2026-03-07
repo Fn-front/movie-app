@@ -1,66 +1,101 @@
 import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
+import path from 'path';
 
 /**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
+ * .env.localから環境変数を読み込む
  */
-// require('dotenv').config();
+dotenv.config({ path: path.resolve(__dirname, '.env.local') });
+
+const isCI = !!process.env.CI;
 
 /**
- * See https://playwright.dev/docs/test-configuration.
+ * storageStateの保存先パス
+ */
+export const STORAGE_STATE = path.join(
+  __dirname,
+  'e2e/.auth/storageState.json',
+);
+
+/**
+ * @see https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
   testDir: './e2e',
-  /* Run tests in files in parallel */
   fullyParallel: true,
-  /* Fail the build on CI if you accidentally left test.only in the source code. */
-  forbidOnly: !!process.env.CI,
-  /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
-  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
-  /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
+  forbidOnly: isCI,
+  retries: isCI ? 2 : 0,
+  workers: isCI ? 1 : undefined,
+  reporter: isCI ? 'github' : 'html',
+  timeout: 30000,
+  expect: {
+    timeout: 10000,
+  },
   use: {
-    /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: 'http://localhost:3000',
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
   },
 
-  /* Configure projects for major browsers */
   projects: [
+    /**
+     * setupプロジェクト: 認証セッションを事前生成
+     */
+    {
+      name: 'setup',
+      testMatch: /global\.setup\.ts/,
+    },
+
+    /**
+     * Chromium（CI・ローカル共通）
+     */
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: STORAGE_STATE,
+      },
+      dependencies: ['setup'],
     },
 
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
+    /**
+     * Firefox（ローカルのみ）
+     */
+    ...(isCI
+      ? []
+      : [
+          {
+            name: 'firefox',
+            use: {
+              ...devices['Desktop Firefox'],
+              storageState: STORAGE_STATE,
+            },
+            dependencies: ['setup'],
+          },
+        ]),
 
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-
-    /* Test against mobile viewports. */
-    {
-      name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
-    },
-    {
-      name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
-    },
+    /**
+     * WebKit（ローカルのみ）
+     */
+    ...(isCI
+      ? []
+      : [
+          {
+            name: 'webkit',
+            use: {
+              ...devices['Desktop Safari'],
+              storageState: STORAGE_STATE,
+            },
+            dependencies: ['setup'],
+          },
+        ]),
   ],
 
-  /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'npm run dev',
+    command: isCI ? 'npm run build && npm start' : 'npm run dev',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !isCI,
+    timeout: 120000,
   },
 });

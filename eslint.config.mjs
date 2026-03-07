@@ -18,6 +18,7 @@ export default [
       'out/**',
       'build/**',
       'dist/**',
+      'e2e/**',
       'next-env.d.ts',
       'eslint.config.mjs',
       'eslint-local-rules/**',

@@ -61,6 +61,8 @@ const createMockResponse = (
       totalPages: 3,
       totalItems: 50,
       itemsPerPage: 20,
+      hasNextPage: true,
+      nextPage: 2,
     },
     genres: { 28: 'アクション' },
     ...overrides,
@@ -93,8 +95,6 @@ describe('useMovieList', () => {
 
       expect(result.current.isLoading).toBe(true);
       expect(result.current.movies).toEqual([]);
-      expect(result.current.pagination).toBeNull();
-      expect(result.current.page).toBe(1);
       expect(result.current.sortBy).toBe('release_date');
       expect(result.current.releaseType).toBe('theatrical');
     });
@@ -143,7 +143,7 @@ describe('useMovieList', () => {
 
       expect(result.current.movies).toHaveLength(1);
       expect(result.current.movies[0].title).toBe('テスト映画');
-      expect(result.current.pagination?.totalPages).toBe(3);
+      expect(result.current.hasNextPage).toBe(true);
       expect(result.current.genres).toEqual({ 28: 'アクション' });
     });
 
@@ -275,45 +275,9 @@ describe('useMovieList', () => {
   });
 
   describe('ハンドラー', () => {
-    it('handlePageChangeでページが変更され再フェッチされる', async () => {
+    it('handleSortChangeでソートが変更されリフェッチされる', async () => {
       const { result } = renderHook(() => useMovieList(defaultOptions), {
         wrapper: createQueryWrapper(),
-      });
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      mockGetMovies.mockClear();
-
-      act(() => {
-        result.current.handlePageChange(3);
-      });
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      expect(result.current.page).toBe(3);
-      expect(mockGetMovies).toHaveBeenCalledWith(
-        expect.objectContaining({ page: 3 }),
-        expect.anything(),
-      );
-    });
-
-    it('handleSortChangeでソートが変更されページが1にリセットされる', async () => {
-      const { result } = renderHook(() => useMovieList(defaultOptions), {
-        wrapper: createQueryWrapper(),
-      });
-
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      mockGetMovies.mockClear();
-
-      act(() => {
-        result.current.handlePageChange(3);
       });
 
       await waitFor(() => {
@@ -327,11 +291,10 @@ describe('useMovieList', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        expect(mockGetMovies).toHaveBeenCalled();
       });
 
       expect(result.current.sortBy).toBe('popularity');
-      expect(result.current.page).toBe(1);
       expect(mockGetMovies).toHaveBeenCalledWith(
         expect.objectContaining({ sort_by: 'popularity', page: 1 }),
         expect.anything(),
@@ -354,11 +317,10 @@ describe('useMovieList', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        expect(mockGetMovies).toHaveBeenCalled();
       });
 
       expect(result.current.releaseType).toBe('streaming');
-      expect(result.current.page).toBe(1);
       expect(mockGetMovies).toHaveBeenCalledWith(
         expect.objectContaining({ release_type: 'streaming' }),
         expect.anything(),
@@ -391,7 +353,7 @@ describe('useMovieList', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
+        expect(mockGetMovies).toHaveBeenCalled();
       });
 
       expect(result.current.selectedGenreIds).toEqual([28, 12]);
@@ -401,7 +363,6 @@ describe('useMovieList', () => {
       });
       expect(result.current.isRevivalFilter).toBe(true);
       expect(result.current.isFilterModalOpen).toBe(false);
-      expect(result.current.page).toBe(1);
       expect(mockGetMovies).toHaveBeenCalledWith(
         expect.objectContaining({
           genre_ids: '28,12',
@@ -433,6 +394,84 @@ describe('useMovieList', () => {
         result.current.handleFilterModalClose();
       });
       expect(result.current.isFilterModalOpen).toBe(false);
+    });
+  });
+
+  describe('無限スクロール', () => {
+    it('hasNextPageがtrueの場合fetchNextPageで次ページを取得できる', async () => {
+      const page2Response = createMockResponse({
+        movies: [
+          {
+            id: 2,
+            title: '2番目の映画',
+            poster_path: null,
+            backdrop_path: null,
+            release_date: '2026-03-02',
+            overview: null,
+            vote_average: 6,
+            popularity: 80,
+            genre_ids: [12],
+            release_type: 'theatrical',
+            is_revival: false,
+          },
+        ],
+        pagination: {
+          currentPage: 2,
+          totalPages: 3,
+          totalItems: 50,
+          itemsPerPage: 20,
+          hasNextPage: true,
+          nextPage: 3,
+        },
+      });
+
+      mockGetMovies
+        .mockResolvedValueOnce(createMockResponse())
+        .mockResolvedValueOnce(page2Response);
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.fetchNextPage();
+      });
+
+      await waitFor(() => {
+        expect(result.current.movies).toHaveLength(2);
+      });
+
+      expect(result.current.movies[0].title).toBe('テスト映画');
+      expect(result.current.movies[1].title).toBe('2番目の映画');
+    });
+
+    it('最終ページではhasNextPageがfalseになる', async () => {
+      mockGetMovies.mockResolvedValue(
+        createMockResponse({
+          pagination: {
+            currentPage: 3,
+            totalPages: 3,
+            totalItems: 50,
+            itemsPerPage: 20,
+            hasNextPage: false,
+            nextPage: null,
+          },
+        }),
+      );
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.hasNextPage).toBe(false);
     });
   });
 
@@ -535,8 +574,6 @@ describe('useMovieList', () => {
         result.current.handleReleaseTypeChange('streaming');
       });
 
-      // keepPreviousDataにより前のデータがプレースホルダーとして表示されるため、
-      // 新しいデータの到着を直接待機する
       await waitFor(() => {
         expect(result.current.movies[0]?.title).toBe('2番目の映画');
       });

@@ -39,4 +39,29 @@ test.describe('公開中ページ', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).not.toBeVisible();
   });
+
+  test('ページネーションが表示されない（無限スクロール）', async ({ page }) => {
+    await page
+      .locator('[class*="movie_tile"]')
+      .first()
+      .waitFor({ timeout: 10000 })
+      .catch(() => {});
+    await expect(
+      page.getByRole('navigation', { name: /ページネーション/ }),
+    ).not.toBeVisible();
+  });
+
+  test('スクロールで追加データが読み込まれる', async ({ page }) => {
+    const movieTiles = page.locator('[class*="movie_tile"]');
+    const firstCount = await movieTiles.count();
+
+    // 映画が20件以上ある場合のみ無限スクロールをテスト
+    if (firstCount >= 20) {
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(2000);
+
+      const newCount = await movieTiles.count();
+      expect(newCount).toBeGreaterThan(firstCount);
+    }
+  });
 });

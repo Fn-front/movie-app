@@ -60,6 +60,8 @@ export interface PaginationInfo {
   totalPages: number;
   totalItems: number;
   itemsPerPage: number;
+  hasNextPage: boolean;
+  nextPage: number | null;
 }
 
 /**

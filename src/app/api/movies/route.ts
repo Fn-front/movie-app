@@ -356,6 +356,8 @@ export async function GET(request: Request) {
     const total = totalItems ?? 0;
     const totalPages = Math.ceil(total / PAGINATION.ITEMS_PER_PAGE);
 
+    const hasNextPage = page < totalPages;
+
     return NextResponse.json(
       {
         success: true,
@@ -366,6 +368,8 @@ export async function GET(request: Request) {
             totalPages,
             totalItems: total,
             itemsPerPage: PAGINATION.ITEMS_PER_PAGE,
+            hasNextPage,
+            nextPage: hasNextPage ? page + 1 : null,
           },
           genres: genreMap,
         },

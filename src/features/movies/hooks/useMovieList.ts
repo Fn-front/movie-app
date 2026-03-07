@@ -7,13 +7,13 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import {
   useQuery,
+  useInfiniteQuery,
   useMutation,
   useQueryClient,
-  keepPreviousData,
 } from '@tanstack/react-query';
 
 import { getMovies } from '@/lib/api/movies/movies';
-import type { MovieCacheItem, PaginationInfo } from '@/lib/api/movies/movies';
+import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import { getSavedFilter, saveFilter } from '@/lib/api/filters/filters';
 import { useToast } from '@/hooks/useToast';
 import {
@@ -42,10 +42,10 @@ export interface UseMovieListOptions {
  */
 export interface UseMovieListReturn {
   movies: MovieCacheItem[];
-  pagination: PaginationInfo | null;
   isLoading: boolean;
-  isTransitioning: boolean;
-  page: number;
+  isFetchingNextPage: boolean;
+  hasNextPage: boolean;
+  fetchNextPage: () => void;
   sortBy: string;
   releaseType: 'theatrical' | 'streaming';
   genres: Record<number, string>;
@@ -53,7 +53,6 @@ export interface UseMovieListReturn {
   dateRange: DateRange;
   isRevivalFilter: boolean | undefined;
   isFilterModalOpen: boolean;
-  handlePageChange: (page: number) => void;
   handleSortChange: (value: string) => void;
   handleReleaseTypeChange: (value: 'theatrical' | 'streaming') => void;
   handleFilterApply: (
@@ -103,7 +102,6 @@ function buildFilterConditions(
 export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const { timeFrame, defaultSortOrder, defaultDateRange } = options;
 
-  const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<string>(DEFAULT_SORT);
   const [releaseType, setReleaseType] = useState<'theatrical' | 'streaming'>(
     DEFAULT_RELEASE_TYPE,
@@ -158,10 +156,9 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       savedFilterQuery.isFetched ||
       savedFilterQuery.isError);
 
-  // 映画一覧クエリのパラメータを構築
-  const moviesQueryParams = useMemo(
+  // 映画一覧クエリのベースパラメータを構築（pageを除く）
+  const moviesBaseParams = useMemo(
     () => ({
-      page,
       sort_by: sortBy as 'release_date' | 'popularity' | 'vote_average',
       sort_order: defaultSortOrder,
       release_type: releaseType,
@@ -173,7 +170,6 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       is_revival: isRevivalFilter,
     }),
     [
-      page,
       sortBy,
       defaultSortOrder,
       releaseType,
@@ -184,12 +180,15 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     ],
   );
 
-  // 映画一覧の取得
-  const moviesQuery = useQuery({
-    queryKey: movieKeys.list(moviesQueryParams),
-    queryFn: ({ signal }) => getMovies(moviesQueryParams, { signal }),
+  // 映画一覧の無限スクロール取得
+  const moviesQuery = useInfiniteQuery({
+    queryKey: movieKeys.list(moviesBaseParams),
+    queryFn: ({ pageParam, signal }) =>
+      getMovies({ ...moviesBaseParams, page: pageParam }, { signal }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.data.pagination.nextPage ?? undefined,
     enabled: isFilterReady,
-    placeholderData: keepPreviousData,
   });
 
   // エラー時のトースト表示
@@ -219,18 +218,9 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     [isAuthenticated, saveFilterMutate],
   );
 
-  const handlePageChange = useCallback((newPage: number) => {
-    setPage(newPage);
-    const main = document.querySelector('main');
-    if (main) {
-      main.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, []);
-
   const handleSortChange = useCallback(
     (value: string) => {
       setSortBy(value);
-      setPage(1);
       saveFilterIfAuthenticated(
         buildFilterConditions(
           value,
@@ -253,7 +243,6 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const handleReleaseTypeChange = useCallback(
     (value: 'theatrical' | 'streaming') => {
       setReleaseType(value);
-      setPage(1);
       saveFilterIfAuthenticated(
         buildFilterConditions(
           sortBy,
@@ -282,7 +271,6 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       setSelectedGenreIds(genreIds);
       setDateRange(newDateRange);
       setIsRevivalFilter(isRevival);
-      setPage(1);
       setIsFilterModalOpen(false);
       saveFilterIfAuthenticated(
         buildFilterConditions(
@@ -305,27 +293,37 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     setIsFilterModalOpen(false);
   }, []);
 
-  // サーバーステートの導出
-  const pagination = moviesQuery.data?.data.pagination ?? null;
+  // 全ページの映画を結合
+  const movies = useMemo(
+    () => moviesQuery.data?.pages.flatMap((page) => page.data.movies) ?? [],
+    [moviesQuery.data],
+  );
+
+  const genres = useMemo(
+    () => moviesQuery.data?.pages[0]?.data.genres ?? {},
+    [moviesQuery.data],
+  );
+
   const isLoading = !isFilterReady || moviesQuery.isLoading;
-  const isTransitioning =
-    moviesQuery.isFetching && moviesQuery.isPlaceholderData;
+
+  const fetchNextPage = useCallback(() => {
+    moviesQuery.fetchNextPage();
+  }, [moviesQuery]);
 
   return useMemo(
     () => ({
-      movies: moviesQuery.data?.data.movies ?? [],
-      pagination,
+      movies,
       isLoading,
-      isTransitioning,
-      page,
+      isFetchingNextPage: moviesQuery.isFetchingNextPage,
+      hasNextPage: moviesQuery.hasNextPage,
+      fetchNextPage,
       sortBy,
       releaseType,
-      genres: moviesQuery.data?.data.genres ?? {},
+      genres,
       selectedGenreIds,
       dateRange,
       isRevivalFilter,
       isFilterModalOpen,
-      handlePageChange,
       handleSortChange,
       handleReleaseTypeChange,
       handleFilterApply,
@@ -333,18 +331,18 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       handleFilterModalClose,
     }),
     [
-      moviesQuery.data,
-      pagination,
+      movies,
       isLoading,
-      isTransitioning,
-      page,
+      moviesQuery.isFetchingNextPage,
+      moviesQuery.hasNextPage,
+      fetchNextPage,
       sortBy,
       releaseType,
+      genres,
       selectedGenreIds,
       dateRange,
       isRevivalFilter,
       isFilterModalOpen,
-      handlePageChange,
       handleSortChange,
       handleReleaseTypeChange,
       handleFilterApply,

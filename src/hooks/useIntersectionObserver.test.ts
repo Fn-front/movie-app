@@ -7,9 +7,7 @@ import { useIntersectionObserver } from './useIntersectionObserver';
 describe('useIntersectionObserver', () => {
   it('refオブジェクトを返す', () => {
     const onIntersect = jest.fn();
-    const { result } = renderHook(() =>
-      useIntersectionObserver(onIntersect),
-    );
+    const { result } = renderHook(() => useIntersectionObserver(onIntersect));
 
     expect(result.current).toHaveProperty('current');
     expect(result.current.current).toBeNull();
@@ -31,9 +29,7 @@ describe('useIntersectionObserver', () => {
     })) as unknown as typeof IntersectionObserver;
 
     const onIntersect = jest.fn();
-    renderHook(() =>
-      useIntersectionObserver(onIntersect, { enabled: false }),
-    );
+    renderHook(() => useIntersectionObserver(onIntersect, { enabled: false }));
 
     expect(mockObserve).not.toHaveBeenCalled();
 

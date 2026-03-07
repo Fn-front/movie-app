@@ -3,7 +3,7 @@
  * 要素がビューポートに表示されたときにコールバックを実行する
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 
 interface UseIntersectionObserverOptions {
   /** コールバックを実行するかどうか */

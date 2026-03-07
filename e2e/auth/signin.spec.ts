@@ -68,7 +68,9 @@ test.describe('ログインページ', () => {
     await page.getByRole('button', { name: 'ログイン' }).click();
 
     await expect(
-      page.getByText('メールアドレスまたはパスワードが正しくありません。'),
+      page.getByRole('alert').filter({
+        hasText: 'メールアドレスまたはパスワードが正しくありません。',
+      }),
     ).toBeVisible();
   });
 

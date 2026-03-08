@@ -331,18 +331,18 @@
   - ヘッダー要素の表示確認
 
 ### Step 16: ユニットテスト拡充（`setup/unit-test-expand`）
-- [ ] 認証フォームのテスト追加
+- [x] 認証フォームのテスト追加
   - loginForm.tsx（フォーム表示・バリデーション・送信）
   - registerForm.tsx（フォーム表示・バリデーション・送信）
   - changePasswordForm.tsx（フォーム表示・バリデーション・送信）
-- [ ] API Routeのテスト追加
+- [x] API Routeのテスト追加
   - /api/auth/register/route.ts（正常登録・重複・バリデーションエラー）
   - /api/user/change-password/route.ts（正常変更・認証エラー・バリデーションエラー）
   - /api/movies/route.ts（クエリパラメータ・レスポンス形式）
   - /api/filters/route.ts（GET/PUT・認証チェック）
   - /api/cron/sync-movies/route.ts（認証・同期処理）
   - /api/cron/sync-now-playing/route.ts（認証・同期処理）
-- [ ] 共通UIコンポーネントのテスト追加
+- [x] 共通UIコンポーネントのテスト追加
   - button.tsx（レンダリング・クリック・disabled・aria属性）
   - input.tsx（レンダリング・入力・バリデーション・aria属性）
   - select.tsx（レンダリング・選択・aria属性）
@@ -352,10 +352,10 @@
   - loading.tsx（表示・オーバーレイ・aria属性）
   - tabs.tsx（タブ切替・aria属性）
   - checkbox.tsx（チェック・aria属性）
-- [ ] APIクライアントのテスト追加
+- [x] APIクライアントのテスト追加
   - filters.ts（getSavedFilter・saveFilter）
-- [ ] useHomeフックのテスト追加
-- [ ] headerコンポーネントのテスト追加
+- [x] useHomeフックのテスト追加
+- [x] headerコンポーネントのテスト追加
 
 ### Step 17: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装

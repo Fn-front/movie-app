@@ -358,13 +358,13 @@
 - [x] headerコンポーネントのテスト追加
 
 ### Step 17: 映画詳細モーダル（`feature/movie-detail-modal`）
-- [ ] 映画詳細API（GET /api/movies/:id）を実装
-- [ ] APIクライアントにgetMovieDetailを追加
-- [ ] useMovieDetailフックを作成
-- [ ] MovieDetailModalコンポーネントを作成
-- [ ] MovieDetailContentコンポーネントを作成（バックドロップ・ポスター・ジャンル・評価等）
-- [ ] HomePageにモーダル統合（MovieTileクリックで表示）
-- [ ] テストを追加
+- [x] 映画詳細API（GET /api/movies/:id）を実装
+- [x] APIクライアントにgetMovieDetailを追加
+- [x] useMovieDetailフックを作成
+- [x] MovieDetailModalコンポーネントを作成
+- [x] MovieDetailContentコンポーネントを作成（バックドロップ・ポスター・ジャンル・評価等）
+- [x] HomePageにモーダル統合（MovieTileクリックで表示）
+- [x] テストを追加
 
 ### Step 18: バッチ更新API（`feature/batch-update-movies`）
 - [ ] Cron定数を追加

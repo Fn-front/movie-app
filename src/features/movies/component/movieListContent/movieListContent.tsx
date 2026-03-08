@@ -6,7 +6,7 @@
 
 'use client';
 
-import { memo, useMemo, useCallback } from 'react';
+import { memo, useMemo, useCallback, useState } from 'react';
 
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { Select } from '@/components/ui/select/select';
@@ -17,6 +17,7 @@ import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { MovieTile } from '@/features/movies/component/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/features/movies/component/movieTileSkeleton/movieTileSkeleton';
 import { FilterModal } from '@/features/movies/component/filterModal/filterModal';
+import { MovieDetailModal } from '@/features/movies/component/movieDetailModal/movieDetailModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 
@@ -82,6 +83,16 @@ export const MovieListContent = memo<MovieListContentProps>(
       [handleFilterModalClose],
     );
 
+    const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
+
+    const handleMovieTileClick = useCallback((movieId: number) => {
+      setSelectedMovieId(movieId);
+    }, []);
+
+    const handleDetailModalClose = useCallback(() => {
+      setSelectedMovieId(null);
+    }, []);
+
     const loadMoreRef = useIntersectionObserver(fetchNextPage, {
       enabled: hasNextPage && !isFetchingNextPage,
     });
@@ -130,7 +141,7 @@ export const MovieListContent = memo<MovieListContentProps>(
             <MovieTileSkeleton />
           ) : (
             movies.map((movie) => (
-              <MovieTile key={movie.id} movie={movie} genres={genres} />
+              <MovieTile key={movie.id} movie={movie} genres={genres} onClick={handleMovieTileClick} />
             ))
           )}
         </div>
@@ -157,6 +168,11 @@ export const MovieListContent = memo<MovieListContentProps>(
           selectedDateRange={dateRange}
           isRevivalFilter={isRevivalFilter}
           onApply={handleFilterApply}
+        />
+
+        <MovieDetailModal
+          movieId={selectedMovieId}
+          onClose={handleDetailModalClose}
         />
       </div>
     );

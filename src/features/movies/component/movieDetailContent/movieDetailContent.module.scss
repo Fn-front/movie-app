@@ -1,0 +1,171 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_movie_detail {
+  position: relative;
+
+  // ローディング
+  &__loading {
+    @include flex-center;
+
+    padding: $spacing-12;
+  }
+
+  // エラー
+  &__error {
+    @include flex-center;
+
+    padding: $spacing-12;
+  }
+
+  &__error_text {
+    color: $text-secondary;
+    font-size: $font-size-sm;
+  }
+
+  // バックドロップ
+  &__backdrop {
+    position: relative;
+    width: 100%;
+    height: 200px;
+
+    @include md {
+      height: 250px;
+    }
+  }
+
+  &__backdrop_image {
+    object-fit: cover;
+  }
+
+  &__backdrop_overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.1) 0%,
+      rgba(0, 0, 0, 0.6) 100%
+    );
+  }
+
+  // ボディ
+  &__body {
+    padding: $spacing-6;
+  }
+
+  // メインレイアウト（ポスター + 情報）
+  &__main {
+    display: flex;
+    gap: $spacing-5;
+  }
+
+  // ポスター
+  &__poster {
+    flex-shrink: 0;
+    width: 120px;
+    margin-top: -$spacing-12;
+    position: relative;
+    z-index: 1;
+
+    @include md {
+      width: 150px;
+    }
+  }
+
+  &__poster_image {
+    width: 100%;
+    height: auto;
+    border-radius: $border-radius-lg;
+    box-shadow: $shadow-lg;
+  }
+
+  // 情報
+  &__info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  // タイトル
+  &__title {
+    margin: 0;
+    font-size: $font-size-xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    line-height: $line-height-tight;
+
+    @include md {
+      font-size: $font-size-2xl;
+    }
+  }
+
+  // 原題
+  &__original_title {
+    margin-top: $spacing-1;
+    font-size: $font-size-xs;
+    color: $text-secondary;
+  }
+
+  // メタ情報
+  &__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: $spacing-3;
+    margin-top: $spacing-3;
+  }
+
+  &__meta_item {
+    font-size: $font-size-sm;
+    color: $text-secondary;
+  }
+
+  // 評価
+  &__rating {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 24px;
+    padding: 0 $spacing-2;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-bold;
+    color: $background-paper;
+    background-color: $secondary-600;
+    border-radius: $border-radius-md;
+  }
+
+  // ジャンル
+  &__genres {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-2;
+    margin-top: $spacing-3;
+  }
+
+  &__genre_tag {
+    padding: $spacing-1 $spacing-2;
+    font-size: $font-size-xs;
+    color: $primary-700;
+    background-color: $primary-50;
+    border-radius: $border-radius-md;
+  }
+
+  // あらすじ
+  &__overview {
+    margin-top: $spacing-6;
+  }
+
+  &__section_title {
+    margin: 0;
+    font-size: $font-size-base;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+  }
+
+  &__overview_text {
+    margin-top: $spacing-3;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+    line-height: $line-height-loose;
+  }
+}

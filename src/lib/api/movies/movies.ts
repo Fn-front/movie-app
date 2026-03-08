@@ -3,6 +3,7 @@
  */
 
 import { axiosInstance } from '@/lib/axios/axios';
+import type { MovieDetail } from '@/lib/types';
 
 /**
  * 映画キャッシュアイテムの型
@@ -90,5 +91,28 @@ export async function getMovies(
     params,
     signal: options?.signal,
   });
+  return response.data;
+}
+
+/**
+ * 映画詳細レスポンスの型
+ */
+export interface GetMovieDetailResponse {
+  success: true;
+  data: MovieDetail;
+}
+
+/**
+ * 映画詳細を取得
+ *
+ * @param movieId - 映画ID
+ * @returns 映画詳細レスポンス
+ */
+export async function getMovieDetail(
+  movieId: number,
+): Promise<GetMovieDetailResponse> {
+  const response = await axiosInstance.get<GetMovieDetailResponse>(
+    `/api/movies/${movieId}`,
+  );
   return response.data;
 }

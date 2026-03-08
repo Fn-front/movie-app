@@ -82,5 +82,6 @@ jobs:
         uses: ArtiomTr/jest-coverage-report-action@v2
         with:
           skip-step: all
+          annotations: none
           coverage-file: report.json
           base-coverage-file: report.json

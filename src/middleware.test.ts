@@ -47,7 +47,8 @@ jest.mock('@/lib/auth/auth', () => ({
 }));
 
 // middleware.tsのdefault exportはauth(callback)の結果＝callback自体
-import middleware from './middleware';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const middleware = require('./middleware').default as (req: unknown) => unknown;
 
 /** テスト用のモックリクエストを生成 */
 function createMockRequest(options: {
@@ -83,7 +84,10 @@ describe('middleware', () => {
         hasSessionCookie: true,
       });
 
-      const response = middleware(req) as { headers: Headers; cookies: { delete: jest.Mock } };
+      const response = middleware(req) as {
+        headers: Headers;
+        cookies: { delete: jest.Mock };
+      };
 
       // NextResponse.next()が返される（リダイレクトではない）
       expect(response.headers.get('location')).toBeNull();
@@ -98,7 +102,10 @@ describe('middleware', () => {
         hasSessionCookie: true,
       });
 
-      const response = middleware(req) as { headers: Headers; cookies: { delete: jest.Mock } };
+      const response = middleware(req) as {
+        headers: Headers;
+        cookies: { delete: jest.Mock };
+      };
 
       expect(response.headers.get('location')).toContain('/auth/signin');
       expect(mockCookiesDelete).toHaveBeenCalledWith('next-auth.session-token');
@@ -141,7 +148,9 @@ describe('middleware', () => {
 
       const response = middleware(req) as { headers: Headers };
 
-      expect(response.headers.get('location')).toContain('http://localhost:3000/');
+      expect(response.headers.get('location')).toContain(
+        'http://localhost:3000/',
+      );
       expect(response.headers.get('location')).not.toContain('/auth/');
     });
 

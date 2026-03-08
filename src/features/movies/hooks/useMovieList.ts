@@ -154,7 +154,9 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   // 認証済みユーザーはsavedFilterの取得完了まで映画取得を待機
   const isFilterReady =
     status !== 'loading' &&
-    (!isAuthenticated || savedFilterQuery.isFetched || savedFilterQuery.isError);
+    (!isAuthenticated ||
+      savedFilterQuery.isFetched ||
+      savedFilterQuery.isError);
 
   // 映画一覧クエリのベースパラメータを構築（pageを除く）
   // useEffectによるstate同期前でも保存済みフィルターを直接参照してタイミングギャップを排除
@@ -175,9 +177,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       release_type: saved?.release_type ?? releaseType,
       time_frame: timeFrame,
       genre_ids:
-        effectiveGenreIds.length > 0
-          ? effectiveGenreIds.join(',')
-          : undefined,
+        effectiveGenreIds.length > 0 ? effectiveGenreIds.join(',') : undefined,
       release_date_gte:
         (saved ? saved.date_range_gte : dateRange.gte) || undefined,
       release_date_lte:

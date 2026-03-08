@@ -24,8 +24,7 @@ test.describe('フィルター条件がリロード後も保持される', () =>
     // 適用してPUTリクエストの内容を確認
     const putPromise = page.waitForResponse(
       (res) =>
-        res.url().includes('/api/filters') &&
-        res.request().method() === 'PUT',
+        res.url().includes('/api/filters') && res.request().method() === 'PUT',
     );
     await dialog.getByRole('button', { name: '適用' }).click();
     const putResponse = await putPromise;

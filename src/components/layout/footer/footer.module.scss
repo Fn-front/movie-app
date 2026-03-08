@@ -50,4 +50,24 @@
   &__custom {
     margin-left: auto;
   }
+
+  // TMDbアトリビューション
+  &__attribution {
+    display: flex;
+    align-items: center;
+    gap: $spacing-3;
+    margin-left: auto;
+  }
+
+  &__tmdb_logo {
+    flex-shrink: 0;
+    width: 100px;
+    height: auto;
+  }
+
+  &__attribution_text {
+    margin: 0;
+    font-size: $font-size-xs;
+    color: $text-disabled;
+  }
 }

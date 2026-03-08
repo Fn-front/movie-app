@@ -75,8 +75,12 @@ jobs:
         if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
         run: npm ci
 
+      - name: run-coverage
+        run: npx jest --coverage --ci --json --testLocationInResults --outputFile=report.json || true
+
       - name: coverage-report
         uses: ArtiomTr/jest-coverage-report-action@v2
         with:
-          skip-step: install
-          test-script: npx jest --coverage --config='{"coverageThreshold":{}}'
+          skip-step: all
+          coverage-file: report.json
+          base-coverage-file: report.json

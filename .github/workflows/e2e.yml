@@ -18,22 +18,20 @@ jobs:
     environment: Production
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: setup-node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
       - name: cache-node-modules
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: node_modules_cache
-        env:
-          cache-name: cache-node-modules
         with:
           path: '**/node_modules'
-          key: ${{ runner.os }}-e2e-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
 
       - name: npm-install
         if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
@@ -44,7 +42,7 @@ jobs:
         run: echo "version=$(npx playwright --version | awk '{print $2}')" >> $GITHUB_OUTPUT
 
       - name: cache-playwright-browsers
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: playwright_cache
         with:
           path: ~/.cache/ms-playwright

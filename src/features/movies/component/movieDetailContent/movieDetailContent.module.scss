@@ -208,17 +208,15 @@
 
   &__cast_list {
     display: flex;
+    flex-wrap: wrap;
     gap: $spacing-3;
     margin-top: $spacing-3;
-    overflow-x: auto;
-    padding-bottom: $spacing-2;
   }
 
   &__cast_item {
     display: flex;
     flex-direction: column;
     align-items: center;
-    flex-shrink: 0;
     width: 64px;
     gap: $spacing-1;
   }

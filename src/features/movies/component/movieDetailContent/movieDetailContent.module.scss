@@ -170,4 +170,28 @@
     color: $text-secondary;
     line-height: $line-height-loose;
   }
+
+  // 詳細情報
+  &__additional {
+    margin-top: $spacing-6;
+  }
+
+  &__info_list {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: $spacing-2 $spacing-4;
+    margin-top: $spacing-3;
+  }
+
+  &__info_label {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+  }
+
+  &__info_value {
+    margin: 0;
+    font-size: $font-size-sm;
+    color: $text-primary;
+  }
 }

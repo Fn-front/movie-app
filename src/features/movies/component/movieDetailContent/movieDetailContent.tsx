@@ -21,8 +21,13 @@ import styles from './movieDetailContent.module.scss';
 export interface MovieDetailContentProps {
   /** 映画ID */
   movieId: number;
+  /** 予算・興行収入を表示するか */
+  showFinancialInfo?: boolean;
 }
 
+/**
+ * 上映時間をフォーマット
+ */
 /**
  * 上映時間をフォーマット
  */
@@ -34,10 +39,18 @@ function formatRuntime(minutes: number): string {
 }
 
 /**
+ * 金額をフォーマット（USD）
+ */
+function formatCurrency(amount: number): string {
+  if (amount === 0) return '-';
+  return `$${amount.toLocaleString('en-US')}`;
+}
+
+/**
  * MovieDetailContentコンポーネント
  */
 export const MovieDetailContent = memo<MovieDetailContentProps>(
-  function MovieDetailContent({ movieId }) {
+  function MovieDetailContent({ movieId, showFinancialInfo = false }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
 
     const posterUrl = useMemo(
@@ -157,6 +170,58 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
               </p>
             </div>
           )}
+
+          <div className={styles.c_movie_detail__additional}>
+            <h4 className={styles.c_movie_detail__section_title}>詳細情報</h4>
+            <dl className={styles.c_movie_detail__info_list}>
+              {movie.production_companies.length > 0 && (
+                <>
+                  <dt className={styles.c_movie_detail__info_label}>
+                    制作会社
+                  </dt>
+                  <dd className={styles.c_movie_detail__info_value}>
+                    {movie.production_companies
+                      .map((company) => company.name)
+                      .join('、')}
+                  </dd>
+                </>
+              )}
+
+              {movie.production_countries.length > 0 && (
+                <>
+                  <dt className={styles.c_movie_detail__info_label}>制作国</dt>
+                  <dd className={styles.c_movie_detail__info_value}>
+                    {movie.production_countries
+                      .map((country) => country.name)
+                      .join('、')}
+                  </dd>
+                </>
+              )}
+
+              <dt className={styles.c_movie_detail__info_label}>人気度</dt>
+              <dd className={styles.c_movie_detail__info_value}>
+                {movie.popularity.toFixed(1)}
+              </dd>
+
+              {showFinancialInfo && (
+                <>
+                  <dt className={styles.c_movie_detail__info_label}>
+                    制作予算
+                  </dt>
+                  <dd className={styles.c_movie_detail__info_value}>
+                    {formatCurrency(movie.budget)}
+                  </dd>
+
+                  <dt className={styles.c_movie_detail__info_label}>
+                    興行収入
+                  </dt>
+                  <dd className={styles.c_movie_detail__info_value}>
+                    {formatCurrency(movie.revenue)}
+                  </dd>
+                </>
+              )}
+            </dl>
+          </div>
         </div>
       </div>
     );

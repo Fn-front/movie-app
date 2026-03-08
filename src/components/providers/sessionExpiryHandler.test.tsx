@@ -15,14 +15,20 @@ jest.mock('next-auth/react', () => ({
   signOut: (...args: unknown[]) => mockSignOut(...args),
 }));
 
+let mockPathname = '/movies/now-showing';
+jest.mock('next/navigation', () => ({
+  usePathname: () => mockPathname,
+}));
+
 jest.mock('@/constants', () => ({
-  ROUTES: { LOGIN: '/auth/signin' },
+  ROUTES: { LOGIN: '/auth/signin', REGISTER: '/auth/signup' },
 }));
 
 describe('useSessionExpiry', () => {
   beforeEach(() => {
     mockSignOut.mockClear();
     mockStatus = 'loading';
+    mockPathname = '/movies/now-showing';
   });
 
   it('初回レンダリング時にsignOutを呼ばないこと', () => {
@@ -53,7 +59,31 @@ describe('useSessionExpiry', () => {
     expect(mockSignOut).not.toHaveBeenCalled();
   });
 
-  it('loading → unauthenticated に変化した時にsignOutを呼ばないこと', () => {
+  it('loading → unauthenticated に変化した時にsignOutを呼ぶこと', () => {
+    mockStatus = 'loading';
+    const { rerender } = renderHook(() => useSessionExpiry());
+
+    mockStatus = 'unauthenticated';
+    rerender();
+
+    expect(mockSignOut).toHaveBeenCalledWith({
+      callbackUrl: '/auth/signin',
+    });
+  });
+
+  it('認証ページではsignOutを呼ばないこと', () => {
+    mockPathname = '/auth/signin';
+    mockStatus = 'loading';
+    const { rerender } = renderHook(() => useSessionExpiry());
+
+    mockStatus = 'unauthenticated';
+    rerender();
+
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('新規登録ページではsignOutを呼ばないこと', () => {
+    mockPathname = '/auth/signup';
     mockStatus = 'loading';
     const { rerender } = renderHook(() => useSessionExpiry());
 

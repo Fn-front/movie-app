@@ -151,34 +151,50 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // フィルター準備完了の判定
-  // 認証済みユーザーはsavedFilterがUIに適用されるまで映画取得を待機
+  // 認証済みユーザーはsavedFilterの取得完了まで映画取得を待機
   const isFilterReady =
     status !== 'loading' &&
-    (!isAuthenticated || savedFilterApplied || savedFilterQuery.isError);
+    (!isAuthenticated || savedFilterQuery.isFetched || savedFilterQuery.isError);
 
   // 映画一覧クエリのベースパラメータを構築（pageを除く）
-  const moviesBaseParams = useMemo(
-    () => ({
-      sort_by: sortBy as 'release_date' | 'popularity' | 'vote_average',
+  // useEffectによるstate同期前でも保存済みフィルターを直接参照してタイミングギャップを排除
+  const moviesBaseParams = useMemo(() => {
+    const saved =
+      !savedFilterApplied && savedFilterQuery.data
+        ? savedFilterQuery.data
+        : undefined;
+
+    const effectiveGenreIds = saved?.genre_ids ?? selectedGenreIds;
+
+    return {
+      sort_by: (saved?.sort_by ?? sortBy) as
+        | 'release_date'
+        | 'popularity'
+        | 'vote_average',
       sort_order: defaultSortOrder,
-      release_type: releaseType,
+      release_type: saved?.release_type ?? releaseType,
       time_frame: timeFrame,
       genre_ids:
-        selectedGenreIds.length > 0 ? selectedGenreIds.join(',') : undefined,
-      release_date_gte: dateRange.gte || undefined,
-      release_date_lte: dateRange.lte || undefined,
-      is_revival: isRevivalFilter,
-    }),
-    [
-      sortBy,
-      defaultSortOrder,
-      releaseType,
-      timeFrame,
-      selectedGenreIds,
-      dateRange,
-      isRevivalFilter,
-    ],
-  );
+        effectiveGenreIds.length > 0
+          ? effectiveGenreIds.join(',')
+          : undefined,
+      release_date_gte:
+        (saved ? saved.date_range_gte : dateRange.gte) || undefined,
+      release_date_lte:
+        (saved ? saved.date_range_lte : dateRange.lte) || undefined,
+      is_revival: saved ? saved.is_revival : isRevivalFilter,
+    };
+  }, [
+    sortBy,
+    defaultSortOrder,
+    releaseType,
+    timeFrame,
+    selectedGenreIds,
+    dateRange,
+    isRevivalFilter,
+    savedFilterApplied,
+    savedFilterQuery.data,
+  ]);
 
   // 映画一覧の無限スクロール取得
   const moviesQuery = useInfiniteQuery({

@@ -2,7 +2,15 @@
  * Next.js Middleware - 認証保護
  */
 
+import { NextResponse } from 'next/server';
+
 import { auth } from '@/lib/auth/auth';
+
+/** セッションcookie名（環境に応じて切り替え） */
+const SESSION_COOKIE_NAME =
+  process.env.NODE_ENV === 'production'
+    ? '__Secure-next-auth.session-token'
+    : 'next-auth.session-token';
 
 export default auth((req) => {
   const { nextUrl } = req;
@@ -20,6 +28,17 @@ export default auth((req) => {
   const isAuthPath = authPaths.some((path) =>
     nextUrl.pathname.startsWith(path),
   );
+
+  // セッション期限切れ検知: cookieはあるがJWT検証に失敗 → cookieを削除してログアウト
+  const hasSessionCookie = req.cookies.has(SESSION_COOKIE_NAME);
+
+  if (!isAuthenticated && hasSessionCookie) {
+    const response = isProtectedPath
+      ? NextResponse.redirect(new URL('/auth/signin', nextUrl))
+      : NextResponse.next();
+    response.cookies.delete(SESSION_COOKIE_NAME);
+    return response;
+  }
 
   // 未認証で保護されたパスにアクセス → サインインページへリダイレクト
   if (isProtectedPath && !isAuthenticated) {

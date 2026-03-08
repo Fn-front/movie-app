@@ -31,7 +31,6 @@ test.describe('フィルター条件がリロード後も保持される', () =>
     const putResponse = await putPromise;
     const putBody = putResponse.request().postDataJSON();
 
-
     // PUTにis_revival: falseが含まれていることを確認
     expect(putBody.is_revival).toBe(false);
 
@@ -45,7 +44,6 @@ test.describe('フィルター条件がリロード後も保持される', () =>
     await page.reload();
     const getResponse = await getPromise;
     const getBody = await getResponse.json();
-
 
     // GETにis_revival: falseが含まれていることを確認
     expect(getBody.data.filter_conditions.is_revival).toBe(false);

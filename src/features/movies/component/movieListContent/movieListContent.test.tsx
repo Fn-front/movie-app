@@ -10,10 +10,33 @@ jest.mock('@/hooks/useIntersectionObserver', () => ({
   useIntersectionObserver: () => ({ current: null }),
 }));
 
+let capturedMovieDetailProps: {
+  movieId: number | null;
+  showFinancialInfo: boolean;
+  onClose: () => void;
+} | null = null;
+
 jest.mock(
   '@/features/movies/component/movieDetailModal/movieDetailModal',
   () => ({
-    MovieDetailModal: () => null,
+    MovieDetailModal: (props: {
+      movieId: number | null;
+      showFinancialInfo: boolean;
+      onClose: () => void;
+    }) => {
+      capturedMovieDetailProps = props;
+      return props.movieId !== null ? (
+        <div data-testid='movie-detail-modal'>
+          <span data-testid='detail-movie-id'>{props.movieId}</span>
+          <span data-testid='detail-financial'>
+            {String(props.showFinancialInfo)}
+          </span>
+          <button data-testid='close-detail' onClick={props.onClose}>
+            閉じる
+          </button>
+        </div>
+      ) : null;
+    },
   }),
 );
 
@@ -257,6 +280,207 @@ describe('MovieListContent', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'フィルター' }));
       expect(handleFilterModalOpen).toHaveBeenCalled();
+    });
+
+    it('映画タイルクリックで詳細モーダルにmovieIdが渡される', () => {
+      const pastDate = '2020-01-01';
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            movies: [
+              createMockMovie({
+                id: 42,
+                title: 'クリック映画',
+                release_date: pastDate,
+              }),
+            ],
+          })}
+        />,
+      );
+
+      // MovieTileをクリック
+      fireEvent.click(screen.getByText('クリック映画'));
+      expect(screen.getByTestId('detail-movie-id')).toHaveTextContent('42');
+    });
+
+    it('公開済み映画クリックでshowFinancialInfo=trueが渡される', () => {
+      const pastDate = '2020-01-01';
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            movies: [
+              createMockMovie({
+                id: 10,
+                title: '公開済み映画',
+                release_date: pastDate,
+              }),
+            ],
+          })}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('公開済み映画'));
+      expect(screen.getByTestId('detail-financial')).toHaveTextContent('true');
+    });
+
+    it('未公開映画クリックでshowFinancialInfo=falseが渡される', () => {
+      const futureDate = '2099-12-31';
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            movies: [
+              createMockMovie({
+                id: 20,
+                title: '未公開映画',
+                release_date: futureDate,
+                is_revival: false,
+              }),
+            ],
+          })}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('未公開映画'));
+      expect(screen.getByTestId('detail-financial')).toHaveTextContent('false');
+    });
+
+    it('リバイバル映画クリックでshowFinancialInfo=trueが渡される', () => {
+      const futureDate = '2099-12-31';
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            movies: [
+              createMockMovie({
+                id: 30,
+                title: 'リバイバル映画',
+                release_date: futureDate,
+                is_revival: true,
+              }),
+            ],
+          })}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('リバイバル映画'));
+      expect(screen.getByTestId('detail-financial')).toHaveTextContent('true');
+    });
+
+    it('release_dateがnullの映画クリックでshowFinancialInfo=falseが渡される', () => {
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            movies: [
+              createMockMovie({
+                id: 40,
+                title: '日付なし映画',
+                release_date: null as unknown as string,
+                is_revival: false,
+              }),
+            ],
+          })}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('日付なし映画'));
+      expect(screen.getByTestId('detail-financial')).toHaveTextContent('false');
+    });
+
+    it('詳細モーダルを閉じるとmovieIdがnullに戻る', () => {
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            movies: [createMockMovie({ id: 50, title: '閉じるテスト映画' })],
+          })}
+        />,
+      );
+
+      // 映画をクリックしてモーダルを開く
+      fireEvent.click(screen.getByText('閉じるテスト映画'));
+      expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
+
+      // モーダルを閉じる
+      fireEvent.click(screen.getByTestId('close-detail'));
+      expect(
+        screen.queryByTestId('movie-detail-modal'),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('フィルターバッジ（追加分岐）', () => {
+    it('日付範囲lteのみがある場合もバッジが表示される', () => {
+      const { container } = render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            dateRange: { lte: '2026-12-31' },
+          })}
+        />,
+      );
+      expect(
+        container.querySelector('.c_movie_list__filter_count'),
+      ).toBeInTheDocument();
+    });
+
+    it('isRevivalFilter=trueの場合もバッジが表示される', () => {
+      const { container } = render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({ isRevivalFilter: true })}
+        />,
+      );
+      expect(
+        container.querySelector('.c_movie_list__filter_count'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('空メッセージの追加分岐', () => {
+    it('isLoading=trueかつmoviesが空の場合、空メッセージは表示されない', () => {
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({ isLoading: true, movies: [] })}
+        />,
+      );
+      expect(
+        screen.queryByText('表示する映画がありません。'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('isFetchingNextPage=falseの場合ローディングが表示されない', () => {
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            isFetchingNextPage: false,
+            movies: [createMockMovie()],
+          })}
+        />,
+      );
+      expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('FilterModal連携', () => {
+    it('handleFilterModalCloseが呼ばれる', () => {
+      const handleFilterModalClose = jest.fn();
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            isFilterModalOpen: true,
+            handleFilterModalClose,
+          })}
+        />,
+      );
+      // FilterModalが開いている状態で表示される
+      expect(screen.getByText('フィルター')).toBeInTheDocument();
     });
   });
 });

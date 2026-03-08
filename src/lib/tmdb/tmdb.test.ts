@@ -8,18 +8,35 @@
  */
 
 const mockGet = jest.fn();
+let interceptorRejected: (error: unknown) => Promise<unknown>;
 
 jest.mock('axios', () => {
   const mockAxiosInstance = {
     get: mockGet,
     interceptors: {
-      response: { use: jest.fn() },
+      response: {
+        use: jest.fn(
+          (
+            _onFulfilled: unknown,
+            onRejected: (error: unknown) => Promise<unknown>,
+          ) => {
+            interceptorRejected = onRejected;
+          },
+        ),
+      },
     },
   };
+
+  // tmdbClient自身をモックリクエスト関数として呼べるようにする
+  const instance = Object.assign(
+    jest.fn((config: unknown) => mockGet(config)),
+    mockAxiosInstance,
+  );
+
   return {
     __esModule: true,
     default: {
-      create: jest.fn(() => mockAxiosInstance),
+      create: jest.fn(() => instance),
     },
   };
 });
@@ -68,6 +85,16 @@ const mockGenresResponse = {
   },
 };
 
+const mockKeywordsResponse = {
+  data: {
+    id: 123,
+    keywords: [
+      { id: 1, name: 'keyword1' },
+      { id: 2, name: 'keyword2' },
+    ],
+  },
+};
+
 describe('TMDb APIクライアント', () => {
   beforeEach(() => {
     mockGet.mockReset();
@@ -106,6 +133,17 @@ describe('TMDb APIクライアント', () => {
 
       expect(mockGet).toHaveBeenCalledWith('/movie/upcoming', {
         params: { page: 3 },
+      });
+    });
+
+    it('デフォルトページが1になる', async () => {
+      mockGet.mockResolvedValue(mockResponse);
+
+      const { getUpcomingMovies } = require('./tmdb');
+      await getUpcomingMovies();
+
+      expect(mockGet).toHaveBeenCalledWith('/movie/upcoming', {
+        params: { page: 1 },
       });
     });
   });
@@ -158,6 +196,46 @@ describe('TMDb APIクライアント', () => {
         params: { append_to_response: 'credits' },
       });
     });
+
+    it('レスポンスデータが正しく返される', async () => {
+      mockGet.mockResolvedValue(mockDetailResponse);
+
+      const { getMovieDetail } = require('./tmdb');
+      const result = await getMovieDetail(123);
+
+      expect(result).toEqual(mockDetailResponse.data);
+    });
+  });
+
+  describe('getMovieKeywordIds', () => {
+    it('正しいエンドポイントでgetが呼ばれキーワードID配列を返す', async () => {
+      mockGet.mockResolvedValue(mockKeywordsResponse);
+
+      const { getMovieKeywordIds } = require('./tmdb');
+      const result = await getMovieKeywordIds(123);
+
+      expect(mockGet).toHaveBeenCalledWith('/movie/123/keywords');
+      expect(result).toEqual([1, 2]);
+    });
+
+    it('文字列のmovieIdでも正しく動作する', async () => {
+      mockGet.mockResolvedValue(mockKeywordsResponse);
+
+      const { getMovieKeywordIds } = require('./tmdb');
+      const result = await getMovieKeywordIds('789');
+
+      expect(mockGet).toHaveBeenCalledWith('/movie/789/keywords');
+      expect(result).toEqual([1, 2]);
+    });
+
+    it('キーワードが空の場合は空配列を返す', async () => {
+      mockGet.mockResolvedValue({ data: { id: 123, keywords: [] } });
+
+      const { getMovieKeywordIds } = require('./tmdb');
+      const result = await getMovieKeywordIds(123);
+
+      expect(result).toEqual([]);
+    });
   });
 
   describe('searchMovies', () => {
@@ -196,6 +274,74 @@ describe('TMDb APIクライアント', () => {
           with_genres: undefined,
         },
       });
+    });
+  });
+
+  describe('discoverMovies', () => {
+    it('デフォルトパラメータで正しく呼ばれる', async () => {
+      mockGet.mockResolvedValue(mockResponse);
+
+      const { discoverMovies } = require('./tmdb');
+      await discoverMovies();
+
+      expect(mockGet).toHaveBeenCalledWith('/discover/movie', {
+        params: {
+          page: 1,
+          include_adult: false,
+        },
+      });
+    });
+
+    it('全パラメータが正しく渡される', async () => {
+      mockGet.mockResolvedValue(mockResponse);
+
+      const { discoverMovies } = require('./tmdb');
+      await discoverMovies({
+        page: 3,
+        'release_date.gte': '2025-01-01',
+        'release_date.lte': '2025-12-31',
+        with_release_type: '2|3',
+        sort_by: 'popularity.desc',
+        without_keywords: '100|200',
+        without_genres: '10|20',
+      });
+
+      expect(mockGet).toHaveBeenCalledWith('/discover/movie', {
+        params: {
+          page: 3,
+          include_adult: false,
+          'release_date.gte': '2025-01-01',
+          'release_date.lte': '2025-12-31',
+          with_release_type: '2|3',
+          sort_by: 'popularity.desc',
+          without_keywords: '100|200',
+          without_genres: '10|20',
+        },
+      });
+    });
+
+    it('pageが省略された場合デフォルトで1になる', async () => {
+      mockGet.mockResolvedValue(mockResponse);
+
+      const { discoverMovies } = require('./tmdb');
+      await discoverMovies({ sort_by: 'vote_average.desc' });
+
+      expect(mockGet).toHaveBeenCalledWith('/discover/movie', {
+        params: {
+          page: 1,
+          include_adult: false,
+          sort_by: 'vote_average.desc',
+        },
+      });
+    });
+
+    it('レスポンスデータが正しく返される', async () => {
+      mockGet.mockResolvedValue(mockResponse);
+
+      const { discoverMovies } = require('./tmdb');
+      const result = await discoverMovies();
+
+      expect(result).toEqual(mockResponse.data);
     });
   });
 
@@ -278,6 +424,201 @@ describe('TMDb APIクライアント', () => {
       expect(mockGet).toHaveBeenCalledWith('/movie/now_playing', {
         params: { page: 250 },
       });
+    });
+
+    it('負のページ番号の場合1に補正される', async () => {
+      mockGet.mockResolvedValue(mockResponse);
+
+      const { getPopularMovies } = require('./tmdb');
+      await getPopularMovies(-5);
+
+      expect(mockGet).toHaveBeenCalledWith('/movie/popular', {
+        params: { page: 1 },
+      });
+    });
+
+    it('page=1の場合そのまま1になる', async () => {
+      mockGet.mockResolvedValue(mockResponse);
+
+      const { getPopularMovies } = require('./tmdb');
+      await getPopularMovies(1);
+
+      expect(mockGet).toHaveBeenCalledWith('/movie/popular', {
+        params: { page: 1 },
+      });
+    });
+
+    it('page=500の場合そのまま500になる', async () => {
+      mockGet.mockResolvedValue(mockResponse);
+
+      const { getPopularMovies } = require('./tmdb');
+      await getPopularMovies(500);
+
+      expect(mockGet).toHaveBeenCalledWith('/movie/popular', {
+        params: { page: 500 },
+      });
+    });
+  });
+
+  describe('リトライインターセプター', () => {
+    it('configがない場合はそのままrejectする', async () => {
+      require('./tmdb');
+
+      const error = { config: undefined, response: { status: 429 } };
+
+      await expect(interceptorRejected(error)).rejects.toEqual(error);
+    });
+
+    it('statusがない場合はそのままrejectする', async () => {
+      require('./tmdb');
+
+      const error = {
+        config: { url: '/test' },
+        response: undefined,
+      };
+
+      await expect(interceptorRejected(error)).rejects.toEqual(error);
+    });
+
+    it('リトライ対象外のステータスコードはそのままrejectする', async () => {
+      require('./tmdb');
+
+      const error = {
+        config: { url: '/test' },
+        response: { status: 404 },
+      };
+
+      await expect(interceptorRejected(error)).rejects.toEqual(error);
+    });
+
+    it('リトライ上限に達した場合はrejectする', async () => {
+      require('./tmdb');
+
+      const error = {
+        config: { url: '/test', __retryCount: 3 },
+        response: { status: 429, headers: {} },
+      };
+
+      await expect(interceptorRejected(error)).rejects.toEqual(error);
+    });
+
+    it('429エラーでリトライが実行される', async () => {
+      require('./tmdb');
+
+      jest.useFakeTimers();
+
+      const config = { url: '/test', __retryCount: 0 };
+      const error = {
+        config,
+        response: { status: 429, headers: {} },
+      };
+
+      mockGet.mockResolvedValueOnce(mockResponse);
+
+      const retryPromise = interceptorRejected(error);
+
+      jest.advanceTimersByTime(1000);
+
+      await retryPromise;
+
+      expect(config.__retryCount).toBe(1);
+
+      jest.useRealTimers();
+    });
+
+    it('503エラーでリトライが実行される', async () => {
+      require('./tmdb');
+
+      jest.useFakeTimers();
+
+      const config = { url: '/test', __retryCount: 0 };
+      const error = {
+        config,
+        response: { status: 503, headers: {} },
+      };
+
+      mockGet.mockResolvedValueOnce(mockResponse);
+
+      const retryPromise = interceptorRejected(error);
+
+      jest.advanceTimersByTime(1000);
+
+      await retryPromise;
+
+      expect(config.__retryCount).toBe(1);
+
+      jest.useRealTimers();
+    });
+
+    it('504エラーでリトライが実行される', async () => {
+      require('./tmdb');
+
+      jest.useFakeTimers();
+
+      const config = { url: '/test', __retryCount: 0 };
+      const error = {
+        config,
+        response: { status: 504, headers: {} },
+      };
+
+      mockGet.mockResolvedValueOnce(mockResponse);
+
+      const retryPromise = interceptorRejected(error);
+
+      jest.advanceTimersByTime(1000);
+
+      await retryPromise;
+
+      expect(config.__retryCount).toBe(1);
+
+      jest.useRealTimers();
+    });
+
+    it('retry-afterヘッダーがある場合その値を使用する', async () => {
+      require('./tmdb');
+
+      jest.useFakeTimers();
+
+      const config = { url: '/test' };
+      const error = {
+        config,
+        response: { status: 429, headers: { 'retry-after': '2' } },
+      };
+
+      mockGet.mockResolvedValueOnce(mockResponse);
+
+      const retryPromise = interceptorRejected(error);
+
+      // retry-after=2秒なので2000ms待つ
+      jest.advanceTimersByTime(2000);
+
+      await retryPromise;
+
+      jest.useRealTimers();
+    });
+
+    it('__retryCountが未定義の場合0から開始する', async () => {
+      require('./tmdb');
+
+      jest.useFakeTimers();
+
+      const config = { url: '/test' };
+      const error = {
+        config,
+        response: { status: 429, headers: {} },
+      };
+
+      mockGet.mockResolvedValueOnce(mockResponse);
+
+      const retryPromise = interceptorRejected(error);
+
+      jest.advanceTimersByTime(1000);
+
+      await retryPromise;
+
+      expect((config as { __retryCount?: number }).__retryCount).toBe(1);
+
+      jest.useRealTimers();
     });
   });
 });

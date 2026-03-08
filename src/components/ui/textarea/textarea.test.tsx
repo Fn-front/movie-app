@@ -62,7 +62,13 @@ describe('Textarea', () => {
 
   it('文字数カウントが表示される', () => {
     render(
-      <Textarea label='レビュー' value='テスト' onChange={jest.fn()} showCount maxLength={500} />,
+      <Textarea
+        label='レビュー'
+        value='テスト'
+        onChange={jest.fn()}
+        showCount
+        maxLength={500}
+      />,
     );
     expect(screen.getByText('3 / 500')).toBeInTheDocument();
   });

@@ -216,9 +216,7 @@ describe('MovieContent', () => {
 
     it('フィルターボタンクリックでhandleFilterModalOpenが呼ばれる', () => {
       const handleFilterModalOpen = jest.fn();
-      mockUseHome.mockReturnValue(
-        createMockUseHome({ handleFilterModalOpen }),
-      );
+      mockUseHome.mockReturnValue(createMockUseHome({ handleFilterModalOpen }));
       render(<MovieContent />);
 
       fireEvent.click(screen.getByRole('button', { name: 'フィルター' }));

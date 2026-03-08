@@ -178,9 +178,7 @@ describe('Modal', () => {
     render(
       <Modal {...defaultProps} title={undefined} showCloseButton={true} />,
     );
-    expect(
-      screen.getByRole('button', { name: '閉じる' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '閉じる' })).toBeInTheDocument();
   });
 });
 

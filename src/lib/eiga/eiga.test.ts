@@ -4,7 +4,12 @@
 
 import axios from 'axios';
 
-import { fetchEigaMovies, fetchOriginalTitle, parseIcal, type EigaMovie } from './eiga';
+import {
+  fetchEigaMovies,
+  fetchOriginalTitle,
+  parseIcal,
+  type EigaMovie,
+} from './eiga';
 
 jest.mock('axios');
 
@@ -170,13 +175,10 @@ describe('fetchEigaMovies', () => {
 
     const result = await fetchEigaMovies();
 
-    expect(mockedAxios.get).toHaveBeenCalledWith(
-      expect.any(String),
-      {
-        responseType: 'text',
-        timeout: 30000,
-      },
-    );
+    expect(mockedAxios.get).toHaveBeenCalledWith(expect.any(String), {
+      responseType: 'text',
+      timeout: 30000,
+    });
     expect(result).toHaveLength(3);
     expect(result[0].title).toBe('テスト映画A');
     expect(result[0].releaseDate).toBe('2026-03-01');
@@ -270,7 +272,9 @@ describe('fetchOriginalTitle', () => {
   });
 
   it('タイムアウトエラーの場合もnullを返す', async () => {
-    mockedAxios.get.mockRejectedValueOnce(new Error('timeout of 10000ms exceeded'));
+    mockedAxios.get.mockRejectedValueOnce(
+      new Error('timeout of 10000ms exceeded'),
+    );
 
     const result = await fetchOriginalTitle('https://eiga.com/movie/12345/');
 

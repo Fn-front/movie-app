@@ -1,7 +1,7 @@
 jest.mock('next/image', () => {
   const MockImage = (props: React.ImgHTMLAttributes<HTMLImageElement>) => {
-    // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
-    return <img {...props} />;
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img alt='' {...props} />;
   };
   MockImage.displayName = 'MockImage';
   return { __esModule: true, default: MockImage };
@@ -60,7 +60,9 @@ describe('Avatar', () => {
 
   it('aria-labelがalt textで設定される', () => {
     render(<Avatar alt='テストユーザー' />);
-    expect(screen.getByRole('img', { name: 'テストユーザー' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: 'テストユーザー' }),
+    ).toBeInTheDocument();
   });
 
   it('カスタムクラス名が適用される', () => {

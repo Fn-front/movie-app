@@ -485,9 +485,7 @@ describe('syncEigaMovies', () => {
     // findBestMatchを通過させるために、adult=falseで返してからbestMatchの後にadult=trueに変わるケースは
     // 実際にはないので、ここではfindBestMatchの除外で結果的にスキップになるケースを確認
     mockedSearchMovies.mockResolvedValue({
-      results: [
-        createMockMovie({ id: 400, title: 'テスト映画', adult: true }),
-      ],
+      results: [createMockMovie({ id: 400, title: 'テスト映画', adult: true })],
       page: 1,
       total_pages: 1,
       total_results: 1,

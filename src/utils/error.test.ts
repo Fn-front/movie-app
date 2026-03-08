@@ -73,7 +73,7 @@ describe('handleApiError', () => {
 
   it('開発環境ではconsole.errorにエラーを出力する', () => {
     const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'development';
+    (process.env as Record<string, string>).NODE_ENV = 'development';
     const consoleSpy = jest
       .spyOn(console, 'error')
       .mockImplementation(() => {});
@@ -84,12 +84,12 @@ describe('handleApiError', () => {
     expect(consoleSpy).toHaveBeenCalledWith('API Error:', error);
 
     consoleSpy.mockRestore();
-    process.env.NODE_ENV = originalEnv;
+    (process.env as Record<string, string>).NODE_ENV = originalEnv!;
   });
 
   it('本番環境ではconsole.errorを呼ばない', () => {
     const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
+    (process.env as Record<string, string>).NODE_ENV = 'production';
     const consoleSpy = jest
       .spyOn(console, 'error')
       .mockImplementation(() => {});
@@ -99,7 +99,7 @@ describe('handleApiError', () => {
     expect(consoleSpy).not.toHaveBeenCalled();
 
     consoleSpy.mockRestore();
-    process.env.NODE_ENV = originalEnv;
+    (process.env as Record<string, string>).NODE_ENV = originalEnv!;
   });
 });
 
@@ -279,17 +279,13 @@ describe('logError', () => {
   const originalEnv = process.env.NODE_ENV;
 
   afterEach(() => {
-    process.env.NODE_ENV = originalEnv;
+    (process.env as Record<string, string>).NODE_ENV = originalEnv!;
   });
 
   it('開発環境ではエラー詳細をconsoleに出力する', () => {
-    process.env.NODE_ENV = 'development';
-    const groupSpy = jest
-      .spyOn(console, 'group')
-      .mockImplementation(() => {});
-    const errorSpy = jest
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+    (process.env as Record<string, string>).NODE_ENV = 'development';
+    const groupSpy = jest.spyOn(console, 'group').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     const groupEndSpy = jest
       .spyOn(console, 'groupEnd')
@@ -309,13 +305,9 @@ describe('logError', () => {
   });
 
   it('開発環境でcontextが渡された場合、contextも出力する', () => {
-    process.env.NODE_ENV = 'development';
-    const groupSpy = jest
-      .spyOn(console, 'group')
-      .mockImplementation(() => {});
-    const errorSpy = jest
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+    (process.env as Record<string, string>).NODE_ENV = 'development';
+    const groupSpy = jest.spyOn(console, 'group').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     const groupEndSpy = jest
       .spyOn(console, 'groupEnd')
@@ -333,13 +325,9 @@ describe('logError', () => {
   });
 
   it('開発環境でAxiosErrorの場合、レスポンス詳細も出力する', () => {
-    process.env.NODE_ENV = 'development';
-    const groupSpy = jest
-      .spyOn(console, 'group')
-      .mockImplementation(() => {});
-    const errorSpy = jest
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+    (process.env as Record<string, string>).NODE_ENV = 'development';
+    const groupSpy = jest.spyOn(console, 'group').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     const groupEndSpy = jest
       .spyOn(console, 'groupEnd')
@@ -350,7 +338,9 @@ describe('logError', () => {
     });
     logError(axiosError);
 
-    expect(logSpy).toHaveBeenCalledWith('Response:', { detail: 'server error' });
+    expect(logSpy).toHaveBeenCalledWith('Response:', {
+      detail: 'server error',
+    });
     expect(logSpy).toHaveBeenCalledWith('Status:', 500);
     expect(logSpy).toHaveBeenCalledWith('Headers:', {});
 
@@ -361,13 +351,9 @@ describe('logError', () => {
   });
 
   it('本番環境では何も出力しない', () => {
-    process.env.NODE_ENV = 'production';
-    const groupSpy = jest
-      .spyOn(console, 'group')
-      .mockImplementation(() => {});
-    const errorSpy = jest
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+    (process.env as Record<string, string>).NODE_ENV = 'production';
+    const groupSpy = jest.spyOn(console, 'group').mockImplementation(() => {});
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     logError(new Error('test'));
 

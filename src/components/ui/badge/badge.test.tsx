@@ -32,7 +32,9 @@ describe('Badge', () => {
 
   it('onRemoveがない場合は削除ボタンが表示されない', () => {
     render(<Badge>テスト</Badge>);
-    expect(screen.queryByRole('button', { name: '削除' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '削除' }),
+    ).not.toBeInTheDocument();
   });
 
   it('カスタムクラス名が適用される', () => {

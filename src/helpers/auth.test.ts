@@ -19,7 +19,8 @@ import { auth } from '@/lib/auth/auth';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';
 
-const mockAuth = auth as jest.MockedFunction<typeof auth>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockAuth = auth as jest.MockedFunction<(...args: any[]) => any>;
 
 describe('getAuthSession', () => {
   beforeEach(() => {

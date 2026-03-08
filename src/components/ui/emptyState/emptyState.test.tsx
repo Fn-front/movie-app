@@ -68,7 +68,9 @@ describe('EmptyState', () => {
 
   it('actionが未指定の場合はアクション領域が表示されない', () => {
     const { container } = render(<EmptyState title='データがありません' />);
-    expect(container.querySelector('[class*="action"]')).not.toBeInTheDocument();
+    expect(
+      container.querySelector('[class*="action"]'),
+    ).not.toBeInTheDocument();
   });
 
   it('カスタムクラス名が適用される', () => {

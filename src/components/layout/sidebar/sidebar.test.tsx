@@ -70,7 +70,9 @@ describe('Sidebar', () => {
     );
     expect(screen.getByText('ナビ')).toBeInTheDocument();
     expect(screen.getByText('ユーザー')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'カレンダー' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'カレンダー' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('ウォッチリスト')).toBeInTheDocument();
   });
 });

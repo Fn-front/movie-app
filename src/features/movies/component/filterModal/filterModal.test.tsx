@@ -146,7 +146,11 @@ describe('FilterModal', () => {
         target: { value: '2026-08-01' },
       });
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], { lte: '2026-08-01' }, undefined);
+      expect(onApply).toHaveBeenCalledWith(
+        [],
+        { lte: '2026-08-01' },
+        undefined,
+      );
     });
   });
 

@@ -1,3 +1,4 @@
+import React from 'react';
 import { renderHook } from '@testing-library/react';
 
 import { useIntersectionObserver } from './useIntersectionObserver';
@@ -72,20 +73,22 @@ describe('useIntersectionObserver', () => {
     const mockElement = document.createElement('div');
 
     // useRefのcurrentを上書きするために、refオブジェクトを差し替え
-    const useRefSpy = jest.spyOn(require('react'), 'useRef');
+    const useRefSpy = jest.spyOn(React, 'useRef');
     // 1回目: targetRef, 2回目: onIntersectRef
     useRefSpy
-      .mockReturnValueOnce({ current: mockElement })
-      .mockReturnValueOnce({ current: onIntersect });
+      .mockReturnValueOnce({
+        current: mockElement,
+      } as React.MutableRefObject<HTMLElement>)
+      .mockReturnValueOnce({
+        current: onIntersect,
+      } as unknown as React.MutableRefObject<() => void>);
 
     renderHook(() => useIntersectionObserver(onIntersect));
 
     expect(mockObserve).toHaveBeenCalledWith(mockElement);
 
     // IntersectionObserverのコールバックをシミュレート
-    capturedCallback([
-      { isIntersecting: true } as IntersectionObserverEntry,
-    ]);
+    capturedCallback([{ isIntersecting: true } as IntersectionObserverEntry]);
 
     expect(onIntersect).toHaveBeenCalledTimes(1);
 
@@ -96,16 +99,18 @@ describe('useIntersectionObserver', () => {
     const onIntersect = jest.fn();
     const mockElement = document.createElement('div');
 
-    const useRefSpy = jest.spyOn(require('react'), 'useRef');
+    const useRefSpy = jest.spyOn(React, 'useRef');
     useRefSpy
-      .mockReturnValueOnce({ current: mockElement })
-      .mockReturnValueOnce({ current: onIntersect });
+      .mockReturnValueOnce({
+        current: mockElement,
+      } as React.MutableRefObject<HTMLElement>)
+      .mockReturnValueOnce({
+        current: onIntersect,
+      } as unknown as React.MutableRefObject<() => void>);
 
     renderHook(() => useIntersectionObserver(onIntersect));
 
-    capturedCallback([
-      { isIntersecting: false } as IntersectionObserverEntry,
-    ]);
+    capturedCallback([{ isIntersecting: false } as IntersectionObserverEntry]);
 
     expect(onIntersect).not.toHaveBeenCalled();
 
@@ -116,10 +121,14 @@ describe('useIntersectionObserver', () => {
     const onIntersect = jest.fn();
     const mockElement = document.createElement('div');
 
-    const useRefSpy = jest.spyOn(require('react'), 'useRef');
+    const useRefSpy = jest.spyOn(React, 'useRef');
     useRefSpy
-      .mockReturnValueOnce({ current: mockElement })
-      .mockReturnValueOnce({ current: onIntersect });
+      .mockReturnValueOnce({
+        current: mockElement,
+      } as React.MutableRefObject<HTMLElement>)
+      .mockReturnValueOnce({
+        current: onIntersect,
+      } as unknown as React.MutableRefObject<() => void>);
 
     renderHook(() =>
       useIntersectionObserver(onIntersect, {
@@ -140,10 +149,14 @@ describe('useIntersectionObserver', () => {
     const onIntersect = jest.fn();
     const mockElement = document.createElement('div');
 
-    const useRefSpy = jest.spyOn(require('react'), 'useRef');
+    const useRefSpy = jest.spyOn(React, 'useRef');
     useRefSpy
-      .mockReturnValueOnce({ current: mockElement })
-      .mockReturnValueOnce({ current: onIntersect });
+      .mockReturnValueOnce({
+        current: mockElement,
+      } as React.MutableRefObject<HTMLElement>)
+      .mockReturnValueOnce({
+        current: onIntersect,
+      } as unknown as React.MutableRefObject<() => void>);
 
     renderHook(() => useIntersectionObserver(onIntersect));
 
@@ -159,14 +172,16 @@ describe('useIntersectionObserver', () => {
     const onIntersect = jest.fn();
     const mockElement = document.createElement('div');
 
-    const useRefSpy = jest.spyOn(require('react'), 'useRef');
+    const useRefSpy = jest.spyOn(React, 'useRef');
     useRefSpy
-      .mockReturnValueOnce({ current: mockElement })
-      .mockReturnValueOnce({ current: onIntersect });
+      .mockReturnValueOnce({
+        current: mockElement,
+      } as React.MutableRefObject<HTMLElement>)
+      .mockReturnValueOnce({
+        current: onIntersect,
+      } as unknown as React.MutableRefObject<() => void>);
 
-    const { unmount } = renderHook(() =>
-      useIntersectionObserver(onIntersect),
-    );
+    const { unmount } = renderHook(() => useIntersectionObserver(onIntersect));
 
     unmount();
 
@@ -186,8 +201,8 @@ describe('useIntersectionObserver', () => {
     };
 
     let callCount = 0;
-    const useRefSpy = jest.spyOn(require('react'), 'useRef');
-    useRefSpy.mockImplementation((initialValue) => {
+    const useRefSpy = jest.spyOn(React, 'useRef');
+    useRefSpy.mockImplementation(() => {
       // 初回レンダー時
       if (callCount === 0) {
         callCount++;
@@ -211,9 +226,7 @@ describe('useIntersectionObserver', () => {
     rerender({ callback: onIntersect2 });
 
     // IntersectionObserverのコールバックを実行 - 最新のonIntersectが呼ばれるはず
-    capturedCallback([
-      { isIntersecting: true } as IntersectionObserverEntry,
-    ]);
+    capturedCallback([{ isIntersecting: true } as IntersectionObserverEntry]);
 
     // onIntersectRefは最新のコールバックに更新されている
     expect(refObjects.onIntersectRef.current).toBeDefined();
@@ -224,10 +237,14 @@ describe('useIntersectionObserver', () => {
   it('target要素がnullの場合IntersectionObserverを作成しない', () => {
     const onIntersect = jest.fn();
 
-    const useRefSpy = jest.spyOn(require('react'), 'useRef');
+    const useRefSpy = jest.spyOn(React, 'useRef');
     useRefSpy
-      .mockReturnValueOnce({ current: null })
-      .mockReturnValueOnce({ current: onIntersect });
+      .mockReturnValueOnce({
+        current: null,
+      } as React.MutableRefObject<null>)
+      .mockReturnValueOnce({
+        current: onIntersect,
+      } as unknown as React.MutableRefObject<() => void>);
 
     renderHook(() => useIntersectionObserver(onIntersect));
 
@@ -241,10 +258,14 @@ describe('useIntersectionObserver', () => {
     const onIntersect = jest.fn();
     const mockElement = document.createElement('div');
 
-    const useRefSpy = jest.spyOn(require('react'), 'useRef');
+    const useRefSpy = jest.spyOn(React, 'useRef');
     useRefSpy
-      .mockReturnValueOnce({ current: mockElement })
-      .mockReturnValueOnce({ current: onIntersect });
+      .mockReturnValueOnce({
+        current: mockElement,
+      } as React.MutableRefObject<HTMLElement>)
+      .mockReturnValueOnce({
+        current: onIntersect,
+      } as unknown as React.MutableRefObject<() => void>);
 
     renderHook(() => useIntersectionObserver(onIntersect));
 

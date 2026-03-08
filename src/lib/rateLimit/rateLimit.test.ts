@@ -63,15 +63,13 @@ describe('checkRateLimit', () => {
   });
 
   it('レコード未存在時に新規作成してallowed=trueを返す', async () => {
-    const { supabase, mockFrom, mockEq } = createMockSupabase();
+    const { supabase, mockFrom } = createMockSupabase();
 
     // select→eq→eq→single のチェーン: レコード未検出
-    const mockSingleFn = jest
-      .fn()
-      .mockResolvedValue({
-        data: null,
-        error: { code: SUPABASE_ERROR_CODE.NOT_FOUND },
-      });
+    const mockSingleFn = jest.fn().mockResolvedValue({
+      data: null,
+      error: { code: SUPABASE_ERROR_CODE.NOT_FOUND },
+    });
     const mockEq2 = jest.fn().mockReturnValue({ single: mockSingleFn });
     const mockEq1 = jest.fn().mockReturnValue({ eq: mockEq2 });
     const mockSelectFn = jest.fn().mockReturnValue({ eq: mockEq1 });
@@ -224,9 +222,9 @@ describe('checkRateLimit', () => {
 
     mockFrom.mockReturnValueOnce({ select: mockSelectFn });
 
-    await expect(
-      checkRateLimit(supabase, 'user-1', 'login'),
-    ).rejects.toEqual(dbError);
+    await expect(checkRateLimit(supabase, 'user-1', 'login')).rejects.toEqual(
+      dbError,
+    );
   });
 });
 

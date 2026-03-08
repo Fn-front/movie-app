@@ -44,7 +44,9 @@ describe('ToastContainer', () => {
       clearToasts: jest.fn(),
     });
     const { container } = renderWithProvider(<ToastContainer />);
-    expect(container.querySelector('[data-state="open"]')).not.toBeInTheDocument();
+    expect(
+      container.querySelector('[data-state="open"]'),
+    ).not.toBeInTheDocument();
   });
 
   it('トーストが1件ある場合タイトルが表示される', () => {

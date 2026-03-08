@@ -19,10 +19,7 @@ describe('DropdownMenu', () => {
 
   it('デフォルトpropsでトリガーがレンダリングされる', () => {
     render(
-      <DropdownMenu
-        trigger={<button>メニュー</button>}
-        items={defaultItems}
-      />,
+      <DropdownMenu trigger={<button>メニュー</button>} items={defaultItems} />,
     );
     expect(
       screen.getByRole('button', { name: 'メニュー' }),
@@ -32,24 +29,22 @@ describe('DropdownMenu', () => {
   it('トリガーをクリックするとメニューが表示される', async () => {
     const user = userEvent.setup();
     render(
-      <DropdownMenu
-        trigger={<button>メニュー</button>}
-        items={defaultItems}
-      />,
+      <DropdownMenu trigger={<button>メニュー</button>} items={defaultItems} />,
     );
     await user.click(screen.getByRole('button', { name: 'メニュー' }));
-    expect(screen.getByRole('menuitem', { name: 'プロフィール' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: 'プロフィール' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: '設定' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: 'ログアウト' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: 'ログアウト' }),
+    ).toBeInTheDocument();
   });
 
   it('メニューアイテムをクリックするとonClickが呼ばれる', async () => {
     const user = userEvent.setup();
     render(
-      <DropdownMenu
-        trigger={<button>メニュー</button>}
-        items={defaultItems}
-      />,
+      <DropdownMenu trigger={<button>メニュー</button>} items={defaultItems} />,
     );
     await user.click(screen.getByRole('button', { name: 'メニュー' }));
     await user.click(screen.getByRole('menuitem', { name: 'プロフィール' }));
@@ -62,9 +57,7 @@ describe('DropdownMenu', () => {
       { label: '有効', onClick: jest.fn() },
       { label: '無効', onClick: jest.fn(), disabled: true },
     ];
-    render(
-      <DropdownMenu trigger={<button>メニュー</button>} items={items} />,
-    );
+    render(<DropdownMenu trigger={<button>メニュー</button>} items={items} />);
     await user.click(screen.getByRole('button', { name: 'メニュー' }));
     const disabledItem = screen.getByRole('menuitem', { name: '無効' });
     expect(disabledItem).toHaveAttribute('data-disabled', '');
@@ -79,19 +72,14 @@ describe('DropdownMenu', () => {
         icon: <span data-testid='menu-icon'>icon</span>,
       },
     ];
-    render(
-      <DropdownMenu trigger={<button>メニュー</button>} items={items} />,
-    );
+    render(<DropdownMenu trigger={<button>メニュー</button>} items={items} />);
     await user.click(screen.getByRole('button', { name: 'メニュー' }));
     expect(screen.getByTestId('menu-icon')).toBeInTheDocument();
   });
 
   it('メニューが閉じた状態ではアイテムが表示されない', () => {
     render(
-      <DropdownMenu
-        trigger={<button>メニュー</button>}
-        items={defaultItems}
-      />,
+      <DropdownMenu trigger={<button>メニュー</button>} items={defaultItems} />,
     );
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
   });

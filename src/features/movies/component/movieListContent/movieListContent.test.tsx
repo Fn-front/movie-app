@@ -10,6 +10,7 @@ jest.mock('@/hooks/useIntersectionObserver', () => ({
   useIntersectionObserver: () => ({ current: null }),
 }));
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let capturedMovieDetailProps: {
   movieId: number | null;
   showFinancialInfo: boolean;

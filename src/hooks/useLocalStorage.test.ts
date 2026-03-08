@@ -136,9 +136,7 @@ describe('useLocalStorage', () => {
   });
 
   it('他タブからのstorageイベントで値が更新される', () => {
-    const { result } = renderHook(() =>
-      useLocalStorage('sync-key', 'initial'),
-    );
+    const { result } = renderHook(() => useLocalStorage('sync-key', 'initial'));
 
     act(() => {
       const event = new StorageEvent('storage', {
@@ -152,9 +150,7 @@ describe('useLocalStorage', () => {
   });
 
   it('他タブからのstorageイベントでkeyが異なる場合は無視される', () => {
-    const { result } = renderHook(() =>
-      useLocalStorage('my-key', 'initial'),
-    );
+    const { result } = renderHook(() => useLocalStorage('my-key', 'initial'));
 
     act(() => {
       const event = new StorageEvent('storage', {
@@ -168,9 +164,7 @@ describe('useLocalStorage', () => {
   });
 
   it('storageイベントでnewValueがnullの場合は無視される', () => {
-    const { result } = renderHook(() =>
-      useLocalStorage('null-key', 'initial'),
-    );
+    const { result } = renderHook(() => useLocalStorage('null-key', 'initial'));
 
     act(() => {
       const event = new StorageEvent('storage', {
@@ -225,9 +219,7 @@ describe('useLocalStorage', () => {
   it('オブジェクト型の値を正しく保存・復元できる', () => {
     const initialObj = { name: 'test', count: 0 };
 
-    const { result } = renderHook(() =>
-      useLocalStorage('obj-key', initialObj),
-    );
+    const { result } = renderHook(() => useLocalStorage('obj-key', initialObj));
 
     act(() => {
       result.current[1]({ name: 'updated', count: 5 });

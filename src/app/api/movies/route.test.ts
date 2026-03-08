@@ -89,8 +89,7 @@ const mockDbConnectionErrorResponse = jest.fn(
 
 jest.mock('@/helpers/supabase', () => ({
   createServiceRoleClient: () => mockSupabaseClient,
-  dbConnectionErrorResponse: (...args: unknown[]) =>
-    mockDbConnectionErrorResponse(...args),
+  dbConnectionErrorResponse: () => mockDbConnectionErrorResponse(),
 }));
 
 // --- Helpers ---
@@ -229,10 +228,7 @@ function setupNowPlayingFromMock(options: {
               countResult,
             );
           }
-          return createThenableProxy(
-            createChainMock(dataResult),
-            dataResult,
-          );
+          return createThenableProxy(createChainMock(dataResult), dataResult);
         },
       );
       return chain;
@@ -273,10 +269,10 @@ function setupExpiredCacheFromMock(options: {
       // 他release_typeの既存IDクエリ（neq）
       const chain = createChainMock({ data: [], error: null });
       chain.select.mockImplementation(() => {
-        return createThenableProxy(
-          createChainMock({ data: [], error: null }),
-          { data: [], error: null },
-        );
+        return createThenableProxy(createChainMock({ data: [], error: null }), {
+          data: [],
+          error: null,
+        });
       });
       return chain;
     }
@@ -289,10 +285,7 @@ function setupExpiredCacheFromMock(options: {
     chain.select.mockImplementation(
       (_cols: string, opts?: { count?: string }) => {
         if (opts?.count === 'exact') {
-          return createThenableProxy(
-            createChainMock(countResult),
-            countResult,
-          );
+          return createThenableProxy(createChainMock(countResult), countResult);
         }
         return createThenableProxy(createChainMock(dataResult), dataResult);
       },
@@ -462,9 +455,7 @@ describe('GET /api/movies', () => {
       dataResult: { data: [], error: null },
     });
 
-    const response = await handler(
-      createRequest({ sort_by: 'popularity' }),
-    );
+    const response = await handler(createRequest({ sort_by: 'popularity' }));
     expect(response.status).toBe(200);
   });
 
@@ -475,9 +466,7 @@ describe('GET /api/movies', () => {
       dataResult: { data: [], error: null },
     });
 
-    const response = await handler(
-      createRequest({ sort_by: 'vote_average' }),
-    );
+    const response = await handler(createRequest({ sort_by: 'vote_average' }));
     expect(response.status).toBe(200);
   });
 
@@ -488,9 +477,7 @@ describe('GET /api/movies', () => {
       dataResult: { data: [], error: null },
     });
 
-    const response = await handler(
-      createRequest({ sort_order: 'desc' }),
-    );
+    const response = await handler(createRequest({ sort_order: 'desc' }));
     expect(response.status).toBe(200);
   });
 
@@ -501,9 +488,7 @@ describe('GET /api/movies', () => {
       dataResult: { data: [], error: null },
     });
 
-    const response = await handler(
-      createRequest({ sort_order: 'asc' }),
-    );
+    const response = await handler(createRequest({ sort_order: 'asc' }));
     expect(response.status).toBe(200);
   });
 
@@ -516,9 +501,7 @@ describe('GET /api/movies', () => {
       dataResult: { data: [{ id: 1, genre_ids: [28] }], error: null },
     });
 
-    const response = await handler(
-      createRequest({ genre_ids: '28,35' }),
-    );
+    const response = await handler(createRequest({ genre_ids: '28,35' }));
     expect(response.status).toBe(200);
   });
 
@@ -542,9 +525,7 @@ describe('GET /api/movies', () => {
       dataResult: { data: [], error: null },
     });
 
-    const response = await handler(
-      createRequest({ is_revival: 'true' }),
-    );
+    const response = await handler(createRequest({ is_revival: 'true' }));
     expect(response.status).toBe(200);
   });
 
@@ -555,9 +536,7 @@ describe('GET /api/movies', () => {
       dataResult: { data: [], error: null },
     });
 
-    const response = await handler(
-      createRequest({ is_revival: 'false' }),
-    );
+    const response = await handler(createRequest({ is_revival: 'false' }));
     expect(response.status).toBe(200);
   });
 
@@ -813,21 +792,20 @@ describe('GET /api/movies', () => {
   it('adultコンテンツが除外される', async () => {
     const handler = await loadGET();
 
-    mockDiscoverMovies
-      .mockResolvedValueOnce({
-        results: [
-          {
-            id: 200,
-            title: 'アダルト映画',
-            adult: true,
-            original_language: 'ja',
-            genre_ids: [28],
-            vote_average: 5.0,
-            popularity: 10,
-          },
-        ],
-        total_pages: 1,
-      });
+    mockDiscoverMovies.mockResolvedValueOnce({
+      results: [
+        {
+          id: 200,
+          title: 'アダルト映画',
+          adult: true,
+          original_language: 'ja',
+          genre_ids: [28],
+          vote_average: 5.0,
+          popularity: 10,
+        },
+      ],
+      total_pages: 1,
+    });
 
     setupExpiredCacheFromMock({
       countResult: { count: 0 },
@@ -1038,7 +1016,10 @@ describe('GET /api/movies', () => {
     const handler = await loadGET();
     setupFromMock({
       countResult: { count: 0 },
-      dataResult: { data: null as unknown as unknown[], error: { message: 'DB Error' } },
+      dataResult: {
+        data: null as unknown as unknown[],
+        error: { message: 'DB Error' },
+      },
     });
 
     const response = await handler(createRequest());
@@ -1245,14 +1226,17 @@ describe('GET /api/movies', () => {
         return chain;
       }
       // upsert, count, data クエリ
-      const chain = createChainMock({ count: 1, data: [{ id: 501 }], error: null });
+      const chain = createChainMock({
+        count: 1,
+        data: [{ id: 501 }],
+        error: null,
+      });
       chain.select.mockImplementation(
         (_cols: string, opts?: { count?: string }) => {
           if (opts?.count === 'exact') {
-            return createThenableProxy(
-              createChainMock({ count: 1 }),
-              { count: 1 },
-            );
+            return createThenableProxy(createChainMock({ count: 1 }), {
+              count: 1,
+            });
           }
           return createThenableProxy(
             createChainMock({ data: [{ id: 501 }], error: null }),

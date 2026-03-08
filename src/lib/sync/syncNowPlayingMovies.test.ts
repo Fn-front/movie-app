@@ -18,10 +18,7 @@ import {
   EXCLUDED_KEYWORD_IDS,
   EXCLUDED_LANGUAGES,
 } from '@/constants/movies';
-import {
-  getNowPlayingMovies,
-  getMovieKeywordIds,
-} from '@/lib/tmdb/tmdb';
+import { getNowPlayingMovies, getMovieKeywordIds } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 import { syncNowPlayingMovies } from './syncNowPlayingMovies';
 import type { NowPlayingSyncResult } from './syncNowPlayingMovies';
@@ -173,7 +170,11 @@ describe('syncNowPlayingMovies', () => {
     it('adultフラグがtrueの映画をスキップする', async () => {
       setValidEnv();
 
-      const adultMovie = createMockMovie({ id: 1, adult: true, title: 'Adult Movie' });
+      const adultMovie = createMockMovie({
+        id: 1,
+        adult: true,
+        title: 'Adult Movie',
+      });
       (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
         page: 1,
         total_pages: 1,

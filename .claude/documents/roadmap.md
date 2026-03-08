@@ -306,15 +306,58 @@
 - [x] テストを追加
 
 ### Step 14: フィルター条件保存の不具合調査（`fix/saved-filters-investigation`）
-- [ ] 現在のフィルター保存・復元フローの動作確認
-- [ ] 保存されない条件の特定（ジャンル・日付範囲・リバイバル・ソート等）
-- [ ] API（GET/PUT /api/filters）のリクエスト・レスポンス検証
-- [ ] saved_filtersテーブルのデータ確認
-- [ ] 原因特定と修正方針の決定
-- [ ] 修正実装
-- [ ] テストを追加
+- [x] 現在のフィルター保存・復元フローの動作確認
+- [x] 保存されない条件の特定（ジャンル・日付範囲・リバイバル・ソート等）
+- [x] API（GET/PUT /api/filters）のリクエスト・レスポンス検証
+- [x] saved_filtersテーブルのデータ確認
+- [x] 原因特定と修正方針の決定
+- [x] 修正実装
+- [x] テストを追加
 
-### Step 15: 映画詳細モーダル（`feature/movie-detail-modal`）
+### Step 15: E2Eテスト拡充（`setup/e2e-test-expand`）
+- [ ] ホームページ（`/`）のE2Eテスト追加
+  - ページアクセス・コンテンツ表示確認
+  - ソート・フィルター操作の動作確認
+- [ ] ログアウトのE2Eテスト追加
+  - ログアウト操作後のリダイレクト確認
+- [ ] 未認証アクセス保護のE2Eテスト追加
+  - `/movies/upcoming`、`/movies/now-showing`、`/` への未認証アクセス時のリダイレクト確認
+- [ ] 映画ページのソート・フィルター操作テスト追加
+  - ソート変更の動作確認
+  - ジャンルフィルター適用の動作確認
+- [ ] TMDbアトリビューション表示テスト追加
+  - フッターのクレジット表示確認
+- [ ] ヘッダーのE2Eテスト追加
+  - ヘッダー要素の表示確認
+
+### Step 16: ユニットテスト拡充（`setup/unit-test-expand`）
+- [ ] 認証フォームのテスト追加
+  - loginForm.tsx（フォーム表示・バリデーション・送信）
+  - registerForm.tsx（フォーム表示・バリデーション・送信）
+  - changePasswordForm.tsx（フォーム表示・バリデーション・送信）
+- [ ] API Routeのテスト追加
+  - /api/auth/register/route.ts（正常登録・重複・バリデーションエラー）
+  - /api/user/change-password/route.ts（正常変更・認証エラー・バリデーションエラー）
+  - /api/movies/route.ts（クエリパラメータ・レスポンス形式）
+  - /api/filters/route.ts（GET/PUT・認証チェック）
+  - /api/cron/sync-movies/route.ts（認証・同期処理）
+  - /api/cron/sync-now-playing/route.ts（認証・同期処理）
+- [ ] 共通UIコンポーネントのテスト追加
+  - button.tsx（レンダリング・クリック・disabled・aria属性）
+  - input.tsx（レンダリング・入力・バリデーション・aria属性）
+  - select.tsx（レンダリング・選択・aria属性）
+  - modal.tsx（開閉・オーバーレイクリック・Escape・aria属性）
+  - toast.tsx（表示・自動非表示・aria属性）
+  - card.tsx（レンダリング・children）
+  - loading.tsx（表示・オーバーレイ・aria属性）
+  - tabs.tsx（タブ切替・aria属性）
+  - checkbox.tsx（チェック・aria属性）
+- [ ] APIクライアントのテスト追加
+  - filters.ts（getSavedFilter・saveFilter）
+- [ ] useHomeフックのテスト追加
+- [ ] headerコンポーネントのテスト追加
+
+### Step 17: 映画詳細モーダル（`feature/movie-detail-modal`）
 - [ ] 映画詳細API（GET /api/movies/:id）を実装
 - [ ] APIクライアントにgetMovieDetailを追加
 - [ ] useMovieDetailフックを作成
@@ -323,7 +366,7 @@
 - [ ] HomePageにモーダル統合（MovieTileクリックで表示）
 - [ ] テストを追加
 
-### Step 16: バッチ更新API（`feature/batch-update-movies`）
+### Step 18: バッチ更新API（`feature/batch-update-movies`）
 - [ ] Cron定数を追加
 - [ ] バッチ更新API（POST /api/cron/update-movies）を実装
 - [ ] Vercel Cron設定（vercel.json）を追加

@@ -476,10 +476,12 @@ describe('useMovieList', () => {
   });
 
   describe('フィルター保存', () => {
-    it('認証時はハンドラー実行でフィルターが保存される', async () => {
+    beforeEach(() => {
       mockSessionStatus = 'authenticated';
       mockSessionData = { user: { name: 'テストユーザー' } };
+    });
 
+    it('認証時はハンドラー実行でフィルターが保存される', async () => {
       const { result } = renderHook(() => useMovieList(defaultOptions), {
         wrapper: createQueryWrapper(),
       });
@@ -502,6 +504,9 @@ describe('useMovieList', () => {
     });
 
     it('未認証時はフィルターが保存されない', async () => {
+      mockSessionStatus = 'unauthenticated';
+      mockSessionData = null;
+
       const { result } = renderHook(() => useMovieList(defaultOptions), {
         wrapper: createQueryWrapper(),
       });
@@ -515,6 +520,156 @@ describe('useMovieList', () => {
       });
 
       expect(mockSaveFilter).not.toHaveBeenCalled();
+    });
+
+    it('handleSortChangeが全フィルター条件を含めて保存する', async () => {
+      mockGetSavedFilter.mockResolvedValue({
+        sort_by: 'popularity',
+        release_type: 'streaming',
+        genre_ids: [28],
+        date_range_gte: '2026-03-01',
+        is_revival: true,
+      });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      mockSaveFilter.mockClear();
+
+      act(() => {
+        result.current.handleSortChange('vote_average');
+      });
+
+      await waitFor(() => {
+        expect(mockSaveFilter).toHaveBeenCalled();
+      });
+
+      expect(mockSaveFilter.mock.calls[0][0]).toEqual({
+        sort_by: 'vote_average',
+        release_type: 'streaming',
+        genre_ids: [28],
+        date_range_gte: '2026-03-01',
+        is_revival: true,
+      });
+    });
+
+    it('handleReleaseTypeChangeが全フィルター条件を含めて保存する', async () => {
+      mockGetSavedFilter.mockResolvedValue({
+        sort_by: 'popularity',
+        genre_ids: [12],
+        is_revival: false,
+      });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      mockSaveFilter.mockClear();
+
+      act(() => {
+        result.current.handleReleaseTypeChange('streaming');
+      });
+
+      await waitFor(() => {
+        expect(mockSaveFilter).toHaveBeenCalled();
+      });
+
+      expect(mockSaveFilter.mock.calls[0][0]).toEqual({
+        sort_by: 'popularity',
+        release_type: 'streaming',
+        genre_ids: [12],
+        date_range_gte: '2026-02-11',
+        is_revival: false,
+      });
+    });
+
+    it('handleFilterApplyが全フィルター条件を含めて保存する', async () => {
+      mockGetSavedFilter.mockResolvedValue({
+        sort_by: 'popularity',
+        release_type: 'streaming',
+      });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      mockSaveFilter.mockClear();
+
+      act(() => {
+        result.current.handleFilterApply(
+          [28, 878],
+          { gte: '2026-04-01', lte: '2026-12-31' },
+          true,
+        );
+      });
+
+      await waitFor(() => {
+        expect(mockSaveFilter).toHaveBeenCalled();
+      });
+
+      expect(mockSaveFilter.mock.calls[0][0]).toEqual({
+        sort_by: 'popularity',
+        release_type: 'streaming',
+        genre_ids: [28, 878],
+        date_range_gte: '2026-04-01',
+        date_range_lte: '2026-12-31',
+        is_revival: true,
+      });
+    });
+
+    it('デフォルト値のフィルター条件は保存データに含まれない', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleFilterApply([], {}, undefined);
+      });
+
+      await waitFor(() => {
+        expect(mockSaveFilter).toHaveBeenCalled();
+      });
+
+      expect(mockSaveFilter.mock.calls[0][0]).toEqual({});
+    });
+
+    it('is_revival=falseが正しく保存される', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleFilterApply([], {}, false);
+      });
+
+      await waitFor(() => {
+        expect(mockSaveFilter).toHaveBeenCalled();
+      });
+
+      expect(mockSaveFilter.mock.calls[0][0]).toEqual({
+        is_revival: false,
+      });
     });
   });
 
@@ -536,6 +691,36 @@ describe('useMovieList', () => {
           variant: 'error',
         }),
       );
+    });
+
+    it('saveFilterエラー時にトーストが表示される', async () => {
+      mockSessionStatus = 'authenticated';
+      mockSessionData = { user: { name: 'テストユーザー' } };
+      mockSaveFilter.mockRejectedValue(new Error('Save Error'));
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      mockToast.mockClear();
+
+      act(() => {
+        result.current.handleSortChange('popularity');
+      });
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: 'エラー',
+            description: 'フィルター条件の保存中にエラーが発生しました。',
+            variant: 'error',
+          }),
+        );
+      });
     });
   });
 

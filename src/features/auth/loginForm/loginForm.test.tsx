@@ -62,6 +62,7 @@ describe('LoginForm', () => {
   it('ログイン成功時にトーストとリダイレクトが実行される', async () => {
     mockSignIn.mockResolvedValue({
       error: undefined,
+      code: undefined,
       ok: true,
       status: 200,
       url: '/',
@@ -95,6 +96,7 @@ describe('LoginForm', () => {
   it('ログイン失敗時にエラーが表示される', async () => {
     mockSignIn.mockResolvedValue({
       error: 'CredentialsSignin',
+      code: 'credentials',
       ok: false,
       status: 401,
       url: null,

@@ -141,7 +141,12 @@ export const MovieListContent = memo<MovieListContentProps>(
             <MovieTileSkeleton />
           ) : (
             movies.map((movie) => (
-              <MovieTile key={movie.id} movie={movie} genres={genres} onClick={handleMovieTileClick} />
+              <MovieTile
+                key={movie.id}
+                movie={movie}
+                genres={genres}
+                onClick={handleMovieTileClick}
+              />
             ))
           )}
         </div>

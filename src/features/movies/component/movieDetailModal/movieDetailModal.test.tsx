@@ -26,7 +26,12 @@ jest.mock('@/components/ui/modal/modal', () => ({
     open: boolean;
     children: React.ReactNode;
     title: string;
-  }) => (open ? <div data-testid='modal' aria-label={title}>{children}</div> : null),
+  }) =>
+    open ? (
+      <div data-testid='modal' aria-label={title}>
+        {children}
+      </div>
+    ) : null,
 }));
 
 // --- Tests ---

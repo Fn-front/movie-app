@@ -24,9 +24,7 @@ export interface UseMovieDetailReturn {
  * @param movieId - 映画ID（nullの場合はクエリを無効化）
  * @returns 映画詳細データ
  */
-export function useMovieDetail(
-  movieId: number | null,
-): UseMovieDetailReturn {
+export function useMovieDetail(movieId: number | null): UseMovieDetailReturn {
   const fetchMovieDetail = useCallback(
     () => getMovieDetail(movieId!),
     [movieId],

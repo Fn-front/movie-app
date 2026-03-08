@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/useToast';
 import {
   DEFAULT_SORT,
   DEFAULT_RELEASE_TYPE,
+  FILTER_ERROR_MESSAGES,
   movieKeys,
   filterKeys,
 } from '@/constants';
@@ -207,6 +208,13 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     mutationFn: saveFilter,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: filterKeys.saved });
+    },
+    onError: () => {
+      toast({
+        title: 'エラー',
+        description: FILTER_ERROR_MESSAGES.SAVE_FAILED,
+        variant: 'error',
+      });
     },
   });
 

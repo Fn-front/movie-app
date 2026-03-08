@@ -217,6 +217,39 @@ describe('useMovieList', () => {
       );
     });
 
+    it('保存済みフィルター適用前にデフォルト値で映画取得が走らない', async () => {
+      let resolveSavedFilter: (value: unknown) => void;
+      mockGetSavedFilter.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveSavedFilter = resolve;
+          }),
+      );
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      // savedFilter取得中は映画取得が走らない
+      expect(mockGetMovies).not.toHaveBeenCalled();
+      expect(result.current.isLoading).toBe(true);
+
+      // savedFilterが返ってきた後に映画取得が走る
+      await act(async () => {
+        resolveSavedFilter!({ sort_by: 'popularity' });
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.sortBy).toBe('popularity');
+      expect(mockGetMovies).toHaveBeenCalledWith(
+        expect.objectContaining({ sort_by: 'popularity' }),
+        expect.anything(),
+      );
+    });
+
     it('getSavedFilterがエラーの場合、デフォルト値でフェッチする', async () => {
       mockGetSavedFilter.mockRejectedValue(new Error('API Error'));
 

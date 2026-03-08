@@ -368,14 +368,14 @@
 
 
 ### Step 18: フィルター条件がリロードでリセットされる問題（`fix/filter-reset-on-reload`）
-- [ ] 原因調査
+- [x] 原因調査
   - リロード時にTanStack Queryキャッシュが消えるため `savedFilterQuery.data` がundefinedから始まる
   - `useSession` の `loading` → `authenticated` 遷移中に `savedFilterQuery` が `enabled: false` でスキップされ、UIステートがデフォルト値のまま映画取得が走る
   - `buildFilterConditions` でデフォルト値と一致する条件を省略するため、`date_range_gte` 等のページ固有デフォルト値が保存されず復元できない
   - `saveFilter` の `onSuccess` で `invalidateQueries` → 再取得が走るが、`savedFilterApplied` refがtrueのため再適用されない
-- [ ] 修正方針の決定
-- [ ] 修正実装
-- [ ] テストを追加
+- [x] 修正方針の決定
+- [x] 修正実装
+- [x] テストを追加
 
 ### Step 19: バッチ更新API（`feature/batch-update-movies`）
 - [ ] Cron定数を追加

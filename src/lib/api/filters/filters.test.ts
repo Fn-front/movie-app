@@ -94,9 +94,9 @@ describe('filters API client', () => {
     it('APIエラー時にエラーをスローする', async () => {
       mockedAxios.put.mockRejectedValue(new Error('Server Error'));
 
-      await expect(
-        saveFilter({ sort_by: 'popularity' }),
-      ).rejects.toThrow('Server Error');
+      await expect(saveFilter({ sort_by: 'popularity' })).rejects.toThrow(
+        'Server Error',
+      );
     });
   });
 });

@@ -5,6 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { isAxiosError } from 'axios';
 
 import { getMovieDetail } from '@/lib/tmdb/tmdb';
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';
@@ -40,21 +41,19 @@ export async function GET(
       data: movie,
     });
   } catch (error) {
-    const isNotFound =
-      error instanceof Error &&
-      'response' in error &&
-      (error as { response?: { status?: number } }).response?.status === 404;
-
-    if (isNotFound) {
+    if (
+      isAxiosError(error) &&
+      error.response?.status === HTTP_STATUS.NOT_FOUND
+    ) {
       return NextResponse.json(
         {
           success: false,
           error: {
-            code: 'NOT_FOUND',
+            code: ERROR_CODE.NOT_FOUND,
             message: '映画が見つかりません',
           },
         },
-        { status: 404 },
+        { status: HTTP_STATUS.NOT_FOUND },
       );
     }
 

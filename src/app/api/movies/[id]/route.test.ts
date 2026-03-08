@@ -6,6 +6,8 @@
  * 映画詳細API Route テスト
  */
 
+import { AxiosError } from 'axios';
+
 import { GET } from './route';
 
 // --- Mocks ---
@@ -71,8 +73,13 @@ describe('GET /api/movies/:id', () => {
   });
 
   it('TMDb APIが404を返した場合404を返す', async () => {
-    const error = new Error('Not Found');
-    Object.assign(error, { response: { status: 404 } });
+    const error = new AxiosError('Not Found', '404', undefined, undefined, {
+      status: 404,
+      data: {},
+      statusText: 'Not Found',
+      headers: {},
+      config: { headers: {} },
+    } as never);
     mockGetMovieDetail.mockRejectedValue(error);
 
     const response = await GET(createRequest('999999'), {

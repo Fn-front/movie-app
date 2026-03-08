@@ -55,6 +55,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      checks: write
     steps:
       - name: checkout
         uses: actions/checkout@v3

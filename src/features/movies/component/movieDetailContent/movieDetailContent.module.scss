@@ -164,6 +164,8 @@
 
   &__overview_text {
     margin-top: $spacing-3;
+    max-height: 200px;
+    overflow-y: auto;
     font-size: $font-size-sm;
     color: $text-secondary;
     line-height: $line-height-loose;

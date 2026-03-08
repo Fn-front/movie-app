@@ -32,9 +32,6 @@ export interface MovieDetailContentProps {
 /**
  * 上映時間をフォーマット
  */
-/**
- * 上映時間をフォーマット
- */
 function formatRuntime(minutes: number): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
@@ -43,6 +40,7 @@ function formatRuntime(minutes: number): string {
 }
 
 const MAX_CAST_DISPLAY = 10;
+/** 概算用の固定為替レート（USD→JPY） */
 const USD_TO_JPY_RATE = 150;
 
 /**

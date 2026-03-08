@@ -81,6 +81,17 @@ describe('MovieDetailContent', () => {
         production_countries: [{ iso_3166_1: 'JP', name: '日本' }],
         budget: 0,
         revenue: 0,
+        credits: {
+          cast: [
+            {
+              id: 1,
+              name: 'テスト俳優',
+              character: 'テスト役',
+              profile_path: '/actor.jpg',
+              order: 0,
+            },
+          ],
+        },
         poster_path: '/poster.jpg',
         backdrop_path: '/backdrop.jpg',
       },
@@ -103,6 +114,9 @@ describe('MovieDetailContent', () => {
     expect(screen.getByText('テスト制作会社')).toBeInTheDocument();
     expect(screen.getByText('日本')).toBeInTheDocument();
     expect(screen.getByText('150.5')).toBeInTheDocument();
+    expect(screen.getByText('キャスト')).toBeInTheDocument();
+    expect(screen.getByText('テスト俳優')).toBeInTheDocument();
+    expect(screen.getByText('テスト役')).toBeInTheDocument();
   });
 
   it('原題がタイトルと同じ場合は原題を非表示にする', () => {

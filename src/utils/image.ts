@@ -64,6 +64,18 @@ export function getTMDbBackdropUrl(
 }
 
 /**
+ * TMDbプロフィール画像URLを生成（w185固定）
+ *
+ * @param path - プロフィール画像パス
+ * @returns プロフィール画像URL、またはnull
+ */
+export function getTMDbProfileUrl(
+  path: string | null | undefined,
+): string | null {
+  return getTMDbImageUrl(path, 'w185');
+}
+
+/**
  * プレースホルダー画像URLを生成
  *
  * @param width - 幅

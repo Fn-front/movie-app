@@ -3,6 +3,8 @@
 
 .c_movie_detail {
   position: relative;
+  flex: 1;
+  min-height: 0;
 
   // ローディング
   &__loading {
@@ -51,6 +53,12 @@
   // ボディ
   &__body {
     padding: $spacing-6;
+  }
+
+  // スクロール領域（詳細情報 + キャスト）
+  &__scrollable {
+    overflow-y: auto;
+    max-height: 300px;
   }
 
   // メインレイアウト（ポスター + 情報）
@@ -164,8 +172,6 @@
 
   &__overview_text {
     margin-top: $spacing-3;
-    max-height: 200px;
-    overflow-y: auto;
     font-size: $font-size-sm;
     color: $text-secondary;
     line-height: $line-height-loose;
@@ -193,5 +199,75 @@
     margin: 0;
     font-size: $font-size-sm;
     color: $text-primary;
+  }
+
+  // キャスト
+  &__cast {
+    margin-top: $spacing-6;
+  }
+
+  &__cast_list {
+    display: flex;
+    gap: $spacing-3;
+    margin-top: $spacing-3;
+    overflow-x: auto;
+    padding-bottom: $spacing-2;
+  }
+
+  &__cast_item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 64px;
+    gap: $spacing-1;
+  }
+
+  &__cast_image {
+    width: 48px;
+    height: 48px;
+    border-radius: $border-radius-full;
+    object-fit: cover;
+  }
+
+  &__cast_placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: $border-radius-full;
+    background-color: $gray-200;
+    color: $text-secondary;
+    font-size: $font-size-base;
+    font-weight: $font-weight-medium;
+  }
+
+  &__cast_info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+
+  &__cast_name {
+    font-size: $font-size-2xs;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+  }
+
+  &__cast_character {
+    font-size: $font-size-2xs;
+    color: $text-secondary;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
   }
 }

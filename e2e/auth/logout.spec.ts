@@ -12,26 +12,32 @@ test.describe('ログアウト', () => {
     await page.goto('/');
     await expect(page).toHaveURL('/');
 
-    // NextAuth signOut をクライアント側で実行
-    await page.evaluate(async () => {
-      const res = await fetch('/api/auth/signout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          csrfToken:
-            document.cookie
-              .split('; ')
-              .find((c) => c.startsWith('next-auth.csrf-token'))
-              ?.split('=')[1]
-              ?.split('%')[0] ?? '',
-          callbackUrl: '/auth/signin',
-        }),
-      });
-      // signOut APIのレスポンスに従いリダイレクト
-      if (res.redirected) {
-        window.location.href = res.url;
-      }
+    // CSRFトークンをNextAuthのエンドポイントから取得
+    const csrfToken = await page.evaluate(async () => {
+      const res = await fetch('/api/auth/csrf');
+      const data = await res.json();
+      return data.csrfToken as string;
     });
+
+    // NextAuth signOut をクライアント側で実行
+    await page.evaluate(
+      async ({ token }) => {
+        const res = await fetch('/api/auth/signout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            csrfToken: token,
+            callbackUrl: '/auth/signin',
+          }),
+          redirect: 'follow',
+        });
+        // レスポンスURLにリダイレクト
+        if (res.url) {
+          window.location.href = res.url;
+        }
+      },
+      { token: csrfToken },
+    );
 
     // ログインページにリダイレクトされることを確認
     await expect(page).toHaveURL(/\/auth\/signin/, { timeout: 10000 });

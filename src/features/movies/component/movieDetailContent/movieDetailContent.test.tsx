@@ -65,10 +65,33 @@ describe('MovieDetailContent', () => {
         release_date: '2025-03-15',
         runtime: 125,
         vote_average: 8.5,
+        popularity: 150.5,
         genres: [
           { id: 28, name: 'アクション' },
           { id: 12, name: 'アドベンチャー' },
         ],
+        production_companies: [
+          {
+            id: 1,
+            name: 'テスト制作会社',
+            logo_path: null,
+            origin_country: 'JP',
+          },
+        ],
+        production_countries: [{ iso_3166_1: 'JP', name: '日本' }],
+        budget: 0,
+        revenue: 0,
+        credits: {
+          cast: [
+            {
+              id: 1,
+              name: 'テスト俳優',
+              character: 'テスト役',
+              profile_path: '/actor.jpg',
+              order: 0,
+            },
+          ],
+        },
         poster_path: '/poster.jpg',
         backdrop_path: '/backdrop.jpg',
       },
@@ -87,6 +110,13 @@ describe('MovieDetailContent', () => {
     expect(screen.getByText('アクション')).toBeInTheDocument();
     expect(screen.getByText('アドベンチャー')).toBeInTheDocument();
     expect(screen.getByText('あらすじ')).toBeInTheDocument();
+    expect(screen.getByText('詳細情報')).toBeInTheDocument();
+    expect(screen.getByText('テスト制作会社')).toBeInTheDocument();
+    expect(screen.getByText('日本')).toBeInTheDocument();
+    expect(screen.getByText('150.5')).toBeInTheDocument();
+    expect(screen.getByText('キャスト')).toBeInTheDocument();
+    expect(screen.getByText('テスト俳優')).toBeInTheDocument();
+    expect(screen.getByText('テスト役')).toBeInTheDocument();
   });
 
   it('原題がタイトルと同じ場合は原題を非表示にする', () => {
@@ -99,7 +129,12 @@ describe('MovieDetailContent', () => {
         release_date: '2025-01-01',
         runtime: 90,
         vote_average: 0,
+        popularity: 10,
         genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
         poster_path: null,
         backdrop_path: null,
       },
@@ -123,7 +158,12 @@ describe('MovieDetailContent', () => {
         release_date: '2025-01-01',
         runtime: 90,
         vote_average: 7.0,
+        popularity: 10,
         genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
         poster_path: null,
         backdrop_path: null,
       },
@@ -134,5 +174,95 @@ describe('MovieDetailContent', () => {
     render(<MovieDetailContent movieId={123} />);
 
     expect(screen.queryByText('あらすじ')).not.toBeInTheDocument();
+  });
+
+  it('showFinancialInfo=trueの場合に予算・興行収入を表示する', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 7.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 150000000,
+        revenue: 500000000,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} showFinancialInfo />);
+
+    expect(screen.getByText('制作予算')).toBeInTheDocument();
+    expect(screen.getByText('$150,000,000（約225億円）')).toBeInTheDocument();
+    expect(screen.getByText('興行収入')).toBeInTheDocument();
+    expect(screen.getByText('$500,000,000（約750億円）')).toBeInTheDocument();
+  });
+
+  it('showFinancialInfo=falseの場合は予算・興行収入を非表示にする', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 7.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 150000000,
+        revenue: 500000000,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.queryByText('制作予算')).not.toBeInTheDocument();
+    expect(screen.queryByText('興行収入')).not.toBeInTheDocument();
+  });
+
+  it('予算・興行収入が0の場合は「-」を表示する', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 7.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} showFinancialInfo />);
+
+    expect(screen.getByText('制作予算')).toBeInTheDocument();
+    const dashes = screen.getAllByText('-');
+    expect(dashes).toHaveLength(2);
   });
 });

@@ -84,13 +84,24 @@ export const MovieListContent = memo<MovieListContentProps>(
     );
 
     const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
+    const [showFinancialInfo, setShowFinancialInfo] = useState(false);
 
-    const handleMovieTileClick = useCallback((movieId: number) => {
-      setSelectedMovieId(movieId);
-    }, []);
+    const handleMovieTileClick = useCallback(
+      (movieId: number) => {
+        setSelectedMovieId(movieId);
+        const movie = movies.find((m) => m.id === movieId);
+        const isReleased =
+          movie?.release_date !== undefined &&
+          movie.release_date !== null &&
+          new Date(movie.release_date) < new Date();
+        setShowFinancialInfo(isReleased || movie?.is_revival === true);
+      },
+      [movies],
+    );
 
     const handleDetailModalClose = useCallback(() => {
       setSelectedMovieId(null);
+      setShowFinancialInfo(false);
     }, []);
 
     const loadMoreRef = useIntersectionObserver(fetchNextPage, {
@@ -177,6 +188,7 @@ export const MovieListContent = memo<MovieListContentProps>(
 
         <MovieDetailModal
           movieId={selectedMovieId}
+          showFinancialInfo={showFinancialInfo}
           onClose={handleDetailModalClose}
         />
       </div>

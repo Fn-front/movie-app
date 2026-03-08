@@ -9,7 +9,11 @@ import { memo, useMemo } from 'react';
 import Image from 'next/image';
 
 import { Loading } from '@/components/ui/loading/loading';
-import { getTMDbPosterUrl, getTMDbBackdropUrl } from '@/utils/image';
+import {
+  getTMDbPosterUrl,
+  getTMDbBackdropUrl,
+  getTMDbProfileUrl,
+} from '@/utils/image';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
 
@@ -21,6 +25,8 @@ import styles from './movieDetailContent.module.scss';
 export interface MovieDetailContentProps {
   /** 映画ID */
   movieId: number;
+  /** 予算・興行収入を表示するか */
+  showFinancialInfo?: boolean;
 }
 
 /**
@@ -33,11 +39,43 @@ function formatRuntime(minutes: number): string {
   return `${hours}時間${mins}分`;
 }
 
+const MAX_CAST_DISPLAY = 10;
+/** 概算用の固定為替レート（USD→JPY） */
+const USD_TO_JPY_RATE = 150;
+
+/**
+ * 日本円を読みやすい単位でフォーマット
+ */
+function formatJpy(yen: number): string {
+  const oku = 100_000_000;
+  const man = 10_000;
+
+  if (yen >= oku) {
+    const value = yen / oku;
+    return Number.isInteger(value) ? `${value}億円` : `${value.toFixed(1)}億円`;
+  }
+  if (yen >= man) {
+    const value = Math.round(yen / man);
+    return `${value.toLocaleString('ja-JP')}万円`;
+  }
+  return `${yen.toLocaleString('ja-JP')}円`;
+}
+
+/**
+ * 金額をフォーマット（USD + 約日本円）
+ */
+function formatCurrency(amount: number): string {
+  if (amount === 0) return '-';
+  const usd = `$${amount.toLocaleString('en-US')}`;
+  const jpyAmount = Math.round(amount * USD_TO_JPY_RATE);
+  return `${usd}（約${formatJpy(jpyAmount)}）`;
+}
+
 /**
  * MovieDetailContentコンポーネント
  */
 export const MovieDetailContent = memo<MovieDetailContentProps>(
-  function MovieDetailContent({ movieId }) {
+  function MovieDetailContent({ movieId, showFinancialInfo = false }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
 
     const posterUrl = useMemo(
@@ -157,6 +195,115 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
               </p>
             </div>
           )}
+
+          <div className={styles.c_movie_detail__scrollable}>
+            <div className={styles.c_movie_detail__additional}>
+              <h4 className={styles.c_movie_detail__section_title}>詳細情報</h4>
+              <dl className={styles.c_movie_detail__info_list}>
+                {movie.production_companies.length > 0 && (
+                  <>
+                    <dt className={styles.c_movie_detail__info_label}>
+                      制作会社
+                    </dt>
+                    <dd className={styles.c_movie_detail__info_value}>
+                      {movie.production_companies
+                        .map((company) => company.name)
+                        .join('、')}
+                    </dd>
+                  </>
+                )}
+
+                {movie.production_countries.length > 0 && (
+                  <>
+                    <dt className={styles.c_movie_detail__info_label}>
+                      制作国
+                    </dt>
+                    <dd className={styles.c_movie_detail__info_value}>
+                      {movie.production_countries
+                        .map((country) => country.name)
+                        .join('、')}
+                    </dd>
+                  </>
+                )}
+
+                <dt className={styles.c_movie_detail__info_label}>人気度</dt>
+                <dd className={styles.c_movie_detail__info_value}>
+                  {movie.popularity.toFixed(1)}
+                </dd>
+
+                {showFinancialInfo && (
+                  <>
+                    <dt className={styles.c_movie_detail__info_label}>
+                      制作予算
+                    </dt>
+                    <dd className={styles.c_movie_detail__info_value}>
+                      {formatCurrency(movie.budget)}
+                    </dd>
+
+                    <dt className={styles.c_movie_detail__info_label}>
+                      興行収入
+                    </dt>
+                    <dd className={styles.c_movie_detail__info_value}>
+                      {formatCurrency(movie.revenue)}
+                    </dd>
+                  </>
+                )}
+              </dl>
+            </div>
+
+            {movie.credits && movie.credits.cast.length > 0 && (
+              <div className={styles.c_movie_detail__cast}>
+                <h4 className={styles.c_movie_detail__section_title}>
+                  キャスト
+                </h4>
+                <div className={styles.c_movie_detail__cast_list}>
+                  {movie.credits.cast
+                    .slice(0, MAX_CAST_DISPLAY)
+                    .map((actor) => {
+                      const profileUrl = getTMDbProfileUrl(actor.profile_path);
+                      return (
+                        <div
+                          key={actor.id}
+                          className={styles.c_movie_detail__cast_item}
+                        >
+                          {profileUrl ? (
+                            <Image
+                              src={profileUrl}
+                              alt={actor.name}
+                              width={48}
+                              height={48}
+                              className={styles.c_movie_detail__cast_image}
+                            />
+                          ) : (
+                            <div
+                              className={
+                                styles.c_movie_detail__cast_placeholder
+                              }
+                            >
+                              {actor.name.charAt(0)}
+                            </div>
+                          )}
+                          <div className={styles.c_movie_detail__cast_info}>
+                            <span className={styles.c_movie_detail__cast_name}>
+                              {actor.name}
+                            </span>
+                            {actor.character && (
+                              <span
+                                className={
+                                  styles.c_movie_detail__cast_character
+                                }
+                              >
+                                {actor.character}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );

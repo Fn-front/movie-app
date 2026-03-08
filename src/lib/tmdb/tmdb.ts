@@ -164,6 +164,7 @@ export async function getMovieDetail(
 ): Promise<MovieDetail> {
   const response = await tmdbClient.get<MovieDetail>(
     TMDB_ENDPOINTS.MOVIE_DETAIL(movieId),
+    { params: { append_to_response: 'credits' } },
   );
   return response.data;
 }

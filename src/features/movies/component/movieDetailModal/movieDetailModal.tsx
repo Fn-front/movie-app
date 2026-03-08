@@ -16,6 +16,8 @@ import { MovieDetailContent } from '@/features/movies/component/movieDetailConte
 export interface MovieDetailModalProps {
   /** 表示する映画ID（nullの場合はモーダル非表示） */
   movieId: number | null;
+  /** 予算・興行収入を表示するか */
+  showFinancialInfo?: boolean;
   /** モーダルを閉じるコールバック */
   onClose: () => void;
 }
@@ -24,7 +26,7 @@ export interface MovieDetailModalProps {
  * MovieDetailModalコンポーネント
  */
 export const MovieDetailModal = memo<MovieDetailModalProps>(
-  function MovieDetailModal({ movieId, onClose }) {
+  function MovieDetailModal({ movieId, showFinancialInfo, onClose }) {
     const handleOpenChange = useCallback(
       (open: boolean) => {
         if (!open) {
@@ -41,7 +43,12 @@ export const MovieDetailModal = memo<MovieDetailModalProps>(
         title='映画詳細'
         size='lg'
       >
-        {movieId !== null && <MovieDetailContent movieId={movieId} />}
+        {movieId !== null && (
+          <MovieDetailContent
+            movieId={movieId}
+            showFinancialInfo={showFinancialInfo}
+          />
+        )}
       </Modal>
     );
   },

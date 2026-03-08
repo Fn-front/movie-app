@@ -38,12 +38,34 @@ function formatRuntime(minutes: number): string {
   return `${hours}時間${mins}分`;
 }
 
+const USD_TO_JPY_RATE = 150;
+
 /**
- * 金額をフォーマット（USD）
+ * 日本円を読みやすい単位でフォーマット
+ */
+function formatJpy(yen: number): string {
+  const oku = 100_000_000;
+  const man = 10_000;
+
+  if (yen >= oku) {
+    const value = yen / oku;
+    return Number.isInteger(value) ? `${value}億円` : `${value.toFixed(1)}億円`;
+  }
+  if (yen >= man) {
+    const value = Math.round(yen / man);
+    return `${value.toLocaleString('ja-JP')}万円`;
+  }
+  return `${yen.toLocaleString('ja-JP')}円`;
+}
+
+/**
+ * 金額をフォーマット（USD + 約日本円）
  */
 function formatCurrency(amount: number): string {
   if (amount === 0) return '-';
-  return `$${amount.toLocaleString('en-US')}`;
+  const usd = `$${amount.toLocaleString('en-US')}`;
+  const jpyAmount = Math.round(amount * USD_TO_JPY_RATE);
+  return `${usd}（約${formatJpy(jpyAmount)}）`;
 }
 
 /**

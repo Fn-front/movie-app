@@ -188,9 +188,9 @@ describe('MovieDetailContent', () => {
     render(<MovieDetailContent movieId={123} showFinancialInfo />);
 
     expect(screen.getByText('制作予算')).toBeInTheDocument();
-    expect(screen.getByText('$150,000,000')).toBeInTheDocument();
+    expect(screen.getByText('$150,000,000（約225億円）')).toBeInTheDocument();
     expect(screen.getByText('興行収入')).toBeInTheDocument();
-    expect(screen.getByText('$500,000,000')).toBeInTheDocument();
+    expect(screen.getByText('$500,000,000（約750億円）')).toBeInTheDocument();
   });
 
   it('showFinancialInfo=falseの場合は予算・興行収入を非表示にする', () => {

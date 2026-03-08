@@ -137,13 +137,15 @@ describe('TMDb APIクライアント', () => {
   });
 
   describe('getMovieDetail', () => {
-    it('movieIdが正しくパスに含まれる', async () => {
+    it('movieIdが正しくパスに含まれcreditsが付与される', async () => {
       mockGet.mockResolvedValue(mockDetailResponse);
 
       const { getMovieDetail } = require('./tmdb');
       await getMovieDetail(123);
 
-      expect(mockGet).toHaveBeenCalledWith('/movie/123');
+      expect(mockGet).toHaveBeenCalledWith('/movie/123', {
+        params: { append_to_response: 'credits' },
+      });
     });
 
     it('文字列のmovieIdが正しくパスに含まれる', async () => {
@@ -152,7 +154,9 @@ describe('TMDb APIクライアント', () => {
       const { getMovieDetail } = require('./tmdb');
       await getMovieDetail('456');
 
-      expect(mockGet).toHaveBeenCalledWith('/movie/456');
+      expect(mockGet).toHaveBeenCalledWith('/movie/456', {
+        params: { append_to_response: 'credits' },
+      });
     });
   });
 

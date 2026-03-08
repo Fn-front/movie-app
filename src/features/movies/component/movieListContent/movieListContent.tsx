@@ -6,7 +6,7 @@
 
 'use client';
 
-import { memo, useMemo, useCallback } from 'react';
+import { memo, useMemo, useCallback, useState } from 'react';
 
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { Select } from '@/components/ui/select/select';
@@ -17,6 +17,7 @@ import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { MovieTile } from '@/features/movies/component/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/features/movies/component/movieTileSkeleton/movieTileSkeleton';
 import { FilterModal } from '@/features/movies/component/filterModal/filterModal';
+import { MovieDetailModal } from '@/features/movies/component/movieDetailModal/movieDetailModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 
@@ -82,6 +83,27 @@ export const MovieListContent = memo<MovieListContentProps>(
       [handleFilterModalClose],
     );
 
+    const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
+    const [showFinancialInfo, setShowFinancialInfo] = useState(false);
+
+    const handleMovieTileClick = useCallback(
+      (movieId: number) => {
+        setSelectedMovieId(movieId);
+        const movie = movies.find((m) => m.id === movieId);
+        const isReleased =
+          movie?.release_date !== undefined &&
+          movie.release_date !== null &&
+          new Date(movie.release_date) < new Date();
+        setShowFinancialInfo(isReleased || movie?.is_revival === true);
+      },
+      [movies],
+    );
+
+    const handleDetailModalClose = useCallback(() => {
+      setSelectedMovieId(null);
+      setShowFinancialInfo(false);
+    }, []);
+
     const loadMoreRef = useIntersectionObserver(fetchNextPage, {
       enabled: hasNextPage && !isFetchingNextPage,
     });
@@ -130,7 +152,12 @@ export const MovieListContent = memo<MovieListContentProps>(
             <MovieTileSkeleton />
           ) : (
             movies.map((movie) => (
-              <MovieTile key={movie.id} movie={movie} genres={genres} />
+              <MovieTile
+                key={movie.id}
+                movie={movie}
+                genres={genres}
+                onClick={handleMovieTileClick}
+              />
             ))
           )}
         </div>
@@ -157,6 +184,12 @@ export const MovieListContent = memo<MovieListContentProps>(
           selectedDateRange={dateRange}
           isRevivalFilter={isRevivalFilter}
           onApply={handleFilterApply}
+        />
+
+        <MovieDetailModal
+          movieId={selectedMovieId}
+          showFinancialInfo={showFinancialInfo}
+          onClose={handleDetailModalClose}
         />
       </div>
     );

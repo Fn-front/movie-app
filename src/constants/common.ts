@@ -32,6 +32,8 @@ export const HTTP_STATUS = {
   BAD_REQUEST: 400,
   /** 認証エラー */
   UNAUTHORIZED: 401,
+  /** リソース未検出 */
+  NOT_FOUND: 404,
   /** リソース競合（重複登録等） */
   CONFLICT: 409,
   /** レート制限超過 */
@@ -52,6 +54,8 @@ export const ERROR_CODE = {
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   /** クライアントエラー */
   BAD_REQUEST: 'BAD_REQUEST',
+  /** リソース未検出 */
+  NOT_FOUND: 'NOT_FOUND',
   /** レート制限超過 */
   RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
   /** リソース競合 */

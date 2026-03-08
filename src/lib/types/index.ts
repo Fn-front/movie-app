@@ -58,6 +58,32 @@ export interface MovieDetail extends Omit<Movie, 'genre_ids'> {
   status: string;
   /** ホームページURL */
   homepage: string | null;
+  /** クレジット情報（append_to_response=credits使用時） */
+  credits?: Credits;
+}
+
+/**
+ * クレジット情報型
+ */
+export interface Credits {
+  /** キャスト一覧 */
+  cast: Cast[];
+}
+
+/**
+ * キャスト型
+ */
+export interface Cast {
+  /** キャストID */
+  id: number;
+  /** 俳優名 */
+  name: string;
+  /** 役名 */
+  character: string;
+  /** プロフィール画像パス */
+  profile_path: string | null;
+  /** 表示順 */
+  order: number;
 }
 
 /**

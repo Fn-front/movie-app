@@ -10,6 +10,13 @@ jest.mock('@/hooks/useIntersectionObserver', () => ({
   useIntersectionObserver: () => ({ current: null }),
 }));
 
+jest.mock(
+  '@/features/movies/component/movieDetailModal/movieDetailModal',
+  () => ({
+    MovieDetailModal: () => null,
+  }),
+);
+
 // --- Helpers ---
 
 const createMockMovie = (

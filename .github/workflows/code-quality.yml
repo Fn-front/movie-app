@@ -1,4 +1,4 @@
-name: Test
+name: Code Quality
 
 on:
   pull_request:
@@ -7,53 +7,11 @@ on:
       - develop
       - 'feature/**'
       - 'release/**'
-  push:
-    branches:
-      - main
 
 jobs:
-  test:
-    name: Jest Test
+  lint:
+    name: ESLint Check
     runs-on: ubuntu-latest
-    steps:
-      - name: checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: setup-node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: cache-node-modules
-        uses: actions/cache@v4
-        id: node_modules_cache
-        with:
-          path: '**/node_modules'
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
-
-      - name: npm-install
-        if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
-        run: npm ci
-
-      - name: run-tests-changed
-        if: github.event_name == 'pull_request'
-        run: npx jest --changedSince=origin/main --passWithNoTests
-
-      - name: run-tests-all
-        if: github.event_name == 'push'
-        run: npx jest
-
-  coverage:
-    name: Coverage Report
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: read
-      pull-requests: write
-      checks: write
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -75,13 +33,59 @@ jobs:
         if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
         run: npm ci
 
-      - name: run-coverage
-        run: npx jest --coverage --ci --json --testLocationInResults --outputFile=report.json || true
+      - name: lint-check
+        run: npm run lint
 
-      - name: coverage-report
-        uses: ArtiomTr/jest-coverage-report-action@v2
+  prettier:
+    name: Prettier Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup-node
+        uses: actions/setup-node@v4
         with:
-          skip-step: all
-          annotations: none
-          coverage-file: report.json
-          base-coverage-file: report.json
+          node-version: 20
+          cache: npm
+
+      - name: cache-node-modules
+        uses: actions/cache@v4
+        id: node_modules_cache
+        with:
+          path: '**/node_modules'
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
+
+      - name: npm-install
+        if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
+        run: npm ci
+
+      - name: prettier-check
+        run: npm run prettier:check
+
+  typecheck:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: cache-node-modules
+        uses: actions/cache@v4
+        id: node_modules_cache
+        with:
+          path: '**/node_modules'
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
+
+      - name: npm-install
+        if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
+        run: npm ci
+
+      - name: typecheck
+        run: npx tsc --noEmit

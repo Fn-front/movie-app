@@ -67,6 +67,10 @@ export interface UseMovieListReturn {
 
 /**
  * 現在のフィルター状態からFilterConditionsを構築
+ *
+ * sort_by・release_typeは常に含める（デフォルト値も省略しない）。
+ * 省略するとonSuccess時のキャッシュ上書きで値が消失し、
+ * 再マウント時にデフォルトへフォールバックするバグの原因となる。
  */
 function buildFilterConditions(
   sortBy: string,
@@ -75,13 +79,10 @@ function buildFilterConditions(
   dateRange: DateRange,
   isRevival: boolean | undefined,
 ): FilterConditions {
-  const conditions: FilterConditions = {};
-  if (sortBy !== DEFAULT_SORT) {
-    conditions.sort_by = sortBy as FilterConditions['sort_by'];
-  }
-  if (releaseType !== DEFAULT_RELEASE_TYPE) {
-    conditions.release_type = releaseType;
-  }
+  const conditions: FilterConditions = {
+    sort_by: sortBy as FilterConditions['sort_by'],
+    release_type: releaseType,
+  };
   if (genreIds.length > 0) {
     conditions.genre_ids = genreIds;
   }

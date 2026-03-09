@@ -93,7 +93,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: isCI ? 'npm run build && npm start' : 'npm run dev',
+    command: isCI ? 'npm start' : 'npm run dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !isCI,
     timeout: 120000,

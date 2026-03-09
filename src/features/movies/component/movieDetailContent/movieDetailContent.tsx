@@ -187,16 +187,15 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
             </div>
           </div>
 
-          {movie.overview && (
-            <div className={styles.c_movie_detail__overview}>
-              <h4 className={styles.c_movie_detail__section_title}>あらすじ</h4>
-              <p className={styles.c_movie_detail__overview_text}>
-                {movie.overview}
-              </p>
-            </div>
-          )}
-
           <div className={styles.c_movie_detail__scrollable}>
+            {movie.overview && (
+              <div className={styles.c_movie_detail__overview}>
+                <h4 className={styles.c_movie_detail__section_title}>あらすじ</h4>
+                <p className={styles.c_movie_detail__overview_text}>
+                  {movie.overview}
+                </p>
+              </div>
+            )}
             <div className={styles.c_movie_detail__additional}>
               <h4 className={styles.c_movie_detail__section_title}>詳細情報</h4>
               <dl className={styles.c_movie_detail__info_list}>

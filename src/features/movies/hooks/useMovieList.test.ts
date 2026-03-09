@@ -663,7 +663,7 @@ describe('useMovieList', () => {
       });
     });
 
-    it('デフォルト値のフィルター条件は保存データに含まれない', async () => {
+    it('デフォルト値でもsort_byとrelease_typeは常に保存データに含まれる', async () => {
       const { result } = renderHook(() => useMovieList(defaultOptions), {
         wrapper: createQueryWrapper(),
       });
@@ -680,7 +680,10 @@ describe('useMovieList', () => {
         expect(mockSaveFilter).toHaveBeenCalled();
       });
 
-      expect(mockSaveFilter.mock.calls[0][0]).toEqual({});
+      expect(mockSaveFilter.mock.calls[0][0]).toEqual({
+        sort_by: 'release_date',
+        release_type: 'theatrical',
+      });
     });
 
     it('is_revival=falseが正しく保存される', async () => {
@@ -701,6 +704,8 @@ describe('useMovieList', () => {
       });
 
       expect(mockSaveFilter.mock.calls[0][0]).toEqual({
+        sort_by: 'release_date',
+        release_type: 'theatrical',
         is_revival: false,
       });
     });

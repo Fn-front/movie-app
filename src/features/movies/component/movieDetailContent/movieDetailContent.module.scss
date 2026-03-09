@@ -158,6 +158,42 @@
     border-radius: $border-radius-md;
   }
 
+  // 配信情報
+  &__providers {
+    margin-top: $spacing-4;
+  }
+
+  &__providers_category {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+    margin-top: $spacing-2;
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  &__providers_label {
+    font-size: $font-size-2xs;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+    white-space: nowrap;
+  }
+
+  &__providers_list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-1;
+  }
+
+  &__provider_logo {
+    width: 28px;
+    height: 28px;
+    border-radius: $border-radius-md;
+    object-fit: cover;
+  }
+
   // あらすじ
   &__overview {
     margin-top: $spacing-6;

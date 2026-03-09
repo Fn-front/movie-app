@@ -76,6 +76,18 @@ export function getTMDbProfileUrl(
 }
 
 /**
+ * TMDbプロバイダーロゴ画像URLを生成（w154固定）
+ *
+ * @param path - ロゴ画像パス
+ * @returns ロゴ画像URL、またはnull
+ */
+export function getTMDbProviderLogoUrl(
+  path: string | null | undefined,
+): string | null {
+  return getTMDbImageUrl(path, 'w154');
+}
+
+/**
  * プレースホルダー画像URLを生成
  *
  * @param width - 幅

@@ -13,9 +13,11 @@ import {
   getTMDbPosterUrl,
   getTMDbBackdropUrl,
   getTMDbProfileUrl,
+  getTMDbProviderLogoUrl,
 } from '@/utils/image';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
+import type { WatchProvider } from '@/lib/types';
 
 import styles from './movieDetailContent.module.scss';
 
@@ -72,6 +74,47 @@ function formatCurrency(amount: number): string {
 }
 
 /**
+ * ProviderCategoryコンポーネントのプロパティ
+ */
+interface ProviderCategoryProps {
+  /** カテゴリラベル */
+  label: string;
+  /** プロバイダー一覧 */
+  providers: WatchProvider[];
+}
+
+/**
+ * 配信プロバイダーカテゴリコンポーネント
+ */
+const ProviderCategory = memo<ProviderCategoryProps>(function ProviderCategory({
+  label,
+  providers,
+}) {
+  return (
+    <div className={styles.c_movie_detail__providers_category}>
+      <span className={styles.c_movie_detail__providers_label}>{label}</span>
+      <div className={styles.c_movie_detail__providers_list}>
+        {providers.map((provider) => {
+          const logoUrl = getTMDbProviderLogoUrl(provider.logo_path);
+          return logoUrl ? (
+            <Image
+              key={provider.provider_id}
+              src={logoUrl}
+              alt={provider.provider_name}
+              width={28}
+              height={28}
+              className={styles.c_movie_detail__provider_logo}
+            />
+          ) : null;
+        })}
+      </div>
+    </div>
+  );
+});
+
+ProviderCategory.displayName = 'ProviderCategory';
+
+/**
  * MovieDetailContentコンポーネント
  */
 export const MovieDetailContent = memo<MovieDetailContentProps>(
@@ -91,6 +134,11 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     const formattedDate = useMemo(
       () => formatDate(movie?.release_date),
       [movie?.release_date],
+    );
+
+    const jpProviders = useMemo(
+      () => movie?.['watch/providers']?.results?.JP ?? null,
+      [movie],
     );
 
     const runtime = movie?.runtime ?? null;
@@ -184,6 +232,33 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                   ))}
                 </div>
               )}
+
+              {jpProviders &&
+                (jpProviders.flatrate ||
+                  jpProviders.rent ||
+                  jpProviders.buy) && (
+                  <div className={styles.c_movie_detail__providers}>
+                    {jpProviders.flatrate &&
+                      jpProviders.flatrate.length > 0 && (
+                        <ProviderCategory
+                          label='配信'
+                          providers={jpProviders.flatrate}
+                        />
+                      )}
+                    {jpProviders.rent && jpProviders.rent.length > 0 && (
+                      <ProviderCategory
+                        label='レンタル'
+                        providers={jpProviders.rent}
+                      />
+                    )}
+                    {jpProviders.buy && jpProviders.buy.length > 0 && (
+                      <ProviderCategory
+                        label='購入'
+                        providers={jpProviders.buy}
+                      />
+                    )}
+                  </div>
+                )}
             </div>
           </div>
 

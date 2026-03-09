@@ -10,7 +10,7 @@ import { Heading } from '@/components/ui/heading/heading';
 import { DisplayNameForm } from '@/features/settings/displayNameForm/displayNameForm';
 import { NotificationSettings } from '@/features/settings/notificationSettings/notificationSettings';
 import { ThemeSettings } from '@/features/settings/themeSettings/themeSettings';
-import { ChangePasswordForm } from '@/features/settings/changePasswordForm/changePasswordForm';
+
 import styles from './settingsPage.module.scss';
 
 /**
@@ -37,9 +37,7 @@ export const SettingsPage = memo(function SettingsPage() {
           <ThemeSettings />
         </section>
 
-        <section className={styles.c_settings_page__section}>
-          <ChangePasswordForm />
-        </section>
+
       </div>
     </div>
   );

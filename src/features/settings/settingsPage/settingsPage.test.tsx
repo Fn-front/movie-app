@@ -69,13 +69,6 @@ describe('SettingsPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('パスワード変更セクションが表示される', () => {
-    render(<SettingsPage />);
-    expect(
-      screen.getByRole('heading', { name: 'パスワード変更' }),
-    ).toBeInTheDocument();
-  });
-
   it('表示名入力フィールドが表示される', () => {
     render(<SettingsPage />);
     expect(screen.getByLabelText('表示名')).toBeInTheDocument();

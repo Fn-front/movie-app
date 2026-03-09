@@ -11,8 +11,10 @@ import { GET, PUT } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
+const mockCreateServiceRoleClient = jest.fn();
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () => ({ from: mockFrom }),
+  createServiceRoleClient: (...args: unknown[]) =>
+    mockCreateServiceRoleClient(...args),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -33,6 +35,7 @@ describe('GET /api/filters', () => {
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
+    mockCreateServiceRoleClient.mockReturnValue({ from: mockFrom });
   });
 
   it('保存済みフィルターを取得できる', async () => {
@@ -80,6 +83,34 @@ describe('GET /api/filters', () => {
     const response = await GET();
     expect(response.status).toBe(401);
   });
+
+  it('Supabaseクライアントがnullの場合500を返す', async () => {
+    mockCreateServiceRoleClient.mockReturnValue(null);
+
+    const response = await GET();
+    expect(response.status).toBe(500);
+  });
+
+  it('PGRST116以外のDBエラーで500を返す', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: null,
+            error: { code: 'SOME_OTHER_ERROR', message: 'DB failure' },
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(json.success).toBe(false);
+    (console.error as jest.Mock).mockRestore();
+  });
 });
 
 describe('PUT /api/filters', () => {
@@ -88,6 +119,7 @@ describe('PUT /api/filters', () => {
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
+    mockCreateServiceRoleClient.mockReturnValue({ from: mockFrom });
   });
 
   it('フィルター条件を保存できる', async () => {
@@ -134,5 +166,34 @@ describe('PUT /api/filters', () => {
 
     const response = await PUT(request);
     expect(response.status).toBe(500);
+  });
+
+  it('Supabaseクライアントがnullの場合500を返す', async () => {
+    mockCreateServiceRoleClient.mockReturnValue(null);
+
+    const request = new Request('http://localhost/api/filters', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sort_by: 'popularity' }),
+    });
+
+    const response = await PUT(request);
+    expect(response.status).toBe(500);
+  });
+
+  it('バリデーションエラーで400を返す', async () => {
+    const request = new Request('http://localhost/api/filters', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sort_by: 'invalid_value' }),
+    });
+
+    const response = await PUT(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBeDefined();
+    expect(json.error.details).toBeDefined();
   });
 });

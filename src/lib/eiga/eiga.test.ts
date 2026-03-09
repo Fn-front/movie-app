@@ -2,7 +2,18 @@
  * 映画.com iCalフィード取得・パース処理のテスト
  */
 
-import { parseIcal, type EigaMovie } from './eiga';
+import axios from 'axios';
+
+import {
+  fetchEigaMovies,
+  fetchOriginalTitle,
+  parseIcal,
+  type EigaMovie,
+} from './eiga';
+
+jest.mock('axios');
+
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 /**
  * テスト用iCalデータ
@@ -118,5 +129,165 @@ END:VCALENDAR`;
     const result = parseIcal(ical);
 
     expect(result[0].eigaUrl).toBeNull();
+  });
+
+  it('DTSTARTがないイベントはスキップする', () => {
+    const ical = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SUMMARY:日付なし映画
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20260601
+SUMMARY:有効な映画
+END:VEVENT
+END:VCALENDAR`;
+
+    const result = parseIcal(ical);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe('有効な映画');
+  });
+
+  it('descriptionがnullの場合でもエラーにならない', () => {
+    const ical = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20260701
+SUMMARY:description無し映画
+END:VEVENT
+END:VCALENDAR`;
+
+    const result = parseIcal(ical);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].eigaUrl).toBeNull();
+  });
+});
+
+describe('fetchEigaMovies', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('iCalフィードを取得してパースした結果を返す', async () => {
+    mockedAxios.get.mockResolvedValueOnce({ data: MOCK_ICAL });
+
+    const result = await fetchEigaMovies();
+
+    expect(mockedAxios.get).toHaveBeenCalledWith(expect.any(String), {
+      responseType: 'text',
+      timeout: 30000,
+    });
+    expect(result).toHaveLength(3);
+    expect(result[0].title).toBe('テスト映画A');
+    expect(result[0].releaseDate).toBe('2026-03-01');
+  });
+
+  it('axiosがエラーを投げた場合そのまま伝播する', async () => {
+    mockedAxios.get.mockRejectedValueOnce(new Error('Network Error'));
+
+    await expect(fetchEigaMovies()).rejects.toThrow('Network Error');
+  });
+});
+
+describe('fetchOriginalTitle', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('「原題：」パターンから原題を抽出する', async () => {
+    mockedAxios.get.mockResolvedValueOnce({
+      data: '<div>原題：The Original Title</div>',
+    });
+
+    const result = await fetchOriginalTitle('https://eiga.com/movie/12345/');
+
+    expect(result).toBe('The Original Title');
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      'https://eiga.com/movie/12345/',
+      {
+        responseType: 'text',
+        timeout: 10000,
+      },
+    );
+  });
+
+  it('「原題または英題：」パターンから原題を抽出する', async () => {
+    mockedAxios.get.mockResolvedValueOnce({
+      data: '<div>原題または英題：The English Title</div>',
+    });
+
+    const result = await fetchOriginalTitle('https://eiga.com/movie/12345/');
+
+    expect(result).toBe('The English Title');
+  });
+
+  it('「英題：」パターンから英題を抽出する', async () => {
+    mockedAxios.get.mockResolvedValueOnce({
+      data: '<div>英題：The English Only Title</div>',
+    });
+
+    const result = await fetchOriginalTitle('https://eiga.com/movie/12345/');
+
+    expect(result).toBe('The English Only Title');
+  });
+
+  it('コロンが全角の場合も抽出できる', async () => {
+    mockedAxios.get.mockResolvedValueOnce({
+      data: '<div>原題：Full Width Colon Title</div>',
+    });
+
+    const result = await fetchOriginalTitle('https://eiga.com/movie/12345/');
+
+    expect(result).toBe('Full Width Colon Title');
+  });
+
+  it('半角コロンの場合も抽出できる', async () => {
+    mockedAxios.get.mockResolvedValueOnce({
+      data: '<div>原題:Half Width Colon Title</div>',
+    });
+
+    const result = await fetchOriginalTitle('https://eiga.com/movie/12345/');
+
+    expect(result).toBe('Half Width Colon Title');
+  });
+
+  it('原題が見つからない場合nullを返す', async () => {
+    mockedAxios.get.mockResolvedValueOnce({
+      data: '<div>タイトルのみの映画ページ</div>',
+    });
+
+    const result = await fetchOriginalTitle('https://eiga.com/movie/12345/');
+
+    expect(result).toBeNull();
+  });
+
+  it('axiosがエラーを投げた場合nullを返す', async () => {
+    mockedAxios.get.mockRejectedValueOnce(new Error('Network Error'));
+
+    const result = await fetchOriginalTitle('https://eiga.com/movie/12345/');
+
+    expect(result).toBeNull();
+  });
+
+  it('タイムアウトエラーの場合もnullを返す', async () => {
+    mockedAxios.get.mockRejectedValueOnce(
+      new Error('timeout of 10000ms exceeded'),
+    );
+
+    const result = await fetchOriginalTitle('https://eiga.com/movie/12345/');
+
+    expect(result).toBeNull();
+  });
+
+  it('原題の前後の空白がトリムされる', async () => {
+    mockedAxios.get.mockResolvedValueOnce({
+      data: '<div>原題：  Spaced Title  </div>',
+    });
+
+    const result = await fetchOriginalTitle('https://eiga.com/movie/12345/');
+
+    expect(result).toBe('Spaced Title');
   });
 });

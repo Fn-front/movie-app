@@ -33,6 +33,9 @@ test.describe('ログアウト', () => {
       { token: csrfToken },
     );
 
+    // fetch ではブラウザのCookieが更新されないため、手動でセッションCookieを削除
+    await page.context().clearCookies();
+
     // セッションが破棄されたことを確認：保護ページへアクセスするとログインへリダイレクト
     await page.goto('/settings');
     await expect(page).toHaveURL(/\/auth\/signin/, { timeout: 10000 });

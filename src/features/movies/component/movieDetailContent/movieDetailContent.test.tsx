@@ -236,6 +236,100 @@ describe('MovieDetailContent', () => {
     expect(screen.queryByText('興行収入')).not.toBeInTheDocument();
   });
 
+  it('配信プロバイダー情報を表示する', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 7.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+        'watch/providers': {
+          results: {
+            JP: {
+              link: 'https://www.themoviedb.org/movie/123/watch?locale=JP',
+              flatrate: [
+                {
+                  provider_id: 8,
+                  provider_name: 'Netflix',
+                  logo_path: '/netflix.jpg',
+                  display_priority: 0,
+                },
+              ],
+              rent: [
+                {
+                  provider_id: 2,
+                  provider_name: 'Apple TV',
+                  logo_path: '/apple.jpg',
+                  display_priority: 1,
+                },
+              ],
+              buy: [
+                {
+                  provider_id: 3,
+                  provider_name: 'Google Play Movies',
+                  logo_path: '/google.jpg',
+                  display_priority: 2,
+                },
+              ],
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.getByText('配信')).toBeInTheDocument();
+    expect(screen.getByText('レンタル')).toBeInTheDocument();
+    expect(screen.getByText('購入')).toBeInTheDocument();
+    expect(screen.getByAltText('Netflix')).toBeInTheDocument();
+    expect(screen.getByAltText('Apple TV')).toBeInTheDocument();
+    expect(screen.getByAltText('Google Play Movies')).toBeInTheDocument();
+  });
+
+  it('配信プロバイダー情報がない場合はセクションを非表示にする', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 7.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.queryByText('配信')).not.toBeInTheDocument();
+    expect(screen.queryByText('レンタル')).not.toBeInTheDocument();
+    expect(screen.queryByText('購入')).not.toBeInTheDocument();
+  });
+
   it('予算・興行収入が0の場合は「-」を表示する', () => {
     mockUseMovieDetail.mockReturnValue({
       movie: {

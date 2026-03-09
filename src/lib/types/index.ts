@@ -60,6 +60,44 @@ export interface MovieDetail extends Omit<Movie, 'genre_ids'> {
   homepage: string | null;
   /** クレジット情報（append_to_response=credits使用時） */
   credits?: Credits;
+  /** 配信プロバイダー情報（append_to_response=watch/providers使用時） */
+  'watch/providers'?: WatchProviders;
+}
+
+/**
+ * 配信プロバイダー型
+ */
+export interface WatchProvider {
+  /** プロバイダーID */
+  provider_id: number;
+  /** プロバイダー名 */
+  provider_name: string;
+  /** ロゴパス */
+  logo_path: string;
+  /** 表示順 */
+  display_priority: number;
+}
+
+/**
+ * 国別配信情報型
+ */
+export interface WatchProviderCountry {
+  /** TMDbページへのリンク */
+  link: string;
+  /** 定額配信（ストリーミング） */
+  flatrate?: WatchProvider[];
+  /** レンタル */
+  rent?: WatchProvider[];
+  /** 購入 */
+  buy?: WatchProvider[];
+}
+
+/**
+ * 配信プロバイダーレスポンス型（append_to_response用）
+ */
+export interface WatchProviders {
+  /** 国コード別配信情報 */
+  results: Record<string, WatchProviderCountry>;
 }
 
 /**

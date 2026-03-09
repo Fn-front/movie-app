@@ -5,11 +5,24 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('設定ページ（認証済み）', () => {
-  test.beforeEach(async ({ page }) => {
+  test('設定画面のセクションが表示される', async ({ page }) => {
     await page.goto('/settings');
+    await expect(
+      page.getByRole('heading', { name: '設定' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'プロフィール' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: '通知' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: '外観' }),
+    ).toBeVisible();
   });
 
   test('パスワード変更フォームが表示される', async ({ page }) => {
+    await page.goto('/settings/change-password');
     await expect(
       page.getByRole('heading', { name: 'パスワード変更' }),
     ).toBeVisible();
@@ -26,6 +39,7 @@ test.describe('設定ページ（認証済み）', () => {
   test('現在のパスワード未入力でバリデーションエラーが表示される', async ({
     page,
   }) => {
+    await page.goto('/settings/change-password');
     await page
       .getByLabel('新しいパスワード', { exact: true })
       .fill('NewPass123');
@@ -38,6 +52,7 @@ test.describe('設定ページ（認証済み）', () => {
   test('新しいパスワードが短すぎるとバリデーションエラーが表示される', async ({
     page,
   }) => {
+    await page.goto('/settings/change-password');
     await page.getByLabel('現在のパスワード').fill('Current123');
     await page.getByLabel('新しいパスワード', { exact: true }).fill('Pw1');
     await page.getByLabel('新しいパスワード（確認）').fill('Pw1');
@@ -51,6 +66,7 @@ test.describe('設定ページ（認証済み）', () => {
   test('新しいパスワード確認が一致しないとバリデーションエラーが表示される', async ({
     page,
   }) => {
+    await page.goto('/settings/change-password');
     await page.getByLabel('現在のパスワード').fill('Current123');
     await page
       .getByLabel('新しいパスワード', { exact: true })

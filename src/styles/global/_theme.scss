@@ -1,0 +1,45 @@
+@use '../variables' as *;
+
+// ============================================================
+// テーマ切り替え基盤（CSS変数）
+// ============================================================
+
+:root {
+  // テキスト
+  --color-text-primary: #{$text-primary};
+  --color-text-secondary: #{$text-secondary};
+  --color-text-disabled: #{$text-disabled};
+
+  // 背景
+  --color-bg-default: #{$background-default};
+  --color-bg-paper: #{$background-paper};
+  --color-bg-secondary: #{$background-secondary};
+
+  // ボーダー
+  --color-border: #{$border-color};
+
+  // スクロールバー
+  --color-scrollbar-track: #{$gray-100};
+  --color-scrollbar-thumb: #{$gray-400};
+  --color-scrollbar-thumb-hover: #{$gray-500};
+}
+
+[data-theme='dark'] {
+  // テキスト
+  --color-text-primary: #{$gray-100};
+  --color-text-secondary: #{$gray-400};
+  --color-text-disabled: #{$gray-500};
+
+  // 背景
+  --color-bg-default: #{$gray-900};
+  --color-bg-paper: #{$gray-800};
+  --color-bg-secondary: #{$gray-700};
+
+  // ボーダー
+  --color-border: #{$gray-600};
+
+  // スクロールバー
+  --color-scrollbar-track: #{$gray-800};
+  --color-scrollbar-thumb: #{$gray-500};
+  --color-scrollbar-thumb-hover: #{$gray-400};
+}

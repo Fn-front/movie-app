@@ -428,6 +428,88 @@
 
 ---
 
+## ユーザー設定API
+
+### PUT /api/user/profile
+表示名更新
+
+**認証**: NextAuth.jsセッション必須
+
+**Request Body:**
+```json
+{
+  "name": "新しい表示名"
+}
+```
+
+**Validation (zod):**
+- name: 1〜100文字、空白のみ不可
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "プロフィールを更新しました"
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized`: 未ログイン
+- `400 Bad Request`: バリデーションエラー
+
+---
+
+### GET /api/user/settings
+ユーザー設定取得
+
+**認証**: NextAuth.jsセッション必須
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "theme": "light",
+    "notificationEnabled": false
+  }
+}
+```
+
+**備考:** 設定未作成時はデフォルト値を返却
+
+---
+
+### PUT /api/user/settings
+ユーザー設定更新
+
+**認証**: NextAuth.jsセッション必須
+
+**Request Body:**
+```json
+{
+  "theme": "dark",
+  "notificationEnabled": true
+}
+```
+
+**Validation (zod):**
+- theme: 'light' | 'dark'（optional）
+- notificationEnabled: boolean（optional）
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "設定を更新しました"
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized`: 未ログイン
+- `400 Bad Request`: バリデーションエラー
+
+---
+
 ## 将来的なAPI
 
 ### レビュー機能

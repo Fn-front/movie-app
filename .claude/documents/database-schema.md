@@ -105,7 +105,33 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 
 ---
 
-### user_preferences（ユーザー設定）
+### user_settings（ユーザー設定）
+ユーザーのテーマ・通知などのアプリ設定を管理
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
+| user_id | UUID | NOT NULL | - | ユーザーID（外部キー、ユニーク） |
+| theme | VARCHAR(10) | NOT NULL | 'light' | テーマ（light / dark） |
+| notification_enabled | BOOLEAN | NOT NULL | false | 通知有効フラグ |
+| created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
+| updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |
+
+**インデックス:**
+- `user_id` (UNIQUE)
+
+**外部キー:**
+- `user_id` -> `users(id)` ON DELETE CASCADE
+
+**RLS (Row Level Security):**
+- SELECT: 自分のレコードのみ閲覧可能
+- INSERT: 自分のレコードのみ作成可能
+- UPDATE: 自分のレコードのみ更新可能
+- DELETE: 自分のレコードのみ削除可能
+
+---
+
+### user_preferences（ユーザー嗜好データ）
 将来的なOpenAIレコメンド機能用のユーザー嗜好データ
 
 | カラム名 | 型 | NULL | デフォルト | 説明 |
@@ -189,11 +215,9 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 ```
 users (1) ----< (N) watchlist
   |
-  | (1)
+  +---- (1) user_settings
   |
   +---- (1) user_preferences
-  |
-  | (1)
   |
   +----< (N) reviews
 ```

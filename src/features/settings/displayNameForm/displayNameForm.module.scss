@@ -1,0 +1,24 @@
+@use '@/styles/variables' as *;
+
+.c_display_name_form {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+}
+
+.c_display_name_form__field {
+  max-width: 400px;
+}
+
+.c_display_name_form__submit {
+  display: flex;
+}
+
+.c_display_name_form__error {
+  padding: $spacing-3 $spacing-4;
+  background-color: rgba($error-main, 0.1);
+  border: $border-width-1 solid $error-light;
+  border-radius: $border-radius-md;
+  color: $error-dark;
+  font-size: $font-size-sm;
+}

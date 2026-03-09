@@ -6,7 +6,7 @@
   flex-direction: column;
   gap: $spacing-6;
   width: 230px;
-  height: calc(100vh - 64px); // ヘッダーの高さを引く
+  height: 100%;
   padding: $spacing-6;
   background-color: $background-paper;
   border-right: $border-width-1 solid $border-color;
@@ -19,10 +19,11 @@
     border-bottom: $border-width-1 solid $border-color;
   }
 
-  // ユーザーセクション
+  // ユーザーセクション（サイドバー下部に固定）
   &__user {
-    padding-bottom: $spacing-4;
-    border-bottom: $border-width-1 solid $border-color;
+    margin-top: auto;
+    padding-top: $spacing-4;
+    border-top: $border-width-1 solid $border-color;
   }
 
   // カレンダーボタン

@@ -1,0 +1,14 @@
+@use '@/styles/variables' as *;
+
+.c_notification_settings {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+}
+
+.c_notification_settings__description {
+  margin: 0;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  padding-left: $spacing-8;
+}

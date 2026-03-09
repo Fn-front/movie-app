@@ -29,22 +29,32 @@ export const ThemeSettings = memo(function ThemeSettings() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchSettings = async () => {
       try {
         const settings = await getSettings();
-        setTheme(settings.theme);
+        if (!cancelled) {
+          setTheme(settings.theme);
+        }
       } catch {
         // localStorageのキャッシュを使用
         const cached = localStorage.getItem(STORAGE_KEYS.THEME);
-        if (cached === 'light' || cached === 'dark') {
+        if (!cancelled && (cached === 'light' || cached === 'dark')) {
           setTheme(cached);
         }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchSettings();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleChange = useCallback(
@@ -87,11 +97,11 @@ export const ThemeSettings = memo(function ThemeSettings() {
     <div className={styles.c_theme_settings}>
       <div className={styles.c_theme_settings__select}>
         <Select
-          label="テーマ"
+          label='テーマ'
           options={THEME_OPTIONS}
           value={theme}
           onValueChange={handleChange}
-          aria-label="テーマを選択"
+          aria-label='テーマを選択'
         />
       </div>
       <p className={styles.c_theme_settings__description}>

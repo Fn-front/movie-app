@@ -7,6 +7,7 @@
 
 import { memo, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
+import Image from 'next/image';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import {
   IoSettingsOutline,
@@ -55,9 +56,11 @@ export const UserMenu = memo(function UserMenu() {
           aria-label='ユーザーメニューを開く'
         >
           {userImage ? (
-            <img
+            <Image
               src={userImage}
               alt={userName}
+              width={32}
+              height={32}
               className={styles.c_user_menu__avatar}
             />
           ) : (

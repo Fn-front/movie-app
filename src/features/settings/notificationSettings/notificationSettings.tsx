@@ -21,18 +21,28 @@ export const NotificationSettings = memo(function NotificationSettings() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchSettings = async () => {
       try {
         const settings = await getSettings();
-        setNotificationEnabled(settings.notificationEnabled);
+        if (!cancelled) {
+          setNotificationEnabled(settings.notificationEnabled);
+        }
       } catch {
         // デフォルト値のまま
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchSettings();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleChange = useCallback(
@@ -64,7 +74,7 @@ export const NotificationSettings = memo(function NotificationSettings() {
   return (
     <div className={styles.c_notification_settings}>
       <Checkbox
-        label="公開日リマインダーを受け取る"
+        label='公開日リマインダーを受け取る'
         checked={notificationEnabled}
         onCheckedChange={handleChange}
       />

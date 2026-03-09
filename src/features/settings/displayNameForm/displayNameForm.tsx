@@ -11,10 +11,7 @@ import { useSession } from 'next-auth/react';
 
 import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
-import {
-  updateProfileSchema,
-  type UpdateProfileFormData,
-} from '@/schema/user';
+import { updateProfileSchema, type UpdateProfileFormData } from '@/schema/user';
 import { updateProfile } from '@/lib/api/user/user';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
@@ -72,10 +69,10 @@ export const DisplayNameForm = memo(function DisplayNameForm() {
     >
       <div className={styles.c_display_name_form__field}>
         <Input
-          label="表示名"
-          type="text"
-          autoComplete="name"
-          placeholder="表示名を入力"
+          label='表示名'
+          type='text'
+          autoComplete='name'
+          placeholder='表示名を入力'
           fullWidth
           error={errors.name?.message}
           {...register('name')}
@@ -83,18 +80,18 @@ export const DisplayNameForm = memo(function DisplayNameForm() {
       </div>
 
       {apiError && (
-        <p className={styles.c_display_name_form__error} role="alert">
+        <p className={styles.c_display_name_form__error} role='alert'>
           {apiError}
         </p>
       )}
 
       <div className={styles.c_display_name_form__submit}>
         <Button
-          type="submit"
-          variant="primary"
-          size="md"
+          type='submit'
+          variant='primary'
+          size='md'
           isLoading={isSubmitting}
-          aria-label="表示名を更新"
+          aria-label='表示名を更新'
         >
           更新
         </Button>

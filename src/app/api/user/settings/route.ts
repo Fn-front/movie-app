@@ -117,15 +117,13 @@ export async function PUT(request: Request) {
     }
 
     // upsert（存在しなければ作成、存在すれば更新）
-    const { error: upsertError } = await supabase
-      .from('user_settings')
-      .upsert(
-        {
-          user_id: session.user.id,
-          ...updateData,
-        },
-        { onConflict: 'user_id' },
-      );
+    const { error: upsertError } = await supabase.from('user_settings').upsert(
+      {
+        user_id: session.user.id,
+        ...updateData,
+      },
+      { onConflict: 'user_id' },
+    );
 
     if (upsertError) {
       throw upsertError;

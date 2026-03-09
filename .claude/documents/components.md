@@ -357,6 +357,51 @@ showToast({
 
 ---
 
+### SettingsPage
+設定画面統合コンポーネント
+
+**表示セクション:**
+- プロフィール（DisplayNameForm）
+- 通知設定（NotificationSettings）
+- 外観/テーマ（ThemeSettings）
+
+**使用例:**
+```tsx
+<SettingsPage />
+```
+
+---
+
+### DisplayNameForm
+表示名変更フォーム（react-hook-form + zod）
+
+**使用例:**
+```tsx
+<DisplayNameForm />
+```
+
+---
+
+### NotificationSettings
+通知設定ON/OFF切り替え（オプティミスティックUI）
+
+**使用例:**
+```tsx
+<NotificationSettings />
+```
+
+---
+
+### ThemeSettings
+テーマ切り替え（light/dark）
+
+**使用例:**
+```tsx
+<ThemeSettings />
+```
+
+---
+
 ### SearchBar
 検索バー
 
@@ -549,20 +594,44 @@ const otpSchema = z.object({
 サイドバーコンポーネント
 
 **Props:**
-- `user`: User
-- `onCalendarClick`: () => void
+- `navigation`: ReactNode - ナビゲーション
+- `userSection`: ReactNode - ユーザーセクション
+- `calendarButton`: ReactNode - カレンダーボタン
+- `watchlist`: ReactNode - ウォッチリスト
 
 **表示内容:**
-- ユーザーアイコン・名前
+- ナビゲーション（SideNav）
+- ユーザーメニュー（UserMenu）- 下部に固定
 - カレンダーボタン
 - 見たい映画リスト
 
 **使用例:**
 ```tsx
 <Sidebar
-  user={currentUser}
-  onCalendarClick={handleShowCalendar}
+  navigation={<SideNav />}
+  userSection={<UserMenu />}
 />
+```
+
+---
+
+### UserMenu
+ユーザープロフィール + ポップオーバーメニュー（サイドバー下部）
+
+**ベース**: `@radix-ui/react-dropdown-menu`（プリミティブ直接使用）
+
+**Props:** なし（内部でuseSession()からセッション情報を取得）
+
+**表示内容:**
+- トリガー: アバター（画像 or イニシャル） + ユーザー名
+- ポップオーバー（上方向展開）:
+  - メールアドレス（Label）
+  - 設定リンク（/settings へ遷移）
+  - ログアウトボタン（destructive）
+
+**使用例:**
+```tsx
+<UserMenu />
 ```
 
 ---

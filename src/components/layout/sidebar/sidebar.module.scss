@@ -19,10 +19,11 @@
     border-bottom: $border-width-1 solid $border-color;
   }
 
-  // ユーザーセクション
+  // ユーザーセクション（サイドバー下部に固定）
   &__user {
-    padding-bottom: $spacing-4;
-    border-bottom: $border-width-1 solid $border-color;
+    margin-top: auto;
+    padding-top: $spacing-4;
+    border-top: $border-width-1 solid $border-color;
   }
 
   // カレンダーボタン

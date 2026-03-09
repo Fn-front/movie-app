@@ -4,7 +4,7 @@
 
 import type { Metadata } from 'next';
 
-import { ChangePasswordForm } from '@/features/settings/changePasswordForm/changePasswordForm';
+import { SettingsPage as SettingsPageContent } from '@/features/settings/settingsPage/settingsPage';
 
 export const metadata: Metadata = {
   title: 'アカウント設定 | Movie App',
@@ -12,5 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function SettingsPage() {
-  return <ChangePasswordForm />;
+  return <SettingsPageContent />;
 }

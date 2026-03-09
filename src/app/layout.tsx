@@ -4,6 +4,7 @@ import { Noto_Sans_JP } from 'next/font/google';
 import { AppQueryProvider } from '@/components/providers/queryProvider';
 import { AppSessionProvider } from '@/components/providers/sessionProvider';
 import { AppToastProvider } from '@/components/providers/toastProvider';
+import { ThemeProvider } from '@/components/providers/themeProvider';
 import '@/styles/app.scss';
 
 const noto = Noto_Sans_JP({
@@ -27,6 +28,7 @@ export default function RootLayout({
       <body className={noto.className}>
         <AppSessionProvider>
           <AppQueryProvider>
+            <ThemeProvider />
             <AppToastProvider>{children}</AppToastProvider>
           </AppQueryProvider>
         </AppSessionProvider>

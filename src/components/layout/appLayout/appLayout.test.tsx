@@ -1,3 +1,16 @@
+jest.mock('next-auth/react', () => ({
+  useSession: () => ({
+    data: {
+      user: {
+        name: 'テストユーザー',
+        email: 'test@example.com',
+        image: null,
+      },
+    },
+    status: 'authenticated',
+  }),
+}));
+
 jest.mock('next/link', () => {
   const MockLink = ({
     children,
@@ -23,6 +36,11 @@ jest.mock('next/image', () => {
 
 jest.mock('next/navigation', () => ({
   usePathname: () => '/',
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+    back: jest.fn(),
+  }),
 }));
 
 import React from 'react';

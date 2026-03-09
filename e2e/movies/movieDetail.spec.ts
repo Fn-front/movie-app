@@ -47,10 +47,16 @@ test.describe('映画詳細モーダル', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 15000 });
 
-    // あらすじまたは詳細情報のどちらかが表示される
-    const overview = dialog.getByText('あらすじ');
-    const additionalInfo = dialog.getByText('詳細情報');
-    await expect(overview.or(additionalInfo)).toBeVisible();
+    // あらすじまたは詳細情報の少なくとも一方が表示される
+    const hasOverview = await dialog
+      .getByText('あらすじ')
+      .isVisible()
+      .catch(() => false);
+    const hasAdditionalInfo = await dialog
+      .getByText('詳細情報')
+      .isVisible()
+      .catch(() => false);
+    expect(hasOverview || hasAdditionalInfo).toBe(true);
   });
 
   test('モーダルに詳細情報セクションが表示される', async ({ page }) => {

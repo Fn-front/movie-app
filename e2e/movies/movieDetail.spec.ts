@@ -127,9 +127,7 @@ test.describe('映画詳細モーダル', () => {
     await expect(dialog).not.toBeVisible();
   });
 
-  test('キーボードで映画タイルを操作してモーダルを開ける', async ({
-    page,
-  }) => {
+  test('キーボードで映画タイルを操作してモーダルを開ける', async ({ page }) => {
     const firstTile = movieTileButtons(page).first();
     await firstTile.focus();
     await page.keyboard.press('Enter');

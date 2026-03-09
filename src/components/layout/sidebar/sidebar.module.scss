@@ -6,7 +6,7 @@
   flex-direction: column;
   gap: $spacing-6;
   width: 230px;
-  height: calc(100vh - 64px); // ヘッダーの高さを引く
+  height: 100%;
   padding: $spacing-6;
   background-color: $background-paper;
   border-right: $border-width-1 solid $border-color;

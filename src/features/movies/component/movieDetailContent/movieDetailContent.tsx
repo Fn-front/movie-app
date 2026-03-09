@@ -86,30 +86,31 @@ interface ProviderCategoryProps {
 /**
  * 配信プロバイダーカテゴリコンポーネント
  */
-const ProviderCategory = memo<ProviderCategoryProps>(
-  function ProviderCategory({ label, providers }) {
-    return (
-      <div className={styles.c_movie_detail__providers_category}>
-        <span className={styles.c_movie_detail__providers_label}>{label}</span>
-        <div className={styles.c_movie_detail__providers_list}>
-          {providers.map((provider) => {
-            const logoUrl = getTMDbProviderLogoUrl(provider.logo_path);
-            return logoUrl ? (
-              <Image
-                key={provider.provider_id}
-                src={logoUrl}
-                alt={provider.provider_name}
-                width={28}
-                height={28}
-                className={styles.c_movie_detail__provider_logo}
-              />
-            ) : null;
-          })}
-        </div>
+const ProviderCategory = memo<ProviderCategoryProps>(function ProviderCategory({
+  label,
+  providers,
+}) {
+  return (
+    <div className={styles.c_movie_detail__providers_category}>
+      <span className={styles.c_movie_detail__providers_label}>{label}</span>
+      <div className={styles.c_movie_detail__providers_list}>
+        {providers.map((provider) => {
+          const logoUrl = getTMDbProviderLogoUrl(provider.logo_path);
+          return logoUrl ? (
+            <Image
+              key={provider.provider_id}
+              src={logoUrl}
+              alt={provider.provider_name}
+              width={28}
+              height={28}
+              className={styles.c_movie_detail__provider_logo}
+            />
+          ) : null;
+        })}
       </div>
-    );
-  },
-);
+    </div>
+  );
+});
 
 ProviderCategory.displayName = 'ProviderCategory';
 

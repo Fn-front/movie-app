@@ -6,23 +6,12 @@
 'use client';
 
 import { memo, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { IoSettingsOutline, IoLogOutOutline, IoChevronForward } from 'react-icons/io5';
 
 import { useUserMenu } from './useUserMenu';
 import styles from './userMenu.module.scss';
-
-/**
- * UserMenuコンポーネントのプロパティ
- */
-export interface UserMenuProps {
-  /** ユーザー名 */
-  userName: string;
-  /** ユーザーメールアドレス */
-  userEmail: string;
-  /** ユーザーアバター画像URL */
-  userImage?: string | null;
-}
 
 /**
  * ユーザー名からイニシャルを取得
@@ -33,24 +22,26 @@ const getInitial = (name: string): string => {
 
 /**
  * UserMenuコンポーネント
+ * セッション情報を内部で取得し、認証済みの場合のみ表示する
  *
  * @example
  * ```tsx
- * <UserMenu
- *   userName="テストユーザー"
- *   userEmail="test@example.com"
- *   userImage={null}
- * />
+ * <UserMenu />
  * ```
  */
-export const UserMenu = memo<UserMenuProps>(function UserMenu({
-  userName,
-  userEmail,
-  userImage,
-}) {
+export const UserMenu = memo(function UserMenu() {
+  const { data: session, status } = useSession();
   const { handleNavigateToSettings, handleLogout } = useUserMenu();
 
+  const userName = session?.user?.name ?? '';
+  const userEmail = session?.user?.email ?? '';
+  const userImage = session?.user?.image;
+
   const initial = useMemo(() => getInitial(userName), [userName]);
+
+  if (status !== 'authenticated' || !session?.user) {
+    return null;
+  }
 
   return (
     <DropdownMenuPrimitive.Root>

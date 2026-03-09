@@ -7,7 +7,10 @@ jest.mock('next/navigation', () => ({
   }),
 }));
 
+const mockUseSession = jest.fn();
+
 jest.mock('next-auth/react', () => ({
+  useSession: () => mockUseSession(),
   signOut: (...args: unknown[]) => mockSignOut(...args),
 }));
 
@@ -19,47 +22,66 @@ import { UserMenu } from './userMenu';
 
 // --- Tests ---
 
-const defaultProps = {
-  userName: 'テストユーザー',
-  userEmail: 'test@example.com',
-  userImage: null,
+const authenticatedSession = {
+  data: {
+    user: {
+      name: 'テストユーザー',
+      email: 'test@example.com',
+      image: null,
+    },
+  },
+  status: 'authenticated',
 };
 
 describe('UserMenu', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseSession.mockReturnValue(authenticatedSession);
   });
 
   it('ユーザー名が表示される', () => {
-    render(<UserMenu {...defaultProps} />);
+    render(<UserMenu />);
     expect(screen.getByText('テストユーザー')).toBeInTheDocument();
   });
 
   it('アバター未設定時にイニシャルが表示される', () => {
-    render(<UserMenu {...defaultProps} />);
+    render(<UserMenu />);
     expect(screen.getByText('テ')).toBeInTheDocument();
   });
 
   it('アバター画像が設定されている場合にimg要素が表示される', () => {
-    render(
-      <UserMenu
-        {...defaultProps}
-        userImage="https://example.com/avatar.png"
-      />,
-    );
+    mockUseSession.mockReturnValue({
+      ...authenticatedSession,
+      data: {
+        user: {
+          ...authenticatedSession.data.user,
+          image: 'https://example.com/avatar.png',
+        },
+      },
+    });
+    render(<UserMenu />);
     expect(screen.getByAltText('テストユーザー')).toBeInTheDocument();
   });
 
   it('トリガーボタンにアクセシブルなラベルがある', () => {
-    render(<UserMenu {...defaultProps} />);
+    render(<UserMenu />);
     expect(
       screen.getByRole('button', { name: 'ユーザーメニューを開く' }),
     ).toBeInTheDocument();
   });
 
+  it('未認証時はnullを返す', () => {
+    mockUseSession.mockReturnValue({
+      data: null,
+      status: 'unauthenticated',
+    });
+    const { container } = render(<UserMenu />);
+    expect(container.innerHTML).toBe('');
+  });
+
   it('クリックでポップオーバーが表示される', async () => {
     const user = userEvent.setup();
-    render(<UserMenu {...defaultProps} />);
+    render(<UserMenu />);
 
     await user.click(
       screen.getByRole('button', { name: 'ユーザーメニューを開く' }),
@@ -74,7 +96,7 @@ describe('UserMenu', () => {
 
   it('「設定」クリックで/settingsに遷移する', async () => {
     const user = userEvent.setup();
-    render(<UserMenu {...defaultProps} />);
+    render(<UserMenu />);
 
     await user.click(
       screen.getByRole('button', { name: 'ユーザーメニューを開く' }),
@@ -86,7 +108,7 @@ describe('UserMenu', () => {
 
   it('「ログアウト」クリックでsignOutが呼ばれる', async () => {
     const user = userEvent.setup();
-    render(<UserMenu {...defaultProps} />);
+    render(<UserMenu />);
 
     await user.click(
       screen.getByRole('button', { name: 'ユーザーメニューを開く' }),

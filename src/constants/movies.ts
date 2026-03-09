@@ -110,6 +110,11 @@ export const EXCLUDED_LANGUAGES = ['ko', 'zh'] as const;
 export const EIGA_ICAL_URL = 'https://eiga.com/movie/coming.ics';
 
 /**
+ * バッチ更新: 1回のバッチで処理する映画数
+ */
+export const BATCH_UPDATE_SIZE = 100;
+
+/**
  * 映画APIエラーメッセージ
  */
 export const MOVIES_ERROR_MESSAGES = {

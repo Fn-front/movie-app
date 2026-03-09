@@ -399,7 +399,7 @@
 
 ## バッチ更新API
 
-### POST /api/cron/update-movies
+### GET /api/cron/update-movies
 映画キャッシュのバッチ更新（1日1回実行）
 
 **認証**: Vercel Cron Secret（`Authorization: Bearer <CRON_SECRET>`）

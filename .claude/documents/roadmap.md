@@ -378,11 +378,11 @@
 - [x] テストを追加
 
 ### Step 19: バッチ更新API（`feature/batch-update-movies`）
-- [ ] Cron定数を追加
-- [ ] バッチ更新API（POST /api/cron/update-movies）を実装
-- [ ] Vercel Cron設定（vercel.json）を追加
-- [ ] .env.exampleにCRON_SECRETを追加
-- [ ] テストを追加
+- [x] Cron定数を追加
+- [x] バッチ更新API（GET /api/cron/update-movies）を実装
+- [x] Vercel Cron設定（vercel.json）を追加
+- [x] .env.exampleにCRON_SECRETを追加
+- [x] テストを追加
 
 ---
 

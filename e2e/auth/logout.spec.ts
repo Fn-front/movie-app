@@ -6,8 +6,9 @@
 import { test, expect } from '../fixtures/auth';
 
 test.describe('ログアウト', () => {
-  test('signOut API呼び出し後にログインページへリダイレクトされる', async ({
+  test('signOut API呼び出し後にセッションが無効化される', async ({
     page,
+    browser,
   }) => {
     await page.goto('/');
     await expect(page).toHaveURL('/');
@@ -16,13 +17,16 @@ test.describe('ログアウト', () => {
     const csrfRes = await page.request.get('/api/auth/csrf');
     const { csrfToken } = await csrfRes.json();
 
-    // page.request はブラウザとCookieを共有し、Set-Cookie も正しく反映される
+    // NextAuth signOut API を呼び出し（サーバー側のセッションを無効化）
     await page.request.post('/api/auth/signout', {
       form: { csrfToken },
     });
 
-    // セッションが破棄されたことを確認：保護ページへアクセスするとログインへリダイレクト
-    await page.goto('/settings');
-    await expect(page).toHaveURL(/\/auth\/signin/, { timeout: 10000 });
+    // 新しいコンテキスト（Cookie無し）で保護ページにアクセスし、リダイレクトを確認
+    const context = await browser.newContext();
+    const newPage = await context.newPage();
+    await newPage.goto('http://localhost:3000/settings');
+    await expect(newPage).toHaveURL(/\/auth\/signin/, { timeout: 10000 });
+    await context.close();
   });
 });

@@ -190,7 +190,9 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
           <div className={styles.c_movie_detail__scrollable}>
             {movie.overview && (
               <div className={styles.c_movie_detail__overview}>
-                <h4 className={styles.c_movie_detail__section_title}>あらすじ</h4>
+                <h4 className={styles.c_movie_detail__section_title}>
+                  あらすじ
+                </h4>
                 <p className={styles.c_movie_detail__overview_text}>
                   {movie.overview}
                 </p>

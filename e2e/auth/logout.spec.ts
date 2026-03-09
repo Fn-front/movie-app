@@ -22,24 +22,19 @@ test.describe('ログアウト', () => {
     // NextAuth signOut をクライアント側で実行
     await page.evaluate(
       async ({ token }) => {
-        const res = await fetch('/api/auth/signout', {
+        await fetch('/api/auth/signout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
             csrfToken: token,
-            callbackUrl: '/auth/signin',
           }),
-          redirect: 'follow',
         });
-        // レスポンスURLにリダイレクト
-        if (res.url) {
-          window.location.href = res.url;
-        }
       },
       { token: csrfToken },
     );
 
-    // ログインページにリダイレクトされることを確認
+    // セッションが破棄されたことを確認：保護ページへアクセスするとログインへリダイレクト
+    await page.goto('/settings');
     await expect(page).toHaveURL(/\/auth\/signin/, { timeout: 10000 });
   });
 });

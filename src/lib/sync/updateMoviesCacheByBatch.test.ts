@@ -40,11 +40,7 @@ function createFromMock(options: {
   selectError?: { message: string } | null;
   updateError?: { message: string } | null;
 }) {
-  const {
-    selectData = [],
-    selectError = null,
-    updateError = null,
-  } = options;
+  const { selectData = [], selectError = null, updateError = null } = options;
 
   const fromMock = jest.fn().mockReturnValue({
     select: jest.fn().mockResolvedValue({

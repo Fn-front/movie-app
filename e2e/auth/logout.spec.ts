@@ -13,28 +13,13 @@ test.describe('ログアウト', () => {
     await expect(page).toHaveURL('/');
 
     // CSRFトークンをNextAuthのエンドポイントから取得
-    const csrfToken = await page.evaluate(async () => {
-      const res = await fetch('/api/auth/csrf');
-      const data = await res.json();
-      return data.csrfToken as string;
+    const csrfRes = await page.request.get('/api/auth/csrf');
+    const { csrfToken } = await csrfRes.json();
+
+    // page.request はブラウザとCookieを共有し、Set-Cookie も正しく反映される
+    await page.request.post('/api/auth/signout', {
+      form: { csrfToken },
     });
-
-    // NextAuth signOut をクライアント側で実行
-    await page.evaluate(
-      async ({ token }) => {
-        await fetch('/api/auth/signout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            csrfToken: token,
-          }),
-        });
-      },
-      { token: csrfToken },
-    );
-
-    // fetch ではブラウザのCookieが更新されないため、手動でセッションCookieを削除
-    await page.context().clearCookies();
 
     // セッションが破棄されたことを確認：保護ページへアクセスするとログインへリダイレクト
     await page.goto('/settings');

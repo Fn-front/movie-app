@@ -7,18 +7,12 @@ import { test, expect } from '@playwright/test';
 test.describe('設定ページ（認証済み）', () => {
   test('設定画面のセクションが表示される', async ({ page }) => {
     await page.goto('/settings');
-    await expect(
-      page.getByRole('heading', { name: '設定' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: '設定' })).toBeVisible();
     await expect(
       page.getByRole('heading', { name: 'プロフィール' }),
     ).toBeVisible();
-    await expect(
-      page.getByRole('heading', { name: '通知' }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole('heading', { name: '外観' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: '通知' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '外観' })).toBeVisible();
   });
 
   test('パスワード変更フォームが表示される', async ({ page }) => {

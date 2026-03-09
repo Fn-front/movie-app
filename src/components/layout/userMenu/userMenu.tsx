@@ -8,7 +8,11 @@
 import { memo, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
-import { IoSettingsOutline, IoLogOutOutline, IoChevronForward } from 'react-icons/io5';
+import {
+  IoSettingsOutline,
+  IoLogOutOutline,
+  IoChevronForward,
+} from 'react-icons/io5';
 
 import { useUserMenu } from './useUserMenu';
 import styles from './userMenu.module.scss';
@@ -48,7 +52,7 @@ export const UserMenu = memo(function UserMenu() {
       <DropdownMenuPrimitive.Trigger asChild>
         <button
           className={styles.c_user_menu__trigger}
-          aria-label="ユーザーメニューを開く"
+          aria-label='ユーザーメニューを開く'
         >
           {userImage ? (
             <img
@@ -68,15 +72,17 @@ export const UserMenu = memo(function UserMenu() {
       <DropdownMenuPrimitive.Portal>
         <DropdownMenuPrimitive.Content
           className={styles.c_user_menu__content}
-          side="top"
-          align="start"
+          side='top'
+          align='start'
           sideOffset={8}
         >
           <DropdownMenuPrimitive.Label className={styles.c_user_menu__label}>
             {userEmail}
           </DropdownMenuPrimitive.Label>
 
-          <DropdownMenuPrimitive.Separator className={styles.c_user_menu__separator} />
+          <DropdownMenuPrimitive.Separator
+            className={styles.c_user_menu__separator}
+          />
 
           <DropdownMenuPrimitive.Item
             className={styles.c_user_menu__item}
@@ -91,7 +97,9 @@ export const UserMenu = memo(function UserMenu() {
             </span>
           </DropdownMenuPrimitive.Item>
 
-          <DropdownMenuPrimitive.Separator className={styles.c_user_menu__separator} />
+          <DropdownMenuPrimitive.Separator
+            className={styles.c_user_menu__separator}
+          />
 
           <DropdownMenuPrimitive.Item
             className={`${styles.c_user_menu__item} ${styles.c_user_menu__item__destructive}`}

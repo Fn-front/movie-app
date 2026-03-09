@@ -43,9 +43,7 @@ import { SettingsPage } from './settingsPage';
 describe('SettingsPage', () => {
   it('設定見出しが表示される', () => {
     render(<SettingsPage />);
-    expect(
-      screen.getByRole('heading', { name: '設定' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '設定' })).toBeInTheDocument();
   });
 
   it('プロフィールセクションが表示される', () => {
@@ -57,16 +55,12 @@ describe('SettingsPage', () => {
 
   it('通知セクションが表示される', () => {
     render(<SettingsPage />);
-    expect(
-      screen.getByRole('heading', { name: '通知' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '通知' })).toBeInTheDocument();
   });
 
   it('外観セクションが表示される', () => {
     render(<SettingsPage />);
-    expect(
-      screen.getByRole('heading', { name: '外観' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '外観' })).toBeInTheDocument();
   });
 
   it('表示名入力フィールドが表示される', () => {

@@ -36,8 +36,6 @@ export const SettingsPage = memo(function SettingsPage() {
           <Heading level={2}>外観</Heading>
           <ThemeSettings />
         </section>
-
-
       </div>
     </div>
   );

@@ -26,12 +26,24 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Get date info
+        id: date
+        run: echo "week=$(date +%Y-%V)" >> $GITHUB_OUTPUT
+
       - name: cache-node-modules
         uses: actions/cache@v4
         id: node_modules_cache
         with:
           path: '**/node_modules'
           key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
+
+      - name: cache-nextjs-build
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-
 
       - name: npm-install
         if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}

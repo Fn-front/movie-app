@@ -10,11 +10,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import {
-  HTTP_STATUS,
-  ERROR_CODE,
-  WATCHLIST_ERROR_MESSAGES,
-} from '@/constants';
+import { HTTP_STATUS, ERROR_CODE, WATCHLIST_ERROR_MESSAGES } from '@/constants';
 
 export async function DELETE(
   _request: Request,

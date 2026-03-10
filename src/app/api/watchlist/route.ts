@@ -12,11 +12,7 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { watchlistQuerySchema, watchlistAddSchema } from '@/schema/watchlist';
-import {
-  HTTP_STATUS,
-  ERROR_CODE,
-  WATCHLIST_ERROR_MESSAGES,
-} from '@/constants';
+import { HTTP_STATUS, ERROR_CODE, WATCHLIST_ERROR_MESSAGES } from '@/constants';
 
 export async function GET(request: Request) {
   try {
@@ -73,7 +69,9 @@ export async function GET(request: Request) {
     const items = data ?? [];
     const hasMore = items.length > limit;
     const watchlist = hasMore ? items.slice(0, limit) : items;
-    const nextCursor = hasMore ? watchlist[watchlist.length - 1].added_at : null;
+    const nextCursor = hasMore
+      ? watchlist[watchlist.length - 1].added_at
+      : null;
 
     return NextResponse.json(
       {

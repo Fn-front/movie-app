@@ -71,7 +71,9 @@ export function useWatchlist(): UseWatchlistReturn {
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
-      lastPage.data.has_more ? lastPage.data.next_cursor ?? undefined : undefined,
+      lastPage.data.has_more
+        ? (lastPage.data.next_cursor ?? undefined)
+        : undefined,
     enabled: isAuthenticated,
   });
 

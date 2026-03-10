@@ -218,7 +218,7 @@ export function useWatchlist(): UseWatchlistReturn {
 
   const fetchNextPage = useCallback(() => {
     watchlistQuery.fetchNextPage();
-  }, [watchlistQuery.fetchNextPage]);
+  }, [watchlistQuery]);
 
   return useMemo(
     () => ({

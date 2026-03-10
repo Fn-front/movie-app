@@ -4,6 +4,8 @@
 
 import { z } from 'zod';
 
+import { WATCHLIST_DEFAULT_LIMIT, WATCHLIST_MAX_LIMIT } from '@/constants';
+
 /**
  * ウォッチリスト追加のバリデーションスキーマ
  */
@@ -41,8 +43,11 @@ export const watchlistQuerySchema = z.object({
     .number()
     .int()
     .min(1, '取得件数は1以上で指定してください')
-    .max(50, '取得件数は50以下で指定してください')
-    .default(20),
+    .max(
+      WATCHLIST_MAX_LIMIT,
+      `取得件数は${WATCHLIST_MAX_LIMIT}以下で指定してください`,
+    )
+    .default(WATCHLIST_DEFAULT_LIMIT),
 });
 
 /**

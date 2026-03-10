@@ -52,15 +52,15 @@ export async function GET(request: Request) {
       .from('watchlist')
       .select('id, tmdb_movie_id, title, poster_path, release_date, added_at')
       .eq('user_id', session.user.id)
-      .is('deleted_at', null)
-      .order('added_at', { ascending: false })
-      .limit(limit + 1);
+      .is('deleted_at', null);
 
     if (cursor) {
       query = query.lt('added_at', cursor);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await query
+      .order('added_at', { ascending: false })
+      .limit(limit + 1);
 
     if (error) {
       throw error;
@@ -110,8 +110,24 @@ export async function POST(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    // リクエストボディのバリデーション
-    const body = await request.json();
+    // リクエストボディのパース
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.BAD_REQUEST,
+            message: WATCHLIST_ERROR_MESSAGES.INVALID_BODY,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
+    }
+
+    // バリデーション
     const result = watchlistAddSchema.safeParse(body);
 
     if (!result.success) {

@@ -137,9 +137,9 @@ describe('GET /api/watchlist', () => {
       select: () => ({
         eq: () => ({
           is: () => ({
-            order: () => ({
-              limit: () => ({
-                lt: () => ({
+            lt: () => ({
+              order: () => ({
+                limit: () => ({
                   data: [],
                   error: null,
                 }),
@@ -372,6 +372,21 @@ describe('POST /api/watchlist', () => {
     );
 
     expect(response.status).toBe(500);
+  });
+
+  it('不正なJSONで400を返す', async () => {
+    const request = new Request('http://localhost/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'invalid json',
+    });
+
+    const response = await POST(request);
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('BAD_REQUEST');
   });
 
   it('tmdb_movie_idが未指定で400を返す', async () => {

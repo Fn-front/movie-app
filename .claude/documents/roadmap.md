@@ -405,6 +405,36 @@
   - axiosでクライアント側リクエスト
 - [ ] リアルタイム更新実装
 
+### お気に入り機能（設計書: `.claude/documents/favorites-design.md`）
+
+#### Step 1: DB・API基盤（`feature/favorites-api`）
+- [ ] favoritesテーブル作成（Supabase migration）
+  - UUID主キー、論理削除、RLSポリシー設定
+  - UNIQUE制約（user_id, tmdb_movie_id WHERE deleted_at IS NULL）
+- [ ] お気に入り一覧取得API（GET /api/favorites）
+- [ ] お気に入り追加API（POST /api/favorites）
+- [ ] 評価更新API（PATCH /api/favorites/:id）
+- [ ] お気に入り削除API（DELETE /api/favorites/:id）
+- [ ] zodバリデーションスキーマ作成
+- [ ] APIクライアント（src/lib/api/favorites.ts）作成
+- [ ] テストを追加
+
+#### Step 2: お気に入りUI（`feature/favorites-ui`）
+- [ ] FavoriteButtonコンポーネント作成（ハートアイコン）
+- [ ] RatingIndicatorコンポーネント作成（1〜10点、数値インジケーター）
+- [ ] FavoriteRatingModalコンポーネント作成（点数入力モーダル）
+- [ ] MovieTileにFavoriteButton統合
+- [ ] useFavoritesフック作成（TanStack Query）
+- [ ] テストを追加
+
+#### Step 3: お気に入り一覧ページ（`feature/favorites-page`）
+- [ ] ROUTES定数にFAVORITES追加
+- [ ] SideNavに「お気に入り」項目追加
+- [ ] /favorites ページ作成
+- [ ] FavoriteListコンポーネント作成（グリッド表示 + 評価表示）
+- [ ] ソート機能（登録日順 / 評価順）
+- [ ] テストを追加
+
 ### ウォッチリスト追加・削除
 - [ ] ウォッチリスト追加UI実装
 - [ ] ウォッチリスト追加API実装（`POST /api/watchlist`）

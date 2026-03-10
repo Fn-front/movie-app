@@ -72,6 +72,47 @@ test.describe('設定ページ（認証済み）', () => {
   });
 });
 
+test.describe('設定ページ操作', () => {
+  test('表示名フォームが表示される', async ({ page }) => {
+    await page.goto('/settings');
+    await expect(page.getByLabel('表示名')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: '表示名を更新' }),
+    ).toBeVisible();
+  });
+
+  test('表示名が空のままだとバリデーションエラーが表示される', async ({
+    page,
+  }) => {
+    await page.goto('/settings');
+    await page.getByLabel('表示名').clear();
+    await page.getByRole('button', { name: '表示名を更新' }).click();
+
+    await expect(page.getByText(/表示名/)).toBeVisible();
+  });
+
+  test('通知設定のチェックボックスが表示される', async ({ page }) => {
+    await page.goto('/settings');
+    await expect(
+      page.getByRole('checkbox', { name: '公開日リマインダーを受け取る' }),
+    ).toBeVisible();
+  });
+
+  test('テーマ選択が表示される', async ({ page }) => {
+    await page.goto('/settings');
+    await expect(
+      page.getByText('テーマを選択', { exact: false }),
+    ).toBeVisible();
+  });
+
+  test('パスワード変更ページに遷移できる', async ({ page }) => {
+    await page.goto('/settings/change-password');
+    await expect(
+      page.getByRole('heading', { name: 'パスワード変更' }),
+    ).toBeVisible();
+  });
+});
+
 test.describe('設定ページ（未認証）', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 

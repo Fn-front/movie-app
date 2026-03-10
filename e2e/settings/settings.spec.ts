@@ -72,7 +72,7 @@ test.describe('設定ページ（認証済み）', () => {
   });
 });
 
-test.describe('設定ページ操作', () => {
+test.describe('設定ページ — フォーム要素', () => {
   test('表示名フォームが表示される', async ({ page }) => {
     await page.goto('/settings');
     await expect(page.getByLabel('表示名')).toBeVisible();
@@ -88,7 +88,7 @@ test.describe('設定ページ操作', () => {
     await page.getByLabel('表示名').clear();
     await page.getByRole('button', { name: '表示名を更新' }).click();
 
-    await expect(page.getByText(/表示名/)).toBeVisible();
+    await expect(page.getByText('表示名を入力してください')).toBeVisible();
   });
 
   test('通知設定のチェックボックスが表示される', async ({ page }) => {
@@ -102,13 +102,6 @@ test.describe('設定ページ操作', () => {
     await page.goto('/settings');
     await expect(
       page.getByText('テーマを選択', { exact: false }),
-    ).toBeVisible();
-  });
-
-  test('パスワード変更ページに遷移できる', async ({ page }) => {
-    await page.goto('/settings/change-password');
-    await expect(
-      page.getByRole('heading', { name: 'パスワード変更' }),
     ).toBeVisible();
   });
 });

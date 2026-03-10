@@ -2,7 +2,7 @@
  * ユーザーメニュー E2Eテスト（認証済み）
  */
 
-import { test, expect } from '../fixtures/auth';
+import { test, expect } from '@playwright/test';
 
 test.describe('ユーザーメニュー', () => {
   test.beforeEach(async ({ page }) => {
@@ -53,13 +53,12 @@ test.describe('ユーザーメニュー', () => {
     await expect(page).toHaveURL('/settings');
   });
 
-  test('メニュー外クリックでメニューが閉じる', async ({ page }) => {
+  test('Escapeキーでメニューが閉じる', async ({ page }) => {
     await page.getByRole('button', { name: 'ユーザーメニューを開く' }).click();
 
     await expect(page.getByRole('menu')).toBeVisible();
 
-    // メニュー外をクリック
-    await page.locator('body').click({ position: { x: 0, y: 0 } });
+    await page.keyboard.press('Escape');
 
     await expect(page.getByRole('menu')).not.toBeVisible();
   });

@@ -53,6 +53,15 @@ test.describe('ユーザーメニュー', () => {
     await expect(page).toHaveURL('/settings');
   });
 
+  test('メニュー内にメールアドレスが表示される', async ({ page }) => {
+    await page.getByRole('button', { name: 'ユーザーメニューを開く' }).click();
+
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    // DropdownMenu.Labelとして表示されるメールアドレス（@を含むテキスト）
+    await expect(menu.locator('text=@')).toBeVisible();
+  });
+
   test('Escapeキーでメニューが閉じる', async ({ page }) => {
     await page.getByRole('button', { name: 'ユーザーメニューを開く' }).click();
 
@@ -61,5 +70,16 @@ test.describe('ユーザーメニュー', () => {
     await page.keyboard.press('Escape');
 
     await expect(page.getByRole('menu')).not.toBeVisible();
+  });
+});
+
+test.describe('ユーザーメニュー（未認証）', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('未認証時はユーザーメニューが表示されない', async ({ page }) => {
+    await page.goto('/auth/signin');
+    await expect(
+      page.getByRole('button', { name: 'ユーザーメニューを開く' }),
+    ).not.toBeVisible();
   });
 });

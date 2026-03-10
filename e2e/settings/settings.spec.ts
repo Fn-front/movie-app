@@ -98,11 +98,66 @@ test.describe('設定ページ — フォーム要素', () => {
     ).toBeVisible();
   });
 
+  test('表示名の初期値にセッションのユーザー名が入っている', async ({
+    page,
+  }) => {
+    await page.goto('/settings');
+    const nameInput = page.getByLabel('表示名');
+    await expect(nameInput).toBeVisible();
+    await expect(nameInput).not.toHaveValue('');
+  });
+
+  test('通知設定のチェックボックスをトグルできる', async ({ page }) => {
+    await page.goto('/settings');
+    const checkbox = page.getByRole('checkbox', {
+      name: '公開日リマインダーを受け取る',
+    });
+    await expect(checkbox).toBeVisible();
+
+    const initialState = await checkbox.isChecked();
+    await checkbox.click();
+
+    if (initialState) {
+      await expect(checkbox).not.toBeChecked();
+    } else {
+      await expect(checkbox).toBeChecked();
+    }
+  });
+
+  test('通知設定の説明テキストが表示される', async ({ page }) => {
+    await page.goto('/settings');
+    await expect(
+      page.getByText(
+        'ウォッチリストに追加した映画の公開日が近づいたら通知します',
+      ),
+    ).toBeVisible();
+  });
+
   test('テーマ選択が表示される', async ({ page }) => {
     await page.goto('/settings');
     await expect(
       page.getByText('テーマを選択', { exact: false }),
     ).toBeVisible();
+  });
+
+  test('テーマを切り替えるとdata-theme属性が変わる', async ({ page }) => {
+    await page.goto('/settings');
+
+    // テーマセレクトのトリガーをクリック
+    const themeTrigger = page.getByRole('combobox', { name: 'テーマを選択' });
+    await expect(themeTrigger).toBeVisible();
+    await themeTrigger.click();
+
+    // 「ダーク」を選択
+    await page.getByRole('option', { name: 'ダーク' }).click();
+
+    // data-theme属性がdarkに変わる
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  });
+
+  test('テーマの説明テキストが表示される', async ({ page }) => {
+    await page.goto('/settings');
+    await expect(page.getByText('アプリの外観を切り替えます')).toBeVisible();
   });
 });
 

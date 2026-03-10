@@ -73,8 +73,13 @@ test.describe('設定ページ（認証済み）', () => {
 });
 
 test.describe('設定ページ — フォーム要素', () => {
-  test('表示名フォームが表示される', async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
     await page.goto('/settings');
+    // セッション・API取得完了を待つ（見出しが表示されるまで）
+    await expect(page.getByRole('heading', { name: '設定' })).toBeVisible();
+  });
+
+  test('表示名フォームが表示される', async ({ page }) => {
     await expect(page.getByLabel('表示名')).toBeVisible();
     await expect(
       page.getByRole('button', { name: '表示名を更新' }),
@@ -84,7 +89,6 @@ test.describe('設定ページ — フォーム要素', () => {
   test('表示名が空のままだとバリデーションエラーが表示される', async ({
     page,
   }) => {
-    await page.goto('/settings');
     await page.getByLabel('表示名').clear();
     await page.getByRole('button', { name: '表示名を更新' }).click();
 
@@ -92,7 +96,6 @@ test.describe('設定ページ — フォーム要素', () => {
   });
 
   test('通知設定のチェックボックスが表示される', async ({ page }) => {
-    await page.goto('/settings');
     await expect(
       page.getByRole('checkbox', { name: '公開日リマインダーを受け取る' }),
     ).toBeVisible();
@@ -101,14 +104,12 @@ test.describe('設定ページ — フォーム要素', () => {
   test('表示名の初期値にセッションのユーザー名が入っている', async ({
     page,
   }) => {
-    await page.goto('/settings');
     const nameInput = page.getByLabel('表示名');
     await expect(nameInput).toBeVisible();
     await expect(nameInput).not.toHaveValue('');
   });
 
   test('通知設定のチェックボックスをトグルできる', async ({ page }) => {
-    await page.goto('/settings');
     const checkbox = page.getByRole('checkbox', {
       name: '公開日リマインダーを受け取る',
     });
@@ -125,7 +126,6 @@ test.describe('設定ページ — フォーム要素', () => {
   });
 
   test('通知設定の説明テキストが表示される', async ({ page }) => {
-    await page.goto('/settings');
     await expect(
       page.getByText(
         'ウォッチリストに追加した映画の公開日が近づいたら通知します',
@@ -134,16 +134,13 @@ test.describe('設定ページ — フォーム要素', () => {
   });
 
   test('テーマ選択が表示される', async ({ page }) => {
-    await page.goto('/settings');
+    // Selectのラベル「テーマ」が表示される
     await expect(
-      page.getByText('テーマを選択', { exact: false }),
+      page.getByRole('combobox', { name: 'テーマを選択' }),
     ).toBeVisible();
   });
 
   test('テーマを切り替えるとdata-theme属性が変わる', async ({ page }) => {
-    await page.goto('/settings');
-
-    // テーマセレクトのトリガーをクリック
     const themeTrigger = page.getByRole('combobox', { name: 'テーマを選択' });
     await expect(themeTrigger).toBeVisible();
     await themeTrigger.click();
@@ -156,7 +153,6 @@ test.describe('設定ページ — フォーム要素', () => {
   });
 
   test('テーマの説明テキストが表示される', async ({ page }) => {
-    await page.goto('/settings');
     await expect(page.getByText('アプリの外観を切り替えます')).toBeVisible();
   });
 });

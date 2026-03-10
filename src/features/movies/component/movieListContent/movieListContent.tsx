@@ -17,7 +17,7 @@ import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { MovieTile } from '@/features/movies/component/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/features/movies/component/movieTileSkeleton/movieTileSkeleton';
 import { FilterModal } from '@/features/movies/component/filterModal/filterModal';
-import { MovieDetailModal } from '@/features/movies/component/movieDetailModal/movieDetailModal';
+import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 

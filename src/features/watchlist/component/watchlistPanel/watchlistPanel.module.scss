@@ -1,0 +1,33 @@
+@use '@/styles/variables' as *;
+
+.c_watchlist_panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-1;
+  }
+
+  &__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: $spacing-6 $spacing-2;
+    color: $text-secondary;
+    font-size: $font-size-xs;
+    text-align: center;
+  }
+
+  &__loading {
+    display: flex;
+    justify-content: center;
+    padding: $spacing-4;
+  }
+
+  &__sentinel {
+    height: 1px;
+  }
+}

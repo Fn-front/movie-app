@@ -18,7 +18,7 @@ let capturedMovieDetailProps: {
 } | null = null;
 
 jest.mock(
-  '@/features/movies/component/movieDetailModal/movieDetailModal',
+  '@/components/ui/movie/detailModal/movieDetailModal',
   () => ({
     MovieDetailModal: (props: {
       movieId: number | null;

@@ -13,3 +13,8 @@ export const movieKeys = {
 export const filterKeys = {
   saved: ['savedFilter'] as const,
 };
+
+export const watchlistKeys = {
+  all: ['watchlist'] as const,
+  list: () => ['watchlist', 'list'] as const,
+};

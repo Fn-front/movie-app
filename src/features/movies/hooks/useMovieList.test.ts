@@ -4,6 +4,7 @@ import { useMovieList } from './useMovieList';
 import type { UseMovieListOptions } from './useMovieList';
 import type { GetMoviesResponse } from '@/lib/api/movies/movies';
 import { createQueryWrapper } from '@/test/queryTestUtils';
+import { FILTER_ERROR_MESSAGES } from '@/constants/filters';
 
 // --- Mocks ---
 
@@ -754,7 +755,7 @@ describe('useMovieList', () => {
         expect(mockToast).toHaveBeenCalledWith(
           expect.objectContaining({
             title: 'エラー',
-            description: 'フィルター条件の保存中にエラーが発生しました。',
+            description: FILTER_ERROR_MESSAGES.SAVE_FAILED,
             variant: 'error',
           }),
         );

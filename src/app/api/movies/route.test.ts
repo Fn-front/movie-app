@@ -6,6 +6,8 @@
  * 映画一覧API Route テスト
  */
 
+import { MOVIES_ERROR_MESSAGES } from '@/constants/movies';
+
 // --- Mocks ---
 
 // genreCacheをリセットするために、モジュールを都度リロード
@@ -337,7 +339,7 @@ describe('GET /api/movies', () => {
     const json = await response.json();
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('VALIDATION_ERROR');
-    expect(json.error.message).toBe('クエリパラメータが不正です。');
+    expect(json.error.message).toBe(MOVIES_ERROR_MESSAGES.INVALID_QUERY);
   });
 
   it('pageが0の場合、400を返す', async () => {
@@ -1028,9 +1030,7 @@ describe('GET /api/movies', () => {
     const json = await response.json();
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('SERVER_ERROR');
-    expect(json.error.message).toBe(
-      '映画データの取得中にエラーが発生しました。',
-    );
+    expect(json.error.message).toBe(MOVIES_ERROR_MESSAGES.FETCH_FAILED);
   });
 
   // === 予期しない例外 ===

@@ -401,24 +401,24 @@
 ### ウォッチリスト機能
 
 #### Step 1: DB確認・API・フック基盤（`feature/watchlist-api`）
-- [ ] watchlistテーブルの既存migration確認（RLS・インデックス・UNIQUE制約のWHERE deleted_at IS NULL対応）
-- [ ] ウォッチリスト一覧取得API（GET /api/watchlist）
+- [x] watchlistテーブルの既存migration確認（RLS・インデックス・UNIQUE制約のWHERE deleted_at IS NULL対応）
+- [x] ウォッチリスト一覧取得API（GET /api/watchlist）
   - NextAuth.jsで認証チェック
   - カーソルベースページング（無限スクロール用、20件ずつ）
   - ソート: 追加日順（新しい順）
-- [ ] ウォッチリスト追加API（POST /api/watchlist）
+- [x] ウォッチリスト追加API（POST /api/watchlist）
   - NextAuth.jsで認証チェック
   - 重複チェック（409 Conflict）
-- [ ] ウォッチリスト削除API（DELETE /api/watchlist/:id）
+- [x] ウォッチリスト削除API（DELETE /api/watchlist/:id）
   - NextAuth.jsで認証チェック
   - 論理削除（deleted_at更新）
-- [ ] zodバリデーションスキーマ作成
-- [ ] APIクライアント（src/lib/api/watchlist.ts）作成
-- [ ] useWatchlistフック作成（TanStack Query）
+- [x] zodバリデーションスキーマ作成
+- [x] APIクライアント（src/lib/api/watchlist.ts）作成
+- [x] useWatchlistフック作成（TanStack Query）
   - useInfiniteQuery（サイドバー一覧用、20件ずつ）
   - useMutation（追加・削除、楽観的UI更新）
   - ウォッチリスト状態チェック（キャッシュから判定）
-- [ ] テストを追加
+- [x] テストを追加
   - API Routeテスト（/api/watchlist）
     - GET: 認証チェック・ページング・ソート・deleted_atフィルタ
     - POST: 認証チェック・正常追加・重複409・バリデーションエラー

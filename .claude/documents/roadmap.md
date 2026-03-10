@@ -398,16 +398,87 @@
   - 通知設定
   - テーマ切り替え
 
-### ウォッチリスト一覧
-- [ ] WatchlistItemコンポーネント実装
-- [ ] ウォッチリスト一覧取得API実装（`/api/watchlist`）
+### ウォッチリスト機能
+
+#### Step 1: DB確認・API・フック基盤（`feature/watchlist-api`）
+- [ ] watchlistテーブルの既存migration確認（RLS・インデックス・UNIQUE制約のWHERE deleted_at IS NULL対応）
+- [ ] ウォッチリスト一覧取得API（GET /api/watchlist）
   - NextAuth.jsで認証チェック
-  - axiosでクライアント側リクエスト
-- [ ] リアルタイム更新実装
+  - カーソルベースページング（無限スクロール用、20件ずつ）
+  - ソート: 追加日順（新しい順）
+- [ ] ウォッチリスト追加API（POST /api/watchlist）
+  - NextAuth.jsで認証チェック
+  - 重複チェック（409 Conflict）
+- [ ] ウォッチリスト削除API（DELETE /api/watchlist/:id）
+  - NextAuth.jsで認証チェック
+  - 論理削除（deleted_at更新）
+- [ ] zodバリデーションスキーマ作成
+- [ ] APIクライアント（src/lib/api/watchlist.ts）作成
+- [ ] useWatchlistフック作成（TanStack Query）
+  - useInfiniteQuery（サイドバー一覧用、20件ずつ）
+  - useMutation（追加・削除、楽観的UI更新）
+  - ウォッチリスト状態チェック（キャッシュから判定）
+- [ ] テストを追加
+  - API Routeテスト（/api/watchlist）
+    - GET: 認証チェック・ページング・ソート・deleted_atフィルタ
+    - POST: 認証チェック・正常追加・重複409・バリデーションエラー
+    - DELETE: 認証チェック・正常削除・404（存在しない/他ユーザー/削除済み）
+  - zodスキーマテスト（watchlistAddSchema等）
+  - APIクライアントテスト（getWatchlist・addWatchlist・removeWatchlist）
+  - useWatchlistフックテスト
+    - 一覧取得（useInfiniteQuery）・次ページ読み込み
+    - 追加mutation・楽観的更新・エラー時ロールバック
+    - 削除mutation・楽観的更新・エラー時ロールバック
+    - ウォッチリスト状態チェック（isInWatchlist）
+
+#### Step 2: サイドバーウォッチリスト表示（`feature/watchlist-sidebar`）
+- [ ] MovieDetailModalを共通UIコンポーネントに移動（features/movies/component/ → components/ui/movie/detailModal/）
+  - 現在movieListContentからのみ使用されているが、WatchlistPanel・お気に入り等からも使うため共通化
+  - 既存のimportパスを更新
+- [ ] WatchlistItemコンポーネント作成（小ポスター + タイトル + 削除ボタン、クリックで映画詳細モーダル表示）
+- [ ] WatchlistPanelコンポーネント作成（サイドバー内、高さ300px、スクロール + 無限読み込み + MovieDetailModal統合）
+- [ ] 既存Sidebarのwatchlist propにWatchlistPanelを渡して統合（スロット・見出しは実装済み）
+- [ ] 空状態の表示（「ウォッチリストに映画を追加しましょう」）
+- [ ] テストを追加
+  - WatchlistItemテスト
+    - レンダリング（ポスター・タイトル・削除ボタン表示）
+    - アイテムクリック時にonClick（映画詳細モーダル表示用）コールバック
+    - 削除ボタンクリック時のコールバック（onClickを発火しない、stopPropagation）
+    - ポスター画像なし時のフォールバック表示
+    - aria属性の確認
+  - WatchlistPanelテスト
+    - 一覧表示（複数件）
+    - 空状態メッセージ表示
+    - ローディング状態表示
+    - スクロール時の追加読み込みトリガー（Intersection Observer）
+
+#### Step 3: MovieTileウォッチリスト統合（`feature/watchlist-tile`）
+- [ ] WatchlistAddButtonコンポーネント作成（プラスアイコン / チェックアイコン切替）
+- [ ] MovieTileにWatchlistAddButton統合（ポスター上にオーバーレイ表示）
+  - event.stopPropagation()で詳細モーダルと干渉しない
+- [ ] 映画詳細モーダル内にもウォッチリスト追加/削除ボタン配置
+- [ ] 楽観的UI更新（追加/削除時に即座にUI反映、失敗時にロールバック）
+- [ ] Toast通知（「ウォッチリストに追加しました」「ウォッチリストから削除しました」）
+- [ ] テストを追加
+  - WatchlistAddButtonテスト
+    - 未追加時: プラスアイコン表示・クリックで追加コールバック
+    - 追加済み時: チェックアイコン表示・クリックで削除コールバック
+    - event.stopPropagation()が呼ばれることの確認
+    - aria-label切替（「ウォッチリストに追加」/「ウォッチリストから削除」）
+  - MovieTile統合テスト
+    - WatchlistAddButtonがポスター上に表示される
+    - ボタンクリックがMovieTileのonClickを発火しない
+  - 映画詳細モーダル統合テスト
+    - ウォッチリスト追加/削除ボタンの表示・動作
+  - E2Eテスト（Playwright）
+    - MovieTileからウォッチリスト追加 → サイドバーに反映
+    - サイドバーから削除 → MovieTileのアイコンが戻る
+    - 詳細モーダルからウォッチリスト追加/削除
+    - Toast通知の表示確認
 
 ### お気に入り機能（設計書: `.claude/documents/favorites-design.md`）
 
-#### Step 1: DB・API基盤（`feature/favorites-api`）
+#### Step 4: DB・API基盤（`feature/favorites-api`）
 - [ ] favoritesテーブル作成（Supabase migration）
   - UUID主キー、論理削除、RLSポリシー設定
   - UNIQUE制約（user_id, tmdb_movie_id WHERE deleted_at IS NULL）
@@ -419,7 +490,7 @@
 - [ ] APIクライアント（src/lib/api/favorites.ts）作成
 - [ ] テストを追加
 
-#### Step 2: お気に入りUI（`feature/favorites-ui`）
+#### Step 5: お気に入りUI（`feature/favorites-ui`）
 - [ ] FavoriteButtonコンポーネント作成（ハートアイコン）
 - [ ] RatingIndicatorコンポーネント作成（1〜10点、数値インジケーター）
 - [ ] FavoriteRatingModalコンポーネント作成（点数入力モーダル）
@@ -427,24 +498,13 @@
 - [ ] useFavoritesフック作成（TanStack Query）
 - [ ] テストを追加
 
-#### Step 3: お気に入り一覧ページ（`feature/favorites-page`）
+#### Step 6: お気に入り一覧ページ（`feature/favorites-page`）
 - [ ] ROUTES定数にFAVORITES追加
 - [ ] SideNavに「お気に入り」項目追加
 - [ ] /favorites ページ作成
 - [ ] FavoriteListコンポーネント作成（グリッド表示 + 評価表示）
 - [ ] ソート機能（登録日順 / 評価順）
 - [ ] テストを追加
-
-### ウォッチリスト追加・削除
-- [ ] ウォッチリスト追加UI実装
-- [ ] ウォッチリスト追加API実装（`POST /api/watchlist`）
-  - NextAuth.jsで認証チェック
-  - axiosでクライアント側リクエスト
-- [ ] ウォッチリスト削除API実装（`DELETE /api/watchlist/:id`）
-  - NextAuth.jsで認証チェック
-  - axiosでクライアント側リクエスト
-- [ ] 楽観的UI更新
-- [ ] エラーハンドリング（axios error handling）
 
 ---
 

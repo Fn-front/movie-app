@@ -54,9 +54,9 @@
 | notes | TEXT | NULL | - | メモ（将来的に使用） |
 
 **インデックス:**
-- `user_id, tmdb_movie_id` (UNIQUE) - 重複登録防止
+- `user_id, tmdb_movie_id` (UNIQUE, WHERE deleted_at IS NULL) - 重複登録防止（論理削除済みは対象外、再追加可能）
 - `user_id` - ユーザー検索の高速化
-- `added_at` - 追加日順ソート用
+- `added_at` - 追加日順ソート用（カーソルベースページングのカーソル）
 - `deleted_at` - 論理削除フィルタ用
 
 **外部キー:**

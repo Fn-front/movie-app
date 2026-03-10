@@ -103,6 +103,22 @@ export const ROUTES = {
 } as const;
 
 /**
+ * エラーメッセージ生成ヘルパー
+ */
+export const errorMessage = {
+  /** 取得失敗: 「{対象}の取得に失敗しました」 */
+  fetchFailed: (target: string) => `${target}の取得に失敗しました`,
+  /** 保存失敗: 「{対象}の保存に失敗しました」 */
+  saveFailed: (target: string) => `${target}の保存に失敗しました`,
+  /** 追加失敗: 「{対象}への追加に失敗しました」 */
+  addFailed: (target: string) => `${target}への追加に失敗しました`,
+  /** 削除失敗: 「{対象}からの削除に失敗しました」 */
+  removeFailed: (target: string) => `${target}からの削除に失敗しました`,
+  /** バリデーションエラー: 「{対象}が不正です」 */
+  invalid: (target: string) => `${target}が不正です`,
+} as const;
+
+/**
  * エラーメッセージ
  */
 export const ERROR_MESSAGES = {

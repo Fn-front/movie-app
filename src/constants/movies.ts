@@ -2,6 +2,8 @@
  * 映画関連の定数
  */
 
+import { errorMessage } from './common';
+
 /**
  * ソート選択肢
  */
@@ -119,7 +121,7 @@ export const BATCH_UPDATE_SIZE = 100;
  */
 export const MOVIES_ERROR_MESSAGES = {
   /** クエリパラメータ不正 */
-  INVALID_QUERY: 'クエリパラメータが不正です。',
+  INVALID_QUERY: errorMessage.invalid('クエリパラメータ'),
   /** 映画データ取得失敗 */
-  FETCH_FAILED: '映画データの取得中にエラーが発生しました。',
+  FETCH_FAILED: errorMessage.fetchFailed('映画データ'),
 } as const;

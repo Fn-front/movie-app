@@ -46,7 +46,7 @@ jest.mock('next/navigation', () => ({
 jest.mock(
   '@/features/watchlist/component/watchlistPanel/watchlistPanel',
   () => ({
-    WatchlistPanel: () => <div data-testid="watchlist-panel">WatchlistPanel</div>,
+    WatchlistPanel: () => <div data-testid='watchlist-panel'>WatchlistPanel</div>,
   }),
 );
 

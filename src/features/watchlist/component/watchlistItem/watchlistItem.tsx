@@ -6,6 +6,7 @@
 'use client';
 
 import { memo, useCallback } from 'react';
+import Image from 'next/image';
 
 import { getTMDbImageUrl } from '@/utils/image';
 import type { WatchlistItem as WatchlistItemType } from '@/lib/api/watchlist/watchlist';
@@ -77,11 +78,12 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
       aria-label={`${item.title}の詳細を表示`}
     >
       {posterUrl ? (
-        <img
+        <Image
           className={styles.c_watchlist_item__poster}
           src={posterUrl}
           alt={`${item.title}のポスター`}
-          loading='lazy'
+          width={36}
+          height={54}
         />
       ) : (
         <div

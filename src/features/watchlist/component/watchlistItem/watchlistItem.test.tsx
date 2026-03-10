@@ -186,6 +186,7 @@ describe('WatchlistItem', () => {
     );
 
     const img = screen.getByAltText('テスト映画のポスター');
-    expect(img).toHaveAttribute('src', expect.stringContaining('/abc.jpg'));
+    expect(img).toHaveAttribute('src');
+    expect(img.getAttribute('src')).toContain('abc.jpg');
   });
 });

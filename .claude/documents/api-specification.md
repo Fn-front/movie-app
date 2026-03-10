@@ -315,9 +315,17 @@
 ## ウォッチリストAPI
 
 ### GET /api/watchlist
-ユーザーのウォッチリスト取得
+ユーザーのウォッチリスト取得（カーソルベースページング）
 
 **認証**: 必須
+
+**ページング方式**: カーソルベース（added_at基準）
+- ウォッチリストは追加・削除が頻繁に発生するため、オフセットベースだとページずれが起きる
+- added_at（降順）をカーソルとして使用し、安定したページングを実現
+
+**Query Parameters:**
+- `cursor` (optional): カーソル値（前回レスポンスのnext_cursor、ISO 8601形式）
+- `limit` (optional): 取得件数（デフォルト: 20、最大: 50）
 
 **Response (200 OK):**
 ```json
@@ -328,18 +336,21 @@
       {
         "id": "watchlist-uuid",
         "tmdb_movie_id": 12345,
-        "added_at": "2025-01-29T10:00:00Z",
-        "movie": {
-          "id": 12345,
-          "title": "映画タイトル",
-          "poster_path": "/path/to/poster.jpg",
-          "release_date": "2025-01-29"
-        }
+        "title": "映画タイトル",
+        "poster_path": "/path/to/poster.jpg",
+        "release_date": "2025-01-29",
+        "added_at": "2025-01-29T10:00:00Z"
       }
-    ]
+    ],
+    "next_cursor": "2025-01-28T15:00:00Z",
+    "has_more": true
   }
 }
 ```
+
+**備考:**
+- `next_cursor` が `null` の場合、次ページなし（`has_more: false`）
+- レスポンスは `added_at` 降順（新しい順）で固定
 
 ---
 
@@ -351,9 +362,18 @@
 **Request Body:**
 ```json
 {
-  "tmdb_movie_id": 12345
+  "tmdb_movie_id": 12345,
+  "title": "映画タイトル",
+  "poster_path": "/path/to/poster.jpg",
+  "release_date": "2025-01-29"
 }
 ```
+
+**Validation (zod):**
+- `tmdb_movie_id`: 正の整数、必須
+- `title`: 文字列、必須
+- `poster_path`: 文字列、任意
+- `release_date`: 文字列（日付形式）、任意
 
 **Response (201 Created):**
 ```json
@@ -363,12 +383,16 @@
   "data": {
     "id": "watchlist-uuid",
     "tmdb_movie_id": 12345,
+    "title": "映画タイトル",
+    "poster_path": "/path/to/poster.jpg",
+    "release_date": "2025-01-29",
     "added_at": "2025-01-29T10:00:00Z"
   }
 }
 ```
 
 **Error Responses:**
+- `400 Bad Request`: バリデーションエラー
 - `401 Unauthorized`: 認証が必要
 - `409 Conflict`: すでにウォッチリストに追加済み
 

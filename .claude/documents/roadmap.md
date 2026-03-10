@@ -432,14 +432,14 @@
     - ウォッチリスト状態チェック（isInWatchlist）
 
 #### Step 2: サイドバーウォッチリスト表示（`feature/watchlist-sidebar`）
-- [ ] MovieDetailModalを共通UIコンポーネントに移動（features/movies/component/ → components/ui/movie/detailModal/）
+- [x] MovieDetailModalを共通UIコンポーネントに移動（features/movies/component/ → components/ui/movie/detailModal/）
   - 現在movieListContentからのみ使用されているが、WatchlistPanel・お気に入り等からも使うため共通化
   - 既存のimportパスを更新
-- [ ] WatchlistItemコンポーネント作成（小ポスター + タイトル + 削除ボタン、クリックで映画詳細モーダル表示）
-- [ ] WatchlistPanelコンポーネント作成（サイドバー内、高さ300px、スクロール + 無限読み込み + MovieDetailModal統合）
-- [ ] 既存Sidebarのwatchlist propにWatchlistPanelを渡して統合（スロット・見出しは実装済み）
-- [ ] 空状態の表示（「ウォッチリストに映画を追加しましょう」）
-- [ ] テストを追加
+- [x] WatchlistItemコンポーネント作成（小ポスター + タイトル + 削除ボタン、クリックで映画詳細モーダル表示）
+- [x] WatchlistPanelコンポーネント作成（サイドバー内、高さ300px、スクロール + 無限読み込み + MovieDetailModal統合）
+- [x] 既存Sidebarのwatchlist propにWatchlistPanelを渡して統合（スロット・見出しは実装済み）
+- [x] 空状態の表示（「ウォッチリストに映画を追加しましょう」）
+- [x] テストを追加
   - WatchlistItemテスト
     - レンダリング（ポスター・タイトル・削除ボタン表示）
     - アイテムクリック時にonClick（映画詳細モーダル表示用）コールバック

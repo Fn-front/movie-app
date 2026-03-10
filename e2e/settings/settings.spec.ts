@@ -80,7 +80,7 @@ test.describe('設定ページ — フォーム要素', () => {
   });
 
   test('表示名フォームが表示される', async ({ page }) => {
-    await expect(page.getByLabel('表示名')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: '表示名' })).toBeVisible();
     await expect(
       page.getByRole('button', { name: '表示名を更新' }),
     ).toBeVisible();
@@ -89,7 +89,7 @@ test.describe('設定ページ — フォーム要素', () => {
   test('表示名が空のままだとバリデーションエラーが表示される', async ({
     page,
   }) => {
-    await page.getByLabel('表示名').clear();
+    await page.getByRole('textbox', { name: '表示名' }).clear();
     await page.getByRole('button', { name: '表示名を更新' }).click();
 
     await expect(page.getByText('表示名を入力してください')).toBeVisible();
@@ -104,7 +104,7 @@ test.describe('設定ページ — フォーム要素', () => {
   test('表示名の初期値にセッションのユーザー名が入っている', async ({
     page,
   }) => {
-    const nameInput = page.getByLabel('表示名');
+    const nameInput = page.getByRole('textbox', { name: '表示名' });
     await expect(nameInput).toBeVisible();
     await expect(nameInput).not.toHaveValue('');
   });

@@ -17,29 +17,26 @@ let capturedMovieDetailProps: {
   onClose: () => void;
 } | null = null;
 
-jest.mock(
-  '@/components/ui/movie/detailModal/movieDetailModal',
-  () => ({
-    MovieDetailModal: (props: {
-      movieId: number | null;
-      showFinancialInfo: boolean;
-      onClose: () => void;
-    }) => {
-      capturedMovieDetailProps = props;
-      return props.movieId !== null ? (
-        <div data-testid='movie-detail-modal'>
-          <span data-testid='detail-movie-id'>{props.movieId}</span>
-          <span data-testid='detail-financial'>
-            {String(props.showFinancialInfo)}
-          </span>
-          <button data-testid='close-detail' onClick={props.onClose}>
-            閉じる
-          </button>
-        </div>
-      ) : null;
-    },
-  }),
-);
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: (props: {
+    movieId: number | null;
+    showFinancialInfo: boolean;
+    onClose: () => void;
+  }) => {
+    capturedMovieDetailProps = props;
+    return props.movieId !== null ? (
+      <div data-testid='movie-detail-modal'>
+        <span data-testid='detail-movie-id'>{props.movieId}</span>
+        <span data-testid='detail-financial'>
+          {String(props.showFinancialInfo)}
+        </span>
+        <button data-testid='close-detail' onClick={props.onClose}>
+          閉じる
+        </button>
+      </div>
+    ) : null;
+  },
+}));
 
 // --- Helpers ---
 

@@ -147,7 +147,10 @@ test.describe('設定ページ — フォーム要素', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ success: true, message: '設定を更新しました' }),
+          body: JSON.stringify({
+            success: true,
+            message: '設定を更新しました',
+          }),
         });
       } else {
         await route.continue();

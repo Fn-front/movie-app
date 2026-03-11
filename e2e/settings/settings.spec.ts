@@ -161,8 +161,12 @@ test.describe('設定ページ — フォーム要素', () => {
     await expect(themeTrigger).toBeVisible();
     await themeTrigger.click();
 
-    // 「ダーク」を選択
-    await page.getByRole('option', { name: 'ダーク' }).click();
+    // ドロップダウン（listbox）が開くのを待つ
+    const listbox = page.getByRole('listbox');
+    await expect(listbox).toBeVisible();
+
+    // 「ダーク」を選択（listboxスコープ内で検索）
+    await listbox.getByText('ダーク').click();
 
     // data-theme属性がdarkに変わる
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');

@@ -98,6 +98,8 @@ export const ROUTES = {
   UPCOMING: '/movies/upcoming',
   /** 公開中 */
   NOW_SHOWING: '/movies/now-showing',
+  /** お気に入り */
+  FAVORITES: '/favorites',
   /** 映画詳細 */
   MOVIE_DETAIL: (id: string | number) => `/movies/${id}`,
 } as const;

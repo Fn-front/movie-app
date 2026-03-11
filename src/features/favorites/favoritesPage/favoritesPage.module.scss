@@ -1,0 +1,33 @@
+@use '@/styles/variables' as *;
+
+.c_favorites_page {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $spacing-4;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: $font-size-2xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+  }
+
+  &__controls {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+    flex-shrink: 0;
+  }
+
+  &__sort {
+    width: 180px;
+    flex-shrink: 0;
+  }
+}

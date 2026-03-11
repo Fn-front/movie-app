@@ -1,0 +1,78 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_favorite_list {
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: $spacing-4;
+  }
+
+  &__empty {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    font-size: $font-size-lg;
+    color: $text-secondary;
+  }
+}
+
+.c_favorite_tile {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: $transition-all;
+
+  &__poster {
+    position: relative;
+    aspect-ratio: 2 / 3;
+    overflow: hidden;
+    background-color: $background-secondary;
+  }
+
+  &__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &__no_image {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    font-size: $font-size-sm;
+    color: $text-disabled;
+  }
+
+  &__favorite_button {
+    position: absolute;
+    top: $spacing-2;
+    right: $spacing-2;
+  }
+
+  &__info {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: $spacing-1;
+    height: 100%;
+    padding: $spacing-3;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+    line-height: $line-height-tight;
+
+    @include text-truncate-multiline(2);
+  }
+
+  &__rating {
+    margin-top: auto;
+  }
+}

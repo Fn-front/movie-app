@@ -625,16 +625,16 @@
     - FavoriteButton表示・動作確認
 
 #### Step 6: お気に入り一覧ページ（`feature/favorites-page`）
-- [ ] ROUTES定数にFAVORITES追加
-- [ ] SideNavに「お気に入り」項目追加
-- [ ] /favorites ページ作成（メタデータ設定）
-- [ ] FavoriteListコンポーネント作成
+- [x] ROUTES定数にFAVORITES追加
+- [x] SideNavに「お気に入り」項目追加
+- [x] /favorites ページ作成（メタデータ設定）
+- [x] FavoriteListコンポーネント作成
   - MovieTileと同様のグリッドレイアウト
   - 各タイルにRatingIndicator（表示モード）を表示
   - 空状態の表示（「お気に入りの映画を追加しましょう」）
-- [ ] ソートSelect（登録日順 / 評価順）
-- [ ] useFavoritesPageフック作成（ソート状態管理 + useFavorites統合）
-- [ ] 結合テスト
+- [x] ソートSelect（登録日順 / 評価順）
+- [x] useFavoritesPageフック作成（ソート状態管理 + useFavorites統合）
+- [x] 結合テスト
   - FavoriteListテスト
     - 一覧表示（複数件・グリッド）
     - 空状態メッセージ表示
@@ -643,7 +643,7 @@
   - favoritesPageテスト
     - ソート切替（登録日順 ↔ 評価順）
     - FavoriteButtonクリック → RatingModal表示
-- [ ] E2Eテスト（Playwright）— クリティカルユーザーフローのみ
+- [x] E2Eテスト（Playwright）— クリティカルユーザーフローのみ
   - MovieTileからお気に入り追加（評価選択 → 登録）→ ハートアイコン変化
   - お気に入り一覧ページで表示確認 → 評価変更 → 削除
   - 詳細モーダルからお気に入り追加/削除

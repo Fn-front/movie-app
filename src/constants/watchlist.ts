@@ -2,7 +2,7 @@
  * ウォッチリスト関連の定数
  */
 
-import { errorMessage } from './common';
+import { errorMessage, successMessage } from './common';
 
 /**
  * ウォッチリストのデフォルト取得件数
@@ -27,4 +27,12 @@ export const WATCHLIST_ERROR_MESSAGES = {
   NOT_FOUND: 'ウォッチリストに見つかりません',
   INVALID_QUERY: errorMessage.invalid('クエリパラメータ'),
   INVALID_BODY: errorMessage.invalid('入力内容'),
+} as const;
+
+/**
+ * ウォッチリスト成功メッセージ
+ */
+export const WATCHLIST_SUCCESS_MESSAGES = {
+  ADDED: successMessage.added(TARGET),
+  REMOVED: successMessage.removed(TARGET),
 } as const;

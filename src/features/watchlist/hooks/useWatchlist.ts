@@ -22,7 +22,11 @@ import type {
 } from '@/lib/api/watchlist/watchlist';
 import type { WatchlistAddFormData } from '@/schema/watchlist';
 import { useToast } from '@/hooks/useToast';
-import { watchlistKeys, WATCHLIST_DEFAULT_LIMIT } from '@/constants';
+import {
+  watchlistKeys,
+  WATCHLIST_DEFAULT_LIMIT,
+  WATCHLIST_ERROR_MESSAGES,
+} from '@/constants';
 
 /**
  * useWatchlistフックの返り値
@@ -125,7 +129,7 @@ export function useWatchlist(): UseWatchlistReturn {
       }
       toast({
         title: 'エラー',
-        description: 'ウォッチリストへの追加に失敗しました',
+        description: WATCHLIST_ERROR_MESSAGES.ADD_FAILED,
         variant: 'error',
       });
     },
@@ -172,7 +176,7 @@ export function useWatchlist(): UseWatchlistReturn {
       }
       toast({
         title: 'エラー',
-        description: 'ウォッチリストからの削除に失敗しました',
+        description: WATCHLIST_ERROR_MESSAGES.REMOVE_FAILED,
         variant: 'error',
       });
     },

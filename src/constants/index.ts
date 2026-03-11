@@ -7,4 +7,5 @@ export * from './common';
 export * from './filters';
 export * from './movies';
 export * from './queryKeys';
+export * from './user';
 export * from './watchlist';

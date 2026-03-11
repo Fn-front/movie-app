@@ -13,7 +13,13 @@ import {
 } from '@/helpers/supabase';
 import { updateSettingsSchema } from '@/schema/user';
 import type { UserSettings } from '@/schema/user';
-import { HTTP_STATUS, ERROR_CODE, SUPABASE_ERROR_CODE } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  SUPABASE_ERROR_CODE,
+  SETTINGS_ERROR_MESSAGES,
+  SETTINGS_SUCCESS_MESSAGES,
+} from '@/constants';
 
 /** デフォルトのユーザー設定 */
 const DEFAULT_SETTINGS: UserSettings = {
@@ -71,7 +77,7 @@ export async function GET() {
         success: false,
         error: {
           code: ERROR_CODE.SERVER_ERROR,
-          message: '設定の取得に失敗しました',
+          message: SETTINGS_ERROR_MESSAGES.FETCH_FAILED,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
@@ -132,7 +138,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       {
         success: true,
-        message: '設定を更新しました',
+        message: SETTINGS_SUCCESS_MESSAGES.UPDATED,
       },
       { status: HTTP_STATUS.OK },
     );
@@ -144,7 +150,7 @@ export async function PUT(request: Request) {
         success: false,
         error: {
           code: ERROR_CODE.SERVER_ERROR,
-          message: '設定の更新に失敗しました',
+          message: SETTINGS_ERROR_MESSAGES.UPDATE_FAILED,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

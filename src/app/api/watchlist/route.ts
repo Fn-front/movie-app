@@ -12,7 +12,12 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { watchlistQuerySchema, watchlistAddSchema } from '@/schema/watchlist';
-import { HTTP_STATUS, ERROR_CODE, WATCHLIST_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  WATCHLIST_ERROR_MESSAGES,
+  WATCHLIST_SUCCESS_MESSAGES,
+} from '@/constants';
 
 export async function GET(request: Request) {
   try {
@@ -186,7 +191,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: true,
-        message: 'ウォッチリストに追加しました',
+        message: WATCHLIST_SUCCESS_MESSAGES.ADDED,
         data: inserted,
       },
       { status: HTTP_STATUS.CREATED },

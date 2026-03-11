@@ -10,6 +10,14 @@ jest.mock('@/hooks/useIntersectionObserver', () => ({
   useIntersectionObserver: () => ({ current: null }),
 }));
 
+jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
+  useWatchlistToggle: () => ({
+    isInWatchlist: jest.fn().mockReturnValue(false),
+    toggleWatchlist: jest.fn(),
+    isToggling: false,
+  }),
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let capturedMovieDetailProps: {
   movieId: number | null;

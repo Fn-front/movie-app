@@ -14,11 +14,12 @@ import { Button } from '@/components/ui/button/button';
 import { FilterIcon } from '@/components/icons/filterIcon/filterIcon';
 import { Loading } from '@/components/ui/loading/loading';
 import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
-import { MovieTile } from '@/features/movies/component/movieTile/movieTile';
-import { MovieTileSkeleton } from '@/features/movies/component/movieTileSkeleton/movieTileSkeleton';
+import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
+import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
 import { FilterModal } from '@/features/movies/component/filterModal/filterModal';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
+import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 
 import styles from './movieListContent.module.scss';
@@ -57,6 +58,8 @@ export const MovieListContent = memo<MovieListContentProps>(
       handleFilterModalOpen,
       handleFilterModalClose,
     } = movieList;
+
+    const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
 
     const sortOptions = useMemo(
       () =>
@@ -157,6 +160,9 @@ export const MovieListContent = memo<MovieListContentProps>(
                 movie={movie}
                 genres={genres}
                 onClick={handleMovieTileClick}
+                isInWatchlist={isInWatchlist(movie.id)}
+                onWatchlistToggle={toggleWatchlist}
+                watchlistDisabled={isToggling}
               />
             ))
           )}

@@ -47,6 +47,19 @@
     }
   }
 
+  &__watchlist_button {
+    position: absolute;
+    top: $spacing-2;
+    right: $spacing-2;
+    opacity: 0;
+    transition: opacity $duration-fast $ease-in-out;
+  }
+
+  &:hover &__watchlist_button,
+  &:focus-within &__watchlist_button {
+    opacity: 1;
+  }
+
   &__revival {
     position: absolute;
     top: $spacing-2;
@@ -58,7 +71,7 @@
     padding: 0 $spacing-2;
     font-size: $font-size-xs;
     font-weight: $font-weight-bold;
-    color: #ffffff;
+    color: $text-inverse;
     background-color: $secondary-600;
     border-radius: $border-radius-md;
   }

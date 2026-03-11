@@ -10,7 +10,12 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { HTTP_STATUS, ERROR_CODE, WATCHLIST_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  WATCHLIST_ERROR_MESSAGES,
+  WATCHLIST_SUCCESS_MESSAGES,
+} from '@/constants';
 
 export async function DELETE(
   _request: Request,
@@ -53,7 +58,7 @@ export async function DELETE(
     return NextResponse.json(
       {
         success: true,
-        message: 'ウォッチリストから削除しました',
+        message: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
       },
       { status: HTTP_STATUS.OK },
     );

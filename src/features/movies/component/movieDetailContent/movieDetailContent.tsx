@@ -5,10 +5,12 @@
 
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 
 import { Loading } from '@/components/ui/loading/loading';
+import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
+import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import {
   getTMDbPosterUrl,
   getTMDbBackdropUrl,
@@ -120,6 +122,22 @@ ProviderCategory.displayName = 'ProviderCategory';
 export const MovieDetailContent = memo<MovieDetailContentProps>(
   function MovieDetailContent({ movieId, showFinancialInfo = false }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
+    const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
+
+    const inWatchlist = useMemo(
+      () => isInWatchlist(movieId),
+      [isInWatchlist, movieId],
+    );
+
+    const handleWatchlistToggle = useCallback(() => {
+      if (!movie) return;
+      toggleWatchlist({
+        id: movieId,
+        title: movie.title,
+        poster_path: movie.poster_path ?? null,
+        release_date: movie.release_date ?? null,
+      });
+    }, [movie, movieId, toggleWatchlist]);
 
     const posterUrl = useMemo(
       () => getTMDbPosterUrl(movie?.poster_path),
@@ -195,7 +213,15 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
             )}
 
             <div className={styles.c_movie_detail__info}>
-              <h3 className={styles.c_movie_detail__title}>{movie.title}</h3>
+              <div className={styles.c_movie_detail__title_row}>
+                <h3 className={styles.c_movie_detail__title}>{movie.title}</h3>
+                <WatchlistAddButton
+                  isInWatchlist={inWatchlist}
+                  onClick={handleWatchlistToggle}
+                  disabled={isToggling}
+                  size='md'
+                />
+              </div>
               {movie.original_title !== movie.title && (
                 <p className={styles.c_movie_detail__original_title}>
                   {movie.original_title}

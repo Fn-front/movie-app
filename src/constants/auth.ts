@@ -28,6 +28,8 @@ export const AUTH_ERROR_MESSAGES = {
   PASSWORD_CHANGE_FAILED: 'パスワードの変更に失敗しました。',
   /** 未認証エラー */
   UNAUTHORIZED: '認証が必要です。ログインしてください。',
+  /** 認証失敗（Cron等のBearer認証） */
+  AUTH_FAILED: '認証に失敗しました。',
   /** レート制限超過 */
   RATE_LIMIT_EXCEEDED: 'しばらく時間をおいてから再度お試しください。',
   /** 新旧パスワード同一 */

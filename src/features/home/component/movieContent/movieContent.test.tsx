@@ -6,6 +6,13 @@ jest.mock('@/features/home/hooks/useHome');
 jest.mock('@/hooks/useIntersectionObserver', () => ({
   useIntersectionObserver: () => ({ current: null }),
 }));
+jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
+  useWatchlistToggle: () => ({
+    isInWatchlist: jest.fn().mockReturnValue(false),
+    toggleWatchlist: jest.fn(),
+    isToggling: false,
+  }),
+}));
 
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';

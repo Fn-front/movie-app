@@ -8,6 +8,8 @@
 
 import { NextRequest } from 'next/server';
 
+import { MOVIES_SUCCESS_MESSAGES } from '@/constants';
+
 import { GET } from './route';
 
 // --- Mocks ---
@@ -55,7 +57,7 @@ describe('GET /api/cron/update-movies', () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.message).toBe('映画キャッシュを更新しました');
+    expect(json.message).toBe(MOVIES_SUCCESS_MESSAGES.CACHE_UPDATED);
     expect(json.updated_count).toBe(95);
     expect(json.data).toEqual({ total: 100, updated: 95, errors: [] });
   });

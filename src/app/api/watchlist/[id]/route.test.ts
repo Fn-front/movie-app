@@ -6,6 +6,8 @@
  * ウォッチリスト削除API Route テスト (DELETE)
  */
 
+import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants';
+
 import { DELETE } from './route';
 
 // --- Mocks ---
@@ -68,7 +70,7 @@ describe('DELETE /api/watchlist/:id', () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.message).toBe('ウォッチリストから削除しました');
+    expect(json.message).toBe(WATCHLIST_SUCCESS_MESSAGES.REMOVED);
   });
 
   it('存在しないIDで404を返す', async () => {

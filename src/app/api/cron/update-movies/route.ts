@@ -8,7 +8,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { HTTP_STATUS } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  AUTH_ERROR_MESSAGES,
+  MOVIES_SUCCESS_MESSAGES,
+} from '@/constants';
 import { updateMoviesCacheByBatch } from '@/lib/sync/updateMoviesCacheByBatch';
 
 export const dynamic = 'force-dynamic';
@@ -22,8 +27,8 @@ export async function GET(request: NextRequest) {
         {
           success: false,
           error: {
-            code: 'UNAUTHORIZED',
-            message: '認証に失敗しました。',
+            code: ERROR_CODE.UNAUTHORIZED,
+            message: AUTH_ERROR_MESSAGES.AUTH_FAILED,
           },
         },
         { status: HTTP_STATUS.UNAUTHORIZED },
@@ -36,7 +41,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: '映画キャッシュを更新しました',
+        message: MOVIES_SUCCESS_MESSAGES.CACHE_UPDATED,
         updated_count: result.updated,
         data: result,
       },
@@ -49,7 +54,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: {
-          code: 'SERVER_ERROR',
+          code: ERROR_CODE.SERVER_ERROR,
           message: '映画キャッシュのバッチ更新中にエラーが発生しました。',
         },
       },

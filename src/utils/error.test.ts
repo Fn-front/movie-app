@@ -10,6 +10,7 @@ import {
   isNetworkError,
   isAuthError,
   logError,
+  HTTP_ERROR_MESSAGES,
 } from './error';
 
 function createAxiosError(
@@ -41,7 +42,7 @@ describe('handleApiError', () => {
     });
     const result = handleApiError(error);
 
-    expect(result.message).toBe('要求されたリソースが見つかりませんでした');
+    expect(result.message).toBe(HTTP_ERROR_MESSAGES.NOT_FOUND);
     expect(result.statusCode).toBe(404);
     expect(result.details).toEqual({ detail: 'Not found' });
   });
@@ -68,7 +69,7 @@ describe('handleApiError', () => {
   it('未知のエラーからデフォルトメッセージを返す', () => {
     const result = handleApiError('unknown error');
 
-    expect(result.message).toBe('予期しないエラーが発生しました');
+    expect(result.message).toBe(HTTP_ERROR_MESSAGES.UNKNOWN_ERROR);
   });
 
   it('開発環境ではconsole.errorにエラーを出力する', () => {
@@ -106,65 +107,61 @@ describe('handleApiError', () => {
 describe('formatErrorMessage', () => {
   it('AxiosError 400の場合、入力エラーメッセージを返す', () => {
     const error = createAxiosError(400);
-    expect(formatErrorMessage(error)).toBe('入力内容に誤りがあります');
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.BAD_REQUEST);
   });
 
   it('AxiosError 401の場合、認証エラーメッセージを返す', () => {
     const error = createAxiosError(401);
-    expect(formatErrorMessage(error)).toBe(
-      '認証に失敗しました。再度ログインしてください',
-    );
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.UNAUTHORIZED);
   });
 
   it('AxiosError 403の場合、権限エラーメッセージを返す', () => {
     const error = createAxiosError(403);
-    expect(formatErrorMessage(error)).toBe('アクセス権限がありません');
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.FORBIDDEN);
   });
 
   it('AxiosError 404の場合、リソース不在メッセージを返す', () => {
     const error = createAxiosError(404);
-    expect(formatErrorMessage(error)).toBe(
-      '要求されたリソースが見つかりませんでした',
-    );
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.NOT_FOUND);
   });
 
   it('AxiosError 408の場合、タイムアウトメッセージを返す', () => {
     const error = createAxiosError(408);
-    expect(formatErrorMessage(error)).toBe('リクエストがタイムアウトしました');
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.TIMEOUT);
   });
 
   it('AxiosError 429の場合、レート制限メッセージを返す', () => {
     const error = createAxiosError(429);
     expect(formatErrorMessage(error)).toBe(
-      'リクエストが多すぎます。しばらく待ってから再度お試しください',
+      HTTP_ERROR_MESSAGES.TOO_MANY_REQUESTS,
     );
   });
 
   it('AxiosError 500の場合、サーバーエラーメッセージを返す', () => {
     const error = createAxiosError(500);
-    expect(formatErrorMessage(error)).toBe('サーバーエラーが発生しました');
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.SERVER_ERROR);
   });
 
   it('AxiosError 502の場合、通信失敗メッセージを返す', () => {
     const error = createAxiosError(502);
-    expect(formatErrorMessage(error)).toBe('サーバーとの通信に失敗しました');
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.BAD_GATEWAY);
   });
 
   it('AxiosError 503の場合、サービス利用不可メッセージを返す', () => {
     const error = createAxiosError(503);
-    expect(formatErrorMessage(error)).toBe('サービスが一時的に利用できません');
+    expect(formatErrorMessage(error)).toBe(
+      HTTP_ERROR_MESSAGES.SERVICE_UNAVAILABLE,
+    );
   });
 
   it('AxiosError ERR_NETWORKの場合、ネットワークエラーメッセージを返す', () => {
     const error = new AxiosError('Network Error', 'ERR_NETWORK');
-    expect(formatErrorMessage(error)).toBe(
-      'ネットワークエラーが発生しました。接続を確認してください',
-    );
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.NETWORK_ERROR);
   });
 
   it('AxiosError ECONNABORTEDの場合、タイムアウトメッセージを返す', () => {
     const error = new AxiosError('timeout', 'ECONNABORTED');
-    expect(formatErrorMessage(error)).toBe('リクエストがタイムアウトしました');
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.TIMEOUT);
   });
 
   it('Responseオブジェクトからメッセージを返す', () => {
@@ -172,7 +169,7 @@ describe('formatErrorMessage', () => {
       status: 500,
       statusText: 'Internal Server Error',
     });
-    expect(formatErrorMessage(response)).toBe('サーバーエラーが発生しました');
+    expect(formatErrorMessage(response)).toBe(HTTP_ERROR_MESSAGES.SERVER_ERROR);
   });
 
   it('Errorオブジェクトからerror.messageを返す', () => {
@@ -182,18 +179,18 @@ describe('formatErrorMessage', () => {
 
   it('未知のエラーからデフォルトメッセージを返す', () => {
     expect(formatErrorMessage('unknown')).toBe(
-      '予期しないエラーが発生しました',
+      HTTP_ERROR_MESSAGES.UNKNOWN_ERROR,
     );
   });
 
   it('AxiosError 504(500以上のdefault)の場合、サーバーエラーメッセージを返す', () => {
     const error = createAxiosError(504);
-    expect(formatErrorMessage(error)).toBe('サーバーエラーが発生しました');
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.SERVER_ERROR);
   });
 
   it('AxiosError 405(400以上のdefault)の場合、リクエストエラーメッセージを返す', () => {
     const error = createAxiosError(405);
-    expect(formatErrorMessage(error)).toBe('リクエストエラーが発生しました');
+    expect(formatErrorMessage(error)).toBe(HTTP_ERROR_MESSAGES.REQUEST_ERROR);
   });
 
   it('AxiosError カスタムメッセージがある場合、そのメッセージを返す', () => {
@@ -224,7 +221,9 @@ describe('formatErrorMessage', () => {
       status: 404,
       statusText: 'Not Found',
     });
-    expect(formatErrorMessage(response)).toBe('リクエストエラーが発生しました');
+    expect(formatErrorMessage(response)).toBe(
+      HTTP_ERROR_MESSAGES.REQUEST_ERROR,
+    );
   });
 
   it('Response 200台の場合、statusTextを含むメッセージを返す', () => {

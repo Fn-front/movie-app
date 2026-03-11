@@ -26,9 +26,7 @@ export async function cleanupWatchlist(
 /**
  * テストユーザーのフィルター条件をデフォルト状態にリセットする
  */
-export async function resetFilters(
-  request: APIRequestContext,
-): Promise<void> {
+export async function resetFilters(request: APIRequestContext): Promise<void> {
   await request.put('/api/filters', {
     data: {},
   });

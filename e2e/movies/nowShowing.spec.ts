@@ -17,10 +17,12 @@ test.describe('公開中ページ — 無限スクロール', () => {
     // 映画が20件以上ある場合のみ無限スクロールをテスト
     if (firstCount >= 20) {
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(2000);
 
-      const newCount = await movieTiles.count();
-      expect(newCount).toBeGreaterThan(firstCount);
+      // タイル数が増えるまで自動リトライで待機
+      await expect(async () => {
+        const newCount = await movieTiles.count();
+        expect(newCount).toBeGreaterThan(firstCount);
+      }).toPass({ timeout: 10000 });
     }
   });
 });

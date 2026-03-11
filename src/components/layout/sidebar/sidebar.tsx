@@ -53,19 +53,19 @@ export const Sidebar = memo<SidebarProps>(function Sidebar({
         <div className={styles.c_sidebar__navigation}>{navigation}</div>
       )}
 
+      {watchlist && (
+        <div className={styles.c_sidebar__watchlist}>
+          <h2 className={styles.c_sidebar__watchlist_title}>見たい映画</h2>
+          <div className={styles.c_sidebar__watchlist_content}>{watchlist}</div>
+        </div>
+      )}
+
       {userSection && (
         <div className={styles.c_sidebar__user}>{userSection}</div>
       )}
 
       {calendarButton && (
         <div className={styles.c_sidebar__calendar}>{calendarButton}</div>
-      )}
-
-      {watchlist && (
-        <div className={styles.c_sidebar__watchlist}>
-          <h2 className={styles.c_sidebar__watchlist_title}>見たい映画</h2>
-          <div className={styles.c_sidebar__watchlist_content}>{watchlist}</div>
-        </div>
       )}
     </aside>
   );

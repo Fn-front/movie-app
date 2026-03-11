@@ -8,6 +8,7 @@
 import { memo, useCallback } from 'react';
 import Image from 'next/image';
 
+import { formatDate } from '@/utils/date';
 import { getTMDbImageUrl } from '@/utils/image';
 import type { WatchlistItem as WatchlistItemType } from '@/lib/api/watchlist/watchlist';
 
@@ -98,6 +99,11 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
         <p className={styles.c_watchlist_item__title} title={item.title}>
           {item.title}
         </p>
+        {item.release_date && (
+          <p className={styles.c_watchlist_item__release_date}>
+            {formatDate(item.release_date)}
+          </p>
+        )}
       </div>
 
       <button

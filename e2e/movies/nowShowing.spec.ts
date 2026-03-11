@@ -7,6 +7,23 @@ import { test, expect } from '../fixtures/auth';
 
 test.describe('公開中ページ — 無限スクロール', () => {
   test('スクロールで追加データが読み込まれる', async ({ page }) => {
+    // page > 1 のリクエストを一旦保留してキューに溜める
+    const pendingRequests: Array<{
+      route: import('@playwright/test').Route;
+    }> = [];
+
+    await page.route('**/api/movies**', async (route) => {
+      const url = route.request().url();
+      const pageMatch = url.match(/page=(\d+)/);
+      const pageNum = pageMatch ? parseInt(pageMatch[1], 10) : 1;
+
+      if (pageNum > 1) {
+        pendingRequests.push({ route });
+        return;
+      }
+      await route.continue();
+    });
+
     await page.goto('/movies/now-showing');
 
     const movieTiles = page.locator('[class*="movie_tile"]');
@@ -14,16 +31,31 @@ test.describe('公開中ページ — 無限スクロール', () => {
 
     const firstCount = await movieTiles.count();
 
-    // 映画が20件以上ある場合のみ無限スクロールをテスト
-    if (firstCount >= 20) {
-      // スクロール＋タイル数増加を自動リトライで待機
-      await expect(async () => {
-        await page.evaluate(() =>
-          window.scrollTo(0, document.body.scrollHeight),
-        );
-        const newCount = await movieTiles.count();
-        expect(newCount).toBeGreaterThan(firstCount);
-      }).toPass({ timeout: 15000 });
+    // 映画が20件未満 or ペンディングリクエストがない場合はスキップ
+    if (firstCount < 20 || pendingRequests.length === 0) {
+      // 保留中リクエストを解放してからスキップ
+      for (const req of pendingRequests) {
+        await req.route.continue();
+      }
+      await page.unroute('**/api/movies**');
+      test.skip();
+      return;
     }
+
+    // ルートインターセプトを解除し、保留中リクエストを解放
+    await page.unroute('**/api/movies**');
+    for (const req of pendingRequests) {
+      await req.route.continue();
+    }
+
+    // sentinel要素までスクロールして追加読み込みを発火
+    const sentinel = page.locator('[class*="movie_list__sentinel"]');
+    await sentinel.scrollIntoViewIfNeeded();
+
+    // タイル数が増えるのを待つ
+    await expect(async () => {
+      const newCount = await movieTiles.count();
+      expect(newCount).toBeGreaterThan(firstCount);
+    }).toPass({ timeout: 15000 });
   });
 });

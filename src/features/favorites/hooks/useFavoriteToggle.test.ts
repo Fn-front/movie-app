@@ -87,7 +87,7 @@ describe('useFavoriteToggle', () => {
     expect(result.current.modalState.isOpen).toBe(false);
   });
 
-  it('handleSubmitでaddToFavoritesが呼ばれモーダルが閉じる', () => {
+  it('handleModalSubmitで未登録時にaddToFavoritesが呼ばれモーダルが閉じる', () => {
     const { result } = renderHook(() => useFavoriteToggle());
 
     act(() => {
@@ -95,7 +95,7 @@ describe('useFavoriteToggle', () => {
     });
 
     act(() => {
-      result.current.handleSubmit(7);
+      result.current.handleModalSubmit(7);
     });
 
     expect(mockAddToFavorites).toHaveBeenCalledWith({
@@ -108,7 +108,7 @@ describe('useFavoriteToggle', () => {
     expect(result.current.modalState.isOpen).toBe(false);
   });
 
-  it('handleUpdateでupdateRatingが呼ばれモーダルが閉じる', () => {
+  it('handleModalSubmitで登録済み時にupdateRatingが呼ばれモーダルが閉じる', () => {
     const { result } = renderHook(() => useFavoriteToggle());
     const favorite = { id: 'fav-1', rating: 5 };
 
@@ -117,7 +117,7 @@ describe('useFavoriteToggle', () => {
     });
 
     act(() => {
-      result.current.handleUpdate(9);
+      result.current.handleModalSubmit(9);
     });
 
     expect(mockUpdateRating).toHaveBeenCalledWith('fav-1', 9);
@@ -140,27 +140,14 @@ describe('useFavoriteToggle', () => {
     expect(result.current.modalState.isOpen).toBe(false);
   });
 
-  it('movieがnullの場合handleSubmitは何もしない', () => {
+  it('movieがnullの場合handleModalSubmitは何もしない', () => {
     const { result } = renderHook(() => useFavoriteToggle());
 
     act(() => {
-      result.current.handleSubmit(7);
+      result.current.handleModalSubmit(7);
     });
 
     expect(mockAddToFavorites).not.toHaveBeenCalled();
-  });
-
-  it('currentFavoriteがnullの場合handleUpdateは何もしない', () => {
-    const { result } = renderHook(() => useFavoriteToggle());
-
-    act(() => {
-      result.current.handleFavoriteToggle(createMovie(), null);
-    });
-
-    act(() => {
-      result.current.handleUpdate(9);
-    });
-
     expect(mockUpdateRating).not.toHaveBeenCalled();
   });
 

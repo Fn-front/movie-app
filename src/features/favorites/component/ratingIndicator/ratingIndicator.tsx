@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback } from 'react';
 
 import { FAVORITES_RATING_MIN, FAVORITES_RATING_MAX } from '@/constants';
 
@@ -52,13 +52,10 @@ export const RatingIndicator = memo<RatingIndicatorProps>(
       [onRatingChange],
     );
 
-    const sizeClassName = useMemo(
-      () =>
-        size === 'sm'
-          ? styles.c_rating_indicator__sm
-          : styles.c_rating_indicator__md,
-      [size],
-    );
+    const sizeClassName =
+      size === 'sm'
+        ? styles.c_rating_indicator__sm
+        : styles.c_rating_indicator__md;
 
     return (
       <div

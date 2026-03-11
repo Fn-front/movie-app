@@ -47,10 +47,8 @@ export interface UseFavoriteToggleReturn {
   ) => void;
   /** モーダルを閉じる */
   closeModal: () => void;
-  /** 登録ハンドラー（モーダルから呼ばれる） */
-  handleSubmit: (rating: number) => void;
-  /** 更新ハンドラー（モーダルから呼ばれる） */
-  handleUpdate: (rating: number) => void;
+  /** モーダル送信ハンドラー（currentFavoriteの有無で登録/更新を自動判定） */
+  handleModalSubmit: (rating: number) => void;
   /** 削除ハンドラー（モーダルから呼ばれる） */
   handleDelete: () => void;
   /** 処理中かどうか */
@@ -94,28 +92,29 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
     setModalState(INITIAL_MODAL_STATE);
   }, []);
 
-  const handleSubmit = useCallback(
+  const handleModalSubmit = useCallback(
     (rating: number) => {
-      if (!modalState.movie) return;
-      addToFavorites({
-        tmdb_movie_id: modalState.movie.id,
-        title: modalState.movie.title,
-        poster_path: modalState.movie.poster_path,
-        release_date: modalState.movie.release_date,
-        rating,
-      });
+      if (modalState.currentFavorite) {
+        updateRating(modalState.currentFavorite.id, rating);
+      } else {
+        if (!modalState.movie) return;
+        addToFavorites({
+          tmdb_movie_id: modalState.movie.id,
+          title: modalState.movie.title,
+          poster_path: modalState.movie.poster_path,
+          release_date: modalState.movie.release_date,
+          rating,
+        });
+      }
       closeModal();
     },
-    [modalState.movie, addToFavorites, closeModal],
-  );
-
-  const handleUpdate = useCallback(
-    (rating: number) => {
-      if (!modalState.currentFavorite) return;
-      updateRating(modalState.currentFavorite.id, rating);
-      closeModal();
-    },
-    [modalState.currentFavorite, updateRating, closeModal],
+    [
+      modalState.movie,
+      modalState.currentFavorite,
+      addToFavorites,
+      updateRating,
+      closeModal,
+    ],
   );
 
   const handleDelete = useCallback(() => {
@@ -129,8 +128,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       modalState,
       handleFavoriteToggle,
       closeModal,
-      handleSubmit,
-      handleUpdate,
+      handleModalSubmit,
       handleDelete,
       isProcessing: isAdding || isUpdating || isRemoving,
     }),
@@ -138,8 +136,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       modalState,
       handleFavoriteToggle,
       closeModal,
-      handleSubmit,
-      handleUpdate,
+      handleModalSubmit,
       handleDelete,
       isAdding,
       isUpdating,

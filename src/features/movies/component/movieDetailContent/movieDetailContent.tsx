@@ -130,8 +130,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
       modalState: favoriteModalState,
       handleFavoriteToggle,
       closeModal: closeFavoriteModal,
-      handleSubmit: handleFavoriteSubmit,
-      handleUpdate: handleFavoriteUpdate,
+      handleModalSubmit: handleFavoriteModalSubmit,
       handleDelete: handleFavoriteDelete,
       isProcessing: isFavoriteProcessing,
     } = useFavoriteToggle();
@@ -446,11 +445,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
           onClose={closeFavoriteModal}
           movieTitle={favoriteModalState.movie?.title ?? ''}
           currentFavorite={favoriteModalState.currentFavorite}
-          onSubmit={
-            favoriteModalState.currentFavorite
-              ? handleFavoriteUpdate
-              : handleFavoriteSubmit
-          }
+          onSubmit={handleFavoriteModalSubmit}
           onDelete={handleFavoriteDelete}
         />
       </div>

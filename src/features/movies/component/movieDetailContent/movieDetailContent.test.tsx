@@ -14,33 +14,14 @@ jest.mock('@/features/movies/hooks/useMovieDetail', () => ({
   useMovieDetail: (...args: unknown[]) => mockUseMovieDetail(...args),
 }));
 
-const mockUseWatchlist = {
+const mockUseWatchlistToggle = {
   isInWatchlist: jest.fn().mockReturnValue(false),
-  getWatchlistId: jest.fn().mockReturnValue(undefined),
-  addToWatchlist: jest.fn(),
-  removeFromWatchlist: jest.fn(),
-  isAdding: false,
-  isRemoving: false,
-  watchlist: [],
-  isLoading: false,
-  isFetchingNextPage: false,
-  hasNextPage: false,
-  fetchNextPage: jest.fn(),
+  toggleWatchlist: jest.fn(),
+  isToggling: false,
 };
 
-jest.mock('@/features/watchlist/hooks/useWatchlist', () => ({
-  useWatchlist: () => mockUseWatchlist,
-}));
-
-const mockToast = jest.fn();
-
-jest.mock('@/hooks/useToast', () => ({
-  useToast: () => ({
-    toasts: [],
-    toast: mockToast,
-    removeToast: jest.fn(),
-    clearToasts: jest.fn(),
-  }),
+jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
+  useWatchlistToggle: () => mockUseWatchlistToggle,
 }));
 
 jest.mock('next/image', () => ({
@@ -384,7 +365,7 @@ describe('MovieDetailContent', () => {
         isLoading: false,
         isError: false,
       });
-      mockUseWatchlist.isInWatchlist.mockReturnValue(false);
+      mockUseWatchlistToggle.isInWatchlist.mockReturnValue(false);
 
       render(<MovieDetailContent movieId={123} />);
 
@@ -399,7 +380,7 @@ describe('MovieDetailContent', () => {
         isLoading: false,
         isError: false,
       });
-      mockUseWatchlist.isInWatchlist.mockReturnValue(true);
+      mockUseWatchlistToggle.isInWatchlist.mockReturnValue(true);
 
       render(<MovieDetailContent movieId={123} />);
 

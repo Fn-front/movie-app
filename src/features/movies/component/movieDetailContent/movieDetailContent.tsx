@@ -10,8 +10,7 @@ import Image from 'next/image';
 
 import { Loading } from '@/components/ui/loading/loading';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
-import { useWatchlist } from '@/features/watchlist/hooks/useWatchlist';
-import { useToast } from '@/hooks/useToast';
+import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import {
   getTMDbPosterUrl,
   getTMDbBackdropUrl,
@@ -123,15 +122,8 @@ ProviderCategory.displayName = 'ProviderCategory';
 export const MovieDetailContent = memo<MovieDetailContentProps>(
   function MovieDetailContent({ movieId, showFinancialInfo = false }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
-    const {
-      isInWatchlist,
-      getWatchlistId,
-      addToWatchlist,
-      removeFromWatchlist,
-      isAdding,
-      isRemoving,
-    } = useWatchlist();
-    const { toast } = useToast();
+    const { isInWatchlist, toggleWatchlist, isToggling } =
+      useWatchlistToggle();
 
     const inWatchlist = useMemo(
       () => isInWatchlist(movieId),
@@ -140,36 +132,13 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
 
     const handleWatchlistToggle = useCallback(() => {
       if (!movie) return;
-      if (inWatchlist) {
-        const watchlistId = getWatchlistId(movieId);
-        if (watchlistId) {
-          removeFromWatchlist(watchlistId);
-          toast({
-            title: 'ウォッチリストから削除しました',
-            variant: 'success',
-          });
-        }
-      } else {
-        addToWatchlist({
-          tmdb_movie_id: movieId,
-          title: movie.title,
-          poster_path: movie.poster_path ?? null,
-          release_date: movie.release_date ?? null,
-        });
-        toast({
-          title: 'ウォッチリストに追加しました',
-          variant: 'success',
-        });
-      }
-    }, [
-      movie,
-      movieId,
-      inWatchlist,
-      getWatchlistId,
-      addToWatchlist,
-      removeFromWatchlist,
-      toast,
-    ]);
+      toggleWatchlist({
+        id: movieId,
+        title: movie.title,
+        poster_path: movie.poster_path ?? null,
+        release_date: movie.release_date ?? null,
+      });
+    }, [movie, movieId, toggleWatchlist]);
 
     const posterUrl = useMemo(
       () => getTMDbPosterUrl(movie?.poster_path),
@@ -250,7 +219,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                 <WatchlistAddButton
                   isInWatchlist={inWatchlist}
                   onClick={handleWatchlistToggle}
-                  disabled={isAdding || isRemoving}
+                  disabled={isToggling}
                   size='md'
                 />
               </div>

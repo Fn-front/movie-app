@@ -19,10 +19,8 @@ import { MovieTileSkeleton } from '@/features/movies/component/movieTileSkeleton
 import { FilterModal } from '@/features/movies/component/filterModal/filterModal';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
-import { useWatchlist } from '@/features/watchlist/hooks/useWatchlist';
-import { useToast } from '@/hooks/useToast';
+import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
-import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
 import styles from './movieListContent.module.scss';
 
@@ -61,48 +59,8 @@ export const MovieListContent = memo<MovieListContentProps>(
       handleFilterModalClose,
     } = movieList;
 
-    const {
-      isInWatchlist,
-      getWatchlistId,
-      addToWatchlist,
-      removeFromWatchlist,
-      isAdding,
-      isRemoving,
-    } = useWatchlist();
-    const { toast } = useToast();
-
-    const handleWatchlistToggle = useCallback(
-      (movie: MovieCacheItem) => {
-        if (isInWatchlist(movie.id)) {
-          const watchlistId = getWatchlistId(movie.id);
-          if (watchlistId) {
-            removeFromWatchlist(watchlistId);
-            toast({
-              title: 'ウォッチリストから削除しました',
-              variant: 'success',
-            });
-          }
-        } else {
-          addToWatchlist({
-            tmdb_movie_id: movie.id,
-            title: movie.title,
-            poster_path: movie.poster_path,
-            release_date: movie.release_date,
-          });
-          toast({
-            title: 'ウォッチリストに追加しました',
-            variant: 'success',
-          });
-        }
-      },
-      [
-        isInWatchlist,
-        getWatchlistId,
-        addToWatchlist,
-        removeFromWatchlist,
-        toast,
-      ],
-    );
+    const { isInWatchlist, toggleWatchlist, isToggling } =
+      useWatchlistToggle();
 
     const sortOptions = useMemo(
       () =>
@@ -204,8 +162,8 @@ export const MovieListContent = memo<MovieListContentProps>(
                 genres={genres}
                 onClick={handleMovieTileClick}
                 isInWatchlist={isInWatchlist(movie.id)}
-                onWatchlistToggle={handleWatchlistToggle}
-                watchlistDisabled={isAdding || isRemoving}
+                onWatchlistToggle={toggleWatchlist}
+                watchlistDisabled={isToggling}
               />
             ))
           )}

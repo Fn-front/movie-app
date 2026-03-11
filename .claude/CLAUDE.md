@@ -136,6 +136,7 @@
 - `design-system.md` - デザインシステム
 - `environment-variables.md` - 環境変数
 - `components.md` - コンポーネント仕様
+- `testing-strategy.md` - テスト戦略
 - `roadmap.md` - 開発ロードマップ
 
 ## コーディング規約

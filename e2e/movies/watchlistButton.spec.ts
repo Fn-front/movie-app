@@ -5,12 +5,17 @@
  */
 
 import { test, expect } from '../fixtures/auth';
+import { cleanupWatchlist } from '../helpers/api';
 import { movieTileButtons } from '../helpers/locators';
 
 test.describe('ウォッチリストボタン — 状態トグル', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/movies/now-showing');
     await movieTileButtons(page).first().waitFor({ timeout: 30000 });
+  });
+
+  test.afterEach(async ({ request }) => {
+    await cleanupWatchlist(request);
   });
 
   test('ウォッチリストボタンクリックでラベルが切り替わる', async ({ page }) => {
@@ -48,6 +53,10 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
   test.beforeEach(async ({ page }) => {
     await page.goto('/movies/now-showing');
     await movieTileButtons(page).first().waitFor({ timeout: 30000 });
+  });
+
+  test.afterEach(async ({ request }) => {
+    await cleanupWatchlist(request);
   });
 
   test('モーダル内ウォッチリストボタンクリックでラベルが切り替わる', async ({

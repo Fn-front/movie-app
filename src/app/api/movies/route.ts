@@ -6,6 +6,7 @@
 
 import { NextResponse } from 'next/server';
 
+import { getAuthSession } from '@/helpers/auth';
 import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
@@ -358,11 +359,51 @@ export async function GET(request: Request) {
 
     const hasNextPage = page < totalPages;
 
+    // 認証済みの場合、お気に入り情報を付与
+    const session = await getAuthSession();
+    let moviesWithFavorites = movies ?? [];
+
+    if (session && moviesWithFavorites.length > 0) {
+      const movieIds = moviesWithFavorites.map(
+        (m: { id: number }) => m.id,
+      );
+
+      const { data: favorites } = await supabase
+        .from('favorites')
+        .select('id, tmdb_movie_id, rating')
+        .eq('user_id', session.user.id)
+        .in('tmdb_movie_id', movieIds)
+        .is('deleted_at', null);
+
+      if (favorites && favorites.length > 0) {
+        const favoriteMap = new Map(
+          favorites.map((f: { id: string; tmdb_movie_id: number; rating: number }) => [
+            f.tmdb_movie_id,
+            { id: f.id, rating: f.rating },
+          ]),
+        );
+
+        moviesWithFavorites = moviesWithFavorites.map(
+          (movie: { id: number }) => ({
+            ...movie,
+            favorite: favoriteMap.get(movie.id) ?? null,
+          }),
+        );
+      } else {
+        moviesWithFavorites = moviesWithFavorites.map(
+          (movie: { id: number }) => ({
+            ...movie,
+            favorite: null,
+          }),
+        );
+      }
+    }
+
     return NextResponse.json(
       {
         success: true,
         data: {
-          movies: movies ?? [],
+          movies: moviesWithFavorites,
           pagination: {
             currentPage: page,
             totalPages,

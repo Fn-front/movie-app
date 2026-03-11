@@ -527,35 +527,35 @@
 > テスティングトロフィーモデル（Step 3.5）を最初から適用。各Stepでテストレイヤーを明示する。
 
 #### Step 4: DB・API・スキーマ基盤（`feature/favorites-api`）
-- [ ] favoritesテーブル作成（Supabase migration）
+- [x] favoritesテーブル作成（Supabase migration）
   - UUID主キー、論理削除、RLSポリシー設定
   - UNIQUE制約（user_id, tmdb_movie_id WHERE deleted_at IS NULL）
   - update_updated_at_column() トリガー適用
-- [ ] zodバリデーションスキーマ作成（favoritesAddSchema, favoritesUpdateSchema, favoritesQuerySchema）
-- [ ] お気に入り定数追加（エラーメッセージ、成功メッセージ、queryKeys等）
-- [ ] 映画一覧API（GET /api/movies）にお気に入り情報を追加
+- [x] zodバリデーションスキーマ作成（favoritesAddSchema, favoritesUpdateSchema, favoritesQuerySchema）
+- [x] お気に入り定数追加（エラーメッセージ、成功メッセージ、queryKeys等）
+- [x] 映画一覧API（GET /api/movies）にお気に入り情報を追加
   - 認証済みの場合、favoritesテーブルをLEFT JOINし各映画に `favorite: { id, rating } | null` を付与
   - 未認証の場合は `favorite` フィールドを含めない
-- [ ] 映画詳細API（GET /api/movies/:id）にお気に入り情報を追加
+- [x] 映画詳細API（GET /api/movies/:id）にお気に入り情報を追加
   - 認証済みの場合、`favorite: { id, rating } | null` を付与
-- [ ] お気に入り一覧取得API（GET /api/favorites）
+- [x] お気に入り一覧取得API（GET /api/favorites）
   - NextAuth.jsで認証チェック
   - ページベースページング（page/limit、20件ずつ）
   - ソート: 登録日順（added_at） / 評価順（rating）
-- [ ] お気に入り追加API（POST /api/favorites）
+- [x] お気に入り追加API（POST /api/favorites）
   - NextAuth.jsで認証チェック
   - 重複チェック（409 Conflict）
-- [ ] 評価更新API（PATCH /api/favorites/:id）
+- [x] 評価更新API（PATCH /api/favorites/:id）
   - NextAuth.jsで認証チェック
   - 所有者チェック（404 Not Found）
-- [ ] お気に入り削除API（DELETE /api/favorites/:id）
+- [x] お気に入り削除API（DELETE /api/favorites/:id）
   - NextAuth.jsで認証チェック
   - 論理削除（deleted_at更新）
-- [ ] APIクライアント（src/lib/api/favorites/favorites.ts）作成
-- [ ] 単体テスト
+- [x] APIクライアント（src/lib/api/favorites/favorites.ts）作成
+- [x] 単体テスト
   - zodスキーマテスト（favoritesAddSchema, favoritesUpdateSchema, favoritesQuerySchema）
   - APIクライアントテスト（getFavorites, addFavorite, updateFavoriteRating, removeFavorite）
-- [ ] 結合テスト
+- [x] 結合テスト
   - API Routeテスト（GET /api/movies）— お気に入り情報付与
     - 認証済み: 各映画に `favorite` フィールドが含まれる
     - 未認証: `favorite` フィールドが含まれない

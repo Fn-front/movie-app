@@ -7,6 +7,8 @@
 import { NextResponse } from 'next/server';
 import { isAxiosError } from 'axios';
 
+import { getAuthSession } from '@/helpers/auth';
+import { createServiceRoleClient } from '@/helpers/supabase';
 import { getMovieDetail } from '@/lib/tmdb/tmdb';
 import { HTTP_STATUS, ERROR_CODE, MOVIES_ERROR_MESSAGES } from '@/constants';
 
@@ -36,9 +38,32 @@ export async function GET(
 
     const movie = await getMovieDetail(movieId);
 
+    // 認証済みの場合、お気に入り情報を付与
+    let favorite = undefined;
+    const session = await getAuthSession();
+
+    if (session) {
+      const supabase = createServiceRoleClient();
+
+      if (supabase) {
+        const { data: favoriteData } = await supabase
+          .from('favorites')
+          .select('id, rating')
+          .eq('user_id', session.user.id)
+          .eq('tmdb_movie_id', movieId)
+          .is('deleted_at', null)
+          .single();
+
+        favorite = favoriteData ?? null;
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      data: movie,
+      data: {
+        ...movie,
+        ...(favorite !== undefined ? { favorite } : {}),
+      },
     });
   } catch (error) {
     if (

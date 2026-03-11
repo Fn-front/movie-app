@@ -18,6 +18,16 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
   getMovieDetail: (...args: unknown[]) => mockGetMovieDetail(...args),
 }));
 
+const mockGetAuthSession = jest.fn().mockResolvedValue(null);
+jest.mock('@/helpers/auth', () => ({
+  getAuthSession: (...args: unknown[]) => mockGetAuthSession(...args),
+}));
+
+const mockFrom = jest.fn();
+jest.mock('@/helpers/supabase', () => ({
+  createServiceRoleClient: () => ({ from: mockFrom }),
+}));
+
 // --- Helpers ---
 
 const createRequest = (id: string) =>
@@ -103,5 +113,89 @@ describe('GET /api/movies/:id', () => {
     expect(response.status).toBe(500);
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('SERVER_ERROR');
+  });
+
+  // === お気に入り情報の付与 ===
+
+  it('認証済みユーザーの場合、favoriteフィールドが付与される', async () => {
+    mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
+    const mockMovie = {
+      id: 123,
+      title: 'テスト映画',
+      overview: 'テスト概要',
+    };
+    mockGetMovieDetail.mockResolvedValue(mockMovie);
+
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: jest.fn().mockReturnValue({
+          eq: () => ({
+            is: () => ({
+              single: () => ({
+                data: { id: 'fav-1', rating: 8 },
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET(createRequest('123'), {
+      params: createParams('123'),
+    });
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.favorite).toEqual({ id: 'fav-1', rating: 8 });
+  });
+
+  it('認証済みだがお気に入り未登録の場合、favoriteがnullになる', async () => {
+    mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
+    const mockMovie = {
+      id: 456,
+      title: '未登録映画',
+    };
+    mockGetMovieDetail.mockResolvedValue(mockMovie);
+
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: jest.fn().mockReturnValue({
+          eq: () => ({
+            is: () => ({
+              single: () => ({
+                data: null,
+                error: { code: 'PGRST116' },
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET(createRequest('456'), {
+      params: createParams('456'),
+    });
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.favorite).toBeNull();
+  });
+
+  it('未認証の場合、favoriteフィールドが含まれない', async () => {
+    mockGetAuthSession.mockResolvedValue(null);
+    const mockMovie = {
+      id: 123,
+      title: 'テスト映画',
+    };
+    mockGetMovieDetail.mockResolvedValue(mockMovie);
+
+    const response = await GET(createRequest('123'), {
+      params: createParams('123'),
+    });
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.favorite).toBeUndefined();
   });
 });

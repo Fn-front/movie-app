@@ -77,6 +77,63 @@ describe('ChangePasswordForm', () => {
     });
   });
 
+  it('現在のパスワード未入力でバリデーションエラーが表示される', async () => {
+    render(<ChangePasswordForm />);
+
+    await user.type(
+      screen.getByLabelText('新しいパスワード'),
+      'NewPass123',
+    );
+    await user.type(
+      screen.getByLabelText('新しいパスワード（確認）'),
+      'NewPass123',
+    );
+    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('パスワードを入力してください'),
+      ).toBeInTheDocument();
+    });
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
+  it('新しいパスワードが短すぎるとバリデーションエラーが表示される', async () => {
+    render(<ChangePasswordForm />);
+
+    await fillForm({
+      currentPassword: 'Current123',
+      newPassword: 'Pw1',
+      confirmNewPassword: 'Pw1',
+    });
+    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('パスワードは8文字以上で入力してください'),
+      ).toBeInTheDocument();
+    });
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
+  it('新しいパスワード確認が一致しないとバリデーションエラーが表示される', async () => {
+    render(<ChangePasswordForm />);
+
+    await fillForm({
+      currentPassword: 'Current123',
+      newPassword: 'NewPassword123',
+      confirmNewPassword: 'Different123',
+    });
+    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('パスワードが一致しません'),
+      ).toBeInTheDocument();
+    });
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
   it('パスワード変更成功時にトーストと成功メッセージが表示される', async () => {
     mockChangePassword.mockResolvedValue({
       success: true,

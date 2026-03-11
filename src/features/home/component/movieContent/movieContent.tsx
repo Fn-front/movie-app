@@ -47,7 +47,7 @@ export const MovieContent = memo(function MovieContent() {
     handleFilterModalClose,
   } = useHome();
 
-  const { isInWatchlist, toggleWatchlist, togglingMovieId } =
+  const { isInWatchlist, toggleWatchlist, isMovieToggling } =
     useWatchlistToggle();
 
   const sortOptions = useMemo(
@@ -127,7 +127,7 @@ export const MovieContent = memo(function MovieContent() {
               genres={genres}
               isInWatchlist={isInWatchlist(movie.id)}
               onWatchlistToggle={toggleWatchlist}
-              watchlistDisabled={togglingMovieId === movie.id}
+              watchlistDisabled={isMovieToggling(movie.id)}
             />
           ))
         )}

@@ -70,13 +70,6 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
 
   const [togglingIds, setTogglingIds] = useState<Set<number>>(new Set());
 
-  // mutation完了時にtogglingIdsをリセット
-  useEffect(() => {
-    if (!isAdding && !isRemoving) {
-      setTogglingIds(new Set());
-    }
-  }, [isAdding, isRemoving]);
-
   // 最新の関数群を単一refで保持し、toggleWatchlistの参照を安定させる
   const handlersRef = useRef<ToggleHandlers>({
     isInWatchlist,
@@ -85,47 +78,47 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
     removeFromWatchlist,
     toast,
   });
-  handlersRef.current = {
-    isInWatchlist,
-    getWatchlistId,
-    addToWatchlist,
-    removeFromWatchlist,
-    toast,
-  };
+  useEffect(() => {
+    handlersRef.current = {
+      isInWatchlist,
+      getWatchlistId,
+      addToWatchlist,
+      removeFromWatchlist,
+      toast,
+    };
+  });
 
-  const toggleWatchlist = useCallback(
-    (movie: WatchlistToggleMovie) => {
-      setTogglingIds((prev) => new Set(prev).add(movie.id));
+  const toggleWatchlist = useCallback((movie: WatchlistToggleMovie) => {
+    setTogglingIds((prev) => new Set(prev).add(movie.id));
 
-      const h = handlersRef.current;
-      if (h.isInWatchlist(movie.id)) {
-        const watchlistId = h.getWatchlistId(movie.id);
-        if (watchlistId) {
-          h.removeFromWatchlist(watchlistId);
-          h.toast({
-            title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
-            variant: 'success',
-          });
-        }
-      } else {
-        h.addToWatchlist({
-          tmdb_movie_id: movie.id,
-          title: movie.title,
-          poster_path: movie.poster_path,
-          release_date: movie.release_date,
-        });
+    const h = handlersRef.current;
+    if (h.isInWatchlist(movie.id)) {
+      const watchlistId = h.getWatchlistId(movie.id);
+      if (watchlistId) {
+        h.removeFromWatchlist(watchlistId);
         h.toast({
-          title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
+          title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
           variant: 'success',
         });
       }
-    },
-    [],
-  );
+    } else {
+      h.addToWatchlist({
+        tmdb_movie_id: movie.id,
+        title: movie.title,
+        poster_path: movie.poster_path,
+        release_date: movie.release_date,
+      });
+      h.toast({
+        title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
+        variant: 'success',
+      });
+    }
+  }, []);
 
   const isMovieToggling = useCallback(
-    (tmdbMovieId: number) => togglingIds.has(tmdbMovieId),
-    [togglingIds],
+    (tmdbMovieId: number) =>
+      (isAdding || isRemoving) && togglingIds.has(tmdbMovieId),
+    [togglingIds, isAdding, isRemoving],
   );
 
   return useMemo(

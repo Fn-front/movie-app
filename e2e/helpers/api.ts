@@ -11,7 +11,6 @@ import type { APIRequestContext } from '@playwright/test';
 export async function cleanupWatchlist(
   request: APIRequestContext,
 ): Promise<void> {
-  // ウォッチリスト全件取得
   const response = await request.get('/api/watchlist');
 
   if (!response.ok()) return;
@@ -19,8 +18,18 @@ export async function cleanupWatchlist(
   const json = await response.json();
   const items = json.data?.watchlist ?? [];
 
-  // 各アイテムを削除
   for (const item of items) {
     await request.delete(`/api/watchlist/${item.id}`);
   }
+}
+
+/**
+ * テストユーザーのフィルター条件をデフォルト状態にリセットする
+ */
+export async function resetFilters(
+  request: APIRequestContext,
+): Promise<void> {
+  await request.put('/api/filters', {
+    data: {},
+  });
 }

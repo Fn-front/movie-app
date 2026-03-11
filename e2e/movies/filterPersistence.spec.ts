@@ -3,8 +3,13 @@
  */
 
 import { test, expect } from '../fixtures/auth';
+import { resetFilters } from '../helpers/api';
 
 test.describe('フィルター条件がリロード後も保持される', () => {
+  test.afterEach(async ({ request }) => {
+    await resetFilters(request);
+  });
+
   test('リバイバル除外 → リロード → APIレスポンスと復元を確認', async ({
     page,
   }) => {

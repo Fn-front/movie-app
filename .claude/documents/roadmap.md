@@ -476,6 +476,31 @@
     - 詳細モーダルからウォッチリスト追加/削除
     - Toast通知の表示確認
 
+#### Step 3.5: テスト戦略改善 — テスティングトロフィー導入（`setup/testing-trophy`）
+- [ ] テスト戦略ドキュメント作成（`.claude/documents/testing-strategy.md`）
+  - テスティングトロフィーモデルの採用方針
+  - 各テストレイヤーの役割と境界定義
+    - 静的解析（TypeScript + ESLint）: 型エラー・コード品質
+    - 単体テスト（Jest）: 純粋なロジック・ユーティリティ・定数
+    - 結合テスト（Jest + RTL）: コンポーネントの振る舞い・フック・API Route
+    - E2E（Playwright）: クリティカルユーザーフローのみ
+  - 「何をどのレイヤーで検証すべきか」の判断基準
+  - テストの安定性ルール（フレーク対策・データ依存・待機戦略）
+- [ ] E2E設計思想の追加（`e2e-test.md`に追記）
+  - E2Eの対象範囲: クリティカルユーザージャーニーに限定
+  - 安定性ルール（ロード完了待機・Web-Firstアサーション・`waitForTimeout`禁止）
+  - データ依存テストの扱い（外部API依存はsoft assertion or 条件分岐）
+  - 状態変更テストのクリーンアップ方針（追加→削除で元に戻す）
+  - 共通ヘルパー管理ルール（`e2e/helpers/`に集約）
+- [ ] E2E共通ヘルパーのリファクタリング
+  - 重複ヘルパー関数（`movieTileButtons`等）を`e2e/helpers/locators.ts`に集約
+  - 各specファイルからのimportに統一
+- [ ] テストスペック一覧の更新（`e2e-test.md`）
+  - 新規追加分（watchlistButton.spec.ts等）を反映
+- [ ] 既存テストの分類見直し
+  - E2Eで検証している内容のうち、結合テストに移せるものを特定
+  - 移行計画の作成（実施はお気に入り機能開発と並行）
+
 ### お気に入り機能（設計書: `.claude/documents/favorites-design.md`）
 
 #### Step 4: DB・API基盤（`feature/favorites-api`）

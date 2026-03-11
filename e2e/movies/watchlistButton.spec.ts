@@ -186,8 +186,8 @@ test.describe('ウォッチリストボタン — 詳細モーダル', () => {
     });
     await modalButton.click();
 
-    // モーダルを閉じる
-    await page.keyboard.press('Escape');
+    // モーダルを閉じる（閉じるボタンを使用 — Escapeはフォーカス位置で効かない場合がある）
+    await dialog.getByRole('button', { name: '閉じる' }).click();
     await expect(dialog).not.toBeVisible();
 
     // タイル側のラベルが切り替わっていることを確認

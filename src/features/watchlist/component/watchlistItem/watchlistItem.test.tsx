@@ -25,7 +25,7 @@ const createMockItem = (
 // --- Tests ---
 
 describe('WatchlistItem', () => {
-  it('ポスター・タイトル・削除ボタンが表示される', () => {
+  it('ポスター・タイトル・公開日・削除ボタンが表示される', () => {
     const item = createMockItem();
     render(
       <WatchlistItem item={item} onClick={jest.fn()} onDelete={jest.fn()} />,
@@ -33,11 +33,22 @@ describe('WatchlistItem', () => {
 
     expect(screen.getByAltText('テスト映画のポスター')).toBeInTheDocument();
     expect(screen.getByText('テスト映画')).toBeInTheDocument();
+    expect(screen.getByText('2026年03月01日')).toBeInTheDocument();
     expect(
       screen.getByRole('button', {
         name: 'テスト映画をウォッチリストから削除',
       }),
     ).toBeInTheDocument();
+  });
+
+  it('公開日がnullの場合は公開日が表示されない', () => {
+    const item = createMockItem({ release_date: null });
+    render(
+      <WatchlistItem item={item} onClick={jest.fn()} onDelete={jest.fn()} />,
+    );
+
+    expect(screen.getByText('テスト映画')).toBeInTheDocument();
+    expect(screen.queryByText(/\d{4}年/)).not.toBeInTheDocument();
   });
 
   it('アイテムクリック時にonClickが映画IDで呼ばれる', async () => {

@@ -66,9 +66,7 @@ export const WatchlistAddButton = memo<WatchlistAddButtonProps>(
         onKeyDown={handleKeyDown}
         disabled={disabled}
         aria-label={
-          isInWatchlist
-            ? 'ウォッチリストから削除'
-            : 'ウォッチリストに追加'
+          isInWatchlist ? 'ウォッチリストから削除' : 'ウォッチリストに追加'
         }
       >
         {isInWatchlist ? <IoCheckmark /> : <IoAdd />}

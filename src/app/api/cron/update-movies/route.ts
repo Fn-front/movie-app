@@ -8,7 +8,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { HTTP_STATUS, ERROR_CODE, AUTH_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  AUTH_ERROR_MESSAGES,
+  MOVIES_SUCCESS_MESSAGES,
+} from '@/constants';
 import { updateMoviesCacheByBatch } from '@/lib/sync/updateMoviesCacheByBatch';
 
 export const dynamic = 'force-dynamic';
@@ -36,7 +41,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: '映画キャッシュを更新しました',
+        message: MOVIES_SUCCESS_MESSAGES.CACHE_UPDATED,
         updated_count: result.updated,
         data: result,
       },

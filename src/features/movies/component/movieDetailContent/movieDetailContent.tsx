@@ -122,8 +122,7 @@ ProviderCategory.displayName = 'ProviderCategory';
 export const MovieDetailContent = memo<MovieDetailContentProps>(
   function MovieDetailContent({ movieId, showFinancialInfo = false }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
-    const { isInWatchlist, toggleWatchlist, isToggling } =
-      useWatchlistToggle();
+    const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
 
     const inWatchlist = useMemo(
       () => isInWatchlist(movieId),

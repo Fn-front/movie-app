@@ -2,7 +2,7 @@
  * 映画関連の定数
  */
 
-import { errorMessage } from './common';
+import { errorMessage, successMessage } from './common';
 
 /**
  * ソート選択肢
@@ -128,4 +128,12 @@ export const MOVIES_ERROR_MESSAGES = {
   INVALID_MOVIE_ID: errorMessage.invalid('映画ID'),
   /** 映画未検出 */
   NOT_FOUND: errorMessage.notFound('映画'),
+} as const;
+
+/**
+ * 映画API成功メッセージ
+ */
+export const MOVIES_SUCCESS_MESSAGES = {
+  /** 映画キャッシュ更新完了 */
+  CACHE_UPDATED: successMessage.updated('映画キャッシュ'),
 } as const;

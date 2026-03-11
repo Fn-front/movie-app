@@ -7,6 +7,25 @@ import { AxiosError } from 'axios';
 import { HTTP_STATUS } from '@/constants';
 
 /**
+ * HTTPステータスコード別エラーメッセージ
+ */
+export const HTTP_ERROR_MESSAGES = {
+  BAD_REQUEST: '入力内容に誤りがあります',
+  UNAUTHORIZED: '認証に失敗しました。再度ログインしてください',
+  FORBIDDEN: 'アクセス権限がありません',
+  NOT_FOUND: '要求されたリソースが見つかりませんでした',
+  TIMEOUT: 'リクエストがタイムアウトしました',
+  TOO_MANY_REQUESTS:
+    'リクエストが多すぎます。しばらく待ってから再度お試しください',
+  SERVER_ERROR: 'サーバーエラーが発生しました',
+  BAD_GATEWAY: 'サーバーとの通信に失敗しました',
+  SERVICE_UNAVAILABLE: 'サービスが一時的に利用できません',
+  NETWORK_ERROR: 'ネットワークエラーが発生しました。接続を確認してください',
+  REQUEST_ERROR: 'リクエストエラーが発生しました',
+  UNKNOWN_ERROR: '予期しないエラーが発生しました',
+} as const;
+
+/**
  * エラーレスポンス型
  */
 export interface ErrorResponse {
@@ -65,7 +84,7 @@ export function handleApiError(error: unknown): ErrorResponse {
 
   // その他のエラー
   return {
-    message: '予期しないエラーが発生しました',
+    message: HTTP_ERROR_MESSAGES.UNKNOWN_ERROR,
   };
 }
 
@@ -89,40 +108,40 @@ export function formatErrorMessage(error: unknown): string {
     // HTTPステータスコード別メッセージ
     switch (statusCode) {
       case 400:
-        return '入力内容に誤りがあります';
+        return HTTP_ERROR_MESSAGES.BAD_REQUEST;
       case 401:
-        return '認証に失敗しました。再度ログインしてください';
+        return HTTP_ERROR_MESSAGES.UNAUTHORIZED;
       case 403:
-        return 'アクセス権限がありません';
+        return HTTP_ERROR_MESSAGES.FORBIDDEN;
       case 404:
-        return '要求されたリソースが見つかりませんでした';
+        return HTTP_ERROR_MESSAGES.NOT_FOUND;
       case 408:
-        return 'リクエストがタイムアウトしました';
+        return HTTP_ERROR_MESSAGES.TIMEOUT;
       case 429:
-        return 'リクエストが多すぎます。しばらく待ってから再度お試しください';
+        return HTTP_ERROR_MESSAGES.TOO_MANY_REQUESTS;
       case 500:
-        return 'サーバーエラーが発生しました';
+        return HTTP_ERROR_MESSAGES.SERVER_ERROR;
       case 502:
-        return 'サーバーとの通信に失敗しました';
+        return HTTP_ERROR_MESSAGES.BAD_GATEWAY;
       case 503:
-        return 'サービスが一時的に利用できません';
+        return HTTP_ERROR_MESSAGES.SERVICE_UNAVAILABLE;
       default:
         if (statusCode && statusCode >= 500) {
-          return 'サーバーエラーが発生しました';
+          return HTTP_ERROR_MESSAGES.SERVER_ERROR;
         }
         if (statusCode && statusCode >= 400) {
-          return 'リクエストエラーが発生しました';
+          return HTTP_ERROR_MESSAGES.REQUEST_ERROR;
         }
     }
 
     // ネットワークエラー
     if (error.code === 'ERR_NETWORK') {
-      return 'ネットワークエラーが発生しました。接続を確認してください';
+      return HTTP_ERROR_MESSAGES.NETWORK_ERROR;
     }
 
     // タイムアウト
     if (error.code === 'ECONNABORTED') {
-      return 'リクエストがタイムアウトしました';
+      return HTTP_ERROR_MESSAGES.TIMEOUT;
     }
 
     // カスタムメッセージがあればそれを使用
@@ -136,10 +155,10 @@ export function formatErrorMessage(error: unknown): string {
   // Fetchエラー
   if (error instanceof Response) {
     if (error.status >= 500) {
-      return 'サーバーエラーが発生しました';
+      return HTTP_ERROR_MESSAGES.SERVER_ERROR;
     }
     if (error.status >= 400) {
-      return 'リクエストエラーが発生しました';
+      return HTTP_ERROR_MESSAGES.REQUEST_ERROR;
     }
     return `エラーが発生しました: ${error.statusText}`;
   }
@@ -150,7 +169,7 @@ export function formatErrorMessage(error: unknown): string {
   }
 
   // その他
-  return '予期しないエラーが発生しました';
+  return HTTP_ERROR_MESSAGES.UNKNOWN_ERROR;
 }
 
 /**

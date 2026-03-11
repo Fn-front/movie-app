@@ -6,15 +6,15 @@
   justify-content: center;
   border: none;
   border-radius: $border-radius-full;
-  background-color: rgba(0, 0, 0, 0.6);
-  color: #ffffff;
+  background-color: $overlay-dark;
+  color: $text-inverse;
   cursor: pointer;
   transition:
     opacity $duration-fast $ease-in-out,
     background-color $duration-fast $ease-in-out;
 
   &:hover {
-    background-color: rgba(0, 0, 0, 0.8);
+    background-color: $overlay-darker;
   }
 
   &:focus-visible {

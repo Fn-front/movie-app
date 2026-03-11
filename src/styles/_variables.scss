@@ -86,6 +86,15 @@ $background-paper: #ffffff;
 $background-secondary: $gray-100;
 $background-disabled: $gray-100;
 
+// オーバーレイ
+$overlay-light: rgba(0, 0, 0, 0.1);
+$overlay-medium: rgba(0, 0, 0, 0.5);
+$overlay-dark: rgba(0, 0, 0, 0.6);
+$overlay-darker: rgba(0, 0, 0, 0.8);
+
+// テキスト反転色（白）
+$text-inverse: #ffffff;
+
 // ボーダー
 $border-color: $gray-300;
 

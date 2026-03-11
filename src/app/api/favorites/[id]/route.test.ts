@@ -10,6 +10,11 @@ import { FAVORITES_SUCCESS_MESSAGES } from '@/constants';
 
 import { PATCH, DELETE } from './route';
 
+// --- Constants ---
+
+const VALID_UUID = '550e8400-e29b-41d4-a716-446655440000';
+const OTHER_UUID = '660e8400-e29b-41d4-a716-446655440001';
+
 // --- Mocks ---
 
 const mockFrom = jest.fn();
@@ -64,7 +69,7 @@ describe('PATCH /api/favorites/:id', () => {
               select: () => ({
                 single: () => ({
                   data: {
-                    id: 'fav-123',
+                    id: VALID_UUID,
                     tmdb_movie_id: 12345,
                     title: 'テスト映画',
                     poster_path: '/test.jpg',
@@ -81,7 +86,7 @@ describe('PATCH /api/favorites/:id', () => {
       }),
     });
 
-    const { request, params } = createPatchRequest('fav-123', { rating: 7 });
+    const { request, params } = createPatchRequest(VALID_UUID, { rating: 7 });
     const response = await PATCH(request, { params });
     const json = await response.json();
 
@@ -109,7 +114,7 @@ describe('PATCH /api/favorites/:id', () => {
       }),
     });
 
-    const { request, params } = createPatchRequest('non-existent', {
+    const { request, params } = createPatchRequest(OTHER_UUID, {
       rating: 5,
     });
     const response = await PATCH(request, { params });
@@ -120,8 +125,20 @@ describe('PATCH /api/favorites/:id', () => {
     expect(json.error.code).toBe('NOT_FOUND');
   });
 
+  it('不正なID形式で400を返す', async () => {
+    const { request, params } = createPatchRequest('invalid-id', {
+      rating: 5,
+    });
+    const response = await PATCH(request, { params });
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+  });
+
   it('バリデーションエラーで400を返す（rating範囲外）', async () => {
-    const { request, params } = createPatchRequest('fav-123', { rating: 11 });
+    const { request, params } = createPatchRequest(VALID_UUID, { rating: 11 });
     const response = await PATCH(request, { params });
     const json = await response.json();
 
@@ -131,7 +148,9 @@ describe('PATCH /api/favorites/:id', () => {
   });
 
   it('バリデーションエラーで400を返す（rating小数）', async () => {
-    const { request, params } = createPatchRequest('fav-123', { rating: 5.5 });
+    const { request, params } = createPatchRequest(VALID_UUID, {
+      rating: 5.5,
+    });
     const response = await PATCH(request, { params });
 
     expect(response.status).toBe(400);
@@ -140,19 +159,22 @@ describe('PATCH /api/favorites/:id', () => {
   it('未認証で401を返す', async () => {
     (getAuthSession as jest.Mock).mockResolvedValue(null);
 
-    const { request, params } = createPatchRequest('fav-123', { rating: 5 });
+    const { request, params } = createPatchRequest(VALID_UUID, { rating: 5 });
     const response = await PATCH(request, { params });
 
     expect(response.status).toBe(401);
   });
 
   it('不正なJSONで400を返す', async () => {
-    const request = new Request('http://localhost/api/favorites/fav-123', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: 'invalid json',
-    });
-    const params = Promise.resolve({ id: 'fav-123' });
+    const request = new Request(
+      `http://localhost/api/favorites/${VALID_UUID}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'invalid json',
+      },
+    );
+    const params = Promise.resolve({ id: VALID_UUID });
 
     const response = await PATCH(request, { params });
     const json = await response.json();
@@ -168,7 +190,7 @@ describe('PATCH /api/favorites/:id', () => {
       },
     });
 
-    const { request, params } = createPatchRequest('fav-123', { rating: 5 });
+    const { request, params } = createPatchRequest(VALID_UUID, { rating: 5 });
     const response = await PATCH(request, { params });
 
     expect(response.status).toBe(500);
@@ -193,7 +215,7 @@ describe('DELETE /api/favorites/:id', () => {
             is: () => ({
               select: () => ({
                 single: () => ({
-                  data: { id: 'fav-123' },
+                  data: { id: VALID_UUID },
                   error: null,
                 }),
               }),
@@ -203,7 +225,7 @@ describe('DELETE /api/favorites/:id', () => {
       }),
     });
 
-    const { request, params } = createDeleteRequest('fav-123');
+    const { request, params } = createDeleteRequest(VALID_UUID);
     const response = await DELETE(request, { params });
     const json = await response.json();
 
@@ -230,13 +252,23 @@ describe('DELETE /api/favorites/:id', () => {
       }),
     });
 
-    const { request, params } = createDeleteRequest('non-existent');
+    const { request, params } = createDeleteRequest(OTHER_UUID);
     const response = await DELETE(request, { params });
     const json = await response.json();
 
     expect(response.status).toBe(404);
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('NOT_FOUND');
+  });
+
+  it('不正なID形式で400を返す', async () => {
+    const { request, params } = createDeleteRequest('not-a-uuid');
+    const response = await DELETE(request, { params });
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('他ユーザーのお気に入りで404を返す', async () => {
@@ -257,7 +289,7 @@ describe('DELETE /api/favorites/:id', () => {
       }),
     });
 
-    const { request, params } = createDeleteRequest('other-user-fav');
+    const { request, params } = createDeleteRequest(OTHER_UUID);
     const response = await DELETE(request, { params });
 
     expect(response.status).toBe(404);
@@ -281,7 +313,7 @@ describe('DELETE /api/favorites/:id', () => {
       }),
     });
 
-    const { request, params } = createDeleteRequest('deleted-fav');
+    const { request, params } = createDeleteRequest(OTHER_UUID);
     const response = await DELETE(request, { params });
 
     expect(response.status).toBe(404);
@@ -290,7 +322,7 @@ describe('DELETE /api/favorites/:id', () => {
   it('未認証で401を返す', async () => {
     (getAuthSession as jest.Mock).mockResolvedValue(null);
 
-    const { request, params } = createDeleteRequest('fav-123');
+    const { request, params } = createDeleteRequest(VALID_UUID);
     const response = await DELETE(request, { params });
 
     expect(response.status).toBe(401);
@@ -303,7 +335,7 @@ describe('DELETE /api/favorites/:id', () => {
       },
     });
 
-    const { request, params } = createDeleteRequest('fav-123');
+    const { request, params } = createDeleteRequest(VALID_UUID);
     const response = await DELETE(request, { params });
 
     expect(response.status).toBe(500);

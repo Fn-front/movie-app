@@ -52,6 +52,7 @@ export const FAVORITES_ERROR_MESSAGES = {
   UPDATE_FAILED: errorMessage.updateFailed('評価'),
   ALREADY_EXISTS: 'この映画は既にお気に入りに登録されています',
   NOT_FOUND: 'お気に入りが見つかりません',
+  INVALID_ID: errorMessage.invalid('お気に入りID'),
   INVALID_QUERY: errorMessage.invalid('クエリパラメータ'),
   INVALID_BODY: errorMessage.invalid('入力内容'),
   INVALID_RATING: '評価は1〜10の整数で入力してください',

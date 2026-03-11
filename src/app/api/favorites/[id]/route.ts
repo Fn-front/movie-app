@@ -5,6 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
 import {
@@ -18,6 +19,8 @@ import {
   FAVORITES_ERROR_MESSAGES,
   FAVORITES_SUCCESS_MESSAGES,
 } from '@/constants';
+
+const uuidSchema = z.string().uuid();
 
 export async function PATCH(
   request: Request,
@@ -33,6 +36,20 @@ export async function PATCH(
     if (!supabase) return dbConnectionErrorResponse();
 
     const { id } = await params;
+
+    // UUID形式チェック
+    if (!uuidSchema.safeParse(id).success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: FAVORITES_ERROR_MESSAGES.INVALID_ID,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
+    }
 
     // リクエストボディのパース
     let body: unknown;
@@ -131,6 +148,20 @@ export async function DELETE(
     if (!supabase) return dbConnectionErrorResponse();
 
     const { id } = await params;
+
+    // UUID形式チェック
+    if (!uuidSchema.safeParse(id).success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: FAVORITES_ERROR_MESSAGES.INVALID_ID,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
+    }
 
     // 論理削除（自分のお気に入りかつ未削除のもののみ）
     const { data, error } = await supabase

@@ -54,6 +54,12 @@
     @include text-truncate-multiline(3);
   }
 
+  &__release_date {
+    margin: $spacing-1 0 0;
+    font-size: $font-size-2xs;
+    color: $text-secondary;
+  }
+
   &__delete {
     flex-shrink: 0;
     display: flex;

@@ -148,6 +148,9 @@ test.describe('映画詳細モーダル', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 15000 });
 
+    // 詳細データのロード完了を待つ（Loadingスピナーが消えて詳細情報が表示されるまで）
+    await expect(dialog.getByText('詳細情報')).toBeVisible({ timeout: 15000 });
+
     // 公開中ページではshowFinancialInfo=trueなので表示される
     await expect(dialog.getByText('制作予算')).toBeVisible();
     await expect(dialog.getByText('興行収入')).toBeVisible();
@@ -161,6 +164,9 @@ test.describe('映画詳細モーダル', () => {
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 15000 });
+
+    // 詳細データのロード完了を待つ
+    await expect(dialog.getByText('詳細情報')).toBeVisible({ timeout: 15000 });
 
     // 公開予定ページではshowFinancialInfo=falseなので非表示
     await expect(dialog.getByText('制作予算')).not.toBeVisible();

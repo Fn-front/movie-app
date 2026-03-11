@@ -19,18 +19,6 @@
     border-bottom: $border-width-1 solid $border-color;
   }
 
-  // ユーザーセクション（サイドバー下部に固定）
-  &__user {
-    margin-top: auto;
-    padding-top: $spacing-4;
-    border-top: $border-width-1 solid $border-color;
-  }
-
-  // カレンダーボタン
-  &__calendar {
-    // カスタムスタイルは不要（ボタンコンポーネントのスタイルを使用）
-  }
-
   // ウォッチリスト
   &__watchlist {
     flex: 1;
@@ -50,5 +38,17 @@
       flex: 1;
       overflow-y: auto;
     }
+  }
+
+  // ユーザーセクション（サイドバー下部に固定）
+  &__user {
+    margin-top: auto;
+    padding-top: $spacing-4;
+    border-top: $border-width-1 solid $border-color;
+  }
+
+  // カレンダーボタン
+  &__calendar {
+    // カスタムスタイルは不要（ボタンコンポーネントのスタイルを使用）
   }
 }

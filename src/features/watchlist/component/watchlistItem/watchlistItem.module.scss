@@ -1,4 +1,5 @@
 @use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
 
 .c_watchlist_item {
   display: flex;
@@ -49,9 +50,8 @@
     font-size: $font-size-xs;
     font-weight: $font-weight-medium;
     color: $text-primary;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+
+    @include text-truncate-multiline(3);
   }
 
   &__delete {

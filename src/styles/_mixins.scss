@@ -162,7 +162,7 @@
 
 // 基本カードスタイル
 @mixin card {
-  background-color: white;
+  background-color: $background-paper;
   border-radius: $border-radius-lg;
   box-shadow: $shadow-md;
   padding: $spacing-6;

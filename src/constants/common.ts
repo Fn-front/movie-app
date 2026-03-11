@@ -119,9 +119,9 @@ export const errorMessage = {
 } as const;
 
 /**
- * トーストメッセージ生成ヘルパー
+ * 成功メッセージ生成ヘルパー
  */
-export const toastMessage = {
+export const successMessage = {
   /** 追加成功: 「{対象}に追加しました」 */
   added: (target: string) => `${target}に追加しました`,
   /** 削除成功: 「{対象}から削除しました」 */

@@ -4,7 +4,7 @@
 
 import { renderHook, act } from '@testing-library/react';
 
-import { WATCHLIST_TOAST_MESSAGES } from '@/constants/watchlist';
+import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants/watchlist';
 
 import { useWatchlistToggle } from './useWatchlistToggle';
 
@@ -78,7 +78,7 @@ describe('useWatchlistToggle', () => {
       release_date: '2026-01-01',
     });
     expect(mockToast).toHaveBeenCalledWith({
-      title: WATCHLIST_TOAST_MESSAGES.ADDED,
+      title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
       variant: 'success',
     });
   });
@@ -94,7 +94,7 @@ describe('useWatchlistToggle', () => {
 
     expect(mockRemoveFromWatchlist).toHaveBeenCalledWith('watchlist-id-123');
     expect(mockToast).toHaveBeenCalledWith({
-      title: WATCHLIST_TOAST_MESSAGES.REMOVED,
+      title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
       variant: 'success',
     });
   });

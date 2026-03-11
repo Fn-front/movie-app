@@ -2,6 +2,7 @@
  * ウォッチリストAPIクライアント テスト
  */
 
+import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 import { getWatchlist, addWatchlist, removeWatchlist } from './watchlist';
 
@@ -75,7 +76,7 @@ describe('watchlist API client', () => {
     const mockResponse = {
       data: {
         success: true,
-        message: 'ウォッチリストに追加しました',
+        message: WATCHLIST_SUCCESS_MESSAGES.ADDED,
         data: {
           id: 'new-wl-id',
           tmdb_movie_id: 12345,

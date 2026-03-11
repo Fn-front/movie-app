@@ -61,9 +61,7 @@ describe('DisplayNameForm', () => {
     await user.click(screen.getByRole('button', { name: '表示名を更新' }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('表示名を入力してください'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('表示名を入力してください')).toBeInTheDocument();
     });
     expect(mockUpdateProfile).not.toHaveBeenCalled();
   });

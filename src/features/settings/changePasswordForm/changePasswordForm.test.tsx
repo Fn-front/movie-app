@@ -80,10 +80,7 @@ describe('ChangePasswordForm', () => {
   it('現在のパスワード未入力でバリデーションエラーが表示される', async () => {
     render(<ChangePasswordForm />);
 
-    await user.type(
-      screen.getByLabelText('新しいパスワード'),
-      'NewPass123',
-    );
+    await user.type(screen.getByLabelText('新しいパスワード'), 'NewPass123');
     await user.type(
       screen.getByLabelText('新しいパスワード（確認）'),
       'NewPass123',
@@ -127,9 +124,7 @@ describe('ChangePasswordForm', () => {
     await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('パスワードが一致しません'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('パスワードが一致しません')).toBeInTheDocument();
     });
     expect(mockChangePassword).not.toHaveBeenCalled();
   });

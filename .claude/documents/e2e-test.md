@@ -19,20 +19,12 @@ e2e/
 │   ├── signup.spec.ts       # 新規登録ページテスト
 │   ├── logout.spec.ts       # ログアウトテスト
 │   └── protection.spec.ts   # 認証保護テスト
-├── home/
-│   └── home.spec.ts         # ホームページテスト
-├── layout/
-│   ├── header.spec.ts       # ヘッダーテスト
-│   ├── footer.spec.ts       # フッターテスト
-│   └── userMenu.spec.ts     # ユーザーメニュー（ポップオーバー）テスト
 ├── movies/
 │   ├── upcoming.spec.ts     # 公開予定ページテスト
 │   ├── nowShowing.spec.ts   # 公開中ページテスト
 │   ├── movieDetail.spec.ts  # 映画詳細テスト
 │   ├── sortFilter.spec.ts   # ソート・フィルターテスト
 │   └── filterPersistence.spec.ts # フィルター永続化テスト
-├── navigation/
-│   └── sideNav.spec.ts      # サイドナビゲーションテスト
 ├── settings/
 │   └── settings.spec.ts     # 設定ページテスト
 └── global.setup.ts          # グローバルセットアップ（storageState生成）
@@ -144,20 +136,6 @@ e2e/helpers/
 |---|---|---|
 | signOut APIが正常に応答する | 認証済み | CSRFトークン取得 → signOut APIのPOSTが200を返す |
 
-### e2e/layout/userMenu.spec.ts（ユーザーメニュー）
-
-| テスト | 認証 | 説明 |
-|---|---|---|
-| トリガーボタンが表示される | 認証済み | `aria-label='ユーザーメニューを開く'` ボタンの存在確認 |
-| ユーザー名が表示される | 認証済み | トリガーボタン内にテキストが存在する |
-| クリックでドロップダウンメニューが表示される | 認証済み | `role="menu"` の表示確認 |
-| メニュー内に設定リンクが表示される | 認証済み | `menuitem` に「設定」が存在する |
-| メニュー内にログアウトボタンが表示される | 認証済み | `menuitem` に「ログアウト」が存在する |
-| 「設定」クリックで設定ページに遷移する | 認証済み | `/settings` に遷移 |
-| メニュー内にメールアドレスが表示される | 認証済み | `@` を含むテキストがメニュー内に存在する |
-| Escapeキーでメニューが閉じる | 認証済み | メニュー表示後 Escape で非表示になる |
-| 未認証時はユーザーメニューが表示されない | 未認証 | `/auth/signin` でトリガーボタンが非表示 |
-
 ### e2e/movies/upcoming.spec.ts（公開予定）
 
 | テスト | 認証 | 説明 |
@@ -219,17 +197,6 @@ e2e/helpers/
 | 詳細モーダル内にボタンが表示される | 認証済み | モーダル内のボタン確認 |
 | モーダル内でラベルが切り替わる | 認証済み | モーダル内トグル・クリーンアップ |
 | モーダルで追加後タイル側も同期される | 認証済み | モーダル↔タイル間の状態同期 |
-
-### e2e/navigation/sideNav.spec.ts（サイドナビ）
-
-| テスト | 認証 | 説明 |
-|---|---|---|
-| サイドナビ表示 | 認証済み | `aria-label='映画ナビゲーション'` |
-| 「公開予定」リンク存在 | 認証済み | リンクの存在確認 |
-| 「公開中」リンク存在 | 認証済み | リンクの存在確認 |
-| 公開予定リンク遷移 | 認証済み | `/movies/upcoming` に遷移 |
-| 公開中リンク遷移 | 認証済み | `/movies/now-showing` に遷移 |
-| aria-current="page" | 認証済み | アクティブリンクのアクセシビリティ確認 |
 
 ### e2e/settings/settings.spec.ts（設定）
 

@@ -498,9 +498,29 @@
 - [x] CLAUDE.md更新
   - 設計ドキュメント一覧に `testing-strategy.md` を追加
 
-#### Step 3.6: 既存テストのレイヤー見直し（`setup/test-layer-review`）
-- [ ] E2Eで検証している内容のうち、結合テストに移せるものを特定
-- [ ] 移行対象テストの移行実施
+#### Step 3.6a: カバー済みE2Eテスト削除（`setup/test-layer-review-cleanup`）
+- [x] `e2e/layout/footer.spec.ts` 削除（結合テストで完全カバー済み）
+- [x] `e2e/layout/header.spec.ts` 削除（結合テストで完全カバー済み）
+- [x] `e2e/navigation/sideNav.spec.ts` 削除（結合テストで完全カバー済み）
+- [x] `e2e/home/home.spec.ts` 削除（結合テストで完全カバー済み）
+- [x] `e2e/layout/userMenu.spec.ts` 削除（結合テストでほぼカバー済み）
+- [x] E2E関連ドキュメント更新（`e2e-test.md`）
+
+#### Step 3.6b: 認証フォーム結合テスト移行（`setup/test-layer-auth-form`）
+- [ ] `signin.spec.ts` からバリデーション・エラー表示・リンク遷移テストを結合テストに移行
+- [ ] `signup.spec.ts` からバリデーション・リンク遷移テストを結合テストに移行
+- [ ] 移行済みテストケースをE2Eから削除（認証フロー系のみE2Eに残す）
+
+#### Step 3.6c: 映画ページ結合テスト移行（`setup/test-layer-movies`）
+- [ ] `movieDetail.spec.ts` からモーダル表示・コンテンツ・開閉操作テストを結合テストに移行
+- [ ] `nowShowing.spec.ts` / `upcoming.spec.ts` からページUI表示テストを結合テストに移行
+- [ ] `sortFilter.spec.ts` からソート変更・フィルター適用テストを結合テストに移行
+- [ ] `watchlistButton.spec.ts` からボタン表示・aria属性・状態切替テストを結合テストに移行
+- [ ] 移行済みテストケースをE2Eから削除（無限スクロール・同期系のみE2Eに残す）
+
+#### Step 3.6d: 設定ページ結合テスト移行（`setup/test-layer-settings`）
+- [ ] `settings.spec.ts` からバリデーション・テーマ切替・通知トグルテストを結合テストに移行
+- [ ] 移行済みテストケースをE2Eから削除（認証保護のみE2Eに残す）
 
 ### お気に入り機能（設計書: `.claude/documents/favorites-design.md`）
 

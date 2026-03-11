@@ -524,33 +524,129 @@
 
 ### お気に入り機能（設計書: `.claude/documents/favorites-design.md`）
 
-#### Step 4: DB・API基盤（`feature/favorites-api`）
+> テスティングトロフィーモデル（Step 3.5）を最初から適用。各Stepでテストレイヤーを明示する。
+
+#### Step 4: DB・API・スキーマ基盤（`feature/favorites-api`）
 - [ ] favoritesテーブル作成（Supabase migration）
   - UUID主キー、論理削除、RLSポリシー設定
   - UNIQUE制約（user_id, tmdb_movie_id WHERE deleted_at IS NULL）
+  - update_updated_at_column() トリガー適用
+- [ ] zodバリデーションスキーマ作成（favoritesAddSchema, favoritesUpdateSchema, favoritesQuerySchema）
+- [ ] お気に入り定数追加（エラーメッセージ、成功メッセージ、queryKeys等）
+- [ ] 映画一覧API（GET /api/movies）にお気に入り情報を追加
+  - 認証済みの場合、favoritesテーブルをLEFT JOINし各映画に `favorite: { id, rating } | null` を付与
+  - 未認証の場合は `favorite` フィールドを含めない
+- [ ] 映画詳細API（GET /api/movies/:id）にお気に入り情報を追加
+  - 認証済みの場合、`favorite: { id, rating } | null` を付与
 - [ ] お気に入り一覧取得API（GET /api/favorites）
+  - NextAuth.jsで認証チェック
+  - ページベースページング（page/limit、20件ずつ）
+  - ソート: 登録日順（added_at） / 評価順（rating）
 - [ ] お気に入り追加API（POST /api/favorites）
+  - NextAuth.jsで認証チェック
+  - 重複チェック（409 Conflict）
 - [ ] 評価更新API（PATCH /api/favorites/:id）
+  - NextAuth.jsで認証チェック
+  - 所有者チェック（404 Not Found）
 - [ ] お気に入り削除API（DELETE /api/favorites/:id）
-- [ ] zodバリデーションスキーマ作成
-- [ ] APIクライアント（src/lib/api/favorites.ts）作成
-- [ ] テストを追加
+  - NextAuth.jsで認証チェック
+  - 論理削除（deleted_at更新）
+- [ ] APIクライアント（src/lib/api/favorites/favorites.ts）作成
+- [ ] 単体テスト
+  - zodスキーマテスト（favoritesAddSchema, favoritesUpdateSchema, favoritesQuerySchema）
+  - APIクライアントテスト（getFavorites, addFavorite, updateFavoriteRating, removeFavorite）
+- [ ] 結合テスト
+  - API Routeテスト（GET /api/movies）— お気に入り情報付与
+    - 認証済み: 各映画に `favorite` フィールドが含まれる
+    - 未認証: `favorite` フィールドが含まれない
+    - お気に入り登録済み映画: `{ id, rating }` が返る
+    - 未登録映画: `null` が返る
+  - API Routeテスト（GET /api/movies/:id）— お気に入り情報付与
+    - 認証済み/未認証の `favorite` フィールド確認
+  - API Routeテスト（/api/favorites）
+    - GET: 認証チェック・ページング・ソート・deleted_atフィルタ
+    - POST: 認証チェック・正常追加・重複409・バリデーションエラー
+  - API Routeテスト（/api/favorites/:id）
+    - PATCH: 認証チェック・正常更新・バリデーションエラー・404（存在しない/他ユーザー/削除済み）
+    - DELETE: 認証チェック・正常削除・404（存在しない/他ユーザー/削除済み）
 
-#### Step 5: お気に入りUI（`feature/favorites-ui`）
-- [ ] FavoriteButtonコンポーネント作成（ハートアイコン）
-- [ ] RatingIndicatorコンポーネント作成（1〜10点、数値インジケーター）
-- [ ] FavoriteRatingModalコンポーネント作成（点数入力モーダル）
-- [ ] MovieTileにFavoriteButton統合
+#### Step 5: お気に入りUI + MovieTile統合（`feature/favorites-ui`）
 - [ ] useFavoritesフック作成（TanStack Query）
-- [ ] テストを追加
+  - useQuery（一覧取得 — /favoritesページ用）
+  - useMutation（追加・評価更新・削除）
+  - 楽観的UI更新（映画一覧キャッシュ内の該当映画の `favorite` フィールドを更新）
+- [ ] useFavoriteToggleフック作成
+  - useFavorites + useToast を統合
+  - 未登録: RatingModal表示 → 登録
+  - 登録済み: RatingModal表示（現在の評価セット）→ 更新 or 削除
+- [ ] RatingIndicatorコンポーネント作成（1〜10点、数値インジケーター）
+  - インタラクティブモード（モーダル内）: クリックで評価選択
+  - 表示モード（一覧画面）: 読み取り専用
+- [ ] FavoriteRatingModalコンポーネント作成（点数入力モーダル）
+  - Radix UI Dialogベース
+  - 映画タイトル表示 + RatingIndicator
+  - 新規: 「登録」「キャンセル」ボタン
+  - 更新: 現在の評価を初期値 + 「更新」「削除」「キャンセル」ボタン
+- [ ] FavoriteButtonコンポーネント作成（ハートアイコン）
+  - props: `favorite: { id, rating } | null`（映画一覧レスポンスから渡される）
+  - `favorite` が null: 白抜きハート → クリックでRatingModal表示
+  - `favorite` がオブジェクト: 塗りつぶしハート（$secondary-600）→ クリックで評価変更モーダル表示
+  - event.stopPropagation()でMovieTileクリックと干渉しない
+- [ ] MovieTileにFavoriteButton統合（ポスター上にオーバーレイ表示）
+- [ ] 映画詳細モーダル内にもFavoriteButton配置
+- [ ] Toast通知（「お気に入りに追加しました」「お気に入りから削除しました」「評価を更新しました」）
+- [ ] 結合テスト
+  - useFavoritesフックテスト
+    - 一覧取得（useQuery）・ページ切替
+    - 追加mutation・映画一覧キャッシュの楽観的更新・エラー時ロールバック
+    - 評価更新mutation・映画一覧キャッシュの楽観的更新
+    - 削除mutation・映画一覧キャッシュの楽観的更新・エラー時ロールバック
+  - useFavoriteToggleフックテスト
+    - 未登録映画: モーダル表示フラグON
+    - 登録済み映画: モーダル表示フラグON（現在の評価付き）
+  - RatingIndicatorテスト
+    - インタラクティブモード: クリックで値変更・コールバック発火
+    - 表示モード: 読み取り専用で表示・クリック無効
+    - aria属性の確認
+  - FavoriteRatingModalテスト
+    - 新規登録: タイトル表示・評価選択・登録ボタンで送信
+    - 評価変更: 現在の評価が初期値・更新ボタンで送信
+    - 削除: 削除ボタンで削除コールバック発火
+    - キャンセル・ESCで閉じる
+  - FavoriteButtonテスト
+    - 未登録時: 白抜きハート表示・クリックでコールバック
+    - 登録済み時: 塗りつぶしハート表示・クリックでコールバック
+    - event.stopPropagation()の確認
+    - aria-label切替（「お気に入りに追加」/「お気に入りを編集」）
+  - MovieTile統合テスト
+    - FavoriteButtonがポスター上に表示される
+    - ボタンクリックがMovieTileのonClickを発火しない
+  - 映画詳細モーダル統合テスト
+    - FavoriteButton表示・動作確認
 
 #### Step 6: お気に入り一覧ページ（`feature/favorites-page`）
 - [ ] ROUTES定数にFAVORITES追加
 - [ ] SideNavに「お気に入り」項目追加
-- [ ] /favorites ページ作成
-- [ ] FavoriteListコンポーネント作成（グリッド表示 + 評価表示）
-- [ ] ソート機能（登録日順 / 評価順）
-- [ ] テストを追加
+- [ ] /favorites ページ作成（メタデータ設定）
+- [ ] FavoriteListコンポーネント作成
+  - MovieTileと同様のグリッドレイアウト
+  - 各タイルにRatingIndicator（表示モード）を表示
+  - 空状態の表示（「お気に入りの映画を追加しましょう」）
+- [ ] ソートSelect（登録日順 / 評価順）
+- [ ] useFavoritesPageフック作成（ソート状態管理 + useFavorites統合）
+- [ ] 結合テスト
+  - FavoriteListテスト
+    - 一覧表示（複数件・グリッド）
+    - 空状態メッセージ表示
+    - ローディング状態表示
+    - 各タイルにRatingIndicator表示
+  - favoritesPageテスト
+    - ソート切替（登録日順 ↔ 評価順）
+    - FavoriteButtonクリック → RatingModal表示
+- [ ] E2Eテスト（Playwright）— クリティカルユーザーフローのみ
+  - MovieTileからお気に入り追加（評価選択 → 登録）→ ハートアイコン変化
+  - お気に入り一覧ページで表示確認 → 評価変更 → 削除
+  - 詳細モーダルからお気に入り追加/削除
 
 ---
 

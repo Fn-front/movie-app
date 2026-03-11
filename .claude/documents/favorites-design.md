@@ -301,26 +301,93 @@ src/features/favorites/
 
 ---
 
-## 7. カスタムフック（useFavorites）
+## 7. お気に入り状態チェック方式
+
+### 方針: 映画一覧APIのレスポンスに含める
+
+お気に入り状態の判定は、別途お気に入り全件を取得するのではなく、**映画一覧API（GET /api/movies）のレスポンスに各映画のお気に入り情報を含める**方式を採用する。
+
+### GET /api/movies レスポンス変更
+
+認証済みユーザーの場合、各映画に `favorite` フィールドを追加する。
+
+```json
+{
+  "success": true,
+  "data": {
+    "movies": [
+      {
+        "id": 12345,
+        "title": "映画タイトル",
+        "poster_path": "/abc.jpg",
+        "favorite": { "id": "favorite-uuid", "rating": 8 }
+      },
+      {
+        "id": 67890,
+        "title": "別の映画",
+        "poster_path": "/def.jpg",
+        "favorite": null
+      }
+    ]
+  }
+}
+```
+
+- `favorite` が `null` → 未登録（白抜きハート）
+- `favorite` がオブジェクト → 登録済み（塗りつぶしハート、`id` は更新/削除用、`rating` は表示用）
+- 未認証の場合は `favorite` フィールドを含めない
+
+### API実装
+
+映画一覧取得時に、認証済みであれば `favorites` テーブルを LEFT JOIN し、該当ユーザーの `favorite.id` と `favorite.rating` を付与する。
+
+```sql
+SELECT mc.*, f.id AS favorite_id, f.rating AS favorite_rating
+FROM movie_cache mc
+LEFT JOIN favorites f
+  ON f.tmdb_movie_id = mc.id
+  AND f.user_id = :userId
+  AND f.deleted_at IS NULL
+WHERE ...
+```
+
+### 映画詳細API（GET /api/movies/:id）も同様
+
+詳細モーダルでもお気に入り状態を表示するため、映画詳細APIにも `favorite` フィールドを追加する。
+
+### メリット
+
+- 追加リクエスト不要（映画一覧取得の1リクエストで完結）
+- お気に入り件数が増えても全件取得の必要がない
+- MovieTileのレンダリング時点でお気に入り情報が確定している
+
+---
+
+## 8. カスタムフック（useFavorites）
 
 TanStack Query ベースで実装。
 
 ```typescript
 export const useFavorites = () => {
-  // お気に入り一覧取得（useQuery）
+  // お気に入り一覧取得（useQuery）— /favorites ページ用
   // お気に入り追加（useMutation + 楽観的更新）
   // 評価更新（useMutation）
   // お気に入り削除（useMutation + 楽観的更新）
-  // 特定映画のお気に入り状態チェック（キャッシュから判定）
+  // ※ isInFavorites は映画一覧レスポンスの favorite フィールドで判定
 };
 ```
 
+**楽観的UI更新時のキャッシュ操作:**
+- 追加: 映画一覧キャッシュ内の該当映画の `favorite` を `{ id: 'optimistic-xxx', rating }` に更新
+- 削除: 映画一覧キャッシュ内の該当映画の `favorite` を `null` に更新
+- 評価変更: 映画一覧キャッシュ内の該当映画の `favorite.rating` を更新
+
 ---
 
-## 8. UIフロー
+## 9. UIフロー
 
 ```
-MovieTile上のハートアイコンをクリック
+MovieTile上のハートアイコンをクリック（favoriteフィールドで状態判定）
   |
   +-- [未登録の場合]
   |     FavoriteRatingModal表示
@@ -338,7 +405,7 @@ MovieTile上のハートアイコンをクリック
 
 ---
 
-## 9. reviewsテーブルとの評価スケール差異について
+## 10. reviewsテーブルとの評価スケール差異について
 
 | 機能 | スケール | 型 | 用途 |
 |---|---|---|---|

@@ -14,6 +14,35 @@ jest.mock('@/features/movies/hooks/useMovieDetail', () => ({
   useMovieDetail: (...args: unknown[]) => mockUseMovieDetail(...args),
 }));
 
+const mockUseWatchlist = {
+  isInWatchlist: jest.fn().mockReturnValue(false),
+  getWatchlistId: jest.fn().mockReturnValue(undefined),
+  addToWatchlist: jest.fn(),
+  removeFromWatchlist: jest.fn(),
+  isAdding: false,
+  isRemoving: false,
+  watchlist: [],
+  isLoading: false,
+  isFetchingNextPage: false,
+  hasNextPage: false,
+  fetchNextPage: jest.fn(),
+};
+
+jest.mock('@/features/watchlist/hooks/useWatchlist', () => ({
+  useWatchlist: () => mockUseWatchlist,
+}));
+
+const mockToast = jest.fn();
+
+jest.mock('@/hooks/useToast', () => ({
+  useToast: () => ({
+    toasts: [],
+    toast: mockToast,
+    removeToast: jest.fn(),
+    clearToasts: jest.fn(),
+  }),
+}));
+
 jest.mock('next/image', () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => {
@@ -328,6 +357,56 @@ describe('MovieDetailContent', () => {
     expect(screen.queryByText('配信')).not.toBeInTheDocument();
     expect(screen.queryByText('レンタル')).not.toBeInTheDocument();
     expect(screen.queryByText('購入')).not.toBeInTheDocument();
+  });
+
+  describe('ウォッチリスト統合', () => {
+    const movieData = {
+      id: 123,
+      title: 'テスト映画',
+      original_title: 'Test Movie',
+      overview: 'テスト概要',
+      release_date: '2025-03-15',
+      runtime: 120,
+      vote_average: 8.0,
+      popularity: 100,
+      genres: [],
+      production_companies: [],
+      production_countries: [],
+      budget: 0,
+      revenue: 0,
+      poster_path: '/poster.jpg',
+      backdrop_path: null,
+    };
+
+    it('ウォッチリスト追加ボタンが表示される', () => {
+      mockUseMovieDetail.mockReturnValue({
+        movie: movieData,
+        isLoading: false,
+        isError: false,
+      });
+      mockUseWatchlist.isInWatchlist.mockReturnValue(false);
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+      ).toBeInTheDocument();
+    });
+
+    it('追加済みの場合は削除ボタンが表示される', () => {
+      mockUseMovieDetail.mockReturnValue({
+        movie: movieData,
+        isLoading: false,
+        isError: false,
+      });
+      mockUseWatchlist.isInWatchlist.mockReturnValue(true);
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('button', { name: 'ウォッチリストから削除' }),
+      ).toBeInTheDocument();
+    });
   });
 
   it('予算・興行収入が0の場合は「-」を表示する', () => {

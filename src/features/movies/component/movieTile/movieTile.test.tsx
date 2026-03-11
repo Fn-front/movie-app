@@ -193,4 +193,58 @@ describe('MovieTile', () => {
       }).not.toThrow();
     });
   });
+
+  describe('ウォッチリスト統合', () => {
+    it('onWatchlistToggleが指定されるとWatchlistAddButtonが表示される', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onWatchlistToggle={jest.fn()}
+          isInWatchlist={false}
+        />,
+      );
+      expect(
+        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+      ).toBeInTheDocument();
+    });
+
+    it('onWatchlistToggleが未指定の場合WatchlistAddButtonが表示されない', () => {
+      render(<MovieTile movie={createMockMovie()} />);
+      expect(
+        screen.queryByRole('button', { name: 'ウォッチリストに追加' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('WatchlistAddButtonクリックがMovieTileのonClickを発火しない', () => {
+      const onClick = jest.fn();
+      const onWatchlistToggle = jest.fn();
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onClick={onClick}
+          onWatchlistToggle={onWatchlistToggle}
+          isInWatchlist={false}
+        />,
+      );
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+      );
+      expect(onWatchlistToggle).toHaveBeenCalledTimes(1);
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('isInWatchlist=trueの場合「ウォッチリストから削除」が表示される', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onWatchlistToggle={jest.fn()}
+          isInWatchlist={true}
+        />,
+      );
+      expect(
+        screen.getByRole('button', { name: 'ウォッチリストから削除' }),
+      ).toBeInTheDocument();
+    });
+  });
 });

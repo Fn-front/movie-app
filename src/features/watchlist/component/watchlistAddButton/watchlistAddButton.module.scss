@@ -1,0 +1,48 @@
+@use '@/styles/variables' as *;
+
+.c_watchlist_add_button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: $border-radius-full;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  cursor: pointer;
+  transition: opacity $duration-fast $ease-in-out,
+    background-color $duration-fast $ease-in-out;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.8);
+  }
+
+  &:focus-visible {
+    outline: 2px solid $primary-500;
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &__sm {
+    width: 28px;
+    height: 28px;
+    font-size: $font-size-base;
+  }
+
+  &__md {
+    width: 36px;
+    height: 36px;
+    font-size: $font-size-xl;
+  }
+
+  &__active {
+    background-color: $primary-500;
+
+    &:hover {
+      background-color: $primary-600;
+    }
+  }
+}

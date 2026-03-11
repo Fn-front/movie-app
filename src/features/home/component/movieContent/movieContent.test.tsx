@@ -6,6 +6,29 @@ jest.mock('@/features/home/hooks/useHome');
 jest.mock('@/hooks/useIntersectionObserver', () => ({
   useIntersectionObserver: () => ({ current: null }),
 }));
+jest.mock('@/features/watchlist/hooks/useWatchlist', () => ({
+  useWatchlist: () => ({
+    isInWatchlist: jest.fn().mockReturnValue(false),
+    getWatchlistId: jest.fn().mockReturnValue(undefined),
+    addToWatchlist: jest.fn(),
+    removeFromWatchlist: jest.fn(),
+    isAdding: false,
+    isRemoving: false,
+    watchlist: [],
+    isLoading: false,
+    isFetchingNextPage: false,
+    hasNextPage: false,
+    fetchNextPage: jest.fn(),
+  }),
+}));
+jest.mock('@/hooks/useToast', () => ({
+  useToast: () => ({
+    toasts: [],
+    toast: jest.fn(),
+    removeToast: jest.fn(),
+    clearToasts: jest.fn(),
+  }),
+}));
 
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';

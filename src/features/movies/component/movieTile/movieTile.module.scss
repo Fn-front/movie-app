@@ -47,6 +47,19 @@
     }
   }
 
+  &__watchlist_button {
+    position: absolute;
+    top: $spacing-2;
+    right: $spacing-2;
+    opacity: 0;
+    transition: opacity $duration-fast $ease-in-out;
+  }
+
+  &:hover &__watchlist_button,
+  &:focus-within &__watchlist_button {
+    opacity: 1;
+  }
+
   &__revival {
     position: absolute;
     top: $spacing-2;

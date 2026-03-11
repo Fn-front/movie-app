@@ -18,6 +18,9 @@ import { MovieTile } from '@/features/home/component/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/features/home/component/movieTileSkeleton/movieTileSkeleton';
 import { FilterModal } from '@/features/home/component/filterModal/filterModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
+import { useWatchlist } from '@/features/watchlist/hooks/useWatchlist';
+import { useToast } from '@/hooks/useToast';
+import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
 import { useHome } from '@/features/home/hooks/useHome';
 import styles from '@/features/home/home.module.scss';
@@ -45,6 +48,43 @@ export const MovieContent = memo(function MovieContent() {
     handleFilterModalOpen,
     handleFilterModalClose,
   } = useHome();
+
+  const {
+    isInWatchlist,
+    getWatchlistId,
+    addToWatchlist,
+    removeFromWatchlist,
+    isAdding,
+    isRemoving,
+  } = useWatchlist();
+  const { toast } = useToast();
+
+  const handleWatchlistToggle = useCallback(
+    (movie: MovieCacheItem) => {
+      if (isInWatchlist(movie.id)) {
+        const watchlistId = getWatchlistId(movie.id);
+        if (watchlistId) {
+          removeFromWatchlist(watchlistId);
+          toast({
+            title: 'ウォッチリストから削除しました',
+            variant: 'success',
+          });
+        }
+      } else {
+        addToWatchlist({
+          tmdb_movie_id: movie.id,
+          title: movie.title,
+          poster_path: movie.poster_path,
+          release_date: movie.release_date,
+        });
+        toast({
+          title: 'ウォッチリストに追加しました',
+          variant: 'success',
+        });
+      }
+    },
+    [isInWatchlist, getWatchlistId, addToWatchlist, removeFromWatchlist, toast],
+  );
 
   const sortOptions = useMemo(
     () =>
@@ -117,7 +157,14 @@ export const MovieContent = memo(function MovieContent() {
           <MovieTileSkeleton />
         ) : (
           movies.map((movie) => (
-            <MovieTile key={movie.id} movie={movie} genres={genres} />
+            <MovieTile
+              key={movie.id}
+              movie={movie}
+              genres={genres}
+              isInWatchlist={isInWatchlist(movie.id)}
+              onWatchlistToggle={handleWatchlistToggle}
+              watchlistDisabled={isAdding || isRemoving}
+            />
           ))
         )}
       </div>

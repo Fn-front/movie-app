@@ -9,6 +9,7 @@ import { memo, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 
 import { Card } from '@/components/ui/card/card';
+import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
 import { getTMDbPosterUrl } from '@/utils/image';
 import { formatDate } from '@/utils/date';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
@@ -25,6 +26,12 @@ export interface MovieTileProps {
   genres?: Record<number, string>;
   /** クリック時のコールバック */
   onClick?: (movieId: number) => void;
+  /** ウォッチリストに追加済みかどうか */
+  isInWatchlist?: boolean;
+  /** ウォッチリストボタンクリック時のコールバック */
+  onWatchlistToggle?: (movie: MovieCacheItem) => void;
+  /** ウォッチリストボタン無効化 */
+  watchlistDisabled?: boolean;
 }
 
 /**
@@ -34,6 +41,9 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   movie,
   genres,
   onClick,
+  isInWatchlist = false,
+  onWatchlistToggle,
+  watchlistDisabled = false,
 }) {
   const handleClick = useCallback(() => {
     onClick?.(movie.id);
@@ -48,6 +58,10 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
     },
     [movie.id, onClick],
   );
+
+  const handleWatchlistToggle = useCallback(() => {
+    onWatchlistToggle?.(movie);
+  }, [movie, onWatchlistToggle]);
 
   const posterUrl = getTMDbPosterUrl(movie.poster_path);
   const formattedDate = movie.release_date
@@ -97,6 +111,15 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
         )}
         {movie.is_revival && (
           <span className={styles.c_movie_tile__revival}>リバイバル</span>
+        )}
+        {onWatchlistToggle && (
+          <div className={styles.c_movie_tile__watchlist_button}>
+            <WatchlistAddButton
+              isInWatchlist={isInWatchlist}
+              onClick={handleWatchlistToggle}
+              disabled={watchlistDisabled}
+            />
+          </div>
         )}
       </div>
       <div className={styles.c_movie_tile__info}>

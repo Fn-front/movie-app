@@ -93,6 +93,13 @@
     min-width: 0;
   }
 
+  // タイトル行（タイトル + ウォッチリストボタン）
+  &__title_row {
+    display: flex;
+    align-items: flex-start;
+    gap: $spacing-3;
+  }
+
   // タイトル
   &__title {
     margin: 0;

@@ -1,58 +1,16 @@
 /**
  * ウォッチリストボタン E2Eテスト（認証済み）
- * MovieTile上およびモーダル内のウォッチリスト追加/削除ボタンを検証
+ * クリティカルユーザージャーニーのみ（ボタン表示・aria-label確認は結合テストに移行済み）
+ * API呼び出し→状態更新→UI反映、モーダル↔タイル間の状態同期を検証
  */
 
 import { test, expect } from '../fixtures/auth';
 import { movieTileButtons } from '../helpers/locators';
 
-test.describe('ウォッチリストボタン — MovieTile', () => {
+test.describe('ウォッチリストボタン — 状態トグル', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/movies/now-showing');
     await movieTileButtons(page).first().waitFor({ timeout: 30000 });
-  });
-
-  test('映画タイルにウォッチリストボタンが表示される', async ({ page }) => {
-    const firstTile = movieTileButtons(page).first();
-    const watchlistButton = firstTile.getByRole('button', {
-      name: /ウォッチリスト/,
-    });
-
-    await expect(watchlistButton).toBeVisible();
-  });
-
-  test('ウォッチリストボタンのaria-labelが「ウォッチリストに追加」である', async ({
-    page,
-  }) => {
-    const firstTile = movieTileButtons(page).first();
-    const addButton = firstTile.getByRole('button', {
-      name: 'ウォッチリストに追加',
-    });
-
-    // 未追加状態では「ウォッチリストに追加」ラベル
-    const isAddVisible = await addButton.isVisible().catch(() => false);
-    const removeButton = firstTile.getByRole('button', {
-      name: 'ウォッチリストから削除',
-    });
-    const isRemoveVisible = await removeButton.isVisible().catch(() => false);
-
-    // どちらかのラベルが表示される
-    expect(isAddVisible || isRemoveVisible).toBe(true);
-  });
-
-  test('ウォッチリストボタンをクリックしてもモーダルが開かない', async ({
-    page,
-  }) => {
-    const firstTile = movieTileButtons(page).first();
-    const watchlistButton = firstTile.getByRole('button', {
-      name: /ウォッチリスト/,
-    });
-
-    await watchlistButton.click();
-
-    // モーダルが開かないことを確認（stopPropagationが効いている）
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).not.toBeVisible();
   });
 
   test('ウォッチリストボタンクリックでラベルが切り替わる', async ({ page }) => {
@@ -84,41 +42,12 @@ test.describe('ウォッチリストボタン — MovieTile', () => {
       await expect(removeButton).toBeVisible({ timeout: 5000 });
     }
   });
-
-  test('公開予定ページでもウォッチリストボタンが表示される', async ({
-    page,
-  }) => {
-    await page.goto('/movies/upcoming');
-    await movieTileButtons(page).first().waitFor({ timeout: 30000 });
-
-    const firstTile = movieTileButtons(page).first();
-    const watchlistButton = firstTile.getByRole('button', {
-      name: /ウォッチリスト/,
-    });
-
-    await expect(watchlistButton).toBeVisible();
-  });
 });
 
-test.describe('ウォッチリストボタン — 詳細モーダル', () => {
+test.describe('ウォッチリストボタン — モーダル↔タイル状態同期', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/movies/now-showing');
     await movieTileButtons(page).first().waitFor({ timeout: 30000 });
-  });
-
-  test('詳細モーダル内にウォッチリストボタンが表示される', async ({ page }) => {
-    await movieTileButtons(page).first().click();
-
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 15000 });
-
-    // 詳細データのロード完了を待つ
-    await expect(dialog.getByText('詳細情報')).toBeVisible({ timeout: 15000 });
-
-    const watchlistButton = dialog.getByRole('button', {
-      name: /ウォッチリスト/,
-    });
-    await expect(watchlistButton).toBeVisible();
   });
 
   test('モーダル内ウォッチリストボタンクリックでラベルが切り替わる', async ({

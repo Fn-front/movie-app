@@ -512,11 +512,11 @@
 - [x] 移行済みテストケースをE2Eから削除（認証フロー系のみE2Eに残す）
 
 #### Step 3.6c: 映画ページ結合テスト移行（`setup/test-layer-movies`）
-- [ ] `movieDetail.spec.ts` からモーダル表示・コンテンツ・開閉操作テストを結合テストに移行
-- [ ] `nowShowing.spec.ts` / `upcoming.spec.ts` からページUI表示テストを結合テストに移行
-- [ ] `sortFilter.spec.ts` からソート変更・フィルター適用テストを結合テストに移行
-- [ ] `watchlistButton.spec.ts` からボタン表示・aria属性・状態切替テストを結合テストに移行
-- [ ] 移行済みテストケースをE2Eから削除（無限スクロール・同期系のみE2Eに残す）
+- [x] `movieDetail.spec.ts` からモーダル表示・コンテンツ・開閉操作テストを結合テストに移行
+- [x] `nowShowing.spec.ts` / `upcoming.spec.ts` からページUI表示テストを結合テストに移行
+- [x] `sortFilter.spec.ts` からソート変更・フィルター適用テストを結合テストに移行
+- [x] `watchlistButton.spec.ts` からボタン表示・aria属性・状態切替テストを結合テストに移行
+- [x] 移行済みテストケースをE2Eから削除（無限スクロール・同期系のみE2Eに残す）
 
 #### Step 3.6d: 設定ページ結合テスト移行（`setup/test-layer-settings`）
 - [ ] `settings.spec.ts` からバリデーション・テーマ切替・通知トグルテストを結合テストに移行

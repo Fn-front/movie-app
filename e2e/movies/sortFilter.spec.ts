@@ -1,5 +1,6 @@
 /**
  * 映画ページ ソート・フィルター操作 E2Eテスト（認証済み）
+ * クリティカルユーザージャーニーのみ（クリアボタン動作は結合テストに移行済み）
  */
 
 import { test, expect } from '../fixtures/auth';
@@ -47,18 +48,6 @@ test.describe('公開予定ページのソート・フィルター操作', () =>
 
     await dialog.getByRole('button', { name: '適用' }).click();
     await expect(dialog).not.toBeVisible();
-  });
-
-  test('フィルターモーダルでクリアボタンが機能する', async ({ page }) => {
-    await page.getByRole('button', { name: /フィルター/ }).click();
-
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
-
-    await dialog.getByRole('button', { name: 'クリア' }).click();
-
-    // クリア後もモーダルは開いたまま
-    await expect(dialog).toBeVisible();
   });
 
   test('リリースタイプタブを切り替えられる', async ({ page }) => {

@@ -119,6 +119,16 @@ export const errorMessage = {
 } as const;
 
 /**
+ * トーストメッセージ生成ヘルパー
+ */
+export const toastMessage = {
+  /** 追加成功: 「{対象}に追加しました」 */
+  added: (target: string) => `${target}に追加しました`,
+  /** 削除成功: 「{対象}から削除しました」 */
+  removed: (target: string) => `${target}から削除しました`,
+} as const;
+
+/**
  * エラーメッセージ
  */
 export const ERROR_MESSAGES = {

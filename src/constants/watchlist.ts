@@ -2,7 +2,7 @@
  * ウォッチリスト関連の定数
  */
 
-import { errorMessage } from './common';
+import { errorMessage, toastMessage } from './common';
 
 /**
  * ウォッチリストのデフォルト取得件数
@@ -33,6 +33,6 @@ export const WATCHLIST_ERROR_MESSAGES = {
  * ウォッチリストトーストメッセージ
  */
 export const WATCHLIST_TOAST_MESSAGES = {
-  ADDED: 'ウォッチリストに追加しました',
-  REMOVED: 'ウォッチリストから削除しました',
+  ADDED: toastMessage.added(TARGET),
+  REMOVED: toastMessage.removed(TARGET),
 } as const;

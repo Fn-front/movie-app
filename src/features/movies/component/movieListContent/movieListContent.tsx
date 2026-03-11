@@ -20,6 +20,8 @@ import { FilterModal } from '@/features/movies/component/filterModal/filterModal
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
+import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
+import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 
 import styles from './movieListContent.module.scss';
@@ -60,6 +62,14 @@ export const MovieListContent = memo<MovieListContentProps>(
     } = movieList;
 
     const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
+    const {
+      modalState: favoriteModalState,
+      handleFavoriteToggle,
+      closeModal: closeFavoriteModal,
+      handleModalSubmit: handleFavoriteModalSubmit,
+      handleDelete: handleFavoriteDelete,
+      isProcessing: isFavoriteProcessing,
+    } = useFavoriteToggle();
 
     const sortOptions = useMemo(
       () =>
@@ -163,6 +173,8 @@ export const MovieListContent = memo<MovieListContentProps>(
                 isInWatchlist={isInWatchlist(movie.id)}
                 onWatchlistToggle={toggleWatchlist}
                 watchlistDisabled={isToggling}
+                onFavoriteToggle={handleFavoriteToggle}
+                favoriteDisabled={isFavoriteProcessing}
               />
             ))
           )}
@@ -196,6 +208,15 @@ export const MovieListContent = memo<MovieListContentProps>(
           movieId={selectedMovieId}
           showFinancialInfo={showFinancialInfo}
           onClose={handleDetailModalClose}
+        />
+
+        <FavoriteRatingModal
+          isOpen={favoriteModalState.isOpen}
+          onClose={closeFavoriteModal}
+          movieTitle={favoriteModalState.movie?.title ?? ''}
+          currentFavorite={favoriteModalState.currentFavorite}
+          onSubmit={handleFavoriteModalSubmit}
+          onDelete={handleFavoriteDelete}
         />
       </div>
     );

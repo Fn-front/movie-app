@@ -62,6 +62,8 @@ export interface MovieDetail extends Omit<Movie, 'genre_ids'> {
   credits?: Credits;
   /** 配信プロバイダー情報（append_to_response=watch/providers使用時） */
   'watch/providers'?: WatchProviders;
+  /** お気に入り情報（認証済みの場合のみ） */
+  favorite?: { id: string; rating: number } | null;
 }
 
 /**

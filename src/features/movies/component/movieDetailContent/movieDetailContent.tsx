@@ -10,7 +10,10 @@ import Image from 'next/image';
 
 import { Loading } from '@/components/ui/loading/loading';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
+import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
+import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
+import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import {
   getTMDbPosterUrl,
   getTMDbBackdropUrl,
@@ -123,6 +126,14 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
   function MovieDetailContent({ movieId, showFinancialInfo = false }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
     const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
+    const {
+      modalState: favoriteModalState,
+      handleFavoriteToggle,
+      closeModal: closeFavoriteModal,
+      handleModalSubmit: handleFavoriteModalSubmit,
+      handleDelete: handleFavoriteDelete,
+      isProcessing: isFavoriteProcessing,
+    } = useFavoriteToggle();
 
     const inWatchlist = useMemo(
       () => isInWatchlist(movieId),
@@ -138,6 +149,19 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
         release_date: movie.release_date ?? null,
       });
     }, [movie, movieId, toggleWatchlist]);
+
+    const handleFavoriteClick = useCallback(() => {
+      if (!movie) return;
+      handleFavoriteToggle(
+        {
+          id: movieId,
+          title: movie.title,
+          poster_path: movie.poster_path ?? null,
+          release_date: movie.release_date ?? null,
+        },
+        movie.favorite ?? null,
+      );
+    }, [movie, movieId, handleFavoriteToggle]);
 
     const posterUrl = useMemo(
       () => getTMDbPosterUrl(movie?.poster_path),
@@ -215,12 +239,20 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
             <div className={styles.c_movie_detail__info}>
               <div className={styles.c_movie_detail__title_row}>
                 <h3 className={styles.c_movie_detail__title}>{movie.title}</h3>
-                <WatchlistAddButton
-                  isInWatchlist={inWatchlist}
-                  onClick={handleWatchlistToggle}
-                  disabled={isToggling}
-                  size='md'
-                />
+                <div className={styles.c_movie_detail__action_buttons}>
+                  <FavoriteButton
+                    favorite={movie.favorite ?? null}
+                    onClick={handleFavoriteClick}
+                    disabled={isFavoriteProcessing}
+                    size='md'
+                  />
+                  <WatchlistAddButton
+                    isInWatchlist={inWatchlist}
+                    onClick={handleWatchlistToggle}
+                    disabled={isToggling}
+                    size='md'
+                  />
+                </div>
               </div>
               {movie.original_title !== movie.title && (
                 <p className={styles.c_movie_detail__original_title}>
@@ -407,6 +439,15 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
             )}
           </div>
         </div>
+
+        <FavoriteRatingModal
+          isOpen={favoriteModalState.isOpen}
+          onClose={closeFavoriteModal}
+          movieTitle={favoriteModalState.movie?.title ?? ''}
+          currentFavorite={favoriteModalState.currentFavorite}
+          onSubmit={handleFavoriteModalSubmit}
+          onDelete={handleFavoriteDelete}
+        />
       </div>
     );
   },

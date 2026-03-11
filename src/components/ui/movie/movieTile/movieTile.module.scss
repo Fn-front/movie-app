@@ -47,9 +47,15 @@
     }
   }
 
-  &__watchlist_button {
+  &__favorite_button {
     position: absolute;
     top: $spacing-2;
+    right: $spacing-2;
+  }
+
+  &__watchlist_button {
+    position: absolute;
+    bottom: $spacing-2;
     right: $spacing-2;
   }
 

@@ -31,6 +31,8 @@ export interface MovieCacheItem {
   release_type: 'theatrical' | 'streaming';
   /** リバイバル上映フラグ */
   is_revival: boolean;
+  /** お気に入り情報（認証済みの場合のみ） */
+  favorite?: { id: string; rating: number } | null;
 }
 
 /**

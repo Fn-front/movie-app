@@ -10,9 +10,11 @@ import Image from 'next/image';
 
 import { Card } from '@/components/ui/card/card';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
+import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { getTMDbPosterUrl } from '@/utils/image';
 import { formatDate } from '@/utils/date';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
+import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
 import styles from './movieTile.module.scss';
 
@@ -32,6 +34,13 @@ export interface MovieTileProps {
   onWatchlistToggle?: (movie: MovieCacheItem) => void;
   /** ウォッチリストボタン無効化 */
   watchlistDisabled?: boolean;
+  /** お気に入りボタンクリック時のコールバック */
+  onFavoriteToggle?: (
+    movie: MovieCacheItem,
+    favorite: MovieFavoriteInfo | null,
+  ) => void;
+  /** お気に入りボタン無効化 */
+  favoriteDisabled?: boolean;
 }
 
 /**
@@ -44,6 +53,8 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   isInWatchlist = false,
   onWatchlistToggle,
   watchlistDisabled = false,
+  onFavoriteToggle,
+  favoriteDisabled = false,
 }) {
   const handleClick = useCallback(() => {
     onClick?.(movie.id);
@@ -62,6 +73,10 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   const handleWatchlistToggle = useCallback(() => {
     onWatchlistToggle?.(movie);
   }, [movie, onWatchlistToggle]);
+
+  const handleFavoriteToggle = useCallback(() => {
+    onFavoriteToggle?.(movie, movie.favorite ?? null);
+  }, [movie, onFavoriteToggle]);
 
   const posterUrl = getTMDbPosterUrl(movie.poster_path);
   const formattedDate = movie.release_date
@@ -111,6 +126,15 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
         )}
         {movie.is_revival && (
           <span className={styles.c_movie_tile__revival}>リバイバル</span>
+        )}
+        {onFavoriteToggle && (
+          <div className={styles.c_movie_tile__favorite_button}>
+            <FavoriteButton
+              favorite={movie.favorite ?? null}
+              onClick={handleFavoriteToggle}
+              disabled={favoriteDisabled}
+            />
+          </div>
         )}
         {onWatchlistToggle && (
           <div className={styles.c_movie_tile__watchlist_button}>

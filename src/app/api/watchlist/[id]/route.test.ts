@@ -10,6 +10,11 @@ import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants';
 
 import { DELETE } from './route';
 
+// --- Constants ---
+
+const VALID_UUID = '550e8400-e29b-41d4-a716-446655440000';
+const OTHER_UUID = '660e8400-e29b-41d4-a716-446655440001';
+
 // --- Mocks ---
 
 const mockFrom = jest.fn();
@@ -54,7 +59,7 @@ describe('DELETE /api/watchlist/:id', () => {
             is: () => ({
               select: () => ({
                 single: () => ({
-                  data: { id: 'wl-123' },
+                  data: { id: VALID_UUID },
                   error: null,
                 }),
               }),
@@ -64,7 +69,7 @@ describe('DELETE /api/watchlist/:id', () => {
       }),
     });
 
-    const { request, params } = createDeleteRequest('wl-123');
+    const { request, params } = createDeleteRequest(VALID_UUID);
     const response = await DELETE(request, { params });
     const json = await response.json();
 
@@ -91,13 +96,23 @@ describe('DELETE /api/watchlist/:id', () => {
       }),
     });
 
-    const { request, params } = createDeleteRequest('non-existent');
+    const { request, params } = createDeleteRequest(OTHER_UUID);
     const response = await DELETE(request, { params });
     const json = await response.json();
 
     expect(response.status).toBe(404);
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('NOT_FOUND');
+  });
+
+  it('不正なID形式で400を返す', async () => {
+    const { request, params } = createDeleteRequest('not-a-uuid');
+    const response = await DELETE(request, { params });
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('VALIDATION_ERROR');
   });
 
   it('他ユーザーのウォッチリストで404を返す', async () => {
@@ -119,7 +134,7 @@ describe('DELETE /api/watchlist/:id', () => {
       }),
     });
 
-    const { request, params } = createDeleteRequest('other-user-wl');
+    const { request, params } = createDeleteRequest(OTHER_UUID);
     const response = await DELETE(request, { params });
 
     expect(response.status).toBe(404);
@@ -144,7 +159,7 @@ describe('DELETE /api/watchlist/:id', () => {
       }),
     });
 
-    const { request, params } = createDeleteRequest('deleted-wl');
+    const { request, params } = createDeleteRequest(OTHER_UUID);
     const response = await DELETE(request, { params });
 
     expect(response.status).toBe(404);
@@ -153,7 +168,7 @@ describe('DELETE /api/watchlist/:id', () => {
   it('未認証で401を返す', async () => {
     (getAuthSession as jest.Mock).mockResolvedValue(null);
 
-    const { request, params } = createDeleteRequest('wl-123');
+    const { request, params } = createDeleteRequest(VALID_UUID);
     const response = await DELETE(request, { params });
 
     expect(response.status).toBe(401);
@@ -166,7 +181,7 @@ describe('DELETE /api/watchlist/:id', () => {
       },
     });
 
-    const { request, params } = createDeleteRequest('wl-123');
+    const { request, params } = createDeleteRequest(VALID_UUID);
     const response = await DELETE(request, { params });
 
     expect(response.status).toBe(500);

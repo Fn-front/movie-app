@@ -10,6 +10,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
+import { isValidUuid, invalidUuidResponse } from '@/helpers/validation';
 import {
   HTTP_STATUS,
   ERROR_CODE,
@@ -31,6 +32,11 @@ export async function DELETE(
     if (!supabase) return dbConnectionErrorResponse();
 
     const { id } = await params;
+
+    // UUID形式チェック
+    if (!isValidUuid(id)) {
+      return invalidUuidResponse(WATCHLIST_ERROR_MESSAGES.INVALID_ID);
+    }
 
     // 論理削除（自分のウォッチリストかつ未削除のもののみ）
     const { data, error } = await supabase

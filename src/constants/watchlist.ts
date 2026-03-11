@@ -25,6 +25,7 @@ export const WATCHLIST_ERROR_MESSAGES = {
   REMOVE_FAILED: errorMessage.removeFailed(TARGET),
   ALREADY_EXISTS: 'この映画はすでにウォッチリストに追加されています',
   NOT_FOUND: 'ウォッチリストに見つかりません',
+  INVALID_ID: errorMessage.invalid('ウォッチリストID'),
   INVALID_QUERY: errorMessage.invalid('クエリパラメータ'),
   INVALID_BODY: errorMessage.invalid('入力内容'),
 } as const;

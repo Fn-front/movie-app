@@ -13,6 +13,11 @@ import { MOVIES_ERROR_MESSAGES } from '@/constants/movies';
 // genreCacheをリセットするために、モジュールを都度リロード
 let GET: typeof import('./route').GET;
 
+const mockGetAuthSession = jest.fn().mockResolvedValue(null);
+jest.mock('@/helpers/auth', () => ({
+  getAuthSession: (...args: unknown[]) => mockGetAuthSession(...args),
+}));
+
 const mockSyncNowPlayingMovies = jest.fn().mockResolvedValue({ synced: 0 });
 jest.mock('@/lib/sync/syncNowPlayingMovies', () => ({
   syncNowPlayingMovies: (...args: unknown[]) =>
@@ -41,6 +46,8 @@ function createChainMock(resolveValue: unknown = { data: null, error: null }) {
     'select',
     'eq',
     'neq',
+    'in',
+    'is',
     'order',
     'limit',
     'single',
@@ -1279,5 +1286,82 @@ describe('GET /api/movies', () => {
     const json = await response.json();
     expect(json.success).toBe(true);
     expect(json.data.pagination.totalItems).toBe(10);
+  });
+
+  // === お気に入り情報の付与 ===
+
+  it('認証済みユーザーの場合、映画にfavoriteフィールドが付与される', async () => {
+    const handler = await loadGET();
+    mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+    const movies = [
+      { id: 1, title: '映画A' },
+      { id: 2, title: '映画B' },
+    ];
+
+    const callTracker = { count: 0 };
+    mockSupabaseClient!.from.mockImplementation((table: string) => {
+      callTracker.count++;
+
+      if (table === 'favorites') {
+        // お気に入りクエリ
+        return createChainMock({
+          data: [{ id: 'fav-1', tmdb_movie_id: 1, rating: 8 }],
+          error: null,
+        });
+      }
+
+      // 通常の映画クエリ
+      const currentCall = callTracker.count;
+      if (currentCall === 1) {
+        return createChainMock({
+          data: { cached_at: new Date().toISOString() },
+          error: null,
+        });
+      }
+      if (currentCall === 2) {
+        const chain = createChainMock({ count: 2 });
+        chain.select.mockImplementation(
+          (_cols: string, opts?: { count?: string }) => {
+            if (opts?.count === 'exact') {
+              return createThenableProxy(createChainMock({ count: 2 }), {
+                count: 2,
+              });
+            }
+            return createThenableProxy(
+              createChainMock({ data: movies, error: null }),
+              { data: movies, error: null },
+            );
+          },
+        );
+        return chain;
+      }
+      return createChainMock({ data: movies, error: null });
+    });
+
+    const response = await handler(createRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.movies[0].favorite).toEqual({ id: 'fav-1', rating: 8 });
+    expect(json.data.movies[1].favorite).toBeNull();
+  });
+
+  it('未認証の場合、映画にfavoriteフィールドが含まれない', async () => {
+    const handler = await loadGET();
+    mockGetAuthSession.mockResolvedValue(null);
+
+    const movies = [{ id: 1, title: '映画A' }];
+
+    setupFromMock({
+      countResult: { count: 1 },
+      dataResult: { data: movies, error: null },
+    });
+
+    const response = await handler(createRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.movies[0].favorite).toBeUndefined();
   });
 });

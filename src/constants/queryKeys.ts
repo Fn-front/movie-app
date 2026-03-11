@@ -18,3 +18,9 @@ export const watchlistKeys = {
   all: ['watchlist'] as const,
   list: () => ['watchlist', 'list'] as const,
 };
+
+export const favoriteKeys = {
+  all: ['favorites'] as const,
+  list: (params?: { sort_by?: string; sort_order?: string }) =>
+    ['favorites', 'list', params] as const,
+};

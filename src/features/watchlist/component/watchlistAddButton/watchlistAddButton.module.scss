@@ -9,7 +9,8 @@
   background-color: rgba(0, 0, 0, 0.6);
   color: #ffffff;
   cursor: pointer;
-  transition: opacity $duration-fast $ease-in-out,
+  transition:
+    opacity $duration-fast $ease-in-out,
     background-color $duration-fast $ease-in-out;
 
   &:hover {

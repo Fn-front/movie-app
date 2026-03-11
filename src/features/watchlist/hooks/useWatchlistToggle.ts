@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants/watchlist';
 import { useWatchlist } from '@/features/watchlist/hooks/useWatchlist';
 import { useToast } from '@/hooks/useToast';
+import type { ToastOptions } from '@/hooks/useToast';
 
 /**
  * トグル対象の映画データ（最小限のフィールド）
@@ -50,7 +51,7 @@ interface ToggleHandlers {
     release_date: string | null;
   }) => void;
   removeFromWatchlist: (id: string) => void;
-  toast: (options: { title: string; variant: string }) => void;
+  toast: (options: ToastOptions) => void;
 }
 
 /**

@@ -4,6 +4,8 @@
 
 import { renderHook, act } from '@testing-library/react';
 
+import { WATCHLIST_TOAST_MESSAGES } from '@/constants/watchlist';
+
 import { useWatchlistToggle } from './useWatchlistToggle';
 
 // --- Mocks ---
@@ -76,7 +78,7 @@ describe('useWatchlistToggle', () => {
       release_date: '2026-01-01',
     });
     expect(mockToast).toHaveBeenCalledWith({
-      title: 'ウォッチリストに追加しました',
+      title: WATCHLIST_TOAST_MESSAGES.ADDED,
       variant: 'success',
     });
   });
@@ -92,7 +94,7 @@ describe('useWatchlistToggle', () => {
 
     expect(mockRemoveFromWatchlist).toHaveBeenCalledWith('watchlist-id-123');
     expect(mockToast).toHaveBeenCalledWith({
-      title: 'ウォッチリストから削除しました',
+      title: WATCHLIST_TOAST_MESSAGES.REMOVED,
       variant: 'success',
     });
   });

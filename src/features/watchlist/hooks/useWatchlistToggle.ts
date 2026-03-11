@@ -5,6 +5,7 @@
 
 import { useCallback, useMemo } from 'react';
 
+import { WATCHLIST_TOAST_MESSAGES } from '@/constants/watchlist';
 import { useWatchlist } from '@/features/watchlist/hooks/useWatchlist';
 import { useToast } from '@/hooks/useToast';
 
@@ -55,7 +56,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         if (watchlistId) {
           removeFromWatchlist(watchlistId);
           toast({
-            title: 'ウォッチリストから削除しました',
+            title: WATCHLIST_TOAST_MESSAGES.REMOVED,
             variant: 'success',
           });
         }
@@ -67,7 +68,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
           release_date: movie.release_date,
         });
         toast({
-          title: 'ウォッチリストに追加しました',
+          title: WATCHLIST_TOAST_MESSAGES.ADDED,
           variant: 'success',
         });
       }

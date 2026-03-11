@@ -28,3 +28,11 @@ export const WATCHLIST_ERROR_MESSAGES = {
   INVALID_QUERY: errorMessage.invalid('クエリパラメータ'),
   INVALID_BODY: errorMessage.invalid('入力内容'),
 } as const;
+
+/**
+ * ウォッチリストトーストメッセージ
+ */
+export const WATCHLIST_TOAST_MESSAGES = {
+  ADDED: 'ウォッチリストに追加しました',
+  REMOVED: 'ウォッチリストから削除しました',
+} as const;

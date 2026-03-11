@@ -318,11 +318,17 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     setIsFilterModalOpen(false);
   }, []);
 
-  // 全ページの映画を結合
-  const movies = useMemo(
-    () => moviesQuery.data?.pages.flatMap((page) => page.data.movies) ?? [],
-    [moviesQuery.data],
-  );
+  // 全ページの映画を結合（ページ間の重複を除去）
+  const movies = useMemo(() => {
+    const allMovies =
+      moviesQuery.data?.pages.flatMap((page) => page.data.movies) ?? [];
+    const seen = new Set<number>();
+    return allMovies.filter((movie) => {
+      if (seen.has(movie.id)) return false;
+      seen.add(movie.id);
+      return true;
+    });
+  }, [moviesQuery.data]);
 
   const genres = useMemo(
     () => moviesQuery.data?.pages[0]?.data.genres ?? {},

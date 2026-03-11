@@ -286,6 +286,7 @@ export async function GET(request: Request) {
       .select('*')
       .eq('release_type', release_type)
       .order(sortColumn, { ascending, nullsFirst: false })
+      .order('id', { ascending: true })
       .range(offset, offset + PAGINATION.ITEMS_PER_PAGE - 1);
 
     if (isNowPlayingTheatrical) {

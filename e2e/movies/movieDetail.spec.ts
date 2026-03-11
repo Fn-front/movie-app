@@ -50,6 +50,9 @@ test.describe('映画詳細モーダル', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 15000 });
 
+    // 詳細データのロード完了を待つ
+    await expect(dialog.getByText('詳細情報')).toBeVisible({ timeout: 15000 });
+
     // あらすじまたは詳細情報の少なくとも一方が表示される
     const hasOverview = await dialog
       .getByText('あらすじ')

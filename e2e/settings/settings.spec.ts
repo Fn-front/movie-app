@@ -141,7 +141,7 @@ test.describe('設定ページ — フォーム要素', () => {
   });
 
   test('テーマを切り替えるとdata-theme属性が変わる', async ({ page }) => {
-    // 設定更新APIをモック（FK制約エラー回避）
+    // 設定APIをモック（GET・PUT両方）
     await page.route('**/api/user/settings', async (route) => {
       if (route.request().method() === 'PUT') {
         await route.fulfill({
@@ -153,9 +153,20 @@ test.describe('設定ページ — フォーム要素', () => {
           }),
         });
       } else {
-        await route.continue();
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            data: { theme: 'light', notificationEnabled: false },
+          }),
+        });
       }
     });
+
+    // モック有効状態でページを再読み込み
+    await page.goto('/settings');
+    await expect(page.getByRole('heading', { name: '設定' })).toBeVisible();
 
     const themeTrigger = page.getByRole('combobox', { name: 'テーマを選択' });
     await expect(themeTrigger).toBeVisible();

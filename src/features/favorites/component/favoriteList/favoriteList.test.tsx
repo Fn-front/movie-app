@@ -10,13 +10,14 @@ import { FavoriteList } from './favoriteList';
 import type { FavoriteItem } from '@/lib/api/favorites/favorites';
 
 // next/imageモック
-jest.mock('next/image', () => ({
-  __esModule: true,
-  default: (props: Record<string, unknown>) => {
-    // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
-    return <img {...props} />;
-  },
-}));
+jest.mock('next/image', () => {
+  const MockImage = (props: React.ImgHTMLAttributes<HTMLImageElement>) => {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img alt='' {...props} />;
+  };
+  MockImage.displayName = 'MockImage';
+  return { __esModule: true, default: MockImage };
+});
 
 // getTMDbPosterUrlモック
 jest.mock('@/utils/image', () => ({
@@ -116,10 +117,7 @@ describe('FavoriteList', () => {
     // RatingIndicatorが表示モードで表示される（role="img"）
     const ratingIndicators = screen.getAllByRole('img', { name: /評価:/ });
     expect(ratingIndicators).toHaveLength(3);
-    expect(ratingIndicators[0]).toHaveAttribute(
-      'aria-label',
-      '評価: 8/10',
-    );
+    expect(ratingIndicators[0]).toHaveAttribute('aria-label', '評価: 8/10');
   });
 
   it('FavoriteButtonクリックでonFavoriteToggleが呼ばれる', async () => {

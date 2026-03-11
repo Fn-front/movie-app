@@ -3,7 +3,7 @@
  */
 
 import '@testing-library/jest-dom';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { FavoritesPage } from './favoritesPage';
@@ -50,13 +50,14 @@ jest.mock('@/features/favorites/hooks/useFavoritesPage', () => ({
 }));
 
 // next/imageモック
-jest.mock('next/image', () => ({
-  __esModule: true,
-  default: (props: Record<string, unknown>) => {
-    // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
-    return <img {...props} />;
-  },
-}));
+jest.mock('next/image', () => {
+  const MockImage = (props: React.ImgHTMLAttributes<HTMLImageElement>) => {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img alt='' {...props} />;
+  };
+  MockImage.displayName = 'MockImage';
+  return { __esModule: true, default: MockImage };
+});
 
 jest.mock('@/utils/image', () => ({
   getTMDbPosterUrl: (path: string | null) =>

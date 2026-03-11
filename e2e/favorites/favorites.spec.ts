@@ -91,14 +91,12 @@ test.describe('お気に入り — 一覧ページ', () => {
     await cleanupFavorites();
   });
 
-  test('お気に入り一覧ページで表示確認 → 評価変更 → 削除', async ({
-    page,
-  }) => {
+  test('お気に入り一覧ページで表示確認 → 評価変更 → 削除', async ({ page }) => {
     // お気に入り一覧ページに遷移
     await page.goto('/favorites');
-    await expect(
-      page.getByRole('heading', { name: 'お気に入り' }),
-    ).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('heading', { name: 'お気に入り' })).toBeVisible(
+      { timeout: 15000 },
+    );
 
     // お気に入りが表示されている
     const editButton = page

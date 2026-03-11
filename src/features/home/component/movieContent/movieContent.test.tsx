@@ -11,6 +11,7 @@ jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
     isInWatchlist: jest.fn().mockReturnValue(false),
     toggleWatchlist: jest.fn(),
     isToggling: false,
+    togglingMovieId: null,
   }),
 }));
 

@@ -3,7 +3,7 @@
  * useWatchlist + useToast を統合し、トグルロジックを一元管理
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants/watchlist';
 import { useWatchlist } from '@/features/watchlist/hooks/useWatchlist';
@@ -33,6 +33,8 @@ export interface UseWatchlistToggleReturn {
   toggleWatchlist: (movie: WatchlistToggleMovie) => void;
   /** 追加/削除処理中 */
   isToggling: boolean;
+  /** 現在トグル中の映画ID（per-movie無効化用） */
+  togglingMovieId: number | null;
 }
 
 /**
@@ -49,31 +51,58 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
   } = useWatchlist();
   const { toast } = useToast();
 
+  const [togglingMovieId, setTogglingMovieId] = useState<number | null>(null);
+
+  // mutation完了時にtogglingMovieIdをリセット
+  useEffect(() => {
+    if (!isAdding && !isRemoving) {
+      setTogglingMovieId(null);
+    }
+  }, [isAdding, isRemoving]);
+
+  // ref化して toggleWatchlist の参照を安定させる
+  const isInWatchlistRef = useRef(isInWatchlist);
+  isInWatchlistRef.current = isInWatchlist;
+
+  const getWatchlistIdRef = useRef(getWatchlistId);
+  getWatchlistIdRef.current = getWatchlistId;
+
+  const addToWatchlistRef = useRef(addToWatchlist);
+  addToWatchlistRef.current = addToWatchlist;
+
+  const removeFromWatchlistRef = useRef(removeFromWatchlist);
+  removeFromWatchlistRef.current = removeFromWatchlist;
+
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
   const toggleWatchlist = useCallback(
     (movie: WatchlistToggleMovie) => {
-      if (isInWatchlist(movie.id)) {
-        const watchlistId = getWatchlistId(movie.id);
+      setTogglingMovieId(movie.id);
+
+      if (isInWatchlistRef.current(movie.id)) {
+        const watchlistId = getWatchlistIdRef.current(movie.id);
         if (watchlistId) {
-          removeFromWatchlist(watchlistId);
-          toast({
+          removeFromWatchlistRef.current(watchlistId);
+          toastRef.current({
             title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
             variant: 'success',
           });
         }
       } else {
-        addToWatchlist({
+        addToWatchlistRef.current({
           tmdb_movie_id: movie.id,
           title: movie.title,
           poster_path: movie.poster_path,
           release_date: movie.release_date,
         });
-        toast({
+        toastRef.current({
           title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
           variant: 'success',
         });
       }
     },
-    [isInWatchlist, getWatchlistId, addToWatchlist, removeFromWatchlist, toast],
+    [],
   );
 
   return useMemo(
@@ -81,7 +110,8 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       isInWatchlist,
       toggleWatchlist,
       isToggling: isAdding || isRemoving,
+      togglingMovieId,
     }),
-    [isInWatchlist, toggleWatchlist, isAdding, isRemoving],
+    [isInWatchlist, toggleWatchlist, isAdding, isRemoving, togglingMovieId],
   );
 }

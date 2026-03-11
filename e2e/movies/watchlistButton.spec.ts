@@ -3,11 +3,14 @@
  * クリティカルユーザージャーニーのみ（ボタン表示・aria-label確認は結合テストに移行済み）
  * API呼び出し→状態更新→UI反映、モーダル↔タイル間の状態同期を検証
  * afterEachで全件クリーンアップするため、テスト内で「元に戻す」操作は不要
+ * 同一ユーザーのウォッチリストを操作するため、テスト間の競合を避けてシリアル実行
  */
 
 import { test, expect } from '../fixtures/auth';
 import { cleanupWatchlist } from '../helpers/api';
 import { movieTileButtons } from '../helpers/locators';
+
+test.describe.configure({ mode: 'serial' });
 
 /** ウォッチリストAPIレスポンスを待つ */
 function waitForWatchlistResponse(page: import('@playwright/test').Page) {
@@ -26,8 +29,8 @@ test.describe('ウォッチリストボタン — 状態トグル', () => {
     await movieTileButtons(page).first().waitFor({ timeout: 30000 });
   });
 
-  test.afterEach(async ({ request }) => {
-    await cleanupWatchlist(request);
+  test.afterEach(async () => {
+    await cleanupWatchlist();
   });
 
   test('ウォッチリストボタンクリックでラベルが切り替わる', async ({ page }) => {
@@ -61,8 +64,8 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
     await movieTileButtons(page).first().waitFor({ timeout: 30000 });
   });
 
-  test.afterEach(async ({ request }) => {
-    await cleanupWatchlist(request);
+  test.afterEach(async () => {
+    await cleanupWatchlist();
   });
 
   test('モーダル内ウォッチリストボタンクリックでラベルが切り替わる', async ({
@@ -119,6 +122,7 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
     const modalButton = dialog.getByRole('button', {
       name: /ウォッチリスト/,
     });
+    await expect(modalButton).toBeVisible({ timeout: 5000 });
     const responsePromise = waitForWatchlistResponse(page);
     await modalButton.click();
     await responsePromise;

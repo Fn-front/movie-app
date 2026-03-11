@@ -6,7 +6,7 @@ import { test, expect } from '../fixtures/auth';
 import { resetFilters } from '../helpers/api';
 
 test.describe('フィルター条件がリロード後も保持される', () => {
-  test.afterEach(async ({ request }) => {
+  test.beforeEach(async ({ request }) => {
     await resetFilters(request);
   });
 

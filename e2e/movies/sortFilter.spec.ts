@@ -1,10 +1,10 @@
 /**
  * 映画ページ ソート・フィルター操作 E2Eテスト（認証済み）
  * クリティカルユーザージャーニーのみ（クリアボタン動作は結合テストに移行済み）
+ * UI操作の動作確認のみのため、フィルターリセットは不要
  */
 
 import { test, expect } from '../fixtures/auth';
-import { resetFilters } from '../helpers/api';
 
 test.describe('公開予定ページのソート・フィルター操作', () => {
   test.beforeEach(async ({ page }) => {
@@ -15,10 +15,6 @@ test.describe('公開予定ページのソート・フィルター操作', () =>
       .first()
       .or(page.getByText(/映画が見つかりませんでした/))
       .waitFor({ timeout: 15000 });
-  });
-
-  test.afterEach(async ({ request }) => {
-    await resetFilters(request);
   });
 
   test('ソートを変更できる', async ({ page }) => {
@@ -79,10 +75,6 @@ test.describe('公開中ページのソート・フィルター操作', () => {
       .first()
       .or(page.getByText(/映画が見つかりませんでした/))
       .waitFor({ timeout: 15000 });
-  });
-
-  test.afterEach(async ({ request }) => {
-    await resetFilters(request);
   });
 
   test('ソートを変更できる', async ({ page }) => {

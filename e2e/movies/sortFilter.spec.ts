@@ -4,6 +4,7 @@
  */
 
 import { test, expect } from '../fixtures/auth';
+import { resetFilters } from '../helpers/api';
 
 test.describe('公開予定ページのソート・フィルター操作', () => {
   test.beforeEach(async ({ page }) => {
@@ -14,6 +15,10 @@ test.describe('公開予定ページのソート・フィルター操作', () =>
       .first()
       .or(page.getByText(/映画が見つかりませんでした/))
       .waitFor({ timeout: 15000 });
+  });
+
+  test.afterEach(async ({ request }) => {
+    await resetFilters(request);
   });
 
   test('ソートを変更できる', async ({ page }) => {
@@ -74,6 +79,10 @@ test.describe('公開中ページのソート・フィルター操作', () => {
       .first()
       .or(page.getByText(/映画が見つかりませんでした/))
       .waitFor({ timeout: 15000 });
+  });
+
+  test.afterEach(async ({ request }) => {
+    await resetFilters(request);
   });
 
   test('ソートを変更できる', async ({ page }) => {

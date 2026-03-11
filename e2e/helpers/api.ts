@@ -39,13 +39,10 @@ export async function cleanupWatchlist(): Promise<void> {
   const userId = await getTestUserId();
   if (!userId) return;
 
-  await fetch(
-    `${SUPABASE_URL}/rest/v1/watchlist?user_id=eq.${userId}`,
-    {
-      method: 'DELETE',
-      headers: supabaseHeaders,
-    },
-  );
+  await fetch(`${SUPABASE_URL}/rest/v1/watchlist?user_id=eq.${userId}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
 }
 
 /**

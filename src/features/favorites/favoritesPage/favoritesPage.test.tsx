@@ -40,7 +40,7 @@ jest.mock('@/features/favorites/hooks/useFavoritesPage', () => ({
       closeModal: mockCloseModal,
       handleModalSubmit: mockHandleModalSubmit,
       handleDelete: mockHandleDelete,
-      isProcessing: false,
+      isFavoriteProcessing: jest.fn().mockReturnValue(false),
     },
   }),
   FAVORITES_PAGE_SORT_OPTIONS: [

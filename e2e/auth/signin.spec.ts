@@ -1,27 +1,18 @@
 /**
- * ログインページ E2Eテスト
+ * ログイン E2Eテスト
+ * クリティカルユーザージャーニーのみ（バリデーション・UI表示は結合テストに移行済み）
  */
 
 import { test, expect } from '@playwright/test';
 
 import { TEST_USER } from '../helpers/testUser';
 
-test.describe('ログインページ', () => {
+test.describe('ログイン認証フロー', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/auth/signin');
-  });
-
-  test('フォームが正しく表示される', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'ログイン' })).toBeVisible();
-    await expect(page.getByLabel('メールアドレス')).toBeVisible();
-    await expect(page.getByLabel('パスワード')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'ログイン' })).toBeVisible();
-    await expect(page.getByRole('link', { name: '新規登録' })).toBeVisible();
-  });
-
   test('正常なログインでホームにリダイレクトされる', async ({ page }) => {
+    await page.goto('/auth/signin');
+
     await page.getByLabel('メールアドレス').fill(TEST_USER.email);
     await page.getByLabel('パスワード').fill(TEST_USER.password);
     await page.getByRole('button', { name: 'ログイン' }).click();
@@ -30,39 +21,9 @@ test.describe('ログインページ', () => {
     await expect(page).toHaveURL('/');
   });
 
-  test('メールアドレス未入力でバリデーションエラーが表示される', async ({
-    page,
-  }) => {
-    await page.getByLabel('パスワード').fill('Password123');
-    await page.getByRole('button', { name: 'ログイン' }).click();
-
-    await expect(
-      page.getByText('メールアドレスを入力してください'),
-    ).toBeVisible();
-  });
-
-  test('パスワード未入力でバリデーションエラーが表示される', async ({
-    page,
-  }) => {
-    await page.getByLabel('メールアドレス').fill('test@example.com');
-    await page.getByRole('button', { name: 'ログイン' }).click();
-
-    await expect(page.getByText('パスワードを入力してください')).toBeVisible();
-  });
-
-  test('メールアドレス形式不正でバリデーションエラーが表示される', async ({
-    page,
-  }) => {
-    await page.getByLabel('メールアドレス').fill('invalid-email');
-    await page.getByLabel('パスワード').fill('Password123');
-    await page.getByRole('button', { name: 'ログイン' }).click();
-
-    await expect(
-      page.getByText('メールアドレスの形式が正しくありません'),
-    ).toBeVisible();
-  });
-
   test('不正な認証情報でエラーメッセージが表示される', async ({ page }) => {
+    await page.goto('/auth/signin');
+
     await page.getByLabel('メールアドレス').fill('wrong@example.com');
     await page.getByLabel('パスワード').fill('WrongPassword123');
     await page.getByRole('button', { name: 'ログイン' }).click();
@@ -72,12 +33,6 @@ test.describe('ログインページ', () => {
         hasText: 'メールアドレスまたはパスワードが正しくありません。',
       }),
     ).toBeVisible();
-  });
-
-  test('新規登録リンクでサインアップページに遷移する', async ({ page }) => {
-    await page.getByRole('link', { name: '新規登録' }).click();
-
-    await expect(page).toHaveURL('/auth/signup');
   });
 });
 

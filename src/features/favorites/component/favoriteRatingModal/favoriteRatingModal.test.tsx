@@ -29,9 +29,7 @@ describe('FavoriteRatingModal', () => {
 
     it('「登録」ボタンが表示される', () => {
       render(<FavoriteRatingModal {...defaultProps} />);
-      expect(
-        screen.getByRole('button', { name: '登録' }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '登録' })).toBeInTheDocument();
     });
 
     it('「削除」ボタンが表示されない', () => {
@@ -51,12 +49,7 @@ describe('FavoriteRatingModal', () => {
 
     it('評価を選択して登録できる', () => {
       const onSubmit = jest.fn();
-      render(
-        <FavoriteRatingModal
-          {...defaultProps}
-          onSubmit={onSubmit}
-        />,
-      );
+      render(<FavoriteRatingModal {...defaultProps} onSubmit={onSubmit} />);
 
       // 8を選択
       fireEvent.click(screen.getByRole('radio', { name: '8点' }));
@@ -86,16 +79,12 @@ describe('FavoriteRatingModal', () => {
 
     it('「更新」ボタンが表示される', () => {
       render(<FavoriteRatingModal {...editProps} />);
-      expect(
-        screen.getByRole('button', { name: '更新' }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '更新' })).toBeInTheDocument();
     });
 
     it('「削除」ボタンが表示される', () => {
       render(<FavoriteRatingModal {...editProps} />);
-      expect(
-        screen.getByRole('button', { name: '削除' }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '削除' })).toBeInTheDocument();
     });
 
     it('現在の評価が初期値として設定される', () => {

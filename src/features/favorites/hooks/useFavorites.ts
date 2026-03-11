@@ -53,9 +53,7 @@ export interface UseFavoritesReturn {
 /**
  * お気に入り カスタムフック
  */
-export function useFavorites(
-  params?: GetFavoritesRequest,
-): UseFavoritesReturn {
+export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated' && !!session?.user;
   const queryClient = useQueryClient();

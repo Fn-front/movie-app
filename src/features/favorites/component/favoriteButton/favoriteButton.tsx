@@ -30,7 +30,12 @@ export interface FavoriteButtonProps {
  * FavoriteButtonコンポーネント
  */
 export const FavoriteButton = memo<FavoriteButtonProps>(
-  function FavoriteButton({ favorite, onClick, disabled = false, size = 'sm' }) {
+  function FavoriteButton({
+    favorite,
+    onClick,
+    disabled = false,
+    size = 'sm',
+  }) {
     const isFavorite = favorite !== null;
 
     const handleClick = useCallback(

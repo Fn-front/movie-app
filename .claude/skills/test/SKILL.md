@@ -431,7 +431,9 @@ it('バリデーションエラーが表示される', async () => {
 
 ## 参考ドキュメント
 
-- `.claude/documents/roadmap.md` - テスト戦略
+- `.claude/documents/testing-strategy.md` - テスト戦略（テスティングトロフィーモデル・各レイヤーの判断基準）
+- `.claude/documents/e2e-test.md` - E2Eテスト設計（インフラ・設定・スペック一覧）
+- `.claude/documents/roadmap.md` - 開発ロードマップ
 
 ## 使用例
 

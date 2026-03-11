@@ -3,11 +3,7 @@
  */
 
 import { test, expect } from '../fixtures/auth';
-
-/** 映画タイルのボタンロケータを取得 */
-function movieTileButtons(page: import('@playwright/test').Page) {
-  return page.getByRole('button', { name: /の詳細を表示/ });
-}
+import { movieTileButtons } from '../helpers/locators';
 
 test.describe('映画詳細モーダル', () => {
   test.beforeEach(async ({ page }) => {

@@ -11,7 +11,12 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { updateProfileSchema } from '@/schema/user';
-import { HTTP_STATUS, ERROR_CODE } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  PROFILE_ERROR_MESSAGES,
+  PROFILE_SUCCESS_MESSAGES,
+} from '@/constants';
 
 export async function PUT(request: Request) {
   try {
@@ -56,7 +61,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(
       {
         success: true,
-        message: '表示名を更新しました',
+        message: PROFILE_SUCCESS_MESSAGES.UPDATED,
       },
       { status: HTTP_STATUS.OK },
     );
@@ -68,7 +73,7 @@ export async function PUT(request: Request) {
         success: false,
         error: {
           code: ERROR_CODE.SERVER_ERROR,
-          message: '表示名の更新に失敗しました',
+          message: PROFILE_ERROR_MESSAGES.UPDATE_FAILED,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

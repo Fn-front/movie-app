@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 import { isAxiosError } from 'axios';
 
 import { getMovieDetail } from '@/lib/tmdb/tmdb';
-import { HTTP_STATUS, ERROR_CODE } from '@/constants';
+import { HTTP_STATUS, ERROR_CODE, MOVIES_ERROR_MESSAGES } from '@/constants';
 
 /**
  * 映画詳細を取得
@@ -27,7 +27,7 @@ export async function GET(
           success: false,
           error: {
             code: ERROR_CODE.VALIDATION_ERROR,
-            message: '映画IDが不正です',
+            message: MOVIES_ERROR_MESSAGES.INVALID_MOVIE_ID,
           },
         },
         { status: HTTP_STATUS.BAD_REQUEST },
@@ -50,7 +50,7 @@ export async function GET(
           success: false,
           error: {
             code: ERROR_CODE.NOT_FOUND,
-            message: '映画が見つかりません',
+            message: MOVIES_ERROR_MESSAGES.NOT_FOUND,
           },
         },
         { status: HTTP_STATUS.NOT_FOUND },

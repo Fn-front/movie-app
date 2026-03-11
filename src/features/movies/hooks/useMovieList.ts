@@ -20,6 +20,7 @@ import {
   DEFAULT_SORT,
   DEFAULT_RELEASE_TYPE,
   FILTER_ERROR_MESSAGES,
+  MOVIES_ERROR_MESSAGES,
   movieKeys,
   filterKeys,
 } from '@/constants';
@@ -213,7 +214,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     if (moviesQuery.error) {
       toast({
         title: 'エラー',
-        description: '映画データの取得に失敗しました。',
+        description: MOVIES_ERROR_MESSAGES.FETCH_FAILED,
         variant: 'error',
       });
     }

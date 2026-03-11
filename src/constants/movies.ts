@@ -124,4 +124,8 @@ export const MOVIES_ERROR_MESSAGES = {
   INVALID_QUERY: errorMessage.invalid('クエリパラメータ'),
   /** 映画データ取得失敗 */
   FETCH_FAILED: errorMessage.fetchFailed('映画データ'),
+  /** 映画ID不正 */
+  INVALID_MOVIE_ID: errorMessage.invalid('映画ID'),
+  /** 映画未検出 */
+  NOT_FOUND: errorMessage.notFound('映画'),
 } as const;

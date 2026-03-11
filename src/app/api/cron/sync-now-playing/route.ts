@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { HTTP_STATUS } from '@/constants';
+import { HTTP_STATUS, ERROR_CODE, AUTH_ERROR_MESSAGES } from '@/constants';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
 
 export const dynamic = 'force-dynamic';
@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
         {
           success: false,
           error: {
-            code: 'UNAUTHORIZED',
-            message: '認証に失敗しました。',
+            code: ERROR_CODE.UNAUTHORIZED,
+            message: AUTH_ERROR_MESSAGES.AUTH_FAILED,
           },
         },
         { status: HTTP_STATUS.UNAUTHORIZED },
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         error: {
-          code: 'SERVER_ERROR',
+          code: ERROR_CODE.SERVER_ERROR,
           message: 'Now Playing映画同期中にエラーが発生しました。',
         },
       },

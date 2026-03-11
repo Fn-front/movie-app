@@ -114,8 +114,12 @@ export const errorMessage = {
   addFailed: (target: string) => `${target}への追加に失敗しました`,
   /** 削除失敗: 「{対象}からの削除に失敗しました」 */
   removeFailed: (target: string) => `${target}からの削除に失敗しました`,
+  /** 更新失敗: 「{対象}の更新に失敗しました」 */
+  updateFailed: (target: string) => `${target}の更新に失敗しました`,
   /** バリデーションエラー: 「{対象}が不正です」 */
   invalid: (target: string) => `${target}が不正です`,
+  /** 未検出: 「{対象}が見つかりません」 */
+  notFound: (target: string) => `${target}が見つかりません`,
 } as const;
 
 /**
@@ -126,6 +130,8 @@ export const successMessage = {
   added: (target: string) => `${target}に追加しました`,
   /** 削除成功: 「{対象}から削除しました」 */
   removed: (target: string) => `${target}から削除しました`,
+  /** 更新成功: 「{対象}を更新しました」 */
+  updated: (target: string) => `${target}を更新しました`,
 } as const;
 
 /**

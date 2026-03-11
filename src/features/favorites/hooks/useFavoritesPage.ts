@@ -19,6 +19,11 @@ export const FAVORITES_PAGE_SORT_OPTIONS = [
 ] as const;
 
 /**
+ * ソートキーの型
+ */
+type SortByValue = (typeof FAVORITES_PAGE_SORT_OPTIONS)[number]['value'];
+
+/**
  * useFavoritesPageフックの返り値
  */
 export interface UseFavoritesPageReturn {
@@ -27,7 +32,7 @@ export interface UseFavoritesPageReturn {
   /** 読み込み中 */
   isLoading: boolean;
   /** 現在のソートキー */
-  sortBy: string;
+  sortBy: SortByValue;
   /** ソート変更ハンドラー */
   handleSortChange: (value: string) => void;
   /** お気に入りトグル関連 */
@@ -38,20 +43,17 @@ export interface UseFavoritesPageReturn {
  * お気に入りページ カスタムフック
  */
 export function useFavoritesPage(): UseFavoritesPageReturn {
-  const [sortBy, setSortBy] = useState<string>(FAVORITES_SORT_BY.ADDED_AT);
+  const [sortBy, setSortBy] = useState<SortByValue>(FAVORITES_SORT_BY.ADDED_AT);
 
   const { favorites, isLoading } = useFavorites({
-    sort_by: sortBy as 'added_at' | 'rating',
-    sort_order:
-      sortBy === FAVORITES_SORT_BY.RATING
-        ? FAVORITES_SORT_ORDER.DESC
-        : FAVORITES_SORT_ORDER.DESC,
+    sort_by: sortBy,
+    sort_order: FAVORITES_SORT_ORDER.DESC,
   });
 
   const favoriteToggle = useFavoriteToggle();
 
   const handleSortChange = useCallback((value: string) => {
-    setSortBy(value);
+    setSortBy(value as SortByValue);
   }, []);
 
   return useMemo(

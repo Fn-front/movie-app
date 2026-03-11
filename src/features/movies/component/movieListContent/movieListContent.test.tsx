@@ -18,6 +18,25 @@ jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
   }),
 }));
 
+jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
+  useFavoriteToggle: () => ({
+    modalState: { isOpen: false, movie: null, currentFavorite: null },
+    handleFavoriteToggle: jest.fn(),
+    closeModal: jest.fn(),
+    handleSubmit: jest.fn(),
+    handleUpdate: jest.fn(),
+    handleDelete: jest.fn(),
+    isProcessing: false,
+  }),
+}));
+
+jest.mock(
+  '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal',
+  () => ({
+    FavoriteRatingModal: () => null,
+  }),
+);
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 let capturedMovieDetailProps: {
   movieId: number | null;

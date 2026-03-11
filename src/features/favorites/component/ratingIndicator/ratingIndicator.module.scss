@@ -1,0 +1,83 @@
+@use '@/styles/variables' as *;
+
+.c_rating_indicator {
+  display: flex;
+  gap: $spacing-1;
+  align-items: center;
+
+  &__sm {
+    gap: 2px;
+  }
+
+  &__md {
+    gap: $spacing-1;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: $border-width-1 solid $gray-300;
+    border-radius: $border-radius-md;
+    background-color: transparent;
+    color: $text-disabled;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    cursor: default;
+    transition:
+      background-color $duration-fast $ease-in-out,
+      color $duration-fast $ease-in-out,
+      border-color $duration-fast $ease-in-out;
+    padding: 0;
+
+    .c_rating_indicator__sm & {
+      width: 24px;
+      height: 24px;
+      font-size: $font-size-2xs;
+    }
+
+    .c_rating_indicator__md & {
+      width: 32px;
+      height: 32px;
+      font-size: $font-size-sm;
+    }
+
+    &__active {
+      background-color: $secondary-50;
+      border-color: $secondary-400;
+      color: $secondary-800;
+    }
+
+    &__selected {
+      background-color: $secondary-600;
+      border-color: $secondary-600;
+      color: $text-inverse;
+    }
+  }
+}
+
+// インタラクティブモード（button要素）のスタイル
+.c_rating_indicator[role='radiogroup'] {
+  .c_rating_indicator__item {
+    cursor: pointer;
+
+    &:hover {
+      background-color: $secondary-100;
+      border-color: $secondary-500;
+      color: $secondary-800;
+    }
+
+    &:focus-visible {
+      outline: 2px solid $primary-500;
+      outline-offset: 2px;
+    }
+
+    &__selected {
+      &:hover {
+        background-color: $secondary-700;
+        border-color: $secondary-700;
+        color: $text-inverse;
+      }
+    }
+  }
+}

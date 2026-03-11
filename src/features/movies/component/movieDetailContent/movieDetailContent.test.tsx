@@ -24,6 +24,25 @@ jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
   useWatchlistToggle: () => mockUseWatchlistToggle,
 }));
 
+jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
+  useFavoriteToggle: () => ({
+    modalState: { isOpen: false, movie: null, currentFavorite: null },
+    handleFavoriteToggle: jest.fn(),
+    closeModal: jest.fn(),
+    handleSubmit: jest.fn(),
+    handleUpdate: jest.fn(),
+    handleDelete: jest.fn(),
+    isProcessing: false,
+  }),
+}));
+
+jest.mock(
+  '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal',
+  () => ({
+    FavoriteRatingModal: () => null,
+  }),
+);
+
 jest.mock('next/image', () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => {

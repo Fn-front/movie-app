@@ -571,31 +571,31 @@
     - DELETE: 認証チェック・正常削除・404（存在しない/他ユーザー/削除済み）
 
 #### Step 5: お気に入りUI + MovieTile統合（`feature/favorites-ui`）
-- [ ] useFavoritesフック作成（TanStack Query）
+- [x] useFavoritesフック作成（TanStack Query）
   - useQuery（一覧取得 — /favoritesページ用）
   - useMutation（追加・評価更新・削除）
   - 楽観的UI更新（映画一覧キャッシュ内の該当映画の `favorite` フィールドを更新）
-- [ ] useFavoriteToggleフック作成
+- [x] useFavoriteToggleフック作成
   - useFavorites + useToast を統合
   - 未登録: RatingModal表示 → 登録
   - 登録済み: RatingModal表示（現在の評価セット）→ 更新 or 削除
-- [ ] RatingIndicatorコンポーネント作成（1〜10点、数値インジケーター）
+- [x] RatingIndicatorコンポーネント作成（1〜10点、数値インジケーター）
   - インタラクティブモード（モーダル内）: クリックで評価選択
   - 表示モード（一覧画面）: 読み取り専用
-- [ ] FavoriteRatingModalコンポーネント作成（点数入力モーダル）
+- [x] FavoriteRatingModalコンポーネント作成（点数入力モーダル）
   - Radix UI Dialogベース
   - 映画タイトル表示 + RatingIndicator
   - 新規: 「登録」「キャンセル」ボタン
   - 更新: 現在の評価を初期値 + 「更新」「削除」「キャンセル」ボタン
-- [ ] FavoriteButtonコンポーネント作成（ハートアイコン）
+- [x] FavoriteButtonコンポーネント作成（ハートアイコン）
   - props: `favorite: { id, rating } | null`（映画一覧レスポンスから渡される）
   - `favorite` が null: 白抜きハート → クリックでRatingModal表示
   - `favorite` がオブジェクト: 塗りつぶしハート（$secondary-600）→ クリックで評価変更モーダル表示
   - event.stopPropagation()でMovieTileクリックと干渉しない
-- [ ] MovieTileにFavoriteButton統合（ポスター上にオーバーレイ表示）
-- [ ] 映画詳細モーダル内にもFavoriteButton配置
-- [ ] Toast通知（「お気に入りに追加しました」「お気に入りから削除しました」「評価を更新しました」）
-- [ ] 結合テスト
+- [x] MovieTileにFavoriteButton統合（ポスター上にオーバーレイ表示）
+- [x] 映画詳細モーダル内にもFavoriteButton配置
+- [x] Toast通知（「お気に入りに追加しました」「お気に入りから削除しました」「評価を更新しました」）
+- [x] 結合テスト
   - useFavoritesフックテスト
     - 一覧取得（useQuery）・ページ切替
     - 追加mutation・映画一覧キャッシュの楽観的更新・エラー時ロールバック
@@ -634,7 +634,7 @@
   - 空状態の表示（「お気に入りの映画を追加しましょう」）
 - [ ] ソートSelect（登録日順 / 評価順）
 - [ ] useFavoritesPageフック作成（ソート状態管理 + useFavorites統合）
-- [ ] 結合テスト
+- [x] 結合テスト
   - FavoriteListテスト
     - 一覧表示（複数件・グリッド）
     - 空状態メッセージ表示

@@ -3,7 +3,10 @@
  */
 
 import { axiosInstance } from '@/lib/axios/axios';
-import type { FavoritesAddFormData, FavoritesUpdateFormData } from '@/schema/favorites';
+import type {
+  FavoritesAddFormData,
+  FavoritesUpdateFormData,
+} from '@/schema/favorites';
 
 /**
  * お気に入りアイテムの型

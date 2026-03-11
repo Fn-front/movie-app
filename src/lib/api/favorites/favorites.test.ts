@@ -175,17 +175,13 @@ describe('favorites API client', () => {
 
       await removeFavorite('fav-123');
 
-      expect(mockedAxios.delete).toHaveBeenCalledWith(
-        '/api/favorites/fav-123',
-      );
+      expect(mockedAxios.delete).toHaveBeenCalledWith('/api/favorites/fav-123');
     });
 
     it('APIエラー時にエラーがスローされる', async () => {
       mockedAxios.delete.mockRejectedValue(new Error('Not Found'));
 
-      await expect(removeFavorite('non-existent')).rejects.toThrow(
-        'Not Found',
-      );
+      await expect(removeFavorite('non-existent')).rejects.toThrow('Not Found');
     });
   });
 });

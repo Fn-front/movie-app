@@ -364,9 +364,7 @@ export async function GET(request: Request) {
     let moviesWithFavorites = movies ?? [];
 
     if (session && moviesWithFavorites.length > 0) {
-      const movieIds = moviesWithFavorites.map(
-        (m: { id: number }) => m.id,
-      );
+      const movieIds = moviesWithFavorites.map((m: { id: number }) => m.id);
 
       const { data: favorites } = await supabase
         .from('favorites')
@@ -377,10 +375,12 @@ export async function GET(request: Request) {
 
       if (favorites && favorites.length > 0) {
         const favoriteMap = new Map(
-          favorites.map((f: { id: string; tmdb_movie_id: number; rating: number }) => [
-            f.tmdb_movie_id,
-            { id: f.id, rating: f.rating },
-          ]),
+          favorites.map(
+            (f: { id: string; tmdb_movie_id: number; rating: number }) => [
+              f.tmdb_movie_id,
+              { id: f.id, rating: f.rating },
+            ],
+          ),
         );
 
         moviesWithFavorites = moviesWithFavorites.map(

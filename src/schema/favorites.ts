@@ -34,8 +34,14 @@ export const favoritesAddSchema = z.object({
   rating: z
     .number()
     .int('評価は整数で入力してください')
-    .min(FAVORITES_RATING_MIN, `評価は${FAVORITES_RATING_MIN}以上で入力してください`)
-    .max(FAVORITES_RATING_MAX, `評価は${FAVORITES_RATING_MAX}以下で入力してください`),
+    .min(
+      FAVORITES_RATING_MIN,
+      `評価は${FAVORITES_RATING_MIN}以上で入力してください`,
+    )
+    .max(
+      FAVORITES_RATING_MAX,
+      `評価は${FAVORITES_RATING_MAX}以下で入力してください`,
+    ),
 });
 
 /**
@@ -50,8 +56,14 @@ export const favoritesUpdateSchema = z.object({
   rating: z
     .number()
     .int('評価は整数で入力してください')
-    .min(FAVORITES_RATING_MIN, `評価は${FAVORITES_RATING_MIN}以上で入力してください`)
-    .max(FAVORITES_RATING_MAX, `評価は${FAVORITES_RATING_MAX}以下で入力してください`),
+    .min(
+      FAVORITES_RATING_MIN,
+      `評価は${FAVORITES_RATING_MIN}以上で入力してください`,
+    )
+    .max(
+      FAVORITES_RATING_MAX,
+      `評価は${FAVORITES_RATING_MAX}以下で入力してください`,
+    ),
 });
 
 /**

@@ -23,6 +23,7 @@ describe('SideNav', () => {
 
     expect(screen.getByText('公開予定')).toBeInTheDocument();
     expect(screen.getByText('公開中')).toBeInTheDocument();
+    expect(screen.getByText('お気に入り')).toBeInTheDocument();
   });
 
   it('nav要素にaria-labelが設定される', () => {
@@ -74,5 +75,19 @@ describe('SideNav', () => {
 
     const nowShowingLink = screen.getByText('公開中');
     expect(nowShowingLink).toHaveAttribute('href', '/movies/now-showing');
+
+    const favoritesLink = screen.getByText('お気に入り');
+    expect(favoritesLink).toHaveAttribute('href', '/favorites');
+  });
+
+  it('お気に入りがアクティブの場合aria-current="page"が設定される', () => {
+    mockPathname.mockReturnValue('/favorites');
+    render(<SideNav />);
+
+    const favoritesLink = screen.getByText('お気に入り');
+    expect(favoritesLink).toHaveAttribute('aria-current', 'page');
+
+    const upcomingLink = screen.getByText('公開予定');
+    expect(upcomingLink).not.toHaveAttribute('aria-current');
   });
 });

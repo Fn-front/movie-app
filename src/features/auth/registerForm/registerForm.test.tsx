@@ -135,13 +135,14 @@ describe('RegisterForm', () => {
       'test@example.com',
     );
     await user.type(screen.getByLabelText('パスワード'), 'Password123');
-    await user.type(screen.getByLabelText('パスワード（確認）'), 'Different123');
+    await user.type(
+      screen.getByLabelText('パスワード（確認）'),
+      'Different123',
+    );
     await user.click(screen.getByRole('button', { name: '新規登録' }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText('パスワードが一致しません'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('パスワードが一致しません')).toBeInTheDocument();
     });
     expect(mockRegisterUser).not.toHaveBeenCalled();
   });

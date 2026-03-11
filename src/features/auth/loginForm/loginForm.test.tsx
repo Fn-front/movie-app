@@ -49,14 +49,50 @@ describe('LoginForm', () => {
     );
   });
 
-  it('空フォーム送信時にバリデーションエラーが表示される', async () => {
+  it('メールアドレス未入力でバリデーションエラーが表示される', async () => {
     render(<LoginForm />);
 
+    await user.type(screen.getByLabelText('パスワード'), 'Password123');
     await user.click(screen.getByRole('button', { name: 'ログイン' }));
 
     await waitFor(() => {
-      expect(mockSignIn).not.toHaveBeenCalled();
+      expect(
+        screen.getByText('メールアドレスを入力してください'),
+      ).toBeInTheDocument();
     });
+    expect(mockSignIn).not.toHaveBeenCalled();
+  });
+
+  it('パスワード未入力でバリデーションエラーが表示される', async () => {
+    render(<LoginForm />);
+
+    await user.type(
+      screen.getByLabelText('メールアドレス'),
+      'test@example.com',
+    );
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('パスワードを入力してください'),
+      ).toBeInTheDocument();
+    });
+    expect(mockSignIn).not.toHaveBeenCalled();
+  });
+
+  it('メールアドレス形式不正でバリデーションエラーが表示される', async () => {
+    render(<LoginForm />);
+
+    await user.type(screen.getByLabelText('メールアドレス'), 'invalid-email');
+    await user.type(screen.getByLabelText('パスワード'), 'Password123');
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('メールアドレスの形式が正しくありません'),
+      ).toBeInTheDocument();
+    });
+    expect(mockSignIn).not.toHaveBeenCalled();
   });
 
   it('ログイン成功時にトーストとリダイレクトが実行される', async () => {

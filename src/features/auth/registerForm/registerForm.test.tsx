@@ -74,14 +74,76 @@ describe('RegisterForm', () => {
     );
   });
 
-  it('空フォーム送信時にバリデーションエラーが表示される', async () => {
+  it('メールアドレス未入力でバリデーションエラーが表示される', async () => {
     render(<RegisterForm />);
 
+    await user.type(screen.getByLabelText('パスワード'), 'Password123');
+    await user.type(screen.getByLabelText('パスワード（確認）'), 'Password123');
     await user.click(screen.getByRole('button', { name: '新規登録' }));
 
     await waitFor(() => {
-      expect(mockRegisterUser).not.toHaveBeenCalled();
+      expect(
+        screen.getByText('メールアドレスを入力してください'),
+      ).toBeInTheDocument();
     });
+    expect(mockRegisterUser).not.toHaveBeenCalled();
+  });
+
+  it('パスワードが短すぎるとバリデーションエラーが表示される', async () => {
+    render(<RegisterForm />);
+
+    await user.type(
+      screen.getByLabelText('メールアドレス'),
+      'test@example.com',
+    );
+    await user.type(screen.getByLabelText('パスワード'), 'Pw1');
+    await user.type(screen.getByLabelText('パスワード（確認）'), 'Pw1');
+    await user.click(screen.getByRole('button', { name: '新規登録' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('パスワードは8文字以上で入力してください'),
+      ).toBeInTheDocument();
+    });
+    expect(mockRegisterUser).not.toHaveBeenCalled();
+  });
+
+  it('パスワードに大文字がないとバリデーションエラーが表示される', async () => {
+    render(<RegisterForm />);
+
+    await user.type(
+      screen.getByLabelText('メールアドレス'),
+      'test@example.com',
+    );
+    await user.type(screen.getByLabelText('パスワード'), 'password123');
+    await user.type(screen.getByLabelText('パスワード（確認）'), 'password123');
+    await user.click(screen.getByRole('button', { name: '新規登録' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('パスワードに大文字を含めてください'),
+      ).toBeInTheDocument();
+    });
+    expect(mockRegisterUser).not.toHaveBeenCalled();
+  });
+
+  it('パスワード確認が一致しないとバリデーションエラーが表示される', async () => {
+    render(<RegisterForm />);
+
+    await user.type(
+      screen.getByLabelText('メールアドレス'),
+      'test@example.com',
+    );
+    await user.type(screen.getByLabelText('パスワード'), 'Password123');
+    await user.type(screen.getByLabelText('パスワード（確認）'), 'Different123');
+    await user.click(screen.getByRole('button', { name: '新規登録' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('パスワードが一致しません'),
+      ).toBeInTheDocument();
+    });
+    expect(mockRegisterUser).not.toHaveBeenCalled();
   });
 
   it('登録成功時にトーストとリダイレクトが実行される', async () => {

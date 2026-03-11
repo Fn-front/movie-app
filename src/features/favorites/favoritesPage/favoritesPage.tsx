@@ -30,7 +30,7 @@ export const FavoritesPage = memo(function FavoritesPage() {
     closeModal,
     handleModalSubmit,
     handleDelete,
-    isProcessing,
+    isFavoriteProcessing,
   } = favoriteToggle;
 
   const sortOptions = useMemo(
@@ -61,7 +61,7 @@ export const FavoritesPage = memo(function FavoritesPage() {
         favorites={favorites}
         isLoading={isLoading}
         onFavoriteToggle={handleFavoriteToggle}
-        favoriteDisabled={isProcessing}
+        isFavoriteProcessing={isFavoriteProcessing}
       />
 
       <FavoriteRatingModal

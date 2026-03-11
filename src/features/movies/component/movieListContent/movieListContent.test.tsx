@@ -14,7 +14,7 @@ jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
   useWatchlistToggle: () => ({
     isInWatchlist: jest.fn().mockReturnValue(false),
     toggleWatchlist: jest.fn(),
-    isToggling: false,
+    isMovieToggling: jest.fn().mockReturnValue(false),
   }),
 }));
 
@@ -25,7 +25,7 @@ jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
     closeModal: jest.fn(),
     handleModalSubmit: jest.fn(),
     handleDelete: jest.fn(),
-    isProcessing: false,
+    isFavoriteProcessing: jest.fn().mockReturnValue(false),
   }),
 }));
 

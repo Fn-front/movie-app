@@ -53,6 +53,8 @@ export interface UseFavoriteToggleReturn {
   handleDelete: () => void;
   /** 処理中かどうか */
   isProcessing: boolean;
+  /** 指定映画が処理中かどうか（per-movie無効化用） */
+  isFavoriteProcessing: (tmdbMovieId: number) => boolean;
 }
 
 const INITIAL_MODAL_STATE: FavoriteModalState = {
@@ -77,6 +79,8 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
   const [modalState, setModalState] =
     useState<FavoriteModalState>(INITIAL_MODAL_STATE);
 
+  const [processingIds, setProcessingIds] = useState<Set<number>>(new Set());
+
   const handleFavoriteToggle = useCallback(
     (movie: FavoriteToggleMovie, favorite: MovieFavoriteInfo | null) => {
       setModalState({
@@ -94,6 +98,9 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
 
   const handleModalSubmit = useCallback(
     (rating: number) => {
+      if (modalState.movie) {
+        setProcessingIds((prev) => new Set(prev).add(modalState.movie!.id));
+      }
       if (modalState.currentFavorite) {
         updateRating(modalState.currentFavorite.id, rating);
       } else {
@@ -119,9 +126,23 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
 
   const handleDelete = useCallback(() => {
     if (!modalState.currentFavorite) return;
+    if (modalState.movie) {
+      setProcessingIds((prev) => new Set(prev).add(modalState.movie!.id));
+    }
     removeFromFavorites(modalState.currentFavorite.id);
     closeModal();
-  }, [modalState.currentFavorite, removeFromFavorites, closeModal]);
+  }, [
+    modalState.currentFavorite,
+    modalState.movie,
+    removeFromFavorites,
+    closeModal,
+  ]);
+
+  const isFavoriteProcessing = useCallback(
+    (tmdbMovieId: number) =>
+      (isAdding || isUpdating || isRemoving) && processingIds.has(tmdbMovieId),
+    [processingIds, isAdding, isUpdating, isRemoving],
+  );
 
   return useMemo(
     () => ({
@@ -131,6 +152,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       handleModalSubmit,
       handleDelete,
       isProcessing: isAdding || isUpdating || isRemoving,
+      isFavoriteProcessing,
     }),
     [
       modalState,
@@ -141,6 +163,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       isAdding,
       isUpdating,
       isRemoving,
+      isFavoriteProcessing,
     ],
   );
 }

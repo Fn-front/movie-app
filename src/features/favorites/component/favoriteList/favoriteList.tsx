@@ -38,8 +38,8 @@ export interface FavoriteListProps {
     },
     favorite: MovieFavoriteInfo | null,
   ) => void;
-  /** お気に入りボタン無効化 */
-  favoriteDisabled?: boolean;
+  /** 指定映画が処理中かどうか（per-movie無効化用） */
+  isFavoriteProcessing?: (tmdbMovieId: number) => boolean;
 }
 
 /**
@@ -49,7 +49,7 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
   favorites,
   isLoading,
   onFavoriteToggle,
-  favoriteDisabled = false,
+  isFavoriteProcessing,
 }) {
   if (isLoading) {
     return (
@@ -74,7 +74,7 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
           key={item.id}
           item={item}
           onFavoriteToggle={onFavoriteToggle}
-          favoriteDisabled={favoriteDisabled}
+          favoriteDisabled={isFavoriteProcessing?.(item.tmdb_movie_id) ?? false}
         />
       ))}
     </div>

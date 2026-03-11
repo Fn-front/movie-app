@@ -61,14 +61,15 @@ export const MovieListContent = memo<MovieListContentProps>(
       handleFilterModalClose,
     } = movieList;
 
-    const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
+    const { isInWatchlist, toggleWatchlist, isMovieToggling } =
+      useWatchlistToggle();
     const {
       modalState: favoriteModalState,
       handleFavoriteToggle,
       closeModal: closeFavoriteModal,
       handleModalSubmit: handleFavoriteModalSubmit,
       handleDelete: handleFavoriteDelete,
-      isProcessing: isFavoriteProcessing,
+      isFavoriteProcessing,
     } = useFavoriteToggle();
 
     const sortOptions = useMemo(
@@ -172,9 +173,9 @@ export const MovieListContent = memo<MovieListContentProps>(
                 onClick={handleMovieTileClick}
                 isInWatchlist={isInWatchlist(movie.id)}
                 onWatchlistToggle={toggleWatchlist}
-                watchlistDisabled={isToggling}
+                watchlistDisabled={isMovieToggling(movie.id)}
                 onFavoriteToggle={handleFavoriteToggle}
-                favoriteDisabled={isFavoriteProcessing}
+                favoriteDisabled={isFavoriteProcessing(movie.id)}
               />
             ))
           )}

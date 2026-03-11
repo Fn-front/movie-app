@@ -141,6 +141,19 @@ test.describe('設定ページ — フォーム要素', () => {
   });
 
   test('テーマを切り替えるとdata-theme属性が変わる', async ({ page }) => {
+    // 設定更新APIをモック（FK制約エラー回避）
+    await page.route('**/api/user/settings', async (route) => {
+      if (route.request().method() === 'PUT') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true, message: '設定を更新しました' }),
+        });
+      } else {
+        await route.continue();
+      }
+    });
+
     const themeTrigger = page.getByRole('combobox', { name: 'テーマを選択' });
     await expect(themeTrigger).toBeVisible();
     await themeTrigger.click();

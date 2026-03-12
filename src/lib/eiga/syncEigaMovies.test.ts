@@ -104,29 +104,19 @@ describe('findBestMatch', () => {
     expect(result?.id).toBe(2);
   });
 
-  it('除外言語の映画を除外する', () => {
+  it('iCal経由では言語フィルタなしで全候補を返す', () => {
     const candidates = [
       createMockMovie({
         id: 1,
         title: 'テスト映画',
         original_language: 'ko',
-      }),
-      createMockMovie({
-        id: 2,
-        title: 'テスト映画',
-        original_language: 'zh',
-      }),
-      createMockMovie({
-        id: 3,
-        title: '別の映画',
-        original_language: 'en',
         release_date: '2026-03-01',
       }),
     ];
 
     const result = findBestMatch(candidates, eigaMovie);
 
-    expect(result?.id).toBe(3);
+    expect(result?.id).toBe(1);
   });
 
   it('候補が空配列の場合はnullを返す', () => {
@@ -498,7 +488,7 @@ describe('syncEigaMovies', () => {
     expect(mockUpsert).not.toHaveBeenCalled();
   });
 
-  it('除外言語のpost-filterでスキップする', async () => {
+  it('iCal経由では言語フィルタなしで保存する', async () => {
     const eigaMovie: EigaMovie = {
       title: 'テスト映画',
       releaseDate: '2026-03-01',
@@ -506,25 +496,25 @@ describe('syncEigaMovies', () => {
     };
 
     mockedFetchEigaMovies.mockResolvedValue([eigaMovie]);
-    // 除外言語はfindBestMatchでもフィルタされるため、
-    // 他に候補がない場合はfindBestMatchがnullを返してスキップされる
     mockedSearchMovies.mockResolvedValue({
       results: [
         createMockMovie({
           id: 500,
           title: 'テスト映画',
           original_language: 'ko',
+          release_date: '2026-03-01',
         }),
       ],
       page: 1,
       total_pages: 1,
       total_results: 1,
     });
+    (getMovieKeywordIds as jest.Mock).mockResolvedValue([]);
 
     const result = await syncEigaMovies();
 
-    expect(result.skipped).toBe(1);
-    expect(result.added).toBe(0);
+    expect(result.added).toBe(1);
+    expect(mockUpsert).toHaveBeenCalled();
   });
 
   it('除外キーワードを含む映画をpost-filterでスキップする', async () => {

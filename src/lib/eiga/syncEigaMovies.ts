@@ -4,7 +4,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-import { EXCLUDED_KEYWORD_IDS, ALLOWED_LANGUAGES } from '@/constants/movies';
+import { EXCLUDED_KEYWORD_IDS } from '@/constants/movies';
 import { getMovieKeywordIds, searchMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
@@ -39,12 +39,8 @@ export function findBestMatch(
 ): Movie | null {
   if (candidates.length === 0) return null;
 
-  const allowedLangs: readonly string[] = ALLOWED_LANGUAGES;
-
-  // 除外フィルタ適用
-  const filtered = candidates.filter(
-    (movie) => !movie.adult && allowedLangs.includes(movie.original_language),
-  );
+  // 除外フィルタ適用（iCal経由は日本公開確定のため言語フィルタなし）
+  const filtered = candidates.filter((movie) => !movie.adult);
 
   if (filtered.length === 0) return null;
 
@@ -198,12 +194,8 @@ export async function syncEigaMovies(): Promise<SyncResult> {
         continue;
       }
 
-      // post-filter: adultコンテンツ・許可言語外を保存しない
-      const allowedLangs: readonly string[] = ALLOWED_LANGUAGES;
-      if (
-        bestMatch.adult ||
-        !allowedLangs.includes(bestMatch.original_language)
-      ) {
+      // post-filter: adultコンテンツを保存しない（iCal経由は言語フィルタなし）
+      if (bestMatch.adult) {
         result.skipped++;
         continue;
       }

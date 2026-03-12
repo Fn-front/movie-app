@@ -43,9 +43,7 @@ describe('SignInContent', () => {
   it('メールでログインクリック時にOTPログインフォームに切り替わる', async () => {
     render(<SignInContent />);
 
-    await user.click(
-      screen.getByRole('button', { name: 'メールでログイン' }),
-    );
+    await user.click(screen.getByRole('button', { name: 'メールでログイン' }));
 
     await waitFor(() => {
       expect(
@@ -60,9 +58,7 @@ describe('SignInContent', () => {
     render(<SignInContent />);
 
     // OTPログインに切り替え
-    await user.click(
-      screen.getByRole('button', { name: 'メールでログイン' }),
-    );
+    await user.click(screen.getByRole('button', { name: 'メールでログイン' }));
 
     await waitFor(() => {
       expect(

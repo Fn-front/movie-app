@@ -16,7 +16,7 @@ export async function performLogin(page: Page): Promise<void> {
   await page.goto('/auth/signin');
   await page.getByLabel('メールアドレス').fill(TEST_USER.email);
   await page.getByLabel('パスワード').fill(TEST_USER.password);
-  await page.getByRole('button', { name: 'ログイン' }).click();
+  await page.getByRole('button', { name: 'ログイン', exact: true }).click();
   await page.waitForURL('/');
 }
 

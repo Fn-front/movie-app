@@ -92,15 +92,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           // 検証済みOTPの有効期限チェック（verified_atから5分以内）
           const verifiedAt = new Date(verifiedOtp.verified_at).getTime();
-          const expiryMs =
-            OTP_CONFIG.VERIFIED_TOKEN_EXPIRY_MINUTES * 60 * 1000;
+          const expiryMs = OTP_CONFIG.VERIFIED_TOKEN_EXPIRY_MINUTES * 60 * 1000;
 
           if (Date.now() - verifiedAt > expiryMs) {
             // 期限切れのOTPを削除
-            await supabase
-              .from('otp_codes')
-              .delete()
-              .eq('id', verifiedOtp.id);
+            await supabase.from('otp_codes').delete().eq('id', verifiedOtp.id);
             throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
           }
 

@@ -40,41 +40,38 @@ export function useOtpLogin(): UseOtpLoginReturn {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const handleSendOtp = useCallback(
-    async (inputEmail: string) => {
-      setIsSubmitting(true);
-      setApiError(null);
+  const handleSendOtp = useCallback(async (inputEmail: string) => {
+    setIsSubmitting(true);
+    setApiError(null);
 
-      try {
-        const response = await fetch('/api/auth/otp/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: inputEmail,
-            action: OTP_ACTION.LOGIN,
-          }),
-        });
+    try {
+      const response = await fetch('/api/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: inputEmail,
+          action: OTP_ACTION.LOGIN,
+        }),
+      });
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (!response.ok) {
-          setApiError(
-            data.error?.message || 'ログインコードの送信に失敗しました。',
-          );
-          return;
-        }
-
-        setEmail(inputEmail);
-        setStep('otp');
-      } catch (error) {
-        const { message } = handleApiError(error);
-        setApiError(message || 'ネットワークエラーが発生しました。');
-      } finally {
-        setIsSubmitting(false);
+      if (!response.ok) {
+        setApiError(
+          data.error?.message || 'ログインコードの送信に失敗しました。',
+        );
+        return;
       }
-    },
-    [],
-  );
+
+      setEmail(inputEmail);
+      setStep('otp');
+    } catch (error) {
+      const { message } = handleApiError(error);
+      setApiError(message || 'ネットワークエラーが発生しました。');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, []);
 
   const handleOtpVerifySuccess = useCallback(async () => {
     setIsSubmitting(true);

@@ -13,10 +13,7 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
 }));
 
 import { createClient } from '@supabase/supabase-js';
-import {
-  EXCLUDED_GENRE_IDS,
-  EXCLUDED_KEYWORD_IDS,
-} from '@/constants/movies';
+import { EXCLUDED_GENRE_IDS, EXCLUDED_KEYWORD_IDS } from '@/constants/movies';
 import { getNowPlayingMovies, getMovieKeywordIds } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 import { syncNowPlayingMovies } from './syncNowPlayingMovies';

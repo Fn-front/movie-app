@@ -256,6 +256,7 @@ describe('RegisterForm', () => {
     mockRegisterUser.mockResolvedValue({
       success: true,
       data: { userId: '123' },
+      message: '確認コードをメールに送信しました。',
     });
 
     render(<RegisterForm />);

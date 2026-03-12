@@ -335,22 +335,53 @@ showToast({
 
 ---
 
-### Calendar
-カレンダーコンポーネント
+### CalendarDialog
+カレンダーダイアログコンポーネント（ウォッチリストの映画の公開日を月間カレンダーで表示）
+
+**ベース**: `@radix-ui/react-dialog` + `react-day-picker`
 
 **Props:**
-- `watchlist`: WatchlistItem[]
-- `onMovieClick`: (movieId: number) => void
+- `isOpen`: boolean
+- `onClose`: () => void
+
+**内部動作:**
+- `useCalendar` フックでデータ取得・状態管理
+- `GET /api/watchlist/calendar` から月ごとのウォッチリスト映画を取得
+- `release_date` がNULLの映画は表示対象外
+- 取得済み月データはキャッシュ（ダイアログ再オープン時にクリア）
 
 **表示内容:**
-- 月間カレンダー
-- 公開日にマッピングされた映画
-- 月切り替えボタン
+- 月間カレンダー（react-day-picker）
+- 映画がある日付にドット/バッジ表示
+- 日付クリックで CalendarMovieList に映画一覧表示
+- 月切り替えボタン（前月・次月）
+- ローディング状態
 
 **使用例:**
 ```tsx
-<Calendar
-  watchlist={watchlist}
+<CalendarDialog
+  isOpen={isCalendarOpen}
+  onClose={handleCloseCalendar}
+/>
+```
+
+---
+
+### CalendarMovieList
+カレンダー内の選択日の映画一覧コンポーネント
+
+**Props:**
+- `movies`: Array<{ id: string; tmdb_movie_id: number; title: string; poster_path: string | null; release_date: string }>
+- `onMovieClick`: (movieId: number) => void
+
+**表示内容:**
+- ポスターサムネイル（w92）+ タイトル + 公開日
+- 映画クリックで詳細モーダル表示
+
+**使用例:**
+```tsx
+<CalendarMovieList
+  movies={selectedDateMovies}
   onMovieClick={handleMovieClick}
 />
 ```

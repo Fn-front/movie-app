@@ -5,8 +5,24 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { Select } from '@/components/ui/select/select';
 import { MovieFilter } from './movieFilter';
 import type { MovieFilterProps } from './movieFilter';
+
+jest.mock('@/components/ui/select/select', () => ({
+  Select: jest.fn((props) => (
+    <div data-testid={`select-${props.label}`}>
+      <button
+        aria-label={props['aria-label']}
+        onClick={() => props.onValueChange?.(props.options[0]?.value)}
+      >
+        {props.placeholder}
+      </button>
+    </div>
+  )),
+}));
+
+const mockSelect = Select as jest.MockedFunction<typeof Select>;
 
 // --- Helpers ---
 const mockGenres = [
@@ -162,6 +178,39 @@ describe('MovieFilter', () => {
       );
 
       expect(onFilterClear).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('年代選択', () => {
+    it('年代変更時にonFilterChangeが呼ばれる', () => {
+      const onFilterChange = jest.fn();
+      render(<MovieFilter {...createDefaultProps({ onFilterChange })} />);
+
+      const yearCallProps = (mockSelect as jest.Mock).mock.calls.find(
+        (call: unknown[]) => (call[0] as { label: string }).label === '公開年',
+      )?.[0] as { onValueChange: (value: string) => void };
+      yearCallProps.onValueChange('2024');
+
+      expect(onFilterChange).toHaveBeenCalledWith(
+        expect.objectContaining({ year: 2024 }),
+      );
+    });
+  });
+
+  describe('評価選択', () => {
+    it('評価変更時にonFilterChangeが呼ばれる', () => {
+      const onFilterChange = jest.fn();
+      render(<MovieFilter {...createDefaultProps({ onFilterChange })} />);
+
+      const ratingCallProps = (mockSelect as jest.Mock).mock.calls.find(
+        (call: unknown[]) =>
+          (call[0] as { label: string }).label === '最低評価',
+      )?.[0] as { onValueChange: (value: string) => void };
+      ratingCallProps.onValueChange('7.5');
+
+      expect(onFilterChange).toHaveBeenCalledWith(
+        expect.objectContaining({ vote_average_gte: 7.5 }),
+      );
     });
   });
 

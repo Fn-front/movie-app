@@ -78,20 +78,26 @@ export const MovieFilter = memo<MovieFilterProps>(function MovieFilter({
     [currentFilters.genre],
   );
 
-  const handleGenreToggle = useCallback(
-    (genreId: number) => (checked: boolean) => {
-      const newGenres = new Set(selectedGenres);
-      if (checked) {
-        newGenres.add(genreId);
-      } else {
-        newGenres.delete(genreId);
-      }
-      onFilterChange({
-        ...currentFilters,
-        genre: newGenres.size > 0 ? Array.from(newGenres) : undefined,
-      });
-    },
-    [selectedGenres, currentFilters, onFilterChange],
+  const genreToggleHandlers = useMemo(
+    () =>
+      new Map(
+        genres.map((genre) => [
+          genre.id,
+          (checked: boolean) => {
+            const newGenres = new Set(selectedGenres);
+            if (checked) {
+              newGenres.add(genre.id);
+            } else {
+              newGenres.delete(genre.id);
+            }
+            onFilterChange({
+              ...currentFilters,
+              genre: newGenres.size > 0 ? Array.from(newGenres) : undefined,
+            });
+          },
+        ]),
+      ),
+    [genres, selectedGenres, currentFilters, onFilterChange],
   );
 
   const handleYearChange = useCallback(
@@ -146,7 +152,7 @@ export const MovieFilter = memo<MovieFilterProps>(function MovieFilter({
               key={genre.id}
               label={genre.name}
               checked={selectedGenres.has(genre.id)}
-              onCheckedChange={handleGenreToggle(genre.id)}
+              onCheckedChange={genreToggleHandlers.get(genre.id)}
               className={styles.c_movie_filter__genre_item}
             />
           ))}

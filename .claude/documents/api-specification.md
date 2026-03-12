@@ -50,6 +50,8 @@
 | 403 | FORBIDDEN | "アクセス権限がありません" | - |
 | 404 | NOT_FOUND | "リソースが見つかりません" | - |
 | 404 | USER_NOT_FOUND | "ユーザーが見つかりません" | - |
+| 400 | INVALID_OTP | "確認コードが間違っています" | { remainingAttempts: 3 } |
+| 400 | OTP_EXPIRED | "確認コードの有効期限が切れました" | - |
 | 409 | CONFLICT | "すでに登録済みのメールアドレスです" | - |
 | 429 | RATE_LIMIT_EXCEEDED | "試行回数の上限に達しました。30分後に再度お試しください" | { retryAfter: 1800 } |
 | 429 | TOO_MANY_REQUESTS | "リクエストが多すぎます。しばらく待ってから再度お試しください" | - |
@@ -110,14 +112,121 @@
 ```json
 {
   "success": true,
-  "message": "登録が完了しました",
+  "message": "確認コードをメールに送信しました",
   "data": { "userId": "uuid-here" }
+}
+```
+
+**内部処理:**
+1. ユーザー作成（is_verified = false）
+2. OTPコード生成（6桁）・保存
+3. Resendでメール送信
+
+**Error Responses:**
+- `400 Bad Request`: バリデーションエラー
+- `409 Conflict`: すでに登録済みのメールアドレス
+
+---
+
+### POST /api/auth/otp/send
+OTPコード送信（再送信含む）
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "action": "registration"
+}
+```
+
+**Validation:**
+- `email`: メール形式必須
+- `action`: 'registration' | 'login' | 'password_change'
+
+**内部処理:**
+1. アクション別チェック
+   - `registration`: 該当メールのユーザーが存在し `is_verified = false` であること
+   - `login`: 該当メールのユーザーが存在すること
+   - `password_change`: ログイン済みセッション必須
+2. 前回送信から1分以上経過しているかチェック
+3. 既存の未使用OTPを無効化
+4. 新しいOTPコードを生成・保存（有効期限: 10分）
+5. Resendでメール送信
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "確認コードを送信しました"
 }
 ```
 
 **Error Responses:**
 - `400 Bad Request`: バリデーションエラー
-- `409 Conflict`: すでに登録済みのメールアドレス
+- `404 Not Found`: ユーザーが見つからない（login時）
+- `429 Too Many Requests`: 再送間隔が短すぎる（1分未満）
+
+---
+
+### POST /api/auth/otp/verify
+OTPコード検証
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "code": "123456",
+  "action": "registration"
+}
+```
+
+**Validation:**
+- `email`: メール形式必須
+- `code`: 6桁数字
+- `action`: 'registration' | 'login' | 'password_change'
+
+**内部処理:**
+1. otp_codesテーブルから該当レコード検索
+2. 有効期限チェック（10分以内か）
+3. 試行回数チェック（5回以内か）
+4. コード照合
+5. アクション別後処理:
+   - `registration`: is_verified = true に更新、OTPレコード削除
+   - `login`: OTPレコードに検証済みフラグ設定（セッション発行はクライアント側でCredentials Provider経由）
+   - `password_change`: OTPレコードに検証済みフラグ設定（パスワード変更APIで再検証）
+
+**Response (200 OK) - registration:**
+```json
+{
+  "success": true,
+  "message": "メール認証が完了しました"
+}
+```
+
+**Response (200 OK) - login:**
+```json
+{
+  "success": true,
+  "message": "コード検証に成功しました"
+}
+```
+
+**Response (200 OK) - password_change:**
+```json
+{
+  "success": true,
+  "message": "コード検証に成功しました"
+}
+```
+
+**備考:**
+- `login`の場合: クライアント側でverify成功後、NextAuth.jsの`signIn("credentials")`を`loginMethod: "otp"`で呼び出してセッション発行
+- `password_change`の場合: verify成功後、パスワード変更API（`POST /api/user/change-password`）を呼び出す。変更API側でotp_codesの検証済みフラグを再確認
+
+**Error Responses:**
+- `400 Bad Request`: コードが間違っている（残り試行回数をdetailsに含む）
+- `400 Bad Request`: OTPの有効期限切れ
+- `429 Too Many Requests`: 試行回数超過（5回）
 
 ---
 
@@ -165,20 +274,29 @@
 ---
 
 ### POST /api/user/change-password
-パスワード変更（ログイン済みユーザー）
+パスワード変更（ログイン済みユーザー、OTP検証済み）
 
 **認証**: NextAuth.jsセッション必須
+
+**前提条件**: 事前に `POST /api/auth/otp/verify`（action: password_change）で検証成功していること
 
 **Request Body:**
 ```json
 {
-  "currentPassword": "oldPassword123",
-  "newPassword": "newPassword456"
+  "newPassword": "NewPassword456"
 }
 ```
 
 **Validation:**
-- パスワード: 8文字以上、英字（大文字・小文字）+ 数字必須（react-hook-form + zodで検証）
+- `newPassword`: 8文字以上、英字（大文字・小文字）+ 数字必須
+
+**内部処理:**
+1. セッションからユーザー情報を取得
+2. otp_codesテーブルで該当ユーザーのpassword_change用OTPが検証済み（verified_at IS NOT NULL）かつ有効期限内かを確認
+3. 新パスワードのバリデーション
+4. パスワードハッシュ化・更新
+5. password_changed_at を更新
+6. OTPレコード削除
 
 **Response (200 OK):**
 ```json
@@ -190,7 +308,7 @@
 
 **Error Responses:**
 - `401 Unauthorized`: 未ログイン
-- `400 Bad Request`: 現在のパスワードが間違っている
+- `403 Forbidden`: OTP検証が完了していない
 - `400 Bad Request`: 新しいパスワードがポリシー違反
 
 ---

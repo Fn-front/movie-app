@@ -28,6 +28,8 @@ export const OTP_CONFIG = {
   MAX_ATTEMPTS: 5,
   /** 再送間隔（秒） */
   RESEND_INTERVAL_SECONDS: 60,
+  /** OTP検証済みトークンの有効期限（分） — verified_atからの経過時間 */
+  VERIFIED_TOKEN_EXPIRY_MINUTES: 5,
 } as const;
 
 /**

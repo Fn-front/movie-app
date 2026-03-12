@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
 import { AUTH_ERROR_MESSAGES } from '@/constants';
+import { OTP_CONFIG } from '@/constants/otp';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -69,6 +70,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         if (loginMethod === 'otp') {
+          // メール認証チェック
+          if (!user.is_verified) {
+            throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
+          }
+
           // OTPログイン: otp_codesのverified_atを確認
           const { data: verifiedOtp } = await supabase
             .from('otp_codes')
@@ -81,6 +87,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             .single();
 
           if (!verifiedOtp) {
+            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          }
+
+          // 検証済みOTPの有効期限チェック（verified_atから5分以内）
+          const verifiedAt = new Date(verifiedOtp.verified_at).getTime();
+          const expiryMs =
+            OTP_CONFIG.VERIFIED_TOKEN_EXPIRY_MINUTES * 60 * 1000;
+
+          if (Date.now() - verifiedAt > expiryMs) {
+            // 期限切れのOTPを削除
+            await supabase
+              .from('otp_codes')
+              .delete()
+              .eq('id', verifiedOtp.id);
             throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
           }
 

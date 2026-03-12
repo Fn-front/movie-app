@@ -18,7 +18,7 @@
 - **Framework**: Next.js API Routes + Supabase Edge Functions
 - **認証**: NextAuth.js v5 (App Router対応)
 - **ORM**: Supabase SDK
-- **メール送信**: Resend
+- **メール送信**: Resend（無料枠: 3,000通/月、100通/日、2req/s）
 
 ### データベース
 - **DB**: Supabase (PostgreSQL)

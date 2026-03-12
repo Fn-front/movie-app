@@ -56,10 +56,7 @@ export const CalendarButton = memo(function CalendarButton() {
         onOpenChange={handleOpenChange}
         onMovieClick={handleMovieClick}
       />
-      <MovieDetailModal
-        movieId={selectedMovieId}
-        onClose={handleModalClose}
-      />
+      <MovieDetailModal movieId={selectedMovieId} onClose={handleModalClose} />
     </>
   );
 });

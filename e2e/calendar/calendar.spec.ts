@@ -31,9 +31,7 @@ test.describe('カレンダー', () => {
 
   test('月切り替えが動作する', async ({ page }) => {
     // カレンダーを開く
-    await page
-      .getByRole('button', { name: '公開カレンダーを開く' })
-      .click();
+    await page.getByRole('button', { name: '公開カレンダーを開く' }).click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -44,17 +42,17 @@ test.describe('カレンダー', () => {
     });
 
     // 次月ボタンをクリック
-    const nextButton = dialog.getByRole('button', { name: /next/i }).or(
-      dialog.locator('button[name="next_month"]'),
-    );
+    const nextButton = dialog
+      .getByRole('button', { name: /next/i })
+      .or(dialog.locator('button[name="next_month"]'));
     if (await nextButton.isVisible()) {
       await nextButton.click();
     }
 
     // 前月ボタンをクリック
-    const prevButton = dialog.getByRole('button', { name: /previous/i }).or(
-      dialog.locator('button[name="previous_month"]'),
-    );
+    const prevButton = dialog
+      .getByRole('button', { name: /previous/i })
+      .or(dialog.locator('button[name="previous_month"]'));
     if (await prevButton.isVisible()) {
       await prevButton.click();
     }
@@ -62,9 +60,7 @@ test.describe('カレンダー', () => {
 
   test('ESCキーでダイアログが閉じる', async ({ page }) => {
     // カレンダーを開く
-    await page
-      .getByRole('button', { name: '公開カレンダーを開く' })
-      .click();
+    await page.getByRole('button', { name: '公開カレンダーを開く' }).click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();

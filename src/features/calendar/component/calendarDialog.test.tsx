@@ -74,9 +74,7 @@ describe('CalendarDialog', () => {
     expect(screen.getByText('公開カレンダー')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(
-        screen.queryByText('読み込み中...'),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
     });
   });
 
@@ -137,9 +135,7 @@ describe('CalendarDialog', () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.queryByText('読み込み中...'),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
     });
 
     expect(mockGetCalendarMovies).toHaveBeenCalled();
@@ -177,9 +173,7 @@ describe('CalendarDialog', () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.queryByText('読み込み中...'),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
     });
 
     // カレンダー内の日付ボタンをクリック（15日）
@@ -207,9 +201,7 @@ describe('CalendarDialog', () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.queryByText('読み込み中...'),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
     });
 
     // 15日をクリック

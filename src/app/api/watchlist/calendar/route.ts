@@ -11,11 +11,7 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { calendarQuerySchema } from '@/schema/calendar';
-import {
-  HTTP_STATUS,
-  ERROR_CODE,
-  CALENDAR_ERROR_MESSAGES,
-} from '@/constants';
+import { HTTP_STATUS, ERROR_CODE, CALENDAR_ERROR_MESSAGES } from '@/constants';
 
 export async function GET(request: Request) {
   try {

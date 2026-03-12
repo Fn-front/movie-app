@@ -102,9 +102,7 @@ describe('CalendarButton', () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByRole('dialog'),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
     // ESCで閉じる

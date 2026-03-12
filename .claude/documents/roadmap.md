@@ -797,25 +797,25 @@
 - [x] useSearchフックとの連携
 
 ### Step 6: テスト
-- [ ] SearchBarコンポーネントテスト
+- [x] SearchBarコンポーネントテスト
   - Enter押下でページ遷移
   - 検索アイコンクリックでページ遷移
   - 空文字での検索防止
-- [ ] SearchResultsコンポーネントテスト
+- [x] SearchResultsコンポーネントテスト
   - 検索結果の一覧表示
   - 結果件数表示
   - 結果なし時のEmptyState表示
   - ページネーション操作
-- [ ] MovieFilterコンポーネントテスト
+- [x] MovieFilterコンポーネントテスト
   - ジャンル選択・解除
   - 年代選択
   - 評価選択
   - フィルタークリア
-- [ ] useSearchフックテスト
+- [x] useSearchフックテスト
   - URLパラメータからの検索条件読み取り
   - API呼び出しとレスポンス処理
   - フィルター変更時のURL更新
-- [ ] 検索API Routeテスト
+- [x] 検索API Routeテスト
   - キーワード検索
   - フィルター検索
   - キーワード + フィルター併用

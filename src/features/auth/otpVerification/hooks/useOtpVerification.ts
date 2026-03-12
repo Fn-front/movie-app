@@ -33,7 +33,7 @@ export function useOtpVerification({
 }: UseOtpVerificationProps): UseOtpVerificationReturn {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const [resendCountdown, setResendCountdown] = useState(
+  const [resendCountdown, setResendCountdown] = useState<number>(
     OTP_CONFIG.RESEND_INTERVAL_SECONDS,
   );
   const [apiError, setApiError] = useState<string | null>(null);

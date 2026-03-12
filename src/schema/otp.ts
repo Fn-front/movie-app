@@ -18,7 +18,7 @@ export const otpSendSchema = z.object({
     .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
     .email(VALIDATION_MESSAGES.EMAIL_INVALID),
   action: z.enum(otpActionValues, {
-    errorMap: () => ({ message: '不正なアクション種別です' }),
+    error: '不正なアクション種別です',
   }),
 });
 
@@ -37,7 +37,7 @@ export const otpVerifySchema = z.object({
     .length(6, '6桁の数字を入力してください')
     .regex(/^[0-9]{6}$/, '数字のみ入力可能です'),
   action: z.enum(otpActionValues, {
-    errorMap: () => ({ message: '不正なアクション種別です' }),
+    error: '不正なアクション種別です',
   }),
 });
 

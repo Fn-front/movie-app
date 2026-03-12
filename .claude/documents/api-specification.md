@@ -354,6 +354,61 @@
 
 ---
 
+### GET /api/watchlist/calendar
+カレンダー表示用ウォッチリスト取得（月別）
+
+**認証**: 必須
+
+**Query Parameters:**
+- `month` (optional): 対象月（YYYY-MM形式、デフォルト: 当月）
+
+**内部処理フロー:**
+1. `month` パラメータをzodでバリデーション（YYYY-MM形式）
+2. 指定月の1日〜末日の範囲で `release_date` フィルタ
+3. `release_date` がNULLのレコードは除外
+4. `deleted_at IS NULL` でフィルタ（論理削除済みを除外）
+5. 日付をキーとしたマップ形式で返却
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "month": "2026-03",
+    "movies": {
+      "2026-03-15": [
+        {
+          "id": "watchlist-uuid",
+          "tmdb_movie_id": 12345,
+          "title": "映画タイトルA",
+          "poster_path": "/path/to/poster.jpg",
+          "release_date": "2026-03-15"
+        }
+      ],
+      "2026-03-22": [
+        {
+          "id": "watchlist-uuid-2",
+          "tmdb_movie_id": 67890,
+          "title": "映画タイトルB",
+          "poster_path": "/path/to/poster2.jpg",
+          "release_date": "2026-03-22"
+        }
+      ]
+    }
+  }
+}
+```
+
+**備考:**
+- 該当月に映画がない場合、`movies` は空オブジェクト `{}`
+- レスポンスはページングなし（1ヶ月分のウォッチリスト映画は少量の想定）
+
+**Error Responses:**
+- `400 Bad Request`: `month` パラメータの形式が不正
+- `401 Unauthorized`: 認証が必要
+
+---
+
 ### POST /api/watchlist
 ウォッチリストに追加
 

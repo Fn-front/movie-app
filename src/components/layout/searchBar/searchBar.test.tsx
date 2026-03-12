@@ -67,6 +67,8 @@ describe('SearchBar', () => {
     );
   });
 
+  // ボタンがdisabledのためuserEventではsubmitが発生しない
+  // handleSubmitの空文字ガードをテストするためfireEvent.submitを使用
   it('空文字では検索できない', () => {
     render(<SearchBar />);
     const form = screen.getByRole('search');

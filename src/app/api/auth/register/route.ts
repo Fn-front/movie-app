@@ -90,14 +90,12 @@ export async function POST(request: Request) {
       Date.now() + OTP_CONFIG.EXPIRY_MINUTES * 60 * 1000,
     );
 
-    const { error: otpInsertError } = await supabase
-      .from('otp_codes')
-      .insert({
-        email,
-        code,
-        action_type: 'registration',
-        expires_at: expiresAt.toISOString(),
-      });
+    const { error: otpInsertError } = await supabase.from('otp_codes').insert({
+      email,
+      code,
+      action_type: 'registration',
+      expires_at: expiresAt.toISOString(),
+    });
 
     if (otpInsertError) {
       throw otpInsertError;

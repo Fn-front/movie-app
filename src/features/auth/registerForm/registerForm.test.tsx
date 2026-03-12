@@ -21,26 +21,23 @@ jest.mock('@/lib/api/auth/auth', () => ({
   registerUser: (...args: unknown[]) => mockRegisterUser(...args),
 }));
 
-jest.mock(
-  '@/features/auth/otpVerification/otpVerification',
-  () => ({
-    OtpVerification: ({
-      email,
-      onVerifySuccess,
-    }: {
-      email: string;
-      action: string;
-      onVerifySuccess?: () => void;
-    }) => (
-      <div data-testid='otp-verification'>
-        <span data-testid='otp-email'>{email}</span>
-        <button onClick={onVerifySuccess} data-testid='otp-verify-success'>
-          検証成功
-        </button>
-      </div>
-    ),
-  }),
-);
+jest.mock('@/features/auth/otpVerification/otpVerification', () => ({
+  OtpVerification: ({
+    email,
+    onVerifySuccess,
+  }: {
+    email: string;
+    action: string;
+    onVerifySuccess?: () => void;
+  }) => (
+    <div data-testid='otp-verification'>
+      <span data-testid='otp-email'>{email}</span>
+      <button onClick={onVerifySuccess} data-testid='otp-verify-success'>
+        検証成功
+      </button>
+    </div>
+  ),
+}));
 
 // --- Tests ---
 

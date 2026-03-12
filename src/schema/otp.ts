@@ -7,7 +7,10 @@ import { z } from 'zod';
 import { OTP_ACTION, type OtpAction } from '@/constants/otp';
 import { VALIDATION_MESSAGES } from '@/constants/auth';
 
-const otpActionValues = Object.values(OTP_ACTION) as [OtpAction, ...OtpAction[]];
+const otpActionValues = Object.values(OTP_ACTION) as [
+  OtpAction,
+  ...OtpAction[],
+];
 
 /**
  * OTP送信APIリクエストのバリデーションスキーマ

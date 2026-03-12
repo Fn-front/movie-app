@@ -2,7 +2,7 @@
  * useOtpVerification カスタムフック テスト
  */
 
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 
 import { useOtpVerification } from './useOtpVerification';
 
@@ -144,9 +144,7 @@ describe('useOtpVerification', () => {
       await result.current.handleVerify('123456');
     });
 
-    expect(result.current.apiError).toBe(
-      'ネットワークエラーが発生しました。',
-    );
+    expect(result.current.apiError).toBe('ネットワークエラーが発生しました。');
   });
 
   it('handleResend: ネットワークエラー時にエラーメッセージが設定される', async () => {
@@ -164,8 +162,6 @@ describe('useOtpVerification', () => {
       await result.current.handleResend();
     });
 
-    expect(result.current.apiError).toBe(
-      'ネットワークエラーが発生しました。',
-    );
+    expect(result.current.apiError).toBe('ネットワークエラーが発生しました。');
   });
 });

@@ -67,15 +67,16 @@ describe('OtpVerification', () => {
 
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ success: true, message: 'メール認証が完了しました' }),
+      json: async () => ({
+        success: true,
+        message: 'メール認証が完了しました',
+      }),
     });
 
     render(<OtpVerification {...defaultProps} />);
 
     await user.type(screen.getByLabelText('確認コード'), '123456');
-    await user.click(
-      screen.getByRole('button', { name: '確認コードを検証' }),
-    );
+    await user.click(screen.getByRole('button', { name: '確認コードを検証' }));
 
     await waitFor(() => {
       expect(defaultProps.onVerifySuccess).toHaveBeenCalled();
@@ -111,9 +112,7 @@ describe('OtpVerification', () => {
     render(<OtpVerification {...defaultProps} />);
 
     await user.type(screen.getByLabelText('確認コード'), '999999');
-    await user.click(
-      screen.getByRole('button', { name: '確認コードを検証' }),
-    );
+    await user.click(screen.getByRole('button', { name: '確認コードを検証' }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -127,9 +126,7 @@ describe('OtpVerification', () => {
     render(<OtpVerification {...defaultProps} />);
 
     await user.type(screen.getByLabelText('確認コード'), '123');
-    await user.click(
-      screen.getByRole('button', { name: '確認コードを検証' }),
-    );
+    await user.click(screen.getByRole('button', { name: '確認コードを検証' }));
 
     await waitFor(() => {
       expect(

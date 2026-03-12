@@ -134,9 +134,11 @@ describe('GET /api/movies/search', () => {
       expect(json.success).toBe(true);
       expect(json.data.movies).toHaveLength(3);
       expect(json.data.pagination.page).toBe(1);
+      expect(json.data.pagination.isServerFiltered).toBe(false);
       expect(mockSearchMovies).toHaveBeenCalledWith({
         query: 'アクション',
         page: 1,
+        year: undefined,
       });
     });
 
@@ -151,6 +153,25 @@ describe('GET /api/movies/search', () => {
       expect(mockSearchMovies).toHaveBeenCalledWith({
         query: 'test',
         page: 2,
+        year: undefined,
+      });
+    });
+
+    it('キーワード + 年代指定でyearをTMDb APIに渡す', async () => {
+      mockSearchMovies.mockResolvedValue(mockTMDbResponse);
+
+      const response = await GET(
+        createRequest({ query: 'test', year: '2024' }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      // yearはTMDb API側で処理されるためサーバー側フィルタリングなし
+      expect(json.data.pagination.isServerFiltered).toBe(false);
+      expect(mockSearchMovies).toHaveBeenCalledWith({
+        query: 'test',
+        page: 1,
+        year: 2024,
       });
     });
   });
@@ -165,25 +186,11 @@ describe('GET /api/movies/search', () => {
       const json = await response.json();
 
       expect(response.status).toBe(200);
+      expect(json.data.pagination.isServerFiltered).toBe(true);
       // genre_ids に 28 を含む映画のみ（id:1 と id:3）
       expect(json.data.movies).toHaveLength(2);
       expect(json.data.movies[0].id).toBe(1);
       expect(json.data.movies[1].id).toBe(3);
-    });
-
-    it('キーワード + 年代フィルターで結果を絞り込む', async () => {
-      mockSearchMovies.mockResolvedValue(mockTMDbResponse);
-
-      const response = await GET(
-        createRequest({ query: 'test', year: '2024' }),
-      );
-      const json = await response.json();
-
-      expect(response.status).toBe(200);
-      // release_dateが2024年の映画のみ（id:1 と id:2）
-      expect(json.data.movies).toHaveLength(2);
-      expect(json.data.movies[0].id).toBe(1);
-      expect(json.data.movies[1].id).toBe(2);
     });
 
     it('キーワード + 評価フィルターで結果を絞り込む', async () => {
@@ -195,32 +202,32 @@ describe('GET /api/movies/search', () => {
       const json = await response.json();
 
       expect(response.status).toBe(200);
+      expect(json.data.pagination.isServerFiltered).toBe(true);
       // vote_average >= 7.5 の映画のみ（id:1[8.0] と id:3[9.0]）
       expect(json.data.movies).toHaveLength(2);
       expect(json.data.movies[0].id).toBe(1);
       expect(json.data.movies[1].id).toBe(3);
     });
 
-    it('キーワード + 複数フィルターで結果を絞り込む', async () => {
+    it('キーワード + ジャンル + 評価フィルターで結果を絞り込む', async () => {
       mockSearchMovies.mockResolvedValue(mockTMDbResponse);
 
       const response = await GET(
         createRequest({
           query: 'test',
           genre: '28',
-          year: '2024',
           vote_average_gte: '7.0',
         }),
       );
       const json = await response.json();
 
       expect(response.status).toBe(200);
-      // genre_ids含む28 AND 2024年 AND vote_average >= 7.0 → id:1のみ
-      expect(json.data.movies).toHaveLength(1);
-      expect(json.data.movies[0].id).toBe(1);
+      expect(json.data.pagination.isServerFiltered).toBe(true);
+      // genre_ids含む28 AND vote_average >= 7.0 → id:1とid:3
+      expect(json.data.movies).toHaveLength(2);
     });
 
-    it('フィルタリング後のtotal_resultsが更新される', async () => {
+    it('フィルタリング後のtotal_resultsとtotal_pagesが更新される', async () => {
       mockSearchMovies.mockResolvedValue(mockTMDbResponse);
 
       const response = await GET(createRequest({ query: 'test', genre: '35' }));
@@ -229,6 +236,43 @@ describe('GET /api/movies/search', () => {
       // genre_ids に 35 を含む映画のみ（id:2）
       expect(json.data.movies).toHaveLength(1);
       expect(json.data.pagination.totalResults).toBe(1);
+      expect(json.data.pagination.totalPages).toBe(1);
+      expect(json.data.pagination.isServerFiltered).toBe(true);
+    });
+
+    it('release_dateが空文字の映画は年代フィルターで除外されない（yearはAPI側で処理）', async () => {
+      const responseWithEmptyDate = {
+        ...mockTMDbResponse,
+        results: [
+          ...mockTMDbResponse.results,
+          {
+            id: 4,
+            title: '公開日未定映画',
+            overview: '概要4',
+            release_date: '',
+            poster_path: null,
+            vote_average: 7.0,
+            popularity: 30,
+            genre_ids: [28],
+            adult: false,
+            original_language: 'ja',
+            original_title: 'TBD Movie',
+            backdrop_path: null,
+            vote_count: 10,
+          },
+        ],
+      };
+      mockSearchMovies.mockResolvedValue(responseWithEmptyDate);
+
+      // yearはTMDb API側で処理。genreのサーバー側フィルタリングのみ
+      const response = await GET(
+        createRequest({ query: 'test', genre: '28', year: '2024' }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      // genre_ids に 28 を含む映画（id:1, id:3, id:4）
+      expect(json.data.movies).toHaveLength(3);
     });
   });
 
@@ -243,6 +287,7 @@ describe('GET /api/movies/search', () => {
 
       expect(response.status).toBe(200);
       expect(json.success).toBe(true);
+      expect(json.data.pagination.isServerFiltered).toBe(false);
       expect(mockDiscoverMovies).toHaveBeenCalledWith({
         page: 1,
         with_genres: '28,12',

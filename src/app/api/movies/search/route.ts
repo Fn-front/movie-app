@@ -16,12 +16,10 @@ import { HTTP_STATUS, ERROR_CODE, SEARCH_ERROR_MESSAGES } from '@/constants';
 
 /**
  * ジャンルIDをパースしてnumber配列に変換
+ * zodスキーマで /^\d+(,\d+)*$/ バリデーション済みのため、不正値は到達しない
  */
 function parseGenreIds(genre: string): number[] {
-  return genre
-    .split(',')
-    .map(Number)
-    .filter((id) => !isNaN(id) && id > 0);
+  return genre.split(',').map(Number);
 }
 
 /**
@@ -95,29 +93,35 @@ export async function GET(request: Request) {
 
     const { query, page, genre, year, vote_average_gte } = queryResult.data;
 
-    const hasFilters =
-      genre !== undefined ||
-      year !== undefined ||
-      vote_average_gte !== undefined;
     const genreIds = genre ? parseGenreIds(genre) : undefined;
 
     let result: TMDbResponse<Movie>;
 
+    // サーバー側フィルタリングが適用されたかどうか
+    let isServerFiltered = false;
+
     if (query) {
       // パターン1: キーワード検索（+ サーバー側フィルタリング）
-      result = await searchMovies({ query, page });
+      // TMDb /search/movie は year パラメータをサポートしているためAPI側に渡す
+      result = await searchMovies({ query, page, year });
 
-      if (hasFilters) {
+      // genre・vote_average_gte はTMDb /search/movieが非対応のためサーバー側でフィルタリング
+      const needsServerFilter =
+        (genreIds && genreIds.length > 0) || vote_average_gte !== undefined;
+
+      if (needsServerFilter) {
         const filteredMovies = filterMovies(result.results, {
           genreIds,
-          year,
           voteAverageGte: vote_average_gte,
         });
 
+        isServerFiltered = true;
         result = {
           ...result,
           results: filteredMovies,
+          // サーバー側フィルタリングにより1ページ分の件数のみ。正確な総件数は不明
           total_results: filteredMovies.length,
+          total_pages: 1,
         };
       }
     } else {
@@ -140,6 +144,7 @@ export async function GET(request: Request) {
             page: result.page,
             totalPages: result.total_pages,
             totalResults: result.total_results,
+            isServerFiltered,
           },
         },
       },

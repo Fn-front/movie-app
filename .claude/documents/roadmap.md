@@ -952,21 +952,21 @@
 - [x] rate_limitsテーブル更新（otp_verify アクション追加）
 
 ### Step 2: OTP基盤実装 + OTPVerificationコンポーネント
-- [ ] OTPコード生成ユーティリティ（crypto.randomInt、6桁数字）
-- [ ] OTPメール送信処理（Resend統合）
+- [x] OTPコード生成ユーティリティ（crypto.randomInt、6桁数字）
+- [x] OTPメール送信処理（Resend統合）
   - Resend SDKセットアップ（`resend` パッケージ）
   - メールテンプレート作成
   - 送信元メールアドレス設定
   - 無料枠制約考慮（3,000通/月、100通/日、2req/s）
-- [ ] OTP送信API実装（`POST /api/auth/otp/send`）
+- [x] OTP送信API実装（`POST /api/auth/otp/send`）
   - action別バリデーション（registration / login / password_change）
   - 再送間隔チェック（1分）
   - 既存OTP無効化
-- [ ] OTP検証API実装（`POST /api/auth/otp/verify`）
+- [x] OTP検証API実装（`POST /api/auth/otp/verify`）
   - 有効期限チェック（10分）
   - 試行回数チェック（5回）
   - action別後処理
-- [ ] OTPVerificationコンポーネント作成
+- [x] OTPVerificationコンポーネント作成
   - action prop対応（registration / login / password_change）
   - 送信先メールアドレス表示
   - 再送カウントダウン表示（1分）

@@ -1,0 +1,62 @@
+@use '@/styles/variables' as *;
+
+.c_otp_verification {
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
+  padding: $spacing-8;
+}
+
+.c_otp_verification__description {
+  margin-top: $spacing-4;
+  text-align: center;
+  font-size: $font-size-sm;
+  color: $gray-600;
+  line-height: $line-height-normal;
+}
+
+.c_otp_verification__email {
+  font-weight: $font-weight-bold;
+  color: $gray-900;
+}
+
+.c_otp_verification__form {
+  margin-top: $spacing-8;
+}
+
+.c_otp_verification__input_wrapper {
+  max-width: 240px;
+  margin: 0 auto;
+}
+
+.c_otp_verification__error {
+  margin-top: $spacing-4;
+  padding: $spacing-3 $spacing-4;
+  background-color: rgba($error-main, 0.1);
+  border: $border-width-1 solid $error-light;
+  border-radius: $border-radius-md;
+  color: $error-dark;
+  font-size: $font-size-sm;
+  text-align: center;
+}
+
+.c_otp_verification__attempts {
+  margin-top: $spacing-2;
+  text-align: center;
+  font-size: $font-size-xs;
+  color: $warning-dark;
+}
+
+.c_otp_verification__actions {
+  margin-top: $spacing-6;
+}
+
+.c_otp_verification__resend {
+  margin-top: $spacing-6;
+  text-align: center;
+}
+
+.c_otp_verification__countdown {
+  font-size: $font-size-sm;
+  color: $gray-500;
+}

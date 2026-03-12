@@ -942,14 +942,14 @@
 ## フェーズ8: 認証機能拡張
 
 ### Step 1: DB・テーブル準備
-- [ ] accountsテーブル作成（ソーシャルログインアカウント連携用）
+- [x] accountsテーブル作成（ソーシャルログインアカウント連携用）
   - provider, provider_account_id, access_token 等
   - RLS設定
-- [ ] otp_codesテーブル作成（OTP検証コード管理用）
+- [x] otp_codesテーブル作成（OTP検証コード管理用）
   - email, code(6桁), action_type, expires_at, attempts
   - クリーンアップ処理
-- [ ] usersテーブル変更（password_hash を NULL許容に変更）
-- [ ] rate_limitsテーブル更新（otp_verify アクション追加）
+- [x] usersテーブル変更（password_hash を NULL許容に変更）
+- [x] rate_limitsテーブル更新（otp_verify アクション追加）
 
 ### Step 2: OTP基盤実装 + OTPVerificationコンポーネント
 - [ ] OTPコード生成ユーティリティ（crypto.randomInt、6桁数字）

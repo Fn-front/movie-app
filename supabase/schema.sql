@@ -21,17 +21,20 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email VARCHAR(255) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255),
   name VARCHAR(100),
   avatar_url TEXT,
+  role VARCHAR(20) NOT NULL DEFAULT 'user',
   is_verified BOOLEAN NOT NULL DEFAULT false,
   password_changed_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT now(),
-  updated_at TIMESTAMP NOT NULL DEFAULT now()
+  updated_at TIMESTAMP NOT NULL DEFAULT now(),
+  CONSTRAINT chk_user_role CHECK (role IN ('user', 'admin'))
 );
 
 -- インデックス
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
 -- 更新日時自動更新トリガー
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -48,37 +51,58 @@ CREATE TRIGGER update_users_updated_at
   EXECUTE FUNCTION update_updated_at_column();
 
 -- --------------------------------------------
--- otp_tokens（ワンタイムパスワード）
+-- accounts（ソーシャルログインアカウント連携）
 -- --------------------------------------------
-CREATE TABLE IF NOT EXISTS otp_tokens (
+CREATE TABLE IF NOT EXISTS accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token VARCHAR(6) NOT NULL,
-  expires_at TIMESTAMP NOT NULL,
-  is_used BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMP NOT NULL DEFAULT now()
+  provider VARCHAR(50) NOT NULL,
+  provider_account_id VARCHAR(255) NOT NULL,
+  type VARCHAR(20) NOT NULL DEFAULT 'oauth',
+  access_token TEXT,
+  refresh_token TEXT,
+  expires_at INTEGER,
+  token_type VARCHAR(50),
+  scope VARCHAR(255),
+  id_token TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP NOT NULL DEFAULT now()
 );
 
 -- インデックス
-CREATE UNIQUE INDEX IF NOT EXISTS idx_otp_tokens_user_token ON otp_tokens(user_id, token);
-CREATE INDEX IF NOT EXISTS idx_otp_tokens_expires_at ON otp_tokens(expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_provider_account
+  ON accounts(provider, provider_account_id);
+CREATE INDEX IF NOT EXISTS idx_accounts_user_id
+  ON accounts(user_id);
+
+-- 更新日時自動更新トリガー
+CREATE TRIGGER update_accounts_updated_at
+  BEFORE UPDATE ON accounts
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
 -- --------------------------------------------
--- password_reset_tokens（パスワードリセット）
+-- otp_codes（OTP検証コード）
 -- --------------------------------------------
-CREATE TABLE IF NOT EXISTS password_reset_tokens (
+CREATE TABLE IF NOT EXISTS otp_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token VARCHAR(64) NOT NULL UNIQUE,
+  email VARCHAR(255) NOT NULL,
+  code VARCHAR(6) NOT NULL,
+  action_type VARCHAR(50) NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
   expires_at TIMESTAMP NOT NULL,
-  is_used BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMP NOT NULL DEFAULT now()
+  verified_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  CONSTRAINT chk_otp_action_type CHECK (action_type IN ('registration', 'login', 'password_change')),
+  CONSTRAINT chk_otp_attempts CHECK (attempts >= 0 AND attempts <= 5),
+  CONSTRAINT chk_otp_code_format CHECK (code ~ '^\d{6}$')
 );
 
 -- インデックス
-CREATE UNIQUE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
-CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
-CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_otp_codes_email_action_created
+  ON otp_codes(email, action_type, created_at);
+CREATE INDEX IF NOT EXISTS idx_otp_codes_expires_at
+  ON otp_codes(expires_at);
 
 -- --------------------------------------------
 -- watchlist（見たい映画リスト）
@@ -103,10 +127,37 @@ CREATE INDEX IF NOT EXISTS idx_watchlist_added_at ON watchlist(added_at);
 CREATE INDEX IF NOT EXISTS idx_watchlist_deleted_at ON watchlist(deleted_at);
 
 -- --------------------------------------------
+-- favorites（お気に入り映画）
+-- --------------------------------------------
+CREATE TABLE IF NOT EXISTS favorites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tmdb_movie_id INTEGER NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  poster_path VARCHAR(255),
+  release_date DATE,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 10),
+  added_at TIMESTAMP NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMP
+);
+
+-- インデックス
+CREATE UNIQUE INDEX IF NOT EXISTS idx_favorites_user_movie
+  ON favorites(user_id, tmdb_movie_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_favorites_user_id ON favorites(user_id);
+
+-- 更新日時自動更新トリガー
+CREATE TRIGGER update_favorites_updated_at
+  BEFORE UPDATE ON favorites
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- --------------------------------------------
 -- movie_cache（映画情報キャッシュ）
 -- --------------------------------------------
 CREATE TABLE IF NOT EXISTS movie_cache (
-  id INTEGER PRIMARY KEY,
+  id INTEGER NOT NULL,
   title VARCHAR(255) NOT NULL,
   poster_path VARCHAR(255),
   backdrop_path VARCHAR(255),
@@ -115,8 +166,12 @@ CREATE TABLE IF NOT EXISTS movie_cache (
   vote_average DECIMAL(3,1),
   popularity DECIMAL(10,3),
   genre_ids JSONB,
+  release_type VARCHAR(20) NOT NULL DEFAULT 'theatrical',
+  is_revival BOOLEAN NOT NULL DEFAULT false,
+  is_now_playing BOOLEAN NOT NULL DEFAULT false,
   cached_at TIMESTAMP NOT NULL DEFAULT now(),
-  updated_at TIMESTAMP NOT NULL DEFAULT now()
+  updated_at TIMESTAMP NOT NULL DEFAULT now(),
+  PRIMARY KEY (id, release_type)
 );
 
 -- インデックス
@@ -124,6 +179,8 @@ CREATE INDEX IF NOT EXISTS idx_movie_cache_release_date ON movie_cache(release_d
 CREATE INDEX IF NOT EXISTS idx_movie_cache_popularity ON movie_cache(popularity);
 CREATE INDEX IF NOT EXISTS idx_movie_cache_cached_at ON movie_cache(cached_at);
 CREATE INDEX IF NOT EXISTS idx_movie_cache_updated_at ON movie_cache(updated_at);
+CREATE INDEX IF NOT EXISTS idx_movie_cache_release_type ON movie_cache(release_type);
+CREATE INDEX IF NOT EXISTS idx_movie_cache_is_now_playing ON movie_cache(is_now_playing);
 
 -- 更新日時自動更新トリガー
 CREATE TRIGGER update_movie_cache_updated_at
@@ -157,7 +214,49 @@ CREATE TRIGGER update_rate_limits_updated_at
   EXECUTE FUNCTION update_updated_at_column();
 
 -- --------------------------------------------
--- user_preferences（ユーザー設定）
+-- user_settings（ユーザー設定）
+-- --------------------------------------------
+CREATE TABLE IF NOT EXISTS user_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  theme VARCHAR(10) NOT NULL DEFAULT 'light',
+  notification_enabled BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMP NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP NOT NULL DEFAULT now(),
+  CONSTRAINT user_settings_user_id_unique UNIQUE (user_id)
+);
+
+-- インデックス
+CREATE INDEX IF NOT EXISTS idx_user_settings_user_id ON user_settings(user_id);
+
+-- 更新日時自動更新トリガー
+CREATE TRIGGER update_user_settings_updated_at
+  BEFORE UPDATE ON user_settings
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- --------------------------------------------
+-- saved_filters（保存済みフィルター）
+-- --------------------------------------------
+CREATE TABLE IF NOT EXISTS saved_filters (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  filter_conditions JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMP NOT NULL DEFAULT now(),
+  CONSTRAINT saved_filters_user_id_unique UNIQUE (user_id)
+);
+
+-- インデックス
+CREATE INDEX IF NOT EXISTS idx_saved_filters_user_id ON saved_filters(user_id);
+
+-- 更新日時自動更新トリガー
+CREATE TRIGGER update_saved_filters_updated_at
+  BEFORE UPDATE ON saved_filters
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- --------------------------------------------
+-- user_preferences（ユーザー嗜好データ）
 -- --------------------------------------------
 CREATE TABLE IF NOT EXISTS user_preferences (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -210,11 +309,14 @@ CREATE TRIGGER update_reviews_updated_at
 
 -- RLS有効化
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE otp_tokens ENABLE ROW LEVEL SECURITY;
-ALTER TABLE password_reset_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE watchlist ENABLE ROW LEVEL SECURITY;
+ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE movie_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE saved_filters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
 
@@ -243,52 +345,25 @@ CREATE POLICY users_delete_own ON users
   USING (auth.uid() = id);
 
 -- --------------------------------------------
--- otp_tokens ポリシー
+-- accounts ポリシー
 -- --------------------------------------------
 
--- SELECT: 自分のトークンのみ閲覧可能
-CREATE POLICY otp_tokens_select_own ON otp_tokens
+-- SELECT: 自分のレコードのみ閲覧可能
+CREATE POLICY accounts_select_own ON accounts
   FOR SELECT
   USING (auth.uid() = user_id);
 
--- INSERT: 公開（OTP発行用）
-CREATE POLICY otp_tokens_insert_public ON otp_tokens
-  FOR INSERT
-  WITH CHECK (true);
+-- INSERT/UPDATE: サーバー側のみ（service roleでバイパス）
 
--- UPDATE: 自分のトークンのみ更新可能
-CREATE POLICY otp_tokens_update_own ON otp_tokens
-  FOR UPDATE
-  USING (auth.uid() = user_id);
-
--- DELETE: 自分のトークンのみ削除可能
-CREATE POLICY otp_tokens_delete_own ON otp_tokens
+-- DELETE: 自分のレコードのみ削除可能
+CREATE POLICY accounts_delete_own ON accounts
   FOR DELETE
   USING (auth.uid() = user_id);
 
 -- --------------------------------------------
--- password_reset_tokens ポリシー
+-- otp_codes ポリシー
 -- --------------------------------------------
-
--- SELECT: 自分のトークンのみ閲覧可能
-CREATE POLICY password_reset_tokens_select_own ON password_reset_tokens
-  FOR SELECT
-  USING (auth.uid() = user_id);
-
--- INSERT: 公開（パスワードリセット用）
-CREATE POLICY password_reset_tokens_insert_public ON password_reset_tokens
-  FOR INSERT
-  WITH CHECK (true);
-
--- UPDATE: 自分のトークンのみ更新可能
-CREATE POLICY password_reset_tokens_update_own ON password_reset_tokens
-  FOR UPDATE
-  USING (auth.uid() = user_id);
-
--- DELETE: 自分のトークンのみ削除可能
-CREATE POLICY password_reset_tokens_delete_own ON password_reset_tokens
-  FOR DELETE
-  USING (auth.uid() = user_id);
+-- すべてservice roleで操作するためポリシーは設定しない
 
 -- --------------------------------------------
 -- watchlist ポリシー
@@ -315,6 +390,30 @@ CREATE POLICY watchlist_delete_own ON watchlist
   USING (auth.uid() = user_id);
 
 -- --------------------------------------------
+-- favorites ポリシー
+-- --------------------------------------------
+
+-- SELECT: 自分のお気に入りのみ閲覧可能（論理削除済みを除外）
+CREATE POLICY favorites_select_own ON favorites
+  FOR SELECT
+  USING (auth.uid() = user_id AND deleted_at IS NULL);
+
+-- INSERT: 自分のお気に入りのみ追加可能
+CREATE POLICY favorites_insert_own ON favorites
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- UPDATE: 自分のお気に入りのみ更新可能
+CREATE POLICY favorites_update_own ON favorites
+  FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- DELETE: 自分のお気に入りのみ削除可能（実際には論理削除を使用）
+CREATE POLICY favorites_delete_own ON favorites
+  FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- --------------------------------------------
 -- movie_cache ポリシー
 -- --------------------------------------------
 
@@ -323,9 +422,7 @@ CREATE POLICY movie_cache_select_all ON movie_cache
   FOR SELECT
   USING (true);
 
--- INSERT: サービスロールのみ
--- UPDATE: サービスロールのみ
--- DELETE: サービスロールのみ
+-- INSERT/UPDATE/DELETE: サービスロールのみ
 -- （API Routeでservice_role keyを使用して操作）
 
 -- --------------------------------------------
@@ -351,6 +448,46 @@ CREATE POLICY rate_limits_update_all ON rate_limits
 CREATE POLICY rate_limits_delete_all ON rate_limits
   FOR DELETE
   USING (true);
+
+-- --------------------------------------------
+-- user_settings ポリシー
+-- --------------------------------------------
+
+CREATE POLICY user_settings_select_own ON user_settings
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY user_settings_insert_own ON user_settings
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY user_settings_update_own ON user_settings
+  FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY user_settings_delete_own ON user_settings
+  FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- --------------------------------------------
+-- saved_filters ポリシー
+-- --------------------------------------------
+
+CREATE POLICY saved_filters_select_own ON saved_filters
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY saved_filters_insert_own ON saved_filters
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY saved_filters_update_own ON saved_filters
+  FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY saved_filters_delete_own ON saved_filters
+  FOR DELETE
+  USING (auth.uid() = user_id);
 
 -- --------------------------------------------
 -- user_preferences ポリシー
@@ -399,27 +536,3 @@ CREATE POLICY reviews_update_own ON reviews
 CREATE POLICY reviews_delete_own ON reviews
   FOR DELETE
   USING (auth.uid() = user_id);
-
--- ============================================
--- 4. 完了メッセージ
--- ============================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '✅ データベーススキーマの作成が完了しました！';
-  RAISE NOTICE '';
-  RAISE NOTICE '作成されたテーブル:';
-  RAISE NOTICE '  - users';
-  RAISE NOTICE '  - otp_tokens';
-  RAISE NOTICE '  - password_reset_tokens';
-  RAISE NOTICE '  - watchlist';
-  RAISE NOTICE '  - movie_cache';
-  RAISE NOTICE '  - rate_limits';
-  RAISE NOTICE '  - user_preferences';
-  RAISE NOTICE '  - reviews';
-  RAISE NOTICE '';
-  RAISE NOTICE '次のステップ:';
-  RAISE NOTICE '  1. Supabaseダッシュボードでテーブルが作成されたことを確認';
-  RAISE NOTICE '  2. Authentication設定を確認';
-  RAISE NOTICE '  3. NextAuth.js設定ファイルを作成';
-END $$;

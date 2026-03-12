@@ -134,6 +134,30 @@ describe('POST /api/user/change-password', () => {
     expect(response.status).toBe(400);
   });
 
+  it('パスワード未設定ユーザーの場合400を返す', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'user-123', password_hash: null },
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({
+        currentPassword: 'OldPassword1',
+        newPassword: 'NewPassword1',
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.message).toBe('パスワードが設定されていません。');
+  });
+
   it('現在のパスワードが不正な場合400を返す', async () => {
     mockFrom.mockReturnValueOnce({
       select: () => ({

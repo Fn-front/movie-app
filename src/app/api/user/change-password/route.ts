@@ -89,6 +89,20 @@ export async function POST(request: Request) {
       );
     }
 
+    // パスワード未設定（ソーシャルログインのみのユーザー）
+    if (!user.password_hash) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.BAD_REQUEST,
+            message: AUTH_ERROR_MESSAGES.PASSWORD_NOT_SET,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
+    }
+
     // 現在のパスワード照合
     const isCurrentPasswordValid = await bcrypt.compare(
       currentPassword,

@@ -16,7 +16,6 @@ import { createClient } from '@supabase/supabase-js';
 import {
   EXCLUDED_GENRE_IDS,
   EXCLUDED_KEYWORD_IDS,
-  EXCLUDED_LANGUAGES,
 } from '@/constants/movies';
 import { getNowPlayingMovies, getMovieKeywordIds } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
@@ -197,7 +196,7 @@ describe('syncNowPlayingMovies', () => {
 
       const excludedLangMovie = createMockMovie({
         id: 2,
-        original_language: EXCLUDED_LANGUAGES[0],
+        original_language: 'xx',
         title: '除外言語映画',
       });
       (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({

@@ -22,7 +22,7 @@ import {
   RELEASE_TYPE_MAP,
   EXCLUDED_KEYWORDS_PARAM,
   EXCLUDED_GENRES_PARAM,
-  EXCLUDED_LANGUAGES,
+  ALLOWED_LANGUAGES,
   MIN_VOTE_AVERAGE,
   MIN_POPULARITY,
   MOVIES_ERROR_MESSAGES,
@@ -217,11 +217,11 @@ export async function GET(request: Request) {
           if (tmdbResponse.results.length === 0) break;
 
           // adultコンテンツ・除外言語・別release_typeで既存の映画・低品質コンテンツを除外
-          const excludedLangs: readonly string[] = EXCLUDED_LANGUAGES;
+          const allowedLangs: readonly string[] = ALLOWED_LANGUAGES;
           const filteredResults = tmdbResponse.results.filter(
             (movie) =>
               !movie.adult &&
-              !excludedLangs.includes(movie.original_language) &&
+              allowedLangs.includes(movie.original_language) &&
               !existingOtherTypeIds.has(movie.id) &&
               movie.genre_ids &&
               movie.genre_ids.length > 0 &&

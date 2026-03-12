@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 import {
   EXCLUDED_GENRE_IDS,
   EXCLUDED_KEYWORD_IDS,
-  EXCLUDED_LANGUAGES,
+  ALLOWED_LANGUAGES,
   MIN_POPULARITY,
   MIN_VOTE_AVERAGE,
 } from '@/constants/movies';
@@ -70,10 +70,10 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
   result.fetched = allMovies.length;
 
   // 2. フィルタリング: adult・除外言語を除外
-  const excludedLangs: readonly string[] = EXCLUDED_LANGUAGES;
+  const allowedLangs: readonly string[] = ALLOWED_LANGUAGES;
   const excludedGenres: readonly number[] = EXCLUDED_GENRE_IDS;
   const filteredMovies = allMovies.filter((movie) => {
-    if (movie.adult || excludedLangs.includes(movie.original_language)) {
+    if (movie.adult || !allowedLangs.includes(movie.original_language)) {
       result.skipped++;
       return false;
     }

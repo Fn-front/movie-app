@@ -52,6 +52,12 @@ jest.mock(
   }),
 );
 
+jest.mock('@/features/calendar/component/calendarButton', () => ({
+  CalendarButton: () => (
+    <div data-testid='calendar-button'>CalendarButton</div>
+  ),
+}));
+
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 

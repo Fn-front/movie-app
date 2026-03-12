@@ -1,0 +1,36 @@
+@use '@/styles/variables' as *;
+
+.c_calendarButton {
+  display: flex;
+  align-items: center;
+  gap: $spacing-2;
+  width: 100%;
+  padding: $spacing-3 $spacing-4;
+  border: none;
+  background: none;
+  color: $dark-blue-100;
+  font-size: $font-size-sm;
+  font-family: $font-family-base;
+  cursor: pointer;
+  border-radius: $border-radius-md;
+  transition: $transition-bg;
+
+  &:hover {
+    background-color: $dark-blue-500;
+    color: $text-inverse;
+  }
+
+  &:focus-visible {
+    outline: $border-width-2 solid $primary-400;
+    outline-offset: 2px;
+  }
+}
+
+.c_calendarButton__icon {
+  font-size: $font-size-base;
+  flex-shrink: 0;
+}
+
+.c_calendarButton__text {
+  white-space: nowrap;
+}

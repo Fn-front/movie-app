@@ -1,0 +1,129 @@
+@use '@/styles/variables' as *;
+
+.c_calendarDialog__body {
+  padding: 0;
+}
+
+.c_calendarDialog__loading,
+.c_calendarDialog__error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-10;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+}
+
+.c_calendarDialog__error {
+  color: $error-main;
+}
+
+.c_calendarDialog__calendar {
+  padding: $spacing-4;
+  display: flex;
+  justify-content: center;
+}
+
+// react-day-picker カスタムスタイル
+.c_calendarDialog__dayPicker {
+  --rdp-accent-color: #{$primary-500};
+  --rdp-accent-background-color: #{$primary-50};
+
+  font-family: $font-family-base;
+  font-size: $font-size-sm;
+  width: 100%;
+}
+
+.c_calendarDialog__caption {
+  font-size: $font-size-base;
+  font-weight: $font-weight-bold;
+  color: $text-primary;
+  text-align: center;
+}
+
+.c_calendarDialog__nav {
+  display: flex;
+  gap: $spacing-2;
+}
+
+.c_calendarDialog__navButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: $border-width-1 solid $border-color;
+  border-radius: $border-radius-md;
+  background-color: $background-paper;
+  color: $text-primary;
+  cursor: pointer;
+  transition: $transition-bg;
+
+  &:hover {
+    background-color: $background-secondary;
+  }
+
+  &:focus-visible {
+    outline: $border-width-2 solid $primary-500;
+    outline-offset: 2px;
+  }
+}
+
+.c_calendarDialog__weekday {
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+  text-align: center;
+}
+
+.c_calendarDialog__day {
+  border-radius: $border-radius-md;
+  transition: $transition-bg;
+  cursor: pointer;
+  font-size: $font-size-sm;
+
+  &:hover {
+    background-color: $primary-50;
+  }
+
+  &:focus-visible {
+    outline: $border-width-2 solid $primary-500;
+    outline-offset: 2px;
+  }
+}
+
+.c_calendarDialog__daySelected {
+  background-color: $primary-500 !important;
+  color: $text-inverse !important;
+  font-weight: $font-weight-bold;
+
+  &:hover {
+    background-color: $primary-600 !important;
+  }
+}
+
+.c_calendarDialog__dayToday {
+  font-weight: $font-weight-bold;
+  border: $border-width-2 solid $primary-300;
+  border-radius: $border-radius-md;
+}
+
+.c_calendarDialog__dayOutside {
+  color: $text-disabled;
+}
+
+.c_calendarDialog__dayWithMovies {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px;
+    height: 6px;
+    border-radius: $border-radius-full;
+    background-color: $secondary-600;
+  }
+}

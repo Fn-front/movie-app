@@ -653,11 +653,11 @@
 ## フェーズ5: カレンダー機能（1週間）
 
 ### セットアップ
-- [ ] react-day-picker インストール・設定
+- [x] react-day-picker インストール・設定
   - SCSS Modulesでのカスタムスタイリング設定
 
 ### カレンダー用API
-- [ ] `GET /api/watchlist/calendar` 実装
+- [x] `GET /api/watchlist/calendar` 実装
   - クエリパラメータ: `month`（YYYY-MM形式、デフォルト: 当月）
   - ウォッチリストの映画を指定月の1日〜末日の範囲で `release_date` フィルタ
   - `release_date` がNULLの映画は除外
@@ -665,7 +665,7 @@
   - レスポンス: 日付をキーとした映画リストのマップ形式
   - zodバリデーション（monthパラメータ）
   - 統一エラーレスポンス形式
-- [ ] カレンダー用APIテスト
+- [x] カレンダー用APIテスト
   - 正常系（月指定あり / デフォルト当月）
   - 映画がない月の空レスポンス
   - release_dateがNULLの映画が除外されること
@@ -673,7 +673,7 @@
   - バリデーションエラー（不正なmonth形式）
 
 ### カスタムフック
-- [ ] useCalendar フック実装
+- [x] useCalendar フック実装
   - 表示月の状態管理（前月・次月切り替え）
   - 選択日の状態管理
   - API呼び出し（月変更時にデータ取得）
@@ -683,7 +683,7 @@
   - 月切り替えハンドラー（useCallback）
   - 日付選択ハンドラー（useCallback）
   - ローディング・エラー状態管理
-- [ ] useCalendar フックテスト
+- [x] useCalendar フックテスト
   - 初期状態（当月表示）
   - 月切り替え（前月・次月）
   - 日付選択で該当映画リスト取得
@@ -694,7 +694,7 @@
   - エラーハンドリング
 
 ### コンポーネント実装
-- [ ] CalendarDialog コンポーネント実装
+- [x] CalendarDialog コンポーネント実装
   - Radix UI Dialog（size: xl）
   - react-day-picker で月間カレンダー表示
   - 映画がある日付にドット/バッジ表示
@@ -702,18 +702,18 @@
   - 月切り替え（前月・次月ボタン）
   - ローディング状態表示
   - React.memo + displayName 必須
-- [ ] CalendarMovieList コンポーネント実装
+- [x] CalendarMovieList コンポーネント実装
   - 選択日の映画一覧表示
   - ポスターサムネイル（w92）+ タイトル + 公開日
   - 映画クリックで詳細モーダル表示
   - React.memo + displayName 必須
-- [ ] サイドバーカレンダーボタン実装
+- [x] サイドバーカレンダーボタン実装
   - Sidebar の calendarButton props に接続
   - カレンダーアイコン + テキスト
   - ダイアログ開閉制御
 
 ### スタイリング
-- [ ] CalendarDialog SCSS Modules
+- [x] CalendarDialog SCSS Modules
   - react-day-picker のカスタムスタイリング
   - デザインシステム変数使用（ハードコード禁止）
   - 映画ドット/バッジのスタイル
@@ -722,15 +722,15 @@
   - WCAG AA コントラスト準拠
 
 ### テスト
-- [ ] CalendarDialog コンポーネントテスト
+- [x] CalendarDialog コンポーネントテスト
   - ダイアログ開閉（ESCキー・オーバーレイクリック）
   - 月切り替え操作
   - 日付選択で映画一覧表示
   - ローディング状態表示
-- [ ] CalendarMovieList コンポーネントテスト
+- [x] CalendarMovieList コンポーネントテスト
   - 映画一覧の正しい表示（ポスター・タイトル・公開日）
   - 映画クリックイベント発火
-- [ ] E2Eテスト（Playwright）
+- [x] E2Eテスト（Playwright）
   - サイドバーボタンクリック → カレンダーダイアログ表示
   - 月切り替え → データ更新確認
   - 日付クリック → 映画一覧表示 → 映画クリック → 詳細モーダル表示

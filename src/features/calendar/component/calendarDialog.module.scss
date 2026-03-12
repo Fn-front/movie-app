@@ -68,8 +68,10 @@
   background-color: $background-secondary;
 }
 
-.c_calendarDialog__calendar :global(.fc .fc-button-primary:not(:disabled).fc-button-active),
-.c_calendarDialog__calendar :global(.fc .fc-button-primary:not(:disabled):active) {
+.c_calendarDialog__calendar
+  :global(.fc .fc-button-primary:not(:disabled).fc-button-active),
+.c_calendarDialog__calendar
+  :global(.fc .fc-button-primary:not(:disabled):active) {
   background-color: $background-secondary;
   border-color: $border-color;
   color: $text-primary;

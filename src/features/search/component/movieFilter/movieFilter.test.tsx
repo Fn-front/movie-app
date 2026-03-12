@@ -208,7 +208,9 @@ describe('MovieFilter', () => {
       const onFilterChange = jest.fn();
       render(<MovieFilter {...createDefaultProps({ onFilterChange })} />);
 
-      const yearCallProps = (mockSelect as jest.Mock).mock.calls.find(
+      const yearCallProps = (
+        mockSelect as unknown as jest.Mock
+      ).mock.calls.find(
         (call: unknown[]) => (call[0] as { label: string }).label === '公開年',
       )?.[0] as { onValueChange: (value: string) => void };
       yearCallProps.onValueChange('2024');
@@ -227,7 +229,9 @@ describe('MovieFilter', () => {
         />,
       );
 
-      const yearCallProps = (mockSelect as jest.Mock).mock.calls.find(
+      const yearCallProps = (
+        mockSelect as unknown as jest.Mock
+      ).mock.calls.find(
         (call: unknown[]) => (call[0] as { label: string }).label === '公開年',
       )?.[0] as { value: string | undefined };
 
@@ -240,7 +244,9 @@ describe('MovieFilter', () => {
       const onFilterChange = jest.fn();
       render(<MovieFilter {...createDefaultProps({ onFilterChange })} />);
 
-      const ratingCallProps = (mockSelect as jest.Mock).mock.calls.find(
+      const ratingCallProps = (
+        mockSelect as unknown as jest.Mock
+      ).mock.calls.find(
         (call: unknown[]) =>
           (call[0] as { label: string }).label === '最低評価',
       )?.[0] as { onValueChange: (value: string) => void };
@@ -260,7 +266,9 @@ describe('MovieFilter', () => {
         />,
       );
 
-      const ratingCallProps = (mockSelect as jest.Mock).mock.calls.find(
+      const ratingCallProps = (
+        mockSelect as unknown as jest.Mock
+      ).mock.calls.find(
         (call: unknown[]) =>
           (call[0] as { label: string }).label === '最低評価',
       )?.[0] as { value: string | undefined };

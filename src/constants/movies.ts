@@ -102,9 +102,23 @@ export const EXCLUDED_KEYWORD_IDS = [
 export const EXCLUDED_KEYWORDS_PARAM = EXCLUDED_KEYWORD_IDS.join('|');
 
 /**
- * TMDb Discover APIで除外する原語（ISO 639-1）
+ * 許可する原語（ISO 639-1）
+ * この一覧に含まれない言語の映画は除外される
  */
-export const EXCLUDED_LANGUAGES = ['ko', 'zh'] as const;
+export const ALLOWED_LANGUAGES = [
+  'ja', // 日本語
+  'en', // 英語
+  'fr', // フランス語
+  'de', // ドイツ語
+  'es', // スペイン語
+  'it', // イタリア語
+  'no', // ノルウェー語
+  'sv', // スウェーデン語
+  'da', // デンマーク語
+  'hi', // ヒンディー語
+  'te', // テルグ語
+  'ta', // タミル語
+] as const;
 
 /**
  * 映画.com iCalフィードURL

@@ -35,12 +35,9 @@ jest.mock('@/features/search/component/searchResults/searchResults', () => ({
   )),
 }));
 
-jest.mock(
-  '@/features/search/component/movieFilter/movieFilter',
-  () => ({
-    MovieFilter: jest.fn(() => <div data-testid='movie-filter' />),
-  }),
-);
+jest.mock('@/features/search/component/movieFilter/movieFilter', () => ({
+  MovieFilter: jest.fn(() => <div data-testid='movie-filter' />),
+}));
 
 // --- Helpers ---
 function createMockUseSearchReturn(

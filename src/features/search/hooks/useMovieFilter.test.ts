@@ -151,9 +151,7 @@ describe('useMovieFilter', () => {
         result.current.handleFilterChange({ year: 2024 });
       });
 
-      expect(mockPush).toHaveBeenCalledWith(
-        expect.stringContaining('query='),
-      );
+      expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('query='));
     });
 
     it('undefinedのフィルターを削除する', () => {
@@ -203,9 +201,7 @@ describe('useMovieFilter', () => {
         result.current.handleFilterClear();
       });
 
-      expect(mockPush).toHaveBeenCalledWith(
-        expect.stringContaining('query='),
-      );
+      expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('query='));
     });
   });
 });

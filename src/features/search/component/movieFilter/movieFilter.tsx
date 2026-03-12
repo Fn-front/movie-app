@@ -115,15 +115,19 @@ export const MovieFilter = memo<MovieFilterProps>(function MovieFilter({
   );
 
   return (
-    <div className={styles.c_movie_filter} role="search" aria-label="映画フィルター">
+    <div
+      className={styles.c_movie_filter}
+      role='search'
+      aria-label='映画フィルター'
+    >
       <div className={styles.c_movie_filter__header}>
         <h2 className={styles.c_movie_filter__title}>フィルター</h2>
         {hasActiveFilters && (
           <Button
-            variant="ghost"
-            size="sm"
+            variant='ghost'
+            size='sm'
             onClick={onFilterClear}
-            aria-label="フィルターをクリア"
+            aria-label='フィルターをクリア'
           >
             クリア
           </Button>
@@ -134,8 +138,8 @@ export const MovieFilter = memo<MovieFilterProps>(function MovieFilter({
         <h3 className={styles.c_movie_filter__section_title}>ジャンル</h3>
         <div
           className={styles.c_movie_filter__genre_list}
-          role="group"
-          aria-label="ジャンル選択"
+          role='group'
+          aria-label='ジャンル選択'
         >
           {genres.map((genre) => (
             <Checkbox
@@ -151,7 +155,7 @@ export const MovieFilter = memo<MovieFilterProps>(function MovieFilter({
 
       <div className={styles.c_movie_filter__section}>
         <Select
-          label="公開年"
+          label='公開年'
           options={YEAR_OPTIONS}
           value={
             currentFilters.year !== undefined
@@ -159,15 +163,15 @@ export const MovieFilter = memo<MovieFilterProps>(function MovieFilter({
               : undefined
           }
           onValueChange={handleYearChange}
-          placeholder="すべての年代"
-          aria-label="公開年を選択"
+          placeholder='すべての年代'
+          aria-label='公開年を選択'
           fullWidth
         />
       </div>
 
       <div className={styles.c_movie_filter__section}>
         <Select
-          label="最低評価"
+          label='最低評価'
           options={RATING_OPTIONS}
           value={
             currentFilters.vote_average_gte !== undefined
@@ -175,8 +179,8 @@ export const MovieFilter = memo<MovieFilterProps>(function MovieFilter({
               : undefined
           }
           onValueChange={handleRatingChange}
-          placeholder="すべての評価"
-          aria-label="最低評価を選択"
+          placeholder='すべての評価'
+          aria-label='最低評価を選択'
           fullWidth
         />
       </div>

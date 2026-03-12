@@ -76,11 +76,7 @@ describe('MovieFilter', () => {
       const user = userEvent.setup();
       const onFilterChange = jest.fn();
 
-      render(
-        <MovieFilter
-          {...createDefaultProps({ onFilterChange })}
-        />,
-      );
+      render(<MovieFilter {...createDefaultProps({ onFilterChange })} />);
 
       await user.click(screen.getByLabelText('アクション'));
 
@@ -130,9 +126,7 @@ describe('MovieFilter', () => {
   describe('クリアボタン', () => {
     it('フィルターが適用されている場合にクリアボタンを表示する', () => {
       render(
-        <MovieFilter
-          {...createDefaultProps({ hasActiveFilters: true })}
-        />,
+        <MovieFilter {...createDefaultProps({ hasActiveFilters: true })} />,
       );
 
       expect(
@@ -142,9 +136,7 @@ describe('MovieFilter', () => {
 
     it('フィルターが未適用の場合はクリアボタンを表示しない', () => {
       render(
-        <MovieFilter
-          {...createDefaultProps({ hasActiveFilters: false })}
-        />,
+        <MovieFilter {...createDefaultProps({ hasActiveFilters: false })} />,
       );
 
       expect(

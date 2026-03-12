@@ -44,7 +44,10 @@ function parseFiltersFromParams(searchParams: URLSearchParams): FilterOptions {
 
   return {
     genre: genreParam
-      ? genreParam.split(',').map(Number).filter((n) => !Number.isNaN(n))
+      ? genreParam
+          .split(',')
+          .map(Number)
+          .filter((n) => !Number.isNaN(n))
       : undefined,
     year: yearParam ? Number(yearParam) : undefined,
     vote_average_gte: voteParam ? Number(voteParam) : undefined,

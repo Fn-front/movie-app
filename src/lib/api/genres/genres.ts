@@ -19,8 +19,7 @@ export interface GetGenresResponse {
  * ジャンル一覧を取得
  */
 export async function getGenresApi(): Promise<GetGenresResponse> {
-  const response = await axiosInstance.get<GetGenresResponse>(
-    '/api/movies/genres',
-  );
+  const response =
+    await axiosInstance.get<GetGenresResponse>('/api/movies/genres');
   return response.data;
 }

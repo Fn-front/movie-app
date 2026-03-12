@@ -192,8 +192,8 @@ OTPコード検証
 4. コード照合
 5. アクション別後処理:
    - `registration`: is_verified = true に更新、OTPレコード削除
-   - `login`: NextAuth.jsでセッション発行、OTPレコード削除
-   - `password_change`: 検証済みトークン返却（パスワード変更APIで使用）
+   - `login`: OTPレコードに検証済みフラグ設定（セッション発行はクライアント側でCredentials Provider経由）
+   - `password_change`: OTPレコードに検証済みフラグ設定（パスワード変更APIで再検証）
 
 **Response (200 OK) - registration:**
 ```json
@@ -207,11 +207,7 @@ OTPコード検証
 ```json
 {
   "success": true,
-  "user": {
-    "id": "uuid-here",
-    "email": "user@example.com",
-    "name": "ユーザー名"
-  }
+  "message": "コード検証に成功しました"
 }
 ```
 
@@ -219,9 +215,13 @@ OTPコード検証
 ```json
 {
   "success": true,
-  "data": { "verificationToken": "xxx" }
+  "message": "コード検証に成功しました"
 }
 ```
+
+**備考:**
+- `login`の場合: クライアント側でverify成功後、NextAuth.jsの`signIn("credentials")`を`loginMethod: "otp"`で呼び出してセッション発行
+- `password_change`の場合: verify成功後、パスワード変更API（`POST /api/user/change-password`）を呼び出す。変更API側でotp_codesの検証済みフラグを再確認
 
 **Error Responses:**
 - `400 Bad Request`: コードが間違っている（残り試行回数をdetailsに含む）
@@ -278,21 +278,21 @@ OTPコード検証
 
 **認証**: NextAuth.jsセッション必須
 
+**前提条件**: 事前に `POST /api/auth/otp/verify`（action: password_change）で検証成功していること
+
 **Request Body:**
 ```json
 {
-  "code": "123456",
   "newPassword": "NewPassword456"
 }
 ```
 
 **Validation:**
-- `code`: 6桁数字（OTPコード）
 - `newPassword`: 8文字以上、英字（大文字・小文字）+ 数字必須
 
 **内部処理:**
 1. セッションからユーザー情報を取得
-2. OTPコード検証（action: password_change）
+2. otp_codesテーブルで該当ユーザーのpassword_change用OTPが検証済み（verified_at IS NOT NULL）かつ有効期限内かを確認
 3. 新パスワードのバリデーション
 4. パスワードハッシュ化・更新
 5. password_changed_at を更新
@@ -308,7 +308,7 @@ OTPコード検証
 
 **Error Responses:**
 - `401 Unauthorized`: 未ログイン
-- `400 Bad Request`: OTPコードが間違っているまたは期限切れ
+- `403 Forbidden`: OTP検証が完了していない
 - `400 Bad Request`: 新しいパスワードがポリシー違反
 
 ---

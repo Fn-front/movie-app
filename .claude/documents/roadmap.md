@@ -951,7 +951,7 @@
 - [ ] usersテーブル変更（password_hash を NULL許容に変更）
 - [ ] rate_limitsテーブル更新（otp_verify アクション追加）
 
-### Step 2: OTP基盤実装
+### Step 2: OTP基盤実装 + OTPVerificationコンポーネント
 - [ ] OTPコード生成ユーティリティ（crypto.randomInt、6桁数字）
 - [ ] OTPメール送信処理（Resend統合）
   - メールテンプレート作成
@@ -964,6 +964,12 @@
   - 有効期限チェック（10分）
   - 試行回数チェック（5回）
   - action別後処理
+- [ ] OTPVerificationコンポーネント作成
+  - action prop対応（registration / login / password_change）
+  - 送信先メールアドレス表示
+  - 再送カウントダウン表示（1分）
+  - 残り試行回数表示（エラー時）
+  - inputMode="numeric" 対応
 
 ### Step 3: 新規登録フロー改修
 - [ ] 登録API改修（`POST /api/auth/register`）
@@ -1000,15 +1006,7 @@
   - OTP送信 → OTP入力 + 新パスワード入力
 - [ ] 設定画面にPasswordChangeForm配置
 
-### Step 7: OTPVerificationコンポーネント改修
-- [ ] OTPVerificationコンポーネント更新
-  - action prop追加（registration / login / password_change）
-  - 送信先メールアドレス表示
-  - 再送カウントダウン表示（1分）
-  - 残り試行回数表示（エラー時）
-  - inputMode="numeric" 対応
-
-### Step 8: テスト
+### Step 7: テスト
 - [ ] OTP送信APIテスト
 - [ ] OTP検証APIテスト
 - [ ] 登録フロー改修テスト（OTP検証含む）

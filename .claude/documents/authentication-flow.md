@@ -197,26 +197,33 @@ POST /api/auth/otp/send
 [OTP検証画面]
   - 6桁のコードを入力
   ↓
-POST /api/auth/otp/verify
-  {
-    email: "user@example.com",
-    code: "123456",
-    action: "login"
-  }
+クライアント処理:
+  1. POST /api/auth/otp/verify でOTPコードを検証
+  2. 検証成功後、NextAuth.js の signIn("credentials") を呼び出し
+     signIn("credentials", {
+       email: "user@example.com",
+       otpToken: "検証成功トークン",  // OTP検証APIが返すワンタイムトークン
+       loginMethod: "otp"
+     })
+  3. Credentials Provider の authorize 関数内で
+     loginMethod を判定し、otpToken の有効性を検証
   ↓
-サーバー処理:
-  1. OTPコード検証（上記と同じ）
-  2. 検証成功 → NextAuth.jsでセッション発行
-  3. OTPレコード削除
+サーバー処理（Credentials Provider authorize）:
+  1. loginMethod === "otp" の場合:
+     a. otpToken の有効性を検証（DB上の検証済みフラグ確認）
+     b. ユーザー情報を返却 → セッション発行
+  2. loginMethod === "password"（通常ログイン）の場合:
+     a. パスワードハッシュ照合
+     b. ユーザー情報を返却 → セッション発行
   ↓
-成功レスポンス
-  {
-    success: true,
-    user: { id, email, name, avatar_url }
-  }
-  ↓
-[ホーム画面に遷移]
+成功レスポンス（NextAuth.js自動処理）
+  セッションCookie発行 → ホーム画面に遷移
 ```
+
+**設計判断 — Credentials Provider統一の理由:**
+- NextAuth.jsはCredentials Provider以外からプログラマティックにセッションを発行する手段がない
+- OTPログインもCredentials Providerのauthorize関数を経由することで、JWT/セッションの発行を統一
+- loginMethodパラメータで認証方式を分岐し、authorize関数内でOTPトークン検証 or パスワード照合を切り替え
 
 ---
 
@@ -293,23 +300,40 @@ POST /api/auth/otp/send
 [OTP検証 + 新パスワード入力画面]
 ```
 
-### 2. OTP検証 + パスワード変更
+### 2. OTP検証
 ```
 ユーザー
   ↓
 [OTP検証 + 新パスワード入力画面]
   - 6桁のコードを入力
+  ↓
+POST /api/auth/otp/verify
+  {
+    email: "user@example.com",
+    code: "123456",
+    action: "password_change"
+  }
+  ↓
+サーバー処理:
+  1. OTPコード検証
+  2. 検証成功 → otp_codesのverified_atを設定
+```
+
+### 3. パスワード変更
+```
+ユーザー
+  ↓
+[新パスワード入力]
   - 新しいパスワードを入力
   ↓
 POST /api/user/change-password
   {
-    code: "123456",
     newPassword: "NewPassword456"
   }
   ↓
 サーバー処理:
   1. セッションからユーザー情報を取得
-  2. OTPコード検証
+  2. otp_codesで検証済みOTPが存在するか確認（verified_at IS NOT NULL、有効期限内）
   3. 新しいパスワードのバリデーション
   4. パスワードハッシュ化・更新
   5. password_changed_at を更新
@@ -456,16 +480,26 @@ import GitHubProvider from "next-auth/providers/github"
 
 export const authOptions = {
   providers: [
-    // メール+パスワード認証
+    // メール+パスワード認証 / メールOTPログイン（統一）
     CredentialsProvider({
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
+        loginMethod: { label: "Login Method", type: "text" }, // "password" | "otp"
+        otpToken: { label: "OTP Token", type: "text" },
       },
       async authorize(credentials) {
-        // ユーザー認証ロジック
-        // is_verified チェック必須
+        const { email, password, loginMethod, otpToken } = credentials
+
+        if (loginMethod === "otp") {
+          // OTPログイン: otp_codesのverified_atを確認
+          // 検証済みOTPが存在すればユーザー情報を返却
+        } else {
+          // パスワードログイン: パスワードハッシュ照合
+          // is_verified チェック必須
+        }
+
         return {
           id: user.id,
           email: user.email,

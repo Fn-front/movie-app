@@ -69,6 +69,10 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 - UPDATE: サーバー側のみ（service role）
 - DELETE: 自分のレコードのみ削除可能
 
+**NextAuth.jsからの操作方法:**
+- NextAuth.jsのカスタムアダプターではなく、signInコールバック内でSupabase service roleクライアントを使用してaccountsテーブルを直接操作する
+- OAuth認証成功時にsignInコールバックでアカウントリンク処理を実行し、service roleキーでINSERT/UPDATEを行う
+
 ---
 
 ### otp_codes（OTP検証コード）
@@ -94,9 +98,16 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 - `attempts` は 0〜5 の範囲（CHECK制約）
 - `code` は 6桁数字（CHECK制約）
 
+**設計判断 — user_id FKを持たない理由:**
+- 現在の設計では新規登録時にユーザーが先に作成される（is_verified = false）ため、user_id FKを持たせることは可能
+- しかし、emailベースにすることで以下のメリットがある:
+  - OTPテーブルがusersテーブルに依存しないシンプルな設計
+  - 将来的にユーザー作成前にメール到達確認を行うフローに変更しやすい
+  - RLSを使わずservice roleでの操作に統一できる（OTPはサーバー側でのみ操作）
+
 **クリーンアップ:**
-- 有効期限切れ（`expires_at < now()`）のレコードは定期的に削除
-- 検証成功時（`verified_at IS NOT NULL`）のレコードは即座に削除
+- 有効期限切れ（`expires_at < now()`）のレコードはVercel Cron Jobsで定期削除（rate_limitsと同一ジョブ）
+- 検証成功時のレコードは即座に削除
 
 ---
 

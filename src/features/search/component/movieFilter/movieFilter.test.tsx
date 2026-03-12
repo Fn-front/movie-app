@@ -137,6 +137,28 @@ describe('MovieFilter', () => {
         }),
       );
     });
+
+    it('最後のジャンルを解除するとgenreがundefinedになる', async () => {
+      const user = userEvent.setup();
+      const onFilterChange = jest.fn();
+
+      render(
+        <MovieFilter
+          {...createDefaultProps({
+            currentFilters: { genre: [28] },
+            onFilterChange,
+          })}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('アクション'));
+
+      expect(onFilterChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          genre: undefined,
+        }),
+      );
+    });
   });
 
   describe('クリアボタン', () => {
@@ -195,6 +217,22 @@ describe('MovieFilter', () => {
         expect.objectContaining({ year: 2024 }),
       );
     });
+
+    it('年代フィルターが設定済みの場合にSelectのvalueに値が渡される', () => {
+      render(
+        <MovieFilter
+          {...createDefaultProps({
+            currentFilters: { year: 2024 },
+          })}
+        />,
+      );
+
+      const yearCallProps = (mockSelect as jest.Mock).mock.calls.find(
+        (call: unknown[]) => (call[0] as { label: string }).label === '公開年',
+      )?.[0] as { value: string | undefined };
+
+      expect(yearCallProps.value).toBe('2024');
+    });
   });
 
   describe('評価選択', () => {
@@ -211,6 +249,23 @@ describe('MovieFilter', () => {
       expect(onFilterChange).toHaveBeenCalledWith(
         expect.objectContaining({ vote_average_gte: 7.5 }),
       );
+    });
+
+    it('評価フィルターが設定済みの場合にSelectのvalueに値が渡される', () => {
+      render(
+        <MovieFilter
+          {...createDefaultProps({
+            currentFilters: { vote_average_gte: 7.5 },
+          })}
+        />,
+      );
+
+      const ratingCallProps = (mockSelect as jest.Mock).mock.calls.find(
+        (call: unknown[]) =>
+          (call[0] as { label: string }).label === '最低評価',
+      )?.[0] as { value: string | undefined };
+
+      expect(ratingCallProps.value).toBe('7.5');
     });
   });
 

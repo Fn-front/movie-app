@@ -1,0 +1,25 @@
+@use '@/styles/variables' as *;
+
+.c_search_results {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+
+  &__count {
+    margin: 0;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: $spacing-4;
+  }
+
+  &__pagination {
+    margin-top: $spacing-4;
+    display: flex;
+    justify-content: center;
+  }
+}

@@ -3,6 +3,7 @@
  */
 
 import type { GetMoviesRequest } from '@/lib/api/movies/movies';
+import type { SearchMoviesRequest } from '@/lib/api/search/search';
 
 export const movieKeys = {
   all: ['movies'] as const,
@@ -22,6 +23,12 @@ export const watchlistKeys = {
 export const calendarKeys = {
   all: ['calendar'] as const,
   month: (month: string) => ['calendar', month] as const,
+};
+
+export const searchKeys = {
+  all: ['search'] as const,
+  results: (params: Omit<SearchMoviesRequest, 'page'>) =>
+    ['search', params] as const,
 };
 
 export const favoriteKeys = {

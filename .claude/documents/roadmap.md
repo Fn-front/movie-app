@@ -773,15 +773,15 @@
 - [x] Headerへの配置
 
 ### Step 4: 検索結果ページ + SearchResultsコンポーネント
-- [ ] 検索結果ページ実装（`/app/search/page.tsx`）
+- [x] 検索結果ページ実装（`/app/search/page.tsx`）
   - Server Component
   - メタデータ設定
-- [ ] SearchResultsコンポーネント実装
+- [x] SearchResultsコンポーネント実装
   - 既存MovieTileを使用した検索結果一覧
   - 結果件数表示
   - 既存Paginationコンポーネント使用
   - 結果なし時のEmptyState表示
-- [ ] useSearchフック実装
+- [x] useSearchフック実装
   - useSearchParamsでURLパラメータ読み取り
   - axiosで `/api/movies/search` を呼び出し
   - ローディング・エラー状態管理

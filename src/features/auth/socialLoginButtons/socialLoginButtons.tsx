@@ -22,13 +22,21 @@ export const SocialLoginButtons = memo<SocialLoginButtonsProps>(
     const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
 
     const handleGoogleLogin = useCallback(async () => {
-      setLoadingProvider('google');
-      await signIn('google', { callbackUrl: '/' });
+      try {
+        setLoadingProvider('google');
+        await signIn('google', { callbackUrl: '/' });
+      } finally {
+        setLoadingProvider(null);
+      }
     }, []);
 
     const handleGithubLogin = useCallback(async () => {
-      setLoadingProvider('github');
-      await signIn('github', { callbackUrl: '/' });
+      try {
+        setLoadingProvider('github');
+        await signIn('github', { callbackUrl: '/' });
+      } finally {
+        setLoadingProvider(null);
+      }
     }, []);
 
     const isDisabled = disabled || loadingProvider !== null;

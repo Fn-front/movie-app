@@ -190,11 +190,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = user.email;
 
       // 既存ユーザーを検索
-      const { data: existingUser } = await supabase
+      const { data: existingUser, error: findError } = await supabase
         .from('users')
-        .select('id')
+        .select('id, avatar_url')
         .eq('email', email)
         .single();
+
+      // DBエラー（"not found"以外）は失敗とする
+      if (findError && findError.code !== 'PGRST116') {
+        return false;
+      }
 
       let userId: string;
 
@@ -203,19 +208,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         userId = existingUser.id;
 
         // OAuthプロフィール情報でアバターを更新（未設定の場合のみ）
-        if (profile?.image || user.image) {
-          const { data: userData } = await supabase
+        if ((profile?.image || user.image) && !existingUser.avatar_url) {
+          await supabase
             .from('users')
-            .select('avatar_url')
-            .eq('id', userId)
-            .single();
-
-          if (userData && !userData.avatar_url) {
-            await supabase
-              .from('users')
-              .update({ avatar_url: user.image ?? profile?.image ?? null })
-              .eq('id', userId);
-          }
+            .update({ avatar_url: user.image ?? profile?.image ?? null })
+            .eq('id', userId);
         }
       } else {
         // 新規ユーザー作成（is_verified = true）
@@ -267,8 +264,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user, account }) {
       // 初回ログイン時にユーザー情報をトークンに追加
       if (user) {
-        if (account?.provider === 'google' || account?.provider === 'github') {
+        if (account?.provider && account.provider !== 'credentials') {
           // OAuthログイン: DBからユーザー情報を取得
+          token.id = user.id;
+          token.email = user.email;
+          token.name = user.name;
+          token.picture = user.image;
+          token.role = 'user';
+          token.passwordChangedAt = null;
+          token.lastPasswordCheck = Date.now();
+
           if (supabase && user.id) {
             const { data: dbUser } = await supabase
               .from('users')
@@ -276,13 +281,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               .eq('id', user.id)
               .single();
 
-            token.id = user.id;
-            token.email = user.email;
-            token.name = user.name;
-            token.picture = user.image;
-            token.role = dbUser?.role ?? 'user';
-            token.passwordChangedAt = dbUser?.password_changed_at ?? null;
-            token.lastPasswordCheck = Date.now();
+            if (dbUser) {
+              token.role = dbUser.role ?? 'user';
+              token.passwordChangedAt = dbUser.password_changed_at ?? null;
+            }
           }
         } else {
           // Credentialsログイン

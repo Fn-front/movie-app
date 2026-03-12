@@ -1,0 +1,48 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_movie_filter {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-5;
+  padding: $spacing-4;
+  background-color: $background-paper;
+  border: $border-width-1 solid $border-color;
+  border-radius: $border-radius-lg;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: $font-size-lg;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+  }
+
+  &__section {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-2;
+  }
+
+  &__section_title {
+    margin: 0;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+  }
+
+  &__genre_list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-2;
+  }
+
+  &__genre_item {
+    flex-shrink: 0;
+  }
+}

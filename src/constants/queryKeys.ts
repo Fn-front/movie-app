@@ -30,6 +30,10 @@ export const searchKeys = {
   results: (params: SearchMoviesRequest) => ['search', params] as const,
 };
 
+export const genreKeys = {
+  all: ['genres'] as const,
+};
+
 export const favoriteKeys = {
   all: ['favorites'] as const,
   list: (params?: { sort_by?: string; sort_order?: string }) =>

@@ -788,13 +788,13 @@
   - フィルター変更時にURL更新 + 再検索
 
 ### Step 5: MovieFilterコンポーネント + フィルタリング連携
-- [ ] MovieFilterコンポーネント実装
+- [x] MovieFilterコンポーネント実装
   - ジャンルマルチセレクト（Radix UI Checkbox群）
   - 年代ドロップダウン（Radix UI Select、2020〜現在+5年先）
   - 評価選択（Radix UI Select、0〜10、0.5刻み）
   - フィルタークリアボタン
   - フィルター変更 → URLパラメータ更新
-- [ ] useSearchフックとの連携
+- [x] useSearchフックとの連携
 
 ### Step 6: テスト
 - [ ] SearchBarコンポーネントテスト

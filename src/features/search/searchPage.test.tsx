@@ -6,12 +6,24 @@ import { render, screen } from '@testing-library/react';
 
 import { SearchPage } from './searchPage';
 import type { UseSearchReturn } from './hooks/useSearch';
+import type { UseMovieFilterReturn } from './hooks/useMovieFilter';
+import type { UseGenresReturn } from './hooks/useGenres';
 
 // --- Mocks ---
 const mockUseSearch = jest.fn<UseSearchReturn, []>();
+const mockUseMovieFilter = jest.fn<UseMovieFilterReturn, []>();
+const mockUseGenres = jest.fn<UseGenresReturn, []>();
 
 jest.mock('./hooks/useSearch', () => ({
   useSearch: () => mockUseSearch(),
+}));
+
+jest.mock('./hooks/useMovieFilter', () => ({
+  useMovieFilter: () => mockUseMovieFilter(),
+}));
+
+jest.mock('./hooks/useGenres', () => ({
+  useGenres: () => mockUseGenres(),
 }));
 
 jest.mock('@/features/search/component/searchResults/searchResults', () => ({
@@ -21,6 +33,10 @@ jest.mock('@/features/search/component/searchResults/searchResults', () => ({
       <span data-testid='current-page'>{props.currentPage}</span>
     </div>
   )),
+}));
+
+jest.mock('@/features/search/component/movieFilter/movieFilter', () => ({
+  MovieFilter: jest.fn(() => <div data-testid='movie-filter' />),
 }));
 
 // --- Helpers ---
@@ -40,6 +56,24 @@ function createMockUseSearchReturn(
   };
 }
 
+function setupDefaultMocks(searchOverrides?: Partial<UseSearchReturn>) {
+  mockUseSearch.mockReturnValue(createMockUseSearchReturn(searchOverrides));
+  mockUseMovieFilter.mockReturnValue({
+    currentFilters: {},
+    hasActiveFilters: false,
+    handleFilterChange: jest.fn(),
+    handleFilterClear: jest.fn(),
+  });
+  mockUseGenres.mockReturnValue({
+    genres: [
+      { id: 28, name: 'アクション' },
+      { id: 12, name: 'アドベンチャー' },
+    ],
+    isLoading: false,
+    isError: false,
+  });
+}
+
 // --- Tests ---
 describe('SearchPage', () => {
   beforeEach(() => {
@@ -47,9 +81,7 @@ describe('SearchPage', () => {
   });
 
   it('検索キーワードがある場合はタイトルに表示する', () => {
-    mockUseSearch.mockReturnValue(
-      createMockUseSearchReturn({ query: 'テスト映画' }),
-    );
+    setupDefaultMocks({ query: 'テスト映画' });
 
     render(<SearchPage />);
 
@@ -59,7 +91,7 @@ describe('SearchPage', () => {
   });
 
   it('検索キーワードがない場合は汎用タイトルを表示する', () => {
-    mockUseSearch.mockReturnValue(createMockUseSearchReturn({ query: '' }));
+    setupDefaultMocks({ query: '' });
 
     render(<SearchPage />);
 
@@ -69,12 +101,10 @@ describe('SearchPage', () => {
   });
 
   it('SearchResultsコンポーネントにpropsを渡す', () => {
-    mockUseSearch.mockReturnValue(
-      createMockUseSearchReturn({
-        totalResults: 50,
-        currentPage: 3,
-      }),
-    );
+    setupDefaultMocks({
+      totalResults: 50,
+      currentPage: 3,
+    });
 
     render(<SearchPage />);
 
@@ -83,10 +113,18 @@ describe('SearchPage', () => {
   });
 
   it('SearchResultsコンポーネントが表示される', () => {
-    mockUseSearch.mockReturnValue(createMockUseSearchReturn());
+    setupDefaultMocks();
 
     render(<SearchPage />);
 
     expect(screen.getByTestId('search-results')).toBeInTheDocument();
+  });
+
+  it('MovieFilterコンポーネントが表示される', () => {
+    setupDefaultMocks();
+
+    render(<SearchPage />);
+
+    expect(screen.getByTestId('movie-filter')).toBeInTheDocument();
   });
 });

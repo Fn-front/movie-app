@@ -8,7 +8,10 @@
 import { memo } from 'react';
 
 import { SearchResults } from '@/features/search/component/searchResults/searchResults';
+import { MovieFilter } from '@/features/search/component/movieFilter/movieFilter';
 import { useSearch } from '@/features/search/hooks/useSearch';
+import { useMovieFilter } from '@/features/search/hooks/useMovieFilter';
+import { useGenres } from '@/features/search/hooks/useGenres';
 
 import styles from './searchPage.module.scss';
 
@@ -26,20 +29,43 @@ export const SearchPage = memo(function SearchPage() {
     handlePageChange,
   } = useSearch();
 
+  const {
+    currentFilters,
+    hasActiveFilters,
+    handleFilterChange,
+    handleFilterClear,
+  } = useMovieFilter();
+
+  const { genres } = useGenres();
+
   return (
     <div className={styles.c_search_page}>
       <h1 className={styles.c_search_page__title}>
         {query ? `「${query}」の検索結果` : '検索結果'}
       </h1>
 
-      <SearchResults
-        movies={movies}
-        totalResults={totalResults}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={handlePageChange}
-        isLoading={isLoading}
-      />
+      <div className={styles.c_search_page__content}>
+        <aside className={styles.c_search_page__filter}>
+          <MovieFilter
+            currentFilters={currentFilters}
+            onFilterChange={handleFilterChange}
+            onFilterClear={handleFilterClear}
+            hasActiveFilters={hasActiveFilters}
+            genres={genres}
+          />
+        </aside>
+
+        <div className={styles.c_search_page__results}>
+          <SearchResults
+            movies={movies}
+            totalResults={totalResults}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            isLoading={isLoading}
+          />
+        </div>
+      </div>
     </div>
   );
 });

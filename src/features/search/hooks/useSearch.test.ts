@@ -2,10 +2,9 @@
  * useSearchフックのテスト
  */
 
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-import { searchMoviesApi } from '@/lib/api/search/search';
 import { useToast } from '@/hooks/useToast';
 import { useSearch } from './useSearch';
 
@@ -36,9 +35,6 @@ const mockUseSearchParams = useSearchParams as jest.MockedFunction<
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 const mockUseQuery = useQuery as jest.MockedFunction<typeof useQuery>;
 const mockUseToast = useToast as jest.MockedFunction<typeof useToast>;
-const mockSearchMoviesApi = searchMoviesApi as jest.MockedFunction<
-  typeof searchMoviesApi
->;
 
 // --- Helpers ---
 const mockPush = jest.fn();
@@ -53,8 +49,12 @@ function setupMocks(
   queryResult: Partial<ReturnType<typeof useQuery>> = {},
 ) {
   const searchParams = createSearchParams(params);
-  mockUseSearchParams.mockReturnValue(searchParams as any);
-  mockUseRouter.mockReturnValue({ push: mockPush } as any);
+  mockUseSearchParams.mockReturnValue(
+    searchParams as unknown as ReturnType<typeof useSearchParams>,
+  );
+  mockUseRouter.mockReturnValue({ push: mockPush } as unknown as ReturnType<
+    typeof useRouter
+  >);
   mockUseToast.mockReturnValue({
     toast: mockToast,
     toasts: [],
@@ -68,7 +68,7 @@ function setupMocks(
     isError: false,
     error: null,
     ...queryResult,
-  } as any);
+  } as unknown as ReturnType<typeof useQuery>);
 }
 
 describe('useSearch', () => {
@@ -181,7 +181,9 @@ describe('useSearch', () => {
         result.current.handlePageChange(3);
       });
 
-      expect(mockPush).toHaveBeenCalledWith('/search?query=%E3%83%86%E3%82%B9%E3%83%88&page=3');
+      expect(mockPush).toHaveBeenCalledWith(
+        '/search?query=%E3%83%86%E3%82%B9%E3%83%88&page=3',
+      );
     });
 
     it('既存のパラメータを保持してページを更新する', () => {
@@ -193,15 +195,11 @@ describe('useSearch', () => {
         result.current.handlePageChange(2);
       });
 
-      expect(mockPush).toHaveBeenCalledWith(
-        expect.stringContaining('query='),
-      );
+      expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('query='));
       expect(mockPush).toHaveBeenCalledWith(
         expect.stringContaining('genre=28'),
       );
-      expect(mockPush).toHaveBeenCalledWith(
-        expect.stringContaining('page=2'),
-      );
+      expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('page=2'));
     });
   });
 });

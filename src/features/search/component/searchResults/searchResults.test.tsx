@@ -12,7 +12,10 @@ import type { Movie } from '@/lib/types';
 // --- Mocks ---
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: jest.fn(({ movie, onClick }) => (
-    <div data-testid={`movie-tile-${movie.id}`} onClick={() => onClick?.(movie.id)}>
+    <div
+      data-testid={`movie-tile-${movie.id}`}
+      onClick={() => onClick?.(movie.id)}
+    >
       {movie.title}
     </div>
   )),
@@ -27,7 +30,9 @@ jest.mock('@/components/ui/movie/movieTileSkeleton/movieTileSkeleton', () => ({
 jest.mock('@/components/ui/pagination/pagination', () => ({
   Pagination: jest.fn(({ currentPage, totalPages, onPageChange }) => (
     <nav data-testid='pagination'>
-      <span>ページ {currentPage} / {totalPages}</span>
+      <span>
+        ページ {currentPage} / {totalPages}
+      </span>
       <button onClick={() => onPageChange(currentPage + 1)}>次のページ</button>
     </nav>
   )),

@@ -76,7 +76,8 @@ export function useSearch(): UseSearchReturn {
 
   const queryKeyParams = useMemo(() => {
     if (!requestParams) return {};
-    const { page: _, ...rest } = requestParams;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { page, ...rest } = requestParams;
     return rest;
   }, [requestParams]);
 
@@ -111,7 +112,10 @@ export function useSearch(): UseSearchReturn {
   );
 
   const query = searchParams.get('query') ?? '';
-  const movies = searchQuery.data?.data.movies ?? [];
+  const movies = useMemo(
+    () => searchQuery.data?.data.movies ?? [],
+    [searchQuery.data],
+  );
   const pagination = searchQuery.data?.data.pagination;
 
   return useMemo(

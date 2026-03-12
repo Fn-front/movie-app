@@ -59,31 +59,25 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
     [query, router],
   );
 
-  const classNames = [styles.c_search_bar, className]
-    .filter(Boolean)
-    .join(' ');
+  const classNames = [styles.c_search_bar, className].filter(Boolean).join(' ');
 
   return (
-    <form
-      className={classNames}
-      role="search"
-      onSubmit={handleSubmit}
-    >
+    <form className={classNames} role='search' onSubmit={handleSubmit}>
       <input
-        type="text"
+        type='text'
         className={styles.c_search_bar__input}
         value={query}
         onChange={handleChange}
         placeholder={placeholder}
-        aria-label="映画を検索"
+        aria-label='映画を検索'
       />
       <button
-        type="submit"
+        type='submit'
         className={styles.c_search_bar__button}
-        aria-label="検索"
+        aria-label='検索'
         disabled={!query.trim()}
       >
-        <IoSearchOutline size={20} aria-hidden="true" />
+        <IoSearchOutline size={20} aria-hidden='true' />
       </button>
     </form>
   );

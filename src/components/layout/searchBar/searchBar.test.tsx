@@ -22,7 +22,7 @@ describe('SearchBar', () => {
   });
 
   it('プレースホルダーが表示される', () => {
-    render(<SearchBar placeholder="テスト検索..." />);
+    render(<SearchBar placeholder='テスト検索...' />);
     expect(screen.getByPlaceholderText('テスト検索...')).toBeInTheDocument();
   });
 
@@ -32,7 +32,7 @@ describe('SearchBar', () => {
   });
 
   it('defaultValueが初期値として設定される', () => {
-    render(<SearchBar defaultValue="アベンジャーズ" />);
+    render(<SearchBar defaultValue='アベンジャーズ' />);
     expect(screen.getByLabelText('映画を検索')).toHaveValue('アベンジャーズ');
   });
 
@@ -99,7 +99,7 @@ describe('SearchBar', () => {
   });
 
   it('カスタムクラス名が適用される', () => {
-    render(<SearchBar className="custom-class" />);
+    render(<SearchBar className='custom-class' />);
     const form = screen.getByRole('search');
     expect(form.className).toContain('custom-class');
   });
@@ -110,9 +110,7 @@ describe('SearchBar', () => {
     const input = screen.getByLabelText('映画を検索');
     await user.type(input, 'test & query');
     await user.keyboard('{Enter}');
-    expect(mockPush).toHaveBeenCalledWith(
-      '/search?query=test%20%26%20query',
-    );
+    expect(mockPush).toHaveBeenCalledWith('/search?query=test%20%26%20query');
   });
 
   it('前後の空白がトリムされて検索される', async () => {

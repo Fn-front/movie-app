@@ -28,6 +28,7 @@ import { registerUser } from '@/lib/api/auth/auth';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import { OtpVerification } from '@/features/auth/otpVerification/otpVerification';
+import { SocialLoginButtons } from '@/features/auth/socialLoginButtons/socialLoginButtons';
 import styles from './registerForm.module.scss';
 
 /**
@@ -178,6 +179,8 @@ export const RegisterForm = memo(function RegisterForm() {
           </div>
         </div>
       </form>
+
+      <SocialLoginButtons disabled={isSubmitting} />
 
       <p className={styles.c_register_form__footer}>
         アカウントをお持ちの方は{' '}

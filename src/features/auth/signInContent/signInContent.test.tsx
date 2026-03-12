@@ -19,6 +19,10 @@ jest.mock('next-auth/react', () => ({
   signIn: jest.fn(),
 }));
 
+jest.mock('@/features/auth/socialLoginButtons/socialLoginButtons', () => ({
+  SocialLoginButtons: () => <div data-testid='social-login-buttons' />,
+}));
+
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 

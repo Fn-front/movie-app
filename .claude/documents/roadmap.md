@@ -989,16 +989,16 @@
 - [x] LoginFormに「メールでログイン」リンク追加
 
 ### Step 5: ソーシャルログイン実装（Google / GitHub）
-- [ ] NextAuth.js Provider設定
+- [x] NextAuth.js Provider設定
   - Google Provider追加
   - GitHub Provider追加
-- [ ] signInコールバック実装（アカウントリンク処理）
+- [x] signInコールバック実装（アカウントリンク処理）
   - 同じメールの既存ユーザーとの自動リンク
   - 新規ユーザー作成（is_verified = true）
-- [ ] SocialLoginButtonsコンポーネント作成
+- [x] SocialLoginButtonsコンポーネント作成
   - Googleログインボタン
   - GitHubログインボタン
-- [ ] LoginForm / RegisterFormにSocialLoginButtons配置
+- [x] LoginForm / RegisterFormにSocialLoginButtons配置
 
 ### Step 6: パスワード変更フロー改修
 - [ ] パスワード変更API改修（`POST /api/user/change-password`）

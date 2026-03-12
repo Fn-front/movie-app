@@ -4,6 +4,8 @@
 
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
+import Google from 'next-auth/providers/google';
+import GitHub from 'next-auth/providers/github';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
@@ -144,6 +146,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         };
       },
     }),
+
+    // Google OAuth
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    }),
+
+    // GitHub OAuth
+    GitHub({
+      clientId: process.env.GITHUB_CLIENT_ID ?? '',
+      clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '',
+    }),
   ],
 
   session: {
@@ -157,18 +171,131 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
 
   callbacks: {
-    async jwt({ token, user }) {
+    async signIn({ user, account, profile }) {
+      // Credentials Providerはそのまま通す
+      if (account?.provider === 'credentials') {
+        return true;
+      }
+
+      // OAuthログイン: アカウントリンク処理
+      if (
+        !supabase ||
+        !account?.provider ||
+        !account?.providerAccountId ||
+        !user?.email
+      ) {
+        return false;
+      }
+
+      const email = user.email;
+
+      // 既存ユーザーを検索
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      let userId: string;
+
+      if (existingUser) {
+        // 既存ユーザー → アカウントリンク
+        userId = existingUser.id;
+
+        // OAuthプロフィール情報でアバターを更新（未設定の場合のみ）
+        if (profile?.image || user.image) {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('avatar_url')
+            .eq('id', userId)
+            .single();
+
+          if (userData && !userData.avatar_url) {
+            await supabase
+              .from('users')
+              .update({ avatar_url: user.image ?? profile?.image ?? null })
+              .eq('id', userId);
+          }
+        }
+      } else {
+        // 新規ユーザー作成（is_verified = true）
+        const { data: newUser, error: createError } = await supabase
+          .from('users')
+          .insert({
+            email,
+            name: user.name ?? null,
+            avatar_url: user.image ?? null,
+            is_verified: true,
+          })
+          .select('id')
+          .single();
+
+        if (createError || !newUser) {
+          return false;
+        }
+
+        userId = newUser.id;
+      }
+
+      // accountsテーブルにプロバイダー情報を upsert
+      const { error: accountError } = await supabase.from('accounts').upsert(
+        {
+          user_id: userId,
+          provider: account.provider,
+          provider_account_id: account.providerAccountId,
+          type: account.type ?? 'oauth',
+          access_token: account.access_token ?? null,
+          refresh_token: account.refresh_token ?? null,
+          expires_at: account.expires_at ?? null,
+          token_type: account.token_type ?? null,
+          scope: account.scope ?? null,
+          id_token: account.id_token ?? null,
+        },
+        { onConflict: 'provider,provider_account_id' },
+      );
+
+      if (accountError) {
+        return false;
+      }
+
+      // userオブジェクトにidをセット（jwtコールバックで使用）
+      user.id = userId;
+
+      return true;
+    },
+
+    async jwt({ token, user, account }) {
       // 初回ログイン時にユーザー情報をトークンに追加
       if (user) {
-        token.id = user.id;
-        token.email = user.email;
-        token.name = user.name;
-        token.picture = user.image;
-        token.role = user.role;
-        token.passwordChangedAt =
-          (user as unknown as { passwordChangedAt: string | null })
-            .passwordChangedAt ?? null;
-        token.lastPasswordCheck = Date.now();
+        if (account?.provider === 'google' || account?.provider === 'github') {
+          // OAuthログイン: DBからユーザー情報を取得
+          if (supabase && user.id) {
+            const { data: dbUser } = await supabase
+              .from('users')
+              .select('role, password_changed_at')
+              .eq('id', user.id)
+              .single();
+
+            token.id = user.id;
+            token.email = user.email;
+            token.name = user.name;
+            token.picture = user.image;
+            token.role = dbUser?.role ?? 'user';
+            token.passwordChangedAt = dbUser?.password_changed_at ?? null;
+            token.lastPasswordCheck = Date.now();
+          }
+        } else {
+          // Credentialsログイン
+          token.id = user.id;
+          token.email = user.email;
+          token.name = user.name;
+          token.picture = user.image;
+          token.role = user.role;
+          token.passwordChangedAt =
+            (user as unknown as { passwordChangedAt: string | null })
+              .passwordChangedAt ?? null;
+          token.lastPasswordCheck = Date.now();
+        }
       }
 
       // パスワード変更によるセッション無効化チェック（5分間隔）

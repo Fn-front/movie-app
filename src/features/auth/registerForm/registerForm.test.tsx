@@ -21,6 +21,12 @@ jest.mock('@/lib/api/auth/auth', () => ({
   registerUser: (...args: unknown[]) => mockRegisterUser(...args),
 }));
 
+jest.mock('@/features/auth/socialLoginButtons/socialLoginButtons', () => ({
+  SocialLoginButtons: ({ disabled }: { disabled?: boolean }) => (
+    <div data-testid='social-login-buttons' data-disabled={disabled} />
+  ),
+}));
+
 jest.mock('@/features/auth/otpVerification/otpVerification', () => ({
   OtpVerification: ({
     email,
@@ -86,6 +92,7 @@ describe('RegisterForm', () => {
     expect(
       screen.getByRole('button', { name: '新規登録' }),
     ).toBeInTheDocument();
+    expect(screen.getByTestId('social-login-buttons')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'ログイン' })).toHaveAttribute(
       'href',
       '/auth/signin',

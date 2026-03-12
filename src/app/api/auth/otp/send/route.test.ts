@@ -287,6 +287,54 @@ describe('POST /api/auth/otp/send', () => {
     expect(json.success).toBe(true);
   });
 
+  it('OTP挿入時のDBエラーで500を返す', async () => {
+    // ユーザー検索
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'user-1', is_verified: false },
+            error: null,
+          }),
+        }),
+      }),
+    });
+    // 前回送信チェック（なし）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                single: () => ({ data: null, error: { code: 'PGRST116' } }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    // 既存OTP削除
+    mockFrom.mockReturnValueOnce({
+      delete: () => ({
+        eq: () => ({
+          eq: () => ({ is: () => ({ data: null, error: null }) }),
+        }),
+      }),
+    });
+    // OTP挿入失敗
+    mockFrom.mockReturnValueOnce({
+      insert: () => ({ error: new Error('Insert failed') }),
+    });
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', action: 'registration' }),
+    );
+
+    expect(response.status).toBe(500);
+    const json = await response.json();
+    expect(json.success).toBe(false);
+  });
+
   it('メール送信失敗で500を返す', async () => {
     // sendOtpEmailをfalseに変更
     const { sendOtpEmail } = await import('@/lib/otp');

@@ -147,6 +147,52 @@ describe('useOtpVerification', () => {
     expect(result.current.apiError).toBe('ネットワークエラーが発生しました。');
   });
 
+  it('handleResend: APIエラー時にエラーメッセージが設定される', async () => {
+    const { result } = renderHook(() => useOtpVerification(defaultProps));
+
+    act(() => {
+      jest.advanceTimersByTime(60 * 1000);
+    });
+
+    jest.useRealTimers();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({
+        error: { message: '再送信間隔が短すぎます。' },
+      }),
+    });
+
+    await act(async () => {
+      await result.current.handleResend();
+    });
+
+    expect(result.current.apiError).toBe('再送信間隔が短すぎます。');
+    // カウントダウンはリセットされない
+    expect(result.current.resendCountdown).toBe(0);
+  });
+
+  it('handleResend: APIエラーでメッセージがない場合デフォルトメッセージが設定される', async () => {
+    const { result } = renderHook(() => useOtpVerification(defaultProps));
+
+    act(() => {
+      jest.advanceTimersByTime(60 * 1000);
+    });
+
+    jest.useRealTimers();
+
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({}),
+    });
+
+    await act(async () => {
+      await result.current.handleResend();
+    });
+
+    expect(result.current.apiError).toBe('再送信に失敗しました。');
+  });
+
   it('handleResend: ネットワークエラー時にエラーメッセージが設定される', async () => {
     const { result } = renderHook(() => useOtpVerification(defaultProps));
 

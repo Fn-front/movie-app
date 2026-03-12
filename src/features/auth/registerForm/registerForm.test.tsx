@@ -251,4 +251,28 @@ describe('RegisterForm', () => {
     // OTP検証画面は表示されない
     expect(screen.queryByTestId('otp-verification')).not.toBeInTheDocument();
   });
+
+  it('ユーザー名なしで登録成功する', async () => {
+    mockRegisterUser.mockResolvedValue({
+      success: true,
+      data: { userId: '123' },
+      message: '確認コードをメールに送信しました。',
+    });
+
+    render(<RegisterForm />);
+    await fillForm({ name: '' });
+    await user.click(screen.getByRole('button', { name: '新規登録' }));
+
+    await waitFor(() => {
+      expect(mockRegisterUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: undefined,
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('otp-verification')).toBeInTheDocument();
+    });
+  });
 });

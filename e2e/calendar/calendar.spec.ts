@@ -3,7 +3,7 @@
  * クリティカルユーザージャーニー
  * - サイドバーボタンクリック → カレンダーダイアログ表示
  * - 月切り替え → データ更新確認
- * - 日付クリック → 映画一覧表示 → 映画クリック → 詳細モーダル表示
+ * - ESCキーでダイアログ閉じる
  */
 
 import { test, expect } from '../fixtures/auth';
@@ -41,21 +41,23 @@ test.describe('カレンダー', () => {
       timeout: 10000,
     });
 
+    // FullCalendarのタイトル（月名）を取得
+    const title = dialog.locator('.fc-toolbar-title');
+    const initialTitle = await title.textContent();
+
     // 次月ボタンをクリック
-    const nextButton = dialog
-      .getByRole('button', { name: /next/i })
-      .or(dialog.locator('button[name="next_month"]'));
-    if (await nextButton.isVisible()) {
-      await nextButton.click();
-    }
+    const nextButton = dialog.locator('.fc-next-button');
+    await nextButton.click();
+
+    // タイトルが変わることを確認
+    await expect(title).not.toHaveText(initialTitle ?? '');
 
     // 前月ボタンをクリック
-    const prevButton = dialog
-      .getByRole('button', { name: /previous/i })
-      .or(dialog.locator('button[name="previous_month"]'));
-    if (await prevButton.isVisible()) {
-      await prevButton.click();
-    }
+    const prevButton = dialog.locator('.fc-prev-button');
+    await prevButton.click();
+
+    // 元のタイトルに戻ることを確認
+    await expect(title).toHaveText(initialTitle ?? '');
   });
 
   test('ESCキーでダイアログが閉じる', async ({ page }) => {

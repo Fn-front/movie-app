@@ -75,7 +75,7 @@ export const CalendarDialog = memo<CalendarDialogProps>(
 
     const handleDatesSetCallback = useCallback(
       (arg: DatesSetArg) => {
-        handleDatesSet({ start: arg.start });
+        handleDatesSet({ currentStart: arg.view.currentStart });
       },
       [handleDatesSet],
     );

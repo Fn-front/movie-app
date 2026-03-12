@@ -16,6 +16,8 @@ jest.mock('@/lib/api/calendar/calendar', () => ({
   getCalendarMovies: (...args: unknown[]) => mockGetCalendarMovies(...args),
 }));
 
+jest.mock('@fullcalendar/core', () => ({}));
+
 // --- Helpers ---
 
 function createWrapper() {
@@ -320,5 +322,75 @@ describe('useCalendar', () => {
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
     });
+  });
+
+  it('calendarEventsがFullCalendar用の形式で生成される', async () => {
+    const { result } = renderHook(() => useCalendar(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.calendarEvents).toHaveLength(3);
+    expect(result.current.calendarEvents[0]).toEqual({
+      id: 'wl-1',
+      title: '映画A',
+      start: '2026-03-15',
+      extendedProps: {
+        tmdbMovieId: 100,
+        posterPath: '/a.jpg',
+      },
+    });
+  });
+
+  it('handleDatesSetで月が切り替わる', async () => {
+    const { result } = renderHook(() => useCalendar(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    const initialMonth = result.current.currentMonth.getMonth();
+
+    act(() => {
+      // 異なる月のcurrentStartを渡す
+      const differentMonth = new Date();
+      differentMonth.setMonth(differentMonth.getMonth() + 2);
+      differentMonth.setDate(1);
+      result.current.handleDatesSet({ currentStart: differentMonth });
+    });
+
+    expect(result.current.currentMonth.getMonth()).not.toBe(initialMonth);
+    expect(result.current.selectedDate).toBeUndefined();
+  });
+
+  it('handleDatesSetで同月の場合は状態が変わらない', async () => {
+    const { result } = renderHook(() => useCalendar(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    act(() => {
+      result.current.selectDate(new Date(2026, 2, 15));
+    });
+
+    expect(result.current.selectedDate).toBeDefined();
+
+    act(() => {
+      // 同じ月のcurrentStartを渡す
+      const sameMonth = new Date(result.current.currentMonth);
+      sameMonth.setDate(1);
+      result.current.handleDatesSet({ currentStart: sameMonth });
+    });
+
+    // 同月なので選択日はリセットされない
+    expect(result.current.selectedDate).toBeDefined();
   });
 });

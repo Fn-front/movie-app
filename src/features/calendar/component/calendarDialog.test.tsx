@@ -2,7 +2,7 @@
  * CalendarDialogコンポーネント テスト
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
@@ -24,12 +24,9 @@ jest.mock('@fullcalendar/react', () => {
   const MockFullCalendar = (props: {
     events?: Array<{ id: string; title: string; start: string }>;
     dateClick?: (arg: { date: Date; dateStr: string }) => void;
-    datesSet?: (arg: { start: Date; end: Date }) => void;
+    datesSet?: (arg: { view: { currentStart: Date } }) => void;
   }) => {
     mockDateClick.mockImplementation(props.dateClick);
-    if (props.datesSet) {
-      props.datesSet({ start: new Date(), end: new Date() });
-    }
     return (
       <div data-testid='fullcalendar'>
         {props.events?.map((event) => (
@@ -224,18 +221,22 @@ describe('CalendarDialog', () => {
       expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
     });
 
-    // モックされたdateClickコールバックを呼び出す
-    if (
-      mockDateClick.mock.calls.length > 0 ||
-      mockDateClick.getMockImplementation()
-    ) {
-      const dateClickHandler = mockDateClick.getMockImplementation();
-      if (dateClickHandler) {
-        dateClickHandler({
-          date: new Date(2026, 2, 15),
-          dateStr: '2026-03-15',
-        });
-      }
-    }
+    // モックされたdateClickコールバックが設定されていることを確認
+    const dateClickHandler = mockDateClick.getMockImplementation();
+    expect(dateClickHandler).toBeDefined();
+
+    // dateClickコールバックを呼び出して日付選択をシミュレート
+    await act(async () => {
+      dateClickHandler!({
+        date: new Date(2026, 2, 15),
+        dateStr: '2026-03-15',
+      });
+    });
+
+    // 選択日の映画一覧が表示される
+    await waitFor(() => {
+      expect(screen.getByText('2026年3月15日（1件）')).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText('映画Aの詳細を表示')).toBeInTheDocument();
   });
 });

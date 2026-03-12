@@ -43,7 +43,7 @@ export interface UseCalendarReturn {
   /** 日付を選択 */
   selectDate: (date: Date | undefined) => void;
   /** FullCalendarの月変更時コールバック */
-  handleDatesSet: (dateInfo: { start: Date }) => void;
+  handleDatesSet: (dateInfo: { currentStart: Date }) => void;
   /** キャッシュをクリアして再取得 */
   resetCache: () => void;
   /** ローディング中 */
@@ -128,10 +128,8 @@ export function useCalendar(): UseCalendarReturn {
   }, []);
 
   const handleDatesSet = useCallback(
-    (dateInfo: { start: Date }) => {
-      const newMonth = new Date(dateInfo.start);
-      // FullCalendarのstartは月初の前週を含むため、中旬にずらす
-      newMonth.setDate(15);
+    (dateInfo: { currentStart: Date }) => {
+      const newMonth = dateInfo.currentStart;
       const newMonthStr = formatMonth(newMonth);
       const currentMonthStr = formatMonth(currentMonth);
       if (newMonthStr !== currentMonthStr) {

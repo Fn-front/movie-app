@@ -156,6 +156,24 @@ describe('GET /api/watchlist/calendar', () => {
     expect(json.error.code).toBe('VALIDATION_ERROR');
   });
 
+  it('不正な月（00）で400を返す', async () => {
+    const response = await GET(createGetRequest({ month: '2026-00' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('不正な月（13）で400を返す', async () => {
+    const response = await GET(createGetRequest({ month: '2026-13' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+  });
+
   it('DBエラー時に500を返す', async () => {
     mockCalendarQuery(null, new Error('DB error'));
 

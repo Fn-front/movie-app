@@ -88,7 +88,8 @@ export async function GET(request: Request) {
     > = {};
 
     for (const item of data ?? []) {
-      const date = item.release_date as string;
+      if (!item.release_date) continue;
+      const date = item.release_date;
       if (!moviesByDate[date]) {
         moviesByDate[date] = [];
       }

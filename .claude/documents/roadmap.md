@@ -653,7 +653,7 @@
 ## フェーズ5: カレンダー機能（1週間）
 
 ### セットアップ
-- [x] react-day-picker インストール・設定
+- [x] FullCalendar（@fullcalendar/react + daygrid + interaction）インストール・設定
   - SCSS Modulesでのカスタムスタイリング設定
 
 ### カレンダー用API
@@ -733,7 +733,7 @@
 - [x] E2Eテスト（Playwright）
   - サイドバーボタンクリック → カレンダーダイアログ表示
   - 月切り替え → データ更新確認
-  - 日付クリック → 映画一覧表示 → 映画クリック → 詳細モーダル表示
+  - ESCキーでダイアログ閉じる
 
 ---
 

@@ -25,10 +25,16 @@ import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import styles from './loginForm.module.scss';
 
+interface LoginFormProps {
+  onOtpLoginClick?: () => void;
+}
+
 /**
  * ログインフォーム
  */
-export const LoginForm = memo(function LoginForm() {
+export const LoginForm = memo<LoginFormProps>(function LoginForm({
+  onOtpLoginClick,
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const [apiError, setApiError] = useState<string | null>(null);
@@ -138,6 +144,18 @@ export const LoginForm = memo(function LoginForm() {
           </div>
         </div>
       </form>
+
+      {onOtpLoginClick && (
+        <p className={styles.c_login_form__footer}>
+          <button
+            type='button'
+            className={styles.c_login_form__link}
+            onClick={onOtpLoginClick}
+          >
+            メールでログイン
+          </button>
+        </p>
+      )}
 
       <p className={styles.c_login_form__footer}>
         アカウントをお持ちでない方は{' '}

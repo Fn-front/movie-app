@@ -150,7 +150,7 @@ describe('POST /api/auth/register', () => {
     expect(response.status).toBe(500);
   });
 
-  it('OTPメール送信失敗で500を返す', async () => {
+  it('OTPメール送信失敗で500を返し、ユーザー・OTPレコードを削除する', async () => {
     // 既存ユーザーなし
     mockFrom.mockReturnValueOnce({
       select: () => ({
@@ -175,6 +175,13 @@ describe('POST /api/auth/register', () => {
 
     mockSendOtpEmail.mockResolvedValueOnce(false);
 
+    // ロールバック: OTPレコード削除
+    const mockOtpDelete = jest.fn().mockReturnValue({ eq: jest.fn() });
+    mockFrom.mockReturnValueOnce({ delete: mockOtpDelete });
+    // ロールバック: ユーザーレコード削除
+    const mockUserDelete = jest.fn().mockReturnValue({ eq: jest.fn() });
+    mockFrom.mockReturnValueOnce({ delete: mockUserDelete });
+
     const response = await POST(
       createRequest({
         email: 'test@example.com',
@@ -185,6 +192,9 @@ describe('POST /api/auth/register', () => {
 
     expect(response.status).toBe(500);
     expect(json.success).toBe(false);
+    // ロールバックが実行されたことを確認
+    expect(mockOtpDelete).toHaveBeenCalled();
+    expect(mockUserDelete).toHaveBeenCalled();
   });
 
   it('OTP INSERT失敗で500を返す', async () => {

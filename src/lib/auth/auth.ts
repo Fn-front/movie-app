@@ -67,6 +67,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
+        // メール認証チェック（パスワード照合前に実施し、不要なbcrypt計算を回避）
+        if (!user.is_verified) {
+          throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
+        }
+
         // パスワード未設定（ソーシャルログインのみのユーザー）
         if (!user.password_hash) {
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
@@ -80,11 +85,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!isPasswordValid) {
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
-        }
-
-        // メール認証チェック
-        if (!user.is_verified) {
-          throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
         }
 
         // 認証成功 — レート制限リセット

@@ -105,6 +105,10 @@ export async function POST(request: Request) {
     const emailSent = await sendOtpEmail(email, code);
 
     if (!emailSent) {
+      // メール送信失敗時はユーザー・OTPレコードを削除（ロールバック）
+      await supabase.from('otp_codes').delete().eq('email', email);
+      await supabase.from('users').delete().eq('id', newUser.id);
+
       return NextResponse.json(
         {
           success: false,

@@ -306,6 +306,54 @@ describe('POST /api/auth/otp/verify', () => {
     expect(json.error.details.remainingAttempts).toBe(2);
   });
 
+  it('registration: is_verified更新失敗で500を返す', async () => {
+    // OTPレコード取得
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            is: () => ({
+              order: () => ({
+                limit: () => ({
+                  single: () => ({
+                    data: {
+                      id: 'otp-1',
+                      email: 'test@example.com',
+                      code: '123456',
+                      action_type: 'registration',
+                      attempts: 0,
+                      expires_at: futureDate,
+                      verified_at: null,
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    // usersテーブル更新失敗
+    mockFrom.mockReturnValueOnce({
+      update: () => ({
+        eq: () => ({ data: null, error: new Error('Update failed') }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({
+        email: 'test@example.com',
+        code: '123456',
+        action: 'registration',
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    const json = await response.json();
+    expect(json.success).toBe(false);
+  });
+
   it('password_change: 正常にOTPを検証して検証済みフラグを設定できる', async () => {
     // OTPレコード取得
     mockFrom.mockReturnValueOnce({

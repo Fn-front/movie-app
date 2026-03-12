@@ -39,6 +39,39 @@ export async function registerUser(
 }
 
 /**
+ * OTP送信リクエストの型
+ */
+export interface SendOtpRequest {
+  email: string;
+  action: string;
+}
+
+/**
+ * OTP送信レスポンスの型
+ */
+export interface SendOtpResponse {
+  success: boolean;
+  message?: string;
+  error?: {
+    message: string;
+  };
+}
+
+/**
+ * OTP送信
+ *
+ * @param data - OTP送信データ
+ * @returns OTP送信レスポンス
+ */
+export async function sendOtp(data: SendOtpRequest): Promise<SendOtpResponse> {
+  const response = await axiosInstance.post<SendOtpResponse>(
+    '/api/auth/otp/send',
+    data,
+  );
+  return response.data;
+}
+
+/**
  * パスワード変更リクエストの型（OTP検証後）
  */
 export interface ChangePasswordRequest {

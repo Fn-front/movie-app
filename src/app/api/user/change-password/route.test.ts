@@ -124,8 +124,8 @@ describe('POST /api/user/change-password', () => {
       verified_at: new Date().toISOString(),
     });
     mockBcryptCompare.mockResolvedValueOnce(false); // newPassword is different
+    mockOtpDelete(); // OTP削除（パスワード更新前に無効化）
     mockUpdateSuccess();
-    mockOtpDelete(); // OTP削除
 
     const response = await POST(
       createRequest({ newPassword: 'NewPassword1' }),
@@ -236,8 +236,8 @@ describe('POST /api/user/change-password', () => {
       verified_at: new Date().toISOString(),
     });
     // password_hash が null なので同一チェックはスキップされる
+    mockOtpDelete(); // OTP削除（パスワード更新前に無効化）
     mockUpdateSuccess();
-    mockOtpDelete();
 
     const response = await POST(
       createRequest({ newPassword: 'NewPassword1' }),

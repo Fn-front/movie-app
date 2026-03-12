@@ -155,6 +155,9 @@ export async function POST(request: Request) {
       }
     }
 
+    // 検証済みOTPを先に削除（TOCTOU対策: パスワード更新前にOTPを無効化）
+    await supabase.from('otp_codes').delete().eq('id', verifiedOtp.id);
+
     // 新パスワードハッシュ化
     const newPasswordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
 
@@ -170,9 +173,6 @@ export async function POST(request: Request) {
     if (updateError) {
       throw updateError;
     }
-
-    // 検証済みOTPを削除（ワンタイム使用）
-    await supabase.from('otp_codes').delete().eq('id', verifiedOtp.id);
 
     // レート制限リセット（成功時）
     await resetRateLimit(supabase, session.user.id, RATE_LIMIT_ACTION);

@@ -21,7 +21,7 @@ import {
 } from '@/schema/auth';
 import { OTP_ACTION } from '@/constants/otp';
 import { AUTH_ERROR_MESSAGES, TOAST_TITLES } from '@/constants';
-import { changePassword } from '@/lib/api/auth/auth';
+import { changePassword, sendOtp } from '@/lib/api/auth/auth';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import styles from './changePasswordForm.module.scss';
@@ -62,25 +62,11 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
       setApiError(null);
 
       try {
-        const response = await fetch('/api/auth/otp/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email,
-            action: OTP_ACTION.PASSWORD_CHANGE,
-          }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          setApiError(data.error?.message || 'コードの送信に失敗しました。');
-          return;
-        }
-
+        await sendOtp({ email, action: OTP_ACTION.PASSWORD_CHANGE });
         setStep('verify_otp');
-      } catch {
-        setApiError('ネットワークエラーが発生しました。');
+      } catch (error) {
+        const { message } = handleApiError(error);
+        setApiError(message ?? 'コードの送信に失敗しました。');
       } finally {
         setIsSendingOtp(false);
       }
@@ -88,6 +74,7 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
 
     // ステップ2: OTP検証成功
     const handleOtpVerifySuccess = useCallback(() => {
+      setApiError(null);
       setStep('new_password');
     }, []);
 
@@ -109,6 +96,7 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
             variant: 'success',
           });
           reset();
+          // 成功後は初期画面に戻り、successMessageをステップ1で表示する
           setStep('send_otp');
         } catch (error) {
           const { message } = handleApiError(error);

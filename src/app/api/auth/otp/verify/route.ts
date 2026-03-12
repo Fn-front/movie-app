@@ -160,12 +160,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // 想定外のアクション（zodバリデーション通過後のため到達しないはずだが防御的に処理）
     return NextResponse.json(
       {
-        success: true,
-        message: OTP_SUCCESS_MESSAGES.CODE_VERIFIED,
+        success: false,
+        error: {
+          code: ERROR_CODE.BAD_REQUEST,
+          message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
+        },
       },
-      { status: HTTP_STATUS.OK },
+      { status: HTTP_STATUS.BAD_REQUEST },
     );
   } catch (error) {
     console.error('OTP verify error:', error);
@@ -175,7 +179,7 @@ export async function POST(request: Request) {
         success: false,
         error: {
           code: ERROR_CODE.SERVER_ERROR,
-          message: AUTH_ERROR_MESSAGES.REGISTER_SERVER_ERROR,
+          message: OTP_ERROR_MESSAGES.VERIFY_SERVER_ERROR,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

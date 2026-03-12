@@ -53,6 +53,8 @@ export const OTP_ERROR_MESSAGES = {
   EMAIL_SEND_FAILED: '確認コードの送信に失敗しました。',
   /** OTP検証が未完了 */
   OTP_NOT_VERIFIED: 'OTP検証が完了していません。',
+  /** サーバーエラー */
+  VERIFY_SERVER_ERROR: 'OTP検証中にエラーが発生しました。',
 } as const;
 
 /**

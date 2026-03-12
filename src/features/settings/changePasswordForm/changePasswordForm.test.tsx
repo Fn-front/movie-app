@@ -11,53 +11,115 @@ jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
+const mockSendOtp = jest.fn();
 const mockChangePassword = jest.fn();
 jest.mock('@/lib/api/auth/auth', () => ({
+  sendOtp: (...args: unknown[]) => mockSendOtp(...args),
   changePassword: (...args: unknown[]) => mockChangePassword(...args),
 }));
+
+jest.mock('@/features/auth/otpVerification/otpVerification', () => ({
+  OtpVerification: ({
+    email,
+    onVerifySuccess,
+  }: {
+    email: string;
+    action: string;
+    onVerifySuccess?: () => void;
+  }) => (
+    <div data-testid='otp-verification'>
+      <span data-testid='otp-email'>{email}</span>
+      <button onClick={onVerifySuccess} data-testid='otp-verify-success'>
+        検証成功
+      </button>
+    </div>
+  ),
+}));
+
+// --- Helpers ---
+
+const user = userEvent.setup();
+const defaultEmail = 'test@example.com';
+
+/** OTP送信 → OTP検証成功 → 新パスワード入力画面まで遷移するヘルパー */
+const goToNewPasswordStep = async () => {
+  mockSendOtp.mockResolvedValueOnce({ success: true });
+
+  render(<ChangePasswordForm email={defaultEmail} />);
+
+  await user.click(screen.getByRole('button', { name: '確認コードを送信' }));
+
+  await waitFor(() => {
+    expect(screen.getByTestId('otp-verification')).toBeInTheDocument();
+  });
+
+  await user.click(screen.getByTestId('otp-verify-success'));
+
+  await waitFor(() => {
+    expect(screen.getByLabelText('新しいパスワード')).toBeInTheDocument();
+  });
+};
 
 // --- Tests ---
 
 describe('ChangePasswordForm', () => {
-  const user = userEvent.setup();
-
-  const fillForm = async (overrides?: {
-    currentPassword?: string;
-    newPassword?: string;
-    confirmNewPassword?: string;
-  }) => {
-    const values = {
-      currentPassword: 'OldPassword1',
-      newPassword: 'NewPassword1',
-      confirmNewPassword: 'NewPassword1',
-      ...overrides,
-    };
-
-    await user.type(
-      screen.getByLabelText('現在のパスワード'),
-      values.currentPassword,
-    );
-    await user.type(
-      screen.getByLabelText('新しいパスワード'),
-      values.newPassword,
-    );
-    await user.type(
-      screen.getByLabelText('新しいパスワード（確認）'),
-      values.confirmNewPassword,
-    );
-  };
-
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('フォームが正しく表示される', () => {
-    render(<ChangePasswordForm />);
+  it('初期状態で確認コード送信ボタンが表示される', () => {
+    render(<ChangePasswordForm email={defaultEmail} />);
 
     expect(
-      screen.getByRole('heading', { name: 'パスワード変更' }),
+      screen.getByText(
+        'パスワードを変更するには、メールアドレスに確認コードを送信します。',
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('現在のパスワード')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '確認コードを送信' }),
+    ).toBeInTheDocument();
+  });
+
+  it('確認コード送信成功時にOTP検証画面に遷移する', async () => {
+    mockSendOtp.mockResolvedValueOnce({ success: true });
+
+    render(<ChangePasswordForm email={defaultEmail} />);
+
+    await user.click(screen.getByRole('button', { name: '確認コードを送信' }));
+
+    await waitFor(() => {
+      expect(mockSendOtp).toHaveBeenCalledWith({
+        email: defaultEmail,
+        action: 'password_change',
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('otp-verification')).toBeInTheDocument();
+      expect(screen.getByTestId('otp-email')).toHaveTextContent(defaultEmail);
+    });
+  });
+
+  it('確認コード送信失敗時にエラーが表示される', async () => {
+    mockSendOtp.mockRejectedValueOnce(
+      new AxiosError('Send failed', 'ERR_BAD_REQUEST'),
+    );
+
+    render(<ChangePasswordForm email={defaultEmail} />);
+
+    await user.click(screen.getByRole('button', { name: '確認コードを送信' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+
+    // OTP検証画面には遷移しない
+    expect(screen.queryByTestId('otp-verification')).not.toBeInTheDocument();
+  });
+
+  it('OTP検証成功後に新パスワード入力フォームが表示される', async () => {
+    await goToNewPasswordStep();
+
     expect(screen.getByLabelText('新しいパスワード')).toBeInTheDocument();
     expect(
       screen.getByLabelText('新しいパスワード（確認）'),
@@ -67,42 +129,11 @@ describe('ChangePasswordForm', () => {
     ).toBeInTheDocument();
   });
 
-  it('空フォーム送信時にバリデーションエラーが表示される', async () => {
-    render(<ChangePasswordForm />);
+  it('新パスワードが短すぎるとバリデーションエラーが表示される', async () => {
+    await goToNewPasswordStep();
 
-    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
-
-    await waitFor(() => {
-      expect(mockChangePassword).not.toHaveBeenCalled();
-    });
-  });
-
-  it('現在のパスワード未入力でバリデーションエラーが表示される', async () => {
-    render(<ChangePasswordForm />);
-
-    await user.type(screen.getByLabelText('新しいパスワード'), 'NewPass123');
-    await user.type(
-      screen.getByLabelText('新しいパスワード（確認）'),
-      'NewPass123',
-    );
-    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
-
-    await waitFor(() => {
-      expect(
-        screen.getByText('パスワードを入力してください'),
-      ).toBeInTheDocument();
-    });
-    expect(mockChangePassword).not.toHaveBeenCalled();
-  });
-
-  it('新しいパスワードが短すぎるとバリデーションエラーが表示される', async () => {
-    render(<ChangePasswordForm />);
-
-    await fillForm({
-      currentPassword: 'Current123',
-      newPassword: 'Pw1',
-      confirmNewPassword: 'Pw1',
-    });
+    await user.type(screen.getByLabelText('新しいパスワード'), 'Pw1');
+    await user.type(screen.getByLabelText('新しいパスワード（確認）'), 'Pw1');
     await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
 
     await waitFor(() => {
@@ -113,14 +144,17 @@ describe('ChangePasswordForm', () => {
     expect(mockChangePassword).not.toHaveBeenCalled();
   });
 
-  it('新しいパスワード確認が一致しないとバリデーションエラーが表示される', async () => {
-    render(<ChangePasswordForm />);
+  it('新パスワード確認が一致しないとバリデーションエラーが表示される', async () => {
+    await goToNewPasswordStep();
 
-    await fillForm({
-      currentPassword: 'Current123',
-      newPassword: 'NewPassword123',
-      confirmNewPassword: 'Different123',
-    });
+    await user.type(
+      screen.getByLabelText('新しいパスワード'),
+      'NewPassword123',
+    );
+    await user.type(
+      screen.getByLabelText('新しいパスワード（確認）'),
+      'Different123',
+    );
     await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
 
     await waitFor(() => {
@@ -129,19 +163,23 @@ describe('ChangePasswordForm', () => {
     expect(mockChangePassword).not.toHaveBeenCalled();
   });
 
-  it('パスワード変更成功時にトーストと成功メッセージが表示される', async () => {
+  it('パスワード変更成功時にトーストと成功メッセージが表示され初期画面に戻る', async () => {
     mockChangePassword.mockResolvedValue({
       success: true,
       message: 'パスワードを変更しました。',
     });
 
-    render(<ChangePasswordForm />);
-    await fillForm();
+    await goToNewPasswordStep();
+
+    await user.type(screen.getByLabelText('新しいパスワード'), 'NewPassword1');
+    await user.type(
+      screen.getByLabelText('新しいパスワード（確認）'),
+      'NewPassword1',
+    );
     await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
 
     await waitFor(() => {
       expect(mockChangePassword).toHaveBeenCalledWith({
-        currentPassword: 'OldPassword1',
         newPassword: 'NewPassword1',
       });
     });
@@ -150,6 +188,10 @@ describe('ChangePasswordForm', () => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({ variant: 'success' }),
       );
+      // 初期画面（OTP送信ステップ）に戻る
+      expect(
+        screen.getByRole('button', { name: '確認コードを送信' }),
+      ).toBeInTheDocument();
       expect(screen.getByRole('status')).toHaveTextContent(
         'パスワードを変更しました。',
       );
@@ -161,8 +203,13 @@ describe('ChangePasswordForm', () => {
       new AxiosError('Change failed', 'ERR_BAD_REQUEST'),
     );
 
-    render(<ChangePasswordForm />);
-    await fillForm();
+    await goToNewPasswordStep();
+
+    await user.type(screen.getByLabelText('新しいパスワード'), 'NewPassword1');
+    await user.type(
+      screen.getByLabelText('新しいパスワード（確認）'),
+      'NewPassword1',
+    );
     await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
 
     await waitFor(() => {

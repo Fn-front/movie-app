@@ -103,11 +103,10 @@ export const otpLoginEmailSchema = z.object({
 export type OtpLoginEmailFormData = z.infer<typeof otpLoginEmailSchema>;
 
 /**
- * パスワード変更フォームのバリデーションスキーマ
+ * パスワード変更フォームのバリデーションスキーマ（新パスワードのみ）
  */
 export const changePasswordSchema = z
   .object({
-    currentPassword: z.string().min(1, VALIDATION_MESSAGES.PASSWORD_REQUIRED),
     newPassword: passwordSchema,
     confirmNewPassword: z
       .string()
@@ -124,9 +123,8 @@ export const changePasswordSchema = z
 export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 
 /**
- * パスワード変更APIリクエストのバリデーションスキーマ
+ * パスワード変更APIリクエストのバリデーションスキーマ（OTP検証後）
  */
 export const changePasswordApiSchema = z.object({
-  currentPassword: z.string().min(1, VALIDATION_MESSAGES.PASSWORD_REQUIRED),
   newPassword: passwordSchema,
 });

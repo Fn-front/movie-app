@@ -1001,12 +1001,12 @@
 - [x] LoginForm / RegisterFormにSocialLoginButtons配置
 
 ### Step 6: パスワード変更フロー改修
-- [ ] パスワード変更API改修（`POST /api/user/change-password`）
+- [x] パスワード変更API改修（`POST /api/user/change-password`）
   - OTPコード検証を追加
   - 現在のパスワード入力を廃止
-- [ ] PasswordChangeFormコンポーネント作成
+- [x] PasswordChangeFormコンポーネント作成
   - OTP送信 → OTP入力 + 新パスワード入力
-- [ ] 設定画面にPasswordChangeForm配置
+- [x] 設定画面にPasswordChangeForm配置
 
 ### Step 7: テスト
 - [ ] OTP送信APIテスト

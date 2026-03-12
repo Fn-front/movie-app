@@ -8,6 +8,7 @@
 import { type ReactNode, memo } from 'react';
 
 import { Header } from '@/components/layout/header/header';
+import { SearchBar } from '@/components/layout/searchBar/searchBar';
 import { Sidebar } from '@/components/layout/sidebar/sidebar';
 import { SideNav } from '@/components/layout/sideNav/sideNav';
 import { UserMenu } from '@/components/layout/userMenu/userMenu';
@@ -44,7 +45,7 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
   return (
     <div className={styles.c_app_layout}>
       <div className={styles.c_app_layout__header}>
-        <Header />
+        <Header searchBar={<SearchBar />} />
       </div>
 
       <div className={styles.c_app_layout__body}>

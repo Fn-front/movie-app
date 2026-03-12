@@ -1,0 +1,60 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_search_bar {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background-color: $background-secondary;
+  border: $border-width-1 solid $border-color;
+  border-radius: $border-radius-full;
+  transition: $transition-all;
+
+  &:focus-within {
+    border-color: $primary-500;
+    box-shadow: 0 0 0 3px rgba($primary-500, 0.1);
+  }
+
+  // 検索入力フィールド
+  &__input {
+    @include input-reset;
+
+    flex: 1;
+    padding: $spacing-2 $spacing-4;
+    font-family: $font-family-base;
+    font-size: $font-size-sm;
+    color: $text-primary;
+    min-width: 0;
+
+    &::placeholder {
+      color: $text-secondary;
+    }
+  }
+
+  // 検索ボタン
+  &__button {
+    @include button-reset;
+    @include flex-center;
+
+    flex-shrink: 0;
+    width: 3.6rem;
+    height: 3.6rem;
+    border-radius: $border-radius-full;
+    color: $text-secondary;
+    transition: $transition-all;
+
+    &:hover:not(:disabled) {
+      color: $primary-500;
+      background-color: $primary-50;
+    }
+
+    &:focus-visible {
+      @include focus-visible;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+}

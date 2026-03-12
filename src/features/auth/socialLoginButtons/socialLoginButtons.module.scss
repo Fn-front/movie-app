@@ -1,0 +1,39 @@
+@use '@/styles/variables' as *;
+
+.c_social_login {
+  margin-top: $spacing-6;
+}
+
+.c_social_login__divider {
+  display: flex;
+  align-items: center;
+  gap: $spacing-4;
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: $border-width-1;
+    background-color: $gray-300;
+  }
+}
+
+.c_social_login__divider_text {
+  font-size: $font-size-sm;
+  color: $gray-500;
+  white-space: nowrap;
+}
+
+.c_social_login__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+  margin-top: $spacing-6;
+}
+
+.c_social_login__button_content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-2;
+}

@@ -21,6 +21,12 @@ jest.mock('next-auth/react', () => ({
   signIn: jest.fn(),
 }));
 
+jest.mock('@/features/auth/socialLoginButtons/socialLoginButtons', () => ({
+  SocialLoginButtons: ({ disabled }: { disabled?: boolean }) => (
+    <div data-testid='social-login-buttons' data-disabled={disabled} />
+  ),
+}));
+
 const mockSignIn = signIn as jest.MockedFunction<typeof signIn>;
 
 // --- Tests ---
@@ -43,6 +49,7 @@ describe('LoginForm', () => {
     expect(
       screen.getByRole('button', { name: 'ログイン' }),
     ).toBeInTheDocument();
+    expect(screen.getByTestId('social-login-buttons')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '新規登録' })).toHaveAttribute(
       'href',
       '/auth/signup',

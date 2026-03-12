@@ -23,6 +23,7 @@ import {
 } from '@/constants';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
+import { SocialLoginButtons } from '@/features/auth/socialLoginButtons/socialLoginButtons';
 import styles from './loginForm.module.scss';
 
 interface LoginFormProps {
@@ -144,6 +145,8 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
           </div>
         </div>
       </form>
+
+      <SocialLoginButtons disabled={isSubmitting} />
 
       {onOtpLoginClick && (
         <p className={styles.c_login_form__footer}>

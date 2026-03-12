@@ -954,8 +954,10 @@
 ### Step 2: OTP基盤実装 + OTPVerificationコンポーネント
 - [ ] OTPコード生成ユーティリティ（crypto.randomInt、6桁数字）
 - [ ] OTPメール送信処理（Resend統合）
+  - Resend SDKセットアップ（`resend` パッケージ）
   - メールテンプレート作成
   - 送信元メールアドレス設定
+  - 無料枠制約考慮（3,000通/月、100通/日、2req/s）
 - [ ] OTP送信API実装（`POST /api/auth/otp/send`）
   - action別バリデーション（registration / login / password_change）
   - 再送間隔チェック（1分）

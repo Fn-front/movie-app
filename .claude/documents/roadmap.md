@@ -766,11 +766,11 @@
 - [x] ジャンル一覧API実装（`GET /api/movies/genres`）
 
 ### Step 3: SearchBarコンポーネント + Header配置
-- [ ] SearchBarコンポーネント実装
+- [x] SearchBarコンポーネント実装
   - テキスト入力 + 検索アイコンボタン
   - Enter or アイコンクリックで `/search?query=xxx` にページ遷移
   - デバウンスなし（ページ遷移トリガーのため不要）
-- [ ] Headerへの配置
+- [x] Headerへの配置
 
 ### Step 4: 検索結果ページ + SearchResultsコンポーネント
 - [ ] 検索結果ページ実装（`/app/search/page.tsx`）

@@ -225,7 +225,7 @@ export async function GET(request: Request) {
               !existingOtherTypeIds.has(movie.id) &&
               movie.genre_ids &&
               movie.genre_ids.length > 0 &&
-              movie.vote_average >= MIN_VOTE_AVERAGE &&
+              (movie.vote_average === 0 || movie.vote_average >= MIN_VOTE_AVERAGE) &&
               movie.popularity >= MIN_POPULARITY,
           );
 

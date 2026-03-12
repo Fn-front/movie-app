@@ -86,7 +86,7 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
       return false;
     }
     if (
-      movie.vote_average < MIN_VOTE_AVERAGE ||
+      (movie.vote_average > 0 && movie.vote_average < MIN_VOTE_AVERAGE) ||
       movie.popularity < MIN_POPULARITY
     ) {
       result.skipped++;

@@ -29,7 +29,6 @@ function filterMovies(
   movies: Movie[],
   options: {
     genreIds?: number[];
-    year?: number;
     voteAverageGte?: number;
   },
 ): Movie[] {
@@ -40,14 +39,6 @@ function filterMovies(
         movie.genre_ids.includes(id),
       );
       if (!hasMatchingGenre) return false;
-    }
-
-    // 年代フィルター: release_dateの年と一致するか
-    if (options.year !== undefined) {
-      const releaseYear = movie.release_date
-        ? new Date(movie.release_date).getFullYear()
-        : null;
-      if (releaseYear !== options.year) return false;
     }
 
     // 評価フィルター: vote_averageが閾値以上か

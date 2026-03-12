@@ -127,10 +127,14 @@ export async function POST(request: Request) {
     // アクション別後処理
     if (action === OTP_ACTION.REGISTRATION) {
       // is_verified = true に更新
-      await supabase
+      const { error: updateError } = await supabase
         .from('users')
         .update({ is_verified: true })
         .eq('email', email);
+
+      if (updateError) {
+        throw updateError;
+      }
 
       // OTPレコード削除
       await supabase.from('otp_codes').delete().eq('id', otpRecord.id);

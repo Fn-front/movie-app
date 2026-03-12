@@ -17,7 +17,10 @@ export const AUTH_ERROR_MESSAGES = {
   /** 登録失敗 */
   REGISTER_FAILED: '登録に失敗しました。',
   /** 登録成功 */
-  REGISTER_SUCCESS: '登録が完了しました。',
+  REGISTER_SUCCESS: '確認コードをメールに送信しました。',
+  /** メール未認証エラー */
+  EMAIL_NOT_VERIFIED:
+    'メール認証が完了していません。登録時に送信された確認コードで認証してください。',
   /** バリデーションエラー */
   VALIDATION_ERROR: '入力内容に誤りがあります。',
   /** 現在のパスワードが不正 */
@@ -65,8 +68,10 @@ export const TOAST_MESSAGES = {
   /** ログイン成功時の説明 */
   LOGIN_SUCCESS_DESCRIPTION: 'ホーム画面に移動します。',
   /** 登録成功時の説明 */
-  REGISTER_SUCCESS_DESCRIPTION:
-    'アカウントが作成されました。ログインしてください。',
+  REGISTER_SUCCESS_DESCRIPTION: '確認コードをメールに送信しました。',
+  /** メール認証完了時の説明 */
+  REGISTER_VERIFIED_DESCRIPTION:
+    'メール認証が完了しました。ログインしてください。',
 } as const;
 
 /**

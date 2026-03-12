@@ -1,5 +1,8 @@
 /**
  * 新規登録フォームコンポーネント
+ *
+ * 登録成功後、OTP検証画面に切り替わる。
+ * OTP検証成功後、ログインページへ遷移する。
  */
 
 'use client';
@@ -20,9 +23,11 @@ import {
   TOAST_MESSAGES,
   ROUTES,
 } from '@/constants';
+import { OTP_ACTION } from '@/constants/otp';
 import { registerUser } from '@/lib/api/auth/auth';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
+import { OtpVerification } from '@/features/auth/otpVerification/otpVerification';
 import styles from './registerForm.module.scss';
 
 /**
@@ -32,6 +37,7 @@ export const RegisterForm = memo(function RegisterForm() {
   const router = useRouter();
   const { toast } = useToast();
   const [apiError, setApiError] = useState<string | null>(null);
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
 
   const {
     register,
@@ -64,7 +70,8 @@ export const RegisterForm = memo(function RegisterForm() {
           variant: 'success',
         });
 
-        router.push(ROUTES.LOGIN);
+        // OTP検証画面に切り替え
+        setRegisteredEmail(data.email);
       } catch (error) {
         const { message } = handleApiError(error);
         const errorMessage = message ?? AUTH_ERROR_MESSAGES.REGISTER_FAILED;
@@ -76,8 +83,28 @@ export const RegisterForm = memo(function RegisterForm() {
         });
       }
     },
-    [router, toast],
+    [toast],
   );
+
+  const handleOtpVerifySuccess = useCallback(() => {
+    toast({
+      title: TOAST_TITLES.REGISTER_SUCCESS,
+      description: TOAST_MESSAGES.REGISTER_VERIFIED_DESCRIPTION,
+      variant: 'success',
+    });
+    router.push(ROUTES.LOGIN);
+  }, [router, toast]);
+
+  // OTP検証画面を表示
+  if (registeredEmail) {
+    return (
+      <OtpVerification
+        email={registeredEmail}
+        action={OTP_ACTION.REGISTRATION}
+        onVerifySuccess={handleOtpVerifySuccess}
+      />
+    );
+  }
 
   return (
     <div className={styles.c_register_form}>

@@ -434,53 +434,102 @@ showToast({
 ---
 
 ### SearchBar
-検索バー
+Header用検索バー（ページ遷移トリガー）
+
+**配置**: Header内
 
 **Props:**
-- `onSearch`: (query: string) => void
+- `defaultValue`: string（URLのqueryパラメータから初期値設定用）
 - `placeholder`: string
+
+**動作:**
+- テキスト入力 + 検索アイコンボタン
+- Enter or 検索アイコンクリック → `router.push('/search?query=xxx')` でページ遷移
+- デバウンスなし（ページ遷移トリガーのため不要）
+- 空文字での検索は防止
 
 **使用例:**
 ```tsx
 <SearchBar
-  onSearch={handleSearch}
+  defaultValue={currentQuery}
   placeholder="映画を検索..."
 />
 ```
 
 ---
 
-### MovieFilter
-映画フィルターコンポーネント（検索機能用）
+### SearchResults
+検索結果一覧コンポーネント
 
 **Props:**
-- `onFilterChange`: (filters: FilterOptions) => void
-- `genres`: Array<{ id: number; name: string }>
-
-**FilterOptions型:**
 ```typescript
-type FilterOptions = {
-  genre?: number[];     // ジャンルID配列
-  year?: number;        // 公開年
-  vote_average_gte?: number;  // 最低評価
-}
+type SearchResultsProps = {
+  movies: Movie[];
+  totalResults: number;
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  onMovieClick: (movieId: number) => void;
+  isLoading: boolean;
+};
 ```
 
 **表示内容:**
-- ジャンル選択（マルチセレクト）
-- 年代選択（ドロップダウン）
-- 評価選択（スライダー or ドロップダウン）
+- 結果件数表示（例: 「123件の検索結果」）
+- 既存MovieTileを使用した映画一覧（グリッドレイアウト）
+- 既存Paginationコンポーネントによるページ切り替え
+- ローディング中は既存MovieTileSkeletonを表示
+- 結果なし時は既存EmptyStateコンポーネントを表示
+
+**使用例:**
+```tsx
+<SearchResults
+  movies={searchResults}
+  totalResults={200}
+  currentPage={1}
+  totalPages={10}
+  onPageChange={handlePageChange}
+  onMovieClick={handleMovieClick}
+  isLoading={isSearching}
+/>
+```
+
+---
+
+### MovieFilter
+映画フィルターコンポーネント（検索結果ページ用）
+
+**Props:**
+```typescript
+type FilterOptions = {
+  genre?: number[];          // ジャンルID配列
+  year?: number;             // 公開年
+  vote_average_gte?: number; // 最低評価
+};
+
+type MovieFilterProps = {
+  currentFilters: FilterOptions;
+  onFilterChange: (filters: FilterOptions) => void;
+  genres: Array<{ id: number; name: string }>;
+};
+```
+
+**表示内容:**
+- ジャンルマルチセレクト（Radix UI Checkbox群）
+- 年代ドロップダウン（Radix UI Select、2020〜現在+5年先）
+- 評価選択（Radix UI Select、0〜10、0.5刻み）
 - フィルタークリアボタン
+
+**動作:**
+- フィルター変更 → `onFilterChange`コールバック → 親がURLパラメータを更新
+- URLパラメータ形式: `?genre=28,12&year=2024&rating=7.0`
 
 **使用例:**
 ```tsx
 <MovieFilter
+  currentFilters={{ genre: [28], year: 2024 }}
   onFilterChange={handleFilterChange}
-  genres={[
-    { id: 28, name: 'アクション' },
-    { id: 12, name: 'アドベンチャー' },
-    { id: 35, name: 'コメディ' }
-  ]}
+  genres={genres}
 />
 ```
 

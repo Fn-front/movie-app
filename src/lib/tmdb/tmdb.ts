@@ -228,6 +228,12 @@ export interface DiscoverMoviesParams {
   without_keywords?: string;
   /** 除外するジャンルID（パイプ区切り） */
   without_genres?: string;
+  /** ジャンルIDフィルター（カンマ区切り） */
+  with_genres?: string;
+  /** 公開年フィルター */
+  primary_release_year?: number;
+  /** 最低評価フィルター */
+  'vote_average.gte'?: number;
 }
 
 /**

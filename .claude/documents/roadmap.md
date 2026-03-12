@@ -1009,14 +1009,14 @@
 - [x] 設定画面にPasswordChangeForm配置
 
 ### Step 7: テスト
-- [ ] OTP送信APIテスト
-- [ ] OTP検証APIテスト
-- [ ] 登録フロー改修テスト（OTP検証含む）
-- [ ] メールOTPログインテスト
-- [ ] ソーシャルログインテスト（モック）
-- [ ] パスワード変更フロー改修テスト
-- [ ] OTPVerificationコンポーネントテスト
-- [ ] SocialLoginButtonsコンポーネントテスト
+- [x] OTP送信APIテスト
+- [x] OTP検証APIテスト
+- [x] 登録フロー改修テスト（OTP検証含む）
+- [x] メールOTPログインテスト
+- [x] ソーシャルログインテスト（モック）
+- [x] パスワード変更フロー改修テスト
+- [x] OTPVerificationコンポーネントテスト
+- [x] SocialLoginButtonsコンポーネントテスト
 
 ---
 

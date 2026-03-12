@@ -33,6 +33,15 @@ jest.mock('@/hooks/useToast', () => ({
   }),
 }));
 
+jest.mock(
+  '@/features/settings/changePasswordForm/changePasswordForm',
+  () => ({
+    ChangePasswordForm: ({ email }: { email: string }) => (
+      <div data-testid='change-password-form' data-email={email} />
+    ),
+  }),
+);
+
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 
@@ -51,6 +60,19 @@ describe('SettingsPage', () => {
     expect(
       screen.getByRole('heading', { name: 'プロフィール' }),
     ).toBeInTheDocument();
+  });
+
+  it('パスワード変更セクションが表示される', () => {
+    render(<SettingsPage />);
+    expect(
+      screen.getByRole('heading', { name: 'パスワード変更' }),
+    ).toBeInTheDocument();
+    const changePasswordForm = screen.getByTestId('change-password-form');
+    expect(changePasswordForm).toBeInTheDocument();
+    expect(changePasswordForm).toHaveAttribute(
+      'data-email',
+      'test@example.com',
+    );
   });
 
   it('通知セクションが表示される', () => {

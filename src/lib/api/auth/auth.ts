@@ -39,10 +39,9 @@ export async function registerUser(
 }
 
 /**
- * パスワード変更リクエストの型
+ * パスワード変更リクエストの型（OTP検証後）
  */
 export interface ChangePasswordRequest {
-  currentPassword: string;
   newPassword: string;
 }
 

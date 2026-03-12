@@ -3,7 +3,7 @@
  * 月間カレンダー表示用のデータ取得・状態管理
  */
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -54,7 +54,6 @@ export function useCalendar(): UseCalendarReturn {
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const queryClient = useQueryClient();
-  const cachedMonths = useRef<Set<string>>(new Set());
 
   const monthStr = useMemo(() => formatMonth(currentMonth), [currentMonth]);
 
@@ -64,11 +63,6 @@ export function useCalendar(): UseCalendarReturn {
     queryFn: () => getCalendarMovies({ month: monthStr }),
     staleTime: Infinity,
   });
-
-  // キャッシュ済み月を追跡
-  if (calendarQuery.data && !cachedMonths.current.has(monthStr)) {
-    cachedMonths.current.add(monthStr);
-  }
 
   // 日付ごとの映画マップ
   const moviesByDate = useMemo(
@@ -114,7 +108,6 @@ export function useCalendar(): UseCalendarReturn {
   }, []);
 
   const resetCache = useCallback(() => {
-    cachedMonths.current.clear();
     setSelectedDate(undefined);
     queryClient.invalidateQueries({ queryKey: calendarKeys.all });
   }, [queryClient]);

@@ -13,6 +13,7 @@ import { SideNav } from '@/components/layout/sideNav/sideNav';
 import { UserMenu } from '@/components/layout/userMenu/userMenu';
 import { Footer } from '@/components/layout/footer/footer';
 import { WatchlistPanel } from '@/features/watchlist/component/watchlistPanel/watchlistPanel';
+import { CalendarButton } from '@/features/calendar/component/calendarButton';
 
 import styles from './appLayout.module.scss';
 
@@ -52,6 +53,7 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
             <Sidebar
               navigation={<SideNav />}
               userSection={<UserMenu />}
+              calendarButton={<CalendarButton />}
               watchlist={<WatchlistPanel />}
             />
           </div>

@@ -1,0 +1,102 @@
+@use '@/styles/variables' as *;
+
+.c_calendarMovieList {
+  padding: $spacing-4;
+  border-top: $border-width-1 solid $border-color;
+}
+
+.c_calendarMovieList__title {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-bold;
+  color: $text-primary;
+  margin-bottom: $spacing-3;
+}
+
+.c_calendarMovieList__empty {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  text-align: center;
+  padding: $spacing-4 0;
+}
+
+.c_calendarMovieList__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+}
+
+.c_calendarMovieList__item {
+  border-radius: $border-radius-md;
+
+  &:hover {
+    background-color: $background-secondary;
+  }
+}
+
+.c_calendarMovieList__button {
+  display: flex;
+  align-items: center;
+  gap: $spacing-3;
+  width: 100%;
+  padding: $spacing-2;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  border-radius: $border-radius-md;
+  transition: $transition-bg;
+
+  &:focus-visible {
+    outline: $border-width-2 solid $primary-500;
+    outline-offset: 2px;
+  }
+}
+
+.c_calendarMovieList__poster {
+  flex-shrink: 0;
+  width: 46px;
+  height: 69px;
+  border-radius: $border-radius-sm;
+  overflow: hidden;
+}
+
+.c_calendarMovieList__posterImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.c_calendarMovieList__posterFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background-color: $gray-200;
+  color: $text-secondary;
+  font-size: $font-size-2xs;
+}
+
+.c_calendarMovieList__info {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+  min-width: 0;
+}
+
+.c_calendarMovieList__movieTitle {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-primary;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c_calendarMovieList__releaseDate {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+}

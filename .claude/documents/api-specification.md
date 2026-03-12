@@ -285,27 +285,94 @@
 映画検索（フィルタリング対応、キャッシュなし、都度TMDb API取得）
 
 **Query Parameters:**
-- `query` (required): 検索キーワード
+- `query` (optional): 検索キーワード
 - `page` (optional): ページ番号（デフォルト: 1）
 - `genre` (optional): ジャンルID（カンマ区切りで複数指定可: `28,12`）
 - `year` (optional): 公開年（YYYY形式: `2024`）
 - `vote_average_gte` (optional): 最低評価（0-10: `7.0`）
 
+**バリデーション（zod）:**
+- `query`と（`genre` or `year` or `vote_average_gte`）のいずれかは必須。両方なしの場合400エラー
+- `page`: 正の整数
+- `genre`: カンマ区切りの正の整数
+- `year`: 4桁の正の整数
+- `vote_average_gte`: 0〜10の数値（0.5刻み）
+
 **内部処理フロー:**
-1. TMDb API（`/search/movie` + `/discover/movie`）を呼び出し
-2. フィルターパラメータをTMDb APIに渡す
+
+**パターン1: キーワードあり（queryが存在）**
+1. TMDb API `/search/movie` を呼び出し
+   - `query`: 検索キーワード
+   - `page`: ページ番号
+   - `language=ja-JP`, `region=JP`
+2. フィルターパラメータが指定されている場合、**サーバー側でフィルタリング**
+   - `genre`: レスポンスの`genre_ids`配列に指定ジャンルIDが含まれるかチェック
+   - `year`: レスポンスの`release_date`の年と一致するかチェック
+   - `vote_average_gte`: レスポンスの`vote_average`が閾値以上かチェック
+3. フィルタリング後の結果を返却
+   - **注意**: サーバー側フィルタリングにより`total_results`はTMDbの値と異なる（フィルタリング後の件数を返す）
+
+**パターン2: キーワードなし + フィルターあり**
+1. TMDb API `/discover/movie` を呼び出し
    - `with_genres`: ジャンルフィルター
    - `primary_release_year`: 年代フィルター
    - `vote_average.gte`: 評価フィルター
-3. 検索結果をそのまま返却（DBには保存しない）
+   - `page`: ページ番号
+   - `language=ja-JP`, `region=JP`
+   - `sort_by=popularity.desc`
+2. 検索結果をそのまま返却
+
+**パターン3: キーワードなし + フィルターなし**
+1. 400エラーを返却（`VALIDATION_ERROR`）
 
 **Response (200 OK):**
 ```json
 {
   "success": true,
   "data": {
-    "movies": [ /* 映画一覧と同じ形式 */ ],
-    "pagination": { /* ページネーション情報 */ }
+    "movies": [
+      {
+        "id": 12345,
+        "title": "映画タイトル",
+        "overview": "概要",
+        "release_date": "2025-01-29",
+        "poster_path": "/path/to/poster.jpg",
+        "vote_average": 8.5,
+        "popularity": 123.45,
+        "genre_ids": [28, 12]
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "total_pages": 10,
+      "total_results": 200
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: 検索条件なし、またはパラメータ不正
+
+---
+
+### GET /api/movies/genres
+ジャンルマスターデータ取得（TMDb APIから取得）
+
+**内部処理フロー:**
+1. TMDb API `/genre/movie/list` を呼び出し（`language=ja`）
+2. ジャンル一覧を返却
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "genres": [
+      { "id": 28, "name": "アクション" },
+      { "id": 12, "name": "アドベンチャー" },
+      { "id": 35, "name": "コメディ" }
+    ]
   }
 }
 ```

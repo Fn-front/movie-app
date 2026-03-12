@@ -89,6 +89,10 @@
   transition: $transition-bg;
 }
 
+.c_calendarDialog__calendar :global(.fc .fc-daygrid-day-frame) {
+  min-height: 100px;
+}
+
 .c_calendarDialog__calendar :global(.fc .fc-daygrid-day:hover) {
   background-color: $primary-50;
 }
@@ -149,11 +153,13 @@
 }
 
 .c_calendarDialog__event {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: $font-size-xs;
   color: $secondary-600;
-  white-space: nowrap;
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
   line-height: 1.4;
+  word-break: break-all;
 }

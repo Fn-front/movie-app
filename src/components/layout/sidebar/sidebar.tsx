@@ -60,12 +60,12 @@ export const Sidebar = memo<SidebarProps>(function Sidebar({
         </div>
       )}
 
-      {userSection && (
-        <div className={styles.c_sidebar__user}>{userSection}</div>
-      )}
-
       {calendarButton && (
         <div className={styles.c_sidebar__calendar}>{calendarButton}</div>
+      )}
+
+      {userSection && (
+        <div className={styles.c_sidebar__user}>{userSection}</div>
       )}
     </aside>
   );

@@ -93,7 +93,7 @@ export const CalendarDialog = memo<CalendarDialogProps>(
         onOpenChange={onOpenChange}
         title='公開カレンダー'
         description='ウォッチリストの映画を公開日ごとに表示します'
-        size='lg'
+        size='xl'
       >
         <ModalBody className={styles.c_calendarDialog__body}>
           {isLoading ? (

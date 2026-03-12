@@ -24,6 +24,7 @@ jest.mock('@tanstack/react-query', () => {
   return {
     ...actual,
     useQuery: jest.fn(),
+    keepPreviousData: actual.keepPreviousData,
   };
 });
 

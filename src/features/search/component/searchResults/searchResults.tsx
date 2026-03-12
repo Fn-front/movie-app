@@ -40,6 +40,10 @@ export interface SearchResultsProps {
 
 /**
  * Movie型をMovieCacheItem型に変換
+ *
+ * release_type / is_revival は検索APIのレスポンスに含まれないため、
+ * MovieTileの表示用にデフォルト値を設定している。
+ * 検索結果ではこれらの情報は表示に影響しない。
  */
 function toMovieCacheItem(movie: Movie): MovieCacheItem {
   return {

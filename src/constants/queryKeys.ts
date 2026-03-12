@@ -27,8 +27,7 @@ export const calendarKeys = {
 
 export const searchKeys = {
   all: ['search'] as const,
-  results: (params: Omit<SearchMoviesRequest, 'page'>) =>
-    ['search', params] as const,
+  results: (params: SearchMoviesRequest) => ['search', params] as const,
 };
 
 export const favoriteKeys = {

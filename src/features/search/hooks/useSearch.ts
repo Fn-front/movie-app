@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 
 import { searchMoviesApi } from '@/lib/api/search/search';
 import type { SearchMoviesRequest } from '@/lib/api/search/search';
@@ -74,15 +74,8 @@ export function useSearch(): UseSearchReturn {
     [searchParams],
   );
 
-  const queryKeyParams = useMemo(() => {
-    if (!requestParams) return {};
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { page, ...rest } = requestParams;
-    return rest;
-  }, [requestParams]);
-
   const searchQuery = useQuery({
-    queryKey: searchKeys.results(queryKeyParams),
+    queryKey: searchKeys.results(requestParams ?? { page: 1 }),
     queryFn: ({ signal }) => {
       if (!requestParams) {
         throw new Error('検索条件がありません');
@@ -90,6 +83,7 @@ export function useSearch(): UseSearchReturn {
       return searchMoviesApi(requestParams, { signal });
     },
     enabled: requestParams !== null,
+    placeholderData: keepPreviousData,
   });
 
   useEffect(() => {

@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { EventInput } from '@fullcalendar/core';
 
 import {
   getCalendarMovies,
@@ -33,12 +34,16 @@ export interface UseCalendarReturn {
   selectedDateMovies: CalendarMovieItem[];
   /** 映画がある日付の一覧 */
   datesWithMovies: Date[];
+  /** FullCalendar用イベント配列 */
+  calendarEvents: EventInput[];
   /** 前月に切り替え */
   goToPreviousMonth: () => void;
   /** 次月に切り替え */
   goToNextMonth: () => void;
   /** 日付を選択 */
   selectDate: (date: Date | undefined) => void;
+  /** FullCalendarの月変更時コールバック */
+  handleDatesSet: (dateInfo: { start: Date }) => void;
   /** キャッシュをクリアして再取得 */
   resetCache: () => void;
   /** ローディング中 */
@@ -85,6 +90,21 @@ export function useCalendar(): UseCalendarReturn {
     });
   }, [moviesByDate]);
 
+  // FullCalendar用イベント配列
+  const calendarEvents = useMemo<EventInput[]>(() => {
+    return Object.entries(moviesByDate).flatMap(([dateStr, movies]) =>
+      movies.map((movie) => ({
+        id: movie.id,
+        title: movie.title,
+        start: dateStr,
+        extendedProps: {
+          tmdbMovieId: movie.tmdb_movie_id,
+          posterPath: movie.poster_path,
+        },
+      })),
+    );
+  }, [moviesByDate]);
+
   const goToPreviousMonth = useCallback(() => {
     setCurrentMonth((prev) => {
       const newDate = new Date(prev);
@@ -107,6 +127,21 @@ export function useCalendar(): UseCalendarReturn {
     setSelectedDate(date);
   }, []);
 
+  const handleDatesSet = useCallback(
+    (dateInfo: { start: Date }) => {
+      const newMonth = new Date(dateInfo.start);
+      // FullCalendarのstartは月初の前週を含むため、中旬にずらす
+      newMonth.setDate(15);
+      const newMonthStr = formatMonth(newMonth);
+      const currentMonthStr = formatMonth(currentMonth);
+      if (newMonthStr !== currentMonthStr) {
+        setCurrentMonth(newMonth);
+        setSelectedDate(undefined);
+      }
+    },
+    [currentMonth],
+  );
+
   const resetCache = useCallback(() => {
     setSelectedDate(undefined);
     queryClient.invalidateQueries({ queryKey: calendarKeys.all });
@@ -119,9 +154,11 @@ export function useCalendar(): UseCalendarReturn {
       moviesByDate,
       selectedDateMovies,
       datesWithMovies,
+      calendarEvents,
       goToPreviousMonth,
       goToNextMonth,
       selectDate,
+      handleDatesSet,
       resetCache,
       isLoading: calendarQuery.isLoading,
       error: calendarQuery.error,
@@ -132,9 +169,11 @@ export function useCalendar(): UseCalendarReturn {
       moviesByDate,
       selectedDateMovies,
       datesWithMovies,
+      calendarEvents,
       goToPreviousMonth,
       goToNextMonth,
       selectDate,
+      handleDatesSet,
       resetCache,
       calendarQuery.isLoading,
       calendarQuery.error,

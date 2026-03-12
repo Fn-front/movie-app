@@ -20,110 +20,138 @@
 
 .c_calendarDialog__calendar {
   padding: $spacing-4;
-  display: flex;
-  justify-content: center;
 }
 
-// react-day-picker カスタムスタイル
-.c_calendarDialog__dayPicker {
-  --rdp-accent-color: #{$primary-500};
-  --rdp-accent-background-color: #{$primary-50};
-
+// FullCalendar カスタムスタイル（グローバルセレクタ）
+.c_calendarDialog__calendar :global(.fc) {
   font-family: $font-family-base;
   font-size: $font-size-sm;
-  width: 100%;
 }
 
-.c_calendarDialog__caption {
+.c_calendarDialog__calendar :global(.fc .fc-toolbar-title) {
   font-size: $font-size-base;
   font-weight: $font-weight-bold;
   color: $text-primary;
-  text-align: center;
 }
 
-.c_calendarDialog__nav {
-  display: flex;
-  gap: $spacing-2;
-}
-
-.c_calendarDialog__navButton {
+.c_calendarDialog__calendar :global(.fc .fc-button) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 32px;
   height: 32px;
+  padding: 0;
   border: $border-width-1 solid $border-color;
   border-radius: $border-radius-md;
   background-color: $background-paper;
   color: $text-primary;
   cursor: pointer;
   transition: $transition-bg;
-
-  &:hover {
-    background-color: $background-secondary;
-  }
-
-  &:focus-visible {
-    outline: $border-width-2 solid $primary-500;
-    outline-offset: 2px;
-  }
 }
 
-.c_calendarDialog__weekday {
+.c_calendarDialog__calendar :global(.fc .fc-button:hover) {
+  background-color: $background-secondary;
+  border-color: $border-color;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-button:focus-visible) {
+  outline: $border-width-2 solid $primary-500;
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-button:focus) {
+  box-shadow: none;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-button:active) {
+  background-color: $background-secondary;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-button-primary:not(:disabled).fc-button-active),
+.c_calendarDialog__calendar :global(.fc .fc-button-primary:not(:disabled):active) {
+  background-color: $background-secondary;
+  border-color: $border-color;
+  color: $text-primary;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-col-header-cell-cushion) {
   font-size: $font-size-xs;
   font-weight: $font-weight-medium;
   color: $text-secondary;
-  text-align: center;
+  text-decoration: none;
 }
 
-.c_calendarDialog__day {
-  border-radius: $border-radius-md;
-  transition: $transition-bg;
+.c_calendarDialog__calendar :global(.fc .fc-daygrid-day) {
   cursor: pointer;
+  transition: $transition-bg;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-daygrid-day:hover) {
+  background-color: $primary-50;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-daygrid-day-number) {
   font-size: $font-size-sm;
-
-  &:hover {
-    background-color: $primary-50;
-  }
-
-  &:focus-visible {
-    outline: $border-width-2 solid $primary-500;
-    outline-offset: 2px;
-  }
+  color: $text-primary;
+  text-decoration: none;
+  padding: $spacing-1;
 }
 
-.c_calendarDialog__daySelected {
-  background-color: $primary-500 !important;
-  color: $text-inverse !important;
-  font-weight: $font-weight-bold;
-
-  &:hover {
-    background-color: $primary-600 !important;
-  }
+.c_calendarDialog__calendar :global(.fc .fc-day-today) {
+  background-color: transparent !important;
 }
 
-.c_calendarDialog__dayToday {
+.c_calendarDialog__calendar :global(.fc .fc-day-today .fc-daygrid-day-number) {
   font-weight: $font-weight-bold;
   border: $border-width-2 solid $primary-300;
   border-radius: $border-radius-md;
 }
 
-.c_calendarDialog__dayOutside {
+.c_calendarDialog__calendar :global(.fc .fc-day-other .fc-daygrid-day-number) {
   color: $text-disabled;
 }
 
-.c_calendarDialog__dayWithMovies {
-  position: relative;
+.c_calendarDialog__calendar :global(.fc .fc-daygrid-day-events) {
+  margin-top: 0;
+}
 
-  &::after {
-    content: '';
-    position: absolute;
-    bottom: 2px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 6px;
-    height: 6px;
-    border-radius: $border-radius-full;
-    background-color: $secondary-600;
-  }
+.c_calendarDialog__calendar :global(.fc .fc-daygrid-event) {
+  margin: 0 $spacing-1;
+  border: none;
+  background-color: transparent;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-daygrid-event-harness) {
+  margin-bottom: 1px;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-daygrid-more-link) {
+  font-size: $font-size-xs;
+  color: $primary-500;
+  font-weight: $font-weight-medium;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-popover) {
+  border-radius: $border-radius-md;
+  box-shadow: $shadow-md;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-theme-standard td),
+.c_calendarDialog__calendar :global(.fc .fc-theme-standard th) {
+  border-color: $border-color;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-scrollgrid) {
+  border-color: $border-color;
+}
+
+.c_calendarDialog__event {
+  display: block;
+  font-size: $font-size-xs;
+  color: $secondary-600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
 }

@@ -6,8 +6,12 @@
 'use client';
 
 import { memo, useCallback, useEffect } from 'react';
-import { DayPicker } from 'react-day-picker';
-import { ja } from 'react-day-picker/locale';
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import interactionPlugin from '@fullcalendar/interaction';
+import type { DateClickArg } from '@fullcalendar/interaction';
+import type { DatesSetArg, EventContentArg } from '@fullcalendar/core';
+import jaLocale from '@fullcalendar/core/locales/ja';
 
 import { Modal, ModalBody } from '@/components/ui/modal/modal';
 import { useCalendar } from '@/features/calendar/hooks/useCalendar';
@@ -28,6 +32,17 @@ export interface CalendarDialogProps {
 }
 
 /**
+ * イベントのカスタムレンダリング
+ */
+const renderEventContent = (eventInfo: EventContentArg) => {
+  return (
+    <span className={styles.c_calendarDialog__event}>
+      {eventInfo.event.title}
+    </span>
+  );
+};
+
+/**
  * CalendarDialogコンポーネント
  */
 export const CalendarDialog = memo<CalendarDialogProps>(
@@ -36,10 +51,9 @@ export const CalendarDialog = memo<CalendarDialogProps>(
       currentMonth,
       selectedDate,
       selectedDateMovies,
-      datesWithMovies,
-      goToPreviousMonth,
-      goToNextMonth,
+      calendarEvents,
       selectDate,
+      handleDatesSet,
       resetCache,
       isLoading,
       error,
@@ -52,23 +66,18 @@ export const CalendarDialog = memo<CalendarDialogProps>(
       }
     }, [open, resetCache]);
 
-    const handleMonthChange = useCallback(
-      (month: Date) => {
-        const current = new Date(currentMonth);
-        if (month.getTime() > current.getTime()) {
-          goToNextMonth();
-        } else {
-          goToPreviousMonth();
-        }
-      },
-      [currentMonth, goToNextMonth, goToPreviousMonth],
-    );
-
-    const handleDayClick = useCallback(
-      (date: Date) => {
-        selectDate(date);
+    const handleDateClick = useCallback(
+      (arg: DateClickArg) => {
+        selectDate(arg.date);
       },
       [selectDate],
+    );
+
+    const handleDatesSetCallback = useCallback(
+      (arg: DatesSetArg) => {
+        handleDatesSet({ start: arg.start });
+      },
+      [handleDatesSet],
     );
 
     const handleMovieClick = useCallback(
@@ -98,30 +107,23 @@ export const CalendarDialog = memo<CalendarDialogProps>(
           ) : (
             <>
               <div className={styles.c_calendarDialog__calendar}>
-                <DayPicker
-                  locale={ja}
-                  month={currentMonth}
-                  onMonthChange={handleMonthChange}
-                  mode='single'
-                  selected={selectedDate}
-                  onSelect={selectDate}
-                  onDayClick={handleDayClick}
-                  modifiers={{ hasMovies: datesWithMovies }}
-                  modifiersClassNames={{
-                    hasMovies: styles.c_calendarDialog__dayWithMovies,
+                <FullCalendar
+                  plugins={[dayGridPlugin, interactionPlugin]}
+                  initialView='dayGridMonth'
+                  locale={jaLocale}
+                  initialDate={currentMonth}
+                  events={calendarEvents}
+                  dateClick={handleDateClick}
+                  datesSet={handleDatesSetCallback}
+                  eventContent={renderEventContent}
+                  headerToolbar={{
+                    left: 'prev',
+                    center: 'title',
+                    right: 'next',
                   }}
-                  classNames={{
-                    root: styles.c_calendarDialog__dayPicker,
-                    month_caption: styles.c_calendarDialog__caption,
-                    nav: styles.c_calendarDialog__nav,
-                    button_previous: styles.c_calendarDialog__navButton,
-                    button_next: styles.c_calendarDialog__navButton,
-                    weekday: styles.c_calendarDialog__weekday,
-                    day: styles.c_calendarDialog__day,
-                    selected: styles.c_calendarDialog__daySelected,
-                    today: styles.c_calendarDialog__dayToday,
-                    outside: styles.c_calendarDialog__dayOutside,
-                  }}
+                  height='auto'
+                  dayMaxEvents={3}
+                  fixedWeekCount={false}
                 />
               </div>
               {selectedDate && (

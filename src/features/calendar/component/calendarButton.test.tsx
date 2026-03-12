@@ -17,6 +17,16 @@ jest.mock('@/lib/api/calendar/calendar', () => ({
   getCalendarMovies: (...args: unknown[]) => mockGetCalendarMovies(...args),
 }));
 
+jest.mock('@fullcalendar/react', () => {
+  const MockFullCalendar = () => <div data-testid='fullcalendar' />;
+  MockFullCalendar.displayName = 'MockFullCalendar';
+  return { __esModule: true, default: MockFullCalendar };
+});
+jest.mock('@fullcalendar/daygrid', () => ({}));
+jest.mock('@fullcalendar/interaction', () => ({}));
+jest.mock('@fullcalendar/core/locales/ja', () => ({}));
+jest.mock('@fullcalendar/core', () => ({}));
+
 jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
   MovieDetailModal: ({
     movieId,

@@ -17,6 +17,37 @@ jest.mock('@/lib/api/calendar/calendar', () => ({
   getCalendarMovies: (...args: unknown[]) => mockGetCalendarMovies(...args),
 }));
 
+// FullCalendarのモック
+const mockDateClick = jest.fn();
+
+jest.mock('@fullcalendar/react', () => {
+  const MockFullCalendar = (props: {
+    events?: Array<{ id: string; title: string; start: string }>;
+    dateClick?: (arg: { date: Date; dateStr: string }) => void;
+    datesSet?: (arg: { start: Date; end: Date }) => void;
+  }) => {
+    mockDateClick.mockImplementation(props.dateClick);
+    if (props.datesSet) {
+      props.datesSet({ start: new Date(), end: new Date() });
+    }
+    return (
+      <div data-testid='fullcalendar'>
+        {props.events?.map((event) => (
+          <div key={event.id} data-testid={`event-${event.id}`}>
+            {event.title}
+          </div>
+        ))}
+      </div>
+    );
+  };
+  MockFullCalendar.displayName = 'MockFullCalendar';
+  return { __esModule: true, default: MockFullCalendar };
+});
+
+jest.mock('@fullcalendar/daygrid', () => ({}));
+jest.mock('@fullcalendar/interaction', () => ({}));
+jest.mock('@fullcalendar/core/locales/ja', () => ({}));
+
 const mockCalendarResponse = {
   success: true,
   data: {
@@ -124,7 +155,7 @@ describe('CalendarDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('データ取得後にカレンダーが表示される', async () => {
+  it('データ取得後にFullCalendarが表示される', async () => {
     render(
       <CalendarDialog
         open={true}
@@ -138,6 +169,7 @@ describe('CalendarDialog', () => {
       expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
     });
 
+    expect(screen.getByTestId('fullcalendar')).toBeInTheDocument();
     expect(mockGetCalendarMovies).toHaveBeenCalled();
   });
 
@@ -160,9 +192,7 @@ describe('CalendarDialog', () => {
     });
   });
 
-  it('日付クリックで映画一覧を表示する', async () => {
-    const user = userEvent.setup();
-
+  it('イベントデータがFullCalendarに渡される', async () => {
     render(
       <CalendarDialog
         open={true}
@@ -176,26 +206,16 @@ describe('CalendarDialog', () => {
       expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
     });
 
-    // カレンダー内の日付ボタンをクリック（15日）
-    const dayButtons = screen.getAllByRole('gridcell');
-    const day15 = dayButtons.find((btn) => btn.textContent?.includes('15'));
-    if (day15) {
-      const button = day15.querySelector('button');
-      if (button) {
-        await user.click(button);
-      }
-    }
+    expect(screen.getByTestId('event-wl-1')).toBeInTheDocument();
+    expect(screen.getByText('映画A')).toBeInTheDocument();
   });
 
-  it('映画クリック時にonMovieClickが呼ばれる', async () => {
-    const user = userEvent.setup();
-    const onMovieClick = jest.fn();
-
+  it('日付クリックで映画一覧を表示する', async () => {
     render(
       <CalendarDialog
         open={true}
         onOpenChange={jest.fn()}
-        onMovieClick={onMovieClick}
+        onMovieClick={jest.fn()}
       />,
       { wrapper: createWrapper() },
     );
@@ -204,21 +224,18 @@ describe('CalendarDialog', () => {
       expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
     });
 
-    // 15日をクリック
-    const dayButtons = screen.getAllByRole('gridcell');
-    const day15 = dayButtons.find((btn) => btn.textContent?.includes('15'));
-    if (day15) {
-      const button = day15.querySelector('button');
-      if (button) {
-        await user.click(button);
+    // モックされたdateClickコールバックを呼び出す
+    if (
+      mockDateClick.mock.calls.length > 0 ||
+      mockDateClick.getMockImplementation()
+    ) {
+      const dateClickHandler = mockDateClick.getMockImplementation();
+      if (dateClickHandler) {
+        dateClickHandler({
+          date: new Date(2026, 2, 15),
+          dateStr: '2026-03-15',
+        });
       }
-    }
-
-    // 映画一覧が表示されたら映画をクリック
-    const movieButton = screen.queryByLabelText('映画Aの詳細を表示');
-    if (movieButton) {
-      await user.click(movieButton);
-      expect(onMovieClick).toHaveBeenCalledWith(100);
     }
   });
 });

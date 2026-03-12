@@ -67,6 +67,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
+        // パスワード未設定（ソーシャルログインのみのユーザー）
+        if (!user.password_hash) {
+          throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+        }
+
         // パスワード照合
         const isPasswordValid = await bcrypt.compare(
           password,

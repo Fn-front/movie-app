@@ -207,6 +207,65 @@ export interface User {
 }
 
 /**
+ * ソーシャルログインアカウント連携型（DBレコード）
+ */
+export interface Account {
+  /** レコードID */
+  id: string;
+  /** ユーザーID */
+  user_id: string;
+  /** プロバイダー名 */
+  provider: 'google' | 'github';
+  /** プロバイダー側のアカウントID */
+  provider_account_id: string;
+  /** アカウント種別 */
+  type: 'oauth';
+  /** アクセストークン */
+  access_token: string | null;
+  /** リフレッシュトークン */
+  refresh_token: string | null;
+  /** トークン有効期限（UNIX timestamp） */
+  expires_at: number | null;
+  /** トークン種別 */
+  token_type: string | null;
+  /** スコープ */
+  scope: string | null;
+  /** IDトークン */
+  id_token: string | null;
+  /** 作成日時 */
+  created_at: string;
+  /** 更新日時 */
+  updated_at: string;
+}
+
+/**
+ * OTPアクション種別
+ */
+export type OtpActionType = 'registration' | 'login' | 'password_change';
+
+/**
+ * OTP検証コード型（DBレコード）
+ */
+export interface OtpCode {
+  /** レコードID */
+  id: string;
+  /** 送信先メールアドレス */
+  email: string;
+  /** 6桁OTPコード */
+  code: string;
+  /** アクション種別 */
+  action_type: OtpActionType;
+  /** 検証試行回数 */
+  attempts: number;
+  /** 有効期限 */
+  expires_at: string;
+  /** 検証完了日時 */
+  verified_at: string | null;
+  /** 作成日時 */
+  created_at: string;
+}
+
+/**
  * ウォッチリスト型
  */
 export interface Watchlist {

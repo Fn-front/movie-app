@@ -11,4 +11,19 @@
     font-weight: $font-weight-bold;
     color: $text-primary;
   }
+
+  &__content {
+    display: flex;
+    gap: $spacing-6;
+  }
+
+  &__filter {
+    flex-shrink: 0;
+    width: 280px;
+  }
+
+  &__results {
+    flex: 1;
+    min-width: 0;
+  }
 }

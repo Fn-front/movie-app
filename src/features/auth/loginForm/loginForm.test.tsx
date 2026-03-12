@@ -157,6 +157,27 @@ describe('LoginForm', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
+  it('onOtpLoginClick指定時にメールでログインボタンが表示される', async () => {
+    const mockOtpClick = jest.fn();
+    render(<LoginForm onOtpLoginClick={mockOtpClick} />);
+
+    const otpLoginButton = screen.getByRole('button', {
+      name: 'メールでログイン',
+    });
+    expect(otpLoginButton).toBeInTheDocument();
+
+    await user.click(otpLoginButton);
+    expect(mockOtpClick).toHaveBeenCalled();
+  });
+
+  it('onOtpLoginClick未指定時にメールでログインボタンが表示されない', () => {
+    render(<LoginForm />);
+
+    expect(
+      screen.queryByRole('button', { name: 'メールでログイン' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('signInが例外をスローした場合にエラーが表示される', async () => {
     mockSignIn.mockRejectedValue(
       new AxiosError('Network error', 'ERR_NETWORK'),

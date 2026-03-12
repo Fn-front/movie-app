@@ -982,11 +982,11 @@
 - [x] ログイン時 is_verified チェック追加
 
 ### Step 4: メールOTPログイン実装
-- [ ] OtpLoginFormコンポーネント作成
+- [x] OtpLoginFormコンポーネント作成
   - メールアドレス入力
   - 「ログインコードを送信」ボタン
-- [ ] OTP送信 → 検証 → セッション発行フロー
-- [ ] LoginFormに「メールでログイン」リンク追加
+- [x] OTP送信 → 検証 → セッション発行フロー
+- [x] LoginFormに「メールでログイン」リンク追加
 
 ### Step 5: ソーシャルログイン実装（Google / GitHub）
 - [ ] NextAuth.js Provider設定

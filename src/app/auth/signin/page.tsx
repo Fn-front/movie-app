@@ -4,7 +4,7 @@
 
 import type { Metadata } from 'next';
 
-import { LoginForm } from '@/features/auth/loginForm/loginForm';
+import { SignInContent } from '@/features/auth/signInContent/signInContent';
 
 export const metadata: Metadata = {
   title: 'ログイン | Movie App',
@@ -12,5 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function SignInPage() {
-  return <LoginForm />;
+  return <SignInContent />;
 }

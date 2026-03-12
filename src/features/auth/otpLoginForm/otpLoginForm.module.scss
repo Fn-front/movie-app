@@ -1,34 +1,34 @@
 @use '@/styles/variables' as *;
 
-.c_login_form {
+.c_otp_login_form {
   width: 100%;
   max-width: 540px;
   margin: 0 auto;
   padding: $spacing-8;
 }
 
-.c_login_form__body {
+.c_otp_login_form__body {
   margin-top: $spacing-8;
 }
 
-.c_login_form__fields {
+.c_otp_login_form__fields {
   display: flex;
   flex-direction: column;
   gap: $spacing-5;
 }
 
-.c_login_form__submit {
+.c_otp_login_form__submit {
   margin-top: $spacing-4;
 }
 
-.c_login_form__footer {
+.c_otp_login_form__footer {
   margin-top: $spacing-6;
   text-align: center;
   font-size: $font-size-sm;
   color: $gray-500;
 }
 
-.c_login_form__link {
+.c_otp_login_form__link {
   color: $primary-500;
   text-decoration: none;
   font-weight: $font-weight-medium;
@@ -49,7 +49,7 @@
   }
 }
 
-.c_login_form__error {
+.c_otp_login_form__error {
   padding: $spacing-3 $spacing-4;
   background-color: rgba($error-main, 0.1);
   border: $border-width-1 solid $error-light;

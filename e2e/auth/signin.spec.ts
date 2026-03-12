@@ -15,7 +15,7 @@ test.describe('ログイン認証フロー', () => {
 
     await page.getByLabel('メールアドレス').fill(TEST_USER.email);
     await page.getByLabel('パスワード').fill(TEST_USER.password);
-    await page.getByRole('button', { name: 'ログイン' }).click();
+    await page.getByRole('button', { name: 'ログイン', exact: true }).click();
 
     await page.waitForURL('/');
     await expect(page).toHaveURL('/');
@@ -26,7 +26,7 @@ test.describe('ログイン認証フロー', () => {
 
     await page.getByLabel('メールアドレス').fill('wrong@example.com');
     await page.getByLabel('パスワード').fill('WrongPassword123');
-    await page.getByRole('button', { name: 'ログイン' }).click();
+    await page.getByRole('button', { name: 'ログイン', exact: true }).click();
 
     await expect(
       page.getByRole('alert').filter({

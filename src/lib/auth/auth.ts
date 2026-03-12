@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
 import { AUTH_ERROR_MESSAGES } from '@/constants';
+import { OTP_CONFIG } from '@/constants/otp';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -36,18 +37,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
+        loginMethod: { label: 'Login Method', type: 'text' },
       },
       async authorize(credentials) {
         if (!supabase) {
           throw new Error(AUTH_ERROR_MESSAGES.DB_CONNECTION_ERROR);
         }
 
-        if (!credentials?.email || !credentials?.password) {
+        if (!credentials?.email) {
           throw new Error(AUTH_ERROR_MESSAGES.CREDENTIALS_REQUIRED);
         }
 
         const email = credentials.email as string;
-        const password = credentials.password as string;
+        const loginMethod = (credentials.loginMethod as string) || 'password';
 
         // レート制限チェック（emailベース: 3回失敗で30分ロック）
         const rateLimitResult = await checkRateLimit(supabase, email, 'login');
@@ -67,24 +69,66 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
-        // メール認証チェック（パスワード照合前に実施し、不要なbcrypt計算を回避）
-        if (!user.is_verified) {
-          throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
-        }
+        if (loginMethod === 'otp') {
+          // メール認証チェック
+          if (!user.is_verified) {
+            throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
+          }
 
-        // パスワード未設定（ソーシャルログインのみのユーザー）
-        if (!user.password_hash) {
-          throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
-        }
+          // OTPログイン: otp_codesのverified_atを確認
+          const { data: verifiedOtp } = await supabase
+            .from('otp_codes')
+            .select('id, verified_at')
+            .eq('email', email)
+            .eq('action_type', 'login')
+            .not('verified_at', 'is', null)
+            .order('verified_at', { ascending: false })
+            .limit(1)
+            .single();
 
-        // パスワード照合
-        const isPasswordValid = await bcrypt.compare(
-          password,
-          user.password_hash,
-        );
+          if (!verifiedOtp) {
+            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          }
 
-        if (!isPasswordValid) {
-          throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          // 検証済みOTPの有効期限チェック（verified_atから5分以内）
+          const verifiedAt = new Date(verifiedOtp.verified_at).getTime();
+          const expiryMs = OTP_CONFIG.VERIFIED_TOKEN_EXPIRY_MINUTES * 60 * 1000;
+
+          if (Date.now() - verifiedAt > expiryMs) {
+            // 期限切れのOTPを削除
+            await supabase.from('otp_codes').delete().eq('id', verifiedOtp.id);
+            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          }
+
+          // 検証済みOTPを削除（ワンタイム使用）
+          await supabase.from('otp_codes').delete().eq('id', verifiedOtp.id);
+        } else {
+          // パスワードログイン
+          if (!credentials?.password) {
+            throw new Error(AUTH_ERROR_MESSAGES.CREDENTIALS_REQUIRED);
+          }
+
+          const password = credentials.password as string;
+
+          // メール認証チェック（パスワード照合前に実施し、不要なbcrypt計算を回避）
+          if (!user.is_verified) {
+            throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
+          }
+
+          // パスワード未設定（ソーシャルログインのみのユーザー）
+          if (!user.password_hash) {
+            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          }
+
+          // パスワード照合
+          const isPasswordValid = await bcrypt.compare(
+            password,
+            user.password_hash,
+          );
+
+          if (!isPasswordValid) {
+            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          }
         }
 
         // 認証成功 — レート制限リセット

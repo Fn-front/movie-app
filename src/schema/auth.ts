@@ -88,6 +88,21 @@ export const registerApiSchema = z.object({
 });
 
 /**
+ * OTPログイン用メールアドレスのバリデーションスキーマ
+ */
+export const otpLoginEmailSchema = z.object({
+  email: z
+    .string()
+    .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
+    .email(VALIDATION_MESSAGES.EMAIL_INVALID),
+});
+
+/**
+ * OTPログイン用メールアドレスの型
+ */
+export type OtpLoginEmailFormData = z.infer<typeof otpLoginEmailSchema>;
+
+/**
  * パスワード変更フォームのバリデーションスキーマ
  */
 export const changePasswordSchema = z

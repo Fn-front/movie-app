@@ -40,7 +40,10 @@ export const searchQuerySchema = z
   })
   .refine(
     (data) =>
-      data.query || data.genre || data.year !== undefined || data.vote_average_gte !== undefined,
+      data.query ||
+      data.genre ||
+      data.year !== undefined ||
+      data.vote_average_gte !== undefined,
     {
       message: '検索キーワードまたはフィルター条件を指定してください',
     },

@@ -107,9 +107,7 @@ describe('GET /api/movies/search', () => {
     });
 
     it('不正なジャンルID形式で400を返す', async () => {
-      const response = await GET(
-        createRequest({ genre: 'abc' }),
-      );
+      const response = await GET(createRequest({ genre: 'abc' }));
 
       expect(response.status).toBe(400);
     });
@@ -145,9 +143,7 @@ describe('GET /api/movies/search', () => {
     it('キーワード + ページ指定で検索できる', async () => {
       mockSearchMovies.mockResolvedValue({ ...mockTMDbResponse, page: 2 });
 
-      const response = await GET(
-        createRequest({ query: 'test', page: '2' }),
-      );
+      const response = await GET(createRequest({ query: 'test', page: '2' }));
       const json = await response.json();
 
       expect(response.status).toBe(200);
@@ -165,9 +161,7 @@ describe('GET /api/movies/search', () => {
     it('キーワード + ジャンルフィルターで結果を絞り込む', async () => {
       mockSearchMovies.mockResolvedValue(mockTMDbResponse);
 
-      const response = await GET(
-        createRequest({ query: 'test', genre: '28' }),
-      );
+      const response = await GET(createRequest({ query: 'test', genre: '28' }));
       const json = await response.json();
 
       expect(response.status).toBe(200);
@@ -229,9 +223,7 @@ describe('GET /api/movies/search', () => {
     it('フィルタリング後のtotal_resultsが更新される', async () => {
       mockSearchMovies.mockResolvedValue(mockTMDbResponse);
 
-      const response = await GET(
-        createRequest({ query: 'test', genre: '35' }),
-      );
+      const response = await GET(createRequest({ query: 'test', genre: '35' }));
       const json = await response.json();
 
       // genre_ids に 35 を含む映画のみ（id:2）
@@ -275,9 +267,7 @@ describe('GET /api/movies/search', () => {
     it('評価フィルターのみでDiscover APIを使用する', async () => {
       mockDiscoverMovies.mockResolvedValue(mockTMDbResponse);
 
-      const response = await GET(
-        createRequest({ vote_average_gte: '7.5' }),
-      );
+      const response = await GET(createRequest({ vote_average_gte: '7.5' }));
 
       expect(response.status).toBe(200);
       expect(mockDiscoverMovies).toHaveBeenCalledWith(

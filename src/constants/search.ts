@@ -13,8 +13,7 @@ export const SEARCH_ERROR_MESSAGES = {
   /** バリデーションエラー */
   VALIDATION_ERROR: errorMessage.invalid('検索パラメータ'),
   /** 検索条件なし */
-  NO_SEARCH_CRITERIA:
-    '検索キーワードまたはフィルター条件を指定してください',
+  NO_SEARCH_CRITERIA: '検索キーワードまたはフィルター条件を指定してください',
   /** 検索結果取得失敗 */
   FETCH_FAILED: errorMessage.fetchFailed(TARGET),
   /** ジャンル一覧取得失敗 */

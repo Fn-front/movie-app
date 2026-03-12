@@ -12,11 +12,7 @@ import { NextResponse } from 'next/server';
 import { searchMovies, discoverMovies } from '@/lib/tmdb/tmdb';
 import type { Movie, TMDbResponse } from '@/lib/types';
 import { searchQuerySchema } from '@/schema/search';
-import {
-  HTTP_STATUS,
-  ERROR_CODE,
-  SEARCH_ERROR_MESSAGES,
-} from '@/constants';
+import { HTTP_STATUS, ERROR_CODE, SEARCH_ERROR_MESSAGES } from '@/constants';
 
 /**
  * ジャンルIDをパースしてnumber配列に変換
@@ -90,9 +86,7 @@ export async function GET(request: Request) {
             message: isNoSearchCriteria
               ? SEARCH_ERROR_MESSAGES.NO_SEARCH_CRITERIA
               : SEARCH_ERROR_MESSAGES.VALIDATION_ERROR,
-            details: isNoSearchCriteria
-              ? undefined
-              : formErrors.fieldErrors,
+            details: isNoSearchCriteria ? undefined : formErrors.fieldErrors,
           },
         },
         { status: HTTP_STATUS.BAD_REQUEST },

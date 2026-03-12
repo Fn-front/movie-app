@@ -17,7 +17,7 @@
 |---------|-----|------|-----------|------|
 | id | UUID | NOT NULL | gen_random_uuid() | ユーザーID（主キー） |
 | email | VARCHAR(255) | NOT NULL | - | メールアドレス（ユニーク） |
-| password_hash | VARCHAR(255) | NOT NULL | - | ハッシュ化されたパスワード |
+| password_hash | VARCHAR(255) | NULL | - | ハッシュ化されたパスワード（ソーシャルログインユーザーはNULL） |
 | name | VARCHAR(100) | NULL | - | ユーザー名 |
 | avatar_url | TEXT | NULL | - | アバター画像URL |
 | role | VARCHAR(20) | NOT NULL | 'user' | ユーザー権限（user / admin） |
@@ -34,6 +34,69 @@
 - UPDATE: 自分のレコードのみ更新可能
 - DELETE: 自分のレコードのみ削除可能
 - INSERT: 公開（新規登録用）
+
+---
+
+### accounts（ソーシャルログインアカウント）
+OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.jsアダプター準拠）
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
+| user_id | UUID | NOT NULL | - | ユーザーID（外部キー） |
+| provider | VARCHAR(50) | NOT NULL | - | プロバイダー名（google / github） |
+| provider_account_id | VARCHAR(255) | NOT NULL | - | プロバイダー側のアカウントID |
+| type | VARCHAR(20) | NOT NULL | 'oauth' | アカウント種別（oauth） |
+| access_token | TEXT | NULL | - | アクセストークン |
+| refresh_token | TEXT | NULL | - | リフレッシュトークン |
+| expires_at | INTEGER | NULL | - | トークン有効期限（UNIX timestamp） |
+| token_type | VARCHAR(50) | NULL | - | トークン種別 |
+| scope | VARCHAR(255) | NULL | - | スコープ |
+| id_token | TEXT | NULL | - | IDトークン |
+| created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
+| updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |
+
+**インデックス:**
+- `provider, provider_account_id` (UNIQUE) - プロバイダー内での一意性
+- `user_id` - ユーザー別アカウント取得用
+
+**外部キー:**
+- `user_id` -> `users(id)` ON DELETE CASCADE
+
+**RLS (Row Level Security):**
+- SELECT: 自分のレコードのみ閲覧可能
+- INSERT: サーバー側のみ（service role）
+- UPDATE: サーバー側のみ（service role）
+- DELETE: 自分のレコードのみ削除可能
+
+---
+
+### otp_codes（OTP検証コード）
+メール認証用の6桁ワンタイムコードを管理
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
+| email | VARCHAR(255) | NOT NULL | - | 送信先メールアドレス |
+| code | VARCHAR(6) | NOT NULL | - | 6桁OTPコード |
+| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（registration / login / password_change） |
+| attempts | INTEGER | NOT NULL | 0 | 検証試行回数 |
+| expires_at | TIMESTAMP | NOT NULL | - | 有効期限（作成時刻 + 10分） |
+| verified_at | TIMESTAMP | NULL | - | 検証完了日時 |
+| created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
+
+**インデックス:**
+- `email, action_type, created_at` - メール・アクション・日時での検索用
+- `expires_at` - 期限切れレコードのクリーンアップ用
+
+**制約:**
+- `action_type` は 'registration', 'login', 'password_change' のいずれか（CHECK制約）
+- `attempts` は 0〜5 の範囲（CHECK制約）
+- `code` は 6桁数字（CHECK制約）
+
+**クリーンアップ:**
+- 有効期限切れ（`expires_at < now()`）のレコードは定期的に削除
+- 検証成功時（`verified_at IS NOT NULL`）のレコードは即座に削除
 
 ---
 
@@ -186,7 +249,7 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 |---------|-----|------|-----------|------|
 | id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
 | identifier | VARCHAR(255) | NOT NULL | - | 識別子（IPアドレス or ユーザーID） |
-| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（login） |
+| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（login / otp_verify） |
 | attempts | INTEGER | NOT NULL | 0 | 試行回数 |
 | locked_until | TIMESTAMP | NULL | - | ロック解除時刻 |
 | last_attempt_at | TIMESTAMP | NOT NULL | now() | 最終試行時刻 |
@@ -198,11 +261,12 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 - `locked_until` - ロック解除チェック用
 
 **制約:**
-- `action_type` は 'login', 'change_password' 等（CHECK制約）
+- `action_type` は 'login', 'change_password', 'otp_verify' 等（CHECK制約）
 
 **レート制限ルール:**
 - **login**: 3回失敗で30分ロック
 - **change_password**: 3回失敗で30分ロック
+- **otp_verify**: 5回失敗で該当OTP無効化
 
 **クリーンアップ:**
 - ロック解除時刻を過ぎたレコードは定期的に削除（Vercel Cron Jobs）
@@ -215,11 +279,15 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 ```
 users (1) ----< (N) watchlist
   |
+  +----< (N) accounts
+  |
   +---- (1) user_settings
   |
   +---- (1) user_preferences
   |
   +----< (N) reviews
+
+otp_codes（usersと直接FKなし、emailで紐付け）
 ```
 
 ---

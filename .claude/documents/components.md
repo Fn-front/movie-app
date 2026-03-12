@@ -540,18 +540,22 @@ type MovieFilterProps = {
 
 **Props:**
 - `onSubmit`: (email: string, password: string) => Promise<void>
+- `onOtpLoginClick`: () => void
 - `onRegisterClick`: () => void
 
 **表示内容:**
 - メールアドレス入力
 - パスワード入力
 - ログインボタン
+- SocialLoginButtonsコンポーネント（区切り線「または」付き）
+- 「メールでログイン」リンク（OTPログインへ遷移）
 - 新規登録リンク
 
 **使用例:**
 ```tsx
 <LoginForm
   onSubmit={handleLogin}
+  onOtpLoginClick={handleShowOtpLogin}
   onRegisterClick={handleShowRegister}
 />
 ```
@@ -570,6 +574,7 @@ type MovieFilterProps = {
 - パスワード入力
 - ユーザー名入力
 - 登録ボタン
+- SocialLoginButtonsコンポーネント（区切り線「または」付き）
 - ログインリンク
 
 **使用例:**
@@ -577,6 +582,52 @@ type MovieFilterProps = {
 <RegisterForm
   onSubmit={handleRegister}
   onLoginClick={handleShowLogin}
+/>
+```
+
+---
+
+### SocialLoginButtons
+ソーシャルログインボタン群
+
+**Props:**
+- `onGoogleLogin`: () => void
+- `onGithubLogin`: () => void
+- `disabled`: boolean
+
+**表示内容:**
+- Googleログインボタン（Googleアイコン + 「Googleでログイン」）
+- GitHubログインボタン（GitHubアイコン + 「GitHubでログイン」）
+- ボタンはoutlineスタイル、フルワイド
+
+**使用例:**
+```tsx
+<SocialLoginButtons
+  onGoogleLogin={handleGoogleLogin}
+  onGithubLogin={handleGithubLogin}
+  disabled={isLoading}
+/>
+```
+
+---
+
+### OtpLoginForm
+メールOTPログインフォーム
+
+**Props:**
+- `onSubmit`: (email: string) => Promise<void>
+- `onBackToLogin`: () => void
+
+**表示内容:**
+- メールアドレス入力
+- 「ログインコードを送信」ボタン
+- 「パスワードでログイン」リンク（LoginFormに戻る）
+
+**使用例:**
+```tsx
+<OtpLoginForm
+  onSubmit={handleSendOtpForLogin}
+  onBackToLogin={handleBackToLogin}
 />
 ```
 
@@ -591,15 +642,20 @@ OTP検証フォーム
 - `onSubmit`: (otp: string) => Promise<void>
 - `onResend`: () => Promise<void>
 - `email`: string
+- `action`: 'registration' | 'login' | 'password_change'
 
 **表示内容:**
+- 送信先メールアドレス表示（例: 「user@example.com に送信しました」）
 - 6桁OTP入力フィールド（1つの入力欄方式）
   - type="text"
+  - inputMode="numeric"
   - maxLength={6}
   - pattern="[0-9]{6}"
   - プレースホルダー: "123456"
+  - 自動フォーカス
 - 検証ボタン
-- 再送信ボタン（5分間隔制限）
+- 再送信ボタン（1分間隔制限、カウントダウン表示）
+- 残り試行回数表示（エラー時）
 
 **バリデーション（zod）:**
 ```typescript
@@ -615,6 +671,32 @@ const otpSchema = z.object({
 <OTPVerification
   onSubmit={handleVerifyOTP}
   onResend={handleResendOTP}
+  email={userEmail}
+  action="registration"
+/>
+```
+
+---
+
+### PasswordChangeForm
+パスワード変更フォーム（OTP検証 + 新パスワード入力）
+
+**フォーム**: react-hook-form + zod
+
+**Props:**
+- `onRequestOtp`: () => Promise<void>
+- `onSubmit`: (code: string, newPassword: string) => Promise<void>
+- `email`: string
+
+**表示内容:**
+- ステップ1: 「確認コードを送信」ボタン
+- ステップ2: OTPコード入力 + 新パスワード入力 + 変更ボタン
+
+**使用例:**
+```tsx
+<PasswordChangeForm
+  onRequestOtp={handleRequestOtp}
+  onSubmit={handleChangePassword}
   email={userEmail}
 />
 ```

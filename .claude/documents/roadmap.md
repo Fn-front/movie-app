@@ -931,22 +931,92 @@
   - 星評価入力UI
 - [ ] 映画詳細モーダルにレビューセクション追加
 
-### 認証機能拡張（将来的に検討）
-- [ ] ソーシャルログイン（Google/Twitter等）
-  - NextAuth.js OAuth Providers設定
-  - Google Provider / Twitter Provider追加
-  - 既存アカウントとの連携機能
-- [ ] パスワードレス認証（マジックリンク等）
-  - メールリンク認証実装
-  - NextAuth.js Email Provider設定
-- [ ] 二要素認証（TOTP）
-  - Google Authenticator等との連携
-
 ### その他機能
 - [ ] シェア機能
 - [ ] ダークモード
 - [ ] 通知機能（公開日リマインダー）
 - [ ] 言語切り替え（日本語/英語）
+
+---
+
+## フェーズ8: 認証機能拡張
+
+### Step 1: DB・テーブル準備
+- [ ] accountsテーブル作成（ソーシャルログインアカウント連携用）
+  - provider, provider_account_id, access_token 等
+  - RLS設定
+- [ ] otp_codesテーブル作成（OTP検証コード管理用）
+  - email, code(6桁), action_type, expires_at, attempts
+  - クリーンアップ処理
+- [ ] usersテーブル変更（password_hash を NULL許容に変更）
+- [ ] rate_limitsテーブル更新（otp_verify アクション追加）
+
+### Step 2: OTP基盤実装
+- [ ] OTPコード生成ユーティリティ（crypto.randomInt、6桁数字）
+- [ ] OTPメール送信処理（Resend統合）
+  - メールテンプレート作成
+  - 送信元メールアドレス設定
+- [ ] OTP送信API実装（`POST /api/auth/otp/send`）
+  - action別バリデーション（registration / login / password_change）
+  - 再送間隔チェック（1分）
+  - 既存OTP無効化
+- [ ] OTP検証API実装（`POST /api/auth/otp/verify`）
+  - 有効期限チェック（10分）
+  - 試行回数チェック（5回）
+  - action別後処理
+
+### Step 3: 新規登録フロー改修
+- [ ] 登録API改修（`POST /api/auth/register`）
+  - is_verified = false で作成
+  - OTP生成・メール送信を追加
+- [ ] OTP検証画面への遷移処理
+- [ ] OTP検証成功 → is_verified = true 更新
+- [ ] ログイン時 is_verified チェック追加
+
+### Step 4: メールOTPログイン実装
+- [ ] OtpLoginFormコンポーネント作成
+  - メールアドレス入力
+  - 「ログインコードを送信」ボタン
+- [ ] OTP送信 → 検証 → セッション発行フロー
+- [ ] LoginFormに「メールでログイン」リンク追加
+
+### Step 5: ソーシャルログイン実装（Google / GitHub）
+- [ ] NextAuth.js Provider設定
+  - Google Provider追加
+  - GitHub Provider追加
+- [ ] signInコールバック実装（アカウントリンク処理）
+  - 同じメールの既存ユーザーとの自動リンク
+  - 新規ユーザー作成（is_verified = true）
+- [ ] SocialLoginButtonsコンポーネント作成
+  - Googleログインボタン
+  - GitHubログインボタン
+- [ ] LoginForm / RegisterFormにSocialLoginButtons配置
+
+### Step 6: パスワード変更フロー改修
+- [ ] パスワード変更API改修（`POST /api/user/change-password`）
+  - OTPコード検証を追加
+  - 現在のパスワード入力を廃止
+- [ ] PasswordChangeFormコンポーネント作成
+  - OTP送信 → OTP入力 + 新パスワード入力
+- [ ] 設定画面にPasswordChangeForm配置
+
+### Step 7: OTPVerificationコンポーネント改修
+- [ ] OTPVerificationコンポーネント更新
+  - action prop追加（registration / login / password_change）
+  - 送信先メールアドレス表示
+  - 再送カウントダウン表示（1分）
+  - 残り試行回数表示（エラー時）
+  - inputMode="numeric" 対応
+
+### Step 8: テスト
+- [ ] OTP送信APIテスト
+- [ ] OTP検証APIテスト
+- [ ] 登録フロー改修テスト（OTP検証含む）
+- [ ] メールOTPログインテスト
+- [ ] ソーシャルログインテスト（モック）
+- [ ] パスワード変更フロー改修テスト
+- [ ] OTPVerificationコンポーネントテスト
+- [ ] SocialLoginButtonsコンポーネントテスト
 
 ---
 

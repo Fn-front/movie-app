@@ -84,6 +84,48 @@ cookies: {
 
 ---
 
+### OAuth認証（ソーシャルログイン）
+
+```bash
+# Google OAuth
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+
+# GitHub OAuth
+GITHUB_CLIENT_ID=your_github_client_id_here
+GITHUB_CLIENT_SECRET=your_github_client_secret_here
+```
+
+**Google OAuth取得方法:**
+1. https://console.cloud.google.com/ でプロジェクト作成
+2. APIとサービス > 認証情報 > OAuth 2.0 クライアントID作成
+3. 承認済みリダイレクトURI: `http://localhost:3000/api/auth/callback/google`（開発）
+4. 本番: `https://yourdomain.com/api/auth/callback/google`
+
+**GitHub OAuth取得方法:**
+1. https://github.com/settings/developers > New OAuth App
+2. Authorization callback URL: `http://localhost:3000/api/auth/callback/github`（開発）
+3. 本番: `https://yourdomain.com/api/auth/callback/github`
+
+---
+
+### メール送信（Resend）
+
+```bash
+# Resend API Key
+RESEND_API_KEY=re_xxxxxxxxxxxx
+
+# 送信元メールアドレス
+RESEND_FROM_EMAIL=noreply@yourdomain.com
+```
+
+**取得方法:**
+1. https://resend.com/ でアカウント作成
+2. API Keys で新しいキーを生成
+3. ドメイン認証を完了させる（独自ドメイン使用時）
+
+---
+
 ### Vercel Cron Jobs（バッチ更新用）
 
 ```bash
@@ -178,6 +220,16 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 # Authentication (NextAuth.js)
 NEXTAUTH_SECRET=your_nextauth_secret_here_minimum_32_chars
 NEXTAUTH_URL=http://localhost:3000
+
+# OAuth (Social Login)
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+GITHUB_CLIENT_ID=your_github_client_id_here
+GITHUB_CLIENT_SECRET=your_github_client_secret_here
+
+# Email (Resend)
+RESEND_API_KEY=re_xxxxxxxxxxxx
+RESEND_FROM_EMAIL=noreply@yourdomain.com
 
 # Rate Limiting
 RATE_LIMIT_MAX_ATTEMPTS=3

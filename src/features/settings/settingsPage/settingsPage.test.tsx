@@ -33,14 +33,11 @@ jest.mock('@/hooks/useToast', () => ({
   }),
 }));
 
-jest.mock(
-  '@/features/settings/changePasswordForm/changePasswordForm',
-  () => ({
-    ChangePasswordForm: ({ email }: { email: string }) => (
-      <div data-testid='change-password-form' data-email={email} />
-    ),
-  }),
-);
+jest.mock('@/features/settings/changePasswordForm/changePasswordForm', () => ({
+  ChangePasswordForm: ({ email }: { email: string }) => (
+    <div data-testid='change-password-form' data-email={email} />
+  ),
+}));
 
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';

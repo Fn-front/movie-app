@@ -4,7 +4,7 @@
 
 import type { Metadata } from 'next';
 
-import { ChangePasswordForm } from '@/features/settings/changePasswordForm/changePasswordForm';
+import { ChangePasswordPageContent } from './changePasswordPageContent';
 
 export const metadata: Metadata = {
   title: 'パスワード変更 | Movie App',
@@ -12,5 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function ChangePasswordPage() {
-  return <ChangePasswordForm />;
+  return <ChangePasswordPageContent />;
 }

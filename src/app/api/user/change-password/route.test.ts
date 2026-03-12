@@ -127,9 +127,7 @@ describe('POST /api/user/change-password', () => {
     mockOtpDelete(); // OTP削除（パスワード更新前に無効化）
     mockUpdateSuccess();
 
-    const response = await POST(
-      createRequest({ newPassword: 'NewPassword1' }),
-    );
+    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -139,9 +137,7 @@ describe('POST /api/user/change-password', () => {
   it('未認証で401を返す', async () => {
     (getAuthSession as jest.Mock).mockResolvedValue(null);
 
-    const response = await POST(
-      createRequest({ newPassword: 'NewPassword1' }),
-    );
+    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
 
     expect(response.status).toBe(401);
   });
@@ -152,9 +148,7 @@ describe('POST /api/user/change-password', () => {
       retryAfter: 1800,
     });
 
-    const response = await POST(
-      createRequest({ newPassword: 'NewPassword1' }),
-    );
+    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
 
     expect(response.status).toBe(429);
   });
@@ -173,9 +167,7 @@ describe('POST /api/user/change-password', () => {
     });
     mockOtpSelect(null); // 検証済みOTPなし
 
-    const response = await POST(
-      createRequest({ newPassword: 'NewPassword1' }),
-    );
+    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
     const json = await response.json();
 
     expect(response.status).toBe(400);
@@ -195,9 +187,7 @@ describe('POST /api/user/change-password', () => {
     });
     mockOtpDelete(); // 期限切れOTP削除
 
-    const response = await POST(
-      createRequest({ newPassword: 'NewPassword1' }),
-    );
+    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
     const json = await response.json();
 
     expect(response.status).toBe(400);
@@ -239,9 +229,7 @@ describe('POST /api/user/change-password', () => {
     mockOtpDelete(); // OTP削除（パスワード更新前に無効化）
     mockUpdateSuccess();
 
-    const response = await POST(
-      createRequest({ newPassword: 'NewPassword1' }),
-    );
+    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
     const json = await response.json();
 
     expect(response.status).toBe(200);

@@ -82,6 +82,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
+        // メール認証チェック
+        if (!user.is_verified) {
+          throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
+        }
+
         // 認証成功 — レート制限リセット
         await resetRateLimit(supabase, email, 'login');
 

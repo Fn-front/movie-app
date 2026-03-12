@@ -974,12 +974,12 @@
   - inputMode="numeric" 対応
 
 ### Step 3: 新規登録フロー改修
-- [ ] 登録API改修（`POST /api/auth/register`）
+- [x] 登録API改修（`POST /api/auth/register`）
   - is_verified = false で作成
   - OTP生成・メール送信を追加
-- [ ] OTP検証画面への遷移処理
-- [ ] OTP検証成功 → is_verified = true 更新
-- [ ] ログイン時 is_verified チェック追加
+- [x] OTP検証画面への遷移処理
+- [x] OTP検証成功 → is_verified = true 更新
+- [x] ログイン時 is_verified チェック追加
 
 ### Step 4: メールOTPログイン実装
 - [ ] OtpLoginFormコンポーネント作成

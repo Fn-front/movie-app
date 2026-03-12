@@ -21,6 +21,27 @@ jest.mock('@/lib/api/auth/auth', () => ({
   registerUser: (...args: unknown[]) => mockRegisterUser(...args),
 }));
 
+jest.mock(
+  '@/features/auth/otpVerification/otpVerification',
+  () => ({
+    OtpVerification: ({
+      email,
+      onVerifySuccess,
+    }: {
+      email: string;
+      action: string;
+      onVerifySuccess?: () => void;
+    }) => (
+      <div data-testid='otp-verification'>
+        <span data-testid='otp-email'>{email}</span>
+        <button onClick={onVerifySuccess} data-testid='otp-verify-success'>
+          検証成功
+        </button>
+      </div>
+    ),
+  }),
+);
+
 // --- Tests ---
 
 describe('RegisterForm', () => {
@@ -147,11 +168,11 @@ describe('RegisterForm', () => {
     expect(mockRegisterUser).not.toHaveBeenCalled();
   });
 
-  it('登録成功時にトーストとリダイレクトが実行される', async () => {
+  it('登録成功時にOTP検証画面が表示される', async () => {
     mockRegisterUser.mockResolvedValue({
       success: true,
       data: { userId: '123' },
-      message: '登録完了',
+      message: '確認コードをメールに送信しました。',
     });
 
     render(<RegisterForm />);
@@ -167,8 +188,40 @@ describe('RegisterForm', () => {
     });
 
     await waitFor(() => {
+      expect(screen.getByTestId('otp-verification')).toBeInTheDocument();
+      expect(screen.getByTestId('otp-email')).toHaveTextContent(
+        'test@example.com',
+      );
+    });
+
+    // フォームは非表示
+    expect(screen.queryByLabelText('メールアドレス')).not.toBeInTheDocument();
+  });
+
+  it('OTP検証成功時にトーストとリダイレクトが実行される', async () => {
+    mockRegisterUser.mockResolvedValue({
+      success: true,
+      data: { userId: '123' },
+      message: '確認コードをメールに送信しました。',
+    });
+
+    render(<RegisterForm />);
+    await fillForm();
+    await user.click(screen.getByRole('button', { name: '新規登録' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('otp-verification')).toBeInTheDocument();
+    });
+
+    // OTP検証成功ボタンをクリック
+    await user.click(screen.getByTestId('otp-verify-success'));
+
+    await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: 'success' }),
+        expect.objectContaining({
+          variant: 'success',
+          description: 'メール認証が完了しました。ログインしてください。',
+        }),
       );
       expect(mockPush).toHaveBeenCalledWith('/auth/signin');
     });
@@ -191,5 +244,7 @@ describe('RegisterForm', () => {
     });
 
     expect(mockPush).not.toHaveBeenCalled();
+    // OTP検証画面は表示されない
+    expect(screen.queryByTestId('otp-verification')).not.toBeInTheDocument();
   });
 });

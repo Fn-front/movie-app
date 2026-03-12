@@ -98,4 +98,10 @@ describe('AppLayout', () => {
     render(<AppLayout>コンテンツ</AppLayout>);
     expect(screen.getByRole('link', { name: 'Movie App' })).toBeInTheDocument();
   });
+
+  it('SearchBarがHeader内に表示される', () => {
+    render(<AppLayout>コンテンツ</AppLayout>);
+    expect(screen.getByRole('search')).toBeInTheDocument();
+    expect(screen.getByLabelText('映画を検索')).toBeInTheDocument();
+  });
 });

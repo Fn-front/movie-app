@@ -51,22 +51,22 @@ test.describe('モバイルレスポンシブ表示', () => {
   }) => {
     await page.goto('/');
 
-    // 映画タイルが存在する場合クリック
+    // 映画タイルが表示されるまで待機
     const movieTile = page.locator('[class*="movie_tile"]').first();
+    await expect(movieTile).toBeVisible({ timeout: 10000 });
 
-    if (await movieTile.isVisible()) {
-      await movieTile.click();
+    await movieTile.click();
 
-      // モーダルが表示される
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toBeVisible();
+    // モーダルが表示される
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
 
-      // モーダルが画面内に収まっている
-      const dialogBox = await dialog.boundingBox();
+    // モーダルが画面内に収まっている
+    const dialogBox = await dialog.boundingBox();
+    expect(dialogBox).not.toBeNull();
 
-      if (dialogBox) {
-        expect(dialogBox.width).toBeLessThanOrEqual(375);
-      }
+    if (dialogBox) {
+      expect(dialogBox.width).toBeLessThanOrEqual(375);
     }
   });
 });

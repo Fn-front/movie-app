@@ -143,8 +143,8 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
       noPadding
       clickable={!!onClick}
       className={styles.c_favorite_tile}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
+      onClick={onClick ? handleClick : undefined}
+      onKeyDown={onClick ? handleKeyDown : undefined}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       aria-label={onClick ? `${item.title}の詳細を表示` : undefined}

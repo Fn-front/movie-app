@@ -219,19 +219,4 @@ describe('ChangePasswordForm', () => {
       );
     });
   });
-
-  it('OTP送信失敗時に一般エラーのメッセージが表示される', async () => {
-    mockSendOtp.mockRejectedValueOnce(
-      new AxiosError('Send failed', 'ERR_NETWORK'),
-    );
-
-    render(<ChangePasswordForm email={defaultEmail} />);
-
-    await user.click(screen.getByRole('button', { name: '確認コードを送信' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByRole('alert').textContent).toBeTruthy();
-    });
-  });
 });

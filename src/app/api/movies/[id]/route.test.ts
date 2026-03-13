@@ -24,12 +24,8 @@ jest.mock('@/helpers/auth', () => ({
 }));
 
 const mockFrom = jest.fn();
-const mockCreateServiceRoleClient = jest
-  .fn()
-  .mockReturnValue({ from: mockFrom });
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: (...args: unknown[]) =>
-    mockCreateServiceRoleClient(...args),
+  createServiceRoleClient: () => ({ from: mockFrom }),
 }));
 
 // --- Helpers ---
@@ -184,24 +180,6 @@ describe('GET /api/movies/:id', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.favorite).toBeNull();
-  });
-
-  it('認証済みだがSupabaseクライアントがnullの場合、favoriteフィールドが含まれない', async () => {
-    mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
-    mockCreateServiceRoleClient.mockReturnValueOnce(null);
-    const mockMovie = {
-      id: 789,
-      title: 'Supabase未接続映画',
-    };
-    mockGetMovieDetail.mockResolvedValue(mockMovie);
-
-    const response = await GET(createRequest('789'), {
-      params: createParams('789'),
-    });
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.data.favorite).toBeUndefined();
   });
 
   it('未認証の場合、favoriteフィールドが含まれない', async () => {

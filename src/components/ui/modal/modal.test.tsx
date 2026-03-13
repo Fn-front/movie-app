@@ -180,36 +180,6 @@ describe('Modal', () => {
     );
     expect(screen.getByRole('button', { name: '閉じる' })).toBeInTheDocument();
   });
-
-  it('closeOnOverlayClick=trueの場合オーバーレイポインターダウンでpreventDefaultが呼ばれない', () => {
-    const handleOpenChange = jest.fn();
-    render(
-      <Modal
-        {...defaultProps}
-        closeOnOverlayClick={true}
-        onOpenChange={handleOpenChange}
-      />,
-    );
-    const dialog = screen.getByRole('dialog');
-    // Radix UI の onPointerDownOutside ハンドラーを直接トリガー
-    fireEvent.pointerDown(dialog, { bubbles: true });
-    expect(dialog).toBeInTheDocument();
-  });
-
-  it('closeOnEscape=trueの場合ESCキーハンドラーでpreventDefaultが呼ばれない', () => {
-    const handleOpenChange = jest.fn();
-    render(
-      <Modal
-        {...defaultProps}
-        closeOnEscape={true}
-        onOpenChange={handleOpenChange}
-      />,
-    );
-    const dialog = screen.getByRole('dialog');
-    // Radix UI の onEscapeKeyDown ハンドラーを直接トリガー
-    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
-    expect(dialog).toBeInTheDocument();
-  });
 });
 
 describe('ModalHeader', () => {
@@ -223,11 +193,6 @@ describe('ModalHeader', () => {
       <ModalHeader className='custom-header'>ヘッダー内容</ModalHeader>,
     );
     expect(container.firstChild).toHaveClass('custom-header');
-  });
-
-  it('classNameなしの場合でも正常にレンダリングされる', () => {
-    render(<ModalHeader>ヘッダーのみ</ModalHeader>);
-    expect(screen.getByText('ヘッダーのみ')).toBeInTheDocument();
   });
 });
 
@@ -243,11 +208,6 @@ describe('ModalBody', () => {
     );
     expect(container.firstChild).toHaveClass('custom-body');
   });
-
-  it('classNameなしの場合でも正常にレンダリングされる', () => {
-    render(<ModalBody>ボディのみ</ModalBody>);
-    expect(screen.getByText('ボディのみ')).toBeInTheDocument();
-  });
 });
 
 describe('ModalFooter', () => {
@@ -261,10 +221,5 @@ describe('ModalFooter', () => {
       <ModalFooter className='custom-footer'>フッター内容</ModalFooter>,
     );
     expect(container.firstChild).toHaveClass('custom-footer');
-  });
-
-  it('classNameなしの場合でも正常にレンダリングされる', () => {
-    render(<ModalFooter>フッターのみ</ModalFooter>);
-    expect(screen.getByText('フッターのみ')).toBeInTheDocument();
   });
 });

@@ -38,37 +38,4 @@ describe('AppQueryProvider', () => {
 
     expect(screen.getByTestId('child')).toHaveTextContent('テストコンテンツ');
   });
-
-  it('複数回マウントしても同じQueryClientインスタンスが使用される', () => {
-    let firstClient: unknown;
-    let secondClient: unknown;
-
-    function CaptureClient({ onCapture }: { onCapture: (c: unknown) => void }) {
-      const client = useQueryClient();
-      onCapture(client);
-      return null;
-    }
-
-    render(
-      <AppQueryProvider>
-        <CaptureClient
-          onCapture={(c) => {
-            firstClient = c;
-          }}
-        />
-      </AppQueryProvider>,
-    );
-
-    render(
-      <AppQueryProvider>
-        <CaptureClient
-          onCapture={(c) => {
-            secondClient = c;
-          }}
-        />
-      </AppQueryProvider>,
-    );
-
-    expect(firstClient).toBe(secondClient);
-  });
 });

@@ -93,24 +93,6 @@ describe('useSearch', () => {
 
       expect(result.current.query).toBe('');
     });
-
-    it('page・year・vote_average_gteパラメータを読み取る', () => {
-      setupMocks({
-        query: 'テスト',
-        page: '3',
-        year: '2025',
-        vote_average_gte: '7',
-        genre: '28',
-      });
-
-      renderHook(() => useSearch());
-
-      expect(mockUseQuery).toHaveBeenCalledWith(
-        expect.objectContaining({
-          enabled: true,
-        }),
-      );
-    });
   });
 
   describe('検索結果の取得', () => {

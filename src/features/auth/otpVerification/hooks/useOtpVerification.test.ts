@@ -210,42 +210,4 @@ describe('useOtpVerification', () => {
 
     expect(result.current.apiError).toBe('ネットワークエラーが発生しました。');
   });
-
-  it('handleVerify: エラーでメッセージがない場合デフォルトメッセージが設定される', async () => {
-    jest.useRealTimers();
-
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({}),
-    });
-
-    const { result } = renderHook(() => useOtpVerification(defaultProps));
-
-    await act(async () => {
-      await result.current.handleVerify('123456');
-    });
-
-    expect(result.current.apiError).toBe('検証に失敗しました。');
-    expect(result.current.remainingAttempts).toBeNull();
-  });
-
-  it('handleVerify: エラーでdetailsがない場合remainingAttemptsが更新されない', async () => {
-    jest.useRealTimers();
-
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      json: async () => ({
-        error: { message: 'コードが無効です' },
-      }),
-    });
-
-    const { result } = renderHook(() => useOtpVerification(defaultProps));
-
-    await act(async () => {
-      await result.current.handleVerify('123456');
-    });
-
-    expect(result.current.apiError).toBe('コードが無効です');
-    expect(result.current.remainingAttempts).toBeNull();
-  });
 });

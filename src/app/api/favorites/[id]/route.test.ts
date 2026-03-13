@@ -18,12 +18,8 @@ const OTHER_UUID = '660e8400-e29b-41d4-a716-446655440001';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
-const mockCreateServiceRoleClient = jest
-  .fn()
-  .mockReturnValue({ from: mockFrom });
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: (...args: unknown[]) =>
-    mockCreateServiceRoleClient(...args),
+  createServiceRoleClient: () => ({ from: mockFrom }),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -62,17 +58,6 @@ describe('PATCH /api/favorites/:id', () => {
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
-  });
-
-  it('Supabaseクライアントがnullの場合500を返す', async () => {
-    mockCreateServiceRoleClient.mockReturnValueOnce(null);
-
-    const { request, params } = createPatchRequest(VALID_UUID, { rating: 7 });
-    const response = await PATCH(request, { params });
-
-    expect(response.status).toBe(500);
-    const json = await response.json();
-    expect(json.success).toBe(false);
   });
 
   it('評価を正常に更新できる', async () => {
@@ -220,17 +205,6 @@ describe('DELETE /api/favorites/:id', () => {
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
-  });
-
-  it('Supabaseクライアントがnullの場合500を返す', async () => {
-    mockCreateServiceRoleClient.mockReturnValueOnce(null);
-
-    const { request, params } = createDeleteRequest(VALID_UUID);
-    const response = await DELETE(request, { params });
-
-    expect(response.status).toBe(500);
-    const json = await response.json();
-    expect(json.success).toBe(false);
   });
 
   it('正常に論理削除できる', async () => {

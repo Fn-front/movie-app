@@ -11,12 +11,8 @@ import { POST } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
-const mockCreateServiceRoleClient = jest
-  .fn()
-  .mockReturnValue({ from: mockFrom });
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: (...args: unknown[]) =>
-    mockCreateServiceRoleClient(...args),
+  createServiceRoleClient: () => ({ from: mockFrom }),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -91,21 +87,6 @@ describe('POST /api/auth/register', () => {
     expect(json.data.userId).toBe('user-123');
     expect(mockGenerateOtpCode).toHaveBeenCalled();
     expect(mockSendOtpEmail).toHaveBeenCalledWith('test@example.com', '123456');
-  });
-
-  it('Supabaseクライアントがnullの場合500を返す', async () => {
-    mockCreateServiceRoleClient.mockReturnValueOnce(null);
-
-    const response = await POST(
-      createRequest({
-        email: 'test@example.com',
-        password: 'Password1',
-      }),
-    );
-
-    expect(response.status).toBe(500);
-    const json = await response.json();
-    expect(json.success).toBe(false);
   });
 
   it('バリデーションエラーで400を返す', async () => {

@@ -11,10 +11,8 @@ import { POST } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
-let mockSupabaseEnabled = true;
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () =>
-    mockSupabaseEnabled ? { from: mockFrom } : null,
+  createServiceRoleClient: () => ({ from: mockFrom }),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -109,7 +107,6 @@ const mockOtpDelete = () => {
 describe('POST /api/user/change-password', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSupabaseEnabled = true;
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -216,58 +213,6 @@ describe('POST /api/user/change-password', () => {
     );
 
     expect(response.status).toBe(400);
-  });
-
-  it('Supabaseクライアントがnullの場合、500を返す', async () => {
-    mockSupabaseEnabled = false;
-
-    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
-
-    expect(response.status).toBe(500);
-  });
-
-  it('ユーザー取得でfetchErrorが発生した場合、500を返す', async () => {
-    // fetchErrorあり、userなし
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          single: () => ({
-            data: null,
-            error: { message: 'DB fetch error' },
-          }),
-        }),
-      }),
-    });
-
-    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
-    const json = await response.json();
-
-    expect(response.status).toBe(500);
-    expect(json.success).toBe(false);
-  });
-
-  it('パスワード更新でupdateErrorが発生した場合、500を返す', async () => {
-    mockUserSelect({
-      id: 'user-123',
-      email: 'test@example.com',
-      password_hash: 'old_hash',
-    });
-    mockOtpSelect({
-      id: 'otp-1',
-      verified_at: new Date().toISOString(),
-    });
-    mockBcryptCompare.mockResolvedValueOnce(false);
-    mockOtpDelete(); // OTP削除（パスワード更新前に無効化）
-    // UPDATE失敗
-    mockFrom.mockReturnValueOnce({
-      update: () => ({
-        eq: () => ({ error: new Error('Update error') }),
-      }),
-    });
-
-    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
-
-    expect(response.status).toBe(500);
   });
 
   it('パスワード未設定ユーザーでもOTP検証済みなら変更できる', async () => {

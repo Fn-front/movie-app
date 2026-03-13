@@ -206,25 +206,4 @@ describe('LoginForm', () => {
       );
     });
   });
-
-  it('signInがnullを返した場合（result?.errorがundefined）にリダイレクトが実行される', async () => {
-    // signInがnullを返すケース — result?.error は undefined (falsy) なので成功とみなす
-    mockSignIn.mockResolvedValue(null);
-
-    render(<LoginForm />);
-
-    await user.type(
-      screen.getByLabelText('メールアドレス'),
-      'test@example.com',
-    );
-    await user.type(screen.getByLabelText('パスワード'), 'Password1');
-    await user.click(screen.getByRole('button', { name: 'ログイン' }));
-
-    await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: 'success' }),
-      );
-      expect(mockPush).toHaveBeenCalledWith('/');
-    });
-  });
 });

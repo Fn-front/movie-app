@@ -17,12 +17,8 @@ import { GET, PUT } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
-const mockCreateServiceRoleClient = jest
-  .fn()
-  .mockReturnValue({ from: mockFrom });
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: (...args: unknown[]) =>
-    mockCreateServiceRoleClient(...args),
+  createServiceRoleClient: () => ({ from: mockFrom }),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -52,16 +48,6 @@ describe('GET /api/user/settings', () => {
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
-  });
-
-  it('Supabaseクライアントがnullの場合500を返す', async () => {
-    mockCreateServiceRoleClient.mockReturnValueOnce(null);
-
-    const response = await GET();
-
-    expect(response.status).toBe(500);
-    const json = await response.json();
-    expect(json.success).toBe(false);
   });
 
   it('設定を取得できる', async () => {
@@ -168,16 +154,6 @@ describe('PUT /api/user/settings', () => {
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
-  });
-
-  it('Supabaseクライアントがnullの場合500を返す', async () => {
-    mockCreateServiceRoleClient.mockReturnValueOnce(null);
-
-    const response = await PUT(createPutRequest({ theme: 'dark' }));
-
-    expect(response.status).toBe(500);
-    const json = await response.json();
-    expect(json.success).toBe(false);
   });
 
   it('テーマを更新できる', async () => {

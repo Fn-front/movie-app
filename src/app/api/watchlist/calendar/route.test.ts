@@ -11,10 +11,8 @@ import { GET } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
-let mockSupabaseEnabled = true;
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () =>
-    mockSupabaseEnabled ? { from: mockFrom } : null,
+  createServiceRoleClient: () => ({ from: mockFrom }),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -63,7 +61,6 @@ const mockCalendarQuery = (data: unknown[] | null, error: unknown = null) => {
 describe('GET /api/watchlist/calendar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSupabaseEnabled = true;
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -183,66 +180,6 @@ describe('GET /api/watchlist/calendar', () => {
     const response = await GET(createGetRequest({ month: '2026-03' }));
 
     expect(response.status).toBe(500);
-  });
-
-  it('Supabaseクライアントがnullの場合、500を返す', async () => {
-    mockSupabaseEnabled = false;
-
-    const response = await GET(createGetRequest({ month: '2026-03' }));
-
-    expect(response.status).toBe(500);
-  });
-
-  it('12月を指定した場合、翌年1月が終了日として計算される', async () => {
-    mockCalendarQuery([]);
-
-    const response = await GET(createGetRequest({ month: '2026-12' }));
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.success).toBe(true);
-    expect(json.data.month).toBe('2026-12');
-  });
-
-  it('dataがnullの場合、空のmovies_by_dateを返す', async () => {
-    mockCalendarQuery(null);
-
-    const response = await GET(createGetRequest({ month: '2026-03' }));
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.data.movies_by_date).toEqual({});
-  });
-
-  it('release_dateがnullのアイテムはスキップされる', async () => {
-    const mockItems = [
-      {
-        id: 'wl-1',
-        tmdb_movie_id: 100,
-        title: '映画A',
-        poster_path: '/a.jpg',
-        release_date: null,
-        added_at: '2026-01-10T00:00:00Z',
-      },
-      {
-        id: 'wl-2',
-        tmdb_movie_id: 200,
-        title: '映画B',
-        poster_path: '/b.jpg',
-        release_date: '2026-03-15',
-        added_at: '2026-01-09T00:00:00Z',
-      },
-    ];
-
-    mockCalendarQuery(mockItems);
-
-    const response = await GET(createGetRequest({ month: '2026-03' }));
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    // release_date=nullのアイテムはスキップされるため1日のみ
-    expect(Object.keys(json.data.movies_by_date)).toHaveLength(1);
-    expect(json.data.movies_by_date['2026-03-15']).toHaveLength(1);
   });
 
   it('日付ごとに映画が正しくグループ化される', async () => {

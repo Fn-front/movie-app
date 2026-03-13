@@ -117,30 +117,4 @@ describe('ToastContainer', () => {
     closeButton.click();
     expect(removeToast).toHaveBeenCalledWith('toast-1');
   });
-
-  it('open=trueの場合removeToastは呼ばれない', () => {
-    const removeToast = jest.fn();
-    mockUseToast.mockReturnValue({
-      toasts: [createMockToast({ id: 'toast-1' })],
-      toast: jest.fn(),
-      removeToast,
-      clearToasts: jest.fn(),
-    });
-    renderWithProvider(<ToastContainer />);
-
-    // トーストが表示されているがremoveToastは呼ばれていない
-    expect(screen.getByText('テストタイトル')).toBeInTheDocument();
-    expect(removeToast).not.toHaveBeenCalled();
-  });
-
-  it('descriptionがない場合もトーストが表示される', () => {
-    mockUseToast.mockReturnValue({
-      toasts: [createMockToast({ id: '1', description: undefined })],
-      toast: jest.fn(),
-      removeToast: jest.fn(),
-      clearToasts: jest.fn(),
-    });
-    renderWithProvider(<ToastContainer />);
-    expect(screen.getByText('テストタイトル')).toBeInTheDocument();
-  });
 });

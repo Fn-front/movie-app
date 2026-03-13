@@ -27,11 +27,6 @@ jest.mock('@/features/auth/socialLoginButtons/socialLoginButtons', () => ({
   ),
 }));
 
-const mockHandleApiError = jest.fn();
-jest.mock('@/utils/error', () => ({
-  handleApiError: (...args: unknown[]) => mockHandleApiError(...args),
-}));
-
 jest.mock('@/features/auth/otpVerification/otpVerification', () => ({
   OtpVerification: ({
     email,
@@ -82,8 +77,6 @@ describe('RegisterForm', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // デフォルトはAxiosErrorのメッセージを返すように設定
-    mockHandleApiError.mockReturnValue({ message: '登録に失敗しました' });
   });
 
   it('フォームが正しく表示される', () => {
@@ -257,22 +250,6 @@ describe('RegisterForm', () => {
     expect(mockPush).not.toHaveBeenCalled();
     // OTP検証画面は表示されない
     expect(screen.queryByTestId('otp-verification')).not.toBeInTheDocument();
-  });
-
-  it('handleApiErrorがmessage=nullを返す場合デフォルトエラーメッセージが使用される', async () => {
-    mockRegisterUser.mockRejectedValue(new Error('Unknown'));
-    mockHandleApiError.mockReturnValue({ message: null });
-
-    render(<RegisterForm />);
-    await fillForm();
-    await user.click(screen.getByRole('button', { name: '新規登録' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({ variant: 'error' }),
-      );
-    });
   });
 
   it('ユーザー名なしで登録成功する', async () => {

@@ -927,9 +927,9 @@
   - **未決定のままだとSPユーザーがカレンダーにアクセスできない**
 
 #### テスト
-- [x] 結合テスト
+- [ ] 結合テスト
   - 主要コンポーネントのレスポンシブ表示テスト（必要に応じて）
-- [x] E2Eテスト（Playwright）
+- [ ] E2Eテスト（Playwright）
   - SP表示幅での主要ページ表示確認
   - SP表示幅での映画詳細モーダル表示
 
@@ -952,7 +952,7 @@
 - [ ] 不足箇所の修正
 
 #### テスト
-- [x] 結合テスト
+- [ ] 結合テスト
   - アクセシビリティテスト（カスタムコンポーネントのaria属性・フォーカス）
 
 ---
@@ -1002,7 +1002,7 @@
   - ユーザー単位のtry-catch（1ユーザーの失敗が他に影響しない）
   - OpenAI/TMDbエラー時は該当ユーザーをスキップし既存レコメンドを維持
 - [ ] Vercel Cron設定（vercel.json）— 日次実行
-- [x] 結合テスト
+- [ ] 結合テスト
   - Cron APIテスト
     - CRON_SECRET認証チェック
     - OpenAI APIモック → 正常レスポンスのパース
@@ -1025,7 +1025,7 @@
   - ローディング・エラー状態管理
 - [ ] 単体テスト
   - APIクライアントテスト（getRecommendations）
-- [x] 結合テスト
+- [ ] 結合テスト
   - API Routeテスト（GET /api/recommendations）
     - 認証チェック（401）
     - 正常取得（レコメンドあり）
@@ -1046,13 +1046,13 @@
 - [ ] SCSS Modules スタイリング
   - デザインシステム変数使用
   - レスポンシブ対応（Step 3実装時に調整）
-- [x] 結合テスト
+- [ ] 結合テスト
   - RecommendationSectionテスト
     - お気に入り0件 → 登録促進テキスト表示
     - レコメンド未生成 → 準備中テキスト表示
     - レコメンドあり → MovieTile 10件表示
     - タイルクリック → MovieDetailModal表示
-- [x] E2Eテスト（Playwright）
+- [ ] E2Eテスト（Playwright）
   - ホームページでレコメンドセクション表示確認
   - レコメンド映画タイルクリック → 詳細モーダル表示
 
@@ -1089,7 +1089,7 @@
   - suggestTitle(query)
 - [ ] 単体テスト
   - APIクライアントテスト（suggestTitle）
-- [x] 結合テスト
+- [ ] 結合テスト
   - API Routeテスト（GET /api/movies/suggest-title）
     - 認証チェック（401）
     - キャッシュヒット → DB結果を返す
@@ -1112,7 +1112,7 @@
   - React.memo + displayName 必須
 - [ ] SearchResults変更
   - 検索結果0件時にTitleSuggestionをEmptyStateの上に配置
-- [x] 結合テスト
+- [ ] 結合テスト
   - useTitleSuggestionフックテスト
   - TitleSuggestionコンポーネントテスト
     - 提案あり → リンク表示

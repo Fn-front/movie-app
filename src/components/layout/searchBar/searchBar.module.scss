@@ -158,7 +158,8 @@
 
     position: fixed;
     inset: 0;
-    top: 52px; // ヘッダー分のオフセット
+    // ヘッダー高さ（padding-y: $spacing-3 × 2 + ボタン高さ4rem = 約52px）に依存
+    top: ($spacing-3 * 2) + 4rem;
     z-index: calc($z-index-fixed - 1);
     background-color: $overlay-light;
 

@@ -11,6 +11,13 @@ import { useFavoriteToggle } from './useFavoriteToggle';
 const mockAddToFavorites = jest.fn();
 const mockUpdateRating = jest.fn();
 const mockRemoveFromFavorites = jest.fn();
+const mockGetFavoriteInfo = jest.fn().mockReturnValue(null);
+
+const mockMutationState = {
+  isAdding: false,
+  isUpdating: false,
+  isRemoving: false,
+};
 
 jest.mock('@/features/favorites/hooks/useFavorites', () => ({
   useFavorites: () => ({
@@ -19,9 +26,16 @@ jest.mock('@/features/favorites/hooks/useFavorites', () => ({
     addToFavorites: mockAddToFavorites,
     updateRating: mockUpdateRating,
     removeFromFavorites: mockRemoveFromFavorites,
-    isAdding: false,
-    isUpdating: false,
-    isRemoving: false,
+    getFavoriteInfo: mockGetFavoriteInfo,
+    get isAdding() {
+      return mockMutationState.isAdding;
+    },
+    get isUpdating() {
+      return mockMutationState.isUpdating;
+    },
+    get isRemoving() {
+      return mockMutationState.isRemoving;
+    },
   }),
 }));
 
@@ -39,6 +53,9 @@ const createMovie = () => ({
 describe('useFavoriteToggle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockMutationState.isAdding = false;
+    mockMutationState.isUpdating = false;
+    mockMutationState.isRemoving = false;
   });
 
   it('初期状態ではモーダルが閉じている', () => {
@@ -168,5 +185,45 @@ describe('useFavoriteToggle', () => {
   it('isProcessingがfalseを返す', () => {
     const { result } = renderHook(() => useFavoriteToggle());
     expect(result.current.isProcessing).toBe(false);
+  });
+
+  it('ミューテーション中はisFavoriteProcessingがtrueを返す', () => {
+    const { result, rerender } = renderHook(() => useFavoriteToggle());
+
+    act(() => {
+      result.current.handleFavoriteToggle(createMovie(), null);
+    });
+    act(() => {
+      result.current.handleModalSubmit(7);
+    });
+
+    mockMutationState.isAdding = true;
+    rerender();
+
+    expect(result.current.isFavoriteProcessing(42)).toBe(true);
+  });
+
+  it('ミューテーション完了時にprocessingIdsがクリアされる', () => {
+    const { result, rerender } = renderHook(() => useFavoriteToggle());
+
+    act(() => {
+      result.current.handleFavoriteToggle(createMovie(), null);
+    });
+    act(() => {
+      result.current.handleModalSubmit(7);
+    });
+
+    mockMutationState.isAdding = true;
+    rerender();
+    expect(result.current.isFavoriteProcessing(42)).toBe(true);
+
+    mockMutationState.isAdding = false;
+    rerender();
+    expect(result.current.isFavoriteProcessing(42)).toBe(false);
+  });
+
+  it('getFavoriteInfoを返す', () => {
+    const { result } = renderHook(() => useFavoriteToggle());
+    expect(result.current.getFavoriteInfo(42)).toBeNull();
   });
 });

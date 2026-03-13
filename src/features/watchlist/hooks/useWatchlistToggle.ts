@@ -115,6 +115,13 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
     }
   }, []);
 
+  // ミューテーション完了時にtogglingIdsをクリア
+  useEffect(() => {
+    if (!isAdding && !isRemoving) {
+      setTogglingIds((prev) => (prev.size > 0 ? new Set() : prev));
+    }
+  }, [isAdding, isRemoving]);
+
   const isMovieToggling = useCallback(
     (tmdbMovieId: number) =>
       (isAdding || isRemoving) && togglingIds.has(tmdbMovieId),

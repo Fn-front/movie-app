@@ -3,7 +3,7 @@
  * useFavorites + モーダル状態管理を統合
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useFavorites } from '@/features/favorites/hooks/useFavorites';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
@@ -55,6 +55,8 @@ export interface UseFavoriteToggleReturn {
   isProcessing: boolean;
   /** 指定映画が処理中かどうか（per-movie無効化用） */
   isFavoriteProcessing: (tmdbMovieId: number) => boolean;
+  /** 指定映画のお気に入り情報を取得（未登録ならnull） */
+  getFavoriteInfo: (tmdbMovieId: number) => MovieFavoriteInfo | null;
 }
 
 const INITIAL_MODAL_STATE: FavoriteModalState = {
@@ -71,6 +73,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
     addToFavorites,
     updateRating,
     removeFromFavorites,
+    getFavoriteInfo,
     isAdding,
     isUpdating,
     isRemoving,
@@ -138,6 +141,13 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
     closeModal,
   ]);
 
+  // ミューテーション完了時にprocessingIdsをクリア
+  useEffect(() => {
+    if (!isAdding && !isUpdating && !isRemoving) {
+      setProcessingIds((prev) => (prev.size > 0 ? new Set() : prev));
+    }
+  }, [isAdding, isUpdating, isRemoving]);
+
   const isFavoriteProcessing = useCallback(
     (tmdbMovieId: number) =>
       (isAdding || isUpdating || isRemoving) && processingIds.has(tmdbMovieId),
@@ -153,6 +163,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       handleDelete,
       isProcessing: isAdding || isUpdating || isRemoving,
       isFavoriteProcessing,
+      getFavoriteInfo,
     }),
     [
       modalState,
@@ -164,6 +175,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       isUpdating,
       isRemoving,
       isFavoriteProcessing,
+      getFavoriteInfo,
     ],
   );
 }

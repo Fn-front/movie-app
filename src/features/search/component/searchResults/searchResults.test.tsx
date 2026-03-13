@@ -67,6 +67,7 @@ jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
     handleModalSubmit: jest.fn(),
     handleDelete: jest.fn(),
     isFavoriteProcessing: jest.fn(() => false),
+    getFavoriteInfo: jest.fn(() => null),
   }),
 }));
 

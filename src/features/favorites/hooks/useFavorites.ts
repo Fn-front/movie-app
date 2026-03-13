@@ -42,6 +42,8 @@ export interface UseFavoritesReturn {
   updateRating: (id: string, rating: number) => void;
   /** お気に入りから削除 */
   removeFromFavorites: (id: string) => void;
+  /** 指定映画のお気に入り情報を取得（未登録ならnull） */
+  getFavoriteInfo: (tmdbMovieId: number) => MovieFavoriteInfo | null;
   /** 追加中 */
   isAdding: boolean;
   /** 更新中 */
@@ -280,6 +282,17 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
     [removeMutation],
   );
 
+  const getFavoriteInfo = useCallback(
+    (tmdbMovieId: number): MovieFavoriteInfo | null => {
+      const item = favoritesQuery.data?.data.favorites.find(
+        (f) => f.tmdb_movie_id === tmdbMovieId,
+      );
+      if (!item) return null;
+      return { id: item.id, rating: item.rating };
+    },
+    [favoritesQuery.data],
+  );
+
   return useMemo(
     () => ({
       favorites: favoritesQuery.data?.data,
@@ -287,6 +300,7 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
       addToFavorites,
       updateRating,
       removeFromFavorites,
+      getFavoriteInfo,
       isAdding: addMutation.isPending,
       isUpdating: updateMutation.isPending,
       isRemoving: removeMutation.isPending,
@@ -297,6 +311,7 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
       addToFavorites,
       updateRating,
       removeFromFavorites,
+      getFavoriteInfo,
       addMutation.isPending,
       updateMutation.isPending,
       removeMutation.isPending,

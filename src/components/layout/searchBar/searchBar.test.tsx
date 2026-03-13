@@ -103,7 +103,8 @@ describe('SearchBar', () => {
   it('カスタムクラス名が適用される', () => {
     render(<SearchBar className='custom-class' />);
     const form = screen.getByRole('search');
-    expect(form.className).toContain('custom-class');
+    // classNameはラッパーdivに適用される
+    expect(form.parentElement?.className).toContain('custom-class');
   });
 
   it('検索クエリがURLエンコードされる', async () => {

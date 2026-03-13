@@ -2,17 +2,75 @@
 @use '@/styles/mixins' as *;
 
 .c_search_bar {
+  position: relative;
   display: flex;
   align-items: center;
-  width: 100%;
-  background-color: $background-secondary;
-  border: $border-width-1 solid $border-color;
-  border-radius: $border-radius-full;
-  transition: $transition-all;
+  margin-left: auto;
 
-  &:focus-within {
-    border-color: $primary-500;
-    box-shadow: 0 0 0 3px rgba($primary-500, 0.1);
+  // SP: 検索アイコンボタン（トグル）
+  &__toggle {
+    @include button-reset;
+    @include flex-center;
+
+    width: 4rem;
+    height: 4rem;
+    border-radius: $border-radius-md;
+    color: $text-secondary;
+    transition: $transition-all;
+
+    &:hover {
+      color: $primary-500;
+      background-color: $background-secondary;
+    }
+
+    &:focus-visible {
+      @include focus-visible;
+    }
+
+    // lg以上で非表示（フォームが常に表示されるため）
+    @include lg {
+      display: none;
+    }
+  }
+
+  // 検索フォーム
+  &__form {
+    // SP: デフォルトで非表示
+    display: none;
+
+    // SP: 展開時
+    &--expanded {
+      display: flex;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: $z-index-fixed;
+      padding: $spacing-3 $spacing-4;
+      background-color: $background-paper;
+      box-shadow: $shadow-md;
+      animation: searchBarSlideDown $duration-fast $ease-out;
+    }
+
+    // lg以上: 常に表示
+    @include lg {
+      display: flex;
+      position: static;
+      padding: 0;
+      background-color: $background-secondary;
+      border: $border-width-1 solid $border-color;
+      border-radius: $border-radius-full;
+      box-shadow: none;
+      animation: none;
+      width: 100%;
+      max-width: 400px;
+      transition: $transition-all;
+
+      &:focus-within {
+        border-color: $primary-500;
+        box-shadow: 0 0 0 3px rgba($primary-500, 0.1);
+      }
+    }
   }
 
   // 検索入力フィールド
@@ -25,6 +83,15 @@
     font-size: $font-size-sm;
     color: $text-primary;
     min-width: 0;
+    background-color: $background-secondary;
+    border: $border-width-1 solid $border-color;
+    border-radius: $border-radius-full;
+
+    @include lg {
+      background-color: transparent;
+      border: none;
+      border-radius: 0;
+    }
 
     &::placeholder {
       color: $text-secondary;
@@ -56,5 +123,60 @@
       opacity: 0.4;
       cursor: not-allowed;
     }
+  }
+
+  // SP: 閉じるボタン
+  &__close {
+    @include button-reset;
+    @include flex-center;
+
+    flex-shrink: 0;
+    width: 3.6rem;
+    height: 3.6rem;
+    border-radius: $border-radius-md;
+    color: $text-secondary;
+    transition: $transition-all;
+
+    &:hover {
+      color: $text-primary;
+      background-color: $background-secondary;
+    }
+
+    &:focus-visible {
+      @include focus-visible;
+    }
+
+    // lg以上で非表示
+    @include lg {
+      display: none;
+    }
+  }
+
+  // SP: 展開時のオーバーレイ
+  &__overlay {
+    @include button-reset;
+
+    position: fixed;
+    inset: 0;
+    top: 52px; // ヘッダー分のオフセット
+    z-index: calc($z-index-fixed - 1);
+    background-color: $overlay-light;
+
+    // lg以上で非表示
+    @include lg {
+      display: none;
+    }
+  }
+}
+
+@keyframes searchBarSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

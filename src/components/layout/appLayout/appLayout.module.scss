@@ -21,19 +21,28 @@
     overflow: hidden;
   }
 
-  // サイドバー
+  // サイドバー（lg未満で非表示）
   &__sidebar {
+    display: none;
     flex-shrink: 0;
+
+    @include lg {
+      display: block;
+    }
   }
 
   // メインコンテンツ
   &__main {
     flex: 1;
     overflow-y: auto;
-    padding: $spacing-6;
+    padding: $spacing-4;
     max-width: 1440px;
     margin: 0 auto;
     width: 100%;
+
+    @include lg {
+      padding: $spacing-6;
+    }
   }
 
   // フッター

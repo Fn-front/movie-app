@@ -13,18 +13,36 @@
   &__container {
     display: flex;
     align-items: center;
-    gap: $spacing-6;
-    padding: $spacing-4 $spacing-6;
+    gap: $spacing-3;
+    padding: $spacing-3 $spacing-4;
+
+    @include lg {
+      gap: $spacing-6;
+      padding: $spacing-4 $spacing-6;
+    }
+  }
+
+  // モバイルメニューボタン（lg未満で表示）
+  &__mobile_menu {
+    flex-shrink: 0;
+
+    @include lg {
+      display: none;
+    }
   }
 
   // ロゴ
   &__logo {
-    font-size: $font-size-2xl;
+    font-size: $font-size-lg;
     font-weight: $font-weight-bold;
     color: $primary-500;
     text-decoration: none;
     transition: $transition-all;
     flex-shrink: 0;
+
+    @include lg {
+      font-size: $font-size-2xl;
+    }
 
     &:hover {
       color: $primary-600;
@@ -42,9 +60,14 @@
     max-width: 400px;
   }
 
-  // ユーザーメニュー
+  // ユーザーメニュー（lg未満で非表示 → MobileDrawer内に移動）
   &__user {
+    display: none;
     margin-left: auto;
     flex-shrink: 0;
+
+    @include lg {
+      display: block;
+    }
   }
 }

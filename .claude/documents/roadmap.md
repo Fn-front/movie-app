@@ -872,9 +872,9 @@
 ### Step 2: モバイルレイアウト基盤（`feature/mobile-layout`）
 
 #### ハンバーガーメニュー
-- [ ] MobileMenuButtonコンポーネント作成（ハンバーガーアイコン、Header内に配置）
+- [x] MobileMenuButtonコンポーネント作成（ハンバーガーアイコン、Header内に配置）
   - lg以上で非表示、lg未満で表示
-- [ ] MobileDrawerコンポーネント作成（Radix UI Dialog ベース）
+- [x] MobileDrawerコンポーネント作成（Radix UI Dialog ベース）
   - ナビリンク（SideNavと同じ項目: ホーム / 公開予定 / 公開中 / お気に入り / ウォッチリスト）
   - ユーザーメニュー（アバター + 設定リンク + ログアウト）
   - カレンダーボタンは含めない（別途検討）
@@ -882,19 +882,19 @@
   - ページ遷移時に自動で閉じる
 
 #### レイアウト調整
-- [ ] Header: SP対応
+- [x] Header: SP対応
   - ハンバーガーボタン追加（lg未満で表示）
-  - SearchBar: SP対応（幅調整 or 検索アイコンタップで展開）— **Step 2 着手時に方針決定**
+  - SearchBar: SP対応（検索アイコンタップで展開）
   - ユーザーメニュー: lg未満で非表示（MobileDrawer内に移動）
-- [ ] Sidebar: lg未満で非表示（display: none）
-- [ ] Footer: SP簡略化（TMDbアトリビューションをコンパクトに1行表示）
+- [x] Sidebar: lg未満で非表示（display: none）
+- [x] Footer: SP簡略化（TMDbアトリビューションをコンパクトに1行表示）
 
 #### テスト
-- [ ] 結合テスト
+- [x] 結合テスト
   - MobileDrawerテスト（開閉・ナビリンク・ユーザーメニュー・ページ遷移で閉じる）
   - MobileMenuButtonテスト（クリックでDrawer開閉）
   - Header SPレイアウトテスト（ハンバーガー表示、ユーザーメニュー非表示）
-- [ ] E2Eテスト（Playwright）
+- [x] E2Eテスト（Playwright）
   - SP表示幅でハンバーガーメニュー → ナビゲーション遷移
 
 ### Step 3: 主要ページレスポンシブ対応（`feature/responsive-pages`）
@@ -927,9 +927,9 @@
   - **未決定のままだとSPユーザーがカレンダーにアクセスできない**
 
 #### テスト
-- [ ] 結合テスト
+- [x] 結合テスト
   - 主要コンポーネントのレスポンシブ表示テスト（必要に応じて）
-- [ ] E2Eテスト（Playwright）
+- [x] E2Eテスト（Playwright）
   - SP表示幅での主要ページ表示確認
   - SP表示幅での映画詳細モーダル表示
 
@@ -952,7 +952,7 @@
 - [ ] 不足箇所の修正
 
 #### テスト
-- [ ] 結合テスト
+- [x] 結合テスト
   - アクセシビリティテスト（カスタムコンポーネントのaria属性・フォーカス）
 
 ---
@@ -1002,7 +1002,7 @@
   - ユーザー単位のtry-catch（1ユーザーの失敗が他に影響しない）
   - OpenAI/TMDbエラー時は該当ユーザーをスキップし既存レコメンドを維持
 - [ ] Vercel Cron設定（vercel.json）— 日次実行
-- [ ] 結合テスト
+- [x] 結合テスト
   - Cron APIテスト
     - CRON_SECRET認証チェック
     - OpenAI APIモック → 正常レスポンスのパース
@@ -1025,7 +1025,7 @@
   - ローディング・エラー状態管理
 - [ ] 単体テスト
   - APIクライアントテスト（getRecommendations）
-- [ ] 結合テスト
+- [x] 結合テスト
   - API Routeテスト（GET /api/recommendations）
     - 認証チェック（401）
     - 正常取得（レコメンドあり）
@@ -1046,13 +1046,13 @@
 - [ ] SCSS Modules スタイリング
   - デザインシステム変数使用
   - レスポンシブ対応（Step 3実装時に調整）
-- [ ] 結合テスト
+- [x] 結合テスト
   - RecommendationSectionテスト
     - お気に入り0件 → 登録促進テキスト表示
     - レコメンド未生成 → 準備中テキスト表示
     - レコメンドあり → MovieTile 10件表示
     - タイルクリック → MovieDetailModal表示
-- [ ] E2Eテスト（Playwright）
+- [x] E2Eテスト（Playwright）
   - ホームページでレコメンドセクション表示確認
   - レコメンド映画タイルクリック → 詳細モーダル表示
 
@@ -1089,7 +1089,7 @@
   - suggestTitle(query)
 - [ ] 単体テスト
   - APIクライアントテスト（suggestTitle）
-- [ ] 結合テスト
+- [x] 結合テスト
   - API Routeテスト（GET /api/movies/suggest-title）
     - 認証チェック（401）
     - キャッシュヒット → DB結果を返す
@@ -1112,7 +1112,7 @@
   - React.memo + displayName 必須
 - [ ] SearchResults変更
   - 検索結果0件時にTitleSuggestionをEmptyStateの上に配置
-- [ ] 結合テスト
+- [x] 結合テスト
   - useTitleSuggestionフックテスト
   - TitleSuggestionコンポーネントテスト
     - 提案あり → リンク表示

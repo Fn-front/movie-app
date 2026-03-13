@@ -3,7 +3,10 @@
  */
 
 import { axiosInstance } from '@/lib/axios/axios';
-import type { WatchlistAddFormData } from '@/schema/watchlist';
+import type {
+  WatchlistAddFormData,
+  WatchlistSortOption,
+} from '@/schema/watchlist';
 
 /**
  * ウォッチリストアイテムの型
@@ -29,6 +32,7 @@ export interface WatchlistItem {
 export interface GetWatchlistRequest {
   cursor?: string;
   limit?: number;
+  sort?: WatchlistSortOption;
 }
 
 /**

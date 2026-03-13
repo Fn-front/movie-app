@@ -12,6 +12,7 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { watchlistQuerySchema, watchlistAddSchema } from '@/schema/watchlist';
+import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 import {
   HTTP_STATUS,
   ERROR_CODE,
@@ -34,6 +35,7 @@ export async function GET(request: Request) {
     const queryResult = watchlistQuerySchema.safeParse({
       cursor: searchParams.get('cursor') ?? undefined,
       limit: searchParams.get('limit') ?? undefined,
+      sort: searchParams.get('sort') ?? undefined,
     });
 
     if (!queryResult.success) {
@@ -50,9 +52,61 @@ export async function GET(request: Request) {
       );
     }
 
-    const { cursor, limit } = queryResult.data;
+    const { cursor, limit, sort } = queryResult.data;
 
-    // ウォッチリスト取得（カーソルベースページング）
+    if (sort === 'release_date_proximity') {
+      // 公開日が今日に近い順（ABS(release_date - NOW())昇順、NULLは末尾）
+      // Supabase SDKではカスタムORDERが使えないためRPCまたはraw SQLを使用
+      const offset = cursor ? parseInt(cursor, 10) : 0;
+
+      if (Number.isNaN(offset)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: ERROR_CODE.VALIDATION_ERROR,
+              message: WATCHLIST_ERROR_MESSAGES.INVALID_QUERY,
+            },
+          },
+          { status: HTTP_STATUS.BAD_REQUEST },
+        );
+      }
+
+      const { data, error } = await supabase.rpc('get_watchlist_by_proximity', {
+        p_user_id: session.user.id,
+        p_limit: limit,
+        p_offset: offset,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const items = (data ?? []) as Array<
+        WatchlistItem & { total_count: number }
+      >;
+      const totalCount = items.length > 0 ? items[0].total_count : 0;
+      const hasMore = offset + limit < totalCount;
+      const nextCursor = hasMore ? String(offset + limit) : null;
+
+      // total_count をレスポンスから除外
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const watchlist = items.map(({ total_count, ...item }) => item);
+
+      return NextResponse.json(
+        {
+          success: true,
+          data: {
+            watchlist,
+            next_cursor: nextCursor,
+            has_more: hasMore,
+          },
+        },
+        { status: HTTP_STATUS.OK },
+      );
+    }
+
+    // デフォルト: 追加日順（既存ロジック）
     let query = supabase
       .from('watchlist')
       .select('id, tmdb_movie_id, title, poster_path, release_date, added_at')

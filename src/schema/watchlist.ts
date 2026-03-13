@@ -32,13 +32,19 @@ export const watchlistAddSchema = z.object({
 export type WatchlistAddFormData = z.infer<typeof watchlistAddSchema>;
 
 /**
+ * ウォッチリストソート方式
+ */
+export const WATCHLIST_SORT_OPTIONS = [
+  'added_at',
+  'release_date_proximity',
+] as const;
+export type WatchlistSortOption = (typeof WATCHLIST_SORT_OPTIONS)[number];
+
+/**
  * ウォッチリスト一覧取得クエリのバリデーションスキーマ
  */
 export const watchlistQuerySchema = z.object({
-  cursor: z
-    .string()
-    .datetime({ message: 'カーソルはISO 8601形式で指定してください' })
-    .optional(),
+  cursor: z.string().optional(),
   limit: z.coerce
     .number()
     .int()
@@ -48,6 +54,11 @@ export const watchlistQuerySchema = z.object({
       `取得件数は${WATCHLIST_MAX_LIMIT}以下で指定してください`,
     )
     .default(WATCHLIST_DEFAULT_LIMIT),
+  sort: z
+    .enum(WATCHLIST_SORT_OPTIONS, {
+      error: `ソートはいずれかで指定してください: ${WATCHLIST_SORT_OPTIONS.join(', ')}`,
+    })
+    .default('added_at'),
 });
 
 /**

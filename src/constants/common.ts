@@ -100,6 +100,8 @@ export const ROUTES = {
   NOW_SHOWING: '/movies/now-showing',
   /** お気に入り */
   FAVORITES: '/favorites',
+  /** ウォッチリスト */
+  WATCHLIST: '/watchlist',
   /** 映画詳細 */
   MOVIE_DETAIL: (id: string | number) => `/movies/${id}`,
 } as const;

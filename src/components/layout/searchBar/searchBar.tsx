@@ -83,12 +83,10 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
         aria-label='検索'
         disabled={!query.trim() || isPending}
       >
-        {isPending ? (
-          <Loading size='sm' aria-label='検索中' />
-        ) : (
-          <IoSearchOutline size={20} aria-hidden='true' />
-        )}
+        <IoSearchOutline size={20} aria-hidden='true' />
       </button>
+
+      {isPending && <Loading fullScreen label='検索中...' />}
     </form>
   );
 });

@@ -40,6 +40,8 @@ export interface FavoriteListProps {
   ) => void;
   /** 指定映画が処理中かどうか（per-movie無効化用） */
   isFavoriteProcessing?: (tmdbMovieId: number) => boolean;
+  /** タイルクリック時のコールバック */
+  onClick?: (tmdbMovieId: number) => void;
 }
 
 /**
@@ -50,6 +52,7 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
   isLoading,
   onFavoriteToggle,
   isFavoriteProcessing,
+  onClick,
 }) {
   if (isLoading) {
     return (
@@ -75,6 +78,7 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
           item={item}
           onFavoriteToggle={onFavoriteToggle}
           favoriteDisabled={isFavoriteProcessing?.(item.tmdb_movie_id) ?? false}
+          onClick={onClick}
         />
       ))}
     </div>
@@ -93,6 +97,8 @@ interface FavoriteTileProps {
   onFavoriteToggle: FavoriteListProps['onFavoriteToggle'];
   /** お気に入りボタン無効化 */
   favoriteDisabled: boolean;
+  /** タイルクリック時のコールバック */
+  onClick?: (tmdbMovieId: number) => void;
 }
 
 /**
@@ -102,6 +108,7 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
   item,
   onFavoriteToggle,
   favoriteDisabled,
+  onClick,
 }) {
   const posterUrl = getTMDbPosterUrl(item.poster_path);
 
@@ -117,8 +124,30 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
     );
   }, [item, onFavoriteToggle]);
 
+  const handleClick = useCallback(() => {
+    onClick?.(item.tmdb_movie_id);
+  }, [item.tmdb_movie_id, onClick]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onClick?.(item.tmdb_movie_id);
+      }
+    },
+    [item.tmdb_movie_id, onClick],
+  );
+
   return (
-    <Card noPadding className={styles.c_favorite_tile}>
+    <Card
+      noPadding
+      clickable={!!onClick}
+      className={styles.c_favorite_tile}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+    >
       <div className={styles.c_favorite_tile__poster}>
         {posterUrl ? (
           <Image

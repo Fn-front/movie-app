@@ -158,4 +158,23 @@ describe('FavoriteList', () => {
 
     expect(screen.getByText('No Image')).toBeInTheDocument();
   });
+
+  it('タイルクリックでonClickが呼ばれる', async () => {
+    const mockOnClick = jest.fn();
+    const user = userEvent.setup();
+
+    render(
+      <FavoriteList
+        favorites={mockFavorites}
+        isLoading={false}
+        onFavoriteToggle={mockOnFavoriteToggle}
+        onClick={mockOnClick}
+      />,
+    );
+
+    // 映画タイトルをクリック（CardのonClickが発火する）
+    await user.click(screen.getByText('映画A'));
+
+    expect(mockOnClick).toHaveBeenCalledWith(100);
+  });
 });

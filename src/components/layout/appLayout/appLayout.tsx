@@ -1,6 +1,6 @@
 /**
  * AppLayoutコンポーネント
- * Header/Sidebar/Footerを内包する共通レイアウト
+ * Header/Sidebar/Footer/MobileDrawerを内包する共通レイアウト
  */
 
 'use client';
@@ -13,6 +13,9 @@ import { Sidebar } from '@/components/layout/sidebar/sidebar';
 import { SideNav } from '@/components/layout/sideNav/sideNav';
 import { UserMenu } from '@/components/layout/userMenu/userMenu';
 import { Footer } from '@/components/layout/footer/footer';
+import { MobileMenuButton } from '@/components/layout/mobileMenuButton/mobileMenuButton';
+import { MobileDrawer } from '@/components/layout/mobileDrawer/mobileDrawer';
+import { useMobileDrawer } from '@/components/layout/mobileDrawer/useMobileDrawer';
 import { WatchlistPanel } from '@/features/watchlist/component/watchlistPanel/watchlistPanel';
 import { CalendarButton } from '@/features/calendar/component/calendarButton';
 
@@ -42,10 +45,17 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
   children,
   showSidebar = true,
 }) {
+  const { isOpen, handleToggle, handleOpenChange } = useMobileDrawer();
+
   return (
     <div className={styles.c_app_layout}>
       <div className={styles.c_app_layout__header}>
-        <Header searchBar={<SearchBar />} />
+        <Header
+          searchBar={<SearchBar />}
+          mobileMenuButton={
+            <MobileMenuButton isOpen={isOpen} onToggle={handleToggle} />
+          }
+        />
       </div>
 
       <div className={styles.c_app_layout__body}>
@@ -66,6 +76,8 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
       <div className={styles.c_app_layout__footer}>
         <Footer />
       </div>
+
+      <MobileDrawer open={isOpen} onOpenChange={handleOpenChange} />
     </div>
   );
 });

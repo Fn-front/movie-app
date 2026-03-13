@@ -21,6 +21,8 @@ export interface HeaderProps extends HTMLAttributes<HTMLElement> {
   searchBar?: ReactNode;
   /** ユーザーメニュー（カスタムコンポーネント） */
   userMenu?: ReactNode;
+  /** モバイルメニューボタン（lg未満で表示） */
+  mobileMenuButton?: ReactNode;
   /** カスタムクラス名 */
   className?: string;
 }
@@ -43,6 +45,7 @@ export const Header = memo<HeaderProps>(function Header({
   logoHref = '/',
   searchBar,
   userMenu,
+  mobileMenuButton,
   className,
   ...props
 }) {
@@ -51,6 +54,10 @@ export const Header = memo<HeaderProps>(function Header({
   return (
     <header className={classNames} {...props}>
       <div className={styles.c_header__container}>
+        {mobileMenuButton && (
+          <div className={styles.c_header__mobile_menu}>{mobileMenuButton}</div>
+        )}
+
         <Link href={logoHref} className={styles.c_header__logo}>
           {logoText}
         </Link>

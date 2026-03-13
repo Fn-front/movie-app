@@ -1,6 +1,7 @@
 /**
  * SearchBarコンポーネント
  * Header内に配置する検索バー
+ * SP時は検索アイコンタップで展開する
  */
 
 'use client';
@@ -10,11 +11,12 @@ import {
   type FormEvent,
   memo,
   useCallback,
+  useRef,
   useState,
   useTransition,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { IoSearchOutline } from 'react-icons/io5';
+import { IoSearchOutline, IoCloseOutline } from 'react-icons/io5';
 
 import { Loading } from '@/components/ui/loading/loading';
 
@@ -48,6 +50,8 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
   const router = useRouter();
   const [query, setQuery] = useState(defaultValue);
   const [isPending, startTransition] = useTransition();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
@@ -61,33 +65,88 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
       startTransition(() => {
         router.push(`/search?query=${encodeURIComponent(trimmed)}`);
       });
+      setIsExpanded(false);
     },
     [query, router],
   );
 
+  const handleExpand = useCallback(() => {
+    setIsExpanded(true);
+    // 展開後にinputにフォーカス
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  }, []);
+
+  const handleCollapse = useCallback(() => {
+    setIsExpanded(false);
+    setQuery('');
+  }, []);
+
   const classNames = [styles.c_search_bar, className].filter(Boolean).join(' ');
 
+  const formClassNames = [
+    styles.c_search_bar__form,
+    isExpanded ? styles['c_search_bar__form--expanded'] : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <form className={classNames} role='search' onSubmit={handleSubmit}>
-      <input
-        type='text'
-        className={styles.c_search_bar__input}
-        value={query}
-        onChange={handleChange}
-        placeholder={placeholder}
-        aria-label='映画を検索'
-      />
+    <div className={classNames}>
+      {/* SP: 検索アイコンボタン（展開トリガー） */}
       <button
-        type='submit'
-        className={styles.c_search_bar__button}
-        aria-label='検索'
-        disabled={!query.trim() || isPending}
+        type='button'
+        className={styles.c_search_bar__toggle}
+        onClick={handleExpand}
+        aria-label='検索を開く'
       >
         <IoSearchOutline size={20} aria-hidden='true' />
       </button>
 
+      {/* 検索フォーム（PC: 常に表示、SP: 展開時のみ表示） */}
+      <form className={formClassNames} role='search' onSubmit={handleSubmit}>
+        <input
+          ref={inputRef}
+          type='text'
+          className={styles.c_search_bar__input}
+          value={query}
+          onChange={handleChange}
+          placeholder={placeholder}
+          aria-label='映画を検索'
+        />
+        <button
+          type='submit'
+          className={styles.c_search_bar__button}
+          aria-label='検索'
+          disabled={!query.trim() || isPending}
+        >
+          <IoSearchOutline size={20} aria-hidden='true' />
+        </button>
+        {/* SP: 閉じるボタン */}
+        <button
+          type='button'
+          className={styles.c_search_bar__close}
+          onClick={handleCollapse}
+          aria-label='検索を閉じる'
+        >
+          <IoCloseOutline size={20} aria-hidden='true' />
+        </button>
+      </form>
+
+      {/* SP: 展開時のオーバーレイ */}
+      {isExpanded && (
+        <button
+          type='button'
+          className={styles.c_search_bar__overlay}
+          onClick={handleCollapse}
+          aria-label='検索を閉じる'
+          tabIndex={-1}
+        />
+      )}
+
       {isPending && <Loading fullScreen label='検索中...' />}
-    </form>
+    </div>
   );
 });
 

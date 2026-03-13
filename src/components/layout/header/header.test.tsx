@@ -48,4 +48,18 @@ describe('Header', () => {
     render(<Header className='custom' />);
     expect(screen.getByRole('banner').className).toContain('custom');
   });
+
+  it('mobileMenuButtonスロットが表示される', () => {
+    render(<Header mobileMenuButton={<button>メニューを開く</button>} />);
+    expect(
+      screen.getByRole('button', { name: 'メニューを開く' }),
+    ).toBeInTheDocument();
+  });
+
+  it('mobileMenuButtonが未指定の場合は表示されない', () => {
+    render(<Header />);
+    expect(
+      screen.queryByRole('button', { name: 'メニューを開く' }),
+    ).not.toBeInTheDocument();
+  });
 });

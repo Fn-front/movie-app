@@ -1,0 +1,259 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+// オーバーレイ
+.c_mobile_drawer__overlay {
+  position: fixed;
+  inset: 0;
+  background-color: $overlay-medium;
+  z-index: $z-index-modal-backdrop;
+  animation: overlayFadeIn $duration-fast $ease-out;
+
+  &[data-state='closed'] {
+    animation: overlayFadeOut $duration-fast $ease-in;
+  }
+}
+
+// ドロワーコンテンツ
+.c_mobile_drawer__content {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  max-width: 80vw;
+  background-color: $background-paper;
+  z-index: $z-index-modal;
+  display: flex;
+  flex-direction: column;
+  box-shadow: $shadow-xl;
+  animation: drawerSlideIn $duration-normal $ease-out;
+
+  &[data-state='closed'] {
+    animation: drawerSlideOut $duration-fast $ease-in;
+  }
+
+  // lg以上では表示しない（安全策）
+  @include lg {
+    display: none;
+  }
+}
+
+// ヘッダー
+.c_mobile_drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-4 $spacing-6;
+  border-bottom: $border-width-1 solid $border-color;
+}
+
+.c_mobile_drawer__title {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-bold;
+  color: $text-primary;
+  margin: 0;
+}
+
+.c_mobile_drawer__close {
+  @include button-reset;
+  @include flex-center;
+
+  width: 3.6rem;
+  height: 3.6rem;
+  border-radius: $border-radius-md;
+  color: $text-secondary;
+  transition: $transition-bg;
+
+  &:hover {
+    background-color: $background-secondary;
+  }
+
+  &:focus-visible {
+    @include focus-visible;
+  }
+}
+
+// ナビゲーション
+.c_mobile_drawer__nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: $spacing-4 0;
+}
+
+.c_mobile_drawer__nav_list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+}
+
+.c_mobile_drawer__nav_link {
+  display: flex;
+  align-items: center;
+  gap: $spacing-3;
+  padding: $spacing-3 $spacing-6;
+  font-size: $font-size-base;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+  text-decoration: none;
+  transition: $transition-all;
+
+  &:hover {
+    color: $text-primary;
+    background-color: $background-secondary;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $primary-500;
+    outline-offset: -2px;
+  }
+
+  &--active {
+    color: $primary-700;
+    font-weight: $font-weight-bold;
+    background-color: $primary-50;
+  }
+}
+
+.c_mobile_drawer__nav_icon {
+  @include flex-center;
+
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+// ユーザーセクション
+.c_mobile_drawer__user {
+  border-top: $border-width-1 solid $border-color;
+  padding: $spacing-4 $spacing-6;
+}
+
+.c_mobile_drawer__user_info {
+  display: flex;
+  align-items: center;
+  gap: $spacing-3;
+  margin-bottom: $spacing-4;
+}
+
+.c_mobile_drawer__user_avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: $border-radius-full;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.c_mobile_drawer__user_initial {
+  @include flex-center;
+
+  width: 40px;
+  height: 40px;
+  border-radius: $border-radius-full;
+  background-color: $primary-500;
+  color: $text-inverse;
+  font-size: $font-size-base;
+  font-weight: $font-weight-bold;
+  flex-shrink: 0;
+}
+
+.c_mobile_drawer__user_detail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.c_mobile_drawer__user_name {
+  @include text-truncate;
+
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-primary;
+}
+
+.c_mobile_drawer__user_email {
+  @include text-truncate;
+
+  font-size: $font-size-xs;
+  color: $text-secondary;
+}
+
+// ユーザーアクション
+.c_mobile_drawer__user_actions {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+}
+
+.c_mobile_drawer__user_action {
+  @include button-reset;
+
+  display: flex;
+  align-items: center;
+  gap: $spacing-3;
+  padding: $spacing-2 $spacing-3;
+  font-size: $font-size-sm;
+  color: $text-primary;
+  border-radius: $border-radius-md;
+  transition: $transition-bg;
+
+  &:hover {
+    background-color: $background-secondary;
+  }
+
+  &:focus-visible {
+    @include focus-visible;
+  }
+
+  &--destructive {
+    color: $error-main;
+
+    &:hover {
+      background-color: rgba($error-main, 0.1);
+    }
+  }
+}
+
+// アニメーション
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes overlayFadeOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes drawerSlideIn {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawerSlideOut {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-100%);
+  }
+}

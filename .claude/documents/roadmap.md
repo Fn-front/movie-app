@@ -872,9 +872,9 @@
 ### Step 2: モバイルレイアウト基盤（`feature/mobile-layout`）
 
 #### ハンバーガーメニュー
-- [ ] MobileMenuButtonコンポーネント作成（ハンバーガーアイコン、Header内に配置）
+- [x] MobileMenuButtonコンポーネント作成（ハンバーガーアイコン、Header内に配置）
   - lg以上で非表示、lg未満で表示
-- [ ] MobileDrawerコンポーネント作成（Radix UI Dialog ベース）
+- [x] MobileDrawerコンポーネント作成（Radix UI Dialog ベース）
   - ナビリンク（SideNavと同じ項目: ホーム / 公開予定 / 公開中 / お気に入り / ウォッチリスト）
   - ユーザーメニュー（アバター + 設定リンク + ログアウト）
   - カレンダーボタンは含めない（別途検討）
@@ -882,19 +882,19 @@
   - ページ遷移時に自動で閉じる
 
 #### レイアウト調整
-- [ ] Header: SP対応
+- [x] Header: SP対応
   - ハンバーガーボタン追加（lg未満で表示）
-  - SearchBar: SP対応（幅調整 or 検索アイコンタップで展開）— **Step 2 着手時に方針決定**
+  - SearchBar: SP対応（検索アイコンタップで展開）
   - ユーザーメニュー: lg未満で非表示（MobileDrawer内に移動）
-- [ ] Sidebar: lg未満で非表示（display: none）
-- [ ] Footer: SP簡略化（TMDbアトリビューションをコンパクトに1行表示）
+- [x] Sidebar: lg未満で非表示（display: none）
+- [x] Footer: SP簡略化（TMDbアトリビューションをコンパクトに1行表示）
 
 #### テスト
-- [ ] 結合テスト
+- [x] 結合テスト
   - MobileDrawerテスト（開閉・ナビリンク・ユーザーメニュー・ページ遷移で閉じる）
   - MobileMenuButtonテスト（クリックでDrawer開閉）
   - Header SPレイアウトテスト（ハンバーガー表示、ユーザーメニュー非表示）
-- [ ] E2Eテスト（Playwright）
+- [x] E2Eテスト（Playwright）
   - SP表示幅でハンバーガーメニュー → ナビゲーション遷移
 
 ### Step 3: 主要ページレスポンシブ対応（`feature/responsive-pages`）

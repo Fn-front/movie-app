@@ -64,6 +64,10 @@ jest.mock('@/utils/image', () => ({
     path ? `https://image.tmdb.org/t/p/w500${path}` : null,
 }));
 
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: jest.fn(() => null),
+}));
+
 // --- Tests ---
 
 describe('FavoritesPage', () => {
@@ -145,5 +149,22 @@ describe('FavoritesPage', () => {
     expect(
       screen.getByText('お気に入りの映画を追加しましょう'),
     ).toBeInTheDocument();
+  });
+
+  it('タイルクリックで詳細モーダルにmovieIdが渡される', async () => {
+    const { MovieDetailModal } = jest.requireMock(
+      '@/components/ui/movie/detailModal/movieDetailModal',
+    );
+
+    const user = userEvent.setup();
+
+    render(<FavoritesPage />);
+
+    await user.click(screen.getByText('映画A'));
+
+    expect(MovieDetailModal).toHaveBeenLastCalledWith(
+      expect.objectContaining({ movieId: 100 }),
+      expect.anything(),
+    );
   });
 });

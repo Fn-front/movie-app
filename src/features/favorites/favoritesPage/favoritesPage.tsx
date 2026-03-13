@@ -5,9 +5,10 @@
 
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 
 import { Select } from '@/components/ui/select/select';
+import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { FavoriteList } from '@/features/favorites/component/favoriteList/favoriteList';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import {
@@ -32,6 +33,16 @@ export const FavoritesPage = memo(function FavoritesPage() {
     handleDelete,
     isFavoriteProcessing,
   } = favoriteToggle;
+
+  const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
+
+  const handleMovieClick = useCallback((tmdbMovieId: number) => {
+    setSelectedMovieId(tmdbMovieId);
+  }, []);
+
+  const handleDetailModalClose = useCallback(() => {
+    setSelectedMovieId(null);
+  }, []);
 
   const sortOptions = useMemo(
     () =>
@@ -62,6 +73,13 @@ export const FavoritesPage = memo(function FavoritesPage() {
         isLoading={isLoading}
         onFavoriteToggle={handleFavoriteToggle}
         isFavoriteProcessing={isFavoriteProcessing}
+        onClick={handleMovieClick}
+      />
+
+      <MovieDetailModal
+        movieId={selectedMovieId}
+        showFinancialInfo={false}
+        onClose={handleDetailModalClose}
       />
 
       <FavoriteRatingModal

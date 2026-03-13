@@ -957,7 +957,108 @@
 
 ---
 
-## フェーズ8: 品質保証
+## フェーズ8: AIレコメンド機能（設計書: `.claude/documents/recommendations-design.md`）
+
+> テスティングトロフィーモデルを適用。各Stepでテストレイヤーを明示する。
+
+### Step 1: DB・環境変数・定数基盤（`feature/ai-recommendations-db`）
+- [ ] recommendationsテーブル作成（Supabase migration）
+  - UUID主キー、user_id FK、tmdb_movie_id、title、poster_path、release_date、vote_average、genre_ids、reason、display_order（1〜10）
+  - UNIQUE制約（user_id, display_order）、（user_id, tmdb_movie_id）
+  - RLSポリシー設定（SELECT: 自分のレコメンドのみ、INSERT/UPDATE/DELETE: service_roleのみ）
+  - インデックス（user_id）
+- [ ] 環境変数追加
+  - `OPENAI_API_KEY`
+  - `OPENAI_MODEL`（オプション、デフォルト: gpt-4o-mini）
+  - `.env.example` 更新
+  - `environment-variables.md` 更新
+- [ ] レコメンド定数追加（`lib/constants/recommendations.ts`）
+  - MAX_COUNT、QUERY_KEY、STALE_TIME
+  - メッセージ定数（NO_FAVORITES、NOT_GENERATED、SECTION_TITLE等）
+- [ ] zodバリデーションスキーマ作成
+  - OpenAIレスポンススキーマ（title, year, reason の配列）
+  - APIレスポンススキーマ
+- [ ] 単体テスト
+  - zodスキーマテスト（OpenAIレスポンスのパース・バリデーション）
+
+### Step 2: OpenAIレコメンド生成ロジック + Cron API（`feature/ai-recommendations-cron`）
+- [ ] OpenAIクライアント設定（`lib/openai/client.ts`）
+  - openaiパッケージセットアップ
+  - モデル設定（環境変数 or デフォルト）
+- [ ] レコメンド生成ロジック実装（`lib/openai/generateRecommendations.ts`）
+  - お気に入りリストからプロンプト組み立て
+  - 除外リスト（お気に入り + ウォッチリストのタイトル）をプロンプトに含める
+  - OpenAI API呼び出し（response_format: json_object）
+  - レスポンスをzodスキーマでパース
+- [ ] TMDb検索ロジック実装（既存tmdbClientの`searchMovies`を活用）
+  - タイトル + 公開年で検索 → tmdb_movie_id, poster_path, release_date, vote_average, genre_ids 取得
+  - 検索結果なしの場合はスキップ
+  - 除外リスト（tmdb_movie_id）と照合 → 該当があればスキップ
+- [ ] Cron API実装（`GET /api/cron/generate-recommendations`）
+  - CRON_SECRET認証
+  - お気に入り1件以上のユーザーを取得
+  - ユーザーごとに: お気に入り取得 → 除外リスト取得 → OpenAI → TMDb検索 → DB保存
+  - 既存レコメンド DELETE → 新規 INSERT（トランザクション）
+  - ユーザー単位のtry-catch（1ユーザーの失敗が他に影響しない）
+  - OpenAI/TMDbエラー時は該当ユーザーをスキップし既存レコメンドを維持
+- [ ] Vercel Cron設定（vercel.json）— 日次実行
+- [ ] 結合テスト
+  - Cron APIテスト
+    - CRON_SECRET認証チェック
+    - OpenAI APIモック → 正常レスポンスのパース
+    - TMDb検索モック → 映画情報取得
+    - 除外ロジック（お気に入り/ウォッチリスト重複除外）
+    - ユーザー単位エラーハンドリング（失敗ユーザースキップ）
+    - お気に入り0件ユーザーのスキップ
+
+### Step 3: レコメンド取得API + フック + APIクライアント（`feature/ai-recommendations-api`）
+- [ ] APIクライアント作成（`lib/api/recommendations.ts`）
+  - getRecommendations()
+- [ ] レコメンド取得API実装（`GET /api/recommendations`）
+  - NextAuth.js認証チェック
+  - 自分のrecommendationsをdisplay_order順で取得
+  - generated_atを含めて返却
+  - レコメンドなし → 空配列 + generated_at: null
+- [ ] useRecommendationsフック作成（TanStack Query）
+  - useQueryでレコメンド取得
+  - staleTime: 1時間（日次更新のため）
+  - ローディング・エラー状態管理
+- [ ] 単体テスト
+  - APIクライアントテスト（getRecommendations）
+- [ ] 結合テスト
+  - API Routeテスト（GET /api/recommendations）
+    - 認証チェック（401）
+    - 正常取得（レコメンドあり）
+    - レコメンドなし → 空配列
+  - useRecommendationsフックテスト
+
+### Step 4: ホームUI統合（`feature/ai-recommendations-ui`）
+- [ ] RecommendationSectionコンポーネント作成
+  - セクション見出し（「あなたへのおすすめ」）
+  - 状態分岐:
+    - お気に入り0件 → 登録促進テキスト
+    - レコメンド未生成 → 「準備中」テキスト
+    - レコメンドあり → MovieTile × 10件グリッド表示
+  - 各タイルクリックで MovieDetailModal 表示
+  - React.memo + displayName 必須
+- [ ] ホームページにRecommendationSection統合
+  - 既存コンテンツとの配置決定（上 or 下 — 実装時に決定）
+- [ ] SCSS Modules スタイリング
+  - デザインシステム変数使用
+  - レスポンシブ対応（Step 3実装時に調整）
+- [ ] 結合テスト
+  - RecommendationSectionテスト
+    - お気に入り0件 → 登録促進テキスト表示
+    - レコメンド未生成 → 準備中テキスト表示
+    - レコメンドあり → MovieTile 10件表示
+    - タイルクリック → MovieDetailModal表示
+- [ ] E2Eテスト（Playwright）
+  - ホームページでレコメンドセクション表示確認
+  - レコメンド映画タイルクリック → 詳細モーダル表示
+
+---
+
+## フェーズ9: 品質保証
 
 > テスト基盤は確立済み（テスティングトロフィーモデル導入済み、カバレッジ80%以上達成済み）。
 > 本フェーズではパフォーマンス最適化とセキュリティ監査に集中する。
@@ -1060,15 +1161,15 @@
 - [ ] 発見された脆弱性の修正
 - [ ] 監査結果ドキュメント作成（発見事項・対応内容・残存リスク）
 
-### Step 4: フェーズ7テストカバレッジ確認（`setup/phase7-coverage-review`）
+### Step 4: フェーズ7-8テストカバレッジ確認（`setup/phase7-8-coverage-review`）
 
-- [ ] フェーズ7で追加したコードのカバレッジ確認
+- [ ] フェーズ7-8で追加したコードのカバレッジ確認
 - [ ] カバレッジが80%を下回っている箇所のテスト追加
 - [ ] 最終カバレッジレポート取得・記録
 
 ---
 
-## フェーズ9: デプロイ・本番リリース（数日）
+## フェーズ10: デプロイ・本番リリース（数日）
 
 ### デプロイ準備
 - [ ] Vercelプロジェクト作成
@@ -1088,18 +1189,7 @@
 
 ---
 
-## フェーズ10: 将来的な機能（優先度低）
-
-### OpenAI レコメンド機能
-- [ ] OpenAI API連携
-  - axiosでOpenAI APIリクエスト
-  - サーバー側でAPIキー秘匿
-- [ ] ユーザー嗜好分析ロジック実装
-- [ ] レコメンドAPI実装（`/api/recommendations`）
-  - NextAuth.jsで認証チェック
-  - axiosでクライアント側リクエスト
-- [ ] レコメンドUI実装
-- [ ] A/Bテスト
+## フェーズ11: 将来的な機能（優先度低）
 
 ### レビュー・評価機能
 - [ ] データベーススキーマ実装
@@ -1126,7 +1216,7 @@
 
 ---
 
-## フェーズ8: 認証機能拡張
+## フェーズ8.5: 認証機能拡張（完了済み）
 
 ### Step 1: DB・テーブル準備
 - [x] accountsテーブル作成（ソーシャルログインアカウント連携用）

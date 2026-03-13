@@ -3,7 +3,7 @@
  * useFavorites + モーダル状態管理を統合
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useFavorites } from '@/features/favorites/hooks/useFavorites';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
@@ -82,7 +82,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
   const [modalState, setModalState] =
     useState<FavoriteModalState>(INITIAL_MODAL_STATE);
 
-  const [processingIds, setProcessingIds] = useState<Set<number>>(new Set());
+  const processingIdRef = useRef<number | null>(null);
 
   const handleFavoriteToggle = useCallback(
     (movie: FavoriteToggleMovie, favorite: MovieFavoriteInfo | null) => {
@@ -102,7 +102,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
   const handleModalSubmit = useCallback(
     (rating: number) => {
       if (modalState.movie) {
-        setProcessingIds((prev) => new Set(prev).add(modalState.movie!.id));
+        processingIdRef.current = modalState.movie.id;
       }
       if (modalState.currentFavorite) {
         updateRating(modalState.currentFavorite.id, rating);
@@ -130,7 +130,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
   const handleDelete = useCallback(() => {
     if (!modalState.currentFavorite) return;
     if (modalState.movie) {
-      setProcessingIds((prev) => new Set(prev).add(modalState.movie!.id));
+      processingIdRef.current = modalState.movie.id;
     }
     removeFromFavorites(modalState.currentFavorite.id);
     closeModal();
@@ -141,17 +141,11 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
     closeModal,
   ]);
 
-  // ミューテーション完了時にprocessingIdsをクリア
-  useEffect(() => {
-    if (!isAdding && !isUpdating && !isRemoving) {
-      setProcessingIds((prev) => (prev.size > 0 ? new Set() : prev));
-    }
-  }, [isAdding, isUpdating, isRemoving]);
-
   const isFavoriteProcessing = useCallback(
     (tmdbMovieId: number) =>
-      (isAdding || isUpdating || isRemoving) && processingIds.has(tmdbMovieId),
-    [processingIds, isAdding, isUpdating, isRemoving],
+      (isAdding || isUpdating || isRemoving) &&
+      processingIdRef.current === tmdbMovieId,
+    [isAdding, isUpdating, isRemoving],
   );
 
   return useMemo(

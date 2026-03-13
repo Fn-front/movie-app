@@ -1,9 +1,14 @@
 @use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
 
 .c_search_results {
   display: flex;
   flex-direction: column;
-  gap: $spacing-6;
+  gap: $spacing-4;
+
+  @include md {
+    gap: $spacing-6;
+  }
 
   &__count {
     margin: 0;
@@ -13,8 +18,17 @@
 
   &__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: $spacing-4;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: $spacing-3;
+
+    @include sm {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: $spacing-4;
+    }
+
+    @include lg {
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
   }
 
   &__pagination {

@@ -3,6 +3,7 @@
  */
 
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { SearchPage } from './searchPage';
 import type { UseSearchReturn } from './hooks/useSearch';
@@ -126,5 +127,29 @@ describe('SearchPage', () => {
     render(<SearchPage />);
 
     expect(screen.getByTestId('movie-filter')).toBeInTheDocument();
+  });
+
+  it('フィルタートグルボタンが表示される', () => {
+    setupDefaultMocks();
+
+    render(<SearchPage />);
+
+    const toggleButton = screen.getByRole('button', { name: /フィルター/ });
+    expect(toggleButton).toBeInTheDocument();
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('フィルタートグルボタンクリックでaria-expandedが切り替わる', async () => {
+    setupDefaultMocks();
+    const user = userEvent.setup();
+
+    render(<SearchPage />);
+
+    const toggleButton = screen.getByRole('button', { name: /フィルター/ });
+    await user.click(toggleButton);
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(toggleButton);
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
   });
 });

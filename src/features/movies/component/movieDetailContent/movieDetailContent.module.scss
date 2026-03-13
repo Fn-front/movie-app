@@ -52,7 +52,11 @@
 
   // ボディ
   &__body {
-    padding: $spacing-6;
+    padding: $spacing-4;
+
+    @include md {
+      padding: $spacing-6;
+    }
   }
 
   // スクロール領域（詳細情報 + キャスト）
@@ -64,19 +68,24 @@
   // メインレイアウト（ポスター + 情報）
   &__main {
     display: flex;
-    gap: $spacing-5;
+    gap: $spacing-3;
+
+    @include md {
+      gap: $spacing-5;
+    }
   }
 
   // ポスター
   &__poster {
     flex-shrink: 0;
-    width: 120px;
-    margin-top: -$spacing-12;
+    width: 100px;
+    margin-top: -$spacing-10;
     position: relative;
     z-index: 1;
 
     @include md {
       width: 150px;
+      margin-top: -$spacing-12;
     }
   }
 
@@ -97,20 +106,28 @@
   &__title_row {
     display: flex;
     align-items: flex-start;
-    gap: $spacing-3;
+    gap: $spacing-2;
+
+    @include md {
+      gap: $spacing-3;
+    }
   }
 
   // アクションボタン群（お気に入り + ウォッチリスト）
   &__action_buttons {
     display: flex;
-    gap: $spacing-2;
+    gap: $spacing-1;
     flex-shrink: 0;
+
+    @include md {
+      gap: $spacing-2;
+    }
   }
 
   // タイトル
   &__title {
     margin: 0;
-    font-size: $font-size-xl;
+    font-size: $font-size-lg;
     font-weight: $font-weight-bold;
     color: $text-primary;
     line-height: $line-height-tight;

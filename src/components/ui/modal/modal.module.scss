@@ -17,9 +17,9 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 90vw;
+    width: 95vw;
     max-width: 450px;
-    max-height: 85vh;
+    max-height: 90vh;
     background-color: $background-paper;
     border-radius: $border-radius-lg;
     box-shadow: $shadow-xl;
@@ -28,6 +28,11 @@
     display: flex;
     flex-direction: column;
     animation: contentShow 200ms cubic-bezier(0.16, 1, 0.3, 1);
+
+    @include md {
+      width: 90vw;
+      max-height: 85vh;
+    }
 
     &:focus {
       outline: none;
@@ -58,9 +63,13 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    padding: $spacing-6;
+    padding: $spacing-4;
     border-bottom: $border-width-1 solid $border-color;
     background-color: $background-paper;
+
+    @include md {
+      padding: $spacing-6;
+    }
 
     &_content {
       flex: 1;
@@ -70,9 +79,13 @@
   // タイトル
   &__title {
     margin: 0;
-    font-size: $font-size-xl;
+    font-size: $font-size-lg;
     font-weight: $font-weight-bold;
     color: $text-primary;
+
+    @include md {
+      font-size: $font-size-xl;
+    }
   }
 
   // 説明
@@ -110,8 +123,12 @@
   // ボディ
   &__body {
     flex: 1;
-    padding: $spacing-6;
+    padding: $spacing-4;
     overflow-y: auto;
+
+    @include md {
+      padding: $spacing-6;
+    }
   }
 
   // フッター
@@ -120,9 +137,13 @@
     align-items: center;
     justify-content: flex-end;
     gap: $spacing-3;
-    padding: $spacing-6;
+    padding: $spacing-4;
     border-top: $border-width-1 solid $border-color;
     background-color: $background-paper;
+
+    @include md {
+      padding: $spacing-6;
+    }
   }
 }
 

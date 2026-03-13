@@ -11,9 +11,12 @@ import {
   memo,
   useCallback,
   useState,
+  useTransition,
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { IoSearchOutline } from 'react-icons/io5';
+
+import { Loading } from '@/components/ui/loading/loading';
 
 import styles from './searchBar.module.scss';
 
@@ -44,6 +47,7 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState(defaultValue);
+  const [isPending, startTransition] = useTransition();
 
   const handleChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
@@ -54,7 +58,9 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
       e.preventDefault();
       const trimmed = query.trim();
       if (!trimmed) return;
-      router.push(`/search?query=${encodeURIComponent(trimmed)}`);
+      startTransition(() => {
+        router.push(`/search?query=${encodeURIComponent(trimmed)}`);
+      });
     },
     [query, router],
   );
@@ -75,10 +81,12 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
         type='submit'
         className={styles.c_search_bar__button}
         aria-label='検索'
-        disabled={!query.trim()}
+        disabled={!query.trim() || isPending}
       >
         <IoSearchOutline size={20} aria-hidden='true' />
       </button>
+
+      {isPending && <Loading fullScreen label='検索中...' />}
     </form>
   );
 });

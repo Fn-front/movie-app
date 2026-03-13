@@ -4,9 +4,11 @@
   display: flex;
   flex-direction: column;
   gap: $spacing-6;
+  height: 100%;
 
   &__title {
     margin: 0;
+    flex-shrink: 0;
     font-size: $font-size-2xl;
     font-weight: $font-weight-bold;
     color: $text-primary;
@@ -15,15 +17,19 @@
   &__content {
     display: flex;
     gap: $spacing-6;
+    flex: 1;
+    min-height: 0;
   }
 
   &__filter {
     flex-shrink: 0;
     width: 280px;
+    overflow-y: auto;
   }
 
   &__results {
     flex: 1;
     min-width: 0;
+    overflow-y: auto;
   }
 }

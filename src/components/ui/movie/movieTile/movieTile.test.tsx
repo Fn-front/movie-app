@@ -247,4 +247,75 @@ describe('MovieTile', () => {
       ).toBeInTheDocument();
     });
   });
+
+  describe('評価バッジ', () => {
+    it('評価が5〜7未満の場合midクラスが適用される', () => {
+      const { container } = render(
+        <MovieTile movie={createMockMovie({ vote_average: 6.0 })} />,
+      );
+      expect(screen.getByText('6.0')).toBeInTheDocument();
+      expect(
+        container.querySelector('[class*="rating__mid"]'),
+      ).toBeInTheDocument();
+    });
+
+    it('評価が5未満の場合lowクラスが適用される', () => {
+      const { container } = render(
+        <MovieTile movie={createMockMovie({ vote_average: 3.5 })} />,
+      );
+      expect(screen.getByText('3.5')).toBeInTheDocument();
+      expect(
+        container.querySelector('[class*="rating__low"]'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('お気に入りデータ', () => {
+    it('movie.favoriteがundefinedの場合FavoriteButtonにnullが渡される', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie({ favorite: undefined })}
+          onFavoriteToggle={jest.fn()}
+        />,
+      );
+      expect(
+        screen.getByRole('button', { name: 'お気に入りに追加' }),
+      ).toBeInTheDocument();
+    });
+
+    it('movie.favoriteが存在する場合FavoriteButtonに渡される', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie({
+            favorite: { id: 'fav-1', rating: 8 },
+          })}
+          onFavoriteToggle={jest.fn()}
+        />,
+      );
+      expect(
+        screen.getByRole('button', { name: 'お気に入りを編集' }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('お気に入り統合', () => {
+    it('onFavoriteToggleが指定されるとFavoriteButtonが表示される', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onFavoriteToggle={jest.fn()}
+        />,
+      );
+      expect(
+        screen.getByRole('button', { name: 'お気に入りに追加' }),
+      ).toBeInTheDocument();
+    });
+
+    it('onFavoriteToggleが未指定の場合FavoriteButtonが表示されない', () => {
+      render(<MovieTile movie={createMockMovie()} />);
+      expect(
+        screen.queryByRole('button', { name: 'お気に入りに追加' }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

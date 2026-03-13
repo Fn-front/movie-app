@@ -132,4 +132,18 @@ describe('SettingsPage', () => {
       screen.queryByTestId('change-password-form'),
     ).not.toBeInTheDocument();
   });
+
+  it('sessionがnullの場合パスワード変更セクションが非表示になる', () => {
+    mockUseSession.mockReturnValue({
+      data: null,
+      status: 'unauthenticated',
+      update: jest.fn(),
+    });
+
+    render(<SettingsPage />);
+
+    expect(
+      screen.queryByRole('heading', { name: 'パスワード変更' }),
+    ).not.toBeInTheDocument();
+  });
 });

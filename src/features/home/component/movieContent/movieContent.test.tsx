@@ -230,4 +230,30 @@ describe('MovieContent', () => {
       expect(handleFilterModalOpen).toHaveBeenCalled();
     });
   });
+
+  describe('フィルターモーダル', () => {
+    it('dateRange.lteがある場合バッジが表示される', () => {
+      mockUseHome.mockReturnValue(
+        createMockUseHome({ dateRange: { lte: '2026-12-31' } }),
+      );
+      const { container } = render(<MovieContent />);
+      expect(
+        container.querySelector('.c_home_page__filter_count'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('無限スクロール', () => {
+    it('hasNextPage=trueの場合にセンチネル要素がレンダリングされる', () => {
+      mockUseHome.mockReturnValue(
+        createMockUseHome({
+          hasNextPage: true,
+          isFetchingNextPage: false,
+          movies: [createMockMovie()],
+        }),
+      );
+      render(<MovieContent />);
+      expect(screen.getByText('テスト映画')).toBeInTheDocument();
+    });
+  });
 });

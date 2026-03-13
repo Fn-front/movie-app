@@ -32,6 +32,24 @@ describe('useClickOutside', () => {
     expect(callback).not.toHaveBeenCalled();
   });
 
+  it('要素の外側タッチでcallbackが呼ばれる', () => {
+    const callback = jest.fn();
+    render(<TestComponent callback={callback} />);
+
+    fireEvent.touchStart(document.body);
+
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('要素の内側タッチでcallbackが呼ばれない', () => {
+    const callback = jest.fn();
+    const { getByTestId } = render(<TestComponent callback={callback} />);
+
+    fireEvent.touchStart(getByTestId('inside'));
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
   it('アンマウント時にイベントリスナーが解除される', () => {
     const callback = jest.fn();
     const removeEventListenerSpy = jest.spyOn(document, 'removeEventListener');

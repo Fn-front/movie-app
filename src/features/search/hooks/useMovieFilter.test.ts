@@ -154,6 +154,20 @@ describe('useMovieFilter', () => {
       expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('query='));
     });
 
+    it('vote_average_gteフィルターでURLを更新する', () => {
+      setupMocks({ query: 'テスト' });
+
+      const { result } = renderHook(() => useMovieFilter());
+
+      act(() => {
+        result.current.handleFilterChange({ vote_average_gte: 7.5 });
+      });
+
+      expect(mockPush).toHaveBeenCalledWith(
+        expect.stringContaining('vote_average_gte=7.5'),
+      );
+    });
+
     it('undefinedのフィルターを削除する', () => {
       setupMocks({ query: 'テスト', genre: '28' });
 

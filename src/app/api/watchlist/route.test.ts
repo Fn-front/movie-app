@@ -11,8 +11,10 @@ import { GET, POST } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
+let mockSupabaseEnabled = true;
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () => ({ from: mockFrom }),
+  createServiceRoleClient: () =>
+    mockSupabaseEnabled ? { from: mockFrom } : null,
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -47,6 +49,7 @@ const createPostRequest = (body: Record<string, unknown>) =>
 describe('GET /api/watchlist', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSupabaseEnabled = true;
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -219,11 +222,44 @@ describe('GET /api/watchlist', () => {
     expect(response.status).toBe(200);
     expect(json.data.watchlist).toHaveLength(0);
   });
+
+  it('Supabaseクライアントがnullの場合、500を返す（GET）', async () => {
+    mockSupabaseEnabled = false;
+
+    const response = await GET(createGetRequest());
+
+    expect(response.status).toBe(500);
+  });
+
+  it('dataがnullの場合、空配列を返す', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () => ({
+              limit: () => ({
+                data: null,
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET(createGetRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.watchlist).toHaveLength(0);
+    expect(json.data.has_more).toBe(false);
+  });
 });
 
 describe('POST /api/watchlist', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSupabaseEnabled = true;
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -397,5 +433,18 @@ describe('POST /api/watchlist', () => {
     );
 
     expect(response.status).toBe(400);
+  });
+
+  it('Supabaseクライアントがnullの場合、500を返す（POST）', async () => {
+    mockSupabaseEnabled = false;
+
+    const response = await POST(
+      createPostRequest({
+        tmdb_movie_id: 12345,
+        title: 'テスト映画',
+      }),
+    );
+
+    expect(response.status).toBe(500);
   });
 });

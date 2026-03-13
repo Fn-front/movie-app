@@ -11,8 +11,10 @@ import { GET, POST } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
+let mockSupabaseEnabled = true;
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () => ({ from: mockFrom }),
+  createServiceRoleClient: () =>
+    mockSupabaseEnabled ? { from: mockFrom } : null,
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -47,6 +49,7 @@ const createPostRequest = (body: Record<string, unknown>) =>
 describe('GET /api/favorites', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSupabaseEnabled = true;
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -191,11 +194,123 @@ describe('GET /api/favorites', () => {
 
     expect(response.status).toBe(500);
   });
+
+  it('Supabaseクライアントがnullの場合、500を返す（GET）', async () => {
+    mockSupabaseEnabled = false;
+
+    const response = await GET(createGetRequest());
+
+    expect(response.status).toBe(500);
+  });
+
+  it('件数がnullの場合、totalが0になる', async () => {
+    // 件数取得: count=null
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            count: null,
+            error: null,
+          }),
+        }),
+      }),
+    });
+    // データ取得
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () => ({
+              range: () => ({
+                data: [],
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET(createGetRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.total).toBe(0);
+  });
+
+  it('データ取得でエラーの場合、500を返す', async () => {
+    // 件数取得: 成功
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            count: 1,
+            error: null,
+          }),
+        }),
+      }),
+    });
+    // データ取得: エラー
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () => ({
+              range: () => ({
+                data: null,
+                error: new Error('Data fetch error'),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET(createGetRequest());
+
+    expect(response.status).toBe(500);
+  });
+
+  it('データがnullの場合、空配列を返す', async () => {
+    // 件数取得
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            count: 0,
+            error: null,
+          }),
+        }),
+      }),
+    });
+    // データ取得: null
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () => ({
+              range: () => ({
+                data: null,
+                error: null,
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET(createGetRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.favorites).toEqual([]);
+  });
 });
 
 describe('POST /api/favorites', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSupabaseEnabled = true;
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -391,5 +506,19 @@ describe('POST /api/favorites', () => {
     );
 
     expect(response.status).toBe(400);
+  });
+
+  it('Supabaseクライアントがnullの場合、500を返す（POST）', async () => {
+    mockSupabaseEnabled = false;
+
+    const response = await POST(
+      createPostRequest({
+        tmdb_movie_id: 12345,
+        title: 'テスト映画',
+        rating: 8,
+      }),
+    );
+
+    expect(response.status).toBe(500);
   });
 });

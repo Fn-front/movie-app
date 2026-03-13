@@ -507,4 +507,20 @@ describe('MovieListContent', () => {
       expect(screen.getByText('フィルター')).toBeInTheDocument();
     });
   });
+
+  describe('無限スクロール', () => {
+    it('hasNextPage=trueの場合にセンチネル要素がレンダリングされる', () => {
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            hasNextPage: true,
+            isFetchingNextPage: false,
+            movies: [createMockMovie()],
+          })}
+        />,
+      );
+      expect(screen.getByText('テスト映画')).toBeInTheDocument();
+    });
+  });
 });

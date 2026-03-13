@@ -18,8 +18,12 @@ const OTHER_UUID = '660e8400-e29b-41d4-a716-446655440001';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
+const mockCreateServiceRoleClient = jest
+  .fn()
+  .mockReturnValue({ from: mockFrom });
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () => ({ from: mockFrom }),
+  createServiceRoleClient: (...args: unknown[]) =>
+    mockCreateServiceRoleClient(...args),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -49,6 +53,17 @@ describe('DELETE /api/watchlist/:id', () => {
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
+  });
+
+  it('Supabaseクライアントがnullの場合500を返す', async () => {
+    mockCreateServiceRoleClient.mockReturnValueOnce(null);
+
+    const { request, params } = createDeleteRequest(VALID_UUID);
+    const response = await DELETE(request, { params });
+
+    expect(response.status).toBe(500);
+    const json = await response.json();
+    expect(json.success).toBe(false);
   });
 
   it('正常に論理削除できる', async () => {

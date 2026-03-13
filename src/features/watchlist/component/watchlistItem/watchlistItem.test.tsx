@@ -190,6 +190,23 @@ describe('WatchlistItem', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it('削除ボタンの他のキーではonDeleteが呼ばれない', async () => {
+    const user = userEvent.setup();
+    const onDelete = jest.fn();
+    const item = createMockItem();
+    render(
+      <WatchlistItem item={item} onClick={jest.fn()} onDelete={onDelete} />,
+    );
+
+    const deleteButton = screen.getByRole('button', {
+      name: 'テスト映画をウォッチリストから削除',
+    });
+    deleteButton.focus();
+    await user.keyboard('{Tab}');
+
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
   it('ポスター画像のsrcが正しく生成される', () => {
     const item = createMockItem({ poster_path: '/abc.jpg' });
     render(

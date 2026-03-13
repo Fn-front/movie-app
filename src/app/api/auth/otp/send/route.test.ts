@@ -11,8 +11,10 @@ import { POST } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
+let mockSupabaseEnabled = true;
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () => ({ from: mockFrom }),
+  createServiceRoleClient: () =>
+    mockSupabaseEnabled ? { from: mockFrom } : null,
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -40,6 +42,7 @@ const createRequest = (body: Record<string, unknown>) =>
 describe('POST /api/auth/otp/send', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSupabaseEnabled = true;
   });
 
   it('registration: 正常にOTPを送信できる', async () => {
@@ -333,6 +336,71 @@ describe('POST /api/auth/otp/send', () => {
     expect(response.status).toBe(500);
     const json = await response.json();
     expect(json.success).toBe(false);
+  });
+
+  it('Supabaseクライアントがnullの場合、500を返す', async () => {
+    mockSupabaseEnabled = false;
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', action: 'registration' }),
+    );
+
+    expect(response.status).toBe(500);
+  });
+
+  it('前回送信から十分時間が経過している場合、OTPを送信できる', async () => {
+    // ユーザー検索
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'user-1', is_verified: false },
+            error: null,
+          }),
+        }),
+      }),
+    });
+    // 前回送信（2分前）- RESEND_INTERVAL_SECONDS(60秒)より長い
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                single: () => ({
+                  data: {
+                    created_at: new Date(
+                      Date.now() - 2 * 60 * 1000,
+                    ).toISOString(),
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    // 既存OTP削除
+    mockFrom.mockReturnValueOnce({
+      delete: () => ({
+        eq: () => ({
+          eq: () => ({ is: () => ({ data: null, error: null }) }),
+        }),
+      }),
+    });
+    // OTP挿入
+    mockFrom.mockReturnValueOnce({
+      insert: () => ({ error: null }),
+    });
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', action: 'registration' }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
   });
 
   it('メール送信失敗で500を返す', async () => {

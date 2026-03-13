@@ -83,4 +83,33 @@ describe('Textarea', () => {
     const textarea = screen.getByLabelText('レビュー');
     expect(textarea.closest('div')?.className).toContain('custom');
   });
+
+  it('showCount=trueでmaxLengthがない場合は文字数カウントが表示されない', () => {
+    render(
+      <Textarea
+        label='レビュー'
+        value='テスト'
+        onChange={jest.fn()}
+        showCount
+      />,
+    );
+    expect(screen.queryByText(/\/ /)).not.toBeInTheDocument();
+  });
+
+  it('refが正しく転送される', () => {
+    const ref = jest.fn();
+    render(<Textarea label='レビュー' ref={ref} />);
+    expect(ref).toHaveBeenCalledWith(expect.any(HTMLTextAreaElement));
+  });
+
+  it('valueが文字列でない場合に文字数が0になる', () => {
+    render(
+      <Textarea
+        label='レビュー'
+        showCount
+        maxLength={500}
+      />,
+    );
+    expect(screen.getByText('0 / 500')).toBeInTheDocument();
+  });
 });

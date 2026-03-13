@@ -2,7 +2,7 @@
  * MovieDetailContentコンポーネント テスト
  */
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import { MovieDetailContent } from './movieDetailContent';
 
@@ -24,10 +24,12 @@ jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
   useWatchlistToggle: () => mockUseWatchlistToggle,
 }));
 
+const mockHandleFavoriteToggle = jest.fn();
+
 jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
   useFavoriteToggle: () => ({
     modalState: { isOpen: false, movie: null, currentFavorite: null },
-    handleFavoriteToggle: jest.fn(),
+    handleFavoriteToggle: mockHandleFavoriteToggle,
     closeModal: jest.fn(),
     handleModalSubmit: jest.fn(),
     handleDelete: jest.fn(),
@@ -646,5 +648,480 @@ describe('MovieDetailContent', () => {
     render(<MovieDetailContent movieId={123} showFinancialInfo />);
 
     expect(screen.getByText('$50（約7,500円）')).toBeInTheDocument();
+  });
+
+  it('億単位で小数を含む場合に小数点1桁で表示する', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 5.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 7000000,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} showFinancialInfo />);
+
+    // $7,000,000 * 150 = 1,050,000,000円 = 10.5億円
+    expect(screen.getByText('$7,000,000（約10.5億円）')).toBeInTheDocument();
+  });
+
+  it('万単位の金額を正しくフォーマットする', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 5.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 1000,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} showFinancialInfo />);
+
+    // $1,000 * 150 = 150,000円 = 15万円
+    expect(screen.getByText('$1,000（約15万円）')).toBeInTheDocument();
+  });
+
+  it('プロバイダーのlogo_pathがnullの場合は画像が表示されない', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 7.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+        'watch/providers': {
+          results: {
+            JP: {
+              link: 'https://example.com',
+              flatrate: [
+                {
+                  provider_id: 99,
+                  provider_name: 'NullLogo',
+                  logo_path: null,
+                  display_priority: 0,
+                },
+              ],
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.getByText('配信')).toBeInTheDocument();
+    expect(screen.queryByAltText('NullLogo')).not.toBeInTheDocument();
+  });
+
+  it('flatrateのみのプロバイダー表示', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 7.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+        'watch/providers': {
+          results: {
+            JP: {
+              link: 'https://example.com',
+              flatrate: [
+                {
+                  provider_id: 8,
+                  provider_name: 'Netflix',
+                  logo_path: '/netflix.jpg',
+                  display_priority: 0,
+                },
+              ],
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.getByText('配信')).toBeInTheDocument();
+    expect(screen.queryByText('レンタル')).not.toBeInTheDocument();
+    expect(screen.queryByText('購入')).not.toBeInTheDocument();
+  });
+
+  it('movie.favoriteがある場合もレンダリングされる', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'お気に入り映画',
+        original_title: 'Favorite Movie',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 5.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+        favorite: { id: 'fav-1', rating: 8, comment: 'Great' },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.getByText('お気に入り映画')).toBeInTheDocument();
+  });
+
+  it('watch/providersのJPがない場合はプロバイダー非表示', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 5.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+        'watch/providers': {
+          results: {
+            US: {
+              link: 'https://example.com',
+              flatrate: [
+                {
+                  provider_id: 8,
+                  provider_name: 'Netflix',
+                  logo_path: '/netflix.jpg',
+                  display_priority: 0,
+                },
+              ],
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.queryByText('配信')).not.toBeInTheDocument();
+  });
+
+  it('ウォッチリストボタンをクリックするとtoggleWatchlistが呼ばれる', () => {
+    const movieData = {
+      id: 123,
+      title: 'テスト映画',
+      original_title: 'Test Movie',
+      overview: '',
+      release_date: '2025-03-15',
+      runtime: 120,
+      vote_average: 8.0,
+      popularity: 100,
+      genres: [],
+      production_companies: [],
+      production_countries: [],
+      budget: 0,
+      revenue: 0,
+      poster_path: '/poster.jpg',
+      backdrop_path: null,
+    };
+
+    mockUseMovieDetail.mockReturnValue({
+      movie: movieData,
+      isLoading: false,
+      isError: false,
+    });
+    mockUseWatchlistToggle.isInWatchlist.mockReturnValue(false);
+
+    render(<MovieDetailContent movieId={123} />);
+
+    const watchlistButton = screen.getByRole('button', {
+      name: 'ウォッチリストに追加',
+    });
+    fireEvent.click(watchlistButton);
+
+    expect(mockUseWatchlistToggle.toggleWatchlist).toHaveBeenCalledWith({
+      id: 123,
+      title: 'テスト映画',
+      poster_path: '/poster.jpg',
+      release_date: '2025-03-15',
+    });
+  });
+
+  it('お気に入りボタンをクリックするとhandleFavoriteToggleが呼ばれる', () => {
+    const movieData = {
+      id: 123,
+      title: 'テスト映画',
+      original_title: 'Test Movie',
+      overview: '',
+      release_date: '2025-03-15',
+      runtime: 120,
+      vote_average: 8.0,
+      popularity: 100,
+      genres: [],
+      production_companies: [],
+      production_countries: [],
+      budget: 0,
+      revenue: 0,
+      poster_path: '/poster.jpg',
+      backdrop_path: null,
+    };
+
+    mockUseMovieDetail.mockReturnValue({
+      movie: movieData,
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    const favoriteButton = screen.getByRole('button', {
+      name: 'お気に入りに追加',
+    });
+    fireEvent.click(favoriteButton);
+
+    expect(mockHandleFavoriteToggle).toHaveBeenCalledWith(
+      {
+        id: 123,
+        title: 'テスト映画',
+        poster_path: '/poster.jpg',
+        release_date: '2025-03-15',
+      },
+      null,
+    );
+  });
+
+  it('poster_pathとrelease_dateがundefinedの映画でウォッチリストボタンをクリックする', () => {
+    const movieData = {
+      id: 456,
+      title: 'テスト映画2',
+      original_title: 'Test Movie 2',
+      overview: '',
+      release_date: undefined as unknown as string,
+      runtime: 90,
+      vote_average: 5.0,
+      popularity: 10,
+      genres: [],
+      production_companies: [],
+      production_countries: [],
+      budget: 0,
+      revenue: 0,
+      poster_path: undefined as unknown as string,
+      backdrop_path: null,
+    };
+
+    mockUseMovieDetail.mockReturnValue({
+      movie: movieData,
+      isLoading: false,
+      isError: false,
+    });
+    mockUseWatchlistToggle.isInWatchlist.mockReturnValue(false);
+
+    render(<MovieDetailContent movieId={456} />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+    );
+
+    expect(mockUseWatchlistToggle.toggleWatchlist).toHaveBeenCalledWith({
+      id: 456,
+      title: 'テスト映画2',
+      poster_path: null,
+      release_date: null,
+    });
+  });
+
+  it('poster_pathとrelease_dateがundefinedの映画でお気に入りボタンをクリックする', () => {
+    const movieData = {
+      id: 789,
+      title: 'テスト映画3',
+      original_title: 'Test Movie 3',
+      overview: '',
+      release_date: undefined as unknown as string,
+      runtime: 90,
+      vote_average: 5.0,
+      popularity: 10,
+      genres: [],
+      production_companies: [],
+      production_countries: [],
+      budget: 0,
+      revenue: 0,
+      poster_path: undefined as unknown as string,
+      backdrop_path: null,
+    };
+
+    mockUseMovieDetail.mockReturnValue({
+      movie: movieData,
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={789} />);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'お気に入りに追加' }),
+    );
+
+    expect(mockHandleFavoriteToggle).toHaveBeenCalledWith(
+      {
+        id: 789,
+        title: 'テスト映画3',
+        poster_path: null,
+        release_date: null,
+      },
+      null,
+    );
+  });
+
+  it('レンタルのみのプロバイダーを表示する', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 7.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+        'watch/providers': {
+          results: {
+            JP: {
+              link: 'https://example.com',
+              rent: [
+                {
+                  provider_id: 2,
+                  provider_name: 'Apple TV',
+                  logo_path: '/apple.jpg',
+                  display_priority: 1,
+                },
+              ],
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.getByText('レンタル')).toBeInTheDocument();
+    expect(screen.queryByText('配信')).not.toBeInTheDocument();
+    expect(screen.queryByText('購入')).not.toBeInTheDocument();
+  });
+
+  it('購入のみのプロバイダーを表示する', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 7.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+        'watch/providers': {
+          results: {
+            JP: {
+              link: 'https://example.com',
+              buy: [
+                {
+                  provider_id: 3,
+                  provider_name: 'Google Play Movies',
+                  logo_path: '/google.jpg',
+                  display_priority: 2,
+                },
+              ],
+            },
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.getByText('購入')).toBeInTheDocument();
+    expect(screen.queryByText('配信')).not.toBeInTheDocument();
+    expect(screen.queryByText('レンタル')).not.toBeInTheDocument();
   });
 });

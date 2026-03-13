@@ -83,7 +83,9 @@ describe('WatchlistPanel', () => {
     expect(
       screen.getByText('ウォッチリストに映画を追加しましょう'),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'すべて見る' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'すべて見る' }),
+    ).not.toBeInTheDocument();
   });
 
   it('ローディング状態が表示される', () => {

@@ -3,7 +3,10 @@
  */
 
 import { axiosInstance } from '@/lib/axios/axios';
-import type { WatchlistAddFormData, WatchlistSortOption } from '@/schema/watchlist';
+import type {
+  WatchlistAddFormData,
+  WatchlistSortOption,
+} from '@/schema/watchlist';
 
 /**
  * ウォッチリストアイテムの型

@@ -88,10 +88,7 @@ export const WatchlistPage = memo(function WatchlistPage() {
       />
 
       {hasNextPage && (
-        <div
-          ref={sentinelRef}
-          className={styles.c_watchlist_page__sentinel}
-        />
+        <div ref={sentinelRef} className={styles.c_watchlist_page__sentinel} />
       )}
 
       {isFetchingNextPage && (

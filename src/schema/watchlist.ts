@@ -34,7 +34,10 @@ export type WatchlistAddFormData = z.infer<typeof watchlistAddSchema>;
 /**
  * ウォッチリストソート方式
  */
-export const WATCHLIST_SORT_OPTIONS = ['added_at', 'release_date_proximity'] as const;
+export const WATCHLIST_SORT_OPTIONS = [
+  'added_at',
+  'release_date_proximity',
+] as const;
 export type WatchlistSortOption = (typeof WATCHLIST_SORT_OPTIONS)[number];
 
 /**

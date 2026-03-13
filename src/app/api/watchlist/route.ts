@@ -67,14 +67,17 @@ export async function GET(request: Request) {
         throw error;
       }
 
-      const items = (data ?? []) as Array<WatchlistItem & { total_count: number }>;
+      const items = (data ?? []) as Array<
+        WatchlistItem & { total_count: number }
+      >;
       const totalCount = items.length > 0 ? items[0].total_count : 0;
       const offset = cursor ? parseInt(cursor, 10) : 0;
       const hasMore = offset + limit < totalCount;
       const nextCursor = hasMore ? String(offset + limit) : null;
 
       // total_count をレスポンスから除外
-      const watchlist = items.map(({ total_count: _, ...item }) => item);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const watchlist = items.map(({ total_count, ...item }) => item);
 
       return NextResponse.json(
         {

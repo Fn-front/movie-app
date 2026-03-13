@@ -41,23 +41,17 @@ jest.mock('@/hooks/useIntersectionObserver', () => ({
 
 jest.mock('next/image', () => ({
   __esModule: true,
-  default: ({
-    alt,
-    ...props
-  }: React.ImgHTMLAttributes<HTMLImageElement>) => (
+  default: ({ alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
     // eslint-disable-next-line @next/next/no-img-element
     <img alt={alt} {...props} />
   ),
 }));
 
-jest.mock(
-  '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton',
-  () => ({
-    MovieTileSkeleton: ({ count }: { count: number }) => (
-      <div data-testid='movie-tile-skeleton'>skeleton x {count}</div>
-    ),
-  }),
-);
+jest.mock('@/components/ui/movie/movieTileSkeleton/movieTileSkeleton', () => ({
+  MovieTileSkeleton: ({ count }: { count: number }) => (
+    <div data-testid='movie-tile-skeleton'>skeleton x {count}</div>
+  ),
+}));
 
 jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
   MovieDetailModal: ({
@@ -139,9 +133,7 @@ describe('WatchlistPage', () => {
     mockUseWatchlistPage.watchlist = createMockItems(1);
     render(<WatchlistPage />);
 
-    await user.click(
-      screen.getByRole('button', { name: '映画0の詳細を表示' }),
-    );
+    await user.click(screen.getByRole('button', { name: '映画0の詳細を表示' }));
 
     expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
   });
@@ -151,14 +143,10 @@ describe('WatchlistPage', () => {
     mockUseWatchlistPage.watchlist = createMockItems(1);
     render(<WatchlistPage />);
 
-    await user.click(
-      screen.getByRole('button', { name: '映画0の詳細を表示' }),
-    );
+    await user.click(screen.getByRole('button', { name: '映画0の詳細を表示' }));
     await user.click(screen.getByTestId('close-modal'));
 
-    expect(
-      screen.queryByTestId('movie-detail-modal'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('movie-detail-modal')).not.toBeInTheDocument();
   });
 
   it('削除でremoveFromWatchlistが呼ばれる', async () => {

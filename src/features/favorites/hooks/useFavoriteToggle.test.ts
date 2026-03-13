@@ -203,7 +203,7 @@ describe('useFavoriteToggle', () => {
     expect(result.current.isFavoriteProcessing(42)).toBe(true);
   });
 
-  it('ミューテーション完了時にprocessingIdsがクリアされる', () => {
+  it('ミューテーション完了時にisFavoriteProcessingがfalseを返す', () => {
     const { result, rerender } = renderHook(() => useFavoriteToggle());
 
     act(() => {

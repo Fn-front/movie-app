@@ -140,7 +140,7 @@ describe('useWatchlistToggle', () => {
     expect(result.current.isMovieToggling(42)).toBe(true);
   });
 
-  it('ミューテーション完了時にtogglingIdsがクリアされる', () => {
+  it('ミューテーション完了時にisMovieTogglingがfalseを返す', () => {
     mockIsInWatchlist.mockReturnValue(false);
     const { result, rerender } = renderHook(() => useWatchlistToggle());
 

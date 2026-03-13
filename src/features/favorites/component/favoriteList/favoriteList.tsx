@@ -147,6 +147,7 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
       onKeyDown={handleKeyDown}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? `${item.title}の詳細を表示` : undefined}
     >
       <div className={styles.c_favorite_tile__poster}>
         {posterUrl ? (

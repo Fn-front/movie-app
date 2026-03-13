@@ -1056,6 +1056,72 @@
   - ホームページでレコメンドセクション表示確認
   - レコメンド映画タイルクリック → 詳細モーダル表示
 
+### Step 5: AI原題提案機能（設計書: `.claude/documents/title-suggestion-design.md`）
+
+> 検索結果0件時に、AIが邦題から原題を推測して提案する機能。検索と並行してAPI呼び出しを行い、テンポを損なわない設計。
+
+#### Step 5a: DB・定数・スキーマ基盤（`feature/title-suggestion-db`）
+- [ ] title_suggestionsテーブル作成（Supabase migration）
+  - UUID主キー、query_title（UNIQUE）、suggested_title
+  - RLSポリシー設定（SELECT: 全ユーザー参照可、INSERT/UPDATE/DELETE: service_roleのみ）
+  - インデックス（query_title）
+- [ ] 原題提案定数追加（`lib/constants/search.ts` に追加）
+  - QUERY_KEY、STALE_TIME
+  - メッセージ定数（SUGGESTION_SUFFIX）
+- [ ] zodバリデーションスキーマ作成
+  - suggest-title APIクエリスキーマ（query: 1文字以上）
+  - OpenAIレスポンススキーマ（suggested_title: string | null）
+- [ ] 単体テスト
+  - zodスキーマテスト
+
+#### Step 5b: 原題提案API（`feature/title-suggestion-api`）
+- [ ] 原題提案API実装（`GET /api/movies/suggest-title`）
+  - NextAuth.js認証チェック
+  - クエリパラメータ `query` のバリデーション
+  - title_suggestionsテーブルでキャッシュ確認
+  - キャッシュヒット → DB結果を返す
+  - キャッシュミス → OpenAI API呼び出し（レコメンドと同じクライアント共用）
+  - OpenAIレスポンスをzodでパース
+  - 提案あり → DBに保存 → 返す
+  - 提案なし（null）→ そのまま返す
+  - OpenAIエラー → 提案なし（null）を返す
+- [ ] APIクライアント作成（`lib/api/search/` に追加）
+  - suggestTitle(query)
+- [ ] 単体テスト
+  - APIクライアントテスト（suggestTitle）
+- [ ] 結合テスト
+  - API Routeテスト（GET /api/movies/suggest-title）
+    - 認証チェック（401）
+    - キャッシュヒット → DB結果を返す
+    - キャッシュミス → OpenAI呼び出し → DB保存 → 結果を返す
+    - OpenAIが null を返す → 提案なし
+    - OpenAIエラー → 提案なし
+    - バリデーションエラー（query なし）
+
+#### Step 5c: フロントUI統合（`feature/title-suggestion-ui`）
+- [ ] useTitleSuggestionフック作成（TanStack Query）
+  - useQueryで提案API呼び出し
+  - 検索キーワードが存在する場合のみ enabled
+  - staleTime: 24時間（DBキャッシュがあるため）
+- [ ] useSearchフック変更
+  - useTitleSuggestionを内部で呼び出し
+  - 返り値に suggestion, isSuggestionLoading を追加
+- [ ] TitleSuggestionコンポーネント作成
+  - 提案あり → 「**○○** ですか？」リンク表示（クリックで `/search?query=原題` に遷移）
+  - 提案なし or ローディング中 → 非表示
+  - React.memo + displayName 必須
+- [ ] SearchResults変更
+  - 検索結果0件時にTitleSuggestionをEmptyStateの上に配置
+- [ ] 結合テスト
+  - useTitleSuggestionフックテスト
+  - TitleSuggestionコンポーネントテスト
+    - 提案あり → リンク表示
+    - 提案なし → 非表示
+    - ローディング中 → 非表示
+  - SearchResults統合テスト
+    - 検索結果0件 + 提案あり → TitleSuggestion表示
+    - 検索結果あり → TitleSuggestion非表示
+
 ---
 
 ## フェーズ9: 品質保証

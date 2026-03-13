@@ -865,8 +865,8 @@
   - WatchlistPanelテスト（10件表示・「すべて見る」リンク）
   - useWatchlistPageフックテスト
   - WatchlistPageテスト
-- [ ] E2Eテスト（Playwright）
-  - ウォッチリストページ表示 → 無限スクロール → 映画詳細モーダル
+- [x] E2Eテスト（Playwright）
+  - ウォッチリストページ表示 → 映画詳細モーダル → 削除
   - サイドバー「すべて見る」→ ウォッチリストページ遷移
 
 ### Step 2: モバイルレイアウト基盤（`feature/mobile-layout`）

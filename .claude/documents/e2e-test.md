@@ -25,6 +25,8 @@ e2e/
 │   ├── sortFilter.spec.ts   # ソート・フィルターテスト
 │   ├── filterPersistence.spec.ts # フィルター永続化テスト
 │   └── watchlistButton.spec.ts  # ウォッチリスト状態同期テスト
+├── watchlist/
+│   └── watchlist.spec.ts    # ウォッチリストページテスト
 ├── settings/
 │   └── settings.spec.ts     # 設定ページテスト
 └── global.setup.ts          # グローバルセットアップ（storageState生成）
@@ -173,6 +175,15 @@ e2e/helpers/
 
 > ボタン表示・aria-label確認・stopPropagation・ページ横断表示は `movieListContent.test.tsx`, `movieDetailContent.test.tsx` でカバー済み
 
+### e2e/watchlist/watchlist.spec.ts（ウォッチリストページ）
+
+| テスト | 認証 | 説明 |
+|---|---|---|
+| ページ表示・詳細モーダル | 認証済み | ウォッチリスト追加済み映画の表示確認 → タイルクリックで詳細モーダル表示 |
+| ページで削除 | 認証済み | 削除ボタンクリック → API呼び出し → 空状態メッセージ表示 |
+| サイドバー「すべて見る」遷移 | 認証済み | サイドバーの「すべて見る」リンクから `/watchlist` ページに遷移 |
+
+> タイル表示・空状態メッセージ・スケルトン・ソートセレクトは `watchlistPage.test.tsx`, `watchlistList.test.tsx` でカバー済み
 ### e2e/settings/settings.spec.ts（設定）
 
 #### 設定ページ（認証済み）— テーマ切り替え

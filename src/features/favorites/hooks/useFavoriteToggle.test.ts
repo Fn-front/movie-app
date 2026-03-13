@@ -12,6 +12,10 @@ const mockAddToFavorites = jest.fn();
 const mockUpdateRating = jest.fn();
 const mockRemoveFromFavorites = jest.fn();
 
+let mockIsAdding = false;
+let mockIsUpdating = false;
+let mockIsRemoving = false;
+
 jest.mock('@/features/favorites/hooks/useFavorites', () => ({
   useFavorites: () => ({
     favorites: undefined,
@@ -19,9 +23,9 @@ jest.mock('@/features/favorites/hooks/useFavorites', () => ({
     addToFavorites: mockAddToFavorites,
     updateRating: mockUpdateRating,
     removeFromFavorites: mockRemoveFromFavorites,
-    isAdding: false,
-    isUpdating: false,
-    isRemoving: false,
+    get isAdding() { return mockIsAdding; },
+    get isUpdating() { return mockIsUpdating; },
+    get isRemoving() { return mockIsRemoving; },
   }),
 }));
 
@@ -39,6 +43,9 @@ const createMovie = () => ({
 describe('useFavoriteToggle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockIsAdding = false;
+    mockIsUpdating = false;
+    mockIsRemoving = false;
   });
 
   it('初期状態ではモーダルが閉じている', () => {
@@ -168,5 +175,66 @@ describe('useFavoriteToggle', () => {
   it('isProcessingがfalseを返す', () => {
     const { result } = renderHook(() => useFavoriteToggle());
     expect(result.current.isProcessing).toBe(false);
+  });
+
+  it('isAdding=trueの場合isProcessingがtrueを返す', () => {
+    mockIsAdding = true;
+    const { result } = renderHook(() => useFavoriteToggle());
+    expect(result.current.isProcessing).toBe(true);
+  });
+
+  it('isUpdating=trueの場合isProcessingがtrueを返す', () => {
+    mockIsUpdating = true;
+    const { result } = renderHook(() => useFavoriteToggle());
+    expect(result.current.isProcessing).toBe(true);
+  });
+
+  it('isRemoving=trueの場合isProcessingがtrueを返す', () => {
+    mockIsRemoving = true;
+    const { result } = renderHook(() => useFavoriteToggle());
+    expect(result.current.isProcessing).toBe(true);
+  });
+
+  it('isAdding=trueかつprocessingIdsに含まれている場合isFavoriteProcessingがtrueを返す', () => {
+    mockIsAdding = true;
+    const { result } = renderHook(() => useFavoriteToggle());
+
+    act(() => {
+      result.current.handleFavoriteToggle(createMovie(), null);
+    });
+    act(() => {
+      result.current.handleModalSubmit(7);
+    });
+
+    expect(result.current.isFavoriteProcessing(42)).toBe(true);
+  });
+
+  it('isRemoving=trueかつprocessingIdsに含まれている場合isFavoriteProcessingがtrueを返す', () => {
+    mockIsRemoving = true;
+    const { result } = renderHook(() => useFavoriteToggle());
+    const favorite = { id: 'fav-1', rating: 5 };
+
+    act(() => {
+      result.current.handleFavoriteToggle(createMovie(), favorite);
+    });
+    act(() => {
+      result.current.handleDelete();
+    });
+
+    expect(result.current.isFavoriteProcessing(42)).toBe(true);
+  });
+
+  it('processingIdsに含まれていない映画はisFavoriteProcessingがfalseを返す', () => {
+    mockIsAdding = true;
+    const { result } = renderHook(() => useFavoriteToggle());
+
+    act(() => {
+      result.current.handleFavoriteToggle(createMovie(), null);
+    });
+    act(() => {
+      result.current.handleModalSubmit(7);
+    });
+
+    expect(result.current.isFavoriteProcessing(999)).toBe(false);
   });
 });

@@ -438,4 +438,213 @@ describe('MovieDetailContent', () => {
     const dashes = screen.getAllByText('-');
     expect(dashes).toHaveLength(2);
   });
+
+  it('上映時間が60分未満の場合「○分」と表示する', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'ショート',
+        original_title: 'Short',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 30,
+        vote_average: 5.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.getByText('30分')).toBeInTheDocument();
+  });
+
+  it('runtimeがnullの場合は上映時間を非表示にする', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: null,
+        vote_average: 5.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.queryByText(/分$/)).not.toBeInTheDocument();
+  });
+
+  it('release_dateがnullの場合は日付を非表示にする', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: null,
+        runtime: 90,
+        vote_average: 5.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.queryByText(/年/)).not.toBeInTheDocument();
+  });
+
+  it('vote_averageが0の場合は評価を非表示にする', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.queryByText('0.0')).not.toBeInTheDocument();
+  });
+
+  it('creditsがない場合はキャストセクションを非表示にする', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 5.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+        credits: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.queryByText('キャスト')).not.toBeInTheDocument();
+  });
+
+  it('キャストのprofile_pathがnullの場合はプレースホルダーを表示する', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 5.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 0,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+        credits: {
+          cast: [
+            {
+              id: 1,
+              name: '山田太郎',
+              character: null,
+              profile_path: null,
+              order: 0,
+            },
+          ],
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} />);
+
+    expect(screen.getByText('山田太郎')).toBeInTheDocument();
+    expect(screen.getByText('山')).toBeInTheDocument();
+  });
+
+  it('1万円未満の金額を正しくフォーマットする', () => {
+    mockUseMovieDetail.mockReturnValue({
+      movie: {
+        id: 123,
+        title: 'テスト',
+        original_title: 'Test',
+        overview: '',
+        release_date: '2025-01-01',
+        runtime: 90,
+        vote_average: 5.0,
+        popularity: 10,
+        genres: [],
+        production_companies: [],
+        production_countries: [],
+        budget: 50,
+        revenue: 0,
+        poster_path: null,
+        backdrop_path: null,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<MovieDetailContent movieId={123} showFinancialInfo />);
+
+    expect(screen.getByText('$50（約7,500円）')).toBeInTheDocument();
+  });
 });

@@ -252,6 +252,36 @@ describe('useWatchlist', () => {
     });
   });
 
+  it('has_more=trueでnext_cursor=nullの場合次ページなしと判定する', async () => {
+    mockGetWatchlist.mockResolvedValueOnce({
+      success: true,
+      data: {
+        watchlist: [
+          {
+            id: 'wl-1',
+            tmdb_movie_id: 100,
+            title: '映画A',
+            poster_path: null,
+            release_date: null,
+            added_at: '2026-01-10T00:00:00Z',
+          },
+        ],
+        next_cursor: null,
+        has_more: true,
+      },
+    });
+
+    const { result } = renderHook(() => useWatchlist(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.watchlist).toHaveLength(1);
+    });
+
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
   it('次ページ読み込みが動作する', async () => {
     mockGetWatchlist
       .mockResolvedValueOnce({

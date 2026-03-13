@@ -194,11 +194,6 @@ describe('ModalHeader', () => {
     );
     expect(container.firstChild).toHaveClass('custom-header');
   });
-
-  it('classNameなしの場合でも正常にレンダリングされる', () => {
-    render(<ModalHeader>ヘッダーのみ</ModalHeader>);
-    expect(screen.getByText('ヘッダーのみ')).toBeInTheDocument();
-  });
 });
 
 describe('ModalBody', () => {

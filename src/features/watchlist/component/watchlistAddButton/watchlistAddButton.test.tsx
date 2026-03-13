@@ -82,6 +82,14 @@ describe('WatchlistAddButton', () => {
       expect(onClick).toHaveBeenCalledTimes(1);
       expect(parentKeyDown).not.toHaveBeenCalled();
     });
+
+    it('その他のキーではonClickが呼ばれない', () => {
+      const onClick = jest.fn();
+      render(<WatchlistAddButton isInWatchlist={false} onClick={onClick} />);
+
+      fireEvent.keyDown(screen.getByRole('button'), { key: 'Tab' });
+      expect(onClick).not.toHaveBeenCalled();
+    });
   });
 
   describe('disabled状態', () => {

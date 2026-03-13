@@ -27,6 +27,11 @@ describe('formatDate', () => {
     expect(formatDate('2024-01-15', 'yyyy/MM/dd')).toBe('2024/01/15');
   });
 
+  it('タイムスタンプ（数値）をフォーマットする', () => {
+    const timestamp = new Date(2024, 0, 15).getTime();
+    expect(formatDate(timestamp)).toBe('2024年01月15日');
+  });
+
   it('無効な日付文字列の場合nullを返す', () => {
     expect(formatDate('invalid-date')).toBeNull();
   });
@@ -81,6 +86,11 @@ describe('formatRelativeTime', () => {
   it('年単位の差分を返す', () => {
     const date = new Date(Date.now() - 1000 * 60 * 60 * 24 * 400);
     expect(formatRelativeTime(date)).toBe('1年前');
+  });
+
+  it('ISO文字列を受け取り相対時間を返す', () => {
+    const dateStr = new Date(Date.now() - 1000 * 60 * 10).toISOString();
+    expect(formatRelativeTime(dateStr)).toBe('10分前');
   });
 });
 

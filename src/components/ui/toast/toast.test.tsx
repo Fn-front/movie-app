@@ -40,6 +40,11 @@ describe('Toast', () => {
       screen.getByRole('button', { name: '取り消す' }),
     ).toBeInTheDocument();
   });
+
+  it('warningバリアントでレンダリングされる', () => {
+    renderToast({ variant: 'warning', title: '警告' });
+    expect(screen.getByText('警告')).toBeInTheDocument();
+  });
 });
 
 describe('ToastProvider', () => {

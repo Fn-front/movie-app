@@ -30,6 +30,10 @@ jest.mock('@/lib/api/user/user', () => ({
   updateProfile: (...args: unknown[]) => mockUpdateProfile(...args),
 }));
 
+jest.mock('@/utils/error', () => ({
+  handleApiError: () => ({ message: 'エラーが発生しました' }),
+}));
+
 // --- Tests ---
 
 describe('DisplayNameForm', () => {
@@ -64,5 +68,46 @@ describe('DisplayNameForm', () => {
       expect(screen.getByText('表示名を入力してください')).toBeInTheDocument();
     });
     expect(mockUpdateProfile).not.toHaveBeenCalled();
+  });
+
+  it('表示名更新成功時にセッション更新とトーストが表示される', async () => {
+    mockUpdateProfile.mockResolvedValue({});
+    mockUpdateSession.mockResolvedValue({});
+
+    render(<DisplayNameForm />);
+
+    await user.clear(screen.getByLabelText('表示名'));
+    await user.type(screen.getByLabelText('表示名'), '新しい名前');
+    await user.click(screen.getByRole('button', { name: '表示名を更新' }));
+
+    await waitFor(() => {
+      expect(mockUpdateProfile).toHaveBeenCalledWith('新しい名前');
+    });
+    await waitFor(() => {
+      expect(mockUpdateSession).toHaveBeenCalledWith({ name: '新しい名前' });
+    });
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '表示名を更新しました',
+        variant: 'success',
+      }),
+    );
+  });
+
+  it('表示名更新失敗時にエラーメッセージとトーストが表示される', async () => {
+    mockUpdateProfile.mockRejectedValue(new Error('Update failed'));
+
+    render(<DisplayNameForm />);
+
+    await user.clear(screen.getByLabelText('表示名'));
+    await user.type(screen.getByLabelText('表示名'), '新しい名前');
+    await user.click(screen.getByRole('button', { name: '表示名を更新' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '更新エラー', variant: 'error' }),
+    );
   });
 });

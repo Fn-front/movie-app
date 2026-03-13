@@ -56,4 +56,10 @@ describe('Select', () => {
     render(<Select label='ジャンル' options={options} required />);
     expect(screen.getByText('*')).toBeInTheDocument();
   });
+
+  it('refが正しく転送される', () => {
+    const ref = jest.fn();
+    render(<Select label='ジャンル' options={options} ref={ref} />);
+    expect(ref).toHaveBeenCalledWith(expect.any(HTMLButtonElement));
+  });
 });

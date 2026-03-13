@@ -1,15 +1,6 @@
+const mockUseSession = jest.fn();
 jest.mock('next-auth/react', () => ({
-  useSession: () => ({
-    data: {
-      user: {
-        name: 'テストユーザー',
-        email: 'test@example.com',
-        image: null,
-      },
-    },
-    status: 'authenticated',
-    update: jest.fn(),
-  }),
+  useSession: () => mockUseSession(),
 }));
 
 jest.mock('next/navigation', () => ({
@@ -47,6 +38,20 @@ import { SettingsPage } from './settingsPage';
 // --- Tests ---
 
 describe('SettingsPage', () => {
+  beforeEach(() => {
+    mockUseSession.mockReturnValue({
+      data: {
+        user: {
+          name: 'テストユーザー',
+          email: 'test@example.com',
+          image: null,
+        },
+      },
+      status: 'authenticated',
+      update: jest.fn(),
+    });
+  });
+
   it('設定見出しが表示される', () => {
     render(<SettingsPage />);
     expect(screen.getByRole('heading', { name: '設定' })).toBeInTheDocument();
@@ -103,5 +108,42 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('テーマ')).toBeInTheDocument();
     });
+  });
+
+  it('emailが空の場合パスワード変更セクションが非表示になる', () => {
+    mockUseSession.mockReturnValue({
+      data: {
+        user: {
+          name: 'テストユーザー',
+          email: '',
+          image: null,
+        },
+      },
+      status: 'authenticated',
+      update: jest.fn(),
+    });
+
+    render(<SettingsPage />);
+
+    expect(
+      screen.queryByRole('heading', { name: 'パスワード変更' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('change-password-form'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('sessionがnullの場合パスワード変更セクションが非表示になる', () => {
+    mockUseSession.mockReturnValue({
+      data: null,
+      status: 'unauthenticated',
+      update: jest.fn(),
+    });
+
+    render(<SettingsPage />);
+
+    expect(
+      screen.queryByRole('heading', { name: 'パスワード変更' }),
+    ).not.toBeInTheDocument();
   });
 });

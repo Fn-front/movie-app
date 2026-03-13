@@ -108,4 +108,46 @@ describe('FavoriteRatingModal', () => {
       expect(screen.queryByText('テスト映画')).not.toBeInTheDocument();
     });
   });
+
+  describe('handleOpenChange', () => {
+    it('モーダルが閉じられるときonCloseが呼ばれる', () => {
+      const onClose = jest.fn();
+      render(<FavoriteRatingModal {...defaultProps} onClose={onClose} />);
+
+      // 閉じるボタンクリックでonCloseが呼ばれる（handleOpenChange経由）
+      fireEvent.click(screen.getByRole('button', { name: '閉じる' }));
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  describe('handleDelete（onDeleteなし）', () => {
+    it('onDeleteがundefinedの場合に削除ハンドラーがエラーにならない', () => {
+      // 新規登録モード（currentFavorite=null）ではonDeleteなしでも問題ない
+      render(
+        <FavoriteRatingModal
+          {...defaultProps}
+          currentFavorite={null}
+          onDelete={undefined}
+        />,
+      );
+      expect(
+        screen.queryByRole('button', { name: '削除' }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('onDeleteなし更新モード', () => {
+    it('isEditModeでonDeleteがない場合は削除ボタンが表示されない', () => {
+      render(
+        <FavoriteRatingModal
+          {...defaultProps}
+          currentFavorite={{ id: 'fav-1', rating: 7 }}
+          onDelete={undefined}
+        />,
+      );
+      expect(
+        screen.queryByRole('button', { name: '削除' }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

@@ -60,4 +60,39 @@ describe('Input', () => {
     render(<Input label='名前' placeholder='名前を入力' />);
     expect(screen.getByPlaceholderText('名前を入力')).toBeInTheDocument();
   });
+
+  it('idプロップを指定した場合そのidが使用される', () => {
+    render(<Input id='custom-id' label='名前' />);
+    const input = screen.getByLabelText('名前');
+    expect(input).toHaveAttribute('id', 'custom-id');
+  });
+
+  it('refが正しく転送される', () => {
+    const ref = jest.fn();
+    render(<Input label='名前' ref={ref} />);
+    expect(ref).toHaveBeenCalledWith(expect.any(HTMLInputElement));
+  });
+
+  it('左側アイコンが表示される', () => {
+    render(
+      <Input label='名前' leftIcon={<span data-testid='left-icon'>L</span>} />,
+    );
+    expect(screen.getByTestId('left-icon')).toBeInTheDocument();
+  });
+
+  it('右側アイコンが表示される', () => {
+    render(
+      <Input
+        label='名前'
+        rightIcon={<span data-testid='right-icon'>R</span>}
+      />,
+    );
+    expect(screen.getByTestId('right-icon')).toBeInTheDocument();
+  });
+
+  it('aria-labelとlabelの両方がない場合aria-labelがundefinedになる', () => {
+    render(<Input placeholder='入力' />);
+    const input = screen.getByPlaceholderText('入力');
+    expect(input).not.toHaveAttribute('aria-label');
+  });
 });

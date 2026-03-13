@@ -206,4 +206,32 @@ describe('Pagination', () => {
     );
     expect(screen.getByRole('navigation').className).toContain('custom');
   });
+
+  it('先頭ページ付近では左省略記号が表示されない', () => {
+    const handlePageChange = jest.fn();
+    render(
+      <Pagination
+        currentPage={2}
+        totalPages={10}
+        onPageChange={handlePageChange}
+      />,
+    );
+    // 左省略記号なし、右省略記号あり
+    const ellipses = screen.getAllByText('...');
+    expect(ellipses).toHaveLength(1);
+  });
+
+  it('末尾ページ付近では右省略記号が表示されない', () => {
+    const handlePageChange = jest.fn();
+    render(
+      <Pagination
+        currentPage={9}
+        totalPages={10}
+        onPageChange={handlePageChange}
+      />,
+    );
+    // 左省略記号あり、右省略記号なし
+    const ellipses = screen.getAllByText('...');
+    expect(ellipses).toHaveLength(1);
+  });
 });

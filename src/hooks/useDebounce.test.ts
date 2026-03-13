@@ -94,4 +94,24 @@ describe('useDebounce', () => {
 
     expect(result.current).toBe('updated');
   });
+
+  it('デフォルトdelayが500msで動作する', () => {
+    const { result, rerender } = renderHook(({ value }) => useDebounce(value), {
+      initialProps: { value: 'initial' },
+    });
+
+    rerender({ value: 'updated' });
+
+    act(() => {
+      jest.advanceTimersByTime(499);
+    });
+
+    expect(result.current).toBe('initial');
+
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+
+    expect(result.current).toBe('updated');
+  });
 });

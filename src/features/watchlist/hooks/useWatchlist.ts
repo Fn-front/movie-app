@@ -20,13 +20,26 @@ import type {
   WatchlistItem,
   GetWatchlistResponse,
 } from '@/lib/api/watchlist/watchlist';
-import type { WatchlistAddFormData } from '@/schema/watchlist';
+import type {
+  WatchlistAddFormData,
+  WatchlistSortOption,
+} from '@/schema/watchlist';
 import { useToast } from '@/hooks/useToast';
 import {
   watchlistKeys,
   WATCHLIST_DEFAULT_LIMIT,
   WATCHLIST_ERROR_MESSAGES,
 } from '@/constants';
+
+/**
+ * useWatchlistフックのオプション
+ */
+export interface UseWatchlistOptions {
+  /** ソート方式 */
+  sort?: WatchlistSortOption;
+  /** 1ページあたりの取得件数 */
+  limit?: number;
+}
 
 /**
  * useWatchlistフックの返り値
@@ -59,7 +72,10 @@ export interface UseWatchlistReturn {
 /**
  * ウォッチリスト カスタムフック
  */
-export function useWatchlist(): UseWatchlistReturn {
+export function useWatchlist(
+  options: UseWatchlistOptions = {},
+): UseWatchlistReturn {
+  const { sort = 'added_at', limit = WATCHLIST_DEFAULT_LIMIT } = options;
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated' && !!session?.user;
   const queryClient = useQueryClient();
@@ -67,11 +83,12 @@ export function useWatchlist(): UseWatchlistReturn {
 
   // ウォッチリスト一覧取得（無限スクロール）
   const watchlistQuery = useInfiniteQuery({
-    queryKey: watchlistKeys.list(),
+    queryKey: watchlistKeys.list({ sort }),
     queryFn: ({ pageParam }) =>
       getWatchlist({
         cursor: pageParam,
-        limit: WATCHLIST_DEFAULT_LIMIT,
+        limit,
+        sort,
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
@@ -81,16 +98,18 @@ export function useWatchlist(): UseWatchlistReturn {
     enabled: isAuthenticated,
   });
 
+  const queryKey = watchlistKeys.list({ sort });
+
   // 追加mutation（楽観的UI更新）
   const addMutation = useMutation({
     mutationFn: addWatchlist,
     onMutate: async (newItem) => {
-      await queryClient.cancelQueries({ queryKey: watchlistKeys.list() });
+      await queryClient.cancelQueries({ queryKey });
 
       const previousData = queryClient.getQueryData<{
         pages: GetWatchlistResponse[];
         pageParams: (string | undefined)[];
-      }>(watchlistKeys.list());
+      }>(queryKey);
 
       // 楽観的に追加
       const optimisticItem: WatchlistItem = {
@@ -105,7 +124,7 @@ export function useWatchlist(): UseWatchlistReturn {
       queryClient.setQueryData<{
         pages: GetWatchlistResponse[];
         pageParams: (string | undefined)[];
-      }>(watchlistKeys.list(), (old) => {
+      }>(queryKey, (old) => {
         if (!old) return old;
         const newPages = [...old.pages];
         if (newPages.length > 0) {
@@ -125,7 +144,7 @@ export function useWatchlist(): UseWatchlistReturn {
     onError: (_error, _newItem, context) => {
       // エラー時にロールバック
       if (context?.previousData) {
-        queryClient.setQueryData(watchlistKeys.list(), context.previousData);
+        queryClient.setQueryData(queryKey, context.previousData);
       }
       toast({
         title: 'エラー',
@@ -134,7 +153,8 @@ export function useWatchlist(): UseWatchlistReturn {
       });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: watchlistKeys.list() });
+      // 全ソートのキャッシュを無効化
+      queryClient.invalidateQueries({ queryKey: watchlistKeys.all });
     },
   });
 
@@ -142,18 +162,18 @@ export function useWatchlist(): UseWatchlistReturn {
   const removeMutation = useMutation({
     mutationFn: removeWatchlist,
     onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: watchlistKeys.list() });
+      await queryClient.cancelQueries({ queryKey });
 
       const previousData = queryClient.getQueryData<{
         pages: GetWatchlistResponse[];
         pageParams: (string | undefined)[];
-      }>(watchlistKeys.list());
+      }>(queryKey);
 
       // 楽観的に削除
       queryClient.setQueryData<{
         pages: GetWatchlistResponse[];
         pageParams: (string | undefined)[];
-      }>(watchlistKeys.list(), (old) => {
+      }>(queryKey, (old) => {
         if (!old) return old;
         return {
           ...old,
@@ -172,7 +192,7 @@ export function useWatchlist(): UseWatchlistReturn {
     onError: (_error, _id, context) => {
       // エラー時にロールバック
       if (context?.previousData) {
-        queryClient.setQueryData(watchlistKeys.list(), context.previousData);
+        queryClient.setQueryData(queryKey, context.previousData);
       }
       toast({
         title: 'エラー',
@@ -181,7 +201,8 @@ export function useWatchlist(): UseWatchlistReturn {
       });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: watchlistKeys.list() });
+      // 全ソートのキャッシュを無効化
+      queryClient.invalidateQueries({ queryKey: watchlistKeys.all });
     },
   });
 

@@ -141,9 +141,44 @@ describe('watchlistQuerySchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('cursorがISO 8601形式でない場合エラーになる', () => {
+  it('cursorが文字列であれば受け入れる', () => {
     const result = watchlistQuerySchema.safeParse({
-      cursor: 'not-a-date',
+      cursor: '10',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('sortにadded_atを指定できる', () => {
+    const result = watchlistQuerySchema.safeParse({
+      sort: 'added_at',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sort).toBe('added_at');
+    }
+  });
+
+  it('sortにrelease_date_proximityを指定できる', () => {
+    const result = watchlistQuerySchema.safeParse({
+      sort: 'release_date_proximity',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sort).toBe('release_date_proximity');
+    }
+  });
+
+  it('sortのデフォルト値がadded_atになる', () => {
+    const result = watchlistQuerySchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sort).toBe('added_at');
+    }
+  });
+
+  it('sortに不正な値を指定するとエラーになる', () => {
+    const result = watchlistQuerySchema.safeParse({
+      sort: 'invalid_sort',
     });
     expect(result.success).toBe(false);
   });

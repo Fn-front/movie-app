@@ -28,10 +28,6 @@ jest.mock('@/features/watchlist/hooks/useWatchlist', () => ({
   useWatchlist: () => mockUseWatchlist,
 }));
 
-jest.mock('@/hooks/useIntersectionObserver', () => ({
-  useIntersectionObserver: () => ({ current: null }),
-}));
-
 jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
   MovieDetailModal: ({
     movieId,
@@ -69,8 +65,6 @@ describe('WatchlistPanel', () => {
     jest.clearAllMocks();
     mockUseWatchlist.watchlist = [];
     mockUseWatchlist.isLoading = false;
-    mockUseWatchlist.isFetchingNextPage = false;
-    mockUseWatchlist.hasNextPage = false;
   });
 
   it('複数件の一覧が表示される', () => {
@@ -89,6 +83,7 @@ describe('WatchlistPanel', () => {
     expect(
       screen.getByText('ウォッチリストに映画を追加しましょう'),
     ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'すべて見る' })).not.toBeInTheDocument();
   });
 
   it('ローディング状態が表示される', () => {
@@ -135,13 +130,13 @@ describe('WatchlistPanel', () => {
     expect(mockUseWatchlist.removeFromWatchlist).toHaveBeenCalledWith('wl-0');
   });
 
-  it('次ページ読み込み中にローディングが表示される', () => {
+  it('すべて見るリンクが表示される', () => {
     mockUseWatchlist.watchlist = createMockItems(3);
-    mockUseWatchlist.isFetchingNextPage = true;
-    mockUseWatchlist.hasNextPage = true;
     render(<WatchlistPanel />);
 
-    expect(screen.getAllByRole('status')).toHaveLength(1);
+    const link = screen.getByRole('link', { name: 'すべて見る' });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/watchlist');
   });
 
   it('listロールとlistitemロールが正しく設定される', () => {

@@ -830,41 +830,41 @@
 ### Step 1: ウォッチリストページ + サイドバー仕様変更（`feature/watchlist-page`）
 
 #### ウォッチリストAPI拡張
-- [ ] GET /api/watchlist にソートパラメータ追加
+- [x] GET /api/watchlist にソートパラメータ追加
   - `sort`: `added_at`（デフォルト・既存動作） / `release_date_proximity`（公開日が今日に近い順、過去含む）
   - `limit`: 既存パラメータを活用（サイドバー用に10件指定）
   - zodバリデーションスキーマ更新
   - `release_date_proximity` ソート: `ABS(release_date - NOW())` の昇順、release_date が NULL の映画は末尾
-- [ ] APIクライアント（src/lib/api/watchlist.ts）にソートオプション追加
+- [x] APIクライアント（src/lib/api/watchlist.ts）にソートオプション追加
 
 #### ウォッチリストページ（/watchlist）
-- [ ] ROUTES定数に `WATCHLIST: '/watchlist'` 追加
-- [ ] SideNavに「ウォッチリスト」項目追加
-- [ ] /watchlist ページ作成（メタデータ設定）
-- [ ] WatchlistListコンポーネント作成
+- [x] ROUTES定数に `WATCHLIST: '/watchlist'` 追加
+- [x] SideNavに「ウォッチリスト」項目追加
+- [x] /watchlist ページ作成（メタデータ設定）
+- [x] WatchlistListコンポーネント作成
   - MovieTileと同様のグリッドレイアウト
   - 無限スクロール（20件ずつ）
   - 空状態の表示（「ウォッチリストに映画を追加しましょう」）
   - MovieDetailModal統合（タイルクリックで表示）
-- [ ] ソートSelect（追加日順 / 公開日順）
-- [ ] useWatchlistPageフック作成（ソート状態管理 + useWatchlist統合）
+- [x] ソートSelect（追加日順 / 公開日順）
+- [x] useWatchlistPageフック作成（ソート状態管理 + useWatchlist統合）
 
 #### サイドバーウォッチリスト仕様変更
-- [ ] WatchlistPanelを「公開日が近い順10件」表示に変更
+- [x] WatchlistPanelを「公開日が近い順10件」表示に変更
   - 既存の無限スクロールを廃止
   - `sort=release_date_proximity&limit=10` でAPI呼び出し
   - 「すべて見る」リンク → `/watchlist` へ遷移
 - [ ] サイドバーのウォッチリスト見出しを「公開日が近い映画」等に変更
 
 #### テスト
-- [ ] 単体テスト
+- [x] 単体テスト
   - zodスキーマテスト（sortパラメータ追加分）
   - APIクライアントテスト（ソートオプション）
-- [ ] 結合テスト
-  - API Routeテスト（GET /api/watchlist — release_date_proximityソート）
+- [x] 結合テスト
   - WatchlistListコンポーネントテスト（一覧表示・空状態・無限スクロール）
   - WatchlistPanelテスト（10件表示・「すべて見る」リンク）
   - useWatchlistPageフックテスト
+  - WatchlistPageテスト
 - [ ] E2Eテスト（Playwright）
   - ウォッチリストページ表示 → 無限スクロール → 映画詳細モーダル
   - サイドバー「すべて見る」→ ウォッチリストページ遷移

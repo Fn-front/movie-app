@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: '公開予定', href: ROUTES.UPCOMING },
   { label: '公開中', href: ROUTES.NOW_SHOWING },
   { label: 'お気に入り', href: ROUTES.FAVORITES },
+  { label: 'ウォッチリスト', href: ROUTES.WATCHLIST },
 ];
 
 /**

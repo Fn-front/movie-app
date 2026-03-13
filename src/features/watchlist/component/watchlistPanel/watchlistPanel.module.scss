@@ -27,7 +27,24 @@
     padding: $spacing-4;
   }
 
-  &__sentinel {
-    height: 1px;
+  &__show_all {
+    display: flex;
+    justify-content: center;
+    padding: $spacing-3;
+    margin-top: $spacing-2;
+    font-size: $font-size-sm;
+    color: $primary-500;
+    text-decoration: none;
+    transition: $transition-all;
+
+    &:hover {
+      text-decoration: underline;
+    }
+
+    &:focus-visible {
+      outline: $border-width-2 solid $primary-500;
+      outline-offset: 2px;
+      border-radius: $border-radius-sm;
+    }
   }
 }

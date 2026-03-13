@@ -823,61 +823,248 @@
 
 ---
 
-## フェーズ7: UI/UX改善（1週間）
+## フェーズ7: UI/UX改善
 
-### レスポンシブ対応
-- [ ] スマホレイアウト最適化
-- [ ] タブレットレイアウト最適化
-- [ ] サイドバーのモバイル対応（ハンバーガーメニュー）
+> テスティングトロフィーモデル（フェーズ4 Step 3.5）を適用。各Stepでテストレイヤーを明示する。
 
-### スタイリング改善
-- [ ] ホバーエフェクト（opacity変化等）
-- [ ] フォーカス状態のスタイリング
-- [ ] トランジション効果（opacity 0.2s ease等）
-- [ ] カラーコントラスト確認
+### Step 1: ウォッチリストページ + サイドバー仕様変更（`feature/watchlist-page`）
 
-### アクセシビリティ
-- [x] ARIA属性: Radix UIで自動対応 - 確定
-- [x] キーボード操作: Radix UIで自動対応 - 確定
-- [x] フォーカス管理: Radix UIで自動対応 - 確定
-- [ ] 追加のアクセシビリティ対応（カスタムコンポーネント用）
+#### ウォッチリストAPI拡張
+- [ ] GET /api/watchlist にソートパラメータ追加
+  - `sort`: `added_at`（デフォルト・既存動作） / `release_date_proximity`（公開日が今日に近い順、過去含む）
+  - `limit`: 既存パラメータを活用（サイドバー用に10件指定）
+  - zodバリデーションスキーマ更新
+  - `release_date_proximity` ソート: `ABS(release_date - NOW())` の昇順、release_date が NULL の映画は末尾
+- [ ] APIクライアント（src/lib/api/watchlist.ts）にソートオプション追加
+
+#### ウォッチリストページ（/watchlist）
+- [ ] ROUTES定数に `WATCHLIST: '/watchlist'` 追加
+- [ ] SideNavに「ウォッチリスト」項目追加
+- [ ] /watchlist ページ作成（メタデータ設定）
+- [ ] WatchlistListコンポーネント作成
+  - MovieTileと同様のグリッドレイアウト
+  - 無限スクロール（20件ずつ）
+  - 空状態の表示（「ウォッチリストに映画を追加しましょう」）
+  - MovieDetailModal統合（タイルクリックで表示）
+- [ ] ソートSelect（追加日順 / 公開日順）
+- [ ] useWatchlistPageフック作成（ソート状態管理 + useWatchlist統合）
+
+#### サイドバーウォッチリスト仕様変更
+- [ ] WatchlistPanelを「公開日が近い順10件」表示に変更
+  - 既存の無限スクロールを廃止
+  - `sort=release_date_proximity&limit=10` でAPI呼び出し
+  - 「すべて見る」リンク → `/watchlist` へ遷移
+- [ ] サイドバーのウォッチリスト見出しを「公開日が近い映画」等に変更
+
+#### テスト
+- [ ] 単体テスト
+  - zodスキーマテスト（sortパラメータ追加分）
+  - APIクライアントテスト（ソートオプション）
+- [ ] 結合テスト
+  - API Routeテスト（GET /api/watchlist — release_date_proximityソート）
+  - WatchlistListコンポーネントテスト（一覧表示・空状態・無限スクロール）
+  - WatchlistPanelテスト（10件表示・「すべて見る」リンク）
+  - useWatchlistPageフックテスト
+- [ ] E2Eテスト（Playwright）
+  - ウォッチリストページ表示 → 無限スクロール → 映画詳細モーダル
+  - サイドバー「すべて見る」→ ウォッチリストページ遷移
+
+### Step 2: モバイルレイアウト基盤（`feature/mobile-layout`）
+
+#### ハンバーガーメニュー
+- [ ] MobileMenuButtonコンポーネント作成（ハンバーガーアイコン、Header内に配置）
+  - lg以上で非表示、lg未満で表示
+- [ ] MobileDrawerコンポーネント作成（Radix UI Dialog ベース）
+  - ナビリンク（SideNavと同じ項目: ホーム / 公開予定 / 公開中 / お気に入り / ウォッチリスト）
+  - ユーザーメニュー（アバター + 設定リンク + ログアウト）
+  - カレンダーボタンは含めない（別途検討）
+  - オーバーレイクリック / ESCで閉じる
+  - ページ遷移時に自動で閉じる
+
+#### レイアウト調整
+- [ ] Header: SP対応
+  - ハンバーガーボタン追加（lg未満で表示）
+  - SearchBar: SP対応（幅調整 or 検索アイコンタップで展開）— **Step 2 着手時に方針決定**
+  - ユーザーメニュー: lg未満で非表示（MobileDrawer内に移動）
+- [ ] Sidebar: lg未満で非表示（display: none）
+- [ ] Footer: SP簡略化（TMDbアトリビューションをコンパクトに1行表示）
+
+#### テスト
+- [ ] 結合テスト
+  - MobileDrawerテスト（開閉・ナビリンク・ユーザーメニュー・ページ遷移で閉じる）
+  - MobileMenuButtonテスト（クリックでDrawer開閉）
+  - Header SPレイアウトテスト（ハンバーガー表示、ユーザーメニュー非表示）
+- [ ] E2Eテスト（Playwright）
+  - SP表示幅でハンバーガーメニュー → ナビゲーション遷移
+
+### Step 3: 主要ページレスポンシブ対応（`feature/responsive-pages`）
+
+> 画面を見ながら調整する。以下は対応対象の一覧であり、詳細はStep実装時に決定する。
+
+#### MovieTileグリッド（全映画一覧ページ共通）
+- [ ] カラム数調整（SP: 2列 / タブレット: 3列 / PC: 4-5列）
+- [ ] MovieTileのフォントサイズ・余白調整
+
+#### 各ページ個別対応
+- [ ] ホームページ（/）レスポンシブ
+- [ ] 公開予定（/movies/upcoming）レスポンシブ
+- [ ] 公開中（/movies/now-showing）レスポンシブ
+- [ ] お気に入り（/favorites）レスポンシブ
+- [ ] ウォッチリスト（/watchlist）レスポンシブ
+- [ ] 検索ページ（/search）レスポンシブ
+  - MovieFilter: SP時の表示方式検討（折りたたみ or モーダル化）
+- [ ] 設定ページ（/settings）レスポンシブ
+
+#### モーダル・ダイアログ
+- [ ] MovieDetailModal: SP時のレイアウト調整（フルスクリーン or 幅100%）
+- [ ] CalendarDialog: SP時のレイアウト調整
+- [ ] FavoriteRatingModal: SP時の調整
+- [ ] FilterModal: SP時の調整
+
+#### カレンダーのSPアクセス導線（**Step 3 着手前に方針決定必須**）
+- [ ] SPでのカレンダーアクセス方法を決定・実装
+  - 候補: ウォッチリストページ内にカレンダーボタン配置 / ヘッダーにアイコン追加 / 等
+  - **未決定のままだとSPユーザーがカレンダーにアクセスできない**
+
+#### テスト
+- [ ] 結合テスト
+  - 主要コンポーネントのレスポンシブ表示テスト（必要に応じて）
+- [ ] E2Eテスト（Playwright）
+  - SP表示幅での主要ページ表示確認
+  - SP表示幅での映画詳細モーダル表示
+
+### Step 4: スタイリング改善（`feature/styling-improvements`）
+
+#### ホバーエフェクト
+- [ ] MovieTile: ホバー時のシャドウ変化（既存hover-shadow mixin適用）
+- [ ] ナビリンク: ホバー時の背景色変化
+- [ ] ボタン類: ホバー時のopacity変化（既存hover-opacity mixin適用）
+
+#### フォーカス状態
+- [ ] focus-visible mixinの適用漏れがないか全コンポーネント確認
+- [ ] カスタムコンポーネント（Radix UI外）のフォーカス表示追加
+
+#### トランジション
+- [ ] opacity / transform / box-shadow のトランジション統一（デザインシステム変数使用）
+
+#### カラーコントラスト
+- [ ] WCAG AA基準（テキスト 4.5:1、UI要素 3:1）の全画面確認
+- [ ] 不足箇所の修正
+
+#### テスト
+- [ ] 結合テスト
+  - アクセシビリティテスト（カスタムコンポーネントのaria属性・フォーカス）
 
 ---
 
-## フェーズ8: テスト・品質保証（1週間）
+## フェーズ8: 品質保証
 
-### テスト実装
-- [ ] 単体テスト（Jest + React Testing Library）
-  - [ ] 共通コンポーネントのテスト
-  - [ ] カスタムフックのテスト（useAuth, useMovies等）
-  - [ ] バリデーションロジックのテスト（zodスキーマ）
-- [ ] 統合テスト
-  - [ ] API Routeテスト
-  - [ ] 認証フローテスト
-- [ ] E2Eテスト（Playwright）
-  - [ ] ユーザー登録・ログインフロー
-  - [ ] 映画一覧・詳細表示
-  - [ ] ウォッチリスト操作
-- [ ] カバレッジ80%以上達成
-- [ ] Storybook実装
-  - [ ] Storybookセットアップ
-  - [ ] 共通コンポーネントのストーリー作成（全コンポーネント）
-  - [ ] 機能コンポーネントのストーリー作成（主要なもの）
-  - [ ] インタラクションテスト実装
-  - [ ] デザインシステムドキュメント化
+> テスト基盤は確立済み（テスティングトロフィーモデル導入済み、カバレッジ80%以上達成済み）。
+> 本フェーズではパフォーマンス最適化とセキュリティ監査に集中する。
 
-### パフォーマンス最適化
-- [x] React.memo適用 - 確定（全コンポーネント）
-- [x] useCallback適用 - 確定（全コールバック関数）
-- [ ] Lighthouse監査（目標スコア90以上）
-- [ ] バンドルサイズ最適化
-- [ ] 画像最適化確認（Next.js Image）
-- [ ] キャッシュ戦略確認（movie_cache差分更新）
+### 現状（フェーズ7開始前時点）
+- [x] テスティングトロフィーモデル導入済み
+- [x] 単体テスト + 結合テスト: 140スイート / 1,564テスト
+- [x] E2Eテスト: 12 spec
+- [x] カバレッジ: Statements 89.82% / Branches 84.7% / Functions 87.72% / Lines 90.68%
+- [x] React.memo適用済み（全コンポーネント）
+- [x] useCallback適用済み（全コールバック関数）
 
-### セキュリティ監査
-- [ ] 脆弱性スキャン
-- [ ] 環境変数の再確認
-- [ ] OWASP Top 10対策確認
+### Step 1: Lighthouse監査 + パフォーマンス改善（`setup/lighthouse-audit`）
+
+#### Lighthouse監査実施
+- [ ] 主要ページのLighthouse監査実施（Performance / Accessibility / Best Practices / SEO）
+  - ホーム（/）
+  - 公開予定（/movies/upcoming）
+  - 検索（/search）
+  - お気に入り（/favorites）
+  - ウォッチリスト（/watchlist）
+  - ログイン（/auth/signin）
+- [ ] 各カテゴリ目標スコア90以上
+
+#### パフォーマンス改善
+- [ ] LCP（Largest Contentful Paint）改善
+  - 画像最適化確認（Next.js Image の sizes / priority 属性）
+  - フォント読み込み最適化（font-display: swap 確認）
+- [ ] CLS（Cumulative Layout Shift）改善
+  - 画像・動的コンテンツのサイズ予約確認
+  - スケルトンUIのサイズ一致確認
+- [ ] FID / INP 改善
+  - 重い処理のメインスレッドブロック確認
+- [ ] キャッシュ戦略確認（movie_cache差分更新の動作検証）
+
+### Step 2: バンドルサイズ最適化（`setup/bundle-optimization`）
+
+- [ ] @next/bundle-analyzer 導入・分析
+- [ ] 大きい依存パッケージの特定と対策
+  - 未使用エクスポートの確認（Tree-shaking効果）
+  - 必要に応じてdynamic importに切り替え
+- [ ] 未使用依存パッケージの削除
+- [ ] 最適化前後のバンドルサイズ比較・記録
+
+### Step 3: OWASPセキュリティ監査（`setup/security-audit`）
+
+#### OWASP Top 10 チェックリスト
+
+##### A01: アクセス制御の不備（Broken Access Control）
+- [ ] 全API Routeの認証チェック漏れ確認
+- [ ] RLSポリシーの網羅性確認（他ユーザーデータへのアクセス不可）
+- [ ] Middleware保護パスの漏れ確認
+- [ ] CORS設定確認
+
+##### A02: 暗号化の失敗（Cryptographic Failures）
+- [ ] パスワードハッシュ化の確認（bcrypt）
+- [ ] JWT署名アルゴリズム確認
+- [ ] 機密情報（APIキー等）のクライアント露出確認
+- [ ] Cookie設定確認（HttpOnly / Secure / SameSite）
+
+##### A03: インジェクション（Injection）
+- [ ] SQLインジェクション対策確認（Supabase SDKのパラメータ化クエリ）
+- [ ] XSS対策確認（React自動エスケープ + CSPヘッダー）
+- [ ] zodバリデーションの網羅性確認（全API Route入力）
+
+##### A04: 安全でない設計（Insecure Design）
+- [ ] レート制限の動作確認（ログイン / パスワード変更 / OTP）
+- [ ] ビジネスロジックの悪用シナリオ確認
+
+##### A05: セキュリティの設定ミス（Security Misconfiguration）
+- [ ] セキュリティヘッダー確認（CSP / X-Content-Type-Options / X-Frame-Options / HSTS等）
+- [ ] 環境変数のクライアント露出確認（NEXT_PUBLIC_ プレフィックス）
+- [ ] エラーレスポンスの情報漏洩確認（スタックトレース非公開）
+- [ ] デフォルト認証情報の確認
+
+##### A06: 脆弱で古いコンポーネント（Vulnerable and Outdated Components）
+- [ ] `npm audit` 実施・脆弱性修正
+- [ ] 主要依存パッケージのバージョン確認（既知の脆弱性なし）
+
+##### A07: 認証と識別の失敗（Identification and Authentication Failures）
+- [ ] パスワードポリシーの確認（8文字以上、英大小+数字）
+- [ ] セッション管理の確認（有効期限24時間、JWT検証）
+- [ ] OTPの安全性確認（有効期限10分、試行回数5回、再送間隔1分）
+- [ ] ソーシャルログインのコールバック安全性確認
+
+##### A08: ソフトウェアとデータの整合性の不備（Software and Data Integrity Failures）
+- [ ] 依存パッケージの整合性確認（package-lock.json）
+- [ ] CI/CDパイプラインの安全性確認
+
+##### A09: セキュリティログとモニタリングの不備（Security Logging and Monitoring Failures）
+- [ ] 認証失敗のログ記録確認
+- [ ] レート制限超過のログ記録確認
+- [ ] Vercel Logs設定確認
+
+##### A10: サーバーサイドリクエストフォージェリ（SSRF）
+- [ ] 外部URL取得処理の入力検証確認（TMDb API呼び出し）
+- [ ] 内部ネットワークへのアクセス制限確認
+
+#### 監査結果の対応
+- [ ] 発見された脆弱性の修正
+- [ ] 監査結果ドキュメント作成（発見事項・対応内容・残存リスク）
+
+### Step 4: フェーズ7テストカバレッジ確認（`setup/phase7-coverage-review`）
+
+- [ ] フェーズ7で追加したコードのカバレッジ確認
+- [ ] カバレッジが80%を下回っている箇所のテスト追加
+- [ ] 最終カバレッジレポート取得・記録
 
 ---
 

@@ -3,7 +3,7 @@
  * useWatchlist + useToast を統合し、トグルロジックを一元管理
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants/watchlist';
 import { useWatchlist } from '@/features/watchlist/hooks/useWatchlist';
@@ -68,7 +68,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
   } = useWatchlist();
   const { toast } = useToast();
 
-  const [togglingIds, setTogglingIds] = useState<Set<number>>(new Set());
+  const togglingIdRef = useRef<number | null>(null);
 
   // 最新の関数群を単一refで保持し、toggleWatchlistの参照を安定させる
   const handlersRef = useRef<ToggleHandlers>({
@@ -89,7 +89,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
   });
 
   const toggleWatchlist = useCallback((movie: WatchlistToggleMovie) => {
-    setTogglingIds((prev) => new Set(prev).add(movie.id));
+    togglingIdRef.current = movie.id;
 
     const h = handlersRef.current;
     if (h.isInWatchlist(movie.id)) {
@@ -117,8 +117,8 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
 
   const isMovieToggling = useCallback(
     (tmdbMovieId: number) =>
-      (isAdding || isRemoving) && togglingIds.has(tmdbMovieId),
-    [togglingIds, isAdding, isRemoving],
+      (isAdding || isRemoving) && togglingIdRef.current === tmdbMovieId,
+    [isAdding, isRemoving],
   );
 
   return useMemo(

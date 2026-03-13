@@ -17,6 +17,7 @@ import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle'
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import type { Movie } from '@/lib/types';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
+import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
 import styles from './searchResults.module.scss';
 
@@ -45,7 +46,10 @@ export interface SearchResultsProps {
  * MovieTileの表示用にデフォルト値を設定している。
  * 検索結果ではこれらの情報は表示に影響しない。
  */
-function toMovieCacheItem(movie: Movie): MovieCacheItem {
+function toMovieCacheItem(
+  movie: Movie,
+  favorite: MovieFavoriteInfo | null,
+): MovieCacheItem {
   return {
     id: movie.id,
     title: movie.title,
@@ -58,6 +62,7 @@ function toMovieCacheItem(movie: Movie): MovieCacheItem {
     genre_ids: movie.genre_ids,
     release_type: 'theatrical',
     is_revival: false,
+    favorite,
   };
 }
 
@@ -81,6 +86,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
     handleModalSubmit: handleFavoriteModalSubmit,
     handleDelete: handleFavoriteDelete,
     isFavoriteProcessing,
+    getFavoriteInfo,
   } = useFavoriteToggle();
 
   const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
@@ -93,7 +99,11 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
     setSelectedMovieId(null);
   }, []);
 
-  const movieCacheItems = useMemo(() => movies.map(toMovieCacheItem), [movies]);
+  const movieCacheItems = useMemo(
+    () =>
+      movies.map((movie) => toMovieCacheItem(movie, getFavoriteInfo(movie.id))),
+    [movies, getFavoriteInfo],
+  );
 
   if (isLoading) {
     return (

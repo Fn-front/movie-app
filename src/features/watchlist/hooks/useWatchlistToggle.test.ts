@@ -16,14 +16,20 @@ const mockAddToWatchlist = jest.fn();
 const mockRemoveFromWatchlist = jest.fn();
 const mockToast = jest.fn();
 
+const mockMutationState = { isAdding: false, isRemoving: false };
+
 jest.mock('@/features/watchlist/hooks/useWatchlist', () => ({
   useWatchlist: () => ({
     isInWatchlist: mockIsInWatchlist,
     getWatchlistId: mockGetWatchlistId,
     addToWatchlist: mockAddToWatchlist,
     removeFromWatchlist: mockRemoveFromWatchlist,
-    isAdding: false,
-    isRemoving: false,
+    get isAdding() {
+      return mockMutationState.isAdding;
+    },
+    get isRemoving() {
+      return mockMutationState.isRemoving;
+    },
     watchlist: [],
     isLoading: false,
     isFetchingNextPage: false,
@@ -55,6 +61,8 @@ const createMovie = () => ({
 describe('useWatchlistToggle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockMutationState.isAdding = false;
+    mockMutationState.isRemoving = false;
   });
 
   it('isInWatchlist関数を返す', () => {
@@ -116,5 +124,36 @@ describe('useWatchlistToggle', () => {
     const { result } = renderHook(() => useWatchlistToggle());
 
     expect(result.current.isToggling).toBe(false);
+  });
+
+  it('ミューテーション中はisMovieTogglingがtrueを返す', () => {
+    mockIsInWatchlist.mockReturnValue(false);
+    const { result, rerender } = renderHook(() => useWatchlistToggle());
+
+    act(() => {
+      result.current.toggleWatchlist(createMovie());
+    });
+
+    mockMutationState.isAdding = true;
+    rerender();
+
+    expect(result.current.isMovieToggling(42)).toBe(true);
+  });
+
+  it('ミューテーション完了時にisMovieTogglingがfalseを返す', () => {
+    mockIsInWatchlist.mockReturnValue(false);
+    const { result, rerender } = renderHook(() => useWatchlistToggle());
+
+    act(() => {
+      result.current.toggleWatchlist(createMovie());
+    });
+
+    mockMutationState.isAdding = true;
+    rerender();
+    expect(result.current.isMovieToggling(42)).toBe(true);
+
+    mockMutationState.isAdding = false;
+    rerender();
+    expect(result.current.isMovieToggling(42)).toBe(false);
   });
 });

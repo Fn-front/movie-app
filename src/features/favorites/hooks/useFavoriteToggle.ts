@@ -3,7 +3,7 @@
  * useFavorites + モーダル状態管理を統合
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { useFavorites } from '@/features/favorites/hooks/useFavorites';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
@@ -55,6 +55,8 @@ export interface UseFavoriteToggleReturn {
   isProcessing: boolean;
   /** 指定映画が処理中かどうか（per-movie無効化用） */
   isFavoriteProcessing: (tmdbMovieId: number) => boolean;
+  /** 指定映画のお気に入り情報を取得（未登録ならnull） */
+  getFavoriteInfo: (tmdbMovieId: number) => MovieFavoriteInfo | null;
 }
 
 const INITIAL_MODAL_STATE: FavoriteModalState = {
@@ -71,6 +73,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
     addToFavorites,
     updateRating,
     removeFromFavorites,
+    getFavoriteInfo,
     isAdding,
     isUpdating,
     isRemoving,
@@ -79,7 +82,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
   const [modalState, setModalState] =
     useState<FavoriteModalState>(INITIAL_MODAL_STATE);
 
-  const [processingIds, setProcessingIds] = useState<Set<number>>(new Set());
+  const processingIdRef = useRef<number | null>(null);
 
   const handleFavoriteToggle = useCallback(
     (movie: FavoriteToggleMovie, favorite: MovieFavoriteInfo | null) => {
@@ -99,7 +102,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
   const handleModalSubmit = useCallback(
     (rating: number) => {
       if (modalState.movie) {
-        setProcessingIds((prev) => new Set(prev).add(modalState.movie!.id));
+        processingIdRef.current = modalState.movie.id;
       }
       if (modalState.currentFavorite) {
         updateRating(modalState.currentFavorite.id, rating);
@@ -127,7 +130,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
   const handleDelete = useCallback(() => {
     if (!modalState.currentFavorite) return;
     if (modalState.movie) {
-      setProcessingIds((prev) => new Set(prev).add(modalState.movie!.id));
+      processingIdRef.current = modalState.movie.id;
     }
     removeFromFavorites(modalState.currentFavorite.id);
     closeModal();
@@ -140,8 +143,9 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
 
   const isFavoriteProcessing = useCallback(
     (tmdbMovieId: number) =>
-      (isAdding || isUpdating || isRemoving) && processingIds.has(tmdbMovieId),
-    [processingIds, isAdding, isUpdating, isRemoving],
+      (isAdding || isUpdating || isRemoving) &&
+      processingIdRef.current === tmdbMovieId,
+    [isAdding, isUpdating, isRemoving],
   );
 
   return useMemo(
@@ -153,6 +157,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       handleDelete,
       isProcessing: isAdding || isUpdating || isRemoving,
       isFavoriteProcessing,
+      getFavoriteInfo,
     }),
     [
       modalState,
@@ -164,6 +169,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       isUpdating,
       isRemoving,
       isFavoriteProcessing,
+      getFavoriteInfo,
     ],
   );
 }

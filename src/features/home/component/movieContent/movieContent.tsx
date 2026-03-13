@@ -16,7 +16,7 @@ import { Loading } from '@/components/ui/loading/loading';
 import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
-import { FilterModal } from '@/features/home/component/filterModal/filterModal';
+import { FilterModal } from '@/components/ui/movie/filterModal/filterModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 

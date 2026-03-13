@@ -61,6 +61,7 @@
 
   &__revival {
     display: flex;
+    flex-wrap: wrap;
     gap: $spacing-2;
     border: none;
     padding: 0;

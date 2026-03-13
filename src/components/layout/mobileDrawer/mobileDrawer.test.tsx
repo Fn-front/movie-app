@@ -14,7 +14,10 @@ jest.mock('next/navigation', () => ({
 // useSession / signOut のモック
 const mockSignOut = jest.fn();
 let mockSessionData: {
-  data: { user: { name: string; email: string; image: string | null }; expires: string } | null;
+  data: {
+    user: { name: string; email: string; image: string | null };
+    expires: string;
+  } | null;
   status: string;
 } = {
   data: {
@@ -123,8 +126,12 @@ describe('MobileDrawer', () => {
     };
     render(<MobileDrawer {...defaultProps} />);
     expect(screen.queryByText('テストユーザー')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /設定/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /ログアウト/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /設定/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /ログアウト/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('設定ボタンクリックで設定ページに遷移する', async () => {

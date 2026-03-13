@@ -50,11 +50,7 @@ describe('Header', () => {
   });
 
   it('mobileMenuButtonスロットが表示される', () => {
-    render(
-      <Header
-        mobileMenuButton={<button>メニューを開く</button>}
-      />,
-    );
+    render(<Header mobileMenuButton={<button>メニューを開く</button>} />);
     expect(
       screen.getByRole('button', { name: 'メニューを開く' }),
     ).toBeInTheDocument();

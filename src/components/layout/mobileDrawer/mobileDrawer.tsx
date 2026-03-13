@@ -6,10 +6,8 @@
 'use client';
 
 import { memo, useCallback, useMemo } from 'react';
-import { useSession } from 'next-auth/react';
-import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { signOut, useSession } from 'next-auth/react';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -143,7 +141,10 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
           >
             <ul className={styles.c_mobile_drawer__nav_list}>
               {navItems.map((item) => (
-                <li key={item.href} className={styles.c_mobile_drawer__nav_item}>
+                <li
+                  key={item.href}
+                  className={styles.c_mobile_drawer__nav_item}
+                >
                   <Link
                     href={item.href}
                     className={`${styles.c_mobile_drawer__nav_link} ${item.isActive ? styles['c_mobile_drawer__nav_link--active'] : ''}`}

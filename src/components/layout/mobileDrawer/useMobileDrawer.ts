@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
 /**
@@ -14,6 +14,15 @@ import { usePathname } from 'next/navigation';
 export const useMobileDrawer = () => {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+  const [prevPathname, setPrevPathname] = useState(pathname);
+
+  // pathnameが変わったら閉じる（React推奨: レンダー中のprops変更検出パターン）
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
+    if (isOpen) {
+      setIsOpen(false);
+    }
+  }
 
   /** Drawerを開閉する */
   const handleToggle = useCallback(() => {
@@ -24,11 +33,6 @@ export const useMobileDrawer = () => {
   const handleOpenChange = useCallback((open: boolean) => {
     setIsOpen(open);
   }, []);
-
-  // ページ遷移時に自動で閉じる
-  useEffect(() => {
-    setIsOpen(false);
-  }, [pathname]);
 
   return {
     isOpen,

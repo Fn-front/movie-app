@@ -100,7 +100,8 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
   }, []);
 
   const movieCacheItems = useMemo(
-    () => movies.map((movie) => toMovieCacheItem(movie, getFavoriteInfo(movie.id))),
+    () =>
+      movies.map((movie) => toMovieCacheItem(movie, getFavoriteInfo(movie.id))),
     [movies, getFavoriteInfo],
   );
 

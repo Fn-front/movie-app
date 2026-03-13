@@ -1,23 +1,38 @@
 @use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
 
 .c_settings_page {
   max-width: 720px;
-  padding: $spacing-8;
+  padding: $spacing-4;
+
+  @include md {
+    padding: $spacing-8;
+  }
 }
 
 .c_settings_page__sections {
   display: flex;
   flex-direction: column;
-  gap: $spacing-10;
-  margin-top: $spacing-8;
+  gap: $spacing-6;
+  margin-top: $spacing-6;
+
+  @include md {
+    gap: $spacing-10;
+    margin-top: $spacing-8;
+  }
 }
 
 .c_settings_page__section {
   display: flex;
   flex-direction: column;
-  gap: $spacing-5;
-  padding-bottom: $spacing-8;
+  gap: $spacing-4;
+  padding-bottom: $spacing-6;
   border-bottom: $border-width-1 solid $border-color;
+
+  @include md {
+    gap: $spacing-5;
+    padding-bottom: $spacing-8;
+  }
 
   &:last-child {
     border-bottom: none;

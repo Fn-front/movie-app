@@ -5,13 +5,15 @@
 
 'use client';
 
-import { memo } from 'react';
+import { memo, useCallback, useState } from 'react';
+import { IoFilterOutline } from 'react-icons/io5';
 
 import { SearchResults } from '@/features/search/component/searchResults/searchResults';
 import { MovieFilter } from '@/features/search/component/movieFilter/movieFilter';
 import { useSearch } from '@/features/search/hooks/useSearch';
 import { useMovieFilter } from '@/features/search/hooks/useMovieFilter';
 import { useGenres } from '@/features/search/hooks/useGenres';
+import { Button } from '@/components/ui/button/button';
 
 import styles from './searchPage.module.scss';
 
@@ -38,14 +40,36 @@ export const SearchPage = memo(function SearchPage() {
 
   const { genres } = useGenres();
 
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  const handleFilterToggle = useCallback(() => {
+    setIsFilterOpen((prev) => !prev);
+  }, []);
+
   return (
     <div className={styles.c_search_page}>
-      <h1 className={styles.c_search_page__title}>
-        {query ? `「${query}」の検索結果` : '検索結果'}
-      </h1>
+      <div className={styles.c_search_page__header}>
+        <h1 className={styles.c_search_page__title}>
+          {query ? `「${query}」の検索結果` : '検索結果'}
+        </h1>
+        <Button
+          variant='secondary'
+          size='sm'
+          onClick={handleFilterToggle}
+          className={styles.c_search_page__filter_toggle}
+          aria-expanded={isFilterOpen}
+          aria-controls='search-filter'
+        >
+          <IoFilterOutline />
+          フィルター
+        </Button>
+      </div>
 
       <div className={styles.c_search_page__content}>
-        <aside className={styles.c_search_page__filter}>
+        <aside
+          id='search-filter'
+          className={`${styles.c_search_page__filter} ${isFilterOpen ? styles['c_search_page__filter--open'] : ''}`}
+        >
           <MovieFilter
             currentFilters={currentFilters}
             onFilterChange={handleFilterChange}

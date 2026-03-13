@@ -1,5 +1,5 @@
--- ウォッチリストを公開日の近さ順で取得するRPC関数
--- ABS(release_date - NOW())の昇順、release_dateがNULLの映画は末尾
+-- RPC関数のセキュリティをSECURITY INVOKER（デフォルト）に変更
+-- SECURITY DEFINERはRLSをバイパスするため、SECURITY INVOKERに修正
 CREATE OR REPLACE FUNCTION get_watchlist_by_proximity(
   p_user_id UUID,
   p_limit INT,

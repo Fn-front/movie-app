@@ -57,10 +57,25 @@ export async function GET(request: Request) {
     if (sort === 'release_date_proximity') {
       // 公開日が今日に近い順（ABS(release_date - NOW())昇順、NULLは末尾）
       // Supabase SDKではカスタムORDERが使えないためRPCまたはraw SQLを使用
+      const offset = cursor ? parseInt(cursor, 10) : 0;
+
+      if (Number.isNaN(offset)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: ERROR_CODE.VALIDATION_ERROR,
+              message: WATCHLIST_ERROR_MESSAGES.INVALID_QUERY,
+            },
+          },
+          { status: HTTP_STATUS.BAD_REQUEST },
+        );
+      }
+
       const { data, error } = await supabase.rpc('get_watchlist_by_proximity', {
         p_user_id: session.user.id,
         p_limit: limit,
-        p_offset: cursor ? parseInt(cursor, 10) : 0,
+        p_offset: offset,
       });
 
       if (error) {
@@ -71,7 +86,6 @@ export async function GET(request: Request) {
         WatchlistItem & { total_count: number }
       >;
       const totalCount = items.length > 0 ? items[0].total_count : 0;
-      const offset = cursor ? parseInt(cursor, 10) : 0;
       const hasMore = offset + limit < totalCount;
       const nextCursor = hasMore ? String(offset + limit) : null;
 

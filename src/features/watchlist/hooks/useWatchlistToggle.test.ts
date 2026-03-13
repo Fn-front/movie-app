@@ -25,8 +25,12 @@ jest.mock('@/features/watchlist/hooks/useWatchlist', () => ({
     getWatchlistId: mockGetWatchlistId,
     addToWatchlist: mockAddToWatchlist,
     removeFromWatchlist: mockRemoveFromWatchlist,
-    get isAdding() { return mockIsAdding; },
-    get isRemoving() { return mockIsRemoving; },
+    get isAdding() {
+      return mockIsAdding;
+    },
+    get isRemoving() {
+      return mockIsRemoving;
+    },
     watchlist: [],
     isLoading: false,
     isFetchingNextPage: false,

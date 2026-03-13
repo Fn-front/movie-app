@@ -103,13 +103,7 @@ describe('Textarea', () => {
   });
 
   it('valueが文字列でない場合に文字数が0になる', () => {
-    render(
-      <Textarea
-        label='レビュー'
-        showCount
-        maxLength={500}
-      />,
-    );
+    render(<Textarea label='レビュー' showCount maxLength={500} />);
     expect(screen.getByText('0 / 500')).toBeInTheDocument();
   });
 });

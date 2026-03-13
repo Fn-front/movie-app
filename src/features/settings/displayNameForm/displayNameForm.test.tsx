@@ -87,7 +87,10 @@ describe('DisplayNameForm', () => {
       expect(mockUpdateSession).toHaveBeenCalledWith({ name: '新しい名前' });
     });
     expect(mockToast).toHaveBeenCalledWith(
-      expect.objectContaining({ title: '表示名を更新しました', variant: 'success' }),
+      expect.objectContaining({
+        title: '表示名を更新しました',
+        variant: 'success',
+      }),
     );
   });
 

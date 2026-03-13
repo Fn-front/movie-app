@@ -1020,9 +1020,7 @@ describe('MovieDetailContent', () => {
 
     render(<MovieDetailContent movieId={789} />);
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'お気に入りに追加' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'お気に入りに追加' }));
 
     expect(mockHandleFavoriteToggle).toHaveBeenCalledWith(
       {

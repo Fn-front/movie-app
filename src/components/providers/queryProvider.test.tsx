@@ -51,13 +51,21 @@ describe('AppQueryProvider', () => {
 
     render(
       <AppQueryProvider>
-        <CaptureClient onCapture={(c) => { firstClient = c; }} />
+        <CaptureClient
+          onCapture={(c) => {
+            firstClient = c;
+          }}
+        />
       </AppQueryProvider>,
     );
 
     render(
       <AppQueryProvider>
-        <CaptureClient onCapture={(c) => { secondClient = c; }} />
+        <CaptureClient
+          onCapture={(c) => {
+            secondClient = c;
+          }}
+        />
       </AppQueryProvider>,
     );
 

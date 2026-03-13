@@ -23,9 +23,15 @@ jest.mock('@/features/favorites/hooks/useFavorites', () => ({
     addToFavorites: mockAddToFavorites,
     updateRating: mockUpdateRating,
     removeFromFavorites: mockRemoveFromFavorites,
-    get isAdding() { return mockIsAdding; },
-    get isUpdating() { return mockIsUpdating; },
-    get isRemoving() { return mockIsRemoving; },
+    get isAdding() {
+      return mockIsAdding;
+    },
+    get isUpdating() {
+      return mockIsUpdating;
+    },
+    get isRemoving() {
+      return mockIsRemoving;
+    },
   }),
 }));
 

@@ -1369,10 +1369,13 @@ describe('GET /api/movies', () => {
         // 他release_typeの既存IDクエリ → null
         const chain = createChainMock({ data: null, error: null });
         chain.select.mockImplementation(() => {
-          return createThenableProxy(createChainMock({ data: null, error: null }), {
-            data: null,
-            error: null,
-          });
+          return createThenableProxy(
+            createChainMock({ data: null, error: null }),
+            {
+              data: null,
+              error: null,
+            },
+          );
         });
         return chain;
       }
@@ -1385,10 +1388,13 @@ describe('GET /api/movies', () => {
               count: 0,
             });
           }
-          return createThenableProxy(createChainMock({ data: [], error: null }), {
-            data: [],
-            error: null,
-          });
+          return createThenableProxy(
+            createChainMock({ data: [], error: null }),
+            {
+              data: [],
+              error: null,
+            },
+          );
         },
       );
       return chain;

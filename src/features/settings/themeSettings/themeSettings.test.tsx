@@ -84,9 +84,7 @@ describe('ThemeSettings', () => {
     render(<ThemeSettings />);
 
     await waitFor(() => {
-      expect(
-        screen.getByLabelText('テーマを選択'),
-      ).toBeInTheDocument();
+      expect(screen.getByLabelText('テーマを選択')).toBeInTheDocument();
     });
   });
 
@@ -128,7 +126,10 @@ describe('ThemeSettings', () => {
     });
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'テーマを変更しました', variant: 'success' }),
+        expect.objectContaining({
+          title: 'テーマを変更しました',
+          variant: 'success',
+        }),
       );
     });
   });

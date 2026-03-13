@@ -74,12 +74,19 @@ describe('Input', () => {
   });
 
   it('左側アイコンが表示される', () => {
-    render(<Input label='名前' leftIcon={<span data-testid='left-icon'>L</span>} />);
+    render(
+      <Input label='名前' leftIcon={<span data-testid='left-icon'>L</span>} />,
+    );
     expect(screen.getByTestId('left-icon')).toBeInTheDocument();
   });
 
   it('右側アイコンが表示される', () => {
-    render(<Input label='名前' rightIcon={<span data-testid='right-icon'>R</span>} />);
+    render(
+      <Input
+        label='名前'
+        rightIcon={<span data-testid='right-icon'>R</span>}
+      />,
+    );
     expect(screen.getByTestId('right-icon')).toBeInTheDocument();
   });
 

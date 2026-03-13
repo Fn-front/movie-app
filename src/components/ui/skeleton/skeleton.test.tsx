@@ -38,9 +38,7 @@ describe('Skeleton', () => {
   });
 
   it('追加のstyleが適用される', () => {
-    const { container } = render(
-      <Skeleton style={{ borderRadius: '8px' }} />,
-    );
+    const { container } = render(<Skeleton style={{ borderRadius: '8px' }} />);
     const el = container.firstChild as HTMLElement;
     expect(el.style.borderRadius).toBe('8px');
   });

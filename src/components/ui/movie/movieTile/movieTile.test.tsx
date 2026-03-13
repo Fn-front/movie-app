@@ -301,10 +301,7 @@ describe('MovieTile', () => {
   describe('お気に入り統合', () => {
     it('onFavoriteToggleが指定されるとFavoriteButtonが表示される', () => {
       render(
-        <MovieTile
-          movie={createMockMovie()}
-          onFavoriteToggle={jest.fn()}
-        />,
+        <MovieTile movie={createMockMovie()} onFavoriteToggle={jest.fn()} />,
       );
       expect(
         screen.getByRole('button', { name: 'お気に入りに追加' }),

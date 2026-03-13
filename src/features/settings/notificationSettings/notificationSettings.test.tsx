@@ -85,7 +85,10 @@ describe('NotificationSettings', () => {
 
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({ title: '通知設定を更新しました', variant: 'success' }),
+        expect.objectContaining({
+          title: '通知設定を更新しました',
+          variant: 'success',
+        }),
       );
     });
   });

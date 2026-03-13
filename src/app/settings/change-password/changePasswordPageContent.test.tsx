@@ -3,14 +3,11 @@ jest.mock('next-auth/react', () => ({
   useSession: () => mockUseSession(),
 }));
 
-jest.mock(
-  '@/features/settings/changePasswordForm/changePasswordForm',
-  () => ({
-    ChangePasswordForm: ({ email }: { email: string }) => (
-      <div data-testid='change-password-form' data-email={email} />
-    ),
-  }),
-);
+jest.mock('@/features/settings/changePasswordForm/changePasswordForm', () => ({
+  ChangePasswordForm: ({ email }: { email: string }) => (
+    <div data-testid='change-password-form' data-email={email} />
+  ),
+}));
 
 import { render, screen } from '@testing-library/react';
 

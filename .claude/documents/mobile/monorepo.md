@@ -118,16 +118,56 @@ mv .env web/.env                # .gitignore対象のため git mv 不要
 
 ### Step 2: `.gitignore` の更新
 
-ルートの `.gitignore` にFlutter関連の除外設定を追加：
+既存の `.gitignore` のWeb版エントリに `web/` プレフィックスを追加し、Flutter関連とSupabase関連のエントリを追加する。
+
+**統合方針**: 既存エントリを置き換えるのではなく、既存の構造を維持しつつパスを更新する。
 
 ```gitignore
 # ==================
 # Web (Next.js)
 # ==================
+# dependencies
 web/node_modules/
+web/.pnp
+web/.pnp.js
+
+# testing
+web/coverage/
+web/playwright-report/
+web/test-results/
+web/e2e/.auth/
+
+# next.js
 web/.next/
-web/.env.local
+web/out/
+
+# production
+web/build/
+
+# misc
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+web/.env*.local
 web/.env
+
+# vercel
+web/.vercel
+
+# typescript
+*.tsbuildinfo
+web/next-env.d.ts
+
+# Optional eslint cache
+web/.eslintcache
+
+# Optional stylelint cache
+web/.stylelintcache
 
 # ==================
 # Mobile (Flutter)
@@ -149,7 +189,36 @@ mobile/ios/Runner.xcworkspace/xcuserdata/
 # 共通
 # ==================
 .DS_Store
+Thumbs.db
 *.log
+
+# claude code settings
+.claude/settings.local.json
+
+# IDE - JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# IDE - Visual Studio Code (personal settings only)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# OS files
+*~
+*.swp
+*.swo
+*.bak
+
+# Test coverage
+.nyc_output
+
+# Optional npm cache directory
+.npm
 ```
 
 ### Step 3: Web版の動作確認
@@ -212,6 +281,7 @@ Web版の設定ファイルはすべて相対パスを使用しているため�
 | `.prettierignore` | パス参照なし | 問題なし |
 | `package.json` | スクリプトはすべて相対パスで実行 | 問題なし |
 | `vercel.json` | Vercel設定 | 問題なし |
+| `ignore-build-step.sh` | 相対パス `./` 参照 | 問題なし。ただしVercelのIgnored Build Step設定で `web/` 移動後のパスを指定する必要あり（Step 4参照） |
 | `src/` 内の `@/` インポート | `tsconfig.json` で解決されるため | 問題なし |
 
 #### 更新が必要なファイル

@@ -9,7 +9,7 @@ Web版のデザインシステム（`design-system.md`）をFlutterの `ThemeDat
 
 ## カラーパレット
 
-### Web版 SCSS変数 → Flutter Color
+### Web版 CSSカスタムプロパティ → Flutter Color
 
 ```dart
 // config/theme.dart

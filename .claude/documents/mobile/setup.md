@@ -109,72 +109,51 @@ flutter run
 
 ## 5. 主要パッケージのインストール
 
-`mobile/pubspec.yaml` に以下を追加：
-
-```yaml
-dependencies:
-  flutter:
-    sdk: flutter
-
-  # 状態管理
-  flutter_riverpod: ^2.x.x
-  riverpod_annotation: ^2.x.x
-
-  # Supabase（認証 + DB）
-  supabase_flutter: ^2.x.x
-
-  # HTTP通信
-  dio: ^5.x.x
-
-  # ルーティング
-  go_router: ^14.x.x
-
-  # モデル生成
-  freezed_annotation: ^2.x.x
-  json_annotation: ^4.x.x
-
-  # 画像
-  cached_network_image: ^3.x.x
-
-  # セキュアストレージ
-  flutter_secure_storage: ^9.x.x
-
-  # Google OAuth
-  google_sign_in: ^6.x.x
-
-  # 環境変数
-  flutter_dotenv: ^5.x.x
-
-  # スケルトンUI
-  shimmer: ^3.x.x
-
-  # 日付
-  intl: ^0.x.x
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-
-  # コード生成
-  build_runner: ^2.x.x
-  freezed: ^2.x.x
-  json_serializable: ^6.x.x
-  riverpod_generator: ^2.x.x
-
-  # テスト
-  mockito: ^5.x.x
-  mocktail: ^1.x.x
-
-  # Lint
-  flutter_lints: ^5.x.x
-```
+`flutter pub add` で最新版を取得してインストールする：
 
 ```bash
 cd mobile
-flutter pub get
-```
 
-**注意**: バージョン番号は `flutter pub add <package>` で最新版を取得するのが確実。上記の `x.x` は実行時点の最新に置き換える。
+# 状態管理
+flutter pub add flutter_riverpod riverpod_annotation
+
+# Supabase（認証 + DB）
+flutter pub add supabase_flutter
+
+# HTTP通信
+flutter pub add dio
+
+# ルーティング
+flutter pub add go_router
+
+# モデル生成
+flutter pub add freezed_annotation json_annotation
+
+# 画像
+flutter pub add cached_network_image
+
+# セキュアストレージ
+flutter pub add flutter_secure_storage
+
+# Google OAuth
+flutter pub add google_sign_in
+
+# 環境変数
+flutter pub add flutter_dotenv
+
+# スケルトンUI
+flutter pub add shimmer
+
+# 日付
+flutter pub add intl
+
+# Google Fonts
+flutter pub add google_fonts
+
+# dev_dependencies（コード生成・テスト）
+flutter pub add --dev build_runner freezed json_serializable riverpod_generator
+flutter pub add --dev mockito mocktail
+```
 
 ---
 
@@ -251,10 +230,11 @@ flutter run -d <device_id>
 
 ## 8. Lint 設定
 
-`mobile/analysis_options.yaml`:
+`flutter create` で自動生成される `mobile/analysis_options.yaml` をベースに、プロジェクト固有のルールを追加する：
 
 ```yaml
-include: package:flutter_lints/flutter.yaml
+# flutter create で生成されるデフォルト設定をベースにする
+# （include行はflutter createが自動生成するため、そのまま使用）
 
 linter:
   rules:
@@ -265,6 +245,8 @@ linter:
     sort_constructors_first: true
     unnecessary_this: true
 ```
+
+**注意**: `flutter create` が生成する `analysis_options.yaml` の `include` 行はそのまま維持すること。Flutter SDKバージョンによってデフォルトのlintパッケージが変わるため、自動生成されたものを基準にする。
 
 ---
 

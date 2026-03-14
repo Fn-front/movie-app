@@ -79,6 +79,10 @@ flutter run -d <device_id>
 正規のApple署名プロセスを使ってIPAファイルをiPhoneにインストールするツール。
 Appleに潰されるリスクがない（正規の仕組みを使うため）。
 
+**セキュリティに関する注意**: SideloadlyはApple IDとパスワード（またはApp-Specific Password）を使用して署名を行う。信頼できるツールだが、Apple IDの認証情報を第三者ツールに渡すことになるため、以下を推奨：
+- Apple IDのApp-Specific Passwordを使用する（メインパスワードは渡さない）
+- 可能であればSideloadly専用のApple IDを作成する
+
 ### インストール
 
 1. https://sideloadly.io/ からMac版をダウンロード

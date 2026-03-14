@@ -1,18 +1,21 @@
 /**
- * TMDb Trending API（週次）からトレンド映画を取得し trending_movies テーブルに同期する
+ * TMDb Popular API から人気映画を取得し trending_movies テーブルに同期する
  */
 
 import { createClient } from '@supabase/supabase-js';
 
 import { TRENDING_DISPLAY_COUNT } from '@/constants/trending';
-import { getMovieReleaseDates, getTrendingMovies } from '@/lib/tmdb/tmdb';
-import type { TMDbTrendingMovie } from '@/lib/types';
+import { getMovieReleaseDates, getPopularMovies } from '@/lib/tmdb/tmdb';
+import type { Movie } from '@/lib/types';
 
 /** 劇場公開のリリースタイプ（2: Theatrical limited, 3: Theatrical） */
 const THEATRICAL_RELEASE_TYPES = [2, 3];
 
 /** リリースタイプ判定対象の国コード（日本公開のみ） */
 const RELEASE_DATE_REGION = 'JP';
+
+/** Popular API の最大取得ページ数 */
+const MAX_PAGES = 5;
 
 /**
  * トレンド映画同期結果の型
@@ -48,23 +51,47 @@ async function isTheatricalRelease(movieId: number): Promise<boolean> {
 }
 
 /**
- * トレンド映画を劇場公開作品のみにフィルタリングする
+ * Popular API から JP 劇場公開作品を必要件数集める
+ *
+ * 複数ページを順次取得し、JP劇場公開フィルターを通過した作品が
+ * 必要件数に達するか、最大ページ数に到達したら終了する。
  */
-async function filterTheatricalMovies(
-  movies: TMDbTrendingMovie[],
-): Promise<TMDbTrendingMovie[]> {
-  const results = await Promise.all(
-    movies.map(async (movie) => ({
-      movie,
-      isTheatrical: await isTheatricalRelease(movie.id),
-    })),
-  );
+async function collectTheatricalMovies(): Promise<{
+  movies: Movie[];
+  totalFetched: number;
+}> {
+  const collected: Movie[] = [];
+  let totalFetched = 0;
 
-  return results.filter((r) => r.isTheatrical).map((r) => r.movie);
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const response = await getPopularMovies(page);
+
+    if (response.results.length === 0) break;
+
+    totalFetched += response.results.length;
+
+    const results = await Promise.all(
+      response.results.map(async (movie) => ({
+        movie,
+        isTheatrical: await isTheatricalRelease(movie.id),
+      })),
+    );
+
+    for (const r of results) {
+      if (r.isTheatrical) {
+        collected.push(r.movie);
+        if (collected.length >= TRENDING_DISPLAY_COUNT) {
+          return { movies: collected, totalFetched };
+        }
+      }
+    }
+  }
+
+  return { movies: collected, totalFetched };
 }
 
 /**
- * TMDb Trending API から今週のトレンド映画を取得し trending_movies テーブルに同期する
+ * TMDb Popular API から人気映画を取得し trending_movies テーブルに同期する
  *
  * RPC関数（sync_trending_movies）でトランザクション内のDELETE → INSERTをアトミックに実行。
  * 日本で劇場公開（JPでtype 2 or 3）の作品のみにフィルタリングし、最大10件を保存。
@@ -84,22 +111,14 @@ export async function syncTrendingMovies(): Promise<TrendingSyncResult> {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // 1. TMDb Trending API からトレンド映画を取得（失敗時は既存データを保持）
-  const response = await getTrendingMovies();
-
-  if (response.results.length === 0) {
-    return { fetched: 0, synced: 0 };
-  }
-
-  // 2. 劇場公開作品のみにフィルタリングし、10件に制限
-  const theatricalMovies = await filterTheatricalMovies(response.results);
-  const movies = theatricalMovies.slice(0, TRENDING_DISPLAY_COUNT);
+  // 1. TMDb Popular API から JP 劇場公開作品を収集（失敗時は既存データを保持）
+  const { movies, totalFetched } = await collectTheatricalMovies();
 
   if (movies.length === 0) {
-    return { fetched: response.results.length, synced: 0 };
+    return { fetched: totalFetched, synced: 0 };
   }
 
-  // 3. RPC関数でトランザクション内の全件洗い替え（DELETE → INSERT）をアトミックに実行
+  // 2. RPC関数でトランザクション内の全件洗い替え（DELETE → INSERT）をアトミックに実行
   const rows = movies.map((movie, index) => ({
     tmdb_movie_id: movie.id,
     title: movie.title,
@@ -119,7 +138,7 @@ export async function syncTrendingMovies(): Promise<TrendingSyncResult> {
   }
 
   return {
-    fetched: response.results.length,
+    fetched: totalFetched,
     synced: movies.length,
   };
 }

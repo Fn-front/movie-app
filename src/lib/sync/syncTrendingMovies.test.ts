@@ -10,10 +10,10 @@ import { syncTrendingMovies } from './syncTrendingMovies';
 
 // --- Mocks ---
 
-const mockGetTrendingMovies = jest.fn();
+const mockGetPopularMovies = jest.fn();
 const mockGetMovieReleaseDates = jest.fn();
 jest.mock('@/lib/tmdb/tmdb', () => ({
-  getTrendingMovies: () => mockGetTrendingMovies(),
+  getPopularMovies: (page: number) => mockGetPopularMovies(page),
   getMovieReleaseDates: (movieId: number) => mockGetMovieReleaseDates(movieId),
 }));
 
@@ -30,11 +30,11 @@ jest.mock('@supabase/supabase-js', () => ({
 
 // --- Helpers ---
 
-const createTrendingMovies = (count: number) =>
+const createMovies = (count: number, startId: number = 1) =>
   Array.from({ length: count }, (_, i) => ({
-    id: i + 1,
-    title: `Movie ${i + 1}`,
-    poster_path: `/poster${i + 1}.jpg`,
+    id: startId + i,
+    title: `Movie ${startId + i}`,
+    poster_path: `/poster${startId + i}.jpg`,
     release_date: '2026-03-01',
     vote_average: 7.5,
     popularity: 100 + i,
@@ -74,6 +74,11 @@ describe('syncTrendingMovies', () => {
     };
     // デフォルト: 全て劇場公開
     mockGetMovieReleaseDates.mockResolvedValue(theatricalReleaseDates);
+    // デフォルト: ページ2以降は空
+    mockGetPopularMovies.mockImplementation((page: number) => {
+      if (page === 1) return Promise.resolve({ results: createMovies(20) });
+      return Promise.resolve({ results: [] });
+    });
   });
 
   afterEach(() => {
@@ -89,10 +94,6 @@ describe('syncTrendingMovies', () => {
   });
 
   it('劇場公開作品のみを10件に制限してDBに保存する', async () => {
-    mockGetTrendingMovies.mockResolvedValue({
-      results: createTrendingMovies(20),
-    });
-
     const result = await syncTrendingMovies();
 
     expect(result.fetched).toBe(20);
@@ -104,8 +105,10 @@ describe('syncTrendingMovies', () => {
   });
 
   it('ストリーミング作品を除外する', async () => {
-    const movies = createTrendingMovies(5);
-    mockGetTrendingMovies.mockResolvedValue({ results: movies });
+    mockGetPopularMovies.mockImplementation((page: number) => {
+      if (page === 1) return Promise.resolve({ results: createMovies(5) });
+      return Promise.resolve({ results: [] });
+    });
 
     // Movie 2, 4 はストリーミングのみ
     mockGetMovieReleaseDates.mockImplementation((movieId: number) => {
@@ -129,8 +132,9 @@ describe('syncTrendingMovies', () => {
   });
 
   it('US劇場公開のみでJP公開なしの場合は除外される', async () => {
-    mockGetTrendingMovies.mockResolvedValue({
-      results: createTrendingMovies(1),
+    mockGetPopularMovies.mockImplementation((page: number) => {
+      if (page === 1) return Promise.resolve({ results: createMovies(1) });
+      return Promise.resolve({ results: [] });
     });
     mockGetMovieReleaseDates.mockResolvedValue([
       {
@@ -144,23 +148,19 @@ describe('syncTrendingMovies', () => {
   });
 
   it('JP劇場公開ありの作品は含まれる', async () => {
-    mockGetTrendingMovies.mockResolvedValue({
-      results: createTrendingMovies(1),
+    mockGetPopularMovies.mockImplementation((page: number) => {
+      if (page === 1) return Promise.resolve({ results: createMovies(1) });
+      return Promise.resolve({ results: [] });
     });
-    mockGetMovieReleaseDates.mockResolvedValue([
-      {
-        iso_3166_1: 'JP',
-        release_dates: [{ type: 3, release_date: '2026-03-01' }],
-      },
-    ]);
 
     const result = await syncTrendingMovies();
     expect(result.synced).toBe(1);
   });
 
   it('リリース日取得失敗時は安全側に倒して含める', async () => {
-    mockGetTrendingMovies.mockResolvedValue({
-      results: createTrendingMovies(1),
+    mockGetPopularMovies.mockImplementation((page: number) => {
+      if (page === 1) return Promise.resolve({ results: createMovies(1) });
+      return Promise.resolve({ results: [] });
     });
     mockGetMovieReleaseDates.mockRejectedValue(new Error('API error'));
 
@@ -169,7 +169,7 @@ describe('syncTrendingMovies', () => {
   });
 
   it('取得結果が0件の場合DBへの書き込みをスキップする', async () => {
-    mockGetTrendingMovies.mockResolvedValue({ results: [] });
+    mockGetPopularMovies.mockResolvedValue({ results: [] });
 
     const result = await syncTrendingMovies();
 
@@ -179,8 +179,9 @@ describe('syncTrendingMovies', () => {
   });
 
   it('全てストリーミングの場合は0件でDB書き込みをスキップする', async () => {
-    mockGetTrendingMovies.mockResolvedValue({
-      results: createTrendingMovies(3),
+    mockGetPopularMovies.mockImplementation((page: number) => {
+      if (page === 1) return Promise.resolve({ results: createMovies(3) });
+      return Promise.resolve({ results: [] });
     });
     mockGetMovieReleaseDates.mockResolvedValue(streamingOnlyReleaseDates);
 
@@ -192,17 +193,22 @@ describe('syncTrendingMovies', () => {
   });
 
   it('空のrelease_dateをnullに変換する', async () => {
-    mockGetTrendingMovies.mockResolvedValue({
-      results: [
-        {
-          id: 1,
-          title: 'Test',
-          poster_path: null,
-          release_date: '',
-          vote_average: 5.0,
-          popularity: 50,
-        },
-      ],
+    mockGetPopularMovies.mockImplementation((page: number) => {
+      if (page === 1) {
+        return Promise.resolve({
+          results: [
+            {
+              id: 1,
+              title: 'Test',
+              poster_path: null,
+              release_date: '',
+              vote_average: 5.0,
+              popularity: 50,
+            },
+          ],
+        });
+      }
+      return Promise.resolve({ results: [] });
     });
 
     await syncTrendingMovies();
@@ -212,9 +218,38 @@ describe('syncTrendingMovies', () => {
   });
 
   it('TMDb API取得失敗時はエラーをスローし既存データを保持する', async () => {
-    mockGetTrendingMovies.mockRejectedValue(new Error('API error'));
+    mockGetPopularMovies.mockRejectedValue(new Error('API error'));
 
     await expect(syncTrendingMovies()).rejects.toThrow('API error');
     expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('1ページ目で10件に満たない場合は複数ページから収集する', async () => {
+    // ページ1: 5件中3件が劇場公開、ページ2: 5件全て劇場公開
+    mockGetPopularMovies.mockImplementation((page: number) => {
+      if (page === 1) return Promise.resolve({ results: createMovies(5, 1) });
+      if (page === 2) return Promise.resolve({ results: createMovies(5, 6) });
+      return Promise.resolve({ results: [] });
+    });
+
+    mockGetMovieReleaseDates.mockImplementation((movieId: number) => {
+      // ページ1のMovie 2, 4 はストリーミング
+      if (movieId === 2 || movieId === 4) {
+        return Promise.resolve(streamingOnlyReleaseDates);
+      }
+      return Promise.resolve(theatricalReleaseDates);
+    });
+
+    const result = await syncTrendingMovies();
+
+    expect(result.fetched).toBe(10);
+    expect(result.synced).toBe(8);
+    expect(mockGetPopularMovies).toHaveBeenCalledWith(1);
+    expect(mockGetPopularMovies).toHaveBeenCalledWith(2);
+
+    const rpcMovies = mockRpc.mock.calls[0][1].movies;
+    expect(
+      rpcMovies.map((m: { tmdb_movie_id: number }) => m.tmdb_movie_id),
+    ).toEqual([1, 3, 5, 6, 7, 8, 9, 10]);
   });
 });

@@ -205,6 +205,38 @@ describe('recommendationSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('vote_averageが0の場合成功する（最小値）', () => {
+    const result = recommendationSchema.safeParse({
+      ...validRecommendation,
+      vote_average: 0,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('vote_averageが10の場合成功する（最大値）', () => {
+    const result = recommendationSchema.safeParse({
+      ...validRecommendation,
+      vote_average: 10,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('vote_averageが負の場合エラーになる', () => {
+    const result = recommendationSchema.safeParse({
+      ...validRecommendation,
+      vote_average: -0.1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('vote_averageが10を超える場合エラーになる', () => {
+    const result = recommendationSchema.safeParse({
+      ...validRecommendation,
+      vote_average: 10.1,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('genre_idsがnullでも成功する', () => {
     const result = recommendationSchema.safeParse({
       ...validRecommendation,

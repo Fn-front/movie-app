@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS recommendations (
   vote_average NUMERIC(3,1),
   genre_ids INTEGER[],
   reason TEXT NOT NULL,
-  display_order INTEGER NOT NULL CHECK (display_order BETWEEN 1 AND 10),
+  display_order INTEGER NOT NULL CHECK (display_order BETWEEN 1 AND 10), -- RECOMMENDATIONS_MAX_COUNT = 10 と同期
   generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 

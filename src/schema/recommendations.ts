@@ -51,7 +51,7 @@ export const recommendationSchema = z.object({
   title: z.string().min(1).max(255),
   poster_path: z.string().max(255).nullable(),
   release_date: z.string().nullable(),
-  vote_average: z.number().nullable(),
+  vote_average: z.number().min(0).max(10).nullable(),
   genre_ids: z.array(z.number().int()).nullable(),
   reason: z.string().min(1),
   display_order: z.number().int().min(1).max(RECOMMENDATIONS_MAX_COUNT),

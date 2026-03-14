@@ -975,16 +975,16 @@
 - [x] 単体テスト
 
 ### Step 2: TMDb API取得ロジック + Cron API（`feature/trending-movies-cron`）
-- [ ] TMDb Trending APIクライアント関数作成（`lib/api/trending.ts`）
+- [x] TMDb Trending APIクライアント関数作成（`lib/api/trending.ts`）
   - `GET /trending/movie/week`（`language=ja-JP`）
   - レスポンスのパース・10件制限
-- [ ] Cron API実装（`GET /api/cron/sync-trending`）
+- [x] Cron API実装（`GET /api/cron/sync-trending`）
   - CRON_SECRET認証
   - TMDb APIからトレンド映画取得
   - `trending_movies`テーブルを全件洗い替え（トランザクション内でDELETE → INSERT）
   - TMDb API取得成功後にのみDELETEを実行（失敗時は既存データを保持）
-- [ ] Vercel Cron設定（vercel.json）— 週次実行（`0 20 * * 0`、毎週日曜 JST AM5:00）
-- [ ] 単体テスト
+- [x] Vercel Cron設定（vercel.json）— 週次実行（`0 20 * * 0`、毎週日曜 JST AM5:00）
+- [x] 単体テスト
 
 ### Step 3: カスタムフック（`feature/trending-movies-hook`）
 - [ ] `useTrendingMovies`フック作成

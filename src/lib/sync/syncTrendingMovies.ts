@@ -20,7 +20,7 @@ export interface TrendingSyncResult {
 /**
  * TMDb Trending API から今週のトレンド映画を取得し trending_movies テーブルに同期する
  *
- * トランザクション内で全件洗い替え（DELETE → INSERT）を行う。
+ * RPC関数（sync_trending_movies）でトランザクション内のDELETE → INSERTをアトミックに実行。
  * TMDb API 取得に失敗した場合は既存データを保持する。
  *
  * @returns 同期結果
@@ -45,7 +45,7 @@ export async function syncTrendingMovies(): Promise<TrendingSyncResult> {
     return { fetched: 0, synced: 0 };
   }
 
-  // 2. トランザクション内で全件洗い替え（RPC経由）
+  // 2. RPC関数でトランザクション内の全件洗い替え（DELETE → INSERT）をアトミックに実行
   const rows = movies.map((movie, index) => ({
     tmdb_movie_id: movie.id,
     title: movie.title,
@@ -56,22 +56,12 @@ export async function syncTrendingMovies(): Promise<TrendingSyncResult> {
     display_order: index + 1,
   }));
 
-  // DELETE → INSERT をトランザクションで実行
-  const { error: deleteError } = await supabase
-    .from('trending_movies')
-    .delete()
-    .gte('display_order', 1);
+  const { error } = await supabase.rpc('sync_trending_movies', {
+    movies: rows,
+  });
 
-  if (deleteError) {
-    throw new Error(`トレンド映画の削除に失敗しました: ${deleteError.message}`);
-  }
-
-  const { error: insertError } = await supabase
-    .from('trending_movies')
-    .insert(rows);
-
-  if (insertError) {
-    throw new Error(`トレンド映画の保存に失敗しました: ${insertError.message}`);
+  if (error) {
+    throw new Error(`トレンド映画の同期に失敗しました: ${error.message}`);
   }
 
   return {

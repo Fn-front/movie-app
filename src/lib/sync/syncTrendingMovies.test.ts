@@ -15,30 +15,13 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
   getTrendingMovies: () => mockGetTrendingMovies(),
 }));
 
-const mockFrom = jest.fn();
-const mockDelete = jest.fn();
-const mockGte = jest.fn();
-const mockInsert = jest.fn();
+const mockRpc = jest.fn();
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
-    from: (table: string) => {
-      mockFrom(table);
-      return {
-        delete: () => {
-          mockDelete();
-          return {
-            gte: (_col: string, _val: number) => {
-              mockGte(_col, _val);
-              return Promise.resolve({ error: null });
-            },
-          };
-        },
-        insert: (rows: unknown[]) => {
-          mockInsert(rows);
-          return Promise.resolve({ error: null });
-        },
-      };
+    rpc: (fn: string, params: unknown) => {
+      mockRpc(fn, params);
+      return Promise.resolve({ error: null });
     },
   }),
 }));
@@ -90,13 +73,16 @@ describe('syncTrendingMovies', () => {
 
     expect(result.fetched).toBe(20);
     expect(result.synced).toBe(10);
-    expect(mockDelete).toHaveBeenCalledTimes(1);
-    expect(mockInsert).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledWith('sync_trending_movies', {
+      movies: expect.arrayContaining([
+        expect.objectContaining({ display_order: 1 }),
+        expect.objectContaining({ display_order: 10 }),
+      ]),
+    });
 
-    const insertedRows = mockInsert.mock.calls[0][0];
-    expect(insertedRows).toHaveLength(10);
-    expect(insertedRows[0].display_order).toBe(1);
-    expect(insertedRows[9].display_order).toBe(10);
+    const rpcMovies = mockRpc.mock.calls[0][1].movies;
+    expect(rpcMovies).toHaveLength(10);
   });
 
   it('取得結果が0件の場合DBへの書き込みをスキップする', async () => {
@@ -106,8 +92,7 @@ describe('syncTrendingMovies', () => {
 
     expect(result.fetched).toBe(0);
     expect(result.synced).toBe(0);
-    expect(mockDelete).not.toHaveBeenCalled();
-    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it('空のrelease_dateをnullに変換する', async () => {
@@ -126,14 +111,14 @@ describe('syncTrendingMovies', () => {
 
     await syncTrendingMovies();
 
-    const insertedRows = mockInsert.mock.calls[0][0];
-    expect(insertedRows[0].release_date).toBeNull();
+    const rpcMovies = mockRpc.mock.calls[0][1].movies;
+    expect(rpcMovies[0].release_date).toBeNull();
   });
 
   it('TMDb API取得失敗時はエラーをスローし既存データを保持する', async () => {
     mockGetTrendingMovies.mockRejectedValue(new Error('API error'));
 
     await expect(syncTrendingMovies()).rejects.toThrow('API error');
-    expect(mockDelete).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 });

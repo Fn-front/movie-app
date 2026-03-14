@@ -271,13 +271,6 @@ export async function getGenres() {
 }
 
 /**
- * ジャンル別映画を取得
- *
- * @param genreId - ジャンルID
- * @param page - ページ番号
- * @returns ジャンル別映画リスト
- */
-/**
  * 今週のトレンド映画を取得
  *
  * @returns トレンド映画リスト
@@ -291,6 +284,13 @@ export async function getTrendingMovies(): Promise<
   return response.data;
 }
 
+/**
+ * ジャンル別映画を取得
+ *
+ * @param genreId - ジャンルID
+ * @param page - ページ番号
+ * @returns ジャンル別映画リスト
+ */
 export async function getMoviesByGenre(
   genreId: number,
   page: number = 1,

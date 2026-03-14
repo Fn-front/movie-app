@@ -960,19 +960,19 @@
 > TMDb Trending APIで今週のトレンド映画を週次Cronで取得・DB保存し、ホームページに横スクロールで表示する。
 
 ### Step 1: DB・型定義・定数（`feature/trending-movies-db`）
-- [ ] `trending_movies`テーブル作成（Supabase migration）
+- [x] `trending_movies`テーブル作成（Supabase migration）
   - UUID主キー、tmdb_movie_id、title、poster_path、release_date、vote_average、popularity、display_order（1〜10）、fetched_at（最終同期日時、デフォルト: now()）
   - UNIQUE制約（tmdb_movie_id）
   - RLSポリシー設定（SELECT: 全ユーザー、INSERT/UPDATE/DELETE: service_roleのみ）
   - インデックス（display_order）
-- [ ] Supabase CLIでマイグレーション実行（`supabase migration new` → `supabase db push`）
-- [ ] トレンド映画用の型定義作成（`lib/types/trending.ts`）
+- [x] Supabase CLIでマイグレーション実行（`supabase migration new` → `supabase db push`）
+- [x] トレンド映画用の型定義作成（`lib/types/trending.ts`）
   - TMDb Trending APIレスポンス型
   - DBレコード型
-- [ ] トレンド定数追加（`lib/constants/trending.ts`）
+- [x] トレンド定数追加（`lib/constants/trending.ts`）
   - DISPLAY_COUNT（10）、QUERY_KEY、STALE_TIME
   - セクションタイトル等のメッセージ定数
-- [ ] 単体テスト
+- [x] 単体テスト
 
 ### Step 2: TMDb API取得ロジック + Cron API（`feature/trending-movies-cron`）
 - [ ] TMDb Trending APIクライアント関数作成（`lib/api/trending.ts`）

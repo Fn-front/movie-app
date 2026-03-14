@@ -339,6 +339,48 @@ export type Theme = 'light' | 'dark' | 'system';
 export type Language = 'ja' | 'en';
 
 /**
+ * トレンド映画DBレコード型
+ */
+export interface TrendingMovie {
+  /** レコードID */
+  id: string;
+  /** TMDb映画ID */
+  tmdb_movie_id: number;
+  /** 映画タイトル */
+  title: string;
+  /** ポスター画像パス */
+  poster_path: string | null;
+  /** 公開日 */
+  release_date: string | null;
+  /** 評価平均 */
+  vote_average: number | null;
+  /** 人気度 */
+  popularity: number | null;
+  /** 表示順（1〜10） */
+  display_order: number;
+  /** 最終同期日時 */
+  fetched_at: string;
+}
+
+/**
+ * TMDb Trending APIレスポンスの映画データ型
+ */
+export interface TMDbTrendingMovie {
+  /** TMDb映画ID */
+  id: number;
+  /** タイトル */
+  title: string;
+  /** ポスター画像パス */
+  poster_path: string | null;
+  /** 公開日 */
+  release_date: string;
+  /** 評価平均 */
+  vote_average: number;
+  /** 人気度 */
+  popularity: number;
+}
+
+/**
  * アイコン共通プロパティ
  */
 export interface IconProps {

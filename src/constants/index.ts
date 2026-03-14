@@ -13,3 +13,4 @@ export * from './user';
 export * from './watchlist';
 export * from './calendar';
 export * from './otp';
+export * from './trending';

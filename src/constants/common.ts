@@ -240,6 +240,8 @@ export const TMDB_ENDPOINTS = {
   DISCOVER: '/discover/movie',
   /** 映画キーワード */
   MOVIE_KEYWORDS: (movieId: number | string) => `/movie/${movieId}/keywords`,
+  /** トレンド映画（週次） */
+  TRENDING: '/trending/movie/week',
 } as const;
 
 /**

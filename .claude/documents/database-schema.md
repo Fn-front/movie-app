@@ -285,6 +285,42 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 
 ---
 
+### recommendations（AIレコメンド）
+OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替え）
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
+| user_id | UUID | NOT NULL | - | ユーザーID（FK → users.id） |
+| tmdb_movie_id | INTEGER | NOT NULL | - | TMDb映画ID |
+| title | VARCHAR(255) | NOT NULL | - | 映画タイトル |
+| poster_path | VARCHAR(255) | NULL | - | ポスター画像パス |
+| release_date | DATE | NULL | - | 公開日 |
+| vote_average | NUMERIC(3,1) | NULL | - | TMDb評価 |
+| genre_ids | INTEGER[] | NULL | - | ジャンルID配列 |
+| reason | TEXT | NOT NULL | - | 推薦理由 |
+| display_order | INTEGER | NOT NULL | - | 表示順序（1〜10） |
+| generated_at | TIMESTAMPTZ | NOT NULL | now() | 生成日時 |
+| created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
+
+**インデックス:**
+- `user_id` - ユーザー別一覧取得用
+
+**制約:**
+- `uq_recommendations_user_order` (UNIQUE: user_id, display_order)
+- `uq_recommendations_user_movie` (UNIQUE: user_id, tmdb_movie_id)
+- `display_order BETWEEN 1 AND 10` (CHECK)
+
+**RLSポリシー:**
+- SELECT: 自分のレコメンドのみ参照可能（`auth.uid() = user_id`）
+- INSERT/UPDATE/DELETE: service_roleのみ（Cron API経由、RLSバイパス）
+
+**特徴:**
+- 論理削除なし（日次で全件入れ替えのため）
+- ON DELETE CASCADE（ユーザー削除時に自動削除）
+
+---
+
 ## ER図（概念図）
 
 ```
@@ -295,6 +331,10 @@ users (1) ----< (N) watchlist
   +---- (1) user_settings
   |
   +---- (1) user_preferences
+  |
+  +----< (N) favorites
+  |
+  +----< (N) recommendations
   |
   +----< (N) reviews
 

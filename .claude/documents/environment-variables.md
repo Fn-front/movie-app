@@ -146,12 +146,20 @@ CRON_SECRET=your_cron_secret_here_minimum_32_chars
 
 ---
 
-### OpenAI（将来的なレコメンド機能用）
+### OpenAI（AIレコメンド機能）
 
 ```bash
+# OpenAI API Key（必須）
 OPENAI_API_KEY=sk-xxxxxxxxxxxx
-OPENAI_MODEL=gpt-4-turbo
+
+# 使用モデル（オプション、デフォルト: gpt-4o-mini）
+OPENAI_MODEL=gpt-4o-mini
 ```
+
+**取得方法:**
+1. https://platform.openai.com/ でアカウント作成
+2. API Keys で新しいキーを生成
+3. レコメンド生成に使用（日次Cron）
 
 ---
 
@@ -248,9 +256,9 @@ RATE_LIMIT_LOCK_DURATION=1800000
 # Vercel Cron Jobs
 CRON_SECRET=your_cron_secret_here_minimum_32_chars
 
-# OpenAI (Future)
-# OPENAI_API_KEY=sk-xxxxxxxxxxxx
-# OPENAI_MODEL=gpt-4-turbo
+# OpenAI (AI Recommendations)
+OPENAI_API_KEY=sk-xxxxxxxxxxxx
+# OPENAI_MODEL=gpt-4o-mini
 
 # Application
 NEXT_PUBLIC_APP_NAME=Movie App

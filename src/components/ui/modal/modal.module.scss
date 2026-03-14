@@ -23,7 +23,7 @@
     background-color: $background-paper;
     border-radius: $border-radius-lg;
     box-shadow: $shadow-xl;
-    z-index: $z-index-modal + 1;
+    z-index: calc($z-index-modal + 1);
     overflow: hidden;
     display: flex;
     flex-direction: column;

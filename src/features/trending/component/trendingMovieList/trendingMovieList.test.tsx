@@ -10,24 +10,21 @@ jest.mock('@/features/trending/hooks/useTrendingMovies', () => ({
   useTrendingMovies: () => mockUseTrendingMovies(),
 }));
 
-jest.mock(
-  '@/components/ui/movie/detailModal/movieDetailModal',
-  () => ({
-    MovieDetailModal: ({
-      movieId,
-      onClose,
-    }: {
-      movieId: number | null;
-      onClose: () => void;
-    }) =>
-      movieId ? (
-        <div data-testid='movie-detail-modal'>
-          <span>Movie ID: {movieId}</span>
-          <button onClick={onClose}>閉じる</button>
-        </div>
-      ) : null,
-  }),
-);
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: ({
+    movieId,
+    onClose,
+  }: {
+    movieId: number | null;
+    onClose: () => void;
+  }) =>
+    movieId ? (
+      <div data-testid='movie-detail-modal'>
+        <span>Movie ID: {movieId}</span>
+        <button onClick={onClose}>閉じる</button>
+      </div>
+    ) : null,
+}));
 
 // --- Helpers ---
 

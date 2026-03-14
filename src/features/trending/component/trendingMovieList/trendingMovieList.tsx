@@ -87,19 +87,13 @@ export const TrendingMovieList = memo(function TrendingMovieList() {
           <div className={styles.c_trending_movie_list__list} role='list'>
             {trendingMovies.map((movie) => (
               <div key={movie.id} role='listitem'>
-                <TrendingMovieCard
-                  movie={movie}
-                  onClick={handleMovieClick}
-                />
+                <TrendingMovieCard movie={movie} onClick={handleMovieClick} />
               </div>
             ))}
           </div>
         </div>
       </section>
-      <MovieDetailModal
-        movieId={selectedMovieId}
-        onClose={handleModalClose}
-      />
+      <MovieDetailModal movieId={selectedMovieId} onClose={handleModalClose} />
     </>
   );
 });

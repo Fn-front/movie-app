@@ -1,10 +1,15 @@
 @use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
 
 .c_otp_verification {
   width: 100%;
   max-width: 540px;
   margin: 0 auto;
-  padding: $spacing-8;
+  padding: $spacing-4;
+
+  @include md {
+    padding: $spacing-8;
+  }
 }
 
 .c_otp_verification__description {
@@ -21,7 +26,11 @@
 }
 
 .c_otp_verification__form {
-  margin-top: $spacing-8;
+  margin-top: $spacing-6;
+
+  @include md {
+    margin-top: $spacing-8;
+  }
 }
 
 .c_otp_verification__input_wrapper {

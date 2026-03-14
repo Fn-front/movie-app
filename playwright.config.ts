@@ -26,7 +26,9 @@ export default defineConfig({
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
   workers: isCI ? 2 : undefined,
-  reporter: isCI ? 'github' : 'html',
+  reporter: isCI
+    ? [['github'], ['json', { outputFile: 'playwright-report/results.json' }]]
+    : 'html',
   timeout: 30000,
   expect: {
     timeout: 10000,

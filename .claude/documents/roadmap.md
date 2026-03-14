@@ -1008,6 +1008,9 @@
 - [x] ホームページに`NowShowingMovieList`セクション配置
 - [x] 結合テスト
 
+
+### 今後の検討事項
+- [ ] NowShowingMovieListのServer Component化（日次Cronデータのためクライアントフェッチ不要、RSC+Client分離でFCP改善）
 ---
 
 ## フェーズ9: AIレコメンド機能（設計書: `.claude/documents/recommendations-design.md`）

@@ -1,5 +1,8 @@
 // ============================================================
-// デザインシステム変数
+// デザインシステム変数（CSSカスタムプロパティ参照）
+// ============================================================
+// 各SCSS変数はvar(--xxx)を参照します。
+// ブレークポイントは@mediaで使用するためSCSS変数のまま維持。
 // ============================================================
 
 // ============================================================
@@ -7,183 +10,179 @@
 // ============================================================
 
 // プライマリカラー（ブルー系）
-$primary-900: #004a7c;
-$primary-800: #005a94;
-$primary-700: #006bac;
-$primary-600: #0d7ec4;
-$primary-500: #2390d6; // メイン
-$primary-400: #4ca3dd;
-$primary-300: #75b7e5;
-$primary-200: #9ecbed;
-$primary-100: #c7dff5;
-$primary-50: #e8f3fb;
+$primary-900: var(--primary-900);
+$primary-800: var(--primary-800);
+$primary-700: var(--primary-700);
+$primary-600: var(--primary-600);
+$primary-500: var(--primary-500); // メイン
+$primary-400: var(--primary-400);
+$primary-300: var(--primary-300);
+$primary-200: var(--primary-200);
+$primary-100: var(--primary-100);
+$primary-50: var(--primary-50);
 
 // セカンダリカラー（オレンジ系）
-$secondary-900: #cc7700;
-$secondary-800: #e68600;
-$secondary-700: #ff9500;
-$secondary-600: #ff9600; // メイン
-$secondary-500: #ffa31a;
-$secondary-400: #ffb044;
-$secondary-300: #ffbd6e;
-$secondary-200: #ffca98;
-$secondary-100: #ffd7c2;
-$secondary-50: #fff0e5;
+$secondary-900: var(--secondary-900);
+$secondary-800: var(--secondary-800);
+$secondary-700: var(--secondary-700);
+$secondary-600: var(--secondary-600); // メイン
+$secondary-500: var(--secondary-500);
+$secondary-400: var(--secondary-400);
+$secondary-300: var(--secondary-300);
+$secondary-200: var(--secondary-200);
+$secondary-100: var(--secondary-100);
+$secondary-50: var(--secondary-50);
 
 // ダークブルーグレー（ナビゲーション・サイドバー用）
-$dark-blue-900: #1a2332;
-$dark-blue-800: #232d3f;
-$dark-blue-700: #2d3748;
-$dark-blue-600: #2f3e51; // メイン
-$dark-blue-500: #3d4f65;
-$dark-blue-400: #546479;
-$dark-blue-300: #6b798d;
-$dark-blue-200: #8895a8;
-$dark-blue-100: #a5b1c2;
-$dark-blue-50: #dce1e8;
+$dark-blue-900: var(--dark-blue-900);
+$dark-blue-800: var(--dark-blue-800);
+$dark-blue-700: var(--dark-blue-700);
+$dark-blue-600: var(--dark-blue-600); // メイン
+$dark-blue-500: var(--dark-blue-500);
+$dark-blue-400: var(--dark-blue-400);
+$dark-blue-300: var(--dark-blue-300);
+$dark-blue-200: var(--dark-blue-200);
+$dark-blue-100: var(--dark-blue-100);
+$dark-blue-50: var(--dark-blue-50);
 
 // グレースケール
-$gray-900: #111111;
-$gray-800: #1f1f1f;
-$gray-700: #2d2d2d;
-$gray-600: #444444;
-$gray-500: #6b6b6b;
-$gray-400: #999999;
-$gray-300: #c4c4c4;
-$gray-200: #e0e0e0;
-$gray-100: #f5f5f5;
-$gray-50: #fafafa;
+$gray-900: var(--gray-900);
+$gray-800: var(--gray-800);
+$gray-700: var(--gray-700);
+$gray-600: var(--gray-600);
+$gray-500: var(--gray-500);
+$gray-400: var(--gray-400);
+$gray-300: var(--gray-300);
+$gray-200: var(--gray-200);
+$gray-100: var(--gray-100);
+$gray-50: var(--gray-50);
 
 // セマンティックカラー
-$success-dark: #0d7c4a;
-$success-main: #10b981;
-$success-light: #6ee7b7;
+$success-dark: var(--success-dark);
+$success-main: var(--success-main);
+$success-light: var(--success-light);
 
-$warning-dark: #d97706;
-$warning-main: #f59e0b;
-$warning-light: #fbbf24;
+$warning-dark: var(--warning-dark);
+$warning-main: var(--warning-main);
+$warning-light: var(--warning-light);
 
-$error-dark: #b91c1c;
-$error-main: #ef4444;
-$error-light: #f87171;
+$error-dark: var(--error-dark);
+$error-main: var(--error-main);
+$error-light: var(--error-light);
 
-$info-dark: #1e40af;
-$info-main: #3b82f6;
-$info-light: #60a5fa;
+$info-dark: var(--info-dark);
+$info-main: var(--info-main);
+$info-light: var(--info-light);
 
 // ============================================================
 // セマンティック変数
 // ============================================================
 
 // テキストカラー
-$text-primary: $gray-900;
-$text-secondary: $gray-500;
-$text-disabled: $gray-400;
+$text-primary: var(--text-primary);
+$text-secondary: var(--text-secondary);
+$text-disabled: var(--text-disabled);
 
 // 背景色
-$background-default: $gray-50;
-$background-paper: #ffffff;
-$background-secondary: $gray-100;
-$background-disabled: $gray-100;
+$background-default: var(--background-default);
+$background-paper: var(--background-paper);
+$background-secondary: var(--background-secondary);
+$background-disabled: var(--background-disabled);
 
 // オーバーレイ
-$overlay-light: rgba(0, 0, 0, 0.1);
-$overlay-medium: rgba(0, 0, 0, 0.5);
-$overlay-dark: rgba(0, 0, 0, 0.6);
-$overlay-darker: rgba(0, 0, 0, 0.8);
+$overlay-light: var(--overlay-light);
+$overlay-medium: var(--overlay-medium);
+$overlay-dark: var(--overlay-dark);
+$overlay-darker: var(--overlay-darker);
 
 // テキスト反転色（白）
-$text-inverse: #ffffff;
+$text-inverse: var(--text-inverse);
 
 // ボーダー
-$border-color: $gray-300;
+$border-color: var(--border-color);
 
 // ============================================================
 // タイポグラフィ
 // ============================================================
 
 // フォントファミリー
-$font-family-base:
-  'Noto Sans JP',
-  -apple-system,
-  BlinkMacSystemFont,
-  'Segoe UI',
-  sans-serif;
-$font-family-heading: 'Noto Sans JP', sans-serif;
-$font-family-mono: 'Courier New', monospace;
+$font-family-base: var(--font-family-base);
+$font-family-heading: var(--font-family-heading);
+$font-family-mono: var(--font-family-mono);
 
 // フォントサイズ（1rem = 10px）
-$font-size-2xs: 1rem; // 10px
-$font-size-xs: 1.2rem; // 12px
-$font-size-sm: 1.4rem; // 14px
-$font-size-base: 1.6rem; // 16px
-$font-size-lg: 1.8rem; // 18px
-$font-size-xl: 2rem; // 20px
-$font-size-2xl: 2.4rem; // 24px
-$font-size-3xl: 3rem; // 30px
-$font-size-4xl: 3.6rem; // 36px
-$font-size-5xl: 4.8rem; // 48px
+$font-size-2xs: var(--font-size-2xs); // 10px
+$font-size-xs: var(--font-size-xs); // 12px
+$font-size-sm: var(--font-size-sm); // 14px
+$font-size-base: var(--font-size-base); // 16px
+$font-size-lg: var(--font-size-lg); // 18px
+$font-size-xl: var(--font-size-xl); // 20px
+$font-size-2xl: var(--font-size-2xl); // 24px
+$font-size-3xl: var(--font-size-3xl); // 30px
+$font-size-4xl: var(--font-size-4xl); // 36px
+$font-size-5xl: var(--font-size-5xl); // 48px
 
 // フォントウェイト
-$font-weight-light: 300;
-$font-weight-regular: 400;
-$font-weight-medium: 500;
-$font-weight-bold: 700;
+$font-weight-light: var(--font-weight-light);
+$font-weight-regular: var(--font-weight-regular);
+$font-weight-medium: var(--font-weight-medium);
+$font-weight-bold: var(--font-weight-bold);
 
 // 行間
-$line-height-tight: 1.25;
-$line-height-normal: 1.5;
-$line-height-loose: 1.75;
+$line-height-tight: var(--line-height-tight);
+$line-height-normal: var(--line-height-normal);
+$line-height-loose: var(--line-height-loose);
 
 // ============================================================
 // スペーシング
 // ============================================================
 
-$spacing-0: 0;
-$spacing-1: 0.4rem; // 4px
-$spacing-2: 0.8rem; // 8px
-$spacing-3: 1.2rem; // 12px
-$spacing-4: 1.6rem; // 16px
-$spacing-5: 2rem; // 20px
-$spacing-6: 2.4rem; // 24px
-$spacing-8: 3.2rem; // 32px
-$spacing-10: 4rem; // 40px
-$spacing-12: 4.8rem; // 48px
-$spacing-16: 6.4rem; // 64px
-$spacing-20: 8rem; // 80px
-$spacing-24: 9.6rem; // 96px
+$spacing-0: var(--spacing-0);
+$spacing-1: var(--spacing-1); // 4px
+$spacing-2: var(--spacing-2); // 8px
+$spacing-3: var(--spacing-3); // 12px
+$spacing-4: var(--spacing-4); // 16px
+$spacing-5: var(--spacing-5); // 20px
+$spacing-6: var(--spacing-6); // 24px
+$spacing-8: var(--spacing-8); // 32px
+$spacing-10: var(--spacing-10); // 40px
+$spacing-12: var(--spacing-12); // 48px
+$spacing-16: var(--spacing-16); // 64px
+$spacing-20: var(--spacing-20); // 80px
+$spacing-24: var(--spacing-24); // 96px
 
 // ============================================================
 // ボーダー・角丸
 // ============================================================
 
 // ボーダー幅
-$border-width-0: 0;
-$border-width-1: 1px;
-$border-width-2: 2px;
-$border-width-4: 4px;
+$border-width-0: var(--border-width-0);
+$border-width-1: var(--border-width-1);
+$border-width-2: var(--border-width-2);
+$border-width-4: var(--border-width-4);
 
 // ボーダー半径（角丸）
-$border-radius-none: 0;
-$border-radius-sm: 0.2rem; // 2px
-$border-radius-md: 0.4rem; // 4px
-$border-radius-lg: 0.8rem; // 8px
-$border-radius-xl: 1.2rem; // 12px
-$border-radius-2xl: 1.6rem; // 16px
-$border-radius-full: 9999px;
+$border-radius-none: var(--border-radius-none);
+$border-radius-sm: var(--border-radius-sm); // 2px
+$border-radius-md: var(--border-radius-md); // 4px
+$border-radius-lg: var(--border-radius-lg); // 8px
+$border-radius-xl: var(--border-radius-xl); // 12px
+$border-radius-2xl: var(--border-radius-2xl); // 16px
+$border-radius-full: var(--border-radius-full);
 
 // ============================================================
 // シャドウ（影）
 // ============================================================
 
-$shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-$shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-$shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-$shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-$shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+$shadow-sm: var(--shadow-sm);
+$shadow-md: var(--shadow-md);
+$shadow-lg: var(--shadow-lg);
+$shadow-xl: var(--shadow-xl);
+$shadow-2xl: var(--shadow-2xl);
 
 // ============================================================
 // ブレークポイント（レスポンシブ）
+// ※ @mediaではCSS変数が使えないためSCSS変数のまま維持
 // ============================================================
 
 $breakpoint-sm: 640px;
@@ -197,32 +196,32 @@ $breakpoint-2xl: 1536px;
 // ============================================================
 
 // イージング
-$ease-in: cubic-bezier(0.4, 0, 1, 1);
-$ease-out: cubic-bezier(0, 0, 0.2, 1);
-$ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+$ease-in: var(--ease-in);
+$ease-out: var(--ease-out);
+$ease-in-out: var(--ease-in-out);
 
 // デュレーション
-$duration-fast: 150ms;
-$duration-normal: 300ms;
-$duration-slow: 500ms;
+$duration-fast: var(--duration-fast);
+$duration-normal: var(--duration-normal);
+$duration-slow: var(--duration-slow);
 
 // 基本トランジション
-$transition-all: all $duration-normal $ease-in-out;
-$transition-color: color $duration-fast $ease-in-out;
-$transition-bg: background-color $duration-fast $ease-in-out;
-$transition-shadow: box-shadow $duration-normal $ease-in-out;
-$transition-duration-base: $duration-normal;
+$transition-all: var(--transition-all);
+$transition-color: var(--transition-color);
+$transition-bg: var(--transition-bg);
+$transition-shadow: var(--transition-shadow);
+$transition-duration-base: var(--duration-normal);
 
 // ============================================================
 // Z-Index階層
 // ============================================================
 
-$z-index-dropdown: 1000;
-$z-index-sticky: 1020;
-$z-index-fixed: 1030;
-$z-index-modal-backdrop: 1040;
-$z-index-modal: 1050;
-$z-index-popover: 1060;
-$z-index-tooltip: 1070;
-$z-index-toast: 1080;
-$z-index-header: $z-index-fixed;
+$z-index-dropdown: var(--z-index-dropdown);
+$z-index-sticky: var(--z-index-sticky);
+$z-index-fixed: var(--z-index-fixed);
+$z-index-modal-backdrop: var(--z-index-modal-backdrop);
+$z-index-modal: var(--z-index-modal);
+$z-index-popover: var(--z-index-popover);
+$z-index-tooltip: var(--z-index-tooltip);
+$z-index-toast: var(--z-index-toast);
+$z-index-header: var(--z-index-fixed);

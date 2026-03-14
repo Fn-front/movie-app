@@ -22,7 +22,7 @@
     cursor: pointer;
 
     &:hover:not(:disabled) {
-      background-color: rgba($primary-500, 0.1);
+      background-color: color-alpha(--primary-500, 10%);
       border-color: $primary-500;
       color: $primary-500;
     }
@@ -62,7 +62,7 @@
     cursor: pointer;
 
     &:hover:not(&__active) {
-      background-color: rgba($primary-500, 0.1);
+      background-color: color-alpha(--primary-500, 10%);
       color: $primary-500;
     }
 

@@ -11,8 +11,8 @@ import type { TMDbTrendingMovie } from '@/lib/types';
 /** 劇場公開のリリースタイプ（2: Theatrical limited, 3: Theatrical） */
 const THEATRICAL_RELEASE_TYPES = [2, 3];
 
-/** リリースタイプ判定対象の国コード */
-const RELEASE_DATE_REGIONS = ['JP', 'US'];
+/** リリースタイプ判定対象の国コード（日本公開のみ） */
+const RELEASE_DATE_REGION = 'JP';
 
 /**
  * トレンド映画同期結果の型
@@ -27,18 +27,19 @@ export interface TrendingSyncResult {
 /**
  * 映画が劇場公開作品かどうかを判定する
  *
- * JP または US リージョンで劇場公開（type 2 or 3）のリリースがあればtrue
+ * JP リージョンで劇場公開（type 2 or 3）のリリースがあればtrue
  */
 async function isTheatricalRelease(movieId: number): Promise<boolean> {
   try {
     const releaseDates = await getMovieReleaseDates(movieId);
 
-    return releaseDates.some(
-      (country) =>
-        RELEASE_DATE_REGIONS.includes(country.iso_3166_1) &&
-        country.release_dates.some((rd) =>
-          THEATRICAL_RELEASE_TYPES.includes(rd.type),
-        ),
+    const jpRelease = releaseDates.find(
+      (country) => country.iso_3166_1 === RELEASE_DATE_REGION,
+    );
+    if (!jpRelease) return false;
+
+    return jpRelease.release_dates.some((rd) =>
+      THEATRICAL_RELEASE_TYPES.includes(rd.type),
     );
   } catch {
     // リリース日取得に失敗した場合は除外しない（安全側に倒す）
@@ -66,7 +67,7 @@ async function filterTheatricalMovies(
  * TMDb Trending API から今週のトレンド映画を取得し trending_movies テーブルに同期する
  *
  * RPC関数（sync_trending_movies）でトランザクション内のDELETE → INSERTをアトミックに実行。
- * 劇場公開作品（JP/USでtype 2 or 3）のみにフィルタリングし、最大10件を保存。
+ * 日本で劇場公開（JPでtype 2 or 3）の作品のみにフィルタリングし、最大10件を保存。
  * TMDb API 取得に失敗した場合は既存データを保持する。
  *
  * @returns 同期結果

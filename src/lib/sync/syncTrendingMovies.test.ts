@@ -128,7 +128,7 @@ describe('syncTrendingMovies', () => {
     ).toEqual([1, 2, 3]);
   });
 
-  it('US劇場公開のみの作品も含まれる', async () => {
+  it('US劇場公開のみでJP公開なしの場合は除外される', async () => {
     mockGetTrendingMovies.mockResolvedValue({
       results: createTrendingMovies(1),
     });
@@ -136,6 +136,21 @@ describe('syncTrendingMovies', () => {
       {
         iso_3166_1: 'US',
         release_dates: [{ type: 2, release_date: '2026-03-01' }],
+      },
+    ]);
+
+    const result = await syncTrendingMovies();
+    expect(result.synced).toBe(0);
+  });
+
+  it('JP劇場公開ありの作品は含まれる', async () => {
+    mockGetTrendingMovies.mockResolvedValue({
+      results: createTrendingMovies(1),
+    });
+    mockGetMovieReleaseDates.mockResolvedValue([
+      {
+        iso_3166_1: 'JP',
+        release_dates: [{ type: 3, release_date: '2026-03-01' }],
       },
     ]);
 

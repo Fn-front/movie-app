@@ -1057,7 +1057,7 @@
   - ユーザー単位のtry-catch（1ユーザーの失敗が他に影響しない）
   - OpenAI/TMDbエラー時は該当ユーザーをスキップし既存レコメンドを維持
 - [ ] Vercel Cron設定（vercel.json）— 日次実行
-- [x] 結合テスト
+- [ ] 結合テスト
   - Cron APIテスト
     - CRON_SECRET認証チェック
     - OpenAI APIモック → 正常レスポンスのパース
@@ -1080,7 +1080,7 @@
   - ローディング・エラー状態管理
 - [ ] 単体テスト
   - APIクライアントテスト（getRecommendations）
-- [x] 結合テスト
+- [ ] 結合テスト
   - API Routeテスト（GET /api/recommendations）
     - 認証チェック（401）
     - 正常取得（レコメンドあり）
@@ -1101,7 +1101,7 @@
 - [ ] SCSS Modules スタイリング
   - デザインシステム変数使用
   - レスポンシブ対応（Step 3実装時に調整）
-- [x] 結合テスト
+- [ ] 結合テスト
   - RecommendationSectionテスト
     - お気に入り0件 → 登録促進テキスト表示
     - レコメンド未生成 → 準備中テキスト表示
@@ -1144,7 +1144,7 @@
   - suggestTitle(query)
 - [ ] 単体テスト
   - APIクライアントテスト（suggestTitle）
-- [x] 結合テスト
+- [ ] 結合テスト
   - API Routeテスト（GET /api/movies/suggest-title）
     - 認証チェック（401）
     - キャッシュヒット → DB結果を返す
@@ -1167,7 +1167,7 @@
   - React.memo + displayName 必須
 - [ ] SearchResults変更
   - 検索結果0件時にTitleSuggestionをEmptyStateの上に配置
-- [x] 結合テスト
+- [ ] 結合テスト
   - useTitleSuggestionフックテスト
   - TitleSuggestionコンポーネントテスト
     - 提案あり → リンク表示

@@ -18,9 +18,7 @@
     cursor: not-allowed;
   }
 
-  &:focus-visible {
-    @include focus-visible;
-  }
+  @include focus-visible;
 
   // バリアント: Primary
   &__variant__primary {
@@ -39,31 +37,31 @@
 
   // バリアント: Secondary
   &__variant__secondary {
-    background-color: $secondary-600;
+    background-color: $secondary-900;
     color: white;
     border: none;
 
     &:hover:not(:disabled) {
-      background-color: $secondary-700;
+      background-color: color-mix(in srgb, var(--secondary-900) 85%, black);
     }
 
     &:active:not(:disabled) {
-      background-color: $secondary-800;
+      background-color: color-mix(in srgb, var(--secondary-900) 70%, black);
     }
   }
 
   // バリアント: Danger
   &__variant__danger {
-    background-color: $error-main;
+    background-color: $error-dark;
     color: white;
     border: none;
 
     &:hover:not(:disabled) {
-      background-color: $error-dark;
+      background-color: color-mix(in srgb, var(--error-dark) 85%, black);
     }
 
     &:active:not(:disabled) {
-      background-color: color-mix(in srgb, var(--error-dark) 95%, black);
+      background-color: color-mix(in srgb, var(--error-dark) 70%, black);
     }
   }
 

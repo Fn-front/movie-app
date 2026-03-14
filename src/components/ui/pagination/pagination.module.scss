@@ -27,9 +27,7 @@
       color: $primary-500;
     }
 
-    &:focus-visible {
-      @include focus-visible;
-    }
+    @include focus-visible;
 
     &:disabled {
       opacity: 0.5;
@@ -66,9 +64,7 @@
       color: $primary-500;
     }
 
-    &:focus-visible {
-      @include focus-visible;
-    }
+    @include focus-visible;
 
     // アクティブ状態
     &__active {

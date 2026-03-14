@@ -24,9 +24,7 @@
       border-color: $primary-500;
     }
 
-    &:focus-visible {
-      @include focus-visible;
-    }
+    @include focus-visible;
 
     &[data-state='checked'] {
       background-color: $primary-500;

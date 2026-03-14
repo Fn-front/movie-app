@@ -934,23 +934,23 @@
 ### Step 4: スタイリング改善（`feature/styling-improvements`）
 
 #### ホバーエフェクト
-- [ ] MovieTile: ホバー時のシャドウ変化（既存hover-shadow mixin適用）
-- [ ] ナビリンク: ホバー時の背景色変化
-- [ ] ボタン類: ホバー時のopacity変化（既存hover-opacity mixin適用）
+- [x] MovieTile: ホバー時のシャドウ変化（既存hover-shadow mixin適用）
+- [x] ナビリンク: ホバー時の背景色変化
+- [x] ボタン類: ホバー時のopacity変化（既存hover-opacity mixin適用）
 
 #### フォーカス状態
-- [ ] focus-visible mixinの適用漏れがないか全コンポーネント確認
-- [ ] カスタムコンポーネント（Radix UI外）のフォーカス表示追加
+- [x] focus-visible mixinの適用漏れがないか全コンポーネント確認
+- [x] カスタムコンポーネント（Radix UI外）のフォーカス表示追加
 
 #### トランジション
-- [ ] opacity / transform / box-shadow のトランジション統一（デザインシステム変数使用）
+- [x] opacity / transform / box-shadow のトランジション統一（デザインシステム変数使用）
 
 #### カラーコントラスト
-- [ ] WCAG AA基準（テキスト 4.5:1、UI要素 3:1）の全画面確認
-- [ ] 不足箇所の修正
+- [x] WCAG AA基準（テキスト 4.5:1、UI要素 3:1）の全画面確認
+- [x] 不足箇所の修正
 
 #### テスト
-- [ ] 結合テスト
+- [x] 結合テスト
   - アクセシビリティテスト（カスタムコンポーネントのaria属性・フォーカス）
 
 ---

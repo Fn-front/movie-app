@@ -48,9 +48,7 @@
       color: $primary-600;
     }
 
-    &:focus-visible {
-      @include focus-visible;
-    }
+    @include focus-visible;
   }
 
   // 検索バー

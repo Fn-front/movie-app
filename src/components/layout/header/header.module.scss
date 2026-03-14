@@ -56,8 +56,11 @@
   // 検索バー
   &__search {
     margin-left: auto;
-    width: 100%;
-    max-width: 400px;
+
+    @include lg {
+      width: 100%;
+      max-width: 400px;
+    }
   }
 
   // ユーザーメニュー（lg未満で非表示 → MobileDrawer内に移動）

@@ -957,27 +957,40 @@
 
 ## フェーズ8: トレンド映画表示
 
-> TMDb Trending APIを使用し、今週のトレンド映画をホームページに横スクロールで表示する。
+> TMDb Trending APIで今週のトレンド映画を週次Cronで取得・DB保存し、ホームページに横スクロールで表示する。
 
-### Step 1: API・型定義・定数（`feature/trending-movies-api`）
+### Step 1: DB・型定義・定数（`feature/trending-movies-db`）
+- [ ] `trending_movies`テーブル作成（Supabase migration）
+  - UUID主キー、tmdb_movie_id、title、poster_path、release_date、vote_average、popularity、display_order（1〜10）
+  - UNIQUE制約（tmdb_movie_id）
+  - RLSポリシー設定（SELECT: 全ユーザー、INSERT/UPDATE/DELETE: service_roleのみ）
+  - インデックス（display_order）
 - [ ] トレンド映画用の型定義作成（`lib/types/trending.ts`）
   - TMDb Trending APIレスポンス型
-  - アプリ内で使用するトレンド映画型
+  - DBレコード型
 - [ ] トレンド定数追加（`lib/constants/trending.ts`）
-  - TIME_WINDOW（`week`）、DISPLAY_COUNT（10）、QUERY_KEY、STALE_TIME
+  - DISPLAY_COUNT（10）、QUERY_KEY、STALE_TIME
   - セクションタイトル等のメッセージ定数
+- [ ] 単体テスト
+
+### Step 2: TMDb API取得ロジック + Cron API（`feature/trending-movies-cron`）
 - [ ] TMDb Trending APIクライアント関数作成（`lib/api/trending.ts`）
   - `GET /trending/movie/week`（`language=ja-JP`）
   - レスポンスのパース・10件制限
+- [ ] Cron API実装（`GET /api/cron/sync-trending`）
+  - CRON_SECRET認証
+  - TMDb APIからトレンド映画取得
+  - `trending_movies`テーブルを全件洗い替え（DELETE → INSERT）
+- [ ] Vercel Cron設定（vercel.json）— 週次実行（`0 20 * * 0`、毎週日曜 JST AM5:00）
 - [ ] 単体テスト
 
-### Step 2: カスタムフック（`feature/trending-movies-hook`）
+### Step 3: カスタムフック（`feature/trending-movies-hook`）
 - [ ] `useTrendingMovies`フック作成
-  - React Queryでトレンド映画データ取得
+  - React QueryでDBからトレンド映画データ取得
   - ローディング・エラー状態管理
 - [ ] 単体テスト
 
-### Step 3: UIコンポーネント（`feature/trending-movies-ui`）
+### Step 4: UIコンポーネント（`feature/trending-movies-ui`）
 - [ ] `TrendingMovieCard`コンポーネント作成
   - ポスター画像、タイトル、評価表示
   - 映画詳細ページへのリンク
@@ -991,7 +1004,7 @@
   - スクロールバースタイリング
 - [ ] 単体テスト
 
-### Step 4: ホームページ統合（`feature/trending-movies-integration`）
+### Step 5: ホームページ統合（`feature/trending-movies-integration`）
 - [ ] ホームページに`TrendingMovieList`セクション配置
 - [ ] 結合テスト
 

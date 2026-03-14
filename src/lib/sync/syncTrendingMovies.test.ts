@@ -14,8 +14,7 @@ const mockGetTrendingMovies = jest.fn();
 const mockGetMovieReleaseDates = jest.fn();
 jest.mock('@/lib/tmdb/tmdb', () => ({
   getTrendingMovies: () => mockGetTrendingMovies(),
-  getMovieReleaseDates: (movieId: number) =>
-    mockGetMovieReleaseDates(movieId),
+  getMovieReleaseDates: (movieId: number) => mockGetMovieReleaseDates(movieId),
 }));
 
 const mockRpc = jest.fn();
@@ -120,9 +119,13 @@ describe('syncTrendingMovies', () => {
 
     expect(result.synced).toBe(3);
     const rpcMovies = mockRpc.mock.calls[0][1].movies;
-    expect(rpcMovies.map((m: { tmdb_movie_id: number }) => m.tmdb_movie_id)).toEqual([1, 3, 5]);
+    expect(
+      rpcMovies.map((m: { tmdb_movie_id: number }) => m.tmdb_movie_id),
+    ).toEqual([1, 3, 5]);
     // display_orderが連番になる
-    expect(rpcMovies.map((m: { display_order: number }) => m.display_order)).toEqual([1, 2, 3]);
+    expect(
+      rpcMovies.map((m: { display_order: number }) => m.display_order),
+    ).toEqual([1, 2, 3]);
   });
 
   it('US劇場公開のみの作品も含まれる', async () => {

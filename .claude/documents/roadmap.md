@@ -961,7 +961,7 @@
 
 ### Step 1: DB・型定義・定数（`feature/trending-movies-db`）
 - [ ] `trending_movies`テーブル作成（Supabase migration）
-  - UUID主キー、tmdb_movie_id、title、poster_path、release_date、vote_average、popularity、display_order（1〜10）
+  - UUID主キー、tmdb_movie_id、title、poster_path、release_date、vote_average、popularity、display_order（1〜10）、fetched_at（最終同期日時、デフォルト: now()）
   - UNIQUE制約（tmdb_movie_id）
   - RLSポリシー設定（SELECT: 全ユーザー、INSERT/UPDATE/DELETE: service_roleのみ）
   - インデックス（display_order）
@@ -980,7 +980,8 @@
 - [ ] Cron API実装（`GET /api/cron/sync-trending`）
   - CRON_SECRET認証
   - TMDb APIからトレンド映画取得
-  - `trending_movies`テーブルを全件洗い替え（DELETE → INSERT）
+  - `trending_movies`テーブルを全件洗い替え（トランザクション内でDELETE → INSERT）
+  - TMDb API取得成功後にのみDELETEを実行（失敗時は既存データを保持）
 - [ ] Vercel Cron設定（vercel.json）— 週次実行（`0 20 * * 0`、毎週日曜 JST AM5:00）
 - [ ] 単体テスト
 

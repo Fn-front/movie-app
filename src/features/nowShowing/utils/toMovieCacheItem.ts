@@ -1,14 +1,14 @@
 /**
- * TrendingMovie → MovieCacheItem 変換ユーティリティ
+ * NowShowingMovie → MovieCacheItem 変換ユーティリティ
  */
 
-import type { TrendingMovie } from '@/lib/types';
+import type { NowShowingMovie } from '@/lib/types';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
 /**
- * TrendingMovie を MovieCacheItem に変換する
+ * NowShowingMovie を MovieCacheItem に変換する
  */
-export function toMovieCacheItem(movie: TrendingMovie): MovieCacheItem {
+export function toMovieCacheItem(movie: NowShowingMovie): MovieCacheItem {
   return {
     id: movie.tmdb_movie_id,
     title: movie.title,

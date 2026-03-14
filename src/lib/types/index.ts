@@ -339,9 +339,9 @@ export type Theme = 'light' | 'dark' | 'system';
 export type Language = 'ja' | 'en';
 
 /**
- * トレンド映画DBレコード型
+ * 劇場公開中の人気映画DBレコード型
  */
-export interface TrendingMovie {
+export interface NowShowingMovie {
   /** レコードID */
   id: string;
   /** TMDb映画ID */
@@ -363,9 +363,9 @@ export interface TrendingMovie {
 }
 
 /**
- * TMDb Trending APIレスポンスの映画データ型
+ * TMDb Discover APIレスポンスの映画データ型
  */
-export interface TMDbTrendingMovie {
+export interface TMDbNowShowingMovie {
   /** TMDb映画ID */
   id: number;
   /** タイトル */

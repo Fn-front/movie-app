@@ -1,5 +1,5 @@
 /**
- * TMDb Discover API から日本で劇場公開中の人気映画を取得し trending_movies テーブルに同期する
+ * TMDb Discover API から日本で劇場公開中の人気映画を取得し now_showing_movies テーブルに同期する
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -28,9 +28,9 @@ function formatDate(date: Date): string {
 }
 
 /**
- * TMDb Discover API から日本で劇場公開中の人気映画を取得し trending_movies テーブルに同期する
+ * TMDb Discover API から日本で劇場公開中の人気映画を取得し now_showing_movies テーブルに同期する
  *
- * RPC関数（sync_trending_movies）でトランザクション内のDELETE → INSERTをアトミックに実行。
+ * RPC関数（sync_now_showing_movies）でトランザクション内のDELETE → INSERTをアトミックに実行。
  * Discover API の with_release_type=2|3 で劇場公開作品のみを取得し、最大10件を保存。
  * TMDb API 取得に失敗した場合は既存データを保持する。
  *
@@ -77,7 +77,7 @@ export async function syncNowShowingMovies(): Promise<NowShowingSyncResult> {
     display_order: index + 1,
   }));
 
-  const { error } = await supabase.rpc('sync_trending_movies', {
+  const { error } = await supabase.rpc('sync_now_showing_movies', {
     movies: rows,
   });
 

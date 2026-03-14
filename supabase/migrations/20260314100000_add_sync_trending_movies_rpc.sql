@@ -4,16 +4,20 @@
 -- トレンド映画の全件洗い替えをトランザクション内で実行する
 -- DELETE → INSERT をアトミックに行い、途中失敗時はロールバック
 
+-- テーブル所有者（postgres）にはRLSを免除
+ALTER TABLE trending_movies NO FORCE ROW LEVEL SECURITY;
+
 CREATE OR REPLACE FUNCTION sync_trending_movies(movies JSONB)
 RETURNS INTEGER
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   synced_count INTEGER;
 BEGIN
-  -- 既存データを全件削除
-  DELETE FROM trending_movies;
+  -- 既存データを全件削除（WHERE TRUE で全件指定）
+  DELETE FROM trending_movies WHERE TRUE;
 
   -- 新しいデータを挿入
   INSERT INTO trending_movies (

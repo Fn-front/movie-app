@@ -2,7 +2,7 @@
  * 劇場公開中の人気映画同期 Cron API
  * GET /api/cron/sync-now-showing
  *
- * Vercel Cronで週次自動実行される（毎週日曜 JST AM5:00）。
+ * Vercel Cronで日次自動実行される（毎日 JST AM3:00）。
  * CRON_SECRET環境変数によるBearer認証が必要。
  */
 

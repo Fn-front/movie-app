@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 
 import { NowShowingMovieList } from './nowShowingMovieList';
-import type { TrendingMovie } from '@/lib/types';
+import type { NowShowingMovie } from '@/lib/types';
 
 // --- Mocks ---
 
@@ -49,7 +49,7 @@ jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
 
 // --- Helpers ---
 
-const createMockMovies = (count: number): TrendingMovie[] =>
+const createMockMovies = (count: number): NowShowingMovie[] =>
   Array.from({ length: count }, (_, i) => ({
     id: `uuid-${i + 1}`,
     tmdb_movie_id: 100 + i,
@@ -166,7 +166,7 @@ describe('NowShowingMovieList', () => {
       expect(screen.getByText('3')).toBeInTheDocument();
     });
 
-    it('TrendingMovieがMovieCacheItemに変換されてMovieTileに渡される', () => {
+    it('NowShowingMovieがMovieCacheItemに変換されてMovieTileに渡される', () => {
       mockUseNowShowingMovies.mockReturnValue({
         nowShowingMovies: createMockMovies(1),
         isLoading: false,

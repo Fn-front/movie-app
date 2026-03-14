@@ -7,14 +7,14 @@ import { useQuery } from '@tanstack/react-query';
 
 import { nowShowingKeys, NOW_SHOWING_STALE_TIME } from '@/constants';
 import { getNowShowingMovies } from '@/lib/api/nowShowing/nowShowing';
-import type { TrendingMovie } from '@/lib/types';
+import type { NowShowingMovie } from '@/lib/types';
 
 /**
  * useNowShowingMoviesフックの返り値
  */
 export interface UseNowShowingMoviesReturn {
   /** 劇場公開中の人気映画一覧 */
-  nowShowingMovies: TrendingMovie[];
+  nowShowingMovies: NowShowingMovie[];
   /** 読み込み中 */
   isLoading: boolean;
   /** エラー */

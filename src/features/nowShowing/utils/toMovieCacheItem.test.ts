@@ -1,9 +1,9 @@
-import type { TrendingMovie } from '@/lib/types';
+import type { NowShowingMovie } from '@/lib/types';
 
 import { toMovieCacheItem } from './toMovieCacheItem';
 
 describe('toMovieCacheItem', () => {
-  const baseTrendingMovie: TrendingMovie = {
+  const baseNowShowingMovie: NowShowingMovie = {
     id: 'uuid-1',
     tmdb_movie_id: 12345,
     title: 'テスト映画',
@@ -15,8 +15,8 @@ describe('toMovieCacheItem', () => {
     fetched_at: '2026-03-14T00:00:00Z',
   };
 
-  it('TrendingMovieをMovieCacheItemに正しく変換する', () => {
-    const result = toMovieCacheItem(baseTrendingMovie);
+  it('NowShowingMovieをMovieCacheItemに正しく変換する', () => {
+    const result = toMovieCacheItem(baseNowShowingMovie);
 
     expect(result).toEqual({
       id: 12345,
@@ -34,13 +34,13 @@ describe('toMovieCacheItem', () => {
   });
 
   it('tmdb_movie_idがidにマッピングされる', () => {
-    const result = toMovieCacheItem(baseTrendingMovie);
+    const result = toMovieCacheItem(baseNowShowingMovie);
     expect(result.id).toBe(12345);
   });
 
   it('nullのフィールドが正しく設定される', () => {
-    const movie: TrendingMovie = {
-      ...baseTrendingMovie,
+    const movie: NowShowingMovie = {
+      ...baseNowShowingMovie,
       poster_path: null,
       release_date: null,
       vote_average: null,
@@ -59,12 +59,12 @@ describe('toMovieCacheItem', () => {
   });
 
   it('release_typeが常にtheatricalになる', () => {
-    const result = toMovieCacheItem(baseTrendingMovie);
+    const result = toMovieCacheItem(baseNowShowingMovie);
     expect(result.release_type).toBe('theatrical');
   });
 
   it('is_revivalが常にfalseになる', () => {
-    const result = toMovieCacheItem(baseTrendingMovie);
+    const result = toMovieCacheItem(baseNowShowingMovie);
     expect(result.is_revival).toBe(false);
   });
 });

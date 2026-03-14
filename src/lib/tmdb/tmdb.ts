@@ -9,7 +9,7 @@ import type {
   MovieSearchParams,
   TMDbReleaseDateCountry,
   TMDbResponse,
-  TMDbTrendingMovie,
+  TMDbNowShowingMovie,
 } from '@/lib/types';
 
 import axios, { type AxiosError } from 'axios';
@@ -277,9 +277,9 @@ export async function getGenres() {
  * @returns トレンド映画リスト
  */
 export async function getTrendingMovies(): Promise<
-  TMDbResponse<TMDbTrendingMovie>
+  TMDbResponse<TMDbNowShowingMovie>
 > {
-  const response = await tmdbClient.get<TMDbResponse<TMDbTrendingMovie>>(
+  const response = await tmdbClient.get<TMDbResponse<TMDbNowShowingMovie>>(
     TMDB_ENDPOINTS.TRENDING,
   );
   return response.data;

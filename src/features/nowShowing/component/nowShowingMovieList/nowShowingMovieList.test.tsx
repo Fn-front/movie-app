@@ -5,11 +5,6 @@ import type { NowShowingMovie } from '@/lib/types';
 
 // --- Mocks ---
 
-const mockUseNowShowingMovies = jest.fn();
-jest.mock('@/features/nowShowing/hooks/useNowShowingMovies', () => ({
-  useNowShowingMovies: () => mockUseNowShowingMovies(),
-}));
-
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: ({
     movie,
@@ -69,45 +64,9 @@ describe('NowShowingMovieList', () => {
     jest.clearAllMocks();
   });
 
-  describe('ローディング状態', () => {
-    it('ローディング中にセクションタイトルとローディング表示がされる', () => {
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: [],
-        isLoading: true,
-        isError: false,
-      });
-
-      render(<NowShowingMovieList />);
-      expect(screen.getByText('劇場公開中の人気作品')).toBeInTheDocument();
-      expect(screen.getByText('読み込み中...')).toBeInTheDocument();
-    });
-  });
-
-  describe('エラー状態', () => {
-    it('エラー時にエラーメッセージが表示される', () => {
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: [],
-        isLoading: false,
-        isError: true,
-      });
-
-      render(<NowShowingMovieList />);
-      expect(screen.getByText('劇場公開中の人気作品')).toBeInTheDocument();
-      expect(
-        screen.getByText('劇場公開中の人気映画の取得に失敗しました'),
-      ).toBeInTheDocument();
-    });
-  });
-
   describe('空状態', () => {
     it('データが空の場合に空メッセージが表示される', () => {
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: [],
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<NowShowingMovieList />);
+      render(<NowShowingMovieList movies={[]} />);
       expect(screen.getByText('劇場公開中の人気作品')).toBeInTheDocument();
       expect(
         screen.getByText('劇場公開中の人気映画データがありません'),
@@ -118,13 +77,8 @@ describe('NowShowingMovieList', () => {
   describe('データ表示', () => {
     it('映画カードが表示される', () => {
       const movies = createMockMovies(3);
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: movies,
-        isLoading: false,
-        isError: false,
-      });
 
-      render(<NowShowingMovieList />);
+      render(<NowShowingMovieList movies={movies} />);
       expect(screen.getByText('劇場公開中の人気作品')).toBeInTheDocument();
       expect(screen.getByText('人気映画 1')).toBeInTheDocument();
       expect(screen.getByText('人気映画 2')).toBeInTheDocument();
@@ -132,48 +86,24 @@ describe('NowShowingMovieList', () => {
     });
 
     it('リストにrole=listが設定される', () => {
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: createMockMovies(1),
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<NowShowingMovieList />);
+      render(<NowShowingMovieList movies={createMockMovies(1)} />);
       expect(screen.getByRole('list')).toBeInTheDocument();
     });
 
     it('各カードにrole=listitemが設定される', () => {
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: createMockMovies(3),
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<NowShowingMovieList />);
+      render(<NowShowingMovieList movies={createMockMovies(3)} />);
       expect(screen.getAllByRole('listitem')).toHaveLength(3);
     });
 
     it('ランクバッジが表示される', () => {
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: createMockMovies(3),
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<NowShowingMovieList />);
+      render(<NowShowingMovieList movies={createMockMovies(3)} />);
       expect(screen.getByText('1')).toBeInTheDocument();
       expect(screen.getByText('2')).toBeInTheDocument();
       expect(screen.getByText('3')).toBeInTheDocument();
     });
 
     it('NowShowingMovieがMovieCacheItemに変換されてMovieTileに渡される', () => {
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: createMockMovies(1),
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<NowShowingMovieList />);
+      render(<NowShowingMovieList movies={createMockMovies(1)} />);
       // tmdb_movie_id (100) がMovieTileのmovie.idとして使われる
       expect(screen.getByTestId('movie-tile-100')).toBeInTheDocument();
     });
@@ -181,13 +111,7 @@ describe('NowShowingMovieList', () => {
 
   describe('モーダル連携', () => {
     it('カードクリックで映画詳細モーダルが表示される', () => {
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: createMockMovies(1),
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<NowShowingMovieList />);
+      render(<NowShowingMovieList movies={createMockMovies(1)} />);
 
       fireEvent.click(
         screen.getByRole('button', {
@@ -199,13 +123,7 @@ describe('NowShowingMovieList', () => {
     });
 
     it('モーダルの閉じるボタンでモーダルが非表示になる', () => {
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: createMockMovies(1),
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<NowShowingMovieList />);
+      render(<NowShowingMovieList movies={createMockMovies(1)} />);
 
       fireEvent.click(
         screen.getByRole('button', {
@@ -223,13 +141,7 @@ describe('NowShowingMovieList', () => {
 
   describe('アクセシビリティ', () => {
     it('sectionにaria-labelが設定される', () => {
-      mockUseNowShowingMovies.mockReturnValue({
-        nowShowingMovies: createMockMovies(1),
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<NowShowingMovieList />);
+      render(<NowShowingMovieList movies={createMockMovies(1)} />);
       expect(
         screen.getByRole('region', { name: '劇場公開中の人気作品' }),
       ).toBeInTheDocument();

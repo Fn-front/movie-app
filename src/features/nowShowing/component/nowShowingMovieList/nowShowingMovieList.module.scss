@@ -76,22 +76,6 @@
     border-radius: $border-radius-full;
   }
 
-  &__loading {
-    margin-top: $spacing-4;
-
-    @include flex-center;
-  }
-
-  &__error {
-    margin-top: $spacing-4;
-    padding: $spacing-4;
-    font-size: $font-size-sm;
-    color: $error-dark;
-    text-align: center;
-    background-color: color-alpha(--error-main, 10%);
-    border-radius: $border-radius-md;
-  }
-
   &__empty {
     margin-top: $spacing-4;
     padding: $spacing-4;

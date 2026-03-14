@@ -1,21 +1,14 @@
 /**
- * TMDb Popular API から人気映画を取得し trending_movies テーブルに同期する
+ * TMDb Discover API から日本で劇場公開中の人気映画を取得し trending_movies テーブルに同期する
  */
 
 import { createClient } from '@supabase/supabase-js';
 
 import { TRENDING_DISPLAY_COUNT } from '@/constants/trending';
-import { getMovieReleaseDates, getPopularMovies } from '@/lib/tmdb/tmdb';
-import type { Movie } from '@/lib/types';
+import { discoverMovies } from '@/lib/tmdb/tmdb';
 
-/** 劇場公開のリリースタイプ（2: Theatrical limited, 3: Theatrical） */
-const THEATRICAL_RELEASE_TYPES = [2, 3];
-
-/** リリースタイプ判定対象の国コード（日本公開のみ） */
-const RELEASE_DATE_REGION = 'JP';
-
-/** Popular API の最大取得ページ数 */
-const MAX_PAGES = 5;
+/** 公開日範囲（現在から過去何ヶ月分を対象とするか） */
+const RELEASE_DATE_RANGE_MONTHS = 3;
 
 /**
  * トレンド映画同期結果の型
@@ -28,73 +21,17 @@ export interface TrendingSyncResult {
 }
 
 /**
- * 映画が劇場公開作品かどうかを判定する
- *
- * JP リージョンで劇場公開（type 2 or 3）のリリースがあればtrue
+ * YYYY-MM-DD 形式の日付文字列を返す
  */
-async function isTheatricalRelease(movieId: number): Promise<boolean> {
-  try {
-    const releaseDates = await getMovieReleaseDates(movieId);
-
-    const jpRelease = releaseDates.find(
-      (country) => country.iso_3166_1 === RELEASE_DATE_REGION,
-    );
-    if (!jpRelease) return false;
-
-    return jpRelease.release_dates.some((rd) =>
-      THEATRICAL_RELEASE_TYPES.includes(rd.type),
-    );
-  } catch {
-    // リリース日取得に失敗した場合は除外しない（安全側に倒す）
-    return true;
-  }
+function formatDate(date: Date): string {
+  return date.toISOString().split('T')[0];
 }
 
 /**
- * Popular API から JP 劇場公開作品を必要件数集める
- *
- * 複数ページを順次取得し、JP劇場公開フィルターを通過した作品が
- * 必要件数に達するか、最大ページ数に到達したら終了する。
- */
-async function collectTheatricalMovies(): Promise<{
-  movies: Movie[];
-  totalFetched: number;
-}> {
-  const collected: Movie[] = [];
-  let totalFetched = 0;
-
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const response = await getPopularMovies(page);
-
-    if (response.results.length === 0) break;
-
-    totalFetched += response.results.length;
-
-    const results = await Promise.all(
-      response.results.map(async (movie) => ({
-        movie,
-        isTheatrical: await isTheatricalRelease(movie.id),
-      })),
-    );
-
-    for (const r of results) {
-      if (r.isTheatrical) {
-        collected.push(r.movie);
-        if (collected.length >= TRENDING_DISPLAY_COUNT) {
-          return { movies: collected, totalFetched };
-        }
-      }
-    }
-  }
-
-  return { movies: collected, totalFetched };
-}
-
-/**
- * TMDb Popular API から人気映画を取得し trending_movies テーブルに同期する
+ * TMDb Discover API から日本で劇場公開中の人気映画を取得し trending_movies テーブルに同期する
  *
  * RPC関数（sync_trending_movies）でトランザクション内のDELETE → INSERTをアトミックに実行。
- * 日本で劇場公開（JPでtype 2 or 3）の作品のみにフィルタリングし、最大10件を保存。
+ * Discover API の with_release_type=2|3 で劇場公開作品のみを取得し、最大10件を保存。
  * TMDb API 取得に失敗した場合は既存データを保持する。
  *
  * @returns 同期結果
@@ -111,12 +48,23 @@ export async function syncTrendingMovies(): Promise<TrendingSyncResult> {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // 1. TMDb Popular API から JP 劇場公開作品を収集（失敗時は既存データを保持）
-  const { movies, totalFetched } = await collectTheatricalMovies();
+  // 1. TMDb Discover API から日本で劇場公開中の人気映画を取得
+  const now = new Date();
+  const rangeStart = new Date(now);
+  rangeStart.setMonth(rangeStart.getMonth() - RELEASE_DATE_RANGE_MONTHS);
 
-  if (movies.length === 0) {
-    return { fetched: totalFetched, synced: 0 };
+  const response = await discoverMovies({
+    sort_by: 'popularity.desc',
+    with_release_type: '2|3',
+    'release_date.gte': formatDate(rangeStart),
+    'release_date.lte': formatDate(now),
+  });
+
+  if (response.results.length === 0) {
+    return { fetched: 0, synced: 0 };
   }
+
+  const movies = response.results.slice(0, TRENDING_DISPLAY_COUNT);
 
   // 2. RPC関数でトランザクション内の全件洗い替え（DELETE → INSERT）をアトミックに実行
   const rows = movies.map((movie, index) => ({
@@ -138,7 +86,7 @@ export async function syncTrendingMovies(): Promise<TrendingSyncResult> {
   }
 
   return {
-    fetched: totalFetched,
+    fetched: response.results.length,
     synced: movies.length,
   };
 }

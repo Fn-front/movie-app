@@ -242,6 +242,9 @@ export const TMDB_ENDPOINTS = {
   MOVIE_KEYWORDS: (movieId: number | string) => `/movie/${movieId}/keywords`,
   /** トレンド映画（週次） */
   TRENDING: '/trending/movie/week',
+  /** 映画リリース日（国別リリースタイプ取得用） */
+  MOVIE_RELEASE_DATES: (movieId: number | string) =>
+    `/movie/${movieId}/release_dates`,
 } as const;
 
 /**

@@ -7,6 +7,7 @@ import type {
   Movie,
   MovieDetail,
   MovieSearchParams,
+  TMDbReleaseDateCountry,
   TMDbResponse,
   TMDbTrendingMovie,
 } from '@/lib/types';
@@ -282,6 +283,22 @@ export async function getTrendingMovies(): Promise<
     TMDB_ENDPOINTS.TRENDING,
   );
   return response.data;
+}
+
+/**
+ * 映画のリリース日情報を取得（国別リリースタイプ判定用）
+ *
+ * @param movieId - 映画ID
+ * @returns 国別リリース日情報
+ */
+export async function getMovieReleaseDates(
+  movieId: number,
+): Promise<TMDbReleaseDateCountry[]> {
+  const response = await tmdbClient.get<{
+    id: number;
+    results: TMDbReleaseDateCountry[];
+  }>(TMDB_ENDPOINTS.MOVIE_RELEASE_DATES(movieId));
+  return response.data.results;
 }
 
 /**

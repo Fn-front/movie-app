@@ -11,8 +11,11 @@ import { syncTrendingMovies } from './syncTrendingMovies';
 // --- Mocks ---
 
 const mockGetTrendingMovies = jest.fn();
+const mockGetMovieReleaseDates = jest.fn();
 jest.mock('@/lib/tmdb/tmdb', () => ({
   getTrendingMovies: () => mockGetTrendingMovies(),
+  getMovieReleaseDates: (movieId: number) =>
+    mockGetMovieReleaseDates(movieId),
 }));
 
 const mockRpc = jest.fn();
@@ -38,6 +41,26 @@ const createTrendingMovies = (count: number) =>
     popularity: 100 + i,
   }));
 
+/** JP劇場公開ありのリリース日レスポンス */
+const theatricalReleaseDates = [
+  {
+    iso_3166_1: 'JP',
+    release_dates: [{ type: 3, release_date: '2026-03-01' }],
+  },
+];
+
+/** ストリーミングのみのリリース日レスポンス */
+const streamingOnlyReleaseDates = [
+  {
+    iso_3166_1: 'JP',
+    release_dates: [{ type: 4, release_date: '2026-03-01' }],
+  },
+  {
+    iso_3166_1: 'US',
+    release_dates: [{ type: 4, release_date: '2026-02-15' }],
+  },
+];
+
 // --- Tests ---
 
 describe('syncTrendingMovies', () => {
@@ -50,6 +73,8 @@ describe('syncTrendingMovies', () => {
       NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
       SUPABASE_SERVICE_ROLE_KEY: 'test-key',
     };
+    // デフォルト: 全て劇場公開
+    mockGetMovieReleaseDates.mockResolvedValue(theatricalReleaseDates);
   });
 
   afterEach(() => {
@@ -64,7 +89,7 @@ describe('syncTrendingMovies', () => {
     );
   });
 
-  it('TMDb APIから取得した映画を10件に制限してDBに保存する', async () => {
+  it('劇場公開作品のみを10件に制限してDBに保存する', async () => {
     mockGetTrendingMovies.mockResolvedValue({
       results: createTrendingMovies(20),
     });
@@ -74,15 +99,55 @@ describe('syncTrendingMovies', () => {
     expect(result.fetched).toBe(20);
     expect(result.synced).toBe(10);
     expect(mockRpc).toHaveBeenCalledTimes(1);
-    expect(mockRpc).toHaveBeenCalledWith('sync_trending_movies', {
-      movies: expect.arrayContaining([
-        expect.objectContaining({ display_order: 1 }),
-        expect.objectContaining({ display_order: 10 }),
-      ]),
-    });
 
     const rpcMovies = mockRpc.mock.calls[0][1].movies;
     expect(rpcMovies).toHaveLength(10);
+  });
+
+  it('ストリーミング作品を除外する', async () => {
+    const movies = createTrendingMovies(5);
+    mockGetTrendingMovies.mockResolvedValue({ results: movies });
+
+    // Movie 2, 4 はストリーミングのみ
+    mockGetMovieReleaseDates.mockImplementation((movieId: number) => {
+      if (movieId === 2 || movieId === 4) {
+        return Promise.resolve(streamingOnlyReleaseDates);
+      }
+      return Promise.resolve(theatricalReleaseDates);
+    });
+
+    const result = await syncTrendingMovies();
+
+    expect(result.synced).toBe(3);
+    const rpcMovies = mockRpc.mock.calls[0][1].movies;
+    expect(rpcMovies.map((m: { tmdb_movie_id: number }) => m.tmdb_movie_id)).toEqual([1, 3, 5]);
+    // display_orderが連番になる
+    expect(rpcMovies.map((m: { display_order: number }) => m.display_order)).toEqual([1, 2, 3]);
+  });
+
+  it('US劇場公開のみの作品も含まれる', async () => {
+    mockGetTrendingMovies.mockResolvedValue({
+      results: createTrendingMovies(1),
+    });
+    mockGetMovieReleaseDates.mockResolvedValue([
+      {
+        iso_3166_1: 'US',
+        release_dates: [{ type: 2, release_date: '2026-03-01' }],
+      },
+    ]);
+
+    const result = await syncTrendingMovies();
+    expect(result.synced).toBe(1);
+  });
+
+  it('リリース日取得失敗時は安全側に倒して含める', async () => {
+    mockGetTrendingMovies.mockResolvedValue({
+      results: createTrendingMovies(1),
+    });
+    mockGetMovieReleaseDates.mockRejectedValue(new Error('API error'));
+
+    const result = await syncTrendingMovies();
+    expect(result.synced).toBe(1);
   });
 
   it('取得結果が0件の場合DBへの書き込みをスキップする', async () => {
@@ -91,6 +156,19 @@ describe('syncTrendingMovies', () => {
     const result = await syncTrendingMovies();
 
     expect(result.fetched).toBe(0);
+    expect(result.synced).toBe(0);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('全てストリーミングの場合は0件でDB書き込みをスキップする', async () => {
+    mockGetTrendingMovies.mockResolvedValue({
+      results: createTrendingMovies(3),
+    });
+    mockGetMovieReleaseDates.mockResolvedValue(streamingOnlyReleaseDates);
+
+    const result = await syncTrendingMovies();
+
+    expect(result.fetched).toBe(3);
     expect(result.synced).toBe(0);
     expect(mockRpc).not.toHaveBeenCalled();
   });

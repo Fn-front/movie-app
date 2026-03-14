@@ -381,6 +381,26 @@ export interface TMDbTrendingMovie {
 }
 
 /**
+ * TMDb リリース日レスポンスの個別リリース情報
+ */
+export interface TMDbReleaseDate {
+  /** リリースタイプ（1:Premiere, 2:Theatrical limited, 3:Theatrical, 4:Digital, 5:Physical, 6:TV） */
+  type: number;
+  /** リリース日 */
+  release_date: string;
+}
+
+/**
+ * TMDb リリース日レスポンスの国別情報
+ */
+export interface TMDbReleaseDateCountry {
+  /** 国コード（ISO 3166-1） */
+  iso_3166_1: string;
+  /** リリース日配列 */
+  release_dates: TMDbReleaseDate[];
+}
+
+/**
  * アイコン共通プロパティ
  */
 export interface IconProps {

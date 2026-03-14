@@ -9,7 +9,7 @@ import GitHub from 'next-auth/providers/github';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
-import { AUTH_ERROR_MESSAGES } from '@/constants';
+import { AUTH_ERROR_MESSAGES, SESSION_CONFIG } from '@/constants';
 import { OTP_CONFIG } from '@/constants/otp';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
@@ -162,7 +162,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   session: {
     strategy: 'jwt',
-    maxAge: 24 * 60 * 60, // 24時間
+    maxAge: SESSION_CONFIG.IDLE_MAX_AGE,
   },
 
   pages: {
@@ -273,6 +273,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = 'user';
           token.passwordChangedAt = null;
           token.lastPasswordCheck = Date.now();
+          token.issuedAt = Date.now();
 
           if (supabase && user.id) {
             const { data: dbUser } = await supabase
@@ -297,6 +298,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             (user as unknown as { passwordChangedAt: string | null })
               .passwordChangedAt ?? null;
           token.lastPasswordCheck = Date.now();
+          token.issuedAt = Date.now();
+        }
+      }
+
+      // 絶対有効期限チェック（ログインから7日間）
+      if (token.issuedAt && !token.invalidated) {
+        const elapsed = Date.now() - token.issuedAt;
+        if (elapsed > SESSION_CONFIG.ABSOLUTE_MAX_AGE_MS) {
+          token.invalidated = true;
+          return token;
         }
       }
 

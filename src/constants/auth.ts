@@ -75,6 +75,16 @@ export const TOAST_MESSAGES = {
 } as const;
 
 /**
+ * セッション設定
+ */
+export const SESSION_CONFIG = {
+  /** 非アクティブ時のセッション有効期限（秒） — 24時間 */
+  IDLE_MAX_AGE: 24 * 60 * 60,
+  /** 絶対有効期限（ミリ秒） — 7日間（アクティブでも強制ログアウト） */
+  ABSOLUTE_MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000,
+} as const;
+
+/**
  * bcryptハッシュのコスト
  */
 export const BCRYPT_COST = 12;

@@ -89,6 +89,12 @@ jobs:
           E2E_TEST_USER_EMAIL: ${{ secrets.E2E_TEST_USER_EMAIL }}
           E2E_TEST_USER_PASSWORD: ${{ secrets.E2E_TEST_USER_PASSWORD }}
 
+      - name: playwright-report-summary
+        uses: daun/playwright-report-summary@v3
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        with:
+          report-file: playwright-report/results.json
+
       - name: upload-playwright-report
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

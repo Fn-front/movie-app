@@ -16,9 +16,7 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
     mockDiscoverMovies(params),
 }));
 
-const mockRpc = jest
-  .fn()
-  .mockReturnValue(Promise.resolve({ error: null }));
+const mockRpc = jest.fn().mockReturnValue(Promise.resolve({ error: null }));
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: () => ({

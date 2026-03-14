@@ -9,8 +9,9 @@ import GitHub from 'next-auth/providers/github';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
-import { AUTH_ERROR_MESSAGES } from '@/constants';
+import { AUTH_ERROR_MESSAGES, SESSION_CONFIG } from '@/constants';
 import { OTP_CONFIG } from '@/constants/otp';
+import { isSessionExpired } from '@/lib/auth/sessionExpiry';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -162,7 +163,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   session: {
     strategy: 'jwt',
-    maxAge: 24 * 60 * 60, // 24時間
+    maxAge: SESSION_CONFIG.IDLE_MAX_AGE_S,
   },
 
   pages: {
@@ -273,6 +274,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = 'user';
           token.passwordChangedAt = null;
           token.lastPasswordCheck = Date.now();
+          token.issuedAt = Date.now();
 
           if (supabase && user.id) {
             const { data: dbUser } = await supabase
@@ -297,7 +299,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             (user as unknown as { passwordChangedAt: string | null })
               .passwordChangedAt ?? null;
           token.lastPasswordCheck = Date.now();
+          token.issuedAt = Date.now();
         }
+      }
+
+      // 絶対有効期限チェック（ログインから7日間）
+      if (!token.invalidated && isSessionExpired(token.issuedAt)) {
+        token.invalidated = true;
+        return token;
       }
 
       // パスワード変更によるセッション無効化チェック（5分間隔）

@@ -993,18 +993,18 @@
 - [x] 単体テスト
 
 ### Step 4: UIコンポーネント（`feature/trending-movies-ui`）
-- [ ] `TrendingMovieCard`コンポーネント作成
+- [x] `TrendingMovieCard`コンポーネント作成
   - ポスター画像、タイトル、評価表示
   - 映画詳細ページへのリンク
   - React.memo + displayName
-- [ ] `TrendingMovieList`コンポーネント作成
+- [x] `TrendingMovieList`コンポーネント作成
   - 横スクロールレイアウト（10件横並び）
   - ローディング・エラー・空状態の表示
   - React.memo + displayName
-- [ ] SCSS Modules（横スクロール用スタイル）
+- [x] SCSS Modules（横スクロール用スタイル）
   - デザインシステム変数使用
   - スクロールバースタイリング
-- [ ] 単体テスト
+- [x] 単体テスト
 
 ### Step 5: ホームページ統合（`feature/trending-movies-integration`）
 - [ ] ホームページに`TrendingMovieList`セクション配置

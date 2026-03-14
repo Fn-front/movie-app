@@ -54,11 +54,7 @@ export const recommendationSchema = z.object({
   vote_average: z.number().nullable(),
   genre_ids: z.array(z.number().int()).nullable(),
   reason: z.string().min(1),
-  display_order: z
-    .number()
-    .int()
-    .min(1)
-    .max(RECOMMENDATIONS_MAX_COUNT),
+  display_order: z.number().int().min(1).max(RECOMMENDATIONS_MAX_COUNT),
 });
 
 /**

@@ -955,7 +955,49 @@
 
 ---
 
-## フェーズ8: AIレコメンド機能（設計書: `.claude/documents/recommendations-design.md`）
+## フェーズ8: トレンド映画表示
+
+> TMDb Trending APIを使用し、今週のトレンド映画をホームページに横スクロールで表示する。
+
+### Step 1: API・型定義・定数（`feature/trending-movies-api`）
+- [ ] トレンド映画用の型定義作成（`lib/types/trending.ts`）
+  - TMDb Trending APIレスポンス型
+  - アプリ内で使用するトレンド映画型
+- [ ] トレンド定数追加（`lib/constants/trending.ts`）
+  - TIME_WINDOW（`week`）、DISPLAY_COUNT（10）、QUERY_KEY、STALE_TIME
+  - セクションタイトル等のメッセージ定数
+- [ ] TMDb Trending APIクライアント関数作成（`lib/api/trending.ts`）
+  - `GET /trending/movie/week`（`language=ja-JP`）
+  - レスポンスのパース・10件制限
+- [ ] 単体テスト
+
+### Step 2: カスタムフック（`feature/trending-movies-hook`）
+- [ ] `useTrendingMovies`フック作成
+  - React Queryでトレンド映画データ取得
+  - ローディング・エラー状態管理
+- [ ] 単体テスト
+
+### Step 3: UIコンポーネント（`feature/trending-movies-ui`）
+- [ ] `TrendingMovieCard`コンポーネント作成
+  - ポスター画像、タイトル、評価表示
+  - 映画詳細ページへのリンク
+  - React.memo + displayName
+- [ ] `TrendingMovieList`コンポーネント作成
+  - 横スクロールレイアウト（10件横並び）
+  - ローディング・エラー・空状態の表示
+  - React.memo + displayName
+- [ ] SCSS Modules（横スクロール用スタイル）
+  - デザインシステム変数使用
+  - スクロールバースタイリング
+- [ ] 単体テスト
+
+### Step 4: ホームページ統合（`feature/trending-movies-integration`）
+- [ ] ホームページに`TrendingMovieList`セクション配置
+- [ ] 結合テスト
+
+---
+
+## フェーズ9: AIレコメンド機能（設計書: `.claude/documents/recommendations-design.md`）
 
 > テスティングトロフィーモデルを適用。各Stepでテストレイヤーを明示する。
 
@@ -1122,7 +1164,7 @@
 
 ---
 
-## フェーズ9: 品質保証
+## フェーズ10: 品質保証
 
 > テスト基盤は確立済み（テスティングトロフィーモデル導入済み、カバレッジ80%以上達成済み）。
 > 本フェーズではパフォーマンス最適化とセキュリティ監査に集中する。
@@ -1227,13 +1269,13 @@
 
 ### Step 4: フェーズ7-8テストカバレッジ確認（`setup/phase7-8-coverage-review`）
 
-- [ ] フェーズ7-8で追加したコードのカバレッジ確認
+- [ ] フェーズ7-9で追加したコードのカバレッジ確認
 - [ ] カバレッジが80%を下回っている箇所のテスト追加
 - [ ] 最終カバレッジレポート取得・記録
 
 ---
 
-## フェーズ10: デプロイ・本番リリース（数日）
+## フェーズ11: デプロイ・本番リリース（数日）
 
 ### デプロイ準備
 - [ ] Vercelプロジェクト作成
@@ -1253,7 +1295,7 @@
 
 ---
 
-## フェーズ11: 将来的な機能（優先度低）
+## フェーズ12: 将来的な機能（優先度低）
 
 ### レビュー・評価機能
 - [ ] データベーススキーマ実装
@@ -1280,7 +1322,7 @@
 
 ---
 
-## フェーズ8.5: 認証機能拡張（完了済み）
+## フェーズ9.5: 認証機能拡張（完了済み）
 
 ### Step 1: DB・テーブル準備
 - [x] accountsテーブル作成（ソーシャルログインアカウント連携用）

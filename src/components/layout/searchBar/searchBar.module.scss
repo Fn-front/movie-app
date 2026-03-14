@@ -68,7 +68,7 @@
 
       &:focus-within {
         border-color: $primary-500;
-        box-shadow: 0 0 0 3px rgba($primary-500, 0.1);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-500) 10%, transparent);
       }
     }
   }
@@ -158,9 +158,9 @@
 
     position: fixed;
     inset: 0;
-    // ヘッダー高さ（padding-y: $spacing-3 × 2 + ボタン高さ4rem = 約52px）に依存
-    top: ($spacing-3 * 2) + 4rem;
-    z-index: calc($z-index-fixed - 1);
+    // ヘッダー高さ（padding-y: spacing-3 × 2 + ボタン高さ4rem = 約52px）に依存
+    top: calc(var(--spacing-3) * 2 + 4rem);
+    z-index: calc(var(--z-index-fixed) - 1);
     background-color: $overlay-light;
 
     // lg以上で非表示

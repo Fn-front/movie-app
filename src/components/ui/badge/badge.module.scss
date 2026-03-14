@@ -30,25 +30,25 @@
 
   // バリアント: Primary
   &__variant__primary {
-    background-color: rgba($primary-500, 0.1);
+    background-color: color-mix(in srgb, var(--primary-500) 10%, transparent);
     color: $primary-500;
   }
 
   // バリアント: Success
   &__variant__success {
-    background-color: rgba($success-main, 0.1);
+    background-color: color-mix(in srgb, var(--success-main) 10%, transparent);
     color: $success-main;
   }
 
   // バリアント: Error
   &__variant__error {
-    background-color: rgba($error-main, 0.1);
+    background-color: color-mix(in srgb, var(--error-main) 10%, transparent);
     color: $error-main;
   }
 
   // バリアント: Warning
   &__variant__warning {
-    background-color: rgba($warning-main, 0.1);
+    background-color: color-mix(in srgb, var(--warning-main) 10%, transparent);
     color: $warning-main;
   }
 

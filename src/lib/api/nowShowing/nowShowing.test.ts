@@ -3,10 +3,10 @@
  */
 
 /**
- * トレンド映画APIクライアント テスト
+ * 劇場公開中の人気映画APIクライアント テスト
  */
 
-import { getTrendingMovies } from './trending';
+import { getNowShowingMovies } from './nowShowing';
 
 // --- Mocks ---
 
@@ -46,13 +46,13 @@ jest.mock('@/lib/supabase/client', () => ({
 
 // --- Tests ---
 
-describe('getTrendingMovies', () => {
+describe('getNowShowingMovies', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('display_order昇順でトレンド映画を取得する', async () => {
-    const result = await getTrendingMovies();
+  it('display_order昇順で劇場公開中の人気映画を取得する', async () => {
+    const result = await getNowShowingMovies();
 
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe('Test Movie');

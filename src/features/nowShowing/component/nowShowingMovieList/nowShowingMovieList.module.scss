@@ -1,7 +1,7 @@
 @use '@/styles/variables' as *;
 @use '@/styles/mixins' as *;
 
-.c_trending_movie_list {
+.c_now_showing_movie_list {
   &__header {
     display: flex;
     align-items: center;

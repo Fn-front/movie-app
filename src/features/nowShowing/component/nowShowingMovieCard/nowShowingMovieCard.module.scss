@@ -1,7 +1,7 @@
 @use '@/styles/variables' as *;
 @use '@/styles/mixins' as *;
 
-.c_trending_movie_card {
+.c_now_showing_movie_card {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;

@@ -11,10 +11,10 @@ jest.mock('@/components/layout/appLayout/appLayout', () => ({
 }));
 
 jest.mock(
-  '@/features/trending/component/trendingMovieList/trendingMovieList',
+  '@/features/nowShowing/component/nowShowingMovieList/nowShowingMovieList',
   () => ({
-    TrendingMovieList: () => (
-      <div data-testid='trending-movie-list'>トレンド映画</div>
+    NowShowingMovieList: () => (
+      <div data-testid='now-showing-movie-list'>劇場公開中の人気映画</div>
     ),
   }),
 );
@@ -22,18 +22,18 @@ jest.mock(
 // --- Tests ---
 
 describe('HomePage', () => {
-  it('AppLayout内にTrendingMovieListが表示される', () => {
+  it('AppLayout内にNowShowingMovieListが表示される', () => {
     render(<HomePage />);
 
     expect(screen.getByTestId('app-layout')).toBeInTheDocument();
-    expect(screen.getByTestId('trending-movie-list')).toBeInTheDocument();
+    expect(screen.getByTestId('now-showing-movie-list')).toBeInTheDocument();
   });
 
-  it('TrendingMovieListがAppLayoutの子要素である', () => {
+  it('NowShowingMovieListがAppLayoutの子要素である', () => {
     render(<HomePage />);
 
     const appLayout = screen.getByTestId('app-layout');
-    const trendingList = screen.getByTestId('trending-movie-list');
-    expect(appLayout).toContainElement(trendingList);
+    const nowShowingList = screen.getByTestId('now-showing-movie-list');
+    expect(appLayout).toContainElement(nowShowingList);
   });
 });

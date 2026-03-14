@@ -3,10 +3,10 @@
  */
 
 /**
- * トレンド映画同期ロジック テスト
+ * 劇場公開中の人気映画同期ロジック テスト
  */
 
-import { syncTrendingMovies } from './syncTrendingMovies';
+import { syncNowShowingMovies } from './syncNowShowingMovies';
 
 // --- Mocks ---
 
@@ -40,7 +40,7 @@ const createMovies = (count: number, startId: number = 1) =>
 
 // --- Tests ---
 
-describe('syncTrendingMovies', () => {
+describe('syncNowShowingMovies', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -61,13 +61,13 @@ describe('syncTrendingMovies', () => {
   it('Supabase環境変数が未設定の場合エラーをスローする', async () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = '';
 
-    await expect(syncTrendingMovies()).rejects.toThrow(
+    await expect(syncNowShowingMovies()).rejects.toThrow(
       'Supabase環境変数が設定されていません',
     );
   });
 
   it('Discover APIに劇場公開フィルターと日付範囲を渡す', async () => {
-    await syncTrendingMovies();
+    await syncNowShowingMovies();
 
     expect(mockDiscoverMovies).toHaveBeenCalledTimes(1);
     const params = mockDiscoverMovies.mock.calls[0][0];
@@ -78,7 +78,7 @@ describe('syncTrendingMovies', () => {
   });
 
   it('10件に制限してDBに保存する', async () => {
-    const result = await syncTrendingMovies();
+    const result = await syncNowShowingMovies();
 
     expect(result.fetched).toBe(20);
     expect(result.synced).toBe(10);
@@ -91,7 +91,7 @@ describe('syncTrendingMovies', () => {
   it('display_orderが1から連番になる', async () => {
     mockDiscoverMovies.mockResolvedValue({ results: createMovies(3) });
 
-    await syncTrendingMovies();
+    await syncNowShowingMovies();
 
     const rpcMovies = mockRpc.mock.calls[0][1].movies;
     expect(
@@ -102,7 +102,7 @@ describe('syncTrendingMovies', () => {
   it('取得結果が0件の場合DBへの書き込みをスキップする', async () => {
     mockDiscoverMovies.mockResolvedValue({ results: [] });
 
-    const result = await syncTrendingMovies();
+    const result = await syncNowShowingMovies();
 
     expect(result.fetched).toBe(0);
     expect(result.synced).toBe(0);
@@ -123,7 +123,7 @@ describe('syncTrendingMovies', () => {
       ],
     });
 
-    await syncTrendingMovies();
+    await syncNowShowingMovies();
 
     const rpcMovies = mockRpc.mock.calls[0][1].movies;
     expect(rpcMovies[0].release_date).toBeNull();
@@ -132,7 +132,7 @@ describe('syncTrendingMovies', () => {
   it('TMDb API取得失敗時はエラーをスローし既存データを保持する', async () => {
     mockDiscoverMovies.mockRejectedValue(new Error('API error'));
 
-    await expect(syncTrendingMovies()).rejects.toThrow('API error');
+    await expect(syncNowShowingMovies()).rejects.toThrow('API error');
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
@@ -141,8 +141,8 @@ describe('syncTrendingMovies', () => {
       Promise.resolve({ error: { message: 'RPC failed' } }),
     );
 
-    await expect(syncTrendingMovies()).rejects.toThrow(
-      'トレンド映画の同期に失敗しました: RPC failed',
+    await expect(syncNowShowingMovies()).rejects.toThrow(
+      '劇場公開中の人気映画の同期に失敗しました: RPC failed',
     );
   });
 });

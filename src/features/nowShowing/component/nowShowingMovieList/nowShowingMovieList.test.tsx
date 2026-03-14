@@ -1,13 +1,13 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 
-import { TrendingMovieList } from './trendingMovieList';
+import { NowShowingMovieList } from './nowShowingMovieList';
 import type { TrendingMovie } from '@/lib/types';
 
 // --- Mocks ---
 
-const mockUseTrendingMovies = jest.fn();
-jest.mock('@/features/trending/hooks/useTrendingMovies', () => ({
-  useTrendingMovies: () => mockUseTrendingMovies(),
+const mockUseNowShowingMovies = jest.fn();
+jest.mock('@/features/nowShowing/hooks/useNowShowingMovies', () => ({
+  useNowShowingMovies: () => mockUseNowShowingMovies(),
 }));
 
 jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
@@ -28,12 +28,12 @@ jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
 
 // --- Helpers ---
 
-const createMockTrendingMovies = (count: number): TrendingMovie[] =>
+const createMockMovies = (count: number): TrendingMovie[] =>
   Array.from({ length: count }, (_, i) => ({
     id: `uuid-${i + 1}`,
     tmdb_movie_id: 100 + i,
-    title: `トレンド映画 ${i + 1}`,
-    poster_path: `/trending${i + 1}.jpg`,
+    title: `人気映画 ${i + 1}`,
+    poster_path: `/poster${i + 1}.jpg`,
     release_date: '2026-03-01',
     vote_average: 7.5,
     popularity: 200 - i,
@@ -43,109 +43,117 @@ const createMockTrendingMovies = (count: number): TrendingMovie[] =>
 
 // --- Tests ---
 
-describe('TrendingMovieList', () => {
+describe('NowShowingMovieList', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   describe('ローディング状態', () => {
     it('ローディング中にセクションタイトルとローディング表示がされる', () => {
-      mockUseTrendingMovies.mockReturnValue({
-        trendingMovies: [],
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: [],
         isLoading: true,
         isError: false,
       });
 
-      render(<TrendingMovieList />);
-      expect(screen.getByText('今週のトレンド')).toBeInTheDocument();
+      render(<NowShowingMovieList />);
+      expect(
+        screen.getByText('劇場公開中の人気作品'),
+      ).toBeInTheDocument();
       expect(screen.getByText('読み込み中...')).toBeInTheDocument();
     });
   });
 
   describe('エラー状態', () => {
     it('エラー時にエラーメッセージが表示される', () => {
-      mockUseTrendingMovies.mockReturnValue({
-        trendingMovies: [],
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: [],
         isLoading: false,
         isError: true,
       });
 
-      render(<TrendingMovieList />);
-      expect(screen.getByText('今週のトレンド')).toBeInTheDocument();
+      render(<NowShowingMovieList />);
       expect(
-        screen.getByText('トレンド映画の取得に失敗しました'),
+        screen.getByText('劇場公開中の人気作品'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('劇場公開中の人気映画の取得に失敗しました'),
       ).toBeInTheDocument();
     });
   });
 
   describe('空状態', () => {
     it('データが空の場合に空メッセージが表示される', () => {
-      mockUseTrendingMovies.mockReturnValue({
-        trendingMovies: [],
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: [],
         isLoading: false,
         isError: false,
       });
 
-      render(<TrendingMovieList />);
-      expect(screen.getByText('今週のトレンド')).toBeInTheDocument();
+      render(<NowShowingMovieList />);
       expect(
-        screen.getByText('トレンド映画データがありません'),
+        screen.getByText('劇場公開中の人気作品'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText('劇場公開中の人気映画データがありません'),
       ).toBeInTheDocument();
     });
   });
 
   describe('データ表示', () => {
-    it('トレンド映画カードが表示される', () => {
-      const movies = createMockTrendingMovies(3);
-      mockUseTrendingMovies.mockReturnValue({
-        trendingMovies: movies,
+    it('映画カードが表示される', () => {
+      const movies = createMockMovies(3);
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: movies,
         isLoading: false,
         isError: false,
       });
 
-      render(<TrendingMovieList />);
-      expect(screen.getByText('今週のトレンド')).toBeInTheDocument();
-      expect(screen.getByText('トレンド映画 1')).toBeInTheDocument();
-      expect(screen.getByText('トレンド映画 2')).toBeInTheDocument();
-      expect(screen.getByText('トレンド映画 3')).toBeInTheDocument();
+      render(<NowShowingMovieList />);
+      expect(
+        screen.getByText('劇場公開中の人気作品'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('人気映画 1')).toBeInTheDocument();
+      expect(screen.getByText('人気映画 2')).toBeInTheDocument();
+      expect(screen.getByText('人気映画 3')).toBeInTheDocument();
     });
 
     it('リストにrole=listが設定される', () => {
-      mockUseTrendingMovies.mockReturnValue({
-        trendingMovies: createMockTrendingMovies(1),
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: createMockMovies(1),
         isLoading: false,
         isError: false,
       });
 
-      render(<TrendingMovieList />);
+      render(<NowShowingMovieList />);
       expect(screen.getByRole('list')).toBeInTheDocument();
     });
 
     it('各カードにrole=listitemが設定される', () => {
-      mockUseTrendingMovies.mockReturnValue({
-        trendingMovies: createMockTrendingMovies(3),
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: createMockMovies(3),
         isLoading: false,
         isError: false,
       });
 
-      render(<TrendingMovieList />);
+      render(<NowShowingMovieList />);
       expect(screen.getAllByRole('listitem')).toHaveLength(3);
     });
   });
 
   describe('モーダル連携', () => {
     it('カードクリックで映画詳細モーダルが表示される', () => {
-      mockUseTrendingMovies.mockReturnValue({
-        trendingMovies: createMockTrendingMovies(1),
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: createMockMovies(1),
         isLoading: false,
         isError: false,
       });
 
-      render(<TrendingMovieList />);
+      render(<NowShowingMovieList />);
 
       fireEvent.click(
         screen.getByRole('button', {
-          name: 'トレンド映画 1の詳細を表示',
+          name: '人気映画 1の詳細を表示',
         }),
       );
       expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
@@ -153,17 +161,17 @@ describe('TrendingMovieList', () => {
     });
 
     it('モーダルの閉じるボタンでモーダルが非表示になる', () => {
-      mockUseTrendingMovies.mockReturnValue({
-        trendingMovies: createMockTrendingMovies(1),
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: createMockMovies(1),
         isLoading: false,
         isError: false,
       });
 
-      render(<TrendingMovieList />);
+      render(<NowShowingMovieList />);
 
       fireEvent.click(
         screen.getByRole('button', {
-          name: 'トレンド映画 1の詳細を表示',
+          name: '人気映画 1の詳細を表示',
         }),
       );
       expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
@@ -177,15 +185,15 @@ describe('TrendingMovieList', () => {
 
   describe('アクセシビリティ', () => {
     it('sectionにaria-labelが設定される', () => {
-      mockUseTrendingMovies.mockReturnValue({
-        trendingMovies: createMockTrendingMovies(1),
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: createMockMovies(1),
         isLoading: false,
         isError: false,
       });
 
-      render(<TrendingMovieList />);
+      render(<NowShowingMovieList />);
       expect(
-        screen.getByRole('region', { name: '今週のトレンド' }),
+        screen.getByRole('region', { name: '劇場公開中の人気作品' }),
       ).toBeInTheDocument();
     });
   });

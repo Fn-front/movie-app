@@ -4,16 +4,16 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-import { TRENDING_DISPLAY_COUNT } from '@/constants/trending';
+import { NOW_SHOWING_DISPLAY_COUNT } from '@/constants/nowShowing';
 import { discoverMovies } from '@/lib/tmdb/tmdb';
 
 /** 公開日範囲（現在から過去何ヶ月分を対象とするか） */
 const RELEASE_DATE_RANGE_MONTHS = 3;
 
 /**
- * トレンド映画同期結果の型
+ * 同期結果の型
  */
-export interface TrendingSyncResult {
+export interface NowShowingSyncResult {
   /** 取得した映画数 */
   fetched: number;
   /** DB に保存した映画数 */
@@ -36,7 +36,7 @@ function formatDate(date: Date): string {
  *
  * @returns 同期結果
  */
-export async function syncTrendingMovies(): Promise<TrendingSyncResult> {
+export async function syncNowShowingMovies(): Promise<NowShowingSyncResult> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -64,7 +64,7 @@ export async function syncTrendingMovies(): Promise<TrendingSyncResult> {
     return { fetched: 0, synced: 0 };
   }
 
-  const movies = response.results.slice(0, TRENDING_DISPLAY_COUNT);
+  const movies = response.results.slice(0, NOW_SHOWING_DISPLAY_COUNT);
 
   // 2. RPC関数でトランザクション内の全件洗い替え（DELETE → INSERT）をアトミックに実行
   const rows = movies.map((movie, index) => ({
@@ -82,7 +82,9 @@ export async function syncTrendingMovies(): Promise<TrendingSyncResult> {
   });
 
   if (error) {
-    throw new Error(`トレンド映画の同期に失敗しました: ${error.message}`);
+    throw new Error(
+      `劇場公開中の人気映画の同期に失敗しました: ${error.message}`,
+    );
   }
 
   return {

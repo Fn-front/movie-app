@@ -303,6 +303,26 @@ CREATE TRIGGER update_reviews_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+-- --------------------------------------------
+-- trending_movies（トレンド映画）
+-- --------------------------------------------
+CREATE TABLE IF NOT EXISTS trending_movies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tmdb_movie_id INTEGER NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  poster_path VARCHAR(255),
+  release_date DATE,
+  vote_average DECIMAL(3,1),
+  popularity DECIMAL(10,3),
+  display_order INTEGER NOT NULL,
+  fetched_at TIMESTAMP NOT NULL DEFAULT now(),
+  CONSTRAINT chk_display_order CHECK (display_order >= 1 AND display_order <= 10)
+);
+
+-- インデックス
+CREATE UNIQUE INDEX IF NOT EXISTS idx_trending_movies_tmdb_movie_id ON trending_movies(tmdb_movie_id);
+CREATE INDEX IF NOT EXISTS idx_trending_movies_display_order ON trending_movies(display_order);
+
 -- ============================================
 -- 3. Row Level Security (RLS) ポリシー
 -- ============================================
@@ -319,6 +339,7 @@ ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE saved_filters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trending_movies ENABLE ROW LEVEL SECURITY;
 
 -- --------------------------------------------
 -- users ポリシー
@@ -536,3 +557,14 @@ CREATE POLICY reviews_update_own ON reviews
 CREATE POLICY reviews_delete_own ON reviews
   FOR DELETE
   USING (auth.uid() = user_id);
+
+-- --------------------------------------------
+-- trending_movies ポリシー
+-- --------------------------------------------
+
+-- SELECT: 全員閲覧可能
+CREATE POLICY trending_movies_select_all ON trending_movies
+  FOR SELECT
+  USING (true);
+
+-- INSERT/UPDATE/DELETE: サービスロールのみ（Cron API経由）

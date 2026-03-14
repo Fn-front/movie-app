@@ -965,6 +965,7 @@
   - UNIQUE制約（tmdb_movie_id）
   - RLSポリシー設定（SELECT: 全ユーザー、INSERT/UPDATE/DELETE: service_roleのみ）
   - インデックス（display_order）
+- [ ] Supabase CLIでマイグレーション実行（`supabase migration new` → `supabase db push`）
 - [ ] トレンド映画用の型定義作成（`lib/types/trending.ts`）
   - TMDb Trending APIレスポンス型
   - DBレコード型

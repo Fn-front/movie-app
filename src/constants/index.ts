@@ -14,3 +14,4 @@ export * from './watchlist';
 export * from './calendar';
 export * from './otp';
 export * from './nowShowing';
+export * from './recommendations';

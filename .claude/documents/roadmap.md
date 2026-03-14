@@ -1018,23 +1018,23 @@
 > テスティングトロフィーモデルを適用。各Stepでテストレイヤーを明示する。
 
 ### Step 1: DB・環境変数・定数基盤（`feature/ai-recommendations-db`）
-- [ ] recommendationsテーブル作成（Supabase migration）
+- [x] recommendationsテーブル作成（Supabase migration）
   - UUID主キー、user_id FK、tmdb_movie_id、title、poster_path、release_date、vote_average、genre_ids、reason、display_order（1〜10）
   - UNIQUE制約（user_id, display_order）、（user_id, tmdb_movie_id）
   - RLSポリシー設定（SELECT: 自分のレコメンドのみ、INSERT/UPDATE/DELETE: service_roleのみ）
   - インデックス（user_id）
-- [ ] 環境変数追加
+- [x] 環境変数追加
   - `OPENAI_API_KEY`
   - `OPENAI_MODEL`（オプション、デフォルト: gpt-4o-mini）
   - `.env.example` 更新
   - `environment-variables.md` 更新
-- [ ] レコメンド定数追加（`lib/constants/recommendations.ts`）
+- [x] レコメンド定数追加（`lib/constants/recommendations.ts`）
   - MAX_COUNT、QUERY_KEY、STALE_TIME
   - メッセージ定数（NO_FAVORITES、NOT_GENERATED、SECTION_TITLE等）
-- [ ] zodバリデーションスキーマ作成
+- [x] zodバリデーションスキーマ作成
   - OpenAIレスポンススキーマ（title, year, reason の配列）
   - APIレスポンススキーマ
-- [ ] 単体テスト
+- [x] 単体テスト
   - zodスキーマテスト（OpenAIレスポンスのパース・バリデーション）
 
 ### Step 2: OpenAIレコメンド生成ロジック + Cron API（`feature/ai-recommendations-cron`）

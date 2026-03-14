@@ -49,6 +49,33 @@
     }
   }
 
+  &__item {
+    position: relative;
+    flex-shrink: 0;
+    width: 150px;
+
+    @include md {
+      width: 180px;
+    }
+  }
+
+  &__rank {
+    position: absolute;
+    top: $spacing-1;
+    left: $spacing-1;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-bold;
+    color: $text-inverse;
+    background-color: $primary-700;
+    border-radius: $border-radius-full;
+  }
+
   &__loading {
     margin-top: $spacing-4;
 

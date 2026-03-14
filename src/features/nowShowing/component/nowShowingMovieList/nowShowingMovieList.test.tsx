@@ -10,6 +10,27 @@ jest.mock('@/features/nowShowing/hooks/useNowShowingMovies', () => ({
   useNowShowingMovies: () => mockUseNowShowingMovies(),
 }));
 
+jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
+  MovieTile: ({
+    movie,
+    onClick,
+  }: {
+    movie: { id: number; title: string };
+    onClick?: (movieId: number) => void;
+  }) => (
+    <div
+      data-testid={`movie-tile-${movie.id}`}
+      role='button'
+      tabIndex={0}
+      aria-label={`${movie.title}の詳細を表示`}
+      onClick={() => onClick?.(movie.id)}
+      onKeyDown={() => {}}
+    >
+      {movie.title}
+    </div>
+  ),
+}));
+
 jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
   MovieDetailModal: ({
     movieId,
@@ -57,9 +78,7 @@ describe('NowShowingMovieList', () => {
       });
 
       render(<NowShowingMovieList />);
-      expect(
-        screen.getByText('劇場公開中の人気作品'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('劇場公開中の人気作品')).toBeInTheDocument();
       expect(screen.getByText('読み込み中...')).toBeInTheDocument();
     });
   });
@@ -73,9 +92,7 @@ describe('NowShowingMovieList', () => {
       });
 
       render(<NowShowingMovieList />);
-      expect(
-        screen.getByText('劇場公開中の人気作品'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('劇場公開中の人気作品')).toBeInTheDocument();
       expect(
         screen.getByText('劇場公開中の人気映画の取得に失敗しました'),
       ).toBeInTheDocument();
@@ -91,9 +108,7 @@ describe('NowShowingMovieList', () => {
       });
 
       render(<NowShowingMovieList />);
-      expect(
-        screen.getByText('劇場公開中の人気作品'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('劇場公開中の人気作品')).toBeInTheDocument();
       expect(
         screen.getByText('劇場公開中の人気映画データがありません'),
       ).toBeInTheDocument();
@@ -110,9 +125,7 @@ describe('NowShowingMovieList', () => {
       });
 
       render(<NowShowingMovieList />);
-      expect(
-        screen.getByText('劇場公開中の人気作品'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('劇場公開中の人気作品')).toBeInTheDocument();
       expect(screen.getByText('人気映画 1')).toBeInTheDocument();
       expect(screen.getByText('人気映画 2')).toBeInTheDocument();
       expect(screen.getByText('人気映画 3')).toBeInTheDocument();
@@ -138,6 +151,31 @@ describe('NowShowingMovieList', () => {
 
       render(<NowShowingMovieList />);
       expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    });
+
+    it('ランクバッジが表示される', () => {
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: createMockMovies(3),
+        isLoading: false,
+        isError: false,
+      });
+
+      render(<NowShowingMovieList />);
+      expect(screen.getByText('1')).toBeInTheDocument();
+      expect(screen.getByText('2')).toBeInTheDocument();
+      expect(screen.getByText('3')).toBeInTheDocument();
+    });
+
+    it('TrendingMovieがMovieCacheItemに変換されてMovieTileに渡される', () => {
+      mockUseNowShowingMovies.mockReturnValue({
+        nowShowingMovies: createMockMovies(1),
+        isLoading: false,
+        isError: false,
+      });
+
+      render(<NowShowingMovieList />);
+      // tmdb_movie_id (100) がMovieTileのmovie.idとして使われる
+      expect(screen.getByTestId('movie-tile-100')).toBeInTheDocument();
     });
   });
 

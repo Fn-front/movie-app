@@ -5,13 +5,17 @@
 
 'use client';
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 
 import { Loading } from '@/components/ui/loading/loading';
+import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
-import { NOW_SHOWING_SECTION_TITLE, NOW_SHOWING_ERROR_MESSAGES } from '@/constants';
+import {
+  NOW_SHOWING_SECTION_TITLE,
+  NOW_SHOWING_ERROR_MESSAGES,
+} from '@/constants';
 import { useNowShowingMovies } from '@/features/nowShowing/hooks/useNowShowingMovies';
-import { NowShowingMovieCard } from '@/features/nowShowing/component/nowShowingMovieCard/nowShowingMovieCard';
+import { toMovieCacheItem } from '@/features/nowShowing/utils/toMovieCacheItem';
 
 import styles from './nowShowingMovieList.module.scss';
 
@@ -29,6 +33,11 @@ export const NowShowingMovieList = memo(function NowShowingMovieList() {
   const handleModalClose = useCallback(() => {
     setSelectedMovieId(null);
   }, []);
+
+  const movieCacheItems = useMemo(
+    () => nowShowingMovies.map(toMovieCacheItem),
+    [nowShowingMovies],
+  );
 
   if (isLoading) {
     return (
@@ -85,9 +94,16 @@ export const NowShowingMovieList = memo(function NowShowingMovieList() {
         </div>
         <div className={styles.c_now_showing_movie_list__scroll_container}>
           <div className={styles.c_now_showing_movie_list__list} role='list'>
-            {nowShowingMovies.map((movie) => (
-              <div key={movie.id} role='listitem'>
-                <NowShowingMovieCard movie={movie} onClick={handleMovieClick} />
+            {movieCacheItems.map((movie, index) => (
+              <div
+                key={movie.id}
+                role='listitem'
+                className={styles.c_now_showing_movie_list__item}
+              >
+                <span className={styles.c_now_showing_movie_list__rank}>
+                  {index + 1}
+                </span>
+                <MovieTile movie={movie} onClick={handleMovieClick} />
               </div>
             ))}
           </div>

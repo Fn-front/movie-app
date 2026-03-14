@@ -33,44 +33,33 @@ describe('NowShowingMovieCard', () => {
       render(<NowShowingMovieCard movie={createMockMovie()} />);
       const img = screen.getByAltText('テスト映画のポスター');
       expect(img).toBeInTheDocument();
-      expect(img).toHaveAttribute(
-        'src',
-        expect.stringContaining('poster.jpg'),
-      );
+      expect(img).toHaveAttribute('src', expect.stringContaining('poster.jpg'));
     });
 
     it('poster_pathがnullの場合No Imageが表示される', () => {
       render(
-        <NowShowingMovieCard
-          movie={createMockMovie({ poster_path: null })}
-        />,
+        <NowShowingMovieCard movie={createMockMovie({ poster_path: null })} />,
       );
       expect(screen.getByText('No Image')).toBeInTheDocument();
     });
 
     it('順位バッジが表示される', () => {
       render(
-        <NowShowingMovieCard
-          movie={createMockMovie({ display_order: 3 })}
-        />,
+        <NowShowingMovieCard movie={createMockMovie({ display_order: 3 })} />,
       );
       expect(screen.getByText('3')).toBeInTheDocument();
     });
 
     it('評価が表示される', () => {
       render(
-        <NowShowingMovieCard
-          movie={createMockMovie({ vote_average: 8.0 })}
-        />,
+        <NowShowingMovieCard movie={createMockMovie({ vote_average: 8.0 })} />,
       );
       expect(screen.getByText('8.0')).toBeInTheDocument();
     });
 
     it('評価が0の場合表示されない', () => {
       const { container } = render(
-        <NowShowingMovieCard
-          movie={createMockMovie({ vote_average: 0 })}
-        />,
+        <NowShowingMovieCard movie={createMockMovie({ vote_average: 0 })} />,
       );
       expect(
         container.querySelector('[class*="rating"]'),
@@ -79,9 +68,7 @@ describe('NowShowingMovieCard', () => {
 
     it('評価がnullの場合表示されない', () => {
       const { container } = render(
-        <NowShowingMovieCard
-          movie={createMockMovie({ vote_average: null })}
-        />,
+        <NowShowingMovieCard movie={createMockMovie({ vote_average: null })} />,
       );
       expect(
         container.querySelector('[class*="rating"]'),
@@ -92,9 +79,7 @@ describe('NowShowingMovieCard', () => {
   describe('評価バッジ', () => {
     it('評価が7以上の場合highクラスが適用される', () => {
       const { container } = render(
-        <NowShowingMovieCard
-          movie={createMockMovie({ vote_average: 8.5 })}
-        />,
+        <NowShowingMovieCard movie={createMockMovie({ vote_average: 8.5 })} />,
       );
       expect(
         container.querySelector('[class*="rating__high"]'),
@@ -103,9 +88,7 @@ describe('NowShowingMovieCard', () => {
 
     it('評価が5〜7未満の場合midクラスが適用される', () => {
       const { container } = render(
-        <NowShowingMovieCard
-          movie={createMockMovie({ vote_average: 6.0 })}
-        />,
+        <NowShowingMovieCard movie={createMockMovie({ vote_average: 6.0 })} />,
       );
       expect(
         container.querySelector('[class*="rating__mid"]'),
@@ -114,9 +97,7 @@ describe('NowShowingMovieCard', () => {
 
     it('評価が5未満の場合lowクラスが適用される', () => {
       const { container } = render(
-        <NowShowingMovieCard
-          movie={createMockMovie({ vote_average: 3.5 })}
-        />,
+        <NowShowingMovieCard movie={createMockMovie({ vote_average: 3.5 })} />,
       );
       expect(
         container.querySelector('[class*="rating__low"]'),
@@ -157,10 +138,7 @@ describe('NowShowingMovieCard', () => {
     it('Enterキーでクリックが発火する', () => {
       const onClick = jest.fn();
       render(
-        <NowShowingMovieCard
-          movie={createMockMovie()}
-          onClick={onClick}
-        />,
+        <NowShowingMovieCard movie={createMockMovie()} onClick={onClick} />,
       );
 
       fireEvent.keyDown(screen.getByRole('button'), { key: 'Enter' });
@@ -170,10 +148,7 @@ describe('NowShowingMovieCard', () => {
     it('Spaceキーでクリックが発火する', () => {
       const onClick = jest.fn();
       render(
-        <NowShowingMovieCard
-          movie={createMockMovie()}
-          onClick={onClick}
-        />,
+        <NowShowingMovieCard movie={createMockMovie()} onClick={onClick} />,
       );
 
       fireEvent.keyDown(screen.getByRole('button'), { key: ' ' });
@@ -183,10 +158,7 @@ describe('NowShowingMovieCard', () => {
     it('他のキーではonClickが呼ばれない', () => {
       const onClick = jest.fn();
       render(
-        <NowShowingMovieCard
-          movie={createMockMovie()}
-          onClick={onClick}
-        />,
+        <NowShowingMovieCard movie={createMockMovie()} onClick={onClick} />,
       );
 
       fireEvent.keyDown(screen.getByRole('button'), { key: 'Tab' });

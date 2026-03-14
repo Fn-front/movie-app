@@ -1,24 +1,27 @@
 /**
  * HomePageコンポーネント
- * ホーム画面のメインコンポーネント
+ * ホーム画面のメインコンポーネント（Server Component）
  */
-
-'use client';
-
-import { memo } from 'react';
 
 import { AppLayout } from '@/components/layout/appLayout/appLayout';
 import { NowShowingMovieList } from '@/features/nowShowing/component/nowShowingMovieList/nowShowingMovieList';
+import type { NowShowingMovie } from '@/lib/types';
+
+/**
+ * HomePageコンポーネントのプロパティ
+ */
+export interface HomePageProps {
+  /** 劇場公開中の人気映画一覧 */
+  nowShowingMovies: NowShowingMovie[];
+}
 
 /**
  * HomePageコンポーネント
  */
-export const HomePage = memo(function HomePage() {
+export function HomePage({ nowShowingMovies }: HomePageProps) {
   return (
     <AppLayout>
-      <NowShowingMovieList />
+      <NowShowingMovieList movies={nowShowingMovies} />
     </AppLayout>
   );
-});
-
-HomePage.displayName = 'HomePage';
+}

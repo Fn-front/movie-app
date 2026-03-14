@@ -23,14 +23,14 @@ jest.mock(
 
 describe('HomePage', () => {
   it('AppLayout内にNowShowingMovieListが表示される', () => {
-    render(<HomePage />);
+    render(<HomePage nowShowingMovies={[]} />);
 
     expect(screen.getByTestId('app-layout')).toBeInTheDocument();
     expect(screen.getByTestId('now-showing-movie-list')).toBeInTheDocument();
   });
 
   it('NowShowingMovieListがAppLayoutの子要素である', () => {
-    render(<HomePage />);
+    render(<HomePage nowShowingMovies={[]} />);
 
     const appLayout = screen.getByTestId('app-layout');
     const nowShowingList = screen.getByTestId('now-showing-movie-list');

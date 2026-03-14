@@ -11,6 +11,7 @@ import bcrypt from 'bcryptjs';
 
 import { AUTH_ERROR_MESSAGES, SESSION_CONFIG } from '@/constants';
 import { OTP_CONFIG } from '@/constants/otp';
+import { isSessionExpired } from '@/lib/auth/sessionExpiry';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -162,7 +163,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   session: {
     strategy: 'jwt',
-    maxAge: SESSION_CONFIG.IDLE_MAX_AGE,
+    maxAge: SESSION_CONFIG.IDLE_MAX_AGE_S,
   },
 
   pages: {
@@ -303,12 +304,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       // 絶対有効期限チェック（ログインから7日間）
-      if (token.issuedAt && !token.invalidated) {
-        const elapsed = Date.now() - token.issuedAt;
-        if (elapsed > SESSION_CONFIG.ABSOLUTE_MAX_AGE_MS) {
-          token.invalidated = true;
-          return token;
-        }
+      if (!token.invalidated && isSessionExpired(token.issuedAt)) {
+        token.invalidated = true;
+        return token;
       }
 
       // パスワード変更によるセッション無効化チェック（5分間隔）

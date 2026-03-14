@@ -212,7 +212,7 @@
     color: $error-main;
 
     &:hover {
-      background-color: color-mix(in srgb, var(--error-main) 10%, transparent);
+      background-color: color-alpha(--error-main, 10%);
     }
   }
 }

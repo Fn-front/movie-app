@@ -45,11 +45,11 @@
     text-align: left;
 
     &:hover:not([data-disabled]) {
-      background-color: color-mix(in srgb, var(--primary-500) 10%, transparent);
+      background-color: color-alpha(--primary-500, 10%);
     }
 
     &:focus {
-      background-color: color-mix(in srgb, var(--primary-500) 10%, transparent);
+      background-color: color-alpha(--primary-500, 10%);
     }
 
     &[data-disabled] {
@@ -63,11 +63,11 @@
       color: $error-main;
 
       &:hover:not([data-disabled]) {
-        background-color: color-mix(in srgb, var(--error-main) 10%, transparent);
+        background-color: color-alpha(--error-main, 10%);
       }
 
       &:focus {
-        background-color: color-mix(in srgb, var(--error-main) 10%, transparent);
+        background-color: color-alpha(--error-main, 10%);
       }
     }
   }

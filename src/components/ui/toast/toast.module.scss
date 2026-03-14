@@ -142,7 +142,7 @@
     flex-shrink: 0;
 
     &:hover {
-      background-color: color-mix(in srgb, var(--text-primary) 5%, transparent);
+      background-color: color-alpha(--text-primary, 5%);
       color: $text-primary;
     }
 

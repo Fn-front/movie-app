@@ -74,11 +74,11 @@
     border: $border-width-1 solid $primary-500;
 
     &:hover:not(:disabled) {
-      background-color: color-mix(in srgb, var(--primary-500) 10%, transparent);
+      background-color: color-alpha(--primary-500, 10%);
     }
 
     &:active:not(:disabled) {
-      background-color: color-mix(in srgb, var(--primary-500) 20%, transparent);
+      background-color: color-alpha(--primary-500, 20%);
     }
   }
 

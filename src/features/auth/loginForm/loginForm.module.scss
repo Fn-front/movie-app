@@ -60,7 +60,7 @@
 
 .c_login_form__error {
   padding: $spacing-3 $spacing-4;
-  background-color: color-mix(in srgb, var(--error-main) 10%, transparent);
+  background-color: color-alpha(--error-main, 10%);
   border: $border-width-1 solid $error-light;
   border-radius: $border-radius-md;
   color: $error-dark;

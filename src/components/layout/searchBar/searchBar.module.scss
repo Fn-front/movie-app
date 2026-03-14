@@ -68,7 +68,7 @@
 
       &:focus-within {
         border-color: $primary-500;
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-500) 10%, transparent);
+        box-shadow: 0 0 0 3px color-alpha(--primary-500, 10%);
       }
     }
   }

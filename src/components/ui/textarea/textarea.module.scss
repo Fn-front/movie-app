@@ -46,7 +46,7 @@
     &:focus {
       outline: none;
       border-color: $primary-500;
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-500) 10%, transparent);
+      box-shadow: 0 0 0 3px color-alpha(--primary-500, 10%);
     }
 
     &:disabled {
@@ -62,7 +62,7 @@
       &:hover:not(:disabled),
       &:focus {
         border-color: $error-main;
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--error-main) 10%, transparent);
+        box-shadow: 0 0 0 3px color-alpha(--error-main, 10%);
       }
     }
 

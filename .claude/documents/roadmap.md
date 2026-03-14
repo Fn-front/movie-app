@@ -987,10 +987,10 @@
 - [x] 単体テスト
 
 ### Step 3: カスタムフック（`feature/trending-movies-hook`）
-- [ ] `useTrendingMovies`フック作成
+- [x] `useTrendingMovies`フック作成
   - React QueryでDBからトレンド映画データ取得
   - ローディング・エラー状態管理
-- [ ] 単体テスト
+- [x] 単体テスト
 
 ### Step 4: UIコンポーネント（`feature/trending-movies-ui`）
 - [ ] `TrendingMovieCard`コンポーネント作成

@@ -13,9 +13,22 @@ movie-app/                    # リポジトリルート
 ├── web/                      # Web版（Next.js）※既存コードを移動
 │   ├── src/
 │   ├── public/
+│   ├── e2e/
+│   ├── eslint-local-rules/
 │   ├── package.json
-│   ├── next.config.ts
+│   ├── package-lock.json
+│   ├── next.config.mjs
 │   ├── tsconfig.json
+│   ├── eslint.config.mjs
+│   ├── jest.config.js
+│   ├── jest.setup.js
+│   ├── playwright.config.ts
+│   ├── vercel.json
+│   ├── ignore-build-step.sh
+│   ├── .prettierrc
+│   ├── .prettierignore
+│   ├── .env.local.example
+│   ├── .env.example
 │   └── ...
 ├── mobile/                   # iOS版（Flutter）※新規作成
 │   ├── lib/
@@ -23,6 +36,7 @@ movie-app/                    # リポジトリルート
 │   ├── test/
 │   ├── pubspec.yaml
 │   └── ...
+├── supabase/                 # 共通バックエンド（Web版・Flutter版で共有）
 ├── .claude/                  # 共通ドキュメント（現在位置のまま）
 │   ├── CLAUDE.md
 │   └── documents/
@@ -42,6 +56,9 @@ movie-app/                    # リポジトリルート
 │           ├── monorepo.md
 │           ├── distribution.md
 │           └── design-mapping.md
+├── .github/                  # GitHub Actions ワークフロー
+├── .vscode/                  # IDE設定
+├── .mcp.json                 # Claude Code MCP設定
 ├── .gitignore                # ルートの.gitignore（共通設定）
 └── README.md
 ```
@@ -61,22 +78,43 @@ mkdir web
 # Next.js関連のファイル・ディレクトリを移動
 git mv src/ web/src/
 git mv public/ web/public/
+git mv e2e/ web/e2e/
+git mv eslint-local-rules/ web/eslint-local-rules/
 git mv package.json web/package.json
-git mv package-lock.json web/package-lock.json  # or yarn.lock / pnpm-lock.yaml
-git mv next.config.ts web/next.config.ts
+git mv package-lock.json web/package-lock.json
+git mv next.config.mjs web/next.config.mjs
 git mv tsconfig.json web/tsconfig.json
 git mv next-env.d.ts web/next-env.d.ts
-git mv postcss.config.mjs web/postcss.config.mjs  # 存在する場合
-git mv jest.config.ts web/jest.config.ts
+git mv eslint.config.mjs web/eslint.config.mjs
+git mv jest.config.js web/jest.config.js
+git mv jest.setup.js web/jest.setup.js
+git mv playwright.config.ts web/playwright.config.ts
+git mv vercel.json web/vercel.json
+git mv ignore-build-step.sh web/ignore-build-step.sh
+git mv .prettierrc web/.prettierrc
+git mv .prettierignore web/.prettierignore
 git mv .env.local.example web/.env.local.example
+git mv .env.example web/.env.example
 ```
 
-**移動対象の確認**: 実行前に `ls` でルートにあるNext.js関連ファイルを全て確認し、漏れなく移動する。以下は移動しないファイル：
+**手動対応（gitの追跡外）:**
+```bash
+mv .env.local web/.env.local    # .gitignore対象のため git mv 不要
+mv .env web/.env                # .gitignore対象のため git mv 不要
+```
 
-- `.claude/` - 共通ドキュメント（ルートに残す）
-- `.git/` - Git管理（移動不可）
-- `.gitignore` - ルートに残す（内容を更新）
-- `README.md` - ルートに残す（内容を更新）
+**移動しないファイル（ルートに残す）:**
+
+| ファイル/ディレクトリ | 理由 |
+|---------|------|
+| `.claude/` | 共通ドキュメント（Web版・Flutter版で共有） |
+| `.git/` | Git管理（移動不可） |
+| `.github/` | GitHub Actions ワークフロー |
+| `.gitignore` | ルートで管理（内容を更新） |
+| `.mcp.json` | Claude Code MCP設定 |
+| `.vscode/` | リポジトリ全体のIDE設定 |
+| `supabase/` | 共通バックエンド（Web版・Flutter版で共有） |
+| `README.md` | リポジトリ全体の説明（内容を更新） |
 
 ### Step 2: `.gitignore` の更新
 
@@ -156,19 +194,32 @@ git commit -m "refactor: モノレポ構成に移行（web/ + mobile/）"
 
 ## 注意事項
 
-### パスの変更による影響
+### パスの変更による影響（調査結果）
 
-Web版のコード内で相対パスを使用している箇所は影響を受けない（`src/` 内の参照は `web/src/` に移動しても相対パスのまま動作する）。
+Web版の設定ファイルはすべて相対パスを使用しているため、`web/` に移動しても内部のパス参照を変更する必要はない。
 
-ただし以下は確認が必要：
+#### 変更不要なファイル（相対パスのため移動のみでOK）
 
-| 対象 | 確認事項 |
-|------|---------|
-| `next.config.ts` | 特に問題なし（相対パス参照） |
-| `tsconfig.json` | paths 設定の相対パスが `web/` 基準になるか確認 |
-| `jest.config.ts` | テスト対象パスの確認 |
-| `.env.local` | Web版は `web/.env.local` に配置 |
-| CI/CD | Vercelの Root Directory 変更で対応 |
+| ファイル | パス参照 | 影響 |
+|---------|---------|------|
+| `next.config.mjs` | `sassOptions` で `'./src/styles'` を参照 | 相対パスのため問題なし |
+| `tsconfig.json` | `paths` の `"@/*": ["./src/*"]` | 相対パスのため問題なし |
+| `jest.config.js` | `moduleNameMapper`, `testMatch` 等すべて相対パス | 問題なし |
+| `jest.setup.js` | パス参照なし | 問題なし |
+| `eslint.config.mjs` | `tsconfig.json` を相対参照 | 問題なし |
+| `playwright.config.ts` | `testDir`, `dotenv` パス等すべて相対 | 問題なし |
+| `.prettierrc` | パス参照なし | 問題なし |
+| `.prettierignore` | パス参照なし | 問題なし |
+| `package.json` | スクリプトはすべて相対パスで実行 | 問題なし |
+| `vercel.json` | Vercel設定 | 問題なし |
+| `src/` 内の `@/` インポート | `tsconfig.json` で解決されるため | 問題なし |
+
+#### 更新が必要なファイル
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `.gitignore`（ルート） | Web版のエントリに `web/` プレフィックス追加、Flutter用エントリ追加 |
+| `.github/workflows/*` | paths フィルター、working-directory、キャッシュパス等（後述のセクション参照） |
 
 ### CLAUDE.md の更新
 

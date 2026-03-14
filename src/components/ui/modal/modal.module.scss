@@ -115,9 +115,7 @@
       color: $text-primary;
     }
 
-    &:focus-visible {
-      @include focus-visible;
-    }
+    @include focus-visible;
   }
 
   // ボディ

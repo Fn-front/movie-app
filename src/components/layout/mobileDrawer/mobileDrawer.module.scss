@@ -69,9 +69,7 @@
     background-color: $background-secondary;
   }
 
-  &:focus-visible {
-    @include focus-visible;
-  }
+  @include focus-visible;
 }
 
 // ナビゲーション
@@ -204,9 +202,7 @@
     background-color: $background-secondary;
   }
 
-  &:focus-visible {
-    @include focus-visible;
-  }
+  @include focus-visible;
 
   &--destructive {
     color: $error-main;

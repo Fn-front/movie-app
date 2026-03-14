@@ -20,7 +20,5 @@
     background-color: $background-secondary;
   }
 
-  &:focus-visible {
-    @include focus-visible;
-  }
+  @include focus-visible;
 }

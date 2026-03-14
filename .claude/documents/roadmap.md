@@ -934,23 +934,23 @@
 ### Step 4: スタイリング改善（`feature/styling-improvements`）
 
 #### ホバーエフェクト
-- [ ] MovieTile: ホバー時のシャドウ変化（既存hover-shadow mixin適用）
-- [ ] ナビリンク: ホバー時の背景色変化
-- [ ] ボタン類: ホバー時のopacity変化（既存hover-opacity mixin適用）
+- [x] MovieTile: ホバー時のシャドウ変化（既存hover-shadow mixin適用）
+- [x] ナビリンク: ホバー時の背景色変化
+- [x] ボタン類: ホバー時のopacity変化（既存hover-opacity mixin適用）
 
 #### フォーカス状態
-- [ ] focus-visible mixinの適用漏れがないか全コンポーネント確認
-- [ ] カスタムコンポーネント（Radix UI外）のフォーカス表示追加
+- [x] focus-visible mixinの適用漏れがないか全コンポーネント確認
+- [x] カスタムコンポーネント（Radix UI外）のフォーカス表示追加
 
 #### トランジション
-- [ ] opacity / transform / box-shadow のトランジション統一（デザインシステム変数使用）
+- [x] opacity / transform / box-shadow のトランジション統一（デザインシステム変数使用）
 
 #### カラーコントラスト
-- [ ] WCAG AA基準（テキスト 4.5:1、UI要素 3:1）の全画面確認
-- [ ] 不足箇所の修正
+- [x] WCAG AA基準（テキスト 4.5:1、UI要素 3:1）の全画面確認
+- [x] 不足箇所の修正
 
 #### テスト
-- [ ] 結合テスト
+- [x] 結合テスト
   - アクセシビリティテスト（カスタムコンポーネントのaria属性・フォーカス）
 
 ---
@@ -1000,7 +1000,7 @@
   - ユーザー単位のtry-catch（1ユーザーの失敗が他に影響しない）
   - OpenAI/TMDbエラー時は該当ユーザーをスキップし既存レコメンドを維持
 - [ ] Vercel Cron設定（vercel.json）— 日次実行
-- [ ] 結合テスト
+- [x] 結合テスト
   - Cron APIテスト
     - CRON_SECRET認証チェック
     - OpenAI APIモック → 正常レスポンスのパース
@@ -1023,7 +1023,7 @@
   - ローディング・エラー状態管理
 - [ ] 単体テスト
   - APIクライアントテスト（getRecommendations）
-- [ ] 結合テスト
+- [x] 結合テスト
   - API Routeテスト（GET /api/recommendations）
     - 認証チェック（401）
     - 正常取得（レコメンドあり）
@@ -1044,7 +1044,7 @@
 - [ ] SCSS Modules スタイリング
   - デザインシステム変数使用
   - レスポンシブ対応（Step 3実装時に調整）
-- [ ] 結合テスト
+- [x] 結合テスト
   - RecommendationSectionテスト
     - お気に入り0件 → 登録促進テキスト表示
     - レコメンド未生成 → 準備中テキスト表示
@@ -1087,7 +1087,7 @@
   - suggestTitle(query)
 - [ ] 単体テスト
   - APIクライアントテスト（suggestTitle）
-- [ ] 結合テスト
+- [x] 結合テスト
   - API Routeテスト（GET /api/movies/suggest-title）
     - 認証チェック（401）
     - キャッシュヒット → DB結果を返す
@@ -1110,7 +1110,7 @@
   - React.memo + displayName 必須
 - [ ] SearchResults変更
   - 検索結果0件時にTitleSuggestionをEmptyStateの上に配置
-- [ ] 結合テスト
+- [x] 結合テスト
   - useTitleSuggestionフックテスト
   - TitleSuggestionコンポーネントテスト
     - 提案あり → リンク表示

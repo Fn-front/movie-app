@@ -23,9 +23,7 @@
       background-color: $background-secondary;
     }
 
-    &:focus-visible {
-      @include focus-visible;
-    }
+    @include focus-visible;
 
     // lg以上で非表示（フォームが常に表示されるため）
     @include lg {
@@ -115,9 +113,7 @@
       background-color: $primary-50;
     }
 
-    &:focus-visible {
-      @include focus-visible;
-    }
+    @include focus-visible;
 
     &:disabled {
       opacity: 0.4;
@@ -142,9 +138,7 @@
       background-color: $background-secondary;
     }
 
-    &:focus-visible {
-      @include focus-visible;
-    }
+    @include focus-visible;
 
     // lg以上で非表示
     @include lg {

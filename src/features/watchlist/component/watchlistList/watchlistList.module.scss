@@ -81,10 +81,7 @@
       background-color: rgba(0, 0, 0, 0.8);
     }
 
-    &:focus-visible {
-      outline: $border-width-2 solid $primary-500;
-      outline-offset: 2px;
-    }
+    @include focus-visible;
   }
 
   &__info {

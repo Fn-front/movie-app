@@ -5,7 +5,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-radius: $border-radius-lg;
   transition: $transition-all;
+
+  @include hover-shadow;
 
   &__poster {
     position: relative;
@@ -35,15 +38,15 @@
     font-weight: $font-weight-bold;
 
     &__high {
-      color: $success-main;
+      color: $success-dark;
     }
 
     &__mid {
-      color: $warning-main;
+      color: $warning-dark;
     }
 
     &__low {
-      color: $error-main;
+      color: $error-dark;
     }
   }
 
@@ -71,7 +74,7 @@
     font-size: $font-size-xs;
     font-weight: $font-weight-bold;
     color: $text-inverse;
-    background-color: $secondary-600;
+    background-color: $secondary-900;
     border-radius: $border-radius-md;
   }
 

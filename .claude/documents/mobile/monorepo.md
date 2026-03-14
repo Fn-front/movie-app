@@ -185,3 +185,220 @@ feature/web-xxx     # Web版の機能
 feature/mobile-xxx  # Flutter版の機能
 feature/shared-xxx  # 共通の変更
 ```
+
+---
+
+## GitHub Actions のスコープ変更
+
+モノレポ化により、既存の4つのワークフローを修正する必要がある。
+Web版の変更時のみ実行されるようにスコープを絞り、作業ディレクトリを `web/` に変更する。
+
+### 変更対象ファイル
+
+| ファイル | ワークフロー名 | 変更内容 |
+|---------|--------------|---------|
+| `.github/workflows/build.yml` | Next.js Build | paths + working-directory |
+| `.github/workflows/code-quality.yml` | ESLint / Prettier / TypeScript Check | paths + working-directory |
+| `.github/workflows/test.yml` | Jest Test / Coverage | paths + working-directory |
+| `.github/workflows/e2e.yml` | Playwright E2E | paths + working-directory |
+
+### 変更1: `paths` フィルターの追加
+
+全ワークフローの `on` セクションに `paths` を追加し、`web/` 配下の変更時のみ実行されるようにする。
+
+**変更前（全ワークフロー共通）:**
+```yaml
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'release/**'
+```
+
+**変更後:**
+```yaml
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'release/**'
+    paths:
+      - 'web/**'
+      - '.github/workflows/**'
+```
+
+**test.yml / e2e.yml の `push` トリガーも同様:**
+```yaml
+  push:
+    branches:
+      - main
+    paths:
+      - 'web/**'
+      - '.github/workflows/**'
+```
+
+### 変更2: `defaults.run.working-directory` の追加
+
+全ワークフローの各ジョブに `defaults.run.working-directory` を追加し、npm/npxコマンドが `web/` で実行されるようにする。
+
+**各ジョブに追加:**
+```yaml
+jobs:
+  build:
+    name: Next.js Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      ...
+```
+
+### 変更3: キャッシュパスの更新
+
+`package-lock.json` のパスが変わるため、キャッシュキーとパスを更新する。
+
+**node_modules キャッシュ:**
+```yaml
+# 変更前
+path: '**/node_modules'
+key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
+
+# 変更後
+path: 'web/node_modules'
+key: ${{ runner.os }}-node-modules-${{ hashFiles('web/package-lock.json') }}
+```
+
+**Next.js ビルドキャッシュ:**
+```yaml
+# 変更前
+path: .next/cache
+key: ...-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+
+# 変更後
+path: web/.next/cache
+key: ...-${{ hashFiles('web/**.[jt]s', 'web/**.[jt]sx') }}
+```
+
+### 変更4: `actions/setup-node` の cache-dependency-path
+
+```yaml
+# 変更前
+- name: setup-node
+  uses: actions/setup-node@v4
+  with:
+    node-version: 20
+    cache: npm
+
+# 変更後
+- name: setup-node
+  uses: actions/setup-node@v4
+  with:
+    node-version: 20
+    cache: npm
+    cache-dependency-path: web/package-lock.json
+```
+
+### 変更5: Playwright 関連パス（e2e.yml）
+
+```yaml
+# レポートのアップロードパスを更新
+- name: upload-playwright-report
+  uses: actions/upload-artifact@v4
+  with:
+    path: web/playwright-report/
+
+- name: upload-test-results
+  uses: actions/upload-artifact@v4
+  with:
+    path: web/test-results/
+```
+
+### 完全な変更例（build.yml）
+
+```yaml
+name: Build
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'release/**'
+    paths:
+      - 'web/**'
+      - '.github/workflows/**'
+
+jobs:
+  build:
+    name: Next.js Build
+    runs-on: ubuntu-latest
+    environment: Production
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup-node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Get date info
+        id: date
+        run: |
+          echo "week=$(date +%Y-%V)" >> $GITHUB_OUTPUT
+
+      - name: cache-node-modules
+        uses: actions/cache@v4
+        id: node_modules_cache
+        with:
+          path: 'web/node_modules'
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('web/package-lock.json') }}
+
+      - name: cache-nextjs-build
+        uses: actions/cache@v4
+        with:
+          path: web/.next/cache
+          key: ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-${{ hashFiles('web/package-lock.json') }}-${{ hashFiles('web/**.[jt]s', 'web/**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-
+
+      - name: npm-install
+        if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
+        run: npm ci
+
+      - name: app-build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NEXT_PUBLIC_TMDB_API_KEY: ${{ secrets.NEXT_PUBLIC_TMDB_API_KEY }}
+
+      - name: Clear old cache
+        run: |
+          find .next/cache -type f -mtime +30 -delete 2>/dev/null || true
+```
+
+### 将来: Flutter用ワークフローの追加
+
+Flutter版のCI/CDが必要になった場合、別途ワークフローを追加する：
+
+```
+.github/workflows/
+├── build.yml           # Web版ビルド
+├── code-quality.yml    # Web版コード品質
+├── test.yml            # Web版テスト
+├── e2e.yml             # Web版E2E
+└── flutter-test.yml    # Flutter版テスト（将来追加）
+```
+
+Flutter用ワークフローでは `paths: ['mobile/**']` を指定し、`mobile/` の変更時のみ実行する。

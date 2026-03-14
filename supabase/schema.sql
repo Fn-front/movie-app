@@ -304,9 +304,9 @@ CREATE TRIGGER update_reviews_updated_at
   EXECUTE FUNCTION update_updated_at_column();
 
 -- --------------------------------------------
--- trending_movies（トレンド映画）
+-- now_showing_movies（劇場公開中の人気映画）
 -- --------------------------------------------
-CREATE TABLE IF NOT EXISTS trending_movies (
+CREATE TABLE IF NOT EXISTS now_showing_movies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tmdb_movie_id INTEGER NOT NULL,
   title VARCHAR(255) NOT NULL,
@@ -320,8 +320,8 @@ CREATE TABLE IF NOT EXISTS trending_movies (
 );
 
 -- インデックス
-CREATE UNIQUE INDEX IF NOT EXISTS idx_trending_movies_tmdb_movie_id ON trending_movies(tmdb_movie_id);
-CREATE INDEX IF NOT EXISTS idx_trending_movies_display_order ON trending_movies(display_order);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_now_showing_movies_tmdb_movie_id ON now_showing_movies(tmdb_movie_id);
+CREATE INDEX IF NOT EXISTS idx_now_showing_movies_display_order ON now_showing_movies(display_order);
 
 -- ============================================
 -- 3. Row Level Security (RLS) ポリシー
@@ -339,7 +339,7 @@ ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE saved_filters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
-ALTER TABLE trending_movies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE now_showing_movies ENABLE ROW LEVEL SECURITY;
 
 -- --------------------------------------------
 -- users ポリシー
@@ -559,11 +559,11 @@ CREATE POLICY reviews_delete_own ON reviews
   USING (auth.uid() = user_id);
 
 -- --------------------------------------------
--- trending_movies ポリシー
+-- now_showing_movies ポリシー
 -- --------------------------------------------
 
 -- SELECT: 全員閲覧可能
-CREATE POLICY trending_movies_select_all ON trending_movies
+CREATE POLICY now_showing_movies_select_all ON now_showing_movies
   FOR SELECT
   USING (true);
 

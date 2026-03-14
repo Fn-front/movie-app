@@ -1,15 +1,15 @@
 /**
- * トレンド映画同期 Cron API
- * GET /api/cron/sync-trending
+ * 劇場公開中の人気映画同期 Cron API
+ * GET /api/cron/sync-now-showing
  *
- * Vercel Cronで週次自動実行される（毎週日曜 JST AM5:00）。
+ * Vercel Cronで日次自動実行される（毎日 JST AM3:00）。
  * CRON_SECRET環境変数によるBearer認証が必要。
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 
 import { HTTP_STATUS, ERROR_CODE, AUTH_ERROR_MESSAGES } from '@/constants';
-import { syncTrendingMovies } from '@/lib/sync/syncTrendingMovies';
+import { syncNowShowingMovies } from '@/lib/sync/syncNowShowingMovies';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,22 +30,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // TMDb Trending → DB同期
-    const result = await syncTrendingMovies();
+    // TMDb Discover → DB同期
+    const result = await syncNowShowingMovies();
 
     return NextResponse.json(
       { success: true, data: result },
       { status: HTTP_STATUS.OK },
     );
   } catch (error) {
-    console.error('Sync trending movies error:', error);
+    console.error('Sync now showing movies error:', error);
 
     return NextResponse.json(
       {
         success: false,
         error: {
           code: ERROR_CODE.SERVER_ERROR,
-          message: 'トレンド映画同期中にエラーが発生しました。',
+          message: '劇場公開中の人気映画同期中にエラーが発生しました。',
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

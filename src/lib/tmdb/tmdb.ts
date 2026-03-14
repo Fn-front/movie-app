@@ -7,8 +7,9 @@ import type {
   Movie,
   MovieDetail,
   MovieSearchParams,
+  TMDbReleaseDateCountry,
   TMDbResponse,
-  TMDbTrendingMovie,
+  TMDbNowShowingMovie,
 } from '@/lib/types';
 
 import axios, { type AxiosError } from 'axios';
@@ -276,12 +277,28 @@ export async function getGenres() {
  * @returns トレンド映画リスト
  */
 export async function getTrendingMovies(): Promise<
-  TMDbResponse<TMDbTrendingMovie>
+  TMDbResponse<TMDbNowShowingMovie>
 > {
-  const response = await tmdbClient.get<TMDbResponse<TMDbTrendingMovie>>(
+  const response = await tmdbClient.get<TMDbResponse<TMDbNowShowingMovie>>(
     TMDB_ENDPOINTS.TRENDING,
   );
   return response.data;
+}
+
+/**
+ * 映画のリリース日情報を取得（国別リリースタイプ判定用）
+ *
+ * @param movieId - 映画ID
+ * @returns 国別リリース日情報
+ */
+export async function getMovieReleaseDates(
+  movieId: number,
+): Promise<TMDbReleaseDateCountry[]> {
+  const response = await tmdbClient.get<{
+    id: number;
+    results: TMDbReleaseDateCountry[];
+  }>(TMDB_ENDPOINTS.MOVIE_RELEASE_DATES(movieId));
+  return response.data.results;
 }
 
 /**

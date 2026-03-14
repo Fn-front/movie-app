@@ -3,7 +3,7 @@
  */
 
 /**
- * トレンド映画同期 Cron API テスト
+ * 劇場公開中の人気映画同期 Cron API テスト
  */
 
 import { NextRequest } from 'next/server';
@@ -12,9 +12,9 @@ import { GET } from './route';
 
 // --- Mocks ---
 
-const mockSyncTrending = jest.fn();
-jest.mock('@/lib/sync/syncTrendingMovies', () => ({
-  syncTrendingMovies: () => mockSyncTrending(),
+const mockSyncNowShowing = jest.fn();
+jest.mock('@/lib/sync/syncNowShowingMovies', () => ({
+  syncNowShowingMovies: () => mockSyncNowShowing(),
 }));
 
 // --- Helpers ---
@@ -24,14 +24,14 @@ const createRequest = (authHeader?: string) => {
   if (authHeader) {
     headers.set('authorization', authHeader);
   }
-  return new NextRequest('http://localhost/api/cron/sync-trending', {
+  return new NextRequest('http://localhost/api/cron/sync-now-showing', {
     headers,
   });
 };
 
 // --- Tests ---
 
-describe('GET /api/cron/sync-trending', () => {
+describe('GET /api/cron/sync-now-showing', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -44,7 +44,7 @@ describe('GET /api/cron/sync-trending', () => {
   });
 
   it('正しい認証で同期が実行される', async () => {
-    mockSyncTrending.mockResolvedValue({ fetched: 20, synced: 10 });
+    mockSyncNowShowing.mockResolvedValue({ fetched: 20, synced: 10 });
 
     const response = await GET(createRequest('Bearer test-secret'));
     const json = await response.json();
@@ -69,7 +69,7 @@ describe('GET /api/cron/sync-trending', () => {
   });
 
   it('同期エラーで500を返す', async () => {
-    mockSyncTrending.mockRejectedValue(new Error('Sync failed'));
+    mockSyncNowShowing.mockRejectedValue(new Error('Sync failed'));
 
     const response = await GET(createRequest('Bearer test-secret'));
 

@@ -1,19 +1,19 @@
 /**
- * useTrendingMoviesフック テスト
+ * useNowShowingMoviesフック テスト
  */
 
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, createElement } from 'react';
 
-import { useTrendingMovies } from './useTrendingMovies';
+import { useNowShowingMovies } from './useNowShowingMovies';
 
 // --- Mocks ---
 
-const mockGetTrendingMovies = jest.fn();
+const mockGetNowShowingMovies = jest.fn();
 
-jest.mock('@/lib/api/trending/trending', () => ({
-  getTrendingMovies: () => mockGetTrendingMovies(),
+jest.mock('@/lib/api/nowShowing/nowShowing', () => ({
+  getNowShowingMovies: () => mockGetNowShowingMovies(),
 }));
 
 // --- Helpers ---
@@ -33,11 +33,11 @@ function createWrapper() {
   };
 }
 
-const mockTrendingMovies = [
+const mockMovies = [
   {
     id: 'uuid-1',
     tmdb_movie_id: 123,
-    title: 'Trending Movie 1',
+    title: 'Now Showing Movie 1',
     poster_path: '/poster1.jpg',
     release_date: '2026-03-01',
     vote_average: 7.5,
@@ -48,7 +48,7 @@ const mockTrendingMovies = [
   {
     id: 'uuid-2',
     tmdb_movie_id: 456,
-    title: 'Trending Movie 2',
+    title: 'Now Showing Movie 2',
     poster_path: '/poster2.jpg',
     release_date: '2026-02-15',
     vote_average: 8.0,
@@ -60,15 +60,15 @@ const mockTrendingMovies = [
 
 // --- Tests ---
 
-describe('useTrendingMovies', () => {
+describe('useNowShowingMovies', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('トレンド映画一覧を取得する', async () => {
-    mockGetTrendingMovies.mockResolvedValue(mockTrendingMovies);
+  it('劇場公開中の人気映画一覧を取得する', async () => {
+    mockGetNowShowingMovies.mockResolvedValue(mockMovies);
 
-    const { result } = renderHook(() => useTrendingMovies(), {
+    const { result } = renderHook(() => useNowShowingMovies(), {
       wrapper: createWrapper(),
     });
 
@@ -78,15 +78,17 @@ describe('useTrendingMovies', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(result.current.trendingMovies).toHaveLength(2);
-    expect(result.current.trendingMovies[0].title).toBe('Trending Movie 1');
+    expect(result.current.nowShowingMovies).toHaveLength(2);
+    expect(result.current.nowShowingMovies[0].title).toBe(
+      'Now Showing Movie 1',
+    );
     expect(result.current.isError).toBe(false);
   });
 
   it('データ未取得時は空配列を返す', async () => {
-    mockGetTrendingMovies.mockResolvedValue([]);
+    mockGetNowShowingMovies.mockResolvedValue([]);
 
-    const { result } = renderHook(() => useTrendingMovies(), {
+    const { result } = renderHook(() => useNowShowingMovies(), {
       wrapper: createWrapper(),
     });
 
@@ -94,13 +96,13 @@ describe('useTrendingMovies', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(result.current.trendingMovies).toEqual([]);
+    expect(result.current.nowShowingMovies).toEqual([]);
   });
 
   it('エラー時はisErrorがtrueになる', async () => {
-    mockGetTrendingMovies.mockRejectedValue(new Error('DB error'));
+    mockGetNowShowingMovies.mockRejectedValue(new Error('DB error'));
 
-    const { result } = renderHook(() => useTrendingMovies(), {
+    const { result } = renderHook(() => useNowShowingMovies(), {
       wrapper: createWrapper(),
     });
 
@@ -108,6 +110,6 @@ describe('useTrendingMovies', () => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.trendingMovies).toEqual([]);
+    expect(result.current.nowShowingMovies).toEqual([]);
   });
 });

@@ -339,9 +339,9 @@ export type Theme = 'light' | 'dark' | 'system';
 export type Language = 'ja' | 'en';
 
 /**
- * トレンド映画DBレコード型
+ * 劇場公開中の人気映画DBレコード型
  */
-export interface TrendingMovie {
+export interface NowShowingMovie {
   /** レコードID */
   id: string;
   /** TMDb映画ID */
@@ -363,9 +363,9 @@ export interface TrendingMovie {
 }
 
 /**
- * TMDb Trending APIレスポンスの映画データ型
+ * TMDb Discover APIレスポンスの映画データ型
  */
-export interface TMDbTrendingMovie {
+export interface TMDbNowShowingMovie {
   /** TMDb映画ID */
   id: number;
   /** タイトル */
@@ -378,6 +378,26 @@ export interface TMDbTrendingMovie {
   vote_average: number;
   /** 人気度 */
   popularity: number;
+}
+
+/**
+ * TMDb リリース日レスポンスの個別リリース情報
+ */
+export interface TMDbReleaseDate {
+  /** リリースタイプ（1:Premiere, 2:Theatrical limited, 3:Theatrical, 4:Digital, 5:Physical, 6:TV） */
+  type: number;
+  /** リリース日 */
+  release_date: string;
+}
+
+/**
+ * TMDb リリース日レスポンスの国別情報
+ */
+export interface TMDbReleaseDateCountry {
+  /** 国コード（ISO 3166-1） */
+  iso_3166_1: string;
+  /** リリース日配列 */
+  release_dates: TMDbReleaseDate[];
 }
 
 /**

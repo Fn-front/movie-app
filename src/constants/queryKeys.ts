@@ -40,6 +40,6 @@ export const favoriteKeys = {
     ['favorites', 'list', params] as const,
 };
 
-export const trendingKeys = {
-  all: ['trending'] as const,
+export const nowShowingKeys = {
+  all: ['nowShowing'] as const,
 };

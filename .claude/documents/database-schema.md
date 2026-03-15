@@ -23,6 +23,7 @@
 | role | VARCHAR(20) | NOT NULL | 'user' | ユーザー権限（user / admin） |
 | is_verified | BOOLEAN | NOT NULL | false | メール認証済みフラグ |
 | password_changed_at | TIMESTAMP | NULL | - | パスワード最終変更日時 |
+| last_login_at | TIMESTAMP | NULL | - | 最終ログイン日時（signIn時 + セッション更新時に1時間間隔で更新） |
 | created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
 | updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |
 

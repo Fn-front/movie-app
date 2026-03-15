@@ -173,8 +173,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   callbacks: {
     async signIn({ user, account, profile }) {
-      // Credentials Providerはそのまま通す
+      // Credentials Provider: last_login_at を更新して通す
       if (account?.provider === 'credentials') {
+        if (supabase && user.id) {
+          await supabase
+            .from('users')
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('id', user.id);
+        }
         return true;
       }
 
@@ -256,6 +262,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return false;
       }
 
+      // last_login_at を更新
+      await supabase
+        .from('users')
+        .update({ last_login_at: new Date().toISOString() })
+        .eq('id', userId);
+
       // userオブジェクトにidをセット（jwtコールバックで使用）
       user.id = userId;
 
@@ -274,6 +286,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = 'user';
           token.passwordChangedAt = null;
           token.lastPasswordCheck = Date.now();
+          token.lastLoginUpdate = Date.now();
           token.issuedAt = Date.now();
 
           if (supabase && user.id) {
@@ -299,6 +312,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             (user as unknown as { passwordChangedAt: string | null })
               .passwordChangedAt ?? null;
           token.lastPasswordCheck = Date.now();
+          token.lastLoginUpdate = Date.now();
           token.issuedAt = Date.now();
         }
       }
@@ -335,6 +349,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
 
           token.lastPasswordCheck = now;
+        }
+      }
+
+      // last_login_at のスロットリング更新（1時間間隔）
+      if (token.id && supabase && !token.invalidated) {
+        const now = Date.now();
+
+        if (
+          now - (token.lastLoginUpdate || 0) >
+          SESSION_CONFIG.LOGIN_UPDATE_INTERVAL_MS
+        ) {
+          await supabase
+            .from('users')
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('id', token.id);
+
+          token.lastLoginUpdate = now;
         }
       }
 

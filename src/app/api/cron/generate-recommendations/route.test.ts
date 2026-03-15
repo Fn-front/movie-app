@@ -52,6 +52,21 @@ const mockFavoritesUserQuery = (userIds: string[]) => {
   });
 };
 
+/** アクティブユーザー取得のモック */
+const mockActiveUsersQuery = (userIds: string[]) => {
+  mockFrom.mockReturnValueOnce({
+    select: () => ({
+      in: () => ({
+        gte: () =>
+          Promise.resolve({
+            data: userIds.map((id) => ({ id })),
+            error: null,
+          }),
+      }),
+    }),
+  });
+};
+
 /** お気に入り映画取得のモック */
 const mockFavoritesQuery = (
   favorites: { tmdb_movie_id: number; title: string; rating: number }[],
@@ -175,6 +190,8 @@ describe('GET /api/cron/generate-recommendations', () => {
   it('正常にレコメンドを生成する', async () => {
     // お気に入りユーザー取得
     mockFavoritesUserQuery(['user-1']);
+    // アクティブユーザー取得
+    mockActiveUsersQuery(['user-1']);
     // お気に入り映画取得
     mockFavoritesQuery([
       { tmdb_movie_id: 1, title: 'インターステラー', rating: 9 },
@@ -219,6 +236,8 @@ describe('GET /api/cron/generate-recommendations', () => {
   it('お気に入り0件のユーザーはスキップされる', async () => {
     // お気に入りユーザーなし
     mockFavoritesUserQuery([]);
+    // アクティブユーザー取得（対象なし）
+    mockActiveUsersQuery([]);
 
     const response = await GET(createRequest('Bearer test-secret'));
     const json = await response.json();
@@ -229,6 +248,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('OpenAI APIが失敗した場合、ユーザーをスキップする', async () => {
     mockFavoritesUserQuery(['user-1']);
+    mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
@@ -245,6 +265,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('TMDb検索で結果が0件の場合、ユーザーをスキップする', async () => {
     mockFavoritesUserQuery(['user-1']);
+    mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
@@ -263,6 +284,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('レコメンド削除失敗の場合、ユーザーをスキップする', async () => {
     mockFavoritesUserQuery(['user-1']);
+    mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
@@ -294,6 +316,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('レコメンド挿入失敗の場合、既存データを復元してスキップする', async () => {
     mockFavoritesUserQuery(['user-1']);
+    mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
@@ -336,6 +359,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('ユーザー処理中の例外は他のユーザーに影響しない', async () => {
     mockFavoritesUserQuery(['user-1', 'user-2']);
+    mockActiveUsersQuery(['user-1', 'user-2']);
 
     // user-1: お気に入り取得で例外
     mockFrom.mockReturnValueOnce({
@@ -380,6 +404,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('TMDb解決が10件未満の場合、リトライして不足分を補う', async () => {
     mockFavoritesUserQuery(['user-1']);
+    mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([
       { tmdb_movie_id: 1, title: 'インターステラー', rating: 9 },
     ]);
@@ -464,6 +489,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('リトライは最大2回まで（合計3回）', async () => {
     mockFavoritesUserQuery(['user-1']);
+    mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
@@ -504,6 +530,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('除外リストにお気に入りとウォッチリストの両方が含まれる', async () => {
     mockFavoritesUserQuery(['user-1']);
+    mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([
       { tmdb_movie_id: 1, title: 'お気に入り映画', rating: 9 },
     ]);
@@ -551,8 +578,58 @@ describe('GET /api/cron/generate-recommendations', () => {
     );
   });
 
+  it('非アクティブユーザーはスキップされる', async () => {
+    // お気に入りユーザー2人いるが、アクティブは1人だけ
+    mockFavoritesUserQuery(['user-1', 'user-2']);
+    mockActiveUsersQuery(['user-1']);
+
+    // user-1のみ処理
+    mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
+    mockWatchlistQuery([]);
+    mockDismissedMoviesQuery([]);
+    mockSelectExistingRecommendations([]);
+    mockDeleteRecommendations(true);
+    mockInsertRecommendations(true);
+
+    mockFetchRecommendations.mockResolvedValue([
+      { title: 'Movie A', year: 2020, reason: '理由' },
+    ]);
+    mockResolveRecommendations.mockResolvedValue([
+      {
+        tmdb_movie_id: 100,
+        title: 'Movie A',
+        poster_path: null,
+        release_date: null,
+        vote_average: null,
+        genre_ids: null,
+        reason: '理由',
+        display_order: 1,
+      },
+    ]);
+
+    const response = await GET(createRequest('Bearer test-secret'));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.processed_users).toBe(1);
+    expect(json.data.inactive_users).toBe(1);
+  });
+
+  it('全ユーザーが非アクティブの場合、0件処理', async () => {
+    mockFavoritesUserQuery(['user-1', 'user-2']);
+    mockActiveUsersQuery([]);
+
+    const response = await GET(createRequest('Bearer test-secret'));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.processed_users).toBe(0);
+    expect(json.data.inactive_users).toBe(2);
+  });
+
   it('興味なし映画が除外リストとOpenAIプロンプトに含まれる', async () => {
     mockFavoritesUserQuery(['user-1']);
+    mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([
       { tmdb_movie_id: 1, title: 'お気に入り映画', rating: 9 },
     ]);

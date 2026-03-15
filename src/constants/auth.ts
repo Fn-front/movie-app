@@ -82,6 +82,8 @@ export const SESSION_CONFIG = {
   IDLE_MAX_AGE_S: 24 * 60 * 60,
   /** 絶対有効期限（ミリ秒） — 7日間（アクティブでも強制ログアウト） */
   ABSOLUTE_MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000,
+  /** last_login_at 更新間隔（ミリ秒） — 1時間 */
+  LOGIN_UPDATE_INTERVAL_MS: 60 * 60 * 1000,
 } as const;
 
 /**

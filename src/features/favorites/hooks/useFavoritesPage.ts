@@ -31,6 +31,12 @@ export interface UseFavoritesPageReturn {
   favorites: FavoriteItem[];
   /** 読み込み中 */
   isLoading: boolean;
+  /** 次ページ読み込み中 */
+  isFetchingNextPage: boolean;
+  /** 次ページがあるか */
+  hasNextPage: boolean;
+  /** 次ページを読み込む */
+  fetchNextPage: () => void;
   /** 現在のソートキー */
   sortBy: SortByValue;
   /** ソート変更ハンドラー */
@@ -45,7 +51,13 @@ export interface UseFavoritesPageReturn {
 export function useFavoritesPage(): UseFavoritesPageReturn {
   const [sortBy, setSortBy] = useState<SortByValue>(FAVORITES_SORT_BY.ADDED_AT);
 
-  const { favorites, isLoading } = useFavorites({
+  const {
+    favorites,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useFavorites({
     sort_by: sortBy,
     sort_order: FAVORITES_SORT_ORDER.DESC,
   });
@@ -58,12 +70,24 @@ export function useFavoritesPage(): UseFavoritesPageReturn {
 
   return useMemo(
     () => ({
-      favorites: favorites?.favorites ?? [],
+      favorites,
       isLoading,
+      isFetchingNextPage,
+      hasNextPage,
+      fetchNextPage,
       sortBy,
       handleSortChange,
       favoriteToggle,
     }),
-    [favorites, isLoading, sortBy, handleSortChange, favoriteToggle],
+    [
+      favorites,
+      isLoading,
+      isFetchingNextPage,
+      hasNextPage,
+      fetchNextPage,
+      sortBy,
+      handleSortChange,
+      favoriteToggle,
+    ],
   );
 }

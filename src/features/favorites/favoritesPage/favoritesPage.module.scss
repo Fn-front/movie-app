@@ -43,4 +43,10 @@
       width: 180px;
     }
   }
+
+  &__loading {
+    display: flex;
+    justify-content: center;
+    padding: $spacing-6 0;
+  }
 }

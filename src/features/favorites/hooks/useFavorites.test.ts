@@ -69,9 +69,14 @@ const mockFavoritesResponse = {
         added_at: '2026-01-10T00:00:00Z',
       },
     ],
-    total: 1,
-    page: 1,
-    limit: 20,
+    pagination: {
+      currentPage: 1,
+      totalPages: 1,
+      totalItems: 1,
+      itemsPerPage: 20,
+      hasNextPage: false,
+      nextPage: null,
+    },
   },
 };
 
@@ -89,11 +94,10 @@ describe('useFavorites', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.favorites).toBeDefined();
+      expect(result.current.favorites).toHaveLength(1);
     });
 
-    expect(result.current.favorites?.favorites).toHaveLength(1);
-    expect(result.current.favorites?.favorites[0].title).toBe('映画A');
+    expect(result.current.favorites[0].title).toBe('映画A');
   });
 
   it('追加mutationがAPIを呼び出す', async () => {
@@ -116,7 +120,7 @@ describe('useFavorites', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.favorites).toBeDefined();
+      expect(result.current.isLoading).toBe(false);
     });
 
     act(() => {
@@ -151,7 +155,7 @@ describe('useFavorites', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.favorites).toBeDefined();
+      expect(result.current.isLoading).toBe(false);
     });
 
     act(() => {
@@ -189,7 +193,7 @@ describe('useFavorites', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.favorites).toBeDefined();
+      expect(result.current.isLoading).toBe(false);
     });
 
     act(() => {
@@ -209,7 +213,7 @@ describe('useFavorites', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.favorites).toBeDefined();
+      expect(result.current.isLoading).toBe(false);
     });
 
     act(() => {
@@ -231,7 +235,7 @@ describe('useFavorites', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.favorites).toBeDefined();
+      expect(result.current.isLoading).toBe(false);
     });
 
     act(() => {
@@ -251,7 +255,7 @@ describe('useFavorites', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.favorites).toBeDefined();
+      expect(result.current.isLoading).toBe(false);
     });
 
     act(() => {
@@ -275,7 +279,7 @@ describe('useFavorites', () => {
       wrapper: createWrapper(),
     });
 
-    expect(result.current.favorites).toBeUndefined();
+    expect(result.current.favorites).toEqual([]);
     expect(result.current.isLoading).toBe(false);
     expect(mockGetFavorites).not.toHaveBeenCalled();
 

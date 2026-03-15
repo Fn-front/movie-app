@@ -71,9 +71,14 @@ const mockFavoritesResponse = {
         added_at: '2026-02-15T00:00:00Z',
       },
     ],
-    total: 2,
-    page: 1,
-    limit: 20,
+    pagination: {
+      currentPage: 1,
+      totalPages: 1,
+      totalItems: 2,
+      itemsPerPage: 20,
+      hasNextPage: false,
+      nextPage: null,
+    },
   },
 };
 
@@ -159,7 +164,17 @@ describe('useFavoritesPage', () => {
   it('お気に入りが空の場合は空配列を返す', async () => {
     mockGetFavorites.mockResolvedValue({
       success: true,
-      data: { favorites: [], total: 0, page: 1, limit: 20 },
+      data: {
+        favorites: [],
+        pagination: {
+          currentPage: 1,
+          totalPages: 0,
+          totalItems: 0,
+          itemsPerPage: 20,
+          hasNextPage: false,
+          nextPage: null,
+        },
+      },
     });
 
     const { result } = renderHook(() => useFavoritesPage(), {

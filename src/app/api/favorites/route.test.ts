@@ -107,9 +107,14 @@ describe('GET /api/favorites', () => {
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
     expect(json.data.favorites).toHaveLength(2);
-    expect(json.data.total).toBe(2);
-    expect(json.data.page).toBe(1);
-    expect(json.data.limit).toBe(20);
+    expect(json.data.pagination).toEqual({
+      currentPage: 1,
+      totalPages: 1,
+      totalItems: 2,
+      itemsPerPage: 20,
+      hasNextPage: false,
+      nextPage: null,
+    });
   });
 
   it('ソートとページ指定で取得できる', async () => {

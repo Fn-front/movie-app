@@ -84,14 +84,22 @@ export async function GET(request: Request) {
       throw error;
     }
 
+    const totalPages = Math.ceil(total / limit);
+    const hasNextPage = page < totalPages;
+
     return NextResponse.json(
       {
         success: true,
         data: {
           favorites: data ?? [],
-          total,
-          page,
-          limit,
+          pagination: {
+            currentPage: page,
+            totalPages,
+            totalItems: total,
+            itemsPerPage: limit,
+            hasNextPage,
+            nextPage: hasNextPage ? page + 1 : null,
+          },
         },
       },
       { status: HTTP_STATUS.OK },

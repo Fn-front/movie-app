@@ -27,11 +27,17 @@ let mockFavorites: Array<{
   added_at: string;
 }> = [];
 let mockIsLoading = false;
+let mockIsFetchingNextPage = false;
+let mockHasNextPage = false;
+const mockFetchNextPage = jest.fn();
 
 jest.mock('@/features/favorites/hooks/useFavoritesPage', () => ({
   useFavoritesPage: () => ({
     favorites: mockFavorites,
     isLoading: mockIsLoading,
+    isFetchingNextPage: mockIsFetchingNextPage,
+    hasNextPage: mockHasNextPage,
+    fetchNextPage: mockFetchNextPage,
     sortBy: mockSortBy,
     handleSortChange: mockHandleSortChange,
     favoriteToggle: {
@@ -68,6 +74,10 @@ jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
   MovieDetailModal: jest.fn(() => null),
 }));
 
+jest.mock('@/hooks/useIntersectionObserver', () => ({
+  useIntersectionObserver: jest.fn().mockReturnValue(jest.fn()),
+}));
+
 // --- Tests ---
 
 describe('FavoritesPage', () => {
@@ -75,6 +85,8 @@ describe('FavoritesPage', () => {
     jest.clearAllMocks();
     mockSortBy = 'added_at';
     mockIsLoading = false;
+    mockIsFetchingNextPage = false;
+    mockHasNextPage = false;
     mockFavorites = [
       {
         id: 'fav-1',

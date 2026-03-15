@@ -1108,7 +1108,7 @@
     - レコメンド未生成 → 準備中テキスト表示
     - レコメンドあり → MovieTile 10件表示
     - タイルクリック → MovieDetailModal表示
-- [ ] E2Eテスト（Playwright）
+- [x] E2Eテスト（Playwright）
   - ホームページでレコメンドセクション表示確認
   - レコメンド映画タイルクリック → 詳細モーダル表示
 
@@ -1127,6 +1127,10 @@
   - GET API Routeテスト（認証チェック・一覧取得・空配列）
   - DismissedMoviesListコンポーネントテスト（一覧表示・解除・空状態）
   - APIクライアントテスト（getDismissedMovies）
+- [x] E2Eテスト（Playwright）
+  - 設定ページで興味なし一覧表示確認
+  - 空状態メッセージ表示
+  - 解除ボタンクリック → 楽観的UI更新
 
 ### Step 5: AI原題提案機能（設計書: `.claude/documents/title-suggestion-design.md`）
 

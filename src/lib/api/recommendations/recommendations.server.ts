@@ -61,8 +61,7 @@ export async function getRecommendations(): Promise<RecommendationData> {
 
   const rows = recsResult.data ?? [];
   const hasFavorites = (favCountResult.count ?? 0) > 0;
-  const generatedAt =
-    rows.length > 0 ? (rows[0].generated_at as string) : null;
+  const generatedAt = rows.length > 0 ? (rows[0].generated_at as string) : null;
 
   const recommendations: Recommendation[] = rows.map((row) => ({
     id: row.id as string,

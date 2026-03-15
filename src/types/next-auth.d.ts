@@ -34,7 +34,7 @@ declare module 'next-auth/jwt' {
     role: string;
     passwordChangedAt: string | null;
     lastPasswordCheck: number;
-    lastLoginUpdate: number;
+    lastLoginUpdate?: number;
     issuedAt?: number;
     invalidated?: boolean;
   }

@@ -176,10 +176,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Credentials Provider: last_login_at を更新して通す
       if (account?.provider === 'credentials') {
         if (supabase && user.id) {
-          await supabase
+          const { error: loginUpdateError } = await supabase
             .from('users')
             .update({ last_login_at: new Date().toISOString() })
             .eq('id', user.id);
+
+          if (loginUpdateError) {
+            console.warn(
+              'Failed to update last_login_at for user:',
+              loginUpdateError,
+            );
+          }
         }
         return true;
       }
@@ -263,10 +270,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
 
       // last_login_at を更新
-      await supabase
+      const { error: loginUpdateError } = await supabase
         .from('users')
         .update({ last_login_at: new Date().toISOString() })
         .eq('id', userId);
+
+      if (loginUpdateError) {
+        console.warn(
+          'Failed to update last_login_at for user:',
+          loginUpdateError,
+        );
+      }
 
       // userオブジェクトにidをセット（jwtコールバックで使用）
       user.id = userId;

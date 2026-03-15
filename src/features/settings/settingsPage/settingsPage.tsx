@@ -8,6 +8,7 @@ import { memo } from 'react';
 import { useSession } from 'next-auth/react';
 
 import { Heading } from '@/components/ui/heading/heading';
+import { Skeleton } from '@/components/ui/skeleton/skeleton';
 import { DisplayNameForm } from '@/features/settings/displayNameForm/displayNameForm';
 import { ChangePasswordForm } from '@/features/settings/changePasswordForm/changePasswordForm';
 import { NotificationSettings } from '@/features/settings/notificationSettings/notificationSettings';
@@ -20,8 +21,9 @@ import styles from './settingsPage.module.scss';
  * 設定ページ
  */
 export const SettingsPage = memo(function SettingsPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const email = session?.user?.email ?? '';
+  const isSessionLoading = status === 'loading';
 
   return (
     <div className={styles.c_settings_page}>
@@ -33,11 +35,18 @@ export const SettingsPage = memo(function SettingsPage() {
           <DisplayNameForm />
         </section>
 
-        {email && (
+        {isSessionLoading ? (
           <section className={styles.c_settings_page__section}>
             <Heading level={2}>パスワード変更</Heading>
-            <ChangePasswordForm email={email} />
+            <Skeleton variant='rect' width='100%' height={48} />
           </section>
+        ) : (
+          email && (
+            <section className={styles.c_settings_page__section}>
+              <Heading level={2}>パスワード変更</Heading>
+              <ChangePasswordForm email={email} />
+            </section>
+          )
         )}
 
         <section className={styles.c_settings_page__section}>

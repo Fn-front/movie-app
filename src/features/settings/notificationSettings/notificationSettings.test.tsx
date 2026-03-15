@@ -131,10 +131,19 @@ describe('NotificationSettings', () => {
     ).not.toBeChecked();
   });
 
-  it('ローディング中はnullを返す', () => {
+  it('ローディング中はスケルトンが表示される', () => {
     mockGetSettings.mockReturnValue(new Promise(() => {}));
-    const { container } = render(<NotificationSettings />);
+    render(<NotificationSettings />);
 
-    expect(container.firstChild).toBeNull();
+    expect(
+      screen.queryByRole('checkbox', {
+        name: '公開日リマインダーを受け取る',
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'ウォッチリストに追加した映画の公開日が近づいたら通知します',
+      ),
+    ).not.toBeInTheDocument();
   });
 });

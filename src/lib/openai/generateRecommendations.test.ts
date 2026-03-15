@@ -63,7 +63,7 @@ describe('buildUserPrompt', () => {
     expect(prompt).not.toContain('## 除外リスト');
   });
 
-  it('興味なしリストが含まれる場合、興味なしセクションを追加する', () => {
+  it('興味なしリストが含まれる場合、興味なしセクションをジャンル名付きで追加する', () => {
     const favorites = [{ title: 'インターステラー', rating: 9 }];
     const dismissedMovies = [
       { tmdb_movie_id: 10, title: 'ホラー映画A', genre_ids: [27] },
@@ -72,8 +72,19 @@ describe('buildUserPrompt', () => {
     const prompt = buildUserPrompt(favorites, [], dismissedMovies);
 
     expect(prompt).toContain('## 興味なしリスト');
-    expect(prompt).toContain('- ホラー映画A');
-    expect(prompt).toContain('- ホラー映画B');
+    expect(prompt).toContain('- ホラー映画A（ホラー）');
+    expect(prompt).toContain('- ホラー映画B（ホラー、スリラー）');
+  });
+
+  it('genre_idsがnullの場合、ジャンル名なしで表示する', () => {
+    const favorites = [{ title: 'テスト映画', rating: 5 }];
+    const dismissedMovies = [
+      { tmdb_movie_id: 10, title: '不明ジャンル映画', genre_ids: null },
+    ];
+    const prompt = buildUserPrompt(favorites, [], dismissedMovies);
+
+    expect(prompt).toContain('- 不明ジャンル映画');
+    expect(prompt).not.toContain('- 不明ジャンル映画（');
   });
 
   it('興味なしリストが空の場合、興味なしセクションを含めない', () => {

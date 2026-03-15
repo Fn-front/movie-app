@@ -11,6 +11,29 @@ import {
 
 import { createOpenAIClient, getOpenAIModel } from './client';
 
+/** TMDbジャンルID → ジャンル名マッピング */
+const TMDB_GENRE_MAP: Record<number, string> = {
+  28: 'アクション',
+  12: 'アドベンチャー',
+  16: 'アニメーション',
+  35: 'コメディ',
+  80: '犯罪',
+  99: 'ドキュメンタリー',
+  18: 'ドラマ',
+  10751: 'ファミリー',
+  14: 'ファンタジー',
+  36: '歴史',
+  27: 'ホラー',
+  10402: '音楽',
+  9648: 'ミステリー',
+  10749: 'ロマンス',
+  878: 'SF',
+  10770: 'テレビ映画',
+  53: 'スリラー',
+  10752: '戦争',
+  37: '西部劇',
+};
+
 /** お気に入り映画の情報 */
 export interface FavoriteMovie {
   title: string;
@@ -89,7 +112,14 @@ export function buildUserPrompt(
 
   if (dismissedMovies.length > 0) {
     const dismissedLines = dismissedMovies
-      .map((d) => `- ${d.title}`)
+      .map((d) => {
+        const genreNames = (d.genre_ids || [])
+          .map((id) => TMDB_GENRE_MAP[id])
+          .filter(Boolean);
+        const genreSuffix =
+          genreNames.length > 0 ? `（${genreNames.join('、')}）` : '';
+        return `- ${d.title}${genreSuffix}`;
+      })
       .join('\n');
     prompt += `\n\n## 興味なしリスト（これらの映画やその傾向は避けてください）\n${dismissedLines}`;
   }

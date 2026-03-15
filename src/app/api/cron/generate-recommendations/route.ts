@@ -125,13 +125,7 @@ export async function GET(request: NextRequest) {
           .eq('user_id', userId)
           .is('deleted_at', null);
 
-        const dismissedMovies: DismissedMovie[] = (dismissedItems || []).map(
-          (d) => ({
-            tmdb_movie_id: d.tmdb_movie_id,
-            title: d.title,
-            genre_ids: d.genre_ids,
-          }),
-        );
+        const dismissedMovies = (dismissedItems || []) as DismissedMovie[];
 
         const excludedMovies: ExcludedMovie[] = [
           ...favorites.map((f) => ({

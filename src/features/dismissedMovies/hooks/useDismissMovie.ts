@@ -3,12 +3,15 @@
  * レコメンドカードから映画をdismissする
  */
 
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 
 import { addDismissedMovie } from '@/lib/api/dismissedMovies/dismissedMovies';
 import { useToast } from '@/hooks/useToast';
-import { DISMISSED_MOVIES_SUCCESS_MESSAGES } from '@/constants';
+import {
+  DISMISSED_MOVIES_SUCCESS_MESSAGES,
+  DISMISSED_MOVIES_ERROR_MESSAGES,
+} from '@/constants';
 
 /**
  * dismiss対象の映画データ
@@ -39,7 +42,7 @@ export interface UseDismissMovieReturn {
 export function useDismissMovie(): UseDismissMovieReturn {
   const { toast } = useToast();
   const dismissingIdRef = useRef<number | null>(null);
-  const dismissedIdsRef = useRef<Set<number>>(new Set());
+  const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
 
   const mutation = useMutation({
     mutationFn: (data: DismissMovieData) =>
@@ -54,15 +57,23 @@ export function useDismissMovie(): UseDismissMovieReturn {
         variant: 'success',
       });
     },
+    onError: (_error, variables) => {
+      setDismissedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(variables.tmdb_movie_id);
+        return next;
+      });
+      toast({
+        title: DISMISSED_MOVIES_ERROR_MESSAGES.ADD_FAILED,
+        variant: 'error',
+      });
+    },
   });
 
   const dismissMovie = useCallback(
     (movie: DismissMovieData) => {
       dismissingIdRef.current = movie.tmdb_movie_id;
-      dismissedIdsRef.current = new Set([
-        ...dismissedIdsRef.current,
-        movie.tmdb_movie_id,
-      ]);
+      setDismissedIds((prev) => new Set([...prev, movie.tmdb_movie_id]));
       mutation.mutate(movie);
     },
     [mutation],
@@ -79,8 +90,8 @@ export function useDismissMovie(): UseDismissMovieReturn {
       dismissMovie,
       isDismissing: mutation.isPending,
       isDismissingMovie,
-      dismissedIds: dismissedIdsRef.current,
+      dismissedIds,
     }),
-    [dismissMovie, mutation.isPending, isDismissingMovie],
+    [dismissMovie, mutation.isPending, isDismissingMovie, dismissedIds],
   );
 }

@@ -11,12 +11,14 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
     onFavoriteToggle,
     onWatchlistToggle,
     onDismiss,
+    dismissDisabled,
   }: {
     movie: { id: number; title: string };
     onClick?: (movieId: number) => void;
     onFavoriteToggle?: () => void;
     onWatchlistToggle?: () => void;
     onDismiss?: (movie: { id: number; title: string }) => void;
+    dismissDisabled?: boolean;
   }) => (
     <div
       data-testid={`movie-tile-${movie.id}`}
@@ -52,6 +54,7 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
       {onDismiss && (
         <button
           data-testid={`dismiss-btn-${movie.id}`}
+          disabled={dismissDisabled}
           onClick={(e) => {
             e.stopPropagation();
             onDismiss(movie);
@@ -322,6 +325,22 @@ describe('RecommendationSection', () => {
 
       expect(screen.getByTestId('dismiss-btn-100')).toBeInTheDocument();
       expect(screen.getByTestId('dismiss-btn-101')).toBeInTheDocument();
+    });
+
+    it('お気に入り済みの映画は興味なしボタンが無効になる', () => {
+      mockGetFavoriteInfo.mockImplementation((id: number) =>
+        id === 100 ? { id: 'fav-1', rating: 8 } : null,
+      );
+
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(2)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(screen.getByTestId('dismiss-btn-100')).toBeDisabled();
+      expect(screen.getByTestId('dismiss-btn-101')).not.toBeDisabled();
     });
 
     it('dismissされた映画がリストから除外される', () => {

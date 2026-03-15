@@ -148,7 +148,9 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
                   onFavoriteToggle={handleFavoriteToggle}
                   favoriteDisabled={isFavoriteProcessing(movie.id)}
                   onDismiss={handleDismiss}
-                  dismissDisabled={isDismissingMovie(movie.id)}
+                  dismissDisabled={
+                    isDismissingMovie(movie.id) || !!movie.favorite
+                  }
                 />
                 <p className={styles.c_recommendation_section__reason}>
                   {reasonMap.get(movie.id)}

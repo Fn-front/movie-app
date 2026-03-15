@@ -6,7 +6,7 @@
 'use client';
 
 import { memo, useCallback } from 'react';
-import { IoClose } from 'react-icons/io5';
+import { IoThumbsDown } from 'react-icons/io5';
 
 import styles from './dismissButton.module.scss';
 
@@ -60,7 +60,7 @@ export const DismissButton = memo<DismissButtonProps>(
         disabled={disabled}
         aria-label='興味なし'
       >
-        <IoClose />
+        <IoThumbsDown />
       </button>
     );
   },

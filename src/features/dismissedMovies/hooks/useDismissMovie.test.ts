@@ -1,7 +1,10 @@
 import { renderHook, act } from '@testing-library/react';
 
 import { useDismissMovie } from './useDismissMovie';
-import { DISMISSED_MOVIES_SUCCESS_MESSAGES } from '@/constants';
+import {
+  DISMISSED_MOVIES_SUCCESS_MESSAGES,
+  DISMISSED_MOVIES_ERROR_MESSAGES,
+} from '@/constants';
 
 const mockToast = jest.fn();
 jest.mock('@/hooks/useToast', () => ({
@@ -14,11 +17,24 @@ jest.mock('@/lib/api/dismissedMovies/dismissedMovies', () => ({
 
 const mockMutate = jest.fn();
 let mockOnSuccess: (() => void) | undefined;
+let mockOnError:
+  | ((error: unknown, variables: { tmdb_movie_id: number }) => void)
+  | undefined;
 let mockIsPending = false;
 
 jest.mock('@tanstack/react-query', () => ({
-  useMutation: (opts: { mutationFn: unknown; onSuccess?: () => void }) => {
+  useMutation: (opts: {
+    mutationFn: unknown;
+    onSuccess?: () => void;
+    onError?: (
+      error: unknown,
+      variables: { tmdb_movie_id: number },
+    ) => void;
+  }) => {
     mockOnSuccess = opts.onSuccess as (() => void) | undefined;
+    mockOnError = opts.onError as
+      | ((error: unknown, variables: { tmdb_movie_id: number }) => void)
+      | undefined;
     return {
       mutate: mockMutate,
       get isPending() {
@@ -39,6 +55,7 @@ describe('useDismissMovie', () => {
     jest.clearAllMocks();
     mockIsPending = false;
     mockOnSuccess = undefined;
+    mockOnError = undefined;
   });
 
   it('dismissMovieでmutateが呼ばれる', () => {
@@ -97,5 +114,25 @@ describe('useDismissMovie', () => {
     });
 
     expect(result.current.isDismissingMovie(999)).toBe(false);
+  });
+
+  it('onError時にdismissedIdsからロールバックされエラートーストが表示される', () => {
+    const { result } = renderHook(() => useDismissMovie());
+
+    act(() => {
+      result.current.dismissMovie(mockMovie);
+    });
+
+    expect(result.current.dismissedIds.has(123)).toBe(true);
+
+    act(() => {
+      mockOnError?.(new Error('API Error'), { tmdb_movie_id: 123 });
+    });
+
+    expect(result.current.dismissedIds.has(123)).toBe(false);
+    expect(mockToast).toHaveBeenCalledWith({
+      title: DISMISSED_MOVIES_ERROR_MESSAGES.ADD_FAILED,
+      variant: 'error',
+    });
   });
 });

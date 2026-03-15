@@ -11,6 +11,7 @@ import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
+import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { RECOMMENDATIONS_MESSAGES } from '@/constants';
 import type { Recommendation } from '@/schema/recommendations';
 import { toMovieCacheItem } from '@/features/recommendations/utils/toMovieCacheItem';
@@ -42,6 +43,9 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       handleDelete: handleFavoriteDelete,
       isFavoriteProcessing,
     } = useFavoriteToggle();
+
+    const { isInWatchlist, toggleWatchlist, isMovieToggling } =
+      useWatchlistToggle();
 
     const handleMovieClick = useCallback((movieId: number) => {
       setSelectedMovieId(movieId);
@@ -115,6 +119,9 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
                 <MovieTile
                   movie={movie}
                   onClick={handleMovieClick}
+                  isInWatchlist={isInWatchlist(movie.id)}
+                  onWatchlistToggle={toggleWatchlist}
+                  watchlistDisabled={isMovieToggling(movie.id)}
                   onFavoriteToggle={handleFavoriteToggle}
                   favoriteDisabled={isFavoriteProcessing(movie.id)}
                 />

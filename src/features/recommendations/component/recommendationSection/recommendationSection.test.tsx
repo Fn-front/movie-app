@@ -9,10 +9,12 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
     movie,
     onClick,
     onFavoriteToggle,
+    onWatchlistToggle,
   }: {
     movie: { id: number; title: string };
     onClick?: (movieId: number) => void;
     onFavoriteToggle?: () => void;
+    onWatchlistToggle?: () => void;
   }) => (
     <div
       data-testid={`movie-tile-${movie.id}`}
@@ -32,6 +34,17 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
           }}
         >
           お気に入り
+        </button>
+      )}
+      {onWatchlistToggle && (
+        <button
+          data-testid={`watchlist-btn-${movie.id}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onWatchlistToggle();
+          }}
+        >
+          ウォッチリスト
         </button>
       )}
     </div>
@@ -77,6 +90,19 @@ jest.mock(
     FavoriteRatingModal: () => <div data-testid='favorite-rating-modal' />,
   }),
 );
+
+const mockIsInWatchlist = jest.fn().mockReturnValue(false);
+const mockToggleWatchlist = jest.fn();
+const mockIsMovieToggling = jest.fn().mockReturnValue(false);
+
+jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
+  useWatchlistToggle: () => ({
+    isInWatchlist: mockIsInWatchlist,
+    toggleWatchlist: mockToggleWatchlist,
+    isToggling: false,
+    isMovieToggling: mockIsMovieToggling,
+  }),
+}));
 
 // --- Helpers ---
 
@@ -209,6 +235,20 @@ describe('RecommendationSection', () => {
       expect(
         screen.queryByTestId('movie-detail-modal'),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('ウォッチリストボタン', () => {
+    it('各MovieTileにウォッチリストボタンが表示される', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(2)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(screen.getByTestId('watchlist-btn-100')).toBeInTheDocument();
+      expect(screen.getByTestId('watchlist-btn-101')).toBeInTheDocument();
     });
   });
 

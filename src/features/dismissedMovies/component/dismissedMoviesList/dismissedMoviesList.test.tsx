@@ -21,7 +21,7 @@ jest.mock('next/image', () => {
 
 // getTMDbImageUrlモック
 jest.mock('@/utils/image', () => ({
-  getTMDbImageUrl: (path: string | null, _size?: string) =>
+  getTMDbImageUrl: (path: string | null) =>
     path ? `https://image.tmdb.org/t/p/w92${path}` : null,
 }));
 

@@ -141,7 +141,6 @@ describe('GET /api/dismissed-movies', () => {
 
   it('DB接続エラー時に500を返す', async () => {
     // createServiceRoleClientがnullを返すケースをシミュレート
-    const { createServiceRoleClient } = require('@/helpers/supabase');
     const originalMock = jest.requireMock('@/helpers/supabase');
     const originalFn = originalMock.createServiceRoleClient;
     originalMock.createServiceRoleClient = () => null;

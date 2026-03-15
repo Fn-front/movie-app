@@ -3,7 +3,7 @@
  */
 
 import { auth } from '@/lib/auth/auth';
-import { createClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/helpers/supabase';
 import type { Recommendation } from '@/schema/recommendations';
 
 /**
@@ -34,7 +34,10 @@ export async function getRecommendations(): Promise<RecommendationData> {
     return emptyData;
   }
 
-  const supabase = await createClient();
+  const supabase = createServiceRoleClient();
+  if (!supabase) {
+    return emptyData;
+  }
 
   const [recsResult, favCountResult] = await Promise.all([
     supabase

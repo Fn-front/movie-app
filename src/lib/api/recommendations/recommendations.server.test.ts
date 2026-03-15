@@ -16,8 +16,8 @@ jest.mock('@/lib/auth/auth', () => ({
 }));
 
 const mockFrom = jest.fn();
-jest.mock('@/lib/supabase/server', () => ({
-  createClient: jest.fn(() => Promise.resolve({ from: mockFrom })),
+jest.mock('@/helpers/supabase', () => ({
+  createServiceRoleClient: jest.fn(() => ({ from: mockFrom })),
 }));
 
 // --- Helpers ---
@@ -104,6 +104,17 @@ describe('getRecommendations', () => {
   it('DBエラー時は空のデータを返す', async () => {
     mockRecommendationsQuery([], new Error('DB error'));
     mockFavoritesCountQuery(0);
+
+    const result = await getRecommendations();
+
+    expect(result.recommendations).toEqual([]);
+    expect(result.generatedAt).toBeNull();
+    expect(result.hasFavorites).toBe(false);
+  });
+
+  it('DB接続エラー時は空のデータを返す', async () => {
+    const { createServiceRoleClient } = await import('@/helpers/supabase');
+    (createServiceRoleClient as jest.Mock).mockReturnValueOnce(null);
 
     const result = await getRecommendations();
 

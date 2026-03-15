@@ -1038,27 +1038,27 @@
   - zodスキーマテスト（OpenAIレスポンスのパース・バリデーション）
 
 ### Step 2: OpenAIレコメンド生成ロジック + Cron API（`feature/ai-recommendations-cron`）
-- [ ] OpenAIクライアント設定（`lib/openai/client.ts`）
+- [x] OpenAIクライアント設定（`lib/openai/client.ts`）
   - openaiパッケージセットアップ
   - モデル設定（環境変数 or デフォルト）
-- [ ] レコメンド生成ロジック実装（`lib/openai/generateRecommendations.ts`）
+- [x] レコメンド生成ロジック実装（`lib/openai/generateRecommendations.ts`）
   - お気に入りリストからプロンプト組み立て
   - 除外リスト（お気に入り + ウォッチリストのタイトル）をプロンプトに含める
   - OpenAI API呼び出し（response_format: json_object）
   - レスポンスをzodスキーマでパース
-- [ ] TMDb検索ロジック実装（既存tmdbClientの`searchMovies`を活用）
+- [x] TMDb検索ロジック実装（既存tmdbClientの`searchMovies`を活用）
   - タイトル + 公開年で検索 → tmdb_movie_id, poster_path, release_date, vote_average, genre_ids 取得
   - 検索結果なしの場合はスキップ
   - 除外リスト（tmdb_movie_id）と照合 → 該当があればスキップ
-- [ ] Cron API実装（`GET /api/cron/generate-recommendations`）
+- [x] Cron API実装（`GET /api/cron/generate-recommendations`）
   - CRON_SECRET認証
   - お気に入り1件以上のユーザーを取得
   - ユーザーごとに: お気に入り取得 → 除外リスト取得 → OpenAI → TMDb検索 → DB保存
   - 既存レコメンド DELETE → 新規 INSERT（トランザクション）
   - ユーザー単位のtry-catch（1ユーザーの失敗が他に影響しない）
   - OpenAI/TMDbエラー時は該当ユーザーをスキップし既存レコメンドを維持
-- [ ] Vercel Cron設定（vercel.json）— 日次実行
-- [ ] 結合テスト
+- [x] Vercel Cron設定（vercel.json）— 日次実行
+- [x] 結合テスト
   - Cron APIテスト
     - CRON_SECRET認証チェック
     - OpenAI APIモック → 正常レスポンスのパース

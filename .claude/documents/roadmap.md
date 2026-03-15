@@ -1068,20 +1068,20 @@
     - お気に入り0件ユーザーのスキップ
 
 ### Step 3: レコメンド取得API + フック + APIクライアント（`feature/ai-recommendations-api`）
-- [ ] APIクライアント作成（`lib/api/recommendations.ts`）
+- [x] APIクライアント作成（`lib/api/recommendations.ts`）
   - getRecommendations()
-- [ ] レコメンド取得API実装（`GET /api/recommendations`）
+- [x] レコメンド取得API実装（`GET /api/recommendations`）
   - NextAuth.js認証チェック
   - 自分のrecommendationsをdisplay_order順で取得
   - generated_atを含めて返却
   - レコメンドなし → 空配列 + generated_at: null
-- [ ] useRecommendationsフック作成（TanStack Query）
+- [x] useRecommendationsフック作成（TanStack Query）
   - useQueryでレコメンド取得
   - staleTime: 1時間（日次更新のため）
   - ローディング・エラー状態管理
-- [ ] 単体テスト
+- [x] 単体テスト
   - APIクライアントテスト（getRecommendations）
-- [ ] 結合テスト
+- [x] 結合テスト
   - API Routeテスト（GET /api/recommendations）
     - 認証チェック（401）
     - 正常取得（レコメンドあり）

@@ -8,9 +8,11 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: ({
     movie,
     onClick,
+    onFavoriteToggle,
   }: {
     movie: { id: number; title: string };
     onClick?: (movieId: number) => void;
+    onFavoriteToggle?: () => void;
   }) => (
     <div
       data-testid={`movie-tile-${movie.id}`}
@@ -21,6 +23,17 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
       onKeyDown={() => {}}
     >
       {movie.title}
+      {onFavoriteToggle && (
+        <button
+          data-testid={`favorite-btn-${movie.id}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onFavoriteToggle();
+          }}
+        >
+          お気に入り
+        </button>
+      )}
     </div>
   ),
 }));
@@ -40,6 +53,30 @@ jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
       </div>
     ) : null,
 }));
+
+const mockHandleFavoriteToggle = jest.fn();
+const mockCloseFavoriteModal = jest.fn();
+const mockHandleFavoriteModalSubmit = jest.fn();
+const mockHandleFavoriteDelete = jest.fn();
+const mockIsFavoriteProcessing = jest.fn().mockReturnValue(false);
+
+jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
+  useFavoriteToggle: () => ({
+    modalState: { isOpen: false, movie: null, currentFavorite: null },
+    handleFavoriteToggle: mockHandleFavoriteToggle,
+    closeModal: mockCloseFavoriteModal,
+    handleModalSubmit: mockHandleFavoriteModalSubmit,
+    handleDelete: mockHandleFavoriteDelete,
+    isFavoriteProcessing: mockIsFavoriteProcessing,
+  }),
+}));
+
+jest.mock(
+  '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal',
+  () => ({
+    FavoriteRatingModal: () => <div data-testid='favorite-rating-modal' />,
+  }),
+);
 
 // --- Helpers ---
 
@@ -172,6 +209,31 @@ describe('RecommendationSection', () => {
       expect(
         screen.queryByTestId('movie-detail-modal'),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('お気に入りボタン', () => {
+    it('各MovieTileにお気に入りボタンが表示される', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(2)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(screen.getByTestId('favorite-btn-100')).toBeInTheDocument();
+      expect(screen.getByTestId('favorite-btn-101')).toBeInTheDocument();
+    });
+
+    it('FavoriteRatingModalがレンダリングされる', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(screen.getByTestId('favorite-rating-modal')).toBeInTheDocument();
     });
   });
 

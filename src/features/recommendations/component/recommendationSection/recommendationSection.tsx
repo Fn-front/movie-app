@@ -9,6 +9,8 @@ import { memo, useCallback, useMemo, useState } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
+import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { RECOMMENDATIONS_MESSAGES } from '@/constants';
 import type { Recommendation } from '@/schema/recommendations';
 import { toMovieCacheItem } from '@/features/recommendations/utils/toMovieCacheItem';
@@ -31,6 +33,15 @@ export interface RecommendationSectionProps {
 export const RecommendationSection = memo<RecommendationSectionProps>(
   function RecommendationSection({ recommendations, hasFavorites }) {
     const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
+
+    const {
+      modalState: favoriteModalState,
+      handleFavoriteToggle,
+      closeModal: closeFavoriteModal,
+      handleModalSubmit: handleFavoriteModalSubmit,
+      handleDelete: handleFavoriteDelete,
+      isFavoriteProcessing,
+    } = useFavoriteToggle();
 
     const handleMovieClick = useCallback((movieId: number) => {
       setSelectedMovieId(movieId);
@@ -101,7 +112,12 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
                 role='listitem'
                 className={styles.c_recommendation_section__item}
               >
-                <MovieTile movie={movie} onClick={handleMovieClick} />
+                <MovieTile
+                  movie={movie}
+                  onClick={handleMovieClick}
+                  onFavoriteToggle={handleFavoriteToggle}
+                  favoriteDisabled={isFavoriteProcessing(movie.id)}
+                />
                 <p className={styles.c_recommendation_section__reason}>
                   {reasonMap.get(movie.id)}
                 </p>
@@ -112,6 +128,14 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
         <MovieDetailModal
           movieId={selectedMovieId}
           onClose={handleModalClose}
+        />
+        <FavoriteRatingModal
+          isOpen={favoriteModalState.isOpen}
+          onClose={closeFavoriteModal}
+          movieTitle={favoriteModalState.movie?.title ?? ''}
+          currentFavorite={favoriteModalState.currentFavorite}
+          onSubmit={handleFavoriteModalSubmit}
+          onDelete={handleFavoriteDelete}
         />
       </>
     );

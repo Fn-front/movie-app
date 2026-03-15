@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { addDismissedMovie } from '@/lib/api/dismissedMovies/dismissedMovies';
 import { useToast } from '@/hooks/useToast';
@@ -40,8 +40,11 @@ export interface UseDismissMovieReturn {
 /**
  * 興味なし映画追加フック
  */
+const DISMISSED_MOVIES_QUERY_KEY = ['dismissed-movies'];
+
 export function useDismissMovie(): UseDismissMovieReturn {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const dismissingIdRef = useRef<number | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
 
@@ -54,6 +57,7 @@ export function useDismissMovie(): UseDismissMovieReturn {
         genre_ids: data.genre_ids,
       }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: DISMISSED_MOVIES_QUERY_KEY });
       toast({
         title: DISMISSED_MOVIES_SUCCESS_MESSAGES.ADDED,
         variant: 'success',

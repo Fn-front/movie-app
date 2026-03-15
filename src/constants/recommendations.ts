@@ -8,6 +8,11 @@
 export const RECOMMENDATIONS_MAX_COUNT = 10;
 
 /**
+ * レコメンド生成リトライ上限（初回を除く追加試行回数）
+ */
+export const RECOMMENDATIONS_MAX_RETRIES = 2;
+
+/**
  * レコメンドメッセージ
  */
 export const RECOMMENDATIONS_MESSAGES = {

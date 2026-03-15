@@ -13,13 +13,20 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { HTTP_STATUS, ERROR_CODE, AUTH_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  AUTH_ERROR_MESSAGES,
+  RECOMMENDATIONS_MAX_COUNT,
+  RECOMMENDATIONS_MAX_RETRIES,
+} from '@/constants';
 import { createServiceRoleClient } from '@/helpers/supabase';
 import {
   fetchRecommendationsFromOpenAI,
   resolveRecommendationsWithTMDb,
   type FavoriteMovie,
   type ExcludedMovie,
+  type ResolvedRecommendation,
 } from '@/lib/openai/generateRecommendations';
 
 export const dynamic = 'force-dynamic';
@@ -125,22 +132,58 @@ export async function GET(request: NextRequest) {
         const excludedTitles = excludedMovies.map((m) => m.title);
         const excludedIds = new Set(excludedMovies.map((m) => m.tmdb_movie_id));
 
-        // OpenAI APIでレコメンド生成
-        const aiRecommendations = await fetchRecommendationsFromOpenAI(
-          favoriteMovies,
-          excludedTitles,
-        );
+        // OpenAI APIでレコメンド生成（リトライ付き）
+        const allResolved: ResolvedRecommendation[] = [];
+        let remainingCount = RECOMMENDATIONS_MAX_COUNT;
+        let retryExcludedTitles = [...excludedTitles];
 
-        if (!aiRecommendations) {
-          skippedUsers++;
-          continue;
+        for (
+          let attempt = 0;
+          attempt <= RECOMMENDATIONS_MAX_RETRIES;
+          attempt++
+        ) {
+          const aiRecommendations = await fetchRecommendationsFromOpenAI(
+            favoriteMovies,
+            retryExcludedTitles,
+            remainingCount,
+          );
+
+          if (!aiRecommendations) {
+            break;
+          }
+
+          // TMDb検索で映画情報を解決
+          const resolvedInAttempt = await resolveRecommendationsWithTMDb(
+            aiRecommendations,
+            excludedIds,
+          );
+
+          for (const item of resolvedInAttempt) {
+            // 既に追加済みの映画は除外
+            if (
+              allResolved.some((r) => r.tmdb_movie_id === item.tmdb_movie_id)
+            ) {
+              continue;
+            }
+            allResolved.push({
+              ...item,
+              display_order: allResolved.length + 1,
+            });
+          }
+
+          remainingCount = RECOMMENDATIONS_MAX_COUNT - allResolved.length;
+          if (remainingCount <= 0) {
+            break;
+          }
+
+          // 次回リトライ用に解決済みタイトルを除外リストに追加
+          retryExcludedTitles = [
+            ...excludedTitles,
+            ...allResolved.map((r) => r.title),
+          ];
         }
 
-        // TMDb検索で映画情報を解決
-        const resolved = await resolveRecommendationsWithTMDb(
-          aiRecommendations,
-          excludedIds,
-        );
+        const resolved = allResolved;
 
         if (resolved.length === 0) {
           skippedUsers++;

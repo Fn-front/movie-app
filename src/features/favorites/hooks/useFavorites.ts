@@ -1,10 +1,14 @@
 /**
  * お気に入り カスタムフック
- * useQuery（一覧用）、useMutation（追加・評価更新・削除、楽観的UI更新）
+ * useInfiniteQuery（一覧用）、useMutation（追加・評価更新・削除、楽観的UI更新）
  */
 
 import { useCallback, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 
 import {
@@ -14,8 +18,8 @@ import {
   removeFavorite,
 } from '@/lib/api/favorites/favorites';
 import type {
+  FavoriteItem,
   GetFavoritesRequest,
-  GetFavoritesResponse,
   MovieFavoriteInfo,
 } from '@/lib/api/favorites/favorites';
 import type { FavoritesAddFormData } from '@/schema/favorites';
@@ -32,10 +36,16 @@ import type { GetMoviesResponse } from '@/lib/api/movies/movies';
  * useFavoritesフックの返り値
  */
 export interface UseFavoritesReturn {
-  /** お気に入り一覧取得（/favoritesページ用） */
-  favorites: GetFavoritesResponse['data'] | undefined;
-  /** 読み込み中 */
+  /** お気に入り一覧 */
+  favorites: FavoriteItem[];
+  /** 初回読み込み中 */
   isLoading: boolean;
+  /** 次ページ読み込み中 */
+  isFetchingNextPage: boolean;
+  /** 次ページがあるか */
+  hasNextPage: boolean;
+  /** 次ページを読み込む */
+  fetchNextPage: () => void;
   /** お気に入りに追加 */
   addToFavorites: (data: FavoritesAddFormData) => void;
   /** 評価を更新 */
@@ -61,13 +71,20 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // お気に入り一覧取得
-  const favoritesQuery = useQuery({
+  // お気に入り一覧取得（無限スクロール）
+  const favoritesQuery = useInfiniteQuery({
     queryKey: favoriteKeys.list({
       sort_by: params?.sort_by,
       sort_order: params?.sort_order,
     }),
-    queryFn: () => getFavorites(params),
+    queryFn: ({ pageParam }) =>
+      getFavorites({
+        ...params,
+        page: pageParam,
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.data.pagination.nextPage ?? undefined,
     enabled: isAuthenticated,
   });
 
@@ -261,6 +278,13 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
     },
   });
 
+  // 全ページのお気に入りを結合
+  const favorites = useMemo(
+    () =>
+      favoritesQuery.data?.pages.flatMap((page) => page.data.favorites) ?? [],
+    [favoritesQuery.data],
+  );
+
   const addToFavorites = useCallback(
     (data: FavoritesAddFormData) => {
       addMutation.mutate(data);
@@ -284,19 +308,24 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
 
   const getFavoriteInfo = useCallback(
     (tmdbMovieId: number): MovieFavoriteInfo | null => {
-      const item = favoritesQuery.data?.data.favorites.find(
-        (f) => f.tmdb_movie_id === tmdbMovieId,
-      );
+      const item = favorites.find((f) => f.tmdb_movie_id === tmdbMovieId);
       if (!item) return null;
       return { id: item.id, rating: item.rating };
     },
-    [favoritesQuery.data],
+    [favorites],
   );
+
+  const fetchNextPage = useCallback(() => {
+    favoritesQuery.fetchNextPage();
+  }, [favoritesQuery]);
 
   return useMemo(
     () => ({
-      favorites: favoritesQuery.data?.data,
+      favorites,
       isLoading: favoritesQuery.isLoading,
+      isFetchingNextPage: favoritesQuery.isFetchingNextPage,
+      hasNextPage: favoritesQuery.hasNextPage,
+      fetchNextPage,
       addToFavorites,
       updateRating,
       removeFromFavorites,
@@ -306,8 +335,11 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
       isRemoving: removeMutation.isPending,
     }),
     [
-      favoritesQuery.data,
+      favorites,
       favoritesQuery.isLoading,
+      favoritesQuery.isFetchingNextPage,
+      favoritesQuery.hasNextPage,
+      fetchNextPage,
       addToFavorites,
       updateRating,
       removeFromFavorites,

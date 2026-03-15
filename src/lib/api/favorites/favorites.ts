@@ -49,15 +49,25 @@ export interface GetFavoritesRequest {
 }
 
 /**
+ * お気に入りページネーション情報
+ */
+export interface FavoritesPaginationInfo {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage: number;
+  hasNextPage: boolean;
+  nextPage: number | null;
+}
+
+/**
  * お気に入り一覧取得レスポンスの型
  */
 export interface GetFavoritesResponse {
   success: true;
   data: {
     favorites: FavoriteItem[];
-    total: number;
-    page: number;
-    limit: number;
+    pagination: FavoritesPaginationInfo;
   };
 }
 

@@ -44,9 +44,14 @@ describe('favorites API client', () => {
               added_at: '2026-01-10T00:00:00Z',
             },
           ],
-          total: 1,
-          page: 1,
-          limit: 20,
+          pagination: {
+            currentPage: 1,
+            totalPages: 1,
+            totalItems: 1,
+            itemsPerPage: 20,
+            hasNextPage: false,
+            nextPage: null,
+          },
         },
       },
     };
@@ -60,7 +65,7 @@ describe('favorites API client', () => {
         params: {},
       });
       expect(result.data.favorites).toHaveLength(1);
-      expect(result.data.total).toBe(1);
+      expect(result.data.pagination.totalItems).toBe(1);
     });
 
     it('ソート・ページ指定でお気に入りを取得できる', async () => {

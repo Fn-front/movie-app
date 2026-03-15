@@ -39,7 +39,3 @@ export const favoriteKeys = {
   list: (params?: { sort_by?: string; sort_order?: string }) =>
     ['favorites', 'list', params] as const,
 };
-
-export const recommendationKeys = {
-  all: ['recommendations'] as const,
-};

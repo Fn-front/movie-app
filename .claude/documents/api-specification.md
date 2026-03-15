@@ -837,34 +837,44 @@ OTPコード検証
 
 ---
 
-### OpenAIレコメンド機能
+### AIレコメンド機能
 
-#### POST /api/recommendations
-AIによるおすすめ映画取得
+#### データ取得方式
+レコメンドデータはAPI Route経由ではなく、**Server Component（page.tsx）でサーバーサイド直接取得**する。
+NowShowingMovieListと同じパターンで、`recommendations.server.ts` からSupabase SDKで直接DBアクセスし、propsとしてクライアントコンポーネントに渡す。
 
-**認証**: 必須
-
-**Request Body:**
-```json
-{
-  "count": 5
+**サーバーサイド取得関数:**
+```typescript
+// lib/api/recommendations/recommendations.server.ts
+export async function getRecommendations(): Promise<RecommendationData> {
+  // Supabase Server Clientでcookieベース認証
+  // recommendationsテーブル + favoritesテーブルを並列クエリ
+  // { recommendations, generatedAt, hasFavorites } を返却
 }
 ```
 
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "data": {
-    "recommendations": [
-      {
-        "movie": { /* 映画詳細 */ },
-        "reason": "あなたが好きな〇〇に似ているため"
-      }
-    ]
-  }
-}
+**レスポンス型:**
+```typescript
+type RecommendationData = {
+  recommendations: Recommendation[];
+  generatedAt: string | null;
+  hasFavorites: boolean;
+};
 ```
+
+#### POST /api/cron/generate-recommendations
+AIレコメンド生成（Vercel Cron Jobs、1日1回）
+
+**認証**: Vercel Cron Secret（`Authorization: Bearer <CRON_SECRET>`）
+
+**内部処理フロー:**
+1. お気に入りが1件以上あるユーザーを取得
+2. ユーザーごとのお気に入り映画を取得
+3. OpenAI API（gpt-4o-mini）でレコメンド生成（10件）
+4. recommendationsテーブルにUPSERT
+
+**実行スケジュール:**
+- Vercel Cron Jobs: 毎日午前3時（JST）
 
 ---
 

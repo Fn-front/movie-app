@@ -433,6 +433,40 @@ showToast({
 
 ---
 
+### RecommendationSection
+AIレコメンド映画セクション（NowShowingMovieListと同パターン）
+
+**データ取得方式**: Server Component（page.tsx）でサーバーサイド取得 → propsで渡す
+
+**Props:**
+```typescript
+type RecommendationSectionProps = {
+  recommendations: Recommendation[];
+  hasFavorites: boolean;
+};
+```
+
+**表示状態（3パターン）:**
+1. **お気に入り0件**（`hasFavorites: false`）: 登録促進テキスト
+2. **レコメンド未生成**（`recommendations.length === 0`）: 「準備中」テキスト
+3. **レコメンドあり**: MovieTileグリッド + 推薦理由テキスト
+
+**表示内容:**
+- セクションタイトル「あなたへのおすすめ」
+- MovieTileグリッド（5カラム@lg）
+- 各タイルの下に推薦理由（2行truncate）
+- タイルクリックでMovieDetailModal表示
+
+**使用例:**
+```tsx
+<RecommendationSection
+  recommendations={recommendations}
+  hasFavorites={hasFavorites}
+/>
+```
+
+---
+
 ### SearchBar
 Header用検索バー（ページ遷移トリガー）
 

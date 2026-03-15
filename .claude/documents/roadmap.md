@@ -1089,7 +1089,7 @@
   - useRecommendationsフックテスト
 
 ### Step 4: ホームUI統合（`feature/ai-recommendations-ui`）
-- [ ] RecommendationSectionコンポーネント作成
+- [x] RecommendationSectionコンポーネント作成
   - セクション見出し（「あなたへのおすすめ」）
   - 状態分岐:
     - お気に入り0件 → 登録促進テキスト
@@ -1097,12 +1097,12 @@
     - レコメンドあり → MovieTile × 10件グリッド表示
   - 各タイルクリックで MovieDetailModal 表示
   - React.memo + displayName 必須
-- [ ] ホームページにRecommendationSection統合
-  - 既存コンテンツとの配置決定（上 or 下 — 実装時に決定）
-- [ ] SCSS Modules スタイリング
+- [x] ホームページにRecommendationSection統合
+  - NowShowingMovieListの下に配置
+- [x] SCSS Modules スタイリング
   - デザインシステム変数使用
   - レスポンシブ対応（Step 3実装時に調整）
-- [ ] 結合テスト
+- [x] 結合テスト
   - RecommendationSectionテスト
     - お気に入り0件 → 登録促進テキスト表示
     - レコメンド未生成 → 準備中テキスト表示

@@ -19,18 +19,39 @@ jest.mock(
   }),
 );
 
+jest.mock(
+  '@/features/recommendations/component/recommendationSection/recommendationSection',
+  () => ({
+    RecommendationSection: () => (
+      <div data-testid='recommendation-section'>おすすめ映画</div>
+    ),
+  }),
+);
+
 // --- Tests ---
 
 describe('HomePage', () => {
   it('AppLayout内にNowShowingMovieListが表示される', () => {
-    render(<HomePage nowShowingMovies={[]} />);
+    render(
+      <HomePage
+        nowShowingMovies={[]}
+        recommendations={[]}
+        hasFavorites={false}
+      />,
+    );
 
     expect(screen.getByTestId('app-layout')).toBeInTheDocument();
     expect(screen.getByTestId('now-showing-movie-list')).toBeInTheDocument();
   });
 
   it('NowShowingMovieListがAppLayoutの子要素である', () => {
-    render(<HomePage nowShowingMovies={[]} />);
+    render(
+      <HomePage
+        nowShowingMovies={[]}
+        recommendations={[]}
+        hasFavorites={false}
+      />,
+    );
 
     const appLayout = screen.getByTestId('app-layout');
     const nowShowingList = screen.getByTestId('now-showing-movie-list');

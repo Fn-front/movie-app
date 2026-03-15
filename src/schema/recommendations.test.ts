@@ -6,7 +6,6 @@ import {
   openAiRecommendationItemSchema,
   openAiRecommendationsResponseSchema,
   recommendationSchema,
-  recommendationsApiResponseSchema,
 } from './recommendations';
 
 describe('openAiRecommendationItemSchema', () => {
@@ -297,50 +296,6 @@ describe('recommendationSchema', () => {
     const result = recommendationSchema.safeParse({
       ...validRecommendation,
       reason: '',
-    });
-    expect(result.success).toBe(false);
-  });
-});
-
-describe('recommendationsApiResponseSchema', () => {
-  const validRecommendation = {
-    id: '550e8400-e29b-41d4-a716-446655440000',
-    tmdb_movie_id: 12345,
-    title: 'テスト映画',
-    poster_path: '/test.jpg',
-    release_date: '2024-01-01',
-    vote_average: 7.5,
-    genre_ids: [28, 12],
-    reason: 'おすすめの理由',
-    display_order: 1,
-  };
-
-  it('レコメンドありの場合パースが成功する', () => {
-    const result = recommendationsApiResponseSchema.safeParse({
-      recommendations: [validRecommendation],
-      generated_at: '2026-03-15T03:00:00Z',
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('空配列とgenerated_at nullの場合パースが成功する', () => {
-    const result = recommendationsApiResponseSchema.safeParse({
-      recommendations: [],
-      generated_at: null,
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('recommendationsが未指定の場合エラーになる', () => {
-    const result = recommendationsApiResponseSchema.safeParse({
-      generated_at: null,
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('generated_atが未指定の場合エラーになる', () => {
-    const result = recommendationsApiResponseSchema.safeParse({
-      recommendations: [],
     });
     expect(result.success).toBe(false);
   });

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { HomePage } from '@/features/home/home';
 import { getNowShowingMovies } from '@/lib/api/nowShowing/nowShowing.server';
+import { getRecommendations } from '@/lib/api/recommendations/recommendations.server';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,16 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
-  const nowShowingMovies = await getNowShowingMovies();
+  const [nowShowingMovies, recommendationData] = await Promise.all([
+    getNowShowingMovies(),
+    getRecommendations(),
+  ]);
 
-  return <HomePage nowShowingMovies={nowShowingMovies} />;
+  return (
+    <HomePage
+      nowShowingMovies={nowShowingMovies}
+      recommendations={recommendationData.recommendations}
+      hasFavorites={recommendationData.hasFavorites}
+    />
+  );
 }

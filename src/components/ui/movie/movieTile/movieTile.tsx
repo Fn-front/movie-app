@@ -140,10 +140,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
         )}
         {onDismiss && (
           <div className={styles.c_movie_tile__dismiss_button}>
-            <DismissButton
-              onClick={handleDismiss}
-              disabled={dismissDisabled}
-            />
+            <DismissButton onClick={handleDismiss} disabled={dismissDisabled} />
           </div>
         )}
         {onFavoriteToggle && (

@@ -73,6 +73,8 @@ const mockHandleFavoriteModalSubmit = jest.fn();
 const mockHandleFavoriteDelete = jest.fn();
 const mockIsFavoriteProcessing = jest.fn().mockReturnValue(false);
 
+const mockGetFavoriteInfo = jest.fn().mockReturnValue(null);
+
 jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
   useFavoriteToggle: () => ({
     modalState: { isOpen: false, movie: null, currentFavorite: null },
@@ -81,6 +83,7 @@ jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
     handleModalSubmit: mockHandleFavoriteModalSubmit,
     handleDelete: mockHandleFavoriteDelete,
     isFavoriteProcessing: mockIsFavoriteProcessing,
+    getFavoriteInfo: mockGetFavoriteInfo,
   }),
 }));
 

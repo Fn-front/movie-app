@@ -59,6 +59,19 @@ export async function cleanupFavorites(): Promise<void> {
 }
 
 /**
+ * テストユーザーの興味なし映画を物理削除する
+ */
+export async function cleanupDismissedMovies(): Promise<void> {
+  const userId = await getTestUserId();
+  if (!userId) return;
+
+  await fetch(`${SUPABASE_URL}/rest/v1/dismissed_movies?user_id=eq.${userId}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+}
+
+/**
  * テストユーザーのフィルター条件をデフォルト状態にリセットする
  */
 export async function resetFilters(request: APIRequestContext): Promise<void> {

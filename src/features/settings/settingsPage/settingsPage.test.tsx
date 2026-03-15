@@ -161,4 +161,21 @@ describe('SettingsPage', () => {
       screen.queryByRole('heading', { name: 'パスワード変更' }),
     ).not.toBeInTheDocument();
   });
+
+  it('セッションloading中はパスワード変更セクションにスケルトンが表示される', () => {
+    mockUseSession.mockReturnValue({
+      data: null,
+      status: 'loading',
+      update: jest.fn(),
+    });
+
+    render(<SettingsPage />);
+
+    expect(
+      screen.getByRole('heading', { name: 'パスワード変更' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('change-password-form'),
+    ).not.toBeInTheDocument();
+  });
 });

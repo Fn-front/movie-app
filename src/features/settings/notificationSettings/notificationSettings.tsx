@@ -7,6 +7,7 @@
 import { memo, useCallback, useState, useEffect } from 'react';
 
 import { Checkbox } from '@/components/ui/checkbox/checkbox';
+import { Skeleton } from '@/components/ui/skeleton/skeleton';
 import { getSettings, updateSettings } from '@/lib/api/user/user';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
@@ -69,7 +70,14 @@ export const NotificationSettings = memo(function NotificationSettings() {
     [toast],
   );
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <div className={styles.c_notification_settings}>
+        <Skeleton variant='rect' width={200} height={20} />
+        <Skeleton variant='text' width={280} height={14} />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.c_notification_settings}>

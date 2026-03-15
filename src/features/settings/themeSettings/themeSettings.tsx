@@ -7,6 +7,7 @@
 import { memo, useCallback, useState, useEffect } from 'react';
 
 import { Select } from '@/components/ui/select/select';
+import { Skeleton } from '@/components/ui/skeleton/skeleton';
 import { THEME_VALUES } from '@/schema/user';
 import { getSettings, updateSettings } from '@/lib/api/user/user';
 import { useToast } from '@/hooks/useToast';
@@ -91,7 +92,16 @@ export const ThemeSettings = memo(function ThemeSettings() {
     [theme, toast],
   );
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <div className={styles.c_theme_settings}>
+        <div className={styles.c_theme_settings__select}>
+          <Skeleton variant='rect' width={200} height={36} />
+        </div>
+        <Skeleton variant='text' width={160} height={14} />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.c_theme_settings}>

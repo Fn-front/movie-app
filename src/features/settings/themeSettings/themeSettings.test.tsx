@@ -153,10 +153,13 @@ describe('ThemeSettings', () => {
     });
   });
 
-  it('ローディング中はnullを返す', () => {
+  it('ローディング中はスケルトンが表示される', () => {
     mockGetSettings.mockReturnValue(new Promise(() => {}));
-    const { container } = render(<ThemeSettings />);
+    render(<ThemeSettings />);
 
-    expect(container.firstChild).toBeNull();
+    expect(screen.queryByTestId('theme-select')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('アプリの外観を切り替えます'),
+    ).not.toBeInTheDocument();
   });
 });

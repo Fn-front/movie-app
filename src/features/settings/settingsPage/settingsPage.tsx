@@ -12,6 +12,7 @@ import { DisplayNameForm } from '@/features/settings/displayNameForm/displayName
 import { ChangePasswordForm } from '@/features/settings/changePasswordForm/changePasswordForm';
 import { NotificationSettings } from '@/features/settings/notificationSettings/notificationSettings';
 import { ThemeSettings } from '@/features/settings/themeSettings/themeSettings';
+import { DismissedMoviesList } from '@/features/dismissedMovies/component/dismissedMoviesList/dismissedMoviesList';
 
 import styles from './settingsPage.module.scss';
 
@@ -47,6 +48,11 @@ export const SettingsPage = memo(function SettingsPage() {
         <section className={styles.c_settings_page__section}>
           <Heading level={2}>外観</Heading>
           <ThemeSettings />
+        </section>
+
+        <section className={styles.c_settings_page__section}>
+          <Heading level={2}>興味なし一覧</Heading>
+          <DismissedMoviesList />
         </section>
       </div>
     </div>

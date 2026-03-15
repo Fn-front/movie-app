@@ -393,8 +393,10 @@ showToast({
 
 **表示セクション:**
 - プロフィール（DisplayNameForm）
+- パスワード変更（ChangePasswordForm）
 - 通知設定（NotificationSettings）
 - 外観/テーマ（ThemeSettings）
+- 興味なし一覧（DismissedMoviesList）
 
 **使用例:**
 ```tsx
@@ -463,6 +465,25 @@ type RecommendationSectionProps = {
   recommendations={recommendations}
   hasFavorites={hasFavorites}
 />
+```
+
+---
+
+### DismissedMoviesList
+興味なし映画一覧コンポーネント（設定ページ用）
+
+**Props:**
+なし（内部でAPIからデータ取得）
+
+**表示内容:**
+- 映画ポスターサムネイル（w92）+ タイトル + 解除ボタン
+- 解除ボタンクリックで論理削除（DELETE API呼び出し）
+- 空状態の表示（「興味なしに登録した映画はありません」）
+- ローディング状態
+
+**使用例:**
+```tsx
+<DismissedMoviesList />
 ```
 
 ---

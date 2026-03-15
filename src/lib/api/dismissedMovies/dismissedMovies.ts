@@ -29,6 +29,36 @@ export interface AddDismissedMovieResponse {
 }
 
 /**
+ * 興味なし映画一覧アイテムの型
+ */
+export interface DismissedMovieItem {
+  id: string;
+  tmdb_movie_id: number;
+  title: string;
+  poster_path: string | null;
+  genre_ids: number[] | null;
+  created_at: string;
+}
+
+/**
+ * 興味なし映画一覧レスポンスの型
+ */
+export interface GetDismissedMoviesResponse {
+  success: true;
+  data: DismissedMovieItem[];
+}
+
+/**
+ * 興味なし一覧を取得
+ */
+export async function getDismissedMovies(): Promise<DismissedMovieItem[]> {
+  const response = await axiosInstance.get<GetDismissedMoviesResponse>(
+    '/api/dismissed-movies',
+  );
+  return response.data.data;
+}
+
+/**
  * 興味なしに追加
  */
 export async function addDismissedMovie(

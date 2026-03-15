@@ -1,5 +1,6 @@
 /**
  * 興味なし映画API
+ * GET /api/dismissed-movies - 興味なし一覧取得
  * POST /api/dismissed-movies - 興味なしに追加
  * DELETE /api/dismissed-movies - 興味なしから削除
  */
@@ -18,6 +19,45 @@ import {
   DISMISSED_MOVIES_ERROR_MESSAGES,
   DISMISSED_MOVIES_SUCCESS_MESSAGES,
 } from '@/constants';
+
+export async function GET() {
+  try {
+    const session = await getAuthSession();
+    if (!session) return unauthorizedResponse();
+
+    const supabase = createServiceRoleClient();
+    if (!supabase) return dbConnectionErrorResponse();
+
+    const { data, error } = await supabase
+      .from('dismissed_movies')
+      .select('id, tmdb_movie_id, title, poster_path, genre_ids, created_at')
+      .eq('user_id', session.user.id)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json(
+      { success: true, data: data ?? [] },
+      { status: HTTP_STATUS.OK },
+    );
+  } catch (error) {
+    console.error('Dismissed movies fetch error:', error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: ERROR_CODE.SERVER_ERROR,
+          message: DISMISSED_MOVIES_ERROR_MESSAGES.FETCH_FAILED,
+        },
+      },
+      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
+    );
+  }
+}
 
 export async function POST(request: Request) {
   try {

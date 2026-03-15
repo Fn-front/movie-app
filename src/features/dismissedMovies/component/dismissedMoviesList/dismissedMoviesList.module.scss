@@ -1,0 +1,85 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_dismissed_movies_list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+}
+
+.c_dismissed_movies_list__item {
+  display: flex;
+  align-items: center;
+  gap: $spacing-3;
+  padding: $spacing-2;
+  border-radius: $border-radius-sm;
+  cursor: default;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: $surface-hover;
+  }
+}
+
+.c_dismissed_movies_list__poster {
+  flex-shrink: 0;
+  width: 36px;
+  height: 54px;
+  border-radius: $border-radius-sm;
+  overflow: hidden;
+  background-color: $surface-secondary;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: $font-size-lg;
+}
+
+.c_dismissed_movies_list__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.c_dismissed_movies_list__title {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-primary;
+  @include text-truncate;
+}
+
+.c_dismissed_movies_list__remove_button {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: $border-radius-sm;
+  background: transparent;
+  color: $text-tertiary;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+
+  &:hover {
+    color: $text-primary;
+    background-color: $surface-hover;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $primary-500;
+    outline-offset: -2px;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.c_dismissed_movies_list__loading {
+  display: flex;
+  justify-content: center;
+  padding: $spacing-4;
+}

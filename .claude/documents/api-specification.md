@@ -774,6 +774,103 @@ OTPコード検証
 
 ---
 
+## 興味なし映画API
+
+### POST /api/dismissed-movies
+興味なし映画に追加
+
+**認証**: NextAuth.jsセッション必須
+
+**Request Body:**
+```json
+{
+  "tmdb_movie_id": 12345,
+  "title": "映画タイトル",
+  "genre_ids": [28, 12]
+}
+```
+
+**Validation (zod):**
+- `tmdb_movie_id`: 正の整数、必須
+- `title`: 文字列、必須
+- `genre_ids`: 数値配列、任意
+
+**Response (201 Created):**
+```json
+{
+  "success": true,
+  "message": "興味なしリストに追加しました",
+  "data": {
+    "id": "uuid-here",
+    "tmdb_movie_id": 12345,
+    "title": "映画タイトル",
+    "genre_ids": [28, 12],
+    "created_at": "2026-03-15T10:00:00Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: バリデーションエラー
+- `401 Unauthorized`: 認証が必要
+- `409 Conflict`: すでに興味なしリストに追加済み
+
+---
+
+### GET /api/dismissed-movies
+興味なし映画一覧取得
+
+**認証**: NextAuth.jsセッション必須
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid-here",
+      "tmdb_movie_id": 12345,
+      "title": "映画タイトル",
+      "poster_path": "/path/to/poster.jpg",
+      "genre_ids": [28, 12],
+      "created_at": "2026-03-15T10:00:00Z"
+    }
+  ]
+}
+```
+
+**備考:**
+- `deleted_at IS NULL` のレコードのみ返却
+- `created_at` 降順（新しい順）
+- ページングなし（興味なしリストは少量の想定）
+
+**Error Responses:**
+- `401 Unauthorized`: 認証が必要
+
+---
+
+### DELETE /api/dismissed-movies
+興味なしから削除（論理削除）
+
+**認証**: NextAuth.jsセッション必須
+
+**Query Parameters:**
+- `tmdb_movie_id` (必須): TMDb映画ID
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "興味なしリストから削除しました"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: tmdb_movie_idが不正
+- `401 Unauthorized`: 認証が必要
+
+---
+
 ## 将来的なAPI
 
 ### レビュー機能

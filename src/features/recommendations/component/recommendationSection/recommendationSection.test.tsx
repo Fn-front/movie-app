@@ -4,11 +4,6 @@ import { RecommendationSection } from './recommendationSection';
 
 // --- Mocks ---
 
-const mockUseRecommendations = jest.fn();
-jest.mock('@/features/recommendations/hooks/useRecommendations', () => ({
-  useRecommendations: () => mockUseRecommendations(),
-}));
-
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: ({
     movie,
@@ -64,51 +59,11 @@ const createMockRecommendations = (count: number) =>
 // --- Tests ---
 
 describe('RecommendationSection', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe('ローディング・エラー状態', () => {
-    it('ローディング中は何も表示しない', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: [],
-        generatedAt: null,
-        hasFavorites: false,
-        isLoading: true,
-        isError: false,
-      });
-
-      const { container } = render(<RecommendationSection />);
-
-      expect(container.innerHTML).toBe('');
-    });
-
-    it('エラー時は何も表示しない', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: [],
-        generatedAt: null,
-        hasFavorites: false,
-        isLoading: false,
-        isError: true,
-      });
-
-      const { container } = render(<RecommendationSection />);
-
-      expect(container.innerHTML).toBe('');
-    });
-  });
-
   describe('お気に入り0件', () => {
     it('登録促進テキストが表示される', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: [],
-        generatedAt: null,
-        hasFavorites: false,
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<RecommendationSection />);
+      render(
+        <RecommendationSection recommendations={[]} hasFavorites={false} />,
+      );
 
       expect(screen.getByText('あなたへのおすすめ')).toBeInTheDocument();
       expect(
@@ -121,15 +76,9 @@ describe('RecommendationSection', () => {
 
   describe('レコメンド未生成', () => {
     it('準備中テキストが表示される', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: [],
-        generatedAt: null,
-        hasFavorites: true,
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<RecommendationSection />);
+      render(
+        <RecommendationSection recommendations={[]} hasFavorites={true} />,
+      );
 
       expect(screen.getByText('あなたへのおすすめ')).toBeInTheDocument();
       expect(screen.getByText('おすすめ映画を準備中です')).toBeInTheDocument();
@@ -138,15 +87,12 @@ describe('RecommendationSection', () => {
 
   describe('レコメンドあり', () => {
     it('MovieTileが表示される', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: createMockRecommendations(3),
-        generatedAt: '2026-03-15T03:00:00Z',
-        hasFavorites: true,
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<RecommendationSection />);
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(3)}
+          hasFavorites={true}
+        />,
+      );
 
       expect(screen.getByText('あなたへのおすすめ')).toBeInTheDocument();
       expect(screen.getByText('おすすめ映画 1')).toBeInTheDocument();
@@ -155,44 +101,35 @@ describe('RecommendationSection', () => {
     });
 
     it('推薦理由が表示される', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: createMockRecommendations(2),
-        generatedAt: '2026-03-15T03:00:00Z',
-        hasFavorites: true,
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<RecommendationSection />);
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(2)}
+          hasFavorites={true}
+        />,
+      );
 
       expect(screen.getByText('理由 1')).toBeInTheDocument();
       expect(screen.getByText('理由 2')).toBeInTheDocument();
     });
 
     it('グリッドにrole=listが設定される', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: createMockRecommendations(1),
-        generatedAt: '2026-03-15T03:00:00Z',
-        hasFavorites: true,
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<RecommendationSection />);
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
 
       expect(screen.getByRole('list')).toBeInTheDocument();
     });
 
     it('各アイテムにrole=listitemが設定される', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: createMockRecommendations(3),
-        generatedAt: '2026-03-15T03:00:00Z',
-        hasFavorites: true,
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<RecommendationSection />);
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(3)}
+          hasFavorites={true}
+        />,
+      );
 
       expect(screen.getAllByRole('listitem')).toHaveLength(3);
     });
@@ -200,15 +137,12 @@ describe('RecommendationSection', () => {
 
   describe('モーダル連携', () => {
     it('タイルクリックでMovieDetailModalが表示される', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: createMockRecommendations(1),
-        generatedAt: '2026-03-15T03:00:00Z',
-        hasFavorites: true,
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<RecommendationSection />);
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
 
       fireEvent.click(
         screen.getByRole('button', {
@@ -220,15 +154,12 @@ describe('RecommendationSection', () => {
     });
 
     it('モーダルの閉じるボタンでモーダルが非表示になる', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: createMockRecommendations(1),
-        generatedAt: '2026-03-15T03:00:00Z',
-        hasFavorites: true,
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<RecommendationSection />);
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
 
       fireEvent.click(
         screen.getByRole('button', {
@@ -246,15 +177,12 @@ describe('RecommendationSection', () => {
 
   describe('アクセシビリティ', () => {
     it('sectionにaria-labelが設定される', () => {
-      mockUseRecommendations.mockReturnValue({
-        recommendations: createMockRecommendations(1),
-        generatedAt: '2026-03-15T03:00:00Z',
-        hasFavorites: true,
-        isLoading: false,
-        isError: false,
-      });
-
-      render(<RecommendationSection />);
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
 
       expect(
         screen.getByRole('region', { name: 'あなたへのおすすめ' }),

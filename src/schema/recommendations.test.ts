@@ -319,6 +319,7 @@ describe('recommendationsApiResponseSchema', () => {
     const result = recommendationsApiResponseSchema.safeParse({
       recommendations: [validRecommendation],
       generated_at: '2026-03-15T03:00:00Z',
+      has_favorites: true,
     });
     expect(result.success).toBe(true);
   });
@@ -327,6 +328,7 @@ describe('recommendationsApiResponseSchema', () => {
     const result = recommendationsApiResponseSchema.safeParse({
       recommendations: [],
       generated_at: null,
+      has_favorites: false,
     });
     expect(result.success).toBe(true);
   });
@@ -334,6 +336,7 @@ describe('recommendationsApiResponseSchema', () => {
   it('recommendationsが未指定の場合エラーになる', () => {
     const result = recommendationsApiResponseSchema.safeParse({
       generated_at: null,
+      has_favorites: false,
     });
     expect(result.success).toBe(false);
   });
@@ -341,6 +344,15 @@ describe('recommendationsApiResponseSchema', () => {
   it('generated_atが未指定の場合エラーになる', () => {
     const result = recommendationsApiResponseSchema.safeParse({
       recommendations: [],
+      has_favorites: false,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('has_favoritesが未指定の場合エラーになる', () => {
+    const result = recommendationsApiResponseSchema.safeParse({
+      recommendations: [],
+      generated_at: null,
     });
     expect(result.success).toBe(false);
   });

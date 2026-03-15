@@ -8,11 +8,6 @@
 export const RECOMMENDATIONS_MAX_COUNT = 10;
 
 /**
- * レコメンドのstaleTime（1時間）
- */
-export const RECOMMENDATIONS_STALE_TIME = 60 * 60 * 1000;
-
-/**
  * レコメンドメッセージ
  */
 export const RECOMMENDATIONS_MESSAGES = {

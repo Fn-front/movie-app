@@ -42,6 +42,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       handleModalSubmit: handleFavoriteModalSubmit,
       handleDelete: handleFavoriteDelete,
       isFavoriteProcessing,
+      getFavoriteInfo,
     } = useFavoriteToggle();
 
     const { isInWatchlist, toggleWatchlist, isMovieToggling } =
@@ -56,8 +57,12 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
     }, []);
 
     const movieCacheItems = useMemo(
-      () => recommendations.map(toMovieCacheItem),
-      [recommendations],
+      () =>
+        recommendations.map((rec) => ({
+          ...toMovieCacheItem(rec),
+          favorite: getFavoriteInfo(rec.tmdb_movie_id),
+        })),
+      [recommendations, getFavoriteInfo],
     );
 
     const reasonMap = useMemo(

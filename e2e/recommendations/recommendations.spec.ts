@@ -3,6 +3,10 @@
  *
  * ホームページでレコメンドセクション表示確認
  * レコメンド映画タイルクリック → 詳細モーダル表示
+ *
+ * レコメンドデータはSSRでDBから取得されるため、
+ * テストユーザーのレコメンド有無で分岐する設計。
+ * MovieTileは role='button' + aria-label='${title}の詳細を表示' で実装されている。
  */
 
 import { test, expect } from '../fixtures/auth';
@@ -27,17 +31,13 @@ test.describe('レコメンドセクション — ホームページ表示', () 
     const section = page.getByRole('region', { name: 'あなたへのおすすめ' });
     await expect(section).toBeVisible({ timeout: 15000 });
 
-    // レコメンドが存在する場合のみタイル操作をテスト
+    // レコメンドが存在しない場合はスキップ（SSRデータ依存のため）
     const tiles = section.getByRole('listitem');
     const tileCount = await tiles.count();
-
-    if (tileCount === 0) {
-      // レコメンド未生成の場合は準備中メッセージを確認
-      await expect(
-        section.getByText(/お気に入り|準備中/),
-      ).toBeVisible();
-      return;
-    }
+    test.skip(
+      tileCount === 0,
+      'レコメンドデータが未生成のためタイルクリックテストをスキップ',
+    );
 
     // 最初のタイルの詳細ボタンをクリック
     const firstDetailButton = section

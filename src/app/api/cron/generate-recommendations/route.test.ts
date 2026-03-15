@@ -505,15 +505,17 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     expect(response.status).toBe(200);
 
-    // fetchRecommendationsFromOpenAIに除外タイトルと件数が渡されていることを確認
-    expect(mockFetchRecommendations).toHaveBeenCalledWith(
+    // 初回のfetchRecommendationsFromOpenAIに除外タイトルと件数が渡されていることを確認
+    expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
+      1,
       [{ title: 'お気に入り映画', rating: 9 }],
       ['お気に入り映画', 'ウォッチリスト映画'],
       10,
     );
 
-    // resolveRecommendationsWithTMDbに除外IDセットが渡されていることを確認
-    expect(mockResolveRecommendations).toHaveBeenCalledWith(
+    // 初回のresolveRecommendationsWithTMDbに除外IDセットが渡されていることを確認
+    expect(mockResolveRecommendations).toHaveBeenNthCalledWith(
+      1,
       expect.anything(),
       new Set([1, 2]),
     );

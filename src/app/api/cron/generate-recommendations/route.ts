@@ -130,12 +130,15 @@ export async function GET(request: NextRequest) {
         ];
 
         const excludedTitles = excludedMovies.map((m) => m.title);
-        const excludedIds = new Set(excludedMovies.map((m) => m.tmdb_movie_id));
+        const baseExcludedIds = new Set(
+          excludedMovies.map((m) => m.tmdb_movie_id),
+        );
 
         // OpenAI APIでレコメンド生成（リトライ付き）
         const allResolved: ResolvedRecommendation[] = [];
         let remainingCount = RECOMMENDATIONS_MAX_COUNT;
         let retryExcludedTitles = [...excludedTitles];
+        let retryExcludedIds = baseExcludedIds;
 
         for (
           let attempt = 0;
@@ -155,7 +158,7 @@ export async function GET(request: NextRequest) {
           // TMDb検索で映画情報を解決
           const resolvedInAttempt = await resolveRecommendationsWithTMDb(
             aiRecommendations,
-            excludedIds,
+            retryExcludedIds,
           );
 
           for (const item of resolvedInAttempt) {
@@ -176,7 +179,11 @@ export async function GET(request: NextRequest) {
             break;
           }
 
-          // 次回リトライ用に解決済みタイトルを除外リストに追加
+          // 次回リトライ用に解決済みの映画を除外リストに追加
+          retryExcludedIds = new Set([
+            ...baseExcludedIds,
+            ...allResolved.map((r) => r.tmdb_movie_id),
+          ]);
           retryExcludedTitles = [
             ...excludedTitles,
             ...allResolved.map((r) => r.title),

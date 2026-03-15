@@ -45,9 +45,7 @@ const mockFavoritesCountQuery = (count: number) => {
   });
 };
 
-const mockDismissedMoviesQuery = (
-  dismissedIds: number[] = [],
-) => {
+const mockDismissedMoviesQuery = (dismissedIds: number[] = []) => {
   mockFrom.mockReturnValueOnce({
     select: () => ({
       eq: () => ({

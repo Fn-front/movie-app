@@ -65,9 +65,7 @@ export async function getRecommendations(): Promise<RecommendationData> {
   }
 
   const dismissedIds = new Set(
-    (dismissedResult.data ?? []).map(
-      (d) => d.tmdb_movie_id as number,
-    ),
+    (dismissedResult.data ?? []).map((d) => d.tmdb_movie_id as number),
   );
   const rows = (recsResult.data ?? []).filter(
     (row) => !dismissedIds.has(row.tmdb_movie_id as number),

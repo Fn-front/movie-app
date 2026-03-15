@@ -26,10 +26,7 @@ jest.mock('@tanstack/react-query', () => ({
   useMutation: (opts: {
     mutationFn: unknown;
     onSuccess?: () => void;
-    onError?: (
-      error: unknown,
-      variables: { tmdb_movie_id: number },
-    ) => void;
+    onError?: (error: unknown, variables: { tmdb_movie_id: number }) => void;
   }) => {
     mockOnSuccess = opts.onSuccess as (() => void) | undefined;
     mockOnError = opts.onError as

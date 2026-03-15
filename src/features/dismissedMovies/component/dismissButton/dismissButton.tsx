@@ -25,45 +25,45 @@ export interface DismissButtonProps {
 /**
  * DismissButtonコンポーネント
  */
-export const DismissButton = memo<DismissButtonProps>(
-  function DismissButton({ onClick, disabled = false, size = 'sm' }) {
-    const handleClick = useCallback(
-      (event: React.MouseEvent) => {
+export const DismissButton = memo<DismissButtonProps>(function DismissButton({
+  onClick,
+  disabled = false,
+  size = 'sm',
+}) {
+  const handleClick = useCallback(
+    (event: React.MouseEvent) => {
+      event.stopPropagation();
+      onClick();
+    },
+    [onClick],
+  );
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
         event.stopPropagation();
         onClick();
-      },
-      [onClick],
-    );
+      }
+    },
+    [onClick],
+  );
 
-    const handleKeyDown = useCallback(
-      (event: React.KeyboardEvent) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          event.stopPropagation();
-          onClick();
-        }
-      },
-      [onClick],
-    );
+  const sizeClassName =
+    size === 'md' ? styles.c_dismiss_button__md : styles.c_dismiss_button__sm;
 
-    const sizeClassName =
-      size === 'md'
-        ? styles.c_dismiss_button__md
-        : styles.c_dismiss_button__sm;
-
-    return (
-      <button
-        type='button'
-        className={`${styles.c_dismiss_button} ${sizeClassName}`}
-        onClick={handleClick}
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        aria-label='興味なし'
-      >
-        <IoThumbsDown />
-      </button>
-    );
-  },
-);
+  return (
+    <button
+      type='button'
+      className={`${styles.c_dismiss_button} ${sizeClassName}`}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      disabled={disabled}
+      aria-label='興味なし'
+    >
+      <IoThumbsDown />
+    </button>
+  );
+});
 
 DismissButton.displayName = 'DismissButton';

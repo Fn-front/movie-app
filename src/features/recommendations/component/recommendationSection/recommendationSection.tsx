@@ -50,8 +50,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
     const { isInWatchlist, toggleWatchlist, isMovieToggling } =
       useWatchlistToggle();
 
-    const { dismissMovie, isDismissingMovie, dismissedIds } =
-      useDismissMovie();
+    const { dismissMovie, isDismissingMovie, dismissedIds } = useDismissMovie();
 
     const handleDismiss = useCallback(
       (movie: MovieCacheItem) => {

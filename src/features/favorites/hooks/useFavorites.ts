@@ -20,7 +20,6 @@ import {
 import type {
   FavoriteItem,
   GetFavoritesRequest,
-  GetFavoritesResponse,
   MovieFavoriteInfo,
 } from '@/lib/api/favorites/favorites';
 import type { FavoritesAddFormData } from '@/schema/favorites';

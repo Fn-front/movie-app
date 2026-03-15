@@ -321,6 +321,36 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 
 ---
 
+### dismissed_movies（興味なし映画）
+ユーザーが「興味なし」とした映画を管理（レコメンド精度向上用）
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
+| user_id | UUID | NOT NULL | - | ユーザーID（FK → users.id） |
+| tmdb_movie_id | INTEGER | NOT NULL | - | TMDb映画ID |
+| title | VARCHAR(255) | NOT NULL | - | 映画タイトル |
+| genre_ids | INTEGER[] | NULL | - | ジャンルID配列（傾向分析用） |
+| created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
+| deleted_at | TIMESTAMPTZ | NULL | - | 論理削除 |
+
+**インデックス:**
+- `user_id, tmdb_movie_id` (UNIQUE, WHERE deleted_at IS NULL) - 重複登録防止
+- `user_id` - ユーザー別一覧取得用
+
+**外部キー:**
+- `user_id` -> `users(id)` ON DELETE CASCADE
+
+**RLSポリシー:**
+- SELECT/INSERT/UPDATE/DELETE: 自分のレコードのみ操作可能（`auth.uid() = user_id`）
+
+**用途:**
+- レコメンド生成時に除外IDとして使用
+- ジャンル傾向分析でAIプロンプトに「避けるべきジャンル傾向」を含める
+- 将来的に映画一覧でもフィルタに利用可能
+
+---
+
 ## ER図（概念図）
 
 ```
@@ -337,6 +367,8 @@ users (1) ----< (N) watchlist
   +----< (N) recommendations
   |
   +----< (N) reviews
+  |
+  +----< (N) dismissed_movies
 
 otp_codes（usersと直接FKなし、emailで紐付け）
 ```

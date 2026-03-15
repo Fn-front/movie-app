@@ -26,6 +26,7 @@ import {
   resolveRecommendationsWithTMDb,
   type FavoriteMovie,
   type ExcludedMovie,
+  type DismissedMovie,
   type ResolvedRecommendation,
 } from '@/lib/openai/generateRecommendations';
 
@@ -111,12 +112,26 @@ export async function GET(request: NextRequest) {
           rating: f.rating,
         }));
 
-        // 除外リスト取得（お気に入り + ウォッチリストの映画）
+        // 除外リスト取得（お気に入り + ウォッチリスト + 興味なしの映画）
         const { data: watchlistItems } = await supabase
           .from('watchlist')
           .select('tmdb_movie_id, title')
           .eq('user_id', userId)
           .is('deleted_at', null);
+
+        const { data: dismissedItems } = await supabase
+          .from('dismissed_movies')
+          .select('tmdb_movie_id, title, genre_ids')
+          .eq('user_id', userId)
+          .is('deleted_at', null);
+
+        const dismissedMovies: DismissedMovie[] = (dismissedItems || []).map(
+          (d) => ({
+            tmdb_movie_id: d.tmdb_movie_id,
+            title: d.title,
+            genre_ids: d.genre_ids,
+          }),
+        );
 
         const excludedMovies: ExcludedMovie[] = [
           ...favorites.map((f) => ({
@@ -126,6 +141,10 @@ export async function GET(request: NextRequest) {
           ...(watchlistItems || []).map((w) => ({
             tmdb_movie_id: w.tmdb_movie_id,
             title: w.title,
+          })),
+          ...dismissedMovies.map((d) => ({
+            tmdb_movie_id: d.tmdb_movie_id,
+            title: d.title,
           })),
         ];
 
@@ -149,6 +168,7 @@ export async function GET(request: NextRequest) {
             favoriteMovies,
             retryExcludedTitles,
             remainingCount,
+            dismissedMovies,
           );
 
           if (!aiRecommendations) {

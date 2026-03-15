@@ -20,6 +20,8 @@ export interface UseRecommendationsReturn {
   recommendations: Recommendation[];
   /** 生成日時（未生成の場合null） */
   generatedAt: string | null;
+  /** お気に入りが1件以上あるか */
+  hasFavorites: boolean;
   /** ローディング中 */
   isLoading: boolean;
   /** エラー状態 */
@@ -47,16 +49,23 @@ export function useRecommendations(): UseRecommendationsReturn {
     [recommendationsQuery.data],
   );
 
+  const hasFavorites = useMemo(
+    () => recommendationsQuery.data?.data.has_favorites ?? false,
+    [recommendationsQuery.data],
+  );
+
   return useMemo(
     () => ({
       recommendations,
       generatedAt,
+      hasFavorites,
       isLoading: recommendationsQuery.isLoading,
       isError: recommendationsQuery.isError,
     }),
     [
       recommendations,
       generatedAt,
+      hasFavorites,
       recommendationsQuery.isLoading,
       recommendationsQuery.isError,
     ],

@@ -25,23 +25,31 @@ export async function GET() {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    const { data, error } = await supabase
-      .from('recommendations')
-      .select(
-        'id, tmdb_movie_id, title, poster_path, release_date, vote_average, genre_ids, reason, display_order, generated_at',
-      )
-      .eq('user_id', session.user.id)
-      .order('display_order', { ascending: true });
+    const [recsResult, favCountResult] = await Promise.all([
+      supabase
+        .from('recommendations')
+        .select(
+          'id, tmdb_movie_id, title, poster_path, release_date, vote_average, genre_ids, reason, display_order, generated_at',
+        )
+        .eq('user_id', session.user.id)
+        .order('display_order', { ascending: true }),
+      supabase
+        .from('favorites')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .is('deleted_at', null),
+    ]);
 
-    if (error) {
-      throw error;
+    if (recsResult.error) {
+      throw recsResult.error;
     }
 
-    const recommendations = data ?? [];
+    const recommendations = recsResult.data ?? [];
     const generatedAt =
       recommendations.length > 0
         ? (recommendations[0].generated_at as string)
         : null;
+    const hasFavorites = (favCountResult.count ?? 0) > 0;
 
     return NextResponse.json(
       {
@@ -49,6 +57,7 @@ export async function GET() {
         data: {
           recommendations,
           generated_at: generatedAt,
+          has_favorites: hasFavorites,
         },
       },
       { status: HTTP_STATUS.OK },

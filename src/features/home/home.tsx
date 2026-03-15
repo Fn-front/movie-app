@@ -5,6 +5,7 @@
 
 import { AppLayout } from '@/components/layout/appLayout/appLayout';
 import { NowShowingMovieList } from '@/features/nowShowing/component/nowShowingMovieList/nowShowingMovieList';
+import { RecommendationSection } from '@/features/recommendations/component/recommendationSection/recommendationSection';
 import type { NowShowingMovie } from '@/lib/types';
 
 /**
@@ -22,6 +23,7 @@ export function HomePage({ nowShowingMovies }: HomePageProps) {
   return (
     <AppLayout>
       <NowShowingMovieList movies={nowShowingMovies} />
+      <RecommendationSection />
     </AppLayout>
   );
 }

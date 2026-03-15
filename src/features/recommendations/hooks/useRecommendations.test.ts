@@ -48,6 +48,7 @@ describe('useRecommendations', () => {
         data: {
           recommendations: mockRecs,
           generated_at: '2026-03-15T03:00:00Z',
+          has_favorites: true,
         },
       },
       isLoading: false,
@@ -58,6 +59,7 @@ describe('useRecommendations', () => {
 
     expect(result.current.recommendations).toEqual(mockRecs);
     expect(result.current.generatedAt).toBe('2026-03-15T03:00:00Z');
+    expect(result.current.hasFavorites).toBe(true);
     expect(result.current.isLoading).toBe(false);
     expect(result.current.isError).toBe(false);
   });
@@ -73,6 +75,7 @@ describe('useRecommendations', () => {
 
     expect(result.current.recommendations).toEqual([]);
     expect(result.current.generatedAt).toBeNull();
+    expect(result.current.hasFavorites).toBe(false);
     expect(result.current.isLoading).toBe(true);
   });
 

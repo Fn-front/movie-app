@@ -63,6 +63,7 @@ export const recommendationSchema = z.object({
 export const recommendationsApiResponseSchema = z.object({
   recommendations: z.array(recommendationSchema),
   generated_at: z.string().nullable(),
+  has_favorites: z.boolean(),
 });
 
 /**

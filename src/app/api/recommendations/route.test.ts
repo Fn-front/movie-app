@@ -41,6 +41,17 @@ const mockRecommendationsQuery = (
   });
 };
 
+/** お気に入り件数取得のモック */
+const mockFavoritesCountQuery = (count: number) => {
+  mockFrom.mockReturnValueOnce({
+    select: () => ({
+      eq: () => ({
+        is: () => Promise.resolve({ count, error: null }),
+      }),
+    }),
+  });
+};
+
 // --- Tests ---
 
 describe('GET /api/recommendations', () => {
@@ -80,6 +91,7 @@ describe('GET /api/recommendations', () => {
     ];
 
     mockRecommendationsQuery(mockRecs);
+    mockFavoritesCountQuery(3);
 
     const response = await GET();
     const json = await response.json();
@@ -88,10 +100,12 @@ describe('GET /api/recommendations', () => {
     expect(json.success).toBe(true);
     expect(json.data.recommendations).toHaveLength(2);
     expect(json.data.generated_at).toBe('2026-03-15T03:00:00Z');
+    expect(json.data.has_favorites).toBe(true);
   });
 
   it('レコメンドなしの場合、空配列とgenerated_at: nullを返す', async () => {
     mockRecommendationsQuery([]);
+    mockFavoritesCountQuery(0);
 
     const response = await GET();
     const json = await response.json();
@@ -100,6 +114,7 @@ describe('GET /api/recommendations', () => {
     expect(json.success).toBe(true);
     expect(json.data.recommendations).toHaveLength(0);
     expect(json.data.generated_at).toBeNull();
+    expect(json.data.has_favorites).toBe(false);
   });
 
   it('未認証で401を返す', async () => {
@@ -112,6 +127,7 @@ describe('GET /api/recommendations', () => {
 
   it('DBエラー時に500を返す', async () => {
     mockRecommendationsQuery([], new Error('DB error'));
+    mockFavoritesCountQuery(0);
 
     const response = await GET();
     const json = await response.json();

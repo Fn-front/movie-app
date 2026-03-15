@@ -44,6 +44,7 @@ jest.mock('@tanstack/react-query', () => ({
 const mockMovie = {
   tmdb_movie_id: 123,
   title: 'Test Movie',
+  poster_path: '/test.jpg',
   genre_ids: [28, 12],
 };
 

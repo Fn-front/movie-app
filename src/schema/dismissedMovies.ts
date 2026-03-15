@@ -16,5 +16,6 @@ export const dismissedMoviesAddSchema = z.object({
     .string()
     .min(1, '映画タイトルを入力してください')
     .max(255, '映画タイトルは255文字以内で入力してください'),
+  poster_path: z.string().max(255).nullable().optional(),
   genre_ids: z.array(z.number().int()).nullable().optional(),
 });

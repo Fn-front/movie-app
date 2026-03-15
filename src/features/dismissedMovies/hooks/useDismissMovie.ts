@@ -19,6 +19,7 @@ import {
 interface DismissMovieData {
   tmdb_movie_id: number;
   title: string;
+  poster_path: string | null;
   genre_ids: number[] | null;
 }
 
@@ -49,6 +50,7 @@ export function useDismissMovie(): UseDismissMovieReturn {
       addDismissedMovie({
         tmdb_movie_id: data.tmdb_movie_id,
         title: data.title,
+        poster_path: data.poster_path,
         genre_ids: data.genre_ids,
       }),
     onSuccess: () => {

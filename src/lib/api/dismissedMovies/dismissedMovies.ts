@@ -10,6 +10,7 @@ import { axiosInstance } from '@/lib/axios/axios';
 export interface AddDismissedMovieRequest {
   tmdb_movie_id: number;
   title: string;
+  poster_path?: string | null;
   genre_ids?: number[] | null;
 }
 

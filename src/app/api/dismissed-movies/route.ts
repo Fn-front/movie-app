@@ -127,9 +127,10 @@ export async function POST(request: Request) {
         user_id: session.user.id,
         tmdb_movie_id: result.data.tmdb_movie_id,
         title: result.data.title,
+        poster_path: result.data.poster_path ?? null,
         genre_ids: result.data.genre_ids ?? null,
       })
-      .select('id, tmdb_movie_id, title, genre_ids, created_at')
+      .select('id, tmdb_movie_id, title, poster_path, genre_ids, created_at')
       .single();
 
     if (insertError) {

@@ -348,6 +348,46 @@ POST /api/user/change-password
 
 ---
 
+## 最終ログイン日時（last_login_at）更新フロー
+
+ユーザーのアクティブ状態を追跡するため、`users.last_login_at` を以下のタイミングで更新する。
+
+### 更新タイミング
+
+#### 1. signInコールバック（初回ログイン時）
+```
+認証成功（Credentials / OAuth）
+  ↓
+signIn callback
+  ↓
+supabase.from('users').update({ last_login_at: new Date().toISOString() }).eq('id', userId)
+  ↓
+全プロバイダー共通で実行
+```
+
+#### 2. jwtコールバック（セッション更新時、1時間間隔でスロットリング）
+```
+JWTトークン検証時（ページアクセス / API呼び出し）
+  ↓
+jwt callback
+  ↓
+token.lastLoginUpdate でスロットリングチェック（1時間間隔）
+  ↓
+1時間以上経過 → supabase.from('users').update({ last_login_at: ... }) + token.lastLoginUpdate 更新
+1時間未満 → スキップ
+```
+
+**設計判断 — スロットリングの理由:**
+- JWTコールバックはリクエストごとに呼ばれるため、毎回DB更新するとパフォーマンス劣化
+- 既存の `token.lastPasswordCheck`（5分間隔）と同じパターンを採用
+- 1時間間隔はアクティブユーザー判定（3日以内）に対して十分な精度
+
+**用途:**
+- レコメンド生成Cron（`/api/cron/generate-recommendations`）でアクティブユーザーのフィルタリングに使用
+- `last_login_at >= now() - 3日` のユーザーのみレコメンド生成対象
+
+---
+
 ## ログアウトフロー
 
 ```

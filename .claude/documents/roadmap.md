@@ -1132,6 +1132,19 @@
   - 空状態メッセージ表示
   - 解除ボタンクリック → 楽観的UI更新
 
+### Step 6: アクティブユーザーフィルター（Cronコスト最適化）（`feature/active-user-filter-cron`）
+- [x] usersテーブルに `last_login_at` カラム追加（Supabase migration）
+  - TIMESTAMP、NULL許容
+- [x] auth.ts signInコールバックで `last_login_at` を更新
+  - Credentials / OAuth 共通で認証成功時にDB更新
+- [x] auth.ts jwtコールバックで `last_login_at` をスロットリング更新（1時間間隔）
+  - `token.lastLoginUpdate` で最終更新時刻を管理
+  - 既存の `token.lastPasswordCheck`（5分間隔）と同じパターン
+- [x] Cron API（`/api/cron/generate-recommendations`）にアクティブユーザーフィルター追加
+  - `last_login_at >= now() - 3日` のユーザーのみレコメンド生成対象
+- [x] 結合テスト
+  - Cron API: アクティブユーザーフィルタリング
+
 ### Step 5: AI原題提案機能（設計書: `.claude/documents/title-suggestion-design.md`）
 
 > 検索結果0件時に、AIが邦題から原題を推測して提案する機能。検索と並行してAPI呼び出しを行い、テンポを損なわない設計。

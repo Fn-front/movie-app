@@ -965,7 +965,9 @@ AIレコメンド生成（Vercel Cron Jobs、1日1回）
 **認証**: Vercel Cron Secret（`Authorization: Bearer <CRON_SECRET>`）
 
 **内部処理フロー:**
-1. お気に入りが1件以上あるユーザーを取得
+1. お気に入りが1件以上あるアクティブユーザーを取得
+   - `last_login_at >= now() - 3日` のユーザーのみ対象
+   - 非アクティブユーザーはスキップ（OpenAI APIコスト削減）
 2. ユーザーごとのお気に入り映画を取得
 3. OpenAI API（gpt-4o-mini）でレコメンド生成（10件）
 4. recommendationsテーブルにUPSERT

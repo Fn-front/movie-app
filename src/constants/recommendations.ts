@@ -13,6 +13,12 @@ export const RECOMMENDATIONS_MAX_COUNT = 10;
 export const RECOMMENDATIONS_MAX_RETRIES = 2;
 
 /**
+ * アクティブユーザー判定期間（日数）
+ * last_login_at がこの日数以内のユーザーのみレコメンド生成対象
+ */
+export const RECOMMENDATIONS_ACTIVE_USER_DAYS = 3;
+
+/**
  * レコメンドメッセージ
  */
 export const RECOMMENDATIONS_MESSAGES = {

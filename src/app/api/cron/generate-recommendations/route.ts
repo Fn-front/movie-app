@@ -19,6 +19,7 @@ import {
   AUTH_ERROR_MESSAGES,
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_MAX_RETRIES,
+  RECOMMENDATIONS_ACTIVE_USER_DAYS,
 } from '@/constants';
 import { createServiceRoleClient } from '@/helpers/supabase';
 import {
@@ -89,11 +90,42 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // アクティブユーザーのみにフィルタリング（last_login_at が直近N日以内）
+    const activeThreshold = new Date();
+    activeThreshold.setDate(
+      activeThreshold.getDate() - RECOMMENDATIONS_ACTIVE_USER_DAYS,
+    );
+
+    const { data: activeUsers, error: activeUsersError } = await supabase
+      .from('users')
+      .select('id')
+      .in('id', usersWithFavorites)
+      .gte('last_login_at', activeThreshold.toISOString());
+
+    if (activeUsersError) {
+      console.error('Failed to fetch active users:', activeUsersError);
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.SERVER_ERROR,
+            message: 'アクティブユーザー取得に失敗しました',
+          },
+        },
+        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
+      );
+    }
+
+    const activeUserIds = activeUsers
+      ? activeUsers.map((u) => u.id as string)
+      : [];
+
+    const inactiveUsers = usersWithFavorites.length - activeUserIds.length;
     let processedUsers = 0;
     let skippedUsers = 0;
     let totalRecommendations = 0;
 
-    for (const userId of usersWithFavorites) {
+    for (const userId of activeUserIds) {
       try {
         // お気に入り映画を取得（タイトル + 評価）
         const { data: favorites, error: favError } = await supabase
@@ -280,6 +312,7 @@ export async function GET(request: NextRequest) {
         data: {
           processed_users: processedUsers,
           skipped_users: skippedUsers,
+          inactive_users: inactiveUsers,
           total_recommendations: totalRecommendations,
         },
       },

@@ -58,18 +58,6 @@ export const recommendationSchema = z.object({
 });
 
 /**
- * APIレスポンス全体スキーマ
- */
-export const recommendationsApiResponseSchema = z.object({
-  recommendations: z.array(recommendationSchema),
-  generated_at: z.string().nullable(),
-  has_favorites: z.boolean(),
-});
-
-/**
  * APIレスポンスの型
  */
 export type Recommendation = z.infer<typeof recommendationSchema>;
-export type RecommendationsApiResponse = z.infer<
-  typeof recommendationsApiResponseSchema
->;

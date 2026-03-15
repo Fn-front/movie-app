@@ -74,9 +74,7 @@ jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
 jest.mock(
   '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal',
   () => ({
-    FavoriteRatingModal: () => (
-      <div data-testid='favorite-rating-modal' />
-    ),
+    FavoriteRatingModal: () => <div data-testid='favorite-rating-modal' />,
   }),
 );
 
@@ -235,9 +233,7 @@ describe('RecommendationSection', () => {
         />,
       );
 
-      expect(
-        screen.getByTestId('favorite-rating-modal'),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId('favorite-rating-modal')).toBeInTheDocument();
     });
   });
 

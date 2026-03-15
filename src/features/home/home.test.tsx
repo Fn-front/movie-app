@@ -19,6 +19,15 @@ jest.mock(
   }),
 );
 
+jest.mock(
+  '@/features/recommendations/component/recommendationSection/recommendationSection',
+  () => ({
+    RecommendationSection: () => (
+      <div data-testid='recommendation-section'>おすすめ映画</div>
+    ),
+  }),
+);
+
 // --- Tests ---
 
 describe('HomePage', () => {

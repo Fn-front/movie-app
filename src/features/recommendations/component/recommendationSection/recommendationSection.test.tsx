@@ -5,12 +5,9 @@ import { RecommendationSection } from './recommendationSection';
 // --- Mocks ---
 
 const mockUseRecommendations = jest.fn();
-jest.mock(
-  '@/features/recommendations/hooks/useRecommendations',
-  () => ({
-    useRecommendations: () => mockUseRecommendations(),
-  }),
-);
+jest.mock('@/features/recommendations/hooks/useRecommendations', () => ({
+  useRecommendations: () => mockUseRecommendations(),
+}));
 
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: ({
@@ -135,9 +132,7 @@ describe('RecommendationSection', () => {
       render(<RecommendationSection />);
 
       expect(screen.getByText('あなたへのおすすめ')).toBeInTheDocument();
-      expect(
-        screen.getByText('おすすめ映画を準備中です'),
-      ).toBeInTheDocument();
+      expect(screen.getByText('おすすめ映画を準備中です')).toBeInTheDocument();
     });
   });
 

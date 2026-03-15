@@ -37,8 +37,7 @@ export const RecommendationSection = memo(function RecommendationSection() {
   );
 
   const reasonMap = useMemo(
-    () =>
-      new Map(recommendations.map((r) => [r.tmdb_movie_id, r.reason])),
+    () => new Map(recommendations.map((r) => [r.tmdb_movie_id, r.reason])),
     [recommendations],
   );
 
@@ -109,10 +108,7 @@ export const RecommendationSection = memo(function RecommendationSection() {
           ))}
         </div>
       </section>
-      <MovieDetailModal
-        movieId={selectedMovieId}
-        onClose={handleModalClose}
-      />
+      <MovieDetailModal movieId={selectedMovieId} onClose={handleModalClose} />
     </>
   );
 });

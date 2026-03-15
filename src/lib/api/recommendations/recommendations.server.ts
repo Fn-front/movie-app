@@ -39,7 +39,7 @@ export async function getRecommendations(): Promise<RecommendationData> {
     return emptyData;
   }
 
-  const [recsResult, favCountResult] = await Promise.all([
+  const [recsResult, favCountResult, dismissedResult] = await Promise.all([
     supabase
       .from('recommendations')
       .select(
@@ -52,6 +52,11 @@ export async function getRecommendations(): Promise<RecommendationData> {
       .select('id', { count: 'exact', head: true })
       .eq('user_id', session.user.id)
       .is('deleted_at', null),
+    supabase
+      .from('dismissed_movies')
+      .select('tmdb_movie_id')
+      .eq('user_id', session.user.id)
+      .is('deleted_at', null),
   ]);
 
   if (recsResult.error) {
@@ -59,7 +64,14 @@ export async function getRecommendations(): Promise<RecommendationData> {
     return emptyData;
   }
 
-  const rows = recsResult.data ?? [];
+  const dismissedIds = new Set(
+    (dismissedResult.data ?? []).map(
+      (d) => d.tmdb_movie_id as number,
+    ),
+  );
+  const rows = (recsResult.data ?? []).filter(
+    (row) => !dismissedIds.has(row.tmdb_movie_id as number),
+  );
   const hasFavorites = (favCountResult.count ?? 0) > 0;
   const generatedAt = rows.length > 0 ? (rows[0].generated_at as string) : null;
 

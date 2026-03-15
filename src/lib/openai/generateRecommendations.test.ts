@@ -205,14 +205,20 @@ describe('resolveRecommendationsWithTMDb', () => {
 
   it('除外リストに含まれる映画はスキップする', async () => {
     mockSearchMovies.mockResolvedValue({
-      results: [{ id: 200, title: 'Already Favorite', poster_path: null, release_date: '2020-01-01', vote_average: 7.0, genre_ids: [28] }],
+      results: [
+        {
+          id: 200,
+          title: 'Already Favorite',
+          poster_path: null,
+          release_date: '2020-01-01',
+          vote_average: 7.0,
+          genre_ids: [28],
+        },
+      ],
     });
 
     const items = [createItem('Already Favorite', 2020, '理由')];
-    const result = await resolveRecommendationsWithTMDb(
-      items,
-      new Set([200]),
-    );
+    const result = await resolveRecommendationsWithTMDb(items, new Set([200]));
 
     expect(result).toHaveLength(0);
   });
@@ -220,10 +226,28 @@ describe('resolveRecommendationsWithTMDb', () => {
   it('重複する映画はスキップする', async () => {
     mockSearchMovies
       .mockResolvedValueOnce({
-        results: [{ id: 300, title: 'Movie A', poster_path: null, release_date: '2020-01-01', vote_average: 7.0, genre_ids: [28] }],
+        results: [
+          {
+            id: 300,
+            title: 'Movie A',
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 7.0,
+            genre_ids: [28],
+          },
+        ],
       })
       .mockResolvedValueOnce({
-        results: [{ id: 300, title: 'Movie A', poster_path: null, release_date: '2020-01-01', vote_average: 7.0, genre_ids: [28] }],
+        results: [
+          {
+            id: 300,
+            title: 'Movie A',
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 7.0,
+            genre_ids: [28],
+          },
+        ],
       });
 
     const items = [
@@ -239,7 +263,16 @@ describe('resolveRecommendationsWithTMDb', () => {
     mockSearchMovies
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce({
-        results: [{ id: 400, title: 'Movie B', poster_path: null, release_date: '2021-01-01', vote_average: 8.0, genre_ids: [12] }],
+        results: [
+          {
+            id: 400,
+            title: 'Movie B',
+            poster_path: null,
+            release_date: '2021-01-01',
+            vote_average: 8.0,
+            genre_ids: [12],
+          },
+        ],
       });
 
     const items = [
@@ -258,7 +291,16 @@ describe('resolveRecommendationsWithTMDb', () => {
     for (let i = 1; i <= 12; i++) {
       items.push(createItem(`Movie ${i}`, 2020, `理由${i}`));
       mockSearchMovies.mockResolvedValueOnce({
-        results: [{ id: i, title: `Movie ${i}`, poster_path: null, release_date: '2020-01-01', vote_average: 7.0, genre_ids: [28] }],
+        results: [
+          {
+            id: i,
+            title: `Movie ${i}`,
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 7.0,
+            genre_ids: [28],
+          },
+        ],
       });
     }
 

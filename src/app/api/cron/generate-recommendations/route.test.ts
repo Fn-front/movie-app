@@ -34,10 +34,9 @@ const createRequest = (authHeader?: string) => {
   if (authHeader) {
     headers.set('authorization', authHeader);
   }
-  return new NextRequest(
-    'http://localhost/api/cron/generate-recommendations',
-    { headers },
-  );
+  return new NextRequest('http://localhost/api/cron/generate-recommendations', {
+    headers,
+  });
 };
 
 /** お気に入りユーザー取得のモック */
@@ -190,9 +189,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('OpenAI APIが失敗した場合、ユーザーをスキップする', async () => {
     mockFavoritesUserQuery(['user-1']);
-    mockFavoritesQuery([
-      { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
-    ]);
+    mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
 
     mockFetchRecommendations.mockResolvedValue(null);
@@ -207,9 +204,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('TMDb検索で結果が0件の場合、ユーザーをスキップする', async () => {
     mockFavoritesUserQuery(['user-1']);
-    mockFavoritesQuery([
-      { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
-    ]);
+    mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
 
     mockFetchRecommendations.mockResolvedValue([
@@ -226,9 +221,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('レコメンド削除失敗の場合、ユーザーをスキップする', async () => {
     mockFavoritesUserQuery(['user-1']);
-    mockFavoritesQuery([
-      { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
-    ]);
+    mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDeleteRecommendations(false);
 
@@ -257,9 +250,7 @@ describe('GET /api/cron/generate-recommendations', () => {
 
   it('レコメンド挿入失敗の場合、ユーザーをスキップする', async () => {
     mockFavoritesUserQuery(['user-1']);
-    mockFavoritesQuery([
-      { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
-    ]);
+    mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDeleteRecommendations(true);
     mockInsertRecommendations(false);
@@ -300,9 +291,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     });
 
     // user-2: 正常処理
-    mockFavoritesQuery([
-      { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
-    ]);
+    mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDeleteRecommendations(true);
     mockInsertRecommendations(true);
@@ -336,9 +325,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     mockFavoritesQuery([
       { tmdb_movie_id: 1, title: 'お気に入り映画', rating: 9 },
     ]);
-    mockWatchlistQuery([
-      { tmdb_movie_id: 2, title: 'ウォッチリスト映画' },
-    ]);
+    mockWatchlistQuery([{ tmdb_movie_id: 2, title: 'ウォッチリスト映画' }]);
     mockDeleteRecommendations(true);
     mockInsertRecommendations(true);
 
@@ -359,7 +346,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     ]);
 
     const response = await GET(createRequest('Bearer test-secret'));
-    const json = await response.json();
+    await response.json();
 
     expect(response.status).toBe(200);
 

@@ -12,16 +12,16 @@ jest.mock('openai', () => {
   }));
 });
 
-const originalEnv = process.env;
+const originalClientEnv = process.env;
 
 describe('OpenAI client', () => {
   beforeEach(() => {
     jest.resetModules();
-    process.env = { ...originalEnv };
+    process.env = { ...originalClientEnv };
   });
 
   afterAll(() => {
-    process.env = originalEnv;
+    process.env = originalClientEnv;
   });
 
   describe('createOpenAIClient', () => {

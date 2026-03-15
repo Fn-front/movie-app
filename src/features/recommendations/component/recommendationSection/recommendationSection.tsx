@@ -57,6 +57,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
         dismissMovie({
           tmdb_movie_id: movie.id,
           title: movie.title,
+          poster_path: movie.poster_path ?? null,
           genre_ids: movie.genre_ids ?? null,
         });
       },

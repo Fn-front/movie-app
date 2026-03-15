@@ -3,10 +3,10 @@
  */
 
 /**
- * 興味なしAPI Route テスト (POST / DELETE)
+ * 興味なしAPI Route テスト (GET / POST / DELETE)
  */
 
-import { POST, DELETE } from './route';
+import { GET, POST, DELETE } from './route';
 
 // --- Mocks ---
 
@@ -41,6 +41,120 @@ const createDeleteRequest = (tmdbMovieId?: string) => {
 };
 
 // --- Tests ---
+
+describe('GET /api/dismissed-movies', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      user: { id: 'user-123' },
+    });
+  });
+
+  it('未認証で401を返す', async () => {
+    (getAuthSession as jest.Mock).mockResolvedValue(null);
+
+    const response = await GET();
+
+    expect(response.status).toBe(401);
+    const json = await response.json();
+    expect(json.success).toBe(false);
+  });
+
+  it('正常に興味なし一覧を取得できる', async () => {
+    const mockData = [
+      {
+        id: 'dismissed-1',
+        tmdb_movie_id: 12345,
+        title: 'テスト映画1',
+        poster_path: '/poster1.jpg',
+        genre_ids: [28, 12],
+        created_at: '2026-03-10T00:00:00Z',
+      },
+      {
+        id: 'dismissed-2',
+        tmdb_movie_id: 67890,
+        title: 'テスト映画2',
+        poster_path: '/poster2.jpg',
+        genre_ids: [18],
+        created_at: '2026-03-09T00:00:00Z',
+      },
+    ];
+
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () => Promise.resolve({ data: mockData, error: null }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.data).toHaveLength(2);
+    expect(json.data[0].tmdb_movie_id).toBe(12345);
+    expect(json.data[1].tmdb_movie_id).toBe(67890);
+  });
+
+  it('レコードがない場合は空配列を返す', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () => Promise.resolve({ data: [], error: null }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.data).toEqual([]);
+  });
+
+  it('DBエラー時に500を返す', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () =>
+              Promise.resolve({ data: null, error: new Error('DB error') }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('SERVER_ERROR');
+  });
+
+  it('DB接続エラー時に500を返す', async () => {
+    // createServiceRoleClientがnullを返すケースをシミュレート
+    const originalMock = jest.requireMock('@/helpers/supabase');
+    const originalFn = originalMock.createServiceRoleClient;
+    originalMock.createServiceRoleClient = () => null;
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(json.success).toBe(false);
+
+    // モックを元に戻す
+    originalMock.createServiceRoleClient = originalFn;
+  });
+});
 
 describe('POST /api/dismissed-movies', () => {
   beforeEach(() => {

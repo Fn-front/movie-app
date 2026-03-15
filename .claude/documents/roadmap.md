@@ -1112,6 +1112,22 @@
   - ホームページでレコメンドセクション表示確認
   - レコメンド映画タイルクリック → 詳細モーダル表示
 
+### Step 4.5: 興味なし一覧管理（設定ページ）（`feature/dismissed-movies-settings`）
+- [x] 興味なし一覧取得API（GET /api/dismissed-movies）追加
+  - NextAuth.js認証チェック
+  - deleted_at IS NULLのレコードをcreated_at降順で取得
+  - ページングなし（少量想定）
+- [x] クライアントAPIに一覧取得関数（getDismissedMovies）を追加
+- [x] DismissedMoviesListコンポーネント作成
+  - ポスターサムネイル + タイトル + 解除ボタン
+  - 解除ボタンクリックでDELETE API → 楽観的UI更新
+  - 空状態・ローディング状態
+- [x] 設定ページにDismissedMoviesListセクションを追加
+- [x] テスト追加
+  - GET API Routeテスト（認証チェック・一覧取得・空配列）
+  - DismissedMoviesListコンポーネントテスト（一覧表示・解除・空状態）
+  - APIクライアントテスト（getDismissedMovies）
+
 ### Step 5: AI原題提案機能（設計書: `.claude/documents/title-suggestion-design.md`）
 
 > 検索結果0件時に、AIが邦題から原題を推測して提案する機能。検索と並行してAPI呼び出しを行い、テンポを損なわない設計。

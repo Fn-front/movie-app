@@ -16,6 +16,7 @@ jest.mock('@/lib/api/dismissedMovies/dismissedMovies', () => ({
 }));
 
 const mockMutate = jest.fn();
+const mockInvalidateQueries = jest.fn();
 let mockOnSuccess: (() => void) | undefined;
 let mockOnError:
   | ((error: unknown, variables: { tmdb_movie_id: number }) => void)
@@ -23,6 +24,9 @@ let mockOnError:
 let mockIsPending = false;
 
 jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    invalidateQueries: mockInvalidateQueries,
+  }),
   useMutation: (opts: {
     mutationFn: unknown;
     onSuccess?: () => void;
@@ -44,6 +48,7 @@ jest.mock('@tanstack/react-query', () => ({
 const mockMovie = {
   tmdb_movie_id: 123,
   title: 'Test Movie',
+  poster_path: '/test.jpg',
   genre_ids: [28, 12],
 };
 
@@ -78,13 +83,16 @@ describe('useDismissMovie', () => {
     expect(result.current.dismissedIds.has(123)).toBe(true);
   });
 
-  it('onSuccess時にトーストが表示される', () => {
+  it('onSuccess時にキャッシュ無効化とトーストが表示される', () => {
     renderHook(() => useDismissMovie());
 
     act(() => {
       mockOnSuccess?.();
     });
 
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['dismissed-movies'],
+    });
     expect(mockToast).toHaveBeenCalledWith({
       title: DISMISSED_MOVIES_SUCCESS_MESSAGES.ADDED,
       variant: 'success',

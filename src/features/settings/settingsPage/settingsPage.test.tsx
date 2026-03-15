@@ -30,6 +30,13 @@ jest.mock('@/features/settings/changePasswordForm/changePasswordForm', () => ({
   ),
 }));
 
+jest.mock(
+  '@/features/dismissedMovies/component/dismissedMoviesList/dismissedMoviesList',
+  () => ({
+    DismissedMoviesList: () => <div data-testid='dismissed-movies-list' />,
+  }),
+);
+
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 
@@ -85,6 +92,14 @@ describe('SettingsPage', () => {
   it('外観セクションが表示される', () => {
     render(<SettingsPage />);
     expect(screen.getByRole('heading', { name: '外観' })).toBeInTheDocument();
+  });
+
+  it('興味なし一覧セクションが表示される', () => {
+    render(<SettingsPage />);
+    expect(
+      screen.getByRole('heading', { name: '興味なし一覧' }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('dismissed-movies-list')).toBeInTheDocument();
   });
 
   it('表示名入力フィールドが表示される', () => {

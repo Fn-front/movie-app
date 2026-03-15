@@ -300,4 +300,3 @@ describe('recommendationSchema', () => {
     expect(result.success).toBe(false);
   });
 });
-

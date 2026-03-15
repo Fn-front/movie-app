@@ -35,8 +35,13 @@ export interface ResolvedRecommendation {
   display_order: number;
 }
 
-const SYSTEM_PROMPT = `あなたは映画レコメンドAIです。
-ユーザーのお気に入り映画と評価（1〜10点）を分析し、そのユーザーが好みそうな映画を${RECOMMENDATIONS_MAX_COUNT}件推薦してください。
+/**
+ * システムプロンプトを生成する
+ * @param count - 推薦する映画の件数
+ */
+function buildSystemPrompt(count: number): string {
+  return `あなたは映画レコメンドAIです。
+ユーザーのお気に入り映画と評価（1〜10点）を分析し、そのユーザーが好みそうな映画を${count}件推薦してください。
 
 ルール:
 - 除外リストにある映画は絶対に推薦しないこと
@@ -55,6 +60,7 @@ const SYSTEM_PROMPT = `あなたは映画レコメンドAIです。
     }
   ]
 }`;
+}
 
 /**
  * お気に入り映画リストからユーザープロンプトを組み立てる
@@ -83,11 +89,15 @@ export function buildUserPrompt(
 /**
  * OpenAI APIを呼び出してレコメンドを生成
  *
+ * @param favorites - お気に入り映画リスト
+ * @param excludedTitles - 除外する映画タイトルリスト
+ * @param count - 推薦する件数（デフォルト: RECOMMENDATIONS_MAX_COUNT）
  * @returns パース済みのレコメンド項目配列、失敗時はnull
  */
 export async function fetchRecommendationsFromOpenAI(
   favorites: FavoriteMovie[],
   excludedTitles: string[],
+  count: number = RECOMMENDATIONS_MAX_COUNT,
 ): Promise<OpenAiRecommendationItem[] | null> {
   const client = createOpenAIClient();
   if (!client) {
@@ -101,7 +111,7 @@ export async function fetchRecommendationsFromOpenAI(
     const response = await client.chat.completions.create({
       model: getOpenAIModel(),
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: buildSystemPrompt(count) },
         { role: 'user', content: userPrompt },
       ],
       response_format: { type: 'json_object' },

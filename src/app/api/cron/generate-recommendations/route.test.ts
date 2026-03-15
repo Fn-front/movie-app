@@ -354,6 +354,126 @@ describe('GET /api/cron/generate-recommendations', () => {
     expect(json.data.skipped_users).toBe(1);
   });
 
+  it('TMDb解決が10件未満の場合、リトライして不足分を補う', async () => {
+    mockFavoritesUserQuery(['user-1']);
+    mockFavoritesQuery([
+      { tmdb_movie_id: 1, title: 'インターステラー', rating: 9 },
+    ]);
+    mockWatchlistQuery([]);
+    mockSelectExistingRecommendations([]);
+    mockDeleteRecommendations(true);
+    mockInsertRecommendations(true);
+
+    // 1回目: 8件解決
+    const firstBatchResolved = Array.from({ length: 8 }, (_, i) => ({
+      tmdb_movie_id: 100 + i,
+      title: `Movie ${i + 1}`,
+      poster_path: null,
+      release_date: null,
+      vote_average: null,
+      genre_ids: null,
+      reason: `理由${i + 1}`,
+      display_order: i + 1,
+    }));
+    // 2回目: 2件追加で合計10件に到達
+    const secondBatchResolved = Array.from({ length: 2 }, (_, i) => ({
+      tmdb_movie_id: 200 + i,
+      title: `Extra Movie ${i + 1}`,
+      poster_path: null,
+      release_date: null,
+      vote_average: null,
+      genre_ids: null,
+      reason: `追加理由${i + 1}`,
+      display_order: i + 1,
+    }));
+
+    mockFetchRecommendations
+      .mockResolvedValueOnce(
+        firstBatchResolved.map((r) => ({
+          title: r.title,
+          year: 2020,
+          reason: r.reason,
+        })),
+      )
+      .mockResolvedValueOnce(
+        secondBatchResolved.map((r) => ({
+          title: r.title,
+          year: 2021,
+          reason: r.reason,
+        })),
+      );
+
+    mockResolveRecommendations
+      .mockResolvedValueOnce(firstBatchResolved)
+      .mockResolvedValueOnce(secondBatchResolved);
+
+    const response = await GET(createRequest('Bearer test-secret'));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.processed_users).toBe(1);
+    expect(json.data.total_recommendations).toBe(10);
+
+    // fetchRecommendationsFromOpenAIが2回呼ばれる
+    expect(mockFetchRecommendations).toHaveBeenCalledTimes(2);
+    // 1回目: 10件リクエスト
+    expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
+      1,
+      [{ title: 'インターステラー', rating: 9 }],
+      ['インターステラー'],
+      10,
+    );
+    // 2回目: 不足2件リクエスト、解決済みタイトルを除外
+    expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
+      2,
+      [{ title: 'インターステラー', rating: 9 }],
+      expect.arrayContaining([
+        'インターステラー',
+        ...firstBatchResolved.map((r) => r.title),
+      ]),
+      2,
+    );
+  });
+
+  it('リトライは最大2回まで（合計3回）', async () => {
+    mockFavoritesUserQuery(['user-1']);
+    mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
+    mockWatchlistQuery([]);
+    mockSelectExistingRecommendations([]);
+    mockDeleteRecommendations(true);
+    mockInsertRecommendations(true);
+
+    // 毎回1件だけ解決 → 3回呼ばれて合計3件
+    mockFetchRecommendations.mockResolvedValue([
+      { title: 'Some Movie', year: 2020, reason: '理由' },
+    ]);
+
+    let callCount = 0;
+    mockResolveRecommendations.mockImplementation(() => {
+      callCount++;
+      return Promise.resolve([
+        {
+          tmdb_movie_id: 100 + callCount,
+          title: `Resolved Movie ${callCount}`,
+          poster_path: null,
+          release_date: null,
+          vote_average: null,
+          genre_ids: null,
+          reason: '理由',
+          display_order: 1,
+        },
+      ]);
+    });
+
+    const response = await GET(createRequest('Bearer test-secret'));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.total_recommendations).toBe(3);
+    // 初回 + リトライ2回 = 合計3回
+    expect(mockFetchRecommendations).toHaveBeenCalledTimes(3);
+  });
+
   it('除外リストにお気に入りとウォッチリストの両方が含まれる', async () => {
     mockFavoritesUserQuery(['user-1']);
     mockFavoritesQuery([
@@ -385,14 +505,17 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     expect(response.status).toBe(200);
 
-    // fetchRecommendationsFromOpenAIに除外タイトルが渡されていることを確認
-    expect(mockFetchRecommendations).toHaveBeenCalledWith(
+    // 初回のfetchRecommendationsFromOpenAIに除外タイトルと件数が渡されていることを確認
+    expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
+      1,
       [{ title: 'お気に入り映画', rating: 9 }],
       ['お気に入り映画', 'ウォッチリスト映画'],
+      10,
     );
 
-    // resolveRecommendationsWithTMDbに除外IDセットが渡されていることを確認
-    expect(mockResolveRecommendations).toHaveBeenCalledWith(
+    // 初回のresolveRecommendationsWithTMDbに除外IDセットが渡されていることを確認
+    expect(mockResolveRecommendations).toHaveBeenNthCalledWith(
+      1,
       expect.anything(),
       new Set([1, 2]),
     );

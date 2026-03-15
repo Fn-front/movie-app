@@ -157,6 +157,24 @@ describe('fetchRecommendationsFromOpenAI', () => {
 
     expect(result).toBeNull();
   });
+
+  it('count引数でシステムプロンプトの推薦件数が変わる', async () => {
+    const mockResponse = {
+      recommendations: [{ title: 'Movie A', year: 2020, reason: '理由' }],
+    };
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: JSON.stringify(mockResponse) } }],
+    });
+
+    await fetchRecommendationsFromOpenAI(
+      [{ title: 'テスト', rating: 5 }],
+      [],
+      3,
+    );
+
+    const systemMessage = mockCreate.mock.calls[0][0].messages[0];
+    expect(systemMessage.content).toContain('3件推薦');
+  });
 });
 
 describe('resolveRecommendationsWithTMDb', () => {

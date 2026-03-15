@@ -14,10 +14,10 @@
   padding: $spacing-2;
   border-radius: $border-radius-sm;
   cursor: default;
-  transition: background-color 0.15s ease;
+  transition: background-color $duration-fast $ease-in-out;
 
   &:hover {
-    background-color: $surface-hover;
+    background-color: $background-secondary;
   }
 }
 
@@ -27,7 +27,7 @@
   height: 54px;
   border-radius: $border-radius-sm;
   overflow: hidden;
-  background-color: $surface-secondary;
+  background-color: $background-secondary;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -56,15 +56,15 @@
   border: none;
   border-radius: $border-radius-sm;
   background: transparent;
-  color: $text-tertiary;
+  color: $text-secondary;
   cursor: pointer;
   transition:
-    color 0.15s ease,
-    background-color 0.15s ease;
+    color $duration-fast $ease-in-out,
+    background-color $duration-fast $ease-in-out;
 
   &:hover {
     color: $text-primary;
-    background-color: $surface-hover;
+    background-color: $background-secondary;
   }
 
   &:focus-visible {

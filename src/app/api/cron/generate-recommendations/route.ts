@@ -28,8 +28,9 @@ export const maxDuration = 300;
 export async function GET(request: NextRequest) {
   try {
     // CRON_SECRETで認証
+    const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
       return NextResponse.json(
         {
           success: false,
@@ -56,16 +57,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // お気に入り1件以上のユーザーを取得
-    const { data: usersWithFavorites, error: usersError } = await supabase
+    // お気に入り1件以上のユーザーIDを取得（user_idのみ選択し、JSでユニーク化）
+    const { data: favoriteRows, error: usersError } = await supabase
       .from('favorites')
       .select('user_id')
-      .is('deleted_at', null)
-      .then(({ data, error }) => {
-        if (error) return { data: null, error };
-        const uniqueUserIds = [...new Set(data.map((f) => f.user_id))];
-        return { data: uniqueUserIds, error: null };
-      });
+      .is('deleted_at', null);
+
+    const usersWithFavorites = favoriteRows
+      ? [...new Set(favoriteRows.map((f) => f.user_id as string))]
+      : null;
 
     if (usersError || !usersWithFavorites) {
       console.error('Failed to fetch users with favorites:', usersError);
@@ -147,7 +147,13 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        // 既存レコメンドを削除 → 新規挿入
+        // 既存レコメンドを退避 → 削除 → 新規挿入
+        // INSERT失敗時は退避データで復元し、レコメンドが消失しない
+        const { data: existingRecs } = await supabase
+          .from('recommendations')
+          .select('*')
+          .eq('user_id', userId);
+
         const { error: deleteError } = await supabase
           .from('recommendations')
           .delete()
@@ -183,6 +189,12 @@ export async function GET(request: NextRequest) {
             `Failed to insert recommendations for user ${userId}:`,
             insertError,
           );
+          // INSERT失敗時は既存レコメンドを復元
+          if (existingRecs && existingRecs.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const restoreData = existingRecs.map(({ id, ...rest }) => rest);
+            await supabase.from('recommendations').insert(restoreData);
+          }
           skippedUsers++;
           continue;
         }

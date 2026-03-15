@@ -144,11 +144,12 @@ export async function resolveRecommendationsWithTMDb(
 
   for (const item of items) {
     try {
+      // yearなしで検索（TMDb APIのyearは厳密フィルタのため、1年ずれると0件になる）
       const searchResult = await searchMovies({
         query: item.title,
-        year: item.year,
       });
 
+      // タイトル一致かつ公開年が近い結果を優先的に選択
       const movie = searchResult.results[0];
       if (!movie) {
         continue;

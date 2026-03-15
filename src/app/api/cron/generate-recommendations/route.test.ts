@@ -78,6 +78,17 @@ const mockWatchlistQuery = (
   });
 };
 
+/** 既存レコメンド退避のモック */
+const mockSelectExistingRecommendations = (
+  recs: Record<string, unknown>[] = [],
+) => {
+  mockFrom.mockReturnValueOnce({
+    select: () => ({
+      eq: () => Promise.resolve({ data: recs, error: null }),
+    }),
+  });
+};
+
 /** レコメンド削除のモック */
 const mockDeleteRecommendations = (success: boolean) => {
   mockFrom.mockReturnValueOnce({
@@ -127,6 +138,14 @@ describe('GET /api/cron/generate-recommendations', () => {
     expect(response.status).toBe(401);
   });
 
+  it('CRON_SECRETが未設定の場合401を返す', async () => {
+    delete process.env.CRON_SECRET;
+
+    const response = await GET(createRequest('Bearer test-secret'));
+
+    expect(response.status).toBe(401);
+  });
+
   it('DB接続エラーで500を返す', async () => {
     const { createServiceRoleClient } = await import('@/helpers/supabase');
     (createServiceRoleClient as jest.Mock).mockReturnValueOnce(null);
@@ -145,6 +164,8 @@ describe('GET /api/cron/generate-recommendations', () => {
     ]);
     // ウォッチリスト取得
     mockWatchlistQuery([{ tmdb_movie_id: 2, title: 'ダークナイト' }]);
+    // 既存レコメンド退避
+    mockSelectExistingRecommendations([]);
     // レコメンド削除
     mockDeleteRecommendations(true);
     // レコメンド挿入
@@ -223,6 +244,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     mockFavoritesUserQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
+    mockSelectExistingRecommendations([]);
     mockDeleteRecommendations(false);
 
     mockFetchRecommendations.mockResolvedValue([
@@ -248,12 +270,23 @@ describe('GET /api/cron/generate-recommendations', () => {
     expect(json.data.skipped_users).toBe(1);
   });
 
-  it('レコメンド挿入失敗の場合、ユーザーをスキップする', async () => {
+  it('レコメンド挿入失敗の場合、既存データを復元してスキップする', async () => {
     mockFavoritesUserQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
+    mockSelectExistingRecommendations([
+      {
+        id: 'old-id',
+        user_id: 'user-1',
+        tmdb_movie_id: 50,
+        title: '旧レコメンド',
+        display_order: 1,
+      },
+    ]);
     mockDeleteRecommendations(true);
     mockInsertRecommendations(false);
+    // 復元用のinsertモック
+    mockInsertRecommendations(true);
 
     mockFetchRecommendations.mockResolvedValue([
       { title: 'Movie A', year: 2020, reason: '理由' },
@@ -293,6 +326,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     // user-2: 正常処理
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
+    mockSelectExistingRecommendations([]);
     mockDeleteRecommendations(true);
     mockInsertRecommendations(true);
 
@@ -326,6 +360,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       { tmdb_movie_id: 1, title: 'お気に入り映画', rating: 9 },
     ]);
     mockWatchlistQuery([{ tmdb_movie_id: 2, title: 'ウォッチリスト映画' }]);
+    mockSelectExistingRecommendations([]);
     mockDeleteRecommendations(true);
     mockInsertRecommendations(true);
 

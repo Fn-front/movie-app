@@ -91,18 +91,25 @@ test.describe('設定ページ — 興味なし一覧', () => {
   });
 
   test('解除ボタンクリックで楽観的に一覧から消える', async ({ page }) => {
-    // GET: モックデータ返却、DELETE: 成功レスポンス
+    // 削除済みIDを追跡し、GETレスポンスから除外する
+    const deletedIds = new Set<number>();
+
     await page.route('**/api/dismissed-movies*', async (route) => {
       if (route.request().method() === 'GET') {
+        const remaining = mockDismissedMovies.filter(
+          (m) => !deletedIds.has(m.tmdb_movie_id),
+        );
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({
-            success: true,
-            data: mockDismissedMovies,
-          }),
+          body: JSON.stringify({ success: true, data: remaining }),
         });
       } else if (route.request().method() === 'DELETE') {
+        // URLからtmdb_movie_idを取得して削除済みに追加
+        const url = new URL(route.request().url());
+        const id = Number(url.searchParams.get('tmdb_movie_id'));
+        if (id) deletedIds.add(id);
+
         await route.fulfill({
           status: 200,
           contentType: 'application/json',

@@ -11,6 +11,7 @@ import Image from 'next/image';
 import { Card } from '@/components/ui/card/card';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
+import { DismissButton } from '@/features/dismissedMovies/component/dismissButton/dismissButton';
 import { getTMDbPosterUrl } from '@/utils/image';
 import { formatDate } from '@/utils/date';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
@@ -41,6 +42,10 @@ export interface MovieTileProps {
   ) => void;
   /** お気に入りボタン無効化 */
   favoriteDisabled?: boolean;
+  /** 興味なしボタンクリック時のコールバック */
+  onDismiss?: (movie: MovieCacheItem) => void;
+  /** 興味なしボタン無効化 */
+  dismissDisabled?: boolean;
 }
 
 /**
@@ -55,6 +60,8 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   watchlistDisabled = false,
   onFavoriteToggle,
   favoriteDisabled = false,
+  onDismiss,
+  dismissDisabled = false,
 }) {
   const handleClick = useCallback(() => {
     onClick?.(movie.id);
@@ -77,6 +84,10 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   const handleFavoriteToggle = useCallback(() => {
     onFavoriteToggle?.(movie, movie.favorite ?? null);
   }, [movie, onFavoriteToggle]);
+
+  const handleDismiss = useCallback(() => {
+    onDismiss?.(movie);
+  }, [movie, onDismiss]);
 
   const posterUrl = getTMDbPosterUrl(movie.poster_path);
   const formattedDate = movie.release_date
@@ -126,6 +137,11 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
         )}
         {movie.is_revival && (
           <span className={styles.c_movie_tile__revival}>リバイバル</span>
+        )}
+        {onDismiss && (
+          <div className={styles.c_movie_tile__dismiss_button}>
+            <DismissButton onClick={handleDismiss} disabled={dismissDisabled} />
+          </div>
         )}
         {onFavoriteToggle && (
           <div className={styles.c_movie_tile__favorite_button}>

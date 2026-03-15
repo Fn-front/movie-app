@@ -12,7 +12,9 @@ import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailM
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
+import { useDismissMovie } from '@/features/dismissedMovies/hooks/useDismissMovie';
 import { RECOMMENDATIONS_MESSAGES } from '@/constants';
+import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { Recommendation } from '@/schema/recommendations';
 import { toMovieCacheItem } from '@/features/recommendations/utils/toMovieCacheItem';
 
@@ -48,6 +50,19 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
     const { isInWatchlist, toggleWatchlist, isMovieToggling } =
       useWatchlistToggle();
 
+    const { dismissMovie, isDismissingMovie, dismissedIds } = useDismissMovie();
+
+    const handleDismiss = useCallback(
+      (movie: MovieCacheItem) => {
+        dismissMovie({
+          tmdb_movie_id: movie.id,
+          title: movie.title,
+          genre_ids: movie.genre_ids ?? null,
+        });
+      },
+      [dismissMovie],
+    );
+
     const handleMovieClick = useCallback((movieId: number) => {
       setSelectedMovieId(movieId);
     }, []);
@@ -58,11 +73,13 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
 
     const movieCacheItems = useMemo(
       () =>
-        recommendations.map((rec) => ({
-          ...toMovieCacheItem(rec),
-          favorite: getFavoriteInfo(rec.tmdb_movie_id),
-        })),
-      [recommendations, getFavoriteInfo],
+        recommendations
+          .filter((rec) => !dismissedIds.has(rec.tmdb_movie_id))
+          .map((rec) => ({
+            ...toMovieCacheItem(rec),
+            favorite: getFavoriteInfo(rec.tmdb_movie_id),
+          })),
+      [recommendations, getFavoriteInfo, dismissedIds],
     );
 
     const reasonMap = useMemo(
@@ -129,6 +146,10 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
                   watchlistDisabled={isMovieToggling(movie.id)}
                   onFavoriteToggle={handleFavoriteToggle}
                   favoriteDisabled={isFavoriteProcessing(movie.id)}
+                  onDismiss={handleDismiss}
+                  dismissDisabled={
+                    isDismissingMovie(movie.id) || !!movie.favorite
+                  }
                 />
                 <p className={styles.c_recommendation_section__reason}>
                   {reasonMap.get(movie.id)}

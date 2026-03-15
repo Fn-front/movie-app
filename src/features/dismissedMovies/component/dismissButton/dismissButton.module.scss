@@ -1,0 +1,42 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_dismiss_button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  border-radius: $border-radius-full;
+  background-color: rgba(255, 255, 255, 0.85);
+  color: $gray-400;
+  cursor: pointer;
+  transition:
+    opacity $duration-fast $ease-in-out,
+    background-color $duration-fast $ease-in-out,
+    color $duration-fast $ease-in-out;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 1);
+    color: $error-dark;
+  }
+
+  @include focus-visible;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &__sm {
+    width: 28px;
+    height: 28px;
+    font-size: $font-size-base;
+  }
+
+  &__md {
+    width: 36px;
+    height: 36px;
+    font-size: $font-size-xl;
+  }
+}

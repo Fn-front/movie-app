@@ -50,6 +50,12 @@
     }
   }
 
+  &__dismiss_button {
+    position: absolute;
+    top: $spacing-2;
+    right: calc($spacing-2 + 32px);
+  }
+
   &__favorite_button {
     position: absolute;
     top: $spacing-2;

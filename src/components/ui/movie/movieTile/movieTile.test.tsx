@@ -298,6 +298,49 @@ describe('MovieTile', () => {
     });
   });
 
+  describe('興味なし統合', () => {
+    it('onDismissが指定されるとDismissButtonが表示される', () => {
+      render(<MovieTile movie={createMockMovie()} onDismiss={jest.fn()} />);
+      expect(
+        screen.getByRole('button', { name: '興味なし' }),
+      ).toBeInTheDocument();
+    });
+
+    it('onDismissが未指定の場合DismissButtonが表示されない', () => {
+      render(<MovieTile movie={createMockMovie()} />);
+      expect(
+        screen.queryByRole('button', { name: '興味なし' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('DismissButtonクリックがMovieTileのonClickを発火しない', () => {
+      const onClick = jest.fn();
+      const onDismiss = jest.fn();
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onClick={onClick}
+          onDismiss={onDismiss}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: '興味なし' }));
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('dismissDisabledでボタンが無効になる', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onDismiss={jest.fn()}
+          dismissDisabled={true}
+        />,
+      );
+      expect(screen.getByRole('button', { name: '興味なし' })).toBeDisabled();
+    });
+  });
+
   describe('お気に入り統合', () => {
     it('onFavoriteToggleが指定されるとFavoriteButtonが表示される', () => {
       render(

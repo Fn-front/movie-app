@@ -19,6 +19,8 @@ export default [
       'build/**',
       'dist/**',
       'e2e/**',
+      '.claude/**',
+      '.agents/**',
       'next-env.d.ts',
       'eslint.config.mjs',
       'eslint-local-rules/**',

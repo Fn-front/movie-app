@@ -10,6 +10,9 @@ build/
 # Claude Code
 .claude/
 
+# Agent Skills
+.agents/
+
 # Cache
 .cache/
 
@@ -21,7 +24,8 @@ build/
 .env.production.local
 .env.development.local
 
-# Package manager
+# Package manager / Lock files
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+skills-lock.json

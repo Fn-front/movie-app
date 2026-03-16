@@ -27,9 +27,7 @@ describe('TitleSuggestion', () => {
       />,
     );
 
-    expect(
-      screen.getByText('The Shawshank Redemption'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('The Shawshank Redemption')).toBeInTheDocument();
     expect(screen.getByText('ですか？')).toBeInTheDocument();
   });
 
@@ -58,9 +56,7 @@ describe('TitleSuggestion', () => {
       />,
     );
 
-    await user.click(
-      screen.getByRole('button'),
-    );
+    await user.click(screen.getByRole('button'));
 
     expect(mockPush).toHaveBeenCalledWith(
       '/search?query=The%20Shawshank%20Redemption',

@@ -199,9 +199,7 @@ describe('SearchResults', () => {
         isSuggestionLoading: false,
       });
 
-      expect(
-        screen.queryByTestId('title-suggestion'),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId('title-suggestion')).not.toBeInTheDocument();
     });
   });
 

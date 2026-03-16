@@ -26,6 +26,7 @@ export default function RootLayout({
   return (
     <html lang='ja' suppressHydrationWarning>
       <head>
+        {/* ストレージキーは STORAGE_KEYS.THEME ('movie-app:theme') と同期すること */}
         <script
           dangerouslySetInnerHTML={{
             __html:

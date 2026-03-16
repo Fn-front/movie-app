@@ -1,0 +1,59 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_radio_group {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+}
+
+.c_radio_group__item {
+  display: flex;
+  align-items: center;
+  gap: $spacing-2;
+}
+
+.c_radio_group__radio {
+  @include button-reset;
+  @include flex-center;
+
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: $border-width-2 solid $border-color;
+  background-color: $background-paper;
+  transition: $transition-all;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:hover:not(:disabled) {
+    border-color: $primary-500;
+  }
+
+  @include focus-visible;
+
+  &[data-state='checked'] {
+    border-color: $primary-500;
+  }
+
+  &:disabled {
+    background-color: $background-disabled;
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
+
+.c_radio_group__indicator {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: $primary-500;
+}
+
+.c_radio_group__label {
+  font-size: $font-size-base;
+  color: $text-primary;
+  cursor: pointer;
+  user-select: none;
+}

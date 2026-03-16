@@ -29,6 +29,8 @@ export const SearchPage = memo(function SearchPage() {
     totalPages,
     isLoading,
     handlePageChange,
+    suggestion,
+    isSuggestionLoading,
   } = useSearch();
 
   const {
@@ -87,6 +89,8 @@ export const SearchPage = memo(function SearchPage() {
             totalPages={totalPages}
             onPageChange={handlePageChange}
             isLoading={isLoading}
+            suggestion={suggestion}
+            isSuggestionLoading={isSuggestionLoading}
           />
         </div>
       </div>

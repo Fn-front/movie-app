@@ -78,6 +78,16 @@ jest.mock(
   }),
 );
 
+jest.mock(
+  '@/features/search/component/titleSuggestion/titleSuggestion',
+  () => ({
+    TitleSuggestion: jest.fn(({ suggestion, isLoading }) => {
+      if (isLoading || !suggestion) return null;
+      return <div data-testid='title-suggestion'>{suggestion}ですか？</div>;
+    }),
+  }),
+);
+
 // --- Helpers ---
 const createMockMovie = (overrides?: Partial<Movie>): Movie => ({
   id: 1,
@@ -170,6 +180,28 @@ describe('SearchResults', () => {
       renderSearchResults({ movies: [] });
 
       expect(screen.queryByTestId('pagination')).not.toBeInTheDocument();
+    });
+
+    it('結果が空で提案ありの場合にTitleSuggestionを表示する', () => {
+      renderSearchResults({
+        movies: [],
+        suggestion: 'The Shawshank Redemption',
+        isSuggestionLoading: false,
+      });
+
+      expect(screen.getByTestId('title-suggestion')).toBeInTheDocument();
+    });
+
+    it('結果が空で提案なしの場合はTitleSuggestionを表示しない', () => {
+      renderSearchResults({
+        movies: [],
+        suggestion: null,
+        isSuggestionLoading: false,
+      });
+
+      expect(
+        screen.queryByTestId('title-suggestion'),
+      ).not.toBeInTheDocument();
     });
   });
 

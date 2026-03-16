@@ -18,6 +18,9 @@ jest.mock('@/lib/api/search/search', () => ({
   searchMoviesApi: jest.fn(),
 }));
 jest.mock('@/hooks/useToast');
+jest.mock('./useTitleSuggestion', () => ({
+  useTitleSuggestion: () => ({ suggestion: null, isLoading: false }),
+}));
 
 jest.mock('@tanstack/react-query', () => {
   const actual = jest.requireActual('@tanstack/react-query');

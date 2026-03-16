@@ -16,3 +16,4 @@ export * from './otp';
 export * from './nowShowing';
 export * from './recommendations';
 export * from './dismissedMovies';
+export * from './titleSuggestion';

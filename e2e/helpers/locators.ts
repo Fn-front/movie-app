@@ -7,5 +7,5 @@ import type { Page } from '@playwright/test';
 
 /** 映画タイルのボタンロケータを取得 */
 export function movieTileButtons(page: Page) {
-  return page.getByRole('button', { name: /の詳細を表示/ });
+  return page.locator('[class*="c_movie_tile"][role="button"]');
 }

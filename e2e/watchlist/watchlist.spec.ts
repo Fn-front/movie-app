@@ -63,7 +63,7 @@ test.describe('ウォッチリスト — ページ表示・詳細モーダル', 
 
     // ウォッチリストに映画が表示されている
     const detailButton = page
-      .getByRole('button', { name: /の詳細を表示/ })
+      .locator('[class*="c_watchlist_tile"][role="button"]')
       .first();
     await expect(detailButton).toBeVisible({ timeout: 10000 });
 

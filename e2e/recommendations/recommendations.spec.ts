@@ -6,7 +6,7 @@
  *
  * レコメンドデータはSSRでDBから取得されるため、
  * テストユーザーのレコメンド有無で分岐する設計。
- * MovieTileは role='button' + aria-label='${title}の詳細を表示' で実装されている。
+ * MovieTileは role='button' + aria-label='${title}' で実装されている。
  */
 
 import { test, expect } from '../fixtures/auth';
@@ -41,7 +41,7 @@ test.describe('レコメンドセクション — ホームページ表示', () 
 
     // 最初のタイルの詳細ボタンをクリック
     const firstDetailButton = section
-      .getByRole('button', { name: /の詳細を表示/ })
+      .locator('[class*="c_movie_tile"][role="button"]')
       .first();
     await firstDetailButton.click();
 

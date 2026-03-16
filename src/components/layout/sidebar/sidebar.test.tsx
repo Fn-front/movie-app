@@ -33,17 +33,17 @@ describe('Sidebar', () => {
     expect(screen.getByText('映画リスト')).toBeInTheDocument();
   });
 
-  it('watchlistがある場合は「見たい映画」見出しが表示される', () => {
+  it('watchlistがある場合は「公開日が近い映画」見出しが表示される', () => {
     render(<Sidebar watchlist={<div>映画リスト</div>} />);
     expect(
-      screen.getByRole('heading', { name: '見たい映画' }),
+      screen.getByRole('heading', { name: '公開日が近い映画' }),
     ).toBeInTheDocument();
   });
 
-  it('watchlistがない場合は「見たい映画」見出しが表示されない', () => {
+  it('watchlistがない場合は「公開日が近い映画」見出しが表示されない', () => {
     render(<Sidebar />);
     expect(
-      screen.queryByRole('heading', { name: '見たい映画' }),
+      screen.queryByRole('heading', { name: '公開日が近い映画' }),
     ).not.toBeInTheDocument();
   });
 

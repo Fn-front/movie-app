@@ -140,8 +140,7 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
             <div className={styles.c_change_password_form__submit}>
               <Button
                 variant='primary'
-                size='lg'
-                fullWidth
+                size='md'
                 isLoading={isSendingOtp}
                 onClick={handleSendOtp}
                 aria-label='確認コードを送信'

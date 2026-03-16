@@ -28,3 +28,6 @@ build/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+# Skills
+skills-lock.json

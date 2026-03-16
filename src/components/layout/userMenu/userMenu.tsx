@@ -53,7 +53,7 @@ export const UserMenu = memo(function UserMenu() {
       <DropdownMenuPrimitive.Trigger asChild>
         <button
           className={styles.c_user_menu__trigger}
-          aria-label='ユーザーメニューを開く'
+          aria-label={`${userName} ユーザーメニュー`}
         >
           {userImage ? (
             <Image

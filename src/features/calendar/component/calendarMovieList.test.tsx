@@ -86,10 +86,10 @@ describe('CalendarMovieList', () => {
       />,
     );
 
-    await user.click(screen.getByLabelText('映画Aの詳細を表示'));
+    await user.click(screen.getByLabelText('映画A'));
     expect(onMovieClick).toHaveBeenCalledWith(100);
 
-    await user.click(screen.getByLabelText('映画Bの詳細を表示'));
+    await user.click(screen.getByLabelText('映画B'));
     expect(onMovieClick).toHaveBeenCalledWith(101);
   });
 

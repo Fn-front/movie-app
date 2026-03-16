@@ -141,7 +141,7 @@ describe('MovieTile', () => {
     it('aria-labelが設定される', () => {
       render(<MovieTile movie={createMockMovie()} />);
       expect(
-        screen.getByRole('button', { name: 'テスト映画の詳細を表示' }),
+        screen.getByRole('button', { name: 'テスト映画' }),
       ).toBeInTheDocument();
     });
 

@@ -66,7 +66,7 @@ describe('UserMenu', () => {
   it('トリガーボタンにアクセシブルなラベルがある', () => {
     render(<UserMenu />);
     expect(
-      screen.getByRole('button', { name: 'ユーザーメニューを開く' }),
+      screen.getByRole('button', { name: 'テストユーザー ユーザーメニュー' }),
     ).toBeInTheDocument();
   });
 
@@ -84,7 +84,7 @@ describe('UserMenu', () => {
     render(<UserMenu />);
 
     await user.click(
-      screen.getByRole('button', { name: 'ユーザーメニューを開く' }),
+      screen.getByRole('button', { name: 'テストユーザー ユーザーメニュー' }),
     );
 
     expect(screen.getByText('test@example.com')).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe('UserMenu', () => {
     render(<UserMenu />);
 
     await user.click(
-      screen.getByRole('button', { name: 'ユーザーメニューを開く' }),
+      screen.getByRole('button', { name: 'テストユーザー ユーザーメニュー' }),
     );
     await user.click(screen.getByRole('menuitem', { name: /設定/ }));
 
@@ -111,7 +111,7 @@ describe('UserMenu', () => {
     render(<UserMenu />);
 
     await user.click(
-      screen.getByRole('button', { name: 'ユーザーメニューを開く' }),
+      screen.getByRole('button', { name: 'テストユーザー ユーザーメニュー' }),
     );
     await user.click(screen.getByRole('menuitem', { name: /ログアウト/ }));
 

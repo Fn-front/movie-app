@@ -1554,14 +1554,14 @@
 - [ ] `src/features/movies/component/movieListContent/movieListContent.tsx` の責任分割
   - useWatchlistToggle, useFavoriteToggle, useNowShowing 等を1コンポーネントに集約しすぎ
   - 複数の小さなコンポーネントに分割してテスタビリティ向上
-- [ ] `src/app/movies/now-showing/loader.tsx` の `ssr: false` 使用見直し
-  - Server Component での動的インポートに `ssr: false` は不適切
+- [x] `src/app/movies/now-showing/loader.tsx` の `ssr: false` を削除
+  - ブラウザ専用API不使用のため不要
 
 ##### 不要な最適化の削除
-- [ ] Provider コンポーネントの不要な `memo` を削除
-  - `src/components/providers/queryProvider.tsx`: children propsが毎回変わるため memo は無効
-- [ ] 定数の不要な `useMemo` を削除
-  - `movieListContent.tsx` L75-82: `SORT_OPTIONS` は定数なので memoize 不要、モジュールスコープに移動
+- [x] Provider コンポーネントの不要な `memo` を削除
+  - `queryProvider.tsx`: children propsが毎回変わるため → 通常の関数コンポーネントに変更
+- [x] 定数の不要な `useMemo` を削除
+  - `movieListContent.tsx`: `SORT_OPTIONS` は既に `{ label, value }` 形式 → 直接参照に変更
 
 ##### テーマ初期化
 - [ ] `src/components/providers/themeProvider.tsx` のhydrationミスマッチ対策
@@ -1569,7 +1569,7 @@
   - `layout.tsx` でインラインスクリプトによる初期化を検討
 
 ##### API Route
-- [ ] `src/app/api/auth/register/route.ts` L108-110 のロールバック処理を並列化
+- [x] `src/app/api/auth/register/route.ts` のロールバック処理を並列化
   - `otp_codes` と `users` の削除を `Promise.all` で並列実行
 
 #### P2: 最適化・整合性

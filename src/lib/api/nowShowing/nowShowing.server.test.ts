@@ -10,6 +10,10 @@ import { getNowShowingMovies } from './nowShowing.server';
 
 // --- Mocks ---
 
+jest.mock('next/cache', () => ({
+  unstable_cache: (fn: (...args: unknown[]) => unknown) => fn,
+}));
+
 const mockSelect = jest.fn();
 const mockOrder = jest.fn();
 

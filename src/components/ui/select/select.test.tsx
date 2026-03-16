@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { axe } from 'jest-axe';
 
 import { Select } from './select';
 
@@ -61,5 +62,13 @@ describe('Select', () => {
     const ref = jest.fn();
     render(<Select label='ジャンル' options={options} ref={ref} />);
     expect(ref).toHaveBeenCalledWith(expect.any(HTMLButtonElement));
+  });
+
+  it('アクセシビリティ違反がない', async () => {
+    const { container } = render(
+      <Select label='ジャンル' options={options} />,
+    );
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
   });
 });

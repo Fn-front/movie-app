@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe } from 'jest-axe';
 
 import { Textarea } from './textarea';
 
@@ -105,5 +106,11 @@ describe('Textarea', () => {
   it('valueが文字列でない場合に文字数が0になる', () => {
     render(<Textarea label='レビュー' showCount maxLength={500} />);
     expect(screen.getByText('0 / 500')).toBeInTheDocument();
+  });
+
+  it('アクセシビリティ違反がない', async () => {
+    const { container } = render(<Textarea label='レビュー' />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
   });
 });

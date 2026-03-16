@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe } from 'jest-axe';
 
 import { Button } from './button';
 
@@ -68,5 +69,17 @@ describe('Button', () => {
   it('カスタムクラス名が適用される', () => {
     render(<Button className='custom'>テスト</Button>);
     expect(screen.getByRole('button').className).toContain('custom');
+  });
+
+  it('アクセシビリティ違反がない', async () => {
+    const { container } = render(<Button>クリック</Button>);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it('disabled状態でアクセシビリティ違反がない', async () => {
+    const { container } = render(<Button disabled>クリック</Button>);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
   });
 });

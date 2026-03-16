@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe } from 'jest-axe';
 
 import { Checkbox } from './checkbox';
 
@@ -74,5 +75,11 @@ describe('Checkbox', () => {
     expect(
       screen.getByRole('checkbox', { name: '同意する' }),
     ).toBeInTheDocument();
+  });
+
+  it('アクセシビリティ違反がない', async () => {
+    const { container } = render(<Checkbox label='利用規約に同意する' />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
   });
 });

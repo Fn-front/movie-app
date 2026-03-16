@@ -40,7 +40,6 @@
     border-radius: $border-radius-sm;
     cursor: pointer;
     user-select: none;
-    outline: none;
     transition: $transition-all;
     text-align: left;
 
@@ -51,6 +50,8 @@
     &:focus {
       background-color: color-alpha(--primary-500, 10%);
     }
+
+    @include focus-visible;
 
     &[data-disabled] {
       color: $text-disabled;

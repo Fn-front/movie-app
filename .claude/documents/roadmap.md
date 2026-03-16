@@ -1525,23 +1525,21 @@
 #### P0: セキュリティ
 
 ##### RLSポリシーのセキュリティ改善
-- [ ] `rate_limits` テーブルのRLSポリシーを厳格化
-  - 現状: 全操作（SELECT/INSERT/UPDATE/DELETE）が `USING (true)` で完全開放
-  - service role のみアクセス可能にするか、identifier ベースでフィルタ
-  - **※ 現在 service role のみ使用中のためリスクは限定的だが、明示的に制限すべき**
-- [ ] `movie_cache`, `accounts`, `otp_codes` のRLSポリシーを明示化
-  - INSERT/UPDATE/DELETE ポリシーが未設定（暗黙的拒否だが明示すべき）
+- [x] `rate_limits` テーブルのRLSポリシーを厳格化
+  - 全ポリシーをDROPし、service role のみアクセス可能に変更（ポリシーなし = 全拒否）
+- [x] `movie_cache`, `accounts`, `otp_codes` のRLSポリシーを明示化
+  - マイグレーションにコメントで意図を明示（暗黙的拒否で正しい動作）
 
 ##### RPC関数のセキュリティ
-- [ ] `sync_now_showing_movies` RPCを `SECURITY DEFINER` → `SECURITY INVOKER` に変更
-  - `get_watchlist_by_proximity` は修正済みだが、こちらは未修正
+- [x] `sync_now_showing_movies` RPCを `SECURITY DEFINER` → `SECURITY INVOKER` に変更
+  - Cron APIから service role で呼び出すため RLS バイパスは維持
 
 ##### outline: none の修正（アクセシビリティ違反）
-- [ ] `src/styles/_mixins.scss` の `button-reset`, `input-reset` から `outline: none` を削除
-  - WCAG「フォーカス表示必須」に違反
-  - `focus-visible` mixin を正しく活用する（Button は既に対応済み）
-- [ ] `src/components/ui/input/input.module.scss` L51-55 の `:focus` から `outline: none` を削除
-  - `border-color` + `box-shadow` で代替フォーカス表示は実装済みだが、outline も残すべき
+- [x] `src/styles/_mixins.scss` の `button-reset`, `input-reset` の `outline: none` を修正
+  - `&:focus:not(:focus-visible) { outline: none; }` に変更（マウスクリック時のみ非表示）
+  - キーボードフォーカス時はブラウザデフォルトoutlineが表示される（WCAG準拠）
+- [x] `src/components/ui/input/input.module.scss` の `:focus` から `outline: none` を削除
+  - `@include focus-visible` を追加（select, textarea, dropdownMenu も同様に修正）
 
 #### P1: パフォーマンス・設計改善
 

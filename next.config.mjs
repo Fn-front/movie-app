@@ -1,4 +1,10 @@
 /* eslint-disable no-undef */
+import withBundleAnalyzer from '@next/bundle-analyzer';
+
+const withAnalyzer = withBundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // React Strict Mode有効化（開発環境でEffect二重実行による潜在バグを検出）
@@ -61,4 +67,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withAnalyzer(nextConfig);

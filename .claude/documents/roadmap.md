@@ -1202,7 +1202,7 @@
 ### 未完了 → GitHub Issues
 
 #### 設計書
-- [ ] #150 — components.md 追記・Props修正・favorites-design.md統合
+- [x] #150 — components.md 追記・Props修正・favorites-design.md統合
 
 #### 実装確認・修正
 - [x] #151 — Cronスケジュール・middleware protectedPaths確認

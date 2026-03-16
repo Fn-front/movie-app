@@ -25,6 +25,9 @@
 ### Layouts（レイアウトコンポーネント）
 ページ構造を決定するコンポーネント
 
+### Providers（プロバイダーコンポーネント）
+アプリ全体の状態・コンテキストを管理するコンポーネント
+
 ---
 
 ## Common Components
@@ -37,12 +40,18 @@
 ボタンコンポーネント
 
 **Props:**
-- `variant`: 'primary' | 'secondary' | 'outline' | 'ghost'
-- `size`: 'sm' | 'md' | 'lg'
-- `disabled`: boolean
-- `loading`: boolean
-- `onClick`: () => void
-- `children`: ReactNode
+```typescript
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+type ButtonSize = 'sm' | 'md' | 'lg';
+
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  children: ReactNode;
+  fullWidth?: boolean;
+  isLoading?: boolean;
+}
+```
 
 **使用例:**
 ```tsx
@@ -78,6 +87,23 @@
 
 ---
 
+### Textarea
+テキストエリア入力フィールド
+
+**Props:**
+```typescript
+interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label?: string;
+  error?: string;
+  helperText?: string;
+  fullWidth?: boolean;
+  showCount?: boolean;
+  maxLength?: number;
+}
+```
+
+---
+
 ### Select
 セレクトボックス
 
@@ -85,23 +111,89 @@
 
 **Props:**
 - `value`: string
-- `onChange`: (value: string) => void
+- `onValueChange`: (value: string) => void
 - `options`: Array<{ value: string; label: string }>
 - `placeholder`: string
 - `disabled`: boolean
+- `className`: string
+- `aria-label`: string
 
 **使用例:**
 ```tsx
 <Select
   value={selectedSort}
-  onChange={setSortBy}
+  onValueChange={setSortBy}
   options={[
     { value: 'release_date', label: '公開日順' },
     { value: 'popularity', label: '人気順' },
-    { value: 'vote_average', label: '評価順' }
   ]}
-  placeholder="並び替え"
+  aria-label="ソート順を選択"
 />
+```
+
+---
+
+### Checkbox
+チェックボックス
+
+**ベース**: `@radix-ui/react-checkbox`
+
+**Props:**
+```typescript
+interface CheckboxProps {
+  label?: string;
+  checked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+  disabled?: boolean;
+  required?: boolean;
+  id?: string;
+  className?: string;
+  'aria-label'?: string;
+}
+```
+
+---
+
+### Tabs
+タブ切り替え
+
+**ベース**: `@radix-ui/react-tabs`
+
+**Props:**
+```typescript
+interface TabOption {
+  label: string;
+  value: string;
+  disabled?: boolean;
+}
+
+interface TabsProps {
+  options: readonly TabOption[];
+  value: string;
+  onValueChange: (value: string) => void;
+  className?: string;
+  'aria-label'?: string;
+  children?: ReactNode;
+}
+```
+
+---
+
+### Badge
+バッジコンポーネント
+
+**Props:**
+```typescript
+type BadgeVariant = 'default' | 'primary' | 'success' | 'error' | 'warning';
+type BadgeSize = 'sm' | 'md';
+
+interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
+  children: ReactNode;
+  variant?: BadgeVariant;
+  size?: BadgeSize;
+  onRemove?: () => void;
+  className?: string;
+}
 ```
 
 ---
@@ -111,16 +203,9 @@
 
 **Props:**
 - `children`: ReactNode
-- `hover`: boolean - ホバー効果の有無
+- `hover`: boolean
 - `onClick`: () => void
 - `className`: string
-
-**使用例:**
-```tsx
-<Card hover onClick={handleCardClick}>
-  <CardContent />
-</Card>
-```
 
 ---
 
@@ -130,11 +215,35 @@
 **ベース**: `@radix-ui/react-dialog`
 
 **Props:**
-- `isOpen`: boolean
-- `onClose`: () => void
-- `title`: string
-- `children`: ReactNode
-- `size`: 'sm' | 'md' | 'lg' | 'xl'
+```typescript
+interface ModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title?: string;
+  description?: string;
+  children: ReactNode;
+  className?: string;
+  closeOnOverlayClick?: boolean;
+  closeOnEscape?: boolean;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+  showCloseButton?: boolean;
+}
+
+interface ModalHeaderProps {
+  children: ReactNode;
+  className?: string;
+}
+
+interface ModalBodyProps {
+  children: ReactNode;
+  className?: string;
+}
+
+interface ModalFooterProps {
+  children: ReactNode;
+  className?: string;
+}
+```
 
 **機能:**
 - ESCキーで閉じる（Radix UI標準）
@@ -142,16 +251,29 @@
 - フォーカストラップ（モーダル内でフォーカス固定）
 - スクロールロック
 
-**使用例:**
-```tsx
-<Modal
-  isOpen={isOpen}
-  onClose={handleClose}
-  title="映画詳細"
-  size="lg"
->
-  <MovieDetail movieId={selectedMovieId} />
-</Modal>
+---
+
+### DropdownMenu
+ドロップダウンメニュー
+
+**ベース**: `@radix-ui/react-dropdown-menu`
+
+**Props:**
+```typescript
+interface DropdownMenuItem {
+  label: string;
+  icon?: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}
+
+interface DropdownMenuProps {
+  trigger: ReactNode;
+  items: DropdownMenuItem[];
+  align?: 'start' | 'center' | 'end';
+  className?: string;
+}
 ```
 
 ---
@@ -167,40 +289,10 @@
 - `duration`: number（デフォルト: 5000ms）
 - `onClose`: () => void
 
-**表示内容:**
-- メッセージテキスト
-- タイプに応じた色分け
-  - error: 赤
-  - warning: 黄
-  - info: 青
-  - success: 緑
-- 自動消滅（5秒）
-
-**機能:**
-- スワイプで閉じる（Radix UI標準）
-- アニメーション（スライドイン/アウト）
-- 複数同時表示対応（スタック表示）
-- スクリーンリーダー対応
-
-**使用例:**
-```tsx
-<Toast
-  message="メールアドレスの形式が不正です"
-  type="error"
-  duration={5000}
-  onClose={handleCloseToast}
-/>
-```
-
 **グローバル使用:**
 ```tsx
-// Context経由でグローバル管理
 const { showToast } = useToast();
-
-showToast({
-  message: 'ログインに成功しました',
-  type: 'success'
-});
+showToast({ message: 'ログインに成功しました', type: 'success' });
 ```
 
 ---
@@ -211,25 +303,68 @@ showToast({
 **Props:**
 - `size`: 'sm' | 'md' | 'lg'
 - `fullScreen`: boolean
-- `message`: string (optional) - ローディング中のメッセージ
+- `label`: string (optional)
 
-**表示内容:**
-- ローディングサークル（スピナー）
-- オプションでメッセージ表示
+---
 
-**fullScreen時の動作:**
-- 全画面オーバーレイで背景を暗くする
-- 画面操作を完全にブロック（z-index最大値）
-- 中央にローディングサークル表示
-- 認証処理・API呼び出し中に使用
+### Heading
+見出しコンポーネント
 
-**使用例:**
-```tsx
-// 全画面ローディング（認証処理中など）
-<Loading size="lg" fullScreen message="ログイン中..." />
+**Props:**
+```typescript
+interface HeadingProps extends HTMLAttributes<HTMLHeadingElement> {
+  level?: 1 | 2 | 3 | 4 | 5 | 6;
+  align?: 'left' | 'center' | 'right';
+}
+```
 
-// インラインローディング（コンポーネント内）
-<Loading size="md" />
+---
+
+### Pagination
+ページネーション
+
+**Props:**
+```typescript
+interface PaginationProps extends HTMLAttributes<HTMLDivElement> {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  maxPageButtons?: number;
+  className?: string;
+}
+```
+
+---
+
+### Skeleton
+スケルトンローディング
+
+**Props:**
+```typescript
+type SkeletonVariant = 'text' | 'rect' | 'circle';
+
+interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
+  variant?: SkeletonVariant;
+  width?: string | number;
+  height?: string | number;
+  className?: string;
+}
+```
+
+---
+
+### EmptyState
+空状態表示
+
+**Props:**
+```typescript
+interface EmptyStateProps extends HTMLAttributes<HTMLDivElement> {
+  icon?: ReactNode;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  className?: string;
+}
 ```
 
 ---
@@ -241,102 +376,266 @@ showToast({
 - `src`: string
 - `alt`: string
 - `size`: 'sm' | 'md' | 'lg'
-- `fallback`: string - 画像がない場合の表示文字
+- `fallback`: string
 
-**使用例:**
-```tsx
-<Avatar
-  src={user.avatar_url}
-  alt={user.name}
-  size="md"
-  fallback={user.name.charAt(0)}
-/>
+---
+
+## Movie UI Components
+
+### MovieTile
+映画サムネイルタイル
+
+**Props:**
+```typescript
+interface MovieTileProps {
+  movie: MovieCacheItem;
+  genres: Record<number, string>;
+  onClick: (movieId: number) => void;
+  isInWatchlist: boolean;
+  onWatchlistToggle: (movieId: number) => void;
+  watchlistDisabled: boolean;
+  onFavoriteToggle: (movie, favorite) => void;
+  favoriteDisabled: boolean;
+}
+```
+
+---
+
+### MovieTileSkeleton
+映画タイルのスケルトンローディング
+
+**Props:**
+```typescript
+interface MovieTileSkeletonProps {
+  count?: number;
+}
+```
+
+---
+
+### FilterModal
+映画フィルターモーダル
+
+**ベース**: `@radix-ui/react-dialog`
+
+**Props:**
+```typescript
+interface FilterModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  genres: Record<number, string>;
+  selectedGenreIds: number[];
+  selectedDateRange: DateRange;
+  isRevivalFilter: boolean | undefined;
+  onApply: (genreIds: number[], dateRange: DateRange, isRevival: boolean | undefined) => void;
+}
+```
+
+---
+
+### MovieDetailModal
+映画詳細モーダル
+
+**Props:**
+- `movieId`: number | null
+- `title`: string | undefined
+- `showFinancialInfo`: boolean
+- `onClose`: () => void
+
+---
+
+### MovieDetailContent
+映画詳細のコンテンツ部分
+
+**Props:**
+```typescript
+interface MovieDetailContentProps {
+  movieId: number;
+  showFinancialInfo?: boolean;
+}
 ```
 
 ---
 
 ## Feature Components
 
-### MovieTile
-映画サムネイルタイル（ホーム画面用）
+### MovieListContent
+映画一覧コンテンツ（upcoming / nowShowing 共有）
 
 **Props:**
-- `movie`: Movie
-- `onWatchlistAdd`: (movieId: number) => void
-- `onClick`: (movieId: number) => void
-- `isInWatchlist`: boolean
+```typescript
+interface MovieListContentProps {
+  title: string;
+  movieList: UseMovieListReturn;
+}
+```
 
-**表示内容:**
-- ポスター画像
-- タイトル
-- 公開日
-- 「見たい」ボタン
+内部で `MovieListToolbar`、`MovieGrid` に分割。`useMovieListContent` フックでロジック管理。
 
-**使用例:**
-```tsx
-<MovieTile
-  movie={movie}
-  onWatchlistAdd={handleAddToWatchlist}
-  onClick={handleShowDetail}
-  isInWatchlist={watchlist.includes(movie.id)}
-/>
+---
+
+### NowShowingMovieList
+劇場公開中の映画一覧（ホームページ用）
+
+**Props:**
+```typescript
+interface NowShowingMovieListProps {
+  movies: NowShowingMovie[];
+}
 ```
 
 ---
 
-### MovieDetail
-映画詳細モーダル内容
+### MovieContent
+ホームページの映画コンテンツ部分
+
+**Props:** なし（内部で `useHome` フックを使用）
+
+---
+
+### RecommendationSection
+AIレコメンド映画セクション
+
+**データ取得方式**: Server Component（page.tsx）でサーバーサイド取得 → propsで渡す
 
 **Props:**
-- `movieId`: number
+```typescript
+interface RecommendationSectionProps {
+  recommendations: Recommendation[];
+  hasFavorites: boolean;
+}
+```
 
-**表示内容:**
-- 背景画像
-- ポスター画像
-- タイトル（日本語・原題）
-- 概要
-- 公開日
-- 上映時間
-- ジャンル
-- 評価
-- 「見たい」ボタン
+**表示状態（3パターン）:**
+1. **お気に入り0件**（`hasFavorites: false`）: 登録促進テキスト
+2. **レコメンド未生成**（`recommendations.length === 0`）: 「準備中」テキスト
+3. **レコメンドあり**: MovieTileグリッド + 推薦理由テキスト
 
-**使用例:**
-```tsx
-<MovieDetail movieId={selectedMovieId} />
+---
+
+### FavoriteButton
+映画タイルのお気に入りハートアイコン
+
+**Props:**
+```typescript
+interface FavoriteButtonProps {
+  favorite: MovieFavoriteInfo | null;
+  onClick: () => void;
+  disabled?: boolean;
+  size?: 'sm' | 'md';
+}
+```
+
+- 未登録: 白抜きハート → クリックでRatingModal表示
+- 登録済み: 塗りつぶしハート（`$secondary-600`）→ クリックで評価変更
+
+---
+
+### FavoriteRatingModal
+お気に入り評価入力モーダル
+
+**ベース**: `@radix-ui/react-dialog`
+
+**Props:**
+```typescript
+interface FavoriteRatingModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  movieTitle: string;
+  currentFavorite: MovieFavoriteInfo | null;
+  onSubmit: (rating: number) => void;
+  onDelete?: () => void;
+}
 ```
 
 ---
 
-### WatchlistItem
-見たい映画リストアイテム
+### RatingIndicator
+評価値インジケーター（1〜10点）
 
 **Props:**
-- `movie`: Movie
-- `addedAt`: string
-- `onRemove`: (movieId: number) => void
-- `onClick`: (movieId: number) => void
-
-**表示内容:**
-- 小さいポスター画像
-- タイトル
-- 追加日
-- 削除ボタン
-
-**使用例:**
-```tsx
-<WatchlistItem
-  movie={movie}
-  addedAt={watchlistItem.added_at}
-  onRemove={handleRemove}
-  onClick={handleShowDetail}
-/>
+```typescript
+interface RatingIndicatorProps {
+  rating: number;
+  onRatingChange?: (rating: number) => void;
+  size?: 'sm' | 'md';
+}
 ```
+
+- `onRatingChange` 指定時: インタラクティブモード（モーダル内）
+- 未指定時: 読み取り専用（一覧画面）
+
+---
+
+### FavoriteList
+お気に入り一覧グリッド
+
+**Props:**
+```typescript
+interface FavoriteListProps {
+  favorites: FavoriteItem[];
+  isLoading: boolean;
+  onFavoriteToggle: (movie, favorite) => void;
+  isFavoriteProcessing?: (tmdbMovieId: number) => boolean;
+  onClick?: (tmdbMovieId: number) => void;
+}
+```
+
+---
+
+### FavoritesPage
+お気に入りページ
+
+**Props:** なし（内部で `useFavoritesPage` フックを使用）
+
+---
+
+### WatchlistAddButton
+ウォッチリスト追加ボタン
+
+**Props:**
+```typescript
+interface WatchlistAddButtonProps {
+  isInWatchlist: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  size?: 'sm' | 'md';
+}
+```
+
+---
+
+### WatchlistList
+ウォッチリスト一覧
+
+**Props:**
+```typescript
+interface WatchlistListProps {
+  watchlist: WatchlistItem[];
+  isLoading: boolean;
+  onClick?: (tmdbMovieId: number) => void;
+  onDelete?: (id: string) => void;
+}
+```
+
+---
+
+### WatchlistPanel
+サイドバーのウォッチリストパネル
+
+**Props:** なし（内部で状態管理）
+
+---
+
+### WatchlistPage
+ウォッチリストページ
+
+**Props:** なし（内部で `useWatchlistPage` フックを使用）
 
 ---
 
 ### CalendarDialog
-カレンダーダイアログコンポーネント（ウォッチリストの映画の公開日を月間カレンダーで表示）
+カレンダーダイアログコンポーネント
 
 **ベース**: `@radix-ui/react-dialog` + `react-day-picker`
 
@@ -344,46 +643,47 @@ showToast({
 - `isOpen`: boolean
 - `onClose`: () => void
 
-**内部動作:**
-- `useCalendar` フックでデータ取得・状態管理
-- `GET /api/watchlist/calendar` から月ごとのウォッチリスト映画を取得
-- `release_date` がNULLの映画は表示対象外
-- 取得済み月データはキャッシュ（ダイアログ再オープン時にクリア）
-
-**表示内容:**
-- 月間カレンダー（react-day-picker）
-- 映画がある日付にドット/バッジ表示
-- 日付クリックで CalendarMovieList に映画一覧表示
-- 月切り替えボタン（前月・次月）
-- ローディング状態
-
-**使用例:**
-```tsx
-<CalendarDialog
-  isOpen={isCalendarOpen}
-  onClose={handleCloseCalendar}
-/>
-```
-
 ---
 
 ### CalendarMovieList
-カレンダー内の選択日の映画一覧コンポーネント
+カレンダー内の選択日の映画一覧
 
 **Props:**
 - `movies`: Array<{ id: string; tmdb_movie_id: number; title: string; poster_path: string | null; release_date: string }>
 - `onMovieClick`: (movieId: number) => void
 
-**表示内容:**
-- ポスターサムネイル（w92）+ タイトル + 公開日
-- 映画クリックで詳細モーダル表示
+---
 
-**使用例:**
-```tsx
-<CalendarMovieList
-  movies={selectedDateMovies}
-  onMovieClick={handleMovieClick}
-/>
+### SearchPage
+検索結果ページ
+
+**Props:** なし（内部で `useSearchPage` フックを使用）
+
+---
+
+### SearchBar
+Header用検索バー
+
+**Props:**
+- `defaultValue`: string
+- `placeholder`: string
+
+---
+
+### SearchResults
+検索結果一覧
+
+**Props:**
+```typescript
+interface SearchResultsProps {
+  movies: Movie[];
+  totalResults: number;
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  onMovieClick: (movieId: number) => void;
+  isLoading: boolean;
+}
 ```
 
 ---
@@ -398,222 +698,69 @@ showToast({
 - 外観/テーマ（ThemeSettings）
 - 興味なし一覧（DismissedMoviesList）
 
-**使用例:**
-```tsx
-<SettingsPage />
-```
-
 ---
 
 ### DisplayNameForm
 表示名変更フォーム（react-hook-form + zod）
 
-**使用例:**
-```tsx
-<DisplayNameForm />
+**Props:** なし（内部でセッション情報を取得）
+
+---
+
+### ChangePasswordForm
+パスワード変更フォーム（OTP検証 + 新パスワード入力）
+
+**フォーム**: react-hook-form + zod
+
+**Props:**
+```typescript
+interface ChangePasswordFormProps {
+  email: string;
+}
 ```
+
+**ステップ:**
+1. 「確認コードを送信」ボタン → OTP送信
+2. OTPコード入力
+3. 新パスワード入力 + 変更ボタン
 
 ---
 
 ### NotificationSettings
 通知設定ON/OFF切り替え（オプティミスティックUI）
 
-**使用例:**
-```tsx
-<NotificationSettings />
-```
+**Props:** なし
 
 ---
 
 ### ThemeSettings
 テーマ切り替え（light/dark）
 
-**使用例:**
-```tsx
-<ThemeSettings />
-```
-
----
-
-### RecommendationSection
-AIレコメンド映画セクション（NowShowingMovieListと同パターン）
-
-**データ取得方式**: Server Component（page.tsx）でサーバーサイド取得 → propsで渡す
-
-**Props:**
-```typescript
-type RecommendationSectionProps = {
-  recommendations: Recommendation[];
-  hasFavorites: boolean;
-};
-```
-
-**表示状態（3パターン）:**
-1. **お気に入り0件**（`hasFavorites: false`）: 登録促進テキスト
-2. **レコメンド未生成**（`recommendations.length === 0`）: 「準備中」テキスト
-3. **レコメンドあり**: MovieTileグリッド + 推薦理由テキスト
-
-**表示内容:**
-- セクションタイトル「あなたへのおすすめ」
-- MovieTileグリッド（5カラム@lg）
-- 各タイルの下に推薦理由（2行truncate）
-- タイルクリックでMovieDetailModal表示
-
-**使用例:**
-```tsx
-<RecommendationSection
-  recommendations={recommendations}
-  hasFavorites={hasFavorites}
-/>
-```
+**Props:** なし
 
 ---
 
 ### DismissedMoviesList
-興味なし映画一覧コンポーネント（設定ページ用）
+興味なし映画一覧（設定ページ用）
 
-**Props:**
-なし（内部でAPIからデータ取得）
-
-**表示内容:**
-- 映画ポスターサムネイル（w92）+ タイトル + 解除ボタン
-- 解除ボタンクリックで論理削除（DELETE API呼び出し）
-- 空状態の表示（「興味なしに登録した映画はありません」）
-- ローディング状態
-
-**使用例:**
-```tsx
-<DismissedMoviesList />
-```
+**Props:** なし（内部でAPIからデータ取得）
 
 ---
 
-### SearchBar
-Header用検索バー（ページ遷移トリガー）
-
-**配置**: Header内
-
-**Props:**
-- `defaultValue`: string（URLのqueryパラメータから初期値設定用）
-- `placeholder`: string
-
-**動作:**
-- テキスト入力 + 検索アイコンボタン
-- Enter or 検索アイコンクリック → `router.push('/search?query=xxx')` でページ遷移
-- デバウンスなし（ページ遷移トリガーのため不要）
-- 空文字での検索は防止
-
-**使用例:**
-```tsx
-<SearchBar
-  defaultValue={currentQuery}
-  placeholder="映画を検索..."
-/>
-```
-
----
-
-### SearchResults
-検索結果一覧コンポーネント
-
-**Props:**
-```typescript
-type SearchResultsProps = {
-  movies: Movie[];
-  totalResults: number;
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-  onMovieClick: (movieId: number) => void;
-  isLoading: boolean;
-};
-```
-
-**表示内容:**
-- 結果件数表示（例: 「123件の検索結果」）
-- 既存MovieTileを使用した映画一覧（グリッドレイアウト）
-- 既存Paginationコンポーネントによるページ切り替え
-- ローディング中は既存MovieTileSkeletonを表示
-- 結果なし時は既存EmptyStateコンポーネントを表示
-
-**使用例:**
-```tsx
-<SearchResults
-  movies={searchResults}
-  totalResults={200}
-  currentPage={1}
-  totalPages={10}
-  onPageChange={handlePageChange}
-  onMovieClick={handleMovieClick}
-  isLoading={isSearching}
-/>
-```
-
----
-
-### MovieFilter
-映画フィルターコンポーネント（検索結果ページ用）
-
-**Props:**
-```typescript
-type FilterOptions = {
-  genre?: number[];          // ジャンルID配列
-  year?: number;             // 公開年
-  vote_average_gte?: number; // 最低評価
-};
-
-type MovieFilterProps = {
-  currentFilters: FilterOptions;
-  onFilterChange: (filters: FilterOptions) => void;
-  genres: Array<{ id: number; name: string }>;
-};
-```
-
-**表示内容:**
-- ジャンルマルチセレクト（Radix UI Checkbox群）
-- 年代ドロップダウン（Radix UI Select、2020〜現在+5年先）
-- 評価選択（Radix UI Select、0〜10、0.5刻み）
-- フィルタークリアボタン
-
-**動作:**
-- フィルター変更 → `onFilterChange`コールバック → 親がURLパラメータを更新
-- URLパラメータ形式: `?genre=28,12&year=2024&rating=7.0`
-
-**使用例:**
-```tsx
-<MovieFilter
-  currentFilters={{ genre: [28], year: 2024 }}
-  onFilterChange={handleFilterChange}
-  genres={genres}
-/>
-```
-
----
+## Auth Components
 
 ### LoginForm
 ログインフォーム
 
 **Props:**
-- `onSubmit`: (email: string, password: string) => Promise<void>
-- `onOtpLoginClick`: () => void
-- `onRegisterClick`: () => void
-
-**表示内容:**
-- メールアドレス入力
-- パスワード入力
-- ログインボタン
-- SocialLoginButtonsコンポーネント（区切り線「または」付き）
-- 「メールでログイン」リンク（OTPログインへ遷移）
-- 新規登録リンク
-
-**使用例:**
-```tsx
-<LoginForm
-  onSubmit={handleLogin}
-  onOtpLoginClick={handleShowOtpLogin}
-  onRegisterClick={handleShowRegister}
-/>
+```typescript
+interface LoginFormProps {
+  onOtpLoginClick?: () => void;
+}
 ```
+
+- ログイン処理は内部実装（onSubmit Props不要）
+- 新規登録への遷移も内部でルーター使用
 
 ---
 
@@ -621,24 +768,7 @@ type MovieFilterProps = {
 新規登録フォーム
 
 **Props:**
-- `onSubmit`: (data: RegisterData) => Promise<void>
 - `onLoginClick`: () => void
-
-**表示内容:**
-- メールアドレス入力
-- パスワード入力
-- ユーザー名入力
-- 登録ボタン
-- SocialLoginButtonsコンポーネント（区切り線「または」付き）
-- ログインリンク
-
-**使用例:**
-```tsx
-<RegisterForm
-  onSubmit={handleRegister}
-  onLoginClick={handleShowLogin}
-/>
-```
 
 ---
 
@@ -650,20 +780,6 @@ type MovieFilterProps = {
 - `onGithubLogin`: () => void
 - `disabled`: boolean
 
-**表示内容:**
-- Googleログインボタン（Googleアイコン + 「Googleでログイン」）
-- GitHubログインボタン（GitHubアイコン + 「GitHubでログイン」）
-- ボタンはoutlineスタイル、フルワイド
-
-**使用例:**
-```tsx
-<SocialLoginButtons
-  onGoogleLogin={handleGoogleLogin}
-  onGithubLogin={handleGithubLogin}
-  disabled={isLoading}
-/>
-```
-
 ---
 
 ### OtpLoginForm
@@ -673,88 +789,16 @@ type MovieFilterProps = {
 - `onSubmit`: (email: string) => Promise<void>
 - `onBackToLogin`: () => void
 
-**表示内容:**
-- メールアドレス入力
-- 「ログインコードを送信」ボタン
-- 「パスワードでログイン」リンク（LoginFormに戻る）
-
-**使用例:**
-```tsx
-<OtpLoginForm
-  onSubmit={handleSendOtpForLogin}
-  onBackToLogin={handleBackToLogin}
-/>
-```
-
 ---
 
 ### OTPVerification
 OTP検証フォーム
-
-**フォーム**: react-hook-form + zod
 
 **Props:**
 - `onSubmit`: (otp: string) => Promise<void>
 - `onResend`: () => Promise<void>
 - `email`: string
 - `action`: 'registration' | 'login' | 'password_change'
-
-**表示内容:**
-- 送信先メールアドレス表示（例: 「user@example.com に送信しました」）
-- 6桁OTP入力フィールド（1つの入力欄方式）
-  - type="text"
-  - inputMode="numeric"
-  - maxLength={6}
-  - pattern="[0-9]{6}"
-  - プレースホルダー: "123456"
-  - 自動フォーカス
-- 検証ボタン
-- 再送信ボタン（1分間隔制限、カウントダウン表示）
-- 残り試行回数表示（エラー時）
-
-**バリデーション（zod）:**
-```typescript
-const otpSchema = z.object({
-  otp: z.string()
-    .length(6, '6桁の数字を入力してください')
-    .regex(/^[0-9]{6}$/, '数字のみ入力可能です')
-});
-```
-
-**使用例:**
-```tsx
-<OTPVerification
-  onSubmit={handleVerifyOTP}
-  onResend={handleResendOTP}
-  email={userEmail}
-  action="registration"
-/>
-```
-
----
-
-### PasswordChangeForm
-パスワード変更フォーム（OTP検証 + 新パスワード入力）
-
-**フォーム**: react-hook-form + zod
-
-**Props:**
-- `onRequestOtp`: () => Promise<void>
-- `onSubmit`: (code: string, newPassword: string) => Promise<void>
-- `email`: string
-
-**表示内容:**
-- ステップ1: 「確認コードを送信」ボタン
-- ステップ2: OTPコード入力 + 新パスワード入力 + 変更ボタン
-
-**使用例:**
-```tsx
-<PasswordChangeForm
-  onRequestOtp={handleRequestOtp}
-  onSubmit={handleChangePassword}
-  email={userEmail}
-/>
-```
 
 ---
 
@@ -776,14 +820,9 @@ const otpSchema = z.object({
 │ Side │   Content    │
 │ bar  │    Area      │
 │      │              │
-└──────┴──────────────┘
-```
-
-**使用例:**
-```tsx
-<AppLayout user={currentUser}>
-  <HomePage />
-</AppLayout>
+├──────┴──────────────┤
+│       Footer        │
+└─────────────────────┘
 ```
 
 ---
@@ -795,39 +834,57 @@ const otpSchema = z.object({
 - `user`: User | null
 - `onLogout`: () => void
 
-**表示内容:**
-- ロゴ
-- 検索バー
-- ユーザーメニュー
-
-**使用例:**
-```tsx
-<Header user={currentUser} onLogout={handleLogout} />
-```
-
 ---
 
 ### Sidebar
 サイドバーコンポーネント
 
 **Props:**
-- `navigation`: ReactNode - ナビゲーション
-- `userSection`: ReactNode - ユーザーセクション
-- `calendarButton`: ReactNode - カレンダーボタン
-- `watchlist`: ReactNode - ウォッチリスト
+- `navigation`: ReactNode
+- `userSection`: ReactNode
+- `calendarButton`: ReactNode
+- `watchlist`: ReactNode
 
-**表示内容:**
-- ナビゲーション（SideNav）
-- ユーザーメニュー（UserMenu）- 下部に固定
-- カレンダーボタン
-- 見たい映画リスト
+---
 
-**使用例:**
-```tsx
-<Sidebar
-  navigation={<SideNav />}
-  userSection={<UserMenu />}
-/>
+### Footer
+フッターコンポーネント
+
+**Props:**
+```typescript
+interface FooterProps extends HTMLAttributes<HTMLElement> {
+  copyright?: string;
+  links?: Array<{ label: string; href: string }>;
+  children?: ReactNode;
+  className?: string;
+}
+```
+
+---
+
+### MobileDrawer
+モバイルドロワーメニュー
+
+**Props:**
+```typescript
+interface MobileDrawerProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+```
+
+---
+
+### MobileMenuButton
+モバイルメニュートグルボタン
+
+**Props:**
+```typescript
+interface MobileMenuButtonProps {
+  isOpen: boolean;
+  onToggle: () => void;
+  className?: string;
+}
 ```
 
 ---
@@ -835,21 +892,61 @@ const otpSchema = z.object({
 ### UserMenu
 ユーザープロフィール + ポップオーバーメニュー（サイドバー下部）
 
-**ベース**: `@radix-ui/react-dropdown-menu`（プリミティブ直接使用）
+**ベース**: `@radix-ui/react-dropdown-menu`
 
 **Props:** なし（内部でuseSession()からセッション情報を取得）
 
-**表示内容:**
-- トリガー: アバター（画像 or イニシャル） + ユーザー名
-- ポップオーバー（上方向展開）:
-  - メールアドレス（Label）
-  - 設定リンク（/settings へ遷移）
-  - ログアウトボタン（destructive）
+---
 
-**使用例:**
-```tsx
-<UserMenu />
+## Provider Components
+
+### AppSessionProvider
+NextAuth.jsセッションプロバイダー
+
+**Props:**
+```typescript
+interface AppSessionProviderProps {
+  children: ReactNode;
+}
 ```
+
+---
+
+### AppQueryProvider
+TanStack Queryプロバイダー
+
+**Props:**
+```typescript
+interface AppQueryProviderProps {
+  children: ReactNode;
+}
+```
+
+---
+
+### AppToastProvider
+トースト通知プロバイダー
+
+**Props:**
+```typescript
+interface AppToastProviderProps {
+  children: ReactNode;
+}
+```
+
+---
+
+### ThemeProvider
+テーマ初期化コンポーネント（localStorageからテーマを復元）
+
+**Props:** なし
+
+---
+
+### SessionExpiryHandler
+セッション期限切れ監視コンポーネント
+
+**Props:** なし
 
 ---
 
@@ -870,32 +967,6 @@ function getTMDbImageUrl(
 ): string | null;
 ```
 
-**実装:**
-```typescript
-export function getTMDbImageUrl(
-  path: string | null,
-  size: ImageSize = 'w500'
-): string | null {
-  if (!path) return null;
-
-  const baseUrl = process.env.NEXT_PUBLIC_TMDB_IMAGE_BASE_URL;
-  return `${baseUrl}/${size}${path}`;
-}
-```
-
-**使用例:**
-```tsx
-// MovieTileコンポーネント内
-const posterUrl = getTMDbImageUrl(movie.poster_path, 'w500');
-
-<Image
-  src={posterUrl || '/placeholder.jpg'}
-  alt={movie.title}
-  width={500}
-  height={750}
-/>
-```
-
 **画像サイズガイド:**
 - `w92`: サムネイル（ウォッチリストアイテム）
 - `w185`: 小さいポスター
@@ -905,171 +976,29 @@ const posterUrl = getTMDbImageUrl(movie.poster_path, 'w500');
 
 ---
 
-## 確認が必要な事項
+## 設計原則
 
-### コンポーネント設計
-- [x] **ロジック分離**: ロジックはカスタムhooksに分離 - 確定
-- [ ] **Props vs Context**: ユーザー情報はProps渡し？Context？
-- [x] **カスタムフック**: ビジネスロジック・状態管理は全てhooksに切り出す - 確定
-
-**設計原則:**
+### ロジック分離
 - コンポーネント: UIレンダリングのみに専念
 - カスタムフック: データ取得、状態管理、ビジネスロジック
-- 例:
-  - `useAuth()` - 認証状態管理
-  - `useMovies()` - 映画データ取得・キャッシュ
-  - `useWatchlist()` - ウォッチリスト操作
-  - `useToast()` - トースト通知管理
 
 ### UIライブラリ
-- [x] **ヘッドレスUI**: Radix UI - 確定（拡張してカスタマイズ）
-- [x] **アイコン**: React Icons - 確定
-- [x] **アニメーション**: 基本的に行わない - 確定
-  - styleでopacity程度の軽微な変化のみ
-  - transition: opacity 0.2s ease等のシンプルなCSS
-  - パフォーマンスとシンプルさを優先
-
-**Radix UIの利点:**
-- アクセシビリティ標準準拠（WAI-ARIA）
-- ヘッドレスUI（スタイリングの自由度が高い）
-- react-hook-formとの相性が良い
-- TypeScript完全対応
-- キーボードナビゲーション組み込み済み
-
-**React Iconsの利点:**
-- 豊富なアイコンセット（Font Awesome、Material Design等）
-- Tree-shakingで必要なアイコンのみバンドル
-- TypeScript対応
-- 使用例: `<FiSearch />`, `<FiUser />`, `<FiHeart />`
+- **ヘッドレスUI**: Radix UI
+- **アイコン**: React Icons
+- **アニメーション**: 基本的に行わない（opacity/transform程度のCSS transition）
 
 ### パフォーマンス
-- [x] **React.memo**: 必ず実施 - 確定
-  - 全ての再利用可能なコンポーネントにReact.memoを適用
-  - propsの比較関数は必要に応じて実装
-  - 特に重要: MovieTile, WatchlistItem等の繰り返しレンダリングされるコンポーネント
-- [x] **useCallback**: 必ず実施 - 確定
-  - コールバック関数は全てuseCallbackでメモ化
-  - 子コンポーネントに渡す関数は必ずuseCallback
-  - 依存配列を適切に設定
-- [ ] **仮想化**: 大量の映画リストに仮想スクロール必要？
-- [x] **遅延ロード**: Next.js Image + lazy loading - 確定（画像最適化で実装済み）
-
-**memo化の対象コンポーネント:**
-- 繰り返しレンダリング: MovieTile, WatchlistItem, ReviewItem
-- 共通コンポーネント: Button, Input, Select, Card, Modal, Toast
-- レイアウト: Header, Sidebar
-- 大きなコンポーネント: MovieDetail, Calendar
-
-**パフォーマンス最適化の実装例:**
-```typescript
-import { memo, useCallback } from 'react';
-
-type Props = {
-  movie: Movie;
-  onWatchlistAdd: (movieId: number) => void;
-};
-
-export const MovieTile = memo(({ movie, onWatchlistAdd }: Props) => {
-  // コールバックをuseCallbackでメモ化
-  const handleClick = useCallback(() => {
-    onWatchlistAdd(movie.id);
-  }, [movie.id, onWatchlistAdd]);
-
-  return (
-    <Card onClick={handleClick}>
-      {/* ... */}
-    </Card>
-  );
-});
-
-// 親コンポーネント
-export const MovieList = () => {
-  const [watchlist, setWatchlist] = useState<number[]>([]);
-
-  // 子コンポーネントに渡す関数をuseCallbackでメモ化
-  const handleWatchlistAdd = useCallback((movieId: number) => {
-    setWatchlist(prev => [...prev, movieId]);
-  }, []);
-
-  return (
-    <>
-      {movies.map(movie => (
-        <MovieTile
-          key={movie.id}
-          movie={movie}
-          onWatchlistAdd={handleWatchlistAdd}
-        />
-      ))}
-    </>
-  );
-};
-```
+- **React.memo**: 全コンポーネントで必須
+- **useCallback**: 全イベントハンドラーで必須
+- **useMemo**: 計算コストの高い処理で使用
+- **displayName**: 全コンポーネントに設定
 
 ### アクセシビリティ
-- [x] **ARIA属性**: Radix UIに標準搭載（WAI-ARIA準拠）- 確定
-- [x] **キーボード操作**: Radix UIに標準搭載（Tab/Enter/Escape等）- 確定
-- [x] **スクリーンリーダー**: Radix UIに標準搭載 - 確定
-- [x] **カラーコントラスト**: WCAG AA基準を満たす - 確定
-- [x] **フォーカス表示**: キーボード操作時の視覚的フィードバック実装 - 確定
-- [x] **ARIAラベル**: 全インタラクティブ要素に実装 - 確定
-
-**Radix UIのアクセシビリティ機能:**
-- フォーカス管理（Focus Trap、Focus Lock）
-- キーボードナビゲーション（矢印キー、Tab、Enter、Escape）
-- ARIA属性の自動設定（role, aria-label, aria-describedby等）
-- スクリーンリーダー対応（Live Regions、Announcements）
-
-**カスタムコンポーネントのアクセシビリティ要件:**
-- すべてのボタン・リンクにaria-label追加
-- フォーカス時に明確なアウトライン表示（outline: 2px solid $primary-500）
-- カラーコントラスト比4.5:1以上（テキスト）、3:1以上（UI要素）
-- キーボードのみで全操作可能
+- ARIA属性: Radix UIに標準搭載（WAI-ARIA準拠）
+- キーボード操作: Radix UIに標準搭載
+- カラーコントラスト: WCAG AA基準
+- フォーカス表示: キーボード操作時の視覚的フィードバック
 
 ### テスト
-- [x] **単体テスト**: Jest + React Testing Library - 確定
-- [x] **E2Eテスト**: Playwright - 確定
-- [x] **Storybook**: 実施 - 確定
-- [x] **カバレッジ目標**: 80%以上 - 確定
-
-**テスト方針:**
-- 共通コンポーネント: 単体テスト必須
-- カスタムフック: 単体テスト必須
-- ページ・フィーチャー: E2Eテスト
-- API Routes: 統合テスト
-
-**Storybook方針:**
-- 共通コンポーネント（common/）は全てストーリー作成
-- 機能コンポーネント（features/）は主要なもののみ
-- デザインシステムのドキュメント化
-- インタラクションテスト活用
-
-### 命名規則
-- [x] **変数・関数**: lowerCamelCase - 確定
-- [x] **コンポーネントファイル名**: PascalCase - 確定
-- [x] **CSS Modules**: `.module.scss`使用 - 確定
-- [x] **Props型**: 同一ファイル内で定義 - 確定
-
-**命名規則詳細:**
-```typescript
-// コンポーネント: PascalCase
-export const MovieTile = () => {};
-
-// 変数・関数: lowerCamelCase
-const movieData = useMovies();
-const handleClick = () => {};
-
-// カスタムフック: use + PascalCase
-export const useAuth = () => {};
-
-// 型定義: PascalCase（同一ファイル）
-type MovieTileProps = {
-  movie: Movie;
-  onClick: () => void;
-};
-
-// ファイル名
-// - コンポーネント: MovieTile.tsx
-// - フック: useAuth.ts
-// - 型: types.ts
-// - スタイル: MovieTile.module.scss
-```
+- 単体テスト: Jest + React Testing Library
+- カバレッジ目標: 80%以上

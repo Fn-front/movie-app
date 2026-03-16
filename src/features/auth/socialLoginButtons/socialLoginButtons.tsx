@@ -49,13 +49,14 @@ export const SocialLoginButtons = memo<SocialLoginButtonsProps>(
 
         <div className={styles.c_social_login__buttons}>
           <Button
-            variant='secondary'
+            variant='ghost'
             size='lg'
             fullWidth
             disabled={isDisabled}
             isLoading={loadingProvider === 'google'}
             onClick={handleGoogleLogin}
             aria-label='Googleでログイン'
+            className={styles.c_social_login__google}
           >
             <span className={styles.c_social_login__button_content}>
               <FaGoogle aria-hidden='true' />
@@ -64,13 +65,14 @@ export const SocialLoginButtons = memo<SocialLoginButtonsProps>(
           </Button>
 
           <Button
-            variant='secondary'
+            variant='ghost'
             size='lg'
             fullWidth
             disabled={isDisabled}
             isLoading={loadingProvider === 'github'}
             onClick={handleGithubLogin}
             aria-label='GitHubでログイン'
+            className={styles.c_social_login__github}
           >
             <span className={styles.c_social_login__button_content}>
               <FaGithub aria-hidden='true' />

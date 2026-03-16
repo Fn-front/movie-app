@@ -55,7 +55,7 @@ export const Sidebar = memo<SidebarProps>(function Sidebar({
 
       {watchlist && (
         <div className={styles.c_sidebar__watchlist}>
-          <h2 className={styles.c_sidebar__watchlist_title}>見たい映画</h2>
+          <h2 className={styles.c_sidebar__watchlist_title}>公開日が近い映画</h2>
           <div className={styles.c_sidebar__watchlist_content}>{watchlist}</div>
         </div>
       )}

@@ -24,10 +24,8 @@ build/
 .env.production.local
 .env.development.local
 
-# Package manager
+# Package manager / Lock files
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
-
-# Skills
 skills-lock.json

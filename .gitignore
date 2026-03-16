@@ -40,6 +40,9 @@ next-env.d.ts
 # claude code settings
 .claude/settings.local.json
 
+# agent skills binary files
+.agents/**/*.zip
+
 # IDE - JetBrains
 .idea/
 *.iml

@@ -22,10 +22,10 @@
 | avatar_url | TEXT | NULL | - | アバター画像URL |
 | role | VARCHAR(20) | NOT NULL | 'user' | ユーザー権限（user / admin） |
 | is_verified | BOOLEAN | NOT NULL | false | メール認証済みフラグ |
-| password_changed_at | TIMESTAMP | NULL | - | パスワード最終変更日時 |
-| last_login_at | TIMESTAMP | NULL | - | 最終ログイン日時（signIn時 + セッション更新時に1時間間隔で更新） |
-| created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
-| updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |
+| password_changed_at | TIMESTAMPTZ | NULL | - | パスワード最終変更日時 |
+| last_login_at | TIMESTAMPTZ | NULL | - | 最終ログイン日時（signIn時 + セッション更新時に1時間間隔で更新） |
+| created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL | now() | 更新日時 |
 
 **インデックス:**
 - `email` (UNIQUE)
@@ -306,6 +306,7 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 
 **インデックス:**
 - `user_id` - ユーザー別一覧取得用
+- `user_id, display_order ASC` - 表示順ソート用
 
 **制約:**
 - `uq_recommendations_user_order` (UNIQUE: user_id, display_order)
@@ -334,13 +335,15 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 | poster_path | VARCHAR(255) | NULL | - | ポスター画像パス |
 | release_date | DATE | NULL | - | 公開日 |
 | rating | INTEGER | NOT NULL | - | ユーザー評価（1〜10点） |
-| added_at | TIMESTAMP | NOT NULL | now() | 登録日時 |
-| updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |
-| deleted_at | TIMESTAMP | NULL | - | 削除日時（論理削除） |
+| added_at | TIMESTAMPTZ | NOT NULL | now() | 登録日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL | now() | 更新日時 |
+| deleted_at | TIMESTAMPTZ | NULL | - | 削除日時（論理削除） |
 
 **インデックス:**
 - `user_id, tmdb_movie_id` (UNIQUE, WHERE deleted_at IS NULL) - 重複登録防止（論理削除済みは対象外、再追加可能）
 - `user_id` - ユーザー別一覧取得用
+- `user_id, added_at DESC` (WHERE deleted_at IS NULL) - 登録日順ソート用
+- `user_id, rating DESC` (WHERE deleted_at IS NULL) - 評価順ソート用
 
 **外部キー:**
 - `user_id` -> `users(id)` ON DELETE CASCADE
@@ -375,11 +378,16 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 | poster_path | VARCHAR(255) | NULL | - | ポスター画像パス（設定ページの興味なし一覧でサムネイル表示用） |
 | genre_ids | INTEGER[] | NULL | - | ジャンルID配列（傾向分析用） |
 | created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL | now() | 更新日時 |
 | deleted_at | TIMESTAMPTZ | NULL | - | 論理削除 |
 
 **インデックス:**
 - `user_id, tmdb_movie_id` (UNIQUE, WHERE deleted_at IS NULL) - 重複登録防止
 - `user_id` - ユーザー別一覧取得用
+- `user_id, created_at DESC` (WHERE deleted_at IS NULL) - 作成日順ソート用
+
+**トリガー:**
+- `update_dismissed_movies_updated_at`: UPDATE時に `updated_at` を自動更新
 
 **外部キー:**
 - `user_id` -> `users(id)` ON DELETE CASCADE

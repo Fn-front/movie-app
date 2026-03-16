@@ -1208,7 +1208,7 @@
 - [ ] #151 — Cronスケジュール・middleware protectedPaths確認
 - [ ] #155 — ホームページ force-dynamic 見直し（use cache検討）
 - [ ] #156 — movieListContent コンポーネント責任分割
-- [ ] #157 — テーマhydrationミスマッチ対策
+- [x] #157 — テーマhydrationミスマッチ対策
 
 #### UI/UX
 - [ ] #152 — TMDb邦題がない映画のタイトル表示改善

@@ -24,7 +24,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang='ja'>
+    <html lang='ja' suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('movie-app:theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()",
+          }}
+        />
+      </head>
       <body className={noto.className}>
         <AppSessionProvider>
           <AppQueryProvider>

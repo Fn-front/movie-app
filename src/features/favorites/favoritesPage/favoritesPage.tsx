@@ -100,6 +100,7 @@ export const FavoritesPage = memo(function FavoritesPage() {
 
       <MovieDetailModal
         movieId={selectedMovieId}
+        title={favorites.find((item) => item.tmdb_movie_id === selectedMovieId)?.title}
         showFinancialInfo={false}
         onClose={handleDetailModalClose}
       />

@@ -198,6 +198,7 @@ export const MovieListContent = memo<MovieListContentProps>(
 
         <MovieDetailModal
           movieId={selectedMovieId}
+          title={movies.find((m) => m.id === selectedMovieId)?.title}
           showFinancialInfo={showFinancialInfo}
           onClose={handleDetailModalClose}
         />

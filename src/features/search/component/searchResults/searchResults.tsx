@@ -156,6 +156,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
 
       <MovieDetailModal
         movieId={selectedMovieId}
+        title={movies.find((movie) => movie.id === selectedMovieId)?.title}
         showFinancialInfo={false}
         onClose={handleDetailModalClose}
       />

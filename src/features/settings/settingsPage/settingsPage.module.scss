@@ -3,6 +3,7 @@
 
 .c_settings_page {
   max-width: 720px;
+  margin: 0 auto;
   padding: $spacing-4;
 
   @include md {

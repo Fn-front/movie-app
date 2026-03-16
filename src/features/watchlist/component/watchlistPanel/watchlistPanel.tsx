@@ -82,7 +82,11 @@ export const WatchlistPanel = memo(function WatchlistPanel() {
         </>
       )}
 
-      <MovieDetailModal movieId={selectedMovieId} onClose={handleModalClose} />
+      <MovieDetailModal
+        movieId={selectedMovieId}
+        title={watchlist.find((item) => item.tmdb_movie_id === selectedMovieId)?.title}
+        onClose={handleModalClose}
+      />
     </div>
   );
 });

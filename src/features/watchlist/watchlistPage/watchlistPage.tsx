@@ -89,6 +89,7 @@ export const WatchlistPage = memo(function WatchlistPage() {
 
       <MovieDetailModal
         movieId={selectedMovieId}
+        title={watchlist.find((item) => item.tmdb_movie_id === selectedMovieId)?.title}
         showFinancialInfo={false}
         onClose={handleDetailModalClose}
       />

@@ -85,6 +85,7 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
         </section>
         <MovieDetailModal
           movieId={selectedMovieId}
+          title={movieCacheItems.find((movie) => movie.id === selectedMovieId)?.title}
           onClose={handleModalClose}
         />
       </>

@@ -161,6 +161,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
         </section>
         <MovieDetailModal
           movieId={selectedMovieId}
+          title={movieCacheItems.find((movie) => movie.id === selectedMovieId)?.title}
           onClose={handleModalClose}
         />
         <FavoriteRatingModal

@@ -1145,6 +1145,228 @@
 - [x] 結合テスト
   - Cron API: アクティブユーザーフィルタリング
 
+### 設計書・ロードマップ修正タスク（Step 6完了時点のレビューで検出）
+
+#### 設計書の差分修正（`docs/design-docs-sync`）
+
+##### authentication-flow.md
+- [ ] セッションオブジェクト構造を実装に合わせて更新
+  - `isVerified` 削除、`role` / `image` 追加
+- [ ] 絶対有効期限（7日間）の仕様を追加
+  - `token.issuedAt` による判定、`SESSION_CONFIG.ABSOLUTE_MAX_AGE_MS`
+- [ ] パスワード変更によるセッション無効化の仕様を追加
+  - `password_changed_at` の5分間隔監視、`token.invalidated`
+- [ ] NextAuth.js v5のサンプルコードに更新
+  - `const { handlers, auth, signIn, signOut } = NextAuth({...})` 形式に変更
+
+##### api-specification.md
+- [ ] `POST /api/cron/generate-recommendations` → `GET` に修正
+  - 実装はGETメソッド
+- [ ] レコメンド生成の内部処理を「UPSERT」→「DELETE → INSERT（退避・復元付き）」に修正
+- [ ] `RECOMMENDATIONS_MAX_RETRIES = 2` の記載追加
+
+##### database-schema.md
+- [ ] favoritesテーブル定義を追加（ER図には存在するがテーブル定義が未記載）
+  - `favorites-design.md` の内容をベースに統合
+- [ ] dismissed_moviesテーブルに `poster_path VARCHAR(255) NULL` を追加
+  - マイグレーション `20260316010000` で追加済みだが設計書未反映
+
+#### ロードマップ数値の更新
+- [ ] フェーズ10「現状」セクションのテスト数・カバレッジを最新値に更新
+  - 旧: 140スイート / 1,564テスト
+  - 新: 164スイート / 1,772テスト
+  - カバレッジも最新値に更新（Statements 96% 等）
+
+#### ロードマップ記載の補正
+- [ ] フェーズ1「Next.js 15プロジェクト作成」に注釈追加
+  - 初期はNext.js 15、現在はNext.js 16.1.6にアップグレード済み
+
+##### architecture.md
+- [ ] ディレクトリ構成を実装に合わせて更新
+  - `(auth)/`, `(main)` ルートグループは未使用 → `auth/signin`, `auth/signup` 直下構成に修正
+  - `components/common/` → `components/ui/` に変更
+  - `components/features/` → `src/features/` に変更（src直下に配置）
+  - `components/layouts/` → `components/layout/` に変更（単数形）
+  - `lib/utils/` → `src/utils/` に変更
+  - 新規ディレクトリ追記: `constants/`, `helpers/`, `schema/`, `test/`, `hooks/`, `features/`
+  - `lib/` 配下の新規ディレクトリ追記: `eiga/`, `openai/`, `sync/`, `otp/`, `rateLimit/`, `store/`
+- [ ] API Route一覧を実装に合わせて更新
+  - 追記: `/api/cron/`（5ルート）、`/api/user/`（3ルート）、`/api/favorites/`、`/api/filters/`、`/api/dismissed-movies/`
+- [ ] Vercel Cron設定の記載を追加
+  - 5つのCronジョブのスケジュールとパスを記載
+- [ ] セキュリティヘッダー（next.config）の記載を追加
+  - X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, HSTS等
+
+##### architecture.md（実装側の確認事項）
+- [ ] `generate-recommendations` Cronスケジュールの確認
+  - 現在 `"0 3 * * *"`（UTC 03:00 = JST 12:00 昼）→ 意図通りか確認
+  - 他のCronは `"0 18 * * *"`（UTC 18:00 = JST 03:00 朝）で統一
+- [ ] middleware.ts の `protectedPaths` を確認
+  - `/dashboard`, `/profile` が指定されているが未実装ページ
+  - `/favorites`, `/movies`, `/search` が保護対象に含まれていない可能性
+
+##### components.md
+- [ ] 実装済みコンポーネントの大幅追記（30以上未記載）
+  - UIコンポーネント: Badge, Checkbox, EmptyState, Heading, Pagination, Skeleton, Tabs, Textarea, DropdownMenu
+  - レイアウト: Footer, MobileDrawer, MobileMenuButton
+  - Providers: AppQueryProvider, AppSessionProvider, ThemeProvider, AppToastProvider, SessionExpiryHandler
+  - Features: FavoriteButton, FavoriteList, FavoriteRatingModal, RatingIndicator, FavoritesPage
+  - Features: NowShowingMovieList, MovieContent, MovieDetailContent, MovieListContent, SearchPage
+  - Features: WatchlistAddButton, WatchlistList, WatchlistPanel, WatchlistPage, FilterModal, MovieTileSkeleton
+- [ ] 既存コンポーネントのProps定義を実装に合わせて修正
+  - LoginForm: `onSubmit`, `onRegisterClick` 削除（内部実装に変更）
+  - RecommendationSection: favoriteToggle, watchlistToggle, dismissMovie統合を反映
+  - PasswordChangeForm: 2ステップ → 3ステップに修正（OTP送信が独立）
+  - Modal: `isOpen`/`onClose` → `open`/`onOpenChange` に変更（Radix UI Dialog準拠）
+  - Button: variant `'outline'` → `'danger'` に変更
+
+##### design-system.md
+- [ ] SCSS変数の実装差分を反映
+  - `$font-size-2xs`（10px）の追加
+  - `$transition-duration-base` の追加
+  - CSSカスタムプロパティ参照方式（`var(--xxx)`）の説明追記
+- [ ] primary-500カラー値の修正
+  - 設計書: `#2390d6` → 実装: `#1878b9`（意図的な変更か確認要）
+- [ ] rem基準値の明記
+  - 実装は `1rem = 10px`（html font-size: 62.5%）前提、設計書は `1rem = 16px` 前提で記載
+  - rem値が全て異なるが、実際のpx値は同一（例: spacing-2 = 0.8rem = 8px）
+- [ ] ダークモード対応の文書化
+  - `[data-theme='dark']` で完全実装済みだが設計書では「対応する？」と未定状態
+- [ ] セマンティックカラー変数の追記
+  - `--text-primary`, `--text-secondary`, `--text-disabled`
+  - `--background-default`, `--background-paper`, `--background-secondary`
+  - `--overlay-light` 〜 `--overlay-darker`
+  - `--z-index-toast: 1080`
+
+##### environment-variables.md
+- [ ] レート制限関連の環境変数を削除または注記
+  - `RATE_LIMIT_MAX_ATTEMPTS`, `RATE_LIMIT_LOCK_DURATION` はDBベースに変更済み
+
+##### favorites-design.md → components.md/database-schema.md 統合
+- [ ] favorites設計書の内容を正規の設計書に統合
+  - useInfiniteQuery使用（設計書ではuseQuery記載）を反映
+
+#### UI/UXデザイン改善タスク（デザインレビューで検出）
+
+##### ジャンル名翻訳の修正
+- [ ] 検索フィルターのジャンル名を自然な日本語に修正
+  - 「履歴」→「歴史」（History）
+  - 「謎」→「ミステリー」（Mystery）
+  - 「西洋」→「西部劇」（Western）
+
+##### 設定ページのレイアウト改善
+- [ ] コンテンツを中央寄せにする
+  - 現状：フォーム要素が左端に寄っており、右側に大きな空白ができている
+  - 他のページ（ウォッチリスト、お気に入り等）と比べてレイアウトが不統一
+- [ ] 「確認コードを送信」ボタンの幅を「更新」ボタンと揃える
+  - 現状：「更新」が小さいボタン、「確認コードを送信」がフル幅で不均衡
+
+##### ログイン・新規登録ページのソーシャルボタン改善
+- [ ] GoogleとGitHubボタンの色を各ブランドカラーに変更
+  - 現状：両方とも同じオレンジ（セカンダリカラー）でブランド認識がしづらい
+  - Google: 白/グレー背景+ブランドカラー、GitHub: ダーク系が一般的
+
+##### 映画詳細モーダルのヘッダー改善
+- [ ] モーダルタイトル「映画詳細」を映画タイトルに変更する
+  - 汎用的なタイトルで情報量がないため、映画名を直接表示する方が直感的
+
+##### ホームページのレイアウト改善
+- [ ] 「劇場公開中の人気作品」のカード高さを揃える
+  - タイトルが1行と2行のカードでタイトル・日付・評価の位置がバラバラ
+  - ウォッチリストページのように下寄せで揃える
+- [ ] 「劇場公開中の人気作品」と「あなたへのおすすめ」間の余白を広げる
+  - セクション間の区切りが窮屈で視覚的な分離が弱い
+
+##### ウォッチリストの英語タイトル対応
+- [ ] TMDbに邦題がない映画のタイトル表示を改善
+  - 「Star Wars: The Mandalorian and Grogu」「The Thing with Feathers」等が英語のまま
+  - 邦題が存在しない場合の表示ルールを決定（原題表示 or eiga APIで邦題取得）
+
+#### 実装コード改善タスク（Skills ベストプラクティスレビューで検出）
+
+##### React/Next.js（vercel-react-best-practices / next-best-practices）
+
+###### キャッシング戦略
+- [ ] `src/app/page.tsx` の `force-dynamic` を見直す
+  - ホームページが毎回動的レンダリングされている
+  - `getNowShowingMovies()`, `getRecommendations()` はキャッシュ可能なデータ
+  - Next.js 16+ の `use cache` ディレクティブの活用を検討
+
+###### コンポーネント設計
+- [ ] `src/features/movies/component/movieListContent/movieListContent.tsx` の責任分割
+  - useWatchlistToggle, useFavoriteToggle, useNowShowing 等を1コンポーネントに集約しすぎ
+  - 複数の小さなコンポーネントに分割してテスタビリティ向上
+- [ ] `src/app/movies/now-showing/loader.tsx` の `ssr: false` 使用見直し
+  - Server Component での動的インポートに `ssr: false` は不適切
+
+###### 不要な最適化の削除
+- [ ] Provider コンポーネントの不要な `memo` を削除
+  - `src/components/providers/queryProvider.tsx`: children propsが毎回変わるため memo は無効
+- [ ] 定数の不要な `useMemo` を削除
+  - `movieListContent.tsx` L75-82: `SORT_OPTIONS` は定数なので memoize 不要、モジュールスコープに移動
+
+###### テーマ初期化
+- [ ] `src/components/providers/themeProvider.tsx` のhydrationミスマッチ対策
+  - `localStorage` を `useEffect` で読む前にフラッシュが発生する可能性
+  - `layout.tsx` でインラインスクリプトによる初期化を検討
+
+###### バンドル最適化
+- [ ] barrel export（`src/constants/index.ts`, `src/utils/index.ts`）の見直し
+  - `export *` による不要なモジュールのバンドル包含リスク
+  - 直接インポートへの移行を検討
+
+###### API Route
+- [ ] `src/app/api/auth/register/route.ts` L108-110 のロールバック処理を並列化
+  - `otp_codes` と `users` の削除を `Promise.all` で並列実行
+
+##### Supabase/DB（supabase-postgres-best-practices / database-schema-design）
+
+###### RLSポリシーのセキュリティ改善（高優先度）
+- [ ] `rate_limits` テーブルのRLSポリシーを厳格化
+  - 現状: 全操作（SELECT/INSERT/UPDATE/DELETE）が `USING (true)` で完全開放
+  - service role のみアクセス可能にするか、identifier ベースでフィルタ
+- [ ] `movie_cache`, `accounts`, `otp_codes` のRLSポリシーを明示化
+  - INSERT/UPDATE/DELETE ポリシーが未設定（暗黙的拒否だが明示すべき）
+
+###### RPC関数のセキュリティ
+- [ ] `sync_now_showing_movies` RPCを `SECURITY DEFINER` → `SECURITY INVOKER` に変更
+  - `get_watchlist_by_proximity` は修正済みだが、こちらは未修正
+
+###### インデックス最適化
+- [ ] `favorites` テーブルにソート用インデックス追加
+  - `idx_favorites_user_added_at (user_id, added_at DESC) WHERE deleted_at IS NULL`
+  - `idx_favorites_user_rating (user_id, rating DESC) WHERE deleted_at IS NULL`
+- [ ] `recommendations` テーブルに `display_order` 用インデックス追加
+- [ ] `dismissed_movies` テーブルに複合インデックス追加
+
+###### スキーマ整合性
+- [ ] `saved_filters` テーブルに `created_at` カラム追加（ベストプラクティス違反）
+- [ ] `dismissed_movies` テーブルに `updated_at` カラム＋トリガー追加
+- [ ] `TIMESTAMP` vs `TIMESTAMPTZ` の混在を統一
+  - `users` テーブルは `TIMESTAMP`、他は `TIMESTAMPTZ` で不統一
+
+##### テスト/アクセシビリティ（webapp-testing / web-accessibility）
+
+###### アクセシビリティ自動テスト導入（高優先度）
+- [ ] `jest-axe` / `@axe-core/playwright` をインストール
+  - 現在プロジェクトにaxe関連ライブラリが未導入
+- [ ] `jest.setup.js` に jest-axe の `toHaveNoViolations` マッチャーを登録
+- [ ] UIコンポーネントテストに axe-core スキャンを追加
+  - 対象: button, modal, input, checkbox, select 等の全UIコンポーネント
+- [ ] E2Eテストに axe-core スキャンを追加
+  - 主要ユーザージャーニー（ログイン、検索、ウォッチリスト操作）で `.analyze()` 実行
+
+###### outline: none の修正（アクセシビリティ違反）
+- [ ] `src/styles/_mixins.scss` の `button-reset`, `input-reset` から `outline: none` を削除
+  - WCAG「フォーカス表示必須」に違反
+  - `focus-visible` mixin を正しく活用する（Button は既に対応済み）
+- [ ] `src/components/ui/input/input.module.scss` L51-55 の `:focus` から `outline: none` を削除
+  - `border-color` + `box-shadow` で代替フォーカス表示は実装済みだが、outline も残すべき
+
+###### キーボードナビゲーションテスト
+- [ ] Modal, DropdownMenu のキーボード操作テストを追加
+  - ESCキー、Tabキー、矢印キーでの操作確認
+
 ### Step 5: AI原題提案機能（設計書: `.claude/documents/title-suggestion-design.md`）
 
 > 検索結果0件時に、AIが邦題から原題を推測して提案する機能。検索と並行してAPI呼び出しを行い、テンポを損なわない設計。

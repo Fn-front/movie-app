@@ -959,18 +959,27 @@ type RecommendationData = {
 };
 ```
 
-#### POST /api/cron/generate-recommendations
+#### GET /api/cron/generate-recommendations
 AIレコメンド生成（Vercel Cron Jobs、1日1回）
 
 **認証**: Vercel Cron Secret（`Authorization: Bearer <CRON_SECRET>`）
 
+**定数:**
+- `RECOMMENDATIONS_MAX_COUNT`: 1ユーザーあたりの最大レコメンド件数（10件）
+- `RECOMMENDATIONS_MAX_RETRIES`: OpenAI + TMDb解決のリトライ上限回数（2回）
+- `RECOMMENDATIONS_ACTIVE_USER_DAYS`: アクティブユーザーの判定日数（直近N日以内）
+
 **内部処理フロー:**
 1. お気に入りが1件以上あるアクティブユーザーを取得
-   - `last_login_at >= now() - 3日` のユーザーのみ対象
+   - `last_login_at >= now() - RECOMMENDATIONS_ACTIVE_USER_DAYS` のユーザーのみ対象
    - 非アクティブユーザーはスキップ（OpenAI APIコスト削減）
-2. ユーザーごとのお気に入り映画を取得
-3. OpenAI API（gpt-4o-mini）でレコメンド生成（10件）
-4. recommendationsテーブルにUPSERT
+2. ユーザーごとのお気に入り映画・除外リスト（ウォッチリスト・興味なし）を取得
+3. OpenAI API（gpt-4o-mini）でレコメンド生成し、TMDb検索で映画情報を解決
+   - `RECOMMENDATIONS_MAX_COUNT` 件に達するまで最大 `RECOMMENDATIONS_MAX_RETRIES` 回リトライ
+   - リトライ時は解決済み映画を除外リストに追加して重複を防ぐ
+4. recommendationsテーブルに **DELETE → INSERT** で保存（退避・復元付き）
+   - 既存レコメンドを退避した後 DELETE し、新規データを INSERT
+   - INSERT 失敗時は退避データで既存レコメンドを復元し、データ消失を防ぐ
 
 **実行スケジュール:**
 - Vercel Cron Jobs: 毎日午前3時（JST）

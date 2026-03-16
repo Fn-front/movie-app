@@ -3,7 +3,7 @@
 ## フェーズ1: 基盤構築（1-2週間）
 
 ### 環境セットアップ
-- [x] Next.js 15プロジェクト作成
+- [x] Next.js 15プロジェクト作成（※現在はNext.js 16.1.6にアップグレード済み）
 - [x] TypeScript設定
 - [x] ESLint/Prettier設定
 - [x] 必要なパッケージインストール
@@ -1220,9 +1220,9 @@
 
 ### 現状（フェーズ7開始前時点）
 - [x] テスティングトロフィーモデル導入済み
-- [x] 単体テスト + 結合テスト: 140スイート / 1,564テスト
+- [x] 単体テスト + 結合テスト: 164スイート / 1,772テスト
 - [x] E2Eテスト: 12 spec
-- [x] カバレッジ: Statements 89.82% / Branches 84.7% / Functions 87.72% / Lines 90.68%
+- [x] カバレッジ: Statements 96% / Branches 93% / Functions 95% / Lines 96%
 - [x] React.memo適用済み（全コンポーネント）
 - [x] useCallback適用済み（全コールバック関数）
 
@@ -1380,29 +1380,29 @@
 #### P1: 設計書と実装の乖離修正
 
 ##### authentication-flow.md
-- [ ] セッションオブジェクト構造を実装に合わせて更新
+- [x] セッションオブジェクト構造を実装に合わせて更新
   - `isVerified` 削除、`role` / `image` 追加
-- [ ] 絶対有効期限（7日間）の仕様を追加
+- [x] 絶対有効期限（7日間）の仕様を追加
   - `token.issuedAt` による判定、`SESSION_CONFIG.ABSOLUTE_MAX_AGE_MS`
-- [ ] パスワード変更によるセッション無効化の仕様を追加
+- [x] パスワード変更によるセッション無効化の仕様を追加
   - `password_changed_at` の5分間隔監視、`token.invalidated`
-- [ ] NextAuth.js v5のサンプルコードに更新
+- [x] NextAuth.js v5のサンプルコードに更新
   - `const { handlers, auth, signIn, signOut } = NextAuth({...})` 形式に変更
 
 ##### api-specification.md
-- [ ] `POST /api/cron/generate-recommendations` → `GET` に修正
+- [x] `POST /api/cron/generate-recommendations` → `GET` に修正
   - 実装はGETメソッド
-- [ ] レコメンド生成の内部処理を「UPSERT」→「DELETE → INSERT（退避・復元付き）」に修正
-- [ ] `RECOMMENDATIONS_MAX_RETRIES = 2` の記載追加
+- [x] レコメンド生成の内部処理を「UPSERT」→「DELETE → INSERT（退避・復元付き）」に修正
+- [x] `RECOMMENDATIONS_MAX_RETRIES = 2` の記載追加
 
 ##### database-schema.md
-- [ ] favoritesテーブル定義を追加（ER図には存在するがテーブル定義が未記載）
+- [x] favoritesテーブル定義を追加（ER図には存在するがテーブル定義が未記載）
   - `favorites-design.md` の内容をベースに統合
-- [ ] dismissed_moviesテーブルに `poster_path VARCHAR(255) NULL` を追加
+- [x] dismissed_moviesテーブルに `poster_path VARCHAR(255) NULL` を追加
   - マイグレーション `20260316010000` で追加済みだが設計書未反映
 
 ##### architecture.md
-- [ ] ディレクトリ構成を実装に合わせて更新
+- [x] ディレクトリ構成を実装に合わせて更新
   - `(auth)/`, `(main)` ルートグループは未使用 → `auth/signin`, `auth/signup` 直下構成に修正
   - `components/common/` → `components/ui/` に変更
   - `components/features/` → `src/features/` に変更（src直下に配置）
@@ -1410,11 +1410,11 @@
   - `lib/utils/` → `src/utils/` に変更
   - 新規ディレクトリ追記: `constants/`, `helpers/`, `schema/`, `test/`, `hooks/`, `features/`
   - `lib/` 配下の新規ディレクトリ追記: `eiga/`, `openai/`, `sync/`, `otp/`, `rateLimit/`, `store/`
-- [ ] API Route一覧を実装に合わせて更新
+- [x] API Route一覧を実装に合わせて更新
   - 追記: `/api/cron/`（5ルート）、`/api/user/`（3ルート）、`/api/favorites/`、`/api/filters/`、`/api/dismissed-movies/`
-- [ ] Vercel Cron設定の記載を追加
+- [x] Vercel Cron設定の記載を追加
   - 5つのCronジョブのスケジュールとパスを記載
-- [ ] セキュリティヘッダー（next.config）の記載を追加
+- [x] セキュリティヘッダー（next.config）の記載を追加
   - X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, HSTS等
 
 ##### components.md
@@ -1433,25 +1433,25 @@
   - Button: variant `'outline'` → `'danger'` に変更
 
 ##### design-system.md
-- [ ] SCSS変数の実装差分を反映
+- [x] SCSS変数の実装差分を反映
   - `$font-size-2xs`（10px）の追加
   - `$transition-duration-base` の追加
   - CSSカスタムプロパティ参照方式（`var(--xxx)`）の説明追記
-- [ ] primary-500カラー値の修正
+- [x] primary-500カラー値の修正
   - 設計書: `#2390d6` → 実装: `#1878b9`（意図的な変更か確認要）
-- [ ] rem基準値の明記
+- [x] rem基準値の明記
   - 実装は `1rem = 10px`（html font-size: 62.5%）前提、設計書は `1rem = 16px` 前提で記載
   - rem値が全て異なるが、実際のpx値は同一（例: spacing-2 = 0.8rem = 8px）
-- [ ] ダークモード対応の文書化
+- [x] ダークモード対応の文書化
   - `[data-theme='dark']` で完全実装済みだが設計書では「対応する？」と未定状態
-- [ ] セマンティックカラー変数の追記
+- [x] セマンティックカラー変数の追記
   - `--text-primary`, `--text-secondary`, `--text-disabled`
   - `--background-default`, `--background-paper`, `--background-secondary`
   - `--overlay-light` 〜 `--overlay-darker`
   - `--z-index-toast: 1080`
 
 ##### environment-variables.md
-- [ ] レート制限関連の環境変数を削除または注記
+- [x] レート制限関連の環境変数を削除または注記
   - `RATE_LIMIT_MAX_ATTEMPTS`, `RATE_LIMIT_LOCK_DURATION` はDBベースに変更済み
 
 ##### favorites-design.md → components.md/database-schema.md 統合
@@ -1460,11 +1460,11 @@
 
 #### P2: ロードマップ自体の補正
 
-- [ ] フェーズ10「現状」セクションのテスト数・カバレッジを最新値に更新
+- [x] フェーズ10「現状」セクションのテスト数・カバレッジを最新値に更新
   - 旧: 140スイート / 1,564テスト
   - 新: 164スイート / 1,772テスト
   - カバレッジも最新値に更新（Statements 96% 等）
-- [ ] フェーズ1「Next.js 15プロジェクト作成」に注釈追加
+- [x] フェーズ1「Next.js 15プロジェクト作成」に注釈追加
   - 初期はNext.js 15、現在はNext.js 16.1.6にアップグレード済み
 
 #### P1: 実装側の確認事項

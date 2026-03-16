@@ -197,10 +197,13 @@ NEXT_PUBLIC_VERCEL_ANALYTICS_ID=xxxxxxxxxxxx
 
 ### レート制限
 
+> **【廃止】** `RATE_LIMIT_MAX_ATTEMPTS` / `RATE_LIMIT_LOCK_DURATION` は環境変数ベースのレート制限で使用していましたが、**DBベースのレート制限に変更済みのため現在は不要**です。試行回数・ロック期間はDB（`rate_limit_logs` テーブル等）上で管理されます。後方互換のため変数名は残しますが、実装では参照されません。
+
 ```bash
 # レート制限設定（認証エンドポイント）
-RATE_LIMIT_MAX_ATTEMPTS=3  # 3回までの試行制限
-RATE_LIMIT_LOCK_DURATION=1800000  # 30分（ミリ秒）
+# ※廃止: DBベースのレート制限に移行済み。設定しても効果なし
+# RATE_LIMIT_MAX_ATTEMPTS=3  # （廃止）3回までの試行制限
+# RATE_LIMIT_LOCK_DURATION=1800000  # （廃止）30分（ミリ秒）
 ```
 
 ---
@@ -249,9 +252,9 @@ GITHUB_CLIENT_SECRET=your_github_client_secret_here
 RESEND_API_KEY=re_xxxxxxxxxxxx
 RESEND_FROM_EMAIL=noreply@yourdomain.com
 
-# Rate Limiting
-RATE_LIMIT_MAX_ATTEMPTS=3
-RATE_LIMIT_LOCK_DURATION=1800000
+# Rate Limiting（廃止: DBベースに移行済み）
+# RATE_LIMIT_MAX_ATTEMPTS=3
+# RATE_LIMIT_LOCK_DURATION=1800000
 
 # Vercel Cron Jobs
 CRON_SECRET=your_cron_secret_here_minimum_32_chars

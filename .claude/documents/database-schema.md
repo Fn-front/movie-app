@@ -322,6 +322,47 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 
 ---
 
+### favorites（お気に入り映画）
+ユーザーが独自の評価（1〜10点）を付けてお気に入り登録した映画を管理
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
+| user_id | UUID | NOT NULL | - | ユーザーID（外部キー） |
+| tmdb_movie_id | INTEGER | NOT NULL | - | TMDb映画ID |
+| title | VARCHAR(255) | NOT NULL | - | 映画タイトル |
+| poster_path | VARCHAR(255) | NULL | - | ポスター画像パス |
+| release_date | DATE | NULL | - | 公開日 |
+| rating | INTEGER | NOT NULL | - | ユーザー評価（1〜10点） |
+| added_at | TIMESTAMP | NOT NULL | now() | 登録日時 |
+| updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |
+| deleted_at | TIMESTAMP | NULL | - | 削除日時（論理削除） |
+
+**インデックス:**
+- `user_id, tmdb_movie_id` (UNIQUE, WHERE deleted_at IS NULL) - 重複登録防止（論理削除済みは対象外、再追加可能）
+- `user_id` - ユーザー別一覧取得用
+
+**外部キー:**
+- `user_id` -> `users(id)` ON DELETE CASCADE
+
+**制約:**
+- `rating` は 1〜10 の範囲（CHECK制約）
+
+**トリガー:**
+- `update_favorites_updated_at`: UPDATE時に `updated_at` を自動更新（`update_updated_at_column()` 関数を使用）
+
+**削除方式: 論理削除**
+- ユーザーが削除した場合、`deleted_at` に現在時刻を設定
+- 取得時は `WHERE deleted_at IS NULL` でフィルタ
+
+**RLS (Row Level Security):**
+- SELECT: 自分のお気に入りのみ閲覧可能（`auth.uid() = user_id AND deleted_at IS NULL`）
+- INSERT: 自分のお気に入りのみ追加可能（`auth.uid() = user_id`）
+- UPDATE: 自分のお気に入りのみ更新可能（`auth.uid() = user_id`）
+- DELETE: 自分のお気に入りのみ削除可能（`auth.uid() = user_id`）
+
+---
+
 ### dismissed_movies（興味なし映画）
 ユーザーが「興味なし」とした映画を管理（レコメンド精度向上用）
 
@@ -331,6 +372,7 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 | user_id | UUID | NOT NULL | - | ユーザーID（FK → users.id） |
 | tmdb_movie_id | INTEGER | NOT NULL | - | TMDb映画ID |
 | title | VARCHAR(255) | NOT NULL | - | 映画タイトル |
+| poster_path | VARCHAR(255) | NULL | - | ポスター画像パス（設定ページの興味なし一覧でサムネイル表示用） |
 | genre_ids | INTEGER[] | NULL | - | ジャンルID配列（傾向分析用） |
 | created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
 | deleted_at | TIMESTAMPTZ | NULL | - | 論理削除 |

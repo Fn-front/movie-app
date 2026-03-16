@@ -43,6 +43,12 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
       [movies],
     );
 
+    const selectedMovieTitle = useMemo(
+      () =>
+        movieCacheItems.find((movie) => movie.id === selectedMovieId)?.title,
+      [movieCacheItems, selectedMovieId],
+    );
+
     if (movies.length === 0) {
       return (
         <section aria-label={NOW_SHOWING_SECTION_TITLE}>
@@ -85,7 +91,7 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
         </section>
         <MovieDetailModal
           movieId={selectedMovieId}
-          title={movieCacheItems.find((movie) => movie.id === selectedMovieId)?.title}
+          title={selectedMovieTitle}
           onClose={handleModalClose}
         />
       </>

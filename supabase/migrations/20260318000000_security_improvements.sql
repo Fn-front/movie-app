@@ -25,6 +25,7 @@ DROP POLICY IF EXISTS rate_limits_delete_all ON rate_limits;
 -- SELECT は既存ポリシーで全員閲覧可能（そのまま維持）
 -- INSERT/UPDATE/DELETE は service role のみ（ポリシーなし = 暗黙的拒否）
 -- → コメントで意図を明示（暗黙的拒否で正しい動作）
+-- ※ SQL操作なし: 既存の暗黙的拒否が正しいため、コメントによる意図記録のみ
 
 -- ============================================
 -- 3. accounts テーブルのRLSポリシー明示化
@@ -32,12 +33,14 @@ DROP POLICY IF EXISTS rate_limits_delete_all ON rate_limits;
 -- SELECT/DELETE は既存ポリシーで auth.uid() = user_id（そのまま維持）
 -- INSERT/UPDATE は service role のみ（ポリシーなし = 暗黙的拒否）
 -- → コメントで意図を明示（暗黙的拒否で正しい動作）
+-- ※ SQL操作なし: 既存の暗黙的拒否が正しいため、コメントによる意図記録のみ
 
 -- ============================================
 -- 4. otp_codes テーブルのRLSポリシー明示化
 -- ============================================
 -- RLS有効、ポリシーなし = 全拒否（service role のみアクセス可能）
 -- → コメントで意図を明示（暗黙的拒否で正しい動作）
+-- ※ SQL操作なし: 既存の暗黙的拒否が正しいため、コメントによる意図記録のみ
 
 -- ============================================
 -- 5. sync_now_showing_movies RPCを SECURITY INVOKER に変更

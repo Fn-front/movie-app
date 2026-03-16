@@ -6,7 +6,7 @@
 
 'use client';
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { Select } from '@/components/ui/select/select';
@@ -109,6 +109,11 @@ export const MovieListContent = memo<MovieListContentProps>(
       setShowFinancialInfo(false);
     }, []);
 
+    const selectedMovieTitle = useMemo(
+      () => movies.find((m) => m.id === selectedMovieId)?.title,
+      [movies, selectedMovieId],
+    );
+
     const loadMoreRef = useIntersectionObserver(fetchNextPage, {
       enabled: hasNextPage && !isFetchingNextPage,
     });
@@ -198,7 +203,7 @@ export const MovieListContent = memo<MovieListContentProps>(
 
         <MovieDetailModal
           movieId={selectedMovieId}
-          title={movies.find((m) => m.id === selectedMovieId)?.title}
+          title={selectedMovieTitle}
           showFinancialInfo={showFinancialInfo}
           onClose={handleDetailModalClose}
         />

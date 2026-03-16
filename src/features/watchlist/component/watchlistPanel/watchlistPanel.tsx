@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 
 import { Loading } from '@/components/ui/loading/loading';
@@ -37,6 +37,12 @@ export const WatchlistPanel = memo(function WatchlistPanel() {
   const handleModalClose = useCallback(() => {
     setSelectedMovieId(null);
   }, []);
+
+  const selectedMovieTitle = useMemo(
+    () =>
+      watchlist.find((item) => item.tmdb_movie_id === selectedMovieId)?.title,
+    [watchlist, selectedMovieId],
+  );
 
   const handleDelete = useCallback(
     (id: string) => {
@@ -84,7 +90,7 @@ export const WatchlistPanel = memo(function WatchlistPanel() {
 
       <MovieDetailModal
         movieId={selectedMovieId}
-        title={watchlist.find((item) => item.tmdb_movie_id === selectedMovieId)?.title}
+        title={selectedMovieTitle}
         onClose={handleModalClose}
       />
     </div>

@@ -154,11 +154,11 @@ UI Re-render
 | DELETE | `/api/favorites/[id]` | お気に入り削除 |
 | GET | `/api/filters` | フィルター選択肢取得 |
 | GET/POST/DELETE | `/api/dismissed-movies` | 非表示映画管理 |
-| POST | `/api/cron/sync-movies` | 映画データ一括同期（週次） |
-| POST | `/api/cron/sync-now-playing` | 上映中映画同期（日次） |
-| POST | `/api/cron/sync-now-showing` | 映画.com上映中情報同期（日次） |
-| POST | `/api/cron/update-movies` | 映画評価・人気度更新（日次） |
-| POST | `/api/cron/generate-recommendations` | AIレコメンド生成（日次） |
+| GET | `/api/cron/sync-movies` | 映画データ一括同期（週次） |
+| GET | `/api/cron/sync-now-playing` | 上映中映画同期（日次） |
+| GET | `/api/cron/sync-now-showing` | 映画.com上映中情報同期（日次） |
+| GET | `/api/cron/update-movies` | 映画評価・人気度更新（日次） |
+| GET | `/api/cron/generate-recommendations` | AIレコメンド生成（日次） |
 
 ## 主要機能のアーキテクチャ
 

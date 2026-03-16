@@ -83,6 +83,12 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       [recommendations, getFavoriteInfo, dismissedIds],
     );
 
+    const selectedMovieTitle = useMemo(
+      () =>
+        movieCacheItems.find((movie) => movie.id === selectedMovieId)?.title,
+      [movieCacheItems, selectedMovieId],
+    );
+
     const reasonMap = useMemo(
       () => new Map(recommendations.map((r) => [r.tmdb_movie_id, r.reason])),
       [recommendations],
@@ -161,7 +167,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
         </section>
         <MovieDetailModal
           movieId={selectedMovieId}
-          title={movieCacheItems.find((movie) => movie.id === selectedMovieId)?.title}
+          title={selectedMovieTitle}
           onClose={handleModalClose}
         />
         <FavoriteRatingModal

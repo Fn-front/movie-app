@@ -54,6 +54,12 @@ export const FavoritesPage = memo(function FavoritesPage() {
     setSelectedMovieId(null);
   }, []);
 
+  const selectedMovieTitle = useMemo(
+    () =>
+      favorites.find((item) => item.tmdb_movie_id === selectedMovieId)?.title,
+    [favorites, selectedMovieId],
+  );
+
   const sortOptions = useMemo(
     () =>
       FAVORITES_PAGE_SORT_OPTIONS.map((option) => ({
@@ -100,7 +106,7 @@ export const FavoritesPage = memo(function FavoritesPage() {
 
       <MovieDetailModal
         movieId={selectedMovieId}
-        title={favorites.find((item) => item.tmdb_movie_id === selectedMovieId)?.title}
+        title={selectedMovieTitle}
         showFinancialInfo={false}
         onClose={handleDetailModalClose}
       />

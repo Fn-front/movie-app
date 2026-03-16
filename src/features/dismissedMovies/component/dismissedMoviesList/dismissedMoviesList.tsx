@@ -4,7 +4,7 @@
 
 'use client';
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { IoClose } from 'react-icons/io5';
 import Image from 'next/image';
@@ -26,6 +26,7 @@ import {
 import styles from './dismissedMoviesList.module.scss';
 
 const QUERY_KEY = ['dismissed-movies'];
+const INITIAL_DISPLAY_COUNT = 10;
 
 /**
  * 興味なし映画一覧
@@ -70,12 +71,25 @@ export const DismissedMoviesList = memo(function DismissedMoviesList() {
     },
   });
 
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const handleRemove = useCallback(
     (tmdbMovieId: number) => {
       removeMutation.mutate(tmdbMovieId);
     },
     [removeMutation],
   );
+
+  const displayedMovies = useMemo(
+    () => (isExpanded ? movies : movies.slice(0, INITIAL_DISPLAY_COUNT)),
+    [movies, isExpanded],
+  );
+
+  const hasMore = movies.length > INITIAL_DISPLAY_COUNT;
+
+  const handleToggleExpand = useCallback(() => {
+    setIsExpanded((prev) => !prev);
+  }, []);
 
   if (isLoading) {
     return (
@@ -91,7 +105,10 @@ export const DismissedMoviesList = memo(function DismissedMoviesList() {
 
   return (
     <div className={styles.c_dismissed_movies_list}>
-      {movies.map((movie) => (
+      <p className={styles.c_dismissed_movies_list__count}>
+        {movies.length}件登録中
+      </p>
+      {displayedMovies.map((movie) => (
         <DismissedMovieItem
           key={movie.id}
           movie={movie}
@@ -99,6 +116,17 @@ export const DismissedMoviesList = memo(function DismissedMoviesList() {
           isRemoving={removeMutation.isPending}
         />
       ))}
+      {hasMore && (
+        <button
+          type='button'
+          className={styles.c_dismissed_movies_list__toggle}
+          onClick={handleToggleExpand}
+        >
+          {isExpanded
+            ? '折りたたむ'
+            : `すべて表示（残り${movies.length - INITIAL_DISPLAY_COUNT}件）`}
+        </button>
+      )}
     </div>
   );
 });

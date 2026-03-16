@@ -78,6 +78,33 @@
   }
 }
 
+.c_dismissed_movies_list__count {
+  margin: 0;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+}
+
+.c_dismissed_movies_list__toggle {
+  @include button-reset;
+
+  padding: $spacing-2;
+  font-size: $font-size-sm;
+  color: $primary-500;
+  cursor: pointer;
+  text-align: center;
+  border-radius: $border-radius-sm;
+  transition: background-color $duration-fast $ease-in-out;
+
+  &:hover {
+    background-color: $background-secondary;
+  }
+
+  &:focus-visible {
+    outline: 2px solid $primary-500;
+    outline-offset: -2px;
+  }
+}
+
 .c_dismissed_movies_list__loading {
   display: flex;
   justify-content: center;

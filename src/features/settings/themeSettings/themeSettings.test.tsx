@@ -1,4 +1,5 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { ThemeSettings } from './themeSettings';
 
@@ -20,31 +21,35 @@ jest.mock('@/utils/error', () => ({
   handleApiError: () => ({ message: 'エラーが発生しました' }),
 }));
 
-// Radix UI SelectのonValueChangeをキャプチャするためにモック
 let capturedOnValueChange: ((value: string) => void) | undefined;
-jest.mock('@/components/ui/select/select', () => ({
-  Select: ({
-    label,
+jest.mock('@/components/ui/radioGroup/radioGroup', () => ({
+  RadioGroup: ({
+    options,
     value,
     onValueChange,
     'aria-label': ariaLabel,
   }: {
-    label?: string;
+    options: Array<{ label: string; value: string }>;
     value?: string;
     onValueChange?: (value: string) => void;
     'aria-label'?: string;
   }) => {
     capturedOnValueChange = onValueChange;
     return (
-      <select
-        aria-label={ariaLabel || label}
-        value={value}
-        onChange={(e) => onValueChange?.(e.target.value)}
-        data-testid='theme-select'
-      >
-        <option value='light'>ライト</option>
-        <option value='dark'>ダーク</option>
-      </select>
+      <div role='radiogroup' aria-label={ariaLabel} data-testid='theme-radio'>
+        {options.map((opt) => (
+          <label key={opt.value}>
+            <input
+              type='radio'
+              name='theme'
+              value={opt.value}
+              checked={value === opt.value}
+              onChange={(e) => onValueChange?.(e.target.value)}
+            />
+            {opt.label}
+          </label>
+        ))}
+      </div>
     );
   },
 }));
@@ -62,21 +67,11 @@ describe('ThemeSettings', () => {
     capturedOnValueChange = undefined;
   });
 
-  it('テーマ選択が表示される', async () => {
+  it('テーマラジオボタンが表示される', async () => {
     render(<ThemeSettings />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('theme-select')).toBeInTheDocument();
-    });
-  });
-
-  it('テーマの説明テキストが表示される', async () => {
-    render(<ThemeSettings />);
-
-    await waitFor(() => {
-      expect(
-        screen.getByText('アプリの外観を切り替えます'),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId('theme-radio')).toBeInTheDocument();
     });
   });
 
@@ -84,42 +79,33 @@ describe('ThemeSettings', () => {
     render(<ThemeSettings />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('テーマを選択')).toBeInTheDocument();
+      expect(
+        screen.getByRole('radiogroup', { name: 'テーマを選択' }),
+      ).toBeInTheDocument();
     });
   });
 
   it('API取得失敗時にlocalStorageのキャッシュからテーマを読み込む', async () => {
     mockGetSettings.mockRejectedValue(new Error('Network error'));
-    localStorage.setItem('theme', 'dark');
+    localStorage.setItem('movie-app:theme', 'dark');
 
     render(<ThemeSettings />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('theme-select')).toBeInTheDocument();
-    });
-  });
-
-  it('API取得失敗時にlocalStorageにキャッシュがなければデフォルト値を使用', async () => {
-    mockGetSettings.mockRejectedValue(new Error('Network error'));
-
-    render(<ThemeSettings />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('theme-select')).toBeInTheDocument();
+      expect(screen.getByTestId('theme-radio')).toBeInTheDocument();
     });
   });
 
   it('テーマ変更成功時にトーストが表示される', async () => {
+    const user = userEvent.setup();
     mockUpdateSettings.mockResolvedValue({});
     render(<ThemeSettings />);
 
     await waitFor(() => {
-      expect(capturedOnValueChange).toBeDefined();
+      expect(screen.getByTestId('theme-radio')).toBeInTheDocument();
     });
 
-    await act(async () => {
-      capturedOnValueChange!('dark');
-    });
+    await user.click(screen.getByLabelText('ダーク'));
 
     await waitFor(() => {
       expect(mockUpdateSettings).toHaveBeenCalledWith({ theme: 'dark' });
@@ -157,9 +143,6 @@ describe('ThemeSettings', () => {
     mockGetSettings.mockReturnValue(new Promise(() => {}));
     render(<ThemeSettings />);
 
-    expect(screen.queryByTestId('theme-select')).not.toBeInTheDocument();
-    expect(
-      screen.queryByText('アプリの外観を切り替えます'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('theme-radio')).not.toBeInTheDocument();
   });
 });

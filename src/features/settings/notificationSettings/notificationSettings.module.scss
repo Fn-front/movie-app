@@ -10,5 +10,5 @@
   margin: 0;
   font-size: $font-size-xs;
   color: $text-secondary;
-  padding-left: $spacing-8;
+  padding-left: calc(20px + $spacing-2);
 }

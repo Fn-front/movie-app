@@ -121,7 +121,9 @@ describe('SettingsPage', () => {
   it('テーマ選択が表示される', async () => {
     render(<SettingsPage />);
     await waitFor(() => {
-      expect(screen.getByLabelText('テーマ')).toBeInTheDocument();
+      expect(
+        screen.getByRole('radiogroup', { name: 'テーマを選択' }),
+      ).toBeInTheDocument();
     });
   });
 

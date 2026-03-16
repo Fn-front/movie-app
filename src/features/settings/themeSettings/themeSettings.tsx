@@ -6,7 +6,7 @@
 
 import { memo, useCallback, useState, useEffect } from 'react';
 
-import { Select } from '@/components/ui/select/select';
+import { RadioGroup } from '@/components/ui/radioGroup/radioGroup';
 import { Skeleton } from '@/components/ui/skeleton/skeleton';
 import { THEME_VALUES } from '@/schema/user';
 import { getSettings, updateSettings } from '@/lib/api/user/user';
@@ -95,28 +95,20 @@ export const ThemeSettings = memo(function ThemeSettings() {
   if (isLoading) {
     return (
       <div className={styles.c_theme_settings}>
-        <div className={styles.c_theme_settings__select}>
-          <Skeleton variant='rect' width={200} height={36} />
-        </div>
-        <Skeleton variant='text' width={160} height={14} />
+        <Skeleton variant='rect' width={100} height={24} />
+        <Skeleton variant='rect' width={100} height={24} />
       </div>
     );
   }
 
   return (
     <div className={styles.c_theme_settings}>
-      <div className={styles.c_theme_settings__select}>
-        <Select
-          label='テーマ'
-          options={THEME_OPTIONS}
-          value={theme}
-          onValueChange={handleChange}
-          aria-label='テーマを選択'
-        />
-      </div>
-      <p className={styles.c_theme_settings__description}>
-        アプリの外観を切り替えます
-      </p>
+      <RadioGroup
+        options={THEME_OPTIONS}
+        value={theme}
+        onValueChange={handleChange}
+        aria-label='テーマを選択'
+      />
     </div>
   );
 });

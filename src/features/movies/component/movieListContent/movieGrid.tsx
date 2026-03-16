@@ -75,9 +75,7 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
       </div>
 
       {!isLoading && movies.length === 0 && (
-        <p className={styles.c_movie_list__empty}>
-          表示する映画がありません。
-        </p>
+        <p className={styles.c_movie_list__empty}>表示する映画がありません。</p>
       )}
 
       {isFetchingNextPage && (

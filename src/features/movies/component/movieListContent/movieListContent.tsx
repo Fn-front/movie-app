@@ -6,24 +6,17 @@
 
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo } from 'react';
 
 import { Tabs } from '@/components/ui/tabs/tabs';
-import { Select } from '@/components/ui/select/select';
-import { Button } from '@/components/ui/button/button';
-import { FilterIcon } from '@/components/icons/filterIcon/filterIcon';
-import { Loading } from '@/components/ui/loading/loading';
-import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
-import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
-import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
+import { RELEASE_TYPE_OPTIONS } from '@/constants';
 import { FilterModal } from '@/components/ui/movie/filterModal/filterModal';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
-import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
-import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
-import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
-import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
+import { useMovieListContent } from '@/features/movies/hooks/useMovieListContent';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 
+import { MovieListToolbar } from './movieListToolbar';
+import { MovieGrid } from './movieGrid';
 import styles from './movieListContent.module.scss';
 
 /**
@@ -61,62 +54,19 @@ export const MovieListContent = memo<MovieListContentProps>(
       handleFilterModalClose,
     } = movieList;
 
-    const { isInWatchlist, toggleWatchlist, isMovieToggling } =
-      useWatchlistToggle();
     const {
-      modalState: favoriteModalState,
-      handleFavoriteToggle,
-      closeModal: closeFavoriteModal,
-      handleModalSubmit: handleFavoriteModalSubmit,
-      handleDelete: handleFavoriteDelete,
-      isFavoriteProcessing,
-    } = useFavoriteToggle();
-
-    const handleTabValueChange = useCallback(
-      (value: string) => {
-        handleReleaseTypeChange(value as 'theatrical' | 'streaming');
-      },
-      [handleReleaseTypeChange],
+      selectedMovieId,
+      showFinancialInfo,
+      selectedMovieTitle,
+      handleMovieTileClick,
+      handleDetailModalClose,
+      handleTabValueChange,
+      handleFilterModalOpenChange,
+    } = useMovieListContent(
+      movies,
+      handleReleaseTypeChange,
+      handleFilterModalClose,
     );
-
-    const handleFilterModalOpenChange = useCallback(
-      (open: boolean) => {
-        if (!open) {
-          handleFilterModalClose();
-        }
-      },
-      [handleFilterModalClose],
-    );
-
-    const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
-    const [showFinancialInfo, setShowFinancialInfo] = useState(false);
-
-    const handleMovieTileClick = useCallback(
-      (movieId: number) => {
-        setSelectedMovieId(movieId);
-        const movie = movies.find((m) => m.id === movieId);
-        const isReleased =
-          movie?.release_date !== undefined &&
-          movie.release_date !== null &&
-          new Date(movie.release_date) < new Date();
-        setShowFinancialInfo(isReleased || movie?.is_revival === true);
-      },
-      [movies],
-    );
-
-    const handleDetailModalClose = useCallback(() => {
-      setSelectedMovieId(null);
-      setShowFinancialInfo(false);
-    }, []);
-
-    const selectedMovieTitle = useMemo(
-      () => movies.find((m) => m.id === selectedMovieId)?.title,
-      [movies, selectedMovieId],
-    );
-
-    const loadMoreRef = useIntersectionObserver(fetchNextPage, {
-      enabled: hasNextPage && !isFetchingNextPage,
-    });
 
     return (
       <div className={styles.c_movie_list}>
@@ -127,69 +77,25 @@ export const MovieListContent = memo<MovieListContentProps>(
           aria-label='リリースタイプ'
         />
 
-        <div className={styles.c_movie_list__toolbar}>
-          <h2 className={styles.c_movie_list__title}>{title}</h2>
-          <div className={styles.c_movie_list__controls}>
-            <Button
-              variant='ghost'
-              size='sm'
-              onClick={handleFilterModalOpen}
-              aria-label='フィルター'
-              className={styles.c_movie_list__filter_button}
-            >
-              <span className={styles.c_movie_list__filter_inner}>
-                <FilterIcon />
-                {(selectedGenreIds.length > 0 ||
-                  dateRange.gte ||
-                  dateRange.lte ||
-                  isRevivalFilter !== undefined) && (
-                  <span className={styles.c_movie_list__filter_count} />
-                )}
-              </span>
-            </Button>
-            <Select
-              options={SORT_OPTIONS}
-              value={sortBy}
-              onValueChange={handleSortChange}
-              aria-label='ソート順を選択'
-              className={styles.c_movie_list__sort}
-            />
-          </div>
-        </div>
+        <MovieListToolbar
+          title={title}
+          sortBy={sortBy}
+          selectedGenreIds={selectedGenreIds}
+          dateRange={dateRange}
+          isRevivalFilter={isRevivalFilter}
+          onSortChange={handleSortChange}
+          onFilterModalOpen={handleFilterModalOpen}
+        />
 
-        <div className={styles.c_movie_list__grid}>
-          {isLoading ? (
-            <MovieTileSkeleton />
-          ) : (
-            movies.map((movie) => (
-              <MovieTile
-                key={movie.id}
-                movie={movie}
-                genres={genres}
-                onClick={handleMovieTileClick}
-                isInWatchlist={isInWatchlist(movie.id)}
-                onWatchlistToggle={toggleWatchlist}
-                watchlistDisabled={isMovieToggling(movie.id)}
-                onFavoriteToggle={handleFavoriteToggle}
-                favoriteDisabled={isFavoriteProcessing(movie.id)}
-              />
-            ))
-          )}
-        </div>
-
-        {!isLoading && movies.length === 0 && (
-          <p className={styles.c_movie_list__empty}>
-            表示する映画がありません。
-          </p>
-        )}
-
-        {isFetchingNextPage && (
-          <div className={styles.c_movie_list__loading}>
-            <Loading size='sm' label='読み込み中...' />
-          </div>
-        )}
-
-        <div ref={loadMoreRef} className={styles.c_movie_list__sentinel} />
+        <MovieGrid
+          movies={movies}
+          genres={genres}
+          isLoading={isLoading}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+          fetchNextPage={fetchNextPage}
+          onMovieClick={handleMovieTileClick}
+        />
 
         <FilterModal
           open={isFilterModalOpen}
@@ -206,15 +112,6 @@ export const MovieListContent = memo<MovieListContentProps>(
           title={selectedMovieTitle}
           showFinancialInfo={showFinancialInfo}
           onClose={handleDetailModalClose}
-        />
-
-        <FavoriteRatingModal
-          isOpen={favoriteModalState.isOpen}
-          onClose={closeFavoriteModal}
-          movieTitle={favoriteModalState.movie?.title ?? ''}
-          currentFavorite={favoriteModalState.currentFavorite}
-          onSubmit={handleFavoriteModalSubmit}
-          onDelete={handleFavoriteDelete}
         />
       </div>
     );

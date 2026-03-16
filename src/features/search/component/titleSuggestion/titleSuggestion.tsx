@@ -46,9 +46,7 @@ export const TitleSuggestion = memo<TitleSuggestionProps>(
           className={styles.c_title_suggestion__link}
           onClick={handleClick}
         >
-          <span className={styles.c_title_suggestion__title}>
-            {suggestion}
-          </span>
+          <span className={styles.c_title_suggestion__title}>{suggestion}</span>
           {TITLE_SUGGESTION_MESSAGES.SUGGESTION_SUFFIX}
         </button>
       </div>

@@ -62,7 +62,7 @@ export const CalendarMovieList = memo<CalendarMovieListProps>(
                 type='button'
                 className={styles.c_calendarMovieList__button}
                 onClick={() => handleMovieClick(movie.tmdb_movie_id)}
-                aria-label={`${movie.title}の詳細を表示`}
+                aria-label={movie.title}
               >
                 <div className={styles.c_calendarMovieList__poster}>
                   {movie.poster_path ? (

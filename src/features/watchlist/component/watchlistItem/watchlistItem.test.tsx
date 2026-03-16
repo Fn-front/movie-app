@@ -60,7 +60,7 @@ describe('WatchlistItem', () => {
     );
 
     await user.click(
-      screen.getByRole('button', { name: 'テスト映画の詳細を表示' }),
+      screen.getByRole('button', { name: 'テスト映画' }),
     );
     expect(onClick).toHaveBeenCalledWith(456);
   });
@@ -99,7 +99,7 @@ describe('WatchlistItem', () => {
     );
 
     expect(
-      screen.getByRole('button', { name: '映画タイトルの詳細を表示' }),
+      screen.getByRole('button', { name: '映画タイトル' }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('button', {
@@ -117,7 +117,7 @@ describe('WatchlistItem', () => {
     );
 
     const itemButton = screen.getByRole('button', {
-      name: 'テスト映画の詳細を表示',
+      name: 'テスト映画',
     });
     itemButton.focus();
     await user.keyboard('{Enter}');
@@ -150,7 +150,7 @@ describe('WatchlistItem', () => {
     );
 
     const itemButton = screen.getByRole('button', {
-      name: 'テスト映画の詳細を表示',
+      name: 'テスト映画',
     });
     itemButton.focus();
     await user.keyboard('{ }');
@@ -183,7 +183,7 @@ describe('WatchlistItem', () => {
     );
 
     const itemButton = screen.getByRole('button', {
-      name: 'テスト映画の詳細を表示',
+      name: 'テスト映画',
     });
     itemButton.focus();
     await user.keyboard('{Tab}');

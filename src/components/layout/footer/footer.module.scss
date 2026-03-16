@@ -93,7 +93,7 @@
   &__attribution_text {
     margin: 0;
     font-size: $font-size-2xs;
-    color: $text-disabled;
+    color: $text-secondary;
 
     @include lg {
       font-size: $font-size-xs;

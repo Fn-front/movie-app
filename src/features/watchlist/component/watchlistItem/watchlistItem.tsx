@@ -76,7 +76,7 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
       tabIndex={0}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
-      aria-label={`${item.title}の詳細を表示`}
+      aria-label={item.title}
     >
       {posterUrl ? (
         <Image

@@ -134,7 +134,7 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
       onKeyDown={onClick ? handleKeyDown : undefined}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
-      aria-label={onClick ? `${item.title}の詳細を表示` : undefined}
+      aria-label={onClick ? item.title : undefined}
     >
       <div className={styles.c_watchlist_tile__poster}>
         {posterUrl ? (

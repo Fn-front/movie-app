@@ -100,7 +100,7 @@ describe('WatchlistPanel', () => {
     mockUseWatchlist.watchlist = createMockItems(1);
     render(<WatchlistPanel />);
 
-    await user.click(screen.getByRole('button', { name: '映画0の詳細を表示' }));
+    await user.click(screen.getByRole('button', { name: '映画0' }));
 
     expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
     expect(screen.getByText('Movie 100')).toBeInTheDocument();
@@ -111,7 +111,7 @@ describe('WatchlistPanel', () => {
     mockUseWatchlist.watchlist = createMockItems(1);
     render(<WatchlistPanel />);
 
-    await user.click(screen.getByRole('button', { name: '映画0の詳細を表示' }));
+    await user.click(screen.getByRole('button', { name: '映画0' }));
     expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
 
     await user.click(screen.getByTestId('close-modal'));

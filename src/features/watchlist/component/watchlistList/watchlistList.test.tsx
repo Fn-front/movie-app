@@ -91,7 +91,7 @@ describe('WatchlistList', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: '映画0の詳細を表示' }));
+    await user.click(screen.getByRole('button', { name: '映画0' }));
     expect(handleClick).toHaveBeenCalledWith(100);
   });
 
@@ -126,7 +126,7 @@ describe('WatchlistList', () => {
       />,
     );
 
-    const tile = screen.getByRole('button', { name: '映画0の詳細を表示' });
+    const tile = screen.getByRole('button', { name: '映画0' });
     tile.focus();
     await user.keyboard('{Enter}');
     expect(handleClick).toHaveBeenCalledWith(100);

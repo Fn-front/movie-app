@@ -237,6 +237,6 @@ describe('CalendarDialog', () => {
     await waitFor(() => {
       expect(screen.getByText('2026年3月15日（1件）')).toBeInTheDocument();
     });
-    expect(screen.getByLabelText('映画Aの詳細を表示')).toBeInTheDocument();
+    expect(screen.getByLabelText('映画A')).toBeInTheDocument();
   });
 });

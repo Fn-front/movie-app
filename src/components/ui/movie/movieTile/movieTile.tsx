@@ -121,7 +121,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       onKeyDown={handleKeyDown}
       role='button'
       tabIndex={0}
-      aria-label={`${movie.title}の詳細を表示`}
+      aria-label={movie.title}
     >
       <div className={styles.c_movie_tile__poster}>
         {posterUrl ? (

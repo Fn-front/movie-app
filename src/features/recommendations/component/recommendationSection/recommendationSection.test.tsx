@@ -24,7 +24,7 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
       data-testid={`movie-tile-${movie.id}`}
       role='button'
       tabIndex={0}
-      aria-label={`${movie.title}の詳細を表示`}
+      aria-label={`${movie.title}`}
       onClick={() => onClick?.(movie.id)}
       onKeyDown={() => {}}
     >
@@ -246,7 +246,7 @@ describe('RecommendationSection', () => {
 
       fireEvent.click(
         screen.getByRole('button', {
-          name: 'おすすめ映画 1の詳細を表示',
+          name: 'おすすめ映画 1',
         }),
       );
       expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
@@ -263,7 +263,7 @@ describe('RecommendationSection', () => {
 
       fireEvent.click(
         screen.getByRole('button', {
-          name: 'おすすめ映画 1の詳細を表示',
+          name: 'おすすめ映画 1',
         }),
       );
       expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();

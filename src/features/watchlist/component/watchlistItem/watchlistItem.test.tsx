@@ -59,9 +59,7 @@ describe('WatchlistItem', () => {
       <WatchlistItem item={item} onClick={onClick} onDelete={jest.fn()} />,
     );
 
-    await user.click(
-      screen.getByRole('button', { name: 'テスト映画' }),
-    );
+    await user.click(screen.getByRole('button', { name: 'テスト映画' }));
     expect(onClick).toHaveBeenCalledWith(456);
   });
 

@@ -39,16 +39,11 @@ test.describe('設定ページ（認証済み）— テーマ切り替え', () =
     await page.goto('/settings');
     await expect(page.getByRole('heading', { name: '設定' })).toBeVisible();
 
-    const themeTrigger = page.getByRole('combobox', { name: 'テーマを選択' });
-    await expect(themeTrigger).toBeVisible();
-    await themeTrigger.click();
+    const themeGroup = page.getByRole('radiogroup', { name: 'テーマを選択' });
+    await expect(themeGroup).toBeVisible();
 
-    // ドロップダウン（listbox）が開くのを待つ
-    const listbox = page.getByRole('listbox');
-    await expect(listbox).toBeVisible();
-
-    // 「ダーク」を選択（listboxスコープ内で検索）
-    await listbox.getByText('ダーク').click();
+    // 「ダーク」ラジオボタンを選択
+    await themeGroup.getByLabel('ダーク').click();
 
     // data-theme属性がdarkに変わる
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');

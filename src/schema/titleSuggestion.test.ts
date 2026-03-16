@@ -29,6 +29,13 @@ describe('titleSuggestionQuerySchema', () => {
     const result = titleSuggestionQuerySchema.safeParse({});
     expect(result.success).toBe(false);
   });
+
+  it('256文字以上のクエリを拒否する', () => {
+    const result = titleSuggestionQuerySchema.safeParse({
+      query: 'a'.repeat(256),
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('openAiTitleSuggestionResponseSchema', () => {

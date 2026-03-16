@@ -50,14 +50,14 @@ export async function GET(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    // 4. キャッシュ確認
-    const { data: cached } = await supabase
+    // 4. キャッシュ確認（suggested_titleがnullの場合も「提案なし」としてキャッシュヒット）
+    const { data: cached, error: cacheError } = await supabase
       .from('title_suggestions')
       .select('suggested_title')
       .eq('query_title', query)
       .single();
 
-    if (cached) {
+    if (!cacheError && cached) {
       return NextResponse.json(
         {
           success: true,
@@ -73,20 +73,7 @@ export async function GET(request: Request) {
     // 5. OpenAI APIで原題を推測
     const suggestedTitle = await fetchTitleSuggestionFromOpenAI(query);
 
-    if (!suggestedTitle) {
-      return NextResponse.json(
-        {
-          success: true,
-          data: {
-            suggestion: null,
-            cached: false,
-          },
-        },
-        { status: HTTP_STATUS.OK },
-      );
-    }
-
-    // 6. DBにキャッシュ保存
+    // 6. DBにキャッシュ保存（提案なしの場合もnullで保存し、再度のAPI呼び出しを防ぐ）
     await supabase.from('title_suggestions').upsert(
       {
         query_title: query,

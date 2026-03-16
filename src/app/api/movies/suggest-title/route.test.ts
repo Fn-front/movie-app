@@ -107,7 +107,7 @@ describe('GET /api/movies/suggest-title', () => {
     );
   });
 
-  it('OpenAIがnullを返した場合は提案なしを返す', async () => {
+  it('OpenAIがnullを返した場合は提案なしを返しDBにもキャッシュする', async () => {
     mockFetchTitleSuggestion.mockResolvedValue(null);
 
     const response = await GET(createRequest('asdfjkl'));
@@ -117,7 +117,29 @@ describe('GET /api/movies/suggest-title', () => {
     expect(body.success).toBe(true);
     expect(body.data.suggestion).toBeNull();
     expect(body.data.cached).toBe(false);
-    expect(mockUpsert).not.toHaveBeenCalled();
+    expect(mockUpsert).toHaveBeenCalledWith(
+      {
+        query_title: 'asdfjkl',
+        suggested_title: null,
+      },
+      { onConflict: 'query_title' },
+    );
+  });
+
+  it('提案なし（null）のキャッシュヒット時にnullを返す', async () => {
+    mockSingle.mockResolvedValue({
+      data: { suggested_title: null },
+      error: null,
+    });
+
+    const response = await GET(createRequest('asdfjkl'));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data.suggestion).toBeNull();
+    expect(body.data.cached).toBe(true);
+    expect(mockFetchTitleSuggestion).not.toHaveBeenCalled();
   });
 
   it('予期しないエラーで500を返す', async () => {

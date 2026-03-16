@@ -5,13 +5,11 @@
 CREATE TABLE title_suggestions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   query_title VARCHAR(255) NOT NULL,
-  suggested_title VARCHAR(255) NOT NULL,
+  suggested_title VARCHAR(255) NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   CONSTRAINT uq_title_suggestions_query UNIQUE (query_title)
 );
-
-CREATE INDEX idx_title_suggestions_query ON title_suggestions (query_title);
 
 -- RLS有効化
 ALTER TABLE title_suggestions ENABLE ROW LEVEL SECURITY;

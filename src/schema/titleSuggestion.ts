@@ -8,7 +8,7 @@ import { z } from 'zod';
  * 原題提案APIクエリパラメータスキーマ
  */
 export const titleSuggestionQuerySchema = z.object({
-  query: z.string().trim().min(1, '検索キーワードは必須です'),
+  query: z.string().trim().min(1, '検索キーワードは必須です').max(255),
 });
 
 /**

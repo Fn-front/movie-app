@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe } from 'jest-axe';
 
 import { Modal, ModalHeader, ModalBody, ModalFooter } from './modal';
 
@@ -179,6 +180,41 @@ describe('Modal', () => {
       <Modal {...defaultProps} title={undefined} showCloseButton={true} />,
     );
     expect(screen.getByRole('button', { name: '閉じる' })).toBeInTheDocument();
+  });
+
+  it('アクセシビリティ違反がない', async () => {
+    const { container } = render(<Modal {...defaultProps} />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it('Tabキーでフォーカスがモーダル内に留まる', async () => {
+    const user = userEvent.setup();
+    render(
+      <Modal {...defaultProps}>
+        <button>ボタン1</button>
+        <button>ボタン2</button>
+      </Modal>,
+    );
+
+    const closeButton = screen.getByRole('button', { name: '閉じる' });
+    const button1 = screen.getByRole('button', { name: 'ボタン1' });
+    const button2 = screen.getByRole('button', { name: 'ボタン2' });
+
+    // 閉じるボタンにフォーカス
+    closeButton.focus();
+    expect(closeButton).toHaveFocus();
+
+    // Tab でモーダル内のボタンに移動
+    await user.tab();
+    expect(button1).toHaveFocus();
+
+    await user.tab();
+    expect(button2).toHaveFocus();
+
+    // 最後の要素からTabで最初のフォーカス可能要素に戻る（フォーカストラップ）
+    await user.tab();
+    expect(closeButton).toHaveFocus();
   });
 });
 

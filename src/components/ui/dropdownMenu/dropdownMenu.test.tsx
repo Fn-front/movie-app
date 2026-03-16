@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe } from 'jest-axe';
 
 import { DropdownMenu } from './dropdownMenu';
 
@@ -81,6 +82,60 @@ describe('DropdownMenu', () => {
     render(
       <DropdownMenu trigger={<button>メニュー</button>} items={defaultItems} />,
     );
+    expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+  });
+
+  it('アクセシビリティ違反がない（閉じた状態）', async () => {
+    const { container } = render(
+      <DropdownMenu trigger={<button>メニュー</button>} items={defaultItems} />,
+    );
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it('アクセシビリティ違反がない（開いた状態）', async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <DropdownMenu trigger={<button>メニュー</button>} items={defaultItems} />,
+    );
+    await user.click(screen.getByRole('button', { name: 'メニュー' }));
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it('矢印キーでメニューアイテム間を移動できる', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu trigger={<button>メニュー</button>} items={defaultItems} />,
+    );
+
+    // メニューを開く
+    await user.click(screen.getByRole('button', { name: 'メニュー' }));
+
+    // 下矢印キーでアイテム間を移動
+    await user.keyboard('{ArrowDown}');
+    const items = screen.getAllByRole('menuitem');
+    expect(items[0]).toHaveFocus();
+
+    await user.keyboard('{ArrowDown}');
+    expect(items[1]).toHaveFocus();
+
+    await user.keyboard('{ArrowDown}');
+    expect(items[2]).toHaveFocus();
+  });
+
+  it('Escapeキーでメニューが閉じる', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu trigger={<button>メニュー</button>} items={defaultItems} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'メニュー' }));
+    expect(
+      screen.getByRole('menuitem', { name: 'プロフィール' }),
+    ).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { axe } from 'jest-axe';
 
 import { Input } from './input';
 
@@ -94,5 +95,17 @@ describe('Input', () => {
     render(<Input placeholder='入力' />);
     const input = screen.getByPlaceholderText('入力');
     expect(input).not.toHaveAttribute('aria-label');
+  });
+
+  it('アクセシビリティ違反がない', async () => {
+    const { container } = render(<Input label='メールアドレス' />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+
+  it('エラー状態でアクセシビリティ違反がない', async () => {
+    const { container } = render(<Input label='メール' error='必須項目です' />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
   });
 });

@@ -1193,11 +1193,11 @@
 
 ### 完了済み（PR #149）
 
-- [x] **P0: セキュリティ** — RLSポリシー厳格化、RPC SECURITY INVOKER化、outline:none修正
-- [x] **P1: 実装コード改善** — 不要なmemo/useMemo/ssr:false削除、Promise.all並列化
-- [x] **P1: UI/UXデザイン** — ジャンル翻訳、カード高さ揃え、中央寄せ、モーダルタイトル、余白
-- [x] **P1: 設計書同期** — authentication-flow/api-specification/database-schema/architecture/design-system/environment-variables
-- [x] **P2: ロードマップ補正** — テスト数更新、Next.js 16注釈
+- [x] #172 — P0セキュリティ・アクセシビリティ改善
+- [x] #173 — P1実装コード改善
+- [x] #174 — UI/UXデザイン改善
+- [x] #175 — 設計書同期（6ドキュメント）
+- [x] #176 — ロードマップ補正
 
 ### 未完了 → GitHub Issues
 

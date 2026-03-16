@@ -17,7 +17,7 @@ export default auth((req) => {
   const isAuthenticated = !!req.auth;
 
   // 認証が必要なパス
-  const protectedPaths = ['/dashboard', '/profile', '/watchlist', '/settings'];
+  const protectedPaths = ['/watchlist', '/settings', '/favorites'];
 
   // 認証ページ
   const authPaths = ['/auth/signin', '/auth/signup'];

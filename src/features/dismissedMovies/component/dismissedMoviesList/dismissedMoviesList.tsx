@@ -71,22 +71,14 @@ export const DismissedMoviesList = memo(function DismissedMoviesList() {
     },
   });
 
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const handleRemove = useCallback(
     (tmdbMovieId: number) => {
       removeMutation.mutate(tmdbMovieId);
     },
     [removeMutation],
   );
-
-  if (isLoading) {
-    return (
-      <div className={styles.c_dismissed_movies_list__loading}>
-        <Loading size='sm' />
-      </div>
-    );
-  }
-
-  const [isExpanded, setIsExpanded] = useState(false);
 
   const displayedMovies = useMemo(
     () => (isExpanded ? movies : movies.slice(0, INITIAL_DISPLAY_COUNT)),
@@ -98,6 +90,14 @@ export const DismissedMoviesList = memo(function DismissedMoviesList() {
   const handleToggleExpand = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
+
+  if (isLoading) {
+    return (
+      <div className={styles.c_dismissed_movies_list__loading}>
+        <Loading size='sm' />
+      </div>
+    );
+  }
 
   if (movies.length === 0) {
     return <EmptyState title='興味なしに登録した映画はありません' />;

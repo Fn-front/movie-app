@@ -2,16 +2,26 @@
  * 劇場公開中の人気映画API（サーバーサイド用）
  */
 
+import { createClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
 
-import { createClient } from '@/lib/supabase/server';
 import type { NowShowingMovie } from '@/lib/types';
 
 /**
  * 劇場公開中の人気映画一覧をDBから取得する（キャッシュなし内部実装）
+ *
+ * unstable_cache内ではcookies()が使えないため、
+ * 公開データ取得用にcookies不要のSupabaseクライアントを使用する。
  */
 async function fetchNowShowingMovies(): Promise<NowShowingMovie[]> {
-  const supabase = await createClient();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase environment variables are not defined');
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
   const { data, error } = await supabase
     .from('now_showing_movies')

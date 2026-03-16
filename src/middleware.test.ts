@@ -97,7 +97,7 @@ describe('middleware', () => {
 
     it('保護ページでcookieありauth無しの場合、cookieを削除してサインインにリダイレクトする', () => {
       const req = createMockRequest({
-        pathname: '/dashboard',
+        pathname: '/favorites',
         auth: null,
         hasSessionCookie: true,
       });
@@ -156,7 +156,7 @@ describe('middleware', () => {
 
     it('保護ページにアクセスするとそのまま表示する', () => {
       const req = createMockRequest({
-        pathname: '/dashboard',
+        pathname: '/favorites',
         auth: mockAuth,
         hasSessionCookie: true,
       });

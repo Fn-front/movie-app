@@ -1205,7 +1205,7 @@
 - [ ] #150 — components.md 追記・Props修正・favorites-design.md統合
 
 #### 実装確認・修正
-- [ ] #151 — Cronスケジュール・middleware protectedPaths確認
+- [x] #151 — Cronスケジュール・middleware protectedPaths確認
 - [ ] #155 — ホームページ force-dynamic 見直し（use cache検討）
 - [ ] #156 — movieListContent コンポーネント責任分割
 - [ ] #157 — テーマhydrationミスマッチ対策

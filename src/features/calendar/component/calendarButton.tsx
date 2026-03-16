@@ -6,11 +6,18 @@
 'use client';
 
 import { memo, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { FiCalendar } from 'react-icons/fi';
 
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 
-import { CalendarDialog } from './calendarDialog';
+const CalendarDialog = dynamic(
+  () =>
+    import('./calendarDialog').then((mod) => ({
+      default: mod.CalendarDialog,
+    })),
+  { ssr: false },
+);
 import styles from './calendarButton.module.scss';
 
 /**

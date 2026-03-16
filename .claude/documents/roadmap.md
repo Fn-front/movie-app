@@ -1206,7 +1206,7 @@
 
 #### 実装確認・修正
 - [x] #151 — Cronスケジュール・middleware protectedPaths確認
-- [ ] #155 — ホームページ force-dynamic 見直し（use cache検討）
+- [x] #155 — ホームページ force-dynamic 見直し（use cache検討）
 - [x] #156 — movieListContent コンポーネント責任分割
 - [x] #157 — テーマhydrationミスマッチ対策
 

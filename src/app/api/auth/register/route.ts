@@ -18,6 +18,7 @@ import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
 import { OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';
 import { generateOtpCode, sendOtpEmail } from '@/lib/otp';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 
 export async function POST(request: Request) {
   try {
@@ -40,6 +41,33 @@ export async function POST(request: Request) {
           },
         },
         { status: HTTP_STATUS.BAD_REQUEST },
+      );
+    }
+
+    // レート制限チェック（email単位で5回/60分）
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      result.data.email,
+      'register',
+      5,
+      60,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
+            message: AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
+          },
+        },
+        {
+          status: HTTP_STATUS.TOO_MANY_REQUESTS,
+          headers: rateLimitResult.retryAfter
+            ? { 'Retry-After': String(rateLimitResult.retryAfter) }
+            : undefined,
+        },
       );
     }
 

@@ -111,6 +111,13 @@
 - ロードマップ（`.claude/documents/roadmap.md`）のタスクが完了したら、必ずチェックボックスを更新する
 - `- [ ]` → `- [x]` に変更してコミットに含める
 
+**【必須】GitHub Issue運用ルール**：
+- 個別タスク（機能開発・バグ修正・改善等）はGitHub Issueで管理する
+- ロードマップには概要とIssue番号の参照のみ記載し、詳細はIssueに書く
+- PR本文に `Closes #xxx` を記載してIssueとPRをDevelopmentで紐づける
+- 完了済みタスクもIssueとして作成し、対応PRの `Closes` で紐づけてからクローズする
+- ラベルで優先度（`P0: critical` / `P1: important` / `P2: nice-to-have`）とカテゴリ（`security` / `performance` / `ui/ux` / `testing` / `database` / `refactor` / `feature` / `deploy` / `documentation`）を付与する
+
 **【必須】ブランチ削除ルール**：
 - PRマージ後、マージ済みブランチはリモート・ローカル共に削除する
 - `gh pr merge`時に`--delete-branch`を使用する

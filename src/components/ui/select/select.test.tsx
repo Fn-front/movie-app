@@ -65,9 +65,7 @@ describe('Select', () => {
   });
 
   it('アクセシビリティ違反がない', async () => {
-    const { container } = render(
-      <Select label='ジャンル' options={options} />,
-    );
+    const { container } = render(<Select label='ジャンル' options={options} />);
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });

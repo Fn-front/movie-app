@@ -131,7 +131,9 @@ describe('DropdownMenu', () => {
     );
 
     await user.click(screen.getByRole('button', { name: 'メニュー' }));
-    expect(screen.getByRole('menuitem', { name: 'プロフィール' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: 'プロフィール' }),
+    ).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();

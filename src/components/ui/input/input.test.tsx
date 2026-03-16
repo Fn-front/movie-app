@@ -104,9 +104,7 @@ describe('Input', () => {
   });
 
   it('エラー状態でアクセシビリティ違反がない', async () => {
-    const { container } = render(
-      <Input label='メール' error='必須項目です' />,
-    );
+    const { container } = render(<Input label='メール' error='必須項目です' />);
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });

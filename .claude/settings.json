@@ -35,7 +35,16 @@
       "Bash(find:*)",
       "Bash(tree:*)",
       "Bash(which:*)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh pr comment:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh issue comment:*)",
+      "Bash(gh label create:*)",
+      "Bash(gh label edit:*)",
+      "Bash(gh label delete:*)"
     ],
     "deny": [
       "Bash(rm:*)",

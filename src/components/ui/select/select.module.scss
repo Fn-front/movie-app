@@ -49,10 +49,11 @@
     }
 
     &:focus {
-      outline: none;
       border-color: $primary-500;
       box-shadow: 0 0 0 3px color-alpha(--primary-500, 10%);
     }
+
+    @include focus-visible;
 
     &[data-placeholder] {
       color: $text-secondary;
@@ -126,7 +127,6 @@
     border-radius: $border-radius-sm;
     cursor: pointer;
     user-select: none;
-    outline: none;
     transition: $transition-all;
 
     &:hover:not([data-disabled]) {
@@ -136,6 +136,8 @@
     &:focus {
       background-color: color-alpha(--primary-500, 10%);
     }
+
+    @include focus-visible;
 
     &[data-disabled] {
       color: $text-disabled;

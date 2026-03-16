@@ -388,6 +388,85 @@ token.lastLoginUpdate でスロットリングチェック（1時間間隔）
 
 ---
 
+## セッション絶対有効期限（7日間）
+
+アクティブなセッションであっても、ログインから7日間が経過したセッションは強制的に無効化する。
+
+### 仕様
+
+| 項目 | 値 |
+|------|-----|
+| 絶対有効期限 | 7日間（`SESSION_CONFIG.ABSOLUTE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000`） |
+| 非アクティブ有効期限 | 24時間（`SESSION_CONFIG.IDLE_MAX_AGE_S`） |
+| チェックタイミング | jwtコールバック（リクエストごと） |
+| 無効化フラグ | `token.invalidated = true` |
+
+### フロー
+```
+JWTコールバック実行
+  ↓
+token.issuedAt（ログイン時に設定）と現在時刻を比較
+  ↓
+  経過時間 > 7日間 → token.invalidated = true を設定してトークンを返す
+  経過時間 ≤ 7日間 → 続行
+  ↓
+sessionコールバック: token.invalidated が true の場合
+  → session.user.id = '' など空のユーザー情報を返す
+  → クライアント側は未認証状態と判定し、ログイン画面にリダイレクト
+```
+
+**実装ファイル:**
+- `src/lib/auth/sessionExpiry.ts` — `isSessionExpired(issuedAt)` 関数
+- `src/lib/auth/auth.ts` — jwtコールバック内でチェック
+- `src/constants/auth.ts` — `SESSION_CONFIG.ABSOLUTE_MAX_AGE_MS`
+
+---
+
+## パスワード変更によるセッション無効化
+
+パスワード変更後、既存の全セッション（他デバイスを含む）を強制的に無効化する。
+
+### 仕様
+
+| 項目 | 値 |
+|------|-----|
+| チェック間隔 | 5分（`CHECK_INTERVAL = 5 * 60 * 1000`） |
+| チェックタイミング | jwtコールバック（前回チェックから5分以上経過した場合） |
+| 比較対象 | DBの `users.password_changed_at` vs トークンの `token.passwordChangedAt` |
+| 無効化フラグ | `token.invalidated = true` |
+
+### フロー
+```
+JWTコールバック実行
+  ↓
+現在時刻 - token.lastPasswordCheck > 5分？
+  ↓ YES
+  DBから users.password_changed_at を取得
+  ↓
+  DB の password_changed_at > token.passwordChangedAt？
+    YES → token.invalidated = true を設定（セッション無効化）
+    NO  → token.lastPasswordCheck を現在時刻に更新して続行
+  ↓ NO（5分未満）
+  スキップ
+```
+
+**パスワード変更時のDBレコード更新（`src/app/api/user/change-password/route.ts`）:**
+```
+POST /api/user/change-password
+  ↓
+新しいパスワードのハッシュ化
+  ↓
+usersテーブルの password_changed_at を現在時刻に更新
+  ↓
+最大5分以内に全セッションのjwtコールバックが検知 → token.invalidated = true
+```
+
+**実装ファイル:**
+- `src/lib/auth/auth.ts` — jwtコールバック内でチェック
+- `src/app/api/user/change-password/route.ts` — `password_changed_at` を更新
+
+---
+
 ## ログアウトフロー
 
 ```
@@ -503,12 +582,13 @@ Movie Appの確認コードです。
 - **暗号的に安全な乱数**: `crypto.randomInt()` で生成
 
 ### セッション/トークン（NextAuth.js）
-- **有効期限**: 24時間
+- **非アクティブ有効期限**: 24時間（`SESSION_CONFIG.IDLE_MAX_AGE_S`）
+- **絶対有効期限**: 7日間（`SESSION_CONFIG.ABSOLUTE_MAX_AGE_MS`）— アクティブでも強制ログアウト
 - **セッションストレージ**: ブラウザメモリ（JWT方式）
-- **Cookie設定**: 厳密（HttpOnly: true, Secure: true, SameSite: 'strict'）
+- **Cookie設定**（HttpOnly: true, Secure: true（本番）, SameSite: 'lax'）
   - HttpOnly: JavaScriptからアクセス不可
   - Secure: HTTPS必須（本番環境）
-  - SameSite: 'strict' - CSRF対策
+  - SameSite: 'lax' - CSRF対策
 
 ### OAuth セキュリティ
 - **state パラメータ**: CSRF対策（NextAuth.js自動管理）
@@ -527,27 +607,26 @@ Movie Appの確認コードです。
 ### Providers設定
 
 ```typescript
-// app/api/auth/[...nextauth]/route.ts
-import NextAuth from "next-auth"
-import CredentialsProvider from "next-auth/providers/credentials"
-import GoogleProvider from "next-auth/providers/google"
-import GitHubProvider from "next-auth/providers/github"
+// src/lib/auth/auth.ts
+import NextAuth from 'next-auth'
+import Credentials from 'next-auth/providers/credentials'
+import Google from 'next-auth/providers/google'
+import GitHub from 'next-auth/providers/github'
 
-export const authOptions = {
+export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     // メール+パスワード認証 / メールOTPログイン（統一）
-    CredentialsProvider({
-      name: "Credentials",
+    Credentials({
+      name: 'Credentials',
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-        loginMethod: { label: "Login Method", type: "text" }, // "password" | "otp"
-        otpToken: { label: "OTP Token", type: "text" },
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+        loginMethod: { label: 'Login Method', type: 'text' }, // "password" | "otp"
       },
       async authorize(credentials) {
-        const { email, password, loginMethod, otpToken } = credentials
+        const loginMethod = credentials.loginMethod || 'password'
 
-        if (loginMethod === "otp") {
+        if (loginMethod === 'otp') {
           // OTPログイン: otp_codesのverified_atを確認
           // 検証済みOTPが存在すればユーザー情報を返却
         } else {
@@ -559,77 +638,104 @@ export const authOptions = {
           id: user.id,
           email: user.email,
           name: user.name,
-          isVerified: user.is_verified
+          image: user.avatar_url,
+          role: user.role,
+          passwordChangedAt: user.password_changed_at || null,
         }
       }
     }),
 
     // Google OAuth
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
     }),
 
     // GitHub OAuth
-    GitHubProvider({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+    GitHub({
+      clientId: process.env.GITHUB_CLIENT_ID ?? '',
+      clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '',
     }),
   ],
 
   callbacks: {
     // signInコールバック: アカウントリンク処理
     async signIn({ user, account }) {
-      if (account?.provider === 'google' || account?.provider === 'github') {
-        // 同じメールアドレスの既存ユーザーがいればリンク
-        // いなければ新規ユーザー作成
+      if (account?.provider === 'credentials') {
+        // last_login_at を更新して通す
+        return true
       }
+      // OAuthログイン: 既存ユーザーとアカウントリンク or 新規作成
       return true
     },
 
     // JWTコールバック: トークンにユーザー情報を追加
     async jwt({ token, user }) {
       if (user) {
-        token.userId = user.id
+        token.id = user.id
         token.email = user.email
         token.name = user.name
-        token.isVerified = user.isVerified
+        token.picture = user.image
+        token.role = user.role
+        token.passwordChangedAt = user.passwordChangedAt
+        token.lastPasswordCheck = Date.now()
+        token.lastLoginUpdate = Date.now()
+        token.issuedAt = Date.now()
       }
+
+      // 絶対有効期限チェック（ログインから7日間）
+      if (!token.invalidated && isSessionExpired(token.issuedAt)) {
+        token.invalidated = true
+        return token
+      }
+
+      // パスワード変更によるセッション無効化チェック（5分間隔）
+      // ...
+
       return token
     },
 
     // セッションコールバック: クライアントに返すセッション情報
     async session({ session, token }) {
-      session.user = {
-        id: token.userId,
-        email: token.email,
-        name: token.name,
-        isVerified: token.isVerified
+      if (token.invalidated) {
+        // 無効化されたトークン: 空のユーザー情報を返す
+        session.user.id = ''
+        session.user.email = ''
+        session.user.name = null
+        session.user.image = null
+        session.user.role = ''
+        return session
       }
+
+      session.user.id = token.id as string
+      session.user.email = token.email as string
+      session.user.name = token.name as string | null
+      session.user.image = token.picture as string | null
+      session.user.role = token.role as string
       return session
     }
   },
 
   session: {
-    strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24時間
+    strategy: 'jwt',
+    maxAge: SESSION_CONFIG.IDLE_MAX_AGE_S, // 24時間（非アクティブ時）
   },
 
   cookies: {
     sessionToken: {
-      name: `__Secure-next-auth.session-token`,
+      name:
+        process.env.NODE_ENV === 'production'
+          ? '__Secure-next-auth.session-token'
+          : 'next-auth.session-token',
       options: {
         httpOnly: true,
-        sameSite: 'strict',
+        sameSite: 'lax',
         path: '/',
-        secure: true,
+        secure: process.env.NODE_ENV === 'production',
       },
     },
   },
-}
-
-const handler = NextAuth(authOptions)
-export { handler as GET, handler as POST }
+})
 ```
 
 ### セッションオブジェクト構造
@@ -640,7 +746,8 @@ export { handler as GET, handler as POST }
     id: "uuid",
     email: "user@example.com",
     name: "ユーザー名",
-    isVerified: true
+    image: "https://...",  // アバター画像URL（null の場合あり）
+    role: "user"           // ユーザーロール
   },
   expires: "2026-04-12T00:00:00.000Z"
 }
@@ -652,7 +759,8 @@ export { handler as GET, handler as POST }
 
 ### NextAuth.js設定
 - [x] **セッションストレージ**: ブラウザメモリ（JWT方式）
-- [x] **セッション有効期限**: 24時間
+- [x] **セッション有効期限**: 非アクティブ24時間 / 絶対有効期限7日間
+- [x] **セッション無効化**: パスワード変更時（5分間隔チェック）
 - [x] **Credentials Provider**: メールアドレス + パスワード認証
 - [x] **Google Provider**: Google OAuth
 - [x] **GitHub Provider**: GitHub OAuth

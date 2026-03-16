@@ -99,6 +99,11 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
     setSelectedMovieId(null);
   }, []);
 
+  const selectedMovieTitle = useMemo(
+    () => movies.find((movie) => movie.id === selectedMovieId)?.title,
+    [movies, selectedMovieId],
+  );
+
   const movieCacheItems = useMemo(
     () =>
       movies.map((movie) => toMovieCacheItem(movie, getFavoriteInfo(movie.id))),
@@ -156,6 +161,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
 
       <MovieDetailModal
         movieId={selectedMovieId}
+        title={selectedMovieTitle}
         showFinancialInfo={false}
         onClose={handleDetailModalClose}
       />

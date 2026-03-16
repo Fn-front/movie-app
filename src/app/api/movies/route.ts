@@ -57,6 +57,13 @@ let genreCache: { data: Record<number, string>; cachedAt: number } | null =
   null;
 const GENRE_CACHE_DURATION = 24 * 60 * 60 * 1000;
 
+/** TMDb日本語訳の誤訳を自然な日本語に上書きするマップ */
+const GENRE_NAME_OVERRIDES: Record<string, string> = {
+  履歴: '歴史',
+  謎: 'ミステリー',
+  西洋: '西部劇',
+};
+
 /**
  * ジャンルマップを取得（キャッシュ付き）
  */
@@ -70,7 +77,7 @@ async function getGenreMap(): Promise<Record<number, string>> {
   const genres: { id: number; name: string }[] = await getGenres();
   const genreMap: Record<number, string> = {};
   for (const genre of genres) {
-    genreMap[genre.id] = genre.name;
+    genreMap[genre.id] = GENRE_NAME_OVERRIDES[genre.name] ?? genre.name;
   }
 
   genreCache = { data: genreMap, cachedAt: now };

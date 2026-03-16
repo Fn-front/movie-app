@@ -31,7 +31,7 @@ export interface SelectProps {
   /** 全幅表示 */
   fullWidth?: boolean;
   /** 選択肢 */
-  options: SelectOption[];
+  options: readonly SelectOption[];
   /** プレースホルダー */
   placeholder?: string;
   /** 選択された値 */

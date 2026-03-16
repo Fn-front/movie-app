@@ -147,7 +147,10 @@
   font: inherit;
   color: inherit;
   cursor: pointer;
-  outline: none;
+
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
 }
 
 // ============================================================
@@ -162,8 +165,11 @@
   margin: 0;
   font: inherit;
   color: inherit;
-  outline: none;
   appearance: none;
+
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
 }
 
 // ============================================================

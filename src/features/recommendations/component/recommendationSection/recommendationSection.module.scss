@@ -2,10 +2,10 @@
 @use '@/styles/mixins' as *;
 
 .c_recommendation_section {
-  margin-top: $spacing-6;
+  margin-top: $spacing-10;
 
   @include md {
-    margin-top: $spacing-8;
+    margin-top: $spacing-12;
   }
 
   &__title {

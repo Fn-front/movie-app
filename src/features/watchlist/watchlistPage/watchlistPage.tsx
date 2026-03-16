@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 
 import { Select } from '@/components/ui/select/select';
 import { Loading } from '@/components/ui/loading/loading';
@@ -50,6 +50,12 @@ export const WatchlistPage = memo(function WatchlistPage() {
     setSelectedMovieId(null);
   }, []);
 
+  const selectedMovieTitle = useMemo(
+    () =>
+      watchlist.find((item) => item.tmdb_movie_id === selectedMovieId)?.title,
+    [watchlist, selectedMovieId],
+  );
+
   const sentinelRef = useIntersectionObserver(fetchNextPage, {
     enabled: hasNextPage && !isFetchingNextPage,
     rootMargin: '100px',
@@ -89,6 +95,7 @@ export const WatchlistPage = memo(function WatchlistPage() {
 
       <MovieDetailModal
         movieId={selectedMovieId}
+        title={selectedMovieTitle}
         showFinancialInfo={false}
         onClose={handleDetailModalClose}
       />

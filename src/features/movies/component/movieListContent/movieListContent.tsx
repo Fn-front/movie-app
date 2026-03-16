@@ -6,7 +6,7 @@
 
 'use client';
 
-import { memo, useMemo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { Select } from '@/components/ui/select/select';
@@ -72,15 +72,6 @@ export const MovieListContent = memo<MovieListContentProps>(
       isFavoriteProcessing,
     } = useFavoriteToggle();
 
-    const sortOptions = useMemo(
-      () =>
-        SORT_OPTIONS.map((option) => ({
-          label: option.label,
-          value: option.value,
-        })),
-      [],
-    );
-
     const handleTabValueChange = useCallback(
       (value: string) => {
         handleReleaseTypeChange(value as 'theatrical' | 'streaming');
@@ -118,6 +109,11 @@ export const MovieListContent = memo<MovieListContentProps>(
       setShowFinancialInfo(false);
     }, []);
 
+    const selectedMovieTitle = useMemo(
+      () => movies.find((m) => m.id === selectedMovieId)?.title,
+      [movies, selectedMovieId],
+    );
+
     const loadMoreRef = useIntersectionObserver(fetchNextPage, {
       enabled: hasNextPage && !isFetchingNextPage,
     });
@@ -152,7 +148,7 @@ export const MovieListContent = memo<MovieListContentProps>(
               </span>
             </Button>
             <Select
-              options={sortOptions}
+              options={SORT_OPTIONS}
               value={sortBy}
               onValueChange={handleSortChange}
               aria-label='ソート順を選択'
@@ -207,6 +203,7 @@ export const MovieListContent = memo<MovieListContentProps>(
 
         <MovieDetailModal
           movieId={selectedMovieId}
+          title={selectedMovieTitle}
           showFinancialInfo={showFinancialInfo}
           onClose={handleDetailModalClose}
         />

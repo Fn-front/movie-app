@@ -42,35 +42,67 @@
 ```
 src/
 ├── app/                    # Next.js App Router
-│   ├── (auth)/            # 認証関連ページグループ
-│   │   ├── login/
-│   │   └── register/
-│   ├── (main)/            # メインアプリケーション
-│   │   ├── home/
-│   │   ├── calendar/
-│   │   └── search/
+│   ├── auth/              # 認証関連ページ
+│   │   ├── signin/
+│   │   ├── signup/
+│   │   └── layout.tsx
+│   ├── movies/            # 映画一覧ページ
+│   │   ├── now-showing/
+│   │   └── upcoming/
+│   ├── favorites/         # お気に入りページ
+│   ├── search/            # 検索ページ
+│   ├── settings/          # 設定ページ
+│   ├── watchlist/         # ウォッチリストページ
 │   ├── api/               # API Routes
 │   │   ├── auth/
+│   │   ├── cron/
+│   │   ├── dismissed-movies/
+│   │   ├── favorites/
+│   │   ├── filters/
 │   │   ├── movies/
+│   │   ├── user/
 │   │   └── watchlist/
 │   ├── layout.tsx
 │   └── page.tsx
 ├── components/            # 共通コンポーネント
-│   ├── common/           # 汎用コンポーネント
-│   ├── features/         # 機能別コンポーネント
-│   └── layouts/          # レイアウトコンポーネント
-├── lib/                  # ユーティリティ・ヘルパー
-│   ├── api/             # 内部APIクライアント（auth等）
-│   ├── axios/           # axiosインスタンス設定
+│   ├── ui/               # 汎用UIコンポーネント
+│   ├── layout/           # レイアウトコンポーネント
+│   ├── icons/            # アイコンコンポーネント
+│   └── providers/        # Providerコンポーネント
+├── features/              # 機能別モジュール（コンポーネント・フック・型）
+│   ├── auth/
+│   ├── calendar/
+│   ├── dismissedMovies/
+│   ├── favorites/
+│   ├── home/
+│   ├── movies/
+│   ├── nowShowing/
+│   ├── recommendations/
+│   ├── search/
+│   ├── settings/
+│   ├── toast/
+│   └── watchlist/
+├── lib/                  # 外部サービスクライアント・設定
+│   ├── api/             # 内部APIクライアント
 │   ├── auth/            # NextAuth.js認証設定
+│   ├── axios/           # axiosインスタンス設定
+│   ├── eiga/            # 映画.comスクレイピング
+│   ├── openai/          # OpenAI APIクライアント
+│   ├── otp/             # OTP生成・検証
+│   ├── rateLimit/       # レート制限
+│   ├── store/           # Zustandストア
+│   ├── supabase/        # Supabaseクライアント
+│   ├── sync/            # 映画データ同期処理
 │   ├── tmdb/            # TMDb APIクライアント
-│   └── utils/           # 汎用ユーティリティ
-├── types/               # TypeScript型定義
+│   └── types/           # lib内部の型定義
+├── constants/           # 定数定義
+├── helpers/             # ヘルパー関数
 ├── hooks/               # カスタムフック（ビジネスロジック分離）
-│   ├── useAuth.ts      # 認証状態管理
-│   ├── useMovies.ts    # 映画データ取得・キャッシュ
-│   ├── useWatchlist.ts # ウォッチリスト操作
-│   └── useToast.ts     # トースト通知管理
+├── schema/              # zodバリデーションスキーマ
+├── test/                # テストユーティリティ・セットアップ
+├── types/               # TypeScript型定義
+├── utils/               # 汎用ユーティリティ
+├── middleware.ts         # Next.js Middleware
 └── styles/              # グローバルスタイル
 ```
 
@@ -100,6 +132,33 @@ State Update
     ↓
 UI Re-render
 ```
+
+## API Route一覧
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| POST | `/api/auth/register` | ユーザー新規登録 |
+| POST | `/api/auth/otp/send` | OTPコード送信 |
+| POST | `/api/auth/otp/verify` | OTPコード検証 |
+| GET/PUT | `/api/user/profile` | ユーザープロフィール取得・更新 |
+| PUT | `/api/user/change-password` | パスワード変更 |
+| GET/PUT | `/api/user/settings` | ユーザー設定取得・更新 |
+| GET | `/api/movies` | 映画一覧取得 |
+| GET | `/api/movies/[id]` | 映画詳細取得 |
+| GET | `/api/movies/genres` | ジャンル一覧取得 |
+| GET | `/api/movies/search` | 映画検索 |
+| GET/POST | `/api/watchlist` | ウォッチリスト取得・追加 |
+| DELETE | `/api/watchlist/[id]` | ウォッチリスト削除 |
+| GET | `/api/watchlist/calendar` | カレンダー用ウォッチリスト取得 |
+| GET/POST | `/api/favorites` | お気に入り取得・追加 |
+| DELETE | `/api/favorites/[id]` | お気に入り削除 |
+| GET | `/api/filters` | フィルター選択肢取得 |
+| GET/POST/DELETE | `/api/dismissed-movies` | 非表示映画管理 |
+| GET | `/api/cron/sync-movies` | 映画データ一括同期（週次） |
+| GET | `/api/cron/sync-now-playing` | 上映中映画同期（日次） |
+| GET | `/api/cron/sync-now-showing` | 映画.com上映中情報同期（日次） |
+| GET | `/api/cron/update-movies` | 映画評価・人気度更新（日次） |
+| GET | `/api/cron/generate-recommendations` | AIレコメンド生成（日次） |
 
 ## 主要機能のアーキテクチャ
 
@@ -233,3 +292,28 @@ UI Re-render
 - [ ] **Row Level Security (RLS)**: ポリシー設計は？
 - [x] **Realtime機能**: 使用しない - 確定
 - [x] **Storage**: 使用しない（画像はTMDbのみ）- 確定
+
+## Vercel Cron設定
+
+`vercel.json` で以下のCronジョブを定義。すべてUTC基準（JST = UTC+9）。
+
+| パス | スケジュール（UTC） | 実行タイミング（JST） | 用途 |
+|------|---------------------|----------------------|------|
+| `/api/cron/sync-movies` | `0 20 * * 0` | 毎週月曜 05:00 | 映画データ一括同期（週次） |
+| `/api/cron/sync-now-playing` | `0 18 * * *` | 毎日 03:00 | 上映中映画同期（日次） |
+| `/api/cron/update-movies` | `0 18 * * *` | 毎日 03:00 | 映画評価・人気度更新（日次） |
+| `/api/cron/sync-now-showing` | `0 18 * * *` | 毎日 03:00 | 映画.com上映中情報同期（日次） |
+| `/api/cron/generate-recommendations` | `0 3 * * *` | 毎日 12:00 | AIレコメンド生成（日次） |
+
+## セキュリティヘッダー
+
+`next.config.mjs` の `headers()` で全ルート（`/(.*)`）に以下のHTTPヘッダーを付与。
+
+| ヘッダー | 値 | 目的 |
+|----------|----|------|
+| `X-Content-Type-Options` | `nosniff` | MIMEタイプスニッフィング防止 |
+| `X-Frame-Options` | `DENY` | クリックジャッキング防止 |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | リファラー情報の漏洩抑制 |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | ブラウザAPIアクセス制限 |
+| `X-DNS-Prefetch-Control` | `on` | DNSプリフェッチ有効化 |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | HTTPS強制（2年間） |

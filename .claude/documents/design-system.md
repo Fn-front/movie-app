@@ -8,70 +8,94 @@
 
 ---
 
+## 変数システム概要
+
+SCSS変数はすべて `var(--xxx)` 形式でCSSカスタムプロパティを参照します。実際の値は `src/styles/global/_theme.scss` の `:root` ブロックで定義されています。ブレークポイントのみ `@media` クエリで使用するためSCSS変数の直値を維持しています。
+
+```scss
+// 例: _variables.scss の記述パターン
+$primary-500: var(--primary-500);  // CSSカスタムプロパティを参照
+$breakpoint-md: 768px;             // @media用なので直値のまま
+```
+
+---
+
+## rem基準値
+
+`html { font-size: 62.5%; }` を設定することで **1rem = 10px** として扱います（`src/styles/global/_global.scss`）。フォントサイズ・スペーシングの rem 値はすべてこの前提に基づいています。
+
+```scss
+// _theme.scss の例
+--font-size-base: 1.6rem;  // = 16px
+--spacing-4: 1.6rem;       // = 16px
+```
+
+---
+
 ## カラーパレット
 
 ### プライマリカラー（ブルー系）
 メインアクション、リンク、重要な要素に使用
 
 ```scss
-$primary-900: #004a7c;  // 最も濃い
-$primary-800: #005a94;
-$primary-700: #006bac;
-$primary-600: #0d7ec4;
-$primary-500: #2390d6;  // メイン（ブルー）
-$primary-400: #4ca3dd;
-$primary-300: #75b7e5;
-$primary-200: #9ecbed;
-$primary-100: #c7dff5;
-$primary-50:  #e8f3fb;   // 最も薄い
+$primary-900: var(--primary-900);  // #004a7c  最も濃い
+$primary-800: var(--primary-800);  // #005a94
+$primary-700: var(--primary-700);  // #006bac
+$primary-600: var(--primary-600);  // #0d7ec4
+$primary-500: var(--primary-500);  // #1878b9  メイン（ブルー）
+$primary-400: var(--primary-400);  // #4ca3dd
+$primary-300: var(--primary-300);  // #75b7e5
+$primary-200: var(--primary-200);  // #9ecbed
+$primary-100: var(--primary-100);  // #c7dff5
+$primary-50:  var(--primary-50);   // #e8f3fb  最も薄い
 ```
 
 ### セカンダリカラー（オレンジ系）
 アクセント・強調・進行中ステータス用
 
 ```scss
-$secondary-900: #cc7700;
-$secondary-800: #e68600;
-$secondary-700: #ff9500;
-$secondary-600: #ff9600;  // メイン（オレンジ）
-$secondary-500: #ffa31a;
-$secondary-400: #ffb044;
-$secondary-300: #ffbd6e;
-$secondary-200: #ffca98;
-$secondary-100: #ffd7c2;
-$secondary-50:  #fff0e5;
+$secondary-900: var(--secondary-900);  // #cc7700
+$secondary-800: var(--secondary-800);  // #e68600
+$secondary-700: var(--secondary-700);  // #ff9500
+$secondary-600: var(--secondary-600);  // #ff9600  メイン（オレンジ）
+$secondary-500: var(--secondary-500);  // #ffa31a
+$secondary-400: var(--secondary-400);  // #ffb044
+$secondary-300: var(--secondary-300);  // #ffbd6e
+$secondary-200: var(--secondary-200);  // #ffca98
+$secondary-100: var(--secondary-100);  // #ffd7c2
+$secondary-50:  var(--secondary-50);   // #fff0e5
 ```
 
 ### ダークブルーグレー（ナビゲーション・サイドバー用）
 ヘッダー・サイドバー・フッター用の落ち着いた色
 
 ```scss
-$dark-blue-900: #1a2332;
-$dark-blue-800: #232d3f;
-$dark-blue-700: #2d3748;
-$dark-blue-600: #2f3e51;  // メイン（ナビゲーション・サイドバー）
-$dark-blue-500: #3d4f65;
-$dark-blue-400: #546479;
-$dark-blue-300: #6b798d;
-$dark-blue-200: #8895a8;
-$dark-blue-100: #a5b1c2;
-$dark-blue-50:  #dce1e8;
+$dark-blue-900: var(--dark-blue-900);  // #1a2332
+$dark-blue-800: var(--dark-blue-800);  // #232d3f
+$dark-blue-700: var(--dark-blue-700);  // #2d3748
+$dark-blue-600: var(--dark-blue-600);  // #2f3e51  メイン（ナビゲーション・サイドバー）
+$dark-blue-500: var(--dark-blue-500);  // #3d4f65
+$dark-blue-400: var(--dark-blue-400);  // #546479
+$dark-blue-300: var(--dark-blue-300);  // #6b798d
+$dark-blue-200: var(--dark-blue-200);  // #8895a8
+$dark-blue-100: var(--dark-blue-100);  // #a5b1c2
+$dark-blue-50:  var(--dark-blue-50);   // #dce1e8
 ```
 
 ### グレースケール
 テキスト・背景・ボーダー用
 
 ```scss
-$gray-900: #111111;  // ほぼ黒
-$gray-800: #1f1f1f;
-$gray-700: #2d2d2d;
-$gray-600: #444444;
-$gray-500: #6b6b6b;
-$gray-400: #999999;
-$gray-300: #c4c4c4;
-$gray-200: #e0e0e0;
-$gray-100: #f5f5f5;
-$gray-50:  #fafafa;  // ほぼ白
+$gray-900: var(--gray-900);  // #111111  ほぼ黒
+$gray-800: var(--gray-800);  // #1f1f1f
+$gray-700: var(--gray-700);  // #2d2d2d
+$gray-600: var(--gray-600);  // #444444
+$gray-500: var(--gray-500);  // #6b6b6b
+$gray-400: var(--gray-400);  // #999999
+$gray-300: var(--gray-300);  // #c4c4c4
+$gray-200: var(--gray-200);  // #e0e0e0
+$gray-100: var(--gray-100);  // #f5f5f5
+$gray-50:  var(--gray-50);   // #fafafa  ほぼ白
 ```
 
 ### セマンティックカラー
@@ -79,24 +103,50 @@ $gray-50:  #fafafa;  // ほぼ白
 
 ```scss
 // Success
-$success-dark:  #0d7c4a;
-$success-main:  #10b981;
-$success-light: #6ee7b7;
+$success-dark:  var(--success-dark);   // #0d7c4a
+$success-main:  var(--success-main);   // #10b981
+$success-light: var(--success-light);  // #6ee7b7
 
 // Warning
-$warning-dark:  #d97706;
-$warning-main:  #f59e0b;
-$warning-light: #fbbf24;
+$warning-dark:  var(--warning-dark);   // #d97706
+$warning-main:  var(--warning-main);   // #f59e0b
+$warning-light: var(--warning-light);  // #fbbf24
 
 // Error
-$error-dark:    #b91c1c;
-$error-main:    #ef4444;
-$error-light:   #f87171;
+$error-dark:    var(--error-dark);     // #b91c1c
+$error-main:    var(--error-main);     // #ef4444
+$error-light:   var(--error-light);    // #f87171
 
 // Info
-$info-dark:     #1e40af;
-$info-main:     #3b82f6;
-$info-light:    #60a5fa;
+$info-dark:     var(--info-dark);      // #1e40af
+$info-main:     var(--info-main);      // #3b82f6
+$info-light:    var(--info-light);     // #60a5fa
+```
+
+### セマンティック変数（テーマ対応）
+ライト/ダークモードで値が切り替わるセマンティック変数。`_variables.scss` から参照し、コンポーネントで使用する。
+
+```scss
+// テキストカラー
+$text-primary:   var(--text-primary);    // ライト: #111111 / ダーク: #f5f5f5
+$text-secondary: var(--text-secondary);  // ライト: #6b6b6b / ダーク: #999999
+$text-disabled:  var(--text-disabled);   // ライト: #999999 / ダーク: #6b6b6b
+$text-inverse:   var(--text-inverse);    // 常時: #ffffff
+
+// 背景色
+$background-default:   var(--background-default);   // ライト: #fafafa / ダーク: #111111
+$background-paper:     var(--background-paper);     // ライト: #ffffff / ダーク: #1f1f1f
+$background-secondary: var(--background-secondary); // ライト: #f5f5f5 / ダーク: #2d2d2d
+$background-disabled:  var(--background-disabled);  // ライト: #f5f5f5
+
+// オーバーレイ
+$overlay-light:  var(--overlay-light);   // rgba(0,0,0,0.1)
+$overlay-medium: var(--overlay-medium);  // rgba(0,0,0,0.5)
+$overlay-dark:   var(--overlay-dark);    // rgba(0,0,0,0.6)
+$overlay-darker: var(--overlay-darker);  // rgba(0,0,0,0.8)
+
+// ボーダー
+$border-color: var(--border-color);  // ライト: #c4c4c4 / ダーク: #444444
 ```
 
 ---
@@ -111,16 +161,20 @@ $font-family-mono: 'Courier New', monospace;
 ```
 
 ### フォントサイズ
+
+`html { font-size: 62.5%; }` により 1rem = 10px として計算します。
+
 ```scss
-$font-size-xs:   0.75rem;   // 12px
-$font-size-sm:   0.875rem;  // 14px
-$font-size-base: 1rem;      // 16px
-$font-size-lg:   1.125rem;  // 18px
-$font-size-xl:   1.25rem;   // 20px
-$font-size-2xl:  1.5rem;    // 24px
-$font-size-3xl:  1.875rem;  // 30px
-$font-size-4xl:  2.25rem;   // 36px
-$font-size-5xl:  3rem;      // 48px
+$font-size-2xs: var(--font-size-2xs);  // 1rem   = 10px  ※追加変数
+$font-size-xs:  var(--font-size-xs);   // 1.2rem = 12px
+$font-size-sm:  var(--font-size-sm);   // 1.4rem = 14px
+$font-size-base: var(--font-size-base); // 1.6rem = 16px
+$font-size-lg:  var(--font-size-lg);   // 1.8rem = 18px
+$font-size-xl:  var(--font-size-xl);   // 2rem   = 20px
+$font-size-2xl: var(--font-size-2xl);  // 2.4rem = 24px
+$font-size-3xl: var(--font-size-3xl);  // 3rem   = 30px
+$font-size-4xl: var(--font-size-4xl);  // 3.6rem = 36px
+$font-size-5xl: var(--font-size-5xl);  // 4.8rem = 48px
 ```
 
 ### フォントウェイト
@@ -227,10 +281,11 @@ $duration-slow:   500ms;
 
 ### 基本トランジション
 ```scss
-$transition-all:    all $duration-normal $ease-in-out;
-$transition-color:  color $duration-fast $ease-in-out;
-$transition-bg:     background-color $duration-fast $ease-in-out;
-$transition-shadow: box-shadow $duration-normal $ease-in-out;
+$transition-all:            var(--transition-all);     // all 300ms ease-in-out
+$transition-color:          var(--transition-color);   // color 150ms ease-in-out
+$transition-bg:             var(--transition-bg);      // background-color 150ms ease-in-out
+$transition-shadow:         var(--transition-shadow);  // box-shadow 300ms ease-in-out
+$transition-duration-base:  var(--duration-normal);    // 300ms（汎用ショートハンド）
 ```
 
 ---
@@ -348,10 +403,23 @@ $z-index-tooltip:   1070;
 ## 確認が必要な事項
 
 ### カラーパレット
-- [x] **プライマリカラー**: ブルー系（#2390d6）- 確定
+- [x] **プライマリカラー**: ブルー系（#1878b9）- 確定
 - [x] **セカンダリカラー**: オレンジ系（#ff9600）- 確定
 - [x] **ナビゲーション**: ダークブルーグレー（#2f3e51）- 確定
-- [ ] **ダークモード**: 対応する？その場合の色設定は？
+- [x] **ダークモード**: 実装済み（`[data-theme='dark']` セレクタで切り替え）
+
+### ダークモード実装詳細
+`src/styles/global/_theme.scss` に `[data-theme='dark']` セレクタを定義済み。`html` 要素に `data-theme="dark"` 属性を付与することで切り替わる。上書きするカスタムプロパティは以下の通り：
+
+| 変数 | ライトモード | ダークモード |
+|---|---|---|
+| `--text-primary` | `--gray-900`（#111111） | `--gray-100`（#f5f5f5） |
+| `--text-secondary` | `--gray-500`（#6b6b6b） | `--gray-400`（#999999） |
+| `--text-disabled` | `--gray-400`（#999999） | `--gray-500`（#6b6b6b） |
+| `--background-default` | `--gray-50`（#fafafa） | `--gray-900`（#111111） |
+| `--background-paper` | `#ffffff` | `--gray-800`（#1f1f1f） |
+| `--background-secondary` | `--gray-100`（#f5f5f5） | `--gray-700`（#2d2d2d） |
+| `--border-color` | `--gray-300`（#c4c4c4） | `--gray-600`（#444444） |
 
 ### タイポグラフィ
 - [x] **日本語フォント**: Noto Sans JP - 確定

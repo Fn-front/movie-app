@@ -4,7 +4,7 @@
 
 'use client';
 
-import { memo, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 function makeQueryClient(): QueryClient {
@@ -39,14 +39,10 @@ interface AppQueryProviderProps {
   children: ReactNode;
 }
 
-export const AppQueryProvider = memo(function AppQueryProvider({
-  children,
-}: AppQueryProviderProps) {
+export function AppQueryProvider({ children }: AppQueryProviderProps) {
   const queryClient = getQueryClient();
 
   return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
-});
-
-AppQueryProvider.displayName = 'AppQueryProvider';
+}

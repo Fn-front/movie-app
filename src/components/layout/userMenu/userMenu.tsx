@@ -96,7 +96,9 @@ export const UserMenu = memo(function UserMenu() {
             <span className={styles.c_user_menu__item_icon}>
               <IoSettingsOutline />
             </span>
-            <span className={styles.c_user_menu__item_label}>{MENU_LABELS.SETTINGS}</span>
+            <span className={styles.c_user_menu__item_label}>
+              {MENU_LABELS.SETTINGS}
+            </span>
             <span className={styles.c_user_menu__item_arrow}>
               <IoChevronForward />
             </span>
@@ -113,7 +115,9 @@ export const UserMenu = memo(function UserMenu() {
             <span className={styles.c_user_menu__item_icon}>
               <IoLogOutOutline />
             </span>
-            <span className={styles.c_user_menu__item_label}>{MENU_LABELS.LOGOUT}</span>
+            <span className={styles.c_user_menu__item_label}>
+              {MENU_LABELS.LOGOUT}
+            </span>
           </DropdownMenuPrimitive.Item>
         </DropdownMenuPrimitive.Content>
       </DropdownMenuPrimitive.Portal>

@@ -31,7 +31,6 @@ export interface NowPlayingSyncResult {
   errors: string[];
 }
 
-
 /**
  * TMDb now_playing から映画を取得し movie_cache に同期する
  *

@@ -2,7 +2,12 @@
  * TMDb API クライアント
  */
 
-import { API, PAGINATION, TMDB_ENDPOINTS, TMDB_RETRY_CONFIG } from '@/constants';
+import {
+  API,
+  PAGINATION,
+  TMDB_ENDPOINTS,
+  TMDB_RETRY_CONFIG,
+} from '@/constants';
 import type {
   Movie,
   MovieDetail,
@@ -22,7 +27,6 @@ const TMDB_ACCESS_TOKEN = process.env.NEXT_PUBLIC_TMDB_API_KEY;
 if (!TMDB_ACCESS_TOKEN) {
   throw new Error('NEXT_PUBLIC_TMDB_API_KEY is not defined');
 }
-
 
 /**
  * TMDb専用Axiosインスタンス

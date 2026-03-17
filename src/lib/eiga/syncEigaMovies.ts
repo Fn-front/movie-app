@@ -92,7 +92,6 @@ export function findBestMatch(
   return bestMovie;
 }
 
-
 /**
  * リバイバル上映かどうかを判定する
  *

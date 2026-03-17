@@ -1,5 +1,5 @@
 /**
- * OpenAI APIを使用した原題提案ロジック
+ * OpenAI Responses APIを使用した原題提案ロジック（Web検索付き）
  */
 
 import { openAiTitleSuggestionsResponseSchema } from '@/schema/titleSuggestion';
@@ -14,6 +14,7 @@ function buildSystemPrompt(): string {
 
   return `あなたは映画タイトルの翻訳エキスパートです。
 ユーザーが入力した日本語のキーワードに対して、関連する映画の原題（英語タイトル）の候補をすべて回答してください。
+Web検索で「{入力キーワード} 映画 原題」を検索し、最新の映画情報も含めてください。
 
 現在の日付: ${today}
 
@@ -32,7 +33,7 @@ function buildSystemPrompt(): string {
 }
 
 /**
- * OpenAI APIを呼び出して原題候補を推測する
+ * OpenAI Responses APIを呼び出して原題候補を推測する（Web検索付き）
  *
  * @param query - 検索キーワード（邦題）
  * @returns 推測された原題候補の配列、失敗時は空配列
@@ -47,17 +48,33 @@ export async function fetchTitleSuggestionsFromOpenAI(
   }
 
   try {
-    const response = await client.chat.completions.create({
+    const response = await client.responses.create({
       model: getOpenAIModel(),
-      messages: [
-        { role: 'system', content: buildSystemPrompt() },
-        { role: 'user', content: `映画タイトル: ${query}` },
-      ],
-      response_format: { type: 'json_object' },
+      instructions: buildSystemPrompt(),
+      input: `映画タイトル: ${query}`,
+      tools: [{ type: 'web_search_preview' }],
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'title_suggestions',
+          schema: {
+            type: 'object',
+            properties: {
+              suggestions: {
+                type: 'array',
+                items: { type: 'string' },
+              },
+            },
+            required: ['suggestions'],
+            additionalProperties: false,
+          },
+          strict: true,
+        },
+      },
       temperature: 0.2,
     });
 
-    const content = response.choices[0]?.message?.content;
+    const content = response.output_text;
     if (!content) {
       console.error('OpenAI returned empty response for title suggestion');
       return [];

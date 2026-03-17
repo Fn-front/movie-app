@@ -220,8 +220,15 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
       );
     }
 
+    const rootClassName = [
+      styles.c_movie_detail,
+      isVideoDialogOpen && styles.c_movie_detail__dimmed,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
     return (
-      <div className={styles.c_movie_detail}>
+      <div className={rootClassName}>
         {backdropUrl && (
           <div className={styles.c_movie_detail__backdrop}>
             <Image

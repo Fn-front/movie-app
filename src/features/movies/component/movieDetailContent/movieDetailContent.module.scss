@@ -5,6 +5,12 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  transition: opacity $duration-normal $ease-in-out;
+
+  // 動画ダイアログ表示中の透過
+  &__dimmed {
+    opacity: 0.5;
+  }
 
   // ローディング
   &__loading {

@@ -182,7 +182,7 @@ describe('TMDb APIクライアント', () => {
       await getMovieDetail(123);
 
       expect(mockGet).toHaveBeenCalledWith('/movie/123', {
-        params: { append_to_response: 'credits,watch/providers' },
+        params: { append_to_response: 'credits,watch/providers,videos' },
       });
     });
 
@@ -193,7 +193,7 @@ describe('TMDb APIクライアント', () => {
       await getMovieDetail('456');
 
       expect(mockGet).toHaveBeenCalledWith('/movie/456', {
-        params: { append_to_response: 'credits,watch/providers' },
+        params: { append_to_response: 'credits,watch/providers,videos' },
       });
     });
 

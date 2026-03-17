@@ -5,10 +5,13 @@
 
 'use client';
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useState } from 'react';
 
 import { Modal } from '@/components/ui/modal/modal';
 import { MovieDetailContent } from '@/features/movies/component/movieDetailContent/movieDetailContent';
+import { cn } from '@/utils/cn';
+
+import styles from './movieDetailModal.module.scss';
 
 /**
  * MovieDetailModalコンポーネントのプロパティ
@@ -29,6 +32,8 @@ export interface MovieDetailModalProps {
  */
 export const MovieDetailModal = memo<MovieDetailModalProps>(
   function MovieDetailModal({ movieId, title, showFinancialInfo, onClose }) {
+    const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
+
     const handleOpenChange = useCallback(
       (open: boolean) => {
         if (!open) {
@@ -44,11 +49,13 @@ export const MovieDetailModal = memo<MovieDetailModalProps>(
         onOpenChange={handleOpenChange}
         title={title ?? '映画詳細'}
         size='lg'
+        className={cn(isVideoDialogOpen && styles.c_movie_detail_modal__dimmed)}
       >
         {movieId !== null && (
           <MovieDetailContent
             movieId={movieId}
             showFinancialInfo={showFinancialInfo}
+            onVideoDialogOpenChange={setIsVideoDialogOpen}
           />
         )}
       </Modal>

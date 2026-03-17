@@ -70,6 +70,7 @@ const nextConfig = {
               "img-src 'self' https://image.tmdb.org data: blob:",
               "font-src 'self'",
               "connect-src 'self' https://*.supabase.co",
+              'frame-src https://www.youtube.com',
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",

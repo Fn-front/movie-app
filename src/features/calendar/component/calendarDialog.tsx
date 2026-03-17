@@ -5,13 +5,18 @@
 
 'use client';
 
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import type { DateClickArg } from '@fullcalendar/interaction';
-import type { DatesSetArg, EventContentArg } from '@fullcalendar/core';
+import type {
+  DatesSetArg,
+  EventClickArg,
+  EventContentArg,
+} from '@fullcalendar/core';
 import jaLocale from '@fullcalendar/core/locales/ja';
+import { IoChevronBack, IoChevronForward } from 'react-icons/io5';
 
 import { Modal, ModalBody } from '@/components/ui/modal/modal';
 import { useCalendar } from '@/features/calendar/hooks/useCalendar';
@@ -59,6 +64,8 @@ export const CalendarDialog = memo<CalendarDialogProps>(
       error,
     } = useCalendar();
 
+    const calendarApiRef = useRef<FullCalendar>(null);
+
     // ダイアログを開いた時にキャッシュをクリア
     useEffect(() => {
       if (open) {
@@ -66,9 +73,25 @@ export const CalendarDialog = memo<CalendarDialogProps>(
       }
     }, [open, resetCache]);
 
+    const handlePrev = useCallback(() => {
+      calendarApiRef.current?.getApi().prev();
+    }, []);
+
+    const handleNext = useCallback(() => {
+      calendarApiRef.current?.getApi().next();
+    }, []);
+
     const handleDateClick = useCallback(
       (arg: DateClickArg) => {
         selectDate(arg.date);
+      },
+      [selectDate],
+    );
+
+    const handleEventClick = useCallback(
+      (arg: EventClickArg) => {
+        if (!arg.event.start) return;
+        selectDate(arg.event.start);
       },
       [selectDate],
     );
@@ -107,7 +130,32 @@ export const CalendarDialog = memo<CalendarDialogProps>(
           ) : (
             <>
               <div className={styles.c_calendarDialog__calendar}>
+                <div className={styles.c_calendarDialog__header}>
+                  <button
+                    type='button'
+                    className={styles.c_calendarDialog__navButton}
+                    onClick={handlePrev}
+                    aria-label='前月'
+                  >
+                    <IoChevronBack />
+                  </button>
+                  <span className={styles.c_calendarDialog__title}>
+                    {currentMonth.toLocaleDateString('ja-JP', {
+                      year: 'numeric',
+                      month: 'long',
+                    })}
+                  </span>
+                  <button
+                    type='button'
+                    className={styles.c_calendarDialog__navButton}
+                    onClick={handleNext}
+                    aria-label='次月'
+                  >
+                    <IoChevronForward />
+                  </button>
+                </div>
                 <FullCalendar
+                  ref={calendarApiRef}
                   plugins={[dayGridPlugin, interactionPlugin]}
                   initialView='dayGridMonth'
                   locale={jaLocale}
@@ -116,11 +164,8 @@ export const CalendarDialog = memo<CalendarDialogProps>(
                   dateClick={handleDateClick}
                   datesSet={handleDatesSetCallback}
                   eventContent={renderEventContent}
-                  headerToolbar={{
-                    left: 'prev',
-                    center: 'title',
-                    right: 'next',
-                  }}
+                  eventClick={handleEventClick}
+                  headerToolbar={false}
                   height='auto'
                   dayMaxEvents={3}
                   fixedWeekCount={false}

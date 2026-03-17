@@ -41,23 +41,32 @@ test.describe('カレンダー', () => {
       timeout: 10000,
     });
 
-    // FullCalendarのタイトル（月名）を取得
-    const title = dialog.locator('.fc-toolbar-title');
-    const initialTitle = await title.textContent();
+    // カスタムヘッダーのタイトル（月名）を取得
+    const nextButton = dialog.getByRole('button', { name: '次月' });
+    const prevButton = dialog.getByRole('button', { name: '前月' });
+
+    // 次月・前月ボタンの間にあるタイトルテキストを取得
+    const initialTitle = await nextButton
+      .locator('..')
+      .locator('span')
+      .first()
+      .textContent();
 
     // 次月ボタンをクリック
-    const nextButton = dialog.locator('.fc-next-button');
     await nextButton.click();
 
     // タイトルが変わることを確認
-    await expect(title).not.toHaveText(initialTitle ?? '');
+    await expect(
+      nextButton.locator('..').locator('span').first(),
+    ).not.toHaveText(initialTitle ?? '');
 
     // 前月ボタンをクリック
-    const prevButton = dialog.locator('.fc-prev-button');
     await prevButton.click();
 
     // 元のタイトルに戻ることを確認
-    await expect(title).toHaveText(initialTitle ?? '');
+    await expect(nextButton.locator('..').locator('span').first()).toHaveText(
+      initialTitle ?? '',
+    );
   });
 
   test('ESCキーでダイアログが閉じる', async ({ page }) => {

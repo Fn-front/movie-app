@@ -22,19 +22,15 @@
   padding: $spacing-4;
 }
 
-// FullCalendar カスタムスタイル（グローバルセレクタ）
-.c_calendarDialog__calendar :global(.fc) {
-  font-family: $font-family-base;
-  font-size: $font-size-sm;
+// カスタムヘッダー（React Iconsによるナビゲーション）
+.c_calendarDialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-2 $spacing-2 $spacing-4;
 }
 
-.c_calendarDialog__calendar :global(.fc .fc-toolbar-title) {
-  font-size: $font-size-base;
-  font-weight: $font-weight-bold;
-  color: $text-primary;
-}
-
-.c_calendarDialog__calendar :global(.fc .fc-button) {
+.c_calendarDialog__navButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -45,36 +41,32 @@
   border-radius: $border-radius-md;
   background-color: $background-paper;
   color: $text-primary;
+  font-size: $font-size-lg;
   cursor: pointer;
   transition: $transition-bg;
 }
 
-.c_calendarDialog__calendar :global(.fc .fc-button:hover) {
+.c_calendarDialog__navButton:hover {
   background-color: $background-secondary;
   border-color: $border-color;
 }
 
-.c_calendarDialog__calendar :global(.fc .fc-button:focus-visible) {
+.c_calendarDialog__navButton:focus-visible {
   outline: $border-width-2 solid $primary-500;
   outline-offset: 2px;
   box-shadow: none;
 }
 
-.c_calendarDialog__calendar :global(.fc .fc-button:focus) {
-  box-shadow: none;
-}
-
-.c_calendarDialog__calendar :global(.fc .fc-button:active) {
-  background-color: $background-secondary;
-}
-
-.c_calendarDialog__calendar
-  :global(.fc .fc-button-primary:not(:disabled).fc-button-active),
-.c_calendarDialog__calendar
-  :global(.fc .fc-button-primary:not(:disabled):active) {
-  background-color: $background-secondary;
-  border-color: $border-color;
+.c_calendarDialog__title {
+  font-size: $font-size-base;
+  font-weight: $font-weight-bold;
   color: $text-primary;
+}
+
+// FullCalendar カスタムスタイル（グローバルセレクタ）
+.c_calendarDialog__calendar :global(.fc) {
+  font-family: $font-family-base;
+  font-size: $font-size-sm;
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-col-header-cell-cushion) {
@@ -150,6 +142,10 @@
 
 .c_calendarDialog__calendar :global(.fc .fc-scrollgrid) {
   border-color: $border-color;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-event) {
+  cursor: pointer;
 }
 
 .c_calendarDialog__event {

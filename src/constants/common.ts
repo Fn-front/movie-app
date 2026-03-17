@@ -102,6 +102,8 @@ export const ROUTES = {
   FAVORITES: '/favorites',
   /** ウォッチリスト */
   WATCHLIST: '/watchlist',
+  /** 認証エラー */
+  AUTH_ERROR: '/auth/error',
   /** 映画詳細 */
   MOVIE_DETAIL: (id: string | number) => `/movies/${id}`,
 } as const;

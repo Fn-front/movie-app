@@ -8,7 +8,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { HTTP_STATUS, ERROR_CODE, AUTH_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  AUTH_ERROR_MESSAGES,
+  CRON_ERROR_MESSAGES,
+} from '@/constants';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
 
 export const dynamic = 'force-dynamic';
@@ -45,7 +50,7 @@ export async function GET(request: NextRequest) {
         success: false,
         error: {
           code: ERROR_CODE.SERVER_ERROR,
-          message: 'Now Playing映画同期中にエラーが発生しました。',
+          message: CRON_ERROR_MESSAGES.SYNC_NOW_PLAYING,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

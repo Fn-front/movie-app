@@ -27,6 +27,8 @@ import {
   MIN_POPULARITY,
   MOVIES_ERROR_MESSAGES,
   ERROR_CODE,
+  GENRE_CACHE_DURATION_MS,
+  DISCOVER_API_MAX_PAGES,
 } from '@/constants';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
@@ -55,7 +57,6 @@ function formatDateToString(date: Date): string {
  */
 let genreCache: { data: Record<number, string>; cachedAt: number } | null =
   null;
-const GENRE_CACHE_DURATION = 24 * 60 * 60 * 1000;
 
 /** TMDb日本語訳の誤訳を自然な日本語に上書きするマップ */
 const GENRE_NAME_OVERRIDES: Record<string, string> = {
@@ -70,7 +71,7 @@ const GENRE_NAME_OVERRIDES: Record<string, string> = {
 async function getGenreMap(): Promise<Record<number, string>> {
   const now = Date.now();
 
-  if (genreCache && now - genreCache.cachedAt < GENRE_CACHE_DURATION) {
+  if (genreCache && now - genreCache.cachedAt < GENRE_CACHE_DURATION_MS) {
     return genreCache.data;
   }
 
@@ -196,7 +197,8 @@ export async function GET(request: Request) {
           fetchDateLte = formatDateToString(futureDate);
         }
 
-        const withReleaseType = RELEASE_TYPE_MAP[release_type] || '2|3';
+        const withReleaseType =
+          RELEASE_TYPE_MAP[release_type] || RELEASE_TYPE_MAP.theatrical;
 
         // 別のrelease_typeで既に存在するIDを取得（重複防止）
         const { data: existingOtherType } = await supabase
@@ -208,9 +210,8 @@ export async function GET(request: Request) {
           (existingOtherType ?? []).map((row: { id: number }) => row.id),
         );
 
-        // TMDb discover APIで映画を取得（最大5ページ）
-        const maxPages = 5;
-        for (let p = 1; p <= maxPages; p++) {
+        // TMDb discover APIで映画を取得
+        for (let p = 1; p <= DISCOVER_API_MAX_PAGES; p++) {
           const tmdbResponse = await discoverMovies({
             page: p,
             'release_date.gte': fetchDateGte,

@@ -20,6 +20,7 @@ import {
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_MAX_RETRIES,
   RECOMMENDATIONS_ACTIVE_USER_DAYS,
+  CRON_ERROR_MESSAGES,
 } from '@/constants';
 import { createServiceRoleClient } from '@/helpers/supabase';
 import {
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
           success: false,
           error: {
             code: ERROR_CODE.SERVER_ERROR,
-            message: 'ユーザー取得に失敗しました',
+            message: CRON_ERROR_MESSAGES.FETCH_USERS_FAILED,
           },
         },
         { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
           success: false,
           error: {
             code: ERROR_CODE.SERVER_ERROR,
-            message: 'アクティブユーザー取得に失敗しました',
+            message: CRON_ERROR_MESSAGES.FETCH_ACTIVE_USERS_FAILED,
           },
         },
         { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
@@ -326,7 +327,7 @@ export async function GET(request: NextRequest) {
         success: false,
         error: {
           code: ERROR_CODE.SERVER_ERROR,
-          message: 'レコメンド生成中にエラーが発生しました。',
+          message: CRON_ERROR_MESSAGES.GENERATE_RECOMMENDATIONS,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

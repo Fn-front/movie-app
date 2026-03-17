@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 
+import styles from './error.module.scss';
+
 interface ErrorProps {
   error: Error & { digest?: string };
   reset: () => void;
@@ -14,44 +16,15 @@ export default function Error({ error, reset }: ErrorProps) {
   }, [error]);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        padding: '1rem',
-        textAlign: 'center',
-      }}
-    >
-      <h1
-        style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem' }}
-      >
-        エラーが発生しました
-      </h1>
-      <p style={{ marginBottom: '2rem', color: '#666' }}>
+    <div className={styles.c_error}>
+      <h1 className={styles.c_error__title}>エラーが発生しました</h1>
+      <p className={styles.c_error__message}>
         申し訳ございません。予期しないエラーが発生しました。
       </p>
       {error.digest && (
-        <p
-          style={{ fontSize: '0.875rem', color: '#999', marginBottom: '2rem' }}
-        >
-          エラーID: {error.digest}
-        </p>
+        <p className={styles.c_error__digest}>エラーID: {error.digest}</p>
       )}
-      <button
-        onClick={reset}
-        style={{
-          padding: '0.75rem 1.5rem',
-          backgroundColor: '#2390d6',
-          color: 'white',
-          border: 'none',
-          borderRadius: '0.25rem',
-          cursor: 'pointer',
-          fontSize: '1rem',
-        }}
-      >
+      <button onClick={reset} className={styles.c_error__button}>
         もう一度試す
       </button>
     </div>

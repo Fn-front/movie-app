@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 
-import { RECOMMENDATIONS_MAX_COUNT } from '@/constants';
+import { RECOMMENDATIONS_MAX_COUNT, MOVIE_YEAR_RANGE } from '@/constants';
 
 /**
  * OpenAIレスポンスの個別レコメンド項目スキーマ
@@ -14,8 +14,8 @@ export const openAiRecommendationItemSchema = z.object({
   year: z
     .number()
     .int('公開年は整数で入力してください')
-    .min(1888, '公開年が不正です')
-    .max(2100, '公開年が不正です'),
+    .min(MOVIE_YEAR_RANGE.MIN, '公開年が不正です')
+    .max(MOVIE_YEAR_RANGE.MAX, '公開年が不正です'),
   reason: z.string().min(1, '推薦理由は必須です'),
 });
 

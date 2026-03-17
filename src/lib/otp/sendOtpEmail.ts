@@ -4,8 +4,14 @@
 
 import { Resend } from 'resend';
 
+import {
+  DEFAULT_FROM_EMAIL,
+  OTP_EMAIL_SUBJECT,
+  buildOtpEmailText,
+} from '@/constants/email';
+
 const resendApiKey = process.env.RESEND_API_KEY;
-const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@example.com';
+const fromEmail = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM_EMAIL;
 
 /**
  * OTPコードをメールで送信
@@ -29,7 +35,7 @@ export async function sendOtpEmail(
     const { error } = await resend.emails.send({
       from: `Movie App <${fromEmail}>`,
       to: email,
-      subject: '[Movie App] 確認コード',
+      subject: OTP_EMAIL_SUBJECT,
       text: buildOtpEmailText(code),
     });
 
@@ -43,16 +49,4 @@ export async function sendOtpEmail(
     console.error('Failed to send OTP email:', error);
     return false;
   }
-}
-
-/**
- * OTPメール本文を生成
- */
-function buildOtpEmailText(code: string): string {
-  return `Movie Appの確認コードです。
-
-確認コード: ${code}
-
-このコードは10分間有効です。
-心当たりがない場合は、このメールを無視してください。`;
 }

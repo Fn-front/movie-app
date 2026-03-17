@@ -13,6 +13,7 @@ import {
   ERROR_CODE,
   AUTH_ERROR_MESSAGES,
   MOVIES_SUCCESS_MESSAGES,
+  CRON_ERROR_MESSAGES,
 } from '@/constants';
 import { updateMoviesCacheByBatch } from '@/lib/sync/updateMoviesCacheByBatch';
 
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
         success: false,
         error: {
           code: ERROR_CODE.SERVER_ERROR,
-          message: '映画キャッシュのバッチ更新中にエラーが発生しました。',
+          message: CRON_ERROR_MESSAGES.UPDATE_MOVIES,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

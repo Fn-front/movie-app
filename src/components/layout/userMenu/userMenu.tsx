@@ -15,6 +15,8 @@ import {
   IoChevronForward,
 } from 'react-icons/io5';
 
+import { MENU_LABELS } from '@/constants';
+
 import { useUserMenu } from './useUserMenu';
 import styles from './userMenu.module.scss';
 
@@ -94,7 +96,7 @@ export const UserMenu = memo(function UserMenu() {
             <span className={styles.c_user_menu__item_icon}>
               <IoSettingsOutline />
             </span>
-            <span className={styles.c_user_menu__item_label}>設定</span>
+            <span className={styles.c_user_menu__item_label}>{MENU_LABELS.SETTINGS}</span>
             <span className={styles.c_user_menu__item_arrow}>
               <IoChevronForward />
             </span>
@@ -111,7 +113,7 @@ export const UserMenu = memo(function UserMenu() {
             <span className={styles.c_user_menu__item_icon}>
               <IoLogOutOutline />
             </span>
-            <span className={styles.c_user_menu__item_label}>ログアウト</span>
+            <span className={styles.c_user_menu__item_label}>{MENU_LABELS.LOGOUT}</span>
           </DropdownMenuPrimitive.Item>
         </DropdownMenuPrimitive.Content>
       </DropdownMenuPrimitive.Portal>

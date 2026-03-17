@@ -39,3 +39,14 @@
 
 #### パフォーマンス
 - [x] #158 — barrel export 見直し
+
+#### リファクタリング
+- [x] #209 — 映画API Route: マジックナンバー定数化
+- [x] #210 — OpenAI temperature設定を定数に抽出
+- [x] #211 — OTPメール送信のハードコード値を定数に抽出
+- [x] #212 — middleware/auth設定のハードコードパスを定数に統一
+- [x] #213 — TMDb APIクライアントのリトライ設定を定数に抽出
+- [x] #214 — 映画.comスクレイピングのハードコード値を定数に抽出
+- [x] #215 — error.tsx / not-found.tsx のインラインスタイルをSCSS Modulesに変換
+- [x] #216 — CRONルート・APIルートのエラーメッセージを定数に抽出
+- [x] #217 — sideNav / mobileDrawer / userMenu のナビゲーション項目を共通定数化

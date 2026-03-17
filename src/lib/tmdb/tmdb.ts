@@ -55,9 +55,7 @@ tmdbClient.interceptors.response.use(undefined, async (error: AxiosError) => {
   if (
     !config ||
     !status ||
-    !(TMDB_RETRY_CONFIG.RETRYABLE_STATUS_CODES as readonly number[]).includes(
-      status,
-    )
+    !TMDB_RETRY_CONFIG.RETRYABLE_STATUS_CODES.includes(status)
   ) {
     return Promise.reject(error);
   }

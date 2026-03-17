@@ -21,13 +21,3 @@ export const CRON_ERROR_MESSAGES = {
   /** アクティブユーザー取得失敗 */
   FETCH_ACTIVE_USERS_FAILED: 'アクティブユーザー取得に失敗しました',
 } as const;
-
-/**
- * 共通APIエラーメッセージ
- */
-export const API_ERROR_MESSAGES = {
-  /** バリデーションエラー */
-  VALIDATION_ERROR: 'バリデーションエラー',
-  /** サーバーエラー */
-  SERVER_ERROR: 'サーバーエラーが発生しました',
-} as const;

@@ -12,6 +12,7 @@
   - React.memo + useCallback必須
   - Radix UI使用
   - ロジックはhooksに分離
+  - クラス名結合は `cn()` ヘルパー（`@/utils/cn`）を使用（内部でclsxを利用）
 
 - `/api-route` - Next.js API Route作成
   - 統一エラーレスポンス形式

@@ -4,11 +4,12 @@
 
 import { createClient } from '@supabase/supabase-js';
 
+import {
+  RELEASE_TYPE_MAP,
+  NOW_SHOWING_RELEASE_DATE_RANGE_MONTHS,
+} from '@/constants/movies';
 import { NOW_SHOWING_DISPLAY_COUNT } from '@/constants/nowShowing';
 import { discoverMovies } from '@/lib/tmdb/tmdb';
-
-/** 公開日範囲（現在から過去何ヶ月分を対象とするか） */
-const RELEASE_DATE_RANGE_MONTHS = 3;
 
 /**
  * 同期結果の型
@@ -51,11 +52,13 @@ export async function syncNowShowingMovies(): Promise<NowShowingSyncResult> {
   // 1. TMDb Discover API から日本で劇場公開中の人気映画を取得
   const now = new Date();
   const rangeStart = new Date(now);
-  rangeStart.setMonth(rangeStart.getMonth() - RELEASE_DATE_RANGE_MONTHS);
+  rangeStart.setMonth(
+    rangeStart.getMonth() - NOW_SHOWING_RELEASE_DATE_RANGE_MONTHS,
+  );
 
   const response = await discoverMovies({
     sort_by: 'popularity.desc',
-    with_release_type: '2|3',
+    with_release_type: RELEASE_TYPE_MAP.theatrical,
     'release_date.gte': formatDate(rangeStart),
     'release_date.lte': formatDate(now),
   });

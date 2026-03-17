@@ -9,7 +9,7 @@ import GitHub from 'next-auth/providers/github';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
-import { AUTH_ERROR_MESSAGES, SESSION_CONFIG } from '@/constants';
+import { AUTH_ERROR_MESSAGES, SESSION_CONFIG, ROUTES } from '@/constants';
 import { OTP_CONFIG } from '@/constants/otp';
 import { isSessionExpired } from '@/lib/auth/sessionExpiry';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
@@ -167,8 +167,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
 
   pages: {
-    signIn: '/auth/signin',
-    error: '/auth/error',
+    signIn: ROUTES.LOGIN,
+    error: ROUTES.AUTH_ERROR,
   },
 
   callbacks: {
@@ -340,9 +340,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // パスワード変更によるセッション無効化チェック（5分間隔）
       if (token.id && supabase && !token.invalidated) {
         const now = Date.now();
-        const CHECK_INTERVAL = 5 * 60 * 1000; // 5分
 
-        if (now - (token.lastPasswordCheck || 0) > CHECK_INTERVAL) {
+        if (
+          now - (token.lastPasswordCheck || 0) >
+          SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS
+        ) {
           const { data } = await supabase
             .from('users')
             .select('password_changed_at')

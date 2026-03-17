@@ -102,6 +102,8 @@ export const ROUTES = {
   FAVORITES: '/favorites',
   /** ウォッチリスト */
   WATCHLIST: '/watchlist',
+  /** 認証エラー */
+  AUTH_ERROR: '/auth/error',
   /** 映画詳細 */
   MOVIE_DETAIL: (id: string | number) => `/movies/${id}`,
 } as const;
@@ -150,6 +152,16 @@ export const ERROR_MESSAGES = {
   UNKNOWN_ERROR: '予期しないエラーが発生しました。',
   /** データ取得エラー */
   FETCH_ERROR: 'データの取得に失敗しました。',
+} as const;
+
+/**
+ * 共通APIエラーメッセージ
+ */
+export const API_ERROR_MESSAGES = {
+  /** バリデーションエラー */
+  VALIDATION_ERROR: 'バリデーションエラー',
+  /** サーバーエラー */
+  SERVER_ERROR: 'サーバーエラーが発生しました',
 } as const;
 
 /**

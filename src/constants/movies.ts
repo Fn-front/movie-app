@@ -131,6 +131,34 @@ export const EIGA_ICAL_URL = 'https://eiga.com/movie/coming.ics';
 export const BATCH_UPDATE_SIZE = 100;
 
 /**
+ * ジャンルキャッシュ有効期間（ミリ秒） — 24時間
+ */
+export const GENRE_CACHE_DURATION_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Discover API 最大ページ数
+ */
+export const DISCOVER_API_MAX_PAGES = 5;
+
+/**
+ * Now Playing 同期 最大ページ数
+ */
+export const NOW_PLAYING_SYNC_MAX_PAGES = 10;
+
+/**
+ * 劇場公開中映画の公開日範囲（月数）
+ */
+export const NOW_SHOWING_RELEASE_DATE_RANGE_MONTHS = 3;
+
+/**
+ * 公開年バリデーション範囲
+ */
+export const MOVIE_YEAR_RANGE = {
+  MIN: 1888,
+  MAX: 2100,
+} as const;
+
+/**
  * 映画APIエラーメッセージ
  */
 export const MOVIES_ERROR_MESSAGES = {

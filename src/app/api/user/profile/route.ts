@@ -16,6 +16,7 @@ import {
   ERROR_CODE,
   PROFILE_ERROR_MESSAGES,
   PROFILE_SUCCESS_MESSAGES,
+  API_ERROR_MESSAGES,
 } from '@/constants';
 
 export async function PUT(request: Request) {
@@ -38,7 +39,7 @@ export async function PUT(request: Request) {
           success: false,
           error: {
             code: ERROR_CODE.VALIDATION_ERROR,
-            message: 'バリデーションエラー',
+            message: API_ERROR_MESSAGES.VALIDATION_ERROR,
             details: result.error.flatten().fieldErrors,
           },
         },

@@ -2,7 +2,12 @@
  * TMDb API クライアント
  */
 
-import { API, PAGINATION, TMDB_ENDPOINTS } from '@/constants';
+import {
+  API,
+  PAGINATION,
+  TMDB_ENDPOINTS,
+  TMDB_RETRY_CONFIG,
+} from '@/constants';
 import type {
   Movie,
   MovieDetail,
@@ -23,12 +28,6 @@ if (!TMDB_ACCESS_TOKEN) {
   throw new Error('NEXT_PUBLIC_TMDB_API_KEY is not defined');
 }
 
-/** リトライ最大回数 */
-const MAX_RETRY_COUNT = 3;
-
-/** リトライ待機時間（ミリ秒） */
-const RETRY_DELAY = 1000;
-
 /**
  * TMDb専用Axiosインスタンス
  */
@@ -43,9 +42,6 @@ const tmdbClient = axios.create({
   },
 });
 
-/** リトライ対象のHTTPステータスコード */
-const RETRYABLE_STATUS_CODES = [429, 503, 504];
-
 /**
  * リトライ可能なエラー時の自動リトライインターセプター
  * - 429: レート制限超過
@@ -56,20 +52,26 @@ tmdbClient.interceptors.response.use(undefined, async (error: AxiosError) => {
   const config = error.config;
   const status = error.response?.status;
 
-  if (!config || !status || !RETRYABLE_STATUS_CODES.includes(status)) {
+  if (
+    !config ||
+    !status ||
+    !TMDB_RETRY_CONFIG.RETRYABLE_STATUS_CODES.includes(status)
+  ) {
     return Promise.reject(error);
   }
 
   const retryCount = (config as { __retryCount?: number }).__retryCount ?? 0;
 
-  if (retryCount >= MAX_RETRY_COUNT) {
+  if (retryCount >= TMDB_RETRY_CONFIG.MAX_RETRY_COUNT) {
     return Promise.reject(error);
   }
 
   (config as { __retryCount?: number }).__retryCount = retryCount + 1;
 
   const retryAfter = error.response?.headers?.['retry-after'];
-  const delay = retryAfter ? Number(retryAfter) * 1000 : RETRY_DELAY;
+  const delay = retryAfter
+    ? Number(retryAfter) * 1000
+    : TMDB_RETRY_CONFIG.RETRY_DELAY_MS;
 
   await new Promise((resolve) => setTimeout(resolve, delay));
 

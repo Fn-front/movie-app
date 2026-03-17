@@ -10,6 +10,7 @@ import {
   ALLOWED_LANGUAGES,
   MIN_POPULARITY,
   MIN_VOTE_AVERAGE,
+  NOW_PLAYING_SYNC_MAX_PAGES,
 } from '@/constants/movies';
 import { getMovieKeywordIds, getNowPlayingMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
@@ -29,9 +30,6 @@ export interface NowPlayingSyncResult {
   /** エラーメッセージ */
   errors: string[];
 }
-
-/** 最大取得ページ数 */
-const MAX_PAGES = 10;
 
 /**
  * TMDb now_playing から映画を取得し movie_cache に同期する
@@ -60,7 +58,7 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
 
   // 1. TMDb now_playing を全ページ取得
   const allMovies: Movie[] = [];
-  for (let page = 1; page <= MAX_PAGES; page++) {
+  for (let page = 1; page <= NOW_PLAYING_SYNC_MAX_PAGES; page++) {
     const response = await getNowPlayingMovies(page);
     if (response.results.length === 0) break;
     allMovies.push(...response.results);

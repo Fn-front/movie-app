@@ -1,0 +1,38 @@
+@use '@/styles/variables' as *;
+
+.c_error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: $spacing-4;
+  text-align: center;
+}
+
+.c_error__title {
+  font-size: $font-size-3xl;
+  font-weight: $font-weight-bold;
+  margin-bottom: $spacing-4;
+}
+
+.c_error__message {
+  margin-bottom: $spacing-8;
+  color: $text-secondary;
+}
+
+.c_error__digest {
+  font-size: $font-size-sm;
+  color: $text-disabled;
+  margin-bottom: $spacing-8;
+}
+
+.c_error__button {
+  padding: $spacing-3 $spacing-6;
+  background-color: $primary-500;
+  color: $text-inverse;
+  border: none;
+  border-radius: $border-radius-md;
+  cursor: pointer;
+  font-size: $font-size-base;
+}

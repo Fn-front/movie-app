@@ -2,7 +2,7 @@
  * OpenAI APIを使用したレコメンド生成ロジック
  */
 
-import { RECOMMENDATIONS_MAX_COUNT } from '@/constants';
+import { RECOMMENDATIONS_MAX_COUNT, OPENAI_CONFIG } from '@/constants';
 import { searchMovies } from '@/lib/tmdb/tmdb';
 import {
   openAiRecommendationsResponseSchema,
@@ -167,7 +167,7 @@ export async function fetchRecommendationsFromOpenAI(
         { role: 'user', content: userPrompt },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.8,
+      temperature: OPENAI_CONFIG.RECOMMENDATIONS_TEMPERATURE,
     });
 
     const content = response.choices[0]?.message?.content;

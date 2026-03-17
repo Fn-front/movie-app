@@ -10,7 +10,12 @@ import { isAxiosError } from 'axios';
 import { getAuthSession } from '@/helpers/auth';
 import { createServiceRoleClient } from '@/helpers/supabase';
 import { getMovieDetail } from '@/lib/tmdb/tmdb';
-import { HTTP_STATUS, ERROR_CODE, MOVIES_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  MOVIES_ERROR_MESSAGES,
+  API_ERROR_MESSAGES,
+} from '@/constants';
 
 /**
  * 映画詳細を取得
@@ -88,7 +93,7 @@ export async function GET(
         success: false,
         error: {
           code: ERROR_CODE.SERVER_ERROR,
-          message: 'サーバーエラーが発生しました',
+          message: API_ERROR_MESSAGES.SERVER_ERROR,
         },
       },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },

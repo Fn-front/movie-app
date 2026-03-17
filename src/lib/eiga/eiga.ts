@@ -6,6 +6,13 @@ import ICAL from 'ical.js';
 import axios from 'axios';
 
 import { EIGA_ICAL_URL } from '@/constants/movies';
+import {
+  EIGA_FETCH_TIMEOUT_MS,
+  EIGA_ORIGINAL_TITLE_TIMEOUT_MS,
+  EIGA_URL_PATTERN,
+  EIGA_ORIGINAL_TITLE_PATTERN,
+  EIGA_ENGLISH_TITLE_PATTERN,
+} from '@/constants/eiga';
 
 /**
  * iCalから抽出した映画情報
@@ -27,7 +34,7 @@ export interface EigaMovie {
 export async function fetchEigaMovies(): Promise<EigaMovie[]> {
   const response = await axios.get<string>(EIGA_ICAL_URL, {
     responseType: 'text',
-    timeout: 30000,
+    timeout: EIGA_FETCH_TIMEOUT_MS,
   });
 
   return parseIcal(response.data);
@@ -63,7 +70,7 @@ export function parseIcal(icalText: string): EigaMovie[] {
     const description = String(
       vevent.getFirstPropertyValue('description') ?? '',
     );
-    const urlMatch = description.match(/https:\/\/eiga\.com\/movie\/\d+\//);
+    const urlMatch = description.match(EIGA_URL_PATTERN);
     const eigaUrl = urlMatch ? urlMatch[0] : null;
 
     movies.push({ title: summary, releaseDate, eigaUrl });
@@ -84,15 +91,15 @@ export async function fetchOriginalTitle(
   try {
     const response = await axios.get<string>(eigaUrl, {
       responseType: 'text',
-      timeout: 10000,
+      timeout: EIGA_ORIGINAL_TITLE_TIMEOUT_MS,
     });
 
     // 「原題または英題：」の後のテキストを抽出
-    const match = response.data.match(/原題(?:または英題)?[：:]\s*([^<\n]+)/);
+    const match = response.data.match(EIGA_ORIGINAL_TITLE_PATTERN);
     if (match) return match[1].trim();
 
     // 「英題：」のみのパターン
-    const engMatch = response.data.match(/英題[：:]\s*([^<\n]+)/);
+    const engMatch = response.data.match(EIGA_ENGLISH_TITLE_PATTERN);
     if (engMatch) return engMatch[1].trim();
 
     return null;

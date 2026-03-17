@@ -2,6 +2,7 @@
  * OpenAI Responses APIを使用した原題提案ロジック（Web検索付き）
  */
 
+import { OPENAI_CONFIG } from '@/constants';
 import { openAiTitleSuggestionsResponseSchema } from '@/schema/titleSuggestion';
 
 import { createOpenAIClient, getOpenAIModel } from './client';
@@ -76,7 +77,7 @@ export async function fetchTitleSuggestionsFromOpenAI(
           strict: true,
         },
       },
-      temperature: 0.2,
+      temperature: OPENAI_CONFIG.TITLE_SUGGESTION_TEMPERATURE,
     });
 
     const content = response.output_text;

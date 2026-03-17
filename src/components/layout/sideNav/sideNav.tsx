@@ -9,29 +9,9 @@ import { memo, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { ROUTES } from '@/constants';
+import { NAV_ITEMS } from '@/constants';
 
 import styles from './sideNav.module.scss';
-
-/**
- * ナビゲーションアイテムの型
- */
-interface NavItem {
-  /** ラベル */
-  label: string;
-  /** リンク先パス */
-  href: string;
-}
-
-/**
- * ナビゲーションアイテム一覧
- */
-const NAV_ITEMS: NavItem[] = [
-  { label: '公開予定', href: ROUTES.UPCOMING },
-  { label: '公開中', href: ROUTES.NOW_SHOWING },
-  { label: 'お気に入り', href: ROUTES.FAVORITES },
-  { label: 'ウォッチリスト', href: ROUTES.WATCHLIST },
-];
 
 /**
  * SideNavコンポーネント

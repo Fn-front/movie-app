@@ -19,6 +19,7 @@ import {
   SUPABASE_ERROR_CODE,
   SETTINGS_ERROR_MESSAGES,
   SETTINGS_SUCCESS_MESSAGES,
+  API_ERROR_MESSAGES,
 } from '@/constants';
 
 /** デフォルトのユーザー設定 */
@@ -105,7 +106,7 @@ export async function PUT(request: Request) {
           success: false,
           error: {
             code: ERROR_CODE.VALIDATION_ERROR,
-            message: 'バリデーションエラー',
+            message: API_ERROR_MESSAGES.VALIDATION_ERROR,
             details: result.error.flatten().fieldErrors,
           },
         },

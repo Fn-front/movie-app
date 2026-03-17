@@ -22,44 +22,38 @@ import {
   IoCloseOutline,
 } from 'react-icons/io5';
 
-import { ROUTES } from '@/constants';
+import { ROUTES, NAV_ITEMS, MENU_LABELS } from '@/constants';
 
 import styles from './mobileDrawer.module.scss';
 
 /**
- * ナビゲーションアイテムの型
+ * ナビゲーションアイテムの型（アイコン付き）
  */
-interface NavItem {
+interface MobileNavItem {
   label: string;
   href: string;
   icon: React.ReactNode;
 }
 
 /**
- * ナビゲーションアイテム一覧
+ * アイコンマッピング
  */
-const NAV_ITEMS: NavItem[] = [
+const NAV_ICON_MAP: Record<string, React.ReactNode> = {
+  [ROUTES.UPCOMING]: <IoCalendarOutline size={20} />,
+  [ROUTES.NOW_SHOWING]: <IoPlayCircleOutline size={20} />,
+  [ROUTES.FAVORITES]: <IoHeartOutline size={20} />,
+  [ROUTES.WATCHLIST]: <IoBookmarkOutline size={20} />,
+};
+
+/**
+ * モバイル用ナビゲーションアイテム一覧（ホーム + 共通NAV_ITEMS）
+ */
+const MOBILE_NAV_ITEMS: MobileNavItem[] = [
   { label: 'ホーム', href: ROUTES.HOME, icon: <IoHomeOutline size={20} /> },
-  {
-    label: '公開予定',
-    href: ROUTES.UPCOMING,
-    icon: <IoCalendarOutline size={20} />,
-  },
-  {
-    label: '公開中',
-    href: ROUTES.NOW_SHOWING,
-    icon: <IoPlayCircleOutline size={20} />,
-  },
-  {
-    label: 'お気に入り',
-    href: ROUTES.FAVORITES,
-    icon: <IoHeartOutline size={20} />,
-  },
-  {
-    label: 'ウォッチリスト',
-    href: ROUTES.WATCHLIST,
-    icon: <IoBookmarkOutline size={20} />,
-  },
+  ...NAV_ITEMS.map((item) => ({
+    ...item,
+    icon: NAV_ICON_MAP[item.href] ?? null,
+  })),
 ];
 
 /**
@@ -99,7 +93,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
 
   const navItems = useMemo(
     () =>
-      NAV_ITEMS.map((item) => ({
+      MOBILE_NAV_ITEMS.map((item) => ({
         ...item,
         isActive: pathname === item.href,
       })),
@@ -196,7 +190,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
                   onClick={handleNavigateToSettings}
                 >
                   <IoSettingsOutline size={20} aria-hidden='true' />
-                  <span>設定</span>
+                  <span>{MENU_LABELS.SETTINGS}</span>
                 </button>
                 <button
                   type='button'
@@ -204,7 +198,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
                   onClick={handleLogout}
                 >
                   <IoLogOutOutline size={20} aria-hidden='true' />
-                  <span>ログアウト</span>
+                  <span>{MENU_LABELS.LOGOUT}</span>
                 </button>
               </div>
             </div>

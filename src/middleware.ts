@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth/auth';
+import { ROUTES } from '@/constants/common';
 
 /** セッションcookie名（環境に応じて切り替え） */
 const SESSION_COOKIE_NAME =
@@ -12,15 +13,15 @@ const SESSION_COOKIE_NAME =
     ? '__Secure-next-auth.session-token'
     : 'next-auth.session-token';
 
+/** 認証が必要なパス */
+const protectedPaths = [ROUTES.WATCHLIST, ROUTES.SETTINGS, ROUTES.FAVORITES];
+
+/** 認証ページ */
+const authPaths = [ROUTES.LOGIN, ROUTES.REGISTER];
+
 export default auth((req) => {
   const { nextUrl } = req;
   const isAuthenticated = !!req.auth;
-
-  // 認証が必要なパス
-  const protectedPaths = ['/watchlist', '/settings', '/favorites'];
-
-  // 認証ページ
-  const authPaths = ['/auth/signin', '/auth/signup'];
 
   const isProtectedPath = protectedPaths.some((path) =>
     nextUrl.pathname.startsWith(path),
@@ -34,7 +35,7 @@ export default auth((req) => {
 
   if (!isAuthenticated && hasSessionCookie) {
     const response = isProtectedPath
-      ? NextResponse.redirect(new URL('/auth/signin', nextUrl))
+      ? NextResponse.redirect(new URL(ROUTES.LOGIN, nextUrl))
       : NextResponse.next();
     response.cookies.delete(SESSION_COOKIE_NAME);
     return response;
@@ -42,12 +43,12 @@ export default auth((req) => {
 
   // 未認証で保護されたパスにアクセス → サインインページへリダイレクト
   if (isProtectedPath && !isAuthenticated) {
-    return Response.redirect(new URL('/auth/signin', nextUrl));
+    return Response.redirect(new URL(ROUTES.LOGIN, nextUrl));
   }
 
   // 認証済みで認証ページにアクセス → ホームへリダイレクト
   if (isAuthPath && isAuthenticated) {
-    return Response.redirect(new URL('/', nextUrl));
+    return Response.redirect(new URL(ROUTES.HOME, nextUrl));
   }
 
   return;

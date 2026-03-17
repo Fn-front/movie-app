@@ -5,6 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 import { EXCLUDED_KEYWORD_IDS } from '@/constants/movies';
+import { EIGA_SCORING } from '@/constants/eiga';
 import { getMovieKeywordIds, searchMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
@@ -55,7 +56,7 @@ export function findBestMatch(
 
     // 邦題完全一致ボーナス
     if (movie.title === eigaMovie.title) {
-      score += 1000;
+      score += EIGA_SCORING.TITLE_MATCH_BONUS;
     }
 
     // 原題一致ボーナス（フォールバック検索時）
@@ -63,7 +64,7 @@ export function findBestMatch(
       originalTitle &&
       movie.original_title.toLowerCase() === originalTitle.toLowerCase()
     ) {
-      score += 1000;
+      score += EIGA_SCORING.TITLE_MATCH_BONUS;
     }
 
     // 公開日の近さ（差分が小さいほど高スコア）
@@ -71,11 +72,11 @@ export function findBestMatch(
       const movieDate = new Date(movie.release_date).getTime();
       const daysDiff = Math.abs(eigaDate - movieDate) / (1000 * 60 * 60 * 24);
       // 30日以内なら加点、それ以上は減点
-      score += Math.max(0, 100 - daysDiff);
+      score += Math.max(0, EIGA_SCORING.DATE_PROXIMITY_BASE - daysDiff);
     }
 
     // 人気度ボーナス（同スコア時の差別化）
-    score += movie.popularity * 0.01;
+    score += movie.popularity * EIGA_SCORING.POPULARITY_WEIGHT;
 
     if (score > bestScore) {
       bestScore = score;
@@ -84,15 +85,12 @@ export function findBestMatch(
   }
 
   // タイトルが完全一致しない場合は最低限のスコア閾値を設ける
-  if (bestMovie && bestScore < 50) {
+  if (bestMovie && bestScore < EIGA_SCORING.MIN_MATCH_SCORE) {
     return null;
   }
 
   return bestMovie;
 }
-
-/** リバイバル判定の閾値（日数） */
-const REVIVAL_THRESHOLD_DAYS = 90;
 
 /**
  * リバイバル上映かどうかを判定する
@@ -113,7 +111,7 @@ export function isRevival(
   const eigaDate = new Date(eigaReleaseDate).getTime();
   const diffDays = (eigaDate - tmdbDate) / (1000 * 60 * 60 * 24);
 
-  return diffDays >= REVIVAL_THRESHOLD_DAYS;
+  return diffDays >= EIGA_SCORING.REVIVAL_THRESHOLD_DAYS;
 }
 
 /**

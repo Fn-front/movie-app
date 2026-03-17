@@ -104,12 +104,8 @@
   font-weight: $font-weight-bold;
   color: $background-paper;
   background-color: $primary-500;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: $border-radius-md;
+  padding: 2px $spacing-1;
 }
 
 // 映画がある日のインジケーター

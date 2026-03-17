@@ -8,7 +8,7 @@
 import { memo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { TITLE_SUGGESTION_MESSAGES } from '@/constants';
+import { TITLE_SUGGESTION, TITLE_SUGGESTION_MESSAGES } from '@/constants';
 
 import styles from './titleSuggestion.module.scss';
 
@@ -31,9 +31,13 @@ export const TitleSuggestion = memo<TitleSuggestionProps>(
 
     const handleClick = useCallback(
       (title: string) => {
+        sessionStorage.setItem(
+          TITLE_SUGGESTION.STORAGE_KEY,
+          JSON.stringify(suggestions),
+        );
         router.push(`/search?query=${encodeURIComponent(title)}`);
       },
-      [router],
+      [router, suggestions],
     );
 
     if (isLoading || suggestions.length === 0) {

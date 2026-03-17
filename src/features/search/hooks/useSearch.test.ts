@@ -19,7 +19,7 @@ jest.mock('@/lib/api/search/search', () => ({
 }));
 jest.mock('@/hooks/useToast');
 jest.mock('./useTitleSuggestion', () => ({
-  useTitleSuggestion: () => ({ suggestion: null, isLoading: false }),
+  useTitleSuggestion: () => ({ suggestions: [], isLoading: false }),
 }));
 
 jest.mock('@tanstack/react-query', () => {

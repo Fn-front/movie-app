@@ -144,6 +144,10 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
 
   return (
     <div className={styles.c_search_results}>
+      <TitleSuggestion
+        suggestions={suggestions ?? []}
+        isLoading={isSuggestionLoading ?? false}
+      />
       <p className={styles.c_search_results__count}>
         {totalResults.toLocaleString()}件の検索結果
       </p>

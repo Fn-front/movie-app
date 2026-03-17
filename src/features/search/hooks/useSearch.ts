@@ -5,14 +5,14 @@
 
 'use client';
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 
 import { searchMoviesApi } from '@/lib/api/search/search';
 import type { SearchMoviesRequest } from '@/lib/api/search/search';
 import type { Movie } from '@/lib/types';
-import { searchKeys, SEARCH_ERROR_MESSAGES } from '@/constants';
+import { searchKeys, SEARCH_ERROR_MESSAGES, TITLE_SUGGESTION } from '@/constants';
 import { useToast } from '@/hooks/useToast';
 import { useTitleSuggestion } from './useTitleSuggestion';
 
@@ -117,13 +117,37 @@ export function useSearch(): UseSearchReturn {
   );
   const pagination = searchQuery.data?.data.pagination;
 
-  // 検索結果が0件の場合のみ原題提案を有効化
+  // sessionStorageから保持された提案を読み出す（提案クリックで遷移した場合）
+  const [storedSuggestions, setStoredSuggestions] = useState<string[]>([]);
+  useEffect(() => {
+    const stored = sessionStorage.getItem(TITLE_SUGGESTION.STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as string[];
+        setStoredSuggestions(parsed);
+      } catch {
+        sessionStorage.removeItem(TITLE_SUGGESTION.STORAGE_KEY);
+      }
+    } else {
+      setStoredSuggestions([]);
+    }
+  }, [query]);
+
+  // 検索結果が0件の場合のみ原題提案APIを有効化
   const hasNoResults =
     !searchQuery.isLoading && requestParams !== null && movies.length === 0;
-  const { suggestions, isLoading: isSuggestionLoading } = useTitleSuggestion(
-    query,
-    hasNoResults,
-  );
+  const { suggestions: apiSuggestions, isLoading: isSuggestionLoading } =
+    useTitleSuggestion(query, hasNoResults);
+
+  // API提案がある場合はsessionStorageをクリアしてAPI提案を使用
+  // API提案がない場合（結果あり画面）はsessionStorageの提案を使用
+  const suggestions = useMemo(() => {
+    if (apiSuggestions.length > 0) {
+      sessionStorage.removeItem(TITLE_SUGGESTION.STORAGE_KEY);
+      return apiSuggestions;
+    }
+    return storedSuggestions;
+  }, [apiSuggestions, storedSuggestions]);
 
   return useMemo(
     () => ({

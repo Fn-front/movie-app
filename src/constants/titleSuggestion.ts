@@ -22,6 +22,8 @@ export const TITLE_SUGGESTION_ERROR_MESSAGES = {
 export const TITLE_SUGGESTION = {
   /** TanStack Query staleTime（24時間） */
   STALE_TIME: 24 * 60 * 60 * 1000,
+  /** sessionStorageキー: 提案クリック時に提案リストを保持 */
+  STORAGE_KEY: 'title_suggestions',
 } as const;
 
 /**

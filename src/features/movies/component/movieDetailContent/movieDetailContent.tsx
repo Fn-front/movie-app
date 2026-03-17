@@ -8,8 +8,6 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { IoPlayOutline } from 'react-icons/io5';
-import clsx from 'clsx';
-
 import { Loading } from '@/components/ui/loading/loading';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
@@ -25,6 +23,7 @@ import {
 } from '@/utils/image';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
+import { cn } from '@/utils/cn';
 import type { WatchProvider } from '@/lib/types';
 
 import styles from './movieDetailContent.module.scss';
@@ -221,7 +220,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
       );
     }
 
-    const rootClassName = clsx(
+    const rootClassName = cn(
       styles.c_movie_detail,
       isVideoDialogOpen && styles.c_movie_detail__dimmed,
     );

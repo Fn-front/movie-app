@@ -133,9 +133,13 @@ export function useSearch(): UseSearchReturn {
     }
   }, [query]);
 
-  // 検索結果が0件の場合のみ原題提案APIを有効化
+  // 検索結果が0件かつsessionStorageに提案がない場合のみ原題提案APIを有効化
+  // sessionStorageに提案がある = 提案クリックからの遷移なのでAI呼び出し不要
   const hasNoResults =
-    !searchQuery.isLoading && requestParams !== null && movies.length === 0;
+    !searchQuery.isLoading &&
+    requestParams !== null &&
+    movies.length === 0 &&
+    storedSuggestions.length === 0;
   const { suggestions: apiSuggestions, isLoading: isSuggestionLoading } =
     useTitleSuggestion(query, hasNoResults);
 

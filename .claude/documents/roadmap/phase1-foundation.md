@@ -1,0 +1,127 @@
+**ステータス: 完了**
+
+## フェーズ1: 基盤構築（1-2週間）
+
+### 環境セットアップ
+- [x] Next.js 15プロジェクト作成（※現在はNext.js 16.1.6にアップグレード済み）
+- [x] TypeScript設定
+- [x] ESLint/Prettier設定
+- [x] 必要なパッケージインストール
+  - [x] Radix UI（@radix-ui/react-select, react-dialog, react-toast）
+  - [x] React Icons
+  - [x] react-hook-form + zod
+  - [x] その他依存関係
+- [x] 環境設定ファイルの作成
+  - [x] .env.exampleテンプレート作成（環境変数の雛形）
+  - [x] next.config.js設定（TMDb画像ドメイン許可、SCSS設定）
+  - [x] エラーページ実装（app/error.tsx, app/not-found.tsx）
+- [x] 基本設定・スタイリング方針確立
+  - [x] SCSS Modules設定
+  - [x] デザインシステムのSCSS変数作成
+  - [x] 命名規則ドキュメント整備（lowerCamelCase）
+  - [x] アクセシビリティ設定
+    - [x] カラーコントラストWCAG AA基準確認
+    - [x] フォーカス表示スタイル実装（outline: 2px solid $primary-500）
+    - [x] レスポンシブ設定（最小幅375px、モバイルファースト）
+- [x] 共通関数（ユーティリティ）の実装
+  - [x] 画像URLユーティリティ（getTMDbImageUrl）
+  - [x] 日付フォーマット関数（formatDate, formatDateTime）
+  - [x] バリデーションヘルパー（isValidEmail, isValidPassword）
+  - [x] エラーハンドリングヘルパー（handleApiError, formatErrorMessage）
+  - [x] 文字列操作ヘルパー（truncate, capitalize）
+- [x] 共通カスタムフックの実装
+  - [x] useDebounce（入力遅延処理）
+  - [x] useLocalStorage（ローカルストレージ管理）
+  - [x] useMediaQuery（レスポンシブ判定）
+  - [x] usePrevious（前回の値を保持）
+  - [x] useClickOutside（外側クリック検知）
+  - [x] useToggle（boolean状態管理）
+- [x] lib（ライブラリ・設定）の実装
+  - [x] Supabaseクライアント設定（lib/supabase/client.ts, server.ts）
+  - [x] TMDb APIクライアント設定（lib/tmdb/tmdb.ts）
+  - [x] axiosインスタンス設定（lib/axios/axios.ts）
+  - [ ] NextAuth.js設定（lib/auth/authOptions.ts）
+  - [x] 定数定義（lib/constants/index.ts）
+  - [x] 型定義（lib/types/index.ts）
+- [x] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）
+  - [x] Button（React.memo + aria-label）
+  - [x] Input（フォーム統合、React.memo + aria-label）
+  - [x] Select（@radix-ui/react-select、React.memo + aria-label）
+  - [x] Card（React.memo）
+  - [x] Modal（@radix-ui/react-dialog、React.memo + aria-label）
+  - [x] Toast（@radix-ui/react-toast、5秒表示、React.memo + aria-label）
+  - [x] Loading（全画面オーバーレイ対応、React.memo + aria-label）
+  - [x] 全インタラクティブ要素にaria-label実装
+- [ ] カスタムフック基礎実装
+  - [x] useToast（トースト通知管理）
+  - [ ] useAuth（認証状態管理）
+  - [ ] useMovies（映画データ取得）
+  - [ ] useWatchlist（ウォッチリスト操作）
+
+### フェーズ1 単体テスト
+- [x] カスタムフックのテスト
+  - [x] useDebounce
+  - [x] useLocalStorage
+  - [x] useMediaQuery
+  - [x] usePrevious
+  - [x] useClickOutside
+  - [x] useToggle
+  - [x] useToast
+- [x] ユーティリティのテスト
+  - [x] date（formatDate, formatDateTime）
+  - [x] error（handleApiError, formatErrorMessage）
+  - [x] image（getTMDbImageUrl, getTMDbPosterUrl, getTMDbBackdropUrl）
+  - [x] string（truncate, capitalize）
+  - [x] validation（isValidEmail, isValidPassword）
+- [x] Zustandストアユーティリティのテスト
+  - [x] createStore
+  - [x] createPersistStore
+- [x] TMDb APIクライアントのテスト
+  - [x] tmdb.ts（各APIメソッド、リトライ処理、ページバリデーション）
+
+### データベース・認証基盤
+- [x] **技術選定を確定**
+  - [x] データベース: Supabase (PostgreSQL)
+  - [x] ORM: Supabase SDK
+  - [x] 状態管理: Zustand
+  - [x] UIライブラリ: Radix UI（拡張してカスタマイズ）
+  - [x] アイコン: React Icons
+  - [x] 認証: NextAuth.js v5
+  - [x] HTTP Client: axios
+  - [x] フォームバリデーション: react-hook-form + zod
+  - [x] レート制限: 3回
+  - [x] ホスティング: Vercel
+  - [x] CSRF対策: 厳し目の基本設定
+  - [x] コード分割: しない
+  - [x] Supabase Realtime: 使用しない
+  - [x] Supabase Storage: 使用しない
+  - [x] アニメーション: なし（opacity等のCSS transitionのみ）
+  - [x] パフォーマンス: React.memo + useCallback必須適用
+  - [x] 命名規則: lowerCamelCase
+  - [x] テスト: Jest + React Testing Library + Playwright
+- [x] Supabaseプロジェクト作成
+  - [x] Supabaseアカウント作成
+  - [x] 新規プロジェクト作成
+  - [x] 接続情報取得（URL, ANON_KEY, SERVICE_ROLE_KEY）
+- [x] NextAuth.js v5設定
+  - [x] Credentials Providerセットアップ
+  - [x] Supabaseとの統合（usersテーブル）
+  - [x] Session/Callbacks設定（JWT、24時間）
+  - [x] CSRF対策強化設定
+  - [x] 認証保護Middleware作成
+- [x] データベーススキーマ実装
+  - [x] Supabase migrationでテーブル作成（8テーブル）
+  - [x] Row Level Security (RLS) ポリシー設定
+  - [x] インデックス作成
+- [x] 環境変数設定
+  - [x] NEXT_PUBLIC_SUPABASE_URL
+  - [x] NEXT_PUBLIC_SUPABASE_ANON_KEY
+  - [x] SUPABASE_SERVICE_ROLE_KEY
+  - [x] NEXTAUTH_SECRET
+  - [x] NEXTAUTH_URL
+
+### TMDb API連携
+- [x] TMDb APIキー取得
+- [x] axiosインスタンス作成
+- [x] API Client実装（lib/api/tmdb.ts）
+- [x] 映画情報取得のテスト

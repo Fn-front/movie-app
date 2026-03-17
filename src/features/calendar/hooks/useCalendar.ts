@@ -21,6 +21,13 @@ function formatMonth(date: Date): string {
 }
 
 /**
+ * 日付文字列をYYYY-MM-DD形式で生成
+ */
+export function formatDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/**
  * useCalendarフックの返り値
  */
 export interface UseCalendarReturn {
@@ -78,7 +85,7 @@ export function useCalendar(): UseCalendarReturn {
   // 選択中の日付の映画一覧
   const selectedDateMovies = useMemo(() => {
     if (!selectedDate) return [];
-    const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+    const dateStr = formatDate(selectedDate);
     return moviesByDate[dateStr] ?? [];
   }, [selectedDate, moviesByDate]);
 

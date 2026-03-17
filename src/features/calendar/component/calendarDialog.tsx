@@ -5,12 +5,13 @@
 
 'use client';
 
-import { memo, useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import type { DateClickArg } from '@fullcalendar/interaction';
 import type {
+  DayCellMountArg,
   DatesSetArg,
   EventClickArg,
   EventContentArg,
@@ -19,7 +20,7 @@ import jaLocale from '@fullcalendar/core/locales/ja';
 import { IoChevronBack, IoChevronForward } from 'react-icons/io5';
 
 import { Modal, ModalBody } from '@/components/ui/modal/modal';
-import { useCalendar } from '@/features/calendar/hooks/useCalendar';
+import { useCalendar, formatDate } from '@/features/calendar/hooks/useCalendar';
 
 import { CalendarMovieList } from './calendarMovieList';
 import styles from './calendarDialog.module.scss';
@@ -41,7 +42,12 @@ export interface CalendarDialogProps {
  */
 const renderEventContent = (eventInfo: EventContentArg) => {
   return (
-    <span className={styles.c_calendarDialog__event}>
+    <span
+      className={styles.c_calendarDialog__event}
+      role='button'
+      tabIndex={-1}
+      aria-label={`${eventInfo.event.title}の詳細を表示`}
+    >
       {eventInfo.event.title}
     </span>
   );
@@ -56,6 +62,7 @@ export const CalendarDialog = memo<CalendarDialogProps>(
       currentMonth,
       selectedDate,
       selectedDateMovies,
+      moviesByDate,
       calendarEvents,
       selectDate,
       handleDatesSet,
@@ -79,6 +86,31 @@ export const CalendarDialog = memo<CalendarDialogProps>(
 
     const handleNext = useCallback(() => {
       calendarApiRef.current?.getApi().next();
+    }, []);
+
+    const datesWithMoviesSet = useMemo(
+      () => new Set(Object.keys(moviesByDate)),
+      [moviesByDate],
+    );
+
+    const handleDayCellDidMount = useCallback(
+      (arg: DayCellMountArg) => {
+        const dateStr = formatDate(arg.date);
+        if (datesWithMoviesSet.has(dateStr)) {
+          arg.el.classList.add('fc-day-has-events');
+          const count = moviesByDate[dateStr]?.length ?? 0;
+          arg.el.setAttribute(
+            'aria-label',
+            `${arg.date.getDate()}日 映画${count}件`,
+          );
+        }
+      },
+      [datesWithMoviesSet, moviesByDate],
+    );
+
+    const handleDayCellWillUnmount = useCallback((arg: DayCellMountArg) => {
+      arg.el.classList.remove('fc-day-has-events');
+      arg.el.removeAttribute('aria-label');
     }, []);
 
     const handleDateClick = useCallback(
@@ -165,6 +197,8 @@ export const CalendarDialog = memo<CalendarDialogProps>(
                   datesSet={handleDatesSetCallback}
                   eventContent={renderEventContent}
                   eventClick={handleEventClick}
+                  dayCellDidMount={handleDayCellDidMount}
+                  dayCellWillUnmount={handleDayCellWillUnmount}
                   headerToolbar={false}
                   height='auto'
                   dayMaxEvents={3}

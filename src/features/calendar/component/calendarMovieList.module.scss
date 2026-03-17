@@ -98,3 +98,15 @@
   font-size: $font-size-xs;
   color: $text-secondary;
 }
+
+.c_calendarMovieList__arrow {
+  flex-shrink: 0;
+  color: $text-disabled;
+  font-size: $font-size-base;
+  margin-left: auto;
+  transition: $transition-bg;
+}
+
+.c_calendarMovieList__button:hover .c_calendarMovieList__arrow {
+  color: $text-primary;
+}

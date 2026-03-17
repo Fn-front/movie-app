@@ -5,12 +5,13 @@
 
 'use client';
 
-import { memo, useCallback, useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import type { DateClickArg } from '@fullcalendar/interaction';
 import type {
+  DayCellMountArg,
   DatesSetArg,
   EventClickArg,
   EventContentArg,
@@ -41,7 +42,12 @@ export interface CalendarDialogProps {
  */
 const renderEventContent = (eventInfo: EventContentArg) => {
   return (
-    <span className={styles.c_calendarDialog__event}>
+    <span
+      className={styles.c_calendarDialog__event}
+      role='button'
+      tabIndex={0}
+      aria-label={`${eventInfo.event.title}の詳細を表示`}
+    >
       {eventInfo.event.title}
     </span>
   );
@@ -56,6 +62,7 @@ export const CalendarDialog = memo<CalendarDialogProps>(
       currentMonth,
       selectedDate,
       selectedDateMovies,
+      moviesByDate,
       calendarEvents,
       selectDate,
       handleDatesSet,
@@ -80,6 +87,26 @@ export const CalendarDialog = memo<CalendarDialogProps>(
     const handleNext = useCallback(() => {
       calendarApiRef.current?.getApi().next();
     }, []);
+
+    const datesWithMoviesSet = useMemo(
+      () => new Set(Object.keys(moviesByDate)),
+      [moviesByDate],
+    );
+
+    const handleDayCellDidMount = useCallback(
+      (arg: DayCellMountArg) => {
+        const dateStr = `${arg.date.getFullYear()}-${String(arg.date.getMonth() + 1).padStart(2, '0')}-${String(arg.date.getDate()).padStart(2, '0')}`;
+        if (datesWithMoviesSet.has(dateStr)) {
+          arg.el.classList.add('fc-day-has-events');
+          const count = moviesByDate[dateStr]?.length ?? 0;
+          arg.el.setAttribute(
+            'aria-label',
+            `${arg.date.getDate()}日 映画${count}件`,
+          );
+        }
+      },
+      [datesWithMoviesSet, moviesByDate],
+    );
 
     const handleDateClick = useCallback(
       (arg: DateClickArg) => {
@@ -165,6 +192,7 @@ export const CalendarDialog = memo<CalendarDialogProps>(
                   datesSet={handleDatesSetCallback}
                   eventContent={renderEventContent}
                   eventClick={handleEventClick}
+                  dayCellDidMount={handleDayCellDidMount}
                   headerToolbar={false}
                   height='auto'
                   dayMaxEvents={3}

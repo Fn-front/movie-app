@@ -7,6 +7,7 @@
 
 import { memo, useCallback } from 'react';
 import Image from 'next/image';
+import { IoChevronForward } from 'react-icons/io5';
 
 import { API, TMDB_IMAGE_SIZES } from '@/constants';
 import type { CalendarMovieItem } from '@/lib/api/calendar/calendar';
@@ -87,6 +88,10 @@ export const CalendarMovieList = memo<CalendarMovieListProps>(
                     {movie.release_date}
                   </span>
                 </div>
+                <IoChevronForward
+                  className={styles.c_calendarMovieList__arrow}
+                  aria-hidden='true'
+                />
               </button>
             </li>
           ))}

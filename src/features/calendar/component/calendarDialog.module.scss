@@ -97,13 +97,30 @@
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-day-today) {
-  background-color: transparent !important;
+  background-color: $primary-50 !important;
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-day-today .fc-daygrid-day-number) {
   font-weight: $font-weight-bold;
-  border: $border-width-2 solid $primary-300;
-  border-radius: $border-radius-md;
+  color: $background-paper;
+  background-color: $primary-500;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+// 映画がある日のインジケーター
+.c_calendarDialog__calendar :global(.fc .fc-day-has-events .fc-daygrid-day-number)::after {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  background-color: $primary-500;
+  border-radius: 50%;
+  margin: 2px auto 0;
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-day-other .fc-daygrid-day-number) {

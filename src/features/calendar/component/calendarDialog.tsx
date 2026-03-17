@@ -20,7 +20,7 @@ import jaLocale from '@fullcalendar/core/locales/ja';
 import { IoChevronBack, IoChevronForward } from 'react-icons/io5';
 
 import { Modal, ModalBody } from '@/components/ui/modal/modal';
-import { useCalendar } from '@/features/calendar/hooks/useCalendar';
+import { useCalendar, formatDate } from '@/features/calendar/hooks/useCalendar';
 
 import { CalendarMovieList } from './calendarMovieList';
 import styles from './calendarDialog.module.scss';
@@ -45,7 +45,7 @@ const renderEventContent = (eventInfo: EventContentArg) => {
     <span
       className={styles.c_calendarDialog__event}
       role='button'
-      tabIndex={0}
+      tabIndex={-1}
       aria-label={`${eventInfo.event.title}の詳細を表示`}
     >
       {eventInfo.event.title}
@@ -95,7 +95,7 @@ export const CalendarDialog = memo<CalendarDialogProps>(
 
     const handleDayCellDidMount = useCallback(
       (arg: DayCellMountArg) => {
-        const dateStr = `${arg.date.getFullYear()}-${String(arg.date.getMonth() + 1).padStart(2, '0')}-${String(arg.date.getDate()).padStart(2, '0')}`;
+        const dateStr = formatDate(arg.date);
         if (datesWithMoviesSet.has(dateStr)) {
           arg.el.classList.add('fc-day-has-events');
           const count = moviesByDate[dateStr]?.length ?? 0;
@@ -107,6 +107,11 @@ export const CalendarDialog = memo<CalendarDialogProps>(
       },
       [datesWithMoviesSet, moviesByDate],
     );
+
+    const handleDayCellWillUnmount = useCallback((arg: DayCellMountArg) => {
+      arg.el.classList.remove('fc-day-has-events');
+      arg.el.removeAttribute('aria-label');
+    }, []);
 
     const handleDateClick = useCallback(
       (arg: DateClickArg) => {
@@ -193,6 +198,7 @@ export const CalendarDialog = memo<CalendarDialogProps>(
                   eventContent={renderEventContent}
                   eventClick={handleEventClick}
                   dayCellDidMount={handleDayCellDidMount}
+                  dayCellWillUnmount={handleDayCellWillUnmount}
                   headerToolbar={false}
                   height='auto'
                   dayMaxEvents={3}

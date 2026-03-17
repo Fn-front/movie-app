@@ -62,6 +62,8 @@ export interface MovieDetail extends Omit<Movie, 'genre_ids'> {
   credits?: Credits;
   /** 配信プロバイダー情報（append_to_response=watch/providers使用時） */
   'watch/providers'?: WatchProviders;
+  /** 動画情報（append_to_response=videos使用時） */
+  videos?: Videos;
   /** お気に入り情報（認証済みの場合のみ） */
   favorite?: { id: string; rating: number } | null;
 }
@@ -100,6 +102,40 @@ export interface WatchProviderCountry {
 export interface WatchProviders {
   /** 国コード別配信情報 */
   results: Record<string, WatchProviderCountry>;
+}
+
+/**
+ * TMDb 動画データ型
+ */
+export interface Video {
+  /** 動画ID */
+  id: string;
+  /** 言語コード */
+  iso_639_1: string;
+  /** 国コード */
+  iso_3166_1: string;
+  /** YouTube動画キー */
+  key: string;
+  /** 動画名 */
+  name: string;
+  /** 配信サイト（YouTube等） */
+  site: string;
+  /** 動画サイズ */
+  size: number;
+  /** 動画種別（Trailer, Teaser等） */
+  type: string;
+  /** 公式動画フラグ */
+  official: boolean;
+  /** 公開日 */
+  published_at: string;
+}
+
+/**
+ * 動画一覧レスポンス型（append_to_response用）
+ */
+export interface Videos {
+  /** 動画一覧 */
+  results: Video[];
 }
 
 /**

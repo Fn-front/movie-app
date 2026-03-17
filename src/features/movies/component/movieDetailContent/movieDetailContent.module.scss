@@ -50,6 +50,31 @@
     );
   }
 
+  // 再生ボタン（バックドロップ上）
+  &__play_button {
+    @include button-reset;
+    @include flex-center;
+
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 56px;
+    height: 56px;
+    border-radius: $border-radius-full;
+    background-color: $overlay-medium;
+    color: $text-inverse;
+    z-index: 1;
+    transition: $transition-all;
+
+    &:hover {
+      background-color: $overlay-dark;
+      transform: translate(-50%, -50%) scale(1.1);
+    }
+
+    @include focus-visible;
+  }
+
   // ボディ
   &__body {
     padding: $spacing-4;

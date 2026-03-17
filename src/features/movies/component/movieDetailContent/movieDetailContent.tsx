@@ -5,13 +5,15 @@
 
 'use client';
 
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import Image from 'next/image';
+import { IoPlayOutline } from 'react-icons/io5';
 
 import { Loading } from '@/components/ui/loading/loading';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
+import { VideoDialog } from '@/features/movies/component/videoDialog/videoDialog';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import {
@@ -126,6 +128,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
   function MovieDetailContent({ movieId, showFinancialInfo = false }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
     const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
+    const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
     const {
       modalState: favoriteModalState,
       handleFavoriteToggle,
@@ -178,6 +181,16 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
       [movie?.release_date],
     );
 
+    const youtubeVideos = useMemo(
+      () =>
+        movie?.videos?.results.filter((v) => v.site === 'YouTube') ?? [],
+      [movie],
+    );
+
+    const handleOpenVideoDialog = useCallback(() => {
+      setIsVideoDialogOpen(true);
+    }, []);
+
     const jpProviders = useMemo(
       () => movie?.['watch/providers']?.results?.JP ?? null,
       [movie],
@@ -219,6 +232,16 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
               className={styles.c_movie_detail__backdrop_image}
             />
             <div className={styles.c_movie_detail__backdrop_overlay} />
+            {youtubeVideos.length > 0 && (
+              <button
+                type='button'
+                className={styles.c_movie_detail__play_button}
+                onClick={handleOpenVideoDialog}
+                aria-label='予告動画を再生'
+              >
+                <IoPlayOutline size={32} />
+              </button>
+            )}
           </div>
         )}
 
@@ -439,6 +462,15 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
             )}
           </div>
         </div>
+
+        {youtubeVideos.length > 0 && (
+          <VideoDialog
+            open={isVideoDialogOpen}
+            onOpenChange={setIsVideoDialogOpen}
+            videos={youtubeVideos}
+            movieTitle={movie.title}
+          />
+        )}
 
         <FavoriteRatingModal
           isOpen={favoriteModalState.isOpen}

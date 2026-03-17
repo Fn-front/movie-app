@@ -45,6 +45,14 @@ jest.mock(
   }),
 );
 
+jest.mock(
+  '@/features/movies/component/videoDialog/videoDialog',
+  () => ({
+    VideoDialog: ({ open, movieTitle }: { open: boolean; movieTitle: string }) =>
+      open ? <div data-testid='video-dialog'>{movieTitle}の予告動画</div> : null,
+  }),
+);
+
 jest.mock('next/image', () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => {
@@ -582,5 +590,88 @@ describe('MovieDetailContent', () => {
     expect(screen.getByText('購入')).toBeInTheDocument();
     expect(screen.queryByText('配信')).not.toBeInTheDocument();
     expect(screen.queryByText('レンタル')).not.toBeInTheDocument();
+  });
+
+  describe('予告動画', () => {
+    const youtubeVideos = {
+      videos: {
+        results: [
+          {
+            id: 'v1',
+            iso_639_1: 'ja',
+            iso_3166_1: 'JP',
+            key: 'abc123',
+            name: '予告編1',
+            site: 'YouTube',
+            size: 1080,
+            type: 'Trailer',
+            official: true,
+            published_at: '2025-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+    };
+
+    it('YouTube動画がある場合、再生ボタンを表示する', () => {
+      setupMovie({ ...youtubeVideos, backdrop_path: '/backdrop.jpg' });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('button', { name: '予告動画を再生' }),
+      ).toBeInTheDocument();
+    });
+
+    it('YouTube動画がない場合、再生ボタンを表示しない', () => {
+      setupMovie({ backdrop_path: '/backdrop.jpg' });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.queryByRole('button', { name: '予告動画を再生' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('YouTube以外の動画のみの場合、再生ボタンを表示しない', () => {
+      setupMovie({
+        backdrop_path: '/backdrop.jpg',
+        videos: {
+          results: [
+            {
+              id: 'v1',
+              iso_639_1: 'ja',
+              iso_3166_1: 'JP',
+              key: 'abc123',
+              name: '予告編1',
+              site: 'Vimeo',
+              size: 1080,
+              type: 'Trailer',
+              official: true,
+              published_at: '2025-01-01T00:00:00.000Z',
+            },
+          ],
+        },
+      });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.queryByRole('button', { name: '予告動画を再生' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('再生ボタンをクリックすると動画ダイアログが表示される', () => {
+      setupMovie({ ...youtubeVideos, backdrop_path: '/backdrop.jpg' });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(screen.queryByTestId('video-dialog')).not.toBeInTheDocument();
+
+      fireEvent.click(
+        screen.getByRole('button', { name: '予告動画を再生' }),
+      );
+
+      expect(screen.getByTestId('video-dialog')).toBeInTheDocument();
+    });
   });
 });

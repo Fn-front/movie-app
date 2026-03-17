@@ -23,7 +23,6 @@ import {
 } from '@/utils/image';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
-import { cn } from '@/utils/cn';
 import type { WatchProvider } from '@/lib/types';
 
 import styles from './movieDetailContent.module.scss';
@@ -36,6 +35,8 @@ export interface MovieDetailContentProps {
   movieId: number;
   /** 予算・興行収入を表示するか */
   showFinancialInfo?: boolean;
+  /** 動画ダイアログの開閉状態変更コールバック */
+  onVideoDialogOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -125,10 +126,22 @@ ProviderCategory.displayName = 'ProviderCategory';
  * MovieDetailContentコンポーネント
  */
 export const MovieDetailContent = memo<MovieDetailContentProps>(
-  function MovieDetailContent({ movieId, showFinancialInfo = false }) {
+  function MovieDetailContent({
+    movieId,
+    showFinancialInfo = false,
+    onVideoDialogOpenChange,
+  }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
     const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
     const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
+
+    const handleVideoDialogOpenChange = useCallback(
+      (open: boolean) => {
+        setIsVideoDialogOpen(open);
+        onVideoDialogOpenChange?.(open);
+      },
+      [onVideoDialogOpenChange],
+    );
     const {
       modalState: favoriteModalState,
       handleFavoriteToggle,
@@ -188,8 +201,8 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     );
 
     const handleOpenVideoDialog = useCallback(() => {
-      setIsVideoDialogOpen(true);
-    }, []);
+      handleVideoDialogOpenChange(true);
+    }, [handleVideoDialogOpenChange]);
 
     const jpProviders = useMemo(
       () => movie?.['watch/providers']?.results?.JP ?? null,
@@ -220,13 +233,8 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
       );
     }
 
-    const rootClassName = cn(
-      styles.c_movie_detail,
-      isVideoDialogOpen && styles.c_movie_detail__dimmed,
-    );
-
     return (
-      <div className={rootClassName}>
+      <div className={styles.c_movie_detail}>
         {backdropUrl && (
           <div className={styles.c_movie_detail__backdrop}>
             <Image
@@ -471,7 +479,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
         {youtubeVideos.length > 0 && (
           <VideoDialog
             open={isVideoDialogOpen}
-            onOpenChange={setIsVideoDialogOpen}
+            onOpenChange={handleVideoDialogOpenChange}
             videos={youtubeVideos}
             movieTitle={movie.title}
           />

@@ -1,0 +1,8 @@
+@use '@/styles/variables' as *;
+
+.c_movie_detail_modal {
+  &__dimmed {
+    opacity: 0;
+    transition: opacity $duration-normal $ease-in-out;
+  }
+}

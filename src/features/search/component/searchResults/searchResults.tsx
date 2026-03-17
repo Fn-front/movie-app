@@ -12,6 +12,7 @@ import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movie
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { EmptyState } from '@/components/ui/emptyState/emptyState';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { TitleSuggestion } from '@/features/search/component/titleSuggestion/titleSuggestion';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
@@ -37,6 +38,10 @@ export interface SearchResultsProps {
   onPageChange: (page: number) => void;
   /** ローディング中 */
   isLoading: boolean;
+  /** 原題提案候補 */
+  suggestions?: string[];
+  /** 原題提案ローディング中 */
+  isSuggestionLoading?: boolean;
 }
 
 /**
@@ -76,6 +81,8 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
   totalPages,
   onPageChange,
   isLoading,
+  suggestions,
+  isSuggestionLoading,
 }) {
   const { isInWatchlist, toggleWatchlist, isMovieToggling } =
     useWatchlistToggle();
@@ -123,6 +130,10 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
   if (movies.length === 0) {
     return (
       <div className={styles.c_search_results}>
+        <TitleSuggestion
+          suggestions={suggestions ?? []}
+          isLoading={isSuggestionLoading ?? false}
+        />
         <EmptyState
           title='検索結果が見つかりませんでした'
           description='別のキーワードで検索してみてください'
@@ -133,6 +144,10 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
 
   return (
     <div className={styles.c_search_results}>
+      <TitleSuggestion
+        suggestions={suggestions ?? []}
+        isLoading={isSuggestionLoading ?? false}
+      />
       <p className={styles.c_search_results__count}>
         {totalResults.toLocaleString()}件の検索結果
       </p>

@@ -30,6 +30,11 @@ export const searchKeys = {
   results: (params: SearchMoviesRequest) => ['search', params] as const,
 };
 
+export const titleSuggestionKeys = {
+  all: ['titleSuggestion'] as const,
+  query: (query: string) => ['titleSuggestion', query] as const,
+};
+
 export const genreKeys = {
   all: ['genres'] as const,
 };

@@ -71,16 +71,16 @@ describe('VideoDialog', () => {
     );
   });
 
-  it('YouTube以外の動画はフィルタリングされる', () => {
-    const videos = [
-      createVideo({ id: 'v1', name: 'YouTube動画', site: 'YouTube' }),
-      createVideo({ id: 'v2', name: 'Vimeo動画', site: 'Vimeo' }),
-    ];
+  it('video.keyがencodeURIComponentでサニタイズされる', () => {
+    const videos = [createVideo({ key: 'key/with?special&chars' })];
 
     render(<VideoDialog {...defaultProps} videos={videos} />);
 
-    expect(screen.getByText('YouTube動画')).toBeInTheDocument();
-    expect(screen.queryByText('Vimeo動画')).not.toBeInTheDocument();
+    const iframe = screen.getByTitle('予告編1');
+    expect(iframe).toHaveAttribute(
+      'src',
+      `https://www.youtube.com/embed/${encodeURIComponent('key/with?special&chars')}`,
+    );
   });
 
   it('Trailer/Teaserが優先的に表示される', () => {

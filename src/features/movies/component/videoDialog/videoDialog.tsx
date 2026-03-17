@@ -5,8 +5,9 @@
 
 'use client';
 
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
+import { IoCloseOutline } from 'react-icons/io5';
 
 import type { Video } from '@/lib/types';
 
@@ -30,11 +31,10 @@ export interface VideoDialogProps {
 const PRIORITY_TYPES = ['Trailer', 'Teaser'];
 
 /**
- * YouTube動画をフィルタリングし、Trailer/Teaserを優先してソート
+ * Trailer/Teaserを優先してソート
  */
 function sortVideos(videos: Video[]): Video[] {
-  const youtubeVideos = videos.filter((v) => v.site === 'YouTube');
-  return [...youtubeVideos].sort((a, b) => {
+  return [...videos].sort((a, b) => {
     const aIndex = PRIORITY_TYPES.indexOf(a.type);
     const bIndex = PRIORITY_TYPES.indexOf(b.type);
     const aPriority = aIndex === -1 ? PRIORITY_TYPES.length : aIndex;
@@ -49,17 +49,10 @@ function sortVideos(videos: Video[]): Video[] {
  */
 export const VideoDialog = memo<VideoDialogProps>(
   function VideoDialog({ open, onOpenChange, videos, movieTitle }) {
-    const handleOpenChange = useCallback(
-      (newOpen: boolean) => {
-        onOpenChange(newOpen);
-      },
-      [onOpenChange],
-    );
-
     const sortedVideos = useMemo(() => sortVideos(videos), [videos]);
 
     return (
-      <Dialog.Root open={open} onOpenChange={handleOpenChange}>
+      <Dialog.Root open={open} onOpenChange={onOpenChange}>
         <Dialog.Portal>
           <Dialog.Overlay className={styles.c_video_dialog__overlay} />
           <Dialog.Content
@@ -71,22 +64,7 @@ export const VideoDialog = memo<VideoDialogProps>(
             </Dialog.Title>
 
             <Dialog.Close className={styles.c_video_dialog__close}>
-              <svg
-                width='24'
-                height='24'
-                viewBox='0 0 20 20'
-                fill='none'
-                xmlns='http://www.w3.org/2000/svg'
-                aria-hidden='true'
-              >
-                <path
-                  d='M15 5L5 15M5 5L15 15'
-                  stroke='currentColor'
-                  strokeWidth='2'
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                />
-              </svg>
+              <IoCloseOutline size={24} aria-hidden='true' />
               <span className={styles.c_video_dialog__sr_only}>閉じる</span>
             </Dialog.Close>
 
@@ -95,7 +73,7 @@ export const VideoDialog = memo<VideoDialogProps>(
                 <div key={video.id} className={styles.c_video_dialog__item}>
                   <div className={styles.c_video_dialog__video_wrapper}>
                     <iframe
-                      src={`https://www.youtube.com/embed/${video.key}`}
+                      src={`https://www.youtube.com/embed/${encodeURIComponent(video.key)}`}
                       title={video.name}
                       allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
                       allowFullScreen

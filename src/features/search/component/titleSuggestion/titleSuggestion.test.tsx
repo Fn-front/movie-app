@@ -45,9 +45,7 @@ describe('TitleSuggestion', () => {
   });
 
   it('ローディング中はスピナーを表示する', () => {
-    render(
-      <TitleSuggestion suggestions={[]} isLoading={true} />,
-    );
+    render(<TitleSuggestion suggestions={[]} isLoading={true} />);
 
     expect(screen.getByText('原題を検索中...')).toBeInTheDocument();
   });
@@ -61,12 +59,8 @@ describe('TitleSuggestion', () => {
       />,
     );
 
-    await user.click(
-      screen.getByRole('button', { name: 'Pumping Iron' }),
-    );
+    await user.click(screen.getByRole('button', { name: 'Pumping Iron' }));
 
-    expect(mockPush).toHaveBeenCalledWith(
-      '/search?query=Pumping%20Iron',
-    );
+    expect(mockPush).toHaveBeenCalledWith('/search?query=Pumping%20Iron');
   });
 });

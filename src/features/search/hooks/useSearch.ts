@@ -5,14 +5,18 @@
 
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 
 import { searchMoviesApi } from '@/lib/api/search/search';
 import type { SearchMoviesRequest } from '@/lib/api/search/search';
 import type { Movie } from '@/lib/types';
-import { searchKeys, SEARCH_ERROR_MESSAGES, TITLE_SUGGESTION } from '@/constants';
+import {
+  searchKeys,
+  SEARCH_ERROR_MESSAGES,
+  TITLE_SUGGESTION,
+} from '@/constants';
 import { useToast } from '@/hooks/useToast';
 import { useTitleSuggestion } from './useTitleSuggestion';
 
@@ -40,6 +44,20 @@ export interface UseSearchReturn {
   suggestions: string[];
   /** 原題提案ローディング中 */
   isSuggestionLoading: boolean;
+}
+
+/**
+ * sessionStorageから保持された提案を読み出す
+ */
+function readStoredSuggestions(): string[] {
+  try {
+    const stored = sessionStorage.getItem(TITLE_SUGGESTION.STORAGE_KEY);
+    if (!stored) return [];
+    return JSON.parse(stored) as string[];
+  } catch {
+    sessionStorage.removeItem(TITLE_SUGGESTION.STORAGE_KEY);
+    return [];
+  }
 }
 
 /**
@@ -118,20 +136,9 @@ export function useSearch(): UseSearchReturn {
   const pagination = searchQuery.data?.data.pagination;
 
   // sessionStorageから保持された提案を読み出す（提案クリックで遷移した場合）
-  const [storedSuggestions, setStoredSuggestions] = useState<string[]>([]);
-  useEffect(() => {
-    const stored = sessionStorage.getItem(TITLE_SUGGESTION.STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as string[];
-        setStoredSuggestions(parsed);
-      } catch {
-        sessionStorage.removeItem(TITLE_SUGGESTION.STORAGE_KEY);
-      }
-    } else {
-      setStoredSuggestions([]);
-    }
-  }, [query]);
+  // queryが変わるたびに再読み込み（eslint-disable: queryは再読み込みトリガーとして必要）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const storedSuggestions = useMemo(() => readStoredSuggestions(), [query]);
 
   // 検索結果が0件かつsessionStorageに提案がない場合のみ原題提案APIを有効化
   // sessionStorageに提案がある = 提案クリックからの遷移なのでAI呼び出し不要

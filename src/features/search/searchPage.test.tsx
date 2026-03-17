@@ -53,7 +53,7 @@ function createMockUseSearchReturn(
     isLoading: false,
     isError: false,
     handlePageChange: jest.fn(),
-    suggestion: null,
+    suggestions: [],
     isSuggestionLoading: false,
     ...overrides,
   };

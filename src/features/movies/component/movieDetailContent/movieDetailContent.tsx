@@ -195,8 +195,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     );
 
     const youtubeVideos = useMemo(
-      () =>
-        movie?.videos?.results.filter((v) => v.site === 'YouTube') ?? [],
+      () => movie?.videos?.results.filter((v) => v.site === 'YouTube') ?? [],
       [movie],
     );
 

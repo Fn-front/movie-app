@@ -45,13 +45,10 @@ jest.mock(
   }),
 );
 
-jest.mock(
-  '@/features/movies/component/videoDialog/videoDialog',
-  () => ({
-    VideoDialog: ({ open, movieTitle }: { open: boolean; movieTitle: string }) =>
-      open ? <div data-testid='video-dialog'>{movieTitle}の予告動画</div> : null,
-  }),
-);
+jest.mock('@/features/movies/component/videoDialog/videoDialog', () => ({
+  VideoDialog: ({ open, movieTitle }: { open: boolean; movieTitle: string }) =>
+    open ? <div data-testid='video-dialog'>{movieTitle}の予告動画</div> : null,
+}));
 
 jest.mock('next/image', () => ({
   __esModule: true,
@@ -667,9 +664,7 @@ describe('MovieDetailContent', () => {
 
       expect(screen.queryByTestId('video-dialog')).not.toBeInTheDocument();
 
-      fireEvent.click(
-        screen.getByRole('button', { name: '予告動画を再生' }),
-      );
+      fireEvent.click(screen.getByRole('button', { name: '予告動画を再生' }));
 
       expect(screen.getByTestId('video-dialog')).toBeInTheDocument();
     });

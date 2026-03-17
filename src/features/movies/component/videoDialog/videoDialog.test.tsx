@@ -52,9 +52,7 @@ describe('VideoDialog', () => {
   it('open=falseの場合、動画一覧を表示しない', () => {
     const videos = [createVideo()];
 
-    render(
-      <VideoDialog {...defaultProps} open={false} videos={videos} />,
-    );
+    render(<VideoDialog {...defaultProps} open={false} videos={videos} />);
 
     expect(screen.queryByText('予告編1')).not.toBeInTheDocument();
   });

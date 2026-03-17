@@ -40,62 +40,67 @@ function sortVideos(videos: Video[]): Video[] {
     const aPriority = aIndex === -1 ? PRIORITY_TYPES.length : aIndex;
     const bPriority = bIndex === -1 ? PRIORITY_TYPES.length : bIndex;
     if (aPriority !== bPriority) return aPriority - bPriority;
-    return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
+    return (
+      new Date(b.published_at).getTime() - new Date(a.published_at).getTime()
+    );
   });
 }
 
 /**
  * VideoDialogコンポーネント
  */
-export const VideoDialog = memo<VideoDialogProps>(
-  function VideoDialog({ open, onOpenChange, videos, movieTitle }) {
-    const sortedVideos = useMemo(() => sortVideos(videos), [videos]);
+export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
+  open,
+  onOpenChange,
+  videos,
+  movieTitle,
+}) {
+  const sortedVideos = useMemo(() => sortVideos(videos), [videos]);
 
-    return (
-      <Dialog.Root open={open} onOpenChange={onOpenChange}>
-        <Dialog.Portal>
-          <Dialog.Overlay className={styles.c_video_dialog__overlay} />
-          <Dialog.Content
-            className={styles.c_video_dialog__content}
-            aria-label={`${movieTitle}の予告動画`}
-          >
-            <Dialog.Title className={styles.c_video_dialog__sr_only}>
-              {movieTitle}の予告動画
-            </Dialog.Title>
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className={styles.c_video_dialog__overlay} />
+        <Dialog.Content
+          className={styles.c_video_dialog__content}
+          aria-label={`${movieTitle}の予告動画`}
+        >
+          <Dialog.Title className={styles.c_video_dialog__sr_only}>
+            {movieTitle}の予告動画
+          </Dialog.Title>
 
-            <Dialog.Close className={styles.c_video_dialog__close}>
-              <IoCloseOutline size={24} aria-hidden='true' />
-              <span className={styles.c_video_dialog__sr_only}>閉じる</span>
-            </Dialog.Close>
+          <Dialog.Close className={styles.c_video_dialog__close}>
+            <IoCloseOutline size={24} aria-hidden='true' />
+            <span className={styles.c_video_dialog__sr_only}>閉じる</span>
+          </Dialog.Close>
 
-            <div className={styles.c_video_dialog__list}>
-              {sortedVideos.map((video) => (
-                <div key={video.id} className={styles.c_video_dialog__item}>
-                  <div className={styles.c_video_dialog__video_wrapper}>
-                    <iframe
-                      src={`https://www.youtube.com/embed/${encodeURIComponent(video.key)}`}
-                      title={video.name}
-                      allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
-                      allowFullScreen
-                      className={styles.c_video_dialog__iframe}
-                    />
-                  </div>
-                  <div className={styles.c_video_dialog__video_info}>
-                    <span className={styles.c_video_dialog__video_name}>
-                      {video.name}
-                    </span>
-                    <span className={styles.c_video_dialog__video_type}>
-                      {video.type}
-                    </span>
-                  </div>
+          <div className={styles.c_video_dialog__list}>
+            {sortedVideos.map((video) => (
+              <div key={video.id} className={styles.c_video_dialog__item}>
+                <div className={styles.c_video_dialog__video_wrapper}>
+                  <iframe
+                    src={`https://www.youtube.com/embed/${encodeURIComponent(video.key)}`}
+                    title={video.name}
+                    allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
+                    allowFullScreen
+                    className={styles.c_video_dialog__iframe}
+                  />
                 </div>
-              ))}
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-    );
-  },
-);
+                <div className={styles.c_video_dialog__video_info}>
+                  <span className={styles.c_video_dialog__video_name}>
+                    {video.name}
+                  </span>
+                  <span className={styles.c_video_dialog__video_type}>
+                    {video.type}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+});
 
 VideoDialog.displayName = 'VideoDialog';

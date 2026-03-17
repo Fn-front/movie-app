@@ -90,7 +90,8 @@ export const CalendarDialog = memo<CalendarDialogProps>(
 
     const handleEventClick = useCallback(
       (arg: EventClickArg) => {
-        selectDate(arg.event.start ?? new Date());
+        if (!arg.event.start) return;
+        selectDate(arg.event.start);
       },
       [selectDate],
     );

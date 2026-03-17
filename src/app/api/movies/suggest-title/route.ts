@@ -58,7 +58,6 @@ export async function GET(request: Request) {
       .single();
 
     if (!cacheError && cached) {
-      console.log('[TitleSuggestion] Cache hit:', query, cached.suggestions);
       return NextResponse.json(
         {
           success: true,

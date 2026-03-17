@@ -95,7 +95,6 @@ export async function fetchTitleSuggestionsFromOpenAI(
       return [];
     }
 
-    console.log('[TitleSuggestion] OpenAI raw response:', content);
     return result.data.suggestions;
   } catch (error) {
     console.error('OpenAI title suggestion API call failed:', error);

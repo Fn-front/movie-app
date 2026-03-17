@@ -8,6 +8,7 @@
 import { memo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { Loading } from '@/components/ui/loading/loading';
 import { TITLE_SUGGESTION, TITLE_SUGGESTION_MESSAGES } from '@/constants';
 
 import styles from './titleSuggestion.module.scss';
@@ -40,7 +41,15 @@ export const TitleSuggestion = memo<TitleSuggestionProps>(
       [router, suggestions],
     );
 
-    if (isLoading || suggestions.length === 0) {
+    if (isLoading) {
+      return (
+        <div className={styles.c_title_suggestion}>
+          <Loading size='sm' label='原題を検索中...' />
+        </div>
+      );
+    }
+
+    if (suggestions.length === 0) {
       return null;
     }
 

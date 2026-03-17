@@ -44,12 +44,12 @@ describe('TitleSuggestion', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('ローディング中は何も表示しない', () => {
-    const { container } = render(
+  it('ローディング中はスピナーを表示する', () => {
+    render(
       <TitleSuggestion suggestions={[]} isLoading={true} />,
     );
 
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByText('原題を検索中...')).toBeInTheDocument();
   });
 
   it('クリックで原題で再検索する', async () => {

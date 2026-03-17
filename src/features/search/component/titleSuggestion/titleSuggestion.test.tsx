@@ -19,21 +19,26 @@ describe('TitleSuggestion', () => {
     jest.clearAllMocks();
   });
 
-  it('提案ありの場合にリンクを表示する', () => {
+  it('候補ありの場合にプレフィックスとボタンを表示する', () => {
     render(
       <TitleSuggestion
-        suggestion='The Shawshank Redemption'
+        suggestions={['The Shawshank Redemption', 'Shawshank']}
         isLoading={false}
       />,
     );
 
-    expect(screen.getByText('The Shawshank Redemption')).toBeInTheDocument();
-    expect(screen.getByText('ですか？')).toBeInTheDocument();
+    expect(screen.getByText('もしかして:')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'The Shawshank Redemption' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Shawshank' }),
+    ).toBeInTheDocument();
   });
 
-  it('提案なしの場合は何も表示しない', () => {
+  it('候補が空配列の場合は何も表示しない', () => {
     const { container } = render(
-      <TitleSuggestion suggestion={null} isLoading={false} />,
+      <TitleSuggestion suggestions={[]} isLoading={false} />,
     );
 
     expect(container.firstChild).toBeNull();
@@ -41,7 +46,7 @@ describe('TitleSuggestion', () => {
 
   it('ローディング中は何も表示しない', () => {
     const { container } = render(
-      <TitleSuggestion suggestion={null} isLoading={true} />,
+      <TitleSuggestion suggestions={[]} isLoading={true} />,
     );
 
     expect(container.firstChild).toBeNull();
@@ -51,15 +56,17 @@ describe('TitleSuggestion', () => {
     const user = userEvent.setup();
     render(
       <TitleSuggestion
-        suggestion='The Shawshank Redemption'
+        suggestions={['The Shawshank Redemption', 'Pumping Iron']}
         isLoading={false}
       />,
     );
 
-    await user.click(screen.getByRole('button'));
+    await user.click(
+      screen.getByRole('button', { name: 'Pumping Iron' }),
+    );
 
     expect(mockPush).toHaveBeenCalledWith(
-      '/search?query=The%20Shawshank%20Redemption',
+      '/search?query=Pumping%20Iron',
     );
   });
 });

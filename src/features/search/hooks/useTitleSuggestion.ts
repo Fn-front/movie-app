@@ -15,8 +15,8 @@ import { titleSuggestionKeys, TITLE_SUGGESTION } from '@/constants';
  * useTitleSuggestionフックの返り値
  */
 export interface UseTitleSuggestionReturn {
-  /** 提案された原題（提案なしの場合はnull） */
-  suggestion: string | null;
+  /** 提案された原題候補の配列 */
+  suggestions: string[];
   /** ローディング中 */
   isLoading: boolean;
 }
@@ -40,7 +40,7 @@ export function useTitleSuggestion(
 
   return useMemo(
     () => ({
-      suggestion: suggestionQuery.data?.data.suggestion ?? null,
+      suggestions: suggestionQuery.data?.data.suggestions ?? [],
       isLoading: suggestionQuery.isLoading,
     }),
     [suggestionQuery.data, suggestionQuery.isLoading],

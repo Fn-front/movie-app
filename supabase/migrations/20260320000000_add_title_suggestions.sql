@@ -5,7 +5,7 @@
 CREATE TABLE title_suggestions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   query_title VARCHAR(255) NOT NULL,
-  suggested_title VARCHAR(255) NULL,
+  suggestions JSONB NOT NULL DEFAULT '[]',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   CONSTRAINT uq_title_suggestions_query UNIQUE (query_title)

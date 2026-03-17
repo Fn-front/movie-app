@@ -36,8 +36,8 @@ export interface UseSearchReturn {
   isError: boolean;
   /** ページ変更ハンドラー */
   handlePageChange: (page: number) => void;
-  /** 原題提案 */
-  suggestion: string | null;
+  /** 原題提案候補 */
+  suggestions: string[];
   /** 原題提案ローディング中 */
   isSuggestionLoading: boolean;
 }
@@ -120,7 +120,7 @@ export function useSearch(): UseSearchReturn {
   // 検索結果が0件の場合のみ原題提案を有効化
   const hasNoResults =
     !searchQuery.isLoading && requestParams !== null && movies.length === 0;
-  const { suggestion, isLoading: isSuggestionLoading } = useTitleSuggestion(
+  const { suggestions, isLoading: isSuggestionLoading } = useTitleSuggestion(
     query,
     hasNoResults,
   );
@@ -135,7 +135,7 @@ export function useSearch(): UseSearchReturn {
       isLoading: searchQuery.isLoading,
       isError: searchQuery.isError,
       handlePageChange,
-      suggestion,
+      suggestions,
       isSuggestionLoading,
     }),
     [
@@ -145,7 +145,7 @@ export function useSearch(): UseSearchReturn {
       searchQuery.isLoading,
       searchQuery.isError,
       handlePageChange,
-      suggestion,
+      suggestions,
       isSuggestionLoading,
     ],
   );

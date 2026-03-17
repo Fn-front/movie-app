@@ -38,8 +38,8 @@ export interface SearchResultsProps {
   onPageChange: (page: number) => void;
   /** ローディング中 */
   isLoading: boolean;
-  /** 原題提案 */
-  suggestion?: string | null;
+  /** 原題提案候補 */
+  suggestions?: string[];
   /** 原題提案ローディング中 */
   isSuggestionLoading?: boolean;
 }
@@ -81,7 +81,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
   totalPages,
   onPageChange,
   isLoading,
-  suggestion,
+  suggestions,
   isSuggestionLoading,
 }) {
   const { isInWatchlist, toggleWatchlist, isMovieToggling } =
@@ -131,7 +131,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
     return (
       <div className={styles.c_search_results}>
         <TitleSuggestion
-          suggestion={suggestion ?? null}
+          suggestions={suggestions ?? []}
           isLoading={isSuggestionLoading ?? false}
         />
         <EmptyState

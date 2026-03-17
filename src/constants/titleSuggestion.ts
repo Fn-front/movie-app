@@ -28,6 +28,6 @@ export const TITLE_SUGGESTION = {
  * 原題提案UIメッセージ
  */
 export const TITLE_SUGGESTION_MESSAGES = {
-  /** 提案サフィックス */
-  SUGGESTION_SUFFIX: 'ですか？',
+  /** 提案プレフィックス */
+  SUGGESTION_PREFIX: 'もしかして:',
 } as const;

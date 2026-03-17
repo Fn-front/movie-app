@@ -10,8 +10,8 @@ import { axiosInstance } from '@/lib/axios/axios';
 export interface TitleSuggestionResponse {
   success: true;
   data: {
-    /** 提案された原題（提案なしの場合はnull） */
-    suggestion: string | null;
+    /** 提案された原題候補の配列 */
+    suggestions: string[];
     /** DBキャッシュから取得されたか */
     cached: boolean;
   };

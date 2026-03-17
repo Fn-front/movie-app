@@ -2,14 +2,35 @@
 
 .c_title_suggestion {
   text-align: center;
-  margin-bottom: $spacing-2;
+  margin-bottom: $spacing-4;
+}
+
+.c_title_suggestion__label {
+  font-size: $font-size-base;
+  color: $text-secondary;
+  margin-bottom: $spacing-1;
+}
+
+.c_title_suggestion__list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: $spacing-2;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.c_title_suggestion__item {
+  display: inline;
 }
 
 .c_title_suggestion__link {
   all: unset;
   cursor: pointer;
   font-size: $font-size-base;
-  color: $text-secondary;
+  font-weight: $font-weight-bold;
+  color: $primary-500;
 
   &:hover {
     text-decoration: underline;
@@ -20,9 +41,4 @@
     outline-offset: 2px;
     border-radius: $border-radius-sm;
   }
-}
-
-.c_title_suggestion__title {
-  font-weight: $font-weight-bold;
-  color: $primary-500;
 }

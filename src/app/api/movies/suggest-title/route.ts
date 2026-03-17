@@ -16,7 +16,7 @@ import {
   TITLE_SUGGESTION_ERROR_MESSAGES,
 } from '@/constants';
 import { titleSuggestionQuerySchema } from '@/schema/titleSuggestion';
-import { fetchTitleSuggestionFromOpenAI } from '@/lib/openai/suggestTitle';
+import { fetchTitleSuggestionsFromOpenAI } from '@/lib/openai/suggestTitle';
 
 export async function GET(request: Request) {
   try {
@@ -50,10 +50,10 @@ export async function GET(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    // 4. キャッシュ確認（suggested_titleがnullの場合も「提案なし」としてキャッシュヒット）
+    // 4. キャッシュ確認（空配列の場合も「提案なし」としてキャッシュヒット）
     const { data: cached, error: cacheError } = await supabase
       .from('title_suggestions')
-      .select('suggested_title')
+      .select('suggestions')
       .eq('query_title', query)
       .single();
 
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
         {
           success: true,
           data: {
-            suggestion: cached.suggested_title,
+            suggestions: cached.suggestions,
             cached: true,
           },
         },
@@ -70,14 +70,14 @@ export async function GET(request: Request) {
       );
     }
 
-    // 5. OpenAI APIで原題を推測
-    const suggestedTitle = await fetchTitleSuggestionFromOpenAI(query);
+    // 5. OpenAI APIで原題候補を推測
+    const suggestions = await fetchTitleSuggestionsFromOpenAI(query);
 
-    // 6. DBにキャッシュ保存（提案なしの場合もnullで保存し、再度のAPI呼び出しを防ぐ）
+    // 6. DBにキャッシュ保存（空配列も保存し、再度のAPI呼び出しを防ぐ）
     await supabase.from('title_suggestions').upsert(
       {
         query_title: query,
-        suggested_title: suggestedTitle,
+        suggestions,
       },
       { onConflict: 'query_title' },
     );
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
       {
         success: true,
         data: {
-          suggestion: suggestedTitle,
+          suggestions,
           cached: false,
         },
       },

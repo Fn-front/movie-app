@@ -1,6 +1,6 @@
 /**
  * TitleSuggestionコンポーネント
- * 検索結果0件時に原題を提案する
+ * 検索結果0件時に原題候補を提案する
  */
 
 'use client';
@@ -16,8 +16,8 @@ import styles from './titleSuggestion.module.scss';
  * TitleSuggestionコンポーネントのプロパティ
  */
 interface TitleSuggestionProps {
-  /** 提案された原題 */
-  suggestion: string | null;
+  /** 提案された原題候補の配列 */
+  suggestions: string[];
   /** ローディング中 */
   isLoading: boolean;
 }
@@ -26,29 +26,38 @@ interface TitleSuggestionProps {
  * TitleSuggestionコンポーネント
  */
 export const TitleSuggestion = memo<TitleSuggestionProps>(
-  function TitleSuggestion({ suggestion, isLoading }) {
+  function TitleSuggestion({ suggestions, isLoading }) {
     const router = useRouter();
 
-    const handleClick = useCallback(() => {
-      if (suggestion) {
-        router.push(`/search?query=${encodeURIComponent(suggestion)}`);
-      }
-    }, [suggestion, router]);
+    const handleClick = useCallback(
+      (title: string) => {
+        router.push(`/search?query=${encodeURIComponent(title)}`);
+      },
+      [router],
+    );
 
-    if (isLoading || !suggestion) {
+    if (isLoading || suggestions.length === 0) {
       return null;
     }
 
     return (
       <div className={styles.c_title_suggestion}>
-        <button
-          type='button'
-          className={styles.c_title_suggestion__link}
-          onClick={handleClick}
-        >
-          <span className={styles.c_title_suggestion__title}>{suggestion}</span>
-          {TITLE_SUGGESTION_MESSAGES.SUGGESTION_SUFFIX}
-        </button>
+        <p className={styles.c_title_suggestion__label}>
+          {TITLE_SUGGESTION_MESSAGES.SUGGESTION_PREFIX}
+        </p>
+        <ul className={styles.c_title_suggestion__list}>
+          {suggestions.map((title) => (
+            <li key={title} className={styles.c_title_suggestion__item}>
+              <button
+                type='button'
+                className={styles.c_title_suggestion__link}
+                onClick={() => handleClick(title)}
+              >
+                {title}
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
     );
   },

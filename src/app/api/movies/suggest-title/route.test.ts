@@ -32,10 +32,10 @@ jest.mock('@/helpers/supabase', () => ({
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
 
-const mockFetchTitleSuggestion = jest.fn();
+const mockFetchTitleSuggestions = jest.fn();
 jest.mock('@/lib/openai/suggestTitle', () => ({
-  fetchTitleSuggestionFromOpenAI: (...args: unknown[]) =>
-    mockFetchTitleSuggestion(...args),
+  fetchTitleSuggestionsFromOpenAI: (...args: unknown[]) =>
+    mockFetchTitleSuggestions(...args),
 }));
 
 // --- Helpers ---
@@ -74,7 +74,7 @@ describe('GET /api/movies/suggest-title', () => {
 
   it('キャッシュヒット時にDBの結果を返す', async () => {
     mockSingle.mockResolvedValue({
-      data: { suggested_title: 'The Shawshank Redemption' },
+      data: { suggestions: ['The Shawshank Redemption', 'Shawshank'] },
       error: null,
     });
 
@@ -83,52 +83,61 @@ describe('GET /api/movies/suggest-title', () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.data.suggestion).toBe('The Shawshank Redemption');
+    expect(body.data.suggestions).toEqual([
+      'The Shawshank Redemption',
+      'Shawshank',
+    ]);
     expect(body.data.cached).toBe(true);
-    expect(mockFetchTitleSuggestion).not.toHaveBeenCalled();
+    expect(mockFetchTitleSuggestions).not.toHaveBeenCalled();
   });
 
   it('キャッシュミス時にOpenAI APIを呼び出して結果を返す', async () => {
-    mockFetchTitleSuggestion.mockResolvedValue('The Shawshank Redemption');
+    mockFetchTitleSuggestions.mockResolvedValue([
+      'The Shawshank Redemption',
+      'Shawshank',
+    ]);
 
     const response = await GET(createRequest('ショーシャンクの空に'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.data.suggestion).toBe('The Shawshank Redemption');
+    expect(body.data.suggestions).toEqual([
+      'The Shawshank Redemption',
+      'Shawshank',
+    ]);
     expect(body.data.cached).toBe(false);
     expect(mockUpsert).toHaveBeenCalledWith(
       {
         query_title: 'ショーシャンクの空に',
-        suggested_title: 'The Shawshank Redemption',
+        suggestions: ['The Shawshank Redemption', 'Shawshank'],
       },
       { onConflict: 'query_title' },
     );
   });
 
-  it('OpenAIがnullを返した場合は提案なしを返しDBにもキャッシュする', async () => {
-    mockFetchTitleSuggestion.mockResolvedValue(null);
+  it('OpenAIが空配列を返した場合は提案なしを返しDBにもキャッシュする', async () => {
+    mockFetchTitleSuggestions.mockResolvedValue([]);
 
     const response = await GET(createRequest('asdfjkl'));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.data.suggestion).toBeNull();
+    expect(body.data.suggestions).toEqual([]);
     expect(body.data.cached).toBe(false);
     expect(mockUpsert).toHaveBeenCalledWith(
       {
         query_title: 'asdfjkl',
-        suggested_title: null,
+        suggestions: [],
       },
       { onConflict: 'query_title' },
     );
   });
 
-  it('提案なし（null）のキャッシュヒット時にnullを返す', async () => {
+  it('提案なし（空配列）のキャッシュヒット時に空配列を返す', async () => {
     mockSingle.mockResolvedValue({
-      data: { suggested_title: null },
+      data: { suggestions: [] },
       error: null,
     });
 
@@ -137,9 +146,9 @@ describe('GET /api/movies/suggest-title', () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.data.suggestion).toBeNull();
+    expect(body.data.suggestions).toEqual([]);
     expect(body.data.cached).toBe(true);
-    expect(mockFetchTitleSuggestion).not.toHaveBeenCalled();
+    expect(mockFetchTitleSuggestions).not.toHaveBeenCalled();
   });
 
   it('予期しないエラーで500を返す', async () => {

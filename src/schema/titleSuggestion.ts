@@ -12,15 +12,15 @@ export const titleSuggestionQuerySchema = z.object({
 });
 
 /**
- * OpenAIレスポンススキーマ
+ * OpenAIレスポンススキーマ（複数候補）
  */
-export const openAiTitleSuggestionResponseSchema = z.object({
-  suggested_title: z.string().min(1).nullable(),
+export const openAiTitleSuggestionsResponseSchema = z.object({
+  suggestions: z.array(z.string().min(1)).max(5),
 });
 
 /**
  * OpenAIレスポンスの型
  */
-export type OpenAiTitleSuggestionResponse = z.infer<
-  typeof openAiTitleSuggestionResponseSchema
+export type OpenAiTitleSuggestionsResponse = z.infer<
+  typeof openAiTitleSuggestionsResponseSchema
 >;

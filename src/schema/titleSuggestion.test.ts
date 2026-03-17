@@ -4,7 +4,7 @@
 
 import {
   titleSuggestionQuerySchema,
-  openAiTitleSuggestionResponseSchema,
+  openAiTitleSuggestionsResponseSchema,
 } from './titleSuggestion';
 
 describe('titleSuggestionQuerySchema', () => {
@@ -38,32 +38,42 @@ describe('titleSuggestionQuerySchema', () => {
   });
 });
 
-describe('openAiTitleSuggestionResponseSchema', () => {
-  it('原題ありのレスポンスを受け付ける', () => {
-    const result = openAiTitleSuggestionResponseSchema.safeParse({
-      suggested_title: 'The Shawshank Redemption',
+describe('openAiTitleSuggestionsResponseSchema', () => {
+  it('候補ありのレスポンスを受け付ける', () => {
+    const result = openAiTitleSuggestionsResponseSchema.safeParse({
+      suggestions: ['The Shawshank Redemption', 'Shawshank'],
     });
     expect(result.success).toBe(true);
-    expect(result.data?.suggested_title).toBe('The Shawshank Redemption');
+    expect(result.data?.suggestions).toEqual([
+      'The Shawshank Redemption',
+      'Shawshank',
+    ]);
   });
 
-  it('nullのレスポンスを受け付ける', () => {
-    const result = openAiTitleSuggestionResponseSchema.safeParse({
-      suggested_title: null,
+  it('空配列を受け付ける', () => {
+    const result = openAiTitleSuggestionsResponseSchema.safeParse({
+      suggestions: [],
     });
     expect(result.success).toBe(true);
-    expect(result.data?.suggested_title).toBeNull();
+    expect(result.data?.suggestions).toEqual([]);
   });
 
-  it('空文字列を拒否する', () => {
-    const result = openAiTitleSuggestionResponseSchema.safeParse({
-      suggested_title: '',
+  it('5件を超える候補を拒否する', () => {
+    const result = openAiTitleSuggestionsResponseSchema.safeParse({
+      suggestions: ['a', 'b', 'c', 'd', 'e', 'f'],
     });
     expect(result.success).toBe(false);
   });
 
-  it('suggested_titleが未指定の場合を拒否する', () => {
-    const result = openAiTitleSuggestionResponseSchema.safeParse({});
+  it('空文字列を含む候補を拒否する', () => {
+    const result = openAiTitleSuggestionsResponseSchema.safeParse({
+      suggestions: ['The Shawshank Redemption', ''],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('suggestionsが未指定の場合を拒否する', () => {
+    const result = openAiTitleSuggestionsResponseSchema.safeParse({});
     expect(result.success).toBe(false);
   });
 });

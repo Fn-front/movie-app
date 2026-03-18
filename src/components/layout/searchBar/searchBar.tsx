@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import { IoSearchOutline, IoCloseOutline } from 'react-icons/io5';
 
 import { Loading } from '@/components/ui/loading/loading';
+import { ICON_SIZES } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './searchBar.module.scss';
@@ -100,7 +101,7 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
         onClick={handleExpand}
         aria-label='検索を開く'
       >
-        <IoSearchOutline size={20} aria-hidden='true' />
+        <IoSearchOutline size={ICON_SIZES.SM} aria-hidden='true' />
       </button>
 
       {/* 検索フォーム（PC: 常に表示、SP: 展開時のみ表示） */}
@@ -120,7 +121,7 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
           aria-label='検索'
           disabled={!query.trim() || isPending}
         >
-          <IoSearchOutline size={20} aria-hidden='true' />
+          <IoSearchOutline size={ICON_SIZES.SM} aria-hidden='true' />
         </button>
         {/* SP: 閉じるボタン */}
         <button
@@ -129,7 +130,7 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
           onClick={handleCollapse}
           aria-label='検索を閉じる'
         >
-          <IoCloseOutline size={20} aria-hidden='true' />
+          <IoCloseOutline size={ICON_SIZES.SM} aria-hidden='true' />
         </button>
       </form>
 

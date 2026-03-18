@@ -10,6 +10,7 @@ import Image from 'next/image';
 
 import { Card } from '@/components/ui/card/card';
 import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
+import { IMAGE_SIZES, DISPLAY_LIMITS } from '@/constants';
 import { getTMDbPosterUrl } from '@/utils/image';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 
@@ -41,7 +42,7 @@ export const WatchlistList = memo<WatchlistListProps>(function WatchlistList({
   if (isLoading) {
     return (
       <div className={styles.c_watchlist_list__grid}>
-        <MovieTileSkeleton count={8} />
+        <MovieTileSkeleton count={DISPLAY_LIMITS.SKELETON_SMALL} />
       </div>
     );
   }
@@ -141,8 +142,8 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
           <Image
             src={posterUrl}
             alt={`${item.title}のポスター`}
-            width={500}
-            height={750}
+            width={IMAGE_SIZES.POSTER.WIDTH}
+            height={IMAGE_SIZES.POSTER.HEIGHT}
             className={styles.c_watchlist_tile__image}
           />
         ) : (

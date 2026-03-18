@@ -15,7 +15,7 @@ import {
   IoChevronForward,
 } from 'react-icons/io5';
 
-import { MENU_LABELS } from '@/constants';
+import { MENU_LABELS, IMAGE_SIZES } from '@/constants';
 import { getInitial } from '@/utils/user';
 
 import { useUserMenu } from './useUserMenu';
@@ -55,8 +55,8 @@ export const UserMenu = memo(function UserMenu() {
             <Image
               src={userImage}
               alt={userName}
-              width={32}
-              height={32}
+              width={IMAGE_SIZES.AVATAR.WIDTH}
+              height={IMAGE_SIZES.AVATAR.HEIGHT}
               className={styles.c_user_menu__avatar}
             />
           ) : (

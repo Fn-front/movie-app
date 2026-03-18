@@ -16,16 +16,10 @@ import {
 } from 'react-icons/io5';
 
 import { MENU_LABELS } from '@/constants';
+import { getInitial } from '@/utils/user';
 
 import { useUserMenu } from './useUserMenu';
 import styles from './userMenu.module.scss';
-
-/**
- * ユーザー名からイニシャルを取得
- */
-const getInitial = (name: string): string => {
-  return name.charAt(0).toUpperCase();
-};
 
 /**
  * UserMenuコンポーネント

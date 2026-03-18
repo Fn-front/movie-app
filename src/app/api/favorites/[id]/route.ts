@@ -11,7 +11,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { isValidUuid, invalidUuidResponse } from '@/helpers/validation';
+import { isValidUuid, invalidUuidResponse } from '@/helpers/requestValidation';
 import { favoritesUpdateSchema } from '@/schema/favorites';
 import {
   HTTP_STATUS,

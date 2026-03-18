@@ -4,8 +4,12 @@
 
 'use client';
 
-import { forwardRef, memo, useId } from 'react';
+import { forwardRef, memo } from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
+
+import { cn } from '@/utils/cn';
+import { useFormField } from '@/hooks/useFormField';
+import { FormFieldMessage } from '@/components/ui/formFieldMessage/formFieldMessage';
 
 import styles from './select.module.scss';
 
@@ -72,30 +76,25 @@ const SelectComponent = forwardRef<HTMLButtonElement, SelectProps>(
     },
     ref,
   ) {
-    const generatedId = useId();
-    const selectId = id || `select-${generatedId}`;
-    const hasError = Boolean(error);
+    const { fieldId, errorId, helperId, hasError, ariaDescribedBy } =
+      useFormField({ id, fieldType: 'select', error, helperText });
 
-    const wrapperClassNames = [
+    const wrapperClassNames = cn(
       styles.c_select,
       fullWidth && styles.c_select__full_width,
       className,
-    ]
-      .filter(Boolean)
-      .join(' ');
+    );
 
-    const triggerClassNames = [
+    const triggerClassNames = cn(
       styles.c_select__trigger,
       hasError && styles.c_select__trigger__error,
       disabled && styles.c_select__trigger__disabled,
-    ]
-      .filter(Boolean)
-      .join(' ');
+    );
 
     return (
       <div className={wrapperClassNames}>
         {label && (
-          <label htmlFor={selectId} className={styles.c_select__label}>
+          <label htmlFor={fieldId} className={styles.c_select__label}>
             {label}
             {required && <span className={styles.c_select__required}>*</span>}
           </label>
@@ -108,17 +107,11 @@ const SelectComponent = forwardRef<HTMLButtonElement, SelectProps>(
         >
           <SelectPrimitive.Trigger
             ref={ref}
-            id={selectId}
+            id={fieldId}
             className={triggerClassNames}
             aria-label={ariaLabel || label}
             aria-invalid={hasError}
-            aria-describedby={
-              error
-                ? `${selectId}-error`
-                : helperText
-                  ? `${selectId}-helper`
-                  : undefined
-            }
+            aria-describedby={ariaDescribedBy}
           >
             <SelectPrimitive.Value placeholder={placeholder} />
             <SelectPrimitive.Icon className={styles.c_select__icon}>
@@ -182,21 +175,14 @@ const SelectComponent = forwardRef<HTMLButtonElement, SelectProps>(
           </SelectPrimitive.Portal>
         </SelectPrimitive.Root>
 
-        {error && (
-          <p
-            id={`${selectId}-error`}
-            className={styles.c_select__error}
-            role='alert'
-          >
-            {error}
-          </p>
-        )}
-
-        {!error && helperText && (
-          <p id={`${selectId}-helper`} className={styles.c_select__helper}>
-            {helperText}
-          </p>
-        )}
+        <FormFieldMessage
+          error={error}
+          helperText={helperText}
+          errorId={errorId}
+          helperId={helperId}
+          errorClassName={styles.c_select__error}
+          helperClassName={styles.c_select__helper}
+        />
       </div>
     );
   },

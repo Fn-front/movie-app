@@ -6,6 +6,8 @@
 
 import { type HTMLAttributes, memo } from 'react';
 
+import { cn } from '@/utils/cn';
+
 import styles from './skeleton.module.scss';
 
 /**
@@ -45,13 +47,11 @@ export const Skeleton = memo<SkeletonProps>(function Skeleton({
   style,
   ...props
 }) {
-  const classNames = [
+  const classNames = cn(
     styles.c_skeleton,
     styles[`c_skeleton__variant__${variant}`],
     className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
   const inlineStyles = {
     width: typeof width === 'number' ? `${width}px` : width,

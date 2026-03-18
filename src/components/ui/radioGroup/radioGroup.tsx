@@ -7,6 +7,8 @@
 import { memo, useId } from 'react';
 import * as RadioGroupPrimitive from '@radix-ui/react-radio-group';
 
+import { cn } from '@/utils/cn';
+
 import styles from './radioGroup.module.scss';
 
 /**
@@ -45,9 +47,7 @@ export const RadioGroup = memo<RadioGroupProps>(function RadioGroup({
 }) {
   const groupId = useId();
 
-  const rootClassNames = [styles.c_radio_group, className]
-    .filter(Boolean)
-    .join(' ');
+  const rootClassNames = cn(styles.c_radio_group, className);
 
   return (
     <RadioGroupPrimitive.Root

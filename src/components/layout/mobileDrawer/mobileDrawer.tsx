@@ -23,6 +23,7 @@ import {
 } from 'react-icons/io5';
 
 import { ROUTES, NAV_ITEMS, MENU_LABELS } from '@/constants';
+import { getInitial } from '@/utils/user';
 
 import styles from './mobileDrawer.module.scss';
 
@@ -86,10 +87,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
   const userEmail = session?.user?.email ?? '';
   const userImage = session?.user?.image;
 
-  const initial = useMemo(
-    () => (userName ? userName.charAt(0).toUpperCase() : ''),
-    [userName],
-  );
+  const initial = useMemo(() => getInitial(userName), [userName]);
 
   const navItems = useMemo(
     () =>

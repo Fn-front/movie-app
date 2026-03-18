@@ -6,6 +6,8 @@
 
 import { type HTMLAttributes, memo, useCallback, useMemo } from 'react';
 
+import { cn } from '@/utils/cn';
+
 import styles from './pagination.module.scss';
 
 /**
@@ -115,9 +117,7 @@ export const Pagination = memo<PaginationProps>(function Pagination({
     return pages;
   }, [currentPage, totalPages, maxPageButtons]);
 
-  const wrapperClassNames = [styles.c_pagination, className]
-    .filter(Boolean)
-    .join(' ');
+  const wrapperClassNames = cn(styles.c_pagination, className);
 
   if (totalPages <= 1) {
     return null;

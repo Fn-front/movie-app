@@ -7,6 +7,8 @@
 import { type ReactNode, memo, useCallback } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 
+import { cn } from '@/utils/cn';
+
 import styles from './modal.module.scss';
 
 /**
@@ -105,13 +107,11 @@ export const Modal = memo<ModalProps>(function Modal({
     [onOpenChange],
   );
 
-  const contentClassNames = [
+  const contentClassNames = cn(
     styles.c_modal__content,
     styles[`c_modal__content__${size}`],
     className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
@@ -190,9 +190,7 @@ export const ModalHeader = memo<ModalHeaderProps>(function ModalHeader({
   children,
   className,
 }) {
-  const classNames = [styles.c_modal__header, className]
-    .filter(Boolean)
-    .join(' ');
+  const classNames = cn(styles.c_modal__header, className);
 
   return <div className={classNames}>{children}</div>;
 });
@@ -213,9 +211,7 @@ export const ModalBody = memo<ModalBodyProps>(function ModalBody({
   children,
   className,
 }) {
-  const classNames = [styles.c_modal__body, className]
-    .filter(Boolean)
-    .join(' ');
+  const classNames = cn(styles.c_modal__body, className);
 
   return <div className={classNames}>{children}</div>;
 });
@@ -237,9 +233,7 @@ export const ModalFooter = memo<ModalFooterProps>(function ModalFooter({
   children,
   className,
 }) {
-  const classNames = [styles.c_modal__footer, className]
-    .filter(Boolean)
-    .join(' ');
+  const classNames = cn(styles.c_modal__footer, className);
 
   return <div className={classNames}>{children}</div>;
 });

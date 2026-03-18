@@ -25,7 +25,7 @@ describe('useFormField', () => {
 
   it('エラーがある場合はhasErrorがtrueでariaDescribedByがerrorIdになる', () => {
     const { result } = renderHook(() =>
-      useFormField({ id: 'test', error: 'エラーです' }),
+      useFormField({ id: 'test', fieldType: 'input', error: 'エラーです' }),
     );
 
     expect(result.current.hasError).toBe(true);
@@ -34,7 +34,7 @@ describe('useFormField', () => {
 
   it('ヘルパーテキストのみの場合はariaDescribedByがhelperIdになる', () => {
     const { result } = renderHook(() =>
-      useFormField({ id: 'test', helperText: 'ヘルプ' }),
+      useFormField({ id: 'test', fieldType: 'input', helperText: 'ヘルプ' }),
     );
 
     expect(result.current.hasError).toBe(false);
@@ -42,7 +42,9 @@ describe('useFormField', () => {
   });
 
   it('エラーもヘルパーもない場合はariaDescribedByがundefinedになる', () => {
-    const { result } = renderHook(() => useFormField({ id: 'test' }));
+    const { result } = renderHook(() =>
+      useFormField({ id: 'test', fieldType: 'input' }),
+    );
 
     expect(result.current.hasError).toBe(false);
     expect(result.current.ariaDescribedBy).toBeUndefined();
@@ -50,7 +52,12 @@ describe('useFormField', () => {
 
   it('エラーとヘルパーが両方ある場合はエラーが優先される', () => {
     const { result } = renderHook(() =>
-      useFormField({ id: 'test', error: 'エラー', helperText: 'ヘルプ' }),
+      useFormField({
+        id: 'test',
+        fieldType: 'input',
+        error: 'エラー',
+        helperText: 'ヘルプ',
+      }),
     );
 
     expect(result.current.ariaDescribedBy).toBe('test-error');

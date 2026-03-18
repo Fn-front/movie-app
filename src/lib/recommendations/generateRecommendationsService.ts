@@ -34,14 +34,43 @@ export interface GenerateRecommendationsSummary {
   total_recommendations: number;
 }
 
+/** Discriminated Union: 成功結果 */
+interface FetchActiveUserIdsSuccess {
+  type: 'success';
+  activeUserIds: string[];
+  inactiveUsers: number;
+}
+
+/** Discriminated Union: エラー結果 */
+interface FetchActiveUserIdsError {
+  type: 'error';
+  error: string;
+}
+
+type FetchActiveUserIdsResult =
+  | FetchActiveUserIdsSuccess
+  | FetchActiveUserIdsError;
+
+/** Discriminated Union: CRON成功結果 */
+interface CronSuccess {
+  type: 'success';
+  data: GenerateRecommendationsSummary;
+}
+
+/** Discriminated Union: CRONエラー結果 */
+interface CronError {
+  type: 'error';
+  error: string;
+}
+
+export type CronResult = CronSuccess | CronError;
+
 /**
  * お気に入りが1件以上あるアクティブユーザーIDを取得
  */
 export async function fetchActiveUserIds(
   supabase: SupabaseClient,
-): Promise<
-  { activeUserIds: string[]; inactiveUsers: number } | { error: string }
-> {
+): Promise<FetchActiveUserIdsResult> {
   const { data: favoriteRows, error: usersError } = await supabase
     .from('favorites')
     .select('user_id')
@@ -53,7 +82,7 @@ export async function fetchActiveUserIds(
 
   if (usersError || !usersWithFavorites) {
     console.error('Failed to fetch users with favorites:', usersError);
-    return { error: CRON_ERROR_MESSAGES.FETCH_USERS_FAILED };
+    return { type: 'error', error: CRON_ERROR_MESSAGES.FETCH_USERS_FAILED };
   }
 
   const activeThreshold = new Date();
@@ -69,7 +98,10 @@ export async function fetchActiveUserIds(
 
   if (activeUsersError) {
     console.error('Failed to fetch active users:', activeUsersError);
-    return { error: CRON_ERROR_MESSAGES.FETCH_ACTIVE_USERS_FAILED };
+    return {
+      type: 'error',
+      error: CRON_ERROR_MESSAGES.FETCH_ACTIVE_USERS_FAILED,
+    };
   }
 
   const activeUserIds = activeUsers
@@ -78,7 +110,7 @@ export async function fetchActiveUserIds(
 
   const inactiveUsers = usersWithFavorites.length - activeUserIds.length;
 
-  return { activeUserIds, inactiveUsers };
+  return { type: 'success', activeUserIds, inactiveUsers };
 }
 
 /**
@@ -296,9 +328,9 @@ export async function processUserRecommendations(
  */
 export async function executeGenerateRecommendationsCron(
   supabase: SupabaseClient,
-): Promise<GenerateRecommendationsSummary | { error: string }> {
+): Promise<CronResult> {
   const userResult = await fetchActiveUserIds(supabase);
-  if ('error' in userResult) {
+  if (userResult.type === 'error') {
     return userResult;
   }
 
@@ -326,9 +358,12 @@ export async function executeGenerateRecommendationsCron(
   }
 
   return {
-    processed_users: processedUsers,
-    skipped_users: skippedUsers,
-    inactive_users: inactiveUsers,
-    total_recommendations: totalRecommendations,
+    type: 'success',
+    data: {
+      processed_users: processedUsers,
+      skipped_users: skippedUsers,
+      inactive_users: inactiveUsers,
+      total_recommendations: totalRecommendations,
+    },
   };
 }

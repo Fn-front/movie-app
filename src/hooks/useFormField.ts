@@ -7,7 +7,7 @@ import { useId } from 'react';
 
 interface UseFormFieldOptions {
   id?: string;
-  fieldType?: string;
+  fieldType: string;
   error?: string;
   helperText?: string;
 }
@@ -25,7 +25,7 @@ interface UseFormFieldReturn {
  */
 export function useFormField({
   id,
-  fieldType = 'field',
+  fieldType,
   error,
   helperText,
 }: UseFormFieldOptions): UseFormFieldReturn {

@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
 
     const result = await executeGenerateRecommendationsCron(supabase);
 
-    if ('error' in result) {
+    if (result.type === 'error') {
       return NextResponse.json(
         {
           success: false,
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: true, data: result },
+      { success: true, data: result.data },
       { status: HTTP_STATUS.OK },
     );
   } catch (error) {

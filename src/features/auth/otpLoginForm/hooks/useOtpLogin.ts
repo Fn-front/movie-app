@@ -10,6 +10,7 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
+import { API_ENDPOINTS } from '@/constants';
 import { OTP_ACTION } from '@/constants/otp';
 import {
   AUTH_ERROR_MESSAGES,
@@ -45,7 +46,7 @@ export function useOtpLogin(): UseOtpLoginReturn {
     setApiError(null);
 
     try {
-      const response = await fetch('/api/auth/otp/send', {
+      const response = await fetch(API_ENDPOINTS.AUTH.OTP_SEND, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

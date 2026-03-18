@@ -21,6 +21,44 @@ export const API = {
 } as const;
 
 /**
+ * 内部APIエンドポイント
+ */
+export const API_ENDPOINTS = {
+  AUTH: {
+    OTP_SEND: '/api/auth/otp/send',
+    OTP_VERIFY: '/api/auth/otp/verify',
+  },
+} as const;
+
+/**
+ * 外部URL
+ */
+export const EXTERNAL_URLS = {
+  /** YouTube埋め込みURL */
+  YOUTUBE_EMBED: 'https://www.youtube.com/embed/',
+  /** プレースホルダー画像サービス */
+  PLACEHOLDER_IMAGE: 'https://placehold.co',
+} as const;
+
+/**
+ * 公開アセットパス
+ */
+export const ASSET_PATHS = {
+  /** TMDbロゴ */
+  TMDB_LOGO: '/tmdb-logo.svg',
+} as const;
+
+/**
+ * URLパラメータキー（検索フィルター用）
+ */
+export const QUERY_PARAMS = {
+  PAGE: 'page',
+  GENRE: 'genre',
+  YEAR: 'year',
+  VOTE_AVERAGE_GTE: 'vote_average_gte',
+} as const;
+
+/**
  * HTTPステータスコード
  */
 export const HTTP_STATUS = {

@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 
+import { API_ENDPOINTS } from '@/constants';
 import { OTP_CONFIG } from '@/constants/otp';
 import type { OtpAction } from '@/constants/otp';
 
@@ -70,7 +71,7 @@ export function useOtpVerification({
       setApiError(null);
 
       try {
-        const response = await fetch('/api/auth/otp/verify', {
+        const response = await fetch(API_ENDPOINTS.AUTH.OTP_VERIFY, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, code, action }),
@@ -102,7 +103,7 @@ export function useOtpVerification({
     setApiError(null);
 
     try {
-      const response = await fetch('/api/auth/otp/send', {
+      const response = await fetch(API_ENDPOINTS.AUTH.OTP_SEND, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, action }),

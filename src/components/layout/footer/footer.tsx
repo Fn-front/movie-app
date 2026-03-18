@@ -8,6 +8,7 @@ import { type HTMLAttributes, type ReactNode, memo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { ASSET_PATHS } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './footer.module.scss';
@@ -75,7 +76,7 @@ export const Footer = memo<FooterProps>(function Footer({
 
         <div className={styles.c_footer__attribution}>
           <Image
-            src='/tmdb-logo.svg'
+            src={ASSET_PATHS.TMDB_LOGO}
             alt='TMDB'
             width={100}
             height={8}

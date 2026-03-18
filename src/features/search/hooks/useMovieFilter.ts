@@ -8,6 +8,8 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
+import { QUERY_PARAMS } from '@/constants';
+
 /**
  * フィルターオプションの型
  */
@@ -38,9 +40,9 @@ export interface UseMovieFilterReturn {
  * URLパラメータからフィルター状態を読み取る
  */
 function parseFiltersFromParams(searchParams: URLSearchParams): FilterOptions {
-  const genreParam = searchParams.get('genre');
-  const yearParam = searchParams.get('year');
-  const voteParam = searchParams.get('vote_average_gte');
+  const genreParam = searchParams.get(QUERY_PARAMS.GENRE);
+  const yearParam = searchParams.get(QUERY_PARAMS.YEAR);
+  const voteParam = searchParams.get(QUERY_PARAMS.VOTE_AVERAGE_GTE);
 
   return {
     genre: genreParam
@@ -64,27 +66,27 @@ function buildSearchParamsFromFilters(
   const params = new URLSearchParams(currentParams.toString());
 
   // ページをリセット
-  params.delete('page');
+  params.delete(QUERY_PARAMS.PAGE);
 
   // ジャンル
   if (filters.genre && filters.genre.length > 0) {
-    params.set('genre', filters.genre.join(','));
+    params.set(QUERY_PARAMS.GENRE, filters.genre.join(','));
   } else {
-    params.delete('genre');
+    params.delete(QUERY_PARAMS.GENRE);
   }
 
   // 公開年
   if (filters.year !== undefined) {
-    params.set('year', String(filters.year));
+    params.set(QUERY_PARAMS.YEAR, String(filters.year));
   } else {
-    params.delete('year');
+    params.delete(QUERY_PARAMS.YEAR);
   }
 
   // 最低評価
   if (filters.vote_average_gte !== undefined) {
-    params.set('vote_average_gte', String(filters.vote_average_gte));
+    params.set(QUERY_PARAMS.VOTE_AVERAGE_GTE, String(filters.vote_average_gte));
   } else {
-    params.delete('vote_average_gte');
+    params.delete(QUERY_PARAMS.VOTE_AVERAGE_GTE);
   }
 
   return params;
@@ -120,10 +122,10 @@ export function useMovieFilter(): UseMovieFilterReturn {
 
   const handleFilterClear = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    params.delete('genre');
-    params.delete('year');
-    params.delete('vote_average_gte');
-    params.delete('page');
+    params.delete(QUERY_PARAMS.GENRE);
+    params.delete(QUERY_PARAMS.YEAR);
+    params.delete(QUERY_PARAMS.VOTE_AVERAGE_GTE);
+    params.delete(QUERY_PARAMS.PAGE);
     router.push(`/search?${params.toString()}`);
   }, [searchParams, router]);
 

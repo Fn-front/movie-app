@@ -2,6 +2,7 @@
  * アプリケーション定数
  */
 
+export * from './api';
 export * from './auth';
 export * from './common';
 export * from './favorites';

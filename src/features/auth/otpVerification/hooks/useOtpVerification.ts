@@ -80,7 +80,9 @@ export function useOtpVerification({
         const data = await response.json();
 
         if (!response.ok) {
-          setApiError(data.error?.message || UI_ERROR_MESSAGES.OTP_VERIFY_FAILED);
+          setApiError(
+            data.error?.message || UI_ERROR_MESSAGES.OTP_VERIFY_FAILED,
+          );
           if (data.error?.details?.remainingAttempts !== undefined) {
             setRemainingAttempts(data.error.details.remainingAttempts);
           }

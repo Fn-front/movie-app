@@ -125,7 +125,11 @@ export const Pagination = memo<PaginationProps>(function Pagination({
   }
 
   return (
-    <nav className={wrapperClassNames} aria-label={ARIA_LABELS.PAGINATION} {...props}>
+    <nav
+      className={wrapperClassNames}
+      aria-label={ARIA_LABELS.PAGINATION}
+      {...props}
+    >
       <button
         type='button'
         className={styles.c_pagination__button}

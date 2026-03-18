@@ -10,7 +10,12 @@ import { memo, useCallback, useState, useEffect } from 'react';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal/modal';
 import { Button } from '@/components/ui/button/button';
 import { RatingIndicator } from '@/features/favorites/component/ratingIndicator/ratingIndicator';
-import { FAVORITES_RATING_MIN, MODAL_TITLES, BUTTON_LABELS, FILTER_LABELS } from '@/constants';
+import {
+  FAVORITES_RATING_MIN,
+  MODAL_TITLES,
+  BUTTON_LABELS,
+  FILTER_LABELS,
+} from '@/constants';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
 import styles from './favoriteRatingModal.module.scss';
@@ -85,7 +90,9 @@ export const FavoriteRatingModal = memo<FavoriteRatingModalProps>(
       <Modal
         open={isOpen}
         onOpenChange={handleOpenChange}
-        title={isEditMode ? MODAL_TITLES.FAVORITE_EDIT : MODAL_TITLES.FAVORITE_ADD}
+        title={
+          isEditMode ? MODAL_TITLES.FAVORITE_EDIT : MODAL_TITLES.FAVORITE_ADD
+        }
         size='sm'
       >
         <ModalBody>

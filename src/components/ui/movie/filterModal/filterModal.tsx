@@ -124,10 +124,14 @@ const FilterModalContent = memo<{
     <>
       <ModalBody>
         <div className={styles.c_filter__section}>
-          <h3 className={styles.c_filter__section_title}>{FILTER_LABELS.RELEASE_DATE}</h3>
+          <h3 className={styles.c_filter__section_title}>
+            {FILTER_LABELS.RELEASE_DATE}
+          </h3>
           <div className={styles.c_filter__date_range}>
             <label className={styles.c_filter__date_field}>
-              <span className={styles.c_filter__date_label}>{FILTER_LABELS.DATE_FROM}</span>
+              <span className={styles.c_filter__date_label}>
+                {FILTER_LABELS.DATE_FROM}
+              </span>
               <input
                 type='date'
                 value={tempDateRange.gte || ''}
@@ -137,7 +141,9 @@ const FilterModalContent = memo<{
             </label>
             <span className={styles.c_filter__date_separator}>〜</span>
             <label className={styles.c_filter__date_field}>
-              <span className={styles.c_filter__date_label}>{FILTER_LABELS.DATE_TO}</span>
+              <span className={styles.c_filter__date_label}>
+                {FILTER_LABELS.DATE_TO}
+              </span>
               <input
                 type='date'
                 value={tempDateRange.lte || ''}
@@ -149,7 +155,9 @@ const FilterModalContent = memo<{
         </div>
 
         <div className={styles.c_filter__section}>
-          <h3 className={styles.c_filter__section_title}>{FILTER_LABELS.REVIVAL}</h3>
+          <h3 className={styles.c_filter__section_title}>
+            {FILTER_LABELS.REVIVAL}
+          </h3>
           <fieldset className={styles.c_filter__revival}>
             <legend className={styles.c_filter__visually_hidden}>
               {FILTER_LABELS.REVIVAL_FILTER}
@@ -163,7 +171,9 @@ const FilterModalContent = memo<{
                 onChange={handleRevivalChange}
                 className={styles.c_filter__radio}
               />
-              <span className={styles.c_filter__label}>{FILTER_LABELS.ALL}</span>
+              <span className={styles.c_filter__label}>
+                {FILTER_LABELS.ALL}
+              </span>
             </label>
             <label className={styles.c_filter__radio_item}>
               <input
@@ -174,7 +184,9 @@ const FilterModalContent = memo<{
                 onChange={handleRevivalChange}
                 className={styles.c_filter__radio}
               />
-              <span className={styles.c_filter__label}>{FILTER_LABELS.REVIVAL_ONLY}</span>
+              <span className={styles.c_filter__label}>
+                {FILTER_LABELS.REVIVAL_ONLY}
+              </span>
             </label>
             <label className={styles.c_filter__radio_item}>
               <input
@@ -185,13 +197,17 @@ const FilterModalContent = memo<{
                 onChange={handleRevivalChange}
                 className={styles.c_filter__radio}
               />
-              <span className={styles.c_filter__label}>{FILTER_LABELS.REVIVAL_EXCLUDE}</span>
+              <span className={styles.c_filter__label}>
+                {FILTER_LABELS.REVIVAL_EXCLUDE}
+              </span>
             </label>
           </fieldset>
         </div>
 
         <div className={styles.c_filter__section}>
-          <h3 className={styles.c_filter__section_title}>{FILTER_LABELS.GENRE}</h3>
+          <h3 className={styles.c_filter__section_title}>
+            {FILTER_LABELS.GENRE}
+          </h3>
           <div className={styles.c_filter__tag_grid}>
             {sortedGenres.map((genre) => (
               <label key={genre.id} className={styles.c_filter__tag}>

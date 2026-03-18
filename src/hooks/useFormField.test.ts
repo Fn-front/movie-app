@@ -18,9 +18,7 @@ describe('useFormField', () => {
   });
 
   it('IDが未指定の場合はfieldType付きの自動生成IDを使用する', () => {
-    const { result } = renderHook(() =>
-      useFormField({ fieldType: 'input' }),
-    );
+    const { result } = renderHook(() => useFormField({ fieldType: 'input' }));
 
     expect(result.current.fieldId).toContain('input-');
   });
@@ -44,9 +42,7 @@ describe('useFormField', () => {
   });
 
   it('エラーもヘルパーもない場合はariaDescribedByがundefinedになる', () => {
-    const { result } = renderHook(() =>
-      useFormField({ id: 'test' }),
-    );
+    const { result } = renderHook(() => useFormField({ id: 'test' }));
 
     expect(result.current.hasError).toBe(false);
     expect(result.current.ariaDescribedBy).toBeUndefined();

@@ -39,7 +39,9 @@ export interface GenerateRecommendationsSummary {
  */
 export async function fetchActiveUserIds(
   supabase: SupabaseClient,
-): Promise<{ activeUserIds: string[]; inactiveUsers: number } | { error: string }> {
+): Promise<
+  { activeUserIds: string[]; inactiveUsers: number } | { error: string }
+> {
   const { data: favoriteRows, error: usersError } = await supabase
     .from('favorites')
     .select('user_id')
@@ -136,9 +138,7 @@ export async function collectUserMovieData(
   ];
 
   const excludedTitles = excludedMovies.map((m) => m.title);
-  const baseExcludedIds = new Set(
-    excludedMovies.map((m) => m.tmdb_movie_id),
-  );
+  const baseExcludedIds = new Set(excludedMovies.map((m) => m.tmdb_movie_id));
 
   return { favoriteMovies, excludedTitles, baseExcludedIds, dismissedMovies };
 }

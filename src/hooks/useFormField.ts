@@ -35,11 +35,7 @@ export function useFormField({
   const helperId = `${fieldId}-helper`;
   const hasError = Boolean(error);
 
-  const ariaDescribedBy = error
-    ? errorId
-    : helperText
-      ? helperId
-      : undefined;
+  const ariaDescribedBy = error ? errorId : helperText ? helperId : undefined;
 
   return { fieldId, errorId, helperId, hasError, ariaDescribedBy };
 }

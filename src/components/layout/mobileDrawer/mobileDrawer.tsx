@@ -28,6 +28,8 @@ import {
   MENU_LABELS,
   ICON_SIZES,
   IMAGE_SIZES,
+  ARIA_LABELS,
+  MODAL_TITLES,
 } from '@/constants';
 import { getInitial } from '@/utils/user';
 
@@ -124,22 +126,22 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
         <Dialog.Overlay className={styles.c_mobile_drawer__overlay} />
         <Dialog.Content
           className={styles.c_mobile_drawer__content}
-          aria-label='モバイルメニュー'
+          aria-label={ARIA_LABELS.MOBILE_MENU}
           aria-describedby={undefined}
         >
           <div className={styles.c_mobile_drawer__header}>
             <Dialog.Title className={styles.c_mobile_drawer__title}>
-              メニュー
+              {MODAL_TITLES.MENU}
             </Dialog.Title>
             <Dialog.Close className={styles.c_mobile_drawer__close}>
               <IoCloseOutline size={ICON_SIZES.MD} aria-hidden='true' />
-              <span className='sr-only'>閉じる</span>
+              <span className='sr-only'>{ARIA_LABELS.CLOSE}</span>
             </Dialog.Close>
           </div>
 
           <nav
             className={styles.c_mobile_drawer__nav}
-            aria-label='モバイルナビゲーション'
+            aria-label={ARIA_LABELS.MOBILE_NAV}
           >
             <ul className={styles.c_mobile_drawer__nav_list}>
               {navItems.map((item) => (

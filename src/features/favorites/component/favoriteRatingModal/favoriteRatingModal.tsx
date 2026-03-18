@@ -10,7 +10,12 @@ import { memo, useCallback, useState, useEffect } from 'react';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal/modal';
 import { Button } from '@/components/ui/button/button';
 import { RatingIndicator } from '@/features/favorites/component/ratingIndicator/ratingIndicator';
-import { FAVORITES_RATING_MIN } from '@/constants';
+import {
+  FAVORITES_RATING_MIN,
+  MODAL_TITLES,
+  BUTTON_LABELS,
+  FILTER_LABELS,
+} from '@/constants';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
 import styles from './favoriteRatingModal.module.scss';
@@ -85,7 +90,9 @@ export const FavoriteRatingModal = memo<FavoriteRatingModalProps>(
       <Modal
         open={isOpen}
         onOpenChange={handleOpenChange}
-        title={isEditMode ? 'お気に入りを編集' : 'お気に入りに追加'}
+        title={
+          isEditMode ? MODAL_TITLES.FAVORITE_EDIT : MODAL_TITLES.FAVORITE_ADD
+        }
         size='sm'
       >
         <ModalBody>
@@ -95,7 +102,7 @@ export const FavoriteRatingModal = memo<FavoriteRatingModalProps>(
             </p>
             <div className={styles.c_favorite_rating_modal__rating}>
               <span className={styles.c_favorite_rating_modal__rating_label}>
-                評価
+                {FILTER_LABELS.RATING}
               </span>
               <RatingIndicator
                 rating={rating}
@@ -108,12 +115,12 @@ export const FavoriteRatingModal = memo<FavoriteRatingModalProps>(
           <div className={styles.c_favorite_rating_modal__actions}>
             {isEditMode && onDelete && (
               <Button variant='danger' size='sm' onClick={handleDelete}>
-                削除
+                {BUTTON_LABELS.DELETE}
               </Button>
             )}
             <div className={styles.c_favorite_rating_modal__actions_right}>
               <Button variant='ghost' size='sm' onClick={onClose}>
-                キャンセル
+                {BUTTON_LABELS.CANCEL}
               </Button>
               <Button
                 variant='primary'
@@ -121,7 +128,7 @@ export const FavoriteRatingModal = memo<FavoriteRatingModalProps>(
                 onClick={handleSubmit}
                 disabled={rating < FAVORITES_RATING_MIN}
               >
-                {isEditMode ? '更新' : '登録'}
+                {isEditMode ? BUTTON_LABELS.UPDATE : BUTTON_LABELS.REGISTER}
               </Button>
             </div>
           </div>

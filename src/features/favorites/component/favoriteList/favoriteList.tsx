@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/card/card';
 import { RatingIndicator } from '@/features/favorites/component/ratingIndicator/ratingIndicator';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
-import { IMAGE_SIZES, DISPLAY_LIMITS } from '@/constants';
+import { IMAGE_SIZES, DISPLAY_LIMITS, EMPTY_MESSAGES } from '@/constants';
 import { getTMDbPosterUrl } from '@/utils/image';
 import type {
   FavoriteItem,
@@ -59,7 +59,7 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
     <MovieGridContainer
       isLoading={isLoading}
       isEmpty={favorites.length === 0}
-      emptyMessage='お気に入りの映画を追加しましょう'
+      emptyMessage={EMPTY_MESSAGES.FAVORITES}
       skeletonCount={DISPLAY_LIMITS.SKELETON_SMALL}
     >
       {favorites.map((item) => (

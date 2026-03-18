@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/card/card';
 import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
 import { IMAGE_SIZES, DISPLAY_LIMITS } from '@/constants';
 import { getTMDbPosterUrl } from '@/utils/image';
+import { EMPTY_MESSAGES } from '@/constants';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 
 import styles from './watchlistList.module.scss';
@@ -50,7 +51,7 @@ export const WatchlistList = memo<WatchlistListProps>(function WatchlistList({
   if (watchlist.length === 0) {
     return (
       <p className={styles.c_watchlist_list__empty}>
-        ウォッチリストに映画を追加しましょう
+        {EMPTY_MESSAGES.WATCHLIST}
       </p>
     );
   }

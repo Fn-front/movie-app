@@ -6,6 +6,7 @@
 
 import { type HTMLAttributes, memo, useCallback, useMemo } from 'react';
 
+import { ARIA_LABELS } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './pagination.module.scss';
@@ -124,13 +125,17 @@ export const Pagination = memo<PaginationProps>(function Pagination({
   }
 
   return (
-    <nav className={wrapperClassNames} aria-label='ページネーション' {...props}>
+    <nav
+      className={wrapperClassNames}
+      aria-label={ARIA_LABELS.PAGINATION}
+      {...props}
+    >
       <button
         type='button'
         className={styles.c_pagination__button}
         onClick={handleFirst}
         disabled={currentPage === 1}
-        aria-label='最初のページへ'
+        aria-label={ARIA_LABELS.FIRST_PAGE}
       >
         <svg
           width='20'
@@ -161,7 +166,7 @@ export const Pagination = memo<PaginationProps>(function Pagination({
         className={styles.c_pagination__button}
         onClick={handlePrevious}
         disabled={currentPage === 1}
-        aria-label='前のページへ'
+        aria-label={ARIA_LABELS.PREV_PAGE}
       >
         <svg
           width='20'
@@ -199,7 +204,7 @@ export const Pagination = memo<PaginationProps>(function Pagination({
                 page === currentPage ? styles.c_pagination__page__active : ''
               }`}
               onClick={() => handlePageChange(page)}
-              aria-label={`ページ ${page}`}
+              aria-label={ARIA_LABELS.PAGE(page)}
               aria-current={page === currentPage ? 'page' : undefined}
             >
               {page}
@@ -213,7 +218,7 @@ export const Pagination = memo<PaginationProps>(function Pagination({
         className={styles.c_pagination__button}
         onClick={handleNext}
         disabled={currentPage === totalPages}
-        aria-label='次のページへ'
+        aria-label={ARIA_LABELS.NEXT_PAGE}
       >
         <svg
           width='20'
@@ -238,7 +243,7 @@ export const Pagination = memo<PaginationProps>(function Pagination({
         className={styles.c_pagination__button}
         onClick={handleLast}
         disabled={currentPage === totalPages}
-        aria-label='最後のページへ'
+        aria-label={ARIA_LABELS.LAST_PAGE}
       >
         <svg
           width='20'

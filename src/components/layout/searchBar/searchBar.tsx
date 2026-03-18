@@ -19,7 +19,7 @@ import { useRouter } from 'next/navigation';
 import { IoSearchOutline, IoCloseOutline } from 'react-icons/io5';
 
 import { Loading } from '@/components/ui/loading/loading';
-import { ICON_SIZES } from '@/constants';
+import { ICON_SIZES, ARIA_LABELS } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './searchBar.module.scss';
@@ -99,7 +99,7 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
         type='button'
         className={styles.c_search_bar__toggle}
         onClick={handleExpand}
-        aria-label='検索を開く'
+        aria-label={ARIA_LABELS.OPEN_SEARCH}
       >
         <IoSearchOutline size={ICON_SIZES.SM} aria-hidden='true' />
       </button>
@@ -113,12 +113,12 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
           value={query}
           onChange={handleChange}
           placeholder={placeholder}
-          aria-label='映画を検索'
+          aria-label={ARIA_LABELS.SEARCH_MOVIES}
         />
         <button
           type='submit'
           className={styles.c_search_bar__button}
-          aria-label='検索'
+          aria-label={ARIA_LABELS.SEARCH}
           disabled={!query.trim() || isPending}
         >
           <IoSearchOutline size={ICON_SIZES.SM} aria-hidden='true' />
@@ -128,7 +128,7 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
           type='button'
           className={styles.c_search_bar__close}
           onClick={handleCollapse}
-          aria-label='検索を閉じる'
+          aria-label={ARIA_LABELS.CLOSE_SEARCH}
         >
           <IoCloseOutline size={ICON_SIZES.SM} aria-hidden='true' />
         </button>
@@ -140,7 +140,7 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
           type='button'
           className={styles.c_search_bar__overlay}
           onClick={handleCollapse}
-          aria-label='検索を閉じる'
+          aria-label={ARIA_LABELS.CLOSE_SEARCH}
           tabIndex={-1}
         />
       )}

@@ -7,6 +7,7 @@
 import { type ReactNode, memo, useCallback } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 
+import { ARIA_LABELS } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './modal.module.scss';
@@ -162,7 +163,7 @@ export const Modal = memo<ModalProps>(function Modal({
                       strokeLinejoin='round'
                     />
                   </svg>
-                  <span className='sr-only'>閉じる</span>
+                  <span className='sr-only'>{ARIA_LABELS.CLOSE}</span>
                 </Dialog.Close>
               )}
             </div>

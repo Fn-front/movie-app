@@ -23,6 +23,7 @@ import {
   DISMISSED_MOVIES_ERROR_MESSAGES,
   IMAGE_SIZES,
   DISPLAY_LIMITS,
+  EMPTY_MESSAGES,
 } from '@/constants';
 
 import styles from './dismissedMoviesList.module.scss';
@@ -102,7 +103,7 @@ export const DismissedMoviesList = memo(function DismissedMoviesList() {
   }
 
   if (movies.length === 0) {
-    return <EmptyState title='興味なしに登録した映画はありません' />;
+    return <EmptyState title={EMPTY_MESSAGES.DISMISSED} />;
   }
 
   return (

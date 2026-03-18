@@ -7,6 +7,7 @@
 import { type ReactNode, memo, useCallback } from 'react';
 import * as ToastPrimitive from '@radix-ui/react-toast';
 
+import { ARIA_LABELS } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './toast.module.scss';
@@ -239,7 +240,7 @@ export const Toast = memo<ToastProps>(function Toast({
             strokeLinejoin='round'
           />
         </svg>
-        <span className='sr-only'>閉じる</span>
+        <span className='sr-only'>{ARIA_LABELS.CLOSE}</span>
       </ToastPrimitive.Close>
     </ToastPrimitive.Root>
   );

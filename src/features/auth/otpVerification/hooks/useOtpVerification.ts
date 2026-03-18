@@ -8,6 +8,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 
 import { OTP_CONFIG } from '@/constants/otp';
 import type { OtpAction } from '@/constants/otp';
+import { UI_ERROR_MESSAGES } from '@/constants';
 
 interface UseOtpVerificationProps {
   email: string;
@@ -79,7 +80,7 @@ export function useOtpVerification({
         const data = await response.json();
 
         if (!response.ok) {
-          setApiError(data.error?.message || '検証に失敗しました。');
+          setApiError(data.error?.message || UI_ERROR_MESSAGES.OTP_VERIFY_FAILED);
           if (data.error?.details?.remainingAttempts !== undefined) {
             setRemainingAttempts(data.error.details.remainingAttempts);
           }
@@ -89,7 +90,7 @@ export function useOtpVerification({
         setRemainingAttempts(null);
         onVerifySuccess?.();
       } catch {
-        setApiError('ネットワークエラーが発生しました。');
+        setApiError(UI_ERROR_MESSAGES.NETWORK_ERROR);
       } finally {
         setIsSubmitting(false);
       }
@@ -111,7 +112,7 @@ export function useOtpVerification({
       const data = await response.json();
 
       if (!response.ok) {
-        setApiError(data.error?.message || '再送信に失敗しました。');
+        setApiError(data.error?.message || UI_ERROR_MESSAGES.OTP_RESEND_FAILED);
         return;
       }
 
@@ -119,7 +120,7 @@ export function useOtpVerification({
       setResendCountdown(OTP_CONFIG.RESEND_INTERVAL_SECONDS);
       setRemainingAttempts(null);
     } catch {
-      setApiError('ネットワークエラーが発生しました。');
+      setApiError(UI_ERROR_MESSAGES.NETWORK_ERROR);
     } finally {
       setIsResending(false);
     }

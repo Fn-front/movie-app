@@ -9,6 +9,7 @@ import { memo, useCallback, useState } from 'react';
 
 import { Modal } from '@/components/ui/modal/modal';
 import { MovieDetailContent } from '@/features/movies/component/movieDetailContent/movieDetailContent';
+import { MODAL_TITLES } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './movieDetailModal.module.scss';
@@ -47,7 +48,7 @@ export const MovieDetailModal = memo<MovieDetailModalProps>(
       <Modal
         open={movieId !== null}
         onOpenChange={handleOpenChange}
-        title={title ?? '映画詳細'}
+        title={title ?? MODAL_TITLES.MOVIE_DETAIL}
         size='lg'
         className={cn(isVideoDialogOpen && styles.c_movie_detail_modal__dimmed)}
       >

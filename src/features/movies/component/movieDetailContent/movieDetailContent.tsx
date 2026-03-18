@@ -24,6 +24,7 @@ import {
 import { IMAGE_SIZES, ICON_SIZES, DISPLAY_LIMITS } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
+import { ARIA_LABELS, UI_ERROR_MESSAGES } from '@/constants';
 import type { WatchProvider } from '@/lib/types';
 
 import styles from './movieDetailContent.module.scss';
@@ -226,7 +227,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
       return (
         <div className={styles.c_movie_detail__error}>
           <p className={styles.c_movie_detail__error_text}>
-            映画情報の取得に失敗しました。
+            {UI_ERROR_MESSAGES.MOVIE_DETAIL_FETCH_FAILED}
           </p>
         </div>
       );
@@ -249,7 +250,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                 type='button'
                 className={styles.c_movie_detail__play_button}
                 onClick={handleOpenVideoDialog}
-                aria-label='予告動画を再生'
+                aria-label={ARIA_LABELS.PLAY_TRAILER}
               >
                 <IoPlayOutline size={ICON_SIZES.LG} />
               </button>

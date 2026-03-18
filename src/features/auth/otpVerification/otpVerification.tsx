@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { Heading } from '@/components/ui/heading/heading';
 import { otpFormSchema, type OtpFormData } from '@/schema/otp';
+import { ARIA_LABELS, BUTTON_LABELS, OTP_MESSAGES } from '@/constants';
 import type { OtpAction } from '@/constants/otp';
 
 import { useOtpVerification } from './hooks/useOtpVerification';
@@ -59,7 +60,7 @@ export const OtpVerification = memo<OtpVerificationProps>(
     return (
       <div className={styles.c_otp_verification}>
         <Heading level={2} align='center'>
-          確認コードを入力
+          {OTP_MESSAGES.HEADING}
         </Heading>
 
         <p className={styles.c_otp_verification__description}>
@@ -82,7 +83,7 @@ export const OtpVerification = memo<OtpVerificationProps>(
               autoFocus
               autoComplete='one-time-code'
               fullWidth
-              aria-label='確認コード'
+              aria-label={ARIA_LABELS.OTP_CODE}
               error={errors.otp?.message}
               {...register('otp')}
             />
@@ -96,7 +97,7 @@ export const OtpVerification = memo<OtpVerificationProps>(
 
           {remainingAttempts !== null && remainingAttempts > 0 && (
             <p className={styles.c_otp_verification__attempts} role='status'>
-              残り{remainingAttempts}回入力できます
+              {OTP_MESSAGES.REMAINING_ATTEMPTS(remainingAttempts)}
             </p>
           )}
 
@@ -107,9 +108,9 @@ export const OtpVerification = memo<OtpVerificationProps>(
               size='lg'
               fullWidth
               isLoading={isSubmitting}
-              aria-label='確認コードを検証'
+              aria-label={ARIA_LABELS.VERIFY_OTP}
             >
-              確認
+              {BUTTON_LABELS.CONFIRM}
             </Button>
           </div>
         </form>
@@ -121,13 +122,13 @@ export const OtpVerification = memo<OtpVerificationProps>(
               size='sm'
               onClick={onResendClick}
               isLoading={isResending}
-              aria-label='確認コードを再送信'
+              aria-label={ARIA_LABELS.RESEND_OTP}
             >
-              コードを再送信
+              {BUTTON_LABELS.RESEND_CODE}
             </Button>
           ) : (
             <p className={styles.c_otp_verification__countdown}>
-              再送信まで {resendCountdown}秒
+              {OTP_MESSAGES.RESEND_COUNTDOWN(resendCountdown)}
             </p>
           )}
         </div>

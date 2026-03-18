@@ -9,6 +9,7 @@ import { memo, useState, useCallback, useMemo } from 'react';
 
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal/modal';
 import { Button } from '@/components/ui/button/button';
+import { MODAL_TITLES, BUTTON_LABELS, FILTER_LABELS } from '@/constants';
 import type { DateRange } from '@/features/movies/types';
 
 import styles from './filterModal.module.scss';
@@ -123,10 +124,10 @@ const FilterModalContent = memo<{
     <>
       <ModalBody>
         <div className={styles.c_filter__section}>
-          <h3 className={styles.c_filter__section_title}>公開日</h3>
+          <h3 className={styles.c_filter__section_title}>{FILTER_LABELS.RELEASE_DATE}</h3>
           <div className={styles.c_filter__date_range}>
             <label className={styles.c_filter__date_field}>
-              <span className={styles.c_filter__date_label}>開始日</span>
+              <span className={styles.c_filter__date_label}>{FILTER_LABELS.DATE_FROM}</span>
               <input
                 type='date'
                 value={tempDateRange.gte || ''}
@@ -136,7 +137,7 @@ const FilterModalContent = memo<{
             </label>
             <span className={styles.c_filter__date_separator}>〜</span>
             <label className={styles.c_filter__date_field}>
-              <span className={styles.c_filter__date_label}>終了日</span>
+              <span className={styles.c_filter__date_label}>{FILTER_LABELS.DATE_TO}</span>
               <input
                 type='date'
                 value={tempDateRange.lte || ''}
@@ -148,10 +149,10 @@ const FilterModalContent = memo<{
         </div>
 
         <div className={styles.c_filter__section}>
-          <h3 className={styles.c_filter__section_title}>リバイバル上映</h3>
+          <h3 className={styles.c_filter__section_title}>{FILTER_LABELS.REVIVAL}</h3>
           <fieldset className={styles.c_filter__revival}>
             <legend className={styles.c_filter__visually_hidden}>
-              リバイバル上映フィルタ
+              {FILTER_LABELS.REVIVAL_FILTER}
             </legend>
             <label className={styles.c_filter__radio_item}>
               <input
@@ -162,7 +163,7 @@ const FilterModalContent = memo<{
                 onChange={handleRevivalChange}
                 className={styles.c_filter__radio}
               />
-              <span className={styles.c_filter__label}>すべて</span>
+              <span className={styles.c_filter__label}>{FILTER_LABELS.ALL}</span>
             </label>
             <label className={styles.c_filter__radio_item}>
               <input
@@ -173,7 +174,7 @@ const FilterModalContent = memo<{
                 onChange={handleRevivalChange}
                 className={styles.c_filter__radio}
               />
-              <span className={styles.c_filter__label}>リバイバルのみ</span>
+              <span className={styles.c_filter__label}>{FILTER_LABELS.REVIVAL_ONLY}</span>
             </label>
             <label className={styles.c_filter__radio_item}>
               <input
@@ -184,13 +185,13 @@ const FilterModalContent = memo<{
                 onChange={handleRevivalChange}
                 className={styles.c_filter__radio}
               />
-              <span className={styles.c_filter__label}>リバイバル除外</span>
+              <span className={styles.c_filter__label}>{FILTER_LABELS.REVIVAL_EXCLUDE}</span>
             </label>
           </fieldset>
         </div>
 
         <div className={styles.c_filter__section}>
-          <h3 className={styles.c_filter__section_title}>ジャンル</h3>
+          <h3 className={styles.c_filter__section_title}>{FILTER_LABELS.GENRE}</h3>
           <div className={styles.c_filter__tag_grid}>
             {sortedGenres.map((genre) => (
               <label key={genre.id} className={styles.c_filter__tag}>
@@ -209,10 +210,10 @@ const FilterModalContent = memo<{
       <ModalFooter>
         <div className={styles.c_filter__footer}>
           <Button variant='ghost' size='sm' onClick={handleClear}>
-            クリア
+            {BUTTON_LABELS.CLEAR}
           </Button>
           <Button variant='primary' size='sm' onClick={handleApply}>
-            適用
+            {BUTTON_LABELS.APPLY}
           </Button>
         </div>
       </ModalFooter>
@@ -238,7 +239,7 @@ export const FilterModal = memo<FilterModalProps>(function FilterModal({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title='フィルター'
+      title={MODAL_TITLES.FILTER}
       size='sm'
       className={styles.c_filter__modal}
     >

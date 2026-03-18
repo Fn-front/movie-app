@@ -9,7 +9,12 @@ import { memo, useCallback } from 'react';
 import Image from 'next/image';
 import { IoChevronForward } from 'react-icons/io5';
 
-import { API, TMDB_IMAGE_SIZES, IMAGE_SIZES } from '@/constants';
+import {
+  API,
+  TMDB_IMAGE_SIZES,
+  IMAGE_SIZES,
+  EMPTY_MESSAGES,
+} from '@/constants';
 import type { CalendarMovieItem } from '@/lib/api/calendar/calendar';
 
 import styles from './calendarMovieList.module.scss';
@@ -45,7 +50,7 @@ export const CalendarMovieList = memo<CalendarMovieListProps>(
         <div className={styles.c_calendarMovieList}>
           <h3 className={styles.c_calendarMovieList__title}>{formattedDate}</h3>
           <p className={styles.c_calendarMovieList__empty}>
-            この日に公開予定の映画はありません
+            {EMPTY_MESSAGES.CALENDAR}
           </p>
         </div>
       );

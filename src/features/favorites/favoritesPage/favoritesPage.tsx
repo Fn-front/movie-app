@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useMemo } from 'react';
 
 import { Select } from '@/components/ui/select/select';
 import { Loading } from '@/components/ui/loading/loading';
@@ -13,6 +13,7 @@ import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailM
 import { FavoriteList } from '@/features/favorites/component/favoriteList/favoriteList';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
+import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import {
   useFavoritesPage,
   FAVORITES_PAGE_SORT_OPTIONS,
@@ -44,21 +45,17 @@ export const FavoritesPage = memo(function FavoritesPage() {
     isFavoriteProcessing,
   } = favoriteToggle;
 
-  const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
-
-  const handleMovieClick = useCallback((tmdbMovieId: number) => {
-    setSelectedMovieId(tmdbMovieId);
-  }, []);
-
-  const handleDetailModalClose = useCallback(() => {
-    setSelectedMovieId(null);
-  }, []);
-
-  const selectedMovieTitle = useMemo(
-    () =>
-      favorites.find((item) => item.tmdb_movie_id === selectedMovieId)?.title,
-    [favorites, selectedMovieId],
+  const modalItems = useMemo(
+    () => favorites.map((f) => ({ id: f.tmdb_movie_id, title: f.title })),
+    [favorites],
   );
+
+  const {
+    selectedMovieId,
+    selectedMovieTitle,
+    handleMovieClick,
+    handleModalClose,
+  } = useMovieDetailModal(modalItems);
 
   const sortOptions = useMemo(
     () =>
@@ -108,7 +105,7 @@ export const FavoritesPage = memo(function FavoritesPage() {
         movieId={selectedMovieId}
         title={selectedMovieTitle}
         showFinancialInfo={false}
-        onClose={handleDetailModalClose}
+        onClose={handleModalClose}
       />
 
       <FavoriteRatingModal

@@ -6,78 +6,43 @@
 
 import { NextResponse } from 'next/server';
 
-import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
+import { softDeleteById, notFoundResponse } from '@/helpers/apiHelpers';
 import {
-  createServiceRoleClient,
-  dbConnectionErrorResponse,
-} from '@/helpers/supabase';
-import { isValidUuid, invalidUuidResponse } from '@/helpers/requestValidation';
+  isValidUuid,
+  invalidUuidResponse,
+  parseAndValidate,
+} from '@/helpers/requestValidation';
+import { withAuth } from '@/helpers/routeHandler';
 import { favoritesUpdateSchema } from '@/schema/favorites';
 import {
   HTTP_STATUS,
-  ERROR_CODE,
   FAVORITES_ERROR_MESSAGES,
   FAVORITES_SUCCESS_MESSAGES,
 } from '@/constants';
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    // 認証チェック
-    const session = await getAuthSession();
-    if (!session) return unauthorizedResponse();
-
-    // Supabaseクライアント検証
-    const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
-
-    const { id } = await params;
+export const PATCH = withAuth(
+  async ({ session, supabase, request, params }) => {
+    const { id } = await params!;
 
     // UUID形式チェック
     if (!isValidUuid(id)) {
       return invalidUuidResponse(FAVORITES_ERROR_MESSAGES.INVALID_ID);
     }
 
-    // リクエストボディのパース
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.BAD_REQUEST,
-            message: FAVORITES_ERROR_MESSAGES.INVALID_BODY,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
+    // リクエストボディのパース + バリデーション
+    const { data: validatedData, error: validationError } =
+      await parseAndValidate(
+        request,
+        favoritesUpdateSchema,
+        FAVORITES_ERROR_MESSAGES.INVALID_BODY,
       );
-    }
 
-    // バリデーション
-    const result = favoritesUpdateSchema.safeParse(body);
-
-    if (!result.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.VALIDATION_ERROR,
-            message: FAVORITES_ERROR_MESSAGES.INVALID_RATING,
-            details: result.error.flatten().fieldErrors,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
+    if (validationError) return validationError;
 
     // 評価更新（自分のお気に入りかつ未削除のもののみ）
     const { data, error } = await supabase
       .from('favorites')
-      .update({ rating: result.data.rating })
+      .update({ rating: validatedData.rating })
       .eq('id', id)
       .eq('user_id', session.user.id)
       .is('deleted_at', null)
@@ -87,16 +52,7 @@ export async function PATCH(
       .single();
 
     if (error || !data) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.NOT_FOUND,
-            message: FAVORITES_ERROR_MESSAGES.NOT_FOUND,
-          },
-        },
-        { status: HTTP_STATUS.NOT_FOUND },
-      );
+      return notFoundResponse(FAVORITES_ERROR_MESSAGES.NOT_FOUND);
     }
 
     return NextResponse.json(
@@ -107,36 +63,16 @@ export async function PATCH(
       },
       { status: HTTP_STATUS.OK },
     );
-  } catch (error) {
-    console.error('Favorites update error:', error);
+  },
+  {
+    errorLog: 'Favorites update error',
+    errorMessage: FAVORITES_ERROR_MESSAGES.UPDATE_FAILED,
+  },
+);
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: FAVORITES_ERROR_MESSAGES.UPDATE_FAILED,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
-    );
-  }
-}
-
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    // 認証チェック
-    const session = await getAuthSession();
-    if (!session) return unauthorizedResponse();
-
-    // Supabaseクライアント検証
-    const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
-
-    const { id } = await params;
+export const DELETE = withAuth(
+  async ({ session, supabase, params }) => {
+    const { id } = await params!;
 
     // UUID形式チェック
     if (!isValidUuid(id)) {
@@ -144,27 +80,13 @@ export async function DELETE(
     }
 
     // 論理削除（自分のお気に入りかつ未削除のもののみ）
-    const { data, error } = await supabase
-      .from('favorites')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', id)
-      .eq('user_id', session.user.id)
-      .is('deleted_at', null)
-      .select('id')
-      .single();
-
-    if (error || !data) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.NOT_FOUND,
-            message: FAVORITES_ERROR_MESSAGES.NOT_FOUND,
-          },
-        },
-        { status: HTTP_STATUS.NOT_FOUND },
-      );
-    }
+    const success = await softDeleteById(
+      supabase,
+      'favorites',
+      id,
+      session.user.id,
+    );
+    if (!success) return notFoundResponse(FAVORITES_ERROR_MESSAGES.NOT_FOUND);
 
     return NextResponse.json(
       {
@@ -173,18 +95,9 @@ export async function DELETE(
       },
       { status: HTTP_STATUS.OK },
     );
-  } catch (error) {
-    console.error('Favorites remove error:', error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: FAVORITES_ERROR_MESSAGES.REMOVE_FAILED,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
-    );
-  }
-}
+  },
+  {
+    errorLog: 'Favorites remove error',
+    errorMessage: FAVORITES_ERROR_MESSAGES.REMOVE_FAILED,
+  },
+);

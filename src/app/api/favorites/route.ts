@@ -6,11 +6,9 @@
 
 import { NextResponse } from 'next/server';
 
-import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
-import {
-  createServiceRoleClient,
-  dbConnectionErrorResponse,
-} from '@/helpers/supabase';
+import { withAuth } from '@/helpers/routeHandler';
+import { parseAndValidate } from '@/helpers/requestValidation';
+import { checkDuplicate, conflictResponse } from '@/helpers/apiHelpers';
 import { favoritesQuerySchema, favoritesAddSchema } from '@/schema/favorites';
 import {
   HTTP_STATUS,
@@ -19,16 +17,8 @@ import {
   FAVORITES_SUCCESS_MESSAGES,
 } from '@/constants';
 
-export async function GET(request: Request) {
-  try {
-    // 認証チェック
-    const session = await getAuthSession();
-    if (!session) return unauthorizedResponse();
-
-    // Supabaseクライアント検証
-    const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
-
+export const GET = withAuth(
+  async ({ session, supabase, request }) => {
     // クエリパラメータのバリデーション
     const { searchParams } = new URL(request.url);
     const queryResult = favoritesQuerySchema.safeParse({
@@ -104,86 +94,31 @@ export async function GET(request: Request) {
       },
       { status: HTTP_STATUS.OK },
     );
-  } catch (error) {
-    console.error('Favorites fetch error:', error);
+  },
+  {
+    errorLog: 'Favorites fetch error',
+    errorMessage: FAVORITES_ERROR_MESSAGES.FETCH_FAILED,
+  },
+);
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: FAVORITES_ERROR_MESSAGES.FETCH_FAILED,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
+export const POST = withAuth(
+  async ({ session, supabase, request }) => {
+    const parsed = await parseAndValidate(
+      request,
+      favoritesAddSchema,
+      FAVORITES_ERROR_MESSAGES.INVALID_BODY,
     );
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    // 認証チェック
-    const session = await getAuthSession();
-    if (!session) return unauthorizedResponse();
-
-    // Supabaseクライアント検証
-    const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
-
-    // リクエストボディのパース
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.BAD_REQUEST,
-            message: FAVORITES_ERROR_MESSAGES.INVALID_BODY,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
-
-    // バリデーション
-    const result = favoritesAddSchema.safeParse(body);
-
-    if (!result.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.VALIDATION_ERROR,
-            message: FAVORITES_ERROR_MESSAGES.INVALID_BODY,
-            details: result.error.flatten().fieldErrors,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
+    if (parsed.error) return parsed.error;
 
     // 重複チェック
-    const { data: existing } = await supabase
-      .from('favorites')
-      .select('id')
-      .eq('user_id', session.user.id)
-      .eq('tmdb_movie_id', result.data.tmdb_movie_id)
-      .is('deleted_at', null)
-      .single();
-
-    if (existing) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.CONFLICT,
-            message: FAVORITES_ERROR_MESSAGES.ALREADY_EXISTS,
-          },
-        },
-        { status: HTTP_STATUS.CONFLICT },
-      );
+    const isDuplicate = await checkDuplicate(
+      supabase,
+      'favorites',
+      session.user.id,
+      parsed.data.tmdb_movie_id,
+    );
+    if (isDuplicate) {
+      return conflictResponse(FAVORITES_ERROR_MESSAGES.ALREADY_EXISTS);
     }
 
     // お気に入りに追加
@@ -191,11 +126,11 @@ export async function POST(request: Request) {
       .from('favorites')
       .insert({
         user_id: session.user.id,
-        tmdb_movie_id: result.data.tmdb_movie_id,
-        title: result.data.title,
-        poster_path: result.data.poster_path ?? null,
-        release_date: result.data.release_date ?? null,
-        rating: result.data.rating,
+        tmdb_movie_id: parsed.data.tmdb_movie_id,
+        title: parsed.data.title,
+        poster_path: parsed.data.poster_path ?? null,
+        release_date: parsed.data.release_date ?? null,
+        rating: parsed.data.rating,
       })
       .select(
         'id, tmdb_movie_id, title, poster_path, release_date, rating, added_at',
@@ -214,18 +149,9 @@ export async function POST(request: Request) {
       },
       { status: HTTP_STATUS.CREATED },
     );
-  } catch (error) {
-    console.error('Favorites add error:', error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: FAVORITES_ERROR_MESSAGES.ADD_FAILED,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
-    );
-  }
-}
+  },
+  {
+    errorLog: 'Favorites add error',
+    errorMessage: FAVORITES_ERROR_MESSAGES.ADD_FAILED,
+  },
+);

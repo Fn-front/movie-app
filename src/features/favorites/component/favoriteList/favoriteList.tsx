@@ -11,7 +11,7 @@ import Image from 'next/image';
 import { Card } from '@/components/ui/card/card';
 import { RatingIndicator } from '@/features/favorites/component/ratingIndicator/ratingIndicator';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
-import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
+import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
 import { getTMDbPosterUrl } from '@/utils/image';
 import type {
   FavoriteItem,
@@ -54,24 +54,13 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
   isFavoriteProcessing,
   onClick,
 }) {
-  if (isLoading) {
-    return (
-      <div className={styles.c_favorite_list__grid}>
-        <MovieTileSkeleton count={8} />
-      </div>
-    );
-  }
-
-  if (favorites.length === 0) {
-    return (
-      <p className={styles.c_favorite_list__empty}>
-        お気に入りの映画を追加しましょう
-      </p>
-    );
-  }
-
   return (
-    <div className={styles.c_favorite_list__grid}>
+    <MovieGridContainer
+      isLoading={isLoading}
+      isEmpty={favorites.length === 0}
+      emptyMessage='お気に入りの映画を追加しましょう'
+      skeletonCount={8}
+    >
       {favorites.map((item) => (
         <FavoriteTile
           key={item.id}
@@ -81,7 +70,7 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
           onClick={onClick}
         />
       ))}
-    </div>
+    </MovieGridContainer>
   );
 });
 

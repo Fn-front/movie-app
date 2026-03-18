@@ -6,30 +6,20 @@
 
 import { NextResponse } from 'next/server';
 
-import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
-import {
-  createServiceRoleClient,
-  dbConnectionErrorResponse,
-} from '@/helpers/supabase';
-import { watchlistQuerySchema, watchlistAddSchema } from '@/schema/watchlist';
-import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 import {
   HTTP_STATUS,
   ERROR_CODE,
   WATCHLIST_ERROR_MESSAGES,
   WATCHLIST_SUCCESS_MESSAGES,
 } from '@/constants';
+import { checkDuplicate, conflictResponse } from '@/helpers/apiHelpers';
+import { parseAndValidate } from '@/helpers/requestValidation';
+import { withAuth } from '@/helpers/routeHandler';
+import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
+import { watchlistQuerySchema, watchlistAddSchema } from '@/schema/watchlist';
 
-export async function GET(request: Request) {
-  try {
-    // 認証チェック
-    const session = await getAuthSession();
-    if (!session) return unauthorizedResponse();
-
-    // Supabaseクライアント検証
-    const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
-
+export const GET = withAuth(
+  async ({ session, supabase, request }) => {
     // クエリパラメータのバリデーション
     const { searchParams } = new URL(request.url);
     const queryResult = watchlistQuerySchema.safeParse({
@@ -143,86 +133,33 @@ export async function GET(request: Request) {
       },
       { status: HTTP_STATUS.OK },
     );
-  } catch (error) {
-    console.error('Watchlist fetch error:', error);
+  },
+  {
+    errorLog: 'Watchlist fetch error',
+    errorMessage: WATCHLIST_ERROR_MESSAGES.FETCH_FAILED,
+  },
+);
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: WATCHLIST_ERROR_MESSAGES.FETCH_FAILED,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
+export const POST = withAuth(
+  async ({ session, supabase, request }) => {
+    // リクエストボディのパース + バリデーション
+    const parsed = await parseAndValidate(
+      request,
+      watchlistAddSchema,
+      WATCHLIST_ERROR_MESSAGES.INVALID_BODY,
     );
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    // 認証チェック
-    const session = await getAuthSession();
-    if (!session) return unauthorizedResponse();
-
-    // Supabaseクライアント検証
-    const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
-
-    // リクエストボディのパース
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.BAD_REQUEST,
-            message: WATCHLIST_ERROR_MESSAGES.INVALID_BODY,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
-
-    // バリデーション
-    const result = watchlistAddSchema.safeParse(body);
-
-    if (!result.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.VALIDATION_ERROR,
-            message: WATCHLIST_ERROR_MESSAGES.INVALID_BODY,
-            details: result.error.flatten().fieldErrors,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
+    if (parsed.error) return parsed.error;
 
     // 重複チェック（deleted_at IS NULLの条件はUNIQUEインデックスで保証）
-    const { data: existing } = await supabase
-      .from('watchlist')
-      .select('id')
-      .eq('user_id', session.user.id)
-      .eq('tmdb_movie_id', result.data.tmdb_movie_id)
-      .is('deleted_at', null)
-      .single();
+    const isDuplicate = await checkDuplicate(
+      supabase,
+      'watchlist',
+      session.user.id,
+      parsed.data.tmdb_movie_id,
+    );
 
-    if (existing) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.CONFLICT,
-            message: WATCHLIST_ERROR_MESSAGES.ALREADY_EXISTS,
-          },
-        },
-        { status: HTTP_STATUS.CONFLICT },
-      );
+    if (isDuplicate) {
+      return conflictResponse(WATCHLIST_ERROR_MESSAGES.ALREADY_EXISTS);
     }
 
     // ウォッチリストに追加
@@ -230,10 +167,10 @@ export async function POST(request: Request) {
       .from('watchlist')
       .insert({
         user_id: session.user.id,
-        tmdb_movie_id: result.data.tmdb_movie_id,
-        title: result.data.title,
-        poster_path: result.data.poster_path ?? null,
-        release_date: result.data.release_date ?? null,
+        tmdb_movie_id: parsed.data.tmdb_movie_id,
+        title: parsed.data.title,
+        poster_path: parsed.data.poster_path ?? null,
+        release_date: parsed.data.release_date ?? null,
       })
       .select('id, tmdb_movie_id, title, poster_path, release_date, added_at')
       .single();
@@ -250,18 +187,9 @@ export async function POST(request: Request) {
       },
       { status: HTTP_STATUS.CREATED },
     );
-  } catch (error) {
-    console.error('Watchlist add error:', error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: WATCHLIST_ERROR_MESSAGES.ADD_FAILED,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
-    );
-  }
-}
+  },
+  {
+    errorLog: 'Watchlist add error',
+    errorMessage: WATCHLIST_ERROR_MESSAGES.ADD_FAILED,
+  },
+);

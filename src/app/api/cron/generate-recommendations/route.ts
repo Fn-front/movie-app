@@ -13,13 +13,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { HTTP_STATUS, ERROR_CODE, CRON_ERROR_MESSAGES } from '@/constants';
+import { verifyCronAuth } from '@/helpers/cronAuth';
+import { handleRouteError } from '@/helpers/routeError';
 import {
-  HTTP_STATUS,
-  ERROR_CODE,
-  AUTH_ERROR_MESSAGES,
-  CRON_ERROR_MESSAGES,
-} from '@/constants';
-import { createServiceRoleClient } from '@/helpers/supabase';
+  createServiceRoleClient,
+  dbConnectionErrorResponse,
+} from '@/helpers/supabase';
 import { executeGenerateRecommendationsCron } from '@/lib/recommendations/generateRecommendationsService';
 
 export const dynamic = 'force-dynamic';
@@ -27,35 +27,11 @@ export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   try {
-    // CRON_SECRETで認証
-    const cronSecret = process.env.CRON_SECRET;
-    const authHeader = request.headers.get('authorization');
-    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.UNAUTHORIZED,
-            message: AUTH_ERROR_MESSAGES.AUTH_FAILED,
-          },
-        },
-        { status: HTTP_STATUS.UNAUTHORIZED },
-      );
-    }
+    const authError = verifyCronAuth(request);
+    if (authError) return authError;
 
     const supabase = createServiceRoleClient();
-    if (!supabase) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.SERVER_ERROR,
-            message: AUTH_ERROR_MESSAGES.DB_CONNECTION_ERROR,
-          },
-        },
-        { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
-      );
-    }
+    if (!supabase) return dbConnectionErrorResponse();
 
     const result = await executeGenerateRecommendationsCron(supabase);
 
@@ -77,17 +53,10 @@ export async function GET(request: NextRequest) {
       { status: HTTP_STATUS.OK },
     );
   } catch (error) {
-    console.error('Generate recommendations error:', error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: CRON_ERROR_MESSAGES.GENERATE_RECOMMENDATIONS,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
+    return handleRouteError(
+      error,
+      'Generate recommendations error',
+      CRON_ERROR_MESSAGES.GENERATE_RECOMMENDATIONS,
     );
   }
 }

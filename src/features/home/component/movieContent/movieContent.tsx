@@ -12,12 +12,10 @@ import { Tabs } from '@/components/ui/tabs/tabs';
 import { Select } from '@/components/ui/select/select';
 import { Button } from '@/components/ui/button/button';
 import { FilterIcon } from '@/components/icons/filterIcon/filterIcon';
-import { Loading } from '@/components/ui/loading/loading';
 import { SORT_OPTIONS, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
-import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
+import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
 import { FilterModal } from '@/components/ui/movie/filterModal/filterModal';
-import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 
 import { useHome } from '@/features/home/hooks/useHome';
@@ -75,10 +73,6 @@ export const MovieContent = memo(function MovieContent() {
     [handleFilterModalClose],
   );
 
-  const loadMoreRef = useIntersectionObserver(fetchNextPage, {
-    enabled: hasNextPage && !isFetchingNextPage,
-  });
-
   return (
     <div className={styles.c_home_page}>
       <Tabs
@@ -116,34 +110,24 @@ export const MovieContent = memo(function MovieContent() {
         </div>
       </div>
 
-      <div className={styles.c_home_page__grid}>
-        {isLoading ? (
-          <MovieTileSkeleton />
-        ) : (
-          movies.map((movie) => (
-            <MovieTile
-              key={movie.id}
-              movie={movie}
-              genres={genres}
-              isInWatchlist={isInWatchlist(movie.id)}
-              onWatchlistToggle={toggleWatchlist}
-              watchlistDisabled={isMovieToggling(movie.id)}
-            />
-          ))
-        )}
-      </div>
-
-      {!isLoading && movies.length === 0 && (
-        <p className={styles.c_home_page__empty}>表示する映画がありません。</p>
-      )}
-
-      {isFetchingNextPage && (
-        <div className={styles.c_home_page__loading}>
-          <Loading size='sm' label='読み込み中...' />
-        </div>
-      )}
-
-      <div ref={loadMoreRef} className={styles.c_home_page__sentinel} />
+      <MovieGridContainer
+        isLoading={isLoading}
+        isEmpty={movies.length === 0}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        fetchNextPage={fetchNextPage}
+      >
+        {movies.map((movie) => (
+          <MovieTile
+            key={movie.id}
+            movie={movie}
+            genres={genres}
+            isInWatchlist={isInWatchlist(movie.id)}
+            onWatchlistToggle={toggleWatchlist}
+            watchlistDisabled={isMovieToggling(movie.id)}
+          />
+        ))}
+      </MovieGridContainer>
 
       <FilterModal
         open={isFilterModalOpen}

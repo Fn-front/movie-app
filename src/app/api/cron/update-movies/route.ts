@@ -10,33 +10,20 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import {
   HTTP_STATUS,
-  ERROR_CODE,
-  AUTH_ERROR_MESSAGES,
   MOVIES_SUCCESS_MESSAGES,
   CRON_ERROR_MESSAGES,
 } from '@/constants';
+import { verifyCronAuth } from '@/helpers/cronAuth';
+import { handleRouteError } from '@/helpers/routeError';
 import { updateMoviesCacheByBatch } from '@/lib/sync/updateMoviesCacheByBatch';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    // CRON_SECRETで認証
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.UNAUTHORIZED,
-            message: AUTH_ERROR_MESSAGES.AUTH_FAILED,
-          },
-        },
-        { status: HTTP_STATUS.UNAUTHORIZED },
-      );
-    }
+    const authError = verifyCronAuth(request);
+    if (authError) return authError;
 
-    // バッチ更新実行
     const result = await updateMoviesCacheByBatch();
 
     return NextResponse.json(
@@ -49,17 +36,10 @@ export async function GET(request: NextRequest) {
       { status: HTTP_STATUS.OK },
     );
   } catch (error) {
-    console.error('Batch update movies error:', error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: CRON_ERROR_MESSAGES.UPDATE_MOVIES,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
+    return handleRouteError(
+      error,
+      'Batch update movies error',
+      CRON_ERROR_MESSAGES.UPDATE_MOVIES,
     );
   }
 }

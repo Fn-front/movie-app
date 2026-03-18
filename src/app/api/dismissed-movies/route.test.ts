@@ -27,6 +27,9 @@ import { getAuthSession } from '@/helpers/auth';
 
 // --- Helpers ---
 
+const createGetRequest = () =>
+  new Request('http://localhost/api/dismissed-movies', { method: 'GET' });
+
 const createPostRequest = (body: Record<string, unknown>) =>
   new Request('http://localhost/api/dismissed-movies', {
     method: 'POST',
@@ -53,7 +56,7 @@ describe('GET /api/dismissed-movies', () => {
   it('未認証で401を返す', async () => {
     (getAuthSession as jest.Mock).mockResolvedValue(null);
 
-    const response = await GET();
+    const response = await GET(createGetRequest());
 
     expect(response.status).toBe(401);
     const json = await response.json();
@@ -90,7 +93,7 @@ describe('GET /api/dismissed-movies', () => {
       }),
     });
 
-    const response = await GET();
+    const response = await GET(createGetRequest());
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -111,7 +114,7 @@ describe('GET /api/dismissed-movies', () => {
       }),
     });
 
-    const response = await GET();
+    const response = await GET(createGetRequest());
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -131,7 +134,7 @@ describe('GET /api/dismissed-movies', () => {
       }),
     });
 
-    const response = await GET();
+    const response = await GET(createGetRequest());
     const json = await response.json();
 
     expect(response.status).toBe(500);
@@ -145,7 +148,7 @@ describe('GET /api/dismissed-movies', () => {
     const originalFn = originalMock.createServiceRoleClient;
     originalMock.createServiceRoleClient = () => null;
 
-    const response = await GET();
+    const response = await GET(createGetRequest());
     const json = await response.json();
 
     expect(response.status).toBe(500);

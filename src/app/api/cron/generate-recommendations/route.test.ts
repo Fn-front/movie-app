@@ -15,7 +15,9 @@ import { GET } from './route';
 const mockFrom = jest.fn();
 jest.mock('@/helpers/supabase', () => ({
   createServiceRoleClient: jest.fn(() => ({ from: mockFrom })),
-  dbConnectionErrorResponse: jest.fn(),
+  dbConnectionErrorResponse: jest.fn(
+    () => new Response(JSON.stringify({ success: false }), { status: 500 }),
+  ),
 }));
 
 const mockFetchRecommendations = jest.fn();

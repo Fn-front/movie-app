@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
@@ -14,9 +14,10 @@ import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle'
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useDismissMovie } from '@/features/dismissedMovies/hooks/useDismissMovie';
 import { RECOMMENDATIONS_MESSAGES } from '@/constants';
+import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { Recommendation } from '@/schema/recommendations';
-import { toMovieCacheItem } from '@/features/recommendations/utils/toMovieCacheItem';
+import { recommendationToMovieCacheItem } from '@/utils/toMovieCacheItem';
 
 import styles from './recommendationSection.module.scss';
 
@@ -35,8 +36,6 @@ export interface RecommendationSectionProps {
  */
 export const RecommendationSection = memo<RecommendationSectionProps>(
   function RecommendationSection({ recommendations, hasFavorites }) {
-    const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
-
     const {
       modalState: favoriteModalState,
       handleFavoriteToggle,
@@ -64,30 +63,23 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       [dismissMovie],
     );
 
-    const handleMovieClick = useCallback((movieId: number) => {
-      setSelectedMovieId(movieId);
-    }, []);
-
-    const handleModalClose = useCallback(() => {
-      setSelectedMovieId(null);
-    }, []);
-
     const movieCacheItems = useMemo(
       () =>
         recommendations
           .filter((rec) => !dismissedIds.has(rec.tmdb_movie_id))
           .map((rec) => ({
-            ...toMovieCacheItem(rec),
+            ...recommendationToMovieCacheItem(rec),
             favorite: getFavoriteInfo(rec.tmdb_movie_id),
           })),
       [recommendations, getFavoriteInfo, dismissedIds],
     );
 
-    const selectedMovieTitle = useMemo(
-      () =>
-        movieCacheItems.find((movie) => movie.id === selectedMovieId)?.title,
-      [movieCacheItems, selectedMovieId],
-    );
+    const {
+      selectedMovieId,
+      selectedMovieTitle,
+      handleMovieClick,
+      handleModalClose,
+    } = useMovieDetailModal(movieCacheItems);
 
     const reasonMap = useMemo(
       () => new Map(recommendations.map((r) => [r.tmdb_movie_id, r.reason])),

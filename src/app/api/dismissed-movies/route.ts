@@ -7,27 +7,19 @@
 
 import { NextResponse } from 'next/server';
 
-import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
-import {
-  createServiceRoleClient,
-  dbConnectionErrorResponse,
-} from '@/helpers/supabase';
-import { dismissedMoviesAddSchema } from '@/schema/dismissedMovies';
 import {
   HTTP_STATUS,
   ERROR_CODE,
   DISMISSED_MOVIES_ERROR_MESSAGES,
   DISMISSED_MOVIES_SUCCESS_MESSAGES,
 } from '@/constants';
+import { checkDuplicate, conflictResponse } from '@/helpers/apiHelpers';
+import { parseAndValidate } from '@/helpers/requestValidation';
+import { withAuth } from '@/helpers/routeHandler';
+import { dismissedMoviesAddSchema } from '@/schema/dismissedMovies';
 
-export async function GET() {
-  try {
-    const session = await getAuthSession();
-    if (!session) return unauthorizedResponse();
-
-    const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
-
+export const GET = withAuth(
+  async ({ session, supabase }) => {
     const { data, error } = await supabase
       .from('dismissed_movies')
       .select('id, tmdb_movie_id, title, poster_path, genre_ids, created_at')
@@ -43,92 +35,42 @@ export async function GET() {
       { success: true, data: data ?? [] },
       { status: HTTP_STATUS.OK },
     );
-  } catch (error) {
-    console.error('Dismissed movies fetch error:', error);
+  },
+  {
+    errorLog: 'Dismissed movies fetch error',
+    errorMessage: DISMISSED_MOVIES_ERROR_MESSAGES.FETCH_FAILED,
+  },
+);
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: DISMISSED_MOVIES_ERROR_MESSAGES.FETCH_FAILED,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
+export const POST = withAuth(
+  async ({ session, supabase, request }) => {
+    const parsed = await parseAndValidate(
+      request,
+      dismissedMoviesAddSchema,
+      DISMISSED_MOVIES_ERROR_MESSAGES.INVALID_BODY,
     );
-  }
-}
 
-export async function POST(request: Request) {
-  try {
-    const session = await getAuthSession();
-    if (!session) return unauthorizedResponse();
+    if (parsed.error) return parsed.error;
 
-    const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
+    const isDuplicate = await checkDuplicate(
+      supabase,
+      'dismissed_movies',
+      session.user.id,
+      parsed.data.tmdb_movie_id,
+    );
 
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.BAD_REQUEST,
-            message: DISMISSED_MOVIES_ERROR_MESSAGES.INVALID_BODY,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
-
-    const result = dismissedMoviesAddSchema.safeParse(body);
-
-    if (!result.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.VALIDATION_ERROR,
-            message: DISMISSED_MOVIES_ERROR_MESSAGES.INVALID_BODY,
-            details: result.error.flatten().fieldErrors,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
-
-    // 重複チェック
-    const { data: existing } = await supabase
-      .from('dismissed_movies')
-      .select('id')
-      .eq('user_id', session.user.id)
-      .eq('tmdb_movie_id', result.data.tmdb_movie_id)
-      .is('deleted_at', null)
-      .single();
-
-    if (existing) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.CONFLICT,
-            message: DISMISSED_MOVIES_ERROR_MESSAGES.ALREADY_EXISTS,
-          },
-        },
-        { status: HTTP_STATUS.CONFLICT },
-      );
+    if (isDuplicate) {
+      return conflictResponse(DISMISSED_MOVIES_ERROR_MESSAGES.ALREADY_EXISTS);
     }
 
     const { data: inserted, error: insertError } = await supabase
       .from('dismissed_movies')
       .insert({
         user_id: session.user.id,
-        tmdb_movie_id: result.data.tmdb_movie_id,
-        title: result.data.title,
-        poster_path: result.data.poster_path ?? null,
-        genre_ids: result.data.genre_ids ?? null,
+        tmdb_movie_id: parsed.data.tmdb_movie_id,
+        title: parsed.data.title,
+        poster_path: parsed.data.poster_path ?? null,
+        genre_ids: parsed.data.genre_ids ?? null,
       })
       .select('id, tmdb_movie_id, title, poster_path, genre_ids, created_at')
       .single();
@@ -145,30 +87,15 @@ export async function POST(request: Request) {
       },
       { status: HTTP_STATUS.CREATED },
     );
-  } catch (error) {
-    console.error('Dismissed movie add error:', error);
+  },
+  {
+    errorLog: 'Dismissed movie add error',
+    errorMessage: DISMISSED_MOVIES_ERROR_MESSAGES.ADD_FAILED,
+  },
+);
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: DISMISSED_MOVIES_ERROR_MESSAGES.ADD_FAILED,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
-    );
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const session = await getAuthSession();
-    if (!session) return unauthorizedResponse();
-
-    const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
-
+export const DELETE = withAuth(
+  async ({ session, supabase, request }) => {
     const { searchParams } = new URL(request.url);
     const tmdbMovieId = searchParams.get('tmdb_movie_id');
 
@@ -203,18 +130,9 @@ export async function DELETE(request: Request) {
       },
       { status: HTTP_STATUS.OK },
     );
-  } catch (error) {
-    console.error('Dismissed movie remove error:', error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: {
-          code: ERROR_CODE.SERVER_ERROR,
-          message: DISMISSED_MOVIES_ERROR_MESSAGES.REMOVE_FAILED,
-        },
-      },
-      { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
-    );
-  }
-}
+  },
+  {
+    errorLog: 'Dismissed movie remove error',
+    errorMessage: DISMISSED_MOVIES_ERROR_MESSAGES.REMOVE_FAILED,
+  },
+);

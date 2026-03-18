@@ -87,9 +87,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
   if (isLoading) {
     return (
       <div className={styles.c_search_results}>
-        <MovieGridContainer isLoading isEmpty={false}>
-          {null}
-        </MovieGridContainer>
+        <MovieGridContainer isLoading isEmpty={false} />
       </div>
     );
   }

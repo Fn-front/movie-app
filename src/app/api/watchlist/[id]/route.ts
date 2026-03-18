@@ -18,8 +18,9 @@ export const DELETE = withAuth(
   async ({ session, supabase, params }) => {
     const { id } = await params!;
 
-    if (!isValidUuid(id))
+    if (!isValidUuid(id)) {
       return invalidUuidResponse(WATCHLIST_ERROR_MESSAGES.INVALID_ID);
+    }
 
     const success = await softDeleteById(
       supabase,

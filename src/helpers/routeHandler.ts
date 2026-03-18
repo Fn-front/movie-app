@@ -14,8 +14,6 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 
-export { handleRouteError } from '@/helpers/routeError';
-
 /** 認証済みルートハンドラーに渡されるコンテキスト */
 export interface AuthRouteContext {
   session: { user: { id: string } };

@@ -17,8 +17,8 @@ import styles from './movieGridContainer.module.scss';
  * MovieGridContainerコンポーネントのプロパティ
  */
 export interface MovieGridContainerProps {
-  /** グリッド内に表示する子要素（映画タイル等） */
-  children: ReactNode;
+  /** グリッド内に表示する子要素（映画タイル等。isLoading時は不要） */
+  children?: ReactNode;
   /** ローディング中 */
   isLoading: boolean;
   /** アイテムが空かどうか */

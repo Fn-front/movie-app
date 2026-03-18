@@ -1,0 +1,38 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_movie_grid_container {
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: $spacing-3;
+
+    @include sm {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: $spacing-4;
+    }
+
+    @include lg {
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
+  }
+
+  &__empty {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    font-size: $font-size-lg;
+    color: $text-secondary;
+  }
+
+  &__loading {
+    display: flex;
+    justify-content: center;
+    padding: $spacing-6 0;
+  }
+
+  &__sentinel {
+    height: 1px;
+  }
+}

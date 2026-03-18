@@ -5,10 +5,10 @@
 
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useMemo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
-import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
+import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { EmptyState } from '@/components/ui/emptyState/emptyState';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
@@ -16,9 +16,9 @@ import { TitleSuggestion } from '@/features/search/component/titleSuggestion/tit
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
+import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import type { Movie } from '@/lib/types';
-import type { MovieCacheItem } from '@/lib/api/movies/movies';
-import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
+import { movieToMovieCacheItem } from '@/utils/toMovieCacheItem';
 
 import styles from './searchResults.module.scss';
 
@@ -42,33 +42,6 @@ export interface SearchResultsProps {
   suggestions?: string[];
   /** 原題提案ローディング中 */
   isSuggestionLoading?: boolean;
-}
-
-/**
- * Movie型をMovieCacheItem型に変換
- *
- * release_type / is_revival は検索APIのレスポンスに含まれないため、
- * MovieTileの表示用にデフォルト値を設定している。
- * 検索結果ではこれらの情報は表示に影響しない。
- */
-function toMovieCacheItem(
-  movie: Movie,
-  favorite: MovieFavoriteInfo | null,
-): MovieCacheItem {
-  return {
-    id: movie.id,
-    title: movie.title,
-    poster_path: movie.poster_path,
-    backdrop_path: movie.backdrop_path,
-    release_date: movie.release_date,
-    overview: movie.overview,
-    vote_average: movie.vote_average,
-    popularity: movie.popularity,
-    genre_ids: movie.genre_ids,
-    release_type: 'theatrical',
-    is_revival: false,
-    favorite,
-  };
 }
 
 /**
@@ -96,33 +69,25 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
     getFavoriteInfo,
   } = useFavoriteToggle();
 
-  const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
-
-  const handleMovieClick = useCallback((movieId: number) => {
-    setSelectedMovieId(movieId);
-  }, []);
-
-  const handleDetailModalClose = useCallback(() => {
-    setSelectedMovieId(null);
-  }, []);
-
-  const selectedMovieTitle = useMemo(
-    () => movies.find((movie) => movie.id === selectedMovieId)?.title,
-    [movies, selectedMovieId],
-  );
-
   const movieCacheItems = useMemo(
     () =>
-      movies.map((movie) => toMovieCacheItem(movie, getFavoriteInfo(movie.id))),
+      movies.map((movie) =>
+        movieToMovieCacheItem(movie, getFavoriteInfo(movie.id)),
+      ),
     [movies, getFavoriteInfo],
   );
+
+  const {
+    selectedMovieId,
+    selectedMovieTitle,
+    handleMovieClick,
+    handleModalClose,
+  } = useMovieDetailModal(movieCacheItems);
 
   if (isLoading) {
     return (
       <div className={styles.c_search_results}>
-        <div className={styles.c_search_results__grid}>
-          <MovieTileSkeleton />
-        </div>
+        <MovieGridContainer isLoading isEmpty={false} />
       </div>
     );
   }
@@ -152,7 +117,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
         {totalResults.toLocaleString()}件の検索結果
       </p>
 
-      <div className={styles.c_search_results__grid}>
+      <MovieGridContainer isLoading={false} isEmpty={false}>
         {movieCacheItems.map((movie) => (
           <MovieTile
             key={movie.id}
@@ -165,7 +130,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
             favoriteDisabled={isFavoriteProcessing(movie.id)}
           />
         ))}
-      </div>
+      </MovieGridContainer>
 
       <Pagination
         currentPage={currentPage}
@@ -178,7 +143,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
         movieId={selectedMovieId}
         title={selectedMovieTitle}
         showFinancialInfo={false}
-        onClose={handleDetailModalClose}
+        onClose={handleModalClose}
       />
 
       <FavoriteRatingModal

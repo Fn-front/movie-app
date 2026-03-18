@@ -5,13 +5,14 @@
 
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useMemo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { NOW_SHOWING_SECTION_TITLE } from '@/constants';
+import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import type { NowShowingMovie } from '@/lib/types';
-import { toMovieCacheItem } from '@/features/nowShowing/utils/toMovieCacheItem';
+import { nowShowingToMovieCacheItem } from '@/utils/toMovieCacheItem';
 
 import styles from './nowShowingMovieList.module.scss';
 
@@ -28,26 +29,17 @@ export interface NowShowingMovieListProps {
  */
 export const NowShowingMovieList = memo<NowShowingMovieListProps>(
   function NowShowingMovieList({ movies }) {
-    const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
-
-    const handleMovieClick = useCallback((movieId: number) => {
-      setSelectedMovieId(movieId);
-    }, []);
-
-    const handleModalClose = useCallback(() => {
-      setSelectedMovieId(null);
-    }, []);
-
     const movieCacheItems = useMemo(
-      () => movies.map(toMovieCacheItem),
+      () => movies.map(nowShowingToMovieCacheItem),
       [movies],
     );
 
-    const selectedMovieTitle = useMemo(
-      () =>
-        movieCacheItems.find((movie) => movie.id === selectedMovieId)?.title,
-      [movieCacheItems, selectedMovieId],
-    );
+    const {
+      selectedMovieId,
+      selectedMovieTitle,
+      handleMovieClick,
+      handleModalClose,
+    } = useMovieDetailModal(movieCacheItems);
 
     if (movies.length === 0) {
       return (

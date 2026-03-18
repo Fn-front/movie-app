@@ -8,15 +8,11 @@
 import { memo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
-import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
-import { Loading } from '@/components/ui/loading/loading';
+import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
-import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
-
-import styles from './movieListContent.module.scss';
 
 export interface MovieGridProps {
   movies: MovieCacheItem[];
@@ -48,43 +44,29 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
     isFavoriteProcessing,
   } = useFavoriteToggle();
 
-  const loadMoreRef = useIntersectionObserver(fetchNextPage, {
-    enabled: hasNextPage && !isFetchingNextPage,
-  });
-
   return (
     <>
-      <div className={styles.c_movie_list__grid}>
-        {isLoading ? (
-          <MovieTileSkeleton />
-        ) : (
-          movies.map((movie) => (
-            <MovieTile
-              key={movie.id}
-              movie={movie}
-              genres={genres}
-              onClick={onMovieClick}
-              isInWatchlist={isInWatchlist(movie.id)}
-              onWatchlistToggle={toggleWatchlist}
-              watchlistDisabled={isMovieToggling(movie.id)}
-              onFavoriteToggle={handleFavoriteToggle}
-              favoriteDisabled={isFavoriteProcessing(movie.id)}
-            />
-          ))
-        )}
-      </div>
-
-      {!isLoading && movies.length === 0 && (
-        <p className={styles.c_movie_list__empty}>表示する映画がありません。</p>
-      )}
-
-      {isFetchingNextPage && (
-        <div className={styles.c_movie_list__loading}>
-          <Loading size='sm' label='読み込み中...' />
-        </div>
-      )}
-
-      <div ref={loadMoreRef} className={styles.c_movie_list__sentinel} />
+      <MovieGridContainer
+        isLoading={isLoading}
+        isEmpty={movies.length === 0}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        fetchNextPage={fetchNextPage}
+      >
+        {movies.map((movie) => (
+          <MovieTile
+            key={movie.id}
+            movie={movie}
+            genres={genres}
+            onClick={onMovieClick}
+            isInWatchlist={isInWatchlist(movie.id)}
+            onWatchlistToggle={toggleWatchlist}
+            watchlistDisabled={isMovieToggling(movie.id)}
+            onFavoriteToggle={handleFavoriteToggle}
+            favoriteDisabled={isFavoriteProcessing(movie.id)}
+          />
+        ))}
+      </MovieGridContainer>
 
       <FavoriteRatingModal
         isOpen={favoriteModalState.isOpen}

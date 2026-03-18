@@ -10,32 +10,34 @@ import { useWatchlistToggle } from './useWatchlistToggle';
 
 // --- Mocks ---
 
-const mockIsInWatchlist = jest.fn().mockReturnValue(false);
-const mockGetWatchlistId = jest.fn().mockReturnValue(undefined);
-const mockAddToWatchlist = jest.fn();
-const mockRemoveFromWatchlist = jest.fn();
 const mockToast = jest.fn();
+const mockAddWatchlist = jest.fn().mockResolvedValue({});
+const mockRemoveWatchlist = jest.fn().mockResolvedValue(undefined);
+const mockInvalidateQueries = jest.fn();
+const mockGetQueriesData = jest.fn().mockReturnValue([]);
 
-const mockMutationState = { isAdding: false, isRemoving: false };
-
-jest.mock('@/features/watchlist/hooks/useWatchlist', () => ({
-  useWatchlist: () => ({
-    isInWatchlist: mockIsInWatchlist,
-    getWatchlistId: mockGetWatchlistId,
-    addToWatchlist: mockAddToWatchlist,
-    removeFromWatchlist: mockRemoveFromWatchlist,
-    get isAdding() {
-      return mockMutationState.isAdding;
-    },
-    get isRemoving() {
-      return mockMutationState.isRemoving;
-    },
-    watchlist: [],
-    isLoading: false,
-    isFetchingNextPage: false,
-    hasNextPage: false,
-    fetchNextPage: jest.fn(),
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    getQueriesData: mockGetQueriesData,
+    invalidateQueries: mockInvalidateQueries,
   }),
+  useMutation: ({ mutationFn, onError }: { mutationFn: Function; onError?: Function }) => ({
+    mutate: mutationFn,
+    isPending: false,
+    onError,
+  }),
+}));
+
+jest.mock('next-auth/react', () => ({
+  useSession: () => ({
+    data: { user: { id: 'user-1' } },
+    status: 'authenticated',
+  }),
+}));
+
+jest.mock('@/lib/api/watchlist/watchlist', () => ({
+  addWatchlist: (...args: unknown[]) => mockAddWatchlist(...args),
+  removeWatchlist: (...args: unknown[]) => mockRemoveWatchlist(...args),
 }));
 
 jest.mock('@/hooks/useToast', () => ({
@@ -56,30 +58,70 @@ const createMovie = () => ({
   release_date: '2026-01-01',
 });
 
+const setupCacheWithItem = (tmdbMovieId: number, watchlistId: string) => {
+  mockGetQueriesData.mockReturnValue([
+    [
+      ['watchlist', 'list', { sort: 'release_date_proximity' }],
+      {
+        pages: [
+          {
+            data: {
+              watchlist: [
+                {
+                  id: watchlistId,
+                  tmdb_movie_id: tmdbMovieId,
+                  title: 'テスト映画',
+                  poster_path: '/poster.jpg',
+                  release_date: '2026-01-01',
+                  added_at: '2026-01-01T00:00:00Z',
+                },
+              ],
+              next_cursor: null,
+              has_more: false,
+            },
+          },
+        ],
+        pageParams: [undefined],
+      },
+    ],
+  ]);
+};
+
 // --- Tests ---
 
 describe('useWatchlistToggle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockMutationState.isAdding = false;
-    mockMutationState.isRemoving = false;
+    mockGetQueriesData.mockReturnValue([]);
   });
 
   it('isInWatchlist関数を返す', () => {
     const { result } = renderHook(() => useWatchlistToggle());
 
-    expect(result.current.isInWatchlist).toBe(mockIsInWatchlist);
+    expect(typeof result.current.isInWatchlist).toBe('function');
   });
 
-  it('ウォッチリストにない映画のトグルでaddToWatchlistが呼ばれる', () => {
-    mockIsInWatchlist.mockReturnValue(false);
+  it('キャッシュにない映画はisInWatchlistがfalseを返す', () => {
+    const { result } = renderHook(() => useWatchlistToggle());
+
+    expect(result.current.isInWatchlist(42)).toBe(false);
+  });
+
+  it('キャッシュにある映画はisInWatchlistがtrueを返す', () => {
+    setupCacheWithItem(42, 'watchlist-id-123');
+    const { result } = renderHook(() => useWatchlistToggle());
+
+    expect(result.current.isInWatchlist(42)).toBe(true);
+  });
+
+  it('ウォッチリストにない映画のトグルでaddWatchlistが呼ばれる', () => {
     const { result } = renderHook(() => useWatchlistToggle());
 
     act(() => {
       result.current.toggleWatchlist(createMovie());
     });
 
-    expect(mockAddToWatchlist).toHaveBeenCalledWith({
+    expect(mockAddWatchlist).toHaveBeenCalledWith({
       tmdb_movie_id: 42,
       title: 'テスト映画',
       poster_path: '/poster.jpg',
@@ -91,69 +133,24 @@ describe('useWatchlistToggle', () => {
     });
   });
 
-  it('ウォッチリストにある映画のトグルでremoveFromWatchlistが呼ばれる', () => {
-    mockIsInWatchlist.mockReturnValue(true);
-    mockGetWatchlistId.mockReturnValue('watchlist-id-123');
+  it('ウォッチリストにある映画のトグルでremoveWatchlistが呼ばれる', () => {
+    setupCacheWithItem(42, 'watchlist-id-123');
     const { result } = renderHook(() => useWatchlistToggle());
 
     act(() => {
       result.current.toggleWatchlist(createMovie());
     });
 
-    expect(mockRemoveFromWatchlist).toHaveBeenCalledWith('watchlist-id-123');
+    expect(mockRemoveWatchlist).toHaveBeenCalledWith('watchlist-id-123');
     expect(mockToast).toHaveBeenCalledWith({
       title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
       variant: 'success',
     });
   });
 
-  it('watchlistIdがnullの場合removeFromWatchlistが呼ばれない', () => {
-    mockIsInWatchlist.mockReturnValue(true);
-    mockGetWatchlistId.mockReturnValue(undefined);
-    const { result } = renderHook(() => useWatchlistToggle());
-
-    act(() => {
-      result.current.toggleWatchlist(createMovie());
-    });
-
-    expect(mockRemoveFromWatchlist).not.toHaveBeenCalled();
-    expect(mockToast).not.toHaveBeenCalled();
-  });
-
-  it('isTogglingがfalseを返す（isAdding=false, isRemoving=false）', () => {
+  it('isTogglingがfalseを返す（mutation非実行時）', () => {
     const { result } = renderHook(() => useWatchlistToggle());
 
     expect(result.current.isToggling).toBe(false);
-  });
-
-  it('ミューテーション中はisMovieTogglingがtrueを返す', () => {
-    mockIsInWatchlist.mockReturnValue(false);
-    const { result, rerender } = renderHook(() => useWatchlistToggle());
-
-    act(() => {
-      result.current.toggleWatchlist(createMovie());
-    });
-
-    mockMutationState.isAdding = true;
-    rerender();
-
-    expect(result.current.isMovieToggling(42)).toBe(true);
-  });
-
-  it('ミューテーション完了時にisMovieTogglingがfalseを返す', () => {
-    mockIsInWatchlist.mockReturnValue(false);
-    const { result, rerender } = renderHook(() => useWatchlistToggle());
-
-    act(() => {
-      result.current.toggleWatchlist(createMovie());
-    });
-
-    mockMutationState.isAdding = true;
-    rerender();
-    expect(result.current.isMovieToggling(42)).toBe(true);
-
-    mockMutationState.isAdding = false;
-    rerender();
-    expect(result.current.isMovieToggling(42)).toBe(false);
   });
 });

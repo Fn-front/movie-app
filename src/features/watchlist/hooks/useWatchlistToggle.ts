@@ -1,14 +1,27 @@
 /**
  * ウォッチリスト追加/削除トグル カスタムフック
- * useWatchlist + useToast を統合し、トグルロジックを一元管理
+ * 既存のウォッチリストキャッシュを参照 + mutation直接実行で、
+ * 重複リクエストを防止する
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSession } from 'next-auth/react';
 
-import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants/watchlist';
-import { useWatchlist } from '@/features/watchlist/hooks/useWatchlist';
+import {
+  WATCHLIST_ERROR_MESSAGES,
+  WATCHLIST_SUCCESS_MESSAGES,
+} from '@/constants/watchlist';
+import { watchlistKeys } from '@/constants';
+import {
+  addWatchlist,
+  removeWatchlist,
+} from '@/lib/api/watchlist/watchlist';
+import type {
+  WatchlistItem,
+  GetWatchlistResponse,
+} from '@/lib/api/watchlist/watchlist';
 import { useToast } from '@/hooks/useToast';
-import type { ToastOptions } from '@/hooks/useToast';
 
 /**
  * トグル対象の映画データ（最小限のフィールド）
@@ -39,81 +52,118 @@ export interface UseWatchlistToggleReturn {
 }
 
 /**
- * toggleWatchlist内で参照する最新の関数群（参照安定化用）
+ * 既存のウォッチリストキャッシュから全アイテムを取得する
+ * watchlistKeys.all をプレフィックスとして、どのsortオプションのキャッシュからも読み取る
  */
-interface ToggleHandlers {
-  isInWatchlist: (tmdbMovieId: number) => boolean;
-  getWatchlistId: (tmdbMovieId: number) => string | undefined;
-  addToWatchlist: (data: {
-    tmdb_movie_id: number;
-    title: string;
-    poster_path: string | null;
-    release_date: string | null;
-  }) => void;
-  removeFromWatchlist: (id: string) => void;
-  toast: (options: ToastOptions) => void;
+function getWatchlistItemsFromCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+): WatchlistItem[] {
+  const queries = queryClient.getQueriesData<{
+    pages: GetWatchlistResponse[];
+    pageParams: (string | undefined)[];
+  }>({ queryKey: watchlistKeys.all });
+
+  const items: WatchlistItem[] = [];
+  for (const [, data] of queries) {
+    if (data?.pages) {
+      for (const page of data.pages) {
+        items.push(...page.data.watchlist);
+      }
+    }
+  }
+  return items;
 }
 
 /**
  * ウォッチリスト追加/削除トグル カスタムフック
+ *
+ * useWatchlist()を呼ばず、既存のウォッチリストキャッシュを直接参照することで
+ * 重複リクエストを防止する。mutation完了時にwatchlistKeys.allで全キャッシュを無効化。
  */
 export function useWatchlistToggle(): UseWatchlistToggleReturn {
-  const {
-    isInWatchlist,
-    getWatchlistId,
-    addToWatchlist,
-    removeFromWatchlist,
-    isAdding,
-    isRemoving,
-  } = useWatchlist();
+  const queryClient = useQueryClient();
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === 'authenticated' && !!session?.user;
   const { toast } = useToast();
 
   const togglingIdRef = useRef<number | null>(null);
 
-  // 最新の関数群を単一refで保持し、toggleWatchlistの参照を安定させる
-  const handlersRef = useRef<ToggleHandlers>({
-    isInWatchlist,
-    getWatchlistId,
-    addToWatchlist,
-    removeFromWatchlist,
-    toast,
-  });
-  useEffect(() => {
-    handlersRef.current = {
-      isInWatchlist,
-      getWatchlistId,
-      addToWatchlist,
-      removeFromWatchlist,
-      toast,
-    };
+  const addMutation = useMutation({
+    mutationFn: addWatchlist,
+    onError: () => {
+      toast({
+        title: 'エラー',
+        description: WATCHLIST_ERROR_MESSAGES.ADD_FAILED,
+        variant: 'error',
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: watchlistKeys.all });
+    },
   });
 
-  const toggleWatchlist = useCallback((movie: WatchlistToggleMovie) => {
-    togglingIdRef.current = movie.id;
+  const removeMutation = useMutation({
+    mutationFn: removeWatchlist,
+    onError: () => {
+      toast({
+        title: 'エラー',
+        description: WATCHLIST_ERROR_MESSAGES.REMOVE_FAILED,
+        variant: 'error',
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: watchlistKeys.all });
+    },
+  });
 
-    const h = handlersRef.current;
-    if (h.isInWatchlist(movie.id)) {
-      const watchlistId = h.getWatchlistId(movie.id);
-      if (watchlistId) {
-        h.removeFromWatchlist(watchlistId);
-        h.toast({
-          title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
+  const isInWatchlist = useCallback(
+    (tmdbMovieId: number) => {
+      if (!isAuthenticated) return false;
+      const items = getWatchlistItemsFromCache(queryClient);
+      return items.some((item) => item.tmdb_movie_id === tmdbMovieId);
+    },
+    [isAuthenticated, queryClient],
+  );
+
+  const getWatchlistId = useCallback(
+    (tmdbMovieId: number): string | undefined => {
+      const items = getWatchlistItemsFromCache(queryClient);
+      return items.find((item) => item.tmdb_movie_id === tmdbMovieId)?.id;
+    },
+    [queryClient],
+  );
+
+  const toggleWatchlist = useCallback(
+    (movie: WatchlistToggleMovie) => {
+      togglingIdRef.current = movie.id;
+
+      if (isInWatchlist(movie.id)) {
+        const watchlistId = getWatchlistId(movie.id);
+        if (watchlistId) {
+          removeMutation.mutate(watchlistId);
+          toast({
+            title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
+            variant: 'success',
+          });
+        }
+      } else {
+        addMutation.mutate({
+          tmdb_movie_id: movie.id,
+          title: movie.title,
+          poster_path: movie.poster_path,
+          release_date: movie.release_date,
+        });
+        toast({
+          title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
           variant: 'success',
         });
       }
-    } else {
-      h.addToWatchlist({
-        tmdb_movie_id: movie.id,
-        title: movie.title,
-        poster_path: movie.poster_path,
-        release_date: movie.release_date,
-      });
-      h.toast({
-        title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
-        variant: 'success',
-      });
-    }
-  }, []);
+    },
+    [isInWatchlist, getWatchlistId, addMutation, removeMutation, toast],
+  );
+
+  const isAdding = addMutation.isPending;
+  const isRemoving = removeMutation.isPending;
 
   const isMovieToggling = useCallback(
     (tmdbMovieId: number) =>

@@ -165,6 +165,40 @@ export const API_ERROR_MESSAGES = {
 } as const;
 
 /**
+ * 日付フォーマット
+ */
+export const DATE_FORMAT = {
+  /** 日付のみ（例: 2024年01月15日） */
+  DATE: 'yyyy年MM月dd日',
+  /** 日時（例: 2024年01月15日 10:30） */
+  DATETIME: 'yyyy年MM月dd日 HH:mm',
+} as const;
+
+/**
+ * IntersectionObserverデフォルト設定
+ */
+export const INTERSECTION_OBSERVER = {
+  /** デフォルトのrootMargin */
+  ROOT_MARGIN: '200px',
+} as const;
+
+/**
+ * 為替レート（概算用）
+ */
+export const EXCHANGE_RATE = {
+  /** USD→JPY 固定レート */
+  USD_TO_JPY: 150,
+} as const;
+
+/**
+ * デフォルトユーザー設定
+ */
+export const DEFAULT_USER_SETTINGS = {
+  THEME: 'light',
+  NOTIFICATION_ENABLED: false,
+} as const;
+
+/**
  * バリデーション設定
  */
 export const VALIDATION = {

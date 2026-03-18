@@ -22,6 +22,7 @@ import {
   getTMDbProviderLogoUrl,
 } from '@/utils/image';
 import { formatDate } from '@/utils/date';
+import { EXCHANGE_RATE } from '@/constants';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
 import type { WatchProvider } from '@/lib/types';
 
@@ -50,8 +51,6 @@ function formatRuntime(minutes: number): string {
 }
 
 const MAX_CAST_DISPLAY = 10;
-/** 概算用の固定為替レート（USD→JPY） */
-const USD_TO_JPY_RATE = 150;
 
 /**
  * 日本円を読みやすい単位でフォーマット
@@ -77,7 +76,7 @@ function formatJpy(yen: number): string {
 function formatCurrency(amount: number): string {
   if (amount === 0) return '-';
   const usd = `$${amount.toLocaleString('en-US')}`;
-  const jpyAmount = Math.round(amount * USD_TO_JPY_RATE);
+  const jpyAmount = Math.round(amount * EXCHANGE_RATE.USD_TO_JPY);
   return `${usd}（約${formatJpy(jpyAmount)}）`;
 }
 

@@ -20,12 +20,13 @@ import {
   SETTINGS_ERROR_MESSAGES,
   SETTINGS_SUCCESS_MESSAGES,
   API_ERROR_MESSAGES,
+  DEFAULT_USER_SETTINGS,
 } from '@/constants';
 
 /** デフォルトのユーザー設定 */
 const DEFAULT_SETTINGS: UserSettings = {
-  theme: 'light',
-  notificationEnabled: false,
+  theme: DEFAULT_USER_SETTINGS.THEME,
+  notificationEnabled: DEFAULT_USER_SETTINGS.NOTIFICATION_ENABLED,
 };
 
 export async function GET() {

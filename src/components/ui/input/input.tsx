@@ -9,8 +9,11 @@ import {
   type ReactNode,
   forwardRef,
   memo,
-  useId,
 } from 'react';
+
+import { cn } from '@/utils/cn';
+import { useFormField } from '@/hooks/useFormField';
+import { FormFieldMessage } from '@/components/ui/formFieldMessage/formFieldMessage';
 
 import styles from './input.module.scss';
 
@@ -52,32 +55,27 @@ const InputComponent = forwardRef<HTMLInputElement, InputProps>(
     },
     ref,
   ) {
-    const generatedId = useId();
-    const inputId = id || `input-${generatedId}`;
-    const hasError = Boolean(error);
+    const { fieldId, errorId, helperId, hasError, ariaDescribedBy } =
+      useFormField({ id, fieldType: 'input', error, helperText });
 
-    const inputClassNames = [
+    const inputClassNames = cn(
       styles.c_input__field,
       hasError && styles.c_input__field__error,
       leftIcon && styles.c_input__field__with_left_icon,
       rightIcon && styles.c_input__field__with_right_icon,
       disabled && styles.c_input__field__disabled,
-    ]
-      .filter(Boolean)
-      .join(' ');
+    );
 
-    const wrapperClassNames = [
+    const wrapperClassNames = cn(
       styles.c_input,
       fullWidth && styles.c_input__full_width,
       className,
-    ]
-      .filter(Boolean)
-      .join(' ');
+    );
 
     return (
       <div className={wrapperClassNames}>
         {label && (
-          <label htmlFor={inputId} className={styles.c_input__label}>
+          <label htmlFor={fieldId} className={styles.c_input__label}>
             {label}
           </label>
         )}
@@ -91,18 +89,12 @@ const InputComponent = forwardRef<HTMLInputElement, InputProps>(
 
           <input
             ref={ref}
-            id={inputId}
+            id={fieldId}
             className={inputClassNames}
             disabled={disabled}
             aria-label={ariaLabel || label}
             aria-invalid={hasError}
-            aria-describedby={
-              error
-                ? `${inputId}-error`
-                : helperText
-                  ? `${inputId}-helper`
-                  : undefined
-            }
+            aria-describedby={ariaDescribedBy}
             {...props}
           />
 
@@ -113,21 +105,14 @@ const InputComponent = forwardRef<HTMLInputElement, InputProps>(
           )}
         </div>
 
-        {error && (
-          <p
-            id={`${inputId}-error`}
-            className={styles.c_input__error}
-            role='alert'
-          >
-            {error}
-          </p>
-        )}
-
-        {!error && helperText && (
-          <p id={`${inputId}-helper`} className={styles.c_input__helper}>
-            {helperText}
-          </p>
-        )}
+        <FormFieldMessage
+          error={error}
+          helperText={helperText}
+          errorId={errorId}
+          helperId={helperId}
+          errorClassName={styles.c_input__error}
+          helperClassName={styles.c_input__helper}
+        />
       </div>
     );
   },

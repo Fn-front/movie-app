@@ -6,7 +6,7 @@
  * バリデーションヘルパー テスト
  */
 
-import { isValidUuid, invalidUuidResponse } from './validation';
+import { isValidUuid, invalidUuidResponse } from './requestValidation';
 
 describe('isValidUuid', () => {
   it('有効なUUIDでtrueを返す', () => {

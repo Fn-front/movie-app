@@ -7,6 +7,8 @@
 import { type ReactNode, memo, useCallback } from 'react';
 import * as ToastPrimitive from '@radix-ui/react-toast';
 
+import { cn } from '@/utils/cn';
+
 import styles from './toast.module.scss';
 
 /**
@@ -107,13 +109,11 @@ export const Toast = memo<ToastProps>(function Toast({
     [onOpenChange],
   );
 
-  const classNames = [
+  const classNames = cn(
     styles.c_toast,
     styles[`c_toast__variant__${variant}`],
     className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
   const getIcon = () => {
     switch (variant) {

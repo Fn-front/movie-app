@@ -8,6 +8,8 @@
 import { memo, useCallback } from 'react';
 import { IoMenuOutline, IoCloseOutline } from 'react-icons/io5';
 
+import { cn } from '@/utils/cn';
+
 import styles from './mobileMenuButton.module.scss';
 
 /**
@@ -32,9 +34,7 @@ export interface MobileMenuButtonProps {
  */
 export const MobileMenuButton = memo<MobileMenuButtonProps>(
   function MobileMenuButton({ isOpen, onToggle, className }) {
-    const classNames = [styles.c_mobile_menu_button, className]
-      .filter(Boolean)
-      .join(' ');
+    const classNames = cn(styles.c_mobile_menu_button, className);
 
     const handleClick = useCallback(() => {
       onToggle();

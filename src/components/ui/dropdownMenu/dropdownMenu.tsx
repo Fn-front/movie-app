@@ -7,6 +7,8 @@
 import { type ReactNode, memo } from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 
+import { cn } from '@/utils/cn';
+
 import styles from './dropdownMenu.module.scss';
 
 /**
@@ -60,9 +62,7 @@ export const DropdownMenu = memo<DropdownMenuProps>(function DropdownMenu({
   align = 'end',
   className,
 }) {
-  const contentClassNames = [styles.c_dropdown_menu__content, className]
-    .filter(Boolean)
-    .join(' ');
+  const contentClassNames = cn(styles.c_dropdown_menu__content, className);
 
   return (
     <DropdownMenuPrimitive.Root>

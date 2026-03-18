@@ -7,6 +7,8 @@
 import { type HTMLAttributes, type ReactNode, memo } from 'react';
 import Link from 'next/link';
 
+import { cn } from '@/utils/cn';
+
 import styles from './header.module.scss';
 
 /**
@@ -49,7 +51,7 @@ export const Header = memo<HeaderProps>(function Header({
   className,
   ...props
 }) {
-  const classNames = [styles.c_header, className].filter(Boolean).join(' ');
+  const classNames = cn(styles.c_header, className);
 
   return (
     <header className={classNames} {...props}>

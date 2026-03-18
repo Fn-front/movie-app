@@ -4,7 +4,11 @@
 
 'use client';
 
-import { type TextareaHTMLAttributes, forwardRef, memo, useId } from 'react';
+import { type TextareaHTMLAttributes, forwardRef, memo } from 'react';
+
+import { cn } from '@/utils/cn';
+import { useFormField } from '@/hooks/useFormField';
+import { FormFieldMessage } from '@/components/ui/formFieldMessage/formFieldMessage';
 
 import styles from './textarea.module.scss';
 
@@ -47,52 +51,41 @@ const TextareaComponent = forwardRef<HTMLTextAreaElement, TextareaProps>(
     },
     ref,
   ) {
-    const generatedId = useId();
-    const textareaId = id || `textarea-${generatedId}`;
-    const hasError = Boolean(error);
+    const { fieldId, errorId, helperId, hasError, ariaDescribedBy } =
+      useFormField({ id, fieldType: 'textarea', error, helperText });
 
     const currentLength = typeof value === 'string' ? value.length : 0;
 
-    const textareaClassNames = [
+    const textareaClassNames = cn(
       styles.c_textarea__field,
       hasError && styles.c_textarea__field__error,
       disabled && styles.c_textarea__field__disabled,
-    ]
-      .filter(Boolean)
-      .join(' ');
+    );
 
-    const wrapperClassNames = [
+    const wrapperClassNames = cn(
       styles.c_textarea,
       fullWidth && styles.c_textarea__full_width,
       className,
-    ]
-      .filter(Boolean)
-      .join(' ');
+    );
 
     return (
       <div className={wrapperClassNames}>
         {label && (
-          <label htmlFor={textareaId} className={styles.c_textarea__label}>
+          <label htmlFor={fieldId} className={styles.c_textarea__label}>
             {label}
           </label>
         )}
 
         <textarea
           ref={ref}
-          id={textareaId}
+          id={fieldId}
           className={textareaClassNames}
           disabled={disabled}
           value={value}
           maxLength={maxLength}
           aria-label={ariaLabel || label}
           aria-invalid={hasError}
-          aria-describedby={
-            error
-              ? `${textareaId}-error`
-              : helperText
-                ? `${textareaId}-helper`
-                : undefined
-          }
+          aria-describedby={ariaDescribedBy}
           {...props}
         />
 
@@ -102,21 +95,14 @@ const TextareaComponent = forwardRef<HTMLTextAreaElement, TextareaProps>(
           </div>
         )}
 
-        {error && (
-          <p
-            id={`${textareaId}-error`}
-            className={styles.c_textarea__error}
-            role='alert'
-          >
-            {error}
-          </p>
-        )}
-
-        {!error && helperText && (
-          <p id={`${textareaId}-helper`} className={styles.c_textarea__helper}>
-            {helperText}
-          </p>
-        )}
+        <FormFieldMessage
+          error={error}
+          helperText={helperText}
+          errorId={errorId}
+          helperId={helperId}
+          errorClassName={styles.c_textarea__error}
+          helperClassName={styles.c_textarea__helper}
+        />
       </div>
     );
   },

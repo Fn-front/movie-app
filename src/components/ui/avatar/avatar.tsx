@@ -7,6 +7,9 @@
 import { type ImgHTMLAttributes, memo, useState, useCallback } from 'react';
 import Image from 'next/image';
 
+import { cn } from '@/utils/cn';
+import { getInitial } from '@/utils/user';
+
 import styles from './avatar.module.scss';
 
 /**
@@ -62,13 +65,11 @@ export const Avatar = memo<AvatarProps>(function Avatar({
 
   const showFallback = !src || imageError;
 
-  const classNames = [
+  const classNames = cn(
     styles.c_avatar,
     styles[`c_avatar__size__${size}`],
     className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
   const sizeMap: Record<AvatarSize, number> = {
     sm: 32,
@@ -82,7 +83,7 @@ export const Avatar = memo<AvatarProps>(function Avatar({
     <div className={classNames} role='img' aria-label={alt}>
       {showFallback ? (
         <span className={styles.c_avatar__fallback} aria-hidden='true'>
-          {fallback || alt.charAt(0).toUpperCase()}
+          {fallback || getInitial(alt)}
         </span>
       ) : (
         <Image

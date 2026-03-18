@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import { IoSearchOutline, IoCloseOutline } from 'react-icons/io5';
 
 import { Loading } from '@/components/ui/loading/loading';
+import { cn } from '@/utils/cn';
 
 import styles from './searchBar.module.scss';
 
@@ -83,14 +84,12 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
     setQuery('');
   }, []);
 
-  const classNames = [styles.c_search_bar, className].filter(Boolean).join(' ');
+  const classNames = cn(styles.c_search_bar, className);
 
-  const formClassNames = [
+  const formClassNames = cn(
     styles.c_search_bar__form,
-    isExpanded ? styles['c_search_bar__form--expanded'] : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+    isExpanded && styles['c_search_bar__form--expanded'],
+  );
 
   return (
     <div className={classNames}>

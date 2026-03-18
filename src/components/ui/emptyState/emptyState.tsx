@@ -6,6 +6,8 @@
 
 import { type HTMLAttributes, type ReactNode, memo } from 'react';
 
+import { cn } from '@/utils/cn';
+
 import styles from './emptyState.module.scss';
 
 /**
@@ -44,9 +46,7 @@ export const EmptyState = memo<EmptyStateProps>(function EmptyState({
   className,
   ...props
 }) {
-  const classNames = [styles.c_empty_state, className]
-    .filter(Boolean)
-    .join(' ');
+  const classNames = cn(styles.c_empty_state, className);
 
   return (
     <div className={classNames} {...props}>

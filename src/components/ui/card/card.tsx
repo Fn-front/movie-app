@@ -6,6 +6,8 @@
 
 import { type HTMLAttributes, type ReactNode, memo } from 'react';
 
+import { cn } from '@/utils/cn';
+
 import styles from './card.module.scss';
 
 /**
@@ -72,7 +74,7 @@ export const Card = memo<CardProps>(function Card({
   className,
   ...props
 }) {
-  const classNames = [
+  const classNames = cn(
     styles.c_card,
     clickable && styles.c_card__clickable,
     hoverable && styles.c_card__hoverable,
@@ -80,9 +82,7 @@ export const Card = memo<CardProps>(function Card({
     noBorder && styles.c_card__no_border,
     noShadow && styles.c_card__no_shadow,
     className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
   return (
     <div className={classNames} {...props}>
@@ -108,9 +108,7 @@ export const CardHeader = memo<CardHeaderProps>(function CardHeader({
   className,
   ...props
 }) {
-  const classNames = [styles.c_card__header, className]
-    .filter(Boolean)
-    .join(' ');
+  const classNames = cn(styles.c_card__header, className);
 
   return (
     <div className={classNames} {...props}>
@@ -136,7 +134,7 @@ export const CardBody = memo<CardBodyProps>(function CardBody({
   className,
   ...props
 }) {
-  const classNames = [styles.c_card__body, className].filter(Boolean).join(' ');
+  const classNames = cn(styles.c_card__body, className);
 
   return (
     <div className={classNames} {...props}>
@@ -162,9 +160,7 @@ export const CardFooter = memo<CardFooterProps>(function CardFooter({
   className,
   ...props
 }) {
-  const classNames = [styles.c_card__footer, className]
-    .filter(Boolean)
-    .join(' ');
+  const classNames = cn(styles.c_card__footer, className);
 
   return (
     <div className={classNames} {...props}>

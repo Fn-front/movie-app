@@ -6,6 +6,8 @@
 
 import { type HTMLAttributes, type ReactNode, memo } from 'react';
 
+import { cn } from '@/utils/cn';
+
 import styles from './sidebar.module.scss';
 
 /**
@@ -45,7 +47,7 @@ export const Sidebar = memo<SidebarProps>(function Sidebar({
   className,
   ...props
 }) {
-  const classNames = [styles.c_sidebar, className].filter(Boolean).join(' ');
+  const classNames = cn(styles.c_sidebar, className);
 
   return (
     <aside className={classNames} {...props}>

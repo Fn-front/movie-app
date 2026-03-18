@@ -6,6 +6,8 @@
 
 import { type ButtonHTMLAttributes, type ReactNode, memo } from 'react';
 
+import { cn } from '@/utils/cn';
+
 import styles from './button.module.scss';
 
 /**
@@ -55,16 +57,14 @@ export const Button = memo<ButtonProps>(function Button({
   type = 'button',
   ...props
 }) {
-  const classNames = [
+  const classNames = cn(
     styles.c_button,
     styles[`c_button__variant__${variant}`],
     styles[`c_button__size__${size}`],
     fullWidth && styles.c_button__full_width,
     isLoading && styles.c_button__loading,
     className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
   return (
     <button
@@ -77,12 +77,10 @@ export const Button = memo<ButtonProps>(function Button({
         <span className={styles.c_button__spinner} aria-hidden='true' />
       ) : null}
       <span
-        className={[
+        className={cn(
           styles.c_button__content,
           isLoading && styles.c_button__content__hidden,
-        ]
-          .filter(Boolean)
-          .join(' ')}
+        )}
       >
         {children}
       </span>

@@ -4,6 +4,8 @@
 
 import { memo, type HTMLAttributes, type ElementType } from 'react';
 
+import { cn } from '@/utils/cn';
+
 import styles from './heading.module.scss';
 
 /**
@@ -59,14 +61,12 @@ export const Heading = memo(function Heading({
 }: HeadingProps) {
   const Tag: ElementType = `h${level}`;
 
-  const classNames = [
+  const classNames = cn(
     styles.c_heading,
     levelStyleMap[level],
     alignStyleMap[align],
     className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
   return (
     <Tag className={classNames} {...props}>

@@ -6,6 +6,8 @@
 
 import { type HTMLAttributes, memo } from 'react';
 
+import { cn } from '@/utils/cn';
+
 import styles from './loading.module.scss';
 
 /**
@@ -47,20 +49,16 @@ export const Loading = memo<LoadingProps>(function Loading({
   className,
   ...props
 }) {
-  const spinnerClassNames = [
+  const spinnerClassNames = cn(
     styles.c_loading__spinner,
     styles[`c_loading__spinner__${size}`],
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
-  const wrapperClassNames = [
+  const wrapperClassNames = cn(
     styles.c_loading,
     fullScreen && styles.c_loading__fullscreen,
     className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
   const content = (
     <>

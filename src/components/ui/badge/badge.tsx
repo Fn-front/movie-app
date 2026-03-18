@@ -6,6 +6,8 @@
 
 import { type HTMLAttributes, type ReactNode, memo } from 'react';
 
+import { cn } from '@/utils/cn';
+
 import styles from './badge.module.scss';
 
 /**
@@ -62,15 +64,13 @@ export const Badge = memo<BadgeProps>(function Badge({
   className,
   ...props
 }) {
-  const classNames = [
+  const classNames = cn(
     styles.c_badge,
     styles[`c_badge__variant__${variant}`],
     styles[`c_badge__size__${size}`],
     onRemove && styles.c_badge__removable,
     className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  );
 
   return (
     <span className={classNames} {...props}>

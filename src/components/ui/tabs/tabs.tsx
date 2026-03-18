@@ -7,6 +7,8 @@
 import { type ReactNode, memo, useCallback } from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 
+import { cn } from '@/utils/cn';
+
 import styles from './tabs.module.scss';
 
 /**
@@ -70,7 +72,7 @@ export const Tabs = memo<TabsProps>(function Tabs({
     [onValueChange],
   );
 
-  const rootClassNames = [styles.c_tabs, className].filter(Boolean).join(' ');
+  const rootClassNames = cn(styles.c_tabs, className);
 
   return (
     <TabsPrimitive.Root

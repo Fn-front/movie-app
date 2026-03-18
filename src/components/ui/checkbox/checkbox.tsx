@@ -7,6 +7,8 @@
 import { forwardRef, memo, useId } from 'react';
 import * as CheckboxPrimitive from '@radix-ui/react-checkbox';
 
+import { cn } from '@/utils/cn';
+
 import styles from './checkbox.module.scss';
 
 /**
@@ -51,9 +53,7 @@ const CheckboxComponent = forwardRef<HTMLButtonElement, CheckboxProps>(
     const generatedId = useId();
     const checkboxId = id || `checkbox-${generatedId}`;
 
-    const wrapperClassNames = [styles.c_checkbox, className]
-      .filter(Boolean)
-      .join(' ');
+    const wrapperClassNames = cn(styles.c_checkbox, className);
 
     return (
       <div className={wrapperClassNames}>

@@ -4,7 +4,7 @@
  * 重複リクエストを防止する
  */
 
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 
@@ -167,7 +167,10 @@ function rollbackCaches(
  * ウォッチリスト追加/削除トグル カスタムフック
  *
  * useWatchlist()を呼ばず、既存のウォッチリストキャッシュを直接参照することで
- * 重複リクエストを防止する。楽観的UI更新は全キャッシュに対して行う。
+ * 重複リクエストを防止する。楽観的UI更新は全キャッシュ + ローカルstateで管理。
+ *
+ * queryClient.getQueriesData()はリアクティブではないため、
+ * ローカルstateで楽観的なトグル状態を追跡し、即座にUIへ反映する。
  */
 export function useWatchlistToggle(): UseWatchlistToggleReturn {
   const queryClient = useQueryClient();
@@ -176,6 +179,14 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
   const { toast } = useToast();
 
   const togglingIdRef = useRef<number | null>(null);
+
+  // 楽観的なトグル状態をローカルで追跡（queryClient.getQueriesDataはリアクティブでないため）
+  const [optimisticAdds, setOptimisticAdds] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const [optimisticRemoves, setOptimisticRemoves] = useState<Set<number>>(
+    () => new Set(),
+  );
 
   const addMutation = useMutation({
     mutationFn: addWatchlist,
@@ -207,7 +218,13 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         variant: 'error',
       });
     },
-    onSettled: () => {
+    onSettled: (_data, _error, variables) => {
+      // ローカル楽観状態をクリア
+      setOptimisticAdds((prev) => {
+        const next = new Set(prev);
+        next.delete(variables.tmdb_movie_id);
+        return next;
+      });
       queryClient.invalidateQueries({ queryKey: watchlistKeys.all });
     },
   });
@@ -231,6 +248,15 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       });
     },
     onSettled: () => {
+      // ローカル楽観状態をクリア（tmdbMovieIdはrefから取得）
+      if (togglingIdRef.current !== null) {
+        const movieId = togglingIdRef.current;
+        setOptimisticRemoves((prev) => {
+          const next = new Set(prev);
+          next.delete(movieId);
+          return next;
+        });
+      }
       queryClient.invalidateQueries({ queryKey: watchlistKeys.all });
     },
   });
@@ -238,10 +264,14 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
   const isInWatchlist = useCallback(
     (tmdbMovieId: number) => {
       if (!isAuthenticated) return false;
+      // ローカル楽観状態を優先チェック
+      if (optimisticAdds.has(tmdbMovieId)) return true;
+      if (optimisticRemoves.has(tmdbMovieId)) return false;
+      // キャッシュから確認
       const items = getWatchlistItemsFromCache(queryClient);
       return items.some((item) => item.tmdb_movie_id === tmdbMovieId);
     },
-    [isAuthenticated, queryClient],
+    [isAuthenticated, optimisticAdds, optimisticRemoves, queryClient],
   );
 
   const getWatchlistId = useCallback(
@@ -259,6 +289,13 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       if (isInWatchlist(movie.id)) {
         const watchlistId = getWatchlistId(movie.id);
         if (watchlistId) {
+          // ローカル楽観状態を更新（即座にUIへ反映）
+          setOptimisticRemoves((prev) => new Set(prev).add(movie.id));
+          setOptimisticAdds((prev) => {
+            const next = new Set(prev);
+            next.delete(movie.id);
+            return next;
+          });
           removeMutation.mutate(watchlistId);
           toast({
             title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
@@ -266,6 +303,13 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
           });
         }
       } else {
+        // ローカル楽観状態を更新（即座にUIへ反映）
+        setOptimisticAdds((prev) => new Set(prev).add(movie.id));
+        setOptimisticRemoves((prev) => {
+          const next = new Set(prev);
+          next.delete(movie.id);
+          return next;
+        });
         addMutation.mutate({
           tmdb_movie_id: movie.id,
           title: movie.title,

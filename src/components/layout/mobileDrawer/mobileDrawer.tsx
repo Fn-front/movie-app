@@ -22,7 +22,7 @@ import {
   IoCloseOutline,
 } from 'react-icons/io5';
 
-import { ROUTES, NAV_ITEMS, MENU_LABELS } from '@/constants';
+import { ROUTES, NAV_ITEMS, MENU_LABELS, ICON_SIZES, IMAGE_SIZES } from '@/constants';
 import { getInitial } from '@/utils/user';
 
 import styles from './mobileDrawer.module.scss';
@@ -40,17 +40,17 @@ interface MobileNavItem {
  * アイコンマッピング
  */
 const NAV_ICON_MAP: Record<string, React.ReactNode> = {
-  [ROUTES.UPCOMING]: <IoCalendarOutline size={20} />,
-  [ROUTES.NOW_SHOWING]: <IoPlayCircleOutline size={20} />,
-  [ROUTES.FAVORITES]: <IoHeartOutline size={20} />,
-  [ROUTES.WATCHLIST]: <IoBookmarkOutline size={20} />,
+  [ROUTES.UPCOMING]: <IoCalendarOutline size={ICON_SIZES.SM} />,
+  [ROUTES.NOW_SHOWING]: <IoPlayCircleOutline size={ICON_SIZES.SM} />,
+  [ROUTES.FAVORITES]: <IoHeartOutline size={ICON_SIZES.SM} />,
+  [ROUTES.WATCHLIST]: <IoBookmarkOutline size={ICON_SIZES.SM} />,
 };
 
 /**
  * モバイル用ナビゲーションアイテム一覧（ホーム + 共通NAV_ITEMS）
  */
 const MOBILE_NAV_ITEMS: MobileNavItem[] = [
-  { label: 'ホーム', href: ROUTES.HOME, icon: <IoHomeOutline size={20} /> },
+  { label: 'ホーム', href: ROUTES.HOME, icon: <IoHomeOutline size={ICON_SIZES.SM} /> },
   ...NAV_ITEMS.map((item) => ({
     ...item,
     icon: NAV_ICON_MAP[item.href] ?? null,
@@ -122,7 +122,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
               メニュー
             </Dialog.Title>
             <Dialog.Close className={styles.c_mobile_drawer__close}>
-              <IoCloseOutline size={24} aria-hidden='true' />
+              <IoCloseOutline size={ICON_SIZES.MD} aria-hidden='true' />
               <span className='sr-only'>閉じる</span>
             </Dialog.Close>
           </div>
@@ -162,8 +162,8 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
                   <Image
                     src={userImage}
                     alt={userName}
-                    width={40}
-                    height={40}
+                    width={IMAGE_SIZES.AVATAR_MOBILE.WIDTH}
+                    height={IMAGE_SIZES.AVATAR_MOBILE.HEIGHT}
                     className={styles.c_mobile_drawer__user_avatar}
                   />
                 ) : (
@@ -187,7 +187,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
                   className={styles.c_mobile_drawer__user_action}
                   onClick={handleNavigateToSettings}
                 >
-                  <IoSettingsOutline size={20} aria-hidden='true' />
+                  <IoSettingsOutline size={ICON_SIZES.SM} aria-hidden='true' />
                   <span>{MENU_LABELS.SETTINGS}</span>
                 </button>
                 <button
@@ -195,7 +195,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
                   className={`${styles.c_mobile_drawer__user_action} ${styles['c_mobile_drawer__user_action--destructive']}`}
                   onClick={handleLogout}
                 >
-                  <IoLogOutOutline size={20} aria-hidden='true' />
+                  <IoLogOutOutline size={ICON_SIZES.SM} aria-hidden='true' />
                   <span>{MENU_LABELS.LOGOUT}</span>
                 </button>
               </div>

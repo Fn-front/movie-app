@@ -21,6 +21,7 @@ import {
   getTMDbProfileUrl,
   getTMDbProviderLogoUrl,
 } from '@/utils/image';
+import { IMAGE_SIZES, ICON_SIZES, DISPLAY_LIMITS } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
 import type { WatchProvider } from '@/lib/types';
@@ -49,7 +50,6 @@ function formatRuntime(minutes: number): string {
   return `${hours}時間${mins}分`;
 }
 
-const MAX_CAST_DISPLAY = 10;
 /** 概算用の固定為替レート（USD→JPY） */
 const USD_TO_JPY_RATE = 150;
 
@@ -109,8 +109,8 @@ const ProviderCategory = memo<ProviderCategoryProps>(function ProviderCategory({
               key={provider.provider_id}
               src={logoUrl}
               alt={provider.provider_name}
-              width={28}
-              height={28}
+              width={IMAGE_SIZES.PROVIDER_LOGO.WIDTH}
+              height={IMAGE_SIZES.PROVIDER_LOGO.HEIGHT}
               className={styles.c_movie_detail__provider_logo}
             />
           ) : null;
@@ -251,7 +251,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                 onClick={handleOpenVideoDialog}
                 aria-label='予告動画を再生'
               >
-                <IoPlayOutline size={32} />
+                <IoPlayOutline size={ICON_SIZES.LG} />
               </button>
             )}
           </div>
@@ -264,8 +264,8 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                 <Image
                   src={posterUrl}
                   alt={`${movie.title}のポスター`}
-                  width={200}
-                  height={300}
+                  width={IMAGE_SIZES.POSTER_DETAIL.WIDTH}
+                  height={IMAGE_SIZES.POSTER_DETAIL.HEIGHT}
                   className={styles.c_movie_detail__poster_image}
                 />
               </div>
@@ -427,7 +427,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                 </h4>
                 <div className={styles.c_movie_detail__cast_list}>
                   {movie.credits.cast
-                    .slice(0, MAX_CAST_DISPLAY)
+                    .slice(0, DISPLAY_LIMITS.CAST_MAX)
                     .map((actor) => {
                       const profileUrl = getTMDbProfileUrl(actor.profile_path);
                       return (
@@ -439,8 +439,8 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                             <Image
                               src={profileUrl}
                               alt={actor.name}
-                              width={48}
-                              height={48}
+                              width={IMAGE_SIZES.CAST.WIDTH}
+                              height={IMAGE_SIZES.CAST.HEIGHT}
                               className={styles.c_movie_detail__cast_image}
                             />
                           ) : (

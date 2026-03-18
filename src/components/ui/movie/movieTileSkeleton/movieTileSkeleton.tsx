@@ -9,6 +9,7 @@ import { memo } from 'react';
 
 import { Card } from '@/components/ui/card/card';
 import { Skeleton } from '@/components/ui/skeleton/skeleton';
+import { DISPLAY_LIMITS } from '@/constants';
 
 import styles from './movieTileSkeleton.module.scss';
 
@@ -24,7 +25,7 @@ export interface MovieTileSkeletonProps {
  * MovieTileSkeletonコンポーネント
  */
 export const MovieTileSkeleton = memo<MovieTileSkeletonProps>(
-  function MovieTileSkeleton({ count = 20 }) {
+  function MovieTileSkeleton({ count = DISPLAY_LIMITS.SKELETON_DEFAULT }) {
     return (
       <>
         {Array.from({ length: count }, (_, index) => (

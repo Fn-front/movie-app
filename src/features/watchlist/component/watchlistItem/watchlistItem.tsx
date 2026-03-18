@@ -8,6 +8,7 @@
 import { memo, useCallback } from 'react';
 import Image from 'next/image';
 
+import { IMAGE_SIZES } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { getTMDbImageUrl } from '@/utils/image';
 import type { WatchlistItem as WatchlistItemType } from '@/lib/api/watchlist/watchlist';
@@ -83,8 +84,8 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
           className={styles.c_watchlist_item__poster}
           src={posterUrl}
           alt={`${item.title}のポスター`}
-          width={36}
-          height={54}
+          width={IMAGE_SIZES.THUMBNAIL.WIDTH}
+          height={IMAGE_SIZES.THUMBNAIL.HEIGHT}
         />
       ) : (
         <div

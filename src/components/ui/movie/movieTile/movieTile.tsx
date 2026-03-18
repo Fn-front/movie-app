@@ -13,6 +13,7 @@ import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddB
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { DismissButton } from '@/features/dismissedMovies/component/dismissButton/dismissButton';
 import { getTMDbPosterUrl } from '@/utils/image';
+import { IMAGE_SIZES, RATING_THRESHOLDS, DISPLAY_LIMITS } from '@/constants';
 import { formatDate } from '@/utils/date';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
@@ -96,8 +97,8 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
 
   const ratingClassName = useMemo(() => {
     if (movie.vote_average == null || movie.vote_average <= 0) return '';
-    if (movie.vote_average >= 7) return styles.c_movie_tile__rating__high;
-    if (movie.vote_average >= 5) return styles.c_movie_tile__rating__mid;
+    if (movie.vote_average >= RATING_THRESHOLDS.HIGH) return styles.c_movie_tile__rating__high;
+    if (movie.vote_average >= RATING_THRESHOLDS.MID) return styles.c_movie_tile__rating__mid;
     return styles.c_movie_tile__rating__low;
   }, [movie.vote_average]);
 
@@ -106,7 +107,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       return [];
     }
     return movie.genre_ids
-      .slice(0, 2)
+      .slice(0, DISPLAY_LIMITS.GENRE_MAX)
       .map((id) => genres[id])
       .filter(Boolean);
   }, [genres, movie.genre_ids]);
@@ -128,8 +129,8 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
           <Image
             src={posterUrl}
             alt={`${movie.title}のポスター`}
-            width={500}
-            height={750}
+            width={IMAGE_SIZES.POSTER.WIDTH}
+            height={IMAGE_SIZES.POSTER.HEIGHT}
             className={styles.c_movie_tile__image}
           />
         ) : (

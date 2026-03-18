@@ -21,12 +21,14 @@ import { getTMDbImageUrl } from '@/utils/image';
 import {
   DISMISSED_MOVIES_SUCCESS_MESSAGES,
   DISMISSED_MOVIES_ERROR_MESSAGES,
+  IMAGE_SIZES,
+  DISPLAY_LIMITS,
 } from '@/constants';
 
 import styles from './dismissedMoviesList.module.scss';
 
 const QUERY_KEY = ['dismissed-movies'];
-const INITIAL_DISPLAY_COUNT = 10;
+const INITIAL_DISPLAY_COUNT = DISPLAY_LIMITS.DISMISSED_INITIAL;
 
 /**
  * 興味なし映画一覧
@@ -157,8 +159,8 @@ const DismissedMovieItem = memo<DismissedMovieItemProps>(
             <Image
               src={posterUrl}
               alt={movie.title}
-              width={36}
-              height={54}
+              width={IMAGE_SIZES.THUMBNAIL.WIDTH}
+              height={IMAGE_SIZES.THUMBNAIL.HEIGHT}
               unoptimized
             />
           ) : (

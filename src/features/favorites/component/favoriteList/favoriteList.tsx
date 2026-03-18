@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/card/card';
 import { RatingIndicator } from '@/features/favorites/component/ratingIndicator/ratingIndicator';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
+import { IMAGE_SIZES, DISPLAY_LIMITS } from '@/constants';
 import { getTMDbPosterUrl } from '@/utils/image';
 import type {
   FavoriteItem,
@@ -59,7 +60,7 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
       isLoading={isLoading}
       isEmpty={favorites.length === 0}
       emptyMessage='お気に入りの映画を追加しましょう'
-      skeletonCount={8}
+      skeletonCount={DISPLAY_LIMITS.SKELETON_SMALL}
     >
       {favorites.map((item) => (
         <FavoriteTile
@@ -143,8 +144,8 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
           <Image
             src={posterUrl}
             alt={`${item.title}のポスター`}
-            width={500}
-            height={750}
+            width={IMAGE_SIZES.POSTER.WIDTH}
+            height={IMAGE_SIZES.POSTER.HEIGHT}
             className={styles.c_favorite_tile__image}
           />
         ) : (

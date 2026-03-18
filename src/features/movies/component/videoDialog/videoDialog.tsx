@@ -9,6 +9,7 @@ import { memo, useMemo } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { IoCloseOutline } from 'react-icons/io5';
 
+import { ICON_SIZES } from '@/constants';
 import type { Video } from '@/lib/types';
 
 import styles from './videoDialog.module.scss';
@@ -70,7 +71,7 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
           </Dialog.Title>
 
           <Dialog.Close className={styles.c_video_dialog__close}>
-            <IoCloseOutline size={24} aria-hidden='true' />
+            <IoCloseOutline size={ICON_SIZES.MD} aria-hidden='true' />
             <span className={styles.c_video_dialog__sr_only}>閉じる</span>
           </Dialog.Close>
 

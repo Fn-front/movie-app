@@ -9,7 +9,7 @@ import { memo, useCallback } from 'react';
 import Image from 'next/image';
 import { IoChevronForward } from 'react-icons/io5';
 
-import { API, TMDB_IMAGE_SIZES } from '@/constants';
+import { API, TMDB_IMAGE_SIZES, IMAGE_SIZES } from '@/constants';
 import type { CalendarMovieItem } from '@/lib/api/calendar/calendar';
 
 import styles from './calendarMovieList.module.scss';
@@ -70,8 +70,8 @@ export const CalendarMovieList = memo<CalendarMovieListProps>(
                     <Image
                       src={`${API.TMDB_IMAGE_BASE_URL}/${TMDB_IMAGE_SIZES.POSTER.SMALL}${movie.poster_path}`}
                       alt={movie.title}
-                      width={46}
-                      height={69}
+                      width={IMAGE_SIZES.CALENDAR_POSTER.WIDTH}
+                      height={IMAGE_SIZES.CALENDAR_POSTER.HEIGHT}
                       className={styles.c_calendarMovieList__posterImage}
                     />
                   ) : (

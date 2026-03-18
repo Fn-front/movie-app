@@ -68,7 +68,9 @@ const nextConfig = {
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' https://image.tmdb.org data: blob:",
-              "font-src 'self'",
+              // data: は @fullcalendar/core が内部でアイコンフォント(fcicons)を
+              // base64エンコードした data: URI で読み込むために必要
+              "font-src 'self' data:",
               "connect-src 'self' https://*.supabase.co",
               'frame-src https://www.youtube.com',
               "frame-ancestors 'none'",

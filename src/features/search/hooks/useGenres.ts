@@ -9,7 +9,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { getGenresApi } from '@/lib/api/genres/genres';
-import { genreKeys } from '@/constants';
+import { genreKeys, GENRE_CACHE_DURATION_MS } from '@/constants';
 import type { Genre } from '@/lib/types';
 
 /**
@@ -31,8 +31,8 @@ export function useGenres(): UseGenresReturn {
   const genresQuery = useQuery({
     queryKey: genreKeys.all,
     queryFn: () => getGenresApi(),
-    staleTime: 24 * 60 * 60 * 1000,
-    gcTime: 24 * 60 * 60 * 1000,
+    staleTime: GENRE_CACHE_DURATION_MS,
+    gcTime: GENRE_CACHE_DURATION_MS,
   });
 
   const genres = useMemo(

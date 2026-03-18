@@ -5,6 +5,8 @@
 
 import { useEffect, useRef } from 'react';
 
+import { INTERSECTION_OBSERVER_DEFAULTS } from '@/constants';
+
 interface UseIntersectionObserverOptions {
   /** コールバックを実行するかどうか */
   enabled?: boolean;
@@ -25,7 +27,11 @@ export function useIntersectionObserver(
   onIntersect: () => void,
   options: UseIntersectionObserverOptions = {},
 ) {
-  const { enabled = true, rootMargin = '200px', threshold = 0 } = options;
+  const {
+    enabled = true,
+    rootMargin = INTERSECTION_OBSERVER_DEFAULTS.ROOT_MARGIN,
+    threshold = 0,
+  } = options;
   const targetRef = useRef<HTMLDivElement>(null);
   const onIntersectRef = useRef(onIntersect);
 

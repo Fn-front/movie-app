@@ -24,7 +24,7 @@ import {
 import { IMAGE_SIZES, ICON_SIZES, DISPLAY_LIMITS } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
-import { ARIA_LABELS, UI_ERROR_MESSAGES } from '@/constants';
+import { ARIA_LABELS, UI_ERROR_MESSAGES, EXCHANGE_RATE } from '@/constants';
 import type { WatchProvider } from '@/lib/types';
 
 import styles from './movieDetailContent.module.scss';
@@ -52,7 +52,7 @@ function formatRuntime(minutes: number): string {
 }
 
 /** 概算用の固定為替レート（USD→JPY） */
-const USD_TO_JPY_RATE = 150;
+const USD_TO_JPY_RATE = EXCHANGE_RATE.USD_TO_JPY;
 
 /**
  * 日本円を読みやすい単位でフォーマット

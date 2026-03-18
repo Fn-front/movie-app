@@ -20,11 +20,12 @@ import {
   SETTINGS_ERROR_MESSAGES,
   SETTINGS_SUCCESS_MESSAGES,
   API_ERROR_MESSAGES,
+  THEME_DEFAULTS,
 } from '@/constants';
 
 /** デフォルトのユーザー設定 */
 const DEFAULT_SETTINGS: UserSettings = {
-  theme: 'light',
+  theme: THEME_DEFAULTS.DEFAULT,
   notificationEnabled: false,
 };
 

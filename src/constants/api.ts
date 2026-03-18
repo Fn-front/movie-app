@@ -3,7 +3,7 @@
  */
 
 /**
- * API関連の定数
+ * TMDb API設定
  */
 export const API = {
   /** TMDb API Base URL */

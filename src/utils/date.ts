@@ -5,6 +5,8 @@
 import { format as dateFnsFormat, parseISO } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
+import { DATE_FORMATS } from '@/constants';
+
 /**
  * 日付を指定フォーマットで文字列化
  *
@@ -23,7 +25,7 @@ import { ja } from 'date-fns/locale';
  */
 export function formatDate(
   date: Date | string | number | null | undefined,
-  formatString: string = 'yyyy年MM月dd日',
+  formatString: string = DATE_FORMATS.DATE,
 ): string | null {
   if (!date) return null;
 
@@ -54,7 +56,7 @@ export function formatDate(
  */
 export function formatDateTime(
   date: Date | string | number | null | undefined,
-  formatString: string = 'yyyy年MM月dd日 HH:mm',
+  formatString: string = DATE_FORMATS.DATE_TIME,
 ): string | null {
   return formatDate(date, formatString);
 }

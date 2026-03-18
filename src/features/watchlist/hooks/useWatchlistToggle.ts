@@ -13,14 +13,12 @@ import {
   WATCHLIST_SUCCESS_MESSAGES,
 } from '@/constants/watchlist';
 import { watchlistKeys } from '@/constants';
-import {
-  addWatchlist,
-  removeWatchlist,
-} from '@/lib/api/watchlist/watchlist';
+import { addWatchlist, removeWatchlist } from '@/lib/api/watchlist/watchlist';
 import type {
   WatchlistItem,
   GetWatchlistResponse,
 } from '@/lib/api/watchlist/watchlist';
+import type { WatchlistAddFormData } from '@/schema/watchlist';
 import { useToast } from '@/hooks/useToast';
 
 /**
@@ -51,6 +49,12 @@ export interface UseWatchlistToggleReturn {
   isMovieToggling: (tmdbMovieId: number) => boolean;
 }
 
+/** InfiniteQueryのデータ型 */
+type WatchlistInfiniteData = {
+  pages: GetWatchlistResponse[];
+  pageParams: (string | undefined)[];
+};
+
 /**
  * 既存のウォッチリストキャッシュから全アイテムを取得する
  * watchlistKeys.all をプレフィックスとして、どのsortオプションのキャッシュからも読み取る
@@ -58,10 +62,9 @@ export interface UseWatchlistToggleReturn {
 function getWatchlistItemsFromCache(
   queryClient: ReturnType<typeof useQueryClient>,
 ): WatchlistItem[] {
-  const queries = queryClient.getQueriesData<{
-    pages: GetWatchlistResponse[];
-    pageParams: (string | undefined)[];
-  }>({ queryKey: watchlistKeys.all });
+  const queries = queryClient.getQueriesData<WatchlistInfiniteData>({
+    queryKey: watchlistKeys.all,
+  });
 
   const items: WatchlistItem[] = [];
   for (const [, data] of queries) {
@@ -75,10 +78,96 @@ function getWatchlistItemsFromCache(
 }
 
 /**
+ * 全ウォッチリストキャッシュに楽観的にアイテムを追加する
+ */
+function optimisticAddToAllCaches(
+  queryClient: ReturnType<typeof useQueryClient>,
+  item: WatchlistItem,
+): Map<readonly unknown[], WatchlistInfiniteData | undefined> {
+  const previousDataMap = new Map<
+    readonly unknown[],
+    WatchlistInfiniteData | undefined
+  >();
+
+  const queries = queryClient.getQueriesData<WatchlistInfiniteData>({
+    queryKey: watchlistKeys.all,
+  });
+
+  for (const [key, data] of queries) {
+    previousDataMap.set(key, data);
+    if (data?.pages && data.pages.length > 0) {
+      queryClient.setQueryData<WatchlistInfiniteData>(key, {
+        ...data,
+        pages: data.pages.map((page, i) =>
+          i === 0
+            ? {
+                ...page,
+                data: {
+                  ...page.data,
+                  watchlist: [item, ...page.data.watchlist],
+                },
+              }
+            : page,
+        ),
+      });
+    }
+  }
+
+  return previousDataMap;
+}
+
+/**
+ * 全ウォッチリストキャッシュから楽観的にアイテムを削除する
+ */
+function optimisticRemoveFromAllCaches(
+  queryClient: ReturnType<typeof useQueryClient>,
+  id: string,
+): Map<readonly unknown[], WatchlistInfiniteData | undefined> {
+  const previousDataMap = new Map<
+    readonly unknown[],
+    WatchlistInfiniteData | undefined
+  >();
+
+  const queries = queryClient.getQueriesData<WatchlistInfiniteData>({
+    queryKey: watchlistKeys.all,
+  });
+
+  for (const [key, data] of queries) {
+    previousDataMap.set(key, data);
+    if (data?.pages) {
+      queryClient.setQueryData<WatchlistInfiniteData>(key, {
+        ...data,
+        pages: data.pages.map((page) => ({
+          ...page,
+          data: {
+            ...page.data,
+            watchlist: page.data.watchlist.filter((item) => item.id !== id),
+          },
+        })),
+      });
+    }
+  }
+
+  return previousDataMap;
+}
+
+/**
+ * キャッシュをロールバックする
+ */
+function rollbackCaches(
+  queryClient: ReturnType<typeof useQueryClient>,
+  previousDataMap: Map<readonly unknown[], WatchlistInfiniteData | undefined>,
+): void {
+  for (const [key, data] of previousDataMap) {
+    queryClient.setQueryData(key, data);
+  }
+}
+
+/**
  * ウォッチリスト追加/削除トグル カスタムフック
  *
  * useWatchlist()を呼ばず、既存のウォッチリストキャッシュを直接参照することで
- * 重複リクエストを防止する。mutation完了時にwatchlistKeys.allで全キャッシュを無効化。
+ * 重複リクエストを防止する。楽観的UI更新は全キャッシュに対して行う。
  */
 export function useWatchlistToggle(): UseWatchlistToggleReturn {
   const queryClient = useQueryClient();
@@ -90,7 +179,28 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
 
   const addMutation = useMutation({
     mutationFn: addWatchlist,
-    onError: () => {
+    onMutate: async (newItem: WatchlistAddFormData) => {
+      await queryClient.cancelQueries({ queryKey: watchlistKeys.all });
+
+      const optimisticItem: WatchlistItem = {
+        id: `optimistic-${Date.now()}`,
+        tmdb_movie_id: newItem.tmdb_movie_id,
+        title: newItem.title,
+        poster_path: newItem.poster_path ?? null,
+        release_date: newItem.release_date ?? null,
+        added_at: new Date().toISOString(),
+      };
+
+      const previousDataMap = optimisticAddToAllCaches(
+        queryClient,
+        optimisticItem,
+      );
+      return { previousDataMap };
+    },
+    onError: (_error, _newItem, context) => {
+      if (context?.previousDataMap) {
+        rollbackCaches(queryClient, context.previousDataMap);
+      }
       toast({
         title: 'エラー',
         description: WATCHLIST_ERROR_MESSAGES.ADD_FAILED,
@@ -104,7 +214,16 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
 
   const removeMutation = useMutation({
     mutationFn: removeWatchlist,
-    onError: () => {
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: watchlistKeys.all });
+
+      const previousDataMap = optimisticRemoveFromAllCaches(queryClient, id);
+      return { previousDataMap };
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previousDataMap) {
+        rollbackCaches(queryClient, context.previousDataMap);
+      }
       toast({
         title: 'エラー',
         description: WATCHLIST_ERROR_MESSAGES.REMOVE_FAILED,

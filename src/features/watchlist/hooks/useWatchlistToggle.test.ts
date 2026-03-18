@@ -14,17 +14,24 @@ const mockToast = jest.fn();
 const mockAddWatchlist = jest.fn().mockResolvedValue({});
 const mockRemoveWatchlist = jest.fn().mockResolvedValue(undefined);
 const mockInvalidateQueries = jest.fn();
+const mockCancelQueries = jest.fn().mockResolvedValue(undefined);
 const mockGetQueriesData = jest.fn().mockReturnValue([]);
+const mockSetQueryData = jest.fn();
 
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
     getQueriesData: mockGetQueriesData,
     invalidateQueries: mockInvalidateQueries,
+    cancelQueries: mockCancelQueries,
+    setQueryData: mockSetQueryData,
   }),
-  useMutation: ({ mutationFn, onError }: { mutationFn: Function; onError?: Function }) => ({
+  useMutation: ({
+    mutationFn,
+  }: {
+    mutationFn: (...args: unknown[]) => Promise<unknown>;
+  }) => ({
     mutate: mutationFn,
     isPending: false,
-    onError,
   }),
 }));
 

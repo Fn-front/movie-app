@@ -22,7 +22,13 @@ import {
   IoCloseOutline,
 } from 'react-icons/io5';
 
-import { ROUTES, NAV_ITEMS, MENU_LABELS, ICON_SIZES, IMAGE_SIZES } from '@/constants';
+import {
+  ROUTES,
+  NAV_ITEMS,
+  MENU_LABELS,
+  ICON_SIZES,
+  IMAGE_SIZES,
+} from '@/constants';
 import { getInitial } from '@/utils/user';
 
 import styles from './mobileDrawer.module.scss';
@@ -50,7 +56,11 @@ const NAV_ICON_MAP: Record<string, React.ReactNode> = {
  * モバイル用ナビゲーションアイテム一覧（ホーム + 共通NAV_ITEMS）
  */
 const MOBILE_NAV_ITEMS: MobileNavItem[] = [
-  { label: 'ホーム', href: ROUTES.HOME, icon: <IoHomeOutline size={ICON_SIZES.SM} /> },
+  {
+    label: 'ホーム',
+    href: ROUTES.HOME,
+    icon: <IoHomeOutline size={ICON_SIZES.SM} />,
+  },
   ...NAV_ITEMS.map((item) => ({
     ...item,
     icon: NAV_ICON_MAP[item.href] ?? null,

@@ -97,8 +97,10 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
 
   const ratingClassName = useMemo(() => {
     if (movie.vote_average == null || movie.vote_average <= 0) return '';
-    if (movie.vote_average >= RATING_THRESHOLDS.HIGH) return styles.c_movie_tile__rating__high;
-    if (movie.vote_average >= RATING_THRESHOLDS.MID) return styles.c_movie_tile__rating__mid;
+    if (movie.vote_average >= RATING_THRESHOLDS.HIGH)
+      return styles.c_movie_tile__rating__high;
+    if (movie.vote_average >= RATING_THRESHOLDS.MID)
+      return styles.c_movie_tile__rating__mid;
     return styles.c_movie_tile__rating__low;
   }, [movie.vote_average]);
 

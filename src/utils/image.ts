@@ -2,7 +2,7 @@
  * 画像URLユーティリティ
  */
 
-import { API } from '@/constants';
+import { API, EXTERNAL_URLS } from '@/constants';
 
 // 画像サイズ型定義
 export type TMDbImageSize =
@@ -101,5 +101,5 @@ export function getPlaceholderImageUrl(
   text?: string,
 ): string {
   const displayText = text || `${width}x${height}`;
-  return `https://placehold.co/${width}x${height}?text=${encodeURIComponent(displayText)}`;
+  return `${EXTERNAL_URLS.PLACEHOLDER_IMAGE}/${width}x${height}?text=${encodeURIComponent(displayText)}`;
 }

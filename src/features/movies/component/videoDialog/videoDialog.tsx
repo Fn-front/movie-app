@@ -9,7 +9,7 @@ import { memo, useMemo } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { IoCloseOutline } from 'react-icons/io5';
 
-import { ICON_SIZES, ARIA_LABELS } from '@/constants';
+import { ICON_SIZES, ARIA_LABELS, EXTERNAL_URLS } from '@/constants';
 import type { Video } from '@/lib/types';
 
 import styles from './videoDialog.module.scss';
@@ -82,7 +82,7 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
               <div key={video.id} className={styles.c_video_dialog__item}>
                 <div className={styles.c_video_dialog__video_wrapper}>
                   <iframe
-                    src={`https://www.youtube.com/embed/${encodeURIComponent(video.key)}`}
+                    src={`${EXTERNAL_URLS.YOUTUBE_EMBED}/${encodeURIComponent(video.key)}`}
                     title={video.name}
                     allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
                     allowFullScreen

@@ -121,13 +121,13 @@ describe('POST /api/recommendations/refresh', () => {
 
     // 1. カウントチェック（0回使用済み）
     mockCountChain(0);
-    // 2. INSERT成功
-    mockInsertSuccess();
-    // 3. processUserRecommendations成功
+    // 2. processUserRecommendations成功
     mockProcessUserRecommendations.mockResolvedValueOnce({
       status: 'processed',
       recommendationCount: 1,
     });
+    // 3. INSERT成功（生成成功後にカウント記録）
+    mockInsertSuccess();
     // 4. レコメンド取得
     mockFetchRecommendations(mockRecommendations);
 
@@ -141,9 +141,8 @@ describe('POST /api/recommendations/refresh', () => {
     expect(json.data.recommendations[0].title).toBe('テスト映画');
   });
 
-  it('レコメンド生成がskippedの場合に500を返す', async () => {
+  it('レコメンド生成がskippedの場合に500を返す（カウント未消費）', async () => {
     mockCountChain(0);
-    mockInsertSuccess();
     mockProcessUserRecommendations.mockResolvedValueOnce({
       status: 'skipped',
       recommendationCount: 0,
@@ -175,6 +174,10 @@ describe('POST /api/recommendations/refresh', () => {
 
   it('INSERT時のDBエラーで500を返す', async () => {
     mockCountChain(0);
+    mockProcessUserRecommendations.mockResolvedValueOnce({
+      status: 'processed',
+      recommendationCount: 10,
+    });
     mockFrom.mockReturnValueOnce({
       insert: () => Promise.resolve({ error: new Error('Insert error') }),
     });
@@ -188,11 +191,11 @@ describe('POST /api/recommendations/refresh', () => {
 
   it('残り回数が正しく計算される（5回使用済み→残り4回）', async () => {
     mockCountChain(5);
-    mockInsertSuccess();
     mockProcessUserRecommendations.mockResolvedValueOnce({
       status: 'processed',
       recommendationCount: 10,
     });
+    mockInsertSuccess();
     mockFetchRecommendations([]);
 
     const response = await POST(createPostRequest());

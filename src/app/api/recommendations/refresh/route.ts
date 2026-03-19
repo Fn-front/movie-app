@@ -69,14 +69,6 @@ export const POST = withAuth(
       );
     }
 
-    const { error: insertError } = await supabase
-      .from('recommendation_refreshes')
-      .insert({ user_id: session.user.id });
-
-    if (insertError) {
-      throw insertError;
-    }
-
     const result = await processUserRecommendations(supabase, session.user.id);
 
     if (result.status === 'skipped') {
@@ -84,12 +76,20 @@ export const POST = withAuth(
         {
           success: false,
           error: {
-            code: 'GENERATION_FAILED',
+            code: RECOMMENDATION_REFRESH_ERROR_CODE.GENERATION_FAILED,
             message: RECOMMENDATION_REFRESH_MESSAGES.GENERATION_FAILED,
           },
         },
         { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
       );
+    }
+
+    const { error: insertError } = await supabase
+      .from('recommendation_refreshes')
+      .insert({ user_id: session.user.id });
+
+    if (insertError) {
+      throw insertError;
     }
 
     const { data: recommendations } = await supabase

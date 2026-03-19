@@ -81,7 +81,8 @@ export function useRecommendationRefresh(
 
   const usedCount = countData?.usedCount ?? 0;
   const maxCount = countData?.maxCount ?? RECOMMENDATION_REFRESH.MAX_COUNT;
-  const remainingCount = countData?.remainingCount ?? RECOMMENDATION_REFRESH.MAX_COUNT;
+  const remainingCount =
+    countData?.remainingCount ?? RECOMMENDATION_REFRESH.MAX_COUNT;
   const isLimitReached = remainingCount <= 0;
 
   return useMemo(

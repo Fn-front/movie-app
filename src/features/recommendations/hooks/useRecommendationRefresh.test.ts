@@ -20,16 +20,21 @@ jest.mock('@/lib/api/recommendations/recommendations', () => ({
 const mockMutate = jest.fn();
 const mockSetQueryData = jest.fn();
 let mockOnSuccess:
-  | ((data: { remainingCount: number; recommendations: Recommendation[] }) => void)
+  | ((data: {
+      remainingCount: number;
+      recommendations: Recommendation[];
+    }) => void)
   | undefined;
 let mockOnError: ((error: unknown) => void) | undefined;
 let mockIsPending = false;
 
-let mockQueryData: {
-  usedCount: number;
-  maxCount: number;
-  remainingCount: number;
-} | undefined = {
+let mockQueryData:
+  | {
+      usedCount: number;
+      maxCount: number;
+      remainingCount: number;
+    }
+  | undefined = {
   usedCount: 3,
   maxCount: 10,
   remainingCount: 7,
@@ -42,7 +47,10 @@ jest.mock('@tanstack/react-query', () => ({
   }),
   useMutation: (opts: {
     mutationFn: unknown;
-    onSuccess?: (data: { remainingCount: number; recommendations: Recommendation[] }) => void;
+    onSuccess?: (data: {
+      remainingCount: number;
+      recommendations: Recommendation[];
+    }) => void;
     onError?: (error: unknown) => void;
   }) => {
     mockOnSuccess = opts.onSuccess;
@@ -136,7 +144,9 @@ describe('useRecommendationRefresh', () => {
       title: RECOMMENDATION_REFRESH_MESSAGES.SUCCESS,
       variant: 'success',
     });
-    expect(mockOnSuccessCallback).toHaveBeenCalledWith(mockData.recommendations);
+    expect(mockOnSuccessCallback).toHaveBeenCalledWith(
+      mockData.recommendations,
+    );
   });
 
   it('onError時にエラートーストが表示される', () => {
@@ -172,7 +182,9 @@ describe('useRecommendationRefresh', () => {
 
     expect(result.current.usedCount).toBe(0);
     expect(result.current.maxCount).toBe(RECOMMENDATION_REFRESH.MAX_COUNT);
-    expect(result.current.remainingCount).toBe(RECOMMENDATION_REFRESH.MAX_COUNT);
+    expect(result.current.remainingCount).toBe(
+      RECOMMENDATION_REFRESH.MAX_COUNT,
+    );
     expect(result.current.isLimitReached).toBe(false);
   });
 

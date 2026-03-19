@@ -100,8 +100,7 @@ export const POST = withAuth(
       .eq('user_id', session.user.id)
       .order('display_order', { ascending: true });
 
-    const remainingCount =
-      RECOMMENDATION_REFRESH.MAX_COUNT - (usedCount + 1);
+    const remainingCount = RECOMMENDATION_REFRESH.MAX_COUNT - (usedCount + 1);
 
     return NextResponse.json(
       {

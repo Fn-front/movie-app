@@ -31,7 +31,9 @@ export interface RefreshCountResponse {
 /**
  * レコメンドを手動更新する
  */
-export async function refreshRecommendations(): Promise<RefreshRecommendationsResponse['data']> {
+export async function refreshRecommendations(): Promise<
+  RefreshRecommendationsResponse['data']
+> {
   const response = await axiosInstance.post<RefreshRecommendationsResponse>(
     '/api/recommendations/refresh',
   );

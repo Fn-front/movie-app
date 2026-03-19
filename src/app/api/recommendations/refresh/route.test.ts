@@ -160,7 +160,8 @@ describe('POST /api/recommendations/refresh', () => {
     mockFrom.mockReturnValueOnce({
       select: () => ({
         eq: () => ({
-          gte: () => Promise.resolve({ count: null, error: new Error('DB error') }),
+          gte: () =>
+            Promise.resolve({ count: null, error: new Error('DB error') }),
         }),
       }),
     });

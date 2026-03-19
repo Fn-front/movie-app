@@ -455,9 +455,7 @@ describe('RecommendationSection', () => {
         />,
       );
 
-      fireEvent.click(
-        screen.getByRole('button', { name: 'おすすめを更新' }),
-      );
+      fireEvent.click(screen.getByRole('button', { name: 'おすすめを更新' }));
 
       expect(mockRefresh).toHaveBeenCalled();
     });

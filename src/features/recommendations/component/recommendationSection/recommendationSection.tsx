@@ -42,13 +42,20 @@ export interface RecommendationSectionProps {
  * RecommendationSectionコンポーネント
  */
 export const RecommendationSection = memo<RecommendationSectionProps>(
-  function RecommendationSection({ recommendations: initialRecommendations, hasFavorites }) {
-    const [recommendations, setRecommendations] =
-      useState<Recommendation[]>(initialRecommendations);
+  function RecommendationSection({
+    recommendations: initialRecommendations,
+    hasFavorites,
+  }) {
+    const [recommendations, setRecommendations] = useState<Recommendation[]>(
+      initialRecommendations,
+    );
 
-    const handleRefreshSuccess = useCallback((newRecommendations: Recommendation[]) => {
-      setRecommendations(newRecommendations);
-    }, []);
+    const handleRefreshSuccess = useCallback(
+      (newRecommendations: Recommendation[]) => {
+        setRecommendations(newRecommendations);
+      },
+      [],
+    );
 
     const {
       refresh,

@@ -8,6 +8,13 @@
     margin-top: $spacing-12;
   }
 
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $spacing-2;
+  }
+
   &__title {
     margin: 0;
     font-size: $font-size-xl;
@@ -17,6 +24,24 @@
     @include md {
       font-size: $font-size-2xl;
     }
+  }
+
+  &__refresh {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+    flex-shrink: 0;
+  }
+
+  &__remaining {
+    font-size: $font-size-xs;
+    color: $text-secondary;
+    white-space: nowrap;
+  }
+
+  &__refresh_icon {
+    width: 1.4em;
+    height: 1.4em;
   }
 
   &__message {

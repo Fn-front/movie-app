@@ -136,6 +136,23 @@ jest.mock('@/features/dismissedMovies/hooks/useDismissMovie', () => ({
   }),
 }));
 
+const mockRefresh = jest.fn();
+let mockRefreshState = {
+  isRefreshing: false,
+  remainingCount: 7,
+  maxCount: 10,
+  usedCount: 3,
+  isLimitReached: false,
+  isCountLoading: false,
+};
+
+jest.mock('@/features/recommendations/hooks/useRecommendationRefresh', () => ({
+  useRecommendationRefresh: () => ({
+    refresh: mockRefresh,
+    ...mockRefreshState,
+  }),
+}));
+
 // --- Helpers ---
 
 const createMockRecommendations = (count: number) =>
@@ -157,6 +174,19 @@ describe('RecommendationSection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDismissedIds.clear();
+    mockGetFavoriteInfo.mockReturnValue(null);
+    mockIsFavoriteProcessing.mockReturnValue(false);
+    mockIsInWatchlist.mockReturnValue(false);
+    mockIsMovieToggling.mockReturnValue(false);
+    mockIsDismissingMovie.mockReturnValue(false);
+    mockRefreshState = {
+      isRefreshing: false,
+      remainingCount: 7,
+      maxCount: 10,
+      usedCount: 3,
+      isLimitReached: false,
+      isCountLoading: false,
+    };
   });
 
   describe('お気に入り0件', () => {
@@ -343,6 +373,24 @@ describe('RecommendationSection', () => {
       expect(screen.getByTestId('dismiss-btn-101')).not.toBeDisabled();
     });
 
+    it('興味なしボタンクリックでdismissMovieが呼ばれる', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('dismiss-btn-100'));
+
+      expect(mockDismissMovie).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tmdb_movie_id: 100,
+          title: 'おすすめ映画 1',
+        }),
+      );
+    });
+
     it('dismissされた映画がリストから除外される', () => {
       mockDismissedIds.add(100);
 
@@ -371,6 +419,125 @@ describe('RecommendationSection', () => {
       expect(
         screen.getByRole('region', { name: 'あなたへのおすすめ' }),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe('更新ボタン', () => {
+    it('更新ボタンが表示される', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'おすすめを更新' }),
+      ).toBeInTheDocument();
+    });
+
+    it('残り回数が表示される', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(screen.getByText('残り7回 / 月10回')).toBeInTheDocument();
+    });
+
+    it('更新ボタンクリックでrefreshが呼ばれる', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'おすすめを更新' }));
+
+      expect(mockRefresh).toHaveBeenCalled();
+    });
+
+    it('上限到達時にボタンが無効化される', () => {
+      mockRefreshState = {
+        ...mockRefreshState,
+        remainingCount: 0,
+        isLimitReached: true,
+      };
+
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'おすすめを更新' }),
+      ).toBeDisabled();
+    });
+
+    it('上限到達時にリセット通知が表示される', () => {
+      mockRefreshState = {
+        ...mockRefreshState,
+        remainingCount: 0,
+        isLimitReached: true,
+      };
+
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(screen.getByText('来月リセットされます')).toBeInTheDocument();
+    });
+
+    it('更新中はボタンが無効化される', () => {
+      mockRefreshState = {
+        ...mockRefreshState,
+        isRefreshing: true,
+      };
+
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'おすすめを更新' }),
+      ).toBeDisabled();
+    });
+
+    it('カウントローディング中は残り回数が非表示', () => {
+      mockRefreshState = {
+        ...mockRefreshState,
+        isCountLoading: true,
+      };
+
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(screen.queryByText(/残り/)).not.toBeInTheDocument();
+    });
+
+    it('お気に入り0件の場合は更新ボタンが表示されない', () => {
+      render(
+        <RecommendationSection recommendations={[]} hasFavorites={false} />,
+      );
+
+      expect(
+        screen.queryByRole('button', { name: 'おすすめを更新' }),
+      ).not.toBeInTheDocument();
     });
   });
 });

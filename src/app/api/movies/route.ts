@@ -29,6 +29,7 @@ import {
   ERROR_CODE,
   GENRE_CACHE_DURATION_MS,
   DISCOVER_API_MAX_PAGES,
+  GENRE_NAME_OVERRIDES,
 } from '@/constants';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
@@ -57,13 +58,6 @@ function formatDateToString(date: Date): string {
  */
 let genreCache: { data: Record<number, string>; cachedAt: number } | null =
   null;
-
-/** TMDb日本語訳の誤訳を自然な日本語に上書きするマップ */
-const GENRE_NAME_OVERRIDES: Record<string, string> = {
-  履歴: '歴史',
-  謎: 'ミステリー',
-  西洋: '西部劇',
-};
 
 /**
  * ジャンルマップを取得（キャッシュ付き）

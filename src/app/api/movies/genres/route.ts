@@ -6,11 +6,20 @@
 import { NextResponse } from 'next/server';
 
 import { getGenres } from '@/lib/tmdb/tmdb';
-import { HTTP_STATUS, ERROR_CODE, SEARCH_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  SEARCH_ERROR_MESSAGES,
+  GENRE_NAME_OVERRIDES,
+} from '@/constants';
 
 export async function GET() {
   try {
-    const genres: { id: number; name: string }[] = await getGenres();
+    const rawGenres: { id: number; name: string }[] = await getGenres();
+    const genres = rawGenres.map((genre) => ({
+      ...genre,
+      name: GENRE_NAME_OVERRIDES[genre.name] ?? genre.name,
+    }));
 
     return NextResponse.json(
       {

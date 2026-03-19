@@ -19,7 +19,6 @@ import { useRecommendationRefresh } from '@/features/recommendations/hooks/useRe
 import {
   RECOMMENDATIONS_MESSAGES,
   RECOMMENDATION_REFRESH_MESSAGES,
-  RECOMMENDATION_REFRESH,
 } from '@/constants';
 import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';

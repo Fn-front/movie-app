@@ -62,8 +62,8 @@ NEXTAUTH_SECRET=your_nextauth_secret_here_minimum_32_chars
 # NextAuth.js URL（本番環境で必須）
 NEXTAUTH_URL=http://localhost:3000  # 本番: https://yourdomain.com
 
-# NextAuth.js Debug Mode（開発時のみ）
-NEXTAUTH_DEBUG=true  # 本番環境ではfalse
+# Auth.js Debug Mode（明示的に有効化する場合のみ）
+AUTH_DEBUG=true  # デフォルトはfalse、デバッグ時のみ有効化
 ```
 
 **Cookie設定（NextAuth.js設定ファイルで実装）:**

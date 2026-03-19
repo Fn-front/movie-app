@@ -428,6 +428,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 
-  // デバッグモード（開発環境のみ）
-  debug: process.env.NODE_ENV === 'development',
+  // デバッグモード（AUTH_DEBUG=true で明示的に有効化）
+  debug: process.env.AUTH_DEBUG === 'true',
 });

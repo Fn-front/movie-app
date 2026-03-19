@@ -5,15 +5,22 @@
 
 'use client';
 
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { IoRefreshOutline } from 'react-icons/io5';
 
+import { Button } from '@/components/ui/button/button';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useDismissMovie } from '@/features/dismissedMovies/hooks/useDismissMovie';
-import { RECOMMENDATIONS_MESSAGES } from '@/constants';
+import { useRecommendationRefresh } from '@/features/recommendations/hooks/useRecommendationRefresh';
+import {
+  RECOMMENDATIONS_MESSAGES,
+  RECOMMENDATION_REFRESH_MESSAGES,
+  RECOMMENDATION_REFRESH,
+} from '@/constants';
 import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { Recommendation } from '@/schema/recommendations';
@@ -35,7 +42,23 @@ export interface RecommendationSectionProps {
  * RecommendationSectionコンポーネント
  */
 export const RecommendationSection = memo<RecommendationSectionProps>(
-  function RecommendationSection({ recommendations, hasFavorites }) {
+  function RecommendationSection({ recommendations: initialRecommendations, hasFavorites }) {
+    const [recommendations, setRecommendations] =
+      useState<Recommendation[]>(initialRecommendations);
+
+    const handleRefreshSuccess = useCallback((newRecommendations: Recommendation[]) => {
+      setRecommendations(newRecommendations);
+    }, []);
+
+    const {
+      refresh,
+      isRefreshing,
+      remainingCount,
+      maxCount,
+      isLimitReached,
+      isCountLoading,
+    } = useRecommendationRefresh(handleRefreshSuccess);
+
     const {
       modalState: favoriteModalState,
       handleFavoriteToggle,
@@ -86,6 +109,10 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       [recommendations],
     );
 
+    const handleRefresh = useCallback(() => {
+      refresh();
+    }, [refresh]);
+
     // お気に入り0件 → 登録促進テキスト
     if (!hasFavorites) {
       return (
@@ -104,7 +131,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
     }
 
     // レコメンド未生成 → 「準備中」テキスト
-    if (recommendations.length === 0) {
+    if (recommendations.length === 0 && !isRefreshing) {
       return (
         <section
           aria-label={RECOMMENDATIONS_MESSAGES.SECTION_TITLE}
@@ -127,9 +154,37 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
           aria-label={RECOMMENDATIONS_MESSAGES.SECTION_TITLE}
           className={styles.c_recommendation_section}
         >
-          <h2 className={styles.c_recommendation_section__title}>
-            {RECOMMENDATIONS_MESSAGES.SECTION_TITLE}
-          </h2>
+          <div className={styles.c_recommendation_section__header}>
+            <h2 className={styles.c_recommendation_section__title}>
+              {RECOMMENDATIONS_MESSAGES.SECTION_TITLE}
+            </h2>
+            <div className={styles.c_recommendation_section__refresh}>
+              {!isCountLoading && (
+                <span className={styles.c_recommendation_section__remaining}>
+                  {isLimitReached
+                    ? RECOMMENDATION_REFRESH_MESSAGES.RESET_NOTICE
+                    : RECOMMENDATION_REFRESH_MESSAGES.REMAINING_LABEL(
+                        remainingCount,
+                        maxCount,
+                      )}
+                </span>
+              )}
+              <Button
+                variant='ghost'
+                size='sm'
+                onClick={handleRefresh}
+                disabled={isLimitReached || isRefreshing}
+                isLoading={isRefreshing}
+                aria-label='おすすめを更新'
+              >
+                <IoRefreshOutline
+                  className={styles.c_recommendation_section__refresh_icon}
+                  aria-hidden='true'
+                />
+                更新
+              </Button>
+            </div>
+          </div>
           <div className={styles.c_recommendation_section__grid} role='list'>
             {movieCacheItems.map((movie) => (
               <div

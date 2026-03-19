@@ -59,9 +59,7 @@ export default function Error({ error, reset }: ErrorProps) {
       <p style={messageStyle}>
         申し訳ございません。予期しないエラーが発生しました。
       </p>
-      {error.digest && (
-        <p style={digestStyle}>エラーID: {error.digest}</p>
-      )}
+      {error.digest && <p style={digestStyle}>エラーID: {error.digest}</p>}
       <button onClick={handleReset} style={buttonStyle}>
         もう一度試す
       </button>

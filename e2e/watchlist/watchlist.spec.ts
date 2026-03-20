@@ -33,6 +33,12 @@ async function addMovieToWatchlist(page: import('@playwright/test').Page) {
   const addButton = firstTile.getByRole('button', {
     name: 'ウォッチリストに追加',
   });
+  const removeButton = firstTile.getByRole('button', {
+    name: 'ウォッチリストから削除',
+  });
+
+  // ボタンがレンダリングされるまで待機
+  await expect(addButton.or(removeButton)).toBeVisible({ timeout: 10000 });
 
   // 既に追加済みの場合はスキップ
   const isAddVisible = await addButton.isVisible().catch(() => false);
@@ -40,6 +46,8 @@ async function addMovieToWatchlist(page: import('@playwright/test').Page) {
     const responsePromise = waitForWatchlistResponse(page);
     await addButton.click();
     await responsePromise;
+    // 追加完了を確認
+    await expect(removeButton).toBeVisible({ timeout: 10000 });
   }
 }
 
@@ -56,7 +64,15 @@ test.describe('ウォッチリスト — ページ表示・詳細モーダル', 
   test('ウォッチリストページに映画が表示され、クリックで詳細モーダルが開く', async ({
     page,
   }) => {
+    // ウォッチリストデータ取得完了を待ってからページを表示
+    const dataPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes('/api/watchlist') &&
+        res.request().method() === 'GET' &&
+        res.status() === 200,
+    );
     await page.goto('/watchlist');
+    await dataPromise;
     await expect(
       page.getByRole('heading', { name: 'ウォッチリスト' }),
     ).toBeVisible({ timeout: 15000 });
@@ -79,7 +95,15 @@ test.describe('ウォッチリスト — ページ表示・詳細モーダル', 
   });
 
   test('ウォッチリストページで削除すると映画が消える', async ({ page }) => {
+    // ウォッチリストデータ取得完了を待ってからページを表示
+    const dataPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes('/api/watchlist') &&
+        res.request().method() === 'GET' &&
+        res.status() === 200,
+    );
     await page.goto('/watchlist');
+    await dataPromise;
     await expect(
       page.getByRole('heading', { name: 'ウォッチリスト' }),
     ).toBeVisible({ timeout: 15000 });

@@ -42,18 +42,20 @@ test.describe('ウォッチリストボタン — 状態トグル', () => {
       name: 'ウォッチリストから削除',
     });
 
+    // ボタンがレンダリングされるまで待機
+    await expect(addButton.or(removeButton)).toBeVisible({ timeout: 10000 });
     const wasAdded = await addButton.isVisible().catch(() => false);
 
     if (wasAdded) {
       const responsePromise = waitForWatchlistResponse(page);
       await addButton.click();
       await responsePromise;
-      await expect(removeButton).toBeVisible({ timeout: 5000 });
+      await expect(removeButton).toBeVisible({ timeout: 10000 });
     } else {
       const responsePromise = waitForWatchlistResponse(page);
       await removeButton.click();
       await responsePromise;
-      await expect(addButton).toBeVisible({ timeout: 5000 });
+      await expect(addButton).toBeVisible({ timeout: 10000 });
     }
   });
 });
@@ -84,18 +86,20 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
       name: 'ウォッチリストから削除',
     });
 
+    // ボタンがレンダリングされるまで待機
+    await expect(addButton.or(removeButton)).toBeVisible({ timeout: 10000 });
     const wasAdded = await addButton.isVisible().catch(() => false);
 
     if (wasAdded) {
       const responsePromise = waitForWatchlistResponse(page);
       await addButton.click();
       await responsePromise;
-      await expect(removeButton).toBeVisible({ timeout: 5000 });
+      await expect(removeButton).toBeVisible({ timeout: 10000 });
     } else {
       const responsePromise = waitForWatchlistResponse(page);
       await removeButton.click();
       await responsePromise;
-      await expect(addButton).toBeVisible({ timeout: 5000 });
+      await expect(addButton).toBeVisible({ timeout: 10000 });
     }
   });
 
@@ -110,6 +114,10 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
     const tileRemoveButton = firstTile.getByRole('button', {
       name: 'ウォッチリストから削除',
     });
+    // ボタンがレンダリングされるまで待機
+    await expect(tileAddButton.or(tileRemoveButton)).toBeVisible({
+      timeout: 10000,
+    });
     const wasAdded = await tileAddButton.isVisible().catch(() => false);
 
     // モーダルを開く
@@ -122,7 +130,7 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
     const modalButton = dialog.getByRole('button', {
       name: /ウォッチリスト/,
     });
-    await expect(modalButton).toBeVisible({ timeout: 5000 });
+    await expect(modalButton).toBeVisible({ timeout: 10000 });
     const responsePromise = waitForWatchlistResponse(page);
     await modalButton.click();
     await responsePromise;
@@ -133,9 +141,9 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
 
     // タイル側のラベルが切り替わっていることを確認
     if (wasAdded) {
-      await expect(tileRemoveButton).toBeVisible({ timeout: 5000 });
+      await expect(tileRemoveButton).toBeVisible({ timeout: 10000 });
     } else {
-      await expect(tileAddButton).toBeVisible({ timeout: 5000 });
+      await expect(tileAddButton).toBeVisible({ timeout: 10000 });
     }
   });
 });

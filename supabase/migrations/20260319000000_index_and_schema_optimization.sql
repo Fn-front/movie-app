@@ -68,7 +68,6 @@ ALTER TABLE users
 DROP POLICY IF EXISTS favorites_select_own ON favorites;
 
 -- 依存する部分インデックスをDROP
-DROP INDEX IF EXISTS idx_favorites_user_deleted;
 DROP INDEX IF EXISTS idx_favorites_user_added_at;
 DROP INDEX IF EXISTS idx_favorites_user_rating;
 DROP INDEX IF EXISTS idx_favorites_unique_active;

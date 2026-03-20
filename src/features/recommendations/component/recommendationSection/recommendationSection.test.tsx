@@ -539,9 +539,7 @@ describe('RecommendationSection', () => {
         />,
       );
 
-      expect(
-        screen.queryByText('おすすめを更新中...'),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText('おすすめを更新中...')).not.toBeInTheDocument();
     });
 
     it('カウントローディング中は残り回数が非表示', () => {

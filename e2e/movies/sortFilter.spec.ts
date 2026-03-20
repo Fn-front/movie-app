@@ -24,7 +24,7 @@ test.describe('公開予定ページのソート・フィルター操作', () =>
     await sortSelect.click();
     await page.getByRole('option', { name: '人気順' }).click();
 
-    // ソート変更後もページが正常に表示される
+    // ソート変更後もページが正常に表示される（キャッシュヒット時はAPI呼び出しなし）
     await expect(
       page
         .locator('[class*="movie_tile"]')
@@ -82,6 +82,7 @@ test.describe('公開中ページのソート・フィルター操作', () => {
     await sortSelect.click();
     await page.getByRole('option', { name: '評価順' }).click();
 
+    // ソート変更後もページが正常に表示される（キャッシュヒット時はAPI呼び出しなし）
     await expect(
       page
         .locator('[class*="movie_tile"]')

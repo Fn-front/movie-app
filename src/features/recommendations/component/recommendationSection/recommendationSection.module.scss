@@ -66,14 +66,8 @@
     justify-content: center;
     background-color: $overlay-medium;
     border-radius: $border-radius-lg;
-
-    circle {
-      stroke: white;
-    }
-
-    p {
-      color: white;
-    }
+    --loading-circle-color: white;
+    --loading-label-color: white;
   }
 
   &__grid {

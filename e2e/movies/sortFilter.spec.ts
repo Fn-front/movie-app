@@ -21,17 +21,10 @@ test.describe('公開予定ページのソート・フィルター操作', () =>
     const sortSelect = page.getByRole('combobox');
     await expect(sortSelect).toBeVisible();
 
-    const moviesPromise = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/movies') &&
-        res.request().method() === 'GET' &&
-        res.status() < 500,
-    );
     await sortSelect.click();
     await page.getByRole('option', { name: '人気順' }).click();
-    await moviesPromise;
 
-    // ソート変更後もページが正常に表示される
+    // ソート変更後もページが正常に表示される（キャッシュヒット時はAPI呼び出しなし）
     await expect(
       page
         .locator('[class*="movie_tile"]')
@@ -54,13 +47,7 @@ test.describe('公開予定ページのソート・フィルター操作', () =>
       await genreCheckbox.click();
     }
 
-    const filterPromise = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/filters') &&
-        res.status() < 500,
-    );
     await dialog.getByRole('button', { name: '適用' }).click();
-    await filterPromise;
     await expect(dialog).not.toBeVisible();
   });
 
@@ -92,17 +79,10 @@ test.describe('公開中ページのソート・フィルター操作', () => {
 
   test('ソートを変更できる', async ({ page }) => {
     const sortSelect = page.getByRole('combobox');
-
-    const moviesPromise = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/movies') &&
-        res.request().method() === 'GET' &&
-        res.status() < 500,
-    );
     await sortSelect.click();
     await page.getByRole('option', { name: '評価順' }).click();
-    await moviesPromise;
 
+    // ソート変更後もページが正常に表示される（キャッシュヒット時はAPI呼び出しなし）
     await expect(
       page
         .locator('[class*="movie_tile"]')
@@ -124,13 +104,7 @@ test.describe('公開中ページのソート・フィルター操作', () => {
       await genreCheckbox.click();
     }
 
-    const filterPromise = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/filters') &&
-        res.status() < 500,
-    );
     await dialog.getByRole('button', { name: '適用' }).click();
-    await filterPromise;
     await expect(dialog).not.toBeVisible();
   });
 });

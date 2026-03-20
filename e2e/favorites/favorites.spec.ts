@@ -180,11 +180,9 @@ test.describe('お気に入り — 詳細モーダルとの連携', () => {
     const ratingDialog = page.getByRole('dialog');
     await expect(ratingDialog).toBeVisible();
     await ratingDialog.getByRole('radio', { name: '6点' }).click();
-    const registerPromise = waitForFavoritesResponse(page);
     await ratingDialog.getByRole('button', { name: '登録' }).click();
-    await registerPromise;
 
-    // MovieTileのボタンが「お気に入りを編集」に変化することを確認
+    // 楽観的更新でMovieTileのボタンが「お気に入りを編集」に変化することを確認
     await expect(
       firstTile.getByRole('button', { name: 'お気に入りを編集' }),
     ).toBeVisible();

@@ -28,8 +28,7 @@ test.describe('ログイン認証フロー', () => {
     await page.getByLabel('パスワード').fill('WrongPassword123');
 
     const authPromise = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/auth/callback') && res.status() < 500,
+      (res) => res.url().includes('/api/auth/callback') && res.status() < 500,
     );
     await page.getByRole('button', { name: 'ログイン', exact: true }).click();
     await authPromise;

@@ -48,7 +48,7 @@ test.describe('お気に入り — MovieTileから追加', () => {
     // お気に入りボタンをクリック → モーダルが開く
     await addButton.click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await expect(dialog).toBeVisible();
     await expect(
       dialog.getByRole('heading', { name: 'お気に入りに追加' }),
     ).toBeVisible();
@@ -63,7 +63,7 @@ test.describe('お気に入り — MovieTileから追加', () => {
     await expect(dialog).not.toBeVisible();
     await expect(
       firstTile.getByRole('button', { name: 'お気に入りを編集' }),
-    ).toBeVisible({ timeout: 5000 });
+    ).toBeVisible();
   });
 });
 
@@ -79,7 +79,7 @@ test.describe('お気に入り — 一覧ページ', () => {
     await firstTile.getByRole('button', { name: 'お気に入りに追加' }).click();
 
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await expect(dialog).toBeVisible();
     await dialog.getByRole('radio', { name: '7点' }).click();
     const responsePromise = waitForFavoritesResponse(page);
     await dialog.getByRole('button', { name: '登録' }).click();
@@ -92,8 +92,15 @@ test.describe('お気に入り — 一覧ページ', () => {
   });
 
   test('お気に入り一覧ページで表示確認 → 評価変更 → 削除', async ({ page }) => {
-    // お気に入り一覧ページに遷移
+    // お気に入りデータ取得完了を待ってからページを表示
+    const dataPromise = page.waitForResponse(
+      (res) =>
+        res.url().includes('/api/favorites') &&
+        res.request().method() === 'GET' &&
+        res.status() === 200,
+    );
     await page.goto('/favorites');
+    await dataPromise;
     await expect(page.getByRole('heading', { name: 'お気に入り' })).toBeVisible(
       { timeout: 15000 },
     );
@@ -102,12 +109,12 @@ test.describe('お気に入り — 一覧ページ', () => {
     const editButton = page
       .getByRole('button', { name: 'お気に入りを編集' })
       .first();
-    await expect(editButton).toBeVisible({ timeout: 10000 });
+    await expect(editButton).toBeVisible();
 
     // 評価変更：ハートボタンクリック → モーダル → 評価変更 → 更新
     await editButton.click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await expect(dialog).toBeVisible();
     await expect(
       dialog.getByRole('heading', { name: 'お気に入りを編集' }),
     ).toBeVisible();
@@ -119,9 +126,9 @@ test.describe('お気に入り — 一覧ページ', () => {
     await expect(dialog).not.toBeVisible();
 
     // 削除：再度ハートボタンクリック → モーダル → 削除
-    await expect(editButton).toBeVisible({ timeout: 5000 });
+    await expect(editButton).toBeVisible();
     await editButton.click();
-    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await expect(dialog).toBeVisible();
 
     const deletePromise = waitForFavoritesResponse(page);
     await dialog.getByRole('button', { name: '削除' }).click();
@@ -171,13 +178,15 @@ test.describe('お気に入り — 詳細モーダルとの連携', () => {
     });
     await addButton.click();
     const ratingDialog = page.getByRole('dialog');
-    await expect(ratingDialog).toBeVisible({ timeout: 5000 });
+    await expect(ratingDialog).toBeVisible();
     await ratingDialog.getByRole('radio', { name: '6点' }).click();
+    const registerPromise = waitForFavoritesResponse(page);
     await ratingDialog.getByRole('button', { name: '登録' }).click();
+    await registerPromise;
 
-    // 楽観的更新でMovieTileのボタンが「お気に入りを編集」に変化することを確認
+    // MovieTileのボタンが「お気に入りを編集」に変化することを確認
     await expect(
       firstTile.getByRole('button', { name: 'お気に入りを編集' }),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible();
   });
 });

@@ -62,9 +62,9 @@ test.describe('モバイルレスポンシブ表示', () => {
 
     await movieTile.click();
 
-    // モーダルが表示される
+    // モーダルが表示される（詳細API複数呼び出しのため長めのタイムアウト）
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
+    await expect(dialog).toBeVisible({ timeout: 15000 });
 
     // モーダルが画面内に収まっている
     const dialogBox = await dialog.boundingBox();

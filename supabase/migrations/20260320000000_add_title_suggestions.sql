@@ -2,7 +2,7 @@
 -- 邦題→原題のAI翻訳結果をキャッシュするテーブル
 -- 全ユーザー共有のキャッシュ（認証不要）
 
-CREATE TABLE title_suggestions (
+CREATE TABLE IF NOT EXISTS title_suggestions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   query_title VARCHAR(255) NOT NULL,
   suggestions JSONB NOT NULL DEFAULT '[]',
@@ -15,8 +15,17 @@ CREATE TABLE title_suggestions (
 ALTER TABLE title_suggestions ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: 全ユーザーが参照可能
-CREATE POLICY "title_suggestions_select_all"
-  ON title_suggestions FOR SELECT
-  USING (true);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'title_suggestions' AND policyname = 'title_suggestions_select_all'
+  ) THEN
+    CREATE POLICY "title_suggestions_select_all"
+      ON title_suggestions FOR SELECT
+      USING (true);
+  END IF;
+END
+$$;
 
 -- INSERT/UPDATE/DELETE: service_role のみ（API経由）

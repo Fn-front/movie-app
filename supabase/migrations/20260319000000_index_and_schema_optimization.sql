@@ -61,11 +61,40 @@ ALTER TABLE users
 -- -----------------------------------------------------------
 -- #160: TIMESTAMP → TIMESTAMPTZ 統一
 -- favorites テーブル
+-- deleted_at を参照するRLSポリシー・インデックスを一旦DROPしてから型変更
 -- -----------------------------------------------------------
+
+-- 依存するポリシーをDROP
+DROP POLICY IF EXISTS favorites_select_own ON favorites;
+
+-- 依存する部分インデックスをDROP
+DROP INDEX IF EXISTS idx_favorites_user_deleted;
+DROP INDEX IF EXISTS idx_favorites_user_added_at;
+DROP INDEX IF EXISTS idx_favorites_user_rating;
+DROP INDEX IF EXISTS idx_favorites_unique_active;
+
+-- 型変更
 ALTER TABLE favorites
   ALTER COLUMN added_at TYPE TIMESTAMPTZ USING added_at AT TIME ZONE 'UTC',
   ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC',
   ALTER COLUMN deleted_at TYPE TIMESTAMPTZ USING deleted_at AT TIME ZONE 'UTC';
+
+-- ポリシーを再作成
+CREATE POLICY favorites_select_own ON favorites
+  FOR SELECT
+  USING (auth.uid() = user_id AND deleted_at IS NULL);
+
+-- 部分インデックスを再作成（このマイグレーション冒頭で作成したものも含む）
+CREATE INDEX IF NOT EXISTS idx_favorites_user_added_at
+  ON favorites (user_id, added_at DESC)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_favorites_user_rating
+  ON favorites (user_id, rating DESC)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_favorites_unique_active
+  ON favorites(user_id, tmdb_movie_id) WHERE deleted_at IS NULL;
 
 -- -----------------------------------------------------------
 -- #160: TIMESTAMP → TIMESTAMPTZ 統一

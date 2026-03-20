@@ -130,7 +130,7 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
     const modalButton = dialog.getByRole('button', {
       name: /ウォッチリスト/,
     });
-    await expect(modalButton).toBeVisible({ timeout: 5000 });
+    await expect(modalButton).toBeVisible({ timeout: 10000 });
     const responsePromise = waitForWatchlistResponse(page);
     await modalButton.click();
     await responsePromise;

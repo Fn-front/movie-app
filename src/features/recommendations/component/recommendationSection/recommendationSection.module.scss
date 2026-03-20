@@ -52,11 +52,28 @@
     text-align: center;
   }
 
+  &__grid_wrapper {
+    position: relative;
+    margin-top: $spacing-4;
+  }
+
+  &__overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: $overlay-medium;
+    border-radius: $border-radius-lg;
+    --loading-circle-color: white;
+    --loading-label-color: white;
+  }
+
   &__grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: $spacing-4;
-    margin-top: $spacing-4;
 
     @include sm {
       grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

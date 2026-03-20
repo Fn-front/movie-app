@@ -514,6 +514,34 @@ describe('RecommendationSection', () => {
       ).toBeDisabled();
     });
 
+    it('更新中はグリッドエリアにローディングオーバーレイが表示される', () => {
+      mockRefreshState = {
+        ...mockRefreshState,
+        isRefreshing: true,
+      };
+
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(screen.getByText('おすすめを更新中...')).toBeInTheDocument();
+      expect(screen.getByRole('status')).toBeInTheDocument();
+    });
+
+    it('更新中でないときはローディングオーバーレイが非表示', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(screen.queryByText('おすすめを更新中...')).not.toBeInTheDocument();
+    });
+
     it('カウントローディング中は残り回数が非表示', () => {
       mockRefreshState = {
         ...mockRefreshState,

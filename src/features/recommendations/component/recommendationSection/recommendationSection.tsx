@@ -9,6 +9,7 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { IoRefreshOutline } from 'react-icons/io5';
 
 import { Button } from '@/components/ui/button/button';
+import { Loading } from '@/components/ui/loading/loading';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
@@ -180,7 +181,6 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
                 size='sm'
                 onClick={handleRefresh}
                 disabled={isLimitReached || isRefreshing}
-                isLoading={isRefreshing}
                 aria-label='おすすめを更新'
               >
                 <IoRefreshOutline
@@ -191,31 +191,38 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
               </Button>
             </div>
           </div>
-          <div className={styles.c_recommendation_section__grid} role='list'>
-            {movieCacheItems.map((movie) => (
-              <div
-                key={movie.id}
-                role='listitem'
-                className={styles.c_recommendation_section__item}
-              >
-                <MovieTile
-                  movie={movie}
-                  onClick={handleMovieClick}
-                  isInWatchlist={isInWatchlist(movie.id)}
-                  onWatchlistToggle={toggleWatchlist}
-                  watchlistDisabled={isMovieToggling(movie.id)}
-                  onFavoriteToggle={handleFavoriteToggle}
-                  favoriteDisabled={isFavoriteProcessing(movie.id)}
-                  onDismiss={handleDismiss}
-                  dismissDisabled={
-                    isDismissingMovie(movie.id) || !!movie.favorite
-                  }
-                />
-                <p className={styles.c_recommendation_section__reason}>
-                  {reasonMap.get(movie.id)}
-                </p>
+          <div className={styles.c_recommendation_section__grid_wrapper}>
+            {isRefreshing && (
+              <div className={styles.c_recommendation_section__overlay}>
+                <Loading size='md' label='おすすめを更新中...' />
               </div>
-            ))}
+            )}
+            <div className={styles.c_recommendation_section__grid} role='list'>
+              {movieCacheItems.map((movie) => (
+                <div
+                  key={movie.id}
+                  role='listitem'
+                  className={styles.c_recommendation_section__item}
+                >
+                  <MovieTile
+                    movie={movie}
+                    onClick={handleMovieClick}
+                    isInWatchlist={isInWatchlist(movie.id)}
+                    onWatchlistToggle={toggleWatchlist}
+                    watchlistDisabled={isMovieToggling(movie.id)}
+                    onFavoriteToggle={handleFavoriteToggle}
+                    favoriteDisabled={isFavoriteProcessing(movie.id)}
+                    onDismiss={handleDismiss}
+                    dismissDisabled={
+                      isDismissingMovie(movie.id) || !!movie.favorite
+                    }
+                  />
+                  <p className={styles.c_recommendation_section__reason}>
+                    {reasonMap.get(movie.id)}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
         <MovieDetailModal

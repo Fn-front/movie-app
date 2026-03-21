@@ -16,7 +16,7 @@ import { AWARDS_MESSAGES } from '@/constants';
 import { useAwards } from '@/features/awards/hooks/useAwards';
 import { AwardYearSelect } from '@/features/awards/awardYearSelect/awardYearSelect';
 import { AwardSection } from '@/features/awards/awardSection/awardSection';
-import { awardMovieToMovieCacheItem } from '@/features/awards/utils/toMovieCacheItem';
+import { awardMovieToMovieCacheItem } from '@/utils/toMovieCacheItem';
 
 import styles from './awardsPage.module.scss';
 

@@ -9,9 +9,6 @@ import { awardKeys } from '@/constants';
 import { getAwards } from '@/lib/api/awards/awards';
 import type { AwardsResponseData } from '@/features/awards/types';
 
-/** デフォルト年度（現在の年） */
-const DEFAULT_YEAR = new Date().getFullYear();
-
 export interface UseAwardsReturn {
   data: AwardsResponseData | undefined;
   isLoading: boolean;
@@ -21,7 +18,9 @@ export interface UseAwardsReturn {
 }
 
 export function useAwards(): UseAwardsReturn {
-  const [selectedYear, setSelectedYear] = useState<number>(DEFAULT_YEAR);
+  const [selectedYear, setSelectedYear] = useState<number>(
+    () => new Date().getFullYear(),
+  );
 
   const { data, isLoading, isError } = useQuery({
     queryKey: awardKeys.year(selectedYear),

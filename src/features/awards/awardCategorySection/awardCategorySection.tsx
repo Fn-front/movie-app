@@ -5,13 +5,13 @@
 
 'use client';
 
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useMemo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import type { AwardCategoryData } from '@/features/awards/types';
-import { awardMovieToMovieCacheItem } from '@/features/awards/utils/toMovieCacheItem';
+import { awardMovieToMovieCacheItem } from '@/utils/toMovieCacheItem';
 
 import styles from './awardCategorySection.module.scss';
 
@@ -56,20 +56,6 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
       [category.nominees, category.winner],
     );
 
-    const handleWatchlistToggle = useCallback(
-      (movie: MovieCacheItem) => {
-        onWatchlistToggle(movie);
-      },
-      [onWatchlistToggle],
-    );
-
-    const handleFavoriteToggle = useCallback(
-      (movie: MovieCacheItem, favorite: MovieFavoriteInfo | null) => {
-        onFavoriteToggle(movie, favorite);
-      },
-      [onFavoriteToggle],
-    );
-
     return (
       <div className={styles.c_award_category}>
         <h3 className={styles.c_award_category__title}>{category.label}</h3>
@@ -82,9 +68,9 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                 movie={winnerCacheItem}
                 onClick={onMovieClick}
                 isInWatchlist={isInWatchlist(winnerCacheItem.id)}
-                onWatchlistToggle={handleWatchlistToggle}
+                onWatchlistToggle={onWatchlistToggle}
                 watchlistDisabled={isMovieToggling(winnerCacheItem.id)}
-                onFavoriteToggle={handleFavoriteToggle}
+                onFavoriteToggle={onFavoriteToggle}
                 favoriteDisabled={isFavoriteProcessing(winnerCacheItem.id)}
               />
             </div>
@@ -107,9 +93,9 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                     movie={movie}
                     onClick={onMovieClick}
                     isInWatchlist={isInWatchlist(movie.id)}
-                    onWatchlistToggle={handleWatchlistToggle}
+                    onWatchlistToggle={onWatchlistToggle}
                     watchlistDisabled={isMovieToggling(movie.id)}
-                    onFavoriteToggle={handleFavoriteToggle}
+                    onFavoriteToggle={onFavoriteToggle}
                     favoriteDisabled={isFavoriteProcessing(movie.id)}
                   />
                 </div>

@@ -11,7 +11,9 @@ import { test, expect } from '../fixtures/auth';
 test.describe('カレンダー', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page
+      .getByRole('button', { name: '公開カレンダーを開く' })
+      .waitFor({ timeout: 30000 });
   });
 
   test('サイドバーのカレンダーボタンクリックでダイアログが表示される', async ({

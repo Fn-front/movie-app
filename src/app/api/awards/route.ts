@@ -26,6 +26,25 @@ import type {
   AwardsResponseData,
 } from '@/features/awards/types';
 
+/** DBレコードをAwardMovie型に変換 */
+function toAwardMovie(row: {
+  tmdb_movie_id: number;
+  title: string;
+  poster_path: string | null;
+  release_date: string | null;
+  vote_average: number | null;
+  genre_ids: number[] | null;
+}): AwardMovie {
+  return {
+    tmdbMovieId: row.tmdb_movie_id,
+    title: row.title,
+    posterPath: row.poster_path,
+    releaseDate: row.release_date,
+    voteAverage: row.vote_average,
+    genreIds: row.genre_ids,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = createServiceRoleClient();
@@ -34,20 +53,20 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const yearParam = searchParams.get('year');
 
-    if (!yearParam || isNaN(Number(yearParam))) {
+    const year = Number(yearParam);
+
+    if (!yearParam || isNaN(year) || year < 1900 || year > 2100) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: ERROR_CODE.VALIDATION_ERROR,
-            message: 'yearパラメータは必須です（数値）',
+            message: 'yearパラメータは必須です（1900〜2100の数値）',
           },
         },
         { status: HTTP_STATUS.BAD_REQUEST },
       );
     }
-
-    const year = Number(yearParam);
 
     // 利用可能な年度一覧を取得
     const { data: yearRows, error: yearError } = await supabase
@@ -94,22 +113,6 @@ export async function GET(request: Request) {
         );
 
         if (categoryRows.length === 0) continue;
-
-        const toAwardMovie = (row: {
-          tmdb_movie_id: number;
-          title: string;
-          poster_path: string | null;
-          release_date: string | null;
-          vote_average: number | null;
-          genre_ids: number[] | null;
-        }): AwardMovie => ({
-          tmdbMovieId: row.tmdb_movie_id,
-          title: row.title,
-          posterPath: row.poster_path,
-          releaseDate: row.release_date,
-          voteAverage: row.vote_average,
-          genreIds: row.genre_ids,
-        });
 
         const winner =
           categoryRows.find((r: { is_winner: boolean }) => r.is_winner) ?? null;

@@ -36,14 +36,16 @@ export const AwardsPage = memo(function AwardsPage() {
   const { isInWatchlist, toggleWatchlist, isMovieToggling } =
     useWatchlistToggle();
 
+  const awards = data?.awards;
+
   const allMovieCacheItems = useMemo(() => {
-    if (!data?.awards) return [];
-    return data.awards.flatMap((award) =>
+    if (!awards) return [];
+    return awards.flatMap((award) =>
       award.categories.flatMap((cat) =>
         cat.nominees.map(awardMovieToMovieCacheItem),
       ),
     );
-  }, [data?.awards]);
+  }, [awards]);
 
   const uniqueMovieCacheItems = useMemo(() => {
     const seen = new Set<number>();

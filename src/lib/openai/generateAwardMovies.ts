@@ -170,6 +170,19 @@ export async function fetchAwardsFromOpenAI(
 }
 
 /**
+ * TMDb検索結果から公開年が一致する映画を優先選択する
+ * 一致するものがなければ先頭結果をフォールバックとして返す
+ */
+function findBestMatch<T extends { id: number; release_date?: string }>(
+  results: T[],
+  year: number,
+): T | undefined {
+  return (
+    results.find((m) => m.release_date?.startsWith(String(year))) ?? results[0]
+  );
+}
+
+/**
  * OpenAIの受賞作品結果をTMDb検索で解決し、映画情報を取得する
  */
 export async function resolveAwardsWithTMDb(
@@ -180,6 +193,8 @@ export async function resolveAwardsWithTMDb(
   const validCategoryKeys = new Set(
     awardDefinition.categories.map((c) => c.key),
   );
+  // 部門ごとのdisplay_orderカウンター
+  const categoryOrderMap = new Map<string, number>();
 
   for (const item of items) {
     if (!validCategoryKeys.has(item.category)) {
@@ -190,11 +205,11 @@ export async function resolveAwardsWithTMDb(
     try {
       // 日本語タイトルで検索、見つからなければ英語タイトルで検索
       let searchResult = await searchMovies({ query: item.title_ja });
-      let movie = searchResult.results[0];
+      let movie = findBestMatch(searchResult.results, item.year);
 
       if (!movie) {
         searchResult = await searchMovies({ query: item.title_en });
-        movie = searchResult.results[0];
+        movie = findBestMatch(searchResult.results, item.year);
       }
 
       if (!movie) {
@@ -213,6 +228,10 @@ export async function resolveAwardsWithTMDb(
         continue;
       }
 
+      // 部門ごとの連番を採番
+      const currentOrder = (categoryOrderMap.get(item.category) ?? 0) + 1;
+      categoryOrderMap.set(item.category, currentOrder);
+
       resolved.push({
         tmdb_movie_id: movie.id,
         title: movie.title,
@@ -222,7 +241,7 @@ export async function resolveAwardsWithTMDb(
         genre_ids: movie.genre_ids ?? null,
         category: item.category,
         is_winner: item.is_winner,
-        display_order: resolved.length + 1,
+        display_order: currentOrder,
       });
     } catch (error) {
       console.error(`TMDb search failed for "${item.title_ja}":`, error);

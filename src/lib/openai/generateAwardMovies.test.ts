@@ -87,7 +87,9 @@ describe('buildUserPrompt', () => {
       testAwardDefinition.categories,
     );
 
-    expect(prompt).toContain('categoryフィールドには上記の部門キーをそのまま使用');
+    expect(prompt).toContain(
+      'categoryフィールドには上記の部門キーをそのまま使用',
+    );
   });
 });
 
@@ -161,9 +163,7 @@ describe('fetchAwardsFromOpenAI', () => {
   });
 
   it('不正なJSONレスポンスの場合、nullを返す', async () => {
-    mockCreate.mockResolvedValue(
-      createMockResponseOutput('not json'),
-    );
+    mockCreate.mockResolvedValue(createMockResponseOutput('not json'));
 
     const result = await fetchAwardsFromOpenAI(
       2026,
@@ -176,9 +176,7 @@ describe('fetchAwardsFromOpenAI', () => {
 
   it('zodバリデーション失敗の場合、nullを返す', async () => {
     mockCreate.mockResolvedValue(
-      createMockResponseOutput(
-        JSON.stringify({ awards: [{ invalid: true }] }),
-      ),
+      createMockResponseOutput(JSON.stringify({ awards: [{ invalid: true }] })),
     );
 
     const result = await fetchAwardsFromOpenAI(
@@ -341,6 +339,100 @@ describe('resolveAwardsWithTMDb', () => {
     expect(result).toHaveLength(2);
     expect(result[0].category).toBe('best_picture');
     expect(result[1].category).toBe('best_director');
+  });
+
+  it('公開年が一致する映画を優先して選択する', async () => {
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 600,
+          title: '同名映画（旧作）',
+          poster_path: null,
+          release_date: '2010-01-01',
+          vote_average: 6.0,
+          genre_ids: [18],
+        },
+        {
+          id: 601,
+          title: '同名映画（新作）',
+          poster_path: null,
+          release_date: '2026-05-01',
+          vote_average: 8.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    const items = [createAwardItem({ year: 2026 })];
+    const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].tmdb_movie_id).toBe(601);
+  });
+
+  it('公開年一致がない場合は先頭結果にフォールバックする', async () => {
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 700,
+          title: 'フォールバック映画',
+          poster_path: null,
+          release_date: '2024-01-01',
+          vote_average: 7.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    const items = [createAwardItem({ year: 2026 })];
+    const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].tmdb_movie_id).toBe(700);
+  });
+
+  it('display_orderが部門ごとの連番になる', async () => {
+    mockSearchMovies.mockImplementation(
+      async ({ query }: { query: string }) => ({
+        results: [
+          {
+            id: query === '映画A' ? 801 : query === '映画B' ? 802 : 803,
+            title: query,
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      }),
+    );
+
+    const items = [
+      createAwardItem({
+        title_ja: '映画A',
+        title_en: 'Movie A',
+        category: 'best_picture',
+      }),
+      createAwardItem({
+        title_ja: '映画B',
+        title_en: 'Movie B',
+        category: 'best_picture',
+        is_winner: false,
+      }),
+      createAwardItem({
+        title_ja: '映画C',
+        title_en: 'Movie C',
+        category: 'best_director',
+      }),
+    ];
+    const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+    expect(result).toHaveLength(3);
+    // best_picture部門: 1, 2
+    expect(result[0].display_order).toBe(1);
+    expect(result[1].display_order).toBe(2);
+    // best_director部門: 1（独立した連番）
+    expect(result[2].display_order).toBe(1);
   });
 
   it('TMDb検索でエラーが発生した場合はスキップして次に進む', async () => {

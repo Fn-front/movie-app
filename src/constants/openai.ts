@@ -10,4 +10,6 @@ export const OPENAI_CONFIG = {
   RECOMMENDATIONS_TEMPERATURE: 0.8,
   /** タイトルサジェスト時のtemperature */
   TITLE_SUGGESTION_TEMPERATURE: 0.2,
+  /** 受賞作品取得時のtemperature（正確性重視） */
+  AWARDS_TEMPERATURE: 0.2,
 } as const;

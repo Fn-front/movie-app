@@ -2,10 +2,7 @@
  * 受賞作品スキーマ テスト
  */
 
-import {
-  openAiAwardItemSchema,
-  openAiAwardsResponseSchema,
-} from './awards';
+import { openAiAwardItemSchema, openAiAwardsResponseSchema } from './awards';
 
 describe('openAiAwardItemSchema', () => {
   const validItem = {

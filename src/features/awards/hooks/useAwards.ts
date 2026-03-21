@@ -18,8 +18,8 @@ export interface UseAwardsReturn {
 }
 
 export function useAwards(): UseAwardsReturn {
-  const [selectedYear, setSelectedYear] = useState<number>(
-    () => new Date().getFullYear(),
+  const [selectedYear, setSelectedYear] = useState<number>(() =>
+    new Date().getFullYear(),
   );
 
   const { data, isLoading, isError } = useQuery({

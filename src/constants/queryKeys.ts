@@ -49,3 +49,8 @@ export const recommendationKeys = {
   all: ['recommendations'] as const,
   refreshCount: ['recommendations', 'refreshCount'] as const,
 };
+
+export const awardKeys = {
+  all: ['awards'] as const,
+  year: (year: number) => ['awards', year] as const,
+};

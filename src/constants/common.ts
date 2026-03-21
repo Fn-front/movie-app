@@ -34,6 +34,8 @@ export const ROUTES = {
   FAVORITES: '/favorites',
   /** ウォッチリスト */
   WATCHLIST: '/watchlist',
+  /** 受賞作品 */
+  AWARDS: '/awards',
   /** 認証エラー */
   AUTH_ERROR: '/auth/error',
   /** 映画詳細 */

@@ -7,6 +7,7 @@
 
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
+import type { AwardMovie } from '@/features/awards/types';
 import type { Movie, NowShowingMovie } from '@/lib/types';
 import type { Recommendation } from '@/schema/recommendations';
 
@@ -64,6 +65,23 @@ export function recommendationToMovieCacheItem(
     vote_average: rec.vote_average,
     popularity: null,
     genre_ids: rec.genre_ids,
+    release_type: 'theatrical',
+    is_revival: false,
+  };
+}
+
+/** AwardMovie（受賞作品）→ MovieCacheItem */
+export function awardMovieToMovieCacheItem(movie: AwardMovie): MovieCacheItem {
+  return {
+    id: movie.tmdbMovieId,
+    title: movie.title,
+    poster_path: movie.posterPath,
+    backdrop_path: null,
+    release_date: movie.releaseDate,
+    overview: null,
+    vote_average: movie.voteAverage,
+    popularity: null,
+    genre_ids: movie.genreIds,
     release_type: 'theatrical',
     is_revival: false,
   };

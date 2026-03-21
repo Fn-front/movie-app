@@ -71,9 +71,7 @@ export function recommendationToMovieCacheItem(
 }
 
 /** AwardMovie（受賞作品）→ MovieCacheItem */
-export function awardMovieToMovieCacheItem(
-  movie: AwardMovie,
-): MovieCacheItem {
+export function awardMovieToMovieCacheItem(movie: AwardMovie): MovieCacheItem {
   return {
     id: movie.tmdbMovieId,
     title: movie.title,

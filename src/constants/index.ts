@@ -23,6 +23,7 @@ export * from './email';
 export * from './tmdb';
 export * from './eiga';
 export * from './cron';
+export * from './awards';
 export * from './navigation';
 export * from './ui';
 export * from './strings';

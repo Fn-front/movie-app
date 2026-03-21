@@ -2,6 +2,7 @@
  * toMovieCacheItem 変換ユーティリティ テスト
  */
 
+import type { AwardMovie } from '@/features/awards/types';
 import type { Movie, NowShowingMovie } from '@/lib/types';
 import type { Recommendation } from '@/schema/recommendations';
 
@@ -9,6 +10,7 @@ import {
   movieToMovieCacheItem,
   nowShowingToMovieCacheItem,
   recommendationToMovieCacheItem,
+  awardMovieToMovieCacheItem,
 } from './toMovieCacheItem';
 
 describe('movieToMovieCacheItem', () => {
@@ -164,6 +166,60 @@ describe('recommendationToMovieCacheItem', () => {
     };
 
     const result = recommendationToMovieCacheItem(rec);
+
+    expect(result.poster_path).toBeNull();
+    expect(result.release_date).toBeNull();
+    expect(result.vote_average).toBeNull();
+    expect(result.genre_ids).toBeNull();
+    expect(result.backdrop_path).toBeNull();
+    expect(result.overview).toBeNull();
+    expect(result.popularity).toBeNull();
+  });
+});
+
+describe('awardMovieToMovieCacheItem', () => {
+  const baseAwardMovie: AwardMovie = {
+    tmdbMovieId: 11111,
+    title: '受賞映画',
+    posterPath: '/award-poster.jpg',
+    releaseDate: '2025-12-01',
+    voteAverage: 8.5,
+    genreIds: [18, 36],
+  };
+
+  it('AwardMovieをMovieCacheItemに正しく変換する', () => {
+    const result = awardMovieToMovieCacheItem(baseAwardMovie);
+
+    expect(result).toEqual({
+      id: 11111,
+      title: '受賞映画',
+      poster_path: '/award-poster.jpg',
+      backdrop_path: null,
+      release_date: '2025-12-01',
+      overview: null,
+      vote_average: 8.5,
+      popularity: null,
+      genre_ids: [18, 36],
+      release_type: 'theatrical',
+      is_revival: false,
+    });
+  });
+
+  it('tmdbMovieIdがidにマッピングされる', () => {
+    const result = awardMovieToMovieCacheItem(baseAwardMovie);
+    expect(result.id).toBe(11111);
+  });
+
+  it('nullableフィールドが正しく処理される', () => {
+    const movie: AwardMovie = {
+      ...baseAwardMovie,
+      posterPath: null,
+      releaseDate: null,
+      voteAverage: null,
+      genreIds: null,
+    };
+
+    const result = awardMovieToMovieCacheItem(movie);
 
     expect(result.poster_path).toBeNull();
     expect(result.release_date).toBeNull();

@@ -1,0 +1,45 @@
+@use '@/styles/variables' as *;
+
+.c_awards_page {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $spacing-4;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: $font-size-xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+  }
+
+  &__select {
+    width: 120px;
+  }
+
+  &__loading {
+    display: flex;
+    justify-content: center;
+    padding: $spacing-6 0;
+  }
+
+  &__message {
+    margin: 0;
+    padding: $spacing-6 0;
+    text-align: center;
+    color: $text-secondary;
+    font-size: $font-size-sm;
+  }
+
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-10;
+  }
+}

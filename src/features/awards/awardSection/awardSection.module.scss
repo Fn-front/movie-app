@@ -1,0 +1,22 @@
+@use '@/styles/variables' as *;
+
+.c_award_section {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+
+  &__title {
+    margin: 0;
+    padding-bottom: $spacing-3;
+    font-size: $font-size-xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    border-bottom: $border-width-2 solid $primary-500;
+  }
+
+  &__categories {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-8;
+  }
+}

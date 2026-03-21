@@ -1,0 +1,81 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_award_category {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+
+  &__title {
+    margin: 0;
+    font-size: $font-size-base;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+  }
+
+  &__winner {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-2;
+  }
+
+  &__winner_label {
+    display: inline-block;
+    padding: $spacing-1 $spacing-2;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-bold;
+    color: $text-inverse;
+    background-color: $secondary-600;
+    border-radius: $border-radius-sm;
+    width: fit-content;
+  }
+
+  &__winner_tile {
+    max-width: 160px;
+  }
+
+  &__nominees {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-2;
+  }
+
+  &__nominees_label {
+    display: inline-block;
+    padding: $spacing-1 $spacing-2;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+    background-color: $background-secondary;
+    border-radius: $border-radius-sm;
+    width: fit-content;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: $spacing-4;
+
+    @include sm {
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+
+    @include md {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    }
+
+    @include lg {
+      grid-template-columns: repeat(5, 1fr);
+    }
+  }
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+
+    > :first-child {
+      flex: 1;
+    }
+  }
+}

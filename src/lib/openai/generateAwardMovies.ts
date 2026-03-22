@@ -74,9 +74,7 @@ export function buildWikipediaTitle(
   awardDef: AwardDefinition,
 ): string {
   const edition =
-    awardDef.firstEditionYear > 0
-      ? awardYear - awardDef.firstEditionYear
-      : 0;
+    awardDef.firstEditionYear > 0 ? awardYear - awardDef.firstEditionYear : 0;
   return awardDef.wikipediaTemplate
     .replace('{edition}', String(edition))
     .replace('{year}', String(awardYear));

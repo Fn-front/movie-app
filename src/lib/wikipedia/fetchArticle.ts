@@ -37,9 +37,7 @@ export async function fetchWikipediaArticle(
 /**
  * 「受賞とノミネート」に該当するセクション番号を検索
  */
-async function findAwardSectionIndex(
-  title: string,
-): Promise<number | null> {
+async function findAwardSectionIndex(title: string): Promise<number | null> {
   const params = new URLSearchParams({
     action: 'parse',
     page: title,
@@ -92,9 +90,7 @@ async function fetchWikitextSection(
 /**
  * 記事全体のwikitextを取得（フォールバック用）
  */
-async function fetchFullWikitext(
-  title: string,
-): Promise<string | null> {
+async function fetchFullWikitext(title: string): Promise<string | null> {
   const params = new URLSearchParams({
     action: 'parse',
     page: title,

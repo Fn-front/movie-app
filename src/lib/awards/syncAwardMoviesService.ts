@@ -91,9 +91,7 @@ export async function executeSyncAwardMoviesCron(
 
   for (const [awardName, awardDef] of targetAwards) {
     try {
-      const allAiItems: Awaited<
-        ReturnType<typeof fetchAwardsFromOpenAI>
-      > = [];
+      const allAiItems: Awaited<ReturnType<typeof fetchAwardsFromOpenAI>> = [];
       const maxRetries = 3;
 
       // Wikipedia記事を取得（賞ごとに1回）
@@ -110,9 +108,8 @@ export async function executeSyncAwardMoviesCron(
 
       // 部門ごとに個別にOpenAIで構造化
       for (const category of awardDef.categories) {
-        let categoryItems: Awaited<
-          ReturnType<typeof fetchAwardsFromOpenAI>
-        > = null;
+        let categoryItems: Awaited<ReturnType<typeof fetchAwardsFromOpenAI>> =
+          null;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           categoryItems = await fetchAwardsFromOpenAI(

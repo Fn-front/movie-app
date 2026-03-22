@@ -12,14 +12,16 @@ import type { ResolvedAwardMovie } from '@/lib/openai/generateAwardMovies';
 
 const mockFetchAwardsFromOpenAI = jest.fn();
 const mockResolveAwardsWithTMDb = jest.fn();
-const mockBuildWikipediaTitle = jest.fn(() => '第26回テスト賞');
+const mockBuildWikipediaTitle = jest
+  .fn<string, [unknown, unknown]>()
+  .mockReturnValue('第26回テスト賞');
 jest.mock('@/lib/openai/generateAwardMovies', () => ({
   fetchAwardsFromOpenAI: (...args: unknown[]) =>
     mockFetchAwardsFromOpenAI(...args),
   resolveAwardsWithTMDb: (...args: unknown[]) =>
     mockResolveAwardsWithTMDb(...args),
-  buildWikipediaTitle: (...args: unknown[]) =>
-    mockBuildWikipediaTitle(...args),
+  buildWikipediaTitle: (a: unknown, b: unknown) =>
+    mockBuildWikipediaTitle(a, b),
 }));
 
 const mockFetchWikipediaArticle = jest.fn();

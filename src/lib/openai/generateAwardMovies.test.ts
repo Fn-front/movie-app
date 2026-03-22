@@ -26,6 +26,7 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
 
 import {
   buildUserPrompt,
+  buildWikipediaTitle,
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
 } from './generateAwardMovies';
@@ -35,6 +36,8 @@ import {
 const testAwardDefinition: AwardDefinition = {
   label: 'テスト賞',
   month: 3,
+  wikipediaTemplate: '第{edition}回テスト賞',
+  firstEditionYear: 2000,
   categories: [
     { key: 'best_picture', label: '作品賞' },
     { key: 'best_director', label: '監督賞' },
@@ -67,29 +70,58 @@ function createMockResponseOutput(content: string) {
 
 // --- Tests ---
 
+describe('buildWikipediaTitle', () => {
+  it('回数ベースのテンプレートからタイトルを生成する', () => {
+    const title = buildWikipediaTitle(2026, testAwardDefinition);
+    expect(title).toBe('第26回テスト賞');
+  });
+
+  it('年ベースのテンプレートからタイトルを生成する', () => {
+    const def: AwardDefinition = {
+      ...testAwardDefinition,
+      wikipediaTemplate: '{year}年のテスト映画祭',
+      firstEditionYear: 0,
+    };
+    const title = buildWikipediaTitle(2026, def);
+    expect(title).toBe('2026年のテスト映画祭');
+  });
+});
+
 describe('buildUserPrompt', () => {
+  const articleText = '== 受賞とノミネート ==\nテスト記事本文';
+
   it('年・賞名・部門を含むプロンプトを生成する', () => {
     const prompt = buildUserPrompt(
       2026,
       'アカデミー賞',
-      testAwardDefinition.categories,
+      testAwardDefinition.categories[0],
+      articleText,
     );
 
-    expect(prompt).toContain('2026年 アカデミー賞');
-    expect(prompt).toContain('- best_picture: 作品賞');
-    expect(prompt).toContain('- best_director: 監督賞');
+    expect(prompt).toContain('2026年に授賞式が行われたアカデミー賞');
+    expect(prompt).toContain('「作品賞」部門');
   });
 
   it('部門キーをそのまま使用するよう指示する', () => {
     const prompt = buildUserPrompt(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testAwardDefinition.categories[0],
+      articleText,
     );
 
-    expect(prompt).toContain(
-      'categoryフィールドには上記の部門キーをそのまま使用',
+    expect(prompt).toContain('"best_picture"');
+  });
+
+  it('記事本文がプロンプトに含まれる', () => {
+    const prompt = buildUserPrompt(
+      2026,
+      'テスト賞',
+      testAwardDefinition.categories[0],
+      articleText,
     );
+
+    expect(prompt).toContain('テスト記事本文');
   });
 });
 
@@ -97,6 +129,9 @@ describe('fetchAwardsFromOpenAI', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
+
+  const testCategory = testAwardDefinition.categories[0];
+  const testArticleText = '== テスト記事 ==\nテスト本文';
 
   it('正常なレスポンスをパースして返す', async () => {
     const mockResponse = {
@@ -110,7 +145,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toHaveLength(1);
@@ -125,7 +161,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -137,7 +174,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -156,7 +194,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -168,7 +207,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -182,7 +222,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -194,7 +235,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -211,11 +253,12 @@ describe('fetchAwardsFromOpenAI', () => {
     await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     const callArgs = mockCreate.mock.calls[0][0];
-    expect(callArgs.tools).toEqual([{ type: 'web_search_preview' }]);
+    expect(callArgs.tools).toBeUndefined();
     expect(callArgs.text.format.type).toBe('json_schema');
     expect(callArgs.text.format.strict).toBe(true);
   });

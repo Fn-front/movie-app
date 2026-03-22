@@ -2,12 +2,12 @@
  * OpenAI APIを使用した受賞作品データ取得ロジック
  *
  * 処理フロー:
- * 1. OpenAI Responses API + web_search_preview で最新受賞データ取得
- * 2. レスポンスをZodスキーマでバリデーション
+ * 1. Wikipedia APIで記事本文を取得（安定したデータソース）
+ * 2. OpenAI APIで記事本文を構造化データに変換
  * 3. 映画タイトルをTMDb APIで検索 → tmdb_movie_id解決
  */
 
-import type { AwardDefinition } from '@/constants/awards';
+import type { AwardCategory, AwardDefinition } from '@/constants/awards';
 import { OPENAI_CONFIG } from '@/constants';
 import { searchMovies } from '@/lib/tmdb/tmdb';
 import {
@@ -34,16 +34,23 @@ export interface ResolvedAwardMovie {
  * システムプロンプトを生成
  */
 function buildSystemPrompt(): string {
-  return `あなたは映画賞のデータベースです。
-指定された映画賞の受賞作品・ノミネート作品を正確に返してください。
-Web検索を使って最新情報を取得してください。
+  return `あなたは映画賞データの構造化エキスパートです。
+提供されたWikipedia記事のwikitextから、指定された部門の受賞作品とノミネート作品を正確に抽出してJSON形式で返してください。
 
-ルール:
-- 実際に発表された受賞・ノミネート情報のみ返すこと
-- 各部門の受賞者（is_winner: true）は1名のみ
-- ノミネート者は実際にノミネートされた人物・作品のみ
-- title_jaは日本語の正式タイトル、title_enは英語の正式タイトル
+## wikitextの読み方
+- 記事はwikitext（MediaWikiマークアップ）形式です
+- 受賞者は '''太字''' で記載され、先頭行（* で始まる行）に配置されます
+- ノミネート者は ** で始まる行に記載されます
+- 映画タイトルは『』や[[]]で囲まれています
+- {{Award category|...|部門名}} がセクション区切りです
+
+## 抽出ルール
+- title_ja、title_enには必ず「映画のタイトル」を入れること。俳優名・監督名・人物名は絶対に入れないこと
+- 演技賞の場合、記事中の俳優名の横に『』で記載されている出演映画のタイトルを返すこと
+- 監督賞の場合、記事中の監督名の横に『』で記載されている監督作品のタイトルを返すこと
 - yearは映画の公開年（授賞式の年ではなく）
+- 受賞者（is_winner: true）は'''太字'''かつ先頭（*で始まる行）の1名のみ
+- ノミネート者（**で始まる行）は記事に記載されている全員を漏れなく返すこと
 
 レスポンスは以下のJSON形式で返してください:
 {
@@ -60,33 +67,51 @@ Web検索を使って最新情報を取得してください。
 }
 
 /**
- * ユーザープロンプトを組み立てる
+ * Wikipedia記事タイトルを生成
+ */
+export function buildWikipediaTitle(
+  awardYear: number,
+  awardDef: AwardDefinition,
+): string {
+  const edition =
+    awardDef.firstEditionYear > 0
+      ? awardYear - awardDef.firstEditionYear
+      : 0;
+  return awardDef.wikipediaTemplate
+    .replace('{edition}', String(edition))
+    .replace('{year}', String(awardYear));
+}
+
+/**
+ * Wikipedia記事本文を含むユーザープロンプトを組み立てる
  */
 export function buildUserPrompt(
   awardYear: number,
   awardLabel: string,
-  categories: readonly { key: string; label: string }[],
+  category: AwardCategory,
+  articleText: string,
 ): string {
-  const categoryLines = categories
-    .map((c) => `- ${c.key}: ${c.label}`)
-    .join('\n');
+  return `以下は${awardYear}年に授賞式が行われた${awardLabel}のWikipedia記事（wikitext形式）です。
+この記事から「${category.label}」部門の受賞作品とノミネート作品を抽出してください。
 
-  return `${awardYear}年 ${awardLabel} の以下の部門の受賞作品とノミネート作品を教えてください。
+- categoryフィールドには "${category.key}" をそのまま使用してください
+- yearフィールドには映画の公開年（授賞式の年ではなく）を入れてください
+- '''太字'''の先頭行（*）が受賞者（is_winner: true）です
+- **で始まる行がノミネート者です。全員を漏れなく返してください
 
-部門:
-${categoryLines}
-
-各部門について、受賞者1名とノミネート者（受賞者を含む全候補者）を返してください。
-categoryフィールドには上記の部門キーをそのまま使用してください。`;
+---
+${articleText}
+---`;
 }
 
 /**
- * OpenAI APIを呼び出して受賞作品データを取得
+ * OpenAI APIを呼び出して1部門の受賞作品データを抽出
  */
 export async function fetchAwardsFromOpenAI(
   awardYear: number,
   awardLabel: string,
-  categories: readonly { key: string; label: string }[],
+  category: AwardCategory,
+  articleText: string,
 ): Promise<OpenAiAwardItem[] | null> {
   const client = createOpenAIClient();
   if (!client) {
@@ -94,14 +119,18 @@ export async function fetchAwardsFromOpenAI(
     return null;
   }
 
-  const userPrompt = buildUserPrompt(awardYear, awardLabel, categories);
+  const userPrompt = buildUserPrompt(
+    awardYear,
+    awardLabel,
+    category,
+    articleText,
+  );
 
   try {
     const response = await client.responses.create({
       model: getOpenAIModel(),
       instructions: buildSystemPrompt(),
       input: userPrompt,
-      tools: [{ type: 'web_search_preview' }],
       text: {
         format: {
           type: 'json_schema',

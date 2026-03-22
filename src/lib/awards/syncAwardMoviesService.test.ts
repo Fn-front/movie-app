@@ -12,11 +12,20 @@ import type { ResolvedAwardMovie } from '@/lib/openai/generateAwardMovies';
 
 const mockFetchAwardsFromOpenAI = jest.fn();
 const mockResolveAwardsWithTMDb = jest.fn();
+const mockBuildWikipediaTitle = jest.fn(() => '第26回テスト賞');
 jest.mock('@/lib/openai/generateAwardMovies', () => ({
   fetchAwardsFromOpenAI: (...args: unknown[]) =>
     mockFetchAwardsFromOpenAI(...args),
   resolveAwardsWithTMDb: (...args: unknown[]) =>
     mockResolveAwardsWithTMDb(...args),
+  buildWikipediaTitle: (...args: unknown[]) =>
+    mockBuildWikipediaTitle(...args),
+}));
+
+const mockFetchWikipediaArticle = jest.fn();
+jest.mock('@/lib/wikipedia/fetchArticle', () => ({
+  fetchWikipediaArticle: (...args: unknown[]) =>
+    mockFetchWikipediaArticle(...args),
 }));
 
 import {
@@ -84,6 +93,8 @@ describe('executeSyncAwardMoviesCron', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+    // デフォルトでWikipedia記事が取得できる状態
+    mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
   });
 
   afterEach(() => {
@@ -108,7 +119,8 @@ describe('executeSyncAwardMoviesCron', () => {
     // 1月に設定（ゴールデングローブ賞）
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    const aiItems = [
+    // 各部門ごとにOpenAIが呼ばれる
+    mockFetchAwardsFromOpenAI.mockResolvedValue([
       {
         title_ja: 'テスト映画',
         title_en: 'Test Movie',
@@ -116,8 +128,7 @@ describe('executeSyncAwardMoviesCron', () => {
         is_winner: true,
         year: 2025,
       },
-    ];
-    mockFetchAwardsFromOpenAI.mockResolvedValue(aiItems);
+    ]);
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -130,9 +141,10 @@ describe('executeSyncAwardMoviesCron', () => {
     }
   });
 
-  it('OpenAIが空結果を返した場合は該当賞をスキップする', async () => {
+  it('OpenAIが全部門で空結果を返した場合は該当賞をスキップする', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
+    // 全部門でnullを返す（リトライ含む）
     mockFetchAwardsFromOpenAI.mockResolvedValue(null);
 
     const supabase = createMockSupabase();
@@ -197,17 +209,21 @@ describe('executeSyncAwardMoviesCron', () => {
     // 3月に設定（アカデミー賞 + 日本アカデミー賞）
     jest.setSystemTime(new Date('2026-03-15T00:00:00Z'));
 
-    mockFetchAwardsFromOpenAI
-      .mockRejectedValueOnce(new Error('OpenAI error'))
-      .mockResolvedValueOnce([
-        {
-          title_ja: 'テスト',
-          title_en: 'Test',
-          category: 'best_picture',
-          is_winner: true,
-          year: 2025,
-        },
-      ]);
+    // 最初の賞（academy_awards）のWikipedia記事取得を失敗させる
+    // 2番目の賞（japan_academy_awards）は正常に処理
+    mockFetchWikipediaArticle
+      .mockResolvedValueOnce(null) // academy_awards: Wikipedia取得失敗→skip
+      .mockResolvedValueOnce('== テスト記事 =='); // japan_academy_awards: 正常
+
+    mockFetchAwardsFromOpenAI.mockResolvedValue([
+      {
+        title_ja: 'テスト',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2025,
+      },
+    ]);
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();

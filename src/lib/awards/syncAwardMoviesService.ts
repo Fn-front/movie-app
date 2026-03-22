@@ -12,9 +12,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { AWARD_DEFINITIONS, type AwardName } from '@/constants/awards';
 import {
+  buildWikipediaTitle,
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
 } from '@/lib/openai/generateAwardMovies';
+import { fetchWikipediaArticle } from '@/lib/wikipedia/fetchArticle';
 
 /** 同期処理のサマリー */
 export interface SyncAwardMoviesSummary {
@@ -89,19 +91,53 @@ export async function executeSyncAwardMoviesCron(
 
   for (const [awardName, awardDef] of targetAwards) {
     try {
-      const aiItems = await fetchAwardsFromOpenAI(
-        currentYear,
-        awardDef.label,
-        awardDef.categories,
-      );
+      const allAiItems: Awaited<
+        ReturnType<typeof fetchAwardsFromOpenAI>
+      > = [];
+      const maxRetries = 3;
 
-      if (!aiItems || aiItems.length === 0) {
-        console.warn(`No AI results for ${awardName} ${currentYear}`);
+      // Wikipedia記事を取得（賞ごとに1回）
+      const wikipediaTitle = buildWikipediaTitle(currentYear, awardDef);
+      const articleText = await fetchWikipediaArticle(wikipediaTitle);
+
+      if (!articleText) {
+        console.warn(
+          `Wikipedia article not found for ${awardName}: "${wikipediaTitle}"`,
+        );
         skippedAwards.push(awardName);
         continue;
       }
 
-      const resolved = await resolveAwardsWithTMDb(aiItems, awardDef);
+      // 部門ごとに個別にOpenAIで構造化
+      for (const category of awardDef.categories) {
+        let categoryItems: Awaited<
+          ReturnType<typeof fetchAwardsFromOpenAI>
+        > = null;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          categoryItems = await fetchAwardsFromOpenAI(
+            currentYear,
+            awardDef.label,
+            category,
+            articleText,
+          );
+          if (categoryItems && categoryItems.length > 0) break;
+          console.warn(
+            `No AI results for ${awardName}/${category.key} ${currentYear} (attempt ${attempt}/${maxRetries})`,
+          );
+        }
+
+        if (categoryItems && categoryItems.length > 0) {
+          allAiItems.push(...categoryItems);
+        }
+      }
+
+      if (allAiItems.length === 0) {
+        skippedAwards.push(awardName);
+        continue;
+      }
+
+      const resolved = await resolveAwardsWithTMDb(allAiItems, awardDef);
 
       if (resolved.length === 0) {
         console.warn(`No TMDb results for ${awardName} ${currentYear}`);

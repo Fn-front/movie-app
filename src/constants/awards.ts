@@ -20,6 +20,10 @@ export interface AwardDefinition {
   label: string;
   /** 授賞式の月 */
   month: number;
+  /** Wikipedia記事タイトルのテンプレート（{edition}が回数、{year}が年に置換される） */
+  wikipediaTemplate: string;
+  /** 第1回の開催年（回数計算用） */
+  firstEditionYear: number;
   /** 部門一覧 */
   categories: readonly AwardCategory[];
 }
@@ -36,6 +40,8 @@ export const AWARD_DEFINITIONS = {
   academy_awards: {
     label: 'アカデミー賞',
     month: 3,
+    wikipediaTemplate: '第{edition}回アカデミー賞',
+    firstEditionYear: 1928,
     categories: [
       { key: 'best_picture', label: '作品賞' },
       { key: 'best_director', label: '監督賞' },
@@ -48,6 +54,8 @@ export const AWARD_DEFINITIONS = {
   japan_academy_awards: {
     label: '日本アカデミー賞',
     month: 3,
+    wikipediaTemplate: '第{edition}回日本アカデミー賞',
+    firstEditionYear: 1977,
     categories: [
       { key: 'best_picture', label: '最優秀作品賞' },
       { key: 'best_director', label: '最優秀監督賞' },
@@ -61,6 +69,8 @@ export const AWARD_DEFINITIONS = {
   cannes: {
     label: 'カンヌ映画祭',
     month: 5,
+    wikipediaTemplate: '{year}年のカンヌ国際映画祭',
+    firstEditionYear: 0,
     categories: [
       { key: 'palme_dor', label: 'パルムドール' },
       { key: 'grand_prix', label: 'グランプリ' },
@@ -75,6 +85,8 @@ export const AWARD_DEFINITIONS = {
   golden_globes: {
     label: 'ゴールデングローブ賞',
     month: 1,
+    wikipediaTemplate: '第{edition}回ゴールデングローブ賞',
+    firstEditionYear: 1943,
     categories: [
       { key: 'best_drama', label: '作品賞（ドラマ部門）' },
       {

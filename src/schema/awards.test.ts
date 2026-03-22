@@ -75,10 +75,10 @@ describe('openAiAwardsResponseSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('awards配列が空の場合エラーになる', () => {
+  it('awards配列が空でも有効（未発表の賞に対応）', () => {
     const result = openAiAwardsResponseSchema.safeParse({
       awards: [],
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 });

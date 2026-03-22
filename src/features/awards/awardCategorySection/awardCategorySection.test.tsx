@@ -27,9 +27,7 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
 
 // --- Helpers ---
 
-const createAwardMovie = (
-  overrides: Partial<AwardMovie> = {},
-): AwardMovie => ({
+const createAwardMovie = (overrides: Partial<AwardMovie> = {}): AwardMovie => ({
   tmdbMovieId: 100,
   title: 'テスト映画',
   posterPath: '/poster.jpg',

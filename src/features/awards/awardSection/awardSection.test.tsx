@@ -13,18 +13,14 @@ jest.mock(
     }: {
       category: { category: string; label: string };
     }) => (
-      <div data-testid={`category-${category.category}`}>
-        {category.label}
-      </div>
+      <div data-testid={`category-${category.category}`}>{category.label}</div>
     ),
   }),
 );
 
 // --- Helpers ---
 
-const createMockAward = (
-  overrides: Partial<AwardData> = {},
-): AwardData => ({
+const createMockAward = (overrides: Partial<AwardData> = {}): AwardData => ({
   awardName: 'academy_awards',
   label: 'アカデミー賞',
   categories: [
@@ -95,6 +91,8 @@ describe('AwardSection', () => {
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(
       'アカデミー賞',
     );
-    expect(screen.queryByTestId('category-best_picture')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('category-best_picture'),
+    ).not.toBeInTheDocument();
   });
 });

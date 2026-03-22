@@ -32,10 +32,9 @@ const createRequest = (authHeader?: string) => {
   if (authHeader) {
     headers.set('authorization', authHeader);
   }
-  return new NextRequest(
-    'http://localhost/api/cron/sync-award-movies',
-    { headers },
-  );
+  return new NextRequest('http://localhost/api/cron/sync-award-movies', {
+    headers,
+  });
 };
 
 // --- Tests ---

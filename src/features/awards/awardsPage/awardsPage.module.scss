@@ -1,4 +1,5 @@
 @use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
 
 .c_awards_page {
   display: flex;
@@ -9,7 +10,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: $spacing-4;
+    gap: $spacing-3;
   }
 
   &__title {
@@ -17,10 +18,26 @@
     font-size: $font-size-xl;
     font-weight: $font-weight-bold;
     color: $text-primary;
+
+    @include md {
+      font-size: $font-size-2xl;
+    }
   }
 
-  &__select {
-    width: 120px;
+  &__controls {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+    flex-shrink: 0;
+  }
+
+  &__sort {
+    width: 140px;
+    flex-shrink: 0;
+
+    @include sm {
+      width: 180px;
+    }
   }
 
   &__loading {

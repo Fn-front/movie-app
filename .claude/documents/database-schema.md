@@ -402,6 +402,44 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 
 ---
 
+### award_movies（受賞作品）
+映画賞の受賞作品・ノミネート作品を管理（月次Cronで同期）
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
+| tmdb_movie_id | INTEGER | NOT NULL | - | TMDb映画ID |
+| title | VARCHAR(255) | NOT NULL | - | 映画タイトル |
+| poster_path | VARCHAR(255) | NULL | - | ポスター画像パス |
+| release_date | DATE | NULL | - | 公開日 |
+| vote_average | NUMERIC(3,1) | NULL | - | TMDb評価 |
+| genre_ids | INTEGER[] | NULL | - | ジャンルID配列 |
+| award_name | VARCHAR(50) | NOT NULL | - | 賞名キー（academy_awards等） |
+| award_year | INTEGER | NOT NULL | - | 授賞年度 |
+| category | VARCHAR(50) | NOT NULL | - | 部門キー（best_picture等） |
+| award_label | VARCHAR(100) | NOT NULL | - | 部門表示名（作品賞等） |
+| is_winner | BOOLEAN | NOT NULL | false | 受賞フラグ |
+| display_order | INTEGER | NOT NULL | - | 表示順序 |
+| generated_at | TIMESTAMPTZ | NOT NULL | now() | 生成日時 |
+| created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
+
+**インデックス:**
+- `tmdb_movie_id, award_name, award_year, category` (UNIQUE) - 重複防止・UPSERT用
+
+**制約:**
+- `display_order >= 1` (CHECK)
+
+**RLSポリシー:**
+- SELECT: 全ユーザー参照可能（公開データ）
+- INSERT/UPDATE/DELETE: service_roleのみ（Cron API経由、RLSバイパス）
+
+**特徴:**
+- ユーザーに紐付かない公開データ（FKなし）
+- 月次Cronで対象月の賞を OpenAI + TMDb で取得・UPSERT
+- 論理削除なし
+
+---
+
 ## ER図（概念図）
 
 ```
@@ -422,6 +460,7 @@ users (1) ----< (N) watchlist
   +----< (N) dismissed_movies
 
 otp_codes（usersと直接FKなし、emailで紐付け）
+award_movies（usersと紐付かない公開データ）
 ```
 
 ---

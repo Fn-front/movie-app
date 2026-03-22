@@ -56,6 +56,7 @@ src/
 │   ├── api/               # API Routes
 │   │   ├── auth/
 │   │   ├── cron/
+│   │   ├── awards/
 │   │   ├── dismissed-movies/
 │   │   ├── favorites/
 │   │   ├── filters/
@@ -70,6 +71,7 @@ src/
 │   ├── icons/            # アイコンコンポーネント
 │   └── providers/        # Providerコンポーネント
 ├── features/              # 機能別モジュール（コンポーネント・フック・型）
+│   ├── awards/
 │   ├── auth/
 │   ├── calendar/
 │   ├── dismissedMovies/
@@ -87,6 +89,7 @@ src/
 │   ├── auth/            # NextAuth.js認証設定
 │   ├── axios/           # axiosインスタンス設定
 │   ├── eiga/            # 映画.comスクレイピング
+│   ├── awards/          # 受賞作品同期サービス
 │   ├── openai/          # OpenAI APIクライアント
 │   ├── otp/             # OTP生成・検証
 │   ├── rateLimit/       # レート制限
@@ -158,7 +161,9 @@ UI Re-render
 | GET | `/api/cron/sync-now-playing` | 上映中映画同期（日次） |
 | GET | `/api/cron/sync-now-showing` | 映画.com上映中情報同期（日次） |
 | GET | `/api/cron/update-movies` | 映画評価・人気度更新（日次） |
+| GET | `/api/awards` | 受賞作品一覧取得 |
 | GET | `/api/cron/generate-recommendations` | AIレコメンド生成（日次） |
+| GET | `/api/cron/sync-award-movies` | 受賞作品同期（月次） |
 
 ## 主要機能のアーキテクチャ
 
@@ -304,6 +309,7 @@ UI Re-render
 | `/api/cron/update-movies` | `0 18 * * *` | 毎日 03:00 | 映画評価・人気度更新（日次） |
 | `/api/cron/sync-now-showing` | `0 18 * * *` | 毎日 03:00 | 映画.com上映中情報同期（日次） |
 | `/api/cron/generate-recommendations` | `0 3 * * *` | 毎日 12:00 | AIレコメンド生成（日次） |
+| `/api/cron/sync-award-movies` | `0 18 28 * *` | 毎月28日 03:00 | 受賞作品同期（月次） |
 
 ## セキュリティヘッダー
 

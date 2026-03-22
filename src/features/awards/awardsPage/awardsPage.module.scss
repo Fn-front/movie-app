@@ -10,7 +10,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: $spacing-4;
+    gap: $spacing-3;
   }
 
   &__title {
@@ -24,8 +24,20 @@
     }
   }
 
-  &__select {
-    width: 120px;
+  &__controls {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+    flex-shrink: 0;
+  }
+
+  &__sort {
+    width: 140px;
+    flex-shrink: 0;
+
+    @include sm {
+      width: 180px;
+    }
   }
 
   &__loading {

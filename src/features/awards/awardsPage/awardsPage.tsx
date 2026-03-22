@@ -101,11 +101,12 @@ export const AwardsPage = memo(function AwardsPage() {
             {AWARDS_MESSAGES.PAGE_TITLE}
           </h2>
           {data && data.availableYears.length > 0 && (
-            <div className={styles.c_awards_page__select}>
+            <div className={styles.c_awards_page__controls}>
               <AwardYearSelect
                 availableYears={data.availableYears}
                 selectedYear={selectedYear}
                 onYearChange={handleYearChange}
+                className={styles.c_awards_page__sort}
               />
             </div>
           )}

@@ -13,10 +13,16 @@ export interface AwardYearSelectProps {
   availableYears: number[];
   selectedYear: number;
   onYearChange: (value: string) => void;
+  className?: string;
 }
 
 export const AwardYearSelect = memo<AwardYearSelectProps>(
-  function AwardYearSelect({ availableYears, selectedYear, onYearChange }) {
+  function AwardYearSelect({
+    availableYears,
+    selectedYear,
+    onYearChange,
+    className,
+  }) {
     const options: SelectOption[] = useMemo(
       () =>
         availableYears.map((year) => ({
@@ -32,6 +38,7 @@ export const AwardYearSelect = memo<AwardYearSelectProps>(
         value={String(selectedYear)}
         onValueChange={onYearChange}
         aria-label='年度を選択'
+        className={className}
       />
     );
   },

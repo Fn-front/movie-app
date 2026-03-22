@@ -1,4 +1,5 @@
 @use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
 
 .c_awards_page {
   display: flex;
@@ -17,6 +18,10 @@
     font-size: $font-size-xl;
     font-weight: $font-weight-bold;
     color: $text-primary;
+
+    @include md {
+      font-size: $font-size-2xl;
+    }
   }
 
   &__select {

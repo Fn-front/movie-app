@@ -414,20 +414,19 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 | release_date | DATE | NULL | - | 公開日 |
 | vote_average | NUMERIC(3,1) | NULL | - | TMDb評価 |
 | genre_ids | INTEGER[] | NULL | - | ジャンルID配列 |
-| award_name | VARCHAR(50) | NOT NULL | - | 賞名キー（academy_awards等） |
+| award_name | VARCHAR(100) | NOT NULL | - | 賞名キー（academy_awards等） |
 | award_year | INTEGER | NOT NULL | - | 授賞年度 |
-| category | VARCHAR(50) | NOT NULL | - | 部門キー（best_picture等） |
-| award_label | VARCHAR(100) | NOT NULL | - | 部門表示名（作品賞等） |
+| category | VARCHAR(100) | NOT NULL | - | 部門キー（best_picture等） |
+| award_label | VARCHAR(255) | NOT NULL | - | 部門表示名（作品賞等） |
 | is_winner | BOOLEAN | NOT NULL | false | 受賞フラグ |
-| display_order | INTEGER | NOT NULL | - | 表示順序 |
+| display_order | INTEGER | NOT NULL | 0 | 表示順序 |
 | generated_at | TIMESTAMPTZ | NOT NULL | now() | 生成日時 |
 | created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
 
 **インデックス:**
 - `tmdb_movie_id, award_name, award_year, category` (UNIQUE) - 重複防止・UPSERT用
-
-**制約:**
-- `display_order >= 1` (CHECK)
+- `award_name, award_year` - 賞・年ごとの絞り込み用
+- `is_winner` - 受賞作品フィルタ用
 
 **RLSポリシー:**
 - SELECT: 全ユーザー参照可能（公開データ）

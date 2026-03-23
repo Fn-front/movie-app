@@ -126,12 +126,19 @@ describe('extractMovieTitlesFromWikitext', () => {
     expect(titles.has('秒速5センチメートル')).toBe(true);
   });
 
-  it('{{仮リンク}}テンプレートからタイトルを抽出する', () => {
+  it('{{仮リンク}}テンプレート（label=あり）からタイトルを抽出する', () => {
     const wikitext =
       '** 『{{仮リンク|ハムネット (映画)|label=ハムネット|en|Hamnet (film)}}』\n** 『{{仮リンク|シークレット・エージェント (2025年の映画)|label=シークレット・エージェント|en|The Secret Agent (2025 film)}}』';
     const titles = extractMovieTitlesFromWikitext(wikitext);
     expect(titles.has('ハムネット')).toBe(true);
     expect(titles.has('シークレット・エージェント')).toBe(true);
+  });
+
+  it('{{仮リンク}}テンプレート（label=なし）からタイトルを抽出する', () => {
+    const wikitext =
+      "** [[ケイト・ハドソン]] - 『{{仮リンク|ソング・サング・ブルー|en|Song Sung Blue (2025 film)}}』 : クレア役";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('ソング・サング・ブルー')).toBe(true);
   });
 
   it('{{仮リンク}}のlabel内の太字マークアップを除去する', () => {

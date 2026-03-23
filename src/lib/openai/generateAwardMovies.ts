@@ -30,13 +30,20 @@ export function extractMovieTitlesFromWikitext(wikitext: string): Set<string> {
     titles.add(resolveWikitextToDisplayText(match[1]));
   }
 
-  // パターン2: {{仮リンク|...|label=表示テキスト|...}} テンプレート
+  // パターン2: {{仮リンク}} テンプレート
+  // label=あり: {{仮リンク|...|label=表示テキスト|...}}
+  // label=なし: {{仮リンク|表示テキスト|lang|英語記事名}}（第1引数が表示テキスト）
   const kariLinkMatches = wikitext.matchAll(
-    /\{\{仮リンク\|[^}]*\|label=([^|}]+)[^}]*\}\}/g,
+    /\{\{仮リンク\|([^|}]+)[^}]*\}\}/g,
   );
   for (const match of kariLinkMatches) {
-    const label = match[1].replace(/'''/g, '');
-    titles.add(label);
+    const fullTemplate = match[0];
+    const labelMatch = fullTemplate.match(/\|label=([^|}]+)/);
+    const displayText = (labelMatch ? labelMatch[1] : match[1]).replace(
+      /'''/g,
+      '',
+    );
+    titles.add(displayText);
   }
 
   // パターン3: * / ** 行の直接リンク（作品賞など『』なしのケース）
@@ -60,8 +67,11 @@ export function extractMovieTitlesFromWikitext(wikitext: string): Set<string> {
 function resolveWikitextToDisplayText(raw: string): string {
   // '''太字'''を除去
   let text = raw.replace(/'''/g, '');
-  // {{仮リンク|...|label=表示テキスト|...}} → 表示テキスト
-  text = text.replace(/\{\{仮リンク\|[^}]*\|label=([^|}]+)[^}]*\}\}/g, '$1');
+  // {{仮リンク|表示テキスト|...}} or {{仮リンク|...|label=表示テキスト|...}} → 表示テキスト
+  text = text.replace(/\{\{仮リンク\|([^|}]+)[^}]*\}\}/g, (_, firstArg) => {
+    const labelMatch = _.match(/\|label=([^|}]+)/);
+    return labelMatch ? labelMatch[1] : firstArg;
+  });
   // [[link|display]] → display, [[link]] → link
   text = text.replace(/\[\[([^\]]+)\]\]/g, (_, content) =>
     resolveWikitextLink(content),

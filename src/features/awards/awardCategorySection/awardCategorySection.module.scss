@@ -31,7 +31,19 @@
   }
 
   &__winner_tile {
-    max-width: 160px;
+    max-width: 140px;
+
+    @include sm {
+      max-width: 150px;
+    }
+
+    @include md {
+      max-width: 160px;
+    }
+
+    @include lg {
+      max-width: calc((100% - $spacing-4 * 4) / 5);
+    }
   }
 
   &__nominees {

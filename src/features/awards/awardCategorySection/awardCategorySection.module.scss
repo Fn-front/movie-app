@@ -84,6 +84,5 @@
     font-size: $font-size-xs;
     line-height: $line-height-normal;
     color: $text-secondary;
-    @include text-truncate-multiline(1);
   }
 }

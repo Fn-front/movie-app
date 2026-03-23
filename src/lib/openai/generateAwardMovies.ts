@@ -17,6 +17,81 @@ import {
 
 import { createOpenAIClient, getOpenAIModel } from './client';
 
+/**
+ * wikitextから映画タイトル候補を抽出する
+ * 『』で囲まれたテキストおよび * / ** 行の[[]]リンクから表示テキストを取得
+ */
+export function extractMovieTitlesFromWikitext(wikitext: string): Set<string> {
+  const titles = new Set<string>();
+
+  // パターン1: 『...』で囲まれたタイトル
+  const bracketMatches = wikitext.matchAll(/『([^』]+)』/g);
+  for (const match of bracketMatches) {
+    titles.add(resolveWikitextToDisplayText(match[1]));
+  }
+
+  // パターン2: {{仮リンク}} テンプレート
+  // label=あり: {{仮リンク|...|label=表示テキスト|...}}
+  // label=なし: {{仮リンク|表示テキスト|lang|英語記事名}}（第1引数が表示テキスト）
+  const kariLinkMatches = wikitext.matchAll(
+    /\{\{仮リンク\|([^|}]+)[^}]*\}\}/g,
+  );
+  for (const match of kariLinkMatches) {
+    const fullTemplate = match[0];
+    const labelMatch = fullTemplate.match(/\|label=([^|}]+)/);
+    const displayText = (labelMatch ? labelMatch[1] : match[1]).replace(
+      /'''/g,
+      '',
+    );
+    titles.add(displayText);
+  }
+
+  // パターン3: * / ** 行の直接リンク（作品賞など『』なしのケース）
+  // 『』を含む行は演技賞形式（人名 - 『映画』）なので、パターン1で取得済み。スキップする
+  const lines = wikitext.split('\n');
+  for (const line of lines) {
+    if (!line.match(/^\*{1,2}\s/)) continue;
+    if (line.includes('『')) continue;
+    const linkMatches = line.matchAll(/\[\[([^\]]+)\]\]/g);
+    for (const linkMatch of linkMatches) {
+      const displayText = resolveWikitextLink(linkMatch[1]);
+      if (!displayText.includes('賞')) {
+        titles.add(displayText);
+      }
+    }
+  }
+
+  return titles;
+}
+
+/** wikitext内のマークアップを解決して表示テキストを取得 */
+function resolveWikitextToDisplayText(raw: string): string {
+  // '''太字'''を除去
+  let text = raw.replace(/'''/g, '');
+  // {{仮リンク|表示テキスト|...}} or {{仮リンク|...|label=表示テキスト|...}} → 表示テキスト
+  text = text.replace(/\{\{仮リンク\|([^|}]+)[^}]*\}\}/g, (_, firstArg) => {
+    const labelMatch = _.match(/\|label=([^|}]+)/);
+    return labelMatch ? labelMatch[1] : firstArg;
+  });
+  // [[link|display]] → display, [[link]] → link
+  text = text.replace(/\[\[([^\]]+)\]\]/g, (_, content) =>
+    resolveWikitextLink(content),
+  );
+  return text.trim();
+}
+
+/** [[link|display]] → display, [[link#section|display]] → display */
+function resolveWikitextLink(content: string): string {
+  if (content.includes('|')) {
+    return content.split('|').pop()!;
+  }
+  // セクションリンク [[title#section]] → title
+  if (content.includes('#')) {
+    return content.split('#')[0];
+  }
+  return content;
+}
+
 /** TMDb検索で解決済みの受賞作品情報 */
 export interface ResolvedAwardMovie {
   tmdb_movie_id: number;
@@ -28,6 +103,7 @@ export interface ResolvedAwardMovie {
   category: string;
   is_winner: boolean;
   display_order: number;
+  person_name?: string;
 }
 
 /**
@@ -46,11 +122,14 @@ function buildSystemPrompt(): string {
 
 ## 抽出ルール
 - title_ja、title_enには必ず「映画のタイトル」を入れること。俳優名・監督名・人物名は絶対に入れないこと
+- 映画タイトルはwikitext中の『』や[[]]で囲まれた文字列をそのまま使用すること。推測や補完をしないこと
 - 演技賞の場合、記事中の俳優名の横に『』で記載されている出演映画のタイトルを返すこと
 - 監督賞の場合、記事中の監督名の横に『』で記載されている監督作品のタイトルを返すこと
-- yearは映画の公開年（授賞式の年ではなく）
+- yearは映画の公開年（授賞式の年ではなく）。通常は授賞式の前年か同年の公開作品が対象
+- wikitextのリンク先にセクション指定（#実写映画 等）がある場合、そのバージョンの公開年を使うこと
 - 受賞者（is_winner: true）は'''太字'''かつ先頭（*で始まる行）の1名のみ
 - ノミネート者（**で始まる行）は記事に記載されている全員を漏れなく返すこと
+- 記事中のすべてのノミネート者を1人も欠落なく抽出すること
 
 レスポンスは以下のJSON形式で返してください:
 {
@@ -230,9 +309,26 @@ export async function resolveAwardsWithTMDb(
     }
 
     try {
-      // 日本語タイトルで検索、見つからなければ英語タイトルで検索
-      let searchResult = await searchMovies({ query: item.title_ja });
+      // 日本語タイトル+公開年で検索、見つからなければ年指定なしで再検索
+      let searchResult = await searchMovies({
+        query: item.title_ja,
+        year: item.year,
+      });
       let movie = findBestMatch(searchResult.results, item.year);
+
+      if (!movie) {
+        searchResult = await searchMovies({ query: item.title_ja });
+        movie = findBestMatch(searchResult.results, item.year);
+      }
+
+      // 日本語で見つからなければ英語タイトルで同様に検索
+      if (!movie) {
+        searchResult = await searchMovies({
+          query: item.title_en,
+          year: item.year,
+        });
+        movie = findBestMatch(searchResult.results, item.year);
+      }
 
       if (!movie) {
         searchResult = await searchMovies({ query: item.title_en });
@@ -246,7 +342,7 @@ export async function resolveAwardsWithTMDb(
         continue;
       }
 
-      // 同じ映画×同じ部門の重複を防止
+      // 同じ映画×同じ部門の重複を防止（DBユニーク制約に合わせる）
       if (
         resolved.some(
           (r) => r.tmdb_movie_id === movie.id && r.category === item.category,
@@ -269,6 +365,7 @@ export async function resolveAwardsWithTMDb(
         category: item.category,
         is_winner: item.is_winner,
         display_order: currentOrder,
+        person_name: item.person_name,
       });
     } catch (error) {
       console.error(`TMDb search failed for "${item.title_ja}":`, error);

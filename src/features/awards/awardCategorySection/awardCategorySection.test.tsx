@@ -34,6 +34,7 @@ const createAwardMovie = (overrides: Partial<AwardMovie> = {}): AwardMovie => ({
   releaseDate: '2025-12-01',
   voteAverage: 8.5,
   genreIds: [18],
+  personName: null,
   ...overrides,
 });
 
@@ -139,5 +140,49 @@ describe('AwardCategorySection', () => {
     render(<AwardCategorySection category={category} {...defaultProps} />);
 
     expect(screen.queryByText('ノミネート')).not.toBeInTheDocument();
+  });
+
+  it('personNameがある場合はMovieTileの下に人名が表示される', () => {
+    const category = createMockCategory({
+      winner: createAwardMovie({
+        tmdbMovieId: 100,
+        title: '受賞映画',
+        personName: '山田太郎',
+      }),
+      nominees: [
+        createAwardMovie({
+          tmdbMovieId: 100,
+          title: '受賞映画',
+          personName: '山田太郎',
+        }),
+        createAwardMovie({
+          tmdbMovieId: 200,
+          title: 'ノミネート映画A',
+          personName: '鈴木花子',
+        }),
+        createAwardMovie({
+          tmdbMovieId: 300,
+          title: 'ノミネート映画B',
+          personName: null,
+        }),
+      ],
+    });
+
+    render(<AwardCategorySection category={category} {...defaultProps} />);
+
+    expect(screen.getByText('山田太郎')).toBeInTheDocument();
+    expect(screen.getByText('鈴木花子')).toBeInTheDocument();
+  });
+
+  it('personNameがnullの場合は人名が表示されない', () => {
+    const category = createMockCategory();
+
+    render(<AwardCategorySection category={category} {...defaultProps} />);
+
+    // personName が null のデフォルトデータでは人名要素が存在しない
+    const personNames = document.querySelectorAll(
+      '[class*="person_name"]',
+    );
+    expect(personNames).toHaveLength(0);
   });
 });

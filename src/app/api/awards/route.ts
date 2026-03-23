@@ -34,6 +34,7 @@ function toAwardMovie(row: {
   release_date: string | null;
   vote_average: number | null;
   genre_ids: number[] | null;
+  person_name: string | null;
 }): AwardMovie {
   return {
     tmdbMovieId: row.tmdb_movie_id,
@@ -42,6 +43,7 @@ function toAwardMovie(row: {
     releaseDate: row.release_date,
     voteAverage: row.vote_average,
     genreIds: row.genre_ids,
+    personName: row.person_name,
   };
 }
 

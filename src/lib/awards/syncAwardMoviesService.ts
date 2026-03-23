@@ -25,7 +25,7 @@ import { fetchWikipediaArticle } from '@/lib/wikipedia/fetchArticle';
 /** 同期処理のサマリー */
 export interface SyncAwardMoviesSummary {
   year: number;
-  month: number;
+  month: number | null;
   synced_awards: string[];
   skipped_awards: string[];
   total_upserted: number;
@@ -46,10 +46,13 @@ interface CronError {
 /** CRONスキップ結果 */
 interface CronSkipped {
   type: 'skipped';
-  data: { year: number; month: number; reason: string };
+  data: { year: number; month: number | null; reason: string };
 }
 
 export type SyncAwardMoviesCronResult = CronSuccess | CronError | CronSkipped;
+
+/** CRON同期対象外の賞 */
+const EXCLUDED_AWARDS: ReadonlySet<string> = new Set(['japan_academy_awards']);
 
 /**
  * 現在月に該当する賞を取得
@@ -62,7 +65,22 @@ export function getAwardsForMonth(
       AwardName,
       (typeof AWARD_DEFINITIONS)[AwardName],
     ][]
-  ).filter(([, def]) => def.month === month);
+  ).filter(([name, def]) => def.month === month && !EXCLUDED_AWARDS.has(name));
+}
+
+/**
+ * 除外対象以外の全賞を取得（過去年同期用）
+ */
+export function getAllSyncableAwards(): [
+  AwardName,
+  (typeof AWARD_DEFINITIONS)[AwardName],
+][] {
+  return (
+    Object.entries(AWARD_DEFINITIONS) as [
+      AwardName,
+      (typeof AWARD_DEFINITIONS)[AwardName],
+    ][]
+  ).filter(([name]) => !EXCLUDED_AWARDS.has(name));
 }
 
 /**
@@ -76,21 +94,29 @@ export function getAwardsForMonth(
  */
 export async function executeSyncAwardMoviesCron(
   supabase: SupabaseClient,
+  targetYear?: number,
 ): Promise<SyncAwardMoviesCronResult> {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
   const generatedAt = now.toISOString();
 
-  const targetAwards = getAwardsForMonth(currentMonth);
+  // targetYear指定時はアカデミー賞のみ同期、未指定時は現在月に該当する賞のみ
+  const isManualSync = targetYear !== undefined;
+  const syncYear = targetYear ?? currentYear;
+  const targetAwards = isManualSync
+    ? getAllSyncableAwards().filter(([name]) => name === 'academy_awards')
+    : getAwardsForMonth(currentMonth);
 
   if (targetAwards.length === 0) {
     return {
       type: 'skipped',
       data: {
-        year: currentYear,
-        month: currentMonth,
-        reason: `${currentMonth}月に該当する賞はありません`,
+        year: syncYear,
+        month: isManualSync ? null : currentMonth,
+        reason: isManualSync
+          ? '同期対象の賞がありません'
+          : `${currentMonth}月に該当する賞はありません`,
       },
     };
   }
@@ -105,13 +131,13 @@ export async function executeSyncAwardMoviesCron(
 
       if (awardName === 'academy_awards') {
         // アカデミー賞: eiga.com から正規表現で抽出（ハルシネーションなし）
-        allAiItems = await fetchEigaOscarAwards(currentYear);
+        allAiItems = await fetchEigaOscarAwards(syncYear);
       } else {
         // その他の賞: Wikipedia + OpenAI で構造化
         allAiItems = await fetchAwardItemsViaWikipedia(
           awardName,
           awardDef,
-          currentYear,
+          syncYear,
         );
       }
 
@@ -123,7 +149,7 @@ export async function executeSyncAwardMoviesCron(
       const resolved = await resolveAwardsWithTMDb(allAiItems, awardDef);
 
       if (resolved.length === 0) {
-        console.warn(`No TMDb results for ${awardName} ${currentYear}`);
+        console.warn(`No TMDb results for ${awardName} ${syncYear}`);
         skippedAwards.push(awardName);
         continue;
       }
@@ -146,11 +172,12 @@ export async function executeSyncAwardMoviesCron(
         vote_average: r.vote_average,
         genre_ids: r.genre_ids,
         award_name: awardName,
-        award_year: currentYear,
+        award_year: syncYear,
         category: r.category,
         award_label: r.award_label,
         is_winner: r.is_winner,
         display_order: r.display_order,
+        person_name: r.person_name ?? null,
         generated_at: generatedAt,
       }));
 
@@ -186,8 +213,8 @@ export async function executeSyncAwardMoviesCron(
   return {
     type: 'success',
     data: {
-      year: currentYear,
-      month: currentMonth,
+      year: syncYear,
+      month: isManualSync ? null : currentMonth,
       synced_awards: syncedAwards,
       skipped_awards: skippedAwards,
       total_upserted: totalUpserted,

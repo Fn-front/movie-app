@@ -78,4 +78,12 @@
       flex: 1;
     }
   }
+
+  &__person_name {
+    margin: $spacing-1 0 0;
+    font-size: $font-size-xs;
+    line-height: $line-height-normal;
+    color: $text-secondary;
+    @include text-truncate-multiline(1);
+  }
 }

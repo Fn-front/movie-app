@@ -12,6 +12,7 @@ export interface AwardMovie {
   releaseDate: string | null;
   voteAverage: number | null;
   genreIds: number[] | null;
+  personName: string | null;
 }
 
 /**

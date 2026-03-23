@@ -103,6 +103,7 @@ export interface ResolvedAwardMovie {
   category: string;
   is_winner: boolean;
   display_order: number;
+  person_name?: string;
 }
 
 /**
@@ -364,6 +365,7 @@ export async function resolveAwardsWithTMDb(
         category: item.category,
         is_winner: item.is_winner,
         display_order: currentOrder,
+        person_name: item.person_name,
       });
     } catch (error) {
       console.error(`TMDb search failed for "${item.title_ja}":`, error);

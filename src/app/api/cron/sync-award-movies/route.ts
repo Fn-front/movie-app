@@ -34,7 +34,23 @@ export async function GET(request: NextRequest) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    const result = await executeSyncAwardMoviesCron(supabase);
+    // 手動同期用: ?year=2025 で特定年の全賞を同期
+    const yearParam = request.nextUrl.searchParams.get('year');
+    const targetYear = yearParam ? Number(yearParam) : undefined;
+    if (yearParam && (isNaN(targetYear!) || targetYear! < 1900 || targetYear! > 2100)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: 'yearパラメータは1900〜2100の数値で指定してください',
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
+    }
+
+    const result = await executeSyncAwardMoviesCron(supabase, targetYear);
 
     if (result.type === 'error') {
       return NextResponse.json(

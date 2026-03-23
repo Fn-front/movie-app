@@ -41,6 +41,7 @@ jest.mock('@/lib/eiga/fetchEigaOscarAwards', () => ({
 
 import {
   getAwardsForMonth,
+  getAllSyncableAwards,
   executeSyncAwardMoviesCron,
 } from './syncAwardMoviesService';
 
@@ -80,12 +81,10 @@ describe('getAwardsForMonth', () => {
     expect(awards[0][0]).toBe('golden_globes');
   });
 
-  it('3月はアカデミー賞と日本アカデミー賞を返す', () => {
+  it('3月はアカデミー賞を返す（日本アカデミー賞は除外）', () => {
     const awards = getAwardsForMonth(3);
-    expect(awards.length).toBe(2);
-    const names = awards.map(([name]) => name);
-    expect(names).toContain('academy_awards');
-    expect(names).toContain('japan_academy_awards');
+    expect(awards.length).toBe(1);
+    expect(awards[0][0]).toBe('academy_awards');
   });
 
   it('5月はカンヌ映画祭を返す', () => {
@@ -97,6 +96,17 @@ describe('getAwardsForMonth', () => {
   it('該当する賞がない月は空配列を返す', () => {
     const awards = getAwardsForMonth(7);
     expect(awards).toHaveLength(0);
+  });
+});
+
+describe('getAllSyncableAwards', () => {
+  it('日本アカデミー賞を除く全賞を返す', () => {
+    const awards = getAllSyncableAwards();
+    const names = awards.map(([name]) => name);
+    expect(names).toContain('academy_awards');
+    expect(names).toContain('golden_globes');
+    expect(names).toContain('cannes');
+    expect(names).not.toContain('japan_academy_awards');
   });
 });
 
@@ -223,33 +233,50 @@ describe('executeSyncAwardMoviesCron', () => {
   });
 
   it('処理中にエラーが発生しても他の賞の処理は続行する', async () => {
-    // 3月に設定（アカデミー賞 + 日本アカデミー賞）
-    jest.setSystemTime(new Date('2026-03-15T00:00:00Z'));
+    // 1月に設定（ゴールデングローブ賞のみ）
+    jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    // academy_awards: eiga.comが空配列（スキップ）
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
-    // japan_academy_awards: Wikipedia正常
     mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
-
-    mockFetchAwardsFromOpenAI.mockResolvedValue([
-      {
-        title_ja: 'テスト',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2025,
-      },
-    ]);
-    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト']));
+    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    mockResolveAwardsWithTMDb.mockResolvedValue([]);
 
     const supabase = createMockSupabase();
     const result = await executeSyncAwardMoviesCron(supabase);
 
     expect(result.type).toBe('success');
     if (result.type === 'success') {
-      expect(result.data.skipped_awards.length).toBe(1);
-      expect(result.data.synced_awards.length).toBe(1);
+      expect(result.data.skipped_awards).toContain('golden_globes');
     }
+  });
+
+  it('targetYear指定時はアカデミー賞のみeiga.com経由で同期する', async () => {
+    jest.setSystemTime(new Date('2026-07-15T00:00:00Z'));
+
+    // eiga.comが受賞作品を返す
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'テスト映画',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+
+    const supabase = createMockSupabase();
+    const result = await executeSyncAwardMoviesCron(supabase, 2025);
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.data.year).toBe(2025);
+      expect(result.data.month).toBeNull();
+      expect(result.data.synced_awards).toEqual(['academy_awards']);
+    }
+    // アカデミー賞のみeiga.comを使用、Wikipedia/OpenAIは呼ばれない
+    expect(mockFetchEigaOscarAwards).toHaveBeenCalledWith(2025);
+    expect(mockFetchWikipediaArticle).not.toHaveBeenCalled();
   });
 
   it('アカデミー賞はeiga.comからデータを取得する', async () => {
@@ -265,16 +292,6 @@ describe('executeSyncAwardMoviesCron', () => {
         year: 2025,
       },
     ]);
-    // japan_academy_awardsもOpenAI経由で正常
-    mockFetchAwardsFromOpenAI.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test Movie',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2025,
-      },
-    ]);
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -283,13 +300,11 @@ describe('executeSyncAwardMoviesCron', () => {
     expect(result.type).toBe('success');
     if (result.type === 'success') {
       expect(result.data.synced_awards).toContain('academy_awards');
-      expect(result.data.synced_awards).toContain('japan_academy_awards');
     }
     // eiga.comが呼ばれたことを確認
     expect(mockFetchEigaOscarAwards).toHaveBeenCalledWith(2026);
-    // アカデミー賞ではWikipediaが呼ばれない
-    // japan_academy_awardsではWikipediaが呼ばれる
-    expect(mockFetchWikipediaArticle).toHaveBeenCalledTimes(1);
+    // アカデミー賞ではWikipediaが呼ばれない（日本アカデミー賞は除外済み）
+    expect(mockFetchWikipediaArticle).not.toHaveBeenCalled();
   });
 
   it('wikitextに存在しないタイトルはハルシネーションとして除外する', async () => {

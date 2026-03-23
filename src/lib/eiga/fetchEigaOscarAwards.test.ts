@@ -95,6 +95,25 @@ describe('extractBestPictureNominees', () => {
     expect(result[0].title).toBe("If I Had Legs I'd Kick You");
   });
 
+  it('映画「...」ラッピングを除去する', () => {
+    const html = `
+      <div class="nominate_ctb">
+        <div class="contents_box_half float_r">
+          <div class="movie_title">
+            <h5 class="h5_link">
+              <a href="/movie/100001/"><i class="fa fa-caret-right">&nbsp;</i>映画「F1（R） エフワン」</a>
+            </h5>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const result = extractBestPictureNominees(html);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe('F1 エフワン');
+  });
+
   it('空のHTMLからは空配列を返す', () => {
     expect(extractBestPictureNominees('')).toHaveLength(0);
   });
@@ -124,8 +143,8 @@ describe('extractPersonCategoryNominees', () => {
     const result = extractPersonCategoryNominees(html);
 
     expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ title: '映画アルファ', isWinner: false });
-    expect(result[1]).toEqual({ title: '映画ベータ', isWinner: true });
+    expect(result[0]).toEqual({ title: '映画アルファ', isWinner: false, personName: '俳優A' });
+    expect(result[1]).toEqual({ title: '映画ベータ', isWinner: true, personName: '俳優B' });
   });
 
   it('nominate_ctb bb_noneブロックはスキップする', () => {
@@ -185,13 +204,13 @@ describe('extractOthersPageNominees', () => {
 
     expect(result[0].section).toBe('助演男優賞');
     expect(result[0].nominees).toHaveLength(2);
-    expect(result[0].nominees[0]).toEqual({ title: '映画1', isWinner: false });
-    expect(result[0].nominees[1]).toEqual({ title: '映画2', isWinner: true });
+    expect(result[0].nominees[0]).toEqual({ title: '映画1', isWinner: false, personName: '俳優A' });
+    expect(result[0].nominees[1]).toEqual({ title: '映画2', isWinner: true, personName: '俳優B' });
 
     expect(result[1].section).toBe('助演女優賞');
     expect(result[1].nominees).toHaveLength(2);
-    expect(result[1].nominees[0]).toEqual({ title: '映画3', isWinner: true });
-    expect(result[1].nominees[1]).toEqual({ title: '映画4', isWinner: false });
+    expect(result[1].nominees[0]).toEqual({ title: '映画3', isWinner: true, personName: '女優C' });
+    expect(result[1].nominees[1]).toEqual({ title: '映画4', isWinner: false, personName: '女優D' });
   });
 
   it('対象外のセクション（脚本賞等）も正しくパースされる', () => {
@@ -199,12 +218,14 @@ describe('extractOthersPageNominees', () => {
       <h4 class="underline"><span>助演男優賞</span></h4>
       <div class="nominate_ctb winner">
         <div class="movie_title">
+          <h5 class="h5_link"><a href="/person/1/">俳優A</a></h5>
           <p class="h5_link_sub">「<a href="/movie/1/">映画A</a>」</p>
         </div>
       </div>
       <h4 class="underline"><span>脚本賞</span></h4>
       <div class="nominate_ctb winner">
         <div class="movie_title">
+          <h5 class="h5_link"><a href="/person/2/">脚本家B</a></h5>
           <p class="h5_link_sub">「<a href="/movie/99/">脚本映画</a>」</p>
         </div>
       </div>

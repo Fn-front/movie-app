@@ -131,7 +131,10 @@ function cleanHtmlText(raw: string): string {
 
 /** eiga.com特有のタイトルラッピング（映画「...」）と全角括弧の注釈を除去 */
 function unwrapMovieTitle(title: string): string {
-  let cleaned = title.replace(/（[^）]*）/g, '').replace(/\s+/g, ' ').trim();
+  const cleaned = title
+    .replace(/（[^）]*）/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const match = cleaned.match(/^映画[「\u300c](.+)[」\u300d]$/);
   return match ? match[1] : cleaned;
 }

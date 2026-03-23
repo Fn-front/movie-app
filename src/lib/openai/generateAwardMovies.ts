@@ -33,9 +33,7 @@ export function extractMovieTitlesFromWikitext(wikitext: string): Set<string> {
   // パターン2: {{仮リンク}} テンプレート
   // label=あり: {{仮リンク|...|label=表示テキスト|...}}
   // label=なし: {{仮リンク|表示テキスト|lang|英語記事名}}（第1引数が表示テキスト）
-  const kariLinkMatches = wikitext.matchAll(
-    /\{\{仮リンク\|([^|}]+)[^}]*\}\}/g,
-  );
+  const kariLinkMatches = wikitext.matchAll(/\{\{仮リンク\|([^|}]+)[^}]*\}\}/g);
   for (const match of kariLinkMatches) {
     const fullTemplate = match[0];
     const labelMatch = fullTemplate.match(/\|label=([^|}]+)/);

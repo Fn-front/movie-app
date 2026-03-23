@@ -143,8 +143,16 @@ describe('extractPersonCategoryNominees', () => {
     const result = extractPersonCategoryNominees(html);
 
     expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ title: '映画アルファ', isWinner: false, personName: '俳優A' });
-    expect(result[1]).toEqual({ title: '映画ベータ', isWinner: true, personName: '俳優B' });
+    expect(result[0]).toEqual({
+      title: '映画アルファ',
+      isWinner: false,
+      personName: '俳優A',
+    });
+    expect(result[1]).toEqual({
+      title: '映画ベータ',
+      isWinner: true,
+      personName: '俳優B',
+    });
   });
 
   it('nominate_ctb bb_noneブロックは必要な構造を持たないためマッチしない', () => {
@@ -204,13 +212,29 @@ describe('extractOthersPageNominees', () => {
 
     expect(result[0].section).toBe('助演男優賞');
     expect(result[0].nominees).toHaveLength(2);
-    expect(result[0].nominees[0]).toEqual({ title: '映画1', isWinner: false, personName: '俳優A' });
-    expect(result[0].nominees[1]).toEqual({ title: '映画2', isWinner: true, personName: '俳優B' });
+    expect(result[0].nominees[0]).toEqual({
+      title: '映画1',
+      isWinner: false,
+      personName: '俳優A',
+    });
+    expect(result[0].nominees[1]).toEqual({
+      title: '映画2',
+      isWinner: true,
+      personName: '俳優B',
+    });
 
     expect(result[1].section).toBe('助演女優賞');
     expect(result[1].nominees).toHaveLength(2);
-    expect(result[1].nominees[0]).toEqual({ title: '映画3', isWinner: true, personName: '女優C' });
-    expect(result[1].nominees[1]).toEqual({ title: '映画4', isWinner: false, personName: '女優D' });
+    expect(result[1].nominees[0]).toEqual({
+      title: '映画3',
+      isWinner: true,
+      personName: '女優C',
+    });
+    expect(result[1].nominees[1]).toEqual({
+      title: '映画4',
+      isWinner: false,
+      personName: '女優D',
+    });
   });
 
   it('対象外のセクション（脚本賞等）も正しくパースされる', () => {

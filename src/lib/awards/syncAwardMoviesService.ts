@@ -68,7 +68,6 @@ export function getAwardsForMonth(
   ).filter(([name, def]) => def.month === month && !EXCLUDED_AWARDS.has(name));
 }
 
-
 /**
  * 受賞作品同期CRONのメイン処理
  *

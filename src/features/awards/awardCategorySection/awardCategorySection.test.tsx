@@ -180,9 +180,7 @@ describe('AwardCategorySection', () => {
     render(<AwardCategorySection category={category} {...defaultProps} />);
 
     // personName が null のデフォルトデータでは人名要素が存在しない
-    const personNames = document.querySelectorAll(
-      '[class*="person_name"]',
-    );
+    const personNames = document.querySelectorAll('[class*="person_name"]');
     expect(personNames).toHaveLength(0);
   });
 });

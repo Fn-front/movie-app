@@ -136,7 +136,7 @@ describe('extractMovieTitlesFromWikitext', () => {
 
   it('{{仮リンク}}テンプレート（label=なし）からタイトルを抽出する', () => {
     const wikitext =
-      "** [[ケイト・ハドソン]] - 『{{仮リンク|ソング・サング・ブルー|en|Song Sung Blue (2025 film)}}』 : クレア役";
+      "** [[ケイト・ハドソン]] - '{{仮リンク|ソング・サング・ブルー|en|Song Sung Blue (2025 film)}}' : クレア役";
     const titles = extractMovieTitlesFromWikitext(wikitext);
     expect(titles.has('ソング・サング・ブルー')).toBe(true);
   });

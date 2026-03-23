@@ -98,7 +98,6 @@ describe('getAwardsForMonth', () => {
   });
 });
 
-
 describe('executeSyncAwardMoviesCron', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -303,9 +302,7 @@ describe('executeSyncAwardMoviesCron', () => {
     mockFetchEigaOscarAwards.mockResolvedValue([]);
     // Wikipedia+OpenAIが結果を返す
     mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
-    mockExtractMovieTitlesFromWikitext.mockReturnValue(
-      new Set(['テスト映画']),
-    );
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockFetchAwardsFromOpenAI.mockResolvedValue([
       {
         title_ja: 'テスト映画',

@@ -197,9 +197,20 @@ export async function executeSyncAwardMoviesCron(
         generated_at: generatedAt,
       }));
 
-      const { error } = await supabase.from('award_movies').upsert(upsertData, {
-        onConflict: 'tmdb_movie_id,award_name,award_year,category',
+      // UPSERT前に重複チェック（同じユニークキーのレコードを除外）
+      const seen = new Set<string>();
+      const deduplicatedData = upsertData.filter((r) => {
+        const key = `${r.tmdb_movie_id}:${r.award_name}:${r.award_year}:${r.category}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
       });
+
+      const { error } = await supabase
+        .from('award_movies')
+        .upsert(deduplicatedData, {
+          onConflict: 'tmdb_movie_id,award_name,award_year,category',
+        });
 
       if (error) {
         console.error(`Failed to upsert ${awardName}:`, error);
@@ -207,7 +218,7 @@ export async function executeSyncAwardMoviesCron(
         continue;
       }
 
-      totalUpserted += upsertData.length;
+      totalUpserted += deduplicatedData.length;
       syncedAwards.push(awardName);
     } catch (error) {
       console.error(`Error processing ${awardName}:`, error);

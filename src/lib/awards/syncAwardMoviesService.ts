@@ -4,7 +4,8 @@
  *
  * 処理フロー:
  * 1. 当年・現在月に該当する賞を AWARD_DEFINITIONS から特定
- * 2. 該当する賞ごとに OpenAI + TMDb で受賞作品データ取得
+ * 2. アカデミー賞: eiga.com から正規表現で抽出 → TMDb で映画情報解決
+ *    その他の賞: Wikipedia + OpenAI で構造化 → TMDb で映画情報解決
  * 3. award_movies テーブルに UPSERT
  */
 
@@ -12,6 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { AWARD_DEFINITIONS, type AwardName } from '@/constants/awards';
 import type { OpenAiAwardItem } from '@/schema/awards';
+import { fetchEigaOscarAwards } from '@/lib/eiga/fetchEigaOscarAwards';
 import {
   buildWikipediaTitle,
   extractMovieTitlesFromWikitext,
@@ -66,10 +68,10 @@ export function getAwardsForMonth(
 /**
  * 受賞作品同期CRONのメイン処理
  *
- * API呼び出し回数の目安（部門ごとにOpenAI 1回、リトライ最大3回）:
- * - 1月: ゴールデングローブ賞 9部門 → 最大27回
- * - 3月: アカデミー賞6部門 + 日本アカデミー賞7部門 → 最大39回
- * - 5月: カンヌ映画祭 8部門 → 最大24回
+ * API呼び出し回数の目安:
+ * - 1月: ゴールデングローブ賞 9部門（OpenAI最大27回）
+ * - 3月: アカデミー賞（eiga.com 5ページ）+ 日本アカデミー賞7部門（OpenAI最大21回）
+ * - 5月: カンヌ映画祭 8部門（OpenAI最大24回）
  * maxDuration=300秒の範囲内で処理完了する想定
  */
 export async function executeSyncAwardMoviesCron(
@@ -99,63 +101,18 @@ export async function executeSyncAwardMoviesCron(
 
   for (const [awardName, awardDef] of targetAwards) {
     try {
-      const allAiItems: OpenAiAwardItem[] = [];
-      const maxRetries = 3;
+      let allAiItems: OpenAiAwardItem[];
 
-      // Wikipedia記事を取得（賞ごとに1回）
-      const wikipediaTitle = buildWikipediaTitle(currentYear, awardDef);
-      const articleText = await fetchWikipediaArticle(wikipediaTitle);
-
-      if (!articleText) {
-        console.warn(
-          `Wikipedia article not found for ${awardName}: "${wikipediaTitle}"`,
+      if (awardName === 'academy_awards') {
+        // アカデミー賞: eiga.com から正規表現で抽出（ハルシネーションなし）
+        allAiItems = await fetchEigaOscarAwards(currentYear);
+      } else {
+        // その他の賞: Wikipedia + OpenAI で構造化
+        allAiItems = await fetchAwardItemsViaWikipedia(
+          awardName,
+          awardDef,
+          currentYear,
         );
-        skippedAwards.push(awardName);
-        continue;
-      }
-
-      // wikitextから映画タイトル候補を事前抽出（ハルシネーション防止用）
-      const validTitles = extractMovieTitlesFromWikitext(articleText);
-
-      // 部門ごとに個別にOpenAIで構造化
-      for (const category of awardDef.categories) {
-        let categoryItems: Awaited<ReturnType<typeof fetchAwardsFromOpenAI>> =
-          null;
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-          categoryItems = await fetchAwardsFromOpenAI(
-            currentYear,
-            awardDef.label,
-            category,
-            articleText,
-          );
-          if (categoryItems && categoryItems.length > 0) break;
-          console.warn(
-            `No AI results for ${awardName}/${category.key} ${currentYear} (attempt ${attempt}/${maxRetries})`,
-          );
-        }
-
-        if (categoryItems && categoryItems.length > 0) {
-          // wikitextに存在しないタイトルを除外（ハルシネーション防止）
-          const verified = categoryItems.filter((item) => {
-            if (validTitles.has(item.title_ja)) return true;
-            console.warn(
-              `Hallucination detected: "${item.title_ja}" not found in wikitext, skipping`,
-            );
-            return false;
-          });
-          // yearが授賞式年から大きく外れている場合は補正
-          const corrected = verified.map((item) => {
-            if (Math.abs(item.year - currentYear) > 2) {
-              console.warn(
-                `Year corrected: "${item.title_ja}" year=${item.year} → ${currentYear - 1}`,
-              );
-              return { ...item, year: currentYear - 1 };
-            }
-            return item;
-          });
-          allAiItems.push(...corrected);
-        }
       }
 
       if (allAiItems.length === 0) {
@@ -236,4 +193,68 @@ export async function executeSyncAwardMoviesCron(
       total_upserted: totalUpserted,
     },
   };
+}
+
+/**
+ * Wikipedia + OpenAI で受賞作品データを取得
+ * アカデミー賞以外の賞で使用
+ */
+async function fetchAwardItemsViaWikipedia(
+  awardName: string,
+  awardDef: (typeof AWARD_DEFINITIONS)[AwardName],
+  currentYear: number,
+): Promise<OpenAiAwardItem[]> {
+  const allAiItems: OpenAiAwardItem[] = [];
+  const maxRetries = 3;
+
+  const wikipediaTitle = buildWikipediaTitle(currentYear, awardDef);
+  const articleText = await fetchWikipediaArticle(wikipediaTitle);
+
+  if (!articleText) {
+    console.warn(
+      `Wikipedia article not found for ${awardName}: "${wikipediaTitle}"`,
+    );
+    return [];
+  }
+
+  const validTitles = extractMovieTitlesFromWikitext(articleText);
+
+  for (const category of awardDef.categories) {
+    let categoryItems: Awaited<ReturnType<typeof fetchAwardsFromOpenAI>> = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      categoryItems = await fetchAwardsFromOpenAI(
+        currentYear,
+        awardDef.label,
+        category,
+        articleText,
+      );
+      if (categoryItems && categoryItems.length > 0) break;
+      console.warn(
+        `No AI results for ${awardName}/${category.key} ${currentYear} (attempt ${attempt}/${maxRetries})`,
+      );
+    }
+
+    if (categoryItems && categoryItems.length > 0) {
+      const verified = categoryItems.filter((item) => {
+        if (validTitles.has(item.title_ja)) return true;
+        console.warn(
+          `Hallucination detected: "${item.title_ja}" not found in wikitext, skipping`,
+        );
+        return false;
+      });
+      const corrected = verified.map((item) => {
+        if (Math.abs(item.year - currentYear) > 2) {
+          console.warn(
+            `Year corrected: "${item.title_ja}" year=${item.year} → ${currentYear - 1}`,
+          );
+          return { ...item, year: currentYear - 1 };
+        }
+        return item;
+      });
+      allAiItems.push(...corrected);
+    }
+  }
+
+  return allAiItems;
 }

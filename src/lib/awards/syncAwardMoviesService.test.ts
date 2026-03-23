@@ -33,6 +33,12 @@ jest.mock('@/lib/wikipedia/fetchArticle', () => ({
     mockFetchWikipediaArticle(...args),
 }));
 
+const mockFetchEigaOscarAwards = jest.fn();
+jest.mock('@/lib/eiga/fetchEigaOscarAwards', () => ({
+  fetchEigaOscarAwards: (...args: unknown[]) =>
+    mockFetchEigaOscarAwards(...args),
+}));
+
 import {
   getAwardsForMonth,
   executeSyncAwardMoviesCron,
@@ -104,6 +110,8 @@ describe('executeSyncAwardMoviesCron', () => {
     mockExtractMovieTitlesFromWikitext.mockReturnValue(
       new Set(['テスト映画', 'テスト']),
     );
+    // デフォルトでeiga.comが空配列を返す状態
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -218,11 +226,10 @@ describe('executeSyncAwardMoviesCron', () => {
     // 3月に設定（アカデミー賞 + 日本アカデミー賞）
     jest.setSystemTime(new Date('2026-03-15T00:00:00Z'));
 
-    // 最初の賞（academy_awards）のWikipedia記事取得を失敗させる
-    // 2番目の賞（japan_academy_awards）は正常に処理
-    mockFetchWikipediaArticle
-      .mockResolvedValueOnce(null) // academy_awards: Wikipedia取得失敗→skip
-      .mockResolvedValueOnce('== テスト記事 =='); // japan_academy_awards: 正常
+    // academy_awards: eiga.comが空配列（スキップ）
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    // japan_academy_awards: Wikipedia正常
+    mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
 
     mockFetchAwardsFromOpenAI.mockResolvedValue([
       {
@@ -243,6 +250,46 @@ describe('executeSyncAwardMoviesCron', () => {
       expect(result.data.skipped_awards.length).toBe(1);
       expect(result.data.synced_awards.length).toBe(1);
     }
+  });
+
+  it('アカデミー賞はeiga.comからデータを取得する', async () => {
+    jest.setSystemTime(new Date('2026-03-15T00:00:00Z'));
+
+    // eiga.comが受賞作品を返す
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'テスト映画',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2025,
+      },
+    ]);
+    // japan_academy_awardsもOpenAI経由で正常
+    mockFetchAwardsFromOpenAI.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test Movie',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2025,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+
+    const supabase = createMockSupabase();
+    const result = await executeSyncAwardMoviesCron(supabase);
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.data.synced_awards).toContain('academy_awards');
+      expect(result.data.synced_awards).toContain('japan_academy_awards');
+    }
+    // eiga.comが呼ばれたことを確認
+    expect(mockFetchEigaOscarAwards).toHaveBeenCalledWith(2026);
+    // アカデミー賞ではWikipediaが呼ばれない
+    // japan_academy_awardsではWikipediaが呼ばれる
+    expect(mockFetchWikipediaArticle).toHaveBeenCalledTimes(1);
   });
 
   it('wikitextに存在しないタイトルはハルシネーションとして除外する', async () => {

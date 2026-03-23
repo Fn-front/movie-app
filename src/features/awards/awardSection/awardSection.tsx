@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
@@ -36,8 +36,31 @@ export const AwardSection = memo<AwardSectionProps>(function AwardSection({
   onFavoriteToggle,
   isFavoriteProcessing,
 }) {
+  const handleCategoryClick = useCallback(
+    (categoryKey: string) => {
+      const element = document.getElementById(`category-${categoryKey}`);
+      element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+    [],
+  );
+
   return (
     <section className={styles.c_award_section} aria-label={award.label}>
+      <nav
+        className={styles.c_award_section__nav}
+        aria-label={`${award.label}カテゴリナビゲーション`}
+      >
+        {award.categories.map((category) => (
+          <button
+            key={category.category}
+            type='button'
+            className={styles.c_award_section__nav_button}
+            onClick={() => handleCategoryClick(category.category)}
+          >
+            {category.label}
+          </button>
+        ))}
+      </nav>
       <h2 className={styles.c_award_section__title}>{award.label}</h2>
       <div className={styles.c_award_section__categories}>
         {award.categories.map((category) => (

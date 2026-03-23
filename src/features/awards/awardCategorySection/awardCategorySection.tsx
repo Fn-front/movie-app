@@ -67,7 +67,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
     }, [category.nominees]);
 
     return (
-      <div className={styles.c_award_category}>
+      <div id={`category-${category.category}`} className={styles.c_award_category}>
         <h3 className={styles.c_award_category__title}>{category.label}</h3>
 
         {winnerCacheItem && (

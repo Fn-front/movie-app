@@ -233,7 +233,7 @@ describe('AwardsPage', () => {
     render(<AwardsPage />);
 
     expect(screen.getByText('アカデミー賞')).toBeInTheDocument();
-    expect(screen.getByText('作品賞')).toBeInTheDocument();
+    expect(screen.getAllByText('作品賞').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('受賞映画')).toBeInTheDocument();
     expect(screen.getByText('ノミネート映画')).toBeInTheDocument();
   });

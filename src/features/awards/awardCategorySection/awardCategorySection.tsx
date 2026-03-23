@@ -17,6 +17,7 @@ import styles from './awardCategorySection.module.scss';
 
 export interface AwardCategorySectionProps {
   category: AwardCategoryData;
+  awardName: string;
   onMovieClick: (movieId: number) => void;
   isInWatchlist: (tmdbMovieId: number) => boolean;
   onWatchlistToggle: (movie: MovieCacheItem) => void;
@@ -31,6 +32,7 @@ export interface AwardCategorySectionProps {
 export const AwardCategorySection = memo<AwardCategorySectionProps>(
   function AwardCategorySection({
     category,
+    awardName,
     onMovieClick,
     isInWatchlist,
     onWatchlistToggle,
@@ -67,7 +69,10 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
     }, [category.nominees]);
 
     return (
-      <div className={styles.c_award_category}>
+      <div
+        id={`category-${awardName}-${category.category}`}
+        className={styles.c_award_category}
+      >
         <h3 className={styles.c_award_category__title}>{category.label}</h3>
 
         {winnerCacheItem && (

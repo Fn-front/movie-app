@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { AwardSection } from './awardSection';
 import type { AwardData } from '@/features/awards/types';
@@ -10,10 +11,17 @@ jest.mock(
   () => ({
     AwardCategorySection: ({
       category,
+      awardName,
     }: {
       category: { category: string; label: string };
+      awardName: string;
     }) => (
-      <div data-testid={`category-${category.category}`}>{category.label}</div>
+      <div
+        data-testid={`category-${category.category}`}
+        id={`category-${awardName}-${category.category}`}
+      >
+        {category.label}
+      </div>
     ),
   }),
 );
@@ -94,5 +102,39 @@ describe('AwardSection', () => {
     expect(
       screen.queryByTestId('category-best_picture'),
     ).not.toBeInTheDocument();
+  });
+
+  it('カテゴリナビゲーションが表示される', () => {
+    const award = createMockAward();
+
+    render(<AwardSection award={award} {...defaultProps} />);
+
+    const nav = screen.getByRole('navigation', {
+      name: 'アカデミー賞カテゴリナビゲーション',
+    });
+    expect(nav).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '作品賞' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '監督賞' })).toBeInTheDocument();
+  });
+
+  it('ナビゲーションボタンをクリックするとscrollIntoViewが呼ばれる', async () => {
+    const user = userEvent.setup();
+    const award = createMockAward();
+    const mockScrollIntoView = jest.fn();
+
+    render(<AwardSection award={award} {...defaultProps} />);
+
+    const targetElement = document.getElementById(
+      'category-academy_awards-best_director',
+    );
+    expect(targetElement).not.toBeNull();
+    targetElement!.scrollIntoView = mockScrollIntoView;
+
+    await user.click(screen.getByRole('button', { name: '監督賞' }));
+
+    expect(mockScrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'start',
+    });
   });
 });

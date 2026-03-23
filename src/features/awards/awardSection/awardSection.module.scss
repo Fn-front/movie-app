@@ -1,9 +1,46 @@
 @use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
 
 .c_award_section {
   display: flex;
   flex-direction: column;
   gap: $spacing-6;
+
+  &__nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-2;
+  }
+
+  &__nav_button {
+    display: inline-flex;
+    align-items: center;
+    gap: $spacing-1;
+    padding: $spacing-2 $spacing-3;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-bold;
+    color: $primary-700;
+    background-color: $background-paper;
+    border: $border-width-1 solid $primary-300;
+    border-radius: $border-radius-full;
+    cursor: pointer;
+    box-shadow: $shadow-sm;
+    transition:
+      background-color $transition-duration-base,
+      box-shadow $transition-duration-base;
+
+    &::after {
+      content: '↓';
+      font-size: $font-size-2xs;
+    }
+
+    &:hover {
+      background-color: $primary-50;
+      box-shadow: $shadow-md;
+    }
+
+    @include focus-visible;
+  }
 
   &__title {
     margin: 0;

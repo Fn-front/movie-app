@@ -6,11 +6,16 @@
  * eiga.com アカデミー賞データ取得テスト
  */
 
+import axios from 'axios';
+
 import {
+  fetchEigaOscarAwards,
   extractBestPictureNominees,
   extractPersonCategoryNominees,
   extractOthersPageNominees,
 } from './fetchEigaOscarAwards';
+
+jest.mock('axios');
 
 describe('extractBestPictureNominees', () => {
   it('作品賞ページから受賞作品とノミネート作品を抽出する', () => {
@@ -76,7 +81,7 @@ describe('extractBestPictureNominees', () => {
     expect(result[0].title).toBe('受賞作品');
   });
 
-  it('HTMLエンティティをデコードする', () => {
+  it('数値参照HTMLエンティティをデコードする', () => {
     const html = `
       <div class="nominate_ctb">
         <div class="contents_box_half float_r">
@@ -93,6 +98,25 @@ describe('extractBestPictureNominees', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].title).toBe("If I Had Legs I'd Kick You");
+  });
+
+  it('16進数参照HTMLエンティティをデコードする', () => {
+    const html = `
+      <div class="nominate_ctb">
+        <div class="contents_box_half float_r">
+          <div class="movie_title">
+            <h5 class="h5_link">
+              <a href="/movie/100001/"><i class="fa fa-caret-right">&nbsp;</i>Test&#x26;Movie</a>
+            </h5>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const result = extractBestPictureNominees(html);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe('Test&Movie');
   });
 
   it('映画「...」ラッピングを除去する', () => {
@@ -260,5 +284,139 @@ describe('extractOthersPageNominees', () => {
     expect(result).toHaveLength(2);
     expect(result[0].section).toBe('助演男優賞');
     expect(result[1].section).toBe('脚本賞');
+  });
+});
+
+describe('fetchEigaOscarAwards', () => {
+  const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  /** 作品賞ページ用HTML */
+  const bestPictureHtml = `
+    <div class="nominate_ctb winner">
+      <div class="contents_box_half float_r">
+        <div class="movie_title">
+          <h5 class="h5_link">
+            <a href="/movie/1/">受賞作品</a>
+          </h5>
+        </div>
+      </div>
+    </div>
+  `;
+
+  /** 演技賞ページ用HTML */
+  const personPageHtml = `
+    <div class="nominate_ctb winner">
+      <div class="movie_title">
+        <h5 class="h5_link"><a href="/person/1/">テスト俳優</a></h5>
+        <p class="h5_link_sub">「<a href="/movie/2/">テスト映画</a>」</p>
+      </div>
+    </div>
+  `;
+
+  /** all-othersページ用HTML */
+  const othersPageHtml = `
+    <h4 class="underline"><span>助演男優賞</span></h4>
+    <div class="nominate_ctb winner">
+      <div class="movie_title">
+        <h5 class="h5_link"><a href="/person/3/">助演俳優</a></h5>
+        <p class="h5_link_sub">「<a href="/movie/3/">助演映画</a>」</p>
+      </div>
+    </div>
+  `;
+
+  it('全ページからデータを取得してOpenAiAwardItem形式で返す', async () => {
+    mockedAxios.get
+      .mockResolvedValueOnce({ data: bestPictureHtml }) // all.html
+      .mockResolvedValueOnce({ data: personPageHtml }) // all-director.html
+      .mockResolvedValueOnce({ data: personPageHtml }) // all-actor.html
+      .mockResolvedValueOnce({ data: personPageHtml }) // all-actress.html
+      .mockResolvedValueOnce({ data: othersPageHtml }); // all-others.html
+
+    const result = await fetchEigaOscarAwards(2026);
+
+    expect(result.length).toBeGreaterThan(0);
+    // 作品賞
+    const bestPicture = result.find((r) => r.category === 'best_picture');
+    expect(bestPicture).toBeDefined();
+    expect(bestPicture!.title_ja).toBe('受賞作品');
+    expect(bestPicture!.is_winner).toBe(true);
+    expect(bestPicture!.year).toBe(2025);
+    // 監督賞
+    const bestDirector = result.find((r) => r.category === 'best_director');
+    expect(bestDirector).toBeDefined();
+    expect(bestDirector!.person_name).toBe('テスト俳優');
+    // 助演男優賞
+    const supportingActor = result.find(
+      (r) => r.category === 'best_supporting_actor',
+    );
+    expect(supportingActor).toBeDefined();
+    expect(supportingActor!.title_ja).toBe('助演映画');
+  });
+
+  it('ページ取得失敗時はそのページをスキップして他のページを処理する', async () => {
+    mockedAxios.get
+      .mockRejectedValueOnce(new Error('Network error')) // all.html 失敗
+      .mockResolvedValueOnce({ data: personPageHtml }) // all-director.html
+      .mockResolvedValueOnce({ data: personPageHtml }) // all-actor.html
+      .mockResolvedValueOnce({ data: personPageHtml }) // all-actress.html
+      .mockResolvedValueOnce({ data: othersPageHtml }); // all-others.html
+
+    const result = await fetchEigaOscarAwards(2026);
+
+    // 作品賞はスキップされるが他の部門は取得できる
+    const bestPicture = result.find((r) => r.category === 'best_picture');
+    expect(bestPicture).toBeUndefined();
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('全ページ取得失敗時は空配列を返す', async () => {
+    mockedAxios.get.mockRejectedValue(new Error('Network error'));
+
+    const result = await fetchEigaOscarAwards(2026);
+
+    expect(result).toEqual([]);
+  });
+
+  it('all-othersページで対象外セクションのノミネートはスキップされる', async () => {
+    const othersWithUnknownSection = `
+      <h4 class="underline"><span>脚本賞</span></h4>
+      <div class="nominate_ctb winner">
+        <div class="movie_title">
+          <h5 class="h5_link"><a href="/person/1/">脚本家</a></h5>
+          <p class="h5_link_sub">「<a href="/movie/1/">脚本映画</a>」</p>
+        </div>
+      </div>
+    `;
+
+    mockedAxios.get
+      .mockResolvedValueOnce({ data: '' }) // all.html
+      .mockResolvedValueOnce({ data: '' }) // all-director.html
+      .mockResolvedValueOnce({ data: '' }) // all-actor.html
+      .mockResolvedValueOnce({ data: '' }) // all-actress.html
+      .mockResolvedValueOnce({ data: othersWithUnknownSection }); // all-others.html
+
+    const result = await fetchEigaOscarAwards(2026);
+
+    // 脚本賞はSECTION_TO_CATEGORYに含まれないためスキップ
+    expect(result).toEqual([]);
+  });
+
+  it('正しいURLパターンでリクエストする', async () => {
+    mockedAxios.get.mockResolvedValue({ data: '' });
+
+    await fetchEigaOscarAwards(2025);
+
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      'https://eiga.com/official/oscar/2025/all.html',
+      expect.anything(),
+    );
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      'https://eiga.com/official/oscar/2025/all-others.html',
+      expect.anything(),
+    );
   });
 });

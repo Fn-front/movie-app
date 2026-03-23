@@ -8,6 +8,12 @@
 
 const WIKIPEDIA_API_BASE = 'https://ja.wikipedia.org/w/api.php';
 
+const WIKIPEDIA_FETCH_OPTIONS: RequestInit = {
+  headers: {
+    'User-Agent': 'MovieApp/1.0 (https://github.com/Fn-front/movie-app)',
+  },
+};
+
 /**
  * Wikipedia記事の「受賞とノミネート」セクションをwikitext形式で取得
  *
@@ -45,7 +51,10 @@ async function findAwardSectionIndex(title: string): Promise<number | null> {
     format: 'json',
   });
 
-  const response = await fetch(`${WIKIPEDIA_API_BASE}?${params.toString()}`);
+  const response = await fetch(
+    `${WIKIPEDIA_API_BASE}?${params.toString()}`,
+    WIKIPEDIA_FETCH_OPTIONS,
+  );
   if (!response.ok) return null;
 
   const data = await response.json();
@@ -77,7 +86,10 @@ async function fetchWikitextSection(
     format: 'json',
   });
 
-  const response = await fetch(`${WIKIPEDIA_API_BASE}?${params.toString()}`);
+  const response = await fetch(
+    `${WIKIPEDIA_API_BASE}?${params.toString()}`,
+    WIKIPEDIA_FETCH_OPTIONS,
+  );
   if (!response.ok) return null;
 
   const data = await response.json();
@@ -98,7 +110,10 @@ async function fetchFullWikitext(title: string): Promise<string | null> {
     format: 'json',
   });
 
-  const response = await fetch(`${WIKIPEDIA_API_BASE}?${params.toString()}`);
+  const response = await fetch(
+    `${WIKIPEDIA_API_BASE}?${params.toString()}`,
+    WIKIPEDIA_FETCH_OPTIONS,
+  );
   if (!response.ok) {
     console.error(`Wikipedia API error: ${response.status}`);
     return null;

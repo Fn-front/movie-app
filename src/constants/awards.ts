@@ -70,7 +70,7 @@ export const AWARD_DEFINITIONS = {
     label: 'カンヌ映画祭',
     month: 5,
     wikipediaTemplate: '{year}年のカンヌ国際映画祭',
-    firstEditionYear: 0,
+    firstEditionYear: 0, // 年ベーステンプレートのため回数計算不要
     categories: [
       { key: 'palme_dor', label: 'パルムドール' },
       { key: 'grand_prix', label: 'グランプリ' },

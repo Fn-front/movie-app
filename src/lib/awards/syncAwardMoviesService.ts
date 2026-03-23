@@ -11,6 +11,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { AWARD_DEFINITIONS, type AwardName } from '@/constants/awards';
+import type { OpenAiAwardItem } from '@/schema/awards';
 import {
   buildWikipediaTitle,
   fetchAwardsFromOpenAI,
@@ -63,6 +64,12 @@ export function getAwardsForMonth(
 
 /**
  * 受賞作品同期CRONのメイン処理
+ *
+ * API呼び出し回数の目安（部門ごとにOpenAI 1回、リトライ最大3回）:
+ * - 1月: ゴールデングローブ賞 9部門 → 最大27回
+ * - 3月: アカデミー賞6部門 + 日本アカデミー賞7部門 → 最大39回
+ * - 5月: カンヌ映画祭 8部門 → 最大24回
+ * maxDuration=300秒の範囲内で処理完了する想定
  */
 export async function executeSyncAwardMoviesCron(
   supabase: SupabaseClient,
@@ -91,7 +98,7 @@ export async function executeSyncAwardMoviesCron(
 
   for (const [awardName, awardDef] of targetAwards) {
     try {
-      const allAiItems: Awaited<ReturnType<typeof fetchAwardsFromOpenAI>> = [];
+      const allAiItems: OpenAiAwardItem[] = [];
       const maxRetries = 3;
 
       // Wikipedia記事を取得（賞ごとに1回）

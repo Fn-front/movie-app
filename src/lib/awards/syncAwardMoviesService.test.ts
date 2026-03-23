@@ -15,6 +15,7 @@ const mockResolveAwardsWithTMDb = jest.fn();
 const mockBuildWikipediaTitle = jest
   .fn<string, [unknown, unknown]>()
   .mockReturnValue('第26回テスト賞');
+const mockExtractMovieTitlesFromWikitext = jest.fn<Set<string>, [string]>();
 jest.mock('@/lib/openai/generateAwardMovies', () => ({
   fetchAwardsFromOpenAI: (...args: unknown[]) =>
     mockFetchAwardsFromOpenAI(...args),
@@ -22,6 +23,8 @@ jest.mock('@/lib/openai/generateAwardMovies', () => ({
     mockResolveAwardsWithTMDb(...args),
   buildWikipediaTitle: (a: unknown, b: unknown) =>
     mockBuildWikipediaTitle(a, b),
+  extractMovieTitlesFromWikitext: (text: string) =>
+    mockExtractMovieTitlesFromWikitext(text),
 }));
 
 const mockFetchWikipediaArticle = jest.fn();
@@ -97,6 +100,10 @@ describe('executeSyncAwardMoviesCron', () => {
     jest.useFakeTimers();
     // デフォルトでWikipedia記事が取得できる状態
     mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
+    // デフォルトですべてのタイトルを許可
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(
+      new Set(['テスト映画', 'テスト']),
+    );
   });
 
   afterEach(() => {
@@ -236,5 +243,41 @@ describe('executeSyncAwardMoviesCron', () => {
       expect(result.data.skipped_awards.length).toBe(1);
       expect(result.data.synced_awards.length).toBe(1);
     }
+  });
+
+  it('wikitextに存在しないタイトルはハルシネーションとして除外する', async () => {
+    jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
+
+    // wikitextには「テスト映画」のみ存在
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
+
+    // 最初の部門のみ正常+ハルシネーションを返し、残りはnull
+    mockFetchAwardsFromOpenAI
+      .mockResolvedValueOnce([
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test Movie',
+          category: 'best_drama',
+          is_winner: true,
+          year: 2025,
+        },
+        {
+          title_ja: 'ハルシネーション映画',
+          title_en: 'Hallucinated Movie',
+          category: 'best_drama',
+          is_winner: false,
+          year: 2025,
+        },
+      ])
+      .mockResolvedValue(null);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+
+    const supabase = createMockSupabase();
+    await executeSyncAwardMoviesCron(supabase);
+
+    // resolveAwardsWithTMDbに渡されるアイテムからハルシネーションが除外されている
+    const resolveCallArgs = mockResolveAwardsWithTMDb.mock.calls[0][0];
+    expect(resolveCallArgs).toHaveLength(1);
+    expect(resolveCallArgs[0].title_ja).toBe('テスト映画');
   });
 });

@@ -17,6 +17,59 @@ import {
 
 import { createOpenAIClient, getOpenAIModel } from './client';
 
+/**
+ * wikitextから映画タイトル候補を抽出する
+ * 『』で囲まれたテキストおよび * / ** 行の[[]]リンクから表示テキストを取得
+ */
+export function extractMovieTitlesFromWikitext(wikitext: string): Set<string> {
+  const titles = new Set<string>();
+
+  // パターン1: 『...』で囲まれたタイトル
+  const bracketMatches = wikitext.matchAll(/『([^』]+)』/g);
+  for (const match of bracketMatches) {
+    titles.add(resolveWikitextToDisplayText(match[1]));
+  }
+
+  // パターン2: * / ** 行の直接リンク（作品賞など『』なしのケース）
+  const lines = wikitext.split('\n');
+  for (const line of lines) {
+    if (!line.match(/^\*{1,2}\s/)) continue;
+    const linkMatches = line.matchAll(/\[\[([^\]]+)\]\]/g);
+    for (const linkMatch of linkMatches) {
+      const displayText = resolveWikitextLink(linkMatch[1]);
+      // 部門名リンク（賞名）を除外
+      if (!displayText.includes('賞')) {
+        titles.add(displayText);
+      }
+    }
+  }
+
+  return titles;
+}
+
+/** wikitext内のマークアップを解決して表示テキストを取得 */
+function resolveWikitextToDisplayText(raw: string): string {
+  // '''太字'''を除去
+  let text = raw.replace(/'''/g, '');
+  // [[link|display]] → display, [[link]] → link
+  text = text.replace(/\[\[([^\]]+)\]\]/g, (_, content) =>
+    resolveWikitextLink(content),
+  );
+  return text.trim();
+}
+
+/** [[link|display]] → display, [[link#section|display]] → display */
+function resolveWikitextLink(content: string): string {
+  if (content.includes('|')) {
+    return content.split('|').pop()!;
+  }
+  // セクションリンク [[title#section]] → title
+  if (content.includes('#')) {
+    return content.split('#')[0];
+  }
+  return content;
+}
+
 /** TMDb検索で解決済みの受賞作品情報 */
 export interface ResolvedAwardMovie {
   tmdb_movie_id: number;

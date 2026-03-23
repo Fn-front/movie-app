@@ -14,6 +14,7 @@ import { AWARD_DEFINITIONS, type AwardName } from '@/constants/awards';
 import type { OpenAiAwardItem } from '@/schema/awards';
 import {
   buildWikipediaTitle,
+  extractMovieTitlesFromWikitext,
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
 } from '@/lib/openai/generateAwardMovies';
@@ -113,6 +114,9 @@ export async function executeSyncAwardMoviesCron(
         continue;
       }
 
+      // wikitextから映画タイトル候補を事前抽出（ハルシネーション防止用）
+      const validTitles = extractMovieTitlesFromWikitext(articleText);
+
       // 部門ごとに個別にOpenAIで構造化
       for (const category of awardDef.categories) {
         let categoryItems: Awaited<ReturnType<typeof fetchAwardsFromOpenAI>> =
@@ -132,7 +136,15 @@ export async function executeSyncAwardMoviesCron(
         }
 
         if (categoryItems && categoryItems.length > 0) {
-          allAiItems.push(...categoryItems);
+          // wikitextに存在しないタイトルを除外（ハルシネーション防止）
+          const verified = categoryItems.filter((item) => {
+            if (validTitles.has(item.title_ja)) return true;
+            console.warn(
+              `Hallucination detected: "${item.title_ja}" not found in wikitext, skipping`,
+            );
+            return false;
+          });
+          allAiItems.push(...verified);
         }
       }
 

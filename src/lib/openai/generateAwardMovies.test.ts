@@ -27,6 +27,7 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
 import {
   buildUserPrompt,
   buildWikipediaTitle,
+  extractMovieTitlesFromWikitext,
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
 } from './generateAwardMovies';
@@ -84,6 +85,50 @@ describe('buildWikipediaTitle', () => {
     };
     const title = buildWikipediaTitle(2026, def);
     expect(title).toBe('2026年のテスト映画祭');
+  });
+});
+
+describe('extractMovieTitlesFromWikitext', () => {
+  it('『』で囲まれたタイトルを抽出する', () => {
+    const wikitext =
+      "* '''[[吉沢亮]]''' - 『'''[[国宝 (映画)|国宝]]'''』\n** [[山田裕貴]] - 『[[爆弾 (小説)#映画|爆弾]]』";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('国宝')).toBe(true);
+    expect(titles.has('爆弾')).toBe(true);
+  });
+
+  it('[[]]リンクのみの行（作品賞形式）からタイトルを抽出する', () => {
+    const wikitext =
+      "* '''[[国宝 (映画)|国宝]]'''\n** [[宝島 (真藤順丈の小説)#映画|宝島]]\n** [[ファーストキス 1ST KISS]]";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('国宝')).toBe(true);
+    expect(titles.has('宝島')).toBe(true);
+    expect(titles.has('ファーストキス 1ST KISS')).toBe(true);
+  });
+
+  it('賞名リンクは除外する', () => {
+    const wikitext =
+      "{{Award category|#eedd82|[[日本アカデミー賞主演男優賞|主演男優賞]]}}\n* '''[[吉沢亮]]''' - 『[[国宝 (映画)|国宝]]』";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('主演男優賞')).toBe(false);
+    expect(titles.has('国宝')).toBe(true);
+  });
+
+  it('太字マークアップを除去してタイトルを抽出する', () => {
+    const wikitext = "* 『'''[[TOKYOタクシー]]'''』";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('TOKYOタクシー')).toBe(true);
+  });
+
+  it('セクションリンク付きのタイトルを正しく解決する', () => {
+    const wikitext = '** [[秒速5センチメートル#実写映画|秒速5センチメートル]]';
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('秒速5センチメートル')).toBe(true);
+  });
+
+  it('空のwikitextでは空のSetを返す', () => {
+    const titles = extractMovieTitlesFromWikitext('');
+    expect(titles.size).toBe(0);
   });
 });
 

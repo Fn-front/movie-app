@@ -47,13 +47,14 @@ export function extractMovieTitlesFromWikitext(wikitext: string): Set<string> {
   }
 
   // パターン3: * / ** 行の直接リンク（作品賞など『』なしのケース）
+  // 『』を含む行は演技賞形式（人名 - 『映画』）なので、パターン1で取得済み。スキップする
   const lines = wikitext.split('\n');
   for (const line of lines) {
     if (!line.match(/^\*{1,2}\s/)) continue;
+    if (line.includes('『')) continue;
     const linkMatches = line.matchAll(/\[\[([^\]]+)\]\]/g);
     for (const linkMatch of linkMatches) {
       const displayText = resolveWikitextLink(linkMatch[1]);
-      // 部門名リンク（賞名）を除外
       if (!displayText.includes('賞')) {
         titles.add(displayText);
       }

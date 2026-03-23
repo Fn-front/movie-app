@@ -27,14 +27,21 @@ jest.mock('@/lib/awards/syncAwardMoviesService', () => ({
 
 // --- Helpers ---
 
-const createRequest = (authHeader?: string) => {
+const createRequest = (
+  authHeader?: string,
+  params?: Record<string, string>,
+) => {
+  const url = new URL('http://localhost/api/cron/sync-award-movies');
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
+  }
   const headers = new Headers();
   if (authHeader) {
     headers.set('authorization', authHeader);
   }
-  return new NextRequest('http://localhost/api/cron/sync-award-movies', {
-    headers,
-  });
+  return new NextRequest(url, { headers });
 };
 
 // --- Tests ---
@@ -121,6 +128,51 @@ describe('GET /api/cron/sync-award-movies', () => {
 
     expect(response.status).toBe(500);
     expect(json.success).toBe(false);
+  });
+
+  it('yearパラメータが不正な場合400を返す', async () => {
+    const response = await GET(
+      createRequest('Bearer test-secret', { year: 'abc' }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+  });
+
+  it('yearパラメータが範囲外の場合400を返す', async () => {
+    const response = await GET(
+      createRequest('Bearer test-secret', { year: '1800' }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+  });
+
+  it('yearパラメータ指定時はtargetYearとして渡される', async () => {
+    mockExecuteSyncAwardMoviesCron.mockResolvedValue({
+      type: 'success',
+      data: {
+        year: 2025,
+        month: null,
+        synced_awards: ['academy_awards'],
+        skipped_awards: [],
+        total_upserted: 5,
+      },
+    });
+
+    const response = await GET(
+      createRequest('Bearer test-secret', { year: '2025' }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(mockExecuteSyncAwardMoviesCron).toHaveBeenCalledWith(
+      expect.anything(),
+      2025,
+    );
   });
 
   it('例外発生時は500を返す', async () => {

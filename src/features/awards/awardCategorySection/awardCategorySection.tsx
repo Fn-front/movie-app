@@ -56,6 +56,16 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
       [category.nominees, category.winner],
     );
 
+    const personNameMap = useMemo(() => {
+      const map = new Map<number, string>();
+      for (const nominee of category.nominees) {
+        if (nominee.personName) {
+          map.set(nominee.tmdbMovieId, nominee.personName);
+        }
+      }
+      return map;
+    }, [category.nominees]);
+
     return (
       <div className={styles.c_award_category}>
         <h3 className={styles.c_award_category__title}>{category.label}</h3>
@@ -73,6 +83,11 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                 onFavoriteToggle={onFavoriteToggle}
                 favoriteDisabled={isFavoriteProcessing(winnerCacheItem.id)}
               />
+              {personNameMap.get(winnerCacheItem.id) && (
+                <p className={styles.c_award_category__person_name}>
+                  {personNameMap.get(winnerCacheItem.id)}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -98,6 +113,11 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                     onFavoriteToggle={onFavoriteToggle}
                     favoriteDisabled={isFavoriteProcessing(movie.id)}
                   />
+                  {personNameMap.get(movie.id) && (
+                    <p className={styles.c_award_category__person_name}>
+                      {personNameMap.get(movie.id)}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

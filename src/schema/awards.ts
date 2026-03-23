@@ -13,13 +13,14 @@ export const openAiAwardItemSchema = z.object({
   category: z.string().min(1, '部門キーは必須です'),
   is_winner: z.boolean(),
   year: z.number().int().min(1900).max(2100),
+  person_name: z.string().optional(),
 });
 
 /**
  * OpenAIレスポンス全体スキーマ
  */
 export const openAiAwardsResponseSchema = z.object({
-  awards: z.array(openAiAwardItemSchema).min(1, '受賞作品は1件以上必要です'),
+  awards: z.array(openAiAwardItemSchema),
 });
 
 /**

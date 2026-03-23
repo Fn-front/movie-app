@@ -185,6 +185,7 @@ describe('awardMovieToMovieCacheItem', () => {
     releaseDate: '2025-12-01',
     voteAverage: 8.5,
     genreIds: [18, 36],
+    personName: null,
   };
 
   it('AwardMovieをMovieCacheItemに正しく変換する', () => {

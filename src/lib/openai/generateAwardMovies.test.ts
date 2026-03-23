@@ -26,6 +26,8 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
 
 import {
   buildUserPrompt,
+  buildWikipediaTitle,
+  extractMovieTitlesFromWikitext,
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
 } from './generateAwardMovies';
@@ -35,6 +37,8 @@ import {
 const testAwardDefinition: AwardDefinition = {
   label: 'テスト賞',
   month: 3,
+  wikipediaTemplate: '第{edition}回テスト賞',
+  firstEditionYear: 2000,
   categories: [
     { key: 'best_picture', label: '作品賞' },
     { key: 'best_director', label: '監督賞' },
@@ -67,29 +71,124 @@ function createMockResponseOutput(content: string) {
 
 // --- Tests ---
 
+describe('buildWikipediaTitle', () => {
+  it('回数ベースのテンプレートからタイトルを生成する', () => {
+    const title = buildWikipediaTitle(2026, testAwardDefinition);
+    expect(title).toBe('第26回テスト賞');
+  });
+
+  it('年ベースのテンプレートからタイトルを生成する', () => {
+    const def: AwardDefinition = {
+      ...testAwardDefinition,
+      wikipediaTemplate: '{year}年のテスト映画祭',
+      firstEditionYear: 0,
+    };
+    const title = buildWikipediaTitle(2026, def);
+    expect(title).toBe('2026年のテスト映画祭');
+  });
+});
+
+describe('extractMovieTitlesFromWikitext', () => {
+  it('『』で囲まれたタイトルを抽出する', () => {
+    const wikitext =
+      "* '''[[吉沢亮]]''' - 『'''[[国宝 (映画)|国宝]]'''』\n** [[山田裕貴]] - 『[[爆弾 (小説)#映画|爆弾]]』";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('国宝')).toBe(true);
+    expect(titles.has('爆弾')).toBe(true);
+  });
+
+  it('[[]]リンクのみの行（作品賞形式）からタイトルを抽出する', () => {
+    const wikitext =
+      "* '''[[国宝 (映画)|国宝]]'''\n** [[宝島 (真藤順丈の小説)#映画|宝島]]\n** [[ファーストキス 1ST KISS]]";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('国宝')).toBe(true);
+    expect(titles.has('宝島')).toBe(true);
+    expect(titles.has('ファーストキス 1ST KISS')).toBe(true);
+  });
+
+  it('賞名リンクは除外する', () => {
+    const wikitext =
+      "{{Award category|#eedd82|[[日本アカデミー賞主演男優賞|主演男優賞]]}}\n* '''[[吉沢亮]]''' - 『[[国宝 (映画)|国宝]]』";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('主演男優賞')).toBe(false);
+    expect(titles.has('国宝')).toBe(true);
+  });
+
+  it('太字マークアップを除去してタイトルを抽出する', () => {
+    const wikitext = "* 『'''[[TOKYOタクシー]]'''』";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('TOKYOタクシー')).toBe(true);
+  });
+
+  it('セクションリンク付きのタイトルを正しく解決する', () => {
+    const wikitext = '** [[秒速5センチメートル#実写映画|秒速5センチメートル]]';
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('秒速5センチメートル')).toBe(true);
+  });
+
+  it('{{仮リンク}}テンプレート（label=あり）からタイトルを抽出する', () => {
+    const wikitext =
+      '** 『{{仮リンク|ハムネット (映画)|label=ハムネット|en|Hamnet (film)}}』\n** 『{{仮リンク|シークレット・エージェント (2025年の映画)|label=シークレット・エージェント|en|The Secret Agent (2025 film)}}』';
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('ハムネット')).toBe(true);
+    expect(titles.has('シークレット・エージェント')).toBe(true);
+  });
+
+  it('{{仮リンク}}テンプレート（label=なし）からタイトルを抽出する', () => {
+    const wikitext =
+      "** [[ケイト・ハドソン]] - '{{仮リンク|ソング・サング・ブルー|en|Song Sung Blue (2025 film)}}' : クレア役";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('ソング・サング・ブルー')).toBe(true);
+  });
+
+  it('{{仮リンク}}のlabel内の太字マークアップを除去する', () => {
+    const wikitext =
+      "* 『{{仮リンク|ハムネット (映画)|label='''ハムネット'''|en|Hamnet (film)}}』";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('ハムネット')).toBe(true);
+  });
+
+  it('空のwikitextでは空のSetを返す', () => {
+    const titles = extractMovieTitlesFromWikitext('');
+    expect(titles.size).toBe(0);
+  });
+});
+
 describe('buildUserPrompt', () => {
+  const articleText = '== 受賞とノミネート ==\nテスト記事本文';
+
   it('年・賞名・部門を含むプロンプトを生成する', () => {
     const prompt = buildUserPrompt(
       2026,
       'アカデミー賞',
-      testAwardDefinition.categories,
+      testAwardDefinition.categories[0],
+      articleText,
     );
 
-    expect(prompt).toContain('2026年 アカデミー賞');
-    expect(prompt).toContain('- best_picture: 作品賞');
-    expect(prompt).toContain('- best_director: 監督賞');
+    expect(prompt).toContain('2026年に授賞式が行われたアカデミー賞');
+    expect(prompt).toContain('「作品賞」部門');
   });
 
   it('部門キーをそのまま使用するよう指示する', () => {
     const prompt = buildUserPrompt(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testAwardDefinition.categories[0],
+      articleText,
     );
 
-    expect(prompt).toContain(
-      'categoryフィールドには上記の部門キーをそのまま使用',
+    expect(prompt).toContain('"best_picture"');
+  });
+
+  it('記事本文がプロンプトに含まれる', () => {
+    const prompt = buildUserPrompt(
+      2026,
+      'テスト賞',
+      testAwardDefinition.categories[0],
+      articleText,
     );
+
+    expect(prompt).toContain('テスト記事本文');
   });
 });
 
@@ -97,6 +196,9 @@ describe('fetchAwardsFromOpenAI', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
+
+  const testCategory = testAwardDefinition.categories[0];
+  const testArticleText = '== テスト記事 ==\nテスト本文';
 
   it('正常なレスポンスをパースして返す', async () => {
     const mockResponse = {
@@ -110,7 +212,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toHaveLength(1);
@@ -125,7 +228,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -137,7 +241,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -156,7 +261,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -168,7 +274,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -182,7 +289,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -194,7 +302,8 @@ describe('fetchAwardsFromOpenAI', () => {
     const result = await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     expect(result).toBeNull();
@@ -211,11 +320,12 @@ describe('fetchAwardsFromOpenAI', () => {
     await fetchAwardsFromOpenAI(
       2026,
       'テスト賞',
-      testAwardDefinition.categories,
+      testCategory,
+      testArticleText,
     );
 
     const callArgs = mockCreate.mock.calls[0][0];
-    expect(callArgs.tools).toEqual([{ type: 'web_search_preview' }]);
+    expect(callArgs.tools).toBeUndefined();
     expect(callArgs.text.format.type).toBe('json_schema');
     expect(callArgs.text.format.strict).toBe(true);
   });
@@ -250,13 +360,42 @@ describe('resolveAwardsWithTMDb', () => {
     expect(result[0].display_order).toBe(1);
   });
 
-  it('日本語タイトルで見つからない場合、英語タイトルで検索する', async () => {
+  it('日本語+year検索で見つかる場合、1回で解決する', async () => {
+    mockSearchMovies.mockResolvedValueOnce({
+      results: [
+        {
+          id: 200,
+          title: 'テスト映画',
+          poster_path: null,
+          release_date: '2026-01-01',
+          vote_average: 7.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    const items = [createAwardItem()];
+    const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].tmdb_movie_id).toBe(200);
+    expect(mockSearchMovies).toHaveBeenCalledTimes(1);
+    expect(mockSearchMovies).toHaveBeenCalledWith({
+      query: 'テスト映画',
+      year: 2026,
+    });
+  });
+
+  it('日本語+yearで見つからない場合、日本語のみ→英語+year→英語のみの順で検索する', async () => {
     mockSearchMovies
-      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({ results: [] }) // 日本語+year
+      .mockResolvedValueOnce({ results: [] }) // 日本語のみ
+      .mockResolvedValueOnce({ results: [] }) // 英語+year
       .mockResolvedValueOnce({
+        // 英語のみ
         results: [
           {
-            id: 200,
+            id: 201,
             title: 'Test Movie',
             poster_path: null,
             release_date: '2026-01-01',
@@ -270,19 +409,28 @@ describe('resolveAwardsWithTMDb', () => {
     const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
 
     expect(result).toHaveLength(1);
-    expect(result[0].tmdb_movie_id).toBe(200);
-    expect(mockSearchMovies).toHaveBeenCalledTimes(2);
+    expect(result[0].tmdb_movie_id).toBe(201);
+    expect(mockSearchMovies).toHaveBeenCalledTimes(4);
+    expect(mockSearchMovies).toHaveBeenCalledWith({
+      query: 'テスト映画',
+      year: 2026,
+    });
     expect(mockSearchMovies).toHaveBeenCalledWith({ query: 'テスト映画' });
+    expect(mockSearchMovies).toHaveBeenCalledWith({
+      query: 'Test Movie',
+      year: 2026,
+    });
     expect(mockSearchMovies).toHaveBeenCalledWith({ query: 'Test Movie' });
   });
 
-  it('両方の検索で見つからない場合はスキップする', async () => {
+  it('全検索パターンで見つからない場合はスキップする', async () => {
     mockSearchMovies.mockResolvedValue({ results: [] });
 
     const items = [createAwardItem()];
     const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
 
     expect(result).toHaveLength(0);
+    expect(mockSearchMovies).toHaveBeenCalledTimes(4);
   });
 
   it('不明な部門キーはスキップする', async () => {

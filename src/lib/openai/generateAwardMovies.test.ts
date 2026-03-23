@@ -126,6 +126,21 @@ describe('extractMovieTitlesFromWikitext', () => {
     expect(titles.has('秒速5センチメートル')).toBe(true);
   });
 
+  it('{{仮リンク}}テンプレートからタイトルを抽出する', () => {
+    const wikitext =
+      '** 『{{仮リンク|ハムネット (映画)|label=ハムネット|en|Hamnet (film)}}』\n** 『{{仮リンク|シークレット・エージェント (2025年の映画)|label=シークレット・エージェント|en|The Secret Agent (2025 film)}}』';
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('ハムネット')).toBe(true);
+    expect(titles.has('シークレット・エージェント')).toBe(true);
+  });
+
+  it('{{仮リンク}}のlabel内の太字マークアップを除去する', () => {
+    const wikitext =
+      "* 『{{仮リンク|ハムネット (映画)|label='''ハムネット'''|en|Hamnet (film)}}』";
+    const titles = extractMovieTitlesFromWikitext(wikitext);
+    expect(titles.has('ハムネット')).toBe(true);
+  });
+
   it('空のwikitextでは空のSetを返す', () => {
     const titles = extractMovieTitlesFromWikitext('');
     expect(titles.size).toBe(0);
@@ -419,7 +434,7 @@ describe('resolveAwardsWithTMDb', () => {
     expect(mockSearchMovies).not.toHaveBeenCalled();
   });
 
-  it('同じ映画×同じ部門でも複数ノミネートを許容する', async () => {
+  it('同じ映画×同じ部門の重複はスキップする', async () => {
     mockSearchMovies.mockResolvedValue({
       results: [
         {
@@ -439,9 +454,7 @@ describe('resolveAwardsWithTMDb', () => {
     ];
     const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
 
-    expect(result).toHaveLength(2);
-    expect(result[0].is_winner).toBe(true);
-    expect(result[1].is_winner).toBe(false);
+    expect(result).toHaveLength(1);
   });
 
   it('同じ映画でも部門が異なれば別々に追加する', async () => {

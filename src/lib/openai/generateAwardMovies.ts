@@ -30,7 +30,16 @@ export function extractMovieTitlesFromWikitext(wikitext: string): Set<string> {
     titles.add(resolveWikitextToDisplayText(match[1]));
   }
 
-  // パターン2: * / ** 行の直接リンク（作品賞など『』なしのケース）
+  // パターン2: {{仮リンク|...|label=表示テキスト|...}} テンプレート
+  const kariLinkMatches = wikitext.matchAll(
+    /\{\{仮リンク\|[^}]*\|label=([^|}]+)[^}]*\}\}/g,
+  );
+  for (const match of kariLinkMatches) {
+    const label = match[1].replace(/'''/g, '');
+    titles.add(label);
+  }
+
+  // パターン3: * / ** 行の直接リンク（作品賞など『』なしのケース）
   const lines = wikitext.split('\n');
   for (const line of lines) {
     if (!line.match(/^\*{1,2}\s/)) continue;
@@ -51,6 +60,8 @@ export function extractMovieTitlesFromWikitext(wikitext: string): Set<string> {
 function resolveWikitextToDisplayText(raw: string): string {
   // '''太字'''を除去
   let text = raw.replace(/'''/g, '');
+  // {{仮リンク|...|label=表示テキスト|...}} → 表示テキスト
+  text = text.replace(/\{\{仮リンク\|[^}]*\|label=([^|}]+)[^}]*\}\}/g, '$1');
   // [[link|display]] → display, [[link]] → link
   text = text.replace(/\[\[([^\]]+)\]\]/g, (_, content) =>
     resolveWikitextLink(content),
@@ -316,6 +327,15 @@ export async function resolveAwardsWithTMDb(
         console.warn(
           `TMDb search failed for "${item.title_ja}" / "${item.title_en}"`,
         );
+        continue;
+      }
+
+      // 同じ映画×同じ部門の重複を防止（DBユニーク制約に合わせる）
+      if (
+        resolved.some(
+          (r) => r.tmdb_movie_id === movie.id && r.category === item.category,
+        )
+      ) {
         continue;
       }
 

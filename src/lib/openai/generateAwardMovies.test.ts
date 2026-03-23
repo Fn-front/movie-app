@@ -419,7 +419,7 @@ describe('resolveAwardsWithTMDb', () => {
     expect(mockSearchMovies).not.toHaveBeenCalled();
   });
 
-  it('同じ映画×同じ部門の重複はスキップする', async () => {
+  it('同じ映画×同じ部門でも複数ノミネートを許容する', async () => {
     mockSearchMovies.mockResolvedValue({
       results: [
         {
@@ -439,7 +439,9 @@ describe('resolveAwardsWithTMDb', () => {
     ];
     const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
 
-    expect(result).toHaveLength(1);
+    expect(result).toHaveLength(2);
+    expect(result[0].is_winner).toBe(true);
+    expect(result[1].is_winner).toBe(false);
   });
 
   it('同じ映画でも部門が異なれば別々に追加する', async () => {

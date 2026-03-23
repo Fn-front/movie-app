@@ -280,4 +280,31 @@ describe('executeSyncAwardMoviesCron', () => {
     expect(resolveCallArgs).toHaveLength(1);
     expect(resolveCallArgs[0].title_ja).toBe('テスト映画');
   });
+
+  it('yearが授賞式年から大きく外れている場合は補正する', async () => {
+    jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
+
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(
+      new Set(['秒速5センチメートル']),
+    );
+
+    mockFetchAwardsFromOpenAI
+      .mockResolvedValueOnce([
+        {
+          title_ja: '秒速5センチメートル',
+          title_en: '5 Centimeters Per Second',
+          category: 'best_drama',
+          is_winner: false,
+          year: 2007,
+        },
+      ])
+      .mockResolvedValue(null);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+
+    const supabase = createMockSupabase();
+    await executeSyncAwardMoviesCron(supabase);
+
+    const resolveCallArgs = mockResolveAwardsWithTMDb.mock.calls[0][0];
+    expect(resolveCallArgs[0].year).toBe(2025);
+  });
 });

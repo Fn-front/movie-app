@@ -144,7 +144,17 @@ export async function executeSyncAwardMoviesCron(
             );
             return false;
           });
-          allAiItems.push(...verified);
+          // yearが授賞式年から大きく外れている場合は補正
+          const corrected = verified.map((item) => {
+            if (Math.abs(item.year - currentYear) > 2) {
+              console.warn(
+                `Year corrected: "${item.title_ja}" year=${item.year} → ${currentYear - 1}`,
+              );
+              return { ...item, year: currentYear - 1 };
+            }
+            return item;
+          });
+          allAiItems.push(...corrected);
         }
       }
 

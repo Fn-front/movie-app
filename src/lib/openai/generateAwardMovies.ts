@@ -102,7 +102,8 @@ function buildSystemPrompt(): string {
 - 映画タイトルはwikitext中の『』や[[]]で囲まれた文字列をそのまま使用すること。推測や補完をしないこと
 - 演技賞の場合、記事中の俳優名の横に『』で記載されている出演映画のタイトルを返すこと
 - 監督賞の場合、記事中の監督名の横に『』で記載されている監督作品のタイトルを返すこと
-- yearは映画の公開年（授賞式の年ではなく）
+- yearは映画の公開年（授賞式の年ではなく）。通常は授賞式の前年か同年の公開作品が対象
+- wikitextのリンク先にセクション指定（#実写映画 等）がある場合、そのバージョンの公開年を使うこと
 - 受賞者（is_winner: true）は'''太字'''かつ先頭（*で始まる行）の1名のみ
 - ノミネート者（**で始まる行）は記事に記載されている全員を漏れなく返すこと
 - 記事中のすべてのノミネート者を1人も欠落なく抽出すること
@@ -315,15 +316,6 @@ export async function resolveAwardsWithTMDb(
         console.warn(
           `TMDb search failed for "${item.title_ja}" / "${item.title_en}"`,
         );
-        continue;
-      }
-
-      // 同じ映画×同じ部門の重複を防止
-      if (
-        resolved.some(
-          (r) => r.tmdb_movie_id === movie.id && r.category === item.category,
-        )
-      ) {
         continue;
       }
 

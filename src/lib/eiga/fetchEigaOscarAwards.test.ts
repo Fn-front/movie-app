@@ -52,7 +52,7 @@ describe('extractBestPictureNominees', () => {
     expect(result[2]).toEqual({ title: 'テスト映画C', isWinner: false });
   });
 
-  it('nominate_ctb bb_noneブロックはスキップする', () => {
+  it('nominate_ctb bb_noneブロックは必要な構造を持たないためマッチしない', () => {
     const html = `
       <div class="nominate_ctb winner">
         <div class="contents_box_half float_r">
@@ -147,7 +147,7 @@ describe('extractPersonCategoryNominees', () => {
     expect(result[1]).toEqual({ title: '映画ベータ', isWinner: true, personName: '俳優B' });
   });
 
-  it('nominate_ctb bb_noneブロックはスキップする', () => {
+  it('nominate_ctb bb_noneブロックは必要な構造を持たないためマッチしない', () => {
     const html = `
       <div class="nominate_ctb winner">
         <div class="movie_title">

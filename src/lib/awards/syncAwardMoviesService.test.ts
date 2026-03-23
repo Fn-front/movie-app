@@ -296,6 +296,39 @@ describe('executeSyncAwardMoviesCron', () => {
     expect(mockFetchWikipediaArticle).not.toHaveBeenCalled();
   });
 
+  it('eiga.comが0件の場合はWikipedia+OpenAIにフォールバックする', async () => {
+    jest.setSystemTime(new Date('2026-03-15T00:00:00Z'));
+
+    // eiga.comが空配列を返す
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    // Wikipedia+OpenAIが結果を返す
+    mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(
+      new Set(['テスト映画']),
+    );
+    mockFetchAwardsFromOpenAI.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test Movie',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2025,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+
+    const supabase = createMockSupabase();
+    const result = await executeSyncAwardMoviesCron(supabase);
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.data.synced_awards).toContain('academy_awards');
+    }
+    // eiga.comが呼ばれた後、Wikipediaにフォールバック
+    expect(mockFetchEigaOscarAwards).toHaveBeenCalled();
+    expect(mockFetchWikipediaArticle).toHaveBeenCalled();
+  });
+
   it('wikitextに存在しないタイトルはハルシネーションとして除外する', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 

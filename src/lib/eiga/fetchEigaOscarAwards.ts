@@ -64,7 +64,13 @@ export async function fetchEigaOscarAwards(
 
   for (const page of EIGA_OSCAR_PAGES) {
     const url = `${EIGA_OSCAR_BASE_URL}/${ceremonyYear}/${page.path}`;
-    const html = await fetchHtml(url);
+    let html: string;
+    try {
+      html = await fetchHtml(url);
+    } catch (error) {
+      console.warn(`Failed to fetch ${url}:`, error);
+      continue;
+    }
 
     if (page.category) {
       const nominees =

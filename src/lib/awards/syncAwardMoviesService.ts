@@ -120,6 +120,17 @@ export async function executeSyncAwardMoviesCron(
       if (awardName === 'academy_awards') {
         // アカデミー賞: eiga.com から正規表現で抽出（ハルシネーションなし）
         allAiItems = await fetchEigaOscarAwards(syncYear);
+        if (allAiItems.length === 0) {
+          // eiga.com取得失敗時はWikipedia+OpenAIにフォールバック
+          console.warn(
+            `eiga.com returned 0 items for ${syncYear}, falling back to Wikipedia+OpenAI`,
+          );
+          allAiItems = await fetchAwardItemsViaWikipedia(
+            awardName,
+            awardDef,
+            syncYear,
+          );
+        }
       } else {
         // その他の賞: Wikipedia + OpenAI で構造化
         allAiItems = await fetchAwardItemsViaWikipedia(

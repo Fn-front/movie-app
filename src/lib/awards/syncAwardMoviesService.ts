@@ -68,28 +68,15 @@ export function getAwardsForMonth(
   ).filter(([name, def]) => def.month === month && !EXCLUDED_AWARDS.has(name));
 }
 
-/**
- * 除外対象以外の全賞を取得（過去年同期用）
- */
-export function getAllSyncableAwards(): [
-  AwardName,
-  (typeof AWARD_DEFINITIONS)[AwardName],
-][] {
-  return (
-    Object.entries(AWARD_DEFINITIONS) as [
-      AwardName,
-      (typeof AWARD_DEFINITIONS)[AwardName],
-    ][]
-  ).filter(([name]) => !EXCLUDED_AWARDS.has(name));
-}
 
 /**
  * 受賞作品同期CRONのメイン処理
  *
  * API呼び出し回数の目安:
  * - 1月: ゴールデングローブ賞 9部門（OpenAI最大27回）
- * - 3月: アカデミー賞（eiga.com 5ページ）+ 日本アカデミー賞7部門（OpenAI最大21回）
+ * - 3月: アカデミー賞（eiga.com 5ページ）
  * - 5月: カンヌ映画祭 8部門（OpenAI最大24回）
+ * - targetYear指定時: アカデミー賞のみ（eiga.com 5ページ）
  * maxDuration=300秒の範囲内で処理完了する想定
  */
 export async function executeSyncAwardMoviesCron(
@@ -104,9 +91,10 @@ export async function executeSyncAwardMoviesCron(
   // targetYear指定時はアカデミー賞のみ同期、未指定時は現在月に該当する賞のみ
   const isManualSync = targetYear !== undefined;
   const syncYear = targetYear ?? currentYear;
-  const targetAwards = isManualSync
-    ? getAllSyncableAwards().filter(([name]) => name === 'academy_awards')
-    : getAwardsForMonth(currentMonth);
+  const targetAwards: [AwardName, (typeof AWARD_DEFINITIONS)[AwardName]][] =
+    isManualSync
+      ? [['academy_awards', AWARD_DEFINITIONS.academy_awards]]
+      : getAwardsForMonth(currentMonth);
 
   if (targetAwards.length === 0) {
     return {

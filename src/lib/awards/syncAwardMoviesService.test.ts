@@ -41,7 +41,6 @@ jest.mock('@/lib/eiga/fetchEigaOscarAwards', () => ({
 
 import {
   getAwardsForMonth,
-  getAllSyncableAwards,
   executeSyncAwardMoviesCron,
 } from './syncAwardMoviesService';
 
@@ -99,16 +98,6 @@ describe('getAwardsForMonth', () => {
   });
 });
 
-describe('getAllSyncableAwards', () => {
-  it('日本アカデミー賞を除く全賞を返す', () => {
-    const awards = getAllSyncableAwards();
-    const names = awards.map(([name]) => name);
-    expect(names).toContain('academy_awards');
-    expect(names).toContain('golden_globes');
-    expect(names).toContain('cannes');
-    expect(names).not.toContain('japan_academy_awards');
-  });
-});
 
 describe('executeSyncAwardMoviesCron', () => {
   beforeEach(() => {

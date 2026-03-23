@@ -46,11 +46,13 @@ function buildSystemPrompt(): string {
 
 ## 抽出ルール
 - title_ja、title_enには必ず「映画のタイトル」を入れること。俳優名・監督名・人物名は絶対に入れないこと
+- 映画タイトルはwikitext中の『』や[[]]で囲まれた文字列をそのまま使用すること。推測や補完をしないこと
 - 演技賞の場合、記事中の俳優名の横に『』で記載されている出演映画のタイトルを返すこと
 - 監督賞の場合、記事中の監督名の横に『』で記載されている監督作品のタイトルを返すこと
 - yearは映画の公開年（授賞式の年ではなく）
 - 受賞者（is_winner: true）は'''太字'''かつ先頭（*で始まる行）の1名のみ
 - ノミネート者（**で始まる行）は記事に記載されている全員を漏れなく返すこと
+- 記事中のすべてのノミネート者を1人も欠落なく抽出すること
 
 レスポンスは以下のJSON形式で返してください:
 {
@@ -230,9 +232,26 @@ export async function resolveAwardsWithTMDb(
     }
 
     try {
-      // 日本語タイトルで検索、見つからなければ英語タイトルで検索
-      let searchResult = await searchMovies({ query: item.title_ja });
+      // 日本語タイトル+公開年で検索、見つからなければ年指定なしで再検索
+      let searchResult = await searchMovies({
+        query: item.title_ja,
+        year: item.year,
+      });
       let movie = findBestMatch(searchResult.results, item.year);
+
+      if (!movie) {
+        searchResult = await searchMovies({ query: item.title_ja });
+        movie = findBestMatch(searchResult.results, item.year);
+      }
+
+      // 日本語で見つからなければ英語タイトルで同様に検索
+      if (!movie) {
+        searchResult = await searchMovies({
+          query: item.title_en,
+          year: item.year,
+        });
+        movie = findBestMatch(searchResult.results, item.year);
+      }
 
       if (!movie) {
         searchResult = await searchMovies({ query: item.title_en });

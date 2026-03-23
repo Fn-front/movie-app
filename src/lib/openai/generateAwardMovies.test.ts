@@ -293,13 +293,42 @@ describe('resolveAwardsWithTMDb', () => {
     expect(result[0].display_order).toBe(1);
   });
 
-  it('日本語タイトルで見つからない場合、英語タイトルで検索する', async () => {
+  it('日本語+year検索で見つかる場合、1回で解決する', async () => {
+    mockSearchMovies.mockResolvedValueOnce({
+      results: [
+        {
+          id: 200,
+          title: 'テスト映画',
+          poster_path: null,
+          release_date: '2026-01-01',
+          vote_average: 7.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    const items = [createAwardItem()];
+    const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].tmdb_movie_id).toBe(200);
+    expect(mockSearchMovies).toHaveBeenCalledTimes(1);
+    expect(mockSearchMovies).toHaveBeenCalledWith({
+      query: 'テスト映画',
+      year: 2026,
+    });
+  });
+
+  it('日本語+yearで見つからない場合、日本語のみ→英語+year→英語のみの順で検索する', async () => {
     mockSearchMovies
-      .mockResolvedValueOnce({ results: [] })
+      .mockResolvedValueOnce({ results: [] }) // 日本語+year
+      .mockResolvedValueOnce({ results: [] }) // 日本語のみ
+      .mockResolvedValueOnce({ results: [] }) // 英語+year
       .mockResolvedValueOnce({
+        // 英語のみ
         results: [
           {
-            id: 200,
+            id: 201,
             title: 'Test Movie',
             poster_path: null,
             release_date: '2026-01-01',
@@ -313,19 +342,28 @@ describe('resolveAwardsWithTMDb', () => {
     const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
 
     expect(result).toHaveLength(1);
-    expect(result[0].tmdb_movie_id).toBe(200);
-    expect(mockSearchMovies).toHaveBeenCalledTimes(2);
+    expect(result[0].tmdb_movie_id).toBe(201);
+    expect(mockSearchMovies).toHaveBeenCalledTimes(4);
+    expect(mockSearchMovies).toHaveBeenCalledWith({
+      query: 'テスト映画',
+      year: 2026,
+    });
     expect(mockSearchMovies).toHaveBeenCalledWith({ query: 'テスト映画' });
+    expect(mockSearchMovies).toHaveBeenCalledWith({
+      query: 'Test Movie',
+      year: 2026,
+    });
     expect(mockSearchMovies).toHaveBeenCalledWith({ query: 'Test Movie' });
   });
 
-  it('両方の検索で見つからない場合はスキップする', async () => {
+  it('全検索パターンで見つからない場合はスキップする', async () => {
     mockSearchMovies.mockResolvedValue({ results: [] });
 
     const items = [createAwardItem()];
     const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
 
     expect(result).toHaveLength(0);
+    expect(mockSearchMovies).toHaveBeenCalledTimes(4);
   });
 
   it('不明な部門キーはスキップする', async () => {

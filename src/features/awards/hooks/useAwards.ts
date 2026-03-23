@@ -32,16 +32,23 @@ export function useAwards(): UseAwardsReturn {
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [userSelectedYear, setUserSelectedYear] = useState<number | null>(null);
 
-  const requestYear = userSelectedYear ?? currentYear;
+  const initialRequestYear = userSelectedYear ?? currentYear;
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: awardKeys.year(requestYear),
-    queryFn: () => getAwards(requestYear),
+  // 初回リクエストでavailableYearsを取得
+  const { data: initialData } = useQuery({
+    queryKey: awardKeys.year(initialRequestYear),
+    queryFn: () => getAwards(initialRequestYear),
   });
 
   // ユーザーが未選択の場合、availableYearsの最新年を使用
-  const latestYear = getLatestAvailableYear(data);
+  const latestYear = getLatestAvailableYear(initialData);
   const selectedYear = userSelectedYear ?? latestYear ?? currentYear;
+
+  // selectedYearのデータを取得（initialRequestYear === selectedYearの場合はキャッシュから）
+  const { data, isLoading, isError } = useQuery({
+    queryKey: awardKeys.year(selectedYear),
+    queryFn: () => getAwards(selectedYear),
+  });
 
   const handleYearChange = useCallback((value: string) => {
     setUserSelectedYear(Number(value));

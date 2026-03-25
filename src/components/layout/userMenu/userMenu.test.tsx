@@ -70,13 +70,29 @@ describe('UserMenu', () => {
     ).toBeInTheDocument();
   });
 
-  it('未認証時はnullを返す', () => {
+  it('未認証時はログインボタンが表示される', () => {
     mockUseSession.mockReturnValue({
       data: null,
       status: 'unauthenticated',
     });
-    const { container } = render(<UserMenu />);
-    expect(container.innerHTML).toBe('');
+    render(<UserMenu />);
+    expect(
+      screen.getByRole('button', { name: 'ログイン' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('ログイン')).toBeInTheDocument();
+  });
+
+  it('未認証時のログインボタンクリックで/auth/signinに遷移する', async () => {
+    const user = userEvent.setup();
+    mockUseSession.mockReturnValue({
+      data: null,
+      status: 'unauthenticated',
+    });
+    render(<UserMenu />);
+
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    expect(mockPush).toHaveBeenCalledWith('/auth/signin');
   });
 
   it('クリックでポップオーバーが表示される', async () => {

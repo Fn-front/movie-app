@@ -43,6 +43,37 @@
     flex-shrink: 0;
   }
 
+  // ログインボタン（未認証時）
+  &__login_button {
+    @include button-reset;
+    @include focus-visible;
+
+    display: flex;
+    align-items: center;
+    gap: $spacing-3;
+    width: 100%;
+    padding: $spacing-2;
+    border-radius: $border-radius-md;
+    transition: $transition-bg;
+
+    &:hover {
+      background-color: color-alpha(--primary-500, 10%);
+    }
+  }
+
+  // ログインアイコン
+  &__login_icon {
+    @include flex-center;
+
+    width: 32px;
+    height: 32px;
+    border-radius: $border-radius-full;
+    background-color: $primary-500;
+    color: $text-inverse;
+    font-size: $font-size-lg;
+    flex-shrink: 0;
+  }
+
   // ユーザー名
   &__name {
     @include text-truncate;

@@ -19,6 +19,19 @@ const mockMutationState = {
   isRemoving: false,
 };
 
+const mockOpenLoginPrompt = jest.fn();
+
+jest.mock('@/lib/store/useLoginPromptStore', () => ({
+  useLoginPromptStore: (selector: (s: { open: jest.Mock }) => jest.Mock) =>
+    selector({ open: mockOpenLoginPrompt }),
+}));
+
+const mockUseSession = jest.fn();
+
+jest.mock('next-auth/react', () => ({
+  useSession: () => mockUseSession(),
+}));
+
 jest.mock('@/features/favorites/hooks/useFavorites', () => ({
   useFavorites: () => ({
     favorites: undefined,
@@ -56,6 +69,10 @@ describe('useFavoriteToggle', () => {
     mockMutationState.isAdding = false;
     mockMutationState.isUpdating = false;
     mockMutationState.isRemoving = false;
+    mockUseSession.mockReturnValue({
+      data: { user: { id: 'user-1' } },
+      status: 'authenticated',
+    });
   });
 
   it('初期状態ではモーダルが閉じている', () => {
@@ -225,5 +242,22 @@ describe('useFavoriteToggle', () => {
   it('getFavoriteInfoを返す', () => {
     const { result } = renderHook(() => useFavoriteToggle());
     expect(result.current.getFavoriteInfo(42)).toBeNull();
+  });
+
+  it('未認証時のhandleFavoriteToggleでログイン誘導モーダルが表示される', () => {
+    mockUseSession.mockReturnValue({
+      data: null,
+      status: 'unauthenticated',
+    });
+    const { result } = renderHook(() => useFavoriteToggle());
+
+    act(() => {
+      result.current.handleFavoriteToggle(createMovie(), null);
+    });
+
+    expect(mockOpenLoginPrompt).toHaveBeenCalledWith(
+      'お気に入りに追加するにはログインが必要です。',
+    );
+    expect(result.current.modalState.isOpen).toBe(false);
   });
 });

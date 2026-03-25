@@ -1,14 +1,7 @@
+const mockUseSession = jest.fn();
+
 jest.mock('next-auth/react', () => ({
-  useSession: () => ({
-    data: {
-      user: {
-        name: 'テストユーザー',
-        email: 'test@example.com',
-        image: null,
-      },
-    },
-    status: 'authenticated',
-  }),
+  useSession: () => mockUseSession(),
 }));
 
 jest.mock('next/link', () => {
@@ -61,9 +54,32 @@ import { render, screen } from '@testing-library/react';
 
 import { AppLayout } from './appLayout';
 
+// --- Helpers ---
+
+const authenticatedSession = {
+  data: {
+    user: {
+      name: 'テストユーザー',
+      email: 'test@example.com',
+      image: null,
+    },
+  },
+  status: 'authenticated',
+};
+
+const unauthenticatedSession = {
+  data: null,
+  status: 'unauthenticated',
+};
+
 // --- Tests ---
 
 describe('AppLayout', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseSession.mockReturnValue(authenticatedSession);
+  });
+
   it('デフォルトpropsでレンダリングされる', () => {
     render(<AppLayout>コンテンツ</AppLayout>);
     expect(screen.getByRole('main')).toBeInTheDocument();
@@ -103,5 +119,31 @@ describe('AppLayout', () => {
     render(<AppLayout>コンテンツ</AppLayout>);
     expect(screen.getByRole('search')).toBeInTheDocument();
     expect(screen.getByLabelText('映画を検索')).toBeInTheDocument();
+  });
+
+  describe('認証状態による表示制御', () => {
+    it('認証済みの場合WatchlistPanelが表示される', () => {
+      mockUseSession.mockReturnValue(authenticatedSession);
+      render(<AppLayout>コンテンツ</AppLayout>);
+      expect(screen.getByTestId('watchlist-panel')).toBeInTheDocument();
+    });
+
+    it('認証済みの場合CalendarButtonが表示される', () => {
+      mockUseSession.mockReturnValue(authenticatedSession);
+      render(<AppLayout>コンテンツ</AppLayout>);
+      expect(screen.getByTestId('calendar-button')).toBeInTheDocument();
+    });
+
+    it('未認証の場合WatchlistPanelが表示されない', () => {
+      mockUseSession.mockReturnValue(unauthenticatedSession);
+      render(<AppLayout>コンテンツ</AppLayout>);
+      expect(screen.queryByTestId('watchlist-panel')).not.toBeInTheDocument();
+    });
+
+    it('未認証の場合CalendarButtonが表示されない', () => {
+      mockUseSession.mockReturnValue(unauthenticatedSession);
+      render(<AppLayout>コンテンツ</AppLayout>);
+      expect(screen.queryByTestId('calendar-button')).not.toBeInTheDocument();
+    });
   });
 });

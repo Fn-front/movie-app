@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useSession } from 'next-auth/react';
 
 import { searchMoviesApi } from '@/lib/api/search/search';
 import type { SearchMoviesRequest } from '@/lib/api/search/search';
@@ -91,6 +92,8 @@ export function useSearch(): UseSearchReturn {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
+  const { status } = useSession();
+  const isAuthenticated = status === 'authenticated';
 
   const requestParams = useMemo(
     () => buildSearchParams(searchParams),
@@ -142,7 +145,9 @@ export function useSearch(): UseSearchReturn {
 
   // 検索結果が0件かつsessionStorageに提案がない場合のみ原題提案APIを有効化
   // sessionStorageに提案がある = 提案クリックからの遷移なのでAI呼び出し不要
+  // 未認証時はAI検索を無効化
   const hasNoResults =
+    isAuthenticated &&
     !searchQuery.isLoading &&
     requestParams !== null &&
     movies.length === 0 &&

@@ -5,17 +5,20 @@
 
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import {
   IoSettingsOutline,
   IoLogOutOutline,
+  IoLogInOutline,
   IoChevronForward,
 } from 'react-icons/io5';
 
 import { MENU_LABELS, IMAGE_SIZES } from '@/constants';
+import { ROUTES } from '@/constants/common';
 import { getInitial } from '@/utils/user';
 
 import { useUserMenu } from './useUserMenu';
@@ -33,6 +36,7 @@ import styles from './userMenu.module.scss';
 export const UserMenu = memo(function UserMenu() {
   const { data: session, status } = useSession();
   const { handleNavigateToSettings, handleLogout } = useUserMenu();
+  const router = useRouter();
 
   const userName = session?.user?.name ?? '';
   const userEmail = session?.user?.email ?? '';
@@ -40,8 +44,23 @@ export const UserMenu = memo(function UserMenu() {
 
   const initial = useMemo(() => getInitial(userName), [userName]);
 
+  const handleLogin = useCallback(() => {
+    router.push(ROUTES.LOGIN);
+  }, [router]);
+
   if (status !== 'authenticated' || !session?.user) {
-    return null;
+    return (
+      <button
+        className={styles.c_user_menu__login_button}
+        onClick={handleLogin}
+        aria-label='ログイン'
+      >
+        <span className={styles.c_user_menu__login_icon}>
+          <IoLogInOutline />
+        </span>
+        <span className={styles.c_user_menu__name}>ログイン</span>
+      </button>
+    );
   }
 
   return (

@@ -4,8 +4,10 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
 
 import { useFavorites } from '@/features/favorites/hooks/useFavorites';
+import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
 /**
@@ -79,6 +81,10 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
     isRemoving,
   } = useFavorites();
 
+  const { status } = useSession();
+  const isAuthenticated = status === 'authenticated';
+  const openLoginPrompt = useLoginPromptStore((s) => s.open);
+
   const [modalState, setModalState] =
     useState<FavoriteModalState>(INITIAL_MODAL_STATE);
 
@@ -86,13 +92,18 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
 
   const handleFavoriteToggle = useCallback(
     (movie: FavoriteToggleMovie, favorite: MovieFavoriteInfo | null) => {
+      if (!isAuthenticated) {
+        openLoginPrompt('お気に入りに追加するにはログインが必要です。');
+        return;
+      }
+
       setModalState({
         isOpen: true,
         movie,
         currentFavorite: favorite ?? null,
       });
     },
-    [],
+    [isAuthenticated, openLoginPrompt],
   );
 
   const closeModal = useCallback(() => {

@@ -21,7 +21,7 @@ jest.mock('@/lib/auth/auth', () => ({
 
 jest.mock('@/components/layout/appLayout/appLayout', () => ({
   AppLayout: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="app-layout">{children}</div>
+    <div data-testid='app-layout'>{children}</div>
   ),
 }));
 

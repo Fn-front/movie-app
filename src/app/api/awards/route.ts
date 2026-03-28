@@ -29,11 +29,17 @@ import type {
   AwardsResponseData,
 } from '@/features/awards/types';
 
-/** 受賞作品クエリで取得するカラム */
+/**
+ * 受賞作品クエリで取得するカラム
+ * ※ AwardMovieRow と必ず同期すること
+ */
 const AWARD_MOVIES_SELECT =
   'tmdb_movie_id, title, poster_path, release_date, vote_average, genre_ids, person_name, award_name, category, is_winner, display_order';
 
-/** 受賞作品の行型 */
+/**
+ * 受賞作品の行型
+ * ※ AWARD_MOVIES_SELECT と必ず同期すること
+ */
 interface AwardMovieRow {
   tmdb_movie_id: number;
   title: string;
@@ -88,7 +94,28 @@ function getClientIp(request: Request): string {
 
 export async function GET(request: Request) {
   try {
+    // バリデーション（不正リクエストはレートリミット消費対象外）
+    const { searchParams } = new URL(request.url);
+    const yearParam = searchParams.get('year');
+
+    const year = Number(yearParam);
+
+    if (!yearParam || isNaN(year) || year < 1900 || year > 2100) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: 'yearパラメータは必須です（1900〜2100の数値）',
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
+    }
+
     // レートリミットチェック（service roleで rate_limits テーブルにアクセス）
+    // ※ checkRateLimitは「N回到達でロック」方式のバースト保護。
+    //   スライディングウィンドウ方式ではないが、Cache-Controlとの併用で十分な保護を提供する。
     const serviceSupabase = createServiceRoleClient();
     if (serviceSupabase) {
       const clientIp = getClientIp(request);
@@ -126,24 +153,6 @@ export async function GET(request: Request) {
     const supabase = createAnonClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    const { searchParams } = new URL(request.url);
-    const yearParam = searchParams.get('year');
-
-    const year = Number(yearParam);
-
-    if (!yearParam || isNaN(year) || year < 1900 || year > 2100) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.VALIDATION_ERROR,
-            message: 'yearパラメータは必須です（1900〜2100の数値）',
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
-
     // 利用可能な年度一覧を取得
     const { data: yearRows, error: yearError } = await supabase
       .from('award_movies')
@@ -177,16 +186,16 @@ export async function GET(request: Request) {
     const awards: AwardData[] = [];
 
     for (const [awardName, awardDef] of Object.entries(AWARD_DEFINITIONS)) {
-      const awardRows_filtered = awardRows.filter(
+      const filteredAwardRows = awardRows.filter(
         (r) => r.award_name === awardName,
       );
 
-      if (awardRows_filtered.length === 0) continue;
+      if (filteredAwardRows.length === 0) continue;
 
       const categories: AwardCategoryData[] = [];
 
       for (const categoryDef of awardDef.categories) {
-        const categoryRows = awardRows_filtered.filter(
+        const categoryRows = filteredAwardRows.filter(
           (r) => r.category === categoryDef.key,
         );
 

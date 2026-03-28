@@ -94,6 +94,12 @@ describe('GET /api/awards', () => {
     expect(body.success).toBe(false);
   });
 
+  it('不正なリクエストはレートリミットを消費しない', async () => {
+    await GET(createRequest());
+
+    expect(checkRateLimit).not.toHaveBeenCalled();
+  });
+
   it('正常にデータを取得する', async () => {
     mockYearQuery([2026, 2025]);
     mockAwardDataQuery([
@@ -251,6 +257,39 @@ describe('GET /api/awards', () => {
   it('DB接続エラー時は500を返す', async () => {
     const { createAnonClient } = await import('@/helpers/supabase');
     (createAnonClient as jest.Mock).mockReturnValueOnce(null);
+
+    const response = await GET(createRequest('2026'));
+    expect(response.status).toBe(500);
+  });
+
+  it('年度一覧取得でDBエラーの場合500を返す', async () => {
+    mockAnonFrom.mockReturnValueOnce({
+      select: () => ({
+        order: () =>
+          Promise.resolve({
+            data: null,
+            error: { message: 'DB error', code: 'INTERNAL' },
+          }),
+      }),
+    });
+
+    const response = await GET(createRequest('2026'));
+    expect(response.status).toBe(500);
+  });
+
+  it('受賞作品取得でDBエラーの場合500を返す', async () => {
+    mockYearQuery([2026]);
+    mockAnonFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          order: () =>
+            Promise.resolve({
+              data: null,
+              error: { message: 'DB error', code: 'INTERNAL' },
+            }),
+        }),
+      }),
+    });
 
     const response = await GET(createRequest('2026'));
     expect(response.status).toBe(500);

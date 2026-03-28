@@ -422,8 +422,9 @@ export async function GET(request: Request) {
       {
         status: HTTP_STATUS.OK,
         headers: {
-          'Cache-Control':
-            'public, s-maxage=3600, stale-while-revalidate=86400',
+          'Cache-Control': session
+            ? 'private, no-store'
+            : 'public, s-maxage=3600, stale-while-revalidate=86400',
         },
       },
     );

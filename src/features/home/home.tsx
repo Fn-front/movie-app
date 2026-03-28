@@ -19,6 +19,8 @@ export interface HomePageProps {
   recommendations: Recommendation[];
   /** お気に入りが1件以上あるか */
   hasFavorites: boolean;
+  /** 認証済みかどうか */
+  isAuthenticated: boolean;
 }
 
 /**
@@ -28,14 +30,17 @@ export function HomePage({
   nowShowingMovies,
   recommendations,
   hasFavorites,
+  isAuthenticated,
 }: HomePageProps) {
   return (
     <AppLayout>
       <NowShowingMovieList movies={nowShowingMovies} />
-      <RecommendationSection
-        recommendations={recommendations}
-        hasFavorites={hasFavorites}
-      />
+      {isAuthenticated && (
+        <RecommendationSection
+          recommendations={recommendations}
+          hasFavorites={hasFavorites}
+        />
+      )}
     </AppLayout>
   );
 }

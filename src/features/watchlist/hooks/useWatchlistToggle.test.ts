@@ -35,11 +35,17 @@ jest.mock('@tanstack/react-query', () => ({
   }),
 }));
 
+const mockOpenLoginPrompt = jest.fn();
+
+jest.mock('@/lib/store/useLoginPromptStore', () => ({
+  useLoginPromptStore: (selector: (s: { open: jest.Mock }) => jest.Mock) =>
+    selector({ open: mockOpenLoginPrompt }),
+}));
+
+const mockUseSession = jest.fn();
+
 jest.mock('next-auth/react', () => ({
-  useSession: () => ({
-    data: { user: { id: 'user-1' } },
-    status: 'authenticated',
-  }),
+  useSession: () => mockUseSession(),
 }));
 
 jest.mock('@/lib/api/watchlist/watchlist', () => ({
@@ -100,6 +106,10 @@ describe('useWatchlistToggle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetQueriesData.mockReturnValue([]);
+    mockUseSession.mockReturnValue({
+      data: { user: { id: 'user-1' } },
+      status: 'authenticated',
+    });
   });
 
   it('isInWatchlist関数を返す', () => {
@@ -159,5 +169,22 @@ describe('useWatchlistToggle', () => {
     const { result } = renderHook(() => useWatchlistToggle());
 
     expect(result.current.isToggling).toBe(false);
+  });
+
+  it('未認証時のtoggleWatchlistでログイン誘導モーダルが表示される', () => {
+    mockUseSession.mockReturnValue({
+      data: null,
+      status: 'unauthenticated',
+    });
+    const { result } = renderHook(() => useWatchlistToggle());
+
+    act(() => {
+      result.current.toggleWatchlist(createMovie());
+    });
+
+    expect(mockOpenLoginPrompt).toHaveBeenCalledWith(
+      'ウォッチリストに追加するにはログインが必要です。',
+    );
+    expect(mockAddWatchlist).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { HomePage } from '@/features/home/home';
+import { auth } from '@/lib/auth/auth';
 import { getNowShowingMovies } from '@/lib/api/nowShowing/nowShowing.server';
 import { getRecommendations } from '@/lib/api/recommendations/recommendations.server';
 
@@ -10,6 +11,9 @@ export const metadata: Metadata = {
 };
 
 export default async function Home() {
+  const session = await auth();
+  const isAuthenticated = !!session?.user;
+
   const [nowShowingMovies, recommendationData] = await Promise.all([
     getNowShowingMovies(),
     getRecommendations(),
@@ -20,6 +24,7 @@ export default async function Home() {
       nowShowingMovies={nowShowingMovies}
       recommendations={recommendationData.recommendations}
       hasFavorites={recommendationData.hasFavorites}
+      isAuthenticated={isAuthenticated}
     />
   );
 }

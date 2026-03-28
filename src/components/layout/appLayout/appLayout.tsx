@@ -6,6 +6,7 @@
 'use client';
 
 import { type ReactNode, memo } from 'react';
+import { useSession } from 'next-auth/react';
 
 import { Header } from '@/components/layout/header/header';
 import { SearchBar } from '@/components/layout/searchBar/searchBar';
@@ -18,6 +19,7 @@ import { MobileDrawer } from '@/components/layout/mobileDrawer/mobileDrawer';
 import { useMobileDrawer } from '@/components/layout/mobileDrawer/useMobileDrawer';
 import { WatchlistPanel } from '@/features/watchlist/component/watchlistPanel/watchlistPanel';
 import { CalendarButton } from '@/features/calendar/component/calendarButton';
+import { LoginPromptModal } from '@/components/ui/loginPromptModal/loginPromptModal';
 
 import styles from './appLayout.module.scss';
 
@@ -46,6 +48,8 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
   showSidebar = true,
 }) {
   const { isOpen, handleToggle, handleOpenChange } = useMobileDrawer();
+  const { status } = useSession();
+  const isAuthenticated = status === 'authenticated';
 
   return (
     <div className={styles.c_app_layout}>
@@ -64,8 +68,8 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
             <Sidebar
               navigation={<SideNav />}
               userSection={<UserMenu />}
-              calendarButton={<CalendarButton />}
-              watchlist={<WatchlistPanel />}
+              calendarButton={isAuthenticated ? <CalendarButton /> : undefined}
+              watchlist={isAuthenticated ? <WatchlistPanel /> : undefined}
             />
           </div>
         )}
@@ -78,6 +82,7 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
       </div>
 
       <MobileDrawer open={isOpen} onOpenChange={handleOpenChange} />
+      <LoginPromptModal />
     </div>
   );
 });

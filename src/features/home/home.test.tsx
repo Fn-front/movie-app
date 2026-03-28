@@ -37,6 +37,7 @@ describe('HomePage', () => {
         nowShowingMovies={[]}
         recommendations={[]}
         hasFavorites={false}
+        isAuthenticated={true}
       />,
     );
 
@@ -50,11 +51,40 @@ describe('HomePage', () => {
         nowShowingMovies={[]}
         recommendations={[]}
         hasFavorites={false}
+        isAuthenticated={true}
       />,
     );
 
     const appLayout = screen.getByTestId('app-layout');
     const nowShowingList = screen.getByTestId('now-showing-movie-list');
     expect(appLayout).toContainElement(nowShowingList);
+  });
+
+  it('認証済みの場合RecommendationSectionが表示される', () => {
+    render(
+      <HomePage
+        nowShowingMovies={[]}
+        recommendations={[]}
+        hasFavorites={false}
+        isAuthenticated={true}
+      />,
+    );
+
+    expect(screen.getByTestId('recommendation-section')).toBeInTheDocument();
+  });
+
+  it('未認証の場合RecommendationSectionが表示されない', () => {
+    render(
+      <HomePage
+        nowShowingMovies={[]}
+        recommendations={[]}
+        hasFavorites={false}
+        isAuthenticated={false}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId('recommendation-section'),
+    ).not.toBeInTheDocument();
   });
 });

@@ -3,7 +3,10 @@
  *
  * セッションが確定的にunauthenticatedになった場合、NextAuthのsignOutを実行してログインページへ遷移する。
  * - authenticated → unauthenticated（ライブセッション切れ）
- * - loading → unauthenticated（リロード時にセッション期限切れ）
+ *
+ * ※ loading → unauthenticated（リロード時）はmiddlewareがサーバーサイドで
+ *   期限切れcookieの削除とリダイレクトを処理するため、クライアント側では対応しない。
+ *   これにより未ログインユーザーが公開ページに正常にアクセスできる。
  */
 
 'use client';
@@ -26,15 +29,10 @@ export function useSessionExpiry() {
   const prevStatusRef = useRef(status);
 
   useEffect(() => {
-    const wasLoading = prevStatusRef.current === 'loading';
     const wasAuthenticated = prevStatusRef.current === 'authenticated';
     const isAuthPage = AUTH_PATHS.some((path) => pathname.startsWith(path));
 
-    if (
-      (wasLoading || wasAuthenticated) &&
-      status === 'unauthenticated' &&
-      !isAuthPage
-    ) {
+    if (wasAuthenticated && status === 'unauthenticated' && !isAuthPage) {
       signOut({ callbackUrl: ROUTES.LOGIN });
     }
     prevStatusRef.current = status;

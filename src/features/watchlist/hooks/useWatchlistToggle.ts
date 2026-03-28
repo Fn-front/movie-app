@@ -14,6 +14,7 @@ import {
 } from '@/constants/watchlist';
 import { watchlistKeys } from '@/constants';
 import { addWatchlist, removeWatchlist } from '@/lib/api/watchlist/watchlist';
+import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
 import type {
   WatchlistItem,
   GetWatchlistResponse,
@@ -177,6 +178,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated' && !!session?.user;
   const { toast } = useToast();
+  const openLoginPrompt = useLoginPromptStore((s) => s.open);
 
   const togglingIdRef = useRef<number | null>(null);
 
@@ -284,6 +286,11 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
 
   const toggleWatchlist = useCallback(
     (movie: WatchlistToggleMovie) => {
+      if (!isAuthenticated) {
+        openLoginPrompt('ウォッチリストに追加するにはログインが必要です。');
+        return;
+      }
+
       togglingIdRef.current = movie.id;
 
       if (isInWatchlist(movie.id)) {
@@ -322,7 +329,15 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         });
       }
     },
-    [isInWatchlist, getWatchlistId, addMutation, removeMutation, toast],
+    [
+      isAuthenticated,
+      openLoginPrompt,
+      isInWatchlist,
+      getWatchlistId,
+      addMutation,
+      removeMutation,
+      toast,
+    ],
   );
 
   const isAdding = addMutation.isPending;

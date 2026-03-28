@@ -14,6 +14,13 @@ jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
 }));
 
+jest.mock('next-auth/react', () => ({
+  useSession: () => ({
+    data: { user: { id: 'user-1' } },
+    status: 'authenticated',
+  }),
+}));
+
 jest.mock('@/lib/api/search/search', () => ({
   searchMoviesApi: jest.fn(),
 }));

@@ -59,16 +59,14 @@ describe('useSessionExpiry', () => {
     expect(mockSignOut).not.toHaveBeenCalled();
   });
 
-  it('loading → unauthenticated に変化した時にsignOutを呼ぶこと', () => {
+  it('loading → unauthenticated に変化した時にsignOutを呼ばないこと（未ログインユーザー）', () => {
     mockStatus = 'loading';
     const { rerender } = renderHook(() => useSessionExpiry());
 
     mockStatus = 'unauthenticated';
     rerender();
 
-    expect(mockSignOut).toHaveBeenCalledWith({
-      callbackUrl: '/auth/signin',
-    });
+    expect(mockSignOut).not.toHaveBeenCalled();
   });
 
   it('認証ページではsignOutを呼ばないこと', () => {

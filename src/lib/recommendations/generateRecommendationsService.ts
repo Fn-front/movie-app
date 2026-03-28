@@ -323,8 +323,12 @@ export async function processUserRecommendations(
   return { status: 'processed', recommendationCount: resolved.length };
 }
 
+/** バッチサイズ（同時処理するユーザー数の上限） */
+export const BATCH_SIZE = 5;
+
 /**
  * レコメンド生成CRONのメイン処理
+ * ユーザーをバッチ単位（5件ずつ）で並行処理し、リソース負荷を制限する
  */
 export async function executeGenerateRecommendationsCron(
   supabase: SupabaseClient,
@@ -339,22 +343,46 @@ export async function executeGenerateRecommendationsCron(
   let skippedUsers = 0;
   let totalRecommendations = 0;
 
-  for (const userId of activeUserIds) {
-    try {
-      const result = await processUserRecommendations(supabase, userId);
-      if (result.status === 'processed') {
-        processedUsers++;
-        totalRecommendations += result.recommendationCount;
+  const totalBatches = Math.ceil(activeUserIds.length / BATCH_SIZE);
+
+  for (let i = 0; i < activeUserIds.length; i += BATCH_SIZE) {
+    const batchIndex = Math.floor(i / BATCH_SIZE) + 1;
+    const batch = activeUserIds.slice(i, i + BATCH_SIZE);
+
+    console.log(
+      `Processing batch ${batchIndex}/${totalBatches}... (${batch.length} users)`,
+    );
+
+    const results = await Promise.allSettled(
+      batch.map(async (userId) => {
+        try {
+          return await processUserRecommendations(supabase, userId);
+        } catch (error) {
+          console.error(
+            `Error processing recommendations for user ${userId}:`,
+            error,
+          );
+          return { status: 'skipped' as const, recommendationCount: 0 };
+        }
+      }),
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        if (result.value.status === 'processed') {
+          processedUsers++;
+          totalRecommendations += result.value.recommendationCount;
+        } else {
+          skippedUsers++;
+        }
       } else {
         skippedUsers++;
       }
-    } catch (error) {
-      console.error(
-        `Error processing recommendations for user ${userId}:`,
-        error,
-      );
-      skippedUsers++;
     }
+
+    console.log(
+      `Completed batch ${batchIndex}/${totalBatches}: ${processedUsers} success, ${skippedUsers} failed`,
+    );
   }
 
   return {

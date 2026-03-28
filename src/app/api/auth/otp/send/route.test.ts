@@ -364,9 +364,7 @@ describe('POST /api/auth/otp/send', () => {
     });
     setupOtpFlowMocks();
 
-    await POST(
-      createRequest({ email: 'test@example.com', action: 'login' }),
-    );
+    await POST(createRequest({ email: 'test@example.com', action: 'login' }));
 
     expect(mockCheckRateLimit).toHaveBeenCalledWith(
       expect.anything(),

@@ -353,7 +353,10 @@ export async function executeGenerateRecommendationsCron(
       `Processing batch ${batchIndex}/${totalBatches}... (${batch.length} users)`,
     );
 
-    const results = await Promise.allSettled(
+    let batchSuccess = 0;
+    let batchFailed = 0;
+
+    const results = await Promise.all(
       batch.map(async (userId) => {
         try {
           return await processUserRecommendations(supabase, userId);
@@ -368,20 +371,18 @@ export async function executeGenerateRecommendationsCron(
     );
 
     for (const result of results) {
-      if (result.status === 'fulfilled') {
-        if (result.value.status === 'processed') {
-          processedUsers++;
-          totalRecommendations += result.value.recommendationCount;
-        } else {
-          skippedUsers++;
-        }
+      if (result.status === 'processed') {
+        processedUsers++;
+        batchSuccess++;
+        totalRecommendations += result.recommendationCount;
       } else {
         skippedUsers++;
+        batchFailed++;
       }
     }
 
     console.log(
-      `Completed batch ${batchIndex}/${totalBatches}: ${processedUsers} success, ${skippedUsers} failed`,
+      `Completed batch ${batchIndex}/${totalBatches}: ${batchSuccess} success, ${batchFailed} failed`,
     );
   }
 

@@ -184,7 +184,7 @@ describe('GET /api/movies/:id', () => {
 
   // === Cache-Controlヘッダー ===
 
-  it('成功レスポンスにCache-Controlヘッダーが設定される', async () => {
+  it('未認証時はpublic Cache-Controlヘッダーが設定される', async () => {
     mockGetAuthSession.mockResolvedValue(null);
     const mockMovie = {
       id: 123,
@@ -200,6 +200,23 @@ describe('GET /api/movies/:id', () => {
     expect(response.headers.get('Cache-Control')).toBe(
       'public, s-maxage=86400, stale-while-revalidate=604800',
     );
+  });
+
+  it('認証済み時はprivate, no-store Cache-Controlヘッダーが設定される', async () => {
+    mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
+    const mockMovie = {
+      id: 123,
+      title: 'テスト映画',
+    };
+    mockGetMovieDetail.mockResolvedValue(mockMovie);
+    mockFavoriteSingle.mockResolvedValue({ data: null, error: null });
+
+    const response = await GET(createRequest('123'), {
+      params: createParams('123'),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
   });
 
   it('未認証の場合、favoriteフィールドが含まれない', async () => {

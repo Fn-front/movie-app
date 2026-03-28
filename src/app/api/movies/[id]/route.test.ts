@@ -209,7 +209,17 @@ describe('GET /api/movies/:id', () => {
       title: 'テスト映画',
     };
     mockGetMovieDetail.mockResolvedValue(mockMovie);
-    mockFavoriteSingle.mockResolvedValue({ data: null, error: null });
+    mockFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            is: () => ({
+              single: () => Promise.resolve({ data: null, error: null }),
+            }),
+          }),
+        }),
+      }),
+    });
 
     const response = await GET(createRequest('123'), {
       params: createParams('123'),

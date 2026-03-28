@@ -23,6 +23,12 @@ import {
   AUTH_ERROR_MESSAGES,
 } from '@/constants';
 
+/** タイミング攻撃防止用のランダム遅延（200〜500ms） */
+async function randomDelay(): Promise<void> {
+  const delay = 200 + Math.random() * 300;
+  await new Promise((resolve) => setTimeout(resolve, delay));
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = createServiceRoleClient();
@@ -85,7 +91,8 @@ export async function POST(request: Request) {
         .single();
 
       if (!user) {
-        // メール列挙防止: 存在しないメールでも成功レスポンスを返す
+        // メール列挙防止: 存在しないメールでも成功レスポンス（遅延付き）
+        await randomDelay();
         return NextResponse.json(
           {
             success: true,
@@ -96,7 +103,8 @@ export async function POST(request: Request) {
       }
 
       if (user.is_verified) {
-        // メール列挙防止: 既に認証済みでも成功レスポンスを返す
+        // メール列挙防止: 既に認証済みでも成功レスポンス（遅延付き）
+        await randomDelay();
         return NextResponse.json(
           {
             success: true,
@@ -114,7 +122,8 @@ export async function POST(request: Request) {
         .single();
 
       if (!user) {
-        // メール列挙防止: 存在しないメールでも成功レスポンスを返す
+        // メール列挙防止: 存在しないメールでも成功レスポンス（遅延付き）
+        await randomDelay();
         return NextResponse.json(
           {
             success: true,

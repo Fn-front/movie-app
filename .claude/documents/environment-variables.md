@@ -16,14 +16,8 @@ Vercel Environment Variables - Web UIまたはCLIで設定
 映画情報取得用
 
 ```bash
-# TMDb API Key
-NEXT_PUBLIC_TMDB_API_KEY=your_tmdb_api_key_here
-
-# TMDb API Base URL
-NEXT_PUBLIC_TMDB_BASE_URL=https://api.themoviedb.org/3
-
-# TMDb Image Base URL
-NEXT_PUBLIC_TMDB_IMAGE_BASE_URL=https://image.tmdb.org/t/p
+# TMDb API Key（サーバーサイドのみ使用、NEXT_PUBLIC_ 不要）
+TMDB_API_KEY=your_tmdb_api_key_here
 ```
 
 **取得方法:**
@@ -228,10 +222,8 @@ USE_MOCK_DATA=false
 プロジェクトルートに配置するサンプルファイル
 
 ```bash
-# TMDb API
-NEXT_PUBLIC_TMDB_API_KEY=your_tmdb_api_key_here
-NEXT_PUBLIC_TMDB_BASE_URL=https://api.themoviedb.org/3
-NEXT_PUBLIC_TMDB_IMAGE_BASE_URL=https://image.tmdb.org/t/p
+# TMDb API（サーバーサイドのみ）
+TMDB_API_KEY=your_tmdb_api_key_here
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -289,7 +281,7 @@ NODE_ENV=development
 // lib/env.ts
 export function validateEnv() {
   const required = [
-    'NEXT_PUBLIC_TMDB_API_KEY',
+    'TMDB_API_KEY',
     'DATABASE_URL',
     'JWT_SECRET',
   ];

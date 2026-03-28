@@ -38,6 +38,11 @@ jest.mock('@/lib/openai/suggestTitle', () => ({
     mockFetchTitleSuggestions(...args),
 }));
 
+const mockCheckRateLimit = jest.fn();
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 // --- Helpers ---
 
 function createRequest(query?: string): Request {
@@ -54,6 +59,7 @@ describe('GET /api/movies/suggest-title', () => {
     jest.clearAllMocks();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
     mockSingle.mockResolvedValue({ data: null, error: null });
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
   });
 
   it('未認証の場合401を返す', async () => {
@@ -72,7 +78,7 @@ describe('GET /api/movies/suggest-title', () => {
     expect(body.error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('キャッシュヒット時にDBの結果を返す', async () => {
+  it('キャッシュヒット時にDBの結果を返す（レートリミット未消費）', async () => {
     mockSingle.mockResolvedValue({
       data: { suggestions: ['The Shawshank Redemption', 'Shawshank'] },
       error: null,
@@ -89,6 +95,7 @@ describe('GET /api/movies/suggest-title', () => {
     ]);
     expect(body.data.cached).toBe(true);
     expect(mockFetchTitleSuggestions).not.toHaveBeenCalled();
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
   });
 
   it('キャッシュミス時にOpenAI APIを呼び出して結果を返す', async () => {
@@ -149,6 +156,35 @@ describe('GET /api/movies/suggest-title', () => {
     expect(body.data.suggestions).toEqual([]);
     expect(body.data.cached).toBe(true);
     expect(mockFetchTitleSuggestions).not.toHaveBeenCalled();
+  });
+
+  it('レートリミット超過時に429を返す', async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 3600,
+    });
+
+    const response = await GET(createRequest('テスト'));
+    const body = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(body.success).toBe(false);
+    expect(response.headers.get('Retry-After')).toBe('3600');
+    expect(mockFetchTitleSuggestions).not.toHaveBeenCalled();
+  });
+
+  it('レートリミットがユーザーID単位で呼ばれる', async () => {
+    mockFetchTitleSuggestions.mockResolvedValue([]);
+
+    await GET(createRequest('テスト'));
+
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      'suggest_title',
+      10,
+      60,
+    );
   });
 
   it('予期しないエラーで500を返す', async () => {

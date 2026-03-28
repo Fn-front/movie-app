@@ -22,10 +22,10 @@ import axios, { type AxiosError } from 'axios';
 /**
  * TMDb API Read Access Token
  */
-const TMDB_ACCESS_TOKEN = process.env.NEXT_PUBLIC_TMDB_API_KEY;
+const TMDB_ACCESS_TOKEN = process.env.TMDB_API_KEY;
 
 if (!TMDB_ACCESS_TOKEN) {
-  throw new Error('NEXT_PUBLIC_TMDB_API_KEY is not defined');
+  throw new Error('TMDB_API_KEY is not defined');
 }
 
 /**

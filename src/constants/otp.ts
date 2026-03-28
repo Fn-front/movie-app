@@ -28,6 +28,10 @@ export const OTP_CONFIG = {
   MAX_ATTEMPTS: 5,
   /** 再送間隔（秒） */
   RESEND_INTERVAL_SECONDS: 60,
+  /** 日次送信上限 */
+  DAILY_SEND_LIMIT: 5,
+  /** 日次送信上限のウィンドウ（分） — 24時間 */
+  DAILY_SEND_WINDOW_MINUTES: 1440,
   /** OTP検証済みトークンの有効期限（分） — verified_atからの経過時間 */
   VERIFIED_TOKEN_EXPIRY_MINUTES: 5,
 } as const;
@@ -45,6 +49,8 @@ export const OTP_ERROR_MESSAGES = {
     '試行回数の上限に達しました。新しいコードを再送信してください。',
   /** 再送間隔が短すぎる */
   RESEND_TOO_SOON: 'しばらく待ってから再送信してください。',
+  /** 日次送信上限超過 */
+  DAILY_LIMIT_EXCEEDED: '本日の送信上限に達しました。明日再度お試しください。',
   /** OTPコードが見つからない */
   CODE_NOT_FOUND: '有効な確認コードが見つかりません。再送信してください。',
   /** ユーザーが見つからない */

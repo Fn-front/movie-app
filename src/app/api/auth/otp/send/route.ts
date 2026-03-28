@@ -12,6 +12,7 @@ import {
 import { getAuthSession } from '@/helpers/auth';
 import { otpSendSchema } from '@/schema/otp';
 import { generateOtpCode, sendOtpEmail } from '@/lib/otp';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
   OTP_ACTION,
   OTP_CONFIG,
@@ -21,6 +22,12 @@ import {
   ERROR_CODE,
   AUTH_ERROR_MESSAGES,
 } from '@/constants';
+
+/** タイミング攻撃防止用のランダム遅延（200〜500ms） */
+async function randomDelay(): Promise<void> {
+  const delay = 200 + Math.random() * 300;
+  await new Promise((resolve) => setTimeout(resolve, delay));
+}
 
 export async function POST(request: Request) {
   try {
@@ -47,6 +54,33 @@ export async function POST(request: Request) {
 
     const { email, action } = result.data;
 
+    // 日次送信上限チェック（メールアドレス単位で5通/日）
+    const dailyLimitResult = await checkRateLimit(
+      supabase,
+      email,
+      'otp_send_daily',
+      OTP_CONFIG.DAILY_SEND_LIMIT,
+      OTP_CONFIG.DAILY_SEND_WINDOW_MINUTES,
+    );
+
+    if (!dailyLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
+            message: OTP_ERROR_MESSAGES.DAILY_LIMIT_EXCEEDED,
+          },
+        },
+        {
+          status: HTTP_STATUS.TOO_MANY_REQUESTS,
+          headers: dailyLimitResult.retryAfter
+            ? { 'Retry-After': String(dailyLimitResult.retryAfter) }
+            : undefined,
+        },
+      );
+    }
+
     // アクション別チェック
     if (action === OTP_ACTION.REGISTRATION) {
       // 該当メールのユーザーが存在し is_verified = false であること
@@ -57,28 +91,26 @@ export async function POST(request: Request) {
         .single();
 
       if (!user) {
+        // メール列挙防止: 存在しないメールでも成功レスポンス（遅延付き）
+        await randomDelay();
         return NextResponse.json(
           {
-            success: false,
-            error: {
-              code: ERROR_CODE.NOT_FOUND,
-              message: OTP_ERROR_MESSAGES.USER_NOT_FOUND,
-            },
+            success: true,
+            message: OTP_SUCCESS_MESSAGES.CODE_SENT,
           },
-          { status: HTTP_STATUS.NOT_FOUND },
+          { status: HTTP_STATUS.OK },
         );
       }
 
       if (user.is_verified) {
+        // メール列挙防止: 既に認証済みでも成功レスポンス（遅延付き）
+        await randomDelay();
         return NextResponse.json(
           {
-            success: false,
-            error: {
-              code: ERROR_CODE.BAD_REQUEST,
-              message: OTP_ERROR_MESSAGES.ALREADY_VERIFIED,
-            },
+            success: true,
+            message: OTP_SUCCESS_MESSAGES.CODE_SENT,
           },
-          { status: HTTP_STATUS.BAD_REQUEST },
+          { status: HTTP_STATUS.OK },
         );
       }
     } else if (action === OTP_ACTION.LOGIN) {
@@ -90,15 +122,14 @@ export async function POST(request: Request) {
         .single();
 
       if (!user) {
+        // メール列挙防止: 存在しないメールでも成功レスポンス（遅延付き）
+        await randomDelay();
         return NextResponse.json(
           {
-            success: false,
-            error: {
-              code: ERROR_CODE.NOT_FOUND,
-              message: OTP_ERROR_MESSAGES.USER_NOT_FOUND,
-            },
+            success: true,
+            message: OTP_SUCCESS_MESSAGES.CODE_SENT,
           },
-          { status: HTTP_STATUS.NOT_FOUND },
+          { status: HTTP_STATUS.OK },
         );
       }
     } else if (action === OTP_ACTION.PASSWORD_CHANGE) {

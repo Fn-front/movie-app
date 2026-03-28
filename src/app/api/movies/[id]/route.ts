@@ -63,13 +63,21 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...movie,
-        ...(favorite !== undefined ? { favorite } : {}),
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          ...movie,
+          ...(favorite !== undefined ? { favorite } : {}),
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control':
+            'public, s-maxage=86400, stale-while-revalidate=604800',
+        },
+      },
+    );
   } catch (error) {
     if (
       isAxiosError(error) &&

@@ -182,6 +182,26 @@ describe('GET /api/movies/:id', () => {
     expect(json.data.favorite).toBeNull();
   });
 
+  // === Cache-Controlヘッダー ===
+
+  it('成功レスポンスにCache-Controlヘッダーが設定される', async () => {
+    mockGetAuthSession.mockResolvedValue(null);
+    const mockMovie = {
+      id: 123,
+      title: 'テスト映画',
+    };
+    mockGetMovieDetail.mockResolvedValue(mockMovie);
+
+    const response = await GET(createRequest('123'), {
+      params: createParams('123'),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=86400, stale-while-revalidate=604800',
+    );
+  });
+
   it('未認証の場合、favoriteフィールドが含まれない', async () => {
     mockGetAuthSession.mockResolvedValue(null);
     const mockMovie = {

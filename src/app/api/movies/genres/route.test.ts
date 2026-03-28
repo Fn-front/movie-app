@@ -51,6 +51,17 @@ describe('GET /api/movies/genres', () => {
     expect(json.data.genres).toEqual([]);
   });
 
+  it('成功レスポンスにCache-Controlヘッダーが設定される', async () => {
+    mockGetGenres.mockResolvedValue([{ id: 28, name: 'アクション' }]);
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=604800',
+    );
+  });
+
   it('TMDb APIエラー時に500を返す', async () => {
     mockGetGenres.mockRejectedValue(new Error('TMDb API error'));
 

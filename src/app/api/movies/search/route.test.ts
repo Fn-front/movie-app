@@ -342,6 +342,21 @@ describe('GET /api/movies/search', () => {
     });
   });
 
+  // === Cache-Controlヘッダー ===
+
+  describe('Cache-Controlヘッダー', () => {
+    it('成功レスポンスにCache-Controlヘッダーが設定される', async () => {
+      mockSearchMovies.mockResolvedValue(mockTMDbResponse);
+
+      const response = await GET(createRequest({ query: 'test' }));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Cache-Control')).toBe(
+        'public, s-maxage=3600, stale-while-revalidate=86400',
+      );
+    });
+  });
+
   // === エラーハンドリング ===
 
   describe('エラーハンドリング', () => {

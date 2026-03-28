@@ -34,10 +34,7 @@ export function verifyCronAuth(request: Request): NextResponse | null {
   const expected = Buffer.from(`Bearer ${cronSecret}`);
   const actual = Buffer.from(authHeader);
 
-  if (
-    expected.length !== actual.length ||
-    !timingSafeEqual(expected, actual)
-  ) {
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
     return NextResponse.json(
       {
         success: false,

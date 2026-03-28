@@ -419,7 +419,14 @@ export async function GET(request: Request) {
           genres: genreMap,
         },
       },
-      { status: HTTP_STATUS.OK },
+      {
+        status: HTTP_STATUS.OK,
+        headers: {
+          'Cache-Control': session
+            ? 'private, no-store'
+            : 'public, s-maxage=3600, stale-while-revalidate=86400',
+        },
+      },
     );
   } catch (error) {
     console.error('Movies fetch error:', error);

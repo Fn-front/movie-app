@@ -139,7 +139,13 @@ export async function GET(request: Request) {
           },
         },
       },
-      { status: HTTP_STATUS.OK },
+      {
+        status: HTTP_STATUS.OK,
+        headers: {
+          'Cache-Control':
+            'public, s-maxage=3600, stale-while-revalidate=86400',
+        },
+      },
     );
   } catch (error) {
     console.error('Movie search error:', error);

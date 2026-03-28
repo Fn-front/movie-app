@@ -1,7 +1,7 @@
 /**
  * 映画詳細API
  * GET /api/movies/:id
- * キャッシュなし、都度TMDb API取得
+ * 未認証時はCDNキャッシュ、認証時はprivate（favorite情報を含むため）
  */
 
 import { NextResponse } from 'next/server';
@@ -63,13 +63,22 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        ...movie,
-        ...(favorite !== undefined ? { favorite } : {}),
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          ...movie,
+          ...(favorite !== undefined ? { favorite } : {}),
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': session
+            ? 'private, no-store'
+            : 'public, s-maxage=86400, stale-while-revalidate=604800',
+        },
+      },
+    );
   } catch (error) {
     if (
       isAxiosError(error) &&

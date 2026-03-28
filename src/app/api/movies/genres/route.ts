@@ -28,7 +28,12 @@ export async function GET() {
           genres,
         },
       },
-      { status: HTTP_STATUS.OK },
+      {
+        status: HTTP_STATUS.OK,
+        headers: {
+          'Cache-Control': 'public, s-maxage=604800',
+        },
+      },
     );
   } catch (error) {
     console.error('Genres fetch error:', error);

@@ -14,7 +14,11 @@ jest.mock('@supabase/supabase-js', () => ({
 
 // --- Tests ---
 
-import { createServiceRoleClient, dbConnectionErrorResponse } from './supabase';
+import {
+  createServiceRoleClient,
+  createAnonClient,
+  dbConnectionErrorResponse,
+} from './supabase';
 import { createClient } from '@supabase/supabase-js';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';
@@ -64,6 +68,53 @@ describe('createServiceRoleClient', () => {
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     const result = createServiceRoleClient();
+
+    expect(result).toBeNull();
+    expect(mockCreateClient).not.toHaveBeenCalled();
+  });
+});
+
+describe('createAnonClient', () => {
+  const ORIGINAL_ENV = process.env;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  afterAll(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  it('環境変数がある場合にクライアントを返す', () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
+
+    const result = createAnonClient();
+
+    expect(result).not.toBeNull();
+    expect(mockCreateClient).toHaveBeenCalledWith(
+      'https://test.supabase.co',
+      'test-anon-key',
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    );
+  });
+
+  it('NEXT_PUBLIC_SUPABASE_URLが未設定の場合にnullを返す', () => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
+
+    const result = createAnonClient();
+
+    expect(result).toBeNull();
+    expect(mockCreateClient).not.toHaveBeenCalled();
+  });
+
+  it('NEXT_PUBLIC_SUPABASE_ANON_KEYが未設定の場合にnullを返す', () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    const result = createAnonClient();
 
     expect(result).toBeNull();
     expect(mockCreateClient).not.toHaveBeenCalled();

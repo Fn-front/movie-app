@@ -14,17 +14,47 @@ import {
   AWARD_DEFINITIONS,
   AWARDS_MESSAGES,
 } from '@/constants';
+import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { handleRouteError } from '@/helpers/routeError';
 import {
+  createAnonClient,
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import type {
   AwardMovie,
   AwardCategoryData,
   AwardData,
   AwardsResponseData,
 } from '@/features/awards/types';
+
+/** 受賞作品クエリで取得するカラム */
+const AWARD_MOVIES_SELECT =
+  'tmdb_movie_id, title, poster_path, release_date, vote_average, genre_ids, person_name, award_name, category, is_winner, display_order';
+
+/** 受賞作品の行型 */
+interface AwardMovieRow {
+  tmdb_movie_id: number;
+  title: string;
+  poster_path: string | null;
+  release_date: string | null;
+  vote_average: number | null;
+  genre_ids: number[] | null;
+  person_name: string | null;
+  award_name: string;
+  category: string;
+  is_winner: boolean;
+  display_order: number;
+}
+
+/** Cache-Control: CDNで1時間キャッシュ、stale-while-revalidateで24時間 */
+const CACHE_CONTROL_VALUE =
+  'public, s-maxage=3600, stale-while-revalidate=86400';
+
+/** レートリミット設定: IP単位で30回/10分 */
+const RATE_LIMIT_MAX_ATTEMPTS = 30;
+const RATE_LIMIT_WINDOW_MINUTES = 10;
 
 /** DBレコードをAwardMovie型に変換 */
 function toAwardMovie(row: {
@@ -47,9 +77,53 @@ function toAwardMovie(row: {
   };
 }
 
+/** リクエストからクライアントIPを取得 */
+function getClientIp(request: Request): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  return 'unknown';
+}
+
 export async function GET(request: Request) {
   try {
-    const supabase = createServiceRoleClient();
+    // レートリミットチェック（service roleで rate_limits テーブルにアクセス）
+    const serviceSupabase = createServiceRoleClient();
+    if (serviceSupabase) {
+      const clientIp = getClientIp(request);
+      const rateLimitResult = await checkRateLimit(
+        serviceSupabase,
+        clientIp,
+        'awards_fetch',
+        RATE_LIMIT_MAX_ATTEMPTS,
+        RATE_LIMIT_WINDOW_MINUTES,
+      );
+
+      if (!rateLimitResult.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
+              message: AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
+            },
+          },
+          {
+            status: HTTP_STATUS.TOO_MANY_REQUESTS,
+            headers: {
+              ...(rateLimitResult.retryAfter
+                ? { 'Retry-After': String(rateLimitResult.retryAfter) }
+                : {}),
+              'Cache-Control': 'no-store',
+            },
+          },
+        );
+      }
+    }
+
+    // データ取得はanonキー（RLS有効）
+    const supabase = createAnonClient();
     if (!supabase) return dbConnectionErrorResponse();
 
     const { searchParams } = new URL(request.url);
@@ -86,10 +160,10 @@ export async function GET(request: Request) {
       ),
     ];
 
-    // 指定年度の受賞作品データを取得
-    const { data: awardRows, error: awardError } = await supabase
+    // 指定年度の受賞作品データを取得（必要カラムのみ）
+    const { data: rawAwardRows, error: awardError } = await supabase
       .from('award_movies')
-      .select('*')
+      .select(AWARD_MOVIES_SELECT)
       .eq('award_year', year)
       .order('display_order', { ascending: true });
 
@@ -97,12 +171,14 @@ export async function GET(request: Request) {
       throw awardError;
     }
 
+    const awardRows = (rawAwardRows ?? []) as unknown as AwardMovieRow[];
+
     // AWARD_DEFINITIONS の定義順でデータを構造化
     const awards: AwardData[] = [];
 
     for (const [awardName, awardDef] of Object.entries(AWARD_DEFINITIONS)) {
-      const awardRows_filtered = (awardRows ?? []).filter(
-        (r: { award_name: string }) => r.award_name === awardName,
+      const awardRows_filtered = awardRows.filter(
+        (r) => r.award_name === awardName,
       );
 
       if (awardRows_filtered.length === 0) continue;
@@ -111,13 +187,12 @@ export async function GET(request: Request) {
 
       for (const categoryDef of awardDef.categories) {
         const categoryRows = awardRows_filtered.filter(
-          (r: { category: string }) => r.category === categoryDef.key,
+          (r) => r.category === categoryDef.key,
         );
 
         if (categoryRows.length === 0) continue;
 
-        const winner =
-          categoryRows.find((r: { is_winner: boolean }) => r.is_winner) ?? null;
+        const winner = categoryRows.find((r) => r.is_winner) ?? null;
         const nominees = categoryRows.map(toAwardMovie);
 
         categories.push({
@@ -145,7 +220,10 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       { success: true, data: responseData },
-      { status: HTTP_STATUS.OK },
+      {
+        status: HTTP_STATUS.OK,
+        headers: { 'Cache-Control': CACHE_CONTROL_VALUE },
+      },
     );
   } catch (error) {
     return handleRouteError(

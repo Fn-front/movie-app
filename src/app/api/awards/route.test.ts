@@ -8,9 +8,12 @@
 
 // --- Mocks ---
 
-const mockFrom = jest.fn();
+const mockAnonFrom = jest.fn();
+const mockServiceFrom = jest.fn();
+
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: jest.fn(() => ({ from: mockFrom })),
+  createAnonClient: jest.fn(() => ({ from: mockAnonFrom })),
+  createServiceRoleClient: jest.fn(() => ({ from: mockServiceFrom })),
   dbConnectionErrorResponse: jest.fn(
     () => new Response(JSON.stringify({ success: false }), { status: 500 }),
   ),
@@ -25,19 +28,28 @@ jest.mock('@/helpers/routeError', () => ({
   ),
 }));
 
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: jest.fn().mockResolvedValue({ allowed: true }),
+}));
+
 import { GET } from './route';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 
 // --- Helpers ---
 
-function createRequest(yearParam?: string): Request {
+function createRequest(yearParam?: string, ip?: string): Request {
   const url = yearParam
     ? `http://localhost/api/awards?year=${yearParam}`
     : 'http://localhost/api/awards';
-  return new Request(url);
+  const headers: Record<string, string> = {};
+  if (ip) {
+    headers['x-forwarded-for'] = ip;
+  }
+  return new Request(url, { headers });
 }
 
 function mockYearQuery(years: number[]) {
-  mockFrom.mockReturnValueOnce({
+  mockAnonFrom.mockReturnValueOnce({
     select: () => ({
       order: () =>
         Promise.resolve({
@@ -49,7 +61,7 @@ function mockYearQuery(years: number[]) {
 }
 
 function mockAwardDataQuery(rows: Record<string, unknown>[]) {
-  mockFrom.mockReturnValueOnce({
+  mockAnonFrom.mockReturnValueOnce({
     select: () => ({
       eq: () => ({
         order: () => Promise.resolve({ data: rows, error: null }),
@@ -58,11 +70,28 @@ function mockAwardDataQuery(rows: Record<string, unknown>[]) {
   });
 }
 
+function mockRateLimitQuery() {
+  mockServiceFrom.mockReturnValueOnce({
+    select: () => ({
+      eq: () => ({
+        eq: () => ({
+          single: () =>
+            Promise.resolve({ data: null, error: { code: 'PGRST116' } }),
+        }),
+      }),
+    }),
+  });
+  mockServiceFrom.mockReturnValueOnce({
+    insert: () => Promise.resolve({ error: null }),
+  });
+}
+
 // --- Tests ---
 
 describe('GET /api/awards', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (checkRateLimit as jest.Mock).mockResolvedValue({ allowed: true });
   });
 
   it('yearパラメータなしの場合400を返す', async () => {
@@ -91,6 +120,7 @@ describe('GET /api/awards', () => {
         release_date: '2025-12-01',
         vote_average: 8.5,
         genre_ids: [18],
+        person_name: null,
         award_name: 'academy_awards',
         award_year: 2026,
         category: 'best_picture',
@@ -114,6 +144,17 @@ describe('GET /api/awards', () => {
     expect(body.data.awards[0].categories[0].winner.tmdbMovieId).toBe(100);
   });
 
+  it('Cache-Controlヘッダーが設定される', async () => {
+    mockYearQuery([2026]);
+    mockAwardDataQuery([]);
+
+    const response = await GET(createRequest('2026'));
+
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, s-maxage=3600, stale-while-revalidate=86400',
+    );
+  });
+
   it('データがない年度は空のawards配列を返す', async () => {
     mockYearQuery([2026]);
     mockAwardDataQuery([]);
@@ -135,6 +176,7 @@ describe('GET /api/awards', () => {
         release_date: '2025-12-01',
         vote_average: 8.5,
         genre_ids: [18],
+        person_name: null,
         award_name: 'academy_awards',
         award_year: 2026,
         category: 'best_picture',
@@ -149,6 +191,7 @@ describe('GET /api/awards', () => {
         release_date: '2025-11-01',
         vote_average: 7.5,
         genre_ids: [18],
+        person_name: null,
         award_name: 'academy_awards',
         award_year: 2026,
         category: 'best_picture',
@@ -177,6 +220,7 @@ describe('GET /api/awards', () => {
         release_date: '2025-12-01',
         vote_average: 8.0,
         genre_ids: [18],
+        person_name: '監督名',
         award_name: 'academy_awards',
         award_year: 2026,
         category: 'best_director',
@@ -191,6 +235,7 @@ describe('GET /api/awards', () => {
         release_date: '2025-12-01',
         vote_average: 8.5,
         genre_ids: [18],
+        person_name: null,
         award_name: 'academy_awards',
         award_year: 2026,
         category: 'best_picture',
@@ -220,10 +265,73 @@ describe('GET /api/awards', () => {
   });
 
   it('DB接続エラー時は500を返す', async () => {
-    const { createServiceRoleClient } = await import('@/helpers/supabase');
-    (createServiceRoleClient as jest.Mock).mockReturnValueOnce(null);
+    const { createAnonClient } = await import('@/helpers/supabase');
+    (createAnonClient as jest.Mock).mockReturnValueOnce(null);
 
     const response = await GET(createRequest('2026'));
     expect(response.status).toBe(500);
+  });
+
+  describe('レートリミット', () => {
+    it('レートリミット超過時に429を返す', async () => {
+      (checkRateLimit as jest.Mock).mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 600,
+      });
+
+      const response = await GET(createRequest('2026', '192.168.1.1'));
+      const body = await response.json();
+
+      expect(response.status).toBe(429);
+      expect(body.success).toBe(false);
+      expect(response.headers.get('Retry-After')).toBe('600');
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+    });
+
+    it('x-forwarded-forからIPアドレスを取得する', async () => {
+      (checkRateLimit as jest.Mock).mockResolvedValueOnce({ allowed: true });
+      mockYearQuery([2026]);
+      mockAwardDataQuery([]);
+
+      await GET(createRequest('2026', '10.0.0.1, 10.0.0.2'));
+
+      expect(checkRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        '10.0.0.1',
+        'awards_fetch',
+        30,
+        10,
+      );
+    });
+
+    it('x-forwarded-forがない場合はunknownを使用する', async () => {
+      (checkRateLimit as jest.Mock).mockResolvedValueOnce({ allowed: true });
+      mockYearQuery([2026]);
+      mockAwardDataQuery([]);
+
+      await GET(createRequest('2026'));
+
+      expect(checkRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'unknown',
+        'awards_fetch',
+        30,
+        10,
+      );
+    });
+
+    it('service roleクライアントがない場合はレートリミットをスキップする', async () => {
+      const { createServiceRoleClient } = await import('@/helpers/supabase');
+      (createServiceRoleClient as jest.Mock).mockReturnValueOnce(null);
+      mockYearQuery([2026]);
+      mockAwardDataQuery([]);
+
+      const response = await GET(createRequest('2026'));
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(checkRateLimit).not.toHaveBeenCalled();
+    });
   });
 });

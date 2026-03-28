@@ -15,8 +15,14 @@ import {
   ERROR_CODE,
   TITLE_SUGGESTION_ERROR_MESSAGES,
 } from '@/constants';
+import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { titleSuggestionQuerySchema } from '@/schema/titleSuggestion';
 import { fetchTitleSuggestionsFromOpenAI } from '@/lib/openai/suggestTitle';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+
+/** レートリミット設定: ユーザー単位で10回/60分（OpenAI APIコスト保護） */
+const RATE_LIMIT_MAX_ATTEMPTS = 10;
+const RATE_LIMIT_WINDOW_MINUTES = 60;
 
 export async function GET(request: Request) {
   try {
@@ -50,7 +56,34 @@ export async function GET(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    // 4. キャッシュ確認（空配列の場合も「提案なし」としてキャッシュヒット）
+    // 4. レートリミットチェック（ユーザー単位）
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      'suggest_title',
+      RATE_LIMIT_MAX_ATTEMPTS,
+      RATE_LIMIT_WINDOW_MINUTES,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
+            message: AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
+          },
+        },
+        {
+          status: HTTP_STATUS.TOO_MANY_REQUESTS,
+          headers: rateLimitResult.retryAfter
+            ? { 'Retry-After': String(rateLimitResult.retryAfter) }
+            : undefined,
+        },
+      );
+    }
+
+    // 5. キャッシュ確認（空配列の場合も「提案なし」としてキャッシュヒット）
     const { data: cached, error: cacheError } = await supabase
       .from('title_suggestions')
       .select('suggestions')
@@ -70,10 +103,10 @@ export async function GET(request: Request) {
       );
     }
 
-    // 5. OpenAI APIで原題候補を推測
+    // 6. OpenAI APIで原題候補を推測
     const suggestions = await fetchTitleSuggestionsFromOpenAI(query);
 
-    // 6. DBにキャッシュ保存（空配列も保存し、再度のAPI呼び出しを防ぐ）
+    // 7. DBにキャッシュ保存（空配列も保存し、再度のAPI呼び出しを防ぐ）
     await supabase.from('title_suggestions').upsert(
       {
         query_title: query,

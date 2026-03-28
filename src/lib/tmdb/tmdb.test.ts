@@ -42,7 +42,7 @@ jest.mock('axios', () => {
 });
 
 beforeAll(() => {
-  process.env.NEXT_PUBLIC_TMDB_API_KEY = 'test-token';
+  process.env.TMDB_API_KEY = 'test-token';
 });
 
 const mockResponse = {

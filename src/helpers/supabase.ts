@@ -1,5 +1,5 @@
 /**
- * API Route用 Supabase service roleクライアントヘルパー
+ * API Route用 Supabaseクライアントヘルパー
  */
 
 import { NextResponse } from 'next/server';
@@ -22,6 +22,26 @@ export function createServiceRoleClient() {
   }
 
   return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+/**
+ * Supabase anonキークライアントを作成（RLS有効）
+ *
+ * 公開APIなどRLSを適用したい場面で使用する。
+ *
+ * @returns Supabaseクライアント、環境変数未設定の場合はnull
+ */
+export function createAnonClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return null;
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }

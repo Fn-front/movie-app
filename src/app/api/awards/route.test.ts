@@ -70,22 +70,6 @@ function mockAwardDataQuery(rows: Record<string, unknown>[]) {
   });
 }
 
-function mockRateLimitQuery() {
-  mockServiceFrom.mockReturnValueOnce({
-    select: () => ({
-      eq: () => ({
-        eq: () => ({
-          single: () =>
-            Promise.resolve({ data: null, error: { code: 'PGRST116' } }),
-        }),
-      }),
-    }),
-  });
-  mockServiceFrom.mockReturnValueOnce({
-    insert: () => Promise.resolve({ error: null }),
-  });
-}
-
 // --- Tests ---
 
 describe('GET /api/awards', () => {

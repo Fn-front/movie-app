@@ -56,7 +56,27 @@ export async function GET(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    // 4. レートリミットチェック（ユーザー単位）
+    // 4. キャッシュ確認（空配列の場合も「提案なし」としてキャッシュヒット）
+    const { data: cached, error: cacheError } = await supabase
+      .from('title_suggestions')
+      .select('suggestions')
+      .eq('query_title', query)
+      .single();
+
+    if (!cacheError && cached) {
+      return NextResponse.json(
+        {
+          success: true,
+          data: {
+            suggestions: cached.suggestions,
+            cached: true,
+          },
+        },
+        { status: HTTP_STATUS.OK },
+      );
+    }
+
+    // 5. レートリミットチェック（OpenAI API呼び出し前、キャッシュヒット時は消費しない）
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,
@@ -80,26 +100,6 @@ export async function GET(request: Request) {
             ? { 'Retry-After': String(rateLimitResult.retryAfter) }
             : undefined,
         },
-      );
-    }
-
-    // 5. キャッシュ確認（空配列の場合も「提案なし」としてキャッシュヒット）
-    const { data: cached, error: cacheError } = await supabase
-      .from('title_suggestions')
-      .select('suggestions')
-      .eq('query_title', query)
-      .single();
-
-    if (!cacheError && cached) {
-      return NextResponse.json(
-        {
-          success: true,
-          data: {
-            suggestions: cached.suggestions,
-            cached: true,
-          },
-        },
-        { status: HTTP_STATUS.OK },
       );
     }
 

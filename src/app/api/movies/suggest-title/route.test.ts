@@ -78,7 +78,7 @@ describe('GET /api/movies/suggest-title', () => {
     expect(body.error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('キャッシュヒット時にDBの結果を返す', async () => {
+  it('キャッシュヒット時にDBの結果を返す（レートリミット未消費）', async () => {
     mockSingle.mockResolvedValue({
       data: { suggestions: ['The Shawshank Redemption', 'Shawshank'] },
       error: null,
@@ -95,6 +95,7 @@ describe('GET /api/movies/suggest-title', () => {
     ]);
     expect(body.data.cached).toBe(true);
     expect(mockFetchTitleSuggestions).not.toHaveBeenCalled();
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
   });
 
   it('キャッシュミス時にOpenAI APIを呼び出して結果を返す', async () => {

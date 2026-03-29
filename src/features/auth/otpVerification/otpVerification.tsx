@@ -32,7 +32,6 @@ export const OtpVerification = memo<OtpVerificationProps>(
       resendCountdown,
       canResend,
       apiError,
-      remainingAttempts,
       handleVerify,
       handleResend,
     } = useOtpVerification({ email, action, onVerifySuccess });
@@ -92,12 +91,6 @@ export const OtpVerification = memo<OtpVerificationProps>(
           {apiError && (
             <p className={styles.c_otp_verification__error} role='alert'>
               {apiError}
-            </p>
-          )}
-
-          {remainingAttempts !== null && remainingAttempts > 0 && (
-            <p className={styles.c_otp_verification__attempts} role='status'>
-              {OTP_MESSAGES.REMAINING_ATTEMPTS(remainingAttempts)}
             </p>
           )}
 

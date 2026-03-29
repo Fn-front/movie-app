@@ -37,7 +37,6 @@ describe('useOtpVerification', () => {
     expect(result.current.resendCountdown).toBe(60);
     expect(result.current.canResend).toBe(false);
     expect(result.current.apiError).toBeNull();
-    expect(result.current.remainingAttempts).toBeNull();
   });
 
   it('カウントダウンが正しく動作する', () => {
@@ -85,7 +84,7 @@ describe('useOtpVerification', () => {
     );
   });
 
-  it('handleVerify: 失敗時にエラーと残り試行回数が設定される', async () => {
+  it('handleVerify: 失敗時にエラーメッセージが設定される', async () => {
     jest.useRealTimers();
 
     mockFetch.mockResolvedValueOnce({
@@ -93,7 +92,6 @@ describe('useOtpVerification', () => {
       json: async () => ({
         error: {
           message: 'コードが間違っています',
-          details: { remainingAttempts: 3 },
         },
       }),
     });
@@ -105,7 +103,6 @@ describe('useOtpVerification', () => {
     });
 
     expect(result.current.apiError).toBe('コードが間違っています');
-    expect(result.current.remainingAttempts).toBe(3);
     expect(defaultProps.onVerifySuccess).not.toHaveBeenCalled();
   });
 

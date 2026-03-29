@@ -260,7 +260,7 @@ describe('POST /api/auth/otp/verify', () => {
     expect(response.status).toBe(429);
   });
 
-  it('コードが不一致の場合400を返し残り試行回数を含む', async () => {
+  it('コードが不一致の場合400を返す', async () => {
     // OTPレコード取得
     mockFrom.mockReturnValueOnce({
       select: () => ({
@@ -303,7 +303,7 @@ describe('POST /api/auth/otp/verify', () => {
     const json = await response.json();
 
     expect(response.status).toBe(400);
-    expect(json.error.details.remainingAttempts).toBe(2);
+    expect(json.error.details).toBeUndefined();
   });
 
   it('registration: is_verified更新失敗で500を返す', async () => {

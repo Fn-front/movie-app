@@ -109,15 +109,12 @@ export async function POST(request: Request) {
         .update({ attempts: newAttempts })
         .eq('id', otpRecord.id);
 
-      const remainingAttempts = OTP_CONFIG.MAX_ATTEMPTS - newAttempts;
-
       return NextResponse.json(
         {
           success: false,
           error: {
             code: ERROR_CODE.BAD_REQUEST,
-            message: `${OTP_ERROR_MESSAGES.INVALID_CODE}残り${remainingAttempts}回入力できます。`,
-            details: { remainingAttempts },
+            message: OTP_ERROR_MESSAGES.INVALID_CODE,
           },
         },
         { status: HTTP_STATUS.BAD_REQUEST },

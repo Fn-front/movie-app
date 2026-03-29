@@ -22,7 +22,6 @@ interface UseOtpVerificationReturn {
   resendCountdown: number;
   canResend: boolean;
   apiError: string | null;
-  remainingAttempts: number | null;
   handleVerify: (code: string) => Promise<void>;
   handleResend: () => Promise<void>;
 }
@@ -38,9 +37,6 @@ export function useOtpVerification({
     OTP_CONFIG.RESEND_INTERVAL_SECONDS,
   );
   const [apiError, setApiError] = useState<string | null>(null);
-  const [remainingAttempts, setRemainingAttempts] = useState<number | null>(
-    null,
-  );
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -83,13 +79,9 @@ export function useOtpVerification({
           setApiError(
             data.error?.message || UI_ERROR_MESSAGES.OTP_VERIFY_FAILED,
           );
-          if (data.error?.details?.remainingAttempts !== undefined) {
-            setRemainingAttempts(data.error.details.remainingAttempts);
-          }
           return;
         }
 
-        setRemainingAttempts(null);
         onVerifySuccess?.();
       } catch {
         setApiError(UI_ERROR_MESSAGES.NETWORK_ERROR);
@@ -120,7 +112,6 @@ export function useOtpVerification({
 
       // カウントダウンリセット
       setResendCountdown(OTP_CONFIG.RESEND_INTERVAL_SECONDS);
-      setRemainingAttempts(null);
     } catch {
       setApiError(UI_ERROR_MESSAGES.NETWORK_ERROR);
     } finally {
@@ -134,7 +125,6 @@ export function useOtpVerification({
     resendCountdown,
     canResend,
     apiError,
-    remainingAttempts,
     handleVerify,
     handleResend,
   };

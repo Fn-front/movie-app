@@ -8,7 +8,7 @@
 
 import { NextRequest } from 'next/server';
 
-import { GET } from './route';
+import { GET, maxDuration, dynamic } from './route';
 
 // --- Mocks ---
 
@@ -39,6 +39,14 @@ describe('GET /api/cron/sync-movies', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  it('maxDurationが120に設定されている', () => {
+    expect(maxDuration).toBe(120);
+  });
+
+  it('dynamicがforce-dynamicに設定されている', () => {
+    expect(dynamic).toBe('force-dynamic');
   });
 
   it('正しい認証で同期が実行される', async () => {

@@ -37,7 +37,6 @@ export async function POST(request: Request) {
           error: {
             code: ERROR_CODE.VALIDATION_ERROR,
             message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
-            details: result.error.flatten().fieldErrors,
           },
         },
         { status: HTTP_STATUS.BAD_REQUEST },

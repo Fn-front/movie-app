@@ -286,7 +286,7 @@ export async function GET(request: Request) {
     // データクエリを構築
     let dataQuery = supabase
       .from('movie_cache')
-      .select('*')
+      .select('id, tmdb_id, title, poster_path, backdrop_path, release_date, overview, vote_average, popularity, genre_ids, release_type, is_now_playing, is_revival')
       .eq('release_type', release_type)
       .order(sortColumn, { ascending, nullsFirst: false })
       .order('id', { ascending: true })

@@ -132,8 +132,6 @@ export const FILTER_LABELS = {
 export const OTP_MESSAGES = {
   /** 見出し */
   HEADING: '確認コードを入力',
-  /** 残り試行回数 */
-  REMAINING_ATTEMPTS: (count: number) => `残り${count}回入力できます`,
   /** 再送信カウントダウン */
   RESEND_COUNTDOWN: (seconds: number) => `再送信まで ${seconds}秒`,
 } as const;

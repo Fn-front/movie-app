@@ -286,7 +286,9 @@ export async function GET(request: Request) {
     // データクエリを構築
     let dataQuery = supabase
       .from('movie_cache')
-      .select('id, title, poster_path, backdrop_path, release_date, overview, vote_average, popularity, genre_ids, release_type, is_now_playing, is_revival')
+      .select(
+        'id, title, poster_path, backdrop_path, release_date, overview, vote_average, popularity, genre_ids, release_type, is_now_playing, is_revival',
+      )
       .eq('release_type', release_type)
       .order(sortColumn, { ascending, nullsFirst: false })
       .order('id', { ascending: true })
@@ -365,7 +367,7 @@ export async function GET(request: Request) {
 
     // 認証済みの場合、お気に入り情報を付与
     const session = await getAuthSession();
-    let moviesWithFavorites = movies ?? [];
+    let moviesWithFavorites: any[] = movies ?? [];
 
     if (session && moviesWithFavorites.length > 0) {
       const movieIds = moviesWithFavorites.map((m: { id: number }) => m.id);

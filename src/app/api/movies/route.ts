@@ -286,7 +286,9 @@ export async function GET(request: Request) {
     // データクエリを構築
     let dataQuery = supabase
       .from('movie_cache')
-      .select('*')
+      .select(
+        'id, title, poster_path, backdrop_path, release_date, overview, vote_average, popularity, genre_ids, release_type, is_now_playing, is_revival',
+      )
       .eq('release_type', release_type)
       .order(sortColumn, { ascending, nullsFirst: false })
       .order('id', { ascending: true })
@@ -368,7 +370,7 @@ export async function GET(request: Request) {
     let moviesWithFavorites = movies ?? [];
 
     if (session && moviesWithFavorites.length > 0) {
-      const movieIds = moviesWithFavorites.map((m: { id: number }) => m.id);
+      const movieIds = moviesWithFavorites.map((m) => m.id);
 
       const { data: favorites } = await supabase
         .from('favorites')
@@ -379,27 +381,21 @@ export async function GET(request: Request) {
 
       if (favorites && favorites.length > 0) {
         const favoriteMap = new Map(
-          favorites.map(
-            (f: { id: string; tmdb_movie_id: number; rating: number }) => [
-              f.tmdb_movie_id,
-              { id: f.id, rating: f.rating },
-            ],
-          ),
+          favorites.map((f) => [
+            f.tmdb_movie_id,
+            { id: f.id, rating: f.rating },
+          ]),
         );
 
-        moviesWithFavorites = moviesWithFavorites.map(
-          (movie: { id: number }) => ({
-            ...movie,
-            favorite: favoriteMap.get(movie.id) ?? null,
-          }),
-        );
+        moviesWithFavorites = moviesWithFavorites.map((movie) => ({
+          ...movie,
+          favorite: favoriteMap.get(movie.id) ?? null,
+        })) as typeof moviesWithFavorites;
       } else {
-        moviesWithFavorites = moviesWithFavorites.map(
-          (movie: { id: number }) => ({
-            ...movie,
-            favorite: null,
-          }),
-        );
+        moviesWithFavorites = moviesWithFavorites.map((movie) => ({
+          ...movie,
+          favorite: null,
+        })) as typeof moviesWithFavorites;
       }
     }
 

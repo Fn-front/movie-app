@@ -114,8 +114,7 @@ export function useCalendar(): UseCalendarReturn {
 
   const goToPreviousMonth = useCallback(() => {
     setCurrentMonth((prev) => {
-      const newDate = new Date(prev);
-      newDate.setMonth(newDate.getMonth() - 1);
+      const newDate = new Date(prev.getFullYear(), prev.getMonth() - 1, 1);
       return newDate;
     });
     setSelectedDate(undefined);
@@ -123,8 +122,7 @@ export function useCalendar(): UseCalendarReturn {
 
   const goToNextMonth = useCallback(() => {
     setCurrentMonth((prev) => {
-      const newDate = new Date(prev);
-      newDate.setMonth(newDate.getMonth() + 1);
+      const newDate = new Date(prev.getFullYear(), prev.getMonth() + 1, 1);
       return newDate;
     });
     setSelectedDate(undefined);

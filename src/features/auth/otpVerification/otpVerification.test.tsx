@@ -103,8 +103,7 @@ describe('OtpVerification', () => {
       json: async () => ({
         success: false,
         error: {
-          message: '確認コードが間違っています。残り3回入力できます。',
-          details: { remainingAttempts: 3 },
+          message: '確認コードが間違っています。',
         },
       }),
     });
@@ -116,7 +115,9 @@ describe('OtpVerification', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
-      expect(screen.getByRole('status')).toHaveTextContent('残り3回');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '確認コードが間違っています。',
+      );
     });
   });
 

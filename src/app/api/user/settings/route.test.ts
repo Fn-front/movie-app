@@ -29,6 +29,11 @@ jest.mock('@/helpers/auth', () => ({
     new Response(JSON.stringify({ success: false }), { status: 401 }),
 }));
 
+const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
 
 // --- Helpers ---
@@ -209,5 +214,20 @@ describe('PUT /api/user/settings', () => {
     expect(response.status).toBe(500);
     expect(json.success).toBe(false);
     expect(json.error.message).toBe(SETTINGS_ERROR_MESSAGES.UPDATE_FAILED);
+  });
+
+  it('レート制限超過時に429を返す', async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 60,
+    });
+
+    const response = await PUT(createPutRequest({ theme: 'dark' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('RATE_LIMIT_EXCEEDED');
+    expect(json.error.details.retryAfter).toBe(60);
   });
 });

@@ -10,7 +10,7 @@ import { NextRequest } from 'next/server';
 
 import { MOVIES_SUCCESS_MESSAGES } from '@/constants';
 
-import { GET } from './route';
+import { GET, maxDuration, dynamic } from './route';
 
 // --- Mocks ---
 
@@ -43,6 +43,14 @@ describe('GET /api/cron/update-movies', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  it('maxDurationが60に設定されている', () => {
+    expect(maxDuration).toBe(60);
+  });
+
+  it('dynamicがforce-dynamicに設定されている', () => {
+    expect(dynamic).toBe('force-dynamic');
   });
 
   it('正しい認証でバッチ更新が実行される', async () => {

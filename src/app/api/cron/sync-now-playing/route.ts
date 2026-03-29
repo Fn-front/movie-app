@@ -14,6 +14,7 @@ import { handleRouteError } from '@/helpers/routeError';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   try {

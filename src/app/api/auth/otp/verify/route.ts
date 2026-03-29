@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     // otp_codesテーブルから該当レコード検索（最新の未検証OTP）
     const { data: otpRecord, error: fetchError } = await supabase
       .from('otp_codes')
-      .select('*')
+      .select('id, code, attempts, expires_at')
       .eq('email', email)
       .eq('action_type', action)
       .is('verified_at', null)

@@ -45,8 +45,8 @@ describe('GET /api/cron/update-movies', () => {
     process.env = originalEnv;
   });
 
-  it('maxDurationが60に設定されている', () => {
-    expect(maxDuration).toBe(60);
+  it('maxDurationが300に設定されている', () => {
+    expect(maxDuration).toBe(300);
   });
 
   it('dynamicがforce-dynamicに設定されている', () => {

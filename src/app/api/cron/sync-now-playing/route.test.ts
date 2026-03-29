@@ -43,8 +43,8 @@ describe('GET /api/cron/sync-now-playing', () => {
     process.env = originalEnv;
   });
 
-  it('maxDurationが60に設定されている', () => {
-    expect(maxDuration).toBe(60);
+  it('maxDurationが120に設定されている', () => {
+    expect(maxDuration).toBe(120);
   });
 
   it('dynamicがforce-dynamicに設定されている', () => {

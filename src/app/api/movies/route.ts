@@ -367,10 +367,10 @@ export async function GET(request: Request) {
 
     // 認証済みの場合、お気に入り情報を付与
     const session = await getAuthSession();
-    let moviesWithFavorites: any[] = movies ?? [];
+    let moviesWithFavorites = movies ?? [];
 
     if (session && moviesWithFavorites.length > 0) {
-      const movieIds = moviesWithFavorites.map((m: { id: number }) => m.id);
+      const movieIds = moviesWithFavorites.map((m) => m.id);
 
       const { data: favorites } = await supabase
         .from('favorites')
@@ -381,27 +381,21 @@ export async function GET(request: Request) {
 
       if (favorites && favorites.length > 0) {
         const favoriteMap = new Map(
-          favorites.map(
-            (f: { id: string; tmdb_movie_id: number; rating: number }) => [
-              f.tmdb_movie_id,
-              { id: f.id, rating: f.rating },
-            ],
-          ),
+          favorites.map((f) => [
+            f.tmdb_movie_id,
+            { id: f.id, rating: f.rating },
+          ]),
         );
 
-        moviesWithFavorites = moviesWithFavorites.map(
-          (movie: { id: number }) => ({
-            ...movie,
-            favorite: favoriteMap.get(movie.id) ?? null,
-          }),
-        );
+        moviesWithFavorites = moviesWithFavorites.map((movie) => ({
+          ...movie,
+          favorite: favoriteMap.get(movie.id) ?? null,
+        })) as typeof moviesWithFavorites;
       } else {
-        moviesWithFavorites = moviesWithFavorites.map(
-          (movie: { id: number }) => ({
-            ...movie,
-            favorite: null,
-          }),
-        );
+        moviesWithFavorites = moviesWithFavorites.map((movie) => ({
+          ...movie,
+          favorite: null,
+        })) as typeof moviesWithFavorites;
       }
     }
 

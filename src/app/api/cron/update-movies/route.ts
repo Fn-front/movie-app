@@ -18,6 +18,7 @@ import { handleRouteError } from '@/helpers/routeError';
 import { updateMoviesCacheByBatch } from '@/lib/sync/updateMoviesCacheByBatch';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   try {

@@ -30,6 +30,11 @@ jest.mock('@/helpers/auth', () => ({
     new Response(JSON.stringify({ success: false }), { status: 401 }),
 }));
 
+const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
 
 // --- Helpers ---
@@ -195,6 +200,22 @@ describe('PATCH /api/favorites/:id', () => {
 
     expect(response.status).toBe(500);
   });
+
+  it('レート制限超過時に429を返す', async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 60,
+    });
+
+    const { request, params } = createPatchRequest(VALID_UUID, { rating: 5 });
+    const response = await PATCH(request, { params });
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('RATE_LIMIT_EXCEEDED');
+    expect(json.error.details.retryAfter).toBe(60);
+  });
 });
 
 // --- DELETE Tests ---
@@ -339,5 +360,21 @@ describe('DELETE /api/favorites/:id', () => {
     const response = await DELETE(request, { params });
 
     expect(response.status).toBe(500);
+  });
+
+  it('レート制限超過時に429を返す', async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 60,
+    });
+
+    const { request, params } = createDeleteRequest(VALID_UUID);
+    const response = await DELETE(request, { params });
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('RATE_LIMIT_EXCEEDED');
+    expect(json.error.details.retryAfter).toBe(60);
   });
 });

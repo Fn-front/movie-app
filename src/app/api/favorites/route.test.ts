@@ -23,6 +23,11 @@ jest.mock('@/helpers/auth', () => ({
     new Response(JSON.stringify({ success: false }), { status: 401 }),
 }));
 
+const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
 
 // --- Helpers ---
@@ -385,6 +390,27 @@ describe('POST /api/favorites', () => {
     expect(response.status).toBe(400);
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('BAD_REQUEST');
+  });
+
+  it('レート制限超過時に429を返す', async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 60,
+    });
+
+    const response = await POST(
+      createPostRequest({
+        tmdb_movie_id: 12345,
+        title: 'テスト映画',
+        rating: 8,
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('RATE_LIMIT_EXCEEDED');
+    expect(json.error.details.retryAfter).toBe(60);
   });
 
   it('ratingが未指定で400を返す', async () => {

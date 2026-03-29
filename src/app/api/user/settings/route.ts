@@ -11,6 +11,8 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
+import { rateLimitExceededResponse } from '@/helpers/apiHelpers';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { updateSettingsSchema } from '@/schema/user';
 import type { UserSettings } from '@/schema/user';
 import {
@@ -22,6 +24,10 @@ import {
   API_ERROR_MESSAGES,
   THEME_DEFAULTS,
 } from '@/constants';
+
+const RATE_LIMIT_ACTION = 'write_api_settings';
+const RATE_LIMIT_MAX_ATTEMPTS = 10;
+const RATE_LIMIT_WINDOW_MINUTES = 1;
 
 /** デフォルトのユーザー設定 */
 const DEFAULT_SETTINGS: UserSettings = {
@@ -96,6 +102,19 @@ export async function PUT(request: Request) {
     // Supabaseクライアント検証
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
+
+    // レート制限チェック
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION,
+      RATE_LIMIT_MAX_ATTEMPTS,
+      RATE_LIMIT_WINDOW_MINUTES,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
 
     // リクエストボディの取得・バリデーション
     const body = await request.json();

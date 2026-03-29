@@ -6,13 +6,18 @@
 
 import { NextResponse } from 'next/server';
 
-import { softDeleteById, notFoundResponse } from '@/helpers/apiHelpers';
+import {
+  softDeleteById,
+  notFoundResponse,
+  rateLimitExceededResponse,
+} from '@/helpers/apiHelpers';
 import {
   isValidUuid,
   invalidUuidResponse,
   parseAndValidate,
 } from '@/helpers/requestValidation';
 import { withAuth } from '@/helpers/routeHandler';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { favoritesUpdateSchema } from '@/schema/favorites';
 import {
   HTTP_STATUS,
@@ -20,8 +25,25 @@ import {
   FAVORITES_SUCCESS_MESSAGES,
 } from '@/constants';
 
+const RATE_LIMIT_ACTION = 'write_api_favorites';
+const RATE_LIMIT_MAX_ATTEMPTS = 10;
+const RATE_LIMIT_WINDOW_MINUTES = 1;
+
 export const PATCH = withAuth(
   async ({ session, supabase, request, params }) => {
+    // レート制限チェック
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION,
+      RATE_LIMIT_MAX_ATTEMPTS,
+      RATE_LIMIT_WINDOW_MINUTES,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     const { id } = await params!;
 
     // UUID形式チェック
@@ -72,6 +94,19 @@ export const PATCH = withAuth(
 
 export const DELETE = withAuth(
   async ({ session, supabase, params }) => {
+    // レート制限チェック
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION,
+      RATE_LIMIT_MAX_ATTEMPTS,
+      RATE_LIMIT_WINDOW_MINUTES,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     const { id } = await params!;
 
     // UUID形式チェック

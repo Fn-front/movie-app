@@ -12,11 +12,20 @@ import {
   WATCHLIST_ERROR_MESSAGES,
   WATCHLIST_SUCCESS_MESSAGES,
 } from '@/constants';
-import { checkDuplicate, conflictResponse } from '@/helpers/apiHelpers';
+import {
+  checkDuplicate,
+  conflictResponse,
+  rateLimitExceededResponse,
+} from '@/helpers/apiHelpers';
 import { parseAndValidate } from '@/helpers/requestValidation';
 import { withAuth } from '@/helpers/routeHandler';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 import { watchlistQuerySchema, watchlistAddSchema } from '@/schema/watchlist';
+
+const RATE_LIMIT_ACTION = 'write_api_watchlist';
+const RATE_LIMIT_MAX_ATTEMPTS = 10;
+const RATE_LIMIT_WINDOW_MINUTES = 1;
 
 export const GET = withAuth(
   async ({ session, supabase, request }) => {
@@ -142,6 +151,19 @@ export const GET = withAuth(
 
 export const POST = withAuth(
   async ({ session, supabase, request }) => {
+    // レート制限チェック
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION,
+      RATE_LIMIT_MAX_ATTEMPTS,
+      RATE_LIMIT_WINDOW_MINUTES,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     // リクエストボディのパース + バリデーション
     const parsed = await parseAndValidate(
       request,

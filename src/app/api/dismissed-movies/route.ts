@@ -13,10 +13,19 @@ import {
   DISMISSED_MOVIES_ERROR_MESSAGES,
   DISMISSED_MOVIES_SUCCESS_MESSAGES,
 } from '@/constants';
-import { checkDuplicate, conflictResponse } from '@/helpers/apiHelpers';
+import {
+  checkDuplicate,
+  conflictResponse,
+  rateLimitExceededResponse,
+} from '@/helpers/apiHelpers';
 import { parseAndValidate } from '@/helpers/requestValidation';
 import { withAuth } from '@/helpers/routeHandler';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { dismissedMoviesAddSchema } from '@/schema/dismissedMovies';
+
+const RATE_LIMIT_ACTION = 'write_api_dismissed_movies';
+const RATE_LIMIT_MAX_ATTEMPTS = 10;
+const RATE_LIMIT_WINDOW_MINUTES = 1;
 
 export const GET = withAuth(
   async ({ session, supabase }) => {
@@ -44,6 +53,19 @@ export const GET = withAuth(
 
 export const POST = withAuth(
   async ({ session, supabase, request }) => {
+    // レート制限チェック
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION,
+      RATE_LIMIT_MAX_ATTEMPTS,
+      RATE_LIMIT_WINDOW_MINUTES,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     const parsed = await parseAndValidate(
       request,
       dismissedMoviesAddSchema,
@@ -96,6 +118,19 @@ export const POST = withAuth(
 
 export const DELETE = withAuth(
   async ({ session, supabase, request }) => {
+    // レート制限チェック
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION,
+      RATE_LIMIT_MAX_ATTEMPTS,
+      RATE_LIMIT_WINDOW_MINUTES,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     const { searchParams } = new URL(request.url);
     const tmdbMovieId = searchParams.get('tmdb_movie_id');
 

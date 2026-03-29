@@ -8,6 +8,8 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';
+import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
+import type { RateLimitResult } from '@/lib/rateLimit/rateLimit';
 
 /**
  * レコードの論理削除（deleted_atを設定）
@@ -67,6 +69,23 @@ export function conflictResponse(message: string) {
       },
     },
     { status: HTTP_STATUS.CONFLICT },
+  );
+}
+
+/**
+ * 429 Too Many Requestsレスポンスを生成
+ */
+export function rateLimitExceededResponse(rateLimitResult: RateLimitResult) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
+        message: AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
+        details: { retryAfter: rateLimitResult.retryAfter },
+      },
+    },
+    { status: HTTP_STATUS.TOO_MANY_REQUESTS },
   );
 }
 

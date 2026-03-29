@@ -8,7 +8,12 @@ import { NextResponse } from 'next/server';
 
 import { withAuth } from '@/helpers/routeHandler';
 import { parseAndValidate } from '@/helpers/requestValidation';
-import { checkDuplicate, conflictResponse } from '@/helpers/apiHelpers';
+import {
+  checkDuplicate,
+  conflictResponse,
+  rateLimitExceededResponse,
+} from '@/helpers/apiHelpers';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { favoritesQuerySchema, favoritesAddSchema } from '@/schema/favorites';
 import {
   HTTP_STATUS,
@@ -16,6 +21,10 @@ import {
   FAVORITES_ERROR_MESSAGES,
   FAVORITES_SUCCESS_MESSAGES,
 } from '@/constants';
+
+const RATE_LIMIT_ACTION = 'write_api_favorites';
+const RATE_LIMIT_MAX_ATTEMPTS = 10;
+const RATE_LIMIT_WINDOW_MINUTES = 1;
 
 export const GET = withAuth(
   async ({ session, supabase, request }) => {
@@ -103,6 +112,19 @@ export const GET = withAuth(
 
 export const POST = withAuth(
   async ({ session, supabase, request }) => {
+    // レート制限チェック
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION,
+      RATE_LIMIT_MAX_ATTEMPTS,
+      RATE_LIMIT_WINDOW_MINUTES,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     const parsed = await parseAndValidate(
       request,
       favoritesAddSchema,

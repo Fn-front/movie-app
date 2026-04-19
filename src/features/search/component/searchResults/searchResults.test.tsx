@@ -234,7 +234,7 @@ describe('SearchResults', () => {
 
       expect(MovieDetailModal).toHaveBeenLastCalledWith(
         expect.objectContaining({ movieId: 1 }),
-        expect.anything(),
+        undefined,
       );
     });
   });

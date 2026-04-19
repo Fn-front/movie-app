@@ -176,7 +176,7 @@ describe('FavoritesPage', () => {
 
     expect(MovieDetailModal).toHaveBeenLastCalledWith(
       expect.objectContaining({ movieId: 100 }),
-      expect.anything(),
+      undefined,
     );
   });
 });

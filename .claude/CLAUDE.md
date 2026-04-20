@@ -126,9 +126,7 @@
 
 **【必須】テスト作成ルール**：
 - 機能開発時は対応する単体テストも一緒に作成する
-- テストファイルは対象ファイルと同じディレクトリに `<filename>.test.ts(x)` で配置
-- テストカバレッジは全指標（Statements, Branches, Functions, Lines）で**80%以上**を維持する
-- カバレッジが80%を下回る変更はPRに含めない
+- 詳細は `.claude/rules/testing.md` を参照
 
 **作業フロー**：
 1. ブランチ作成 → 2. 実装 → 3. テスト作成 → 4. コミット → 5. ロードマップ更新 → 6. PR作成 → 7. マージ → 8. ブランチ削除
@@ -177,20 +175,11 @@
 - 変数・関数: lowerCamelCase（例: `handleClick`, `isLoading`）
 - API Route: kebab-case（例: `watchlist/add`）
 
-### 必須パターン
-- **React.memo**: すべてのコンポーネントで必須
-- **useCallback**: すべてのイベントハンドラーで必須
-- **useMemo**: 計算コストの高い処理で使用
-- **displayName**: すべてのコンポーネントに設定
-
-### スタイリング
-- SCSS Modules使用
-- HTML要素を直接スタイリングしない（独自クラス名必須）
-- デザインシステム変数を使用（ハードコード禁止）
-- アニメーションは最小限（opacity/transform程度）
-
-### アクセシビリティ
-- WCAG AA準拠
-- 適切なARIA属性付与
-- フォーカス表示必須
-- セマンティックHTML使用
+### ファイルタイプ別ルール
+詳細は `.claude/rules/` 配下のルールファイルを参照：
+- `react-component.md` - Reactコンポーネント規約（memo, useCallback, displayName等）
+- `scss-styling.md` - スタイリングルール（SCSS Modules, デザインシステム変数）
+- `testing.md` - テスト作成ルール（Jest + RTL, カバレッジ80%）
+- `api-route.md` - API Routeルール（認証, レート制限, レスポンス形式）
+- `custom-hook.md` - カスタムフックルール（useCallback/useMemo, エラーハンドリング）
+- `supabase-db.md` - DB操作ルール（Supabase CLI, マイグレーション, 型生成）

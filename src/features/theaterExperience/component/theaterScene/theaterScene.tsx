@@ -71,33 +71,33 @@ const CameraAnimator = memo<{
     }
   }, [selectedSeat, theater]);
 
-  // アニメーション中はOrbitControlsを無効化して干渉を防ぐ
   const isAnimating = useRef(false);
 
   useEffect(() => {
     isAnimating.current = true;
+    if (controlsRef.current) {
+      controlsRef.current.enabled = false;
+    }
   }, [selectedSeat]);
 
   useFrame((_, delta) => {
-    if (!controlsRef.current) return;
+    if (!controlsRef.current || !isAnimating.current) return;
     const controls = controlsRef.current;
     const t = 1 - Math.exp(-LERP_SPEED * delta);
+
+    camera.position.lerp(targetPos.current, t);
+    controls.target.lerp(targetLookAt.current, t);
+    controls.update();
 
     const posDist = camera.position.distanceTo(targetPos.current);
     const targetDist = controls.target.distanceTo(targetLookAt.current);
 
-    if (posDist > 0.01 || targetDist > 0.01) {
-      // アニメーション中: カメラ位置を直接制御
-      controls.enabled = false;
-      camera.position.lerp(targetPos.current, t);
-      controls.target.lerp(targetLookAt.current, t);
-      controls.update();
-    } else {
-      // アニメーション完了: ユーザー操作を有効化
+    if (posDist < 0.01 && targetDist < 0.01) {
+      // アニメーション完了: OrbitControlsにカメラ制御を委譲
       camera.position.copy(targetPos.current);
       controls.target.copy(targetLookAt.current);
-      controls.enabled = true;
       controls.update();
+      controls.enabled = true;
       isAnimating.current = false;
     }
   });

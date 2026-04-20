@@ -57,11 +57,11 @@ const CameraAnimator = memo<{
         selectedSeat.position_y + 3.5,
         selectedSeat.position_z - 3,
       );
-      // 座席の少し前方（スクリーン方向）を注視
+      // スクリーン中心を注視（実際の着席視点に近い方向）
       targetLookAt.current.set(
-        selectedSeat.position_x,
-        selectedSeat.position_y + 0.5,
-        selectedSeat.position_z + 2,
+        theater.screen_center_x,
+        theater.screen_center_y,
+        theater.screen_center_z,
       );
     } else {
       // 俯瞰視点に戻る

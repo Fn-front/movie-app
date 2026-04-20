@@ -20,6 +20,7 @@ jest.mock('three', () => ({
     this.width = width;
     this.height = height;
     this.needsUpdate = false;
+    this.dispose = jest.fn();
   }),
   FloatType: 1015,
   RGBAFormat: 1023,
@@ -78,5 +79,15 @@ describe('useAudioShader', () => {
 
     expect(result.current.uSpeakerData.value).toBeDefined();
     expect(result.current.uSpeakerData.value.width).toBe(2);
+  });
+
+  it('uniforms参照が安定している', () => {
+    const { result, rerender } = renderHook(() =>
+      useAudioShader(mockSpeakers, 'mid', 20, 25),
+    );
+
+    const firstRef = result.current;
+    rerender();
+    expect(result.current).toBe(firstRef);
   });
 });

@@ -110,6 +110,8 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   roomWidth={theater.room_width}
                   roomDepth={theater.room_depth}
                   roomHeight={theater.room_height}
+                  selectedSeat={selectedSeat}
+                  theater={theater}
                 >
                   <SeatMeshes
                     seats={seats}

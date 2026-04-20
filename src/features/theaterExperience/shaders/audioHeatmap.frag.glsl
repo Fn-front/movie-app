@@ -4,7 +4,7 @@
  * スピーカーからの音響強度をリアルタイムで可視化
  * - 逆二乗則による距離減衰
  * - 大気吸収（ISO 9613-1ベース）
- * - 位相干渉（波の重ね合わせ）
+ * - 定在波パターン（位相干渉）
  * - カラーマッピング（青→緑→黄→赤）
  */
 
@@ -91,9 +91,8 @@ void main() {
   vec2 worldPos = uvToWorld(vUv);
   float wavelength = SPEED_OF_SOUND / uFrequency;
 
-  // 全スピーカーの寄与を加算（位相付き）
-  float realPart = 0.0;
-  float imagPart = 0.0;
+  // 全スピーカーの寄与を加算（定在波パターン）
+  float totalIntensity = 0.0;
 
   for (int i = 0; i < 32; i++) {
     if (float(i) >= uSpeakerCount) break;
@@ -112,21 +111,20 @@ void main() {
       * calcDistanceAttenuation(distance)
       * calcAbsorptionLoss(distance);
 
-    // 位相 = 2π * distance / wavelength + 2π * frequency * time
-    float phase = 2.0 * PI * distance / wavelength + 2.0 * PI * uFrequency * uTime;
+    // 定在波パターン: 距離ベースの空間的な干渉パターン
+    // uTime でゆっくりアニメーション（視覚効果用、物理的な音速ではなく表示用）
+    float spatialPhase = 2.0 * PI * distance / wavelength;
+    float timePhase = uTime * 2.0; // ゆっくりしたアニメーション
+    float wave = 0.5 + 0.5 * cos(spatialPhase + timePhase);
 
-    realPart += amplitude * cos(phase);
-    imagPart += amplitude * sin(phase);
+    totalIntensity += amplitude * wave;
   }
 
-  // 強度 = |complex amplitude|^2
-  float intensity = realPart * realPart + imagPart * imagPart;
-
-  // 正規化（経験的スケーリング）
-  float normalizedIntensity = sqrt(intensity) * 2.0;
+  // 正規化（スケーリングを大きくして視認性を確保）
+  float normalizedIntensity = clamp(totalIntensity * 8.0, 0.0, 1.0);
 
   vec3 color = intensityToColor(normalizedIntensity);
-  float alpha = 0.4 + 0.3 * clamp(normalizedIntensity, 0.0, 1.0);
+  float alpha = 0.3 + 0.5 * normalizedIntensity;
 
   gl_FragColor = vec4(color, alpha);
 }

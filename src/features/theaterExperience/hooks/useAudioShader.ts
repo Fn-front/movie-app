@@ -3,7 +3,7 @@
  * スピーカーデータをDataTextureに変換し、uniformsを管理する
  */
 
-import { useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 import { DataTexture, FloatType, RGBAFormat, NearestFilter } from 'three';
 
 import type { TheaterSpeaker, FrequencyBand } from '../types';
@@ -24,10 +24,10 @@ export interface AudioShaderUniforms {
  * 各ピクセル: [x, y, z, power_watts]
  */
 function createSpeakerTexture(speakers: TheaterSpeaker[]): DataTexture {
-  const count = speakers.length;
+  const count = Math.max(speakers.length, 1);
   const data = new Float32Array(count * 4);
 
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < speakers.length; i++) {
     const s = speakers[i];
     data[i * 4 + 0] = s.position_x;
     data[i * 4 + 1] = s.position_y;
@@ -46,6 +46,9 @@ function createSpeakerTexture(speakers: TheaterSpeaker[]): DataTexture {
 /**
  * オーディオシェーダーのuniformsを生成・管理するフック
  *
+ * uniforms オブジェクトの参照を安定させ、値のみをミューテートすることで
+ * R3F の shaderMaterial が正しく uniform を反映する。
+ *
  * @param speakers スピーカー配列
  * @param frequencyBand 周波数帯
  * @param roomWidth 劇場幅 (m)
@@ -57,33 +60,44 @@ export function useAudioShader(
   roomWidth: number,
   roomDepth: number,
 ): AudioShaderUniforms {
-  const speakerTexture = useMemo(
-    () => createSpeakerTexture(speakers),
-    [speakers],
-  );
+  const uniformsRef = useRef<AudioShaderUniforms | null>(null);
 
-  const frequency = FREQUENCY_MAP[frequencyBand];
-  const absorption = ABSORPTION_COEFFICIENTS[frequencyBand];
-
-  const uniforms = useMemo<AudioShaderUniforms>(
-    () => ({
-      uSpeakerData: { value: speakerTexture },
+  // 初回のみ uniforms オブジェクトを作成
+  if (uniformsRef.current === null) {
+    uniformsRef.current = {
+      uSpeakerData: { value: createSpeakerTexture(speakers) },
       uSpeakerCount: { value: speakers.length },
-      uFrequency: { value: frequency },
-      uAbsorption: { value: absorption },
+      uFrequency: { value: FREQUENCY_MAP[frequencyBand] },
+      uAbsorption: { value: ABSORPTION_COEFFICIENTS[frequencyBand] },
       uTime: { value: 0 },
       uRoomSize: { value: [roomWidth, roomDepth] },
       uRoomOffset: { value: [-roomWidth / 2, -roomDepth / 2] },
-    }),
-    [
-      speakerTexture,
-      speakers.length,
-      frequency,
-      absorption,
-      roomWidth,
-      roomDepth,
-    ],
-  );
+    };
+  }
 
-  return uniforms;
+  // スピーカーデータが変わったらテクスチャを再生成
+  useEffect(() => {
+    if (!uniformsRef.current) return;
+    const tex = createSpeakerTexture(speakers);
+    uniformsRef.current.uSpeakerData.value = tex;
+    uniformsRef.current.uSpeakerCount.value = speakers.length;
+    return () => tex.dispose();
+  }, [speakers]);
+
+  // 周波数帯が変わったら値をミューテート
+  useEffect(() => {
+    if (!uniformsRef.current) return;
+    uniformsRef.current.uFrequency.value = FREQUENCY_MAP[frequencyBand];
+    uniformsRef.current.uAbsorption.value =
+      ABSORPTION_COEFFICIENTS[frequencyBand];
+  }, [frequencyBand]);
+
+  // 部屋サイズが変わったら値をミューテート
+  useEffect(() => {
+    if (!uniformsRef.current) return;
+    uniformsRef.current.uRoomSize.value = [roomWidth, roomDepth];
+    uniformsRef.current.uRoomOffset.value = [-roomWidth / 2, -roomDepth / 2];
+  }, [roomWidth, roomDepth]);
+
+  return uniformsRef.current;
 }

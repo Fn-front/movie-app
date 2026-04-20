@@ -41,14 +41,15 @@ export const AudioHeatmapPlane = memo<AudioHeatmapPlaneProps>(
     });
 
     return (
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-        <planeGeometry args={[width, depth, 1, 1]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <planeGeometry args={[width, depth, 128, 128]} />
         <shaderMaterial
           ref={materialRef}
           vertexShader={vertexShader}
           fragmentShader={fragmentShader}
           uniforms={uniforms as unknown as Record<string, { value: unknown }>}
           transparent
+          depthWrite={false}
         />
       </mesh>
     );

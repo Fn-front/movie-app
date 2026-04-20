@@ -1,0 +1,73 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_seat_a11y_list {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+}
+
+.c_seat_a11y_list__title {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+  margin: 0;
+}
+
+.c_seat_a11y_list__row {
+  display: flex;
+  align-items: center;
+  gap: $spacing-2;
+}
+
+.c_seat_a11y_list__row_label {
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+  min-width: 2.4em;
+  text-align: right;
+}
+
+.c_seat_a11y_list__seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.c_seat_a11y_list__seat_button {
+  @include button-reset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: $font-size-2xs;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+  background-color: color-alpha(--gray-500, 10%);
+  border-radius: $border-radius-sm;
+  cursor: pointer;
+  transition:
+    background-color $duration-fast $ease-in-out,
+    color $duration-fast $ease-in-out;
+
+  &:hover {
+    background-color: color-alpha(--primary-500, 15%);
+    color: $primary-500;
+  }
+
+  @include focus-visible;
+}
+
+.c_seat_a11y_list__seat_button__selected {
+  background-color: $primary-500;
+  color: $white;
+
+  &:hover {
+    background-color: $primary-600;
+    color: $white;
+  }
+}

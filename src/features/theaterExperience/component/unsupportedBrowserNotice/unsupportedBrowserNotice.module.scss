@@ -1,0 +1,61 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_unsupported_notice {
+  @include card;
+  @include flex-center-vertical;
+  padding: $spacing-8;
+  gap: $spacing-4;
+  text-align: center;
+  min-height: 300px;
+}
+
+.c_unsupported_notice__title {
+  font-size: $font-size-xl;
+  font-weight: $font-weight-bold;
+  color: $text-primary;
+  margin: 0;
+}
+
+.c_unsupported_notice__description {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  max-width: 400px;
+  margin: 0;
+}
+
+.c_unsupported_notice__suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+}
+
+.c_unsupported_notice__suggestions_label {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+  margin: 0;
+}
+
+.c_unsupported_notice__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: $spacing-3;
+  justify-content: center;
+}
+
+.c_unsupported_notice__list_item {
+  font-size: $font-size-sm;
+  color: $text-primary;
+  padding: $spacing-2 $spacing-3;
+  background-color: color-alpha(--gray-500, 8%);
+  border-radius: $border-radius-md;
+}
+
+.c_unsupported_notice__note {
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  margin: 0;
+}

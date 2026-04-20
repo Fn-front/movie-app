@@ -50,17 +50,18 @@ const CameraAnimator = memo<{
 
   useEffect(() => {
     if (selectedSeat) {
-      // 一人称視点: 座席位置 + 目の高さ
-      const eyeHeight = selectedSeat.position_y + 1.2;
+      // 座席視点: 座席の少し後ろ上方から見下ろす
+      // 選択席・周囲の席・スクリーンが全て見える位置
       targetPos.current.set(
         selectedSeat.position_x,
-        eyeHeight,
-        selectedSeat.position_z,
+        selectedSeat.position_y + 3.5,
+        selectedSeat.position_z - 3,
       );
+      // 座席の少し前方（スクリーン方向）を注視
       targetLookAt.current.set(
-        theater.screen_center_x,
-        theater.screen_center_y,
-        theater.screen_center_z,
+        selectedSeat.position_x,
+        selectedSeat.position_y + 0.5,
+        selectedSeat.position_z + 2,
       );
     } else {
       // 俯瞰視点に戻る
@@ -69,14 +70,35 @@ const CameraAnimator = memo<{
     }
   }, [selectedSeat, theater]);
 
+  // アニメーション中はOrbitControlsを無効化して干渉を防ぐ
+  const isAnimating = useRef(false);
+
+  useEffect(() => {
+    isAnimating.current = true;
+  }, [selectedSeat]);
+
   useFrame((_, delta) => {
     if (!controlsRef.current) return;
     const controls = controlsRef.current;
     const t = 1 - Math.exp(-LERP_SPEED * delta);
 
-    camera.position.lerp(targetPos.current, t);
-    controls.target.lerp(targetLookAt.current, t);
-    controls.update();
+    const posDist = camera.position.distanceTo(targetPos.current);
+    const targetDist = controls.target.distanceTo(targetLookAt.current);
+
+    if (posDist > 0.01 || targetDist > 0.01) {
+      // アニメーション中: カメラ位置を直接制御
+      controls.enabled = false;
+      camera.position.lerp(targetPos.current, t);
+      controls.target.lerp(targetLookAt.current, t);
+      controls.update();
+    } else {
+      // アニメーション完了: ユーザー操作を有効化
+      camera.position.copy(targetPos.current);
+      controls.target.copy(targetLookAt.current);
+      controls.enabled = true;
+      controls.update();
+      isAnimating.current = false;
+    }
   });
 
   return (

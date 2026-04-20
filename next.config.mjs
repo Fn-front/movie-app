@@ -26,7 +26,16 @@ const nextConfig = {
     includePaths: ['./src/styles'],
   },
 
-  // GLSL シェーダーファイルを raw text としてインポートするための webpack 設定
+  // GLSL シェーダーファイルを raw text としてインポート（Turbopack: dev 用）
+  turbopack: {
+    rules: {
+      '*.glsl': {
+        type: 'raw',
+      },
+    },
+  },
+
+  // GLSL シェーダーファイルを raw text としてインポート（webpack: build 用）
   webpack(config) {
     config.module.rules.push({
       test: /\.glsl$/,

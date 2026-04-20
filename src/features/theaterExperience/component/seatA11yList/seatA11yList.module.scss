@@ -64,10 +64,10 @@
 
 .c_seat_a11y_list__seat_button__selected {
   background-color: $primary-500;
-  color: $white;
+  color: $text-inverse;
 
   &:hover {
     background-color: $primary-600;
-    color: $white;
+    color: $text-inverse;
   }
 }

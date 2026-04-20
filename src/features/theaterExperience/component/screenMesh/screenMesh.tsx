@@ -32,9 +32,9 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
     <mesh position={[centerX, centerY, centerZ]}>
       <planeGeometry args={[width, height]} />
       <meshStandardMaterial
-        color='#e0e0e0'
-        emissive='#8888cc'
-        emissiveIntensity={0.5}
+        color='#f0f0f0'
+        emissive='#aab0cc'
+        emissiveIntensity={0.8}
         side={DoubleSide}
       />
     </mesh>

@@ -15,9 +15,9 @@ import {
 import type { TheaterSeat } from '../../types';
 
 const SEAT_SIZE = { width: 0.6, height: 0.5, depth: 0.5 };
-const COLOR_DEFAULT = new Color('#4a4e69');
-const COLOR_SELECTED = new Color('#f72585');
-const COLOR_HOVER = new Color('#7209b7');
+const COLOR_DEFAULT = new Color('#8b3a3a');
+const COLOR_SELECTED = new Color('#e8c840');
+const COLOR_HOVER = new Color('#c06050');
 
 export interface SeatMeshesProps {
   /** 座席データ一覧 */

@@ -78,13 +78,15 @@ vec3 hsv2rgb(vec3 c) {
 
 /**
  * 強度からヒートマップカラーへ変換
- * 青(0.0) → シアン → 緑 → 黄 → 赤(1.0)
+ * 紫(低) → 青 → シアン → 緑 → 黄 → 赤(高)
  */
 vec3 intensityToColor(float intensity) {
   float t = clamp(intensity, 0.0, 1.0);
-  // Hue: 0.66(blue) → 0.0(red)
-  float hue = mix(0.66, 0.0, t);
-  return hsv2rgb(vec3(hue, 0.85, 0.6 + 0.4 * t));
+  // Hue: 0.75(purple) → 0.0(red)
+  float hue = mix(0.75, 0.0, t);
+  float sat = 0.7 + 0.3 * t;
+  float val = 0.4 + 0.6 * t;
+  return hsv2rgb(vec3(hue, sat, val));
 }
 
 void main() {
@@ -120,11 +122,13 @@ void main() {
     totalIntensity += amplitude * wave;
   }
 
-  // 正規化（スケーリングを大きくして視認性を確保）
-  float normalizedIntensity = clamp(totalIntensity * 8.0, 0.0, 1.0);
+  // スピーカー数で正規化し、pow カーブでコントラストを強調
+  float avgIntensity = totalIntensity / max(uSpeakerCount, 1.0);
+  float normalizedIntensity = pow(clamp(avgIntensity * 2.5, 0.0, 1.0), 1.8);
 
   vec3 color = intensityToColor(normalizedIntensity);
-  float alpha = 0.3 + 0.5 * normalizedIntensity;
+  // 低強度は完全透明に、高強度でも半透明で床を透過
+  float alpha = smoothstep(0.02, 0.5, normalizedIntensity) * 0.55;
 
   gl_FragColor = vec4(color, alpha);
 }

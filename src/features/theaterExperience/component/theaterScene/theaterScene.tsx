@@ -133,20 +133,26 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       <CameraAnimator selectedSeat={selectedSeat} theater={theater} />
 
       {/* ライティング */}
-      <ambientLight intensity={0.3} />
-      <directionalLight position={[0, roomHeight, 0]} intensity={0.5} />
-      <pointLight position={[0, roomHeight - 1, 0]} intensity={0.3} />
+      <ambientLight intensity={0.4} />
+      <directionalLight position={[0, roomHeight, 0]} intensity={0.6} />
+      <pointLight position={[0, roomHeight - 1, 0]} intensity={0.4} />
+      {/* スクリーン側からの間接光（座席を照らす） */}
+      <pointLight
+        position={[0, 3, halfDepth - 2]}
+        intensity={0.2}
+        color='#c0c0e0'
+      />
 
-      {/* 床 */}
+      {/* 床（映画館のカーペット風） */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
         <planeGeometry args={[roomWidth, roomDepth]} />
-        <meshStandardMaterial color='#1a1a2e' />
+        <meshStandardMaterial color='#2c2c3a' />
       </mesh>
 
       {/* 後壁 */}
       <mesh position={[0, roomHeight / 2, -halfDepth]}>
         <planeGeometry args={[roomWidth, roomHeight]} />
-        <meshStandardMaterial color='#16213e' />
+        <meshStandardMaterial color='#1e1e32' />
       </mesh>
 
       {/* 左壁 */}
@@ -155,7 +161,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         position={[-halfWidth, roomHeight / 2, 0]}
       >
         <planeGeometry args={[roomDepth, roomHeight]} />
-        <meshStandardMaterial color='#16213e' />
+        <meshStandardMaterial color='#1e1e32' />
       </mesh>
 
       {/* 右壁 */}
@@ -164,7 +170,13 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         position={[halfWidth, roomHeight / 2, 0]}
       >
         <planeGeometry args={[roomDepth, roomHeight]} />
-        <meshStandardMaterial color='#16213e' />
+        <meshStandardMaterial color='#1e1e32' />
+      </mesh>
+
+      {/* 天井（うっすら見える程度） */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, roomHeight, 0]}>
+        <planeGeometry args={[roomWidth, roomDepth]} />
+        <meshStandardMaterial color='#151520' />
       </mesh>
 
       {children}

@@ -57,9 +57,10 @@ const CameraAnimator = memo<{
         selectedSeat.position_y + 3.5,
         selectedSeat.position_z - 3,
       );
-      // スクリーン中心を注視（実際の着席視点に近い方向）
+      // 座席から真っ直ぐ前方（スクリーン壁方向）を注視
+      // X座標は座席と同じにして横回転を防止
       targetLookAt.current.set(
-        theater.screen_center_x,
+        selectedSeat.position_x,
         theater.screen_center_y,
         theater.screen_center_z,
       );

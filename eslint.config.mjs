@@ -24,6 +24,8 @@ export default [
       'next-env.d.ts',
       'eslint.config.mjs',
       'eslint-local-rules/**',
+      'src/types/database.types.ts',
+      'src/test/__mocks__/**',
     ],
   },
 
@@ -52,6 +54,30 @@ export default [
       'react/react-in-jsx-scope': 'off',
       'react/prop-types': 'off',
       'react/no-array-index-key': 'error',
+      'react/no-unknown-property': [
+        'error',
+        {
+          ignore: [
+            'args',
+            'position',
+            'rotation',
+            'intensity',
+            'frustumCulled',
+            'transparent',
+            'depthWrite',
+            'emissive',
+            'emissiveIntensity',
+            'side',
+            'vertexShader',
+            'fragmentShader',
+            'uniforms',
+            'object',
+            'castShadow',
+            'receiveShadow',
+            'dispose',
+          ],
+        },
+      ],
 
       // React Hooks
       ...reactHooksPlugin.configs.recommended.rules,

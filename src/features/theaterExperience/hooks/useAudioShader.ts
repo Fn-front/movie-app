@@ -62,7 +62,8 @@ export function useAudioShader(
 ): AudioShaderUniforms {
   const uniformsRef = useRef<AudioShaderUniforms | null>(null);
 
-  // 初回のみ uniforms オブジェクトを作成
+  // 初回のみ uniforms オブジェクトを作成（lazy ref initialization）
+  // R3F ShaderMaterial の uniforms は安定した参照が必要
   if (uniformsRef.current === null) {
     uniformsRef.current = {
       uSpeakerData: { value: createSpeakerTexture(speakers) },
@@ -99,5 +100,6 @@ export function useAudioShader(
     uniformsRef.current.uRoomOffset.value = [-roomWidth / 2, -roomDepth / 2];
   }, [roomWidth, roomDepth]);
 
-  return uniformsRef.current;
+  // eslint-disable-next-line react-hooks/refs -- R3F ShaderMaterial requires stable uniform reference via lazy ref init
+  return uniformsRef.current!;
 }

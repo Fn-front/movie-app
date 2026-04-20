@@ -122,6 +122,7 @@ function setupFullQuery() {
 }
 
 function setupNotFound() {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   mockFrom.mockImplementation((_table?: string) => ({
     select: jest.fn().mockReturnValue({
       eq: jest.fn().mockReturnValue({

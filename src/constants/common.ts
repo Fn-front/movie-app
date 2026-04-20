@@ -36,6 +36,8 @@ export const ROUTES = {
   WATCHLIST: '/watchlist',
   /** 受賞作品 */
   AWARDS: '/awards',
+  /** シアター体験 */
+  THEATER_EXPERIENCE: '/theater-experience',
   /** 認証エラー */
   AUTH_ERROR: '/auth/error',
   /** 映画詳細 */

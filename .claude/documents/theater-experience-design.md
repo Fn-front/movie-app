@@ -246,8 +246,9 @@ Three.js の `PerspectiveCamera` を選択座席位置に配置し、スクリ�
 
 - **理由**: Next.js 16 との親和性が高く、Three.js を React コンポーネントとして宣言的に記述可能。`useFrame` フックでアニメーションループを React 外に切り出せる。
 - **バージョン方針**:
-  - 現状 `react@18.3.1` のため、**R3F は v8 系を採用**（`@react-three/fiber@^8` / `@react-three/drei@^9.88` 付近の React 18 対応版）
-  - React 19 へのアップグレード完了後（Issue #340）、R3F v9 系へ移行する
+  - React 19.2.5 + Next.js 16.2.4 へのアップグレード完了済み（Issue #340 CLOSED）
+  - **R3F v9 系を採用**（`@react-three/fiber@^9` / `@react-three/drei@^9` — React 19 対応版）
+  - インストール前に `npm info @react-three/fiber` で React 19 互換を確認すること
 - **SSR対策**: `Canvas` は `'use client'` + `next/dynamic(ssr: false)` でラップし、ハイドレーションエラーを回避
 - **一人称プレビュー**: drei の `<View>` を使用し、メインビューと同一シーンをポート分けでレンダリング（別Canvasを立てず1シーン運用）
 
@@ -255,9 +256,9 @@ Three.js の `PerspectiveCamera` を選択座席位置に配置し、スクリ�
 
 ```json
 {
-  "three": "^0.160.0",
-  "@react-three/fiber": "^8.17.0",
-  "@react-three/drei": "^9.88.0"
+  "three": "^0.170.0",
+  "@react-three/fiber": "^9.0.0",
+  "@react-three/drei": "^9.120.0"
 }
 ```
 
@@ -265,14 +266,15 @@ Three.js の `PerspectiveCamera` を選択座席位置に配置し、スクリ�
 ```json
 {
   "devDependencies": {
+    "@types/three": "^0.170.0",
     "leva": "^0.9.0"
   }
 }
 ```
 
 - `leva` はデバッグUI用。本番バンドルに含めないため `devDependencies` に置き、使用箇所は `process.env.NODE_ENV === 'development'` ガードで限定
-- バージョンは実装時の最新安定版に合わせて確定する
-- React 19 移行後に `package.json` を v9 系へ上書き更新（Issue #340 完了後）
+- バージョンは実装時の最新安定版に合わせて確定する（上記は目安）
+- React 19.2.5 + Next.js 16.2.4 環境で R3F v9 系を直接採用（Issue #340 完了済み）
 
 ### 5.3 ディレクトリ構成
 
@@ -312,6 +314,10 @@ src/features/theaterExperience/
 │   │   ├── seatInfoPanel.tsx            # 選択席の視野占有率・歪み表示
 │   │   ├── seatInfoPanel.module.scss
 │   │   └── seatInfoPanel.test.tsx
+│   ├── distortionPreview/               # 2D Canvas で台形歪みプレビュー
+│   │   ├── distortionPreview.tsx
+│   │   ├── distortionPreview.module.scss
+│   │   └── distortionPreview.test.tsx
 │   ├── theaterSelector/
 │   │   ├── theaterSelector.tsx          # 劇場選択（将来用、初期は1件固定）
 │   │   ├── theaterSelector.module.scss
@@ -481,6 +487,7 @@ export interface Theater {
   screen_center_y: number;
   screen_center_z: number;
   audio_layout: AudioLayout;
+  description?: string;
 }
 
 export interface TheaterSeat {
@@ -688,7 +695,7 @@ ONの場合:
 
 ## 14. 実装ステップ（推奨順序）
 
-> **前提**: Issue #340（React 19 + Next.js 16 アップグレード）完了後に着手。R3F v9 採用可否はこのアップグレード結果で確定。
+> **前提**: Issue #340（React 19 + Next.js 16 アップグレード）完了済み。R3F v9 系を直接採用。
 
 1. マイグレーション（theaters / theater_seats / theater_speakers + シードデータ1件）
 2. API Route（`/api/theaters`, `/api/theaters/[slug]`）+ zodスキーマ + ユニットテスト
@@ -698,9 +705,8 @@ ONの場合:
 6. 3Dシーン基盤（`theaterCanvas`, `theaterScene`, `screenMesh`, `seatMeshes`）
 7. 床面ヒートマップ（`audioHeatmapPlane` + フラグメントシェーダー）
 8. 一人称プレビュー（`firstPersonPreview`、drei `<View>` 採用）
-9. 操作UI（`frequencySelector`, `seatInfoPanel`, `theaterSelector`）
+9. 操作UI（`frequencySelector`, `seatInfoPanel`, `distortionPreview`, `theaterSelector`）
 10. `unsupportedBrowserNotice`（WebGL2/モバイル非対応時）
 11. ページ統合（`theaterExperiencePage`）・動的ルート `[slug]` 対応・ナビゲーション追加・認証ガード（`middleware.ts` 更新）
 12. アクセシビリティ対応（`prefers-reduced-motion`、コントラスト調整、キーボード操作）
 13. E2E・スナップショットテスト整備・カバレッジ80%確認
-14. React 19 移行後（Issue #340 完了）に R3F v9 系へバージョンアップ + 動作確認

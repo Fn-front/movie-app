@@ -1,0 +1,82 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_theater_experience {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+  padding: $spacing-6;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.c_theater_experience__loading,
+.c_theater_experience__error {
+  @include flex-center;
+  min-height: 400px;
+  color: $text-secondary;
+  font-size: $font-size-base;
+}
+
+.c_theater_experience__header {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+}
+
+.c_theater_experience__title {
+  font-size: $font-size-2xl;
+  font-weight: $font-weight-bold;
+  color: $text-primary;
+  margin: 0;
+}
+
+.c_theater_experience__subtitle {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  margin: 0;
+}
+
+.c_theater_experience__main {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: $spacing-6;
+
+  @media (max-width: $breakpoint-lg) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.c_theater_experience__canvas_area {
+  min-height: 400px;
+}
+
+.c_theater_experience__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+}
+
+.c_theater_experience__a11y_section {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+}
+
+.c_theater_experience__clear_button {
+  @include button-reset;
+  align-self: flex-start;
+  padding: $spacing-2 $spacing-4;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  background-color: color-alpha(--gray-500, 10%);
+  border-radius: $border-radius-md;
+  cursor: pointer;
+  transition: background-color $duration-fast $ease-in-out;
+
+  &:hover {
+    background-color: color-alpha(--gray-500, 20%);
+  }
+
+  @include focus-visible;
+}

@@ -18,6 +18,7 @@ import { TheaterScene } from '../component/theaterScene/theaterScene';
 import { SeatMeshes } from '../component/seatMeshes/seatMeshes';
 import { ScreenMesh } from '../component/screenMesh/screenMesh';
 import { AudioHeatmapPlane } from '../component/audioHeatmapPlane/audioHeatmapPlane';
+import { SpeakerMeshes } from '../component/speakerMeshes/speakerMeshes';
 import { SeatInfoPanel } from '../component/seatInfoPanel/seatInfoPanel';
 import { SeatA11yList } from '../component/seatA11yList/seatA11yList';
 import { FrequencySelector } from '../component/frequencySelector/frequencySelector';
@@ -126,12 +127,15 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                     centerZ={theater.screen_center_z}
                   />
                   {speakers.length > 0 && (
-                    <AudioHeatmapPlane
-                      uniforms={audioUniforms}
-                      width={theater.room_width}
-                      depth={theater.room_depth}
-                      reducedMotion={reducedMotion}
-                    />
+                    <>
+                      <SpeakerMeshes speakers={speakers} />
+                      <AudioHeatmapPlane
+                        uniforms={audioUniforms}
+                        width={theater.room_width}
+                        depth={theater.room_depth}
+                        reducedMotion={reducedMotion}
+                      />
+                    </>
                   )}
                 </TheaterScene>
               </TheaterCanvas>

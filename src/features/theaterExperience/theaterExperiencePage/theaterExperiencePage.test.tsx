@@ -60,6 +60,9 @@ jest.mock('../component/seatMeshes/seatMeshes', () => ({
 jest.mock('../component/screenMesh/screenMesh', () => ({
   ScreenMesh: jest.fn(() => <div data-testid='screen-mesh' />),
 }));
+jest.mock('../component/speakerMeshes/speakerMeshes', () => ({
+  SpeakerMeshes: jest.fn(() => <div data-testid='speaker-meshes' />),
+}));
 jest.mock('../component/audioHeatmapPlane/audioHeatmapPlane', () => ({
   AudioHeatmapPlane: jest.fn(() => <div data-testid='heatmap' />),
 }));

@@ -15,6 +15,8 @@ const customJestConfig = {
   moduleNameMapper: {
     // Handle module aliases
     '^@/(.*)$': '<rootDir>/src/$1',
+    // GLSL shader files
+    '\\.glsl$': '<rootDir>/src/test/__mocks__/glslMock.js',
   },
   collectCoverageFrom: [
     'src/**/*.{js,jsx,ts,tsx}',

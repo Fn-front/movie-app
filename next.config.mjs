@@ -26,6 +26,15 @@ const nextConfig = {
     includePaths: ['./src/styles'],
   },
 
+  // GLSL シェーダーファイルを raw text としてインポートするための webpack 設定
+  webpack(config) {
+    config.module.rules.push({
+      test: /\.glsl$/,
+      type: 'asset/source',
+    });
+    return config;
+  },
+
   // 環境変数の検証（オプション）
   env: {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,

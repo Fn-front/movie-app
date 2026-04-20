@@ -1,0 +1,21 @@
+@use '@/styles/variables' as *;
+
+.c_distortion_preview {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+}
+
+.c_distortion_preview__label {
+  font-size: $font-size-2xs;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+}
+
+.c_distortion_preview__canvas {
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  border-radius: $border-radius-sm;
+  background-color: color-alpha(--gray-900, 80%);
+}

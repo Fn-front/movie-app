@@ -104,6 +104,7 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
     <instancedMesh
       ref={meshRef}
       args={[undefined, undefined, seats.length]}
+      frustumCulled={false}
       onClick={handleClick}
       onPointerOver={handlePointerOver}
       onPointerOut={handlePointerOut}

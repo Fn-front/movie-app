@@ -21,6 +21,11 @@ const nextConfig = {
     ],
   },
 
+  // Turbopack ファイルシステムキャッシュを無効化（raw import の HMR 不具合回避）
+  experimental: {
+    turbopackFileSystemCacheForDev: false,
+  },
+
   // SCSS設定（sassパッケージがあれば自動で有効）
   sassOptions: {
     includePaths: ['./src/styles'],

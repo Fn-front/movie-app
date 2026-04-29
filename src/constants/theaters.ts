@@ -32,7 +32,7 @@ export const THEATER_SEATS_SELECT =
 
 /** スピーカーSELECTカラム */
 export const THEATER_SPEAKERS_SELECT =
-  'id, channel, position_x, position_y, position_z, power_watts';
+  'id, channel, position_x, position_y, position_z, power_watts, direction_x, direction_y, direction_z, directivity_alpha';
 
 /** キャッシュヘッダー（認証済みユーザー向け） */
 export const THEATER_CACHE_CONTROL = 'private, max-age=3600';

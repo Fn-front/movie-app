@@ -65,6 +65,10 @@ export interface TheaterSpeaker {
   position_y: number;
   position_z: number;
   power_watts: number;
+  direction_x: number;
+  direction_y: number;
+  direction_z: number;
+  directivity_alpha: number;
 }
 
 /** 劇場詳細（座席・スピーカー含む） */

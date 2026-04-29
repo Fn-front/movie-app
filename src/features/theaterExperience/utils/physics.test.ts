@@ -6,11 +6,13 @@ import {
   calcDistance,
   calcDistanceAttenuation,
   calcAtmosphericAbsorption,
+  calcDirectivity,
   calcSpeakerContribution,
   calcTotalIntensity,
   ABSORPTION_COEFFICIENTS,
   SPEED_OF_SOUND,
   FREQUENCY_MAP,
+  MIN_DISTANCE,
 } from './physics';
 
 describe('calcDistance', () => {
@@ -42,9 +44,11 @@ describe('calcDistanceAttenuation', () => {
     expect(at2m).toBeCloseTo(at1m / 4);
   });
 
-  it('距離0以下では0を返す', () => {
-    expect(calcDistanceAttenuation(500, 0)).toBe(0);
-    expect(calcDistanceAttenuation(500, -1)).toBe(0);
+  it('距離がMIN_DISTANCE未満の場合はMIN_DISTANCEにクランプする', () => {
+    const clamped = calcDistanceAttenuation(500, 0);
+    const atMin = calcDistanceAttenuation(500, MIN_DISTANCE);
+    expect(clamped).toBeCloseTo(atMin);
+    expect(calcDistanceAttenuation(500, -1)).toBeCloseTo(atMin);
   });
 
   it('出力に比例する', () => {
@@ -76,8 +80,51 @@ describe('calcAtmosphericAbsorption', () => {
   });
 
   it('距離10mでの高音減衰を正しく計算する', () => {
+    // high = 0.009, exp(-0.009 * 10) = exp(-0.09) ≈ 0.914
     const expected = Math.exp(-ABSORPTION_COEFFICIENTS.high * 10);
     expect(calcAtmosphericAbsorption('high', 10)).toBeCloseTo(expected);
+  });
+});
+
+describe('calcDirectivity', () => {
+  it('alpha=1.0 のとき全方向均等で1.0を返す', () => {
+    expect(calcDirectivity(0, 0, -1, 1, 0, 0, 1.0)).toBe(1.0);
+    expect(calcDirectivity(0, 0, -1, -1, 0, 0, 1.0)).toBe(1.0);
+  });
+
+  it('正面方向では最大値を返す（alpha=0.5, cosθ=1）', () => {
+    // 方向: (0, 0, -1), リスナー方向: (0, 0, -1) → cosθ=1
+    const result = calcDirectivity(0, 0, -1, 0, 0, -1, 0.5);
+    // D = 0.5 + 0.5 * 1.0 = 1.0
+    expect(result).toBeCloseTo(1.0);
+  });
+
+  it('背面方向では最小値を返す（alpha=0.5, cosθ<0）', () => {
+    // 方向: (0, 0, -1), リスナー方向: (0, 0, 1) → cosθ=-1
+    const result = calcDirectivity(0, 0, -1, 0, 0, 1, 0.5);
+    // D = 0.5 + 0.5 * max(-1, 0) = 0.5
+    expect(result).toBeCloseTo(0.5);
+  });
+
+  it('真横方向ではalpha値を返す（alpha=0.5, cosθ=0）', () => {
+    // 方向: (0, 0, -1), リスナー方向: (1, 0, 0) → cosθ=0
+    const result = calcDirectivity(0, 0, -1, 1, 0, 0, 0.5);
+    // D = 0.5 + 0.5 * max(0, 0) = 0.5
+    expect(result).toBeCloseTo(0.5);
+  });
+
+  it('天井スピーカーの広めパターン（alpha=0.6）', () => {
+    // 正面
+    const front = calcDirectivity(0, -1, 0, 0, -1, 0, 0.6);
+    expect(front).toBeCloseTo(1.0);
+    // 背面
+    const back = calcDirectivity(0, -1, 0, 0, 1, 0, 0.6);
+    expect(back).toBeCloseTo(0.6);
+  });
+
+  it('ゼロベクトルではalpha値を返す', () => {
+    expect(calcDirectivity(0, 0, 0, 0, 0, -1, 0.5)).toBe(0.5);
+    expect(calcDirectivity(0, 0, -1, 0, 0, 0, 0.5)).toBe(0.5);
   });
 });
 
@@ -98,6 +145,18 @@ describe('calcSpeakerContribution', () => {
     const near = Math.abs(calcSpeakerContribution(500, 1, 'mid', 0));
     const far = Math.abs(calcSpeakerContribution(500, 10, 'mid', 0));
     expect(near).toBeGreaterThan(far);
+  });
+
+  it('directivity=0.5 のとき寄与が半分になる', () => {
+    const full = calcSpeakerContribution(500, 5, 'mid', 0, 0, 1.0);
+    const half = calcSpeakerContribution(500, 5, 'mid', 0, 0, 0.5);
+    expect(half).toBeCloseTo(full * 0.5);
+  });
+
+  it('directivity未指定ではデフォルト1.0', () => {
+    const withDefault = calcSpeakerContribution(500, 5, 'mid', 0, 0);
+    const withExplicit = calcSpeakerContribution(500, 5, 'mid', 0, 0, 1.0);
+    expect(withDefault).toBeCloseTo(withExplicit);
   });
 });
 

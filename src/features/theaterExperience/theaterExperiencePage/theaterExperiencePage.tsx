@@ -153,6 +153,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                       <SpeakerMeshes speakers={speakers} />
                       <AudioHeatmapPlane
                         uniforms={audioUniforms}
+                        frequencyBand={frequencyBand}
                         width={heatmapBounds.width}
                         depth={heatmapBounds.depth}
                         centerZ={heatmapBounds.centerZ}

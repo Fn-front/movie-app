@@ -11,13 +11,17 @@ import { useFrame } from '@react-three/fiber';
 import { AdditiveBlending } from 'three';
 import type { ShaderMaterial as ShaderMaterialType } from 'three';
 
+import type { FrequencyBand } from '../../types';
 import type { AudioShaderUniforms } from '../../hooks/useAudioShader';
+import { ABSORPTION_COEFFICIENTS, FREQUENCY_MAP } from '../../utils/physics';
 import { vertexShader } from '../../shaders/audioHeatmap.vert';
 import { fragmentShader } from '../../shaders/audioHeatmap.frag';
 
 export interface AudioHeatmapPlaneProps {
   /** シェーダーuniforms */
   uniforms: AudioShaderUniforms;
+  /** 現在の周波数帯 */
+  frequencyBand: FrequencyBand;
   /** 平面の幅 (m) */
   width: number;
   /** 平面の奥行 (m) */
@@ -31,6 +35,7 @@ export interface AudioHeatmapPlaneProps {
 export const AudioHeatmapPlane = memo<AudioHeatmapPlaneProps>(
   function AudioHeatmapPlane({
     uniforms,
+    frequencyBand,
     width,
     depth,
     centerZ = 0,
@@ -38,10 +43,19 @@ export const AudioHeatmapPlane = memo<AudioHeatmapPlaneProps>(
   }) {
     const materialRef = useRef<ShaderMaterialType>(null);
 
-    // フレームごとにuTimeを更新
+    // フレームごとにuTimeを更新し、周波数帯のuniformを同期
+    // R3FはshaderMaterialのuniforms propを内部コピーするため、
+    // useEffectでのref経由ミューテーションではGPUに反映されない。
+    // materialRef経由で直接更新する必要がある。
     useFrame((_, delta) => {
-      if (reducedMotion || !materialRef.current) return;
-      materialRef.current.uniforms.uTime.value += delta * 0.5;
+      if (!materialRef.current) return;
+      if (!reducedMotion) {
+        materialRef.current.uniforms.uTime.value += delta * 0.5;
+      }
+      materialRef.current.uniforms.uFrequency.value =
+        FREQUENCY_MAP[frequencyBand];
+      materialRef.current.uniforms.uAbsorption.value =
+        ABSORPTION_COEFFICIENTS[frequencyBand];
     });
 
     return (

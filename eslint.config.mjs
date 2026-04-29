@@ -75,6 +75,7 @@ export default [
             'castShadow',
             'receiveShadow',
             'dispose',
+            'blending',
           ],
         },
       ],

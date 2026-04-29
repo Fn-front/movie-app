@@ -31,7 +31,7 @@ const nextConfig = {
     includePaths: ['./src/styles'],
   },
 
-  // GLSL シェーダーファイルを raw text としてインポート（Turbopack: dev 用）
+  // GLSL シェーダーファイルを raw text (string) としてインポート（Turbopack: dev 用）
   turbopack: {
     rules: {
       '*.glsl': {

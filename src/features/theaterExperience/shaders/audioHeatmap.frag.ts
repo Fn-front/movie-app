@@ -1,4 +1,12 @@
 /**
+ * オーディオヒートマップフラグメントシェーダー（インライン）
+ *
+ * Turbopack の raw loader が .glsl を正しくバンドルしない問題の回避策として
+ * GLSL ソースをテンプレートリテラルで保持する。
+ * 正規ソースは audioHeatmap.frag.glsl を参照。
+ */
+export const fragmentShader = /* glsl */ `
+/**
  * オーディオヒートマップフラグメントシェーダー
  *
  * スピーカーからの音響強度をリアルタイムで可視化
@@ -167,3 +175,4 @@ void main() {
 
   gl_FragColor = vec4(color, alpha);
 }
+`;

@@ -7,6 +7,10 @@ jest.mock('@react-three/fiber', () => ({
   useFrame: jest.fn(),
 }));
 
+jest.mock('three', () => ({
+  AdditiveBlending: 1,
+}));
+
 jest.mock('../../shaders/audioHeatmap.vert.glsl', () => 'vertex shader');
 jest.mock('../../shaders/audioHeatmap.frag.glsl', () => 'fragment shader');
 

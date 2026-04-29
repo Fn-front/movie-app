@@ -40,7 +40,17 @@ jest.mock('../hooks/useWebGL2Support', () => ({
   })),
 }));
 jest.mock('../hooks/useAudioShader', () => ({
-  useAudioShader: jest.fn(() => ({})),
+  useAudioShader: jest.fn(() => ({
+    uSpeakerData: { value: null },
+    uSpeakerCount: { value: 0 },
+    uFrequency: { value: 1000 },
+    uAbsorption: { value: 0.001 },
+    uTime: { value: 0 },
+    uRoomSize: { value: [20, 25] },
+    uRoomOffset: { value: [-10, -12.5] },
+    uSliceY: { value: 1.2 },
+    uSliceAlpha: { value: 0.85 },
+  })),
 }));
 
 // コンポーネントモック
@@ -126,6 +136,10 @@ const mockTheaterDetail = {
         position_y: 2,
         position_z: 10,
         power_watts: 100,
+        direction_x: -0.41,
+        direction_y: -0.21,
+        direction_z: -0.89,
+        directivity_alpha: 0.5,
       },
     ],
   },

@@ -54,11 +54,33 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
 
     const fovMetrics = useFieldOfView(selectedSeat, theater);
 
+    // ヒートマップ表示範囲を客席エリアから算出（マージン3m）
+    const heatmapBounds = useMemo(() => {
+      if (seats.length === 0) {
+        return {
+          width: theater?.room_width ?? 20,
+          depth: theater?.room_depth ?? 25,
+          centerZ: 0,
+        };
+      }
+      const margin = 3;
+      const zValues = seats.map((s) => s.position_z);
+      const minZ = Math.min(...zValues) - margin;
+      const maxZ = Math.max(...zValues) + margin;
+      return {
+        width: theater?.room_width ?? 20,
+        depth: maxZ - minZ,
+        centerZ: (minZ + maxZ) / 2,
+      };
+    }, [seats, theater?.room_width, theater?.room_depth]);
+
     const audioUniforms = useAudioShader(
       speakers,
       frequencyBand,
-      theater?.room_width ?? 20,
-      theater?.room_depth ?? 25,
+      heatmapBounds.width,
+      heatmapBounds.depth,
+      1.2,
+      heatmapBounds.centerZ,
     );
 
     const handleSeatClick = useCallback(
@@ -131,8 +153,9 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                       <SpeakerMeshes speakers={speakers} />
                       <AudioHeatmapPlane
                         uniforms={audioUniforms}
-                        width={theater.room_width}
-                        depth={theater.room_depth}
+                        width={heatmapBounds.width}
+                        depth={heatmapBounds.depth}
+                        centerZ={heatmapBounds.centerZ}
                         reducedMotion={reducedMotion}
                       />
                     </>

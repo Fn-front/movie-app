@@ -33,6 +33,10 @@ describe('SpeakerMeshes', () => {
       position_y: 3,
       position_z: 5,
       power_watts: 500,
+      direction_x: -0.41,
+      direction_y: -0.21,
+      direction_z: -0.89,
+      directivity_alpha: 0.5,
     };
 
     const props = {
@@ -51,6 +55,10 @@ describe('SpeakerMeshes', () => {
       position_y: 7,
       position_z: 3,
       power_watts: 300,
+      direction_x: -0.34,
+      direction_y: -0.55,
+      direction_z: -0.76,
+      directivity_alpha: 0.6,
     };
 
     const lfeSpeaker: TheaterSpeaker = {
@@ -60,6 +68,10 @@ describe('SpeakerMeshes', () => {
       position_y: 0.5,
       position_z: 10,
       power_watts: 800,
+      direction_x: 0.0,
+      direction_y: 0.04,
+      direction_z: -1.0,
+      directivity_alpha: 1.0,
     };
 
     const speakers = [ceilingSpeaker, lfeSpeaker];

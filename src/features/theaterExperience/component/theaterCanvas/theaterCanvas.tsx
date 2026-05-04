@@ -1,12 +1,15 @@
 /**
  * TheaterCanvasコンポーネント
  * R3F Canvasのラッパー、dynamic importでSSR無効化
+ * ACESFilmicToneMappingとポストプロセス（Bloom/Vignette）で映画的な描画
  */
 
 'use client';
 
 import { memo, type ReactNode } from 'react';
 import { Canvas } from '@react-three/fiber';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import { ACESFilmicToneMapping } from 'three';
 
 import { cn } from '@/utils/cn';
 
@@ -26,11 +29,27 @@ export const TheaterCanvas = memo<TheaterCanvasProps>(function TheaterCanvas({
   return (
     <div className={cn(styles.c_theater_canvas, className)} aria-hidden='true'>
       <Canvas
+        shadows
         dpr={[1, 1.5]}
         camera={{ position: [0, 15, -20], fov: 50 }}
-        gl={{ antialias: true, alpha: false }}
+        gl={{
+          antialias: true,
+          alpha: false,
+          preserveDrawingBuffer: true,
+          toneMapping: ACESFilmicToneMapping,
+          toneMappingExposure: 1.2,
+        }}
       >
         {children}
+        <EffectComposer>
+          <Bloom
+            luminanceThreshold={0.6}
+            luminanceSmoothing={0.4}
+            intensity={0.5}
+            mipmapBlur
+          />
+          <Vignette eskil={false} offset={0.25} darkness={0.7} />
+        </EffectComposer>
       </Canvas>
     </div>
   );

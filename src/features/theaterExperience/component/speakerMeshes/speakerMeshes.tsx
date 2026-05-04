@@ -1,6 +1,6 @@
 /**
  * SpeakerMeshesコンポーネント
- * InstancedMeshでスピーカーを効率的に描画
+ * RoundedBox + メタリックマテリアルでスピーカーを描画
  * 天井スピーカーは下向き、壁/床スピーカーは水平向きで視覚的に区別
  */
 
@@ -12,6 +12,11 @@ import {
   Color,
   type InstancedMesh as InstancedMeshType,
 } from 'three';
+import { RoundedBoxGeometry } from 'three-stdlib';
+import { extend } from '@react-three/fiber';
+
+// R3FにRoundedBoxGeometryを登録
+extend({ RoundedBoxGeometry });
 
 import type { TheaterSpeaker, SpeakerChannel } from '../../types';
 
@@ -30,9 +35,9 @@ const CEILING_CHANNELS: ReadonlySet<SpeakerChannel> = new Set([
 /** LFEチャンネル判定 */
 const LFE_CHANNELS: ReadonlySet<SpeakerChannel> = new Set(['LFE']);
 
-const COLOR_CEILING = new Color('#4a90d9');
-const COLOR_WALL = new Color('#2c2c2c');
-const COLOR_LFE = new Color('#6b3fa0');
+const COLOR_CEILING = new Color('#3a7ac0');
+const COLOR_WALL = new Color('#1c1c1c');
+const COLOR_LFE = new Color('#5a2f90');
 
 export interface SpeakerMeshesProps {
   /** スピーカーデータ一覧 */
@@ -88,11 +93,23 @@ export const SpeakerMeshes = memo<SpeakerMeshesProps>(function SpeakerMeshes({
       ref={meshRef}
       args={[undefined, undefined, speakers.length]}
       frustumCulled={false}
+      castShadow
     >
-      <boxGeometry
-        args={[SPEAKER_SIZE.width, SPEAKER_SIZE.height, SPEAKER_SIZE.depth]}
+      <roundedBoxGeometry
+        args={[
+          SPEAKER_SIZE.width,
+          SPEAKER_SIZE.height,
+          SPEAKER_SIZE.depth,
+          4,
+          0.03,
+        ]}
       />
-      <meshStandardMaterial emissive='#444444' emissiveIntensity={0.3} />
+      <meshStandardMaterial
+        roughness={0.25}
+        metalness={0.8}
+        emissive='#333340'
+        emissiveIntensity={0.2}
+      />
     </instancedMesh>
   );
 });

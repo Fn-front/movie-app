@@ -15,6 +15,14 @@ jest.mock('three', () => ({
   Color: jest.fn(),
 }));
 
+jest.mock('three-stdlib', () => ({
+  RoundedBoxGeometry: jest.fn(),
+}));
+
+jest.mock('@react-three/fiber', () => ({
+  extend: jest.fn(),
+}));
+
 import type { TheaterSpeaker } from '../../types';
 
 import { SpeakerMeshes } from './speakerMeshes';

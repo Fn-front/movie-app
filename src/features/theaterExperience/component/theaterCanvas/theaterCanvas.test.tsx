@@ -12,6 +12,18 @@ jest.mock('@react-three/fiber', () => ({
   )),
 }));
 
+jest.mock('@react-three/postprocessing', () => ({
+  EffectComposer: jest.fn(({ children }: { children: React.ReactNode }) => (
+    <div data-testid='effect-composer'>{children}</div>
+  )),
+  Bloom: jest.fn(() => null),
+  Vignette: jest.fn(() => null),
+}));
+
+jest.mock('three', () => ({
+  ACESFilmicToneMapping: 4,
+}));
+
 import { TheaterCanvas } from './theaterCanvas';
 
 describe('TheaterCanvas', () => {

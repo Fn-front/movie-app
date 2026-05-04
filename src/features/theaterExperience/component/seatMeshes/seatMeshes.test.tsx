@@ -8,11 +8,39 @@ jest.mock('three', () => ({
     this: Record<string, unknown>,
   ) {
     this.position = { set: jest.fn() };
+    this.rotation = { set: jest.fn() };
     this.matrix = {};
     this.updateMatrix = jest.fn();
   }),
   Color: jest.fn(),
+  RepeatWrapping: 1000,
 }));
+
+jest.mock('three-stdlib', () => ({
+  RoundedBoxGeometry: jest.fn(),
+}));
+
+jest.mock('@react-three/fiber', () => ({
+  extend: jest.fn(),
+}));
+
+jest.mock('@react-three/drei', () => {
+  const useGLTF = jest.fn(() => ({
+    nodes: {},
+    materials: {},
+    scene: {},
+  })) as jest.Mock & { preload: jest.Mock };
+  useGLTF.preload = jest.fn();
+
+  return {
+    useTexture: jest.fn(() => ({
+      map: { wrapS: 0, wrapT: 0, repeat: { set: jest.fn() } },
+      normalMap: { wrapS: 0, wrapT: 0, repeat: { set: jest.fn() } },
+      roughnessMap: { wrapS: 0, wrapT: 0, repeat: { set: jest.fn() } },
+    })),
+    useGLTF,
+  };
+});
 
 import type { TheaterSeat } from '../../types';
 

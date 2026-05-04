@@ -5,12 +5,30 @@
 
 jest.mock('@react-three/drei', () => ({
   OrbitControls: jest.fn(() => null),
+  Environment: jest.fn(() => null),
+  ContactShadows: jest.fn(() => null),
+  useTexture: jest.fn(() => ({
+    map: { wrapS: 0, wrapT: 0, repeat: { set: jest.fn() } },
+    normalMap: { wrapS: 0, wrapT: 0, repeat: { set: jest.fn() } },
+    roughnessMap: { wrapS: 0, wrapT: 0, repeat: { set: jest.fn() } },
+    aoMap: { wrapS: 0, wrapT: 0, repeat: { set: jest.fn() } },
+  })),
 }));
 jest.mock('@react-three/fiber', () => ({
   useThree: jest.fn(() => ({
     camera: { position: { lerp: jest.fn() } },
   })),
   useFrame: jest.fn(),
+}));
+jest.mock('three', () => ({
+  Vector3: jest.fn().mockImplementation(function (
+    this: Record<string, unknown>,
+  ) {
+    this.clone = jest.fn().mockReturnValue(this);
+    this.copy = jest.fn();
+    this.set = jest.fn();
+  }),
+  RepeatWrapping: 1000,
 }));
 
 import { TheaterScene } from './theaterScene';

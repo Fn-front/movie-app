@@ -9,7 +9,13 @@
 import { Suspense, memo, useRef, useEffect, useMemo } from 'react';
 import { OrbitControls, useTexture, ContactShadows } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
-import { Vector3, RepeatWrapping } from 'three';
+import {
+  Vector3,
+  RepeatWrapping,
+  Object3D,
+  PlaneGeometry,
+  type InstancedMesh as InstancedMeshType,
+} from 'three';
 import type { OrbitControls as OrbitControlsType } from 'three-stdlib';
 
 import type { TheaterSeat, Theater } from '../../types';
@@ -36,6 +42,9 @@ const OVERVIEW_TARGET = new Vector3(0, 1, 0);
 /** カメラ補間の速度 (0~1、1に近いほど速い) */
 const LERP_SPEED = 3;
 
+/** 着座時の目の高さ（座席Y座標からのオフセット） */
+const SEATED_EYE_HEIGHT = 1.2;
+
 /**
  * カメラアニメーション用の内部コンポーネント
  * useFrame を使って毎フレームカメラ位置を補間する
@@ -51,12 +60,11 @@ const CameraAnimator = memo<{
 
   useEffect(() => {
     if (selectedSeat) {
-      // 座席視点: 座席の少し後ろ上方から見下ろす
-      // 選択席・周囲の席・スクリーンが全て見える位置
+      // 座席視点: 着座目線（firstPersonPreview と統一）
       targetPos.current.set(
         selectedSeat.position_x,
-        selectedSeat.position_y + 3.5,
-        selectedSeat.position_z - 3,
+        selectedSeat.position_y + SEATED_EYE_HEIGHT,
+        selectedSeat.position_z,
       );
       // 座席から真っ直ぐ前方（スクリーン壁方向）を注視
       // X座標は座席と同じにして横回転を防止
@@ -183,7 +191,13 @@ const WallMesh = memo<{
   return (
     <mesh position={position} rotation={rotation} receiveShadow>
       <planeGeometry args={[width, height]} />
-      <meshStandardMaterial {...textures} color='#0d0d1a' roughness={0.9} />
+      <meshStandardMaterial
+        {...textures}
+        color='#2a2a45'
+        roughness={0.9}
+        emissive='#0a0a18'
+        emissiveIntensity={1.0}
+      />
     </mesh>
   );
 });
@@ -216,14 +230,165 @@ const CeilingMesh = memo<{
       <planeGeometry args={[roomWidth, roomDepth]} />
       <meshStandardMaterial
         {...textures}
-        color='#0a0a14'
+        color='#222238'
         roughness={0.98}
         metalness={0.05}
+        emissive='#080812'
+        emissiveIntensity={1.0}
       />
     </mesh>
   );
 });
 CeilingMesh.displayName = 'CeilingMesh';
+
+/** 通路足元灯の数（片側） */
+const AISLE_LIGHTS_PER_SIDE = 10;
+/** 通路足元灯の総数 */
+const AISLE_LIGHTS_TOTAL = AISLE_LIGHTS_PER_SIDE * 2;
+
+/**
+ * 通路足元灯コンポーネント
+ * 座席エリアの両サイドに小さな発光メッシュを等間隔配置
+ */
+const AisleLights = memo<{
+  roomWidth: number;
+  frontZ: number;
+  backZ: number;
+}>(function AisleLights({ roomWidth, frontZ, backZ }) {
+  const meshRef = useRef<InstancedMeshType>(null);
+  const tempObject = useMemo(() => new Object3D(), []);
+
+  useEffect(() => {
+    if (!meshRef.current) return;
+
+    const aisleX = roomWidth / 2 - 1.5;
+    const zRange = frontZ - backZ;
+    let index = 0;
+
+    for (let side = 0; side < 2; side++) {
+      const x = side === 0 ? -aisleX : aisleX;
+      for (let i = 0; i < AISLE_LIGHTS_PER_SIDE; i++) {
+        const z = backZ + (zRange * i) / (AISLE_LIGHTS_PER_SIDE - 1);
+        tempObject.position.set(x, 0.01, z);
+        tempObject.updateMatrix();
+        meshRef.current!.setMatrixAt(index, tempObject.matrix);
+        index++;
+      }
+    }
+
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [roomWidth, frontZ, backZ, tempObject]);
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, AISLE_LIGHTS_TOTAL]}
+      frustumCulled={false}
+    >
+      <boxGeometry args={[0.12, 0.02, 0.12]} />
+      <meshStandardMaterial
+        color='#ffa040'
+        emissive='#ff8020'
+        emissiveIntensity={3.0}
+      />
+    </instancedMesh>
+  );
+});
+AisleLights.displayName = 'AisleLights';
+
+/**
+ * 壁面LEDアクセントラインコンポーネント
+ * 左右の壁面に高さ1mで水平に走る細い発光帯
+ */
+const WallAccentLine = memo<{
+  roomWidth: number;
+  roomDepth: number;
+}>(function WallAccentLine({ roomWidth, roomDepth }) {
+  const halfWidth = roomWidth / 2;
+
+  return (
+    <>
+      {/* 左壁アクセント */}
+      <mesh
+        position={[-halfWidth + 0.02, 1.0, 0]}
+        rotation={[0, Math.PI / 2, 0]}
+      >
+        <boxGeometry args={[roomDepth, 0.02, 0.01]} />
+        <meshStandardMaterial
+          color='#4060a0'
+          emissive='#3050a0'
+          emissiveIntensity={2.5}
+        />
+      </mesh>
+      {/* 右壁アクセント */}
+      <mesh
+        position={[halfWidth - 0.02, 1.0, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
+      >
+        <boxGeometry args={[roomDepth, 0.02, 0.01]} />
+        <meshStandardMaterial
+          color='#4060a0'
+          emissive='#3050a0'
+          emissiveIntensity={2.5}
+        />
+      </mesh>
+    </>
+  );
+});
+WallAccentLine.displayName = 'WallAccentLine';
+
+/** 座席エリア最後列の最大高さ (m) — マイグレーションと同期 */
+const SLOPE_MAX_HEIGHT = 3.13;
+
+/**
+ * 傾斜床メッシュコンポーネント
+ * 座席エリアに傾斜する床面を追加（前端Y=0、後端Y=SLOPE_MAX_HEIGHT）
+ */
+const SlopedFloorMesh = memo<{
+  roomWidth: number;
+  frontZ: number;
+  backZ: number;
+}>(function SlopedFloorMesh({ roomWidth, frontZ, backZ }) {
+  const geometry = useMemo(() => {
+    const depth = frontZ - backZ;
+    const geo = new PlaneGeometry(roomWidth, depth, 1, 10);
+    const posAttr = geo.attributes.position;
+
+    for (let i = 0; i < posAttr.count; i++) {
+      // PlaneGeometry のローカルY（回転前）= 傾斜方向
+      // -depth/2(前端) 〜 +depth/2(後端)
+      const localY = posAttr.getY(i);
+      // 0(前端) 〜 1(後端) に正規化
+      const t = (localY + depth / 2) / depth;
+      // 2次曲線的に高さを増加（マイグレーションの勾配カーブに近似）
+      const heightOffset = SLOPE_MAX_HEIGHT * t * t;
+      posAttr.setZ(i, heightOffset);
+    }
+
+    posAttr.needsUpdate = true;
+    geo.computeVertexNormals();
+    return geo;
+  }, [roomWidth, frontZ, backZ]);
+
+  const centerZ = (frontZ + backZ) / 2;
+
+  return (
+    <mesh
+      geometry={geometry}
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[0, 0, centerZ]}
+      receiveShadow
+    >
+      <meshStandardMaterial
+        color='#1a1a2e'
+        roughness={0.95}
+        transparent
+        opacity={0.85}
+      />
+    </mesh>
+  );
+});
+SlopedFloorMesh.displayName = 'SlopedFloorMesh';
 
 export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   roomWidth,
@@ -242,13 +407,13 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       <CameraAnimator selectedSeat={selectedSeat} theater={theater} />
 
       {/* 距離フォグ: 奥行きの空気感を演出 */}
-      <fog attach='fog' args={['#050510', roomDepth * 0.6, roomDepth * 1.8]} />
+      <fog attach='fog' args={['#050510', roomDepth * 1.5, roomDepth * 2.5]} />
 
       {/* ライティング */}
-      <ambientLight intensity={0.15} color='#ffd4a0' />
+      <ambientLight intensity={0.45} color='#ffd4a0' />
       <directionalLight
         position={[0, roomHeight, 0]}
-        intensity={0.3}
+        intensity={0.5}
         color='#fff5e6'
         castShadow
         shadow-mapSize-width={1024}
@@ -262,8 +427,8 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         shadow-bias={-0.002}
       />
       <pointLight
-        position={[0, 3, halfDepth - 1]}
-        intensity={0.8}
+        position={[0, 3, halfDepth - 3]}
+        intensity={0.3}
         color='#b0c0e8'
         distance={roomDepth}
         decay={2}
@@ -282,17 +447,60 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       />
       <pointLight
         position={[-halfWidth + 0.5, 2, 0]}
-        intensity={0.15}
+        intensity={0.6}
         color='#ff9966'
-        distance={8}
-        decay={2}
+        distance={15}
+        decay={1.5}
       />
       <pointLight
         position={[halfWidth - 0.5, 2, 0]}
-        intensity={0.15}
+        intensity={0.6}
         color='#ff9966'
-        distance={8}
+        distance={15}
+        decay={1.5}
+      />
+      {/* 座席エリア照明（スクリーン側から客席を照らす間接光） */}
+      <spotLight
+        position={[0, roomHeight - 1, halfDepth - 3]}
+        target-position={[0, 0, 0]}
+        angle={Math.PI / 3}
+        penumbra={1.0}
+        intensity={0.3}
+        color='#d0d8f0'
+        distance={roomDepth}
         decay={2}
+      />
+      {/* 前方壁上部ウォッシュライト（スクリーン周辺を照らす） */}
+      <pointLight
+        position={[0, roomHeight - 1, halfDepth - 2]}
+        intensity={0.3}
+        color='#c0c8e0'
+        distance={20}
+        decay={1.5}
+      />
+      {/* 後方壁上部ウォッシュライト */}
+      <pointLight
+        position={[0, roomHeight - 1, -halfDepth + 2]}
+        intensity={0.6}
+        color='#c0c8e0'
+        distance={20}
+        decay={1.5}
+      />
+      {/* 左壁上部ウォッシュライト */}
+      <pointLight
+        position={[-halfWidth + 1, roomHeight - 1, 0]}
+        intensity={0.5}
+        color='#c0c8e0'
+        distance={20}
+        decay={1.5}
+      />
+      {/* 右壁上部ウォッシュライト */}
+      <pointLight
+        position={[halfWidth - 1, roomHeight - 1, 0]}
+        intensity={0.5}
+        color='#c0c8e0'
+        distance={20}
+        decay={1.5}
       />
 
       {/* 床・壁（PBRテクスチャ、Suspenseで個別にラップ） */}
@@ -309,21 +517,21 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
             </mesh>
             <mesh position={[0, roomHeight / 2, -halfDepth]}>
               <planeGeometry args={[roomWidth, roomHeight]} />
-              <meshStandardMaterial color='#0d0d1a' />
+              <meshStandardMaterial color='#2a2a45' />
             </mesh>
             <mesh
               rotation={[0, Math.PI / 2, 0]}
               position={[-halfWidth, roomHeight / 2, 0]}
             >
               <planeGeometry args={[roomDepth, roomHeight]} />
-              <meshStandardMaterial color='#0d0d1a' />
+              <meshStandardMaterial color='#2a2a45' />
             </mesh>
             <mesh
               rotation={[0, -Math.PI / 2, 0]}
               position={[halfWidth, roomHeight / 2, 0]}
             >
               <planeGeometry args={[roomDepth, roomHeight]} />
-              <meshStandardMaterial color='#0d0d1a' />
+              <meshStandardMaterial color='#2a2a45' />
             </mesh>
             {/* 後方壁フォールバック */}
             <mesh
@@ -331,12 +539,12 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
               position={[0, roomHeight / 2, halfDepth]}
             >
               <planeGeometry args={[roomWidth, roomHeight]} />
-              <meshStandardMaterial color='#0d0d1a' />
+              <meshStandardMaterial color='#2a2a45' />
             </mesh>
             {/* 天井フォールバック */}
             <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, roomHeight, 0]}>
               <planeGeometry args={[roomWidth, roomDepth]} />
-              <meshStandardMaterial color='#0a0a14' />
+              <meshStandardMaterial color='#222238' />
             </mesh>
           </>
         }
@@ -373,6 +581,23 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
           roomHeight={roomHeight}
         />
       </Suspense>
+
+      {/* 傾斜床（座席エリア） */}
+      <SlopedFloorMesh
+        roomWidth={roomWidth}
+        frontZ={halfDepth - 4}
+        backZ={-halfDepth + 11}
+      />
+
+      {/* 通路足元灯 */}
+      <AisleLights
+        roomWidth={roomWidth}
+        frontZ={halfDepth - 4}
+        backZ={-halfDepth + 11}
+      />
+
+      {/* 壁面LEDアクセントライン */}
+      <WallAccentLine roomWidth={roomWidth} roomDepth={roomDepth} />
 
       {/* ContactShadows: 床面への接地影 */}
       <ContactShadows

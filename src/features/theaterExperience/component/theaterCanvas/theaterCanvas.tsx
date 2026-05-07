@@ -43,12 +43,12 @@ export const TheaterCanvas = memo<TheaterCanvasProps>(function TheaterCanvas({
         {children}
         <EffectComposer>
           <Bloom
-            luminanceThreshold={0.6}
+            luminanceThreshold={0.7}
             luminanceSmoothing={0.4}
-            intensity={0.5}
+            intensity={0.3}
             mipmapBlur
           />
-          <Vignette eskil={false} offset={0.25} darkness={0.7} />
+          <Vignette eskil={false} offset={0.3} darkness={0.5} />
         </EffectComposer>
       </Canvas>
     </div>

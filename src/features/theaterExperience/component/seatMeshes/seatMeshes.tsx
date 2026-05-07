@@ -52,10 +52,10 @@ const SEAT_CUSHION = { width: 0.55, height: 0.12, depth: 0.45 };
 const SEAT_BACK = { width: 0.55, height: 0.5, depth: 0.08 };
 const ARMREST = { width: 0.05, height: 0.2, depth: 0.4 };
 
-const COLOR_DEFAULT = new Color('#6b2020');
+const COLOR_DEFAULT = new Color('#8b3030');
 const COLOR_SELECTED = new Color('#e8c840');
 const COLOR_HOVER = new Color('#a04030');
-const COLOR_FRAME = new Color('#1a1a1a');
+const COLOR_FRAME = new Color('#303038');
 
 /** GLTFモデルパス */
 const SEAT_MODEL_PATH = '/models/theater/seat.glb';
@@ -181,11 +181,18 @@ const GLTFSeatInstances = memo<{
             {isFabric ? (
               <meshStandardMaterial
                 {...textures}
-                roughness={0.85}
+                roughness={0.75}
                 metalness={0.0}
+                emissive='#1a0808'
+                emissiveIntensity={0.8}
               />
             ) : (
-              <meshStandardMaterial roughness={0.4} metalness={0.6} />
+              <meshStandardMaterial
+                roughness={0.4}
+                metalness={0.6}
+                emissive='#060608'
+                emissiveIntensity={0.5}
+              />
             )}
           </instancedMesh>
         );

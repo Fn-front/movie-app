@@ -20,7 +20,7 @@ extend({ RoundedBoxGeometry });
 
 import type { TheaterSpeaker, SpeakerChannel } from '../../types';
 
-const SPEAKER_SIZE = { width: 0.4, height: 0.25, depth: 0.3 };
+const SPEAKER_SIZE = { width: 0.6, height: 0.35, depth: 0.4 };
 
 /** 天井チャンネル判定 */
 const CEILING_CHANNELS: ReadonlySet<SpeakerChannel> = new Set([
@@ -35,9 +35,9 @@ const CEILING_CHANNELS: ReadonlySet<SpeakerChannel> = new Set([
 /** LFEチャンネル判定 */
 const LFE_CHANNELS: ReadonlySet<SpeakerChannel> = new Set(['LFE']);
 
-const COLOR_CEILING = new Color('#3a7ac0');
-const COLOR_WALL = new Color('#1c1c1c');
-const COLOR_LFE = new Color('#5a2f90');
+const COLOR_CEILING = new Color('#5090e0');
+const COLOR_WALL = new Color('#404050');
+const COLOR_LFE = new Color('#7040b0');
 
 export interface SpeakerMeshesProps {
   /** スピーカーデータ一覧 */
@@ -105,10 +105,10 @@ export const SpeakerMeshes = memo<SpeakerMeshesProps>(function SpeakerMeshes({
         ]}
       />
       <meshStandardMaterial
-        roughness={0.25}
-        metalness={0.8}
-        emissive='#333340'
-        emissiveIntensity={0.2}
+        roughness={0.4}
+        metalness={0.3}
+        emissive='#4060a0'
+        emissiveIntensity={0.6}
       />
     </instancedMesh>
   );

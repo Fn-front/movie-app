@@ -14,6 +14,7 @@ import {
   RepeatWrapping,
   Object3D,
   PlaneGeometry,
+  MathUtils,
   type InstancedMesh as InstancedMeshType,
 } from 'three';
 import type { OrbitControls as OrbitControlsType } from 'three-stdlib';
@@ -35,8 +36,7 @@ export interface TheaterSceneProps {
   children: React.ReactNode;
 }
 
-/** 俯瞰カメラの初期位置 */
-const OVERVIEW_POSITION = new Vector3(0, 15, -20);
+/** 俯瞰カメラの注視点 */
 const OVERVIEW_TARGET = new Vector3(0, 1, 0);
 
 /** カメラ補間の速度 (0~1、1に近いほど速い) */
@@ -44,6 +44,11 @@ const LERP_SPEED = 3;
 
 /** 着座時の目の高さ（座席Y座標からのオフセット） */
 const SEATED_EYE_HEIGHT = 1.2;
+
+/** 壁面からカメラ位置のバッファ (m) */
+const ROOM_BOUNDARY_PADDING = 0.5;
+/** カメラY座標の最低高さ (m) */
+const CAMERA_MIN_Y = 0.5;
 
 /**
  * カメラアニメーション用の内部コンポーネント
@@ -55,7 +60,19 @@ const CameraAnimator = memo<{
 }>(function CameraAnimator({ selectedSeat, theater }) {
   const controlsRef = useRef<OrbitControlsType>(null);
   const { camera } = useThree();
-  const targetPos = useRef(OVERVIEW_POSITION.clone());
+
+  // 部屋内の俯瞰位置: 天井近く・後壁近くから見下ろす
+  const overviewPosition = useMemo(
+    () =>
+      new Vector3(
+        0,
+        theater.room_height - ROOM_BOUNDARY_PADDING,
+        -(theater.room_depth / 2 - ROOM_BOUNDARY_PADDING),
+      ),
+    [theater.room_height, theater.room_depth],
+  );
+
+  const targetPos = useRef(overviewPosition.clone());
   const targetLookAt = useRef(OVERVIEW_TARGET.clone());
 
   useEffect(() => {
@@ -75,10 +92,10 @@ const CameraAnimator = memo<{
       );
     } else {
       // 俯瞰視点に戻る
-      targetPos.current.copy(OVERVIEW_POSITION);
+      targetPos.current.copy(overviewPosition);
       targetLookAt.current.copy(OVERVIEW_TARGET);
     }
-  }, [selectedSeat, theater]);
+  }, [selectedSeat, theater, overviewPosition]);
 
   const isAnimating = useRef(false);
 
@@ -90,25 +107,45 @@ const CameraAnimator = memo<{
   }, [selectedSeat]);
 
   useFrame((_, delta) => {
-    if (!controlsRef.current || !isAnimating.current) return;
+    if (!controlsRef.current) return;
     const controls = controlsRef.current;
-    const t = 1 - Math.exp(-LERP_SPEED * delta);
 
-    camera.position.lerp(targetPos.current, t);
-    controls.target.lerp(targetLookAt.current, t);
-    controls.update();
+    // --- アニメーション処理 ---
+    if (isAnimating.current) {
+      const t = 1 - Math.exp(-LERP_SPEED * delta);
 
-    const posDist = camera.position.distanceTo(targetPos.current);
-    const targetDist = controls.target.distanceTo(targetLookAt.current);
-
-    if (posDist < 0.01 && targetDist < 0.01) {
-      // アニメーション完了: OrbitControlsにカメラ制御を委譲
-      camera.position.copy(targetPos.current);
-      controls.target.copy(targetLookAt.current);
+      camera.position.lerp(targetPos.current, t);
+      controls.target.lerp(targetLookAt.current, t);
       controls.update();
-      controls.enabled = true;
-      isAnimating.current = false;
+
+      const posDist = camera.position.distanceTo(targetPos.current);
+      const targetDist = controls.target.distanceTo(targetLookAt.current);
+
+      if (posDist < 0.01 && targetDist < 0.01) {
+        // アニメーション完了: OrbitControlsにカメラ制御を委譲
+        camera.position.copy(targetPos.current);
+        controls.target.copy(targetLookAt.current);
+        controls.update();
+        controls.enabled = true;
+        isAnimating.current = false;
+      }
     }
+
+    // --- 境界クランプ（毎フレーム実行） ---
+    const pad = ROOM_BOUNDARY_PADDING;
+    const halfW = theater.room_width / 2 - pad;
+    const halfD = theater.room_depth / 2 - pad;
+    const maxY = theater.room_height - pad;
+
+    camera.position.x = MathUtils.clamp(camera.position.x, -halfW, halfW);
+    camera.position.y = MathUtils.clamp(camera.position.y, CAMERA_MIN_Y, maxY);
+    camera.position.z = MathUtils.clamp(camera.position.z, -halfD, halfD);
+
+    controls.target.x = MathUtils.clamp(controls.target.x, -halfW, halfW);
+    controls.target.y = MathUtils.clamp(controls.target.y, CAMERA_MIN_Y, maxY);
+    controls.target.z = MathUtils.clamp(controls.target.z, -halfD, halfD);
+
+    controls.update();
   });
 
   return (

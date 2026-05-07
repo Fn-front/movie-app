@@ -147,6 +147,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                     centerX={theater.screen_center_x}
                     centerY={theater.screen_center_y}
                     centerZ={theater.screen_center_z}
+                    reducedMotion={reducedMotion}
                   />
                   {speakers.length > 0 && (
                     <>

@@ -254,10 +254,10 @@ const FirstPersonCameraRig = memo<{
    *   ため、両者の中間として「カメラX とスクリーン中心X の中点」を注視点
    *   とする（α=0.5）。
    *
-   * - Y: スクリーン中心の高さに合わせる。スクリーン全体（上端から下端まで）
-   *   が視野の中央に収まるようにすることで「上半分が見えない」状態を回避。
-   *   現実の映画館でも、観客は椅子のリクライン姿勢で自然にスクリーン中心
-   *   付近に視線を向けている。
+   * - Y: 眼の高さ＋1.5m。スクリーン中心(y=4.5)を直接 lookAt すると
+   *   前列で33°もの上向きになり「首を反らす」状態になる。実際の映画館では
+   *   椅子のリクライン姿勢で 15-20° 程度の自然な上向きなので、注視点を
+   *   スクリーン下半分の中央付近（眼+1.5m）に置く。
    *
    * - Z: スクリーン平面のZに固定。
    */
@@ -265,15 +265,16 @@ const FirstPersonCameraRig = memo<{
     const seatX = Number(selectedSeat.position_x);
     const screenX = Number(theater.screen_center_x);
     const midX = (seatX + screenX) / 2;
+    const eyeY = Number(selectedSeat.position_y) + SEATED_EYE_HEIGHT;
     return [
       -midX, // ミラー反転（カメラ位置と同じ補正）
-      Number(theater.screen_center_y),
+      eyeY + 1.5,
       Number(theater.screen_center_z),
     ];
   }, [
     selectedSeat.position_x,
+    selectedSeat.position_y,
     theater.screen_center_x,
-    theater.screen_center_y,
     theater.screen_center_z,
   ]);
 

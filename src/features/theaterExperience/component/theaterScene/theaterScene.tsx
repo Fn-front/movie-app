@@ -7,9 +7,19 @@
 'use client';
 
 import { memo, useMemo, useRef, useEffect } from 'react';
-import { OrthographicCamera, Edges } from '@react-three/drei';
+import {
+  OrthographicCamera,
+  PerspectiveCamera,
+  Edges,
+  OrbitControls,
+} from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
-import { PlaneGeometry, type OrthographicCamera as OrthographicCameraType } from 'three';
+import {
+  PlaneGeometry,
+  Vector3,
+  type OrthographicCamera as OrthographicCameraType,
+  type PerspectiveCamera as PerspectiveCameraType,
+} from 'three';
 
 import type { TheaterSeat, Theater } from '../../types';
 
@@ -146,6 +156,9 @@ const SlopedFloorMesh = memo<{
 });
 SlopedFloorMesh.displayName = 'SlopedFloorMesh';
 
+/** 着座時の目の高さ（座席Y座標からのオフセット） */
+const SEATED_EYE_HEIGHT = 1.2;
+
 /**
  * 等角投影カメラ + lookAt 原点向き
  * drei の OrthographicCamera は lookAt プロパティを取らないため
@@ -185,10 +198,65 @@ const IsometricCameraRig = memo<{
 });
 IsometricCameraRig.displayName = 'IsometricCameraRig';
 
+/**
+ * 一人称カメラ（選択座席の目線位置）
+ * 座席が変わるたびに位置と注視点を更新し、OrbitControlsで自由視点許可
+ */
+const FirstPersonCameraRig = memo<{
+  selectedSeat: TheaterSeat;
+  theater: Theater;
+}>(function FirstPersonCameraRig({ selectedSeat, theater }) {
+  const cameraRef = useRef<PerspectiveCameraType | null>(null);
+  const set = useThree((state) => state.set);
+
+  const seatPos = useMemo<[number, number, number]>(
+    () => [
+      Number(selectedSeat.position_x),
+      Number(selectedSeat.position_y) + SEATED_EYE_HEIGHT,
+      Number(selectedSeat.position_z),
+    ],
+    [selectedSeat.position_x, selectedSeat.position_y, selectedSeat.position_z],
+  );
+  const target = useMemo<[number, number, number]>(
+    () => [
+      Number(theater.screen_center_x),
+      Number(theater.screen_center_y),
+      Number(theater.screen_center_z),
+    ],
+    [theater.screen_center_x, theater.screen_center_y, theater.screen_center_z],
+  );
+
+  useEffect(() => {
+    if (cameraRef.current) {
+      cameraRef.current.position.set(seatPos[0], seatPos[1], seatPos[2]);
+      cameraRef.current.lookAt(new Vector3(target[0], target[1], target[2]));
+      cameraRef.current.updateProjectionMatrix();
+      set({ camera: cameraRef.current });
+    }
+  }, [seatPos, target, set]);
+
+  return (
+    <>
+      <PerspectiveCamera ref={cameraRef} makeDefault fov={70} near={0.05} far={100} />
+      <OrbitControls
+        target={target}
+        enableZoom={false}
+        enablePan={false}
+        rotateSpeed={0.4}
+        minPolarAngle={Math.PI / 4}
+        maxPolarAngle={Math.PI / 1.6}
+      />
+    </>
+  );
+});
+FirstPersonCameraRig.displayName = 'FirstPersonCameraRig';
+
 export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   roomWidth,
   roomDepth,
   roomHeight,
+  selectedSeat,
+  theater,
   children,
 }) {
   const halfWidth = roomWidth / 2;
@@ -196,11 +264,16 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
 
   return (
     <>
-      <IsometricCameraRig
-        roomWidth={roomWidth}
-        roomDepth={roomDepth}
-        roomHeight={roomHeight}
-      />
+      {/* 座席選択時は一人称、未選択時は等角投影 */}
+      {selectedSeat ? (
+        <FirstPersonCameraRig selectedSeat={selectedSeat} theater={theater} />
+      ) : (
+        <IsometricCameraRig
+          roomWidth={roomWidth}
+          roomDepth={roomDepth}
+          roomHeight={roomHeight}
+        />
+      )}
 
       {/* フラットライティング */}
       <ambientLight intensity={0.7} />

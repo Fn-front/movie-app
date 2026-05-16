@@ -81,3 +81,25 @@
 
   @include focus-visible;
 }
+
+.c_theater_experience__back_to_overview {
+  @include button-reset;
+  position: absolute;
+  top: $spacing-3;
+  left: $spacing-3;
+  z-index: 10;
+  padding: $spacing-2 $spacing-4;
+  font-size: $font-size-sm;
+  color: $text-primary;
+  background-color: rgba(255, 255, 255, 0.92);
+  border: 1px solid color-alpha(--gray-500, 20%);
+  border-radius: $border-radius-md;
+  cursor: pointer;
+  transition: background-color $duration-fast $ease-in-out;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 1);
+  }
+
+  @include focus-visible;
+}

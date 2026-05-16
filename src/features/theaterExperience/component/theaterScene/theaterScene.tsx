@@ -215,23 +215,32 @@ const FirstPersonCameraRig = memo<{
   const cameraRef = useRef<PerspectiveCameraType | null>(null);
   const set = useThree((state) => state.set);
 
+  /**
+   * 注視点: 座席の真正面・水平方向。
+   * 実際の映画館では観客は水平に前を向いて座り、スクリーンは結果として視野の
+   * 上方に現れる。スクリーン中心を直接 lookAt すると首が上下左右に回って
+   * しまうため、顔は座席のX位置・目の高さで真正面（+Z）を向く。
+   *
+   * 左右の見え方について:
+   * Three.js は +Z方向を向くカメラで世界の +X 軸を画面左に投影する。本アプリの
+   * 座標系は +X = 観客から見て右なので、座席X座標をそのまま使うと端席で左右が
+   * 反転する（A1=左端の人がスクリーンを画面左に見るなど）。これを補正する
+   * ため、カメラ位置と注視点のX座標を鏡像位置（-x）に置く。シーン上の
+   * オブジェクト（座席・スピーカー等）は実位置のまま描画され、観客視点と
+   * 一致する見え方になる。距離・視野占有率の数値は元の position_x から計算
+   * されるため、表示は正確なまま。
+   */
   const seatPos = useMemo<[number, number, number]>(
     () => [
-      Number(selectedSeat.position_x),
+      -Number(selectedSeat.position_x),
       Number(selectedSeat.position_y) + SEATED_EYE_HEIGHT,
       Number(selectedSeat.position_z),
     ],
     [selectedSeat.position_x, selectedSeat.position_y, selectedSeat.position_z],
   );
-  /**
-   * 注視点: 座席の真正面・水平方向
-   * 実際の映画館では観客は水平に前を向いて座っており、スクリーンは結果として
-   * 視野の上方に現れる。スクリーン中心を直接 lookAt すると首が上下左右に
-   * 回ってしまうため、顔は座席のX位置・目の高さで真正面（+Z）を向く。
-   */
   const target = useMemo<[number, number, number]>(
     () => [
-      Number(selectedSeat.position_x),
+      -Number(selectedSeat.position_x),
       Number(selectedSeat.position_y) + SEATED_EYE_HEIGHT,
       Number(theater.screen_center_z),
     ],

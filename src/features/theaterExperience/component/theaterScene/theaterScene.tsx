@@ -11,7 +11,6 @@ import {
   OrthographicCamera,
   PerspectiveCamera,
   Edges,
-  OrbitControls,
 } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import {
@@ -239,28 +238,34 @@ const FirstPersonCameraRig = memo<{
     [selectedSeat.position_x, selectedSeat.position_y, selectedSeat.position_z],
   );
   /**
-   * 注視点のY: 完全な水平ではなく、スクリーン底辺の高さに向ける。
+   * 注視点の決め方:
    *
-   * 実際の映画館の椅子はリクライン構造になっており、観客の視線は自然と
-   * やや上向き（~10-20°）になる。これにより、スクリーンの底辺〜中央付近が
-   * 視野の中心に来るのが普通。完全水平にすると視野の下半分がほぼ床になり、
-   * 特に近席（A列など）でコンテキストが極端に欠けて見える。
+   * - X: 端席で「真正面のみ」だと視野の中心からスクリーンが外れ続けてしまい、
+   *   逆に「スクリーン中心を直接 lookAt」すると首が大きく回り過ぎて不自然。
+   *   実際の映画館では端席の観客も頭を少し傾けてスクリーンを視野内に収める
+   *   ため、両者の中間として「カメラX とスクリーン中心X の中点」を注視点
+   *   とする（α=0.5）。
    *
-   * 「スクリーン底辺の少し上」を注視点にすることで、スクリーン全体・周囲の
-   * 壁・天井の一部が自然に視野に入り、リアルな観客視点に近づく。
+   * - Y: スクリーン中心の高さに合わせる。スクリーン全体（上端から下端まで）
+   *   が視野の中央に収まるようにすることで「上半分が見えない」状態を回避。
+   *   現実の映画館でも、観客は椅子のリクライン姿勢で自然にスクリーン中心
+   *   付近に視線を向けている。
+   *
+   * - Z: スクリーン平面のZに固定。
    */
   const target = useMemo<[number, number, number]>(() => {
-    const screenBottomY =
-      Number(theater.screen_center_y) - Number(theater.screen_height) / 2;
+    const seatX = Number(selectedSeat.position_x);
+    const screenX = Number(theater.screen_center_x);
+    const midX = (seatX + screenX) / 2;
     return [
-      -Number(selectedSeat.position_x),
-      screenBottomY + 0.5,
+      -midX, // ミラー反転（カメラ位置と同じ補正）
+      Number(theater.screen_center_y),
       Number(theater.screen_center_z),
     ];
   }, [
     selectedSeat.position_x,
+    theater.screen_center_x,
     theater.screen_center_y,
-    theater.screen_height,
     theater.screen_center_z,
   ]);
 
@@ -278,23 +283,16 @@ const FirstPersonCameraRig = memo<{
       {/*
         FOV 85° (垂直): 16:9 で水平 ~116°。人間の視野の周辺認識ぎりぎりの
         広角でスクリーン+周囲（壁・天井・床）が同時に視野に入る。
-        70° 前後だとIMAX相当の没入感だが、視覚化ツールとしては周辺コンテキストが
-        映らないので情報量不足のため、やや広角寄りに振る。
+        OrbitControls は使わず、座席ごとにカメラ位置と注視点を固定する。
+        座席を変えるとカメラがその座席の視点に瞬時に切り替わる。
       */}
       <PerspectiveCamera
         ref={cameraRef}
         makeDefault
+        position={seatPos}
         fov={85}
         near={0.05}
         far={100}
-      />
-      <OrbitControls
-        target={target}
-        enableZoom={false}
-        enablePan={false}
-        rotateSpeed={0.4}
-        minPolarAngle={Math.PI / 4}
-        maxPolarAngle={Math.PI / 1.6}
       />
     </>
   );

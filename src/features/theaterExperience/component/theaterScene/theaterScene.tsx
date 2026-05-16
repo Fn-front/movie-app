@@ -238,14 +238,31 @@ const FirstPersonCameraRig = memo<{
     ],
     [selectedSeat.position_x, selectedSeat.position_y, selectedSeat.position_z],
   );
-  const target = useMemo<[number, number, number]>(
-    () => [
+  /**
+   * 注視点のY: 完全な水平ではなく、スクリーン底辺の高さに向ける。
+   *
+   * 実際の映画館の椅子はリクライン構造になっており、観客の視線は自然と
+   * やや上向き（~10-20°）になる。これにより、スクリーンの底辺〜中央付近が
+   * 視野の中心に来るのが普通。完全水平にすると視野の下半分がほぼ床になり、
+   * 特に近席（A列など）でコンテキストが極端に欠けて見える。
+   *
+   * 「スクリーン底辺の少し上」を注視点にすることで、スクリーン全体・周囲の
+   * 壁・天井の一部が自然に視野に入り、リアルな観客視点に近づく。
+   */
+  const target = useMemo<[number, number, number]>(() => {
+    const screenBottomY =
+      Number(theater.screen_center_y) - Number(theater.screen_height) / 2;
+    return [
       -Number(selectedSeat.position_x),
-      Number(selectedSeat.position_y) + SEATED_EYE_HEIGHT,
+      screenBottomY + 0.5,
       Number(theater.screen_center_z),
-    ],
-    [selectedSeat.position_x, selectedSeat.position_y, theater.screen_center_z],
-  );
+    ];
+  }, [
+    selectedSeat.position_x,
+    theater.screen_center_y,
+    theater.screen_height,
+    theater.screen_center_z,
+  ]);
 
   useEffect(() => {
     if (cameraRef.current) {
@@ -258,10 +275,16 @@ const FirstPersonCameraRig = memo<{
 
   return (
     <>
+      {/*
+        FOV 85° (垂直): 16:9 で水平 ~116°。人間の視野の周辺認識ぎりぎりの
+        広角でスクリーン+周囲（壁・天井・床）が同時に視野に入る。
+        70° 前後だとIMAX相当の没入感だが、視覚化ツールとしては周辺コンテキストが
+        映らないので情報量不足のため、やや広角寄りに振る。
+      */}
       <PerspectiveCamera
         ref={cameraRef}
         makeDefault
-        fov={70}
+        fov={85}
         near={0.05}
         far={100}
       />

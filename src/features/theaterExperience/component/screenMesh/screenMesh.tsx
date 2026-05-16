@@ -41,11 +41,20 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
   const halfH = height / 2;
 
   return (
-    <group position={[centerX, centerY, centerZ]}>
+    /*
+      スクリーンZを後壁から 0.1m 手前にオフセットして Z-fighting を回避。
+      後壁はシーンの halfDepth (= room_depth/2) 位置にあり、screen_center_z が
+      同じ値だと両者が同一平面に重なってシマ模様のアーティファクトが発生する。
+    */
+    <group position={[centerX, centerY, centerZ - 0.1]}>
       {/* スクリーン本体（フラットな単色） */}
       <mesh>
         <planeGeometry args={[width, height]} />
-        <meshBasicMaterial color='#3a4a8a' side={DoubleSide} toneMapped={false} />
+        <meshBasicMaterial
+          color='#3a4a8a'
+          side={DoubleSide}
+          toneMapped={false}
+        />
         <Edges color='#1a1a2e' lineWidth={1.5} />
       </mesh>
 

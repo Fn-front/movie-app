@@ -72,7 +72,13 @@ const WallMesh = memo<{
   position: [number, number, number];
   rotation?: [number, number, number];
   color?: string;
-}>(function WallMesh({ width, height, position, rotation, color = COLOR_WALL }) {
+}>(function WallMesh({
+  width,
+  height,
+  position,
+  rotation,
+  color = COLOR_WALL,
+}) {
   return (
     <mesh position={position} rotation={rotation} receiveShadow>
       <planeGeometry args={[width, height]} />
@@ -217,13 +223,19 @@ const FirstPersonCameraRig = memo<{
     ],
     [selectedSeat.position_x, selectedSeat.position_y, selectedSeat.position_z],
   );
+  /**
+   * 注視点: 座席の真正面（同じX・スクリーンの高さ・スクリーンのZ）
+   * スクリーン中心を直接 lookAt すると端席で首が大きく回ってしまうため、
+   * 顔は前方（+Z）を向いた自然な姿勢にする。端席では結果としてスクリーンが
+   * 視界の中で偏って見え、それが視野占有率・歪みスコアと一致する。
+   */
   const target = useMemo<[number, number, number]>(
     () => [
-      Number(theater.screen_center_x),
+      Number(selectedSeat.position_x),
       Number(theater.screen_center_y),
       Number(theater.screen_center_z),
     ],
-    [theater.screen_center_x, theater.screen_center_y, theater.screen_center_z],
+    [selectedSeat.position_x, theater.screen_center_y, theater.screen_center_z],
   );
 
   useEffect(() => {
@@ -237,7 +249,13 @@ const FirstPersonCameraRig = memo<{
 
   return (
     <>
-      <PerspectiveCamera ref={cameraRef} makeDefault fov={70} near={0.05} far={100} />
+      <PerspectiveCamera
+        ref={cameraRef}
+        makeDefault
+        fov={70}
+        near={0.05}
+        far={100}
+      />
       <OrbitControls
         target={target}
         enableZoom={false}

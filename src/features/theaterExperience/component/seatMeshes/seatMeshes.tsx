@@ -125,7 +125,7 @@ const SeatBacks = memo<{
       tempObject.position.set(
         seat.position_x,
         seat.position_y + 0.6,
-        seat.position_z + SEAT_CUSHION.depth / 2,
+        seat.position_z - SEAT_CUSHION.depth / 2,
       );
       tempObject.rotation.set(-0.1, 0, 0);
       tempObject.updateMatrix();

@@ -6,9 +6,10 @@
 
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useRef, useEffect } from 'react';
 import { OrthographicCamera, Edges } from '@react-three/drei';
-import { PlaneGeometry } from 'three';
+import { useThree } from '@react-three/fiber';
+import { PlaneGeometry, type OrthographicCamera as OrthographicCameraType } from 'three';
 
 import type { TheaterSeat, Theater } from '../../types';
 
@@ -145,6 +146,45 @@ const SlopedFloorMesh = memo<{
 });
 SlopedFloorMesh.displayName = 'SlopedFloorMesh';
 
+/**
+ * 等角投影カメラ + lookAt 原点向き
+ * drei の OrthographicCamera は lookAt プロパティを取らないため
+ * ref 経由で手動で向きを設定する
+ */
+const IsometricCameraRig = memo<{
+  roomWidth: number;
+  roomDepth: number;
+  roomHeight: number;
+}>(function IsometricCameraRig({ roomWidth, roomDepth, roomHeight }) {
+  const cameraRef = useRef<OrthographicCameraType | null>(null);
+  const set = useThree((state) => state.set);
+  const camDistance = Math.max(roomWidth, roomDepth) * 1.2;
+  const target = useMemo<[number, number, number]>(
+    () => [0, roomHeight / 2, 0],
+    [roomHeight],
+  );
+
+  useEffect(() => {
+    if (cameraRef.current) {
+      cameraRef.current.lookAt(target[0], target[1], target[2]);
+      cameraRef.current.updateProjectionMatrix();
+      set({ camera: cameraRef.current });
+    }
+  }, [target, set]);
+
+  return (
+    <OrthographicCamera
+      ref={cameraRef}
+      makeDefault
+      position={[camDistance, camDistance, camDistance]}
+      zoom={28}
+      near={0.1}
+      far={200}
+    />
+  );
+});
+IsometricCameraRig.displayName = 'IsometricCameraRig';
+
 export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   roomWidth,
   roomDepth,
@@ -154,18 +194,12 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   const halfWidth = roomWidth / 2;
   const halfDepth = roomDepth / 2;
 
-  // アイソメトリックカメラ位置（45度斜め見下ろし）
-  const camDistance = Math.max(roomWidth, roomDepth) * 1.2;
-
   return (
     <>
-      {/* アイソメトリックカメラ */}
-      <OrthographicCamera
-        makeDefault
-        position={[camDistance, camDistance, camDistance]}
-        zoom={28}
-        near={-100}
-        far={200}
+      <IsometricCameraRig
+        roomWidth={roomWidth}
+        roomDepth={roomDepth}
+        roomHeight={roomHeight}
       />
 
       {/* フラットライティング */}

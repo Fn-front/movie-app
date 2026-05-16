@@ -23,3 +23,22 @@ globs:
 
 - スキーマ変更後は `supabase gen types typescript --project-id <project-id> > src/types/database.types.ts` で型定義を再生成する
 - 型定義ファイルは手動で編集しない（常に自動生成で上書き）
+
+## 【必須】Data API公開のためのGRANT付与
+
+> 背景: Supabaseの仕様変更により、2026/05/30以降の新規プロジェクトと2026/10/30以降の既存プロジェクトでは、`public` スキーマで作成したテーブルがData API（supabase-js / PostgREST / GraphQL）にデフォルトで公開されなくなる。明示的な `GRANT` が無い場合、PostgRESTは `42501` エラーを返す。
+
+- 新規テーブル作成マイグレーションでは、`CREATE TABLE` 直後に必ず以下のGRANTを記述する（不要なロールへの付与は省く）
+- `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` と `CREATE POLICY` だけでは公開されない。GRANTが前提
+- 公開読み取り（マスターデータ等）は `anon` にもSELECTを付与する。ユーザー固有データなら `authenticated` のみで十分
+- `service_role` は管理用ロールなので、サーバー側からアクセスするテーブルには付与する
+
+```sql
+-- 例1: ユーザー固有データ（認証必須）
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
+
+-- 例2: 公開マスターデータ（未認証含む全員が閲覧可能）
+GRANT SELECT ON public.<table_name> TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
+```

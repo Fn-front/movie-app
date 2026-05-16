@@ -23,6 +23,7 @@ import { SeatInfoPanel } from '../component/seatInfoPanel/seatInfoPanel';
 import { SeatA11yList } from '../component/seatA11yList/seatA11yList';
 import { FrequencySelector } from '../component/frequencySelector/frequencySelector';
 import { UnsupportedBrowserNotice } from '../component/unsupportedBrowserNotice/unsupportedBrowserNotice';
+import { SeatPipPreview } from '../component/seatPipPreview/seatPipPreview';
 
 import styles from './theaterExperiencePage.module.scss';
 
@@ -92,6 +93,10 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
 
     const handleFrequencyChange = useCallback((value: FrequencyBand) => {
       setFrequencyBand(value);
+    }, []);
+
+    const handlePipSeatClick = useCallback(() => {
+      // PiP内では座席クリックを無効化
     }, []);
 
     const selectedSeatId = useMemo(
@@ -166,6 +171,45 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
               </TheaterCanvas>
             ) : (
               <UnsupportedBrowserNotice />
+            )}
+            {/* 座席選択中のPiP（一人称視点プレビュー） */}
+            {isWebGL2Supported && selectedSeat && (
+              <SeatPipPreview seat={selectedSeat} theater={theater}>
+                <SeatMeshes
+                  seats={seats}
+                  selectedSeatId={selectedSeatId}
+                  onSeatClick={handlePipSeatClick}
+                />
+                <ScreenMesh
+                  width={theater.screen_width}
+                  height={theater.screen_height}
+                  centerX={theater.screen_center_x}
+                  centerY={theater.screen_center_y}
+                  centerZ={theater.screen_center_z}
+                  reducedMotion={reducedMotion}
+                />
+                {speakers.length > 0 && <SpeakerMeshes speakers={speakers} />}
+                {/* PiP内の床（簡素化、ヒートマップは載せない） */}
+                <mesh
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  position={[0, 0, 0]}
+                  receiveShadow
+                >
+                  <planeGeometry
+                    args={[theater.room_width, theater.room_depth]}
+                  />
+                  <meshLambertMaterial color='#e8e0d4' />
+                </mesh>
+                {/* 後方壁 */}
+                <mesh
+                  position={[0, theater.room_height / 2, -theater.room_depth / 2]}
+                >
+                  <planeGeometry
+                    args={[theater.room_width, theater.room_height]}
+                  />
+                  <meshLambertMaterial color='#d4cfc4' />
+                </mesh>
+              </SeatPipPreview>
             )}
           </div>
 

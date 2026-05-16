@@ -1,17 +1,14 @@
 /**
  * ScreenMeshコンポーネント
  * スクリーン矩形メッシュ + ベゼル（暗いフレーム）
- * カスタムshaderMaterialでノイズベースの映像感を演出
+ * アイソメトリック ドールハウス: フラットな単色 + エッジ強調
  */
 
 'use client';
 
-import { memo, useRef, useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
-import { DoubleSide, ShaderMaterial } from 'three';
-
-import { screenVertexShader } from '../../shaders/screenVertex';
-import { screenFragmentShader } from '../../shaders/screenFragment';
+import { memo } from 'react';
+import { DoubleSide } from 'three';
+import { Edges } from '@react-three/drei';
 
 /** ベゼル（フレーム）の太さ (m) */
 const BEZEL_THICKNESS = 0.08;
@@ -29,7 +26,7 @@ export interface ScreenMeshProps {
   centerY: number;
   /** スクリーン中心Z座標 */
   centerZ: number;
-  /** prefers-reduced-motion 有効時は true */
+  /** prefers-reduced-motion 有効時は true（プロトタイプでは未使用） */
   reducedMotion?: boolean;
 }
 
@@ -39,41 +36,17 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
   centerX,
   centerY,
   centerZ,
-  reducedMotion = false,
 }) {
   const halfW = width / 2;
   const halfH = height / 2;
-  const materialRef = useRef<ShaderMaterial>(null);
-
-  const uniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-    }),
-    [],
-  );
-
-  useFrame((_, delta) => {
-    if (materialRef.current && !reducedMotion) {
-      materialRef.current.uniforms.uTime.value += delta;
-    }
-  });
 
   return (
     <group position={[centerX, centerY, centerZ]}>
-      {/* スクリーン本体 */}
+      {/* スクリーン本体（フラットな単色） */}
       <mesh>
         <planeGeometry args={[width, height]} />
-        <shaderMaterial
-          ref={materialRef}
-          vertexShader={screenVertexShader}
-          fragmentShader={screenFragmentShader}
-          uniforms={uniforms}
-          side={DoubleSide}
-          toneMapped
-          polygonOffset
-          polygonOffsetFactor={-1}
-          polygonOffsetUnits={-1}
-        />
+        <meshBasicMaterial color='#3a4a8a' side={DoubleSide} toneMapped={false} />
+        <Edges color='#1a1a2e' lineWidth={1.5} />
       </mesh>
 
       {/* ベゼル（上） */}
@@ -81,7 +54,8 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
         <boxGeometry
           args={[width + BEZEL_THICKNESS * 2, BEZEL_THICKNESS, BEZEL_DEPTH]}
         />
-        <meshStandardMaterial color='#080808' roughness={0.3} metalness={0.7} />
+        <meshLambertMaterial color='#1a1a2e' />
+        <Edges color='#0a0a14' lineWidth={1} />
       </mesh>
 
       {/* ベゼル（下） */}
@@ -89,19 +63,22 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
         <boxGeometry
           args={[width + BEZEL_THICKNESS * 2, BEZEL_THICKNESS, BEZEL_DEPTH]}
         />
-        <meshStandardMaterial color='#080808' roughness={0.3} metalness={0.7} />
+        <meshLambertMaterial color='#1a1a2e' />
+        <Edges color='#0a0a14' lineWidth={1} />
       </mesh>
 
       {/* ベゼル（左） */}
       <mesh position={[-halfW - BEZEL_THICKNESS / 2, 0, -BEZEL_DEPTH / 2]}>
         <boxGeometry args={[BEZEL_THICKNESS, height, BEZEL_DEPTH]} />
-        <meshStandardMaterial color='#080808' roughness={0.3} metalness={0.7} />
+        <meshLambertMaterial color='#1a1a2e' />
+        <Edges color='#0a0a14' lineWidth={1} />
       </mesh>
 
       {/* ベゼル（右） */}
       <mesh position={[halfW + BEZEL_THICKNESS / 2, 0, -BEZEL_DEPTH / 2]}>
         <boxGeometry args={[BEZEL_THICKNESS, height, BEZEL_DEPTH]} />
-        <meshStandardMaterial color='#080808' roughness={0.3} metalness={0.7} />
+        <meshLambertMaterial color='#1a1a2e' />
+        <Edges color='#0a0a14' lineWidth={1} />
       </mesh>
     </group>
   );

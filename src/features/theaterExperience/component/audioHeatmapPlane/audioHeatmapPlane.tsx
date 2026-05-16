@@ -56,6 +56,9 @@ export const AudioHeatmapPlane = memo<AudioHeatmapPlaneProps>(
         FREQUENCY_MAP[frequencyBand];
       materialRef.current.uniforms.uAbsorption.value =
         ABSORPTION_COEFFICIENTS[frequencyBand];
+      // アイソメトリック ドールハウススタイル: フラット床上のレイヤー感を出すため
+      // ヒートマップ全体のアルファを 0.7 に固定
+      materialRef.current.uniforms.uSliceAlpha.value = 0.7;
     });
 
     return (

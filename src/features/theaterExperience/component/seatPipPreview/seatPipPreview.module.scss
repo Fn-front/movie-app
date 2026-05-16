@@ -1,0 +1,32 @@
+@use '@/styles/variables' as *;
+
+.c_seat_pip_preview {
+  position: absolute;
+  right: $spacing-3;
+  bottom: $spacing-3;
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+  background-color: $background-paper;
+  padding: $spacing-2;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-lg;
+  border: 2px solid #ffffff;
+  z-index: 10;
+}
+
+.c_seat_pip_preview__label {
+  font-size: $font-size-xs;
+  font-weight: 600;
+  color: $text-primary;
+  text-align: center;
+}
+
+.c_seat_pip_preview__canvas {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: $border-radius-md;
+  overflow: hidden;
+  background-color: $background-secondary;
+}

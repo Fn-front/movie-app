@@ -14,6 +14,7 @@ argument-hint: <tableName>
 ### アーキテクチャ原則
 
 - **Row Level Security (RLS)**: すべてのテーブルで必須
+- **GRANT付与**: Data API（supabase-js / PostgREST / GraphQL）公開のため必須（2026/10/30以降の既存プロジェクトに適用される仕様変更対応）
 - **UUID主キー**: `gen_random_uuid()`を使用
 - **タイムスタンプ**: `created_at`, `updated_at`を必ず含める
 - **論理削除**: ユーザーデータは`deleted_at`で論理削除
@@ -72,6 +73,31 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+```
+
+## Data API公開のためのGRANT付与
+
+> 2026/05/30以降の新規Supabaseプロジェクト、2026/10/30以降の既存プロジェクトでは、`public` スキーマで作成したテーブルはGRANTを明示しないとData API（supabase-js / PostgREST / GraphQL）からアクセスできない。RLSとは別に、必ずGRANTも付与する。
+
+### パターンA: ユーザー固有データ（認証必須）
+
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO service_role;
+```
+
+### パターンB: 公開データ（未認証含む全員が閲覧可能）
+
+```sql
+GRANT SELECT ON <table_name> TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO service_role;
+```
+
+### パターンC: マスターデータ（読み取り専用、サーバー側のみ書き込み）
+
+```sql
+GRANT SELECT ON <table_name> TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO service_role;
 ```
 
 ## Row Level Security (RLS) ポリシー
@@ -271,6 +297,10 @@ CREATE TRIGGER set_updated_at
   BEFORE UPDATE ON watchlist
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+
+-- Data API GRANT（パターンA: ユーザー固有データ）
+GRANT SELECT, INSERT, UPDATE, DELETE ON watchlist TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON watchlist TO service_role;
 
 -- RLS Policies
 ALTER TABLE watchlist ENABLE ROW LEVEL SECURITY;

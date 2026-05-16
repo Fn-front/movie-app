@@ -68,21 +68,24 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       };
     }, [seats]);
 
-    // ヒートマップ表示範囲を客席エリアから算出（マージン3m）
+    // ヒートマップ表示範囲を客席エリアから算出
+    // マージン 1m を加えつつ、部屋境界（後壁/前壁）を超えないようにクリップ
     const heatmapBounds = useMemo(() => {
+      const roomWidth = theater?.room_width ?? 20;
+      const roomDepth = theater?.room_depth ?? 25;
+      const halfDepth = roomDepth / 2;
       if (seats.length === 0) {
-        return {
-          width: theater?.room_width ?? 20,
-          depth: theater?.room_depth ?? 25,
-          centerZ: 0,
-        };
+        return { width: roomWidth, depth: roomDepth, centerZ: 0 };
       }
-      const margin = 3;
-      const zValues = seats.map((s) => s.position_z);
-      const minZ = Math.min(...zValues) - margin;
-      const maxZ = Math.max(...zValues) + margin;
+      const margin = 1;
+      const zValues = seats.map((s) => Number(s.position_z));
+      const seatMinZ = Math.min(...zValues);
+      const seatMaxZ = Math.max(...zValues);
+      // 後壁(-halfDepth)を超えない、スクリーン側壁(+halfDepth)を超えない
+      const minZ = Math.max(seatMinZ - margin, -halfDepth + 0.1);
+      const maxZ = Math.min(seatMaxZ + margin, halfDepth - 0.1);
       return {
-        width: theater?.room_width ?? 20,
+        width: roomWidth,
         depth: maxZ - minZ,
         centerZ: (minZ + maxZ) / 2,
       };

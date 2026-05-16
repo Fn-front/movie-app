@@ -95,12 +95,12 @@ describe('useAudioShader', () => {
     expect(result.current.uSliceY.value).toBeCloseTo(2.0);
   });
 
-  it('uSliceAlphaが0.85', () => {
+  it('uSliceAlphaが0.4', () => {
     const { result } = renderHook(() =>
       useAudioShader(mockSpeakers, 'mid', 20, 25),
     );
 
-    expect(result.current.uSliceAlpha.value).toBeCloseTo(0.85);
+    expect(result.current.uSliceAlpha.value).toBeCloseTo(0.4);
   });
 
   it('周波数帯に応じてfrequencyが変わる', () => {

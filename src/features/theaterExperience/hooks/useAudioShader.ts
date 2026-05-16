@@ -97,7 +97,7 @@ export function useAudioShader(
         ],
       },
       uSliceY: { value: sliceY },
-      uSliceAlpha: { value: 0.85 },
+      uSliceAlpha: { value: 0.4 },
     };
   }
 

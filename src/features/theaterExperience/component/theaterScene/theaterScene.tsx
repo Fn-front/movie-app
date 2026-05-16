@@ -210,7 +210,8 @@ const WallMesh = memo<{
   height: number;
   position: [number, number, number];
   rotation?: [number, number, number];
-}>(function WallMesh({ width, height, position, rotation }) {
+  color?: string;
+}>(function WallMesh({ width, height, position, rotation, color = '#2a2a45' }) {
   const textures = useTexture({
     map: '/textures/theater/wall_color.jpg',
     normalMap: '/textures/theater/wall_normal.jpg',
@@ -230,10 +231,10 @@ const WallMesh = memo<{
       <planeGeometry args={[width, height]} />
       <meshStandardMaterial
         {...textures}
-        color='#2a2a45'
+        color={color}
         roughness={0.9}
-        emissive='#0a0a18'
-        emissiveIntensity={1.0}
+        emissive='#0a0a14'
+        emissiveIntensity={0.3}
       />
     </mesh>
   );
@@ -270,8 +271,8 @@ const CeilingMesh = memo<{
         color='#222238'
         roughness={0.98}
         metalness={0.05}
-        emissive='#080812'
-        emissiveIntensity={1.0}
+        emissive='#080810'
+        emissiveIntensity={0.2}
       />
     </mesh>
   );
@@ -444,13 +445,13 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       <CameraAnimator selectedSeat={selectedSeat} theater={theater} />
 
       {/* 距離フォグ: 奥行きの空気感を演出 */}
-      <fog attach='fog' args={['#050510', roomDepth * 1.5, roomDepth * 2.5]} />
+      <fog attach='fog' args={['#050510', roomDepth * 4, roomDepth * 6]} />
 
       {/* ライティング */}
-      <ambientLight intensity={0.45} color='#ffd4a0' />
+      <ambientLight intensity={0.15} color='#ffd4a0' />
       <directionalLight
         position={[0, roomHeight, 0]}
-        intensity={0.5}
+        intensity={0.8}
         color='#fff5e6'
         castShadow
         shadow-mapSize-width={1024}
@@ -465,7 +466,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       />
       <pointLight
         position={[0, 3, halfDepth - 3]}
-        intensity={0.3}
+        intensity={0.1}
         color='#b0c0e8'
         distance={roomDepth}
         decay={2}
@@ -510,7 +511,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       {/* 前方壁上部ウォッシュライト（スクリーン周辺を照らす） */}
       <pointLight
         position={[0, roomHeight - 1, halfDepth - 2]}
-        intensity={0.3}
+        intensity={0.05}
         color='#c0c8e0'
         distance={20}
         decay={1.5}
@@ -604,12 +605,13 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
           position={[halfWidth, roomHeight / 2, 0]}
           rotation={[0, -Math.PI / 2, 0]}
         />
-        {/* 後方壁 */}
+        {/* スクリーン側壁（映画館のマスキング：非常に暗い色で映像を引き立てる） */}
         <WallMesh
           width={roomWidth}
           height={roomHeight}
           position={[0, roomHeight / 2, halfDepth]}
           rotation={[0, Math.PI, 0]}
+          color='#080810'
         />
         {/* 天井（壁テクスチャ流用で凹凸感付与） */}
         <CeilingMesh

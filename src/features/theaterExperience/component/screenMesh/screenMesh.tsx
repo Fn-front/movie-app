@@ -69,7 +69,7 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
           fragmentShader={screenFragmentShader}
           uniforms={uniforms}
           side={DoubleSide}
-          toneMapped={false}
+          toneMapped
           polygonOffset
           polygonOffsetFactor={-1}
           polygonOffsetUnits={-1}

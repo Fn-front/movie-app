@@ -33,6 +33,12 @@ export interface TheaterSceneProps {
   selectedSeat: TheaterSeat | null;
   /** 劇場データ（スクリーン位置用） */
   theater: Theater;
+  /** 座席エリアの前端Z（最前列のZ位置）— 傾斜床の起点 */
+  seatAreaFrontZ: number;
+  /** 座席エリアの後端Z（最後列のZ位置）— 傾斜床の終点 */
+  seatAreaBackZ: number;
+  /** 座席エリア最後列のY高さ — 傾斜床の最大高さ */
+  seatAreaMaxY: number;
   /** 子要素（座席、スクリーン、ヒートマップ等） */
   children: React.ReactNode;
 }
@@ -44,8 +50,8 @@ const COLOR_CEILING = '#b8b3a8';
 const COLOR_SLOPE = '#a8a092';
 const COLOR_EDGE = '#5a5247';
 
-/** 座席エリア最後列の最大高さ (m) */
-const SLOPE_MAX_HEIGHT = 3.13;
+/** マージン: 傾斜床は座席より少し外側まで広げる */
+const SLOPE_MARGIN = 0.5;
 
 /**
  * フラットな床メッシュ（ドールハウス基盤）
@@ -123,12 +129,14 @@ RoomEdgesBox.displayName = 'RoomEdgesBox';
 
 /**
  * 傾斜床メッシュ（座席エリア）
+ * frontZ→backZ にかけて、t² の曲線で maxHeight まで上がる
  */
 const SlopedFloorMesh = memo<{
   roomWidth: number;
   frontZ: number;
   backZ: number;
-}>(function SlopedFloorMesh({ roomWidth, frontZ, backZ }) {
+  maxHeight: number;
+}>(function SlopedFloorMesh({ roomWidth, frontZ, backZ, maxHeight }) {
   const geometry = useMemo(() => {
     const depth = frontZ - backZ;
     const geo = new PlaneGeometry(roomWidth, depth, 1, 10);
@@ -137,14 +145,14 @@ const SlopedFloorMesh = memo<{
     for (let i = 0; i < posAttr.count; i++) {
       const localY = posAttr.getY(i);
       const t = (localY + depth / 2) / depth;
-      const heightOffset = SLOPE_MAX_HEIGHT * t * t;
+      const heightOffset = maxHeight * t * t;
       posAttr.setZ(i, heightOffset);
     }
 
     posAttr.needsUpdate = true;
     geo.computeVertexNormals();
     return geo;
-  }, [roomWidth, frontZ, backZ]);
+  }, [roomWidth, frontZ, backZ, maxHeight]);
 
   const centerZ = (frontZ + backZ) / 2;
 
@@ -305,6 +313,9 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   roomHeight,
   selectedSeat,
   theater,
+  seatAreaFrontZ,
+  seatAreaBackZ,
+  seatAreaMaxY,
   children,
 }) {
   const halfWidth = roomWidth / 2;
@@ -387,8 +398,9 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       {/* 傾斜床（座席エリア） */}
       <SlopedFloorMesh
         roomWidth={roomWidth}
-        frontZ={halfDepth - 4}
-        backZ={-halfDepth + 11}
+        frontZ={seatAreaFrontZ + SLOPE_MARGIN}
+        backZ={seatAreaBackZ - SLOPE_MARGIN}
+        maxHeight={seatAreaMaxY}
       />
 
       {children}

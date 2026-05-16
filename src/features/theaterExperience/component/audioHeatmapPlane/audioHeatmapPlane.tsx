@@ -6,9 +6,9 @@
 
 'use client';
 
-import { memo, useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { AdditiveBlending } from 'three';
+import { AdditiveBlending, PlaneGeometry } from 'three';
 import type { ShaderMaterial as ShaderMaterialType } from 'three';
 
 import type { FrequencyBand } from '../../types';
@@ -28,6 +28,12 @@ export interface AudioHeatmapPlaneProps {
   depth: number;
   /** 平面の中心Z座標 (m) */
   centerZ?: number;
+  /** 傾斜床に沿わせる場合に渡す。スロープ前端Z（座席最前列のZ） */
+  slopeFrontZ?: number;
+  /** スロープ後端Z（座席最後列のZ） */
+  slopeBackZ?: number;
+  /** スロープ最大高さ（座席最後列のY） */
+  slopeMaxHeight?: number;
   /** prefers-reduced-motionが有効か */
   reducedMotion?: boolean;
 }
@@ -39,9 +45,45 @@ export const AudioHeatmapPlane = memo<AudioHeatmapPlaneProps>(
     width,
     depth,
     centerZ = 0,
+    slopeFrontZ,
+    slopeBackZ,
+    slopeMaxHeight,
     reducedMotion = false,
   }) {
     const materialRef = useRef<ShaderMaterialType>(null);
+
+    /**
+     * 傾斜床に沿わせる場合、SlopedFloorMesh と同じ t² カーブで頂点を
+     * 上方向に変位させる。これによりヒートマップが床（スロープ）の上面に
+     * 重なり、スロープの下に隠れない。
+     */
+    const geometry = useMemo(() => {
+      const segments = slopeFrontZ !== undefined ? 24 : 1;
+      const geo = new PlaneGeometry(width, depth, 1, segments);
+      if (
+        slopeFrontZ === undefined ||
+        slopeBackZ === undefined ||
+        slopeMaxHeight === undefined
+      ) {
+        return geo;
+      }
+      const posAttr = geo.attributes.position;
+      for (let i = 0; i < posAttr.count; i++) {
+        // plane の localY は -depth/2 .. +depth/2
+        // 回転 -π/2 後、localY は world -Z 方向へ写像される
+        // worldZ = centerZ - localY
+        const localY = posAttr.getY(i);
+        const worldZ = centerZ - localY;
+        // スロープ区間 (slopeBackZ..slopeFrontZ) の内側だけ持ち上げる
+        if (worldZ >= slopeBackZ && worldZ <= slopeFrontZ) {
+          const t = (slopeFrontZ - worldZ) / (slopeFrontZ - slopeBackZ);
+          posAttr.setZ(i, slopeMaxHeight * t * t);
+        }
+      }
+      posAttr.needsUpdate = true;
+      geo.computeVertexNormals();
+      return geo;
+    }, [width, depth, centerZ, slopeFrontZ, slopeBackZ, slopeMaxHeight]);
 
     // フレームごとにuTimeを更新し、周波数帯のuniformを同期
     // R3FはshaderMaterialのuniforms propを内部コピーするため、
@@ -56,14 +98,15 @@ export const AudioHeatmapPlane = memo<AudioHeatmapPlaneProps>(
         FREQUENCY_MAP[frequencyBand];
       materialRef.current.uniforms.uAbsorption.value =
         ABSORPTION_COEFFICIENTS[frequencyBand];
-      // アイソメトリック ドールハウススタイル: フラット床上のレイヤー感を出すため
-      // ヒートマップ全体のアルファを 0.7 に固定
       materialRef.current.uniforms.uSliceAlpha.value = 0.7;
     });
 
     return (
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, centerZ]}>
-        <planeGeometry args={[width, depth, 1, 1]} />
+      <mesh
+        geometry={geometry}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.02, centerZ]}
+      >
         <shaderMaterial
           ref={materialRef}
           vertexShader={vertexShader}

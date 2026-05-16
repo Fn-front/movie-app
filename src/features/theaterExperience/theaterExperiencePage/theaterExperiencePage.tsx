@@ -54,6 +54,20 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
 
     const fovMetrics = useFieldOfView(selectedSeat, theater);
 
+    // 座席エリアの境界（傾斜床のサイズ算出用）
+    const seatAreaBounds = useMemo(() => {
+      if (seats.length === 0) {
+        return { frontZ: 0, backZ: 0, maxY: 0 };
+      }
+      const zValues = seats.map((s) => Number(s.position_z));
+      const yValues = seats.map((s) => Number(s.position_y));
+      return {
+        frontZ: Math.max(...zValues),
+        backZ: Math.min(...zValues),
+        maxY: Math.max(...yValues),
+      };
+    }, [seats]);
+
     // ヒートマップ表示範囲を客席エリアから算出（マージン3m）
     const heatmapBounds = useMemo(() => {
       if (seats.length === 0) {
@@ -135,6 +149,9 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   roomHeight={theater.room_height}
                   selectedSeat={selectedSeat}
                   theater={theater}
+                  seatAreaFrontZ={seatAreaBounds.frontZ}
+                  seatAreaBackZ={seatAreaBounds.backZ}
+                  seatAreaMaxY={seatAreaBounds.maxY}
                 >
                   <SeatMeshes
                     seats={seats}
@@ -158,6 +175,9 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                         width={heatmapBounds.width}
                         depth={heatmapBounds.depth}
                         centerZ={heatmapBounds.centerZ}
+                        slopeFrontZ={seatAreaBounds.frontZ}
+                        slopeBackZ={seatAreaBounds.backZ}
+                        slopeMaxHeight={seatAreaBounds.maxY}
                         reducedMotion={reducedMotion}
                       />
                     </>

@@ -224,18 +224,18 @@ const FirstPersonCameraRig = memo<{
     [selectedSeat.position_x, selectedSeat.position_y, selectedSeat.position_z],
   );
   /**
-   * 注視点: 座席の真正面（同じX・スクリーンの高さ・スクリーンのZ）
-   * スクリーン中心を直接 lookAt すると端席で首が大きく回ってしまうため、
-   * 顔は前方（+Z）を向いた自然な姿勢にする。端席では結果としてスクリーンが
-   * 視界の中で偏って見え、それが視野占有率・歪みスコアと一致する。
+   * 注視点: 座席の真正面・水平方向
+   * 実際の映画館では観客は水平に前を向いて座っており、スクリーンは結果として
+   * 視野の上方に現れる。スクリーン中心を直接 lookAt すると首が上下左右に
+   * 回ってしまうため、顔は座席のX位置・目の高さで真正面（+Z）を向く。
    */
   const target = useMemo<[number, number, number]>(
     () => [
       Number(selectedSeat.position_x),
-      Number(theater.screen_center_y),
+      Number(selectedSeat.position_y) + SEATED_EYE_HEIGHT,
       Number(theater.screen_center_z),
     ],
-    [selectedSeat.position_x, theater.screen_center_y, theater.screen_center_z],
+    [selectedSeat.position_x, selectedSeat.position_y, theater.screen_center_z],
   );
 
   useEffect(() => {

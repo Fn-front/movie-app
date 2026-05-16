@@ -33,12 +33,11 @@ declare module '@react-three/fiber' {
 
 /**
  * 座席パーツのサイズ定義
- * 席間隔 0.6m に対し幅 0.6m とすることで隣接席が接触し、すき間が見えない
- * （実際の映画館では肘掛けが共有されるが、本モデルでは肘掛けを描画しない
- * ためクッション幅で埋める）
+ * 席x間隔 0.6m に対しクッション幅 0.5m とし、隣接席間に 10cm の隙間を確保。
+ * これが実際の映画館の肘掛けに相当するスペース。座席が個別に見える。
  */
-const SEAT_CUSHION = { width: 0.6, height: 0.12, depth: 0.45 };
-const SEAT_BACK = { width: 0.6, height: 0.5, depth: 0.08 };
+const SEAT_CUSHION = { width: 0.5, height: 0.12, depth: 0.45 };
+const SEAT_BACK = { width: 0.5, height: 0.5, depth: 0.08 };
 
 /** ドールハウス座席カラー（列ごとに交互） */
 const COLOR_SEAT_A = new Color('#c44545');

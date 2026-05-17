@@ -7,6 +7,10 @@ jest.mock('@react-three/fiber', () => ({
   useFrame: jest.fn(),
 }));
 
+jest.mock('@react-three/drei', () => ({
+  Edges: () => null,
+}));
+
 jest.mock('three', () => ({
   DoubleSide: 2,
   ShaderMaterial: jest.fn(),

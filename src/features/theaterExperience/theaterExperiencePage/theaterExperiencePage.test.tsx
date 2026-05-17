@@ -3,6 +3,7 @@
  */
 
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 // matchMedia モック（jsdom未実装）
 Object.defineProperty(window, 'matchMedia', {
@@ -96,11 +97,13 @@ jest.mock(
 
 import { useTheater } from '../hooks/useTheater';
 import { useWebGL2Support } from '../hooks/useWebGL2Support';
+import { useSeatSelection } from '../hooks/useSeatSelection';
 
 import { TheaterExperiencePage } from './theaterExperiencePage';
 
 const mockUseTheater = useTheater as jest.Mock;
 const mockUseWebGL2Support = useWebGL2Support as jest.Mock;
+const mockUseSeatSelection = useSeatSelection as jest.Mock;
 
 const mockTheaterDetail = {
   theater: {
@@ -222,5 +225,92 @@ describe('TheaterExperiencePage', () => {
     render(<TheaterExperiencePage slug='standard-medium' />);
 
     expect(screen.getByTestId('frequency-selector')).toBeInTheDocument();
+  });
+
+  describe('ヒートマップ表示切替', () => {
+    it('初期状態ではヒートマップは描画されない', () => {
+      render(<TheaterExperiencePage slug='standard-medium' />);
+
+      expect(screen.queryByTestId('heatmap')).not.toBeInTheDocument();
+    });
+
+    it('「表示」を押すとヒートマップが描画される', async () => {
+      const user = userEvent.setup();
+      render(<TheaterExperiencePage slug='standard-medium' />);
+
+      await user.click(
+        screen.getByRole('radio', { name: 'ヒートマップを表示' }),
+      );
+
+      expect(screen.getByTestId('heatmap')).toBeInTheDocument();
+    });
+
+    it('「非表示」を押すとヒートマップが消える', async () => {
+      const user = userEvent.setup();
+      render(<TheaterExperiencePage slug='standard-medium' />);
+
+      await user.click(
+        screen.getByRole('radio', { name: 'ヒートマップを表示' }),
+      );
+      expect(screen.getByTestId('heatmap')).toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole('radio', { name: 'ヒートマップを非表示' }),
+      );
+
+      expect(screen.queryByTestId('heatmap')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('一人称視点時の振る舞い', () => {
+    const selectedSeat = mockTheaterDetail.theater.seats[0];
+
+    it('座席未選択時はスピーカーが描画される', () => {
+      render(<TheaterExperiencePage slug='standard-medium' />);
+
+      expect(screen.getByTestId('speaker-meshes')).toBeInTheDocument();
+    });
+
+    it('座席選択時はスピーカーが非表示になる', () => {
+      mockUseSeatSelection.mockReturnValueOnce({
+        selectedSeat,
+        selectSeat: jest.fn(),
+        clearSelection: jest.fn(),
+      });
+
+      render(<TheaterExperiencePage slug='standard-medium' />);
+
+      expect(screen.queryByTestId('speaker-meshes')).not.toBeInTheDocument();
+    });
+
+    it('座席選択時は俯瞰に戻るボタンが表示される', () => {
+      mockUseSeatSelection.mockReturnValueOnce({
+        selectedSeat,
+        selectSeat: jest.fn(),
+        clearSelection: jest.fn(),
+      });
+
+      render(<TheaterExperiencePage slug='standard-medium' />);
+
+      expect(
+        screen.getByRole('button', { name: '← 俯瞰に戻る' }),
+      ).toBeInTheDocument();
+    });
+
+    it('俯瞰に戻るボタンで clearSelection が呼ばれる', async () => {
+      const clearSelection = jest.fn();
+      mockUseSeatSelection.mockReturnValueOnce({
+        selectedSeat,
+        selectSeat: jest.fn(),
+        clearSelection,
+      });
+      const user = userEvent.setup();
+
+      render(<TheaterExperiencePage slug='standard-medium' />);
+
+      await user.click(screen.getByRole('button', { name: '← 俯瞰に戻る' }));
+
+      expect(clearSelection).toHaveBeenCalledTimes(1);
+    });
   });
 });

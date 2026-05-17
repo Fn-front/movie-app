@@ -23,6 +23,10 @@ jest.mock('@react-three/fiber', () => ({
   extend: jest.fn(),
 }));
 
+jest.mock('@react-three/drei', () => ({
+  Edges: () => null,
+}));
+
 import type { TheaterSpeaker } from '../../types';
 
 import { SpeakerMeshes } from './speakerMeshes';

@@ -22,6 +22,7 @@ import { SpeakerMeshes } from '../component/speakerMeshes/speakerMeshes';
 import { SeatInfoPanel } from '../component/seatInfoPanel/seatInfoPanel';
 import { SeatA11yList } from '../component/seatA11yList/seatA11yList';
 import { FrequencySelector } from '../component/frequencySelector/frequencySelector';
+import { HeatmapToggle } from '../component/heatmapToggle/heatmapToggle';
 import { UnsupportedBrowserNotice } from '../component/unsupportedBrowserNotice/unsupportedBrowserNotice';
 
 import styles from './theaterExperiencePage.module.scss';
@@ -45,6 +46,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
     const { data: theaterDetail, isLoading, error } = useTheater(slug);
     const { selectedSeat, selectSeat, clearSelection } = useSeatSelection();
     const [frequencyBand, setFrequencyBand] = useState<FrequencyBand>('mid');
+    const [isHeatmapVisible, setIsHeatmapVisible] = useState(false);
     const { isSupported: isWebGL2Supported, isChecking } = useWebGL2Support();
     const reducedMotion = useReducedMotion();
 
@@ -139,6 +141,10 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       setFrequencyBand(value);
     }, []);
 
+    const handleHeatmapVisibleChange = useCallback((visible: boolean) => {
+      setIsHeatmapVisible(visible);
+    }, []);
+
     const selectedSeatId = useMemo(
       () => selectedSeat?.id ?? null,
       [selectedSeat],
@@ -202,18 +208,21 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   />
                   {speakers.length > 0 && (
                     <>
-                      <SpeakerMeshes speakers={speakers} />
-                      <AudioHeatmapPlane
-                        uniforms={audioUniforms}
-                        frequencyBand={frequencyBand}
-                        width={heatmapBounds.width}
-                        depth={heatmapBounds.depth}
-                        centerZ={heatmapBounds.centerZ}
-                        slopeFrontZ={seatAreaBounds.frontZ}
-                        slopeBackZ={seatAreaBounds.backZ}
-                        slopeMaxHeight={seatAreaBounds.maxY}
-                        reducedMotion={reducedMotion}
-                      />
+                      {/* 一人称視点時はスピーカーを非表示（視界の邪魔を防ぐ） */}
+                      {!selectedSeat && <SpeakerMeshes speakers={speakers} />}
+                      {isHeatmapVisible && (
+                        <AudioHeatmapPlane
+                          uniforms={audioUniforms}
+                          frequencyBand={frequencyBand}
+                          width={heatmapBounds.width}
+                          depth={heatmapBounds.depth}
+                          centerZ={heatmapBounds.centerZ}
+                          slopeFrontZ={seatAreaBounds.frontZ}
+                          slopeBackZ={seatAreaBounds.backZ}
+                          slopeMaxHeight={seatAreaBounds.maxY}
+                          reducedMotion={reducedMotion}
+                        />
+                      )}
                     </>
                   )}
                 </TheaterScene>
@@ -235,6 +244,10 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
 
           {/* サイドパネル */}
           <aside className={styles.c_theater_experience__sidebar}>
+            <HeatmapToggle
+              visible={isHeatmapVisible}
+              onVisibleChange={handleHeatmapVisibleChange}
+            />
             <FrequencySelector
               value={frequencyBand}
               onValueChange={handleFrequencyChange}

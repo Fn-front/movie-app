@@ -55,14 +55,16 @@ export interface TheaterSceneProps {
  * ドールハウスのフラット感は維持しつつ、シネマ風の暗色に振る。
  */
 const COLOR_FLOOR = '#1f1820'; // 通路の濃色カーペット
-const COLOR_WALL = '#5d535e'; // 暗い壁（アコースティックパネル想定）
+const COLOR_WALL = '#6a5d68'; // 暗い壁（やや暖かみのあるトーン）
 const COLOR_CEILING = '#252028'; // 暗い天井（投影光反射防止）
-const COLOR_SLOPE = '#332530'; // 座席エリアの暗色カーペット
+const COLOR_SLOPE = '#2e1f2c'; // 座席エリアの暗色カーペット（やや深め）
+const COLOR_SCREEN_WALL = '#2d2540'; // スクリーン側壁（深紫でシネマ感）
+const COLOR_PROSCENIUM = '#1a1322'; // ステージ前縁の暗色バンド
 const COLOR_EDGE = '#b0a0a8'; // 暗色背景に対する明色エッジ線
 
 /** アクセント設備カラー */
 const COLOR_AISLE_LIGHT = '#ffd4a0'; // 通路灯（暖色）
-const COLOR_EXIT_SIGN = '#ff3030'; // 出口サイン（赤）
+const COLOR_EXIT_SIGN = '#ff4060'; // 出口サイン（やや鮮やかな赤ピンク）
 const COLOR_STEP_LED = '#ffe8c4'; // 段差LED（やや暖白）
 
 /** マージン: 傾斜床は座席より少し外側まで広げる */
@@ -185,6 +187,45 @@ const SlopedFloorMesh = memo<{
 SlopedFloorMesh.displayName = 'SlopedFloorMesh';
 
 /**
+ * 座席エリア後端と後壁の隙間を埋める「最上段の水平床」と「縦壁」
+ * 傾斜床の最後端は床より maxHeight だけ高い位置にあるため、
+ * 何もしないと床との縦の段差が空中に現れる。実映画館では最後列の後ろに
+ * 最上段通路 + バックステップ壁があり、これでスタジアム客席の輪郭が完成する。
+ */
+const BackStepFill = memo<{
+  roomWidth: number;
+  roomDepth: number;
+  slopeBackZ: number;
+  maxHeight: number;
+}>(function BackStepFill({ roomWidth, roomDepth, slopeBackZ, maxHeight }) {
+  const halfDepth = roomDepth / 2;
+  const backWallZ = -halfDepth;
+  const topFloorDepth = slopeBackZ - backWallZ;
+  if (topFloorDepth <= 0) return null;
+  const topFloorCenterZ = (slopeBackZ + backWallZ) / 2;
+
+  return (
+    <group>
+      {/* 縦の段差壁: slopeBackZ の位置で床から maxHeight まで立ち上がる */}
+      <mesh position={[0, maxHeight / 2, slopeBackZ]} receiveShadow>
+        <planeGeometry args={[roomWidth, maxHeight]} />
+        <meshLambertMaterial color={COLOR_SLOPE} />
+      </mesh>
+      {/* 最上段の水平床（バック通路） */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, maxHeight, topFloorCenterZ]}
+        receiveShadow
+      >
+        <planeGeometry args={[roomWidth, topFloorDepth]} />
+        <meshLambertMaterial color={COLOR_SLOPE} />
+      </mesh>
+    </group>
+  );
+});
+BackStepFill.displayName = 'BackStepFill';
+
+/**
  * 通路灯（壁際の小さな発光体）
  * 両側通路に等間隔で配置。観客の足元を照らす雰囲気作り。
  */
@@ -216,16 +257,16 @@ const AisleLights = memo<{
         <group key={i} position={pos}>
           {/* メイン発光体 */}
           <mesh>
-            <sphereGeometry args={[0.18, 12, 12]} />
+            <sphereGeometry args={[0.22, 14, 14]} />
             <meshBasicMaterial color={COLOR_AISLE_LIGHT} toneMapped={false} />
           </mesh>
           {/* 周囲の薄いグロー */}
           <mesh>
-            <sphereGeometry args={[0.35, 12, 12]} />
+            <sphereGeometry args={[0.5, 14, 14]} />
             <meshBasicMaterial
               color={COLOR_AISLE_LIGHT}
               transparent
-              opacity={0.2}
+              opacity={0.22}
               toneMapped={false}
             />
           </mesh>
@@ -287,7 +328,7 @@ const StepLEDs = memo<{
         const ledZ = (z + (rowZs[i - 1] ?? z)) / 2; // 段の中央Z
         return (
           <mesh key={i} position={[0, ledY, ledZ]}>
-            <boxGeometry args={[seatWidth, 0.02, 0.02]} />
+            <boxGeometry args={[seatWidth, 0.04, 0.04]} />
             <meshBasicMaterial color={COLOR_STEP_LED} toneMapped={false} />
           </mesh>
         );
@@ -504,14 +545,20 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         position={[halfWidth, roomHeight / 2, 0]}
         rotation={[0, -Math.PI / 2, 0]}
       />
-      {/* スクリーン側壁（暗色でスクリーンを引き立てる） */}
+      {/* スクリーン側壁（深紫でスクリーンを引き立てる） */}
       <WallMesh
         width={roomWidth}
         height={roomHeight}
         position={[0, roomHeight / 2, halfDepth]}
         rotation={[0, Math.PI, 0]}
-        color='#3a3530'
+        color={COLOR_SCREEN_WALL}
       />
+
+      {/* ステージ前縁バンド（スクリーン下の細い装飾帯でシアター感を強調） */}
+      <mesh position={[0, 0.15, halfDepth - 0.05]}>
+        <boxGeometry args={[roomWidth, 0.3, 0.1]} />
+        <meshLambertMaterial color={COLOR_PROSCENIUM} />
+      </mesh>
 
       {/* 天井（ドールハウスとしては開けておいても良いが、雰囲気維持で残す） */}
       <CeilingMesh
@@ -532,6 +579,14 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         roomWidth={roomWidth}
         frontZ={seatAreaFrontZ + SLOPE_MARGIN}
         backZ={seatAreaBackZ - SLOPE_MARGIN}
+        maxHeight={seatAreaMaxY}
+      />
+
+      {/* 傾斜床と後壁の間の段差を埋める（バックステップ壁＋最上段通路） */}
+      <BackStepFill
+        roomWidth={roomWidth}
+        roomDepth={roomDepth}
+        slopeBackZ={seatAreaBackZ - SLOPE_MARGIN}
         maxHeight={seatAreaMaxY}
       />
 

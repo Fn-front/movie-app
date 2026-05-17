@@ -1,0 +1,52 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_heatmap_toggle {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+}
+
+.c_heatmap_toggle__label {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+}
+
+.c_heatmap_toggle__group {
+  display: flex;
+  gap: $spacing-1;
+  background-color: color-alpha(--gray-500, 10%);
+  border-radius: $border-radius-md;
+  padding: $spacing-1;
+}
+
+.c_heatmap_toggle__item {
+  @include button-reset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: $spacing-2 $spacing-3;
+  border-radius: $border-radius-sm;
+  color: $text-secondary;
+  font-size: $font-size-sm;
+  cursor: pointer;
+  transition:
+    background-color $duration-fast $ease-in-out,
+    color $duration-fast $ease-in-out;
+
+  &:hover {
+    color: $text-primary;
+    background-color: color-alpha(--gray-500, 10%);
+  }
+
+  @include focus-visible;
+
+  &[data-state='on'] {
+    background-color: $background-paper;
+    color: $primary-500;
+    box-shadow: $shadow-sm;
+    font-weight: $font-weight-medium;
+  }
+}

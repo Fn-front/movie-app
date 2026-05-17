@@ -1,0 +1,285 @@
+/**
+ * TheaterExperiencePageコンポーネント
+ * シアター体験機能の統合ページ
+ */
+
+'use client';
+
+import { memo, useCallback, useMemo, useState } from 'react';
+
+import type { FrequencyBand, TheaterSeat } from '../types';
+import { useTheater } from '../hooks/useTheater';
+import { useSeatSelection } from '../hooks/useSeatSelection';
+import { useFieldOfView } from '../hooks/useFieldOfView';
+import { useWebGL2Support } from '../hooks/useWebGL2Support';
+import { useAudioShader } from '../hooks/useAudioShader';
+import { TheaterCanvas } from '../component/theaterCanvas/theaterCanvas';
+import { TheaterScene } from '../component/theaterScene/theaterScene';
+import { SeatMeshes } from '../component/seatMeshes/seatMeshes';
+import { ScreenMesh } from '../component/screenMesh/screenMesh';
+import { AudioHeatmapPlane } from '../component/audioHeatmapPlane/audioHeatmapPlane';
+import { SpeakerMeshes } from '../component/speakerMeshes/speakerMeshes';
+import { SeatInfoPanel } from '../component/seatInfoPanel/seatInfoPanel';
+import { SeatA11yList } from '../component/seatA11yList/seatA11yList';
+import { FrequencySelector } from '../component/frequencySelector/frequencySelector';
+import { HeatmapToggle } from '../component/heatmapToggle/heatmapToggle';
+import { UnsupportedBrowserNotice } from '../component/unsupportedBrowserNotice/unsupportedBrowserNotice';
+
+import styles from './theaterExperiencePage.module.scss';
+
+/** prefers-reduced-motion の判定 */
+function useReducedMotion(): boolean {
+  const [reduced] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
+  return reduced;
+}
+
+export interface TheaterExperiencePageProps {
+  /** 劇場slug */
+  slug: string;
+}
+
+export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
+  function TheaterExperiencePage({ slug }) {
+    const { data: theaterDetail, isLoading, error } = useTheater(slug);
+    const { selectedSeat, selectSeat, clearSelection } = useSeatSelection();
+    const [frequencyBand, setFrequencyBand] = useState<FrequencyBand>('mid');
+    const [isHeatmapVisible, setIsHeatmapVisible] = useState(false);
+    const { isSupported: isWebGL2Supported, isChecking } = useWebGL2Support();
+    const reducedMotion = useReducedMotion();
+
+    const theater = theaterDetail?.theater;
+    // theaterDetail 未取得時の `[]` フォールバックを毎レンダー新参照にしないよう
+    // useMemo で固定化する。これにより下流の useMemo の依存が安定する。
+    const seats = useMemo(
+      () => theaterDetail?.theater.seats ?? [],
+      [theaterDetail],
+    );
+    const speakers = useMemo(
+      () => theaterDetail?.theater.speakers ?? [],
+      [theaterDetail],
+    );
+
+    const fovMetrics = useFieldOfView(selectedSeat, theater);
+
+    // 座席エリアの境界（傾斜床・段差LEDのサイズ算出用）
+    const seatAreaBounds = useMemo(() => {
+      if (seats.length === 0) {
+        return {
+          frontZ: 0,
+          backZ: 0,
+          maxY: 0,
+          rowZs: [] as number[],
+          rowYs: [] as number[],
+          width: 0,
+        };
+      }
+      const zValues = seats.map((s) => Number(s.position_z));
+      const yValues = seats.map((s) => Number(s.position_y));
+      const xValues = seats.map((s) => Number(s.position_x));
+
+      // 列ラベル順に各列の代表 Z/Y を抽出（前→後）
+      const byRow = new Map<string, { z: number; y: number }>();
+      seats.forEach((s) => {
+        if (!byRow.has(s.row_label)) {
+          byRow.set(s.row_label, {
+            z: Number(s.position_z),
+            y: Number(s.position_y),
+          });
+        }
+      });
+      const sortedRows = Array.from(byRow.entries()).sort(
+        ([, a], [, b]) => b.z - a.z,
+      );
+      const rowZs = sortedRows.map(([, v]) => v.z);
+      const rowYs = sortedRows.map(([, v]) => v.y);
+
+      return {
+        frontZ: Math.max(...zValues),
+        backZ: Math.min(...zValues),
+        maxY: Math.max(...yValues),
+        rowZs,
+        rowYs,
+        width: Math.max(...xValues) - Math.min(...xValues) + 0.6,
+      };
+    }, [seats]);
+
+    // ヒートマップ表示範囲を客席エリアから算出
+    // マージン 1m を加えつつ、部屋境界（後壁/前壁）を超えないようにクリップ
+    const heatmapBounds = useMemo(() => {
+      const roomWidth = theater?.room_width ?? 20;
+      const roomDepth = theater?.room_depth ?? 25;
+      const halfDepth = roomDepth / 2;
+      if (seats.length === 0) {
+        return { width: roomWidth, depth: roomDepth, centerZ: 0 };
+      }
+      const margin = 1;
+      const zValues = seats.map((s) => Number(s.position_z));
+      const seatMinZ = Math.min(...zValues);
+      const seatMaxZ = Math.max(...zValues);
+      // 後壁(-halfDepth)を超えない、スクリーン側壁(+halfDepth)を超えない
+      const minZ = Math.max(seatMinZ - margin, -halfDepth + 0.1);
+      const maxZ = Math.min(seatMaxZ + margin, halfDepth - 0.1);
+      return {
+        width: roomWidth,
+        depth: maxZ - minZ,
+        centerZ: (minZ + maxZ) / 2,
+      };
+    }, [seats, theater?.room_width, theater?.room_depth]);
+
+    const audioUniforms = useAudioShader(
+      speakers,
+      frequencyBand,
+      heatmapBounds.width,
+      heatmapBounds.depth,
+      1.2,
+      heatmapBounds.centerZ,
+    );
+
+    const handleSeatClick = useCallback(
+      (seat: TheaterSeat) => {
+        selectSeat(seat);
+      },
+      [selectSeat],
+    );
+
+    const handleFrequencyChange = useCallback((value: FrequencyBand) => {
+      setFrequencyBand(value);
+    }, []);
+
+    const handleHeatmapVisibleChange = useCallback((visible: boolean) => {
+      setIsHeatmapVisible(visible);
+    }, []);
+
+    const selectedSeatId = useMemo(
+      () => selectedSeat?.id ?? null,
+      [selectedSeat],
+    );
+
+    if (isLoading || isChecking) {
+      return (
+        <div className={styles.c_theater_experience__loading}>
+          <p>読み込み中...</p>
+        </div>
+      );
+    }
+
+    if (error || !theater) {
+      return (
+        <div className={styles.c_theater_experience__error}>
+          <p>劇場データの取得に失敗しました。</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className={styles.c_theater_experience}>
+        <header className={styles.c_theater_experience__header}>
+          <h1 className={styles.c_theater_experience__title}>シアター体験</h1>
+          <p className={styles.c_theater_experience__subtitle}>
+            {theater.name}
+          </p>
+        </header>
+
+        <div className={styles.c_theater_experience__main}>
+          {/* 3Dビュー or フォールバック */}
+          <div className={styles.c_theater_experience__canvas_area}>
+            {isWebGL2Supported ? (
+              <TheaterCanvas>
+                <TheaterScene
+                  roomWidth={theater.room_width}
+                  roomDepth={theater.room_depth}
+                  roomHeight={theater.room_height}
+                  selectedSeat={selectedSeat}
+                  theater={theater}
+                  seatAreaFrontZ={seatAreaBounds.frontZ}
+                  seatAreaBackZ={seatAreaBounds.backZ}
+                  seatAreaMaxY={seatAreaBounds.maxY}
+                  rowZs={seatAreaBounds.rowZs}
+                  rowYs={seatAreaBounds.rowYs}
+                  seatAreaWidth={seatAreaBounds.width}
+                >
+                  <SeatMeshes
+                    seats={seats}
+                    selectedSeatId={selectedSeatId}
+                    onSeatClick={handleSeatClick}
+                  />
+                  <ScreenMesh
+                    width={theater.screen_width}
+                    height={theater.screen_height}
+                    centerX={theater.screen_center_x}
+                    centerY={theater.screen_center_y}
+                    centerZ={theater.screen_center_z}
+                    reducedMotion={reducedMotion}
+                  />
+                  {speakers.length > 0 && (
+                    <>
+                      {/* 一人称視点時はスピーカーを非表示（視界の邪魔を防ぐ） */}
+                      {!selectedSeat && <SpeakerMeshes speakers={speakers} />}
+                      {isHeatmapVisible && (
+                        <AudioHeatmapPlane
+                          uniforms={audioUniforms}
+                          frequencyBand={frequencyBand}
+                          width={heatmapBounds.width}
+                          depth={heatmapBounds.depth}
+                          centerZ={heatmapBounds.centerZ}
+                          slopeFrontZ={seatAreaBounds.frontZ}
+                          slopeBackZ={seatAreaBounds.backZ}
+                          slopeMaxHeight={seatAreaBounds.maxY}
+                          reducedMotion={reducedMotion}
+                        />
+                      )}
+                    </>
+                  )}
+                </TheaterScene>
+              </TheaterCanvas>
+            ) : (
+              <UnsupportedBrowserNotice />
+            )}
+            {/* 座席選択中はメインビューが一人称に切り替わるので俯瞰へ戻すボタンを表示 */}
+            {isWebGL2Supported && selectedSeat && (
+              <button
+                type='button'
+                onClick={clearSelection}
+                className={styles.c_theater_experience__back_to_overview}
+              >
+                ← 俯瞰に戻る
+              </button>
+            )}
+          </div>
+
+          {/* サイドパネル */}
+          <aside className={styles.c_theater_experience__sidebar}>
+            <HeatmapToggle
+              visible={isHeatmapVisible}
+              onVisibleChange={handleHeatmapVisibleChange}
+            />
+            <FrequencySelector
+              value={frequencyBand}
+              onValueChange={handleFrequencyChange}
+            />
+            <SeatInfoPanel
+              seat={selectedSeat}
+              fovMetrics={fovMetrics}
+              theater={theater}
+            />
+          </aside>
+        </div>
+
+        {/* アクセシブルな座席一覧 */}
+        <section className={styles.c_theater_experience__a11y_section}>
+          <SeatA11yList
+            seats={seats}
+            theater={theater}
+            selectedSeatId={selectedSeatId}
+            onSelectSeat={handleSeatClick}
+          />
+        </section>
+      </div>
+    );
+  },
+);
+
+TheaterExperiencePage.displayName = 'TheaterExperiencePage';

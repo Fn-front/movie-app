@@ -1,0 +1,9 @@
+@use '@/styles/variables' as *;
+
+.c_first_person_preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: $border-radius-md;
+  overflow: hidden;
+  background-color: $gray-900;
+}

@@ -14,7 +14,12 @@ const SESSION_COOKIE_NAME =
     : 'next-auth.session-token';
 
 /** 認証が必要なパス */
-const protectedPaths = [ROUTES.WATCHLIST, ROUTES.SETTINGS, ROUTES.FAVORITES];
+const protectedPaths = [
+  ROUTES.WATCHLIST,
+  ROUTES.SETTINGS,
+  ROUTES.FAVORITES,
+  ROUTES.THEATER_EXPERIENCE,
+];
 
 /** 認証ページ */
 const authPaths = [ROUTES.LOGIN, ROUTES.REGISTER];

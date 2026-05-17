@@ -1,0 +1,121 @@
+/**
+ * SeatA11yList コンポーネント テスト
+ */
+
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+import type { TheaterSeat, Theater } from '../../types';
+
+import { SeatA11yList } from './seatA11yList';
+
+const mockTheater: Theater = {
+  id: 'uuid-1',
+  name: 'テスト劇場',
+  slug: 'test',
+  format: 'standard',
+  room_width: 20,
+  room_depth: 25,
+  room_height: 8,
+  screen_width: 14,
+  screen_height: 6,
+  screen_center_x: 0,
+  screen_center_y: 4,
+  screen_center_z: 12.5,
+  audio_layout: 'atmos_9_1_6',
+};
+
+const mockSeats: TheaterSeat[] = [
+  {
+    id: 'seat-a1',
+    row_label: 'A',
+    seat_number: 1,
+    position_x: -3,
+    position_y: 0,
+    position_z: 5,
+    seat_type: 'standard',
+  },
+  {
+    id: 'seat-a2',
+    row_label: 'A',
+    seat_number: 2,
+    position_x: 0,
+    position_y: 0,
+    position_z: 5,
+    seat_type: 'standard',
+  },
+  {
+    id: 'seat-b1',
+    row_label: 'B',
+    seat_number: 1,
+    position_x: -3,
+    position_y: 0.1,
+    position_z: 3.7,
+    seat_type: 'standard',
+  },
+];
+
+describe('SeatA11yList', () => {
+  const defaultProps = {
+    seats: mockSeats,
+    theater: mockTheater,
+    selectedSeatId: null,
+    onSelectSeat: jest.fn(),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('行ラベルが表示される', () => {
+    render(<SeatA11yList {...defaultProps} />);
+
+    expect(screen.getByText('A列')).toBeInTheDocument();
+    expect(screen.getByText('B列')).toBeInTheDocument();
+  });
+
+  it('座席ボタンが表示される', () => {
+    render(<SeatA11yList {...defaultProps} />);
+
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(3);
+  });
+
+  it('座席ボタンにaria-labelが設定される', () => {
+    render(<SeatA11yList {...defaultProps} />);
+
+    const button = screen.getAllByRole('button')[0];
+    expect(button).toHaveAttribute('aria-label');
+    expect(button.getAttribute('aria-label')).toContain('A列1番');
+  });
+
+  it('選択中の座席はaria-pressed=trueになる', () => {
+    render(<SeatA11yList {...defaultProps} selectedSeatId='seat-a2' />);
+
+    const buttons = screen.getAllByRole('button');
+    // A列2番が選択されている
+    expect(buttons[1]).toHaveAttribute('aria-pressed', 'true');
+    // その他は未選択
+    expect(buttons[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(buttons[2]).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('座席クリックでonSelectSeatが呼ばれる', async () => {
+    const user = userEvent.setup();
+    const onSelectSeat = jest.fn();
+
+    render(<SeatA11yList {...defaultProps} onSelectSeat={onSelectSeat} />);
+
+    await user.click(screen.getAllByRole('button')[0]);
+
+    expect(onSelectSeat).toHaveBeenCalledWith(mockSeats[0]);
+  });
+
+  it('region roleとaria-labelが設定される', () => {
+    render(<SeatA11yList {...defaultProps} />);
+
+    expect(
+      screen.getByRole('region', { name: '座席選択' }),
+    ).toBeInTheDocument();
+  });
+});

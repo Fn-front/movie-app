@@ -54,3 +54,8 @@ export const awardKeys = {
   all: ['awards'] as const,
   year: (year: number) => ['awards', year] as const,
 };
+
+export const theaterKeys = {
+  all: ['theaters'] as const,
+  detail: (slug: string) => ['theaters', slug] as const,
+};

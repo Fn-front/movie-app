@@ -23,6 +23,7 @@ export const NAV_ITEMS: NavItemBase[] = [
   { label: 'お気に入り', href: ROUTES.FAVORITES },
   { label: 'ウォッチリスト', href: ROUTES.WATCHLIST },
   { label: '受賞作品', href: ROUTES.AWARDS },
+  { label: 'シアター体験', href: ROUTES.THEATER_EXPERIENCE },
 ];
 
 /**

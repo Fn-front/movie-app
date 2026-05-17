@@ -31,3 +31,4 @@ export * from './apiEndpoints';
 export * from './external';
 export * from './queryParams';
 export * from './defaults';
+export * from './theaters';

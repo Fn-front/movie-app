@@ -54,11 +54,11 @@ export interface TheaterSceneProps {
  * 実映画館では「暗さに目を慣らさせる」目的で内装全体を暗色にしている。
  * ドールハウスのフラット感は維持しつつ、シネマ風の暗色に振る。
  */
-const COLOR_FLOOR = '#1a1418'; // 通路の濃色カーペット
-const COLOR_WALL = '#1f1a1d'; // 暗い壁（アコースティックパネル想定）
-const COLOR_CEILING = '#15131a'; // 暗い天井（投影光反射防止）
-const COLOR_SLOPE = '#2a1f25'; // 座席エリアの暗色カーペット
-const COLOR_EDGE = '#7a6a70'; // 暗色背景に対するライト寄りのエッジ線
+const COLOR_FLOOR = '#1f1820'; // 通路の濃色カーペット（少し明るく）
+const COLOR_WALL = '#2a242d'; // 暗い壁（アコースティックパネル想定）
+const COLOR_CEILING = '#1a1620'; // 暗い天井（投影光反射防止）
+const COLOR_SLOPE = '#332530'; // 座席エリアの暗色カーペット（少し明るく）
+const COLOR_EDGE = '#8a7a80'; // 暗色背景に対する明色エッジ線
 
 /** アクセント設備カラー */
 const COLOR_AISLE_LIGHT = '#ffd4a0'; // 通路灯（暖色）
@@ -213,10 +213,23 @@ const AisleLights = memo<{
   return (
     <group>
       {lights.map((pos, i) => (
-        <mesh key={i} position={pos}>
-          <sphereGeometry args={[0.08, 8, 8]} />
-          <meshBasicMaterial color={COLOR_AISLE_LIGHT} toneMapped={false} />
-        </mesh>
+        <group key={i} position={pos}>
+          {/* メイン発光体 */}
+          <mesh>
+            <sphereGeometry args={[0.18, 12, 12]} />
+            <meshBasicMaterial color={COLOR_AISLE_LIGHT} toneMapped={false} />
+          </mesh>
+          {/* 周囲の薄いグロー */}
+          <mesh>
+            <sphereGeometry args={[0.35, 12, 12]} />
+            <meshBasicMaterial
+              color={COLOR_AISLE_LIGHT}
+              transparent
+              opacity={0.2}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
       ))}
     </group>
   );
@@ -232,10 +245,10 @@ const ExitSigns = memo<{
 }>(function ExitSigns({ roomWidth, roomDepth }) {
   const halfWidth = roomWidth / 2;
   const halfDepth = roomDepth / 2;
-  const signY = 2.6;
-  const signDepth = 0.05;
-  const signWidth = 0.7;
-  const signHeight = 0.25;
+  const signY = 2.8;
+  const signDepth = 0.08;
+  const signWidth = 1.2;
+  const signHeight = 0.5;
   // 後壁の両端（後壁から内側 0.05m）に配置
   return (
     <group>

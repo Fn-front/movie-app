@@ -253,8 +253,8 @@ const AisleLights = memo<{
 
   return (
     <group>
-      {lights.map((pos, i) => (
-        <group key={i} position={pos}>
+      {lights.map((pos) => (
+        <group key={`${pos[0]},${pos[2]}`} position={pos}>
           {/* メイン発光体 */}
           <mesh>
             <sphereGeometry args={[0.22, 14, 14]} />
@@ -327,7 +327,7 @@ const StepLEDs = memo<{
         const ledY = (rowYs[i] + prevY) / 2; // 段の中央高さ
         const ledZ = (z + (rowZs[i - 1] ?? z)) / 2; // 段の中央Z
         return (
-          <mesh key={i} position={[0, ledY, ledZ]}>
+          <mesh key={z} position={[0, ledY, ledZ]}>
             <boxGeometry args={[seatWidth, 0.04, 0.04]} />
             <meshBasicMaterial color={COLOR_STEP_LED} toneMapped={false} />
           </mesh>

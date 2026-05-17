@@ -47,7 +47,11 @@ export const SpeakerMeshes = memo<SpeakerMeshesProps>(function SpeakerMeshes({
         return (
           <mesh
             key={speaker.id}
-            position={[speaker.position_x, speaker.position_y, speaker.position_z]}
+            position={[
+              speaker.position_x,
+              speaker.position_y,
+              speaker.position_z,
+            ]}
             rotation={rotation}
             castShadow
           >

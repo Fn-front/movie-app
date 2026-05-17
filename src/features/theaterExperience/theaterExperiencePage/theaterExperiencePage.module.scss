@@ -64,24 +64,6 @@
   gap: $spacing-3;
 }
 
-.c_theater_experience__clear_button {
-  @include button-reset;
-  align-self: flex-start;
-  padding: $spacing-2 $spacing-4;
-  font-size: $font-size-sm;
-  color: $text-secondary;
-  background-color: color-alpha(--gray-500, 10%);
-  border-radius: $border-radius-md;
-  cursor: pointer;
-  transition: background-color $duration-fast $ease-in-out;
-
-  &:hover {
-    background-color: color-alpha(--gray-500, 20%);
-  }
-
-  @include focus-visible;
-}
-
 .c_theater_experience__back_to_overview {
   @include button-reset;
   position: absolute;

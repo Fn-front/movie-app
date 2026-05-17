@@ -262,15 +262,6 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
 
         {/* アクセシブルな座席一覧 */}
         <section className={styles.c_theater_experience__a11y_section}>
-          {selectedSeat && (
-            <button
-              type='button'
-              className={styles.c_theater_experience__clear_button}
-              onClick={clearSelection}
-            >
-              選択を解除
-            </button>
-          )}
           <SeatA11yList
             seats={seats}
             theater={theater}

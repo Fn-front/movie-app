@@ -23,6 +23,18 @@ const customJestConfig = {
     '!src/**/*.d.ts',
     '!src/**/*.stories.{js,jsx,ts,tsx}',
     '!src/**/__tests__/**',
+    // React Three Fiber メッシュ層は jsdom + jest では実行時の振る舞いを
+    // 検証できない（WebGL 非対応）。実装詳細扱いとし、ユーザー振る舞いは
+    // E2E（Playwright）でカバーする。
+    '!src/features/theaterExperience/component/seatMeshes/**',
+    '!src/features/theaterExperience/component/theaterScene/**',
+    '!src/features/theaterExperience/component/screenMesh/**',
+    '!src/features/theaterExperience/component/speakerMeshes/**',
+    '!src/features/theaterExperience/component/audioHeatmapPlane/**',
+    '!src/features/theaterExperience/component/firstPersonPreview/**',
+    '!src/features/theaterExperience/component/theaterCanvas/**',
+    // GLSL シェーダー文字列の export（カバレッジ計測対象外）
+    '!src/features/theaterExperience/shaders/**',
   ],
   testMatch: [
     '<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}',

@@ -8,6 +8,8 @@
 import { NextResponse } from 'next/server';
 
 import { withAuth } from '@/helpers/routeHandler';
+import { rateLimitExceededResponse } from '@/helpers/apiHelpers';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
   HTTP_STATUS,
   THEATER_MESSAGES,
@@ -15,8 +17,24 @@ import {
   THEATER_CACHE_CONTROL,
 } from '@/constants';
 
+/** 認証ユーザー単位の読み取りレート制限: 30 回 / 1 分 */
+const RATE_LIMIT_ACTION = 'read_api_theaters';
+const RATE_LIMIT_MAX_ATTEMPTS = 30;
+const RATE_LIMIT_WINDOW_MINUTES = 1;
+
 export const GET = withAuth(
-  async ({ supabase }) => {
+  async ({ session, supabase }) => {
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION,
+      RATE_LIMIT_MAX_ATTEMPTS,
+      RATE_LIMIT_WINDOW_MINUTES,
+    );
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     const { data, error } = await supabase
       .from('theaters')
       .select(THEATERS_LIST_SELECT)

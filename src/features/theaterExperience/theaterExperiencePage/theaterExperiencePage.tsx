@@ -51,8 +51,16 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
     const reducedMotion = useReducedMotion();
 
     const theater = theaterDetail?.theater;
-    const seats = theaterDetail?.theater.seats ?? [];
-    const speakers = theaterDetail?.theater.speakers ?? [];
+    // theaterDetail 未取得時の `[]` フォールバックを毎レンダー新参照にしないよう
+    // useMemo で固定化する。これにより下流の useMemo の依存が安定する。
+    const seats = useMemo(
+      () => theaterDetail?.theater.seats ?? [],
+      [theaterDetail],
+    );
+    const speakers = useMemo(
+      () => theaterDetail?.theater.speakers ?? [],
+      [theaterDetail],
+    );
 
     const fovMetrics = useFieldOfView(selectedSeat, theater);
 

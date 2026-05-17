@@ -54,17 +54,45 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
 
     const fovMetrics = useFieldOfView(selectedSeat, theater);
 
-    // 座席エリアの境界（傾斜床のサイズ算出用）
+    // 座席エリアの境界（傾斜床・段差LEDのサイズ算出用）
     const seatAreaBounds = useMemo(() => {
       if (seats.length === 0) {
-        return { frontZ: 0, backZ: 0, maxY: 0 };
+        return {
+          frontZ: 0,
+          backZ: 0,
+          maxY: 0,
+          rowZs: [] as number[],
+          rowYs: [] as number[],
+          width: 0,
+        };
       }
       const zValues = seats.map((s) => Number(s.position_z));
       const yValues = seats.map((s) => Number(s.position_y));
+      const xValues = seats.map((s) => Number(s.position_x));
+
+      // 列ラベル順に各列の代表 Z/Y を抽出（前→後）
+      const byRow = new Map<string, { z: number; y: number }>();
+      seats.forEach((s) => {
+        if (!byRow.has(s.row_label)) {
+          byRow.set(s.row_label, {
+            z: Number(s.position_z),
+            y: Number(s.position_y),
+          });
+        }
+      });
+      const sortedRows = Array.from(byRow.entries()).sort(
+        ([, a], [, b]) => b.z - a.z,
+      );
+      const rowZs = sortedRows.map(([, v]) => v.z);
+      const rowYs = sortedRows.map(([, v]) => v.y);
+
       return {
         frontZ: Math.max(...zValues),
         backZ: Math.min(...zValues),
         maxY: Math.max(...yValues),
+        rowZs,
+        rowYs,
+        width: Math.max(...xValues) - Math.min(...xValues) + 0.6,
       };
     }, [seats]);
 
@@ -155,6 +183,9 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   seatAreaFrontZ={seatAreaBounds.frontZ}
                   seatAreaBackZ={seatAreaBounds.backZ}
                   seatAreaMaxY={seatAreaBounds.maxY}
+                  rowZs={seatAreaBounds.rowZs}
+                  rowYs={seatAreaBounds.rowYs}
+                  seatAreaWidth={seatAreaBounds.width}
                 >
                   <SeatMeshes
                     seats={seats}

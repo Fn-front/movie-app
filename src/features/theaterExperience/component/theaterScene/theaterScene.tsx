@@ -39,16 +39,31 @@ export interface TheaterSceneProps {
   seatAreaBackZ: number;
   /** 座席エリア最後列のY高さ — 傾斜床の最大高さ */
   seatAreaMaxY: number;
+  /** 各列のZ位置（前列から後列の順） — 段差LED配置用 */
+  rowZs: number[];
+  /** 各列のY位置（前列から後列の順） — 段差LED配置用 */
+  rowYs: number[];
+  /** 座席エリア全体の横幅 — 段差LEDの横長サイズ */
+  seatAreaWidth: number;
   /** 子要素（座席、スクリーン、ヒートマップ等） */
   children: React.ReactNode;
 }
 
-/** ドールハウスパレット */
-const COLOR_FLOOR = '#e8e0d4';
-const COLOR_WALL = '#d4cfc4';
-const COLOR_CEILING = '#b8b3a8';
-const COLOR_SLOPE = '#a8a092';
-const COLOR_EDGE = '#5a5247';
+/**
+ * シネマカラーパレット（暗色基調）
+ * 実映画館では「暗さに目を慣らさせる」目的で内装全体を暗色にしている。
+ * ドールハウスのフラット感は維持しつつ、シネマ風の暗色に振る。
+ */
+const COLOR_FLOOR = '#1a1418'; // 通路の濃色カーペット
+const COLOR_WALL = '#1f1a1d'; // 暗い壁（アコースティックパネル想定）
+const COLOR_CEILING = '#15131a'; // 暗い天井（投影光反射防止）
+const COLOR_SLOPE = '#2a1f25'; // 座席エリアの暗色カーペット
+const COLOR_EDGE = '#7a6a70'; // 暗色背景に対するライト寄りのエッジ線
+
+/** アクセント設備カラー */
+const COLOR_AISLE_LIGHT = '#ffd4a0'; // 通路灯（暖色）
+const COLOR_EXIT_SIGN = '#ff3030'; // 出口サイン（赤）
+const COLOR_STEP_LED = '#ffe8c4'; // 段差LED（やや暖白）
 
 /** マージン: 傾斜床は座席より少し外側まで広げる */
 const SLOPE_MARGIN = 0.5;
@@ -168,6 +183,106 @@ const SlopedFloorMesh = memo<{
   );
 });
 SlopedFloorMesh.displayName = 'SlopedFloorMesh';
+
+/**
+ * 通路灯（壁際の小さな発光体）
+ * 両側通路に等間隔で配置。観客の足元を照らす雰囲気作り。
+ */
+const AisleLights = memo<{
+  roomWidth: number;
+  seatAreaFrontZ: number;
+  seatAreaBackZ: number;
+}>(function AisleLights({ roomWidth, seatAreaFrontZ, seatAreaBackZ }) {
+  const halfWidth = roomWidth / 2;
+  // 壁から内側 0.2m に配置、左右両側
+  const wallOffset = 0.2;
+  // 座席エリアの前後方向に等間隔で配置（2m間隔）
+  const lights = useMemo(() => {
+    const positions: [number, number, number][] = [];
+    const length = seatAreaFrontZ - seatAreaBackZ;
+    const count = Math.max(3, Math.floor(length / 2));
+    for (let i = 0; i < count; i++) {
+      const t = i / (count - 1);
+      const z = seatAreaFrontZ - t * length;
+      positions.push([-(halfWidth - wallOffset), 0.4, z]);
+      positions.push([halfWidth - wallOffset, 0.4, z]);
+    }
+    return positions;
+  }, [halfWidth, seatAreaFrontZ, seatAreaBackZ]);
+
+  return (
+    <group>
+      {lights.map((pos, i) => (
+        <mesh key={i} position={pos}>
+          <sphereGeometry args={[0.08, 8, 8]} />
+          <meshBasicMaterial color={COLOR_AISLE_LIGHT} toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+});
+AisleLights.displayName = 'AisleLights';
+
+/**
+ * 出口サイン（後壁・両側に赤い発光板）
+ */
+const ExitSigns = memo<{
+  roomWidth: number;
+  roomDepth: number;
+}>(function ExitSigns({ roomWidth, roomDepth }) {
+  const halfWidth = roomWidth / 2;
+  const halfDepth = roomDepth / 2;
+  const signY = 2.6;
+  const signDepth = 0.05;
+  const signWidth = 0.7;
+  const signHeight = 0.25;
+  // 後壁の両端（後壁から内側 0.05m）に配置
+  return (
+    <group>
+      {[-1, 1].map((side) => (
+        <mesh
+          key={side}
+          position={[side * (halfWidth * 0.7), signY, -halfDepth + signDepth]}
+        >
+          <boxGeometry args={[signWidth, signHeight, signDepth]} />
+          <meshBasicMaterial color={COLOR_EXIT_SIGN} toneMapped={false} />
+          <Edges color='#400000' lineWidth={1} />
+        </mesh>
+      ))}
+    </group>
+  );
+});
+ExitSigns.displayName = 'ExitSigns';
+
+/**
+ * 段差LED（各列の前方リスト部分に細い光帯）
+ * スタジアム傾斜の段差を明示し、安全性と雰囲気を両立。
+ */
+const StepLEDs = memo<{
+  rowZs: number[];
+  rowYs: number[];
+  seatWidth: number;
+}>(function StepLEDs({ rowZs, rowYs, seatWidth }) {
+  return (
+    <group>
+      {rowZs.map((z, i) => {
+        if (i === 0) return null; // A列は段差なし
+        // 各列の前方端に細い光帯を配置
+        // 帯の高さは Y方向、前方Z位置
+        const prevY = rowYs[i - 1] ?? 0;
+        const ledY = (rowYs[i] + prevY) / 2; // 段の中央高さ
+        const ledZ = (z + (rowZs[i - 1] ?? z)) / 2; // 段の中央Z
+        return (
+          <mesh key={i} position={[0, ledY, ledZ]}>
+            <boxGeometry args={[seatWidth, 0.02, 0.02]} />
+            <meshBasicMaterial color={COLOR_STEP_LED} toneMapped={false} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+});
+StepLEDs.displayName = 'StepLEDs';
 
 /** 着座時の目の高さ（座席Y座標からのオフセット） */
 const SEATED_EYE_HEIGHT = 1.2;
@@ -317,6 +432,9 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   seatAreaFrontZ,
   seatAreaBackZ,
   seatAreaMaxY,
+  rowZs,
+  rowYs,
+  seatAreaWidth,
   children,
 }) {
   const halfWidth = roomWidth / 2;
@@ -403,6 +521,19 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         backZ={seatAreaBackZ - SLOPE_MARGIN}
         maxHeight={seatAreaMaxY}
       />
+
+      {/* 通路灯（両側壁際の暖色発光体） */}
+      <AisleLights
+        roomWidth={roomWidth}
+        seatAreaFrontZ={seatAreaFrontZ}
+        seatAreaBackZ={seatAreaBackZ}
+      />
+
+      {/* 出口サイン（後壁両端の赤い発光板） */}
+      <ExitSigns roomWidth={roomWidth} roomDepth={roomDepth} />
+
+      {/* 段差LED（各列の段差を明示する細い光帯） */}
+      <StepLEDs rowZs={rowZs} rowYs={rowYs} seatWidth={seatAreaWidth} />
 
       {children}
     </>

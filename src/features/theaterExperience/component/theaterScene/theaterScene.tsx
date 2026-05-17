@@ -55,10 +55,10 @@ export interface TheaterSceneProps {
  * ドールハウスのフラット感は維持しつつ、シネマ風の暗色に振る。
  */
 const COLOR_FLOOR = '#1f1820'; // 通路の濃色カーペット
-const COLOR_WALL = '#3d3640'; // 暗い壁（アコースティックパネル想定）
-const COLOR_CEILING = '#1a1620'; // 暗い天井（投影光反射防止）
+const COLOR_WALL = '#5d535e'; // 暗い壁（アコースティックパネル想定）
+const COLOR_CEILING = '#252028'; // 暗い天井（投影光反射防止）
 const COLOR_SLOPE = '#332530'; // 座席エリアの暗色カーペット
-const COLOR_EDGE = '#9a8a90'; // 暗色背景に対する明色エッジ線
+const COLOR_EDGE = '#b0a0a8'; // 暗色背景に対する明色エッジ線
 
 /** アクセント設備カラー */
 const COLOR_AISLE_LIGHT = '#ffd4a0'; // 通路灯（暖色）
@@ -467,7 +467,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       )}
 
       {/* フラットライティング */}
-      <ambientLight intensity={0.7} />
+      <ambientLight intensity={1.0} />
       <directionalLight
         position={[10, 20, 5]}
         intensity={0.6}

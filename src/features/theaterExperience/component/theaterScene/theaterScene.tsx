@@ -54,11 +54,11 @@ export interface TheaterSceneProps {
  * 実映画館では「暗さに目を慣らさせる」目的で内装全体を暗色にしている。
  * ドールハウスのフラット感は維持しつつ、シネマ風の暗色に振る。
  */
-const COLOR_FLOOR = '#1f1820'; // 通路の濃色カーペット（少し明るく）
-const COLOR_WALL = '#2a242d'; // 暗い壁（アコースティックパネル想定）
+const COLOR_FLOOR = '#1f1820'; // 通路の濃色カーペット
+const COLOR_WALL = '#3d3640'; // 暗い壁（アコースティックパネル想定）
 const COLOR_CEILING = '#1a1620'; // 暗い天井（投影光反射防止）
-const COLOR_SLOPE = '#332530'; // 座席エリアの暗色カーペット（少し明るく）
-const COLOR_EDGE = '#8a7a80'; // 暗色背景に対する明色エッジ線
+const COLOR_SLOPE = '#332530'; // 座席エリアの暗色カーペット
+const COLOR_EDGE = '#9a8a90'; // 暗色背景に対する明色エッジ線
 
 /** アクセント設備カラー */
 const COLOR_AISLE_LIGHT = '#ffd4a0'; // 通路灯（暖色）

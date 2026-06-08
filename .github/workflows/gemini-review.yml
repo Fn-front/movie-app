@@ -95,8 +95,16 @@ jobs:
                 "core": []
               }
             }
-          extensions: |
-            [
-              "https://github.com/gemini-cli-extensions/code-review"
-            ]
-          prompt: '/pr-code-review'
+          prompt: |-
+            あなたはコードレビュアーです。プロジェクト固有のルールは GEMINI.md に記載されています。
+
+            手順:
+            1. GitHub MCP のツール `pull_request_read` で PR #${{ github.event.pull_request.number || github.event.issue.number }} の差分を取得する
+            2. GEMINI.md のルールと一般的なベストプラクティスに従って差分をレビューする
+            3. 指摘がある場合: `add_comment_to_pending_review` で該当行にコメント投稿後、`pull_request_review_write` で event="COMMENT" としてレビューを submit
+            4. 指摘がない場合: `pull_request_review_write` で body="✅ LGTM - 問題は見つかりませんでした", event="COMMENT" でレビューを submit
+
+            制約:
+            - コード本体にコメントを追加することを提案しない
+            - 過剰な抽象化やリファクタリング提案は行わない
+            - レビューコメントは日本語で書く

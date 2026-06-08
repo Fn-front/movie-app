@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
 
       - name: Gemini AI Code Reviewer
-        uses: truongnh1992/gemini-ai-code-reviewer@7c4b01afa073e48a44c72cdc1d010f9e3b95686f  # v9.2.1
+        uses: truongnh1992/gemini-ai-code-reviewer@7c4b01afa073e48a44c72cdc1d010f9e3b95686f # v9.2.1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

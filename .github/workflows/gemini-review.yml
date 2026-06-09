@@ -98,8 +98,18 @@ jobs:
             手順:
             1. GitHub MCP のツール `pull_request_read` で PR #${{ github.event.pull_request.number || github.event.issue.number }} の差分を取得する
             2. 下記の必須チェック項目を **一つずつ順番に機械的に確認** する（飛ばしや見落とし禁止）
-            3. 違反があれば `add_comment_to_pending_review` で該当行にコメント投稿後、`pull_request_review_write` で event="COMMENT" としてレビューを submit
-            4. 違反がなければ `pull_request_review_write` で body="✅ LGTM - 問題は見つかりませんでした", event="COMMENT" でレビューを submit
+            3. 違反を発見するたびに、**違反ごと**に以下を実行する:
+               a. 該当ファイル名と行番号（差分の "+" 側＝新ファイルの行）を特定する
+               b. `add_comment_to_pending_review` で**その違反だけ**に該当する**単独の行コメント**を投稿
+               c. コメント内容には「違反内容」と「修正例（コード片）」を含める
+            4. 全違反コメント投稿後、`pull_request_review_write` を event="COMMENT" で submit する
+               - body は短いサマリー（例: "⚠️ N件の指摘あり"）でよい
+            5. 違反がない場合は行コメント投稿はスキップし、`pull_request_review_write` で body="✅ LGTM - 問題は見つかりませんでした", event="COMMENT" として submit
+
+            ## 行コメントの原則
+            - **1違反 = 1行コメント**。複数違反を1コメントにまとめない
+            - 同じ行に複数違反があれば、違反ごとに別コメントで投稿
+            - 行番号は diff の "+" 側（追加された新ファイル）の行を指定
 
             ## 必須チェック項目（一つずつ確実に確認すること）
 

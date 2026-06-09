@@ -97,11 +97,45 @@ jobs:
 
             手順:
             1. GitHub MCP のツール `pull_request_read` で PR #${{ github.event.pull_request.number || github.event.issue.number }} の差分を取得する
-            2. GEMINI.md のルールと一般的なベストプラクティスに従って差分をレビューする
-            3. 指摘がある場合: `add_comment_to_pending_review` で該当行にコメント投稿後、`pull_request_review_write` で event="COMMENT" としてレビューを submit
-            4. 指摘がない場合: `pull_request_review_write` で body="✅ LGTM - 問題は見つかりませんでした", event="COMMENT" でレビューを submit
+            2. 下記の必須チェック項目を **一つずつ順番に機械的に確認** する（飛ばしや見落とし禁止）
+            3. 違反があれば `add_comment_to_pending_review` で該当行にコメント投稿後、`pull_request_review_write` で event="COMMENT" としてレビューを submit
+            4. 違反がなければ `pull_request_review_write` で body="✅ LGTM - 問題は見つかりませんでした", event="COMMENT" でレビューを submit
 
-            制約:
-            - コード本体にコメントを追加することを提案しない
+            ## 必須チェック項目（一つずつ確実に確認すること）
+
+            ### Reactコンポーネント
+            - [ ] すべてのコンポーネントが `React.memo` でラップされているか
+            - [ ] **すべてのイベントハンドラー（onClick, onChange, onSubmit等）に `useCallback` が使われているか**
+            - [ ] 計算コストの高い処理に `useMemo` が使われているか
+            - [ ] `displayName` が設定されているか
+            - [ ] ロジックがカスタムフックに分離されているか
+            - [ ] クラス名結合に `cn()` ヘルパー（`@/utils/cn`）が使われているか
+
+            ### スタイリング
+            - [ ] SCSS Modules を使っているか（インラインスタイル禁止）
+            - [ ] カラー/スペーシング/フォントサイズがデザインシステム変数を使っているか（ハードコード禁止）
+            - [ ] HTMLタグを直接スタイリングしていないか（独自クラス名必須）
+
+            ### アクセシビリティ
+            - [ ] WCAG AA準拠（適切なARIA属性、フォーカス表示、セマンティックHTML）
+            - [ ] クリック可能要素にbutton/aを使っているか（divのonClickは禁止）
+
+            ### 命名規則
+            - [ ] ファイル名: lowerCamelCase（例: movieCard.tsx）
+            - [ ] コンポーネント: PascalCase
+            - [ ] 変数・関数・props: lowerCamelCase（snake_case禁止）
+            - [ ] API Route: kebab-case
+
+            ### セキュリティ
+            - [ ] 環境変数・APIキーがハードコードされていないか
+            - [ ] ユーザー入力のバリデーション（zod等）があるか
+            - [ ] SQL injection / XSS / CSRF への対策があるか
+
+            ### テスト
+            - [ ] 新規 .ts(x) ファイルに対応するテストファイル（<filename>.test.ts(x)）があるか
+
+            ## 制約
+            - コード本体にコメントを追加する提案はしない
             - 過剰な抽象化やリファクタリング提案は行わない
             - レビューコメントは日本語で書く
+            - 上記のチェック項目は**すべて見落とさず順番に確認**すること

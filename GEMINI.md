@@ -89,7 +89,7 @@ Gemini CLI がこのリポジトリでレビュー・分類・質問対応を行
 - 過剰な抽象化・リファクタリングの提案
 - 機能要件外の改善（「ついで」の修正は不要）
 
-## レポジトリ構成
+## リポジトリ構成
 
 - `src/app/` - Next.js App Router（ページ・API Routes）
 - `src/components/` - React コンポーネント

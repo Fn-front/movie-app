@@ -1,6 +1,9 @@
 name: '🔀 Gemini Dispatch'
 
 on:
+  pull_request:
+    types:
+      - 'opened'
   issues:
     types:
       - 'opened'
@@ -21,9 +24,14 @@ defaults:
 
 jobs:
   dispatch:
-    # OWNER のみ: コメントで @gemini-cli から始まる、または Issue 作成時のみ起動
+    # OWNER のみ: PR作成時 (Draft除外) / Issue作成時 / @gemini-cli コメント時に起動
     if: |-
       (
+        github.event_name == 'pull_request' &&
+        github.event.action == 'opened' &&
+        github.event.pull_request.draft == false &&
+        github.event.pull_request.author_association == 'OWNER'
+      ) || (
         github.event_name == 'issues' &&
         contains(fromJSON('["opened", "reopened"]'), github.event.action) &&
         github.event.issue.author_association == 'OWNER'
@@ -55,7 +63,9 @@ jobs:
             const request = process.env.REQUEST;
             core.setOutput('request', request);
 
-            if (['issues.opened', 'issues.reopened'].includes(eventType)) {
+            if (eventType === 'pull_request.opened') {
+              core.setOutput('command', 'review');
+            } else if (['issues.opened', 'issues.reopened'].includes(eventType)) {
               core.setOutput('command', 'triage');
             } else if (request.startsWith('@gemini-cli /review')) {
               core.setOutput('command', 'review');

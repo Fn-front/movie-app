@@ -19,6 +19,7 @@ export default [
       'build/**',
       'dist/**',
       'e2e/**',
+      'scripts/**',
       '.claude/**',
       '.agents/**',
       'next-env.d.ts',

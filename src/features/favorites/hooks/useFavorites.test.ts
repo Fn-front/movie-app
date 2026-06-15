@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, createElement } from 'react';
 
 import { useFavorites } from './useFavorites';
+import { movieKeys } from '@/constants';
 
 // --- Mocks ---
 
@@ -53,6 +54,18 @@ function createWrapper() {
       children,
     );
   };
+}
+
+function createWrapperWithClient() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children);
+  return { wrapper, queryClient };
 }
 
 const mockFavoritesResponse = {
@@ -266,6 +279,124 @@ describe('useFavorites', () => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({ variant: 'error' }),
       );
+    });
+  });
+
+  describe('映画詳細キャッシュとの共存（regression）', () => {
+    // movieKeys.all = ['movies'] は ['movies', 'detail', id] にもマッチするため、
+    // setQueriesData の updater が詳細キャッシュ（pages を持たない構造）にも
+    // 適用されて TypeError を起こさないことを確認する
+
+    it('詳細キャッシュ存在下でも addToFavorites が成功する', async () => {
+      mockAddFavorite.mockResolvedValue({
+        success: true,
+        message: 'お気に入りに追加しました',
+        data: {
+          id: 'fav-x',
+          tmdb_movie_id: 999,
+          title: '詳細キャッシュ映画',
+          poster_path: null,
+          release_date: null,
+          rating: 7,
+          added_at: '2026-03-10T00:00:00Z',
+        },
+      });
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(movieKeys.detail(999), {
+        id: 999,
+        title: '詳細キャッシュ映画',
+        overview: '...',
+        poster_path: null,
+        release_date: null,
+      });
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.addToFavorites({
+          tmdb_movie_id: 999,
+          title: '詳細キャッシュ映画',
+          rating: 7,
+        });
+      });
+
+      // mutationFn が呼ばれていれば onMutate で例外が出ていない証拠
+      await waitFor(() => {
+        expect(mockAddFavorite).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({ variant: 'success' }),
+        );
+      });
+    });
+
+    it('詳細キャッシュ存在下でも updateRating が成功する', async () => {
+      mockUpdateFavoriteRating.mockResolvedValue({
+        success: true,
+        message: '評価を更新しました',
+        data: {
+          id: 'fav-1',
+          tmdb_movie_id: 100,
+          title: '映画A',
+          poster_path: '/a.jpg',
+          release_date: '2026-01-01',
+          rating: 9,
+          added_at: '2026-01-10T00:00:00Z',
+        },
+      });
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(movieKeys.detail(100), {
+        id: 100,
+        title: '映画A',
+        overview: '...',
+        poster_path: '/a.jpg',
+        release_date: '2026-01-01',
+      });
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.updateRating('fav-1', 9);
+      });
+
+      await waitFor(() => {
+        expect(mockUpdateFavoriteRating).toHaveBeenCalled();
+      });
+    });
+
+    it('詳細キャッシュ存在下でも removeFromFavorites が成功する', async () => {
+      mockRemoveFavorite.mockResolvedValue(undefined);
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(movieKeys.detail(100), {
+        id: 100,
+        title: '映画A',
+        overview: '...',
+        poster_path: '/a.jpg',
+        release_date: '2026-01-01',
+      });
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.removeFromFavorites('fav-1');
+      });
+
+      await waitFor(() => {
+        expect(mockRemoveFavorite).toHaveBeenCalled();
+      });
     });
   });
 

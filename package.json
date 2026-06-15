@@ -16,7 +16,9 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "analyze": "ANALYZE=true next build",
-    "prepare": "husky"
+    "prepare": "husky",
+    "ai-review:last": "cat .cache/ai-review-latest.json | jq '.'",
+    "ai-review:history": "cat .cache/ai-review-history.log"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

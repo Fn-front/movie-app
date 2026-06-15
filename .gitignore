@@ -77,4 +77,7 @@ Thumbs.db
 
 # Optional stylelint cache
 .stylelintcache
+
+# AI review cache (pre-commit hook output)
+.cache/
 # Cache refresh 1769994937

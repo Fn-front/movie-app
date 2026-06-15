@@ -4,6 +4,7 @@
 # - blocker / warning を JSON 出力で分離して表示
 # - Phase 1: blocker でもコミットは継続（exit 0 固定）
 # - 緊急バイパス: SKIP_AI_REVIEW=1 git commit ...
+# - ログ保存: .cache/ai-review-latest.json (直近), .cache/ai-review-history.log (累積サマリー)
 
 set -uo pipefail
 
@@ -56,6 +57,13 @@ fi
 BLOCKERS=$(echo "$RESPONSE" | jq -r '.blockers // [] | length' 2>/dev/null || echo 0)
 WARNINGS=$(echo "$RESPONSE" | jq -r '.warnings // [] | length' 2>/dev/null || echo 0)
 
+# ログ保存
+mkdir -p .cache
+echo "$RESPONSE" | jq '.' > .cache/ai-review-latest.json 2>/dev/null || echo "$RESPONSE" > .cache/ai-review-latest.json
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+COMMIT_MSG=$(git log -1 --format='%s' 2>/dev/null || echo "(no previous commit)")
+echo "[$TIMESTAMP] blockers=$BLOCKERS warnings=$WARNINGS / prev: $COMMIT_MSG" >> .cache/ai-review-history.log
+
 if [ "$BLOCKERS" -gt 0 ]; then
   echo ""
   echo "🚨 重大な指摘 (Phase 1 では blocker にしません):"
@@ -71,5 +79,8 @@ fi
 if [ "$BLOCKERS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
   echo "✅ AI レビュー: 問題なし"
 fi
+
+echo ""
+echo "📄 詳細ログ: npm run ai-review:last で再表示できます"
 
 exit 0

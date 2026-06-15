@@ -15,7 +15,10 @@
     "test:coverage": "jest --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "analyze": "ANALYZE=true next build"
+    "analyze": "ANALYZE=true next build",
+    "prepare": "husky",
+    "ai-review:last": "node -e \"console.log(JSON.stringify(JSON.parse(require('fs').readFileSync('.cache/ai-review-latest.json','utf8')), null, 2))\"",
+    "ai-review:history": "cat .cache/ai-review-history.log"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",
@@ -76,6 +79,7 @@
     "eslint-plugin-import-x": "^4.16.1",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^7.0.1",
+    "husky": "^9.1.7",
     "jest": "^30.2.0",
     "jest-axe": "^10.0.0",
     "jest-environment-jsdom": "^30.2.0",

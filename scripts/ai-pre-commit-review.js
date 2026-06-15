@@ -16,7 +16,10 @@ const sh = (cmd) => execSync(cmd, { encoding: 'utf8' });
 const log = (msg) => process.stdout.write(msg + '\n');
 
 function which(cmd) {
-  const r = spawnSync('command', ['-v', cmd], { encoding: 'utf8', shell: true });
+  const r = spawnSync('command', ['-v', cmd], {
+    encoding: 'utf8',
+    shell: true,
+  });
   return r.status === 0;
 }
 

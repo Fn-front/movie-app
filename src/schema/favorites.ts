@@ -25,12 +25,18 @@ export const favoritesAddSchema = z.object({
     .string()
     .min(1, '映画タイトルを入力してください')
     .max(255, '映画タイトルは255文字以内で入力してください'),
-  poster_path: z.string().max(255).nullable().optional(),
-  release_date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, '日付はYYYY-MM-DD形式で入力してください')
-    .nullable()
-    .optional(),
+  poster_path: z.preprocess(
+    (v) => (v === '' ? null : v),
+    z.string().max(255).nullable().optional(),
+  ),
+  release_date: z.preprocess(
+    (v) => (v === '' ? null : v),
+    z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, '日付はYYYY-MM-DD形式で入力してください')
+      .nullable()
+      .optional(),
+  ),
   rating: z
     .number()
     .int('評価は整数で入力してください')

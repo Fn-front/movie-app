@@ -16,6 +16,9 @@ build/
 # Cache
 .cache/
 
+# Supabase generated
+supabase/.temp/
+
 # Misc
 .DS_Store
 *.log

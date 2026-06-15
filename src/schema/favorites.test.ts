@@ -103,6 +103,21 @@ describe('favoritesAddSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('poster_pathとrelease_dateが空文字列の場合はnullとして扱われる', () => {
+    const result = favoritesAddSchema.safeParse({
+      tmdb_movie_id: 12345,
+      title: 'テスト映画',
+      rating: 5,
+      poster_path: '',
+      release_date: '',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.poster_path).toBeNull();
+      expect(result.data.release_date).toBeNull();
+    }
+  });
+
   it('ratingが0の場合エラーになる', () => {
     const result = favoritesAddSchema.safeParse({
       tmdb_movie_id: 12345,

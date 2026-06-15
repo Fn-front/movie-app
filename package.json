@@ -17,7 +17,7 @@
     "test:e2e:ui": "playwright test --ui",
     "analyze": "ANALYZE=true next build",
     "prepare": "husky",
-    "ai-review:last": "cat .cache/ai-review-latest.json | jq '.'",
+    "ai-review:last": "node -e \"console.log(JSON.stringify(JSON.parse(require('fs').readFileSync('.cache/ai-review-latest.json','utf8')), null, 2))\"",
     "ai-review:history": "cat .cache/ai-review-history.log"
   },
   "dependencies": {

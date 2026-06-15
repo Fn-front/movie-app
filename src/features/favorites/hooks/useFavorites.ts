@@ -89,24 +89,29 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
   });
 
   // 映画一覧キャッシュ内のfavoriteフィールドを更新するユーティリティ
+  // movieKeys.all (= ['movies']) は一覧と詳細の両方にマッチするため、
+  // 一覧形式 (pages を持つ) のキャッシュのみ更新する
   const updateMovieCacheFavorite = useCallback(
     (tmdbMovieId: number, favorite: MovieFavoriteInfo | null) => {
       queryClient.setQueriesData<{
         pages: GetMoviesResponse[];
         pageParams: number[];
       }>({ queryKey: movieKeys.all }, (old) => {
-        if (!old) return old;
+        if (!old || !Array.isArray(old.pages)) return old;
         return {
           ...old,
-          pages: old.pages.map((page) => ({
-            ...page,
-            data: {
-              ...page.data,
-              movies: page.data.movies.map((movie) =>
-                movie.id === tmdbMovieId ? { ...movie, favorite } : movie,
-              ),
-            },
-          })),
+          pages: old.pages.map((page) => {
+            if (!page?.data?.movies) return page;
+            return {
+              ...page,
+              data: {
+                ...page.data,
+                movies: page.data.movies.map((movie) =>
+                  movie.id === tmdbMovieId ? { ...movie, favorite } : movie,
+                ),
+              },
+            };
+          }),
         };
       });
     },
@@ -178,20 +183,23 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
         pages: GetMoviesResponse[];
         pageParams: number[];
       }>({ queryKey: movieKeys.all }, (old) => {
-        if (!old) return old;
+        if (!old || !Array.isArray(old.pages)) return old;
         return {
           ...old,
-          pages: old.pages.map((page) => ({
-            ...page,
-            data: {
-              ...page.data,
-              movies: page.data.movies.map((movie) =>
-                movie.favorite?.id === id
-                  ? { ...movie, favorite: { id, rating } }
-                  : movie,
-              ),
-            },
-          })),
+          pages: old.pages.map((page) => {
+            if (!page?.data?.movies) return page;
+            return {
+              ...page,
+              data: {
+                ...page.data,
+                movies: page.data.movies.map((movie) =>
+                  movie.favorite?.id === id
+                    ? { ...movie, favorite: { id, rating } }
+                    : movie,
+                ),
+              },
+            };
+          }),
         };
       });
 
@@ -236,20 +244,23 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
         pages: GetMoviesResponse[];
         pageParams: number[];
       }>({ queryKey: movieKeys.all }, (old) => {
-        if (!old) return old;
+        if (!old || !Array.isArray(old.pages)) return old;
         return {
           ...old,
-          pages: old.pages.map((page) => ({
-            ...page,
-            data: {
-              ...page.data,
-              movies: page.data.movies.map((movie) =>
-                movie.favorite?.id === id
-                  ? { ...movie, favorite: null }
-                  : movie,
-              ),
-            },
-          })),
+          pages: old.pages.map((page) => {
+            if (!page?.data?.movies) return page;
+            return {
+              ...page,
+              data: {
+                ...page.data,
+                movies: page.data.movies.map((movie) =>
+                  movie.favorite?.id === id
+                    ? { ...movie, favorite: null }
+                    : movie,
+                ),
+              },
+            };
+          }),
         };
       });
 

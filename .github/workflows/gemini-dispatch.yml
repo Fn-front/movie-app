@@ -4,10 +4,6 @@ on:
   pull_request:
     types:
       - 'opened'
-  issues:
-    types:
-      - 'opened'
-      - 'reopened'
   issue_comment:
     types:
       - 'created'
@@ -24,17 +20,13 @@ defaults:
 
 jobs:
   dispatch:
-    # OWNER のみ: PR作成時 (Draft除外) / Issue作成時 / @gemini-cli コメント時に起動
+    # OWNER のみ: PR作成時 (Draft除外) / @gemini-cli コメント時に起動
     if: |-
       (
         github.event_name == 'pull_request' &&
         github.event.action == 'opened' &&
         github.event.pull_request.draft == false &&
         github.event.pull_request.author_association == 'OWNER'
-      ) || (
-        github.event_name == 'issues' &&
-        contains(fromJSON('["opened", "reopened"]'), github.event.action) &&
-        github.event.issue.author_association == 'OWNER'
       ) || (
         github.event.sender.type == 'User' &&
         startsWith(github.event.comment.body || github.event.review.body || github.event.issue.body, '@gemini-cli') &&
@@ -65,8 +57,6 @@ jobs:
 
             if (eventType === 'pull_request.opened') {
               core.setOutput('command', 'review');
-            } else if (['issues.opened', 'issues.reopened'].includes(eventType)) {
-              core.setOutput('command', 'triage');
             } else if (request.startsWith('@gemini-cli /review')) {
               core.setOutput('command', 'review');
               const additionalContext = request.replace(/^@gemini-cli \/review/, '').trim();

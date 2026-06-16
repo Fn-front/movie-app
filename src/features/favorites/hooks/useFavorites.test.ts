@@ -303,12 +303,17 @@ describe('useFavorites', () => {
       });
 
       const { wrapper, queryClient } = createWrapperWithClient();
+      // useMovieDetail のキャッシュは { success, data: MovieDetail } 構造
       queryClient.setQueryData(movieKeys.detail(999), {
-        id: 999,
-        title: '詳細キャッシュ映画',
-        overview: '...',
-        poster_path: null,
-        release_date: null,
+        success: true,
+        data: {
+          id: 999,
+          title: '詳細キャッシュ映画',
+          overview: '...',
+          poster_path: null,
+          release_date: null,
+          favorite: null,
+        },
       });
 
       const { result } = renderHook(() => useFavorites(), { wrapper });
@@ -333,9 +338,16 @@ describe('useFavorites', () => {
           expect.objectContaining({ variant: 'success' }),
         );
       });
+
+      // 詳細キャッシュの favorite が実 ID で更新されている
+      const detail = queryClient.getQueryData<{
+        success: true;
+        data: { favorite: { id: string; rating: number } | null };
+      }>(movieKeys.detail(999));
+      expect(detail?.data.favorite).toEqual({ id: 'fav-x', rating: 7 });
     });
 
-    it('詳細キャッシュ存在下でも updateRating が成功する', async () => {
+    it('詳細キャッシュの favorite.rating が updateRating で更新される', async () => {
       mockUpdateFavoriteRating.mockResolvedValue({
         success: true,
         message: '評価を更新しました',
@@ -352,11 +364,15 @@ describe('useFavorites', () => {
 
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(movieKeys.detail(100), {
-        id: 100,
-        title: '映画A',
-        overview: '...',
-        poster_path: '/a.jpg',
-        release_date: '2026-01-01',
+        success: true,
+        data: {
+          id: 100,
+          title: '映画A',
+          overview: '...',
+          poster_path: '/a.jpg',
+          release_date: '2026-01-01',
+          favorite: { id: 'fav-1', rating: 5 },
+        },
       });
 
       const { result } = renderHook(() => useFavorites(), { wrapper });
@@ -371,18 +387,28 @@ describe('useFavorites', () => {
       await waitFor(() => {
         expect(mockUpdateFavoriteRating).toHaveBeenCalled();
       });
+
+      const detail = queryClient.getQueryData<{
+        success: true;
+        data: { favorite: { id: string; rating: number } | null };
+      }>(movieKeys.detail(100));
+      expect(detail?.data.favorite).toEqual({ id: 'fav-1', rating: 9 });
     });
 
-    it('詳細キャッシュ存在下でも removeFromFavorites が成功する', async () => {
+    it('詳細キャッシュの favorite が removeFromFavorites で null になる', async () => {
       mockRemoveFavorite.mockResolvedValue(undefined);
 
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(movieKeys.detail(100), {
-        id: 100,
-        title: '映画A',
-        overview: '...',
-        poster_path: '/a.jpg',
-        release_date: '2026-01-01',
+        success: true,
+        data: {
+          id: 100,
+          title: '映画A',
+          overview: '...',
+          poster_path: '/a.jpg',
+          release_date: '2026-01-01',
+          favorite: { id: 'fav-1', rating: 5 },
+        },
       });
 
       const { result } = renderHook(() => useFavorites(), { wrapper });
@@ -397,6 +423,12 @@ describe('useFavorites', () => {
       await waitFor(() => {
         expect(mockRemoveFavorite).toHaveBeenCalled();
       });
+
+      const detail = queryClient.getQueryData<{
+        success: true;
+        data: { favorite: { id: string; rating: number } | null };
+      }>(movieKeys.detail(100));
+      expect(detail?.data.favorite).toBeNull();
     });
   });
 

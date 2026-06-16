@@ -88,32 +88,48 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
     enabled: isAuthenticated,
   });
 
-  // 映画一覧キャッシュ内のfavoriteフィールドを更新するユーティリティ
-  // movieKeys.all (= ['movies']) は一覧と詳細の両方にマッチするため、
-  // 一覧形式 (pages を持つ) のキャッシュのみ更新する
+  // 映画関連キャッシュ内のfavoriteフィールドを更新するユーティリティ
+  // movieKeys.all (= ['movies']) は一覧 (pages 構造) と詳細 ({ data: MovieDetail } 構造)
+  // の両方にマッチするため、構造を判別して適切に更新する
   const updateMovieCacheFavorite = useCallback(
     (tmdbMovieId: number, favorite: MovieFavoriteInfo | null) => {
-      queryClient.setQueriesData<{
-        pages: GetMoviesResponse[];
-        pageParams: number[];
-      }>({ queryKey: movieKeys.all }, (old) => {
-        if (!old || !Array.isArray(old.pages)) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page) => {
-            if (!page?.data?.movies) return page;
+      queryClient.setQueriesData(
+        { queryKey: movieKeys.all },
+        (old: unknown) => {
+          if (!old || typeof old !== 'object') return old;
+
+          // 一覧キャッシュ (useInfiniteQuery: { pages, pageParams })
+          const list = old as {
+            pages?: GetMoviesResponse[];
+            pageParams?: number[];
+          };
+          if (Array.isArray(list.pages)) {
             return {
-              ...page,
-              data: {
-                ...page.data,
-                movies: page.data.movies.map((movie) =>
-                  movie.id === tmdbMovieId ? { ...movie, favorite } : movie,
-                ),
-              },
+              ...list,
+              pages: list.pages.map((page) => {
+                if (!page?.data?.movies) return page;
+                return {
+                  ...page,
+                  data: {
+                    ...page.data,
+                    movies: page.data.movies.map((movie) =>
+                      movie.id === tmdbMovieId ? { ...movie, favorite } : movie,
+                    ),
+                  },
+                };
+              }),
             };
-          }),
-        };
-      });
+          }
+
+          // 詳細キャッシュ (useQuery: { success, data: MovieDetail })
+          const detail = old as { data?: { id?: number } };
+          if (detail.data?.id === tmdbMovieId) {
+            return { ...detail, data: { ...detail.data, favorite } };
+          }
+
+          return old;
+        },
+      );
     },
     [queryClient],
   );
@@ -178,30 +194,49 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
         pageParams: number[];
       }>({ queryKey: movieKeys.all });
 
-      // 映画一覧キャッシュからtmdbMovieIdを探して楽観的更新
-      queryClient.setQueriesData<{
-        pages: GetMoviesResponse[];
-        pageParams: number[];
-      }>({ queryKey: movieKeys.all }, (old) => {
-        if (!old || !Array.isArray(old.pages)) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page) => {
-            if (!page?.data?.movies) return page;
+      // 映画関連キャッシュからお気に入りIDを探して楽観的更新（一覧＋詳細）
+      queryClient.setQueriesData(
+        { queryKey: movieKeys.all },
+        (old: unknown) => {
+          if (!old || typeof old !== 'object') return old;
+
+          const list = old as {
+            pages?: GetMoviesResponse[];
+            pageParams?: number[];
+          };
+          if (Array.isArray(list.pages)) {
             return {
-              ...page,
-              data: {
-                ...page.data,
-                movies: page.data.movies.map((movie) =>
-                  movie.favorite?.id === id
-                    ? { ...movie, favorite: { id, rating } }
-                    : movie,
-                ),
-              },
+              ...list,
+              pages: list.pages.map((page) => {
+                if (!page?.data?.movies) return page;
+                return {
+                  ...page,
+                  data: {
+                    ...page.data,
+                    movies: page.data.movies.map((movie) =>
+                      movie.favorite?.id === id
+                        ? { ...movie, favorite: { id, rating } }
+                        : movie,
+                    ),
+                  },
+                };
+              }),
             };
-          }),
-        };
-      });
+          }
+
+          const detail = old as {
+            data?: { favorite?: { id?: string } | null };
+          };
+          if (detail.data?.favorite?.id === id) {
+            return {
+              ...detail,
+              data: { ...detail.data, favorite: { id, rating } },
+            };
+          }
+
+          return old;
+        },
+      );
 
       return { previousMoviesCache };
     },
@@ -239,30 +274,46 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
         pageParams: number[];
       }>({ queryKey: movieKeys.all });
 
-      // 映画一覧キャッシュからfavoriteをnullに設定
-      queryClient.setQueriesData<{
-        pages: GetMoviesResponse[];
-        pageParams: number[];
-      }>({ queryKey: movieKeys.all }, (old) => {
-        if (!old || !Array.isArray(old.pages)) return old;
-        return {
-          ...old,
-          pages: old.pages.map((page) => {
-            if (!page?.data?.movies) return page;
+      // 映画関連キャッシュからお気に入りをnullに設定（一覧＋詳細）
+      queryClient.setQueriesData(
+        { queryKey: movieKeys.all },
+        (old: unknown) => {
+          if (!old || typeof old !== 'object') return old;
+
+          const list = old as {
+            pages?: GetMoviesResponse[];
+            pageParams?: number[];
+          };
+          if (Array.isArray(list.pages)) {
             return {
-              ...page,
-              data: {
-                ...page.data,
-                movies: page.data.movies.map((movie) =>
-                  movie.favorite?.id === id
-                    ? { ...movie, favorite: null }
-                    : movie,
-                ),
-              },
+              ...list,
+              pages: list.pages.map((page) => {
+                if (!page?.data?.movies) return page;
+                return {
+                  ...page,
+                  data: {
+                    ...page.data,
+                    movies: page.data.movies.map((movie) =>
+                      movie.favorite?.id === id
+                        ? { ...movie, favorite: null }
+                        : movie,
+                    ),
+                  },
+                };
+              }),
             };
-          }),
-        };
-      });
+          }
+
+          const detail = old as {
+            data?: { favorite?: { id?: string } | null };
+          };
+          if (detail.data?.favorite?.id === id) {
+            return { ...detail, data: { ...detail.data, favorite: null } };
+          }
+
+          return old;
+        },
+      );
 
       return { previousMoviesCache };
     },

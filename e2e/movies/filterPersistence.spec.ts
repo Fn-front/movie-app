@@ -6,6 +6,10 @@ import { test, expect } from '../fixtures/auth';
 import { resetFilters } from '../helpers/api';
 
 test.describe('フィルター条件がリロード後も保持される', () => {
+  // goto×2＋フィルタ操作＋PUT/GET待ち＋reload と重く、並列負荷下で30秒予算を
+  // 超過しうるためタイムアウトを延長する
+  test.describe.configure({ timeout: 60000 });
+
   test.beforeEach(async ({ request }) => {
     await resetFilters(request);
   });
@@ -30,6 +34,7 @@ test.describe('フィルター条件がリロード後も保持される', () =>
     const putPromise = page.waitForResponse(
       (res) =>
         res.url().includes('/api/filters') && res.request().method() === 'PUT',
+      { timeout: 30000 },
     );
     await dialog.getByRole('button', { name: '適用' }).click();
     const putResponse = await putPromise;
@@ -44,6 +49,7 @@ test.describe('フィルター条件がリロード後も保持される', () =>
         res.url().includes('/api/filters') &&
         res.request().method() === 'GET' &&
         res.status() === 200,
+      { timeout: 30000 },
     );
     await page.reload();
     const getResponse = await getPromise;

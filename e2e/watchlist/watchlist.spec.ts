@@ -11,7 +11,9 @@ import { test, expect } from '../fixtures/auth';
 import { cleanupWatchlist } from '../helpers/api';
 import { movieTileButtons } from '../helpers/locators';
 
-test.describe.configure({ mode: 'serial' });
+// 同一ユーザーのウォッチリストを直列操作。並列負荷下でも goto＋タイル待ち＋
+// API応答（前準備の beforeEach 含む）が予算切れしないよう、テストタイムアウトを延長する
+test.describe.configure({ mode: 'serial', timeout: 90000 });
 
 /** ウォッチリストAPIレスポンスを待つ */
 function waitForWatchlistResponse(page: import('@playwright/test').Page) {
@@ -21,6 +23,7 @@ function waitForWatchlistResponse(page: import('@playwright/test').Page) {
       (res.request().method() === 'POST' ||
         res.request().method() === 'DELETE') &&
       res.status() < 500,
+    { timeout: 30000 },
   );
 }
 

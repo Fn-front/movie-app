@@ -10,6 +10,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
+  RECOMMENDATIONS_MAX_COUNT,
+  RECOMMENDATIONS_GENERATION_BUFFER,
+} from '@/constants';
+
+import {
   executeGenerateRecommendationsCron,
   fetchActiveUserIds,
   collectUserMovieData,
@@ -279,6 +284,19 @@ describe('generateRecommendationsService', () => {
   });
 
   describe('generateRecommendationsWithRetry', () => {
+    /** display_order を埋めた解決済みレコメンドを生成 */
+    const buildResolved = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        tmdb_movie_id: i + 1,
+        title: `Movie ${i + 1}`,
+        poster_path: null,
+        release_date: null,
+        vote_average: null,
+        genre_ids: null,
+        reason: `理由${i + 1}`,
+        display_order: i + 1,
+      }));
+
     it('OpenAIがnullを返したら空配列を返す', async () => {
       mockFetchRecommendations.mockResolvedValue(null);
 
@@ -290,6 +308,100 @@ describe('generateRecommendationsService', () => {
       );
 
       expect(result).toEqual([]);
+    });
+
+    it('初回は必要数＋バッファ件をAIに要求する', async () => {
+      mockFetchRecommendations.mockResolvedValueOnce(
+        Array.from({ length: RECOMMENDATIONS_MAX_COUNT }, (_, i) => ({
+          title: `Movie ${i + 1}`,
+          year: 2020,
+          reason: `理由${i + 1}`,
+        })),
+      );
+      // 初回で最大件数を解決 → リトライせず終了
+      mockResolveRecommendations.mockResolvedValueOnce(
+        buildResolved(RECOMMENDATIONS_MAX_COUNT),
+      );
+
+      await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      // 第3引数（要求件数）が 最大件数＋バッファ であること
+      expect(mockFetchRecommendations.mock.calls[0][2]).toBe(
+        RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
+      );
+    });
+
+    it('バッファ分多く解決されても最大件数で丸める', async () => {
+      mockFetchRecommendations.mockResolvedValueOnce(
+        Array.from({ length: RECOMMENDATIONS_MAX_COUNT + 2 }, (_, i) => ({
+          title: `Movie ${i + 1}`,
+          year: 2020,
+          reason: `理由${i + 1}`,
+        })),
+      );
+      // 解決ロジックがバッファ込みで12件返しても、累積は10件で打ち切る
+      mockResolveRecommendations.mockResolvedValueOnce(
+        buildResolved(RECOMMENDATIONS_MAX_COUNT + 2),
+      );
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(result).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
+      expect(result[result.length - 1].display_order).toBe(
+        RECOMMENDATIONS_MAX_COUNT,
+      );
+    });
+
+    it('初回で不足した場合、不足分＋バッファでリトライする', async () => {
+      // 初回: 9件解決（1件不足）
+      mockFetchRecommendations
+        .mockResolvedValueOnce(
+          Array.from({ length: RECOMMENDATIONS_MAX_COUNT }, (_, i) => ({
+            title: `Movie ${i + 1}`,
+            year: 2020,
+            reason: `理由${i + 1}`,
+          })),
+        )
+        .mockResolvedValueOnce([
+          { title: 'Extra', year: 2021, reason: '追加理由' },
+        ]);
+      mockResolveRecommendations
+        .mockResolvedValueOnce(buildResolved(RECOMMENDATIONS_MAX_COUNT - 1))
+        .mockResolvedValueOnce([
+          {
+            tmdb_movie_id: 999,
+            title: 'Extra',
+            poster_path: null,
+            release_date: null,
+            vote_average: null,
+            genre_ids: null,
+            reason: '追加理由',
+            display_order: 1,
+          },
+        ]);
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(result).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
+      // リトライ時の要求件数は「不足1件＋バッファ」
+      expect(mockFetchRecommendations.mock.calls[1][2]).toBe(
+        1 + RECOMMENDATIONS_GENERATION_BUFFER,
+      );
     });
   });
 

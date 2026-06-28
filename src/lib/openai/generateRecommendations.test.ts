@@ -357,4 +357,111 @@ describe('resolveRecommendationsWithTMDb', () => {
 
     expect(result).toHaveLength(10);
   });
+
+  it('公開年が一致する候補を関連度順より優先して選択する', async () => {
+    // 直前のテストで消費されなかった mockResolvedValueOnce キューを破棄
+    mockSearchMovies.mockReset();
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 1,
+          title: 'Dune',
+          poster_path: null,
+          release_date: '1984-12-14',
+          vote_average: 6.3,
+          genre_ids: [878],
+        },
+        {
+          id: 2,
+          title: 'Dune',
+          poster_path: null,
+          release_date: '2021-09-15',
+          vote_average: 7.8,
+          genre_ids: [878],
+        },
+      ],
+    });
+
+    const items = [createItem('Dune', 2021, '理由')];
+    const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+    expect(result).toHaveLength(1);
+    expect(result[0].tmdb_movie_id).toBe(2);
+  });
+
+  it('公開年が許容範囲内の候補がない場合は先頭（関連度最上位）を選ぶ', async () => {
+    mockSearchMovies.mockReset();
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 10,
+          title: 'Old Movie',
+          poster_path: null,
+          release_date: '1990-01-01',
+          vote_average: 7.0,
+          genre_ids: [18],
+        },
+        {
+          id: 20,
+          title: 'Old Movie',
+          poster_path: null,
+          release_date: '1995-01-01',
+          vote_average: 6.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    const items = [createItem('Old Movie', 2020, '理由')];
+    const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+    expect(result).toHaveLength(1);
+    expect(result[0].tmdb_movie_id).toBe(10);
+  });
+
+  it('release_dateが空文字の候補は年一致せず先頭を選ぶ', async () => {
+    mockSearchMovies.mockReset();
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 30,
+          title: 'No Date Movie',
+          poster_path: null,
+          release_date: '',
+          vote_average: 7.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    const items = [createItem('No Date Movie', 2020, '理由')];
+    const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+    expect(result).toHaveLength(1);
+    expect(result[0].tmdb_movie_id).toBe(30);
+  });
+
+  it('limit引数で指定件数で打ち切る', async () => {
+    mockSearchMovies.mockReset();
+    const items: OpenAiRecommendationItem[] = [];
+    for (let i = 1; i <= 5; i++) {
+      items.push(createItem(`Movie ${i}`, 2020, `理由${i}`));
+      mockSearchMovies.mockResolvedValueOnce({
+        results: [
+          {
+            id: i,
+            title: `Movie ${i}`,
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 7.0,
+            genre_ids: [28],
+          },
+        ],
+      });
+    }
+
+    const result = await resolveRecommendationsWithTMDb(items, new Set(), 2);
+
+    expect(result).toHaveLength(2);
+  });
 });

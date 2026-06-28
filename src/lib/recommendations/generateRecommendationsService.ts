@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_MAX_RETRIES,
+  RECOMMENDATIONS_GENERATION_BUFFER,
   RECOMMENDATIONS_ACTIVE_USER_DAYS,
   CRON_ERROR_MESSAGES,
 } from '@/constants';
@@ -190,10 +191,12 @@ export async function generateRecommendationsWithRetry(
   let retryExcludedIds = baseExcludedIds;
 
   for (let attempt = 0; attempt <= RECOMMENDATIONS_MAX_RETRIES; attempt++) {
+    // TMDb解決時の取りこぼし・除外を見越し、必要数より多め（+バッファ）に要求する
+    const requestCount = remainingCount + RECOMMENDATIONS_GENERATION_BUFFER;
     const aiRecommendations = await fetchRecommendationsFromOpenAI(
       favoriteMovies,
       retryExcludedTitles,
-      remainingCount,
+      requestCount,
       dismissedMovies,
     );
 
@@ -204,9 +207,14 @@ export async function generateRecommendationsWithRetry(
     const resolvedInAttempt = await resolveRecommendationsWithTMDb(
       aiRecommendations,
       retryExcludedIds,
+      remainingCount,
     );
 
     for (const item of resolvedInAttempt) {
+      // バッファ分多めに解決されても最大件数で丸める（オーバーシュート防止）
+      if (allResolved.length >= RECOMMENDATIONS_MAX_COUNT) {
+        break;
+      }
       if (allResolved.some((r) => r.tmdb_movie_id === item.tmdb_movie_id)) {
         continue;
       }

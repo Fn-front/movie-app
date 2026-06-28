@@ -4,7 +4,18 @@
 
 import { z } from 'zod';
 
-import { RECOMMENDATIONS_MAX_COUNT, MOVIE_YEAR_RANGE } from '@/constants';
+import {
+  RECOMMENDATIONS_MAX_COUNT,
+  RECOMMENDATIONS_GENERATION_BUFFER,
+  MOVIE_YEAR_RANGE,
+} from '@/constants';
+
+/**
+ * AIに要求しうる最大件数（最大表示件数＋取りこぼし用バッファ）
+ * バッファ分多めに要求するため、レスポンス検証の上限もこれに合わせる。
+ */
+const OPENAI_RECOMMENDATIONS_MAX_RESPONSE =
+  RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER;
 
 /**
  * OpenAIレスポンスの個別レコメンド項目スキーマ
@@ -27,8 +38,8 @@ export const openAiRecommendationsResponseSchema = z.object({
     .array(openAiRecommendationItemSchema)
     .min(1, 'レコメンドは1件以上必要です')
     .max(
-      RECOMMENDATIONS_MAX_COUNT,
-      `レコメンドは${RECOMMENDATIONS_MAX_COUNT}件以下にしてください`,
+      OPENAI_RECOMMENDATIONS_MAX_RESPONSE,
+      `レコメンドは${OPENAI_RECOMMENDATIONS_MAX_RESPONSE}件以下にしてください`,
     ),
 });
 

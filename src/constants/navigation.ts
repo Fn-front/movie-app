@@ -32,4 +32,5 @@ export const NAV_ITEMS: NavItemBase[] = [
 export const MENU_LABELS = {
   SETTINGS: '設定',
   LOGOUT: 'ログアウト',
+  LOGIN: 'ログイン',
 } as const;

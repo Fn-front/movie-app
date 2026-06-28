@@ -134,6 +134,35 @@ describe('MobileDrawer', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('未認証の場合はログインボタンが表示される', () => {
+    mockSessionData = {
+      data: null,
+      status: 'unauthenticated',
+    };
+    render(<MobileDrawer {...defaultProps} />);
+    expect(
+      screen.getByRole('button', { name: /ログイン/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('認証済みの場合はログインボタンが表示されない', () => {
+    render(<MobileDrawer {...defaultProps} />);
+    expect(
+      screen.queryByRole('button', { name: /ログイン/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('ログインボタンクリックでサインインページに遷移する', async () => {
+    mockSessionData = {
+      data: null,
+      status: 'unauthenticated',
+    };
+    const user = userEvent.setup();
+    render(<MobileDrawer {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: /ログイン/ }));
+    expect(mockPush).toHaveBeenCalledWith('/auth/signin');
+  });
+
   it('設定ボタンクリックで設定ページに遷移する', async () => {
     const user = userEvent.setup();
     render(<MobileDrawer {...defaultProps} />);

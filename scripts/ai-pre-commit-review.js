@@ -15,6 +15,24 @@ const path = require('path');
 const sh = (cmd) => execSync(cmd, { encoding: 'utf8' });
 const log = (msg) => process.stdout.write(msg + '\n');
 
+/** Claude CLI 実行のタイムアウト（ms） */
+const CLAUDE_TIMEOUT_MS = 90000;
+
+/** 失敗・診断情報を履歴ログに追記する（原因不明化の解消用） */
+function logHistory(line) {
+  try {
+    const cacheDir = path.resolve('.cache');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    fs.appendFileSync(
+      path.join(cacheDir, 'ai-review-history.log'),
+      `[${ts}] ${line}\n`,
+    );
+  } catch {
+    /* ログ失敗は無視（コミットをブロックしない） */
+  }
+}
+
 function which(cmd) {
   const r = spawnSync('command', ['-v', cmd], {
     encoding: 'utf8',
@@ -65,15 +83,28 @@ try {
   const r = spawnSync(
     'claude',
     ['-p', '--output-format', 'json', '--max-turns', '1', prompt],
-    { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024 },
+    { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: CLAUDE_TIMEOUT_MS },
   );
   if (r.status !== 0) {
+    // 失敗理由（タイムアウト/シグナル/stderr）を履歴に残し、原因不明化を防ぐ
+    const isTimeout =
+      r.error?.code === 'ETIMEDOUT' || r.signal === 'SIGTERM';
+    const reason = isTimeout
+      ? `timeout (${CLAUDE_TIMEOUT_MS}ms)`
+      : (r.stderr || '').trim().slice(0, 500) ||
+        `exit=${r.status} signal=${r.signal}`;
     log('⚠️  Claude CLI の実行に失敗しました。スキップします。');
+    logHistory(`FAILED claude CLI: ${reason}`);
     process.exit(0);
   }
   outer = JSON.parse(r.stdout);
+  // CLIは成功(exit 0)でもAPI側エラーが乗る場合があるため記録する
+  if (outer.api_error_status) {
+    logHistory(`API error status: ${outer.api_error_status}`);
+  }
 } catch (e) {
   log(`⚠️  Claude のレスポンスを解析できませんでした: ${e.message}`);
+  logHistory(`PARSE error: ${e.message}`);
   process.exit(0);
 }
 
@@ -94,16 +125,14 @@ fs.writeFileSync(
   path.join(cacheDir, 'ai-review-latest.json'),
   JSON.stringify(review, null, 2) + '\n',
 );
-const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
 let prev = '(no previous commit)';
 try {
   prev = sh('git log -1 --format=%s').trim();
 } catch {
   /* ignore */
 }
-fs.appendFileSync(
-  path.join(cacheDir, 'ai-review-history.log'),
-  `[${ts}] blockers=${review.blockers.length} warnings=${review.warnings.length} / prev: ${prev}\n`,
+logHistory(
+  `blockers=${review.blockers.length} warnings=${review.warnings.length} / prev: ${prev}`,
 );
 
 const fmt = (items) =>

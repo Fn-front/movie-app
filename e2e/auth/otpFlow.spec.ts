@@ -22,9 +22,11 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
   const signupEmail = 'signup-otp-e2e@example.com';
+  const errEmail = 'signup-otp-err-e2e@example.com';
 
   test.afterAll(async () => {
     await cleanupAuthUser(signupEmail);
+    await cleanupAuthUser(errEmail);
   });
 
   test('新規登録 → 確認コード入力 → 認証完了 → サインイン', async ({
@@ -52,6 +54,32 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
     // 検証成功でサインインページへ
     await page.waitForURL(/\/auth\/signin/);
     await expect(page).toHaveURL(/\/auth\/signin/);
+  });
+
+  test('誤った確認コードだとエラーが表示され遷移しない', async ({ page }) => {
+    await cleanupAuthUser(errEmail);
+
+    await page.goto('/auth/signup');
+    await page.getByLabel('メールアドレス').fill(errEmail);
+    await page.getByLabel('パスワード', { exact: true }).fill('Password123');
+    await page.getByLabel('パスワード（確認）').fill('Password123');
+    await page.getByRole('button', { name: '新規登録' }).click();
+
+    await expect(
+      page.getByRole('heading', { name: '確認コードを入力' }),
+    ).toBeVisible();
+
+    // 実コードと異なる値を入力（実コードが偶然一致しないことを確認）
+    const realCode = await getLatestOtpCode(errEmail, 'registration');
+    const wrongCode = realCode === '000000' ? '111111' : '000000';
+    await page.getByLabel('確認コード', { exact: true }).fill(wrongCode);
+    await page.getByRole('button', { name: '確認コードを検証' }).click();
+
+    // エラーが表示され、確認コード画面に留まる
+    await expect(page.getByText('確認コードが間違っています。')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: '確認コードを入力' }),
+    ).toBeVisible();
   });
 
   test('メールOTPログイン → 確認コード入力 → ログイン成功', async ({

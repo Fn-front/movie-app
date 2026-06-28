@@ -38,20 +38,34 @@ test.describe('受賞作品（公開）', () => {
     await expect(page.getByRole('dialog')).toBeVisible();
   });
 
-  test('年度を切り替えると一覧が更新される', async ({ page }) => {
+  test('年度を切り替えると選択年度と一覧が更新される', async ({ page }) => {
     await page.goto('/awards');
     await expect(page.locator('[class*="movie_tile"]').first()).toBeVisible({
       timeout: 15000,
     });
 
     const yearSelect = page.getByRole('combobox', { name: '年度を選択' });
-    await yearSelect.click();
+    const initialYear = (await yearSelect.textContent())?.trim();
 
+    await yearSelect.click();
     const options = page.getByRole('option');
     await options.first().waitFor({ timeout: 10000 });
-    // 末尾（別年度）を選択
-    await options.last().click();
 
+    // 現在と異なる年度オプションを選ぶ（無ければ切替不可のためスキップ）
+    const count = await options.count();
+    let targetYear: string | null = null;
+    for (let i = 0; i < count; i++) {
+      const text = (await options.nth(i).textContent())?.trim();
+      if (text && text !== initialYear) {
+        targetYear = text;
+        await options.nth(i).click();
+        break;
+      }
+    }
+    test.skip(!targetYear, '選択可能な年度が1件のみのため切替をスキップ');
+
+    // 選択年度が実際に変わったことを確認
+    await expect(yearSelect).toContainText(targetYear!);
     // 切替後も受賞作品一覧が表示される
     await expect(page.locator('[class*="movie_tile"]').first()).toBeVisible({
       timeout: 15000,

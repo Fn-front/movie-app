@@ -19,6 +19,7 @@ import {
   IoBookmarkOutline,
   IoSettingsOutline,
   IoLogOutOutline,
+  IoLogInOutline,
   IoCloseOutline,
 } from 'react-icons/io5';
 
@@ -112,6 +113,10 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
 
   const handleNavigateToSettings = useCallback(() => {
     router.push(ROUTES.SETTINGS);
+  }, [router]);
+
+  const handleLogin = useCallback(() => {
+    router.push(ROUTES.LOGIN);
   }, [router]);
 
   const handleLogout = useCallback(async () => {
@@ -209,6 +214,21 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
                 >
                   <IoLogOutOutline size={ICON_SIZES.SM} aria-hidden='true' />
                   <span>{MENU_LABELS.LOGOUT}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isAuthenticated && (
+            <div className={styles.c_mobile_drawer__user}>
+              <div className={styles.c_mobile_drawer__user_actions}>
+                <button
+                  type='button'
+                  className={styles.c_mobile_drawer__user_action}
+                  onClick={handleLogin}
+                >
+                  <IoLogInOutline size={ICON_SIZES.SM} aria-hidden='true' />
+                  <span>{MENU_LABELS.LOGIN}</span>
                 </button>
               </div>
             </div>

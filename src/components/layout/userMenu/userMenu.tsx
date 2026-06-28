@@ -53,12 +53,12 @@ export const UserMenu = memo(function UserMenu() {
       <button
         className={styles.c_user_menu__login_button}
         onClick={handleLogin}
-        aria-label='ログイン'
+        aria-label={MENU_LABELS.LOGIN}
       >
         <span className={styles.c_user_menu__login_icon}>
           <IoLogInOutline />
         </span>
-        <span className={styles.c_user_menu__name}>ログイン</span>
+        <span className={styles.c_user_menu__name}>{MENU_LABELS.LOGIN}</span>
       </button>
     );
   }

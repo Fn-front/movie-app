@@ -83,12 +83,15 @@ try {
   const r = spawnSync(
     'claude',
     ['-p', '--output-format', 'json', '--max-turns', '1', prompt],
-    { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, timeout: CLAUDE_TIMEOUT_MS },
+    {
+      encoding: 'utf8',
+      maxBuffer: 50 * 1024 * 1024,
+      timeout: CLAUDE_TIMEOUT_MS,
+    },
   );
   if (r.status !== 0) {
     // 失敗理由（タイムアウト/シグナル/stderr）を履歴に残し、原因不明化を防ぐ
-    const isTimeout =
-      r.error?.code === 'ETIMEDOUT' || r.signal === 'SIGTERM';
+    const isTimeout = r.error?.code === 'ETIMEDOUT' || r.signal === 'SIGTERM';
     const reason = isTimeout
       ? `timeout (${CLAUDE_TIMEOUT_MS}ms)`
       : (r.stderr || '').trim().slice(0, 500) ||

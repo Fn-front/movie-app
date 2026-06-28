@@ -59,6 +59,65 @@ export async function cleanupFavorites(): Promise<void> {
 }
 
 /**
+ * おすすめセクションを表示させるため、テストユーザーに
+ * お気に入り1件＋おすすめ2件をシードする（refresh E2E用）。
+ * おすすめは SSR で表示されるため、ページ遷移前に投入する。
+ */
+export async function seedRecommendations(): Promise<void> {
+  const userId = await getTestUserId();
+  if (!userId) return;
+
+  const post = (path: string, body: unknown) =>
+    fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      method: 'POST',
+      headers: {
+        ...supabaseHeaders,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=ignore-duplicates',
+      },
+      body: JSON.stringify(body),
+    });
+
+  // hasFavorites=true にする
+  await post('favorites', {
+    user_id: userId,
+    tmdb_movie_id: 999001,
+    title: 'E2Eお気に入り',
+    rating: 8,
+  });
+  // recommendations を2件
+  await post('recommendations', [
+    {
+      user_id: userId,
+      tmdb_movie_id: 999101,
+      title: 'E2Eおすすめ1',
+      reason: 'E2E用の理由1',
+      display_order: 1,
+    },
+    {
+      user_id: userId,
+      tmdb_movie_id: 999102,
+      title: 'E2Eおすすめ2',
+      reason: 'E2E用の理由2',
+      display_order: 2,
+    },
+  ]);
+}
+
+/**
+ * テストユーザーのおすすめを物理削除する（refresh E2Eの後始末用）。
+ */
+export async function cleanupRecommendations(): Promise<void> {
+  const userId = await getTestUserId();
+  if (!userId) return;
+
+  await fetch(`${SUPABASE_URL}/rest/v1/recommendations?user_id=eq.${userId}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+}
+
+/**
  * テストユーザーの興味なし映画を物理削除する
  */
 export async function cleanupDismissedMovies(): Promise<void> {

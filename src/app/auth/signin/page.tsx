@@ -11,6 +11,11 @@ export const metadata: Metadata = {
   description: 'Movie Appにログイン',
 };
 
-export default function SignInPage() {
-  return <SignInContent />;
+interface SignInPageProps {
+  searchParams: Promise<{ callbackUrl?: string }>;
+}
+
+export default async function SignInPage({ searchParams }: SignInPageProps) {
+  const { callbackUrl } = await searchParams;
+  return <SignInContent callbackUrl={callbackUrl} />;
 }

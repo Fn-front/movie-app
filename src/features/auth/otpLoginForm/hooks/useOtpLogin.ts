@@ -11,14 +11,10 @@ import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
 import { OTP_ACTION } from '@/constants/otp';
-import {
-  AUTH_ERROR_MESSAGES,
-  TOAST_TITLES,
-  TOAST_MESSAGES,
-  ROUTES,
-} from '@/constants';
+import { AUTH_ERROR_MESSAGES, TOAST_TITLES, TOAST_MESSAGES } from '@/constants';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
+import { resolveSafeCallbackUrl } from '@/utils/url';
 
 type OtpLoginStep = 'email' | 'otp';
 
@@ -32,7 +28,7 @@ interface UseOtpLoginReturn {
   handleBackToEmail: () => void;
 }
 
-export function useOtpLogin(): UseOtpLoginReturn {
+export function useOtpLogin(callbackUrl?: string): UseOtpLoginReturn {
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState<OtpLoginStep>('email');
@@ -100,7 +96,7 @@ export function useOtpLogin(): UseOtpLoginReturn {
         variant: 'success',
       });
 
-      router.push(ROUTES.HOME);
+      router.push(resolveSafeCallbackUrl(callbackUrl));
     } catch (error) {
       const { message } = handleApiError(error);
       setApiError(message || AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
@@ -112,7 +108,7 @@ export function useOtpLogin(): UseOtpLoginReturn {
     } finally {
       setIsSubmitting(false);
     }
-  }, [email, router, toast]);
+  }, [email, router, toast, callbackUrl]);
 
   const handleBackToEmail = useCallback(() => {
     setStep('email');

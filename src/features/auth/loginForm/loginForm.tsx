@@ -23,11 +23,14 @@ import {
 } from '@/constants';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
+import { resolveSafeCallbackUrl } from '@/utils/url';
 import { SocialLoginButtons } from '@/features/auth/socialLoginButtons/socialLoginButtons';
 import styles from './loginForm.module.scss';
 
 interface LoginFormProps {
   onOtpLoginClick?: () => void;
+  /** ログイン後の戻り先（callbackUrl） */
+  callbackUrl?: string;
 }
 
 /**
@@ -35,6 +38,7 @@ interface LoginFormProps {
  */
 export const LoginForm = memo<LoginFormProps>(function LoginForm({
   onOtpLoginClick,
+  callbackUrl,
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -79,7 +83,7 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
           variant: 'success',
         });
 
-        router.push(ROUTES.HOME);
+        router.push(resolveSafeCallbackUrl(callbackUrl));
       } catch (error) {
         const { message } = handleApiError(error);
         setApiError(message);
@@ -90,7 +94,7 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
         });
       }
     },
-    [router, toast],
+    [router, toast, callbackUrl],
   );
 
   return (
@@ -146,7 +150,7 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
         </div>
       </form>
 
-      <SocialLoginButtons disabled={isSubmitting} />
+      <SocialLoginButtons disabled={isSubmitting} callbackUrl={callbackUrl} />
 
       {onOtpLoginClick && (
         <p className={styles.c_login_form__footer}>

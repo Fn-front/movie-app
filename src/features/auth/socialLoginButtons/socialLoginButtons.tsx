@@ -11,33 +11,40 @@ import { signIn } from 'next-auth/react';
 import { FaGoogle, FaGithub } from 'react-icons/fa';
 
 import { Button } from '@/components/ui/button/button';
+import { resolveSafeCallbackUrl } from '@/utils/url';
 import styles from './socialLoginButtons.module.scss';
 
 interface SocialLoginButtonsProps {
   disabled?: boolean;
+  /** ログイン後の戻り先（callbackUrl） */
+  callbackUrl?: string;
 }
 
 export const SocialLoginButtons = memo<SocialLoginButtonsProps>(
-  function SocialLoginButtons({ disabled = false }) {
+  function SocialLoginButtons({ disabled = false, callbackUrl }) {
     const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
 
     const handleGoogleLogin = useCallback(async () => {
       try {
         setLoadingProvider('google');
-        await signIn('google', { callbackUrl: '/' });
+        await signIn('google', {
+          callbackUrl: resolveSafeCallbackUrl(callbackUrl),
+        });
       } finally {
         setLoadingProvider(null);
       }
-    }, []);
+    }, [callbackUrl]);
 
     const handleGithubLogin = useCallback(async () => {
       try {
         setLoadingProvider('github');
-        await signIn('github', { callbackUrl: '/' });
+        await signIn('github', {
+          callbackUrl: resolveSafeCallbackUrl(callbackUrl),
+        });
       } finally {
         setLoadingProvider(null);
       }
-    }, []);
+    }, [callbackUrl]);
 
     const isDisabled = disabled || loadingProvider !== null;
 

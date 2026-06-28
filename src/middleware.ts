@@ -30,20 +30,30 @@ export default auth((req) => {
     nextUrl.pathname.startsWith(path),
   );
 
+  // ログイン後に元のページへ戻すための callbackUrl 付きサインインURLを生成する
+  const buildSignInUrl = () => {
+    const signInUrl = new URL(ROUTES.LOGIN, nextUrl);
+    signInUrl.searchParams.set(
+      'callbackUrl',
+      nextUrl.pathname + nextUrl.search,
+    );
+    return signInUrl;
+  };
+
   // セッション期限切れ検知: cookieはあるがJWT検証に失敗 → cookieを削除してログアウト
   const hasSessionCookie = req.cookies.has(SESSION_COOKIE_NAME);
 
   if (!isAuthenticated && hasSessionCookie) {
     const response = isProtectedPath
-      ? NextResponse.redirect(new URL(ROUTES.LOGIN, nextUrl))
+      ? NextResponse.redirect(buildSignInUrl())
       : NextResponse.next();
     response.cookies.delete(SESSION_COOKIE_NAME);
     return response;
   }
 
-  // 未認証で保護されたパスにアクセス → サインインページへリダイレクト
+  // 未認証で保護されたパスにアクセス → サインインページへリダイレクト（戻り先を保持）
   if (isProtectedPath && !isAuthenticated) {
-    return Response.redirect(new URL(ROUTES.LOGIN, nextUrl));
+    return Response.redirect(buildSignInUrl());
   }
 
   // 認証済みで認証ページにアクセス → ホームへリダイレクト

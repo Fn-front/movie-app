@@ -21,6 +21,22 @@ test.describe('ログイン認証フロー', () => {
     await expect(page).toHaveURL('/');
   });
 
+  test('保護ページへの未認証アクセス後、ログインすると元のページへ戻る', async ({
+    page,
+  }) => {
+    // 未認証で保護ページにアクセス → callbackUrl付きでサインインへリダイレクト
+    await page.goto('/watchlist');
+    await expect(page).toHaveURL(/\/auth\/signin\?callbackUrl=/);
+
+    await page.getByLabel('メールアドレス').fill(TEST_USER.email);
+    await page.getByLabel('パスワード').fill(TEST_USER.password);
+    await page.getByRole('button', { name: 'ログイン', exact: true }).click();
+
+    // ホームではなく元の保護ページに戻る
+    await page.waitForURL('/watchlist');
+    await expect(page).toHaveURL('/watchlist');
+  });
+
   test('不正な認証情報でエラーメッセージが表示される', async ({ page }) => {
     await page.goto('/auth/signin');
 

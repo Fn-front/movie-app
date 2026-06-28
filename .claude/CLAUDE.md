@@ -165,6 +165,12 @@
 - バッジが**赤色**でエラー件数（例：「1 Issue」「N Issues」）を表示していたら**エラー状態**と認識する（ページが正常に見えても見逃さない）
 - 赤バッジを検知したら、エラー内容（コンソール/ランタイムエラー）を取得して原因を切り分ける
 
+**【必須】E2E結果のスクショをPRに添付**：
+- PRでE2Eを実行したら、各シナリオの結果スクリーンショットをPR本文に埋め込む
+- 画像は `docs/e2e-screenshots/` 配下にコミットし、PR本文に raw URL で埋め込む
+- ファイル名はシナリオ単位で安定させ、**同じテストの再取得は上書き**する（重複画像を増やさない）。例: `<feature>-<scenario>.png`
+- URLは**コミットSHA固定のpermalink**を使う（`https://github.com/Fn-front/movie-app/blob/<commit-sha>/docs/e2e-screenshots/<file>.png?raw=true`）。`<branch>` 指定はマージ後のブランチ削除でリンク切れ（404）になるため避ける
+
 ## 設計ドキュメント
 
 詳細な設計仕様は`.claude/documents/`を参照：

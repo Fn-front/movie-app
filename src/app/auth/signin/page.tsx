@@ -17,9 +17,9 @@ interface SignInPageProps {
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
   const { callbackUrl } = await searchParams;
-  // 重複指定（?callbackUrl=a&callbackUrl=b）で配列になる場合は先頭を採用
-  const normalizedCallbackUrl = Array.isArray(callbackUrl)
-    ? callbackUrl[0]
-    : callbackUrl;
-  return <SignInContent callbackUrl={normalizedCallbackUrl} />;
+  // 重複指定（?callbackUrl=a&callbackUrl=b）等で配列になった場合は不正として扱い、
+  // resolveSafeCallbackUrl と同様にホームへフォールバックさせる（文字列のみ採用）
+  const callbackUrlParam =
+    typeof callbackUrl === 'string' ? callbackUrl : undefined;
+  return <SignInContent callbackUrl={callbackUrlParam} />;
 }

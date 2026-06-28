@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth/auth';
-import { ROUTES } from '@/constants/common';
+import { ROUTES, AUTH_REQUIRED_ROUTES } from '@/constants/common';
 
 /** セッションcookie名（環境に応じて切り替え） */
 const SESSION_COOKIE_NAME =
@@ -13,13 +13,8 @@ const SESSION_COOKIE_NAME =
     ? '__Secure-next-auth.session-token'
     : 'next-auth.session-token';
 
-/** 認証が必要なパス */
-const protectedPaths = [
-  ROUTES.WATCHLIST,
-  ROUTES.SETTINGS,
-  ROUTES.FAVORITES,
-  ROUTES.THEATER_EXPERIENCE,
-];
+/** 認証が必要なパス（ナビゲーションと共通定義） */
+const protectedPaths = AUTH_REQUIRED_ROUTES;
 
 /** 認証ページ */
 const authPaths = [ROUTES.LOGIN, ROUTES.REGISTER];

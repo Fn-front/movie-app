@@ -36,6 +36,13 @@ jest.mock('next-auth/react', () => ({
   signOut: (...args: unknown[]) => mockSignOut(...args),
 }));
 
+// ログイン誘導ストアのモック（useNavAuthGuard が使用）
+const mockOpenLoginPrompt = jest.fn();
+jest.mock('@/lib/store/useLoginPromptStore', () => ({
+  useLoginPromptStore: (selector: (s: { open: jest.Mock }) => unknown) =>
+    selector({ open: mockOpenLoginPrompt }),
+}));
+
 describe('MobileDrawer', () => {
   const defaultProps = {
     open: true,
@@ -161,6 +168,23 @@ describe('MobileDrawer', () => {
     render(<MobileDrawer {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /ログイン/ }));
     expect(mockPush).toHaveBeenCalledWith('/auth/signin');
+  });
+
+  it('未認証で保護ルート(お気に入り)クリックでログイン誘導が表示されドロワーが閉じる', async () => {
+    mockSessionData = {
+      data: null,
+      status: 'unauthenticated',
+    };
+    const onOpenChange = jest.fn();
+    const user = userEvent.setup();
+    render(<MobileDrawer {...defaultProps} onOpenChange={onOpenChange} />);
+
+    await user.click(screen.getByRole('link', { name: 'お気に入り' }));
+
+    expect(mockOpenLoginPrompt).toHaveBeenCalledWith(
+      'お気に入りを見るにはログインが必要です。',
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it('設定ボタンクリックで設定ページに遷移する', async () => {

@@ -34,3 +34,19 @@ export const MENU_LABELS = {
   LOGOUT: 'ログアウト',
   LOGIN: 'ログイン',
 } as const;
+
+/**
+ * 保護ルートをナビゲーションから開こうとした際の、未認証ユーザー向け誘導メッセージ。
+ * 「保護対象かどうか」の判定は AUTH_REQUIRED_ROUTES が真実源であり、ここは表示文言のみ。
+ * AUTH_REQUIRED_ROUTES のうちナビに出るルートはここに文言を用意し、
+ * 未定義のルートは NAV_AUTH_PROMPT_DEFAULT_MESSAGE にフォールバックする。
+ */
+export const NAV_AUTH_PROMPT_MESSAGES: Record<string, string> = {
+  [ROUTES.FAVORITES]: 'お気に入りを見るにはログインが必要です。',
+  [ROUTES.WATCHLIST]: 'ウォッチリストを見るにはログインが必要です。',
+  [ROUTES.THEATER_EXPERIENCE]: 'シアター体験を見るにはログインが必要です。',
+};
+
+/** 保護ルート用メッセージが未定義の場合のデフォルト誘導文言 */
+export const NAV_AUTH_PROMPT_DEFAULT_MESSAGE =
+  'このページを見るにはログインが必要です。';

@@ -99,5 +99,8 @@ export default defineConfig({
     url: 'http://localhost:3000',
     reuseExistingServer: !isCI,
     timeout: 120000,
+    // OTPフローE2E用: メール実送信をスキップ（コードはDBから取得して検証）。
+    // ローカルで reuseExistingServer 時は、起動済みdevサーバーにも同フラグが必要。
+    env: { OTP_EMAIL_TEST_BYPASS: 'true' },
   },
 });

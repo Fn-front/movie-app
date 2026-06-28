@@ -79,3 +79,77 @@ export async function resetFilters(request: APIRequestContext): Promise<void> {
     data: {},
   });
 }
+
+/**
+ * 指定メール・アクションの最新の未検証OTPコードをDBから取得する。
+ * メール実送信に依存せずOTPフローを検証するために使用（OTP_EMAIL_TEST_BYPASS前提）。
+ */
+export async function getLatestOtpCode(
+  email: string,
+  action: 'registration' | 'login' | 'password_change',
+): Promise<string | null> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${encodeURIComponent(email)}` +
+      `&action_type=eq.${action}&verified_at=is.null` +
+      `&order=created_at.desc&limit=1&select=code`,
+    { headers: supabaseHeaders },
+  );
+  const data = await res.json();
+  return data[0]?.code ?? null;
+}
+
+/** otp_codes の未検証レコードを PATCH するための内部ヘルパー */
+async function patchUnverifiedOtp(
+  email: string,
+  action: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const enc = encodeURIComponent(email);
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${enc}` +
+      `&action_type=eq.${action}&verified_at=is.null`,
+    {
+      method: 'PATCH',
+      headers: { ...supabaseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+/**
+ * 最新の未検証OTPを期限切れにする（異常系E2E用）。
+ */
+export async function expireOtpCode(
+  email: string,
+  action: 'registration' | 'login' | 'password_change',
+): Promise<void> {
+  await patchUnverifiedOtp(email, action, {
+    expires_at: new Date(Date.now() - 60_000).toISOString(),
+  });
+}
+
+/**
+ * 未検証OTPの試行回数を上限まで引き上げる（異常系E2E用）。
+ */
+export async function maxOutOtpAttempts(
+  email: string,
+  action: 'registration' | 'login' | 'password_change',
+  maxAttempts = 5,
+): Promise<void> {
+  await patchUnverifiedOtp(email, action, { attempts: maxAttempts });
+}
+
+/**
+ * 指定メールのユーザーとOTPコードを物理削除する（signupテストの後始末用）。
+ */
+export async function cleanupAuthUser(email: string): Promise<void> {
+  const enc = encodeURIComponent(email);
+  await fetch(`${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${enc}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+  await fetch(`${SUPABASE_URL}/rest/v1/users?email=eq.${enc}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+}

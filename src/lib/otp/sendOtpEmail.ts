@@ -24,6 +24,22 @@ export async function sendOtpEmail(
   email: string,
   code: string,
 ): Promise<boolean> {
+  // E2E/テスト用バイパス: メールの実送信をスキップして成功扱いにする。
+  // OTPコードはDBに保存されるため、テストはDBから取得して検証できる。
+  // デフォルトoff。CIのE2Eサーバー（npm start=本番ビルド）のみ
+  // OTP_EMAIL_TEST_BYPASS=true で有効化する。
+  // Vercel本番では VERCEL_ENV ガードにより強制無効（誤設定耐性）。
+  // ※ NODE_ENV は CI も production のため判別に使えない。
+  if (
+    process.env.VERCEL_ENV !== 'production' &&
+    process.env.OTP_EMAIL_TEST_BYPASS === 'true'
+  ) {
+    console.warn(
+      '[OTP_EMAIL_TEST_BYPASS] sendOtpEmail はテストモードのため実送信をスキップしました',
+    );
+    return true;
+  }
+
   if (!resendApiKey) {
     console.error('RESEND_API_KEY is not configured');
     return false;

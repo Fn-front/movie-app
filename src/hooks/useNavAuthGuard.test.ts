@@ -78,4 +78,17 @@ describe('useNavAuthGuard', () => {
       'シアター体験を見るにはログインが必要です。',
     );
   });
+
+  it('個別メッセージ未定義の保護ルート(設定)はデフォルト文言で誘導する', () => {
+    const { result } = renderHook(() => useNavAuthGuard());
+    const event = createEvent();
+
+    // SETTINGS は AUTH_REQUIRED_ROUTES に含まれるが個別メッセージは未定義
+    result.current.handleProtectedNavClick(ROUTES.SETTINGS)(event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(mockOpenLoginPrompt).toHaveBeenCalledWith(
+      'このページを見るにはログインが必要です。',
+    );
+  });
 });

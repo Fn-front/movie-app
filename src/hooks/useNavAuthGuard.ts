@@ -13,7 +13,11 @@ import { useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import type { MouseEvent } from 'react';
 
-import { NAV_AUTH_PROMPT_MESSAGES } from '@/constants';
+import {
+  AUTH_REQUIRED_ROUTES,
+  NAV_AUTH_PROMPT_MESSAGES,
+  NAV_AUTH_PROMPT_DEFAULT_MESSAGE,
+} from '@/constants';
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
 
 /**
@@ -26,17 +30,20 @@ export function useNavAuthGuard() {
 
   const handleProtectedNavClick = useCallback(
     (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
-      // 認証済み、または保護対象でないルートは通常遷移
+      // 認証済みは通常遷移
       if (isAuthenticated) {
         return;
       }
-      const message = NAV_AUTH_PROMPT_MESSAGES[href];
-      if (!message) {
+      // 「保護対象か」は middleware と共通の AUTH_REQUIRED_ROUTES を真実源に判定する
+      const isProtected = AUTH_REQUIRED_ROUTES.some((route) => route === href);
+      if (!isProtected) {
         return;
       }
       // 未認証 かつ 保護ルート → 遷移をキャンセルしてログイン誘導
       event.preventDefault();
-      openLoginPrompt(message);
+      openLoginPrompt(
+        NAV_AUTH_PROMPT_MESSAGES[href] ?? NAV_AUTH_PROMPT_DEFAULT_MESSAGE,
+      );
     },
     [isAuthenticated, openLoginPrompt],
   );

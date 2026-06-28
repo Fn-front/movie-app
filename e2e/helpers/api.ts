@@ -98,6 +98,47 @@ export async function getLatestOtpCode(
   return data[0]?.code ?? null;
 }
 
+/** otp_codes の未検証レコードを PATCH するための内部ヘルパー */
+async function patchUnverifiedOtp(
+  email: string,
+  action: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const enc = encodeURIComponent(email);
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${enc}` +
+      `&action_type=eq.${action}&verified_at=is.null`,
+    {
+      method: 'PATCH',
+      headers: { ...supabaseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+/**
+ * 最新の未検証OTPを期限切れにする（異常系E2E用）。
+ */
+export async function expireOtpCode(
+  email: string,
+  action: 'registration' | 'login' | 'password_change',
+): Promise<void> {
+  await patchUnverifiedOtp(email, action, {
+    expires_at: new Date(Date.now() - 60_000).toISOString(),
+  });
+}
+
+/**
+ * 未検証OTPの試行回数を上限まで引き上げる（異常系E2E用）。
+ */
+export async function maxOutOtpAttempts(
+  email: string,
+  action: 'registration' | 'login' | 'password_change',
+  maxAttempts = 5,
+): Promise<void> {
+  await patchUnverifiedOtp(email, action, { attempts: maxAttempts });
+}
+
 /**
  * 指定メールのユーザーとOTPコードを物理削除する（signupテストの後始末用）。
  */

@@ -12,7 +12,12 @@
 
 import { test, expect } from '@playwright/test';
 
-import { getLatestOtpCode, cleanupAuthUser } from '../helpers/api';
+import {
+  getLatestOtpCode,
+  cleanupAuthUser,
+  expireOtpCode,
+  maxOutOtpAttempts,
+} from '../helpers/api';
 import { TEST_USER } from '../helpers/testUser';
 
 // 同一メールのOTPを直列で扱うためシリアル実行
@@ -23,11 +28,31 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
 
   const signupEmail = 'signup-otp-e2e@example.com';
   const errEmail = 'signup-otp-err-e2e@example.com';
+  const expiredEmail = 'signup-otp-expired-e2e@example.com';
+  const maxAttemptsEmail = 'signup-otp-maxatt-e2e@example.com';
 
   test.afterAll(async () => {
     await cleanupAuthUser(signupEmail);
     await cleanupAuthUser(errEmail);
+    await cleanupAuthUser(expiredEmail);
+    await cleanupAuthUser(maxAttemptsEmail);
   });
+
+  /** 新規登録して確認コード入力画面まで進める（異常系の共通前処理） */
+  async function gotoOtpScreenViaSignup(
+    page: import('@playwright/test').Page,
+    email: string,
+  ): Promise<void> {
+    await cleanupAuthUser(email);
+    await page.goto('/auth/signup');
+    await page.getByLabel('メールアドレス').fill(email);
+    await page.getByLabel('パスワード', { exact: true }).fill('Password123');
+    await page.getByLabel('パスワード（確認）').fill('Password123');
+    await page.getByRole('button', { name: '新規登録' }).click();
+    await expect(
+      page.getByRole('heading', { name: '確認コードを入力' }),
+    ).toBeVisible();
+  }
 
   test('新規登録 → 確認コード入力 → 認証完了 → サインイン', async ({
     page,
@@ -79,6 +104,38 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
     await expect(page.getByText('確認コードが間違っています。')).toBeVisible();
     await expect(
       page.getByRole('heading', { name: '確認コードを入力' }),
+    ).toBeVisible();
+  });
+
+  test('有効期限切れの確認コードだとエラーが表示される', async ({ page }) => {
+    await gotoOtpScreenViaSignup(page, expiredEmail);
+
+    // DBで期限を過去に書き換えてから、正しいコードを入力
+    const code = await getLatestOtpCode(expiredEmail, 'registration');
+    expect(code).toBeTruthy();
+    await expireOtpCode(expiredEmail, 'registration');
+
+    await page.getByLabel('確認コード', { exact: true }).fill(code!);
+    await page.getByRole('button', { name: '確認コードを検証' }).click();
+
+    await expect(
+      page.getByText('確認コードの有効期限が切れました。再送信してください。'),
+    ).toBeVisible();
+  });
+
+  test('試行回数の上限超過でエラーが表示される', async ({ page }) => {
+    await gotoOtpScreenViaSignup(page, maxAttemptsEmail);
+
+    // DBで試行回数を上限まで引き上げてから検証
+    await maxOutOtpAttempts(maxAttemptsEmail, 'registration');
+
+    await page.getByLabel('確認コード', { exact: true }).fill('000000');
+    await page.getByRole('button', { name: '確認コードを検証' }).click();
+
+    await expect(
+      page.getByText(
+        '試行回数の上限に達しました。新しいコードを再送信してください。',
+      ),
     ).toBeVisible();
   });
 

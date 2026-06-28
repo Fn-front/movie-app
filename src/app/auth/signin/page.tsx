@@ -12,10 +12,14 @@ export const metadata: Metadata = {
 };
 
 interface SignInPageProps {
-  searchParams: Promise<{ callbackUrl?: string }>;
+  searchParams: Promise<{ callbackUrl?: string | string[] }>;
 }
 
 export default async function SignInPage({ searchParams }: SignInPageProps) {
   const { callbackUrl } = await searchParams;
-  return <SignInContent callbackUrl={callbackUrl} />;
+  // 重複指定（?callbackUrl=a&callbackUrl=b）で配列になる場合は先頭を採用
+  const normalizedCallbackUrl = Array.isArray(callbackUrl)
+    ? callbackUrl[0]
+    : callbackUrl;
+  return <SignInContent callbackUrl={normalizedCallbackUrl} />;
 }

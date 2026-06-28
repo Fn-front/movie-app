@@ -11,6 +11,10 @@ describe('resolveSafeCallbackUrl', () => {
     expect(resolveSafeCallbackUrl('')).toBe('/');
   });
 
+  it('配列（クエリ重複指定）が渡された場合はホームを返す', () => {
+    expect(resolveSafeCallbackUrl(['/watchlist', '/favorites'])).toBe('/');
+  });
+
   it('同一オリジンの相対パスはそのまま返す', () => {
     expect(resolveSafeCallbackUrl('/watchlist')).toBe('/watchlist');
     expect(resolveSafeCallbackUrl('/favorites?sort=desc')).toBe(

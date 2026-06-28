@@ -16,11 +16,14 @@ import { ROUTES } from '@/constants/common';
  * - バックスラッシュを含むURL（`/\evil.com` 等の回避策）
  * - 認証ページ自身（リダイレクトループ防止）
  *
- * @param raw - クエリ等から受け取った callbackUrl 文字列
+ * @param raw - クエリ等から受け取った callbackUrl（重複指定で配列になる場合も考慮）
  * @returns 安全な遷移先パス。不正なら ROUTES.HOME
  */
-export function resolveSafeCallbackUrl(raw: string | null | undefined): string {
-  if (!raw) {
+export function resolveSafeCallbackUrl(
+  raw: string | string[] | null | undefined,
+): string {
+  // 文字列以外（null/undefined/空文字/配列）は不正としてホームへ
+  if (typeof raw !== 'string' || !raw) {
     return ROUTES.HOME;
   }
 

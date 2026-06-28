@@ -2,8 +2,13 @@
  * OpenAI APIを使用したレコメンド生成ロジック
  */
 
-import { RECOMMENDATIONS_MAX_COUNT, OPENAI_CONFIG } from '@/constants';
+import {
+  RECOMMENDATIONS_MAX_COUNT,
+  RECOMMENDATIONS_YEAR_MATCH_TOLERANCE,
+  OPENAI_CONFIG,
+} from '@/constants';
 import { searchMovies } from '@/lib/tmdb/tmdb';
+import type { Movie } from '@/lib/types';
 import {
   openAiRecommendationsResponseSchema,
   type OpenAiRecommendationItem,
@@ -192,15 +197,59 @@ export async function fetchRecommendationsFromOpenAI(
 }
 
 /**
+ * 公開日文字列（YYYY-MM-DD）から公開年を取り出す
+ * @returns 年（数値）。空文字・不正値の場合は null
+ */
+function getReleaseYear(releaseDate: string | null | undefined): number | null {
+  if (!releaseDate) {
+    return null;
+  }
+  const year = Number.parseInt(releaseDate.slice(0, 4), 10);
+  return Number.isNaN(year) ? null : year;
+}
+
+/**
+ * TMDb検索結果から、AIが指定した公開年に最も近い候補を選ぶ
+ *
+ * 検索はタイトルのみで行う（TMDb APIのyearは厳密フィルタのため、1年ずれると
+ * 0件になる）ため、結果はTMDbの関連度順に並ぶ。その並びを尊重しつつ、AIが返した
+ * 公開年と許容範囲内で一致する最初の候補を優先する。一致がなければ先頭を採用する。
+ *
+ * @param results - TMDb検索結果
+ * @param year - AIが返した公開年
+ * @returns 採用する映画。結果が空なら undefined
+ */
+function selectBestMovieMatch(
+  results: Movie[],
+  year: number,
+): Movie | undefined {
+  if (results.length === 0) {
+    return undefined;
+  }
+
+  const matched = results.find((movie) => {
+    const releaseYear = getReleaseYear(movie.release_date);
+    return (
+      releaseYear !== null &&
+      Math.abs(releaseYear - year) <= RECOMMENDATIONS_YEAR_MATCH_TOLERANCE
+    );
+  });
+
+  return matched ?? results[0];
+}
+
+/**
  * OpenAIのレコメンド結果をTMDb検索で解決し、映画情報を取得する
  *
  * @param items - OpenAIが返したレコメンド項目
  * @param excludedIds - 除外するtmdb_movie_idの集合
+ * @param limit - 解決する最大件数（デフォルト: RECOMMENDATIONS_MAX_COUNT）
  * @returns 解決済みのレコメンド映画情報配列
  */
 export async function resolveRecommendationsWithTMDb(
   items: OpenAiRecommendationItem[],
   excludedIds: Set<number>,
+  limit: number = RECOMMENDATIONS_MAX_COUNT,
 ): Promise<ResolvedRecommendation[]> {
   const resolved: ResolvedRecommendation[] = [];
 
@@ -212,7 +261,7 @@ export async function resolveRecommendationsWithTMDb(
       });
 
       // タイトル一致かつ公開年が近い結果を優先的に選択
-      const movie = searchResult.results[0];
+      const movie = selectBestMovieMatch(searchResult.results, item.year);
       if (!movie) {
         continue;
       }
@@ -237,7 +286,7 @@ export async function resolveRecommendationsWithTMDb(
         display_order: resolved.length + 1,
       });
 
-      if (resolved.length >= RECOMMENDATIONS_MAX_COUNT) {
+      if (resolved.length >= limit) {
         break;
       }
     } catch (error) {

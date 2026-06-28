@@ -3,10 +3,19 @@
  */
 
 import {
+  RECOMMENDATIONS_MAX_COUNT,
+  RECOMMENDATIONS_GENERATION_BUFFER,
+} from '@/constants';
+
+import {
   openAiRecommendationItemSchema,
   openAiRecommendationsResponseSchema,
   recommendationSchema,
 } from './recommendations';
+
+/** AIレスポンスで許容される最大件数（最大表示件数＋取りこぼし用バッファ） */
+const MAX_RESPONSE_COUNT =
+  RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER;
 
 describe('openAiRecommendationItemSchema', () => {
   it('有効な入力でパースが成功する', () => {
@@ -120,8 +129,8 @@ describe('openAiRecommendationsResponseSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('10件のレコメンドでパースが成功する（最大件数）', () => {
-    const items = Array.from({ length: 10 }, (_, i) => ({
+  it('最大件数＋バッファ件のレコメンドでパースが成功する（上限）', () => {
+    const items = Array.from({ length: MAX_RESPONSE_COUNT }, (_, i) => ({
       ...validItem,
       title: `映画${i + 1}`,
     }));
@@ -138,8 +147,8 @@ describe('openAiRecommendationsResponseSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('11件以上の場合エラーになる', () => {
-    const items = Array.from({ length: 11 }, (_, i) => ({
+  it('上限（最大件数＋バッファ）を超える場合エラーになる', () => {
+    const items = Array.from({ length: MAX_RESPONSE_COUNT + 1 }, (_, i) => ({
       ...validItem,
       title: `映画${i + 1}`,
     }));

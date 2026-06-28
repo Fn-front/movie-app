@@ -13,6 +13,19 @@ export const RECOMMENDATIONS_MAX_COUNT = 10;
 export const RECOMMENDATIONS_MAX_RETRIES = 2;
 
 /**
+ * AI生成時の追加要求件数（バッファ）
+ * TMDb解決時の取りこぼし・除外を見越して、必要数より多めにAIへ推薦を要求する。
+ * これにより1回のAI呼び出しで RECOMMENDATIONS_MAX_COUNT 件を満たしやすくする。
+ */
+export const RECOMMENDATIONS_GENERATION_BUFFER = 5;
+
+/**
+ * TMDb候補選択時に許容する公開年の差（年）
+ * AIが返した公開年とTMDb検索結果の公開年がこの範囲内なら一致候補とみなす。
+ */
+export const RECOMMENDATIONS_YEAR_MATCH_TOLERANCE = 1;
+
+/**
  * アクティブユーザー判定期間（日数）
  * last_login_at がこの日数以内のユーザーのみレコメンド生成対象
  */

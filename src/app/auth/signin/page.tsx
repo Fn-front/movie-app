@@ -11,6 +11,15 @@ export const metadata: Metadata = {
   description: 'Movie Appにログイン',
 };
 
-export default function SignInPage() {
-  return <SignInContent />;
+interface SignInPageProps {
+  searchParams: Promise<{ callbackUrl?: string | string[] }>;
+}
+
+export default async function SignInPage({ searchParams }: SignInPageProps) {
+  const { callbackUrl } = await searchParams;
+  // 重複指定（?callbackUrl=a&callbackUrl=b）等で配列になった場合は不正として扱い、
+  // resolveSafeCallbackUrl と同様にホームへフォールバックさせる（文字列のみ採用）
+  const callbackUrlParam =
+    typeof callbackUrl === 'string' ? callbackUrl : undefined;
+  return <SignInContent callbackUrl={callbackUrlParam} />;
 }

@@ -13,7 +13,14 @@ import { OtpLoginForm } from '@/features/auth/otpLoginForm/otpLoginForm';
 
 type LoginMode = 'password' | 'otp';
 
-export const SignInContent = memo(function SignInContent() {
+interface SignInContentProps {
+  /** ログイン後の戻り先（middlewareが付与する callbackUrl） */
+  callbackUrl?: string;
+}
+
+export const SignInContent = memo<SignInContentProps>(function SignInContent({
+  callbackUrl,
+}) {
   const [loginMode, setLoginMode] = useState<LoginMode>('password');
 
   const handleOtpLoginClick = useCallback(() => {
@@ -25,10 +32,20 @@ export const SignInContent = memo(function SignInContent() {
   }, []);
 
   if (loginMode === 'otp') {
-    return <OtpLoginForm onPasswordLoginClick={handlePasswordLoginClick} />;
+    return (
+      <OtpLoginForm
+        onPasswordLoginClick={handlePasswordLoginClick}
+        callbackUrl={callbackUrl}
+      />
+    );
   }
 
-  return <LoginForm onOtpLoginClick={handleOtpLoginClick} />;
+  return (
+    <LoginForm
+      onOtpLoginClick={handleOtpLoginClick}
+      callbackUrl={callbackUrl}
+    />
+  );
 });
 
 SignInContent.displayName = 'SignInContent';

@@ -22,10 +22,13 @@ import styles from './otpLoginForm.module.scss';
 
 interface OtpLoginFormProps {
   onPasswordLoginClick?: () => void;
+  /** ログイン後の戻り先（callbackUrl） */
+  callbackUrl?: string;
 }
 
 export const OtpLoginForm = memo<OtpLoginFormProps>(function OtpLoginForm({
   onPasswordLoginClick,
+  callbackUrl,
 }) {
   const {
     step,
@@ -35,7 +38,7 @@ export const OtpLoginForm = memo<OtpLoginFormProps>(function OtpLoginForm({
     handleSendOtp,
     handleOtpVerifySuccess,
     handleBackToEmail,
-  } = useOtpLogin();
+  } = useOtpLogin(callbackUrl);
 
   const {
     register,

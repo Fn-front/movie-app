@@ -4,6 +4,7 @@
 
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { SideNav } from './sideNav';
 
@@ -13,9 +14,24 @@ jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname(),
 }));
 
+// next-auth のモック（useNavAuthGuard が使用）
+let mockAuthStatus = 'unauthenticated';
+jest.mock('next-auth/react', () => ({
+  useSession: () => ({ data: null, status: mockAuthStatus }),
+}));
+
+// ログイン誘導ストアのモック
+const mockOpenLoginPrompt = jest.fn();
+jest.mock('@/lib/store/useLoginPromptStore', () => ({
+  useLoginPromptStore: (selector: (s: { open: jest.Mock }) => unknown) =>
+    selector({ open: mockOpenLoginPrompt }),
+}));
+
 describe('SideNav', () => {
   beforeEach(() => {
+    jest.clearAllMocks();
     mockPathname.mockReturnValue('/');
+    mockAuthStatus = 'unauthenticated';
   });
 
   it('ナビゲーションリンクが表示される', () => {
@@ -89,5 +105,16 @@ describe('SideNav', () => {
 
     const upcomingLink = screen.getByText('公開予定');
     expect(upcomingLink).not.toHaveAttribute('aria-current');
+  });
+
+  it('未認証で保護ルート(お気に入り)クリックでログイン誘導が表示される', async () => {
+    const user = userEvent.setup();
+    render(<SideNav />);
+
+    await user.click(screen.getByText('お気に入り'));
+
+    expect(mockOpenLoginPrompt).toHaveBeenCalledWith(
+      'お気に入りを見るにはログインが必要です。',
+    );
   });
 });

@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { NAV_ITEMS } from '@/constants';
+import { useNavAuthGuard } from '@/hooks/useNavAuthGuard';
 
 import styles from './sideNav.module.scss';
 
@@ -18,6 +19,7 @@ import styles from './sideNav.module.scss';
  */
 export const SideNav = memo(function SideNav() {
   const pathname = usePathname();
+  const { handleProtectedNavClick } = useNavAuthGuard();
 
   const navItems = useMemo(
     () =>
@@ -37,6 +39,7 @@ export const SideNav = memo(function SideNav() {
               href={item.href}
               className={`${styles.c_side_nav__link} ${item.isActive ? styles['c_side_nav__link--active'] : ''}`}
               aria-current={item.isActive ? 'page' : undefined}
+              onClick={handleProtectedNavClick(item.href)}
             >
               {item.label}
             </Link>

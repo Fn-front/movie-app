@@ -34,3 +34,13 @@ export const MENU_LABELS = {
   LOGOUT: 'ログアウト',
   LOGIN: 'ログイン',
 } as const;
+
+/**
+ * 保護ルートをナビゲーションから開こうとした際の、未認証ユーザー向け誘導メッセージ
+ * ルートのパスをキーに引く。
+ */
+export const NAV_AUTH_PROMPT_MESSAGES: Record<string, string> = {
+  [ROUTES.FAVORITES]: 'お気に入りを見るにはログインが必要です。',
+  [ROUTES.WATCHLIST]: 'ウォッチリストを見るにはログインが必要です。',
+  [ROUTES.THEATER_EXPERIENCE]: 'シアター体験を見るにはログインが必要です。',
+};

@@ -6,6 +6,7 @@
 'use client';
 
 import { memo, useCallback, useMemo } from 'react';
+import type { MouseEvent } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -33,6 +34,7 @@ import {
   MODAL_TITLES,
 } from '@/constants';
 import { getInitial } from '@/utils/user';
+import { useNavAuthGuard } from '@/hooks/useNavAuthGuard';
 
 import styles from './mobileDrawer.module.scss';
 
@@ -95,6 +97,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const router = useRouter();
+  const { handleProtectedNavClick } = useNavAuthGuard();
 
   const userName = session?.user?.name ?? '';
   const userEmail = session?.user?.email ?? '';
@@ -109,6 +112,18 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
         isActive: pathname === item.href,
       })),
     [pathname],
+  );
+
+  const handleNavLinkClick = useCallback(
+    (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+      handleProtectedNavClick(href)(event);
+      // 未認証で保護ルートを押した場合は遷移せずモーダルを出すため、
+      // ドロワーを閉じてオーバーレイの重なりを避ける
+      if (event.defaultPrevented) {
+        onOpenChange(false);
+      }
+    },
+    [handleProtectedNavClick, onOpenChange],
   );
 
   const handleNavigateToSettings = useCallback(() => {
@@ -158,6 +173,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
                     href={item.href}
                     className={`${styles.c_mobile_drawer__nav_link} ${item.isActive ? styles['c_mobile_drawer__nav_link--active'] : ''}`}
                     aria-current={item.isActive ? 'page' : undefined}
+                    onClick={handleNavLinkClick(item.href)}
                   >
                     <span
                       className={styles.c_mobile_drawer__nav_icon}

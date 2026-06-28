@@ -144,6 +144,13 @@ jobs:
             ### テスト
             - [ ] 新規 .ts(x) ファイルに対応するテストファイル（<filename>.test.ts(x)）があるか
 
+            ## 誤検知の防止（重要）
+            - `React.memo` / `useCallback` / `useMemo` / `displayName` の「欠落」を指摘する前に、**差分行だけで判断せず対象の定義全体を確認**すること。これらは指摘対象の行とは別の行に適用されていることが多い:
+              - `React.memo` は `export const X = memo(function X(...))` のラップ行にある（コンポーネント本体やJSXの行とは別の場所）
+              - `useCallback` はハンドラの**定義行**にある（`onClick={handler}` の使用行ではなく、`const handler = useCallback(...)` の行）
+            - 差分だけで判断できない場合は `pull_request_read` 等でファイル全体を読み、**既に適用済みなら指摘しない**
+            - 確証が持てない指摘は行わない（false positive を避ける。不明なら指摘しない）
+
             ## 制約
             - コード本体にコメントを追加する提案はしない
             - 過剰な抽象化やリファクタリング提案は行わない

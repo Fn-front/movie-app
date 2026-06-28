@@ -24,6 +24,16 @@ export async function sendOtpEmail(
   email: string,
   code: string,
 ): Promise<boolean> {
+  // E2E/テスト用バイパス: メールの実送信をスキップして成功扱いにする。
+  // OTPコードはDBに保存されるため、テストはDBから取得して検証できる。
+  // 本番では絶対に有効化しないこと（デフォルトoff。CIのE2Eサーバーのみ true）。
+  if (process.env.OTP_EMAIL_TEST_BYPASS === 'true') {
+    console.warn(
+      '[OTP_EMAIL_TEST_BYPASS] sendOtpEmail はテストモードのため実送信をスキップしました',
+    );
+    return true;
+  }
+
   if (!resendApiKey) {
     console.error('RESEND_API_KEY is not configured');
     return false;

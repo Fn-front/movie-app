@@ -79,3 +79,36 @@ export async function resetFilters(request: APIRequestContext): Promise<void> {
     data: {},
   });
 }
+
+/**
+ * 指定メール・アクションの最新の未検証OTPコードをDBから取得する。
+ * メール実送信に依存せずOTPフローを検証するために使用（OTP_EMAIL_TEST_BYPASS前提）。
+ */
+export async function getLatestOtpCode(
+  email: string,
+  action: 'registration' | 'login' | 'password_change',
+): Promise<string | null> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${encodeURIComponent(email)}` +
+      `&action_type=eq.${action}&verified_at=is.null` +
+      `&order=created_at.desc&limit=1&select=code`,
+    { headers: supabaseHeaders },
+  );
+  const data = await res.json();
+  return data[0]?.code ?? null;
+}
+
+/**
+ * 指定メールのユーザーとOTPコードを物理削除する（signupテストの後始末用）。
+ */
+export async function cleanupAuthUser(email: string): Promise<void> {
+  const enc = encodeURIComponent(email);
+  await fetch(`${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${enc}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+  await fetch(`${SUPABASE_URL}/rest/v1/users?email=eq.${enc}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+}

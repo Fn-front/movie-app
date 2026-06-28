@@ -8,6 +8,11 @@
 
 import { NextRequest } from 'next/server';
 
+import {
+  RECOMMENDATIONS_MAX_COUNT,
+  RECOMMENDATIONS_GENERATION_BUFFER,
+} from '@/constants';
+
 import { GET } from './route';
 
 // --- Mocks ---
@@ -468,15 +473,15 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     // fetchRecommendationsFromOpenAIが2回呼ばれる
     expect(mockFetchRecommendations).toHaveBeenCalledTimes(2);
-    // 1回目: 10件リクエスト
+    // 1回目: 最大件数＋バッファをリクエスト
     expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
       1,
       [{ title: 'インターステラー', rating: 9 }],
       ['インターステラー'],
-      10,
+      RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
       [],
     );
-    // 2回目: 不足2件リクエスト、解決済みタイトルを除外
+    // 2回目: 不足2件＋バッファをリクエスト、解決済みタイトルを除外
     expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
       2,
       [{ title: 'インターステラー', rating: 9 }],
@@ -484,7 +489,7 @@ describe('GET /api/cron/generate-recommendations', () => {
         'インターステラー',
         ...firstBatchResolved.map((r) => r.title),
       ]),
-      2,
+      2 + RECOMMENDATIONS_GENERATION_BUFFER,
       [],
     );
   });
@@ -568,15 +573,16 @@ describe('GET /api/cron/generate-recommendations', () => {
       1,
       [{ title: 'お気に入り映画', rating: 9 }],
       ['お気に入り映画', 'ウォッチリスト映画'],
-      10,
+      RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
       [],
     );
 
-    // 初回のresolveRecommendationsWithTMDbに除外IDセットが渡されていることを確認
+    // 初回のresolveRecommendationsWithTMDbに除外IDセットと必要件数が渡されていることを確認
     expect(mockResolveRecommendations).toHaveBeenNthCalledWith(
       1,
       expect.anything(),
       new Set([1, 2]),
+      RECOMMENDATIONS_MAX_COUNT,
     );
   });
 
@@ -670,7 +676,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       1,
       [{ title: 'お気に入り映画', rating: 9 }],
       ['お気に入り映画', '興味なし映画A', '興味なし映画B'],
-      10,
+      RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
       [
         { tmdb_movie_id: 10, title: '興味なし映画A', genre_ids: [27] },
         { tmdb_movie_id: 20, title: '興味なし映画B', genre_ids: [27, 53] },
@@ -682,6 +688,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       1,
       expect.anything(),
       new Set([1, 10, 20]),
+      RECOMMENDATIONS_MAX_COUNT,
     );
   });
 });

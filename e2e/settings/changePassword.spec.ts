@@ -143,3 +143,94 @@ test.describe('パスワード変更ページ（認証済み）', () => {
     await expect(page.getByText('パスワード変更エラー').first()).toBeVisible();
   });
 });
+
+test.describe('パスワード変更ページ — バリデーション/送信失敗（認証済み・#400）', () => {
+  // 新パスワードのバリデーション分岐（複雑性/長さ/必須）。
+  // zod の検証順（min → 大文字 → 小文字 → 数字）に沿い、直前チェックは通過して
+  // 対象チェックだけを失敗させる入力を用意する。
+  const complexityCases = [
+    {
+      title: '8文字未満',
+      password: 'Pass1',
+      message: 'パスワードは8文字以上で入力してください',
+    },
+    {
+      title: '大文字欠落',
+      password: 'password123',
+      message: 'パスワードに大文字を含めてください',
+    },
+    {
+      title: '小文字欠落',
+      password: 'PASSWORD123',
+      message: 'パスワードに小文字を含めてください',
+    },
+    {
+      title: '数字欠落',
+      password: 'PasswordAbc',
+      message: 'パスワードに数字を含めてください',
+    },
+  ];
+
+  for (const { title, password, message } of complexityCases) {
+    test(`入力バリデーション: 新PWが${title}だと「${message}」が表示される`, async ({
+      authenticatedPage: page,
+    }) => {
+      await mockOtpSuccess(page);
+      await advanceToNewPasswordStep(page);
+
+      await page.getByLabel('新しいパスワード', { exact: true }).fill(password);
+      await page.getByLabel('新しいパスワード（確認）').fill(password);
+      await page.getByRole('button', { name: 'パスワードを変更' }).click();
+
+      await expect(page.getByText(message)).toBeVisible();
+    });
+  }
+
+  test('入力バリデーション: 確認用パスワードが未入力だとエラーが表示される', async ({
+    authenticatedPage: page,
+  }) => {
+    await mockOtpSuccess(page);
+    await advanceToNewPasswordStep(page);
+
+    await page
+      .getByLabel('新しいパスワード', { exact: true })
+      .fill('NewPass123');
+    // 確認は未入力のまま送信
+    await page.getByRole('button', { name: 'パスワードを変更' }).click();
+
+    await expect(
+      page.getByText('パスワード（確認）を入力してください'),
+    ).toBeVisible();
+  });
+
+  test('エラー応答: ステップ1でOTP送信が失敗するとエラーが表示される', async ({
+    authenticatedPage: page,
+  }) => {
+    // OTP送信APIを失敗でモック
+    await page.route('**/api/auth/otp/send', async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: false,
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'コードの送信に失敗しました',
+          },
+        }),
+      });
+    });
+
+    await page.goto('/settings/change-password');
+    await page.getByRole('button', { name: '確認コードを送信' }).click();
+
+    // ステップ1に留まり、エラー（role=alert）が表示される
+    // ※ Next.js のルートアナウンサー（空のrole=alert）と区別するため中身のあるものに絞る
+    await expect(
+      page.getByRole('alert').filter({ hasText: /\S/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: '確認コードを送信' }),
+    ).toBeVisible();
+  });
+});

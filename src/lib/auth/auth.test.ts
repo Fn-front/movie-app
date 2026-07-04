@@ -186,6 +186,25 @@ describe('signIn コールバック（OAuth）', () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
+  it('既存ユーザーでアバター設定済みなら avatar を更新しない（last_loginのみ）', async () => {
+    let userUpdateCount = 0;
+    setResolver(({ table, ops }) => {
+      if (table === 'users' && ops.includes('select'))
+        return {
+          data: { id: 'existing-1', avatar_url: 'has.png' },
+          error: null,
+        };
+      if (table === 'users' && ops.includes('update')) userUpdateCount += 1;
+      return { data: null, error: null };
+    });
+
+    const user = { email: 'a@example.com', image: 'new.png' };
+    await signIn({ user, account, profile: {} });
+
+    // アバター更新は走らず、last_login 更新の1回のみ
+    expect(userUpdateCount).toBe(1);
+  });
+
   it('新規ユーザー: users に作成して true を返す', async () => {
     setResolver(({ table, ops }) => {
       // insert チェーン（.insert().select().single()）も select を含むため insert を先に判定
@@ -391,6 +410,70 @@ describe('jwt コールバック', () => {
       account: null,
     });
     expect(token.invalidated).toBe(true);
+  });
+
+  it('OAuth初回でDBユーザーが取得できない場合は role=user のまま', async () => {
+    setResolver(() => ({ data: null, error: null }));
+
+    const token = await jwt({
+      token: {},
+      user: { id: 'u9', email: 'x@example.com', name: 'X', image: null },
+      account: { provider: 'github' },
+    });
+
+    expect(token.id).toBe('u9');
+    expect(token.role).toBe('user');
+    expect(token.passwordChangedAt).toBeNull();
+  });
+
+  it('パスワード変更後（DBのpassword_changed_atがトークンより新しい）はセッション無効化', async () => {
+    setResolver(({ table, ops }) => {
+      if (table === 'users' && ops.includes('select'))
+        return {
+          data: { password_changed_at: '2026-06-01T00:00:00Z' },
+          error: null,
+        };
+      return { data: null, error: null };
+    });
+
+    const token = await jwt({
+      token: {
+        id: 'u1',
+        issuedAt: Date.now(), // 絶対期限は未超過
+        lastPasswordCheck: 0, // チェック間隔を必ず超過させて照合を走らせる
+        lastLoginUpdate: Date.now(),
+        passwordChangedAt: null, // トークン側は未変更(0)扱い → DB側が新しい
+      },
+      user: undefined,
+      account: null,
+    });
+
+    expect(token.invalidated).toBe(true);
+  });
+
+  it('last_login はスロットリング間隔を超えていれば更新される', async () => {
+    let userUpdated = false;
+    setResolver(({ table, ops }) => {
+      // パスワード変更チェックの select は「変更なし」を返す
+      if (table === 'users' && ops.includes('select'))
+        return { data: { password_changed_at: null }, error: null };
+      if (table === 'users' && ops.includes('update')) userUpdated = true;
+      return { data: null, error: null };
+    });
+
+    const token = await jwt({
+      token: {
+        id: 'u1',
+        issuedAt: Date.now(),
+        lastPasswordCheck: Date.now(), // パスワードチェックはスキップ
+        lastLoginUpdate: 0, // last_login 更新間隔を超過 → 更新が走る
+      },
+      user: undefined,
+      account: null,
+    });
+
+    expect(userUpdated).toBe(true);
+    expect(token.invalidated).toBeUndefined();
   });
 });
 

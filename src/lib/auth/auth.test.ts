@@ -72,15 +72,15 @@ jest.mock('@supabase/supabase-js', () => {
 });
 
 // --- Provider / NextAuth モック ---
-const mockGoogle = jest.fn((_opts: unknown) => ({ id: 'google' }));
-const mockGitHub = jest.fn((_opts: unknown) => ({ id: 'github' }));
+const mockGoogle = jest.fn(() => ({ id: 'google' }));
+const mockGitHub = jest.fn(() => ({ id: 'github' }));
 jest.mock('next-auth/providers/google', () => ({
   __esModule: true,
-  default: (opts: unknown) => mockGoogle(opts),
+  default: mockGoogle,
 }));
 jest.mock('next-auth/providers/github', () => ({
   __esModule: true,
-  default: (opts: unknown) => mockGitHub(opts),
+  default: mockGitHub,
 }));
 jest.mock('next-auth/providers/credentials', () => ({
   __esModule: true,

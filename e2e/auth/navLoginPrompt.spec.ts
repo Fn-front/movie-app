@@ -39,4 +39,32 @@ test.describe('ナビゲーションからのログイン誘導（未認証）',
     await dialog.getByRole('button', { name: 'ログイン' }).click();
     await expect(page).toHaveURL(/\/auth\/signin/);
   });
+
+  // 保護ルートごとのモーダル文言（お気に入りは上でカバー済み）
+  const protectedRoutes = [
+    {
+      link: 'ウォッチリスト',
+      message: 'ウォッチリストを見るにはログインが必要です。',
+    },
+    {
+      link: 'シアター体験',
+      message: 'シアター体験を見るにはログインが必要です。',
+    },
+  ];
+
+  for (const { link, message } of protectedRoutes) {
+    test(`未認証で${link}リンクを押すとルート別メッセージのモーダルが表示される`, async ({
+      page,
+    }) => {
+      await page.goto('/');
+
+      await page.getByRole('link', { name: link }).click();
+
+      // リダイレクトされずモーダルが表示される
+      await expect(page).toHaveURL('/');
+      const dialog = page.getByRole('dialog', { name: 'ログインが必要です' });
+      await expect(dialog).toBeVisible();
+      await expect(page.getByText(message)).toBeVisible();
+    });
+  }
 });

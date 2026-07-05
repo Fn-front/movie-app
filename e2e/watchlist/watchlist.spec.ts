@@ -10,6 +10,7 @@
 import { test, expect } from '../fixtures/auth';
 import { cleanupWatchlist } from '../helpers/api';
 import { movieTileButtons } from '../helpers/locators';
+import { mockMovieDetail } from '../helpers/movieDetail';
 
 // 同一ユーザーのウォッチリストを直列操作。並列負荷下でも goto＋タイル待ち＋
 // API応答（前準備の beforeEach 含む）が予算切れしないよう、テストタイムアウトを延長する
@@ -57,6 +58,7 @@ async function addMovieToWatchlist(page: import('@playwright/test').Page) {
 test.describe('ウォッチリスト — ページ表示・詳細モーダル', () => {
   test.beforeEach(async ({ page }) => {
     await cleanupWatchlist();
+    await mockMovieDetail(page);
     await addMovieToWatchlist(page);
   });
 

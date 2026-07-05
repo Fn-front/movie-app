@@ -11,6 +11,7 @@
 import { test, expect } from '../fixtures/auth';
 import { cleanupFavorites } from '../helpers/api';
 import { movieTileButtons } from '../helpers/locators';
+import { mockMovieDetail } from '../helpers/movieDetail';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -145,6 +146,7 @@ test.describe('お気に入り — 一覧ページ', () => {
 test.describe('お気に入り — 詳細モーダルとの連携', () => {
   test.beforeEach(async ({ page }) => {
     await cleanupFavorites();
+    await mockMovieDetail(page);
     await page.goto('/movies/now-showing');
     await movieTileButtons(page).first().waitFor({ timeout: 30000 });
   });

@@ -10,6 +10,7 @@
  */
 
 import { test, expect } from '../fixtures/auth';
+import { mockMovieDetail } from '../helpers/movieDetail';
 
 test.describe('レコメンドセクション — ホームページ表示', () => {
   test('ホームページにレコメンドセクションが表示される', async ({ page }) => {
@@ -26,6 +27,7 @@ test.describe('レコメンドセクション — ホームページ表示', () 
   test('レコメンド映画タイルクリックで詳細モーダルが表示される', async ({
     page,
   }) => {
+    await mockMovieDetail(page);
     await page.goto('/');
 
     const section = page.getByRole('region', { name: 'あなたへのおすすめ' });

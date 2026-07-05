@@ -79,5 +79,71 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
 
       await expect(page.getByText('パスワードが一致しません')).toBeVisible();
     });
+
+    // パスワード複雑性（zod検証順: min → 大文字 → 小文字 → 数字 に沿って
+    // 直前チェックは通過し対象だけ失敗させる入力を用意）
+    const complexityCases = [
+      {
+        title: '大文字欠落',
+        password: 'password123',
+        message: 'パスワードに大文字を含めてください',
+      },
+      {
+        title: '小文字欠落',
+        password: 'PASSWORD123',
+        message: 'パスワードに小文字を含めてください',
+      },
+      {
+        title: '数字欠落',
+        password: 'PasswordAbc',
+        message: 'パスワードに数字を含めてください',
+      },
+    ];
+
+    for (const { title, password, message } of complexityCases) {
+      test(`パスワードが${title}だと「${message}」が表示される`, async ({
+        page,
+      }) => {
+        await page.goto('/auth/signup');
+
+        await page.getByLabel('メールアドレス').fill('valid@example.com');
+        await page.getByLabel('パスワード', { exact: true }).fill(password);
+        await page.getByLabel('パスワード（確認）').fill(password);
+        await page.getByRole('button', { name: '新規登録' }).click();
+
+        await expect(page.getByText(message)).toBeVisible();
+      });
+    }
+
+    test('メールアドレスが上限長（255文字）を超えるとエラーが表示される', async ({
+      page,
+    }) => {
+      await page.goto('/auth/signup');
+
+      // 形式は有効なまま255文字超にする（ローカル部を長くする）
+      const longEmail = `${'a'.repeat(250)}@example.com`;
+      await page.getByLabel('メールアドレス').fill(longEmail);
+      await page.getByLabel('パスワード', { exact: true }).fill('Password123');
+      await page.getByLabel('パスワード（確認）').fill('Password123');
+      await page.getByRole('button', { name: '新規登録' }).click();
+
+      await expect(page.getByText('メールアドレスが長すぎます')).toBeVisible();
+    });
+
+    test('ユーザー名が上限長（100文字）を超えるとエラーが表示される', async ({
+      page,
+    }) => {
+      await page.goto('/auth/signup');
+
+      await page.getByLabel('メールアドレス').fill('valid@example.com');
+      await page.getByLabel('ユーザー名（任意）').fill('あ'.repeat(101));
+      await page.getByLabel('パスワード', { exact: true }).fill('Password123');
+      await page.getByLabel('パスワード（確認）').fill('Password123');
+      await page.getByRole('button', { name: '新規登録' }).click();
+
+      await expect(
+        page.getByText('ユーザー名は100文字以内で入力してください'),
+      ).toBeVisible();
+    });
   });
 });

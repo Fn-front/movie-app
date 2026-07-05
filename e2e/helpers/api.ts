@@ -199,6 +199,22 @@ export async function maxOutOtpAttempts(
 }
 
 /**
+ * 指定メール（+任意でアクション種別）のOTPコードのみを物理削除する。
+ * ユーザーは削除しないため、既存テストユーザーの後始末に安全に使える。
+ */
+export async function cleanupOtpCodes(
+  email: string,
+  action?: 'registration' | 'login' | 'password_change',
+): Promise<void> {
+  const enc = encodeURIComponent(email);
+  const actionFilter = action ? `&action_type=eq.${action}` : '';
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${enc}${actionFilter}`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+}
+
+/**
  * 指定メールのユーザーとOTPコードを物理削除する（signupテストの後始末用）。
  */
 export async function cleanupAuthUser(email: string): Promise<void> {

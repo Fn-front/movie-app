@@ -9,6 +9,7 @@
 import { test, expect } from '../fixtures/auth';
 import { cleanupWatchlist } from '../helpers/api';
 import { movieTileButtons } from '../helpers/locators';
+import { mockMovieDetail } from '../helpers/movieDetail';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -62,6 +63,7 @@ test.describe('ウォッチリストボタン — 状態トグル', () => {
 
 test.describe('ウォッチリストボタン — モーダル↔タイル状態同期', () => {
   test.beforeEach(async ({ page }) => {
+    await mockMovieDetail(page);
     await page.goto('/movies/now-showing');
     await movieTileButtons(page).first().waitFor({ timeout: 30000 });
   });

@@ -199,6 +199,39 @@ export async function maxOutOtpAttempts(
 }
 
 /**
+ * 指定識別子（メール等）のレート制限レコードを物理削除してリセットする。
+ * OTP日次送信上限（action_type='otp_send_daily'）はメール単位で24h/5通のため、
+ * CI/ローカルの繰り返し実行で累積し他テストと衝突する。OTP系テストの前に
+ * これを呼んで自テストが累積に寄与せず・干渉されないようにする。
+ */
+export async function cleanupRateLimit(
+  identifier: string,
+  actionType = 'otp_send_daily',
+): Promise<void> {
+  const enc = encodeURIComponent(identifier);
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/rate_limits?identifier=eq.${enc}&action_type=eq.${actionType}`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+}
+
+/**
+ * 指定メール（+任意でアクション種別）のOTPコードのみを物理削除する。
+ * ユーザーは削除しないため、既存テストユーザーの後始末に安全に使える。
+ */
+export async function cleanupOtpCodes(
+  email: string,
+  action?: 'registration' | 'login' | 'password_change',
+): Promise<void> {
+  const enc = encodeURIComponent(email);
+  const actionFilter = action ? `&action_type=eq.${action}` : '';
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${enc}${actionFilter}`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+}
+
+/**
  * 指定メールのユーザーとOTPコードを物理削除する（signupテストの後始末用）。
  */
 export async function cleanupAuthUser(email: string): Promise<void> {

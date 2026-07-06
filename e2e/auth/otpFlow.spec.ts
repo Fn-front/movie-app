@@ -15,6 +15,7 @@ import { test, expect } from '@playwright/test';
 import {
   getLatestOtpCode,
   cleanupAuthUser,
+  cleanupRateLimit,
   expireOtpCode,
   maxOutOtpAttempts,
 } from '../helpers/api';
@@ -36,6 +37,18 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
     await cleanupAuthUser(errEmail);
     await cleanupAuthUser(expiredEmail);
     await cleanupAuthUser(maxAttemptsEmail);
+  });
+
+  // OTP日次送信上限（メール単位24h/5通）はCI/ローカルの繰り返し実行で累積し、
+  // 送信が RATE_LIMIT で弾かれてflakyになる。各テスト前に使用メールの制限をリセットする。
+  test.beforeEach(async () => {
+    await Promise.all([
+      cleanupRateLimit(TEST_USER.email),
+      cleanupRateLimit(signupEmail),
+      cleanupRateLimit(errEmail),
+      cleanupRateLimit(expiredEmail),
+      cleanupRateLimit(maxAttemptsEmail),
+    ]);
   });
 
   /** 新規登録して確認コード入力画面まで進める（異常系の共通前処理） */

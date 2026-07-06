@@ -9,16 +9,26 @@
  *    page.clock で時間を早送りして検証する。
  *
  * メール実送信には依存しない（OTP_EMAIL_TEST_BYPASS＋DBからコード取得）。
+ * ※ OTP日次送信上限（メール単位24h/5通）はCI累積で他テストと衝突するため、
+ *    各テストで対象メールのレート制限をリセットして自己完結させる。
+ *    再送テストは TEST_USER を使わずユニークなsignupメール（registration）で行い、
+ *    otpFlow の login 送信と衝突しないようにする。
  */
 
 import { test, expect } from '../fixtures/auth';
-import { getLatestOtpCode, cleanupOtpCodes } from '../helpers/api';
+import {
+  getLatestOtpCode,
+  cleanupOtpCodes,
+  cleanupRateLimit,
+  cleanupAuthUser,
+} from '../helpers/api';
 import { TEST_USER } from '../helpers/testUser';
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('パスワード変更OTP（認証済み・action_type password_change）', () => {
   test.beforeEach(async () => {
+    await cleanupRateLimit(TEST_USER.email);
     await cleanupOtpCodes(TEST_USER.email, 'password_change');
   });
 
@@ -56,15 +66,19 @@ test.describe('パスワード変更OTP（認証済み・action_type password_ch
   });
 });
 
-test.describe('OTP再送（未認証・ログインOTP）', () => {
+test.describe('OTP再送（未認証・新規登録OTP）', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
+  // TEST_USER と衝突しないユニークなメール（registration OTP）
+  const resendEmail = 'resend-otp-e2e@example.com';
+
   test.beforeEach(async () => {
-    await cleanupOtpCodes(TEST_USER.email, 'login');
+    await cleanupAuthUser(resendEmail);
+    await cleanupRateLimit(resendEmail);
   });
 
   test.afterEach(async () => {
-    await cleanupOtpCodes(TEST_USER.email, 'login');
+    await cleanupAuthUser(resendEmail);
   });
 
   test('60秒経過後に「コードを再送信」でき、カウントダウンが再開する', async ({
@@ -73,10 +87,11 @@ test.describe('OTP再送（未認証・ログインOTP）', () => {
     // カウントダウン（setInterval）を制御するため時計をモック
     await page.clock.install();
 
-    await page.goto('/auth/signin');
-    await page.getByRole('button', { name: 'メールでログイン' }).click();
-    await page.getByLabel('メールアドレス').fill(TEST_USER.email);
-    await page.getByRole('button', { name: 'ログインコードを送信' }).click();
+    await page.goto('/auth/signup');
+    await page.getByLabel('メールアドレス').fill(resendEmail);
+    await page.getByLabel('パスワード', { exact: true }).fill('Password123');
+    await page.getByLabel('パスワード（確認）').fill('Password123');
+    await page.getByRole('button', { name: '新規登録' }).click();
 
     await expect(
       page.getByRole('heading', { name: '確認コードを入力' }),

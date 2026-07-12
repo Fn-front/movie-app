@@ -17,6 +17,13 @@ jest.mock('@/helpers/supabase', () => ({
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
 
+const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+const mockResetRateLimit = jest.fn().mockResolvedValue(undefined);
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  resetRateLimit: (...args: unknown[]) => mockResetRateLimit(...args),
+}));
+
 // --- Helpers ---
 
 const createRequest = (body: Record<string, unknown>) =>
@@ -34,6 +41,7 @@ const pastDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 describe('POST /api/auth/otp/verify', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
   });
 
   it('registration: 正常にOTPを検証して認証完了できる', async () => {
@@ -89,6 +97,12 @@ describe('POST /api/auth/otp/verify', () => {
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
     expect(json.message).toContain('メール認証');
+    // 検証成功時にレート制限がリセットされる
+    expect(mockResetRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_verify',
+    );
   });
 
   it('login: 正常にOTPを検証して検証済みフラグを設定できる', async () => {
@@ -137,6 +151,12 @@ describe('POST /api/auth/otp/verify', () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
+    // 検証成功時にレート制限がリセットされる
+    expect(mockResetRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_verify',
+    );
   });
 
   it('バリデーションエラーで400を返す', async () => {
@@ -400,5 +420,141 @@ describe('POST /api/auth/otp/verify', () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
+    // 検証成功時にレート制限がリセットされる
+    expect(mockResetRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_verify',
+    );
+  });
+
+  it('コード不一致（検証失敗）時はレート制限をリセットしない', async () => {
+    // OTPレコード取得
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            is: () => ({
+              order: () => ({
+                limit: () => ({
+                  single: () => ({
+                    data: {
+                      id: 'otp-1',
+                      code: '123456',
+                      attempts: 0,
+                      expires_at: futureDate,
+                      verified_at: null,
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    // attempts更新
+    mockFrom.mockReturnValueOnce({
+      update: () => ({
+        eq: () => ({ data: null, error: null }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({
+        email: 'test@example.com',
+        code: '999999',
+        action: 'registration',
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockResetRateLimit).not.toHaveBeenCalled();
+  });
+
+  it('検証試行のレート制限超過の場合429を返し、コード照合をスキップする', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 600 });
+
+    const response = await POST(
+      createRequest({
+        email: 'test@example.com',
+        code: '123456',
+        action: 'registration',
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.success).toBe(false);
+    expect(response.headers.get('Retry-After')).toBe('600');
+    // レート制限で早期リターンするため、otp_codes取得は行われない
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('検証試行のレート制限超過（retryAfterなし）でも429を返す', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false });
+
+    const response = await POST(
+      createRequest({
+        email: 'test@example.com',
+        code: '123456',
+        action: 'registration',
+      }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBeNull();
+  });
+
+  it('email単位でレート制限が掛かる（識別子・アクション種別・上限が正しい）', async () => {
+    // OTPレコード取得（正常系にして通過させる）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            is: () => ({
+              order: () => ({
+                limit: () => ({
+                  single: () => ({
+                    data: {
+                      id: 'otp-1',
+                      email: 'test@example.com',
+                      code: '123456',
+                      action_type: 'login',
+                      attempts: 0,
+                      expires_at: futureDate,
+                      verified_at: null,
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({
+      update: () => ({
+        eq: () => ({ data: null, error: null }),
+      }),
+    });
+
+    await POST(
+      createRequest({
+        email: 'test@example.com',
+        code: '123456',
+        action: 'login',
+      }),
+    );
+
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_verify',
+      10,
+      10,
+    );
   });
 });

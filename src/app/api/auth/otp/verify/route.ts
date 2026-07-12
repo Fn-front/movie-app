@@ -9,6 +9,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
+import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import { otpVerifySchema } from '@/schema/otp';
 import {
   OTP_ACTION,
@@ -44,6 +45,36 @@ export async function POST(request: Request) {
     }
 
     const { email, code, action } = result.data;
+
+    // 検証試行のレート制限チェック（メールアドレス単位）
+    // OTP行のattemptsは送信のたびにリセットされるため、
+    // エンドポイント単位で独立した試行カウントを設けて多層防御とする。
+    // 上限超過時はウィンドウ分だけロックし、検証成功時に後述の resetRateLimit で解除する
+    const verifyLimitResult = await checkRateLimit(
+      supabase,
+      email,
+      'otp_verify',
+      OTP_CONFIG.VERIFY_RATE_LIMIT,
+      OTP_CONFIG.VERIFY_RATE_LIMIT_WINDOW_MINUTES,
+    );
+
+    if (!verifyLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
+            message: OTP_ERROR_MESSAGES.VERIFY_RATE_LIMIT_EXCEEDED,
+          },
+        },
+        {
+          status: HTTP_STATUS.TOO_MANY_REQUESTS,
+          headers: verifyLimitResult.retryAfter
+            ? { 'Retry-After': String(verifyLimitResult.retryAfter) }
+            : undefined,
+        },
+      );
+    }
 
     // otp_codesテーブルから該当レコード検索（最新の未検証OTP）
     const { data: otpRecord, error: fetchError } = await supabase
@@ -136,6 +167,9 @@ export async function POST(request: Request) {
       // OTPレコード削除
       await supabase.from('otp_codes').delete().eq('id', otpRecord.id);
 
+      // 検証成功のためレート制限をリセット（正当なユーザーの再検証を妨げない）
+      await resetRateLimit(supabase, email, 'otp_verify');
+
       return NextResponse.json(
         {
           success: true,
@@ -151,6 +185,9 @@ export async function POST(request: Request) {
         .from('otp_codes')
         .update({ verified_at: now.toISOString() })
         .eq('id', otpRecord.id);
+
+      // 検証成功のためレート制限をリセット（正当なユーザーの再検証を妨げない）
+      await resetRateLimit(supabase, email, 'otp_verify');
 
       return NextResponse.json(
         {

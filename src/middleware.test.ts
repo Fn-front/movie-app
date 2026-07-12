@@ -3,8 +3,7 @@
  */
 
 // next/serverをモック
-// mockNextResponseNext は NextResponse.next() に渡される init 引数
-// （{ request: { headers } }）を記録し、リクエストヘッダへの nonce/CSP 伝播を検証する。
+// mockNextResponseNext は NextResponse.next() の呼び出しを記録する。
 const mockNextResponseNext = jest.fn();
 const mockNextResponseRedirect = jest.fn();
 const mockCookiesDelete = jest.fn();
@@ -180,58 +179,8 @@ describe('middleware', () => {
     });
   });
 
-  describe('CSP nonce / ヘッダ付与', () => {
-    it('通常応答に Content-Security-Policy ヘッダが付与される', () => {
-      const req = createMockRequest({
-        pathname: '/movies/now-showing',
-        auth: mockAuth,
-        hasSessionCookie: true,
-      });
-
-      const response = middleware(req);
-      const csp = response.headers.get('content-security-policy');
-
-      expect(csp).not.toBeNull();
-      expect(csp).toContain("script-src 'self' 'nonce-");
-      expect(csp).toContain("'strict-dynamic'");
-      // 多層防御強化: 'unsafe-inline' は script-src から除去されている
-      const scriptSrc = csp
-        ?.split('; ')
-        .find((d) => d.startsWith('script-src'));
-      expect(scriptSrc).not.toContain("'unsafe-inline'");
-    });
-
-    it('リダイレクト応答にも Content-Security-Policy ヘッダが付与される', () => {
-      const req = createMockRequest({
-        pathname: '/watchlist',
-        auth: null,
-        hasSessionCookie: false,
-      });
-
-      const response = middleware(req);
-
-      expect(response.headers.get('content-security-policy')).not.toBeNull();
-    });
-
-    it('リクエストごとに異なる nonce を生成する', () => {
-      const req1 = createMockRequest({
-        pathname: '/movies/now-showing',
-        auth: mockAuth,
-        hasSessionCookie: true,
-      });
-      const req2 = createMockRequest({
-        pathname: '/movies/now-showing',
-        auth: mockAuth,
-        hasSessionCookie: true,
-      });
-
-      const csp1 = middleware(req1).headers.get('content-security-policy');
-      const csp2 = middleware(req2).headers.get('content-security-policy');
-
-      expect(csp1).not.toBe(csp2);
-    });
-
-    it('x-nonce と CSP がリクエストヘッダに伝播する（Server Component / Next.js 参照用）', () => {
+  describe('CSP / nonce を付与しない（静的配信へ移行）', () => {
+    it('通常応答に Content-Security-Policy ヘッダを設定しない（next.config で静的配信）', () => {
       const req = createMockRequest({
         pathname: '/movies/now-showing',
         auth: mockAuth,
@@ -240,22 +189,21 @@ describe('middleware', () => {
 
       const response = middleware(req);
 
-      // NextResponse.next() に渡された init から伝播先のリクエストヘッダを取得
-      const init = mockNextResponseNext.mock.calls[0][0] as {
-        request?: { headers?: Headers };
-      };
-      const requestHeaders = init?.request?.headers;
-      expect(requestHeaders).toBeInstanceOf(Headers);
+      expect(response.headers.get('content-security-policy')).toBeNull();
+    });
 
-      const nonceHeader = requestHeaders?.get('x-nonce');
-      const requestCsp = requestHeaders?.get('content-security-policy');
-      const responseCsp = response.headers.get('content-security-policy');
+    it('NextResponse.next() に x-nonce/CSP を載せたリクエストヘッダを渡さない', () => {
+      const req = createMockRequest({
+        pathname: '/movies/now-showing',
+        auth: mockAuth,
+        hasSessionCookie: true,
+      });
 
-      // x-nonce が設定され、レスポンス CSP の nonce 値と一致する
-      expect(nonceHeader).toBeTruthy();
-      expect(responseCsp).toContain(`'nonce-${nonceHeader}'`);
-      // リクエストヘッダにも同一の CSP が伝播している
-      expect(requestCsp).toBe(responseCsp);
+      middleware(req);
+
+      // 認証のみのため init（{ request: { headers } }）は渡されない
+      const init = mockNextResponseNext.mock.calls[0][0];
+      expect(init).toBeUndefined();
     });
   });
 });

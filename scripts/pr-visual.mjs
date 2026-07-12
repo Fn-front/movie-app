@@ -65,7 +65,8 @@ function shot(url, out) {
 }
 
 function record(url, out, sec = '8') {
-  if (!url || !out) throw new Error('record: <url> <out.webm> [sec] が必要です');
+  if (!url || !out)
+    throw new Error('record: <url> <out.webm> [sec] が必要です');
   ensureDir(out);
   sh('agent-browser', ['record', 'start', out, url, '--session', SESSION]);
   console.log(`● 録画開始（${sec}秒）: ${out}`);
@@ -83,7 +84,9 @@ function remuxDuration(out) {
   try {
     sh('ffmpeg', ['-version']);
   } catch {
-    console.warn('⚠ ffmpeg 未導入のため duration 補正をスキップ（GitHub で長さが 0 表示になる場合あり。brew install ffmpeg 推奨）');
+    console.warn(
+      '⚠ ffmpeg 未導入のため duration 補正をスキップ（GitHub で長さが 0 表示になる場合あり。brew install ffmpeg 推奨）',
+    );
     return;
   }
   const tmp = `${out}.fixed.webm`;
@@ -106,12 +109,15 @@ function ghImageUpload(files) {
     .split('\n')
     .filter(Boolean);
   if (lines.length !== files.length) {
-    throw new Error(`gh image の出力行数(${lines.length})がファイル数(${files.length})と一致しません`);
+    throw new Error(
+      `gh image の出力行数(${lines.length})がファイル数(${files.length})と一致しません`,
+    );
   }
   const map = new Map();
   files.forEach((f, i) => {
     const raw = lines[i].trim();
-    const m = raw.match(/\((https?:\/\/[^)]+)\)/) || raw.match(/(https?:\/\/\S+)/);
+    const m =
+      raw.match(/\((https?:\/\/[^)]+)\)/) || raw.match(/(https?:\/\/\S+)/);
     map.set(f, { url: m ? m[1] : raw, raw });
   });
   return map;
@@ -129,7 +135,10 @@ function upload(files) {
 }
 
 function beforeafter(before, after, ...videos) {
-  if (!before || !after) throw new Error('beforeafter: <before.png> <after.png> [demo.webm...] が必要です');
+  if (!before || !after)
+    throw new Error(
+      'beforeafter: <before.png> <after.png> [demo.webm...] が必要です',
+    );
   const map = ghImageUpload([before, after, ...videos]);
   const out = [
     '## スクリーンショット',
@@ -171,7 +180,7 @@ try {
           '  node scripts/pr-visual.mjs record      <url> <out.webm> [sec]',
           '  node scripts/pr-visual.mjs upload      <file...>',
           '  node scripts/pr-visual.mjs beforeafter <before.png> <after.png> [demo.webm...]',
-        ].join('\n')
+        ].join('\n'),
       );
       process.exit(cmd ? 1 : 0);
   }

@@ -18,14 +18,8 @@ import { registerApiSchema } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
 import { OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';
-import { generateOtpCode, sendOtpEmail } from '@/lib/otp';
+import { generateOtpCode, sendOtpEmail, randomDelay } from '@/lib/otp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
-
-/** タイミング攻撃防止用のランダム遅延（200〜500ms） */
-async function randomDelay(): Promise<void> {
-  const delay = 200 + Math.random() * 300;
-  await new Promise((resolve) => setTimeout(resolve, delay));
-}
 
 export async function POST(request: Request) {
   try {
@@ -91,6 +85,7 @@ export async function POST(request: Request) {
       // 既存メールでも新規登録と区別できないレスポンスを返す。
       // - 内部では新規ユーザー・OTPを作成せず、メールも送信しない
       // - bcryptハッシュ計算＋ランダム遅延で新規作成時とタイミングを揃える
+      //   （新規成功パスも同じ randomDelay() を通す。詳細は下記コメント参照）
       // - レスポンスは 201・同一ボディ形状（userId はダミーのUUID）
       await bcrypt.hash(password, BCRYPT_COST);
       await randomDelay();
@@ -162,6 +157,17 @@ export async function POST(request: Request) {
         { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
       );
     }
+
+    // メールアドレス列挙防止（タイミング均一化）:
+    // 既存メール分岐と同じ randomDelay() を新規成功パスでも通し、
+    // 両パスの応答時間にジッターを持たせて分布を近づける。
+    //
+    // 【残る限界】完全なタイミング一致は困難:
+    // - 既存メール分岐は SELECT 1回のみ、新規成功パスは users/otp_codes への
+    //   INSERT と sendOtpEmail(Resend) の実処理を伴うため、DB・外部メール送信の
+    //   実所要時間の差は randomDelay() のジッター（200〜500ms）で吸収しきれない
+    //   場合がある。この差の完全な隠蔽は本実装のスコープ外とする。
+    await randomDelay();
 
     return NextResponse.json(
       {

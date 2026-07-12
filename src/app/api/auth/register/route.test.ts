@@ -28,9 +28,11 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 
 const mockGenerateOtpCode = jest.fn().mockReturnValue('123456');
 const mockSendOtpEmail = jest.fn().mockResolvedValue(true);
+const mockRandomDelay = jest.fn().mockResolvedValue(undefined);
 jest.mock('@/lib/otp', () => ({
   generateOtpCode: () => mockGenerateOtpCode(),
   sendOtpEmail: (...args: unknown[]) => mockSendOtpEmail(...args),
+  randomDelay: () => mockRandomDelay(),
 }));
 
 // --- Helpers ---
@@ -92,6 +94,8 @@ describe('POST /api/auth/register', () => {
     expect(json.data.userId).toBe('user-123');
     expect(mockGenerateOtpCode).toHaveBeenCalled();
     expect(mockSendOtpEmail).toHaveBeenCalledWith('test@example.com', '123456');
+    // タイミング均一化: 新規成功パスも randomDelay を通す
+    expect(mockRandomDelay).toHaveBeenCalledTimes(1);
   });
 
   it('バリデーションエラーで400を返す', async () => {
@@ -135,6 +139,8 @@ describe('POST /api/auth/register', () => {
     expect(mockFrom).toHaveBeenCalledTimes(1); // 既存チェックのSELECTのみ
     expect(mockGenerateOtpCode).not.toHaveBeenCalled();
     expect(mockSendOtpEmail).not.toHaveBeenCalled();
+    // タイミング均一化: 既存メール分岐も randomDelay を通す
+    expect(mockRandomDelay).toHaveBeenCalledTimes(1);
   });
 
   it('既存メール時のレスポンス形状が新規登録時と区別できない', async () => {

@@ -42,3 +42,20 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
 GRANT SELECT ON public.<table_name> TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
 ```
+
+## 【必須】接続確認・プロジェクト操作は CLI 経由（curl 直叩き禁止）
+
+- Supabase への疎通確認・プロジェクト操作は **Supabase CLI（`supabase` / `npx supabase`）経由で行う**
+- Management API（`https://api.supabase.com/...`）を `curl` で直接叩かない。トークンを `Authorization` ヘッダで外部送信する形になり、サンドボックス/権限ポリシーで拒否されやすい（毎回失敗しがち）
+- トークンは `.env.local` の `SUPABASE_ACCESS_TOKEN` を読み込んで CLI に環境変数で渡す。値はコマンドライン・ログに露出させない
+
+```bash
+# .env.local から読み込み（値は表示しない）
+set -a; . ./.env.local; set +a
+
+# 疎通確認・プロジェクト一覧
+npx supabase projects list
+
+# 例: マイグレーション反映（CLI が SUPABASE_ACCESS_TOKEN を利用）
+npx supabase db push
+```

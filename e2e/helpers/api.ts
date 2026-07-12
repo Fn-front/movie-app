@@ -199,18 +199,44 @@ export async function maxOutOtpAttempts(
 }
 
 /**
+ * メール（identifier）単位で使われる認証/OTP系のレート制限 action_type 一覧。
+ * これらは rate_limits テーブルに email を identifier として蓄積されるため、
+ * CI/ローカルの繰り返し実行で累積し、近接実行する他テストと衝突して
+ * RATE_LIMIT_EXCEEDED / VERIFY_RATE_LIMIT_EXCEEDED で不安定に失敗する。
+ * - otp_send_daily: OTP日次送信上限（src/app/api/auth/otp/send/route.ts）
+ * - otp_verify:     OTP検証のバースト上限（src/app/api/auth/otp/verify/route.ts, #416）
+ * - login:          メールOTPログインの試行上限（src/lib/auth/auth.ts）
+ * - register:       新規登録の試行上限（src/app/api/auth/register/route.ts）
+ * - otp_resend:     OTP再送上限（DB制約で許可済み。将来の追従漏れを防ぐため含める）
+ * ※ change_password は identifier が user.id（メール以外）かつ DB を叩く E2E で
+ *   到達しないため、ここには含めない。
+ */
+const EMAIL_RATE_LIMIT_ACTION_TYPES = [
+  'otp_send_daily',
+  'otp_verify',
+  'login',
+  'register',
+  'otp_resend',
+] as const;
+
+/**
  * 指定識別子（メール等）のレート制限レコードを物理削除してリセットする。
- * OTP日次送信上限（action_type='otp_send_daily'）はメール単位で24h/5通のため、
- * CI/ローカルの繰り返し実行で累積し他テストと衝突する。OTP系テストの前に
- * これを呼んで自テストが累積に寄与せず・干渉されないようにする。
+ * 既定では認証/OTP系の関連 action_type をすべて（{@link EMAIL_RATE_LIMIT_ACTION_TYPES}）
+ * まとめてリセットし、テスト間の累積・残留で他テストがレート制限に到達するのを防ぐ。
+ * OTP/認証系テストの前（beforeEach 等）に呼んで、自テストが累積に寄与せず・
+ * 干渉されないようにする。
+ *
+ * @param identifier 対象の識別子（通常はメールアドレス）
+ * @param actionTypes リセット対象の action_type。未指定なら関連する全種別。
  */
 export async function cleanupRateLimit(
   identifier: string,
-  actionType = 'otp_send_daily',
+  actionTypes: readonly string[] = EMAIL_RATE_LIMIT_ACTION_TYPES,
 ): Promise<void> {
   const enc = encodeURIComponent(identifier);
+  const inList = encodeURIComponent(`(${actionTypes.join(',')})`);
   await fetch(
-    `${SUPABASE_URL}/rest/v1/rate_limits?identifier=eq.${enc}&action_type=eq.${actionType}`,
+    `${SUPABASE_URL}/rest/v1/rate_limits?identifier=eq.${enc}&action_type=in.${inList}`,
     { method: 'DELETE', headers: supabaseHeaders },
   );
 }

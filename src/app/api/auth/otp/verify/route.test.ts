@@ -17,6 +17,11 @@ jest.mock('@/helpers/supabase', () => ({
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
 
+const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 // --- Helpers ---
 
 const createRequest = (body: Record<string, unknown>) =>
@@ -34,6 +39,7 @@ const pastDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 describe('POST /api/auth/otp/verify', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
   });
 
   it('registration: 正常にOTPを検証して認証完了できる', async () => {
@@ -400,5 +406,90 @@ describe('POST /api/auth/otp/verify', () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
+  });
+
+  it('検証試行のレート制限超過の場合429を返し、コード照合をスキップする', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 600 });
+
+    const response = await POST(
+      createRequest({
+        email: 'test@example.com',
+        code: '123456',
+        action: 'registration',
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.success).toBe(false);
+    expect(response.headers.get('Retry-After')).toBe('600');
+    // レート制限で早期リターンするため、otp_codes取得は行われない
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('検証試行のレート制限超過（retryAfterなし）でも429を返す', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false });
+
+    const response = await POST(
+      createRequest({
+        email: 'test@example.com',
+        code: '123456',
+        action: 'registration',
+      }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBeNull();
+  });
+
+  it('email単位でレート制限が掛かる（識別子・アクション種別・上限が正しい）', async () => {
+    // OTPレコード取得（正常系にして通過させる）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            is: () => ({
+              order: () => ({
+                limit: () => ({
+                  single: () => ({
+                    data: {
+                      id: 'otp-1',
+                      email: 'test@example.com',
+                      code: '123456',
+                      action_type: 'login',
+                      attempts: 0,
+                      expires_at: futureDate,
+                      verified_at: null,
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({
+      update: () => ({
+        eq: () => ({ data: null, error: null }),
+      }),
+    });
+
+    await POST(
+      createRequest({
+        email: 'test@example.com',
+        code: '123456',
+        action: 'login',
+      }),
+    );
+
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_verify',
+      10,
+      10,
+    );
   });
 });

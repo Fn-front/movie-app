@@ -9,6 +9,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { otpVerifySchema } from '@/schema/otp';
 import {
   OTP_ACTION,
@@ -44,6 +45,35 @@ export async function POST(request: Request) {
     }
 
     const { email, code, action } = result.data;
+
+    // 検証試行のレート制限チェック（メールアドレス単位）
+    // OTP行のattemptsは送信のたびにリセットされるため、
+    // エンドポイント単位で独立した試行カウントを設けて多層防御とする
+    const verifyLimitResult = await checkRateLimit(
+      supabase,
+      email,
+      'otp_verify',
+      OTP_CONFIG.VERIFY_RATE_LIMIT,
+      OTP_CONFIG.VERIFY_RATE_LIMIT_WINDOW_MINUTES,
+    );
+
+    if (!verifyLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
+            message: OTP_ERROR_MESSAGES.VERIFY_RATE_LIMIT_EXCEEDED,
+          },
+        },
+        {
+          status: HTTP_STATUS.TOO_MANY_REQUESTS,
+          headers: verifyLimitResult.retryAfter
+            ? { 'Retry-After': String(verifyLimitResult.retryAfter) }
+            : undefined,
+        },
+      );
+    }
 
     // otp_codesテーブルから該当レコード検索（最新の未検証OTP）
     const { data: otpRecord, error: fetchError } = await supabase

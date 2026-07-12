@@ -84,23 +84,10 @@ const nextConfig = {
             key: 'Strict-Transport-Security',
             value: 'max-age=63072000; includeSubDomains; preload',
           },
-          {
-            key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' https://image.tmdb.org data: blob:",
-              // data: は @fullcalendar/core が内部でアイコンフォント(fcicons)を
-              // base64エンコードした data: URI で読み込むために必要
-              "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co",
-              'frame-src https://www.youtube.com',
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join('; '),
-          },
+          // Content-Security-Policy は nonce ベースへ移行したため
+          // src/middleware.ts でリクエストごとに動的生成する。
+          // ここで静的に定義すると二重定義になるため、あえて設定しない。
+          // （CSP 以外のセキュリティヘッダは静的でよいため本ファイルで維持）
         ],
       },
     ];

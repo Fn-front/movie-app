@@ -7,6 +7,7 @@ import withBundleAnalyzer from '@next/bundle-analyzer';
 import {
   buildCspHeaderValue,
   buildReportingEndpointsValue,
+  buildTrustedTypesReportOnlyHeaderValue,
 } from './src/lib/security/cspDirectives.mjs';
 
 const withAnalyzer = withBundleAnalyzer({
@@ -25,6 +26,15 @@ const cspHeaderValue = buildCspHeaderValue({ isDev, withReporting: true });
 
 // Reporting API のエンドポイント定義。CSP の report-to グループ名と対応させる。
 const reportingEndpointsValue = buildReportingEndpointsValue();
+
+/**
+ * Trusted Types 導入の Report-Only CSP（段階3）。
+ * enforce CSP（unsafe-inline）はそのまま維持しつつ、別ヘッダで
+ * `require-trusted-types-for 'script'` / `trusted-types <policy>` を Report-Only
+ * 配信する。違反はブロックされず /api/csp-report に収集され、DOM-based XSS の
+ * sink を安全に洗い出す。enforce への昇格は段階4 で行う。
+ */
+const trustedTypesReportOnlyValue = buildTrustedTypesReportOnlyHeaderValue();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -110,6 +120,12 @@ const nextConfig = {
           {
             key: 'Content-Security-Policy',
             value: cspHeaderValue,
+          },
+          // 段階3: Trusted Types を Report-Only で導入する。enforce CSP とは
+          // 別ヘッダのため既存機能は壊れず、違反は /api/csp-report に収集される。
+          {
+            key: 'Content-Security-Policy-Report-Only',
+            value: trustedTypesReportOnlyValue,
           },
           // report-to（CSP）が参照する Reporting API のエンドポイント定義。
           // 違反レポートは /api/csp-report が受信する。

@@ -57,6 +57,18 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         storageState: STORAGE_STATE,
+        // ヘッドレスChromiumでWebGL2を安定して有効化する。
+        // CI（GPUなし）では ANGLE + SwiftShader でソフトウェアレンダリングにフォールバックさせ、
+        // シアター体験ページ（three.js / WebGL2）の isWebGL2Support ゲートが
+        // 安定して true になるようにする（flaky対策）。
+        launchOptions: {
+          args: [
+            '--use-gl=angle',
+            '--use-angle=swiftshader',
+            '--enable-unsafe-swiftshader',
+            '--ignore-gpu-blocklist',
+          ],
+        },
       },
       dependencies: ['setup'],
     },

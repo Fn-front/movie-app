@@ -313,7 +313,7 @@ UI Re-render
 
 ## セキュリティヘッダー
 
-`next.config.mjs` の `headers()` で全ルート（`/(.*)`）に以下のHTTPヘッダーを付与。
+`next.config.mjs` の `headers()` で全ルート（`/(.*)`）に以下のHTTPヘッダーを付与（CSP を除く）。
 
 | ヘッダー | 値 | 目的 |
 |----------|----|------|
@@ -323,3 +323,22 @@ UI Re-render
 | `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | ブラウザAPIアクセス制限 |
 | `X-DNS-Prefetch-Control` | `on` | DNSプリフェッチ有効化 |
 | `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | HTTPS強制（2年間） |
+
+### Content-Security-Policy（nonce ベース）
+
+CSP はページと API で付与方法を分離している。
+
+| 対象 | 付与元 | 値 |
+|------|--------|----|
+| HTMLページ | `src/middleware.ts`（リクエスト毎に動的生成） | nonce ベース CSP（`script-src` は `'self' 'nonce-<...>' 'strict-dynamic'`、本番は `'unsafe-eval'` 除去・開発時のみ保持） |
+| `/api/*` | `next.config.mjs`（静的） | `default-src 'none'; frame-ancestors 'none'` |
+
+**nonce ベース CSP の仕組み（`src/lib/security/csp.ts` / `src/middleware.ts` / `src/app/layout.tsx`）:**
+- middleware がリクエスト毎に nonce を生成し、CSP ヘッダを組み立てる（`buildCspHeader` / `generateNonce`）
+- nonce は `x-nonce` リクエストヘッダに載せ、`layout.tsx`（Server Component）がテーマ初期化のインラインスクリプトに付与
+- CSP はリクエスト・レスポンス双方に設定（Next.js が自身のスクリプトへ nonce を付与するにはリクエスト側の CSP が必要）
+- `script-src` から `'unsafe-inline'` を除去。`'strict-dynamic'` 併用で nonce 付きスクリプトが読み込む chunk 等を信頼
+- `style-src` は各種ライブラリのインラインスタイル依存のため `'unsafe-inline'` を維持（今回のスコープ外）
+- `/api/*` は middleware の matcher 対象外のため、`next.config.mjs` で最も制限的な CSP を静的付与（多層防御）
+
+**副作用:** per-request nonce を用いるため、全ページが動的レンダリング（`ƒ`）になる。

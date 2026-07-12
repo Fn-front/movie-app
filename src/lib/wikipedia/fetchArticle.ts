@@ -6,7 +6,7 @@
  * - wikitextにはテーブル構造と太字（受賞者）マークアップが保持される
  */
 
-const WIKIPEDIA_API_BASE = 'https://ja.wikipedia.org/w/api.php';
+import { getRequiredEnv } from '@/utils/env';
 
 const WIKIPEDIA_FETCH_OPTIONS: RequestInit = {
   headers: {
@@ -52,7 +52,7 @@ async function findAwardSectionIndex(title: string): Promise<number | null> {
   });
 
   const response = await fetch(
-    `${WIKIPEDIA_API_BASE}?${params.toString()}`,
+    `${getRequiredEnv('WIKIPEDIA_API_BASE_URL')}?${params.toString()}`,
     WIKIPEDIA_FETCH_OPTIONS,
   );
   if (!response.ok) return null;
@@ -87,7 +87,7 @@ async function fetchWikitextSection(
   });
 
   const response = await fetch(
-    `${WIKIPEDIA_API_BASE}?${params.toString()}`,
+    `${getRequiredEnv('WIKIPEDIA_API_BASE_URL')}?${params.toString()}`,
     WIKIPEDIA_FETCH_OPTIONS,
   );
   if (!response.ok) return null;
@@ -111,7 +111,7 @@ async function fetchFullWikitext(title: string): Promise<string | null> {
   });
 
   const response = await fetch(
-    `${WIKIPEDIA_API_BASE}?${params.toString()}`,
+    `${getRequiredEnv('WIKIPEDIA_API_BASE_URL')}?${params.toString()}`,
     WIKIPEDIA_FETCH_OPTIONS,
   );
   if (!response.ok) {

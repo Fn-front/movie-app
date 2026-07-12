@@ -5,7 +5,6 @@
 import ICAL from 'ical.js';
 import axios from 'axios';
 
-import { EIGA_ICAL_URL } from '@/constants/movies';
 import {
   EIGA_FETCH_TIMEOUT_MS,
   EIGA_ORIGINAL_TITLE_TIMEOUT_MS,
@@ -13,6 +12,7 @@ import {
   EIGA_ORIGINAL_TITLE_PATTERN,
   EIGA_ENGLISH_TITLE_PATTERN,
 } from '@/constants/eiga';
+import { getRequiredEnv } from '@/utils/env';
 
 /**
  * iCalから抽出した映画情報
@@ -32,7 +32,7 @@ export interface EigaMovie {
  * @returns 映画タイトルと公開日の配列
  */
 export async function fetchEigaMovies(): Promise<EigaMovie[]> {
-  const response = await axios.get<string>(EIGA_ICAL_URL, {
+  const response = await axios.get<string>(getRequiredEnv('EIGA_ICAL_URL'), {
     responseType: 'text',
     timeout: EIGA_FETCH_TIMEOUT_MS,
   });

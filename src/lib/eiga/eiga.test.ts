@@ -166,8 +166,15 @@ END:VCALENDAR`;
 });
 
 describe('fetchEigaMovies', () => {
+  const EIGA_ICAL_URL = 'https://example.test/coming.ics';
+
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.EIGA_ICAL_URL = EIGA_ICAL_URL;
+  });
+
+  afterEach(() => {
+    delete process.env.EIGA_ICAL_URL;
   });
 
   it('iCalフィードを取得してパースした結果を返す', async () => {
@@ -175,7 +182,7 @@ describe('fetchEigaMovies', () => {
 
     const result = await fetchEigaMovies();
 
-    expect(mockedAxios.get).toHaveBeenCalledWith(expect.any(String), {
+    expect(mockedAxios.get).toHaveBeenCalledWith(EIGA_ICAL_URL, {
       responseType: 'text',
       timeout: 30000,
     });
@@ -188,6 +195,12 @@ describe('fetchEigaMovies', () => {
     mockedAxios.get.mockRejectedValueOnce(new Error('Network Error'));
 
     await expect(fetchEigaMovies()).rejects.toThrow('Network Error');
+  });
+
+  it('EIGA_ICAL_URL 未設定時はエラーを投げる', async () => {
+    delete process.env.EIGA_ICAL_URL;
+
+    await expect(fetchEigaMovies()).rejects.toThrow('EIGA_ICAL_URL');
   });
 });
 

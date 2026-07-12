@@ -289,9 +289,15 @@ describe('extractOthersPageNominees', () => {
 
 describe('fetchEigaOscarAwards', () => {
   const mockedAxios = axios as jest.Mocked<typeof axios>;
+  const EIGA_OSCAR_BASE_URL = 'https://example.test/oscar';
 
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.EIGA_OSCAR_BASE_URL = EIGA_OSCAR_BASE_URL;
+  });
+
+  afterEach(() => {
+    delete process.env.EIGA_OSCAR_BASE_URL;
   });
 
   /** 作品賞ページ用HTML */
@@ -411,12 +417,20 @@ describe('fetchEigaOscarAwards', () => {
     await fetchEigaOscarAwards(2025);
 
     expect(mockedAxios.get).toHaveBeenCalledWith(
-      'https://eiga.com/official/oscar/2025/all.html',
+      `${EIGA_OSCAR_BASE_URL}/2025/all.html`,
       expect.anything(),
     );
     expect(mockedAxios.get).toHaveBeenCalledWith(
-      'https://eiga.com/official/oscar/2025/all-others.html',
+      `${EIGA_OSCAR_BASE_URL}/2025/all-others.html`,
       expect.anything(),
+    );
+  });
+
+  it('EIGA_OSCAR_BASE_URL 未設定時はエラーを投げる', async () => {
+    delete process.env.EIGA_OSCAR_BASE_URL;
+
+    await expect(fetchEigaOscarAwards(2025)).rejects.toThrow(
+      'EIGA_OSCAR_BASE_URL',
     );
   });
 });

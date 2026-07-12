@@ -157,6 +157,30 @@ OPENAI_MODEL=gpt-4o-mini
 
 ---
 
+### スクレイピング対象URL（外部データ取得）
+
+publicリポジトリのため、スクレイピング対象の外部URLはソースコードに直接記載せず環境変数で管理する（対象URLの非公開が目的）。**実URLはドキュメント・Git追跡ファイルに記載しない**。値は各開発者の `.env.local` および本番/CIの環境変数で設定する。
+
+```bash
+# eiga.com アカデミー賞特集ページのベースURL（末尾スラッシュなし）
+EIGA_OSCAR_BASE_URL=
+
+# eiga.com 公開予定作品のiCalフィードURL
+EIGA_ICAL_URL=
+
+# Wikipedia API のベースURL（api.php まで）
+WIKIPEDIA_API_BASE_URL=
+```
+
+**利用箇所:**
+- `EIGA_OSCAR_BASE_URL`: `src/lib/eiga/fetchEigaOscarAwards.ts`（アカデミー賞ノミネート・受賞データ取得）
+- `EIGA_ICAL_URL`: `src/lib/eiga/eiga.ts`（公開予定映画のiCalフィード取得）
+- `WIKIPEDIA_API_BASE_URL`: `src/lib/wikipedia/fetchArticle.ts`（受賞記事のwikitext取得）
+
+**注意:** これらはサーバーサイドのみで使用（`NEXT_PUBLIC_` 不要）。いずれも未設定時は `getRequiredEnv`（`src/utils/env.ts`）が明確なエラーを投げて設定漏れを早期検知する。
+
+---
+
 ## オプション環境変数
 
 ### アプリケーション設定
@@ -224,6 +248,11 @@ USE_MOCK_DATA=false
 ```bash
 # TMDb API（サーバーサイドのみ）
 TMDB_API_KEY=your_tmdb_api_key_here
+
+# スクレイピング対象URL（値は非公開。実URLは記載しない）
+EIGA_OSCAR_BASE_URL=
+EIGA_ICAL_URL=
+WIKIPEDIA_API_BASE_URL=
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co

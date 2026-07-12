@@ -28,6 +28,16 @@ export default function RootLayout({
       <head>
         {/* ストレージキーは STORAGE_KEYS.THEME ('movie-app:theme') と同期すること */}
         {/* CSP は script-src 'unsafe-inline' を許容するため nonce は付与しない */}
+        {/*
+          Trusted Types（段階3, Report-Only）について:
+          この <script> は SSR で静的にドキュメントへ埋め込まれる「インラインスクリプト」であり、
+          DOM 注入 sink（innerHTML / script.text 代入 / eval 等）ではない。よって
+          `require-trusted-types-for 'script'` の対象外で、Report-Only でも enforce でも
+          違反にならない（挙動は script-src 'unsafe-inline' 側で許可される）。
+          そのため named ポリシー経由へ書き換える必要はなく、固定文字列のまま維持する。
+          ランタイム注入が必要になった場合に備えたポリシーは
+          src/lib/security/trustedTypes.ts（theme-init）に用意している。
+        */}
         <script
           dangerouslySetInnerHTML={{
             __html:

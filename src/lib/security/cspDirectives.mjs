@@ -15,6 +15,14 @@
  * 段階2 で追加:
  * - CSP 違反を自前収集するため `report-to` / `report-uri` を付与する
  *   （enforce CSP に付与し、通常運用での違反を監視する）。
+ *
+ * 段階3 で追加:
+ * - DOM-based XSS を型レベルで封じるため Trusted Types を導入する。まずは
+ *   `Content-Security-Policy-Report-Only` に `require-trusted-types-for 'script'`
+ *   と `trusted-types <policy>` を付与し、違反を `/api/csp-report` に収集する
+ *   （enforce CSP＝unsafe-inline はそのまま維持し、既存機能を壊さない）。
+ * - Report-Only 段階で違反が出ないことを確認してから、段階4 で enforce CSP へ
+ *   `require-trusted-types-for 'script'` を昇格させる。
  */
 
 /**
@@ -28,6 +36,26 @@ export const CSP_REPORT_PATH = '/api/csp-report';
  * `Reporting-Endpoints` ヘッダのキーと一致させること。
  */
 export const CSP_REPORT_GROUP = 'csp-endpoint';
+
+/**
+ * Trusted Types のポリシー名（許可リスト）。
+ * `trusted-types` ディレクティブに列挙する名前と、クライアント側で
+ * `trustedTypes.createPolicy(...)` に渡す名前を一致させるため単一ソース化する。
+ *
+ * - `sanitize-html`: DOMPurify で sanitize する汎用 HTML ポリシー（アプリ用）。
+ * - `theme-init`: `layout.tsx` のテーマ初期化インラインスクリプト（固定文字列）を
+ *   enforce 昇格後も動作させるための named ポリシー。
+ * - `dompurify`: DOMPurify が内部で生成し得るデフォルトポリシー名。明示的に
+ *   許可リストへ含めておく（内部ポリシー利用時に enforce でブロックされないため）。
+ * - `nextjs`: Next.js（App Router のスクリプト注入等）が利用し得るポリシー名。
+ *   Report-Only 段階で違反を観測し、enforce 昇格時の許可要否を判断する。
+ */
+export const TRUSTED_TYPES_POLICIES = Object.freeze([
+  'sanitize-html',
+  'theme-init',
+  'dompurify',
+  'nextjs',
+]);
 
 /**
  * CSP ディレクティブ配列を生成する。
@@ -92,4 +120,38 @@ export function buildCspHeaderValue(options) {
  */
 export function buildReportingEndpointsValue() {
   return `${CSP_REPORT_GROUP}="${CSP_REPORT_PATH}"`;
+}
+
+/**
+ * Trusted Types 用の Report-Only CSP ディレクティブ配列を生成する（段階3）。
+ *
+ * enforce CSP（{@link getCspDirectives}）とは独立した
+ * `Content-Security-Policy-Report-Only` ヘッダに載せる。Report-Only なので
+ * 違反はブロックされず `/api/csp-report` に収集されるのみ。これにより
+ * `unsafe-inline` を維持したまま DOM-based XSS の sink を安全に洗い出せる。
+ *
+ * - `require-trusted-types-for 'script'`: DOM sink（innerHTML 等）へ生文字列を
+ *   渡す操作を TrustedHTML 必須にする。
+ * - `trusted-types <policy...>`: 許可するポリシー名の列挙。
+ *   ここに無い名前で `createPolicy` すると（enforce 時に）失敗する。
+ * - `report-to` / `report-uri`: 違反を既存の収集エンドポイントへ送る。
+ *
+ * @returns {string[]} Report-Only CSP ディレクティブの配列
+ */
+export function getTrustedTypesReportOnlyDirectives() {
+  return [
+    "require-trusted-types-for 'script'",
+    `trusted-types ${TRUSTED_TYPES_POLICIES.join(' ')}`,
+    `report-to ${CSP_REPORT_GROUP}`,
+    `report-uri ${CSP_REPORT_PATH}`,
+  ];
+}
+
+/**
+ * Trusted Types 用の Report-Only CSP ヘッダ値（1 行文字列）を生成する。
+ *
+ * @returns {string} `Content-Security-Policy-Report-Only` に設定する値
+ */
+export function buildTrustedTypesReportOnlyHeaderValue() {
+  return getTrustedTypesReportOnlyDirectives().join('; ');
 }

@@ -71,7 +71,24 @@ function record(url, out, sec = '8') {
   console.log(`● 録画開始（${sec}秒）: ${out}`);
   sleep(Number(sec) * 1000);
   sh('agent-browser', ['record', 'stop', '--session', SESSION]);
+  remuxDuration(out);
   console.log(`✓ 録画保存: ${out}`);
+}
+
+/**
+ * agent-browser の WebM はコンテナの duration メタデータが欠落しがちで、
+ * GitHub のプレーヤーが「0 秒」と表示してしまう。ffmpeg で remux して補正する（あれば）。
+ */
+function remuxDuration(out) {
+  try {
+    sh('ffmpeg', ['-version']);
+  } catch {
+    console.warn('⚠ ffmpeg 未導入のため duration 補正をスキップ（GitHub で長さが 0 表示になる場合あり。brew install ffmpeg 推奨）');
+    return;
+  }
+  const tmp = `${out}.fixed.webm`;
+  sh('ffmpeg', ['-y', '-i', out, '-c', 'copy', tmp]);
+  sh('mv', [tmp, out]);
 }
 
 /**

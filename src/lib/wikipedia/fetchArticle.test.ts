@@ -36,6 +36,11 @@ function createWikitextResponse(wikitext: string) {
 describe('fetchWikipediaArticle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.WIKIPEDIA_API_BASE_URL = 'https://example.test/w/api.php';
+  });
+
+  afterEach(() => {
+    delete process.env.WIKIPEDIA_API_BASE_URL;
   });
 
   it('受賞セクションが見つかった場合、セクションのwikitextを返す', async () => {
@@ -178,6 +183,15 @@ describe('fetchWikipediaArticle', () => {
 
     const firstCallOptions = mockFetch.mock.calls[0][1];
     expect(firstCallOptions.headers['User-Agent']).toContain('MovieApp');
+  });
+
+  it('WIKIPEDIA_API_BASE_URL 未設定時はfetchせずnullを返す', async () => {
+    delete process.env.WIKIPEDIA_API_BASE_URL;
+
+    const result = await fetchWikipediaArticle('テスト記事');
+
+    expect(result).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('sectionsがnullの場合、記事全体にフォールバックする', async () => {

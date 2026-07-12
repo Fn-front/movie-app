@@ -121,11 +121,6 @@ export const ALLOWED_LANGUAGES = [
 ] as const;
 
 /**
- * 映画.com iCalフィードURL
- */
-export const EIGA_ICAL_URL = 'https://eiga.com/movie/coming.ics';
-
-/**
  * バッチ更新: 1回のバッチで処理する映画数
  */
 export const BATCH_UPDATE_SIZE = 100;

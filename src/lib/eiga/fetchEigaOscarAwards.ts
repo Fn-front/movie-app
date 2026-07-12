@@ -8,8 +8,8 @@
 import axios from 'axios';
 
 import type { OpenAiAwardItem } from '@/schema/awards';
+import { getRequiredEnv } from '@/utils/env';
 
-const EIGA_OSCAR_BASE_URL = 'https://eiga.com/official/oscar';
 const EIGA_FETCH_TIMEOUT_MS = 30000;
 
 /** eiga.comページと対応する部門のマッピング */
@@ -60,10 +60,11 @@ export interface ExtractedNominee {
 export async function fetchEigaOscarAwards(
   ceremonyYear: number,
 ): Promise<OpenAiAwardItem[]> {
+  const baseUrl = getRequiredEnv('EIGA_OSCAR_BASE_URL');
   const allItems: OpenAiAwardItem[] = [];
 
   for (const page of EIGA_OSCAR_PAGES) {
-    const url = `${EIGA_OSCAR_BASE_URL}/${ceremonyYear}/${page.path}`;
+    const url = `${baseUrl}/${ceremonyYear}/${page.path}`;
     let html: string;
     try {
       html = await fetchHtml(url);

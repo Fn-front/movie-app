@@ -7,6 +7,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 
 import {
@@ -19,6 +20,12 @@ import { OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';
 import { generateOtpCode, sendOtpEmail } from '@/lib/otp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+
+/** タイミング攻撃防止用のランダム遅延（200〜500ms） */
+async function randomDelay(): Promise<void> {
+  const delay = 200 + Math.random() * 300;
+  await new Promise((resolve) => setTimeout(resolve, delay));
+}
 
 export async function POST(request: Request) {
   try {
@@ -80,15 +87,21 @@ export async function POST(request: Request) {
       .single();
 
     if (existingUser) {
+      // メールアドレス列挙防止:
+      // 既存メールでも新規登録と区別できないレスポンスを返す。
+      // - 内部では新規ユーザー・OTPを作成せず、メールも送信しない
+      // - bcryptハッシュ計算＋ランダム遅延で新規作成時とタイミングを揃える
+      // - レスポンスは 201・同一ボディ形状（userId はダミーのUUID）
+      await bcrypt.hash(password, BCRYPT_COST);
+      await randomDelay();
+
       return NextResponse.json(
         {
-          success: false,
-          error: {
-            code: ERROR_CODE.CONFLICT,
-            message: AUTH_ERROR_MESSAGES.EMAIL_ALREADY_EXISTS,
-          },
+          success: true,
+          data: { userId: randomUUID() },
+          message: AUTH_ERROR_MESSAGES.REGISTER_SUCCESS,
         },
-        { status: HTTP_STATUS.CONFLICT },
+        { status: HTTP_STATUS.CREATED },
       );
     }
 

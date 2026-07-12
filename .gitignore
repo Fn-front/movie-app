@@ -80,4 +80,7 @@ Thumbs.db
 
 # AI review cache (pre-commit hook output)
 .cache/
+
+# PR ビジュアル証跡の一時ファイル（Release Assets へアップ後は残さない）
+/docs/tmp/
 # Cache refresh 1769994937

@@ -9,7 +9,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import { otpVerifySchema } from '@/schema/otp';
 import {
   OTP_ACTION,
@@ -48,7 +48,8 @@ export async function POST(request: Request) {
 
     // 検証試行のレート制限チェック（メールアドレス単位）
     // OTP行のattemptsは送信のたびにリセットされるため、
-    // エンドポイント単位で独立した試行カウントを設けて多層防御とする
+    // エンドポイント単位で独立した試行カウントを設けて多層防御とする。
+    // 上限超過時はウィンドウ分だけロックし、検証成功時に後述の resetRateLimit で解除する
     const verifyLimitResult = await checkRateLimit(
       supabase,
       email,
@@ -166,6 +167,9 @@ export async function POST(request: Request) {
       // OTPレコード削除
       await supabase.from('otp_codes').delete().eq('id', otpRecord.id);
 
+      // 検証成功のためレート制限をリセット（正当なユーザーの再検証を妨げない）
+      await resetRateLimit(supabase, email, 'otp_verify');
+
       return NextResponse.json(
         {
           success: true,
@@ -181,6 +185,9 @@ export async function POST(request: Request) {
         .from('otp_codes')
         .update({ verified_at: now.toISOString() })
         .eq('id', otpRecord.id);
+
+      // 検証成功のためレート制限をリセット（正当なユーザーの再検証を妨げない）
+      await resetRateLimit(supabase, email, 'otp_verify');
 
       return NextResponse.json(
         {

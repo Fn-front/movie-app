@@ -34,9 +34,9 @@ export const OTP_CONFIG = {
   DAILY_SEND_WINDOW_MINUTES: 1440,
   /** OTP検証済みトークンの有効期限（分） — verified_atからの経過時間 */
   VERIFIED_TOKEN_EXPIRY_MINUTES: 5,
-  /** 検証試行のレート制限上限（回） — attemptsとは独立したエンドポイント単位の多層防御 */
+  /** 検証試行のレート制限上限（回） — attemptsとは独立したエンドポイント単位の多層防御。この回数を超えるとロックされる */
   VERIFY_RATE_LIMIT: 10,
-  /** 検証試行のレート制限ウィンドウ（分） — 超過時のロック時間 */
+  /** 検証試行の超過後ロック継続時間（分） — スライディングウィンドウの集計幅ではなく、上限超過時点からこの時間ロックする */
   VERIFY_RATE_LIMIT_WINDOW_MINUTES: 10,
 } as const;
 

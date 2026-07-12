@@ -324,21 +324,24 @@ UI Re-render
 | `X-DNS-Prefetch-Control` | `on` | DNSプリフェッチ有効化 |
 | `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | HTTPS強制（2年間） |
 
-### Content-Security-Policy（nonce ベース）
+### Content-Security-Policy（unsafe-inline 許容・静的配信）
 
-CSP はページと API で付与方法を分離している。
+CSP はページと API で付与方法を分離し、いずれも `next.config.mjs` の `headers()` で静的付与する。
 
 | 対象 | 付与元 | 値 |
 |------|--------|----|
-| HTMLページ | `src/middleware.ts`（リクエスト毎に動的生成） | nonce ベース CSP（`script-src` は `'self' 'nonce-<...>' 'strict-dynamic'`、本番は `'unsafe-eval'` 除去・開発時のみ保持） |
-| `/api/*` | `next.config.mjs`（静的） | `default-src 'none'; frame-ancestors 'none'` |
+| HTMLページ（`/(.*)`） | `next.config.mjs`（静的） | `script-src 'self' 'unsafe-inline'`（開発時のみ `'unsafe-eval'` を追加）＋ `report-to` / `report-uri`。ほか `default-src 'self'` 等 |
+| `/api/*` | `next.config.mjs`（静的・後勝ちで上書き） | `default-src 'none'; frame-ancestors 'none'` |
 
-**nonce ベース CSP の仕組み（`src/lib/security/csp.ts` / `src/middleware.ts` / `src/app/layout.tsx`）:**
-- middleware がリクエスト毎に nonce を生成し、CSP ヘッダを組み立てる（`buildCspHeader` / `generateNonce`）
-- nonce は `x-nonce` リクエストヘッダに載せ、`layout.tsx`（Server Component）がテーマ初期化のインラインスクリプトに付与
-- CSP はリクエスト・レスポンス双方に設定（Next.js が自身のスクリプトへ nonce を付与するにはリクエスト側の CSP が必要）
-- `script-src` から `'unsafe-inline'` を除去。`'strict-dynamic'` 併用で nonce 付きスクリプトが読み込む chunk 等を信頼
-- `style-src` は各種ライブラリのインラインスタイル依存のため `'unsafe-inline'` を維持（今回のスコープ外）
-- `/api/*` は middleware の matcher 対象外のため、`next.config.mjs` で最も制限的な CSP を静的付与（多層防御）
+**CSP 値の単一ソース化（`src/lib/security/cspDirectives.mjs`）:**
+- CSP ディレクティブ定義はプレーン ESM の `cspDirectives.mjs` に集約する。`next.config.mjs`（Node ESM・TS トランスパイル前）は TypeScript を直接 import できないため、値の二重定義（同期漏れ）を避ける目的で共有モジュール化している。
+- `next.config.mjs` は `buildCspHeaderValue` / `buildReportingEndpointsValue` を import してヘッダ値を組み立てる。
+- `src/lib/security/csp.ts`（`buildCspHeader`）は同モジュールの薄いラッパで、テスト・将来の再利用向けに公開する。
+- `script-src` に `'unsafe-inline'` を許容することで静的プリレンダ（`○ Static`）を維持する。nonce / `'strict-dynamic'` は hydration mismatch を招くため採用しない。
+- `style-src` は各種ライブラリのインラインスタイル依存のため `'unsafe-inline'` を維持。
+- `/api/*` は最も制限的な CSP を静的付与し、多層防御を維持する。
 
-**副作用:** per-request nonce を用いるため、全ページが動的レンダリング（`ƒ`）になる。
+**CSP 違反レポートの自前収集（`src/app/api/csp-report/route.ts`）:**
+- enforce CSP に `report-to csp-endpoint`（＋後方互換の `report-uri /api/csp-report`）を付与し、`Reporting-Endpoints: csp-endpoint="/api/csp-report"` ヘッダで受信先を宣言する。
+- `/api/csp-report` は POST で違反レポートを受信し、違反ディレクティブ・blocked-uri 等を構造化ログ（`console.warn('[csp-report]', ...)`）に出力する。report-uri 形式（`application/csp-report`）と Reporting API 形式（`application/reports+json`）の双方に対応。
+- 認証不要（ブラウザが未認証で送信するため）。大量送信・悪用対策として本文サイズ上限（16KB）を設け、解析失敗時も含め常に `204` を返す（ブラウザの再送・利用者体験に影響させない）。

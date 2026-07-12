@@ -84,10 +84,22 @@ const nextConfig = {
             key: 'Strict-Transport-Security',
             value: 'max-age=63072000; includeSubDomains; preload',
           },
-          // Content-Security-Policy は nonce ベースへ移行したため
+          // HTML ページ向けの Content-Security-Policy は nonce ベースへ移行したため
           // src/middleware.ts でリクエストごとに動的生成する。
           // ここで静的に定義すると二重定義になるため、あえて設定しない。
           // （CSP 以外のセキュリティヘッダは静的でよいため本ファイルで維持）
+        ],
+      },
+      {
+        // /api/* は middleware の matcher 対象外（nonce CSP が付与されない）。
+        // JSON API はスクリプト実行やフレーム化を一切必要としないため、
+        // 最も制限的な CSP を静的に付与して多層防御を維持する。
+        source: '/api/(.*)',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "default-src 'none'; frame-ancestors 'none'",
+          },
         ],
       },
     ];

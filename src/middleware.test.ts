@@ -3,18 +3,20 @@
  */
 
 // next/serverをモック
+// mockNextResponseNext は NextResponse.next() に渡される init 引数
+// （{ request: { headers } }）を記録し、リクエストヘッダへの nonce/CSP 伝播を検証する。
 const mockNextResponseNext = jest.fn();
 const mockNextResponseRedirect = jest.fn();
 const mockCookiesDelete = jest.fn();
 
 jest.mock('next/server', () => ({
   NextResponse: {
-    next: () => {
+    next: (init?: { request?: { headers?: Headers } }) => {
+      mockNextResponseNext(init);
       const response = {
         headers: new Headers(),
         cookies: { delete: mockCookiesDelete },
       };
-      mockNextResponseNext.mockReturnValue(response);
       return response;
     },
     redirect: (url: URL) => {
@@ -227,6 +229,33 @@ describe('middleware', () => {
       const csp2 = middleware(req2).headers.get('content-security-policy');
 
       expect(csp1).not.toBe(csp2);
+    });
+
+    it('x-nonce と CSP がリクエストヘッダに伝播する（Server Component / Next.js 参照用）', () => {
+      const req = createMockRequest({
+        pathname: '/movies/now-showing',
+        auth: mockAuth,
+        hasSessionCookie: true,
+      });
+
+      const response = middleware(req);
+
+      // NextResponse.next() に渡された init から伝播先のリクエストヘッダを取得
+      const init = mockNextResponseNext.mock.calls[0][0] as {
+        request?: { headers?: Headers };
+      };
+      const requestHeaders = init?.request?.headers;
+      expect(requestHeaders).toBeInstanceOf(Headers);
+
+      const nonceHeader = requestHeaders?.get('x-nonce');
+      const requestCsp = requestHeaders?.get('content-security-policy');
+      const responseCsp = response.headers.get('content-security-policy');
+
+      // x-nonce が設定され、レスポンス CSP の nonce 値と一致する
+      expect(nonceHeader).toBeTruthy();
+      expect(responseCsp).toContain(`'nonce-${nonceHeader}'`);
+      // リクエストヘッダにも同一の CSP が伝播している
+      expect(requestCsp).toBe(responseCsp);
     });
   });
 });

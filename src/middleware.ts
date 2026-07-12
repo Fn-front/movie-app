@@ -1,11 +1,12 @@
 /**
- * Next.js Middleware - 認証保護
+ * Next.js Middleware - 認証保護 + CSP nonce 付与
  */
 
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth/auth';
 import { ROUTES, AUTH_REQUIRED_ROUTES } from '@/constants/common';
+import { buildCspHeader, generateNonce } from '@/lib/security/csp';
 
 /** セッションcookie名（環境に応じて切り替え） */
 const SESSION_COOKIE_NAME =
@@ -22,6 +23,34 @@ const authPaths = [ROUTES.LOGIN, ROUTES.REGISTER];
 export default auth((req) => {
   const { nextUrl } = req;
   const isAuthenticated = !!req.auth;
+
+  // --- CSP nonce の生成とヘッダ準備 ---
+  // リクエストごとに nonce を生成し CSP ヘッダを組み立てる。
+  // x-nonce はリクエストヘッダに載せ、Server Component（layout.tsx）から
+  // 参照できるようにする。CSP はリクエスト/レスポンス双方に設定する
+  // （Next.js が自身のスクリプトへ nonce を付与するにはリクエスト側の CSP が必要）。
+  const nonce = generateNonce();
+  const isDev = process.env.NODE_ENV === 'development';
+  const cspHeader = buildCspHeader(nonce, isDev);
+
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('Content-Security-Policy', cspHeader);
+
+  /** 通常応答（NextResponse.next）に nonce 付きリクエストヘッダと CSP を適用する */
+  const buildNextResponse = () => {
+    const response = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+    response.headers.set('Content-Security-Policy', cspHeader);
+    return response;
+  };
+
+  /** リダイレクト応答にも CSP を付与する */
+  const withCsp = (response: NextResponse) => {
+    response.headers.set('Content-Security-Policy', cspHeader);
+    return response;
+  };
 
   const isProtectedPath = protectedPaths.some((path) =>
     nextUrl.pathname.startsWith(path),
@@ -45,23 +74,23 @@ export default auth((req) => {
 
   if (!isAuthenticated && hasSessionCookie) {
     const response = isProtectedPath
-      ? NextResponse.redirect(buildSignInUrl())
-      : NextResponse.next();
+      ? withCsp(NextResponse.redirect(buildSignInUrl()))
+      : buildNextResponse();
     response.cookies.delete(SESSION_COOKIE_NAME);
     return response;
   }
 
   // 未認証で保護されたパスにアクセス → サインインページへリダイレクト（戻り先を保持）
   if (isProtectedPath && !isAuthenticated) {
-    return Response.redirect(buildSignInUrl());
+    return withCsp(NextResponse.redirect(buildSignInUrl()));
   }
 
   // 認証済みで認証ページにアクセス → ホームへリダイレクト
   if (isAuthPath && isAuthenticated) {
-    return Response.redirect(new URL(ROUTES.HOME, nextUrl));
+    return withCsp(NextResponse.redirect(new URL(ROUTES.HOME, nextUrl)));
   }
 
-  return;
+  return buildNextResponse();
 });
 
 // Middlewareを適用するパスを設定

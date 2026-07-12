@@ -7,12 +7,64 @@
  */
 
 import { test, expect } from '../fixtures/auth';
+import type { Page } from '@playwright/test';
+
+/**
+ * WebGL2 初期化・データ取得完了の待機タイムアウト（ms）。
+ * CIのヘッドレスChromiumでの初期化遅延を吸収しつつ、
+ * expect のデフォルト（10秒）より長めに確保する。
+ */
+const READY_TIMEOUT_MS = 15000;
+
+/**
+ * WebGL2 が利用可能になるまで明示的に待機する。
+ *
+ * CIのヘッドレスChromiumではGPU無効化により WebGL2 初期化が遅延することがあり、
+ * その状態でページのゲート（isWebGL2Support）に依存すると
+ * UnsupportedBrowserNotice に落ちて期待要素が出ずタイムアウトする。
+ * ここでブラウザの WebGL2 コンテキスト生成が成功することを先に確認し、
+ * ソフトウェアレンダリング（SwiftShader）でも安定して true になることを保証する。
+ */
+async function waitForWebGL2(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      try {
+        const canvas = document.createElement('canvas');
+        return canvas.getContext('webgl2') !== null;
+      } catch {
+        return false;
+      }
+    },
+    undefined,
+    { timeout: READY_TIMEOUT_MS },
+  );
+}
+
+/**
+ * useTheater（Supabaseフェッチ）のデータ取得完了を待機する。
+ *
+ * 座席一覧（SeatA11yList）はデータ取得後に描画されるため、
+ * 座席ボタンの出現を待つことでデータ取得完了を明示的に保証する。
+ * 併せて、読み込み中インジケータが消えていることも確認する。
+ */
+async function waitForTheaterReady(page: Page): Promise<void> {
+  // 読み込み中表示が消えるまで待つ（useTheater / useWebGL2Support の判定完了）
+  await expect(page.getByText('読み込み中...')).toHaveCount(0, {
+    timeout: READY_TIMEOUT_MS,
+  });
+  // 座席一覧が描画される（= useTheater のデータ取得完了）
+  await expect(page.getByRole('button', { name: /^A列1番、/ })).toBeVisible();
+}
 
 test.describe('シアター体験ページ', () => {
   test('俯瞰ビューが表示され、座席を選択すると一人称に切り替わり、俯瞰に戻れる', async ({
     page,
   }) => {
     await page.goto('/theater-experience');
+
+    // WebGL2 初期化とデータ取得の完了を明示的に待つ（暗黙タイムアウト依存を解消）
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
 
     // タイトルと劇場名が表示されること
     await expect(
@@ -49,6 +101,10 @@ test.describe('シアター体験ページ', () => {
 
   test('ヒートマップ表示/非表示を切り替えられる', async ({ page }) => {
     await page.goto('/theater-experience');
+
+    // WebGL2 初期化とデータ取得の完了を明示的に待つ
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
 
     const showRadio = page.getByRole('radio', { name: 'ヒートマップを表示' });
     const hideRadio = page.getByRole('radio', { name: 'ヒートマップを非表示' });

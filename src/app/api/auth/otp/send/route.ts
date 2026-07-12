@@ -11,7 +11,7 @@ import {
 } from '@/helpers/supabase';
 import { getAuthSession } from '@/helpers/auth';
 import { otpSendSchema } from '@/schema/otp';
-import { generateOtpCode, sendOtpEmail } from '@/lib/otp';
+import { generateOtpCode, sendOtpEmail, randomDelay } from '@/lib/otp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
   OTP_ACTION,
@@ -22,12 +22,6 @@ import {
   ERROR_CODE,
   AUTH_ERROR_MESSAGES,
 } from '@/constants';
-
-/** タイミング攻撃防止用のランダム遅延（200〜500ms） */
-async function randomDelay(): Promise<void> {
-  const delay = 200 + Math.random() * 300;
-  await new Promise((resolve) => setTimeout(resolve, delay));
-}
 
 export async function POST(request: Request) {
   try {

@@ -29,6 +29,7 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 jest.mock('@/lib/otp', () => ({
   generateOtpCode: () => '123456',
   sendOtpEmail: jest.fn().mockResolvedValue(true),
+  randomDelay: jest.fn().mockResolvedValue(undefined),
 }));
 
 // --- Helpers ---

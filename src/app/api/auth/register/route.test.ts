@@ -28,9 +28,11 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 
 const mockGenerateOtpCode = jest.fn().mockReturnValue('123456');
 const mockSendOtpEmail = jest.fn().mockResolvedValue(true);
+const mockRandomDelay = jest.fn().mockResolvedValue(undefined);
 jest.mock('@/lib/otp', () => ({
   generateOtpCode: () => mockGenerateOtpCode(),
   sendOtpEmail: (...args: unknown[]) => mockSendOtpEmail(...args),
+  randomDelay: () => mockRandomDelay(),
 }));
 
 // --- Helpers ---
@@ -92,6 +94,8 @@ describe('POST /api/auth/register', () => {
     expect(json.data.userId).toBe('user-123');
     expect(mockGenerateOtpCode).toHaveBeenCalled();
     expect(mockSendOtpEmail).toHaveBeenCalledWith('test@example.com', '123456');
+    // タイミング均一化: 新規成功パスも randomDelay を通す
+    expect(mockRandomDelay).toHaveBeenCalledTimes(1);
   });
 
   it('バリデーションエラーで400を返す', async () => {
@@ -107,7 +111,8 @@ describe('POST /api/auth/register', () => {
     expect(json.success).toBe(false);
   });
 
-  it('既存ユーザーで409を返す', async () => {
+  it('既存メールでも新規登録と区別できない成功レスポンス（201）を返す（列挙防止）', async () => {
+    // 既存ユーザーあり
     mockFrom.mockReturnValueOnce({
       select: () => ({
         eq: () => ({
@@ -122,10 +127,58 @@ describe('POST /api/auth/register', () => {
         password: 'Password1',
       }),
     );
-
-    expect(response.status).toBe(409);
     const json = await response.json();
-    expect(json.success).toBe(false);
+
+    // 新規作成時（201・success:true・data.userId・message）と同一形状
+    expect(response.status).toBe(201);
+    expect(json.success).toBe(true);
+    expect(typeof json.data.userId).toBe('string');
+    expect(json.message).toBe('確認コードをメールに送信しました。');
+
+    // 内部では新規ユーザー・OTPを作成せず、メールも送信しない
+    expect(mockFrom).toHaveBeenCalledTimes(1); // 既存チェックのSELECTのみ
+    expect(mockGenerateOtpCode).not.toHaveBeenCalled();
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
+    // タイミング均一化: 既存メール分岐も randomDelay を通す
+    expect(mockRandomDelay).toHaveBeenCalledTimes(1);
+  });
+
+  it('既存メール時のレスポンス形状が新規登録時と区別できない', async () => {
+    // 新規登録の成功レスポンス
+    setupSuccessMocks();
+    const newUserRes = await POST(
+      createRequest({ email: 'new@example.com', password: 'Password1' }),
+    );
+    const newUserJson = await newUserRes.json();
+
+    jest.clearAllMocks();
+
+    // 既存メールのレスポンス
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({ data: { id: 'existing' }, error: null }),
+        }),
+      }),
+    });
+    const existingRes = await POST(
+      createRequest({ email: 'existing@example.com', password: 'Password1' }),
+    );
+    const existingJson = await existingRes.json();
+
+    // ステータス・キー構成・型が一致（userId 値のみ異なるダミー）
+    expect(existingRes.status).toBe(newUserRes.status);
+    expect(Object.keys(existingJson).sort()).toEqual(
+      Object.keys(newUserJson).sort(),
+    );
+    expect(Object.keys(existingJson.data).sort()).toEqual(
+      Object.keys(newUserJson.data).sort(),
+    );
+    expect(existingJson.success).toBe(newUserJson.success);
+    expect(existingJson.message).toBe(newUserJson.message);
+    expect(typeof existingJson.data.userId).toBe(
+      typeof newUserJson.data.userId,
+    );
   });
 
   it('ユーザーINSERT失敗で500を返す', async () => {

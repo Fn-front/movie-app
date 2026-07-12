@@ -32,6 +32,11 @@ describe('buildCspHeader', () => {
       expect(header).toContain("object-src 'none'");
     });
 
+    it('違反監視用の report-to / report-uri を含む', () => {
+      expect(header).toContain('report-to csp-endpoint');
+      expect(header).toContain('report-uri /api/csp-report');
+    });
+
     it('既存の他ディレクティブを維持する', () => {
       expect(header).toContain("default-src 'self'");
       expect(header).toContain("frame-ancestors 'none'");

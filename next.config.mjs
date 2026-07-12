@@ -1,6 +1,14 @@
 /* eslint-disable no-undef */
 import withBundleAnalyzer from '@next/bundle-analyzer';
 
+// CSP の値は src/lib/security/csp.ts と共有（単一ソース化）。
+// next.config.mjs（Node ESM）は TS を直接 import できないため、プレーン
+// ESM の共有モジュールを双方から import して値の二重定義を防ぐ。
+import {
+  buildCspHeaderValue,
+  buildReportingEndpointsValue,
+} from './src/lib/security/cspDirectives.mjs';
+
 const withAnalyzer = withBundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
 });
@@ -11,21 +19,12 @@ const isDev = process.env.NODE_ENV === 'development';
  * HTML ページ向け CSP。
  * script-src に 'unsafe-inline' を許容することで静的プリレンダ（nonce 不要）を維持する。
  * dev は Next.js 開発ツールが eval を利用するため 'unsafe-eval' も付与する。
- * 値は src/lib/security/csp.ts の buildCspHeader と同期させること。
+ * 違反監視のため report-to / report-uri を付与する（自前 /api/csp-report で収集）。
  */
-const cspHeaderValue = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' https://image.tmdb.org data: blob:",
-  "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co",
-  'frame-src https://www.youtube.com',
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join('; ');
+const cspHeaderValue = buildCspHeaderValue({ isDev, withReporting: true });
+
+// Reporting API のエンドポイント定義。CSP の report-to グループ名と対応させる。
+const reportingEndpointsValue = buildReportingEndpointsValue();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -111,6 +110,12 @@ const nextConfig = {
           {
             key: 'Content-Security-Policy',
             value: cspHeaderValue,
+          },
+          // report-to（CSP）が参照する Reporting API のエンドポイント定義。
+          // 違反レポートは /api/csp-report が受信する。
+          {
+            key: 'Reporting-Endpoints',
+            value: reportingEndpointsValue,
           },
         ],
       },

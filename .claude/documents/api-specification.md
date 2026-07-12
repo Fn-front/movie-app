@@ -52,7 +52,7 @@
 | 404 | USER_NOT_FOUND | "ユーザーが見つかりません" | - |
 | 400 | INVALID_OTP | "確認コードが間違っています" | { remainingAttempts: 3 } |
 | 400 | OTP_EXPIRED | "確認コードの有効期限が切れました" | - |
-| 409 | CONFLICT | "すでに登録済みのメールアドレスです" | - |
+| 409 | CONFLICT | "すでに登録済みです"（例: ウォッチリスト重複） | - |
 | 429 | RATE_LIMIT_EXCEEDED | "試行回数の上限に達しました。30分後に再度お試しください" | { retryAfter: 1800 } |
 | 429 | TOO_MANY_REQUESTS | "リクエストが多すぎます。しばらく待ってから再度お試しください" | - |
 | 500 | INTERNAL_SERVER_ERROR | "サーバーエラーが発生しました" | - |
@@ -118,13 +118,20 @@
 ```
 
 **内部処理:**
-1. ユーザー作成（is_verified = false）
-2. OTPコード生成（6桁）・保存
-3. Resendでメール送信
+1. メールアドレスで既存ユーザーを検索
+   - 既存メールの場合（メールアドレス列挙防止）: 新規ユーザー・OTPを作成せず、メールも送信しない。bcrypt.hash + randomDelay(200〜500ms) でタイミングを均一化し、上記と同一形状の `201`（`userId` はダミーUUID）を返す
+2. ユーザー作成（is_verified = false）
+3. OTPコード生成（6桁）・保存
+4. Resendでメール送信
+5. randomDelay(200〜500ms)（既存メール分岐とタイミングを揃える）
+
+**メールアドレス列挙防止:**
+- 既存メールでも `409 EMAIL_ALREADY_EXISTS` は返さず、新規登録と区別できない `201`（同一ボディ形状・`userId` はダミーUUID）を返す
+- DB insert / OTP 生成 / メール送信の実処理差による応答時間の完全一致はスコープ外
 
 **Error Responses:**
 - `400 Bad Request`: バリデーションエラー
-- `409 Conflict`: すでに登録済みのメールアドレス
+- `429 Too Many Requests`: レート制限超過（email単位）
 
 ---
 
@@ -186,11 +193,12 @@ OTPコード検証
 - `action`: 'registration' | 'login' | 'password_change'
 
 **内部処理:**
-1. otp_codesテーブルから該当レコード検索
-2. 有効期限チェック（10分以内か）
-3. 試行回数チェック（5回以内か）
-4. コード照合
-5. アクション別後処理:
+1. 検証試行のレート制限チェック（email単位、10回/10分）— 超過時は 429 を返しコード照合をスキップ
+2. otp_codesテーブルから該当レコード検索
+3. 有効期限チェック（10分以内か）
+4. 試行回数チェック（5回以内か）
+5. コード照合
+6. アクション別後処理（検証成功時はレート制限をリセット）:
    - `registration`: is_verified = true に更新、OTPレコード削除
    - `login`: OTPレコードに検証済みフラグ設定（セッション発行はクライアント側でCredentials Provider経由）
    - `password_change`: OTPレコードに検証済みフラグ設定（パスワード変更APIで再検証）
@@ -226,7 +234,19 @@ OTPコード検証
 **Error Responses:**
 - `400 Bad Request`: コードが間違っている（残り試行回数をdetailsに含む）
 - `400 Bad Request`: OTPの有効期限切れ
-- `429 Too Many Requests`: 試行回数超過（5回）
+- `429 Too Many Requests`: 検証試行のレート制限超過（email単位、10回/10分）。`RATE_LIMIT_EXCEEDED` + `Retry-After` ヘッダ（残りロック秒数）を返す。方式は「上限超過時点からウィンドウ分（10分）ロック」で、検証成功時にリセットされる
+
+**429レスポンス例:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "検証の試行回数が多すぎます。しばらく待ってから再度お試しください。"
+  }
+}
+```
+（`Retry-After` ヘッダに残りロック秒数を付与。ボディに `details` は含まない）
 
 ---
 

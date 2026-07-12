@@ -1,37 +1,31 @@
 /**
  * Content Security Policy (CSP) ヘッダ生成ロジック
  *
- * nonce ベースの CSP を採用し、`script-src` から `'unsafe-inline'` を除去する。
- * インラインスクリプト（layout.tsx のテーマ初期化）にはリクエストごとに生成した
- * nonce を付与することで実行を許可する。
+ * `script-src` に `'unsafe-inline'` を許容することで、静的プリレンダ
+ * （nonce 不要）を維持したまま CSP を配信できるようにする。
+ * nonce / strict-dynamic による全ページ動的化は hydration mismatch を
+ * 引き起こしたため採用しない（XSS 多層防御は後続段階で report / Trusted
+ * Types により補う）。
  *
- * `'strict-dynamic'` を併用することで、nonce 付きスクリプトが動的に読み込む
- * スクリプト（Next.js の chunk 等）を信頼し、明示的なホワイトリスト維持を不要にする。
+ * unsafe-inline を許容するため CSP は nonce に依存せず、next.config.mjs で
+ * 全パスへ静的ヘッダとして配信する。
  */
-
-/** リクエストごとに一意な nonce を生成する（base64 エンコードした UUID） */
-export function generateNonce(): string {
-  return Buffer.from(crypto.randomUUID()).toString('base64');
-}
 
 /**
  * CSP ヘッダ値を生成する。
  *
- * @param nonce リクエストごとの nonce
  * @param isDev 開発環境かどうか。開発時のみ `script-src` に `'unsafe-eval'` を付与する
  *   （Next.js の開発ツールが eval を利用するため）。本番では付与しない。
  * @returns 1 行に整形した CSP ヘッダ値
  */
-export function buildCspHeader(nonce: string, isDev: boolean): string {
+export function buildCspHeader(isDev: boolean): string {
   const directives = [
     "default-src 'self'",
-    // nonce + strict-dynamic により 'unsafe-inline' を除去。
-    // 本番では 'unsafe-eval' を付与しない（多層防御の強化）。
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${
-      isDev ? " 'unsafe-eval'" : ''
-    }`,
+    // 静的プリレンダを維持するため 'unsafe-inline' を許容する。
+    // dev は Next.js 開発ツールが eval を利用するため 'unsafe-eval' も付与する。
+    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
     // style-src は Next.js / 各種ライブラリのインラインスタイルに依存するため
-    // 'unsafe-inline' を維持する（今回の対応スコープ外）。
+    // 'unsafe-inline' を維持する。
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' https://image.tmdb.org data: blob:",
     // data: は @fullcalendar/core が内部でアイコンフォント(fcicons)を
@@ -42,6 +36,8 @@ export function buildCspHeader(nonce: string, isDev: boolean): string {
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
+    // プラグイン（<object>/<embed>）を全面禁止し、埋め込みベクタを塞ぐ
+    "object-src 'none'",
   ];
 
   return directives.join('; ');

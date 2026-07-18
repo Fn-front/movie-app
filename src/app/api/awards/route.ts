@@ -15,6 +15,7 @@ import {
   AWARDS_MESSAGES,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  CACHE_CONTROL,
 } from '@/constants';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { handleRouteError } from '@/helpers/routeError';
@@ -55,10 +56,6 @@ interface AwardMovieRow {
   is_winner: boolean;
   display_order: number;
 }
-
-/** Cache-Control: CDNで1時間キャッシュ、stale-while-revalidateで24時間 */
-const CACHE_CONTROL_VALUE =
-  'public, s-maxage=3600, stale-while-revalidate=86400';
 
 /** DBレコードをAwardMovie型に変換 */
 function toAwardMovie(row: {
@@ -140,7 +137,7 @@ export async function GET(request: Request) {
               ...(rateLimitResult.retryAfter
                 ? { 'Retry-After': String(rateLimitResult.retryAfter) }
                 : {}),
-              'Cache-Control': 'no-store',
+              'Cache-Control': CACHE_CONTROL.NO_STORE,
             },
           },
         );
@@ -221,7 +218,7 @@ export async function GET(request: Request) {
       { success: true, data: responseData },
       {
         status: HTTP_STATUS.OK,
-        headers: { 'Cache-Control': CACHE_CONTROL_VALUE },
+        headers: { 'Cache-Control': CACHE_CONTROL.PUBLIC_1H_SWR_24H },
       },
     );
   } catch (error) {

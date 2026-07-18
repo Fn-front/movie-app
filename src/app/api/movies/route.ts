@@ -14,6 +14,7 @@ import {
 import { moviesQuerySchema } from '@/schema/movies';
 import {
   HTTP_STATUS,
+  CACHE_CONTROL,
   PAGINATION,
   CACHE_DURATION_HOURS,
   NOW_PLAYING_CACHE_DURATION_HOURS,
@@ -419,8 +420,8 @@ export async function GET(request: Request) {
         status: HTTP_STATUS.OK,
         headers: {
           'Cache-Control': session
-            ? 'private, no-store'
-            : 'public, s-maxage=3600, stale-while-revalidate=86400',
+            ? CACHE_CONTROL.PRIVATE_NO_STORE
+            : CACHE_CONTROL.PUBLIC_1H_SWR_24H,
         },
       },
     );

@@ -15,6 +15,7 @@ import {
   ERROR_CODE,
   MOVIES_ERROR_MESSAGES,
   API_ERROR_MESSAGES,
+  CACHE_CONTROL,
 } from '@/constants';
 
 /**
@@ -74,8 +75,8 @@ export async function GET(
       {
         headers: {
           'Cache-Control': session
-            ? 'private, no-store'
-            : 'public, s-maxage=86400, stale-while-revalidate=604800',
+            ? CACHE_CONTROL.PRIVATE_NO_STORE
+            : CACHE_CONTROL.PUBLIC_24H_SWR_7D,
         },
       },
     );

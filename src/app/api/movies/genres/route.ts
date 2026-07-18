@@ -11,6 +11,7 @@ import {
   ERROR_CODE,
   SEARCH_ERROR_MESSAGES,
   GENRE_NAME_OVERRIDES,
+  CACHE_CONTROL,
 } from '@/constants';
 
 export async function GET() {
@@ -31,7 +32,7 @@ export async function GET() {
       {
         status: HTTP_STATUS.OK,
         headers: {
-          'Cache-Control': 'public, s-maxage=604800',
+          'Cache-Control': CACHE_CONTROL.PUBLIC_7D,
         },
       },
     );

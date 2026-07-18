@@ -14,6 +14,12 @@ export const WATCHLIST_DEFAULT_LIMIT = 20;
  */
 export const WATCHLIST_MAX_LIMIT = 50;
 
+/**
+ * ウォッチリスト取得SELECTカラム
+ */
+export const WATCHLIST_SELECT =
+  'id, tmdb_movie_id, title, poster_path, release_date, added_at';
+
 const TARGET = 'ウォッチリスト';
 
 /**

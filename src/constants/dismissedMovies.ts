@@ -4,6 +4,12 @@
 
 import { errorMessage, successMessage } from './common';
 
+/**
+ * 興味なし映画取得SELECTカラム
+ */
+export const DISMISSED_MOVIES_SELECT =
+  'id, tmdb_movie_id, title, poster_path, genre_ids, created_at';
+
 const TARGET = '興味なしリスト';
 
 /**

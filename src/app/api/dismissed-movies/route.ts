@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server';
 import {
   HTTP_STATUS,
   ERROR_CODE,
+  DISMISSED_MOVIES_SELECT,
   DISMISSED_MOVIES_ERROR_MESSAGES,
   DISMISSED_MOVIES_SUCCESS_MESSAGES,
   RATE_LIMIT_ACTION,
@@ -29,7 +30,7 @@ export const GET = withAuth(
   async ({ session, supabase }) => {
     const { data, error } = await supabase
       .from('dismissed_movies')
-      .select('id, tmdb_movie_id, title, poster_path, genre_ids, created_at')
+      .select(DISMISSED_MOVIES_SELECT)
       .eq('user_id', session.user.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false });
@@ -92,7 +93,7 @@ export const POST = withAuth(
         poster_path: parsed.data.poster_path ?? null,
         genre_ids: parsed.data.genre_ids ?? null,
       })
-      .select('id, tmdb_movie_id, title, poster_path, genre_ids, created_at')
+      .select(DISMISSED_MOVIES_SELECT)
       .single();
 
     if (insertError) {

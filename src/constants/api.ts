@@ -43,6 +43,22 @@ export const HTTP_STATUS = {
 } as const;
 
 /**
+ * Cache-Control ヘッダー値
+ */
+export const CACHE_CONTROL = {
+  /** CDN 1時間 / SWR 24時間 */
+  PUBLIC_1H_SWR_24H: 'public, s-maxage=3600, stale-while-revalidate=86400',
+  /** CDN 24時間 / SWR 7日 */
+  PUBLIC_24H_SWR_7D: 'public, s-maxage=86400, stale-while-revalidate=604800',
+  /** CDN 7日 */
+  PUBLIC_7D: 'public, s-maxage=604800',
+  /** 認証時: キャッシュ無効 */
+  PRIVATE_NO_STORE: 'private, no-store',
+  /** エラー等: キャッシュ無効 */
+  NO_STORE: 'no-store',
+} as const;
+
+/**
  * APIエラーコード
  */
 export const ERROR_CODE = {

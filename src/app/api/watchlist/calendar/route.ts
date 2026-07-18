@@ -11,7 +11,12 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { calendarQuerySchema } from '@/schema/calendar';
-import { HTTP_STATUS, ERROR_CODE, CALENDAR_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  CALENDAR_ERROR_MESSAGES,
+  WATCHLIST_SELECT,
+} from '@/constants';
 
 export async function GET(request: Request) {
   try {
@@ -62,7 +67,7 @@ export async function GET(request: Request) {
     // ウォッチリストから指定月の映画を取得
     const { data, error } = await supabase
       .from('watchlist')
-      .select('id, tmdb_movie_id, title, poster_path, release_date, added_at')
+      .select(WATCHLIST_SELECT)
       .eq('user_id', session.user.id)
       .is('deleted_at', null)
       .not('release_date', 'is', null)

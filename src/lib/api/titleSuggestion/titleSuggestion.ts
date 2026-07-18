@@ -2,6 +2,7 @@
  * 原題提案API クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 
 /**
@@ -25,7 +26,7 @@ export async function suggestTitleApi(
   options?: { signal?: AbortSignal },
 ): Promise<TitleSuggestionResponse> {
   const response = await axiosInstance.get<TitleSuggestionResponse>(
-    '/api/movies/suggest-title',
+    API_ENDPOINTS.MOVIES_SUGGEST_TITLE,
     {
       params: { query },
       signal: options?.signal,

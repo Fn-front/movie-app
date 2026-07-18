@@ -2,6 +2,7 @@
  * ウォッチリストAPI クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 import type {
   WatchlistAddFormData,
@@ -66,7 +67,7 @@ export async function getWatchlist(
   params: GetWatchlistRequest = {},
 ): Promise<GetWatchlistResponse> {
   const response = await axiosInstance.get<GetWatchlistResponse>(
-    '/api/watchlist',
+    API_ENDPOINTS.WATCHLIST,
     { params },
   );
   return response.data;
@@ -82,7 +83,7 @@ export async function addWatchlist(
   data: WatchlistAddFormData,
 ): Promise<AddWatchlistResponse> {
   const response = await axiosInstance.post<AddWatchlistResponse>(
-    '/api/watchlist',
+    API_ENDPOINTS.WATCHLIST,
     data,
   );
   return response.data;
@@ -94,5 +95,5 @@ export async function addWatchlist(
  * @param id - ウォッチリストID
  */
 export async function removeWatchlist(id: string): Promise<void> {
-  await axiosInstance.delete(`/api/watchlist/${id}`);
+  await axiosInstance.delete(API_ENDPOINTS.watchlistById(id));
 }

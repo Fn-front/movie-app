@@ -2,6 +2,7 @@
  * 検索API クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 import type { Movie } from '@/lib/types';
 
@@ -54,7 +55,7 @@ export async function searchMoviesApi(
   options?: { signal?: AbortSignal },
 ): Promise<SearchMoviesResponse> {
   const response = await axiosInstance.get<SearchMoviesResponse>(
-    '/api/movies/search',
+    API_ENDPOINTS.MOVIES_SEARCH,
     {
       params,
       signal: options?.signal,

@@ -2,6 +2,7 @@
  * お気に入りAPI クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 import type {
   FavoritesAddFormData,
@@ -99,7 +100,7 @@ export async function getFavorites(
   params: GetFavoritesRequest = {},
 ): Promise<GetFavoritesResponse> {
   const response = await axiosInstance.get<GetFavoritesResponse>(
-    '/api/favorites',
+    API_ENDPOINTS.FAVORITES,
     { params },
   );
   return response.data;
@@ -115,7 +116,7 @@ export async function addFavorite(
   data: FavoritesAddFormData,
 ): Promise<AddFavoriteResponse> {
   const response = await axiosInstance.post<AddFavoriteResponse>(
-    '/api/favorites',
+    API_ENDPOINTS.FAVORITES,
     data,
   );
   return response.data;
@@ -133,7 +134,7 @@ export async function updateFavoriteRating(
   data: FavoritesUpdateFormData,
 ): Promise<UpdateFavoriteRatingResponse> {
   const response = await axiosInstance.patch<UpdateFavoriteRatingResponse>(
-    `/api/favorites/${id}`,
+    API_ENDPOINTS.favoriteById(id),
     data,
   );
   return response.data;
@@ -145,5 +146,5 @@ export async function updateFavoriteRating(
  * @param id - お気に入りID
  */
 export async function removeFavorite(id: string): Promise<void> {
-  await axiosInstance.delete(`/api/favorites/${id}`);
+  await axiosInstance.delete(API_ENDPOINTS.favoriteById(id));
 }

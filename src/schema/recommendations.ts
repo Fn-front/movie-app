@@ -11,8 +11,9 @@ import {
 } from '@/constants';
 
 /**
- * AIに要求しうる最大件数（最大表示件数＋取りこぼし用バッファ）
- * バッファ分多めに要求するため、レスポンス検証の上限もこれに合わせる。
+ * AIレスポンスとして保持する最大件数（最大表示件数＋取りこぼし用バッファ）。
+ * LLMは要求件数を厳密に守らず超過して返すことがあるため、超過分は
+ * バリデーションエラーにせず、この件数まで切り詰める（超過分は破棄）。
  */
 const OPENAI_RECOMMENDATIONS_MAX_RESPONSE =
   RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER;
@@ -34,13 +35,17 @@ export const openAiRecommendationItemSchema = z.object({
  * OpenAIレスポンス全体スキーマ
  */
 export const openAiRecommendationsResponseSchema = z.object({
-  recommendations: z
-    .array(openAiRecommendationItemSchema)
-    .min(1, 'レコメンドは1件以上必要です')
-    .max(
-      OPENAI_RECOMMENDATIONS_MAX_RESPONSE,
-      `レコメンドは${OPENAI_RECOMMENDATIONS_MAX_RESPONSE}件以下にしてください`,
-    ),
+  // LLMは要求件数を超えて返すことがある。上限超過を弾かず、かつ全件を検証する
+  // 無駄（巨大配列時のコスト）を避けるため、検証前に上限件数へ切り詰める。
+  recommendations: z.preprocess(
+    (value) =>
+      Array.isArray(value)
+        ? value.slice(0, OPENAI_RECOMMENDATIONS_MAX_RESPONSE)
+        : value,
+    z
+      .array(openAiRecommendationItemSchema)
+      .min(1, 'レコメンドは1件以上必要です'),
+  ),
 });
 
 /**

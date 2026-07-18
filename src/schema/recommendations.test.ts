@@ -138,6 +138,9 @@ describe('openAiRecommendationsResponseSchema', () => {
       recommendations: items,
     });
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recommendations).toHaveLength(MAX_RESPONSE_COUNT);
+    }
   });
 
   it('空配列の場合エラーになる', () => {
@@ -147,7 +150,7 @@ describe('openAiRecommendationsResponseSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('上限（最大件数＋バッファ）を超える場合エラーになる', () => {
+  it('上限（最大件数＋バッファ）を超える場合は弾かず上限件数に切り詰める', () => {
     const items = Array.from({ length: MAX_RESPONSE_COUNT + 1 }, (_, i) => ({
       ...validItem,
       title: `映画${i + 1}`,
@@ -155,7 +158,28 @@ describe('openAiRecommendationsResponseSchema', () => {
     const result = openAiRecommendationsResponseSchema.safeParse({
       recommendations: items,
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recommendations).toHaveLength(MAX_RESPONSE_COUNT);
+    }
+  });
+
+  it('上限を大幅に超える場合も先頭から上限件数のみ残す（順序維持）', () => {
+    const items = Array.from({ length: MAX_RESPONSE_COUNT + 10 }, (_, i) => ({
+      ...validItem,
+      title: `映画${i + 1}`,
+    }));
+    const result = openAiRecommendationsResponseSchema.safeParse({
+      recommendations: items,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recommendations).toHaveLength(MAX_RESPONSE_COUNT);
+      expect(result.data.recommendations[0].title).toBe('映画1');
+      expect(result.data.recommendations[MAX_RESPONSE_COUNT - 1].title).toBe(
+        `映画${MAX_RESPONSE_COUNT}`,
+      );
+    }
   });
 
   it('recommendationsが未指定の場合エラーになる', () => {

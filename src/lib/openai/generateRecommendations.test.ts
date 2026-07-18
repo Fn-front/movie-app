@@ -6,6 +6,10 @@
  * レコメンド生成ロジック テスト
  */
 
+import {
+  RECOMMENDATIONS_GENERATION_BUFFER,
+  RECOMMENDATIONS_MAX_COUNT,
+} from '@/constants';
 import type { OpenAiRecommendationItem } from '@/schema/recommendations';
 
 // --- Mocks ---
@@ -28,6 +32,10 @@ import {
   fetchRecommendationsFromOpenAI,
   resolveRecommendationsWithTMDb,
 } from './generateRecommendations';
+
+/** AIレスポンスとして保持される最大件数（最大表示件数＋取りこぼし用バッファ） */
+const MAX_RESPONSE_COUNT =
+  RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER;
 
 // --- Tests ---
 
@@ -205,6 +213,31 @@ describe('fetchRecommendationsFromOpenAI', () => {
 
     const systemMessage = mockCreate.mock.calls[0][0].messages[0];
     expect(systemMessage.content).toContain('3件推薦');
+  });
+
+  it('OpenAIが上限を超える件数を返しても、nullにせず上限件数に切り詰めて返す', async () => {
+    // LLMは要求件数を厳密に守らず超過して返すことがある。
+    // 以前は上限超過でzod検証に失敗しnullを返し、cronが丸ごと失敗していた。
+    const overCount = MAX_RESPONSE_COUNT + 1;
+    const mockResponse = {
+      recommendations: Array.from({ length: overCount }, (_, i) => ({
+        title: `Movie ${i + 1}`,
+        year: 2020,
+        reason: `理由${i + 1}`,
+      })),
+    };
+    mockCreate.mockResolvedValue({
+      choices: [{ message: { content: JSON.stringify(mockResponse) } }],
+    });
+
+    const result = await fetchRecommendationsFromOpenAI(
+      [{ title: 'テスト', rating: 5 }],
+      [],
+    );
+
+    expect(result).not.toBeNull();
+    expect(result).toHaveLength(MAX_RESPONSE_COUNT);
+    expect(result![0].title).toBe('Movie 1');
   });
 });
 

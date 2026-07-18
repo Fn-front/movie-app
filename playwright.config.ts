@@ -112,7 +112,8 @@ export default defineConfig({
     reuseExistingServer: !isCI,
     timeout: 120000,
     // OTPフローE2E用: メール実送信をスキップ（コードはDBから取得して検証）。
+    // E2E_TEST_MODE=true は positive guard の必須シグナル（これが無いとバイパスは無効）。
     // ローカルで reuseExistingServer 時は、起動済みdevサーバーにも同フラグが必要。
-    env: { OTP_EMAIL_TEST_BYPASS: 'true' },
+    env: { E2E_TEST_MODE: 'true', OTP_EMAIL_TEST_BYPASS: 'true' },
   },
 });

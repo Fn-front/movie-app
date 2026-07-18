@@ -26,13 +26,17 @@ export async function sendOtpEmail(
 ): Promise<boolean> {
   // E2E/テスト用バイパス: メールの実送信をスキップして成功扱いにする。
   // OTPコードはDBに保存されるため、テストはDBから取得して検証できる。
-  // デフォルトoff。CIのE2Eサーバー（npm start=本番ビルド）のみ
-  // OTP_EMAIL_TEST_BYPASS=true で有効化する。
-  // Vercel本番では VERCEL_ENV ガードにより強制無効（誤設定耐性）。
+  //
+  // positive guard（fail-closed）: 明示的な E2E_TEST_MODE=true のときのみ許可する。
+  // 旧実装は VERCEL_ENV !== 'production' の否定条件（fail-open）で、preview や
+  // VERCEL_ENV 未定義でもフラグ単体で有効化されうる問題があった（#424）。
+  // 加えて機能個別の OTP_EMAIL_TEST_BYPASS=true を要求し、Vercel 本番では
+  // VERCEL_ENV で多層に強制無効化する（万一 E2E_TEST_MODE が本番に漏れても遮断）。
   // ※ NODE_ENV は CI も production のため判別に使えない。
   if (
-    process.env.VERCEL_ENV !== 'production' &&
-    process.env.OTP_EMAIL_TEST_BYPASS === 'true'
+    process.env.E2E_TEST_MODE === 'true' &&
+    process.env.OTP_EMAIL_TEST_BYPASS === 'true' &&
+    process.env.VERCEL_ENV !== 'production'
   ) {
     console.warn(
       '[OTP_EMAIL_TEST_BYPASS] sendOtpEmail はテストモードのため実送信をスキップしました',

@@ -79,6 +79,45 @@ export function calcDistanceToScreen(
 }
 
 /**
+ * 一人称視点の水平注視点X（首振りの向き）を計算する。
+ *
+ * 実際の観客の挙動をモデル化する:
+ * - スクリーン中心が正面から deadzoneYawRad 以内なら首を振らず真正面を向く
+ *   （中央〜中央寄りの席。多少のズレは目・周辺視でカバーするため頭は動かさない）。
+ * - それを超える分だけ首を振り、maxYawRad で頭打ちにする（端席が首を振り過ぎない）。
+ *
+ * ミラー反転前の実座標系で返す（呼び出し側で必要なら -x する）。
+ *
+ * @param seatX 座席X
+ * @param screenCenterX スクリーン中心X
+ * @param forwardDistance 座席→スクリーン平面の前方距離（>0 を想定）
+ * @param maxYawRad 水平首振りの上限角（ラジアン、>=0）
+ * @param deadzoneYawRad 首を振り始めない不感帯の角度（ラジアン、>=0、既定0）
+ * @returns 注視点のX座標
+ */
+export function calcYawClampedTargetX(
+  seatX: number,
+  screenCenterX: number,
+  forwardDistance: number,
+  maxYawRad: number,
+  deadzoneYawRad = 0,
+): number {
+  const lateralToCenter = screenCenterX - seatX;
+  // 前方距離が取れない場合はスクリーン中心を向く（フォールバック）
+  if (forwardDistance <= 0) return screenCenterX;
+  // スクリーン中心方向の角度（正面=0）
+  const yawToCenter = Math.atan(Math.abs(lateralToCenter) / forwardDistance);
+  // 不感帯を超えた分だけ首を振り、上限角で頭打ちにする
+  const headYaw = Math.min(
+    Math.max(yawToCenter - deadzoneYawRad, 0),
+    maxYawRad,
+  );
+  const lateral =
+    Math.sign(lateralToCenter) * forwardDistance * Math.tan(headYaw);
+  return seatX + lateral;
+}
+
+/**
  * 視野占有率メトリクスを一括計算する
  */
 export function calcFieldOfViewMetrics(

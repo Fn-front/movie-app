@@ -10,6 +10,7 @@ import {
   calcDistanceToScreen,
   calcFieldOfViewMetrics,
   projectScreenQuad,
+  calcYawClampedTargetX,
 } from './fieldOfView';
 
 describe('calcHorizontalFov', () => {
@@ -185,5 +186,53 @@ describe('projectScreenQuad', () => {
       expect(typeof p.x).toBe('number');
       expect(typeof p.y).toBe('number');
     });
+  });
+});
+
+describe('calcYawClampedTargetX', () => {
+  const MAX_YAW = (20 * Math.PI) / 180;
+  const DEADZONE = (15 * Math.PI) / 180;
+
+  it('中央席は首を振らず真正面（=座席X）を向く', () => {
+    expect(calcYawClampedTargetX(0, 0, 5, MAX_YAW, DEADZONE)).toBeCloseTo(0, 6);
+  });
+
+  it('不感帯内（中央寄り）の席は首を振らず真正面を向く', () => {
+    // seatX=-1: 中心方向角 = atan(1/5) ≒ 11.3° < 15°(不感帯) → 振らず座席X(-1)
+    expect(calcYawClampedTargetX(-1, 0, 5, MAX_YAW, DEADZONE)).toBeCloseTo(
+      -1,
+      6,
+    );
+  });
+
+  it('不感帯を超えた分だけ首を振る（超過角のみ）', () => {
+    // 中心方向角25°の席 → 首振り = 25° - 15°(不感帯) = 10°
+    const seatX = -5 * Math.tan((25 * Math.PI) / 180);
+    const targetX = calcYawClampedTargetX(seatX, 0, 5, MAX_YAW, DEADZONE);
+    const yaw = Math.atan(Math.abs(targetX - seatX) / 5);
+    expect(yaw).toBeCloseTo((10 * Math.PI) / 180, 6);
+  });
+
+  it('端席は上限角で頭打ちになる（中心まで振り切らない）', () => {
+    // A列端: seatX=-7.2, 中心方向角=55.2°。不感帯控除後40.2°>20°(上限)→20°で頭打ち
+    const targetX = calcYawClampedTargetX(-7.2, 0, 5, MAX_YAW, DEADZONE);
+    const yaw = Math.atan(Math.abs(targetX - -7.2) / 5);
+    expect(yaw).toBeCloseTo(MAX_YAW, 6);
+    expect(targetX).toBeCloseTo(-7.2 + 5 * Math.tan(MAX_YAW), 6);
+  });
+
+  it('反対側の端席でも符号を保って頭打ちになる', () => {
+    const targetX = calcYawClampedTargetX(7.2, 0, 5, MAX_YAW, DEADZONE);
+    expect(targetX).toBeCloseTo(7.2 - 5 * Math.tan(MAX_YAW), 6);
+  });
+
+  it('不感帯0（既定）なら上限内でスクリーン中心を向く', () => {
+    // deadzone省略時は従来のクランプ動作: 11.3°<20° → 中心(0)を向く
+    expect(calcYawClampedTargetX(-1, 0, 5, MAX_YAW)).toBeCloseTo(0, 6);
+  });
+
+  it('前方距離が0以下ならスクリーン中心を返す（フォールバック）', () => {
+    expect(calcYawClampedTargetX(-7.2, 0, 0, MAX_YAW, DEADZONE)).toBe(0);
+    expect(calcYawClampedTargetX(-7.2, 0, -3, MAX_YAW, DEADZONE)).toBe(0);
   });
 });

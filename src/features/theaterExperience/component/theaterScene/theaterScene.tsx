@@ -21,6 +21,10 @@ import {
 } from 'three';
 
 import type { TheaterSeat, Theater } from '../../types';
+import {
+  calcDistanceToScreen,
+  calcYawClampedTargetX,
+} from '../../utils/fieldOfView';
 
 export interface TheaterSceneProps {
   /** 劇場の幅 (m) */
@@ -342,6 +346,20 @@ StepLEDs.displayName = 'StepLEDs';
 const SEATED_EYE_HEIGHT = 1.2;
 
 /**
+ * 一人称視点の水平首振り角の上限（度）。端席でスクリーン中心を直接向くと首を
+ * 回し過ぎるため、この角度で頭打ちにする（超過分はスクリーンが視野の端に寄る）。
+ */
+const MAX_YAW_DEG = 20;
+const MAX_YAW_RAD = (MAX_YAW_DEG * Math.PI) / 180;
+
+/**
+ * 首を振り始めない不感帯（度）。スクリーン中心がこの角度以内なら真正面のまま
+ * （中央〜中央寄りの席は頭を動かさず、目・周辺視でスクリーンを捉える）。
+ */
+const YAW_DEADZONE_DEG = 15;
+const YAW_DEADZONE_RAD = (YAW_DEADZONE_DEG * Math.PI) / 180;
+
+/**
  * 等角投影カメラ + lookAt 原点向き
  * drei の OrthographicCamera は lookAt プロパティを取らないため
  * ref 経由で手動で向きを設定する
@@ -417,11 +435,11 @@ const FirstPersonCameraRig = memo<{
   /**
    * 注視点の決め方:
    *
-   * - X: 端席で「真正面のみ」だと視野の中心からスクリーンが外れ続けてしまい、
-   *   逆に「スクリーン中心を直接 lookAt」すると首が大きく回り過ぎて不自然。
-   *   実際の映画館では端席の観客も頭を少し傾けてスクリーンを視野内に収める
-   *   ため、両者の中間として「カメラX とスクリーン中心X の中点」を注視点
-   *   とする（α=0.5）。
+   * - X（水平の首振り）: 中央〜中央寄りの席は首を振らず真正面（スクリーン中心が
+   *   不感帯 YAW_DEADZONE_DEG 以内）。それを超えた分だけスクリーン中心方向へ首を
+   *   振り、上限角 MAX_YAW_DEG で頭打ちにする（超過分はスクリーンが視野の端に寄る）。
+   *   旧実装は「座席Xとスクリーン中心Xの中点」(α=0.5)固定で、中央寄りでも首を振り、
+   *   前列端では約36°も振り過剰だった（例: A列端 full 55° → 上限20°で頭打ち）。
    *
    * - Y: 眼の高さ＋1.5m。スクリーン中心(y=4.5)を直接 lookAt すると
    *   前列で33°もの上向きになり「首を反らす」状態になる。実際の映画館では
@@ -433,16 +451,27 @@ const FirstPersonCameraRig = memo<{
   const target = useMemo<[number, number, number]>(() => {
     const seatX = Number(selectedSeat.position_x);
     const screenX = Number(theater.screen_center_x);
-    const midX = (seatX + screenX) / 2;
+    const seatZ = Number(selectedSeat.position_z);
+    const screenZ = Number(theater.screen_center_z);
     const eyeY = Number(selectedSeat.position_y) + SEATED_EYE_HEIGHT;
+    // スクリーン中心を向くが、水平首振りは MAX_YAW で頭打ちにする
+    const forwardDist = calcDistanceToScreen(seatZ, screenZ);
+    const targetX = calcYawClampedTargetX(
+      seatX,
+      screenX,
+      forwardDist,
+      MAX_YAW_RAD,
+      YAW_DEADZONE_RAD,
+    );
     return [
-      -midX, // ミラー反転（カメラ位置と同じ補正）
+      -targetX, // ミラー反転（カメラ位置と同じ補正）
       eyeY + 1.5,
-      Number(theater.screen_center_z),
+      screenZ,
     ];
   }, [
     selectedSeat.position_x,
     selectedSeat.position_y,
+    selectedSeat.position_z,
     theater.screen_center_x,
     theater.screen_center_z,
   ]);

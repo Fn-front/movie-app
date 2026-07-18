@@ -15,6 +15,8 @@
 
 import { NextResponse } from 'next/server';
 
+import { createInMemoryRateLimiter } from '@/lib/rateLimit/inMemoryRateLimit';
+
 /**
  * 受信を許可する本文サイズの上限（バイト）。
  * これを超えるレポートは中身を読まずに破棄する（メモリ枯渇・DoS 対策）。
@@ -23,6 +25,29 @@ const MAX_BODY_BYTES = 16 * 1024; // 16KB
 
 /** 正常受信時のレスポンス（本文不要のため 204）。 */
 const NO_CONTENT = 204;
+
+/**
+ * IP 単位のレート制限（インメモリ）。
+ * CSP レポートは大量に届きうるため、レポート毎に DB 書き込みが発生する
+ * DB-based レート制限は逆効果。プロセス内の軽量スロットリングで濫用・ログ肥大を
+ * 抑止する（サーバーレスではインスタンス単位・コールドスタートでリセットされる
+ * best-effort）。超過分は処理・ログせず 204 のまま黙って破棄する。
+ */
+const RATE_LIMIT_MAX_REQUESTS = 60;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1分
+const rateLimiter = createInMemoryRateLimiter({
+  maxRequests: RATE_LIMIT_MAX_REQUESTS,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+});
+
+/** リクエストからクライアント IP を取得する（取得不可時は 'unknown'）。 */
+function getClientIp(request: Request): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  return 'unknown';
+}
 
 /**
  * 単一の CSP 違反レポート本体から、ログに残す主要フィールドを抽出する。
@@ -92,6 +117,12 @@ function logReports(payload: unknown): void {
 
 export async function POST(request: Request): Promise<NextResponse> {
   try {
+    // レート制限（超過分は処理・ログせず破棄）。CSP レポートは大量に届きうるため
+    // インメモリで軽量にスロットリングする（best-effort）。204 を維持する。
+    if (!rateLimiter.check(getClientIp(request))) {
+      return new NextResponse(null, { status: NO_CONTENT });
+    }
+
     // 本文サイズ上限チェック（Content-Length が信頼できない場合も後段の
     // text() 長で二重に防ぐ）。数値化に失敗した不正な Content-Length は
     // 上限超過として扱い、中身を読まずに破棄する（防御的）。

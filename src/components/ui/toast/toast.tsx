@@ -7,7 +7,7 @@
 import { type ReactNode, memo, useCallback } from 'react';
 import * as ToastPrimitive from '@radix-ui/react-toast';
 
-import { ARIA_LABELS } from '@/constants';
+import { ANIMATION, ARIA_LABELS } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './toast.module.scss';
@@ -64,7 +64,7 @@ export interface ToastProviderProps {
 export const ToastProvider = memo<ToastProviderProps>(function ToastProvider({
   children,
   swipeDirection = 'right',
-  duration = 5000,
+  duration = ANIMATION.TOAST_DURATION,
 }) {
   return (
     <ToastPrimitive.Provider
@@ -99,7 +99,7 @@ export const Toast = memo<ToastProps>(function Toast({
   title,
   description,
   variant = 'info',
-  duration = 5000,
+  duration = ANIMATION.TOAST_DURATION,
   action,
   className,
 }) {

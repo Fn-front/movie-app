@@ -16,7 +16,7 @@ import {
 } from '@/helpers/supabase';
 import { registerApiSchema } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
-import { OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
+import { OTP_ACTION, OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';
 import { generateOtpCode, sendOtpEmail, randomDelay } from '@/lib/otp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
     const { error: otpInsertError } = await supabase.from('otp_codes').insert({
       email,
       code,
-      action_type: 'registration',
+      action_type: OTP_ACTION.REGISTRATION,
       expires_at: expiresAt.toISOString(),
     });
 

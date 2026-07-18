@@ -14,7 +14,7 @@ import {
 import { changePasswordApiSchema } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';
-import { OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
+import { OTP_ACTION, OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
 const RATE_LIMIT_ACTION = 'change_password';
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
       .from('otp_codes')
       .select('id, verified_at')
       .eq('email', user.email)
-      .eq('action_type', 'password_change')
+      .eq('action_type', OTP_ACTION.PASSWORD_CHANGE)
       .not('verified_at', 'is', null)
       .order('verified_at', { ascending: false })
       .limit(1)

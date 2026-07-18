@@ -9,8 +9,13 @@ import GitHub from 'next-auth/providers/github';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
-import { AUTH_ERROR_MESSAGES, SESSION_CONFIG, ROUTES } from '@/constants';
-import { OTP_CONFIG } from '@/constants/otp';
+import {
+  AUTH_ERROR_MESSAGES,
+  SESSION_CONFIG,
+  ROUTES,
+  SUPABASE_ERROR_CODE,
+} from '@/constants';
+import { OTP_ACTION, OTP_CONFIG } from '@/constants/otp';
 import { isSessionExpired } from '@/lib/auth/sessionExpiry';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
@@ -55,7 +60,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const loginMethod = (credentials.loginMethod as string) || 'password';
 
         // レート制限チェック（emailベース: 3回失敗で30分ロック）
-        const rateLimitResult = await checkRateLimit(supabase, email, 'login');
+        const rateLimitResult = await checkRateLimit(
+          supabase,
+          email,
+          OTP_ACTION.LOGIN,
+        );
 
         if (!rateLimitResult.allowed) {
           throw new Error(AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED);
@@ -83,7 +92,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             .from('otp_codes')
             .select('id, verified_at')
             .eq('email', email)
-            .eq('action_type', 'login')
+            .eq('action_type', OTP_ACTION.LOGIN)
             .not('verified_at', 'is', null)
             .order('verified_at', { ascending: false })
             .limit(1)
@@ -135,7 +144,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         // 認証成功 — レート制限リセット
-        await resetRateLimit(supabase, email, 'login');
+        await resetRateLimit(supabase, email, OTP_ACTION.LOGIN);
 
         return {
           id: user.id,
@@ -211,7 +220,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         .single();
 
       // DBエラー（"not found"以外）は失敗とする
-      if (findError && findError.code !== 'PGRST116') {
+      if (findError && findError.code !== SUPABASE_ERROR_CODE.NOT_FOUND) {
         return false;
       }
 

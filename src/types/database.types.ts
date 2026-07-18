@@ -97,7 +97,6 @@ export type Database = {
       };
       award_movies: {
         Row: {
-          award_label: string;
           award_name: string;
           award_year: number;
           category: string;
@@ -115,7 +114,6 @@ export type Database = {
           vote_average: number | null;
         };
         Insert: {
-          award_label: string;
           award_name: string;
           award_year: number;
           category: string;
@@ -133,7 +131,6 @@ export type Database = {
           vote_average?: number | null;
         };
         Update: {
-          award_label?: string;
           award_name?: string;
           award_year?: number;
           category?: string;

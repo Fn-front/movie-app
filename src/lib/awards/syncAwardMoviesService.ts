@@ -152,17 +152,10 @@ export async function executeSyncAwardMoviesCron(
         continue;
       }
 
-      // 部門ラベルをカテゴリごとに解決
-      const categoryLabelMap = new Map<string, string>(
-        awardDef.categories.map((c) => [c.key, c.label]),
-      );
-      const resolvedWithLabels = resolved.map((r) => ({
-        ...r,
-        award_label: categoryLabelMap.get(r.category) ?? r.category,
-      }));
-
-      // 各レコードにaward_labelを付与してUPSERT
-      const upsertData = resolvedWithLabels.map((r) => ({
+      // 各レコードをUPSERT用に整形する。
+      // 部門ラベルは AWARD_DEFINITIONS（アプリ定数）を単一ソースとし DB には保存しない
+      // （読み取り側の /api/awards も AWARD_DEFINITIONS からラベルを取得している）。
+      const upsertData = resolved.map((r) => ({
         tmdb_movie_id: r.tmdb_movie_id,
         title: r.title,
         poster_path: r.poster_path,
@@ -172,7 +165,6 @@ export async function executeSyncAwardMoviesCron(
         award_name: awardName,
         award_year: syncYear,
         category: r.category,
-        award_label: r.award_label,
         is_winner: r.is_winner,
         display_order: r.display_order,
         person_name: r.person_name ?? null,

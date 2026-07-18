@@ -26,6 +26,10 @@ describe('sendOtpEmail', () => {
       RESEND_API_KEY: 'test_api_key',
       RESEND_FROM_EMAIL: 'test@example.com',
     };
+    // バイパス系フラグは各テストで明示設定するため baseline はクリア
+    delete process.env.E2E_TEST_MODE;
+    delete process.env.OTP_EMAIL_TEST_BYPASS;
+    delete process.env.VERCEL_ENV;
   });
 
   afterAll(() => {
@@ -89,5 +93,84 @@ describe('sendOtpEmail', () => {
         text: expect.stringContaining('654321'),
       }),
     );
+  });
+
+  describe('テストバイパスガード（positive guard / #424）', () => {
+    it('E2E_TEST_MODE=true かつ OTP_EMAIL_TEST_BYPASS=true で実送信をスキップしtrueを返す', async () => {
+      process.env.E2E_TEST_MODE = 'true';
+      process.env.OTP_EMAIL_TEST_BYPASS = 'true';
+      delete process.env.VERCEL_ENV;
+      jest.resetModules();
+
+      const { sendOtpEmail } = await import('./sendOtpEmail');
+      const result = await sendOtpEmail('user@example.com', '123456');
+
+      expect(result).toBe(true);
+      // バイパス時は実送信しない
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('OTP_EMAIL_TEST_BYPASS=true 単体（E2E_TEST_MODE無し）ではバイパスしない: VERCEL_ENV=production', async () => {
+      mockSend.mockResolvedValue({ data: { id: 'x' }, error: null });
+      process.env.OTP_EMAIL_TEST_BYPASS = 'true';
+      process.env.VERCEL_ENV = 'production';
+      jest.resetModules();
+
+      const { sendOtpEmail } = await import('./sendOtpEmail');
+      await sendOtpEmail('user@example.com', '123456');
+
+      // 実送信パスに入る＝バイパスしていない
+      expect(mockSend).toHaveBeenCalled();
+    });
+
+    it('OTP_EMAIL_TEST_BYPASS=true 単体ではバイパスしない: VERCEL_ENV=preview', async () => {
+      mockSend.mockResolvedValue({ data: { id: 'x' }, error: null });
+      process.env.OTP_EMAIL_TEST_BYPASS = 'true';
+      process.env.VERCEL_ENV = 'preview';
+      jest.resetModules();
+
+      const { sendOtpEmail } = await import('./sendOtpEmail');
+      await sendOtpEmail('user@example.com', '123456');
+
+      expect(mockSend).toHaveBeenCalled();
+    });
+
+    it('OTP_EMAIL_TEST_BYPASS=true 単体ではバイパスしない: VERCEL_ENV 未定義', async () => {
+      mockSend.mockResolvedValue({ data: { id: 'x' }, error: null });
+      process.env.OTP_EMAIL_TEST_BYPASS = 'true';
+      delete process.env.VERCEL_ENV;
+      jest.resetModules();
+
+      const { sendOtpEmail } = await import('./sendOtpEmail');
+      await sendOtpEmail('user@example.com', '123456');
+
+      expect(mockSend).toHaveBeenCalled();
+    });
+
+    it('E2E_TEST_MODE=true + OTP_EMAIL_TEST_BYPASS=true でも VERCEL_ENV=production ではバイパスしない（多層防御）', async () => {
+      mockSend.mockResolvedValue({ data: { id: 'x' }, error: null });
+      process.env.E2E_TEST_MODE = 'true';
+      process.env.OTP_EMAIL_TEST_BYPASS = 'true';
+      process.env.VERCEL_ENV = 'production';
+      jest.resetModules();
+
+      const { sendOtpEmail } = await import('./sendOtpEmail');
+      await sendOtpEmail('user@example.com', '123456');
+
+      expect(mockSend).toHaveBeenCalled();
+    });
+
+    it('E2E_TEST_MODE=true でも OTP_EMAIL_TEST_BYPASS が無ければバイパスしない', async () => {
+      mockSend.mockResolvedValue({ data: { id: 'x' }, error: null });
+      process.env.E2E_TEST_MODE = 'true';
+      delete process.env.OTP_EMAIL_TEST_BYPASS;
+      delete process.env.VERCEL_ENV;
+      jest.resetModules();
+
+      const { sendOtpEmail } = await import('./sendOtpEmail');
+      await sendOtpEmail('user@example.com', '123456');
+
+      expect(mockSend).toHaveBeenCalled();
+    });
   });
 });

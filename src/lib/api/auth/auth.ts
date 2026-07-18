@@ -2,6 +2,7 @@
  * 認証API クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 
 /**
@@ -65,7 +66,7 @@ export interface SendOtpResponse {
  */
 export async function sendOtp(data: SendOtpRequest): Promise<SendOtpResponse> {
   const response = await axiosInstance.post<SendOtpResponse>(
-    '/api/auth/otp/send',
+    API_ENDPOINTS.OTP_SEND,
     data,
   );
   return response.data;

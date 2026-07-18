@@ -12,7 +12,12 @@ import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { Heading } from '@/components/ui/heading/heading';
 import { otpFormSchema, type OtpFormData } from '@/schema/otp';
-import { ARIA_LABELS, BUTTON_LABELS, OTP_MESSAGES } from '@/constants';
+import {
+  ARIA_LABELS,
+  BUTTON_LABELS,
+  OTP_CONFIG,
+  OTP_MESSAGES,
+} from '@/constants';
 import type { OtpAction } from '@/constants/otp';
 
 import { useOtpVerification } from './hooks/useOtpVerification';
@@ -76,8 +81,8 @@ export const OtpVerification = memo<OtpVerificationProps>(
             <Input
               type='text'
               inputMode='numeric'
-              maxLength={6}
-              pattern='[0-9]{6}'
+              maxLength={OTP_CONFIG.CODE_LENGTH}
+              pattern={`[0-9]{${OTP_CONFIG.CODE_LENGTH}}`}
               placeholder='123456'
               autoFocus
               autoComplete='one-time-code'

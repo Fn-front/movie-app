@@ -7,10 +7,9 @@
 
 import axios from 'axios';
 
+import { EIGA_FETCH_TIMEOUT_MS } from '@/constants';
 import type { OpenAiAwardItem } from '@/schema/awards';
 import { getRequiredEnv } from '@/utils/env';
-
-const EIGA_FETCH_TIMEOUT_MS = 30000;
 
 /** eiga.comページと対応する部門のマッピング */
 interface EigaPageConfig {

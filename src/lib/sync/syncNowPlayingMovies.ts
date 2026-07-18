@@ -11,6 +11,7 @@ import {
   MIN_POPULARITY,
   MIN_VOTE_AVERAGE,
   NOW_PLAYING_SYNC_MAX_PAGES,
+  RELEASE_TYPE,
 } from '@/constants/movies';
 import { getMovieKeywordIds, getNowPlayingMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
@@ -139,7 +140,7 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
           vote_average: movie.vote_average,
           popularity: movie.popularity,
           genre_ids: movie.genre_ids,
-          release_type: 'theatrical',
+          release_type: RELEASE_TYPE.THEATRICAL,
           is_now_playing: true,
           cached_at: now,
         },

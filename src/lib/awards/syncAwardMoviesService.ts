@@ -11,7 +11,13 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { AWARD_DEFINITIONS, type AwardName } from '@/constants/awards';
+import {
+  AWARD_DEFINITIONS,
+  AWARDS_EXCLUDED,
+  AWARDS_MAX_RETRIES,
+  AWARDS_YEAR_MATCH_TOLERANCE,
+  type AwardName,
+} from '@/constants/awards';
 import type { OpenAiAwardItem } from '@/schema/awards';
 import { fetchEigaOscarAwards } from '@/lib/eiga/fetchEigaOscarAwards';
 import {
@@ -52,7 +58,7 @@ interface CronSkipped {
 export type SyncAwardMoviesCronResult = CronSuccess | CronError | CronSkipped;
 
 /** CRON同期対象外の賞 */
-const EXCLUDED_AWARDS: ReadonlySet<string> = new Set(['japan_academy_awards']);
+const EXCLUDED_AWARDS: ReadonlySet<string> = new Set(AWARDS_EXCLUDED);
 
 /**
  * 現在月に該当する賞を取得
@@ -222,7 +228,7 @@ async function fetchAwardItemsViaWikipedia(
   currentYear: number,
 ): Promise<OpenAiAwardItem[]> {
   const allAiItems: OpenAiAwardItem[] = [];
-  const maxRetries = 3;
+  const maxRetries = AWARDS_MAX_RETRIES;
 
   const wikipediaTitle = buildWikipediaTitle(currentYear, awardDef);
   const articleText = await fetchWikipediaArticle(wikipediaTitle);
@@ -261,7 +267,7 @@ async function fetchAwardItemsViaWikipedia(
         return false;
       });
       const corrected = verified.map((item) => {
-        if (Math.abs(item.year - currentYear) > 2) {
+        if (Math.abs(item.year - currentYear) > AWARDS_YEAR_MATCH_TOLERANCE) {
           console.warn(
             `Year corrected: "${item.title_ja}" year=${item.year} → ${currentYear - 1}`,
           );

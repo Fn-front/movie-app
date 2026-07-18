@@ -5,6 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { unstable_cache } from 'next/cache';
 
+import { NOW_SHOWING_REVALIDATE_SECONDS } from '@/constants/nowShowing';
 import type { NowShowingMovie } from '@/lib/types';
 
 /**
@@ -44,5 +45,5 @@ async function fetchNowShowingMovies(): Promise<NowShowingMovie[]> {
 export const getNowShowingMovies = unstable_cache(
   fetchNowShowingMovies,
   ['now-showing-movies'],
-  { revalidate: 3600 },
+  { revalidate: NOW_SHOWING_REVALIDATE_SECONDS },
 );

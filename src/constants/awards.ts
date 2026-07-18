@@ -111,6 +111,29 @@ export const AWARD_DEFINITIONS = {
 } as const satisfies Record<string, AwardDefinition>;
 
 /**
+ * OpenAI からの受賞作品取得リトライ最大回数
+ */
+export const AWARDS_MAX_RETRIES = 3;
+
+/**
+ * 受賞作品の公開年許容差（この差を超える場合は前年に補正）
+ */
+export const AWARDS_YEAR_MATCH_TOLERANCE = 2;
+
+/**
+ * CRON同期の対象外とする賞
+ */
+export const AWARDS_EXCLUDED = ['japan_academy_awards'] as const;
+
+/**
+ * 受賞年バリデーション範囲
+ */
+export const AWARD_YEAR_RANGE = {
+  MIN: 1900,
+  MAX: 2100,
+} as const;
+
+/**
  * 受賞作品ページのメッセージ
  */
 export const AWARDS_MESSAGES = {

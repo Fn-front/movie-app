@@ -15,7 +15,7 @@
 
 import { NextResponse } from 'next/server';
 
-import { IN_MEMORY_RATE_LIMIT } from '@/constants';
+import { HTTP_STATUS, IN_MEMORY_RATE_LIMIT } from '@/constants';
 import { createInMemoryRateLimiter } from '@/lib/rateLimit/inMemoryRateLimit';
 
 /**
@@ -23,9 +23,6 @@ import { createInMemoryRateLimiter } from '@/lib/rateLimit/inMemoryRateLimit';
  * これを超えるレポートは中身を読まずに破棄する（メモリ枯渇・DoS 対策）。
  */
 const MAX_BODY_BYTES = 16 * 1024; // 16KB
-
-/** 正常受信時のレスポンス（本文不要のため 204）。 */
-const NO_CONTENT = 204;
 
 /**
  * IP 単位のレート制限（インメモリ）。
@@ -119,7 +116,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // レート制限（超過分は処理・ログせず破棄）。CSP レポートは大量に届きうるため
     // インメモリで軽量にスロットリングする（best-effort）。204 を維持する。
     if (!rateLimiter.check(getClientIp(request))) {
-      return new NextResponse(null, { status: NO_CONTENT });
+      return new NextResponse(null, { status: HTTP_STATUS.NO_CONTENT });
     }
 
     // 本文サイズ上限チェック（Content-Length が信頼できない場合も後段の
@@ -127,12 +124,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     // 上限超過として扱い、中身を読まずに破棄する（防御的）。
     const contentLength = Number(request.headers.get('content-length') ?? '0');
     if (!Number.isFinite(contentLength) || contentLength > MAX_BODY_BYTES) {
-      return new NextResponse(null, { status: NO_CONTENT });
+      return new NextResponse(null, { status: HTTP_STATUS.NO_CONTENT });
     }
 
     const raw = await request.text();
     if (raw.length === 0 || raw.length > MAX_BODY_BYTES) {
-      return new NextResponse(null, { status: NO_CONTENT });
+      return new NextResponse(null, { status: HTTP_STATUS.NO_CONTENT });
     }
 
     let payload: unknown;
@@ -140,7 +137,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       payload = JSON.parse(raw);
     } catch {
       // 不正な JSON は破棄（悪用・誤送信対策）。
-      return new NextResponse(null, { status: NO_CONTENT });
+      return new NextResponse(null, { status: HTTP_STATUS.NO_CONTENT });
     }
 
     logReports(payload);
@@ -150,5 +147,5 @@ export async function POST(request: Request): Promise<NextResponse> {
     console.error('[csp-report] failed to process report:', error);
   }
 
-  return new NextResponse(null, { status: NO_CONTENT });
+  return new NextResponse(null, { status: HTTP_STATUS.NO_CONTENT });
 }

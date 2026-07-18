@@ -32,6 +32,11 @@ export const RECOMMENDATIONS_YEAR_MATCH_TOLERANCE = 1;
 export const RECOMMENDATIONS_ACTIVE_USER_DAYS = 3;
 
 /**
+ * レコメンド生成CRONのバッチサイズ（同時処理するユーザー数の上限）
+ */
+export const RECOMMENDATIONS_BATCH_SIZE = 5;
+
+/**
  * レコメンド手動更新設定
  */
 export const RECOMMENDATION_REFRESH = {

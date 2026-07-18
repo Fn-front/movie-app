@@ -12,6 +12,7 @@ import {
   HTTP_STATUS,
   ERROR_CODE,
   AWARD_DEFINITIONS,
+  AWARD_YEAR_RANGE,
   AWARDS_MESSAGES,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
@@ -95,13 +96,18 @@ export async function GET(request: Request) {
 
     const year = Number(yearParam);
 
-    if (!yearParam || isNaN(year) || year < 1900 || year > 2100) {
+    if (
+      !yearParam ||
+      isNaN(year) ||
+      year < AWARD_YEAR_RANGE.MIN ||
+      year > AWARD_YEAR_RANGE.MAX
+    ) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: ERROR_CODE.VALIDATION_ERROR,
-            message: 'yearパラメータは必須です（1900〜2100の数値）',
+            message: `yearパラメータは必須です（${AWARD_YEAR_RANGE.MIN}〜${AWARD_YEAR_RANGE.MAX}の数値）`,
           },
         },
         { status: HTTP_STATUS.BAD_REQUEST },

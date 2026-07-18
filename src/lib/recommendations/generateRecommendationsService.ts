@@ -10,6 +10,7 @@ import {
   RECOMMENDATIONS_MAX_RETRIES,
   RECOMMENDATIONS_GENERATION_BUFFER,
   RECOMMENDATIONS_ACTIVE_USER_DAYS,
+  RECOMMENDATIONS_BATCH_SIZE,
   CRON_ERROR_MESSAGES,
 } from '@/constants';
 import {
@@ -331,9 +332,6 @@ export async function processUserRecommendations(
   return { status: 'processed', recommendationCount: resolved.length };
 }
 
-/** バッチサイズ（同時処理するユーザー数の上限） */
-export const BATCH_SIZE = 5;
-
 /**
  * レコメンド生成CRONのメイン処理
  * ユーザーをバッチ単位（5件ずつ）で並行処理し、リソース負荷を制限する
@@ -351,11 +349,13 @@ export async function executeGenerateRecommendationsCron(
   let skippedUsers = 0;
   let totalRecommendations = 0;
 
-  const totalBatches = Math.ceil(activeUserIds.length / BATCH_SIZE);
+  const totalBatches = Math.ceil(
+    activeUserIds.length / RECOMMENDATIONS_BATCH_SIZE,
+  );
 
-  for (let i = 0; i < activeUserIds.length; i += BATCH_SIZE) {
-    const batchIndex = Math.floor(i / BATCH_SIZE) + 1;
-    const batch = activeUserIds.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < activeUserIds.length; i += RECOMMENDATIONS_BATCH_SIZE) {
+    const batchIndex = Math.floor(i / RECOMMENDATIONS_BATCH_SIZE) + 1;
+    const batch = activeUserIds.slice(i, i + RECOMMENDATIONS_BATCH_SIZE);
 
     console.log(
       `Processing batch ${batchIndex}/${totalBatches}... (${batch.length} users)`,

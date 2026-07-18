@@ -5,15 +5,13 @@
  * 応答時間分布を近づけてメールアドレスの存在を推定されにくくする。
  */
 
-/** ランダム遅延の最小値（ミリ秒） */
-const RANDOM_DELAY_MIN_MS = 200;
-/** ランダム遅延の振れ幅（ミリ秒） */
-const RANDOM_DELAY_RANGE_MS = 300;
+import { OTP_RANDOM_DELAY } from '@/constants';
 
 /**
  * 200〜500ms のランダムな遅延を挿入する。
  */
 export async function randomDelay(): Promise<void> {
-  const delay = RANDOM_DELAY_MIN_MS + Math.random() * RANDOM_DELAY_RANGE_MS;
+  const delay =
+    OTP_RANDOM_DELAY.MIN_MS + Math.random() * OTP_RANDOM_DELAY.RANGE_MS;
   await new Promise((resolve) => setTimeout(resolve, delay));
 }

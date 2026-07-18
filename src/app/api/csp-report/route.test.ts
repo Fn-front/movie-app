@@ -176,4 +176,23 @@ describe('POST /api/csp-report', () => {
     expect(res.status).toBe(204);
     expect(errorSpy).toHaveBeenCalled();
   });
+
+  it('同一IPから大量に送ると上限超過分はログせず破棄する（204維持）', async () => {
+    // このテスト専用のユニークIP（他テストとレート制限状態を共有しない）
+    const ip = '203.0.113.77';
+    const body = JSON.stringify({
+      'csp-report': { 'blocked-uri': 'https://evil.example.com/x.js' },
+    });
+    // 上限（route の RATE_LIMIT_MAX_REQUESTS）より十分多く送る
+    const attempts = 200;
+
+    for (let i = 0; i < attempts; i++) {
+      const res = await POST(makeRequest(body, { 'x-forwarded-for': ip }));
+      expect(res.status).toBe(204);
+    }
+
+    // 上限超過分は破棄されログされないため、warn 回数は試行回数より少ない
+    expect(warnSpy.mock.calls.length).toBeGreaterThan(0);
+    expect(warnSpy.mock.calls.length).toBeLessThan(attempts);
+  });
 });

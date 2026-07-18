@@ -15,6 +15,7 @@
 
 import { NextResponse } from 'next/server';
 
+import { IN_MEMORY_RATE_LIMIT } from '@/constants';
 import { createInMemoryRateLimiter } from '@/lib/rateLimit/inMemoryRateLimit';
 
 /**
@@ -33,11 +34,9 @@ const NO_CONTENT = 204;
  * 抑止する（サーバーレスではインスタンス単位・コールドスタートでリセットされる
  * best-effort）。超過分は処理・ログせず 204 のまま黙って破棄する。
  */
-const RATE_LIMIT_MAX_REQUESTS = 60;
-const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1分
 const rateLimiter = createInMemoryRateLimiter({
-  maxRequests: RATE_LIMIT_MAX_REQUESTS,
-  windowMs: RATE_LIMIT_WINDOW_MS,
+  maxRequests: IN_MEMORY_RATE_LIMIT.CSP_REPORT.maxRequests,
+  windowMs: IN_MEMORY_RATE_LIMIT.CSP_REPORT.windowMs,
 });
 
 /** リクエストからクライアント IP を取得する（取得不可時は 'unknown'）。 */

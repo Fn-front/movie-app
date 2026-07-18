@@ -20,11 +20,9 @@ import {
   ERROR_CODE,
   FAVORITES_ERROR_MESSAGES,
   FAVORITES_SUCCESS_MESSAGES,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
-
-const RATE_LIMIT_ACTION = 'write_api_favorites';
-const RATE_LIMIT_MAX_ATTEMPTS = 10;
-const RATE_LIMIT_WINDOW_MINUTES = 1;
 
 export const GET = withAuth(
   async ({ session, supabase, request }) => {
@@ -116,9 +114,9 @@ export const POST = withAuth(
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,
-      RATE_LIMIT_ACTION,
-      RATE_LIMIT_MAX_ATTEMPTS,
-      RATE_LIMIT_WINDOW_MINUTES,
+      RATE_LIMIT_ACTION.WRITE_FAVORITES,
+      RATE_LIMIT_CONFIG.WRITE_FAVORITES.maxAttempts,
+      RATE_LIMIT_CONFIG.WRITE_FAVORITES.windowMinutes,
     );
 
     if (!rateLimitResult.allowed) {

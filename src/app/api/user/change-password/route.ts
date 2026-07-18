@@ -13,11 +13,9 @@ import {
 } from '@/helpers/supabase';
 import { changePasswordApiSchema } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
-import { HTTP_STATUS, ERROR_CODE } from '@/constants';
+import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import { OTP_ACTION, OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
-
-const RATE_LIMIT_ACTION = 'change_password';
 
 export async function POST(request: Request) {
   try {
@@ -33,7 +31,7 @@ export async function POST(request: Request) {
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,
-      RATE_LIMIT_ACTION,
+      RATE_LIMIT_ACTION.CHANGE_PASSWORD,
     );
 
     if (!rateLimitResult.allowed) {
@@ -175,7 +173,11 @@ export async function POST(request: Request) {
     }
 
     // レート制限リセット（成功時）
-    await resetRateLimit(supabase, session.user.id, RATE_LIMIT_ACTION);
+    await resetRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.CHANGE_PASSWORD,
+    );
 
     return NextResponse.json(
       {

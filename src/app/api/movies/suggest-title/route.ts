@@ -14,15 +14,13 @@ import {
   HTTP_STATUS,
   ERROR_CODE,
   TITLE_SUGGESTION_ERROR_MESSAGES,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { titleSuggestionQuerySchema } from '@/schema/titleSuggestion';
 import { fetchTitleSuggestionsFromOpenAI } from '@/lib/openai/suggestTitle';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
-
-/** レートリミット設定: ユーザー単位で10回/60分（OpenAI APIコスト保護） */
-const RATE_LIMIT_MAX_ATTEMPTS = 10;
-const RATE_LIMIT_WINDOW_MINUTES = 60;
 
 export async function GET(request: Request) {
   try {
@@ -80,9 +78,9 @@ export async function GET(request: Request) {
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,
-      'suggest_title',
-      RATE_LIMIT_MAX_ATTEMPTS,
-      RATE_LIMIT_WINDOW_MINUTES,
+      RATE_LIMIT_ACTION.SUGGEST_TITLE,
+      RATE_LIMIT_CONFIG.SUGGEST_TITLE.maxAttempts,
+      RATE_LIMIT_CONFIG.SUGGEST_TITLE.windowMinutes,
     );
 
     if (!rateLimitResult.allowed) {

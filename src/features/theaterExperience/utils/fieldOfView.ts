@@ -79,6 +79,34 @@ export function calcDistanceToScreen(
 }
 
 /**
+ * 一人称視点の水平注視点X（首振りの向き）を計算する。
+ *
+ * スクリーン中心を向こうとするが、首の左右回転角が maxYawRad を超える席は上限で
+ * 頭打ちにする（超過分はスクリーンが視野の端に寄る）。上限内の席はスクリーン中心を
+ * 正面に捉える。ミラー反転前の実座標系で返す（呼び出し側で必要なら -x する）。
+ *
+ * @param seatX 座席X
+ * @param screenCenterX スクリーン中心X
+ * @param forwardDistance 座席→スクリーン平面の前方距離（>0 を想定）
+ * @param maxYawRad 水平首振りの上限角（ラジアン、>=0）
+ * @returns 注視点のX座標
+ */
+export function calcYawClampedTargetX(
+  seatX: number,
+  screenCenterX: number,
+  forwardDistance: number,
+  maxYawRad: number,
+): number {
+  const fullLateral = screenCenterX - seatX;
+  // 前方距離が取れない場合はスクリーン中心を向く（フォールバック）
+  if (forwardDistance <= 0) return screenCenterX;
+  const maxLateral = forwardDistance * Math.tan(maxYawRad);
+  const clampedLateral =
+    Math.sign(fullLateral) * Math.min(Math.abs(fullLateral), maxLateral);
+  return seatX + clampedLateral;
+}
+
+/**
  * 視野占有率メトリクスを一括計算する
  */
 export function calcFieldOfViewMetrics(

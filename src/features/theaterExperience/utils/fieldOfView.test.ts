@@ -10,6 +10,7 @@ import {
   calcDistanceToScreen,
   calcFieldOfViewMetrics,
   projectScreenQuad,
+  calcYawClampedTargetX,
 } from './fieldOfView';
 
 describe('calcHorizontalFov', () => {
@@ -185,5 +186,45 @@ describe('projectScreenQuad', () => {
       expect(typeof p.x).toBe('number');
       expect(typeof p.y).toBe('number');
     });
+  });
+});
+
+describe('calcYawClampedTargetX', () => {
+  const MAX_YAW = (20 * Math.PI) / 180;
+
+  it('中央席は首を振らずスクリーン中心（=座席X）を向く', () => {
+    expect(calcYawClampedTargetX(0, 0, 5, MAX_YAW)).toBeCloseTo(0, 6);
+  });
+
+  it('上限角内の席はスクリーン中心を正面に捉える', () => {
+    // 角度 = atan(1/5) ≒ 11.3° < 20° なので中心(0)をそのまま向く
+    expect(calcYawClampedTargetX(-1, 0, 5, MAX_YAW)).toBeCloseTo(0, 6);
+  });
+
+  it('上限角を超える端席は上限角で頭打ちになる（中心まで振り切らない）', () => {
+    // A列端: seatX=-7.2, screenX=0, forward=5。full角=atan(7.2/5)=55.2°>20°
+    // → 横ずれは 5*tan(20°) に制限。targetX = -7.2 + 5*tan(20°)
+    const maxLateral = 5 * Math.tan(MAX_YAW);
+    expect(calcYawClampedTargetX(-7.2, 0, 5, MAX_YAW)).toBeCloseTo(
+      -7.2 + maxLateral,
+      6,
+    );
+    // クランプ後の実効首振り角がちょうど上限になること
+    const targetX = calcYawClampedTargetX(-7.2, 0, 5, MAX_YAW);
+    const yaw = Math.atan(Math.abs(targetX - -7.2) / 5);
+    expect(yaw).toBeCloseTo(MAX_YAW, 6);
+  });
+
+  it('反対側の端席でも符号を保って頭打ちになる', () => {
+    const maxLateral = 5 * Math.tan(MAX_YAW);
+    expect(calcYawClampedTargetX(7.2, 0, 5, MAX_YAW)).toBeCloseTo(
+      7.2 - maxLateral,
+      6,
+    );
+  });
+
+  it('前方距離が0以下ならスクリーン中心を返す（フォールバック）', () => {
+    expect(calcYawClampedTargetX(-7.2, 0, 0, MAX_YAW)).toBe(0);
+    expect(calcYawClampedTargetX(-7.2, 0, -3, MAX_YAW)).toBe(0);
   });
 });

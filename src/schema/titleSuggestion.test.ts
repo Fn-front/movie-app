@@ -58,11 +58,24 @@ describe('openAiTitleSuggestionsResponseSchema', () => {
     expect(result.data?.suggestions).toEqual([]);
   });
 
-  it('5件を超える候補を拒否する', () => {
+  it('5件ちょうどはそのまま通る（上限）', () => {
     const result = openAiTitleSuggestionsResponseSchema.safeParse({
-      suggestions: ['a', 'b', 'c', 'd', 'e', 'f'],
+      suggestions: ['a', 'b', 'c', 'd', 'e'],
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.suggestions).toEqual(['a', 'b', 'c', 'd', 'e']);
+    }
+  });
+
+  it('5件を超える候補は拒否せず先頭5件に切り詰める（順序維持）', () => {
+    const result = openAiTitleSuggestionsResponseSchema.safeParse({
+      suggestions: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.suggestions).toEqual(['a', 'b', 'c', 'd', 'e']);
+    }
   });
 
   it('空文字列を含む候補を拒否する', () => {

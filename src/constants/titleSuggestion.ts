@@ -24,6 +24,8 @@ export const TITLE_SUGGESTION = {
   STALE_TIME: 24 * 60 * 60 * 1000,
   /** sessionStorageキー: 提案クリック時に提案リストを保持 */
   STORAGE_KEY: 'title_suggestions',
+  /** 原題候補の最大件数（LLMが超過して返した場合は切り詰める） */
+  MAX_SUGGESTIONS: 5,
 } as const;
 
 /**

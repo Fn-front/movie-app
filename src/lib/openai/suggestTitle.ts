@@ -2,7 +2,7 @@
  * OpenAI Responses APIを使用した原題提案ロジック（Web検索付き）
  */
 
-import { OPENAI_CONFIG } from '@/constants';
+import { OPENAI_CONFIG, TITLE_SUGGESTION } from '@/constants';
 import { openAiTitleSuggestionsResponseSchema } from '@/schema/titleSuggestion';
 
 import { createOpenAIClient, getOpenAIModel } from './client';
@@ -26,7 +26,7 @@ function buildSystemPrompt(): string {
 - 入力が既に原題（英語）の場合は空配列を返すこと
 - 邦題として正式に知られている映画を最優先で含めること（最新の映画も含む）
 - キーワードから推測できる関連映画も候補に含めること
-- 思いつく候補をすべて返すこと（上限5件）
+- 思いつく候補をすべて返すこと（上限${TITLE_SUGGESTION.MAX_SUGGESTIONS}件）
 - 最も可能性が高い順に並べること
 - 候補は必ず「映画作品」のタイトルに限定すること（ゲーム・テレビ番組・書籍など映画以外の作品は含めない）
 - 映画と全く関連がないと判断できる場合のみ空配列を返すこと

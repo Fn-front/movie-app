@@ -13,6 +13,8 @@ import {
   ERROR_CODE,
   AWARD_DEFINITIONS,
   AWARDS_MESSAGES,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { handleRouteError } from '@/helpers/routeError';
@@ -57,10 +59,6 @@ interface AwardMovieRow {
 /** Cache-Control: CDNで1時間キャッシュ、stale-while-revalidateで24時間 */
 const CACHE_CONTROL_VALUE =
   'public, s-maxage=3600, stale-while-revalidate=86400';
-
-/** レートリミット設定: IP単位で30回/10分 */
-const RATE_LIMIT_MAX_ATTEMPTS = 30;
-const RATE_LIMIT_WINDOW_MINUTES = 10;
 
 /** DBレコードをAwardMovie型に変換 */
 function toAwardMovie(row: {
@@ -122,9 +120,9 @@ export async function GET(request: Request) {
       const rateLimitResult = await checkRateLimit(
         serviceSupabase,
         clientIp,
-        'awards_fetch',
-        RATE_LIMIT_MAX_ATTEMPTS,
-        RATE_LIMIT_WINDOW_MINUTES,
+        RATE_LIMIT_ACTION.AWARDS_FETCH,
+        RATE_LIMIT_CONFIG.AWARDS_FETCH.maxAttempts,
+        RATE_LIMIT_CONFIG.AWARDS_FETCH.windowMinutes,
       );
 
       if (!rateLimitResult.allowed) {

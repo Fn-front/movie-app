@@ -23,11 +23,9 @@ import {
   SETTINGS_SUCCESS_MESSAGES,
   API_ERROR_MESSAGES,
   THEME_DEFAULTS,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
-
-const RATE_LIMIT_ACTION = 'write_api_settings';
-const RATE_LIMIT_MAX_ATTEMPTS = 10;
-const RATE_LIMIT_WINDOW_MINUTES = 1;
 
 /** デフォルトのユーザー設定 */
 const DEFAULT_SETTINGS: UserSettings = {
@@ -107,9 +105,9 @@ export async function PUT(request: Request) {
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,
-      RATE_LIMIT_ACTION,
-      RATE_LIMIT_MAX_ATTEMPTS,
-      RATE_LIMIT_WINDOW_MINUTES,
+      RATE_LIMIT_ACTION.WRITE_SETTINGS,
+      RATE_LIMIT_CONFIG.WRITE_SETTINGS.maxAttempts,
+      RATE_LIMIT_CONFIG.WRITE_SETTINGS.windowMinutes,
     );
 
     if (!rateLimitResult.allowed) {

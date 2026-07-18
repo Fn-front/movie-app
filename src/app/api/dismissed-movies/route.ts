@@ -12,6 +12,8 @@ import {
   ERROR_CODE,
   DISMISSED_MOVIES_ERROR_MESSAGES,
   DISMISSED_MOVIES_SUCCESS_MESSAGES,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 import {
   checkDuplicate,
@@ -22,10 +24,6 @@ import { parseAndValidate } from '@/helpers/requestValidation';
 import { withAuth } from '@/helpers/routeHandler';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { dismissedMoviesAddSchema } from '@/schema/dismissedMovies';
-
-const RATE_LIMIT_ACTION = 'write_api_dismissed_movies';
-const RATE_LIMIT_MAX_ATTEMPTS = 10;
-const RATE_LIMIT_WINDOW_MINUTES = 1;
 
 export const GET = withAuth(
   async ({ session, supabase }) => {
@@ -57,9 +55,9 @@ export const POST = withAuth(
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,
-      RATE_LIMIT_ACTION,
-      RATE_LIMIT_MAX_ATTEMPTS,
-      RATE_LIMIT_WINDOW_MINUTES,
+      RATE_LIMIT_ACTION.WRITE_DISMISSED_MOVIES,
+      RATE_LIMIT_CONFIG.WRITE_DISMISSED_MOVIES.maxAttempts,
+      RATE_LIMIT_CONFIG.WRITE_DISMISSED_MOVIES.windowMinutes,
     );
 
     if (!rateLimitResult.allowed) {
@@ -122,9 +120,9 @@ export const DELETE = withAuth(
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,
-      RATE_LIMIT_ACTION,
-      RATE_LIMIT_MAX_ATTEMPTS,
-      RATE_LIMIT_WINDOW_MINUTES,
+      RATE_LIMIT_ACTION.WRITE_DISMISSED_MOVIES,
+      RATE_LIMIT_CONFIG.WRITE_DISMISSED_MOVIES.maxAttempts,
+      RATE_LIMIT_CONFIG.WRITE_DISMISSED_MOVIES.windowMinutes,
     );
 
     if (!rateLimitResult.allowed) {

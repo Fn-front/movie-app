@@ -17,7 +17,12 @@ import {
 import { registerApiSchema } from '@/schema/auth';
 import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
 import { OTP_ACTION, OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
-import { HTTP_STATUS, ERROR_CODE } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
+} from '@/constants';
 import { generateOtpCode, sendOtpEmail, randomDelay } from '@/lib/otp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 
@@ -48,9 +53,9 @@ export async function POST(request: Request) {
     const rateLimitResult = await checkRateLimit(
       supabase,
       result.data.email,
-      'register',
-      5,
-      60,
+      RATE_LIMIT_ACTION.REGISTER,
+      RATE_LIMIT_CONFIG.REGISTER.maxAttempts,
+      RATE_LIMIT_CONFIG.REGISTER.windowMinutes,
     );
 
     if (!rateLimitResult.allowed) {

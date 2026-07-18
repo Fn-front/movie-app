@@ -19,11 +19,9 @@ import {
   PROFILE_ERROR_MESSAGES,
   PROFILE_SUCCESS_MESSAGES,
   API_ERROR_MESSAGES,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
-
-const RATE_LIMIT_ACTION = 'write_api_profile';
-const RATE_LIMIT_MAX_ATTEMPTS = 10;
-const RATE_LIMIT_WINDOW_MINUTES = 1;
 
 export async function PUT(request: Request) {
   try {
@@ -39,9 +37,9 @@ export async function PUT(request: Request) {
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,
-      RATE_LIMIT_ACTION,
-      RATE_LIMIT_MAX_ATTEMPTS,
-      RATE_LIMIT_WINDOW_MINUTES,
+      RATE_LIMIT_ACTION.WRITE_PROFILE,
+      RATE_LIMIT_CONFIG.WRITE_PROFILE.maxAttempts,
+      RATE_LIMIT_CONFIG.WRITE_PROFILE.windowMinutes,
     );
 
     if (!rateLimitResult.allowed) {

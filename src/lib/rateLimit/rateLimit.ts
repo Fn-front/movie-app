@@ -4,7 +4,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
-import { SUPABASE_ERROR_CODE } from '@/constants';
+import { RATE_LIMIT_DEFAULT, SUPABASE_ERROR_CODE } from '@/constants';
 
 /**
  * レート制限チェック結果
@@ -28,8 +28,8 @@ export async function checkRateLimit(
   supabase: SupabaseClient,
   identifier: string,
   actionType: string,
-  maxAttempts: number = 3,
-  windowMinutes: number = 30,
+  maxAttempts: number = RATE_LIMIT_DEFAULT.MAX_ATTEMPTS,
+  windowMinutes: number = RATE_LIMIT_DEFAULT.WINDOW_MINUTES,
 ): Promise<RateLimitResult> {
   const { data, error } = await supabase
     .from('rate_limits')

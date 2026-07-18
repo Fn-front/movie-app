@@ -32,3 +32,4 @@ export * from './external';
 export * from './queryParams';
 export * from './defaults';
 export * from './theaters';
+export * from './rateLimit';

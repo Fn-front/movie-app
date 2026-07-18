@@ -21,22 +21,19 @@ import {
   THEATER_SEATS_SELECT,
   THEATER_SPEAKERS_SELECT,
   THEATER_CACHE_CONTROL,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 import { theaterSlugSchema } from '@/schema/theaters';
-
-/** 認証ユーザー単位の読み取りレート制限: 30 回 / 1 分 */
-const RATE_LIMIT_ACTION = 'read_api_theater_detail';
-const RATE_LIMIT_MAX_ATTEMPTS = 30;
-const RATE_LIMIT_WINDOW_MINUTES = 1;
 
 export const GET = withAuth(
   async ({ session, supabase, params }) => {
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,
-      RATE_LIMIT_ACTION,
-      RATE_LIMIT_MAX_ATTEMPTS,
-      RATE_LIMIT_WINDOW_MINUTES,
+      RATE_LIMIT_ACTION.READ_THEATER_DETAIL,
+      RATE_LIMIT_CONFIG.READ_THEATER_DETAIL.maxAttempts,
+      RATE_LIMIT_CONFIG.READ_THEATER_DETAIL.windowMinutes,
     );
     if (!rateLimitResult.allowed) {
       return rateLimitExceededResponse(rateLimitResult);

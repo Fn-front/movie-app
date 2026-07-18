@@ -11,6 +11,8 @@ import {
   ERROR_CODE,
   WATCHLIST_ERROR_MESSAGES,
   WATCHLIST_SUCCESS_MESSAGES,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 import {
   checkDuplicate,
@@ -22,10 +24,6 @@ import { withAuth } from '@/helpers/routeHandler';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 import { watchlistQuerySchema, watchlistAddSchema } from '@/schema/watchlist';
-
-const RATE_LIMIT_ACTION = 'write_api_watchlist';
-const RATE_LIMIT_MAX_ATTEMPTS = 10;
-const RATE_LIMIT_WINDOW_MINUTES = 1;
 
 export const GET = withAuth(
   async ({ session, supabase, request }) => {
@@ -155,9 +153,9 @@ export const POST = withAuth(
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,
-      RATE_LIMIT_ACTION,
-      RATE_LIMIT_MAX_ATTEMPTS,
-      RATE_LIMIT_WINDOW_MINUTES,
+      RATE_LIMIT_ACTION.WRITE_WATCHLIST,
+      RATE_LIMIT_CONFIG.WRITE_WATCHLIST.maxAttempts,
+      RATE_LIMIT_CONFIG.WRITE_WATCHLIST.windowMinutes,
     );
 
     if (!rateLimitResult.allowed) {

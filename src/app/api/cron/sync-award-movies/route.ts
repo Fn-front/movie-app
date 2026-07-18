@@ -14,7 +14,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { HTTP_STATUS, ERROR_CODE, CRON_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  CRON_ERROR_MESSAGES,
+  AWARD_YEAR_RANGE,
+} from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
 import { handleRouteError } from '@/helpers/routeError';
 import {
@@ -39,14 +44,16 @@ export async function GET(request: NextRequest) {
     const targetYear = yearParam ? Number(yearParam) : undefined;
     if (
       yearParam &&
-      (isNaN(targetYear!) || targetYear! < 1900 || targetYear! > 2100)
+      (isNaN(targetYear!) ||
+        targetYear! < AWARD_YEAR_RANGE.MIN ||
+        targetYear! > AWARD_YEAR_RANGE.MAX)
     ) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: ERROR_CODE.VALIDATION_ERROR,
-            message: 'yearパラメータは1900〜2100の数値で指定してください',
+            message: `yearパラメータは${AWARD_YEAR_RANGE.MIN}〜${AWARD_YEAR_RANGE.MAX}の数値で指定してください`,
           },
         },
         { status: HTTP_STATUS.BAD_REQUEST },

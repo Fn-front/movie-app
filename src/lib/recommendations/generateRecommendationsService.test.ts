@@ -12,6 +12,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_GENERATION_BUFFER,
+  RECOMMENDATIONS_BATCH_SIZE,
 } from '@/constants';
 
 import {
@@ -21,7 +22,6 @@ import {
   generateRecommendationsWithRetry,
   upsertRecommendations,
   processUserRecommendations,
-  BATCH_SIZE,
 } from './generateRecommendationsService';
 
 // --- Mocks ---
@@ -158,9 +158,9 @@ describe('generateRecommendationsService', () => {
     jest.restoreAllMocks();
   });
 
-  describe('BATCH_SIZE', () => {
+  describe('RECOMMENDATIONS_BATCH_SIZE', () => {
     it('バッチサイズが5であること', () => {
-      expect(BATCH_SIZE).toBe(5);
+      expect(RECOMMENDATIONS_BATCH_SIZE).toBe(5);
     });
   });
 

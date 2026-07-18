@@ -39,24 +39,32 @@ export const MOVIES_FETCH_MONTHS_AHEAD = 3;
 export const NOW_SHOWING_MONTHS_BACK = 2;
 
 /**
+ * リリースタイプ値（このファイル内のリリースタイプの単一ソース）
+ */
+export const RELEASE_TYPE = {
+  THEATRICAL: 'theatrical',
+  STREAMING: 'streaming',
+} as const;
+
+/**
  * リリースタイプ選択肢
  */
 export const RELEASE_TYPE_OPTIONS = [
-  { label: '劇場公開', value: 'theatrical' },
-  { label: 'ストリーミング', value: 'streaming' },
+  { label: '劇場公開', value: RELEASE_TYPE.THEATRICAL },
+  { label: 'ストリーミング', value: RELEASE_TYPE.STREAMING },
 ] as const;
 
 /**
  * デフォルトリリースタイプ
  */
-export const DEFAULT_RELEASE_TYPE = 'theatrical' as const;
+export const DEFAULT_RELEASE_TYPE = RELEASE_TYPE.THEATRICAL;
 
 /**
  * TMDb APIのwith_release_typeパラメータへのマッピング
  */
 export const RELEASE_TYPE_MAP: Record<string, string> = {
-  theatrical: '2|3',
-  streaming: '4',
+  [RELEASE_TYPE.THEATRICAL]: '2|3',
+  [RELEASE_TYPE.STREAMING]: '4',
 };
 
 /**

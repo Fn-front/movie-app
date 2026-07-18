@@ -4,7 +4,7 @@
 
 import OpenAI from 'openai';
 
-const DEFAULT_MODEL = 'gpt-4o-mini';
+import { OPENAI_CONFIG } from '@/constants';
 
 /**
  * OpenAIクライアントを作成
@@ -25,5 +25,5 @@ export function createOpenAIClient(): OpenAI | null {
  * 使用するOpenAIモデル名を取得
  */
 export function getOpenAIModel(): string {
-  return process.env.OPENAI_MODEL || DEFAULT_MODEL;
+  return process.env.OPENAI_MODEL || OPENAI_CONFIG.DEFAULT_MODEL;
 }

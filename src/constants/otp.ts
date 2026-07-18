@@ -41,6 +41,11 @@ export const OTP_CONFIG = {
 } as const;
 
 /**
+ * タイミング攻撃・メールアドレス列挙防止用のランダム遅延（ミリ秒）
+ */
+export const OTP_RANDOM_DELAY = { MIN_MS: 200, RANGE_MS: 300 } as const;
+
+/**
  * OTPエラーメッセージ
  */
 export const OTP_ERROR_MESSAGES = {

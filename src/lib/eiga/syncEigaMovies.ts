@@ -4,7 +4,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-import { EXCLUDED_KEYWORD_IDS } from '@/constants/movies';
+import { EXCLUDED_KEYWORD_IDS, RELEASE_TYPE } from '@/constants/movies';
 import { EIGA_SCORING } from '@/constants/eiga';
 import { getMovieKeywordIds, searchMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
@@ -226,7 +226,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
           vote_average: bestMatch.vote_average,
           popularity: bestMatch.popularity,
           genre_ids: bestMatch.genre_ids,
-          release_type: 'theatrical',
+          release_type: RELEASE_TYPE.THEATRICAL,
           is_revival: revival,
           cached_at: now,
         },

@@ -10,6 +10,11 @@ import { successMessage } from './common';
 export const NOW_SHOWING_DISPLAY_COUNT = 10;
 
 /**
+ * 劇場公開中の人気映画キャッシュの再検証間隔（秒） — 1時間
+ */
+export const NOW_SHOWING_REVALIDATE_SECONDS = 3600;
+
+/**
  * 劇場公開中の人気映画セクションタイトル
  */
 export const NOW_SHOWING_SECTION_TITLE = '劇場公開中の人気作品';

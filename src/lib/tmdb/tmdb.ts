@@ -7,6 +7,7 @@ import {
   PAGINATION,
   TMDB_ENDPOINTS,
   TMDB_RETRY_CONFIG,
+  TMDB_SORT_BY,
 } from '@/constants';
 import type {
   Movie,
@@ -320,7 +321,7 @@ export async function getMoviesByGenre(
       params: {
         with_genres: genreId,
         page: validatePage(page),
-        sort_by: 'popularity.desc',
+        sort_by: TMDB_SORT_BY.POPULARITY_DESC,
       },
     },
   );

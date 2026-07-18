@@ -9,6 +9,7 @@ import {
   NOW_SHOWING_RELEASE_DATE_RANGE_MONTHS,
 } from '@/constants/movies';
 import { NOW_SHOWING_DISPLAY_COUNT } from '@/constants/nowShowing';
+import { TMDB_SORT_BY } from '@/constants/tmdb';
 import { discoverMovies } from '@/lib/tmdb/tmdb';
 
 /**
@@ -57,7 +58,7 @@ export async function syncNowShowingMovies(): Promise<NowShowingSyncResult> {
   );
 
   const response = await discoverMovies({
-    sort_by: 'popularity.desc',
+    sort_by: TMDB_SORT_BY.POPULARITY_DESC,
     with_release_type: RELEASE_TYPE_MAP.theatrical,
     'release_date.gte': formatDate(rangeStart),
     'release_date.lte': formatDate(now),

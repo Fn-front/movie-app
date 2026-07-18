@@ -28,6 +28,8 @@ export const HTTP_STATUS = {
   OK: 200,
   /** 成功（リソース作成） */
   CREATED: 201,
+  /** 成功（本文なし） */
+  NO_CONTENT: 204,
   /** クライアントエラー（バリデーション等） */
   BAD_REQUEST: 400,
   /** 認証エラー */

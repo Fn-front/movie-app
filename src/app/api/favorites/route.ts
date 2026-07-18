@@ -53,10 +53,10 @@ export const GET = withAuth(
 
     const { sort_by, sort_order, page, limit } = queryResult.data;
 
-    // 件数取得
+    // 件数取得（カウントのみのため id 列だけ指定して転送量を削減）
     const { count, error: countError } = await supabase
       .from('favorites')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('user_id', session.user.id)
       .is('deleted_at', null);
 

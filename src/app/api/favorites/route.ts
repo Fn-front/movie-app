@@ -18,6 +18,7 @@ import { favoritesQuerySchema, favoritesAddSchema } from '@/schema/favorites';
 import {
   HTTP_STATUS,
   ERROR_CODE,
+  FAVORITES_SELECT,
   FAVORITES_ERROR_MESSAGES,
   FAVORITES_SUCCESS_MESSAGES,
   RATE_LIMIT_ACTION,
@@ -69,9 +70,7 @@ export const GET = withAuth(
 
     const { data, error } = await supabase
       .from('favorites')
-      .select(
-        'id, tmdb_movie_id, title, poster_path, release_date, rating, added_at',
-      )
+      .select(FAVORITES_SELECT)
       .eq('user_id', session.user.id)
       .is('deleted_at', null)
       .order(sort_by, { ascending: sort_order === 'asc' })
@@ -152,9 +151,7 @@ export const POST = withAuth(
         release_date: parsed.data.release_date ?? null,
         rating: parsed.data.rating,
       })
-      .select(
-        'id, tmdb_movie_id, title, poster_path, release_date, rating, added_at',
-      )
+      .select(FAVORITES_SELECT)
       .single();
 
     if (insertError) {

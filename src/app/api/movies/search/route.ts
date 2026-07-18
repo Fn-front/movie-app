@@ -12,7 +12,12 @@ import { NextResponse } from 'next/server';
 import { searchMovies, discoverMovies } from '@/lib/tmdb/tmdb';
 import type { Movie, TMDbResponse } from '@/lib/types';
 import { searchQuerySchema } from '@/schema/search';
-import { HTTP_STATUS, ERROR_CODE, SEARCH_ERROR_MESSAGES } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  SEARCH_ERROR_MESSAGES,
+  CACHE_CONTROL,
+} from '@/constants';
 
 /**
  * ジャンルIDをパースしてnumber配列に変換
@@ -142,8 +147,7 @@ export async function GET(request: Request) {
       {
         status: HTTP_STATUS.OK,
         headers: {
-          'Cache-Control':
-            'public, s-maxage=3600, stale-while-revalidate=86400',
+          'Cache-Control': CACHE_CONTROL.PUBLIC_1H_SWR_24H,
         },
       },
     );

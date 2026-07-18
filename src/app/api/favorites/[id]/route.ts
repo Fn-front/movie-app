@@ -21,6 +21,7 @@ import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { favoritesUpdateSchema } from '@/schema/favorites';
 import {
   HTTP_STATUS,
+  FAVORITES_SELECT,
   FAVORITES_ERROR_MESSAGES,
   FAVORITES_SUCCESS_MESSAGES,
   RATE_LIMIT_ACTION,
@@ -66,9 +67,7 @@ export const PATCH = withAuth(
       .eq('id', id)
       .eq('user_id', session.user.id)
       .is('deleted_at', null)
-      .select(
-        'id, tmdb_movie_id, title, poster_path, release_date, rating, added_at',
-      )
+      .select(FAVORITES_SELECT)
       .single();
 
     if (error || !data) {

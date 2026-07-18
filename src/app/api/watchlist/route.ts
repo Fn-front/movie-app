@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
 import {
   HTTP_STATUS,
   ERROR_CODE,
+  WATCHLIST_SELECT,
   WATCHLIST_ERROR_MESSAGES,
   WATCHLIST_SUCCESS_MESSAGES,
   RATE_LIMIT_ACTION,
@@ -106,7 +107,7 @@ export const GET = withAuth(
     // デフォルト: 追加日順（既存ロジック）
     let query = supabase
       .from('watchlist')
-      .select('id, tmdb_movie_id, title, poster_path, release_date, added_at')
+      .select(WATCHLIST_SELECT)
       .eq('user_id', session.user.id)
       .is('deleted_at', null);
 
@@ -192,7 +193,7 @@ export const POST = withAuth(
         poster_path: parsed.data.poster_path ?? null,
         release_date: parsed.data.release_date ?? null,
       })
-      .select('id, tmdb_movie_id, title, poster_path, release_date, added_at')
+      .select(WATCHLIST_SELECT)
       .single();
 
     if (insertError) {

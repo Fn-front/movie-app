@@ -2,6 +2,7 @@
  * フィルター条件保存API クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 import type { FilterConditions } from '@/schema/filters';
 
@@ -21,8 +22,9 @@ export interface GetSavedFilterResponse {
  * @returns フィルター条件（未保存の場合は空オブジェクト）
  */
 export async function getSavedFilter(): Promise<FilterConditions> {
-  const response =
-    await axiosInstance.get<GetSavedFilterResponse>('/api/filters');
+  const response = await axiosInstance.get<GetSavedFilterResponse>(
+    API_ENDPOINTS.FILTERS,
+  );
   return response.data.data.filter_conditions;
 }
 
@@ -32,5 +34,5 @@ export async function getSavedFilter(): Promise<FilterConditions> {
  * @param conditions - 保存するフィルター条件
  */
 export async function saveFilter(conditions: FilterConditions): Promise<void> {
-  await axiosInstance.put('/api/filters', conditions);
+  await axiosInstance.put(API_ENDPOINTS.FILTERS, conditions);
 }

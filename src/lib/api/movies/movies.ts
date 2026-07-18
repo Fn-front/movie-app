@@ -2,6 +2,7 @@
  * 映画API クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 import type { MovieDetail } from '@/lib/types';
 
@@ -89,10 +90,13 @@ export async function getMovies(
   params: GetMoviesRequest = {},
   options?: { signal?: AbortSignal },
 ): Promise<GetMoviesResponse> {
-  const response = await axiosInstance.get<GetMoviesResponse>('/api/movies', {
-    params,
-    signal: options?.signal,
-  });
+  const response = await axiosInstance.get<GetMoviesResponse>(
+    API_ENDPOINTS.MOVIES,
+    {
+      params,
+      signal: options?.signal,
+    },
+  );
   return response.data;
 }
 
@@ -114,7 +118,7 @@ export async function getMovieDetail(
   movieId: number,
 ): Promise<GetMovieDetailResponse> {
   const response = await axiosInstance.get<GetMovieDetailResponse>(
-    `/api/movies/${movieId}`,
+    API_ENDPOINTS.movieById(movieId),
   );
   return response.data;
 }

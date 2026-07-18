@@ -33,7 +33,7 @@ export async function registerUser(
   data: RegisterRequest,
 ): Promise<RegisterResponse> {
   const response = await axiosInstance.post<RegisterResponse>(
-    '/api/auth/register',
+    API_ENDPOINTS.AUTH_REGISTER,
     data,
   );
   return response.data;
@@ -97,7 +97,7 @@ export async function changePassword(
   data: ChangePasswordRequest,
 ): Promise<ChangePasswordResponse> {
   const response = await axiosInstance.post<ChangePasswordResponse>(
-    '/api/user/change-password',
+    API_ENDPOINTS.USER_CHANGE_PASSWORD,
     data,
   );
   return response.data;

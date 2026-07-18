@@ -2,6 +2,7 @@
  * カレンダーAPI クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 
 /**
@@ -50,7 +51,7 @@ export async function getCalendarMovies(
   params: GetCalendarRequest = {},
 ): Promise<GetCalendarResponse> {
   const response = await axiosInstance.get<GetCalendarResponse>(
-    '/api/watchlist/calendar',
+    API_ENDPOINTS.WATCHLIST_CALENDAR,
     { params },
   );
   return response.data;

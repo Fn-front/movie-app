@@ -2,6 +2,7 @@
  * レコメンド手動更新API クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 import type { Recommendation } from '@/schema/recommendations';
 
@@ -35,7 +36,7 @@ export async function refreshRecommendations(): Promise<
   RefreshRecommendationsResponse['data']
 > {
   const response = await axiosInstance.post<RefreshRecommendationsResponse>(
-    '/api/recommendations/refresh',
+    API_ENDPOINTS.RECOMMENDATIONS_REFRESH,
   );
   return response.data.data;
 }
@@ -45,7 +46,7 @@ export async function refreshRecommendations(): Promise<
  */
 export async function getRefreshCount(): Promise<RefreshCountResponse['data']> {
   const response = await axiosInstance.get<RefreshCountResponse>(
-    '/api/recommendations/refresh-count',
+    API_ENDPOINTS.RECOMMENDATIONS_REFRESH_COUNT,
   );
   return response.data.data;
 }

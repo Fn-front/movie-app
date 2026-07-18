@@ -2,6 +2,7 @@
  * 興味なし映画API クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 
 /**
@@ -54,7 +55,7 @@ export interface GetDismissedMoviesResponse {
  */
 export async function getDismissedMovies(): Promise<DismissedMovieItem[]> {
   const response = await axiosInstance.get<GetDismissedMoviesResponse>(
-    '/api/dismissed-movies',
+    API_ENDPOINTS.DISMISSED_MOVIES,
   );
   return response.data.data;
 }
@@ -66,7 +67,7 @@ export async function addDismissedMovie(
   data: AddDismissedMovieRequest,
 ): Promise<AddDismissedMovieResponse> {
   const response = await axiosInstance.post<AddDismissedMovieResponse>(
-    '/api/dismissed-movies',
+    API_ENDPOINTS.DISMISSED_MOVIES,
     data,
   );
   return response.data;
@@ -76,7 +77,5 @@ export async function addDismissedMovie(
  * 興味なしから削除
  */
 export async function removeDismissedMovie(tmdbMovieId: number): Promise<void> {
-  await axiosInstance.delete(
-    `/api/dismissed-movies?tmdb_movie_id=${tmdbMovieId}`,
-  );
+  await axiosInstance.delete(API_ENDPOINTS.dismissedMovieByTmdbId(tmdbMovieId));
 }

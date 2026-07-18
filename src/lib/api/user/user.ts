@@ -2,6 +2,7 @@
  * ユーザー設定API クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
 import type { UserSettings } from '@/schema/user';
 
@@ -19,7 +20,7 @@ export interface GetSettingsResponse {
  * @param name - 新しい表示名
  */
 export async function updateProfile(name: string): Promise<void> {
-  await axiosInstance.put('/api/user/profile', { name });
+  await axiosInstance.put(API_ENDPOINTS.USER_PROFILE, { name });
 }
 
 /**
@@ -28,8 +29,9 @@ export async function updateProfile(name: string): Promise<void> {
  * @returns ユーザー設定
  */
 export async function getSettings(): Promise<UserSettings> {
-  const response =
-    await axiosInstance.get<GetSettingsResponse>('/api/user/settings');
+  const response = await axiosInstance.get<GetSettingsResponse>(
+    API_ENDPOINTS.USER_SETTINGS,
+  );
   return response.data.data;
 }
 
@@ -41,7 +43,7 @@ export async function getSettings(): Promise<UserSettings> {
 export async function updateSettings(
   settings: Partial<UserSettings>,
 ): Promise<void> {
-  await axiosInstance.put('/api/user/settings', {
+  await axiosInstance.put(API_ENDPOINTS.USER_SETTINGS, {
     theme: settings.theme,
     notificationEnabled: settings.notificationEnabled,
   });

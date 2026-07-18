@@ -2,6 +2,7 @@
  * 劇場API クライアント
  */
 
+import { API_ENDPOINTS } from '@/constants';
 import type {
   TheatersApiResponse,
   TheaterDetailApiResponse,
@@ -12,8 +13,9 @@ import { axiosInstance } from '@/lib/axios/axios';
  * 劇場一覧を取得する
  */
 export async function getTheaters(): Promise<TheatersApiResponse['data']> {
-  const response =
-    await axiosInstance.get<TheatersApiResponse>('/api/theaters');
+  const response = await axiosInstance.get<TheatersApiResponse>(
+    API_ENDPOINTS.THEATERS,
+  );
   return response.data.data;
 }
 
@@ -24,7 +26,7 @@ export async function getTheaterBySlug(
   slug: string,
 ): Promise<TheaterDetailApiResponse['data']> {
   const response = await axiosInstance.get<TheaterDetailApiResponse>(
-    `/api/theaters/${slug}`,
+    API_ENDPOINTS.theaterBySlug(slug),
   );
   return response.data.data;
 }

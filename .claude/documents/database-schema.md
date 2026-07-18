@@ -414,6 +414,7 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 | release_date | DATE | NULL | - | 公開日 |
 | vote_average | NUMERIC(3,1) | NULL | - | TMDb評価 |
 | genre_ids | INTEGER[] | NULL | - | ジャンルID配列 |
+| person_name | VARCHAR(255) | NULL | - | 人名（監督賞・演技賞などで使用） |
 | award_name | VARCHAR(100) | NOT NULL | - | 賞名キー（academy_awards等） |
 | award_year | INTEGER | NOT NULL | - | 授賞年度 |
 | category | VARCHAR(100) | NOT NULL | - | 部門キー（best_picture等） |

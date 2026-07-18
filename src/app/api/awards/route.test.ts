@@ -9,10 +9,11 @@
 // --- Mocks ---
 
 const mockAnonFrom = jest.fn();
+const mockAnonRpc = jest.fn();
 const mockServiceFrom = jest.fn();
 
 jest.mock('@/helpers/supabase', () => ({
-  createAnonClient: jest.fn(() => ({ from: mockAnonFrom })),
+  createAnonClient: jest.fn(() => ({ from: mockAnonFrom, rpc: mockAnonRpc })),
   createServiceRoleClient: jest.fn(() => ({ from: mockServiceFrom })),
   dbConnectionErrorResponse: jest.fn(
     () => new Response(JSON.stringify({ success: false }), { status: 500 }),
@@ -49,15 +50,8 @@ function createRequest(yearParam?: string, ip?: string): Request {
 }
 
 function mockYearQuery(years: number[]) {
-  mockAnonFrom.mockReturnValueOnce({
-    select: () => ({
-      order: () =>
-        Promise.resolve({
-          data: years.map((y) => ({ award_year: y })),
-          error: null,
-        }),
-    }),
-  });
+  // 年度一覧は RPC get_award_years（DB 側で DISTINCT・降順）で取得する
+  mockAnonRpc.mockResolvedValueOnce({ data: years, error: null });
 }
 
 function mockAwardDataQuery(rows: Record<string, unknown>[]) {
@@ -243,9 +237,9 @@ describe('GET /api/awards', () => {
     expect(categories[1].category).toBe('best_director');
   });
 
-  it('availableYearsが重複なしで返される', async () => {
-    // 同じ年度が複数レコードに存在する場合
-    mockYearQuery([2026, 2026, 2025, 2025, 2024]);
+  it('availableYearsはRPC(get_award_years)の結果をそのまま返す', async () => {
+    // 重複排除・降順ソートは DB 側（RPC）で実施されるため、返り値をそのまま返す
+    mockYearQuery([2026, 2025, 2024]);
     mockAwardDataQuery([]);
 
     const response = await GET(createRequest('2026'));
@@ -262,15 +256,10 @@ describe('GET /api/awards', () => {
     expect(response.status).toBe(500);
   });
 
-  it('年度一覧取得でDBエラーの場合500を返す', async () => {
-    mockAnonFrom.mockReturnValueOnce({
-      select: () => ({
-        order: () =>
-          Promise.resolve({
-            data: null,
-            error: { message: 'DB error', code: 'INTERNAL' },
-          }),
-      }),
+  it('年度一覧取得(RPC)でDBエラーの場合500を返す', async () => {
+    mockAnonRpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'DB error', code: 'INTERNAL' },
     });
 
     const response = await GET(createRequest('2026'));

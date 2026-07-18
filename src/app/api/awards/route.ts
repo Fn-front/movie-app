@@ -153,21 +153,13 @@ export async function GET(request: Request) {
     const supabase = createAnonClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    // 利用可能な年度一覧を取得
-    const { data: yearRows, error: yearError } = await supabase
-      .from('award_movies')
-      .select('award_year')
-      .order('award_year', { ascending: false });
+    // 利用可能な年度一覧を取得（DB 側で DISTINCT・降順ソート）
+    const { data: availableYears, error: yearError } =
+      await supabase.rpc('get_award_years');
 
     if (yearError) {
       throw yearError;
     }
-
-    const availableYears = [
-      ...new Set(
-        (yearRows ?? []).map((r: { award_year: number }) => r.award_year),
-      ),
-    ];
 
     // 指定年度の受賞作品データを取得（必要カラムのみ）
     const { data: rawAwardRows, error: awardError } = await supabase
@@ -223,7 +215,7 @@ export async function GET(request: Request) {
 
     const responseData: AwardsResponseData = {
       year,
-      availableYears,
+      availableYears: availableYears ?? [],
       awards,
     };
 

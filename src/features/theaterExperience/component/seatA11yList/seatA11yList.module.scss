@@ -103,6 +103,15 @@ $seat-cell-size: 28px;
   transform-origin: top right;
 }
 
+// 俯瞰3Dのホバーと相互連動する強調リング。
+// マウスの :hover とは別経路（3D側からのホバーやキーボードフォーカス）でも点灯し、
+// 2Dリストと3D座席のどちらをポイントしても対応席が同時に強調される。
+.c_seat_a11y_list__seat_button__hovered {
+  background-color: color-alpha(--warning-main, 15%);
+  box-shadow: 0 0 0 $border-width-2 $warning-main;
+  color: $text-primary;
+}
+
 .c_seat_a11y_list__seat_button__selected {
   background-color: $primary-500;
   color: $text-inverse;

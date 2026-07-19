@@ -66,7 +66,9 @@ describe('SeatMeshes', () => {
     const props = {
       seats: [mockSeat],
       selectedSeatId: null,
+      hoveredSeatId: null,
       onSeatClick: jest.fn(),
+      onHoverSeat: jest.fn(),
     };
 
     expect(props.seats).toHaveLength(1);

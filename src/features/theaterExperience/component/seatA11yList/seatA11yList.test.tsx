@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import type { TheaterSeat, Theater } from '../../types';
 
 import { SeatA11yList } from './seatA11yList';
+import styles from './seatA11yList.module.scss';
 
 const mockTheater: Theater = {
   id: 'uuid-1',
@@ -60,7 +61,9 @@ describe('SeatA11yList', () => {
     seats: mockSeats,
     theater: mockTheater,
     selectedSeatId: null,
+    hoveredSeatId: null,
     onSelectSeat: jest.fn(),
+    onHoverSeat: jest.fn(),
   };
 
   beforeEach(() => {
@@ -138,6 +141,45 @@ describe('SeatA11yList', () => {
     // グリッド列数は最大席番号
     const ul = li?.parentElement as HTMLElement;
     expect(ul.style.getPropertyValue('--seat-cols')).toBe('5');
+  });
+
+  it('ホバーで onHoverSeat が席IDで呼ばれ、解除で null が渡る（3Dと相互連動）', async () => {
+    const user = userEvent.setup();
+    const onHoverSeat = jest.fn();
+
+    render(<SeatA11yList {...defaultProps} onHoverSeat={onHoverSeat} />);
+
+    const button = screen.getAllByRole('button')[0];
+    await user.hover(button);
+    expect(onHoverSeat).toHaveBeenCalledWith('seat-a1');
+
+    await user.unhover(button);
+    expect(onHoverSeat).toHaveBeenCalledWith(null);
+  });
+
+  it('フォーカスでも onHoverSeat が呼ばれる（キーボード連動）', async () => {
+    const user = userEvent.setup();
+    const onHoverSeat = jest.fn();
+
+    render(<SeatA11yList {...defaultProps} onHoverSeat={onHoverSeat} />);
+
+    await user.tab();
+    expect(screen.getAllByRole('button')[0]).toHaveFocus();
+    expect(onHoverSeat).toHaveBeenCalledWith('seat-a1');
+  });
+
+  it('hoveredSeatId が指す席に強調クラスが付く', () => {
+    render(<SeatA11yList {...defaultProps} hoveredSeatId='seat-a2' />);
+
+    const buttons = screen.getAllByRole('button');
+    // A列2番がホバー強調される
+    expect(buttons[1]).toHaveClass(
+      styles.c_seat_a11y_list__seat_button__hovered,
+    );
+    // その他は強調されない
+    expect(buttons[0]).not.toHaveClass(
+      styles.c_seat_a11y_list__seat_button__hovered,
+    );
   });
 
   it('車椅子席は♿マーカーと車椅子席ラベルが付く', () => {

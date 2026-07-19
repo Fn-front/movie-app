@@ -1,7 +1,7 @@
 /**
  * SeatMeshesコンポーネント
  * アイソメトリック ドールハウススタイル: フラットなRoundedBox座席 + エッジ強調
- * 列ごとに2色交互、選択座席はハイライト
+ * 通常席は単色。ホバー席は枠＋席番号ラベルで強調し、2Dリストと相互連動する。
  */
 
 'use client';
@@ -14,9 +14,11 @@ import {
 } from 'three';
 import { RoundedBoxGeometry } from 'three-stdlib';
 import { extend } from '@react-three/fiber';
-import { Edges } from '@react-three/drei';
+import { Edges, Html } from '@react-three/drei';
 
 import type { TheaterSeat } from '../../types';
+
+import styles from './seatMeshes.module.scss';
 
 // R3FにRoundedBoxGeometryを登録
 extend({ RoundedBoxGeometry });
@@ -44,6 +46,8 @@ const COLOR_SEAT = new Color('#bf4040');
 const COLOR_SELECTED = new Color('#ffaa00');
 /** 車椅子席カラー（他席と区別できる青系） */
 const COLOR_WHEELCHAIR = new Color('#3b82f6');
+/** ホバー強調枠の色（design-system の --warning-main と一致させ、2Dリング色と揃える） */
+const HOVER_FRAME_COLOR = '#f59e0b';
 
 /** 座席の色種別キー（純粋・テスト用にexport） */
 export type SeatColorKey = 'selected' | 'wheelchair' | 'seat';
@@ -77,8 +81,12 @@ export interface SeatMeshesProps {
   seats: TheaterSeat[];
   /** 選択中の座席ID */
   selectedSeatId: string | null;
+  /** ホバー中の座席ID（2Dリストと相互ハイライト） */
+  hoveredSeatId: string | null;
   /** 座席クリック時コールバック */
   onSeatClick: (seat: TheaterSeat) => void;
+  /** 座席ホバー変化コールバック（null=ホバー解除） */
+  onHoverSeat: (seatId: string | null) => void;
 }
 
 /**
@@ -196,10 +204,14 @@ const SeatBacks = memo<{
 SeatBacks.displayName = 'SeatBacks';
 
 /**
- * 選択座席のハイライト枠（emissive + Edges）
+ * ホバー席のハイライト枠（Edges）＋席番号ラベル
+ * 旧 SelectedSeatHighlight は「選択即一人称遷移」で俯瞰に一度も現れないデッド演出
+ * だった。これをホバー強調に転用し、俯瞰3Dで席の識別（枠＋番号）を可能にする。
+ * InstancedMesh は per-instance のラベルを持てないため、ホバー中の1席だけ
+ * drei Html で番号をオーバーレイする（席数に依らず overlay は常に1つ）。
  */
-const SelectedSeatHighlight = memo<{ seat: TheaterSeat | null }>(
-  function SelectedSeatHighlight({ seat }) {
+const HoverHighlight = memo<{ seat: TheaterSeat | null }>(
+  function HoverHighlight({ seat }) {
     if (!seat) return null;
     return (
       <group
@@ -212,23 +224,38 @@ const SelectedSeatHighlight = memo<{ seat: TheaterSeat | null }>(
         <mesh>
           <boxGeometry args={[0.7, 0.85, 0.6]} />
           <meshBasicMaterial
-            color='#ffaa00'
+            color={HOVER_FRAME_COLOR}
             transparent
             opacity={0.0}
             depthWrite={false}
           />
-          <Edges color='#ffaa00' lineWidth={2.5} />
+          <Edges color={HOVER_FRAME_COLOR} lineWidth={2.5} />
         </mesh>
+        {/* pointerEvents:none はラッパーdivを3Dのポインタ判定に透過させるための
+            機能指定（見た目のスタイルはCSS Module側 c_seat_meshes__label に集約） */}
+        <Html
+          center
+          position={[0, 0.75, 0]}
+          style={{ pointerEvents: 'none' }}
+          zIndexRange={[100, 0]}
+        >
+          <span className={styles.c_seat_meshes__label}>
+            {seat.row_label}
+            {seat.seat_number}
+          </span>
+        </Html>
       </group>
     );
   },
 );
-SelectedSeatHighlight.displayName = 'SelectedSeatHighlight';
+HoverHighlight.displayName = 'HoverHighlight';
 
 export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
   seats,
   selectedSeatId,
+  hoveredSeatId,
   onSeatClick,
+  onHoverSeat,
 }) {
   /** 透明なクリック判定用InstancedMesh */
   const hitRef = useRef<InstancedMeshType>(null);
@@ -253,16 +280,17 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
     (event: { instanceId?: number }) => {
       if (event.instanceId === undefined) return;
       const seat = seats[event.instanceId];
-      if (seat && seat.id !== selectedSeatId) {
-        document.body.style.cursor = 'pointer';
-      }
+      if (!seat) return;
+      document.body.style.cursor = 'pointer';
+      onHoverSeat(seat.id);
     },
-    [seats, selectedSeatId],
+    [seats, onHoverSeat],
   );
 
   const handlePointerOut = useCallback(() => {
     document.body.style.cursor = 'auto';
-  }, []);
+    onHoverSeat(null);
+  }, [onHoverSeat]);
 
   const handleClick = useCallback(
     (event: { instanceId?: number; stopPropagation: () => void }) => {
@@ -276,16 +304,21 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
     [seats, onSeatClick],
   );
 
-  const selectedSeat = useMemo(
-    () => seats.find((s) => s.id === selectedSeatId) ?? null,
-    [seats, selectedSeatId],
+  // ホバー中の席（俯瞰時のみ枠＋番号ラベルを表示）。
+  // 一人称時（selectedSeatId あり）は視界を妨げないため表示しない。
+  const hoveredSeat = useMemo(
+    () =>
+      selectedSeatId
+        ? null
+        : (seats.find((s) => s.id === hoveredSeatId) ?? null),
+    [seats, hoveredSeatId, selectedSeatId],
   );
 
   return (
     <group>
       <SeatCushions seats={seats} selectedSeatId={selectedSeatId} />
       <SeatBacks seats={seats} selectedSeatId={selectedSeatId} />
-      <SelectedSeatHighlight seat={selectedSeat} />
+      <HoverHighlight seat={hoveredSeat} />
 
       {/* 透明なクリック判定メッシュ */}
       <instancedMesh

@@ -5,7 +5,7 @@
  * - 距離減衰（振幅 ∝ 1/d, 逆二乗則ベース）
  * - 大気吸収（ISO 9613-1ベース, exp(-kd)）
  * - Phasor sum による時間平均干渉パターン
- * - カラーマッピング（青→緑→黄→赤）
+ * - カラーマッピング（viridis: 知覚均一・色覚多様性(CVD)セーフ）
  */
 
 precision mediump float;
@@ -91,25 +91,22 @@ float calcAbsorptionLoss(float distance) {
 }
 
 /**
- * HSVからRGBへの変換
- */
-vec3 hsv2rgb(vec3 c) {
-  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-}
-
-/**
- * 強度からヒートマップカラーへ変換
- * 紫(低) → 青 → シアン → 緑 → 黄 → 赤(高)
+ * 強度からヒートマップカラーへ変換（viridis 近似）
+ * viridis は知覚均一かつ色覚多様性(CVD)セーフな連続カラーマップ。
+ * レインボー(hue回転)は中〜高で緑〜黄〜赤が潰れて判別不能なため置換。
+ * 多項式近似の係数は公開実装（https://www.shadertoy.com/view/WlfXRN, public domain）由来。
+ * 低(暗い紫) → 青 → 緑 → 黄(高)
  */
 vec3 intensityToColor(float intensity) {
   float t = clamp(intensity, 0.0, 1.0);
-  // Hue: 0.75(purple) → 0.0(red)
-  float hue = mix(0.75, 0.0, t);
-  float sat = 0.7 + 0.3 * t;
-  float val = 0.4 + 0.6 * t;
-  return hsv2rgb(vec3(hue, sat, val));
+  const vec3 c0 = vec3(0.2777273272234177, 0.005407344544966578, 0.3340998053353061);
+  const vec3 c1 = vec3(0.1050930431085774, 1.404613529898575, 1.384590162594685);
+  const vec3 c2 = vec3(-0.3308618287255563, 0.214847559468213, 0.09509516302823659);
+  const vec3 c3 = vec3(-4.634230498983486, -5.799100973351585, -19.33244095627987);
+  const vec3 c4 = vec3(6.228269936347081, 14.17993336680509, 56.69055260068105);
+  const vec3 c5 = vec3(4.776384997670288, -13.74514537774601, -65.35303263337234);
+  const vec3 c6 = vec3(-5.435455855934631, 4.645852612178535, 26.3124352495832);
+  return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
 }
 
 void main() {

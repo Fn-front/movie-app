@@ -27,6 +27,7 @@ import { SeatInfoPanel } from '../component/seatInfoPanel/seatInfoPanel';
 import { SeatA11yList } from '../component/seatA11yList/seatA11yList';
 import { FrequencySelector } from '../component/frequencySelector/frequencySelector';
 import { HeatmapToggle } from '../component/heatmapToggle/heatmapToggle';
+import { HeatmapLegend } from '../component/heatmapLegend/heatmapLegend';
 import { UnsupportedBrowserNotice } from '../component/unsupportedBrowserNotice/unsupportedBrowserNotice';
 import { TheaterSelector } from '../component/theaterSelector/theaterSelector';
 
@@ -329,6 +330,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
               value={frequencyBand}
               onValueChange={handleFrequencyChange}
             />
+            {isHeatmapVisible && <HeatmapLegend />}
             <SeatInfoPanel
               seat={selectedSeat}
               fovMetrics={fovMetrics}

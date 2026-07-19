@@ -1,0 +1,42 @@
+@use '@/styles/variables' as *;
+
+// viridis カラーマップのCSS近似。
+// GLSLシェーダー(audioHeatmap.frag) の intensityToColor と配色を一致させる。
+// viridis は知覚均一・色覚多様性(CVD)セーフな連続カラーマップ。
+$viridis-gradient: linear-gradient(
+  to right,
+  #440154 0%,
+  #3b528b 25%,
+  #21918c 50%,
+  #5ec962 75%,
+  #fde725 100%
+);
+
+.c_heatmap_legend {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+}
+
+.c_heatmap_legend__title {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+}
+
+.c_heatmap_legend__bar {
+  height: $spacing-2;
+  border-radius: $border-radius-sm;
+  background: $viridis-gradient;
+  border: $border-width-1 solid color-alpha(--gray-500, 20%);
+}
+
+.c_heatmap_legend__ticks {
+  display: flex;
+  justify-content: space-between;
+}
+
+.c_heatmap_legend__tick {
+  font-size: $font-size-2xs;
+  color: $text-secondary;
+}

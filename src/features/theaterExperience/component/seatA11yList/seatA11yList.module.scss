@@ -61,6 +61,7 @@ $seat-cell-size: 28px;
 
 .c_seat_a11y_list__seat_button {
   @include button-reset;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -87,6 +88,19 @@ $seat-cell-size: 28px;
 .c_seat_a11y_list__seat_button__wheelchair {
   // 色以外の形状手掛かり（破線枠）でも車椅子席を示す（色覚に依存しない）
   border: $border-width-1 dashed color-alpha(--gray-500, 55%);
+}
+
+// 車椅子マーカー。番号を主表示に残しつつ、隅に小さく重ねて識別性を保つ
+// （席番号が晴眼者にも読めるようにする）
+.c_seat_a11y_list__wheelchair_icon {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: $font-size-2xs;
+  line-height: 1;
+  pointer-events: none;
+  transform: scale(0.7);
+  transform-origin: top right;
 }
 
 .c_seat_a11y_list__seat_button__selected {

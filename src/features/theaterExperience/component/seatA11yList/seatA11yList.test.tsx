@@ -156,6 +156,8 @@ describe('SeatA11yList', () => {
 
     const button = screen.getByRole('button');
     expect(button.getAttribute('aria-label')).toContain('車椅子席');
+    // 席番号を主表示に残しつつ ♿ マーカーも併記する（番号が読める）
+    expect(button).toHaveTextContent('1');
     expect(button).toHaveTextContent('♿');
   });
 });

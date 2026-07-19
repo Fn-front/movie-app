@@ -72,7 +72,7 @@ const COLOR_EDGE = '#b0a0a8'; // 暗色背景に対する明色エッジ線
 
 /** アクセント設備カラー */
 const COLOR_AISLE_LIGHT = '#ffd4a0'; // 通路灯（暖色）
-const COLOR_EXIT_SIGN = '#ff4060'; // 出口サイン（やや鮮やかな赤ピンク）
+const COLOR_EXIT_SIGN = '#00b06b'; // 非常口誘導灯（日本の法定色：緑）
 const COLOR_STEP_LED = '#ffe8c4'; // 段差LED（やや暖白）
 
 /** マージン: 傾斜床は座席より少し外側まで広げる */
@@ -290,18 +290,24 @@ const AisleLights = memo<{
 AisleLights.displayName = 'AisleLights';
 
 /**
- * 出口サイン（後壁・両側に赤い発光板）
+ * 非常口誘導灯（後壁・両側の緑の発光板）
+ * 傾斜のあるスタジアム席では最後列座席が高くせり上がるため、旧実装の固定
+ * signY(2.8m) だと座席に埋没した。座席群の最大高さ(seatAreaMaxY)より上、かつ
+ * 天井直下に退避させ、どのタイプでも座席と交差しないようにする。
  */
 const ExitSigns = memo<{
   roomWidth: number;
   roomDepth: number;
-}>(function ExitSigns({ roomWidth, roomDepth }) {
+  roomHeight: number;
+  seatAreaMaxY: number;
+}>(function ExitSigns({ roomWidth, roomDepth, roomHeight, seatAreaMaxY }) {
   const halfWidth = roomWidth / 2;
   const halfDepth = roomDepth / 2;
-  const signY = 2.8;
   const signDepth = 0.08;
   const signWidth = 1.2;
   const signHeight = 0.5;
+  // 座席群より上（+0.6m）かつ天井直下（roomHeight-0.6m）に配置し、座席に埋没させない
+  const signY = Math.max(seatAreaMaxY + 0.6, roomHeight - 0.6);
   // 後壁の両端（後壁から内側 0.05m）に配置
   return (
     <group>
@@ -312,7 +318,7 @@ const ExitSigns = memo<{
         >
           <boxGeometry args={[signWidth, signHeight, signDepth]} />
           <meshBasicMaterial color={COLOR_EXIT_SIGN} toneMapped={false} />
-          <Edges color='#400000' lineWidth={1} />
+          <Edges color='#00301a' lineWidth={1} />
         </mesh>
       ))}
     </group>
@@ -649,8 +655,13 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         seatAreaBackZ={seatAreaBackZ}
       />
 
-      {/* 出口サイン（後壁両端の赤い発光板） */}
-      <ExitSigns roomWidth={roomWidth} roomDepth={roomDepth} />
+      {/* 非常口誘導灯（後壁両端の緑の発光板・座席上に退避） */}
+      <ExitSigns
+        roomWidth={roomWidth}
+        roomDepth={roomDepth}
+        roomHeight={roomHeight}
+        seatAreaMaxY={seatAreaMaxY}
+      />
 
       {/* 段差LED（各列の段差を明示する細い光帯） */}
       <StepLEDs rowZs={rowZs} rowYs={rowYs} seatWidth={seatAreaWidth} />

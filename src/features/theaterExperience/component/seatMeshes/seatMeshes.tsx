@@ -39,18 +39,19 @@ declare module '@react-three/fiber' {
 const SEAT_CUSHION = { width: 0.5, height: 0.12, depth: 0.45 };
 const SEAT_BACK = { width: 0.5, height: 0.5, depth: 0.08 };
 
-/** ドールハウス座席カラー（列ごとに交互） */
-const COLOR_SEAT_A = new Color('#c44545');
-const COLOR_SEAT_B = new Color('#b03838');
+/** ドールハウス座席カラー（単色） */
+const COLOR_SEAT = new Color('#bf4040');
 const COLOR_SELECTED = new Color('#ffaa00');
 /** 車椅子席カラー（他席と区別できる青系） */
 const COLOR_WHEELCHAIR = new Color('#3b82f6');
 
 /** 座席の色種別キー（純粋・テスト用にexport） */
-export type SeatColorKey = 'selected' | 'wheelchair' | 'rowEven' | 'rowOdd';
+export type SeatColorKey = 'selected' | 'wheelchair' | 'seat';
 
 /**
- * 座席の色種別を決定する。優先度: 選択中 > 車椅子席 > 列ごとの交互色。
+ * 座席の色種別を決定する。優先度: 選択中 > 車椅子席 > 通常席（単色）。
+ * 旧実装は列ごとの2色交互だったが、輝度差が視認閾値未満（コントラスト比≈1.24:1）で
+ * 列識別に寄与せず無効な配色だったため撤廃。列識別は2D座席一覧が担う。
  */
 export function getSeatColorKey(
   seat: TheaterSeat,
@@ -58,15 +59,13 @@ export function getSeatColorKey(
 ): SeatColorKey {
   if (seat.id === selectedSeatId) return 'selected';
   if (seat.seat_type === 'wheelchair') return 'wheelchair';
-  // 列ごとに2色交互（row_label文字コード偶奇）
-  return seat.row_label.charCodeAt(0) % 2 === 0 ? 'rowEven' : 'rowOdd';
+  return 'seat';
 }
 
 const SEAT_COLOR_BY_KEY: Record<SeatColorKey, Color> = {
   selected: COLOR_SELECTED,
   wheelchair: COLOR_WHEELCHAIR,
-  rowEven: COLOR_SEAT_A,
-  rowOdd: COLOR_SEAT_B,
+  seat: COLOR_SEAT,
 };
 
 function getSeatColor(seat: TheaterSeat, selectedSeatId: string | null): Color {

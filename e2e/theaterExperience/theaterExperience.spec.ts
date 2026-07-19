@@ -123,3 +123,82 @@ test.describe('シアター体験ページ', () => {
     await expect(hideRadio).toHaveAttribute('data-state', 'on');
   });
 });
+
+test.describe('劇場タイプの切替', () => {
+  test('セレクタで別劇場に切り替えると劇場名と座席レイアウトが変わる', async ({
+    page,
+  }) => {
+    await page.goto('/theater-experience');
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
+
+    const selector = page.getByRole('combobox', { name: '劇場を選択' });
+    await expect(selector).toContainText('汎用中規模シアター');
+    // 標準は1列16席 → A列34番は存在しない
+    await expect(page.getByRole('button', { name: /^A列34番/ })).toHaveCount(0);
+
+    // IMAX へ切替
+    await selector.click();
+    await page
+      .getByRole('option', { name: 'IMAXレーザー/GTテクノロジー' })
+      .click();
+
+    // URL に反映され、劇場名が変わる
+    await expect(page).toHaveURL(/theater=imax-gt/);
+    await expect(selector).toContainText('IMAXレーザー/GTテクノロジー');
+    // IMAX は1列34席 → A列34番が現れる（座席レイアウトが変わった証拠）
+    await expect(page.getByRole('button', { name: /^A列34番/ })).toBeVisible({
+      timeout: READY_TIMEOUT_MS,
+    });
+  });
+
+  test('?theater= 付きURLで初期選択され、リロード後も保持される', async ({
+    page,
+  }) => {
+    await page.goto('/theater-experience?theater=imax-gt');
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
+
+    const selector = page.getByRole('combobox', { name: '劇場を選択' });
+    await expect(selector).toContainText('IMAXレーザー/GTテクノロジー');
+
+    await page.reload();
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
+    await expect(selector).toContainText('IMAXレーザー/GTテクノロジー');
+    await expect(page).toHaveURL(/theater=imax-gt/);
+  });
+
+  test('存在しない劇場slugは「見つかりません」を表示しセレクタから復帰できる', async ({
+    page,
+  }) => {
+    await page.goto('/theater-experience?theater=nonexistent-hall');
+
+    // エラー分岐: 座席は描画されないが、ヘッダーのセレクタとエラー文言は出る
+    await expect(page.getByText(/指定された劇場が見つかりません/)).toBeVisible({
+      timeout: READY_TIMEOUT_MS,
+    });
+    const selector = page.getByRole('combobox', { name: '劇場を選択' });
+    await expect(selector).toBeVisible();
+
+    // 有効な劇場を選び直して復帰できる
+    await selector.click();
+    await page
+      .getByRole('option', { name: '汎用中規模シアター（標準）' })
+      .click();
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
+    await expect(page).toHaveURL(/theater=standard-medium/);
+  });
+
+  test('車椅子席が座席一覧に表示される（標準）', async ({ page }) => {
+    await page.goto('/theater-experience');
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
+
+    // 標準は A列5番/12番 が車椅子席（seat_type=wheelchair, aria-labelに（車椅子席））
+    await expect(
+      page.getByRole('button', { name: /A列5番（車椅子席）/ }),
+    ).toBeVisible();
+  });
+});

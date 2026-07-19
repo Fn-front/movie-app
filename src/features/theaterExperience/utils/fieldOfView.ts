@@ -21,6 +21,15 @@ export interface Point3D {
   z: number;
 }
 
+/** スクリーンの寸法と中心位置 */
+export interface ScreenGeometry {
+  width: number;
+  height: number;
+  center_x: number;
+  center_y: number;
+  center_z: number;
+}
+
 /**
  * 座席からスクリーン中心までの3Dユークリッド距離。
  * 水平オフセット(X)と高さ(Y)も含むため、同一列でも端席ほど距離が大きくなり、
@@ -55,13 +64,7 @@ export function calcDistanceToScreen(
  */
 export function calcViewingFovRatios(
   seat: Point3D,
-  screen: {
-    width: number;
-    height: number;
-    center_x: number;
-    center_y: number;
-    center_z: number;
-  },
+  screen: ScreenGeometry,
 ): { horizontal_ratio: number; vertical_ratio: number } {
   const halfW = screen.width / 2;
   const halfH = screen.height / 2;
@@ -153,13 +156,7 @@ export function calcYawClampedTargetX(
  */
 export function calcFieldOfViewMetrics(
   seat: { position_x: number; position_y: number; position_z: number },
-  screen: {
-    width: number;
-    height: number;
-    center_x: number;
-    center_y: number;
-    center_z: number;
-  },
+  screen: ScreenGeometry,
 ): FieldOfViewMetrics {
   const seatPoint: Point3D = {
     x: seat.position_x,
@@ -192,13 +189,7 @@ export function calcFieldOfViewMetrics(
  */
 export function projectScreenQuad(
   seat: { x: number; y: number; z: number },
-  screen: {
-    width: number;
-    height: number;
-    center_x: number;
-    center_y: number;
-    center_z: number;
-  },
+  screen: ScreenGeometry,
 ): [Point2D, Point2D, Point2D, Point2D] {
   const halfW = screen.width / 2;
   const halfH = screen.height / 2;

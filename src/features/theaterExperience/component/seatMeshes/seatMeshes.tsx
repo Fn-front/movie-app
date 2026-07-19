@@ -92,6 +92,7 @@ const SeatCushions = memo<{
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
 
+  // 位置行列は座席データにのみ依存（選択変更では再計算しない）
   useEffect(() => {
     if (!meshRef.current) return;
     seats.forEach((seat, i) => {
@@ -103,14 +104,20 @@ const SeatCushions = memo<{
       tempObject.rotation.set(0, 0, 0);
       tempObject.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObject.matrix);
-
-      meshRef.current!.setColorAt(i, getSeatColor(seat, selectedSeatId));
     });
     meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [seats, tempObject]);
+
+  // 色は座席データと選択状態に依存（選択変更時はここだけ再実行）
+  useEffect(() => {
+    if (!meshRef.current) return;
+    seats.forEach((seat, i) => {
+      meshRef.current!.setColorAt(i, getSeatColor(seat, selectedSeatId));
+    });
     if (meshRef.current.instanceColor) {
       meshRef.current.instanceColor.needsUpdate = true;
     }
-  }, [seats, selectedSeatId, tempObject]);
+  }, [seats, selectedSeatId]);
 
   return (
     <instancedMesh
@@ -158,14 +165,20 @@ const SeatBacks = memo<{
       tempObject.scale.set(1, noBack ? 0 : 1, 1);
       tempObject.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObject.matrix);
-
-      meshRef.current!.setColorAt(i, getSeatColor(seat, selectedSeatId));
     });
     meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [seats, tempObject]);
+
+  // 色は座席データと選択状態に依存（選択変更時はここだけ再実行）
+  useEffect(() => {
+    if (!meshRef.current) return;
+    seats.forEach((seat, i) => {
+      meshRef.current!.setColorAt(i, getSeatColor(seat, selectedSeatId));
+    });
     if (meshRef.current.instanceColor) {
       meshRef.current.instanceColor.needsUpdate = true;
     }
-  }, [seats, selectedSeatId, tempObject]);
+  }, [seats, selectedSeatId]);
 
   return (
     <instancedMesh

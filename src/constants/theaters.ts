@@ -34,8 +34,14 @@ export const THEATER_SEATS_SELECT =
 export const THEATER_SPEAKERS_SELECT =
   'id, channel, position_x, position_y, position_z, power_watts, direction_x, direction_y, direction_z, directivity_alpha';
 
+/** 劇場データのキャッシュ有効期間（秒）。API Cache-Control と React Query staleTime の単一ソース */
+export const THEATER_CACHE_MAX_AGE_SECONDS = 3600;
+
 /** キャッシュヘッダー（認証済みユーザー向け） */
-export const THEATER_CACHE_CONTROL = 'private, max-age=3600';
+export const THEATER_CACHE_CONTROL = `private, max-age=${THEATER_CACHE_MAX_AGE_SECONDS}`;
+
+/** React Query の staleTime（Cache-Control と一致, ミリ秒） */
+export const THEATER_STALE_TIME_MS = THEATER_CACHE_MAX_AGE_SECONDS * 1000;
 
 /** 選択中の劇場を保持するURLクエリのキー */
 export const THEATER_QUERY_PARAM = 'theater';

@@ -17,6 +17,7 @@ jest.mock('next/navigation', () => ({
 describe('useTheaterSelection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    window.history.replaceState({}, '', MOCK_PATHNAME);
   });
 
   it('初期slugを返す', () => {
@@ -59,6 +60,20 @@ describe('useTheaterSelection', () => {
 
     expect(mockReplace).toHaveBeenCalledWith(
       '/theater-experience?theater=a+b%26c',
+      { scroll: false },
+    );
+  });
+
+  it('既存のクエリを保持したまま theater を更新する', () => {
+    window.history.replaceState({}, '', `${MOCK_PATHNAME}?foo=bar`);
+    const { result } = renderHook(() => useTheaterSelection('standard-medium'));
+
+    act(() => {
+      result.current.selectTheater('imax-gt');
+    });
+
+    expect(mockReplace).toHaveBeenCalledWith(
+      '/theater-experience?foo=bar&theater=imax-gt',
       { scroll: false },
     );
   });

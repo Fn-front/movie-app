@@ -13,7 +13,6 @@ jest.mock('@react-three/drei', () => ({
 
 jest.mock('three', () => ({
   DoubleSide: 2,
-  ShaderMaterial: jest.fn(),
 }));
 
 jest.mock('../../shaders/screenVertex', () => ({
@@ -24,7 +23,18 @@ jest.mock('../../shaders/screenFragment', () => ({
   screenFragmentShader: 'mock-fragment-shader',
 }));
 
-import { ScreenMesh } from './screenMesh';
+import { ScreenMesh, advanceScreenTime } from './screenMesh';
+
+describe('advanceScreenTime', () => {
+  it('通常時は経過時間(delta)だけ進む', () => {
+    expect(advanceScreenTime(1, 0.5, false)).toBeCloseTo(1.5);
+  });
+
+  it('reducedMotion時は現在値を維持しアニメ（フリッカー含む）を停止する', () => {
+    expect(advanceScreenTime(1, 0.5, true)).toBe(1);
+    expect(advanceScreenTime(0, 999, true)).toBe(0);
+  });
+});
 
 describe('ScreenMesh', () => {
   it('エクスポートが正しく定義されている', () => {

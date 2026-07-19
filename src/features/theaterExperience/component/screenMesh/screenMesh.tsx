@@ -1,14 +1,20 @@
 /**
  * ScreenMeshコンポーネント
  * スクリーン矩形メッシュ + ベゼル（暗いフレーム）
- * アイソメトリック ドールハウス: フラットな単色 + エッジ強調
+ * 本体は投影風シェーダー（screenVertex/screenFragment）で「上映中の幕」を表現する。
+ * prefers-reduced-motion 有効時はアニメ（フリッカー含む）を停止する。
  */
 
 'use client';
 
-import { memo } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import { DoubleSide } from 'three';
+import type { ShaderMaterial } from 'three';
+import { useFrame } from '@react-three/fiber';
 import { Edges } from '@react-three/drei';
+
+import { screenVertexShader } from '../../shaders/screenVertex';
+import { screenFragmentShader } from '../../shaders/screenFragment';
 
 /** ベゼル（フレーム）の太さ (m) */
 const BEZEL_THICKNESS = 0.08;
@@ -26,8 +32,21 @@ export interface ScreenMeshProps {
   centerY: number;
   /** スクリーン中心Z座標 */
   centerZ: number;
-  /** prefers-reduced-motion 有効時は true（プロトタイプでは未使用） */
+  /** prefers-reduced-motion 有効時は true（投影アニメを停止する） */
   reducedMotion?: boolean;
+}
+
+/**
+ * 投影シェーダーの経過時間を進める。
+ * reducedMotion 有効時は現在値を維持してアニメ（12Hzフリッカー含む）を停止する
+ * （WCAG 2.3.1 点滅/発作、prefers-reduced-motion への配慮）。
+ */
+export function advanceScreenTime(
+  current: number,
+  delta: number,
+  reducedMotion: boolean,
+): number {
+  return reducedMotion ? current : current + delta;
 }
 
 export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
@@ -36,9 +55,23 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
   centerX,
   centerY,
   centerZ,
+  reducedMotion = false,
 }) {
   const halfW = width / 2;
   const halfH = height / 2;
+
+  const materialRef = useRef<ShaderMaterial>(null);
+  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
+
+  useFrame((_, delta) => {
+    const material = materialRef.current;
+    if (!material) return;
+    material.uniforms.uTime.value = advanceScreenTime(
+      material.uniforms.uTime.value,
+      delta,
+      reducedMotion,
+    );
+  });
 
   return (
     /*
@@ -47,11 +80,14 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
       同じ値だと両者が同一平面に重なってシマ模様のアーティファクトが発生する。
     */
     <group position={[centerX, centerY, centerZ - 0.1]}>
-      {/* スクリーン本体（フラットな単色） */}
+      {/* スクリーン本体（投影風シェーダー） */}
       <mesh>
         <planeGeometry args={[width, height]} />
-        <meshBasicMaterial
-          color='#3a4a8a'
+        <shaderMaterial
+          ref={materialRef}
+          vertexShader={screenVertexShader}
+          fragmentShader={screenFragmentShader}
+          uniforms={uniforms}
           side={DoubleSide}
           toneMapped={false}
         />

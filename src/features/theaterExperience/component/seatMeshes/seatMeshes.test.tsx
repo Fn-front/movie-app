@@ -96,11 +96,8 @@ describe('getSeatColorKey', () => {
     );
   });
 
-  it('偶数文字コードの列は rowEven（B列）', () => {
-    expect(getSeatColorKey({ ...base, row_label: 'B' }, null)).toBe('rowEven');
-  });
-
-  it('奇数文字コードの列は rowOdd（A列）', () => {
-    expect(getSeatColorKey({ ...base, row_label: 'A' }, null)).toBe('rowOdd');
+  it('通常席は単色 seat（列に依らず一定）', () => {
+    expect(getSeatColorKey({ ...base, row_label: 'A' }, null)).toBe('seat');
+    expect(getSeatColorKey({ ...base, row_label: 'B' }, null)).toBe('seat');
   });
 });

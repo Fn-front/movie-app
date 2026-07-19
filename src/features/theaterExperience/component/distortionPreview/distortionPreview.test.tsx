@@ -37,6 +37,7 @@ const mockSeat: TheaterSeat = {
 // Canvas 2D context のモック
 const mockGetContext = jest.fn().mockReturnValue({
   clearRect: jest.fn(),
+  fillRect: jest.fn(),
   strokeRect: jest.fn(),
   beginPath: jest.fn(),
   moveTo: jest.fn(),

@@ -18,6 +18,17 @@ const CANVAS_WIDTH = 200;
 const CANVAS_HEIGHT = 140;
 const PADDING = 20;
 
+/**
+ * 固定の視野フレーム（人の快適視野の目安: 水平±70°, 垂直±45°）。
+ * 台形をこの固定スケールで描くため、席ごとの見込み角の「大きさ」と位置、
+ * アスペクト比が保たれる（前列＝大きく視界を占有、後列＝小さく中央寄り）。
+ */
+const HALF_FOV_X = (70 * Math.PI) / 180;
+const HALF_FOV_Y = (45 * Math.PI) / 180;
+
+/** 台形の輪郭・背景に対しコントラスト比 ≥3:1 を満たす暗背景（WCAG 1.4.11） */
+const BG_COLOR = '#141414';
+
 export interface DistortionPreviewProps {
   /** 選択中の座席 */
   seat: TheaterSeat;
@@ -28,28 +39,20 @@ export interface DistortionPreviewProps {
 }
 
 /**
- * Point2D配列を Canvas描画域にフィットさせる
+ * 座席視点の角度座標(rad)を固定FOVフレーム内のCanvas座標へ写す。
+ * 独立正規化しないため、見込み角の大きさ（視界占有）とアスペクト比が保たれ、
+ * 席ごとにスクリーンの見かけの大きさ・位置が変化する。
  */
-function normalizeQuad(
-  quad: [Point2D, Point2D, Point2D, Point2D],
-): [Point2D, Point2D, Point2D, Point2D] {
-  const xs = quad.map((p) => p.x);
-  const ys = quad.map((p) => p.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-
-  const rangeX = maxX - minX || 1;
-  const rangeY = maxY - minY || 1;
-
-  const drawW = CANVAS_WIDTH - PADDING * 2;
-  const drawH = CANVAS_HEIGHT - PADDING * 2;
-
-  return quad.map((p) => ({
-    x: PADDING + ((p.x - minX) / rangeX) * drawW,
-    y: PADDING + ((p.y - minY) / rangeY) * drawH,
-  })) as [Point2D, Point2D, Point2D, Point2D];
+function toCanvasPoint(p: Point2D): Point2D {
+  const cx = CANVAS_WIDTH / 2;
+  const cy = CANVAS_HEIGHT / 2;
+  const drawHalfW = CANVAS_WIDTH / 2 - PADDING;
+  const drawHalfH = CANVAS_HEIGHT / 2 - PADDING;
+  return {
+    x: cx + (p.x / HALF_FOV_X) * drawHalfW,
+    // 上向きの角度(スクリーンは目線より上)を画面の上方向へ
+    y: cy - (p.y / HALF_FOV_Y) * drawHalfH,
+  };
 }
 
 export const DistortionPreview = memo<DistortionPreviewProps>(
@@ -84,8 +87,12 @@ export const DistortionPreview = memo<DistortionPreviewProps>(
 
       ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      // 理想的な矩形（参考用）
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      // 背景を暗色で明示塗り（枠・台形のコントラストを保証）
+      ctx.fillStyle = BG_COLOR;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      // 視野フレーム（固定FOVの枠）— 背景に対しコントラスト比 ≥3:1（WCAG 1.4.11）
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.strokeRect(
@@ -96,18 +103,27 @@ export const DistortionPreview = memo<DistortionPreviewProps>(
       );
       ctx.setLineDash([]);
 
-      // 台形（実際の見え方）
-      const normalized = normalizeQuad(quad);
+      // 中央（正面）の十字ガイド
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
       ctx.beginPath();
-      ctx.moveTo(normalized[0].x, normalized[0].y);
-      ctx.lineTo(normalized[1].x, normalized[1].y);
-      ctx.lineTo(normalized[2].x, normalized[2].y);
-      ctx.lineTo(normalized[3].x, normalized[3].y);
+      ctx.moveTo(CANVAS_WIDTH / 2, PADDING);
+      ctx.lineTo(CANVAS_WIDTH / 2, CANVAS_HEIGHT - PADDING);
+      ctx.moveTo(PADDING, CANVAS_HEIGHT / 2);
+      ctx.lineTo(CANVAS_WIDTH - PADDING, CANVAS_HEIGHT / 2);
+      ctx.stroke();
+
+      // スクリーンの見え方（実際の見込み角サイズの台形。固定FOVスケールで描画）
+      const pts = quad.map(toCanvasPoint);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      ctx.lineTo(pts[1].x, pts[1].y);
+      ctx.lineTo(pts[2].x, pts[2].y);
+      ctx.lineTo(pts[3].x, pts[3].y);
       ctx.closePath();
 
-      ctx.fillStyle = 'rgba(99, 102, 241, 0.15)';
+      ctx.fillStyle = 'rgba(99, 102, 241, 0.35)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(99, 102, 241, 0.8)';
+      ctx.strokeStyle = 'rgba(129, 140, 248, 0.95)';
       ctx.lineWidth = 2;
       ctx.stroke();
     }, [quad]);

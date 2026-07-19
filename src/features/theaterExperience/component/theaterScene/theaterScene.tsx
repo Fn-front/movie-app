@@ -16,6 +16,7 @@ import { useThree } from '@react-three/fiber';
 import {
   PlaneGeometry,
   Vector3,
+  AdditiveBlending,
   type OrthographicCamera as OrthographicCameraType,
   type PerspectiveCamera as PerspectiveCameraType,
 } from 'three';
@@ -238,8 +239,10 @@ const BackStepFill = memo<{
 BackStepFill.displayName = 'BackStepFill';
 
 /**
- * 通路灯（壁際の小さな発光体）
- * 両側通路に等間隔で配置。観客の足元を照らす雰囲気作り。
+ * 通路灯（壁際・足元の小さな発光体）
+ * 両側通路に等間隔で配置。旧実装は半径0.22m+グロー0.5mの大きな発光球で「浮いた
+ * 金色の玉」に見え、しかもグローが加算合成でなく暗環（黒い縁取り）になっていた。
+ * 足元(y≈0.15)の小型発光体＋加算合成の淡いグローに変更し、足元灯らしくする。
  */
 const AisleLights = memo<{
   roomWidth: number;
@@ -257,8 +260,9 @@ const AisleLights = memo<{
     for (let i = 0; i < count; i++) {
       const t = i / (count - 1);
       const z = seatAreaFrontZ - t * length;
-      positions.push([-(halfWidth - wallOffset), 0.4, z]);
-      positions.push([halfWidth - wallOffset, 0.4, z]);
+      // 足元(床際)に配置
+      positions.push([-(halfWidth - wallOffset), 0.15, z]);
+      positions.push([halfWidth - wallOffset, 0.15, z]);
     }
     return positions;
   }, [halfWidth, seatAreaFrontZ, seatAreaBackZ]);
@@ -267,18 +271,20 @@ const AisleLights = memo<{
     <group>
       {lights.map((pos) => (
         <group key={`${pos[0]},${pos[2]}`} position={pos}>
-          {/* メイン発光体 */}
+          {/* 足元の小さな発光体 */}
           <mesh>
-            <sphereGeometry args={[0.22, 14, 14]} />
+            <sphereGeometry args={[0.08, 12, 12]} />
             <meshBasicMaterial color={COLOR_AISLE_LIGHT} toneMapped={false} />
           </mesh>
-          {/* 周囲の薄いグロー */}
+          {/* 加算合成の淡いグロー（暗環にならず自然に滲む） */}
           <mesh>
-            <sphereGeometry args={[0.5, 14, 14]} />
+            <sphereGeometry args={[0.22, 12, 12]} />
             <meshBasicMaterial
               color={COLOR_AISLE_LIGHT}
               transparent
-              opacity={0.22}
+              opacity={0.35}
+              blending={AdditiveBlending}
+              depthWrite={false}
               toneMapped={false}
             />
           </mesh>

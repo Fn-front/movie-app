@@ -2,6 +2,8 @@
  * 視野・歪み計算ユーティリティ
  *
  * 設計書 Section 4 の見え方計算。
+ * メトリクス（距離・視野占有率・歪み）は座席の3D位置(X/Y/Z)を考慮するため、
+ * 同一列でも中央席と端席で値に差が出る。
  */
 
 import type { FieldOfViewMetrics } from '../types';
@@ -12,70 +14,102 @@ export interface Point2D {
   y: number;
 }
 
-/**
- * 水平視野角（ラジアン）
- * θ_h = 2 * atan((screen_width / 2) / distance)
- */
-export function calcHorizontalFov(
-  screenWidth: number,
-  distance: number,
-): number {
-  if (distance <= 0) return 0;
-  return 2 * Math.atan(screenWidth / 2 / distance);
+/** 3D座標 */
+export interface Point3D {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** スクリーンの寸法と中心位置 */
+export interface ScreenGeometry {
+  width: number;
+  height: number;
+  center_x: number;
+  center_y: number;
+  center_z: number;
 }
 
 /**
- * 垂直視野角（ラジアン）
- * θ_v = 2 * atan((screen_height / 2) / distance)
+ * 座席からスクリーン中心までの3Dユークリッド距離。
+ * 水平オフセット(X)と高さ(Y)も含むため、同一列でも端席ほど距離が大きくなり、
+ * スクリーンが高い位置にある前列では床上の見た目より距離が長くなる。
  */
-export function calcVerticalFov(
-  screenHeight: number,
-  distance: number,
-): number {
-  if (distance <= 0) return 0;
-  return 2 * Math.atan(screenHeight / 2 / distance);
+export function calcDistance3D(seat: Point3D, screenCenter: Point3D): number {
+  const dx = seat.x - screenCenter.x;
+  const dy = seat.y - screenCenter.y;
+  const dz = seat.z - screenCenter.z;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 /**
- * 視野占有率を計算する
- * ratio = θ / π（人間の視野約180度で正規化）
- */
-export function calcFovRatios(
-  screenWidth: number,
-  screenHeight: number,
-  distance: number,
-): { horizontal_ratio: number; vertical_ratio: number } {
-  const hFov = calcHorizontalFov(screenWidth, distance);
-  const vFov = calcVerticalFov(screenHeight, distance);
-  return {
-    horizontal_ratio: hFov / Math.PI,
-    vertical_ratio: vFov / Math.PI,
-  };
-}
-
-/**
- * 歪みスコア（0〜1）
- * 座席のX座標とスクリーン中心Xの差をスクリーン幅の半分で正規化。
- * 中央=0、端=1。
- */
-export function calcDistortionScore(
-  seatX: number,
-  screenCenterX: number,
-  screenWidth: number,
-): number {
-  if (screenWidth <= 0) return 0;
-  const offset = Math.abs(seatX - screenCenterX);
-  return Math.min(offset / (screenWidth / 2), 1);
-}
-
-/**
- * 座席からスクリーンまでのZ方向の距離を計算する
+ * 座席からスクリーン平面までのZ方向（前後）距離。
+ * カメラの前方距離など「スクリーン平面までの垂直距離」が必要な箇所で使う
+ * （首振り注視点の計算等）。占有率・歪みの計算には calcDistance3D 等を使う。
  */
 export function calcDistanceToScreen(
   seatZ: number,
   screenCenterZ: number,
 ): number {
   return Math.abs(screenCenterZ - seatZ);
+}
+
+/**
+ * 視野占有率（水平・垂直, 0〜1）を座席の3D位置から計算する。
+ *
+ * スクリーンの端が座席から見込む角度(subtense)を求め、人間の視野 π(=180°)で
+ * 正規化する。座席がスクリーン中心から左右にずれるほど水平の見込み角は
+ * 小さくなる（横長スクリーンを斜めから見るため）ので、同一列でも端席は
+ * 占有率が下がる。
+ */
+export function calcViewingFovRatios(
+  seat: Point3D,
+  screen: ScreenGeometry,
+): { horizontal_ratio: number; vertical_ratio: number } {
+  const halfW = screen.width / 2;
+  const halfH = screen.height / 2;
+  const dz = screen.center_z - seat.z;
+  if (dz <= 0) return { horizontal_ratio: 0, vertical_ratio: 0 };
+
+  // 水平: スクリーン左右端の見込み角の差（水平面で計算）
+  const dxLeft = screen.center_x - halfW - seat.x;
+  const dxRight = screen.center_x + halfW - seat.x;
+  const hAngle = Math.atan2(dxRight, dz) - Math.atan2(dxLeft, dz);
+
+  // 垂直: 水平面内の距離を実効距離として上下端の見込み角の差を計算
+  const dx = screen.center_x - seat.x;
+  const horizDist = Math.sqrt(dx * dx + dz * dz);
+  const dyTop = screen.center_y + halfH - seat.y;
+  const dyBottom = screen.center_y - halfH - seat.y;
+  const vAngle = Math.atan2(dyTop, horizDist) - Math.atan2(dyBottom, horizDist);
+
+  return {
+    horizontal_ratio: Math.abs(hAngle) / Math.PI,
+    vertical_ratio: Math.abs(vAngle) / Math.PI,
+  };
+}
+
+/**
+ * 歪みスコア（0〜1）。座席からスクリーンを見る視線が「正対」からどれだけ
+ * 外れているか（＝台形歪みの強さ）を、水平の斜め角と垂直の見上げ角の合計を
+ * 90°で正規化して表す。中央=0に近く、端・前列ほど大きい。
+ * - 水平成分: スクリーン中心からの左右ズレ（端席ほど大）
+ * - 垂直成分(keystone): スクリーンを見上げる角度。前列ほど近く見上げが急に
+ *   なるため距離依存で大きくなる。
+ */
+export function calcViewingDistortion(
+  seat: Point3D,
+  screenCenter: Point3D,
+): number {
+  const dz = screenCenter.z - seat.z;
+  if (dz <= 0) return 0;
+  const dx = screenCenter.x - seat.x;
+  const dy = screenCenter.y - seat.y;
+  const horizObliqueness = Math.atan2(Math.abs(dx), dz);
+  const horizDist = Math.sqrt(dx * dx + dz * dz);
+  const verticalLookUp = Math.atan2(Math.abs(dy), horizDist);
+  const total = horizObliqueness + verticalLookUp;
+  return Math.min(total / (Math.PI / 2), 1);
 }
 
 /**
@@ -118,30 +152,29 @@ export function calcYawClampedTargetX(
 }
 
 /**
- * 視野占有率メトリクスを一括計算する
+ * 視野占有率メトリクスを一括計算する（座席の3D位置を考慮）。
  */
 export function calcFieldOfViewMetrics(
-  seat: { position_x: number; position_z: number },
-  screen: {
-    width: number;
-    height: number;
-    center_x: number;
-    center_z: number;
-  },
+  seat: { position_x: number; position_y: number; position_z: number },
+  screen: ScreenGeometry,
 ): FieldOfViewMetrics {
-  const distance = calcDistanceToScreen(seat.position_z, screen.center_z);
-  const ratios = calcFovRatios(screen.width, screen.height, distance);
-  const distortion = calcDistortionScore(
-    seat.position_x,
-    screen.center_x,
-    screen.width,
-  );
+  const seatPoint: Point3D = {
+    x: seat.position_x,
+    y: seat.position_y,
+    z: seat.position_z,
+  };
+  const screenCenter: Point3D = {
+    x: screen.center_x,
+    y: screen.center_y,
+    z: screen.center_z,
+  };
+  const ratios = calcViewingFovRatios(seatPoint, screen);
 
   return {
     horizontal_ratio: ratios.horizontal_ratio,
     vertical_ratio: ratios.vertical_ratio,
-    distance_to_screen: distance,
-    distortion_score: distortion,
+    distance_to_screen: calcDistance3D(seatPoint, screenCenter),
+    distortion_score: calcViewingDistortion(seatPoint, screenCenter),
   };
 }
 
@@ -156,13 +189,7 @@ export function calcFieldOfViewMetrics(
  */
 export function projectScreenQuad(
   seat: { x: number; y: number; z: number },
-  screen: {
-    width: number;
-    height: number;
-    center_x: number;
-    center_y: number;
-    center_z: number;
-  },
+  screen: ScreenGeometry,
 ): [Point2D, Point2D, Point2D, Point2D] {
   const halfW = screen.width / 2;
   const halfH = screen.height / 2;

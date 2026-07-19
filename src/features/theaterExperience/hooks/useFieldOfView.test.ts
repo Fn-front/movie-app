@@ -48,12 +48,16 @@ describe('useFieldOfView', () => {
   });
 
   it('中央席の視野メトリクスを計算する', () => {
-    const seat = createSeat({ position_x: 0, position_z: 0 });
+    const seat = createSeat({ position_x: 0, position_y: 0.4, position_z: 0 });
     const { result } = renderHook(() => useFieldOfView(seat, mockTheater));
 
     expect(result.current).not.toBeNull();
-    expect(result.current!.distance_to_screen).toBeCloseTo(12.5);
-    expect(result.current!.distortion_score).toBeCloseTo(0);
+    // 距離は3D（dz=12.5, dy=3.6） → sqrt(12.5^2 + 3.6^2)
+    expect(result.current!.distance_to_screen).toBeCloseTo(
+      Math.sqrt(12.5 * 12.5 + 3.6 * 3.6),
+    );
+    // 中央席は歪みが小さい（見上げ角のみ、左右ズレなし）
+    expect(result.current!.distortion_score).toBeLessThan(0.3);
     expect(result.current!.horizontal_ratio).toBeGreaterThan(0);
     expect(result.current!.vertical_ratio).toBeGreaterThan(0);
   });

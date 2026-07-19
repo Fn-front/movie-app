@@ -46,7 +46,8 @@ function formatSeatLabel(
   seat: TheaterSeat,
   metrics: FieldOfViewMetrics | null,
 ): string {
-  const base = `${seat.row_label}列${seat.seat_number}番`;
+  const type = seat.seat_type === 'wheelchair' ? '（車椅子席）' : '';
+  const base = `${seat.row_label}列${seat.seat_number}番${type}`;
   if (!metrics) return base;
   const dist = metrics.distance_to_screen.toFixed(1);
   const hRatio = (metrics.horizontal_ratio * 100).toFixed(0);

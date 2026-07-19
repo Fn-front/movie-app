@@ -43,6 +43,19 @@ const SEAT_BACK = { width: 0.5, height: 0.5, depth: 0.08 };
 const COLOR_SEAT_A = new Color('#c44545');
 const COLOR_SEAT_B = new Color('#b03838');
 const COLOR_SELECTED = new Color('#ffaa00');
+/** 車椅子席カラー（他席と区別できる青系） */
+const COLOR_WHEELCHAIR = new Color('#3b82f6');
+
+/**
+ * 座席の表示色を決定する。
+ * 優先度: 選択中 > 車椅子席 > 列ごとの交互色
+ */
+function getSeatColor(seat: TheaterSeat, selectedSeatId: string | null): Color {
+  if (seat.id === selectedSeatId) return COLOR_SELECTED;
+  if (seat.seat_type === 'wheelchair') return COLOR_WHEELCHAIR;
+  // 列ごとに2色交互（row_label文字コード偶奇）
+  return seat.row_label.charCodeAt(0) % 2 === 0 ? COLOR_SEAT_A : COLOR_SEAT_B;
+}
 
 export interface SeatMeshesProps {
   /** 座席データ一覧 */
@@ -75,15 +88,7 @@ const SeatCushions = memo<{
       tempObject.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObject.matrix);
 
-      let color: Color;
-      if (seat.id === selectedSeatId) {
-        color = COLOR_SELECTED;
-      } else {
-        // 列ごとに2色交互（row_label文字コード偶奇）
-        const rowKey = seat.row_label.charCodeAt(0);
-        color = rowKey % 2 === 0 ? COLOR_SEAT_A : COLOR_SEAT_B;
-      }
-      meshRef.current!.setColorAt(i, color);
+      meshRef.current!.setColorAt(i, getSeatColor(seat, selectedSeatId));
     });
     meshRef.current.instanceMatrix.needsUpdate = true;
     if (meshRef.current.instanceColor) {
@@ -135,14 +140,7 @@ const SeatBacks = memo<{
       tempObject.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObject.matrix);
 
-      let color: Color;
-      if (seat.id === selectedSeatId) {
-        color = COLOR_SELECTED;
-      } else {
-        const rowKey = seat.row_label.charCodeAt(0);
-        color = rowKey % 2 === 0 ? COLOR_SEAT_A : COLOR_SEAT_B;
-      }
-      meshRef.current!.setColorAt(i, color);
+      meshRef.current!.setColorAt(i, getSeatColor(seat, selectedSeatId));
     });
     meshRef.current.instanceMatrix.needsUpdate = true;
     if (meshRef.current.instanceColor) {

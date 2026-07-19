@@ -10,12 +10,13 @@ import { memo, useMemo } from 'react';
 import { cn } from '@/utils/cn';
 
 import type { TheaterSeat, Theater, FieldOfViewMetrics } from '../../types';
+import {
+  getRecommendation,
+  type RecommendationLevel,
+} from '../../utils/seatRecommendation';
 import { DistortionPreview } from '../distortionPreview/distortionPreview';
 
 import styles from './seatInfoPanel.module.scss';
-
-/** 推奨度レベル */
-type RecommendationLevel = 'excellent' | 'good' | 'fair' | 'poor';
 
 export interface SeatInfoPanelProps {
   /** 選択中の座席 */
@@ -26,18 +27,6 @@ export interface SeatInfoPanelProps {
   theater?: Theater;
   /** 追加クラス名 */
   className?: string;
-}
-
-/**
- * 歪みスコアから推奨度を算出
- */
-function getRecommendation(metrics: FieldOfViewMetrics): RecommendationLevel {
-  const { distortion_score, horizontal_ratio } = metrics;
-
-  if (distortion_score <= 0.15 && horizontal_ratio >= 0.3) return 'excellent';
-  if (distortion_score <= 0.3 && horizontal_ratio >= 0.2) return 'good';
-  if (distortion_score <= 0.5) return 'fair';
-  return 'poor';
 }
 
 const RECOMMENDATION_LABELS: Record<RecommendationLevel, string> = {

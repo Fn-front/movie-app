@@ -62,11 +62,11 @@ describe('SeatInfoPanel', () => {
     expect(screen.getByText('10%')).toBeInTheDocument();
   });
 
-  it('歪みが低く占有率が高い場合は「最適」バッジ', () => {
+  it('スイートスポット（占有率が最良帯・低歪み）は「最適」バッジ', () => {
     const seat = createSeat();
     const metrics = createMetrics({
+      horizontal_ratio: 0.25,
       distortion_score: 0.05,
-      horizontal_ratio: 0.4,
     });
 
     render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);
@@ -74,11 +74,11 @@ describe('SeatInfoPanel', () => {
     expect(screen.getByText('最適')).toBeInTheDocument();
   });
 
-  it('歪みが中程度の場合は「良好」バッジ', () => {
+  it('やや近い/中程度の歪みは「良好」バッジ', () => {
     const seat = createSeat();
     const metrics = createMetrics({
-      distortion_score: 0.2,
-      horizontal_ratio: 0.25,
+      horizontal_ratio: 0.35,
+      distortion_score: 0.15,
     });
 
     render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);
@@ -86,11 +86,11 @@ describe('SeatInfoPanel', () => {
     expect(screen.getByText('良好')).toBeInTheDocument();
   });
 
-  it('歪みが高い場合は「普通」バッジ', () => {
+  it('スイートスポットから外れると「普通」バッジ', () => {
     const seat = createSeat();
     const metrics = createMetrics({
-      distortion_score: 0.4,
-      horizontal_ratio: 0.15,
+      horizontal_ratio: 0.4,
+      distortion_score: 0.2,
     });
 
     render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);
@@ -98,11 +98,11 @@ describe('SeatInfoPanel', () => {
     expect(screen.getByText('普通')).toBeInTheDocument();
   });
 
-  it('歪みが非常に高い場合は「非推奨」バッジ', () => {
+  it('近すぎ（占有率過大）＋高歪みは「非推奨」バッジ', () => {
     const seat = createSeat();
     const metrics = createMetrics({
-      distortion_score: 0.6,
-      horizontal_ratio: 0.1,
+      horizontal_ratio: 0.6,
+      distortion_score: 0.5,
     });
 
     render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);

@@ -22,7 +22,10 @@ export function useTheaterSelection(initialSlug: string) {
     (nextSlug: string) => {
       if (nextSlug === slug) return;
       setSlug(nextSlug);
-      const params = new URLSearchParams();
+      // 既存のクエリを保持したまま theater だけ更新する
+      const params = new URLSearchParams(
+        typeof window !== 'undefined' ? window.location.search : '',
+      );
       params.set(THEATER_QUERY_PARAM, nextSlug);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },

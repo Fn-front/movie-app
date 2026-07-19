@@ -49,7 +49,11 @@ export interface TheaterExperiencePageProps {
 export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
   function TheaterExperiencePage({ initialSlug }) {
     const { slug, selectTheater } = useTheaterSelection(initialSlug);
-    const { data: theaterList } = useTheaters();
+    const {
+      data: theaterList,
+      error: theatersError,
+      refetch: refetchTheaters,
+    } = useTheaters();
     const { data: theaterDetail, isLoading, error } = useTheater(slug);
     const { selectedSeat, selectSeat, clearSelection } = useSeatSelection();
     const [frequencyBand, setFrequencyBand] = useState<FrequencyBand>('mid');
@@ -162,6 +166,10 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       [selectTheater, clearSelection],
     );
 
+    const handleRefetchTheaters = useCallback(() => {
+      refetchTheaters();
+    }, [refetchTheaters]);
+
     const handleFrequencyChange = useCallback((value: FrequencyBand) => {
       setFrequencyBand(value);
     }, []);
@@ -187,13 +195,27 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
             </p>
           )}
         </div>
-        {theaters.length > 0 && (
+        {theaters.length > 0 ? (
           <TheaterSelector
             theaters={theaters}
             value={slug}
             onValueChange={handleTheaterChange}
           />
-        )}
+        ) : theatersError ? (
+          <div
+            className={styles.c_theater_experience__selector_error}
+            role='alert'
+          >
+            <span>劇場一覧の取得に失敗しました。</span>
+            <button
+              type='button'
+              onClick={handleRefetchTheaters}
+              className={styles.c_theater_experience__retry}
+            >
+              再試行
+            </button>
+          </div>
+        ) : null}
       </header>
     );
 

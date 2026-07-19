@@ -215,6 +215,7 @@ describe('TheaterExperiencePage', () => {
       data: { theaters: mockTheaters },
       isLoading: false,
       error: null,
+      refetch: jest.fn(),
     });
     mockUseTheaterSelection.mockReturnValue({
       slug: 'standard-medium',
@@ -334,6 +335,25 @@ describe('TheaterExperiencePage', () => {
       expect(
         screen.getByText('劇場データの取得に失敗しました。'),
       ).toBeInTheDocument();
+    });
+
+    it('劇場一覧の取得失敗時はエラー＋再試行を表示する', async () => {
+      const refetch = jest.fn();
+      mockUseTheaters.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        error: new Error('list fetch failed'),
+        refetch,
+      });
+      const user = userEvent.setup();
+
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      expect(
+        screen.getByText('劇場一覧の取得に失敗しました。'),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: '再試行' }));
+      expect(refetch).toHaveBeenCalledTimes(1);
     });
 
     it('劇場を切り替えると selectTheater と clearSelection が呼ばれる', async () => {

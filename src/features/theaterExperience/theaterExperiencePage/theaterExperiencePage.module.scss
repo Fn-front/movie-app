@@ -32,6 +32,30 @@
   gap: $spacing-1;
 }
 
+.c_theater_experience__selector_error {
+  display: flex;
+  align-items: center;
+  gap: $spacing-2;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+}
+
+.c_theater_experience__retry {
+  @include button-reset;
+  padding: $spacing-1 $spacing-3;
+  font-size: $font-size-sm;
+  color: $primary-500;
+  border: $border-width-1 solid $primary-500;
+  border-radius: $border-radius-md;
+  cursor: pointer;
+
+  &:hover {
+    background-color: color-alpha(--primary-500, 10%);
+  }
+
+  @include focus-visible;
+}
+
 .c_theater_experience__title {
   font-size: $font-size-2xl;
   font-weight: $font-weight-bold;

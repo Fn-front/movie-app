@@ -76,11 +76,16 @@ export const SeatA11yList = memo<SeatA11yListProps>(function SeatA11yList({
       map.set(
         seat.id,
         calcFieldOfViewMetrics(
-          { position_x: seat.position_x, position_z: seat.position_z },
+          {
+            position_x: seat.position_x,
+            position_y: seat.position_y,
+            position_z: seat.position_z,
+          },
           {
             width: theater.screen_width,
             height: theater.screen_height,
             center_x: theater.screen_center_x,
+            center_y: theater.screen_center_y,
             center_z: theater.screen_center_z,
           },
         ),

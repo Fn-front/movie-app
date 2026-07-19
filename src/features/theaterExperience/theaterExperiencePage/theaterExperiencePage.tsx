@@ -9,6 +9,8 @@ import { memo, useCallback, useMemo, useState } from 'react';
 
 import type { FrequencyBand, TheaterSeat } from '../types';
 import { useTheater } from '../hooks/useTheater';
+import { useTheaters } from '../hooks/useTheaters';
+import { useTheaterSelection } from '../hooks/useTheaterSelection';
 import { useSeatSelection } from '../hooks/useSeatSelection';
 import { useFieldOfView } from '../hooks/useFieldOfView';
 import { useWebGL2Support } from '../hooks/useWebGL2Support';
@@ -24,6 +26,7 @@ import { SeatA11yList } from '../component/seatA11yList/seatA11yList';
 import { FrequencySelector } from '../component/frequencySelector/frequencySelector';
 import { HeatmapToggle } from '../component/heatmapToggle/heatmapToggle';
 import { UnsupportedBrowserNotice } from '../component/unsupportedBrowserNotice/unsupportedBrowserNotice';
+import { TheaterSelector } from '../component/theaterSelector/theaterSelector';
 
 import styles from './theaterExperiencePage.module.scss';
 
@@ -37,12 +40,14 @@ function useReducedMotion(): boolean {
 }
 
 export interface TheaterExperiencePageProps {
-  /** 劇場slug */
-  slug: string;
+  /** 初期表示する劇場slug（URLクエリ由来、未指定時は既定劇場にフォールバック） */
+  initialSlug: string;
 }
 
 export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
-  function TheaterExperiencePage({ slug }) {
+  function TheaterExperiencePage({ initialSlug }) {
+    const { slug, selectTheater } = useTheaterSelection(initialSlug);
+    const { data: theaterList } = useTheaters();
     const { data: theaterDetail, isLoading, error } = useTheater(slug);
     const { selectedSeat, selectSeat, clearSelection } = useSeatSelection();
     const [frequencyBand, setFrequencyBand] = useState<FrequencyBand>('mid');
@@ -61,6 +66,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       () => theaterDetail?.theater.speakers ?? [],
       [theaterDetail],
     );
+    const theaters = useMemo(() => theaterList?.theaters ?? [], [theaterList]);
 
     const fovMetrics = useFieldOfView(selectedSeat, theater);
 
@@ -145,6 +151,15 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       [selectSeat],
     );
 
+    const handleTheaterChange = useCallback(
+      (nextSlug: string) => {
+        // 劇場を切り替えたら、旧劇場の座席選択（一人称視点）を解除して俯瞰に戻す
+        selectTheater(nextSlug);
+        clearSelection();
+      },
+      [selectTheater, clearSelection],
+    );
+
     const handleFrequencyChange = useCallback((value: FrequencyBand) => {
       setFrequencyBand(value);
     }, []);
@@ -158,30 +173,54 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       [selectedSeat],
     );
 
+    // ヘッダー（タイトル＋劇場セレクタ）はローディング/エラー時も表示し、
+    // どの状態でも別の劇場へ切り替えられるようにする
+    const header = (
+      <header className={styles.c_theater_experience__header}>
+        <div className={styles.c_theater_experience__heading}>
+          <h1 className={styles.c_theater_experience__title}>シアター体験</h1>
+          {theater && (
+            <p className={styles.c_theater_experience__subtitle}>
+              {theater.name}
+            </p>
+          )}
+        </div>
+        {theaters.length > 0 && (
+          <TheaterSelector
+            className={styles.c_theater_experience__selector}
+            theaters={theaters}
+            value={slug}
+            onValueChange={handleTheaterChange}
+          />
+        )}
+      </header>
+    );
+
     if (isLoading || isChecking) {
       return (
-        <div className={styles.c_theater_experience__loading}>
-          <p>読み込み中...</p>
+        <div className={styles.c_theater_experience}>
+          {header}
+          <div className={styles.c_theater_experience__loading}>
+            <p>読み込み中...</p>
+          </div>
         </div>
       );
     }
 
     if (error || !theater) {
       return (
-        <div className={styles.c_theater_experience__error}>
-          <p>劇場データの取得に失敗しました。</p>
+        <div className={styles.c_theater_experience}>
+          {header}
+          <div className={styles.c_theater_experience__error}>
+            <p>劇場データの取得に失敗しました。</p>
+          </div>
         </div>
       );
     }
 
     return (
       <div className={styles.c_theater_experience}>
-        <header className={styles.c_theater_experience__header}>
-          <h1 className={styles.c_theater_experience__title}>シアター体験</h1>
-          <p className={styles.c_theater_experience__subtitle}>
-            {theater.name}
-          </p>
-        </header>
+        {header}
 
         <div className={styles.c_theater_experience__main}>
           {/* 3Dビュー or フォールバック */}

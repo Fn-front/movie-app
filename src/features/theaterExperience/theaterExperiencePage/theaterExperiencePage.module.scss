@@ -20,8 +20,20 @@
 
 .c_theater_experience__header {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: $spacing-4;
+}
+
+.c_theater_experience__heading {
+  display: flex;
   flex-direction: column;
   gap: $spacing-1;
+}
+
+.c_theater_experience__selector {
+  min-width: 220px;
 }
 
 .c_theater_experience__title {

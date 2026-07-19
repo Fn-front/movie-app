@@ -36,3 +36,6 @@ export const THEATER_SPEAKERS_SELECT =
 
 /** キャッシュヘッダー（認証済みユーザー向け） */
 export const THEATER_CACHE_CONTROL = 'private, max-age=3600';
+
+/** 選択中の劇場を保持するURLクエリのキー */
+export const THEATER_QUERY_PARAM = 'theater';

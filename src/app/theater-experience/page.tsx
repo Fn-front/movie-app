@@ -1,9 +1,7 @@
 import type { Metadata } from 'next';
 
-import {
-  DEFAULT_THEATER_SLUG,
-  THEATER_QUERY_PARAM,
-} from '@/constants/theaters';
+import { THEATER_QUERY_PARAM } from '@/constants';
+import { resolveInitialTheaterSlug } from '@/features/theaterExperience/utils/resolveInitialTheaterSlug';
 
 import { TheaterExperiencePageLoader } from './loader';
 
@@ -21,9 +19,6 @@ export default async function TheaterExperience({
   searchParams,
 }: TheaterExperiencePageProps) {
   const params = await searchParams;
-  const raw = params[THEATER_QUERY_PARAM];
-  // 重複指定(?theater=a&theater=b)等で配列になった場合は不正として既定劇場にフォールバック
-  const initialSlug =
-    typeof raw === 'string' && raw.length > 0 ? raw : DEFAULT_THEATER_SLUG;
+  const initialSlug = resolveInitialTheaterSlug(params[THEATER_QUERY_PARAM]);
   return <TheaterExperiencePageLoader initialSlug={initialSlug} />;
 }

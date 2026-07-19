@@ -187,7 +187,6 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
         </div>
         {theaters.length > 0 && (
           <TheaterSelector
-            className={styles.c_theater_experience__selector}
             theaters={theaters}
             value={slug}
             onValueChange={handleTheaterChange}

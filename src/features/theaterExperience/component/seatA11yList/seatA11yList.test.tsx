@@ -118,4 +118,44 @@ describe('SeatA11yList', () => {
       screen.getByRole('region', { name: '座席選択' }),
     ).toBeInTheDocument();
   });
+
+  it('座席番号でグリッド列に配置される（飛び番でも実列に揃う）', () => {
+    const seats: TheaterSeat[] = [
+      {
+        id: 'gap-5',
+        row_label: 'A',
+        seat_number: 5,
+        position_x: 0,
+        position_y: 0,
+        position_z: 0,
+        seat_type: 'standard',
+      },
+    ];
+    render(<SeatA11yList {...defaultProps} seats={seats} />);
+
+    const li = screen.getByRole('button').closest('li');
+    expect(li).toHaveStyle({ gridColumn: '5' });
+    // グリッド列数は最大席番号
+    const ul = li?.parentElement as HTMLElement;
+    expect(ul.style.getPropertyValue('--seat-cols')).toBe('5');
+  });
+
+  it('車椅子席は♿マーカーと車椅子席ラベルが付く', () => {
+    const seats: TheaterSeat[] = [
+      {
+        id: 'wc',
+        row_label: 'A',
+        seat_number: 1,
+        position_x: 0,
+        position_y: 0,
+        position_z: 0,
+        seat_type: 'wheelchair',
+      },
+    ];
+    render(<SeatA11yList {...defaultProps} seats={seats} />);
+
+    const button = screen.getByRole('button');
+    expect(button.getAttribute('aria-label')).toContain('車椅子席');
+    expect(button).toHaveTextContent('♿');
+  });
 });

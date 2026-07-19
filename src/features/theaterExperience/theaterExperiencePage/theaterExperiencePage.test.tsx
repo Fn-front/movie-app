@@ -362,6 +362,37 @@ describe('TheaterExperiencePage', () => {
     });
   });
 
+  describe('slug伝播・存在しない劇場', () => {
+    it('選択中のslugでuseTheaterが呼ばれる（slug伝播）', () => {
+      mockUseTheaterSelection.mockReturnValue({
+        slug: 'imax-gt',
+        selectTheater: jest.fn(),
+      });
+
+      render(<TheaterExperiencePage initialSlug='imax-gt' />);
+
+      expect(mockUseTheater).toHaveBeenCalledWith('imax-gt');
+    });
+
+    it('一覧に無いslugのエラー時は「見つかりません」を表示する', () => {
+      mockUseTheaterSelection.mockReturnValue({
+        slug: 'unknown-hall',
+        selectTheater: jest.fn(),
+      });
+      mockUseTheater.mockReturnValue({
+        data: null,
+        isLoading: false,
+        error: new Error('not found'),
+      });
+
+      render(<TheaterExperiencePage initialSlug='unknown-hall' />);
+
+      expect(
+        screen.getByText(/指定された劇場が見つかりません/),
+      ).toBeInTheDocument();
+    });
+  });
+
   describe('ヒートマップ表示切替', () => {
     it('初期状態ではヒートマップは描画されない', () => {
       render(<TheaterExperiencePage initialSlug='standard-medium' />);

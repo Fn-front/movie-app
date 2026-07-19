@@ -46,15 +46,31 @@ const COLOR_SELECTED = new Color('#ffaa00');
 /** 車椅子席カラー（他席と区別できる青系） */
 const COLOR_WHEELCHAIR = new Color('#3b82f6');
 
+/** 座席の色種別キー（純粋・テスト用にexport） */
+export type SeatColorKey = 'selected' | 'wheelchair' | 'rowEven' | 'rowOdd';
+
 /**
- * 座席の表示色を決定する。
- * 優先度: 選択中 > 車椅子席 > 列ごとの交互色
+ * 座席の色種別を決定する。優先度: 選択中 > 車椅子席 > 列ごとの交互色。
  */
-function getSeatColor(seat: TheaterSeat, selectedSeatId: string | null): Color {
-  if (seat.id === selectedSeatId) return COLOR_SELECTED;
-  if (seat.seat_type === 'wheelchair') return COLOR_WHEELCHAIR;
+export function getSeatColorKey(
+  seat: TheaterSeat,
+  selectedSeatId: string | null,
+): SeatColorKey {
+  if (seat.id === selectedSeatId) return 'selected';
+  if (seat.seat_type === 'wheelchair') return 'wheelchair';
   // 列ごとに2色交互（row_label文字コード偶奇）
-  return seat.row_label.charCodeAt(0) % 2 === 0 ? COLOR_SEAT_A : COLOR_SEAT_B;
+  return seat.row_label.charCodeAt(0) % 2 === 0 ? 'rowEven' : 'rowOdd';
+}
+
+const SEAT_COLOR_BY_KEY: Record<SeatColorKey, Color> = {
+  selected: COLOR_SELECTED,
+  wheelchair: COLOR_WHEELCHAIR,
+  rowEven: COLOR_SEAT_A,
+  rowOdd: COLOR_SEAT_B,
+};
+
+function getSeatColor(seat: TheaterSeat, selectedSeatId: string | null): Color {
+  return SEAT_COLOR_BY_KEY[getSeatColorKey(seat, selectedSeatId)];
 }
 
 export interface SeatMeshesProps {
@@ -137,6 +153,9 @@ const SeatBacks = memo<{
         seat.position_z - SEAT_CUSHION.depth / 2,
       );
       tempObject.rotation.set(-0.1, 0, 0);
+      // 車椅子席は背もたれを描かない（フラットな車椅子スペース＝色以外の形状差でも区別）
+      const noBack = seat.seat_type === 'wheelchair';
+      tempObject.scale.set(1, noBack ? 0 : 1, 1);
       tempObject.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObject.matrix);
 
@@ -265,7 +284,7 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
         onPointerOver={handlePointerOver}
         onPointerOut={handlePointerOut}
       >
-        <boxGeometry args={[0.65, 0.7, 0.55]} />
+        <boxGeometry args={[0.55, 0.7, 0.55]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </instancedMesh>
     </group>

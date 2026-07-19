@@ -7,6 +7,8 @@
 
 import { memo, useCallback, useMemo, useState } from 'react';
 
+import { THEATER_MESSAGES } from '@/constants';
+
 import type { FrequencyBand, TheaterSeat } from '../types';
 import { useTheater } from '../hooks/useTheater';
 import { useTheaters } from '../hooks/useTheaters';
@@ -207,11 +209,18 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
     }
 
     if (error || !theater) {
+      // 一覧が取れているのに該当slugが無い＝存在しない劇場（取得失敗と区別する）
+      const notFound =
+        theaters.length > 0 && !theaters.some((t) => t.slug === slug);
       return (
         <div className={styles.c_theater_experience}>
           {header}
           <div className={styles.c_theater_experience__error}>
-            <p>劇場データの取得に失敗しました。</p>
+            <p>
+              {notFound
+                ? `${THEATER_MESSAGES.NOT_FOUND}。上の劇場セレクタから選び直してください。`
+                : `${THEATER_MESSAGES.FETCH_ERROR}。`}
+            </p>
           </div>
         </div>
       );

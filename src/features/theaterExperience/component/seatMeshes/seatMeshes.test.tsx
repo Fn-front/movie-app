@@ -44,7 +44,7 @@ jest.mock('@react-three/drei', () => {
 
 import type { TheaterSeat } from '../../types';
 
-import { SeatMeshes } from './seatMeshes';
+import { SeatMeshes, getSeatColorKey } from './seatMeshes';
 
 describe('SeatMeshes', () => {
   it('エクスポートが正しく定義されている', () => {
@@ -70,5 +70,37 @@ describe('SeatMeshes', () => {
     };
 
     expect(props.seats).toHaveLength(1);
+  });
+});
+
+describe('getSeatColorKey', () => {
+  const base: TheaterSeat = {
+    id: 's1',
+    row_label: 'A',
+    seat_number: 1,
+    position_x: 0,
+    position_y: 0,
+    position_z: 0,
+    seat_type: 'standard',
+  };
+
+  it('選択中の席は selected（車椅子より優先）', () => {
+    expect(getSeatColorKey({ ...base, seat_type: 'wheelchair' }, 's1')).toBe(
+      'selected',
+    );
+  });
+
+  it('車椅子席は wheelchair', () => {
+    expect(getSeatColorKey({ ...base, seat_type: 'wheelchair' }, null)).toBe(
+      'wheelchair',
+    );
+  });
+
+  it('偶数文字コードの列は rowEven（B列）', () => {
+    expect(getSeatColorKey({ ...base, row_label: 'B' }, null)).toBe('rowEven');
+  });
+
+  it('奇数文字コードの列は rowOdd（A列）', () => {
+    expect(getSeatColorKey({ ...base, row_label: 'A' }, null)).toBe('rowOdd');
   });
 });

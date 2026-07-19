@@ -25,6 +25,10 @@ import {
   calcDistanceToScreen,
   calcYawClampedTargetX,
 } from '../../utils/fieldOfView';
+import {
+  calcOverviewZoom,
+  interpolateFloorHeight,
+} from '../../utils/theaterGeometry';
 
 export interface TheaterSceneProps {
   /** 劇場の幅 (m) */
@@ -150,30 +154,34 @@ RoomEdgesBox.displayName = 'RoomEdgesBox';
 
 /**
  * 傾斜床メッシュ（座席エリア）
- * frontZ→backZ にかけて、t² の曲線で maxHeight まで上がる
+ * 各列の実Z/Y(rowZs/rowYs)を線形補間して床高を決めるため、床が必ず座席の
+ * 足元を通り座席が浮かない。座席の傾斜曲線(t^1.3)や横通路のZシフトにも自動追従する。
  */
 const SlopedFloorMesh = memo<{
   roomWidth: number;
   frontZ: number;
   backZ: number;
-  maxHeight: number;
-}>(function SlopedFloorMesh({ roomWidth, frontZ, backZ, maxHeight }) {
+  rowZs: number[];
+  rowYs: number[];
+}>(function SlopedFloorMesh({ roomWidth, frontZ, backZ, rowZs, rowYs }) {
   const geometry = useMemo(() => {
     const depth = frontZ - backZ;
-    const geo = new PlaneGeometry(roomWidth, depth, 1, 10);
+    const segments = Math.max(10, rowZs.length * 2);
+    const geo = new PlaneGeometry(roomWidth, depth, 1, segments);
     const posAttr = geo.attributes.position;
 
     for (let i = 0; i < posAttr.count; i++) {
       const localY = posAttr.getY(i);
       const t = (localY + depth / 2) / depth;
-      const heightOffset = maxHeight * t * t;
-      posAttr.setZ(i, heightOffset);
+      // t=0(前/低) → frontZ、t=1(後/高) → backZ
+      const worldZ = frontZ - t * depth;
+      posAttr.setZ(i, interpolateFloorHeight(worldZ, rowZs, rowYs));
     }
 
     posAttr.needsUpdate = true;
     geo.computeVertexNormals();
     return geo;
-  }, [roomWidth, frontZ, backZ, maxHeight]);
+  }, [roomWidth, frontZ, backZ, rowZs, rowYs]);
 
   const centerZ = (frontZ + backZ) / 2;
 
@@ -321,15 +329,27 @@ const StepLEDs = memo<{
   rowYs: number[];
   seatWidth: number;
 }>(function StepLEDs({ rowZs, rowYs, seatWidth }) {
+  // 通常の列間隔（最小の正の間隔）を基準に、これを大きく超えるペア（横通路）は
+  // 段差ではないためLEDを描かない（通路中央に宙浮きのLEDが出るのを防ぐ）
+  const normalGap = useMemo(() => {
+    let min = Infinity;
+    for (let i = 1; i < rowZs.length; i++) {
+      const g = Math.abs(rowZs[i - 1] - rowZs[i]);
+      if (g > 0.01 && g < min) min = g;
+    }
+    return Number.isFinite(min) ? min : 1;
+  }, [rowZs]);
+
   return (
     <group>
       {rowZs.map((z, i) => {
         if (i === 0) return null; // A列は段差なし
-        // 各列の前方端に細い光帯を配置
-        // 帯の高さは Y方向、前方Z位置
+        const gap = Math.abs((rowZs[i - 1] ?? z) - z);
+        if (gap > normalGap * 1.5) return null; // 横通路（段差でない）はスキップ
+        // 各列の前方端に細い光帯を配置（段の中央高さ・中央Z）
         const prevY = rowYs[i - 1] ?? 0;
-        const ledY = (rowYs[i] + prevY) / 2; // 段の中央高さ
-        const ledZ = (z + (rowZs[i - 1] ?? z)) / 2; // 段の中央Z
+        const ledY = (rowYs[i] + prevY) / 2;
+        const ledZ = (z + (rowZs[i - 1] ?? z)) / 2;
         return (
           <mesh key={z} position={[0, ledY, ledZ]}>
             <boxGeometry args={[seatWidth, 0.04, 0.04]} />
@@ -372,6 +392,8 @@ const IsometricCameraRig = memo<{
   const cameraRef = useRef<OrthographicCameraType | null>(null);
   const set = useThree((state) => state.set);
   const camDistance = Math.max(roomWidth, roomDepth) * 1.2;
+  // 部屋サイズに応じて等角カメラのズームを調整（大型ルームでも全体が収まる）
+  const zoom = calcOverviewZoom(roomWidth, roomDepth, roomHeight);
   const target = useMemo<[number, number, number]>(
     () => [0, roomHeight / 2, 0],
     [roomHeight],
@@ -390,7 +412,7 @@ const IsometricCameraRig = memo<{
       ref={cameraRef}
       makeDefault
       position={[camDistance, camDistance, camDistance]}
-      zoom={28}
+      zoom={zoom}
       near={0.1}
       far={200}
     />
@@ -603,12 +625,13 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         roomHeight={roomHeight}
       />
 
-      {/* 傾斜床（座席エリア） */}
+      {/* 傾斜床（座席エリア）— 各列の実Z/Yを補間して座席を接地させる */}
       <SlopedFloorMesh
         roomWidth={roomWidth}
         frontZ={seatAreaFrontZ + SLOPE_MARGIN}
         backZ={seatAreaBackZ - SLOPE_MARGIN}
-        maxHeight={seatAreaMaxY}
+        rowZs={rowZs}
+        rowYs={rowYs}
       />
 
       {/* 傾斜床と後壁の間の段差を埋める（バックステップ壁＋最上段通路） */}

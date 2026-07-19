@@ -57,5 +57,6 @@ export const awardKeys = {
 
 export const theaterKeys = {
   all: ['theaters'] as const,
+  list: ['theaters', 'list'] as const,
   detail: (slug: string) => ['theaters', slug] as const,
 };

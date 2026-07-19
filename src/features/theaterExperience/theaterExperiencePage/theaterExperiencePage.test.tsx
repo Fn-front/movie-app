@@ -24,6 +24,12 @@ Object.defineProperty(window, 'matchMedia', {
 jest.mock('../hooks/useTheater', () => ({
   useTheater: jest.fn(),
 }));
+jest.mock('../hooks/useTheaters', () => ({
+  useTheaters: jest.fn(),
+}));
+jest.mock('../hooks/useTheaterSelection', () => ({
+  useTheaterSelection: jest.fn(),
+}));
 jest.mock('../hooks/useSeatSelection', () => ({
   useSeatSelection: jest.fn(() => ({
     selectedSeat: null,
@@ -94,14 +100,43 @@ jest.mock(
     )),
   }),
 );
+jest.mock('../component/theaterSelector/theaterSelector', () => ({
+  TheaterSelector: jest.fn(
+    ({
+      theaters,
+      value,
+      onValueChange,
+    }: {
+      theaters: { slug: string; name: string }[];
+      value: string;
+      onValueChange: (slug: string) => void;
+    }) => (
+      <select
+        data-testid='theater-selector'
+        value={value}
+        onChange={(e) => onValueChange(e.target.value)}
+      >
+        {theaters.map((t) => (
+          <option key={t.slug} value={t.slug}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+    ),
+  ),
+}));
 
 import { useTheater } from '../hooks/useTheater';
+import { useTheaters } from '../hooks/useTheaters';
+import { useTheaterSelection } from '../hooks/useTheaterSelection';
 import { useWebGL2Support } from '../hooks/useWebGL2Support';
 import { useSeatSelection } from '../hooks/useSeatSelection';
 
 import { TheaterExperiencePage } from './theaterExperiencePage';
 
 const mockUseTheater = useTheater as jest.Mock;
+const mockUseTheaters = useTheaters as jest.Mock;
+const mockUseTheaterSelection = useTheaterSelection as jest.Mock;
 const mockUseWebGL2Support = useWebGL2Support as jest.Mock;
 const mockUseSeatSelection = useSeatSelection as jest.Mock;
 
@@ -148,6 +183,23 @@ const mockTheaterDetail = {
   },
 };
 
+const mockTheaters = [
+  {
+    id: 'uuid-1',
+    name: 'スタンダードシアター（中型）',
+    slug: 'standard-medium',
+    format: 'standard' as const,
+    audio_layout: 'atmos_9_1_6' as const,
+  },
+  {
+    id: 'uuid-2',
+    name: 'IMAX シアター',
+    slug: 'imax-gt',
+    format: 'imax' as const,
+    audio_layout: 'atmos_9_1_6' as const,
+  },
+];
+
 describe('TheaterExperiencePage', () => {
   beforeEach(() => {
     mockUseTheater.mockReturnValue({
@@ -159,6 +211,15 @@ describe('TheaterExperiencePage', () => {
       isSupported: true,
       isChecking: false,
     });
+    mockUseTheaters.mockReturnValue({
+      data: { theaters: mockTheaters },
+      isLoading: false,
+      error: null,
+    });
+    mockUseTheaterSelection.mockReturnValue({
+      slug: 'standard-medium',
+      selectTheater: jest.fn(),
+    });
   });
 
   it('読み込み中はローディング表示', () => {
@@ -168,7 +229,7 @@ describe('TheaterExperiencePage', () => {
       error: null,
     });
 
-    render(<TheaterExperiencePage slug='standard-medium' />);
+    render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
     expect(screen.getByText('読み込み中...')).toBeInTheDocument();
   });
@@ -180,7 +241,7 @@ describe('TheaterExperiencePage', () => {
       error: new Error('fetch failed'),
     });
 
-    render(<TheaterExperiencePage slug='standard-medium' />);
+    render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
     expect(
       screen.getByText('劇場データの取得に失敗しました。'),
@@ -188,16 +249,17 @@ describe('TheaterExperiencePage', () => {
   });
 
   it('正常時はタイトルと劇場名が表示される', () => {
-    render(<TheaterExperiencePage slug='standard-medium' />);
+    render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
     expect(screen.getByText('シアター体験')).toBeInTheDocument();
+    // 同名の劇場がセレクタの<option>にも現れるため、サブタイトル<p>に限定して検証
     expect(
-      screen.getByText('スタンダードシアター（中型）'),
+      screen.getByText('スタンダードシアター（中型）', { selector: 'p' }),
     ).toBeInTheDocument();
   });
 
   it('WebGL2対応環境では3Dキャンバスが表示される', () => {
-    render(<TheaterExperiencePage slug='standard-medium' />);
+    render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
     expect(screen.getByTestId('theater-canvas')).toBeInTheDocument();
     expect(screen.queryByTestId('unsupported-notice')).not.toBeInTheDocument();
@@ -209,34 +271,138 @@ describe('TheaterExperiencePage', () => {
       isChecking: false,
     });
 
-    render(<TheaterExperiencePage slug='standard-medium' />);
+    render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
     expect(screen.getByTestId('unsupported-notice')).toBeInTheDocument();
     expect(screen.queryByTestId('theater-canvas')).not.toBeInTheDocument();
   });
 
   it('座席一覧が表示される', () => {
-    render(<TheaterExperiencePage slug='standard-medium' />);
+    render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
     expect(screen.getByTestId('seat-a11y-list')).toBeInTheDocument();
   });
 
   it('周波数セレクターが表示される', () => {
-    render(<TheaterExperiencePage slug='standard-medium' />);
+    render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
     expect(screen.getByTestId('frequency-selector')).toBeInTheDocument();
   });
 
+  describe('劇場セレクタ', () => {
+    it('劇場一覧が取得できたらセレクタを表示する', () => {
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      expect(screen.getByTestId('theater-selector')).toBeInTheDocument();
+    });
+
+    it('劇場一覧が空のときはセレクタを表示しない', () => {
+      mockUseTheaters.mockReturnValue({
+        data: { theaters: [] },
+        isLoading: false,
+        error: null,
+      });
+
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      expect(screen.queryByTestId('theater-selector')).not.toBeInTheDocument();
+    });
+
+    it('ローディング中でもセレクタは表示され続ける', () => {
+      mockUseTheater.mockReturnValue({
+        data: null,
+        isLoading: true,
+        error: null,
+      });
+
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      expect(screen.getByTestId('theater-selector')).toBeInTheDocument();
+      expect(screen.getByText('読み込み中...')).toBeInTheDocument();
+    });
+
+    it('エラー時でもセレクタは表示され続ける', () => {
+      mockUseTheater.mockReturnValue({
+        data: null,
+        isLoading: false,
+        error: new Error('fetch failed'),
+      });
+
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      expect(screen.getByTestId('theater-selector')).toBeInTheDocument();
+      expect(
+        screen.getByText('劇場データの取得に失敗しました。'),
+      ).toBeInTheDocument();
+    });
+
+    it('劇場を切り替えると selectTheater と clearSelection が呼ばれる', async () => {
+      const selectTheater = jest.fn();
+      const clearSelection = jest.fn();
+      mockUseTheaterSelection.mockReturnValueOnce({
+        slug: 'standard-medium',
+        selectTheater,
+      });
+      mockUseSeatSelection.mockReturnValueOnce({
+        selectedSeat: null,
+        selectSeat: jest.fn(),
+        clearSelection,
+      });
+      const user = userEvent.setup();
+
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      await user.selectOptions(
+        screen.getByTestId('theater-selector'),
+        'imax-gt',
+      );
+
+      expect(selectTheater).toHaveBeenCalledWith('imax-gt');
+      expect(clearSelection).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('slug伝播・存在しない劇場', () => {
+    it('選択中のslugでuseTheaterが呼ばれる（slug伝播）', () => {
+      mockUseTheaterSelection.mockReturnValue({
+        slug: 'imax-gt',
+        selectTheater: jest.fn(),
+      });
+
+      render(<TheaterExperiencePage initialSlug='imax-gt' />);
+
+      expect(mockUseTheater).toHaveBeenCalledWith('imax-gt');
+    });
+
+    it('一覧に無いslugのエラー時は「見つかりません」を表示する', () => {
+      mockUseTheaterSelection.mockReturnValue({
+        slug: 'unknown-hall',
+        selectTheater: jest.fn(),
+      });
+      mockUseTheater.mockReturnValue({
+        data: null,
+        isLoading: false,
+        error: new Error('not found'),
+      });
+
+      render(<TheaterExperiencePage initialSlug='unknown-hall' />);
+
+      expect(
+        screen.getByText(/指定された劇場が見つかりません/),
+      ).toBeInTheDocument();
+    });
+  });
+
   describe('ヒートマップ表示切替', () => {
     it('初期状態ではヒートマップは描画されない', () => {
-      render(<TheaterExperiencePage slug='standard-medium' />);
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
       expect(screen.queryByTestId('heatmap')).not.toBeInTheDocument();
     });
 
     it('「表示」を押すとヒートマップが描画される', async () => {
       const user = userEvent.setup();
-      render(<TheaterExperiencePage slug='standard-medium' />);
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
       await user.click(
         screen.getByRole('radio', { name: 'ヒートマップを表示' }),
@@ -247,7 +413,7 @@ describe('TheaterExperiencePage', () => {
 
     it('「非表示」を押すとヒートマップが消える', async () => {
       const user = userEvent.setup();
-      render(<TheaterExperiencePage slug='standard-medium' />);
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
       await user.click(
         screen.getByRole('radio', { name: 'ヒートマップを表示' }),
@@ -266,7 +432,7 @@ describe('TheaterExperiencePage', () => {
     const selectedSeat = mockTheaterDetail.theater.seats[0];
 
     it('座席未選択時はスピーカーが描画される', () => {
-      render(<TheaterExperiencePage slug='standard-medium' />);
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
       expect(screen.getByTestId('speaker-meshes')).toBeInTheDocument();
     });
@@ -278,7 +444,7 @@ describe('TheaterExperiencePage', () => {
         clearSelection: jest.fn(),
       });
 
-      render(<TheaterExperiencePage slug='standard-medium' />);
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
       expect(screen.queryByTestId('speaker-meshes')).not.toBeInTheDocument();
     });
@@ -290,7 +456,7 @@ describe('TheaterExperiencePage', () => {
         clearSelection: jest.fn(),
       });
 
-      render(<TheaterExperiencePage slug='standard-medium' />);
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
       expect(
         screen.getByRole('button', { name: '← 俯瞰に戻る' }),
@@ -306,7 +472,7 @@ describe('TheaterExperiencePage', () => {
       });
       const user = userEvent.setup();
 
-      render(<TheaterExperiencePage slug='standard-medium' />);
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
       await user.click(screen.getByRole('button', { name: '← 俯瞰に戻る' }));
 

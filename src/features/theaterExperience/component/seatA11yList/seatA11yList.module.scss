@@ -1,10 +1,30 @@
 @use '@/styles/variables' as *;
 @use '@/styles/mixins' as *;
 
+// 座席セル1マスのサイズ（座席ボタンとグリッド列幅で共有する単一ソース）
+$seat-cell-size: 28px;
+
 .c_seat_a11y_list {
   display: flex;
   flex-direction: column;
   gap: $spacing-3;
+  overflow-x: auto;
+  // フォーカスリングが端の席で見切れないよう余白を確保
+  padding: $spacing-1;
+}
+
+.c_seat_a11y_list__header {
+  display: flex;
+  align-items: center;
+  gap: $spacing-3;
+}
+
+.c_seat_a11y_list__legend {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-1;
+  font-size: $font-size-2xs;
+  color: $text-secondary;
 }
 
 .c_seat_a11y_list__title {
@@ -29,8 +49,10 @@
 }
 
 .c_seat_a11y_list__seats {
-  display: flex;
-  flex-wrap: wrap;
+  // 座席番号でグリッド列を固定し、各座席を seat_number の列に配置する。
+  // 台形/欠番の行も列が揃い、3Dの座席位置と対応する。
+  display: grid;
+  grid-template-columns: repeat(var(--seat-cols, 1), $seat-cell-size);
   gap: $spacing-1;
   list-style: none;
   margin: 0;
@@ -42,8 +64,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: $seat-cell-size;
+  height: $seat-cell-size;
   font-size: $font-size-2xs;
   font-weight: $font-weight-medium;
   color: $text-secondary;
@@ -60,6 +82,11 @@
   }
 
   @include focus-visible;
+}
+
+.c_seat_a11y_list__seat_button__wheelchair {
+  // 色以外の形状手掛かり（破線枠）でも車椅子席を示す（色覚に依存しない）
+  border: $border-width-1 dashed color-alpha(--gray-500, 55%);
 }
 
 .c_seat_a11y_list__seat_button__selected {

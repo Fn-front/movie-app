@@ -15,6 +15,10 @@ const TheaterExperiencePage = dynamic(
   },
 );
 
-export function TheaterExperiencePageLoader({ slug }: { slug: string }) {
-  return <TheaterExperiencePage slug={slug} />;
+export function TheaterExperiencePageLoader({
+  initialSlug,
+}: {
+  initialSlug: string;
+}) {
+  return <TheaterExperiencePage initialSlug={initialSlug} />;
 }

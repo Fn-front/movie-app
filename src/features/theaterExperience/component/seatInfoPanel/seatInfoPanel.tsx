@@ -84,9 +84,9 @@ export const SeatInfoPanel = memo<SeatInfoPanelProps>(function SeatInfoPanel({
       aria-live='polite'
     >
       <div className={styles.c_seat_info_panel__header}>
-        <h3 className={styles.c_seat_info_panel__title}>
+        <h2 className={styles.c_seat_info_panel__title}>
           {seat.row_label}列 {seat.seat_number}番
-        </h3>
+        </h2>
         {recommendation && (
           <span
             className={cn(

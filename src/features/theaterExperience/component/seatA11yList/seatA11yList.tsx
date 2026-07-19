@@ -143,10 +143,14 @@ export const SeatA11yList = memo<SeatA11yListProps>(function SeatA11yList({
                     title={formatSeatLabel(seat, metrics)}
                     onClick={() => handleSeatClick(seat)}
                   >
-                    {seat.seat_type === 'wheelchair' ? (
-                      <span aria-hidden='true'>♿</span>
-                    ) : (
-                      seat.seat_number
+                    {seat.seat_number}
+                    {seat.seat_type === 'wheelchair' && (
+                      <span
+                        aria-hidden='true'
+                        className={styles.c_seat_a11y_list__wheelchair_icon}
+                      >
+                        ♿
+                      </span>
                     )}
                   </button>
                 </li>

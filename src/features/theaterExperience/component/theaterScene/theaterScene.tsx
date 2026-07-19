@@ -364,6 +364,14 @@ const YAW_DEADZONE_RAD = (YAW_DEADZONE_DEG * Math.PI) / 180;
  * drei の OrthographicCamera は lookAt プロパティを取らないため
  * ref 経由で手動で向きを設定する
  */
+/** 俯瞰カメラのズーム上限（中規模ルームで最適だった従来値） */
+const OVERVIEW_MAX_ZOOM = 28;
+/**
+ * 俯瞰ズーム = 定数 / fitSize（定数 = 上限28 × 基準fitSize≈25）。
+ * 部屋が大きいほどズームアウトし、大型ルーム(IMAX等)でも劇場全体が画面に収まる。
+ */
+const OVERVIEW_ZOOM_CONSTANT = 700;
+
 const IsometricCameraRig = memo<{
   roomWidth: number;
   roomDepth: number;
@@ -372,6 +380,12 @@ const IsometricCameraRig = memo<{
   const cameraRef = useRef<OrthographicCameraType | null>(null);
   const set = useThree((state) => state.set);
   const camDistance = Math.max(roomWidth, roomDepth) * 1.2;
+  // 部屋サイズに応じて等角カメラのズームを調整（従来の固定zoom=28では大型ルームが見切れていた）
+  const fitSize = Math.max(
+    (roomWidth + roomDepth) / Math.SQRT2,
+    roomHeight * 1.2,
+  );
+  const zoom = Math.min(OVERVIEW_MAX_ZOOM, OVERVIEW_ZOOM_CONSTANT / fitSize);
   const target = useMemo<[number, number, number]>(
     () => [0, roomHeight / 2, 0],
     [roomHeight],
@@ -390,7 +404,7 @@ const IsometricCameraRig = memo<{
       ref={cameraRef}
       makeDefault
       position={[camDistance, camDistance, camDistance]}
-      zoom={28}
+      zoom={zoom}
       near={0.1}
       far={200}
     />

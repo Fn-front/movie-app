@@ -329,6 +329,18 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
     onHoverSeat(null);
   }, [onHoverSeat]);
 
+  // 俯瞰ホバーで付与したグローバルカーソル(document.body)を確実に戻す。
+  // R3F はポインタ移動時のみ再判定するため、席を静止クリックして一人称に入ると
+  // onPointerOut が発火せず 'pointer' が残る。選択遷移時とアンマウント時に 'auto' へ戻す。
+  useEffect(() => {
+    if (selectedSeatId !== null) {
+      document.body.style.cursor = 'auto';
+    }
+    return () => {
+      document.body.style.cursor = 'auto';
+    };
+  }, [selectedSeatId]);
+
   const handleClick = useCallback(
     (event: { instanceId?: number; stopPropagation: () => void }) => {
       event.stopPropagation();

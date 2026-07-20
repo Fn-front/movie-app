@@ -418,14 +418,34 @@ describe('TheaterExperiencePage', () => {
     it('劇場を切り替えると強調（ホバー/フォーカス）がリセットされる', () => {
       render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
+      // ホバーとフォーカスを両方付与（ホバー優先で hover-seat が強調される）。
+      // 両チャネルを立てることで、切替時の hovered/focused 双方のリセット漏れを検出する。
       act(() => lastProps(mockSeatA11yList).onFocusSeat('focus-seat'));
-      expect(lastProps(mockSeatMeshes).highlightedSeatId).toBe('focus-seat');
+      act(() => lastProps(mockSeatMeshes).onHoverSeat('hover-seat'));
+      expect(lastProps(mockSeatMeshes).highlightedSeatId).toBe('hover-seat');
 
       act(() => {
         fireEvent.change(screen.getByTestId('theater-selector'), {
           target: { value: 'imax-gt' },
         });
       });
+
+      // ホバー・フォーカス両チャネルが解除される
+      expect(lastProps(mockSeatMeshes).highlightedSeatId).toBeNull();
+      expect(lastProps(mockSeatA11yList).highlightedSeatId).toBeNull();
+    });
+
+    it('席を選択（一人称遷移）するとホバー/フォーカス強調がリセットされる（stale漏れ防止）', () => {
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      // 俯瞰でホバー＋フォーカスを付与（ホバー優先で hover-seat 強調）
+      act(() => lastProps(mockSeatA11yList).onFocusSeat('focus-seat'));
+      act(() => lastProps(mockSeatMeshes).onHoverSeat('hover-seat'));
+      expect(lastProps(mockSeatMeshes).highlightedSeatId).toBe('hover-seat');
+
+      // 3D席を静止クリック→一人称。R3Fは onPointerOut を発火しないため、
+      // 選択時に明示リセットしないと stale hover が残りキーボード強調をマスクする。
+      act(() => lastProps(mockSeatMeshes).onSeatClick({ id: 'seat-x' }));
 
       expect(lastProps(mockSeatMeshes).highlightedSeatId).toBeNull();
       expect(lastProps(mockSeatA11yList).highlightedSeatId).toBeNull();
@@ -547,6 +567,37 @@ describe('TheaterExperiencePage', () => {
       await user.click(screen.getByRole('button', { name: '← 俯瞰に戻る' }));
 
       expect(clearSelection).toHaveBeenCalledTimes(1);
+    });
+
+    it('俯瞰に戻ると一人称中に付いたホバー/フォーカス強調がリセットされる', async () => {
+      // 再レンダーをまたいで selectedSeat を維持するため persistent モックを使い、
+      // テスト後に既定（selectedSeat=null）へ復元してリークを防ぐ。
+      mockUseSeatSelection.mockReturnValue({
+        selectedSeat,
+        selectSeat: jest.fn(),
+        clearSelection: jest.fn(),
+      });
+      const user = userEvent.setup();
+
+      try {
+        render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+        // 一人称中でも2Dリストのホバーは連動する
+        act(() => lastProps(mockSeatA11yList).onHoverSeat('hover-seat'));
+        expect(lastProps(mockSeatA11yList).highlightedSeatId).toBe(
+          'hover-seat',
+        );
+
+        await user.click(screen.getByRole('button', { name: '← 俯瞰に戻る' }));
+
+        expect(lastProps(mockSeatA11yList).highlightedSeatId).toBeNull();
+      } finally {
+        mockUseSeatSelection.mockReturnValue({
+          selectedSeat: null,
+          selectSeat: jest.fn(),
+          clearSelection: jest.fn(),
+        });
+      }
     });
   });
 });

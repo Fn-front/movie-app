@@ -159,6 +159,12 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
     const handleSeatClick = useCallback(
       (seat: TheaterSeat) => {
         selectSeat(seat);
+        // 一人称に入る際、俯瞰で拾ったホバー/フォーカス強調を解除する。
+        // R3F は静止クリックでは onPointerOut を発火しないため、これをしないと
+        // stale な hoveredSeatId が highlightedSeatId を占有し、一人称中の2Dリストで
+        // キーボードフォーカスの強調が追従しなくなる（3D→2D のホバー漏れ）。
+        setHoveredSeatId(null);
+        setFocusedSeatId(null);
       },
       [selectSeat],
     );
@@ -173,6 +179,14 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
 
     // 強調対象: ポインタホバーを優先し、無ければキーボードフォーカス席
     const highlightedSeatId = hoveredSeatId ?? focusedSeatId;
+
+    const handleBackToOverview = useCallback(() => {
+      // 俯瞰へ戻る際、一人称中に2Dリストで拾ったホバー/フォーカス強調も解除する
+      // （handleSeatClick / handleTheaterChange と対称）。
+      clearSelection();
+      setHoveredSeatId(null);
+      setFocusedSeatId(null);
+    }, [clearSelection]);
 
     const handleTheaterChange = useCallback(
       (nextSlug: string) => {
@@ -333,7 +347,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
             {isWebGL2Supported && selectedSeat && (
               <button
                 type='button'
-                onClick={clearSelection}
+                onClick={handleBackToOverview}
                 className={styles.c_theater_experience__back_to_overview}
               >
                 ← 俯瞰に戻る

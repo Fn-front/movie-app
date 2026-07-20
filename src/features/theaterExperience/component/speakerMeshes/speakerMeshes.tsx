@@ -14,19 +14,12 @@ import { Edges } from '@react-three/drei';
 // R3FにRoundedBoxGeometryを登録
 extend({ RoundedBoxGeometry });
 
-import type { TheaterSpeaker, SpeakerChannel } from '../../types';
-
-const SPEAKER_SIZE = { width: 0.6, height: 0.35, depth: 0.4 };
-
-/** 天井チャンネル判定 */
-const CEILING_CHANNELS: ReadonlySet<SpeakerChannel> = new Set([
-  'LTF',
-  'RTF',
-  'LTM',
-  'RTM',
-  'LTR',
-  'RTR',
-]);
+import type { TheaterSpeaker } from '../../types';
+import {
+  getSpeakerKind,
+  getSpeakerSize,
+  isSpeakerVisible,
+} from '../../utils/speakerKinds';
 
 export interface SpeakerMeshesProps {
   /** スピーカーデータ一覧 */
@@ -39,10 +32,14 @@ export const SpeakerMeshes = memo<SpeakerMeshesProps>(function SpeakerMeshes({
   return (
     <group>
       {speakers.map((speaker) => {
-        const isCeiling = CEILING_CHANNELS.has(speaker.channel);
-        const rotation: [number, number, number] = isCeiling
-          ? [Math.PI, 0, 0]
-          : [0, 0, 0];
+        const kind = getSpeakerKind(speaker.channel);
+        // スクリーンch（L/C/R/LFE）は幕裏想定で描画しない（幕手前への露出を解消）
+        if (!isSpeakerVisible(kind)) return null;
+
+        const size = getSpeakerSize(kind);
+        // 天井は下向き、壁掛け（サラウンド）は水平向き
+        const rotation: [number, number, number] =
+          kind === 'ceiling' ? [Math.PI, 0, 0] : [0, 0, 0];
 
         return (
           <mesh
@@ -56,13 +53,7 @@ export const SpeakerMeshes = memo<SpeakerMeshesProps>(function SpeakerMeshes({
             castShadow
           >
             <roundedBoxGeometry
-              args={[
-                SPEAKER_SIZE.width,
-                SPEAKER_SIZE.height,
-                SPEAKER_SIZE.depth,
-                4,
-                0.03,
-              ]}
+              args={[size.width, size.height, size.depth, 4, 0.03]}
             />
             <meshLambertMaterial color='#2a2a3a' />
             <Edges color='#0a0a14' lineWidth={1.2} />

@@ -27,6 +27,69 @@ export function calcOverviewZoom(
   return Math.min(OVERVIEW_MAX_ZOOM, OVERVIEW_ZOOM_CONSTANT / fitSize);
 }
 
+/** 段差LEDの1セグメント（縦通路で区切られた1つの座席ブロックに対応）。中心xと幅。 */
+export interface SeatXSegment {
+  /** ブロック中心のx座標 */
+  center: number;
+  /** ブロックの幅（端席の外側への張り出しを含む） */
+  width: number;
+}
+
+/**
+ * 座席のx座標群から、縦通路で分割された座席ブロックのxセグメントを算出する。
+ *
+ * 段差LEDを「全幅1本」ではなく座席ブロック単位で分割配置するために使う（座席を貫通する
+ * 光線や通路の暗部まで伸びる帯を防ぐ）。隣接するユニークx間隔の最小を「通常の座席間隔」と
+ * みなし、これを aisleGapRatio 倍を超える間隔を縦通路とみなしてブロックを分割する
+ * （行の横通路判定と同じデータ駆動の考え方）。各ブロックは端席の外側へ seatHalf だけ
+ * 張り出し、座席下を自然に照らす。
+ *
+ * @param xValues 座席のx座標（重複可・順不同）
+ * @param seatHalf 端席の外側への張り出し（座席半幅の目安, m）
+ * @param aisleGapRatio 通常間隔の何倍を超えたら縦通路とみなすか
+ * @returns 各座席ブロックの {center, width}。座席が空なら []
+ */
+export function computeSeatXSegments(
+  xValues: number[],
+  seatHalf = 0.3,
+  aisleGapRatio = 1.5,
+): SeatXSegment[] {
+  const xs = Array.from(new Set(xValues)).sort((a, b) => a - b);
+  if (xs.length === 0) return [];
+  if (xs.length === 1) {
+    return [{ center: xs[0], width: seatHalf * 2 }];
+  }
+
+  // 通常の座席間隔（最小の正の間隔）を基準にする
+  let normalGap = Infinity;
+  for (let i = 1; i < xs.length; i++) {
+    const g = xs[i] - xs[i - 1];
+    if (g > 0.01 && g < normalGap) normalGap = g;
+  }
+  if (!Number.isFinite(normalGap)) normalGap = 0;
+
+  const segments: SeatXSegment[] = [];
+  let blockStart = xs[0];
+  let blockEnd = xs[0];
+  const pushBlock = () => {
+    segments.push({
+      center: (blockStart + blockEnd) / 2,
+      width: blockEnd - blockStart + seatHalf * 2,
+    });
+  };
+  for (let i = 1; i < xs.length; i++) {
+    const g = xs[i] - xs[i - 1];
+    if (normalGap > 0 && g > normalGap * aisleGapRatio) {
+      // 縦通路 → ここまでを1ブロックとして確定し、新ブロックを開始
+      pushBlock();
+      blockStart = xs[i];
+    }
+    blockEnd = xs[i];
+  }
+  pushBlock();
+  return segments;
+}
+
 /**
  * 各列の実Z(rowZs)・実Y(rowYs)から、指定Zにおける傾斜床の高さを線形補間する。
  *

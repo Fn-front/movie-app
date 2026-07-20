@@ -5,6 +5,7 @@
 import {
   OVERVIEW_MAX_ZOOM,
   calcOverviewZoom,
+  computeSeatXSegments,
   interpolateFloorHeight,
 } from './theaterGeometry';
 
@@ -69,5 +70,59 @@ describe('interpolateFloorHeight', () => {
     const mid = interpolateFloorHeight(-2.5, rowZs, rowYs);
     expect(mid).toBeGreaterThan(0.5);
     expect(mid).toBeLessThan(2);
+  });
+});
+
+describe('computeSeatXSegments', () => {
+  it('縦通路が無ければ1ブロックにまとまる（端席の外側へ張り出す）', () => {
+    // 等間隔4席 -1,0,1,2 → 1ブロック。幅 = (2 - -1) + 0.3*2 = 3.6、中心 0.5
+    const segs = computeSeatXSegments([-1, 0, 1, 2]);
+    expect(segs).toHaveLength(1);
+    expect(segs[0].center).toBeCloseTo(0.5);
+    expect(segs[0].width).toBeCloseTo(3.6);
+  });
+
+  it('通常間隔を大きく超えるギャップ（縦通路）でブロックが分割される', () => {
+    // 間隔1の座席群を、中央の幅3のギャップで2ブロックに分割
+    // 左: -3,-2,-1 / 右: 2,3,4
+    const segs = computeSeatXSegments([-3, -2, -1, 2, 3, 4]);
+    expect(segs).toHaveLength(2);
+    expect(segs[0].center).toBeCloseTo(-2); // (-3 + -1)/2
+    expect(segs[0].width).toBeCloseTo(2 + 0.6); // (-1 - -3) + 0.6
+    expect(segs[1].center).toBeCloseTo(3); // (2 + 4)/2
+    expect(segs[1].width).toBeCloseTo(2 + 0.6);
+  });
+
+  it('縦通路2本で3ブロックに分割される', () => {
+    // -4,-3 | (通路) | 0,1 | (通路) | 4,5
+    const segs = computeSeatXSegments([-4, -3, 0, 1, 4, 5]);
+    expect(segs).toHaveLength(3);
+    expect(segs.map((s) => s.center)).toEqual([-3.5, 0.5, 4.5]);
+  });
+
+  it('重複xは1つに畳まれ、順不同でも正しく分割される', () => {
+    const segs = computeSeatXSegments([1, -1, 0, 1, -1, 5, 6]);
+    // ユニーク昇順: -1,0,1,5,6 → 通常間隔1、5でギャップ4(=通路) → 2ブロック
+    expect(segs).toHaveLength(2);
+    expect(segs[0].center).toBeCloseTo(0); // (-1 + 1)/2
+    expect(segs[1].center).toBeCloseTo(5.5); // (5 + 6)/2
+  });
+
+  it('席が1つなら中心その席・幅は張り出し分のみ', () => {
+    const segs = computeSeatXSegments([2]);
+    expect(segs).toEqual([{ center: 2, width: 0.6 }]);
+  });
+
+  it('空配列では空セグメント', () => {
+    expect(computeSeatXSegments([])).toEqual([]);
+  });
+
+  it('張り出し・通路閾値はパラメータで調整できる', () => {
+    // aisleGapRatio を上げると同じ間隔でも通路とみなされずまとまる
+    const merged = computeSeatXSegments([0, 1, 3, 4], 0.3, 3);
+    expect(merged).toHaveLength(1);
+    // 既定閾値(1.5)ではギャップ2 > 1*1.5 で分割される
+    const split = computeSeatXSegments([0, 1, 3, 4]);
+    expect(split).toHaveLength(2);
   });
 });

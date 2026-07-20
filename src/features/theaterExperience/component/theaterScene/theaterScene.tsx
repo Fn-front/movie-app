@@ -30,6 +30,7 @@ import {
   calcOverviewZoom,
   interpolateFloorHeight,
 } from '../../utils/theaterGeometry';
+import type { SeatXSegment } from '../../utils/theaterGeometry';
 
 export interface TheaterSceneProps {
   /** 劇場の幅 (m) */
@@ -52,8 +53,8 @@ export interface TheaterSceneProps {
   rowZs: number[];
   /** 各列のY位置（前列から後列の順） — 段差LED配置用 */
   rowYs: number[];
-  /** 座席エリア全体の横幅 — 段差LEDの横長サイズ */
-  seatAreaWidth: number;
+  /** 座席ブロックのxセグメント（縦通路で分割） — 段差LEDをブロック単位に分割配置する */
+  seatSegments: SeatXSegment[];
   /** 子要素（座席、スクリーン、ヒートマップ等） */
   children: React.ReactNode;
 }
@@ -333,14 +334,18 @@ const ExitSigns = memo<{
 ExitSigns.displayName = 'ExitSigns';
 
 /**
- * 段差LED（各列の前方リスト部分に細い光帯）
+ * 段差LED（各列の段鼻に細い光帯）
  * スタジアム傾斜の段差を明示し、安全性と雰囲気を両立。
+ *
+ * 座席ブロック（縦通路で分割）ごとに分割配置し、全幅1本の光線が座席を貫通して
+ * 通路の暗部まで伸びるのを防ぐ。輝度は toneMapped を有効化して周囲に馴染ませる
+ * （旧実装の toneMapped=false による全開発光を廃止）。
  */
 const StepLEDs = memo<{
   rowZs: number[];
   rowYs: number[];
-  seatWidth: number;
-}>(function StepLEDs({ rowZs, rowYs, seatWidth }) {
+  seatSegments: SeatXSegment[];
+}>(function StepLEDs({ rowZs, rowYs, seatSegments }) {
   // 通常の列間隔（最小の正の間隔）を基準に、これを大きく超えるペア（横通路）は
   // 段差ではないためLEDを描かない（通路中央に宙浮きのLEDが出るのを防ぐ）
   const normalGap = useMemo(() => {
@@ -358,16 +363,16 @@ const StepLEDs = memo<{
         if (i === 0) return null; // A列は段差なし
         const gap = Math.abs((rowZs[i - 1] ?? z) - z);
         if (gap > normalGap * 1.5) return null; // 横通路（段差でない）はスキップ
-        // 各列の前方端に細い光帯を配置（段の中央高さ・中央Z）
+        // 段の中央高さ・中央Zに、各座席ブロックの幅で光帯を配置
         const prevY = rowYs[i - 1] ?? 0;
         const ledY = (rowYs[i] + prevY) / 2;
         const ledZ = (z + (rowZs[i - 1] ?? z)) / 2;
-        return (
-          <mesh key={z} position={[0, ledY, ledZ]}>
-            <boxGeometry args={[seatWidth, 0.04, 0.04]} />
-            <meshBasicMaterial color={COLOR_STEP_LED} toneMapped={false} />
+        return seatSegments.map((seg) => (
+          <mesh key={`${z}:${seg.center}`} position={[seg.center, ledY, ledZ]}>
+            <boxGeometry args={[seg.width, 0.04, 0.04]} />
+            <meshBasicMaterial color={COLOR_STEP_LED} />
           </mesh>
-        );
+        ));
       })}
     </group>
   );
@@ -551,7 +556,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   seatAreaMaxY,
   rowZs,
   rowYs,
-  seatAreaWidth,
+  seatSegments,
   children,
 }) {
   const halfWidth = roomWidth / 2;
@@ -669,8 +674,8 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         seatAreaMaxY={seatAreaMaxY}
       />
 
-      {/* 段差LED（各列の段差を明示する細い光帯） */}
-      <StepLEDs rowZs={rowZs} rowYs={rowYs} seatWidth={seatAreaWidth} />
+      {/* 段差LED（各列の段鼻を座席ブロック単位で明示する細い光帯） */}
+      <StepLEDs rowZs={rowZs} rowYs={rowYs} seatSegments={seatSegments} />
 
       {children}
     </>

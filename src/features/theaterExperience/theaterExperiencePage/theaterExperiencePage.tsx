@@ -10,6 +10,7 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { THEATER_MESSAGES } from '@/constants';
 
 import type { FrequencyBand, TheaterSeat } from '../types';
+import { computeSeatXSegments } from '../utils/theaterGeometry';
 import { useTheater } from '../hooks/useTheater';
 import { useTheaters } from '../hooks/useTheaters';
 import { useTheaterSelection } from '../hooks/useTheaterSelection';
@@ -91,7 +92,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
           maxY: 0,
           rowZs: [] as number[],
           rowYs: [] as number[],
-          width: 0,
+          seatSegments: [] as ReturnType<typeof computeSeatXSegments>,
         };
       }
       const zValues = seats.map((s) => Number(s.position_z));
@@ -120,7 +121,8 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
         maxY: Math.max(...yValues),
         rowZs,
         rowYs,
-        width: Math.max(...xValues) - Math.min(...xValues) + 0.6,
+        // 段差LEDを座席ブロック単位に分割配置するためのxセグメント（縦通路で分割）
+        seatSegments: computeSeatXSegments(xValues),
       };
     }, [seats]);
 
@@ -302,7 +304,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   seatAreaMaxY={seatAreaBounds.maxY}
                   rowZs={seatAreaBounds.rowZs}
                   rowYs={seatAreaBounds.rowYs}
-                  seatAreaWidth={seatAreaBounds.width}
+                  seatSegments={seatAreaBounds.seatSegments}
                 >
                   <SeatMeshes
                     seats={seats}

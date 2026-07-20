@@ -2,7 +2,7 @@
  * TheaterExperiencePage コンポーネント テスト
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // matchMedia モック（jsdom未実装）
@@ -131,6 +131,8 @@ import { useTheaters } from '../hooks/useTheaters';
 import { useTheaterSelection } from '../hooks/useTheaterSelection';
 import { useWebGL2Support } from '../hooks/useWebGL2Support';
 import { useSeatSelection } from '../hooks/useSeatSelection';
+import { SeatMeshes } from '../component/seatMeshes/seatMeshes';
+import { SeatA11yList } from '../component/seatA11yList/seatA11yList';
 
 import { TheaterExperiencePage } from './theaterExperiencePage';
 
@@ -138,6 +140,11 @@ const mockUseTheater = useTheater as jest.Mock;
 const mockUseTheaters = useTheaters as jest.Mock;
 const mockUseTheaterSelection = useTheaterSelection as jest.Mock;
 const mockUseWebGL2Support = useWebGL2Support as jest.Mock;
+const mockSeatMeshes = SeatMeshes as unknown as jest.Mock;
+const mockSeatA11yList = SeatA11yList as unknown as jest.Mock;
+
+/** モック子コンポーネントに最後に渡された props を取得する */
+const lastProps = (m: jest.Mock) => m.mock.calls[m.mock.calls.length - 1][0];
 const mockUseSeatSelection = useSeatSelection as jest.Mock;
 
 const mockTheaterDetail = {
@@ -379,6 +386,49 @@ describe('TheaterExperiencePage', () => {
 
       expect(selectTheater).toHaveBeenCalledWith('imax-gt');
       expect(clearSelection).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('座席の相互ハイライト（ホバー/フォーカス連動）', () => {
+    it('初期は強調なしで、3D/2D 双方に highlightedSeatId=null が渡る', () => {
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      expect(lastProps(mockSeatMeshes).highlightedSeatId).toBeNull();
+      expect(lastProps(mockSeatA11yList).highlightedSeatId).toBeNull();
+    });
+
+    it('ホバーはフォーカスより優先され、ホバー解除でフォーカス席に戻る（片方の解除で消えない）', () => {
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      // キーボードフォーカス（2Dリスト）→ 3D/2D が focus 席で強調
+      act(() => lastProps(mockSeatA11yList).onFocusSeat('focus-seat'));
+      expect(lastProps(mockSeatMeshes).highlightedSeatId).toBe('focus-seat');
+      expect(lastProps(mockSeatA11yList).highlightedSeatId).toBe('focus-seat');
+
+      // 3Dホバー（別席）→ ホバーが優先される
+      act(() => lastProps(mockSeatMeshes).onHoverSeat('hover-seat'));
+      expect(lastProps(mockSeatMeshes).highlightedSeatId).toBe('hover-seat');
+      expect(lastProps(mockSeatA11yList).highlightedSeatId).toBe('hover-seat');
+
+      // ホバー解除 → フォーカス席へ戻る（null にはならない＝チャネル分離）
+      act(() => lastProps(mockSeatMeshes).onHoverSeat(null));
+      expect(lastProps(mockSeatMeshes).highlightedSeatId).toBe('focus-seat');
+    });
+
+    it('劇場を切り替えると強調（ホバー/フォーカス）がリセットされる', () => {
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      act(() => lastProps(mockSeatA11yList).onFocusSeat('focus-seat'));
+      expect(lastProps(mockSeatMeshes).highlightedSeatId).toBe('focus-seat');
+
+      act(() => {
+        fireEvent.change(screen.getByTestId('theater-selector'), {
+          target: { value: 'imax-gt' },
+        });
+      });
+
+      expect(lastProps(mockSeatMeshes).highlightedSeatId).toBeNull();
+      expect(lastProps(mockSeatA11yList).highlightedSeatId).toBeNull();
     });
   });
 

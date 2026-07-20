@@ -61,9 +61,10 @@ describe('SeatA11yList', () => {
     seats: mockSeats,
     theater: mockTheater,
     selectedSeatId: null,
-    hoveredSeatId: null,
+    highlightedSeatId: null,
     onSelectSeat: jest.fn(),
     onHoverSeat: jest.fn(),
+    onFocusSeat: jest.fn(),
   };
 
   beforeEach(() => {
@@ -143,7 +144,7 @@ describe('SeatA11yList', () => {
     expect(ul.style.getPropertyValue('--seat-cols')).toBe('5');
   });
 
-  it('ホバーで onHoverSeat が席IDで呼ばれ、解除で null が渡る（3Dと相互連動）', async () => {
+  it('マウスホバーで onHoverSeat が席IDで呼ばれ、解除で null が渡る（3Dと相互連動）', async () => {
     const user = userEvent.setup();
     const onHoverSeat = jest.fn();
 
@@ -157,28 +158,42 @@ describe('SeatA11yList', () => {
     expect(onHoverSeat).toHaveBeenCalledWith(null);
   });
 
-  it('フォーカスでも onHoverSeat が呼ばれる（キーボード連動）', async () => {
+  it('キーボードフォーカスは onFocusSeat（ホバーとは別チャネル）で連動し、blurで解除される', async () => {
     const user = userEvent.setup();
+    const onFocusSeat = jest.fn();
     const onHoverSeat = jest.fn();
 
-    render(<SeatA11yList {...defaultProps} onHoverSeat={onHoverSeat} />);
+    render(
+      <SeatA11yList
+        {...defaultProps}
+        onFocusSeat={onFocusSeat}
+        onHoverSeat={onHoverSeat}
+      />,
+    );
 
+    // 先頭ボタンへフォーカス → onFocusSeat（onHoverSeatは呼ばれない）
     await user.tab();
     expect(screen.getAllByRole('button')[0]).toHaveFocus();
-    expect(onHoverSeat).toHaveBeenCalledWith('seat-a1');
+    expect(onFocusSeat).toHaveBeenCalledWith('seat-a1');
+    expect(onHoverSeat).not.toHaveBeenCalled();
+
+    // 次ボタンへフォーカス移動 → 前ボタンの blur で null、新ボタンで席ID
+    await user.tab();
+    expect(onFocusSeat).toHaveBeenCalledWith(null);
+    expect(onFocusSeat).toHaveBeenLastCalledWith('seat-a2');
   });
 
-  it('hoveredSeatId が指す席に強調クラスが付く', () => {
-    render(<SeatA11yList {...defaultProps} hoveredSeatId='seat-a2' />);
+  it('highlightedSeatId が指す席に強調クラスが付く', () => {
+    render(<SeatA11yList {...defaultProps} highlightedSeatId='seat-a2' />);
 
     const buttons = screen.getAllByRole('button');
-    // A列2番がホバー強調される
+    // A列2番が強調される
     expect(buttons[1]).toHaveClass(
-      styles.c_seat_a11y_list__seat_button__hovered,
+      styles.c_seat_a11y_list__seat_button__highlighted,
     );
     // その他は強調されない
     expect(buttons[0]).not.toHaveClass(
-      styles.c_seat_a11y_list__seat_button__hovered,
+      styles.c_seat_a11y_list__seat_button__highlighted,
     );
   });
 

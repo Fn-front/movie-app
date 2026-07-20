@@ -21,12 +21,14 @@ export interface SeatA11yListProps {
   theater: Theater;
   /** 選択中の座席ID */
   selectedSeatId: string | null;
-  /** ホバー中の座席ID（俯瞰3Dと相互ハイライト） */
-  hoveredSeatId: string | null;
+  /** 強調表示する座席ID（ポインタホバー or キーボードフォーカス由来。俯瞰3Dと相互ハイライト） */
+  highlightedSeatId: string | null;
   /** 座席選択コールバック */
   onSelectSeat: (seat: TheaterSeat) => void;
-  /** 座席ホバー変化コールバック（null=ホバー解除） */
+  /** ポインタホバー変化コールバック（null=ホバー解除） */
   onHoverSeat: (seatId: string | null) => void;
+  /** キーボードフォーカス変化コールバック（null=フォーカス解除） */
+  onFocusSeat: (seatId: string | null) => void;
   /** 追加クラス名 */
   className?: string;
 }
@@ -62,23 +64,27 @@ interface SeatButtonProps {
   seat: TheaterSeat;
   metrics: FieldOfViewMetrics | null;
   isSelected: boolean;
-  isHovered: boolean;
+  isHighlighted: boolean;
   onSelectSeat: (seat: TheaterSeat) => void;
   onHoverSeat: (seatId: string | null) => void;
+  onFocusSeat: (seatId: string | null) => void;
 }
 
 /**
  * 座席ボタン1つ。イベントハンドラーを座席単位で useCallback 安定化するため、
  * リスト map からコンポーネントとして切り出している。
- * マウスホバーに加えキーボードフォーカスでも onHoverSeat を発火し、俯瞰3Dと連動する。
+ * ポインタ(onMouseEnter/Leave)とキーボードフォーカス(onFocus/Blur)を別チャネルで通知し、
+ * ページ側で `hovered ?? focused` に統合して俯瞰3Dと相互連動させる。両者を単一状態に
+ * まとめると、片方の解除（例: 別席へのマウス移動）がフォーカス中の強調を消してしまう。
  */
 const SeatButton = memo<SeatButtonProps>(function SeatButton({
   seat,
   metrics,
   isSelected,
-  isHovered,
+  isHighlighted,
   onSelectSeat,
   onHoverSeat,
+  onFocusSeat,
 }) {
   const label = formatSeatLabel(seat, metrics);
 
@@ -86,11 +92,19 @@ const SeatButton = memo<SeatButtonProps>(function SeatButton({
     () => onSelectSeat(seat),
     [onSelectSeat, seat],
   );
-  const handleHover = useCallback(
+  const handlePointerEnter = useCallback(
     () => onHoverSeat(seat.id),
     [onHoverSeat, seat.id],
   );
-  const handleUnhover = useCallback(() => onHoverSeat(null), [onHoverSeat]);
+  const handlePointerLeave = useCallback(
+    () => onHoverSeat(null),
+    [onHoverSeat],
+  );
+  const handleFocus = useCallback(
+    () => onFocusSeat(seat.id),
+    [onFocusSeat, seat.id],
+  );
+  const handleBlur = useCallback(() => onFocusSeat(null), [onFocusSeat]);
 
   return (
     <li style={{ gridColumn: seat.seat_number }}>
@@ -100,17 +114,17 @@ const SeatButton = memo<SeatButtonProps>(function SeatButton({
           styles.c_seat_a11y_list__seat_button,
           seat.seat_type === 'wheelchair' &&
             styles.c_seat_a11y_list__seat_button__wheelchair,
-          isHovered && styles.c_seat_a11y_list__seat_button__hovered,
+          isHighlighted && styles.c_seat_a11y_list__seat_button__highlighted,
           isSelected && styles.c_seat_a11y_list__seat_button__selected,
         )}
         aria-pressed={isSelected}
         aria-label={label}
         title={label}
         onClick={handleClick}
-        onMouseEnter={handleHover}
-        onMouseLeave={handleUnhover}
-        onFocus={handleHover}
-        onBlur={handleUnhover}
+        onMouseEnter={handlePointerEnter}
+        onMouseLeave={handlePointerLeave}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
       >
         {seat.seat_number}
         {seat.seat_type === 'wheelchair' && (
@@ -131,9 +145,10 @@ export const SeatA11yList = memo<SeatA11yListProps>(function SeatA11yList({
   seats,
   theater,
   selectedSeatId,
-  hoveredSeatId,
+  highlightedSeatId,
   onSelectSeat,
   onHoverSeat,
+  onFocusSeat,
   className,
 }) {
   const rowGroups = useMemo(() => groupByRow(seats), [seats]);
@@ -197,9 +212,10 @@ export const SeatA11yList = memo<SeatA11yListProps>(function SeatA11yList({
                 seat={seat}
                 metrics={metricsMap.get(seat.id) ?? null}
                 isSelected={seat.id === selectedSeatId}
-                isHovered={seat.id === hoveredSeatId}
+                isHighlighted={seat.id === highlightedSeatId}
                 onSelectSeat={onSelectSeat}
                 onHoverSeat={onHoverSeat}
+                onFocusSeat={onFocusSeat}
               />
             ))}
           </ul>

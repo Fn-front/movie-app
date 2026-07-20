@@ -46,8 +46,12 @@ const COLOR_SEAT = new Color('#bf4040');
 const COLOR_SELECTED = new Color('#ffaa00');
 /** 車椅子席カラー（他席と区別できる青系） */
 const COLOR_WHEELCHAIR = new Color('#3b82f6');
-/** ホバー強調枠の色（design-system の --warning-main と一致させ、2Dリング色と揃える） */
-const HOVER_FRAME_COLOR = '#f59e0b';
+/**
+ * ホバー強調枠の色（design-system の --warning-dark と一致させ、2Dリング色と揃える）。
+ * 明色背景の2Dリングが WCAG 1.4.11(非テキスト3:1) を満たすよう、--warning-main(#f59e0b,
+ * 2.06:1) ではなく --warning-dark(#d97706, 3.05:1) を採用し、3D枠も同色に統一する。
+ */
+const HOVER_FRAME_COLOR = '#d97706';
 
 /** 座席の色種別キー（純粋・テスト用にexport） */
 export type SeatColorKey = 'selected' | 'wheelchair' | 'seat';
@@ -76,13 +80,43 @@ function getSeatColor(seat: TheaterSeat, selectedSeatId: string | null): Color {
   return SEAT_COLOR_BY_KEY[getSeatColorKey(seat, selectedSeatId)];
 }
 
+/**
+ * ポインタが座席インスタンスに乗ったとき「ホバーとして通知すべき座席ID」を返す。
+ * 一人称時（selectedSeatId あり）は俯瞰専用のホバー演出を出さないため null を返し、
+ * 2Dリストへのホバー漏れ（意図しないリング点灯）とカーソル変化を防ぐ。
+ * R3F描画に依存しない純粋関数としてテスト可能にする。
+ */
+export function resolveHoverEmitId(
+  seats: TheaterSeat[],
+  instanceId: number | undefined,
+  selectedSeatId: string | null,
+): string | null {
+  if (selectedSeatId !== null) return null;
+  if (instanceId === undefined) return null;
+  return seats[instanceId]?.id ?? null;
+}
+
+/**
+ * ホバー強調枠＋番号ラベルを描く座席を返す。俯瞰時（selectedSeatId===null）のみ有効で、
+ * 一人称では視界を妨げないため常に null。R3F描画に依存しない純粋関数。
+ */
+export function getHoverHighlightSeat(
+  seats: TheaterSeat[],
+  highlightedSeatId: string | null,
+  selectedSeatId: string | null,
+): TheaterSeat | null {
+  if (selectedSeatId !== null) return null;
+  if (!highlightedSeatId) return null;
+  return seats.find((s) => s.id === highlightedSeatId) ?? null;
+}
+
 export interface SeatMeshesProps {
   /** 座席データ一覧 */
   seats: TheaterSeat[];
   /** 選択中の座席ID */
   selectedSeatId: string | null;
-  /** ホバー中の座席ID（2Dリストと相互ハイライト） */
-  hoveredSeatId: string | null;
+  /** 強調表示する座席ID（ポインタホバー or キーボードフォーカス由来。2Dリストと相互連動） */
+  highlightedSeatId: string | null;
   /** 座席クリック時コールバック */
   onSeatClick: (seat: TheaterSeat) => void;
   /** 座席ホバー変化コールバック（null=ホバー解除） */
@@ -253,7 +287,7 @@ HoverHighlight.displayName = 'HoverHighlight';
 export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
   seats,
   selectedSeatId,
-  hoveredSeatId,
+  highlightedSeatId,
   onSeatClick,
   onHoverSeat,
 }) {
@@ -278,13 +312,16 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
 
   const handlePointerOver = useCallback(
     (event: { instanceId?: number }) => {
-      if (event.instanceId === undefined) return;
-      const seat = seats[event.instanceId];
-      if (!seat) return;
+      const seatId = resolveHoverEmitId(
+        seats,
+        event.instanceId,
+        selectedSeatId,
+      );
+      if (!seatId) return;
       document.body.style.cursor = 'pointer';
-      onHoverSeat(seat.id);
+      onHoverSeat(seatId);
     },
-    [seats, onHoverSeat],
+    [seats, onHoverSeat, selectedSeatId],
   );
 
   const handlePointerOut = useCallback(() => {
@@ -307,11 +344,8 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
   // ホバー中の席（俯瞰時のみ枠＋番号ラベルを表示）。
   // 一人称時（selectedSeatId あり）は視界を妨げないため表示しない。
   const hoveredSeat = useMemo(
-    () =>
-      selectedSeatId
-        ? null
-        : (seats.find((s) => s.id === hoveredSeatId) ?? null),
-    [seats, hoveredSeatId, selectedSeatId],
+    () => getHoverHighlightSeat(seats, highlightedSeatId, selectedSeatId),
+    [seats, highlightedSeatId, selectedSeatId],
   );
 
   return (

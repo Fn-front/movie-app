@@ -44,7 +44,22 @@ jest.mock('@react-three/drei', () => {
 
 import type { TheaterSeat } from '../../types';
 
-import { SeatMeshes, getSeatColorKey } from './seatMeshes';
+import {
+  SeatMeshes,
+  getSeatColorKey,
+  resolveHoverEmitId,
+  getHoverHighlightSeat,
+} from './seatMeshes';
+
+const seatAt = (id: string): TheaterSeat => ({
+  id,
+  row_label: 'A',
+  seat_number: 1,
+  position_x: 0,
+  position_y: 0,
+  position_z: 0,
+  seat_type: 'standard',
+});
 
 describe('SeatMeshes', () => {
   it('エクスポートが正しく定義されている', () => {
@@ -53,25 +68,49 @@ describe('SeatMeshes', () => {
   });
 
   it('propsの型が正しい', () => {
-    const mockSeat: TheaterSeat = {
-      id: 'seat-1',
-      row_label: 'A',
-      seat_number: 1,
-      position_x: 0,
-      position_y: 0,
-      position_z: 0,
-      seat_type: 'standard',
-    };
-
     const props = {
-      seats: [mockSeat],
+      seats: [seatAt('seat-1')],
       selectedSeatId: null,
-      hoveredSeatId: null,
+      highlightedSeatId: null,
       onSeatClick: jest.fn(),
       onHoverSeat: jest.fn(),
     };
 
     expect(props.seats).toHaveLength(1);
+  });
+});
+
+describe('resolveHoverEmitId', () => {
+  const seats = [seatAt('s0'), seatAt('s1'), seatAt('s2')];
+
+  it('俯瞰時はインスタンスに対応する座席IDを返す', () => {
+    expect(resolveHoverEmitId(seats, 1, null)).toBe('s1');
+  });
+
+  it('一人称時（selectedSeatId あり）は null を返しホバー漏れを防ぐ', () => {
+    expect(resolveHoverEmitId(seats, 1, 's0')).toBeNull();
+  });
+
+  it('instanceId 未定義や範囲外は null', () => {
+    expect(resolveHoverEmitId(seats, undefined, null)).toBeNull();
+    expect(resolveHoverEmitId(seats, 99, null)).toBeNull();
+  });
+});
+
+describe('getHoverHighlightSeat', () => {
+  const seats = [seatAt('s0'), seatAt('s1')];
+
+  it('俯瞰時は強調IDに一致する座席を返す', () => {
+    expect(getHoverHighlightSeat(seats, 's1', null)?.id).toBe('s1');
+  });
+
+  it('一人称時は常に null（枠/ラベルを出さない）', () => {
+    expect(getHoverHighlightSeat(seats, 's1', 's0')).toBeNull();
+  });
+
+  it('強調IDが null / 未一致なら null', () => {
+    expect(getHoverHighlightSeat(seats, null, null)).toBeNull();
+    expect(getHoverHighlightSeat(seats, 'nope', null)).toBeNull();
   });
 });
 

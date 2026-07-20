@@ -6,6 +6,22 @@
 export const OVERVIEW_MAX_ZOOM = 28;
 /** 俯瞰ズーム定数（= 上限28 × 基準fitSize≈25）。部屋が大きいほどズームアウトする */
 export const OVERVIEW_ZOOM_CONSTANT = 700;
+/** 俯瞰カメラの引き距離係数（部屋の最大辺に対する倍率。等角3方向とも同値） */
+export const OVERVIEW_CAMERA_DISTANCE_FACTOR = 1.2;
+
+/**
+ * 等角俯瞰カメラの設置位置を算出する（3軸とも同じ引き距離のアイソメトリック視点）。
+ * 一人称遷移のフライスルー開始点（俯瞰視点）と、俯瞰カメラリグの設置位置で
+ * 同一値を共有するため、単一ソースとして切り出している。
+ */
+export function calcOverviewCameraPosition(
+  roomWidth: number,
+  roomDepth: number,
+): [number, number, number] {
+  const distance =
+    Math.max(roomWidth, roomDepth) * OVERVIEW_CAMERA_DISTANCE_FACTOR;
+  return [distance, distance, distance];
+}
 
 /**
  * 部屋サイズに応じた等角俯瞰カメラのズームを算出する。

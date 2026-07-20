@@ -4,7 +4,9 @@
 
 import {
   OVERVIEW_MAX_ZOOM,
+  OVERVIEW_CAMERA_DISTANCE_FACTOR,
   calcOverviewZoom,
+  calcOverviewCameraPosition,
   computeSeatXSegments,
   interpolateFloorHeight,
 } from './theaterGeometry';
@@ -35,6 +37,28 @@ describe('calcOverviewZoom', () => {
 
   it('不正な寸法(0以下)でも上限を返す', () => {
     expect(calcOverviewZoom(0, 0, 0)).toBe(OVERVIEW_MAX_ZOOM);
+  });
+});
+
+describe('calcOverviewCameraPosition', () => {
+  it('最大辺×係数を3軸とも同値に設定する（等角視点）', () => {
+    // standard: max(14.5,21)=21 → 21×1.2=25.2
+    const [x, y, z] = calcOverviewCameraPosition(14.5, 21);
+    expect(x).toBeCloseTo(21 * OVERVIEW_CAMERA_DISTANCE_FACTOR, 6);
+    expect(x).toBe(y);
+    expect(y).toBe(z);
+  });
+
+  it('幅と奥行のうち大きい方で律速する', () => {
+    // 幅の方が大きいケース
+    const [x] = calcOverviewCameraPosition(30, 10);
+    expect(x).toBeCloseTo(30 * OVERVIEW_CAMERA_DISTANCE_FACTOR, 6);
+  });
+
+  it('大型ルーム(IMAX)ほど引き距離が大きい', () => {
+    const std = calcOverviewCameraPosition(14.5, 21)[0];
+    const imax = calcOverviewCameraPosition(29, 26)[0];
+    expect(imax).toBeGreaterThan(std);
   });
 });
 

@@ -12,7 +12,7 @@ import {
   PerspectiveCamera,
   Edges,
 } from '@react-three/drei';
-import { useThree } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber';
 import {
   PlaneGeometry,
   Vector3,
@@ -23,11 +23,17 @@ import {
 
 import type { TheaterSeat, Theater } from '../../types';
 import {
+  calcDistance3D,
   calcDistanceToScreen,
   calcYawClampedTargetX,
+  calcPitchClampedTargetY,
+  calcFirstPersonFov,
+  easeOutCubic,
+  resolveFlythroughStart,
 } from '../../utils/fieldOfView';
 import {
   calcOverviewZoom,
+  calcOverviewCameraPosition,
   interpolateFloorHeight,
 } from '../../utils/theaterGeometry';
 import type { SeatXSegment } from '../../utils/theaterGeometry';
@@ -56,6 +62,8 @@ export interface TheaterSceneProps {
   rowYs: number[];
   /** 座席ブロックのxセグメント（縦通路で分割） — 段差LEDをブロック単位に分割配置する */
   seatSegments: SeatXSegment[];
+  /** prefers-reduced-motion 有効時は true（俯瞰→一人称のフライスルーを即時カットにする） */
+  reducedMotion?: boolean;
   /** 子要素（座席、スクリーン、ヒートマップ等） */
   children: React.ReactNode;
 }
@@ -394,6 +402,27 @@ const YAW_DEADZONE_DEG = 15;
 const YAW_DEADZONE_RAD = (YAW_DEADZONE_DEG * Math.PI) / 180;
 
 /**
+ * 一人称視点の見上げ角の上限（度）。スクリーン中心が高い位置（IMAX等）でも、
+ * 首を反らし過ぎない自然なリクライン姿勢の上限。超過分はスクリーンが視野の上方に寄る
+ * （高い大画面を「見上げている」実態がそのまま表現される）。
+ */
+const MAX_PITCH_DEG = 22;
+const MAX_PITCH_RAD = (MAX_PITCH_DEG * Math.PI) / 180;
+
+/**
+ * 首を上げ始めない不感帯（度）。スクリーン中心の仰角がこの角度以内なら首を上げず、
+ * 眼の高さの真正面を向く（僅かな高低差は目・周辺視で捉える）。
+ */
+const PITCH_DEADZONE_DEG = 6;
+const PITCH_DEADZONE_RAD = (PITCH_DEADZONE_DEG * Math.PI) / 180;
+
+/**
+ * 俯瞰→一人称のフライスルー時間（秒）。空間の対応付けを助ける短い移動。
+ * prefers-reduced-motion 有効時は 0 として即時カットにする（WCAG 2.3.3 配慮）。
+ */
+const FLYTHROUGH_DURATION_S = 0.55;
+
+/**
  * 等角投影カメラ + lookAt 原点向き
  * drei の OrthographicCamera は lookAt プロパティを取らないため
  * ref 経由で手動で向きを設定する
@@ -405,7 +434,11 @@ const IsometricCameraRig = memo<{
 }>(function IsometricCameraRig({ roomWidth, roomDepth, roomHeight }) {
   const cameraRef = useRef<OrthographicCameraType | null>(null);
   const set = useThree((state) => state.set);
-  const camDistance = Math.max(roomWidth, roomDepth) * 1.2;
+  // 設置位置は一人称フライスルーの開始点と共有（単一ソース）
+  const position = useMemo(
+    () => calcOverviewCameraPosition(roomWidth, roomDepth),
+    [roomWidth, roomDepth],
+  );
   // 部屋サイズに応じて等角カメラのズームを調整（大型ルームでも全体が収まる）
   const zoom = calcOverviewZoom(roomWidth, roomDepth, roomHeight);
   const target = useMemo<[number, number, number]>(
@@ -425,7 +458,7 @@ const IsometricCameraRig = memo<{
     <OrthographicCamera
       ref={cameraRef}
       makeDefault
-      position={[camDistance, camDistance, camDistance]}
+      position={position}
       zoom={zoom}
       near={0.1}
       far={200}
@@ -436,21 +469,29 @@ IsometricCameraRig.displayName = 'IsometricCameraRig';
 
 /**
  * 一人称カメラ（選択座席の目線位置）
- * 座席が変わるたびに位置と注視点を更新し、OrbitControlsで自由視点許可
+ * 座席が変わるたびに位置・注視点・FOVを更新し、俯瞰視点から着座点への
+ * 短いフライスルー（reduced-motion時は即時）で空間の対応付けを助ける。
  */
 const FirstPersonCameraRig = memo<{
   selectedSeat: TheaterSeat;
   theater: Theater;
-}>(function FirstPersonCameraRig({ selectedSeat, theater }) {
+  roomWidth: number;
+  roomDepth: number;
+  roomHeight: number;
+  reducedMotion: boolean;
+}>(function FirstPersonCameraRig({
+  selectedSeat,
+  theater,
+  roomWidth,
+  roomDepth,
+  roomHeight,
+  reducedMotion,
+}) {
   const cameraRef = useRef<PerspectiveCameraType | null>(null);
   const set = useThree((state) => state.set);
 
   /**
-   * 注視点: 座席の真正面・水平方向。
-   * 実際の映画館では観客は水平に前を向いて座り、スクリーンは結果として視野の
-   * 上方に現れる。スクリーン中心を直接 lookAt すると首が上下左右に回って
-   * しまうため、顔は座席のX位置・目の高さで真正面（+Z）を向く。
-   *
+   * カメラ位置: 座席の目線。
    * 左右の見え方について:
    * Three.js は +Z方向を向くカメラで世界の +X 軸を画面左に投影する。本アプリの
    * 座標系は +X = 観客から見て右なので、座席X座標をそのまま使うと端席で左右が
@@ -468,20 +509,17 @@ const FirstPersonCameraRig = memo<{
     ],
     [selectedSeat.position_x, selectedSeat.position_y, selectedSeat.position_z],
   );
+
   /**
    * 注視点の決め方:
    *
    * - X（水平の首振り）: 中央〜中央寄りの席は首を振らず真正面（スクリーン中心が
-   *   不感帯 YAW_DEADZONE_DEG 以内）。それを超えた分だけスクリーン中心方向へ首を
-   *   振り、上限角 MAX_YAW_DEG で頭打ちにする（超過分はスクリーンが視野の端に寄る）。
-   *   旧実装は「座席Xとスクリーン中心Xの中点」(α=0.5)固定で、中央寄りでも首を振り、
-   *   前列端では約36°も振り過剰だった（例: A列端 full 55° → 上限20°で頭打ち）。
-   *
-   * - Y: 眼の高さ＋1.5m。スクリーン中心(y=4.5)を直接 lookAt すると
-   *   前列で33°もの上向きになり「首を反らす」状態になる。実際の映画館では
-   *   椅子のリクライン姿勢で 15-20° 程度の自然な上向きなので、注視点を
-   *   スクリーン下半分の中央付近（眼+1.5m）に置く。
-   *
+   *   不感帯 YAW_DEADZONE_DEG 以内）。超過分だけスクリーン中心方向へ首を振り、
+   *   上限角 MAX_YAW_DEG で頭打ちにする。
+   * - Y（見上げ）: 旧実装の「眼+1.5m」固定をやめ、実際のスクリーン中心Yに追従する
+   *   pitch-clamp に変更。フォーマットでスクリーン中心Yが大きく異なる
+   *   （standard 4.35 / IMAX 10.45 等）ため、固定値では特にIMAX前列で見上げが
+   *   過小表現された。上限角 MAX_PITCH_DEG で頭打ちにする（首を反らし過ぎない）。
    * - Z: スクリーン平面のZに固定。
    */
   const target = useMemo<[number, number, number]>(() => {
@@ -489,8 +527,8 @@ const FirstPersonCameraRig = memo<{
     const screenX = Number(theater.screen_center_x);
     const seatZ = Number(selectedSeat.position_z);
     const screenZ = Number(theater.screen_center_z);
+    const screenCenterY = Number(theater.screen_center_y);
     const eyeY = Number(selectedSeat.position_y) + SEATED_EYE_HEIGHT;
-    // スクリーン中心を向くが、水平首振りは MAX_YAW で頭打ちにする
     const forwardDist = calcDistanceToScreen(seatZ, screenZ);
     const targetX = calcYawClampedTargetX(
       seatX,
@@ -499,9 +537,16 @@ const FirstPersonCameraRig = memo<{
       MAX_YAW_RAD,
       YAW_DEADZONE_RAD,
     );
+    const targetY = calcPitchClampedTargetY(
+      eyeY,
+      screenCenterY,
+      forwardDist,
+      MAX_PITCH_RAD,
+      PITCH_DEADZONE_RAD,
+    );
     return [
       -targetX, // ミラー反転（カメラ位置と同じ補正）
-      eyeY + 1.5,
+      targetY,
       screenZ,
     ];
   }, [
@@ -509,35 +554,121 @@ const FirstPersonCameraRig = memo<{
     selectedSeat.position_y,
     selectedSeat.position_z,
     theater.screen_center_x,
+    theater.screen_center_y,
     theater.screen_center_z,
   ]);
 
+  /**
+   * FOV: スクリーン寸法/フォーマット・席距離に追従して可変（旧実装は 85° 固定）。
+   * 眼→スクリーン中心の視聴距離とスクリーン高から、スクリーンが視野の一定割合を
+   * 占めるFOVを算出し上下限でクランプする。IMAX等の大画面ほど広く、後列ほど狭くなる。
+   */
+  const fov = useMemo(() => {
+    const eye = {
+      x: Number(selectedSeat.position_x),
+      y: Number(selectedSeat.position_y) + SEATED_EYE_HEIGHT,
+      z: Number(selectedSeat.position_z),
+    };
+    const screenCenter = {
+      x: Number(theater.screen_center_x),
+      y: Number(theater.screen_center_y),
+      z: Number(theater.screen_center_z),
+    };
+    const viewingDistance = calcDistance3D(eye, screenCenter);
+    return calcFirstPersonFov(viewingDistance, Number(theater.screen_height));
+  }, [
+    selectedSeat.position_x,
+    selectedSeat.position_y,
+    selectedSeat.position_z,
+    theater.screen_center_x,
+    theater.screen_center_y,
+    theater.screen_center_z,
+    theater.screen_height,
+  ]);
+
+  // フライスルー開始点（俯瞰カメラと同じ設置位置・注視点＝俯瞰の見え方から着座へ繋ぐ）
+  const overviewPos = useMemo(
+    () => calcOverviewCameraPosition(roomWidth, roomDepth),
+    [roomWidth, roomDepth],
+  );
+  const overviewTarget = useMemo<[number, number, number]>(
+    () => [0, roomHeight / 2, 0],
+    [roomHeight],
+  );
+
+  // フライスルーのアニメーション状態（useFrameで進める。R3F描画依存のため単体テスト対象外）
+  const anim = useRef({
+    elapsed: FLYTHROUGH_DURATION_S,
+    from: new Vector3(),
+    fromTarget: new Vector3(),
+    started: false,
+  });
+  // 現在の注視点（座席切替時に「今向いている点」から補間を再開するため保持）
+  const currentTarget = useRef(new Vector3());
+
+  // 座席選択・切替時にフライスルーを（再）開始する。開始点の決定は
+  // resolveFlythroughStart（純ロジック・単体テスト済み）に委譲する。
   useEffect(() => {
-    if (cameraRef.current) {
-      cameraRef.current.position.set(seatPos[0], seatPos[1], seatPos[2]);
-      cameraRef.current.lookAt(new Vector3(target[0], target[1], target[2]));
-      cameraRef.current.updateProjectionMatrix();
-      set({ camera: cameraRef.current });
+    const cam = cameraRef.current;
+    if (!cam) return;
+    cam.fov = fov;
+    cam.updateProjectionMatrix();
+
+    const start = resolveFlythroughStart({
+      started: anim.current.started,
+      reducedMotion,
+      durationS: FLYTHROUGH_DURATION_S,
+      overviewPos,
+      overviewTarget,
+      currentPos: [cam.position.x, cam.position.y, cam.position.z],
+      currentTarget: [
+        currentTarget.current.x,
+        currentTarget.current.y,
+        currentTarget.current.z,
+      ],
+    });
+    anim.current.from.set(start.from[0], start.from[1], start.from[2]);
+    anim.current.fromTarget.set(
+      start.fromTarget[0],
+      start.fromTarget[1],
+      start.fromTarget[2],
+    );
+    anim.current.elapsed = start.elapsed;
+    anim.current.started = true;
+    set({ camera: cam });
+  }, [seatPos, target, fov, overviewPos, overviewTarget, reducedMotion, set]);
+
+  // 毎フレーム、開始点→着座点へ ease-out 補間する（満了後は着座点で静止＝冪等）
+  useFrame((_, delta) => {
+    const cam = cameraRef.current;
+    if (!cam) return;
+    const a = anim.current;
+    if (a.elapsed < FLYTHROUGH_DURATION_S) {
+      a.elapsed = Math.min(a.elapsed + delta, FLYTHROUGH_DURATION_S);
     }
-  }, [seatPos, target, set]);
+    const t = easeOutCubic(a.elapsed / FLYTHROUGH_DURATION_S);
+    cam.position.set(
+      a.from.x + (seatPos[0] - a.from.x) * t,
+      a.from.y + (seatPos[1] - a.from.y) * t,
+      a.from.z + (seatPos[2] - a.from.z) * t,
+    );
+    currentTarget.current.set(
+      a.fromTarget.x + (target[0] - a.fromTarget.x) * t,
+      a.fromTarget.y + (target[1] - a.fromTarget.y) * t,
+      a.fromTarget.z + (target[2] - a.fromTarget.z) * t,
+    );
+    cam.lookAt(currentTarget.current);
+  });
 
   return (
-    <>
-      {/*
-        FOV 85° (垂直): 16:9 で水平 ~116°。人間の視野の周辺認識ぎりぎりの
-        広角でスクリーン+周囲（壁・天井・床）が同時に視野に入る。
-        OrbitControls は使わず、座席ごとにカメラ位置と注視点を固定する。
-        座席を変えるとカメラがその座席の視点に瞬時に切り替わる。
-      */}
-      <PerspectiveCamera
-        ref={cameraRef}
-        makeDefault
-        position={seatPos}
-        fov={85}
-        near={0.05}
-        far={100}
-      />
-    </>
+    <PerspectiveCamera
+      ref={cameraRef}
+      makeDefault
+      position={overviewPos}
+      fov={fov}
+      near={0.05}
+      far={200}
+    />
   );
 });
 FirstPersonCameraRig.displayName = 'FirstPersonCameraRig';
@@ -554,6 +685,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   rowZs,
   rowYs,
   seatSegments,
+  reducedMotion = false,
   children,
 }) {
   const halfWidth = roomWidth / 2;
@@ -568,7 +700,14 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
     <>
       {/* 座席選択時は一人称、未選択時は等角投影 */}
       {selectedSeat ? (
-        <FirstPersonCameraRig selectedSeat={selectedSeat} theater={theater} />
+        <FirstPersonCameraRig
+          selectedSeat={selectedSeat}
+          theater={theater}
+          roomWidth={roomWidth}
+          roomDepth={roomDepth}
+          roomHeight={roomHeight}
+          reducedMotion={reducedMotion}
+        />
       ) : (
         <IsometricCameraRig
           roomWidth={roomWidth}

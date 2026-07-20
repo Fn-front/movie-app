@@ -10,6 +10,10 @@ import {
   calcFieldOfViewMetrics,
   projectScreenQuad,
   calcYawClampedTargetX,
+  calcPitchClampedTargetY,
+  calcFirstPersonFov,
+  easeOutCubic,
+  resolveFlythroughStart,
 } from './fieldOfView';
 
 describe('calcDistance3D', () => {
@@ -263,5 +267,184 @@ describe('calcYawClampedTargetX', () => {
   it('前方距離が0以下ならスクリーン中心を返す（フォールバック）', () => {
     expect(calcYawClampedTargetX(-7.2, 0, 0, MAX_YAW, DEADZONE)).toBe(0);
     expect(calcYawClampedTargetX(-7.2, 0, -3, MAX_YAW, DEADZONE)).toBe(0);
+  });
+});
+
+describe('calcPitchClampedTargetY', () => {
+  const MAX_PITCH = (22 * Math.PI) / 180;
+  const DEADZONE = (6 * Math.PI) / 180;
+  const EYE_Y = 1.5;
+
+  it('スクリーン中心が眼と同高（仰角0）なら首を上げず眼の高さを向く', () => {
+    expect(
+      calcPitchClampedTargetY(EYE_Y, EYE_Y, 5, MAX_PITCH, DEADZONE),
+    ).toBeCloseTo(EYE_Y, 6);
+  });
+
+  it('不感帯内（低い仰角）の高さは首を上げず眼の高さを向く', () => {
+    // 仰角 = atan(0.5/5) ≒ 5.7° < 6°(不感帯) → 首を上げず eyeY
+    expect(
+      calcPitchClampedTargetY(EYE_Y, EYE_Y + 0.5, 5, MAX_PITCH, DEADZONE),
+    ).toBeCloseTo(EYE_Y, 6);
+  });
+
+  it('不感帯を超えた分だけ首を上げる（超過角のみ）', () => {
+    // 中心仰角20°の高さ → 見上げ = 20° - 6°(不感帯) = 14°
+    const screenY = EYE_Y + 5 * Math.tan((20 * Math.PI) / 180);
+    const targetY = calcPitchClampedTargetY(
+      EYE_Y,
+      screenY,
+      5,
+      MAX_PITCH,
+      DEADZONE,
+    );
+    const pitch = Math.atan((targetY - EYE_Y) / 5);
+    expect(pitch).toBeCloseTo((14 * Math.PI) / 180, 6);
+  });
+
+  it('高いスクリーン（IMAX相当）は上限角で頭打ちになる（首を反らし過ぎない）', () => {
+    // 仰角57°相当（IMAX前列: 中心10.45 - 眼~1.2 を距離6で見上げ）→ 22°で頭打ち
+    const screenY = EYE_Y + 6 * Math.tan((57 * Math.PI) / 180);
+    const targetY = calcPitchClampedTargetY(
+      EYE_Y,
+      screenY,
+      6,
+      MAX_PITCH,
+      DEADZONE,
+    );
+    const pitch = Math.atan((targetY - EYE_Y) / 6);
+    expect(pitch).toBeCloseTo(MAX_PITCH, 6);
+  });
+
+  it('スクリーンが眼より低い場合は符号を保って下向きになる', () => {
+    const screenY = EYE_Y - 5 * Math.tan((15 * Math.PI) / 180);
+    const targetY = calcPitchClampedTargetY(
+      EYE_Y,
+      screenY,
+      5,
+      MAX_PITCH,
+      DEADZONE,
+    );
+    expect(targetY).toBeLessThan(EYE_Y);
+  });
+
+  it('前方距離が0以下ならスクリーン中心の高さを返す（フォールバック）', () => {
+    expect(calcPitchClampedTargetY(EYE_Y, 8, 0, MAX_PITCH, DEADZONE)).toBe(8);
+    expect(calcPitchClampedTargetY(EYE_Y, 8, -2, MAX_PITCH, DEADZONE)).toBe(8);
+  });
+});
+
+describe('calcFirstPersonFov', () => {
+  it('FOVは既定の上下限[50,75]°の範囲に収まる', () => {
+    // 近い大画面（IMAX前列相当）: 上限に張り付く
+    expect(calcFirstPersonFov(11, 18.9)).toBe(75);
+    // 遠い小画面（後列相当）: 下限で頭打ち
+    expect(calcFirstPersonFov(18.8, 6.7)).toBe(50);
+  });
+
+  it('同一距離では大画面ほどFOVが広い（フォーマット追従）', () => {
+    const standard = calcFirstPersonFov(15, 6.7);
+    const imax = calcFirstPersonFov(15, 18.9);
+    expect(imax).toBeGreaterThan(standard);
+  });
+
+  it('同一スクリーンでは近いほどFOVが広い（席距離追従）', () => {
+    const near = calcFirstPersonFov(8, 8);
+    const far = calcFirstPersonFov(20, 8);
+    expect(near).toBeGreaterThan(far);
+  });
+
+  it('中間域では fillRatio に基づく垂直サブテンスからFOVを算出する', () => {
+    // subtense = 2*atan(4/12) ≒ 36.87°、fillRatio 0.7 → 52.7°（[50,75]内）
+    const expected = ((2 * Math.atan(4 / 12)) / 0.7) * (180 / Math.PI);
+    expect(calcFirstPersonFov(12, 8)).toBeCloseTo(expected, 4);
+    expect(calcFirstPersonFov(12, 8)).toBeGreaterThan(50);
+    expect(calcFirstPersonFov(12, 8)).toBeLessThan(75);
+  });
+
+  it('視聴距離やスクリーン高が0以下なら上限FOVを返す（フォールバック）', () => {
+    expect(calcFirstPersonFov(0, 8)).toBe(75);
+    expect(calcFirstPersonFov(10, 0)).toBe(75);
+  });
+
+  it('options で上下限・fillRatio を上書きできる', () => {
+    expect(calcFirstPersonFov(11, 18.9, { maxFovDeg: 90 })).toBeGreaterThan(75);
+    expect(
+      calcFirstPersonFov(30, 6.7, { minFovDeg: 40 }),
+    ).toBeGreaterThanOrEqual(40);
+  });
+});
+
+describe('easeOutCubic', () => {
+  it('端点は 0→0, 1→1 に写像する', () => {
+    expect(easeOutCubic(0)).toBe(0);
+    expect(easeOutCubic(1)).toBe(1);
+  });
+
+  it('中間は線形より進んでいる（開始直後に速い ease-out）', () => {
+    expect(easeOutCubic(0.5)).toBeGreaterThan(0.5);
+    // 1 - (1-0.5)^3 = 0.875
+    expect(easeOutCubic(0.5)).toBeCloseTo(0.875, 6);
+  });
+
+  it('範囲外入力は0〜1にクランプされる', () => {
+    expect(easeOutCubic(-1)).toBe(0);
+    expect(easeOutCubic(2)).toBe(1);
+  });
+
+  it('単調増加する', () => {
+    expect(easeOutCubic(0.2)).toBeLessThan(easeOutCubic(0.4));
+    expect(easeOutCubic(0.4)).toBeLessThan(easeOutCubic(0.6));
+  });
+});
+
+describe('resolveFlythroughStart', () => {
+  const base = {
+    durationS: 0.55,
+    overviewPos: [30, 30, 30] as [number, number, number],
+    overviewTarget: [0, 4, 0] as [number, number, number],
+    currentPos: [-2, 1.2, 5] as [number, number, number],
+    currentTarget: [-1, 5, 10] as [number, number, number],
+  };
+
+  it('初回（未起動）は俯瞰視点から補間を始める', () => {
+    const r = resolveFlythroughStart({
+      ...base,
+      started: false,
+      reducedMotion: false,
+    });
+    expect(r.from).toEqual([30, 30, 30]);
+    expect(r.fromTarget).toEqual([0, 4, 0]);
+    expect(r.elapsed).toBe(0);
+  });
+
+  it('一人称中の席替え（起動済み）は現在のカメラ状態から補間を始める', () => {
+    const r = resolveFlythroughStart({
+      ...base,
+      started: true,
+      reducedMotion: false,
+    });
+    expect(r.from).toEqual([-2, 1.2, 5]);
+    expect(r.fromTarget).toEqual([-1, 5, 10]);
+    expect(r.elapsed).toBe(0);
+  });
+
+  it('reduced-motion 時は elapsed を満了させ即時カットにする', () => {
+    const r = resolveFlythroughStart({
+      ...base,
+      started: false,
+      reducedMotion: true,
+    });
+    expect(r.elapsed).toBe(0.55);
+  });
+
+  it('reduced-motion は起点の決定には影響しない（席替えでも現在位置起点）', () => {
+    const r = resolveFlythroughStart({
+      ...base,
+      started: true,
+      reducedMotion: true,
+    });
+    expect(r.from).toEqual([-2, 1.2, 5]);
+    expect(r.elapsed).toBe(0.55);
   });
 });

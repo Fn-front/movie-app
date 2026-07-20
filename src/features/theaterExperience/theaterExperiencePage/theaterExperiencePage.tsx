@@ -305,6 +305,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   rowZs={seatAreaBounds.rowZs}
                   rowYs={seatAreaBounds.rowYs}
                   seatSegments={seatAreaBounds.seatSegments}
+                  reducedMotion={reducedMotion}
                 >
                   <SeatMeshes
                     seats={seats}

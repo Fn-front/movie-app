@@ -152,6 +152,133 @@ export function calcYawClampedTargetX(
 }
 
 /**
+ * 一人称視点の垂直FOV（度）を、視聴距離とスクリーン高から算出する。
+ *
+ * 旧実装は全フォーマット共通の fov=85° 固定で、広角すぎて魚眼的な歪みが出るうえ、
+ * IMAX(スクリーン高18.9m)と standard(6.7m) のフォーマット差に追従しなかった。
+ * ここではスクリーン高が視野に占める見込み角（垂直サブテンス）を基準に、
+ * スクリーンが視野の一定割合(fillRatio)を占めるFOVを求め、上下限でクランプする。
+ *
+ * - 近い/大画面（IMAX最前列など）: サブテンスが大 → FOVは上限に張り付き、
+ *   スクリーンがFOVを超えて「はみ出す」実態がそのまま表現される（過小表現しない）。
+ * - 遠い/小画面（後列など）: サブテンスが小 → FOVは下限で頭打ちになり、
+ *   スクリーンが小さく見える（＝距離感が残る。常に画面いっぱいに再フレームしない）。
+ *
+ * @param viewingDistance 眼からスクリーン中心までの視聴距離(m, >0想定)
+ * @param screenHeight スクリーンの高さ(m)
+ * @param options fillRatio: スクリーン高がFOVに占める目標割合 / min,maxFovDeg: FOV上下限(度)
+ * @returns 垂直FOV(度)
+ */
+export function calcFirstPersonFov(
+  viewingDistance: number,
+  screenHeight: number,
+  options: {
+    fillRatio?: number;
+    minFovDeg?: number;
+    maxFovDeg?: number;
+  } = {},
+): number {
+  const { fillRatio = 0.7, minFovDeg = 50, maxFovDeg = 75 } = options;
+  if (viewingDistance <= 0 || screenHeight <= 0) return maxFovDeg;
+  // スクリーン高の垂直サブテンス（上端・下端の見込み角の差）
+  const subtenseRad = 2 * Math.atan(screenHeight / 2 / viewingDistance);
+  const fovDeg = ((subtenseRad / fillRatio) * 180) / Math.PI;
+  return Math.min(Math.max(fovDeg, minFovDeg), maxFovDeg);
+}
+
+/**
+ * 一人称視点の垂直注視点Y（見上げの向き）を計算する。
+ * calcYawClampedTargetX（水平首振り）の垂直版で、対称のロジック:
+ * - スクリーン中心の仰角が deadzonePitchRad 以内なら首を上げず、眼の高さの真正面を向く。
+ * - それを超える分だけ首を上向け、maxPitchRad で頭打ちにする（過度な首反りを防ぐ）。
+ *
+ * 旧実装は「眼の高さ+1.5m」固定で、スクリーン中心Yがフォーマットで大きく異なる
+ * （standard 4.35 / IMAX 10.45 等）のに追従せず、特にIMAX前列で見上げが過小表現された。
+ * 本関数は実際のスクリーン中心Yに追従し、上限角で頭打ちにする。
+ *
+ * @param eyeY 眼の高さ(m)
+ * @param screenCenterY スクリーン中心のY(m)
+ * @param forwardDistance 座席→スクリーン平面の前方距離(m, >0想定)
+ * @param maxPitchRad 見上げ角の上限(rad, >=0)
+ * @param deadzonePitchRad 首を上げ始めない不感帯(rad, >=0, 既定0)
+ * @returns 注視点のY座標
+ */
+export function calcPitchClampedTargetY(
+  eyeY: number,
+  screenCenterY: number,
+  forwardDistance: number,
+  maxPitchRad: number,
+  deadzonePitchRad = 0,
+): number {
+  const verticalToCenter = screenCenterY - eyeY;
+  // 前方距離が取れない場合はスクリーン中心の高さを向く（フォールバック）
+  if (forwardDistance <= 0) return screenCenterY;
+  const pitchToCenter = Math.atan(Math.abs(verticalToCenter) / forwardDistance);
+  // 不感帯を超えた分だけ首を上げ、上限角で頭打ちにする
+  const headPitch = Math.min(
+    Math.max(pitchToCenter - deadzonePitchRad, 0),
+    maxPitchRad,
+  );
+  const vertical =
+    Math.sign(verticalToCenter) * forwardDistance * Math.tan(headPitch);
+  return eyeY + vertical;
+}
+
+/**
+ * ease-out cubic 補間係数。俯瞰→一人称のフライスルーで、開始直後に速く動き
+ * 着座点へ滑らかに減速して収束させる（0→1 を単調増加で写像）。
+ * 範囲外入力は 0〜1 にクランプする。
+ */
+export function easeOutCubic(t: number): number {
+  const clamped = Math.min(Math.max(t, 0), 1);
+  return 1 - Math.pow(1 - clamped, 3);
+}
+
+/** フライスルー補間の開始状態（開始位置・開始注視点・初期経過秒） */
+export interface FlythroughStart {
+  from: [number, number, number];
+  fromTarget: [number, number, number];
+  elapsed: number;
+}
+
+/**
+ * 一人称フライスルーの開始状態を決定する（R3Fに依存しない純ロジック）。
+ * - 初回（俯瞰→一人称）: 俯瞰カメラの位置・注視点から補間を始める（空間の対応付け）。
+ * - 一人称中の席替え: 現在のカメラ位置・注視点から補間を始める（滑らかな席移動）。
+ * - prefers-reduced-motion 時: elapsed を満了させて即時カット（アニメを飛ばす）。
+ *
+ * @param params.started 既に一人称カメラが起動済みか（false=初回）
+ * @param params.reducedMotion reduced-motion 有効時 true
+ * @param params.durationS フライスルー時間(秒)
+ * @param params.overviewPos 俯瞰カメラ位置 / overviewTarget 俯瞰注視点
+ * @param params.currentPos 現在のカメラ位置 / currentTarget 現在の注視点
+ */
+export function resolveFlythroughStart(params: {
+  started: boolean;
+  reducedMotion: boolean;
+  durationS: number;
+  overviewPos: [number, number, number];
+  overviewTarget: [number, number, number];
+  currentPos: [number, number, number];
+  currentTarget: [number, number, number];
+}): FlythroughStart {
+  const {
+    started,
+    reducedMotion,
+    durationS,
+    overviewPos,
+    overviewTarget,
+    currentPos,
+    currentTarget,
+  } = params;
+  return {
+    from: started ? currentPos : overviewPos,
+    fromTarget: started ? currentTarget : overviewTarget,
+    elapsed: reducedMotion ? durationS : 0,
+  };
+}
+
+/**
  * 視野占有率メトリクスを一括計算する（座席の3D位置を考慮）。
  */
 export function calcFieldOfViewMetrics(

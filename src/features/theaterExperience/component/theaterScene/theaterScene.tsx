@@ -31,6 +31,7 @@ import {
   interpolateFloorHeight,
 } from '../../utils/theaterGeometry';
 import type { SeatXSegment } from '../../utils/theaterGeometry';
+import { getWallColors } from '../../utils/theaterPalette';
 
 export interface TheaterSceneProps {
   /** 劇場の幅 (m) */
@@ -63,12 +64,13 @@ export interface TheaterSceneProps {
  * シネマカラーパレット（暗色基調）
  * 実映画館では「暗さに目を慣らさせる」目的で内装全体を暗色にしている。
  * ドールハウスのフラット感は維持しつつ、シネマ風の暗色に振る。
+ *
+ * 壁・天井・スクリーン側壁の色はフォーマット別に出し分けるため
+ * `getWallColors(theater.format)`（utils/theaterPalette）から取得する。
+ * 床・傾斜床・装飾帯は素材共通のためここで定数管理する。
  */
 const COLOR_FLOOR = '#1f1820'; // 通路の濃色カーペット
-const COLOR_WALL = '#6a5d68'; // 暗い壁（やや暖かみのあるトーン）
-const COLOR_CEILING = '#252028'; // 暗い天井（投影光反射防止）
 const COLOR_SLOPE = '#2e1f2c'; // 座席エリアの暗色カーペット（やや深め）
-const COLOR_SCREEN_WALL = '#2d2540'; // スクリーン側壁（深紫でシネマ感）
 const COLOR_PROSCENIUM = '#1a1322'; // ステージ前縁の暗色バンド
 const COLOR_EDGE = '#b0a0a8'; // 暗色背景に対する明色エッジ線
 
@@ -103,14 +105,8 @@ const WallMesh = memo<{
   height: number;
   position: [number, number, number];
   rotation?: [number, number, number];
-  color?: string;
-}>(function WallMesh({
-  width,
-  height,
-  position,
-  rotation,
-  color = COLOR_WALL,
-}) {
+  color: string;
+}>(function WallMesh({ width, height, position, rotation, color }) {
   return (
     <mesh position={position} rotation={rotation} receiveShadow>
       <planeGeometry args={[width, height]} />
@@ -127,11 +123,12 @@ const CeilingMesh = memo<{
   roomWidth: number;
   roomDepth: number;
   roomHeight: number;
-}>(function CeilingMesh({ roomWidth, roomDepth, roomHeight }) {
+  color: string;
+}>(function CeilingMesh({ roomWidth, roomDepth, roomHeight, color }) {
   return (
     <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, roomHeight, 0]}>
       <planeGeometry args={[roomWidth, roomDepth]} />
-      <meshLambertMaterial color={COLOR_CEILING} />
+      <meshLambertMaterial color={color} />
     </mesh>
   );
 });
@@ -561,6 +558,11 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
 }) {
   const halfWidth = roomWidth / 2;
   const halfDepth = roomDepth / 2;
+  // 壁・天井・スクリーン側壁の色をフォーマット別に出し分ける
+  const palette = useMemo(
+    () => getWallColors(theater.format),
+    [theater.format],
+  );
 
   return (
     <>
@@ -595,31 +597,34 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       {/* 床 */}
       <FloorMesh roomWidth={roomWidth} roomDepth={roomDepth} />
 
-      {/* 壁（4面）— 天井とスクリーン側壁は省略してドールハウスの中身が見えるように */}
+      {/* 壁（4面）— フォーマット別の壁色（Dolbyは黒基調） */}
       <WallMesh
         width={roomWidth}
         height={roomHeight}
         position={[0, roomHeight / 2, -halfDepth]}
+        color={palette.wall}
       />
       <WallMesh
         width={roomDepth}
         height={roomHeight}
         position={[-halfWidth, roomHeight / 2, 0]}
         rotation={[0, Math.PI / 2, 0]}
+        color={palette.wall}
       />
       <WallMesh
         width={roomDepth}
         height={roomHeight}
         position={[halfWidth, roomHeight / 2, 0]}
         rotation={[0, -Math.PI / 2, 0]}
+        color={palette.wall}
       />
-      {/* スクリーン側壁（深紫でスクリーンを引き立てる） */}
+      {/* スクリーン側壁（スクリーンを引き立てる暗色・フォーマット別） */}
       <WallMesh
         width={roomWidth}
         height={roomHeight}
         position={[0, roomHeight / 2, halfDepth]}
         rotation={[0, Math.PI, 0]}
-        color={COLOR_SCREEN_WALL}
+        color={palette.screenWall}
       />
 
       {/* ステージ前縁バンド（スクリーン下の細い装飾帯でシアター感を強調） */}
@@ -628,11 +633,12 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         <meshLambertMaterial color={COLOR_PROSCENIUM} />
       </mesh>
 
-      {/* 天井（ドールハウスとしては開けておいても良いが、雰囲気維持で残す） */}
+      {/* 天井（フォーマット別の暗色・投影光の反射を抑える） */}
       <CeilingMesh
         roomWidth={roomWidth}
         roomDepth={roomDepth}
         roomHeight={roomHeight}
+        color={palette.ceiling}
       />
 
       {/* 部屋外形のエッジ線 */}

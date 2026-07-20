@@ -527,7 +527,7 @@ describe('TheaterExperiencePage', () => {
       expect(screen.getByTestId('speaker-meshes')).toBeInTheDocument();
     });
 
-    it('座席選択時はスピーカーが非表示になる', () => {
+    it('座席選択時もスピーカーは表示される（天井/サラウンドで設備感を残す）', () => {
       mockUseSeatSelection.mockReturnValueOnce({
         selectedSeat,
         selectSeat: jest.fn(),
@@ -536,7 +536,9 @@ describe('TheaterExperiencePage', () => {
 
       render(<TheaterExperiencePage initialSlug='standard-medium' />);
 
-      expect(screen.queryByTestId('speaker-meshes')).not.toBeInTheDocument();
+      // スクリーンch(L/C/R/LFE)の非表示は SpeakerMeshes 内部で行うため、
+      // ページ側では俯瞰・着席いずれでも SpeakerMeshes が描画されることを検証する。
+      expect(screen.getByTestId('speaker-meshes')).toBeInTheDocument();
     });
 
     it('座席選択時は俯瞰に戻るボタンが表示される', () => {

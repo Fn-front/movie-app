@@ -323,8 +323,12 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   />
                   {speakers.length > 0 && (
                     <>
-                      {/* 一人称視点時はスピーカーを非表示（視界の邪魔を防ぐ） */}
-                      {!selectedSeat && <SpeakerMeshes speakers={speakers} />}
+                      {/*
+                        スピーカーは俯瞰・一人称いずれでも表示する。
+                        スクリーンch(L/C/R/LFE)はSpeakerMeshes内で非表示にし、
+                        目線より上の天井/サラウンドを残して設備感を出す。
+                      */}
+                      <SpeakerMeshes speakers={speakers} />
                       {isHeatmapVisible && (
                         <AudioHeatmapPlane
                           uniforms={audioUniforms}

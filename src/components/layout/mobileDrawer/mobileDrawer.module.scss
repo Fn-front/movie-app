@@ -110,9 +110,10 @@
   }
 
   &--active {
-    color: $primary-700;
+    // 固定の淡青(primary-50)＋青文字はダークで明ブロック化するため、テーマ追従の青ティントに。
+    color: $text-primary;
     font-weight: $font-weight-bold;
-    background-color: $primary-50;
+    background-color: color-alpha(--primary-500, 15%);
   }
 }
 

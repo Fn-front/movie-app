@@ -1,4 +1,5 @@
 @use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
 
 .c_filter {
   &__modal {
@@ -80,10 +81,10 @@
 
     &:has(input:checked) {
       border-color: $primary-500;
-      background-color: $primary-50;
+      background-color: color-alpha(--primary-500, 15%);
 
       .c_filter__label {
-        color: $primary-700;
+        color: $text-primary;
         font-weight: $font-weight-medium;
       }
     }
@@ -131,8 +132,8 @@
     transition: $transition-all;
 
     .c_filter__tag_input:checked + & {
-      color: $primary-700;
-      background-color: $primary-50;
+      color: $text-primary;
+      background-color: color-alpha(--primary-500, 15%);
       border-color: $primary-500;
       font-weight: $font-weight-medium;
     }

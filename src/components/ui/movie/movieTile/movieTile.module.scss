@@ -31,7 +31,9 @@
     width: 100%;
     height: 100%;
     font-size: $font-size-sm;
-    color: $text-disabled;
+    // プレースホルダ文言はダークで text-disabled(#6b6b6b) だと低コントラストのため
+    // text-secondary に一段上げて可読性を確保する。
+    color: $text-secondary;
   }
 
   &__rating {

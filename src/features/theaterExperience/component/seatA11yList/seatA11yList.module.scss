@@ -70,9 +70,9 @@ $seat-cell-size: 28px;
   font-size: $font-size-2xs;
   font-weight: $font-weight-medium;
   // 席番号は 10px(通常テキスト扱い)のため WCAG 1.4.3 の 4.5:1 が必要。
-  // text-secondary(--gray-500) だと 10% alpha 背景を body(#fafafa)に合成後 4.50:1 で
-  // 境界を割るため、--gray-600 に一段濃くして 8.2:1 を確保する（背景依存も解消）。
-  color: $gray-600;
+  // 半透明背景をライト/ダーク双方の body に合成しても十分なコントラストを保つよう、
+  // テーマ追従の text-primary(ライト #111 / ダーク #f5f5f5) を用いる。
+  color: $text-primary;
   background-color: color-alpha(--gray-500, 10%);
   border-radius: $border-radius-sm;
   cursor: pointer;
@@ -81,10 +81,9 @@ $seat-cell-size: 28px;
     color $duration-fast $ease-in-out;
 
   &:hover {
+    // ホバーは背景の青系ティントで示し、文字色は text-primary のまま高コントラストを維持する
+    // （テーマ非追従の固定青文字はダーク時に同系背景へ埋もれるため使わない）。
     background-color: color-alpha(--primary-500, 15%);
-    // primary-500 文字は同系色(primary@15%)背景の合成で 3.74:1 と不足するため、
-    // primary-800 まで濃くして 5.7:1 を確保する（WCAG 1.4.3）。
-    color: $primary-800;
   }
 
   @include focus-visible;

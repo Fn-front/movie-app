@@ -1,4 +1,5 @@
 @use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
 
 .c_calendarDialog__body {
   padding: 0;
@@ -86,7 +87,7 @@
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-daygrid-day:hover) {
-  background-color: $primary-50;
+  background-color: color-alpha(--primary-500, 12%);
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-daygrid-day-number) {
@@ -97,7 +98,7 @@
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-day-today) {
-  background-color: $primary-50 !important;
+  background-color: color-alpha(--primary-500, 14%) !important;
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-day-today .fc-daygrid-day-number) {

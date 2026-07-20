@@ -23,7 +23,7 @@
     margin-top: $spacing-4;
     overflow-x: auto;
     scrollbar-width: thin;
-    scrollbar-color: $gray-300 transparent;
+    scrollbar-color: var(--color-scrollbar-thumb) transparent;
 
     &::-webkit-scrollbar {
       height: 6px;
@@ -34,7 +34,7 @@
     }
 
     &::-webkit-scrollbar-thumb {
-      background-color: $gray-300;
+      background-color: var(--color-scrollbar-thumb);
       border-radius: $border-radius-full;
     }
   }

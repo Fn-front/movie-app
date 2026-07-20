@@ -110,7 +110,7 @@
 
     &:hover:not(:disabled) {
       color: $primary-500;
-      background-color: $primary-50;
+      background-color: color-alpha(--primary-500, 15%);
     }
 
     @include focus-visible;

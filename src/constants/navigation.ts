@@ -33,6 +33,7 @@ export const MENU_LABELS = {
   SETTINGS: '設定',
   LOGOUT: 'ログアウト',
   LOGIN: 'ログイン',
+  DARK_MODE: 'ダークモード',
 } as const;
 
 /**

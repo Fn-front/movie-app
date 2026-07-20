@@ -15,11 +15,15 @@ import {
   IoLogOutOutline,
   IoLogInOutline,
   IoChevronForward,
+  IoSunnyOutline,
+  IoMoonOutline,
 } from 'react-icons/io5';
 
 import { MENU_LABELS, IMAGE_SIZES } from '@/constants';
 import { ROUTES } from '@/constants/common';
 import { getInitial } from '@/utils/user';
+import { useTheme } from '@/hooks/useTheme';
+import { cn } from '@/utils/cn';
 
 import { useUserMenu } from './useUserMenu';
 import styles from './userMenu.module.scss';
@@ -36,17 +40,28 @@ import styles from './userMenu.module.scss';
 export const UserMenu = memo(function UserMenu() {
   const { data: session, status } = useSession();
   const { handleNavigateToSettings, handleLogout } = useUserMenu();
+  const { resolvedTheme, toggleTheme } = useTheme();
   const router = useRouter();
 
   const userName = session?.user?.name ?? '';
   const userEmail = session?.user?.email ?? '';
   const userImage = session?.user?.image;
+  const isDark = resolvedTheme === 'dark';
 
   const initial = useMemo(() => getInitial(userName), [userName]);
 
   const handleLogin = useCallback(() => {
     router.push(ROUTES.LOGIN);
   }, [router]);
+
+  // トグルしてもメニューは閉じない（onSelect の既定動作を抑止）
+  const handleToggleTheme = useCallback(
+    (event: Event) => {
+      event.preventDefault();
+      toggleTheme();
+    },
+    [toggleTheme],
+  );
 
   if (status !== 'authenticated' || !session?.user) {
     return (
@@ -116,6 +131,28 @@ export const UserMenu = memo(function UserMenu() {
               <IoChevronForward />
             </span>
           </DropdownMenuPrimitive.Item>
+
+          <DropdownMenuPrimitive.CheckboxItem
+            className={styles.c_user_menu__item}
+            checked={isDark}
+            onSelect={handleToggleTheme}
+          >
+            <span className={styles.c_user_menu__item_icon}>
+              {isDark ? <IoMoonOutline /> : <IoSunnyOutline />}
+            </span>
+            <span className={styles.c_user_menu__item_label}>
+              {MENU_LABELS.DARK_MODE}
+            </span>
+            <span
+              className={cn(
+                styles.c_user_menu__switch,
+                isDark && styles.c_user_menu__switch__on,
+              )}
+              aria-hidden='true'
+            >
+              <span className={styles.c_user_menu__switch_thumb} />
+            </span>
+          </DropdownMenuPrimitive.CheckboxItem>
 
           <DropdownMenuPrimitive.Separator
             className={styles.c_user_menu__separator}

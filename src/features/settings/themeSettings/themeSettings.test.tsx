@@ -10,10 +10,8 @@ jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
-const mockGetSettings = jest.fn();
 const mockUpdateSettings = jest.fn();
 jest.mock('@/lib/api/user/user', () => ({
-  getSettings: (...args: unknown[]) => mockGetSettings(...args),
   updateSettings: (...args: unknown[]) => mockUpdateSettings(...args),
 }));
 
@@ -59,15 +57,12 @@ jest.mock('@/components/ui/radioGroup/radioGroup', () => ({
 describe('ThemeSettings', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetSettings.mockResolvedValue({
-      theme: 'light',
-      notificationEnabled: false,
-    });
     localStorage.clear();
+    document.documentElement.removeAttribute('data-theme');
     capturedOnValueChange = undefined;
   });
 
-  it('テーマラジオボタンが表示される', async () => {
+  it('マウント後にテーマラジオボタンが表示される', async () => {
     render(<ThemeSettings />);
 
     await waitFor(() => {
@@ -85,18 +80,17 @@ describe('ThemeSettings', () => {
     });
   });
 
-  it('API取得失敗時にlocalStorageのキャッシュからテーマを読み込む', async () => {
-    mockGetSettings.mockRejectedValue(new Error('Network error'));
-    localStorage.setItem('movie-app:theme', 'dark');
+  it('適用中テーマ（data-theme）が選択状態に反映される', async () => {
+    document.documentElement.setAttribute('data-theme', 'dark');
 
     render(<ThemeSettings />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('theme-radio')).toBeInTheDocument();
+      expect(screen.getByLabelText('ダーク')).toBeChecked();
     });
   });
 
-  it('テーマ変更成功時にトーストが表示される', async () => {
+  it('テーマ変更成功時にupdateSettingsとdata-theme更新・トーストが行われる', async () => {
     const user = userEvent.setup();
     mockUpdateSettings.mockResolvedValue({});
     render(<ThemeSettings />);
@@ -110,6 +104,8 @@ describe('ThemeSettings', () => {
     await waitFor(() => {
       expect(mockUpdateSettings).toHaveBeenCalledWith({ theme: 'dark' });
     });
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(localStorage.getItem('movie-app:theme')).toBe('dark');
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -137,12 +133,7 @@ describe('ThemeSettings', () => {
         expect.objectContaining({ title: '更新エラー', variant: 'error' }),
       );
     });
-  });
-
-  it('ローディング中はスケルトンが表示される', () => {
-    mockGetSettings.mockReturnValue(new Promise(() => {}));
-    render(<ThemeSettings />);
-
-    expect(screen.queryByTestId('theme-radio')).not.toBeInTheDocument();
+    // ロールバックで data-theme が元（light 相当）へ戻る
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
 });

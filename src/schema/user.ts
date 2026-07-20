@@ -6,8 +6,11 @@ import { z } from 'zod';
 
 /**
  * テーマの選択肢
+ * `system` は OS 設定（prefers-color-scheme）に追従する未設定既定値。
+ * 切り替えUI（スイッチ/RadioGroup）はライト/ダークの2択で、明示操作時は
+ * light/dark を保存する。system は主に未設定ユーザーの既定として使う。
  */
-export const THEME_VALUES = ['light', 'dark'] as const;
+export const THEME_VALUES = ['light', 'dark', 'system'] as const;
 
 /**
  * 表示名更新のバリデーションスキーマ

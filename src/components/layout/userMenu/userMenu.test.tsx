@@ -14,6 +14,17 @@ jest.mock('next-auth/react', () => ({
   signOut: (...args: unknown[]) => mockSignOut(...args),
 }));
 
+const mockToggleTheme = jest.fn();
+const mockTheme = { resolved: 'light' as 'light' | 'dark' };
+jest.mock('@/hooks/useTheme', () => ({
+  useTheme: () => ({
+    resolvedTheme: mockTheme.resolved,
+    setTheme: jest.fn(),
+    toggleTheme: mockToggleTheme,
+    mounted: true,
+  }),
+}));
+
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -37,6 +48,7 @@ describe('UserMenu', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseSession.mockReturnValue(authenticatedSession);
+    mockTheme.resolved = 'light';
   });
 
   it('ユーザー名が表示される', () => {
@@ -134,5 +146,48 @@ describe('UserMenu', () => {
     expect(mockSignOut).toHaveBeenCalledWith({
       callbackUrl: '/auth/signin',
     });
+  });
+
+  it('メニューにダークモードのトグル（menuitemcheckbox）が表示される', async () => {
+    const user = userEvent.setup();
+    render(<UserMenu />);
+
+    await user.click(
+      screen.getByRole('button', { name: 'テストユーザー ユーザーメニュー' }),
+    );
+
+    const toggle = screen.getByRole('menuitemcheckbox', {
+      name: /ダークモード/,
+    });
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('ダークテーマ時はトグルがオン（aria-checked=true）', async () => {
+    mockTheme.resolved = 'dark';
+    const user = userEvent.setup();
+    render(<UserMenu />);
+
+    await user.click(
+      screen.getByRole('button', { name: 'テストユーザー ユーザーメニュー' }),
+    );
+
+    expect(
+      screen.getByRole('menuitemcheckbox', { name: /ダークモード/ }),
+    ).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('ダークモードのトグルクリックでtoggleThemeが呼ばれる', async () => {
+    const user = userEvent.setup();
+    render(<UserMenu />);
+
+    await user.click(
+      screen.getByRole('button', { name: 'テストユーザー ユーザーメニュー' }),
+    );
+    await user.click(
+      screen.getByRole('menuitemcheckbox', { name: /ダークモード/ }),
+    );
+
+    expect(mockToggleTheme).toHaveBeenCalled();
   });
 });

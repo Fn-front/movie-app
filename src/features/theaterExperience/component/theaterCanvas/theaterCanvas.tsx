@@ -49,7 +49,13 @@ export const TheaterCanvas = memo<TheaterCanvasProps>(function TheaterCanvas({
           - Vignette: 画面周縁をわずかに落とし、スクリーンへ視線を集めるシネマ感を付与。
           mipmapBlur で低コストに広がりを出し、E2E(WebGL)を重くしない。
         */}
-        <EffectComposer>
+        {/*
+          multisampling={0}: MSAA レンダーターゲットを持たせず GPU メモリを抑える。
+          CIのソフトウェアWebGL(SwiftShader)で EffectComposer のマルチサンプル用
+          レンダーターゲットがメモリ/コンテキストを圧迫し、大席数(IMAX)でクラッシュ
+          （E2Eの net::ERR_ABORTED）する事象を避けるための設定。
+        */}
+        <EffectComposer multisampling={0}>
           <Bloom
             luminanceThreshold={0.9}
             luminanceSmoothing={0.08}

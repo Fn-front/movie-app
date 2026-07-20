@@ -295,9 +295,10 @@ const SeatBases = memo<{ seats: TheaterSeat[] }>(function SeatBases({ seats }) {
       ref={meshRef}
       args={[undefined, undefined, seats.length]}
       frustumCulled={false}
-      castShadow
       receiveShadow
     >
+      {/* castShadow は付けない: 床際の小さな台座で影寄与は僅少、影マップ描画コストを抑える
+          （CIのソフトウェアWebGLでの負荷/flaky化を避けるため。座面・背もたれのみ影を落とす） */}
       <boxGeometry
         args={[SEAT_BASE.width, SEAT_BASE.height, SEAT_BASE.depth]}
       />
@@ -347,8 +348,9 @@ const SeatArmrests = memo<{ seats: TheaterSeat[] }>(function SeatArmrests({
       ref={meshRef}
       args={[undefined, undefined, seats.length * 2]}
       frustumCulled={false}
-      castShadow
     >
+      {/* castShadow は付けない: 肘掛けは細く影寄与は僅少。影マップ描画のジオメトリを抑える
+          （instance数は seats*2 と多いため、castShadow 除外の効果が大きい） */}
       <boxGeometry
         args={[SEAT_ARMREST.width, SEAT_ARMREST.height, SEAT_ARMREST.depth]}
       />

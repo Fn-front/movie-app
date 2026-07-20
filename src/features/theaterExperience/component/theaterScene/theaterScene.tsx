@@ -11,7 +11,6 @@ import {
   OrthographicCamera,
   PerspectiveCamera,
   Edges,
-  ContactShadows,
 } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import {
@@ -100,7 +99,6 @@ const COLOR_STEP_LED_HDR = new Color(COLOR_STEP_LED).multiplyScalar(1.6);
 /** ライティング用カラー */
 const COLOR_HEMI_SKY = '#cfd6e6'; // 半球光の空側フィル（やや寒色）
 const COLOR_HEMI_GROUND = '#2a2130'; // 半球光の地面側フィル（暗紫・床トーンに寄せる）
-const COLOR_CONTACT_SHADOW = '#000000'; // 接地影（ContactShadows）の色
 
 /** マージン: 傾斜床は座席より少し外側まで広げる */
 const SLOPE_MARGIN = 0.5;
@@ -748,19 +746,12 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       />
 
       {/*
-        接地影（ContactShadows）: 座席群の足元に安価なソフト接地影を敷き、座席が床から
-        浮いて見えるのを緩和する。傾斜床の前縁付近（床y=0）に置き、opacity/blur を控えめに
-        してドールハウスのフラット感を壊さない範囲に留める。
+        接地感は「強めた directionalLight の実影（castShadow）＋座席台座メッシュ」で担保する。
+        以前はここに ContactShadows（drei）を敷いていたが、既定で毎フレーム影マップを
+        再描画するため、CIのソフトウェアWebGL(SwiftShader)＋最大席数(IMAX 544席)で
+        描画が重くなり E2E がタイムアウト/クラッシュ（#474 完了条件「E2Eをflaky化させない」に
+        抵触）した。per-frame コストの大きい ContactShadows を撤去し安定性を優先する。
       */}
-      <ContactShadows
-        position={[0, 0.02, 0]}
-        scale={Math.max(roomWidth, roomDepth) * 1.1}
-        resolution={1024}
-        far={roomHeight}
-        blur={2.6}
-        opacity={0.45}
-        color={COLOR_CONTACT_SHADOW}
-      />
 
       {/* 床 */}
       <FloorMesh roomWidth={roomWidth} roomDepth={roomDepth} />

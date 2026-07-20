@@ -28,6 +28,11 @@ jest.mock('three', () => ({
     this.copy = jest.fn();
     this.set = jest.fn();
   }),
+  // 発光体の HDR カラー（new Color(...).multiplyScalar(...)）がモジュール読込時に
+  // 走るため、Color モックにも multiplyScalar を持たせる（自身を返す軽量スタブ）。
+  Color: jest.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.multiplyScalar = jest.fn(() => this);
+  }),
   RepeatWrapping: 1000,
 }));
 

@@ -40,12 +40,22 @@ declare module '@react-three/fiber' {
  */
 const SEAT_CUSHION = { width: 0.5, height: 0.12, depth: 0.45 };
 const SEAT_BACK = { width: 0.5, height: 0.5, depth: 0.08 };
+/** 座面下の台座（脚）。床(y)からクッション下端(y+0.24)までを埋め、座席の浮きを解消する */
+const SEAT_BASE = { width: 0.2, height: 0.24, depth: 0.34 };
+/** 肘掛けバー。クッション両脇に配置し、椅子のシルエットを立たせる */
+const SEAT_ARMREST = { width: 0.05, height: 0.14, depth: 0.4 };
+/** 肘掛けをクッション中心から左右に置くオフセット（席ピッチ0.6内に収める） */
+const ARMREST_OFFSET_X = 0.27;
 
 /** ドールハウス座席カラー（単色） */
 const COLOR_SEAT = new Color('#bf4040');
 const COLOR_SELECTED = new Color('#ffaa00');
 /** 車椅子席カラー（他席と区別できる青系） */
 const COLOR_WHEELCHAIR = new Color('#3b82f6');
+/** 座席フレーム（脚・肘掛け）の暗色。座面/背もたれと分離し椅子構造を見せる */
+const COLOR_FRAME = new Color('#3a2e30');
+/** 背もたれは座面より一段暗くして、座面と背もたれの境界（椅子のシルエット）を立たせる */
+const BACK_DARKEN = 0.78;
 /**
  * ホバー強調枠の色（design-system の --warning-dark と一致させ、2Dリング色と揃える）。
  * 明色背景の2Dリングが WCAG 1.4.11(非テキスト3:1) を満たすよう、--warning-main(#f59e0b,
@@ -76,8 +86,23 @@ const SEAT_COLOR_BY_KEY: Record<SeatColorKey, Color> = {
   seat: COLOR_SEAT,
 };
 
+// 背もたれ用に一段暗くした色（座面との境界＝椅子のシルエットを立たせる）
+const SEAT_BACK_COLOR_BY_KEY: Record<SeatColorKey, Color> = {
+  selected: COLOR_SELECTED.clone().multiplyScalar(BACK_DARKEN),
+  wheelchair: COLOR_WHEELCHAIR.clone().multiplyScalar(BACK_DARKEN),
+  seat: COLOR_SEAT.clone().multiplyScalar(BACK_DARKEN),
+};
+
 function getSeatColor(seat: TheaterSeat, selectedSeatId: string | null): Color {
   return SEAT_COLOR_BY_KEY[getSeatColorKey(seat, selectedSeatId)];
+}
+
+/** 背もたれの色（座面より一段暗い）。座面/背もたれの輝度差でシルエットを立たせる。 */
+export function getSeatBackColor(
+  seat: TheaterSeat,
+  selectedSeatId: string | null,
+): Color {
+  return SEAT_BACK_COLOR_BY_KEY[getSeatColorKey(seat, selectedSeatId)];
 }
 
 /**
@@ -176,7 +201,8 @@ const SeatCushions = memo<{
           0.03,
         ]}
       />
-      <meshLambertMaterial />
+      {/* Lambert(拡散のみ) → Standard(PBR)。強めた directional 光で微光沢と陰影が出る */}
+      <meshStandardMaterial roughness={0.68} metalness={0.05} />
     </instancedMesh>
   );
 });
@@ -210,11 +236,11 @@ const SeatBacks = memo<{
     meshRef.current.instanceMatrix.needsUpdate = true;
   }, [seats, tempObject]);
 
-  // 色は座席データと選択状態に依存（選択変更時はここだけ再実行）
+  // 色は座席データと選択状態に依存（背もたれは座面より一段暗い色を使う）
   useEffect(() => {
     if (!meshRef.current) return;
     seats.forEach((seat, i) => {
-      meshRef.current!.setColorAt(i, getSeatColor(seat, selectedSeatId));
+      meshRef.current!.setColorAt(i, getSeatBackColor(seat, selectedSeatId));
     });
     if (meshRef.current.instanceColor) {
       meshRef.current.instanceColor.needsUpdate = true;
@@ -231,11 +257,110 @@ const SeatBacks = memo<{
       <roundedBoxGeometry
         args={[SEAT_BACK.width, SEAT_BACK.height, SEAT_BACK.depth, 4, 0.02]}
       />
-      <meshLambertMaterial />
+      <meshStandardMaterial roughness={0.72} metalness={0.05} />
     </instancedMesh>
   );
 });
 SeatBacks.displayName = 'SeatBacks';
+
+/**
+ * 座面下の台座（脚）のInstancedMesh。
+ * 床(position_y)からクッション下端までを埋め、座席が床から浮いて見えるのを解消する。
+ * 車椅子席は座席構造が無いため scale=0 で描かない。
+ */
+const SeatBases = memo<{ seats: TheaterSeat[] }>(function SeatBases({ seats }) {
+  const meshRef = useRef<InstancedMeshType>(null);
+  const tempObject = useMemo(() => new Object3D(), []);
+
+  useEffect(() => {
+    if (!meshRef.current) return;
+    seats.forEach((seat, i) => {
+      // 台座中心 = 床 + 高さ/2（床からクッション下端 y+0.24 を埋める）
+      tempObject.position.set(
+        seat.position_x,
+        seat.position_y + SEAT_BASE.height / 2,
+        seat.position_z,
+      );
+      tempObject.rotation.set(0, 0, 0);
+      const hidden = seat.seat_type === 'wheelchair';
+      tempObject.scale.set(1, hidden ? 0 : 1, 1);
+      tempObject.updateMatrix();
+      meshRef.current!.setMatrixAt(i, tempObject.matrix);
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [seats, tempObject]);
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, seats.length]}
+      frustumCulled={false}
+      castShadow
+      receiveShadow
+    >
+      <boxGeometry
+        args={[SEAT_BASE.width, SEAT_BASE.height, SEAT_BASE.depth]}
+      />
+      <meshStandardMaterial
+        color={COLOR_FRAME}
+        roughness={0.6}
+        metalness={0.15}
+      />
+    </instancedMesh>
+  );
+});
+SeatBases.displayName = 'SeatBases';
+
+/**
+ * 肘掛けバーのInstancedMesh（1席につき左右2本 = seats.length * 2 インスタンス）。
+ * クッション両脇に置き、椅子のシルエットを立たせる。車椅子席は scale=0 で描かない。
+ */
+const SeatArmrests = memo<{ seats: TheaterSeat[] }>(function SeatArmrests({
+  seats,
+}) {
+  const meshRef = useRef<InstancedMeshType>(null);
+  const tempObject = useMemo(() => new Object3D(), []);
+
+  useEffect(() => {
+    if (!meshRef.current) return;
+    seats.forEach((seat, i) => {
+      const hidden = seat.seat_type === 'wheelchair';
+      // 肘掛け高さ = クッション上面のやや上（座面 y+0.3・厚み0.12 → 上面 y+0.36）
+      const armY = seat.position_y + 0.42;
+      [-ARMREST_OFFSET_X, ARMREST_OFFSET_X].forEach((dx, side) => {
+        tempObject.position.set(
+          seat.position_x + dx,
+          armY,
+          seat.position_z + 0.02,
+        );
+        tempObject.rotation.set(0, 0, 0);
+        tempObject.scale.set(1, hidden ? 0 : 1, 1);
+        tempObject.updateMatrix();
+        meshRef.current!.setMatrixAt(i * 2 + side, tempObject.matrix);
+      });
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [seats, tempObject]);
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, seats.length * 2]}
+      frustumCulled={false}
+      castShadow
+    >
+      <boxGeometry
+        args={[SEAT_ARMREST.width, SEAT_ARMREST.height, SEAT_ARMREST.depth]}
+      />
+      <meshStandardMaterial
+        color={COLOR_FRAME}
+        roughness={0.55}
+        metalness={0.15}
+      />
+    </instancedMesh>
+  );
+});
+SeatArmrests.displayName = 'SeatArmrests';
 
 /**
  * ホバー席のハイライト枠（Edges）＋席番号ラベル
@@ -362,6 +487,8 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
 
   return (
     <group>
+      <SeatBases seats={seats} />
+      <SeatArmrests seats={seats} />
       <SeatCushions seats={seats} selectedSeatId={selectedSeatId} />
       <SeatBacks seats={seats} selectedSeatId={selectedSeatId} />
       <HoverHighlight seat={hoveredSeat} />

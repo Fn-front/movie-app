@@ -103,6 +103,18 @@ $seat-cell-size: 28px;
   transform-origin: top right;
 }
 
+// 俯瞰3Dのホバー/フォーカスと相互連動する強調リング。
+// マウスの :hover とは別経路（3D側からのホバーやキーボードフォーカス）でも点灯し、
+// 2Dリストと3D座席のどちらをポイントしても対応席が同時に強調される。
+// リング色は --warning-dark(#d97706)。明色背景(#fafafa)で 3.05:1 と WCAG 1.4.11
+// (非テキスト3:1) を満たす（--warning-main の 2.06:1 では不足）。3D枠と同色に統一。
+// 併せて文字色を $text-primary に濃くし、色以外の手掛かり（輝度差）でも状態を示す。
+.c_seat_a11y_list__seat_button__highlighted {
+  background-color: color-alpha(--warning-dark, 12%);
+  box-shadow: 0 0 0 $border-width-2 $warning-dark;
+  color: $text-primary;
+}
+
 .c_seat_a11y_list__seat_button__selected {
   background-color: $primary-500;
   color: $text-inverse;

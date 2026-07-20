@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import type { TheaterSeat, Theater } from '../../types';
 
 import { SeatA11yList } from './seatA11yList';
+import styles from './seatA11yList.module.scss';
 
 const mockTheater: Theater = {
   id: 'uuid-1',
@@ -60,7 +61,10 @@ describe('SeatA11yList', () => {
     seats: mockSeats,
     theater: mockTheater,
     selectedSeatId: null,
+    highlightedSeatId: null,
     onSelectSeat: jest.fn(),
+    onHoverSeat: jest.fn(),
+    onFocusSeat: jest.fn(),
   };
 
   beforeEach(() => {
@@ -138,6 +142,59 @@ describe('SeatA11yList', () => {
     // グリッド列数は最大席番号
     const ul = li?.parentElement as HTMLElement;
     expect(ul.style.getPropertyValue('--seat-cols')).toBe('5');
+  });
+
+  it('マウスホバーで onHoverSeat が席IDで呼ばれ、解除で null が渡る（3Dと相互連動）', async () => {
+    const user = userEvent.setup();
+    const onHoverSeat = jest.fn();
+
+    render(<SeatA11yList {...defaultProps} onHoverSeat={onHoverSeat} />);
+
+    const button = screen.getAllByRole('button')[0];
+    await user.hover(button);
+    expect(onHoverSeat).toHaveBeenCalledWith('seat-a1');
+
+    await user.unhover(button);
+    expect(onHoverSeat).toHaveBeenCalledWith(null);
+  });
+
+  it('キーボードフォーカスは onFocusSeat（ホバーとは別チャネル）で連動し、blurで解除される', async () => {
+    const user = userEvent.setup();
+    const onFocusSeat = jest.fn();
+    const onHoverSeat = jest.fn();
+
+    render(
+      <SeatA11yList
+        {...defaultProps}
+        onFocusSeat={onFocusSeat}
+        onHoverSeat={onHoverSeat}
+      />,
+    );
+
+    // 先頭ボタンへフォーカス → onFocusSeat（onHoverSeatは呼ばれない）
+    await user.tab();
+    expect(screen.getAllByRole('button')[0]).toHaveFocus();
+    expect(onFocusSeat).toHaveBeenCalledWith('seat-a1');
+    expect(onHoverSeat).not.toHaveBeenCalled();
+
+    // 次ボタンへフォーカス移動 → 前ボタンの blur で null、新ボタンで席ID
+    await user.tab();
+    expect(onFocusSeat).toHaveBeenCalledWith(null);
+    expect(onFocusSeat).toHaveBeenLastCalledWith('seat-a2');
+  });
+
+  it('highlightedSeatId が指す席に強調クラスが付く', () => {
+    render(<SeatA11yList {...defaultProps} highlightedSeatId='seat-a2' />);
+
+    const buttons = screen.getAllByRole('button');
+    // A列2番が強調される
+    expect(buttons[1]).toHaveClass(
+      styles.c_seat_a11y_list__seat_button__highlighted,
+    );
+    // その他は強調されない
+    expect(buttons[0]).not.toHaveClass(
+      styles.c_seat_a11y_list__seat_button__highlighted,
+    );
   });
 
   it('車椅子席は♿マーカーと車椅子席ラベルが付く', () => {

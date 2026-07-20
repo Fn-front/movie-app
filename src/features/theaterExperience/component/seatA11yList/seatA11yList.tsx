@@ -21,8 +21,14 @@ export interface SeatA11yListProps {
   theater: Theater;
   /** 選択中の座席ID */
   selectedSeatId: string | null;
+  /** 強調表示する座席ID（ポインタホバー or キーボードフォーカス由来。俯瞰3Dと相互ハイライト） */
+  highlightedSeatId: string | null;
   /** 座席選択コールバック */
   onSelectSeat: (seat: TheaterSeat) => void;
+  /** ポインタホバー変化コールバック（null=ホバー解除） */
+  onHoverSeat: (seatId: string | null) => void;
+  /** キーボードフォーカス変化コールバック（null=フォーカス解除） */
+  onFocusSeat: (seatId: string | null) => void;
   /** 追加クラス名 */
   className?: string;
 }
@@ -54,11 +60,95 @@ function formatSeatLabel(
   return `${base}、スクリーン距離${dist}m、視野占有率${hRatio}%`;
 }
 
+interface SeatButtonProps {
+  seat: TheaterSeat;
+  metrics: FieldOfViewMetrics | null;
+  isSelected: boolean;
+  isHighlighted: boolean;
+  onSelectSeat: (seat: TheaterSeat) => void;
+  onHoverSeat: (seatId: string | null) => void;
+  onFocusSeat: (seatId: string | null) => void;
+}
+
+/**
+ * 座席ボタン1つ。イベントハンドラーを座席単位で useCallback 安定化するため、
+ * リスト map からコンポーネントとして切り出している。
+ * ポインタ(onMouseEnter/Leave)とキーボードフォーカス(onFocus/Blur)を別チャネルで通知し、
+ * ページ側で `hovered ?? focused` に統合して俯瞰3Dと相互連動させる。両者を単一状態に
+ * まとめると、片方の解除（例: 別席へのマウス移動）がフォーカス中の強調を消してしまう。
+ */
+const SeatButton = memo<SeatButtonProps>(function SeatButton({
+  seat,
+  metrics,
+  isSelected,
+  isHighlighted,
+  onSelectSeat,
+  onHoverSeat,
+  onFocusSeat,
+}) {
+  const label = formatSeatLabel(seat, metrics);
+
+  const handleClick = useCallback(
+    () => onSelectSeat(seat),
+    [onSelectSeat, seat],
+  );
+  const handlePointerEnter = useCallback(
+    () => onHoverSeat(seat.id),
+    [onHoverSeat, seat.id],
+  );
+  const handlePointerLeave = useCallback(
+    () => onHoverSeat(null),
+    [onHoverSeat],
+  );
+  const handleFocus = useCallback(
+    () => onFocusSeat(seat.id),
+    [onFocusSeat, seat.id],
+  );
+  const handleBlur = useCallback(() => onFocusSeat(null), [onFocusSeat]);
+
+  return (
+    <li style={{ gridColumn: seat.seat_number }}>
+      <button
+        type='button'
+        className={cn(
+          styles.c_seat_a11y_list__seat_button,
+          seat.seat_type === 'wheelchair' &&
+            styles.c_seat_a11y_list__seat_button__wheelchair,
+          isHighlighted && styles.c_seat_a11y_list__seat_button__highlighted,
+          isSelected && styles.c_seat_a11y_list__seat_button__selected,
+        )}
+        aria-pressed={isSelected}
+        aria-label={label}
+        title={label}
+        onClick={handleClick}
+        onMouseEnter={handlePointerEnter}
+        onMouseLeave={handlePointerLeave}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+      >
+        {seat.seat_number}
+        {seat.seat_type === 'wheelchair' && (
+          <span
+            aria-hidden='true'
+            className={styles.c_seat_a11y_list__wheelchair_icon}
+          >
+            ♿
+          </span>
+        )}
+      </button>
+    </li>
+  );
+});
+SeatButton.displayName = 'SeatButton';
+
 export const SeatA11yList = memo<SeatA11yListProps>(function SeatA11yList({
   seats,
   theater,
   selectedSeatId,
+  highlightedSeatId,
   onSelectSeat,
+  onHoverSeat,
+  onFocusSeat,
   className,
 }) {
   const rowGroups = useMemo(() => groupByRow(seats), [seats]);
@@ -94,13 +184,6 @@ export const SeatA11yList = memo<SeatA11yListProps>(function SeatA11yList({
     return map;
   }, [seats, theater]);
 
-  const handleSeatClick = useCallback(
-    (seat: TheaterSeat) => {
-      onSelectSeat(seat);
-    },
-    [onSelectSeat],
-  );
-
   return (
     <div
       className={cn(styles.c_seat_a11y_list, className)}
@@ -123,39 +206,18 @@ export const SeatA11yList = memo<SeatA11yListProps>(function SeatA11yList({
             role='list'
             style={{ '--seat-cols': maxSeatNumber } as CSSProperties}
           >
-            {rowSeats.map((seat) => {
-              const isSelected = seat.id === selectedSeatId;
-              const metrics = metricsMap.get(seat.id) ?? null;
-
-              return (
-                <li key={seat.id} style={{ gridColumn: seat.seat_number }}>
-                  <button
-                    type='button'
-                    className={cn(
-                      styles.c_seat_a11y_list__seat_button,
-                      seat.seat_type === 'wheelchair' &&
-                        styles.c_seat_a11y_list__seat_button__wheelchair,
-                      isSelected &&
-                        styles.c_seat_a11y_list__seat_button__selected,
-                    )}
-                    aria-pressed={isSelected}
-                    aria-label={formatSeatLabel(seat, metrics)}
-                    title={formatSeatLabel(seat, metrics)}
-                    onClick={() => handleSeatClick(seat)}
-                  >
-                    {seat.seat_number}
-                    {seat.seat_type === 'wheelchair' && (
-                      <span
-                        aria-hidden='true'
-                        className={styles.c_seat_a11y_list__wheelchair_icon}
-                      >
-                        ♿
-                      </span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
+            {rowSeats.map((seat) => (
+              <SeatButton
+                key={seat.id}
+                seat={seat}
+                metrics={metricsMap.get(seat.id) ?? null}
+                isSelected={seat.id === selectedSeatId}
+                isHighlighted={seat.id === highlightedSeatId}
+                onSelectSeat={onSelectSeat}
+                onHoverSeat={onHoverSeat}
+                onFocusSeat={onFocusSeat}
+              />
+            ))}
           </ul>
         </div>
       ))}

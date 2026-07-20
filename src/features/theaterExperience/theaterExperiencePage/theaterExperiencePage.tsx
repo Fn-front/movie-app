@@ -57,6 +57,11 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
     } = useTheaters();
     const { data: theaterDetail, isLoading, error } = useTheater(slug);
     const { selectedSeat, selectSeat, clearSelection } = useSeatSelection();
+    // ポインタホバーとキーボードフォーカスは独立チャネルとして別々に保持し、
+    // 強調対象は `hovered ?? focused` で導出する。単一状態にまとめると、片方の解除
+    // （別席へのマウス移動など）がフォーカス中の強調を消してしまう（3D↔2D の desync）。
+    const [hoveredSeatId, setHoveredSeatId] = useState<string | null>(null);
+    const [focusedSeatId, setFocusedSeatId] = useState<string | null>(null);
     const [frequencyBand, setFrequencyBand] = useState<FrequencyBand>('mid');
     const [isHeatmapVisible, setIsHeatmapVisible] = useState(false);
     const { isSupported: isWebGL2Supported, isChecking } = useWebGL2Support();
@@ -154,15 +159,43 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
     const handleSeatClick = useCallback(
       (seat: TheaterSeat) => {
         selectSeat(seat);
+        // 一人称に入る際、俯瞰で拾ったホバー/フォーカス強調を解除する。
+        // R3F は静止クリックでは onPointerOut を発火しないため、これをしないと
+        // stale な hoveredSeatId が highlightedSeatId を占有し、一人称中の2Dリストで
+        // キーボードフォーカスの強調が追従しなくなる（3D→2D のホバー漏れ）。
+        setHoveredSeatId(null);
+        setFocusedSeatId(null);
       },
       [selectSeat],
     );
+
+    const handleHoverSeat = useCallback((seatId: string | null) => {
+      setHoveredSeatId(seatId);
+    }, []);
+
+    const handleFocusSeat = useCallback((seatId: string | null) => {
+      setFocusedSeatId(seatId);
+    }, []);
+
+    // 強調対象: ポインタホバーを優先し、無ければキーボードフォーカス席
+    const highlightedSeatId = hoveredSeatId ?? focusedSeatId;
+
+    const handleBackToOverview = useCallback(() => {
+      // 俯瞰へ戻る際、一人称中に2Dリストで拾ったホバー/フォーカス強調も解除する
+      // （handleSeatClick / handleTheaterChange と対称）。
+      clearSelection();
+      setHoveredSeatId(null);
+      setFocusedSeatId(null);
+    }, [clearSelection]);
 
     const handleTheaterChange = useCallback(
       (nextSlug: string) => {
         // 劇場を切り替えたら、旧劇場の座席選択（一人称視点）を解除して俯瞰に戻す
         selectTheater(nextSlug);
         clearSelection();
+        // 旧劇場の座席を指していた強調（ホバー/フォーカス）も解除する
+        setHoveredSeatId(null);
+        setFocusedSeatId(null);
       },
       [selectTheater, clearSelection],
     );
@@ -274,7 +307,9 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   <SeatMeshes
                     seats={seats}
                     selectedSeatId={selectedSeatId}
+                    highlightedSeatId={highlightedSeatId}
                     onSeatClick={handleSeatClick}
+                    onHoverSeat={handleHoverSeat}
                   />
                   <ScreenMesh
                     width={theater.screen_width}
@@ -312,7 +347,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
             {isWebGL2Supported && selectedSeat && (
               <button
                 type='button'
-                onClick={clearSelection}
+                onClick={handleBackToOverview}
                 className={styles.c_theater_experience__back_to_overview}
               >
                 ← 俯瞰に戻る
@@ -345,7 +380,10 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
             seats={seats}
             theater={theater}
             selectedSeatId={selectedSeatId}
+            highlightedSeatId={highlightedSeatId}
             onSelectSeat={handleSeatClick}
+            onHoverSeat={handleHoverSeat}
+            onFocusSeat={handleFocusSeat}
           />
         </section>
       </div>

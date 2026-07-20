@@ -18,10 +18,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: $border-width-1 solid $gray-300;
+    // 枠線・文字はテーマ追従色にする（ダークで gray-300 の明枠・
+    // text-disabled(#6b6b6b) の低コントラスト文字が浮く問題を解消）。
+    border: $border-width-1 solid $border-color;
     border-radius: $border-radius-md;
     background-color: transparent;
-    color: $text-disabled;
+    color: $text-secondary;
     font-size: $font-size-xs;
     font-weight: $font-weight-medium;
     cursor: default;
@@ -44,9 +46,11 @@
     }
 
     &__active {
-      background-color: $secondary-50;
-      border-color: $secondary-400;
-      color: $secondary-800;
+      // 固定クリーム地の代わりにオレンジの半透明ティント（ライト/ダーク双方に追従）。
+      // 数値は text-primary で常に高コントラストにし、暖色ティント＋枠で「評価済み」を示す。
+      background-color: color-alpha(--secondary-500, 16%);
+      border-color: color-alpha(--secondary-500, 55%);
+      color: $text-primary;
     }
 
     &__selected {
@@ -63,9 +67,9 @@
     cursor: pointer;
 
     &:hover {
-      background-color: $secondary-100;
+      background-color: color-alpha(--secondary-500, 28%);
       border-color: $secondary-500;
-      color: $secondary-800;
+      color: $text-primary;
     }
 
     @include focus-visible;

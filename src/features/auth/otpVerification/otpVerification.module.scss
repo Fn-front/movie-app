@@ -16,13 +16,13 @@
   margin-top: $spacing-4;
   text-align: center;
   font-size: $font-size-sm;
-  color: $gray-600;
+  color: $text-secondary;
   line-height: $line-height-normal;
 }
 
 .c_otp_verification__email {
   font-weight: $font-weight-bold;
-  color: $gray-900;
+  color: $text-primary;
 }
 
 .c_otp_verification__form {
@@ -60,5 +60,5 @@
 
 .c_otp_verification__countdown {
   font-size: $font-size-sm;
-  color: $gray-500;
+  color: $text-secondary;
 }

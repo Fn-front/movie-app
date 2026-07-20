@@ -8,8 +8,13 @@
   flex-shrink: 0;
   border: none;
   border-radius: $border-radius-full;
-  background-color: rgba(255, 255, 255, 0.85);
-  color: $gray-400;
+  // ポスター上のオーバーレイ。テーマ追従の frosted サーフェスにし、
+  // ライト=白 / ダーク=暗 のピルへ切り替える（ダークで白ピルが浮く問題を解消）。
+  background-color: color-alpha(--background-paper, 85%);
+  // 同色サーフェス（詳細モーダルの paper 背景）上でも輪郭が出るよう極薄リングを付与。
+  box-shadow: inset 0 0 0 $border-width-1 color-alpha(--text-primary, 12%);
+  // 非アクティブは text-secondary（ライト 5.7:1 / ダーク 5.9:1 で WCAG 1.4.11 を満たす）。
+  color: $text-secondary;
   cursor: pointer;
   transition:
     opacity $duration-fast $ease-in-out,
@@ -17,7 +22,7 @@
     color $duration-fast $ease-in-out;
 
   &:hover {
-    background-color: rgba(255, 255, 255, 1);
+    background-color: $background-paper;
     color: $secondary-600;
   }
 

@@ -209,8 +209,10 @@
   &__genre_tag {
     padding: $spacing-1 $spacing-2;
     font-size: $font-size-xs;
-    color: $primary-700;
-    background-color: $primary-50;
+    // 固定の淡青(primary-50)＋青文字はダークで浮く/低コントラストのため、
+    // テーマ追従の青ティント＋text-primary に。
+    color: $text-primary;
+    background-color: color-alpha(--primary-500, 15%);
     border-radius: $border-radius-md;
   }
 
@@ -327,7 +329,7 @@
     width: 48px;
     height: 48px;
     border-radius: $border-radius-full;
-    background-color: $gray-200;
+    background-color: $background-secondary;
     color: $text-secondary;
     font-size: $font-size-base;
     font-weight: $font-weight-medium;

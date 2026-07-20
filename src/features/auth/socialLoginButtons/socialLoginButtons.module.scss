@@ -14,13 +14,13 @@
     content: '';
     flex: 1;
     height: $border-width-1;
-    background-color: $gray-300;
+    background-color: $border-color;
   }
 }
 
 .c_social_login__divider_text {
   font-size: $font-size-sm;
-  color: $gray-500;
+  color: $text-secondary;
   white-space: nowrap;
 }
 
@@ -57,7 +57,9 @@
 .c_social_login__github {
   background-color: $gray-900;
   color: white;
-  border: $border-width-1 solid $gray-900;
+  // 枠線はテーマ追従色にする（ダーク背景 #111 と地の $gray-900 が同色で輪郭が
+  // 消えるのを防ぎ、ボタン形状を両テーマで維持する）。
+  border: $border-width-1 solid $border-color;
 
   &:hover:not(:disabled) {
     background-color: $gray-800;

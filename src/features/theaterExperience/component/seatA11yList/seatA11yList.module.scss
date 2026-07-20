@@ -69,7 +69,10 @@ $seat-cell-size: 28px;
   height: $seat-cell-size;
   font-size: $font-size-2xs;
   font-weight: $font-weight-medium;
-  color: $text-secondary;
+  // 席番号は 10px(通常テキスト扱い)のため WCAG 1.4.3 の 4.5:1 が必要。
+  // text-secondary(--gray-500) だと 10% alpha 背景を body(#fafafa)に合成後 4.50:1 で
+  // 境界を割るため、--gray-600 に一段濃くして 8.2:1 を確保する（背景依存も解消）。
+  color: $gray-600;
   background-color: color-alpha(--gray-500, 10%);
   border-radius: $border-radius-sm;
   cursor: pointer;
@@ -79,7 +82,9 @@ $seat-cell-size: 28px;
 
   &:hover {
     background-color: color-alpha(--primary-500, 15%);
-    color: $primary-500;
+    // primary-500 文字は同系色(primary@15%)背景の合成で 3.74:1 と不足するため、
+    // primary-800 まで濃くして 5.7:1 を確保する（WCAG 1.4.3）。
+    color: $primary-800;
   }
 
   @include focus-visible;
@@ -120,7 +125,9 @@ $seat-cell-size: 28px;
   color: $text-inverse;
 
   &:hover {
-    background-color: $primary-600;
+    // 白文字×primary-600 は 4.38:1 で 4.5:1 を割るため、primary-700 に濃くして
+    // 5.68:1 を確保する（選択席ホバー時も 1.4.3 を維持）。
+    background-color: $primary-700;
     color: $text-inverse;
   }
 }

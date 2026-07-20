@@ -9,10 +9,16 @@ jest.mock('three', () => ({
   ) {
     this.position = { set: jest.fn() };
     this.rotation = { set: jest.fn() };
+    this.scale = { set: jest.fn() };
     this.matrix = {};
     this.updateMatrix = jest.fn();
   }),
-  Color: jest.fn(),
+  // 背もたれ色の生成（clone().multiplyScalar()）がモジュール読込時に走るため、
+  // Color モックにも clone/multiplyScalar を持たせる（自身を返す軽量スタブ）。
+  Color: jest.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.clone = jest.fn(() => this);
+    this.multiplyScalar = jest.fn(() => this);
+  }),
   RepeatWrapping: 1000,
 }));
 
@@ -47,6 +53,7 @@ import type { TheaterSeat } from '../../types';
 import {
   SeatMeshes,
   getSeatColorKey,
+  getSeatBackColor,
   resolveHoverEmitId,
   getHoverHighlightSeat,
 } from './seatMeshes';
@@ -140,5 +147,33 @@ describe('getSeatColorKey', () => {
   it('通常席は単色 seat（列に依らず一定）', () => {
     expect(getSeatColorKey({ ...base, row_label: 'A' }, null)).toBe('seat');
     expect(getSeatColorKey({ ...base, row_label: 'B' }, null)).toBe('seat');
+  });
+});
+
+describe('getSeatBackColor', () => {
+  const base: TheaterSeat = {
+    id: 's1',
+    row_label: 'A',
+    seat_number: 1,
+    position_x: 0,
+    position_y: 0,
+    position_z: 0,
+    seat_type: 'standard',
+  };
+
+  // getSeatColorKey と同じ優先度で色種別を選び、種別ごとに一段暗い色を返す。
+  // （three は本テストでモックのため実RGBの暗さは検証せず、種別分岐の一貫性を検証）
+  it('色種別ごとに定義済みの背もたれ色を返す', () => {
+    expect(getSeatBackColor(base, null)).toBeDefined();
+    expect(
+      getSeatBackColor({ ...base, seat_type: 'wheelchair' }, null),
+    ).toBeDefined();
+    expect(getSeatBackColor(base, 's1')).toBeDefined();
+  });
+
+  it('同一種別では同じインスタンス（事前計算マップ）を返す', () => {
+    expect(getSeatBackColor(base, null)).toBe(getSeatBackColor(base, null));
+    // 選択中は種別が selected に変わるため seat とは別インスタンス
+    expect(getSeatBackColor(base, null)).not.toBe(getSeatBackColor(base, 's1'));
   });
 });

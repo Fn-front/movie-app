@@ -11,12 +11,13 @@ import {
   OrthographicCamera,
   PerspectiveCamera,
   Edges,
+  ContactShadows,
 } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import {
   PlaneGeometry,
   Vector3,
-  AdditiveBlending,
+  Color,
   type OrthographicCamera as OrthographicCameraType,
   type PerspectiveCamera as PerspectiveCameraType,
 } from 'three';
@@ -78,6 +79,20 @@ const COLOR_EDGE = '#b0a0a8'; // 暗色背景に対する明色エッジ線
 const COLOR_AISLE_LIGHT = '#ffd4a0'; // 通路灯（暖色）
 const COLOR_EXIT_SIGN = '#00b06b'; // 非常口誘導灯（日本の法定色：緑）
 const COLOR_STEP_LED = '#ffe8c4'; // 段差LED（やや暖白）
+
+/**
+ * 発光体の HDR カラー（各チャンネルを 1.0 超へ増幅）。
+ * Bloom は「明るい背景(#f5f3ee, ACES後≈0.8)は光らせず、発光体だけ滲ませる」ため
+ * luminanceThreshold を 0.9 に設定している。LDR(≤1.0)のままだと背景に埋もれて
+ * 閾値を超えないため、発光体は toneMapped=false かつ HDR にして確実にブルームさせる。
+ */
+const COLOR_AISLE_LIGHT_HDR = new Color(COLOR_AISLE_LIGHT).multiplyScalar(2.4);
+const COLOR_STEP_LED_HDR = new Color(COLOR_STEP_LED).multiplyScalar(1.6);
+
+/** ライティング用カラー */
+const COLOR_HEMI_SKY = '#cfd6e6'; // 半球光の空側フィル（やや寒色）
+const COLOR_HEMI_GROUND = '#2a2130'; // 半球光の地面側フィル（暗紫・床トーンに寄せる）
+const COLOR_CONTACT_SHADOW = '#000000'; // 接地影（ContactShadows）の色
 
 /** マージン: 傾斜床は座席より少し外側まで広げる */
 const SLOPE_MARGIN = 0.5;
@@ -238,9 +253,9 @@ BackStepFill.displayName = 'BackStepFill';
 
 /**
  * 通路灯（壁際・足元の小さな発光体）
- * 両側通路に等間隔で配置。旧実装は半径0.22m+グロー0.5mの大きな発光球で「浮いた
- * 金色の玉」に見え、しかもグローが加算合成でなく暗環（黒い縁取り）になっていた。
- * 足元(y≈0.15)の小型発光体＋加算合成の淡いグローに変更し、足元灯らしくする。
+ * 両側通路に等間隔で配置。発光体本体（toneMapped=false）のみを描き、滲み（グロー）は
+ * ポストプロセスの Bloom に委ねる。#464 で自作していた加算合成グロー球（半透明の大球）は
+ * Bloom 導入により不要になったため削除した（暗環化リスクもなくなる）。
  */
 const AisleLights = memo<{
   roomWidth: number;
@@ -269,20 +284,11 @@ const AisleLights = memo<{
     <group>
       {lights.map((pos) => (
         <group key={`${pos[0]},${pos[2]}`} position={pos}>
-          {/* 足元の小さな発光体 */}
+          {/* 足元の小さな発光体（HDR＋toneMapped=false で Bloom が滲みを付与） */}
           <mesh>
             <sphereGeometry args={[0.08, 12, 12]} />
-            <meshBasicMaterial color={COLOR_AISLE_LIGHT} toneMapped={false} />
-          </mesh>
-          {/* 加算合成の淡いグロー（暗環にならず自然に滲む） */}
-          <mesh>
-            <sphereGeometry args={[0.22, 12, 12]} />
             <meshBasicMaterial
-              color={COLOR_AISLE_LIGHT}
-              transparent
-              opacity={0.35}
-              blending={AdditiveBlending}
-              depthWrite={false}
+              color={COLOR_AISLE_LIGHT_HDR}
               toneMapped={false}
             />
           </mesh>
@@ -367,7 +373,8 @@ const StepLEDs = memo<{
         return seatSegments.map((seg) => (
           <mesh key={`${z}:${seg.center}`} position={[seg.center, ledY, ledZ]}>
             <boxGeometry args={[seg.width, 0.04, 0.04]} />
-            <meshBasicMaterial color={COLOR_STEP_LED} />
+            {/* 段差LEDも HDR＋toneMapped=false で Bloom により細く滲ませる（過度な全開発光は避ける控えめ増幅） */}
+            <meshBasicMaterial color={COLOR_STEP_LED_HDR} toneMapped={false} />
           </mesh>
         ));
       })}
@@ -577,11 +584,18 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         />
       )}
 
-      {/* フラットライティング */}
-      <ambientLight intensity={1.0} />
+      {/*
+        ライティング: 旧実装は ambient=1.0 優位（ambient:directional≈1.67:1）で
+        キーライトが形を変調できず全体がフラットだった。ambient を下げ directional を
+        上げて比を反転（≈1:2）し、座席・壁に陰影と接地感を出す。hemisphereLight で
+        天井側の淡いフィル（sky→ground のグラデ）を加え、暗部が潰れ過ぎないようにする。
+      */}
+      <ambientLight intensity={0.5} />
+      {/* args=[skyColor, groundColor, intensity]（groundColor はコンストラクタ引数で渡す） */}
+      <hemisphereLight args={[COLOR_HEMI_SKY, COLOR_HEMI_GROUND, 0.35]} />
       <directionalLight
         position={[10, 20, 5]}
-        intensity={0.6}
+        intensity={1.15}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
@@ -592,6 +606,21 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         shadow-camera-near={0.1}
         shadow-camera-far={roomHeight + 30}
         shadow-bias={-0.002}
+      />
+
+      {/*
+        接地影（ContactShadows）: 座席群の足元に安価なソフト接地影を敷き、座席が床から
+        浮いて見えるのを緩和する。傾斜床の前縁付近（床y=0）に置き、opacity/blur を控えめに
+        してドールハウスのフラット感を壊さない範囲に留める。
+      */}
+      <ContactShadows
+        position={[0, 0.02, 0]}
+        scale={Math.max(roomWidth, roomDepth) * 1.1}
+        resolution={1024}
+        far={roomHeight}
+        blur={2.6}
+        opacity={0.45}
+        color={COLOR_CONTACT_SHADOW}
       />
 
       {/* 床 */}

@@ -1,21 +1,19 @@
 /**
- * テーマ切り替えコンポーネント
+ * テーマ切り替えコンポーネント（設定ページ）
+ * 共有フック useTheme を利用し、ユーザーメニューのスイッチと状態を共有する。
+ * 保存値が system（OS追従）の場合は解決後の light/dark を選択表示する。
  */
 
 'use client';
 
-import { memo, useCallback, useState, useEffect } from 'react';
+import { memo, useCallback } from 'react';
 
 import { RadioGroup } from '@/components/ui/radioGroup/radioGroup';
-import { Skeleton } from '@/components/ui/skeleton/skeleton';
-import { THEME_VALUES } from '@/schema/user';
-import { getSettings, updateSettings } from '@/lib/api/user/user';
-import { useToast } from '@/hooks/useToast';
-import { handleApiError } from '@/utils/error';
-import { STORAGE_KEYS } from '@/constants/common';
+import { useTheme } from '@/hooks/useTheme';
+import type { ResolvedTheme } from '@/utils/theme';
 import styles from './themeSettings.module.scss';
 
-/** テーマの選択肢 */
+/** テーマの選択肢（切り替えは light/dark の2択） */
 const THEME_OPTIONS = [
   { label: 'ライト', value: 'light' },
   { label: 'ダーク', value: 'dark' },
@@ -25,87 +23,22 @@ const THEME_OPTIONS = [
  * テーマ切り替え設定
  */
 export const ThemeSettings = memo(function ThemeSettings() {
-  const { toast } = useToast();
-  const [theme, setTheme] = useState<(typeof THEME_VALUES)[number]>('light');
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const fetchSettings = async () => {
-      try {
-        const settings = await getSettings();
-        if (!cancelled) {
-          setTheme(settings.theme);
-        }
-      } catch {
-        // localStorageのキャッシュを使用
-        const cached = localStorage.getItem(STORAGE_KEYS.THEME);
-        if (!cancelled && (cached === 'light' || cached === 'dark')) {
-          setTheme(cached);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchSettings();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { resolvedTheme, setTheme } = useTheme();
 
   const handleChange = useCallback(
-    async (value: string) => {
-      const newTheme = value as (typeof THEME_VALUES)[number];
-      const previousTheme = theme;
-      setTheme(newTheme);
-
-      // localStorageにキャッシュ
-      localStorage.setItem(STORAGE_KEYS.THEME, newTheme);
-
-      // HTML要素にdata-theme属性を設定
-      document.documentElement.setAttribute('data-theme', newTheme);
-
-      try {
-        await updateSettings({ theme: newTheme });
-        toast({
-          title: 'テーマを変更しました',
-          variant: 'success',
-        });
-      } catch (error) {
-        // 失敗時は元に戻す
-        setTheme(previousTheme);
-        localStorage.setItem(STORAGE_KEYS.THEME, previousTheme);
-        document.documentElement.setAttribute('data-theme', previousTheme);
-        const { message } = handleApiError(error);
-        toast({
-          title: '更新エラー',
-          description: message ?? 'テーマの変更に失敗しました',
-          variant: 'error',
-        });
+    (value: string) => {
+      if (value === 'light' || value === 'dark') {
+        setTheme(value as ResolvedTheme);
       }
     },
-    [theme, toast],
+    [setTheme],
   );
-
-  if (isLoading) {
-    return (
-      <div className={styles.c_theme_settings}>
-        <Skeleton variant='rect' width={100} height={24} />
-        <Skeleton variant='rect' width={100} height={24} />
-      </div>
-    );
-  }
 
   return (
     <div className={styles.c_theme_settings}>
       <RadioGroup
         options={THEME_OPTIONS}
-        value={theme}
+        value={resolvedTheme}
         onValueChange={handleChange}
         aria-label='テーマを選択'
       />

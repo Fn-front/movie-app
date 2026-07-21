@@ -96,7 +96,7 @@ describe('GET /api/user/settings', () => {
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
     expect(json.data).toEqual({
-      theme: 'light',
+      theme: 'system',
       notificationEnabled: false,
     });
   });
@@ -147,7 +147,7 @@ describe('GET /api/user/settings', () => {
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
     expect(json.data).toEqual({
-      theme: 'light',
+      theme: 'system',
       notificationEnabled: false,
     });
   });

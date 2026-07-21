@@ -181,6 +181,40 @@
       color: $text-secondary;
     }
   }
+
+  // テーマ切替スイッチ（見た目のみ。状態は CheckboxItem の aria-checked が保持）
+  &__switch {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    width: 36px;
+    height: 20px;
+    padding: 2px;
+    border-radius: $border-radius-full;
+    background-color: $background-secondary;
+    border: $border-width-1 solid $border-color;
+    transition:
+      background-color $duration-fast $ease-in-out,
+      border-color $duration-fast $ease-in-out;
+
+    &__on {
+      background-color: $primary-500;
+      border-color: $primary-500;
+    }
+
+    &_thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: $border-radius-full;
+      background-color: $background-paper;
+      box-shadow: $shadow-sm;
+      transition: transform $duration-fast $ease-in-out;
+
+      .c_user_menu__switch__on & {
+        transform: translateX(16px);
+      }
+    }
+  }
 }
 
 // アニメーション（上方向展開用）

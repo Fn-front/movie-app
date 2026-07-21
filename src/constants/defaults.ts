@@ -24,8 +24,8 @@ export const INTERSECTION_OBSERVER_DEFAULTS = {
  * テーマ設定
  */
 export const THEME_DEFAULTS = {
-  /** デフォルトテーマ */
-  DEFAULT: 'light' as const,
+  /** デフォルトテーマ（未設定時は OS 設定に追従） */
+  DEFAULT: 'system' as const,
 } as const;
 
 /**

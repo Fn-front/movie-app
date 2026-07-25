@@ -8,32 +8,45 @@ const mockNextResponseNext = jest.fn();
 const mockNextResponseRedirect = jest.fn();
 const mockCookiesDelete = jest.fn();
 
-jest.mock('next/server', () => ({
-  NextResponse: {
-    next: (init?: { request?: { headers?: Headers } }) => {
+jest.mock('next/server', () => {
+  // new NextResponse(null, { status: 404 }) 呼び出しに対応するためクラスとして定義する
+  class MockNextResponse {
+    headers: Headers;
+    status: number;
+    cookies: { delete: jest.Mock };
+    constructor(
+      _body?: unknown,
+      init?: { status?: number; headers?: Record<string, string> },
+    ) {
+      this.headers = new Headers(init?.headers);
+      this.status = init?.status ?? 200;
+      this.cookies = { delete: mockCookiesDelete };
+    }
+    static next(init?: { request?: { headers?: Headers } }) {
       mockNextResponseNext(init);
-      const response = {
-        headers: new Headers(),
-        cookies: { delete: mockCookiesDelete },
-      };
-      return response;
-    },
-    redirect: (url: URL) => {
-      const response = {
-        headers: new Headers({ location: url.toString() }),
-        cookies: { delete: mockCookiesDelete },
-      };
+      return new MockNextResponse();
+    }
+    static redirect(url: URL) {
+      const response = new MockNextResponse(null, {
+        headers: { location: url.toString() },
+      });
       mockNextResponseRedirect.mockReturnValue(response);
       return response;
-    },
-  },
-}));
+    }
+  }
+  return { NextResponse: MockNextResponse };
+});
 
 // ResponseグローバルをJest環境に追加
 global.Response = class MockResponse {
   headers: Headers;
-  constructor(_body?: unknown, init?: { headers?: Record<string, string> }) {
+  status: number;
+  constructor(
+    _body?: unknown,
+    init?: { status?: number; headers?: Record<string, string> },
+  ) {
     this.headers = new Headers(init?.headers);
+    this.status = init?.status ?? 200;
   }
   static redirect(url: URL) {
     return new MockResponse(null, {
@@ -51,6 +64,7 @@ jest.mock('@/lib/auth/auth', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const middleware = require('./middleware').default as (req: unknown) => {
   headers: Headers;
+  status?: number;
   cookies?: { delete: jest.Mock };
 };
 
@@ -74,11 +88,78 @@ function createMockRequest(options: {
 
 describe('middleware', () => {
   const mockAuth = { user: { id: 'user-1' } };
+  const originalVercelEnv = process.env.VERCEL_ENV;
 
   beforeEach(() => {
     mockNextResponseNext.mockClear();
     mockNextResponseRedirect.mockClear();
     mockCookiesDelete.mockClear();
+    // 既定はローカル環境として扱う
+    delete process.env.VERCEL_ENV;
+  });
+
+  afterAll(() => {
+    if (originalVercelEnv === undefined) {
+      delete process.env.VERCEL_ENV;
+    } else {
+      process.env.VERCEL_ENV = originalVercelEnv;
+    }
+  });
+
+  describe('Vercel本番デプロイ（VERCEL_ENV=production）', () => {
+    beforeEach(() => {
+      process.env.VERCEL_ENV = 'production';
+    });
+
+    it('/api/cron/* は通過する（Vercel Cronのため）', () => {
+      const req = createMockRequest({
+        pathname: '/api/cron/sync-movies',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = middleware(req);
+
+      expect(mockNextResponseNext).toHaveBeenCalled();
+      expect(response.status).toBe(200);
+    });
+
+    it('トップページは404で隠す', () => {
+      const req = createMockRequest({
+        pathname: '/',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = middleware(req);
+
+      expect(response.status).toBe(404);
+    });
+
+    it('保護ページは404で隠す（サインインへリダイレクトしない）', () => {
+      const req = createMockRequest({
+        pathname: '/favorites',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = middleware(req);
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get('location')).toBeNull();
+    });
+
+    it('cron以外の /api/* は404で隠す', () => {
+      const req = createMockRequest({
+        pathname: '/api/watchlist',
+        auth: mockAuth,
+        hasSessionCookie: true,
+      });
+
+      const response = middleware(req);
+
+      expect(response.status).toBe(404);
+    });
   });
 
   describe('セッション期限切れ検知（cookie残存）', () => {

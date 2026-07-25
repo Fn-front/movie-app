@@ -24,6 +24,21 @@ const authPaths = [ROUTES.LOGIN, ROUTES.REGISTER];
 
 export default auth((req) => {
   const { nextUrl } = req;
+
+  // 本番Vercelデプロイではローカル運用のためcron以外を全て404で隠す。
+  // Vercel Cronは /api/cron/* のみ通過させ、routeハンドラの Bearer 認証へ委ねる。
+  if (process.env.VERCEL_ENV === 'production') {
+    if (nextUrl.pathname.startsWith('/api/cron/')) {
+      return NextResponse.next();
+    }
+    return new NextResponse(null, { status: 404 });
+  }
+
+  // ローカル/Preview: NextAuth の API 系はミドルウェア判定をスキップする
+  if (nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.next();
+  }
+
   const isAuthenticated = !!req.auth;
 
   const isProtectedPath = protectedPaths.some((path) =>
@@ -72,12 +87,14 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public (public files)
+     * NOTE: 本番Vercel環境で /api/* 配下も封鎖するため api は除外しない。
+     * ローカル/Preview では冒頭で /api/ を素通しにして NextAuth 等の
+     * 動作を阻害しないようにしている。
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

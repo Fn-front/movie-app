@@ -11,6 +11,13 @@ on:
     branches:
       - main
 
+# 共有 Supabase DB に対して E2E が並列実行されるとテストデータ（ハードコード済みメール）が
+# 別 run の cleanupAuthUser で消され OTP テストが失敗する。
+# リポ全体で E2E を直列化し衝突を防ぐ。実行中は強制キャンセルせず DB を中途半端な状態にしない。
+concurrency:
+  group: e2e-shared-db
+  cancel-in-progress: false
+
 jobs:
   e2e:
     name: Playwright E2E

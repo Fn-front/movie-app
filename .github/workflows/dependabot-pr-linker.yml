@@ -1,0 +1,93 @@
+name: Dependabot PR Linker
+
+# Dependabot が作成した PR の本文に含まれる GHSA ID を検出し、対応する
+# `dependabot-alert` ラベル付き Issue を `Closes #xxx` として PR 本文に追記する。
+# PR がマージされると GitHub 標準機能で Issue が自動クローズされる。
+#
+# pull_request_target を使う理由:
+# Dependabot 由来 PR は pull_request イベントで発火する GITHUB_TOKEN の書き込み権限が
+# デフォルト read-only に制限されるため、base ブランチのコンテキストで実行される
+# pull_request_target を用いる。PR コードのチェックアウト / 実行は行わないため安全。
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+jobs:
+  link:
+    name: Link Dependabot PR to tracker issues
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Link tracker issues via Closes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pr = context.payload.pull_request;
+            const body = pr.body || '';
+
+            // PR 本文から GHSA ID を抽出（大小混在許容、重複除外）
+            const ghsaRegex = /GHSA(?:-[a-z0-9]{4}){3}/gi;
+            const ghsaIds = [...new Set([...body.matchAll(ghsaRegex)].map((m) => m[0].toUpperCase()))];
+            if (ghsaIds.length === 0) {
+              core.info('No GHSA IDs found in PR body; nothing to link.');
+              return;
+            }
+            core.info(`GHSA IDs in PR: ${ghsaIds.join(', ')}`);
+
+            // dependabot-alert ラベル付き open Issue を取得
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              labels: 'dependabot-alert',
+              state: 'open',
+              per_page: 100,
+            });
+            if (issues.length === 0) {
+              core.info('No open dependabot-alert issues found.');
+              return;
+            }
+
+            // Issue 本文の GHSA ID を突合
+            const matchedIssueNumbers = [];
+            for (const issue of issues) {
+              const issueBody = issue.body || '';
+              const issueGhsas = [...new Set([...issueBody.matchAll(ghsaRegex)].map((m) => m[0].toUpperCase()))];
+              if (issueGhsas.some((g) => ghsaIds.includes(g))) {
+                matchedIssueNumbers.push(issue.number);
+              }
+            }
+            if (matchedIssueNumbers.length === 0) {
+              core.info('No tracker issues match PR GHSA IDs.');
+              return;
+            }
+            core.info(`Matched tracker issues: ${matchedIssueNumbers.map((n) => `#${n}`).join(', ')}`);
+
+            // 既に PR 本文に含まれる Closes/Fixes/Resolves を抽出して重複追記を回避
+            const linkKeywordRegex = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi;
+            const alreadyLinked = new Set(
+              [...body.matchAll(linkKeywordRegex)].map((m) => parseInt(m[1], 10)),
+            );
+            const toAdd = matchedIssueNumbers.filter((n) => !alreadyLinked.has(n));
+            if (toAdd.length === 0) {
+              core.info('All matching issues are already linked.');
+              return;
+            }
+
+            const closesLines = toAdd.map((n) => `Closes #${n}`).join('\n');
+            const newBody = `${closesLines}\n\n${body}`;
+
+            await github.rest.pulls.update({
+              owner,
+              repo,
+              pull_number: pr.number,
+              body: newBody,
+            });
+            core.info(`Added Closes links for issues: ${toAdd.map((n) => `#${n}`).join(', ')}`);

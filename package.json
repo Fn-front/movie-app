@@ -48,7 +48,7 @@
     "dompurify": "^3.4.12",
     "ical.js": "^2.2.1",
     "next": "^16.2.6",
-    "next-auth": "^5.0.0-beta.30",
+    "next-auth": "^5.0.0-beta.32",
     "openai": "^6.29.0",
     "postprocessing": "^6.39.1",
     "react": "19.2.5",

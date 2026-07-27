@@ -11,7 +11,7 @@ on:
 permissions:
   contents: read
   issues: write
-  security-events: read
+  vulnerability-alerts: read
 
 jobs:
   sync:
@@ -74,11 +74,32 @@ jobs:
             const severityToPriority = (sev) =>
               sev === 'critical' || sev === 'high' ? 'P1: important' : 'P2: nice-to-have';
 
-            // 新規 open alert を起票
+            // 新規 open alert を起票 / 既存 closed Issue に対応する alert が再度 open に戻ったら再オープン
             let created = 0;
+            let reopened = 0;
             for (const alert of alerts) {
               if (alert.state !== 'open') continue;
-              if (issueByAlertNum.has(alert.number)) continue;
+
+              const existingIssue = issueByAlertNum.get(alert.number);
+              if (existingIssue) {
+                if (existingIssue.state === 'closed') {
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: existingIssue.number,
+                    body: `Dependabot alert #${alert.number} が再度 \`open\` に戻ったため Issue を再オープン。`,
+                  });
+                  await github.rest.issues.update({
+                    owner,
+                    repo,
+                    issue_number: existingIssue.number,
+                    state: 'open',
+                  });
+                  reopened += 1;
+                  core.info(`Reopened issue #${existingIssue.number} (alert #${alert.number} → open)`);
+                }
+                continue;
+              }
 
               const pkg = alert.dependency.package.name;
               const eco = alert.dependency.package.ecosystem;
@@ -148,4 +169,4 @@ jobs:
               core.info(`Closed issue #${issue.number} (alert #${alertNum} → ${alert.state})`);
             }
 
-            core.info(`Summary: created=${created}, closed=${closed}`);
+            core.info(`Summary: created=${created}, reopened=${reopened}, closed=${closed}`);

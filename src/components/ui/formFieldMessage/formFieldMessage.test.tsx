@@ -49,4 +49,21 @@ describe('FormFieldMessage', () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  it('境界値: error が空文字列(falsy)の場合はヘルパーテキストが表示される', () => {
+    render(
+      <FormFieldMessage {...defaultProps} error='' helperText='ヘルパーです' />,
+    );
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('ヘルパーです')).toBeInTheDocument();
+  });
+
+  it('境界値: helperText が空文字列(falsy)のみの場合は何もレンダリングしない', () => {
+    const { container } = render(
+      <FormFieldMessage {...defaultProps} helperText='' />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
 });

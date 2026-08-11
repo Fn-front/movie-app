@@ -32,4 +32,25 @@ describe('handleRouteError', () => {
 
     expect(consoleSpy).toHaveBeenCalledWith('Log prefix:', error);
   });
+
+  it('境界値: unknown 型のエラー(文字列/オブジェクト)でも 500 を返せる', async () => {
+    const responseStr = handleRouteError('string error', 'p1', 'msg1');
+    const jsonStr = await responseStr.json();
+    expect(responseStr.status).toBe(500);
+    expect(jsonStr.error.code).toBe('SERVER_ERROR');
+    expect(jsonStr.error.message).toBe('msg1');
+
+    const responseObj = handleRouteError({ raw: 'obj' }, 'p2', 'msg2');
+    const jsonObj = await responseObj.json();
+    expect(responseObj.status).toBe(500);
+    expect(jsonObj.error.message).toBe('msg2');
+  });
+
+  it('境界値: null/undefined エラーでもクラッシュしない', async () => {
+    const responseNull = handleRouteError(null, 'p', 'msg');
+    expect(responseNull.status).toBe(500);
+
+    const responseUndef = handleRouteError(undefined, 'p', 'msg');
+    expect(responseUndef.status).toBe(500);
+  });
 });

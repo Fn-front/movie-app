@@ -39,7 +39,7 @@ export interface AppLayoutProps {
  * @example
  * ```tsx
  * <AppLayout>
- *   <MovieContent />
+ *   <NowShowingMovieList movies={nowShowingMovies} />
  * </AppLayout>
  * ```
  */

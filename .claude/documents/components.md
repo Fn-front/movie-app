@@ -486,13 +486,6 @@ interface NowShowingMovieListProps {
 
 ---
 
-### MovieContent
-ホームページの映画コンテンツ部分
-
-**Props:** なし（内部で `useHome` フックを使用）
-
----
-
 ### RecommendationSection
 AIレコメンド映画セクション
 

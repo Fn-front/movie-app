@@ -73,6 +73,46 @@ describe('SocialLoginButtons', () => {
     ).toBeDisabled();
   });
 
+  it('callbackUrl 指定時、signIn の callbackUrl に伝播される（Google）', async () => {
+    mockSignIn.mockResolvedValue(undefined as never);
+
+    render(<SocialLoginButtons callbackUrl='/favorites' />);
+
+    await user.click(screen.getByRole('button', { name: 'Googleでログイン' }));
+
+    await waitFor(() => {
+      expect(mockSignIn).toHaveBeenCalledWith('google', {
+        callbackUrl: '/favorites',
+      });
+    });
+  });
+
+  it('callbackUrl 指定時、signIn の callbackUrl に伝播される（GitHub）', async () => {
+    mockSignIn.mockResolvedValue(undefined as never);
+
+    render(<SocialLoginButtons callbackUrl='/watchlist' />);
+
+    await user.click(screen.getByRole('button', { name: 'GitHubでログイン' }));
+
+    await waitFor(() => {
+      expect(mockSignIn).toHaveBeenCalledWith('github', {
+        callbackUrl: '/watchlist',
+      });
+    });
+  });
+
+  it('危険な callbackUrl（外部URL）はホームに落として signIn に渡される', async () => {
+    mockSignIn.mockResolvedValue(undefined as never);
+
+    render(<SocialLoginButtons callbackUrl='https://evil.com/steal' />);
+
+    await user.click(screen.getByRole('button', { name: 'Googleでログイン' }));
+
+    await waitFor(() => {
+      expect(mockSignIn).toHaveBeenCalledWith('google', { callbackUrl: '/' });
+    });
+  });
+
   it('ボタンクリック中は両方のボタンが無効化される', async () => {
     // signInを解決しないPromiseにして、ローディング状態を維持
     mockSignIn.mockReturnValue(new Promise(() => {}));

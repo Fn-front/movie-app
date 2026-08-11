@@ -121,6 +121,34 @@ describe('OtpVerification', () => {
     });
   });
 
+  it('数字以外を含むコードでバリデーションエラーが表示される（pattern境界値）', async () => {
+    jest.useRealTimers();
+
+    render(<OtpVerification {...defaultProps} />);
+
+    await user.type(screen.getByLabelText('確認コード'), 'abcdef');
+    await user.click(screen.getByRole('button', { name: '確認コードを検証' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('数字のみ入力可能です')).toBeInTheDocument();
+    });
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('input maxLength=6 で7桁以上の入力は6桁に切り詰められる（境界値）', async () => {
+    jest.useRealTimers();
+
+    render(<OtpVerification {...defaultProps} />);
+
+    const input = screen.getByLabelText('確認コード') as HTMLInputElement;
+    // ネイティブ maxLength により7桁目以降は入力されない
+    expect(input.maxLength).toBe(6);
+
+    await user.type(input, '1234567');
+    expect(input.value).toBe('123456');
+  });
+
   it('6桁未満のコードでバリデーションエラーが表示される', async () => {
     jest.useRealTimers();
 

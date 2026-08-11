@@ -33,29 +33,53 @@ async function getTestUserId(): Promise<string | null> {
 }
 
 /**
- * テストユーザーのウォッチリストを物理削除する
+ * テストユーザーの rate_limits レコードを物理削除する。
+ *
+ * 背景: WRITE_FAVORITES / WRITE_WATCHLIST 等の DB-based レート制限は
+ * user_id を identifier として 10 attempts / 1min で制限する。E2E は
+ * 短時間に多くの POST/PATCH/DELETE を発行するため、テスト毎にリセット
+ * しないと後続テストが 429 で失敗する。
  */
-export async function cleanupWatchlist(): Promise<void> {
+export async function cleanupRateLimits(): Promise<void> {
   const userId = await getTestUserId();
   if (!userId) return;
 
-  await fetch(`${SUPABASE_URL}/rest/v1/watchlist?user_id=eq.${userId}`, {
+  await fetch(`${SUPABASE_URL}/rest/v1/rate_limits?identifier=eq.${userId}`, {
     method: 'DELETE',
     headers: supabaseHeaders,
   });
 }
 
 /**
- * テストユーザーのお気に入りを物理削除する
+ * テストユーザーのウォッチリストを物理削除する（rate_limitsも同時にリセット）
+ */
+export async function cleanupWatchlist(): Promise<void> {
+  const userId = await getTestUserId();
+  if (!userId) return;
+
+  await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/watchlist?user_id=eq.${userId}`, {
+      method: 'DELETE',
+      headers: supabaseHeaders,
+    }),
+    cleanupRateLimits(),
+  ]);
+}
+
+/**
+ * テストユーザーのお気に入りを物理削除する（rate_limitsも同時にリセット）
  */
 export async function cleanupFavorites(): Promise<void> {
   const userId = await getTestUserId();
   if (!userId) return;
 
-  await fetch(`${SUPABASE_URL}/rest/v1/favorites?user_id=eq.${userId}`, {
-    method: 'DELETE',
-    headers: supabaseHeaders,
-  });
+  await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/favorites?user_id=eq.${userId}`, {
+      method: 'DELETE',
+      headers: supabaseHeaders,
+    }),
+    cleanupRateLimits(),
+  ]);
 }
 
 /**
@@ -118,16 +142,19 @@ export async function cleanupRecommendations(): Promise<void> {
 }
 
 /**
- * テストユーザーの興味なし映画を物理削除する
+ * テストユーザーの興味なし映画を物理削除する（rate_limitsも同時にリセット）
  */
 export async function cleanupDismissedMovies(): Promise<void> {
   const userId = await getTestUserId();
   if (!userId) return;
 
-  await fetch(`${SUPABASE_URL}/rest/v1/dismissed_movies?user_id=eq.${userId}`, {
-    method: 'DELETE',
-    headers: supabaseHeaders,
-  });
+  await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/dismissed_movies?user_id=eq.${userId}`, {
+      method: 'DELETE',
+      headers: supabaseHeaders,
+    }),
+    cleanupRateLimits(),
+  ]);
 }
 
 /**

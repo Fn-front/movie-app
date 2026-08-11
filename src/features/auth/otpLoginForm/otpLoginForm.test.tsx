@@ -439,4 +439,86 @@ describe('OtpLoginForm', () => {
       expect(mockPush).toHaveBeenCalledWith('/');
     });
   });
+
+  it('callbackUrl 指定時、OTP検証成功で callbackUrl に遷移する', async () => {
+    // OTP送信成功
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+
+    render(<OtpLoginForm callbackUrl='/watchlist' />);
+
+    await user.type(
+      screen.getByLabelText('メールアドレス'),
+      'test@example.com',
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'ログインコードを送信' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('確認コード')).toBeInTheDocument();
+    });
+
+    // OTP検証成功 + signIn 成功
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+    mockSignIn.mockResolvedValueOnce({
+      error: undefined,
+      ok: true,
+      status: 200,
+      url: '/',
+    });
+
+    await user.type(screen.getByLabelText('確認コード'), '123456');
+    await user.click(screen.getByRole('button', { name: '確認コードを検証' }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/watchlist');
+    });
+  });
+
+  it('危険な callbackUrl（プロトコル相対）はホームに落とされる', async () => {
+    // OTP送信成功
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+
+    render(<OtpLoginForm callbackUrl='//evil.com/steal' />);
+
+    await user.type(
+      screen.getByLabelText('メールアドレス'),
+      'test@example.com',
+    );
+    await user.click(
+      screen.getByRole('button', { name: 'ログインコードを送信' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('確認コード')).toBeInTheDocument();
+    });
+
+    // OTP検証成功 + signIn 成功
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+    mockSignIn.mockResolvedValueOnce({
+      error: undefined,
+      ok: true,
+      status: 200,
+      url: '/',
+    });
+
+    await user.type(screen.getByLabelText('確認コード'), '123456');
+    await user.click(screen.getByRole('button', { name: '確認コードを検証' }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/');
+    });
+  });
 });

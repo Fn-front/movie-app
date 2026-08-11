@@ -185,6 +185,52 @@ describe('LoginForm', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('callbackUrl 指定時、ログイン成功で callbackUrl に遷移する', async () => {
+    mockSignIn.mockResolvedValue({
+      error: undefined,
+      code: undefined,
+      ok: true,
+      status: 200,
+      url: '/',
+    });
+
+    render(<LoginForm callbackUrl='/favorites' />);
+
+    await user.type(
+      screen.getByLabelText('メールアドレス'),
+      'test@example.com',
+    );
+    await user.type(screen.getByLabelText('パスワード'), 'Password1');
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/favorites');
+    });
+  });
+
+  it('危険な callbackUrl（外部URL）はホームに落とされる', async () => {
+    mockSignIn.mockResolvedValue({
+      error: undefined,
+      code: undefined,
+      ok: true,
+      status: 200,
+      url: '/',
+    });
+
+    render(<LoginForm callbackUrl='https://evil.com/steal' />);
+
+    await user.type(
+      screen.getByLabelText('メールアドレス'),
+      'test@example.com',
+    );
+    await user.type(screen.getByLabelText('パスワード'), 'Password1');
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/');
+    });
+  });
+
   it('signInが例外をスローした場合にエラーが表示される', async () => {
     mockSignIn.mockRejectedValue(
       new AxiosError('Network error', 'ERR_NETWORK'),

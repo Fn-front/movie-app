@@ -252,6 +252,27 @@ describe('RegisterForm', () => {
     expect(screen.queryByTestId('otp-verification')).not.toBeInTheDocument();
   });
 
+  it('既存メール（メール列挙防止のダミーsuccess）でも OTP検証画面へ遷移する', async () => {
+    // register API は既存メールでも成功レスポンス（ダミーuserId）を返す仕様。
+    // Form 側はこれを見分けられないため通常のsuccessパスと同じ動作をする必要がある。
+    mockRegisterUser.mockResolvedValue({
+      success: true,
+      data: { userId: 'dummy-uuid-for-existing-email' },
+      message: '確認コードをメールに送信しました。',
+    });
+
+    render(<RegisterForm />);
+    await fillForm({ email: 'existing@example.com' });
+    await user.click(screen.getByRole('button', { name: '新規登録' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('otp-verification')).toBeInTheDocument();
+      expect(screen.getByTestId('otp-email')).toHaveTextContent(
+        'existing@example.com',
+      );
+    });
+  });
+
   it('ユーザー名なしで登録成功する', async () => {
     mockRegisterUser.mockResolvedValue({
       success: true,

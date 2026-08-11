@@ -2,6 +2,8 @@
  * 認証関連の定数
  */
 
+import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE } from './time';
+
 /**
  * 認証エラーメッセージ
  */
@@ -81,17 +83,39 @@ export const SESSION_CONFIG = {
   /** 非アクティブ時のセッション有効期限（秒） — 24時間 */
   IDLE_MAX_AGE_S: 24 * 60 * 60,
   /** 絶対有効期限（ミリ秒） — 7日間（アクティブでも強制ログアウト） */
-  ABSOLUTE_MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000,
+  ABSOLUTE_MAX_AGE_MS: 7 * MS_PER_DAY,
   /** last_login_at 更新間隔（ミリ秒） — 1時間 */
-  LOGIN_UPDATE_INTERVAL_MS: 60 * 60 * 1000,
+  LOGIN_UPDATE_INTERVAL_MS: MS_PER_HOUR,
   /** パスワード変更チェック間隔（ミリ秒） — 5分 */
-  PASSWORD_CHECK_INTERVAL_MS: 5 * 60 * 1000,
+  PASSWORD_CHECK_INTERVAL_MS: 5 * MS_PER_MINUTE,
 } as const;
 
 /**
  * bcryptハッシュのコスト
  */
 export const BCRYPT_COST = 12;
+
+/**
+ * ユーザーロール
+ *
+ * DB の users.role カラムに格納する値。将来的に 'admin' 等が増えても
+ * この定数を経由するようにしておくと集約されやすい。
+ */
+export const USER_ROLE = {
+  USER: 'user',
+} as const;
+export type UserRole = (typeof USER_ROLE)[keyof typeof USER_ROLE];
+
+/**
+ * NextAuth credentials provider の loginMethod パラメータ
+ *
+ * パスワードログイン ('password') と OTP ログイン ('otp') を区別する。
+ */
+export const LOGIN_METHOD = {
+  PASSWORD: 'password',
+  OTP: 'otp',
+} as const;
+export type LoginMethod = (typeof LOGIN_METHOD)[keyof typeof LOGIN_METHOD];
 
 /**
  * バリデーションメッセージ

@@ -14,6 +14,8 @@ import {
   SESSION_CONFIG,
   ROUTES,
   SUPABASE_ERROR_CODE,
+  LOGIN_METHOD,
+  USER_ROLE,
 } from '@/constants';
 import { OTP_ACTION, OTP_CONFIG } from '@/constants/otp';
 import { isSessionExpired } from '@/lib/auth/sessionExpiry';
@@ -57,7 +59,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         const email = credentials.email as string;
-        const loginMethod = (credentials.loginMethod as string) || 'password';
+        const loginMethod =
+          (credentials.loginMethod as string) || LOGIN_METHOD.PASSWORD;
 
         // レート制限チェック（emailベース: 3回失敗で30分ロック）
         const rateLimitResult = await checkRateLimit(
@@ -81,7 +84,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
-        if (loginMethod === 'otp') {
+        if (loginMethod === LOGIN_METHOD.OTP) {
           // メール認証チェック
           if (!user.is_verified) {
             throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
@@ -306,7 +309,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.email = user.email;
           token.name = user.name;
           token.picture = user.image;
-          token.role = 'user';
+          token.role = USER_ROLE.USER;
           token.passwordChangedAt = null;
           token.lastPasswordCheck = Date.now();
           token.lastLoginUpdate = Date.now();
@@ -320,7 +323,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               .single();
 
             if (dbUser) {
-              token.role = dbUser.role ?? 'user';
+              token.role = dbUser.role ?? USER_ROLE.USER;
               token.passwordChangedAt = dbUser.password_changed_at ?? null;
             }
           }

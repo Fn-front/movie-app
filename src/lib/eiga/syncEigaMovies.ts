@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { EXCLUDED_KEYWORD_IDS, RELEASE_TYPE } from '@/constants/movies';
 import { EIGA_SCORING } from '@/constants/eiga';
+import { MS_PER_DAY } from '@/constants/time';
 import { getMovieKeywordIds, searchMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
@@ -70,7 +71,7 @@ export function findBestMatch(
     // 公開日の近さ（差分が小さいほど高スコア）
     if (movie.release_date) {
       const movieDate = new Date(movie.release_date).getTime();
-      const daysDiff = Math.abs(eigaDate - movieDate) / (1000 * 60 * 60 * 24);
+      const daysDiff = Math.abs(eigaDate - movieDate) / MS_PER_DAY;
       // 30日以内なら加点、それ以上は減点
       score += Math.max(0, EIGA_SCORING.DATE_PROXIMITY_BASE - daysDiff);
     }
@@ -109,7 +110,7 @@ export function isRevival(
 
   const tmdbDate = new Date(tmdbReleaseDate).getTime();
   const eigaDate = new Date(eigaReleaseDate).getTime();
-  const diffDays = (eigaDate - tmdbDate) / (1000 * 60 * 60 * 24);
+  const diffDays = (eigaDate - tmdbDate) / MS_PER_DAY;
 
   return diffDays >= EIGA_SCORING.REVIVAL_THRESHOLD_DAYS;
 }

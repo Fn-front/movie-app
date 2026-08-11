@@ -5,6 +5,7 @@ import { AppQueryProvider } from '@/components/providers/queryProvider';
 import { AppSessionProvider } from '@/components/providers/sessionProvider';
 import { AppToastProvider } from '@/components/providers/toastProvider';
 import { ThemeProvider } from '@/components/providers/themeProvider';
+import { APP_NAME } from '@/constants/app';
 import '@/styles/app.scss';
 
 const noto = Noto_Sans_JP({
@@ -14,7 +15,7 @@ const noto = Noto_Sans_JP({
 });
 
 export const metadata: Metadata = {
-  title: 'Movie App',
+  title: APP_NAME,
   description: '映画ウォッチリスト管理アプリケーション',
 };
 

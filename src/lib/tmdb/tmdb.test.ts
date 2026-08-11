@@ -41,6 +41,8 @@ jest.mock('axios', () => {
   };
 });
 
+import { TMDB_MOVIE_DETAIL_APPEND } from '@/constants/tmdb';
+
 beforeAll(() => {
   process.env.TMDB_API_KEY = 'test-token';
 });
@@ -182,7 +184,7 @@ describe('TMDb APIクライアント', () => {
       await getMovieDetail(123);
 
       expect(mockGet).toHaveBeenCalledWith('/movie/123', {
-        params: { append_to_response: 'credits,watch/providers,videos' },
+        params: { append_to_response: TMDB_MOVIE_DETAIL_APPEND },
       });
     });
 
@@ -193,7 +195,7 @@ describe('TMDb APIクライアント', () => {
       await getMovieDetail('456');
 
       expect(mockGet).toHaveBeenCalledWith('/movie/456', {
-        params: { append_to_response: 'credits,watch/providers,videos' },
+        params: { append_to_response: TMDB_MOVIE_DETAIL_APPEND },
       });
     });
 

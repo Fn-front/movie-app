@@ -16,6 +16,7 @@
 import { NextResponse } from 'next/server';
 
 import { HTTP_STATUS, IN_MEMORY_RATE_LIMIT } from '@/constants';
+import { getClientIp } from '@/lib/http/getClientIp';
 import { createInMemoryRateLimiter } from '@/lib/rateLimit/inMemoryRateLimit';
 
 /**
@@ -35,15 +36,6 @@ const rateLimiter = createInMemoryRateLimiter({
   maxRequests: IN_MEMORY_RATE_LIMIT.CSP_REPORT.maxRequests,
   windowMs: IN_MEMORY_RATE_LIMIT.CSP_REPORT.windowMs,
 });
-
-/** リクエストからクライアント IP を取得する（取得不可時は 'unknown'）。 */
-function getClientIp(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
-  return 'unknown';
-}
 
 /**
  * 単一の CSP 違反レポート本体から、ログに残す主要フィールドを抽出する。

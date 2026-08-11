@@ -213,6 +213,23 @@ describe('RecommendationSection', () => {
       expect(screen.getByText('あなたへのおすすめ')).toBeInTheDocument();
       expect(screen.getByText('おすすめ映画を準備中です')).toBeInTheDocument();
     });
+
+    it('境界値: recommendations=[] かつ isRefreshing=true では準備中テキストが出ずグリッドが表示される', () => {
+      mockRefreshState = {
+        ...mockRefreshState,
+        isRefreshing: true,
+      };
+
+      render(
+        <RecommendationSection recommendations={[]} hasFavorites={true} />,
+      );
+
+      // 準備中は表示されず、代わりに更新中オーバーレイのグリッドが出る
+      expect(
+        screen.queryByText('おすすめ映画を準備中です'),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText('おすすめを更新中...')).toBeInTheDocument();
+    });
   });
 
   describe('レコメンドあり', () => {

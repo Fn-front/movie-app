@@ -69,6 +69,49 @@ describe('useMovieDetail', () => {
     expect(result.current.isError).toBe(false);
   });
 
+  it('movieId=0（境界値: falsy だが null ではない）でもクエリを実行する', async () => {
+    const mockMovie = { id: 0, title: 'ID=0の映画' };
+    mockGetMovieDetail.mockResolvedValue({ data: mockMovie });
+
+    const { result } = renderHook(() => useMovieDetail(0), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.movie).toEqual(mockMovie);
+    });
+
+    // enabled: movieId !== null → 0 は null 判定ではないので実行される
+    expect(mockGetMovieDetail).toHaveBeenCalledWith(0);
+  });
+
+  it('movieId が変わると新しい ID でクエリが実行される', async () => {
+    mockGetMovieDetail
+      .mockResolvedValueOnce({ data: { id: 1, title: '映画A' } })
+      .mockResolvedValueOnce({ data: { id: 2, title: '映画B' } });
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: number }) => useMovieDetail(id),
+      {
+        wrapper: createWrapper(),
+        initialProps: { id: 1 },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.movie?.id).toBe(1);
+    });
+
+    rerender({ id: 2 });
+
+    await waitFor(() => {
+      expect(result.current.movie?.id).toBe(2);
+    });
+
+    expect(mockGetMovieDetail).toHaveBeenNthCalledWith(1, 1);
+    expect(mockGetMovieDetail).toHaveBeenNthCalledWith(2, 2);
+  });
+
   it('エラー時にisErrorがtrueになる', async () => {
     mockGetMovieDetail.mockRejectedValue(new Error('API error'));
 

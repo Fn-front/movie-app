@@ -136,6 +136,124 @@ describe('FavoriteRatingModal', () => {
     });
   });
 
+  describe('境界値', () => {
+    it('rating=1（最小値）を選択して登録できる', () => {
+      const onSubmit = jest.fn();
+      render(<FavoriteRatingModal {...defaultProps} onSubmit={onSubmit} />);
+
+      fireEvent.click(screen.getByRole('radio', { name: '1点' }));
+      fireEvent.click(screen.getByRole('button', { name: '登録' }));
+      expect(onSubmit).toHaveBeenCalledWith(1);
+    });
+
+    it('rating=10（最大値）を選択して登録できる', () => {
+      const onSubmit = jest.fn();
+      render(<FavoriteRatingModal {...defaultProps} onSubmit={onSubmit} />);
+
+      fireEvent.click(screen.getByRole('radio', { name: '10点' }));
+      fireEvent.click(screen.getByRole('button', { name: '登録' }));
+      expect(onSubmit).toHaveBeenCalledWith(10);
+    });
+  });
+
+  describe('更新モード（submit）', () => {
+    it('更新ボタンクリックで onSubmit が現在の評価で呼ばれる', () => {
+      const onSubmit = jest.fn();
+      render(
+        <FavoriteRatingModal
+          {...defaultProps}
+          currentFavorite={{ id: 'fav-1', rating: 7 }}
+          onSubmit={onSubmit}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: '更新' }));
+      expect(onSubmit).toHaveBeenCalledWith(7);
+    });
+
+    it('更新モードで評価を変更してから更新すると新しい評価で呼ばれる', () => {
+      const onSubmit = jest.fn();
+      render(
+        <FavoriteRatingModal
+          {...defaultProps}
+          currentFavorite={{ id: 'fav-1', rating: 7 }}
+          onSubmit={onSubmit}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('radio', { name: '9点' }));
+      fireEvent.click(screen.getByRole('button', { name: '更新' }));
+      expect(onSubmit).toHaveBeenCalledWith(9);
+    });
+  });
+
+  describe('isOpen 変更時の rating リセット', () => {
+    it('モーダル再オープン時に currentFavorite.rating で再初期化される', () => {
+      const { rerender } = render(
+        <FavoriteRatingModal
+          {...defaultProps}
+          currentFavorite={{ id: 'fav-1', rating: 3 }}
+        />,
+      );
+
+      // 初期値: 3点
+      expect(screen.getByRole('radio', { name: '3点' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+
+      // 別の値を選択
+      fireEvent.click(screen.getByRole('radio', { name: '8点' }));
+      expect(screen.getByRole('radio', { name: '8点' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+
+      // モーダルを閉じて再オープン → currentFavorite.rating (=3) に戻る
+      rerender(
+        <FavoriteRatingModal
+          {...defaultProps}
+          isOpen={false}
+          currentFavorite={{ id: 'fav-1', rating: 3 }}
+        />,
+      );
+      rerender(
+        <FavoriteRatingModal
+          {...defaultProps}
+          isOpen={true}
+          currentFavorite={{ id: 'fav-1', rating: 3 }}
+        />,
+      );
+
+      expect(screen.getByRole('radio', { name: '3点' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+    });
+
+    it('新規登録モードで再オープンすると DEFAULT_RATING=5 に戻る', () => {
+      const { rerender } = render(<FavoriteRatingModal {...defaultProps} />);
+
+      // 初期値: 5点（DEFAULT_RATING）
+      expect(screen.getByRole('radio', { name: '5点' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+
+      // 別の値を選択
+      fireEvent.click(screen.getByRole('radio', { name: '2点' }));
+
+      // 再オープン → 5点にリセット
+      rerender(<FavoriteRatingModal {...defaultProps} isOpen={false} />);
+      rerender(<FavoriteRatingModal {...defaultProps} isOpen={true} />);
+
+      expect(screen.getByRole('radio', { name: '5点' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+    });
+  });
+
   describe('onDeleteなし更新モード', () => {
     it('isEditModeでonDeleteがない場合は削除ボタンが表示されない', () => {
       render(

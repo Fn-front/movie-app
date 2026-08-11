@@ -51,6 +51,23 @@ export async function cleanupRateLimits(): Promise<void> {
 }
 
 /**
+ * すべての rate_limits レコードを物理削除する（グローバルセットアップ用）。
+ *
+ * 背景: IP ベースのレート制限（AWARDS_FETCH / READ_THEATERS 等の公開API）は
+ * CI ランナーの IP を identifier とするが、実行時までIPが分からないため
+ * ユーザーID指定の cleanupRateLimits では消せない。E2E 開始時に一度だけ
+ * 全レコードを削除して確定的な初期状態を作る。
+ *
+ * ※ 本テーブルはユーザー由来の耐障害的なカウンタで、E2E 環境では消して問題ない。
+ */
+export async function cleanupAllRateLimits(): Promise<void> {
+  await fetch(`${SUPABASE_URL}/rest/v1/rate_limits?id=not.is.null`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+}
+
+/**
  * テストユーザーのウォッチリストを物理削除する（rate_limitsも同時にリセット）
  */
 export async function cleanupWatchlist(): Promise<void> {

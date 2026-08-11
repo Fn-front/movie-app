@@ -6,6 +6,7 @@
 import { test as base, type Page } from '@playwright/test';
 
 import { STORAGE_STATE } from '../../playwright.config';
+import { cleanupAllRateLimits } from '../helpers/api';
 import { TEST_USER } from '../helpers/testUser';
 
 /**
@@ -22,9 +23,13 @@ export async function performLogin(page: Page): Promise<void> {
 
 /**
  * グローバル認証セットアップ
- * setupプロジェクトからstorageStateを生成する
+ * setupプロジェクトからstorageStateを生成する。
+ *
+ * ここで rate_limits テーブルを全消しし、公開API (AWARDS_FETCH 等 IPベース)
+ * とユーザー系 (WRITE_FAVORITES 等 user_idベース) の両方を確定的な初期状態にする。
  */
 export async function globalAuthSetup(page: Page): Promise<void> {
+  await cleanupAllRateLimits();
   await performLogin(page);
   await page.context().storageState({ path: STORAGE_STATE });
 }

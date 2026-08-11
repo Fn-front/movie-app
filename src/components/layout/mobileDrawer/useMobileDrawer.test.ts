@@ -46,6 +46,20 @@ describe('useMobileDrawer', () => {
     expect(result.current.isOpen).toBe(false);
   });
 
+  it('境界値: 閉じている状態で pathname が変わっても閉じたまま（no-op）', () => {
+    const { result, rerender } = renderHook(() => useMobileDrawer());
+
+    // 初期状態で閉じている
+    expect(result.current.isOpen).toBe(false);
+
+    // パス変更
+    mockPathname = '/settings';
+    rerender();
+
+    // 閉じたまま
+    expect(result.current.isOpen).toBe(false);
+  });
+
   it('pathname変更時にisOpenがfalseになる', () => {
     const { result, rerender } = renderHook(() => useMobileDrawer());
 

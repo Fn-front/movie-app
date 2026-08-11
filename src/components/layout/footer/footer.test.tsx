@@ -51,4 +51,23 @@ describe('Footer', () => {
     const footer = container.querySelector('footer');
     expect(footer?.className).toContain('custom-class');
   });
+
+  it('境界値: links が空配列の場合、nav 要素が描画されない', () => {
+    const { container } = render(<Footer links={[]} />);
+    expect(container.querySelector('nav')).not.toBeInTheDocument();
+  });
+
+  it('境界値: links が未指定の場合も nav 要素が描画されない', () => {
+    const { container } = render(<Footer />);
+    expect(container.querySelector('nav')).not.toBeInTheDocument();
+  });
+
+  it('children が渡されると custom 領域として描画される', () => {
+    render(
+      <Footer>
+        <span data-testid='custom-content'>カスタム</span>
+      </Footer>,
+    );
+    expect(screen.getByTestId('custom-content')).toBeInTheDocument();
+  });
 });

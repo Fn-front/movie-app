@@ -46,4 +46,28 @@ describe('MobileMenuButton', () => {
     render(<MobileMenuButton {...defaultProps} className='custom-class' />);
     expect(screen.getByRole('button').className).toContain('custom-class');
   });
+
+  it('境界値: Enter キーでも onToggle が呼ばれる（キーボード操作）', async () => {
+    const user = userEvent.setup();
+    const onToggle = jest.fn();
+    render(<MobileMenuButton {...defaultProps} onToggle={onToggle} />);
+
+    const button = screen.getByRole('button');
+    button.focus();
+    await user.keyboard('{Enter}');
+
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('境界値: Space キーでも onToggle が呼ばれる（キーボード操作）', async () => {
+    const user = userEvent.setup();
+    const onToggle = jest.fn();
+    render(<MobileMenuButton {...defaultProps} onToggle={onToggle} />);
+
+    const button = screen.getByRole('button');
+    button.focus();
+    await user.keyboard(' ');
+
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
 });

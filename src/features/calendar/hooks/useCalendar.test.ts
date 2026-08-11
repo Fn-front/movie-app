@@ -298,6 +298,64 @@ describe('useCalendar', () => {
     });
   });
 
+  describe('年境界（12月↔翌年1月）', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('12月から次月へ切り替えると翌年1月になる', async () => {
+      // 2026年12月に固定
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date(2026, 11, 15));
+
+      const { result } = renderHook(() => useCalendar(), {
+        wrapper: createWrapper(),
+      });
+
+      jest.useRealTimers();
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.currentMonth.getFullYear()).toBe(2026);
+      expect(result.current.currentMonth.getMonth()).toBe(11); // 12月
+
+      act(() => {
+        result.current.goToNextMonth();
+      });
+
+      expect(result.current.currentMonth.getFullYear()).toBe(2027);
+      expect(result.current.currentMonth.getMonth()).toBe(0); // 1月
+    });
+
+    it('1月から前月へ切り替えると前年12月になる', async () => {
+      // 2027年1月に固定
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date(2027, 0, 15));
+
+      const { result } = renderHook(() => useCalendar(), {
+        wrapper: createWrapper(),
+      });
+
+      jest.useRealTimers();
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.currentMonth.getFullYear()).toBe(2027);
+      expect(result.current.currentMonth.getMonth()).toBe(0); // 1月
+
+      act(() => {
+        result.current.goToPreviousMonth();
+      });
+
+      expect(result.current.currentMonth.getFullYear()).toBe(2026);
+      expect(result.current.currentMonth.getMonth()).toBe(11); // 12月
+    });
+  });
+
   it('エラー時にerrorを返す', async () => {
     mockGetCalendarMovies.mockRejectedValueOnce(new Error('API Error'));
 

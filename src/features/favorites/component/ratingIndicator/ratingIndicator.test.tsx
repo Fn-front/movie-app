@@ -90,6 +90,62 @@ describe('RatingIndicator', () => {
     });
   });
 
+  describe('境界値', () => {
+    it('rating=1（最小値）で1のみが選択状態になる', () => {
+      render(<RatingIndicator rating={1} onRatingChange={jest.fn()} />);
+
+      expect(screen.getByRole('radio', { name: '1点' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+      expect(screen.getByRole('radio', { name: '2点' })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      );
+      expect(screen.getByRole('radio', { name: '10点' })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      );
+    });
+
+    it('rating=10（最大値）で10のみが選択状態になる', () => {
+      render(<RatingIndicator rating={10} onRatingChange={jest.fn()} />);
+
+      expect(screen.getByRole('radio', { name: '10点' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+      expect(screen.getByRole('radio', { name: '9点' })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      );
+      expect(screen.getByRole('radio', { name: '1点' })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      );
+    });
+
+    it('インタラクティブモードで aria-label="評価を選択" が設定される', () => {
+      render(<RatingIndicator rating={5} onRatingChange={jest.fn()} />);
+      expect(screen.getByRole('radiogroup')).toHaveAttribute(
+        'aria-label',
+        '評価を選択',
+      );
+    });
+
+    it('選択中のラジオボタンのみ tabIndex=0（キーボードフォーカス制御）', () => {
+      render(<RatingIndicator rating={7} onRatingChange={jest.fn()} />);
+      expect(screen.getByRole('radio', { name: '7点' })).toHaveAttribute(
+        'tabIndex',
+        '0',
+      );
+      expect(screen.getByRole('radio', { name: '1点' })).toHaveAttribute(
+        'tabIndex',
+        '-1',
+      );
+    });
+  });
+
   describe('サイズ', () => {
     it('size=smの場合smクラスが適用される', () => {
       const { container } = render(<RatingIndicator rating={5} size='sm' />);

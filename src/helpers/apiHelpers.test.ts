@@ -6,7 +6,11 @@
  * apiHelpers テスト
  */
 
-import { conflictResponse, notFoundResponse } from './apiHelpers';
+import {
+  conflictResponse,
+  isUniqueViolation,
+  notFoundResponse,
+} from './apiHelpers';
 
 describe('conflictResponse', () => {
   it('409ステータスのレスポンスを返す', async () => {
@@ -17,6 +21,31 @@ describe('conflictResponse', () => {
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('CONFLICT');
     expect(json.error.message).toBe('重複エラー');
+  });
+});
+
+describe('isUniqueViolation', () => {
+  it('SQLSTATE 23505 の error オブジェクトで true を返す', () => {
+    expect(isUniqueViolation({ code: '23505', message: 'duplicate' })).toBe(
+      true,
+    );
+  });
+
+  it('別の SQLSTATE では false を返す', () => {
+    expect(isUniqueViolation({ code: '23503' })).toBe(false);
+    expect(isUniqueViolation({ code: 'PGRST116' })).toBe(false);
+  });
+
+  it('null / undefined / プリミティブでは false を返す', () => {
+    expect(isUniqueViolation(null)).toBe(false);
+    expect(isUniqueViolation(undefined)).toBe(false);
+    expect(isUniqueViolation('23505')).toBe(false);
+    expect(isUniqueViolation(23505)).toBe(false);
+  });
+
+  it('code プロパティを持たないオブジェクトでは false を返す', () => {
+    expect(isUniqueViolation({})).toBe(false);
+    expect(isUniqueViolation(new Error('boom'))).toBe(false);
   });
 });
 

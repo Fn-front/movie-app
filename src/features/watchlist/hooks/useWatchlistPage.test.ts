@@ -53,6 +53,22 @@ describe('useWatchlistPage', () => {
     });
   });
 
+  it('境界値: 一度切替後に元のソート (added_at) に戻せる', () => {
+    const { result } = renderHook(() => useWatchlistPage());
+
+    act(() => {
+      result.current.handleSortChange('release_date_proximity');
+    });
+    expect(result.current.sortBy).toBe('release_date_proximity');
+
+    act(() => {
+      result.current.handleSortChange('added_at');
+    });
+    expect(result.current.sortBy).toBe('added_at');
+    // 最後の呼び出しは added_at で行われる
+    expect(mockUseWatchlist).toHaveBeenLastCalledWith({ sort: 'added_at' });
+  });
+
   it('useWatchlistの返り値が正しく返される', () => {
     const mockWatchlist = [
       {

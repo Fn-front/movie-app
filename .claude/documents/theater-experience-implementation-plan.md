@@ -924,7 +924,7 @@ export default function TheaterExperienceRoute() {
 |---|---|
 | `src/constants/common.ts` | `ROUTES` に `THEATER_EXPERIENCE: '/theater-experience'` 追加 |
 | `src/constants/navigation.ts` | `NAV_ITEMS` 末尾に `{ label: 'シアター体験', href: ROUTES.THEATER_EXPERIENCE }` 追加 |
-| `src/middleware.ts` | `protectedPaths` に `ROUTES.THEATER_EXPERIENCE` 追加 |
+| `src/proxy.ts` | `protectedPaths` に `ROUTES.THEATER_EXPERIENCE` 追加 |
 
 ### アクセシビリティ対応
 

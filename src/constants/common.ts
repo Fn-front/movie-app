@@ -45,8 +45,8 @@ export const ROUTES = {
 } as const;
 
 /**
- * 認証が必要なルート（middleware と ナビゲーションの共通定義）
- * 未認証アクセス時は middleware がリダイレクトし、ナビからはログイン誘導を表示する。
+ * 認証が必要なルート（proxy と ナビゲーションの共通定義）
+ * 未認証アクセス時は proxy がリダイレクトし、ナビからはログイン誘導を表示する。
  */
 export const AUTH_REQUIRED_ROUTES = [
   ROUTES.WATCHLIST,

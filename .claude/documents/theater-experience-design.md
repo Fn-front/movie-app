@@ -562,7 +562,7 @@ export interface FieldOfViewMetrics {
 
 - `src/constants/common.ts` の `ROUTES` に `THEATER_EXPERIENCE: '/theater-experience'` を追加
 - `src/constants/navigation.ts` の `NAV_ITEMS` 配列**末尾**に `{ label: 'シアター体験', href: ROUTES.THEATER_EXPERIENCE }` を追加
-- `src/middleware.ts` の `protectedPaths` 配列に **`ROUTES.THEATER_EXPERIENCE`** を追加（既存の `.startsWith()` 判定により `/theater-experience/[slug]` も含めて保護される）
+- `src/proxy.ts` の `protectedPaths` 配列に **`ROUTES.THEATER_EXPERIENCE`** を追加（既存の `.startsWith()` 判定により `/theater-experience/[slug]` も含めて保護される）
 
 ---
 
@@ -707,6 +707,6 @@ ONの場合:
 8. 一人称プレビュー（`firstPersonPreview`、drei `<View>` 採用）
 9. 操作UI（`frequencySelector`, `seatInfoPanel`, `distortionPreview`, `theaterSelector`）
 10. `unsupportedBrowserNotice`（WebGL2/モバイル非対応時）
-11. ページ統合（`theaterExperiencePage`）・動的ルート `[slug]` 対応・ナビゲーション追加・認証ガード（`middleware.ts` 更新）
+11. ページ統合（`theaterExperiencePage`）・動的ルート `[slug]` 対応・ナビゲーション追加・認証ガード（`proxy.ts` 更新）
 12. アクセシビリティ対応（`prefers-reduced-motion`、コントラスト調整、キーボード操作）
 13. E2E・スナップショットテスト整備・カバレッジ80%確認

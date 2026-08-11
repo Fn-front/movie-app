@@ -7,6 +7,7 @@
 import { type HTMLAttributes, type ReactNode, memo } from 'react';
 import Link from 'next/link';
 
+import { APP_NAME } from '@/constants/app';
 import { cn } from '@/utils/cn';
 
 import styles from './header.module.scss';
@@ -43,7 +44,7 @@ export interface HeaderProps extends HTMLAttributes<HTMLElement> {
  * ```
  */
 export const Header = memo<HeaderProps>(function Header({
-  logoText = 'Movie App',
+  logoText = APP_NAME,
   logoHref = '/',
   searchBar,
   userMenu,

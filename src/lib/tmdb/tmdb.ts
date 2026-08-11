@@ -6,6 +6,7 @@ import {
   API,
   PAGINATION,
   TMDB_ENDPOINTS,
+  TMDB_MOVIE_DETAIL_APPEND,
   TMDB_RETRY_CONFIG,
   TMDB_SORT_BY,
 } from '@/constants';
@@ -169,7 +170,7 @@ export async function getMovieDetail(
 ): Promise<MovieDetail> {
   const response = await tmdbClient.get<MovieDetail>(
     TMDB_ENDPOINTS.MOVIE_DETAIL(movieId),
-    { params: { append_to_response: 'credits,watch/providers,videos' } },
+    { params: { append_to_response: TMDB_MOVIE_DETAIL_APPEND } },
   );
   return response.data;
 }

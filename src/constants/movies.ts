@@ -3,6 +3,7 @@
  */
 
 import { errorMessage, successMessage } from './common';
+import { MS_PER_DAY } from './time';
 
 /**
  * ソート選択肢
@@ -136,7 +137,7 @@ export const BATCH_UPDATE_SIZE = 100;
 /**
  * ジャンルキャッシュ有効期間（ミリ秒） — 24時間
  */
-export const GENRE_CACHE_DURATION_MS = 24 * 60 * 60 * 1000;
+export const GENRE_CACHE_DURATION_MS = MS_PER_DAY;
 
 /**
  * Discover API 最大ページ数

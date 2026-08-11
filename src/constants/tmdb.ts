@@ -48,3 +48,9 @@ export const TMDB_GENRE_MAP: Record<number, string> = {
  * TMDb Discover APIのsort_byパラメータ値
  */
 export const TMDB_SORT_BY = { POPULARITY_DESC: 'popularity.desc' } as const;
+
+/**
+ * 映画詳細取得時に付与する append_to_response の値。
+ * credits（キャスト・スタッフ）、watch/providers（配信情報）、videos（予告動画）を一度に取得。
+ */
+export const TMDB_MOVIE_DETAIL_APPEND = 'credits,watch/providers,videos';

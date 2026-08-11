@@ -4,6 +4,7 @@
 
 import { Resend } from 'resend';
 
+import { APP_NAME } from '@/constants/app';
 import {
   DEFAULT_FROM_EMAIL,
   OTP_EMAIL_SUBJECT,
@@ -53,7 +54,7 @@ export async function sendOtpEmail(
 
   try {
     const { error } = await resend.emails.send({
-      from: `Movie App <${fromEmail}>`,
+      from: `${APP_NAME} <${fromEmail}>`,
       to: email,
       subject: OTP_EMAIL_SUBJECT,
       text: buildOtpEmailText(code),

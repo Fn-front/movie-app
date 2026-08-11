@@ -338,6 +338,48 @@ describe('POST /api/favorites', () => {
     expect(response.status).toBe(401);
   });
 
+  it('INSERT時にUNIQUE違反(23505)が発生したら409を返す', async () => {
+    // 重複チェック: 存在しない（race: 直後に別リクエストが挿入した想定）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: jest.fn().mockReturnValue({
+          eq: () => ({
+            is: () => ({
+              single: () => ({
+                data: null,
+                error: { code: 'PGRST116' },
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    // INSERT: UNIQUE violation
+    mockFrom.mockReturnValueOnce({
+      insert: () => ({
+        select: () => ({
+          single: () => ({
+            data: null,
+            error: { code: '23505', message: 'duplicate key' },
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createPostRequest({
+        tmdb_movie_id: 12345,
+        title: 'テスト映画',
+        rating: 8,
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('CONFLICT');
+  });
+
   it('INSERTエラー時に500を返す', async () => {
     // 重複チェック: 存在しない
     mockFrom.mockReturnValueOnce({

@@ -11,6 +11,7 @@ import { parseAndValidate } from '@/helpers/requestValidation';
 import {
   checkDuplicate,
   conflictResponse,
+  isUniqueViolation,
   rateLimitExceededResponse,
 } from '@/helpers/apiHelpers';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
@@ -155,6 +156,9 @@ export const POST = withAuth(
       .single();
 
     if (insertError) {
+      if (isUniqueViolation(insertError)) {
+        return conflictResponse(FAVORITES_ERROR_MESSAGES.ALREADY_EXISTS);
+      }
       throw insertError;
     }
 

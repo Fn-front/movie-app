@@ -18,6 +18,7 @@ import {
 import {
   checkDuplicate,
   conflictResponse,
+  isUniqueViolation,
   rateLimitExceededResponse,
 } from '@/helpers/apiHelpers';
 import { parseAndValidate } from '@/helpers/requestValidation';
@@ -197,6 +198,9 @@ export const POST = withAuth(
       .single();
 
     if (insertError) {
+      if (isUniqueViolation(insertError)) {
+        return conflictResponse(WATCHLIST_ERROR_MESSAGES.ALREADY_EXISTS);
+      }
       throw insertError;
     }
 

@@ -57,6 +57,19 @@ export async function checkDuplicate(
 }
 
 /**
+ * Postgres の UNIQUE 制約違反（SQLSTATE 23505）判定。
+ * checkDuplicate と INSERT の間に生じる race を安全側で吸収するために使う。
+ */
+export function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '23505'
+  );
+}
+
+/**
  * 409 Conflictレスポンスを生成
  */
 export function conflictResponse(message: string) {

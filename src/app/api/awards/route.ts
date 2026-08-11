@@ -25,6 +25,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
+import { getClientIp } from '@/lib/http/getClientIp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import type {
   AwardMovie,
@@ -77,15 +78,6 @@ function toAwardMovie(row: {
     genreIds: row.genre_ids,
     personName: row.person_name,
   };
-}
-
-/** リクエストからクライアントIPを取得 */
-function getClientIp(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
-  return 'unknown';
 }
 
 export async function GET(request: Request) {

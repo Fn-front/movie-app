@@ -260,6 +260,145 @@ describe('proxy', () => {
     });
   });
 
+  describe('境界値: callbackUrl 生成', () => {
+    it('保護ページへの未認証アクセス時、クエリ文字列を含む callbackUrl が生成される', () => {
+      const req = createMockRequest({
+        pathname: '/favorites',
+        auth: null,
+        hasSessionCookie: false,
+      });
+      // search を持たせる（createMockRequest は new URL(pathname) で組み立てるので追加で書き換える）
+      req.nextUrl.search = '?tab=recent&sort=asc';
+
+      const response = proxy(req);
+      const location = response.headers.get('location');
+
+      // callbackUrl はエンコード済み: /favorites?tab=recent&sort=asc
+      expect(location).toContain(
+        'callbackUrl=%2Ffavorites%3Ftab%3Drecent%26sort%3Dasc',
+      );
+    });
+
+    it('クエリなしの保護ページアクセスでは callbackUrl にパスのみが含まれる', () => {
+      const req = createMockRequest({
+        pathname: '/watchlist',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = proxy(req);
+      const location = response.headers.get('location');
+
+      expect(location).toContain('callbackUrl=%2Fwatchlist');
+      expect(location).not.toContain('%3F'); // クエリを表す '?' を含まない
+    });
+  });
+
+  describe('境界値: protectedPaths / authPaths のマッチング', () => {
+    it('動的セグメント /theater-experience/[slug] も startsWith で保護される', () => {
+      const req = createMockRequest({
+        pathname: '/theater-experience/imax-osaka-expocity',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = proxy(req);
+      const location = response.headers.get('location');
+
+      expect(location).toContain('/auth/signin');
+      expect(location).toContain(
+        'callbackUrl=%2Ftheater-experience%2Fimax-osaka-expocity',
+      );
+    });
+
+    it('/settings も未認証時はサインインにリダイレクトされる', () => {
+      const req = createMockRequest({
+        pathname: '/settings',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toContain(
+        'callbackUrl=%2Fsettings',
+      );
+    });
+
+    it('認証済で /auth/signup にアクセスするとホームにリダイレクトされる', () => {
+      const req = createMockRequest({
+        pathname: '/auth/signup',
+        auth: mockAuth,
+        hasSessionCookie: true,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toContain(
+        'http://localhost:3000/',
+      );
+      expect(response.headers.get('location')).not.toContain('/auth/');
+    });
+
+    it('/auth/error は authPaths 外なので、認証済でもホームにリダイレクトされず表示される', () => {
+      const req = createMockRequest({
+        pathname: '/auth/error',
+        auth: mockAuth,
+        hasSessionCookie: true,
+      });
+
+      const response = proxy(req);
+
+      // リダイレクトされずに通過（location ヘッダなし）
+      expect(response.headers.get('location')).toBeNull();
+    });
+
+    it('未認証で /auth/signin にアクセスしても通過する（リダイレクトループを防ぐ）', () => {
+      const req = createMockRequest({
+        pathname: '/auth/signin',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toBeNull();
+      expect(mockNextResponseNext).toHaveBeenCalled();
+    });
+  });
+
+  describe('境界値: ローカル/Preview 環境での /api/* 素通し', () => {
+    it('VERCEL_ENV 未設定時、/api/* は認証判定をスキップして通過する', () => {
+      const req = createMockRequest({
+        pathname: '/api/watchlist',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = proxy(req);
+
+      expect(mockNextResponseNext).toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      // NextAuth の API は認証情報なしでも proxy を通過する必要がある
+      expect(response.headers.get('location')).toBeNull();
+    });
+
+    it('VERCEL_ENV="preview" では /api/* は素通し（本番404封鎖の対象外）', () => {
+      process.env.VERCEL_ENV = 'preview';
+
+      const req = createMockRequest({
+        pathname: '/api/auth/session',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = proxy(req);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('location')).toBeNull();
+    });
+  });
+
   describe('CSP / nonce を付与しない（静的配信へ移行）', () => {
     it('通常応答に Content-Security-Policy ヘッダを設定しない（next.config で静的配信）', () => {
       const req = createMockRequest({

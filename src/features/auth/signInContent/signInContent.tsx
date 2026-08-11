@@ -14,7 +14,7 @@ import { OtpLoginForm } from '@/features/auth/otpLoginForm/otpLoginForm';
 type LoginMode = 'password' | 'otp';
 
 interface SignInContentProps {
-  /** ログイン後の戻り先（middlewareが付与する callbackUrl） */
+  /** ログイン後の戻り先（proxyが付与する callbackUrl） */
   callbackUrl?: string;
 }
 

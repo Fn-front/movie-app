@@ -105,7 +105,7 @@ src/
 ├── test/                # テストユーティリティ・セットアップ
 ├── types/               # TypeScript型定義
 ├── utils/               # 汎用ユーティリティ
-├── middleware.ts         # Next.js Middleware
+├── proxy.ts              # Next.js Proxy（旧 middleware.ts）
 └── styles/              # グローバルスタイル
 ```
 

@@ -1,8 +1,11 @@
 /**
- * Next.js Middleware - 認証保護
+ * Next.js Proxy - 認証保護（旧 middleware.ts / Next.js 16 対応）
  *
  * CSP は static prerender を維持するため next.config.mjs で静的配信する
  * （script-src 'unsafe-inline' 許容により nonce 不要）。ここでは認証保護のみを担う。
+ *
+ * proxy はネットワーク層のリダイレクト/リライトに徹し、認可の最終判定は
+ * Server Components / Route Handlers 側でも二重に行う設計とする。
  */
 
 import { NextResponse } from 'next/server';
@@ -22,7 +25,7 @@ const protectedPaths = AUTH_REQUIRED_ROUTES;
 /** 認証ページ */
 const authPaths = [ROUTES.LOGIN, ROUTES.REGISTER];
 
-export default auth((req) => {
+export const proxy = auth((req) => {
   const { nextUrl } = req;
 
   // 本番Vercelデプロイではローカル運用のためcron以外を全て404で隠す。

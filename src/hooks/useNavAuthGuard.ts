@@ -34,7 +34,7 @@ export function useNavAuthGuard() {
       if (isAuthenticated) {
         return;
       }
-      // 「保護対象か」は middleware と共通の AUTH_REQUIRED_ROUTES を真実源に判定する
+      // 「保護対象か」は proxy と共通の AUTH_REQUIRED_ROUTES を真実源に判定する
       const isProtected = AUTH_REQUIRED_ROUTES.some((route) => route === href);
       if (!isProtected) {
         return;

@@ -24,7 +24,7 @@ src/
 │       └── auth/
 │           └── [...nextauth]/
 │               └── route.ts     # NextAuth.js API Route
-├── middleware.ts                # 認証保護ミドルウェア
+├── proxy.ts                     # 認証保護 Proxy（Next.js 16 file convention）
 └── types/
     └── next-auth.d.ts           # NextAuth.js 型定義拡張
 ```
@@ -199,9 +199,9 @@ export async function login(formData: FormData) {
 - セキュアクッキー（本番環境）
 - HttpOnly, SameSite=Lax
 
-## ミドルウェア
+## Proxy（旧 Middleware）
 
-`src/middleware.ts` で認証保護を実装：
+`src/proxy.ts` で認証保護を実装（Next.js 16 で `middleware` は `proxy` にリネームされた）：
 
 ```typescript
 // 認証が必要なパス

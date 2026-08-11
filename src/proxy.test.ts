@@ -1,5 +1,5 @@
 /**
- * Next.js Middleware テスト
+ * Next.js Proxy テスト（旧 middleware.test.ts / Next.js 16 対応）
  */
 
 // next/serverをモック
@@ -60,9 +60,9 @@ jest.mock('@/lib/auth/auth', () => ({
   auth: (callback: (...args: unknown[]) => unknown) => callback,
 }));
 
-// middleware.tsのdefault exportはauth(callback)の結果＝callback自体
+// proxy.tsの named export `proxy` は auth(callback) の結果＝callback自体
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const middleware = require('./middleware').default as (req: unknown) => {
+const proxy = require('./proxy').proxy as (req: unknown) => {
   headers: Headers;
   status?: number;
   cookies?: { delete: jest.Mock };
@@ -86,7 +86,7 @@ function createMockRequest(options: {
   };
 }
 
-describe('middleware', () => {
+describe('proxy', () => {
   const mockAuth = { user: { id: 'user-1' } };
   const originalVercelEnv = process.env.VERCEL_ENV;
 
@@ -118,7 +118,7 @@ describe('middleware', () => {
         hasSessionCookie: false,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       expect(mockNextResponseNext).toHaveBeenCalled();
       expect(response.status).toBe(200);
@@ -131,7 +131,7 @@ describe('middleware', () => {
         hasSessionCookie: false,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       expect(response.status).toBe(404);
     });
@@ -143,7 +143,7 @@ describe('middleware', () => {
         hasSessionCookie: false,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       expect(response.status).toBe(404);
       expect(response.headers.get('location')).toBeNull();
@@ -156,7 +156,7 @@ describe('middleware', () => {
         hasSessionCookie: true,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       expect(response.status).toBe(404);
     });
@@ -170,7 +170,7 @@ describe('middleware', () => {
         hasSessionCookie: true,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       // NextResponse.next()が返される（リダイレクトではない）
       expect(response.headers.get('location')).toBeNull();
@@ -185,7 +185,7 @@ describe('middleware', () => {
         hasSessionCookie: true,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       expect(response.headers.get('location')).toContain('/auth/signin');
       expect(mockCookiesDelete).toHaveBeenCalledWith('next-auth.session-token');
@@ -200,7 +200,7 @@ describe('middleware', () => {
         hasSessionCookie: false,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       expect(response.headers.get('location')).toContain('/auth/signin');
     });
@@ -212,7 +212,7 @@ describe('middleware', () => {
         hasSessionCookie: false,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       // リダイレクトではなく通常応答（location ヘッダが無い）
       expect(response.headers.get('location')).toBeNull();
@@ -227,7 +227,7 @@ describe('middleware', () => {
         hasSessionCookie: true,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       expect(response.headers.get('location')).toContain(
         'http://localhost:3000/',
@@ -242,7 +242,7 @@ describe('middleware', () => {
         hasSessionCookie: true,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       expect(response.headers.get('location')).toBeNull();
     });
@@ -254,7 +254,7 @@ describe('middleware', () => {
         hasSessionCookie: true,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       expect(response.headers.get('location')).toBeNull();
     });
@@ -268,7 +268,7 @@ describe('middleware', () => {
         hasSessionCookie: true,
       });
 
-      const response = middleware(req);
+      const response = proxy(req);
 
       expect(response.headers.get('content-security-policy')).toBeNull();
     });
@@ -280,7 +280,7 @@ describe('middleware', () => {
         hasSessionCookie: true,
       });
 
-      middleware(req);
+      proxy(req);
 
       // 認証のみのため init（{ request: { headers } }）は渡されない
       const init = mockNextResponseNext.mock.calls[0][0];

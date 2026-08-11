@@ -4,7 +4,7 @@
  * セッションが確定的にunauthenticatedになった場合、NextAuthのsignOutを実行してログインページへ遷移する。
  * - authenticated → unauthenticated（ライブセッション切れ）
  *
- * ※ loading → unauthenticated（リロード時）はmiddlewareがサーバーサイドで
+ * ※ loading → unauthenticated（リロード時）はproxyがサーバーサイドで
  *   期限切れcookieの削除とリダイレクトを処理するため、クライアント側では対応しない。
  *   これにより未ログインユーザーが公開ページに正常にアクセスできる。
  */

@@ -385,17 +385,21 @@ describe('proxy', () => {
 
     it('VERCEL_ENV="preview" では /api/* は素通し（本番404封鎖の対象外）', () => {
       process.env.VERCEL_ENV = 'preview';
+      try {
+        const req = createMockRequest({
+          pathname: '/api/auth/session',
+          auth: null,
+          hasSessionCookie: false,
+        });
 
-      const req = createMockRequest({
-        pathname: '/api/auth/session',
-        auth: null,
-        hasSessionCookie: false,
-      });
+        const response = proxy(req);
 
-      const response = proxy(req);
-
-      expect(response.status).toBe(200);
-      expect(response.headers.get('location')).toBeNull();
+        expect(response.status).toBe(200);
+        expect(response.headers.get('location')).toBeNull();
+      } finally {
+        // 後続テストへの副作用を防ぐため即時復元（上位 beforeEach でも delete されるが多重防御）
+        delete process.env.VERCEL_ENV;
+      }
     });
   });
 

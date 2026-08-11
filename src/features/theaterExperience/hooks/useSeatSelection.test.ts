@@ -66,6 +66,37 @@ describe('useSeatSelection', () => {
     expect(result.current.selectedSeat?.id).toBe('seat-2');
   });
 
+  it('境界値: 同座席toggleで解除後、もう一度同じ座席を選択できる（toggle2周目）', () => {
+    const { result } = renderHook(() => useSeatSelection());
+    const seat = createMockSeat('seat-1');
+
+    // 1周目: 選択
+    act(() => {
+      result.current.selectSeat(seat);
+    });
+    // 1周目: 解除
+    act(() => {
+      result.current.selectSeat(seat);
+    });
+    expect(result.current.selectedSeat).toBeNull();
+
+    // 2周目: 再選択できる
+    act(() => {
+      result.current.selectSeat(seat);
+    });
+    expect(result.current.selectedSeat?.id).toBe('seat-1');
+  });
+
+  it('境界値: 選択なし状態で clearSelection を呼んでもエラーにならない（no-op）', () => {
+    const { result } = renderHook(() => useSeatSelection());
+
+    // 初期状態から clearSelection を呼ぶ
+    act(() => {
+      result.current.clearSelection();
+    });
+    expect(result.current.selectedSeat).toBeNull();
+  });
+
   it('clearSelectionで選択を解除できる', () => {
     const { result } = renderHook(() => useSeatSelection());
     const seat = createMockSeat('seat-1');

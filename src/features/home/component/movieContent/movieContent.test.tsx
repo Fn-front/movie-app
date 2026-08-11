@@ -201,6 +201,29 @@ describe('MovieContent', () => {
       ).toBeInTheDocument();
     });
 
+    it('日付範囲lte単独（gteなし）でバッジが表示される', () => {
+      mockUseHome.mockReturnValue(
+        createMockUseHome({ dateRange: { lte: '2026-12-31' } }),
+      );
+      const { container } = render(<MovieContent />);
+      expect(
+        container.querySelector('.c_home_page__filter_count'),
+      ).toBeInTheDocument();
+    });
+
+    it('複数のフィルタが有効でもバッジは1つだけ表示される（境界値）', () => {
+      mockUseHome.mockReturnValue(
+        createMockUseHome({
+          selectedGenreIds: [28, 12],
+          dateRange: { gte: '2026-01-01', lte: '2026-12-31' },
+          isRevivalFilter: true,
+        }),
+      );
+      const { container } = render(<MovieContent />);
+      const badges = container.querySelectorAll('.c_home_page__filter_count');
+      expect(badges).toHaveLength(1);
+    });
+
     it('フィルターが無効な場合バッジが表示されない', () => {
       const { container } = render(<MovieContent />);
       expect(
@@ -228,6 +251,26 @@ describe('MovieContent', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'フィルター' }));
       expect(handleFilterModalOpen).toHaveBeenCalled();
+    });
+
+    it('ソート変更でhandleSortChangeが呼ばれる', () => {
+      const handleSortChange = jest.fn();
+      mockUseHome.mockReturnValue(createMockUseHome({ handleSortChange }));
+      render(<MovieContent />);
+
+      // Radix Select は combobox の keydown で option を確定できる
+      const combobox = screen.getByRole('combobox', {
+        name: 'ソート順を選択',
+      });
+      fireEvent.keyDown(combobox, { key: 'ArrowDown' });
+      const listbox = screen.getByRole('listbox');
+      const optionToClick = Array.from(
+        listbox.querySelectorAll('[role="option"]'),
+      ).find((el) => el.textContent !== '公開日順');
+      if (optionToClick) {
+        fireEvent.click(optionToClick);
+      }
+      expect(handleSortChange).toHaveBeenCalled();
     });
   });
 });

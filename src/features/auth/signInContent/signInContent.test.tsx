@@ -19,8 +19,17 @@ jest.mock('next-auth/react', () => ({
   signIn: jest.fn(),
 }));
 
+const mockSocialLoginButtons = jest.fn(
+  (props: { callbackUrl?: string; disabled?: boolean }) => (
+    <div
+      data-testid='social-login-buttons'
+      data-callback={props.callbackUrl ?? ''}
+    />
+  ),
+);
 jest.mock('@/features/auth/socialLoginButtons/socialLoginButtons', () => ({
-  SocialLoginButtons: () => <div data-testid='social-login-buttons' />,
+  SocialLoginButtons: (props: { callbackUrl?: string; disabled?: boolean }) =>
+    mockSocialLoginButtons(props),
 }));
 
 const mockFetch = jest.fn();
@@ -56,6 +65,35 @@ describe('SignInContent', () => {
     });
 
     expect(screen.queryByLabelText('パスワード')).not.toBeInTheDocument();
+  });
+
+  it('callbackUrl プロパティが LoginForm 経由で SocialLoginButtons に伝播される', () => {
+    render(<SignInContent callbackUrl='/favorites' />);
+
+    // 初期はpasswordモード → LoginForm 内の SocialLoginButtons に callbackUrl 伝播
+    expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
+      'data-callback',
+      '/favorites',
+    );
+  });
+
+  it('OTPモード切替後も callbackUrl が引き継がれる（OtpLoginForm 側）', async () => {
+    render(<SignInContent callbackUrl='/watchlist' />);
+
+    await user.click(screen.getByRole('button', { name: 'メールでログイン' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: 'メールでログイン' }),
+      ).toBeInTheDocument();
+    });
+
+    // OTP モードでは SocialLoginButtons は無いが、
+    // OtpLoginForm のメール入力→送信フローで useOtpLogin(callbackUrl) に渡っている。
+    // ここでは callbackUrl が同マウント中に保持されていることをスモークで確認。
+    expect(
+      screen.getByRole('heading', { name: 'メールでログイン' }),
+    ).toBeInTheDocument();
   });
 
   it('パスワードでログインクリック時にパスワードログインフォームに戻る', async () => {

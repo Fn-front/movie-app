@@ -21,8 +21,6 @@ import {
   MOVIES_FETCH_MONTHS_AHEAD,
   NOW_SHOWING_MONTHS_BACK,
   RELEASE_TYPE_MAP,
-  EXCLUDED_KEYWORDS_PARAM,
-  EXCLUDED_GENRES_PARAM,
   ALLOWED_LANGUAGES,
   MIN_VOTE_AVERAGE,
   MIN_POPULARITY,
@@ -213,8 +211,6 @@ export async function GET(request: Request) {
             'release_date.lte': fetchDateLte,
             with_release_type: withReleaseType,
             sort_by: 'popularity.desc',
-            without_keywords: EXCLUDED_KEYWORDS_PARAM,
-            without_genres: EXCLUDED_GENRES_PARAM,
           });
 
           if (tmdbResponse.results.length === 0) break;

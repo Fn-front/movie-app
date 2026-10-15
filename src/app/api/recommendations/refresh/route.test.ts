@@ -29,7 +29,13 @@ jest.mock('@/lib/recommendations/generateRecommendationsService', () => ({
     mockProcessUserRecommendations(...args),
 }));
 
+const mockCheckCooldown = jest.fn();
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkCooldown: (...args: unknown[]) => mockCheckCooldown(...args),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
+import { RATE_LIMIT_ACTION, RECOMMENDATION_REFRESH } from '@/constants';
 
 // --- Helpers ---
 
@@ -81,6 +87,7 @@ describe('POST /api/recommendations/refresh', () => {
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
+    mockCheckCooldown.mockResolvedValue({ allowed: true });
   });
 
   it('未認証で401を返す', async () => {
@@ -91,6 +98,55 @@ describe('POST /api/recommendations/refresh', () => {
     expect(response.status).toBe(401);
     const json = await response.json();
     expect(json.success).toBe(false);
+  });
+
+  it('クールダウン中は429を返し、Retry-Afterヘッダーを付ける', async () => {
+    mockCheckCooldown.mockResolvedValue({ allowed: false, retryAfter: 42 });
+
+    const response = await POST(createPostRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('REFRESH_COOLDOWN');
+    expect(response.headers.get('Retry-After')).toBe('42');
+  });
+
+  it('クールダウン中はレコメンド生成処理を実行しない', async () => {
+    mockCheckCooldown.mockResolvedValue({ allowed: false, retryAfter: 60 });
+
+    await POST(createPostRequest());
+
+    expect(mockProcessUserRecommendations).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('クールダウン拒否でretryAfterが無い場合はRetry-Afterを付けない', async () => {
+    mockCheckCooldown.mockResolvedValue({ allowed: false });
+
+    const response = await POST(createPostRequest());
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBeNull();
+  });
+
+  it('クールダウンはユーザーIDと設定秒数で判定される', async () => {
+    mockCountChain(0);
+    mockProcessUserRecommendations.mockResolvedValueOnce({
+      status: 'processed',
+      recommendationCount: 1,
+    });
+    mockInsertSuccess();
+    mockFetchRecommendations([]);
+
+    await POST(createPostRequest());
+
+    expect(mockCheckCooldown).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-123',
+      RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+      RECOMMENDATION_REFRESH.SERVER_COOLDOWN_SECONDS,
+    );
   });
 
   it('上限到達時に429を返す', async () => {

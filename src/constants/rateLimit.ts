@@ -23,6 +23,7 @@ export const RATE_LIMIT_ACTION = {
   SUGGEST_TITLE: 'suggest_title',
   REGISTER: 'register',
   CHANGE_PASSWORD: 'change_password',
+  RECOMMENDATION_REFRESH: 'recommendation_refresh',
 } as const;
 
 /**

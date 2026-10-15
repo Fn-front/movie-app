@@ -60,6 +60,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
     const {
       refresh,
       isRefreshing,
+      isRefreshDisabled,
       remainingCount,
       maxCount,
       isLimitReached,
@@ -180,7 +181,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
                 variant='ghost'
                 size='sm'
                 onClick={handleRefresh}
-                disabled={isLimitReached || isRefreshing}
+                disabled={isRefreshDisabled}
                 aria-label='おすすめを更新'
               >
                 <IoRefreshOutline

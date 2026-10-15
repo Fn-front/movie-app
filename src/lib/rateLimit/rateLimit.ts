@@ -4,7 +4,11 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
-import { RATE_LIMIT_DEFAULT, SUPABASE_ERROR_CODE } from '@/constants';
+import {
+  MS_PER_SECOND,
+  RATE_LIMIT_DEFAULT,
+  SUPABASE_ERROR_CODE,
+} from '@/constants';
 
 /**
  * レート制限チェック結果
@@ -97,6 +101,71 @@ export async function checkRateLimit(
       attempts: data.attempts + 1,
       last_attempt_at: now.toISOString(),
     })
+    .eq('id', data.id);
+
+  return { allowed: true };
+}
+
+/**
+ * クールダウンチェック（連続呼び出しの間隔制限）
+ *
+ * checkRateLimit が「N回失敗したらロック」モデルなのに対し、こちらは
+ * 「直前の呼び出しから一定時間あけないと通さない」モデル。
+ * コストの高い処理（AI生成など）の連打抑止に使う。
+ *
+ * 呼び出し時点で `last_attempt_at` を更新するため、処理完了前に届いた
+ * 多重リクエストもブロックできる。拒否時は時刻を更新しないため、
+ * クールダウンが連打で延長されることはない。
+ *
+ * @param supabase - Supabaseクライアント
+ * @param identifier - 識別子（ユーザーIDやIPアドレス）
+ * @param actionType - アクション種別
+ * @param cooldownSeconds - 必要な間隔（秒）
+ * @returns レート制限チェック結果
+ */
+export async function checkCooldown(
+  supabase: SupabaseClient,
+  identifier: string,
+  actionType: string,
+  cooldownSeconds: number,
+): Promise<RateLimitResult> {
+  const now = new Date();
+
+  const { data, error } = await supabase
+    .from('rate_limits')
+    .select('id, last_attempt_at')
+    .eq('identifier', identifier)
+    .eq('action_type', actionType)
+    .single();
+
+  // レコードが存在しない場合は初回とみなして通す
+  if (error && error.code === SUPABASE_ERROR_CODE.NOT_FOUND) {
+    await supabase.from('rate_limits').insert({
+      identifier,
+      action_type: actionType,
+      attempts: 1,
+      last_attempt_at: now.toISOString(),
+    });
+    return { allowed: true };
+  }
+
+  if (error) {
+    throw error;
+  }
+
+  const cooldownMs = cooldownSeconds * MS_PER_SECOND;
+  const elapsedMs = now.getTime() - new Date(data.last_attempt_at).getTime();
+
+  if (elapsedMs < cooldownMs) {
+    return {
+      allowed: false,
+      retryAfter: Math.ceil((cooldownMs - elapsedMs) / MS_PER_SECOND),
+    };
+  }
+
+  await supabase
+    .from('rate_limits')
+    .update({ last_attempt_at: now.toISOString() })
     .eq('id', data.id);
 
   return { allowed: true };

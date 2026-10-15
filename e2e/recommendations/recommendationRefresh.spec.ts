@@ -8,6 +8,7 @@
  * ユーザーストーリー網羅:
  * - 正常系: 「更新」クリック → 再生成成功（モック）→ 成功トースト＋残り回数更新
  * - 上限到達: 残り0回（モック）→ 「更新」ボタンが無効
+ * - 連打防止: 連続クリックしてもAPI呼び出しは1回のみ、完了後もクールダウンで無効
  */
 
 import { test, expect } from '../fixtures/auth';
@@ -70,6 +71,50 @@ test.describe('おすすめ更新（認証済み）', () => {
       page.getByText('おすすめ映画を更新しました').first(),
     ).toBeVisible();
     await expect(page.getByText('残り7回 / 月10回')).toBeVisible();
+  });
+
+  test('更新ボタンを連打してもAPI呼び出しは1回のみで、完了後はクールダウンで無効', async ({
+    authenticatedPage: page,
+  }) => {
+    let postCount = 0;
+
+    // 生成中の多重クリックを再現するため、レスポンスを遅延させる
+    await page.route('**/api/recommendations/refresh', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      postCount++;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: { remainingCount: 7, recommendations: [] },
+        }),
+      });
+    });
+
+    await page.goto('/');
+
+    const section = page.getByRole('region', { name: 'あなたへのおすすめ' });
+    await expect(section).toBeVisible({ timeout: 15000 });
+
+    const refreshButton = page.getByRole('button', { name: 'おすすめを更新' });
+    await expect(refreshButton).toBeEnabled();
+
+    // 1回目のクリック以降はボタンがdisabledになるため、
+    // force指定で連打してもクリックイベント自体が発火しない
+    for (let i = 0; i < 5; i++) {
+      await refreshButton.click({ force: true }).catch(() => {});
+    }
+
+    await expect(
+      page.getByText('おすすめ映画を更新しました').first(),
+    ).toBeVisible();
+
+    expect(postCount).toBe(1);
+
+    // 更新完了後もクールダウン中はボタンが無効のまま
+    await expect(refreshButton).toBeDisabled();
   });
 
   test('今月の更新上限に達している場合は更新ボタンが無効', async ({

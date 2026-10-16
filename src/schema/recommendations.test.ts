@@ -295,8 +295,10 @@ describe('recommendationSchema', () => {
   });
 
   it('vote_countが未指定の場合エラーになる', () => {
-    const { vote_count: _voteCount, ...withoutVoteCount } = validRecommendation;
-    const result = recommendationSchema.safeParse(withoutVoteCount);
+    const result = recommendationSchema.safeParse({
+      ...validRecommendation,
+      vote_count: undefined,
+    });
     expect(result.success).toBe(false);
   });
 

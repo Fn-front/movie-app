@@ -319,6 +319,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   reducedMotion={reducedMotion}
                 >
                   <SeatMeshes
+                    theme={interiorTheme}
                     seats={seats}
                     selectedSeatId={selectedSeatId}
                     highlightedSeatId={highlightedSeatId}
@@ -326,6 +327,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                     onHoverSeat={handleHoverSeat}
                   />
                   <ScreenMesh
+                    theme={interiorTheme}
                     width={theater.screen_width}
                     height={theater.screen_height}
                     centerX={theater.screen_center_x}

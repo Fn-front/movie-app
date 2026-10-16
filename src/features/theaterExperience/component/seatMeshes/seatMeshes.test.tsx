@@ -52,8 +52,6 @@ import type { TheaterSeat } from '../../types';
 
 import {
   SeatMeshes,
-  getSeatColorKey,
-  getSeatBackColor,
   resolveHoverEmitId,
   getHoverHighlightSeat,
 } from './seatMeshes';
@@ -118,62 +116,5 @@ describe('getHoverHighlightSeat', () => {
   it('強調IDが null / 未一致なら null', () => {
     expect(getHoverHighlightSeat(seats, null, null)).toBeNull();
     expect(getHoverHighlightSeat(seats, 'nope', null)).toBeNull();
-  });
-});
-
-describe('getSeatColorKey', () => {
-  const base: TheaterSeat = {
-    id: 's1',
-    row_label: 'A',
-    seat_number: 1,
-    position_x: 0,
-    position_y: 0,
-    position_z: 0,
-    seat_type: 'standard',
-  };
-
-  it('選択中の席は selected（車椅子より優先）', () => {
-    expect(getSeatColorKey({ ...base, seat_type: 'wheelchair' }, 's1')).toBe(
-      'selected',
-    );
-  });
-
-  it('車椅子席は wheelchair', () => {
-    expect(getSeatColorKey({ ...base, seat_type: 'wheelchair' }, null)).toBe(
-      'wheelchair',
-    );
-  });
-
-  it('通常席は単色 seat（列に依らず一定）', () => {
-    expect(getSeatColorKey({ ...base, row_label: 'A' }, null)).toBe('seat');
-    expect(getSeatColorKey({ ...base, row_label: 'B' }, null)).toBe('seat');
-  });
-});
-
-describe('getSeatBackColor', () => {
-  const base: TheaterSeat = {
-    id: 's1',
-    row_label: 'A',
-    seat_number: 1,
-    position_x: 0,
-    position_y: 0,
-    position_z: 0,
-    seat_type: 'standard',
-  };
-
-  // getSeatColorKey と同じ優先度で色種別を選び、種別ごとに一段暗い色を返す。
-  // （three は本テストでモックのため実RGBの暗さは検証せず、種別分岐の一貫性を検証）
-  it('色種別ごとに定義済みの背もたれ色を返す', () => {
-    expect(getSeatBackColor(base, null)).toBeDefined();
-    expect(
-      getSeatBackColor({ ...base, seat_type: 'wheelchair' }, null),
-    ).toBeDefined();
-    expect(getSeatBackColor(base, 's1')).toBeDefined();
-  });
-
-  it('同一種別では同じインスタンス（事前計算マップ）を返す', () => {
-    expect(getSeatBackColor(base, null)).toBe(getSeatBackColor(base, null));
-    // 選択中は種別が selected に変わるため seat とは別インスタンス
-    expect(getSeatBackColor(base, null)).not.toBe(getSeatBackColor(base, 's1'));
   });
 });

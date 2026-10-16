@@ -1,6 +1,6 @@
 /**
  * SeatInfoPanelコンポーネント
- * 選択中の座席の視野占有率・距離・歪みスコアを表示
+ * 選択中の座席の視野占有率・距離・歪みスコア・前席遮蔽率を表示
  */
 
 'use client';
@@ -120,6 +120,15 @@ export const SeatInfoPanel = memo<SeatInfoPanelProps>(function SeatInfoPanel({
             </dt>
             <dd className={styles.c_seat_info_panel__metric_value}>
               {(fovMetrics.distortion_score * 100).toFixed(0)}%
+            </dd>
+          </div>
+
+          <div className={styles.c_seat_info_panel__metric}>
+            <dt className={styles.c_seat_info_panel__metric_label}>
+              前席遮蔽率
+            </dt>
+            <dd className={styles.c_seat_info_panel__metric_value}>
+              {((fovMetrics.front_occlusion_ratio ?? 0) * 100).toFixed(0)}%
             </dd>
           </div>
         </dl>

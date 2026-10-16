@@ -101,6 +101,11 @@ export interface FieldOfViewMetrics {
   distance_to_screen: number;
   /** 歪みスコア（0〜1、両端席ほど高い） */
   distortion_score: number;
+  /**
+   * 前席の頭による幕下部の遮蔽率（0〜1）。前席に人が座っている前提の最悪ケース。
+   * 最前列など前席が無い席は 0。省略時は遮蔽なしとして扱う。
+   */
+  front_occlusion_ratio?: number;
 }
 
 /** 劇場一覧APIレスポンス */

@@ -26,6 +26,7 @@ const createMetrics = (
   vertical_ratio: 0.2,
   distance_to_screen: 12.5,
   distortion_score: 0.1,
+  front_occlusion_ratio: 0.12,
   ...overrides,
 });
 
@@ -52,6 +53,7 @@ describe('SeatInfoPanel', () => {
       horizontal_ratio: 0.35,
       vertical_ratio: 0.2,
       distortion_score: 0.1,
+      front_occlusion_ratio: 0.12,
     });
 
     render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);
@@ -67,6 +69,7 @@ describe('SeatInfoPanel', () => {
     const metrics = createMetrics({
       horizontal_ratio: 0.25,
       distortion_score: 0.05,
+      front_occlusion_ratio: 0.12,
     });
 
     render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);
@@ -79,6 +82,7 @@ describe('SeatInfoPanel', () => {
     const metrics = createMetrics({
       horizontal_ratio: 0.35,
       distortion_score: 0.15,
+      front_occlusion_ratio: 0.12,
     });
 
     render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);
@@ -91,6 +95,7 @@ describe('SeatInfoPanel', () => {
     const metrics = createMetrics({
       horizontal_ratio: 0.4,
       distortion_score: 0.2,
+      front_occlusion_ratio: 0.12,
     });
 
     render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);
@@ -103,6 +108,7 @@ describe('SeatInfoPanel', () => {
     const metrics = createMetrics({
       horizontal_ratio: 0.6,
       distortion_score: 0.5,
+      front_occlusion_ratio: 0.12,
     });
 
     render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);
@@ -118,5 +124,20 @@ describe('SeatInfoPanel', () => {
 
     const region = screen.getByRole('region', { name: '座席情報' });
     expect(region).toHaveAttribute('aria-live', 'polite');
+  });
+  it('前席遮蔽率を表示する', () => {
+    const seat = createSeat();
+    const metrics = createMetrics({ front_occlusion_ratio: 0.18 });
+    render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);
+    expect(screen.getByText('前席遮蔽率')).toBeInTheDocument();
+    expect(screen.getByText('18%')).toBeInTheDocument();
+  });
+
+  it('前席遮蔽率が未指定なら0%と表示する（最前列など前席が無い席）', () => {
+    const seat = createSeat();
+    const metrics = createMetrics();
+    delete metrics.front_occlusion_ratio;
+    render(<SeatInfoPanel seat={seat} fovMetrics={metrics} />);
+    expect(screen.getByText('0%')).toBeInTheDocument();
   });
 });

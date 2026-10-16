@@ -13,6 +13,7 @@ import type { FrequencyBand, TheaterSeat } from '../types';
 import { computeSeatXSegments } from '../utils/theaterGeometry';
 import { getInteriorTheme } from '../utils/theaterPalette';
 import { computeAisleSideSeatIds } from '../utils/aisleGeometry';
+import { computeOccupiedSeatIds } from '../utils/occupancy';
 import { useTheater } from '../hooks/useTheater';
 import { useTheaters } from '../hooks/useTheaters';
 import { useTheaterSelection } from '../hooks/useTheaterSelection';
@@ -30,6 +31,12 @@ import { SeatInfoPanel } from '../component/seatInfoPanel/seatInfoPanel';
 import { SeatA11yList } from '../component/seatA11yList/seatA11yList';
 import { FrequencySelector } from '../component/frequencySelector/frequencySelector';
 import { HeatmapToggle } from '../component/heatmapToggle/heatmapToggle';
+import {
+  OccupancySelector,
+  getOccupancyRate,
+  type OccupancyLevel,
+} from '../component/occupancySelector/occupancySelector';
+import { AudienceMeshes } from '../component/audienceMeshes/audienceMeshes';
 import { HeatmapLegend } from '../component/heatmapLegend/heatmapLegend';
 import { UnsupportedBrowserNotice } from '../component/unsupportedBrowserNotice/unsupportedBrowserNotice';
 import { TheaterSelector } from '../component/theaterSelector/theaterSelector';
@@ -92,7 +99,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       [theater?.format],
     );
 
-    const fovMetrics = useFieldOfView(selectedSeat, theater);
+    const fovMetrics = useFieldOfView(selectedSeat, theater, seats);
 
     // 座席エリアの境界（傾斜床・段差LEDのサイズ算出用）
     const seatAreaBounds = useMemo(() => {
@@ -243,6 +250,22 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       [selectedSeat],
     );
 
+    /**
+     * 客席の入り（表示設定）。席の評価指標には影響しない
+     * （前席遮蔽率は「前席に人が座っている前提」の最悪ケースで算出するため）。
+     */
+    const [occupancyLevel, setOccupancyLevel] =
+      useState<OccupancyLevel>('empty');
+    const occupiedSeatIds = useMemo(
+      () =>
+        computeOccupiedSeatIds(
+          seats,
+          getOccupancyRate(occupancyLevel),
+          selectedSeatId,
+        ),
+      [seats, occupancyLevel, selectedSeatId],
+    );
+
     // ヘッダー（タイトル＋劇場セレクタ）はローディング/エラー時も表示し、
     // どの状態でも別の劇場へ切り替えられるようにする
     const header = (
@@ -352,6 +375,12 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                     centerZ={theater.screen_center_z}
                     reducedMotion={reducedMotion}
                   />
+                  <AudienceMeshes
+                    theme={interiorTheme}
+                    seats={seats}
+                    occupiedSeatIds={occupiedSeatIds}
+                    rowCurveRadius={theater.row_curve_radius}
+                  />
                   {speakers.length > 0 && (
                     <>
                       {/*
@@ -396,6 +425,10 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
 
           {/* サイドパネル */}
           <aside className={styles.c_theater_experience__sidebar}>
+            <OccupancySelector
+              level={occupancyLevel}
+              onLevelChange={setOccupancyLevel}
+            />
             <HeatmapToggle
               visible={isHeatmapVisible}
               onVisibleChange={handleHeatmapVisibleChange}

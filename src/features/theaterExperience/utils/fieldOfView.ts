@@ -9,6 +9,7 @@
 import type { FieldOfViewMetrics } from '../types';
 
 import { calcScreenArcPoint } from './screenCurve';
+import { calcFrontRowOcclusion, type SightlineSeat } from './sightline';
 
 /** 2D座標 */
 export interface Point2D {
@@ -309,6 +310,11 @@ export function resolveFlythroughStart(params: {
 export function calcFieldOfViewMetrics(
   seat: { position_x: number; position_y: number; position_z: number },
   screen: ScreenGeometry,
+  /**
+   * 前列の席。渡すと前席の頭による幕下部の遮蔽率を算出する。
+   * 最前列や未指定なら遮蔽なし（0）として扱うため、既存の呼び出しは挙動が変わらない。
+   */
+  frontSeat?: SightlineSeat | null,
 ): FieldOfViewMetrics {
   const seatPoint: Point3D = {
     x: seat.position_x,
@@ -327,6 +333,15 @@ export function calcFieldOfViewMetrics(
     vertical_ratio: ratios.vertical_ratio,
     distance_to_screen: calcDistance3D(seatPoint, screenCenter),
     distortion_score: calcViewingDistortion(seatPoint, screenCenter),
+    front_occlusion_ratio: frontSeat
+      ? calcFrontRowOcclusion(
+          seat,
+          frontSeat,
+          screen.center_y,
+          screen.height,
+          screen.center_z,
+        )
+      : 0,
   };
 }
 

@@ -4,7 +4,7 @@
 
 `/theater-experience` の3Dシーンの内装意匠を、実在の映画館（TOHOシネマズ）の内装写真を参考に刷新する。
 
-現状のシーンは「アイソメトリック・ドールハウス（フラットマテリアル＋エッジ強調）」として作られており、壁・床は単色の `planeGeometry` 1枚、座席は箱型、通路には段が無い。これを **フォト寄り** に振り、壁・通路階段・座席・床・スクリーンの5系統に手を入れる。
+現状のシーンは「アイソメトリック・ドールハウス（フラットマテリアル＋エッジ強調）」として作られており、壁・床は単色の `planeGeometry` 1枚、座席とスピーカーは箱型、通路には段が無い。これを **フォト寄り** に振り、壁・通路階段・座席・床・スクリーン・スピーカー・ライティングの各系統に手を入れる。
 
 参考にした実物:
 
@@ -27,7 +27,8 @@
 | 4 | 通路階段 | 縦通路に踏面・蹴込みを生成し、蹴込みに琥珀LED帯・段鼻に明ライン |
 | 5 | 座席 | 背もたれ上端をドーム状に、ヘッドレスト枕を追加、色をテーマ化 |
 | 6 | スクリーン | 黒マスキングの大型化、幕面のパーフォレーション表現 |
-| 7 | ライティング | 視点別（俯瞰＝現状維持 / 一人称＝劇場照明） |
+| 7 | スピーカー | 客席方向へのエイミング、バッフル・ドライバー・ブラケットの造形、色のテーマ化 |
+| 8 | ライティング | 視点別（俯瞰＝現状維持 / 一人称＝劇場照明） |
 
 ### 含まないもの
 
@@ -35,7 +36,8 @@
 - **DBスキーマ変更**。通路位置は既存の座席座標から導出できるため、マイグレーション不要
 - **画像アセットの追加**。`public/` へのテクスチャ画像配置は行わない（理由は §2.2）
 - **モバイル対応**。既存どおりデスクトップのみ
-- **俯瞰ライティングの変更**（§9 参照）
+- **俯瞰ライティングの変更**（§10 参照）
+- **スピーカーの配置座標の変更**。DBの `theater_speakers` の座標は音響計算の入力でもあるため動かさない。本件で変えるのは**向きと造形と色**のみ
 
 ---
 
@@ -108,6 +110,8 @@ export interface InteriorTheme {
   carpet: { base: string; motif: string; pattern: CarpetPattern };
   /** 座席 */
   seat: { cushion: string; headrest: string; frame: string };
+  /** スピーカー（筐体・バッフル面・ドライバーコーン） */
+  speaker: { cabinet: string; baffle: string; driver: string };
 }
 ```
 
@@ -130,6 +134,9 @@ export interface InteriorTheme {
 | `seat.cushion` | `#8c5a56` | `#3a3a3e` | `#1f1d20` |
 | `seat.headrest` | `#9a6762` | `#46464b` | `#2a272b` |
 | `seat.frame` | `#2e2a28` | `#232326` | `#141214` |
+| `speaker.cabinet` | `#1a1a1c` | `#17171a` | `#141214` |
+| `speaker.baffle` | `#34343a` | `#2e2e34` | `#6b5327`（真鍮） |
+| `speaker.driver` | `#0e0e10` | `#0c0c0e` | `#2a2010` |
 
 背もたれ色は既存どおり `cushion * BACK_DARKEN(0.78)` で導出し、テーマには持たせない。
 
@@ -139,11 +146,12 @@ export interface InteriorTheme {
 
 ### 3.3 テーマの導出箇所とprop経路
 
-現状 `TheaterScene` は内部で `getWallColors(theater.format)` を呼んでいるが、`SeatMeshes` と `ScreenMesh` は **`TheaterScene` の子として `theaterExperiencePage.tsx` から渡されている**（`theaterExperiencePage.tsx:296-348`）。各コンポーネントが個別にテーマを導出すると単一ソースが崩れるため、以下に改める。
+現状 `TheaterScene` は内部で `getWallColors(theater.format)` を呼んでいるが、`SeatMeshes` / `ScreenMesh` / `SpeakerMeshes` は **`TheaterScene` の子として `theaterExperiencePage.tsx` から渡されている**（`theaterExperiencePage.tsx:296-348`）。各コンポーネントが個別にテーマを導出すると単一ソースが崩れるため、以下に改める。
 
 - `theaterExperiencePage` で `const theme = useMemo(() => getInteriorTheme(theater.format), [theater.format])` を1回だけ導出する
-- `TheaterScene` / `SeatMeshes` / `ScreenMesh` に `theme: InteriorTheme` を prop として渡す
+- `TheaterScene` / `SeatMeshes` / `ScreenMesh` / `SpeakerMeshes` に `theme: InteriorTheme` を prop として渡す
 - `TheaterSceneProps` から内部導出を取り除く（**これが本件唯一のインターフェース変更**）
+- `SpeakerMeshes` にはエイミング先として客席重心（§9.2）も渡す
 
 ### 3.4 識別性の検証（必須）
 
@@ -353,9 +361,84 @@ export function computeAisleSteps(
 
 ---
 
-## 9. 視点別ライティング（`component/theaterScene/` 改修）
+## 9. スピーカー（`utils/speakerAiming.ts` 新規 ＋ `component/speakerMeshes/` 改修）
 
-### 9.1 値
+### 9.1 現状の不具合
+
+`speakerMeshes.tsx` は種別ごとに回転を出し分けているが、**視覚的に何も起きていない**。
+
+```ts
+const rotation = kind === 'ceiling' ? [Math.PI, 0, 0] : [0, 0, 0];
+```
+
+`RoundedBoxGeometry` は対称な箱であり、X軸まわりに180°回しても見た目は変わらない。「天井は下向き、壁/床スピーカーは水平向きで視覚的に区別」というファイル冒頭のコメントは、実装されていない効果を記述している。さらに壁掛けサラウンドは `[0, 0, 0]`＝+Z（スクリーン方向）を向いたままで、客席を向いていない。
+
+根本原因は **「向きを示す面」がジオメトリに無い**こと。箱が「スピーカーに見える」のはバッフル面とドライバーコーンが見えるからであり、それが無い以上、回転させても意味が出ない。したがって **造形（§9.3）とエイミング（§9.2）はセットで入れる必要がある**。
+
+### 9.2 エイミング（`utils/speakerAiming.ts`）
+
+参考写真では、サラウンドも天井chも**客席に向けて内向き・下向きに振られている**。スピーカー位置と客席重心からオイラー角を算出する。
+
+```ts
+/** 3D点 */
+export interface AimPoint { x: number; y: number; z: number }
+
+/**
+ * スピーカーを客席重心へ向けるオイラー角 [pitch, yaw, 0] を算出する。
+ *
+ * yaw   = Math.atan2(dx, dz)（Y軸まわり。three の既定前方 -Z に合わせる）
+ * pitch = -Math.asin(dy / 距離) を maxPitchRad でクランプ
+ *
+ * 実機のサラウンドは真下を向かず斜め下に留まるため、俯角に上限を設ける。
+ * 距離ゼロ（スピーカーと重心が同一点）の場合は [0, 0, 0] を返す。
+ */
+export function calcSpeakerAim(
+  speaker: AimPoint,
+  target: AimPoint,
+  maxPitchRad?: number,
+): [number, number, number];
+
+/**
+ * 座席エリアの前後端Zと耳の高さから、エイミング先の客席重心を返す。
+ * x は 0（室中心）、y は耳の高さ、z は前後端の中点。
+ */
+export function calcAudienceCentroid(
+  seatAreaFrontZ: number,
+  seatAreaBackZ: number,
+  earHeightY: number,
+): AimPoint;
+```
+
+- `maxPitchRad` の既定値は **35°**（実機のサラウンドの俯角の目安）
+- 天井chにもこのクランプを適用する。重心の真上にある天井chはほぼ真下を向くが、35°で頭打ちになるため**やや前方を向いた自然な角度**に収まる
+- 客席重心は `theaterExperiencePage` が既に保持している `seatAreaFrontZ` / `seatAreaBackZ` から導けるため、**DB変更は不要**。`earHeightY` は既存の `SEATED_EYE_HEIGHT`（1.2m）を流用する
+
+### 9.3 造形
+
+向きが視覚的に意味を持つよう、筐体に方向性のあるパーツを足す。
+
+| パーツ | 対象 | 形状 | 色 |
+|---|---|---|---|
+| 筐体 | 全可視ch | 既存の `RoundedBoxGeometry`（サイズは `getSpeakerSize` のまま） | `theme.speaker.cabinet` |
+| バッフル板 | 全可視ch | 筐体前面に厚さ 0.02m の薄板。筐体より一段明るい | `theme.speaker.baffle` |
+| ドライバーコーン | 全可視ch | バッフル中央に薄い円柱（`cylinderGeometry`）。半径は筐体短辺の 0.33 倍 | `theme.speaker.driver` |
+| ブラケット | サラウンドのみ | 筐体背面と壁の間を埋める小箱（0.06 × 0.06 × 0.12m） | `theme.speaker.cabinet` |
+
+天井chはブラケットの代わりに、既存どおり天井面に接して配置する（吊り下げロッドは描かない。俯瞰で視認できないわりにジオメトリが増えるため）。
+
+スクリーンch（L/C/R/LFE）は実機でも音響透過スクリーンの裏にあるため、**`isSpeakerVisible` による非表示を維持する**。
+
+### 9.4 ドローコールについて
+
+Atmos 9.1.6 レイアウトでは可視スピーカーは最大12個（16ch − スクリーン4ch）。1個あたり最大4パーツで48ドローコール程度に収まる。**この規模では `InstancedMesh` 化のメリットが測定可能な差にならない**ため、既存の `speakers.map()` による個別メッシュ構造を維持し、可読性を優先する。§2.1 の instancing 原則は、席数（最大544）やリブ本数（最大約170）のように**データ量に比例して増える要素**に適用する。
+
+`castShadow` は既存どおり筐体のみに付け、追加パーツには付けない。
+
+---
+
+## 10. 視点別ライティング（`component/theaterScene/` 改修）
+
+### 10.1 値
 
 `TheaterScene` 内で `isFirstPerson = selectedSeat !== null` を判定し、ライト強度を切り替える。
 
@@ -370,7 +453,7 @@ export function computeAisleSteps(
 
 **俯瞰を据え置くのは意図的**である。俯瞰は座席選択UIそのものであり、ここを暗くすると座席の識別性（§2.3）と既存E2Eスクリーンショットの大半が壊れる。
 
-### 9.2 遷移
+### 10.2 遷移
 
 座席選択時には既に俯瞰→一人称のフライスルー（`FLYTHROUGH_DURATION_S = 0.55s`、`easeOutCubic`）がある。ライト強度もこれと**同じ時間・同じイージングで補間**し、カメラ移動と光量変化を同期させる。`reducedMotion` 時はフライスルー同様に即時切替とする。
 
@@ -378,18 +461,19 @@ export function computeAisleSteps(
 
 ---
 
-## 10. テスト方針
+## 11. テスト方針
 
 `.claude/rules/testing.md` に従い、全指標80%以上を維持する。
 
-### 10.1 単体テスト（新規）
+### 11.1 単体テスト（新規）
 
 | 対象 | 観点 |
 |---|---|
 | `utils/aisleGeometry.ts` | **最重点**。純ロジックなので手厚く。(1) ブロック間隙間の通路検出 (2) サイド通路の検出 (3) `minWidth` 未満の隙間を通路としない (4) 段の生成数が列数×通路数と一致 (5) 横通路を `riseHeight = 0` のランディングとして扱う (6) 端ケース：座席ゼロ／1列のみ／全列同一Y（平床）／通路ゼロ（全幅1ブロック） |
+| `utils/speakerAiming.ts` | 純ロジック。(1) 真横の相手に対し yaw が 90° になる (2) 真上から見下ろす配置で pitch が負（下向き）になる (3) `maxPitchRad` を超える俯角がクランプされる (4) スピーカーと重心が同一点なら `[0, 0, 0]` を返す (5) 左右対称な配置で yaw が符号反転の関係になる (6) `calcAudienceCentroid` が前後端の中点と耳の高さを返す |
 | `utils/theaterTextures.ts` | jsdom に canvas 実装が無いため、`HTMLCanvasElement.prototype.getContext` をモックし、(1) 柄種別ごとに異なる描画コマンド列が発行される (2) 同一フォーマットの2回目呼び出しでキャッシュが効き再描画されない (3) `wallGraphic.kind === 'none'` で `null` を返す、を検証する。**`canvas` パッケージは導入しない**（依存最小主義） |
 
-### 10.2 単体テスト（既存の拡張）
+### 11.2 単体テスト（既存の拡張）
 
 | 対象 | 観点 |
 |---|---|
@@ -397,13 +481,13 @@ export function computeAisleSteps(
 | `utils/theaterGeometry.test.ts` | `isCrossAisleGap()` の切り出しに追随 |
 | `seatMeshes` の純粋関数テスト | `getSeatColorKey` / `getSeatBackColor` のテーマ引数化に追随 |
 
-### 10.3 カバレッジ除外
+### 11.3 カバレッジ除外
 
 `wallPanels` / `aisleStairs` は R3F メッシュ層であり、jsdom（WebGL非対応）では実行時の振る舞いを検証できない。既存の `seatMeshes` / `theaterScene` 等と同じ扱いとし、`jest.config.js` の `collectCoverageFrom` 除外リストに追加する。振る舞いは E2E でカバーする。
 
 **ロジックは必ず `utils/` 側の純粋関数に置き、メッシュコンポーネントには配置処理だけを残す。** 除外対象に判断ロジックを持ち込まない。
 
-### 10.4 E2E・ビジュアル証跡
+### 11.4 E2E・ビジュアル証跡
 
 - 既存の E2E スクリーンショット4枚（`docs/e2e-screenshots/theater-types-{standard-medium,tcx,imax-gt,dolby-cinema}.png`）を撮り直し、**同名で上書き**する
 - `.claude/rules/visual-evidence.md` に従い、各PRに Before/After スクリーンショットと動作動画を添付する。特に **一人称視点**（座席選択後）の Before/After を必ず含める。俯瞰だけでは本件の変化の大半が写らない
@@ -411,7 +495,7 @@ export function computeAisleSteps(
 
 ---
 
-## 11. PR分割と完了条件
+## 12. PR分割と完了条件
 
 5系統を1PRにまとめると巨大すぎるため分割する。各PRは単体でマージ可能な状態にする。
 
@@ -421,7 +505,8 @@ export function computeAisleSteps(
 | 2 | 壁 | `wallPanels`（リブ・コーブ・幅木・グラフィック） | #1 |
 | 3 | 通路階段 | `aisleGeometry.ts`、`aisleStairs`、`isCrossAisleGap` の共用化 | #1 |
 | 4 | 座席＋スクリーン | ドーム背もたれ、ヘッドレスト、テーマ色化、マスキング拡大、パーフォレーション | #1 |
-| 5 | 視点別ライティング | `AdaptiveLighting`、E2Eスクショ更新 | #2 #3 #4 |
+| 5 | スピーカー | `speakerAiming.ts`、エイミング、バッフル・ドライバー・ブラケット、テーマ色化 | #1 |
+| 6 | 視点別ライティング | `AdaptiveLighting`、E2Eスクショ更新 | #2 #3 #4 #5 |
 
 ### 完了条件（全PR共通）
 
@@ -429,12 +514,13 @@ export function computeAisleSteps(
 - [ ] `npm run lint` / 型チェックがパス
 - [ ] IMAX（544席）で E2E がタイムアウト・クラッシュしない
 - [ ] 俯瞰で通常席・車椅子席・選択中席が判別可能（§3.4 の輝度比を実測）
-- [ ] 俯瞰のライティング値が変更されていない（PR #5 を除く）
+- [ ] 俯瞰のライティング値が変更されていない（PR #6 を除く）
+- [ ] `theater_speakers` の座標データが変更されていない（向き・造形・色のみの変更であること）
 - [ ] Before/After スクリーンショット（俯瞰・一人称の両方）と動作動画をPRに添付
 
 ---
 
-## 12. 参考資料
+## 13. 参考資料
 
 - [`theater-experience-design.md`](theater-experience-design.md) — 座標系・DBスキーマ・音響計算の設計（本書はこれを変更しない）
 - [`design-system.md`](design-system.md) — カラーパレット・コントラスト要件

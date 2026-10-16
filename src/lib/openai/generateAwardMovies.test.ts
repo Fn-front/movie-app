@@ -329,6 +329,23 @@ describe('fetchAwardsFromOpenAI', () => {
     expect(callArgs.text.format.type).toBe('json_schema');
     expect(callArgs.text.format.strict).toBe(true);
   });
+
+  it('システムプロンプトにアダルト作品の除外指示が含まれる', async () => {
+    mockCreate.mockResolvedValue(
+      createMockResponseOutput(JSON.stringify({ awards: [] })),
+    );
+
+    await fetchAwardsFromOpenAI(
+      2026,
+      'テスト賞',
+      testCategory,
+      testArticleText,
+    );
+
+    const callArgs = mockCreate.mock.calls[0][0];
+    expect(callArgs.instructions).toContain('アダルト作品');
+    expect(callArgs.instructions).toContain('抽出対象に含めないこと');
+  });
 });
 
 describe('resolveAwardsWithTMDb', () => {

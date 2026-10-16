@@ -4,11 +4,13 @@
 
 import {
   API,
+  EXCLUDED_GENRE_IDS,
+  EXCLUDED_GENRES_PARAM,
+  EXCLUDED_KEYWORDS_PARAM,
   PAGINATION,
   TMDB_ENDPOINTS,
   TMDB_MOVIE_DETAIL_APPEND,
   TMDB_RETRY_CONFIG,
-  TMDB_SORT_BY,
 } from '@/constants';
 import type {
   Movie,
@@ -16,7 +18,6 @@ import type {
   MovieSearchParams,
   TMDbReleaseDateCountry,
   TMDbResponse,
-  TMDbNowShowingMovie,
 } from '@/lib/types';
 
 import axios, { type AxiosError } from 'axios';
@@ -41,6 +42,8 @@ const tmdbClient = axios.create({
   params: {
     language: API.TMDB_LANGUAGE,
     region: API.TMDB_REGION,
+    // 全エンドポイント共通でアダルト作品を除外する（新規関数で付け忘れないよう既定値化）
+    include_adult: false,
   },
 });
 
@@ -88,46 +91,32 @@ function validatePage(page: number): number {
 }
 
 /**
- * 人気映画を取得
+ * 不適切コンテンツを結果側から除外する
  *
- * @param page - ページ番号
- * @returns 人気映画リスト
+ * TMDbの `without_keywords` / `without_genres` は `/discover/movie` でしか
+ * サポートされないため、`/search/movie` や `/movie/now_playing` では
+ * APIパラメータで足切りできない。
+ * そこで取得後の結果に対して `adult` フラグと除外ジャンルを一律で弾き、
+ * `include_adult=false` との二重防御とする。
+ *
+ * @param movies - TMDbから取得した映画リスト
+ * @returns 不適切コンテンツを除いた映画リスト
  */
-export async function getPopularMovies(
-  page: number = 1,
-): Promise<TMDbResponse<Movie>> {
-  const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    TMDB_ENDPOINTS.POPULAR,
-    {
-      params: { page: validatePage(page) },
-    },
-  );
-  return response.data;
-}
+function excludeInappropriateMovies(movies: Movie[]): Movie[] {
+  const excludedGenres: readonly number[] = EXCLUDED_GENRE_IDS;
 
-/**
- * 最新映画を取得
- *
- * @param page - ページ番号
- * @returns 最新映画リスト
- */
-export async function getUpcomingMovies(
-  page: number = 1,
-): Promise<TMDbResponse<Movie>> {
-  const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    TMDB_ENDPOINTS.UPCOMING,
-    {
-      params: { page: validatePage(page) },
-    },
+  return movies.filter(
+    (movie) =>
+      !movie.adult &&
+      !(movie.genre_ids ?? []).some((id) => excludedGenres.includes(id)),
   );
-  return response.data;
 }
 
 /**
  * 上映中の映画を取得
  *
  * @param page - ページ番号
- * @returns 上映中の映画リスト
+ * @returns 上映中の映画リスト（不適切コンテンツ除外済み）
  */
 export async function getNowPlayingMovies(
   page: number = 1,
@@ -138,25 +127,10 @@ export async function getNowPlayingMovies(
       params: { page: validatePage(page) },
     },
   );
-  return response.data;
-}
-
-/**
- * 高評価映画を取得
- *
- * @param page - ページ番号
- * @returns 高評価映画リスト
- */
-export async function getTopRatedMovies(
-  page: number = 1,
-): Promise<TMDbResponse<Movie>> {
-  const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    TMDB_ENDPOINTS.TOP_RATED,
-    {
-      params: { page: validatePage(page) },
-    },
-  );
-  return response.data;
+  return {
+    ...response.data,
+    results: excludeInappropriateMovies(response.data.results),
+  };
 }
 
 /**
@@ -194,8 +168,12 @@ export async function getMovieKeywordIds(
 /**
  * 映画を検索
  *
+ * `include_adult=false` はtmdbClientの既定パラメータで常に送られる。
+ * 検索エンドポイントはキーワード・ジャンル除外に非対応のため、
+ * 結果側でも不適切コンテンツを除外する。
+ *
  * @param params - 検索パラメータ
- * @returns 検索結果
+ * @returns 検索結果（不適切コンテンツ除外済み）
  */
 export async function searchMovies(
   params: MovieSearchParams,
@@ -213,7 +191,10 @@ export async function searchMovies(
       },
     },
   );
-  return response.data;
+  return {
+    ...response.data,
+    results: excludeInappropriateMovies(response.data.results),
+  };
 }
 
 /**
@@ -245,8 +226,11 @@ export interface DiscoverMoviesParams {
 /**
  * 映画をDiscoverで取得（公開日範囲指定対応）
  *
+ * 除外キーワード・除外ジャンルは既定で付与されるため、呼び出し側で
+ * 毎回指定する必要はない（明示的に渡した場合はそちらが優先される）。
+ *
  * @param params - Discoverパラメータ
- * @returns 映画リスト
+ * @returns 映画リスト（不適切コンテンツ除外済み）
  */
 export async function discoverMovies(
   params: DiscoverMoviesParams = {},
@@ -257,12 +241,16 @@ export async function discoverMovies(
     {
       params: {
         page: validatePage(page),
-        include_adult: false,
+        without_keywords: EXCLUDED_KEYWORDS_PARAM,
+        without_genres: EXCLUDED_GENRES_PARAM,
         ...rest,
       },
     },
   );
-  return response.data;
+  return {
+    ...response.data,
+    results: excludeInappropriateMovies(response.data.results),
+  };
 }
 
 /**
@@ -273,20 +261,6 @@ export async function discoverMovies(
 export async function getGenres() {
   const response = await tmdbClient.get(TMDB_ENDPOINTS.GENRES);
   return response.data.genres;
-}
-
-/**
- * 今週のトレンド映画を取得
- *
- * @returns トレンド映画リスト
- */
-export async function getTrendingMovies(): Promise<
-  TMDbResponse<TMDbNowShowingMovie>
-> {
-  const response = await tmdbClient.get<TMDbResponse<TMDbNowShowingMovie>>(
-    TMDB_ENDPOINTS.TRENDING,
-  );
-  return response.data;
 }
 
 /**
@@ -303,28 +277,4 @@ export async function getMovieReleaseDates(
     results: TMDbReleaseDateCountry[];
   }>(TMDB_ENDPOINTS.MOVIE_RELEASE_DATES(movieId));
   return response.data.results;
-}
-
-/**
- * ジャンル別映画を取得
- *
- * @param genreId - ジャンルID
- * @param page - ページ番号
- * @returns ジャンル別映画リスト
- */
-export async function getMoviesByGenre(
-  genreId: number,
-  page: number = 1,
-): Promise<TMDbResponse<Movie>> {
-  const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    TMDB_ENDPOINTS.DISCOVER,
-    {
-      params: {
-        with_genres: genreId,
-        page: validatePage(page),
-        sort_by: TMDB_SORT_BY.POPULARITY_DESC,
-      },
-    },
-  );
-  return response.data;
 }

@@ -11,6 +11,12 @@ import {
   getRecommendation,
 } from './seatRecommendation';
 
+/**
+ * 既定値はスタジアム傾斜の客席中ほどを想定する。
+ * `front_occlusion_ratio` は「前席に人が座っている前提」の値で、0 は最前列（前席なし）を
+ * 意味する。既定を 0 にすると全ケースが最前列扱いになり遮蔽の項が満点になってしまうため、
+ * 中ほどの席として現実的な 0.12 を既定に置く。
+ */
 const metrics = (
   overrides: Partial<FieldOfViewMetrics> = {},
 ): FieldOfViewMetrics => ({
@@ -18,6 +24,7 @@ const metrics = (
   vertical_ratio: 0.15,
   distance_to_screen: 12,
   distortion_score: 0.05,
+  front_occlusion_ratio: 0.12,
   ...overrides,
 });
 
@@ -76,6 +83,26 @@ describe('calcSeatScore / getRecommendation', () => {
     const low = calcSeatScore(metrics({ distortion_score: 0.05 }));
     const high = calcSeatScore(metrics({ distortion_score: 0.5 }));
     expect(high).toBeLessThan(low);
+  });
+
+  it('前席遮蔽が大きいほどスコアが下がる', () => {
+    const low = calcSeatScore(metrics({ front_occlusion_ratio: 0 }));
+    const high = calcSeatScore(metrics({ front_occlusion_ratio: 0.3 }));
+    expect(high).toBeLessThan(low);
+  });
+
+  it('遮蔽が上限(0.3)を超えても下限で頭打ちになる', () => {
+    expect(calcSeatScore(metrics({ front_occlusion_ratio: 0.3 }))).toBe(
+      calcSeatScore(metrics({ front_occlusion_ratio: 0.9 })),
+    );
+  });
+
+  it('front_occlusion_ratio 未指定は遮蔽なし（0 指定）と同じ扱い', () => {
+    const omitted = metrics();
+    delete omitted.front_occlusion_ratio;
+    expect(calcSeatScore(omitted)).toBe(
+      calcSeatScore(metrics({ front_occlusion_ratio: 0 })),
+    );
   });
 });
 

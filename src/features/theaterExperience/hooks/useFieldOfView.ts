@@ -6,20 +6,26 @@ import { useMemo } from 'react';
 
 import type { TheaterSeat, Theater, FieldOfViewMetrics } from '../types';
 import { calcFieldOfViewMetrics } from '../utils/fieldOfView';
+import { findFrontSeat } from '../utils/sightline';
 
 /**
  * 選択座席と劇場データから視野メトリクスを算出する
  *
  * @param seat 選択中の座席（nullの場合はnullを返す）
  * @param theater 劇場データ（undefinedの場合はnullを返す）
+ * @param seats 全座席（前席遮蔽率の算出に使う。省略すると遮蔽なし＝0になる）
  * @returns 視野占有率メトリクス
  */
 export function useFieldOfView(
   seat: TheaterSeat | null,
   theater: Theater | undefined,
+  seats: TheaterSeat[] = [],
 ): FieldOfViewMetrics | null {
   return useMemo(() => {
     if (!seat || !theater) return null;
+
+    // 前席に人が座っている前提（最悪ケース）で遮蔽を評価する
+    const frontSeat = findFrontSeat(seat, seats);
 
     return calcFieldOfViewMetrics(
       {
@@ -35,6 +41,7 @@ export function useFieldOfView(
         center_z: theater.screen_center_z,
         curvature: theater.screen_curvature,
       },
+      frontSeat,
     );
-  }, [seat, theater]);
+  }, [seat, theater, seats]);
 }

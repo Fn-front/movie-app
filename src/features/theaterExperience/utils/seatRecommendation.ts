@@ -26,9 +26,16 @@ const H_MAX = 0.5;
 /** 歪み(0〜1)がこの値以上で歪み品質を0とする */
 const DISTORTION_MAX = 0.6;
 
-/** 総合スコアの配分（占有率 : 歪み） */
-const W_OCCUPANCY = 0.6;
-const W_DISTORTION = 0.4;
+/**
+ * 前席遮蔽(0〜1)がこの値以上で遮蔽品質を0とする。
+ * 幕の下端から3割が隠れると鑑賞に明確な支障が出るため、そこを下限に取る。
+ */
+const OCCLUSION_MAX = 0.3;
+
+/** 総合スコアの配分（占有率 : 歪み : 前席遮蔽） */
+const W_OCCUPANCY = 0.45;
+const W_DISTORTION = 0.3;
+const W_OCCLUSION = 0.25;
 
 /** 推奨度レベルの閾値（総合スコア 0〜1） */
 const THRESHOLD_EXCELLENT = 0.8;
@@ -56,16 +63,28 @@ export function calcOccupancyScore(horizontalRatio: number): number {
 }
 
 /**
- * 総合スコア（0〜1）。占有スイートスポット＋歪み品質の加重和。
- * 前列中央は「占有率過大」と「見上げ歪み大」の両方で減点され、
- * 単純な閾値判定のように無条件で最高評価にはならない。
+ * 総合スコア（0〜1）。占有スイートスポット＋歪み品質＋前席遮蔽品質の加重和。
+ *
+ * 前列中央は「占有率過大」と「見上げ歪み大」の両方で減点され、単純な閾値判定の
+ * ように無条件で最高評価にはならない。一方で最前列は前席が無いぶん遮蔽品質は満点に
+ * なるため、この項だけでは最前列が有利になる。3項の合算で釣り合いを取る。
+ *
+ * `front_occlusion_ratio` が未指定の場合は遮蔽なし（品質1）として扱うため、
+ * 既存の呼び出しは挙動が変わらない。
  */
 export function calcSeatScore(metrics: FieldOfViewMetrics): number {
   const occupancy = calcOccupancyScore(metrics.horizontal_ratio);
   const distortionQuality = clamp01(
     1 - metrics.distortion_score / DISTORTION_MAX,
   );
-  return occupancy * W_OCCUPANCY + distortionQuality * W_DISTORTION;
+  const occlusionQuality = clamp01(
+    1 - (metrics.front_occlusion_ratio ?? 0) / OCCLUSION_MAX,
+  );
+  return (
+    occupancy * W_OCCUPANCY +
+    distortionQuality * W_DISTORTION +
+    occlusionQuality * W_OCCLUSION
+  );
 }
 
 /**

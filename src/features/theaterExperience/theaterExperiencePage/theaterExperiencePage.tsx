@@ -342,7 +342,10 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                         スクリーンch(L/C/R/LFE)はSpeakerMeshes内で非表示にし、
                         目線より上の天井/サラウンドを残して設備感を出す。
                       */}
-                      <SpeakerMeshes speakers={speakers} />
+                      <SpeakerMeshes
+                        speakers={speakers}
+                        theme={interiorTheme}
+                      />
                       {isHeatmapVisible && (
                         <AudioHeatmapPlane
                           uniforms={audioUniforms}

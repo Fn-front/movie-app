@@ -14,6 +14,7 @@ import type { ShaderMaterial as ShaderMaterialType } from 'three';
 import type { FrequencyBand } from '../../types';
 import type { AudioShaderUniforms } from '../../hooks/useAudioShader';
 import { ABSORPTION_COEFFICIENTS, FREQUENCY_MAP } from '../../utils/physics';
+import { interpolateFloorHeight } from '../../utils/theaterGeometry';
 import { vertexShader } from '../../shaders/audioHeatmap.vert';
 import { fragmentShader } from '../../shaders/audioHeatmap.frag';
 
@@ -28,12 +29,14 @@ export interface AudioHeatmapPlaneProps {
   depth: number;
   /** 平面の中心Z座標 (m) */
   centerZ?: number;
-  /** 傾斜床に沿わせる場合に渡す。スロープ前端Z（座席最前列のZ） */
-  slopeFrontZ?: number;
-  /** スロープ後端Z（座席最後列のZ） */
-  slopeBackZ?: number;
-  /** スロープ最大高さ（座席最後列のY） */
-  slopeMaxHeight?: number;
+  /**
+   * 各列の代表Z（前→後の降順）。傾斜床に沿わせる場合に渡す。
+   * 床メッシュ（SlopedFloorMesh）と同じ `interpolateFloorHeight` で補間するため、
+   * 面が必ず実際の床の上に乗る。
+   */
+  rowZs?: number[];
+  /** 各列の代表Y（rowZs と同順・同数） */
+  rowYs?: number[];
   /** prefers-reduced-motionが有効か */
   reducedMotion?: boolean;
 }
@@ -45,26 +48,25 @@ export const AudioHeatmapPlane = memo<AudioHeatmapPlaneProps>(
     width,
     depth,
     centerZ = 0,
-    slopeFrontZ,
-    slopeBackZ,
-    slopeMaxHeight,
+    rowZs,
+    rowYs,
     reducedMotion = false,
   }) {
     const materialRef = useRef<ShaderMaterialType>(null);
 
     /**
-     * 傾斜床に沿わせる場合、SlopedFloorMesh と同じ t² カーブで頂点を
-     * 上方向に変位させる。これによりヒートマップが床（スロープ）の上面に
-     * 重なり、スロープの下に隠れない。
+     * 傾斜床に沿わせる場合、床メッシュ（SlopedFloorMesh）と**同じ**
+     * `interpolateFloorHeight` で頂点を変位させる。
+     *
+     * 旧実装は `slopeMaxHeight * t²` という独自カーブを使っており、床メッシュ
+     * （各列のYを必ず通る線形補間）とも座席（t^1.3）とも一致していなかった。
+     * つまりヒートマップ面が実際の床の上に乗っていなかった。式を一本化する。
      */
     const geometry = useMemo(() => {
-      const segments = slopeFrontZ !== undefined ? 24 : 1;
+      const hasSlope = rowZs !== undefined && rowYs !== undefined;
+      const segments = hasSlope ? Math.max(24, rowZs.length * 2) : 1;
       const geo = new PlaneGeometry(width, depth, 1, segments);
-      if (
-        slopeFrontZ === undefined ||
-        slopeBackZ === undefined ||
-        slopeMaxHeight === undefined
-      ) {
+      if (!hasSlope || rowZs.length === 0 || rowZs.length !== rowYs.length) {
         return geo;
       }
       const posAttr = geo.attributes.position;
@@ -74,16 +76,12 @@ export const AudioHeatmapPlane = memo<AudioHeatmapPlaneProps>(
         // worldZ = centerZ - localY
         const localY = posAttr.getY(i);
         const worldZ = centerZ - localY;
-        // スロープ区間 (slopeBackZ..slopeFrontZ) の内側だけ持ち上げる
-        if (worldZ >= slopeBackZ && worldZ <= slopeFrontZ) {
-          const t = (slopeFrontZ - worldZ) / (slopeFrontZ - slopeBackZ);
-          posAttr.setZ(i, slopeMaxHeight * t * t);
-        }
+        posAttr.setZ(i, interpolateFloorHeight(worldZ, rowZs, rowYs));
       }
       posAttr.needsUpdate = true;
       geo.computeVertexNormals();
       return geo;
-    }, [width, depth, centerZ, slopeFrontZ, slopeBackZ, slopeMaxHeight]);
+    }, [width, depth, centerZ, rowZs, rowYs]);
 
     // フレームごとにuTimeを更新し、周波数帯のuniformを同期
     // R3FはshaderMaterialのuniforms propを内部コピーするため、

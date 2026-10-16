@@ -4,8 +4,11 @@
  */
 
 varying vec2 vUv;
+varying float vWorldY;
 
 void main() {
   vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+  vWorldY = worldPosition.y;
+  gl_Position = projectionMatrix * viewMatrix * worldPosition;
 }

@@ -19,6 +19,8 @@ export const fragmentShader = /* glsl */ `
 precision mediump float;
 
 varying vec2 vUv;
+// ヒートマップ面の実ワールドY（傾斜床に沿って変位済み）
+varying float vWorldY;
 
 // スピーカーデータテクスチャ（各ピクセル: x,y,z,power）
 uniform sampler2D uSpeakerData;
@@ -35,7 +37,7 @@ uniform vec2 uRoomSize; // (width, depth)
 // 劇場のオフセット（ワールド座標の原点からの変換）
 uniform vec2 uRoomOffset; // (x_offset, z_offset)
 // スライスのY座標（ボリュメトリック表示用）
-uniform float uSliceY;
+uniform float uEarHeight;
 // スライスのアルファ値（枚数に応じて調整）
 uniform float uSliceAlpha;
 
@@ -137,7 +139,7 @@ void main() {
 
     // 3D距離（スライスのY高さを考慮）
     float dx = worldPos.x - speakerPos.x;
-    float dy = uSliceY - speakerPos.y;
+    float dy = (vWorldY + uEarHeight) - speakerPos.y;
     float dz = worldPos.y - speakerPos.z; // UV.y → Z方向
     float distance = sqrt(dx * dx + dy * dy + dz * dz);
 

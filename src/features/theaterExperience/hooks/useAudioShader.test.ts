@@ -63,7 +63,7 @@ describe('useAudioShader', () => {
     const uniforms = result.current;
     expect(uniforms).toBeDefined();
     expect(uniforms.uSpeakerCount).toBeDefined();
-    expect(uniforms.uSliceY).toBeDefined();
+    expect(uniforms.uEarHeight).toBeDefined();
   });
 
   it('正しいuniform値を持つ', () => {
@@ -79,20 +79,20 @@ describe('useAudioShader', () => {
     expect(uniforms.uRoomOffset.value).toEqual([-10, -12.5]);
   });
 
-  it('デフォルトのsliceYが1.2（耳の高さ）', () => {
+  it('デフォルトの耳の高さが1.2m（面からのオフセット）', () => {
     const { result } = renderHook(() =>
       useAudioShader(mockSpeakers, 'mid', 20, 25),
     );
 
-    expect(result.current.uSliceY.value).toBeCloseTo(1.2);
+    expect(result.current.uEarHeight.value).toBeCloseTo(1.2);
   });
 
-  it('sliceYをカスタム値で指定できる', () => {
+  it('耳の高さをカスタム値で指定できる', () => {
     const { result } = renderHook(() =>
       useAudioShader(mockSpeakers, 'mid', 20, 25, 2.0),
     );
 
-    expect(result.current.uSliceY.value).toBeCloseTo(2.0);
+    expect(result.current.uEarHeight.value).toBeCloseTo(2.0);
   });
 
   it('uSliceAlphaが0.4', () => {

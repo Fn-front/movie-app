@@ -12,6 +12,8 @@ export const CRON_ERROR_MESSAGES = {
   SYNC_NOW_PLAYING: 'Now Playing映画同期中にエラーが発生しました。',
   /** 劇場公開中映画同期エラー */
   SYNC_NOW_SHOWING: '劇場公開中の人気映画同期中にエラーが発生しました。',
+  /** 配信作品同期エラー */
+  SYNC_STREAMING: '配信作品同期中にエラーが発生しました。',
   /** 映画キャッシュバッチ更新エラー */
   UPDATE_MOVIES: '映画キャッシュのバッチ更新中にエラーが発生しました。',
   /** レコメンド生成エラー */

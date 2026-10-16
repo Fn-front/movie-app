@@ -17,6 +17,9 @@ import {
   PlaneGeometry,
   Vector3,
   Color,
+  type AmbientLight,
+  type DirectionalLight,
+  type HemisphereLight,
   type Texture,
   type OrthographicCamera as OrthographicCameraType,
   type PerspectiveCamera as PerspectiveCameraType,
@@ -38,6 +41,11 @@ import {
   interpolateFloorHeight,
 } from '../../utils/theaterGeometry';
 import type { SeatXSegment } from '../../utils/theaterGeometry';
+import {
+  calcLightIntensities,
+  getTargetIntensities,
+  type LightIntensities,
+} from '../../utils/adaptiveLighting';
 import {
   calcNormalGap,
   computeAisleSteps,
@@ -477,6 +485,106 @@ const PITCH_DEADZONE_RAD = (PITCH_DEADZONE_DEG * Math.PI) / 180;
 const FLYTHROUGH_DURATION_S = 0.55;
 
 /**
+ * 視点別ライティング。
+ *
+ * 実映画館は「暗闇＋局所照明」だが、俯瞰（等角投影）はそのまま座席選択UIなので
+ * ここを暗くすると座席の識別性（設計書 §2.3）と既存E2Eスクリーンショットが壊れる。
+ * そのため俯瞰は既存値のまま据え置き、一人称だけ劇場照明に落とす。
+ *
+ * 座席選択時にはカメラのフライスルーがあるため、光量変化も同じ時間・同じイージングで
+ * 進めて移動と同期させる。prefers-reduced-motion 有効時は即時切替にする。
+ *
+ * 毎フレームのコストはスカラー代入3回で、描画負荷には影響しない。
+ */
+const AdaptiveLighting = memo<{
+  roomWidth: number;
+  roomDepth: number;
+  roomHeight: number;
+  isFirstPerson: boolean;
+  reducedMotion: boolean;
+}>(function AdaptiveLighting({
+  roomWidth,
+  roomDepth,
+  roomHeight,
+  isFirstPerson,
+  reducedMotion,
+}) {
+  const ambientRef = useRef<AmbientLight>(null);
+  const hemisphereRef = useRef<HemisphereLight>(null);
+  const directionalRef = useRef<DirectionalLight>(null);
+
+  const target = useMemo(
+    () => getTargetIntensities(isFirstPerson),
+    [isFirstPerson],
+  );
+  // 遷移の開始値と経過秒。視点が切り替わった時点の実強度から補間を再開する
+  const anim = useRef<{ from: LightIntensities; elapsed: number }>({
+    from: target,
+    elapsed: FLYTHROUGH_DURATION_S,
+  });
+
+  useEffect(() => {
+    anim.current = {
+      from: {
+        ambient: ambientRef.current?.intensity ?? target.ambient,
+        hemisphere: hemisphereRef.current?.intensity ?? target.hemisphere,
+        directional: directionalRef.current?.intensity ?? target.directional,
+      },
+      elapsed: 0,
+    };
+  }, [target]);
+
+  useFrame((_, delta) => {
+    const duration = reducedMotion ? 0 : FLYTHROUGH_DURATION_S;
+    const a = anim.current;
+    if (a.elapsed < FLYTHROUGH_DURATION_S) {
+      a.elapsed = Math.min(a.elapsed + delta, FLYTHROUGH_DURATION_S);
+    }
+    const next = calcLightIntensities(a.from, target, a.elapsed, duration);
+    if (ambientRef.current) ambientRef.current.intensity = next.ambient;
+    if (hemisphereRef.current)
+      hemisphereRef.current.intensity = next.hemisphere;
+    if (directionalRef.current) {
+      directionalRef.current.intensity = next.directional;
+    }
+  });
+
+  return (
+    <>
+      {/*
+        ライティング: 旧実装は ambient=1.0 優位（ambient:directional≈1.67:1）で
+        キーライトが形を変調できず全体がフラットだった。ambient を下げ directional を
+        上げて比を反転（≈1:2）し、座席・壁に陰影と接地感を出す。hemisphereLight で
+        天井側の淡いフィル（sky→ground のグラデ）を加え、暗部が潰れ過ぎないようにする。
+        強度は毎フレーム AdaptiveLighting が書き換えるため、ここは初期値。
+      */}
+      <ambientLight ref={ambientRef} intensity={target.ambient} />
+      {/* args=[skyColor, groundColor, intensity]（groundColor はコンストラクタ引数で渡す） */}
+      <hemisphereLight
+        ref={hemisphereRef}
+        args={[COLOR_HEMI_SKY, COLOR_HEMI_GROUND, target.hemisphere]}
+      />
+      <directionalLight
+        ref={directionalRef}
+        position={[10, 20, 5]}
+        intensity={target.directional}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-left={-roomWidth / 2}
+        shadow-camera-right={roomWidth / 2}
+        shadow-camera-top={roomDepth / 2}
+        shadow-camera-bottom={-roomDepth / 2}
+        shadow-camera-near={0.1}
+        shadow-camera-far={roomHeight + 30}
+        shadow-bias={-0.002}
+      />
+    </>
+  );
+});
+AdaptiveLighting.displayName = 'AdaptiveLighting';
+
+/**
  * 等角投影カメラ + lookAt 原点向き
  * drei の OrthographicCamera は lookAt プロパティを取らないため
  * ref 経由で手動で向きを設定する
@@ -796,28 +904,13 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         />
       )}
 
-      {/*
-        ライティング: 旧実装は ambient=1.0 優位（ambient:directional≈1.67:1）で
-        キーライトが形を変調できず全体がフラットだった。ambient を下げ directional を
-        上げて比を反転（≈1:2）し、座席・壁に陰影と接地感を出す。hemisphereLight で
-        天井側の淡いフィル（sky→ground のグラデ）を加え、暗部が潰れ過ぎないようにする。
-      */}
-      <ambientLight intensity={0.5} />
-      {/* args=[skyColor, groundColor, intensity]（groundColor はコンストラクタ引数で渡す） */}
-      <hemisphereLight args={[COLOR_HEMI_SKY, COLOR_HEMI_GROUND, 0.35]} />
-      <directionalLight
-        position={[10, 20, 5]}
-        intensity={1.15}
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-camera-left={-roomWidth / 2}
-        shadow-camera-right={roomWidth / 2}
-        shadow-camera-top={roomDepth / 2}
-        shadow-camera-bottom={-roomDepth / 2}
-        shadow-camera-near={0.1}
-        shadow-camera-far={roomHeight + 30}
-        shadow-bias={-0.002}
+      {/* 視点別ライティング（俯瞰は現状維持 / 一人称は劇場照明へ補間） */}
+      <AdaptiveLighting
+        roomWidth={roomWidth}
+        roomDepth={roomDepth}
+        roomHeight={roomHeight}
+        isFirstPerson={selectedSeat !== null}
+        reducedMotion={reducedMotion}
       />
 
       {/*

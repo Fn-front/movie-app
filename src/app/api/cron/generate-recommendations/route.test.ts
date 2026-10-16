@@ -18,8 +18,9 @@ import { GET } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
+const mockRpc = jest.fn();
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: jest.fn(() => ({ from: mockFrom })),
+  createServiceRoleClient: jest.fn(() => ({ from: mockFrom, rpc: mockRpc })),
   dbConnectionErrorResponse: jest.fn(
     () => new Response(JSON.stringify({ success: false }), { status: 500 }),
   ),
@@ -117,37 +118,11 @@ const mockDismissedMoviesQuery = (
   });
 };
 
-/** 既存レコメンド退避のモック */
-const mockSelectExistingRecommendations = (
-  recs: Record<string, unknown>[] = [],
-) => {
-  mockFrom.mockReturnValueOnce({
-    select: () => ({
-      eq: () => Promise.resolve({ data: recs, error: null }),
-    }),
-  });
-};
-
-/** レコメンド削除のモック */
-const mockDeleteRecommendations = (success: boolean) => {
-  mockFrom.mockReturnValueOnce({
-    delete: () => ({
-      eq: () =>
-        Promise.resolve({
-          data: null,
-          error: success ? null : new Error('Delete failed'),
-        }),
-    }),
-  });
-};
-
-/** レコメンド挿入のモック */
-const mockInsertRecommendations = (success: boolean) => {
-  mockFrom.mockReturnValueOnce({
-    insert: () =>
-      Promise.resolve({
-        error: success ? null : new Error('Insert failed'),
-      }),
+/** upsert_recommendations RPC のモック */
+const mockUpsertRecommendationsRpc = (success: boolean) => {
+  mockRpc.mockResolvedValueOnce({
+    data: success ? 1 : null,
+    error: success ? null : new Error('RPC failed'),
   });
 };
 
@@ -207,12 +182,8 @@ describe('GET /api/cron/generate-recommendations', () => {
     mockWatchlistQuery([{ tmdb_movie_id: 2, title: 'ダークナイト' }]);
     // 興味なし映画取得
     mockDismissedMoviesQuery([]);
-    // 既存レコメンド退避
-    mockSelectExistingRecommendations([]);
-    // レコメンド削除
-    mockDeleteRecommendations(true);
-    // レコメンド挿入
-    mockInsertRecommendations(true);
+    // レコメンド洗い替え（トランザクション内のDELETE → INSERT）
+    mockUpsertRecommendationsRpc(true);
 
     mockFetchRecommendations.mockResolvedValue([
       { title: 'Arrival', year: 2016, reason: 'SF好きにおすすめ' },
@@ -289,14 +260,13 @@ describe('GET /api/cron/generate-recommendations', () => {
     expect(json.data.skipped_users).toBe(1);
   });
 
-  it('レコメンド削除失敗の場合、ユーザーをスキップする', async () => {
+  it('レコメンド洗い替えRPCが失敗した場合、ユーザーをスキップする', async () => {
     mockFavoritesUserQuery(['user-1']);
     mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
-    mockSelectExistingRecommendations([]);
-    mockDeleteRecommendations(false);
+    mockUpsertRecommendationsRpc(false);
 
     mockFetchRecommendations.mockResolvedValue([
       { title: 'Movie A', year: 2020, reason: '理由' },
@@ -321,25 +291,13 @@ describe('GET /api/cron/generate-recommendations', () => {
     expect(json.data.skipped_users).toBe(1);
   });
 
-  it('レコメンド挿入失敗の場合、既存データを復元してスキップする', async () => {
+  it('レコメンド洗い替えはRPC1回で行い、DELETE/INSERTを個別発行しない', async () => {
     mockFavoritesUserQuery(['user-1']);
     mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
-    mockSelectExistingRecommendations([
-      {
-        id: 'old-id',
-        user_id: 'user-1',
-        tmdb_movie_id: 50,
-        title: '旧レコメンド',
-        display_order: 1,
-      },
-    ]);
-    mockDeleteRecommendations(true);
-    mockInsertRecommendations(false);
-    // 復元用のinsertモック
-    mockInsertRecommendations(true);
+    mockUpsertRecommendationsRpc(true);
 
     mockFetchRecommendations.mockResolvedValue([
       { title: 'Movie A', year: 2020, reason: '理由' },
@@ -361,7 +319,11 @@ describe('GET /api/cron/generate-recommendations', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data.skipped_users).toBe(1);
+    expect(json.data.processed_users).toBe(1);
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc.mock.calls[0][0]).toBe('upsert_recommendations');
+    // from() はお気に入り/ウォッチリスト/興味なし/ユーザー取得の読み取りのみ
+    expect(mockFrom).toHaveBeenCalledTimes(5);
   });
 
   it('ユーザー処理中の例外は他のユーザーに影響しない', async () => {
@@ -381,9 +343,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
-    mockSelectExistingRecommendations([]);
-    mockDeleteRecommendations(true);
-    mockInsertRecommendations(true);
+    mockUpsertRecommendationsRpc(true);
 
     mockFetchRecommendations.mockResolvedValue([
       { title: 'Movie B', year: 2021, reason: '理由' },
@@ -417,9 +377,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     ]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
-    mockSelectExistingRecommendations([]);
-    mockDeleteRecommendations(true);
-    mockInsertRecommendations(true);
+    mockUpsertRecommendationsRpc(true);
 
     // 1回目: 8件解決
     const firstBatchResolved = Array.from({ length: 8 }, (_, i) => ({
@@ -480,6 +438,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       ['インターステラー'],
       RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
       [],
+      undefined,
     );
     // 2回目: 不足2件＋バッファをリクエスト、解決済みタイトルを除外
     expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
@@ -491,6 +450,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       ]),
       2 + RECOMMENDATIONS_GENERATION_BUFFER,
       [],
+      undefined,
     );
   });
 
@@ -500,9 +460,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
-    mockSelectExistingRecommendations([]);
-    mockDeleteRecommendations(true);
-    mockInsertRecommendations(true);
+    mockUpsertRecommendationsRpc(true);
 
     // 毎回1件だけ解決 → 3回呼ばれて合計3件
     mockFetchRecommendations.mockResolvedValue([
@@ -543,9 +501,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     ]);
     mockWatchlistQuery([{ tmdb_movie_id: 2, title: 'ウォッチリスト映画' }]);
     mockDismissedMoviesQuery([]);
-    mockSelectExistingRecommendations([]);
-    mockDeleteRecommendations(true);
-    mockInsertRecommendations(true);
+    mockUpsertRecommendationsRpc(true);
 
     mockFetchRecommendations.mockResolvedValue([
       { title: 'New Movie', year: 2023, reason: '理由' },
@@ -575,6 +531,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       ['お気に入り映画', 'ウォッチリスト映画'],
       RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
       [],
+      undefined,
     );
 
     // 初回のresolveRecommendationsWithTMDbに除外IDセットと必要件数が渡されていることを確認
@@ -583,6 +540,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       expect.anything(),
       new Set([1, 2]),
       RECOMMENDATIONS_MAX_COUNT,
+      undefined,
     );
   });
 
@@ -595,9 +553,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
     mockWatchlistQuery([]);
     mockDismissedMoviesQuery([]);
-    mockSelectExistingRecommendations([]);
-    mockDeleteRecommendations(true);
-    mockInsertRecommendations(true);
+    mockUpsertRecommendationsRpc(true);
 
     mockFetchRecommendations.mockResolvedValue([
       { title: 'Movie A', year: 2020, reason: '理由' },
@@ -646,9 +602,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       { tmdb_movie_id: 10, title: '興味なし映画A', genre_ids: [27] },
       { tmdb_movie_id: 20, title: '興味なし映画B', genre_ids: [27, 53] },
     ]);
-    mockSelectExistingRecommendations([]);
-    mockDeleteRecommendations(true);
-    mockInsertRecommendations(true);
+    mockUpsertRecommendationsRpc(true);
 
     mockFetchRecommendations.mockResolvedValue([
       { title: 'New Movie', year: 2023, reason: '理由' },
@@ -681,6 +635,7 @@ describe('GET /api/cron/generate-recommendations', () => {
         { tmdb_movie_id: 10, title: '興味なし映画A', genre_ids: [27] },
         { tmdb_movie_id: 20, title: '興味なし映画B', genre_ids: [27, 53] },
       ],
+      undefined,
     );
 
     // 除外IDセットに興味なし映画のIDが含まれる
@@ -689,6 +644,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       expect.anything(),
       new Set([1, 10, 20]),
       RECOMMENDATIONS_MAX_COUNT,
+      undefined,
     );
   });
 });

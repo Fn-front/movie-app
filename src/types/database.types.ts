@@ -922,6 +922,10 @@ export type Database = {
         }[];
       };
       sync_now_showing_movies: { Args: { movies: Json }; Returns: number };
+      upsert_recommendations: {
+        Args: { p_recommendations: Json; p_user_id: string };
+        Returns: number;
+      };
     };
     Enums: {
       [_ in never]: never;

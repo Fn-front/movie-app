@@ -179,12 +179,15 @@ export async function collectUserMovieData(
 
 /**
  * AIレコメンド生成（リトライロジック含む）
+ *
+ * @param signal - 中断シグナル。クライアント離脱時に外部API呼び出しを打ち切る
  */
 export async function generateRecommendationsWithRetry(
   favoriteMovies: FavoriteMovie[],
   excludedTitles: string[],
   baseExcludedIds: Set<number>,
   dismissedMovies: DismissedMovie[],
+  signal?: AbortSignal,
 ): Promise<ResolvedRecommendation[]> {
   const allResolved: ResolvedRecommendation[] = [];
   let remainingCount = RECOMMENDATIONS_MAX_COUNT;
@@ -192,6 +195,11 @@ export async function generateRecommendationsWithRetry(
   let retryExcludedIds = baseExcludedIds;
 
   for (let attempt = 0; attempt <= RECOMMENDATIONS_MAX_RETRIES; attempt++) {
+    // 中断済みならリトライに入らず、ここまでの結果で打ち切る
+    if (signal?.aborted) {
+      break;
+    }
+
     // TMDb解決時の取りこぼし・除外を見越し、必要数より多め（+バッファ）に要求する
     const requestCount = remainingCount + RECOMMENDATIONS_GENERATION_BUFFER;
     const aiRecommendations = await fetchRecommendationsFromOpenAI(
@@ -199,6 +207,7 @@ export async function generateRecommendationsWithRetry(
       retryExcludedTitles,
       requestCount,
       dismissedMovies,
+      signal,
     );
 
     if (!aiRecommendations) {
@@ -209,6 +218,7 @@ export async function generateRecommendationsWithRetry(
       aiRecommendations,
       retryExcludedIds,
       remainingCount,
+      signal,
     );
 
     for (const item of resolvedInAttempt) {
@@ -244,58 +254,37 @@ export async function generateRecommendationsWithRetry(
 }
 
 /**
- * DBトランザクション（既存退避 → 削除 → 新規挿入、失敗時復元）
+ * レコメンドをトランザクション内で全件洗い替えする
+ *
+ * DELETE → INSERT を Supabase JS から2リクエストで行うと PostgreSQL の
+ * トランザクションにならず、間でプロセスが落ちると既存レコメンドが全消失した
+ * 状態で残りうる。PL/pgSQL 関数を1回呼ぶことで原子性を担保する。
  */
 export async function upsertRecommendations(
   supabase: SupabaseClient,
   userId: string,
   resolved: ResolvedRecommendation[],
 ): Promise<boolean> {
-  const { data: existingRecs } = await supabase
-    .from('recommendations')
-    .select('*')
-    .eq('user_id', userId);
+  const { error } = await supabase.rpc('upsert_recommendations', {
+    p_user_id: userId,
+    p_recommendations: resolved.map((r) => ({
+      tmdb_movie_id: r.tmdb_movie_id,
+      title: r.title,
+      poster_path: r.poster_path,
+      release_date: r.release_date,
+      vote_average: r.vote_average,
+      vote_count: r.vote_count,
+      genre_ids: r.genre_ids,
+      reason: r.reason,
+      display_order: r.display_order,
+    })),
+  });
 
-  const { error: deleteError } = await supabase
-    .from('recommendations')
-    .delete()
-    .eq('user_id', userId);
-
-  if (deleteError) {
+  if (error) {
     console.error(
-      `Failed to delete old recommendations for user ${userId}:`,
-      deleteError,
+      `Failed to upsert recommendations for user ${userId}:`,
+      error,
     );
-    return false;
-  }
-
-  const insertData = resolved.map((r) => ({
-    user_id: userId,
-    tmdb_movie_id: r.tmdb_movie_id,
-    title: r.title,
-    poster_path: r.poster_path,
-    release_date: r.release_date,
-    vote_average: r.vote_average,
-    vote_count: r.vote_count,
-    genre_ids: r.genre_ids,
-    reason: r.reason,
-    display_order: r.display_order,
-  }));
-
-  const { error: insertError } = await supabase
-    .from('recommendations')
-    .insert(insertData);
-
-  if (insertError) {
-    console.error(
-      `Failed to insert recommendations for user ${userId}:`,
-      insertError,
-    );
-    if (existingRecs && existingRecs.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const restoreData = existingRecs.map(({ id, ...rest }) => rest);
-      await supabase.from('recommendations').insert(restoreData);
-    }
     return false;
   }
 
@@ -304,10 +293,14 @@ export async function upsertRecommendations(
 
 /**
  * ユーザー単位のレコメンド処理
+ *
+ * @param signal - 中断シグナル。クライアント離脱時に生成を打ち切り、
+ *                 DBへの書き込みも行わない（既存レコメンドを保持するため）
  */
 export async function processUserRecommendations(
   supabase: SupabaseClient,
   userId: string,
+  signal?: AbortSignal,
 ): Promise<UserProcessResult> {
   const movieData = await collectUserMovieData(supabase, userId);
   if (!movieData) {
@@ -319,9 +312,16 @@ export async function processUserRecommendations(
     movieData.excludedTitles,
     movieData.baseExcludedIds,
     movieData.dismissedMovies,
+    signal,
   );
 
   if (resolved.length === 0) {
+    return { status: 'skipped', recommendationCount: 0 };
+  }
+
+  // 中断済みなら書き込まない。中途半端な件数で洗い替えすると
+  // 既存レコメンドを質の低い結果で上書きしてしまうため。
+  if (signal?.aborted) {
     return { status: 'skipped', recommendationCount: 0 };
   }
 

@@ -286,11 +286,11 @@ describe('syncNowPlayingMovies', () => {
     });
   });
 
-  describe('別release_typeで既存の映画のスキップ', () => {
-    it('別release_typeで既にDBに存在する映画をスキップする', async () => {
+  describe('別release_typeとの共存（相互排他の撤廃）', () => {
+    it('streaming として既にDBに存在する映画でも除外せずUPSERTする', async () => {
       setValidEnv();
 
-      const movie = createMockMovie({ id: 100, title: '既存映画' });
+      const movie = createMockMovie({ id: 100, title: '配信済みの劇場公開作' });
 
       (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
         page: 1,
@@ -298,14 +298,39 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
+      // 別release_type に同じIDが存在する状況
       const fromMock = createFromMock({ existingOtherTypeIds: [100] });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
       const result = await syncNowPlayingMovies();
 
-      expect(result.skipped).toBe(1);
-      expect(result.upserted).toBe(0);
+      // PK は (id, release_type) のため共存でき、スキップしてはいけない
+      expect(result.skipped).toBe(0);
+      expect(result.upserted).toBe(1);
+    });
+
+    it('別release_typeの既存ID取得クエリ（1000行制限の原因）を発行しない', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({ id: 101 });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
+
+      const fromMock = createFromMock({});
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+
+      await syncNowPlayingMovies();
+
+      // from() は UPSERT と is_now_playing クリアの2回のみ（事前SELECTなし）
+      expect(fromMock).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -599,8 +624,8 @@ describe('syncNowPlayingMovies', () => {
 
       await syncNowPlayingMovies();
 
-      // from() 1回目は既存チェック、2回目が UPSERT
-      return fromMock.mock.results[1].value.upsert.mock.calls[0][0];
+      // 事前SELECTを廃止したため、from() 1回目が UPSERT
+      return fromMock.mock.results[0].value.upsert.mock.calls[0][0];
     }
 
     it('TMDbのvote_countをmovie_cacheにUPSERTする', async () => {

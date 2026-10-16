@@ -118,16 +118,9 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
     errors: [],
   };
 
-  // 別release_typeで既に存在するIDを取得（重複防止）
-  const { data: existingOtherType } = await supabase
-    .from('movie_cache')
-    .select('id')
-    .neq('release_type', RELEASE_TYPE.STREAMING);
-
-  const existingOtherTypeIds = new Set(
-    (existingOtherType ?? []).map((row: { id: number }) => row.id),
-  );
-
+  // 別release_type（theatrical）に存在するIDの除外は行わない。
+  // movie_cache の PK は (id, release_type) のため DB 側で自然に共存でき、
+  // 除外すると「劇場公開後に配信化された作品」が配信タブに一生出なくなる。
   const allowedLangs: readonly string[] = ALLOWED_LANGUAGES;
   const now = new Date();
   const cachedAt = now.toISOString();
@@ -148,12 +141,11 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
 
         result.fetched += response.results.length;
 
-        // adultコンテンツ・除外言語・別release_typeで既存の映画・低品質コンテンツを除外
+        // adultコンテンツ・除外言語・低品質コンテンツを除外
         const filteredResults = response.results.filter(
           (movie) =>
             !movie.adult &&
             allowedLangs.includes(movie.original_language) &&
-            !existingOtherTypeIds.has(movie.id) &&
             movie.genre_ids &&
             movie.genre_ids.length > 0 &&
             (movie.vote_average === 0 ||

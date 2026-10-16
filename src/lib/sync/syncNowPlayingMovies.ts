@@ -94,28 +94,17 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
     return true;
   });
 
-  // 3. 別release_typeで既に存在するIDを取得（重複防止）
-  const { data: existingStreaming } = await supabase
-    .from('movie_cache')
-    .select('id')
-    .neq('release_type', 'theatrical');
-
-  const existingOtherTypeIds = new Set(
-    (existingStreaming ?? []).map((row: { id: number }) => row.id),
-  );
-
-  // 4. キーワードフィルタ + 重複チェック + UPSERT（順次処理でレート制限対策）
+  // 3. キーワードフィルタ + UPSERT（順次処理でレート制限対策）
+  //
+  // 別release_type（streaming）に存在するIDの除外は行わない。
+  // movie_cache の PK は (id, release_type) のため DB 側で自然に共存でき、
+  // 除外すると「配信済みだが劇場でリバイバル上映中」の作品が公開中タブから
+  // 消える。加えて Supabase-js の暗黙1000行制限で除外自体が静かに壊れていた。
   const nowPlayingIds = new Set<number>();
   const now = new Date().toISOString();
 
   for (const movie of filteredMovies) {
     try {
-      // 別release_typeで既に存在する場合はスキップ
-      if (existingOtherTypeIds.has(movie.id)) {
-        result.skipped++;
-        continue;
-      }
-
       // 除外キーワードチェック
       const keywordIds = await getMovieKeywordIds(movie.id);
       const hasExcludedKeyword = keywordIds.some((id) =>
@@ -159,7 +148,7 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
     }
   }
 
-  // 5. リストから外れた映画の is_now_playing をクリア
+  // 4. リストから外れた映画の is_now_playing をクリア
   const nowPlayingIdsArray = Array.from(nowPlayingIds);
   const { data: clearedData, error: clearError } = await supabase
     .from('movie_cache')

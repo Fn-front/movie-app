@@ -23,6 +23,16 @@ jest.mock('next-auth/react', () => ({
   }),
 }));
 
+const mockRouterPush = jest.fn();
+const mockRouterReplace = jest.fn();
+let mockSearchParams = new URLSearchParams();
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
+  usePathname: () => '/movies/now-showing',
+  useSearchParams: () => mockSearchParams,
+}));
+
 const mockGetMovies = jest.fn();
 jest.mock('@/lib/api/movies/movies', () => ({
   getMovies: (...args: unknown[]) => mockGetMovies(...args),
@@ -83,6 +93,7 @@ describe('useMovieList', () => {
     jest.clearAllMocks();
     mockSessionStatus = 'unauthenticated';
     mockSessionData = null;
+    mockSearchParams = new URLSearchParams();
     mockGetMovies.mockResolvedValue(createMockResponse());
     mockGetSavedFilter.mockResolvedValue({});
     mockSaveFilter.mockResolvedValue(undefined);
@@ -804,6 +815,171 @@ describe('useMovieList', () => {
       await waitFor(() => {
         expect(result.current.movies[0]?.title).toBe('2番目の映画');
       });
+    });
+  });
+  describe('URLクエリによるフィルター永続化', () => {
+    it('URLのフィルターを初期stateに注入する（デフォルト値を経由しない）', () => {
+      mockSearchParams = new URLSearchParams({
+        sort_by: 'popularity',
+        release_type: 'streaming',
+        genre_ids: '28,12',
+        is_revival: 'true',
+      });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      // 初回レンダリング時点で復元済み（useEffectの後追い反映ではない）
+      expect(result.current.sortBy).toBe('popularity');
+      expect(result.current.releaseType).toBe('streaming');
+      expect(result.current.selectedGenreIds).toEqual([28, 12]);
+      expect(result.current.isRevivalFilter).toBe(true);
+    });
+
+    it('URLの日付範囲を初期stateに注入する', () => {
+      mockSearchParams = new URLSearchParams({
+        date_range_gte: '2026-05-01',
+        date_range_lte: '2026-06-30',
+      });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      expect(result.current.dateRange).toEqual({
+        gte: '2026-05-01',
+        lte: '2026-06-30',
+      });
+    });
+
+    it('URLに日付がない場合はページ既定の日付範囲を使う', () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      expect(result.current.dateRange.gte).toBe('2026-02-11');
+    });
+
+    it('URLの不正値はデフォルトにフォールバックし例外を投げない', () => {
+      mockSearchParams = new URLSearchParams({
+        sort_by: 'invalid',
+        release_type: 'invalid',
+        genre_ids: 'abc',
+        date_range_gte: '2026/01/01',
+        is_revival: 'maybe',
+      });
+
+      expect(() =>
+        renderHook(() => useMovieList(defaultOptions), {
+          wrapper: createQueryWrapper(),
+        }),
+      ).not.toThrow();
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      expect(result.current.sortBy).toBe('release_date');
+      expect(result.current.releaseType).toBe('theatrical');
+      expect(result.current.selectedGenreIds).toEqual([]);
+      expect(result.current.dateRange.gte).toBe('2026-02-11');
+      expect(result.current.isRevivalFilter).toBeUndefined();
+    });
+
+    it('ソート変更をURLへreplaceで反映する（履歴を積まない）', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleSortChange('popularity');
+      });
+
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(mockRouterReplace).toHaveBeenCalledWith(
+        expect.stringContaining('sort_by=popularity'),
+        { scroll: false },
+      );
+    });
+
+    it('フィルター適用をURLへ反映する', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleFilterApply([28, 12], { gte: '2026-04-01' }, true);
+      });
+
+      const url = mockRouterReplace.mock.calls[0][0] as string;
+      expect(url).toContain('genre_ids=28%2C12');
+      expect(url).toContain('date_range_gte=2026-04-01');
+      expect(url).toContain('is_revival=true');
+    });
+
+    it('ページ既定の日付範囲はURLに書き込まない（翌日以降に古い範囲で絞られるのを防ぐ）', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleSortChange('popularity');
+      });
+
+      const url = mockRouterReplace.mock.calls[0][0] as string;
+      expect(url).not.toContain('date_range_gte');
+    });
+
+    it('未認証でもURL反映は行われる（保存APIは呼ばない）', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleSortChange('popularity');
+      });
+
+      expect(mockRouterReplace).toHaveBeenCalled();
+      expect(mockSaveFilter).not.toHaveBeenCalled();
+    });
+
+    it('URLにフィルターがある場合、保存済みフィルターで上書きしない', async () => {
+      mockSessionStatus = 'authenticated';
+      mockSessionData = { user: { name: 'テストユーザー' } };
+      mockSearchParams = new URLSearchParams({ sort_by: 'popularity' });
+      mockGetSavedFilter.mockResolvedValue({
+        sort_by: 'vote_average',
+        release_type: 'streaming',
+      });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      // URLが唯一の正。保存済みフィルターでは上書きされない
+      expect(result.current.sortBy).toBe('popularity');
+      expect(result.current.releaseType).toBe('theatrical');
     });
   });
 });

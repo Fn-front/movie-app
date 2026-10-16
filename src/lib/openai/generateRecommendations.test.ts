@@ -129,6 +129,29 @@ describe('fetchRecommendationsFromOpenAI', () => {
     expect(result![0].reason).toBe('SF好きにおすすめ');
   });
 
+  it('システムプロンプトにアダルト作品の除外指示が含まれる', async () => {
+    mockCreate.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              recommendations: [
+                { title: 'Arrival', year: 2016, reason: '理由' },
+              ],
+            }),
+          },
+        },
+      ],
+    });
+
+    await fetchRecommendationsFromOpenAI([{ title: 'テスト', rating: 5 }], []);
+
+    const systemMessage = mockCreate.mock.calls[0][0].messages.find(
+      (message: { role: string }) => message.role === 'system',
+    );
+    expect(systemMessage.content).toContain('アダルト作品');
+  });
+
   it('OpenAIクライアントがnullの場合、nullを返す', async () => {
     const { createOpenAIClient } = await import('./client');
     (createOpenAIClient as jest.Mock).mockReturnValueOnce(null);
@@ -274,6 +297,91 @@ describe('resolveRecommendationsWithTMDb', () => {
     expect(result[0].title).toBe('Arrival');
     expect(result[0].display_order).toBe(1);
     expect(result[0].reason).toBe('SF好きにおすすめ');
+  });
+
+  describe('アダルト作品の除外', () => {
+    it('adult=trueの映画を採用しない', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 900,
+            title: 'Adult Movie',
+            adult: true,
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 6.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+
+      const items = [createItem('Adult Movie', 2020, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('adult作品が先頭にあっても、後続の一般作品を採用する', async () => {
+      // 同名のアダルト作品がTMDb検索の先頭に来るケース
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 901,
+            title: 'Same Title',
+            adult: true,
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 5.0,
+            genre_ids: [18],
+          },
+          {
+            id: 902,
+            title: 'Same Title',
+            adult: false,
+            poster_path: '/poster.jpg',
+            release_date: '2020-05-01',
+            vote_average: 7.5,
+            genre_ids: [28],
+          },
+        ],
+      });
+
+      const items = [createItem('Same Title', 2020, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(902);
+    });
+
+    it('全件adultの場合は1件も採用しない', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 903,
+            title: 'Adult A',
+            adult: true,
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 5.0,
+            genre_ids: [18],
+          },
+          {
+            id: 904,
+            title: 'Adult B',
+            adult: true,
+            poster_path: null,
+            release_date: '2021-01-01',
+            vote_average: 6.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+
+      const items = [createItem('Adult A', 2020, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(0);
+    });
   });
 
   it('検索結果がない場合はスキップする', async () => {

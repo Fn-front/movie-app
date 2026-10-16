@@ -145,6 +145,55 @@ export async function seedRecommendations(): Promise<void> {
   ]);
 }
 
+/** 相互排他バグ検証用の映画ID（movie_cache シード用） */
+export const CROSS_RELEASE_TYPE_MOVIE_ID = 999501;
+
+/**
+ * 同一IDを theatrical / streaming の両方の release_type で movie_cache に投入する。
+ *
+ * movie_cache の PK は (id, release_type) のため両立できる。
+ * 「劇場公開後に配信化された作品」が配信一覧から消えないこと（Issue #580）の検証用。
+ *
+ * @param releaseDate - 公開日（YYYY-MM-DD）。一覧の日付範囲フィルタに合わせて指定する
+ */
+export async function seedCrossReleaseTypeMovie(
+  releaseDate: string,
+): Promise<void> {
+  const base = {
+    id: CROSS_RELEASE_TYPE_MOVIE_ID,
+    title: 'E2E劇場公開後に配信化された作品',
+    poster_path: null,
+    backdrop_path: null,
+    release_date: releaseDate,
+    overview: 'E2E用',
+    vote_average: 7.5,
+    vote_count: 100,
+    popularity: 50,
+    genre_ids: [28],
+  };
+
+  await fetch(`${SUPABASE_URL}/rest/v1/movie_cache`, {
+    method: 'POST',
+    headers: {
+      ...supabaseHeaders,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify([
+      { ...base, release_type: 'theatrical' },
+      { ...base, release_type: 'streaming' },
+    ]),
+  });
+}
+
+/** シードした movie_cache の行を物理削除する */
+export async function cleanupCrossReleaseTypeMovie(): Promise<void> {
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/movie_cache?id=eq.${CROSS_RELEASE_TYPE_MOVIE_ID}`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+}
+
 /**
  * テストユーザーのおすすめを物理削除する（refresh E2Eの後始末用）。
  */

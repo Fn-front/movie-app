@@ -220,14 +220,25 @@ describe('syncStreamingMovies', () => {
       expect(mockUpsert).not.toHaveBeenCalled();
       expect(result.skipped).toBe(2);
     });
+  });
 
-    it('別release_typeで既に存在する映画を除外する', async () => {
+  describe('別release_typeとの共存（相互排他の撤廃）', () => {
+    it('theatrical として既に存在する映画でも除外せずUPSERTする', async () => {
+      // 劇場公開作品としてキャッシュ済みの映画が配信化されたケース
       mockNeq.mockResolvedValue({ data: [{ id: 1 }], error: null });
 
       const result = await syncStreamingMovies();
 
-      expect(mockUpsert).not.toHaveBeenCalled();
-      expect(result.skipped).toBe(2);
+      // PK は (id, release_type) のため共存でき、除外してはいけない
+      expect(result.skipped).toBe(0);
+      expect(result.upserted).toBe(2);
+      expect(mockUpsert).toHaveBeenCalled();
+    });
+
+    it('別release_typeの既存ID取得クエリ（1000行制限の原因）を発行しない', async () => {
+      await syncStreamingMovies();
+
+      expect(mockNeq).not.toHaveBeenCalled();
     });
   });
 

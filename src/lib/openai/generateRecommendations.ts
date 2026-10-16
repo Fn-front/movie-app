@@ -59,6 +59,7 @@ function buildSystemPrompt(count: number): string {
 
 ルール:
 - 除外リストにある映画は絶対に推薦しないこと
+- アダルト作品（成人向け・ポルノ・ピンク映画等）は絶対に推薦しないこと
 - 実在する映画のみ推薦すること
 - ジャンル、監督、テーマ、雰囲気などの傾向を分析して推薦すること
 - 評価が高い映画の傾向をより重視すること
@@ -252,8 +253,12 @@ export async function resolveRecommendationsWithTMDb(
         { signal },
       );
 
+      // adult作品を除外（searchMoviesでも除外済みだが、レコメンドはDBに保存され
+      // 全ユーザーに表示されるため、保存直前でも明示的に弾く二重防御とする）
+      const safeResults = searchResult.results.filter((movie) => !movie.adult);
+
       // タイトル一致かつ公開年が近い結果を優先的に選択
-      const movie = selectBestMovieMatch(searchResult.results, item.year);
+      const movie = selectBestMovieMatch(safeResults, item.year);
       if (!movie) {
         continue;
       }

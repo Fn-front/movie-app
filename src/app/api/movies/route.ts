@@ -20,6 +20,7 @@ import {
   NOW_PLAYING_CACHE_DURATION_HOURS,
   MOVIES_FETCH_MONTHS_AHEAD,
   NOW_SHOWING_MONTHS_BACK,
+  RELEASE_TYPE,
   RELEASE_TYPE_MAP,
   ALLOWED_LANGUAGES,
   MIN_VOTE_AVERAGE,
@@ -32,6 +33,7 @@ import {
 } from '@/constants';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
+import { syncStreamingMovies } from '@/lib/sync/syncStreamingMovies';
 
 /**
  * ソートカラムのマッピング
@@ -152,8 +154,22 @@ export async function GET(request: Request) {
       if (nowPlayingCacheExpired) {
         await syncNowPlayingMovies();
       }
+    } else if (release_type === RELEASE_TYPE.STREAMING) {
+      // streaming: CRON（/api/cron/sync-streaming）で事前同期する。
+      // キャッシュが単に古いだけのケースでDiscoverを直列実行すると、
+      // 失効直後のユーザーが数十秒待たされるため同期は行わない。
+      // CRONが一度も走っていない場合に一覧が空になるのを避けるため、
+      // レコードが1件も無いときだけフォールバックとして同期する。
+      const { count: streamingCount } = await supabase
+        .from('movie_cache')
+        .select('id', { count: 'exact', head: true })
+        .eq('release_type', RELEASE_TYPE.STREAMING);
+
+      if (!streamingCount) {
+        await syncStreamingMovies();
+      }
     } else {
-      // 従来のDiscover APIロジック
+      // theatrical + upcoming: 従来のDiscover APIロジック
       const { data: cacheInfo } = await supabase
         .from('movie_cache')
         .select('cached_at')

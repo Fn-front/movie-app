@@ -24,6 +24,7 @@ const CRON_ENDPOINTS = [
   'sync-now-playing',
   'update-movies',
   'sync-now-showing',
+  'sync-streaming',
   'generate-recommendations',
   'sync-award-movies',
 ];

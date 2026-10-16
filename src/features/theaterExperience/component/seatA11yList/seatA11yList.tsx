@@ -177,6 +177,7 @@ export const SeatA11yList = memo<SeatA11yListProps>(function SeatA11yList({
             center_x: theater.screen_center_x,
             center_y: theater.screen_center_y,
             center_z: theater.screen_center_z,
+            curvature: theater.screen_curvature,
           },
         ),
       );

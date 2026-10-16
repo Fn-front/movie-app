@@ -22,6 +22,7 @@ const mockTheater: Theater = {
   screen_center_y: 4,
   screen_center_z: 12.5,
   row_curve_radius: 0,
+  screen_curvature: 0,
   audio_layout: 'atmos_9_1_6',
 };
 

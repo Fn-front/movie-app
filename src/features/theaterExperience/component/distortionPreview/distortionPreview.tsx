@@ -73,6 +73,7 @@ export const DistortionPreview = memo<DistortionPreviewProps>(
             center_x: theater.screen_center_x,
             center_y: theater.screen_center_y,
             center_z: theater.screen_center_z,
+            curvature: theater.screen_curvature,
           },
         ),
       [seat, theater],

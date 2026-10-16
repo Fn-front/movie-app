@@ -8,6 +8,8 @@
 
 import type { FieldOfViewMetrics } from '../types';
 
+import { calcScreenArcPoint } from './screenCurve';
+
 /** 2D座標 */
 export interface Point2D {
   x: number;
@@ -28,6 +30,11 @@ export interface ScreenGeometry {
   center_x: number;
   center_y: number;
   center_z: number;
+  /**
+   * 湾曲半径 (m)。0 または未指定なら平面。
+   * 省略時は平面として扱うため、既存の呼び出しは挙動が変わらない。
+   */
+  curvature?: number;
 }
 
 /**
@@ -71,10 +78,28 @@ export function calcViewingFovRatios(
   const dz = screen.center_z - seat.z;
   if (dz <= 0) return { horizontal_ratio: 0, vertical_ratio: 0 };
 
-  // 水平: スクリーン左右端の見込み角の差（水平面で計算）
-  const dxLeft = screen.center_x - halfW - seat.x;
-  const dxRight = screen.center_x + halfW - seat.x;
-  const hAngle = Math.atan2(dxRight, dz) - Math.atan2(dxLeft, dz);
+  /*
+    水平: スクリーン左右端の見込み角の差（水平面で計算）。
+    湾曲スクリーンでは両端が客席側へせり出すため、端のZが中心と異なる。
+    端点を弧上から取ることで、湾曲時も実際の見込み角になる
+    （平面なら calcScreenArcPoint は従来と同じ値を返す）。
+  */
+  const curvature = screen.curvature ?? 0;
+  const left = calcScreenArcPoint(
+    -halfW,
+    screen.center_x,
+    screen.center_z,
+    curvature,
+  );
+  const right = calcScreenArcPoint(
+    halfW,
+    screen.center_x,
+    screen.center_z,
+    curvature,
+  );
+  const hAngle =
+    Math.atan2(right.x - seat.x, right.z - seat.z) -
+    Math.atan2(left.x - seat.x, left.z - seat.z);
 
   // 垂直: 水平面内の距離を実効距離として上下端の見込み角の差を計算
   const dx = screen.center_x - seat.x;
@@ -321,28 +346,30 @@ export function projectScreenQuad(
   const halfW = screen.width / 2;
   const halfH = screen.height / 2;
 
-  // スクリーン四隅の3D座標
+  /*
+    スクリーン四隅の3D座標。
+    湾曲スクリーンでは両端が客席側へせり出すため、左右端を弧上から取る
+    （平面なら calcScreenArcPoint は従来と同じ値を返すので挙動は変わらない）。
+    高さ方向は曲げないため y は従来どおり。
+  */
+  const curvature = screen.curvature ?? 0;
+  const leftEdge = calcScreenArcPoint(
+    -halfW,
+    screen.center_x,
+    screen.center_z,
+    curvature,
+  );
+  const rightEdge = calcScreenArcPoint(
+    halfW,
+    screen.center_x,
+    screen.center_z,
+    curvature,
+  );
   const corners3D = [
-    {
-      x: screen.center_x - halfW,
-      y: screen.center_y + halfH,
-      z: screen.center_z,
-    }, // 左上
-    {
-      x: screen.center_x + halfW,
-      y: screen.center_y + halfH,
-      z: screen.center_z,
-    }, // 右上
-    {
-      x: screen.center_x + halfW,
-      y: screen.center_y - halfH,
-      z: screen.center_z,
-    }, // 右下
-    {
-      x: screen.center_x - halfW,
-      y: screen.center_y - halfH,
-      z: screen.center_z,
-    }, // 左下
+    { x: leftEdge.x, y: screen.center_y + halfH, z: leftEdge.z }, // 左上
+    { x: rightEdge.x, y: screen.center_y + halfH, z: rightEdge.z }, // 右上
+    { x: rightEdge.x, y: screen.center_y - halfH, z: rightEdge.z }, // 右下
+    { x: leftEdge.x, y: screen.center_y - halfH, z: leftEdge.z }, // 左下
   ];
 
   // 座席視点での透視投影（簡易版）

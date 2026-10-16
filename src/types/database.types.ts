@@ -652,6 +652,7 @@ export type Database = {
           room_depth: number;
           room_height: number;
           room_width: number;
+          row_curve_radius: number;
           screen_center_x: number;
           screen_center_y: number;
           screen_center_z: number;
@@ -672,6 +673,7 @@ export type Database = {
           room_depth: number;
           room_height: number;
           room_width: number;
+          row_curve_radius?: number;
           screen_center_x: number;
           screen_center_y: number;
           screen_center_z: number;
@@ -692,6 +694,7 @@ export type Database = {
           room_depth?: number;
           room_height?: number;
           room_width?: number;
+          row_curve_radius?: number;
           screen_center_x?: number;
           screen_center_y?: number;
           screen_center_z?: number;

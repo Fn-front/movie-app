@@ -24,7 +24,7 @@ export const THEATERS_LIST_SELECT =
 
 /** 劇場詳細SELECTカラム */
 export const THEATERS_DETAIL_SELECT =
-  'id, name, slug, format, room_width, room_depth, room_height, screen_width, screen_height, screen_center_x, screen_center_y, screen_center_z, audio_layout, description';
+  'id, name, slug, format, room_width, room_depth, room_height, screen_width, screen_height, screen_center_x, screen_center_y, screen_center_z, row_curve_radius, audio_layout, description';
 
 /** 座席SELECTカラム */
 export const THEATER_SEATS_SELECT =

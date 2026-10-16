@@ -19,6 +19,7 @@ import {
   getSeatHeadrestColor,
 } from '../../utils/seatColors';
 import type { InteriorTheme } from '../../utils/theaterPalette';
+import { calcSeatYawOnArc, rotateLocalOffset } from '../../utils/rowCurve';
 
 import styles from './seatMeshes.module.scss';
 
@@ -100,6 +101,8 @@ export interface SeatMeshesProps {
   theme: InteriorTheme;
   /** 通路に面する座席ID → 通路のある向き（-1=左 / +1=右）。該当席に列記号プレートを付ける */
   aisleSideSeatIds: Map<string, -1 | 1>;
+  /** 座席列の弧の半径 (m)。0 なら直線列。座席を弧の接線方向へ向けるのに使う */
+  rowCurveRadius: number;
   /** 座席データ一覧 */
   seats: TheaterSeat[];
   /** 選択中の座席ID */
@@ -119,7 +122,8 @@ const SeatCushions = memo<{
   seats: TheaterSeat[];
   selectedSeatId: string | null;
   theme: InteriorTheme;
-}>(function SeatCushions({ seats, selectedSeatId, theme }) {
+  rowCurveRadius: number;
+}>(function SeatCushions({ seats, selectedSeatId, theme, rowCurveRadius }) {
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
 
@@ -132,12 +136,16 @@ const SeatCushions = memo<{
         seat.position_y + 0.3,
         seat.position_z,
       );
-      tempObject.rotation.set(0, 0, 0);
+      tempObject.rotation.set(
+        0,
+        calcSeatYawOnArc(seat.position_x, rowCurveRadius),
+        0,
+      );
       tempObject.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObject.matrix);
     });
     meshRef.current.instanceMatrix.needsUpdate = true;
-  }, [seats, tempObject]);
+  }, [seats, rowCurveRadius, tempObject]);
 
   // 色は座席データと選択状態に依存（選択変更時はここだけ再実行）
   useEffect(() => {
@@ -183,7 +191,8 @@ const SeatBacks = memo<{
   seats: TheaterSeat[];
   selectedSeatId: string | null;
   theme: InteriorTheme;
-}>(function SeatBacks({ seats, selectedSeatId, theme }) {
+  rowCurveRadius: number;
+}>(function SeatBacks({ seats, selectedSeatId, theme, rowCurveRadius }) {
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
 
@@ -195,7 +204,11 @@ const SeatBacks = memo<{
         seat.position_y + 0.6,
         seat.position_z - SEAT_CUSHION.depth / 2,
       );
-      tempObject.rotation.set(-0.1, 0, 0);
+      tempObject.rotation.set(
+        -0.1,
+        calcSeatYawOnArc(seat.position_x, rowCurveRadius),
+        0,
+      );
       // 車椅子席は背もたれを描かない（フラットな車椅子スペース＝色以外の形状差でも区別）
       const noBack = seat.seat_type === 'wheelchair';
       tempObject.scale.set(1, noBack ? 0 : 1, 1);
@@ -246,7 +259,8 @@ const SeatHeadrests = memo<{
   seats: TheaterSeat[];
   selectedSeatId: string | null;
   theme: InteriorTheme;
-}>(function SeatHeadrests({ seats, selectedSeatId, theme }) {
+  rowCurveRadius: number;
+}>(function SeatHeadrests({ seats, selectedSeatId, theme, rowCurveRadius }) {
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
 
@@ -259,14 +273,18 @@ const SeatHeadrests = memo<{
         seat.position_y + 0.9,
         seat.position_z - SEAT_CUSHION.depth / 2 - 0.025,
       );
-      tempObject.rotation.set(-0.1, 0, 0);
+      tempObject.rotation.set(
+        -0.1,
+        calcSeatYawOnArc(seat.position_x, rowCurveRadius),
+        0,
+      );
       const noBack = seat.seat_type === 'wheelchair';
       tempObject.scale.set(1, noBack ? 0 : 1, 1);
       tempObject.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObject.matrix);
     });
     meshRef.current.instanceMatrix.needsUpdate = true;
-  }, [seats, tempObject]);
+  }, [seats, rowCurveRadius, tempObject]);
 
   useEffect(() => {
     if (!meshRef.current) return;
@@ -308,102 +326,113 @@ SeatHeadrests.displayName = 'SeatHeadrests';
  * 床(position_y)からクッション下端までを埋め、座席が床から浮いて見えるのを解消する。
  * 車椅子席は座席構造が無いため scale=0 で描かない。
  */
-const SeatBases = memo<{ seats: TheaterSeat[]; theme: InteriorTheme }>(
-  function SeatBases({ seats, theme }) {
-    const meshRef = useRef<InstancedMeshType>(null);
-    const tempObject = useMemo(() => new Object3D(), []);
+const SeatBases = memo<{
+  seats: TheaterSeat[];
+  theme: InteriorTheme;
+  rowCurveRadius: number;
+}>(function SeatBases({ seats, theme, rowCurveRadius }) {
+  const meshRef = useRef<InstancedMeshType>(null);
+  const tempObject = useMemo(() => new Object3D(), []);
 
-    useEffect(() => {
-      if (!meshRef.current) return;
-      seats.forEach((seat, i) => {
-        // 台座中心 = 床 + 高さ/2（床からクッション下端 y+0.24 を埋める）
-        tempObject.position.set(
-          seat.position_x,
-          seat.position_y + SEAT_BASE.height / 2,
-          seat.position_z,
-        );
-        tempObject.rotation.set(0, 0, 0);
-        const hidden = seat.seat_type === 'wheelchair';
-        tempObject.scale.set(1, hidden ? 0 : 1, 1);
-        tempObject.updateMatrix();
-        meshRef.current!.setMatrixAt(i, tempObject.matrix);
-      });
-      meshRef.current.instanceMatrix.needsUpdate = true;
-    }, [seats, tempObject]);
+  useEffect(() => {
+    if (!meshRef.current) return;
+    seats.forEach((seat, i) => {
+      // 台座中心 = 床 + 高さ/2（床からクッション下端 y+0.24 を埋める）
+      tempObject.position.set(
+        seat.position_x,
+        seat.position_y + SEAT_BASE.height / 2,
+        seat.position_z,
+      );
+      tempObject.rotation.set(
+        0,
+        calcSeatYawOnArc(seat.position_x, rowCurveRadius),
+        0,
+      );
+      const hidden = seat.seat_type === 'wheelchair';
+      tempObject.scale.set(1, hidden ? 0 : 1, 1);
+      tempObject.updateMatrix();
+      meshRef.current!.setMatrixAt(i, tempObject.matrix);
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [seats, rowCurveRadius, tempObject]);
 
-    return (
-      <instancedMesh
-        ref={meshRef}
-        args={[undefined, undefined, seats.length]}
-        frustumCulled={false}
-        receiveShadow
-      >
-        {/* castShadow は付けない: 床際の小さな台座で影寄与は僅少、影マップ描画コストを抑える
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, seats.length]}
+      frustumCulled={false}
+      receiveShadow
+    >
+      {/* castShadow は付けない: 床際の小さな台座で影寄与は僅少、影マップ描画コストを抑える
           （CIのソフトウェアWebGLでの負荷/flaky化を避けるため。座面・背もたれのみ影を落とす） */}
-        <boxGeometry
-          args={[SEAT_BASE.width, SEAT_BASE.height, SEAT_BASE.depth]}
-        />
-        <meshStandardMaterial
-          color={theme.seat.frame}
-          roughness={0.6}
-          metalness={0.15}
-        />
-      </instancedMesh>
-    );
-  },
-);
+      <boxGeometry
+        args={[SEAT_BASE.width, SEAT_BASE.height, SEAT_BASE.depth]}
+      />
+      <meshStandardMaterial
+        color={theme.seat.frame}
+        roughness={0.6}
+        metalness={0.15}
+      />
+    </instancedMesh>
+  );
+});
 SeatBases.displayName = 'SeatBases';
 
 /**
  * 肘掛けバーのInstancedMesh（1席につき左右2本 = seats.length * 2 インスタンス）。
  * クッション両脇に置き、椅子のシルエットを立たせる。車椅子席は scale=0 で描かない。
  */
-const SeatArmrests = memo<{ seats: TheaterSeat[]; theme: InteriorTheme }>(
-  function SeatArmrests({ seats, theme }) {
-    const meshRef = useRef<InstancedMeshType>(null);
-    const tempObject = useMemo(() => new Object3D(), []);
+const SeatArmrests = memo<{
+  seats: TheaterSeat[];
+  theme: InteriorTheme;
+  rowCurveRadius: number;
+}>(function SeatArmrests({ seats, theme, rowCurveRadius }) {
+  const meshRef = useRef<InstancedMeshType>(null);
+  const tempObject = useMemo(() => new Object3D(), []);
 
-    useEffect(() => {
-      if (!meshRef.current) return;
-      seats.forEach((seat, i) => {
-        const hidden = seat.seat_type === 'wheelchair';
-        // 肘掛け高さ = クッション上面のやや上（座面 y+0.3・厚み0.12 → 上面 y+0.36）
-        const armY = seat.position_y + 0.42;
-        [-ARMREST_OFFSET_X, ARMREST_OFFSET_X].forEach((dx, side) => {
-          tempObject.position.set(
-            seat.position_x + dx,
-            armY,
-            seat.position_z + 0.02,
-          );
-          tempObject.rotation.set(0, 0, 0);
-          tempObject.scale.set(1, hidden ? 0 : 1, 1);
-          tempObject.updateMatrix();
-          meshRef.current!.setMatrixAt(i * 2 + side, tempObject.matrix);
-        });
+  useEffect(() => {
+    if (!meshRef.current) return;
+    seats.forEach((seat, i) => {
+      const hidden = seat.seat_type === 'wheelchair';
+      // 肘掛け高さ = クッション上面のやや上（座面 y+0.3・厚み0.12 → 上面 y+0.36）
+      const armY = seat.position_y + 0.42;
+      const yaw = calcSeatYawOnArc(seat.position_x, rowCurveRadius);
+      [-ARMREST_OFFSET_X, ARMREST_OFFSET_X].forEach((dx, side) => {
+        // 弧状列では座席が傾くため、肘掛けのオフセットも同じ向きへ回す
+        const [ox, oz] = rotateLocalOffset(dx, 0.02, yaw);
+        tempObject.position.set(
+          seat.position_x + ox,
+          armY,
+          seat.position_z + oz,
+        );
+        tempObject.rotation.set(0, yaw, 0);
+        tempObject.scale.set(1, hidden ? 0 : 1, 1);
+        tempObject.updateMatrix();
+        meshRef.current!.setMatrixAt(i * 2 + side, tempObject.matrix);
       });
-      meshRef.current.instanceMatrix.needsUpdate = true;
-    }, [seats, tempObject]);
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [seats, rowCurveRadius, tempObject]);
 
-    return (
-      <instancedMesh
-        ref={meshRef}
-        args={[undefined, undefined, seats.length * 2]}
-        frustumCulled={false}
-      >
-        {/* castShadow は付けない: 肘掛けは細く影寄与は僅少。影マップ描画のジオメトリを抑える
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, seats.length * 2]}
+      frustumCulled={false}
+    >
+      {/* castShadow は付けない: 肘掛けは細く影寄与は僅少。影マップ描画のジオメトリを抑える
           （instance数は seats*2 と多いため、castShadow 除外の効果が大きい） */}
-        <boxGeometry
-          args={[SEAT_ARMREST.width, SEAT_ARMREST.height, SEAT_ARMREST.depth]}
-        />
-        <meshStandardMaterial
-          color={theme.seat.frame}
-          roughness={0.55}
-          metalness={0.15}
-        />
-      </instancedMesh>
-    );
-  },
-);
+      <boxGeometry
+        args={[SEAT_ARMREST.width, SEAT_ARMREST.height, SEAT_ARMREST.depth]}
+      />
+      <meshStandardMaterial
+        color={theme.seat.frame}
+        roughness={0.55}
+        metalness={0.15}
+      />
+    </instancedMesh>
+  );
+});
 SeatArmrests.displayName = 'SeatArmrests';
 
 /**
@@ -423,7 +452,13 @@ const RowMarkerPlates = memo<{
   seats: TheaterSeat[];
   theme: InteriorTheme;
   aisleSideSeatIds: Map<string, -1 | 1>;
-}>(function RowMarkerPlates({ seats, theme, aisleSideSeatIds }) {
+  rowCurveRadius: number;
+}>(function RowMarkerPlates({
+  seats,
+  theme,
+  aisleSideSeatIds,
+  rowCurveRadius,
+}) {
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
 
@@ -442,19 +477,29 @@ const RowMarkerPlates = memo<{
       // 通路のある側の肘掛けに貼る。室中心基準にすると、中央通路に面する内側端の席で
       // プレートが通路と逆側に付いてしまうため、判定結果の向きをそのまま使う
       const outward = aisleSideSeatIds.get(seat.id) ?? 1;
-      tempObject.position.set(
-        seat.position_x + outward * (ARMREST_OFFSET_X + 0.03),
-        seat.position_y + 0.42,
-        seat.position_z + 0.02,
+      const yaw = calcSeatYawOnArc(seat.position_x, rowCurveRadius);
+      const [ox, oz] = rotateLocalOffset(
+        outward * (ARMREST_OFFSET_X + 0.03),
+        0.02,
+        yaw,
       );
-      // 円柱の軸(+Y)をX方向へ倒して、肘掛け側面に円盤が向くようにする
-      tempObject.rotation.set(0, 0, Math.PI / 2);
+      tempObject.position.set(
+        seat.position_x + ox,
+        seat.position_y + 0.42,
+        seat.position_z + oz,
+      );
+      /*
+        円柱の軸(+Y)をZ軸まわりに90°倒してローカルX方向へ向け、さらにY軸で座席の
+        向きへ回す。three の Euler 'XYZ' は Rx*Ry*Rz の順に適用するため、Rz（倒す）が
+        先、Ry（向ける）が後になり意図どおりになる。
+      */
+      tempObject.rotation.set(0, yaw, Math.PI / 2);
       tempObject.scale.set(1, 1, 1);
       tempObject.updateMatrix();
       meshRef.current!.setMatrixAt(i, tempObject.matrix);
     });
     meshRef.current.instanceMatrix.needsUpdate = true;
-  }, [targets, aisleSideSeatIds, tempObject]);
+  }, [targets, aisleSideSeatIds, rowCurveRadius, tempObject]);
 
   if (targets.length === 0) return null;
 
@@ -528,6 +573,7 @@ HoverHighlight.displayName = 'HoverHighlight';
 export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
   theme,
   aisleSideSeatIds,
+  rowCurveRadius,
   seats,
   selectedSeatId,
   highlightedSeatId,
@@ -546,12 +592,16 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
         seat.position_y + 0.45,
         seat.position_z,
       );
-      tempObject.rotation.set(0, 0, 0);
+      tempObject.rotation.set(
+        0,
+        calcSeatYawOnArc(seat.position_x, rowCurveRadius),
+        0,
+      );
       tempObject.updateMatrix();
       hitRef.current!.setMatrixAt(i, tempObject.matrix);
     });
     hitRef.current.instanceMatrix.needsUpdate = true;
-  }, [seats, tempObject]);
+  }, [seats, rowCurveRadius, tempObject]);
 
   const handlePointerOver = useCallback(
     (event: { instanceId?: number }) => {
@@ -605,23 +655,35 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
 
   return (
     <group>
-      <SeatBases seats={seats} theme={theme} />
-      <SeatArmrests seats={seats} theme={theme} />
+      <SeatBases seats={seats} theme={theme} rowCurveRadius={rowCurveRadius} />
+      <SeatArmrests
+        seats={seats}
+        theme={theme}
+        rowCurveRadius={rowCurveRadius}
+      />
       <SeatCushions
         seats={seats}
         selectedSeatId={selectedSeatId}
         theme={theme}
+        rowCurveRadius={rowCurveRadius}
       />
-      <SeatBacks seats={seats} selectedSeatId={selectedSeatId} theme={theme} />
+      <SeatBacks
+        seats={seats}
+        selectedSeatId={selectedSeatId}
+        theme={theme}
+        rowCurveRadius={rowCurveRadius}
+      />
       <SeatHeadrests
         seats={seats}
         selectedSeatId={selectedSeatId}
         theme={theme}
+        rowCurveRadius={rowCurveRadius}
       />
       <RowMarkerPlates
         seats={seats}
         theme={theme}
         aisleSideSeatIds={aisleSideSeatIds}
+        rowCurveRadius={rowCurveRadius}
       />
       <HoverHighlight seat={hoveredSeat} />
 

@@ -5,6 +5,7 @@
 import {
   calcFacetRadius,
   computeCeilingLightPlacements,
+  computeCeilingReflectorPlacements,
   computeFacetPlacements,
   computeRibPlacements,
   isWallHiddenInOverview,
@@ -171,5 +172,46 @@ describe('isWallHiddenInOverview', () => {
 
   it('原点上の壁（座標0）は隠さない', () => {
     expect(isWallHiddenInOverview(0, 0)).toBe(false);
+  });
+});
+
+describe('computeCeilingReflectorPlacements', () => {
+  it('左右の側壁沿いに同数ずつ配置する', () => {
+    const r = computeCeilingReflectorPlacements(14, 20, 2.5);
+    const left = r.filter((p) => p.x < 0);
+    const right = r.filter((p) => p.x > 0);
+    expect(left).toHaveLength(right.length);
+    expect(left.length).toBeGreaterThan(0);
+  });
+
+  it('側壁から wallOffset だけ内側に入る', () => {
+    const r = computeCeilingReflectorPlacements(14, 20, 2.5, 0.6);
+    expect(Math.abs(r[0].x)).toBeCloseTo(14 / 2 - 0.6);
+  });
+
+  it('両端に半ピッチの余白を残す', () => {
+    const r = computeCeilingReflectorPlacements(14, 20, 2.5);
+    const zs = [...new Set(r.map((p) => p.z))].sort((a, b) => a - b);
+    const step = 20 / 8;
+    expect(zs[0]).toBeCloseTo(-10 + step / 2);
+    expect(zs[zs.length - 1]).toBeCloseTo(10 - step / 2);
+  });
+
+  it('器具の凹面が室内を向くよう左右で逆の yaw になる', () => {
+    const r = computeCeilingReflectorPlacements(14, 20, 2.5);
+    const left = r.find((p) => p.x < 0);
+    const right = r.find((p) => p.x > 0);
+    expect(left?.yaw).toBeCloseTo(-Math.PI / 2);
+    expect(right?.yaw).toBeCloseTo(Math.PI / 2);
+  });
+
+  it('奥行が間隔に満たなければ空配列を返す', () => {
+    expect(computeCeilingReflectorPlacements(14, 2, 2.5)).toEqual([]);
+  });
+
+  it('寸法がゼロ・負でも例外を投げず空配列を返す', () => {
+    expect(computeCeilingReflectorPlacements(0, 20, 2.5)).toEqual([]);
+    expect(computeCeilingReflectorPlacements(14, 0, 2.5)).toEqual([]);
+    expect(computeCeilingReflectorPlacements(14, 20, 0)).toEqual([]);
   });
 });

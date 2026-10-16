@@ -170,3 +170,55 @@ export function computeCeilingLightPlacements(
 export function isWallHiddenInOverview(x: number, z: number): boolean {
   return x > 0 || z > 0;
 }
+
+/** 天井リフレクター1基の配置 */
+export interface CeilingReflectorPlacement {
+  /** 室中心を原点とした位置 */
+  x: number;
+  z: number;
+  /** 器具の向き（Y軸回転, rad）。壁に沿わせる */
+  yaw: number;
+}
+
+/**
+ * 天井の湾曲リフレクター照明の配置を算出する。
+ *
+ * TCX（日比谷）の写真では、天井際に金色の湾曲したリフレクター器具が側壁に沿って
+ * 並んでいる。平らな円盤のダウンライト（`computeCeilingLightPlacements`）とは
+ * 別の器具なので、側壁沿いにのみ配置する。
+ *
+ * 奥行方向に等間隔で並べ、両端には半ピッチの余白を残す（壁の入隅で器具が潰れない）。
+ *
+ * @param roomWidth 室内幅 (m)
+ * @param roomDepth 室内奥行 (m)
+ * @param spacing 器具の間隔の目安 (m)
+ * @param wallOffset 側壁から内側へのオフセット (m)
+ * @returns 左右の側壁沿いの配置。寸法が不正なら空配列
+ */
+export function computeCeilingReflectorPlacements(
+  roomWidth: number,
+  roomDepth: number,
+  spacing: number,
+  wallOffset = 0.6,
+): CeilingReflectorPlacement[] {
+  if (roomWidth <= 0 || roomDepth <= 0 || spacing <= 0) return [];
+
+  const count = Math.floor(roomDepth / spacing);
+  if (count < 1) return [];
+
+  const step = roomDepth / count;
+  const halfWidth = roomWidth / 2;
+  const placements: CeilingReflectorPlacement[] = [];
+
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < count; i++) {
+      placements.push({
+        x: side * (halfWidth - wallOffset),
+        z: -roomDepth / 2 + step * (i + 0.5),
+        // 左壁は +90°、右壁は -90°（器具の凹面を室内へ向ける）
+        yaw: side * (Math.PI / 2),
+      });
+    }
+  }
+  return placements;
+}

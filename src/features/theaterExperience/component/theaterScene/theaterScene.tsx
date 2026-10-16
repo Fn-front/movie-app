@@ -58,6 +58,7 @@ import type { InteriorTheme } from '../../utils/theaterPalette';
 import {
   CARPET_TILE_METERS,
   getCarpetTexture,
+  getExitSignTexture,
   getWallGraphicTexture,
 } from '../../utils/theaterTextures';
 import { AisleStairs } from '../aisleStairs/aisleStairs';
@@ -135,6 +136,17 @@ const COLOR_HEMI_GROUND = '#2a2130'; // 半球光の地面側フィル（暗紫�
  * 落とす。`toneMapped` も既定（true）のままにしてシーンのトーンマッピングに乗せる。
  */
 const WALL_GRAPHIC_OPACITY = 0.22;
+
+/** スクリーン下のステージ（エプロン）の奥行 (m) */
+const STAGE_DEPTH = 1.5;
+/** 出入口の開口サイズ (m) */
+const DOOR_WIDTH = 1.0;
+const DOOR_HEIGHT = 2.1;
+/** 映写窓のサイズ (m) */
+const PORT_WIDTH = 0.5;
+const PORT_HEIGHT = 0.4;
+/** 映写窓の色（映写室の光が僅かに漏れる想定のごく暗い寒色） */
+const COLOR_PROJECTION_PORT = '#0d1118';
 
 /** マージン: 傾斜床は座席より少し外側まで広げる */
 const SLOPE_MARGIN = 0.5;
@@ -357,6 +369,125 @@ const BackStepFill = memo<{
 BackStepFill.displayName = 'BackStepFill';
 
 /**
+ * スクリーン下のステージ（エプロン）。
+ *
+ * 参考写真ではどの劇場も幕の下にまとまった黒いステージ領域があり、床から一段
+ * 上がっている。旧実装は高さ0.3mの細い装飾帯だけで、幕が床から生えているように
+ * 見えていた。
+ *
+ * 高さは**幕の下端に合わせる**（`screen_center_y - screen_height/2`）。全フォーマットで
+ * 幕下端は床から1.0mなので、ステージ上面がちょうど幕の下端に接する。
+ */
+const StageApron = memo<{
+  theme: InteriorTheme;
+  roomWidth: number;
+  roomDepth: number;
+  screenBottomY: number;
+}>(function StageApron({ theme, roomWidth, roomDepth, screenBottomY }) {
+  // 幕下端が床以下／不正値ならステージを作らない。
+  // 将来フックを足したときに Rules of Hooks 違反にならないよう、ガードは先頭に置く
+  if (!Number.isFinite(screenBottomY) || screenBottomY <= 0.05) return null;
+
+  const halfDepth = roomDepth / 2;
+  const height = screenBottomY;
+  const depth = STAGE_DEPTH;
+  const centerZ = halfDepth - depth / 2;
+
+  return (
+    <group>
+      {/* 上面（客席から見える天板） */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, height, centerZ]}
+        receiveShadow
+      >
+        <planeGeometry args={[roomWidth, depth]} />
+        <meshStandardMaterial color={COLOR_PROSCENIUM} roughness={0.95} />
+      </mesh>
+      {/* 前面（客席に正対する立ち上がり） */}
+      <mesh position={[0, height / 2, centerZ - depth / 2]} receiveShadow>
+        <planeGeometry args={[roomWidth, height]} />
+        <meshStandardMaterial color={COLOR_PROSCENIUM} roughness={0.95} />
+      </mesh>
+      {/* 前縁の見切り（細いライン。段鼻として段差を明示する） */}
+      <mesh position={[0, height, centerZ - depth / 2]}>
+        <boxGeometry args={[roomWidth, 0.04, 0.04]} />
+        <meshStandardMaterial
+          color={theme.dado}
+          roughness={0.6}
+          metalness={0.2}
+        />
+      </mesh>
+    </group>
+  );
+});
+StageApron.displayName = 'StageApron';
+
+/**
+ * 後壁の造作（出入口の扉＋映写窓）。
+ *
+ * - 扉: 非常口誘導灯は後壁に設置済みだったが**扉が無く**、「誘導灯はあるのに出口が
+ *   ない」という矛盾した状態だった。誘導灯の真下に開口を置いて整合させる。
+ *   実機は遮光のため内側にカーテンがあるので、開口の内側に一段明るい面を入れる。
+ * - 映写窓: IMAX公式のシアター構成図では後方にプロジェクター本体が描かれている。
+ *   後壁上部に映写窓（ポート）を並べる。
+ *
+ * いずれも最上段通路（`walkwayY`）の高さを基準に置く。
+ */
+const BackWallFixtures = memo<{
+  theme: InteriorTheme;
+  roomWidth: number;
+  roomDepth: number;
+  roomHeight: number;
+  walkwayY: number;
+}>(function BackWallFixtures({
+  theme,
+  roomWidth,
+  roomDepth,
+  roomHeight,
+  walkwayY,
+}) {
+  const halfWidth = roomWidth / 2;
+  const backZ = -roomDepth / 2;
+  // 誘導灯と同じ x に合わせる（誘導灯の真下が出口）
+  const doorX = halfWidth * 0.7;
+  // 映写窓は後壁の上部。天井と最上段通路の中間よりやや上
+  const portY = Math.min(roomHeight - 1.2, walkwayY + 2.6);
+
+  return (
+    <group>
+      {[-1, 1].map((side) => (
+        <group key={`door-${side}`} position={[side * doorX, walkwayY, backZ]}>
+          {/* 開口（枠） */}
+          <mesh position={[0, DOOR_HEIGHT / 2, 0.02]}>
+            <planeGeometry args={[DOOR_WIDTH, DOOR_HEIGHT]} />
+            <meshStandardMaterial color={theme.dado} roughness={0.9} />
+          </mesh>
+          {/* 遮光カーテン（開口の内側。一段明るくして奥行きを示す） */}
+          <mesh position={[0, DOOR_HEIGHT / 2, 0.04]}>
+            <planeGeometry args={[DOOR_WIDTH * 0.86, DOOR_HEIGHT * 0.94]} />
+            <meshStandardMaterial color={theme.relief} roughness={0.95} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* 映写窓（中央に3つ並べる） */}
+      {[-1, 0, 1].map((i) => (
+        <mesh
+          key={`port-${i}`}
+          position={[i * (PORT_WIDTH * 1.6), portY, backZ + 0.03]}
+        >
+          <planeGeometry args={[PORT_WIDTH, PORT_HEIGHT]} />
+          {/* 映写室の光が僅かに漏れる想定でごく暗い寒色 */}
+          <meshBasicMaterial color={COLOR_PROJECTION_PORT} />
+        </mesh>
+      ))}
+    </group>
+  );
+});
+BackWallFixtures.displayName = 'BackWallFixtures';
+
+/**
  * 通路灯（壁際・足元の小さな発光体）
  * 両側通路に等間隔で配置。発光体本体（toneMapped=false）のみを描き、滲み（グロー）は
  * ポストプロセスの Bloom に委ねる。#464 で自作していた加算合成グロー球（半透明の大球）は
@@ -423,6 +554,7 @@ const ExitSigns = memo<{
   const signHeight = 0.5;
   // 座席群より上（+0.6m）かつ天井直下（roomHeight-0.6m）に配置し、座席に埋没させない
   const signY = Math.max(seatAreaMaxY + 0.6, roomHeight - 0.6);
+  const exitSignTexture = useMemo(() => getExitSignTexture(), []);
   // 後壁の両端（後壁から内側 0.05m）に配置
   return (
     <group>
@@ -432,7 +564,12 @@ const ExitSigns = memo<{
           position={[side * (halfWidth * 0.7), signY, -halfDepth + signDepth]}
         >
           <boxGeometry args={[signWidth, signHeight, signDepth]} />
-          <meshBasicMaterial color={COLOR_EXIT_SIGN} toneMapped={false} />
+          {/* 緑地＋白の「走る人」ピクトグラム。ベタ塗りだと標識に見えないため */}
+          <meshBasicMaterial
+            color={COLOR_EXIT_SIGN}
+            map={exitSignTexture}
+            toneMapped={false}
+          />
           <Edges color='#00301a' lineWidth={1} />
         </mesh>
       ))}
@@ -1051,11 +1188,24 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         color={theme.screenWall}
       />
 
-      {/* ステージ前縁バンド（スクリーン下の細い装飾帯でシアター感を強調） */}
-      <mesh position={[0, 0.15, halfDepth - 0.05]}>
-        <boxGeometry args={[roomWidth, 0.3, 0.1]} />
-        <meshLambertMaterial color={COLOR_PROSCENIUM} />
-      </mesh>
+      {/* スクリーン下のステージ（エプロン） */}
+      <StageApron
+        theme={theme}
+        roomWidth={roomWidth}
+        roomDepth={roomDepth}
+        screenBottomY={
+          Number(theater.screen_center_y) - Number(theater.screen_height) / 2
+        }
+      />
+
+      {/* 後壁の造作（出入口の扉＋映写窓） */}
+      <BackWallFixtures
+        theme={theme}
+        roomWidth={roomWidth}
+        roomDepth={roomDepth}
+        roomHeight={roomHeight}
+        walkwayY={seatAreaMaxY}
+      />
 
       {/* 天井（フォーマット別の暗色・投影光の反射を抑える） */}
       <CeilingMesh
@@ -1078,6 +1228,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       {/* 天井の埋込ダウンライト */}
       <CeilingLights
         theme={theme}
+        isFirstPerson={selectedSeat !== null}
         roomWidth={roomWidth}
         roomDepth={roomDepth}
         roomHeight={roomHeight}

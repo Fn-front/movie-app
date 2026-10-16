@@ -5,12 +5,13 @@
  * 導入しない）、`getContext` をモックして「発行された描画コマンドの列」を検証する。
  */
 
-import { SRGBColorSpace } from 'three';
+import { ClampToEdgeWrapping, SRGBColorSpace } from 'three';
 
 import { getInteriorTheme } from './theaterPalette';
 import {
   clearTextureCacheForTest,
   getCarpetTexture,
+  getExitSignTexture,
   getScreenPerforationTexture,
   getWallGraphicTexture,
 } from './theaterTextures';
@@ -33,6 +34,7 @@ function createCtxMock() {
     moveTo: record('moveTo'),
     lineTo: record('lineTo'),
     bezierCurveTo: record('bezierCurveTo'),
+    closePath: record('closePath'),
     fillStyle: '',
     strokeStyle: '',
     lineWidth: 0,
@@ -149,6 +151,41 @@ describe('getScreenPerforationTexture', () => {
   });
 });
 
+describe('getExitSignTexture', () => {
+  it('テーマ非依存のシングルトンを返す', () => {
+    const first = getExitSignTexture();
+    expect(getExitSignTexture()).toBe(first);
+  });
+
+  it('sRGB色空間のテクスチャを返す', () => {
+    expect(getExitSignTexture().colorSpace).toBe(SRGBColorSpace);
+  });
+
+  it('標識なのでタイリングしない（ClampToEdge）', () => {
+    const texture = getExitSignTexture();
+    expect(texture.wrapS).toBe(ClampToEdgeWrapping);
+    expect(texture.wrapT).toBe(ClampToEdgeWrapping);
+  });
+
+  it('人型ピクトグラム（頭の円＋胴/脚/腕の多角形）と扉の矩形を描く', () => {
+    getExitSignTexture();
+    const calls = ctxMock.calls.join('|');
+    // 頭は arc、胴・脚・腕は moveTo/lineTo/closePath の多角形
+    expect(calls).toContain('arc(');
+    expect(calls).toContain('closePath(');
+    // 扉の開口は fillRect（緑地の塗りつぶしと合わせて複数回）
+    const fillRects = ctxMock.calls.filter((c) => c.startsWith('fillRect('));
+    expect(fillRects.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('2回目の呼び出しではキャッシュが効き再描画しない', () => {
+    getExitSignTexture();
+    const callCount = ctxMock.calls.length;
+    getExitSignTexture();
+    expect(ctxMock.calls.length).toBe(callCount);
+  });
+});
+
 describe('canvas 非対応環境', () => {
   it('getContext が null を返しても例外を投げずテクスチャを返す', () => {
     getContextSpy.mockReturnValue(null);
@@ -158,5 +195,7 @@ describe('canvas 非対応環境', () => {
     expect(getCarpetTexture(getInteriorTheme('standard')).colorSpace).toBe(
       SRGBColorSpace,
     );
+    expect(() => getExitSignTexture()).not.toThrow();
+    expect(() => getScreenPerforationTexture()).not.toThrow();
   });
 });

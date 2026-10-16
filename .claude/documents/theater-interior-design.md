@@ -14,7 +14,11 @@
 - <https://www.tohotheater.jp/service/dolby-cinema/>（Dolby Cinema 公式内観。ファセット壁・シアンコーブ・階段手すり）
 - <https://www.olinas.jp/theme/olinas/files/shop/411_photo5.jpg>（TOHOシネマズ錦糸町オリナス。標準館の客席全景）
 
-> **注記**: 本書は意匠（見た目）の設計書である。座標系・DBスキーマ・音響計算の設計は [`theater-experience-design.md`](theater-experience-design.md) を正とし、本書ではそれらを変更しない。
+> **注記**: 本書は意匠（見た目）の設計書である。座標系・音響計算の設計は [`theater-experience-design.md`](theater-experience-design.md) を正とし、本書ではそれらを変更しない。
+>
+> ただし**DBスキーマは2カラム追加した**（`theaters.row_curve_radius` / `theaters.screen_curvature`）。意匠のために座席と幕の形そのものを変えた結果であり、当初の「スキーマは触らない」という前提から外れている。カラム定義は `theater-experience-design.md` 側の `theaters` テーブル定義を正とし、本書では使い方（§6.6 / §8.1）を説明する。
+>
+> 幕の湾曲は見え方の計算（視野占有率・歪み）にも影響するため、そちらの対応は `theater-experience-design.md` §4.2 に記載した。
 
 ---
 
@@ -32,16 +36,21 @@
 | 6 | スクリーン | 黒マスキングの大型化、幕面のパーフォレーション表現、Dolbyの青い発光フレーム |
 | 7 | スピーカー | 既存 `direction_*` を描画に反映、バッフル・ドライバー・ブラケットの造形、色のテーマ化 |
 | 8 | ライティング | 視点別（俯瞰＝現状維持 / 一人称＝劇場照明） |
+| 9 | 付帯設備 | ステージエプロン・後壁の出入口扉・映写窓・誘導灯のピクトグラム・天井リフレクター（§5.6） |
+| 10 | 観客モデルと占有率 | 頭＋肩のシルエットを着席させ、客席の入り（空席／半分／満席）を切り替える（§7.3） |
 
 ### 含まないもの
 
 - ~~**スクリーンの湾曲**~~ → **実装済み（IMAX のみ）**。当初は「歪み計算も曲面対応に直すまで整合しない」としてスコープ外にしたが、湾曲が必要なのは IMAX の1館だけだったため、`screen_curvature > 0` のときだけ曲面パスに分岐する形で対応した。他3館は従来の平面パスを通るので挙動は変わらない（§8.1）
-- **DBスキーマ変更**。通路位置は既存の座席座標から導出できるため、マイグレーション不要
+- ~~**DBスキーマ変更**~~ → **2カラム追加した**。当初は「通路位置は既存の座席座標から導出できるためマイグレーション不要」としていたが、列の弧と幕の湾曲は劇場ごとの設計値であり座標から導出できないため、`theaters` に `row_curve_radius` と `screen_curvature` を追加した（§6.6 / §8.1）。いずれも `DEFAULT 0 = 従来どおり` なので、既存データの挙動は変わらない
 - **画像アセットの追加**。`public/` へのテクスチャ画像配置は行わない（理由は §2.2）
 - **モバイル対応**。既存どおりデスクトップのみ
 - **俯瞰ライティングの変更**（§10 参照）
 - **スピーカーの配置座標・向きデータの変更**。DBの `theater_speakers` の `position_*` / `direction_*` は音響計算の入力でもあるため動かさない。本件で変えるのは**造形と色、および既存 `direction_*` を描画に反映すること**のみ（§9）
-- **弧状（扇形）の座席列**。参考写真ではどの劇場も列が弧を描いているが、本アプリのDBは直線列である（`20260719015039_setup_theater_types.sql` で `position_z` は列番号のみ、`position_x` は席番号のみに依存）。弧状化はシードデータの作り直しになるため本件のスコープ外とし、既知の乖離として記録する
+- ~~**弧状（扇形）の座席列**~~ → **実装済み（全4館）**。当初は「シードデータの作り直しになる」としてスコープ外にしたが、劇場ごとに半径が一定なら既存行の `UPDATE` で済むと分かったため対応した（§6.6）
+- **観客による吸音**。観客モデルを描画するようになった（§7.3）が、音響ヒートマップは無人の室内を前提にしたままで、占有率を変えても変化しない。見た目と音響モデルの間の既知の乖離として記録する
+- **座席の小物**（カップホルダー・肘掛けのボタン類）。俯瞰のスケールでは視認できず、一人称でも観客モデルに隠れるため見送る
+- **幕裏のアコースティックカーテン**。不透明な幕の裏側にあり物理的に見えない
 
 ---
 
@@ -292,6 +301,32 @@ const COLOR_COVE_HDR = new Color(theme.cove).multiplyScalar(1.8);
 
 `planeGeometry` は片面描画のため、俯瞰では手前2面がカリングされ **奥側の壁（左壁・後壁）のみ**が見える。現行のスクリーンショットでも左壁が見えているので、造作（リブ／ファセット）とコーブはそこに効く。天井ダウンライトは俯瞰では天井面がカリングされて見えないため、一人称専用の演出になる。一人称では両側壁が全面に見えるため、こちらが主戦場になる。
 
+#### 【重要】壁際の立体は俯瞰で手動カリングする
+
+**カリングされるのは片面の `planeGeometry` だけで、立体（箱・コーン・トーラス等）はされない。** 壁の位置に立体を置くと、俯瞰では手前側の壁の立体が宙に浮いて客席に覆いかぶさる。
+
+この問題は**同じ原因で2回再発させた**（PR #611 の壁パネル、PR #633 の天井リフレクター）。壁際・天井際に立体を追加するときは必ず `isWallHiddenInOverview(x, z)`（`utils/wallGeometry.ts`）で判定し、俯瞰では手前側を描画対象から外すこと。
+
+```ts
+// 壁面を描画対象に含めるかの判定（各壁パネル・付帯設備で共通）
+faces.filter((f) => isFirstPerson || !isWallHiddenInOverview(f.x, f.z));
+```
+
+単体テストでは検出できない（jsdom に WebGL が無く、カメラ位置も関与しないため）。**俯瞰のスクリーンショットで目視確認するまで気付けない種類の不具合**である。
+
+### 5.6 付帯設備
+
+意匠の仕上げとして、参考写真に写っているが未実装だった設備を追加する。いずれも `theaterScene` 内のローカルコンポーネントとして実装する。
+
+| 設備 | 実装 | 根拠・決めごと |
+|---|---|---|
+| ステージエプロン | `StageApron` | 幕の下に床から立ち上がるステージ。高さは**幕の下端** (`screen_center_y - screen_height/2`) に合わせる。全フォーマットで幕下端は床から1.0m なので、天板がちょうど幕の下端に接する。前縁に `theme.dado` の細い見切りを入れて段差を明示する |
+| 出入口の扉 | `BackWallFixtures` | **非常口誘導灯はあるのに扉が無い**という矛盾した状態だったので、誘導灯の真下 (`±roomWidth*0.35`) に開口を置いて整合させた。実機は遮光のため内側にカーテンがあるので、開口の内側に一段明るい面 (`theme.relief`) を重ねて奥行きを示す |
+| 映写窓（ポート） | `BackWallFixtures` | IMAX公式の構成図では後方にプロジェクター本体が描かれている。後壁上部に3つ並べる。映写室の光が僅かに漏れる想定で、ごく暗い寒色の `meshBasicMaterial` |
+| 誘導灯のピクトグラム | `getExitSignTexture()` | 日本の法定色である緑地 (`#00b06b`) に白の走る人。`CanvasTexture` で生成する |
+| 天井リフレクター | `CeilingReflectors` | 側壁際の天井に沿って並ぶ反射板。`TorusGeometry` の部分弧で凹面をつくり、`yaw = side * π/2` で凹面を室内へ向ける。**俯瞰では §5.5 のとおり手前側を手動カリングする** |
+| 幕上のインジケータ灯 | `ScreenTopIndicators` | TCX の幕上部を拡大すると、赤いインジケータ付きの小型ユニットが等間隔に並んでいる。**これがスピーカーかは画像から断定できないため音源としては扱わない**。`theater_speakers` に無い音源を描くと見た目と音響計算の二重ソースになるので、設備灯として置くに留める。点滅させない（WCAG 2.3.1） |
+
 ---
 
 ## 6. 通路階段（`utils/aisleGeometry.ts` ＋ `component/aisleStairs/` 新規）
@@ -408,6 +443,38 @@ export function computeAisleSteps(
 
 `StepLEDs` は**座席ブロック内**の段鼻を照らす光帯、本件の段鼻ラインは**通路**の段鼻。別物であり共存する。両者で色（`COLOR_STEP_LED`）を共有する。
 
+### 6.6 弧状（扇形）の座席列
+
+参考写真ではどの劇場も列が弧を描いている。列内のどの席も幕から概ね等距離になるようにするためで、本アプリも極座標配置へ移行した。
+
+**DB**: `theaters.row_curve_radius`（0 なら直線列）。マイグレーション `20261016093525_theater_curved_rows.sql`。
+
+列の中央席を現在位置 `(0, z_r)` に据え置き、弧の中心を `(0, z_r + R)` に取る。`position_x` を**弧長方向のオフセット** `s` として解釈すると:
+
+```
+θ     = s / R
+new_x = R * sin(θ)
+new_z = z_r + R * (1 - cos(θ))
+```
+
+弧長で等間隔になるため、実機の等間隔配置と一致する。両端ほど `z` が大きくなる＝前方へせり出す。
+
+| 劇場 | R (m) | 端席の前方シフト | 列間隔との比 |
+|---|---|---|---|
+| standard-medium | 29 | 0.29 m | 0.27 |
+| tcx | 35 | 1.02 m | 0.89 |
+| imax-gt | 36 | 1.16 m | 1.01 |
+| dolby-cinema | 29 | 0.57 m | 0.47 |
+
+半径は室内奥行の約1.4倍を目安にした。これより小さいと弧がきつくなり、端席のせり出しが列間隔を大きく超えてしまう。
+
+**実装上の決めごと**:
+
+- 既存行を `UPDATE` する（`DELETE` + 再 `INSERT` にしない）。`theater_seats.id` を参照するテーブルは無いが、ID を保つ方が安全なため
+- 座席の各パーツは `calcSeatYawOnArc()` で弧に沿って首を振らせる。パーツのローカルオフセットも `rotateLocalOffset()` で同じ角に回す（`utils/rowCurve.ts`）
+- **通路検出（`computeSeatXSegments`）は影響を受けない。** 劇場ごとに半径が一定なので、`new_x` は全列で同じ値になるため
+- `byRow` の列代表席は**最小 |x|（列の中央）**で取る。弧状列では最初に現れた席が端席になりうるため
+
 ---
 
 ## 7. 座席（`component/seatMeshes/` 改修）
@@ -423,6 +490,32 @@ export function computeAisleSteps(
 ハードコードの `COLOR_SEAT` / `COLOR_FRAME` をテーマ由来に置き換える。`COLOR_SELECTED`（`#ffaa00`）と `COLOR_WHEELCHAIR`（`#3b82f6`）は**機能色なのでテーマ化しない**。
 
 `SeatMeshes` に `theme: InteriorTheme` を prop として渡す。色決定関数（`getSeatColorKey` / `getSeatBackColor`）は現在モジュールレベルの定数テーブルを引いているので、テーマを引数に取る形へ変更する。これらは純粋関数として export 済みでテストもあるため、テストも追随して更新する。
+
+### 7.3 観客モデルと占有率
+
+実際に人が座っていたらどう見えるかを体感できるようにする。参考写真（客席を後方から撮ったもの）では、観客は**頭と肩のシルエットだけが暗く見える**。顔やディテールは写らないので、造形もそこに絞る。
+
+**造形**（`component/audienceMeshes/`）:
+
+| パーツ | ジオメトリ | 配置 |
+|---|---|---|
+| 頭 | `sphereGeometry` 半径 0.105 | `HEAD_Y = 1.21` |
+| 肩 | `RoundedBox` 0.42 × 0.2 × 0.2 | `SHOULDER_Y = 1.02` |
+
+いずれも `InstancedMesh`。`BODY_Z_OFFSET = -0.1` で座面より僅かに後ろへ寄せ、背もたれに預けた姿勢にする。
+
+**占有の決定**（`utils/occupancy.ts`）:
+
+- `calcSeatOccupancyScore(seatId)` が席IDから `[0,1)` の決定論的スコアを返し、`score < 占有率` の席を埋める。**`Math.random()` は使わない**（§2 の方針。再レンダリングのたびに並びが変わるとE2Eスクリーンショットも安定しない）
+- この方式は**単調**である。占有率を上げると席が増えるだけで減らないため、UIの操作が直感どおりに見える
+- ハッシュは FNV-1a に **lowbias32 の最終撹拌を掛ける**。FNV-1a だけだと `seat-0`・`seat-1` のような似た短い文字列で分散が偏り、占有席が塊になった（10区間中8区間にしか散らなかった）
+- 体格・首の傾きも同じスコアから選ぶ（`calcAudienceVariant`）。全員が同じ大きさだと不自然なため4種を振り分ける
+- **選択中の席は常に空ける**（そこに座っているのは利用者自身のため）
+- **車椅子席は除外する**。座席メッシュを持たないフラットなスペースなので、人型を置くと宙に浮く
+
+**UI**（`component/occupancySelector/`）: Radix `ToggleGroup` で 空席 (0) / 半分 (0.5) / 満席 (1)。既定は空席。
+
+> **占有率は席の評価指標に影響させない。** 前席遮蔽率は「前席に人が座っている前提」の最悪ケースで算出しており、誰がたまたま座っているかで席の評価が揺れるべきではないため。これは意図的な分離であり、E2Eでも不変条件として検証する。
 
 ---
 
@@ -566,20 +659,34 @@ Atmos 9.1.6 レイアウトでは可視スピーカーは最大12個（16ch − 
 | `utils/aisleGeometry.ts` | **最重点**。純ロジックなので手厚く。(1) ブロック間隙間の通路検出 (2) サイド通路の検出 (3) `minWidth` 未満の隙間を通路としない (4) 段の生成数が列数×通路数と一致 (5) 横通路を `riseHeight = 0` のランディングとして扱う (6) 端ケース：座席ゼロ／1列のみ／全列同一Y（平床）／通路ゼロ（全幅1ブロック） |
 | `utils/speakerAiming.ts` | 純ロジック。`directionToEuler` について (1) `(0,0,-1)` で `[0, 0, 0]` を返す (2) `(1,0,0)` で yaw が +90° になる (3) `dy < 0`（下向き）で pitch が正、`dy > 0` で負になる (4) ゼロベクトルで `[0, 0, 0]` を返し NaN を出さない (5) 正規化されていないベクトル（長さ2など）でも正規化後と同じ角度を返す (6) `dy` が ±1 を僅かに超える丸め誤差入力でも `Math.asin` が NaN にならない |
 | `utils/theaterTextures.ts` | jsdom に canvas 実装が無いため、`HTMLCanvasElement.prototype.getContext` をモックし、(1) 柄種別ごとに異なる描画コマンド列が発行される (2) 同一フォーマットの2回目呼び出しでキャッシュが効き再描画されない (3) `wallGraphic.kind === 'none'` で `null` を返す、を検証する。**`canvas` パッケージは導入しない**（依存最小主義） |
+| `utils/wallGeometry.ts` | リブ／ファセットの配置数と座標、`calcFacetRadius`、天井ダウンライト・リフレクターの配置。**`isWallHiddenInOverview` は §5.5 の再発防止として必ず含める** |
+| `utils/seatColors.ts` | テーマ引数化後の色解決。機能色（選択中・車椅子席）がテーマで上書きされないこと |
+| `utils/adaptiveLighting.ts` | **俯瞰の光量値を定数でロックする**（`OVERVIEW_INTENSITIES` が 0.5 / 0.35 / 1.15 のままであること）。§10 の「俯瞰は現状維持」を回帰から守る唯一の手段 |
+| `utils/rowCurve.ts` | `isCurvedLayout`、`calcSeatYawOnArc`（中央席で0、端席で弧に沿う）、`calcArcForwardShift`、`rotateLocalOffset` |
+| `utils/screenCurve.ts` | `isCurvedScreen`、`calcScreenArcPoint`（`curvature = 0` で従来と同値）、`calcScreenSagitta`。**`screen_width` は弧長として扱う**ため、IMAX のサジッタは弦の式 (2.14m) ではなく 2.06m になる |
+| `utils/occupancy.ts` | (1) 占有率を上げたとき席集合が**単調に増える**こと (2) 選択中の席と車椅子席が除外されること (3) ハッシュが10区間に十分散ること（撹拌の回帰検出） (4) `calcAudienceVariant` が同じIDに同じ体格を返すこと (5) 範囲外の占有率のクランプ |
+| `utils/sightline.ts` | (1) `findFrontSeat` が `row_label` でグループ化し平均Zで前後を決めること（**列内でZが変わる弧状列**を含む） (2) 段差が大きいほど遮蔽が小さい (3) 列間隔が狭いほど遮蔽が大きい (4) 結果が常に 0〜1 (5) 最前列・不正配置（幕が後方／前席が後方／幕高0）で 0 |
 
 ### 11.2 単体テスト（既存の拡張）
 
 | 対象 | 観点 |
 |---|---|
-| `utils/theaterPalette.test.ts` | 全フォーマットで `InteriorTheme` の全フィールドが揃うこと、未知フォーマットが `standard` にフォールバックすること |
+| `utils/theaterPalette.test.ts` | 全フォーマットで `InteriorTheme` の全フィールドが揃うこと、未知フォーマットが `standard` にフォールバックすること。**§3.4 の輝度比（座席とカーペットが 1.8:1 以上）をテストで強制する** |
 | `utils/theaterGeometry.test.ts` | `isCrossAisleGap()` の切り出しに追随 |
 | `seatMeshes` の純粋関数テスト | `getSeatColorKey` / `getSeatBackColor` のテーマ引数化に追随 |
+| `utils/fieldOfView.test.ts` | 湾曲スクリーン（`curvature > 0`）での見込み角、`front_occlusion_ratio` の受け渡し。**`curvature = 0` で従来の期待値が変わらないこと**を併せて検証する |
+| `utils/seatRecommendation.test.ts` | 重みが 0.6 / 0.4 の2項から 0.45 / 0.30 / 0.25 の3項へ変わったことに追随。`front_occlusion_ratio` 未指定で従来挙動になること |
+| `component/occupancySelector.test.tsx` | 選択肢の描画、`aria-checked` 状態、コールバック、**Radix が選択解除時に渡す空文字を無視すること**、キーボード操作（`ArrowRight` → `Enter`）。`ToggleGroup.Root` のロールは `radiogroup` ではなく `group` である点に注意 |
 
 ### 11.3 カバレッジ除外
 
-`wallPanels` / `ceilingLights` / `aisleStairs` は R3F メッシュ層であり、jsdom（WebGL非対応）では実行時の振る舞いを検証できない。既存の `seatMeshes` / `theaterScene` 等と同じ扱いとし、`jest.config.js` の `collectCoverageFrom` 除外リストに追加する。振る舞いは E2E でカバーする。
+`wallPanels` / `ceilingLights` / `aisleStairs` / `audienceMeshes` は R3F メッシュ層であり、jsdom（WebGL非対応）では実行時の振る舞いを検証できない。既存の `seatMeshes` / `theaterScene` 等と同じ扱いとし、`jest.config.js` の `collectCoverageFrom` 除外リストに追加する。振る舞いは E2E でカバーする。
 
 **ロジックは必ず `utils/` 側の純粋関数に置き、メッシュコンポーネントには配置処理だけを残す。** 除外対象に判断ロジックを持ち込まない。
+
+> この原則は一度破った。観客の体格選択ロジックを `audienceMeshes` の中に直接書いてしまい、レビューで指摘されて `utils/occupancy.ts` の `calcAudienceVariant()` へ切り出した。**除外対象にロジックを置くとテストから見えなくなる**ため、配置以外の判断が混ざり始めたら `utils/` へ出すこと。
+
+`occupancySelector` は**除外しない**。通常のDOMコンポーネントなので RTL でテストできる。
 
 ### 11.4 E2E・ビジュアル証跡
 
@@ -587,36 +694,93 @@ Atmos 9.1.6 レイアウトでは可視スピーカーは最大12個（16ch − 
 - `.claude/rules/visual-evidence.md` に従い、各PRに Before/After スクリーンショットと動作動画を添付する。特に **一人称視点**（座席選択後）の Before/After を必ず含める。俯瞰だけでは本件の変化の大半が写らない
 - IMAX（最大席数544席）で E2E がタイムアウト・クラッシュしないことを確認する。これは過去に `ContactShadows` の撤去理由となった既知のリスクポイント
 
+#### スクリーンショットの撮影手順（WebGLが黒く潰れる問題）
+
+`docs/e2e-screenshots/` の撮り直しは、次の3条件を**すべて**満たさないとキャンバスが真っ黒になる。どれか1つでも欠けると、UIだけ写って3Dシーンが黒い画像ができあがる。
+
+| 条件 | 理由 |
+|---|---|
+| **実機 Chrome**（`channel: 'chrome'`） | Playwright 同梱の Chromium はヘッド付きでもキャンバスを合成できなかった。GPU合成が効く実機 Chrome が必要 |
+| **ヘッド付き**（`headless: false`） | ヘッドレスではキャンバスが黒くなる（本件以前からの既知事象。変更を stash して確認済み） |
+| **`fullPage` を使わない** | `fullPage: true` は `captureBeyondViewport` で再描画を伴い、`preserveDrawingBuffer: false` のキャンバスが空のまま取り込まれる。ビューポートを `document.documentElement.scrollHeight` まで広げて通常撮影する |
+
+その他の決めごと:
+
+- 認証は Playwright の E2E が生成する `e2e/.auth/storageState.json` を流用する（未生成なら `npx playwright test --project=setup`）
+- `nextjs-portal { display: none !important }` を注入して Next.js の開発ツールバッジを隠す
+- リサイズ後はキャンバスが再構築されるため、撮影前に数秒待つ
+- **A列の開始席番は劇場によって違う**（TCX は4番始まり）。データ取得完了の待機に `A列1番` を使うと TCX で詰まるので `/^A列\d+番/` で待つ
+- `npm run dev` を `| head` などのパイプにつながない。`head` が終了した時点で SIGPIPE により dev サーバーが応答しなくなる（この撮影中に実際に踏んだ）
+
+**客席の入りのE2E観点**（`e2e/theaterExperience/`）:
+
+| 観点 | 内容 |
+|---|---|
+| 正常系 | 既定が空席で、満席・半分へ切り替えられる |
+| 状態保持 | 座席を選んで一人称へ遷移しても占有率が保たれる |
+| 重複・競合 | 選択中の選択肢を再クリックしても解除されない（Radix の空文字ガード） |
+| アクセシビリティ | キーボード（ロービングフォーカス）で切り替えられる |
+| 不変条件 | **占有率を変えても前席遮蔽率が変わらない**（§7.3 の意図的な分離を回帰から守る） |
+
+> 占有率の効果そのもの（人が描かれること）は3Dキャンバス内なので DOM からは検証できない。見た目は上記スクリーンショットで担保する。
+
 ---
 
 ## 12. PR分割と完了条件
 
 5系統を1PRにまとめると巨大すぎるため分割する。各PRは単体でマージ可能な状態にする。
 
-| # | PR | 内容 | 依存 |
-|---|---|---|---|
-| 1 | 内装テーマ基盤 | `InteriorTheme` 拡張、`theaterTextures.ts` 新規、カーペットを床・傾斜床・バックステップへ適用 | — |
-| 2 | 壁・天井 | `wallPanels`（リブ／ファセット・コーブ・幅木・グラフィック）、`ceilingLights` | #1 |
-| 3 | 通路階段 | `aisleGeometry.ts`、`aisleStairs`（段・LED・手すり・腰壁）、`isCrossAisleGap` の共用化 | #1 |
-| 4 | 座席＋スクリーン | ドーム背もたれ、ヘッドレスト、テーマ色化、マスキング拡大、パーフォレーション、`screenGlow` | #1 |
-| 5 | スピーカー | `speakerAiming.ts`、既存 `direction_*` の描画反映、バッフル・ドライバー・ブラケット、テーマ色化 | #1 |
-| 6 | 視点別ライティング | `AdaptiveLighting`、E2Eスクショ更新 | #2 #3 #4 #5 |
+### 実績
+
+当初は6PRの計画だったが、実装中に見つけた不具合の修正と、スコープ外にしていた項目の追加で最終的に13PRになった。
+
+| PR | 内容 | 区分 |
+|---|---|---|
+| [#609](https://github.com/Fn-front/movie-app/pull/609) | 内装テーマ基盤＋カーペットの手続き的テクスチャ | 計画どおり |
+| [#611](https://github.com/Fn-front/movie-app/pull/611) | 壁の造作・コーブ照明・幅木・天井ダウンライト | 計画どおり |
+| [#615](https://github.com/Fn-front/movie-app/pull/615) | 縦通路の階段化・手すり・横通路の腰壁 | 計画どおり |
+| [#617](https://github.com/Fn-front/movie-app/pull/617) | 座席のシルエット刷新・幕の黒マスキング／発光フレーム | 計画どおり |
+| [#619](https://github.com/Fn-front/movie-app/pull/619) | **修正**: スピーカーの向きが描画に反映されていなかった | 既存不具合 |
+| [#621](https://github.com/Fn-front/movie-app/pull/621) | 視点別ライティング＋E2Eスクショ更新 | 計画どおり |
+| [#625](https://github.com/Fn-front/movie-app/pull/625) | 意匠の細部4件（楔形スピーカー・幕上インジケータ・壁の光・列記号プレート） | 追加 |
+| [#626](https://github.com/Fn-front/movie-app/pull/626) | 座席列の弧状化（当初スコープ外） | 追加 |
+| [#627](https://github.com/Fn-front/movie-app/pull/627) | **修正**: 音響ヒートマップが床の下に埋まり高さも固定だった | 既存不具合 |
+| [#629](https://github.com/Fn-front/movie-app/pull/629) | IMAX のカーブドスクリーン（当初スコープ外） | 追加 |
+| [#631](https://github.com/Fn-front/movie-app/pull/631) | **修正**: 通路の手すりが客席エリアを貫く長い棒になっていた | 本件で作り込んだ不具合 |
+| [#633](https://github.com/Fn-front/movie-app/pull/633) | 付帯設備5件（§5.6） | 追加 |
+| [#636](https://github.com/Fn-front/movie-app/pull/636) | 観客モデルと占有率、前席視線遮蔽の指標化 | 追加 |
+
+> **スピーカーのPRは独立していない。** 計画では #5 として独立PRだったが、実際には造形追加と不具合修正が不可分だったため #619 に統合した。
+
+### 振り返り
+
+- **不具合は4件とも、テストではなくスクリーンショットで見つかった。** いずれも単体テストは通っており、実機を描画するまで気付けなかった。§5.5 と §11.4 に撮影手順を残したのはこのため
+- **スコープ見積もりを2回外した。** 弧状列（#626）と湾曲スクリーン（#629）はどちらも「全面的な作り直しが要る」と過大に見積もってスコープ外にしていたが、実際は条件分岐で済んだ。「既存の計算を全部直す必要がある」と感じたら、**本当に全劇場に影響するのかを先に確認する**
 
 ### 完了条件（全PR共通）
 
-- [ ] `npx jest` が全件パスし、カバレッジが全指標80%以上
-- [ ] `npm run lint` / 型チェックがパス
-- [ ] IMAX（544席）で E2E がタイムアウト・クラッシュしない
-- [ ] 俯瞰で通常席・車椅子席・選択中席が判別可能（§3.4 の輝度比を実測）
-- [ ] 俯瞰のライティング値が変更されていない（PR #6 を除く）
-- [ ] `theater_speakers` の座標データが変更されていない（向き・造形・色のみの変更であること）
-- [ ] Before/After スクリーンショット（俯瞰・一人称の両方）と動作動画をPRに添付
+- [x] `npx jest` が全件パスし、カバレッジが全指標80%以上
+- [x] `npm run lint` / 型チェックがパス
+- [x] IMAX（544席）で E2E がタイムアウト・クラッシュしない
+- [x] 俯瞰で通常席・車椅子席・選択中席が判別可能（§3.4 の輝度比を実測）
+- [x] 俯瞰のライティング値が変更されていない（#621 を除く）
+- [x] `theater_speakers` の座標データが変更されていない（向き・造形・色のみの変更であること）
+- [x] Before/After スクリーンショット（俯瞰・一人称の両方）と動作動画をPRに添付
+
+**壁際・天井際に立体を追加するPRでは、上記に加えて以下を必ず確認する**（§5.5）:
+
+- [x] 俯瞰のスクリーンショットで、手前側の立体が客席に覆いかぶさっていないこと
 
 ---
 
 ## 13. 参考資料
 
-- [`theater-experience-design.md`](theater-experience-design.md) — 座標系・DBスキーマ・音響計算の設計（本書はこれを変更しない）
+- [`theater-experience-design.md`](theater-experience-design.md) — 座標系・DBスキーマ・音響計算・見え方の計算（A〜D）の設計
 - [`design-system.md`](design-system.md) — カラーパレット・コントラスト要件
 - `.claude/rules/visual-evidence.md` — 画面修正PRのビジュアル証跡ルール
 - `.claude/rules/testing.md` — テスト作成ルール
+
+### 本件で追加したマイグレーション
+
+- `supabase/migrations/20261016093525_theater_curved_rows.sql` — `row_curve_radius` の追加と座席位置の極座標化（§6.6）
+- `supabase/migrations/20261016111646_theater_screen_curvature.sql` — `screen_curvature` の追加（§8.1）

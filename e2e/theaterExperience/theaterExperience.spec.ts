@@ -4,6 +4,8 @@
  * 1. ページが表示される
  * 2. 座席選択→一人称切替→俯瞰に戻る
  * 3. ヒートマップ表示/非表示の切替
+ * 4. 劇場タイプの切替・URL保持・不正slugからの復帰
+ * 5. 客席の入り（占有率）の切替・状態保持・評価指標への非干渉
  */
 
 import { test, expect } from '../fixtures/auth';
@@ -200,5 +202,130 @@ test.describe('劇場タイプの切替', () => {
     await expect(
       page.getByRole('button', { name: /A列5番（車椅子席）/ }),
     ).toBeVisible();
+  });
+});
+
+test.describe('客席の入り（占有率）', () => {
+  /** 占有率の選択肢を aria-label で引く（Radix ToggleGroup の Item は role=radio） */
+  const occupancyOption = (page: Page, label: string) =>
+    page.getByRole('radio', { name: `客席を${label}にする` });
+
+  test('既定は空席で、満席・半分へ切り替えられる（選択中の再クリックでは解除されない）', async ({
+    page,
+  }) => {
+    await page.goto('/theater-experience');
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
+
+    const empty = occupancyOption(page, '空席');
+    const half = occupancyOption(page, '半分');
+    const full = occupancyOption(page, '満席');
+
+    // 既定は空席
+    await expect(empty).toHaveAttribute('aria-checked', 'true');
+    await expect(full).toHaveAttribute('aria-checked', 'false');
+
+    // 満席へ切替
+    await full.click();
+    await expect(full).toHaveAttribute('aria-checked', 'true');
+    await expect(empty).toHaveAttribute('aria-checked', 'false');
+
+    // 半分へ切替
+    await half.click();
+    await expect(half).toHaveAttribute('aria-checked', 'true');
+    await expect(full).toHaveAttribute('aria-checked', 'false');
+
+    // 選択中の選択肢を再クリックしても解除されない。
+    // Radix は選択解除時に空文字を渡すが、OccupancySelector 側で無視している
+    await half.click();
+    await expect(half).toHaveAttribute('aria-checked', 'true');
+  });
+
+  test('座席を選んで一人称へ遷移しても占有率が保たれる', async ({ page }) => {
+    await page.goto('/theater-experience');
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
+
+    await occupancyOption(page, '満席').click();
+    await expect(occupancyOption(page, '満席')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
+    // 座席選択 → 一人称ビューへ
+    await page.getByRole('button', { name: /^A列1番、/ }).click();
+    await expect(
+      page.getByRole('button', { name: '← 俯瞰に戻る' }),
+    ).toBeVisible();
+
+    // 占有率は保たれている
+    await expect(occupancyOption(page, '満席')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
+    // 俯瞰に戻っても保たれている
+    await page.getByRole('button', { name: '← 俯瞰に戻る' }).click();
+    await expect(occupancyOption(page, '満席')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+  });
+
+  test('キーボードで占有率を切り替えられる', async ({ page }) => {
+    await page.goto('/theater-experience');
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
+
+    const empty = occupancyOption(page, '空席');
+    const half = occupancyOption(page, '半分');
+
+    // ロービングフォーカス: 選択中の項目にフォーカスし、矢印キーで隣へ移動する
+    await empty.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(half).toBeFocused();
+
+    // 確定は Space で行う。Radix のロービングフォーカスは矢印キーを自前で捌いており、
+    // Enter ではトグルが確定しない（移動のみ）
+    await page.keyboard.press('Space');
+
+    await expect(half).toHaveAttribute('aria-checked', 'true');
+    await expect(empty).toHaveAttribute('aria-checked', 'false');
+  });
+
+  test('占有率を変えても前席遮蔽率は変わらない', async ({ page }) => {
+    await page.goto('/theater-experience');
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
+
+    // 前席のある列を選ぶ（A列は最前列で遮蔽が常に0になるため）
+    await page.getByRole('button', { name: /^C列8番、/ }).click();
+
+    /*
+      `term` ロールは accessible name を内容から取らない（nameFrom: author）ため、
+      getByRole('term', { name }) では引けない。ロールで構造を押さえ、
+      テキストで特定する。
+    */
+    const occlusion = page
+      .getByRole('term')
+      .filter({ hasText: '前席遮蔽率' })
+      .locator('xpath=following-sibling::dd[1]');
+    await expect(occlusion).toBeVisible();
+    const before = await occlusion.textContent();
+
+    // 満席にする
+    await occupancyOption(page, '満席').click();
+    await expect(occupancyOption(page, '満席')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
+    /*
+      遮蔽率は「前席に人が座っている前提」の最悪ケースで算出しており、
+      実際に誰が座っているか（客席の入り）には依存しない。
+      段床が急なため値自体は0%になる席が多いが、ここで守りたいのは
+      「占有率が評価指標に漏れ込んでいないこと」そのもの。
+    */
+    await expect(occlusion).toHaveText(before ?? '');
   });
 });

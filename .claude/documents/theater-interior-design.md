@@ -8,8 +8,11 @@
 
 参考にした実物:
 
-- <https://www.tohotheater.jp/service/premium_theater/>
-- <https://www.tohotheater.jp/theater/081/institution05.html>（TOHOシネマズ日比谷）
+- <https://www.tohotheater.jp/service/premium_theater/>（TCX / プレミアムサウンド / プレミアムシート）
+- <https://www.tohotheater.jp/theater/081/institution05.html>（TOHOシネマズ日比谷。TCX内観・Dolby Atmosスピーカー・座席）
+- <https://www.tohotheater.jp/service/imax/>（IMAXシアター構成図・スピーカー配置）
+- <https://www.tohotheater.jp/service/dolby-cinema/>（Dolby Cinema 公式内観。ファセット壁・シアンコーブ・階段手すり）
+- <https://www.olinas.jp/theme/olinas/files/shop/411_photo5.jpg>（TOHOシネマズ錦糸町オリナス。標準館の客席全景）
 
 > **注記**: 本書は意匠（見た目）の設計書である。座標系・DBスキーマ・音響計算の設計は [`theater-experience-design.md`](theater-experience-design.md) を正とし、本書ではそれらを変更しない。
 
@@ -23,11 +26,11 @@
 |---|---|---|
 | 1 | 内装テーマ | `WallColors` を `InteriorTheme` に拡張し、フォーマット別の内装アイデンティティを一元管理 |
 | 2 | 手続き的テクスチャ | `CanvasTexture` でカーペット柄・壁グラフィック・幕のパーフォレーションを生成 |
-| 3 | 壁 | 縦リブ（ルーバー）＋天井際のコーブ照明＋幅木（ダド）＋壁グラフィック |
-| 4 | 通路階段 | 縦通路に踏面・蹴込みを生成し、蹴込みに琥珀LED帯・段鼻に明ライン |
+| 3 | 壁・天井 | 壁の造作（縦リブ／Dolbyは多面体ファセット）＋天井際のコーブ照明＋幅木（ダド）＋壁グラフィック＋天井ダウンライト |
+| 4 | 通路階段 | 縦通路に踏面・蹴込みを生成し、蹴込みに琥珀LED帯・段鼻に明ライン。階段の手すりと横通路の腰壁も追加 |
 | 5 | 座席 | 背もたれ上端をドーム状に、ヘッドレスト枕を追加、色をテーマ化 |
-| 6 | スクリーン | 黒マスキングの大型化、幕面のパーフォレーション表現 |
-| 7 | スピーカー | 客席方向へのエイミング、バッフル・ドライバー・ブラケットの造形、色のテーマ化 |
+| 6 | スクリーン | 黒マスキングの大型化、幕面のパーフォレーション表現、Dolbyの青い発光フレーム |
+| 7 | スピーカー | 既存 `direction_*` を描画に反映、バッフル・ドライバー・ブラケットの造形、色のテーマ化 |
 | 8 | ライティング | 視点別（俯瞰＝現状維持 / 一人称＝劇場照明） |
 
 ### 含まないもの
@@ -37,7 +40,8 @@
 - **画像アセットの追加**。`public/` へのテクスチャ画像配置は行わない（理由は §2.2）
 - **モバイル対応**。既存どおりデスクトップのみ
 - **俯瞰ライティングの変更**（§10 参照）
-- **スピーカーの配置座標の変更**。DBの `theater_speakers` の座標は音響計算の入力でもあるため動かさない。本件で変えるのは**向きと造形と色**のみ
+- **スピーカーの配置座標・向きデータの変更**。DBの `theater_speakers` の `position_*` / `direction_*` は音響計算の入力でもあるため動かさない。本件で変えるのは**造形と色、および既存 `direction_*` を描画に反映すること**のみ（§9）
+- **弧状（扇形）の座席列**。参考写真ではどの劇場も列が弧を描いているが、本アプリのDBは直線列である（`20260719015039_setup_theater_types.sql` で `position_z` は列番号のみ、`position_x` は席番号のみに依存）。弧状化はシードデータの作り直しになるため本件のスコープ外とし、既知の乖離として記録する
 
 ---
 
@@ -60,7 +64,7 @@ JS側で走る計算は微小で、WASMに移しても計測可能な差は出�
 
 したがって **本設計で抑えるべきコストは「頂点数」「ドローコール数」「テクスチャフェッチ」「シャドウマップに入るジオメトリ量」** であり、以下を原則とする。
 
-- 反復要素（リブ・階段の踏面/蹴込み/LED・ヘッドレスト）は **すべて `InstancedMesh` に集約し、1種類＝1ドローコール** とする
+- 反復要素（リブ／ファセット・階段の踏面/蹴込み/LED・手すり・天井ダウンライト・ヘッドレスト）は **すべて `InstancedMesh` に集約し、1種類＝1ドローコール** とする
 - 新規に追加するメッシュに **`castShadow` を付けない**（既存の肘掛け・台座と同じ方針）
 - テクスチャは **256〜512px に制限**し、フォーマット単位でモジュールレベルにキャッシュして再生成しない
 - `EffectComposer multisampling={0}`、`dpr={[1, 1.5]}` の既存設定は変更しない
@@ -89,21 +93,32 @@ export type CarpetPattern = 'dots' | 'swoop' | 'diagonal';
 /** 壁グラフィックの種別（'none' は下地のみ） */
 export type WallGraphic = 'dots' | 'swoop' | 'none';
 
+/**
+ * 壁の造作形式。
+ * - rib:   等間隔の縦リブ（ルーバー）。TCX・標準館の意匠
+ * - facet: 多面体ファセット（折り紙状の三角面）。Dolby Cinema の意匠
+ */
+export type WallTreatment = 'rib' | 'facet';
+
 export interface InteriorTheme {
   /** 側壁・後壁の下地色 */
   wall: string;
   /** 天井色 */
   ceiling: string;
-  /** スクリーン側壁（迷光を殺す黒） */
+  /** スクリーン側壁 */
   screenWall: string;
   /** 幅木（床から 0.6m の帯）の色 */
   dado: string;
-  /** 縦リブの正面色 */
-  rib: string;
-  /** 縦リブの側面色（陰影の対になる一段暗い色） */
-  ribShade: string;
+  /** 壁の造作形式 */
+  wallTreatment: WallTreatment;
+  /** 造作（リブ正面 / ファセット明部）の色 */
+  relief: string;
+  /** 造作（リブ側面 / ファセット暗部）の色 */
+  reliefShade: string;
   /** コーブ照明の色（HDR化して Bloom に乗せる） */
   cove: string;
+  /** 幕外周の発光フレーム色。null なら描かない（Dolby のみ使用） */
+  screenGlow: string | null;
   /** 壁グラフィックの種別と色 */
   wallGraphic: { kind: WallGraphic; color: string };
   /** カーペット */
@@ -119,26 +134,37 @@ export interface InteriorTheme {
 
 | | `standard` | `imax` | `dolby_cinema` |
 |---|---|---|---|
-| 参考写真 | ワイドコンフォートシート | TCX（日比谷） | ブラックアウト内装 |
-| `wall` | `#23242e` | `#2b2a2e` | `#101013` |
-| `ceiling` | `#15161a` | `#1a1b1f` | `#0a0a0c` |
-| `screenWall` | `#08070a` | `#08080a` | `#050506` |
-| `dado` | `#15161c` | `#16161a` | `#0a0a0c` |
-| `rib` | `#4a4036` | `#55555c` | `#17171a` |
-| `ribShade` | `#2a241e` | `#303036` | `#0b0b0d` |
-| `cove` | `#ffcf9a` | `#ffd8b0` | `#ffd0a8` |
-| `wallGraphic` | `dots` / `#8a6a2e` | `swoop` / `#7a2420` | `none` / `#000000` |
-| `carpet.base` | `#1b1d2a` | `#2a1420` | `#121214` |
-| `carpet.motif` | `#6b5426` | `#5e2630` | `#1d1d20` |
+| 参考写真 | ワイドコンフォートシート | IMAX公式シアター図 | Dolby Cinema 公式内観 |
+| `wallTreatment` | `rib` | `rib` | **`facet`** |
+| `wall` | `#23242e` | `#2b2a2e` | `#2a2b2f` |
+| `ceiling` | `#15161a` | `#1a1b1f` | `#1e1f22` |
+| `screenWall` | `#08070a` | `#08080a` | `#26272b` |
+| `dado` | `#15161c` | `#16161a` | `#1a1b1e` |
+| `relief` | `#4a4036` | `#55555c` | `#3a3b40` |
+| `reliefShade` | `#2a241e` | `#303036` | `#1c1d20` |
+| `cove` | `#ffcf9a` | `#ffd8b0` | **`#2a9ff0`（シアン）** |
+| `screenGlow` | `null` | `null` | **`#1f7fe0`** |
+| `wallGraphic` | `dots` / `#8a6a2e` | `none` / `#000000` | `none` / `#000000` |
+| `carpet.base` | `#1b1d2a` | `#2a1420` | `#161719` |
+| `carpet.motif` | `#6b5426` | `#5e2630` | `#202126` |
 | `carpet.pattern` | `dots` | `swoop` | `diagonal` |
-| `seat.cushion` | `#8c5a56` | `#3a3a3e` | `#1f1d20` |
-| `seat.headrest` | `#9a6762` | `#46464b` | `#2a272b` |
-| `seat.frame` | `#2e2a28` | `#232326` | `#141214` |
+| `seat.cushion` | `#8c5a56` | `#3a3a3e` | `#44454a` |
+| `seat.headrest` | `#9a6762` | `#46464b` | `#4e4f55` |
+| `seat.frame` | `#2e2a28` | `#232326` | `#1a1b1e` |
 | `speaker.cabinet` | `#1a1a1c` | `#17171a` | `#141214` |
 | `speaker.baffle` | `#34343a` | `#2e2e34` | `#6b5327`（真鍮） |
 | `speaker.driver` | `#0e0e10` | `#0c0c0e` | `#2a2010` |
 
+**`imax` の `wallGraphic` について**: 当初は TCX（日比谷）の赤いスウープを流用していたが、IMAX公式のシアター図では側壁に装飾グラフィックが無い素のグレーであることを確認したため `none` に変更した。IMAX の壁は縦リブとコーブ照明だけで構成する。
+
+**`dolby_cinema` について**: 当初「ブラックアウトの真っ黒な部屋」と推測していたが、公式内観写真では **中濃グレーの多面体ファセット壁＋シアンブルーのコーブ** が実態だった。`screenWall` も黒ではなくファセットのグレーを回り込ませ、幕外周に `screenGlow` の青い発光フレームを置く（§8）。座席も真っ黒ではなく中濃チャコールで、これにより §3.4 の輝度比条件も満たしやすくなる。
+
 背もたれ色は既存どおり `cushion * BACK_DARKEN(0.78)` で導出し、テーマには持たせない。
+
+> **`standard` の配色について（意図の記録）**
+> 実在のTOHO標準スクリーン（例: 錦糸町オリナス）は **紫の壁＋緑と山吹の三角形アコースティックパネル＋紫の座席** という、はるかに彩度の高い内装である。本設計の `standard`（濃紺＋金のボケ円）はプレミアムシート館から取った配色であり、標準館の忠実な再現ではない。
+>
+> これは **3フォーマットを暗色基調で統一し、`imax` / `dolby_cinema` との差を彩度ではなくトーンで出す**ための意図的な選択である。「実物と違う」という理由だけで olinas 寄りに変更しないこと。変更する場合はアートディレクション全体の再判断として扱う。
 
 ### 3.2 既存APIの互換
 
@@ -151,14 +177,15 @@ export interface InteriorTheme {
 - `theaterExperiencePage` で `const theme = useMemo(() => getInteriorTheme(theater.format), [theater.format])` を1回だけ導出する
 - `TheaterScene` / `SeatMeshes` / `ScreenMesh` / `SpeakerMeshes` に `theme: InteriorTheme` を prop として渡す
 - `TheaterSceneProps` から内部導出を取り除く（**これが本件唯一のインターフェース変更**）
-- `SpeakerMeshes` にはエイミング先として客席重心（§9.2）も渡す
 
 ### 3.4 識別性の検証（必須）
 
-`dolby_cinema` は座席 `#1f1d20`、カーペット `#121214` と双方が暗く、俯瞰で座席の輪郭が沈むリスクがある。実装時に以下を確認し、満たさなければ `seat.cushion` を明るい側へ調整する。
+`dolby_cinema` は内装全体が暗く、俯瞰で座席の輪郭が沈むリスクがある。実装時に以下を確認し、満たさなければ `seat.cushion` を明るい側へ調整する。
 
 - 座席クッション色とカーペット色の相対輝度比が **1.8:1 以上**
+  （`#44454a` と `#161719` で約 1.95:1 を見込む。要実測）
 - 通常席と車椅子席（`#3b82f6`）、通常席と選択中（`#ffaa00`）がそれぞれ俯瞰スクリーンショットで判別可能
+- **シアンのコーブ（`#2a9ff0`）と車椅子席の青（`#3b82f6`）が混同されないこと。** 両者とも青系のため、Dolby で特に注意する。コーブは発光体（`toneMapped=false` ＋ Bloom）で座席は陰影付きの立体なので質感は分かれるが、俯瞰スクリーンショットで実際に確認する
 
 俯瞰のライティング（`directionalLight 1.15`）は据え置くため、輝度比に加えて陰影でも形が立つ。
 
@@ -215,16 +242,42 @@ export function getScreenPerforationTexture(): Texture;
 |---|---|---|---|
 | 下地 | 側壁2面＋後壁 | 既存の `WallMesh`（`planeGeometry`） | `map` に壁グラフィックテクスチャを追加（`none` の場合は `map` なし） |
 | 幅木 | 側壁2面＋後壁 | 床から 0.6m、厚さ 0.04m の帯 | 面ごとに `boxGeometry` 1枚（計3枚） |
-| 縦リブ | **側壁2面のみ** | 幅 0.12m × 奥行 0.06m × 高さ（幅木上端〜コーブ下端） | 2面ぶんを1つの `InstancedMesh` に集約。間隔 0.35m |
+| **造作**（リブ or ファセット） | **側壁2面のみ** | `theme.wallTreatment` で切替（§5.2） | 2面ぶんを1つの `InstancedMesh` に集約 |
 | コーブ照明 | 側壁2面＋後壁 | 天井から 0.25m 下、壁から 0.1m 内側、高さ 0.06m の帯 | 面ごとに `boxGeometry` 1枚（計3本） |
 
-### 5.2 リブの本数と配置
+後壁は非常口誘導灯（`ExitSigns`）と干渉するため、**後壁には造作を入れず**、下地グラフィック・幅木・コーブのみとする。
 
-リブ本数は壁長から `Math.floor(wallLength / 0.35)` で算出する。側壁の長さは `roomDepth`、後壁は `roomWidth`。後壁は非常口誘導灯（`ExitSigns`）と干渉するため、**後壁にはリブを入れず**、下地グラフィックと幅木のみとする。
+### 5.2 壁の造作 — 2系統
 
-最大規模（IMAX、`roomDepth` ≈ 30m）でも側壁2面で約170本。1つの `InstancedMesh` なのでドローコールは1。`castShadow` は付けない。
+`theme.wallTreatment` で描き分ける。どちらも **1つの `InstancedMesh`** に集約し、`castShadow` は付けない。色は明部 `theme.relief` / 暗部 `theme.reliefShade`。
 
-### 5.3 コーブ照明
+#### `rib`（`standard` / `imax`）
+
+幅 0.12m × 奥行 0.06m × 高さ（幅木上端〜コーブ下端）の細い箱を、間隔 0.35m で並べる。本数は `Math.floor(wallLength / 0.35)`。最大規模（`roomDepth` ≈ 30m）でも側壁2面で約170本。
+
+#### `facet`（`dolby_cinema`）
+
+Dolby Cinema の折り紙状の壁を、**壁面から手前に突き出す三角錐（4面の低ポリ）** の反復で表現する。
+
+- 1ユニットは底面 1.6m 角、頂点の突出 0.35m の三角錐を2つ組み合わせた菱形ユニット
+- 側壁をユニットサイズでタイル分割し、`InstancedMesh` に配置。各インスタンスの `rotation.z` をインデックスから決定論的に4通り（0 / 90 / 180 / 270°）で振り、**規則的な繰り返しに見えないようにする**
+- 法線の向きが面ごとに変わるため、既存の `directionalLight` だけで明暗の三角パターンが出る。テクスチャ不要
+- 最大規模で側壁2面あわせて約 2 × (30 / 1.6) × (10 / 1.6) ≈ 230 ユニット。`InstancedMesh` 1つなのでドローコールは1
+
+> `Math.random()` は使わない。部屋サイズが同じなら毎回同じ見た目になる決定論的な配置とし、E2Eスクリーンショットを安定させる。
+
+### 5.3 天井ダウンライト（`component/ceilingLights/` 新規）
+
+参考写真ではどの劇場も、暗い天井に**埋込ダウンライトがグリッド状**に並んでいる。現状の設計では天井が単色のままだったため追加する。
+
+- 天井面から 0.02m 下に、半径 0.09m の薄い円盤（`cylinderGeometry`）をグリッド配置
+- 間隔は 2.5m 四方。個数は `Math.floor(roomWidth / 2.5) × Math.floor(roomDepth / 2.5)`（最大規模で約 8 × 12 = 96個）
+- `meshBasicMaterial` ＋ HDR化した `theme.cove` ＋ `toneMapped={false}` で Bloom に乗せる
+- 1つの `InstancedMesh`。`castShadow` なし、点滅なし
+
+Dolby では `cove` がシアンのため天井のダウンライトもシアンになり、公式写真の青い点光の印象と一致する。
+
+### 5.4 コーブ照明
 
 既存の通路灯・段差LEDと同じ作法に揃える。
 
@@ -235,9 +288,9 @@ const COLOR_COVE_HDR = new Color(theme.cove).multiplyScalar(1.8);
 
 `TheaterCanvas` の `Bloom luminanceThreshold={0.9}` を超えるよう HDR 化する。点滅させない。
 
-### 5.4 俯瞰での見え方
+### 5.5 俯瞰での見え方
 
-`planeGeometry` は片面描画のため、俯瞰では手前2面がカリングされ **奥側の壁（左壁・後壁）のみ**が見える。現行のスクリーンショットでも左壁が見えているので、リブとコーブはそこに効く。一人称では両側壁が全面に見えるため、こちらが主戦場になる。
+`planeGeometry` は片面描画のため、俯瞰では手前2面がカリングされ **奥側の壁（左壁・後壁）のみ**が見える。現行のスクリーンショットでも左壁が見えているので、造作（リブ／ファセット）とコーブはそこに効く。天井ダウンライトは俯瞰では天井面がカリングされて見えないため、一人称専用の演出になる。一人称では両側壁が全面に見えるため、こちらが主戦場になる。
 
 ---
 
@@ -325,12 +378,33 @@ export function computeAisleSteps(
 | 蹴込み | `riseHeight > 0` の段数 | `meshStandardMaterial`（`theme.dado`） |
 | 蹴込みLED | 同上 | `meshBasicMaterial` ＋ HDR琥珀 ＋ `toneMapped={false}` |
 | 段鼻ライン | 同上 | `meshBasicMaterial` ＋ HDR温白 ＋ `toneMapped={false}` |
+| **手すり支柱** | 段数 × 通路の手すり本数 | `meshStandardMaterial`（`theme.speaker.cabinet` と同系の暗色金属） |
+| **手すり笠木** | 通路の手すり本数 | 同上 |
 
-いずれも `InstancedMesh`。最大規模でも通路4本 × 20列 = 80インスタンス程度で、ドローコールは4。`castShadow` は付けない。
+いずれも `InstancedMesh`。最大規模でも通路4本 × 20列 = 80インスタンス程度で、ドローコールは6。`castShadow` は付けない。
 
 既存の `SlopedFloorMesh` は通路部分も滑らかに補間しているため、**階段はその上に乗せるだけ**で床側の改修は不要。Z-fighting を避けるため踏面を床から `0.002m` 浮かせる。
 
-### 6.4 既存 `StepLEDs` との関係
+### 6.4 手すりと横通路の腰壁
+
+参考写真（Dolby Cinema 公式内観、TCX日比谷）で、**階段沿いの金属パイプ手すり**と、**横通路の前縁に立つ腰壁（キャップ付き）** が確認できたため追加する。
+
+#### 手すり
+
+- 各縦通路の**座席ブロック側の縁**に沿って、段の勾配に追従する手すりを立てる
+- 支柱: 0.04m 角 × 高さ 0.9m を段ごとに1本
+- 笠木: 支柱の上端を結ぶ細い角材（0.05m 角）。段の勾配に合わせて傾ける。通路1本につき1インスタンス（始点と終点から長さ・角度・中点を算出）
+- サイド通路（壁側）には手すりを立てない。壁が手すりの役目を果たすため
+
+#### 横通路の腰壁
+
+- 横通路（`riseHeight = 0` のランディング）の**前縁**に、高さ 0.9m の壁を立てる
+- 上端に一段明るいキャップ（高さ 0.05m）を乗せる。参考写真の木製キャップレールに相当
+- 座席ブロックの幅ぶんだけ立て、通路部分は開口させる（`computeAisleXRanges` の補集合＝`computeSeatXSegments` の各セグメントをそのまま使える）
+
+腰壁は**俯瞰でスタジアム客席の段構成を読み取りやすくする**効果もある。現状は傾斜床がのっぺり繋がっていて段の構造が分かりにくい。
+
+### 6.5 既存 `StepLEDs` との関係
 
 `StepLEDs` は**座席ブロック内**の段鼻を照らす光帯、本件の段鼻ラインは**通路**の段鼻。別物であり共存する。両者で色（`COLOR_STEP_LED`）を共有する。
 
@@ -356,7 +430,8 @@ export function computeAisleSteps(
 
 - `BEZEL_THICKNESS` を **0.08 → 0.35** に拡大し、色を `#1a1a2e` → `#060608` に変更。実物の黒マスキングに寄せる
 - 幕面のシェーダーマテリアルに、パーフォレーションテクスチャを **乗算** する uniform（`uPerfMap`）を追加。`shaders/screenFragment` に数行追加する
-- `theme.screenWall` を全フォーマットで `#08070a` 系の黒に寄せ、幕まわりの迷光を殺す
+- `theme.screenWall` は `standard` / `imax` では `#08070a` 系の黒に寄せ、幕まわりの迷光を殺す。**`dolby_cinema` だけは例外**で、公式内観どおりファセット壁のグレー（`#26272b`）を幕まわりにも回り込ませる
+- **幕外周の発光フレーム**（`theme.screenGlow`）。`null` でないフォーマットのみ、黒マスキングのさらに外側に幅 0.12m の発光帯を四辺へ置く。`meshBasicMaterial` ＋ HDR化 ＋ `toneMapped={false}` で Bloom に乗せる（Dolby Cinema の青い縁取り）
 - 湾曲は入れないため、`projectScreenQuad` / `calcViewingDistortion` および `distortionPreview` は**無改修**
 
 ---
@@ -373,45 +448,39 @@ const rotation = kind === 'ceiling' ? [Math.PI, 0, 0] : [0, 0, 0];
 
 `RoundedBoxGeometry` は対称な箱であり、X軸まわりに180°回しても見た目は変わらない。「天井は下向き、壁/床スピーカーは水平向きで視覚的に区別」というファイル冒頭のコメントは、実装されていない効果を記述している。さらに壁掛けサラウンドは `[0, 0, 0]`＝+Z（スクリーン方向）を向いたままで、客席を向いていない。
 
-根本原因は **「向きを示す面」がジオメトリに無い**こと。箱が「スピーカーに見える」のはバッフル面とドライバーコーンが見えるからであり、それが無い以上、回転させても意味が出ない。したがって **造形（§9.3）とエイミング（§9.2）はセットで入れる必要がある**。
+根本原因は **「向きを示す面」がジオメトリに無い**こと。箱が「スピーカーに見える」のはバッフル面とドライバーコーンが見えるからであり、それが無い以上、回転させても意味が出ない。したがって **造形（§9.3）と向きの反映（§9.2）はセットで入れる必要がある**。
 
-### 9.2 エイミング（`utils/speakerAiming.ts`）
+### 9.2 向きは既存のDBデータを使う（新規計算はしない）
 
-参考写真では、サラウンドも天井chも**客席に向けて内向き・下向きに振られている**。スピーカー位置と客席重心からオイラー角を算出する。
+**`theater_speakers` には向きのデータが既にある。** `20260421000001_add_speaker_directivity.sql` で `direction_x / direction_y / direction_z`（正規化済みの正面方向ベクトル）が追加されており、`TheaterSpeaker` 型にもAPIレスポンスにも含まれ、音響の指向性計算（`directivity_alpha` と併用）で実際に使われている。値も `20260719015039_setup_theater_types.sql` のコメントどおり `normalize(客席中央(0, 1.0, mid_z) - 設置位置)` で全室に追従して算出されている。
+
+つまり **描画層だけがこのデータを無視して固定回転を使っている** のが現状である。
+
+したがって本設計では客席重心を再計算せず、**既存の `direction_*` をオイラー角へ変換するだけ**にする。これにより「見た目の向き」と「音響シミュレーションが仮定している指向性」が必ず一致し、二重のソースが生まれない。
 
 ```ts
-/** 3D点 */
-export interface AimPoint { x: number; y: number; z: number }
-
 /**
- * スピーカーを客席重心へ向けるオイラー角 [pitch, yaw, 0] を算出する。
+ * 正規化済みの方向ベクトルを、three のメッシュに適用するオイラー角
+ * [pitch, yaw, 0] へ変換する。
  *
- * yaw   = Math.atan2(dx, dz)（Y軸まわり。three の既定前方 -Z に合わせる）
- * pitch = -Math.asin(dy / 距離) を maxPitchRad でクランプ
+ * three の既定前方は -Z。バッフル面を +Z 側に作る前提で
+ *   yaw   = Math.atan2(dx, dz)
+ *   pitch = -Math.asin(clamp(dy, -1, 1))
+ * とする。
  *
- * 実機のサラウンドは真下を向かず斜め下に留まるため、俯角に上限を設ける。
- * 距離ゼロ（スピーカーと重心が同一点）の場合は [0, 0, 0] を返す。
+ * ゼロベクトル（長さが EPSILON 未満）が渡された場合は [0, 0, 0] を返し、
+ * NaN を描画層へ流さない。正規化されていないベクトルは内部で正規化する。
  */
-export function calcSpeakerAim(
-  speaker: AimPoint,
-  target: AimPoint,
-  maxPitchRad?: number,
+export function directionToEuler(
+  dx: number,
+  dy: number,
+  dz: number,
 ): [number, number, number];
-
-/**
- * 座席エリアの前後端Zと耳の高さから、エイミング先の客席重心を返す。
- * x は 0（室中心）、y は耳の高さ、z は前後端の中点。
- */
-export function calcAudienceCentroid(
-  seatAreaFrontZ: number,
-  seatAreaBackZ: number,
-  earHeightY: number,
-): AimPoint;
 ```
 
-- `maxPitchRad` の既定値は **35°**（実機のサラウンドの俯角の目安）
-- 天井chにもこのクランプを適用する。重心の真上にある天井chはほぼ真下を向くが、35°で頭打ちになるため**やや前方を向いた自然な角度**に収まる
-- 客席重心は `theaterExperiencePage` が既に保持している `seatAreaFrontZ` / `seatAreaBackZ` から導けるため、**DB変更は不要**。`earHeightY` は既存の `SEATED_EYE_HEIGHT`（1.2m）を流用する
+- **俯角のクランプは行わない。** DBの値は音響モデルが使っている実際の指向方向であり、見た目だけ丸めると §9.2 冒頭で解消したはずの二重ソース問題が戻る
+- 正規化されていない値が入っていても破綻しないよう、内部で長さを見て正規化する（DBは `real` 型で丸め誤差が乗りうる）
+- `AimPoint` / `calcAudienceCentroid` は不要になったので設けない。`SpeakerMeshes` への追加 prop も `theme` だけで済む
 
 ### 9.3 造形
 
@@ -470,7 +539,7 @@ Atmos 9.1.6 レイアウトでは可視スピーカーは最大12個（16ch − 
 | 対象 | 観点 |
 |---|---|
 | `utils/aisleGeometry.ts` | **最重点**。純ロジックなので手厚く。(1) ブロック間隙間の通路検出 (2) サイド通路の検出 (3) `minWidth` 未満の隙間を通路としない (4) 段の生成数が列数×通路数と一致 (5) 横通路を `riseHeight = 0` のランディングとして扱う (6) 端ケース：座席ゼロ／1列のみ／全列同一Y（平床）／通路ゼロ（全幅1ブロック） |
-| `utils/speakerAiming.ts` | 純ロジック。(1) 真横の相手に対し yaw が 90° になる (2) 真上から見下ろす配置で pitch が負（下向き）になる (3) `maxPitchRad` を超える俯角がクランプされる (4) スピーカーと重心が同一点なら `[0, 0, 0]` を返す (5) 左右対称な配置で yaw が符号反転の関係になる (6) `calcAudienceCentroid` が前後端の中点と耳の高さを返す |
+| `utils/speakerAiming.ts` | 純ロジック。`directionToEuler` について (1) `(0,0,-1)` で `[0, 0, 0]` を返す (2) `(1,0,0)` で yaw が +90° になる (3) `dy < 0`（下向き）で pitch が正、`dy > 0` で負になる (4) ゼロベクトルで `[0, 0, 0]` を返し NaN を出さない (5) 正規化されていないベクトル（長さ2など）でも正規化後と同じ角度を返す (6) `dy` が ±1 を僅かに超える丸め誤差入力でも `Math.asin` が NaN にならない |
 | `utils/theaterTextures.ts` | jsdom に canvas 実装が無いため、`HTMLCanvasElement.prototype.getContext` をモックし、(1) 柄種別ごとに異なる描画コマンド列が発行される (2) 同一フォーマットの2回目呼び出しでキャッシュが効き再描画されない (3) `wallGraphic.kind === 'none'` で `null` を返す、を検証する。**`canvas` パッケージは導入しない**（依存最小主義） |
 
 ### 11.2 単体テスト（既存の拡張）
@@ -483,7 +552,7 @@ Atmos 9.1.6 レイアウトでは可視スピーカーは最大12個（16ch − 
 
 ### 11.3 カバレッジ除外
 
-`wallPanels` / `aisleStairs` は R3F メッシュ層であり、jsdom（WebGL非対応）では実行時の振る舞いを検証できない。既存の `seatMeshes` / `theaterScene` 等と同じ扱いとし、`jest.config.js` の `collectCoverageFrom` 除外リストに追加する。振る舞いは E2E でカバーする。
+`wallPanels` / `ceilingLights` / `aisleStairs` は R3F メッシュ層であり、jsdom（WebGL非対応）では実行時の振る舞いを検証できない。既存の `seatMeshes` / `theaterScene` 等と同じ扱いとし、`jest.config.js` の `collectCoverageFrom` 除外リストに追加する。振る舞いは E2E でカバーする。
 
 **ロジックは必ず `utils/` 側の純粋関数に置き、メッシュコンポーネントには配置処理だけを残す。** 除外対象に判断ロジックを持ち込まない。
 
@@ -502,10 +571,10 @@ Atmos 9.1.6 レイアウトでは可視スピーカーは最大12個（16ch − 
 | # | PR | 内容 | 依存 |
 |---|---|---|---|
 | 1 | 内装テーマ基盤 | `InteriorTheme` 拡張、`theaterTextures.ts` 新規、カーペットを床・傾斜床・バックステップへ適用 | — |
-| 2 | 壁 | `wallPanels`（リブ・コーブ・幅木・グラフィック） | #1 |
-| 3 | 通路階段 | `aisleGeometry.ts`、`aisleStairs`、`isCrossAisleGap` の共用化 | #1 |
-| 4 | 座席＋スクリーン | ドーム背もたれ、ヘッドレスト、テーマ色化、マスキング拡大、パーフォレーション | #1 |
-| 5 | スピーカー | `speakerAiming.ts`、エイミング、バッフル・ドライバー・ブラケット、テーマ色化 | #1 |
+| 2 | 壁・天井 | `wallPanels`（リブ／ファセット・コーブ・幅木・グラフィック）、`ceilingLights` | #1 |
+| 3 | 通路階段 | `aisleGeometry.ts`、`aisleStairs`（段・LED・手すり・腰壁）、`isCrossAisleGap` の共用化 | #1 |
+| 4 | 座席＋スクリーン | ドーム背もたれ、ヘッドレスト、テーマ色化、マスキング拡大、パーフォレーション、`screenGlow` | #1 |
+| 5 | スピーカー | `speakerAiming.ts`、既存 `direction_*` の描画反映、バッフル・ドライバー・ブラケット、テーマ色化 | #1 |
 | 6 | 視点別ライティング | `AdaptiveLighting`、E2Eスクショ更新 | #2 #3 #4 #5 |
 
 ### 完了条件（全PR共通）

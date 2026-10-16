@@ -10,6 +10,7 @@ import {
   refreshRecommendations,
   getRefreshCount,
 } from '@/lib/api/recommendations/recommendations';
+import { useRecommendationRefreshStore } from '@/features/recommendations/store/recommendationRefreshStore';
 import { useToast } from '@/hooks/useToast';
 import {
   RECOMMENDATION_REFRESH,
@@ -51,6 +52,15 @@ export function useRecommendationRefresh(
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // 画面遷移でアンマウントしても進行状態が消えないようグローバルストアで保持する
+  const isRefreshing = useRecommendationRefreshStore(
+    (state) => state.isRefreshing,
+  );
+  const startRefresh = useRecommendationRefreshStore(
+    (state) => state.startRefresh,
+  );
+  const endRefresh = useRecommendationRefreshStore((state) => state.endRefresh);
+
   const [isCoolingDown, setIsCoolingDown] = useState(false);
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -71,13 +81,22 @@ export function useRecommendationRefresh(
   });
 
   const mutation = useMutation({
-    mutationFn: refreshRecommendations,
+    // 進行状態の記録・解除は mutationFn 内で行う。
+    // onMutate / onSettled はコンポーネントがアンマウントすると呼ばれないため、
+    // 画面遷移後に isRefreshing が立ちっぱなしになる。
+    mutationFn: async () => {
+      startRefresh();
+      try {
+        return await refreshRecommendations();
+      } finally {
+        endRefresh();
+        // アンマウント後も残回数を確実に同期させる（onSuccessは呼ばれないため）
+        queryClient.invalidateQueries({
+          queryKey: recommendationKeys.refreshCount,
+        });
+      }
+    },
     onSuccess: (data) => {
-      queryClient.setQueryData(recommendationKeys.refreshCount, {
-        usedCount: RECOMMENDATION_REFRESH.MAX_COUNT - data.remainingCount,
-        maxCount: RECOMMENDATION_REFRESH.MAX_COUNT,
-        remainingCount: data.remainingCount,
-      });
       toast({
         title: RECOMMENDATION_REFRESH_MESSAGES.SUCCESS,
         variant: 'success',
@@ -105,8 +124,7 @@ export function useRecommendationRefresh(
   const remainingCount =
     countData?.remainingCount ?? RECOMMENDATION_REFRESH.MAX_COUNT;
   const isLimitReached = remainingCount <= 0;
-  const isRefreshDisabled =
-    mutation.isPending || isCoolingDown || isLimitReached;
+  const isRefreshDisabled = isRefreshing || isCoolingDown || isLimitReached;
 
   const refresh = useCallback(() => {
     // ボタンのdisabledだけに頼らず、フック側でも多重実行を止める
@@ -117,7 +135,7 @@ export function useRecommendationRefresh(
   return useMemo(
     () => ({
       refresh,
-      isRefreshing: mutation.isPending,
+      isRefreshing,
       isCoolingDown,
       isRefreshDisabled,
       remainingCount,
@@ -128,7 +146,7 @@ export function useRecommendationRefresh(
     }),
     [
       refresh,
-      mutation.isPending,
+      isRefreshing,
       isCoolingDown,
       isRefreshDisabled,
       remainingCount,

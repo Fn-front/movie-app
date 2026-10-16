@@ -123,6 +123,7 @@ export function buildUserPrompt(
  * @param excludedTitles - 除外する映画タイトルリスト
  * @param count - 推薦する件数（デフォルト: RECOMMENDATIONS_MAX_COUNT）
  * @param dismissedMovies - 興味なし映画リスト（傾向分析用）
+ * @param signal - 中断シグナル。クライアント離脱時にOpenAI呼び出しを打ち切る
  * @returns パース済みのレコメンド項目配列、失敗時はnull
  */
 export async function fetchRecommendationsFromOpenAI(
@@ -130,6 +131,7 @@ export async function fetchRecommendationsFromOpenAI(
   excludedTitles: string[],
   count: number = RECOMMENDATIONS_MAX_COUNT,
   dismissedMovies: DismissedMovie[] = [],
+  signal?: AbortSignal,
 ): Promise<OpenAiRecommendationItem[] | null> {
   const client = createOpenAIClient();
   if (!client) {
@@ -144,15 +146,18 @@ export async function fetchRecommendationsFromOpenAI(
   );
 
   try {
-    const response = await client.chat.completions.create({
-      model: getOpenAIModel(),
-      messages: [
-        { role: 'system', content: buildSystemPrompt(count) },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: OPENAI_CONFIG.RECOMMENDATIONS_TEMPERATURE,
-    });
+    const response = await client.chat.completions.create(
+      {
+        model: getOpenAIModel(),
+        messages: [
+          { role: 'system', content: buildSystemPrompt(count) },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: OPENAI_CONFIG.RECOMMENDATIONS_TEMPERATURE,
+      },
+      { signal },
+    );
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -223,21 +228,29 @@ function selectBestMovieMatch(
  * @param items - OpenAIが返したレコメンド項目
  * @param excludedIds - 除外するtmdb_movie_idの集合
  * @param limit - 解決する最大件数（デフォルト: RECOMMENDATIONS_MAX_COUNT）
+ * @param signal - 中断シグナル。クライアント離脱時にTMDb検索を打ち切る
  * @returns 解決済みのレコメンド映画情報配列
  */
 export async function resolveRecommendationsWithTMDb(
   items: OpenAiRecommendationItem[],
   excludedIds: Set<number>,
   limit: number = RECOMMENDATIONS_MAX_COUNT,
+  signal?: AbortSignal,
 ): Promise<ResolvedRecommendation[]> {
   const resolved: ResolvedRecommendation[] = [];
 
   for (const item of items) {
+    // 中断済みなら以降のTMDb検索を行わない
+    if (signal?.aborted) {
+      break;
+    }
+
     try {
       // yearなしで検索（TMDb APIのyearは厳密フィルタのため、1年ずれると0件になる）
-      const searchResult = await searchMovies({
-        query: item.title,
-      });
+      const searchResult = await searchMovies(
+        { query: item.title },
+        { signal },
+      );
 
       // タイトル一致かつ公開年が近い結果を優先的に選択
       const movie = selectBestMovieMatch(searchResult.results, item.year);

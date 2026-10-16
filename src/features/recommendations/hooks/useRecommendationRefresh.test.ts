@@ -5,6 +5,7 @@ import {
   RECOMMENDATION_REFRESH_MESSAGES,
   RECOMMENDATION_REFRESH,
 } from '@/constants';
+import { useRecommendationRefreshStore } from '@/features/recommendations/store/recommendationRefreshStore';
 import type { Recommendation } from '@/schema/recommendations';
 
 const mockToast = jest.fn();
@@ -17,8 +18,12 @@ jest.mock('@/lib/api/recommendations/recommendations', () => ({
   getRefreshCount: jest.fn(),
 }));
 
+// eslint-disable-next-line import-x/first
+import { refreshRecommendations } from '@/lib/api/recommendations/recommendations';
+
 const mockMutate = jest.fn();
-const mockSetQueryData = jest.fn();
+const mockInvalidateQueries = jest.fn();
+let mockMutationFn: (() => Promise<unknown>) | undefined;
 let mockOnSuccess:
   | ((data: {
       remainingCount: number;
@@ -27,7 +32,6 @@ let mockOnSuccess:
   | undefined;
 let mockOnError: ((error: unknown) => void) | undefined;
 let mockOnSettled: (() => void) | undefined;
-let mockIsPending = false;
 
 let mockQueryData:
   | {
@@ -44,10 +48,10 @@ let mockIsLoading = false;
 
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
-    setQueryData: mockSetQueryData,
+    invalidateQueries: mockInvalidateQueries,
   }),
   useMutation: (opts: {
-    mutationFn: unknown;
+    mutationFn: () => Promise<unknown>;
     onSuccess?: (data: {
       remainingCount: number;
       recommendations: Recommendation[];
@@ -55,15 +59,11 @@ jest.mock('@tanstack/react-query', () => ({
     onError?: (error: unknown) => void;
     onSettled?: () => void;
   }) => {
+    mockMutationFn = opts.mutationFn;
     mockOnSuccess = opts.onSuccess;
     mockOnError = opts.onError;
     mockOnSettled = opts.onSettled;
-    return {
-      mutate: mockMutate,
-      get isPending() {
-        return mockIsPending;
-      },
-    };
+    return { mutate: mockMutate };
   },
   useQuery: () => ({
     get data() {
@@ -78,8 +78,9 @@ jest.mock('@tanstack/react-query', () => ({
 describe('useRecommendationRefresh', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockIsPending = false;
+    useRecommendationRefreshStore.setState({ isRefreshing: false });
     mockIsLoading = false;
+    mockMutationFn = undefined;
     mockOnSuccess = undefined;
     mockOnError = undefined;
     mockOnSettled = undefined;
@@ -111,7 +112,7 @@ describe('useRecommendationRefresh', () => {
     expect(mockMutate).toHaveBeenCalled();
   });
 
-  it('onSuccess時にクエリキャッシュ更新とトーストが表示される', () => {
+  it('onSuccess時にトーストとコールバックが実行される', () => {
     const mockOnSuccessCallback = jest.fn();
     renderHook(() => useRecommendationRefresh(mockOnSuccessCallback));
 
@@ -136,14 +137,6 @@ describe('useRecommendationRefresh', () => {
       mockOnSuccess?.(mockData);
     });
 
-    expect(mockSetQueryData).toHaveBeenCalledWith(
-      ['recommendations', 'refreshCount'],
-      {
-        usedCount: RECOMMENDATION_REFRESH.MAX_COUNT - 6,
-        maxCount: RECOMMENDATION_REFRESH.MAX_COUNT,
-        remainingCount: 6,
-      },
-    );
     expect(mockToast).toHaveBeenCalledWith({
       title: RECOMMENDATION_REFRESH_MESSAGES.SUCCESS,
       variant: 'success',
@@ -166,11 +159,68 @@ describe('useRecommendationRefresh', () => {
     });
   });
 
-  it('isPending時にisRefreshingがtrueを返す', () => {
-    mockIsPending = true;
+  it('ストアのisRefreshingがtrueならisRefreshingを返す（画面遷移後も保持）', () => {
+    useRecommendationRefreshStore.setState({ isRefreshing: true });
     const { result } = renderHook(() => useRecommendationRefresh());
 
     expect(result.current.isRefreshing).toBe(true);
+    expect(result.current.isRefreshDisabled).toBe(true);
+  });
+
+  it('mutationFn実行中はストアのisRefreshingがtrueになる', async () => {
+    renderHook(() => useRecommendationRefresh());
+
+    let resolveRefresh: ((value: unknown) => void) | undefined;
+    (refreshRecommendations as jest.Mock).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }),
+    );
+
+    let promise: Promise<unknown> | undefined;
+    act(() => {
+      promise = mockMutationFn?.();
+    });
+
+    expect(useRecommendationRefreshStore.getState().isRefreshing).toBe(true);
+
+    await act(async () => {
+      resolveRefresh?.({ remainingCount: 9, recommendations: [] });
+      await promise;
+    });
+
+    expect(useRecommendationRefreshStore.getState().isRefreshing).toBe(false);
+  });
+
+  it('mutationFnが失敗してもストアのisRefreshingが解除される', async () => {
+    renderHook(() => useRecommendationRefresh());
+
+    (refreshRecommendations as jest.Mock).mockRejectedValueOnce(
+      new Error('API Error'),
+    );
+
+    await act(async () => {
+      await expect(mockMutationFn?.()).rejects.toThrow('API Error');
+    });
+
+    expect(useRecommendationRefreshStore.getState().isRefreshing).toBe(false);
+  });
+
+  it('mutationFn完了時に残回数クエリを無効化する', async () => {
+    renderHook(() => useRecommendationRefresh());
+
+    (refreshRecommendations as jest.Mock).mockResolvedValueOnce({
+      remainingCount: 9,
+      recommendations: [],
+    });
+
+    await act(async () => {
+      await mockMutationFn?.();
+    });
+
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['recommendations', 'refreshCount'],
+    });
   });
 
   it('isLoading時にisCountLoadingがtrueを返す', () => {
@@ -297,7 +347,7 @@ describe('useRecommendationRefresh', () => {
     });
 
     it('更新処理中はrefreshを呼んでもmutateされない', () => {
-      mockIsPending = true;
+      useRecommendationRefreshStore.setState({ isRefreshing: true });
       const { result } = renderHook(() => useRecommendationRefresh());
 
       act(() => {

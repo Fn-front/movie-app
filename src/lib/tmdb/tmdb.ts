@@ -173,10 +173,12 @@ export async function getMovieKeywordIds(
  * 結果側でも不適切コンテンツを除外する。
  *
  * @param params - 検索パラメータ
+ * @param options - リクエストオプション（中断シグナル）
  * @returns 検索結果（不適切コンテンツ除外済み）
  */
 export async function searchMovies(
   params: MovieSearchParams,
+  options?: { signal?: AbortSignal },
 ): Promise<TMDbResponse<Movie>> {
   const { query, page = 1, year, genre } = params;
 
@@ -189,6 +191,7 @@ export async function searchMovies(
         year,
         with_genres: genre,
       },
+      signal: options?.signal,
     },
   );
   return {

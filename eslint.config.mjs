@@ -86,6 +86,7 @@ export default [
             'polygonOffsetUnits',
             'roughness',
             'metalness',
+            'map',
             'shadow-mapSize-width',
             'shadow-mapSize-height',
             'shadow-camera-left',

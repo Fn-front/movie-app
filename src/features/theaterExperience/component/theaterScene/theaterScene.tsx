@@ -17,6 +17,7 @@ import {
   PlaneGeometry,
   Vector3,
   Color,
+  type Texture,
   type OrthographicCamera as OrthographicCameraType,
   type PerspectiveCamera as PerspectiveCameraType,
 } from 'three';
@@ -37,9 +38,15 @@ import {
   interpolateFloorHeight,
 } from '../../utils/theaterGeometry';
 import type { SeatXSegment } from '../../utils/theaterGeometry';
-import { getWallColors } from '../../utils/theaterPalette';
+import type { InteriorTheme } from '../../utils/theaterPalette';
+import {
+  CARPET_TILE_METERS,
+  getCarpetTexture,
+} from '../../utils/theaterTextures';
 
 export interface TheaterSceneProps {
+  /** 内装テーマ（フォーマット別の色・造作。ページ側で一度だけ導出する） */
+  theme: InteriorTheme;
   /** 劇場の幅 (m) */
   roomWidth: number;
   /** 劇場の奥行 (m) */
@@ -71,14 +78,11 @@ export interface TheaterSceneProps {
 /**
  * シネマカラーパレット（暗色基調）
  * 実映画館では「暗さに目を慣らさせる」目的で内装全体を暗色にしている。
- * ドールハウスのフラット感は維持しつつ、シネマ風の暗色に振る。
  *
- * 壁・天井・スクリーン側壁の色はフォーマット別に出し分けるため
- * `getWallColors(theater.format)`（utils/theaterPalette）から取得する。
- * 床・傾斜床・装飾帯は素材共通のためここで定数管理する。
+ * 壁・天井・床（カーペット）・座席の色はフォーマット別に出し分けるため
+ * `InteriorTheme`（utils/theaterPalette）から prop で受け取る。
+ * フォーマットに依らない装飾帯・エッジ線のみここで定数管理する。
  */
-const COLOR_FLOOR = '#1f1820'; // 通路の濃色カーペット
-const COLOR_SLOPE = '#2e1f2c'; // 座席エリアの暗色カーペット（やや深め）
 const COLOR_PROSCENIUM = '#1a1322'; // ステージ前縁の暗色バンド
 const COLOR_EDGE = '#b0a0a8'; // 暗色背景に対する明色エッジ線
 
@@ -104,18 +108,45 @@ const COLOR_HEMI_GROUND = '#2a2130'; // 半球光の地面側フィル（暗紫�
 const SLOPE_MARGIN = 0.5;
 
 /**
- * フラットな床メッシュ（ドールハウス基盤）
+ * カーペットテクスチャを、貼る面の実寸に合わせた repeat 付きで返す。
+ *
+ * `getCarpetTexture` はフォーマット単位でキャッシュされた共有インスタンスを返すため、
+ * 面ごとに異なる repeat を設定するには clone が要る（repeat はテクスチャの状態なので
+ * 共有したまま書き換えると他の面にも波及する）。clone は画像データを共有するので
+ * 生成コストは小さい。
  */
-const FloorMesh = memo<{ roomWidth: number; roomDepth: number }>(
-  function FloorMesh({ roomWidth, roomDepth }) {
-    return (
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[roomWidth, roomDepth]} />
-        <meshLambertMaterial color={COLOR_FLOOR} />
-      </mesh>
+function useCarpet(
+  theme: InteriorTheme,
+  widthM: number,
+  depthM: number,
+): Texture {
+  return useMemo(() => {
+    const texture = getCarpetTexture(theme).clone();
+    texture.needsUpdate = true;
+    texture.repeat.set(
+      Math.max(1, widthM / CARPET_TILE_METERS),
+      Math.max(1, depthM / CARPET_TILE_METERS),
     );
-  },
-);
+    return texture;
+  }, [theme, widthM, depthM]);
+}
+
+/**
+ * フラットな床メッシュ（通路のカーペット）
+ */
+const FloorMesh = memo<{
+  theme: InteriorTheme;
+  roomWidth: number;
+  roomDepth: number;
+}>(function FloorMesh({ theme, roomWidth, roomDepth }) {
+  const carpet = useCarpet(theme, roomWidth, roomDepth);
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+      <planeGeometry args={[roomWidth, roomDepth]} />
+      <meshLambertMaterial color={theme.carpet.base} map={carpet} />
+    </mesh>
+  );
+});
 FloorMesh.displayName = 'FloorMesh';
 
 /**
@@ -178,12 +209,14 @@ RoomEdgesBox.displayName = 'RoomEdgesBox';
  * 足元を通り座席が浮かない。座席の傾斜曲線(t^1.3)や横通路のZシフトにも自動追従する。
  */
 const SlopedFloorMesh = memo<{
+  theme: InteriorTheme;
   roomWidth: number;
   frontZ: number;
   backZ: number;
   rowZs: number[];
   rowYs: number[];
-}>(function SlopedFloorMesh({ roomWidth, frontZ, backZ, rowZs, rowYs }) {
+}>(function SlopedFloorMesh({ theme, roomWidth, frontZ, backZ, rowZs, rowYs }) {
+  const carpet = useCarpet(theme, roomWidth, Math.abs(frontZ - backZ));
   const geometry = useMemo(() => {
     const depth = frontZ - backZ;
     const segments = Math.max(10, rowZs.length * 2);
@@ -212,7 +245,7 @@ const SlopedFloorMesh = memo<{
       position={[0, 0, centerZ]}
       receiveShadow
     >
-      <meshLambertMaterial color={COLOR_SLOPE} />
+      <meshLambertMaterial color={theme.carpet.base} map={carpet} />
     </mesh>
   );
 });
@@ -225,23 +258,32 @@ SlopedFloorMesh.displayName = 'SlopedFloorMesh';
  * 最上段通路 + バックステップ壁があり、これでスタジアム客席の輪郭が完成する。
  */
 const BackStepFill = memo<{
+  theme: InteriorTheme;
   roomWidth: number;
   roomDepth: number;
   slopeBackZ: number;
   maxHeight: number;
-}>(function BackStepFill({ roomWidth, roomDepth, slopeBackZ, maxHeight }) {
+}>(function BackStepFill({
+  theme,
+  roomWidth,
+  roomDepth,
+  slopeBackZ,
+  maxHeight,
+}) {
   const halfDepth = roomDepth / 2;
   const backWallZ = -halfDepth;
   const topFloorDepth = slopeBackZ - backWallZ;
+  const carpet = useCarpet(theme, roomWidth, Math.max(topFloorDepth, 0.01));
   if (topFloorDepth <= 0) return null;
   const topFloorCenterZ = (slopeBackZ + backWallZ) / 2;
 
   return (
     <group>
-      {/* 縦の段差壁: slopeBackZ の位置で床から maxHeight まで立ち上がる */}
+      {/* 縦の段差壁: slopeBackZ の位置で床から maxHeight まで立ち上がる。
+          立ち上がり面は踏面ではなく蹴込みなので、カーペットではなく幅木色にする */}
       <mesh position={[0, maxHeight / 2, slopeBackZ]} receiveShadow>
         <planeGeometry args={[roomWidth, maxHeight]} />
-        <meshLambertMaterial color={COLOR_SLOPE} />
+        <meshLambertMaterial color={theme.dado} />
       </mesh>
       {/* 最上段の水平床（バック通路） */}
       <mesh
@@ -250,7 +292,7 @@ const BackStepFill = memo<{
         receiveShadow
       >
         <planeGeometry args={[roomWidth, topFloorDepth]} />
-        <meshLambertMaterial color={COLOR_SLOPE} />
+        <meshLambertMaterial color={theme.carpet.base} map={carpet} />
       </mesh>
     </group>
   );
@@ -679,6 +721,7 @@ const FirstPersonCameraRig = memo<{
 FirstPersonCameraRig.displayName = 'FirstPersonCameraRig';
 
 export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
+  theme,
   roomWidth,
   roomDepth,
   roomHeight,
@@ -695,11 +738,6 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
 }) {
   const halfWidth = roomWidth / 2;
   const halfDepth = roomDepth / 2;
-  // 壁・天井・スクリーン側壁の色をフォーマット別に出し分ける
-  const palette = useMemo(
-    () => getWallColors(theater.format),
-    [theater.format],
-  );
 
   return (
     <>
@@ -753,29 +791,29 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         抵触）した。per-frame コストの大きい ContactShadows を撤去し安定性を優先する。
       */}
 
-      {/* 床 */}
-      <FloorMesh roomWidth={roomWidth} roomDepth={roomDepth} />
+      {/* 床（通路のカーペット） */}
+      <FloorMesh theme={theme} roomWidth={roomWidth} roomDepth={roomDepth} />
 
       {/* 壁（4面）— フォーマット別の壁色（Dolbyは黒基調） */}
       <WallMesh
         width={roomWidth}
         height={roomHeight}
         position={[0, roomHeight / 2, -halfDepth]}
-        color={palette.wall}
+        color={theme.wall}
       />
       <WallMesh
         width={roomDepth}
         height={roomHeight}
         position={[-halfWidth, roomHeight / 2, 0]}
         rotation={[0, Math.PI / 2, 0]}
-        color={palette.wall}
+        color={theme.wall}
       />
       <WallMesh
         width={roomDepth}
         height={roomHeight}
         position={[halfWidth, roomHeight / 2, 0]}
         rotation={[0, -Math.PI / 2, 0]}
-        color={palette.wall}
+        color={theme.wall}
       />
       {/* スクリーン側壁（スクリーンを引き立てる暗色・フォーマット別） */}
       <WallMesh
@@ -783,7 +821,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         height={roomHeight}
         position={[0, roomHeight / 2, halfDepth]}
         rotation={[0, Math.PI, 0]}
-        color={palette.screenWall}
+        color={theme.screenWall}
       />
 
       {/* ステージ前縁バンド（スクリーン下の細い装飾帯でシアター感を強調） */}
@@ -797,7 +835,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         roomWidth={roomWidth}
         roomDepth={roomDepth}
         roomHeight={roomHeight}
-        color={palette.ceiling}
+        color={theme.ceiling}
       />
 
       {/* 部屋外形のエッジ線 */}
@@ -809,6 +847,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
 
       {/* 傾斜床（座席エリア）— 各列の実Z/Yを補間して座席を接地させる */}
       <SlopedFloorMesh
+        theme={theme}
         roomWidth={roomWidth}
         frontZ={seatAreaFrontZ + SLOPE_MARGIN}
         backZ={seatAreaBackZ - SLOPE_MARGIN}
@@ -818,6 +857,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
 
       {/* 傾斜床と後壁の間の段差を埋める（バックステップ壁＋最上段通路） */}
       <BackStepFill
+        theme={theme}
         roomWidth={roomWidth}
         roomDepth={roomDepth}
         slopeBackZ={seatAreaBackZ - SLOPE_MARGIN}

@@ -11,6 +11,7 @@ import { THEATER_MESSAGES } from '@/constants';
 
 import type { FrequencyBand, TheaterSeat } from '../types';
 import { computeSeatXSegments } from '../utils/theaterGeometry';
+import { getInteriorTheme } from '../utils/theaterPalette';
 import { useTheater } from '../hooks/useTheater';
 import { useTheaters } from '../hooks/useTheaters';
 import { useTheaterSelection } from '../hooks/useTheaterSelection';
@@ -80,6 +81,15 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       [theaterDetail],
     );
     const theaters = useMemo(() => theaterList?.theaters ?? [], [theaterList]);
+
+    /**
+     * 内装テーマはここで一度だけ導出し、シーンと子メッシュへ配る。
+     * 各コンポーネントが個別に getInteriorTheme を呼ぶと単一ソースが崩れるため。
+     */
+    const interiorTheme = useMemo(
+      () => getInteriorTheme(theater?.format ?? 'standard'),
+      [theater?.format],
+    );
 
     const fovMetrics = useFieldOfView(selectedSeat, theater);
 
@@ -294,6 +304,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
             {isWebGL2Supported ? (
               <TheaterCanvas>
                 <TheaterScene
+                  theme={interiorTheme}
                   roomWidth={theater.room_width}
                   roomDepth={theater.room_depth}
                   roomHeight={theater.room_height}

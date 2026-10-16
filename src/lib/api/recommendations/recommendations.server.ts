@@ -43,7 +43,7 @@ export async function getRecommendations(): Promise<RecommendationData> {
     supabase
       .from('recommendations')
       .select(
-        'id, tmdb_movie_id, title, poster_path, release_date, vote_average, genre_ids, reason, display_order, generated_at',
+        'id, tmdb_movie_id, title, poster_path, release_date, vote_average, vote_count, genre_ids, reason, display_order, generated_at',
       )
       .eq('user_id', session.user.id)
       .order('display_order', { ascending: true }),
@@ -80,6 +80,7 @@ export async function getRecommendations(): Promise<RecommendationData> {
     poster_path: row.poster_path as string | null,
     release_date: row.release_date as string | null,
     vote_average: row.vote_average as number | null,
+    vote_count: row.vote_count as number,
     genre_ids: row.genre_ids as number[] | null,
     reason: row.reason as string,
     display_order: row.display_order as number,

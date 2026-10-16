@@ -126,7 +126,7 @@ export const POST = withAuth(
     const { data: recommendations } = await supabase
       .from('recommendations')
       .select(
-        'id, tmdb_movie_id, title, poster_path, release_date, vote_average, genre_ids, reason, display_order',
+        'id, tmdb_movie_id, title, poster_path, release_date, vote_average, vote_count, genre_ids, reason, display_order',
       )
       .eq('user_id', session.user.id)
       .order('display_order', { ascending: true });

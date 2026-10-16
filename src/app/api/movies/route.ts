@@ -240,6 +240,7 @@ export async function GET(request: Request) {
             release_date: movie.release_date || null,
             overview: movie.overview || null,
             vote_average: movie.vote_average,
+            vote_count: movie.vote_count ?? 0,
             popularity: movie.popularity,
             genre_ids: movie.genre_ids,
             release_type,
@@ -284,7 +285,7 @@ export async function GET(request: Request) {
     let dataQuery = supabase
       .from('movie_cache')
       .select(
-        'id, title, poster_path, backdrop_path, release_date, overview, vote_average, popularity, genre_ids, release_type, is_now_playing, is_revival',
+        'id, title, poster_path, backdrop_path, release_date, overview, vote_average, vote_count, popularity, genre_ids, release_type, is_now_playing, is_revival',
       )
       .eq('release_type', release_type)
       .order(sortColumn, { ascending, nullsFirst: false })

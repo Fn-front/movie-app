@@ -97,6 +97,7 @@ export interface ResolvedAwardMovie {
   poster_path: string | null;
   release_date: string | null;
   vote_average: number | null;
+  vote_count: number;
   genre_ids: number[] | null;
   category: string;
   is_winner: boolean;
@@ -360,6 +361,7 @@ export async function resolveAwardsWithTMDb(
         poster_path: movie.poster_path,
         release_date: movie.release_date || null,
         vote_average: movie.vote_average ?? null,
+        vote_count: movie.vote_count ?? 0,
         genre_ids: movie.genre_ids ?? null,
         category: item.category,
         is_winner: item.is_winner,

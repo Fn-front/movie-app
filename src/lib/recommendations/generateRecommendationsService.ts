@@ -276,6 +276,7 @@ export async function upsertRecommendations(
     poster_path: r.poster_path,
     release_date: r.release_date,
     vote_average: r.vote_average,
+    vote_count: r.vote_count,
     genre_ids: r.genre_ids,
     reason: r.reason,
     display_order: r.display_order,

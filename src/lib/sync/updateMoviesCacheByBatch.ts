@@ -75,6 +75,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
           .from('movie_cache')
           .update({
             vote_average: detail.vote_average,
+            vote_count: detail.vote_count ?? 0,
             popularity: detail.popularity,
             updated_at: now,
           })

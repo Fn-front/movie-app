@@ -390,6 +390,8 @@ export interface NowShowingMovie {
   release_date: string | null;
   /** 評価平均 */
   vote_average: number | null;
+  /** 評価件数 */
+  vote_count: number;
   /** 人気度 */
   popularity: number | null;
   /** 表示順（1〜10） */

@@ -1396,4 +1396,100 @@ describe('GET /api/movies', () => {
     expect(response.status).toBe(200);
     expect(json.data.movies[0].favorite).toBeUndefined();
   });
+
+  // === vote_count ===
+
+  it('SELECTにvote_countが含まれ、レスポンスにそのまま返る', async () => {
+    const handler = await loadGET();
+
+    setupFromMock({
+      countResult: { count: 1 },
+      dataResult: {
+        data: [{ id: 1, title: '映画A', vote_average: 7.5, vote_count: 1234 }],
+        error: null,
+      },
+    });
+
+    const response = await handler(createRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.movies[0].vote_count).toBe(1234);
+
+    // 3回目のfrom()がデータクエリ。SELECT句にvote_countが含まれること
+    const dataQueryChain = mockSupabaseClient!.from.mock.results[2].value;
+    expect(dataQueryChain.select.mock.calls[0][0]).toContain('vote_count');
+  });
+
+  it('TMDb同期時のUPSERTにvote_countが含まれる', async () => {
+    const handler = await loadGET();
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          id: 700,
+          title: 'vote_count付き映画',
+          adult: false,
+          original_language: 'ja',
+          genre_ids: [28],
+          vote_average: 7.0,
+          vote_count: 4321,
+          popularity: 50,
+          poster_path: '/p.jpg',
+          backdrop_path: null,
+          release_date: '2026-07-01',
+          overview: '概要',
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 700 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    // from() 1回目=キャッシュ確認、2回目=他release_typeの既存ID、3回目=UPSERT
+    const upsertChain = mockSupabaseClient!.from.mock.results[2].value;
+    const upsertRows = upsertChain.upsert.mock.calls[0][0];
+    expect(upsertRows[0].vote_count).toBe(4321);
+  });
+
+  it('TMDbがvote_countを返さない場合は0でUPSERTする', async () => {
+    const handler = await loadGET();
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          id: 701,
+          title: 'vote_countなし映画',
+          adult: false,
+          original_language: 'ja',
+          genre_ids: [28],
+          vote_average: 7.0,
+          popularity: 50,
+          poster_path: '/p.jpg',
+          backdrop_path: null,
+          release_date: '2026-07-01',
+          overview: '概要',
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 701 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    const upsertChain = mockSupabaseClient!.from.mock.results[2].value;
+    const upsertRows = upsertChain.upsert.mock.calls[0][0];
+    expect(upsertRows[0].vote_count).toBe(0);
+  });
 });

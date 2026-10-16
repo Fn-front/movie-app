@@ -77,6 +77,7 @@ export async function syncNowShowingMovies(): Promise<NowShowingSyncResult> {
     poster_path: movie.poster_path,
     release_date: movie.release_date || null,
     vote_average: movie.vote_average,
+    vote_count: movie.vote_count ?? 0,
     popularity: movie.popularity,
     display_order: index + 1,
   }));

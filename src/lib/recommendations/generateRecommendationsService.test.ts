@@ -292,6 +292,7 @@ describe('generateRecommendationsService', () => {
         poster_path: null,
         release_date: null,
         vote_average: null,
+        vote_count: 0,
         genre_ids: null,
         reason: `理由${i + 1}`,
         display_order: i + 1,
@@ -384,6 +385,7 @@ describe('generateRecommendationsService', () => {
             poster_path: null,
             release_date: null,
             vote_average: null,
+            vote_count: 0,
             genre_ids: null,
             reason: '追加理由',
             display_order: 1,
@@ -406,6 +408,36 @@ describe('generateRecommendationsService', () => {
   });
 
   describe('upsertRecommendations', () => {
+    it('vote_countをINSERT対象に含める', async () => {
+      const insertSpy = jest.fn();
+      mockSelectExistingRecommendations([]);
+      mockDeleteRecommendations(true);
+      mockFrom.mockReturnValueOnce({
+        insert: (rows: unknown) => {
+          insertSpy(rows);
+          return Promise.resolve({ error: null });
+        },
+      });
+
+      await upsertRecommendations(mockSupabase, 'user-1', [
+        {
+          tmdb_movie_id: 100,
+          title: 'Movie',
+          poster_path: null,
+          release_date: null,
+          vote_average: 7.5,
+          vote_count: 4321,
+          genre_ids: null,
+          reason: '理由',
+          display_order: 1,
+        },
+      ]);
+
+      expect(insertSpy).toHaveBeenCalledWith([
+        expect.objectContaining({ vote_count: 4321 }),
+      ]);
+    });
+
     it('正常に挿入できた場合trueを返す', async () => {
       mockSelectExistingRecommendations([]);
       mockDeleteRecommendations(true);
@@ -418,6 +450,7 @@ describe('generateRecommendationsService', () => {
           poster_path: null,
           release_date: null,
           vote_average: null,
+          vote_count: 0,
           genre_ids: null,
           reason: '理由',
           display_order: 1,
@@ -438,6 +471,7 @@ describe('generateRecommendationsService', () => {
           poster_path: null,
           release_date: null,
           vote_average: null,
+          vote_count: 0,
           genre_ids: null,
           reason: '理由',
           display_order: 1,
@@ -463,6 +497,7 @@ describe('generateRecommendationsService', () => {
           poster_path: null,
           release_date: null,
           vote_average: null,
+          vote_count: 0,
           genre_ids: null,
           reason: '理由',
           display_order: 1,
@@ -484,6 +519,7 @@ describe('generateRecommendationsService', () => {
           poster_path: null,
           release_date: null,
           vote_average: null,
+          vote_count: 0,
           genre_ids: null,
           reason: '理由',
           display_order: 1,
@@ -517,6 +553,7 @@ describe('generateRecommendationsService', () => {
           poster_path: null,
           release_date: null,
           vote_average: null,
+          vote_count: 0,
           genre_ids: null,
           reason: '理由',
           display_order: 1,
@@ -608,6 +645,7 @@ describe('generateRecommendationsService', () => {
           poster_path: null,
           release_date: null,
           vote_average: null,
+          vote_count: 0,
           genre_ids: null,
           reason: '理由',
           display_order: 1,
@@ -653,6 +691,7 @@ describe('generateRecommendationsService', () => {
           poster_path: null,
           release_date: null,
           vote_average: null,
+          vote_count: 0,
           genre_ids: null,
           reason: '理由',
           display_order: 1,

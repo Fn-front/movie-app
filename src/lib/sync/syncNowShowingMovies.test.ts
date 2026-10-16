@@ -33,6 +33,7 @@ const createMovies = (count: number, startId: number = 1) =>
     poster_path: `/poster${startId + i}.jpg`,
     release_date: '2026-03-01',
     vote_average: 7.5,
+    vote_count: 1200 + i,
     popularity: 100 - i,
   }));
 
@@ -132,6 +133,37 @@ describe('syncNowShowingMovies', () => {
 
     await expect(syncNowShowingMovies()).rejects.toThrow('API error');
     expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('TMDbのvote_countをRPCに渡す', async () => {
+    mockDiscoverMovies.mockResolvedValue({ results: createMovies(2) });
+
+    await syncNowShowingMovies();
+
+    const rpcMovies = mockRpc.mock.calls[0][1].movies;
+    expect(rpcMovies.map((m: { vote_count: number }) => m.vote_count)).toEqual([
+      1200, 1201,
+    ]);
+  });
+
+  it('vote_countが欠落している場合は0としてRPCに渡す', async () => {
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          id: 1,
+          title: 'Test',
+          poster_path: null,
+          release_date: '2026-03-01',
+          vote_average: 5.0,
+          popularity: 50,
+        },
+      ],
+    });
+
+    await syncNowShowingMovies();
+
+    const rpcMovies = mockRpc.mock.calls[0][1].movies;
+    expect(rpcMovies[0].vote_count).toBe(0);
   });
 
   it('Supabase RPC失敗時はエラーをスローする', async () => {

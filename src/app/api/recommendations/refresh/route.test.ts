@@ -246,6 +246,53 @@ describe('POST /api/recommendations/refresh', () => {
     expect(json.success).toBe(false);
   });
 
+  it('レスポンスにvote_countが含まれ、SELECT句にも指定されている', async () => {
+    const selectSpy = jest.fn();
+
+    mockCountChain(0);
+    mockProcessUserRecommendations.mockResolvedValueOnce({
+      status: 'processed',
+      recommendationCount: 1,
+    });
+    mockInsertSuccess();
+    mockFrom.mockReturnValueOnce({
+      select: (columns: string) => {
+        selectSpy(columns);
+        return {
+          eq: () => ({
+            order: () =>
+              Promise.resolve({
+                data: [
+                  {
+                    id: 'rec-1',
+                    tmdb_movie_id: 100,
+                    title: 'テスト映画',
+                    poster_path: '/poster.jpg',
+                    release_date: '2025-01-01',
+                    vote_average: 8.5,
+                    vote_count: 1234,
+                    genre_ids: [28],
+                    reason: 'テスト理由',
+                    display_order: 1,
+                  },
+                ],
+                error: null,
+              }),
+          }),
+        };
+      },
+    });
+
+    const response = await POST(createPostRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.recommendations[0].vote_count).toBe(1234);
+    expect(selectSpy).toHaveBeenCalledWith(
+      expect.stringContaining('vote_count'),
+    );
+  });
+
   it('残り回数が正しく計算される（5回使用済み→残り4回）', async () => {
     mockCountChain(5);
     mockProcessUserRecommendations.mockResolvedValueOnce({

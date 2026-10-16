@@ -368,3 +368,50 @@ describe('弧状列への追従', () => {
     expect(curved.map((r) => r.width)).toEqual([4, 4]);
   });
 });
+
+describe('aisleIndex（手すりが通路をまたいで繋がるのを防ぐ）', () => {
+  const aisles = computeAisleXRanges(TWO_BLOCKS, 14);
+  const rowZs = [5, 4, 3, 2];
+  const rowYs = [0, 0.2, 0.4, 0.6];
+
+  it('各段がどの通路に属するかを持つ', () => {
+    const steps = computeAisleSteps(aisles, rowZs, rowYs);
+    expect(steps.every((s) => Number.isInteger(s.aisleIndex))).toBe(true);
+  });
+
+  it('aisleIndex は通路の並び順に 0 から振られる', () => {
+    const steps = computeAisleSteps(aisles, rowZs, rowYs);
+    expect([...new Set(steps.map((s) => s.aisleIndex))]).toEqual(
+      aisles.map((_, i) => i),
+    );
+  });
+
+  it('同じ aisleIndex の段は同じ通路中心を持つ', () => {
+    const steps = computeAisleSteps(aisles, rowZs, rowYs);
+    for (let i = 0; i < aisles.length; i++) {
+      const own = steps.filter((s) => s.aisleIndex === i);
+      expect(new Set(own.map((s) => s.centerX)).size).toBe(1);
+      expect(own).toHaveLength(rowZs.length);
+    }
+  });
+
+  it('配列上で隣接していても通路が変わる境界が存在する', () => {
+    // この境界で steps[i+1] を無条件に繋ぐと、笠木が客席エリアの全奥行を貫く
+    const steps = computeAisleSteps(aisles, rowZs, rowYs);
+    const boundaries = steps.filter(
+      (s, i) => steps[i + 1] && steps[i + 1].aisleIndex !== s.aisleIndex,
+    );
+    expect(boundaries).toHaveLength(aisles.length - 1);
+  });
+
+  it('通路の境界では前後位置が大きく飛ぶ（繋いではいけないことの根拠）', () => {
+    const steps = computeAisleSteps(aisles, rowZs, rowYs);
+    const i = steps.findIndex(
+      (s, idx) => steps[idx + 1] && steps[idx + 1].aisleIndex !== s.aisleIndex,
+    );
+    const jump = Math.abs(steps[i + 1].centerZ - steps[i].centerZ);
+    const normalStep = Math.abs(steps[1].centerZ - steps[0].centerZ);
+    // 境界の飛びは通常の段差の数倍になる
+    expect(jump).toBeGreaterThan(normalStep * 2);
+  });
+});

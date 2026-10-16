@@ -26,6 +26,13 @@ export interface AisleXRange {
 
 /** 階段の1段（踏面＋蹴込み） */
 export interface AisleStep {
+  /**
+   * この段が属する通路のインデックス。
+   *
+   * 段は全通路を連結した1本の配列で返すため、手すりの笠木のように「次の段」と
+   * 繋ぐ処理では、通路をまたいで繋がないようこの値で区切る必要がある。
+   */
+  aisleIndex: number;
   /** 踏面中心のx */
   centerX: number;
   /** 踏面の幅（通路幅） */
@@ -166,7 +173,7 @@ export function computeAisleSteps(
   const depth = normalGap > 0 ? normalGap : 1;
 
   const steps: AisleStep[] = [];
-  for (const aisle of aisles) {
+  aisles.forEach((aisle, aisleIndex) => {
     // 通路の位置における弧の前方シフト（直線列なら 0）
     const shift = calcArcForwardShift(aisle.center, rowCurveRadius);
     for (let i = 0; i < rowZs.length; i++) {
@@ -176,6 +183,7 @@ export function computeAisleSteps(
       const centerZ = rowZs[i] + shift;
 
       steps.push({
+        aisleIndex,
         centerX: aisle.center,
         width: aisle.width,
         centerZ,
@@ -185,7 +193,7 @@ export function computeAisleSteps(
         riserZ: centerZ + depth / 2,
       });
     }
-  }
+  });
   return steps;
 }
 

@@ -16,12 +16,7 @@
 'use client';
 
 import { memo } from 'react';
-import { RoundedBoxGeometry } from 'three-stdlib';
-import { extend } from '@react-three/fiber';
 import { Edges } from '@react-three/drei';
-
-// R3FにRoundedBoxGeometryを登録
-extend({ RoundedBoxGeometry });
 
 import type { TheaterSpeaker } from '../../types';
 import { directionToEuler } from '../../utils/speakerAiming';
@@ -41,6 +36,12 @@ const DRIVER_THICKNESS = 0.015;
 const DRIVER_RADIUS_RATIO = 0.33;
 /** ブラケット（壁との間の取付金具）の寸法 (m) */
 const BRACKET = { width: 0.06, height: 0.06, depth: 0.12 };
+/**
+ * 筐体の背面側の絞り率。
+ * 参考写真（TCX の側壁サラウンドを拡大）では筐体が明確に楔形で、前面（バッフル側）が
+ * 広く背面が狭い。四角錐台で表現するため、背面の半径を前面の何倍にするかを持つ。
+ */
+const CABINET_TAPER = 0.62;
 
 export interface SpeakerMeshesProps {
   /** スピーカーデータ一覧 */
@@ -73,15 +74,26 @@ const SpeakerUnit = memo<{
       position={[speaker.position_x, speaker.position_y, speaker.position_z]}
       rotation={rotation}
     >
-      {/* 筐体 */}
-      <mesh castShadow>
-        <roundedBoxGeometry
-          args={[size.width, size.height, size.depth, 4, 0.03]}
+      {/*
+        筐体（四角錐台の楔形）。
+        CylinderGeometry の radialSegments=4 は半径を外接円とする正方形断面になるため、
+        一辺を筐体幅に合わせるには半径を 1/√2 倍する。軸は +Y なので [π/2,0,0] で
+        +Z（バッフル側）へ倒し、前面を広く・背面を狭くする。
+      */}
+      <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <cylinderGeometry
+          args={[
+            (size.width / Math.SQRT2) * CABINET_TAPER,
+            size.width / Math.SQRT2,
+            size.depth,
+            4,
+          ]}
         />
         <meshStandardMaterial
           color={theme.speaker.cabinet}
           roughness={0.6}
           metalness={0.2}
+          flatShading
         />
         <Edges color={theme.speaker.driver} lineWidth={1.2} />
       </mesh>

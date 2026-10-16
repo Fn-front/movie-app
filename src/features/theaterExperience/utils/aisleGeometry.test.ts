@@ -5,6 +5,7 @@
 import type { SeatXSegment } from './theaterGeometry';
 import {
   calcNormalGap,
+  computeAisleSideSeatIds,
   computeAisleSteps,
   computeAisleXRanges,
   computeCrossAisleRails,
@@ -238,5 +239,72 @@ describe('computeCrossAisleRails', () => {
     expect(computeCrossAisleRails([], [5, 4], [0, 0.2])).toEqual([]);
     expect(computeCrossAisleRails(TWO_BLOCKS, [5], [0])).toEqual([]);
     expect(computeCrossAisleRails(TWO_BLOCKS, [5, 4], [0])).toEqual([]);
+  });
+});
+
+describe('computeAisleSideSeatIds', () => {
+  /** -6〜-2 と 2〜6 の2ブロック。各ブロックに3席ずつ */
+  const seats = [
+    { id: 'a1', row_label: 'A', position_x: -5 },
+    { id: 'a2', row_label: 'A', position_x: -4 },
+    { id: 'a3', row_label: 'A', position_x: -3 },
+    { id: 'a4', row_label: 'A', position_x: 3 },
+    { id: 'a5', row_label: 'A', position_x: 4 },
+    { id: 'a6', row_label: 'A', position_x: 5 },
+  ];
+
+  it('各ブロックの左右端の席だけを返す', () => {
+    const map = computeAisleSideSeatIds(seats, TWO_BLOCKS);
+    expect([...map.keys()].sort()).toEqual(['a1', 'a3', 'a4', 'a6']);
+  });
+
+  it('ブロック中央の席は含まない', () => {
+    const map = computeAisleSideSeatIds(seats, TWO_BLOCKS);
+    expect(map.has('a2')).toBe(false);
+    expect(map.has('a5')).toBe(false);
+  });
+
+  it('向きはブロック中心からの外向きになる（室中心基準ではない）', () => {
+    const map = computeAisleSideSeatIds(seats, TWO_BLOCKS);
+    // 左ブロック: a1 が左端 → -1、a3 が右端（中央通路側）→ +1
+    expect(map.get('a1')).toBe(-1);
+    expect(map.get('a3')).toBe(1);
+    // 右ブロック: a4 が左端（中央通路側）→ -1、a6 が右端 → +1
+    expect(map.get('a4')).toBe(-1);
+    expect(map.get('a6')).toBe(1);
+  });
+
+  it('中央通路に面する席は通路側を向く（室中心基準だと逆になるケース）', () => {
+    const map = computeAisleSideSeatIds(seats, TWO_BLOCKS);
+    // a4 は x>0 だが、中央通路は左側にある。室中心基準(x>=0 → +1)だと誤る
+    expect(map.get('a4')).toBe(-1);
+  });
+
+  it('列ごとに独立して端を判定する（列で席数が違っても正しい）', () => {
+    const mixed = [
+      ...seats,
+      { id: 'b1', row_label: 'B', position_x: -4 },
+      { id: 'b2', row_label: 'B', position_x: -3 },
+    ];
+    const map = computeAisleSideSeatIds(mixed, TWO_BLOCKS);
+    expect(map.get('b1')).toBe(-1);
+    expect(map.get('b2')).toBe(1);
+  });
+
+  it('1席しかない列ではその席を左端として扱う', () => {
+    const single = [{ id: 'z1', row_label: 'Z', position_x: -4 }];
+    const map = computeAisleSideSeatIds(single, TWO_BLOCKS);
+    expect(map.size).toBe(1);
+    expect(map.get('z1')).toBe(-1);
+  });
+
+  it('どのブロックにも属さない席は無視する', () => {
+    const outside = [{ id: 'x1', row_label: 'A', position_x: 100 }];
+    expect(computeAisleSideSeatIds(outside, TWO_BLOCKS).size).toBe(0);
+  });
+
+  it('座席・セグメントが空なら空の Map を返す', () => {
+    expect(computeAisleSideSeatIds([], TWO_BLOCKS).size).toBe(0);
+    expect(computeAisleSideSeatIds(seats, []).size).toBe(0);
   });
 });

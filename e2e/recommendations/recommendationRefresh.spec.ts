@@ -88,7 +88,24 @@ test.describe('おすすめ更新（認証済み）', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           success: true,
-          data: { remainingCount: 7, recommendations: [] },
+          data: {
+            remainingCount: 7,
+            // 空配列を返すと「準備中」表示に切り替わり更新ボタンが消えるため、
+            // クールダウン検証のために1件以上返す
+            recommendations: [
+              {
+                id: '00000000-0000-0000-0000-000000000002',
+                tmdb_movie_id: 999202,
+                title: '連打テスト後おすすめ',
+                poster_path: null,
+                release_date: null,
+                vote_average: null,
+                genre_ids: null,
+                reason: '連打テスト後の理由',
+                display_order: 1,
+              },
+            ],
+          },
         }),
       });
     });

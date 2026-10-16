@@ -9,7 +9,13 @@
  * 有界（最大9枚・合計1MB未満）なので、明示的な dispose は行わない。
  */
 
-import { CanvasTexture, RepeatWrapping, SRGBColorSpace, Texture } from 'three';
+import {
+  CanvasTexture,
+  ClampToEdgeWrapping,
+  RepeatWrapping,
+  SRGBColorSpace,
+  Texture,
+} from 'three';
 
 import type { CarpetPattern, InteriorTheme } from './theaterPalette';
 
@@ -19,6 +25,9 @@ const CARPET_SIZE = 256;
 const WALL_GRAPHIC_SIZE = 512;
 /** 幕パーフォレーションテクスチャの一辺（px） */
 const PERFORATION_SIZE = 64;
+/** 非常口誘導灯テクスチャの幅・高さ（px）。横長の標識に合わせる */
+const EXIT_SIGN_WIDTH = 128;
+const EXIT_SIGN_HEIGHT = 64;
 
 /** カーペット柄1タイルが対応する実寸（m）。UV repeat の算出に使う */
 export const CARPET_TILE_METERS = 4;
@@ -216,4 +225,82 @@ export function getScreenPerforationTexture(): Texture {
 export function clearTextureCacheForTest(): void {
   cache.forEach((texture) => texture.dispose());
   cache.clear();
+}
+
+/**
+ * 非常口誘導灯のテクスチャを返す（テーマ非依存のシングルトン）。
+ *
+ * 日本の誘導灯は緑地に白の「走る人」ピクトグラムと矢印で構成される。ベタ塗りの
+ * 緑箱だと標識に見えないため、簡略化したピクトグラムを描く。
+ *
+ * 細部までは描かない。実機でも数十px程度でしか見えないため、人型のシルエットと
+ * 開口（扉）が読み取れれば足りる。
+ */
+export function getExitSignTexture(): Texture {
+  const key = 'exitSign';
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = EXIT_SIGN_WIDTH;
+  canvas.height = EXIT_SIGN_HEIGHT;
+  const ctx = canvas.getContext('2d');
+
+  if (ctx) {
+    // 緑地（日本の法定色）
+    ctx.fillStyle = '#00b06b';
+    ctx.fillRect(0, 0, EXIT_SIGN_WIDTH, EXIT_SIGN_HEIGHT);
+
+    ctx.fillStyle = '#ffffff';
+
+    // 右側: 扉の開口（白枠）
+    ctx.fillRect(84, 12, 30, 40);
+    ctx.fillStyle = '#00b06b';
+    ctx.fillRect(88, 16, 22, 32);
+    ctx.fillStyle = '#ffffff';
+
+    // 左側: 走る人（頭・胴・脚・腕を矩形と三角で簡略化）
+    ctx.beginPath();
+    ctx.arc(34, 18, 6, 0, Math.PI * 2); // 頭
+    ctx.fill();
+    // 胴（前傾）
+    ctx.beginPath();
+    ctx.moveTo(30, 24);
+    ctx.lineTo(42, 28);
+    ctx.lineTo(38, 40);
+    ctx.lineTo(26, 36);
+    ctx.closePath();
+    ctx.fill();
+    // 前脚
+    ctx.beginPath();
+    ctx.moveTo(38, 38);
+    ctx.lineTo(48, 50);
+    ctx.lineTo(42, 53);
+    ctx.lineTo(32, 42);
+    ctx.closePath();
+    ctx.fill();
+    // 後脚
+    ctx.beginPath();
+    ctx.moveTo(28, 36);
+    ctx.lineTo(22, 52);
+    ctx.lineTo(16, 50);
+    ctx.lineTo(22, 34);
+    ctx.closePath();
+    ctx.fill();
+    // 腕（扉を指す向き）
+    ctx.beginPath();
+    ctx.moveTo(40, 26);
+    ctx.lineTo(56, 22);
+    ctx.lineTo(57, 27);
+    ctx.lineTo(41, 31);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  const texture = toTexture(canvas);
+  // 標識なのでタイリングしない
+  texture.wrapS = ClampToEdgeWrapping;
+  texture.wrapT = ClampToEdgeWrapping;
+  cache.set(key, texture);
+  return texture;
 }

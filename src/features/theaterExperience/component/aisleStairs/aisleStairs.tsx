@@ -294,8 +294,18 @@ const Handrails = memo<{
   useEffect(() => {
     if (!meshRef.current) return;
     steps.forEach((step, i) => {
-      // この段の上端から次の段の上端へ向かう区間を1本で表す
-      const next = steps[i + 1];
+      /*
+        この段の上端から次の段の上端へ向かう区間を1本で表す。
+
+        steps は全通路を連結したフラット配列なので、単純に steps[i+1] を引くと
+        通路の境界で「次の通路の最前列」を掴み、笠木が客席エリアの全奥行を貫く
+        1本の棒になってしまう。aisleIndex が一致する場合のみ繋ぐ。
+      */
+      const candidate = steps[i + 1];
+      const next =
+        candidate && candidate.aisleIndex === step.aisleIndex
+          ? candidate
+          : undefined;
       const dz = next ? next.centerZ - step.centerZ : -step.depth;
       const dy = next ? next.topY - step.topY : 0;
       const length = Math.hypot(dz, dy);

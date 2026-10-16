@@ -48,6 +48,12 @@ const createRequest = (body: Record<string, unknown>) =>
     body: JSON.stringify(body),
   });
 
+/** 正常系のリクエストボディ（OTP検証済みトークン付き） */
+const validBody = (newPassword = 'NewPassword1') => ({
+  newPassword,
+  verificationToken: 'verification-token',
+});
+
 /** ユーザー取得のモック */
 const mockUserSelect = (userData: Record<string, unknown> | null) => {
   mockFrom.mockReturnValueOnce({
@@ -62,21 +68,21 @@ const mockUserSelect = (userData: Record<string, unknown> | null) => {
   });
 };
 
-/** OTP取得のモック */
+/**
+ * OTP取得のモック
+ *
+ * 検証済みOTPはメールアドレスではなく、otp/verify が発行したトークンの
+ * ハッシュで引く。`eq('verification_token_hash', ...)` → `eq('action_type', ...)`
+ * → `single()` の2段 eq に対応する。
+ */
 const mockOtpSelect = (otpData: Record<string, unknown> | null) => {
   mockFrom.mockReturnValueOnce({
     select: () => ({
       eq: jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
-          not: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              limit: jest.fn().mockReturnValue({
-                single: () => ({
-                  data: otpData,
-                  error: otpData ? null : { message: 'not found' },
-                }),
-              }),
-            }),
+          single: () => ({
+            data: otpData,
+            error: otpData ? null : { message: 'not found' },
           }),
         }),
       }),
@@ -121,13 +127,14 @@ describe('POST /api/user/change-password', () => {
     });
     mockOtpSelect({
       id: 'otp-1',
+      email: 'test@example.com',
       verified_at: new Date().toISOString(),
     });
     mockBcryptCompare.mockResolvedValueOnce(false); // newPassword is different
     mockOtpDelete(); // OTP削除（パスワード更新前に無効化）
     mockUpdateSuccess();
 
-    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
+    const response = await POST(createRequest(validBody()));
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -137,7 +144,7 @@ describe('POST /api/user/change-password', () => {
   it('未認証で401を返す', async () => {
     (getAuthSession as jest.Mock).mockResolvedValue(null);
 
-    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
+    const response = await POST(createRequest(validBody()));
 
     expect(response.status).toBe(401);
   });
@@ -148,13 +155,13 @@ describe('POST /api/user/change-password', () => {
       retryAfter: 1800,
     });
 
-    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
+    const response = await POST(createRequest(validBody()));
 
     expect(response.status).toBe(429);
   });
 
   it('バリデーションエラーで400を返す', async () => {
-    const response = await POST(createRequest({ newPassword: '123' }));
+    const response = await POST(createRequest(validBody('123')));
 
     expect(response.status).toBe(400);
   });
@@ -167,7 +174,7 @@ describe('POST /api/user/change-password', () => {
     });
     mockOtpSelect(null); // 検証済みOTPなし
 
-    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
+    const response = await POST(createRequest(validBody()));
     const json = await response.json();
 
     expect(response.status).toBe(400);
@@ -183,11 +190,12 @@ describe('POST /api/user/change-password', () => {
     // 10分前のverified_at（5分の制限を超過）
     mockOtpSelect({
       id: 'otp-1',
+      email: 'test@example.com',
       verified_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
     });
     mockOtpDelete(); // 期限切れOTP削除
 
-    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
+    const response = await POST(createRequest(validBody()));
     const json = await response.json();
 
     expect(response.status).toBe(400);
@@ -204,15 +212,40 @@ describe('POST /api/user/change-password', () => {
     });
     mockOtpSelect({
       id: 'otp-1',
+      email: 'test@example.com',
       verified_at: new Date().toISOString(),
     });
     mockBcryptCompare.mockResolvedValueOnce(true); // newPassword is same
 
-    const response = await POST(
-      createRequest({ newPassword: 'SamePassword1' }),
-    );
+    const response = await POST(createRequest(validBody('SamePassword1')));
 
     expect(response.status).toBe(400);
+  });
+
+  it('verificationToken が無い場合400を返す（OTP検証の証明が必須）', async () => {
+    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
+
+    expect(response.status).toBe(400);
+  });
+
+  it('トークンが他人のOTPを指している場合400を返す', async () => {
+    mockUserSelect({
+      id: 'user-123',
+      email: 'test@example.com',
+      password_hash: 'old_hash',
+    });
+    // トークン自体は有効だが、別アカウント（victim）のOTP行を指している
+    mockOtpSelect({
+      id: 'otp-1',
+      email: 'victim@example.com',
+      verified_at: new Date().toISOString(),
+    });
+
+    const response = await POST(createRequest(validBody()));
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.message).toBe('OTP検証が完了していません。');
   });
 
   it('パスワード未設定ユーザーでもOTP検証済みなら変更できる', async () => {
@@ -223,13 +256,14 @@ describe('POST /api/user/change-password', () => {
     });
     mockOtpSelect({
       id: 'otp-1',
+      email: 'test@example.com',
       verified_at: new Date().toISOString(),
     });
     // password_hash が null なので同一チェックはスキップされる
     mockOtpDelete(); // OTP削除（パスワード更新前に無効化）
     mockUpdateSuccess();
 
-    const response = await POST(createRequest({ newPassword: 'NewPassword1' }));
+    const response = await POST(createRequest(validBody()));
     const json = await response.json();
 
     expect(response.status).toBe(200);

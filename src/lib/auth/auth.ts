@@ -19,6 +19,8 @@ import {
 } from '@/constants';
 import { OTP_ACTION, OTP_CONFIG } from '@/constants/otp';
 import { isSessionExpired } from '@/lib/auth/sessionExpiry';
+import { hashVerificationToken } from '@/lib/otp/verificationToken';
+import { fetchVerifiedGitHubProfile } from '@/lib/auth/githubProfile';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -48,6 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
         loginMethod: { label: 'Login Method', type: 'text' },
+        verificationToken: { label: 'Verification Token', type: 'text' },
       },
       async authorize(credentials) {
         if (!supabase) {
@@ -90,18 +93,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
           }
 
-          // OTPログイン: otp_codesのverified_atを確認
+          // OTPログイン: otp/verify が発行した検証済みトークンで本人確認する。
+          // メールアドレスで行を引くと、被害者が検証を終えた直後に第三者が
+          // email だけでログインできてしまうため、トークンハッシュで引く。
+          const verificationToken = credentials.verificationToken as
+            | string
+            | undefined;
+
+          if (!verificationToken) {
+            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          }
+
           const { data: verifiedOtp } = await supabase
             .from('otp_codes')
-            .select('id, verified_at')
-            .eq('email', email)
+            .select('id, email, verified_at')
+            .eq(
+              'verification_token_hash',
+              hashVerificationToken(verificationToken),
+            )
             .eq('action_type', OTP_ACTION.LOGIN)
-            .not('verified_at', 'is', null)
-            .order('verified_at', { ascending: false })
-            .limit(1)
             .single();
 
-          if (!verifiedOtp) {
+          // トークンが示す行のメールアドレスと、ログイン対象が一致すること。
+          // 別アカウントのトークンで成り代わるのを防ぐ
+          if (!verifiedOtp || verifiedOtp.email !== email) {
             throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
           }
 
@@ -167,9 +182,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
 
     // GitHub OAuth
+    // userinfo を差し替え、検証済みメールのみを採用する。
+    // 既定実装は公開メールが無いとき `primary ?? emails[0]` を verified を見ずに
+    // 採用するため、未検証メールによるアカウント乗っ取りが成立しうる
     GitHub({
       clientId: process.env.GITHUB_CLIENT_ID ?? '',
       clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '',
+      userinfo: {
+        url: 'https://api.github.com/user',
+        async request({ tokens }: { tokens: { access_token?: string } }) {
+          return fetchVerifiedGitHubProfile(tokens.access_token ?? '');
+        },
+      },
     }),
   ],
 
@@ -210,6 +234,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         !account?.providerAccountId ||
         !user?.email
       ) {
+        return false;
+      }
+
+      // メール検証状態の確認。
+      // 下の処理はメール一致で既存アカウントへリンクするため、プロバイダ側で
+      // 未検証のメールを信用すると、そのアドレスを自分のアカウントに追加した
+      // 攻撃者が他人のアカウントへログインできてしまう。
+      // Google は email_verified を返し、GitHub は userinfo 差し替えで付与している
+      const emailVerified = (profile as { email_verified?: unknown } | null)
+        ?.email_verified;
+
+      if (emailVerified !== true) {
         return false;
       }
 

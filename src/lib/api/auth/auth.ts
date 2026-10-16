@@ -77,6 +77,8 @@ export async function sendOtp(data: SendOtpRequest): Promise<SendOtpResponse> {
  */
 export interface ChangePasswordRequest {
   newPassword: string;
+  /** `/api/auth/otp/verify` が検証成功時に返すワンタイムトークン */
+  verificationToken: string;
 }
 
 /**

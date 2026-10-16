@@ -345,6 +345,7 @@ export type Database = {
           email: string;
           expires_at: string;
           id: string;
+          verification_token_hash: string | null;
           verified_at: string | null;
         };
         Insert: {
@@ -355,6 +356,7 @@ export type Database = {
           email: string;
           expires_at: string;
           id?: string;
+          verification_token_hash?: string | null;
           verified_at?: string | null;
         };
         Update: {
@@ -365,6 +367,7 @@ export type Database = {
           email?: string;
           expires_at?: string;
           id?: string;
+          verification_token_hash?: string | null;
           verified_at?: string | null;
         };
         Relationships: [];

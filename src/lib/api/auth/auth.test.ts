@@ -74,8 +74,8 @@ describe('auth API client', () => {
 
   describe('changePassword', () => {
     const changePasswordData = {
-      currentPassword: 'OldPassword1',
       newPassword: 'NewPassword1',
+      verificationToken: 'verification-token',
     };
 
     it('パスワード変更に成功した場合、レスポンスデータを返す', async () => {

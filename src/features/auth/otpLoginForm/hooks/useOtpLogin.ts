@@ -24,7 +24,7 @@ interface UseOtpLoginReturn {
   isSubmitting: boolean;
   apiError: string | null;
   handleSendOtp: (email: string) => Promise<void>;
-  handleOtpVerifySuccess: () => Promise<void>;
+  handleOtpVerifySuccess: (verificationToken?: string) => Promise<void>;
   handleBackToEmail: () => void;
 }
 
@@ -69,46 +69,50 @@ export function useOtpLogin(callbackUrl?: string): UseOtpLoginReturn {
     }
   }, []);
 
-  const handleOtpVerifySuccess = useCallback(async () => {
-    setIsSubmitting(true);
-    setApiError(null);
+  const handleOtpVerifySuccess = useCallback(
+    async (verificationToken?: string) => {
+      setIsSubmitting(true);
+      setApiError(null);
 
-    try {
-      const result = await signIn('credentials', {
-        redirect: false,
-        email,
-        loginMethod: 'otp',
-      });
+      try {
+        const result = await signIn('credentials', {
+          redirect: false,
+          email,
+          loginMethod: 'otp',
+          verificationToken,
+        });
 
-      if (result?.error) {
-        setApiError(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+        if (result?.error) {
+          setApiError(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          toast({
+            title: TOAST_TITLES.LOGIN_ERROR,
+            description: AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
+            variant: 'error',
+          });
+          return;
+        }
+
+        toast({
+          title: TOAST_TITLES.LOGIN_SUCCESS,
+          description: TOAST_MESSAGES.LOGIN_SUCCESS_DESCRIPTION,
+          variant: 'success',
+        });
+
+        router.push(resolveSafeCallbackUrl(callbackUrl));
+      } catch (error) {
+        const { message } = handleApiError(error);
+        setApiError(message || AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         toast({
           title: TOAST_TITLES.LOGIN_ERROR,
-          description: AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
+          description: message || AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
           variant: 'error',
         });
-        return;
+      } finally {
+        setIsSubmitting(false);
       }
-
-      toast({
-        title: TOAST_TITLES.LOGIN_SUCCESS,
-        description: TOAST_MESSAGES.LOGIN_SUCCESS_DESCRIPTION,
-        variant: 'success',
-      });
-
-      router.push(resolveSafeCallbackUrl(callbackUrl));
-    } catch (error) {
-      const { message } = handleApiError(error);
-      setApiError(message || AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
-      toast({
-        title: TOAST_TITLES.LOGIN_ERROR,
-        description: message || AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
-        variant: 'error',
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [email, router, toast, callbackUrl]);
+    },
+    [email, router, toast, callbackUrl],
+  );
 
   const handleBackToEmail = useCallback(() => {
     setStep('email');

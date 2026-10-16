@@ -16,6 +16,7 @@ import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
 import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import { OTP_ACTION, OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
+import { hashVerificationToken } from '@/lib/otp';
 
 export async function POST(request: Request) {
   try {
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { newPassword } = result.data;
+    const { newPassword, verificationToken } = result.data;
 
     // ユーザー取得
     const { data: user, error: fetchError } = await supabase
@@ -88,18 +89,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // OTP検証チェック: otp_codesで検証済みOTPの存在確認
+    // OTP検証チェック: otp/verify が発行した検証済みトークンで確認する。
+    // メールアドレスで引くと「検証済みの行が存在する」だけで通ってしまうため、
+    // 検証を完了した当人しか持たないトークンのハッシュで引く
     const { data: verifiedOtp } = await supabase
       .from('otp_codes')
-      .select('id, verified_at')
-      .eq('email', user.email)
+      .select('id, email, verified_at')
+      .eq('verification_token_hash', hashVerificationToken(verificationToken))
       .eq('action_type', OTP_ACTION.PASSWORD_CHANGE)
-      .not('verified_at', 'is', null)
-      .order('verified_at', { ascending: false })
-      .limit(1)
       .single();
 
-    if (!verifiedOtp) {
+    // トークンが示す行が、セッションユーザー本人のものであること
+    if (!verifiedOtp || verifiedOtp.email !== user.email) {
       return NextResponse.json(
         {
           success: false,

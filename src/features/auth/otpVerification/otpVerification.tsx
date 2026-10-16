@@ -26,7 +26,8 @@ import styles from './otpVerification.module.scss';
 interface OtpVerificationProps {
   email: string;
   action: OtpAction;
-  onVerifySuccess?: () => void;
+  /** 検証成功時のコールバック。login / password_change ではワンタイムトークンを受け取る */
+  onVerifySuccess?: (verificationToken?: string) => void;
 }
 
 export const OtpVerification = memo<OtpVerificationProps>(

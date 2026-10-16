@@ -25,12 +25,22 @@ jest.mock('@/features/auth/otpVerification/otpVerification', () => ({
   }: {
     email: string;
     action: string;
-    onVerifySuccess?: () => void;
+    onVerifySuccess?: (verificationToken?: string) => void;
   }) => (
     <div data-testid='otp-verification'>
       <span data-testid='otp-email'>{email}</span>
-      <button onClick={onVerifySuccess} data-testid='otp-verify-success'>
+      <button
+        onClick={() => onVerifySuccess?.('verification-token')}
+        data-testid='otp-verify-success'
+      >
         検証成功
+      </button>
+      {/* トークンを発行しないケース（検証未完了相当）の再現用 */}
+      <button
+        onClick={() => onVerifySuccess?.(undefined)}
+        data-testid='otp-verify-success-without-token'
+      >
+        検証成功（トークンなし）
       </button>
     </div>
   ),
@@ -181,6 +191,7 @@ describe('ChangePasswordForm', () => {
     await waitFor(() => {
       expect(mockChangePassword).toHaveBeenCalledWith({
         newPassword: 'NewPassword1',
+        verificationToken: 'verification-token',
       });
     });
 

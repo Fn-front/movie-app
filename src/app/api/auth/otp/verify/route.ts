@@ -10,6 +10,7 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
+import { generateVerificationToken } from '@/lib/otp';
 import { otpVerifySchema } from '@/schema/otp';
 import {
   OTP_ACTION,
@@ -180,11 +181,23 @@ export async function POST(request: Request) {
     }
 
     if (action === OTP_ACTION.LOGIN || action === OTP_ACTION.PASSWORD_CHANGE) {
-      // OTPレコードに検証済みフラグ設定
-      await supabase
+      // 検証済みトークンを発行する。
+      // 「OTP検証が済んでいる」ことの証明をメールアドレス（公開識別子）ではなく
+      // このトークンで行うことで、被害者の検証直後に第三者が signIn / change-password
+      // を叩いて成り代わる経路を塞ぐ。平文はこのレスポンスでのみ返す。
+      const { token, tokenHash } = generateVerificationToken();
+
+      const { error: updateError } = await supabase
         .from('otp_codes')
-        .update({ verified_at: now.toISOString() })
+        .update({
+          verified_at: now.toISOString(),
+          verification_token_hash: tokenHash,
+        })
         .eq('id', otpRecord.id);
+
+      if (updateError) {
+        throw updateError;
+      }
 
       // 検証成功のためレート制限をリセット（正当なユーザーの再検証を妨げない）
       await resetRateLimit(supabase, email, 'otp_verify');
@@ -193,6 +206,7 @@ export async function POST(request: Request) {
         {
           success: true,
           message: OTP_SUCCESS_MESSAGES.CODE_VERIFIED,
+          data: { verificationToken: token },
         },
         { status: HTTP_STATUS.OK },
       );

@@ -138,6 +138,7 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
           release_date: movie.release_date || null,
           overview: movie.overview || null,
           vote_average: movie.vote_average,
+          vote_count: movie.vote_count ?? 0,
           popularity: movie.popularity,
           genre_ids: movie.genre_ids,
           release_type: RELEASE_TYPE.THEATRICAL,

@@ -15,6 +15,7 @@ const createMockMovie = (
   release_date: '2026-03-01',
   overview: 'テスト概要',
   vote_average: 7.5,
+  vote_count: 1200,
   popularity: 100,
   genre_ids: [28, 12],
   release_type: 'theatrical',

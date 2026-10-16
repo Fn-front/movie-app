@@ -203,6 +203,7 @@ describe('recommendationSchema', () => {
     poster_path: '/test.jpg',
     release_date: '2024-01-01',
     vote_average: 7.5,
+    vote_count: 1234,
     genre_ids: [28, 12],
     reason: 'おすすめの理由',
     display_order: 1,
@@ -266,6 +267,36 @@ describe('recommendationSchema', () => {
       ...validRecommendation,
       vote_average: 10.1,
     });
+    expect(result.success).toBe(false);
+  });
+
+  it('vote_countが0の場合成功する（最小値）', () => {
+    const result = recommendationSchema.safeParse({
+      ...validRecommendation,
+      vote_count: 0,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('vote_countが負の場合エラーになる', () => {
+    const result = recommendationSchema.safeParse({
+      ...validRecommendation,
+      vote_count: -1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('vote_countが小数の場合エラーになる', () => {
+    const result = recommendationSchema.safeParse({
+      ...validRecommendation,
+      vote_count: 1.5,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('vote_countが未指定の場合エラーになる', () => {
+    const { vote_count: _voteCount, ...withoutVoteCount } = validRecommendation;
+    const result = recommendationSchema.safeParse(withoutVoteCount);
     expect(result.success).toBe(false);
   });
 

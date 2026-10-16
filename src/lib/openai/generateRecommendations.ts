@@ -43,6 +43,7 @@ export interface ResolvedRecommendation {
   poster_path: string | null;
   release_date: string | null;
   vote_average: number | null;
+  vote_count: number;
   genre_ids: number[] | null;
   reason: string;
   display_order: number;
@@ -259,6 +260,7 @@ export async function resolveRecommendationsWithTMDb(
         poster_path: movie.poster_path,
         release_date: movie.release_date || null,
         vote_average: movie.vote_average ?? null,
+        vote_count: movie.vote_count ?? 0,
         genre_ids: movie.genre_ids ?? null,
         reason: item.reason,
         display_order: resolved.length + 1,

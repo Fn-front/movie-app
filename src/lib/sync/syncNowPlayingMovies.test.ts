@@ -580,4 +580,43 @@ describe('syncNowPlayingMovies', () => {
       expect(getNowPlayingMovies).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('vote_count の保存', () => {
+    /** 1件だけ同期させ、UPSERTに渡された行を取り出す */
+    async function upsertRowOf(movie: Movie) {
+      setValidEnv();
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
+
+      const fromMock = createFromMock({});
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+
+      await syncNowPlayingMovies();
+
+      // from() 1回目は既存チェック、2回目が UPSERT
+      return fromMock.mock.results[1].value.upsert.mock.calls[0][0];
+    }
+
+    it('TMDbのvote_countをmovie_cacheにUPSERTする', async () => {
+      const row = await upsertRowOf(createMockMovie({ vote_count: 1234 }));
+
+      expect(row.vote_count).toBe(1234);
+    });
+
+    it('vote_countが欠落している場合は0として保存する', async () => {
+      const movie = createMockMovie();
+      // TMDbレスポンスに vote_count が含まれないケース
+      delete (movie as Partial<Movie>).vote_count;
+
+      const row = await upsertRowOf(movie as Movie);
+
+      expect(row.vote_count).toBe(0);
+    });
+  });
 });

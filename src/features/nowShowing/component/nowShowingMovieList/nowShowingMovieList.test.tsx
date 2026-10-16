@@ -52,6 +52,7 @@ const createMockMovies = (count: number): NowShowingMovie[] =>
     poster_path: `/poster${i + 1}.jpg`,
     release_date: '2026-03-01',
     vote_average: 7.5,
+    vote_count: 1200,
     popularity: 200 - i,
     display_order: i + 1,
     fetched_at: '2026-03-14T00:00:00Z',

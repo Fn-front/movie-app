@@ -225,6 +225,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
           release_date: releaseDate,
           overview: bestMatch.overview || null,
           vote_average: bestMatch.vote_average,
+          vote_count: bestMatch.vote_count ?? 0,
           popularity: bestMatch.popularity,
           genre_ids: bestMatch.genre_ids,
           release_type: RELEASE_TYPE.THEATRICAL,

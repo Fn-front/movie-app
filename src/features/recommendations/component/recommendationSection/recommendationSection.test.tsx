@@ -165,6 +165,7 @@ const createMockRecommendations = (count: number) =>
     poster_path: `/poster${i + 1}.jpg`,
     release_date: '2026-01-01',
     vote_average: 7.5,
+    vote_count: 1200,
     genre_ids: [878],
     reason: `理由 ${i + 1}`,
     display_order: i + 1,

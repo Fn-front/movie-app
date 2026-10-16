@@ -8,7 +8,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
-import { checkRateLimit, resetRateLimit } from './rateLimit';
+import { checkCooldown, checkRateLimit, resetRateLimit } from './rateLimit';
 import { SUPABASE_ERROR_CODE } from '@/constants';
 
 // --- Helpers ---
@@ -225,6 +225,149 @@ describe('checkRateLimit', () => {
     await expect(checkRateLimit(supabase, 'user-1', 'login')).rejects.toEqual(
       dbError,
     );
+  });
+});
+
+describe('checkCooldown', () => {
+  const NOW = '2026-01-01T00:00:00.000Z';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(NOW));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /**
+   * select→eq→eq→single のチェーンモックを組み立てる
+   */
+  function mockSelectChain(result: {
+    data: unknown;
+    error: unknown;
+  }): jest.Mock {
+    const mockSingleFn = jest.fn().mockResolvedValue(result);
+    const mockEq2 = jest.fn().mockReturnValue({ single: mockSingleFn });
+    const mockEq1 = jest.fn().mockReturnValue({ eq: mockEq2 });
+    return jest.fn().mockReturnValue({ eq: mockEq1 });
+  }
+
+  it('レコード未存在時は初回とみなしallowed=trueを返す', async () => {
+    const mockInsert = jest.fn().mockResolvedValue({ error: null });
+    const mockFrom = jest
+      .fn()
+      .mockReturnValueOnce({
+        select: mockSelectChain({
+          data: null,
+          error: { code: SUPABASE_ERROR_CODE.NOT_FOUND },
+        }),
+      })
+      .mockReturnValueOnce({ insert: mockInsert });
+    const supabase = { from: mockFrom } as unknown as SupabaseClient;
+
+    const result = await checkCooldown(supabase, 'user-1', 'refresh', 60);
+
+    expect(result).toEqual({ allowed: true });
+    expect(mockFrom).toHaveBeenCalledWith('rate_limits');
+    expect(mockInsert).toHaveBeenCalledWith({
+      identifier: 'user-1',
+      action_type: 'refresh',
+      attempts: 1,
+      last_attempt_at: NOW,
+    });
+  });
+
+  it('クールダウン中はallowed=falseと残り秒数を返す', async () => {
+    // 20秒前に呼び出し済み → 60秒クールダウンなら残り40秒
+    const mockFrom = jest.fn().mockReturnValueOnce({
+      select: mockSelectChain({
+        data: {
+          id: 'record-1',
+          last_attempt_at: '2025-12-31T23:59:40.000Z',
+        },
+        error: null,
+      }),
+    });
+    const supabase = { from: mockFrom } as unknown as SupabaseClient;
+
+    const result = await checkCooldown(supabase, 'user-1', 'refresh', 60);
+
+    expect(result).toEqual({ allowed: false, retryAfter: 40 });
+  });
+
+  it('境界値: クールダウン満了の1ms手前は拒否する', async () => {
+    const mockFrom = jest.fn().mockReturnValueOnce({
+      select: mockSelectChain({
+        data: {
+          id: 'record-1',
+          last_attempt_at: '2025-12-31T23:59:00.001Z',
+        },
+        error: null,
+      }),
+    });
+    const supabase = { from: mockFrom } as unknown as SupabaseClient;
+
+    const result = await checkCooldown(supabase, 'user-1', 'refresh', 60);
+
+    expect(result.allowed).toBe(false);
+    expect(result.retryAfter).toBe(1);
+  });
+
+  it('境界値: クールダウン満了ちょうどは許可し時刻を更新する', async () => {
+    const mockUpdateEq = jest.fn().mockResolvedValue({ error: null });
+    const mockUpdate = jest.fn().mockReturnValue({ eq: mockUpdateEq });
+    const mockFrom = jest
+      .fn()
+      .mockReturnValueOnce({
+        select: mockSelectChain({
+          data: {
+            id: 'record-1',
+            last_attempt_at: '2025-12-31T23:59:00.000Z',
+          },
+          error: null,
+        }),
+      })
+      .mockReturnValueOnce({ update: mockUpdate });
+    const supabase = { from: mockFrom } as unknown as SupabaseClient;
+
+    const result = await checkCooldown(supabase, 'user-1', 'refresh', 60);
+
+    expect(result).toEqual({ allowed: true });
+    expect(mockUpdate).toHaveBeenCalledWith({ last_attempt_at: NOW });
+    expect(mockUpdateEq).toHaveBeenCalledWith('id', 'record-1');
+  });
+
+  it('拒否時は last_attempt_at を更新しない（連打でクールダウンが延びない）', async () => {
+    const mockUpdate = jest.fn();
+    const mockFrom = jest.fn().mockReturnValue({
+      select: mockSelectChain({
+        data: {
+          id: 'record-1',
+          last_attempt_at: '2025-12-31T23:59:50.000Z',
+        },
+        error: null,
+      }),
+      update: mockUpdate,
+    });
+    const supabase = { from: mockFrom } as unknown as SupabaseClient;
+
+    await checkCooldown(supabase, 'user-1', 'refresh', 60);
+
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('NOT_FOUND以外のDBエラーはthrowする', async () => {
+    const dbError = { code: 'OTHER_ERROR', message: 'DB error' };
+    const mockFrom = jest.fn().mockReturnValueOnce({
+      select: mockSelectChain({ data: null, error: dbError }),
+    });
+    const supabase = { from: mockFrom } as unknown as SupabaseClient;
+
+    await expect(
+      checkCooldown(supabase, 'user-1', 'refresh', 60),
+    ).rejects.toEqual(dbError);
   });
 });
 

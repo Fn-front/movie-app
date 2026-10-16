@@ -12,11 +12,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
   HTTP_STATUS,
+  RATE_LIMIT_ACTION,
   RECOMMENDATION_REFRESH,
   RECOMMENDATION_REFRESH_MESSAGES,
   RECOMMENDATION_REFRESH_ERROR_CODE,
 } from '@/constants';
 import { withAuth } from '@/helpers/routeHandler';
+import { checkCooldown } from '@/lib/rateLimit/rateLimit';
 import { processUserRecommendations } from '@/lib/recommendations/generateRecommendationsService';
 import type { Recommendation } from '@/schema/recommendations';
 
@@ -54,6 +56,35 @@ function getMonthStart(): string {
 
 export const POST = withAuth(
   async ({ session, supabase }) => {
+    // 連打防止のクールダウン。
+    // 試行時点で記録されるため、生成完了前の多重リクエストもここで止まる
+    // （recommendation_refreshes の行は生成成功後にしか作られないため、
+    //   そちらの時刻だけでは in-flight の連打を防げない）。
+    const cooldownResult = await checkCooldown(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+      RECOMMENDATION_REFRESH.SERVER_COOLDOWN_SECONDS,
+    );
+
+    if (!cooldownResult.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: RECOMMENDATION_REFRESH_ERROR_CODE.COOLDOWN,
+            message: RECOMMENDATION_REFRESH_MESSAGES.COOLDOWN,
+          },
+        },
+        {
+          status: HTTP_STATUS.TOO_MANY_REQUESTS,
+          headers: cooldownResult.retryAfter
+            ? { 'Retry-After': String(cooldownResult.retryAfter) }
+            : undefined,
+        },
+      );
+    }
+
     const usedCount = await getMonthlyRefreshCount(supabase, session.user.id);
 
     if (usedCount >= RECOMMENDATION_REFRESH.MAX_COUNT) {

@@ -26,6 +26,7 @@ let mockOnSuccess:
     }) => void)
   | undefined;
 let mockOnError: ((error: unknown) => void) | undefined;
+let mockOnSettled: (() => void) | undefined;
 let mockIsPending = false;
 
 let mockQueryData:
@@ -52,9 +53,11 @@ jest.mock('@tanstack/react-query', () => ({
       recommendations: Recommendation[];
     }) => void;
     onError?: (error: unknown) => void;
+    onSettled?: () => void;
   }) => {
     mockOnSuccess = opts.onSuccess;
     mockOnError = opts.onError;
+    mockOnSettled = opts.onSettled;
     return {
       mutate: mockMutate,
       get isPending() {
@@ -79,6 +82,7 @@ describe('useRecommendationRefresh', () => {
     mockIsLoading = false;
     mockOnSuccess = undefined;
     mockOnError = undefined;
+    mockOnSettled = undefined;
     mockQueryData = {
       usedCount: 3,
       maxCount: 10,
@@ -201,5 +205,131 @@ describe('useRecommendationRefresh', () => {
         mockOnSuccess?.(mockData);
       });
     }).not.toThrow();
+  });
+
+  describe('連打防止（クライアント側クールダウン）', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('初期状態ではクールダウン中ではなく更新可能', () => {
+      const { result } = renderHook(() => useRecommendationRefresh());
+
+      expect(result.current.isCoolingDown).toBe(false);
+      expect(result.current.isRefreshDisabled).toBe(false);
+    });
+
+    it('更新完了後はクールダウンに入りボタンが無効化される', () => {
+      const { result } = renderHook(() => useRecommendationRefresh());
+
+      act(() => {
+        mockOnSettled?.();
+      });
+
+      expect(result.current.isCoolingDown).toBe(true);
+      expect(result.current.isRefreshDisabled).toBe(true);
+    });
+
+    it('クールダウン中はrefreshを連打してもmutateされない', () => {
+      const { result } = renderHook(() => useRecommendationRefresh());
+
+      act(() => {
+        mockOnSettled?.();
+      });
+
+      act(() => {
+        result.current.refresh();
+        result.current.refresh();
+        result.current.refresh();
+      });
+
+      expect(mockMutate).not.toHaveBeenCalled();
+    });
+
+    it('境界値: クールダウン満了の1ms手前ではまだ無効', () => {
+      const { result } = renderHook(() => useRecommendationRefresh());
+
+      act(() => {
+        mockOnSettled?.();
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(RECOMMENDATION_REFRESH.CLIENT_COOLDOWN_MS - 1);
+      });
+
+      expect(result.current.isCoolingDown).toBe(true);
+    });
+
+    it('境界値: クールダウン満了で解除され再度更新できる', () => {
+      const { result } = renderHook(() => useRecommendationRefresh());
+
+      act(() => {
+        mockOnSettled?.();
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(RECOMMENDATION_REFRESH.CLIENT_COOLDOWN_MS);
+      });
+
+      expect(result.current.isCoolingDown).toBe(false);
+      expect(result.current.isRefreshDisabled).toBe(false);
+
+      act(() => {
+        result.current.refresh();
+      });
+
+      expect(mockMutate).toHaveBeenCalledTimes(1);
+    });
+
+    it('生成失敗後もクールダウンに入る（再試行の連打を抑止）', () => {
+      const { result } = renderHook(() => useRecommendationRefresh());
+
+      act(() => {
+        mockOnError?.(new Error('API Error'));
+        mockOnSettled?.();
+      });
+
+      expect(result.current.isCoolingDown).toBe(true);
+    });
+
+    it('更新処理中はrefreshを呼んでもmutateされない', () => {
+      mockIsPending = true;
+      const { result } = renderHook(() => useRecommendationRefresh());
+
+      act(() => {
+        result.current.refresh();
+      });
+
+      expect(mockMutate).not.toHaveBeenCalled();
+    });
+
+    it('上限到達時はrefreshを呼んでもmutateされない', () => {
+      mockQueryData = { usedCount: 10, maxCount: 10, remainingCount: 0 };
+      const { result } = renderHook(() => useRecommendationRefresh());
+
+      act(() => {
+        result.current.refresh();
+      });
+
+      expect(mockMutate).not.toHaveBeenCalled();
+    });
+
+    it('アンマウント時にクールダウンタイマーが破棄される', () => {
+      const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
+      const { unmount } = renderHook(() => useRecommendationRefresh());
+
+      act(() => {
+        mockOnSettled?.();
+      });
+
+      unmount();
+
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+      clearTimeoutSpy.mockRestore();
+    });
   });
 });

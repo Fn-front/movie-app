@@ -2,6 +2,8 @@
  * レコメンド関連の定数
  */
 
+import { MS_PER_SECOND } from './time';
+
 /**
  * レコメンド最大件数
  */
@@ -42,6 +44,17 @@ export const RECOMMENDATIONS_BATCH_SIZE = 5;
 export const RECOMMENDATION_REFRESH = {
   /** 月あたりの更新上限回数 */
   MAX_COUNT: 10,
+  /**
+   * クライアント側クールダウン（ミリ秒）
+   * 更新完了後この時間は更新ボタンを無効化し、連打による無駄な呼び出しを防ぐ。
+   */
+  CLIENT_COOLDOWN_MS: 30 * MS_PER_SECOND,
+  /**
+   * サーバー側クールダウン（秒）
+   * 直前の呼び出しからこの時間が経過していなければ 429 を返す。
+   * クライアント側より長くして、API直叩きによるコスト集中を防ぐ。
+   */
+  SERVER_COOLDOWN_SECONDS: 60,
 } as const;
 
 /**
@@ -60,6 +73,7 @@ export const RECOMMENDATIONS_MESSAGES = {
 export const RECOMMENDATION_REFRESH_MESSAGES = {
   SUCCESS: 'おすすめ映画を更新しました',
   LIMIT_EXCEEDED: '今月の更新回数上限に達しました（10回/月）',
+  COOLDOWN: '更新間隔が短すぎます。しばらく待ってからお試しください',
   GENERATION_FAILED: 'レコメンド生成に失敗しました',
   FETCH_COUNT_FAILED: '更新回数の取得に失敗しました',
   RESET_NOTICE: '来月リセットされます',
@@ -72,5 +86,6 @@ export const RECOMMENDATION_REFRESH_MESSAGES = {
  */
 export const RECOMMENDATION_REFRESH_ERROR_CODE = {
   LIMIT_EXCEEDED: 'REFRESH_LIMIT_EXCEEDED',
+  COOLDOWN: 'REFRESH_COOLDOWN',
   GENERATION_FAILED: 'GENERATION_FAILED',
 } as const;

@@ -139,6 +139,8 @@ jest.mock('@/features/dismissedMovies/hooks/useDismissMovie', () => ({
 const mockRefresh = jest.fn();
 let mockRefreshState = {
   isRefreshing: false,
+  isCoolingDown: false,
+  isRefreshDisabled: false,
   remainingCount: 7,
   maxCount: 10,
   usedCount: 3,
@@ -181,6 +183,8 @@ describe('RecommendationSection', () => {
     mockIsDismissingMovie.mockReturnValue(false);
     mockRefreshState = {
       isRefreshing: false,
+      isCoolingDown: false,
+      isRefreshDisabled: false,
       remainingCount: 7,
       maxCount: 10,
       usedCount: 3,
@@ -482,6 +486,7 @@ describe('RecommendationSection', () => {
         ...mockRefreshState,
         remainingCount: 0,
         isLimitReached: true,
+        isRefreshDisabled: true,
       };
 
       render(
@@ -517,6 +522,26 @@ describe('RecommendationSection', () => {
       mockRefreshState = {
         ...mockRefreshState,
         isRefreshing: true,
+        isRefreshDisabled: true,
+      };
+
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'おすすめを更新' }),
+      ).toBeDisabled();
+    });
+
+    it('クールダウン中はボタンが無効化される', () => {
+      mockRefreshState = {
+        ...mockRefreshState,
+        isCoolingDown: true,
+        isRefreshDisabled: true,
       };
 
       render(

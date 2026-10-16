@@ -38,12 +38,20 @@ import {
   interpolateFloorHeight,
 } from '../../utils/theaterGeometry';
 import type { SeatXSegment } from '../../utils/theaterGeometry';
+import {
+  calcNormalGap,
+  computeAisleSteps,
+  computeAisleXRanges,
+  computeCrossAisleRails,
+  isCrossAisleGap,
+} from '../../utils/aisleGeometry';
 import type { InteriorTheme } from '../../utils/theaterPalette';
 import {
   CARPET_TILE_METERS,
   getCarpetTexture,
   getWallGraphicTexture,
 } from '../../utils/theaterTextures';
+import { AisleStairs } from '../aisleStairs/aisleStairs';
 import { CeilingLights } from '../ceilingLights/ceilingLights';
 import { WallPanels } from '../wallPanels/wallPanels';
 
@@ -403,22 +411,16 @@ const StepLEDs = memo<{
   seatSegments: SeatXSegment[];
 }>(function StepLEDs({ rowZs, rowYs, seatSegments }) {
   // 通常の列間隔（最小の正の間隔）を基準に、これを大きく超えるペア（横通路）は
-  // 段差ではないためLEDを描かない（通路中央に宙浮きのLEDが出るのを防ぐ）
-  const normalGap = useMemo(() => {
-    let min = Infinity;
-    for (let i = 1; i < rowZs.length; i++) {
-      const g = Math.abs(rowZs[i - 1] - rowZs[i]);
-      if (g > 0.01 && g < min) min = g;
-    }
-    return Number.isFinite(min) ? min : 1;
-  }, [rowZs]);
+  // 段差ではないためLEDを描かない（通路中央に宙浮きのLEDが出るのを防ぐ）。
+  // 判定は通路階段の生成と同じ基準を使う（utils/aisleGeometry で共通化）。
+  const normalGap = useMemo(() => calcNormalGap(rowZs) || 1, [rowZs]);
 
   return (
     <group>
       {rowZs.map((z, i) => {
         if (i === 0) return null; // A列は段差なし
         const gap = Math.abs((rowZs[i - 1] ?? z) - z);
-        if (gap > normalGap * 1.5) return null; // 横通路（段差でない）はスキップ
+        if (isCrossAisleGap(gap, normalGap)) return null; // 横通路はスキップ
         // 段の中央高さ・中央Zに、各座席ブロックの幅で光帯を配置
         const prevY = rowYs[i - 1] ?? 0;
         const ledY = (rowYs[i] + prevY) / 2;
@@ -747,6 +749,33 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   // 壁グラフィック（kind === 'none' のフォーマットでは null）。壁全面に引き伸ばす
   const wallGraphic = useMemo(() => getWallGraphicTexture(theme), [theme]);
 
+  /**
+   * 通路階段の配置。座席ブロックのxセグメントと各列のZ/Yから導出するため
+   * DBの追加データは要らない。
+   */
+  const aisles = useMemo(
+    () => computeAisleXRanges(seatSegments, roomWidth),
+    [seatSegments, roomWidth],
+  );
+  const aisleSteps = useMemo(
+    () => computeAisleSteps(aisles, rowZs, rowYs),
+    [aisles, rowZs, rowYs],
+  );
+  /**
+   * 手すりを立てる段。サイド通路（側壁に接する通路）は壁が手すりの役目を
+   * 果たすため除外する。
+   */
+  const railedSteps = useMemo(() => {
+    const innerCenters = new Set(
+      aisles.filter((a) => !a.isSide).map((a) => a.center),
+    );
+    return aisleSteps.filter((s) => innerCenters.has(s.centerX));
+  }, [aisles, aisleSteps]);
+  const crossAisleRails = useMemo(
+    () => computeCrossAisleRails(seatSegments, rowZs, rowYs),
+    [seatSegments, rowZs, rowYs],
+  );
+
   return (
     <>
       {/* 座席選択時は一人称、未選択時は等角投影 */}
@@ -910,6 +939,14 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
 
       {/* 段差LED（各列の段鼻を座席ブロック単位で明示する細い光帯） */}
       <StepLEDs rowZs={rowZs} rowYs={rowYs} seatSegments={seatSegments} />
+
+      {/* 縦通路の階段（踏面・蹴込み・蹴込みLED・段鼻ライン）＋手すり＋横通路の腰壁 */}
+      <AisleStairs
+        theme={theme}
+        steps={aisleSteps}
+        rails={crossAisleRails}
+        railedSteps={railedSteps}
+      />
 
       {children}
     </>

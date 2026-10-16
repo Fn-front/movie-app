@@ -41,6 +41,11 @@ jest.mock('axios', () => {
   };
 });
 
+import {
+  EXCLUDED_GENRE_IDS,
+  EXCLUDED_GENRES_PARAM,
+  EXCLUDED_KEYWORDS_PARAM,
+} from '@/constants/movies';
 import { TMDB_MOVIE_DETAIL_APPEND } from '@/constants/tmdb';
 
 beforeAll(() => {
@@ -49,6 +54,34 @@ beforeAll(() => {
 
 const mockResponse = {
   data: { page: 1, results: [], total_pages: 1, total_results: 0 },
+};
+
+/** 不適切コンテンツ除外テスト用の映画ファクトリ */
+const createMovie = (overrides: Partial<Record<string, unknown>> = {}) => ({
+  id: 1,
+  title: '一般映画',
+  adult: false,
+  genre_ids: [28],
+  ...overrides,
+});
+
+/** adult・除外ジャンル・一般作品が混在したレスポンス */
+const mixedContentResponse = {
+  data: {
+    page: 1,
+    results: [
+      createMovie({ id: 1, title: '一般映画' }),
+      createMovie({ id: 2, title: 'アダルト作品', adult: true }),
+      createMovie({
+        id: 3,
+        title: 'TV映画',
+        genre_ids: [EXCLUDED_GENRE_IDS[0]],
+      }),
+      createMovie({ id: 4, title: 'ジャンル未設定', genre_ids: undefined }),
+    ],
+    total_pages: 1,
+    total_results: 4,
+  },
 };
 
 const mockDetailResponse = {
@@ -102,51 +135,16 @@ describe('TMDb APIクライアント', () => {
     mockGet.mockReset();
   });
 
-  describe('getPopularMovies', () => {
-    it('正しいエンドポイントとパラメータでgetが呼ばれる', async () => {
-      mockGet.mockResolvedValue(mockResponse);
+  describe('tmdbClientの既定パラメータ', () => {
+    it('include_adult=falseが全リクエスト共通で送られる', () => {
+      require('./tmdb');
+      const axios = require('axios').default;
 
-      const { getPopularMovies } = require('./tmdb');
-      await getPopularMovies(2);
-
-      expect(mockGet).toHaveBeenCalledWith('/movie/popular', {
-        params: { page: 2 },
-      });
-    });
-
-    it('デフォルトページが1になる', async () => {
-      mockGet.mockResolvedValue(mockResponse);
-
-      const { getPopularMovies } = require('./tmdb');
-      await getPopularMovies();
-
-      expect(mockGet).toHaveBeenCalledWith('/movie/popular', {
-        params: { page: 1 },
-      });
-    });
-  });
-
-  describe('getUpcomingMovies', () => {
-    it('正しいエンドポイントとパラメータでgetが呼ばれる', async () => {
-      mockGet.mockResolvedValue(mockResponse);
-
-      const { getUpcomingMovies } = require('./tmdb');
-      await getUpcomingMovies(3);
-
-      expect(mockGet).toHaveBeenCalledWith('/movie/upcoming', {
-        params: { page: 3 },
-      });
-    });
-
-    it('デフォルトページが1になる', async () => {
-      mockGet.mockResolvedValue(mockResponse);
-
-      const { getUpcomingMovies } = require('./tmdb');
-      await getUpcomingMovies();
-
-      expect(mockGet).toHaveBeenCalledWith('/movie/upcoming', {
-        params: { page: 1 },
-      });
+      expect(axios.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          params: expect.objectContaining({ include_adult: false }),
+        }),
+      );
     });
   });
 
@@ -161,18 +159,25 @@ describe('TMDb APIクライアント', () => {
         params: { page: 1 },
       });
     });
-  });
 
-  describe('getTopRatedMovies', () => {
-    it('正しいエンドポイントとパラメータでgetが呼ばれる', async () => {
-      mockGet.mockResolvedValue(mockResponse);
+    it('adult作品と除外ジャンルの作品が結果から除外される', async () => {
+      mockGet.mockResolvedValue(mixedContentResponse);
 
-      const { getTopRatedMovies } = require('./tmdb');
-      await getTopRatedMovies(5);
+      const { getNowPlayingMovies } = require('./tmdb');
+      const result = await getNowPlayingMovies(1);
 
-      expect(mockGet).toHaveBeenCalledWith('/movie/top_rated', {
-        params: { page: 5 },
-      });
+      expect(result.results.map((m: { id: number }) => m.id)).toEqual([1, 4]);
+    });
+
+    it('ページネーション情報は除外後も元のレスポンスを保持する', async () => {
+      mockGet.mockResolvedValue(mixedContentResponse);
+
+      const { getNowPlayingMovies } = require('./tmdb');
+      const result = await getNowPlayingMovies(1);
+
+      expect(result.page).toBe(1);
+      expect(result.total_pages).toBe(1);
+      expect(result.total_results).toBe(4);
     });
   });
 
@@ -277,10 +282,38 @@ describe('TMDb APIクライアント', () => {
         },
       });
     });
+
+    it('adult作品と除外ジャンルの作品が結果から除外される', async () => {
+      mockGet.mockResolvedValue(mixedContentResponse);
+
+      const { searchMovies } = require('./tmdb');
+      const result = await searchMovies({ query: 'テスト' });
+
+      expect(result.results.map((m: { id: number }) => m.id)).toEqual([1, 4]);
+    });
+
+    it('すべてがadult作品の場合は空配列を返す', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          page: 1,
+          results: [
+            createMovie({ id: 10, adult: true }),
+            createMovie({ id: 11, adult: true }),
+          ],
+          total_pages: 1,
+          total_results: 2,
+        },
+      });
+
+      const { searchMovies } = require('./tmdb');
+      const result = await searchMovies({ query: 'テスト' });
+
+      expect(result.results).toEqual([]);
+    });
   });
 
   describe('discoverMovies', () => {
-    it('デフォルトパラメータで正しく呼ばれる', async () => {
+    it('除外キーワード・除外ジャンルが既定で付与される', async () => {
       mockGet.mockResolvedValue(mockResponse);
 
       const { discoverMovies } = require('./tmdb');
@@ -289,7 +322,8 @@ describe('TMDb APIクライアント', () => {
       expect(mockGet).toHaveBeenCalledWith('/discover/movie', {
         params: {
           page: 1,
-          include_adult: false,
+          without_keywords: EXCLUDED_KEYWORDS_PARAM,
+          without_genres: EXCLUDED_GENRES_PARAM,
         },
       });
     });
@@ -304,18 +338,33 @@ describe('TMDb APIクライアント', () => {
         'release_date.lte': '2025-12-31',
         with_release_type: '2|3',
         sort_by: 'popularity.desc',
+      });
+
+      expect(mockGet).toHaveBeenCalledWith('/discover/movie', {
+        params: {
+          page: 3,
+          without_keywords: EXCLUDED_KEYWORDS_PARAM,
+          without_genres: EXCLUDED_GENRES_PARAM,
+          'release_date.gte': '2025-01-01',
+          'release_date.lte': '2025-12-31',
+          with_release_type: '2|3',
+          sort_by: 'popularity.desc',
+        },
+      });
+    });
+
+    it('明示指定された除外パラメータが既定値を上書きする', async () => {
+      mockGet.mockResolvedValue(mockResponse);
+
+      const { discoverMovies } = require('./tmdb');
+      await discoverMovies({
         without_keywords: '100|200',
         without_genres: '10|20',
       });
 
       expect(mockGet).toHaveBeenCalledWith('/discover/movie', {
         params: {
-          page: 3,
-          include_adult: false,
-          'release_date.gte': '2025-01-01',
-          'release_date.lte': '2025-12-31',
-          with_release_type: '2|3',
-          sort_by: 'popularity.desc',
+          page: 1,
           without_keywords: '100|200',
           without_genres: '10|20',
         },
@@ -331,7 +380,8 @@ describe('TMDb APIクライアント', () => {
       expect(mockGet).toHaveBeenCalledWith('/discover/movie', {
         params: {
           page: 1,
-          include_adult: false,
+          without_keywords: EXCLUDED_KEYWORDS_PARAM,
+          without_genres: EXCLUDED_GENRES_PARAM,
           sort_by: 'vote_average.desc',
         },
       });
@@ -344,6 +394,15 @@ describe('TMDb APIクライアント', () => {
       const result = await discoverMovies();
 
       expect(result).toEqual(mockResponse.data);
+    });
+
+    it('API側で漏れたadult作品・除外ジャンルを結果側でも除外する', async () => {
+      mockGet.mockResolvedValue(mixedContentResponse);
+
+      const { discoverMovies } = require('./tmdb');
+      const result = await discoverMovies();
+
+      expect(result.results.map((m: { id: number }) => m.id)).toEqual([1, 4]);
     });
   });
 
@@ -362,46 +421,14 @@ describe('TMDb APIクライアント', () => {
     });
   });
 
-  describe('getMoviesByGenre', () => {
-    it('discoverエンドポイントが正しいパラメータで呼ばれる', async () => {
-      mockGet.mockResolvedValue(mockResponse);
-
-      const { getMoviesByGenre } = require('./tmdb');
-      await getMoviesByGenre(28, 3);
-
-      expect(mockGet).toHaveBeenCalledWith('/discover/movie', {
-        params: {
-          with_genres: 28,
-          page: 3,
-          sort_by: 'popularity.desc',
-        },
-      });
-    });
-
-    it('デフォルトページが1になる', async () => {
-      mockGet.mockResolvedValue(mockResponse);
-
-      const { getMoviesByGenre } = require('./tmdb');
-      await getMoviesByGenre(35);
-
-      expect(mockGet).toHaveBeenCalledWith('/discover/movie', {
-        params: {
-          with_genres: 35,
-          page: 1,
-          sort_by: 'popularity.desc',
-        },
-      });
-    });
-  });
-
   describe('validatePage（各API関数経由で確認）', () => {
     it('page=0の場合1に補正される', async () => {
       mockGet.mockResolvedValue(mockResponse);
 
-      const { getPopularMovies } = require('./tmdb');
-      await getPopularMovies(0);
+      const { getNowPlayingMovies } = require('./tmdb');
+      await getNowPlayingMovies(0);
 
-      expect(mockGet).toHaveBeenCalledWith('/movie/popular', {
+      expect(mockGet).toHaveBeenCalledWith('/movie/now_playing', {
         params: { page: 1 },
       });
     });
@@ -409,10 +436,10 @@ describe('TMDb APIクライアント', () => {
     it('page=501の場合500に補正される', async () => {
       mockGet.mockResolvedValue(mockResponse);
 
-      const { getTopRatedMovies } = require('./tmdb');
-      await getTopRatedMovies(501);
+      const { getNowPlayingMovies } = require('./tmdb');
+      await getNowPlayingMovies(501);
 
-      expect(mockGet).toHaveBeenCalledWith('/movie/top_rated', {
+      expect(mockGet).toHaveBeenCalledWith('/movie/now_playing', {
         params: { page: 500 },
       });
     });
@@ -431,21 +458,24 @@ describe('TMDb APIクライアント', () => {
     it('負のページ番号の場合1に補正される', async () => {
       mockGet.mockResolvedValue(mockResponse);
 
-      const { getPopularMovies } = require('./tmdb');
-      await getPopularMovies(-5);
+      const { searchMovies } = require('./tmdb');
+      await searchMovies({ query: 'テスト', page: -5 });
 
-      expect(mockGet).toHaveBeenCalledWith('/movie/popular', {
-        params: { page: 1 },
-      });
+      expect(mockGet).toHaveBeenCalledWith(
+        '/search/movie',
+        expect.objectContaining({
+          params: expect.objectContaining({ page: 1 }),
+        }),
+      );
     });
 
     it('page=1の場合そのまま1になる', async () => {
       mockGet.mockResolvedValue(mockResponse);
 
-      const { getPopularMovies } = require('./tmdb');
-      await getPopularMovies(1);
+      const { getNowPlayingMovies } = require('./tmdb');
+      await getNowPlayingMovies(1);
 
-      expect(mockGet).toHaveBeenCalledWith('/movie/popular', {
+      expect(mockGet).toHaveBeenCalledWith('/movie/now_playing', {
         params: { page: 1 },
       });
     });
@@ -453,12 +483,15 @@ describe('TMDb APIクライアント', () => {
     it('page=500の場合そのまま500になる', async () => {
       mockGet.mockResolvedValue(mockResponse);
 
-      const { getPopularMovies } = require('./tmdb');
-      await getPopularMovies(500);
+      const { discoverMovies } = require('./tmdb');
+      await discoverMovies({ page: 500 });
 
-      expect(mockGet).toHaveBeenCalledWith('/movie/popular', {
-        params: { page: 500 },
-      });
+      expect(mockGet).toHaveBeenCalledWith(
+        '/discover/movie',
+        expect.objectContaining({
+          params: expect.objectContaining({ page: 500 }),
+        }),
+      );
     });
   });
 

@@ -77,6 +77,18 @@ describe('fetchTitleSuggestionsFromOpenAI', () => {
     expect(instructions).toContain(`上限${TITLE_SUGGESTION.MAX_SUGGESTIONS}件`);
   });
 
+  it('プロンプトにアダルト作品の除外指示が含まれる', async () => {
+    mockCreate.mockResolvedValue({
+      output_text: JSON.stringify({ suggestions: [] }),
+    });
+
+    await fetchTitleSuggestionsFromOpenAI('テスト');
+
+    const instructions = mockCreate.mock.calls[0][0].instructions;
+    expect(instructions).toContain('アダルト作品');
+    expect(instructions).toContain('候補に含めないこと');
+  });
+
   it('OpenAIクライアントがnullの場合、[]を返す', async () => {
     const { createOpenAIClient } = await import('./client');
     (createOpenAIClient as jest.Mock).mockReturnValueOnce(null);

@@ -33,6 +33,8 @@ const customJestConfig = {
     '!src/features/theaterExperience/component/audioHeatmapPlane/**',
     '!src/features/theaterExperience/component/firstPersonPreview/**',
     '!src/features/theaterExperience/component/theaterCanvas/**',
+    '!src/features/theaterExperience/component/wallPanels/**',
+    '!src/features/theaterExperience/component/ceilingLights/**',
     // GLSL シェーダー文字列の export（カバレッジ計測対象外）
     '!src/features/theaterExperience/shaders/**',
   ],

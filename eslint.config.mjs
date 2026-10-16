@@ -87,6 +87,7 @@ export default [
             'roughness',
             'metalness',
             'map',
+            'flatShading',
             'shadow-mapSize-width',
             'shadow-mapSize-height',
             'shadow-camera-left',

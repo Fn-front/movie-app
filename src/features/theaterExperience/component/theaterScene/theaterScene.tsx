@@ -42,7 +42,10 @@ import type { InteriorTheme } from '../../utils/theaterPalette';
 import {
   CARPET_TILE_METERS,
   getCarpetTexture,
+  getWallGraphicTexture,
 } from '../../utils/theaterTextures';
+import { CeilingLights } from '../ceilingLights/ceilingLights';
+import { WallPanels } from '../wallPanels/wallPanels';
 
 export interface TheaterSceneProps {
   /** 内装テーマ（フォーマット別の色・造作。ページ側で一度だけ導出する） */
@@ -158,11 +161,13 @@ const WallMesh = memo<{
   position: [number, number, number];
   rotation?: [number, number, number];
   color: string;
-}>(function WallMesh({ width, height, position, rotation, color }) {
+  /** 壁グラフィックのテクスチャ。null ならベタ塗り */
+  map?: Texture | null;
+}>(function WallMesh({ width, height, position, rotation, color, map }) {
   return (
     <mesh position={position} rotation={rotation} receiveShadow>
       <planeGeometry args={[width, height]} />
-      <meshLambertMaterial color={color} />
+      <meshLambertMaterial color={color} map={map ?? undefined} />
     </mesh>
   );
 });
@@ -739,6 +744,9 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   const halfWidth = roomWidth / 2;
   const halfDepth = roomDepth / 2;
 
+  // 壁グラフィック（kind === 'none' のフォーマットでは null）。壁全面に引き伸ばす
+  const wallGraphic = useMemo(() => getWallGraphicTexture(theme), [theme]);
+
   return (
     <>
       {/* 座席選択時は一人称、未選択時は等角投影 */}
@@ -800,6 +808,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         height={roomHeight}
         position={[0, roomHeight / 2, -halfDepth]}
         color={theme.wall}
+        map={wallGraphic}
       />
       <WallMesh
         width={roomDepth}
@@ -807,6 +816,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         position={[-halfWidth, roomHeight / 2, 0]}
         rotation={[0, Math.PI / 2, 0]}
         color={theme.wall}
+        map={wallGraphic}
       />
       <WallMesh
         width={roomDepth}
@@ -814,6 +824,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         position={[halfWidth, roomHeight / 2, 0]}
         rotation={[0, -Math.PI / 2, 0]}
         color={theme.wall}
+        map={wallGraphic}
       />
       {/* スクリーン側壁（スクリーンを引き立てる暗色・フォーマット別） */}
       <WallMesh
@@ -836,6 +847,24 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         roomDepth={roomDepth}
         roomHeight={roomHeight}
         color={theme.ceiling}
+      />
+
+      {/* 壁の造作（リブ/ファセット）＋幅木＋コーブ照明。
+          俯瞰では手前側の壁の造作を描かない（壁本体の片面カリングと見え方を揃える） */}
+      <WallPanels
+        theme={theme}
+        isFirstPerson={selectedSeat !== null}
+        roomWidth={roomWidth}
+        roomDepth={roomDepth}
+        roomHeight={roomHeight}
+      />
+
+      {/* 天井の埋込ダウンライト */}
+      <CeilingLights
+        theme={theme}
+        roomWidth={roomWidth}
+        roomDepth={roomDepth}
+        roomHeight={roomHeight}
       />
 
       {/* 部屋外形のエッジ線 */}

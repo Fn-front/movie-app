@@ -232,3 +232,61 @@ export function computeCrossAisleRails(
   }
   return rails;
 }
+
+/**
+ * 座席ブロックの端（通路に面する席）と、その席から見て通路がある向きを返す。
+ *
+ * 参考写真では通路側座席の肘掛けに丸い列記号プレートが付いている。一人称視点で
+ * 現在位置を把握する手がかりになるため、どの席のどちら側に付けるかを判定する。
+ *
+ * 各列 × 各ブロックについて、x の最小・最大にあたる席を端とみなす。列ごとに独立して
+ * 判定するので、列によって席数が違う（最前列が短い等）レイアウトでも端を拾える。
+ *
+ * 向きは**ブロック中心からの外向き**で決める。室中心（x=0）基準にすると、中央通路に
+ * 面する内側端の席でプレートが通路と逆側に付いてしまう。
+ *
+ * @param seats 座席一覧（`id` / `row_label` / `position_x` を使う）
+ * @param segments 座席ブロックのxセグメント
+ * @returns 座席ID → 通路のある向き（-1 = 左, +1 = 右）
+ */
+export function computeAisleSideSeatIds(
+  seats: { id: string; row_label: string; position_x: number }[],
+  segments: SeatXSegment[],
+): Map<string, -1 | 1> {
+  const result = new Map<string, -1 | 1>();
+  if (seats.length === 0 || segments.length === 0) return result;
+
+  type Seat = (typeof seats)[number];
+  const buckets = new Map<string, { block: number; min: Seat; max: Seat }>();
+
+  for (const seat of seats) {
+    // この席が属するブロックを探す（複数に含まれる場合は中心が近い方）
+    let blockIndex = -1;
+    let bestDistance = Infinity;
+    segments.forEach((seg, i) => {
+      const distance = Math.abs(seat.position_x - seg.center);
+      if (distance <= seg.width / 2 && distance < bestDistance) {
+        bestDistance = distance;
+        blockIndex = i;
+      }
+    });
+    if (blockIndex < 0) continue;
+
+    const key = `${seat.row_label}:${blockIndex}`;
+    const bucket = buckets.get(key);
+    if (!bucket) {
+      buckets.set(key, { block: blockIndex, min: seat, max: seat });
+      continue;
+    }
+    if (seat.position_x < bucket.min.position_x) bucket.min = seat;
+    if (seat.position_x > bucket.max.position_x) bucket.max = seat;
+  }
+
+  for (const { min, max } of buckets.values()) {
+    // ブロックの左端は左が通路、右端は右が通路
+    result.set(min.id, -1);
+    // 1席しかない列では max と min が同一。右側を優先して上書きしない
+    if (max.id !== min.id) result.set(max.id, 1);
+  }
+  return result;
+}

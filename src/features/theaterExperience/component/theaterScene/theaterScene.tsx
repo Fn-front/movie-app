@@ -14,6 +14,7 @@ import {
 } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import {
+  AdditiveBlending,
   PlaneGeometry,
   Vector3,
   Color,
@@ -117,11 +118,23 @@ const COLOR_STEP_LED = '#ffe8c4'; // 段差LED（やや暖白）
  * 閾値を超えないため、発光体は toneMapped=false かつ HDR にして確実にブルームさせる。
  */
 const COLOR_AISLE_LIGHT_HDR = new Color(COLOR_AISLE_LIGHT).multiplyScalar(2.4);
+/** 幕上インジケータの筐体色と赤いランプ（HDR化して Bloom に乗せる） */
+const COLOR_INDICATOR_BODY = '#131316';
+/** 幕上インジケータの灯数 */
+const INDICATOR_COUNT = 6;
+const COLOR_INDICATOR_HDR = new Color('#ff3a2a').multiplyScalar(2.0);
 const COLOR_STEP_LED_HDR = new Color(COLOR_STEP_LED).multiplyScalar(1.6);
 
 /** ライティング用カラー */
 const COLOR_HEMI_SKY = '#cfd6e6'; // 半球光の空側フィル（やや寒色）
 const COLOR_HEMI_GROUND = '#2a2130'; // 半球光の地面側フィル（暗紫・床トーンに寄せる）
+
+/**
+ * 壁グラフィック（加算合成）の不透明度。
+ * 等倍で重ねると壁が白飛びしてリブの陰影を潰すため、光だまりとして馴染む強さまで
+ * 落とす。`toneMapped` も既定（true）のままにしてシーンのトーンマッピングに乗せる。
+ */
+const WALL_GRAPHIC_OPACITY = 0.22;
 
 /** マージン: 傾斜床は座席より少し外側まで広げる */
 const SLOPE_MARGIN = 0.5;
@@ -177,14 +190,37 @@ const WallMesh = memo<{
   position: [number, number, number];
   rotation?: [number, number, number];
   color: string;
-  /** 壁グラフィックのテクスチャ。null ならベタ塗り */
-  map?: Texture | null;
-}>(function WallMesh({ width, height, position, rotation, color, map }) {
+  /**
+   * 壁グラフィックのテクスチャ。null ならベタ塗り。
+   *
+   * 拡散色(`map`)ではなく**加算合成の板**として壁の手前に重ねる。実機の壁の模様は
+   * 照明で落とした光だまりであって塗装ではないため、拡散色で貼ると質感が違う。
+   */
+  graphic?: Texture | null;
+}>(function WallMesh({ width, height, position, rotation, color, graphic }) {
   return (
-    <mesh position={position} rotation={rotation} receiveShadow>
-      <planeGeometry args={[width, height]} />
-      <meshLambertMaterial color={color} map={map ?? undefined} />
-    </mesh>
+    <group position={position} rotation={rotation}>
+      <mesh receiveShadow>
+        <planeGeometry args={[width, height]} />
+        <meshLambertMaterial color={color} />
+      </mesh>
+      {graphic && (
+        <mesh position={[0, 0, 0.02]}>
+          <planeGeometry args={[width, height]} />
+          {/*
+            AdditiveBlending で「壁に光が乗っている」表現にする。depthWrite=false で
+            後続の造作（リブ/ファセット）の描画順に干渉しない。
+          */}
+          <meshBasicMaterial
+            map={graphic}
+            blending={AdditiveBlending}
+            transparent
+            opacity={WALL_GRAPHIC_OPACITY}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+    </group>
   );
 });
 WallMesh.displayName = 'WallMesh';
@@ -445,6 +481,58 @@ const StepLEDs = memo<{
   );
 });
 StepLEDs.displayName = 'StepLEDs';
+
+/**
+ * 幕上のインジケータ灯。
+ *
+ * 参考写真（TCX のスクリーン上部を拡大）では、天井面に赤いインジケータ付きの小型
+ * ユニットが等間隔で並んでいる。
+ *
+ * これがスピーカーかどうかは画像から断定できないため、**音源としては扱わない**。
+ * `theater_speakers` に無い音源を描くと「見た目と音響計算の二重ソース」になるため、
+ * あくまで設備灯として置く。
+ */
+const ScreenTopIndicators = memo<{
+  roomWidth: number;
+  roomDepth: number;
+  roomHeight: number;
+}>(function ScreenTopIndicators({ roomWidth, roomDepth, roomHeight }) {
+  const units = useMemo(() => {
+    const span = roomWidth * 0.45;
+    return Array.from(
+      { length: INDICATOR_COUNT },
+      (_, i) => -span / 2 + span * (i / (INDICATOR_COUNT - 1)),
+    );
+  }, [roomWidth]);
+
+  // 天井直下、スクリーン側壁から少し手前
+  const y = roomHeight - 0.18;
+  const z = roomDepth / 2 - 0.5;
+
+  return (
+    <group>
+      {units.map((x) => (
+        <group key={x} position={[x, y, z]}>
+          {/* 筐体 */}
+          <mesh>
+            <boxGeometry args={[0.16, 0.12, 0.2]} />
+            <meshStandardMaterial
+              color={COLOR_INDICATOR_BODY}
+              roughness={0.6}
+              metalness={0.25}
+            />
+          </mesh>
+          {/* 赤いインジケータ（静的発光。点滅させない — WCAG 2.3.1） */}
+          <mesh position={[0, 0, -0.11]}>
+            <sphereGeometry args={[0.022, 8, 8]} />
+            <meshBasicMaterial color={COLOR_INDICATOR_HDR} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+});
+ScreenTopIndicators.displayName = 'ScreenTopIndicators';
 
 /** 着座時の目の高さ（座席Y座標からのオフセット） */
 const SEATED_EYE_HEIGHT = 1.2;
@@ -930,7 +1018,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         height={roomHeight}
         position={[0, roomHeight / 2, -halfDepth]}
         color={theme.wall}
-        map={wallGraphic}
+        graphic={wallGraphic}
       />
       <WallMesh
         width={roomDepth}
@@ -938,7 +1026,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         position={[-halfWidth, roomHeight / 2, 0]}
         rotation={[0, Math.PI / 2, 0]}
         color={theme.wall}
-        map={wallGraphic}
+        graphic={wallGraphic}
       />
       <WallMesh
         width={roomDepth}
@@ -946,7 +1034,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         position={[halfWidth, roomHeight / 2, 0]}
         rotation={[0, -Math.PI / 2, 0]}
         color={theme.wall}
-        map={wallGraphic}
+        graphic={wallGraphic}
       />
       {/* スクリーン側壁（スクリーンを引き立てる暗色・フォーマット別） */}
       <WallMesh
@@ -1032,6 +1120,13 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
 
       {/* 段差LED（各列の段鼻を座席ブロック単位で明示する細い光帯） */}
       <StepLEDs rowZs={rowZs} rowYs={rowYs} seatSegments={seatSegments} />
+
+      {/* 幕上の設備インジケータ（音源ではない） */}
+      <ScreenTopIndicators
+        roomWidth={roomWidth}
+        roomDepth={roomDepth}
+        roomHeight={roomHeight}
+      />
 
       {/* 縦通路の階段（踏面・蹴込み・蹴込みLED・段鼻ライン）＋手すり＋横通路の腰壁 */}
       <AisleStairs

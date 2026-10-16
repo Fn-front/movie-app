@@ -12,6 +12,7 @@ import { THEATER_MESSAGES } from '@/constants';
 import type { FrequencyBand, TheaterSeat } from '../types';
 import { computeSeatXSegments } from '../utils/theaterGeometry';
 import { getInteriorTheme } from '../utils/theaterPalette';
+import { computeAisleSideSeatIds } from '../utils/aisleGeometry';
 import { useTheater } from '../hooks/useTheater';
 import { useTheaters } from '../hooks/useTheaters';
 import { useTheaterSelection } from '../hooks/useTheaterSelection';
@@ -138,6 +139,12 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
 
     // ヒートマップ表示範囲を客席エリアから算出
     // マージン 1m を加えつつ、部屋境界（後壁/前壁）を超えないようにクリップ
+    /** 通路に面する座席（列記号プレートを付ける対象） */
+    const aisleSideSeatIds = useMemo(
+      () => computeAisleSideSeatIds(seats, seatAreaBounds.seatSegments),
+      [seats, seatAreaBounds.seatSegments],
+    );
+
     const heatmapBounds = useMemo(() => {
       const roomWidth = theater?.room_width ?? 20;
       const roomDepth = theater?.room_depth ?? 25;
@@ -320,6 +327,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                 >
                   <SeatMeshes
                     theme={interiorTheme}
+                    aisleSideSeatIds={aisleSideSeatIds}
                     seats={seats}
                     selectedSeatId={selectedSeatId}
                     highlightedSeatId={highlightedSeatId}

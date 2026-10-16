@@ -52,6 +52,8 @@ const SEAT_BASE = { width: 0.2, height: 0.24, depth: 0.34 };
 const SEAT_ARMREST = { width: 0.05, height: 0.14, depth: 0.4 };
 /** 肘掛けをクッション中心から左右に置くオフセット（席ピッチ0.6内に収める） */
 const ARMREST_OFFSET_X = 0.27;
+/** 列記号プレート（通路側座席の肘掛けに付く丸板）の半径と厚み (m) */
+const ROW_PLATE = { radius: 0.045, thickness: 0.01 };
 
 /**
  * ホバー強調枠の色（design-system の --warning-dark と一致させ、2Dリング色と揃える）。
@@ -96,6 +98,8 @@ export function getHoverHighlightSeat(
 export interface SeatMeshesProps {
   /** 内装テーマ（座面・背もたれ・ヘッドレスト・フレームの色） */
   theme: InteriorTheme;
+  /** 通路に面する座席ID → 通路のある向き（-1=左 / +1=右）。該当席に列記号プレートを付ける */
+  aisleSideSeatIds: Map<string, -1 | 1>;
   /** 座席データ一覧 */
   seats: TheaterSeat[];
   /** 選択中の座席ID */
@@ -403,6 +407,78 @@ const SeatArmrests = memo<{ seats: TheaterSeat[]; theme: InteriorTheme }>(
 SeatArmrests.displayName = 'SeatArmrests';
 
 /**
+ * 列記号プレート（InstancedMesh）。
+ *
+ * 参考写真では通路側座席の肘掛けに丸い列記号プレートが付いている。一人称視点で
+ * 自分がどのあたりに座っているかを把握する手がかりになる。
+ *
+ * 文字そのものは描かない。InstancedMesh は per-instance のテキストを持てず、席数分の
+ * `Html` オーバーレイを出すと最大544席で破綻するため、金属質の丸板だけを置いて
+ * 「プレートが付いている」ことを示す（席番号はホバー時のラベルと2D座席一覧が担う）。
+ *
+ * 通路に面する席の判定は `utils/aisleGeometry` の `computeAisleSideSeatIds`
+ * （純粋・単体テスト済み）に委譲する。
+ */
+const RowMarkerPlates = memo<{
+  seats: TheaterSeat[];
+  theme: InteriorTheme;
+  aisleSideSeatIds: Map<string, -1 | 1>;
+}>(function RowMarkerPlates({ seats, theme, aisleSideSeatIds }) {
+  const meshRef = useRef<InstancedMeshType>(null);
+  const tempObject = useMemo(() => new Object3D(), []);
+
+  // 通路側かつ車椅子席でない席のみ（車椅子席は肘掛けを描いていない）
+  const targets = useMemo(
+    () =>
+      seats.filter(
+        (s) => aisleSideSeatIds.has(s.id) && s.seat_type !== 'wheelchair',
+      ),
+    [seats, aisleSideSeatIds],
+  );
+
+  useEffect(() => {
+    if (!meshRef.current) return;
+    targets.forEach((seat, i) => {
+      // 通路のある側の肘掛けに貼る。室中心基準にすると、中央通路に面する内側端の席で
+      // プレートが通路と逆側に付いてしまうため、判定結果の向きをそのまま使う
+      const outward = aisleSideSeatIds.get(seat.id) ?? 1;
+      tempObject.position.set(
+        seat.position_x + outward * (ARMREST_OFFSET_X + 0.03),
+        seat.position_y + 0.42,
+        seat.position_z + 0.02,
+      );
+      // 円柱の軸(+Y)をX方向へ倒して、肘掛け側面に円盤が向くようにする
+      tempObject.rotation.set(0, 0, Math.PI / 2);
+      tempObject.scale.set(1, 1, 1);
+      tempObject.updateMatrix();
+      meshRef.current!.setMatrixAt(i, tempObject.matrix);
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [targets, aisleSideSeatIds, tempObject]);
+
+  if (targets.length === 0) return null;
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, targets.length]}
+      frustumCulled={false}
+    >
+      {/* castShadow は付けない: 肘掛けに貼る小片で影寄与は僅少 */}
+      <cylinderGeometry
+        args={[ROW_PLATE.radius, ROW_PLATE.radius, ROW_PLATE.thickness, 10]}
+      />
+      <meshStandardMaterial
+        color={theme.relief}
+        roughness={0.35}
+        metalness={0.6}
+      />
+    </instancedMesh>
+  );
+});
+RowMarkerPlates.displayName = 'RowMarkerPlates';
+
+/**
  * ホバー席のハイライト枠（Edges）＋席番号ラベル
  * 旧 SelectedSeatHighlight は「選択即一人称遷移」で俯瞰に一度も現れないデッド演出
  * だった。これをホバー強調に転用し、俯瞰3Dで席の識別（枠＋番号）を可能にする。
@@ -451,6 +527,7 @@ HoverHighlight.displayName = 'HoverHighlight';
 
 export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
   theme,
+  aisleSideSeatIds,
   seats,
   selectedSeatId,
   highlightedSeatId,
@@ -540,6 +617,11 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
         seats={seats}
         selectedSeatId={selectedSeatId}
         theme={theme}
+      />
+      <RowMarkerPlates
+        seats={seats}
+        theme={theme}
+        aisleSideSeatIds={aisleSideSeatIds}
       />
       <HoverHighlight seat={hoveredSeat} />
 

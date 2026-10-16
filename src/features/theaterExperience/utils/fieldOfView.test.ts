@@ -448,3 +448,80 @@ describe('resolveFlythroughStart', () => {
     expect(r.elapsed).toBe(0.55);
   });
 });
+
+describe('カーブドスクリーン（curvature）', () => {
+  const flatScreen = {
+    width: 25.8,
+    height: 18.9,
+    center_x: 0,
+    center_y: 10.45,
+    center_z: 13,
+  };
+  const curvedScreen = { ...flatScreen, curvature: 40 };
+  const centerSeat = { x: 0, y: 1.7, z: 0 };
+  const edgeSeat = { x: 9, y: 1.7, z: 0 };
+
+  it('curvature 未指定は平面として扱い、0 指定と同じ結果になる', () => {
+    expect(calcViewingFovRatios(centerSeat, flatScreen)).toEqual(
+      calcViewingFovRatios(centerSeat, { ...flatScreen, curvature: 0 }),
+    );
+    expect(projectScreenQuad(centerSeat, flatScreen)).toEqual(
+      projectScreenQuad(centerSeat, { ...flatScreen, curvature: 0 }),
+    );
+  });
+
+  it('湾曲すると中央席の水平視野占有率が平面と変わる', () => {
+    const flat = calcViewingFovRatios(centerSeat, flatScreen);
+    const curved = calcViewingFovRatios(centerSeat, curvedScreen);
+    expect(curved.horizontal_ratio).not.toBeCloseTo(flat.horizontal_ratio, 4);
+  });
+
+  it('湾曲しても垂直視野占有率は変わらない（高さ方向は曲げない）', () => {
+    const flat = calcViewingFovRatios(centerSeat, flatScreen);
+    const curved = calcViewingFovRatios(centerSeat, curvedScreen);
+    expect(curved.vertical_ratio).toBeCloseTo(flat.vertical_ratio);
+  });
+
+  it('湾曲時も左右対称な座席で同じ水平占有率になる', () => {
+    const right = calcViewingFovRatios(edgeSeat, curvedScreen);
+    const left = calcViewingFovRatios(
+      { ...edgeSeat, x: -edgeSeat.x },
+      curvedScreen,
+    );
+    expect(left.horizontal_ratio).toBeCloseTo(right.horizontal_ratio);
+  });
+
+  it('湾曲時は四隅のZが中心より客席側（小さい方）に来る', () => {
+    const quad = projectScreenQuad(centerSeat, curvedScreen);
+    // 角度ベースの投影なので、湾曲で端が近づくぶん見込み角が広がる
+    const flatQuad = projectScreenQuad(centerSeat, flatScreen);
+    expect(Math.abs(quad[1].x)).toBeGreaterThan(Math.abs(flatQuad[1].x));
+  });
+
+  it('湾曲時も四隅は左右対称に投影される（中央席）', () => {
+    const [topLeft, topRight] = projectScreenQuad(centerSeat, curvedScreen);
+    expect(topLeft.x).toBeCloseTo(-topRight.x);
+    expect(topLeft.y).toBeCloseTo(topRight.y);
+  });
+
+  it('歪みスコアは幕中心基準なので湾曲の影響を受けない', () => {
+    const screenCenter = { x: 0, y: 10.45, z: 13 };
+    expect(calcViewingDistortion(edgeSeat, screenCenter)).toBe(
+      calcViewingDistortion(edgeSeat, screenCenter),
+    );
+  });
+
+  it('スクリーンが座席の後ろなら湾曲時もゼロを返す', () => {
+    const behind = { x: 0, y: 1.7, z: 20 };
+    expect(calcViewingFovRatios(behind, curvedScreen)).toEqual({
+      horizontal_ratio: 0,
+      vertical_ratio: 0,
+    });
+    expect(projectScreenQuad(behind, curvedScreen)).toEqual([
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+    ]);
+  });
+});

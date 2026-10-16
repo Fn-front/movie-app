@@ -656,6 +656,7 @@ export type Database = {
           screen_center_x: number;
           screen_center_y: number;
           screen_center_z: number;
+          screen_curvature: number;
           screen_height: number;
           screen_width: number;
           slug: string;
@@ -677,6 +678,7 @@ export type Database = {
           screen_center_x: number;
           screen_center_y: number;
           screen_center_z: number;
+          screen_curvature?: number;
           screen_height: number;
           screen_width: number;
           slug: string;
@@ -698,6 +700,7 @@ export type Database = {
           screen_center_x?: number;
           screen_center_y?: number;
           screen_center_z?: number;
+          screen_curvature?: number;
           screen_height?: number;
           screen_width?: number;
           slug?: string;

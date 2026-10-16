@@ -8,7 +8,7 @@
 'use client';
 
 import { memo, useMemo, useRef } from 'react';
-import { Color, DoubleSide, Vector2 } from 'three';
+import { Color, DoubleSide, PlaneGeometry, Vector2 } from 'three';
 import type { ShaderMaterial } from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Edges } from '@react-three/drei';
@@ -16,6 +16,7 @@ import { Edges } from '@react-three/drei';
 import { screenVertexShader } from '../../shaders/screenVertex';
 import { screenFragmentShader } from '../../shaders/screenFragment';
 import type { InteriorTheme } from '../../utils/theaterPalette';
+import { calcScreenArcPoint, isCurvedScreen } from '../../utils/screenCurve';
 import {
   PERFORATION_TILE_METERS,
   getScreenPerforationTexture,
@@ -36,9 +37,47 @@ const GLOW_WIDTH = 0.12;
 /** 発光フレームの HDR 倍率 */
 const GLOW_HDR = 2.2;
 
+/**
+ * 弧に沿って頂点変位させた板のジオメトリを作る。
+ *
+ * 幕本体と上下のマスキングで共用する。湾曲時に上下のマスキングを直線の箱のままに
+ * すると、弧から外れて飛び出してしまうため。
+ *
+ * UVは変えないので、幕本体に貼る投影シェーダー（vUv ベース）はそのまま動く。
+ * 平面時は分割不要なので 1x1 セグメントで返す（頂点数を増やさない）。
+ *
+ * @param stripWidth 板の幅（弧長として扱う）
+ * @param stripHeight 板の高さ
+ * @param curvature 湾曲半径 (m)。0 なら平面
+ */
+function createArcStrip(
+  stripWidth: number,
+  stripHeight: number,
+  curvature: number,
+): PlaneGeometry {
+  if (!isCurvedScreen(curvature)) {
+    return new PlaneGeometry(stripWidth, stripHeight);
+  }
+  // 弧を滑らかに見せるぶんだけ横方向を分割する（幅1mあたり1分割、8〜32の範囲）
+  const segments = Math.min(32, Math.max(8, Math.round(stripWidth)));
+  const geo = new PlaneGeometry(stripWidth, stripHeight, segments, 1);
+  const posAttr = geo.attributes.position;
+  for (let i = 0; i < posAttr.count; i++) {
+    // localX は -stripWidth/2 .. +stripWidth/2（幕に沿った弧長として扱う）
+    const point = calcScreenArcPoint(posAttr.getX(i), 0, 0, curvature);
+    posAttr.setX(i, point.x);
+    posAttr.setZ(i, point.z);
+  }
+  posAttr.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
 export interface ScreenMeshProps {
   /** 内装テーマ（幕外周の発光フレーム色） */
   theme: InteriorTheme;
+  /** 湾曲半径 (m)。0 なら平面（IMAX のみ値を持つ） */
+  curvature: number;
   /** スクリーン幅 (m) */
   width: number;
   /** スクリーン高さ (m) */
@@ -68,6 +107,7 @@ export function advanceScreenTime(
 
 export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
   theme,
+  curvature,
   width,
   height,
   centerX,
@@ -97,6 +137,29 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
     [width, height],
   );
 
+  /** 幕の左右端の位置（group ローカル。平面なら ±halfW / z=0） */
+  const leftEdge = useMemo(
+    () => calcScreenArcPoint(-width / 2, 0, 0, curvature),
+    [width, curvature],
+  );
+  const rightEdge = useMemo(
+    () => calcScreenArcPoint(width / 2, 0, 0, curvature),
+    [width, curvature],
+  );
+
+  /** 幕本体のジオメトリ（湾曲時は弧に沿う） */
+  const screenGeometry = useMemo(
+    () => createArcStrip(width, height, curvature),
+    [width, height, curvature],
+  );
+
+  /** 上下マスキングのジオメトリ（幕より左右へベゼル分はみ出す） */
+  const horizontalBezelGeometry = useMemo(
+    () =>
+      createArcStrip(width + BEZEL_THICKNESS * 2, BEZEL_THICKNESS, curvature),
+    [width, curvature],
+  );
+
   /** 幕外周の発光フレーム（screenGlow を持つフォーマットのみ） */
   const glowColor = useMemo(
     () =>
@@ -123,9 +186,8 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
       同じ値だと両者が同一平面に重なってシマ模様のアーティファクトが発生する。
     */
     <group position={[centerX, centerY, centerZ - 0.1]}>
-      {/* スクリーン本体（投影風シェーダー） */}
-      <mesh>
-        <planeGeometry args={[width, height]} />
+      {/* スクリーン本体（投影風シェーダー）。湾曲時は頂点を弧上へ変位させる */}
+      <mesh geometry={screenGeometry}>
         <shaderMaterial
           ref={materialRef}
           vertexShader={screenVertexShader}
@@ -137,33 +199,43 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
         <Edges color={BEZEL_COLOR} lineWidth={1.5} />
       </mesh>
 
-      {/* ベゼル（上） */}
-      <mesh position={[0, halfH + BEZEL_THICKNESS / 2, -BEZEL_DEPTH / 2]}>
-        <boxGeometry
-          args={[width + BEZEL_THICKNESS * 2, BEZEL_THICKNESS, BEZEL_DEPTH]}
-        />
-        <meshLambertMaterial color={BEZEL_COLOR} />
-        <Edges color={BEZEL_COLOR} lineWidth={1} />
+      {/* ベゼル（上）。湾曲時は幕と同じ弧に沿わせる（直線の箱だと弧から飛び出す） */}
+      <mesh
+        geometry={horizontalBezelGeometry}
+        position={[0, halfH + BEZEL_THICKNESS / 2, 0]}
+      >
+        <meshLambertMaterial color={BEZEL_COLOR} side={DoubleSide} />
       </mesh>
 
       {/* ベゼル（下） */}
-      <mesh position={[0, -halfH - BEZEL_THICKNESS / 2, -BEZEL_DEPTH / 2]}>
-        <boxGeometry
-          args={[width + BEZEL_THICKNESS * 2, BEZEL_THICKNESS, BEZEL_DEPTH]}
-        />
-        <meshLambertMaterial color={BEZEL_COLOR} />
-        <Edges color={BEZEL_COLOR} lineWidth={1} />
+      <mesh
+        geometry={horizontalBezelGeometry}
+        position={[0, -halfH - BEZEL_THICKNESS / 2, 0]}
+      >
+        <meshLambertMaterial color={BEZEL_COLOR} side={DoubleSide} />
       </mesh>
 
-      {/* ベゼル（左） */}
-      <mesh position={[-halfW - BEZEL_THICKNESS / 2, 0, -BEZEL_DEPTH / 2]}>
+      {/* ベゼル（左）。湾曲時は弧の端点に合わせて客席側へ寄せる */}
+      <mesh
+        position={[
+          leftEdge.x - BEZEL_THICKNESS / 2,
+          0,
+          leftEdge.z - BEZEL_DEPTH / 2,
+        ]}
+      >
         <boxGeometry args={[BEZEL_THICKNESS, height, BEZEL_DEPTH]} />
         <meshLambertMaterial color={BEZEL_COLOR} />
         <Edges color={BEZEL_COLOR} lineWidth={1} />
       </mesh>
 
-      {/* ベゼル（右） */}
-      <mesh position={[halfW + BEZEL_THICKNESS / 2, 0, -BEZEL_DEPTH / 2]}>
+      {/* ベゼル（右）。湾曲時は弧の端点に合わせて客席側へ寄せる */}
+      <mesh
+        position={[
+          rightEdge.x + BEZEL_THICKNESS / 2,
+          0,
+          rightEdge.z - BEZEL_DEPTH / 2,
+        ]}
+      >
         <boxGeometry args={[BEZEL_THICKNESS, height, BEZEL_DEPTH]} />
         <meshLambertMaterial color={BEZEL_COLOR} />
         <Edges color={BEZEL_COLOR} lineWidth={1} />

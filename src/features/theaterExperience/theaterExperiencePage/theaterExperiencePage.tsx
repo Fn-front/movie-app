@@ -344,6 +344,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   />
                   <ScreenMesh
                     theme={interiorTheme}
+                    curvature={theater.screen_curvature}
                     width={theater.screen_width}
                     height={theater.screen_height}
                     centerX={theater.screen_center_x}

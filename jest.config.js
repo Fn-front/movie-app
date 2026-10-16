@@ -35,6 +35,7 @@ const customJestConfig = {
     '!src/features/theaterExperience/component/theaterCanvas/**',
     '!src/features/theaterExperience/component/wallPanels/**',
     '!src/features/theaterExperience/component/ceilingLights/**',
+    '!src/features/theaterExperience/component/aisleStairs/**',
     // GLSL シェーダー文字列の export（カバレッジ計測対象外）
     '!src/features/theaterExperience/shaders/**',
   ],

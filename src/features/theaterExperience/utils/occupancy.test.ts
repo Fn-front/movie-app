@@ -2,7 +2,11 @@
  * occupancy テスト
  */
 
-import { calcSeatOccupancyScore, computeOccupiedSeatIds } from './occupancy';
+import {
+  calcAudienceVariant,
+  calcSeatOccupancyScore,
+  computeOccupiedSeatIds,
+} from './occupancy';
 
 const makeSeats = (count: number, seatType = 'standard') =>
   Array.from({ length: count }, (_, i) => ({
@@ -100,5 +104,45 @@ describe('computeOccupiedSeatIds', () => {
 
   it('座席が空なら空集合を返す', () => {
     expect(computeOccupiedSeatIds([], 1).size).toBe(0);
+  });
+});
+
+describe('calcAudienceVariant', () => {
+  it('同じ席IDなら常に同じ体格を返す（再レンダリングでちらつかない）', () => {
+    expect(calcAudienceVariant('seat-1')).toEqual(
+      calcAudienceVariant('seat-1'),
+    );
+  });
+
+  it('体格の倍率は妥当な範囲に収まる', () => {
+    for (let i = 0; i < 100; i++) {
+      const v = calcAudienceVariant(`seat-${i}`);
+      expect(v.build).toBeGreaterThan(0.8);
+      expect(v.build).toBeLessThan(1.2);
+    }
+  });
+
+  it('首の傾きは僅かな範囲に収まる（不自然な角度にならない）', () => {
+    for (let i = 0; i < 100; i++) {
+      expect(Math.abs(calcAudienceVariant(`seat-${i}`).headTilt)).toBeLessThan(
+        0.1,
+      );
+    }
+  });
+
+  it('席ごとに体格が分かれる（全員同じにならない）', () => {
+    const builds = new Set(
+      Array.from(
+        { length: 100 },
+        (_, i) => calcAudienceVariant(`seat-${i}`).build,
+      ),
+    );
+    expect(builds.size).toBeGreaterThan(1);
+  });
+
+  it('空文字でも例外を投げず有効な体格を返す', () => {
+    const v = calcAudienceVariant('');
+    expect(typeof v.build).toBe('number');
+    expect(typeof v.headTilt).toBe('number');
   });
 });

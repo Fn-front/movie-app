@@ -68,3 +68,37 @@ export function computeOccupiedSeatIds(
   }
   return occupied;
 }
+
+/** 観客の体格・首の傾きのバリエーション */
+export interface AudienceVariant {
+  /** 体格の倍率 */
+  build: number;
+  /** 首の傾き (rad) */
+  headTilt: number;
+}
+
+/**
+ * 観客の体格バリエーション。全員が同じ大きさ・同じ姿勢だと並びが不自然なため、
+ * 席ごとに振り分ける。
+ */
+const AUDIENCE_VARIANTS: readonly AudienceVariant[] = [
+  { build: 0.92, headTilt: -0.05 },
+  { build: 1.0, headTilt: 0.02 },
+  { build: 1.06, headTilt: 0.06 },
+  { build: 0.97, headTilt: -0.01 },
+];
+
+/**
+ * 席IDから観客の体格・首の傾きを決定論的に選ぶ。
+ *
+ * 占有判定と同じスコアを使うため、再レンダリングしても同じ席には同じ体格が割り当たる
+ * （`Math.random()` を使うと毎フレーム体格が変わってちらつく）。
+ *
+ * @param seatId 座席ID
+ */
+export function calcAudienceVariant(seatId: string): AudienceVariant {
+  const index =
+    Math.floor(calcSeatOccupancyScore(seatId) * AUDIENCE_VARIANTS.length) %
+    AUDIENCE_VARIANTS.length;
+  return AUDIENCE_VARIANTS[index];
+}

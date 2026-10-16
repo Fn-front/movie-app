@@ -24,7 +24,7 @@ import { extend } from '@react-three/fiber';
 extend({ RoundedBoxGeometry });
 
 import type { TheaterSeat } from '../../types';
-import { calcSeatOccupancyScore } from '../../utils/occupancy';
+import { calcAudienceVariant } from '../../utils/occupancy';
 import { calcSeatYawOnArc } from '../../utils/rowCurve';
 import type { InteriorTheme } from '../../utils/theaterPalette';
 
@@ -38,11 +38,6 @@ const SHOULDER_Y = 1.02;
 const HEAD_Y = 1.21;
 /** 背もたれに預けるぶん、座席中心より後方へ寄せる量 (m) */
 const BODY_Z_OFFSET = -0.1;
-
-/** 体格のばらつき（席IDのスコアから選ぶ倍率） */
-const BUILD_SCALES = [0.92, 1.0, 1.06, 0.97];
-/** 首の傾きのばらつき (rad) */
-const HEAD_TILTS = [-0.05, 0.02, 0.06, -0.01];
 
 export interface AudienceMeshesProps {
   /** 内装テーマ（人の色は暗いシルエットなので座席フレーム色を流用する） */
@@ -70,9 +65,7 @@ export const AudienceMeshes = memo<AudienceMeshesProps>(
       occupants.forEach((seat, i) => {
         const yaw = calcSeatYawOnArc(seat.position_x, rowCurveRadius);
         // 体格・首の傾きは席IDから決定論的に振る（再レンダリングで変わらない）
-        const variant = Math.floor(calcSeatOccupancyScore(seat.id) * 4) % 4;
-        const build = BUILD_SCALES[variant];
-        const tilt = HEAD_TILTS[variant];
+        const { build, headTilt } = calcAudienceVariant(seat.id);
         // 背もたれに預けるぶん後方へ。弧状列では座席の向きに合わせて回す
         const dz = BODY_Z_OFFSET;
         const ox = dz * Math.sin(yaw);
@@ -95,7 +88,7 @@ export const AudienceMeshes = memo<AudienceMeshesProps>(
             seat.position_y + HEAD_Y * build,
             seat.position_z + oz,
           );
-          tempObject.rotation.set(tilt, yaw, 0);
+          tempObject.rotation.set(headTilt, yaw, 0);
           tempObject.scale.set(build, build, build);
           tempObject.updateMatrix();
           headRef.current.setMatrixAt(i, tempObject.matrix);

@@ -369,9 +369,8 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                           width={heatmapBounds.width}
                           depth={heatmapBounds.depth}
                           centerZ={heatmapBounds.centerZ}
-                          slopeFrontZ={seatAreaBounds.frontZ}
-                          slopeBackZ={seatAreaBounds.backZ}
-                          slopeMaxHeight={seatAreaBounds.maxY}
+                          rowZs={seatAreaBounds.rowZs}
+                          rowYs={seatAreaBounds.rowYs}
                           reducedMotion={reducedMotion}
                         />
                       )}

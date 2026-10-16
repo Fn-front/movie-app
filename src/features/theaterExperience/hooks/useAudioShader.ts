@@ -17,7 +17,7 @@ export interface AudioShaderUniforms {
   uTime: { value: number };
   uRoomSize: { value: [number, number] };
   uRoomOffset: { value: [number, number] };
-  uSliceY: { value: number };
+  uEarHeight: { value: number };
   uSliceAlpha: { value: number };
 }
 
@@ -65,7 +65,8 @@ function createSpeakerTexture(speakers: TheaterSpeaker[]): DataTexture {
  * @param frequencyBand 周波数帯
  * @param roomWidth ヒートマップ幅 (m)
  * @param roomDepth ヒートマップ奥行 (m)
- * @param sliceY スライスのY座標（耳の高さ、デフォルト1.2m）
+ * @param earHeight ヒートマップ面からの聴取点の高さ（耳の高さ、既定1.2m）。
+ *   面は傾斜床に沿って変位しているため、絶対Yではなく面からのオフセットとして扱う
  * @param roomCenterZ ヒートマップ中心のZ座標（デフォルト0）
  */
 export function useAudioShader(
@@ -73,7 +74,7 @@ export function useAudioShader(
   frequencyBand: FrequencyBand,
   roomWidth: number,
   roomDepth: number,
-  sliceY: number = 1.2,
+  earHeight: number = 1.2,
   roomCenterZ: number = 0,
 ): AudioShaderUniforms {
   const uniformsRef = useRef<AudioShaderUniforms | null>(null);
@@ -96,7 +97,7 @@ export function useAudioShader(
           number,
         ],
       },
-      uSliceY: { value: sliceY },
+      uEarHeight: { value: earHeight },
       uSliceAlpha: { value: 0.4 },
     };
   }

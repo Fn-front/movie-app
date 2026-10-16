@@ -110,13 +110,20 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       const yValues = seats.map((s) => Number(s.position_y));
       const xValues = seats.map((s) => Number(s.position_x));
 
-      // 列ラベル順に各列の代表 Z/Y を抽出（前→後）
-      const byRow = new Map<string, { z: number; y: number }>();
+      /*
+        各列の代表 Z/Y は「列の中央席（|x| が最小の席）」から取る。
+        弧状列では端席ほど前方へせり出すため、最初に出てきた席（＝端席）を代表に
+        すると階段・段差LED・腰壁の位置が列全体とずれる。
+      */
+      const byRow = new Map<string, { z: number; y: number; absX: number }>();
       seats.forEach((s) => {
-        if (!byRow.has(s.row_label)) {
+        const absX = Math.abs(Number(s.position_x));
+        const current = byRow.get(s.row_label);
+        if (!current || absX < current.absX) {
           byRow.set(s.row_label, {
             z: Number(s.position_z),
             y: Number(s.position_y),
+            absX,
           });
         }
       });
@@ -328,6 +335,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   <SeatMeshes
                     theme={interiorTheme}
                     aisleSideSeatIds={aisleSideSeatIds}
+                    rowCurveRadius={theater.row_curve_radius}
                     seats={seats}
                     selectedSeatId={selectedSeatId}
                     highlightedSeatId={highlightedSeatId}

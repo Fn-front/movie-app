@@ -308,3 +308,63 @@ describe('computeAisleSideSeatIds', () => {
     expect(computeAisleSideSeatIds(seats, []).size).toBe(0);
   });
 });
+
+describe('弧状列への追従', () => {
+  const aisles = computeAisleXRanges(TWO_BLOCKS, 14);
+  const rowZs = [5, 4, 3, 2];
+  const rowYs = [0, 0.2, 0.4, 0.6];
+
+  it('直線列（半径0）では段のZが代表Zと一致する', () => {
+    const steps = computeAisleSteps(aisles, rowZs, rowYs, 0);
+    const center = steps.filter((s) => s.centerX === 0);
+    expect(center.map((s) => s.centerZ)).toEqual(rowZs);
+  });
+
+  it('弧状列では通路の位置に応じて段が前方へシフトする', () => {
+    const radius = 29;
+    const steps = computeAisleSteps(aisles, rowZs, rowYs, radius);
+    // 中央通路(center=0)はシフトなし
+    const center = steps.filter((s) => s.centerX === 0);
+    expect(center.map((s) => s.centerZ)).toEqual(rowZs);
+    // サイド通路(center=±6.5)は前方（+Z）へずれる
+    const side = steps.filter((s) => s.centerX === 6.5);
+    side.forEach((s, i) => expect(s.centerZ).toBeGreaterThan(rowZs[i]));
+  });
+
+  it('左右のサイド通路は同じだけシフトする（対称）', () => {
+    const steps = computeAisleSteps(aisles, rowZs, rowYs, 29);
+    const left = steps.filter((s) => s.centerX === -6.5).map((s) => s.centerZ);
+    const right = steps.filter((s) => s.centerX === 6.5).map((s) => s.centerZ);
+    left.forEach((z, i) => expect(z).toBeCloseTo(right[i]));
+  });
+
+  it('蹴込み面は常に踏面の前端にある（シフト後も整合する）', () => {
+    const steps = computeAisleSteps(aisles, rowZs, rowYs, 29);
+    steps.forEach((s) => expect(s.riserZ).toBeCloseTo(s.centerZ + s.depth / 2));
+  });
+
+  it('蹴込みの高さは弧の有無で変わらない（高さは列のYのみに依存）', () => {
+    const straight = computeAisleSteps(aisles, rowZs, rowYs, 0);
+    const curved = computeAisleSteps(aisles, rowZs, rowYs, 29);
+    expect(curved.map((s) => s.riseHeight)).toEqual(
+      straight.map((s) => s.riseHeight),
+    );
+  });
+
+  it('腰壁も弧に沿って前方へシフトする', () => {
+    const zs = [6, 5, 3, 2];
+    const ys = [0, 0.2, 0.4, 0.6];
+    const straight = computeCrossAisleRails(TWO_BLOCKS, zs, ys, 0);
+    const curved = computeCrossAisleRails(TWO_BLOCKS, zs, ys, 29);
+    expect(curved).toHaveLength(straight.length);
+    curved.forEach((r, i) => expect(r.z).toBeGreaterThan(straight[i].z));
+  });
+
+  it('腰壁の高さと幅は弧の有無で変わらない', () => {
+    const zs = [6, 5, 3, 2];
+    const ys = [0, 0.2, 0.4, 0.6];
+    const curved = computeCrossAisleRails(TWO_BLOCKS, zs, ys, 29);
+    expect(curved.map((r) => r.baseY)).toEqual([0.4, 0.4]);
+    expect(curved.map((r) => r.width)).toEqual([4, 4]);
+  });
+});

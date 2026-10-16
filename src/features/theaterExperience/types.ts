@@ -42,6 +42,8 @@ export interface Theater {
   screen_center_x: number;
   screen_center_y: number;
   screen_center_z: number;
+  /** 座席列の弧の半径 (m)。0 なら直線列 */
+  row_curve_radius: number;
   audio_layout: AudioLayout;
   description?: string;
 }

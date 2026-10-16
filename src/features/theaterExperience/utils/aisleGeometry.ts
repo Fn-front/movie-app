@@ -11,6 +11,7 @@
  * 判断を含む計算はすべてここへ置く。
  */
 
+import { calcArcForwardShift } from './rowCurve';
 import type { SeatXSegment } from './theaterGeometry';
 
 /** 縦通路のx範囲 */
@@ -139,9 +140,14 @@ export function computeAisleXRanges(
  *
  * `rowZs` は前（大きいz）→後（小さいz）の降順を想定する。
  *
+ * 弧状列（`rowCurveRadius > 0`）では、列の代表Zは中央席のものなので、通路の位置
+ * （横に離れている）では座席が前方へせり出している。段のZにも同じ前方シフトを
+ * 加えないと、端の通路で階段と座席の前後位置がずれる。
+ *
  * @param aisles 縦通路のx範囲
  * @param rowZs 各列の代表Z（前→後の降順）
  * @param rowYs 各列の代表Y（rowZs と同順・同数）
+ * @param rowCurveRadius 座席列の弧の半径 (m)。0 なら直線列
  * @param ratio 横通路判定の倍率
  * @returns 階段の段の配列。通路が無い・列が無い場合は空配列
  */
@@ -149,6 +155,7 @@ export function computeAisleSteps(
   aisles: AisleXRange[],
   rowZs: number[],
   rowYs: number[],
+  rowCurveRadius = 0,
   ratio: number = CROSS_AISLE_GAP_RATIO,
 ): AisleStep[] {
   if (aisles.length === 0) return [];
@@ -160,19 +167,22 @@ export function computeAisleSteps(
 
   const steps: AisleStep[] = [];
   for (const aisle of aisles) {
+    // 通路の位置における弧の前方シフト（直線列なら 0）
+    const shift = calcArcForwardShift(aisle.center, rowCurveRadius);
     for (let i = 0; i < rowZs.length; i++) {
       const gap = i > 0 ? Math.abs(rowZs[i - 1] - rowZs[i]) : 0;
       // 最前列と横通路の手前には蹴込みを立てない
       const noRiser = i === 0 || isCrossAisleGap(gap, normalGap, ratio);
+      const centerZ = rowZs[i] + shift;
 
       steps.push({
         centerX: aisle.center,
         width: aisle.width,
-        centerZ: rowZs[i],
+        centerZ,
         depth,
         topY: rowYs[i],
         riseHeight: noRiser ? 0 : rowYs[i] - rowYs[i - 1],
-        riserZ: rowZs[i] + depth / 2,
+        riserZ: centerZ + depth / 2,
       });
     }
   }
@@ -198,9 +208,12 @@ export interface CrossAisleRail {
  * キャップレール）が立っている。俯瞰でスタジアム客席の段構成を読み取りやすくする
  * 効果もある。通路部分は開口させるため、座席ブロックのxセグメントぶんだけ立てる。
  *
+ * 弧状列では腰壁も弧に沿わせる。ブロック中心の位置における前方シフトを加える。
+ *
  * @param segments 座席ブロックのxセグメント
  * @param rowZs 各列の代表Z（前→後の降順）
  * @param rowYs 各列の代表Y
+ * @param rowCurveRadius 座席列の弧の半径 (m)。0 なら直線列
  * @param ratio 横通路判定の倍率
  * @returns 腰壁の配置。横通路が無ければ空配列
  */
@@ -208,6 +221,7 @@ export function computeCrossAisleRails(
   segments: SeatXSegment[],
   rowZs: number[],
   rowYs: number[],
+  rowCurveRadius = 0,
   ratio: number = CROSS_AISLE_GAP_RATIO,
 ): CrossAisleRail[] {
   if (segments.length === 0) return [];
@@ -225,7 +239,10 @@ export function computeCrossAisleRails(
       rails.push({
         centerX: seg.center,
         width: seg.width,
-        z: rowZs[i] + normalGap / 2,
+        z:
+          rowZs[i] +
+          normalGap / 2 +
+          calcArcForwardShift(seg.center, rowCurveRadius),
         baseY: rowYs[i],
       });
     }

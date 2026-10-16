@@ -954,8 +954,8 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
     [seatSegments, roomWidth],
   );
   const aisleSteps = useMemo(
-    () => computeAisleSteps(aisles, rowZs, rowYs),
-    [aisles, rowZs, rowYs],
+    () => computeAisleSteps(aisles, rowZs, rowYs, theater.row_curve_radius),
+    [aisles, rowZs, rowYs, theater.row_curve_radius],
   );
   /**
    * 手すりを立てる段。サイド通路（側壁に接する通路）は壁が手すりの役目を
@@ -968,8 +968,14 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
     return aisleSteps.filter((s) => innerCenters.has(s.centerX));
   }, [aisles, aisleSteps]);
   const crossAisleRails = useMemo(
-    () => computeCrossAisleRails(seatSegments, rowZs, rowYs),
-    [seatSegments, rowZs, rowYs],
+    () =>
+      computeCrossAisleRails(
+        seatSegments,
+        rowZs,
+        rowYs,
+        theater.row_curve_radius,
+      ),
+    [seatSegments, rowZs, rowYs, theater.row_curve_radius],
   );
 
   return (

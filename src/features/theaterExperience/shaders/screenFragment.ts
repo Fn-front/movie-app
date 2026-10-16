@@ -12,6 +12,9 @@ precision mediump float;
 
 varying vec2 vUv;
 uniform float uTime;
+/** 幕のパーフォレーション（微細な穴あき）。乗算して僅かに沈ませる */
+uniform sampler2D uPerfMap;
+uniform vec2 uPerfRepeat;
 
 /**
  * 2Dシンプレックスノイズ近似
@@ -72,6 +75,11 @@ void main() {
 
   // ベース輝度を加算（スクリーンの投射光 — 控えめにしてノイズパターンを引き立てる）
   color += vec3(0.02, 0.025, 0.05);
+
+  // 幕のパーフォレーション（音響透過スクリーンの微細な穴）を乗算。
+  // 実機の幕は無数の小孔が開いており、近距離では細かな粒状感として見える。
+  float perf = texture2D(uPerfMap, vUv * uPerfRepeat).r;
+  color *= mix(1.0, perf, 0.35);
 
   gl_FragColor = vec4(color, 1.0);
 }

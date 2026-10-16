@@ -8,20 +8,37 @@
 'use client';
 
 import { memo, useMemo, useRef } from 'react';
-import { DoubleSide } from 'three';
+import { Color, DoubleSide, Vector2 } from 'three';
 import type { ShaderMaterial } from 'three';
 import { useFrame } from '@react-three/fiber';
 import { Edges } from '@react-three/drei';
 
 import { screenVertexShader } from '../../shaders/screenVertex';
 import { screenFragmentShader } from '../../shaders/screenFragment';
+import type { InteriorTheme } from '../../utils/theaterPalette';
+import {
+  PERFORATION_TILE_METERS,
+  getScreenPerforationTexture,
+} from '../../utils/theaterTextures';
 
-/** ベゼル（フレーム）の太さ (m) */
-const BEZEL_THICKNESS = 0.08;
+/**
+ * 黒マスキングの太さ (m)。
+ * 旧値 0.08 は実機の黒マスキング（0.3〜0.5m級）に対して細すぎ、幕と壁の境界が
+ * 曖昧だった。太らせて幕を引き立てる。
+ */
+const BEZEL_THICKNESS = 0.35;
 /** ベゼルの奥行き (m) */
 const BEZEL_DEPTH = 0.05;
+/** 黒マスキングの色（実機の遮光マスキングに寄せた純黒寄り） */
+const BEZEL_COLOR = '#060608';
+/** 幕外周の発光フレームの幅 (m)。Dolby Cinema の青い縁取り */
+const GLOW_WIDTH = 0.12;
+/** 発光フレームの HDR 倍率 */
+const GLOW_HDR = 2.2;
 
 export interface ScreenMeshProps {
+  /** 内装テーマ（幕外周の発光フレーム色） */
+  theme: InteriorTheme;
   /** スクリーン幅 (m) */
   width: number;
   /** スクリーン高さ (m) */
@@ -50,6 +67,7 @@ export function advanceScreenTime(
 }
 
 export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
+  theme,
   width,
   height,
   centerX,
@@ -61,7 +79,32 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
   const halfH = height / 2;
 
   const materialRef = useRef<ShaderMaterial>(null);
-  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
+  /**
+   * パーフォレーションは実寸基準でタイリングする（幕のサイズが変わっても孔の
+   * 大きさが変わらないようにする）。
+   */
+  const uniforms = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uPerfMap: { value: getScreenPerforationTexture() },
+      uPerfRepeat: {
+        value: new Vector2(
+          width / PERFORATION_TILE_METERS,
+          height / PERFORATION_TILE_METERS,
+        ),
+      },
+    }),
+    [width, height],
+  );
+
+  /** 幕外周の発光フレーム（screenGlow を持つフォーマットのみ） */
+  const glowColor = useMemo(
+    () =>
+      theme.screenGlow
+        ? new Color(theme.screenGlow).multiplyScalar(GLOW_HDR)
+        : null,
+    [theme.screenGlow],
+  );
 
   useFrame((_, delta) => {
     const material = materialRef.current;
@@ -91,7 +134,7 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
           side={DoubleSide}
           toneMapped={false}
         />
-        <Edges color='#1a1a2e' lineWidth={1.5} />
+        <Edges color={BEZEL_COLOR} lineWidth={1.5} />
       </mesh>
 
       {/* ベゼル（上） */}
@@ -99,8 +142,8 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
         <boxGeometry
           args={[width + BEZEL_THICKNESS * 2, BEZEL_THICKNESS, BEZEL_DEPTH]}
         />
-        <meshLambertMaterial color='#1a1a2e' />
-        <Edges color='#0a0a14' lineWidth={1} />
+        <meshLambertMaterial color={BEZEL_COLOR} />
+        <Edges color={BEZEL_COLOR} lineWidth={1} />
       </mesh>
 
       {/* ベゼル（下） */}
@@ -108,23 +151,67 @@ export const ScreenMesh = memo<ScreenMeshProps>(function ScreenMesh({
         <boxGeometry
           args={[width + BEZEL_THICKNESS * 2, BEZEL_THICKNESS, BEZEL_DEPTH]}
         />
-        <meshLambertMaterial color='#1a1a2e' />
-        <Edges color='#0a0a14' lineWidth={1} />
+        <meshLambertMaterial color={BEZEL_COLOR} />
+        <Edges color={BEZEL_COLOR} lineWidth={1} />
       </mesh>
 
       {/* ベゼル（左） */}
       <mesh position={[-halfW - BEZEL_THICKNESS / 2, 0, -BEZEL_DEPTH / 2]}>
         <boxGeometry args={[BEZEL_THICKNESS, height, BEZEL_DEPTH]} />
-        <meshLambertMaterial color='#1a1a2e' />
-        <Edges color='#0a0a14' lineWidth={1} />
+        <meshLambertMaterial color={BEZEL_COLOR} />
+        <Edges color={BEZEL_COLOR} lineWidth={1} />
       </mesh>
 
       {/* ベゼル（右） */}
       <mesh position={[halfW + BEZEL_THICKNESS / 2, 0, -BEZEL_DEPTH / 2]}>
         <boxGeometry args={[BEZEL_THICKNESS, height, BEZEL_DEPTH]} />
-        <meshLambertMaterial color='#1a1a2e' />
-        <Edges color='#0a0a14' lineWidth={1} />
+        <meshLambertMaterial color={BEZEL_COLOR} />
+        <Edges color={BEZEL_COLOR} lineWidth={1} />
       </mesh>
+
+      {/*
+        幕外周の発光フレーム（Dolby Cinema の青い縁取り）。
+        黒マスキングのさらに外側を四辺で囲う。HDR＋toneMapped=false で Bloom に乗せ、
+        点滅はさせない（WCAG 2.3.1）。screenGlow を持たないフォーマットでは描かない。
+      */}
+      {glowColor && (
+        <group>
+          {[1, -1].map((sign) => (
+            <mesh
+              key={`glow-h-${sign}`}
+              position={[
+                0,
+                sign * (halfH + BEZEL_THICKNESS + GLOW_WIDTH / 2),
+                -BEZEL_DEPTH / 2,
+              ]}
+            >
+              <boxGeometry
+                args={[
+                  width + (BEZEL_THICKNESS + GLOW_WIDTH) * 2,
+                  GLOW_WIDTH,
+                  BEZEL_DEPTH,
+                ]}
+              />
+              <meshBasicMaterial color={glowColor} toneMapped={false} />
+            </mesh>
+          ))}
+          {[1, -1].map((sign) => (
+            <mesh
+              key={`glow-v-${sign}`}
+              position={[
+                sign * (halfW + BEZEL_THICKNESS + GLOW_WIDTH / 2),
+                0,
+                -BEZEL_DEPTH / 2,
+              ]}
+            >
+              <boxGeometry
+                args={[GLOW_WIDTH, height + BEZEL_THICKNESS * 2, BEZEL_DEPTH]}
+              />
+              <meshBasicMaterial color={glowColor} toneMapped={false} />
+            </mesh>
+          ))}
+        </group>
+      )}
     </group>
   );
 });

@@ -773,6 +773,38 @@ export type Database = {
         };
         Relationships: [];
       };
+      totp_recovery_codes: {
+        Row: {
+          code_hash: string;
+          created_at: string;
+          id: string;
+          used_at: string | null;
+          user_id: string;
+        };
+        Insert: {
+          code_hash: string;
+          created_at?: string;
+          id?: string;
+          used_at?: string | null;
+          user_id: string;
+        };
+        Update: {
+          code_hash?: string;
+          created_at?: string;
+          id?: string;
+          used_at?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'totp_recovery_codes_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       user_preferences: {
         Row: {
           analysis_data: Json | null;
@@ -839,6 +871,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: 'user_settings_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: true;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      user_totp: {
+        Row: {
+          confirmed_at: string | null;
+          created_at: string;
+          encrypted_secret: string;
+          last_used_counter: number | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          confirmed_at?: string | null;
+          created_at?: string;
+          encrypted_secret: string;
+          last_used_counter?: number | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          confirmed_at?: string | null;
+          created_at?: string;
+          encrypted_secret?: string;
+          last_used_counter?: number | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'user_totp_user_id_fkey';
             columns: ['user_id'];
             isOneToOne: true;
             referencedRelation: 'users';

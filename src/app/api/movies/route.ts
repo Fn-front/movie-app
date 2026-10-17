@@ -257,9 +257,9 @@ export async function GET(request: Request) {
             cached_at: now.toISOString(),
           }));
 
-          await supabase.from('movie_cache').upsert(movieRows, {
-            onConflict: 'id,release_type',
-          });
+          // リバイバル行の release_date を上書きしないため RPC 経由で UPSERT する
+          // （set_now_playing は指定せず、既存の is_now_playing を保持する）
+          await supabase.rpc('upsert_movie_cache', { movies: movieRows });
 
           if (p >= tmdbResponse.total_pages) break;
         }

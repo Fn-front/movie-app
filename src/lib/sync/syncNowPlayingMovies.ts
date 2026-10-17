@@ -113,24 +113,30 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
       nowPlayingIds.add(movie.id);
 
       // movie_cache に UPSERT
-      const { error } = await supabase.from('movie_cache').upsert(
-        {
-          id: movie.id,
-          title: movie.title,
-          poster_path: movie.poster_path,
-          backdrop_path: movie.backdrop_path,
-          release_date: movie.release_date || null,
-          overview: movie.overview || null,
-          vote_average: movie.vote_average,
-          vote_count: movie.vote_count ?? 0,
-          popularity: movie.popularity,
-          genre_ids: movie.genre_ids,
-          release_type: RELEASE_TYPE.THEATRICAL,
-          is_now_playing: true,
-          cached_at: now,
-        },
-        { onConflict: 'id,release_type' },
-      );
+      //
+      // 素の upsert ではなく RPC を使う。リバイバル上映作品の release_date は
+      // 映画.com側（syncEigaMovies）が持ち主であり、TMDbの原公開日で上書きすると
+      // 「リバイバル」バッジのまま公開日が数十年前になるため。
+      // 列ごとの条件付き更新は postgrest の upsert では表現できない。
+      const { error } = await supabase.rpc('upsert_movie_cache', {
+        movies: [
+          {
+            id: movie.id,
+            title: movie.title,
+            poster_path: movie.poster_path,
+            backdrop_path: movie.backdrop_path,
+            release_date: movie.release_date || null,
+            overview: movie.overview || null,
+            vote_average: movie.vote_average,
+            vote_count: movie.vote_count ?? 0,
+            popularity: movie.popularity,
+            genre_ids: movie.genre_ids,
+            release_type: RELEASE_TYPE.THEATRICAL,
+            cached_at: now,
+          },
+        ],
+        set_now_playing: true,
+      });
 
       if (error) {
         result.errors.push(`${movie.title}: ${error.message}`);

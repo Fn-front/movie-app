@@ -42,13 +42,12 @@ function createMockMovie(overrides: Partial<Movie> = {}): Movie {
 }
 
 /**
- * Supabaseのfromモックを構築する
- * from() は複数回呼ばれるため、呼び出し順で挙動を制御する:
- * 1回目: select('id').neq(...) → 既存ストリーミングチェック
- * 2回目以降: upsert() → 映画データUPSERT
- * 最後: update(...).eq(...).eq(...).not(...).select('id') → クリア処理
+ * Supabaseクライアントのモックを構築する
+ *
+ * 映画データのUPSERTは upsert_movie_cache RPC 経由（リバイバル行の
+ * release_date を上書きしないため）。from() は is_now_playing のクリアに使う。
  */
-function createFromMock(options: {
+function createSupabaseMock(options: {
   existingOtherTypeIds?: number[];
   upsertError?: { message: string } | null;
   clearData?: { id: number }[];
@@ -61,6 +60,7 @@ function createFromMock(options: {
     clearError = null,
   } = options;
 
+  const rpcMock = jest.fn().mockResolvedValue({ error: upsertError });
   const fromMock = jest.fn();
 
   // 呼び出しごとの振り分け
@@ -70,7 +70,6 @@ function createFromMock(options: {
         data: existingOtherTypeIds.map((id) => ({ id })),
       }),
     }),
-    upsert: jest.fn().mockResolvedValue({ error: upsertError }),
     update: jest.fn().mockReturnValue({
       eq: jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
@@ -85,7 +84,7 @@ function createFromMock(options: {
     }),
   }));
 
-  return fromMock;
+  return { from: fromMock, rpc: rpcMock, fromMock, rpcMock };
 }
 
 // ---------- 環境変数の保存・復元 ----------
@@ -178,8 +177,8 @@ describe('syncNowPlayingMovies', () => {
         results: [adultMovie],
       });
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -203,8 +202,8 @@ describe('syncNowPlayingMovies', () => {
         results: [excludedLangMovie],
       });
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -227,8 +226,8 @@ describe('syncNowPlayingMovies', () => {
         results: [excludedGenreMovie],
       });
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -251,8 +250,8 @@ describe('syncNowPlayingMovies', () => {
         results: [noGenreMovie],
       });
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -276,8 +275,8 @@ describe('syncNowPlayingMovies', () => {
         results: [lowQualityMovie],
       });
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -301,8 +300,8 @@ describe('syncNowPlayingMovies', () => {
       (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
       // 別release_type に同じIDが存在する状況
-      const fromMock = createFromMock({ existingOtherTypeIds: [100] });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({ existingOtherTypeIds: [100] });
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -324,13 +323,15 @@ describe('syncNowPlayingMovies', () => {
       });
       (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       await syncNowPlayingMovies();
 
-      // from() は UPSERT と is_now_playing クリアの2回のみ（事前SELECTなし）
-      expect(fromMock).toHaveBeenCalledTimes(2);
+      // 事前SELECTは廃止済み。UPSERTはRPC経由なので from() は
+      // is_now_playing クリアの1回のみ
+      expect(supabaseMock.fromMock).toHaveBeenCalledTimes(1);
+      expect(supabaseMock.rpcMock).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -348,8 +349,8 @@ describe('syncNowPlayingMovies', () => {
       });
       (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(true);
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -372,37 +373,28 @@ describe('syncNowPlayingMovies', () => {
       });
       (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
-      const upsertMock = jest.fn().mockResolvedValue({ error: null });
-      const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          neq: jest.fn().mockResolvedValue({ data: [] }),
-        }),
-        upsert: upsertMock,
-        update: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              not: jest.fn().mockReturnValue({
-                select: jest.fn().mockResolvedValue({ data: [], error: null }),
-              }),
-            }),
-          }),
-        }),
-      });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
       expect(result.upserted).toBe(1);
       expect(result.errors).toHaveLength(0);
-      expect(upsertMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 300,
-          title: '成功映画',
-          release_type: 'theatrical',
-          is_now_playing: true,
-        }),
-        { onConflict: 'id,release_type' },
-      );
+      // リバイバル行の release_date を保護するため RPC 経由で UPSERT する
+      expect(supabaseMock.rpcMock).toHaveBeenCalledWith('upsert_movie_cache', {
+        movies: [
+          expect.objectContaining({
+            id: 300,
+            title: '成功映画',
+            release_type: 'theatrical',
+          }),
+        ],
+        set_now_playing: true,
+      });
+      // is_now_playing は payload ではなく set_now_playing 引数で立てる
+      expect(
+        supabaseMock.rpcMock.mock.calls[0][1].movies[0],
+      ).not.toHaveProperty('is_now_playing');
     });
 
     it('UPSERTがエラーの場合errorsに記録される', async () => {
@@ -418,10 +410,10 @@ describe('syncNowPlayingMovies', () => {
       });
       (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
-      const fromMock = createFromMock({
+      const supabaseMock = createSupabaseMock({
         upsertError: { message: 'duplicate key violation' },
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -459,14 +451,16 @@ describe('syncNowPlayingMovies', () => {
         }),
       });
 
-      const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          neq: jest.fn().mockResolvedValue({ data: [] }),
+      const supabaseMock = {
+        from: jest.fn().mockReturnValue({
+          select: jest.fn().mockReturnValue({
+            neq: jest.fn().mockResolvedValue({ data: [] }),
+          }),
+          update: updateMock,
         }),
-        upsert: jest.fn().mockResolvedValue({ error: null }),
-        update: updateMock,
-      });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+        rpc: jest.fn().mockResolvedValue({ error: null }),
+      };
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -485,10 +479,10 @@ describe('syncNowPlayingMovies', () => {
         results: [],
       });
 
-      const fromMock = createFromMock({
+      const supabaseMock = createSupabaseMock({
         clearError: { message: 'clear failed' },
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -515,8 +509,8 @@ describe('syncNowPlayingMovies', () => {
         .mockRejectedValueOnce(new Error('API rate limit exceeded'))
         .mockResolvedValueOnce(false);
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -539,8 +533,8 @@ describe('syncNowPlayingMovies', () => {
       });
       (hasExcludedKeyword as jest.Mock).mockRejectedValueOnce('string error');
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -574,8 +568,8 @@ describe('syncNowPlayingMovies', () => {
         .mockResolvedValueOnce(false)
         .mockResolvedValueOnce(false);
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
@@ -594,13 +588,94 @@ describe('syncNowPlayingMovies', () => {
         results: [],
       });
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       const result = await syncNowPlayingMovies();
 
       expect(result.fetched).toBe(0);
       expect(getNowPlayingMovies).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('リバイバル作品の公開日保護', () => {
+    it('release_dateの上書き判定をDB側に委ねるRPCを使う', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({ id: 700, release_date: '1979-10-06' });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      await syncNowPlayingMovies();
+
+      // 素の upsert ではリバイバル行の release_date を保護できないため
+      // RPC 経由であることを固定する
+      expect(supabaseMock.rpcMock).toHaveBeenCalledWith(
+        'upsert_movie_cache',
+        expect.objectContaining({ set_now_playing: true }),
+      );
+      // movie_cache への直接 upsert は行わない
+      for (const result of supabaseMock.fromMock.mock.results) {
+        expect(result.value.upsert).toBeUndefined();
+      }
+    });
+
+    it('TMDbのrelease_dateはそのままRPCに渡す（保護判定はDB側）', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({ id: 701, release_date: '1996-02-17' });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      await syncNowPlayingMovies();
+
+      expect(supabaseMock.rpcMock.mock.calls[0][1].movies[0].release_date).toBe(
+        '1996-02-17',
+      );
+    });
+
+    it('RPCが失敗した場合errorsに記録される', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({ id: 702, title: 'RPC失敗映画' });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+
+      const supabaseMock = createSupabaseMock({
+        upsertError: { message: 'rpc failed' },
+      });
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(result.upserted).toBe(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toContain('RPC失敗映画');
+      expect(result.errors[0]).toContain('rpc failed');
     });
   });
 
@@ -617,13 +692,13 @@ describe('syncNowPlayingMovies', () => {
       });
       (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
-      const fromMock = createFromMock({});
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
 
       await syncNowPlayingMovies();
 
-      // 事前SELECTを廃止したため、from() 1回目が UPSERT
-      return fromMock.mock.results[0].value.upsert.mock.calls[0][0];
+      // UPSERTはRPC経由。movies 配列の先頭が対象の行
+      return supabaseMock.rpcMock.mock.calls[0][1].movies[0];
     }
 
     it('TMDbのvote_countをmovie_cacheにUPSERTする', async () => {

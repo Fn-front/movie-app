@@ -907,6 +907,10 @@ export type Database = {
         }[];
       };
       sync_now_showing_movies: { Args: { movies: Json }; Returns: number };
+      upsert_movie_cache: {
+        Args: { movies: Json; set_now_playing?: boolean };
+        Returns: number;
+      };
       upsert_recommendations: {
         Args: { p_recommendations: Json; p_user_id: string };
         Returns: number;

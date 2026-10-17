@@ -6,14 +6,13 @@ import { createClient } from '@supabase/supabase-js';
 
 import {
   EXCLUDED_GENRE_IDS,
-  EXCLUDED_KEYWORD_IDS,
   ALLOWED_LANGUAGES,
   MIN_POPULARITY,
   MIN_VOTE_AVERAGE,
   NOW_PLAYING_SYNC_MAX_PAGES,
   RELEASE_TYPE,
 } from '@/constants/movies';
-import { getMovieKeywordIds, getNowPlayingMovies } from '@/lib/tmdb/tmdb';
+import { getNowPlayingMovies, hasExcludedKeyword } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
 /**
@@ -106,11 +105,7 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
   for (const movie of filteredMovies) {
     try {
       // 除外キーワードチェック
-      const keywordIds = await getMovieKeywordIds(movie.id);
-      const hasExcludedKeyword = keywordIds.some((id) =>
-        (EXCLUDED_KEYWORD_IDS as readonly number[]).includes(id),
-      );
-      if (hasExcludedKeyword) {
+      if (await hasExcludedKeyword(movie.id)) {
         result.skipped++;
         continue;
       }

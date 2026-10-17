@@ -6,6 +6,7 @@ import {
   API,
   EXCLUDED_GENRE_IDS,
   EXCLUDED_GENRES_PARAM,
+  EXCLUDED_KEYWORD_IDS,
   EXCLUDED_KEYWORDS_PARAM,
   PAGINATION,
   TMDB_ENDPOINTS,
@@ -153,16 +154,47 @@ export async function getMovieDetail(
  * 映画のキーワード一覧を取得
  *
  * @param movieId - 映画ID
+ * @param options - リクエストオプション（中断シグナル）
  * @returns キーワードID配列
  */
 export async function getMovieKeywordIds(
   movieId: number | string,
+  options?: { signal?: AbortSignal },
 ): Promise<number[]> {
   const response = await tmdbClient.get<{
     id: number;
     keywords: { id: number; name: string }[];
-  }>(TMDB_ENDPOINTS.MOVIE_KEYWORDS(movieId));
+  }>(TMDB_ENDPOINTS.MOVIE_KEYWORDS(movieId), { signal: options?.signal });
   return response.data.keywords.map((k) => k.id);
+}
+
+/**
+ * 映画が除外キーワード（アダルト系）を含むかを判定する
+ *
+ * アダルト判定の実体は `EXCLUDED_KEYWORD_IDS` だが、TMDbの `without_keywords` は
+ * `/discover/movie` でしかサポートされないため、`/search/movie` 経由で取得した
+ * 映画はこの関数で1件ずつ判定する必要がある。
+ * `excludeInappropriateMovies` が見ている `adult` フラグだけでは、
+ * `adult=false` のままポルノ・ピンク映画キーワードを持つ作品を弾けない。
+ *
+ * 取得に失敗した場合は**例外をそのまま投げる**。呼び出し側はいずれも
+ * try/catch で当該映画をスキップする実装になっており、判定できない映画を
+ * 採用しない（fail-closed）。ここで握りつぶすと、同期処理側の
+ * エラー記録（`result.errors`）が失われるため意図的に catch していない。
+ *
+ * @param movieId - 映画ID
+ * @param options - リクエストオプション（中断シグナル）
+ * @returns 除外対象なら true
+ * @throws TMDbへの問い合わせに失敗した場合
+ */
+export async function hasExcludedKeyword(
+  movieId: number | string,
+  options?: { signal?: AbortSignal },
+): Promise<boolean> {
+  const keywordIds = await getMovieKeywordIds(movieId, options);
+  return keywordIds.some((id) =>
+    (EXCLUDED_KEYWORD_IDS as readonly number[]).includes(id),
+  );
 }
 
 /**

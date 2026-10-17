@@ -5,7 +5,7 @@
 // TMDbモジュールのモック（モジュールレベルの環境変数チェックを回避）
 jest.mock('@/lib/tmdb/tmdb', () => ({
   searchMovies: jest.fn(),
-  getMovieKeywordIds: jest.fn(),
+  hasExcludedKeyword: jest.fn(),
 }));
 
 jest.mock('@supabase/supabase-js', () => ({
@@ -18,7 +18,7 @@ jest.mock('./eiga', () => ({
 }));
 
 import { createClient } from '@supabase/supabase-js';
-import { searchMovies, getMovieKeywordIds } from '@/lib/tmdb/tmdb';
+import { searchMovies, hasExcludedKeyword } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
 import {
@@ -258,8 +258,8 @@ describe('syncEigaMovies', () => {
   const mockedSearchMovies = searchMovies as jest.MockedFunction<
     typeof searchMovies
   >;
-  const mockedGetMovieKeywordIds = getMovieKeywordIds as jest.MockedFunction<
-    typeof getMovieKeywordIds
+  const mockedHasExcludedKeyword = hasExcludedKeyword as jest.MockedFunction<
+    typeof hasExcludedKeyword
   >;
 
   beforeEach(() => {
@@ -325,7 +325,7 @@ describe('syncEigaMovies', () => {
       total_pages: 1,
       total_results: 1,
     });
-    mockedGetMovieKeywordIds.mockResolvedValue([]);
+    mockedHasExcludedKeyword.mockResolvedValue(false);
 
     const result = await syncEigaMovies();
 
@@ -402,7 +402,7 @@ describe('syncEigaMovies', () => {
       total_results: 1,
     });
 
-    mockedGetMovieKeywordIds.mockResolvedValue([]);
+    mockedHasExcludedKeyword.mockResolvedValue(false);
 
     const result = await syncEigaMovies();
 
@@ -509,7 +509,7 @@ describe('syncEigaMovies', () => {
       total_pages: 1,
       total_results: 1,
     });
-    (getMovieKeywordIds as jest.Mock).mockResolvedValue([]);
+    (hasExcludedKeyword as jest.Mock).mockResolvedValue(false);
 
     const result = await syncEigaMovies();
 
@@ -533,7 +533,7 @@ describe('syncEigaMovies', () => {
     });
 
     // 除外キーワードIDを返す（155477 = softcore）
-    mockedGetMovieKeywordIds.mockResolvedValue([155477]);
+    mockedHasExcludedKeyword.mockResolvedValue(true);
 
     const result = await syncEigaMovies();
 
@@ -563,7 +563,7 @@ describe('syncEigaMovies', () => {
       total_pages: 1,
       total_results: 1,
     });
-    mockedGetMovieKeywordIds.mockResolvedValue([]);
+    mockedHasExcludedKeyword.mockResolvedValue(false);
 
     const result = await syncEigaMovies();
 
@@ -598,7 +598,7 @@ describe('syncEigaMovies', () => {
       total_pages: 1,
       total_results: 1,
     });
-    mockedGetMovieKeywordIds.mockResolvedValue([]);
+    mockedHasExcludedKeyword.mockResolvedValue(false);
 
     const result = await syncEigaMovies();
 
@@ -627,7 +627,7 @@ describe('syncEigaMovies', () => {
       total_pages: 1,
       total_results: 1,
     });
-    mockedGetMovieKeywordIds.mockResolvedValue([]);
+    mockedHasExcludedKeyword.mockResolvedValue(false);
     mockUpsert.mockResolvedValue({
       error: { message: 'DB書き込みエラー' },
     });
@@ -657,7 +657,7 @@ describe('syncEigaMovies', () => {
       total_pages: 1,
       total_results: 1,
     });
-    mockedGetMovieKeywordIds.mockResolvedValue([]);
+    mockedHasExcludedKeyword.mockResolvedValue(false);
 
     const result = await syncEigaMovies();
 
@@ -707,7 +707,7 @@ describe('syncEigaMovies', () => {
       total_pages: 1,
       total_results: 1,
     });
-    mockedGetMovieKeywordIds.mockResolvedValue([]);
+    mockedHasExcludedKeyword.mockResolvedValue(false);
 
     const result = await syncEigaMovies();
 

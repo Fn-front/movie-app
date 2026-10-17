@@ -8,7 +8,7 @@ import {
   OPENAI_CONFIG,
   TMDB_GENRE_MAP,
 } from '@/constants';
-import { searchMovies } from '@/lib/tmdb/tmdb';
+import { hasExcludedKeyword, searchMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 import {
   openAiRecommendationsResponseSchema,
@@ -269,6 +269,13 @@ export async function resolveRecommendationsWithTMDb(
 
       // 同じ映画が既に追加されていないか確認
       if (resolved.some((r) => r.tmdb_movie_id === movie.id)) {
+        continue;
+      }
+
+      // 除外キーワード（ポルノ・ピンク映画等）を含む映画を弾く。
+      // adult フラグだけでは `adult=false` のアダルト作品を通してしまうため、
+      // 採用が確定する直前にTMDbへ1回だけ問い合わせる（呼び出し回数を最小化）。
+      if (await hasExcludedKeyword(movie.id, { signal })) {
         continue;
       }
 

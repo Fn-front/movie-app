@@ -214,6 +214,73 @@ describe('TMDb APIクライアント', () => {
     });
   });
 
+  describe('hasExcludedKeyword', () => {
+    it('除外キーワードを含む場合trueを返す', async () => {
+      // 155477 = softcore（EXCLUDED_KEYWORD_IDS の先頭）
+      mockGet.mockResolvedValue({
+        data: { id: 1, keywords: [{ id: 155477, name: 'softcore' }] },
+      });
+
+      const { hasExcludedKeyword } = require('./tmdb');
+
+      expect(await hasExcludedKeyword(1)).toBe(true);
+    });
+
+    it('除外キーワードを含まない場合falseを返す', async () => {
+      mockGet.mockResolvedValue({
+        data: { id: 1, keywords: [{ id: 9999, name: 'space' }] },
+      });
+
+      const { hasExcludedKeyword } = require('./tmdb');
+
+      expect(await hasExcludedKeyword(1)).toBe(false);
+    });
+
+    it('キーワードが空の場合falseを返す', async () => {
+      mockGet.mockResolvedValue({ data: { id: 1, keywords: [] } });
+
+      const { hasExcludedKeyword } = require('./tmdb');
+
+      expect(await hasExcludedKeyword(1)).toBe(false);
+    });
+
+    it('複数キーワードのうち1つでも除外対象ならtrueを返す', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          id: 1,
+          keywords: [
+            { id: 9999, name: 'space' },
+            { id: 445, name: 'pornography' },
+          ],
+        },
+      });
+
+      const { hasExcludedKeyword } = require('./tmdb');
+
+      expect(await hasExcludedKeyword(1)).toBe(true);
+    });
+
+    it('取得失敗時は例外をそのまま投げる（呼び出し側でスキップさせるfail-closed）', async () => {
+      mockGet.mockRejectedValue(new Error('TMDb error'));
+
+      const { hasExcludedKeyword } = require('./tmdb');
+
+      await expect(hasExcludedKeyword(1)).rejects.toThrow('TMDb error');
+    });
+
+    it('signalをTMDbリクエストに渡す', async () => {
+      mockGet.mockResolvedValue({ data: { id: 1, keywords: [] } });
+      const controller = new AbortController();
+
+      const { hasExcludedKeyword } = require('./tmdb');
+      await hasExcludedKeyword(1, { signal: controller.signal });
+
+      expect(mockGet).toHaveBeenCalledWith('/movie/1/keywords', {
+        signal: controller.signal,
+      });
+    });
+  });
+
   describe('getMovieKeywordIds', () => {
     it('正しいエンドポイントでgetが呼ばれキーワードID配列を返す', async () => {
       mockGet.mockResolvedValue(mockKeywordsResponse);
@@ -221,7 +288,9 @@ describe('TMDb APIクライアント', () => {
       const { getMovieKeywordIds } = require('./tmdb');
       const result = await getMovieKeywordIds(123);
 
-      expect(mockGet).toHaveBeenCalledWith('/movie/123/keywords');
+      expect(mockGet).toHaveBeenCalledWith('/movie/123/keywords', {
+        signal: undefined,
+      });
       expect(result).toEqual([1, 2]);
     });
 
@@ -231,7 +300,9 @@ describe('TMDb APIクライアント', () => {
       const { getMovieKeywordIds } = require('./tmdb');
       const result = await getMovieKeywordIds('789');
 
-      expect(mockGet).toHaveBeenCalledWith('/movie/789/keywords');
+      expect(mockGet).toHaveBeenCalledWith('/movie/789/keywords', {
+        signal: undefined,
+      });
       expect(result).toEqual([1, 2]);
     });
 

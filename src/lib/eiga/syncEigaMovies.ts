@@ -4,10 +4,10 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-import { EXCLUDED_KEYWORD_IDS, RELEASE_TYPE } from '@/constants/movies';
+import { RELEASE_TYPE } from '@/constants/movies';
 import { EIGA_SCORING } from '@/constants/eiga';
 import { MS_PER_DAY } from '@/constants/time';
-import { getMovieKeywordIds, searchMovies } from '@/lib/tmdb/tmdb';
+import { hasExcludedKeyword, searchMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
 import { fetchEigaMovies, fetchOriginalTitle, type EigaMovie } from './eiga';
@@ -200,11 +200,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
       }
 
       // post-filter: 除外キーワードを含む映画を保存しない
-      const keywordIds = await getMovieKeywordIds(bestMatch.id);
-      const hasExcludedKeyword = keywordIds.some((id) =>
-        (EXCLUDED_KEYWORD_IDS as readonly number[]).includes(id),
-      );
-      if (hasExcludedKeyword) {
+      if (await hasExcludedKeyword(bestMatch.id)) {
         result.skipped++;
         continue;
       }

@@ -23,8 +23,10 @@ jest.mock('./client', () => ({
 }));
 
 const mockSearchMovies = jest.fn();
+const mockHasExcludedKeyword = jest.fn().mockResolvedValue(false);
 jest.mock('@/lib/tmdb/tmdb', () => ({
   searchMovies: (...args: unknown[]) => mockSearchMovies(...args),
+  hasExcludedKeyword: (...args: unknown[]) => mockHasExcludedKeyword(...args),
 }));
 
 import {
@@ -378,6 +380,98 @@ describe('resolveRecommendationsWithTMDb', () => {
       });
 
       const items = [createItem('Adult A', 2020, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('除外キーワードによる除外', () => {
+    it('除外キーワードを持つ映画を採用しない', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 910,
+            title: 'Keyword Adult Movie',
+            adult: false,
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 6.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+      mockHasExcludedKeyword.mockResolvedValueOnce(true);
+
+      const items = [createItem('Keyword Adult Movie', 2020, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('キーワード判定は採用が確定する直前に1回だけ呼ばれる', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 911,
+            title: 'Movie',
+            adult: false,
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 7.0,
+            genre_ids: [28],
+          },
+        ],
+      });
+      mockHasExcludedKeyword.mockResolvedValue(false);
+
+      const items = [createItem('Movie', 2020, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(mockHasExcludedKeyword).toHaveBeenCalledTimes(1);
+      expect(mockHasExcludedKeyword.mock.calls[0][0]).toBe(911);
+    });
+
+    it('除外リストに含まれる映画ではキーワード判定を呼ばない（TMDb呼び出し削減）', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 912,
+            title: 'Excluded',
+            adult: false,
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 7.0,
+            genre_ids: [28],
+          },
+        ],
+      });
+      mockHasExcludedKeyword.mockResolvedValue(false);
+
+      const items = [createItem('Excluded', 2020, '理由')];
+      await resolveRecommendationsWithTMDb(items, new Set([912]));
+
+      expect(mockHasExcludedKeyword).not.toHaveBeenCalled();
+    });
+
+    it('キーワード判定が失敗した映画はスキップされる（fail-closed）', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 913,
+            title: 'Movie',
+            adult: false,
+            poster_path: null,
+            release_date: '2020-01-01',
+            vote_average: 7.0,
+            genre_ids: [28],
+          },
+        ],
+      });
+      mockHasExcludedKeyword.mockRejectedValueOnce(new Error('TMDb error'));
+
+      const items = [createItem('Movie', 2020, '理由')];
       const result = await resolveRecommendationsWithTMDb(items, new Set());
 
       expect(result).toHaveLength(0);

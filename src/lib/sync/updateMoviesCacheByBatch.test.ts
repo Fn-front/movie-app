@@ -32,8 +32,14 @@ function createMockMovieDetail(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** 映画ID取得のページサイズ（実装と同じ値） */
+const SELECT_PAGE_SIZE = 1000;
+
 /**
  * Supabaseのfromモックを構築する
+ *
+ * 映画ID取得は .order().order().range() のチェーンでページングするため、
+ * range の指定に応じて該当ページを返す。
  */
 function createFromMock(options: {
   selectData?: { id: number; release_type: string }[];
@@ -42,10 +48,18 @@ function createFromMock(options: {
 }) {
   const { selectData = [], selectError = null, updateError = null } = options;
 
-  const fromMock = jest.fn().mockReturnValue({
-    select: jest.fn().mockResolvedValue({
-      data: selectData,
+  const rangeMock = jest.fn((from: number, to: number) =>
+    Promise.resolve({
+      data: selectError ? null : selectData.slice(from, to + 1),
       error: selectError,
+    }),
+  );
+
+  const fromMock = jest.fn().mockReturnValue({
+    select: jest.fn().mockReturnValue({
+      order: jest.fn().mockReturnValue({
+        order: jest.fn().mockReturnValue({ range: rangeMock }),
+      }),
     }),
     update: jest.fn().mockReturnValue({
       eq: jest.fn().mockResolvedValue({
@@ -54,7 +68,7 @@ function createFromMock(options: {
     }),
   });
 
-  return fromMock;
+  return Object.assign(fromMock, { rangeMock });
 }
 
 // ---------- 環境変数の保存・復元 ----------
@@ -130,6 +144,88 @@ describe('updateMoviesCacheByBatch', () => {
       );
     });
 
+    it('1000件を超える場合もページングして全件取得する', async () => {
+      setValidEnv();
+
+      // 1000行の上限をまたぐ件数（1000件目以降が欠落していないことを確認）
+      const rows = Array.from({ length: SELECT_PAGE_SIZE + 250 }, (_, i) => ({
+        id: i + 1,
+        release_type: 'theatrical',
+      }));
+
+      const fromMock = createFromMock({ selectData: rows });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (getMovieDetail as jest.Mock).mockResolvedValue(createMockMovieDetail());
+
+      const result = await updateMoviesCacheByBatch();
+
+      expect(result.total).toBe(SELECT_PAGE_SIZE + 250);
+      expect(result.updated).toBe(SELECT_PAGE_SIZE + 250);
+      // 2ページ目を取得し、3ページ目（空）で打ち切る
+      expect(fromMock.rangeMock).toHaveBeenCalledTimes(2);
+      expect(fromMock.rangeMock).toHaveBeenNthCalledWith(
+        1,
+        0,
+        SELECT_PAGE_SIZE - 1,
+      );
+      expect(fromMock.rangeMock).toHaveBeenNthCalledWith(
+        2,
+        SELECT_PAGE_SIZE,
+        SELECT_PAGE_SIZE * 2 - 1,
+      );
+    });
+
+    it('ちょうど1000件の場合、次ページを取得して空で打ち切る', async () => {
+      setValidEnv();
+
+      const rows = Array.from({ length: SELECT_PAGE_SIZE }, (_, i) => ({
+        id: i + 1,
+        release_type: 'theatrical',
+      }));
+
+      const fromMock = createFromMock({ selectData: rows });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (getMovieDetail as jest.Mock).mockResolvedValue(createMockMovieDetail());
+
+      const result = await updateMoviesCacheByBatch();
+
+      expect(result.total).toBe(SELECT_PAGE_SIZE);
+      expect(fromMock.rangeMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('2ページ目の取得エラーでもエラーをスローする', async () => {
+      setValidEnv();
+
+      const rows = Array.from({ length: SELECT_PAGE_SIZE }, (_, i) => ({
+        id: i + 1,
+        release_type: 'theatrical',
+      }));
+
+      let call = 0;
+      const fromMock = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({
+          order: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              range: jest.fn(() => {
+                call++;
+                return call === 1
+                  ? Promise.resolve({ data: rows, error: null })
+                  : Promise.resolve({
+                      data: null,
+                      error: { message: 'timeout' },
+                    });
+              }),
+            }),
+          }),
+        }),
+      });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+
+      await expect(updateMoviesCacheByBatch()).rejects.toThrow(
+        '映画ID取得エラー: timeout',
+      );
+    });
+
     it('映画データが0件の場合、空の結果を返す', async () => {
       setValidEnv();
 
@@ -147,9 +243,12 @@ describe('updateMoviesCacheByBatch', () => {
       setValidEnv();
 
       const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockResolvedValue({
-          data: null,
-          error: null,
+        select: jest.fn().mockReturnValue({
+          order: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              range: jest.fn().mockResolvedValue({ data: null, error: null }),
+            }),
+          }),
         }),
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
@@ -176,7 +275,18 @@ describe('updateMoviesCacheByBatch', () => {
         eq: jest.fn().mockResolvedValue({ error: null }),
       });
       const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockResolvedValue({ data: rows, error: null }),
+        select: jest.fn().mockReturnValue({
+          order: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              range: jest.fn((from: number, to: number) =>
+                Promise.resolve({
+                  data: rows.slice(from, to + 1),
+                  error: null,
+                }),
+              ),
+            }),
+          }),
+        }),
         update: updateMock,
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
@@ -216,7 +326,18 @@ describe('updateMoviesCacheByBatch', () => {
         eq: jest.fn().mockResolvedValue({ error: null }),
       });
       const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockResolvedValue({ data: rows, error: null }),
+        select: jest.fn().mockReturnValue({
+          order: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              range: jest.fn((from: number, to: number) =>
+                Promise.resolve({
+                  data: rows.slice(from, to + 1),
+                  error: null,
+                }),
+              ),
+            }),
+          }),
+        }),
         update: updateMock,
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
@@ -244,7 +365,18 @@ describe('updateMoviesCacheByBatch', () => {
         eq: jest.fn().mockResolvedValue({ error: null }),
       });
       const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockResolvedValue({ data: rows, error: null }),
+        select: jest.fn().mockReturnValue({
+          order: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              range: jest.fn((from: number, to: number) =>
+                Promise.resolve({
+                  data: rows.slice(from, to + 1),
+                  error: null,
+                }),
+              ),
+            }),
+          }),
+        }),
         update: updateMock,
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
@@ -274,7 +406,18 @@ describe('updateMoviesCacheByBatch', () => {
           .mockResolvedValue({ error: { message: 'update failed' } }),
       });
       const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockResolvedValue({ data: rows, error: null }),
+        select: jest.fn().mockReturnValue({
+          order: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              range: jest.fn((from: number, to: number) =>
+                Promise.resolve({
+                  data: rows.slice(from, to + 1),
+                  error: null,
+                }),
+              ),
+            }),
+          }),
+        }),
         update: updateMock,
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
@@ -297,7 +440,18 @@ describe('updateMoviesCacheByBatch', () => {
       const rows = [{ id: 1, release_type: 'theatrical' }];
 
       const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockResolvedValue({ data: rows, error: null }),
+        select: jest.fn().mockReturnValue({
+          order: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              range: jest.fn((from: number, to: number) =>
+                Promise.resolve({
+                  data: rows.slice(from, to + 1),
+                  error: null,
+                }),
+              ),
+            }),
+          }),
+        }),
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 

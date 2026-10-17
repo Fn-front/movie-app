@@ -8,7 +8,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { RELEASE_TYPE } from '@/constants/movies';
 import { EIGA_SCORING } from '@/constants/eiga';
 import { MS_PER_DAY } from '@/constants/time';
-import { hasExcludedKeyword, searchMovies } from '@/lib/tmdb/tmdb';
+import {
+  getJpTheatricalReleaseDates,
+  hasExcludedKeyword,
+  searchMovies,
+} from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
 import { fetchEigaMovies, fetchOriginalTitle, type EigaMovie } from './eiga';
@@ -97,23 +101,31 @@ export function findBestMatch(
 /**
  * リバイバル上映かどうかを判定する
  *
- * TMDbの公開日がiCalの日付より3ヶ月以上前ならリバイバルとみなす。
+ * 「過去に日本で劇場公開された作品が再上映される」ことをリバイバルとみなし、
+ * iCalの上映日より3ヶ月以上前の**劇場公開**（TMDbのリリースタイプ 2/3）が
+ * あるかどうかで判定する。
  *
- * @param tmdbReleaseDate - TMDbの公開日（YYYY-MM-DD）
- * @param eigaReleaseDate - iCalの公開日（YYYY-MM-DD）
+ * 以前は `/movie/{id}` の `release_date` との日数差で判定していたが、
+ * region 指定でもプレミア（タイプ1）が代表日になることがあり、
+ * 「映画祭プレミアの約1年後に劇場公開される新作」をリバイバルと誤判定していた。
+ *
+ * 日本の劇場公開情報が無い場合は false を返す。過去の劇場公開を確認できない
+ * 以上「再上映」とは言えないため、主張する側に証拠を求める（fail-closed）。
+ *
+ * @param jpTheatricalReleaseDates - 日本の劇場公開日（YYYY-MM-DD、昇順）
+ * @param eigaReleaseDate - iCalの上映日（YYYY-MM-DD）
  * @returns リバイバル上映ならtrue
  */
 export function isRevival(
-  tmdbReleaseDate: string | null,
+  jpTheatricalReleaseDates: string[],
   eigaReleaseDate: string,
 ): boolean {
-  if (!tmdbReleaseDate) return false;
-
-  const tmdbDate = new Date(tmdbReleaseDate).getTime();
   const eigaDate = new Date(eigaReleaseDate).getTime();
-  const diffDays = (eigaDate - tmdbDate) / MS_PER_DAY;
 
-  return diffDays >= EIGA_SCORING.REVIVAL_THRESHOLD_DAYS;
+  return jpTheatricalReleaseDates.some((releaseDate) => {
+    const diffDays = (eigaDate - new Date(releaseDate).getTime()) / MS_PER_DAY;
+    return diffDays >= EIGA_SCORING.REVIVAL_THRESHOLD_DAYS;
+  });
 }
 
 /**
@@ -264,7 +276,9 @@ export async function syncEigaMovies(): Promise<SyncResult> {
       }
 
       // リバイバル上映判定
-      const revival = isRevival(movie.release_date, eigaMovie.releaseDate);
+      // 代表公開日ではなく日本の劇場公開履歴で判定する（プレミア日との誤判定を防ぐ）
+      const jpTheatricalDates = await getJpTheatricalReleaseDates(movie.id);
+      const revival = isRevival(jpTheatricalDates, eigaMovie.releaseDate);
       const releaseDate = revival
         ? eigaMovie.releaseDate
         : movie.release_date || null;

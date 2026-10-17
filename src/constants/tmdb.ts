@@ -49,6 +49,17 @@ export const TMDB_GENRE_MAP: Record<number, string> = {
  */
 export const TMDB_SORT_BY = { POPULARITY_DESC: 'popularity.desc' } as const;
 
+/** TMDb リリース日情報の国コード（日本） */
+export const TMDB_JP_COUNTRY_CODE = 'JP';
+
+/**
+ * 劇場公開を表す TMDb のリリースタイプ
+ * 1:Premiere / 2:Theatrical limited / 3:Theatrical / 4:Digital / 5:Physical / 6:TV
+ *
+ * プレミア（1）は「映画祭等での先行上映」であり劇場公開ではないため含めない。
+ */
+export const TMDB_THEATRICAL_RELEASE_TYPES = [2, 3] as const;
+
 /**
  * 映画詳細取得時に付与する append_to_response の値。
  * credits（キャスト・スタッフ）、watch/providers（配信情報）、videos（予告動画）を一度に取得。

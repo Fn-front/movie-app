@@ -244,6 +244,8 @@ describe('syncEigaMovies', () => {
 
   const mockFrom = jest.fn();
   const mockSelect = jest.fn();
+  /** 既存ID問い合わせ（select('id').eq(...).in(...)）の終端 */
+  const mockIn = jest.fn();
   const mockUpsert = jest.fn();
 
   const mockedCreateClient = createClient as jest.MockedFunction<
@@ -268,7 +270,11 @@ describe('syncEigaMovies', () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
 
-    mockSelect.mockResolvedValue({ data: [], error: null });
+    // 既存ID問い合わせは候補IDだけを対象にする（全件SELECTは1000行上限にかかるため）
+    mockIn.mockResolvedValue({ data: [], error: null });
+    mockSelect.mockReturnValue({
+      eq: jest.fn().mockReturnValue({ in: mockIn }),
+    });
     mockUpsert.mockResolvedValue({ error: null });
     mockFrom.mockImplementation((table: string) => {
       if (table === 'movie_cache') {
@@ -435,6 +441,114 @@ describe('syncEigaMovies', () => {
     expect(result.added).toBe(0);
   });
 
+  describe('既存ID問い合わせ（1000行上限対策）', () => {
+    /** iCal映画とTMDb検索結果をn件分用意する */
+    const setupMovies = (count: number) => {
+      const eigaMovies = Array.from({ length: count }, (_, i) => ({
+        title: `映画${i + 1}`,
+        releaseDate: '2026-03-01',
+        eigaUrl: null,
+      }));
+      mockedFetchEigaMovies.mockResolvedValue(eigaMovies);
+      mockedSearchMovies.mockImplementation(async (params) => {
+        const index = Number(String(params.query).replace('映画', '')) - 1;
+        return {
+          results: [
+            createMockMovie({ id: 1000 + index, title: `映画${index + 1}` }),
+          ],
+          page: 1,
+          total_pages: 1,
+          total_results: 1,
+        };
+      });
+      return eigaMovies;
+    };
+
+    it('全件SELECTではなく候補IDを指定して問い合わせる', async () => {
+      setupMovies(3);
+      mockedHasExcludedKeyword.mockResolvedValue(false);
+
+      await syncEigaMovies();
+
+      // release_type で絞り、候補IDだけを in() で指定する
+      expect(mockSelect).toHaveBeenCalledWith('id');
+      expect(mockIn).toHaveBeenCalledTimes(1);
+      expect(mockIn).toHaveBeenCalledWith('id', [1000, 1001, 1002]);
+    });
+
+    it('候補が200件を超える場合は分割して問い合わせる（URL長対策）', async () => {
+      setupMovies(250);
+      mockedHasExcludedKeyword.mockResolvedValue(false);
+
+      await syncEigaMovies();
+
+      expect(mockIn).toHaveBeenCalledTimes(2);
+      expect(mockIn.mock.calls[0][1]).toHaveLength(200);
+      expect(mockIn.mock.calls[1][1]).toHaveLength(50);
+    });
+
+    it('1000件を超える候補でも全件が重複判定される', async () => {
+      setupMovies(1200);
+      // 全件が既存として返る
+      mockIn.mockImplementation(async (_column: string, ids: number[]) => ({
+        data: ids.map((id) => ({ id })),
+        error: null,
+      }));
+      mockedHasExcludedKeyword.mockResolvedValue(false);
+
+      const result = await syncEigaMovies();
+
+      // 1件もUPSERTされない（全件が既存と判定される）
+      expect(result.added).toBe(0);
+      expect(result.skipped).toBe(1200);
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('既存IDの映画ではキーワード判定とUPSERTを行わない', async () => {
+      setupMovies(2);
+      mockIn.mockResolvedValue({ data: [{ id: 1000 }], error: null });
+      mockedHasExcludedKeyword.mockResolvedValue(false);
+
+      const result = await syncEigaMovies();
+
+      // 既存の1件はTMDbキーワード取得をスキップする
+      expect(mockedHasExcludedKeyword).toHaveBeenCalledTimes(1);
+      expect(mockedHasExcludedKeyword).toHaveBeenCalledWith(1001);
+      expect(mockUpsert).toHaveBeenCalledTimes(1);
+      expect(result.added).toBe(1);
+      expect(result.skipped).toBe(1);
+    });
+
+    it('既存ID取得に失敗した場合は例外をスローする（silent truncationを避ける）', async () => {
+      setupMovies(2);
+      mockIn.mockResolvedValue({
+        data: null,
+        error: { message: 'connection refused' },
+      });
+
+      await expect(syncEigaMovies()).rejects.toThrow(
+        '既存ID取得エラー: connection refused',
+      );
+    });
+
+    it('候補が0件の場合は既存ID問い合わせを行わない', async () => {
+      mockedFetchEigaMovies.mockResolvedValue([
+        { title: 'マッチしない映画', releaseDate: '2026-03-01', eigaUrl: null },
+      ]);
+      mockedSearchMovies.mockResolvedValue({
+        results: [],
+        page: 1,
+        total_pages: 1,
+        total_results: 0,
+      });
+
+      const result = await syncEigaMovies();
+
+      expect(mockIn).not.toHaveBeenCalled();
+      expect(result.skipped).toBe(1);
+    });
+  });
+
   it('既にmovie_cacheに存在するIDをスキップする', async () => {
     const eigaMovie: EigaMovie = {
       title: 'テスト映画',
@@ -451,8 +565,8 @@ describe('syncEigaMovies', () => {
     });
 
     // 既存データとして返す
-    mockSelect.mockResolvedValue({
-      data: [{ id: 300, release_type: 'theatrical' }],
+    mockIn.mockResolvedValue({
+      data: [{ id: 300 }],
       error: null,
     });
 

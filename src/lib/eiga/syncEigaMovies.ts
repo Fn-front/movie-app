@@ -3,6 +3,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { RELEASE_TYPE } from '@/constants/movies';
 import { EIGA_SCORING } from '@/constants/eiga';
@@ -116,6 +117,52 @@ export function isRevival(
 }
 
 /**
+ * 既存ID問い合わせの1回あたりID数
+ *
+ * `.in()` はIDをURLクエリに展開するため、長すぎるURLにならないよう分割する。
+ */
+const EXISTING_ID_CHUNK_SIZE = 200;
+
+/**
+ * 指定したTMDb IDのうち、theatrical として既に movie_cache にある ID を返す
+ *
+ * 全件SELECTだと PostgREST の暗黙1000行制限にかかるため、候補のIDだけを問い合わせる。
+ * 取得に失敗した場合は例外を投げる（握りつぶすと全件が「未登録」扱いになり、
+ * 無駄なTMDb呼び出しとUPSERTが大量に走るため）。
+ *
+ * @param supabase - Supabaseクライアント
+ * @param movieIds - 問い合わせ対象のTMDb ID
+ * @returns 既存のID集合
+ */
+async function fetchExistingTheatricalIds(
+  supabase: SupabaseClient,
+  movieIds: number[],
+): Promise<Set<number>> {
+  const uniqueIds = [...new Set(movieIds)];
+  const existing = new Set<number>();
+
+  for (let i = 0; i < uniqueIds.length; i += EXISTING_ID_CHUNK_SIZE) {
+    const chunk = uniqueIds.slice(i, i + EXISTING_ID_CHUNK_SIZE);
+
+    const { data, error } = await supabase
+      .from('movie_cache')
+      .select('id')
+      .eq('release_type', RELEASE_TYPE.THEATRICAL)
+      .in('id', chunk);
+
+    if (error) {
+      throw new Error(`既存ID取得エラー: ${error.message}`);
+    }
+
+    for (const row of data ?? []) {
+      existing.add((row as { id: number }).id);
+    }
+  }
+
+  return existing;
+}
+
+/**
  * 映画.com iCalフィードからTMDb検索してmovie_cacheに補完する
  *
  * @returns 同期結果
@@ -142,21 +189,10 @@ export async function syncEigaMovies(): Promise<SyncResult> {
     errors: [],
   };
 
-  // 2. 既存のmovie_cache IDを取得（重複チェック用）
-  const { data: existingRows } = await supabase
-    .from('movie_cache')
-    .select('id, release_type');
+  // 2. 各映画をTMDb検索して候補を確定する
+  //    重複判定には TMDb ID が必要なため、検索は既存・新規を問わず必ず走る
+  const candidates: { eigaMovie: EigaMovie; movie: Movie }[] = [];
 
-  const existingIds = new Set(
-    (existingRows ?? []).map(
-      (row: { id: number; release_type: string }) =>
-        `${row.id}_${row.release_type}`,
-    ),
-  );
-
-  const now = new Date().toISOString();
-
-  // 3. 各映画をTMDb検索してマッチング
   for (const eigaMovie of eigaMovies) {
     try {
       // TMDb検索（順次実行でレート制限対策）
@@ -186,44 +222,66 @@ export async function syncEigaMovies(): Promise<SyncResult> {
         continue;
       }
 
-      // 劇場公開として登録（映画.comは劇場公開映画が対象）
-      const cacheKey = `${bestMatch.id}_theatrical`;
-      if (existingIds.has(cacheKey)) {
+      candidates.push({ eigaMovie, movie: bestMatch });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      result.errors.push(`${eigaMovie.title}: ${message}`);
+    }
+  }
+
+  // 3. 候補のIDだけで既存行を問い合わせる
+  //    movie_cache 全件を SELECT すると PostgREST の暗黙1000行制限にかかり、
+  //    取得できなかった行が「未登録」と誤判定される（無駄なTMDb呼び出しとUPSERTが発生）。
+  //    候補は iCal の件数（高々数百）なので、ID指定なら上限の影響を受けない。
+  const existingIds = await fetchExistingTheatricalIds(
+    supabase,
+    candidates.map((candidate) => candidate.movie.id),
+  );
+
+  const now = new Date().toISOString();
+
+  // 4. 新規の候補だけ post-filter を通して UPSERT する
+  const processedIds = new Set<number>(existingIds);
+
+  for (const { eigaMovie, movie } of candidates) {
+    try {
+      // 既存行は触らない（同じ映画が複数エントリにマッチした場合もここで弾く）
+      if (processedIds.has(movie.id)) {
         result.skipped++;
         continue;
       }
 
       // post-filter: adultコンテンツを保存しない（iCal経由は言語フィルタなし）
-      if (bestMatch.adult) {
+      if (movie.adult) {
         result.skipped++;
         continue;
       }
 
       // post-filter: 除外キーワードを含む映画を保存しない
-      if (await hasExcludedKeyword(bestMatch.id)) {
+      if (await hasExcludedKeyword(movie.id)) {
         result.skipped++;
         continue;
       }
 
       // リバイバル上映判定
-      const revival = isRevival(bestMatch.release_date, eigaMovie.releaseDate);
+      const revival = isRevival(movie.release_date, eigaMovie.releaseDate);
       const releaseDate = revival
         ? eigaMovie.releaseDate
-        : bestMatch.release_date || null;
+        : movie.release_date || null;
 
       // movie_cacheにupsert
       const { error } = await supabase.from('movie_cache').upsert(
         {
-          id: bestMatch.id,
-          title: bestMatch.title,
-          poster_path: bestMatch.poster_path,
-          backdrop_path: bestMatch.backdrop_path,
+          id: movie.id,
+          title: movie.title,
+          poster_path: movie.poster_path,
+          backdrop_path: movie.backdrop_path,
           release_date: releaseDate,
-          overview: bestMatch.overview || null,
-          vote_average: bestMatch.vote_average,
-          vote_count: bestMatch.vote_count ?? 0,
-          popularity: bestMatch.popularity,
-          genre_ids: bestMatch.genre_ids,
+          overview: movie.overview || null,
+          vote_average: movie.vote_average,
+          vote_count: movie.vote_count ?? 0,
+          popularity: movie.popularity,
+          genre_ids: movie.genre_ids,
           release_type: RELEASE_TYPE.THEATRICAL,
           is_revival: revival,
           cached_at: now,
@@ -236,7 +294,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
         continue;
       }
 
-      existingIds.add(cacheKey);
+      processedIds.add(movie.id);
       result.added++;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

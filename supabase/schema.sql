@@ -53,18 +53,15 @@ CREATE TRIGGER update_users_updated_at
 -- --------------------------------------------
 -- accounts（ソーシャルログインアカウント連携）
 -- --------------------------------------------
+-- OAuthプロバイダとのリンク情報のみを保持する。
+-- access_token / refresh_token / id_token 等は保存しない（読み出す実装が無く、
+-- 保持は漏洩時の被害面を広げるだけのため。20261017020000 で削除済み）。
 CREATE TABLE IF NOT EXISTS accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   provider VARCHAR(50) NOT NULL,
   provider_account_id VARCHAR(255) NOT NULL,
   type VARCHAR(20) NOT NULL DEFAULT 'oauth',
-  access_token TEXT,
-  refresh_token TEXT,
-  expires_at INTEGER,
-  token_type VARCHAR(50),
-  scope VARCHAR(255),
-  id_token TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT now(),
   updated_at TIMESTAMP NOT NULL DEFAULT now()
 );

@@ -41,46 +41,28 @@ export type Database = {
     Tables: {
       accounts: {
         Row: {
-          access_token: string | null;
           created_at: string;
-          expires_at: number | null;
           id: string;
-          id_token: string | null;
           provider: string;
           provider_account_id: string;
-          refresh_token: string | null;
-          scope: string | null;
-          token_type: string | null;
           type: string;
           updated_at: string;
           user_id: string;
         };
         Insert: {
-          access_token?: string | null;
           created_at?: string;
-          expires_at?: number | null;
           id?: string;
-          id_token?: string | null;
           provider: string;
           provider_account_id: string;
-          refresh_token?: string | null;
-          scope?: string | null;
-          token_type?: string | null;
           type?: string;
           updated_at?: string;
           user_id: string;
         };
         Update: {
-          access_token?: string | null;
           created_at?: string;
-          expires_at?: number | null;
           id?: string;
-          id_token?: string | null;
           provider?: string;
           provider_account_id?: string;
-          refresh_token?: string | null;
-          scope?: string | null;
-          token_type?: string | null;
           type?: string;
           updated_at?: string;
           user_id?: string;

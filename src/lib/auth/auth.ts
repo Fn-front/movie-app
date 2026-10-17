@@ -296,19 +296,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         userId = newUser.id;
       }
 
-      // accountsテーブルにプロバイダー情報を upsert
+      // accountsテーブルにプロバイダー情報を upsert。
+      //
+      // access_token / refresh_token / id_token は保存しない。本アプリは JWT
+      // セッション戦略でアダプタを使っておらず、これらを読み出すコードが存在
+      // しないため、持っていても漏洩時の被害面を広げるだけ（#650）。
+      // 将来プロバイダAPIを叩く機能が必要になったら、暗号化付きで再導入する。
       const { error: accountError } = await supabase.from('accounts').upsert(
         {
           user_id: userId,
           provider: account.provider,
           provider_account_id: account.providerAccountId,
           type: account.type ?? 'oauth',
-          access_token: account.access_token ?? null,
-          refresh_token: account.refresh_token ?? null,
-          expires_at: account.expires_at ?? null,
-          token_type: account.token_type ?? null,
-          scope: account.scope ?? null,
-          id_token: account.id_token ?? null,
         },
         { onConflict: 'provider,provider_account_id' },
       );

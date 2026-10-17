@@ -25,8 +25,11 @@ process.env.GITHUB_CLIENT_SECRET = 'github-client-secret';
 // jest の巻き上げ制約により、ファクトリ内から参照する可変状態は `mock` プレフィックス必須。
 const mockState: {
   resolver: (ctx: { table: string; ops: string[]; single: boolean }) => unknown;
+  /** 書き込み系に渡されたペイロードの記録（何を保存しているかの検証用） */
+  writes: Array<{ table: string; method: string; payload: unknown }>;
 } = {
   resolver: () => ({ data: null, error: null }),
+  writes: [],
 };
 
 jest.mock('@supabase/supabase-js', () => {
@@ -46,9 +49,13 @@ jest.mock('@supabase/supabase-js', () => {
       'limit',
       'is',
     ];
+    const writeMethods = new Set(['insert', 'update', 'upsert']);
     for (const m of passthrough) {
-      builder[m] = jest.fn(() => {
+      builder[m] = jest.fn((payload: unknown) => {
         ops.push(m);
+        if (writeMethods.has(m)) {
+          mockState.writes.push({ table, method: m, payload });
+        }
         return builder;
       });
     }
@@ -122,6 +129,7 @@ function setResolver(fn: typeof mockState.resolver) {
 
 beforeEach(() => {
   setResolver(() => ({ data: null, error: null }));
+  mockState.writes = [];
 });
 
 // -------------------- provider 構成 --------------------
@@ -180,6 +188,49 @@ describe('signIn コールバック（OAuth）', () => {
 
     expect(result).toBe(true);
     expect(user.id).toBe('existing-1');
+  });
+
+  it('accounts にはリンク情報のみを保存し、OAuthトークンを保存しない（#650）', async () => {
+    setResolver(({ table, ops }) => {
+      if (table === 'users' && ops.includes('select'))
+        return {
+          data: { id: 'existing-1', avatar_url: 'has.png' },
+          error: null,
+        };
+      return { data: null, error: null };
+    });
+
+    await signIn({
+      user: { email: 'a@example.com' },
+      account: {
+        ...account,
+        access_token: 'at-secret',
+        refresh_token: 'rt-secret',
+        id_token: 'it-secret',
+        expires_at: 1234567890,
+        token_type: 'bearer',
+        scope: 'openid profile email',
+      },
+      profile: verifiedProfile,
+    });
+
+    const accountsUpsert = mockState.writes.find(
+      (w) => w.table === 'accounts' && w.method === 'upsert',
+    );
+
+    expect(accountsUpsert).toBeDefined();
+    expect(accountsUpsert!.payload).toEqual({
+      user_id: 'existing-1',
+      provider: 'google',
+      provider_account_id: 'g-123',
+      type: 'oauth',
+    });
+
+    // トークン類がペイロードに一切現れないこと
+    const serialized = JSON.stringify(accountsUpsert!.payload);
+    for (const secret of ['at-secret', 'rt-secret', 'it-secret']) {
+      expect(serialized).not.toContain(secret);
+    }
   });
 
   it('既存ユーザーでアバター未設定なら avatar を更新する', async () => {

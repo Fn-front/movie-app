@@ -6,6 +6,9 @@
  * 新規登録API Route テスト
  */
 
+// hashOtpCode は pepper が無いと例外を投げる（平文フォールバック禁止）
+process.env.OTP_HASH_PEPPER = 'test-pepper-value';
+
 import { POST } from './route';
 
 // --- Mocks ---
@@ -33,6 +36,8 @@ jest.mock('@/lib/otp', () => ({
   generateOtpCode: () => mockGenerateOtpCode(),
   sendOtpEmail: (...args: unknown[]) => mockSendOtpEmail(...args),
   randomDelay: () => mockRandomDelay(),
+  // 保存値はハッシュ。実装と同じ形（hex 64文字）にしておく
+  hashOtpCode: (code: string, email: string) => `hashed:${email}:${code}`,
 }));
 
 // --- Helpers ---

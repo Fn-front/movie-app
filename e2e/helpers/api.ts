@@ -4,6 +4,8 @@
  * ウォッチリストはSupabase REST APIで物理削除、フィルターはアプリAPIでリセット
  */
 
+import { createHmac } from 'crypto';
+
 import type { APIRequestContext } from '@playwright/test';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -235,6 +237,18 @@ export async function resetFilters(request: APIRequestContext): Promise<void> {
 /**
  * 指定メール・アクションの最新の未検証OTPコードをDBから取得する。
  * メール実送信に依存せずOTPフローを検証するために使用（OTP_EMAIL_TEST_BYPASS前提）。
+ *
+ * OTPコードは平文では保存されず、HMAC-SHA256（鍵 = OTP_HASH_PEPPER）の
+ * ハッシュだけがDBにある（#640）。ハッシュは戻せないため、テスト側で
+ * 000000〜999999 を総当たりして一致するコードを特定する。
+ *
+ * この方法を採るのは、**本番コードにテスト専用の分岐を一切入れないため**。
+ * 「テスト時だけ平文も保存する」「テスト時はコードを固定する」といった方式は、
+ * フラグが漏れた環境で脆弱性がそのまま復活する。
+ *
+ * 総当たりが成立するのは pepper を知っているから。DBだけを手に入れた攻撃者は
+ * HMAC を計算できないため同じことはできない（それがこの設計の要点）。
+ * 実測で1秒前後。
  */
 export async function getLatestOtpCode(
   email: string,
@@ -243,11 +257,47 @@ export async function getLatestOtpCode(
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${encodeURIComponent(email)}` +
       `&action_type=eq.${action}&verified_at=is.null` +
-      `&order=created_at.desc&limit=1&select=code`,
+      `&order=created_at.desc&limit=1&select=code_hash`,
     { headers: supabaseHeaders },
   );
   const data = await res.json();
-  return data[0]?.code ?? null;
+  const codeHash: string | null = data[0]?.code_hash ?? null;
+
+  if (!codeHash) return null;
+
+  return findOtpCodeByHash(codeHash, email);
+}
+
+/**
+ * ハッシュに一致する6桁コードを総当たりで特定する
+ *
+ * @param codeHash - DBに保存されているハッシュ（hex）
+ * @param email - 宛先メールアドレス（HMACのメッセージに含まれる）
+ * @returns 一致したコード。見つからなければ null
+ */
+function findOtpCodeByHash(codeHash: string, email: string): string | null {
+  const pepper = process.env.OTP_HASH_PEPPER;
+
+  if (!pepper) {
+    throw new Error(
+      'OTP_HASH_PEPPER が未設定のため、OTPコードを特定できません。' +
+        'E2E実行環境に本番と同じ値を設定してください。',
+    );
+  }
+
+  const prefix = `${email.toLowerCase()}:`;
+  const expected = Buffer.from(codeHash, 'hex');
+
+  for (let i = 0; i < 1_000_000; i++) {
+    const candidate = String(i).padStart(6, '0');
+    const actual = createHmac('sha256', pepper)
+      .update(`${prefix}${candidate}`)
+      .digest();
+
+    if (actual.equals(expected)) return candidate;
+  }
+
+  return null;
 }
 
 /** otp_codes の未検証レコードを PATCH するための内部ヘルパー */

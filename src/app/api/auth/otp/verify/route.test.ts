@@ -6,7 +6,11 @@
  * OTP検証API Route テスト
  */
 
+// hashOtpCode は pepper が無いと例外を投げる（平文フォールバック禁止）
+process.env.OTP_HASH_PEPPER = 'test-pepper-value';
+
 import { POST } from './route';
+import { hashOtpCode } from '@/lib/otp';
 
 // --- Mocks ---
 
@@ -57,7 +61,7 @@ describe('POST /api/auth/otp/verify', () => {
                     data: {
                       id: 'otp-1',
                       email: 'test@example.com',
-                      code: '123456',
+                      code_hash: hashOtpCode('123456', 'test@example.com'),
                       action_type: 'registration',
                       attempts: 0,
                       expires_at: futureDate,
@@ -118,7 +122,7 @@ describe('POST /api/auth/otp/verify', () => {
                     data: {
                       id: 'otp-1',
                       email: 'test@example.com',
-                      code: '123456',
+                      code_hash: hashOtpCode('123456', 'test@example.com'),
                       action_type: 'login',
                       attempts: 0,
                       expires_at: futureDate,
@@ -215,7 +219,7 @@ describe('POST /api/auth/otp/verify', () => {
                   single: () => ({
                     data: {
                       id: 'otp-1',
-                      code: '123456',
+                      code_hash: hashOtpCode('123456', 'test@example.com'),
                       attempts: 0,
                       expires_at: pastDate,
                       verified_at: null,
@@ -254,7 +258,7 @@ describe('POST /api/auth/otp/verify', () => {
                   single: () => ({
                     data: {
                       id: 'otp-1',
-                      code: '123456',
+                      code_hash: hashOtpCode('123456', 'test@example.com'),
                       attempts: 5,
                       expires_at: futureDate,
                       verified_at: null,
@@ -292,7 +296,7 @@ describe('POST /api/auth/otp/verify', () => {
                   single: () => ({
                     data: {
                       id: 'otp-1',
-                      code: '123456',
+                      code_hash: hashOtpCode('123456', 'test@example.com'),
                       attempts: 2,
                       expires_at: futureDate,
                       verified_at: null,
@@ -339,7 +343,7 @@ describe('POST /api/auth/otp/verify', () => {
                     data: {
                       id: 'otp-1',
                       email: 'test@example.com',
-                      code: '123456',
+                      code_hash: hashOtpCode('123456', 'test@example.com'),
                       action_type: 'registration',
                       attempts: 0,
                       expires_at: futureDate,
@@ -387,7 +391,7 @@ describe('POST /api/auth/otp/verify', () => {
                     data: {
                       id: 'otp-1',
                       email: 'test@example.com',
-                      code: '123456',
+                      code_hash: hashOtpCode('123456', 'test@example.com'),
                       action_type: 'password_change',
                       attempts: 0,
                       expires_at: futureDate,
@@ -440,7 +444,7 @@ describe('POST /api/auth/otp/verify', () => {
                   single: () => ({
                     data: {
                       id: 'otp-1',
-                      code: '123456',
+                      code_hash: hashOtpCode('123456', 'test@example.com'),
                       attempts: 0,
                       expires_at: futureDate,
                       verified_at: null,
@@ -520,7 +524,7 @@ describe('POST /api/auth/otp/verify', () => {
                     data: {
                       id: 'otp-1',
                       email: 'test@example.com',
-                      code: '123456',
+                      code_hash: hashOtpCode('123456', 'test@example.com'),
                       action_type: 'login',
                       attempts: 0,
                       expires_at: futureDate,

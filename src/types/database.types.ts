@@ -331,7 +331,8 @@ export type Database = {
         Row: {
           action_type: string;
           attempts: number;
-          code: string;
+          code: string | null;
+          code_hash: string | null;
           created_at: string;
           email: string;
           expires_at: string;
@@ -342,7 +343,8 @@ export type Database = {
         Insert: {
           action_type: string;
           attempts?: number;
-          code: string;
+          code?: string | null;
+          code_hash?: string | null;
           created_at?: string;
           email: string;
           expires_at: string;
@@ -353,7 +355,8 @@ export type Database = {
         Update: {
           action_type?: string;
           attempts?: number;
-          code?: string;
+          code?: string | null;
+          code_hash?: string | null;
           created_at?: string;
           email?: string;
           expires_at?: string;

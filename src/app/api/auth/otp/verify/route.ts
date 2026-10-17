@@ -10,7 +10,7 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
-import { generateVerificationToken } from '@/lib/otp';
+import { generateVerificationToken, verifyOtpCode } from '@/lib/otp';
 import { otpVerifySchema } from '@/schema/otp';
 import {
   OTP_ACTION,
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     // otp_codesテーブルから該当レコード検索（最新の未検証OTP）
     const { data: otpRecord, error: fetchError } = await supabase
       .from('otp_codes')
-      .select('id, code, attempts, expires_at')
+      .select('id, code_hash, attempts, expires_at')
       .eq('email', email)
       .eq('action_type', action)
       .is('verified_at', null)
@@ -134,7 +134,8 @@ export async function POST(request: Request) {
     }
 
     // コード照合
-    if (otpRecord.code !== code) {
+    // 平文比較ではなく HMAC の timingSafeEqual 照合（#640）
+    if (!verifyOtpCode(code, email, otpRecord.code_hash)) {
       // 試行回数をインクリメント
       const newAttempts = otpRecord.attempts + 1;
       await supabase

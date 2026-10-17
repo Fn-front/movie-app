@@ -3,6 +3,7 @@
  */
 
 import {
+  RECOMMENDATIONS_DISMISSED_TRAIT_LIMIT,
   RECOMMENDATIONS_HIGH_RATING_THRESHOLD,
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_RATING_BANDS,
@@ -31,11 +32,20 @@ export interface ExcludedMovie {
   title: string;
 }
 
-/** 興味なし映画の情報 */
+/**
+ * 興味なし映画の情報
+ *
+ * keywords / director_name / release_year は傾向学習用に dismiss 時点で
+ * TMDbから収集する。収集機能の導入前に登録されたレコードや、
+ * 収集に失敗したレコードは null になる。
+ */
 export interface DismissedMovie {
   tmdb_movie_id: number;
   title: string;
   genre_ids: number[] | null;
+  keywords: string[] | null;
+  director_name: string | null;
+  release_year: number | null;
 }
 
 /** TMDb検索結果から取得したレコメンド映画情報 */
@@ -65,6 +75,7 @@ function buildSystemPrompt(count: number): string {
 - 実在する映画のみ推薦すること
 - ジャンル、監督、テーマ、雰囲気などの傾向を分析して推薦すること
 - 「興味なし」リストがある場合、それらの映画のジャンルやテーマの傾向を避けること
+- 「避けるべき傾向」が示されている場合、そこに挙がった監督・テーマ・年代に当てはまる作品は推薦しないこと
 - 推薦理由は日本語で1〜2文で簡潔に書くこと
 
 評価の重みづけ:
@@ -134,6 +145,76 @@ function buildFavoriteSections(favorites: FavoriteMovie[]): string {
 }
 
 /**
+ * 値の出現回数を数え、多い順に上位N件を返す
+ *
+ * @param values - 集計対象の値（null・空文字は無視する）
+ * @param limit - 返す件数の上限
+ */
+function pickMostFrequent(
+  values: (string | null | undefined)[],
+  limit: number,
+): string[] {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    if (!value) {
+      continue;
+    }
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([value]) => value);
+}
+
+/**
+ * 「興味なし」から読み取れる避けるべき傾向をまとめる
+ *
+ * 個々のタイトルを列挙するだけでは、AIは「このユーザーが何を嫌うのか」を
+ * 抽象化できない。頻出する監督・テーマ・年代を明示的に渡すことで、
+ * 同系統の作品を推薦させないようにする。
+ *
+ * 収集前の古いレコードは各項目が null のため、該当する行は出力しない。
+ *
+ * @param dismissedMovies - 興味なし映画リスト
+ * @returns 傾向の箇条書き。1件も傾向が得られなければ空文字
+ */
+function buildDismissedTraits(dismissedMovies: DismissedMovie[]): string {
+  const lines: string[] = [];
+
+  const directors = pickMostFrequent(
+    dismissedMovies.map((d) => d.director_name),
+    RECOMMENDATIONS_DISMISSED_TRAIT_LIMIT,
+  );
+  if (directors.length > 0) {
+    lines.push(`- 監督: ${directors.join('、')}`);
+  }
+
+  const keywords = pickMostFrequent(
+    dismissedMovies.flatMap((d) => d.keywords ?? []),
+    RECOMMENDATIONS_DISMISSED_TRAIT_LIMIT,
+  );
+  if (keywords.length > 0) {
+    lines.push(`- テーマ: ${keywords.join('、')}`);
+  }
+
+  // 年代は10年単位に丸めてから集計する（1994年と1998年を同じ傾向として扱う）
+  const decades = pickMostFrequent(
+    dismissedMovies.map((d) =>
+      d.release_year === null
+        ? null
+        : `${Math.floor(d.release_year / 10) * 10}年代`,
+    ),
+    RECOMMENDATIONS_DISMISSED_TRAIT_LIMIT,
+  );
+  if (decades.length > 0) {
+    lines.push(`- 年代: ${decades.join('、')}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * お気に入り映画リストからユーザープロンプトを組み立てる
  */
 export function buildUserPrompt(
@@ -155,6 +236,11 @@ export function buildUserPrompt(
       })
       .join('\n');
     prompt += `\n\n## 興味なしリスト（これらの映画やその傾向は避けてください）\n${dismissedLines}`;
+
+    const traits = buildDismissedTraits(dismissedMovies);
+    if (traits) {
+      prompt += `\n\n### 避けるべき傾向\n${traits}`;
+    }
   }
 
   if (watchlistTitles.length > 0) {

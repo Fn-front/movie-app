@@ -157,7 +157,9 @@ export async function collectUserMovieData(
 
   const { data: dismissedItems } = await supabase
     .from('dismissed_movies')
-    .select('tmdb_movie_id, title, genre_ids')
+    .select(
+      'tmdb_movie_id, title, genre_ids, keywords, director_name, release_year',
+    )
     .eq('user_id', userId)
     .is('deleted_at', null);
 

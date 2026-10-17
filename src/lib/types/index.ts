@@ -144,6 +144,32 @@ export interface Videos {
 export interface Credits {
   /** キャスト一覧 */
   cast: Cast[];
+  /** スタッフ一覧（監督の特定に使用。append_to_response=credits で返る） */
+  crew?: Crew[];
+}
+
+/**
+ * スタッフ型
+ */
+export interface Crew {
+  /** スタッフID */
+  id: number;
+  /** 氏名 */
+  name: string;
+  /** 担当（監督は 'Director'） */
+  job: string;
+}
+
+/**
+ * 「興味なし」の傾向学習に使う映画のメタ情報
+ */
+export interface DismissSignals {
+  /** TMDbキーワード名の配列（テーマ傾向） */
+  keywords: string[];
+  /** 監督名。クレジットに無ければ null */
+  directorName: string | null;
+  /** 公開年。公開日が不明なら null */
+  releaseYear: number | null;
 }
 
 /**

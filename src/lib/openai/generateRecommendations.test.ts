@@ -8,6 +8,7 @@
 
 import {
   OPENAI_CONFIG,
+  RECOMMENDATIONS_DISMISSED_TRAIT_LIMIT,
   RECOMMENDATIONS_HIGH_RATING_THRESHOLD,
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_MAX_REQUEST_COUNT,
@@ -35,6 +36,7 @@ import {
   buildUserPrompt,
   fetchRecommendationsFromOpenAI,
   resolveRecommendationsWithTMDb,
+  type DismissedMovie,
 } from './generateRecommendations';
 
 /** AIレスポンスとして保持される最大件数（1回の要求件数の上限と揃う） */
@@ -61,6 +63,20 @@ function mockRecommendations(
   mockCreate.mockResolvedValue(
     createMockResponseOutput(JSON.stringify({ recommendations: items })),
   );
+}
+
+/** 興味なし映画の1件分を組み立てる（傾向カラムは未指定なら未収集扱いの null） */
+function createDismissed(
+  overrides: Partial<DismissedMovie> & { title: string },
+): DismissedMovie {
+  return {
+    tmdb_movie_id: 1,
+    genre_ids: null,
+    keywords: null,
+    director_name: null,
+    release_year: null,
+    ...overrides,
+  };
 }
 
 /** TMDb検索結果の1件分を組み立てる（original_title は未指定なら title と同じ） */
@@ -209,8 +225,16 @@ describe('buildUserPrompt', () => {
   it('興味なしリストが含まれる場合、興味なしセクションをジャンル名付きで追加する', () => {
     const favorites = [{ title: 'インターステラー', rating: 9 }];
     const dismissedMovies = [
-      { tmdb_movie_id: 10, title: 'ホラー映画A', genre_ids: [27] },
-      { tmdb_movie_id: 20, title: 'ホラー映画B', genre_ids: [27, 53] },
+      createDismissed({
+        tmdb_movie_id: 10,
+        title: 'ホラー映画A',
+        genre_ids: [27],
+      }),
+      createDismissed({
+        tmdb_movie_id: 20,
+        title: 'ホラー映画B',
+        genre_ids: [27, 53],
+      }),
     ];
     const prompt = buildUserPrompt(favorites, [], dismissedMovies);
 
@@ -222,7 +246,7 @@ describe('buildUserPrompt', () => {
   it('genre_idsがnullの場合、ジャンル名なしで表示する', () => {
     const favorites = [{ title: 'テスト映画', rating: 5 }];
     const dismissedMovies = [
-      { tmdb_movie_id: 10, title: '不明ジャンル映画', genre_ids: null },
+      createDismissed({ tmdb_movie_id: 10, title: '不明ジャンル映画' }),
     ];
     const prompt = buildUserPrompt(favorites, [], dismissedMovies);
 
@@ -235,6 +259,107 @@ describe('buildUserPrompt', () => {
     const prompt = buildUserPrompt(favorites, [], []);
 
     expect(prompt).not.toContain('## 興味なしリスト');
+  });
+
+  describe('興味なしから抽出する「避けるべき傾向」', () => {
+    const favorites = [{ title: 'テスト映画', rating: 5 }];
+
+    it('監督・テーマ・年代をまとめて提示する', () => {
+      const prompt = buildUserPrompt(
+        favorites,
+        [],
+        [
+          createDismissed({
+            title: '映画A',
+            director_name: 'Michael Bay',
+            keywords: ['explosion', 'robot'],
+            release_year: 2011,
+          }),
+        ],
+      );
+
+      expect(prompt).toContain('### 避けるべき傾向');
+      expect(prompt).toContain('- 監督: Michael Bay');
+      expect(prompt).toContain('- テーマ: explosion、robot');
+      expect(prompt).toContain('- 年代: 2010年代');
+    });
+
+    it('出現回数が多い順に並べる', () => {
+      const prompt = buildUserPrompt(
+        favorites,
+        [],
+        [
+          createDismissed({ title: 'A', keywords: ['slasher', 'gore'] }),
+          createDismissed({ title: 'B', keywords: ['gore'] }),
+          createDismissed({ title: 'C', keywords: ['gore'] }),
+        ],
+      );
+
+      expect(prompt).toContain('- テーマ: gore、slasher');
+    });
+
+    it('上限件数を超える傾向は切り捨てる', () => {
+      const keywords = Array.from(
+        { length: RECOMMENDATIONS_DISMISSED_TRAIT_LIMIT + 3 },
+        (_, i) => `theme${i + 1}`,
+      );
+      const prompt = buildUserPrompt(
+        favorites,
+        [],
+        [createDismissed({ title: 'A', keywords })],
+      );
+
+      const themeLine = prompt
+        .split('\n')
+        .find((line) => line.startsWith('- テーマ:'));
+      expect(themeLine?.split('、')).toHaveLength(
+        RECOMMENDATIONS_DISMISSED_TRAIT_LIMIT,
+      );
+    });
+
+    it('年代は10年単位に丸めて集計する', () => {
+      const prompt = buildUserPrompt(
+        favorites,
+        [],
+        [
+          createDismissed({ title: 'A', release_year: 1994 }),
+          createDismissed({ title: 'B', release_year: 1998 }),
+          createDismissed({ title: 'C', release_year: 2003 }),
+        ],
+      );
+
+      expect(prompt).toContain('- 年代: 1990年代、2000年代');
+    });
+
+    it('収集前の古いレコードしか無い場合、傾向セクションを出力しない', () => {
+      // keywords / director_name / release_year 収集の導入前に登録されたレコード
+      const prompt = buildUserPrompt(
+        favorites,
+        [],
+        [createDismissed({ title: '収集前の映画', genre_ids: [27] })],
+      );
+
+      expect(prompt).toContain('## 興味なしリスト');
+      expect(prompt).not.toContain('### 避けるべき傾向');
+    });
+
+    it('一部の項目だけ収集済みの場合、その項目だけ出力する', () => {
+      const prompt = buildUserPrompt(
+        favorites,
+        [],
+        [
+          createDismissed({ title: '収集前の映画' }),
+          createDismissed({
+            title: '収集済みの映画',
+            director_name: 'Uwe Boll',
+          }),
+        ],
+      );
+
+      expect(prompt).toContain('- 監督: Uwe Boll');
+      expect(prompt).not.toContain('- テーマ:');
+      expect(prompt).not.toContain('- 年代:');
+    });
   });
 });
 

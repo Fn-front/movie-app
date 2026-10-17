@@ -20,9 +20,14 @@ const OPENAI_RECOMMENDATIONS_MAX_RESPONSE =
 
 /**
  * OpenAIレスポンスの個別レコメンド項目スキーマ
+ *
+ * 邦題・原題の両方を返させることで、TMDb検索の取りこぼしを減らす。
+ * 単一の曖昧なタイトル文字列だけでは、表記揺れ（中黒の有無など）で
+ * 検索0件になったり、同名の別作品に誤ヒットしたりする。
  */
 export const openAiRecommendationItemSchema = z.object({
-  title: z.string().min(1, '映画タイトルは必須です'),
+  title_ja: z.string().min(1, '邦題は必須です'),
+  title_en: z.string().min(1, '原題は必須です'),
   year: z
     .number()
     .int('公開年は整数で入力してください')

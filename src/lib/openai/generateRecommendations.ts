@@ -58,7 +58,7 @@ function buildSystemPrompt(count: number): string {
 ユーザーのお気に入り映画と評価（1〜10点）を分析し、そのユーザーが好みそうな映画を${count}件推薦してください。
 
 ルール:
-- 除外リストにある映画は絶対に推薦しないこと
+- 既に見た作品リストにある映画は推薦しないこと。ただし同名の別作品（リメイク・シリーズの別エピソード）は別の映画として扱ってよい
 - アダルト作品（成人向け・ポルノ・ピンク映画等）は絶対に推薦しないこと
 - 実在する映画のみ推薦すること
 - ジャンル、監督、テーマ、雰囲気などの傾向を分析して推薦すること
@@ -66,11 +66,17 @@ function buildSystemPrompt(count: number): string {
 - 「興味なし」リストがある場合、それらの映画のジャンルやテーマの傾向を避けること
 - 推薦理由は日本語で1〜2文で簡潔に書くこと
 
+タイトルの返し方:
+- title_ja には日本公開時の邦題を、title_en には原題を入れること
+- 邦題が存在しない作品は title_ja にも原題を入れること
+- yearは映画の公開年。記憶が曖昧な場合も必ず最も確からしい年を1つ返すこと
+
 レスポンスは以下のJSON形式で返してください:
 {
   "recommendations": [
     {
-      "title": "映画の原題または最も一般的なタイトル",
+      "title_ja": "邦題",
+      "title_en": "原題",
       "year": 2024,
       "reason": "推薦理由"
     }
@@ -111,7 +117,10 @@ export function buildUserPrompt(
 
   if (excludedTitles.length > 0) {
     const excludeLines = excludedTitles.map((t) => `- ${t}`).join('\n');
-    prompt += `\n\n## 除外リスト（これらの映画は推薦しないでください）\n${excludeLines}`;
+    // 「除外リスト」ではなく「既に見た作品」として渡す。
+    // タイトル文字列でAIに除外を強制すると、同名のリメイクやシリーズの別作品まで
+    // 巻き添えで推薦されなくなる。実際の除外はサーバー側のID照合で行う。
+    prompt += `\n\n## 既に見た作品（重複して推薦しないでください）\n${excludeLines}`;
   }
 
   return prompt;
@@ -147,26 +156,59 @@ export async function fetchRecommendationsFromOpenAI(
   );
 
   try {
-    const response = await client.chat.completions.create(
+    const response = await client.responses.create(
       {
         model: getOpenAIModel(),
-        messages: [
-          { role: 'system', content: buildSystemPrompt(count) },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
+        instructions: buildSystemPrompt(count),
+        input: userPrompt,
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'recommendations_response',
+            schema: {
+              type: 'object',
+              properties: {
+                recommendations: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      title_ja: { type: 'string' },
+                      title_en: { type: 'string' },
+                      year: { type: 'number' },
+                      reason: { type: 'string' },
+                    },
+                    required: ['title_ja', 'title_en', 'year', 'reason'],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ['recommendations'],
+              additionalProperties: false,
+            },
+            strict: true,
+          },
+        },
         temperature: OPENAI_CONFIG.RECOMMENDATIONS_TEMPERATURE,
       },
       { signal },
     );
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      console.error('OpenAI returned empty response');
+    const textOutput = response.output.find((o) => o.type === 'message');
+    if (!textOutput || textOutput.type !== 'message') {
+      console.error('OpenAI returned no message output');
       return null;
     }
 
-    const parsed = JSON.parse(content);
+    const textContent = textOutput.content.find(
+      (c) => c.type === 'output_text',
+    );
+    if (!textContent || textContent.type !== 'output_text') {
+      console.error('OpenAI returned no text content');
+      return null;
+    }
+
+    const parsed = JSON.parse(textContent.text);
     const result = openAiRecommendationsResponseSchema.safeParse(parsed);
 
     if (!result.success) {
@@ -194,33 +236,61 @@ function getReleaseYear(releaseDate: string | null | undefined): number | null {
 }
 
 /**
- * TMDb検索結果から、AIが指定した公開年に最も近い候補を選ぶ
+ * TMDb検索結果から、AIが指定した公開年と一致する候補だけを残す
  *
  * 検索はタイトルのみで行う（TMDb APIのyearは厳密フィルタのため、1年ずれると
- * 0件になる）ため、結果はTMDbの関連度順に並ぶ。その並びを尊重しつつ、AIが返した
- * 公開年と許容範囲内で一致する最初の候補を優先する。一致がなければ先頭を採用する。
+ * 0件になる）ため、結果はTMDbの関連度順に並ぶ。その並びを保ったまま、AIが返した
+ * 公開年と許容範囲内で一致するものに絞り込む。
+ *
+ * 公開年が一致しない候補は棄却する。以前は関連度順の先頭にフォールバックしており、
+ * 「アクション・ヒーロー(2021)」の検索結果から「ラスト・アクション・ヒーロー(1993)」を
+ * 採用するような同名別作品の誤解決を招いていた。
  *
  * @param results - TMDb検索結果
  * @param year - AIが返した公開年
- * @returns 採用する映画。結果が空なら undefined
+ * @returns 公開年が一致する映画の配列（関連度順）
  */
-function selectBestMovieMatch(
-  results: Movie[],
-  year: number,
-): Movie | undefined {
-  if (results.length === 0) {
-    return undefined;
-  }
-
-  const matched = results.find((movie) => {
+function filterByReleaseYear(results: Movie[], year: number): Movie[] {
+  return results.filter((movie) => {
     const releaseYear = getReleaseYear(movie.release_date);
     return (
       releaseYear !== null &&
       Math.abs(releaseYear - year) <= RECOMMENDATIONS_YEAR_MATCH_TOLERANCE
     );
   });
+}
 
-  return matched ?? results[0];
+/**
+ * タイトル比較用に表記揺れを吸収する
+ *
+ * 中黒・空白・記号の有無だけが違う同一作品（「ナイト・クローラー」と
+ * 「ナイトクローラー」など）を同じ文字列として扱う。
+ */
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/[\s・:：\-－−—.,!！?？'"]/g, '');
+}
+
+/**
+ * 検索語と邦題・原題が厳密に一致する候補を探す
+ *
+ * 公開年の一致だけでは、検索語を含む別作品を拾ってしまう。
+ * 例: 「The Purge」で検索すると同じ2013年の「The Purge: The Morning After」が
+ * 関連度順で先に来て、本来の「パージ」を追い越す。
+ *
+ * @param results - 公開年で絞り込み済みのTMDb検索結果
+ * @param query - 検索に使ったタイトル
+ * @returns タイトルが厳密に一致する映画。なければ undefined
+ */
+function findExactTitleMatch(
+  results: Movie[],
+  query: string,
+): Movie | undefined {
+  const normalizedQuery = normalizeTitle(query);
+  return results.find(
+    (movie) =>
+      normalizeTitle(movie.title) === normalizedQuery ||
+      normalizeTitle(movie.original_title ?? '') === normalizedQuery,
+  );
 }
 
 /**
@@ -247,18 +317,44 @@ export async function resolveRecommendationsWithTMDb(
     }
 
     try {
-      // yearなしで検索（TMDb APIのyearは厳密フィルタのため、1年ずれると0件になる）
-      const searchResult = await searchMovies(
-        { query: item.title },
-        { signal },
-      );
+      /**
+       * 公開年が一致する候補を関連度順で取得する
+       *
+       * yearなしで検索する（TMDb APIのyearは厳密フィルタのため、1年ずれると
+       * 0件になる）。adult作品を除外するのは、searchMoviesでも除外済みだが、
+       * レコメンドはDBに保存され全ユーザーに表示されるための二重防御。
+       */
+      const searchSafely = async (query: string) => {
+        const searchResult = await searchMovies({ query }, { signal });
+        const safeResults = searchResult.results.filter(
+          (movie) => !movie.adult,
+        );
+        return filterByReleaseYear(safeResults, item.year);
+      };
 
-      // adult作品を除外（searchMoviesでも除外済みだが、レコメンドはDBに保存され
-      // 全ユーザーに表示されるため、保存直前でも明示的に弾く二重防御とする）
-      const safeResults = searchResult.results.filter((movie) => !movie.adult);
+      // 邦題・原題の順に検索し、タイトルが厳密に一致する候補を最優先で採用する。
+      // AIが返す邦題は表記揺れ（「ナイト・クローラー」と「ナイトクローラー」など）
+      // でTMDbに一致しないことがあるため、原題を第2の手掛かりとして使う。
+      const queries =
+        item.title_en === item.title_ja
+          ? [item.title_ja]
+          : [item.title_ja, item.title_en];
 
-      // タイトル一致かつ公開年が近い結果を優先的に選択
-      const movie = selectBestMovieMatch(safeResults, item.year);
+      let movie: Movie | undefined;
+      // 厳密一致が1件も無かった場合に使う、関連度最上位かつ公開年が一致する候補
+      let relevanceFallback: Movie | undefined;
+
+      for (const query of queries) {
+        const candidates = await searchSafely(query);
+        const exact = findExactTitleMatch(candidates, query);
+        if (exact) {
+          movie = exact;
+          break;
+        }
+        relevanceFallback ??= candidates[0];
+      }
+
+      movie ??= relevanceFallback;
       if (!movie) {
         continue;
       }
@@ -295,7 +391,10 @@ export async function resolveRecommendationsWithTMDb(
         break;
       }
     } catch (error) {
-      console.error(`TMDb search failed for "${item.title}":`, error);
+      console.error(
+        `TMDb search failed for "${item.title_ja}" / "${item.title_en}":`,
+        error,
+      );
       continue;
     }
   }

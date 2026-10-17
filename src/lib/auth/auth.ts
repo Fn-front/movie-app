@@ -16,11 +16,15 @@ import {
   SUPABASE_ERROR_CODE,
   LOGIN_METHOD,
   USER_ROLE,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 import { OTP_ACTION, OTP_CONFIG } from '@/constants/otp';
 import { isSessionExpired } from '@/lib/auth/sessionExpiry';
 import { hashVerificationToken } from '@/lib/otp/verificationToken';
 import { fetchVerifiedGitHubProfile } from '@/lib/auth/githubProfile';
+import { getClientIp } from '@/lib/http/getClientIp';
+import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -52,7 +56,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         loginMethod: { label: 'Login Method', type: 'text' },
         verificationToken: { label: 'Verification Token', type: 'text' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!supabase) {
           throw new Error(AUTH_ERROR_MESSAGES.DB_CONNECTION_ERROR);
         }
@@ -65,11 +69,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const loginMethod =
           (credentials.loginMethod as string) || LOGIN_METHOD.PASSWORD;
 
-        // レート制限チェック（emailベース: 3回失敗で30分ロック）
+        const clientIp = getClientIp(request);
+        const loginIdentifier = buildLoginIdentifier(email, clientIp);
+
+        // 送信元単位のレート制限。1つの送信元からの大量試行を止める
+        if (clientIp !== 'unknown') {
+          const ipLimitResult = await checkRateLimit(
+            supabase,
+            clientIp,
+            RATE_LIMIT_ACTION.LOGIN_IP,
+            RATE_LIMIT_CONFIG.LOGIN_IP.maxAttempts,
+            RATE_LIMIT_CONFIG.LOGIN_IP.windowMinutes,
+          );
+
+          if (!ipLimitResult.allowed) {
+            throw new Error(AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED);
+          }
+        }
+
+        // アカウント×送信元のレート制限。
+        // 識別子に送信元を含めるため、第三者が誤ったパスワードを試しても
+        // ロックされるのはその第三者自身であり、正当な利用者は締め出されない
         const rateLimitResult = await checkRateLimit(
           supabase,
-          email,
+          loginIdentifier,
           OTP_ACTION.LOGIN,
+          RATE_LIMIT_CONFIG.LOGIN_ACCOUNT.maxAttempts,
+          RATE_LIMIT_CONFIG.LOGIN_ACCOUNT.windowMinutes,
         );
 
         if (!rateLimitResult.allowed) {
@@ -161,8 +187,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         }
 
-        // 認証成功 — レート制限リセット
-        await resetRateLimit(supabase, email, OTP_ACTION.LOGIN);
+        // 認証成功 — レート制限リセット。
+        // 送信元単位（LOGIN_IP）はリセットしない。正当なログイン1回で、
+        // 同じ送信元からの総当たり分までご破算になってしまうため
+        await resetRateLimit(supabase, loginIdentifier, OTP_ACTION.LOGIN);
 
         return {
           id: user.id,

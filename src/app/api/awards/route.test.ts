@@ -295,16 +295,17 @@ describe('GET /api/awards', () => {
       expect(response.headers.get('Cache-Control')).toBe('no-store');
     });
 
-    it('x-forwarded-forからIPアドレスを取得する', async () => {
+    it('x-forwarded-for からIPアドレスを取得する（詐称可能な先頭は使わない）', async () => {
       (checkRateLimit as jest.Mock).mockResolvedValueOnce({ allowed: true });
       mockYearQuery([2026]);
       mockAwardDataQuery([]);
 
+      // 先頭はクライアントが詐称できるため、プロキシが追記した末尾側を使う（#647）
       await GET(createRequest('2026', '10.0.0.1, 10.0.0.2'));
 
       expect(checkRateLimit).toHaveBeenCalledWith(
         expect.anything(),
-        '10.0.0.1',
+        '10.0.0.2',
         'awards_fetch',
         30,
         10,

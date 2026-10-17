@@ -88,6 +88,45 @@ export const RECOMMENDATIONS_ACTIVE_USER_DAYS = 3;
 export const RECOMMENDATIONS_BATCH_SIZE = 5;
 
 /**
+ * レコメンド利用イベントの種別
+ *
+ * CTR = click / impression、ウォッチリスト追加率 = add_to_watchlist / impression、
+ * dismiss率 = dismiss / impression で算出する。
+ */
+export const RECOMMENDATION_EVENT_TYPE = {
+  /** 画面に表示された */
+  IMPRESSION: 'impression',
+  /** タイルがクリックされた */
+  CLICK: 'click',
+  /** ウォッチリストに追加された */
+  ADD_TO_WATCHLIST: 'add_to_watchlist',
+  /** 興味なしにされた */
+  DISMISS: 'dismiss',
+} as const;
+
+export type RecommendationEventType =
+  (typeof RECOMMENDATION_EVENT_TYPE)[keyof typeof RECOMMENDATION_EVENT_TYPE];
+
+/**
+ * 表示（impression）とみなすタイルの可視率
+ * Intersection Observer の threshold に渡す。
+ */
+export const RECOMMENDATION_IMPRESSION_THRESHOLD = 0.5;
+
+/**
+ * 利用イベントの保持日数
+ * 行動ログを無期限に持たないよう、日次CRONで超過分を削除する。
+ */
+export const RECOMMENDATION_EVENT_RETENTION_DAYS = 90;
+
+/**
+ * 1リクエストで記録できるイベント件数の上限
+ * 表示イベントはまとめて送るため複数件を許容するが、
+ * 1画面のレコメンド最大件数（10件）に各種別が付く程度を想定した上限とする。
+ */
+export const RECOMMENDATION_EVENTS_MAX_PER_REQUEST = 40;
+
+/**
  * レコメンド手動更新設定
  */
 export const RECOMMENDATION_REFRESH = {
@@ -114,6 +153,14 @@ export const RECOMMENDATIONS_MESSAGES = {
   NOT_GENERATED: 'おすすめ映画を準備中です',
   SECTION_TITLE: 'あなたへのおすすめ',
   GENERATION_ERROR: 'レコメンド生成中にエラーが発生しました',
+} as const;
+
+/**
+ * レコメンド利用イベント記録のメッセージ
+ */
+export const RECOMMENDATION_EVENTS_MESSAGES = {
+  INVALID_BODY: 'イベントの内容が不正です',
+  RECORD_FAILED: 'イベントの記録に失敗しました',
 } as const;
 
 /**

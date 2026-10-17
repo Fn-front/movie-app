@@ -320,8 +320,12 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.processed_users).toBe(1);
-    expect(mockRpc).toHaveBeenCalledTimes(1);
+    // 洗い替えRPC + 期限切れイベント削除RPC の2回
+    expect(mockRpc).toHaveBeenCalledTimes(2);
     expect(mockRpc.mock.calls[0][0]).toBe('upsert_recommendations');
+    expect(mockRpc.mock.calls[1][0]).toBe(
+      'delete_expired_recommendation_events',
+    );
     // from() はお気に入り/ウォッチリスト/興味なし/ユーザー取得の読み取りのみ
     expect(mockFrom).toHaveBeenCalledTimes(5);
   });

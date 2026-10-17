@@ -66,6 +66,8 @@ export const API_ENDPOINTS = {
   FILTERS: '/api/filters',
   /** レコメンド手動更新 */
   RECOMMENDATIONS_REFRESH: '/api/recommendations/refresh',
+  /** レコメンド利用イベントの記録 */
+  RECOMMENDATIONS_EVENTS: '/api/recommendations/events',
   /** レコメンド更新回数 */
   RECOMMENDATIONS_REFRESH_COUNT: '/api/recommendations/refresh-count',
 } as const;

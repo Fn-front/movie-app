@@ -30,6 +30,8 @@ import {
   hashOtpCode,
 } from '@/lib/otp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
+import { getClientIp } from '@/lib/http/getClientIp';
 
 export async function POST(request: Request) {
   try {
@@ -54,10 +56,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // レート制限チェック（email単位で5回/60分）
+    // 登録試行のレート制限（アカウント×送信元で5回/60分）。
+    //
+    // 識別子にメールアドレス単独を使っていたときは、第三者が被害者のメールで
+    // 数回POSTするだけで本人を60分間登録不能にできた（#644と同種）。
+    // 送信元を含めればロックされるのは試行した本人だけになる。
+    // メールボックス側の保護は、下部の日次送信上限（OTP_SEND_DAILY）が担う。
+    const clientIp = getClientIp(request);
     const rateLimitResult = await checkRateLimit(
       supabase,
-      result.data.email,
+      buildLoginIdentifier(result.data.email, clientIp),
       RATE_LIMIT_ACTION.REGISTER,
       RATE_LIMIT_CONFIG.REGISTER.maxAttempts,
       RATE_LIMIT_CONFIG.REGISTER.windowMinutes,
@@ -107,6 +115,41 @@ export async function POST(request: Request) {
           message: AUTH_ERROR_MESSAGES.REGISTER_SUCCESS,
         },
         { status: HTTP_STATUS.CREATED },
+      );
+    }
+
+    // 日次送信上限チェック（メールアドレス単位で5通/日）。
+    //
+    // register は確認コードメールを直接送るため、/api/auth/otp/send と
+    // 同じ送信カウンタを消費させる。ここを通していなかったときは、
+    // register 経由なら日次上限の管轄外で 5通/60分（最大120通/日）送れた。
+    //
+    // 位置の意図:
+    // - 認証済みメールの早期return（上）より後 … 1通も送らないパスで枠を減らさない
+    // - ユーザー作成（下）より前 … 枠切れのときに未検証ユーザー行を作らない
+    const dailyLimitResult = await checkRateLimit(
+      supabase,
+      email,
+      RATE_LIMIT_ACTION.OTP_SEND_DAILY,
+      OTP_CONFIG.DAILY_SEND_LIMIT,
+      OTP_CONFIG.DAILY_SEND_WINDOW_MINUTES,
+    );
+
+    if (!dailyLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
+            message: OTP_ERROR_MESSAGES.DAILY_LIMIT_EXCEEDED,
+          },
+        },
+        {
+          status: HTTP_STATUS.TOO_MANY_REQUESTS,
+          headers: dailyLimitResult.retryAfter
+            ? { 'Retry-After': String(dailyLimitResult.retryAfter) }
+            : undefined,
+        },
       );
     }
 

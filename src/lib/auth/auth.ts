@@ -24,6 +24,7 @@ import { isSessionExpired } from '@/lib/auth/sessionExpiry';
 import { hashVerificationToken } from '@/lib/otp/verificationToken';
 import { fetchVerifiedGitHubProfile } from '@/lib/auth/githubProfile';
 import { getClientIp } from '@/lib/http/getClientIp';
+import { normalizeEmail } from '@/utils/email';
 import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 
@@ -65,7 +66,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.CREDENTIALS_REQUIRED);
         }
 
-        const email = credentials.email as string;
+        // 表記揺れで別アカウント扱いにならないよう、DBを引く前に正規化する
+        const email = normalizeEmail(credentials.email as string);
         const loginMethod =
           (credentials.loginMethod as string) || LOGIN_METHOD.PASSWORD;
 
@@ -278,7 +280,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return false;
       }
 
-      const email = user.email;
+      // プロバイダが返す表記（GitHub は利用者が入力したまま保持しうる）を
+      // 正規化してから既存アカウントを引く。表記違いで取りこぼすと、
+      // リンクされず同一人物の重複アカウントが黙って作られる。
+      const email = normalizeEmail(user.email);
 
       // 既存ユーザーを検索
       const { data: existingUser, error: findError } = await supabase

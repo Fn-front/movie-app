@@ -421,6 +421,29 @@ describe('POST /api/auth/otp/send', () => {
   // === 日次送信上限 ===
 
   it('日次送信上限超過で429を返す', async () => {
+    // 上限チェックは「実際に送る直前」まで降りてから行うため、
+    // ユーザー検索と再送間隔チェックのモックが先に必要になる
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({ data: { id: 'user-1' }, error: null }),
+        }),
+      }),
+    });
+    // 前回送信なし
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                single: () => ({ data: null, error: { code: 'PGRST116' } }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
     mockCheckRateLimit.mockResolvedValueOnce({
       allowed: false,
       retryAfter: 86400,
@@ -459,6 +482,119 @@ describe('POST /api/auth/otp/send', () => {
       'otp_send_daily',
       5,
       1440,
+    );
+  });
+
+  // === 送信しないパスでは日次上限を消費しない ===
+  // 枠の目的はメールボックスの保護なので、1通も送らないリクエストで減らさない。
+  // 減っていると、第三者が被害者のアドレスを叩くだけで本人の受け取れる通数を削れる。
+
+  it('ユーザーが存在しない場合は日次上限を消費しない', async () => {
+    // ユーザー検索（不在）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({ data: null, error: { code: 'PGRST116' } }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({ email: 'nobody@example.com', action: 'login' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
+  });
+
+  it('既に認証済みの場合は日次上限を消費しない', async () => {
+    // ユーザー検索（認証済み）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'user-1', is_verified: true },
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', action: 'registration' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
+  });
+
+  it('再送間隔内で弾かれる場合は日次上限を消費しない', async () => {
+    // ユーザー検索
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({ data: { id: 'user-1' }, error: null }),
+        }),
+      }),
+    });
+    // 直前に送信済み（再送間隔内）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                single: () => ({
+                  data: { created_at: new Date().toISOString() },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', action: 'login' }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
+  });
+
+  // === メールアドレスの正規化 ===
+
+  it('大小文字が異なる表記でも同じカウンタ・同じ宛先に正規化される', async () => {
+    // ユーザー検索
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({ data: { id: 'user-1' }, error: null }),
+        }),
+      }),
+    });
+    setupOtpFlowMocks();
+
+    const { sendOtpEmail } = await import('@/lib/otp');
+
+    await POST(
+      createRequest({ email: '  TeSt@ExAmPle.COM  ', action: 'login' }),
+    );
+
+    // レート制限の識別子が正規化済みであること（表記を変えても枠を分けられない）
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_send_daily',
+      5,
+      1440,
+    );
+    // 送信先も正規化済みであること
+    expect(sendOtpEmail).toHaveBeenCalledWith(
+      'test@example.com',
+      expect.any(String),
+      'login',
     );
   });
 });

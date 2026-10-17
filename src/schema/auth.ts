@@ -6,6 +6,22 @@ import { z } from 'zod';
 
 import { VALIDATION } from '@/constants';
 import { VALIDATION_MESSAGES } from '@/constants/auth';
+import { normalizeEmail } from '@/utils/email';
+
+/**
+ * 正規化済みメールアドレス
+ *
+ * 形式検証の後に小文字化する。大小文字違いが別アカウント・別レート制限
+ * カウンタになると、表記を変えるだけで登録上限・送信上限を回避できてしまう
+ * ため、スキーマの時点で表記を1つに畳む。
+ */
+const normalizedEmailSchema = z
+  .string()
+  .trim()
+  .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
+  .max(VALIDATION.EMAIL_MAX_LENGTH, VALIDATION_MESSAGES.EMAIL_TOO_LONG)
+  .email(VALIDATION_MESSAGES.EMAIL_INVALID)
+  .transform(normalizeEmail);
 
 /**
  * パスワードバリデーション（ポリシー付き）
@@ -29,11 +45,7 @@ const passwordSchema = z
  */
 export const registerSchema = z
   .object({
-    email: z
-      .string()
-      .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
-      .max(VALIDATION.EMAIL_MAX_LENGTH, VALIDATION_MESSAGES.EMAIL_TOO_LONG)
-      .email(VALIDATION_MESSAGES.EMAIL_INVALID),
+    email: normalizedEmailSchema,
     password: passwordSchema,
     confirmPassword: z
       .string()
@@ -58,10 +70,7 @@ export type RegisterFormData = z.infer<typeof registerSchema>;
  * ログインフォームのバリデーションスキーマ
  */
 export const loginSchema = z.object({
-  email: z
-    .string()
-    .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
-    .email(VALIDATION_MESSAGES.EMAIL_INVALID),
+  email: normalizedEmailSchema,
   password: z.string().min(1, VALIDATION_MESSAGES.PASSWORD_REQUIRED),
 });
 
@@ -74,11 +83,7 @@ export type LoginFormData = z.infer<typeof loginSchema>;
  * 登録APIリクエストのバリデーションスキーマ
  */
 export const registerApiSchema = z.object({
-  email: z
-    .string()
-    .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
-    .max(VALIDATION.EMAIL_MAX_LENGTH, VALIDATION_MESSAGES.EMAIL_TOO_LONG)
-    .email(VALIDATION_MESSAGES.EMAIL_INVALID),
+  email: normalizedEmailSchema,
   password: passwordSchema,
   name: z
     .string()
@@ -91,10 +96,7 @@ export const registerApiSchema = z.object({
  * OTPログイン用メールアドレスのバリデーションスキーマ
  */
 export const otpLoginEmailSchema = z.object({
-  email: z
-    .string()
-    .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
-    .email(VALIDATION_MESSAGES.EMAIL_INVALID),
+  email: normalizedEmailSchema,
 });
 
 /**

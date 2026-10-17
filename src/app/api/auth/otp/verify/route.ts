@@ -10,6 +10,8 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
+import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
+import { getClientIp } from '@/lib/http/getClientIp';
 import { generateVerificationToken, verifyOtpCode } from '@/lib/otp';
 import { otpVerifySchema } from '@/schema/otp';
 import {
@@ -52,9 +54,16 @@ export async function POST(request: Request) {
     // OTP行のattemptsは送信のたびにリセットされるため、
     // エンドポイント単位で独立した試行カウントを設けて多層防御とする。
     // 上限超過時はウィンドウ分だけロックし、検証成功時に後述の resetRateLimit で解除する
+    // 識別子はアカウント×送信元。メールアドレス単独だと、コードを知らない
+    // 第三者が誤ったコードを送り続けるだけで被害者の検証を封鎖できる（#644と同種）。
+    // 送信元を含めればロックされるのは試行した本人だけになる。
+    // コード総当たりに対しては、OTP行自身の attempts（MAX_ATTEMPTS）が
+    // 送信元に関係なく効くため、この変更で弱くはならない。
+    const verifyIdentifier = buildLoginIdentifier(email, getClientIp(request));
+
     const verifyLimitResult = await checkRateLimit(
       supabase,
-      email,
+      verifyIdentifier,
       RATE_LIMIT_ACTION.OTP_VERIFY,
       OTP_CONFIG.VERIFY_RATE_LIMIT,
       OTP_CONFIG.VERIFY_RATE_LIMIT_WINDOW_MINUTES,
@@ -171,7 +180,11 @@ export async function POST(request: Request) {
       await supabase.from('otp_codes').delete().eq('id', otpRecord.id);
 
       // 検証成功のためレート制限をリセット（正当なユーザーの再検証を妨げない）
-      await resetRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_VERIFY);
+      await resetRateLimit(
+        supabase,
+        verifyIdentifier,
+        RATE_LIMIT_ACTION.OTP_VERIFY,
+      );
 
       return NextResponse.json(
         {
@@ -202,7 +215,11 @@ export async function POST(request: Request) {
       }
 
       // 検証成功のためレート制限をリセット（正当なユーザーの再検証を妨げない）
-      await resetRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_VERIFY);
+      await resetRateLimit(
+        supabase,
+        verifyIdentifier,
+        RATE_LIMIT_ACTION.OTP_VERIFY,
+      );
 
       return NextResponse.json(
         {

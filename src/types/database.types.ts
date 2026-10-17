@@ -396,6 +396,41 @@ export type Database = {
         };
         Relationships: [];
       };
+      recommendation_events: {
+        Row: {
+          created_at: string;
+          event_type: string;
+          id: string;
+          recommendation_id: string;
+          tmdb_movie_id: number;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          recommendation_id: string;
+          tmdb_movie_id: number;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          recommendation_id?: string;
+          tmdb_movie_id?: number;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'recommendation_events_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       recommendation_refreshes: {
         Row: {
           created_at: string;
@@ -913,6 +948,10 @@ export type Database = {
           allowed: boolean;
           retry_after: number;
         }[];
+      };
+      delete_expired_recommendation_events: {
+        Args: { retention_days?: number };
+        Returns: number;
       };
       get_award_years: { Args: never; Returns: number[] };
       get_watchlist_by_proximity: {

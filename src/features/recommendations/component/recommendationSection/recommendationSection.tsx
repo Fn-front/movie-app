@@ -16,9 +16,11 @@ import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRati
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useDismissMovie } from '@/features/dismissedMovies/hooks/useDismissMovie';
+import { useRecommendationEvents } from '@/features/recommendations/hooks/useRecommendationEvents';
 import { useRecommendationRefresh } from '@/features/recommendations/hooks/useRecommendationRefresh';
 import {
   RECOMMENDATIONS_MESSAGES,
+  RECOMMENDATION_EVENT_TYPE,
   RECOMMENDATION_REFRESH_MESSAGES,
 } from '@/constants';
 import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
@@ -82,8 +84,15 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
 
     const { dismissMovie, isDismissingMovie, dismissedIds } = useDismissMovie();
 
+    // 計測はお気に入りがある（＝レコメンドが出る）認証済みユーザーのみ対象
+    const { observeTile, trackEvent } = useRecommendationEvents(
+      recommendations,
+      hasFavorites,
+    );
+
     const handleDismiss = useCallback(
       (movie: MovieCacheItem) => {
+        trackEvent(movie.id, RECOMMENDATION_EVENT_TYPE.DISMISS);
         dismissMovie({
           tmdb_movie_id: movie.id,
           title: movie.title,
@@ -91,7 +100,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
           genre_ids: movie.genre_ids ?? null,
         });
       },
-      [dismissMovie],
+      [dismissMovie, trackEvent],
     );
 
     const movieCacheItems = useMemo(
@@ -111,6 +120,25 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       handleMovieClick,
       handleModalClose,
     } = useMovieDetailModal(movieCacheItems);
+
+    const handleTileClick = useCallback(
+      (movieId: number) => {
+        trackEvent(movieId, RECOMMENDATION_EVENT_TYPE.CLICK);
+        handleMovieClick(movieId);
+      },
+      [handleMovieClick, trackEvent],
+    );
+
+    const handleWatchlistToggle = useCallback(
+      (movie: MovieCacheItem) => {
+        // 追加時のみ計測する（解除は「興味がある」シグナルではない）
+        if (!isInWatchlist(movie.id)) {
+          trackEvent(movie.id, RECOMMENDATION_EVENT_TYPE.ADD_TO_WATCHLIST);
+        }
+        toggleWatchlist(movie);
+      },
+      [isInWatchlist, toggleWatchlist, trackEvent],
+    );
 
     const reasonMap = useMemo(
       () => new Map(recommendations.map((r) => [r.tmdb_movie_id, r.reason])),
@@ -202,14 +230,15 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
               {movieCacheItems.map((movie) => (
                 <div
                   key={movie.id}
+                  ref={observeTile(movie.id)}
                   role='listitem'
                   className={styles.c_recommendation_section__item}
                 >
                   <MovieTile
                     movie={movie}
-                    onClick={handleMovieClick}
+                    onClick={handleTileClick}
                     isInWatchlist={isInWatchlist(movie.id)}
-                    onWatchlistToggle={toggleWatchlist}
+                    onWatchlistToggle={handleWatchlistToggle}
                     watchlistDisabled={isMovieToggling(movie.id)}
                     onFavoriteToggle={handleFavoriteToggle}
                     favoriteDisabled={isFavoriteProcessing(movie.id)}

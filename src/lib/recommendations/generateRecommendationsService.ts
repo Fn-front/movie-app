@@ -12,6 +12,7 @@ import {
   RECOMMENDATIONS_MIN_HIT_RATE,
   RECOMMENDATIONS_MAX_REQUEST_COUNT,
   RECOMMENDATIONS_ACTIVE_USER_DAYS,
+  RECOMMENDATION_EVENT_RETENTION_DAYS,
   RECOMMENDATIONS_BATCH_SIZE,
   CRON_ERROR_MESSAGES,
 } from '@/constants';
@@ -24,10 +25,53 @@ import {
   type ResolvedRecommendation,
 } from '@/lib/openai/generateRecommendations';
 
+/**
+ * 生成処理の内訳メトリクス
+ *
+ * 改善の効果を判断するには「何件返せたか」だけでは足りない。
+ * AI呼び出し回数・解決失敗数・リトライ回数を記録し、
+ * 件数が埋まらない原因がどこにあるかを切り分けられるようにする。
+ */
+export interface GenerationMetrics {
+  /** OpenAI呼び出し回数 */
+  openai_calls: number;
+  /** AIが返した候補の総数 */
+  ai_candidates: number;
+  /** TMDbで解決できず、または除外されて採用に至らなかった候補数 */
+  unresolved_candidates: number;
+  /** 追加で行った試行回数（初回を除く） */
+  retries_used: number;
+}
+
+/** 空のメトリクスを生成する */
+function createEmptyMetrics(): GenerationMetrics {
+  return {
+    openai_calls: 0,
+    ai_candidates: 0,
+    unresolved_candidates: 0,
+    retries_used: 0,
+  };
+}
+
+/** メトリクスを加算する */
+function addMetrics(
+  base: GenerationMetrics,
+  addition: GenerationMetrics,
+): GenerationMetrics {
+  return {
+    openai_calls: base.openai_calls + addition.openai_calls,
+    ai_candidates: base.ai_candidates + addition.ai_candidates,
+    unresolved_candidates:
+      base.unresolved_candidates + addition.unresolved_candidates,
+    retries_used: base.retries_used + addition.retries_used,
+  };
+}
+
 /** ユーザー単位の処理結果 */
 interface UserProcessResult {
   status: 'processed' | 'skipped';
   recommendationCount: number;
+  metrics: GenerationMetrics;
 }
 
 /** 全体の処理サマリー */
@@ -36,6 +80,9 @@ export interface GenerateRecommendationsSummary {
   skipped_users: number;
   inactive_users: number;
   total_recommendations: number;
+  metrics: GenerationMetrics;
+  /** 保持期間を超えて削除した利用イベント数 */
+  deleted_events: number;
 }
 
 /** Discriminated Union: 成功結果 */
@@ -225,8 +272,12 @@ export async function generateRecommendationsWithRetry(
   baseExcludedIds: Set<number>,
   dismissedMovies: DismissedMovie[],
   signal?: AbortSignal,
-): Promise<ResolvedRecommendation[]> {
+): Promise<{
+  resolved: ResolvedRecommendation[];
+  metrics: GenerationMetrics;
+}> {
   const allResolved: ResolvedRecommendation[] = [];
+  const metrics = createEmptyMetrics();
   let remainingCount = RECOMMENDATIONS_MAX_COUNT;
   let retryExcludedIds = baseExcludedIds;
   let previousHitRate: number | undefined;
@@ -237,7 +288,12 @@ export async function generateRecommendationsWithRetry(
       break;
     }
 
+    if (attempt > 0) {
+      metrics.retries_used++;
+    }
+
     const requestCount = calculateRequestCount(remainingCount, previousHitRate);
+    metrics.openai_calls++;
     const aiRecommendations = await fetchRecommendationsFromOpenAI(
       favoriteMovies,
       watchlistTitles,
@@ -256,6 +312,10 @@ export async function generateRecommendationsWithRetry(
       remainingCount,
       signal,
     );
+
+    metrics.ai_candidates += aiRecommendations.length;
+    metrics.unresolved_candidates +=
+      aiRecommendations.length - resolvedInAttempt.length;
 
     // 次の試行の要求件数に使う採用率。0件なら下限値が効くので除算のみ行う
     previousHitRate = resolvedInAttempt.length / aiRecommendations.length;
@@ -285,7 +345,7 @@ export async function generateRecommendationsWithRetry(
     ]);
   }
 
-  return allResolved;
+  return { resolved: allResolved, metrics };
 }
 
 /**
@@ -339,10 +399,14 @@ export async function processUserRecommendations(
 ): Promise<UserProcessResult> {
   const movieData = await collectUserMovieData(supabase, userId);
   if (!movieData) {
-    return { status: 'skipped', recommendationCount: 0 };
+    return {
+      status: 'skipped',
+      recommendationCount: 0,
+      metrics: createEmptyMetrics(),
+    };
   }
 
-  const resolved = await generateRecommendationsWithRetry(
+  const { resolved, metrics } = await generateRecommendationsWithRetry(
     movieData.favoriteMovies,
     movieData.watchlistTitles,
     movieData.baseExcludedIds,
@@ -350,22 +414,58 @@ export async function processUserRecommendations(
     signal,
   );
 
+  // スキップした場合もAI・TMDbは消費しているため、メトリクスは必ず返す
   if (resolved.length === 0) {
-    return { status: 'skipped', recommendationCount: 0 };
+    return { status: 'skipped', recommendationCount: 0, metrics };
   }
 
   // 中断済みなら書き込まない。中途半端な件数で洗い替えすると
   // 既存レコメンドを質の低い結果で上書きしてしまうため。
   if (signal?.aborted) {
-    return { status: 'skipped', recommendationCount: 0 };
+    return { status: 'skipped', recommendationCount: 0, metrics };
   }
 
   const success = await upsertRecommendations(supabase, userId, resolved);
   if (!success) {
-    return { status: 'skipped', recommendationCount: 0 };
+    return { status: 'skipped', recommendationCount: 0, metrics };
   }
 
-  return { status: 'processed', recommendationCount: resolved.length };
+  return {
+    status: 'processed',
+    recommendationCount: resolved.length,
+    metrics,
+  };
+}
+
+/**
+ * 保持期間を超えたレコメンド利用イベントを削除する
+ *
+ * 行動ログは個人の嗜好に直結するため無期限に保持しない。
+ * 削除に失敗しても生成処理は続行する（計測データの掃除は副次処理のため）。
+ *
+ * @returns 削除件数。失敗時は 0
+ */
+export async function deleteExpiredRecommendationEvents(
+  supabase: SupabaseClient,
+): Promise<number> {
+  try {
+    const { data, error } = await supabase.rpc(
+      'delete_expired_recommendation_events',
+      { retention_days: RECOMMENDATION_EVENT_RETENTION_DAYS },
+    );
+
+    if (error) {
+      console.error('Failed to delete expired recommendation events:', error);
+      return 0;
+    }
+
+    return typeof data === 'number' ? data : 0;
+  } catch (error) {
+    // 生成が全て終わったあとの掃除処理。ここで落ちて
+    // CRON全体を失敗扱いにしない。
+    console.error('Failed to delete expired recommendation events:', error);
+    return 0;
+  }
 }
 
 /**
@@ -384,6 +484,7 @@ export async function executeGenerateRecommendationsCron(
   let processedUsers = 0;
   let skippedUsers = 0;
   let totalRecommendations = 0;
+  let metrics = createEmptyMetrics();
 
   const totalBatches = Math.ceil(
     activeUserIds.length / RECOMMENDATIONS_BATCH_SIZE,
@@ -409,12 +510,17 @@ export async function executeGenerateRecommendationsCron(
             `Error processing recommendations for user ${userId}:`,
             error,
           );
-          return { status: 'skipped' as const, recommendationCount: 0 };
+          return {
+            status: 'skipped' as const,
+            recommendationCount: 0,
+            metrics: createEmptyMetrics(),
+          };
         }
       }),
     );
 
     for (const result of results) {
+      metrics = addMetrics(metrics, result.metrics);
       if (result.status === 'processed') {
         processedUsers++;
         batchSuccess++;
@@ -430,6 +536,14 @@ export async function executeGenerateRecommendationsCron(
     );
   }
 
+  // 生成のついでに保持期間切れの行動ログを掃除する。
+  // 専用CRONを増やさずに済み、日次で確実に回る。
+  const deletedEvents = await deleteExpiredRecommendationEvents(supabase);
+
+  console.log(
+    `Generation metrics: openai_calls=${metrics.openai_calls} ai_candidates=${metrics.ai_candidates} unresolved=${metrics.unresolved_candidates} retries=${metrics.retries_used} deleted_events=${deletedEvents}`,
+  );
+
   return {
     type: 'success',
     data: {
@@ -437,6 +551,8 @@ export async function executeGenerateRecommendationsCron(
       skipped_users: skippedUsers,
       inactive_users: inactiveUsers,
       total_recommendations: totalRecommendations,
+      metrics,
+      deleted_events: deletedEvents,
     },
   };
 }

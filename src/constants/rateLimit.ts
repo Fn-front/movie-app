@@ -24,6 +24,7 @@ export const RATE_LIMIT_ACTION = {
   REGISTER: 'register',
   CHANGE_PASSWORD: 'change_password',
   RECOMMENDATION_REFRESH: 'recommendation_refresh',
+  WRITE_RECOMMENDATION_EVENTS: 'write_api_recommendation_events',
   /** ログイン試行の送信元単位の上限（IPアドレス単位） */
   LOGIN_IP: 'login_ip',
   /** OTP の日次送信上限（メールアドレス単位） */
@@ -60,6 +61,13 @@ export const RATE_LIMIT_CONFIG = {
   READ_THEATER_DETAIL: { maxAttempts: 30, windowMinutes: 1 },
   AWARDS_FETCH: { maxAttempts: 30, windowMinutes: 10 },
   SUGGEST_TITLE: { maxAttempts: 10, windowMinutes: 60 },
+  /**
+   * レコメンド利用イベントの記録。
+   *
+   * 表示イベントはスクロールや再訪のたびに発生しうるため、他の書き込みAPIより
+   * 緩くする。1リクエストで複数件まとめて送る前提。
+   */
+  WRITE_RECOMMENDATION_EVENTS: { maxAttempts: 30, windowMinutes: 1 },
   REGISTER: { maxAttempts: 5, windowMinutes: 60 },
   /**
    * ログイン試行の送信元単位の上限。

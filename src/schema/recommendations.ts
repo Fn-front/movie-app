@@ -7,6 +7,8 @@ import { z } from 'zod';
 import {
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_MAX_REQUEST_COUNT,
+  RECOMMENDATION_EVENT_TYPE,
+  RECOMMENDATION_EVENTS_MAX_PER_REQUEST,
   MOVIE_YEAR_RANGE,
 } from '@/constants';
 
@@ -82,3 +84,41 @@ export const recommendationSchema = z.object({
  * APIレスポンスの型
  */
 export type Recommendation = z.infer<typeof recommendationSchema>;
+
+/**
+ * レコメンド利用イベント記録のバリデーションスキーマ
+ *
+ * 1リクエストで複数件まとめて送れるようにする。Intersection Observer の
+ * impression は一度に何件も発火するため、1件ずつPOSTすると無駄が大きい。
+ */
+export const recommendationEventSchema = z.object({
+  recommendation_id: z.string().uuid('レコメンドIDが不正です'),
+  tmdb_movie_id: z
+    .number()
+    .int('映画IDは整数で入力してください')
+    .positive('映画IDは正の整数で入力してください'),
+  event_type: z.enum(
+    [
+      RECOMMENDATION_EVENT_TYPE.IMPRESSION,
+      RECOMMENDATION_EVENT_TYPE.CLICK,
+      RECOMMENDATION_EVENT_TYPE.ADD_TO_WATCHLIST,
+      RECOMMENDATION_EVENT_TYPE.DISMISS,
+    ],
+    { message: 'イベント種別が不正です' },
+  ),
+});
+
+/**
+ * レコメンド利用イベント記録リクエストのスキーマ
+ */
+export const recommendationEventsPostSchema = z.object({
+  events: z
+    .array(recommendationEventSchema)
+    .min(1, 'イベントは1件以上必要です')
+    .max(
+      RECOMMENDATION_EVENTS_MAX_PER_REQUEST,
+      `イベントは一度に${RECOMMENDATION_EVENTS_MAX_PER_REQUEST}件までです`,
+    ),
+});
+
+export type RecommendationEvent = z.infer<typeof recommendationEventSchema>;

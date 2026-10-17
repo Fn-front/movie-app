@@ -14,11 +14,13 @@ import {
   RECOMMENDATIONS_INITIAL_HIT_RATE,
   RECOMMENDATIONS_MIN_HIT_RATE,
   RECOMMENDATIONS_MAX_REQUEST_COUNT,
+  RECOMMENDATION_EVENT_RETENTION_DAYS,
   RECOMMENDATIONS_BATCH_SIZE,
 } from '@/constants';
 
 import {
   calculateRequestCount,
+  deleteExpiredRecommendationEvents,
   executeGenerateRecommendationsCron,
   fetchActiveUserIds,
   collectUserMovieData,
@@ -117,6 +119,20 @@ const mockDismissedMoviesQuery = (
     }),
   });
 };
+
+/** display_order を埋めた解決済みレコメンドを生成 */
+const buildResolved = (count: number) =>
+  Array.from({ length: count }, (_, i) => ({
+    tmdb_movie_id: i + 1,
+    title: `Movie ${i + 1}`,
+    poster_path: null,
+    release_date: null,
+    vote_average: null,
+    vote_count: 0,
+    genre_ids: null,
+    reason: `理由${i + 1}`,
+    display_order: i + 1,
+  }));
 
 /** upsert_recommendations RPC のモック */
 const mockUpsertRecommendationsRpc = (success: boolean) => {
@@ -266,20 +282,6 @@ describe('generateRecommendationsService', () => {
   });
 
   describe('generateRecommendationsWithRetry', () => {
-    /** display_order を埋めた解決済みレコメンドを生成 */
-    const buildResolved = (count: number) =>
-      Array.from({ length: count }, (_, i) => ({
-        tmdb_movie_id: i + 1,
-        title: `Movie ${i + 1}`,
-        poster_path: null,
-        release_date: null,
-        vote_average: null,
-        vote_count: 0,
-        genre_ids: null,
-        reason: `理由${i + 1}`,
-        display_order: i + 1,
-      }));
-
     it('OpenAIがnullを返したら空配列を返す', async () => {
       mockFetchRecommendations.mockResolvedValue(null);
 
@@ -290,7 +292,7 @@ describe('generateRecommendationsService', () => {
         [],
       );
 
-      expect(result).toEqual([]);
+      expect(result.resolved).toEqual([]);
     });
 
     it('初回は必要数＋バッファ件をAIに要求する', async () => {
@@ -339,8 +341,8 @@ describe('generateRecommendationsService', () => {
         [],
       );
 
-      expect(result).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
-      expect(result[result.length - 1].display_order).toBe(
+      expect(result.resolved).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
+      expect(result.resolved[result.resolved.length - 1].display_order).toBe(
         RECOMMENDATIONS_MAX_COUNT,
       );
     });
@@ -381,7 +383,7 @@ describe('generateRecommendationsService', () => {
         [],
       );
 
-      expect(result).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
+      expect(result.resolved).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
       // AIが10件返して9件採用 → 採用率0.9。不足1件を0.9で割り戻して2件要求する
       expect(mockFetchRecommendations.mock.calls[1][2]).toBe(2);
     });
@@ -441,8 +443,133 @@ describe('generateRecommendationsService', () => {
         [],
       );
 
-      expect(result).toHaveLength(3);
-      expect(result[2].display_order).toBe(3);
+      expect(result.resolved).toHaveLength(3);
+      expect(result.resolved[2].display_order).toBe(3);
+    });
+  });
+
+  describe('生成メトリクス', () => {
+    it('OpenAI呼び出し回数・候補数・未採用数・リトライ回数を記録する', async () => {
+      // 初回: AIが10件返して9件採用 → 1件不足でリトライ
+      mockFetchRecommendations
+        .mockResolvedValueOnce(
+          Array.from({ length: RECOMMENDATIONS_MAX_COUNT }, (_, i) => ({
+            title_ja: `映画${i + 1}`,
+            title_en: `Movie ${i + 1}`,
+            year: 2020,
+            reason: `理由${i + 1}`,
+          })),
+        )
+        .mockResolvedValueOnce([
+          {
+            title_ja: '追加',
+            title_en: 'Extra',
+            year: 2021,
+            reason: '追加理由',
+          },
+        ]);
+      mockResolveRecommendations
+        .mockResolvedValueOnce(buildResolved(RECOMMENDATIONS_MAX_COUNT - 1))
+        .mockResolvedValueOnce([
+          {
+            tmdb_movie_id: 999,
+            title: 'Extra',
+            poster_path: null,
+            release_date: null,
+            vote_average: null,
+            vote_count: 0,
+            genre_ids: null,
+            reason: '追加理由',
+            display_order: 1,
+          },
+        ]);
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(result.metrics).toEqual({
+        openai_calls: 2,
+        ai_candidates: RECOMMENDATIONS_MAX_COUNT + 1,
+        unresolved_candidates: 1,
+        retries_used: 1,
+      });
+    });
+
+    it('1回で揃った場合はリトライ回数0', async () => {
+      mockFetchRecommendations.mockResolvedValueOnce(
+        Array.from({ length: RECOMMENDATIONS_MAX_COUNT }, (_, i) => ({
+          title_ja: `映画${i + 1}`,
+          title_en: `Movie ${i + 1}`,
+          year: 2020,
+          reason: `理由${i + 1}`,
+        })),
+      );
+      mockResolveRecommendations.mockResolvedValueOnce(
+        buildResolved(RECOMMENDATIONS_MAX_COUNT),
+      );
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(result.metrics.retries_used).toBe(0);
+      expect(result.metrics.openai_calls).toBe(1);
+      expect(result.metrics.unresolved_candidates).toBe(0);
+    });
+
+    it('OpenAIが失敗した呼び出しも回数に数える', async () => {
+      mockFetchRecommendations.mockResolvedValueOnce(null);
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(result.metrics.openai_calls).toBe(1);
+      expect(result.metrics.ai_candidates).toBe(0);
+    });
+  });
+
+  describe('deleteExpiredRecommendationEvents', () => {
+    it('削除件数を返す', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 42, error: null });
+
+      const result = await deleteExpiredRecommendationEvents(mockSupabase);
+
+      expect(result).toBe(42);
+      expect(mockRpc).toHaveBeenCalledWith(
+        'delete_expired_recommendation_events',
+        { retention_days: RECOMMENDATION_EVENT_RETENTION_DAYS },
+      );
+    });
+
+    it('RPCがエラーを返しても0を返して続行する', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: new Error('RPC failed'),
+      });
+
+      const result = await deleteExpiredRecommendationEvents(mockSupabase);
+
+      expect(result).toBe(0);
+    });
+
+    it('RPCが例外を投げても0を返して続行する', async () => {
+      // 掃除処理でCRON全体を落とさない
+      mockRpc.mockRejectedValueOnce(new Error('network'));
+
+      const result = await deleteExpiredRecommendationEvents(mockSupabase);
+
+      expect(result).toBe(0);
     });
   });
 
@@ -724,7 +851,10 @@ describe('generateRecommendationsService', () => {
       if (result.type === 'success') {
         expect(result.data.processed_users).toBe(0);
       }
-      expect(console.log).not.toHaveBeenCalled();
+      // バッチ処理のログは出さない（メトリクスのサマリーのみ）
+      expect(console.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Processing batch'),
+      );
     });
 
     it('fetchActiveUserIdsがエラーの場合、即座にエラーを返す', async () => {

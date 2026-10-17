@@ -19,7 +19,13 @@
 
 import { test, expect } from '../fixtures/auth';
 
-/** OTP送信・検証を成功でモックし、ステップ3（新パスワード入力）まで進める */
+/**
+ * OTP送信・検証を成功でモックし、ステップ3（新パスワード入力）まで進める
+ *
+ * 検証APIは `data.verificationToken` を返す必要がある。パスワード変更の本人確認は
+ * このワンタイムトークンで行われ、無い場合はフォームが送信前に弾くため
+ * （src/features/settings/changePasswordForm/changePasswordForm.tsx）。
+ */
 async function mockOtpSuccess(page: import('@playwright/test').Page) {
   await page.route('**/api/auth/otp/send', async (route) => {
     await route.fulfill({
@@ -32,7 +38,10 @@ async function mockOtpSuccess(page: import('@playwright/test').Page) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ success: true }),
+      body: JSON.stringify({
+        success: true,
+        data: { verificationToken: 'e2e-verification-token' },
+      }),
     });
   });
 }

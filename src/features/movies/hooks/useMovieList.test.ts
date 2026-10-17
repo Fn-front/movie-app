@@ -4,6 +4,7 @@ import { useMovieList } from './useMovieList';
 import type { UseMovieListOptions } from './useMovieList';
 import type { GetMoviesResponse } from '@/lib/api/movies/movies';
 import { createQueryWrapper } from '@/test/queryTestUtils';
+import { STORAGE_KEYS } from '@/constants/common';
 import { FILTER_ERROR_MESSAGES } from '@/constants/filters';
 
 // --- Mocks ---
@@ -91,6 +92,8 @@ const defaultOptions: UseMovieListOptions = {
 describe('useMovieList', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // フィルターは localStorage にも保存されるため、テスト間で持ち越さない
+    window.localStorage.clear();
     mockSessionStatus = 'unauthenticated';
     mockSessionData = null;
     mockSearchParams = new URLSearchParams();
@@ -980,6 +983,152 @@ describe('useMovieList', () => {
       // URLが唯一の正。保存済みフィルターでは上書きされない
       expect(result.current.sortBy).toBe('popularity');
       expect(result.current.releaseType).toBe('theatrical');
+    });
+  });
+  describe('localStorageによるフィルター永続化（ナビリンク経由）', () => {
+    /** localStorage にフィルターを仕込む */
+    const seedStorage = (conditions: Record<string, unknown>) => {
+      window.localStorage.setItem(
+        STORAGE_KEYS.MOVIE_FILTERS,
+        JSON.stringify(conditions),
+      );
+    };
+
+    it('URLにクエリが無い場合、localStorageから初期stateに復元する', () => {
+      seedStorage({
+        sort_by: 'popularity',
+        release_type: 'streaming',
+        genre_ids: [28],
+        is_revival: true,
+      });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      expect(result.current.sortBy).toBe('popularity');
+      expect(result.current.releaseType).toBe('streaming');
+      expect(result.current.selectedGenreIds).toEqual([28]);
+      expect(result.current.isRevivalFilter).toBe(true);
+    });
+
+    it('URLにクエリがある場合、localStorageより優先される', () => {
+      seedStorage({ sort_by: 'vote_average', release_type: 'streaming' });
+      mockSearchParams = new URLSearchParams({ sort_by: 'popularity' });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      expect(result.current.sortBy).toBe('popularity');
+      // URLが正なので、URLに無いrelease_typeはデフォルトに戻る
+      expect(result.current.releaseType).toBe('theatrical');
+    });
+
+    it('localStorageの不正値はデフォルトにフォールバックする', () => {
+      seedStorage({ sort_by: 'invalid', genre_ids: 'abc' });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      expect(result.current.sortBy).toBe('release_date');
+      expect(result.current.selectedGenreIds).toEqual([]);
+    });
+
+    it('フィルター変更をlocalStorageに保存する', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleSortChange('popularity');
+      });
+
+      const stored = JSON.parse(
+        window.localStorage.getItem(STORAGE_KEYS.MOVIE_FILTERS) ?? '{}',
+      );
+      expect(stored.sort_by).toBe('popularity');
+    });
+
+    it('ページ既定の日付範囲はlocalStorageにも書き込まない（端末に焼き付かせない）', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleSortChange('popularity');
+      });
+
+      const stored = JSON.parse(
+        window.localStorage.getItem(STORAGE_KEYS.MOVIE_FILTERS) ?? '{}',
+      );
+      expect(stored.date_range_gte).toBeUndefined();
+    });
+
+    it('ユーザー指定の日付範囲はlocalStorageに保存する', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleFilterApply([], { gte: '2026-05-01' }, undefined);
+      });
+
+      const stored = JSON.parse(
+        window.localStorage.getItem(STORAGE_KEYS.MOVIE_FILTERS) ?? '{}',
+      );
+      expect(stored.date_range_gte).toBe('2026-05-01');
+    });
+
+    it('localStorageに値がある場合、保存済みフィルターで上書きしない', async () => {
+      mockSessionStatus = 'authenticated';
+      mockSessionData = { user: { name: 'テストユーザー' } };
+      seedStorage({ sort_by: 'popularity' });
+      mockGetSavedFilter.mockResolvedValue({
+        sort_by: 'vote_average',
+        release_type: 'streaming',
+      });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.sortBy).toBe('popularity');
+    });
+
+    it('URL・localStorageとも空なら保存済みフィルターを使う', async () => {
+      mockSessionStatus = 'authenticated';
+      mockSessionData = { user: { name: 'テストユーザー' } };
+      mockGetSavedFilter.mockResolvedValue({
+        sort_by: 'vote_average',
+        release_type: 'streaming',
+      });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.sortBy).toBe('vote_average');
+      });
+      expect(result.current.releaseType).toBe('streaming');
     });
   });
 });

@@ -148,6 +148,39 @@ test.describe('未認証でもフィルターがページ遷移後に保持さ�
     await expect(page).toHaveURL(/\/movies\/upcoming/);
   });
 
+  test('ナビリンク経由で戻ってもフィルターが保持される（localStorage）', async ({
+    page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    await page
+      .locator('[class*="movie_tile"]')
+      .first()
+      .or(page.getByText(/映画が見つかりませんでした/))
+      .waitFor({ timeout: 15000 });
+
+    // 並び順を「人気順」に変更
+    const sortSelect = page.getByRole('combobox');
+    await sortSelect.click();
+    await page.getByRole('option', { name: '人気順' }).click();
+    await expect(page).toHaveURL(/sort_by=popularity/);
+
+    // サイドナビのリンクで往復する（URLにクエリが付かない経路）
+    await page.getByRole('link', { name: '公開予定' }).first().click();
+    await expect(page).toHaveURL(/\/movies\/upcoming$/);
+
+    await page.getByRole('link', { name: '公開中' }).first().click();
+    await expect(page).toHaveURL(/\/movies\/now-showing$/);
+
+    await page
+      .locator('[class*="movie_tile"]')
+      .first()
+      .or(page.getByText(/映画が見つかりませんでした/))
+      .waitFor({ timeout: 15000 });
+
+    // クエリは無いが localStorage から復元される
+    await expect(sortSelect).toContainText('人気順');
+  });
+
   test('不正なクエリパラメータでもエラーにならずデフォルトで表示される', async ({
     page,
   }) => {

@@ -12,6 +12,8 @@ export const STORAGE_KEYS = {
   LANGUAGE: 'movie-app:language',
   /** 最近検索したキーワード */
   RECENT_SEARCHES: 'movie-app:recent-searches',
+  /** 一覧画面のフィルター条件 */
+  MOVIE_FILTERS: 'movie-app:movie-filters',
 } as const;
 
 /**

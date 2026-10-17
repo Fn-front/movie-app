@@ -379,6 +379,131 @@ describe('resolveAwardsWithTMDb', () => {
     expect(result[0].display_order).toBe(1);
   });
 
+  describe('アダルト作品の除外', () => {
+    it('adult=trueの映画を採用しない', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 930,
+            title: 'Adult Movie',
+            adult: true,
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 6.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+
+      const items = [createAwardItem()];
+      const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('adult作品が先頭にあっても、後続の一般作品を採用する', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 931,
+            title: 'テスト映画',
+            adult: true,
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 5.0,
+            genre_ids: [18],
+          },
+          {
+            id: 932,
+            title: 'テスト映画',
+            adult: false,
+            poster_path: '/poster.jpg',
+            release_date: '2026-01-01',
+            vote_average: 7.5,
+            genre_ids: [28],
+          },
+        ],
+      });
+
+      const items = [createAwardItem()];
+      const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(932);
+    });
+
+    it('フォールバック検索でもadultが除外される（英語タイトル経路）', async () => {
+      // 日本語検索は全件adult、英語検索で一般作品がヒットするケース
+      mockSearchMovies
+        .mockResolvedValueOnce({
+          results: [
+            {
+              id: 933,
+              title: 'Adult',
+              adult: true,
+              poster_path: null,
+              release_date: '2026-01-01',
+              vote_average: 5.0,
+              genre_ids: [18],
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          results: [
+            {
+              id: 934,
+              title: 'Adult',
+              adult: true,
+              poster_path: null,
+              release_date: '2026-01-01',
+              vote_average: 5.0,
+              genre_ids: [18],
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          results: [
+            {
+              id: 935,
+              title: 'Clean Movie',
+              adult: false,
+              poster_path: null,
+              release_date: '2026-01-01',
+              vote_average: 7.0,
+              genre_ids: [28],
+            },
+          ],
+        });
+
+      const items = [createAwardItem()];
+      const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(935);
+    });
+
+    it('全件adultの場合は1件も採用しない', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 936,
+            title: 'Adult A',
+            adult: true,
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 5.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+
+      const items = [createAwardItem()];
+      const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+      expect(result).toHaveLength(0);
+    });
+  });
+
   describe('除外キーワードによる除外', () => {
     it('除外キーワードを持つ映画を採用しない', async () => {
       mockSearchMovies.mockResolvedValue({

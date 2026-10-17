@@ -46,6 +46,17 @@ async function mockOtpSuccess(page: import('@playwright/test').Page) {
   });
 }
 
+/**
+ * 「現在のパスワード」を入力する
+ *
+ * パスワード設定済みユーザーには必須（#643）。未入力だとクライアント側の
+ * バリデーションで止まり、変更APIが呼ばれない。
+ * APIはモックしているため値の正しさは問われない。
+ */
+async function fillCurrentPassword(page: import('@playwright/test').Page) {
+  await page.getByLabel('現在のパスワード').fill('CurrentPass123');
+}
+
 /** ステップ1→2→3 を進めて新パスワード入力フォームを表示させる */
 async function advanceToNewPasswordStep(page: import('@playwright/test').Page) {
   await page.goto('/settings/change-password');
@@ -91,6 +102,7 @@ test.describe('パスワード変更ページ（認証済み）', () => {
 
     await advanceToNewPasswordStep(page);
 
+    await fillCurrentPassword(page);
     await page
       .getByLabel('新しいパスワード', { exact: true })
       .fill('NewPass123');
@@ -143,6 +155,7 @@ test.describe('パスワード変更ページ（認証済み）', () => {
 
     await advanceToNewPasswordStep(page);
 
+    await fillCurrentPassword(page);
     await page
       .getByLabel('新しいパスワード', { exact: true })
       .fill('NewPass123');

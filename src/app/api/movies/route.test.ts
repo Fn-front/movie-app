@@ -329,19 +329,8 @@ function setupExpiredCacheFromMock(options: {
       // キャッシュチェッククエリ → 期限切れ（null）
       return createChainMock({ data: null, error: null });
     }
-    if (currentCall === 2) {
-      // 他release_typeの既存IDクエリ（neq）
-      const chain = createChainMock({ data: [], error: null });
-      chain.select.mockImplementation(() => {
-        return createThenableProxy(createChainMock({ data: [], error: null }), {
-          data: [],
-          error: null,
-        });
-      });
-      return chain;
-    }
-    // TMDb結果のupsert
-    if (discoverResults.length > 0 && currentCall <= 2 + 5) {
+    // TMDb結果のupsert（別release_typeの既存IDクエリは廃止済み）
+    if (discoverResults.length > 0 && currentCall <= 1 + 5) {
       return createChainMock({ error: null });
     }
     // カウントクエリ
@@ -1262,20 +1251,22 @@ describe('GET /api/movies', () => {
     expect(mockSyncStreamingMovies).not.toHaveBeenCalled();
   });
 
-  // === 既存他release_typeのIDが存在する場合の重複除外 ===
+  // === 別release_typeとの共存（相互排他の撤廃） ===
 
-  it('キャッシュ期限切れ時に既存他release_typeのIDが存在する場合、重複が除外される', async () => {
+  it('別release_typeに既に存在するIDでも除外せずUPSERTする', async () => {
     const handler = await loadGET();
 
-    mockDiscoverMovies.mockResolvedValueOnce({
+    mockDiscoverMovies.mockResolvedValue({
       results: [
         {
           id: 500,
-          title: '重複映画',
+          // 劇場公開作品としてキャッシュ済みの映画が配信化されたケース
+          title: '劇場公開後に配信化された作品',
           adult: false,
           original_language: 'ja',
           genre_ids: [28],
           vote_average: 7.0,
+          vote_count: 100,
           popularity: 50,
           poster_path: '/test.jpg',
           backdrop_path: null,
@@ -1289,6 +1280,7 @@ describe('GET /api/movies', () => {
           original_language: 'ja',
           genre_ids: [35],
           vote_average: 6.0,
+          vote_count: 50,
           popularity: 30,
           poster_path: '/new.jpg',
           backdrop_path: null,
@@ -1299,52 +1291,55 @@ describe('GET /api/movies', () => {
       total_pages: 1,
     });
 
-    // 既にstreaming側にid=500が存在するモック
-    const callTracker = { count: 0 };
-    mockSupabaseClient!.from.mockImplementation(() => {
-      callTracker.count++;
-      const currentCall = callTracker.count;
-
-      if (currentCall === 1) {
-        // キャッシュチェック → 期限切れ
-        return createChainMock({ data: null, error: null });
-      }
-      if (currentCall === 2) {
-        // 他release_typeの既存IDクエリ → id=500が存在
-        const chain = createChainMock({ data: [{ id: 500 }], error: null });
-        chain.select.mockImplementation(() => {
-          return createThenableProxy(
-            createChainMock({ data: [{ id: 500 }], error: null }),
-            { data: [{ id: 500 }], error: null },
-          );
-        });
-        return chain;
-      }
-      // upsert, count, data クエリ
-      const chain = createChainMock({
-        count: 1,
-        data: [{ id: 501 }],
-        error: null,
-      });
-      chain.select.mockImplementation(
-        (_cols: string, opts?: { count?: string }) => {
-          if (opts?.count === 'exact') {
-            return createThenableProxy(createChainMock({ count: 1 }), {
-              count: 1,
-            });
-          }
-          return createThenableProxy(
-            createChainMock({ data: [{ id: 501 }], error: null }),
-            { data: [{ id: 501 }], error: null },
-          );
-        },
-      );
-      return chain;
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 500 }, { id: 501 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
     });
 
-    const response = await handler(createRequest());
-    expect(response.status).toBe(200);
-    expect(mockDiscoverMovies).toHaveBeenCalled();
+    await handler(createRequest());
+
+    // PK は (id, release_type) のため共存でき、2件ともUPSERT対象になる
+    const upsertChain = mockSupabaseClient!.from.mock.results[1].value;
+    const upsertRows = upsertChain.upsert.mock.calls[0][0];
+    expect(upsertRows.map((row: { id: number }) => row.id)).toEqual([500, 501]);
+  });
+
+  it('別release_typeの既存IDを取得するクエリ（1000行制限の原因）を発行しない', async () => {
+    const handler = await loadGET();
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          id: 600,
+          title: 'テスト映画',
+          adult: false,
+          original_language: 'ja',
+          genre_ids: [28],
+          vote_average: 7.0,
+          vote_count: 10,
+          popularity: 50,
+          poster_path: null,
+          backdrop_path: null,
+          release_date: '2026-05-01',
+          overview: '',
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 600 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    // 2回目の from() は UPSERT（neq による事前SELECTが無い）
+    const secondChain = mockSupabaseClient!.from.mock.results[1].value;
+    expect(secondChain.upsert).toHaveBeenCalled();
+    expect(secondChain.neq).not.toHaveBeenCalled();
   });
 
   // === 複合パラメータ ===
@@ -1540,8 +1535,8 @@ describe('GET /api/movies', () => {
 
     await handler(createRequest());
 
-    // from() 1回目=キャッシュ確認、2回目=他release_typeの既存ID、3回目=UPSERT
-    const upsertChain = mockSupabaseClient!.from.mock.results[2].value;
+    // from() 1回目=キャッシュ確認、2回目=UPSERT
+    const upsertChain = mockSupabaseClient!.from.mock.results[1].value;
     const upsertRows = upsertChain.upsert.mock.calls[0][0];
     expect(upsertRows[0].vote_count).toBe(4321);
   });
@@ -1576,7 +1571,7 @@ describe('GET /api/movies', () => {
 
     await handler(createRequest());
 
-    const upsertChain = mockSupabaseClient!.from.mock.results[2].value;
+    const upsertChain = mockSupabaseClient!.from.mock.results[1].value;
     const upsertRows = upsertChain.upsert.mock.calls[0][0];
     expect(upsertRows[0].vote_count).toBe(0);
   });

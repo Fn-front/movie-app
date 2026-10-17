@@ -209,15 +209,10 @@ export async function GET(request: Request) {
         const withReleaseType =
           RELEASE_TYPE_MAP[release_type] || RELEASE_TYPE_MAP.theatrical;
 
-        // 別のrelease_typeで既に存在するIDを取得（重複防止）
-        const { data: existingOtherType } = await supabase
-          .from('movie_cache')
-          .select('id')
-          .neq('release_type', release_type);
-
-        const existingOtherTypeIds = new Set(
-          (existingOtherType ?? []).map((row: { id: number }) => row.id),
-        );
+        // 別release_typeに存在するIDの除外は行わない。
+        // movie_cache の PK は (id, release_type) のため DB 側で自然に共存でき、
+        // 除外すると「劇場公開後に配信化された作品」が配信タブに一生出なくなる。
+        // 加えて Supabase-js の暗黙1000行制限により除外自体が静かに壊れていた。
 
         // TMDb discover APIで映画を取得
         for (let p = 1; p <= DISCOVER_API_MAX_PAGES; p++) {
@@ -231,13 +226,12 @@ export async function GET(request: Request) {
 
           if (tmdbResponse.results.length === 0) break;
 
-          // adultコンテンツ・除外言語・別release_typeで既存の映画・低品質コンテンツを除外
+          // adultコンテンツ・除外言語・低品質コンテンツを除外
           const allowedLangs: readonly string[] = ALLOWED_LANGUAGES;
           const filteredResults = tmdbResponse.results.filter(
             (movie) =>
               !movie.adult &&
               allowedLangs.includes(movie.original_language) &&
-              !existingOtherTypeIds.has(movie.id) &&
               movie.genre_ids &&
               movie.genre_ids.length > 0 &&
               (movie.vote_average === 0 ||

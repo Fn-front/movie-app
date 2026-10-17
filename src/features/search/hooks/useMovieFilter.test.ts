@@ -20,6 +20,7 @@ const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 
 // --- Helpers ---
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 
 function createSearchParams(params: Record<string, string>): URLSearchParams {
   return new URLSearchParams(params);
@@ -30,9 +31,10 @@ function setupMocks(params: Record<string, string> = {}) {
   mockUseSearchParams.mockReturnValue(
     searchParams as unknown as ReturnType<typeof useSearchParams>,
   );
-  mockUseRouter.mockReturnValue({ push: mockPush } as unknown as ReturnType<
-    typeof useRouter
-  >);
+  mockUseRouter.mockReturnValue({
+    push: mockPush,
+    replace: mockReplace,
+  } as unknown as ReturnType<typeof useRouter>);
 }
 
 describe('useMovieFilter', () => {
@@ -120,10 +122,10 @@ describe('useMovieFilter', () => {
         result.current.handleFilterChange({ genre: [28, 12], year: 2024 });
       });
 
-      expect(mockPush).toHaveBeenCalledWith(
+      expect(mockReplace).toHaveBeenCalledWith(
         expect.stringContaining('genre=28%2C12'),
       );
-      expect(mockPush).toHaveBeenCalledWith(
+      expect(mockReplace).toHaveBeenCalledWith(
         expect.stringContaining('year=2024'),
       );
     });
@@ -137,7 +139,7 @@ describe('useMovieFilter', () => {
         result.current.handleFilterChange({ genre: [28] });
       });
 
-      expect(mockPush).toHaveBeenCalledWith(
+      expect(mockReplace).toHaveBeenCalledWith(
         expect.not.stringContaining('page='),
       );
     });
@@ -151,7 +153,9 @@ describe('useMovieFilter', () => {
         result.current.handleFilterChange({ year: 2024 });
       });
 
-      expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('query='));
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.stringContaining('query='),
+      );
     });
 
     it('vote_average_gteフィルターでURLを更新する', () => {
@@ -163,7 +167,7 @@ describe('useMovieFilter', () => {
         result.current.handleFilterChange({ vote_average_gte: 7.5 });
       });
 
-      expect(mockPush).toHaveBeenCalledWith(
+      expect(mockReplace).toHaveBeenCalledWith(
         expect.stringContaining('vote_average_gte=7.5'),
       );
     });
@@ -177,9 +181,39 @@ describe('useMovieFilter', () => {
         result.current.handleFilterChange({ genre: undefined });
       });
 
-      expect(mockPush).toHaveBeenCalledWith(
+      expect(mockReplace).toHaveBeenCalledWith(
         expect.not.stringContaining('genre='),
       );
+    });
+  });
+
+  describe('ブラウザ履歴', () => {
+    it('フィルター変更でpushされない（履歴を積まない）', () => {
+      setupMocks({ query: 'テスト' });
+
+      const { result } = renderHook(() => useMovieFilter());
+
+      act(() => {
+        result.current.handleFilterChange({ genre: [28] });
+        result.current.handleFilterChange({ year: 2024 });
+        result.current.handleFilterChange({ vote_average_gte: 7 });
+      });
+
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledTimes(3);
+    });
+
+    it('フィルタークリアでpushされない（履歴を積まない）', () => {
+      setupMocks({ query: 'テスト', genre: '28' });
+
+      const { result } = renderHook(() => useMovieFilter());
+
+      act(() => {
+        result.current.handleFilterClear();
+      });
+
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -199,7 +233,7 @@ describe('useMovieFilter', () => {
         result.current.handleFilterClear();
       });
 
-      const calledUrl = mockPush.mock.calls[0][0] as string;
+      const calledUrl = mockReplace.mock.calls[0][0] as string;
       expect(calledUrl).not.toContain('genre=');
       expect(calledUrl).not.toContain('year=');
       expect(calledUrl).not.toContain('vote_average_gte=');
@@ -215,7 +249,9 @@ describe('useMovieFilter', () => {
         result.current.handleFilterClear();
       });
 
-      expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('query='));
+      expect(mockReplace).toHaveBeenCalledWith(
+        expect.stringContaining('query='),
+      );
     });
   });
 });

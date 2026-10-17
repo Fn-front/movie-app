@@ -112,10 +112,13 @@ export function useMovieFilter(): UseMovieFilterReturn {
     [currentFilters],
   );
 
+  // フィルター変更は同一ページ内の状態変化のため履歴を積まない（replace）。
+  // push にすると変更のたびに履歴が増え、詳細モーダルを閉じた後のブラウザバックで
+  // 「1つ前のフィルター状態」に戻ってしまい、リセットされたように見える。
   const handleFilterChange = useCallback(
     (filters: FilterOptions) => {
       const params = buildSearchParamsFromFilters(searchParams, filters);
-      router.push(`/search?${params.toString()}`);
+      router.replace(`/search?${params.toString()}`);
     },
     [searchParams, router],
   );
@@ -126,7 +129,7 @@ export function useMovieFilter(): UseMovieFilterReturn {
     params.delete(QUERY_PARAMS.YEAR);
     params.delete(QUERY_PARAMS.VOTE_AVERAGE_GTE);
     params.delete(QUERY_PARAMS.PAGE);
-    router.push(`/search?${params.toString()}`);
+    router.replace(`/search?${params.toString()}`);
   }, [searchParams, router]);
 
   return useMemo(

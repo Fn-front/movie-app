@@ -147,4 +147,6 @@ export const VALIDATION_MESSAGES = {
   /** OTP検証済みトークン必須 */
   OTP_TOKEN_REQUIRED:
     'OTP検証が完了していません。確認コードを再送信してください',
+  /** 現在のパスワード必須 */
+  CURRENT_PASSWORD_REQUIRED: '現在のパスワードを入力してください',
 } as const;

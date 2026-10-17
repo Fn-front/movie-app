@@ -103,19 +103,33 @@ export const otpLoginEmailSchema = z.object({
 export type OtpLoginEmailFormData = z.infer<typeof otpLoginEmailSchema>;
 
 /**
- * パスワード変更フォームのバリデーションスキーマ（新パスワードのみ）
+ * パスワード変更フォームのバリデーションスキーマを生成する
+ *
+ * @param requireCurrentPassword - 現在のパスワードを要求するか。
+ *   ソーシャルログインのみで登録しパスワード未設定のユーザー（`password_hash`
+ *   が null）は入力しようがないため false にする
  */
-export const changePasswordSchema = z
-  .object({
-    newPassword: passwordSchema,
-    confirmNewPassword: z
-      .string()
-      .min(1, VALIDATION_MESSAGES.CONFIRM_PASSWORD_REQUIRED),
-  })
-  .refine((data) => data.newPassword === data.confirmNewPassword, {
-    message: VALIDATION_MESSAGES.PASSWORD_MISMATCH,
-    path: ['confirmNewPassword'],
-  });
+export function buildChangePasswordSchema(requireCurrentPassword: boolean) {
+  return z
+    .object({
+      currentPassword: requireCurrentPassword
+        ? z.string().min(1, VALIDATION_MESSAGES.CURRENT_PASSWORD_REQUIRED)
+        : z.string().optional(),
+      newPassword: passwordSchema,
+      confirmNewPassword: z
+        .string()
+        .min(1, VALIDATION_MESSAGES.CONFIRM_PASSWORD_REQUIRED),
+    })
+    .refine((data) => data.newPassword === data.confirmNewPassword, {
+      message: VALIDATION_MESSAGES.PASSWORD_MISMATCH,
+      path: ['confirmNewPassword'],
+    });
+}
+
+/**
+ * パスワード変更フォームのバリデーションスキーマ（現在のパスワード必須）
+ */
+export const changePasswordSchema = buildChangePasswordSchema(true);
 
 /**
  * パスワード変更フォームの型
@@ -132,4 +146,12 @@ export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 export const changePasswordApiSchema = z.object({
   newPassword: passwordSchema,
   verificationToken: z.string().min(1, VALIDATION_MESSAGES.OTP_TOKEN_REQUIRED),
+  /**
+   * 現在のパスワード。
+   *
+   * スキーマ上は任意だが、`users.password_hash` が設定されているユーザーには
+   * ルート側で必須として検証する。パスワード未設定（ソーシャルログインのみ）の
+   * ユーザーは入力しようがないため、ここで一律必須にはできない。
+   */
+  currentPassword: z.string().optional(),
 });

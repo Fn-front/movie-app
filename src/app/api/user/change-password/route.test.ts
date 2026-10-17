@@ -52,6 +52,7 @@ const createRequest = (body: Record<string, unknown>) =>
 const validBody = (newPassword = 'NewPassword1') => ({
   newPassword,
   verificationToken: 'verification-token',
+  currentPassword: 'CurrentPassword1',
 });
 
 /** ユーザー取得のモック */
@@ -130,7 +131,9 @@ describe('POST /api/user/change-password', () => {
       email: 'test@example.com',
       verified_at: new Date().toISOString(),
     });
-    mockBcryptCompare.mockResolvedValueOnce(false); // newPassword is different
+    mockBcryptCompare
+      .mockResolvedValueOnce(true) // 現在のパスワードが一致
+      .mockResolvedValueOnce(false); // 新旧パスワードは異なる
     mockOtpDelete(); // OTP削除（パスワード更新前に無効化）
     mockUpdateSuccess();
 
@@ -215,7 +218,9 @@ describe('POST /api/user/change-password', () => {
       email: 'test@example.com',
       verified_at: new Date().toISOString(),
     });
-    mockBcryptCompare.mockResolvedValueOnce(true); // newPassword is same
+    mockBcryptCompare
+      .mockResolvedValueOnce(true) // 現在のパスワードが一致
+      .mockResolvedValueOnce(true); // 新旧パスワードが同一
 
     const response = await POST(createRequest(validBody('SamePassword1')));
 
@@ -268,5 +273,114 @@ describe('POST /api/user/change-password', () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
+  });
+});
+
+describe('POST /api/user/change-password — 現在のパスワード確認（#643）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      user: { id: 'user-123' },
+    });
+    (checkRateLimit as jest.Mock).mockResolvedValue({ allowed: true });
+  });
+
+  /** パスワード設定済みユーザー + 有効なOTP のモック */
+  const setupPasswordUserWithValidOtp = () => {
+    mockUserSelect({
+      id: 'user-123',
+      email: 'test@example.com',
+      password_hash: 'old_hash',
+    });
+    mockOtpSelect({
+      id: 'otp-1',
+      email: 'test@example.com',
+      verified_at: new Date().toISOString(),
+    });
+  };
+
+  it('現在のパスワードが一致しない場合400を返し、パスワードを更新しない', async () => {
+    setupPasswordUserWithValidOtp();
+    mockBcryptCompare.mockResolvedValueOnce(false); // 現在のパスワードが不一致
+
+    const response = await POST(createRequest(validBody()));
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.message).toBe('現在のパスワードが正しくありません。');
+    // 新旧同一チェックまで進まない＝更新処理に到達していない
+    expect(mockBcryptCompare).toHaveBeenCalledTimes(1);
+  });
+
+  it('currentPassword が無い場合400を返す（設定済みユーザー）', async () => {
+    setupPasswordUserWithValidOtp();
+
+    const response = await POST(
+      createRequest({
+        newPassword: 'NewPassword1',
+        verificationToken: 'verification-token',
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.message).toBe('現在のパスワードを入力してください');
+    expect(mockBcryptCompare).not.toHaveBeenCalled();
+  });
+
+  it('現在のパスワードを users.password_hash と照合する', async () => {
+    setupPasswordUserWithValidOtp();
+    mockBcryptCompare.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mockOtpDelete();
+    mockUpdateSuccess();
+
+    await POST(createRequest(validBody()));
+
+    expect(mockBcryptCompare).toHaveBeenNthCalledWith(
+      1,
+      'CurrentPassword1',
+      'old_hash',
+    );
+  });
+
+  it('パスワード未設定ユーザーでは currentPassword を要求しない', async () => {
+    mockUserSelect({
+      id: 'user-123',
+      email: 'test@example.com',
+      password_hash: null,
+    });
+    mockOtpSelect({
+      id: 'otp-1',
+      email: 'test@example.com',
+      verified_at: new Date().toISOString(),
+    });
+    mockOtpDelete();
+    mockUpdateSuccess();
+
+    const response = await POST(
+      createRequest({
+        newPassword: 'NewPassword1',
+        verificationToken: 'verification-token',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    // 照合自体が行われない
+    expect(mockBcryptCompare).not.toHaveBeenCalled();
+  });
+
+  it('OTP未検証なら現在のパスワード照合まで到達しない（オラクル化の防止）', async () => {
+    mockUserSelect({
+      id: 'user-123',
+      email: 'test@example.com',
+      password_hash: 'old_hash',
+    });
+    mockOtpSelect(null); // 検証済みOTPなし
+
+    const response = await POST(createRequest(validBody()));
+
+    expect(response.status).toBe(400);
+    // セッションだけではパスワードを総当たりできない
+    expect(mockBcryptCompare).not.toHaveBeenCalled();
   });
 });

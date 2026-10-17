@@ -198,6 +198,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           image: user.avatar_url,
           role: user.role,
+          hasPassword: Boolean(user.password_hash),
           passwordChangedAt: user.password_changed_at || null,
         };
       },
@@ -373,6 +374,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.name = user.name;
           token.picture = user.image;
           token.role = USER_ROLE.USER;
+          token.hasPassword = false;
           token.passwordChangedAt = null;
           token.lastPasswordCheck = Date.now();
           token.lastLoginUpdate = Date.now();
@@ -381,12 +383,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (supabase && user.id) {
             const { data: dbUser } = await supabase
               .from('users')
-              .select('role, password_changed_at')
+              .select('role, password_hash, password_changed_at')
               .eq('id', user.id)
               .single();
 
             if (dbUser) {
               token.role = dbUser.role ?? USER_ROLE.USER;
+              token.hasPassword = Boolean(dbUser.password_hash);
               token.passwordChangedAt = dbUser.password_changed_at ?? null;
             }
           }
@@ -397,6 +400,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.name = user.name;
           token.picture = user.image;
           token.role = user.role;
+          token.hasPassword = Boolean(
+            (user as unknown as { hasPassword?: boolean }).hasPassword,
+          );
           token.passwordChangedAt =
             (user as unknown as { passwordChangedAt: string | null })
               .passwordChangedAt ?? null;
@@ -422,7 +428,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ) {
           const { data } = await supabase
             .from('users')
-            .select('password_changed_at')
+            .select('password_hash, password_changed_at')
             .eq('id', token.id)
             .single();
 
@@ -437,6 +443,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               token.invalidated = true;
               return token;
             }
+          }
+
+          // パスワード未設定だったユーザーが設定した場合に追従する
+          // （パスワード変更フォームが「現在のパスワード」欄を出すかの判定に使う）
+          if (data) {
+            token.hasPassword = Boolean(data.password_hash);
           }
 
           token.lastPasswordCheck = now;
@@ -471,6 +483,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.name = null;
         session.user.image = null;
         session.user.role = '';
+        session.user.hasPassword = false;
         return session;
       }
 
@@ -481,6 +494,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.name = token.name as string | null;
         session.user.image = token.picture as string | null;
         session.user.role = token.role as string;
+        session.user.hasPassword = Boolean(token.hasPassword);
       }
       return session;
     },

@@ -50,6 +50,20 @@ const createRequest = (body: Record<string, unknown>) =>
   });
 
 /**
+ * 送信元IPが取れるリクエスト。
+ * Vercel のエッジが付与する x-vercel-forwarded-for はクライアントから改変できない。
+ */
+const createRequestFromIp = (body: Record<string, unknown>, ip: string) =>
+  new Request('http://localhost/api/auth/register', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-vercel-forwarded-for': ip,
+    },
+    body: JSON.stringify(body),
+  });
+
+/**
  * 既存ユーザーなし + INSERT成功 + OTP INSERT成功 のモックを設定
  */
 const setupSuccessMocks = () => {
@@ -481,5 +495,126 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     expect(response.status).toBe(500);
     // otp_codes の1回だけ（users の削除が走っていない）
     expect(deletedTables).toHaveLength(1);
+  });
+
+  // === レート制限の識別子と送信カウンタ ===
+
+  it('登録試行はアカウント×送信元で数える', async () => {
+    setupSuccessMocks();
+
+    await POST(
+      createRequestFromIp(
+        { email: 'test@example.com', password: 'Password1' },
+        '203.0.113.10',
+      ),
+    );
+
+    // 識別子にメール単独を使うと、第三者が被害者のメールで数回POSTするだけで
+    // 本人を60分間登録不能にできる（#644と同種）
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com|203.0.113.10',
+      'register',
+      5,
+      60,
+    );
+  });
+
+  it('確認コード送信前に日次送信上限（メール単位）を消費する', async () => {
+    setupSuccessMocks();
+
+    await POST(
+      createRequestFromIp(
+        { email: 'test@example.com', password: 'Password1' },
+        '203.0.113.10',
+      ),
+    );
+
+    // メールボックス保護の枠は送信元で割らない（IPを変えても掛け算できない）
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_send_daily',
+      5,
+      1440,
+    );
+  });
+
+  it('日次送信上限を超えたら429を返し、ユーザー行を作らない', async () => {
+    // 既存ユーザーなし
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({ single: () => ({ data: null, error: null }) }),
+      }),
+    });
+    // 1回目（register）は許可、2回目（otp_send_daily）で拒否
+    mockCheckRateLimit
+      .mockResolvedValueOnce({ allowed: true })
+      .mockResolvedValueOnce({ allowed: false, retryAfter: 86400 });
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', password: 'Password1' }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.error.code).toBe('RATE_LIMIT_EXCEEDED');
+    expect(response.headers.get('Retry-After')).toBe('86400');
+    // 枠切れでユーザー行やOTPを作らない（INSERTは既存ユーザー検索の1回のみ）
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
+  });
+
+  it('認証済みメールの早期returnでは日次送信上限を消費しない', async () => {
+    // 既存ユーザー（認証済み）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'user-1', is_verified: true },
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', password: 'Password1' }),
+    );
+
+    // 列挙防止のため 201 を返すが、メールは送らないので枠も減らさない
+    expect(response.status).toBe(201);
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
+    expect(mockCheckRateLimit).not.toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_send_daily',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  // === メールアドレスの正規化 ===
+
+  it('大小文字が異なる表記でも同じ送信カウンタに正規化される', async () => {
+    setupSuccessMocks();
+
+    await POST(
+      createRequest({ email: 'TeSt@ExAmPle.COM', password: 'Password1' }),
+    );
+
+    // 表記を変えても枠を分けられない＝同一メールボックスへの多重送信を塞ぐ
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_send_daily',
+      5,
+      1440,
+    );
+    expect(mockSendOtpEmail).toHaveBeenCalledWith(
+      'test@example.com',
+      expect.any(String),
+      'registration',
+    );
   });
 });

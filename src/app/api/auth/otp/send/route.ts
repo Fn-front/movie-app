@@ -18,6 +18,7 @@ import {
   hashOtpCode,
 } from '@/lib/otp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { normalizeEmail } from '@/utils/email';
 import {
   OTP_ACTION,
   OTP_CONFIG,
@@ -80,35 +81,11 @@ export async function POST(request: Request) {
         return unauthorizedResponse();
       }
 
-      email = sessionUser.email;
+      // 移行前に作られた行が残っていても表記を揃えるため、DB由来の値も通す
+      email = normalizeEmail(sessionUser.email);
     }
 
-    // 日次送信上限チェック（メールアドレス単位で5通/日）
-    const dailyLimitResult = await checkRateLimit(
-      supabase,
-      email,
-      RATE_LIMIT_ACTION.OTP_SEND_DAILY,
-      OTP_CONFIG.DAILY_SEND_LIMIT,
-      OTP_CONFIG.DAILY_SEND_WINDOW_MINUTES,
-    );
-
-    if (!dailyLimitResult.allowed) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
-            message: OTP_ERROR_MESSAGES.DAILY_LIMIT_EXCEEDED,
-          },
-        },
-        {
-          status: HTTP_STATUS.TOO_MANY_REQUESTS,
-          headers: dailyLimitResult.retryAfter
-            ? { 'Retry-After': String(dailyLimitResult.retryAfter) }
-            : undefined,
-        },
-      );
-    }
+    // 日次送信上限は「実際に送る直前」まで消費しない（下部参照）。
 
     // アクション別チェック
     if (action === OTP_ACTION.REGISTRATION) {
@@ -191,6 +168,43 @@ export async function POST(request: Request) {
           { status: HTTP_STATUS.TOO_MANY_REQUESTS },
         );
       }
+    }
+
+    // 日次送信上限チェック（メールアドレス単位で5通/日）
+    //
+    // ここまで降りてきた＝実際にメールを送るリクエストに限って消費する。
+    // 最上流で消費していたときは、ユーザー不在・認証済み・再送間隔内・
+    // 送信失敗といった「1通も送らないパス」でも枠が減り、第三者が被害者の
+    // メールアドレスを叩くだけで本人が受け取れる通数を削れた。
+    // 枠の目的はメールボックスの保護なので、送信の実行と1対1で対応させる。
+    //
+    // 識別子は正規化済みメールアドレスのまま（送信元IPを混ぜない）。IPごとに
+    // カウンタが分かれると、同一メールボックスへの送信数をIP数だけ
+    // 掛け算できてしまい、保護の目的そのものが壊れる。
+    const dailyLimitResult = await checkRateLimit(
+      supabase,
+      email,
+      RATE_LIMIT_ACTION.OTP_SEND_DAILY,
+      OTP_CONFIG.DAILY_SEND_LIMIT,
+      OTP_CONFIG.DAILY_SEND_WINDOW_MINUTES,
+    );
+
+    if (!dailyLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
+            message: OTP_ERROR_MESSAGES.DAILY_LIMIT_EXCEEDED,
+          },
+        },
+        {
+          status: HTTP_STATUS.TOO_MANY_REQUESTS,
+          headers: dailyLimitResult.retryAfter
+            ? { 'Retry-After': String(dailyLimitResult.retryAfter) }
+            : undefined,
+        },
+      );
     }
 
     // 既存の未使用OTPを無効化（削除）

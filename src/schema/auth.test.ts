@@ -92,6 +92,69 @@ describe('registerSchema', () => {
   });
 });
 
+describe('メールアドレスの正規化', () => {
+  it('registerSchema: 大文字を小文字に正規化する', () => {
+    const result = registerSchema.safeParse({
+      email: 'TeSt@ExAmPle.COM',
+      password: 'Password1',
+      confirmPassword: 'Password1',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.email).toBe('test@example.com');
+    }
+  });
+
+  it('registerApiSchema: 前後の空白を落として小文字に正規化する', () => {
+    const result = registerApiSchema.safeParse({
+      email: '  TeSt@ExAmPle.COM  ',
+      password: 'Password1',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.email).toBe('test@example.com');
+    }
+  });
+
+  it('loginSchema: 大文字を小文字に正規化する', () => {
+    const result = loginSchema.safeParse({
+      email: 'TeSt@ExAmPle.COM',
+      password: 'Password1',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.email).toBe('test@example.com');
+    }
+  });
+
+  it('大小文字違いの表記はすべて同じ値に収束する（登録上限を分割できない）', () => {
+    const variants = ['a@b.com', 'A@B.com', 'a@B.COM', 'A@B.COM'];
+    const parsed = variants.map((email) => {
+      const result = registerApiSchema.safeParse({
+        email,
+        password: 'Password1',
+      });
+      return result.success ? result.data.email : null;
+    });
+    expect(new Set(parsed)).toEqual(new Set(['a@b.com']));
+  });
+
+  it('ドット違いは別アドレスのまま残す（プロバイダ固有の正規化はしない）', () => {
+    const a = registerApiSchema.safeParse({
+      email: 'v.ictim@gmail.com',
+      password: 'Password1',
+    });
+    const b = registerApiSchema.safeParse({
+      email: 'victim@gmail.com',
+      password: 'Password1',
+    });
+    expect(a.success && b.success).toBe(true);
+    if (a.success && b.success) {
+      expect(a.data.email).not.toBe(b.data.email);
+    }
+  });
+});
+
 describe('loginSchema', () => {
   it('有効な入力でパースが成功する', () => {
     const result = loginSchema.safeParse({

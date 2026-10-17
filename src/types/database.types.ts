@@ -138,9 +138,12 @@ export type Database = {
         Row: {
           created_at: string;
           deleted_at: string | null;
+          director_name: string | null;
           genre_ids: number[] | null;
           id: string;
+          keywords: string[] | null;
           poster_path: string | null;
+          release_year: number | null;
           title: string;
           tmdb_movie_id: number;
           updated_at: string;
@@ -149,9 +152,12 @@ export type Database = {
         Insert: {
           created_at?: string;
           deleted_at?: string | null;
+          director_name?: string | null;
           genre_ids?: number[] | null;
           id?: string;
+          keywords?: string[] | null;
           poster_path?: string | null;
+          release_year?: number | null;
           title: string;
           tmdb_movie_id: number;
           updated_at?: string;
@@ -160,9 +166,12 @@ export type Database = {
         Update: {
           created_at?: string;
           deleted_at?: string | null;
+          director_name?: string | null;
           genre_ids?: number[] | null;
           id?: string;
+          keywords?: string[] | null;
           poster_path?: string | null;
+          release_year?: number | null;
           title?: string;
           tmdb_movie_id?: number;
           updated_at?: string;
@@ -893,6 +902,18 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      consume_rate_limit: {
+        Args: {
+          p_action_type: string;
+          p_identifier: string;
+          p_max_attempts: number;
+          p_window_minutes: number;
+        };
+        Returns: {
+          allowed: boolean;
+          retry_after: number;
+        }[];
+      };
       get_award_years: { Args: never; Returns: number[] };
       get_watchlist_by_proximity: {
         Args: { p_limit: number; p_offset?: number; p_user_id: string };

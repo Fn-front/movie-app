@@ -68,7 +68,11 @@ export async function syncNowShowingMovies(): Promise<NowShowingSyncResult> {
     return { fetched: 0, synced: 0 };
   }
 
-  const movies = response.results.slice(0, NOW_SHOWING_DISPLAY_COUNT);
+  // adult作品を除外（discoverMoviesでも除外済みだが、now_showing_movies は
+  // 未認証ユーザーにも公開されるため、保存直前でも明示的に弾く二重防御とする）
+  const safeResults = response.results.filter((movie) => !movie.adult);
+
+  const movies = safeResults.slice(0, NOW_SHOWING_DISPLAY_COUNT);
 
   // 2. RPC関数でトランザクション内の全件洗い替え（DELETE → INSERT）をアトミックに実行
   const rows = movies.map((movie, index) => ({

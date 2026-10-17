@@ -28,6 +28,8 @@ import {
 import {
   buildFilterSearchParams,
   parseFilterConditionsFromParams,
+  readStoredFilterConditions,
+  writeStoredFilterConditions,
 } from '@/features/movies/utils/movieFilterParams';
 import type { FilterConditions } from '@/schema/filters';
 import type { DateRange } from '@/features/movies/types';
@@ -114,15 +116,37 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // URLのフィルターを初期stateに注入する。
-  // useEffectでの後追い反映だと、初期レンダリングで一瞬デフォルト値が表示される。
+  // フィルターの初期値を決める。useEffectでの後追い反映だと、初期レンダリングで
+  // 一瞬デフォルト値が表示されるため、初期stateに直接注入する。
   // 初期化は1回だけ（以降のURL変更は自前のrouter.replaceによるもののため追従不要）。
-  const [urlFilters] = useState<FilterConditions>(() =>
-    parseFilterConditionsFromParams(
+  //
+  // 優先順位: URL > localStorage > saved_filters > デフォルト
+  // URLは共有・ブラウザバックの正であり最優先。クエリを持たないナビリンク経由の
+  // 遷移では localStorage が受け皿になる（未認証ユーザーの唯一の復元手段）。
+  //
+  // localStorage をレンダリング中に読むが、この2画面はいずれも実質クライアント
+  // 専用レンダリング（now-showing は Suspense 境界、upcoming は ssr:false の
+  // dynamic import）のため、ハイドレーションミスマッチは発生しない。
+  const [initialFilters] = useState<{
+    conditions: FilterConditions;
+    hasAny: boolean;
+  }>(() => {
+    const fromUrl = parseFilterConditionsFromParams(
       new URLSearchParams(searchParams.toString()),
-    ),
-  );
-  const hasUrlFilters = Object.keys(urlFilters).length > 0;
+    );
+    if (Object.keys(fromUrl).length > 0) {
+      return { conditions: fromUrl, hasAny: true };
+    }
+
+    const fromStorage = readStoredFilterConditions();
+    return {
+      conditions: fromStorage,
+      hasAny: Object.keys(fromStorage).length > 0,
+    };
+  });
+
+  const urlFilters = initialFilters.conditions;
+  const hasUrlFilters = initialFilters.hasAny;
 
   const [sortBy, setSortBy] = useState<string>(
     urlFilters.sort_by ?? DEFAULT_SORT,
@@ -144,7 +168,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const { toast } = useToast();
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated' && !!session?.user;
-  // URLにフィルターがある場合はそれを唯一の正とし、保存済みフィルターで上書きしない
+  // URL または localStorage に値がある場合はそれを正とし、saved_filters で上書きしない
   const [savedFilterApplied, setSavedFilterApplied] = useState(hasUrlFilters);
   const queryClient = useQueryClient();
 
@@ -278,15 +302,24 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
    * 並び順を変えただけでその日の既定範囲が固定され、翌日以降も
    * 古い範囲で絞り込まれてしまうため。
    */
+  /** ページ既定の日付範囲を取り除く（陳腐化防止。上の syncFiltersToUrl の説明を参照） */
+  const stripDefaultDateRange = useCallback(
+    (conditions: FilterConditions): FilterConditions => {
+      const stripped: FilterConditions = { ...conditions };
+      if (stripped.date_range_gte === defaultDateRange.gte) {
+        delete stripped.date_range_gte;
+      }
+      if (stripped.date_range_lte === defaultDateRange.lte) {
+        delete stripped.date_range_lte;
+      }
+      return stripped;
+    },
+    [defaultDateRange],
+  );
+
   const syncFiltersToUrl = useCallback(
     (conditions: FilterConditions) => {
-      const urlConditions: FilterConditions = { ...conditions };
-      if (urlConditions.date_range_gte === defaultDateRange.gte) {
-        delete urlConditions.date_range_gte;
-      }
-      if (urlConditions.date_range_lte === defaultDateRange.lte) {
-        delete urlConditions.date_range_lte;
-      }
+      const urlConditions = stripDefaultDateRange(conditions);
 
       const params = buildFilterSearchParams(
         new URLSearchParams(searchParams.toString()),
@@ -298,16 +331,23 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
         scroll: false,
       });
     },
-    [router, pathname, searchParams, defaultDateRange],
+    [router, pathname, searchParams, stripDefaultDateRange],
   );
 
-  /** フィルター変更をURL反映とサーバー保存の両方に伝える */
+  /**
+   * フィルター変更を URL・localStorage・サーバーの3箇所に伝える
+   *
+   * localStorage にもURLと同じ正規化（ページ既定の日付範囲を除く）を適用する。
+   * 正規化せずに保存すると、並び順を変えただけでその日の既定範囲が端末に
+   * 有効期限なしで焼き付き、翌日以降も古い範囲で絞り込まれてしまう。
+   */
   const persistFilters = useCallback(
     (conditions: FilterConditions) => {
       syncFiltersToUrl(conditions);
+      writeStoredFilterConditions(stripDefaultDateRange(conditions));
       saveFilterIfAuthenticated(conditions);
     },
-    [syncFiltersToUrl, saveFilterIfAuthenticated],
+    [syncFiltersToUrl, stripDefaultDateRange, saveFilterIfAuthenticated],
   );
 
   const handleSortChange = useCallback(

@@ -309,30 +309,36 @@ export async function resolveAwardsWithTMDb(
     }
 
     try {
+      /**
+       * adult作品を除外して最良一致を選ぶ
+       *
+       * searchMoviesでも除外済みだが、受賞作品はDBに保存され未認証ユーザーにも
+       * 表示されるため、採用直前でも明示的に弾く二重防御とする。
+       * フォールバック検索が4パターンあるためヘルパー化して漏れを防ぐ。
+       */
+      const searchSafely = async (params: { query: string; year?: number }) => {
+        const searchResult = await searchMovies(params);
+        const safeResults = searchResult.results.filter((m) => !m.adult);
+        return findBestMatch(safeResults, item.year);
+      };
+
       // 日本語タイトル+公開年で検索、見つからなければ年指定なしで再検索
-      let searchResult = await searchMovies({
+      let movie = await searchSafely({
         query: item.title_ja,
         year: item.year,
       });
-      let movie = findBestMatch(searchResult.results, item.year);
 
       if (!movie) {
-        searchResult = await searchMovies({ query: item.title_ja });
-        movie = findBestMatch(searchResult.results, item.year);
+        movie = await searchSafely({ query: item.title_ja });
       }
 
       // 日本語で見つからなければ英語タイトルで同様に検索
       if (!movie) {
-        searchResult = await searchMovies({
-          query: item.title_en,
-          year: item.year,
-        });
-        movie = findBestMatch(searchResult.results, item.year);
+        movie = await searchSafely({ query: item.title_en, year: item.year });
       }
 
       if (!movie) {
-        searchResult = await searchMovies({ query: item.title_en });
-        movie = findBestMatch(searchResult.results, item.year);
+        movie = await searchSafely({ query: item.title_en });
       }
 
       if (!movie) {

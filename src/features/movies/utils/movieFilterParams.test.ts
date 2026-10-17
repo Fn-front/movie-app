@@ -8,7 +8,10 @@
 import {
   buildFilterSearchParams,
   parseFilterConditionsFromParams,
+  readStoredFilterConditions,
+  writeStoredFilterConditions,
 } from './movieFilterParams';
+import { STORAGE_KEYS } from '@/constants/common';
 
 describe('parseFilterConditionsFromParams', () => {
   describe('正常系', () => {
@@ -207,5 +210,88 @@ describe('buildFilterSearchParams', () => {
     const params = buildFilterSearchParams(new URLSearchParams(), conditions);
 
     expect(parseFilterConditionsFromParams(params)).toEqual(conditions);
+  });
+});
+
+describe('localStorage への保存と復元', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    jest.restoreAllMocks();
+  });
+
+  it('保存した条件を復元できる', () => {
+    const conditions = {
+      sort_by: 'popularity' as const,
+      release_type: 'streaming' as const,
+      genre_ids: [28, 12],
+      date_range_gte: '2026-01-01',
+      is_revival: true,
+    };
+
+    writeStoredFilterConditions(conditions);
+
+    expect(readStoredFilterConditions()).toEqual(conditions);
+  });
+
+  it('未保存の場合は空オブジェクトを返す', () => {
+    expect(readStoredFilterConditions()).toEqual({});
+  });
+
+  it('保存値が壊れたJSONでも例外を投げず空を返す', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    window.localStorage.setItem(STORAGE_KEYS.MOVIE_FILTERS, '{壊れた');
+
+    expect(() => readStoredFilterConditions()).not.toThrow();
+    expect(readStoredFilterConditions()).toEqual({});
+  });
+
+  it('保存値がオブジェクトでない場合は空を返す', () => {
+    window.localStorage.setItem(STORAGE_KEYS.MOVIE_FILTERS, '"文字列"');
+
+    expect(readStoredFilterConditions()).toEqual({});
+  });
+
+  it('保存値の不正なフィールドだけを捨てる', () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.MOVIE_FILTERS,
+      JSON.stringify({
+        sort_by: 'popularity',
+        release_type: 'invalid',
+        genre_ids: ['28', 'abc'],
+        date_range_gte: '2026/01/01',
+        is_revival: 'maybe',
+      }),
+    );
+
+    // 文字列の数値はIDとして有効、それ以外は捨てる
+    expect(readStoredFilterConditions()).toEqual({
+      sort_by: 'popularity',
+      genre_ids: [28],
+    });
+  });
+
+  it('localStorage が利用不可でも例外を投げない（読み取り）', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest
+      .spyOn(window.localStorage.__proto__, 'getItem')
+      .mockImplementation(() => {
+        throw new Error('SecurityError');
+      });
+
+    expect(() => readStoredFilterConditions()).not.toThrow();
+    expect(readStoredFilterConditions()).toEqual({});
+  });
+
+  it('localStorage が利用不可でも例外を投げない（書き込み）', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest
+      .spyOn(window.localStorage.__proto__, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+
+    expect(() =>
+      writeStoredFilterConditions({ sort_by: 'popularity' }),
+    ).not.toThrow();
   });
 });

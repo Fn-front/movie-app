@@ -87,6 +87,59 @@ describe('syncNowShowingMovies', () => {
     expect(rpcMovies).toHaveLength(10);
   });
 
+  describe('アダルト作品の除外', () => {
+    it('adult=trueの映画をRPCに渡さない', async () => {
+      mockDiscoverMovies.mockResolvedValue({
+        results: [
+          { ...createMovies(1)[0], id: 801, adult: true },
+          { ...createMovies(1)[0], id: 802, adult: false },
+        ],
+      });
+
+      const result = await syncNowShowingMovies();
+
+      const rpcMovies = mockRpc.mock.calls[0][1].movies;
+      expect(
+        rpcMovies.map((m: { tmdb_movie_id: number }) => m.tmdb_movie_id),
+      ).toEqual([802]);
+      expect(result.synced).toBe(1);
+    });
+
+    it('全件adultの場合はRPCに空配列を渡す', async () => {
+      mockDiscoverMovies.mockResolvedValue({
+        results: [
+          { ...createMovies(1)[0], id: 803, adult: true },
+          { ...createMovies(1)[0], id: 804, adult: true },
+        ],
+      });
+
+      const result = await syncNowShowingMovies();
+
+      expect(mockRpc.mock.calls[0][1].movies).toEqual([]);
+      expect(result.synced).toBe(0);
+    });
+
+    it('adult除外後も表示上限で切り詰める', async () => {
+      // 先頭1件がadult → 残り20件から上限10件
+      mockDiscoverMovies.mockResolvedValue({
+        results: [
+          { ...createMovies(1)[0], id: 805, adult: true },
+          ...createMovies(20, 100),
+        ],
+      });
+
+      const result = await syncNowShowingMovies();
+
+      expect(result.synced).toBe(10);
+      const rpcMovies = mockRpc.mock.calls[0][1].movies;
+      expect(
+        rpcMovies.some(
+          (m: { tmdb_movie_id: number }) => m.tmdb_movie_id === 805,
+        ),
+      ).toBe(false);
+    });
+  });
+
   it('display_orderが1から連番になる', async () => {
     mockDiscoverMovies.mockResolvedValue({ results: createMovies(3) });
 

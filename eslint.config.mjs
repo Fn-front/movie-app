@@ -20,6 +20,10 @@ export default [
       'dist/**',
       'e2e/**',
       'scripts/**',
+      // 作業用の一時ファイル置き場（.gitignore 対象）。ESLint は .gitignore を
+      // 読まないため、ローカルにだけ存在する調査スクリプトが大量の no-undef を
+      // 出していた（CIはこれらを見ないので、ローカルとCIで結果が食い違っていた）
+      'docs/tmp/**',
       '.claude/**',
       '.agents/**',
       'next-env.d.ts',

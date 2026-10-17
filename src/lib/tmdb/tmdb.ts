@@ -11,7 +11,9 @@ import {
   PAGINATION,
   TMDB_ENDPOINTS,
   TMDB_MOVIE_DETAIL_APPEND,
+  TMDB_JP_COUNTRY_CODE,
   TMDB_RETRY_CONFIG,
+  TMDB_THEATRICAL_RELEASE_TYPES,
 } from '@/constants';
 import type {
   Movie,
@@ -312,4 +314,32 @@ export async function getMovieReleaseDates(
     results: TMDbReleaseDateCountry[];
   }>(TMDB_ENDPOINTS.MOVIE_RELEASE_DATES(movieId));
   return response.data.results;
+}
+
+/**
+ * 日本の劇場公開日一覧を取得する（昇順）
+ *
+ * リリースタイプのうち劇場公開にあたる 2（限定公開）/ 3（劇場公開）だけを拾う。
+ * `/movie/{id}` の `release_date` は region 指定でも**プレミア（type 1）**が
+ * 代表日になることがあり、「過去に劇場公開されたか」の判定には使えない。
+ *
+ * @param movieId - 映画ID
+ * @returns YYYY-MM-DD の配列（昇順）。日本のリリース情報が無ければ空配列
+ */
+export async function getJpTheatricalReleaseDates(
+  movieId: number,
+): Promise<string[]> {
+  const countries = await getMovieReleaseDates(movieId);
+  const japan = countries.find(
+    (country) => country.iso_3166_1 === TMDB_JP_COUNTRY_CODE,
+  );
+
+  return (japan?.release_dates ?? [])
+    .filter((release) =>
+      (TMDB_THEATRICAL_RELEASE_TYPES as readonly number[]).includes(
+        release.type,
+      ),
+    )
+    .map((release) => release.release_date.slice(0, 10))
+    .sort();
 }

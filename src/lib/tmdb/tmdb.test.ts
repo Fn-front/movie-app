@@ -492,6 +492,96 @@ describe('TMDb APIクライアント', () => {
     });
   });
 
+  describe('getJpTheatricalReleaseDates', () => {
+    /** release_dates レスポンスを組み立てる */
+    const releasesResponse = (
+      results: {
+        iso_3166_1: string;
+        release_dates: { type: number; release_date: string }[];
+      }[],
+    ) => ({ data: { id: 1, results } });
+
+    it('日本の劇場公開（type2/type3）だけを昇順で返す', async () => {
+      mockGet.mockResolvedValue(
+        releasesResponse([
+          {
+            iso_3166_1: 'JP',
+            release_dates: [
+              { type: 3, release_date: '2026-09-04T00:00:00.000Z' },
+              { type: 1, release_date: '2025-10-29T00:00:00.000Z' },
+              { type: 2, release_date: '1996-09-14T00:00:00.000Z' },
+              { type: 4, release_date: '2026-12-01T00:00:00.000Z' },
+            ],
+          },
+        ]),
+      );
+
+      const { getJpTheatricalReleaseDates } = require('./tmdb');
+      const result = await getJpTheatricalReleaseDates(1);
+
+      // プレミア(1)とデジタル(4)は除外し、昇順に並べる
+      expect(result).toEqual(['1996-09-14', '2026-09-04']);
+      expect(mockGet).toHaveBeenCalledWith('/movie/1/release_dates');
+    });
+
+    it('日本以外の国のリリースは含めない', async () => {
+      mockGet.mockResolvedValue(
+        releasesResponse([
+          {
+            iso_3166_1: 'US',
+            release_dates: [{ type: 3, release_date: '2020-01-01T00:00:00Z' }],
+          },
+          {
+            iso_3166_1: 'JP',
+            release_dates: [{ type: 3, release_date: '2026-03-01T00:00:00Z' }],
+          },
+        ]),
+      );
+
+      const { getJpTheatricalReleaseDates } = require('./tmdb');
+
+      expect(await getJpTheatricalReleaseDates(1)).toEqual(['2026-03-01']);
+    });
+
+    it('日本のリリース情報が無ければ空配列を返す', async () => {
+      mockGet.mockResolvedValue(
+        releasesResponse([
+          {
+            iso_3166_1: 'US',
+            release_dates: [{ type: 3, release_date: '2020-01-01T00:00:00Z' }],
+          },
+        ]),
+      );
+
+      const { getJpTheatricalReleaseDates } = require('./tmdb');
+
+      expect(await getJpTheatricalReleaseDates(1)).toEqual([]);
+    });
+
+    it('日本に劇場公開が無ければ空配列を返す（プレミアのみ）', async () => {
+      mockGet.mockResolvedValue(
+        releasesResponse([
+          {
+            iso_3166_1: 'JP',
+            release_dates: [{ type: 1, release_date: '2025-10-29T00:00:00Z' }],
+          },
+        ]),
+      );
+
+      const { getJpTheatricalReleaseDates } = require('./tmdb');
+
+      expect(await getJpTheatricalReleaseDates(1)).toEqual([]);
+    });
+
+    it('results が空でも空配列を返す', async () => {
+      mockGet.mockResolvedValue(releasesResponse([]));
+
+      const { getJpTheatricalReleaseDates } = require('./tmdb');
+
+      expect(await getJpTheatricalReleaseDates(1)).toEqual([]);
+    });
+  });
+
   describe('validatePage（各API関数経由で確認）', () => {
     it('page=0の場合1に補正される', async () => {
       mockGet.mockResolvedValue(mockResponse);

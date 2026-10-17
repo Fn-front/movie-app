@@ -6,6 +6,7 @@
 jest.mock('@/lib/tmdb/tmdb', () => ({
   searchMovies: jest.fn(),
   hasExcludedKeyword: jest.fn(),
+  getJpTheatricalReleaseDates: jest.fn(),
 }));
 
 jest.mock('@supabase/supabase-js', () => ({
@@ -18,7 +19,11 @@ jest.mock('./eiga', () => ({
 }));
 
 import { createClient } from '@supabase/supabase-js';
-import { searchMovies, hasExcludedKeyword } from '@/lib/tmdb/tmdb';
+import {
+  searchMovies,
+  hasExcludedKeyword,
+  getJpTheatricalReleaseDates,
+} from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
 import {
@@ -199,28 +204,38 @@ describe('findBestMatch', () => {
 });
 
 describe('isRevival', () => {
-  it('TMDbの公開日がiCalの日付より90日以上前ならtrueを返す', () => {
-    expect(isRevival('2025-01-01', '2026-03-01')).toBe(true);
+  it('劇場公開がiCalの日付より90日以上前ならtrueを返す', () => {
+    expect(isRevival(['2025-01-01'], '2026-03-01')).toBe(true);
   });
 
-  it('TMDbの公開日がiCalの日付よりちょうど90日前ならtrueを返す', () => {
-    expect(isRevival('2025-12-02', '2026-03-02')).toBe(true);
+  it('劇場公開がiCalの日付よりちょうど90日前ならtrueを返す', () => {
+    expect(isRevival(['2025-12-02'], '2026-03-02')).toBe(true);
   });
 
-  it('TMDbの公開日がiCalの日付より89日前ならfalseを返す', () => {
-    expect(isRevival('2026-01-01', '2026-03-31')).toBe(false);
+  it('劇場公開がiCalの日付より89日前ならfalseを返す', () => {
+    expect(isRevival(['2026-01-01'], '2026-03-31')).toBe(false);
   });
 
-  it('TMDbの公開日がiCalの日付と同日ならfalseを返す', () => {
-    expect(isRevival('2026-03-01', '2026-03-01')).toBe(false);
+  it('劇場公開がiCalの日付と同日ならfalseを返す', () => {
+    expect(isRevival(['2026-03-01'], '2026-03-01')).toBe(false);
   });
 
-  it('TMDbの公開日がnullならfalseを返す', () => {
-    expect(isRevival(null, '2026-03-01')).toBe(false);
+  it('劇場公開がiCalの日付より未来ならfalseを返す', () => {
+    expect(isRevival(['2026-06-01'], '2026-03-01')).toBe(false);
   });
 
-  it('TMDbの公開日がiCalの日付より未来ならfalseを返す', () => {
-    expect(isRevival('2026-06-01', '2026-03-01')).toBe(false);
+  it('日本の劇場公開情報が無ければfalseを返す（過去の公開を確認できない）', () => {
+    expect(isRevival([], '2026-03-01')).toBe(false);
+  });
+
+  it('複数の劇場公開のうち1つでも90日以上前ならtrueを返す（再上映）', () => {
+    // 1996年の初公開 + 2026年の再上映
+    expect(isRevival(['1996-09-14', '2026-09-04'], '2026-09-04')).toBe(true);
+  });
+
+  it('劇場公開が当該上映日しか無ければfalseを返す（新作）', () => {
+    // プレミア（タイプ1）は渡されないため、新作は劇場公開1件のみになる
+    expect(isRevival(['2026-10-30'], '2026-10-30')).toBe(false);
   });
 });
 
@@ -263,6 +278,10 @@ describe('syncEigaMovies', () => {
   const mockedHasExcludedKeyword = hasExcludedKeyword as jest.MockedFunction<
     typeof hasExcludedKeyword
   >;
+  const mockedGetJpTheatricalReleaseDates =
+    getJpTheatricalReleaseDates as jest.MockedFunction<
+      typeof getJpTheatricalReleaseDates
+    >;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -271,6 +290,8 @@ describe('syncEigaMovies', () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
 
     // 既存ID問い合わせは候補IDだけを対象にする（全件SELECTは1000行上限にかかるため）
+    // 既定では劇場公開履歴なし（＝リバイバルではない）
+    mockedGetJpTheatricalReleaseDates.mockResolvedValue([]);
     mockIn.mockResolvedValue({ data: [], error: null });
     mockSelect.mockReturnValue({
       eq: jest.fn().mockReturnValue({ in: mockIn }),
@@ -669,7 +690,6 @@ describe('syncEigaMovies', () => {
         createMockMovie({
           id: 700,
           title: 'テスト映画',
-          // 90日以上前 → リバイバル
           release_date: '2025-01-01',
         }),
       ],
@@ -678,6 +698,8 @@ describe('syncEigaMovies', () => {
       total_results: 1,
     });
     mockedHasExcludedKeyword.mockResolvedValue(false);
+    // 90日以上前の劇場公開がある → リバイバル
+    mockedGetJpTheatricalReleaseDates.mockResolvedValue(['2025-01-01']);
 
     const result = await syncEigaMovies();
 
@@ -690,6 +712,80 @@ describe('syncEigaMovies', () => {
       }),
       { onConflict: 'id,release_type' },
     );
+  });
+
+  describe('リバイバル誤判定の回帰（本番で発生したケース）', () => {
+    /** iCal 1件 + TMDb検索結果1件を用意する */
+    const setupSingle = (movieId: number, tmdbReleaseDate: string) => {
+      const eigaMovie: EigaMovie = {
+        title: 'テスト映画',
+        releaseDate: '2026-10-30',
+        eigaUrl: null,
+      };
+      mockedFetchEigaMovies.mockResolvedValue([eigaMovie]);
+      mockedSearchMovies.mockResolvedValue({
+        results: [
+          createMockMovie({
+            id: movieId,
+            title: 'テスト映画',
+            release_date: tmdbReleaseDate,
+          }),
+        ],
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+      });
+      mockedHasExcludedKeyword.mockResolvedValue(false);
+    };
+
+    it('プレミアの約1年後に劇場公開される新作をリバイバル扱いしない', async () => {
+      // 恒星の向こう側: type1(プレミア) 2025-10-29 / type3(劇場) 2026-10-30
+      setupSingle(1555226, '2026-10-30');
+      // プレミアは除外され、劇場公開1件だけが渡る
+      mockedGetJpTheatricalReleaseDates.mockResolvedValue(['2026-10-30']);
+
+      await syncEigaMovies();
+
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 1555226,
+          is_revival: false,
+          release_date: '2026-10-30',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('過去に劇場公開がある再上映はリバイバルと判定する', async () => {
+      // スワロウテイル: type3 1996-09-14 / type3 2026-09-04
+      setupSingle(8426, '1996-09-14');
+      mockedGetJpTheatricalReleaseDates.mockResolvedValue([
+        '1996-09-14',
+        '2026-09-04',
+      ]);
+
+      await syncEigaMovies();
+
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 8426,
+          is_revival: true,
+          // iCalの上映日を使う
+          release_date: '2026-10-30',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('リバイバル判定は新規の候補にのみ行う（既存IDではTMDbを呼ばない）', async () => {
+      setupSingle(900, '2026-10-30');
+      mockIn.mockResolvedValue({ data: [{ id: 900 }], error: null });
+
+      await syncEigaMovies();
+
+      expect(mockedGetJpTheatricalReleaseDates).not.toHaveBeenCalled();
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
   });
 
   it('リバイバルでない場合、TMDbのrelease_dateを使用する', async () => {

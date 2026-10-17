@@ -4,7 +4,7 @@
  * POST /api/favorites - お気に入りに追加
  */
 
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 
 import { withAuth } from '@/helpers/routeHandler';
 import { parseAndValidate } from '@/helpers/requestValidation';
@@ -15,6 +15,7 @@ import {
   rateLimitExceededResponse,
 } from '@/helpers/apiHelpers';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { runInstantRecommendationIfEligible } from '@/lib/recommendations/instantRecommendation';
 import { favoritesQuerySchema, favoritesAddSchema } from '@/schema/favorites';
 import {
   HTTP_STATUS,
@@ -25,6 +26,12 @@ import {
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
 } from '@/constants';
+
+/**
+ * 初回お気に入り追加時にレコメンド生成をバックグラウンドで走らせるため、
+ * レスポンス後の処理に余裕を持たせる（after() はルートの上限内で動く）。
+ */
+export const maxDuration = 120;
 
 export const GET = withAuth(
   async ({ session, supabase, request }) => {
@@ -161,6 +168,11 @@ export const POST = withAuth(
       }
       throw insertError;
     }
+
+    // レコメンドがまだ1件も無いユーザーには、その場で生成をキックする。
+    // 日次CRONを待つと最大24時間「準備中」のままになるため。
+    // レスポンスを待たせないよう after() でバックグラウンド実行する。
+    after(() => runInstantRecommendationIfEligible(supabase, session.user.id));
 
     return NextResponse.json(
       {

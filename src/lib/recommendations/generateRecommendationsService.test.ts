@@ -10,12 +10,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
+  OPENAI_CONFIG,
+  RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
   RECOMMENDATIONS_MAX_COUNT,
-  RECOMMENDATIONS_GENERATION_BUFFER,
+  RECOMMENDATIONS_INITIAL_HIT_RATE,
+  RECOMMENDATIONS_MIN_HIT_RATE,
+  RECOMMENDATIONS_MAX_REQUEST_COUNT,
+  RECOMMENDATION_EVENT_RETENTION_DAYS,
   RECOMMENDATIONS_BATCH_SIZE,
 } from '@/constants';
 
 import {
+  calculateRequestCount,
+  deleteExpiredRecommendationEvents,
   executeGenerateRecommendationsCron,
   fetchActiveUserIds,
   collectUserMovieData,
@@ -114,6 +121,20 @@ const mockDismissedMoviesQuery = (
     }),
   });
 };
+
+/** display_order を埋めた解決済みレコメンドを生成 */
+const buildResolved = (count: number) =>
+  Array.from({ length: count }, (_, i) => ({
+    tmdb_movie_id: i + 1,
+    title: `Movie ${i + 1}`,
+    poster_path: null,
+    release_date: null,
+    vote_average: null,
+    vote_count: 0,
+    genre_ids: null,
+    reason: `理由${i + 1}`,
+    display_order: i + 1,
+  }));
 
 /** upsert_recommendations RPC のモック */
 const mockUpsertRecommendationsRpc = (success: boolean) => {
@@ -225,7 +246,8 @@ describe('generateRecommendationsService', () => {
 
       expect(result).not.toBeNull();
       expect(result!.favoriteMovies).toEqual([{ title: '映画A', rating: 8 }]);
-      expect(result!.excludedTitles).toEqual(['映画A', '映画B', '映画C']);
+      // プロンプトに渡すのはウォッチリストのみ（お気に入り・興味なしは専用セクションで渡す）
+      expect(result!.watchlistTitles).toEqual(['映画B']);
       expect(result!.baseExcludedIds).toEqual(new Set([1, 2, 3]));
       expect(result!.dismissedMovies).toEqual([
         { tmdb_movie_id: 3, title: '映画C', genre_ids: [27] },
@@ -262,20 +284,6 @@ describe('generateRecommendationsService', () => {
   });
 
   describe('generateRecommendationsWithRetry', () => {
-    /** display_order を埋めた解決済みレコメンドを生成 */
-    const buildResolved = (count: number) =>
-      Array.from({ length: count }, (_, i) => ({
-        tmdb_movie_id: i + 1,
-        title: `Movie ${i + 1}`,
-        poster_path: null,
-        release_date: null,
-        vote_average: null,
-        vote_count: 0,
-        genre_ids: null,
-        reason: `理由${i + 1}`,
-        display_order: i + 1,
-      }));
-
     it('OpenAIがnullを返したら空配列を返す', async () => {
       mockFetchRecommendations.mockResolvedValue(null);
 
@@ -286,7 +294,7 @@ describe('generateRecommendationsService', () => {
         [],
       );
 
-      expect(result).toEqual([]);
+      expect(result.resolved).toEqual([]);
     });
 
     it('初回は必要数＋バッファ件をAIに要求する', async () => {
@@ -309,13 +317,13 @@ describe('generateRecommendationsService', () => {
         [],
       );
 
-      // 第3引数（要求件数）が 最大件数＋バッファ であること
+      // 第3引数（要求件数）が 必要件数 ÷ 想定採用率 であること
       expect(mockFetchRecommendations.mock.calls[0][2]).toBe(
-        RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
+        Math.ceil(RECOMMENDATIONS_MAX_COUNT / RECOMMENDATIONS_INITIAL_HIT_RATE),
       );
     });
 
-    it('バッファ分多く解決されても最大件数で丸める', async () => {
+    it('必要件数より多く解決されても最大件数で丸める', async () => {
       mockFetchRecommendations.mockResolvedValueOnce(
         Array.from({ length: RECOMMENDATIONS_MAX_COUNT + 2 }, (_, i) => ({
           title: `Movie ${i + 1}`,
@@ -323,7 +331,7 @@ describe('generateRecommendationsService', () => {
           reason: `理由${i + 1}`,
         })),
       );
-      // 解決ロジックがバッファ込みで12件返しても、累積は10件で打ち切る
+      // 解決ロジックが多めに12件返しても、累積は10件で打ち切る
       mockResolveRecommendations.mockResolvedValueOnce(
         buildResolved(RECOMMENDATIONS_MAX_COUNT + 2),
       );
@@ -335,13 +343,13 @@ describe('generateRecommendationsService', () => {
         [],
       );
 
-      expect(result).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
-      expect(result[result.length - 1].display_order).toBe(
+      expect(result.resolved).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
+      expect(result.resolved[result.resolved.length - 1].display_order).toBe(
         RECOMMENDATIONS_MAX_COUNT,
       );
     });
 
-    it('初回で不足した場合、不足分＋バッファでリトライする', async () => {
+    it('初回で不足した場合、実測した採用率で割り戻した件数でリトライする', async () => {
       // 初回: 9件解決（1件不足）
       mockFetchRecommendations
         .mockResolvedValueOnce(
@@ -377,10 +385,336 @@ describe('generateRecommendationsService', () => {
         [],
       );
 
-      expect(result).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
-      // リトライ時の要求件数は「不足1件＋バッファ」
+      expect(result.resolved).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
+      // AIが10件返して9件採用 → 採用率0.9。不足1件を0.9で割り戻して2件要求する
+      expect(mockFetchRecommendations.mock.calls[1][2]).toBe(2);
+    });
+
+    it('採用率が低かった場合、次の試行でより多く要求する', async () => {
+      // 初回: AIが20件返して2件しか採用できない（採用率0.1 → 下限0.3が効く）
+      mockFetchRecommendations
+        .mockResolvedValueOnce(
+          Array.from({ length: 20 }, (_, i) => ({
+            title_ja: `映画${i + 1}`,
+            title_en: `Movie ${i + 1}`,
+            year: 2020,
+            reason: `理由${i + 1}`,
+          })),
+        )
+        .mockResolvedValueOnce([]);
+      mockResolveRecommendations
+        .mockResolvedValueOnce(buildResolved(2))
+        .mockResolvedValueOnce([]);
+
+      await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      // 不足8件 ÷ 下限採用率0.3 = 27件
       expect(mockFetchRecommendations.mock.calls[1][2]).toBe(
-        1 + RECOMMENDATIONS_GENERATION_BUFFER,
+        Math.ceil(
+          (RECOMMENDATIONS_MAX_COUNT - 2) / RECOMMENDATIONS_MIN_HIT_RATE,
+        ),
+      );
+    });
+
+    it('必要件数に届かないまま試行が尽きても、部分結果を返す', async () => {
+      // 初回で3件だけ解決でき、以降のリトライは1件も解決できない
+      const aiItem = {
+        title_ja: '邦題',
+        title_en: 'Title',
+        year: 2020,
+        reason: '理由',
+      };
+      mockFetchRecommendations
+        .mockResolvedValueOnce([aiItem])
+        .mockResolvedValueOnce([aiItem])
+        .mockResolvedValueOnce([aiItem]);
+      mockResolveRecommendations
+        .mockResolvedValueOnce(buildResolved(3))
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(result.resolved).toHaveLength(3);
+      expect(result.resolved[2].display_order).toBe(3);
+    });
+  });
+
+  describe('リトライ戦略と多様性リランキング', () => {
+    /** 全件同一ジャンルのAI候補とTMDb解決結果を用意する */
+    const mockAttempt = (count: number, genreId: number) => {
+      mockFetchRecommendations.mockResolvedValueOnce(
+        Array.from({ length: count }, (_, i) => ({
+          title_ja: `映画${i + 1}`,
+          title_en: `Movie ${i + 1}`,
+          year: 2020,
+          reason: `理由${i + 1}`,
+        })),
+      );
+      mockResolveRecommendations.mockResolvedValueOnce(
+        Array.from({ length: count }, (_, i) => ({
+          ...buildResolved(1)[0],
+          tmdb_movie_id: i + 1,
+          title: `Movie ${i + 1}`,
+          genre_ids: [genreId],
+        })),
+      );
+    };
+
+    it('初回は基準temperature・追加指示なしで呼ぶ', async () => {
+      mockAttempt(RECOMMENDATIONS_MAX_COUNT, 28);
+
+      await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(mockFetchRecommendations.mock.calls[0][5]).toEqual({
+        temperature: OPENAI_CONFIG.RECOMMENDATIONS_TEMPERATURE,
+        hint: null,
+      });
+    });
+
+    it('リトライでは温度を上げ、方向を変える指示を付けて呼ぶ', async () => {
+      // 初回は5件しか解決できず不足 → リトライ
+      mockAttempt(5, 28);
+      mockAttempt(5, 18);
+
+      await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      const retryStrategy = mockFetchRecommendations.mock.calls[1][5];
+      expect(retryStrategy.temperature).toBeGreaterThan(
+        OPENAI_CONFIG.RECOMMENDATIONS_TEMPERATURE,
+      );
+      expect(retryStrategy.hint).toContain('異なるジャンル');
+    });
+
+    it('リランキングの入れ替え先を作るため、必要数より多く解決を要求する', async () => {
+      mockAttempt(RECOMMENDATIONS_MAX_COUNT, 28);
+
+      await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      // 第3引数が「必要件数 + 多様性プール分」
+      expect(mockResolveRecommendations.mock.calls[0][2]).toBe(
+        RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
+      );
+    });
+
+    it('同一ジャンルに偏った候補でも、他ジャンルを先に採用する', async () => {
+      // アクション10件のあとにドラマ5件を解決できたケース
+      mockFetchRecommendations.mockResolvedValueOnce(
+        Array.from({ length: 15 }, (_, i) => ({
+          title_ja: `映画${i + 1}`,
+          title_en: `Movie ${i + 1}`,
+          year: 2020,
+          reason: `理由${i + 1}`,
+        })),
+      );
+      mockResolveRecommendations.mockResolvedValueOnce(
+        Array.from({ length: 15 }, (_, i) => ({
+          ...buildResolved(1)[0],
+          tmdb_movie_id: i + 1,
+          title: `Movie ${i + 1}`,
+          genre_ids: [i < 10 ? 28 : 18],
+        })),
+      );
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      const dramaCount = result.resolved.filter(
+        (r) => r.genre_ids?.[0] === 18,
+      ).length;
+
+      expect(result.resolved).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
+      // リランキング前は先頭10件がすべてアクションだった。
+      // 各ジャンルを上限4件までに抑えた結果、後方のドラマが4件繰り上がり、
+      // 残り2枠は保留したアクションで埋まる（件数は減らさない）
+      expect(dramaCount).toBe(4);
+    });
+  });
+
+  describe('生成メトリクス', () => {
+    it('OpenAI呼び出し回数・候補数・未採用数・リトライ回数を記録する', async () => {
+      // 初回: AIが10件返して9件採用 → 1件不足でリトライ
+      mockFetchRecommendations
+        .mockResolvedValueOnce(
+          Array.from({ length: RECOMMENDATIONS_MAX_COUNT }, (_, i) => ({
+            title_ja: `映画${i + 1}`,
+            title_en: `Movie ${i + 1}`,
+            year: 2020,
+            reason: `理由${i + 1}`,
+          })),
+        )
+        .mockResolvedValueOnce([
+          {
+            title_ja: '追加',
+            title_en: 'Extra',
+            year: 2021,
+            reason: '追加理由',
+          },
+        ]);
+      mockResolveRecommendations
+        .mockResolvedValueOnce(buildResolved(RECOMMENDATIONS_MAX_COUNT - 1))
+        .mockResolvedValueOnce([
+          {
+            tmdb_movie_id: 999,
+            title: 'Extra',
+            poster_path: null,
+            release_date: null,
+            vote_average: null,
+            vote_count: 0,
+            genre_ids: null,
+            reason: '追加理由',
+            display_order: 1,
+          },
+        ]);
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(result.metrics).toEqual({
+        openai_calls: 2,
+        ai_candidates: RECOMMENDATIONS_MAX_COUNT + 1,
+        unresolved_candidates: 1,
+        retries_used: 1,
+      });
+    });
+
+    it('1回で揃った場合はリトライ回数0', async () => {
+      mockFetchRecommendations.mockResolvedValueOnce(
+        Array.from({ length: RECOMMENDATIONS_MAX_COUNT }, (_, i) => ({
+          title_ja: `映画${i + 1}`,
+          title_en: `Movie ${i + 1}`,
+          year: 2020,
+          reason: `理由${i + 1}`,
+        })),
+      );
+      mockResolveRecommendations.mockResolvedValueOnce(
+        buildResolved(RECOMMENDATIONS_MAX_COUNT),
+      );
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(result.metrics.retries_used).toBe(0);
+      expect(result.metrics.openai_calls).toBe(1);
+      expect(result.metrics.unresolved_candidates).toBe(0);
+    });
+
+    it('OpenAIが失敗した呼び出しも回数に数える', async () => {
+      mockFetchRecommendations.mockResolvedValueOnce(null);
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(result.metrics.openai_calls).toBe(1);
+      expect(result.metrics.ai_candidates).toBe(0);
+    });
+  });
+
+  describe('deleteExpiredRecommendationEvents', () => {
+    it('削除件数を返す', async () => {
+      mockRpc.mockResolvedValueOnce({ data: 42, error: null });
+
+      const result = await deleteExpiredRecommendationEvents(mockSupabase);
+
+      expect(result).toBe(42);
+      expect(mockRpc).toHaveBeenCalledWith(
+        'delete_expired_recommendation_events',
+        { retention_days: RECOMMENDATION_EVENT_RETENTION_DAYS },
+      );
+    });
+
+    it('RPCがエラーを返しても0を返して続行する', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: new Error('RPC failed'),
+      });
+
+      const result = await deleteExpiredRecommendationEvents(mockSupabase);
+
+      expect(result).toBe(0);
+    });
+
+    it('RPCが例外を投げても0を返して続行する', async () => {
+      // 掃除処理でCRON全体を落とさない
+      mockRpc.mockRejectedValueOnce(new Error('network'));
+
+      const result = await deleteExpiredRecommendationEvents(mockSupabase);
+
+      expect(result).toBe(0);
+    });
+  });
+
+  describe('calculateRequestCount', () => {
+    it('初回は必要件数を想定採用率で割り戻す', () => {
+      expect(calculateRequestCount(RECOMMENDATIONS_MAX_COUNT)).toBe(
+        Math.ceil(RECOMMENDATIONS_MAX_COUNT / RECOMMENDATIONS_INITIAL_HIT_RATE),
+      );
+    });
+
+    it('直前の採用率が高ければ要求件数を抑える', () => {
+      expect(calculateRequestCount(10, 1)).toBe(10);
+    });
+
+    it('直前の採用率が低ければ要求件数を増やす', () => {
+      expect(calculateRequestCount(10, 0.5)).toBe(20);
+    });
+
+    it('採用率が下限を下回っても下限で頭打ちにする', () => {
+      expect(calculateRequestCount(5, 0.01)).toBe(
+        Math.ceil(5 / RECOMMENDATIONS_MIN_HIT_RATE),
+      );
+    });
+
+    it('採用率0（1件も採用できなかった）でも下限で頭打ちにする', () => {
+      expect(calculateRequestCount(5, 0)).toBe(
+        Math.ceil(5 / RECOMMENDATIONS_MIN_HIT_RATE),
+      );
+    });
+
+    it('要求件数の上限を超えない', () => {
+      expect(calculateRequestCount(RECOMMENDATIONS_MAX_COUNT, 0)).toBe(
+        RECOMMENDATIONS_MAX_REQUEST_COUNT,
       );
     });
   });
@@ -629,7 +963,10 @@ describe('generateRecommendationsService', () => {
       if (result.type === 'success') {
         expect(result.data.processed_users).toBe(0);
       }
-      expect(console.log).not.toHaveBeenCalled();
+      // バッチ処理のログは出さない（メトリクスのサマリーのみ）
+      expect(console.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Processing batch'),
+      );
     });
 
     it('fetchActiveUserIdsがエラーの場合、即座にエラーを返す', async () => {

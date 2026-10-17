@@ -6,23 +6,29 @@ import { z } from 'zod';
 
 import {
   RECOMMENDATIONS_MAX_COUNT,
-  RECOMMENDATIONS_GENERATION_BUFFER,
+  RECOMMENDATIONS_MAX_REQUEST_COUNT,
+  RECOMMENDATION_EVENT_TYPE,
+  RECOMMENDATION_EVENTS_MAX_PER_REQUEST,
   MOVIE_YEAR_RANGE,
 } from '@/constants';
 
 /**
- * AIレスポンスとして保持する最大件数（最大表示件数＋取りこぼし用バッファ）。
+ * AIレスポンスとして保持する最大件数（1回の要求件数の上限と揃える）。
  * LLMは要求件数を厳密に守らず超過して返すことがあるため、超過分は
  * バリデーションエラーにせず、この件数まで切り詰める（超過分は破棄）。
  */
-const OPENAI_RECOMMENDATIONS_MAX_RESPONSE =
-  RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER;
+const OPENAI_RECOMMENDATIONS_MAX_RESPONSE = RECOMMENDATIONS_MAX_REQUEST_COUNT;
 
 /**
  * OpenAIレスポンスの個別レコメンド項目スキーマ
+ *
+ * 邦題・原題の両方を返させることで、TMDb検索の取りこぼしを減らす。
+ * 単一の曖昧なタイトル文字列だけでは、表記揺れ（中黒の有無など）で
+ * 検索0件になったり、同名の別作品に誤ヒットしたりする。
  */
 export const openAiRecommendationItemSchema = z.object({
-  title: z.string().min(1, '映画タイトルは必須です'),
+  title_ja: z.string().min(1, '邦題は必須です'),
+  title_en: z.string().min(1, '原題は必須です'),
   year: z
     .number()
     .int('公開年は整数で入力してください')
@@ -78,3 +84,41 @@ export const recommendationSchema = z.object({
  * APIレスポンスの型
  */
 export type Recommendation = z.infer<typeof recommendationSchema>;
+
+/**
+ * レコメンド利用イベント記録のバリデーションスキーマ
+ *
+ * 1リクエストで複数件まとめて送れるようにする。Intersection Observer の
+ * impression は一度に何件も発火するため、1件ずつPOSTすると無駄が大きい。
+ */
+export const recommendationEventSchema = z.object({
+  recommendation_id: z.string().uuid('レコメンドIDが不正です'),
+  tmdb_movie_id: z
+    .number()
+    .int('映画IDは整数で入力してください')
+    .positive('映画IDは正の整数で入力してください'),
+  event_type: z.enum(
+    [
+      RECOMMENDATION_EVENT_TYPE.IMPRESSION,
+      RECOMMENDATION_EVENT_TYPE.CLICK,
+      RECOMMENDATION_EVENT_TYPE.ADD_TO_WATCHLIST,
+      RECOMMENDATION_EVENT_TYPE.DISMISS,
+    ],
+    { message: 'イベント種別が不正です' },
+  ),
+});
+
+/**
+ * レコメンド利用イベント記録リクエストのスキーマ
+ */
+export const recommendationEventsPostSchema = z.object({
+  events: z
+    .array(recommendationEventSchema)
+    .min(1, 'イベントは1件以上必要です')
+    .max(
+      RECOMMENDATION_EVENTS_MAX_PER_REQUEST,
+      `イベントは一度に${RECOMMENDATION_EVENTS_MAX_PER_REQUEST}件までです`,
+    ),
+});
+
+export type RecommendationEvent = z.infer<typeof recommendationEventSchema>;

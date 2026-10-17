@@ -2,10 +2,7 @@
  * レコメンド zodスキーマ テスト
  */
 
-import {
-  RECOMMENDATIONS_MAX_COUNT,
-  RECOMMENDATIONS_GENERATION_BUFFER,
-} from '@/constants';
+import { RECOMMENDATIONS_MAX_REQUEST_COUNT } from '@/constants';
 
 import {
   openAiRecommendationItemSchema,
@@ -13,76 +10,98 @@ import {
   recommendationSchema,
 } from './recommendations';
 
-/** AIレスポンスで許容される最大件数（最大表示件数＋取りこぼし用バッファ） */
-const MAX_RESPONSE_COUNT =
-  RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER;
+/** AIレスポンスで許容される最大件数（1回の要求件数の上限と揃う） */
+const MAX_RESPONSE_COUNT = RECOMMENDATIONS_MAX_REQUEST_COUNT;
 
 describe('openAiRecommendationItemSchema', () => {
+  const validItem = {
+    title_ja: 'インターステラー',
+    title_en: 'Interstellar',
+    year: 2014,
+    reason: 'SFが好きな方におすすめ',
+  };
+
   it('有効な入力でパースが成功する', () => {
+    const result = openAiRecommendationItemSchema.safeParse(validItem);
+    expect(result.success).toBe(true);
+  });
+
+  it('title_jaが空の場合エラーになる', () => {
     const result = openAiRecommendationItemSchema.safeParse({
-      title: 'インターステラー',
-      year: 2014,
-      reason: 'SFが好きな方におすすめ',
+      ...validItem,
+      title_ja: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('title_jaが未指定の場合エラーになる', () => {
+    const result = openAiRecommendationItemSchema.safeParse({
+      ...validItem,
+      title_ja: undefined,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('title_enが空の場合エラーになる', () => {
+    const result = openAiRecommendationItemSchema.safeParse({
+      ...validItem,
+      title_en: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('title_enが未指定の場合エラーになる', () => {
+    const result = openAiRecommendationItemSchema.safeParse({
+      ...validItem,
+      title_en: undefined,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('邦題と原題が同一文字列でも成功する（邦題が存在しない作品）', () => {
+    const result = openAiRecommendationItemSchema.safeParse({
+      ...validItem,
+      title_ja: 'Memoria',
+      title_en: 'Memoria',
     });
     expect(result.success).toBe(true);
   });
 
-  it('titleが空の場合エラーになる', () => {
-    const result = openAiRecommendationItemSchema.safeParse({
-      title: '',
-      year: 2014,
-      reason: '推薦理由',
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('titleが未指定の場合エラーになる', () => {
-    const result = openAiRecommendationItemSchema.safeParse({
-      year: 2014,
-      reason: '推薦理由',
-    });
-    expect(result.success).toBe(false);
-  });
-
   it('yearが小数の場合エラーになる', () => {
     const result = openAiRecommendationItemSchema.safeParse({
-      title: 'テスト映画',
+      ...validItem,
       year: 2014.5,
-      reason: '推薦理由',
     });
     expect(result.success).toBe(false);
   });
 
   it('yearが1888未満の場合エラーになる', () => {
     const result = openAiRecommendationItemSchema.safeParse({
-      title: 'テスト映画',
+      ...validItem,
       year: 1887,
-      reason: '推薦理由',
     });
     expect(result.success).toBe(false);
   });
 
   it('yearが2100を超える場合エラーになる', () => {
     const result = openAiRecommendationItemSchema.safeParse({
-      title: 'テスト映画',
+      ...validItem,
       year: 2101,
-      reason: '推薦理由',
     });
     expect(result.success).toBe(false);
   });
 
   it('yearが未指定の場合エラーになる', () => {
     const result = openAiRecommendationItemSchema.safeParse({
-      title: 'テスト映画',
-      reason: '推薦理由',
+      ...validItem,
+      year: undefined,
     });
     expect(result.success).toBe(false);
   });
 
   it('reasonが空の場合エラーになる', () => {
     const result = openAiRecommendationItemSchema.safeParse({
-      title: 'テスト映画',
-      year: 2014,
+      ...validItem,
       reason: '',
     });
     expect(result.success).toBe(false);
@@ -90,26 +109,24 @@ describe('openAiRecommendationItemSchema', () => {
 
   it('reasonが未指定の場合エラーになる', () => {
     const result = openAiRecommendationItemSchema.safeParse({
-      title: 'テスト映画',
-      year: 2014,
+      ...validItem,
+      reason: undefined,
     });
     expect(result.success).toBe(false);
   });
 
   it('yearが1888の場合成功する（最小値）', () => {
     const result = openAiRecommendationItemSchema.safeParse({
-      title: 'テスト映画',
+      ...validItem,
       year: 1888,
-      reason: '推薦理由',
     });
     expect(result.success).toBe(true);
   });
 
   it('yearが2100の場合成功する（最大値）', () => {
     const result = openAiRecommendationItemSchema.safeParse({
-      title: 'テスト映画',
+      ...validItem,
       year: 2100,
-      reason: '推薦理由',
     });
     expect(result.success).toBe(true);
   });
@@ -117,10 +134,19 @@ describe('openAiRecommendationItemSchema', () => {
 
 describe('openAiRecommendationsResponseSchema', () => {
   const validItem = {
-    title: 'テスト映画',
+    title_ja: 'テスト映画',
+    title_en: 'Test Movie',
     year: 2024,
     reason: '推薦理由',
   };
+
+  /** 連番の邦題・原題を持つ項目を生成する */
+  const createItems = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      ...validItem,
+      title_ja: `映画${i + 1}`,
+      title_en: `Movie ${i + 1}`,
+    }));
 
   it('有効なレコメンド配列でパースが成功する', () => {
     const result = openAiRecommendationsResponseSchema.safeParse({
@@ -130,12 +156,8 @@ describe('openAiRecommendationsResponseSchema', () => {
   });
 
   it('最大件数＋バッファ件のレコメンドでパースが成功する（上限）', () => {
-    const items = Array.from({ length: MAX_RESPONSE_COUNT }, (_, i) => ({
-      ...validItem,
-      title: `映画${i + 1}`,
-    }));
     const result = openAiRecommendationsResponseSchema.safeParse({
-      recommendations: items,
+      recommendations: createItems(MAX_RESPONSE_COUNT),
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -151,12 +173,8 @@ describe('openAiRecommendationsResponseSchema', () => {
   });
 
   it('上限（最大件数＋バッファ）を超える場合は弾かず上限件数に切り詰める', () => {
-    const items = Array.from({ length: MAX_RESPONSE_COUNT + 1 }, (_, i) => ({
-      ...validItem,
-      title: `映画${i + 1}`,
-    }));
     const result = openAiRecommendationsResponseSchema.safeParse({
-      recommendations: items,
+      recommendations: createItems(MAX_RESPONSE_COUNT + 1),
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -165,18 +183,14 @@ describe('openAiRecommendationsResponseSchema', () => {
   });
 
   it('上限を大幅に超える場合も先頭から上限件数のみ残す（順序維持）', () => {
-    const items = Array.from({ length: MAX_RESPONSE_COUNT + 10 }, (_, i) => ({
-      ...validItem,
-      title: `映画${i + 1}`,
-    }));
     const result = openAiRecommendationsResponseSchema.safeParse({
-      recommendations: items,
+      recommendations: createItems(MAX_RESPONSE_COUNT + 10),
     });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.recommendations).toHaveLength(MAX_RESPONSE_COUNT);
-      expect(result.data.recommendations[0].title).toBe('映画1');
-      expect(result.data.recommendations[MAX_RESPONSE_COUNT - 1].title).toBe(
+      expect(result.data.recommendations[0].title_ja).toBe('映画1');
+      expect(result.data.recommendations[MAX_RESPONSE_COUNT - 1].title_ja).toBe(
         `映画${MAX_RESPONSE_COUNT}`,
       );
     }
@@ -189,7 +203,7 @@ describe('openAiRecommendationsResponseSchema', () => {
 
   it('不正な項目を含む場合エラーになる', () => {
     const result = openAiRecommendationsResponseSchema.safeParse({
-      recommendations: [{ title: '', year: 2024, reason: '理由' }],
+      recommendations: [{ ...validItem, title_ja: '' }],
     });
     expect(result.success).toBe(false);
   });

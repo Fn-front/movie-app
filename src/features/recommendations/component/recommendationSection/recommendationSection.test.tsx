@@ -16,7 +16,7 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
     movie: { id: number; title: string };
     onClick?: (movieId: number) => void;
     onFavoriteToggle?: () => void;
-    onWatchlistToggle?: () => void;
+    onWatchlistToggle?: (movie: { id: number; title: string }) => void;
     onDismiss?: (movie: { id: number; title: string }) => void;
     dismissDisabled?: boolean;
   }) => (
@@ -45,7 +45,7 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
           data-testid={`watchlist-btn-${movie.id}`}
           onClick={(e) => {
             e.stopPropagation();
-            onWatchlistToggle();
+            onWatchlistToggle(movie);
           }}
         >
           ウォッチリスト
@@ -154,6 +154,18 @@ jest.mock('@/features/recommendations/hooks/useRecommendationRefresh', () => ({
     ...mockRefreshState,
   }),
 }));
+
+const mockObserveTile = jest.fn(() => () => {});
+const mockTrackEvent = jest.fn();
+
+jest.mock('@/features/recommendations/hooks/useRecommendationEvents', () => ({
+  useRecommendationEvents: (...args: unknown[]) => {
+    mockUseRecommendationEvents(...args);
+    return { observeTile: mockObserveTile, trackEvent: mockTrackEvent };
+  },
+}));
+
+const mockUseRecommendationEvents = jest.fn();
 
 // --- Helpers ---
 
@@ -609,6 +621,89 @@ describe('RecommendationSection', () => {
       expect(
         screen.queryByRole('button', { name: 'おすすめを更新' }),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('利用イベントの計測', () => {
+    it('各タイルを表示計測の対象として登録する', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(3)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(mockObserveTile).toHaveBeenCalledWith(100);
+      expect(mockObserveTile).toHaveBeenCalledWith(101);
+      expect(mockObserveTile).toHaveBeenCalledWith(102);
+    });
+
+    it('タイルのクリックでclickを記録する', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('movie-tile-100'));
+
+      expect(mockTrackEvent).toHaveBeenCalledWith(100, 'click');
+    });
+
+    it('ウォッチリスト追加でadd_to_watchlistを記録する', () => {
+      mockIsInWatchlist.mockReturnValue(false);
+
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('watchlist-btn-100'));
+
+      expect(mockTrackEvent).toHaveBeenCalledWith(100, 'add_to_watchlist');
+      expect(mockToggleWatchlist).toHaveBeenCalled();
+    });
+
+    it('ウォッチリスト解除では記録しない（興味のシグナルではないため）', () => {
+      mockIsInWatchlist.mockReturnValue(true);
+
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('watchlist-btn-100'));
+
+      expect(mockTrackEvent).not.toHaveBeenCalledWith(100, 'add_to_watchlist');
+      expect(mockToggleWatchlist).toHaveBeenCalled();
+      mockIsInWatchlist.mockReturnValue(false);
+    });
+
+    it('興味なしでdismissを記録する', () => {
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId('dismiss-btn-100'));
+
+      expect(mockTrackEvent).toHaveBeenCalledWith(100, 'dismiss');
+      expect(mockDismissMovie).toHaveBeenCalled();
+    });
+
+    it('お気に入り0件のときは計測を有効にしない', () => {
+      render(
+        <RecommendationSection recommendations={[]} hasFavorites={false} />,
+      );
+
+      expect(mockUseRecommendationEvents).toHaveBeenCalledWith([], false);
     });
   });
 });

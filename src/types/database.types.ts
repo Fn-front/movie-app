@@ -138,9 +138,12 @@ export type Database = {
         Row: {
           created_at: string;
           deleted_at: string | null;
+          director_name: string | null;
           genre_ids: number[] | null;
           id: string;
+          keywords: string[] | null;
           poster_path: string | null;
+          release_year: number | null;
           title: string;
           tmdb_movie_id: number;
           updated_at: string;
@@ -149,9 +152,12 @@ export type Database = {
         Insert: {
           created_at?: string;
           deleted_at?: string | null;
+          director_name?: string | null;
           genre_ids?: number[] | null;
           id?: string;
+          keywords?: string[] | null;
           poster_path?: string | null;
+          release_year?: number | null;
           title: string;
           tmdb_movie_id: number;
           updated_at?: string;
@@ -160,9 +166,12 @@ export type Database = {
         Update: {
           created_at?: string;
           deleted_at?: string | null;
+          director_name?: string | null;
           genre_ids?: number[] | null;
           id?: string;
+          keywords?: string[] | null;
           poster_path?: string | null;
+          release_year?: number | null;
           title?: string;
           tmdb_movie_id?: number;
           updated_at?: string;
@@ -386,6 +395,41 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [];
+      };
+      recommendation_events: {
+        Row: {
+          created_at: string;
+          event_type: string;
+          id: string;
+          recommendation_id: string;
+          tmdb_movie_id: number;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          event_type: string;
+          id?: string;
+          recommendation_id: string;
+          tmdb_movie_id: number;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          event_type?: string;
+          id?: string;
+          recommendation_id?: string;
+          tmdb_movie_id?: number;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'recommendation_events_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       recommendation_refreshes: {
         Row: {
@@ -805,6 +849,7 @@ export type Database = {
           created_at: string;
           email: string;
           id: string;
+          instant_recommendation_used_at: string | null;
           is_verified: boolean;
           last_login_at: string | null;
           name: string | null;
@@ -818,6 +863,7 @@ export type Database = {
           created_at?: string;
           email: string;
           id?: string;
+          instant_recommendation_used_at?: string | null;
           is_verified?: boolean;
           last_login_at?: string | null;
           name?: string | null;
@@ -831,6 +877,7 @@ export type Database = {
           created_at?: string;
           email?: string;
           id?: string;
+          instant_recommendation_used_at?: string | null;
           is_verified?: boolean;
           last_login_at?: string | null;
           name?: string | null;
@@ -893,6 +940,22 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      consume_rate_limit: {
+        Args: {
+          p_action_type: string;
+          p_identifier: string;
+          p_max_attempts: number;
+          p_window_minutes: number;
+        };
+        Returns: {
+          allowed: boolean;
+          retry_after: number;
+        }[];
+      };
+      delete_expired_recommendation_events: {
+        Args: { retention_days?: number };
+        Returns: number;
+      };
       get_award_years: { Args: never; Returns: number[] };
       get_watchlist_by_proximity: {
         Args: { p_limit: number; p_offset?: number; p_user_id: string };

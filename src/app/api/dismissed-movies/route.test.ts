@@ -28,6 +28,12 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }));
 
+const mockGetMovieDismissSignals = jest.fn();
+jest.mock('@/lib/tmdb/tmdb', () => ({
+  getMovieDismissSignals: (...args: unknown[]) =>
+    mockGetMovieDismissSignals(...args),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
 
 // --- Helpers ---
@@ -165,10 +171,103 @@ describe('GET /api/dismissed-movies', () => {
 });
 
 describe('POST /api/dismissed-movies', () => {
+  /** INSERT に渡されたペイロードを記録する */
+  let insertPayload: Record<string, unknown> | undefined;
+
+  /** 重複なし → INSERT成功 の2段構えでSupabaseをモックする */
+  const mockInsertSucceeds = () => {
+    insertPayload = undefined;
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: jest.fn().mockReturnValue({
+          eq: () => ({
+            is: () => ({
+              single: () => ({ data: null, error: { code: 'PGRST116' } }),
+            }),
+          }),
+        }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({
+      insert: (payload: Record<string, unknown>) => {
+        insertPayload = payload;
+        return {
+          select: () => ({
+            single: () => ({
+              data: { id: 'dismissed-1', ...payload },
+              error: null,
+            }),
+          }),
+        };
+      },
+    });
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
+    });
+    mockGetMovieDismissSignals.mockResolvedValue({
+      keywords: [],
+      directorName: null,
+      releaseYear: null,
+    });
+  });
+
+  describe('傾向学習用シグナルの収集', () => {
+    it('TMDbから取得した監督・テーマ・公開年を保存する', async () => {
+      mockGetMovieDismissSignals.mockResolvedValue({
+        keywords: ['robot', 'explosion'],
+        directorName: 'Michael Bay',
+        releaseYear: 2011,
+      });
+      mockInsertSucceeds();
+
+      const response = await POST(
+        createPostRequest({ tmdb_movie_id: 12345, title: 'テスト映画' }),
+      );
+
+      expect(response.status).toBe(201);
+      expect(mockGetMovieDismissSignals).toHaveBeenCalledWith(12345);
+      expect(insertPayload).toMatchObject({
+        keywords: ['robot', 'explosion'],
+        director_name: 'Michael Bay',
+        release_year: 2011,
+      });
+    });
+
+    it('TMDbが失敗しても登録は成功し、傾向カラムはnullで保存する', async () => {
+      // TMDbの不調で「興味なし」の登録自体が失敗してはいけない
+      mockGetMovieDismissSignals.mockRejectedValue(new Error('TMDb error'));
+      mockInsertSucceeds();
+
+      const response = await POST(
+        createPostRequest({ tmdb_movie_id: 12345, title: 'テスト映画' }),
+      );
+
+      expect(response.status).toBe(201);
+      expect(insertPayload).toMatchObject({
+        keywords: null,
+        director_name: null,
+        release_year: null,
+      });
+    });
+
+    it('キーワードが0件の場合はnullで保存する（空配列を残さない）', async () => {
+      mockGetMovieDismissSignals.mockResolvedValue({
+        keywords: [],
+        directorName: 'Uwe Boll',
+        releaseYear: 2005,
+      });
+      mockInsertSucceeds();
+
+      await POST(createPostRequest({ tmdb_movie_id: 1, title: 'テスト映画' }));
+
+      expect(insertPayload).toMatchObject({
+        keywords: null,
+        director_name: 'Uwe Boll',
+      });
     });
   });
 

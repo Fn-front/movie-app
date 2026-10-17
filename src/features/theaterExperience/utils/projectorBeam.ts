@@ -18,11 +18,31 @@ export interface ProjectorBeamQuads {
   vertical: number[];
 }
 
+/** 映写窓のサイズ(m)。窓の描画とビームの根元で共有する単一ソース */
+export const PROJECTION_PORT_WIDTH = 0.5;
+export const PROJECTION_PORT_HEIGHT = 0.4;
+
 /**
- * 映写窓側の開口の半幅(m)。実際のレンズ径相当。
- * 0 にすると頂点が一点に潰れてシェーディングが不自然になるため僅かに持たせる。
+ * 映写窓の高さ(m)を返す。
+ *
+ * 窓そのもの（`BackWallFixtures`）とビームの根元で同じ値を使う必要がある。
+ * 別々に計算すると、片方を変えたときにビームが窓からずれる。
+ *
+ * @param roomHeight 天井高(m)
+ * @param walkwayY 最上段通路の高さ(m)
  */
-const PORT_HALF_SPAN = 0.12;
+export function calcProjectionPortY(
+  roomHeight: number,
+  walkwayY: number,
+): number {
+  return Math.min(roomHeight - 1.2, walkwayY + 2.6);
+}
+
+/**
+ * ビームの根元の半幅(m)。映写窓の開口そのものなので窓幅から導く。
+ * 0 にすると縮退三角形になり、根元が点に潰れて光条として読めない。
+ */
+const PORT_HALF_SPAN = PROJECTION_PORT_WIDTH / 2;
 
 /**
  * ビームがスクリーンに届く位置の、幕に対する縮尺。
@@ -114,18 +134,29 @@ export function computeProjectorBeamQuads(
  * 映写窓がスクリーンより前（+Z 側）にあるような不正配置では、
  * 裏返った台形が出るだけなので描かない。
  *
+ * @param portY 映写窓の高さ(m)
  * @param portZ 映写窓のZ座標(m)
+ * @param screenCenterY スクリーン中心の高さ(m)
  * @param screenCenterZ スクリーン中心のZ座標(m)
  * @param screenWidth スクリーン幅(m)
  * @param screenHeight スクリーン高(m)
  */
 export function isProjectorBeamVisible(
+  portY: number,
   portZ: number,
+  screenCenterY: number,
   screenCenterZ: number,
   screenWidth: number,
   screenHeight: number,
 ): boolean {
-  if (!Number.isFinite(portZ) || !Number.isFinite(screenCenterZ)) return false;
+  /*
+    非有限値を1つでも通すと NaN の頂点ができ、three の boundingSphere 計算が
+    破綻してコンソール警告とカリング異常を起こす。全軸を検証する。
+  */
+  const finite = [portY, portZ, screenCenterY, screenCenterZ].every(
+    Number.isFinite,
+  );
+  if (!finite) return false;
   if (portZ >= screenCenterZ) return false;
   return screenWidth > 0 && screenHeight > 0;
 }

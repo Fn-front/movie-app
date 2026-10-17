@@ -3,6 +3,8 @@
  */
 
 import {
+  PROJECTION_PORT_WIDTH,
+  calcProjectionPortY,
   computeProjectorBeamQuads,
   isProjectorBeamVisible,
 } from './projectorBeam';
@@ -18,6 +20,12 @@ describe('computeProjectorBeamQuads', () => {
     const { horizontal, vertical } = quads();
     expect(horizontal).toHaveLength(12);
     expect(vertical).toHaveLength(12);
+  });
+
+  it('根元の幅は映写窓の幅に一致する（別々に持たない）', () => {
+    const { horizontal } = quads();
+    const span = Math.abs(pt(horizontal, 1)[0] - pt(horizontal, 0)[0]);
+    expect(span).toBeCloseTo(PROJECTION_PORT_WIDTH, 10);
   });
 
   it('映写窓側は細く、スクリーン側は幕の幅まで開く', () => {
@@ -67,25 +75,55 @@ describe('computeProjectorBeamQuads', () => {
   });
 });
 
+describe('calcProjectionPortY', () => {
+  it('最上段通路より上に置く', () => {
+    expect(calcProjectionPortY(11, 3.4)).toBeGreaterThan(3.4);
+  });
+
+  it('天井を突き抜けない', () => {
+    const roomHeight = 7;
+    expect(calcProjectionPortY(roomHeight, 6)).toBeLessThan(roomHeight);
+  });
+});
+
 describe('isProjectorBeamVisible', () => {
+  const visible = (over: Partial<Record<string, number>> = {}) =>
+    isProjectorBeamVisible(
+      over.portY ?? 3.4,
+      over.portZ ?? -10.5,
+      over.screenCenterY ?? 4.35,
+      over.screenCenterZ ?? 12.5,
+      over.screenWidth ?? 16,
+      over.screenHeight ?? 6.7,
+    );
+
   it('映写窓がスクリーンより後ろなら描画する', () => {
-    expect(isProjectorBeamVisible(-10.5, 12.5, 16, 6.7)).toBe(true);
+    expect(visible()).toBe(true);
   });
 
   it('映写窓がスクリーンより前なら描画しない（台形が裏返るため）', () => {
-    expect(isProjectorBeamVisible(13, 12.5, 16, 6.7)).toBe(false);
+    expect(visible({ portZ: 13 })).toBe(false);
   });
 
   it('同じZなら描画しない', () => {
-    expect(isProjectorBeamVisible(12.5, 12.5, 16, 6.7)).toBe(false);
+    expect(visible({ portZ: 12.5 })).toBe(false);
   });
 
   it('幕の寸法が0なら描画しない', () => {
-    expect(isProjectorBeamVisible(-10.5, 12.5, 0, 6.7)).toBe(false);
-    expect(isProjectorBeamVisible(-10.5, 12.5, 16, 0)).toBe(false);
+    expect(visible({ screenWidth: 0 })).toBe(false);
+    expect(visible({ screenHeight: 0 })).toBe(false);
   });
 
-  it('NaN は描画しない', () => {
-    expect(isProjectorBeamVisible(Number.NaN, 12.5, 16, 6.7)).toBe(false);
+  it('いずれかの座標が非有限なら描画しない（NaN頂点でboundingSphereが壊れる）', () => {
+    // DBの値欠損が Number() 経由で NaN になるケースを全軸で弾く
+    for (const axis of [
+      'portY',
+      'portZ',
+      'screenCenterY',
+      'screenCenterZ',
+    ] as const) {
+      expect(visible({ [axis]: Number.NaN })).toBe(false);
+      expect(visible({ [axis]: Number.POSITIVE_INFINITY })).toBe(false);
+    }
   });
 });

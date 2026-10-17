@@ -50,6 +50,9 @@ import {
 import type { SeatXSegment } from '../../utils/theaterGeometry';
 import { SEATED_EYE_HEIGHT } from '../../utils/sightline';
 import {
+  PROJECTION_PORT_HEIGHT,
+  PROJECTION_PORT_WIDTH,
+  calcProjectionPortY,
   computeProjectorBeamQuads,
   isProjectorBeamVisible,
 } from '../../utils/projectorBeam';
@@ -171,9 +174,12 @@ const STAGE_DEPTH = 1.5;
 /** 出入口の開口サイズ (m) */
 const DOOR_WIDTH = 1.0;
 const DOOR_HEIGHT = 2.1;
-/** 映写窓のサイズ (m) */
-const PORT_WIDTH = 0.5;
-const PORT_HEIGHT = 0.4;
+/*
+  映写窓のサイズは `utils/projectorBeam` を単一ソースにする。
+  窓の描画とビームの根元で別々に持つと、片方を変えたとき不整合になる。
+*/
+const PORT_WIDTH = PROJECTION_PORT_WIDTH;
+const PORT_HEIGHT = PROJECTION_PORT_HEIGHT;
 /** 映写窓の色（映写室の光が僅かに漏れる想定のごく暗い寒色） */
 const COLOR_PROJECTION_PORT = '#0d1118';
 
@@ -457,6 +463,19 @@ const ProjectorBeam = memo<{
   screenHeight,
 }) {
   const geometries = useMemo(() => {
+    // 不可視なら頂点を作らない（GPUへ無駄に転送しない）
+    if (
+      !isProjectorBeamVisible(
+        portY,
+        portZ,
+        screenCenterY,
+        screenCenterZ,
+        screenWidth,
+        screenHeight,
+      )
+    ) {
+      return [];
+    }
     const { horizontal, vertical } = computeProjectorBeamQuads(
       portY,
       portZ,
@@ -482,8 +501,16 @@ const ProjectorBeam = memo<{
     });
   }, [portY, portZ, screenCenterY, screenCenterZ, screenWidth, screenHeight]);
 
-  if (!isProjectorBeamVisible(portZ, screenCenterZ, screenWidth, screenHeight))
-    return null;
+  /*
+    BufferGeometry は手動生成なので GPU 資源の破棄も自前で行う。
+    props が変わって作り直したときと、アンマウント時に捨てる。
+  */
+  useEffect(
+    () => () => geometries.forEach(({ geo }) => geo.dispose()),
+    [geometries],
+  );
+
+  if (geometries.length === 0) return null;
 
   return (
     <group>
@@ -578,8 +605,8 @@ const BackWallFixtures = memo<{
   const backZ = -roomDepth / 2;
   // 誘導灯と同じ x に合わせる（誘導灯の真下が出口）
   const doorX = halfWidth * 0.7;
-  // 映写窓は後壁の上部。天井と最上段通路の中間よりやや上
-  const portY = Math.min(roomHeight - 1.2, walkwayY + 2.6);
+  // 映写窓は後壁の上部。ビームの根元と同じ値を使う（単一ソース）
+  const portY = calcProjectionPortY(roomHeight, walkwayY);
 
   return (
     <group>
@@ -1435,7 +1462,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
       */}
       {selectedSeat === null && (
         <ProjectorBeam
-          portY={Math.min(roomHeight - 1.2, seatAreaMaxY + 2.6)}
+          portY={calcProjectionPortY(roomHeight, seatAreaMaxY)}
           portZ={-roomDepth / 2}
           screenCenterY={Number(theater.screen_center_y)}
           screenCenterZ={Number(theater.screen_center_z)}

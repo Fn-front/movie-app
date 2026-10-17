@@ -16,7 +16,16 @@ import type { Page } from '@playwright/test';
  * CIのヘッドレスChromiumでの初期化遅延を吸収しつつ、
  * expect のデフォルト（10秒）より長めに確保する。
  */
-const READY_TIMEOUT_MS = 15000;
+const READY_TIMEOUT_MS = 20000;
+
+/**
+ * 劇場を2回ロードするテスト向けのタイムアウト（ms）。
+ *
+ * 既定の 30 秒は「標準シアターを1回描画する」前提の値で、
+ * IMAX（544席）への切替やリロードを挟むと足りない。CIはGPU無効の
+ * SwiftShader なので、席数がそのまま描画時間に効く。
+ */
+const HEAVY_TEST_TIMEOUT_MS = 90000;
 
 /**
  * WebGL2 が利用可能になるまで明示的に待機する。
@@ -46,16 +55,19 @@ async function waitForWebGL2(page: Page): Promise<void> {
  * useTheater（Supabaseフェッチ）のデータ取得完了を待機する。
  *
  * 座席一覧（SeatA11yList）はデータ取得後に描画されるため、
- * 座席ボタンの出現を待つことでデータ取得完了を明示的に保証する。
- * 併せて、読み込み中インジケータが消えていることも確認する。
+ * **座席ボタンの出現を唯一の完了条件**とする。
+ *
+ * 「読み込み中」の消失は完了条件にしない。`toHaveCount(0)` は表示される前の
+ * 状態でも 0 件で成立してしまい、ガードとして機能しないため
+ * （実際これに頼っていた結果、待機は座席ボタン側の expect 既定10秒だけに
+ * なっており、CIのソフトウェアWebGLで頻繁にタイムアウトしていた）。
+ *
+ * A列の開始席番は劇場によって違う（TCXは4番始まり）ので席番は固定しない。
  */
 async function waitForTheaterReady(page: Page): Promise<void> {
-  // 読み込み中表示が消えるまで待つ（useTheater / useWebGL2Support の判定完了）
-  await expect(page.getByText('読み込み中...')).toHaveCount(0, {
-    timeout: READY_TIMEOUT_MS,
-  });
-  // 座席一覧が描画される（= useTheater のデータ取得完了）
-  await expect(page.getByRole('button', { name: /^A列1番、/ })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: /^A列\d+番/ }).first(),
+  ).toBeVisible({ timeout: READY_TIMEOUT_MS });
 }
 
 test.describe('シアター体験ページ', () => {
@@ -130,6 +142,9 @@ test.describe('劇場タイプの切替', () => {
   test('セレクタで別劇場に切り替えると劇場名と座席レイアウトが変わる', async ({
     page,
   }) => {
+    // 標準 → IMAX(544席) の2回描画になるため既定30秒では足りない
+    test.setTimeout(HEAVY_TEST_TIMEOUT_MS);
+
     await page.goto('/theater-experience');
     await waitForWebGL2(page);
     await waitForTheaterReady(page);
@@ -157,6 +172,9 @@ test.describe('劇場タイプの切替', () => {
   test('?theater= 付きURLで初期選択され、リロード後も保持される', async ({
     page,
   }) => {
+    // IMAX(544席) を goto とリロードで2回描画するため既定30秒では足りない
+    test.setTimeout(HEAVY_TEST_TIMEOUT_MS);
+
     await page.goto('/theater-experience?theater=imax-gt');
     await waitForWebGL2(page);
     await waitForTheaterReady(page);

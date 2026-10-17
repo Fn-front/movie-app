@@ -304,3 +304,43 @@ export function getExitSignTexture(): Texture {
   cache.set(key, texture);
   return texture;
 }
+
+/** 発光グラデーションの解像度（縦方向のみ効くので横は1pxで足りる） */
+const GLOW_GRADIENT_HEIGHT = 128;
+
+/**
+ * 発光体の周囲へ重ねる減衰グラデーションを返す。
+ *
+ * コーブ照明や幕の発光フレームは、実装では均一な色の板だった。実写では
+ * 光源の周囲に向かって滑らかに減衰しており、均一な板は「UIの枠線」に見える。
+ * 中央が最も明るく両端で透明になる帯を重ねて、光が周囲に滲む見え方にする。
+ *
+ * 加算合成で使う前提なので、色は白（＝発光体の色をそのまま乗せる）で持つ。
+ */
+export function getGlowGradientTexture(): Texture {
+  const key = 'glowGradient';
+  const cached = cache.get(key);
+  if (cached) return cached;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = GLOW_GRADIENT_HEIGHT;
+  const ctx = canvas.getContext('2d');
+
+  if (ctx) {
+    const gradient = ctx.createLinearGradient(0, 0, 0, GLOW_GRADIENT_HEIGHT);
+    // 端は完全に透明、中央へ向かって急峻に立ち上げる（光源の near-field らしい減衰）
+    gradient.addColorStop(0, 'rgba(255,255,255,0)');
+    gradient.addColorStop(0.35, 'rgba(255,255,255,0.18)');
+    gradient.addColorStop(0.5, 'rgba(255,255,255,1)');
+    gradient.addColorStop(0.65, 'rgba(255,255,255,0.18)');
+    gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1, GLOW_GRADIENT_HEIGHT);
+  }
+
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
+  cache.set(key, texture);
+  return texture;
+}

@@ -78,6 +78,37 @@ cookies: {
 
 ---
 
+### 二段階認証（TOTP）
+
+```bash
+# TOTP マスター鍵（必須・base64でデコードして32バイト）
+# 生成: openssl rand -base64 32
+TOTP_ENCRYPTION_KEY=your_totp_master_key_here
+```
+
+**用途:**
+
+TOTP の共有鍵はハッシュ化できない（検証のたびに鍵そのものが必要）ため、
+DB には暗号化して保存する。その暗号鍵がこれ。
+DB と環境変数の両方を取られない限り、共有鍵は復号できない。
+
+この1本から HKDF で用途別の鍵を導出する（`src/lib/totp/keys.ts`）:
+
+| 用途 | 使い道 |
+| --- | --- |
+| `SECRET_ENCRYPTION` | `user_totp.encrypted_secret` の AES-256-GCM 暗号化 |
+| `RECOVERY_CODE_HMAC` | `totp_recovery_codes.code_hash` の HMAC-SHA256 |
+
+**注意:**
+
+- **値を変更・紛失すると、登録済みの二段階認証がすべて復号できなくなる**。
+  利用者は認証アプリでもリカバリーコードでもログインできなくなるため、
+  ローテーションする場合は再登録の導線とセットで行うこと
+- ローカル / GitHub Actions（E2E）/ Vercel の**3箇所すべて**に設定する。
+  どれか1つでも欠けるとその環境で二段階認証が動かない
+
+---
+
 ### OAuth認証（ソーシャルログイン）
 
 ```bash

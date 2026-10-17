@@ -112,6 +112,64 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 
 ---
 
+### user_totp（二段階認証の共有鍵）
+TOTP（認証アプリ）の共有鍵を管理
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| user_id | UUID | NOT NULL | - | ユーザーID（主キー / users.id への外部キー） |
+| encrypted_secret | TEXT | NOT NULL | - | AES-256-GCM で暗号化した共有鍵（`iv:authTag:暗号文`、base64） |
+| confirmed_at | TIMESTAMPTZ | NULL | - | 初回コード入力で所持確認が取れた日時。NULL は設定途中 |
+| last_used_counter | BIGINT | NULL | - | 最後に検証を通した時間ステップ（使い回し防止） |
+| created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
+| updated_at | TIMESTAMPTZ | NOT NULL | now() | 更新日時 |
+
+**設計判断 — user_settings に置かない理由:**
+- `user_settings` は `authenticated` に SELECT を付与しているため、RLS をすり抜ける経路が1つでも生まれると共有鍵が読まれる
+- 二段階認証の資格情報は「サーバー（service_role）だけが触れる」境界に置く
+
+**設計判断 — 共有鍵を暗号化して保存する理由:**
+- TOTP はパスワードと違いハッシュ化できない（検証のたびに鍵そのものが必要）
+- 暗号鍵は環境変数（`TOTP_ENCRYPTION_KEY`）側にあるため、DB だけが漏れても復号できない
+- 改ざんを検知するため、認証付き暗号（GCM）を使う
+
+**設計判断 — confirmed_at を持つ理由:**
+- QR を表示しただけで有効化すると、認証アプリへの登録に失敗した利用者がログインできなくなる
+- 初回コードの入力で所持確認が取れてから有効化する
+
+**GRANT:**
+- `service_role` のみ。`anon` / `authenticated` には一切付与しない（Data API から到達不可）
+- RLS は有効だがポリシーを作らない（GRANT が誤って追加された場合の二重の歯止め）
+
+---
+
+### totp_recovery_codes（リカバリーコード）
+認証アプリを失った利用者の復旧手段。使い捨て
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
+| user_id | UUID | NOT NULL | - | ユーザーID（users.id への外部キー） |
+| code_hash | TEXT | NOT NULL | - | HMAC-SHA256（サーバー側の鍵付き） |
+| used_at | TIMESTAMPTZ | NULL | - | 使用済みの日時 |
+| created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
+
+**インデックス:**
+- `user_id, code_hash`（UNIQUE） - 同じユーザーに同じコードが2つ存在しないようにする
+- `user_id`（`used_at IS NULL` の部分インデックス） - 未使用コードの照合用
+
+**設計判断 — bcrypt ではなく HMAC を使う理由:**
+- コードは人間が選ぶものではなく約48bitの乱数なので、総当たりを遅くするストレッチより「鍵が無ければ照合できない」ほうが効く
+- 10件を bcrypt(cost=12) で扱うと発行・照合にそれぞれ数秒かかる
+
+**設計判断 — 使用済みの行を削除しない理由:**
+- 利用者が「残り何個か」を確認できるようにするため
+
+**GRANT:**
+- `user_totp` と同じく `service_role` のみ
+
+---
+
 ### watchlist（見たい映画リスト）
 ユーザーの見たい映画を管理（映画IDと画像URLを保存）
 

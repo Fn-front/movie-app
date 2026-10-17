@@ -15,11 +15,29 @@ export const RECOMMENDATIONS_MAX_COUNT = 10;
 export const RECOMMENDATIONS_MAX_RETRIES = 2;
 
 /**
- * AI生成時の追加要求件数（バッファ）
- * TMDb解決時の取りこぼし・除外を見越して、必要数より多めにAIへ推薦を要求する。
- * これにより1回のAI呼び出しで RECOMMENDATIONS_MAX_COUNT 件を満たしやすくする。
+ * AIへの初回要求時に見込む採用率
+ *
+ * AIが返した候補のうち、TMDbで解決でき除外にも引っかからず採用できる割合。
+ * 必要件数をこの率で割り戻した件数を要求する（10件必要なら 10/0.67 ≒ 15件）。
+ * 2回目以降は直前の試行で実測した採用率に置き換える。
  */
-export const RECOMMENDATIONS_GENERATION_BUFFER = 5;
+export const RECOMMENDATIONS_INITIAL_HIT_RATE = 0.67;
+
+/**
+ * 要求件数の算出に使う採用率の下限
+ *
+ * 実測の採用率が極端に低いときに要求件数が青天井にならないよう、
+ * 割り戻しに使う率をこの値で打ち止めにする。
+ */
+export const RECOMMENDATIONS_MIN_HIT_RATE = 0.3;
+
+/**
+ * 1回のAI呼び出しで要求する件数の上限
+ *
+ * 採用率が低くても、1回のレスポンスが長くなりすぎるとコストと
+ * ハルシネーションの双方が増えるため上限を設ける。
+ */
+export const RECOMMENDATIONS_MAX_REQUEST_COUNT = 30;
 
 /**
  * TMDb候補選択時に許容する公開年の差（年）

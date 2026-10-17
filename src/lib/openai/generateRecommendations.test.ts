@@ -7,8 +7,8 @@
  */
 
 import {
-  RECOMMENDATIONS_GENERATION_BUFFER,
   RECOMMENDATIONS_MAX_COUNT,
+  RECOMMENDATIONS_MAX_REQUEST_COUNT,
 } from '@/constants';
 import type { OpenAiRecommendationItem } from '@/schema/recommendations';
 
@@ -35,9 +35,8 @@ import {
   resolveRecommendationsWithTMDb,
 } from './generateRecommendations';
 
-/** AIレスポンスとして保持される最大件数（最大表示件数＋取りこぼし用バッファ） */
-const MAX_RESPONSE_COUNT =
-  RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER;
+/** AIレスポンスとして保持される最大件数（1回の要求件数の上限と揃う） */
+const MAX_RESPONSE_COUNT = RECOMMENDATIONS_MAX_REQUEST_COUNT;
 
 // --- Helper ---
 
@@ -99,15 +98,24 @@ describe('buildUserPrompt', () => {
       { title: 'インターステラー', rating: 9 },
       { title: 'ブレードランナー 2049', rating: 8 },
     ];
-    const excludedTitles = ['インターステラー', 'ブレードランナー 2049'];
 
-    const prompt = buildUserPrompt(favorites, excludedTitles);
+    const prompt = buildUserPrompt(favorites, ['DUNE/デューン 砂の惑星']);
 
     expect(prompt).toContain('## お気に入り映画');
     expect(prompt).toContain('インターステラー - 評価: 9/10');
     expect(prompt).toContain('ブレードランナー 2049 - 評価: 8/10');
-    expect(prompt).toContain('## 既に見た作品');
-    expect(prompt).toContain('- インターステラー');
+    expect(prompt).toContain('## 鑑賞予定リスト');
+    expect(prompt).toContain('- DUNE/デューン 砂の惑星');
+  });
+
+  it('お気に入りのタイトルを鑑賞予定リストとして再掲しない', () => {
+    // 以前はお気に入り・ウォッチリスト・興味なしを連結した除外リストを渡しており、
+    // 同じタイトルがプロンプトに二重に並んでいた
+    const favorites = [{ title: 'インターステラー', rating: 9 }];
+
+    const prompt = buildUserPrompt(favorites, []);
+
+    expect(prompt.match(/インターステラー/g)).toHaveLength(1);
   });
 
   it('評価がnullの場合、評価を表示しない', () => {
@@ -118,11 +126,11 @@ describe('buildUserPrompt', () => {
     expect(prompt).not.toContain('評価');
   });
 
-  it('既に見た作品が空の場合、該当セクションを含めない', () => {
+  it('鑑賞予定リストが空の場合、該当セクションを含めない', () => {
     const favorites = [{ title: 'テスト映画', rating: 5 }];
     const prompt = buildUserPrompt(favorites, []);
 
-    expect(prompt).not.toContain('## 既に見た作品');
+    expect(prompt).not.toContain('## 鑑賞予定リスト');
   });
 
   it('興味なしリストが含まれる場合、興味なしセクションをジャンル名付きで追加する', () => {

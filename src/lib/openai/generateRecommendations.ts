@@ -58,7 +58,7 @@ function buildSystemPrompt(count: number): string {
 ユーザーのお気に入り映画と評価（1〜10点）を分析し、そのユーザーが好みそうな映画を${count}件推薦してください。
 
 ルール:
-- 既に見た作品リストにある映画は推薦しないこと。ただし同名の別作品（リメイク・シリーズの別エピソード）は別の映画として扱ってよい
+- お気に入り・鑑賞予定・興味なしの各リストに載っている映画は推薦しないこと。ただし同名の別作品（リメイク・シリーズの別エピソード）は別の映画として扱ってよい
 - アダルト作品（成人向け・ポルノ・ピンク映画等）は絶対に推薦しないこと
 - 実在する映画のみ推薦すること
 - ジャンル、監督、テーマ、雰囲気などの傾向を分析して推薦すること
@@ -89,7 +89,7 @@ function buildSystemPrompt(count: number): string {
  */
 export function buildUserPrompt(
   favorites: FavoriteMovie[],
-  excludedTitles: string[],
+  watchlistTitles: string[],
   dismissedMovies: DismissedMovie[] = [],
 ): string {
   const favoriteLines = favorites
@@ -115,12 +115,13 @@ export function buildUserPrompt(
     prompt += `\n\n## 興味なしリスト（これらの映画やその傾向は避けてください）\n${dismissedLines}`;
   }
 
-  if (excludedTitles.length > 0) {
-    const excludeLines = excludedTitles.map((t) => `- ${t}`).join('\n');
-    // 「除外リスト」ではなく「既に見た作品」として渡す。
-    // タイトル文字列でAIに除外を強制すると、同名のリメイクやシリーズの別作品まで
-    // 巻き添えで推薦されなくなる。実際の除外はサーバー側のID照合で行う。
-    prompt += `\n\n## 既に見た作品（重複して推薦しないでください）\n${excludeLines}`;
+  if (watchlistTitles.length > 0) {
+    const watchlistLines = watchlistTitles.map((t) => `- ${t}`).join('\n');
+    // お気に入り・興味なしは専用セクションで既に渡しているため、ここでは
+    // どこにも載っていないウォッチリストだけを追加する。
+    // 以前は3つを連結した「除外リスト」を渡しており、同じタイトルが
+    // プロンプトに二重に並んで指示追従性を落としていた。
+    prompt += `\n\n## 鑑賞予定リスト（これらも推薦しないでください）\n${watchlistLines}`;
   }
 
   return prompt;
@@ -130,7 +131,7 @@ export function buildUserPrompt(
  * OpenAI APIを呼び出してレコメンドを生成
  *
  * @param favorites - お気に入り映画リスト
- * @param excludedTitles - 除外する映画タイトルリスト
+ * @param watchlistTitles - ウォッチリストの映画タイトル（プロンプトでの重複回避用）
  * @param count - 推薦する件数（デフォルト: RECOMMENDATIONS_MAX_COUNT）
  * @param dismissedMovies - 興味なし映画リスト（傾向分析用）
  * @param signal - 中断シグナル。クライアント離脱時にOpenAI呼び出しを打ち切る
@@ -138,7 +139,7 @@ export function buildUserPrompt(
  */
 export async function fetchRecommendationsFromOpenAI(
   favorites: FavoriteMovie[],
-  excludedTitles: string[],
+  watchlistTitles: string[],
   count: number = RECOMMENDATIONS_MAX_COUNT,
   dismissedMovies: DismissedMovie[] = [],
   signal?: AbortSignal,
@@ -151,7 +152,7 @@ export async function fetchRecommendationsFromOpenAI(
 
   const userPrompt = buildUserPrompt(
     favorites,
-    excludedTitles,
+    watchlistTitles,
     dismissedMovies,
   );
 

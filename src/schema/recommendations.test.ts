@@ -2,10 +2,7 @@
  * レコメンド zodスキーマ テスト
  */
 
-import {
-  RECOMMENDATIONS_MAX_COUNT,
-  RECOMMENDATIONS_GENERATION_BUFFER,
-} from '@/constants';
+import { RECOMMENDATIONS_MAX_REQUEST_COUNT } from '@/constants';
 
 import {
   openAiRecommendationItemSchema,
@@ -13,9 +10,8 @@ import {
   recommendationSchema,
 } from './recommendations';
 
-/** AIレスポンスで許容される最大件数（最大表示件数＋取りこぼし用バッファ） */
-const MAX_RESPONSE_COUNT =
-  RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER;
+/** AIレスポンスで許容される最大件数（1回の要求件数の上限と揃う） */
+const MAX_RESPONSE_COUNT = RECOMMENDATIONS_MAX_REQUEST_COUNT;
 
 describe('openAiRecommendationItemSchema', () => {
   const validItem = {

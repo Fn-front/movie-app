@@ -11,11 +11,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
   RECOMMENDATIONS_MAX_COUNT,
-  RECOMMENDATIONS_GENERATION_BUFFER,
+  RECOMMENDATIONS_INITIAL_HIT_RATE,
+  RECOMMENDATIONS_MIN_HIT_RATE,
+  RECOMMENDATIONS_MAX_REQUEST_COUNT,
   RECOMMENDATIONS_BATCH_SIZE,
 } from '@/constants';
 
 import {
+  calculateRequestCount,
   executeGenerateRecommendationsCron,
   fetchActiveUserIds,
   collectUserMovieData,
@@ -225,7 +228,8 @@ describe('generateRecommendationsService', () => {
 
       expect(result).not.toBeNull();
       expect(result!.favoriteMovies).toEqual([{ title: '映画A', rating: 8 }]);
-      expect(result!.excludedTitles).toEqual(['映画A', '映画B', '映画C']);
+      // プロンプトに渡すのはウォッチリストのみ（お気に入り・興味なしは専用セクションで渡す）
+      expect(result!.watchlistTitles).toEqual(['映画B']);
       expect(result!.baseExcludedIds).toEqual(new Set([1, 2, 3]));
       expect(result!.dismissedMovies).toEqual([
         { tmdb_movie_id: 3, title: '映画C', genre_ids: [27] },
@@ -309,13 +313,13 @@ describe('generateRecommendationsService', () => {
         [],
       );
 
-      // 第3引数（要求件数）が 最大件数＋バッファ であること
+      // 第3引数（要求件数）が 必要件数 ÷ 想定採用率 であること
       expect(mockFetchRecommendations.mock.calls[0][2]).toBe(
-        RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
+        Math.ceil(RECOMMENDATIONS_MAX_COUNT / RECOMMENDATIONS_INITIAL_HIT_RATE),
       );
     });
 
-    it('バッファ分多く解決されても最大件数で丸める', async () => {
+    it('必要件数より多く解決されても最大件数で丸める', async () => {
       mockFetchRecommendations.mockResolvedValueOnce(
         Array.from({ length: RECOMMENDATIONS_MAX_COUNT + 2 }, (_, i) => ({
           title: `Movie ${i + 1}`,
@@ -323,7 +327,7 @@ describe('generateRecommendationsService', () => {
           reason: `理由${i + 1}`,
         })),
       );
-      // 解決ロジックがバッファ込みで12件返しても、累積は10件で打ち切る
+      // 解決ロジックが多めに12件返しても、累積は10件で打ち切る
       mockResolveRecommendations.mockResolvedValueOnce(
         buildResolved(RECOMMENDATIONS_MAX_COUNT + 2),
       );
@@ -341,7 +345,7 @@ describe('generateRecommendationsService', () => {
       );
     });
 
-    it('初回で不足した場合、不足分＋バッファでリトライする', async () => {
+    it('初回で不足した場合、実測した採用率で割り戻した件数でリトライする', async () => {
       // 初回: 9件解決（1件不足）
       mockFetchRecommendations
         .mockResolvedValueOnce(
@@ -378,9 +382,100 @@ describe('generateRecommendationsService', () => {
       );
 
       expect(result).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
-      // リトライ時の要求件数は「不足1件＋バッファ」
+      // AIが10件返して9件採用 → 採用率0.9。不足1件を0.9で割り戻して2件要求する
+      expect(mockFetchRecommendations.mock.calls[1][2]).toBe(2);
+    });
+
+    it('採用率が低かった場合、次の試行でより多く要求する', async () => {
+      // 初回: AIが20件返して2件しか採用できない（採用率0.1 → 下限0.3が効く）
+      mockFetchRecommendations
+        .mockResolvedValueOnce(
+          Array.from({ length: 20 }, (_, i) => ({
+            title_ja: `映画${i + 1}`,
+            title_en: `Movie ${i + 1}`,
+            year: 2020,
+            reason: `理由${i + 1}`,
+          })),
+        )
+        .mockResolvedValueOnce([]);
+      mockResolveRecommendations
+        .mockResolvedValueOnce(buildResolved(2))
+        .mockResolvedValueOnce([]);
+
+      await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      // 不足8件 ÷ 下限採用率0.3 = 27件
       expect(mockFetchRecommendations.mock.calls[1][2]).toBe(
-        1 + RECOMMENDATIONS_GENERATION_BUFFER,
+        Math.ceil(
+          (RECOMMENDATIONS_MAX_COUNT - 2) / RECOMMENDATIONS_MIN_HIT_RATE,
+        ),
+      );
+    });
+
+    it('必要件数に届かないまま試行が尽きても、部分結果を返す', async () => {
+      // 初回で3件だけ解決でき、以降のリトライは1件も解決できない
+      const aiItem = {
+        title_ja: '邦題',
+        title_en: 'Title',
+        year: 2020,
+        reason: '理由',
+      };
+      mockFetchRecommendations
+        .mockResolvedValueOnce([aiItem])
+        .mockResolvedValueOnce([aiItem])
+        .mockResolvedValueOnce([aiItem]);
+      mockResolveRecommendations
+        .mockResolvedValueOnce(buildResolved(3))
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(result).toHaveLength(3);
+      expect(result[2].display_order).toBe(3);
+    });
+  });
+
+  describe('calculateRequestCount', () => {
+    it('初回は必要件数を想定採用率で割り戻す', () => {
+      expect(calculateRequestCount(RECOMMENDATIONS_MAX_COUNT)).toBe(
+        Math.ceil(RECOMMENDATIONS_MAX_COUNT / RECOMMENDATIONS_INITIAL_HIT_RATE),
+      );
+    });
+
+    it('直前の採用率が高ければ要求件数を抑える', () => {
+      expect(calculateRequestCount(10, 1)).toBe(10);
+    });
+
+    it('直前の採用率が低ければ要求件数を増やす', () => {
+      expect(calculateRequestCount(10, 0.5)).toBe(20);
+    });
+
+    it('採用率が下限を下回っても下限で頭打ちにする', () => {
+      expect(calculateRequestCount(5, 0.01)).toBe(
+        Math.ceil(5 / RECOMMENDATIONS_MIN_HIT_RATE),
+      );
+    });
+
+    it('採用率0（1件も採用できなかった）でも下限で頭打ちにする', () => {
+      expect(calculateRequestCount(5, 0)).toBe(
+        Math.ceil(5 / RECOMMENDATIONS_MIN_HIT_RATE),
+      );
+    });
+
+    it('要求件数の上限を超えない', () => {
+      expect(calculateRequestCount(RECOMMENDATIONS_MAX_COUNT, 0)).toBe(
+        RECOMMENDATIONS_MAX_REQUEST_COUNT,
       );
     });
   });

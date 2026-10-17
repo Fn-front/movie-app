@@ -416,26 +416,51 @@ function normalizeTitle(title: string): string {
 }
 
 /**
- * 検索語と邦題・原題が厳密に一致する候補を探す
+ * 検索語と邦題・原題が厳密に一致する候補をすべて返す
  *
  * 公開年の一致だけでは、検索語を含む別作品を拾ってしまう。
  * 例: 「The Purge」で検索すると同じ2013年の「The Purge: The Morning After」が
  * 関連度順で先に来て、本来の「パージ」を追い越す。
  *
- * @param results - 公開年で絞り込み済みのTMDb検索結果
+ * @param results - TMDb検索結果
  * @param query - 検索に使ったタイトル
- * @returns タイトルが厳密に一致する映画。なければ undefined
+ * @returns タイトルが厳密に一致する映画の配列（関連度順）
  */
-function findExactTitleMatch(
-  results: Movie[],
-  query: string,
-): Movie | undefined {
+function findExactTitleMatches(results: Movie[], query: string): Movie[] {
   const normalizedQuery = normalizeTitle(query);
-  return results.find(
+  return results.filter(
     (movie) =>
       normalizeTitle(movie.title) === normalizedQuery ||
       normalizeTitle(movie.original_title ?? '') === normalizedQuery,
   );
+}
+
+/**
+ * 公開年がAIの指定に最も近い候補を選ぶ
+ *
+ * タイトルが厳密一致する候補が複数ある場合（同名のリメイクやシリーズ）の
+ * 判別に使う。公開年が不明な候補は、年が分かる候補より優先しない。
+ *
+ * @param movies - 1件以上の候補
+ * @param year - AIが返した公開年
+ * @returns 公開年が最も近い映画
+ */
+function pickNearestByYear(movies: Movie[], year: number): Movie {
+  return movies.reduce((nearest, candidate) => {
+    const candidateYear = getReleaseYear(candidate.release_date);
+    if (candidateYear === null) {
+      return nearest;
+    }
+
+    const nearestYear = getReleaseYear(nearest.release_date);
+    if (nearestYear === null) {
+      return candidate;
+    }
+
+    return Math.abs(candidateYear - year) < Math.abs(nearestYear - year)
+      ? candidate
+      : nearest;
+  });
 }
 
 /**
@@ -463,7 +488,7 @@ export async function resolveRecommendationsWithTMDb(
 
     try {
       /**
-       * 公開年が一致する候補を関連度順で取得する
+       * 候補を関連度順で取得する
        *
        * yearなしで検索する（TMDb APIのyearは厳密フィルタのため、1年ずれると
        * 0件になる）。adult作品を除外するのは、searchMoviesでも除外済みだが、
@@ -471,10 +496,7 @@ export async function resolveRecommendationsWithTMDb(
        */
       const searchSafely = async (query: string) => {
         const searchResult = await searchMovies({ query }, { signal });
-        const safeResults = searchResult.results.filter(
-          (movie) => !movie.adult,
-        );
-        return filterByReleaseYear(safeResults, item.year);
+        return searchResult.results.filter((movie) => !movie.adult);
       };
 
       // 邦題・原題の順に検索し、タイトルが厳密に一致する候補を最優先で採用する。
@@ -491,12 +513,26 @@ export async function resolveRecommendationsWithTMDb(
 
       for (const query of queries) {
         const candidates = await searchSafely(query);
-        const exact = findExactTitleMatch(candidates, query);
-        if (exact) {
-          movie = exact;
+
+        /**
+         * タイトルの厳密一致は公開年の絞り込みより先に評価する
+         *
+         * TMDbは region=JP の日本公開日を返すが、AIが返す公開年は原産国基準の
+         * ことが多く、洋画では1年以上ずれる。先に年で絞ると本来の作品が落ち、
+         * 「エクス・マキナ(日本公開2016)」を 2015 で探して
+         * 「Digitaria Ex Machina(2015)」を拾うような誤解決になっていた。
+         * タイトルが厳密一致するなら作品の同定としては年より確かなので先に見る。
+         */
+        const exactMatches = findExactTitleMatches(candidates, query);
+        if (exactMatches.length > 0) {
+          // 同名のリメイクやシリーズが複数ある場合のみ、公開年で判別する
+          movie = pickNearestByYear(exactMatches, item.year);
           break;
         }
-        relevanceFallback ??= candidates[0];
+
+        // 厳密一致が無い場合は作品を同定できていないため、従来どおり
+        // 公開年で絞ったうえで関連度最上位を採る
+        relevanceFallback ??= filterByReleaseYear(candidates, item.year)[0];
       }
 
       movie ??= relevanceFallback;

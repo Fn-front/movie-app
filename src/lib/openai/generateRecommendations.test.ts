@@ -875,6 +875,134 @@ describe('resolveRecommendationsWithTMDb', () => {
       expect(result).toHaveLength(1);
       expect(result[0].tmdb_movie_id).toBe(50);
     });
+
+    it('公開年が許容範囲を超えてずれていても、厳密一致する候補を採用する', async () => {
+      // TMDbは region=JP の日本公開日を返すが、AIが返すのは原産国基準の
+      // 公開年のことが多い。先に年で絞ると本来の作品が落ち、
+      // 「エクス・マキナ(日本公開2016)」に「Digitaria Ex Machina(2015)」を
+      // 割り当てていた
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({
+            id: 1,
+            title: 'Digitaria Ex Machina',
+            release_date: '2015-10-20',
+          }),
+          createSearchResult({
+            id: 2,
+            title: 'エクス・マキナ',
+            original_title: 'Ex Machina',
+            release_date: '2016-06-11',
+          }),
+        ],
+      });
+
+      const items = [createItem('エクス・マキナ', 2015, '理由', 'Ex Machina')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(2);
+    });
+
+    it('原題のみが厳密一致する場合も、年のずれを理由に落とさない', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({
+            id: 10,
+            title: '邦題が異なる作品',
+            original_title: 'The Nice Guys',
+            release_date: '2016-10-01',
+          }),
+        ],
+      });
+
+      const items = [
+        createItem('ナイスガイズ！', 2015, '理由', 'The Nice Guys'),
+      ];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(10);
+    });
+
+    it('厳密一致が複数ある場合（同名リメイク）は公開年が近いほうを採用する', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({
+            id: 1,
+            title: 'サスペリア',
+            release_date: '1977-12-17',
+          }),
+          createSearchResult({
+            id: 2,
+            title: 'サスペリア',
+            release_date: '2019-01-25',
+          }),
+        ],
+      });
+
+      const items = [createItem('サスペリア', 2018, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(2);
+    });
+
+    it('厳密一致が複数あり、公開年不明の候補が先頭でも年が分かる候補を選ぶ', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({ id: 1, title: 'サスペリア', release_date: '' }),
+          createSearchResult({
+            id: 2,
+            title: 'サスペリア',
+            release_date: '2019-01-25',
+          }),
+        ],
+      });
+
+      const items = [createItem('サスペリア', 2018, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(2);
+    });
+
+    it('厳密一致が1件だけなら公開年が不明でも採用する', async () => {
+      // タイトルで同定できているため、公開日の欠落を理由に捨てない
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({
+            id: 60,
+            title: '公開日未登録の作品',
+            release_date: '',
+          }),
+        ],
+      });
+
+      const items = [createItem('公開日未登録の作品', 2020, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(60);
+    });
+
+    it('邦題が厳密一致すれば、原題では検索しない（年がずれていても）', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({
+            id: 70,
+            title: '邦題一致',
+            release_date: '2018-01-01',
+          }),
+        ],
+      });
+
+      const items = [createItem('邦題一致', 2015, '理由', 'Different EN')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(mockSearchMovies).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('アダルト作品の除外', () => {

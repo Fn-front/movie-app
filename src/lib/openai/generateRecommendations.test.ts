@@ -7,6 +7,8 @@
  */
 
 import {
+  OPENAI_CONFIG,
+  RECOMMENDATIONS_HIGH_RATING_THRESHOLD,
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_MAX_REQUEST_COUNT,
 } from '@/constants';
@@ -118,12 +120,83 @@ describe('buildUserPrompt', () => {
     expect(prompt.match(/インターステラー/g)).toHaveLength(1);
   });
 
-  it('評価がnullの場合、評価を表示しない', () => {
+  it('評価がnullの場合、未評価セクションに評価値なしで並べる', () => {
     const favorites = [{ title: 'テスト映画', rating: null }];
     const prompt = buildUserPrompt(favorites, []);
 
+    expect(prompt).toContain('### 未評価');
     expect(prompt).toContain('- テスト映画');
-    expect(prompt).not.toContain('評価');
+    expect(prompt).not.toContain('テスト映画 - 評価');
+  });
+
+  describe('評価帯ごとのセクション分離', () => {
+    const favorites = [
+      { title: '中評価作品', rating: 6 },
+      { title: '低評価作品', rating: 3 },
+      { title: '高評価作品A', rating: 8 },
+      { title: '未評価作品', rating: null },
+      { title: '高評価作品B', rating: 10 },
+    ];
+
+    it('高評価・中評価・低評価・未評価のセクションに分かれる', () => {
+      const prompt = buildUserPrompt(favorites, []);
+
+      expect(prompt).toContain('### 高評価（8〜10点）');
+      expect(prompt).toContain('### 中評価（5〜7点）');
+      expect(prompt).toContain('### 低評価（1〜4点）');
+      expect(prompt).toContain('### 未評価');
+    });
+
+    it('高評価セクションが中評価・低評価より先に並ぶ', () => {
+      const prompt = buildUserPrompt(favorites, []);
+
+      expect(prompt.indexOf('### 高評価')).toBeLessThan(
+        prompt.indexOf('### 中評価'),
+      );
+      expect(prompt.indexOf('### 中評価')).toBeLessThan(
+        prompt.indexOf('### 低評価'),
+      );
+    });
+
+    it('同一セクション内は評価の降順に並ぶ', () => {
+      const prompt = buildUserPrompt(favorites, []);
+
+      expect(prompt.indexOf('高評価作品B - 評価: 10/10')).toBeLessThan(
+        prompt.indexOf('高評価作品A - 評価: 8/10'),
+      );
+    });
+
+    it('該当する作品が無い評価帯のセクションは出力しない', () => {
+      const prompt = buildUserPrompt([{ title: '高評価のみ', rating: 9 }], []);
+
+      expect(prompt).toContain('### 高評価');
+      expect(prompt).not.toContain('### 中評価');
+      expect(prompt).not.toContain('### 低評価');
+      expect(prompt).not.toContain('### 未評価');
+    });
+
+    it('境界値（4点・5点・7点・8点）が正しい評価帯に入る', () => {
+      const prompt = buildUserPrompt(
+        [
+          { title: '境界4', rating: 4 },
+          { title: '境界5', rating: 5 },
+          { title: '境界7', rating: 7 },
+          { title: '境界8', rating: 8 },
+        ],
+        [],
+      );
+
+      const high = prompt.indexOf('### 高評価');
+      const mid = prompt.indexOf('### 中評価');
+      const low = prompt.indexOf('### 低評価');
+
+      expect(prompt.indexOf('境界8')).toBeGreaterThan(high);
+      expect(prompt.indexOf('境界8')).toBeLessThan(mid);
+      expect(prompt.indexOf('境界7')).toBeGreaterThan(mid);
+      expect(prompt.indexOf('境界5')).toBeGreaterThan(mid);
+      expect(prompt.indexOf('境界5')).toBeLessThan(low);
+      expect(prompt.indexOf('境界4')).toBeGreaterThan(low);
+    });
   });
 
   it('鑑賞予定リストが空の場合、該当セクションを含めない', () => {
@@ -217,6 +290,43 @@ describe('fetchRecommendationsFromOpenAI', () => {
     await fetchRecommendationsFromOpenAI([{ title: 'テスト', rating: 5 }], []);
 
     expect(mockCreate.mock.calls[0][0].instructions).toContain('アダルト作品');
+  });
+
+  it('システムプロンプトに高評価を重視する指示が含まれる', async () => {
+    mockRecommendations([
+      { title_ja: '邦題', title_en: 'Title', year: 2016, reason: '理由' },
+    ]);
+
+    await fetchRecommendationsFromOpenAI([{ title: 'テスト', rating: 5 }], []);
+
+    const { instructions } = mockCreate.mock.calls[0][0];
+    expect(instructions).toContain(
+      `評価${RECOMMENDATIONS_HIGH_RATING_THRESHOLD}点以上`,
+    );
+  });
+
+  it('システムプロンプトに日本市場での入手性の指示が含まれる', async () => {
+    mockRecommendations([
+      { title_ja: '邦題', title_en: 'Title', year: 2016, reason: '理由' },
+    ]);
+
+    await fetchRecommendationsFromOpenAI([{ title: 'テスト', rating: 5 }], []);
+
+    const { instructions } = mockCreate.mock.calls[0][0];
+    expect(instructions).toContain('日本で観られる作品');
+    expect(instructions).toContain('日本未公開の海外マイナー作品は避ける');
+  });
+
+  it('temperature に定数の値が渡る', async () => {
+    mockRecommendations([
+      { title_ja: '邦題', title_en: 'Title', year: 2016, reason: '理由' },
+    ]);
+
+    await fetchRecommendationsFromOpenAI([{ title: 'テスト', rating: 5 }], []);
+
+    expect(mockCreate.mock.calls[0][0].temperature).toBe(
+      OPENAI_CONFIG.RECOMMENDATIONS_TEMPERATURE,
+    );
   });
 
   it('システムプロンプトが同名の別作品を許容すると明示している', async () => {

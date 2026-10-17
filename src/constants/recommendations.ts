@@ -46,6 +46,29 @@ export const RECOMMENDATIONS_MAX_REQUEST_COUNT = 30;
 export const RECOMMENDATIONS_YEAR_MATCH_TOLERANCE = 1;
 
 /**
+ * お気に入りをプロンプトに載せる際の評価帯（降順に並べる）
+ *
+ * 評価値をただ羅列するより、帯ごとに見出しを分けた方がAIが重みを扱いやすい。
+ * 高評価帯の傾向を強く反映させるため、システムプロンプト側でも
+ * `HIGH_RATING_THRESHOLD` 以上を優先するよう明示している。
+ */
+export const RECOMMENDATIONS_RATING_BANDS = [
+  {
+    label: '高評価（8〜10点）- この傾向を最も重視してください',
+    min: 8,
+    max: 10,
+  },
+  { label: '中評価（5〜7点）', min: 5, max: 7 },
+  { label: '低評価（1〜4点）- 参考程度にとどめてください', min: 1, max: 4 },
+] as const;
+
+/**
+ * 「傾向を特に強く反映する」とみなす評価の下限
+ * RECOMMENDATIONS_RATING_BANDS の高評価帯と揃える。
+ */
+export const RECOMMENDATIONS_HIGH_RATING_THRESHOLD = 8;
+
+/**
  * アクティブユーザー判定期間（日数）
  * last_login_at がこの日数以内のユーザーのみレコメンド生成対象
  */

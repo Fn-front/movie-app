@@ -61,6 +61,26 @@ export const proxy = auth((req) => {
     return signInUrl;
   };
 
+  // 第2要素（二段階認証コード）が未了のセッション。
+  //
+  // OAuthログインは authorize を通らないため、プロバイダ側の認証が済んだ
+  // 時点でセッションが張られる。コードを入れるまではどこへも行かせない。
+  // セッション自体も session コールバックで空にしてあるため、ここを
+  // すり抜けても API は使えない（二重の歯止め）。
+  const isTotpPending = Boolean(req.auth?.totpPending);
+  const isTotpPath = nextUrl.pathname.startsWith(ROUTES.TOTP_CHALLENGE);
+
+  if (isTotpPending && !isTotpPath) {
+    return NextResponse.redirect(new URL(ROUTES.TOTP_CHALLENGE, nextUrl));
+  }
+
+  // 入力する必要がない人をこのページに置かない
+  if (isTotpPath && !isTotpPending) {
+    return NextResponse.redirect(
+      new URL(isAuthenticated ? ROUTES.HOME : ROUTES.LOGIN, nextUrl),
+    );
+  }
+
   // セッション期限切れ検知: cookieはあるがJWT検証に失敗 → cookieを削除してログアウト
   const hasSessionCookie = req.cookies.has(SESSION_COOKIE_NAME);
 

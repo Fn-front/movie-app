@@ -71,7 +71,7 @@ const proxy = require('./proxy').proxy as (req: unknown) => {
 /** テスト用のモックリクエストを生成 */
 function createMockRequest(options: {
   pathname: string;
-  auth?: { user: { id: string } } | null;
+  auth?: { user: { id: string }; totpPending?: boolean } | null;
   hasSessionCookie?: boolean;
 }) {
   const origin = 'http://localhost:3000';
@@ -257,6 +257,76 @@ describe('proxy', () => {
       const response = proxy(req);
 
       expect(response.headers.get('location')).toBeNull();
+    });
+  });
+
+  describe('第2要素（二段階認証）が未了のセッション', () => {
+    /** OAuthログイン直後で、まだ認証コードを入れていない状態 */
+    const pendingAuth = { user: { id: '' }, totpPending: true };
+
+    it.each([
+      ['保護ページ', '/favorites'],
+      ['非保護ページ', '/movies/now-showing'],
+      ['ホーム', '/'],
+      ['設定', '/settings'],
+    ])('%s へのアクセスを認証コード入力へ向ける', (_label, pathname) => {
+      const req = createMockRequest({
+        pathname,
+        auth: pendingAuth,
+        hasSessionCookie: true,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toContain('/auth/two-factor');
+    });
+
+    it('認証コード入力ページ自体は通す', () => {
+      const req = createMockRequest({
+        pathname: '/auth/two-factor',
+        auth: pendingAuth,
+        hasSessionCookie: true,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toBeNull();
+    });
+
+    it('ログインページへ戻ろうとしても認証コード入力へ向ける', () => {
+      // 未了のまま他の経路でログインし直せると、第2要素を回避できてしまう
+      const req = createMockRequest({
+        pathname: '/auth/signin',
+        auth: pendingAuth,
+        hasSessionCookie: true,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toContain('/auth/two-factor');
+    });
+
+    it('第2要素が済んだセッションは認証コード入力ページから追い出す', () => {
+      const req = createMockRequest({
+        pathname: '/auth/two-factor',
+        auth: mockAuth,
+        hasSessionCookie: true,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toBe('http://localhost:3000/');
+    });
+
+    it('未認証で認証コード入力ページに来たらログインへ向ける', () => {
+      const req = createMockRequest({
+        pathname: '/auth/two-factor',
+        auth: null,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toContain('/auth/signin');
     });
   });
 

@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
 import {
+  AUTH_ERROR_CODE,
   AUTH_ERROR_MESSAGES,
   SESSION_CONFIG,
   ROUTES,
@@ -26,6 +27,12 @@ import { fetchVerifiedGitHubProfile } from '@/lib/auth/githubProfile';
 import { getClientIp } from '@/lib/http/getClientIp';
 import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
+import {
+  isTotpEnabled,
+  TOTP_VERIFY_RESULT,
+  verifySecondFactor,
+} from '@/lib/auth/totpVerification';
+import { CredentialsSignInError } from '@/lib/auth/authErrors';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -55,6 +62,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: 'Password', type: 'password' },
         loginMethod: { label: 'Login Method', type: 'text' },
         verificationToken: { label: 'Verification Token', type: 'text' },
+        totpCode: { label: 'TOTP Code', type: 'text' },
       },
       async authorize(credentials, request) {
         if (!supabase) {
@@ -117,6 +125,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // メール認証チェック
           if (!user.is_verified) {
             throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
+          }
+
+          // 二段階認証が有効なら、この経路は使わせない。
+          // メールのコードだけで入れる経路は「第2要素」ではなく
+          // 「パスワードの代替」であり、残すと最も弱い経路が全体の強度を
+          // 決めてしまう（#642）。パスワードを忘れた場合はリセットで復旧する
+          if (await isTotpEnabled(supabase, user.id)) {
+            throw new CredentialsSignInError(
+              AUTH_ERROR_CODE.OTP_LOGIN_DISABLED,
+            );
           }
 
           // OTPログイン: otp/verify が発行した検証済みトークンで本人確認する。
@@ -184,6 +202,54 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           if (!isPasswordValid) {
             throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          }
+
+          // 第2要素。パスワードが正しいことを確かめてからでないと、
+          // 「二段階認証を使っているアカウントかどうか」を第三者に教えてしまう
+          if (await isTotpEnabled(supabase, user.id)) {
+            const totpCode = (
+              credentials.totpCode as string | undefined
+            )?.trim();
+
+            if (!totpCode) {
+              // クライアントはこれを受けて認証コードの入力欄を出す
+              throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REQUIRED);
+            }
+
+            // コード自体の総当たりを止める。識別子はユーザーIDを使う
+            // （ここに到達するにはパスワードが要るため、第三者が他人の
+            // アカウントをロックすることはできない）
+            const totpLimitResult = await checkRateLimit(
+              supabase,
+              user.id,
+              RATE_LIMIT_ACTION.TOTP_VERIFY,
+              RATE_LIMIT_CONFIG.TOTP_VERIFY.maxAttempts,
+              RATE_LIMIT_CONFIG.TOTP_VERIFY.windowMinutes,
+            );
+
+            if (!totpLimitResult.allowed) {
+              throw new CredentialsSignInError(AUTH_ERROR_CODE.RATE_LIMITED);
+            }
+
+            const verifyResult = await verifySecondFactor(
+              supabase,
+              user.id,
+              totpCode,
+            );
+
+            if (verifyResult === TOTP_VERIFY_RESULT.REUSED) {
+              throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REUSED);
+            }
+
+            if (verifyResult !== TOTP_VERIFY_RESULT.SUCCESS) {
+              throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_INVALID);
+            }
+
+            await resetRateLimit(
+              supabase,
+              user.id,
+              RATE_LIMIT_ACTION.TOTP_VERIFY,
+            );
           }
         }
 
@@ -364,7 +430,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true;
     },
 
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger, session }) {
       // 初回ログイン時にユーザー情報をトークンに追加
       if (user) {
         if (account?.provider && account.provider !== 'credentials') {
@@ -379,6 +445,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.lastPasswordCheck = Date.now();
           token.lastLoginUpdate = Date.now();
           token.issuedAt = Date.now();
+          token.totpPending = false;
 
           if (supabase && user.id) {
             const { data: dbUser } = await supabase
@@ -392,6 +459,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               token.hasPassword = Boolean(dbUser.password_hash);
               token.passwordChangedAt = dbUser.password_changed_at ?? null;
             }
+
+            // OAuth は Credentials と違い authorize を通らないため、
+            // 第2要素はここで要求する。プロバイダ側の2FA設定に依存せず、
+            // このアプリ独自の第2要素を必ず挟む
+            token.totpPending = await isTotpEnabled(supabase, user.id);
           }
         } else {
           // Credentialsログイン
@@ -409,6 +481,44 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.lastPasswordCheck = Date.now();
           token.lastLoginUpdate = Date.now();
           token.issuedAt = Date.now();
+          // Credentials 経路は authorize で第2要素まで検証済み
+          token.totpPending = false;
+        }
+      }
+
+      // 第2要素の検証（OAuth 経路の続き）。
+      //
+      // 検証はここで行う。クライアントから渡せるのは入力されたコードだけで、
+      // 「検証済み」という結果そのものは渡せない。
+      if (trigger === 'update' && token.totpPending && supabase && token.id) {
+        const totpCode = (session as { totpCode?: unknown } | undefined)
+          ?.totpCode;
+
+        if (typeof totpCode === 'string' && totpCode.trim()) {
+          const totpLimitResult = await checkRateLimit(
+            supabase,
+            token.id,
+            RATE_LIMIT_ACTION.TOTP_VERIFY,
+            RATE_LIMIT_CONFIG.TOTP_VERIFY.maxAttempts,
+            RATE_LIMIT_CONFIG.TOTP_VERIFY.windowMinutes,
+          );
+
+          if (totpLimitResult.allowed) {
+            const verifyResult = await verifySecondFactor(
+              supabase,
+              token.id,
+              totpCode.trim(),
+            );
+
+            if (verifyResult === TOTP_VERIFY_RESULT.SUCCESS) {
+              token.totpPending = false;
+              await resetRateLimit(
+                supabase,
+                token.id,
+                RATE_LIMIT_ACTION.TOTP_VERIFY,
+              );
+            }
+          }
         }
       }
 
@@ -484,6 +594,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.image = null;
         session.user.role = '';
         session.user.hasPassword = false;
+        return session;
+      }
+
+      // 第2要素が未了のセッションは「ログイン済み」として扱わない。
+      // `/api/*` は proxy の判定を素通りするため、ここで空にしておかないと
+      // 認証コードを入れないままAPIを使えてしまう。
+      // 本人が誰かは JWT 側に残っているので、認証コードの検証は続行できる
+      if (token.totpPending) {
+        session.user.id = '';
+        session.user.email = '';
+        session.user.name = null;
+        session.user.image = null;
+        session.user.role = '';
+        session.user.hasPassword = false;
+        session.totpPending = true;
         return session;
       }
 

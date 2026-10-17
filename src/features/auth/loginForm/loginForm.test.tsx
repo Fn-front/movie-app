@@ -231,6 +231,151 @@ describe('LoginForm', () => {
     });
   });
 
+  describe('第2要素（二段階認証）', () => {
+    /** メールとパスワードを入れてログインを押す */
+    const submitCredentials = async () => {
+      await user.type(
+        screen.getByLabelText('メールアドレス'),
+        'test@example.com',
+      );
+      await user.type(screen.getByLabelText('パスワード'), 'Password1');
+      await user.click(screen.getByRole('button', { name: 'ログイン' }));
+    };
+
+    it('初期状態では認証コード欄を表示しない', () => {
+      // 常に出すと、二段階認証を使っているアカウントかどうかを
+      // パスワードを知らない相手に見せてしまう
+      render(<LoginForm />);
+
+      expect(screen.queryByLabelText('認証コード')).not.toBeInTheDocument();
+    });
+
+    it('totp_required を受け取ると認証コード欄を表示する', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: 'totp_required',
+        ok: false,
+        status: 401,
+        url: null,
+      });
+
+      render(<LoginForm />);
+      await submitCredentials();
+
+      expect(await screen.findByLabelText('認証コード')).toBeInTheDocument();
+    });
+
+    it('totp_required のときはエラーを表示しない', async () => {
+      // パスワードは正しいので、失敗として見せるのは誤り
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: 'totp_required',
+        ok: false,
+        status: 401,
+        url: null,
+      });
+
+      render(<LoginForm />);
+      await submitCredentials();
+
+      await screen.findByLabelText('認証コード');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(mockToast).not.toHaveBeenCalled();
+    });
+
+    it('認証コードを入力して再送するとログインできる', async () => {
+      mockSignIn
+        .mockResolvedValueOnce({
+          error: 'CredentialsSignin',
+          code: 'totp_required',
+          ok: false,
+          status: 401,
+          url: null,
+        })
+        .mockResolvedValueOnce({
+          error: undefined,
+          code: undefined,
+          ok: true,
+          status: 200,
+          url: '/',
+        });
+
+      render(<LoginForm />);
+      await submitCredentials();
+
+      await user.type(await screen.findByLabelText('認証コード'), '123456');
+      await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+      await waitFor(() => {
+        expect(mockSignIn).toHaveBeenLastCalledWith(
+          'credentials',
+          expect.objectContaining({ totpCode: '123456' }),
+        );
+      });
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/');
+      });
+    });
+
+    it('認証コード欄を出していないうちは totpCode を送らない', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: 'totp_required',
+        ok: false,
+        status: 401,
+        url: null,
+      });
+
+      render(<LoginForm />);
+      await submitCredentials();
+
+      expect(mockSignIn).toHaveBeenCalledWith(
+        'credentials',
+        expect.not.objectContaining({ totpCode: expect.anything() }),
+      );
+    });
+
+    it.each([
+      ['totp_invalid', '認証コードが正しくありません。'],
+      [
+        'totp_reused',
+        'この認証コードは使用済みです。次のコードが表示されるまでお待ちください。',
+      ],
+      ['rate_limited', 'しばらく時間をおいてから再度お試しください。'],
+    ])('%s を受け取るとその内容を表示する', async (code, message) => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code,
+        ok: false,
+        status: 401,
+        url: null,
+      });
+
+      render(<LoginForm />);
+      await submitCredentials();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    });
+
+    it('判別できないコードは認証情報エラーに丸める', async () => {
+      // どのアカウントが存在するかを推測させないため
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: 'credentials',
+        ok: false,
+        status: 401,
+        url: null,
+      });
+
+      render(<LoginForm />);
+      await submitCredentials();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'メールアドレスまたはパスワードが正しくありません。',
+      );
+    });
+  });
+
   it('signInが例外をスローした場合にエラーが表示される', async () => {
     mockSignIn.mockRejectedValue(
       new AxiosError('Network error', 'ERR_NETWORK'),

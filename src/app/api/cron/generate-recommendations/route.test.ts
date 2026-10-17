@@ -10,6 +10,7 @@ import { NextRequest } from 'next/server';
 
 import {
   RECOMMENDATIONS_MAX_COUNT,
+  RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
   RECOMMENDATIONS_INITIAL_HIT_RATE,
 } from '@/constants';
 
@@ -444,6 +445,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       Math.ceil(RECOMMENDATIONS_MAX_COUNT / RECOMMENDATIONS_INITIAL_HIT_RATE),
       [],
       undefined,
+      expect.objectContaining({ temperature: expect.any(Number) }),
     );
     // 2回目: 実測した採用率で不足分を割り戻した件数をリクエスト
     expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
@@ -453,6 +455,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       expect.any(Number),
       [],
       undefined,
+      expect.objectContaining({ temperature: expect.any(Number) }),
     );
   });
 
@@ -534,6 +537,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       Math.ceil(RECOMMENDATIONS_MAX_COUNT / RECOMMENDATIONS_INITIAL_HIT_RATE),
       [],
       undefined,
+      expect.objectContaining({ temperature: expect.any(Number) }),
     );
 
     // 初回のresolveRecommendationsWithTMDbに除外IDセットと必要件数が渡されていることを確認
@@ -541,7 +545,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       1,
       expect.anything(),
       new Set([1, 2]),
-      RECOMMENDATIONS_MAX_COUNT,
+      RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
       undefined,
     );
   });
@@ -638,6 +642,7 @@ describe('GET /api/cron/generate-recommendations', () => {
         { tmdb_movie_id: 20, title: '興味なし映画B', genre_ids: [27, 53] },
       ],
       undefined,
+      expect.objectContaining({ temperature: expect.any(Number) }),
     );
 
     // 除外IDセットに興味なし映画のIDが含まれる
@@ -645,7 +650,7 @@ describe('GET /api/cron/generate-recommendations', () => {
       1,
       expect.anything(),
       new Set([1, 10, 20]),
-      RECOMMENDATIONS_MAX_COUNT,
+      RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
       undefined,
     );
   });

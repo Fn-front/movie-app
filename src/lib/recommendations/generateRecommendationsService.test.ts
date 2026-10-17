@@ -10,6 +10,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
+  OPENAI_CONFIG,
+  RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_INITIAL_HIT_RATE,
   RECOMMENDATIONS_MIN_HIT_RATE,
@@ -445,6 +447,116 @@ describe('generateRecommendationsService', () => {
 
       expect(result.resolved).toHaveLength(3);
       expect(result.resolved[2].display_order).toBe(3);
+    });
+  });
+
+  describe('リトライ戦略と多様性リランキング', () => {
+    /** 全件同一ジャンルのAI候補とTMDb解決結果を用意する */
+    const mockAttempt = (count: number, genreId: number) => {
+      mockFetchRecommendations.mockResolvedValueOnce(
+        Array.from({ length: count }, (_, i) => ({
+          title_ja: `映画${i + 1}`,
+          title_en: `Movie ${i + 1}`,
+          year: 2020,
+          reason: `理由${i + 1}`,
+        })),
+      );
+      mockResolveRecommendations.mockResolvedValueOnce(
+        Array.from({ length: count }, (_, i) => ({
+          ...buildResolved(1)[0],
+          tmdb_movie_id: i + 1,
+          title: `Movie ${i + 1}`,
+          genre_ids: [genreId],
+        })),
+      );
+    };
+
+    it('初回は基準temperature・追加指示なしで呼ぶ', async () => {
+      mockAttempt(RECOMMENDATIONS_MAX_COUNT, 28);
+
+      await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      expect(mockFetchRecommendations.mock.calls[0][5]).toEqual({
+        temperature: OPENAI_CONFIG.RECOMMENDATIONS_TEMPERATURE,
+        hint: null,
+      });
+    });
+
+    it('リトライでは温度を上げ、方向を変える指示を付けて呼ぶ', async () => {
+      // 初回は5件しか解決できず不足 → リトライ
+      mockAttempt(5, 28);
+      mockAttempt(5, 18);
+
+      await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      const retryStrategy = mockFetchRecommendations.mock.calls[1][5];
+      expect(retryStrategy.temperature).toBeGreaterThan(
+        OPENAI_CONFIG.RECOMMENDATIONS_TEMPERATURE,
+      );
+      expect(retryStrategy.hint).toContain('異なるジャンル');
+    });
+
+    it('リランキングの入れ替え先を作るため、必要数より多く解決を要求する', async () => {
+      mockAttempt(RECOMMENDATIONS_MAX_COUNT, 28);
+
+      await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      // 第3引数が「必要件数 + 多様性プール分」
+      expect(mockResolveRecommendations.mock.calls[0][2]).toBe(
+        RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
+      );
+    });
+
+    it('同一ジャンルに偏った候補でも、他ジャンルを先に採用する', async () => {
+      // アクション10件のあとにドラマ5件を解決できたケース
+      mockFetchRecommendations.mockResolvedValueOnce(
+        Array.from({ length: 15 }, (_, i) => ({
+          title_ja: `映画${i + 1}`,
+          title_en: `Movie ${i + 1}`,
+          year: 2020,
+          reason: `理由${i + 1}`,
+        })),
+      );
+      mockResolveRecommendations.mockResolvedValueOnce(
+        Array.from({ length: 15 }, (_, i) => ({
+          ...buildResolved(1)[0],
+          tmdb_movie_id: i + 1,
+          title: `Movie ${i + 1}`,
+          genre_ids: [i < 10 ? 28 : 18],
+        })),
+      );
+
+      const result = await generateRecommendationsWithRetry(
+        [{ title: 'Fav', rating: 8 }],
+        [],
+        new Set(),
+        [],
+      );
+
+      const dramaCount = result.resolved.filter(
+        (r) => r.genre_ids?.[0] === 18,
+      ).length;
+
+      expect(result.resolved).toHaveLength(RECOMMENDATIONS_MAX_COUNT);
+      // リランキング前は先頭10件がすべてアクションだった。
+      // 各ジャンルを上限4件までに抑えた結果、後方のドラマが4件繰り上がり、
+      // 残り2枠は保留したアクションで埋まる（件数は減らさない）
+      expect(dramaCount).toBe(4);
     });
   });
 

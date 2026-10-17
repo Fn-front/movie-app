@@ -39,6 +39,12 @@ import { getGlowGradientTexture } from '../../utils/theaterTextures';
  */
 const COVE_GLOW_HEIGHT = 1.1;
 
+/**
+ * 滲みの板を発光帯より手前へ出す量 (m)。
+ * 同一平面だと z-fighting で帯と板がちらつく。
+ */
+const COVE_GLOW_Z_OFFSET = 0.01;
+
 /** 幅木の高さ (m) */
 const DADO_HEIGHT = 0.6;
 /** 幅木の壁からの出 (m) */
@@ -267,7 +273,13 @@ const WallFacePanels = memo<{
         重ねる。加算合成なので下の壁の陰影を保ったまま光だけが乗る。
         発光帯より僅かに手前へ出して、帯自体に食い込まないようにする。
       */}
-      <mesh position={[0, roomHeight / 2 - COVE_DROP, COVE_OFFSET - 0.01]}>
+      <mesh
+        position={[
+          0,
+          roomHeight / 2 - COVE_DROP,
+          COVE_OFFSET - COVE_GLOW_Z_OFFSET,
+        ]}
+      >
         <planeGeometry args={[face.length, COVE_GLOW_HEIGHT]} />
         <meshBasicMaterial
           map={glowGradient}

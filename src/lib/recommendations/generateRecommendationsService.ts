@@ -8,7 +8,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_MAX_RETRIES,
-  RECOMMENDATIONS_GENERATION_BUFFER,
+  RECOMMENDATIONS_INITIAL_HIT_RATE,
+  RECOMMENDATIONS_MIN_HIT_RATE,
+  RECOMMENDATIONS_MAX_REQUEST_COUNT,
   RECOMMENDATIONS_ACTIVE_USER_DAYS,
   RECOMMENDATIONS_BATCH_SIZE,
   CRON_ERROR_MESSAGES,
@@ -117,13 +119,18 @@ export async function fetchActiveUserIds(
 
 /**
  * ユーザーのお気に入り・ウォッチリスト・除外リストを収集
+ *
+ * プロンプトへ渡すタイトルは「ウォッチリストのみ」に絞る。
+ * お気に入りと興味なしは専用セクションで既にプロンプトへ載っており、
+ * 除外リストとして再掲すると同じタイトルを二重に送ることになる。
+ * 実際の除外は `baseExcludedIds` によるID照合で行うため情報は失われない。
  */
 export async function collectUserMovieData(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<{
   favoriteMovies: FavoriteMovie[];
-  excludedTitles: string[];
+  watchlistTitles: string[];
   baseExcludedIds: Set<number>;
   dismissedMovies: DismissedMovie[];
 } | null> {
@@ -171,10 +178,38 @@ export async function collectUserMovieData(
     })),
   ];
 
-  const excludedTitles = excludedMovies.map((m) => m.title);
+  const watchlistTitles = (watchlistItems || []).map((w) => w.title as string);
   const baseExcludedIds = new Set(excludedMovies.map((m) => m.tmdb_movie_id));
 
-  return { favoriteMovies, excludedTitles, baseExcludedIds, dismissedMovies };
+  return { favoriteMovies, watchlistTitles, baseExcludedIds, dismissedMovies };
+}
+
+/**
+ * AIへ要求する候補件数を算出する
+ *
+ * AIが返した候補の多くは、お気に入り・ウォッチリストと重複していたり
+ * TMDbで解決できなかったりして採用に至らない。必要件数ぴったりを要求すると
+ * 毎回足りずにリトライが必要になるため、採用率で割り戻した件数を要求する。
+ *
+ * 初回は想定採用率を使い、2回目以降は直前の試行の実測値に置き換えることで、
+ * 既視聴作品が多く衝突しやすいユーザーほど自動的に多く要求するようになる。
+ *
+ * @param remainingCount - あと何件必要か
+ * @param previousHitRate - 直前の試行の採用率。初回は undefined
+ * @returns AIへ要求する件数
+ */
+export function calculateRequestCount(
+  remainingCount: number,
+  previousHitRate?: number,
+): number {
+  const hitRate = Math.max(
+    previousHitRate ?? RECOMMENDATIONS_INITIAL_HIT_RATE,
+    RECOMMENDATIONS_MIN_HIT_RATE,
+  );
+  return Math.min(
+    Math.ceil(remainingCount / hitRate),
+    RECOMMENDATIONS_MAX_REQUEST_COUNT,
+  );
 }
 
 /**
@@ -184,15 +219,15 @@ export async function collectUserMovieData(
  */
 export async function generateRecommendationsWithRetry(
   favoriteMovies: FavoriteMovie[],
-  excludedTitles: string[],
+  watchlistTitles: string[],
   baseExcludedIds: Set<number>,
   dismissedMovies: DismissedMovie[],
   signal?: AbortSignal,
 ): Promise<ResolvedRecommendation[]> {
   const allResolved: ResolvedRecommendation[] = [];
   let remainingCount = RECOMMENDATIONS_MAX_COUNT;
-  let retryExcludedTitles = [...excludedTitles];
   let retryExcludedIds = baseExcludedIds;
+  let previousHitRate: number | undefined;
 
   for (let attempt = 0; attempt <= RECOMMENDATIONS_MAX_RETRIES; attempt++) {
     // 中断済みならリトライに入らず、ここまでの結果で打ち切る
@@ -200,11 +235,10 @@ export async function generateRecommendationsWithRetry(
       break;
     }
 
-    // TMDb解決時の取りこぼし・除外を見越し、必要数より多め（+バッファ）に要求する
-    const requestCount = remainingCount + RECOMMENDATIONS_GENERATION_BUFFER;
+    const requestCount = calculateRequestCount(remainingCount, previousHitRate);
     const aiRecommendations = await fetchRecommendationsFromOpenAI(
       favoriteMovies,
-      retryExcludedTitles,
+      watchlistTitles,
       requestCount,
       dismissedMovies,
       signal,
@@ -221,8 +255,11 @@ export async function generateRecommendationsWithRetry(
       signal,
     );
 
+    // 次の試行の要求件数に使う採用率。0件なら下限値が効くので除算のみ行う
+    previousHitRate = resolvedInAttempt.length / aiRecommendations.length;
+
     for (const item of resolvedInAttempt) {
-      // バッファ分多めに解決されても最大件数で丸める（オーバーシュート防止）
+      // 多めに解決されても最大件数で丸める（オーバーシュート防止）
       if (allResolved.length >= RECOMMENDATIONS_MAX_COUNT) {
         break;
       }
@@ -244,10 +281,6 @@ export async function generateRecommendationsWithRetry(
       ...baseExcludedIds,
       ...allResolved.map((r) => r.tmdb_movie_id),
     ]);
-    retryExcludedTitles = [
-      ...excludedTitles,
-      ...allResolved.map((r) => r.title),
-    ];
   }
 
   return allResolved;
@@ -309,7 +342,7 @@ export async function processUserRecommendations(
 
   const resolved = await generateRecommendationsWithRetry(
     movieData.favoriteMovies,
-    movieData.excludedTitles,
+    movieData.watchlistTitles,
     movieData.baseExcludedIds,
     movieData.dismissedMovies,
     signal,

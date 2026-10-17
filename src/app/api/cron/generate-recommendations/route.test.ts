@@ -10,7 +10,7 @@ import { NextRequest } from 'next/server';
 
 import {
   RECOMMENDATIONS_MAX_COUNT,
-  RECOMMENDATIONS_GENERATION_BUFFER,
+  RECOMMENDATIONS_INITIAL_HIT_RATE,
 } from '@/constants';
 
 import { GET } from './route';
@@ -431,24 +431,22 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     // fetchRecommendationsFromOpenAIが2回呼ばれる
     expect(mockFetchRecommendations).toHaveBeenCalledTimes(2);
-    // 1回目: 最大件数＋バッファをリクエスト
+    // 1回目: 必要件数を想定採用率で割り戻した件数をリクエスト。
+    // お気に入りはプロンプトの専用セクションで渡すため、第2引数（ウォッチリスト）は空
     expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
       1,
       [{ title: 'インターステラー', rating: 9 }],
-      ['インターステラー'],
-      RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
+      [],
+      Math.ceil(RECOMMENDATIONS_MAX_COUNT / RECOMMENDATIONS_INITIAL_HIT_RATE),
       [],
       undefined,
     );
-    // 2回目: 不足2件＋バッファをリクエスト、解決済みタイトルを除外
+    // 2回目: 実測した採用率で不足分を割り戻した件数をリクエスト
     expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
       2,
       [{ title: 'インターステラー', rating: 9 }],
-      expect.arrayContaining([
-        'インターステラー',
-        ...firstBatchResolved.map((r) => r.title),
-      ]),
-      2 + RECOMMENDATIONS_GENERATION_BUFFER,
+      [],
+      expect.any(Number),
       [],
       undefined,
     );
@@ -493,7 +491,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     expect(mockFetchRecommendations).toHaveBeenCalledTimes(3);
   });
 
-  it('除外リストにお気に入りとウォッチリストの両方が含まれる', async () => {
+  it('プロンプトにはウォッチリストのみ渡し、お気に入りは除外IDで弾く', async () => {
     mockFavoritesUserQuery(['user-1']);
     mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([
@@ -524,12 +522,12 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     expect(response.status).toBe(200);
 
-    // 初回のfetchRecommendationsFromOpenAIに除外タイトルと件数が渡されていることを確認
+    // お気に入りは専用セクションで渡るため、タイトルリストはウォッチリストのみ
     expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
       1,
       [{ title: 'お気に入り映画', rating: 9 }],
-      ['お気に入り映画', 'ウォッチリスト映画'],
-      RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
+      ['ウォッチリスト映画'],
+      Math.ceil(RECOMMENDATIONS_MAX_COUNT / RECOMMENDATIONS_INITIAL_HIT_RATE),
       [],
       undefined,
     );
@@ -591,7 +589,7 @@ describe('GET /api/cron/generate-recommendations', () => {
     expect(json.data.inactive_users).toBe(2);
   });
 
-  it('興味なし映画が除外リストとOpenAIプロンプトに含まれる', async () => {
+  it('興味なし映画は除外IDと専用の興味なしリストで渡る', async () => {
     mockFavoritesUserQuery(['user-1']);
     mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([
@@ -625,12 +623,12 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     expect(response.status).toBe(200);
 
-    // 除外タイトルに興味なし映画が含まれる
+    // 興味なしは第4引数の専用リストで渡る（タイトルリストに再掲しない）
     expect(mockFetchRecommendations).toHaveBeenNthCalledWith(
       1,
       [{ title: 'お気に入り映画', rating: 9 }],
-      ['お気に入り映画', '興味なし映画A', '興味なし映画B'],
-      RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER,
+      [],
+      Math.ceil(RECOMMENDATIONS_MAX_COUNT / RECOMMENDATIONS_INITIAL_HIT_RATE),
       [
         { tmdb_movie_id: 10, title: '興味なし映画A', genre_ids: [27] },
         { tmdb_movie_id: 20, title: '興味なし映画B', genre_ids: [27, 53] },

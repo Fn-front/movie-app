@@ -6,17 +6,16 @@ import { z } from 'zod';
 
 import {
   RECOMMENDATIONS_MAX_COUNT,
-  RECOMMENDATIONS_GENERATION_BUFFER,
+  RECOMMENDATIONS_MAX_REQUEST_COUNT,
   MOVIE_YEAR_RANGE,
 } from '@/constants';
 
 /**
- * AIレスポンスとして保持する最大件数（最大表示件数＋取りこぼし用バッファ）。
+ * AIレスポンスとして保持する最大件数（1回の要求件数の上限と揃える）。
  * LLMは要求件数を厳密に守らず超過して返すことがあるため、超過分は
  * バリデーションエラーにせず、この件数まで切り詰める（超過分は破棄）。
  */
-const OPENAI_RECOMMENDATIONS_MAX_RESPONSE =
-  RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_GENERATION_BUFFER;
+const OPENAI_RECOMMENDATIONS_MAX_RESPONSE = RECOMMENDATIONS_MAX_REQUEST_COUNT;
 
 /**
  * OpenAIレスポンスの個別レコメンド項目スキーマ

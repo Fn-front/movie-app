@@ -18,7 +18,13 @@ describe('OVERVIEW_INTENSITIES', () => {
       ambient: 0.5,
       hemisphere: 0.35,
       directional: 1.15,
+      screen: 0,
     });
+  });
+
+  it('俯瞰ではスクリーン面光源を使わない', () => {
+    // 面光源は一人称専用。俯瞰で点けると座席選択UIの見え方が変わるため
+    expect(OVERVIEW_INTENSITIES.screen).toBe(0);
   });
 });
 
@@ -31,12 +37,20 @@ describe('getTargetIntensities', () => {
     expect(getTargetIntensities(true)).toBe(FIRST_PERSON_INTENSITIES);
   });
 
-  it('一人称は全ての光源が俯瞰より暗い（劇場らしい暗さになる）', () => {
+  it('一人称は環境光系が俯瞰より暗い（劇場らしい暗さになる）', () => {
     const over = getTargetIntensities(false);
     const fpv = getTargetIntensities(true);
     expect(fpv.ambient).toBeLessThan(over.ambient);
     expect(fpv.hemisphere).toBeLessThan(over.hemisphere);
     expect(fpv.directional).toBeLessThan(over.directional);
+  });
+
+  it('一人称ではスクリーンが主光源になる', () => {
+    const fpv = getTargetIntensities(true);
+    // 実機の客席は幕に面した側だけが照らされる。環境光より面光源が強いことで
+    // 方向性のある照明になる（一様に暗いだけの絵にしない）
+    expect(fpv.screen).toBeGreaterThan(fpv.ambient);
+    expect(fpv.screen).toBeGreaterThan(fpv.directional);
   });
 
   it('一人称でも完全な暗黒にはしない（形が全く見えなくなるのを防ぐ）', () => {
@@ -48,8 +62,8 @@ describe('getTargetIntensities', () => {
 });
 
 describe('lerpIntensities', () => {
-  const from = { ambient: 0, hemisphere: 0, directional: 0 };
-  const to = { ambient: 1, hemisphere: 2, directional: 4 };
+  const from = { ambient: 0, hemisphere: 0, directional: 0, screen: 0 };
+  const to = { ambient: 1, hemisphere: 2, directional: 4, screen: 8 };
 
   it('t=0 では開始値、t=1 では目標値になる', () => {
     expect(lerpIntensities(from, to, 0)).toEqual(from);
@@ -61,6 +75,7 @@ describe('lerpIntensities', () => {
       ambient: 0.5,
       hemisphere: 1,
       directional: 2,
+      screen: 4,
     });
   });
 

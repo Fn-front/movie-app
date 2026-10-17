@@ -35,6 +35,14 @@ jest.mock('three', () => ({
   }),
   RepeatWrapping: 1000,
 }));
+/*
+  RectAreaLightUniformsLib は three の examples 配下（ESM のみ）で、Jest の
+  既定では node_modules が変換対象外のため解析できない。
+  `init()` はモジュール読込時に走るので、スタブを用意する。
+*/
+jest.mock('three/examples/jsm/lights/RectAreaLightUniformsLib.js', () => ({
+  RectAreaLightUniformsLib: { init: jest.fn() },
+}));
 
 import { TheaterScene } from './theaterScene';
 

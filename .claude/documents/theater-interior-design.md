@@ -661,20 +661,43 @@ Atmos 9.1.6 レイアウトでは可視スピーカーは最大12個（16ch − 
 
 | ライト | 俯瞰（現状維持） | 一人称 |
 |---|---|---|
-| `ambientLight` | 0.50 | 0.12 |
-| `hemisphereLight` | 0.35 | 0.10 |
-| `directionalLight` | 1.15 | 0.25 |
+| `ambientLight` | 0.50 | 0.06 |
+| `hemisphereLight` | 0.35 | 0.05 |
+| `directionalLight` | 1.15 | 0.10 |
+| **スクリーン面光源** | **0（不使用）** | **8** |
 | コーブ HDR 倍率 | 1.8 | 2.6 |
 | 通路灯 HDR 倍率 | 2.4 | 3.0 |
 | 階段LED HDR 倍率 | 1.6 | 2.2 |
 
-**俯瞰を据え置くのは意図的**である。俯瞰は座席選択UIそのものであり、ここを暗くすると座席の識別性（§2.3）と既存E2Eスクリーンショットの大半が壊れる。
+**俯瞰を据え置くのは意図的**である。俯瞰は座席選択UIそのものであり、ここを暗くすると座席の識別性（§2.3）と既存E2Eスクリーンショットの大半が壊れる。俯瞰の値は `adaptiveLighting.test.ts` で**値そのものをロック**してある。
+
+### 10.1.1 スクリーンを主光源にする
+
+実機の客席は**スクリーンが室内の主光源**で、幕に面した側だけが照らされ背面は黒く落ちる（Dolby Cinema 公式の客席写真で確認）。環境光だけで暗くすると「一様に暗いだけ」になり立体感が出ない。改修前の一人称がまさにこの状態だった。
+
+幕と同寸の `RectAreaLight` を幕の 0.15m 手前に置き、客席側（-Z）へ向ける。配置の算出は `utils/screenLight.ts`。
+
+**制約と決めごと**:
+
+- `RectAreaLight` は **`MeshStandardMaterial` / `MeshPhysicalMaterial` にしか効かない**。そのため床・壁・天井・幅木を `meshLambertMaterial` から `meshStandardMaterial` へ変更した。**影は落とさない**（three の仕様）
+- 幕まわりの黒マスキング（`screenMesh` のベゼル）は **Lambert のまま残す**。面光源の至近にあるため Standard にすると明るくなり、黒マスキングとして破綻する
+- `RectAreaLightUniformsLib.init()` が必須。LTC のルックアップテーブルを読み込まないと光源が真っ黒になる。インポートは `three/examples/jsm/...` から行う（`three-stdlib` は推移的依存のため直接依存している `three` 側を使う）
+- 湾曲スクリーン（IMAX）も**平面で近似**する。サジッタ 2.06m は客席までの距離に対して十分小さく、照明の分布に差が出ない
+- 強度0のときは**光源自体をアンマウント**する。`RectAreaLight` は強度0でも全フラグメントに計算が乗るため、俯瞰の描画コストを改修前と同じに保つにはマウント自体を外す必要がある
+
+**強度 8 の根拠**: 実測で振った。12 では標準シアターは良好だが IMAX（幕 25.8m）で側壁が白飛びする。面光源の強度は nits（単位面積あたり）なので、幕が大きいほど室内へ届く総量が増えるため。8 は標準・Dolby で十分効き、IMAX でも破綻しない値。
+
+> **既知の制約**: IMAX の側壁は `relief: #55555c` と元々明るく、面光源下ではやや白く浮く。テーマ色は IMAX 公式の構成図から決めた値なので本改修では触っていない。
+
+**性能**: ソフトウェアWebGL（CI相当）での実測で、一人称を含む E2E が 11秒 → 17秒 になった。内訳は**面光源そのものがほぼ全て**で、Lambert → Standard の置き換え自体のコストは計測できる差にならなかった（11.5秒）。床・天井を Lambert に戻す案も試したが 1 秒しか戻らず、床が暗いままになる代償に見合わないため採用しなかった。毎フレームの追加レンダーパスは無いので、`ContactShadows` 撤去（#474/#493）の原因とは性質が異なる。
 
 ### 10.2 遷移
 
 座席選択時には既に俯瞰→一人称のフライスルー（`FLYTHROUGH_DURATION_S = 0.55s`、`easeOutCubic`）がある。ライト強度もこれと**同じ時間・同じイージングで補間**し、カメラ移動と光量変化を同期させる。`reducedMotion` 時はフライスルー同様に即時切替とする。
 
-実装は `useFrame` 内でライトの `intensity` を書き換える小さなコンポーネント（`AdaptiveLighting`）に切り出す。毎フレームのコストはスカラー代入3回で無視できる。
+実装は `useFrame` 内でライトの `intensity` を書き換える小さなコンポーネント（`AdaptiveLighting`）に切り出す。毎フレームのコストはスカラー代入4回で無視できる。
+
+面光源は**点灯を `isFirstPerson` から直接導出し、消灯だけを state で遅延**させる。「視点が変わった瞬間にマウント」を effect 内の `setState` で書くとカスケードレンダリングになるため（`react-hooks/set-state-in-effect`）。一人称を抜けた直後にアンマウントすると、フライスルーの途中で客席が一段暗くなって不連続に見えるので、強度が0に落ち切ってから外す。
 
 ---
 
@@ -691,7 +714,8 @@ Atmos 9.1.6 レイアウトでは可視スピーカーは最大12個（16ch − 
 | `utils/theaterTextures.ts` | jsdom に canvas 実装が無いため、`HTMLCanvasElement.prototype.getContext` をモックし、(1) 柄種別ごとに異なる描画コマンド列が発行される (2) 同一フォーマットの2回目呼び出しでキャッシュが効き再描画されない (3) `wallGraphic.kind === 'none'` で `null` を返す、を検証する。**`canvas` パッケージは導入しない**（依存最小主義） |
 | `utils/wallGeometry.ts` | リブ／ファセットの配置数と座標、`calcFacetRadius`、天井ダウンライト・リフレクターの配置。**`isWallHiddenInOverview` は §5.5 の再発防止として必ず含める** |
 | `utils/seatColors.ts` | テーマ引数化後の色解決。機能色（選択中・車椅子席）がテーマで上書きされないこと |
-| `utils/adaptiveLighting.ts` | **俯瞰の光量値を定数でロックする**（`OVERVIEW_INTENSITIES` が 0.5 / 0.35 / 1.15 のままであること）。§10 の「俯瞰は現状維持」を回帰から守る唯一の手段 |
+| `utils/adaptiveLighting.ts` | **俯瞰の光量値を定数でロックする**（`OVERVIEW_INTENSITIES` が 0.5 / 0.35 / 1.15 / screen 0 のままであること）。§10 の「俯瞰は現状維持」を回帰から守る唯一の手段。実際この値ロックが、一括置換で俯瞰の面光源まで点けてしまった事故を検出した |
+| `utils/screenLight.ts` | 面光源の配置（幕の手前に出すこと・客席側を向くこと・幕の寸法に追従すること）と、強度0や不正寸法でアンマウント判定になること |
 | `utils/rowCurve.ts` | `isCurvedLayout`、`calcSeatYawOnArc`（中央席で0、端席で弧に沿う）、`calcArcForwardShift`、`rotateLocalOffset` |
 | `utils/screenCurve.ts` | `isCurvedScreen`、`calcScreenArcPoint`（`curvature = 0` で従来と同値）、`calcScreenSagitta`。**`screen_width` は弧長として扱う**ため、IMAX のサジッタは弦の式 (2.14m) ではなく 2.06m になる |
 | `utils/occupancy.ts` | (1) 占有率を上げたとき席集合が**単調に増える**こと (2) 選択中の席と車椅子席が除外されること (3) ハッシュが10区間に十分散ること（撹拌の回帰検出） (4) `calcAudienceVariant` が同じIDに同じ体格を返すこと (5) 範囲外の占有率のクランプ |

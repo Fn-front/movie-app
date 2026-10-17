@@ -225,7 +225,11 @@ const WallFacePanels = memo<{
         receiveShadow
       >
         <boxGeometry args={[face.length, DADO_HEIGHT, DADO_DEPTH]} />
-        <meshLambertMaterial color={theme.dado} />
+        <meshStandardMaterial
+          color={theme.dado}
+          roughness={0.85}
+          metalness={0}
+        />
       </mesh>
 
       {/* 造作（縦リブ or 多面体ファセット） */}

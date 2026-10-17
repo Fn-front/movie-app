@@ -1,6 +1,21 @@
 # Supabase データベースセットアップ
 
-## 📋 実行手順
+> **⚠️ 通常の運用では、このページの手順を使わないこと。**
+>
+> スキーマ変更は `.claude/rules/supabase-db.md` のとおり、すべてマイグレーションで管理する。
+> ダッシュボード（GUI / SQL Editor）での直接変更は禁止。
+>
+> ```bash
+> supabase migration new <name>   # マイグレーション作成
+> supabase db push                # リモートDBへ反映
+> supabase gen types typescript --project-id <project-id> > src/types/database.types.ts
+> ```
+>
+> 以下は**ゼロからDBを作り直す場合の参考手順**。`schema.sql` はマイグレーション群の
+> スナップショットであり、完全に同期している保証はない。新規構築でも
+> `supabase db push` でマイグレーションを順に適用するほうが確実。
+
+## 📋 実行手順（新規構築時の参考）
 
 ### 1. Supabase SQL Editor を開く
 
@@ -25,8 +40,8 @@
 
 作成されたテーブル:
   - users
-  - otp_tokens
-  - password_reset_tokens
+  - accounts
+  - otp_codes
   - watchlist
   - movie_cache
   - rate_limits
@@ -39,8 +54,8 @@
 1. 左サイドバーの **Table Editor** をクリック
 2. 以下のテーブルが表示されることを確認：
    - users
-   - otp_tokens
-   - password_reset_tokens
+   - accounts
+   - otp_codes
    - watchlist
    - movie_cache
    - rate_limits
@@ -58,9 +73,9 @@ NextAuth.jsと統合する場合、Supabase Authenticationは使用しません�
 
 ### ユーザーデータ
 
-- **users**: 自分のレコードのみアクセス可能（新規登録は公開）
-- **otp_tokens**: 自分のトークンのみアクセス可能（発行は公開）
-- **password_reset_tokens**: 自分のトークンのみアクセス可能（発行は公開）
+- **users**: service_role 専用（anon / authenticated の権限は剥奪済み）
+- **accounts**: service_role 専用
+- **otp_codes**: service_role 専用（ポリシーなし＝全拒否）
 - **watchlist**: 自分のリストのみアクセス可能
 - **user_preferences**: 自分の設定のみアクセス可能
 
@@ -71,7 +86,7 @@ NextAuth.jsと統合する場合、Supabase Authenticationは使用しません�
 
 ### レート制限
 
-- **rate_limits**: 全員アクセス可能（レート制限チェック用）
+- **rate_limits**: service_role 専用（ポリシーなし＝全拒否）
 
 ## 📝 スキーマ詳細
 
@@ -79,16 +94,16 @@ NextAuth.jsと統合する場合、Supabase Authenticationは使用しません�
 
 ### 主要テーブル
 
-| テーブル名            | 説明               | 削除方式                   |
-| --------------------- | ------------------ | -------------------------- |
-| users                 | ユーザーアカウント | 物理削除                   |
-| otp_tokens            | OTP認証トークン    | 物理削除（認証完了後）     |
-| password_reset_tokens | パスワードリセット | 物理削除（リセット完了後） |
-| watchlist             | 見たい映画リスト   | 論理削除                   |
-| movie_cache           | 映画情報キャッシュ | 物理削除                   |
-| rate_limits           | レート制限管理     | 物理削除（期限切れ後）     |
-| user_preferences      | ユーザー設定       | 物理削除                   |
-| reviews               | レビュー・評価     | 物理削除                   |
+| テーブル名       | 説明               | 削除方式                   |
+| ---------------- | ------------------ | -------------------------- |
+| users            | ユーザーアカウント | 物理削除                   |
+| accounts         | OAuth連携          | 物理削除（ユーザー削除時） |
+| otp_codes        | OTP確認コード      | 物理削除（検証完了後）     |
+| watchlist        | 見たい映画リスト   | 論理削除                   |
+| movie_cache      | 映画情報キャッシュ | 物理削除                   |
+| rate_limits      | レート制限管理     | 物理削除（期限切れ後）     |
+| user_preferences | ユーザー設定       | 物理削除                   |
+| reviews          | レビュー・評価     | 物理削除                   |
 
 ## 🔧 トラブルシューティング
 
@@ -112,7 +127,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 DROP SCHEMA public CASCADE;
 CREATE SCHEMA public;
 GRANT ALL ON SCHEMA public TO postgres;
-GRANT ALL ON SCHEMA public TO public;
+-- public ロール（anon を含む全ロール）に CREATE を与えないこと。
+-- 必要なのはスキーマの USAGE のみ。
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 ```
 
 その後、`schema.sql` を再実行。
@@ -125,8 +142,8 @@ DROP TABLE IF EXISTS user_preferences CASCADE;
 DROP TABLE IF EXISTS rate_limits CASCADE;
 DROP TABLE IF EXISTS movie_cache CASCADE;
 DROP TABLE IF EXISTS watchlist CASCADE;
-DROP TABLE IF EXISTS password_reset_tokens CASCADE;
-DROP TABLE IF EXISTS otp_tokens CASCADE;
+DROP TABLE IF EXISTS otp_codes CASCADE;
+DROP TABLE IF EXISTS accounts CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 ```
 

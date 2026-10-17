@@ -23,7 +23,12 @@ import {
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
 } from '@/constants';
-import { generateOtpCode, sendOtpEmail, randomDelay } from '@/lib/otp';
+import {
+  generateOtpCode,
+  sendOtpEmail,
+  randomDelay,
+  hashOtpCode,
+} from '@/lib/otp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 
 export async function POST(request: Request) {
@@ -172,7 +177,8 @@ export async function POST(request: Request) {
 
     const { error: otpInsertError } = await supabase.from('otp_codes').insert({
       email,
-      code,
+      // 平文は保存しない（#640）
+      code_hash: hashOtpCode(code, email),
       action_type: OTP_ACTION.REGISTRATION,
       expires_at: expiresAt.toISOString(),
     });

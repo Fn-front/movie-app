@@ -9,3 +9,4 @@ export {
   generateVerificationToken,
   hashVerificationToken,
 } from './verificationToken';
+export { hashOtpCode, verifyOtpCode } from './hashOtpCode';

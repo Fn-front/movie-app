@@ -364,6 +364,7 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                     highlightedSeatId={highlightedSeatId}
                     onSeatClick={handleSeatClick}
                     onHoverSeat={handleHoverSeat}
+                    isHeatmapVisible={isHeatmapVisible}
                   />
                   <ScreenMesh
                     theme={interiorTheme}

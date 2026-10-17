@@ -10,11 +10,15 @@
  *
  * 修復手順:
  *   1. `is_revival=true` の行を全件取得
- *   2. TMDb の原公開日と比較し、一致する行を「上書きされた」と判定
- *      （本来のリバイバル行は映画.comの上映日が90日以上後にあるため一致しない）
- *   3. 映画.com の iCal フィードから正しい上映日を引き当てて復元
- *   4. フィードに無い行（上映終了済み等）は復元できないため、
- *      `is_revival=false` にしてバッジと日付の矛盾を解消する
+ *   2. TMDb の代表公開日と一致する行を「上書きされた候補」として抽出
+ *      （本来のリバイバル行は上映日が90日以上後にあるため一致しない）
+ *   3. 正しい上映日を次の優先順で引き当てて復元する
+ *      a. 映画.com の iCal フィード（最も信頼できる）
+ *      b. TMDb の JP リリース内訳のうち、代表公開日より後の劇場公開
+ *         （type2=限定公開 / type3=劇場公開）の最新日
+ *   4. どちらも得られない行は「そもそもリバイバルではなかった」可能性が高い。
+ *      TMDb のプレミア日(type1)と劇場公開日(type3)が90日以上離れる新作は
+ *      isRevival() が誤って true を返すため、`is_revival=false` に戻す
  *
  * 使い方:
  *   node scripts/repair-revival-release-dates.mjs          … 調査のみ（dry-run）
@@ -108,17 +112,37 @@ async function fetchRevivalRows() {
   return rows;
 }
 
-/** TMDb の原公開日を取得する（失敗時は null） */
-async function fetchTmdbReleaseDate(movieId) {
-  try {
-    const response = await fetch(
-      `https://api.themoviedb.org/3/movie/${movieId}?language=ja-JP&region=JP`,
-      { headers: { Authorization: `Bearer ${TMDB_API_KEY}` } },
-    );
-    if (!response.ok) return null;
+/** TMDb の劇場公開を表すリリースタイプ（2=限定公開, 3=劇場公開） */
+const THEATRICAL_RELEASE_TYPES = [2, 3];
 
-    const detail = await response.json();
-    return detail.release_date || null;
+/**
+ * TMDb から代表公開日と、JPの劇場公開日一覧を取得する
+ *
+ * @returns { primary, theatricalDates } 失敗時は null
+ */
+async function fetchTmdbDates(movieId) {
+  try {
+    const [detailRes, releasesRes] = await Promise.all([
+      fetch(
+        `https://api.themoviedb.org/3/movie/${movieId}?language=ja-JP&region=JP`,
+        { headers: { Authorization: `Bearer ${TMDB_API_KEY}` } },
+      ),
+      fetch(`https://api.themoviedb.org/3/movie/${movieId}/release_dates`, {
+        headers: { Authorization: `Bearer ${TMDB_API_KEY}` },
+      }),
+    ]);
+    if (!detailRes.ok || !releasesRes.ok) return null;
+
+    const detail = await detailRes.json();
+    const releases = await releasesRes.json();
+    const jp = (releases.results ?? []).find((x) => x.iso_3166_1 === 'JP');
+
+    const theatricalDates = (jp?.release_dates ?? [])
+      .filter((x) => THEATRICAL_RELEASE_TYPES.includes(x.type))
+      .map((x) => x.release_date.slice(0, 10))
+      .sort();
+
+    return { primary: detail.release_date || null, theatricalDates };
   } catch {
     return null;
   }
@@ -190,11 +214,11 @@ async function main() {
   console.log(`映画.com フィードの件数: ${eigaDates.size}\n`);
 
   const recoverable = [];
-  const unrecoverable = [];
+  const falsePositives = [];
   let checked = 0;
 
   for (const row of rows) {
-    const tmdbDate = await fetchTmdbReleaseDate(row.id);
+    const tmdb = await fetchTmdbDates(row.id);
     checked++;
 
     if (checked % 50 === 0) {
@@ -202,36 +226,52 @@ async function main() {
     }
     await sleep(TMDB_REQUEST_INTERVAL_MS);
 
-    // TMDbの原公開日と一致 ＝ now-playing CRON に上書きされた行
-    if (!tmdbDate || row.release_date !== tmdbDate) continue;
+    // TMDbの代表公開日と一致 ＝ now-playing CRON に上書きされた候補
+    if (!tmdb?.primary || row.release_date !== tmdb.primary) continue;
 
+    // 復元元の優先順: 映画.comフィード > TMDbの「代表公開日より後の劇場公開」
     const eigaDate = eigaDates.get(row.title);
-    if (eigaDate && eigaDate !== tmdbDate) {
-      recoverable.push({ ...row, tmdbDate, eigaDate });
+    const laterTheatrical = tmdb.theatricalDates.filter(
+      (d) => d > tmdb.primary,
+    );
+    const tmdbRevivalDate = laterTheatrical.at(-1) ?? null;
+    const restoredDate = eigaDate ?? tmdbRevivalDate;
+
+    if (restoredDate && restoredDate !== tmdb.primary) {
+      recoverable.push({
+        ...row,
+        restoredDate,
+        source: eigaDate ? '映画.com' : 'TMDb(JP劇場公開)',
+      });
     } else {
-      unrecoverable.push({ ...row, tmdbDate });
+      // 後続の劇場公開が無い ＝ そもそもリバイバルではない。
+      // TMDbのプレミア日(type1)と劇場公開日(type3)が離れた新作を
+      // isRevival() が誤判定したケース。
+      falsePositives.push(row);
     }
   }
 
   console.log('');
   console.log(
-    `上書きされていた行: ${recoverable.length + unrecoverable.length} 件`,
+    `代表公開日と一致していた行: ${recoverable.length + falsePositives.length} 件`,
   );
-  console.log(`  映画.comから復元可能: ${recoverable.length} 件`);
-  console.log(`  復元不可（フィードに無い）: ${unrecoverable.length} 件`);
+  console.log(`  上映日を復元できる: ${recoverable.length} 件`);
+  console.log(
+    `  リバイバル誤判定（is_revival解除）: ${falsePositives.length} 件`,
+  );
 
   for (const row of recoverable) {
     console.log(
-      `  [復元] ${row.title} (id=${row.id}) ${row.release_date} → ${row.eigaDate}`,
+      `  [復元] ${row.title} (id=${row.id}) ${row.release_date} → ${row.restoredDate} [${row.source}]`,
     );
   }
-  for (const row of unrecoverable) {
+  for (const row of falsePositives) {
     console.log(
       `  [is_revival解除] ${row.title} (id=${row.id}) release_date=${row.release_date}`,
     );
   }
 
-  if (recoverable.length === 0 && unrecoverable.length === 0) {
+  if (recoverable.length === 0 && falsePositives.length === 0) {
     console.log('\n修復対象なし。');
     return;
   }
@@ -244,16 +284,15 @@ async function main() {
   }
 
   for (const row of recoverable) {
-    await updateRow(row.id, { release_date: row.eigaDate });
+    await updateRow(row.id, { release_date: row.restoredDate });
   }
-  for (const row of unrecoverable) {
-    // 日付を復元できない以上、バッジだけ残すとユーザーに矛盾が見える
+  for (const row of falsePositives) {
     await updateRow(row.id, { is_revival: false });
   }
 
   console.log('');
   console.log(
-    `${recoverable.length} 件の公開日を復元し、${unrecoverable.length} 件の is_revival を解除しました。`,
+    `${recoverable.length} 件の公開日を復元し、${falsePositives.length} 件の is_revival を解除しました。`,
   );
 }
 

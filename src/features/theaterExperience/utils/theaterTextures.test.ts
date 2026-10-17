@@ -12,6 +12,7 @@ import {
   clearTextureCacheForTest,
   getCarpetTexture,
   getExitSignTexture,
+  getGlowGradientTexture,
   getScreenPerforationTexture,
   getWallGraphicTexture,
 } from './theaterTextures';
@@ -35,6 +36,14 @@ function createCtxMock() {
     lineTo: record('lineTo'),
     bezierCurveTo: record('bezierCurveTo'),
     closePath: record('closePath'),
+    createLinearGradient: (...args: unknown[]) => {
+      calls.push(`createLinearGradient(${args.join(',')})`);
+      return {
+        addColorStop: (...stop: unknown[]) => {
+          calls.push(`addColorStop(${stop.join(',')})`);
+        },
+      };
+    },
     fillStyle: '',
     strokeStyle: '',
     lineWidth: 0,
@@ -197,5 +206,31 @@ describe('canvas 非対応環境', () => {
     );
     expect(() => getExitSignTexture()).not.toThrow();
     expect(() => getScreenPerforationTexture()).not.toThrow();
+  });
+});
+
+describe('getGlowGradientTexture', () => {
+  it('sRGB色空間のテクスチャを返す', () => {
+    expect(getGlowGradientTexture().colorSpace).toBe(SRGBColorSpace);
+  });
+
+  it('両端が透明・中央が不透明の減衰を描く', () => {
+    getGlowGradientTexture();
+    const calls = ctxMock.calls.join('|');
+    expect(calls).toContain('createLinearGradient(');
+    // 端は完全に透明、中央は不透明
+    expect(calls).toContain('addColorStop(0,rgba(255,255,255,0))');
+    expect(calls).toContain('addColorStop(0.5,rgba(255,255,255,1))');
+    expect(calls).toContain('addColorStop(1,rgba(255,255,255,0))');
+  });
+
+  it('2回目の呼び出しではキャッシュが効き再描画しない', () => {
+    const first = getGlowGradientTexture();
+    const callCount = ctxMock.calls.length;
+    expect(callCount).toBeGreaterThan(0);
+
+    const second = getGlowGradientTexture();
+    expect(second).toBe(first);
+    expect(ctxMock.calls.length).toBe(callCount);
   });
 });

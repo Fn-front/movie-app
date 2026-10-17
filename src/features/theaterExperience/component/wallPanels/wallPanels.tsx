@@ -15,6 +15,7 @@
 
 import { memo, useMemo, useRef, useEffect } from 'react';
 import {
+  AdditiveBlending,
   Object3D,
   Color,
   type InstancedMesh as InstancedMeshType,
@@ -27,6 +28,22 @@ import {
   computeRibPlacements,
   isWallHiddenInOverview,
 } from '../../utils/wallGeometry';
+import { getGlowGradientTexture } from '../../utils/theaterTextures';
+
+/**
+ * コーブ照明の滲みの高さ (m)。
+ *
+ * 発光帯そのもの（COVE_HEIGHT）は細いが、実写では光が上下の壁面へ
+ * 大きく滲む。均一な細帯だけだと「UIの枠線」に見えるため、
+ * 減衰グラデーションの板を重ねる範囲をこの高さで取る。
+ */
+const COVE_GLOW_HEIGHT = 1.1;
+
+/**
+ * 滲みの板を発光帯より手前へ出す量 (m)。
+ * 同一平面だと z-fighting で帯と板がちらつく。
+ */
+const COVE_GLOW_Z_OFFSET = 0.01;
 
 /** 幅木の高さ (m) */
 const DADO_HEIGHT = 0.6;
@@ -216,6 +233,7 @@ const WallFacePanels = memo<{
   withRelief: boolean;
 }>(function WallFacePanels({ theme, face, roomHeight, coveColor, withRelief }) {
   const band = useMemo(() => calcReliefBand(roomHeight), [roomHeight]);
+  const glowGradient = useMemo(() => getGlowGradientTexture(), []);
 
   return (
     <group position={face.position} rotation={face.rotation}>
@@ -249,6 +267,29 @@ const WallFacePanels = memo<{
           bandCenterY={band.centerY}
         />
       )}
+
+      {/*
+        コーブ照明の滲み。発光帯の手前に、上下へ減衰するグラデーションの板を
+        重ねる。加算合成なので下の壁の陰影を保ったまま光だけが乗る。
+        発光帯より僅かに手前へ出して、帯自体に食い込まないようにする。
+      */}
+      <mesh
+        position={[
+          0,
+          roomHeight / 2 - COVE_DROP,
+          COVE_OFFSET - COVE_GLOW_Z_OFFSET,
+        ]}
+      >
+        <planeGeometry args={[face.length, COVE_GLOW_HEIGHT]} />
+        <meshBasicMaterial
+          map={glowGradient}
+          color={coveColor}
+          blending={AdditiveBlending}
+          transparent
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
 
       {/* コーブ照明（天井際を走る発光帯） */}
       <mesh position={[0, roomHeight / 2 - COVE_DROP, COVE_OFFSET]}>

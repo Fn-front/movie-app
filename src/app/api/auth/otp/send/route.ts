@@ -214,7 +214,7 @@ export async function POST(request: Request) {
     }
 
     // Resendでメール送信
-    const emailSent = await sendOtpEmail(email, code);
+    const emailSent = await sendOtpEmail(email, code, action);
 
     if (!emailSent) {
       return NextResponse.json(

@@ -142,7 +142,7 @@ export async function POST(request: Request) {
     }
 
     // Resendでメール送信
-    const emailSent = await sendOtpEmail(email, code);
+    const emailSent = await sendOtpEmail(email, code, OTP_ACTION.REGISTRATION);
 
     if (!emailSent) {
       // メール送信失敗時はユーザー・OTPレコードを削除（ロールバック）

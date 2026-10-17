@@ -7,9 +7,10 @@ import { Resend } from 'resend';
 import { APP_NAME } from '@/constants/app';
 import {
   DEFAULT_FROM_EMAIL,
-  OTP_EMAIL_SUBJECT,
+  buildOtpEmailSubject,
   buildOtpEmailText,
 } from '@/constants/email';
+import type { OtpAction } from '@/constants/otp';
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM_EMAIL;
@@ -19,11 +20,13 @@ const fromEmail = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM_EMAIL;
  *
  * @param email - 送信先メールアドレス
  * @param code - 6桁OTPコード
+ * @param action - OTPの用途（件名・本文に明記する）
  * @returns 送信成功したかどうか
  */
 export async function sendOtpEmail(
   email: string,
   code: string,
+  action: OtpAction,
 ): Promise<boolean> {
   // E2E/テスト用バイパス: メールの実送信をスキップして成功扱いにする。
   // OTPコードはDBに保存されるため、テストはDBから取得して検証できる。
@@ -56,8 +59,8 @@ export async function sendOtpEmail(
     const { error } = await resend.emails.send({
       from: `${APP_NAME} <${fromEmail}>`,
       to: email,
-      subject: OTP_EMAIL_SUBJECT,
-      text: buildOtpEmailText(code),
+      subject: buildOtpEmailSubject(action),
+      text: buildOtpEmailText(code, action),
     });
 
     if (error) {

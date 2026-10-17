@@ -6,6 +6,8 @@
  * OTPメール送信処理 テスト
  */
 
+import { OTP_ACTION } from '@/constants/otp';
+
 // Resendモック
 const mockSend = jest.fn();
 jest.mock('resend', () => ({
@@ -40,13 +42,17 @@ describe('sendOtpEmail', () => {
     mockSend.mockResolvedValue({ data: { id: 'email-123' }, error: null });
 
     const { sendOtpEmail } = await import('./sendOtpEmail');
-    const result = await sendOtpEmail('user@example.com', '123456');
+    const result = await sendOtpEmail(
+      'user@example.com',
+      '123456',
+      OTP_ACTION.LOGIN,
+    );
 
     expect(result).toBe(true);
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'user@example.com',
-        subject: '[Movie App] 確認コード',
+        subject: '[Movie App] ログインの確認コード',
       }),
     );
   });
@@ -58,7 +64,11 @@ describe('sendOtpEmail', () => {
     });
 
     const { sendOtpEmail } = await import('./sendOtpEmail');
-    const result = await sendOtpEmail('user@example.com', '123456');
+    const result = await sendOtpEmail(
+      'user@example.com',
+      '123456',
+      OTP_ACTION.LOGIN,
+    );
 
     expect(result).toBe(false);
   });
@@ -67,7 +77,11 @@ describe('sendOtpEmail', () => {
     mockSend.mockRejectedValue(new Error('Network error'));
 
     const { sendOtpEmail } = await import('./sendOtpEmail');
-    const result = await sendOtpEmail('user@example.com', '123456');
+    const result = await sendOtpEmail(
+      'user@example.com',
+      '123456',
+      OTP_ACTION.LOGIN,
+    );
 
     expect(result).toBe(false);
   });
@@ -77,7 +91,11 @@ describe('sendOtpEmail', () => {
     jest.resetModules();
 
     const { sendOtpEmail } = await import('./sendOtpEmail');
-    const result = await sendOtpEmail('user@example.com', '123456');
+    const result = await sendOtpEmail(
+      'user@example.com',
+      '123456',
+      OTP_ACTION.LOGIN,
+    );
 
     expect(result).toBe(false);
   });
@@ -86,7 +104,7 @@ describe('sendOtpEmail', () => {
     mockSend.mockResolvedValue({ data: { id: 'email-123' }, error: null });
 
     const { sendOtpEmail } = await import('./sendOtpEmail');
-    await sendOtpEmail('user@example.com', '654321');
+    await sendOtpEmail('user@example.com', '654321', OTP_ACTION.LOGIN);
 
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -103,7 +121,11 @@ describe('sendOtpEmail', () => {
       jest.resetModules();
 
       const { sendOtpEmail } = await import('./sendOtpEmail');
-      const result = await sendOtpEmail('user@example.com', '123456');
+      const result = await sendOtpEmail(
+        'user@example.com',
+        '123456',
+        OTP_ACTION.LOGIN,
+      );
 
       expect(result).toBe(true);
       // バイパス時は実送信しない
@@ -117,7 +139,7 @@ describe('sendOtpEmail', () => {
       jest.resetModules();
 
       const { sendOtpEmail } = await import('./sendOtpEmail');
-      await sendOtpEmail('user@example.com', '123456');
+      await sendOtpEmail('user@example.com', '123456', OTP_ACTION.LOGIN);
 
       // 実送信パスに入る＝バイパスしていない
       expect(mockSend).toHaveBeenCalled();
@@ -130,7 +152,7 @@ describe('sendOtpEmail', () => {
       jest.resetModules();
 
       const { sendOtpEmail } = await import('./sendOtpEmail');
-      await sendOtpEmail('user@example.com', '123456');
+      await sendOtpEmail('user@example.com', '123456', OTP_ACTION.LOGIN);
 
       expect(mockSend).toHaveBeenCalled();
     });
@@ -142,7 +164,7 @@ describe('sendOtpEmail', () => {
       jest.resetModules();
 
       const { sendOtpEmail } = await import('./sendOtpEmail');
-      await sendOtpEmail('user@example.com', '123456');
+      await sendOtpEmail('user@example.com', '123456', OTP_ACTION.LOGIN);
 
       expect(mockSend).toHaveBeenCalled();
     });
@@ -155,7 +177,7 @@ describe('sendOtpEmail', () => {
       jest.resetModules();
 
       const { sendOtpEmail } = await import('./sendOtpEmail');
-      await sendOtpEmail('user@example.com', '123456');
+      await sendOtpEmail('user@example.com', '123456', OTP_ACTION.LOGIN);
 
       expect(mockSend).toHaveBeenCalled();
     });
@@ -168,7 +190,7 @@ describe('sendOtpEmail', () => {
       jest.resetModules();
 
       const { sendOtpEmail } = await import('./sendOtpEmail');
-      await sendOtpEmail('user@example.com', '123456');
+      await sendOtpEmail('user@example.com', '123456', OTP_ACTION.LOGIN);
 
       expect(mockSend).toHaveBeenCalled();
     });

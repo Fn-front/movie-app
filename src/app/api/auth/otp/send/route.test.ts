@@ -278,9 +278,11 @@ describe('POST /api/auth/otp/send', () => {
     expect(sendOtpEmail).toHaveBeenCalledWith(
       'session-user@example.com',
       '123456',
+      'password_change',
     );
     expect(sendOtpEmail).not.toHaveBeenCalledWith(
       'victim@example.com',
+      expect.anything(),
       expect.anything(),
     );
   });

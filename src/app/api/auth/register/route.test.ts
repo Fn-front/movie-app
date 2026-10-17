@@ -93,7 +93,11 @@ describe('POST /api/auth/register', () => {
     expect(json.success).toBe(true);
     expect(json.data.userId).toBe('user-123');
     expect(mockGenerateOtpCode).toHaveBeenCalled();
-    expect(mockSendOtpEmail).toHaveBeenCalledWith('test@example.com', '123456');
+    expect(mockSendOtpEmail).toHaveBeenCalledWith(
+      'test@example.com',
+      '123456',
+      'registration',
+    );
     // タイミング均一化: 新規成功パスも randomDelay を通す
     expect(mockRandomDelay).toHaveBeenCalledTimes(1);
   });

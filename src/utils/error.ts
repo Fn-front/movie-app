@@ -35,6 +35,42 @@ export interface ErrorResponse {
 }
 
 /**
+ * APIレスポンスのボディから、利用者に見せるメッセージを取り出す
+ *
+ * 本プロジェクトのAPIは統一エラーレスポンス形式で、メッセージは
+ * `error.message` に入る（`.claude/rules/api-route.md`）。
+ *
+ * ```jsonc
+ * { "success": false, "error": { "code": "...", "message": "..." } }
+ * ```
+ *
+ * これらは `src/constants/` の日本語定数のみで、内部情報やスタックトレースは
+ * 含まないためそのまま表示してよい。
+ *
+ * @param data - レスポンスボディ
+ * @returns メッセージ。取り出せない場合は null
+ */
+function extractServerMessage(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+
+  const { error, message } = data as {
+    error?: { message?: unknown };
+    message?: unknown;
+  };
+
+  if (typeof error?.message === 'string' && error.message) {
+    return error.message;
+  }
+
+  // 統一形式でないレスポンスが混ざった場合のフォールバック
+  if (typeof message === 'string' && message) {
+    return message;
+  }
+
+  return null;
+}
+
+/**
  * APIエラーをハンドリングし、統一されたエラーレスポンスを返す
  *
  * @param error - エラーオブジェクト
@@ -103,9 +139,19 @@ export function handleApiError(error: unknown): ErrorResponse {
 export function formatErrorMessage(error: unknown): string {
   // Axiosエラー
   if (error instanceof AxiosError) {
+    // サーバーが返した具体的なメッセージを最優先する。
+    //
+    // ステータスコード別の汎用メッセージ（「入力内容に誤りがあります」等）だけだと
+    // 利用者は何が悪いのか分からず自力で解決できない。たとえばパスワード変更で
+    // 現在のパスワードを打ち間違えても、どの欄が原因か伝わらなかった（#685）。
+    const serverMessage = extractServerMessage(error.response?.data);
+    if (serverMessage) {
+      return serverMessage;
+    }
+
     const statusCode = error.response?.status;
 
-    // HTTPステータスコード別メッセージ
+    // HTTPステータスコード別メッセージ（サーバーがメッセージを返さない場合）
     switch (statusCode) {
       case 400:
         return HTTP_ERROR_MESSAGES.BAD_REQUEST;
@@ -144,11 +190,7 @@ export function formatErrorMessage(error: unknown): string {
       return HTTP_ERROR_MESSAGES.TIMEOUT;
     }
 
-    // カスタムメッセージがあればそれを使用
-    if (error.response?.data?.message) {
-      return error.response.data.message;
-    }
-
+    // サーバーのメッセージは冒頭の extractServerMessage で処理済み
     return error.message;
   }
 

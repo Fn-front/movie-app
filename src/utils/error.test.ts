@@ -363,3 +363,94 @@ describe('logError', () => {
     errorSpy.mockRestore();
   });
 });
+
+describe('サーバーのメッセージを優先する（#685）', () => {
+  /** 本プロジェクトの統一エラーレスポンス形式 */
+  const apiError = (message: string) => ({
+    success: false,
+    error: { code: 'BAD_REQUEST', message },
+  });
+
+  it('統一形式の error.message を返す（ステータス別の汎用メッセージより優先）', () => {
+    const error = createAxiosError(
+      400,
+      undefined,
+      apiError('現在のパスワードが正しくありません。'),
+    );
+
+    expect(formatErrorMessage(error)).toBe(
+      '現在のパスワードが正しくありません。',
+    );
+    expect(formatErrorMessage(error)).not.toBe(HTTP_ERROR_MESSAGES.BAD_REQUEST);
+  });
+
+  it.each([
+    [400, '確認コードの有効期限が切れました。再送信してください。'],
+    [401, 'メール認証が完了していません。'],
+    [429, '本日の送信上限に達しました。明日再度お試しください。'],
+    [500, 'OTP検証中にエラーが発生しました。'],
+  ])('ステータス %s でもサーバーのメッセージを返す', (status, message) => {
+    expect(
+      formatErrorMessage(
+        createAxiosError(status, undefined, apiError(message)),
+      ),
+    ).toBe(message);
+  });
+
+  it('handleApiError 経由でもサーバーのメッセージが伝わる', () => {
+    const result = handleApiError(
+      createAxiosError(400, undefined, apiError('OTP検証が完了していません。')),
+    );
+
+    expect(result.message).toBe('OTP検証が完了していません。');
+    expect(result.statusCode).toBe(400);
+  });
+
+  describe('メッセージが取り出せない場合は従来どおり汎用メッセージ', () => {
+    it('ボディが空オブジェクト', () => {
+      expect(formatErrorMessage(createAxiosError(400, undefined, {}))).toBe(
+        HTTP_ERROR_MESSAGES.BAD_REQUEST,
+      );
+    });
+
+    it('error はあるが message が無い', () => {
+      expect(
+        formatErrorMessage(
+          createAxiosError(403, undefined, { error: { code: 'FORBIDDEN' } }),
+        ),
+      ).toBe(HTTP_ERROR_MESSAGES.FORBIDDEN);
+    });
+
+    it('message が空文字', () => {
+      expect(
+        formatErrorMessage(
+          createAxiosError(404, undefined, { error: { message: '' } }),
+        ),
+      ).toBe(HTTP_ERROR_MESSAGES.NOT_FOUND);
+    });
+
+    it('message が文字列でない', () => {
+      expect(
+        formatErrorMessage(
+          createAxiosError(500, undefined, { error: { message: { ng: 1 } } }),
+        ),
+      ).toBe(HTTP_ERROR_MESSAGES.SERVER_ERROR);
+    });
+
+    it('ボディが文字列（HTMLエラーページ等）', () => {
+      expect(
+        formatErrorMessage(
+          createAxiosError(502, undefined, '<html>500</html>'),
+        ),
+      ).toBe(HTTP_ERROR_MESSAGES.BAD_GATEWAY);
+    });
+  });
+
+  it('統一形式でないトップレベル message もフォールバックとして拾う', () => {
+    expect(
+      formatErrorMessage(
+        createAxiosError(400, undefined, { message: '別形式のメッセージ' }),
+      ),
+    ).toBe('別形式のメッセージ');
+  });
+});

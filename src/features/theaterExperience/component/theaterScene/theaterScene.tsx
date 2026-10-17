@@ -16,6 +16,9 @@ import {
 import { useThree, useFrame } from '@react-three/fiber';
 import {
   AdditiveBlending,
+  BufferAttribute,
+  BufferGeometry,
+  DoubleSide,
   PlaneGeometry,
   Vector3,
   Color,
@@ -46,6 +49,10 @@ import {
 } from '../../utils/theaterGeometry';
 import type { SeatXSegment } from '../../utils/theaterGeometry';
 import { SEATED_EYE_HEIGHT } from '../../utils/sightline';
+import {
+  computeProjectorBeamQuads,
+  isProjectorBeamVisible,
+} from '../../utils/projectorBeam';
 import {
   computeScreenLightPlacement,
   isScreenLightVisible,
@@ -169,6 +176,14 @@ const PORT_WIDTH = 0.5;
 const PORT_HEIGHT = 0.4;
 /** 映写窓の色（映写室の光が僅かに漏れる想定のごく暗い寒色） */
 const COLOR_PROJECTION_PORT = '#0d1118';
+
+/** 映写ビームの色（投影光。スクリーン面光源と同系の寒色） */
+const COLOR_PROJECTOR_BEAM = '#8fa6c8';
+/**
+ * 映写ビームの不透明度。
+ * 空気中の塵に散乱した光なので、ごく薄い。濃いと客席が霞んで見える。
+ */
+const PROJECTOR_BEAM_OPACITY = 0.06;
 
 /** マージン: 傾斜床は座席より少し外側まで広げる */
 const SLOPE_MARGIN = 0.5;
@@ -419,6 +434,77 @@ BackStepFill.displayName = 'BackStepFill';
  * 高さは**幕の下端に合わせる**（`screen_center_y - screen_height/2`）。全フォーマットで
  * 幕下端は床から1.0mなので、ステージ上面がちょうど幕の下端に接する。
  */
+/**
+ * 映写ビーム（投影光の光条）。
+ *
+ * 映写窓からスクリーンへ広がる台形を2枚直交させ、加算合成で薄く重ねる。
+ * 本物のボリュメトリックライトは高価なので、どの角度からも光条として読める
+ * この近似を使う。頂点の算出は `utils/projectorBeam`（純粋・テスト済み）。
+ */
+const ProjectorBeam = memo<{
+  portY: number;
+  portZ: number;
+  screenCenterY: number;
+  screenCenterZ: number;
+  screenWidth: number;
+  screenHeight: number;
+}>(function ProjectorBeam({
+  portY,
+  portZ,
+  screenCenterY,
+  screenCenterZ,
+  screenWidth,
+  screenHeight,
+}) {
+  const geometries = useMemo(() => {
+    const { horizontal, vertical } = computeProjectorBeamQuads(
+      portY,
+      portZ,
+      screenCenterY,
+      screenCenterZ,
+      screenWidth,
+      screenHeight,
+    );
+    // 4頂点を2三角形に分割する共通のインデックス
+    const index = [0, 1, 2, 0, 2, 3];
+    // 2枚の台形を向きで識別する（配列インデックスをキーに使わない）
+    return [
+      { id: 'horizontal', verts: horizontal },
+      { id: 'vertical', verts: vertical },
+    ].map(({ id, verts }) => {
+      const geo = new BufferGeometry();
+      geo.setAttribute(
+        'position',
+        new BufferAttribute(new Float32Array(verts), 3),
+      );
+      geo.setIndex(index);
+      return { id, geo };
+    });
+  }, [portY, portZ, screenCenterY, screenCenterZ, screenWidth, screenHeight]);
+
+  if (!isProjectorBeamVisible(portZ, screenCenterZ, screenWidth, screenHeight))
+    return null;
+
+  return (
+    <group>
+      {geometries.map(({ id, geo }) => (
+        <mesh key={id} geometry={geo}>
+          <meshBasicMaterial
+            color={COLOR_PROJECTOR_BEAM}
+            blending={AdditiveBlending}
+            transparent
+            opacity={PROJECTOR_BEAM_OPACITY}
+            depthWrite={false}
+            side={DoubleSide}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+});
+ProjectorBeam.displayName = 'ProjectorBeam';
+
 const StageApron = memo<{
   theme: InteriorTheme;
   roomWidth: number;
@@ -1338,6 +1424,25 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         roomHeight={roomHeight}
         walkwayY={seatAreaMaxY}
       />
+
+      {/*
+        映写ビーム（映写窓 → スクリーン）。**俯瞰限定。**
+
+        一人称は着座位置がビームの内側にあり、軸方向を見る格好になる。
+        交差2枚の近似はこの視点で破綻し、板の継ぎ目が幕の上に線として出て
+        画面全体が霞む。本物のボリュメトリックではないので、近似が成立する
+        俯瞰だけで使う。
+      */}
+      {selectedSeat === null && (
+        <ProjectorBeam
+          portY={Math.min(roomHeight - 1.2, seatAreaMaxY + 2.6)}
+          portZ={-roomDepth / 2}
+          screenCenterY={Number(theater.screen_center_y)}
+          screenCenterZ={Number(theater.screen_center_z)}
+          screenWidth={Number(theater.screen_width)}
+          screenHeight={Number(theater.screen_height)}
+        />
+      )}
 
       {/* 天井（フォーマット別の暗色・投影光の反射を抑える） */}
       <CeilingMesh

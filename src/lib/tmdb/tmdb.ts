@@ -16,6 +16,7 @@ import {
   TMDB_THEATRICAL_RELEASE_TYPES,
 } from '@/constants';
 import type {
+  DismissSignals,
   Movie,
   MovieDetail,
   MovieSearchParams,
@@ -150,6 +151,40 @@ export async function getMovieDetail(
     { params: { append_to_response: TMDB_MOVIE_DETAIL_APPEND } },
   );
   return response.data;
+}
+
+/**
+ * 「興味なし」の傾向学習に使う映画のメタ情報を取得する
+ *
+ * 監督・テーマ（キーワード）・公開年を1リクエストでまとめて取る。
+ * `getMovieDetail` は配信情報や予告動画も取得するため、
+ * 傾向学習には不要なレスポンスが大きい。
+ *
+ * キーワードはIDではなく名称を返す。利用先がAIプロンプトであり、
+ * ID（例: 155477）のままではモデルが解釈できないため。
+ *
+ * @param movieId - 映画ID
+ * @returns 傾向学習用のメタ情報。取得できなかった項目は空配列または null
+ * @throws TMDbへの問い合わせに失敗した場合
+ */
+export async function getMovieDismissSignals(
+  movieId: number | string,
+): Promise<DismissSignals> {
+  const response = await tmdbClient.get<
+    MovieDetail & { keywords?: { keywords?: { id: number; name: string }[] } }
+  >(TMDB_ENDPOINTS.MOVIE_DETAIL(movieId), {
+    params: { append_to_response: 'credits,keywords' },
+  });
+
+  const { credits, keywords, release_date } = response.data;
+  const director = credits?.crew?.find((member) => member.job === 'Director');
+  const releaseYear = Number.parseInt((release_date ?? '').slice(0, 4), 10);
+
+  return {
+    keywords: (keywords?.keywords ?? []).map((k) => k.name),
+    directorName: director?.name ?? null,
+    releaseYear: Number.isNaN(releaseYear) ? null : releaseYear,
+  };
 }
 
 /**

@@ -316,6 +316,87 @@ describe('TMDb APIクライアント', () => {
     });
   });
 
+  describe('getMovieDismissSignals', () => {
+    /** credits と keywords を append した映画詳細レスポンス */
+    const mockSignalsResponse = {
+      data: {
+        id: 123,
+        release_date: '2011-06-28',
+        credits: {
+          cast: [],
+          crew: [
+            { id: 1, name: 'Steven Spielberg', job: 'Producer' },
+            { id: 2, name: 'Michael Bay', job: 'Director' },
+          ],
+        },
+        keywords: {
+          keywords: [
+            { id: 10, name: 'robot' },
+            { id: 20, name: 'explosion' },
+          ],
+        },
+      },
+    };
+
+    it('1リクエストで監督・テーマ・公開年を取得する', async () => {
+      mockGet.mockResolvedValue(mockSignalsResponse);
+
+      const { getMovieDismissSignals } = require('./tmdb');
+      const result = await getMovieDismissSignals(123);
+
+      expect(mockGet).toHaveBeenCalledTimes(1);
+      expect(mockGet).toHaveBeenCalledWith('/movie/123', {
+        params: { append_to_response: 'credits,keywords' },
+      });
+      expect(result).toEqual({
+        keywords: ['robot', 'explosion'],
+        directorName: 'Michael Bay',
+        releaseYear: 2011,
+      });
+    });
+
+    it('クレジットに監督がいない場合はnullを返す', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          id: 123,
+          release_date: '2020-01-01',
+          credits: { cast: [], crew: [{ id: 1, name: 'A', job: 'Writer' }] },
+          keywords: { keywords: [] },
+        },
+      });
+
+      const { getMovieDismissSignals } = require('./tmdb');
+      const result = await getMovieDismissSignals(123);
+
+      expect(result.directorName).toBeNull();
+      expect(result.keywords).toEqual([]);
+    });
+
+    it('公開日が空の場合は公開年をnullにする', async () => {
+      mockGet.mockResolvedValue({
+        data: { id: 123, release_date: '', credits: { cast: [] } },
+      });
+
+      const { getMovieDismissSignals } = require('./tmdb');
+      const result = await getMovieDismissSignals(123);
+
+      expect(result.releaseYear).toBeNull();
+    });
+
+    it('credits・keywordsが欠けていても落ちない', async () => {
+      mockGet.mockResolvedValue({ data: { id: 123 } });
+
+      const { getMovieDismissSignals } = require('./tmdb');
+      const result = await getMovieDismissSignals(123);
+
+      expect(result).toEqual({
+        keywords: [],
+        directorName: null,
+        releaseYear: null,
+      });
+    });
+  });
+
   describe('searchMovies', () => {
     it('query, page, year, genreがパラメータに含まれる', async () => {
       mockGet.mockResolvedValue(mockResponse);

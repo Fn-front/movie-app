@@ -25,6 +25,8 @@ import {
 import { parseAndValidate } from '@/helpers/requestValidation';
 import { withAuth } from '@/helpers/routeHandler';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { getMovieDismissSignals } from '@/lib/tmdb/tmdb';
+import type { DismissSignals } from '@/lib/types';
 import { dismissedMoviesAddSchema } from '@/schema/dismissedMovies';
 
 export const GET = withAuth(
@@ -85,6 +87,19 @@ export const POST = withAuth(
       return conflictResponse(DISMISSED_MOVIES_ERROR_MESSAGES.ALREADY_EXISTS);
     }
 
+    // 監督・テーマ・年代をレコメンドの傾向学習用に収集する。
+    // TMDbが落ちていても「興味なし」の登録自体は成功させたいので、
+    // 失敗時はログだけ残して各項目を null のまま保存する。
+    let signals: DismissSignals | null = null;
+    try {
+      signals = await getMovieDismissSignals(parsed.data.tmdb_movie_id);
+    } catch (error) {
+      console.error(
+        `Failed to collect dismiss signals for movie ${parsed.data.tmdb_movie_id}:`,
+        error,
+      );
+    }
+
     const { data: inserted, error: insertError } = await supabase
       .from('dismissed_movies')
       .insert({
@@ -93,6 +108,9 @@ export const POST = withAuth(
         title: parsed.data.title,
         poster_path: parsed.data.poster_path ?? null,
         genre_ids: parsed.data.genre_ids ?? null,
+        keywords: signals?.keywords.length ? signals.keywords : null,
+        director_name: signals?.directorName ?? null,
+        release_year: signals?.releaseYear ?? null,
       })
       .select(DISMISSED_MOVIES_SELECT)
       .single();

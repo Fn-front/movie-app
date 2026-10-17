@@ -69,6 +69,14 @@ export const RECOMMENDATIONS_RATING_BANDS = [
 export const RECOMMENDATIONS_HIGH_RATING_THRESHOLD = 8;
 
 /**
+ * 「避けるべき傾向」としてプロンプトに載せる項目数の上限（監督・テーマ・年代ごと）
+ *
+ * 興味なしが増えるほど傾向も増えるが、全件渡すと指示が薄まる。
+ * 頻出する上位だけに絞って、避けるべき方向を明確に伝える。
+ */
+export const RECOMMENDATIONS_DISMISSED_TRAIT_LIMIT = 5;
+
+/**
  * アクティブユーザー判定期間（日数）
  * last_login_at がこの日数以内のユーザーのみレコメンド生成対象
  */

@@ -19,6 +19,8 @@ jest.mock('@/helpers/supabase', () => ({
 
 jest.mock('@/helpers/auth', () => ({
   getAuthSession: jest.fn().mockResolvedValue({ user: { id: 'user-1' } }),
+  unauthorizedResponse: () =>
+    new Response(JSON.stringify({ success: false }), { status: 401 }),
 }));
 
 const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
@@ -40,6 +42,24 @@ const createRequest = (body: Record<string, unknown>) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+
+/**
+ * password_change の宛先解決で引く `users.email` をモックする。
+ * ボディの email ではなくセッションユーザーのメールを使う仕様（#641）のため、
+ * この取得が最初のクエリになる。
+ */
+const mockSessionUserEmail = (email: string | null) => {
+  mockFrom.mockReturnValueOnce({
+    select: () => ({
+      eq: () => ({
+        single: () => ({
+          data: email ? { email } : null,
+          error: email ? null : { code: 'PGRST116' },
+        }),
+      }),
+    }),
+  });
+};
 
 /**
  * 前回送信なし + 既存OTP削除 + OTP INSERT成功 のモックを設定
@@ -225,11 +245,12 @@ describe('POST /api/auth/otp/send', () => {
   });
 
   it('password_change: 認証済みの場合正常にOTPを送信できる', async () => {
+    mockSessionUserEmail('session-user@example.com');
     setupOtpFlowMocks();
 
     const response = await POST(
       createRequest({
-        email: 'test@example.com',
+        email: 'session-user@example.com',
         action: 'password_change',
       }),
     );
@@ -237,6 +258,65 @@ describe('POST /api/auth/otp/send', () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
+  });
+
+  it('password_change: ボディの email を無視しセッションユーザー宛に送る（#641）', async () => {
+    mockSessionUserEmail('session-user@example.com');
+    setupOtpFlowMocks();
+
+    const { sendOtpEmail } = await import('@/lib/otp');
+
+    const response = await POST(
+      createRequest({
+        // 第三者のアドレスを指定しても、ここへは送られない
+        email: 'victim@example.com',
+        action: 'password_change',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(sendOtpEmail).toHaveBeenCalledWith(
+      'session-user@example.com',
+      '123456',
+    );
+    expect(sendOtpEmail).not.toHaveBeenCalledWith(
+      'victim@example.com',
+      expect.anything(),
+    );
+  });
+
+  it('password_change: 日次送信上限もセッションユーザーのメールで数える（#641）', async () => {
+    mockSessionUserEmail('session-user@example.com');
+    setupOtpFlowMocks();
+
+    await POST(
+      createRequest({
+        email: 'victim@example.com',
+        action: 'password_change',
+      }),
+    );
+
+    // 第三者のアドレスで他人の枠を消費できないこと
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'session-user@example.com',
+      'otp_send_daily',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('password_change: セッションのユーザーがDBに存在しない場合401を返す', async () => {
+    mockSessionUserEmail(null);
+
+    const response = await POST(
+      createRequest({
+        email: 'test@example.com',
+        action: 'password_change',
+      }),
+    );
+
+    expect(response.status).toBe(401);
   });
 
   it('login: 正常にOTPを送信できる', async () => {

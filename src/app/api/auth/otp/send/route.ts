@@ -9,7 +9,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { getAuthSession } from '@/helpers/auth';
+import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
 import { otpSendSchema } from '@/schema/otp';
 import { generateOtpCode, sendOtpEmail, randomDelay } from '@/lib/otp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
@@ -47,7 +47,36 @@ export async function POST(request: Request) {
       );
     }
 
-    const { email, action } = result.data;
+    const { email: requestedEmail, action } = result.data;
+
+    // 送信先の決定。
+    //
+    // password_change はログイン中の本人確認が目的なので、宛先はセッションの
+    // ユーザー自身に固定する。ボディの email を信用すると、アカウントを1つ持つ
+    // だけで任意のアドレスへ自サービス名義の「確認コード」メールを送れてしまい、
+    // フィッシングの踏み台・メール爆撃に使える（#641）。
+    // 受け取り側の /api/user/change-password もセッションユーザーのメールで
+    // 検証済みOTPを引くため、ここを固定することで整合する。
+    let email = requestedEmail;
+
+    if (action === OTP_ACTION.PASSWORD_CHANGE) {
+      const session = await getAuthSession();
+      if (!session) {
+        return unauthorizedResponse();
+      }
+
+      const { data: sessionUser } = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', session.user.id)
+        .single();
+
+      if (!sessionUser) {
+        return unauthorizedResponse();
+      }
+
+      email = sessionUser.email;
+    }
 
     // 日次送信上限チェック（メールアドレス単位で5通/日）
     const dailyLimitResult = await checkRateLimit(
@@ -127,22 +156,8 @@ export async function POST(request: Request) {
           { status: HTTP_STATUS.OK },
         );
       }
-    } else if (action === OTP_ACTION.PASSWORD_CHANGE) {
-      // ログイン済みセッション必須
-      const session = await getAuthSession();
-      if (!session) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: ERROR_CODE.UNAUTHORIZED,
-              message: AUTH_ERROR_MESSAGES.UNAUTHORIZED,
-            },
-          },
-          { status: HTTP_STATUS.UNAUTHORIZED },
-        );
-      }
     }
+    // password_change の認証・宛先解決は上部で済ませている（ボディの email を使わない）
 
     // 前回送信から1分以上経過しているかチェック
     const { data: recentOtp } = await supabase

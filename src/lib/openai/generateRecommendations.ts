@@ -3,7 +3,9 @@
  */
 
 import {
+  RECOMMENDATIONS_HIGH_RATING_THRESHOLD,
   RECOMMENDATIONS_MAX_COUNT,
+  RECOMMENDATIONS_RATING_BANDS,
   RECOMMENDATIONS_YEAR_MATCH_TOLERANCE,
   OPENAI_CONFIG,
   TMDB_GENRE_MAP,
@@ -62,9 +64,17 @@ function buildSystemPrompt(count: number): string {
 - アダルト作品（成人向け・ポルノ・ピンク映画等）は絶対に推薦しないこと
 - 実在する映画のみ推薦すること
 - ジャンル、監督、テーマ、雰囲気などの傾向を分析して推薦すること
-- 評価が高い映画の傾向をより重視すること
 - 「興味なし」リストがある場合、それらの映画のジャンルやテーマの傾向を避けること
 - 推薦理由は日本語で1〜2文で簡潔に書くこと
+
+評価の重みづけ:
+- お気に入りは評価帯ごとのセクションに分けて渡される
+- 評価${RECOMMENDATIONS_HIGH_RATING_THRESHOLD}点以上の作品の傾向を特に強く反映すること
+- 低評価の作品は「このユーザーが好むとは限らない傾向」として参考程度に扱うこと
+
+日本市場での入手性:
+- 日本で観られる作品（日本での劇場公開・配信・ソフト化のいずれかがある作品）を優先すること
+- 日本未公開の海外マイナー作品は避けること
 
 タイトルの返し方:
 - title_ja には日本公開時の邦題を、title_en には原題を入れること
@@ -85,6 +95,45 @@ function buildSystemPrompt(count: number): string {
 }
 
 /**
+ * お気に入り映画を評価帯ごとのセクションに整形する
+ *
+ * 全件を1つの箇条書きに並べると、評価の高低がただの数値として埋もれ、
+ * AIが「どの傾向を強く反映すべきか」を判断できない。評価帯で見出しを分け、
+ * 各帯の中を評価の降順に並べることで、重みづけを構造として伝える。
+ *
+ * @param favorites - お気に入り映画リスト
+ * @returns 評価帯ごとのセクション文字列
+ */
+function buildFavoriteSections(favorites: FavoriteMovie[]): string {
+  const sections = RECOMMENDATIONS_RATING_BANDS.map((band) => {
+    const members = favorites
+      .filter(
+        (f) =>
+          f.rating !== null && f.rating >= band.min && f.rating <= band.max,
+      )
+      .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+
+    if (members.length === 0) {
+      return null;
+    }
+
+    const lines = members
+      .map((f) => `- ${f.title} - 評価: ${f.rating}/10`)
+      .join('\n');
+    return `### ${band.label}\n${lines}`;
+  }).filter((section) => section !== null);
+
+  // 未評価のお気に入りも嗜好のシグナルではあるため、最後に評価帯と分けて渡す
+  const unrated = favorites.filter((f) => f.rating === null);
+  if (unrated.length > 0) {
+    const lines = unrated.map((f) => `- ${f.title}`).join('\n');
+    sections.push(`### 未評価\n${lines}`);
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
  * お気に入り映画リストからユーザープロンプトを組み立てる
  */
 export function buildUserPrompt(
@@ -92,14 +141,7 @@ export function buildUserPrompt(
   watchlistTitles: string[],
   dismissedMovies: DismissedMovie[] = [],
 ): string {
-  const favoriteLines = favorites
-    .map((f) => {
-      const rating = f.rating !== null ? ` - 評価: ${f.rating}/10` : '';
-      return `- ${f.title}${rating}`;
-    })
-    .join('\n');
-
-  let prompt = `## お気に入り映画\n${favoriteLines}`;
+  let prompt = `## お気に入り映画\n${buildFavoriteSections(favorites)}`;
 
   if (dismissedMovies.length > 0) {
     const dismissedLines = dismissedMovies

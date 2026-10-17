@@ -93,6 +93,14 @@ jest.mock('next-auth/providers/credentials', () => ({
   __esModule: true,
   default: (opts: unknown) => ({ id: 'credentials', ...(opts as object) }),
 }));
+
+// --- レート制限モック（authorize のレート制限挙動の検証用）---
+const mockCheckRateLimit = jest.fn();
+const mockResetRateLimit = jest.fn();
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  resetRateLimit: (...args: unknown[]) => mockResetRateLimit(...args),
+}));
 jest.mock('next-auth', () => ({
   __esModule: true,
   default: jest.fn(() => ({
@@ -117,10 +125,23 @@ require('@/lib/auth/auth');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const NextAuth = require('next-auth').default as jest.Mock;
 
+type CredentialsProvider = {
+  id: string;
+  authorize: (
+    credentials: Record<string, unknown>,
+    request: Request,
+  ) => Promise<unknown>;
+};
+
 const config = NextAuth.mock.calls[0][0] as {
   callbacks: Callbacks;
+  providers: Array<{ id: string }>;
 };
 const { signIn, jwt, session } = config.callbacks;
+
+const credentialsProvider = config.providers.find(
+  (p) => p.id === 'credentials',
+) as unknown as CredentialsProvider;
 
 /** デフォルト resolver に戻す */
 function setResolver(fn: typeof mockState.resolver) {
@@ -573,5 +594,111 @@ describe('session コールバック', () => {
       email: '',
       role: '',
     });
+  });
+});
+
+// -------------------- authorize のレート制限（#644）--------------------
+describe('authorize のレート制限', () => {
+  /** 指定の送信元IPでログインを試みるリクエストを作る */
+  function makeRequest(clientIp?: string): Request {
+    const headers = new Headers();
+    if (clientIp) headers.set('x-vercel-forwarded-for', clientIp);
+    return new Request('http://localhost/api/auth/callback/credentials', {
+      headers,
+    });
+  }
+
+  /** 全てのレート制限を通す */
+  function allowAll() {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+  }
+
+  beforeEach(() => {
+    mockCheckRateLimit.mockReset();
+    mockResetRateLimit.mockReset();
+    // users 取得は「該当なし」にして、レート制限の呼び出しだけを見る
+    setResolver(() => ({ data: null, error: { code: 'PGRST116' } }));
+  });
+
+  it('送信元IP単位の制限を login_ip で確認する', async () => {
+    allowAll();
+
+    await credentialsProvider
+      .authorize(
+        { email: 'user@example.com', password: 'pw' },
+        makeRequest('203.0.113.1'),
+      )
+      .catch(() => {}); // ユーザー不在で失敗するが、呼び出しの検証が目的
+
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      '203.0.113.1',
+      'login_ip',
+      20,
+      15,
+    );
+  });
+
+  it('アカウント単位の識別子に送信元IPを含める', async () => {
+    allowAll();
+
+    await credentialsProvider
+      .authorize(
+        { email: 'user@example.com', password: 'pw' },
+        makeRequest('203.0.113.1'),
+      )
+      .catch(() => {});
+
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'user@example.com|203.0.113.1',
+      'login',
+      5,
+      30,
+    );
+  });
+
+  it('第三者の試行は被害者と別の識別子になる（締め出しが起きない）', async () => {
+    allowAll();
+
+    await credentialsProvider
+      .authorize(
+        { email: 'victim@example.com', password: 'wrong' },
+        makeRequest('198.51.100.9'), // 攻撃者の送信元
+      )
+      .catch(() => {});
+
+    const identifiers = mockCheckRateLimit.mock.calls.map((c) => c[1]);
+
+    // 攻撃者の識別子でカウントされ、被害者単独の識別子は使われない
+    expect(identifiers).toContain('victim@example.com|198.51.100.9');
+    expect(identifiers).not.toContain('victim@example.com');
+  });
+
+  it('送信元IP単位の制限を超えたら拒否する', async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 900,
+    });
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: 'pw' },
+        makeRequest('203.0.113.1'),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('送信元が特定できない場合はメールアドレス単独にフォールバックし、IP制限を行わない', async () => {
+    allowAll();
+
+    await credentialsProvider
+      .authorize({ email: 'user@example.com', password: 'pw' }, makeRequest())
+      .catch(() => {});
+
+    const calls = mockCheckRateLimit.mock.calls;
+
+    expect(calls.map((c) => c[2])).not.toContain('login_ip');
+    expect(calls.map((c) => c[1])).toContain('user@example.com');
   });
 });

@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS rate_limits (
     'write_api_profile', 'write_api_settings',
     'read_api_theaters', 'read_api_theater_detail',
     'awards_fetch', 'suggest_title', 'register', 'change_password',
-    'recommendation_refresh', 'otp_send_daily', 'otp_verify',
+    'recommendation_refresh', 'otp_send_daily', 'otp_verify', 'login_ip',
     'otp_resend'  -- legacy
   ))
 );

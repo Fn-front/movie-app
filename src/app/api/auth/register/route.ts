@@ -78,16 +78,16 @@ export async function POST(request: Request) {
 
     const { email, password, name } = result.data;
 
-    // 既存ユーザーチェック
+    // 既存ユーザーチェック（is_verified も見る）
     const { data: existingUser } = await supabase
       .from('users')
-      .select('id')
+      .select('id, is_verified')
       .eq('email', email)
       .single();
 
-    if (existingUser) {
+    if (existingUser?.is_verified) {
       // メールアドレス列挙防止:
-      // 既存メールでも新規登録と区別できないレスポンスを返す。
+      // 認証済みメールでも新規登録と区別できないレスポンスを返す。
       // - 内部では新規ユーザー・OTPを作成せず、メールも送信しない
       // - bcryptハッシュ計算＋ランダム遅延で新規作成時とタイミングを揃える
       //   （新規成功パスも同じ randomDelay() を通す。詳細は下記コメント参照）
@@ -108,20 +108,60 @@ export async function POST(request: Request) {
     // パスワードハッシュ化
     const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
-    // 新規ユーザー作成（未認証状態で作成）
-    const { data: newUser, error: insertError } = await supabase
-      .from('users')
-      .insert({
-        email,
-        password_hash: passwordHash,
-        name: name || null,
-        is_verified: false,
-      })
-      .select('id')
-      .single();
+    // 未検証の既存ユーザーがいる場合は上書きし、いなければ新規作成する。
+    //
+    // 「既存あり」で一律に何もせず成功レスポンスを返していると、第三者が
+    // 他人のメールで先に未検証登録するだけで、本人が二度と登録できなくなる
+    // （しかも列挙防止のため理由を表示できない）。さらに、本人がフィッシング等で
+    // 確認コードを入力してしまうと is_verified=true になり、第三者が設定した
+    // パスワードでログインできてしまう（#645）。
+    //
+    // 上書きすることで、(1) 本人は普通に登録を完了でき、(2) 第三者が設定した
+    // password_hash が消えるため乗っ取り経路も塞がる。確認コードを受け取れるのは
+    // メールアドレスの持ち主だけなので、第三者が繰り返しても意味がない。
+    let userId: string;
 
-    if (insertError || !newUser) {
-      throw insertError;
+    if (existingUser) {
+      const { data: updatedUser, error: updateError } = await supabase
+        .from('users')
+        .update({
+          password_hash: passwordHash,
+          name: name || null,
+        })
+        .eq('id', existingUser.id)
+        .select('id')
+        .single();
+
+      if (updateError || !updatedUser) {
+        throw updateError;
+      }
+
+      userId = updatedUser.id;
+
+      // 旧い未検証OTPを無効化し、有効なコードを1つに保つ
+      await supabase
+        .from('otp_codes')
+        .delete()
+        .eq('email', email)
+        .eq('action_type', OTP_ACTION.REGISTRATION)
+        .is('verified_at', null);
+    } else {
+      const { data: newUser, error: insertError } = await supabase
+        .from('users')
+        .insert({
+          email,
+          password_hash: passwordHash,
+          name: name || null,
+          is_verified: false,
+        })
+        .select('id')
+        .single();
+
+      if (insertError || !newUser) {
+        throw insertError;
+      }
+
+      userId = newUser.id;
     }
 
     // OTPコードを生成・保存
@@ -145,11 +185,14 @@ export async function POST(request: Request) {
     const emailSent = await sendOtpEmail(email, code, OTP_ACTION.REGISTRATION);
 
     if (!emailSent) {
-      // メール送信失敗時はユーザー・OTPレコードを削除（ロールバック）
-      await Promise.all([
-        supabase.from('otp_codes').delete().eq('email', email),
-        supabase.from('users').delete().eq('id', newUser.id),
-      ]);
+      // メール送信失敗時はロールバックする。
+      // users 行を消すのは「このリクエストで作成した場合」のみ。既存の未検証
+      // ユーザーを上書きしたケースで消すと、元々あった行まで巻き添えになる
+      await supabase.from('otp_codes').delete().eq('email', email);
+
+      if (!existingUser) {
+        await supabase.from('users').delete().eq('id', userId);
+      }
 
       return NextResponse.json(
         {
@@ -177,7 +220,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: true,
-        data: { userId: newUser.id },
+        data: { userId },
         message: AUTH_ERROR_MESSAGES.REGISTER_SUCCESS,
       },
       { status: HTTP_STATUS.CREATED },

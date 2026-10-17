@@ -120,7 +120,10 @@ describe('POST /api/auth/register', () => {
     mockFrom.mockReturnValueOnce({
       select: () => ({
         eq: () => ({
-          single: () => ({ data: { id: 'existing' }, error: null }),
+          single: () => ({
+            data: { id: 'existing', is_verified: true },
+            error: null,
+          }),
         }),
       }),
     });
@@ -161,7 +164,10 @@ describe('POST /api/auth/register', () => {
     mockFrom.mockReturnValueOnce({
       select: () => ({
         eq: () => ({
-          single: () => ({ data: { id: 'existing' }, error: null }),
+          single: () => ({
+            data: { id: 'existing', is_verified: true },
+            error: null,
+          }),
         }),
       }),
     });
@@ -309,5 +315,166 @@ describe('POST /api/auth/register', () => {
     );
 
     expect(response.status).toBe(500);
+  });
+});
+
+describe('POST /api/auth/register — 未検証ユーザーの上書き（#645）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockSendOtpEmail.mockResolvedValue(true);
+    mockGenerateOtpCode.mockReturnValue('123456');
+  });
+
+  /** 未検証の既存ユーザーが見つかる状態のモック */
+  const mockUnverifiedExistingUser = () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'squatted-user-id', is_verified: false },
+            error: null,
+          }),
+        }),
+      }),
+    });
+  };
+
+  /** users の UPDATE を記録しつつ成功させるモック */
+  const mockUserUpdate = (captured: { payload?: unknown }) => {
+    mockFrom.mockReturnValueOnce({
+      update: (payload: unknown) => {
+        captured.payload = payload;
+        return {
+          eq: () => ({
+            select: () => ({
+              single: () => ({ data: { id: 'squatted-user-id' }, error: null }),
+            }),
+          }),
+        };
+      },
+    });
+  };
+
+  /** 旧OTP削除 → OTP INSERT のモック */
+  const mockOtpReissue = () => {
+    mockFrom.mockReturnValueOnce({
+      delete: () => ({
+        eq: () => ({ eq: () => ({ is: () => ({ error: null }) }) }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({ insert: () => ({ error: null }) });
+  };
+
+  it('未検証ユーザーが居ても登録を完了できる（締め出しが起きない）', async () => {
+    mockUnverifiedExistingUser();
+    mockUserUpdate({});
+    mockOtpReissue();
+
+    const response = await POST(
+      createRequest({ email: 'victim@example.com', password: 'Password1' }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(json.success).toBe(true);
+    // ダミーUUIDではなく実際のユーザーIDが返る
+    expect(json.data.userId).toBe('squatted-user-id');
+    // 確認コードが実際に送信される（従来は何もせず成功を装っていた）
+    expect(mockSendOtpEmail).toHaveBeenCalledWith(
+      'victim@example.com',
+      '123456',
+      'registration',
+    );
+  });
+
+  it('第三者が設定した password_hash を上書きする（乗っ取り経路の封鎖）', async () => {
+    const captured: { payload?: unknown } = {};
+    mockUnverifiedExistingUser();
+    mockUserUpdate(captured);
+    mockOtpReissue();
+
+    await POST(
+      createRequest({ email: 'victim@example.com', password: 'Password1' }),
+    );
+
+    expect(captured.payload).toEqual({
+      password_hash: 'hashed_password',
+      name: null,
+    });
+  });
+
+  it('上書き時に旧い未検証OTPを削除する（有効なコードを1つに保つ）', async () => {
+    const deleteCalls: string[] = [];
+    mockUnverifiedExistingUser();
+    mockUserUpdate({});
+    mockFrom.mockReturnValueOnce({
+      delete: () => {
+        deleteCalls.push('otp_codes.delete');
+        return { eq: () => ({ eq: () => ({ is: () => ({ error: null }) }) }) };
+      },
+    });
+    mockFrom.mockReturnValueOnce({ insert: () => ({ error: null }) });
+
+    await POST(
+      createRequest({ email: 'victim@example.com', password: 'Password1' }),
+    );
+
+    expect(deleteCalls).toContain('otp_codes.delete');
+  });
+
+  it('認証済みユーザーの場合は上書きせず列挙防止レスポンスを返す', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'verified-user', is_verified: true },
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({ email: 'owner@example.com', password: 'Password1' }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(json.success).toBe(true);
+    // 実IDは漏らさない
+    expect(json.data.userId).not.toBe('verified-user');
+    // 上書きもメール送信も行わない
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
+  });
+
+  it('上書き時のメール送信失敗では既存の users 行を削除しない', async () => {
+    mockSendOtpEmail.mockResolvedValue(false);
+
+    const deletedTables: string[] = [];
+    mockUnverifiedExistingUser();
+    mockUserUpdate({});
+    mockFrom.mockReturnValueOnce({
+      delete: () => ({
+        eq: () => ({ eq: () => ({ is: () => ({ error: null }) }) }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({ insert: () => ({ error: null }) });
+    // ロールバック: otp_codes の削除のみが呼ばれるはず
+    mockFrom.mockImplementation(() => ({
+      delete: () => {
+        deletedTables.push('delete');
+        return { eq: () => ({ error: null }) };
+      },
+    }));
+
+    const response = await POST(
+      createRequest({ email: 'victim@example.com', password: 'Password1' }),
+    );
+
+    expect(response.status).toBe(500);
+    // otp_codes の1回だけ（users の削除が走っていない）
+    expect(deletedTables).toHaveLength(1);
   });
 });

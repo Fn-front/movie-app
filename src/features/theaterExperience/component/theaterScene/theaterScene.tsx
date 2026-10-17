@@ -45,6 +45,7 @@ import {
   interpolateFloorHeight,
 } from '../../utils/theaterGeometry';
 import type { SeatXSegment } from '../../utils/theaterGeometry';
+import { SEATED_EYE_HEIGHT } from '../../utils/sightline';
 import {
   computeScreenLightPlacement,
   isScreenLightVisible,
@@ -711,8 +712,11 @@ const ScreenTopIndicators = memo<{
 });
 ScreenTopIndicators.displayName = 'ScreenTopIndicators';
 
-/** 着座時の目の高さ（座席Y座標からのオフセット） */
-const SEATED_EYE_HEIGHT = 1.2;
+/*
+  着座時の目の高さは `utils/sightline` の定義を使う（単一ソース）。
+  同じ値をここで別定義すると、前席遮蔽の計算と一人称カメラの高さが
+  食い違いうる（床高の式が3箇所で食い違っていた #627 と同じ轍）。
+*/
 
 /**
  * 一人称視点の水平首振り角の上限（度）。端席でスクリーン中心を直接向くと首を

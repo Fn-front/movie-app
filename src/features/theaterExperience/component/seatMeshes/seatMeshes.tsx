@@ -20,6 +20,7 @@ import {
 } from '../../utils/seatColors';
 import type { InteriorTheme } from '../../utils/theaterPalette';
 import { calcSeatYawOnArc, rotateLocalOffset } from '../../utils/rowCurve';
+import { calcSeatOpacity, isSeatTransparent } from '../../utils/heatmapOverlay';
 
 import styles from './seatMeshes.module.scss';
 
@@ -96,6 +97,28 @@ export function getHoverHighlightSeat(
   return seats.find((s) => s.id === highlightedSeatId) ?? null;
 }
 
+/**
+ * 座席マテリアルの透過設定（全パーツ共通）。
+ *
+ * ヒートマップ表示中だけ座席を半透明にして床の音場を透かす。
+ * パーツごとにマテリアルが分かれているので、同じ設定を配って回る。
+ */
+export interface SeatMaterialOverrides {
+  transparent: boolean;
+  opacity: number;
+}
+
+/**
+ * マテリアルの再生成キー。
+ *
+ * three は `transparent` を実行時に書き換えてもシェーダーを再コンパイルしないため、
+ * 初回マウント時の設定のまま固定される（ヒートマップを後から表示しても
+ * 座席が透けなかった原因）。透過の有無が変わったらマテリアルごと作り直す。
+ */
+export function materialKey(material: SeatMaterialOverrides): string {
+  return material.transparent ? 'transparent' : 'opaque';
+}
+
 export interface SeatMeshesProps {
   /** 内装テーマ（座面・背もたれ・ヘッドレスト・フレームの色） */
   theme: InteriorTheme;
@@ -113,17 +136,27 @@ export interface SeatMeshesProps {
   onSeatClick: (seat: TheaterSeat) => void;
   /** 座席ホバー変化コールバック（null=ホバー解除） */
   onHoverSeat: (seatId: string | null) => void;
+  /** ヒートマップ表示中か（表示中は座席を半透明にして床の音場を透かす） */
+  isHeatmapVisible?: boolean;
 }
 
 /**
  * 座面のInstancedMesh
  */
 const SeatCushions = memo<{
+  /** 透過設定（ヒートマップ表示中は半透明） */
+  material: SeatMaterialOverrides;
   seats: TheaterSeat[];
   selectedSeatId: string | null;
   theme: InteriorTheme;
   rowCurveRadius: number;
-}>(function SeatCushions({ seats, selectedSeatId, theme, rowCurveRadius }) {
+}>(function SeatCushions({
+  seats,
+  selectedSeatId,
+  theme,
+  rowCurveRadius,
+  material,
+}) {
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
 
@@ -178,7 +211,12 @@ const SeatCushions = memo<{
         ]}
       />
       {/* Lambert(拡散のみ) → Standard(PBR)。強めた directional 光で微光沢と陰影が出る */}
-      <meshStandardMaterial roughness={0.68} metalness={0.05} />
+      <meshStandardMaterial
+        key={materialKey(material)}
+        roughness={0.68}
+        metalness={0.05}
+        {...material}
+      />
     </instancedMesh>
   );
 });
@@ -188,11 +226,19 @@ SeatCushions.displayName = 'SeatCushions';
  * 背もたれのInstancedMesh
  */
 const SeatBacks = memo<{
+  /** 透過設定（ヒートマップ表示中は半透明） */
+  material: SeatMaterialOverrides;
   seats: TheaterSeat[];
   selectedSeatId: string | null;
   theme: InteriorTheme;
   rowCurveRadius: number;
-}>(function SeatBacks({ seats, selectedSeatId, theme, rowCurveRadius }) {
+}>(function SeatBacks({
+  seats,
+  selectedSeatId,
+  theme,
+  rowCurveRadius,
+  material,
+}) {
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
 
@@ -242,7 +288,12 @@ const SeatBacks = memo<{
       <roundedBoxGeometry
         args={[SEAT_BACK.width, SEAT_BACK.height, SEAT_BACK.depth, 4, 0.05]}
       />
-      <meshStandardMaterial roughness={0.72} metalness={0.05} />
+      <meshStandardMaterial
+        key={materialKey(material)}
+        roughness={0.72}
+        metalness={0.05}
+        {...material}
+      />
     </instancedMesh>
   );
 });
@@ -256,11 +307,19 @@ SeatBacks.displayName = 'SeatBacks';
  * 車椅子席は背もたれが無いため scale=0 で描かない。
  */
 const SeatHeadrests = memo<{
+  /** 透過設定（ヒートマップ表示中は半透明） */
+  material: SeatMaterialOverrides;
   seats: TheaterSeat[];
   selectedSeatId: string | null;
   theme: InteriorTheme;
   rowCurveRadius: number;
-}>(function SeatHeadrests({ seats, selectedSeatId, theme, rowCurveRadius }) {
+}>(function SeatHeadrests({
+  seats,
+  selectedSeatId,
+  theme,
+  rowCurveRadius,
+  material,
+}) {
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
 
@@ -315,7 +374,12 @@ const SeatHeadrests = memo<{
           0.065,
         ]}
       />
-      <meshStandardMaterial roughness={0.7} metalness={0.05} />
+      <meshStandardMaterial
+        key={materialKey(material)}
+        roughness={0.7}
+        metalness={0.05}
+        {...material}
+      />
     </instancedMesh>
   );
 });
@@ -327,10 +391,12 @@ SeatHeadrests.displayName = 'SeatHeadrests';
  * 車椅子席は座席構造が無いため scale=0 で描かない。
  */
 const SeatBases = memo<{
+  /** 透過設定（ヒートマップ表示中は半透明） */
+  material: SeatMaterialOverrides;
   seats: TheaterSeat[];
   theme: InteriorTheme;
   rowCurveRadius: number;
-}>(function SeatBases({ seats, theme, rowCurveRadius }) {
+}>(function SeatBases({ seats, theme, rowCurveRadius, material }) {
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
 
@@ -369,9 +435,11 @@ const SeatBases = memo<{
         args={[SEAT_BASE.width, SEAT_BASE.height, SEAT_BASE.depth]}
       />
       <meshStandardMaterial
+        key={materialKey(material)}
         color={theme.seat.frame}
         roughness={0.6}
         metalness={0.15}
+        {...material}
       />
     </instancedMesh>
   );
@@ -383,10 +451,12 @@ SeatBases.displayName = 'SeatBases';
  * クッション両脇に置き、椅子のシルエットを立たせる。車椅子席は scale=0 で描かない。
  */
 const SeatArmrests = memo<{
+  /** 透過設定（ヒートマップ表示中は半透明） */
+  material: SeatMaterialOverrides;
   seats: TheaterSeat[];
   theme: InteriorTheme;
   rowCurveRadius: number;
-}>(function SeatArmrests({ seats, theme, rowCurveRadius }) {
+}>(function SeatArmrests({ seats, theme, rowCurveRadius, material }) {
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
 
@@ -426,9 +496,11 @@ const SeatArmrests = memo<{
         args={[SEAT_ARMREST.width, SEAT_ARMREST.height, SEAT_ARMREST.depth]}
       />
       <meshStandardMaterial
+        key={materialKey(material)}
         color={theme.seat.frame}
         roughness={0.55}
         metalness={0.15}
+        {...material}
       />
     </instancedMesh>
   );
@@ -449,6 +521,8 @@ SeatArmrests.displayName = 'SeatArmrests';
  * （純粋・単体テスト済み）に委譲する。
  */
 const RowMarkerPlates = memo<{
+  /** 透過設定（ヒートマップ表示中は半透明） */
+  material: SeatMaterialOverrides;
   seats: TheaterSeat[];
   theme: InteriorTheme;
   aisleSideSeatIds: Map<string, -1 | 1>;
@@ -458,6 +532,7 @@ const RowMarkerPlates = memo<{
   theme,
   aisleSideSeatIds,
   rowCurveRadius,
+  material,
 }) {
   const meshRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
@@ -514,9 +589,11 @@ const RowMarkerPlates = memo<{
         args={[ROW_PLATE.radius, ROW_PLATE.radius, ROW_PLATE.thickness, 10]}
       />
       <meshStandardMaterial
+        key={materialKey(material)}
         color={theme.relief}
         roughness={0.35}
         metalness={0.6}
+        {...material}
       />
     </instancedMesh>
   );
@@ -571,6 +648,7 @@ const HoverHighlight = memo<{ seat: TheaterSeat | null }>(
 HoverHighlight.displayName = 'HoverHighlight';
 
 export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
+  isHeatmapVisible = false,
   theme,
   aisleSideSeatIds,
   rowCurveRadius,
@@ -580,6 +658,18 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
   onSeatClick,
   onHoverSeat,
 }) {
+  /*
+    ヒートマップ表示中は座席を半透明にして床の音場を透かす。
+    パーツごとにマテリアルが分かれているので、同じ設定を全パーツへ配る。
+  */
+  const seatMaterial = useMemo<SeatMaterialOverrides>(
+    () => ({
+      transparent: isSeatTransparent(isHeatmapVisible),
+      opacity: calcSeatOpacity(isHeatmapVisible),
+    }),
+    [isHeatmapVisible],
+  );
+
   /** 透明なクリック判定用InstancedMesh */
   const hitRef = useRef<InstancedMeshType>(null);
   const tempObject = useMemo(() => new Object3D(), []);
@@ -655,35 +745,45 @@ export const SeatMeshes = memo<SeatMeshesProps>(function SeatMeshes({
 
   return (
     <group>
-      <SeatBases seats={seats} theme={theme} rowCurveRadius={rowCurveRadius} />
+      <SeatBases
+        seats={seats}
+        theme={theme}
+        rowCurveRadius={rowCurveRadius}
+        material={seatMaterial}
+      />
       <SeatArmrests
         seats={seats}
         theme={theme}
         rowCurveRadius={rowCurveRadius}
+        material={seatMaterial}
       />
       <SeatCushions
         seats={seats}
         selectedSeatId={selectedSeatId}
         theme={theme}
         rowCurveRadius={rowCurveRadius}
+        material={seatMaterial}
       />
       <SeatBacks
         seats={seats}
         selectedSeatId={selectedSeatId}
         theme={theme}
         rowCurveRadius={rowCurveRadius}
+        material={seatMaterial}
       />
       <SeatHeadrests
         seats={seats}
         selectedSeatId={selectedSeatId}
         theme={theme}
         rowCurveRadius={rowCurveRadius}
+        material={seatMaterial}
       />
       <RowMarkerPlates
         seats={seats}
         theme={theme}
         aisleSideSeatIds={aisleSideSeatIds}
         rowCurveRadius={rowCurveRadius}
+        material={seatMaterial}
       />
       <HoverHighlight seat={hoveredSeat} />
 

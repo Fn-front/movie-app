@@ -802,6 +802,7 @@ CIはGPU無効の SwiftShader なので、**席数がそのまま描画時間に
 
 - 認証は Playwright の E2E が生成する `e2e/.auth/storageState.json` を流用する（未生成なら `npx playwright test --project=setup`）
 - `nextjs-portal { display: none !important }` を注入して Next.js の開発ツールバッジを隠す
+- **撮影前にポインタをキャンバス外へ逃がす**（`page.mouse.move(2, 2)`）。座席に乗っているとホバー枠と席番号ラベルが写り込む（実際に Dolby の撮影で「F13」のツールチップが入った）
 - リサイズ後はキャンバスが再構築されるため、撮影前に数秒待つ
 - **A列の開始席番は劇場によって違う**（TCX は4番始まり）。データ取得完了の待機に `A列1番` を使うと TCX で詰まるので `/^A列\d+番/` で待つ
 - `npm run dev` を `| head` などのパイプにつながない。`head` が終了した時点で SIGPIPE により dev サーバーが応答しなくなる（この撮影中に実際に踏んだ）

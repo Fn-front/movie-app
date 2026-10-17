@@ -11,28 +11,41 @@
 
 import { easeOutCubic } from './fieldOfView';
 
-/** 環境光・半球光・平行光の強度セット */
+/** 環境光・半球光・平行光・スクリーン面光源の強度セット */
 export interface LightIntensities {
   ambient: number;
   hemisphere: number;
   directional: number;
+  /** スクリーン面光源（RectAreaLight）の強度。俯瞰では 0 で完全に無効 */
+  screen: number;
 }
 
 /**
  * 俯瞰時の強度。既存値をそのまま据え置く（変更すると座席選択UIの可用性と
  * E2Eスクリーンショットに影響するため）。
+ *
+ * `screen: 0` は「俯瞰は現状維持」の担保。0 のときメッシュ層は面光源自体を
+ * アンマウントするので、俯瞰の描画コストも従来どおりになる。
  */
 export const OVERVIEW_INTENSITIES: LightIntensities = {
   ambient: 0.5,
   hemisphere: 0.35,
   directional: 1.15,
+  screen: 0,
 };
 
-/** 一人称時の強度。着座した観客が見る「暗い客席」を再現する。 */
+/**
+ * 一人称時の強度。着座した観客が見る「暗い客席」を再現する。
+ *
+ * 実際の映画館では**スクリーンが室内の主光源**であり、客席は幕に面した側だけが
+ * 照らされて背面は黒く落ちる（Dolby Cinema 公式の客席写真で確認）。
+ * 環境光を更に下げる代わりに面光源へ寄せることで、この方向性のある照明にする。
+ */
 export const FIRST_PERSON_INTENSITIES: LightIntensities = {
-  ambient: 0.12,
-  hemisphere: 0.1,
-  directional: 0.25,
+  ambient: 0.06,
+  hemisphere: 0.05,
+  directional: 0.1,
+  screen: 8,
 };
 
 /**
@@ -61,6 +74,7 @@ export function lerpIntensities(
     ambient: from.ambient + (to.ambient - from.ambient) * k,
     hemisphere: from.hemisphere + (to.hemisphere - from.hemisphere) * k,
     directional: from.directional + (to.directional - from.directional) * k,
+    screen: from.screen + (to.screen - from.screen) * k,
   };
 }
 

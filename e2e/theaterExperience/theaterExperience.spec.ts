@@ -74,6 +74,12 @@ test.describe('シアター体験ページ', () => {
   test('俯瞰ビューが表示され、座席を選択すると一人称に切り替わり、俯瞰に戻れる', async ({
     page,
   }) => {
+    /*
+      一人称はスクリーン面光源（RectAreaLight）が点くぶん描画が重い。
+      ソフトウェアWebGLでの実測で 11秒 → 17秒 になったため、既定30秒では余裕がない。
+    */
+    test.setTimeout(HEAVY_TEST_TIMEOUT_MS);
+
     await page.goto('/theater-experience');
 
     // WebGL2 初期化とデータ取得の完了を明示的に待つ（暗黙タイムアウト依存を解消）

@@ -6,7 +6,8 @@
 
 'use client';
 
-import { memo, useMemo, useRef, useEffect } from 'react';
+import { memo, useMemo, useRef, useEffect, useState } from 'react';
+import type { RefObject } from 'react';
 import {
   OrthographicCamera,
   PerspectiveCamera,
@@ -21,10 +22,12 @@ import {
   type AmbientLight,
   type DirectionalLight,
   type HemisphereLight,
+  type RectAreaLight,
   type Texture,
   type OrthographicCamera as OrthographicCameraType,
   type PerspectiveCamera as PerspectiveCameraType,
 } from 'three';
+import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
 
 import type { TheaterSeat, Theater } from '../../types';
 import {
@@ -42,6 +45,11 @@ import {
   interpolateFloorHeight,
 } from '../../utils/theaterGeometry';
 import type { SeatXSegment } from '../../utils/theaterGeometry';
+import {
+  computeScreenLightPlacement,
+  isScreenLightVisible,
+} from '../../utils/screenLight';
+import type { ScreenLightPlacement } from '../../utils/screenLight';
 import {
   calcLightIntensities,
   getTargetIntensities,
@@ -127,6 +135,19 @@ const COLOR_INDICATOR_HDR = new Color('#ff3a2a').multiplyScalar(2.0);
 const COLOR_STEP_LED_HDR = new Color(COLOR_STEP_LED).multiplyScalar(1.6);
 
 /** ライティング用カラー */
+/*
+  スクリーン面光源の色。実機の投影光はやや寒色に寄る（Dolby Cinema 公式の
+  客席写真でも、観客の顔は青みがかった光で照らされている）。
+*/
+const COLOR_SCREEN_LIGHT = '#aebdd8';
+
+/*
+  RectAreaLight は LTC（線形変換コサイン）のルックアップテーブルを必要とし、
+  初期化しないと光源が真っ黒になる。副作用のない冪等な初期化なので
+  モジュール評価時に一度だけ実行する。
+*/
+RectAreaLightUniformsLib.init();
+
 const COLOR_HEMI_SKY = '#cfd6e6'; // 半球光の空側フィル（やや寒色）
 const COLOR_HEMI_GROUND = '#2a2130'; // 半球光の地面側フィル（暗紫・床トーンに寄せる）
 
@@ -187,7 +208,12 @@ const FloorMesh = memo<{
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
       <planeGeometry args={[roomWidth, roomDepth]} />
-      <meshLambertMaterial color={theme.carpet.base} map={carpet} />
+      <meshStandardMaterial
+        color={theme.carpet.base}
+        map={carpet}
+        roughness={0.95}
+        metalness={0}
+      />
     </mesh>
   );
 });
@@ -214,7 +240,7 @@ const WallMesh = memo<{
     <group position={position} rotation={rotation}>
       <mesh receiveShadow>
         <planeGeometry args={[width, height]} />
-        <meshLambertMaterial color={color} />
+        <meshStandardMaterial color={color} roughness={0.92} metalness={0} />
       </mesh>
       {graphic && (
         <mesh position={[0, 0, 0.02]}>
@@ -249,7 +275,7 @@ const CeilingMesh = memo<{
   return (
     <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, roomHeight, 0]}>
       <planeGeometry args={[roomWidth, roomDepth]} />
-      <meshLambertMaterial color={color} />
+      <meshStandardMaterial color={color} roughness={0.92} metalness={0} />
     </mesh>
   );
 });
@@ -314,7 +340,12 @@ const SlopedFloorMesh = memo<{
       position={[0, 0, centerZ]}
       receiveShadow
     >
-      <meshLambertMaterial color={theme.carpet.base} map={carpet} />
+      <meshStandardMaterial
+        color={theme.carpet.base}
+        map={carpet}
+        roughness={0.95}
+        metalness={0}
+      />
     </mesh>
   );
 });
@@ -352,7 +383,11 @@ const BackStepFill = memo<{
           立ち上がり面は踏面ではなく蹴込みなので、カーペットではなく幅木色にする */}
       <mesh position={[0, maxHeight / 2, slopeBackZ]} receiveShadow>
         <planeGeometry args={[roomWidth, maxHeight]} />
-        <meshLambertMaterial color={theme.dado} />
+        <meshStandardMaterial
+          color={theme.dado}
+          roughness={0.85}
+          metalness={0}
+        />
       </mesh>
       {/* 最上段の水平床（バック通路） */}
       <mesh
@@ -361,7 +396,12 @@ const BackStepFill = memo<{
         receiveShadow
       >
         <planeGeometry args={[roomWidth, topFloorDepth]} />
-        <meshLambertMaterial color={theme.carpet.base} map={carpet} />
+        <meshStandardMaterial
+          color={theme.carpet.base}
+          map={carpet}
+          roughness={0.95}
+          metalness={0}
+        />
       </mesh>
     </group>
   );
@@ -725,18 +765,21 @@ const AdaptiveLighting = memo<{
   roomWidth: number;
   roomDepth: number;
   roomHeight: number;
+  screenLight: ScreenLightPlacement;
   isFirstPerson: boolean;
   reducedMotion: boolean;
 }>(function AdaptiveLighting({
   roomWidth,
   roomDepth,
   roomHeight,
+  screenLight,
   isFirstPerson,
   reducedMotion,
 }) {
   const ambientRef = useRef<AmbientLight>(null);
   const hemisphereRef = useRef<HemisphereLight>(null);
   const directionalRef = useRef<DirectionalLight>(null);
+  const screenRef = useRef<RectAreaLight>(null);
 
   const target = useMemo(
     () => getTargetIntensities(isFirstPerson),
@@ -748,12 +791,24 @@ const AdaptiveLighting = memo<{
     elapsed: FLYTHROUGH_DURATION_S,
   });
 
+  /*
+    面光源を描画中か。強度0になったら光源自体をアンマウントし、俯瞰の描画コストを
+    改修前と同じに保つ（RectAreaLight は強度0でも全フラグメントに計算が乗る）。
+
+    点灯は `isFirstPerson` から直接導出し、この state は**消灯の遅延にだけ**使う。
+    こうしないと「視点が変わった瞬間にマウント」を effect 内の setState で
+    書くことになり、カスケードレンダリングを招く。
+  */
+  const [screenLightFading, setScreenLightFading] = useState(false);
+  const showScreenLight = isFirstPerson || screenLightFading;
+
   useEffect(() => {
     anim.current = {
       from: {
         ambient: ambientRef.current?.intensity ?? target.ambient,
         hemisphere: hemisphereRef.current?.intensity ?? target.hemisphere,
         directional: directionalRef.current?.intensity ?? target.directional,
+        screen: screenRef.current?.intensity ?? target.screen,
       },
       elapsed: 0,
     };
@@ -772,6 +827,17 @@ const AdaptiveLighting = memo<{
     if (directionalRef.current) {
       directionalRef.current.intensity = next.directional;
     }
+    if (screenRef.current) screenRef.current.intensity = next.screen;
+
+    /*
+      一人称を抜けたあとも、強度が0に落ち切るまでは光源を残す（即アンマウントだと
+      フライスルーの途中で客席が一段暗くなって不連続に見える）。
+      落ち切ったらアンマウントして俯瞰の描画コストを元に戻す。
+    */
+    const fading =
+      !isFirstPerson &&
+      isScreenLightVisible(next.screen, screenLight.width, screenLight.height);
+    if (fading !== screenLightFading) setScreenLightFading(fading);
   });
 
   return (
@@ -804,10 +870,52 @@ const AdaptiveLighting = memo<{
         shadow-camera-far={roomHeight + 30}
         shadow-bias={-0.002}
       />
+      {/*
+        スクリーン面光源。実機の客席は幕が主光源で、幕に面した側だけが照らされ
+        背面は黒く落ちる。環境光だけでは「一様に暗い」だけになり立体感が出ない。
+
+        一人称専用（俯瞰では強度0でアンマウント）。RectAreaLight は
+        MeshStandardMaterial / MeshPhysicalMaterial にしか効かず、影も落とさない。
+      */}
+      {showScreenLight && (
+        <ScreenAreaLight lightRef={screenRef} placement={screenLight} />
+      )}
     </>
   );
 });
 AdaptiveLighting.displayName = 'AdaptiveLighting';
+
+/**
+ * スクリーンを模した矩形面光源。
+ *
+ * `RectAreaLight` は前面からのみ発光するため向きを持つ。three は lookAt で
+ * 姿勢を決める方式なので、位置確定後に ref 経由で向ける。
+ */
+const ScreenAreaLight = memo<{
+  lightRef: RefObject<RectAreaLight | null>;
+  placement: ScreenLightPlacement;
+}>(function ScreenAreaLight({ lightRef, placement }) {
+  const { position, target, width, height } = placement;
+
+  useEffect(() => {
+    const light = lightRef.current;
+    if (!light) return;
+    light.lookAt(target[0], target[1], target[2]);
+  }, [lightRef, target]);
+
+  return (
+    <rectAreaLight
+      ref={lightRef}
+      position={position}
+      width={width}
+      height={height}
+      color={COLOR_SCREEN_LIGHT}
+      // 初期値。実強度は AdaptiveLighting が毎フレーム書き換える
+      intensity={0}
+    />
+  );
+});
+ScreenAreaLight.displayName = 'ScreenAreaLight';
 
 /**
  * 等角投影カメラ + lookAt 原点向き
@@ -1082,6 +1190,25 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   // 壁グラフィック（kind === 'none' のフォーマットでは null）。壁全面に引き伸ばす
   const wallGraphic = useMemo(() => getWallGraphicTexture(theme), [theme]);
 
+  // スクリーン面光源の配置（一人称での主光源。俯瞰では強度0で描画されない）
+  const screenLight = useMemo(
+    () =>
+      computeScreenLightPlacement(
+        Number(theater.screen_center_x),
+        Number(theater.screen_center_y),
+        Number(theater.screen_center_z),
+        Number(theater.screen_width),
+        Number(theater.screen_height),
+      ),
+    [
+      theater.screen_center_x,
+      theater.screen_center_y,
+      theater.screen_center_z,
+      theater.screen_width,
+      theater.screen_height,
+    ],
+  );
+
   /**
    * 通路階段の配置。座席ブロックのxセグメントと各列のZ/Yから導出するため
    * DBの追加データは要らない。
@@ -1140,6 +1267,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
         roomWidth={roomWidth}
         roomDepth={roomDepth}
         roomHeight={roomHeight}
+        screenLight={screenLight}
         isFirstPerson={selectedSeat !== null}
         reducedMotion={reducedMotion}
       />

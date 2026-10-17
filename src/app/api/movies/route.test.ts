@@ -93,7 +93,7 @@ function createChainMock(resolveValue: unknown = { data: null, error: null }) {
   return chain;
 }
 
-let mockSupabaseClient: { from: jest.Mock } | null;
+let mockSupabaseClient: { from: jest.Mock; rpc: jest.Mock } | null;
 const mockDbConnectionErrorResponse = jest.fn(
   () =>
     new Response(JSON.stringify({ success: false, error: 'DB接続エラー' }), {
@@ -356,7 +356,11 @@ describe('GET /api/movies', () => {
     jest.resetModules();
 
     // Supabaseクライアントをデフォルトで有効化
-    mockSupabaseClient = { from: jest.fn() };
+    mockSupabaseClient = {
+      from: jest.fn(),
+      // TMDb同期のUPSERTは upsert_movie_cache RPC 経由
+      rpc: jest.fn().mockResolvedValue({ data: 0, error: null }),
+    };
   });
 
   // モジュールを動的にインポートするヘルパー
@@ -1300,8 +1304,7 @@ describe('GET /api/movies', () => {
     await handler(createRequest());
 
     // PK は (id, release_type) のため共存でき、2件ともUPSERT対象になる
-    const upsertChain = mockSupabaseClient!.from.mock.results[1].value;
-    const upsertRows = upsertChain.upsert.mock.calls[0][0];
+    const upsertRows = mockSupabaseClient!.rpc.mock.calls[0][1].movies;
     expect(upsertRows.map((row: { id: number }) => row.id)).toEqual([500, 501]);
   });
 
@@ -1336,10 +1339,14 @@ describe('GET /api/movies', () => {
 
     await handler(createRequest());
 
-    // 2回目の from() は UPSERT（neq による事前SELECTが無い）
-    const secondChain = mockSupabaseClient!.from.mock.results[1].value;
-    expect(secondChain.upsert).toHaveBeenCalled();
-    expect(secondChain.neq).not.toHaveBeenCalled();
+    // UPSERTはRPC経由。neq による事前SELECTは発行されない
+    expect(mockSupabaseClient!.rpc).toHaveBeenCalledWith(
+      'upsert_movie_cache',
+      expect.objectContaining({ movies: expect.any(Array) }),
+    );
+    for (const result of mockSupabaseClient!.from.mock.results) {
+      expect(result.value.neq).not.toHaveBeenCalled();
+    }
   });
 
   // === 複合パラメータ ===
@@ -1480,6 +1487,52 @@ describe('GET /api/movies', () => {
     expect(json.data.movies[0].favorite).toBeUndefined();
   });
 
+  // === リバイバル作品の公開日保護 ===
+
+  it('Discover同期のUPSERTはupsert_movie_cache RPC経由で行う', async () => {
+    const handler = await loadGET();
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          id: 800,
+          title: 'リバイバル候補',
+          adult: false,
+          original_language: 'ja',
+          genre_ids: [28],
+          vote_average: 7.0,
+          vote_count: 10,
+          popularity: 50,
+          poster_path: null,
+          backdrop_path: null,
+          release_date: '1979-10-06',
+          overview: '',
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 800 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    // 素の upsert ではリバイバル行の release_date を保護できない
+    expect(mockSupabaseClient!.rpc).toHaveBeenCalledWith('upsert_movie_cache', {
+      movies: expect.any(Array),
+    });
+    // set_now_playing は渡さない（Discover経由では既存フラグを保持する）
+    expect(mockSupabaseClient!.rpc.mock.calls[0][1]).not.toHaveProperty(
+      'set_now_playing',
+    );
+    for (const result of mockSupabaseClient!.from.mock.results) {
+      expect(result.value.upsert).not.toHaveBeenCalled();
+    }
+  });
+
   // === vote_count ===
 
   it('SELECTにvote_countが含まれ、レスポンスにそのまま返る', async () => {
@@ -1535,9 +1588,7 @@ describe('GET /api/movies', () => {
 
     await handler(createRequest());
 
-    // from() 1回目=キャッシュ確認、2回目=UPSERT
-    const upsertChain = mockSupabaseClient!.from.mock.results[1].value;
-    const upsertRows = upsertChain.upsert.mock.calls[0][0];
+    const upsertRows = mockSupabaseClient!.rpc.mock.calls[0][1].movies;
     expect(upsertRows[0].vote_count).toBe(4321);
   });
 
@@ -1571,8 +1622,7 @@ describe('GET /api/movies', () => {
 
     await handler(createRequest());
 
-    const upsertChain = mockSupabaseClient!.from.mock.results[1].value;
-    const upsertRows = upsertChain.upsert.mock.calls[0][0];
+    const upsertRows = mockSupabaseClient!.rpc.mock.calls[0][1].movies;
     expect(upsertRows[0].vote_count).toBe(0);
   });
 });

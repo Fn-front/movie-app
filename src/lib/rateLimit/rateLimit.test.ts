@@ -13,218 +13,202 @@ import { SUPABASE_ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 
 // --- Helpers ---
 
-/**
- * Supabaseクライアントのチェーンメソッドモックを作成
- */
-function createMockSupabase() {
-  const mockEq = jest.fn();
-  const mockSingle = jest.fn();
-  const mockSelect = jest.fn();
-  const mockInsert = jest.fn();
-  const mockUpdate = jest.fn();
-  const mockDelete = jest.fn();
-  const mockFrom = jest.fn();
-
-  // チェーンメソッドのデフォルト設定
-  mockEq.mockReturnThis();
-  mockSelect.mockReturnValue({ eq: mockEq });
-  mockInsert.mockResolvedValue({ error: null });
-  mockUpdate.mockReturnValue({ eq: mockEq });
-  mockDelete.mockReturnValue({ eq: mockEq });
-
-  mockFrom.mockReturnValue({
-    select: mockSelect,
-    insert: mockInsert,
-    update: mockUpdate,
-    delete: mockDelete,
-  });
-
-  return {
-    supabase: { from: mockFrom } as unknown as SupabaseClient,
-    mockFrom,
-    mockSelect,
-    mockEq,
-    mockSingle,
-    mockInsert,
-    mockUpdate,
-    mockDelete,
-  };
-}
-
 describe('checkRateLimit', () => {
+  /** RPC の戻り値をモックした Supabase クライアントを作る */
+  function createRpcSupabase(result: {
+    data?: unknown;
+    error?: { code?: string; message?: string } | null;
+  }) {
+    const rpc = jest.fn().mockResolvedValue({
+      data: result.data ?? null,
+      error: result.error ?? null,
+    });
+
+    return { supabase: { rpc } as unknown as SupabaseClient, rpc };
+  }
+
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it('レコード未存在時に新規作成してallowed=trueを返す', async () => {
-    const { supabase, mockFrom } = createMockSupabase();
-
-    // select→eq→eq→single のチェーン: レコード未検出
-    const mockSingleFn = jest.fn().mockResolvedValue({
-      data: null,
-      error: { code: SUPABASE_ERROR_CODE.NOT_FOUND },
-    });
-    const mockEq2 = jest.fn().mockReturnValue({ single: mockSingleFn });
-    const mockEq1 = jest.fn().mockReturnValue({ eq: mockEq2 });
-    const mockSelectFn = jest.fn().mockReturnValue({ eq: mockEq1 });
-
-    mockFrom.mockReturnValueOnce({ select: mockSelectFn }).mockReturnValueOnce({
-      insert: jest.fn().mockResolvedValue({ error: null }),
+  it('consume_rate_limit RPC に識別子・アクション・閾値を渡す', async () => {
+    const { supabase, rpc } = createRpcSupabase({
+      data: [{ allowed: true, retry_after: null }],
     });
 
-    const result = await checkRateLimit(supabase, 'user-1', 'login');
+    await checkRateLimit(supabase, 'user-1', 'login', 5, 30);
 
-    expect(result).toEqual({ allowed: true });
-    expect(mockFrom).toHaveBeenCalledWith('rate_limits');
-  });
-
-  it('ロック中の場合にallowed=falseとretryAfterを返す', async () => {
-    const { supabase, mockFrom } = createMockSupabase();
-
-    // ロック中: locked_until が現在時刻より未来
-    const lockedUntil = new Date('2026-01-01T00:05:00.000Z').toISOString();
-    const mockSingleFn = jest.fn().mockResolvedValue({
-      data: {
-        id: 'record-1',
-        attempts: 4,
-        locked_until: lockedUntil,
-      },
-      error: null,
-    });
-    const mockEq2 = jest.fn().mockReturnValue({ single: mockSingleFn });
-    const mockEq1 = jest.fn().mockReturnValue({ eq: mockEq2 });
-    const mockSelectFn = jest.fn().mockReturnValue({ eq: mockEq1 });
-
-    mockFrom.mockReturnValueOnce({ select: mockSelectFn });
-
-    const result = await checkRateLimit(supabase, 'user-1', 'login');
-
-    expect(result.allowed).toBe(false);
-    expect(result.retryAfter).toBe(300); // 5分 = 300秒
-  });
-
-  it('ロック期間を過ぎている場合にリセットしてallowed=trueを返す', async () => {
-    const { supabase, mockFrom } = createMockSupabase();
-
-    // ロック期間が過ぎている: locked_until が現在時刻より過去
-    const lockedUntil = new Date('2025-12-31T23:00:00.000Z').toISOString();
-    const mockSingleFn = jest.fn().mockResolvedValue({
-      data: {
-        id: 'record-1',
-        attempts: 4,
-        locked_until: lockedUntil,
-      },
-      error: null,
-    });
-    const mockEq2 = jest.fn().mockReturnValue({ single: mockSingleFn });
-    const mockEq1 = jest.fn().mockReturnValue({ eq: mockEq2 });
-    const mockSelectFn = jest.fn().mockReturnValue({ eq: mockEq1 });
-
-    const mockUpdateEq = jest.fn().mockResolvedValue({ error: null });
-    const mockUpdate = jest.fn().mockReturnValue({ eq: mockUpdateEq });
-
-    mockFrom
-      .mockReturnValueOnce({ select: mockSelectFn })
-      .mockReturnValueOnce({ update: mockUpdate });
-
-    const result = await checkRateLimit(supabase, 'user-1', 'login');
-
-    expect(result).toEqual({ allowed: true });
-    expect(mockUpdate).toHaveBeenCalledWith({
-      attempts: 1,
-      locked_until: null,
-      last_attempt_at: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+    expect(rpc).toHaveBeenCalledWith('consume_rate_limit', {
+      p_identifier: 'user-1',
+      p_action_type: 'login',
+      p_max_attempts: 5,
+      p_window_minutes: 30,
     });
   });
 
-  it('最大試行回数に到達した場合にロックしてallowed=falseを返す', async () => {
-    const { supabase, mockFrom } = createMockSupabase();
-
-    const mockSingleFn = jest.fn().mockResolvedValue({
-      data: {
-        id: 'record-1',
-        attempts: 3,
-        locked_until: null,
-      },
-      error: null,
+  it('許可された場合 allowed=true を返す', async () => {
+    const { supabase } = createRpcSupabase({
+      data: [{ allowed: true, retry_after: null }],
     });
-    const mockEq2 = jest.fn().mockReturnValue({ single: mockSingleFn });
-    const mockEq1 = jest.fn().mockReturnValue({ eq: mockEq2 });
-    const mockSelectFn = jest.fn().mockReturnValue({ eq: mockEq1 });
 
-    const mockUpdateEq = jest.fn().mockResolvedValue({ error: null });
-    const mockUpdate = jest.fn().mockReturnValue({ eq: mockUpdateEq });
+    expect(await checkRateLimit(supabase, 'user-1', 'login')).toEqual({
+      allowed: true,
+    });
+  });
 
-    mockFrom
-      .mockReturnValueOnce({ select: mockSelectFn })
-      .mockReturnValueOnce({ update: mockUpdate });
+  it('拒否された場合 allowed=false と retryAfter を返す', async () => {
+    const { supabase } = createRpcSupabase({
+      data: [{ allowed: false, retry_after: 1800 }],
+    });
 
-    const result = await checkRateLimit(supabase, 'user-1', 'login', 3, 30);
+    expect(await checkRateLimit(supabase, 'user-1', 'login')).toEqual({
+      allowed: false,
+      retryAfter: 1800,
+    });
+  });
 
-    expect(result.allowed).toBe(false);
-    expect(result.retryAfter).toBe(1800); // 30分 = 1800秒
-    expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        attempts: 4,
-        locked_until: expect.any(String),
-      }),
+  it('RPC が配列でなくオブジェクトを返しても扱える', async () => {
+    const { supabase } = createRpcSupabase({
+      data: { allowed: false, retry_after: 60 },
+    });
+
+    expect(await checkRateLimit(supabase, 'user-1', 'login')).toEqual({
+      allowed: false,
+      retryAfter: 60,
+    });
+  });
+
+  it('デフォルトの閾値を使う（引数省略時）', async () => {
+    const { supabase, rpc } = createRpcSupabase({
+      data: [{ allowed: true, retry_after: null }],
+    });
+
+    await checkRateLimit(supabase, 'user-1', 'login');
+
+    expect(rpc).toHaveBeenCalledWith(
+      'consume_rate_limit',
+      expect.objectContaining({ p_max_attempts: 3, p_window_minutes: 30 }),
     );
   });
 
-  it('通常のインクリメントでallowed=trueを返す', async () => {
-    const { supabase, mockFrom } = createMockSupabase();
+  describe('エラー時の扱い', () => {
+    let errorSpy: jest.SpyInstance;
+    let warnSpy: jest.SpyInstance;
 
-    const mockSingleFn = jest.fn().mockResolvedValue({
-      data: {
-        id: 'record-1',
-        attempts: 1,
-        locked_until: null,
-      },
-      error: null,
+    beforeEach(() => {
+      errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     });
-    const mockEq2 = jest.fn().mockReturnValue({ single: mockSingleFn });
-    const mockEq1 = jest.fn().mockReturnValue({ eq: mockEq2 });
-    const mockSelectFn = jest.fn().mockReturnValue({ eq: mockEq1 });
 
-    const mockUpdateEq = jest.fn().mockResolvedValue({ error: null });
-    const mockUpdate = jest.fn().mockReturnValue({ eq: mockUpdateEq });
-
-    mockFrom
-      .mockReturnValueOnce({ select: mockSelectFn })
-      .mockReturnValueOnce({ update: mockUpdate });
-
-    const result = await checkRateLimit(supabase, 'user-1', 'login', 3, 30);
-
-    expect(result).toEqual({ allowed: true });
-    expect(mockUpdate).toHaveBeenCalledWith({
-      attempts: 2,
-      last_attempt_at: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+    afterEach(() => {
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
-  });
 
-  it('不明なエラーの場合にエラーをthrowする', async () => {
-    const { supabase, mockFrom } = createMockSupabase();
+    it('CHECK制約違反(23514)を専用メッセージで記録する', async () => {
+      const { supabase } = createRpcSupabase({
+        error: { code: '23514', message: 'violates chk_action_type' },
+      });
 
-    const dbError = { code: 'UNKNOWN', message: 'DB error' };
-    const mockSingleFn = jest.fn().mockResolvedValue({
-      data: null,
-      error: dbError,
+      const result = await checkRateLimit(supabase, 'user-1', 'login');
+
+      expect(result).toEqual({ allowed: true });
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('この制限は機能していません'),
+        expect.anything(),
+      );
     });
-    const mockEq2 = jest.fn().mockReturnValue({ single: mockSingleFn });
-    const mockEq1 = jest.fn().mockReturnValue({ eq: mockEq2 });
-    const mockSelectFn = jest.fn().mockReturnValue({ eq: mockEq1 });
 
-    mockFrom.mockReturnValueOnce({ select: mockSelectFn });
+    it('その他のエラーも記録し、素通しは無言にしない', async () => {
+      const { supabase } = createRpcSupabase({
+        error: { code: '08006', message: 'connection failure' },
+      });
 
-    await expect(checkRateLimit(supabase, 'user-1', 'login')).rejects.toEqual(
-      dbError,
-    );
+      const result = await checkRateLimit(supabase, 'user-1', 'login');
+
+      expect(result).toEqual({ allowed: true });
+      expect(errorSpy).toHaveBeenCalled();
+    });
+
+    it('RPCが行を返さない場合も記録する', async () => {
+      const { supabase } = createRpcSupabase({ data: [] });
+
+      const result = await checkRateLimit(supabase, 'user-1', 'login');
+
+      expect(result).toEqual({ allowed: true });
+      expect(errorSpy).toHaveBeenCalled();
+    });
+
+    describe('RPC未適用時のフォールバック（42883）', () => {
+      /** RPC は 42883 で失敗し、テーブル操作は旧実装どおり動くクライアント */
+      function createFallbackSupabase(row: Record<string, unknown> | null) {
+        const update = jest.fn().mockReturnValue({ eq: jest.fn() });
+        const insert = jest.fn().mockResolvedValue({ error: null });
+        const from = jest.fn().mockReturnValue({
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                single: () => ({
+                  data: row,
+                  error: row ? null : { code: SUPABASE_ERROR_CODE.NOT_FOUND },
+                }),
+              }),
+            }),
+          }),
+          update,
+          insert,
+        });
+
+        const rpc = jest.fn().mockResolvedValue({
+          data: null,
+          error: { code: '42883', message: 'function does not exist' },
+        });
+
+        return {
+          supabase: { rpc, from } as unknown as SupabaseClient,
+          update,
+          insert,
+        };
+      }
+
+      it('RPCが無ければ旧実装で判定を続ける（素通しにしない）', async () => {
+        const { supabase, update } = createFallbackSupabase({
+          id: 'r1',
+          attempts: 3,
+          locked_until: null,
+        });
+
+        const result = await checkRateLimit(supabase, 'user-1', 'login', 3, 30);
+
+        // 旧実装どおり上限到達でロックされる
+        expect(result.allowed).toBe(false);
+        expect(result.retryAfter).toBe(1800);
+        expect(update).toHaveBeenCalled();
+      });
+
+      it('フォールバックしたことを警告として記録する', async () => {
+        const { supabase } = createFallbackSupabase({
+          id: 'r1',
+          attempts: 1,
+          locked_until: null,
+        });
+
+        await checkRateLimit(supabase, 'user-1', 'login');
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('20261017040000'),
+        );
+      });
+
+      it('フォールバックでも行が無ければ作成して許可する', async () => {
+        const { supabase, insert } = createFallbackSupabase(null);
+
+        const result = await checkRateLimit(supabase, 'user-1', 'login');
+
+        expect(result).toEqual({ allowed: true });
+        expect(insert).toHaveBeenCalled();
+      });
+    });
   });
 });
 
@@ -423,7 +407,7 @@ describe('resetRateLimit', () => {
   });
 });
 
-describe('INSERT失敗時の記録（fail-openの可視化）', () => {
+describe('checkCooldown の INSERT 失敗時の記録（fail-openの可視化）', () => {
   let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -459,27 +443,7 @@ describe('INSERT失敗時の記録（fail-openの可視化）', () => {
     return { from: mockFrom } as unknown as SupabaseClient;
   }
 
-  it('checkRateLimit: CHECK制約違反(23514)を専用メッセージで記録する', async () => {
-    const supabase = createSupabaseWithFailingInsert({
-      code: '23514',
-      message: 'violates check constraint "chk_action_type"',
-    });
-
-    const result = await checkRateLimit(
-      supabase,
-      'user@example.com',
-      RATE_LIMIT_ACTION.OTP_SEND_DAILY,
-    );
-
-    // 現状は fail-open のままだが、無言ではなくなる
-    expect(result).toEqual({ allowed: true });
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('この制限は機能していません'),
-      expect.anything(),
-    );
-  });
-
-  it('checkCooldown: CHECK制約違反(23514)を記録する', async () => {
+  it('CHECK制約違反(23514)を専用メッセージで記録する', async () => {
     const supabase = createSupabaseWithFailingInsert({
       code: '23514',
       message: 'violates check constraint "chk_action_type"',
@@ -492,9 +456,10 @@ describe('INSERT失敗時の記録（fail-openの可視化）', () => {
       60,
     );
 
+    // 現状は fail-open のままだが、無言ではなくなる
     expect(result).toEqual({ allowed: true });
     expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('chk_action_type'),
+      expect.stringContaining('この制限は機能していません'),
       expect.anything(),
     );
   });
@@ -505,7 +470,12 @@ describe('INSERT失敗時の記録（fail-openの可視化）', () => {
       message: 'connection failure',
     });
 
-    await checkRateLimit(supabase, 'user-1', RATE_LIMIT_ACTION.OTP_VERIFY);
+    await checkCooldown(
+      supabase,
+      'user-1',
+      RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+      60,
+    );
 
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('insert failed'),
@@ -516,7 +486,12 @@ describe('INSERT失敗時の記録（fail-openの可視化）', () => {
   it('INSERTが成功した場合は何も記録しない', async () => {
     const supabase = createSupabaseWithFailingInsert(null);
 
-    await checkRateLimit(supabase, 'user-1', RATE_LIMIT_ACTION.OTP_VERIFY);
+    await checkCooldown(
+      supabase,
+      'user-1',
+      RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+      60,
+    );
 
     expect(errorSpy).not.toHaveBeenCalled();
   });

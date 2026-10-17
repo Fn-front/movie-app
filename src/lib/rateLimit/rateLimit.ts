@@ -14,6 +14,9 @@ import type { RateLimitActionType } from '@/constants/rateLimit';
 /** Postgres の CHECK 制約違反 */
 const CHECK_VIOLATION_CODE = '23514';
 
+/** Postgres の「関数が存在しない」エラー（RPC 未適用時に返る） */
+const UNDEFINED_FUNCTION_CODE = '42883';
+
 /**
  * rate_limits への書き込み失敗を記録する
  *
@@ -65,6 +68,73 @@ export async function checkRateLimit(
   maxAttempts: number = RATE_LIMIT_DEFAULT.MAX_ATTEMPTS,
   windowMinutes: number = RATE_LIMIT_DEFAULT.WINDOW_MINUTES,
 ): Promise<RateLimitResult> {
+  // 判定とカウンタ更新を1ステートメントで行う。SELECT → UPDATE に分けると
+  // その間に別リクエストが同じ attempts を読み、全員が「上限未満」と判定して
+  // 実効上限を超えられる（#646）。
+  const { data, error } = await supabase.rpc('consume_rate_limit', {
+    p_identifier: identifier,
+    p_action_type: actionType,
+    p_max_attempts: maxAttempts,
+    p_window_minutes: windowMinutes,
+  });
+
+  if (error) {
+    // RPC 未適用（マイグレーションより先にコードがデプロイされた）場合は、
+    // 素通しにすると「レート制限が有効なつもりで全部無効」という最悪の状態に
+    // なる（#546 / #659 と同じ事故）。原子性は失われるが旧実装で判定を続ける。
+    // RPC が全環境に行き渡ったらこのフォールバックは削除してよい。
+    if (error.code === UNDEFINED_FUNCTION_CODE) {
+      console.warn(
+        '[rateLimit] consume_rate_limit RPC が存在しないため旧実装で継続します。' +
+          'マイグレーション 20261017040000 を適用してください。',
+      );
+      return checkRateLimitLegacy(
+        supabase,
+        identifier,
+        actionType,
+        maxAttempts,
+        windowMinutes,
+      );
+    }
+
+    // 失敗を無言で握り潰すと「レート制限が有効なつもりで実は素通し」になる。
+    // 原因の大半は chk_action_type の許可リスト漏れ（23514）。
+    logRateLimitWriteFailure('consume_rate_limit', actionType, error);
+
+    // 制限を判定できない場合は通す（既存の挙動を踏襲）。
+    // ログイン等を巻き込んで停止させないための fail-open だが、
+    // 上のログで検知できるようにしてある。
+    return { allowed: true };
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+
+  if (!row) {
+    logRateLimitWriteFailure('consume_rate_limit', actionType, {
+      message: 'RPC returned no row',
+    });
+    return { allowed: true };
+  }
+
+  return row.allowed
+    ? { allowed: true }
+    : { allowed: false, retryAfter: row.retry_after ?? undefined };
+}
+
+/**
+ * consume_rate_limit RPC が未適用の環境向けフォールバック（旧実装）
+ *
+ * SELECT → UPDATE の読み取り後書き込みのため並行リクエストで実効上限を
+ * 超えられるが、「判定できないから全部通す」よりははるかにマシ。
+ * RPC が全環境に行き渡ったら削除してよい。
+ */
+async function checkRateLimitLegacy(
+  supabase: SupabaseClient,
+  identifier: string,
+  actionType: RateLimitActionType,
+  maxAttempts: number,
+  windowMinutes: number,
+): Promise<RateLimitResult> {
   const { data, error } = await supabase
     .from('rate_limits')
     .select('*')
@@ -72,7 +142,6 @@ export async function checkRateLimit(
     .eq('action_type', actionType)
     .single();
 
-  // レコードが存在しない場合は新規作成
   if (error && error.code === SUPABASE_ERROR_CODE.NOT_FOUND) {
     const { error: insertError } = await supabase.from('rate_limits').insert({
       identifier,
@@ -81,9 +150,6 @@ export async function checkRateLimit(
       last_attempt_at: new Date().toISOString(),
     });
 
-    // INSERT が失敗するとカウンタ行が永久に作られず、以降も毎回ここに来て
-    // allowed を返し続ける＝その制限が無言で機能しなくなる。
-    // 原因の大半は chk_action_type の許可リスト漏れ（23514）なので必ず記録する。
     logRateLimitWriteFailure('insert', actionType, insertError);
 
     return { allowed: true };
@@ -95,7 +161,6 @@ export async function checkRateLimit(
 
   const now = new Date();
 
-  // ロック中かチェック
   if (data.locked_until && new Date(data.locked_until) > now) {
     const retryAfter = Math.ceil(
       (new Date(data.locked_until).getTime() - now.getTime()) / 1000,
@@ -103,7 +168,6 @@ export async function checkRateLimit(
     return { allowed: false, retryAfter };
   }
 
-  // ロック期間を過ぎていたらリセット
   if (data.locked_until && new Date(data.locked_until) <= now) {
     await supabase
       .from('rate_limits')
@@ -116,7 +180,6 @@ export async function checkRateLimit(
     return { allowed: true };
   }
 
-  // 最大試行回数に達した場合はロック
   if (data.attempts >= maxAttempts) {
     const lockedUntil = new Date(now.getTime() + windowMinutes * 60 * 1000);
     await supabase
@@ -130,7 +193,6 @@ export async function checkRateLimit(
     return { allowed: false, retryAfter: windowMinutes * 60 };
   }
 
-  // 試行回数をインクリメント
   await supabase
     .from('rate_limits')
     .update({

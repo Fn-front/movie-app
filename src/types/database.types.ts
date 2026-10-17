@@ -112,6 +112,7 @@ export type Database = {
           title: string;
           tmdb_movie_id: number;
           vote_average: number | null;
+          vote_count: number;
         };
         Insert: {
           award_name: string;
@@ -129,6 +130,7 @@ export type Database = {
           title: string;
           tmdb_movie_id: number;
           vote_average?: number | null;
+          vote_count?: number;
         };
         Update: {
           award_name?: string;
@@ -146,6 +148,7 @@ export type Database = {
           title?: string;
           tmdb_movie_id?: number;
           vote_average?: number | null;
+          vote_count?: number;
         };
         Relationships: [];
       };
@@ -256,6 +259,7 @@ export type Database = {
           title: string;
           updated_at: string;
           vote_average: number | null;
+          vote_count: number;
         };
         Insert: {
           backdrop_path?: string | null;
@@ -272,6 +276,7 @@ export type Database = {
           title: string;
           updated_at?: string;
           vote_average?: number | null;
+          vote_count?: number;
         };
         Update: {
           backdrop_path?: string | null;
@@ -288,6 +293,7 @@ export type Database = {
           title?: string;
           updated_at?: string;
           vote_average?: number | null;
+          vote_count?: number;
         };
         Relationships: [];
       };
@@ -302,6 +308,7 @@ export type Database = {
           title: string;
           tmdb_movie_id: number;
           vote_average: number | null;
+          vote_count: number;
         };
         Insert: {
           display_order: number;
@@ -313,6 +320,7 @@ export type Database = {
           title: string;
           tmdb_movie_id: number;
           vote_average?: number | null;
+          vote_count?: number;
         };
         Update: {
           display_order?: number;
@@ -324,6 +332,7 @@ export type Database = {
           title?: string;
           tmdb_movie_id?: number;
           vote_average?: number | null;
+          vote_count?: number;
         };
         Relationships: [];
       };
@@ -336,6 +345,7 @@ export type Database = {
           email: string;
           expires_at: string;
           id: string;
+          verification_token_hash: string | null;
           verified_at: string | null;
         };
         Insert: {
@@ -346,6 +356,7 @@ export type Database = {
           email: string;
           expires_at: string;
           id?: string;
+          verification_token_hash?: string | null;
           verified_at?: string | null;
         };
         Update: {
@@ -356,6 +367,7 @@ export type Database = {
           email?: string;
           expires_at?: string;
           id?: string;
+          verification_token_hash?: string | null;
           verified_at?: string | null;
         };
         Relationships: [];
@@ -433,6 +445,7 @@ export type Database = {
           tmdb_movie_id: number;
           user_id: string;
           vote_average: number | null;
+          vote_count: number;
         };
         Insert: {
           created_at?: string;
@@ -447,6 +460,7 @@ export type Database = {
           tmdb_movie_id: number;
           user_id: string;
           vote_average?: number | null;
+          vote_count?: number;
         };
         Update: {
           created_at?: string;
@@ -461,6 +475,7 @@ export type Database = {
           tmdb_movie_id?: number;
           user_id?: string;
           vote_average?: number | null;
+          vote_count?: number;
         };
         Relationships: [
           {
@@ -910,6 +925,10 @@ export type Database = {
         }[];
       };
       sync_now_showing_movies: { Args: { movies: Json }; Returns: number };
+      upsert_recommendations: {
+        Args: { p_recommendations: Json; p_user_id: string };
+        Returns: number;
+      };
     };
     Enums: {
       [_ in never]: never;

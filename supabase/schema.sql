@@ -350,10 +350,10 @@ CREATE POLICY users_select_own ON users
   FOR SELECT
   USING (auth.uid() = id);
 
--- INSERT: 公開（新規登録用）
-CREATE POLICY users_insert_public ON users
-  FOR INSERT
-  WITH CHECK (true);
+-- INSERT: ポリシーなし = 全拒否（service_role のみ）
+-- 新規登録は API Route が service_role で行うため anon の INSERT は不要。
+-- 旧 users_insert_public（WITH CHECK (true)）は
+-- 20261017000000_drop_public_insert_policies.sql で削除済み。
 
 -- UPDATE: 自分のレコードのみ更新可能
 CREATE POLICY users_update_own ON users
@@ -568,3 +568,21 @@ CREATE POLICY now_showing_movies_select_all ON now_showing_movies
   USING (true);
 
 -- INSERT/UPDATE/DELETE: サービスロールのみ（Cron API経由）
+
+-- ============================================
+-- 4. テーブル権限（最小権限）
+-- ============================================
+-- RLS は「GRANT がある前提で行を絞る」仕組みのため、認証まわりのテーブルは
+-- GRANT 自体を落として anon / authenticated からの到達性を断つ。
+-- アプリは全ての書き込みを service_role（RLSバイパス）で行う。
+-- 対応マイグレーション: 20261017000000_drop_public_insert_policies.sql
+
+REVOKE ALL ON users FROM anon, authenticated;
+REVOKE ALL ON otp_codes FROM anon, authenticated;
+REVOKE ALL ON rate_limits FROM anon, authenticated;
+REVOKE ALL ON accounts FROM anon, authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON users TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON otp_codes TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON rate_limits TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON accounts TO service_role;

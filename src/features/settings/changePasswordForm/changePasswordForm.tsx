@@ -20,7 +20,11 @@ import {
   type ChangePasswordFormData,
 } from '@/schema/auth';
 import { OTP_ACTION } from '@/constants/otp';
-import { AUTH_ERROR_MESSAGES, TOAST_TITLES } from '@/constants';
+import {
+  AUTH_ERROR_MESSAGES,
+  TOAST_TITLES,
+  VALIDATION_MESSAGES,
+} from '@/constants';
 import { changePassword, sendOtp } from '@/lib/api/auth/auth';
 import { useToast } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
@@ -42,6 +46,9 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
     const [isSendingOtp, setIsSendingOtp] = useState(false);
     const [apiError, setApiError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [verificationToken, setVerificationToken] = useState<string | null>(
+      null,
+    );
 
     const {
       register,
@@ -73,8 +80,10 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
     }, [email]);
 
     // ステップ2: OTP検証成功
-    const handleOtpVerifySuccess = useCallback(() => {
+    // 発行されたワンタイムトークンを保持し、ステップ3の送信時に本人確認として渡す
+    const handleOtpVerifySuccess = useCallback((token?: string) => {
       setApiError(null);
+      setVerificationToken(token ?? null);
       setStep('new_password');
     }, []);
 
@@ -84,9 +93,16 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
         setApiError(null);
         setSuccessMessage(null);
 
+        if (!verificationToken) {
+          setApiError(VALIDATION_MESSAGES.OTP_TOKEN_REQUIRED);
+          setStep('send_otp');
+          return;
+        }
+
         try {
           const response = await changePassword({
             newPassword: data.newPassword,
+            verificationToken,
           });
 
           setSuccessMessage(response.message);
@@ -96,6 +112,8 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
             variant: 'success',
           });
           reset();
+          // トークンはワンタイムのため破棄する
+          setVerificationToken(null);
           // 成功後は初期画面に戻り、successMessageをステップ1で表示する
           setStep('send_otp');
         } catch (error) {
@@ -110,7 +128,7 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
           });
         }
       },
-      [reset, toast],
+      [reset, toast, verificationToken],
     );
 
     return (

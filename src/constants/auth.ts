@@ -144,4 +144,7 @@ export const VALIDATION_MESSAGES = {
   PASSWORD_MISMATCH: 'パスワードが一致しません',
   /** ユーザー名が長すぎる */
   NAME_TOO_LONG: 'ユーザー名は100文字以内で入力してください',
+  /** OTP検証済みトークン必須 */
+  OTP_TOKEN_REQUIRED:
+    'OTP検証が完了していません。確認コードを再送信してください',
 } as const;

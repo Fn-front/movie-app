@@ -55,7 +55,7 @@ function getMonthStart(): string {
 }
 
 export const POST = withAuth(
-  async ({ session, supabase }) => {
+  async ({ session, supabase, request }) => {
     // 連打防止のクールダウン。
     // 試行時点で記録されるため、生成完了前の多重リクエストもここで止まる
     // （recommendation_refreshes の行は生成成功後にしか作られないため、
@@ -100,9 +100,48 @@ export const POST = withAuth(
       );
     }
 
-    const result = await processUserRecommendations(supabase, session.user.id);
+    // 回数の「予約」を先に取る。
+    // 生成成功後に記録する方式では、クライアントが離脱して200を受け取れなくても
+    // サーバーは完走して回数だけ減るため、UI上は「失敗」なのに残回数が減る齟齬が出る。
+    // 先に枠を確保し、生成が成立しなかった場合だけ取り消すことで、
+    // 「abortを繰り返して回数を消費せず生成させる」抜け穴も同時に塞ぐ。
+    const { data: reservation, error: reserveError } = await supabase
+      .from('recommendation_refreshes')
+      .insert({ user_id: session.user.id })
+      .select('id')
+      .single();
+
+    if (reserveError || !reservation) {
+      throw reserveError ?? new Error('Failed to reserve refresh count');
+    }
+
+    /** 予約した回数枠を取り消す（生成が成立しなかった場合） */
+    const releaseReservation = async () => {
+      const { error } = await supabase
+        .from('recommendation_refreshes')
+        .delete()
+        .eq('id', reservation.id);
+
+      if (error) {
+        console.error('Failed to release refresh reservation:', error);
+      }
+    };
+
+    let result;
+    try {
+      result = await processUserRecommendations(
+        supabase,
+        session.user.id,
+        request.signal,
+      );
+    } catch (error) {
+      await releaseReservation();
+      throw error;
+    }
 
     if (result.status === 'skipped') {
+      await releaseReservation();
+
       return NextResponse.json(
         {
           success: false,
@@ -115,18 +154,10 @@ export const POST = withAuth(
       );
     }
 
-    const { error: insertError } = await supabase
-      .from('recommendation_refreshes')
-      .insert({ user_id: session.user.id });
-
-    if (insertError) {
-      throw insertError;
-    }
-
     const { data: recommendations } = await supabase
       .from('recommendations')
       .select(
-        'id, tmdb_movie_id, title, poster_path, release_date, vote_average, genre_ids, reason, display_order',
+        'id, tmdb_movie_id, title, poster_path, release_date, vote_average, vote_count, genre_ids, reason, display_order',
       )
       .eq('user_id', session.user.id)
       .order('display_order', { ascending: true });

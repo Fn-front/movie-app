@@ -63,6 +63,7 @@ function createResolvedMovie(
     poster_path: '/poster.jpg',
     release_date: '2026-01-01',
     vote_average: 8.5,
+    vote_count: 1200,
     genre_ids: [18],
     category: 'best_picture',
     is_winner: true,

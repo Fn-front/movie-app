@@ -131,10 +131,17 @@ describe('provider 構成', () => {
       clientId: 'google-client-id',
       clientSecret: 'google-client-secret',
     });
-    expect(mockGitHub).toHaveBeenCalledWith({
-      clientId: 'github-client-id',
-      clientSecret: 'github-client-secret',
-    });
+    // GitHub は検証済みメールのみを採用するため userinfo を差し替えている
+    expect(mockGitHub).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: 'github-client-id',
+        clientSecret: 'github-client-secret',
+        userinfo: expect.objectContaining({
+          url: 'https://api.github.com/user',
+          request: expect.any(Function),
+        }),
+      }),
+    );
   });
 });
 
@@ -146,6 +153,14 @@ describe('signIn コールバック（OAuth）', () => {
     type: 'oauth',
     access_token: 'at',
   };
+
+  /**
+   * メール検証済みの profile。
+   *
+   * 未検証メールによるアカウント乗っ取りを防ぐため、signIn は
+   * `profile.email_verified === true` を要求する。
+   */
+  const verifiedProfile = { email_verified: true };
 
   it('既存ユーザー: アカウントを紐付けて true を返し user.id を既存IDにする', async () => {
     setResolver(({ table, ops }) => {
@@ -161,7 +176,7 @@ describe('signIn コールバック（OAuth）', () => {
       email: 'a@example.com',
       image: 'new.png',
     };
-    const result = await signIn({ user, account, profile: {} });
+    const result = await signIn({ user, account, profile: verifiedProfile });
 
     expect(result).toBe(true);
     expect(user.id).toBe('existing-1');
@@ -178,7 +193,7 @@ describe('signIn コールバック（OAuth）', () => {
     });
 
     const user = { email: 'a@example.com', image: 'new.png' };
-    await signIn({ user, account, profile: {} });
+    await signIn({ user, account, profile: verifiedProfile });
 
     // アバター更新 + last_login 更新の2回 users.update が走る
     expect(
@@ -199,7 +214,7 @@ describe('signIn コールバック（OAuth）', () => {
     });
 
     const user = { email: 'a@example.com', image: 'new.png' };
-    await signIn({ user, account, profile: {} });
+    await signIn({ user, account, profile: verifiedProfile });
 
     // アバター更新は走らず、last_login 更新の1回のみ
     expect(userUpdateCount).toBe(1);
@@ -219,7 +234,7 @@ describe('signIn コールバック（OAuth）', () => {
       email: 'new@example.com',
       name: 'New User',
     };
-    const result = await signIn({ user, account, profile: {} });
+    const result = await signIn({ user, account, profile: verifiedProfile });
 
     expect(result).toBe(true);
     expect(user.id).toBe('new-1');
@@ -238,7 +253,7 @@ describe('signIn コールバック（OAuth）', () => {
     });
 
     const user = { email: 'a@example.com' };
-    const result = await signIn({ user, account, profile: {} });
+    const result = await signIn({ user, account, profile: verifiedProfile });
     expect(result).toBe(true);
   });
 

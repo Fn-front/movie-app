@@ -24,6 +24,8 @@ export interface MovieCacheItem {
   overview: string | null;
   /** 評価平均 */
   vote_average: number | null;
+  /** 評価件数（TMDb vote_count） */
+  vote_count: number | null;
   /** 人気度 */
   popularity: number | null;
   /** ジャンルID配列 */

@@ -206,6 +206,7 @@ describe('changePasswordApiSchema', () => {
   it('有効な入力でパースが成功する', () => {
     const result = changePasswordApiSchema.safeParse({
       newPassword: 'NewPassword1',
+      verificationToken: 'verification-token',
     });
     expect(result.success).toBe(true);
   });
@@ -213,6 +214,22 @@ describe('changePasswordApiSchema', () => {
   it('newPasswordがポリシーに違反する場合エラーになる', () => {
     const result = changePasswordApiSchema.safeParse({
       newPassword: 'short',
+      verificationToken: 'verification-token',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('verificationTokenが無い場合エラーになる（OTP検証の証明が必須）', () => {
+    const result = changePasswordApiSchema.safeParse({
+      newPassword: 'NewPassword1',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('verificationTokenが空文字の場合エラーになる', () => {
+    const result = changePasswordApiSchema.safeParse({
+      newPassword: 'NewPassword1',
+      verificationToken: '',
     });
     expect(result.success).toBe(false);
   });

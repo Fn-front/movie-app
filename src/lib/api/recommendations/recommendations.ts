@@ -31,12 +31,19 @@ export interface RefreshCountResponse {
 
 /**
  * レコメンドを手動更新する
+ *
+ * @param signal - 中断シグナル。サーバー側は request.signal を受けて生成を打ち切り、
+ *                 消費した回数枠を取り消す。
+ *                 ※ useRecommendationRefresh からは渡さない（画面遷移で生成を
+ *                 止めないため）。タブを閉じた場合はブラウザが自動で中断する。
  */
-export async function refreshRecommendations(): Promise<
-  RefreshRecommendationsResponse['data']
-> {
+export async function refreshRecommendations(
+  signal?: AbortSignal,
+): Promise<RefreshRecommendationsResponse['data']> {
   const response = await axiosInstance.post<RefreshRecommendationsResponse>(
     API_ENDPOINTS.RECOMMENDATIONS_REFRESH,
+    undefined,
+    { signal },
   );
   return response.data.data;
 }

@@ -29,6 +29,10 @@ jest.mock('@/lib/recommendations/generateRecommendationsService', () => ({
     mockProcessUserRecommendations(...args),
 }));
 
+/** 予約INSERT / 予約DELETE の呼び出しを記録するスパイ */
+const mockReservationInsert = jest.fn();
+const mockReservationDelete = jest.fn();
+
 const mockCheckCooldown = jest.fn();
 jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkCooldown: (...args: unknown[]) => mockCheckCooldown(...args),
@@ -58,11 +62,46 @@ function mockCountChain(count: number) {
 }
 
 /**
- * INSERT成功用モック
+ * 回数枠の予約INSERT用モック（insert → select → single）
  */
-function mockInsertSuccess() {
+function mockReservationSuccess(id = 'refresh-1') {
   mockFrom.mockReturnValueOnce({
-    insert: () => Promise.resolve({ error: null }),
+    insert: (...args: unknown[]) => {
+      mockReservationInsert(...args);
+      return {
+        select: () => ({
+          single: () => Promise.resolve({ data: { id }, error: null }),
+        }),
+      };
+    },
+  });
+}
+
+/**
+ * 予約INSERT失敗用モック
+ */
+function mockReservationFailure() {
+  mockFrom.mockReturnValueOnce({
+    insert: () => ({
+      select: () => ({
+        single: () =>
+          Promise.resolve({ data: null, error: new Error('insert failed') }),
+      }),
+    }),
+  });
+}
+
+/**
+ * 予約の取り消し（DELETE）用モック
+ */
+function mockReleaseReservation(error: Error | null = null) {
+  mockFrom.mockReturnValueOnce({
+    delete: () => ({
+      eq: (...args: unknown[]) => {
+        mockReservationDelete(...args);
+        return Promise.resolve({ error });
+      },
+    }),
   });
 }
 
@@ -132,11 +171,11 @@ describe('POST /api/recommendations/refresh', () => {
 
   it('クールダウンはユーザーIDと設定秒数で判定される', async () => {
     mockCountChain(0);
+    mockReservationSuccess();
     mockProcessUserRecommendations.mockResolvedValueOnce({
       status: 'processed',
       recommendationCount: 1,
     });
-    mockInsertSuccess();
     mockFetchRecommendations([]);
 
     await POST(createPostRequest());
@@ -177,13 +216,13 @@ describe('POST /api/recommendations/refresh', () => {
 
     // 1. カウントチェック（0回使用済み）
     mockCountChain(0);
-    // 2. processUserRecommendations成功
+    // 2. 回数枠の予約INSERT（生成より前）
+    mockReservationSuccess();
+    // 3. processUserRecommendations成功
     mockProcessUserRecommendations.mockResolvedValueOnce({
       status: 'processed',
       recommendationCount: 1,
     });
-    // 3. INSERT成功（生成成功後にカウント記録）
-    mockInsertSuccess();
     // 4. レコメンド取得
     mockFetchRecommendations(mockRecommendations);
 
@@ -197,12 +236,14 @@ describe('POST /api/recommendations/refresh', () => {
     expect(json.data.recommendations[0].title).toBe('テスト映画');
   });
 
-  it('レコメンド生成がskippedの場合に500を返す（カウント未消費）', async () => {
+  it('レコメンド生成がskippedの場合に500を返し、予約した回数枠を取り消す', async () => {
     mockCountChain(0);
+    mockReservationSuccess('refresh-skip');
     mockProcessUserRecommendations.mockResolvedValueOnce({
       status: 'skipped',
       recommendationCount: 0,
     });
+    mockReleaseReservation();
 
     const response = await POST(createPostRequest());
     const json = await response.json();
@@ -210,6 +251,8 @@ describe('POST /api/recommendations/refresh', () => {
     expect(response.status).toBe(500);
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('GENERATION_FAILED');
+    // 予約した行が削除される（＝回数は消費されない）
+    expect(mockReservationDelete).toHaveBeenCalledWith('id', 'refresh-skip');
   });
 
   it('カウント取得時のDBエラーで500を返す', async () => {
@@ -229,30 +272,175 @@ describe('POST /api/recommendations/refresh', () => {
     expect(json.success).toBe(false);
   });
 
-  it('INSERT時のDBエラーで500を返す', async () => {
+  it('予約INSERTのDBエラーで500を返し、生成処理を実行しない', async () => {
     mockCountChain(0);
-    mockProcessUserRecommendations.mockResolvedValueOnce({
-      status: 'processed',
-      recommendationCount: 10,
-    });
-    mockFrom.mockReturnValueOnce({
-      insert: () => Promise.resolve({ error: new Error('Insert error') }),
-    });
+    mockReservationFailure();
 
     const response = await POST(createPostRequest());
     const json = await response.json();
 
     expect(response.status).toBe(500);
     expect(json.success).toBe(false);
+    expect(mockProcessUserRecommendations).not.toHaveBeenCalled();
+  });
+
+  it('レスポンスにvote_countが含まれ、SELECT句にも指定されている', async () => {
+    const selectSpy = jest.fn();
+
+    mockCountChain(0);
+    mockReservationSuccess();
+    mockProcessUserRecommendations.mockResolvedValueOnce({
+      status: 'processed',
+      recommendationCount: 1,
+    });
+    mockFrom.mockReturnValueOnce({
+      select: (columns: string) => {
+        selectSpy(columns);
+        return {
+          eq: () => ({
+            order: () =>
+              Promise.resolve({
+                data: [
+                  {
+                    id: 'rec-1',
+                    tmdb_movie_id: 100,
+                    title: 'テスト映画',
+                    poster_path: '/poster.jpg',
+                    release_date: '2025-01-01',
+                    vote_average: 8.5,
+                    vote_count: 1234,
+                    genre_ids: [28],
+                    reason: 'テスト理由',
+                    display_order: 1,
+                  },
+                ],
+                error: null,
+              }),
+          }),
+        };
+      },
+    });
+
+    const response = await POST(createPostRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.recommendations[0].vote_count).toBe(1234);
+    expect(selectSpy).toHaveBeenCalledWith(
+      expect.stringContaining('vote_count'),
+    );
+  });
+
+  it('回数枠の予約は生成処理より前にINSERTされる', async () => {
+    const callOrder: string[] = [];
+
+    mockCountChain(0);
+    mockFrom.mockReturnValueOnce({
+      insert: () => {
+        callOrder.push('reserve');
+        return {
+          select: () => ({
+            single: () =>
+              Promise.resolve({ data: { id: 'refresh-1' }, error: null }),
+          }),
+        };
+      },
+    });
+    mockProcessUserRecommendations.mockImplementationOnce(async () => {
+      callOrder.push('generate');
+      return { status: 'processed', recommendationCount: 1 };
+    });
+    mockFetchRecommendations([]);
+
+    await POST(createPostRequest());
+
+    expect(callOrder).toEqual(['reserve', 'generate']);
+  });
+
+  it('予約には認証ユーザーのIDが使われる', async () => {
+    mockCountChain(0);
+    mockReservationSuccess();
+    mockProcessUserRecommendations.mockResolvedValueOnce({
+      status: 'processed',
+      recommendationCount: 1,
+    });
+    mockFetchRecommendations([]);
+
+    await POST(createPostRequest());
+
+    expect(mockReservationInsert).toHaveBeenCalledWith({
+      user_id: 'user-123',
+    });
+  });
+
+  it('生成成功時は予約を取り消さない', async () => {
+    mockCountChain(0);
+    mockReservationSuccess();
+    mockProcessUserRecommendations.mockResolvedValueOnce({
+      status: 'processed',
+      recommendationCount: 1,
+    });
+    mockFetchRecommendations([]);
+
+    await POST(createPostRequest());
+
+    expect(mockReservationDelete).not.toHaveBeenCalled();
+  });
+
+  it('生成処理が例外を投げた場合も予約した回数枠を取り消す', async () => {
+    mockCountChain(0);
+    mockReservationSuccess('refresh-throw');
+    mockProcessUserRecommendations.mockRejectedValueOnce(
+      new Error('OpenAI down'),
+    );
+    mockReleaseReservation();
+
+    const response = await POST(createPostRequest());
+
+    expect(response.status).toBe(500);
+    expect(mockReservationDelete).toHaveBeenCalledWith('id', 'refresh-throw');
+  });
+
+  it('予約の取り消しに失敗してもレスポンスは返る', async () => {
+    mockCountChain(0);
+    mockReservationSuccess();
+    mockProcessUserRecommendations.mockResolvedValueOnce({
+      status: 'skipped',
+      recommendationCount: 0,
+    });
+    mockReleaseReservation(new Error('delete failed'));
+
+    const response = await POST(createPostRequest());
+
+    expect(response.status).toBe(500);
+  });
+
+  it('リクエストのsignalを生成処理に伝播する', async () => {
+    mockCountChain(0);
+    mockReservationSuccess();
+    mockProcessUserRecommendations.mockResolvedValueOnce({
+      status: 'processed',
+      recommendationCount: 1,
+    });
+    mockFetchRecommendations([]);
+
+    const request = createPostRequest();
+    await POST(request);
+
+    expect(mockProcessUserRecommendations).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-123',
+      request.signal,
+    );
   });
 
   it('残り回数が正しく計算される（5回使用済み→残り4回）', async () => {
     mockCountChain(5);
+    mockReservationSuccess();
     mockProcessUserRecommendations.mockResolvedValueOnce({
       status: 'processed',
       recommendationCount: 10,
     });
-    mockInsertSuccess();
     mockFetchRecommendations([]);
 
     const response = await POST(createPostRequest());

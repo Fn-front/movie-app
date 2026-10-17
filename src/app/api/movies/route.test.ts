@@ -24,6 +24,11 @@ jest.mock('@/lib/sync/syncNowPlayingMovies', () => ({
     mockSyncNowPlayingMovies(...args),
 }));
 
+const mockSyncStreamingMovies = jest.fn().mockResolvedValue({ upserted: 0 });
+jest.mock('@/lib/sync/syncStreamingMovies', () => ({
+  syncStreamingMovies: (...args: unknown[]) => mockSyncStreamingMovies(...args),
+}));
+
 const mockDiscoverMovies = jest.fn().mockResolvedValue({
   results: [],
   total_pages: 0,
@@ -251,6 +256,56 @@ function setupNowPlayingFromMock(options: {
 }
 
 /**
+ * streamingパス用のfromモック
+ * 1回目: streaming件数チェック（フォールバック判定）
+ * 2回目: カウントクエリ
+ * 3回目: データクエリ
+ *
+ * existingCount: movie_cache にある streaming レコード件数
+ */
+function setupStreamingFromMock(options: {
+  existingCount?: number;
+  countResult?: { count: number };
+  dataResult?: { data: unknown[]; error: unknown };
+}) {
+  const {
+    existingCount = 100,
+    countResult = { count: 0 },
+    dataResult = { data: [], error: null },
+  } = options;
+
+  const callTracker = { count: 0 };
+
+  mockSupabaseClient!.from.mockImplementation(() => {
+    callTracker.count++;
+    const currentCall = callTracker.count;
+
+    if (currentCall === 1) {
+      // streaming件数チェック
+      return createChainMock({ count: existingCount });
+    }
+    if (currentCall === 2) {
+      // カウントクエリ or データクエリ
+      const chain = createChainMock(countResult);
+      chain.select.mockImplementation(
+        (_cols: string, opts?: { count?: string }) => {
+          if (opts?.count === 'exact') {
+            return createThenableProxy(
+              createChainMock(countResult),
+              countResult,
+            );
+          }
+          return createThenableProxy(createChainMock(dataResult), dataResult);
+        },
+      );
+      return chain;
+    }
+    // データクエリ
+    return createChainMock(dataResult);
+  });
+}
+
+/**
  * キャッシュ期限切れのDiscover APIフロー用のfromモック
  */
 function setupExpiredCacheFromMock(options: {
@@ -274,19 +329,8 @@ function setupExpiredCacheFromMock(options: {
       // キャッシュチェッククエリ → 期限切れ（null）
       return createChainMock({ data: null, error: null });
     }
-    if (currentCall === 2) {
-      // 他release_typeの既存IDクエリ（neq）
-      const chain = createChainMock({ data: [], error: null });
-      chain.select.mockImplementation(() => {
-        return createThenableProxy(createChainMock({ data: [], error: null }), {
-          data: [],
-          error: null,
-        });
-      });
-      return chain;
-    }
-    // TMDb結果のupsert
-    if (discoverResults.length > 0 && currentCall <= 2 + 5) {
+    // TMDb結果のupsert（別release_typeの既存IDクエリは廃止済み）
+    if (discoverResults.length > 0 && currentCall <= 1 + 5) {
       return createChainMock({ error: null });
     }
     // カウントクエリ
@@ -682,13 +726,10 @@ describe('GET /api/movies', () => {
 
   // === now_showing + streaming パス ===
 
-  it('now_showing+streamingでキャッシュ有効の場合、discoverを呼ばない', async () => {
+  it('now_showing+streamingでキャッシュ済みレコードがある場合、discoverを呼ばない', async () => {
     const handler = await loadGET();
-    setupFromMock({
-      cacheResult: {
-        data: { cached_at: new Date().toISOString() },
-        error: null,
-      },
+    setupStreamingFromMock({
+      existingCount: 100,
       countResult: { count: 0 },
       dataResult: { data: [], error: null },
     });
@@ -702,13 +743,14 @@ describe('GET /api/movies', () => {
 
     expect(response.status).toBe(200);
     expect(mockDiscoverMovies).not.toHaveBeenCalled();
+    expect(mockSyncStreamingMovies).not.toHaveBeenCalled();
   });
 
   it('now_showing+streamingでrelease_date_gteが範囲内の場合、ユーザー指定値が使われる', async () => {
     const handler = await loadGET();
     // 未来の日付を指定して、デフォルトのgteDateより大きくする
     const futureGte = '2026-03-08';
-    setupFromMock({
+    setupStreamingFromMock({
       countResult: { count: 0 },
       dataResult: { data: [], error: null },
     });
@@ -726,7 +768,7 @@ describe('GET /api/movies', () => {
 
   it('now_showing+streamingでrelease_date_lteが指定されている場合', async () => {
     const handler = await loadGET();
-    setupFromMock({
+    setupStreamingFromMock({
       countResult: { count: 0 },
       dataResult: { data: [], error: null },
     });
@@ -974,7 +1016,7 @@ describe('GET /api/movies', () => {
 
   it('release_type=streamingで正常に処理される', async () => {
     const handler = await loadGET();
-    setupFromMock({
+    setupStreamingFromMock({
       countResult: { count: 0 },
       dataResult: { data: [], error: null },
     });
@@ -1127,31 +1169,14 @@ describe('GET /api/movies', () => {
     expect(json.data.pagination.totalPages).toBe(0);
   });
 
-  // === now_showing + streaming キャッシュ期限切れ (Discover APIフロー) ===
+  // === streaming の事前同期CRON化（リクエスト起点の同期はフォールバックのみ） ===
 
-  it('now_showing+streamingでキャッシュ期限切れの場合、Discover APIを呼び出す（過去日付範囲）', async () => {
+  it('streamingはキャッシュが古くてもリクエスト起点で同期しない', async () => {
     const handler = await loadGET();
 
-    mockDiscoverMovies.mockResolvedValueOnce({
-      results: [
-        {
-          id: 400,
-          title: 'ストリーミング映画',
-          adult: false,
-          original_language: 'ja',
-          genre_ids: [28],
-          vote_average: 7.0,
-          popularity: 50,
-          poster_path: '/test.jpg',
-          backdrop_path: '/backdrop.jpg',
-          release_date: '2026-02-01',
-          overview: 'テスト',
-        },
-      ],
-      total_pages: 1,
-    });
-
-    setupExpiredCacheFromMock({
+    // cached_at を参照しない設計のため、古いキャッシュでも同期は走らない
+    setupStreamingFromMock({
+      existingCount: 50,
       countResult: { count: 1 },
       dataResult: {
         data: [{ id: 400, title: 'ストリーミング映画' }],
@@ -1167,27 +1192,81 @@ describe('GET /api/movies', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(mockDiscoverMovies).toHaveBeenCalled();
-    // now_showing+streamingでは過去の日付範囲(release_date.gte)が使われる
-    const callArgs = mockDiscoverMovies.mock.calls[0][0];
-    expect(callArgs['release_date.lte']).toBeDefined();
-    expect(callArgs['release_date.gte']).toBeDefined();
+    expect(mockSyncStreamingMovies).not.toHaveBeenCalled();
+    expect(mockDiscoverMovies).not.toHaveBeenCalled();
   });
 
-  // === 既存他release_typeのIDが存在する場合の重複除外 ===
-
-  it('キャッシュ期限切れ時に既存他release_typeのIDが存在する場合、重複が除外される', async () => {
+  it('streamingレコードが0件の場合のみ、フォールバックとして同期する', async () => {
     const handler = await loadGET();
 
-    mockDiscoverMovies.mockResolvedValueOnce({
+    setupStreamingFromMock({
+      existingCount: 0,
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    const response = await handler(
+      createRequest({
+        time_frame: 'now_showing',
+        release_type: 'streaming',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockSyncStreamingMovies).toHaveBeenCalledTimes(1);
+  });
+
+  it('upcoming+streamingでもレコードが0件ならフォールバック同期が走る', async () => {
+    const handler = await loadGET();
+
+    setupStreamingFromMock({
+      existingCount: 0,
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    const response = await handler(
+      createRequest({
+        time_frame: 'upcoming',
+        release_type: 'streaming',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockSyncStreamingMovies).toHaveBeenCalledTimes(1);
+  });
+
+  it('theatricalではstreamingのフォールバック同期を呼ばない', async () => {
+    const handler = await loadGET();
+    setupFromMock({
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    const response = await handler(
+      createRequest({ release_type: 'theatrical' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockSyncStreamingMovies).not.toHaveBeenCalled();
+  });
+
+  // === 別release_typeとの共存（相互排他の撤廃） ===
+
+  it('別release_typeに既に存在するIDでも除外せずUPSERTする', async () => {
+    const handler = await loadGET();
+
+    mockDiscoverMovies.mockResolvedValue({
       results: [
         {
           id: 500,
-          title: '重複映画',
+          // 劇場公開作品としてキャッシュ済みの映画が配信化されたケース
+          title: '劇場公開後に配信化された作品',
           adult: false,
           original_language: 'ja',
           genre_ids: [28],
           vote_average: 7.0,
+          vote_count: 100,
           popularity: 50,
           poster_path: '/test.jpg',
           backdrop_path: null,
@@ -1201,6 +1280,7 @@ describe('GET /api/movies', () => {
           original_language: 'ja',
           genre_ids: [35],
           vote_average: 6.0,
+          vote_count: 50,
           popularity: 30,
           poster_path: '/new.jpg',
           backdrop_path: null,
@@ -1211,59 +1291,62 @@ describe('GET /api/movies', () => {
       total_pages: 1,
     });
 
-    // 既にstreaming側にid=500が存在するモック
-    const callTracker = { count: 0 };
-    mockSupabaseClient!.from.mockImplementation(() => {
-      callTracker.count++;
-      const currentCall = callTracker.count;
-
-      if (currentCall === 1) {
-        // キャッシュチェック → 期限切れ
-        return createChainMock({ data: null, error: null });
-      }
-      if (currentCall === 2) {
-        // 他release_typeの既存IDクエリ → id=500が存在
-        const chain = createChainMock({ data: [{ id: 500 }], error: null });
-        chain.select.mockImplementation(() => {
-          return createThenableProxy(
-            createChainMock({ data: [{ id: 500 }], error: null }),
-            { data: [{ id: 500 }], error: null },
-          );
-        });
-        return chain;
-      }
-      // upsert, count, data クエリ
-      const chain = createChainMock({
-        count: 1,
-        data: [{ id: 501 }],
-        error: null,
-      });
-      chain.select.mockImplementation(
-        (_cols: string, opts?: { count?: string }) => {
-          if (opts?.count === 'exact') {
-            return createThenableProxy(createChainMock({ count: 1 }), {
-              count: 1,
-            });
-          }
-          return createThenableProxy(
-            createChainMock({ data: [{ id: 501 }], error: null }),
-            { data: [{ id: 501 }], error: null },
-          );
-        },
-      );
-      return chain;
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 500 }, { id: 501 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
     });
 
-    const response = await handler(createRequest());
-    expect(response.status).toBe(200);
-    expect(mockDiscoverMovies).toHaveBeenCalled();
+    await handler(createRequest());
+
+    // PK は (id, release_type) のため共存でき、2件ともUPSERT対象になる
+    const upsertChain = mockSupabaseClient!.from.mock.results[1].value;
+    const upsertRows = upsertChain.upsert.mock.calls[0][0];
+    expect(upsertRows.map((row: { id: number }) => row.id)).toEqual([500, 501]);
+  });
+
+  it('別release_typeの既存IDを取得するクエリ（1000行制限の原因）を発行しない', async () => {
+    const handler = await loadGET();
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          id: 600,
+          title: 'テスト映画',
+          adult: false,
+          original_language: 'ja',
+          genre_ids: [28],
+          vote_average: 7.0,
+          vote_count: 10,
+          popularity: 50,
+          poster_path: null,
+          backdrop_path: null,
+          release_date: '2026-05-01',
+          overview: '',
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 600 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    // 2回目の from() は UPSERT（neq による事前SELECTが無い）
+    const secondChain = mockSupabaseClient!.from.mock.results[1].value;
+    expect(secondChain.upsert).toHaveBeenCalled();
+    expect(secondChain.neq).not.toHaveBeenCalled();
   });
 
   // === 複合パラメータ ===
 
   it('すべてのパラメータを同時に指定して正常に処理される', async () => {
     const handler = await loadGET();
-    setupFromMock({
+    setupStreamingFromMock({
       countResult: { count: 10 },
       dataResult: { data: Array(10).fill({ id: 1 }), error: null },
     });
@@ -1395,5 +1478,101 @@ describe('GET /api/movies', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.movies[0].favorite).toBeUndefined();
+  });
+
+  // === vote_count ===
+
+  it('SELECTにvote_countが含まれ、レスポンスにそのまま返る', async () => {
+    const handler = await loadGET();
+
+    setupFromMock({
+      countResult: { count: 1 },
+      dataResult: {
+        data: [{ id: 1, title: '映画A', vote_average: 7.5, vote_count: 1234 }],
+        error: null,
+      },
+    });
+
+    const response = await handler(createRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.movies[0].vote_count).toBe(1234);
+
+    // 3回目のfrom()がデータクエリ。SELECT句にvote_countが含まれること
+    const dataQueryChain = mockSupabaseClient!.from.mock.results[2].value;
+    expect(dataQueryChain.select.mock.calls[0][0]).toContain('vote_count');
+  });
+
+  it('TMDb同期時のUPSERTにvote_countが含まれる', async () => {
+    const handler = await loadGET();
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          id: 700,
+          title: 'vote_count付き映画',
+          adult: false,
+          original_language: 'ja',
+          genre_ids: [28],
+          vote_average: 7.0,
+          vote_count: 4321,
+          popularity: 50,
+          poster_path: '/p.jpg',
+          backdrop_path: null,
+          release_date: '2026-07-01',
+          overview: '概要',
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 700 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    // from() 1回目=キャッシュ確認、2回目=UPSERT
+    const upsertChain = mockSupabaseClient!.from.mock.results[1].value;
+    const upsertRows = upsertChain.upsert.mock.calls[0][0];
+    expect(upsertRows[0].vote_count).toBe(4321);
+  });
+
+  it('TMDbがvote_countを返さない場合は0でUPSERTする', async () => {
+    const handler = await loadGET();
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          id: 701,
+          title: 'vote_countなし映画',
+          adult: false,
+          original_language: 'ja',
+          genre_ids: [28],
+          vote_average: 7.0,
+          popularity: 50,
+          poster_path: '/p.jpg',
+          backdrop_path: null,
+          release_date: '2026-07-01',
+          overview: '概要',
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 701 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    const upsertChain = mockSupabaseClient!.from.mock.results[1].value;
+    const upsertRows = upsertChain.upsert.mock.calls[0][0];
+    expect(upsertRows[0].vote_count).toBe(0);
   });
 });

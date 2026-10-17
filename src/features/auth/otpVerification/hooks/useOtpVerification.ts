@@ -13,7 +13,14 @@ import { UI_ERROR_MESSAGES, API_ENDPOINTS } from '@/constants';
 interface UseOtpVerificationProps {
   email: string;
   action: OtpAction;
-  onVerifySuccess?: () => void;
+  /**
+   * 検証成功時のコールバック。
+   *
+   * `login` / `password_change` では、以降の処理（signIn / パスワード更新）の
+   * 本人確認に使うワンタイムトークンを受け取る。`registration` では発行されない
+   * ためundefinedになる。
+   */
+  onVerifySuccess?: (verificationToken?: string) => void;
 }
 
 interface UseOtpVerificationReturn {
@@ -82,7 +89,7 @@ export function useOtpVerification({
           return;
         }
 
-        onVerifySuccess?.();
+        onVerifySuccess?.(data.data?.verificationToken);
       } catch {
         setApiError(UI_ERROR_MESSAGES.NETWORK_ERROR);
       } finally {

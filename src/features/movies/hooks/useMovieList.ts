@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   useQuery,
@@ -24,6 +25,10 @@ import {
   movieKeys,
   filterKeys,
 } from '@/constants';
+import {
+  buildFilterSearchParams,
+  parseFilterConditionsFromParams,
+} from '@/features/movies/utils/movieFilterParams';
 import type { FilterConditions } from '@/schema/filters';
 import type { DateRange } from '@/features/movies/types';
 
@@ -105,20 +110,42 @@ function buildFilterConditions(
 export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const { timeFrame, defaultSortOrder, defaultDateRange } = options;
 
-  const [sortBy, setSortBy] = useState<string>(DEFAULT_SORT);
-  const [releaseType, setReleaseType] = useState<'theatrical' | 'streaming'>(
-    DEFAULT_RELEASE_TYPE,
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // URLのフィルターを初期stateに注入する。
+  // useEffectでの後追い反映だと、初期レンダリングで一瞬デフォルト値が表示される。
+  // 初期化は1回だけ（以降のURL変更は自前のrouter.replaceによるもののため追従不要）。
+  const [urlFilters] = useState<FilterConditions>(() =>
+    parseFilterConditionsFromParams(
+      new URLSearchParams(searchParams.toString()),
+    ),
   );
-  const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
-  const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange);
+  const hasUrlFilters = Object.keys(urlFilters).length > 0;
+
+  const [sortBy, setSortBy] = useState<string>(
+    urlFilters.sort_by ?? DEFAULT_SORT,
+  );
+  const [releaseType, setReleaseType] = useState<'theatrical' | 'streaming'>(
+    urlFilters.release_type ?? DEFAULT_RELEASE_TYPE,
+  );
+  const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>(
+    urlFilters.genre_ids ?? [],
+  );
+  const [dateRange, setDateRange] = useState<DateRange>({
+    gte: urlFilters.date_range_gte ?? defaultDateRange.gte,
+    lte: urlFilters.date_range_lte ?? defaultDateRange.lte,
+  });
   const [isRevivalFilter, setIsRevivalFilter] = useState<boolean | undefined>(
-    undefined,
+    urlFilters.is_revival,
   );
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const { toast } = useToast();
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated' && !!session?.user;
-  const [savedFilterApplied, setSavedFilterApplied] = useState(false);
+  // URLにフィルターがある場合はそれを唯一の正とし、保存済みフィルターで上書きしない
+  const [savedFilterApplied, setSavedFilterApplied] = useState(hasUrlFilters);
   const queryClient = useQueryClient();
 
   // 保存済みフィルターの取得
@@ -243,10 +270,50 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     [isAuthenticated, saveFilterMutate],
   );
 
+  /**
+   * フィルター状態をURLに反映する
+   *
+   * 同一ページ内の状態変化のため replace（履歴を積まない）。
+   * ページ固有のデフォルト日付範囲はURLに書かない。書いてしまうと、
+   * 並び順を変えただけでその日の既定範囲が固定され、翌日以降も
+   * 古い範囲で絞り込まれてしまうため。
+   */
+  const syncFiltersToUrl = useCallback(
+    (conditions: FilterConditions) => {
+      const urlConditions: FilterConditions = { ...conditions };
+      if (urlConditions.date_range_gte === defaultDateRange.gte) {
+        delete urlConditions.date_range_gte;
+      }
+      if (urlConditions.date_range_lte === defaultDateRange.lte) {
+        delete urlConditions.date_range_lte;
+      }
+
+      const params = buildFilterSearchParams(
+        new URLSearchParams(searchParams.toString()),
+        urlConditions,
+      );
+      const queryString = params.toString();
+
+      router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
+        scroll: false,
+      });
+    },
+    [router, pathname, searchParams, defaultDateRange],
+  );
+
+  /** フィルター変更をURL反映とサーバー保存の両方に伝える */
+  const persistFilters = useCallback(
+    (conditions: FilterConditions) => {
+      syncFiltersToUrl(conditions);
+      saveFilterIfAuthenticated(conditions);
+    },
+    [syncFiltersToUrl, saveFilterIfAuthenticated],
+  );
+
   const handleSortChange = useCallback(
     (value: string) => {
       setSortBy(value);
-      saveFilterIfAuthenticated(
+      persistFilters(
         buildFilterConditions(
           value,
           releaseType,
@@ -256,19 +323,13 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
         ),
       );
     },
-    [
-      releaseType,
-      selectedGenreIds,
-      dateRange,
-      isRevivalFilter,
-      saveFilterIfAuthenticated,
-    ],
+    [releaseType, selectedGenreIds, dateRange, isRevivalFilter, persistFilters],
   );
 
   const handleReleaseTypeChange = useCallback(
     (value: 'theatrical' | 'streaming') => {
       setReleaseType(value);
-      saveFilterIfAuthenticated(
+      persistFilters(
         buildFilterConditions(
           sortBy,
           value,
@@ -278,13 +339,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
         ),
       );
     },
-    [
-      sortBy,
-      selectedGenreIds,
-      dateRange,
-      isRevivalFilter,
-      saveFilterIfAuthenticated,
-    ],
+    [sortBy, selectedGenreIds, dateRange, isRevivalFilter, persistFilters],
   );
 
   const handleFilterApply = useCallback(
@@ -297,7 +352,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       setDateRange(newDateRange);
       setIsRevivalFilter(isRevival);
       setIsFilterModalOpen(false);
-      saveFilterIfAuthenticated(
+      persistFilters(
         buildFilterConditions(
           sortBy,
           releaseType,
@@ -307,7 +362,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
         ),
       );
     },
-    [sortBy, releaseType, saveFilterIfAuthenticated],
+    [sortBy, releaseType, persistFilters],
   );
 
   const handleFilterModalOpen = useCallback(() => {

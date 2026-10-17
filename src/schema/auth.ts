@@ -124,7 +124,12 @@ export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 
 /**
  * パスワード変更APIリクエストのバリデーションスキーマ（OTP検証後）
+ *
+ * `verificationToken` は `/api/auth/otp/verify` が検証成功時に返すワンタイムトークン。
+ * これを本人確認の根拠にすることで、「検証済みの行がDBに存在する」だけで通る
+ * 状態（メールアドレスを知る第三者が成り代わりうる）を防ぐ。
  */
 export const changePasswordApiSchema = z.object({
   newPassword: passwordSchema,
+  verificationToken: z.string().min(1, VALIDATION_MESSAGES.OTP_TOKEN_REQUIRED),
 });

@@ -27,7 +27,11 @@ import {
 // --- Mocks ---
 
 const mockFrom = jest.fn();
-const mockSupabase = { from: mockFrom } as unknown as SupabaseClient;
+const mockRpc = jest.fn();
+const mockSupabase = {
+  from: mockFrom,
+  rpc: mockRpc,
+} as unknown as SupabaseClient;
 
 const mockFetchRecommendations = jest.fn();
 const mockResolveRecommendations = jest.fn();
@@ -111,37 +115,11 @@ const mockDismissedMoviesQuery = (
   });
 };
 
-/** 既存レコメンド退避のモック */
-const mockSelectExistingRecommendations = (
-  recs: Record<string, unknown>[] = [],
-) => {
-  mockFrom.mockReturnValueOnce({
-    select: () => ({
-      eq: () => Promise.resolve({ data: recs, error: null }),
-    }),
-  });
-};
-
-/** レコメンド削除のモック */
-const mockDeleteRecommendations = (success: boolean) => {
-  mockFrom.mockReturnValueOnce({
-    delete: () => ({
-      eq: () =>
-        Promise.resolve({
-          data: null,
-          error: success ? null : new Error('Delete failed'),
-        }),
-    }),
-  });
-};
-
-/** レコメンド挿入のモック */
-const mockInsertRecommendations = (success: boolean) => {
-  mockFrom.mockReturnValueOnce({
-    insert: () =>
-      Promise.resolve({
-        error: success ? null : new Error('Insert failed'),
-      }),
+/** upsert_recommendations RPC のモック */
+const mockUpsertRecommendationsRpc = (success: boolean) => {
+  mockRpc.mockResolvedValueOnce({
+    data: success ? 1 : null,
+    error: success ? null : new Error('RPC failed'),
   });
 };
 
@@ -292,6 +270,7 @@ describe('generateRecommendationsService', () => {
         poster_path: null,
         release_date: null,
         vote_average: null,
+        vote_count: 0,
         genre_ids: null,
         reason: `理由${i + 1}`,
         display_order: i + 1,
@@ -384,6 +363,7 @@ describe('generateRecommendationsService', () => {
             poster_path: null,
             release_date: null,
             vote_average: null,
+            vote_count: 0,
             genre_ids: null,
             reason: '追加理由',
             display_order: 1,
@@ -406,93 +386,74 @@ describe('generateRecommendationsService', () => {
   });
 
   describe('upsertRecommendations', () => {
-    it('正常に挿入できた場合trueを返す', async () => {
-      mockSelectExistingRecommendations([]);
-      mockDeleteRecommendations(true);
-      mockInsertRecommendations(true);
+    /** RPCに渡されたペイロードを取り出す */
+    const rpcPayload = () => mockRpc.mock.calls[0][1];
+
+    const sampleResolved = {
+      tmdb_movie_id: 100,
+      title: 'Movie',
+      poster_path: null,
+      release_date: null,
+      vote_average: 7.5,
+      vote_count: 4321,
+      genre_ids: [28, 12],
+      reason: '理由',
+      display_order: 1,
+    };
+
+    it('DELETE→INSERTではなくupsert_recommendations RPCを1回呼ぶ', async () => {
+      mockUpsertRecommendationsRpc(true);
 
       const result = await upsertRecommendations(mockSupabase, 'user-1', [
-        {
-          tmdb_movie_id: 100,
-          title: 'Movie',
-          poster_path: null,
-          release_date: null,
-          vote_average: null,
-          genre_ids: null,
-          reason: '理由',
-          display_order: 1,
-        },
+        sampleResolved,
       ]);
 
       expect(result).toBe(true);
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+      expect(mockRpc.mock.calls[0][0]).toBe('upsert_recommendations');
+      // 非トランザクショナルな from().delete() / from().insert() は使わない
+      expect(mockFrom).not.toHaveBeenCalled();
     });
 
-    it('削除失敗でfalseを返す', async () => {
-      mockSelectExistingRecommendations([]);
-      mockDeleteRecommendations(false);
+    it('user_idとレコメンド配列をRPCに渡す', async () => {
+      mockUpsertRecommendationsRpc(true);
 
-      const result = await upsertRecommendations(mockSupabase, 'user-1', [
+      await upsertRecommendations(mockSupabase, 'user-1', [sampleResolved]);
+
+      expect(rpcPayload().p_user_id).toBe('user-1');
+      expect(rpcPayload().p_recommendations).toEqual([
         {
           tmdb_movie_id: 100,
           title: 'Movie',
           poster_path: null,
           release_date: null,
-          vote_average: null,
-          genre_ids: null,
+          vote_average: 7.5,
+          vote_count: 4321,
+          genre_ids: [28, 12],
           reason: '理由',
           display_order: 1,
         },
       ]);
-
-      expect(result).toBe(false);
     });
 
-    it('挿入失敗で既存データを復元してfalseを返す', async () => {
-      mockSelectExistingRecommendations([
-        { id: 'old', user_id: 'user-1', tmdb_movie_id: 50, title: '旧' },
-      ]);
-      mockDeleteRecommendations(true);
-      mockInsertRecommendations(false);
-      // 復元用insert
-      mockInsertRecommendations(true);
+    it('レコメンドが0件でもRPCを呼ぶ（全件削除として機能する）', async () => {
+      mockUpsertRecommendationsRpc(true);
 
-      const result = await upsertRecommendations(mockSupabase, 'user-1', [
-        {
-          tmdb_movie_id: 100,
-          title: 'Movie',
-          poster_path: null,
-          release_date: null,
-          vote_average: null,
-          genre_ids: null,
-          reason: '理由',
-          display_order: 1,
-        },
-      ]);
+      const result = await upsertRecommendations(mockSupabase, 'user-1', []);
 
-      expect(result).toBe(false);
+      expect(result).toBe(true);
+      expect(rpcPayload().p_recommendations).toEqual([]);
     });
 
-    it('挿入失敗で復元データがない場合、復元をスキップする', async () => {
-      mockSelectExistingRecommendations([]);
-      mockDeleteRecommendations(true);
-      mockInsertRecommendations(false);
+    it('RPC失敗でfalseを返す', async () => {
+      mockUpsertRecommendationsRpc(false);
 
       const result = await upsertRecommendations(mockSupabase, 'user-1', [
-        {
-          tmdb_movie_id: 100,
-          title: 'Movie',
-          poster_path: null,
-          release_date: null,
-          vote_average: null,
-          genre_ids: null,
-          reason: '理由',
-          display_order: 1,
-        },
+        sampleResolved,
       ]);
 
       expect(result).toBe(false);
-      // 復元用insertが呼ばれない（delete + insert失敗の2回のみ）
-      expect(mockFrom).toHaveBeenCalledTimes(3);
+      expect(console.error).toHaveBeenCalled();
     });
   });
 
@@ -503,9 +464,7 @@ describe('generateRecommendationsService', () => {
       ]);
       mockWatchlistQuery([]);
       mockDismissedMoviesQuery([]);
-      mockSelectExistingRecommendations([]);
-      mockDeleteRecommendations(true);
-      mockInsertRecommendations(true);
+      mockUpsertRecommendationsRpc(true);
 
       mockFetchRecommendations.mockResolvedValueOnce([
         { title: 'Movie', year: 2020, reason: '理由' },
@@ -517,6 +476,7 @@ describe('generateRecommendationsService', () => {
           poster_path: null,
           release_date: null,
           vote_average: null,
+          vote_count: 0,
           genre_ids: null,
           reason: '理由',
           display_order: 1,
@@ -541,6 +501,106 @@ describe('generateRecommendationsService', () => {
       const result = await processUserRecommendations(mockSupabase, 'user-1');
 
       expect(result.status).toBe('skipped');
+    });
+
+    it('signalを下位の生成処理に伝播する', async () => {
+      const controller = new AbortController();
+
+      mockFavoritesQuery([
+        { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
+      ]);
+      mockWatchlistQuery([]);
+      mockDismissedMoviesQuery([]);
+      mockUpsertRecommendationsRpc(true);
+
+      mockFetchRecommendations.mockResolvedValueOnce([
+        { title: 'Movie', year: 2020, reason: '理由' },
+      ]);
+      mockResolveRecommendations.mockResolvedValueOnce([
+        {
+          tmdb_movie_id: 100,
+          title: 'Movie',
+          poster_path: null,
+          release_date: null,
+          vote_average: null,
+          vote_count: 0,
+          genre_ids: null,
+          reason: '理由',
+          display_order: 1,
+        },
+      ]);
+
+      await processUserRecommendations(
+        mockSupabase,
+        'user-1',
+        controller.signal,
+      );
+
+      // OpenAI: 第5引数、TMDb解決: 第4引数として signal が渡る
+      expect(mockFetchRecommendations.mock.calls[0][4]).toBe(controller.signal);
+      expect(mockResolveRecommendations.mock.calls[0][3]).toBe(
+        controller.signal,
+      );
+    });
+
+    it('中断済みの場合、OpenAIを呼ばずDBも書き換えない', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      mockFavoritesQuery([
+        { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
+      ]);
+      mockWatchlistQuery([]);
+      mockDismissedMoviesQuery([]);
+
+      const result = await processUserRecommendations(
+        mockSupabase,
+        'user-1',
+        controller.signal,
+      );
+
+      expect(result.status).toBe('skipped');
+      expect(mockFetchRecommendations).not.toHaveBeenCalled();
+      // DELETE済みで中断、の状態を作らない（RPCを呼ばないので既存レコメンドは保持）
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    it('生成後に中断された場合、DBを書き換えず既存レコメンドを保持する', async () => {
+      const controller = new AbortController();
+
+      mockFavoritesQuery([
+        { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
+      ]);
+      mockWatchlistQuery([]);
+      mockDismissedMoviesQuery([]);
+
+      mockFetchRecommendations.mockImplementationOnce(async () => {
+        // OpenAI 応答中にクライアントが離脱したケース
+        controller.abort();
+        return [{ title: 'Movie', year: 2020, reason: '理由' }];
+      });
+      mockResolveRecommendations.mockResolvedValueOnce([
+        {
+          tmdb_movie_id: 100,
+          title: 'Movie',
+          poster_path: null,
+          release_date: null,
+          vote_average: null,
+          vote_count: 0,
+          genre_ids: null,
+          reason: '理由',
+          display_order: 1,
+        },
+      ]);
+
+      const result = await processUserRecommendations(
+        mockSupabase,
+        'user-1',
+        controller.signal,
+      );
+
+      expect(result.status).toBe('skipped');
+      expect(mockRpc).not.toHaveBeenCalled();
     });
 
     it('レコメンド0件でskippedを返す', async () => {
@@ -594,9 +654,7 @@ describe('generateRecommendationsService', () => {
       ]);
       mockWatchlistQuery([]);
       mockDismissedMoviesQuery([]);
-      mockSelectExistingRecommendations([]);
-      mockDeleteRecommendations(true);
-      mockInsertRecommendations(true);
+      mockUpsertRecommendationsRpc(true);
 
       mockFetchRecommendations.mockResolvedValueOnce([
         { title: 'Movie', year: 2020, reason: '理由' },
@@ -608,6 +666,7 @@ describe('generateRecommendationsService', () => {
           poster_path: null,
           release_date: null,
           vote_average: null,
+          vote_count: 0,
           genre_ids: null,
           reason: '理由',
           display_order: 1,
@@ -639,9 +698,7 @@ describe('generateRecommendationsService', () => {
       ]);
       mockWatchlistQuery([]);
       mockDismissedMoviesQuery([]);
-      mockSelectExistingRecommendations([]);
-      mockDeleteRecommendations(true);
-      mockInsertRecommendations(true);
+      mockUpsertRecommendationsRpc(true);
 
       mockFetchRecommendations.mockResolvedValueOnce([
         { title: 'Movie', year: 2020, reason: '理由' },
@@ -653,6 +710,7 @@ describe('generateRecommendationsService', () => {
           poster_path: null,
           release_date: null,
           vote_average: null,
+          vote_count: 0,
           genre_ids: null,
           reason: '理由',
           display_order: 1,

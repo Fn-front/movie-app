@@ -9,7 +9,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
 import { checkCooldown, checkRateLimit, resetRateLimit } from './rateLimit';
-import { SUPABASE_ERROR_CODE } from '@/constants';
+import { SUPABASE_ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 
 // --- Helpers ---
 
@@ -267,13 +267,18 @@ describe('checkCooldown', () => {
       .mockReturnValueOnce({ insert: mockInsert });
     const supabase = { from: mockFrom } as unknown as SupabaseClient;
 
-    const result = await checkCooldown(supabase, 'user-1', 'refresh', 60);
+    const result = await checkCooldown(
+      supabase,
+      'user-1',
+      RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+      60,
+    );
 
     expect(result).toEqual({ allowed: true });
     expect(mockFrom).toHaveBeenCalledWith('rate_limits');
     expect(mockInsert).toHaveBeenCalledWith({
       identifier: 'user-1',
-      action_type: 'refresh',
+      action_type: RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
       attempts: 1,
       last_attempt_at: NOW,
     });
@@ -292,7 +297,12 @@ describe('checkCooldown', () => {
     });
     const supabase = { from: mockFrom } as unknown as SupabaseClient;
 
-    const result = await checkCooldown(supabase, 'user-1', 'refresh', 60);
+    const result = await checkCooldown(
+      supabase,
+      'user-1',
+      RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+      60,
+    );
 
     expect(result).toEqual({ allowed: false, retryAfter: 40 });
   });
@@ -309,7 +319,12 @@ describe('checkCooldown', () => {
     });
     const supabase = { from: mockFrom } as unknown as SupabaseClient;
 
-    const result = await checkCooldown(supabase, 'user-1', 'refresh', 60);
+    const result = await checkCooldown(
+      supabase,
+      'user-1',
+      RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+      60,
+    );
 
     expect(result.allowed).toBe(false);
     expect(result.retryAfter).toBe(1);
@@ -332,7 +347,12 @@ describe('checkCooldown', () => {
       .mockReturnValueOnce({ update: mockUpdate });
     const supabase = { from: mockFrom } as unknown as SupabaseClient;
 
-    const result = await checkCooldown(supabase, 'user-1', 'refresh', 60);
+    const result = await checkCooldown(
+      supabase,
+      'user-1',
+      RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+      60,
+    );
 
     expect(result).toEqual({ allowed: true });
     expect(mockUpdate).toHaveBeenCalledWith({ last_attempt_at: NOW });
@@ -353,7 +373,12 @@ describe('checkCooldown', () => {
     });
     const supabase = { from: mockFrom } as unknown as SupabaseClient;
 
-    await checkCooldown(supabase, 'user-1', 'refresh', 60);
+    await checkCooldown(
+      supabase,
+      'user-1',
+      RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+      60,
+    );
 
     expect(mockUpdate).not.toHaveBeenCalled();
   });
@@ -366,7 +391,12 @@ describe('checkCooldown', () => {
     const supabase = { from: mockFrom } as unknown as SupabaseClient;
 
     await expect(
-      checkCooldown(supabase, 'user-1', 'refresh', 60),
+      checkCooldown(
+        supabase,
+        'user-1',
+        RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+        60,
+      ),
     ).rejects.toEqual(dbError);
   });
 });
@@ -390,5 +420,104 @@ describe('resetRateLimit', () => {
     expect(mockDelete).toHaveBeenCalled();
     expect(mockEq1).toHaveBeenCalledWith('identifier', 'user-1');
     expect(mockEq2).toHaveBeenCalledWith('action_type', 'login');
+  });
+});
+
+describe('INSERT失敗時の記録（fail-openの可視化）', () => {
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  /** NOT_FOUND を返して INSERT 分岐に入らせ、その INSERT を失敗させる */
+  function createSupabaseWithFailingInsert(
+    error: { code: string; message: string } | null,
+  ) {
+    const mockInsert = jest.fn().mockResolvedValue({ error });
+    const mockFrom = jest
+      .fn()
+      .mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              single: () => ({
+                data: null,
+                error: { code: SUPABASE_ERROR_CODE.NOT_FOUND },
+              }),
+            }),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({ insert: mockInsert });
+
+    return { from: mockFrom } as unknown as SupabaseClient;
+  }
+
+  it('checkRateLimit: CHECK制約違反(23514)を専用メッセージで記録する', async () => {
+    const supabase = createSupabaseWithFailingInsert({
+      code: '23514',
+      message: 'violates check constraint "chk_action_type"',
+    });
+
+    const result = await checkRateLimit(
+      supabase,
+      'user@example.com',
+      RATE_LIMIT_ACTION.OTP_SEND_DAILY,
+    );
+
+    // 現状は fail-open のままだが、無言ではなくなる
+    expect(result).toEqual({ allowed: true });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('この制限は機能していません'),
+      expect.anything(),
+    );
+  });
+
+  it('checkCooldown: CHECK制約違反(23514)を記録する', async () => {
+    const supabase = createSupabaseWithFailingInsert({
+      code: '23514',
+      message: 'violates check constraint "chk_action_type"',
+    });
+
+    const result = await checkCooldown(
+      supabase,
+      'user-1',
+      RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+      60,
+    );
+
+    expect(result).toEqual({ allowed: true });
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('chk_action_type'),
+      expect.anything(),
+    );
+  });
+
+  it('CHECK制約違反以外のエラーも記録する', async () => {
+    const supabase = createSupabaseWithFailingInsert({
+      code: '08006',
+      message: 'connection failure',
+    });
+
+    await checkRateLimit(supabase, 'user-1', RATE_LIMIT_ACTION.OTP_VERIFY);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('insert failed'),
+      expect.anything(),
+    );
+  });
+
+  it('INSERTが成功した場合は何も記録しない', async () => {
+    const supabase = createSupabaseWithFailingInsert(null);
+
+    await checkRateLimit(supabase, 'user-1', RATE_LIMIT_ACTION.OTP_VERIFY);
+
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });

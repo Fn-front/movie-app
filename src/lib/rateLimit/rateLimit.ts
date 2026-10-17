@@ -9,6 +9,36 @@ import {
   RATE_LIMIT_DEFAULT,
   SUPABASE_ERROR_CODE,
 } from '@/constants';
+import type { RateLimitActionType } from '@/constants/rateLimit';
+
+/** Postgres の CHECK 制約違反 */
+const CHECK_VIOLATION_CODE = '23514';
+
+/**
+ * rate_limits への書き込み失敗を記録する
+ *
+ * ここが無言で失敗すると「レート制限が有効なつもりで実は素通し」という
+ * 最悪の状態になる（fail-open）。特に 23514 は `chk_action_type` の許可リストに
+ * action_type が無いことを意味し、マイグレーションの追従漏れを示す。
+ */
+function logRateLimitWriteFailure(
+  operation: string,
+  actionType: string,
+  error: { code?: string; message?: string } | null,
+): void {
+  if (!error) return;
+
+  if (error.code === CHECK_VIOLATION_CODE) {
+    console.error(
+      `[rateLimit] ${operation} failed: action_type '${actionType}' violates chk_action_type. ` +
+        'この制限は機能していません。マイグレーションで許可リストに追加してください。',
+      error,
+    );
+    return;
+  }
+
+  console.error(`[rateLimit] ${operation} failed for '${actionType}'`, error);
+}
 
 /**
  * レート制限チェック結果
@@ -31,7 +61,7 @@ export interface RateLimitResult {
 export async function checkRateLimit(
   supabase: SupabaseClient,
   identifier: string,
-  actionType: string,
+  actionType: RateLimitActionType,
   maxAttempts: number = RATE_LIMIT_DEFAULT.MAX_ATTEMPTS,
   windowMinutes: number = RATE_LIMIT_DEFAULT.WINDOW_MINUTES,
 ): Promise<RateLimitResult> {
@@ -44,12 +74,18 @@ export async function checkRateLimit(
 
   // レコードが存在しない場合は新規作成
   if (error && error.code === SUPABASE_ERROR_CODE.NOT_FOUND) {
-    await supabase.from('rate_limits').insert({
+    const { error: insertError } = await supabase.from('rate_limits').insert({
       identifier,
       action_type: actionType,
       attempts: 1,
       last_attempt_at: new Date().toISOString(),
     });
+
+    // INSERT が失敗するとカウンタ行が永久に作られず、以降も毎回ここに来て
+    // allowed を返し続ける＝その制限が無言で機能しなくなる。
+    // 原因の大半は chk_action_type の許可リスト漏れ（23514）なので必ず記録する。
+    logRateLimitWriteFailure('insert', actionType, insertError);
+
     return { allowed: true };
   }
 
@@ -126,7 +162,7 @@ export async function checkRateLimit(
 export async function checkCooldown(
   supabase: SupabaseClient,
   identifier: string,
-  actionType: string,
+  actionType: RateLimitActionType,
   cooldownSeconds: number,
 ): Promise<RateLimitResult> {
   const now = new Date();
@@ -140,12 +176,16 @@ export async function checkCooldown(
 
   // レコードが存在しない場合は初回とみなして通す
   if (error && error.code === SUPABASE_ERROR_CODE.NOT_FOUND) {
-    await supabase.from('rate_limits').insert({
+    const { error: insertError } = await supabase.from('rate_limits').insert({
       identifier,
       action_type: actionType,
       attempts: 1,
       last_attempt_at: now.toISOString(),
     });
+
+    // 失敗すると行が作られず、以降も毎回ここに来てクールダウンが効かない
+    logRateLimitWriteFailure('insert', actionType, insertError);
+
     return { allowed: true };
   }
 
@@ -181,7 +221,7 @@ export async function checkCooldown(
 export async function resetRateLimit(
   supabase: SupabaseClient,
   identifier: string,
-  actionType: string,
+  actionType: RateLimitActionType,
 ): Promise<void> {
   await supabase
     .from('rate_limits')

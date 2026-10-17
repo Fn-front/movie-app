@@ -24,7 +24,25 @@ export const RATE_LIMIT_ACTION = {
   REGISTER: 'register',
   CHANGE_PASSWORD: 'change_password',
   RECOMMENDATION_REFRESH: 'recommendation_refresh',
+  /** OTP の日次送信上限（メールアドレス単位） */
+  OTP_SEND_DAILY: 'otp_send_daily',
+  /** OTP 検証試行の上限（メールアドレス単位。OTP行の attempts とは独立した多層防御） */
+  OTP_VERIFY: 'otp_verify',
 } as const;
+
+/**
+ * `rate_limits.action_type` に入れてよい値。
+ *
+ * DB 側の `chk_action_type` CHECK 制約の許可リストと**必ず一致させること**。
+ * 許可リストに無い値で INSERT すると 23514 で失敗し、その制限が無言で
+ * 機能しなくなる（#546 / #659 で2度発生）。`checkRateLimit` / `checkCooldown` の
+ * 引数をこの型で縛ることで、同じ事故をコンパイル時に防ぐ。
+ */
+export type RateLimitActionType =
+  | (typeof RATE_LIMIT_ACTION)[keyof typeof RATE_LIMIT_ACTION]
+  | 'registration'
+  | 'login'
+  | 'password_change';
 
 /**
  * DB-based レート制限の閾値プリセット（maxAttempts 回 / windowMinutes 分）。

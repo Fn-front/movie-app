@@ -21,6 +21,7 @@ import {
   HTTP_STATUS,
   ERROR_CODE,
   AUTH_ERROR_MESSAGES,
+  RATE_LIMIT_ACTION,
 } from '@/constants';
 
 export async function POST(request: Request) {
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
     const dailyLimitResult = await checkRateLimit(
       supabase,
       email,
-      'otp_send_daily',
+      RATE_LIMIT_ACTION.OTP_SEND_DAILY,
       OTP_CONFIG.DAILY_SEND_LIMIT,
       OTP_CONFIG.DAILY_SEND_WINDOW_MINUTES,
     );

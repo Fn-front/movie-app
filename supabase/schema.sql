@@ -200,7 +200,17 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   last_attempt_at TIMESTAMP NOT NULL DEFAULT now(),
   created_at TIMESTAMP NOT NULL DEFAULT now(),
   updated_at TIMESTAMP NOT NULL DEFAULT now(),
-  CONSTRAINT chk_action_type CHECK (action_type IN ('login', 'otp_verify', 'otp_resend', 'change_password'))
+  -- src/constants/rateLimit.ts の RateLimitActionType と必ず一致させること。
+  -- 漏れると該当の制限が無言で無効化される（#546 / #659）。
+  CONSTRAINT chk_action_type CHECK (action_type IN (
+    'registration', 'login', 'password_change',
+    'write_api_favorites', 'write_api_watchlist', 'write_api_dismissed_movies',
+    'write_api_profile', 'write_api_settings',
+    'read_api_theaters', 'read_api_theater_detail',
+    'awards_fetch', 'suggest_title', 'register', 'change_password',
+    'recommendation_refresh', 'otp_send_daily', 'otp_verify',
+    'otp_resend'  -- legacy
+  ))
 );
 
 -- インデックス

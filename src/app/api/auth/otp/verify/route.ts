@@ -20,6 +20,7 @@ import {
   HTTP_STATUS,
   ERROR_CODE,
   AUTH_ERROR_MESSAGES,
+  RATE_LIMIT_ACTION,
 } from '@/constants';
 
 export async function POST(request: Request) {
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
     const verifyLimitResult = await checkRateLimit(
       supabase,
       email,
-      'otp_verify',
+      RATE_LIMIT_ACTION.OTP_VERIFY,
       OTP_CONFIG.VERIFY_RATE_LIMIT,
       OTP_CONFIG.VERIFY_RATE_LIMIT_WINDOW_MINUTES,
     );
@@ -169,7 +170,7 @@ export async function POST(request: Request) {
       await supabase.from('otp_codes').delete().eq('id', otpRecord.id);
 
       // 検証成功のためレート制限をリセット（正当なユーザーの再検証を妨げない）
-      await resetRateLimit(supabase, email, 'otp_verify');
+      await resetRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_VERIFY);
 
       return NextResponse.json(
         {
@@ -200,7 +201,7 @@ export async function POST(request: Request) {
       }
 
       // 検証成功のためレート制限をリセット（正当なユーザーの再検証を妨げない）
-      await resetRateLimit(supabase, email, 'otp_verify');
+      await resetRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_VERIFY);
 
       return NextResponse.json(
         {

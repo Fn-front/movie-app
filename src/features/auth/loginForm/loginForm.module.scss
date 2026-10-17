@@ -58,6 +58,12 @@
   }
 }
 
+.c_login_form__hint {
+  margin-top: calc($spacing-5 * -1 + $spacing-2);
+  font-size: $font-size-sm;
+  color: $text-secondary;
+}
+
 .c_login_form__error {
   padding: $spacing-3 $spacing-4;
   background-color: color-alpha(--error-main, 10%);

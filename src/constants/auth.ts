@@ -43,7 +43,58 @@ export const AUTH_ERROR_MESSAGES = {
   SAME_PASSWORD: '現在のパスワードと同じパスワードには変更できません。',
   /** 登録処理サーバーエラー */
   REGISTER_SERVER_ERROR: '登録処理中にエラーが発生しました。',
+  /**
+   * 第2要素の入力が必要。
+   *
+   * パスワード照合に成功したあと、二段階認証が有効だった場合に返す。
+   * クライアントはこれを受けて認証コードの入力欄を出す。
+   * パスワードが正しい相手にしか返さないため、これ自体は情報を漏らさない。
+   */
+  TOTP_REQUIRED: '認証コードを入力してください。',
+  /** 第2要素が不正 */
+  TOTP_INVALID: '認証コードが正しくありません。',
+  /** 第2要素の使い回し */
+  TOTP_REUSED:
+    'この認証コードは使用済みです。次のコードが表示されるまでお待ちください。',
+  /**
+   * 二段階認証が有効なためメールOTP単独ログインを使えない。
+   *
+   * メールのコードだけでログインできる経路は「第2要素」ではなく
+   * 「パスワードの代替」であり、残すと二段階認証の意味が無くなる（#642）。
+   */
+  OTP_LOGIN_DISABLED_BY_TOTP:
+    '二段階認証が有効なため、メールでのログインは利用できません。パスワードと認証コードでログインしてください。',
 } as const;
+
+/**
+ * Credentials 認証のエラーコード
+ *
+ * `authorize` が投げたエラーの種類をクライアントへ伝えるためのもの。
+ * Auth.js は `CredentialsSignin` を継承したエラーの `code` だけを
+ * `signIn()` の戻り値に載せる（`node_modules/@auth/core/index.js:133`）。
+ *
+ * エラークラス側は `src/lib/auth/authErrors.ts`。定数をこちらに置くのは、
+ * クライアントコンポーネントから `next-auth`（ESM）を引き込まないため。
+ *
+ * ⚠️ `code` は URL に出る。利用者に見せてよい粒度に留めること。
+ * ここのコードはいずれもパスワード照合を通過した相手にしか返らないため、
+ * 二段階認証の有無をパスワードを知らない第三者に教えることはない。
+ */
+export const AUTH_ERROR_CODE = {
+  /** 第2要素の入力が必要（パスワードは正しい） */
+  TOTP_REQUIRED: 'totp_required',
+  /** 第2要素が不正 */
+  TOTP_INVALID: 'totp_invalid',
+  /** 第2要素の使い回し */
+  TOTP_REUSED: 'totp_reused',
+  /** 二段階認証が有効なためメールOTP単独ログインを使えない */
+  OTP_LOGIN_DISABLED: 'otp_login_disabled',
+  /** 試行回数の上限 */
+  RATE_LIMITED: 'rate_limited',
+} as const;
+
+export type AuthErrorCode =
+  (typeof AUTH_ERROR_CODE)[keyof typeof AUTH_ERROR_CODE];
 
 /**
  * トースト通知タイトル

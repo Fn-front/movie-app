@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { loginSchema, type LoginFormData } from '@/schema/auth';
 import {
+  AUTH_ERROR_CODE,
   AUTH_ERROR_MESSAGES,
   TOAST_TITLES,
   TOAST_MESSAGES,
@@ -26,6 +27,25 @@ import { handleApiError } from '@/utils/error';
 import { resolveSafeCallbackUrl } from '@/utils/url';
 import { SocialLoginButtons } from '@/features/auth/socialLoginButtons/socialLoginButtons';
 import styles from './loginForm.module.scss';
+
+/**
+ * `signIn` が返した code を、利用者に見せるメッセージに変換する
+ *
+ * 判別できないものはすべて「メールアドレスまたはパスワードが正しくありません」に
+ * 丸める。どのアカウントが存在するかを推測させないため。
+ */
+const resolveErrorMessage = (code: string | undefined): string => {
+  switch (code) {
+    case AUTH_ERROR_CODE.TOTP_INVALID:
+      return AUTH_ERROR_MESSAGES.TOTP_INVALID;
+    case AUTH_ERROR_CODE.TOTP_REUSED:
+      return AUTH_ERROR_MESSAGES.TOTP_REUSED;
+    case AUTH_ERROR_CODE.RATE_LIMITED:
+      return AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED;
+    default:
+      return AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS;
+  }
+};
 
 interface LoginFormProps {
   onOtpLoginClick?: () => void;
@@ -43,6 +63,15 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
   const router = useRouter();
   const { toast } = useToast();
   const [apiError, setApiError] = useState<string | null>(null);
+  /**
+   * 第2要素の入力欄を出すか。
+   *
+   * 最初から出さないのは、二段階認証を使っているアカウントかどうかを
+   * パスワードを知らない相手に見せないため。パスワードが正しかったときだけ
+   * サーバーが totp_required を返し、そこで初めて表示する。
+   */
+  const [totpRequired, setTotpRequired] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
 
   const {
     register,
@@ -56,6 +85,13 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
     },
   });
 
+  const handleTotpCodeChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setTotpCode(event.target.value);
+    },
+    [],
+  );
+
   const onSubmit = useCallback(
     async (data: LoginFormData) => {
       setApiError(null);
@@ -65,13 +101,22 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
           redirect: false,
           email: data.email,
           password: data.password,
+          // 入力欄を出していないうちは送らない
+          ...(totpRequired ? { totpCode } : {}),
         });
 
         if (result?.error) {
-          setApiError(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          if (result.code === AUTH_ERROR_CODE.TOTP_REQUIRED) {
+            // パスワードは正しい。第2要素の入力へ進む
+            setTotpRequired(true);
+            return;
+          }
+
+          const message = resolveErrorMessage(result.code);
+          setApiError(message);
           toast({
             title: TOAST_TITLES.LOGIN_ERROR,
-            description: AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
+            description: message,
             variant: 'error',
           });
           return;
@@ -94,7 +139,7 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
         });
       }
     },
-    [router, toast, callbackUrl],
+    [router, toast, callbackUrl, totpRequired, totpCode],
   );
 
   return (
@@ -128,6 +173,26 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
             error={errors.password?.message}
             {...register('password')}
           />
+
+          {totpRequired && (
+            <>
+              <Input
+                label='認証コード'
+                type='text'
+                inputMode='text'
+                autoComplete='one-time-code'
+                placeholder='123456 またはリカバリーコード'
+                autoFocus
+                fullWidth
+                value={totpCode}
+                onChange={handleTotpCodeChange}
+              />
+              <p className={styles.c_login_form__hint}>
+                認証アプリに表示されている6桁のコード、または発行済みの
+                リカバリーコードを入力してください。
+              </p>
+            </>
+          )}
 
           {apiError && (
             <p className={styles.c_login_form__error} role='alert'>

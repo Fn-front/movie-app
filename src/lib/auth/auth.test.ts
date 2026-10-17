@@ -45,6 +45,7 @@ jest.mock('@supabase/supabase-js', () => {
       'eq',
       'neq',
       'not',
+      'or',
       'order',
       'limit',
       'is',
@@ -60,6 +61,9 @@ jest.mock('@supabase/supabase-js', () => {
       });
     }
     builder.single = jest.fn(() =>
+      Promise.resolve(mockState.resolver({ table, ops, single: true })),
+    );
+    builder.maybeSingle = jest.fn(() =>
       Promise.resolve(mockState.resolver({ table, ops, single: true })),
     );
     // await builder（.single() を挟まないチェーン）でも解決できるよう thenable にする
@@ -101,6 +105,16 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
   resetRateLimit: (...args: unknown[]) => mockResetRateLimit(...args),
 }));
+// --- 第2要素モック（authorize / jwt の分岐の検証用。検証ロジック自体は
+// totpVerification.test.ts で確認済み）---
+const mockIsTotpEnabled = jest.fn();
+const mockVerifySecondFactor = jest.fn();
+jest.mock('@/lib/auth/totpVerification', () => ({
+  ...jest.requireActual('@/lib/auth/totpVerification'),
+  isTotpEnabled: (...args: unknown[]) => mockIsTotpEnabled(...args),
+  verifySecondFactor: (...args: unknown[]) => mockVerifySecondFactor(...args),
+}));
+
 jest.mock('next-auth', () => ({
   __esModule: true,
   default: jest.fn(() => ({
@@ -109,6 +123,11 @@ jest.mock('next-auth', () => ({
     signIn: jest.fn(),
     signOut: jest.fn(),
   })),
+  // CredentialsSignInError の基底クラス。実物は @auth/core の ESM にあり
+  // Jest の変換対象外のため、code を持つ最小の実装で差し替える
+  CredentialsSignin: class CredentialsSignin extends Error {
+    code = 'credentials';
+  },
 }));
 
 // --- import（モック適用後）---
@@ -124,6 +143,8 @@ type Callbacks = {
 require('@/lib/auth/auth');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const NextAuth = require('next-auth').default as jest.Mock;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const bcrypt = require('bcryptjs') as typeof import('bcryptjs');
 
 type CredentialsProvider = {
   id: string;
@@ -151,6 +172,11 @@ function setResolver(fn: typeof mockState.resolver) {
 beforeEach(() => {
   setResolver(() => ({ data: null, error: null }));
   mockState.writes = [];
+  // 既定は「二段階認証なし」。有効時の挙動は個別のテストで上書きする。
+  // 呼び出し履歴も消す（「問い合わせていないこと」を検証するテストがあるため）
+  mockIsTotpEnabled.mockReset();
+  mockIsTotpEnabled.mockResolvedValue(false);
+  mockVerifySecondFactor.mockReset();
 });
 
 // -------------------- provider 構成 --------------------
@@ -700,5 +726,424 @@ describe('authorize のレート制限', () => {
 
     expect(calls.map((c) => c[2])).not.toContain('login_ip');
     expect(calls.map((c) => c[1])).toContain('user@example.com');
+  });
+});
+
+// -------------------- 第2要素（二段階認証） --------------------
+describe('authorize の第2要素（パスワード経路）', () => {
+  const PASSWORD = 'Password1';
+  /** PASSWORD の bcrypt ハッシュ */
+  const PASSWORD_HASH = bcrypt.hashSync(PASSWORD, 4);
+  const USER_ID = 'user-1';
+
+  function makeRequest(): Request {
+    return new Request('http://localhost/api/auth/callback/credentials', {
+      headers: new Headers({ 'x-vercel-forwarded-for': '203.0.113.1' }),
+    });
+  }
+
+  beforeEach(() => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockResetRateLimit.mockReset();
+    setResolver(({ table }) =>
+      table === 'users'
+        ? {
+            data: {
+              id: USER_ID,
+              email: 'user@example.com',
+              name: 'User',
+              avatar_url: null,
+              role: 'user',
+              is_verified: true,
+              password_hash: PASSWORD_HASH,
+              password_changed_at: null,
+            },
+            error: null,
+          }
+        : { data: null, error: null },
+    );
+  });
+
+  it('二段階認証が無効なら第2要素を求めずにログインできる', async () => {
+    mockIsTotpEnabled.mockResolvedValue(false);
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).resolves.toMatchObject({ id: USER_ID });
+    expect(mockVerifySecondFactor).not.toHaveBeenCalled();
+  });
+
+  it('二段階認証が有効でコード未入力なら totp_required を返す', async () => {
+    mockIsTotpEnabled.mockResolvedValue(true);
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: 'totp_required' });
+  });
+
+  it('パスワードが誤っていれば第2要素の有無を問い合わせない', async () => {
+    // 問い合わせると「二段階認証を使っているアカウントか」を
+    // パスワードを知らない相手に教えることになる
+    mockIsTotpEnabled.mockResolvedValue(true);
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: 'WrongPassword1' },
+        makeRequest(),
+      ),
+    ).rejects.toThrow();
+    expect(mockIsTotpEnabled).not.toHaveBeenCalled();
+  });
+
+  it('正しいコードならログインできる', async () => {
+    mockIsTotpEnabled.mockResolvedValue(true);
+    mockVerifySecondFactor.mockResolvedValue('success');
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: PASSWORD, totpCode: '123456' },
+        makeRequest(),
+      ),
+    ).resolves.toMatchObject({ id: USER_ID });
+  });
+
+  it('誤ったコードは totp_invalid を返す', async () => {
+    mockIsTotpEnabled.mockResolvedValue(true);
+    mockVerifySecondFactor.mockResolvedValue('invalid');
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: PASSWORD, totpCode: '000000' },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: 'totp_invalid' });
+  });
+
+  it('使い回したコードは totp_reused を返す', async () => {
+    mockIsTotpEnabled.mockResolvedValue(true);
+    mockVerifySecondFactor.mockResolvedValue('reused');
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: PASSWORD, totpCode: '123456' },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: 'totp_reused' });
+  });
+
+  it('コードの試行にレート制限を掛ける', async () => {
+    // 6桁を窓付きで受けるため、上限が無いと総当たりで抜かれる
+    mockIsTotpEnabled.mockResolvedValue(true);
+    mockVerifySecondFactor.mockResolvedValue('success');
+
+    await credentialsProvider.authorize(
+      { email: 'user@example.com', password: PASSWORD, totpCode: '123456' },
+      makeRequest(),
+    );
+
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      USER_ID,
+      'totp_verify',
+      5,
+      15,
+    );
+  });
+
+  it('コードの試行上限を超えたら検証せずに拒否する', async () => {
+    mockIsTotpEnabled.mockResolvedValue(true);
+    // login_ip → login → totp_verify の順。3回目だけ拒否する
+    mockCheckRateLimit
+      .mockResolvedValueOnce({ allowed: true })
+      .mockResolvedValueOnce({ allowed: true })
+      .mockResolvedValueOnce({ allowed: false, retryAfter: 900 });
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: PASSWORD, totpCode: '123456' },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+    expect(mockVerifySecondFactor).not.toHaveBeenCalled();
+  });
+
+  it('空白だけのコードは未入力として扱う', async () => {
+    mockIsTotpEnabled.mockResolvedValue(true);
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: PASSWORD, totpCode: '   ' },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: 'totp_required' });
+  });
+});
+
+describe('authorize の第2要素（メールOTP経路）', () => {
+  function makeRequest(): Request {
+    return new Request('http://localhost/api/auth/callback/credentials', {
+      headers: new Headers({ 'x-vercel-forwarded-for': '203.0.113.1' }),
+    });
+  }
+
+  beforeEach(() => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    setResolver(({ table }) =>
+      table === 'users'
+        ? {
+            data: {
+              id: 'user-1',
+              email: 'user@example.com',
+              name: 'User',
+              avatar_url: null,
+              role: 'user',
+              is_verified: true,
+              password_hash: null,
+              password_changed_at: null,
+            },
+            error: null,
+          }
+        : { data: null, error: null },
+    );
+  });
+
+  it('二段階認証が有効ならメールOTP単独ログインを拒否する', async () => {
+    // メールのコードだけで入れる経路は第2要素ではなくパスワードの代替であり、
+    // 残すと最も弱い経路が全体の強度を決めてしまう（#642）
+    mockIsTotpEnabled.mockResolvedValue(true);
+
+    await expect(
+      credentialsProvider.authorize(
+        {
+          email: 'user@example.com',
+          loginMethod: 'otp',
+          verificationToken: 'token',
+        },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: 'otp_login_disabled' });
+  });
+
+  it('二段階認証が無効ならメールOTP経路は従来どおり進む', async () => {
+    mockIsTotpEnabled.mockResolvedValue(false);
+
+    // 検証済みトークンが見つからないので失敗するが、
+    // otp_login_disabled では落ちないことを確認する
+    const error = await credentialsProvider
+      .authorize(
+        {
+          email: 'user@example.com',
+          loginMethod: 'otp',
+          verificationToken: 'token',
+        },
+        makeRequest(),
+      )
+      .catch((e: unknown) => e);
+
+    expect((error as { code?: string }).code).not.toBe('otp_login_disabled');
+  });
+});
+
+// -------------------- 第2要素（jwt / session コールバック） --------------------
+describe('jwt コールバックの第2要素', () => {
+  beforeEach(() => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockResetRateLimit.mockReset();
+  });
+
+  it('OAuth初回で二段階認証が有効なら totpPending を立てる', async () => {
+    // OAuth は authorize を通らないため、ここで第2要素を要求する
+    mockIsTotpEnabled.mockResolvedValue(true);
+    setResolver(() => ({ data: { role: 'user' }, error: null }));
+
+    const token = await jwt({
+      token: {},
+      user: { id: 'u1', email: 'a@example.com', name: 'A', image: null },
+      account: { provider: 'google' },
+    });
+
+    expect(token.totpPending).toBe(true);
+  });
+
+  it('OAuth初回で二段階認証が無効なら totpPending は立たない', async () => {
+    mockIsTotpEnabled.mockResolvedValue(false);
+    setResolver(() => ({ data: { role: 'user' }, error: null }));
+
+    const token = await jwt({
+      token: {},
+      user: { id: 'u1', email: 'a@example.com', name: 'A', image: null },
+      account: { provider: 'google' },
+    });
+
+    expect(token.totpPending).toBe(false);
+  });
+
+  it('Credentials 初回は totpPending を立てない（authorize で検証済み）', async () => {
+    const token = await jwt({
+      token: {},
+      user: {
+        id: 'u2',
+        email: 'b@example.com',
+        name: 'B',
+        image: null,
+        role: 'user',
+        passwordChangedAt: null,
+      },
+      account: { provider: 'credentials' },
+    });
+
+    expect(token.totpPending).toBe(false);
+  });
+
+  it('正しいコードで update されると totpPending が落ちる', async () => {
+    mockVerifySecondFactor.mockResolvedValue('success');
+
+    const token = await jwt({
+      token: { id: 'u1', totpPending: true, issuedAt: Date.now() },
+      user: undefined,
+      account: null,
+      trigger: 'update',
+      session: { totpCode: '123456' },
+    });
+
+    expect(token.totpPending).toBe(false);
+  });
+
+  it.each([
+    ['誤ったコード', 'invalid'],
+    ['使い回したコード', 'reused'],
+    ['二段階認証が無効', 'not_enabled'],
+  ])('%s では totpPending が残る', async (_label, verifyResult) => {
+    mockVerifySecondFactor.mockResolvedValue(verifyResult);
+
+    const token = await jwt({
+      token: { id: 'u1', totpPending: true, issuedAt: Date.now() },
+      user: undefined,
+      account: null,
+      trigger: 'update',
+      session: { totpCode: '000000' },
+    });
+
+    expect(token.totpPending).toBe(true);
+  });
+
+  it('コードを渡さない update では検証しない', async () => {
+    // クライアントは「検証済み」という結果そのものを渡せない
+    const token = await jwt({
+      token: { id: 'u1', totpPending: true, issuedAt: Date.now() },
+      user: undefined,
+      account: null,
+      trigger: 'update',
+      session: { totpPending: false },
+    });
+
+    expect(token.totpPending).toBe(true);
+    expect(mockVerifySecondFactor).not.toHaveBeenCalled();
+  });
+
+  it('試行上限を超えたら検証せず totpPending を残す', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 900 });
+
+    const token = await jwt({
+      token: { id: 'u1', totpPending: true, issuedAt: Date.now() },
+      user: undefined,
+      account: null,
+      trigger: 'update',
+      session: { totpCode: '123456' },
+    });
+
+    expect(token.totpPending).toBe(true);
+    expect(mockVerifySecondFactor).not.toHaveBeenCalled();
+  });
+
+  it('コードの試行にレート制限を掛ける', async () => {
+    mockVerifySecondFactor.mockResolvedValue('success');
+
+    await jwt({
+      token: { id: 'u1', totpPending: true, issuedAt: Date.now() },
+      user: undefined,
+      account: null,
+      trigger: 'update',
+      session: { totpCode: '123456' },
+    });
+
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'u1',
+      'totp_verify',
+      5,
+      15,
+    );
+  });
+
+  it('totpPending でないトークンには update で触れない', async () => {
+    const token = await jwt({
+      token: { id: 'u1', totpPending: false, issuedAt: Date.now() },
+      user: undefined,
+      account: null,
+      trigger: 'update',
+      session: { totpCode: '123456' },
+    });
+
+    expect(token.totpPending).toBe(false);
+    expect(mockVerifySecondFactor).not.toHaveBeenCalled();
+  });
+});
+
+describe('session コールバックの第2要素', () => {
+  /** 空のセッション雛形 */
+  const emptySession = () => ({
+    user: {
+      id: '',
+      email: '',
+      name: null,
+      image: null,
+      role: '',
+      hasPassword: false,
+    },
+  });
+
+  it('totpPending のセッションはユーザー情報を空にする', async () => {
+    // /api/* は proxy の判定を素通りするため、ここで空にしないと
+    // 認証コードを入れないまま API を使えてしまう
+    const result = await session({
+      session: emptySession(),
+      token: {
+        id: 'u1',
+        email: 'a@example.com',
+        name: 'A',
+        picture: null,
+        role: 'admin',
+        hasPassword: true,
+        totpPending: true,
+      },
+    });
+
+    expect(result.user).toMatchObject({ id: '', email: '', role: '' });
+    expect(result.totpPending).toBe(true);
+  });
+
+  it('第2要素が済んでいればユーザー情報を載せる', async () => {
+    const result = await session({
+      session: emptySession(),
+      token: {
+        id: 'u1',
+        email: 'a@example.com',
+        name: 'A',
+        picture: null,
+        role: 'admin',
+        hasPassword: true,
+        totpPending: false,
+      },
+    });
+
+    expect(result.user).toMatchObject({ id: 'u1', role: 'admin' });
+    expect(result.totpPending).toBeUndefined();
   });
 });

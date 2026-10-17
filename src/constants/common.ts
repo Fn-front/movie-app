@@ -40,6 +40,8 @@ export const ROUTES = {
   AWARDS: '/awards',
   /** シアター体験 */
   THEATER_EXPERIENCE: '/theater-experience',
+  /** 二段階認証コードの入力（第2要素が未了のときだけ到達する） */
+  TOTP_CHALLENGE: '/auth/two-factor',
   /** 認証エラー */
   AUTH_ERROR: '/auth/error',
   /** 映画詳細 */

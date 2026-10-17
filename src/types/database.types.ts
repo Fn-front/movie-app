@@ -849,6 +849,7 @@ export type Database = {
           created_at: string;
           email: string;
           id: string;
+          instant_recommendation_used_at: string | null;
           is_verified: boolean;
           last_login_at: string | null;
           name: string | null;
@@ -862,6 +863,7 @@ export type Database = {
           created_at?: string;
           email: string;
           id?: string;
+          instant_recommendation_used_at?: string | null;
           is_verified?: boolean;
           last_login_at?: string | null;
           name?: string | null;
@@ -875,6 +877,7 @@ export type Database = {
           created_at?: string;
           email?: string;
           id?: string;
+          instant_recommendation_used_at?: string | null;
           is_verified?: boolean;
           last_login_at?: string | null;
           name?: string | null;

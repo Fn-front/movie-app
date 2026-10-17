@@ -28,6 +28,18 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }));
 
+const mockRunInstantRecommendation = jest.fn().mockResolvedValue(undefined);
+jest.mock('@/lib/recommendations/instantRecommendation', () => ({
+  runInstantRecommendationIfEligible: (...args: unknown[]) =>
+    mockRunInstantRecommendation(...args),
+}));
+
+// after() のコールバックを即座に実行して、登録されたことを検証できるようにする
+jest.mock('next/server', () => ({
+  ...jest.requireActual('next/server'),
+  after: (callback: () => void) => callback(),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
 
 // --- Helpers ---
@@ -464,5 +476,99 @@ describe('POST /api/favorites', () => {
     );
 
     expect(response.status).toBe(400);
+  });
+
+  describe('初回レコメンドの即時生成', () => {
+    /** 重複なし → INSERT成功 をモックする */
+    const mockInsertSucceeds = () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: jest.fn().mockReturnValue({
+            eq: () => ({
+              is: () => ({
+                single: () => ({ data: null, error: { code: 'PGRST116' } }),
+              }),
+            }),
+          }),
+        }),
+      });
+      mockFrom.mockReturnValueOnce({
+        insert: () => ({
+          select: () => ({
+            single: () => ({ data: { id: 'new-fav-id' }, error: null }),
+          }),
+        }),
+      });
+    };
+
+    it('追加成功後に即時生成をキックする', async () => {
+      mockInsertSucceeds();
+
+      const response = await POST(
+        createPostRequest({
+          tmdb_movie_id: 12345,
+          title: 'テスト映画',
+          rating: 8,
+        }),
+      );
+
+      expect(response.status).toBe(201);
+      expect(mockRunInstantRecommendation).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+      );
+    });
+
+    it('バリデーション失敗時はキックしない', async () => {
+      const response = await POST(
+        createPostRequest({ tmdb_movie_id: 12345, title: 'テスト映画' }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(mockRunInstantRecommendation).not.toHaveBeenCalled();
+    });
+
+    it('重複で409のときはキックしない', async () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: jest.fn().mockReturnValue({
+            eq: () => ({
+              is: () => ({
+                single: () => ({ data: { id: 'existing' }, error: null }),
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const response = await POST(
+        createPostRequest({
+          tmdb_movie_id: 12345,
+          title: 'テスト映画',
+          rating: 8,
+        }),
+      );
+
+      expect(response.status).toBe(409);
+      expect(mockRunInstantRecommendation).not.toHaveBeenCalled();
+    });
+
+    it('レート制限で429のときはキックしない', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 60,
+      });
+
+      const response = await POST(
+        createPostRequest({
+          tmdb_movie_id: 12345,
+          title: 'テスト映画',
+          rating: 8,
+        }),
+      );
+
+      expect(response.status).toBe(429);
+      expect(mockRunInstantRecommendation).not.toHaveBeenCalled();
+    });
   });
 });

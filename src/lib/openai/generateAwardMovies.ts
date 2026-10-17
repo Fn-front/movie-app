@@ -9,7 +9,7 @@
 
 import type { AwardCategory, AwardDefinition } from '@/constants/awards';
 import { OPENAI_CONFIG } from '@/constants';
-import { searchMovies } from '@/lib/tmdb/tmdb';
+import { hasExcludedKeyword, searchMovies } from '@/lib/tmdb/tmdb';
 import {
   openAiAwardsResponseSchema,
   type OpenAiAwardItem,
@@ -348,6 +348,13 @@ export async function resolveAwardsWithTMDb(
           (r) => r.tmdb_movie_id === movie.id && r.category === item.category,
         )
       ) {
+        continue;
+      }
+
+      // 除外キーワード（ポルノ・ピンク映画等）を含む映画を弾く。
+      // adult フラグだけでは `adult=false` のアダルト作品を通してしまうため、
+      // 採用が確定する直前にTMDbへ1回だけ問い合わせる（呼び出し回数を最小化）。
+      if (await hasExcludedKeyword(movie.id)) {
         continue;
       }
 

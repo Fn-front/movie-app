@@ -20,8 +20,10 @@ jest.mock('./client', () => ({
 }));
 
 const mockSearchMovies = jest.fn();
+const mockHasExcludedKeyword = jest.fn().mockResolvedValue(false);
 jest.mock('@/lib/tmdb/tmdb', () => ({
   searchMovies: (...args: unknown[]) => mockSearchMovies(...args),
+  hasExcludedKeyword: (...args: unknown[]) => mockHasExcludedKeyword(...args),
 }));
 
 import {
@@ -375,6 +377,73 @@ describe('resolveAwardsWithTMDb', () => {
     expect(result[0].category).toBe('best_picture');
     expect(result[0].is_winner).toBe(true);
     expect(result[0].display_order).toBe(1);
+  });
+
+  describe('除外キーワードによる除外', () => {
+    it('除外キーワードを持つ映画を採用しない', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 920,
+            title: 'キーワード該当作',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 6.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+      mockHasExcludedKeyword.mockResolvedValueOnce(true);
+
+      const items = [createAwardItem()];
+      const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('キーワード判定は採用が確定する直前に1回だけ呼ばれる', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 921,
+            title: 'テスト映画',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+      mockHasExcludedKeyword.mockResolvedValue(false);
+
+      const items = [createAwardItem()];
+      const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+      expect(result).toHaveLength(1);
+      expect(mockHasExcludedKeyword).toHaveBeenCalledTimes(1);
+      expect(mockHasExcludedKeyword.mock.calls[0][0]).toBe(921);
+    });
+
+    it('キーワード判定が失敗した映画はスキップされる（fail-closed）', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 922,
+            title: 'テスト映画',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+      mockHasExcludedKeyword.mockRejectedValueOnce(new Error('TMDb error'));
+
+      const items = [createAwardItem()];
+      const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+      expect(result).toHaveLength(0);
+    });
   });
 
   it('日本語+year検索で見つかる場合、1回で解決する', async () => {

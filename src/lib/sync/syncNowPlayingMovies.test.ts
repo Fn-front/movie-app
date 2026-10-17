@@ -9,12 +9,12 @@ jest.mock('@supabase/supabase-js', () => ({
 
 jest.mock('@/lib/tmdb/tmdb', () => ({
   getNowPlayingMovies: jest.fn(),
-  getMovieKeywordIds: jest.fn(),
+  hasExcludedKeyword: jest.fn(),
 }));
 
 import { createClient } from '@supabase/supabase-js';
-import { EXCLUDED_GENRE_IDS, EXCLUDED_KEYWORD_IDS } from '@/constants/movies';
-import { getNowPlayingMovies, getMovieKeywordIds } from '@/lib/tmdb/tmdb';
+import { EXCLUDED_GENRE_IDS } from '@/constants/movies';
+import { getNowPlayingMovies, hasExcludedKeyword } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 import { syncNowPlayingMovies } from './syncNowPlayingMovies';
 import type { NowPlayingSyncResult } from './syncNowPlayingMovies';
@@ -298,7 +298,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
       // 別release_type に同じIDが存在する状況
       const fromMock = createFromMock({ existingOtherTypeIds: [100] });
@@ -322,7 +322,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
       const fromMock = createFromMock({});
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
@@ -346,9 +346,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([
-        EXCLUDED_KEYWORD_IDS[0],
-      ]);
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(true);
 
       const fromMock = createFromMock({});
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
@@ -372,7 +370,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
       const upsertMock = jest.fn().mockResolvedValue({ error: null });
       const fromMock = jest.fn().mockReturnValue({
@@ -418,7 +416,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
       const fromMock = createFromMock({
         upsertError: { message: 'duplicate key violation' },
@@ -446,7 +444,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
       const updateMock = jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
@@ -501,7 +499,7 @@ describe('syncNowPlayingMovies', () => {
   });
 
   describe('個別映画処理中のエラーハンドリング', () => {
-    it('getMovieKeywordIdsが例外をスローした場合errorsに記録して処理を続行する', async () => {
+    it('キーワード判定が例外をスローした場合errorsに記録して処理を続行する', async () => {
       setValidEnv();
 
       const movie1 = createMockMovie({ id: 600, title: 'エラー映画1' });
@@ -513,9 +511,9 @@ describe('syncNowPlayingMovies', () => {
         total_results: 2,
         results: [movie1, movie2],
       });
-      (getMovieKeywordIds as jest.Mock)
+      (hasExcludedKeyword as jest.Mock)
         .mockRejectedValueOnce(new Error('API rate limit exceeded'))
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce(false);
 
       const fromMock = createFromMock({});
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
@@ -539,7 +537,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (getMovieKeywordIds as jest.Mock).mockRejectedValueOnce('string error');
+      (hasExcludedKeyword as jest.Mock).mockRejectedValueOnce('string error');
 
       const fromMock = createFromMock({});
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
@@ -572,9 +570,9 @@ describe('syncNowPlayingMovies', () => {
           total_results: 2,
           results: [movie2],
         });
-      (getMovieKeywordIds as jest.Mock)
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]);
+      (hasExcludedKeyword as jest.Mock)
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(false);
 
       const fromMock = createFromMock({});
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
@@ -617,7 +615,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
 
       const fromMock = createFromMock({});
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });

@@ -40,6 +40,10 @@ next-env.d.ts
 # claude code settings
 .claude/settings.local.json
 
+# claude code worktrees（並行作業用。リポジトリのチェックアウトそのものなのでコミットしない。
+# 未指定だと git が embedded git repository として壊れた submodule エントリを追加する）
+.claude/worktrees/
+
 # agent skills binary files
 .agents/**/*.zip
 

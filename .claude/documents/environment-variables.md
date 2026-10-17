@@ -334,6 +334,10 @@ RESEND_FROM_EMAIL=noreply@yourdomain.com
 # OTPコードのHMAC鍵（必須・未設定だとOTPが機能しない）
 OTP_HASH_PEPPER=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
+# TOTP（二段階認証）のマスター鍵（base64でデコードして32バイト）
+# 変更・紛失すると登録済みの二段階認証がすべて復号できなくなる
+TOTP_ENCRYPTION_KEY=your_totp_master_key_here
+
 # Rate Limiting（廃止: DBベースに移行済み）
 # RATE_LIMIT_MAX_ATTEMPTS=3
 # RATE_LIMIT_LOCK_DURATION=1800000

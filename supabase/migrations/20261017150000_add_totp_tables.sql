@@ -6,8 +6,12 @@
 -- 「サーバー（service_role）だけが触れる」境界に置く。
 --
 -- したがって以下の2テーブルには anon / authenticated への GRANT を
--- 一切与えない。Data API（supabase-js / PostgREST）からは到達できず、
--- サーバー側のルートハンドラ経由でのみ読み書きする。
+-- 一切与えず、サーバー側のルートハンドラ（service_role）経由でのみ読み書きする。
+--
+-- ⚠️ ただし「GRANT を書かなければ到達しない」わけではない。本プロジェクトは
+-- 既存プロジェクトのため、public スキーマのテーブルには anon / authenticated への
+-- デフォルトGRANTが付く。剥奪は 20261017160000_revoke_totp_table_grants.sql で
+-- 明示的に行っている。
 
 -- --------------------------------------------
 -- user_totp（TOTP 共有鍵）
@@ -39,8 +43,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_totp TO service_role;
 ALTER TABLE user_totp ENABLE ROW LEVEL SECURITY;
 
 -- ポリシーを1つも作らない = service_role 以外は全拒否。
--- GRANT が無いので到達もしないが、将来 GRANT が誤って追加された場合の
--- 二重の歯止めになる。
+-- GRANT の剥奪（20261017160000）と合わせて二重の歯止めにする。
 
 COMMENT ON TABLE user_totp IS 'TOTP（二段階認証）の共有鍵。Data APIには公開せず、service_role 経由でのみ扱う';
 COMMENT ON COLUMN user_totp.encrypted_secret IS 'AES-256-GCM で暗号化した共有鍵。形式は iv:authTag:暗号文（base64）';

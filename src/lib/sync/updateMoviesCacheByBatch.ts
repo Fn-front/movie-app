@@ -8,6 +8,12 @@ import { BATCH_UPDATE_SIZE } from '@/constants/movies';
 import { getMovieDetail } from '@/lib/tmdb/tmdb';
 
 /**
+ * 映画ID取得時の1ページあたり件数
+ * PostgREST の既定上限（1000行）に合わせる
+ */
+const SELECT_PAGE_SIZE = 1000;
+
+/**
  * バッチ更新結果の型
  */
 export interface BatchUpdateResult {
@@ -43,15 +49,34 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
   };
 
   // 1. DBからユニークな映画IDを全件取得
-  const { data: rows, error: fetchError } = await supabase
-    .from('movie_cache')
-    .select('id, release_type');
+  //
+  // Supabase-js（PostgREST）は .range() 未指定だと既定1000行で打ち切るため、
+  // ページングして全件取得する。打ち切られると取得できなかった行の
+  // vote_average / popularity / vote_count が永久に更新されない。
+  // ORDER BY 無しの LIMIT/OFFSET は順序が保証されずページ間で重複・欠落が
+  // 起きるため、.order() も必須。
+  const rows: { id: number; release_type: string }[] = [];
 
-  if (fetchError) {
-    throw new Error(`映画ID取得エラー: ${fetchError.message}`);
+  for (let offset = 0; ; offset += SELECT_PAGE_SIZE) {
+    const { data, error: fetchError } = await supabase
+      .from('movie_cache')
+      .select('id, release_type')
+      .order('id', { ascending: true })
+      .order('release_type', { ascending: true })
+      .range(offset, offset + SELECT_PAGE_SIZE - 1);
+
+    if (fetchError) {
+      throw new Error(`映画ID取得エラー: ${fetchError.message}`);
+    }
+
+    if (!data || data.length === 0) break;
+
+    rows.push(...(data as { id: number; release_type: string }[]));
+
+    if (data.length < SELECT_PAGE_SIZE) break;
   }
 
-  if (!rows || rows.length === 0) {
+  if (rows.length === 0) {
     return result;
   }
 

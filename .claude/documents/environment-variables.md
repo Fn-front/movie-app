@@ -103,6 +103,33 @@ GITHUB_CLIENT_SECRET=your_github_client_secret_here
 
 ---
 
+### OTPコードのハッシュ化（必須）
+
+```bash
+# OTPコードの HMAC 鍵（pepper）
+OTP_HASH_PEPPER=<32バイト以上のランダム値>
+```
+
+OTPコードは平文ではなく HMAC-SHA256（鍵 = この値、メッセージ = "email:code"）で
+保存する。**未設定だとOTP送信・検証が例外で失敗する**（平文へフォールバックすると
+脆弱性がそのまま残るため、意図的に fail-closed にしている）。
+
+**なぜ必要か:** OTPは6桁 = 100万通りしかなく、ソルト付きSHA-256でも特定の行を狙った
+総当たりは1秒未満で終わる。鍵をDBの外に置くことで、DBだけを手に入れた攻撃者が
+HMACを計算できないようにする。
+
+**生成方法:**
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
+
+**設定先:** `.env.local` / Vercel の環境変数 / GitHub Actions Secrets（E2E用）
+
+**ローテーション時の注意:** 値を変えると既存の未検証OTPが検証できなくなる。
+有効期限は最大10分なので、利用者は再送信で復帰できる。
+
+---
+
 ### メール送信（Resend）
 
 ```bash
@@ -272,6 +299,9 @@ GITHUB_CLIENT_SECRET=your_github_client_secret_here
 # Email (Resend)
 RESEND_API_KEY=re_xxxxxxxxxxxx
 RESEND_FROM_EMAIL=noreply@yourdomain.com
+
+# OTPコードのHMAC鍵（必須・未設定だとOTPが機能しない）
+OTP_HASH_PEPPER=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Rate Limiting（廃止: DBベースに移行済み）
 # RATE_LIMIT_MAX_ATTEMPTS=3

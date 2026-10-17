@@ -11,7 +11,12 @@ import {
 } from '@/helpers/supabase';
 import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
 import { otpSendSchema } from '@/schema/otp';
-import { generateOtpCode, sendOtpEmail, randomDelay } from '@/lib/otp';
+import {
+  generateOtpCode,
+  sendOtpEmail,
+  randomDelay,
+  hashOtpCode,
+} from '@/lib/otp';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
   OTP_ACTION,
@@ -204,7 +209,8 @@ export async function POST(request: Request) {
 
     const { error: insertError } = await supabase.from('otp_codes').insert({
       email,
-      code,
+      // 平文は保存しない。鍵（OTP_HASH_PEPPER）はDBの外に置く（#640）
+      code_hash: hashOtpCode(code, email),
       action_type: action,
       expires_at: expiresAt.toISOString(),
     });

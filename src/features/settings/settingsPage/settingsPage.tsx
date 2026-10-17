@@ -23,6 +23,9 @@ import styles from './settingsPage.module.scss';
 export const SettingsPage = memo(function SettingsPage() {
   const { data: session, status } = useSession();
   const email = session?.user?.email ?? '';
+  // パスワード未設定（ソーシャルログインのみ）のユーザーには
+  // 「現在のパスワード」欄を出さない
+  const hasPassword = session?.user?.hasPassword ?? true;
   const isSessionLoading = status === 'loading';
 
   return (
@@ -44,7 +47,7 @@ export const SettingsPage = memo(function SettingsPage() {
           email && (
             <section className={styles.c_settings_page__section}>
               <Heading level={2}>パスワード変更</Heading>
-              <ChangePasswordForm email={email} />
+              <ChangePasswordForm email={email} hasPassword={hasPassword} />
             </section>
           )
         )}

@@ -1,4 +1,5 @@
 import {
+  buildChangePasswordSchema,
   registerSchema,
   registerApiSchema,
   loginSchema,
@@ -147,6 +148,7 @@ describe('registerApiSchema', () => {
 describe('changePasswordSchema', () => {
   it('有効な入力でパースが成功する', () => {
     const result = changePasswordSchema.safeParse({
+      currentPassword: 'CurrentPassword1',
       newPassword: 'NewPassword1',
       confirmNewPassword: 'NewPassword1',
     });
@@ -155,6 +157,7 @@ describe('changePasswordSchema', () => {
 
   it('新しいパスワードが8文字未満の場合エラーになる', () => {
     const result = changePasswordSchema.safeParse({
+      currentPassword: 'CurrentPassword1',
       newPassword: 'New1',
       confirmNewPassword: 'New1',
     });
@@ -163,6 +166,7 @@ describe('changePasswordSchema', () => {
 
   it('新しいパスワードに大文字がない場合エラーになる', () => {
     const result = changePasswordSchema.safeParse({
+      currentPassword: 'CurrentPassword1',
       newPassword: 'newpassword1',
       confirmNewPassword: 'newpassword1',
     });
@@ -171,6 +175,7 @@ describe('changePasswordSchema', () => {
 
   it('新しいパスワードに小文字がない場合エラーになる', () => {
     const result = changePasswordSchema.safeParse({
+      currentPassword: 'CurrentPassword1',
       newPassword: 'NEWPASSWORD1',
       confirmNewPassword: 'NEWPASSWORD1',
     });
@@ -179,6 +184,7 @@ describe('changePasswordSchema', () => {
 
   it('新しいパスワードに数字がない場合エラーになる', () => {
     const result = changePasswordSchema.safeParse({
+      currentPassword: 'CurrentPassword1',
       newPassword: 'NewPassword',
       confirmNewPassword: 'NewPassword',
     });
@@ -187,6 +193,7 @@ describe('changePasswordSchema', () => {
 
   it('新しいパスワードが一致しない場合エラーになる', () => {
     const result = changePasswordSchema.safeParse({
+      currentPassword: 'CurrentPassword1',
       newPassword: 'NewPassword1',
       confirmNewPassword: 'NewPassword2',
     });
@@ -195,6 +202,7 @@ describe('changePasswordSchema', () => {
 
   it('確認パスワードが空の場合エラーになる', () => {
     const result = changePasswordSchema.safeParse({
+      currentPassword: 'CurrentPassword1',
       newPassword: 'NewPassword1',
       confirmNewPassword: '',
     });
@@ -232,5 +240,68 @@ describe('changePasswordApiSchema', () => {
       verificationToken: '',
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('buildChangePasswordSchema', () => {
+  const base = {
+    newPassword: 'NewPassword1',
+    confirmNewPassword: 'NewPassword1',
+  };
+
+  describe('現在のパスワードを要求する場合（パスワード設定済みユーザー）', () => {
+    const schema = buildChangePasswordSchema(true);
+
+    it('currentPassword があればパースに成功する', () => {
+      expect(
+        schema.safeParse({ ...base, currentPassword: 'CurrentPassword1' })
+          .success,
+      ).toBe(true);
+    });
+
+    it('currentPassword が無いとエラーになる', () => {
+      expect(schema.safeParse(base).success).toBe(false);
+    });
+
+    it('currentPassword が空文字だとエラーになる', () => {
+      expect(schema.safeParse({ ...base, currentPassword: '' }).success).toBe(
+        false,
+      );
+    });
+  });
+
+  describe('現在のパスワードを要求しない場合（ソーシャルログインのみ）', () => {
+    const schema = buildChangePasswordSchema(false);
+
+    it('currentPassword が無くてもパースに成功する', () => {
+      expect(schema.safeParse(base).success).toBe(true);
+    });
+
+    it('新旧パスワードの不一致は従来どおり検出する', () => {
+      expect(
+        schema.safeParse({ ...base, confirmNewPassword: 'Different1' }).success,
+      ).toBe(false);
+    });
+  });
+});
+
+describe('changePasswordApiSchema — currentPassword（#643）', () => {
+  it('currentPassword が無くてもスキーマ上は通る（ルート側で条件付き必須）', () => {
+    expect(
+      changePasswordApiSchema.safeParse({
+        newPassword: 'NewPassword1',
+        verificationToken: 'token',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('currentPassword を含められる', () => {
+    expect(
+      changePasswordApiSchema.safeParse({
+        newPassword: 'NewPassword1',
+        verificationToken: 'token',
+        currentPassword: 'CurrentPassword1',
+      }).success,
+    ).toBe(true);
   });
 });

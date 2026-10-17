@@ -12,7 +12,11 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { changePasswordApiSchema } from '@/schema/auth';
-import { AUTH_ERROR_MESSAGES, BCRYPT_COST } from '@/constants/auth';
+import {
+  AUTH_ERROR_MESSAGES,
+  BCRYPT_COST,
+  VALIDATION_MESSAGES,
+} from '@/constants/auth';
 import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import { OTP_ACTION, OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
@@ -67,7 +71,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const { newPassword, verificationToken } = result.data;
+    const { newPassword, verificationToken, currentPassword } = result.data;
 
     // ユーザー取得
     const { data: user, error: fetchError } = await supabase
@@ -131,6 +135,50 @@ export async function POST(request: Request) {
         },
         { status: HTTP_STATUS.BAD_REQUEST },
       );
+    }
+
+    // 現在のパスワード確認。
+    //
+    // OTP検証だけだと「パスワードを知らない者がパスワードを変更できる」状態で、
+    // セッションを奪われた状態＋メール受信箱へのアクセスで書き換えられてしまう
+    // （書き換えると password_changed_at が更新され、正当な利用者の既存
+    // セッションが全て無効化されるため締め出しにもなる／#643）。
+    //
+    // OTP検証の後に置くのは、このエンドポイントを「セッションだけでパスワードを
+    // 総当たりできるオラクル」にしないため。確認コードも必要になる。
+    // ソーシャルログインのみでパスワード未設定のユーザーは入力しようがないので
+    // スキップする。
+    if (user.password_hash) {
+      if (!currentPassword) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: ERROR_CODE.VALIDATION_ERROR,
+              message: VALIDATION_MESSAGES.CURRENT_PASSWORD_REQUIRED,
+            },
+          },
+          { status: HTTP_STATUS.BAD_REQUEST },
+        );
+      }
+
+      const isCurrentPasswordValid = await bcrypt.compare(
+        currentPassword,
+        user.password_hash,
+      );
+
+      if (!isCurrentPasswordValid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: ERROR_CODE.BAD_REQUEST,
+              message: AUTH_ERROR_MESSAGES.CURRENT_PASSWORD_INCORRECT,
+            },
+          },
+          { status: HTTP_STATUS.BAD_REQUEST },
+        );
+      }
     }
 
     // 新旧パスワード同一チェック（パスワードが設定されている場合のみ）

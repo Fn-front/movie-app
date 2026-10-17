@@ -13,6 +13,8 @@ declare module 'next-auth' {
       name: string | null;
       image: string | null;
       role: string;
+      /** パスワードが設定済みか（ソーシャルログインのみのユーザーは false） */
+      hasPassword: boolean;
     };
   }
 
@@ -22,6 +24,7 @@ declare module 'next-auth' {
     name: string | null;
     image: string | null;
     role: string;
+    hasPassword: boolean;
   }
 }
 
@@ -32,6 +35,7 @@ declare module 'next-auth/jwt' {
     name: string | null;
     picture: string | null;
     role: string;
+    hasPassword: boolean;
     passwordChangedAt: string | null;
     lastPasswordCheck: number;
     lastLoginUpdate?: number;

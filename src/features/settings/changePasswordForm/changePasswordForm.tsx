@@ -8,7 +8,7 @@
 
 'use client';
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 
@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { OtpVerification } from '@/features/auth/otpVerification/otpVerification';
 import {
-  changePasswordSchema,
+  buildChangePasswordSchema,
   type ChangePasswordFormData,
 } from '@/schema/auth';
 import { OTP_ACTION } from '@/constants/otp';
@@ -34,13 +34,20 @@ type Step = 'send_otp' | 'verify_otp' | 'new_password';
 
 interface ChangePasswordFormProps {
   email: string;
+  /**
+   * パスワードが設定済みか。
+   *
+   * ソーシャルログインのみで登録したユーザーは `password_hash` を持たず
+   * 「現在のパスワード」を入力しようがないため、その欄を出さない。
+   */
+  hasPassword: boolean;
 }
 
 /**
  * パスワード変更フォーム（OTP検証ベース）
  */
 export const ChangePasswordForm = memo<ChangePasswordFormProps>(
-  function ChangePasswordForm({ email }) {
+  function ChangePasswordForm({ email, hasPassword }) {
     const { toast } = useToast();
     const [step, setStep] = useState<Step>('send_otp');
     const [isSendingOtp, setIsSendingOtp] = useState(false);
@@ -50,14 +57,21 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
       null,
     );
 
+    // パスワード未設定のユーザーには「現在のパスワード」を要求しない
+    const schema = useMemo(
+      () => buildChangePasswordSchema(hasPassword),
+      [hasPassword],
+    );
+
     const {
       register,
       handleSubmit,
       formState: { errors, isSubmitting },
       reset,
     } = useForm<ChangePasswordFormData>({
-      resolver: zodResolver(changePasswordSchema),
+      resolver: zodResolver(schema),
       defaultValues: {
+        currentPassword: '',
         newPassword: '',
         confirmNewPassword: '',
       },
@@ -103,6 +117,7 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
           const response = await changePassword({
             newPassword: data.newPassword,
             verificationToken,
+            currentPassword: data.currentPassword,
           });
 
           setSuccessMessage(response.message);
@@ -186,6 +201,18 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
             noValidate
           >
             <div className={styles.c_change_password_form__fields}>
+              {hasPassword && (
+                <Input
+                  label='現在のパスワード'
+                  type='password'
+                  autoComplete='current-password'
+                  placeholder='現在のパスワードを入力'
+                  fullWidth
+                  error={errors.currentPassword?.message}
+                  {...register('currentPassword')}
+                />
+              )}
+
               <Input
                 label='新しいパスワード'
                 type='password'

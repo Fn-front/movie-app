@@ -79,6 +79,13 @@ export interface ChangePasswordRequest {
   newPassword: string;
   /** `/api/auth/otp/verify` が検証成功時に返すワンタイムトークン */
   verificationToken: string;
+  /**
+   * 現在のパスワード。
+   *
+   * パスワード未設定（ソーシャルログインのみ）のユーザーは入力しようがないため
+   * 任意。設定済みのユーザーにはサーバー側で必須として検証される。
+   */
+  currentPassword?: string;
 }
 
 /**

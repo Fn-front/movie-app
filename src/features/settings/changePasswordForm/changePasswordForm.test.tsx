@@ -55,7 +55,7 @@ const defaultEmail = 'test@example.com';
 const goToNewPasswordStep = async () => {
   mockSendOtp.mockResolvedValueOnce({ success: true });
 
-  render(<ChangePasswordForm email={defaultEmail} />);
+  render(<ChangePasswordForm email={defaultEmail} hasPassword />);
 
   await user.click(screen.getByRole('button', { name: '確認コードを送信' }));
 
@@ -78,7 +78,7 @@ describe('ChangePasswordForm', () => {
   });
 
   it('初期状態で確認コード送信ボタンが表示される', () => {
-    render(<ChangePasswordForm email={defaultEmail} />);
+    render(<ChangePasswordForm email={defaultEmail} hasPassword />);
 
     expect(
       screen.getByText(
@@ -93,7 +93,7 @@ describe('ChangePasswordForm', () => {
   it('確認コード送信成功時にOTP検証画面に遷移する', async () => {
     mockSendOtp.mockResolvedValueOnce({ success: true });
 
-    render(<ChangePasswordForm email={defaultEmail} />);
+    render(<ChangePasswordForm email={defaultEmail} hasPassword />);
 
     await user.click(screen.getByRole('button', { name: '確認コードを送信' }));
 
@@ -115,7 +115,7 @@ describe('ChangePasswordForm', () => {
       new AxiosError('Send failed', 'ERR_BAD_REQUEST'),
     );
 
-    render(<ChangePasswordForm email={defaultEmail} />);
+    render(<ChangePasswordForm email={defaultEmail} hasPassword />);
 
     await user.click(screen.getByRole('button', { name: '確認コードを送信' }));
 
@@ -181,6 +181,10 @@ describe('ChangePasswordForm', () => {
 
     await goToNewPasswordStep();
 
+    await user.type(
+      screen.getByLabelText('現在のパスワード'),
+      'CurrentPassword1',
+    );
     await user.type(screen.getByLabelText('新しいパスワード'), 'NewPassword1');
     await user.type(
       screen.getByLabelText('新しいパスワード（確認）'),
@@ -192,6 +196,7 @@ describe('ChangePasswordForm', () => {
       expect(mockChangePassword).toHaveBeenCalledWith({
         newPassword: 'NewPassword1',
         verificationToken: 'verification-token',
+        currentPassword: 'CurrentPassword1',
       });
     });
 
@@ -216,6 +221,10 @@ describe('ChangePasswordForm', () => {
 
     await goToNewPasswordStep();
 
+    await user.type(
+      screen.getByLabelText('現在のパスワード'),
+      'CurrentPassword1',
+    );
     await user.type(screen.getByLabelText('新しいパスワード'), 'NewPassword1');
     await user.type(
       screen.getByLabelText('新しいパスワード（確認）'),
@@ -227,6 +236,82 @@ describe('ChangePasswordForm', () => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({ variant: 'error' }),
+      );
+    });
+  });
+});
+
+describe('ChangePasswordForm — 現在のパスワード欄（#643）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  /** hasPassword を指定して新パスワード入力ステップまで進める */
+  const goToStepWith = async (hasPassword: boolean) => {
+    mockSendOtp.mockResolvedValueOnce({ success: true });
+
+    render(
+      <ChangePasswordForm email={defaultEmail} hasPassword={hasPassword} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: '確認コードを送信' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('otp-verification')).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId('otp-verify-success'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('新しいパスワード')).toBeInTheDocument();
+    });
+  };
+
+  it('パスワード設定済みなら「現在のパスワード」欄を表示する', async () => {
+    await goToStepWith(true);
+
+    expect(screen.getByLabelText('現在のパスワード')).toBeInTheDocument();
+  });
+
+  it('パスワード未設定なら「現在のパスワード」欄を表示しない', async () => {
+    await goToStepWith(false);
+
+    expect(screen.queryByLabelText('現在のパスワード')).not.toBeInTheDocument();
+  });
+
+  it('設定済みで現在のパスワードが未入力ならバリデーションエラーになる', async () => {
+    await goToStepWith(true);
+
+    await user.type(screen.getByLabelText('新しいパスワード'), 'NewPassword1');
+    await user.type(
+      screen.getByLabelText('新しいパスワード（確認）'),
+      'NewPassword1',
+    );
+    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('現在のパスワードを入力してください'),
+      ).toBeInTheDocument();
+    });
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
+  it('未設定なら現在のパスワード無しで送信できる', async () => {
+    mockChangePassword.mockResolvedValue({
+      success: true,
+      message: 'パスワードを変更しました。',
+    });
+
+    await goToStepWith(false);
+
+    await user.type(screen.getByLabelText('新しいパスワード'), 'NewPassword1');
+    await user.type(
+      screen.getByLabelText('新しいパスワード（確認）'),
+      'NewPassword1',
+    );
+    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+
+    await waitFor(() => {
+      expect(mockChangePassword).toHaveBeenCalledWith(
+        expect.objectContaining({ newPassword: 'NewPassword1' }),
       );
     });
   });

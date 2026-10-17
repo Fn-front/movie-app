@@ -13,6 +13,7 @@ import {
   RECOMMENDATIONS_MAX_REQUEST_COUNT,
   RECOMMENDATIONS_ACTIVE_USER_DAYS,
   RECOMMENDATION_EVENT_RETENTION_DAYS,
+  RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
   RECOMMENDATIONS_BATCH_SIZE,
   CRON_ERROR_MESSAGES,
 } from '@/constants';
@@ -24,6 +25,10 @@ import {
   type DismissedMovie,
   type ResolvedRecommendation,
 } from '@/lib/openai/generateRecommendations';
+import {
+  applyDiversityReranking,
+  buildRetryStrategy,
+} from '@/lib/recommendations/recommendationStrategy';
 
 /**
  * 生成処理の内訳メトリクス
@@ -300,16 +305,18 @@ export async function generateRecommendationsWithRetry(
       requestCount,
       dismissedMovies,
       signal,
+      buildRetryStrategy(attempt),
     );
 
     if (!aiRecommendations) {
       break;
     }
 
+    // 多様性リランキングで入れ替える余地を作るため、必要数より多めに解決する
     const resolvedInAttempt = await resolveRecommendationsWithTMDb(
       aiRecommendations,
       retryExcludedIds,
-      remainingCount,
+      remainingCount + RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
       signal,
     );
 
@@ -320,7 +327,13 @@ export async function generateRecommendationsWithRetry(
     // 次の試行の要求件数に使う採用率。0件なら下限値が効くので除算のみ行う
     previousHitRate = resolvedInAttempt.length / aiRecommendations.length;
 
-    for (const item of resolvedInAttempt) {
+    // 多めに解決した候補から、ジャンルが偏らないように必要数を選抜する
+    const rerankedInAttempt = applyDiversityReranking(
+      resolvedInAttempt,
+      remainingCount,
+    );
+
+    for (const item of rerankedInAttempt) {
       // 多めに解決されても最大件数で丸める（オーバーシュート防止）
       if (allResolved.length >= RECOMMENDATIONS_MAX_COUNT) {
         break;

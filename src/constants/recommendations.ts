@@ -46,6 +46,37 @@ export const RECOMMENDATIONS_MAX_REQUEST_COUNT = 30;
 export const RECOMMENDATIONS_YEAR_MATCH_TOLERANCE = 1;
 
 /**
+ * 1ジャンルが占めてよい最大比率
+ *
+ * お気に入りに偏り（例: アクションばかり）があるユーザーには同系統ばかりが
+ * 返るため、採用段階で上限を設けて多様性を確保する。
+ * 10件中4件までを同一ジャンルとする。
+ */
+export const RECOMMENDATIONS_MAX_GENRE_RATIO = 0.4;
+
+/**
+ * 多様性リランキング用に余分に解決する候補数
+ *
+ * 必要件数ぴったりしか解決しないと入れ替え先が無く、リランキングが
+ * ただの並べ替えで終わる。少し多めに確保してから選抜する。
+ */
+export const RECOMMENDATIONS_DIVERSITY_POOL_EXTRA = 5;
+
+/**
+ * リトライごとに上乗せする temperature
+ *
+ * 同じ入力・同じ温度で再送しても似た候補が返るだけでリトライが空振りする。
+ * 試行を重ねるごとに少し上げて出力を散らす。
+ */
+export const RECOMMENDATIONS_RETRY_TEMPERATURE_STEP = 0.1;
+
+/**
+ * リトライ時の temperature 上限
+ * 上げすぎると実在しない作品が増えるため頭打ちにする。
+ */
+export const RECOMMENDATIONS_RETRY_MAX_TEMPERATURE = 1;
+
+/**
  * お気に入りをプロンプトに載せる際の評価帯（降順に並べる）
  *
  * 評価値をただ羅列するより、帯ごとに見出しを分けた方がAIが重みを扱いやすい。

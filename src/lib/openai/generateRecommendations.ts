@@ -8,7 +8,6 @@ import {
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_RATING_BANDS,
   RECOMMENDATIONS_YEAR_MATCH_TOLERANCE,
-  OPENAI_CONFIG,
   TMDB_GENRE_MAP,
 } from '@/constants';
 import { hasExcludedKeyword, searchMovies } from '@/lib/tmdb/tmdb';
@@ -17,6 +16,11 @@ import {
   openAiRecommendationsResponseSchema,
   type OpenAiRecommendationItem,
 } from '@/schema/recommendations';
+
+import {
+  buildRetryStrategy,
+  type RetryStrategy,
+} from '@/lib/recommendations/recommendationStrategy';
 
 import { createOpenAIClient, getOpenAIModel } from './client';
 
@@ -64,8 +68,18 @@ export interface ResolvedRecommendation {
 /**
  * システムプロンプトを生成する
  * @param count - 推薦する映画の件数
+ * @param hint - リトライ時の追加指示。初回は null
  */
-function buildSystemPrompt(count: number): string {
+function buildSystemPrompt(count: number, hint: string | null = null): string {
+  const hintSection = hint ? `\n\n重要:\n- ${hint}` : '';
+  return `${buildBaseSystemPrompt(count)}${hintSection}`;
+}
+
+/**
+ * システムプロンプトの共通部分を生成する
+ * @param count - 推薦する映画の件数
+ */
+function buildBaseSystemPrompt(count: number): string {
   return `あなたは映画レコメンドAIです。
 ユーザーのお気に入り映画と評価（1〜10点）を分析し、そのユーザーが好みそうな映画を${count}件推薦してください。
 
@@ -263,6 +277,7 @@ export function buildUserPrompt(
  * @param count - 推薦する件数（デフォルト: RECOMMENDATIONS_MAX_COUNT）
  * @param dismissedMovies - 興味なし映画リスト（傾向分析用）
  * @param signal - 中断シグナル。クライアント離脱時にOpenAI呼び出しを打ち切る
+ * @param strategy - 試行ごとの生成戦略（温度・追加指示）。未指定は初回扱い
  * @returns パース済みのレコメンド項目配列、失敗時はnull
  */
 export async function fetchRecommendationsFromOpenAI(
@@ -271,6 +286,7 @@ export async function fetchRecommendationsFromOpenAI(
   count: number = RECOMMENDATIONS_MAX_COUNT,
   dismissedMovies: DismissedMovie[] = [],
   signal?: AbortSignal,
+  strategy: RetryStrategy = buildRetryStrategy(0),
 ): Promise<OpenAiRecommendationItem[] | null> {
   const client = createOpenAIClient();
   if (!client) {
@@ -288,7 +304,7 @@ export async function fetchRecommendationsFromOpenAI(
     const response = await client.responses.create(
       {
         model: getOpenAIModel(),
-        instructions: buildSystemPrompt(count),
+        instructions: buildSystemPrompt(count, strategy.hint),
         input: userPrompt,
         text: {
           format: {
@@ -318,7 +334,7 @@ export async function fetchRecommendationsFromOpenAI(
             strict: true,
           },
         },
-        temperature: OPENAI_CONFIG.RECOMMENDATIONS_TEMPERATURE,
+        temperature: strategy.temperature,
       },
       { signal },
     );

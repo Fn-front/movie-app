@@ -2,6 +2,8 @@
 @use '@/styles/mixins' as *;
 
 .c_movie_tile {
+  // タイトル button の ::after（カード全面の当たり判定）の基準にする
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -10,6 +12,10 @@
   transition: $transition-all;
 
   @include hover-shadow;
+
+  &:active {
+    transform: scale(0.98);
+  }
 
   &__poster {
     position: relative;
@@ -55,24 +61,28 @@
 
   &__dismiss_button {
     position: absolute;
+    z-index: 1;
     top: $spacing-2;
     right: calc($spacing-2 + 32px);
   }
 
   &__favorite_button {
     position: absolute;
+    z-index: 1;
     top: $spacing-2;
     right: $spacing-2;
   }
 
   &__watchlist_button {
     position: absolute;
+    z-index: 1;
     bottom: $spacing-2;
     right: $spacing-2;
   }
 
   &__revival {
     position: absolute;
+    z-index: 1;
     top: $spacing-2;
     left: $spacing-2;
     display: flex;
@@ -104,6 +114,34 @@
     line-height: $line-height-tight;
 
     @include text-truncate-multiline(2);
+  }
+
+  // タイトルの button をカード全面の当たり判定にする（stretched link パターン）。
+  // カード全体を role="button" にせずに「どこを押しても詳細が開く」を保つための実装。
+  &__title_button {
+    @include button-reset;
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+    }
+
+    &:focus-visible {
+      outline: none;
+
+      &::after {
+        outline: $border-width-2 solid $primary-500;
+        outline-offset: -2px;
+      }
+    }
   }
 
   &__genres {

@@ -16,7 +16,7 @@
 }
 
 .c_calendarDialog__error {
-  color: $error-main;
+  color: $text-danger;
 }
 
 .c_calendarDialog__calendar {
@@ -141,7 +141,7 @@
 
 .c_calendarDialog__calendar :global(.fc .fc-daygrid-more-link) {
   font-size: $font-size-xs;
-  color: $primary-500;
+  color: $text-link;
   font-weight: $font-weight-medium;
 }
 

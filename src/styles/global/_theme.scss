@@ -96,6 +96,20 @@
   // テキスト反転色
   --text-inverse: #ffffff;
 
+  // 用途別テキストカラー
+  //
+  // パレット（--primary-* 等）を直接テキスト色に使うと、テーマごとに背景の明度が
+  // 変わったときにコントラストが崩れる。用途ごとにトークンを挟み、ライト／ダーク
+  // それぞれで WCAG AA（4.5:1）を満たす値を割り当てる。
+  // ライトの基準背景は --background-default #fafafa / --background-paper #ffffff。
+  --text-link: var(--primary-500);
+  --text-link-hover: var(--primary-600);
+  --text-accent: var(--primary-700);
+  --text-success: var(--success-dark);
+  --text-warning: var(--warning-dark);
+  --text-danger: var(--error-dark);
+  --text-info: var(--info-dark);
+
   // ボーダー
   --border-color: var(--gray-300);
 
@@ -223,6 +237,20 @@
   --text-primary: var(--gray-100);
   --text-secondary: var(--gray-400);
   --text-disabled: var(--gray-500);
+
+  // 用途別テキストカラー
+  //
+  // :root の値はライトの白背景向けに選ばれた濃い色で、暗い背景では沈む
+  // （例: --primary-500 #1878b9 は #2d2d2d 上で 2.90:1）。
+  // 暗背景で最も明るい面 --background-secondary #2d2d2d に対しても
+  // 4.5:1 以上になる明るい段へ差し替える。
+  --text-link: var(--primary-400); // #4ca3dd / 4.98:1
+  --text-link-hover: var(--primary-300); // #75b7e5 / 6.34:1
+  --text-accent: var(--primary-300); // #75b7e5 / 6.34:1
+  --text-success: var(--success-main); // #10b981 / 5.43:1
+  --text-warning: var(--warning-main); // #f59e0b / 6.41:1
+  --text-danger: var(--error-light); // #f87171 / 4.98:1
+  --text-info: var(--info-light); // #60a5fa / 5.42:1
 
   // 背景
   --background-default: var(--gray-900);

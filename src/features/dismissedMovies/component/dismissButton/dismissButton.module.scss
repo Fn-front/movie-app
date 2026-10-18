@@ -23,7 +23,7 @@
 
   &:hover {
     background-color: $background-paper;
-    color: $error-dark;
+    color: $text-danger;
   }
 
   @include focus-visible;

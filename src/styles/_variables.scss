@@ -83,6 +83,15 @@ $text-primary: var(--text-primary);
 $text-secondary: var(--text-secondary);
 $text-disabled: var(--text-disabled);
 
+// 用途別テキストカラー（テーマごとにAAを満たす値が入る。パレットを直接使わない）
+$text-link: var(--text-link);
+$text-link-hover: var(--text-link-hover);
+$text-accent: var(--text-accent);
+$text-success: var(--text-success);
+$text-warning: var(--text-warning);
+$text-danger: var(--text-danger);
+$text-info: var(--text-info);
+
 // 背景色
 $background-default: var(--background-default);
 $background-paper: var(--background-paper);

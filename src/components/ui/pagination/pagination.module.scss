@@ -24,7 +24,7 @@
     &:hover:not(:disabled) {
       background-color: color-alpha(--primary-500, 10%);
       border-color: $primary-500;
-      color: $primary-500;
+      color: $text-link;
     }
 
     @include focus-visible;
@@ -61,7 +61,7 @@
 
     &:hover:not(&__active) {
       background-color: color-alpha(--primary-500, 10%);
-      color: $primary-500;
+      color: $text-link;
     }
 
     @include focus-visible;

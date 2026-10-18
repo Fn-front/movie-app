@@ -41,15 +41,15 @@
     font-weight: $font-weight-bold;
 
     &__high {
-      color: $success-dark;
+      color: $text-success;
     }
 
     &__mid {
-      color: $warning-dark;
+      color: $text-warning;
     }
 
     &__low {
-      color: $error-dark;
+      color: $text-danger;
     }
   }
 

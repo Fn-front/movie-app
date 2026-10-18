@@ -26,8 +26,15 @@ const FAKE_CLIENT = { from: jest.fn() } as never;
 
 const LIMIT = { maxAttempts: 10, windowMinutes: 5 };
 
-const createRequest = (headers: Record<string, string> = {}) =>
-  new Request('http://localhost/api/movies', { headers });
+/** 既定で送信元IPが取れるリクエスト（本番の Vercel と同じ状態） */
+const createRequest = (
+  headers: Record<string, string> = {
+    'x-vercel-forwarded-for': '203.0.113.10',
+  },
+) => new Request('http://localhost/api/movies', { headers });
+
+/** 転送ヘッダが無いリクエスト（ローカル起動など） */
+const createRequestWithoutIp = () => new Request('http://localhost/api/movies');
 
 // --- Tests ---
 
@@ -88,14 +95,28 @@ describe('enforcePublicRateLimit', () => {
       expect(mockCheckRateLimit.mock.calls[0][1]).toBe('user-123');
     });
 
-    it('送信元が特定できない場合は unknown で数える', async () => {
-      await enforcePublicRateLimit({
-        request: createRequest(),
+    it('送信元が特定できず未認証なら制限を掛けない', async () => {
+      // 'unknown' を識別子にすると未認証リクエストが1つのカウンタを共有し、
+      // 誰か1人の超過で未認証の利用者全員が 429 になる
+      const result = await enforcePublicRateLimit({
+        request: createRequestWithoutIp(),
         action: 'read_api_movies',
         limit: LIMIT,
       });
 
-      expect(mockCheckRateLimit.mock.calls[0][1]).toBe('unknown');
+      expect(result).toBeNull();
+      expect(mockCheckRateLimit).not.toHaveBeenCalled();
+    });
+
+    it('送信元が特定できなくても認証済みならユーザー単位で数える', async () => {
+      await enforcePublicRateLimit({
+        request: createRequestWithoutIp(),
+        action: 'read_api_movies',
+        limit: LIMIT,
+        userId: 'user-123',
+      });
+
+      expect(mockCheckRateLimit.mock.calls[0][1]).toBe('user-123');
     });
   });
 
@@ -106,7 +127,7 @@ describe('enforcePublicRateLimit', () => {
 
     it('429 を返す', async () => {
       const result = await enforcePublicRateLimit({
-        request: createRequest(),
+        request: createRequest({ 'x-vercel-forwarded-for': '203.0.113.10' }),
         action: 'read_api_movies',
         limit: LIMIT,
       });

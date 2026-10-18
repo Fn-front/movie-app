@@ -77,7 +77,10 @@ export function useWatchlist(
 ): UseWatchlistReturn {
   const { sort = 'added_at', limit = WATCHLIST_DEFAULT_LIMIT } = options;
   const { data: session, status } = useSession();
-  const isAuthenticated = status === 'authenticated' && !!session?.user;
+  // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
+  // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
+  // id の有無で見る（getAuthSession と同じ基準）
+  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
   const queryClient = useQueryClient();
   const { toast } = useToast();
 

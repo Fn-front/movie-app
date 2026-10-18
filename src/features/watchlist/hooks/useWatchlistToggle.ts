@@ -176,7 +176,10 @@ function rollbackCaches(
 export function useWatchlistToggle(): UseWatchlistToggleReturn {
   const queryClient = useQueryClient();
   const { data: session, status } = useSession();
-  const isAuthenticated = status === 'authenticated' && !!session?.user;
+  // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
+  // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
+  // id の有無で見る（getAuthSession と同じ基準）
+  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
   const { toast } = useToast();
   const openLoginPrompt = useLoginPromptStore((s) => s.open);
 

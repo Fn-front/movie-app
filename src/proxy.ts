@@ -42,7 +42,13 @@ export const proxy = auth((req) => {
     return NextResponse.next();
   }
 
-  const isAuthenticated = !!req.auth;
+  // 無効化済みセッション（パスワード変更による強制失効・ログインから7日の
+  // 絶対期限切れ）でも、session コールバックは user を空文字で埋めた
+  // オブジェクトを返すため req.auth 自体は truthy になる。
+  // そのため存在確認では判定できず、id の有無で見る必要がある。
+  // （NextAuth v5 の auth() は session コールバックの戻り値をラップするため、
+  //   コールバックで null を返しても既定値にフォールバックして truthy のまま）
+  const isAuthenticated = !!req.auth?.user?.id;
 
   const isProtectedPath = protectedPaths.some((path) =>
     nextUrl.pathname.startsWith(path),

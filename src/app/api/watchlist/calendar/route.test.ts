@@ -252,7 +252,7 @@ describe('GET /api/watchlist/calendar', () => {
         expect.anything(),
         'user-123',
         'read_api_user_data',
-        120,
+        300,
         10,
       );
     });

@@ -15,7 +15,7 @@ jest.mock('@/hooks/useToast', () => ({
 }));
 
 let mockSessionStatus = 'unauthenticated';
-let mockSessionData: { user?: { name: string } } | null = null;
+let mockSessionData: { user?: { id: string; name: string } } | null = null;
 
 jest.mock('next-auth/react', () => ({
   useSession: () => ({
@@ -179,7 +179,7 @@ describe('useMovieList', () => {
   describe('認証時の保存済みフィルター読み込み', () => {
     beforeEach(() => {
       mockSessionStatus = 'authenticated';
-      mockSessionData = { user: { name: 'テストユーザー' } };
+      mockSessionData = { user: { id: 'user-123', name: 'テストユーザー' } };
     });
 
     it('保存済みフィルターがある場合、stateに反映してフェッチする', async () => {
@@ -528,7 +528,7 @@ describe('useMovieList', () => {
   describe('フィルター保存', () => {
     beforeEach(() => {
       mockSessionStatus = 'authenticated';
-      mockSessionData = { user: { name: 'テストユーザー' } };
+      mockSessionData = { user: { id: 'user-123', name: 'テストユーザー' } };
     });
 
     it('認証時はハンドラー実行でフィルターが保存される', async () => {
@@ -750,7 +750,7 @@ describe('useMovieList', () => {
 
     it('saveFilterエラー時にトーストが表示される', async () => {
       mockSessionStatus = 'authenticated';
-      mockSessionData = { user: { name: 'テストユーザー' } };
+      mockSessionData = { user: { id: 'user-123', name: 'テストユーザー' } };
       mockSaveFilter.mockRejectedValue(new Error('Save Error'));
 
       const { result } = renderHook(() => useMovieList(defaultOptions), {
@@ -965,7 +965,7 @@ describe('useMovieList', () => {
 
     it('URLにフィルターがある場合、保存済みフィルターで上書きしない', async () => {
       mockSessionStatus = 'authenticated';
-      mockSessionData = { user: { name: 'テストユーザー' } };
+      mockSessionData = { user: { id: 'user-123', name: 'テストユーザー' } };
       mockSearchParams = new URLSearchParams({ sort_by: 'popularity' });
       mockGetSavedFilter.mockResolvedValue({
         sort_by: 'vote_average',
@@ -1095,7 +1095,7 @@ describe('useMovieList', () => {
 
     it('localStorageに値がある場合、保存済みフィルターで上書きしない', async () => {
       mockSessionStatus = 'authenticated';
-      mockSessionData = { user: { name: 'テストユーザー' } };
+      mockSessionData = { user: { id: 'user-123', name: 'テストユーザー' } };
       seedStorage({ sort_by: 'popularity' });
       mockGetSavedFilter.mockResolvedValue({
         sort_by: 'vote_average',
@@ -1115,7 +1115,7 @@ describe('useMovieList', () => {
 
     it('URL・localStorageとも空なら保存済みフィルターを使う', async () => {
       mockSessionStatus = 'authenticated';
-      mockSessionData = { user: { name: 'テストユーザー' } };
+      mockSessionData = { user: { id: 'user-123', name: 'テストユーザー' } };
       mockGetSavedFilter.mockResolvedValue({
         sort_by: 'vote_average',
         release_type: 'streaming',

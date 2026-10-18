@@ -138,7 +138,10 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
     await signOut({ callbackUrl: ROUTES.LOGIN });
   }, []);
 
-  const isAuthenticated = status === 'authenticated' && !!session?.user;
+  // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
+  // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
+  // id の有無で見る（getAuthSession と同じ基準）
+  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>

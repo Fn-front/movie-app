@@ -72,6 +72,7 @@ const proxy = require('./proxy').proxy as (req: unknown) => {
 function createMockRequest(options: {
   pathname: string;
   auth?: { user: { id: string }; totpPending?: boolean } | null;
+  // 無効化済みセッションは user.id が空文字になる（auth.ts の session コールバック）
   hasSessionCookie?: boolean;
 }) {
   const origin = 'http://localhost:3000';
@@ -498,6 +499,59 @@ describe('proxy', () => {
       // 認証のみのため init（{ request: { headers } }）は渡されない
       const init = mockNextResponseNext.mock.calls[0][0];
       expect(init).toBeUndefined();
+    });
+  });
+
+  describe('無効化済みセッション（パスワード変更・絶対期限切れ）', () => {
+    // session コールバックは無効化時も user を空文字で埋めたオブジェクトを返すため、
+    // req.auth 自体は truthy になる。存在確認で判定すると認証済み扱いになり、
+    // パスワード変更による強制失効が画面遷移レベルで効かない
+    const invalidatedAuth = { user: { id: '' } };
+
+    it('保護パスはサインインへリダイレクトする', () => {
+      const req = createMockRequest({
+        pathname: '/favorites',
+        auth: invalidatedAuth,
+      });
+
+      const response = proxy(req);
+
+      const location = response.headers.get('location');
+      expect(location).toContain('/auth/signin');
+      expect(location).toContain('callbackUrl=%2Ffavorites');
+    });
+
+    it('サインインページへは通す（ホームへ飛ばして再ログインを塞がない）', () => {
+      const req = createMockRequest({
+        pathname: '/auth/signin',
+        auth: invalidatedAuth,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toBeNull();
+      expect(mockNextResponseNext).toHaveBeenCalled();
+    });
+
+    it('cookieが残っていれば削除する', () => {
+      const req = createMockRequest({
+        pathname: '/',
+        auth: invalidatedAuth,
+        hasSessionCookie: true,
+      });
+
+      proxy(req);
+
+      expect(mockCookiesDelete).toHaveBeenCalledWith('next-auth.session-token');
+    });
+
+    it('公開パスはそのまま表示できる', () => {
+      const req = createMockRequest({ pathname: '/', auth: invalidatedAuth });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toBeNull();
+      expect(mockNextResponseNext).toHaveBeenCalled();
     });
   });
 });

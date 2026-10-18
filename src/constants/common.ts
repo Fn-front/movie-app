@@ -42,6 +42,10 @@ export const ROUTES = {
   THEATER_EXPERIENCE: '/theater-experience',
   /** 二段階認証コードの入力（第2要素が未了のときだけ到達する） */
   TOTP_CHALLENGE: '/auth/two-factor',
+  /** パスワードを忘れた場合のメール入力 */
+  FORGOT_PASSWORD: '/auth/forgot-password',
+  /** パスワード再設定（メールのリンクから到達する） */
+  RESET_PASSWORD: '/auth/reset-password',
   /** 認証エラー */
   AUTH_ERROR: '/auth/error',
   /** 映画詳細 */

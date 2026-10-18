@@ -33,6 +33,10 @@ export const RATE_LIMIT_ACTION = {
   OTP_VERIFY: 'otp_verify',
   /** 二段階認証コードの検証試行の上限（ユーザー単位） */
   TOTP_VERIFY: 'totp_verify',
+  /** パスワードリセットの発行上限（メールアドレス単位） */
+  PASSWORD_RESET_REQUEST: 'password_reset_request',
+  /** パスワードリセットの検証試行の上限（送信元単位） */
+  PASSWORD_RESET_CONFIRM: 'password_reset_confirm',
 } as const;
 
 /**

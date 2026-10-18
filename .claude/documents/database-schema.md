@@ -112,6 +112,36 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 
 ---
 
+### password_reset_tokens（パスワードリセット）
+パスワードを忘れた利用者に送るワンタイムトークンを管理
+
+| カラム名 | 型 | NULL | デフォルト | 説明 |
+|---------|-----|------|-----------|------|
+| id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
+| user_id | UUID | NOT NULL | - | ユーザーID（users.id への外部キー） |
+| token_hash | TEXT | NOT NULL | - | トークンの SHA-256（hex）。平文はメールのリンクにのみ載せる |
+| expires_at | TIMESTAMPTZ | NOT NULL | - | 有効期限（発行から30分） |
+| used_at | TIMESTAMPTZ | NULL | - | 使用済みの日時 |
+| created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
+
+**インデックス:**
+- `token_hash`（UNIQUE） - 照合はハッシュ値の一致で行う
+- `user_id`（`used_at IS NULL` の部分インデックス） - 発行時に既存の未使用トークンを無効化する用途
+- `expires_at` - 期限切れレコードの削除用
+
+**設計判断 — 平文を保存しない理由:**
+- トークンはパスワードをバイパスできる資格情報。DBが漏れた時点で有効なリンクを作られると意味がない
+- 256bit の乱数なので総当たりは成立せず、bcrypt のようなストレッチは不要（`src/lib/otp/verificationToken.ts` と同じ方式）
+
+**設計判断 — 使用済みの行を削除しない理由:**
+- 使い回しを「見つからない」ではなく「使用済み」として判定できるようにするため
+
+**GRANT:**
+- `service_role` のみ。`anon` / `authenticated` には一切付与しない
+- RLS は有効だがポリシーを作らない
+
+---
+
 ### user_totp（二段階認証の共有鍵）
 TOTP（認証アプリ）の共有鍵を管理
 

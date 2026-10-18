@@ -333,6 +333,72 @@ describe('OtpLoginForm', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [
+      '二段階認証が有効',
+      'otp_login_disabled',
+      '二段階認証が有効なため、メールでのログインは利用できません。パスワードと認証コードでログインしてください。',
+    ],
+    [
+      '判別できないコード',
+      'credentials',
+      'メールアドレスまたはパスワードが正しくありません。',
+    ],
+  ])(
+    'signIn のエラー内容を反映する: %s',
+    async (_label, code, expectedMessage) => {
+      // 二段階認証で塞がれたことを伝えないと、利用者はパスワード＋認証コードで
+      // 入り直せばよいと気づけず詰む（#642 / #711 で入れ忘れていた）
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, message: '送信しました。' }),
+      });
+
+      render(<OtpLoginForm />);
+
+      await user.type(
+        screen.getByLabelText('メールアドレス'),
+        'test@example.com',
+      );
+      await user.click(
+        screen.getByRole('button', { name: 'ログインコードを送信' }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('確認コード')).toBeInTheDocument();
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ success: true, message: '検証に成功しました。' }),
+      });
+
+      mockSignIn.mockResolvedValueOnce({
+        error: 'CredentialsSignin',
+        code,
+        ok: false,
+        status: 401,
+        url: null,
+      });
+
+      await user.type(screen.getByLabelText('確認コード'), '123456');
+      await user.click(
+        screen.getByRole('button', { name: '確認コードを検証' }),
+      );
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({
+            description: expectedMessage,
+            variant: 'error',
+          }),
+        );
+      });
+
+      expect(mockPush).not.toHaveBeenCalled();
+    },
+  );
+
   it('OTP検証成功後にsignInが例外をスローした場合にエラーが表示される', async () => {
     // OTP送信成功
     mockFetch.mockResolvedValueOnce({

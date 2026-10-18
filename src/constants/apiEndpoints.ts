@@ -13,6 +13,10 @@ export const API_ENDPOINTS = {
   OTP_SEND: '/api/auth/otp/send',
   /** 新規登録 */
   AUTH_REGISTER: '/api/auth/register',
+  /** パスワード再設定リンクの発行 */
+  PASSWORD_RESET_REQUEST: '/api/auth/password-reset/request',
+  /** パスワード再設定の実行 */
+  PASSWORD_RESET_CONFIRM: '/api/auth/password-reset/confirm',
 
   // --- ユーザー ---
   /** プロフィール更新 */

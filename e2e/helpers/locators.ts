@@ -14,9 +14,13 @@ import type { Page, Locator } from '@playwright/test';
  *
  * `c_card` と `c_movie_tile` の両方を持つのはカードのルート要素だけ。
  * 子要素（`c_movie_tile__poster` 等）を拾わないようにこの条件で絞る。
+ * `c_movie_tile_skeleton` も部分一致してしまうため明示的に除外する
+ * （読み込み中のスケルトンをクリックしても何も起きない）。
  */
 export function movieTiles(page: Page): Locator {
-  return page.locator('[class*="c_card"][class*="c_movie_tile"]');
+  return page.locator(
+    '[class*="c_card"][class*="c_movie_tile"]:not([class*="c_movie_tile_skeleton"])',
+  );
 }
 
 /** 映画タイルの「詳細を開く」ボタン（タイトル）のロケータを取得 */

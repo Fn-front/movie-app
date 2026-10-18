@@ -26,6 +26,15 @@ import { TEST_USER } from '../helpers/testUser';
 
 test.describe.configure({ mode: 'serial' });
 
+/**
+ * 登録に使うパスワード
+ *
+ * 登録APIは HIBP の漏洩リストと照合するため（#652）、`Password123` のような
+ * 漏洩上位の文字列は拒否される。ポリシー（12文字以上・大小文字・数字）を
+ * 満たし、かつ漏洩リストに載らない文字列を使う。
+ */
+const SIGNUP_PASSWORD = 'E2eResendKx7Qm2';
+
 test.describe('パスワード変更OTP（認証済み・action_type password_change）', () => {
   test.beforeEach(async () => {
     await cleanupRateLimit(TEST_USER.email);
@@ -87,8 +96,8 @@ test.describe('OTP再送（未認証・新規登録OTP）', () => {
 
     await page.goto('/auth/signup');
     await page.getByLabel('メールアドレス').fill(resendEmail);
-    await page.getByLabel('パスワード', { exact: true }).fill('Password123');
-    await page.getByLabel('パスワード（確認）').fill('Password123');
+    await page.getByLabel('パスワード', { exact: true }).fill(SIGNUP_PASSWORD);
+    await page.getByLabel('パスワード（確認）').fill(SIGNUP_PASSWORD);
     await page.getByRole('button', { name: '登録する' }).click();
 
     await expect(

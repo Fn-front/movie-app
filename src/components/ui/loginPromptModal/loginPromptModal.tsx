@@ -45,8 +45,13 @@ export const LoginPromptModal = memo(function LoginPromptModal() {
         </div>
       </ModalBody>
       <ModalFooter>
+        {/*
+          Modal ヘッダーの × も「閉じる」というアクセシブルネームを持つ。
+          同名のボタンが2つ並ぶとスクリーンリーダーのボタン一覧で
+          区別できないため、こちらは「キャンセル」にする。
+        */}
         <Button variant='ghost' size='sm' onClick={close}>
-          閉じる
+          キャンセル
         </Button>
         <Button variant='primary' size='sm' onClick={handleLogin}>
           ログイン

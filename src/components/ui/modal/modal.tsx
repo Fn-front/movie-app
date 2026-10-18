@@ -71,6 +71,11 @@ export interface ModalFooterProps {
 /**
  * Modalコンポーネント
  *
+ * `showCloseButton`（既定 true）のヘッダーの × は「閉じる」という
+ * アクセシブルネームを持つ。フッターに同名のボタンを置くと
+ * スクリーンリーダーのボタン一覧で区別できなくなるため、
+ * 「キャンセル」など別の文言にすること。
+ *
  * @example
  * ```tsx
  * <Modal

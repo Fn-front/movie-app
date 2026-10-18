@@ -25,6 +25,15 @@ import { TEST_USER } from '../helpers/testUser';
 // 同一メールのOTPを直列で扱うためシリアル実行
 test.describe.configure({ mode: 'serial' });
 
+/**
+ * 登録に使うパスワード
+ *
+ * 登録APIは HIBP の漏洩リストと照合するため（#652）、`Password123` のような
+ * 漏洩上位の文字列は拒否される。ポリシー（12文字以上・大小文字・数字）を
+ * 満たし、かつ漏洩リストに載らない文字列を使う。
+ */
+const SIGNUP_PASSWORD = 'E2eOtpFlowKx7Qm2';
+
 test.describe('確認コード(OTP)フロー（未認証）', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -65,8 +74,8 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
     await cleanupAuthUser(email);
     await page.goto('/auth/signup');
     await page.getByLabel('メールアドレス').fill(email);
-    await page.getByLabel('パスワード', { exact: true }).fill('Password123');
-    await page.getByLabel('パスワード（確認）').fill('Password123');
+    await page.getByLabel('パスワード', { exact: true }).fill(SIGNUP_PASSWORD);
+    await page.getByLabel('パスワード（確認）').fill(SIGNUP_PASSWORD);
     await page.getByRole('button', { name: '登録する' }).click();
     await expect(
       page.getByRole('heading', { name: '確認コードを入力' }),
@@ -80,8 +89,8 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
 
     await page.goto('/auth/signup');
     await page.getByLabel('メールアドレス').fill(signupEmail);
-    await page.getByLabel('パスワード', { exact: true }).fill('Password123');
-    await page.getByLabel('パスワード（確認）').fill('Password123');
+    await page.getByLabel('パスワード', { exact: true }).fill(SIGNUP_PASSWORD);
+    await page.getByLabel('パスワード（確認）').fill(SIGNUP_PASSWORD);
     await page.getByRole('button', { name: '登録する' }).click();
 
     // 確認コード入力画面に遷移
@@ -105,8 +114,8 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
 
     await page.goto('/auth/signup');
     await page.getByLabel('メールアドレス').fill(errEmail);
-    await page.getByLabel('パスワード', { exact: true }).fill('Password123');
-    await page.getByLabel('パスワード（確認）').fill('Password123');
+    await page.getByLabel('パスワード', { exact: true }).fill(SIGNUP_PASSWORD);
+    await page.getByLabel('パスワード（確認）').fill(SIGNUP_PASSWORD);
     await page.getByRole('button', { name: '登録する' }).click();
 
     await expect(

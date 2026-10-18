@@ -71,7 +71,7 @@
     "details": {
       "fields": {
         "email": "メールアドレスの形式が正しくありません",
-        "password": "パスワードは8文字以上、英字（大文字・小文字）と数字を含む必要があります"
+        "password": "パスワードは12文字以上、英字（大文字・小文字）と数字を含む必要があります"
       }
     }
   }
@@ -103,10 +103,15 @@
 ```json
 {
   "email": "user@example.com",
-  "password": "password123",
+  "password": "ExamplePass1234",
   "name": "ユーザー名"
 }
 ```
+
+**Validation:**
+- `email`: メール形式必須、255文字以内
+- `password`: 12文字以上72バイト以内（UTF-8）、英字（大文字・小文字）+ 数字必須、HIBP の漏洩リストに載っていないこと
+- `name`: 100文字以内（任意）
 
 **Response (201 Created):**
 ```json
@@ -131,6 +136,7 @@
 
 **Error Responses:**
 - `400 Bad Request`: バリデーションエラー
+- `400 Bad Request`: 漏洩パスワード（HIBP 照合でヒット。メッセージ: 「このパスワードは過去の情報漏洩で確認されています。別のパスワードを設定してください」）
 - `429 Too Many Requests`: レート制限超過（email単位）
 
 ---
@@ -257,7 +263,7 @@ OTPコード検証
 ```json
 {
   "email": "user@example.com",
-  "password": "password123"
+  "password": "ExamplePass1234"
 }
 ```
 
@@ -308,12 +314,12 @@ OTPコード検証
 ```
 
 **Validation:**
-- `newPassword`: 8文字以上、英字（大文字・小文字）+ 数字必須
+- `newPassword`: 12文字以上72バイト以内（UTF-8）、英字（大文字・小文字）+ 数字必須、HIBP の漏洩リストに載っていないこと
 
 **内部処理:**
 1. セッションからユーザー情報を取得
-2. otp_codesテーブルで該当ユーザーのpassword_change用OTPが検証済み（verified_at IS NOT NULL）かつ有効期限内かを確認
-3. 新パスワードのバリデーション
+2. 新パスワードのバリデーション（HIBP 漏洩照合を含む。OTPを消費する前に行い、差し戻し時に確認コードの再送を不要にする）
+3. otp_codesテーブルで該当ユーザーのpassword_change用OTPが検証済み（verified_at IS NOT NULL）かつ有効期限内かを確認
 4. パスワードハッシュ化・更新
 5. password_changed_at を更新
 6. OTPレコード削除

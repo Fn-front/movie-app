@@ -32,6 +32,7 @@ import {
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { getClientIp } from '@/lib/http/getClientIp';
+import { rejectPwnedPassword } from '@/helpers/pwnedPasswordGuard';
 
 export async function POST(request: Request) {
   try {
@@ -90,6 +91,14 @@ export async function POST(request: Request) {
     }
 
     const { email, password, name } = result.data;
+
+    // 漏洩パスワードの照合。
+    //
+    // レート制限の後に置くのは、このエンドポイントを外部APIへの無制限な
+    // 踏み台にしないため。既存ユーザーチェックより前なのは、応答がパスワード
+    // だけで決まり、メールアドレスの登録有無を漏らさないため。
+    const pwnedResponse = await rejectPwnedPassword(password);
+    if (pwnedResponse) return pwnedResponse;
 
     // 既存ユーザーチェック（is_verified も見る）
     const { data: existingUser } = await supabase

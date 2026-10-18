@@ -44,8 +44,8 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
       await page.goto('/auth/signup');
 
       await page.getByLabel('メールアドレス').fill('notanemail');
-      await page.getByLabel('パスワード', { exact: true }).fill('Password123');
-      await page.getByLabel('パスワード（確認）').fill('Password123');
+      await page.getByLabel('パスワード', { exact: true }).fill('Password1234');
+      await page.getByLabel('パスワード（確認）').fill('Password1234');
       await page.getByRole('button', { name: '登録する' }).click();
 
       await expect(
@@ -53,19 +53,45 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
       ).toBeVisible();
     });
 
-    test('パスワードが8文字未満だとエラーが表示される', async ({ page }) => {
+    test('パスワードが12文字未満だとエラーが表示される', async ({ page }) => {
       await page.goto('/auth/signup');
 
       await page.getByLabel('メールアドレス').fill('valid@example.com');
-      // 大文字・小文字・数字は満たすが8文字未満
+      // 大文字・小文字・数字は満たすが12文字未満
       await page.getByLabel('パスワード', { exact: true }).fill('Ab1');
       await page.getByLabel('パスワード（確認）').fill('Ab1');
       await page.getByRole('button', { name: '登録する' }).click();
 
       await expect(
-        page.getByText('パスワードは8文字以上で入力してください'),
+        page.getByText('パスワードは12文字以上で入力してください'),
       ).toBeVisible();
     });
+
+    // bcrypt は72バイトで黙って切り詰めるため、上限を超える入力は受け付けない（#652）
+    const byteLimitCases = [
+      { title: 'ASCIIで73バイト', password: `Aa1${'x'.repeat(70)}` },
+      // 26文字しかないが75バイト。文字数で判定していたら通ってしまう
+      { title: '日本語を含み75バイト', password: `Aa1${'あ'.repeat(24)}` },
+    ];
+
+    for (const { title, password } of byteLimitCases) {
+      test(`パスワードが${title}だとバイト数の理由が表示される`, async ({
+        page,
+      }) => {
+        await page.goto('/auth/signup');
+
+        await page.getByLabel('メールアドレス').fill('valid@example.com');
+        await page.getByLabel('パスワード', { exact: true }).fill(password);
+        await page.getByLabel('パスワード（確認）').fill(password);
+        await page.getByRole('button', { name: '登録する' }).click();
+
+        await expect(
+          page.getByText(
+            'パスワードは72バイト以内で入力してください（日本語は1文字3バイト）',
+          ),
+        ).toBeVisible();
+      });
+    }
 
     test('パスワードと確認が一致しないとエラーが表示される', async ({
       page,
@@ -73,29 +99,29 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
       await page.goto('/auth/signup');
 
       await page.getByLabel('メールアドレス').fill('valid@example.com');
-      await page.getByLabel('パスワード', { exact: true }).fill('Password123');
-      await page.getByLabel('パスワード（確認）').fill('Password999');
+      await page.getByLabel('パスワード', { exact: true }).fill('Password1234');
+      await page.getByLabel('パスワード（確認）').fill('Password5678');
       await page.getByRole('button', { name: '登録する' }).click();
 
       await expect(page.getByText('パスワードが一致しません')).toBeVisible();
     });
 
-    // パスワード複雑性（zod検証順: min → 大文字 → 小文字 → 数字 に沿って
+    // パスワード複雑性（zod検証順: min → バイト数 → 大文字 → 小文字 → 数字 に沿って
     // 直前チェックは通過し対象だけ失敗させる入力を用意）
     const complexityCases = [
       {
         title: '大文字欠落',
-        password: 'password123',
+        password: 'password1234',
         message: 'パスワードに大文字を含めてください',
       },
       {
         title: '小文字欠落',
-        password: 'PASSWORD123',
+        password: 'PASSWORD1234',
         message: 'パスワードに小文字を含めてください',
       },
       {
         title: '数字欠落',
-        password: 'PasswordAbc',
+        password: 'PasswordAbcd',
         message: 'パスワードに数字を含めてください',
       },
     ];
@@ -123,8 +149,8 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
       // 形式は有効なまま255文字超にする（ローカル部を長くする）
       const longEmail = `${'a'.repeat(250)}@example.com`;
       await page.getByLabel('メールアドレス').fill(longEmail);
-      await page.getByLabel('パスワード', { exact: true }).fill('Password123');
-      await page.getByLabel('パスワード（確認）').fill('Password123');
+      await page.getByLabel('パスワード', { exact: true }).fill('Password1234');
+      await page.getByLabel('パスワード（確認）').fill('Password1234');
       await page.getByRole('button', { name: '登録する' }).click();
 
       await expect(page.getByText('メールアドレスが長すぎます')).toBeVisible();
@@ -137,8 +163,8 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
 
       await page.getByLabel('メールアドレス').fill('valid@example.com');
       await page.getByLabel('ユーザー名（任意）').fill('あ'.repeat(101));
-      await page.getByLabel('パスワード', { exact: true }).fill('Password123');
-      await page.getByLabel('パスワード（確認）').fill('Password123');
+      await page.getByLabel('パスワード', { exact: true }).fill('Password1234');
+      await page.getByLabel('パスワード（確認）').fill('Password1234');
       await page.getByRole('button', { name: '登録する' }).click();
 
       await expect(

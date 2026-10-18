@@ -8,6 +8,7 @@ import { VALIDATION } from '@/constants';
 import { VALIDATION_MESSAGES } from '@/constants/auth';
 
 import { normalizeEmail } from '@/utils/email';
+import { getByteLength } from '@/utils/string';
 
 /**
  * 正規化済みメールアドレス
@@ -26,10 +27,20 @@ const normalizedEmailSchema = z
 
 /**
  * パスワードバリデーション（ポリシー付き）
- * - 8文字以上
+ * - 12文字以上
+ * - 72バイト以内（UTF-8）
  * - 大文字を含む
  * - 小文字を含む
  * - 数字を含む
+ *
+ * 上限をバイト数で持つのは bcrypt の仕様に合わせるため。bcrypt は入力を
+ * 72バイトで黙って切り詰めるので、上限が無いと「100文字の強固なパスワードを
+ * 設定した」つもりでも先頭72バイト分しか効かない状態になる（#652）。
+ * 文字数で判定すると、UTF-8 で1文字3バイトの日本語を含む場合に意図とずれる。
+ *
+ * 漏洩パスワードの照合（HIBP）はここでは行わない。外部APIへの通信を伴い
+ * 非同期になるうえ、利用者のブラウザから外部へ直接通信させないため、
+ * サーバー側の API Route で行う（`src/lib/auth/pwnedPassword.ts`）。
  */
 const passwordSchema = z
   .string()
@@ -37,6 +48,11 @@ const passwordSchema = z
     VALIDATION.PASSWORD_MIN_LENGTH,
     VALIDATION_MESSAGES.PASSWORD_MIN_LENGTH(VALIDATION.PASSWORD_MIN_LENGTH),
   )
+  .refine((value) => getByteLength(value) <= VALIDATION.PASSWORD_MAX_BYTES, {
+    message: VALIDATION_MESSAGES.PASSWORD_MAX_BYTES(
+      VALIDATION.PASSWORD_MAX_BYTES,
+    ),
+  })
   .regex(/[A-Z]/, VALIDATION_MESSAGES.PASSWORD_UPPERCASE)
   .regex(/[a-z]/, VALIDATION_MESSAGES.PASSWORD_LOWERCASE)
   .regex(/[0-9]/, VALIDATION_MESSAGES.PASSWORD_NUMBER);

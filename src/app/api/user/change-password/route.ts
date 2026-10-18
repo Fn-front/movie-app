@@ -21,6 +21,7 @@ import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import { OTP_ACTION, OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import { hashVerificationToken } from '@/lib/otp';
+import { rejectPwnedPassword } from '@/helpers/pwnedPasswordGuard';
 
 export async function POST(request: Request) {
   try {
@@ -72,6 +73,13 @@ export async function POST(request: Request) {
     }
 
     const { newPassword, verificationToken, currentPassword } = result.data;
+
+    // 漏洩パスワードの照合。
+    //
+    // 検証済みOTPを消費する前に弾く。後に置くと、ここで差し戻された利用者が
+    // 確認コードの再送からやり直すことになる。
+    const pwnedResponse = await rejectPwnedPassword(newPassword);
+    if (pwnedResponse) return pwnedResponse;
 
     // ユーザー取得
     const { data: user, error: fetchError } = await supabase

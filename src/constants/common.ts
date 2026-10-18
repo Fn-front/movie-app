@@ -120,7 +120,16 @@ export const ERROR_MESSAGES = {
  */
 export const VALIDATION = {
   /** パスワード最小文字数 */
-  PASSWORD_MIN_LENGTH: 8,
+  PASSWORD_MIN_LENGTH: 12,
+  /**
+   * パスワード最大バイト数（UTF-8）
+   *
+   * bcrypt は入力を72バイトで黙って切り詰める。上限を設けないと、長い
+   * パスワードを設定した利用者が「先頭72バイトさえ一致すれば通る」ことに
+   * 気づけない（#652）。文字数ではなくバイト数で判定するのは、日本語が
+   * UTF-8 で1文字3バイトになり文字数と乖離するため。
+   */
+  PASSWORD_MAX_BYTES: 72,
   /** メールアドレス最大文字数 */
   EMAIL_MAX_LENGTH: 255,
   /** 検索キーワード最大文字数 */

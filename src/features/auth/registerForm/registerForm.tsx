@@ -143,7 +143,7 @@ export const RegisterForm = memo(function RegisterForm() {
             label='パスワード'
             type='password'
             autoComplete='new-password'
-            placeholder='8文字以上、英大小文字・数字を含む'
+            placeholder='12文字以上、英大小文字・数字を含む'
             fullWidth
             error={errors.password?.message}
             {...register('password')}

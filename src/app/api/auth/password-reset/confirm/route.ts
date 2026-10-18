@@ -27,6 +27,7 @@ import {
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { consumePasswordResetToken } from '@/lib/auth/passwordResetToken';
 import { getClientIp } from '@/lib/http/getClientIp';
+import { rejectPwnedPassword } from '@/helpers/pwnedPasswordGuard';
 
 /** トークンが無効・期限切れ・使用済み */
 const invalidTokenResponse = () =>
@@ -97,6 +98,13 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    // 漏洩パスワードの照合。
+    //
+    // トークンを消費する前に弾く。後に置くと、ここで差し戻された利用者の
+    // リンクが使用済みになり、再発行からやり直すことになる。
+    const pwnedResponse = await rejectPwnedPassword(password);
+    if (pwnedResponse) return pwnedResponse;
 
     // トークンの検証と消費を1文で行う。パスワードを更新してから消費すると、
     // 同じリンクを同時に2回開かれたときに両方とも通る

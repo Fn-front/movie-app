@@ -57,7 +57,7 @@ export const ResetPasswordForm = memo<ResetPasswordFormProps>(
                 label='新しいパスワード'
                 type='password'
                 autoComplete='new-password'
-                placeholder='8文字以上、大文字・小文字・数字を含む'
+                placeholder='12文字以上、大文字・小文字・数字を含む'
                 fullWidth
                 error={errors.password?.message}
                 {...register('password')}

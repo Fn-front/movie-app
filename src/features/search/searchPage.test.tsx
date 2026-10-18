@@ -83,6 +83,16 @@ describe('SearchPage', () => {
     jest.clearAllMocks();
   });
 
+  it('フィルターのランドマークにラベルが付く（サイドバーと区別するため）', () => {
+    setupDefaultMocks({ query: 'テスト映画' });
+
+    render(<SearchPage />);
+
+    expect(
+      screen.getByRole('complementary', { name: '検索フィルター' }),
+    ).toBeInTheDocument();
+  });
+
   it('検索キーワードがある場合はタイトルに表示する', () => {
     setupDefaultMocks({ query: 'テスト映画' });
 

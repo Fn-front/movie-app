@@ -21,6 +21,13 @@ describe('SearchBar', () => {
     expect(screen.getByLabelText('検索')).toBeInTheDocument();
   });
 
+  it('検索ランドマークにラベルが付く（検索ページのフィルターと区別するため）', () => {
+    render(<SearchBar />);
+    expect(
+      screen.getByRole('search', { name: 'サイト内検索' }),
+    ).toBeInTheDocument();
+  });
+
   it('プレースホルダーが表示される', () => {
     render(<SearchBar placeholder='テスト検索...' />);
     expect(screen.getByPlaceholderText('テスト検索...')).toBeInTheDocument();

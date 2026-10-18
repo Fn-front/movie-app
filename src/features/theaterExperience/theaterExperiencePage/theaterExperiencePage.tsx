@@ -430,7 +430,10 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
             </div>
 
             {/* サイドパネル */}
-            <aside className={styles.c_theater_experience__sidebar}>
+            <aside
+              className={styles.c_theater_experience__sidebar}
+              aria-label='座席・音響の設定'
+            >
               <OccupancySelector
                 level={occupancyLevel}
                 onLevelChange={setOccupancyLevel}

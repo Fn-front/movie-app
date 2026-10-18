@@ -12,7 +12,9 @@ export const metadata: Metadata = {
 
 export default async function Home() {
   const session = await auth();
-  const isAuthenticated = !!session?.user;
+  // 無効化済みセッションは user が空文字で埋められたオブジェクトとして返るため、
+  // 存在確認では判定できない。id の有無で見る（getAuthSession と同じ基準）
+  const isAuthenticated = !!session?.user?.id;
 
   const [nowShowingMovies, recommendationData] = await Promise.all([
     getNowShowingMovies(),

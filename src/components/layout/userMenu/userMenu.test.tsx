@@ -36,6 +36,7 @@ import { UserMenu } from './userMenu';
 const authenticatedSession = {
   data: {
     user: {
+      id: 'user-123',
       name: 'テストユーザー',
       email: 'test@example.com',
       image: null,

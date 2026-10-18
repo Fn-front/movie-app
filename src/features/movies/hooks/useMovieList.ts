@@ -167,7 +167,10 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const { toast } = useToast();
   const { data: session, status } = useSession();
-  const isAuthenticated = status === 'authenticated' && !!session?.user;
+  // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
+  // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
+  // id の有無で見る（getAuthSession と同じ基準）
+  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
   // URL または localStorage に値がある場合はそれを正とし、saved_filters で上書きしない
   const [savedFilterApplied, setSavedFilterApplied] = useState(hasUrlFilters);
   const queryClient = useQueryClient();

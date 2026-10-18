@@ -63,7 +63,8 @@ export const UserMenu = memo(function UserMenu() {
     [toggleTheme],
   );
 
-  if (status !== 'authenticated' || !session?.user) {
+  // 無効化済みセッションは user が空文字で埋められて返るため id で判定する
+  if (status !== 'authenticated' || !session?.user?.id) {
     return (
       <button
         className={styles.c_user_menu__login_button}

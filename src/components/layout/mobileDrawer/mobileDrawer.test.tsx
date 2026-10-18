@@ -15,13 +15,14 @@ jest.mock('next/navigation', () => ({
 const mockSignOut = jest.fn();
 let mockSessionData: {
   data: {
-    user: { name: string; email: string; image: string | null };
+    user: { id: string; name: string; email: string; image: string | null };
     expires: string;
   } | null;
   status: string;
 } = {
   data: {
     user: {
+      id: 'user-123',
       name: 'テストユーザー',
       email: 'test@example.com',
       image: null,
@@ -55,6 +56,7 @@ describe('MobileDrawer', () => {
     mockSessionData = {
       data: {
         user: {
+          id: 'user-123',
           name: 'テストユーザー',
           email: 'test@example.com',
           image: null,
@@ -113,6 +115,7 @@ describe('MobileDrawer', () => {
     mockSessionData = {
       data: {
         user: {
+          id: 'user-123',
           name: 'テストユーザー',
           email: 'test@example.com',
           image: 'https://example.com/avatar.jpg',

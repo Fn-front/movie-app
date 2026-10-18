@@ -31,6 +31,8 @@ export const RATE_LIMIT_ACTION = {
   OTP_SEND_DAILY: 'otp_send_daily',
   /** OTP 検証試行の上限（メールアドレス単位。OTP行の attempts とは独立した多層防御） */
   OTP_VERIFY: 'otp_verify',
+  /** 二段階認証コードの検証試行の上限（ユーザー単位） */
+  TOTP_VERIFY: 'totp_verify',
 } as const;
 
 /**
@@ -84,6 +86,17 @@ export const RATE_LIMIT_CONFIG = {
    * **その第三者自身がロックされるだけ**で、正当な利用者は締め出されない（#644）。
    */
   LOGIN_ACCOUNT: { maxAttempts: 5, windowMinutes: 30 },
+  /**
+   * 二段階認証コードの検証試行の上限。
+   *
+   * 6桁 = 100万通りを前後1ステップの窓で受けるため、総当たりの成功確率は
+   * 1試行あたり 3/10^6。上限5回なら窓が開いている間の成功確率は約 1.5/10^5 に
+   * 収まる。ここを緩めると二段階認証が総当たりで抜かれる。
+   *
+   * 識別子はユーザーIDを使う（パスワード照合を通らないとここまで来ないため、
+   * 第三者が他人のアカウントをロックすることはできない）。
+   */
+  TOTP_VERIFY: { maxAttempts: 5, windowMinutes: 15 },
 } as const;
 
 /**

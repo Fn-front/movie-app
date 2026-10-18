@@ -37,6 +37,14 @@ export const RATE_LIMIT_ACTION = {
   PASSWORD_RESET_REQUEST: 'password_reset_request',
   /** パスワードリセットの検証試行の上限（送信元単位） */
   PASSWORD_RESET_CONFIRM: 'password_reset_confirm',
+  /** 映画一覧の取得（未認証は送信元単位 / 認証済みはユーザー単位） */
+  READ_MOVIES: 'read_api_movies',
+  /** 映画検索の実行（送信元単位） */
+  SEARCH_MOVIES: 'search_api_movies',
+  /** 映画詳細の取得（未認証は送信元単位 / 認証済みはユーザー単位） */
+  READ_MOVIE_DETAIL: 'read_api_movie_detail',
+  /** ジャンル一覧の取得（送信元単位） */
+  READ_GENRES: 'read_api_genres',
 } as const;
 
 /**
@@ -83,6 +91,21 @@ export const RATE_LIMIT_CONFIG = {
    * 利用者をまとめて巻き込む。
    */
   LOGIN_IP: { maxAttempts: 20, windowMinutes: 15 },
+  /**
+   * 公開映画APIの上限。
+   *
+   * ⚠️ consume_rate_limit は**スライディングウィンドウではなく**
+   * 「累積 maxAttempts 到達で windowMinutes ロック」方式。通常利用で到達しない
+   * 値にすること。一覧は infinite query でスクロールごとに1本、検索は500msの
+   * デバウンスで打鍵ごとに発火しうるため、読み取り系は厚めに取る。
+   *
+   * ルートごとに別のカウンタにしている。1つにまとめると、一覧のスクロールで
+   * 枠を使い切った利用者が詳細ページでも 429 になる。
+   */
+  READ_MOVIES: { maxAttempts: 120, windowMinutes: 10 },
+  SEARCH_MOVIES: { maxAttempts: 60, windowMinutes: 10 },
+  READ_MOVIE_DETAIL: { maxAttempts: 120, windowMinutes: 10 },
+  READ_GENRES: { maxAttempts: 60, windowMinutes: 10 },
   /**
    * ログイン試行のアカウント×送信元単位の上限。
    *

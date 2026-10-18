@@ -12,11 +12,14 @@ import { NextResponse } from 'next/server';
 import { searchMovies, discoverMovies } from '@/lib/tmdb/tmdb';
 import type { Movie, TMDbResponse } from '@/lib/types';
 import { searchQuerySchema } from '@/schema/search';
+import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import {
   HTTP_STATUS,
   ERROR_CODE,
   SEARCH_ERROR_MESSAGES,
   CACHE_CONTROL,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 
 /**
@@ -57,6 +60,16 @@ function filterMovies(
 
 export async function GET(request: Request) {
   try {
+    // 未認証で叩ける＝サーバーの TMDB_API_KEY を使った無認証プロキシになるため、
+    // 送信元単位で上限を掛ける。認証判定は行わない（JWT検証のコストを
+    // 高頻度の公開ルートに持ち込まないため、識別子は常に送信元）
+    const limited = await enforcePublicRateLimit({
+      request,
+      action: RATE_LIMIT_ACTION.SEARCH_MOVIES,
+      limit: RATE_LIMIT_CONFIG.SEARCH_MOVIES,
+    });
+    if (limited) return limited;
+
     // クエリパラメータのバリデーション
     const { searchParams } = new URL(request.url);
     const queryResult = searchQuerySchema.safeParse({

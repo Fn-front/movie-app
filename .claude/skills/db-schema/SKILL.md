@@ -106,7 +106,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO service_role;
 
 ### パターンD: 関数（RPC・トリガー関数）
 
-> PostgreSQL は `CREATE FUNCTION` 時に **EXECUTE を PUBLIC へ自動付与**する。剥奪しないと、公開されている anon キーから `POST /rest/v1/rpc/<関数名>` で到達できる。
+> 関数の EXECUTE は2系統で付与される。(1) PostgreSQL が `CREATE FUNCTION` 時に **PUBLIC へ自動付与**する分、(2) Supabase が `ALTER DEFAULT PRIVILEGES` で **anon / authenticated へ付与**する分。**両方を剥奪しないと**、公開されている anon キーから `POST /rest/v1/rpc/<関数名>` で到達できる。
 
 ```sql
 CREATE OR REPLACE FUNCTION public.<fn>(<args>)
@@ -116,13 +116,14 @@ SECURITY INVOKER          -- DEFINER は RLS をバイパスする。使うな�
 SET search_path = public, pg_temp
 AS $$ ... $$;
 
-REVOKE EXECUTE ON FUNCTION public.<fn>(<argtypes>) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.<fn>(<argtypes>) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.<fn>(<argtypes>) TO service_role;
 ```
 
-- **`service_role` は superuser ではない。** PUBLIC を剥奪したら明示的に GRANT しないと、サーバー側の呼び出しが `42501` で全て落ちる
+- **`FROM PUBLIC` だけでは不十分。** anon / authenticated への付与が残る
+- **`service_role` は superuser ではない。** 権限を剥奪したら明示的に GRANT しないと、サーバー側の呼び出しが `42501` で全て落ちる（service_role は REVOKE 対象に含めない）
 - `anon` に付与するのは、未認証クライアントが実際に呼ぶ関数だけ
-- `CREATE OR REPLACE` は既存権限を保持するが、**`DROP FUNCTION` → `CREATE` では PUBLIC EXECUTE が復活しうる**
+- `CREATE OR REPLACE` は既存権限を保持するが、**`DROP FUNCTION` → `CREATE` では既定付与が復活しうる**
 - `RETURNS TRIGGER` の関数は PostgREST が RPC として公開しないため REVOKE 不要。ただし `search_path` は固定する
 
 ## Row Level Security (RLS) ポリシー

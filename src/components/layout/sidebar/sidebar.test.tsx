@@ -11,6 +11,13 @@ describe('Sidebar', () => {
     expect(screen.getByRole('complementary')).toBeInTheDocument();
   });
 
+  it('検索ページのフィルターと区別できるようラベルが付く', () => {
+    render(<Sidebar navigation={<nav>ナビ</nav>} />);
+    expect(
+      screen.getByRole('complementary', { name: 'サイドバー' }),
+    ).toBeInTheDocument();
+  });
+
   it('navigationが表示される', () => {
     render(<Sidebar navigation={<nav>ナビゲーション</nav>} />);
     expect(screen.getByText('ナビゲーション')).toBeInTheDocument();

@@ -14,6 +14,7 @@ import { useSearch } from '@/features/search/hooks/useSearch';
 import { useMovieFilter } from '@/features/search/hooks/useMovieFilter';
 import { useGenres } from '@/features/search/hooks/useGenres';
 import { Button } from '@/components/ui/button/button';
+import { cn } from '@/utils/cn';
 
 import styles from './searchPage.module.scss';
 
@@ -70,7 +71,11 @@ export const SearchPage = memo(function SearchPage() {
       <div className={styles.c_search_page__content}>
         <aside
           id='search-filter'
-          className={`${styles.c_search_page__filter} ${isFilterOpen ? styles['c_search_page__filter--open'] : ''}`}
+          aria-label='検索フィルター'
+          className={cn(
+            styles.c_search_page__filter,
+            isFilterOpen && styles['c_search_page__filter--open'],
+          )}
         >
           <MovieFilter
             currentFilters={currentFilters}

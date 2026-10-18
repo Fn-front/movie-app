@@ -9,5 +9,7 @@ export default function AuthLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return <div className={styles.l_auth}>{children}</div>;
+  // div のままだと本文がどのランドマークにも属さず、支援技術の
+  // ランドマークナビゲーションで本文へ飛べない（axe: landmark-one-main / region）
+  return <main className={styles.l_auth}>{children}</main>;
 }

@@ -50,7 +50,9 @@ export const Sidebar = memo<SidebarProps>(function Sidebar({
   const classNames = cn(styles.c_sidebar, className);
 
   return (
-    <aside className={classNames} {...props}>
+    // ラベルが無いと、検索ページのフィルター（同じく aside）と
+    // 区別できない（axe: landmark-unique）
+    <aside className={classNames} aria-label='サイドバー' {...props}>
       {navigation && (
         <div className={styles.c_sidebar__navigation}>{navigation}</div>
       )}

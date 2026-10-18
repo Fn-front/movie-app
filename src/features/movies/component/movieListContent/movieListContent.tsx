@@ -75,27 +75,29 @@ export const MovieListContent = memo<MovieListContentProps>(
           value={releaseType}
           onValueChange={handleTabValueChange}
           aria-label='リリースタイプ'
-        />
+          className={styles.c_movie_list__tabs}
+          contentClassName={styles.c_movie_list__panel}
+        >
+          <MovieListToolbar
+            title={title}
+            sortBy={sortBy}
+            selectedGenreIds={selectedGenreIds}
+            dateRange={dateRange}
+            isRevivalFilter={isRevivalFilter}
+            onSortChange={handleSortChange}
+            onFilterModalOpen={handleFilterModalOpen}
+          />
 
-        <MovieListToolbar
-          title={title}
-          sortBy={sortBy}
-          selectedGenreIds={selectedGenreIds}
-          dateRange={dateRange}
-          isRevivalFilter={isRevivalFilter}
-          onSortChange={handleSortChange}
-          onFilterModalOpen={handleFilterModalOpen}
-        />
-
-        <MovieGrid
-          movies={movies}
-          genres={genres}
-          isLoading={isLoading}
-          isFetchingNextPage={isFetchingNextPage}
-          hasNextPage={hasNextPage}
-          fetchNextPage={fetchNextPage}
-          onMovieClick={handleMovieTileClick}
-        />
+          <MovieGrid
+            movies={movies}
+            genres={genres}
+            isLoading={isLoading}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={hasNextPage}
+            fetchNextPage={fetchNextPage}
+            onMovieClick={handleMovieTileClick}
+          />
+        </Tabs>
 
         <FilterModal
           open={isFilterModalOpen}

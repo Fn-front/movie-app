@@ -35,14 +35,20 @@ export interface TabsProps {
   onValueChange: (value: string) => void;
   /** カスタムクラス名 */
   className?: string;
+  /** タブパネルのクラス名 */
+  contentClassName?: string;
   /** aria-label */
   'aria-label'?: string;
-  /** タブコンテンツ（Tabs.Contentを使う場合） */
-  children?: ReactNode;
+  /** 選択中タブのパネルに描画する内容 */
+  children: ReactNode;
 }
 
 /**
  * Tabsコンポーネント
+ *
+ * children は選択中タブのパネル（role="tabpanel"）として描画される。
+ * パネルを省略すると Trigger の aria-controls が存在しないIDを指してしまうため、
+ * children は必須。
  *
  * @example
  * ```tsx
@@ -54,7 +60,9 @@ export interface TabsProps {
  *   value={releaseType}
  *   onValueChange={handleReleaseTypeChange}
  *   aria-label="リリースタイプ"
- * />
+ * >
+ *   <MovieGrid movies={movies} />
+ * </Tabs>
  * ```
  */
 export const Tabs = memo<TabsProps>(function Tabs({
@@ -62,6 +70,7 @@ export const Tabs = memo<TabsProps>(function Tabs({
   value,
   onValueChange,
   className,
+  contentClassName,
   'aria-label': ariaLabel,
   children,
 }) {
@@ -95,7 +104,14 @@ export const Tabs = memo<TabsProps>(function Tabs({
           </TabsPrimitive.Trigger>
         ))}
       </TabsPrimitive.List>
-      {children}
+      {/*
+        value と同じ値のパネルを常に描画し、選択中 Trigger の aria-controls が
+        実在するパネルを指すようにする。非選択の Trigger は aria-selected="false"
+        のため、ブラウザ・支援技術ともに aria-controls を参照しない。
+      */}
+      <TabsPrimitive.Content value={value} className={contentClassName}>
+        {children}
+      </TabsPrimitive.Content>
     </TabsPrimitive.Root>
   );
 });

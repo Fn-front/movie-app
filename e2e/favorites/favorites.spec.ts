@@ -10,7 +10,7 @@
 
 import { test, expect } from '../fixtures/auth';
 import { cleanupFavorites } from '../helpers/api';
-import { movieTileButtons } from '../helpers/locators';
+import { movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 
 test.describe.configure({ mode: 'serial' });
@@ -31,7 +31,7 @@ test.describe('お気に入り — MovieTileから追加', () => {
   test.beforeEach(async ({ page }) => {
     await cleanupFavorites();
     await page.goto('/movies/now-showing');
-    await movieTileButtons(page).first().waitFor({ timeout: 30000 });
+    await movieTiles(page).first().waitFor({ timeout: 30000 });
   });
 
   test.afterEach(async () => {
@@ -41,7 +41,7 @@ test.describe('お気に入り — MovieTileから追加', () => {
   test('MovieTileのお気に入りボタンから追加するとハートアイコンが変化する', async ({
     page,
   }) => {
-    const firstTile = movieTileButtons(page).first();
+    const firstTile = movieTiles(page).first();
     const addButton = firstTile.getByRole('button', {
       name: 'お気に入りに追加',
     });
@@ -74,9 +74,9 @@ test.describe('お気に入り — 一覧ページ', () => {
 
     // まず映画をお気に入りに追加する
     await page.goto('/movies/now-showing');
-    await movieTileButtons(page).first().waitFor({ timeout: 30000 });
+    await movieTiles(page).first().waitFor({ timeout: 30000 });
 
-    const firstTile = movieTileButtons(page).first();
+    const firstTile = movieTiles(page).first();
     await firstTile.getByRole('button', { name: 'お気に入りに追加' }).click();
 
     const dialog = page.getByRole('dialog');
@@ -148,7 +148,7 @@ test.describe('お気に入り — 詳細モーダルとの連携', () => {
     await cleanupFavorites();
     await mockMovieDetail(page);
     await page.goto('/movies/now-showing');
-    await movieTileButtons(page).first().waitFor({ timeout: 30000 });
+    await movieTiles(page).first().waitFor({ timeout: 30000 });
   });
 
   test.afterEach(async () => {
@@ -159,7 +159,7 @@ test.describe('お気に入り — 詳細モーダルとの連携', () => {
     page,
   }) => {
     // 詳細モーダルで「お気に入りに追加」ボタンが存在することを確認
-    await movieTileButtons(page).first().click();
+    await movieTiles(page).first().click();
     const detailDialog = page.getByRole('dialog');
     await expect(detailDialog).toBeVisible({ timeout: 15000 });
     await expect(detailDialog.getByText('詳細情報')).toBeVisible({
@@ -174,7 +174,7 @@ test.describe('お気に入り — 詳細モーダルとの連携', () => {
     await expect(detailDialog).not.toBeVisible();
 
     // MovieTileからお気に入りに追加
-    const firstTile = movieTileButtons(page).first();
+    const firstTile = movieTiles(page).first();
     const addButton = firstTile.getByRole('button', {
       name: 'お気に入りに追加',
     });

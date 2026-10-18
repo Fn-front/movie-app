@@ -68,16 +68,6 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
     onClick?.(movie.id);
   }, [movie.id, onClick]);
 
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onClick?.(movie.id);
-      }
-    },
-    [movie.id, onClick],
-  );
-
   const handleWatchlistToggle = useCallback(() => {
     onWatchlistToggle?.(movie);
   }, [movie, onWatchlistToggle]);
@@ -115,17 +105,10 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   }, [genres, movie.genre_ids]);
 
   return (
-    <Card
-      clickable
-      hoverable
-      noPadding
-      className={styles.c_movie_tile}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      role='button'
-      tabIndex={0}
-      aria-label={movie.title}
-    >
+    // カード全体を role="button" にすると、内側のお気に入り等のボタンが
+    // インタラクティブ要素の入れ子になり ARIA 上不正になる（axe: nested-interactive）。
+    // 代わりにタイトルを本物の button にし、::after でカード全面を当たり判定にする。
+    <Card hoverable noPadding className={styles.c_movie_tile}>
       <div className={styles.c_movie_tile__poster}>
         {posterUrl ? (
           <Image
@@ -166,7 +149,15 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
         )}
       </div>
       <div className={styles.c_movie_tile__info}>
-        <h3 className={styles.c_movie_tile__title}>{movie.title}</h3>
+        <h3 className={styles.c_movie_tile__title}>
+          <button
+            type='button'
+            className={styles.c_movie_tile__title_button}
+            onClick={handleClick}
+          >
+            {movie.title}
+          </button>
+        </h3>
         {genreNames.length > 0 && (
           <div className={styles.c_movie_tile__genres}>
             {genreNames.map((name) => (

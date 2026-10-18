@@ -9,7 +9,7 @@
 
 import { test, expect } from '../fixtures/auth';
 import { cleanupWatchlist } from '../helpers/api';
-import { movieTileButtons } from '../helpers/locators';
+import { movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 
 // 同一ユーザーのウォッチリストを直列操作。並列負荷下でも goto＋タイル待ち＋
@@ -31,9 +31,9 @@ function waitForWatchlistResponse(page: import('@playwright/test').Page) {
 /** 映画をウォッチリストに追加する（前準備用） */
 async function addMovieToWatchlist(page: import('@playwright/test').Page) {
   await page.goto('/movies/now-showing');
-  await movieTileButtons(page).first().waitFor({ timeout: 30000 });
+  await movieTiles(page).first().waitFor({ timeout: 30000 });
 
-  const firstTile = movieTileButtons(page).first();
+  const firstTile = movieTiles(page).first();
   const addButton = firstTile.getByRole('button', {
     name: 'ウォッチリストに追加',
   });
@@ -145,7 +145,7 @@ test.describe('ウォッチリスト — サイドバー「すべて見る」遷
   }) => {
     // サイドバーが表示されるページに遷移
     await page.goto('/movies/now-showing');
-    await movieTileButtons(page).first().waitFor({ timeout: 30000 });
+    await movieTiles(page).first().waitFor({ timeout: 30000 });
 
     // サイドバーに「すべて見る」リンクが表示される
     const showAllLink = page.getByRole('link', { name: 'すべて見る' });

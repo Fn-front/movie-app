@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { MovieTile } from './movieTile';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
@@ -139,59 +140,99 @@ describe('MovieTile', () => {
   });
 
   describe('アクセシビリティ', () => {
-    it('aria-labelが設定される', () => {
+    it('タイトルがbuttonのアクセシブルネームになる', () => {
       render(<MovieTile movie={createMockMovie()} />);
       expect(
         screen.getByRole('button', { name: 'テスト映画' }),
       ).toBeInTheDocument();
     });
 
-    it('tabIndex=0が設定される', () => {
+    it('タイトルが見出しとして露出する', () => {
       render(<MovieTile movie={createMockMovie()} />);
-      expect(screen.getByRole('button')).toHaveAttribute('tabindex', '0');
+      expect(
+        screen.getByRole('heading', { level: 3, name: 'テスト映画' }),
+      ).toBeInTheDocument();
+    });
+
+    it('操作ボタンが詳細ボタンの子孫にならない（nested-interactive対策）', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onClick={jest.fn()}
+          onWatchlistToggle={jest.fn()}
+          onFavoriteToggle={jest.fn()}
+          onDismiss={jest.fn()}
+        />,
+      );
+
+      const detailButton = screen.getByRole('button', { name: 'テスト映画' });
+      for (const name of [
+        'ウォッチリストに追加',
+        'お気に入りに追加',
+        '興味なし',
+      ]) {
+        expect(detailButton).not.toContainElement(
+          screen.getByRole('button', { name }),
+        );
+      }
     });
   });
 
   describe('インタラクション', () => {
-    it('クリック時にonClickが呼ばれる', () => {
+    it('クリック時にonClickが呼ばれる', async () => {
+      const user = userEvent.setup();
       const onClick = jest.fn();
       render(<MovieTile movie={createMockMovie()} onClick={onClick} />);
 
-      fireEvent.click(screen.getByRole('button'));
+      await user.click(screen.getByRole('button', { name: 'テスト映画' }));
       expect(onClick).toHaveBeenCalledWith(1);
     });
 
-    it('Enterキーでクリックが発火する', () => {
+    it('Enterキーでクリックが発火する', async () => {
+      const user = userEvent.setup();
       const onClick = jest.fn();
       render(<MovieTile movie={createMockMovie()} onClick={onClick} />);
 
-      fireEvent.keyDown(screen.getByRole('button'), { key: 'Enter' });
+      screen.getByRole('button', { name: 'テスト映画' }).focus();
+      await user.keyboard('{Enter}');
       expect(onClick).toHaveBeenCalledWith(1);
     });
 
-    it('Spaceキーでクリックが発火する', () => {
+    it('Spaceキーでクリックが発火する', async () => {
+      const user = userEvent.setup();
       const onClick = jest.fn();
       render(<MovieTile movie={createMockMovie()} onClick={onClick} />);
 
-      fireEvent.keyDown(screen.getByRole('button'), { key: ' ' });
+      screen.getByRole('button', { name: 'テスト映画' }).focus();
+      await user.keyboard('{ }');
       expect(onClick).toHaveBeenCalledWith(1);
     });
 
-    it('他のキーではonClickが呼ばれない', () => {
+    it('他のキーではonClickが呼ばれない', async () => {
+      const user = userEvent.setup();
       const onClick = jest.fn();
       render(<MovieTile movie={createMockMovie()} onClick={onClick} />);
 
-      fireEvent.keyDown(screen.getByRole('button'), { key: 'Tab' });
+      screen.getByRole('button', { name: 'テスト映画' }).focus();
+      await user.keyboard('{Escape}');
       expect(onClick).not.toHaveBeenCalled();
     });
 
-    it('onClickが未指定でもエラーにならない', () => {
+    it('Tabキーで詳細ボタンに到達できる', async () => {
+      const user = userEvent.setup();
+      render(<MovieTile movie={createMockMovie()} onClick={jest.fn()} />);
+
+      await user.tab();
+      expect(screen.getByRole('button', { name: 'テスト映画' })).toHaveFocus();
+    });
+
+    it('onClickが未指定でもエラーにならない', async () => {
+      const user = userEvent.setup();
       render(<MovieTile movie={createMockMovie()} />);
 
-      expect(() => {
-        fireEvent.click(screen.getByRole('button'));
-        fireEvent.keyDown(screen.getByRole('button'), { key: 'Enter' });
-      }).not.toThrow();
+      await expect(
+        user.click(screen.getByRole('button', { name: 'テスト映画' })),
+      ).resolves.not.toThrow();
     });
   });
 

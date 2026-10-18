@@ -47,6 +47,11 @@ export interface MovieTileProps {
   onDismiss?: (movie: MovieCacheItem) => void;
   /** 興味なしボタン無効化 */
   dismissDisabled?: boolean;
+  /**
+   * タイトルの見出しレベル
+   * 置かれるセクションの階層に合わせる（見出しレベルを飛ばさないため）
+   */
+  headingLevel?: 2 | 3 | 4;
 }
 
 /**
@@ -63,7 +68,10 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   favoriteDisabled = false,
   onDismiss,
   dismissDisabled = false,
+  headingLevel = 3,
 }) {
+  const Title = `h${headingLevel}` as const;
+
   const handleClick = useCallback(() => {
     onClick?.(movie.id);
   }, [movie.id, onClick]);
@@ -149,7 +157,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
         )}
       </div>
       <div className={styles.c_movie_tile__info}>
-        <h3 className={styles.c_movie_tile__title}>
+        <Title className={styles.c_movie_tile__title}>
           <button
             type='button'
             className={styles.c_movie_tile__title_button}
@@ -157,7 +165,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
           >
             {movie.title}
           </button>
-        </h3>
+        </Title>
         {genreNames.length > 0 && (
           <div className={styles.c_movie_tile__genres}>
             {genreNames.map((name) => (

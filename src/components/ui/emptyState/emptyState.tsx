@@ -24,6 +24,11 @@ export interface EmptyStateProps extends HTMLAttributes<HTMLDivElement> {
   action?: ReactNode;
   /** カスタムクラス名 */
   className?: string;
+  /**
+   * タイトルの見出しレベル
+   * 置かれるセクションの階層に合わせる（見出しレベルを飛ばさないため）
+   */
+  headingLevel?: 2 | 3 | 4;
 }
 
 /**
@@ -44,14 +49,16 @@ export const EmptyState = memo<EmptyStateProps>(function EmptyState({
   description,
   action,
   className,
+  headingLevel = 3,
   ...props
 }) {
   const classNames = cn(styles.c_empty_state, className);
+  const Title = `h${headingLevel}` as const;
 
   return (
     <div className={classNames} {...props}>
       {icon && <div className={styles.c_empty_state__icon}>{icon}</div>}
-      <h3 className={styles.c_empty_state__title}>{title}</h3>
+      <Title className={styles.c_empty_state__title}>{title}</Title>
       {description && (
         <p className={styles.c_empty_state__description}>{description}</p>
       )}

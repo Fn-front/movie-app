@@ -34,6 +34,12 @@ export function HomePage({
 }: HomePageProps) {
   return (
     <AppLayout>
+      {/*
+        ホームは複数セクションの集合で「見出しに相当する可視の文言」が無いため、
+        スクリーンリーダー向けにのみ h1 を置く。これが無いとページの主題が
+        見出しから辿れない（axe: page-has-heading-one）。
+      */}
+      <h1 className='sr-only'>ホーム</h1>
       <NowShowingMovieList movies={nowShowingMovies} />
       {isAuthenticated && (
         <RecommendationSection

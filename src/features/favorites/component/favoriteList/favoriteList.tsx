@@ -160,7 +160,7 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
         </div>
       </div>
       <div className={styles.c_favorite_tile__info}>
-        <h3 className={styles.c_favorite_tile__title}>{item.title}</h3>
+        <h2 className={styles.c_favorite_tile__title}>{item.title}</h2>
         <div className={styles.c_favorite_tile__rating}>
           <RatingIndicator rating={item.rating} size='sm' />
         </div>

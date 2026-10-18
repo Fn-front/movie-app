@@ -67,9 +67,9 @@ export const AwardsPage = memo(function AwardsPage() {
     return (
       <div className={styles.c_awards_page}>
         <div className={styles.c_awards_page__toolbar}>
-          <h2 className={styles.c_awards_page__title}>
+          <h1 className={styles.c_awards_page__title}>
             {AWARDS_MESSAGES.PAGE_TITLE}
-          </h2>
+          </h1>
         </div>
         <div className={styles.c_awards_page__loading}>
           <Loading size='md' />
@@ -82,9 +82,9 @@ export const AwardsPage = memo(function AwardsPage() {
     return (
       <div className={styles.c_awards_page}>
         <div className={styles.c_awards_page__toolbar}>
-          <h2 className={styles.c_awards_page__title}>
+          <h1 className={styles.c_awards_page__title}>
             {AWARDS_MESSAGES.PAGE_TITLE}
-          </h2>
+          </h1>
         </div>
         <p className={styles.c_awards_page__message}>
           {AWARDS_MESSAGES.FETCH_ERROR}
@@ -97,9 +97,9 @@ export const AwardsPage = memo(function AwardsPage() {
     <>
       <div className={styles.c_awards_page}>
         <div className={styles.c_awards_page__toolbar}>
-          <h2 className={styles.c_awards_page__title}>
+          <h1 className={styles.c_awards_page__title}>
             {AWARDS_MESSAGES.PAGE_TITLE}
-          </h2>
+          </h1>
           {data && data.availableYears.length > 0 && (
             <div className={styles.c_awards_page__controls}>
               <AwardYearSelect

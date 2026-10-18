@@ -40,13 +40,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email));
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 
 -- 更新日時自動更新トリガー
+-- search_path を固定する（Supabase lint: function_search_path_mutable）。
+-- 可変のまま SECURITY DEFINER に変わると、呼び出し元が now() 等を自前スキーマの
+-- 同名関数へすり替えられる。対応マイグレーション: 20261018042537
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public, pg_temp
+AS $$
 BEGIN
   NEW.updated_at = now();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 CREATE TRIGGER update_users_updated_at
   BEFORE UPDATE ON users
@@ -596,3 +603,17 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON users TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON otp_codes TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON rate_limits TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON accounts TO service_role;
+
+-- ============================================
+-- 5. 関数権限（最小権限）
+-- ============================================
+-- PostgreSQL は CREATE FUNCTION 時に EXECUTE を PUBLIC へ自動付与するため、
+-- 放置すると公開 anon キーから /rest/v1/rpc/<関数名> に到達できる。
+-- 既定権限そのものを絞り、DROP → CREATE で静かに復活するのも防ぐ。
+-- 対応マイグレーション: 20261018042537_revoke_function_execute_from_public.sql
+--
+-- ⚠️ service_role は superuser ではないため、PUBLIC を剥奪したら明示的な
+-- GRANT が必須。新しい関数を足すときは必ずセットで書くこと。
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;

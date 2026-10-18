@@ -146,7 +146,7 @@
 
     // 危険なアクション（ログアウト）
     &__destructive {
-      color: $error-main;
+      color: $text-danger;
 
       &:hover {
         background-color: color-alpha(--error-main, 10%);

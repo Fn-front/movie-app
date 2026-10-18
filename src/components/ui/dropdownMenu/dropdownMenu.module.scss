@@ -61,7 +61,7 @@
 
     // 危険なアクション
     &__destructive {
-      color: $error-main;
+      color: $text-danger;
 
       &:hover:not([data-disabled]) {
         background-color: color-alpha(--error-main, 10%);

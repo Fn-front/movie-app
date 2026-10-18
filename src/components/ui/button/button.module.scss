@@ -21,32 +21,37 @@
   @include focus-visible;
 
   // バリアント: Primary
+  // hover の --primary-600 #0d7ec4 は白文字で 4.38:1 と AA を割るため、
+  // hover/active を一段ずつ濃い側へずらす。
   &__variant__primary {
     background-color: $primary-500;
     color: white;
     border: none;
 
     &:hover:not(:disabled) {
-      background-color: $primary-600;
+      background-color: $primary-700;
     }
 
     &:active:not(:disabled) {
-      background-color: $primary-700;
+      background-color: $primary-800;
     }
   }
 
   // バリアント: Secondary
+  // オレンジ面は白文字だと 3.38:1 にしかならないため濃色文字にする。
+  // それに合わせて hover/active は「暗くする」から「明るくする」へ反転させ、
+  // 操作するほどコントラストが上がるようにする。
   &__variant__secondary {
     background-color: $secondary-900;
-    color: white;
+    color: $text-on-accent;
     border: none;
 
     &:hover:not(:disabled) {
-      background-color: color-mix(in srgb, var(--secondary-900) 85%, black);
+      background-color: color-mix(in srgb, var(--secondary-900) 85%, white);
     }
 
     &:active:not(:disabled) {
-      background-color: color-mix(in srgb, var(--secondary-900) 70%, black);
+      background-color: color-mix(in srgb, var(--secondary-900) 70%, white);
     }
   }
 
@@ -66,16 +71,20 @@
   }
 
   // バリアント: Ghost
+  // hover/active で背景に青のティントが乗るぶん、文字色も濃くしないと
+  // ライトテーマで AA を割る（hover 4.18:1 / active 3.63:1）。
   &__variant__ghost {
     background-color: transparent;
-    color: $primary-500;
+    color: $text-link;
     border: $border-width-1 solid $primary-500;
 
     &:hover:not(:disabled) {
+      color: $text-link-hover;
       background-color: color-alpha(--primary-500, 10%);
     }
 
     &:active:not(:disabled) {
+      color: $text-link-active;
       background-color: color-alpha(--primary-500, 20%);
     }
   }

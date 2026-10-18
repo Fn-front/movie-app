@@ -13,7 +13,9 @@ const options = [
 describe('Tabs', () => {
   it('タブが表示される', () => {
     render(
-      <Tabs options={options} value='theatrical' onValueChange={jest.fn()} />,
+      <Tabs options={options} value='theatrical' onValueChange={jest.fn()}>
+        <p>パネル</p>
+      </Tabs>,
     );
     expect(screen.getByRole('tab', { name: '劇場公開' })).toBeInTheDocument();
     expect(
@@ -23,7 +25,9 @@ describe('Tabs', () => {
 
   it('選択されたタブがaria-selected=trueになる', () => {
     render(
-      <Tabs options={options} value='theatrical' onValueChange={jest.fn()} />,
+      <Tabs options={options} value='theatrical' onValueChange={jest.fn()}>
+        <p>パネル</p>
+      </Tabs>,
     );
     expect(screen.getByRole('tab', { name: '劇場公開' })).toHaveAttribute(
       'aria-selected',
@@ -40,11 +44,9 @@ describe('Tabs', () => {
     const handleChange = jest.fn();
 
     render(
-      <Tabs
-        options={options}
-        value='theatrical'
-        onValueChange={handleChange}
-      />,
+      <Tabs options={options} value='theatrical' onValueChange={handleChange}>
+        <p>パネル</p>
+      </Tabs>,
     );
     await user.click(screen.getByRole('tab', { name: 'ストリーミング' }));
 
@@ -64,7 +66,9 @@ describe('Tabs', () => {
         options={optionsWithDisabled}
         value='theatrical'
         onValueChange={handleChange}
-      />,
+      >
+        <p>パネル</p>
+      </Tabs>,
     );
     await user.click(screen.getByRole('tab', { name: '無効' }));
 
@@ -76,11 +80,9 @@ describe('Tabs', () => {
     const handleChange = jest.fn();
 
     render(
-      <Tabs
-        options={options}
-        value='theatrical'
-        onValueChange={handleChange}
-      />,
+      <Tabs options={options} value='theatrical' onValueChange={handleChange}>
+        <p>パネル</p>
+      </Tabs>,
     );
 
     const firstTab = screen.getByRole('tab', { name: '劇場公開' });
@@ -98,7 +100,9 @@ describe('Tabs', () => {
         options={[{ label: '唯一のタブ', value: 'only' }]}
         value='only'
         onValueChange={jest.fn()}
-      />,
+      >
+        <p>パネル</p>
+      </Tabs>,
     );
     expect(screen.getByRole('tab', { name: '唯一のタブ' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '唯一のタブ' })).toHaveAttribute(
@@ -114,11 +118,90 @@ describe('Tabs', () => {
         value='theatrical'
         onValueChange={jest.fn()}
         aria-label='リリースタイプ'
-      />,
+      >
+        <p>パネル</p>
+      </Tabs>,
     );
     expect(screen.getByRole('tablist')).toHaveAttribute(
       'aria-label',
       'リリースタイプ',
     );
+  });
+
+  describe('タブパネル（アクセシビリティ）', () => {
+    it('children が tabpanel として描画される', () => {
+      render(
+        <Tabs options={options} value='theatrical' onValueChange={jest.fn()}>
+          <p>劇場公開のコンテンツ</p>
+        </Tabs>,
+      );
+
+      const panel = screen.getByRole('tabpanel');
+      expect(panel).toHaveTextContent('劇場公開のコンテンツ');
+    });
+
+    it('選択中タブの aria-controls が実在する tabpanel を指す', () => {
+      render(
+        <Tabs options={options} value='theatrical' onValueChange={jest.fn()}>
+          <p>パネル</p>
+        </Tabs>,
+      );
+
+      const selectedTab = screen.getByRole('tab', { name: '劇場公開' });
+      const controls = selectedTab.getAttribute('aria-controls');
+
+      expect(controls).toBeTruthy();
+      expect(document.getElementById(controls as string)).toBe(
+        screen.getByRole('tabpanel'),
+      );
+    });
+
+    it('tabpanel が選択中タブに aria-labelledby で紐づく', () => {
+      render(
+        <Tabs options={options} value='theatrical' onValueChange={jest.fn()}>
+          <p>パネル</p>
+        </Tabs>,
+      );
+
+      const selectedTab = screen.getByRole('tab', { name: '劇場公開' });
+      const panel = screen.getByRole('tabpanel');
+
+      expect(panel).toHaveAttribute('aria-labelledby', selectedTab.id);
+    });
+
+    it('value を切り替えると tabpanel も選択中タブに追従する', () => {
+      const { rerender } = render(
+        <Tabs options={options} value='theatrical' onValueChange={jest.fn()}>
+          <p>パネル</p>
+        </Tabs>,
+      );
+
+      rerender(
+        <Tabs options={options} value='streaming' onValueChange={jest.fn()}>
+          <p>パネル</p>
+        </Tabs>,
+      );
+
+      const selectedTab = screen.getByRole('tab', { name: 'ストリーミング' });
+      const panel = screen.getByRole('tabpanel');
+
+      expect(selectedTab).toHaveAttribute('aria-selected', 'true');
+      expect(selectedTab.getAttribute('aria-controls')).toBe(panel.id);
+    });
+
+    it('contentClassName が tabpanel に適用される', () => {
+      render(
+        <Tabs
+          options={options}
+          value='theatrical'
+          onValueChange={jest.fn()}
+          contentClassName='custom-panel'
+        >
+          <p>パネル</p>
+        </Tabs>,
+      );
+
+      expect(screen.getByRole('tabpanel')).toHaveClass('custom-panel');
+    });
   });
 });

@@ -38,6 +38,6 @@
   background-color: color-alpha(--error-main, 10%);
   border: $border-width-1 solid $error-light;
   border-radius: $border-radius-md;
-  color: $error-dark;
+  color: $text-danger;
   font-size: $font-size-sm;
 }

@@ -31,25 +31,25 @@
   // バリアント: Primary
   &__variant__primary {
     background-color: color-alpha(--primary-500, 10%);
-    color: $primary-500;
+    color: $text-link;
   }
 
   // バリアント: Success
   &__variant__success {
     background-color: color-alpha(--success-main, 10%);
-    color: $success-main;
+    color: $text-success;
   }
 
   // バリアント: Error
   &__variant__error {
     background-color: color-alpha(--error-main, 10%);
-    color: $error-main;
+    color: $text-danger;
   }
 
   // バリアント: Warning
   &__variant__warning {
     background-color: color-alpha(--warning-main, 10%);
-    color: $warning-main;
+    color: $text-warning;
   }
 
   // 削除可能な場合

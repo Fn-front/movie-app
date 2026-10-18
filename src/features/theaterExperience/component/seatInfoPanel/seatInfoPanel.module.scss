@@ -44,22 +44,22 @@
 
 .c_seat_info_panel__badge__excellent {
   background-color: color-alpha(--success-main, 15%);
-  color: $success-dark;
+  color: $text-success;
 }
 
 .c_seat_info_panel__badge__good {
   background-color: color-alpha(--primary-500, 15%);
-  color: $primary-700;
+  color: $text-accent;
 }
 
 .c_seat_info_panel__badge__fair {
   background-color: color-alpha(--warning-main, 15%);
-  color: $warning-dark;
+  color: $text-warning;
 }
 
 .c_seat_info_panel__badge__poor {
   background-color: color-alpha(--error-main, 15%);
-  color: $error-dark;
+  color: $text-danger;
 }
 
 .c_seat_info_panel__metrics {

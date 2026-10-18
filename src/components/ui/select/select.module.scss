@@ -21,7 +21,7 @@
 
   // 必須マーカー
   &__required {
-    color: $error-main;
+    color: $text-danger;
     margin-left: $spacing-1;
   }
 
@@ -146,7 +146,7 @@
     }
 
     &[data-state='checked'] {
-      color: $primary-500;
+      color: $text-link;
       font-weight: $font-weight-medium;
     }
   }
@@ -160,13 +160,13 @@
     justify-content: center;
     width: 20px;
     height: 20px;
-    color: $primary-500;
+    color: $text-link;
   }
 
   // エラーメッセージ
   &__error {
     font-size: $font-size-sm;
-    color: $error-main;
+    color: $text-danger;
     margin-top: $spacing-1;
   }
 

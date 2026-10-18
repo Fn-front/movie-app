@@ -10,6 +10,18 @@
     gap: $spacing-6;
   }
 
+  // タブ本体とパネルの間隔は .c_movie_list と同じリズムに揃える
+  &__tabs,
+  &__panel {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-4;
+
+    @include md {
+      gap: $spacing-6;
+    }
+  }
+
   &__toolbar {
     display: flex;
     align-items: center;

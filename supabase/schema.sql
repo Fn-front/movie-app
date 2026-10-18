@@ -604,6 +604,19 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON otp_codes TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON rate_limits TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON accounts TO service_role;
 
+-- 公開読み取りが必要なテーブル（anon キーで直接読む経路があるもの）。
+-- それ以外は service_role 専用にして到達面を閉じる。
+-- 対応マイグレーション: 20261018053616_declare_table_grants.sql
+--
+-- ⚠️ Supabase の既定は新規テーブルに anon / authenticated へ全権限を与える。
+-- 既定そのものを閉じ、明示GRANTを必須にする。
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  REVOKE ALL ON TABLES FROM anon, authenticated;
+
+GRANT SELECT ON award_movies TO anon;
+GRANT SELECT ON now_showing_movies TO anon;
+
 -- ============================================
 -- 5. 関数権限（最小権限）
 -- ============================================

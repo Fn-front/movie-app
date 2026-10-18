@@ -73,7 +73,7 @@ export const FavoritesPage = memo(function FavoritesPage() {
   return (
     <div className={styles.c_favorites_page}>
       <div className={styles.c_favorites_page__toolbar}>
-        <h2 className={styles.c_favorites_page__title}>お気に入り</h2>
+        <h1 className={styles.c_favorites_page__title}>お気に入り</h1>
         <div className={styles.c_favorites_page__controls}>
           <Select
             options={sortOptions}

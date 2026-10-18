@@ -42,7 +42,7 @@ export const MovieListToolbar = memo<MovieListToolbarProps>(
 
     return (
       <div className={styles.c_movie_list__toolbar}>
-        <h2 className={styles.c_movie_list__title}>{title}</h2>
+        <h1 className={styles.c_movie_list__title}>{title}</h1>
         <div className={styles.c_movie_list__controls}>
           <Button
             variant='ghost'

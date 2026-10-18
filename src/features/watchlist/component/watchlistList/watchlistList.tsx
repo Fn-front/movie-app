@@ -165,7 +165,7 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
         )}
       </div>
       <div className={styles.c_watchlist_tile__info}>
-        <h3 className={styles.c_watchlist_tile__title}>{item.title}</h3>
+        <h2 className={styles.c_watchlist_tile__title}>{item.title}</h2>
         {item.release_date && (
           <p className={styles.c_watchlist_tile__date}>{item.release_date}</p>
         )}

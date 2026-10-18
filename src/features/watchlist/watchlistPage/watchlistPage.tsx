@@ -64,7 +64,7 @@ export const WatchlistPage = memo(function WatchlistPage() {
   return (
     <div className={styles.c_watchlist_page}>
       <div className={styles.c_watchlist_page__toolbar}>
-        <h2 className={styles.c_watchlist_page__title}>ウォッチリスト</h2>
+        <h1 className={styles.c_watchlist_page__title}>ウォッチリスト</h1>
         <div className={styles.c_watchlist_page__controls}>
           <Select
             options={SORT_OPTIONS}

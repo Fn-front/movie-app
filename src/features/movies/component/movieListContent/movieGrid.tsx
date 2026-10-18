@@ -58,6 +58,7 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
             key={movie.id}
             movie={movie}
             genres={genres}
+            headingLevel={2}
             onClick={onMovieClick}
             isInWatchlist={isInWatchlist(movie.id)}
             onWatchlistToggle={toggleWatchlist}

@@ -102,6 +102,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
         <EmptyState
           title='検索結果が見つかりませんでした'
           description='別のキーワードで検索してみてください'
+          headingLevel={2}
         />
       </div>
     );
@@ -123,6 +124,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
             key={movie.id}
             movie={movie}
             onClick={handleMovieClick}
+            headingLevel={2}
             isInWatchlist={isInWatchlist(movie.id)}
             onWatchlistToggle={toggleWatchlist}
             watchlistDisabled={isMovieToggling(movie.id)}

@@ -7,6 +7,7 @@
 import { memo } from 'react';
 import { useSession } from 'next-auth/react';
 
+import { Heading } from '@/components/ui/heading/heading';
 import { ChangePasswordForm } from '@/features/settings/changePasswordForm/changePasswordForm';
 
 export const ChangePasswordPageContent = memo(
@@ -19,7 +20,12 @@ export const ChangePasswordPageContent = memo(
 
     if (!email) return null;
 
-    return <ChangePasswordForm email={email} hasPassword={hasPassword} />;
+    return (
+      <>
+        <Heading level={1}>パスワード変更</Heading>
+        <ChangePasswordForm email={email} hasPassword={hasPassword} />
+      </>
+    );
   },
 );
 

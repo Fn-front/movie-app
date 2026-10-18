@@ -81,6 +81,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
             <div className={styles.c_award_category__winner_tile}>
               <MovieTile
                 movie={winnerCacheItem}
+                headingLevel={4}
                 onClick={onMovieClick}
                 isInWatchlist={isInWatchlist(winnerCacheItem.id)}
                 onWatchlistToggle={onWatchlistToggle}
@@ -113,6 +114,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                     movie={movie}
                     onClick={onMovieClick}
                     isInWatchlist={isInWatchlist(movie.id)}
+                    headingLevel={4}
                     onWatchlistToggle={onWatchlistToggle}
                     watchlistDisabled={isMovieToggling(movie.id)}
                     onFavoriteToggle={onFavoriteToggle}

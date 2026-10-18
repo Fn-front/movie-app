@@ -70,6 +70,7 @@ export const SearchPage = memo(function SearchPage() {
       <div className={styles.c_search_page__content}>
         <aside
           id='search-filter'
+          aria-label='検索フィルター'
           className={`${styles.c_search_page__filter} ${isFilterOpen ? styles['c_search_page__filter--open'] : ''}`}
         >
           <MovieFilter

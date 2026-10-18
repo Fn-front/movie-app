@@ -230,6 +230,35 @@ describe('TheaterExperiencePage', () => {
     });
   });
 
+  describe('ランドマーク', () => {
+    it('本文が main ランドマークに包まれる', () => {
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+      expect(screen.getByRole('main')).toBeInTheDocument();
+    });
+
+    it('読み込み中も main ランドマークがある', () => {
+      mockUseTheater.mockReturnValue({
+        data: null,
+        isLoading: true,
+        error: null,
+      });
+
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+      expect(screen.getByRole('main')).toBeInTheDocument();
+    });
+
+    it('エラー時も main ランドマークがある', () => {
+      mockUseTheater.mockReturnValue({
+        data: null,
+        isLoading: false,
+        error: new Error('取得失敗'),
+      });
+
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+      expect(screen.getByRole('main')).toBeInTheDocument();
+    });
+  });
+
   it('読み込み中はローディング表示', () => {
     mockUseTheater.mockReturnValue({
       data: null,

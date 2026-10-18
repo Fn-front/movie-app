@@ -306,9 +306,11 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       return (
         <div className={styles.c_theater_experience}>
           {header}
-          <div className={styles.c_theater_experience__loading}>
-            <p>読み込み中...</p>
-          </div>
+          <main className={styles.c_theater_experience__main_landmark}>
+            <div className={styles.c_theater_experience__loading}>
+              <p>読み込み中...</p>
+            </div>
+          </main>
         </div>
       );
     }
@@ -320,13 +322,15 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       return (
         <div className={styles.c_theater_experience}>
           {header}
-          <div className={styles.c_theater_experience__error}>
-            <p>
-              {notFound
-                ? `${THEATER_MESSAGES.NOT_FOUND}。上の劇場セレクタから選び直してください。`
-                : `${THEATER_MESSAGES.FETCH_ERROR}。`}
-            </p>
-          </div>
+          <main className={styles.c_theater_experience__main_landmark}>
+            <div className={styles.c_theater_experience__error}>
+              <p>
+                {notFound
+                  ? `${THEATER_MESSAGES.NOT_FOUND}。上の劇場セレクタから選び直してください。`
+                  : `${THEATER_MESSAGES.FETCH_ERROR}。`}
+              </p>
+            </div>
+          </main>
         </div>
       );
     }
@@ -335,130 +339,132 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
       <div className={styles.c_theater_experience}>
         {header}
 
-        <div className={styles.c_theater_experience__main}>
-          {/* 3Dビュー or フォールバック */}
-          <div className={styles.c_theater_experience__canvas_area}>
-            {isWebGL2Supported ? (
-              <TheaterCanvas>
-                <TheaterScene
-                  theme={interiorTheme}
-                  roomWidth={theater.room_width}
-                  roomDepth={theater.room_depth}
-                  roomHeight={theater.room_height}
-                  selectedSeat={selectedSeat}
-                  theater={theater}
-                  seatAreaFrontZ={seatAreaBounds.frontZ}
-                  seatAreaBackZ={seatAreaBounds.backZ}
-                  seatAreaMaxY={seatAreaBounds.maxY}
-                  rowZs={seatAreaBounds.rowZs}
-                  rowYs={seatAreaBounds.rowYs}
-                  seatSegments={seatAreaBounds.seatSegments}
-                  reducedMotion={reducedMotion}
-                >
-                  <SeatMeshes
+        <main className={styles.c_theater_experience__main_landmark}>
+          <div className={styles.c_theater_experience__main}>
+            {/* 3Dビュー or フォールバック */}
+            <div className={styles.c_theater_experience__canvas_area}>
+              {isWebGL2Supported ? (
+                <TheaterCanvas>
+                  <TheaterScene
                     theme={interiorTheme}
-                    aisleSideSeatIds={aisleSideSeatIds}
-                    rowCurveRadius={theater.row_curve_radius}
-                    seats={seats}
-                    selectedSeatId={selectedSeatId}
-                    highlightedSeatId={highlightedSeatId}
-                    onSeatClick={handleSeatClick}
-                    onHoverSeat={handleHoverSeat}
-                    isHeatmapVisible={isHeatmapVisible}
-                  />
-                  <ScreenMesh
-                    theme={interiorTheme}
-                    curvature={theater.screen_curvature}
-                    width={theater.screen_width}
-                    height={theater.screen_height}
-                    centerX={theater.screen_center_x}
-                    centerY={theater.screen_center_y}
-                    centerZ={theater.screen_center_z}
+                    roomWidth={theater.room_width}
+                    roomDepth={theater.room_depth}
+                    roomHeight={theater.room_height}
+                    selectedSeat={selectedSeat}
+                    theater={theater}
+                    seatAreaFrontZ={seatAreaBounds.frontZ}
+                    seatAreaBackZ={seatAreaBounds.backZ}
+                    seatAreaMaxY={seatAreaBounds.maxY}
+                    rowZs={seatAreaBounds.rowZs}
+                    rowYs={seatAreaBounds.rowYs}
+                    seatSegments={seatAreaBounds.seatSegments}
                     reducedMotion={reducedMotion}
-                  />
-                  <AudienceMeshes
-                    theme={interiorTheme}
-                    seats={seats}
-                    occupiedSeatIds={occupiedSeatIds}
-                    rowCurveRadius={theater.row_curve_radius}
-                  />
-                  {speakers.length > 0 && (
-                    <>
-                      {/*
+                  >
+                    <SeatMeshes
+                      theme={interiorTheme}
+                      aisleSideSeatIds={aisleSideSeatIds}
+                      rowCurveRadius={theater.row_curve_radius}
+                      seats={seats}
+                      selectedSeatId={selectedSeatId}
+                      highlightedSeatId={highlightedSeatId}
+                      onSeatClick={handleSeatClick}
+                      onHoverSeat={handleHoverSeat}
+                      isHeatmapVisible={isHeatmapVisible}
+                    />
+                    <ScreenMesh
+                      theme={interiorTheme}
+                      curvature={theater.screen_curvature}
+                      width={theater.screen_width}
+                      height={theater.screen_height}
+                      centerX={theater.screen_center_x}
+                      centerY={theater.screen_center_y}
+                      centerZ={theater.screen_center_z}
+                      reducedMotion={reducedMotion}
+                    />
+                    <AudienceMeshes
+                      theme={interiorTheme}
+                      seats={seats}
+                      occupiedSeatIds={occupiedSeatIds}
+                      rowCurveRadius={theater.row_curve_radius}
+                    />
+                    {speakers.length > 0 && (
+                      <>
+                        {/*
                         スピーカーは俯瞰・一人称いずれでも表示する。
                         スクリーンch(L/C/R/LFE)はSpeakerMeshes内で非表示にし、
                         目線より上の天井/サラウンドを残して設備感を出す。
                       */}
-                      <SpeakerMeshes
-                        speakers={speakers}
-                        theme={interiorTheme}
-                      />
-                      {isHeatmapVisible && (
-                        <AudioHeatmapPlane
-                          uniforms={audioUniforms}
-                          frequencyBand={frequencyBand}
-                          width={heatmapBounds.width}
-                          depth={heatmapBounds.depth}
-                          centerZ={heatmapBounds.centerZ}
-                          rowZs={seatAreaBounds.rowZs}
-                          rowYs={seatAreaBounds.rowYs}
-                          reducedMotion={reducedMotion}
+                        <SpeakerMeshes
+                          speakers={speakers}
+                          theme={interiorTheme}
                         />
-                      )}
-                    </>
-                  )}
-                </TheaterScene>
-              </TheaterCanvas>
-            ) : (
-              <UnsupportedBrowserNotice />
-            )}
-            {/* 座席選択中はメインビューが一人称に切り替わるので俯瞰へ戻すボタンを表示 */}
-            {isWebGL2Supported && selectedSeat && (
-              <button
-                type='button'
-                onClick={handleBackToOverview}
-                className={styles.c_theater_experience__back_to_overview}
-              >
-                ← 俯瞰に戻る
-              </button>
-            )}
+                        {isHeatmapVisible && (
+                          <AudioHeatmapPlane
+                            uniforms={audioUniforms}
+                            frequencyBand={frequencyBand}
+                            width={heatmapBounds.width}
+                            depth={heatmapBounds.depth}
+                            centerZ={heatmapBounds.centerZ}
+                            rowZs={seatAreaBounds.rowZs}
+                            rowYs={seatAreaBounds.rowYs}
+                            reducedMotion={reducedMotion}
+                          />
+                        )}
+                      </>
+                    )}
+                  </TheaterScene>
+                </TheaterCanvas>
+              ) : (
+                <UnsupportedBrowserNotice />
+              )}
+              {/* 座席選択中はメインビューが一人称に切り替わるので俯瞰へ戻すボタンを表示 */}
+              {isWebGL2Supported && selectedSeat && (
+                <button
+                  type='button'
+                  onClick={handleBackToOverview}
+                  className={styles.c_theater_experience__back_to_overview}
+                >
+                  ← 俯瞰に戻る
+                </button>
+              )}
+            </div>
+
+            {/* サイドパネル */}
+            <aside className={styles.c_theater_experience__sidebar}>
+              <OccupancySelector
+                level={occupancyLevel}
+                onLevelChange={setOccupancyLevel}
+              />
+              <HeatmapToggle
+                visible={isHeatmapVisible}
+                onVisibleChange={handleHeatmapVisibleChange}
+              />
+              <FrequencySelector
+                value={frequencyBand}
+                onValueChange={handleFrequencyChange}
+              />
+              {isHeatmapVisible && <HeatmapLegend />}
+              <SeatInfoPanel
+                seat={selectedSeat}
+                fovMetrics={fovMetrics}
+                theater={theater}
+              />
+            </aside>
           </div>
 
-          {/* サイドパネル */}
-          <aside className={styles.c_theater_experience__sidebar}>
-            <OccupancySelector
-              level={occupancyLevel}
-              onLevelChange={setOccupancyLevel}
-            />
-            <HeatmapToggle
-              visible={isHeatmapVisible}
-              onVisibleChange={handleHeatmapVisibleChange}
-            />
-            <FrequencySelector
-              value={frequencyBand}
-              onValueChange={handleFrequencyChange}
-            />
-            {isHeatmapVisible && <HeatmapLegend />}
-            <SeatInfoPanel
-              seat={selectedSeat}
-              fovMetrics={fovMetrics}
+          {/* アクセシブルな座席一覧 */}
+          <section className={styles.c_theater_experience__a11y_section}>
+            <SeatA11yList
+              seats={seats}
               theater={theater}
+              selectedSeatId={selectedSeatId}
+              highlightedSeatId={highlightedSeatId}
+              onSelectSeat={handleSeatClick}
+              onHoverSeat={handleHoverSeat}
+              onFocusSeat={handleFocusSeat}
             />
-          </aside>
-        </div>
-
-        {/* アクセシブルな座席一覧 */}
-        <section className={styles.c_theater_experience__a11y_section}>
-          <SeatA11yList
-            seats={seats}
-            theater={theater}
-            selectedSeatId={selectedSeatId}
-            highlightedSeatId={highlightedSeatId}
-            onSelectSeat={handleSeatClick}
-            onHoverSeat={handleHoverSeat}
-            onFocusSeat={handleFocusSeat}
-          />
-        </section>
+          </section>
+        </main>
       </div>
     );
   },

@@ -10,6 +10,15 @@
   margin: 0 auto;
 }
 
+// 本文を包む main ランドマーク。
+// .c_theater_experience の flex column の並びを変えないよう、
+// 同じ方向・間隔を引き継ぐ。
+.c_theater_experience__main_landmark {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+}
+
 .c_theater_experience__loading,
 .c_theater_experience__error {
   @include flex-center;

@@ -105,7 +105,12 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
       </button>
 
       {/* 検索フォーム（PC: 常に表示、SP: 展開時のみ表示） */}
-      <form className={formClassNames} role='search' onSubmit={handleSubmit}>
+      <form
+        className={formClassNames}
+        role='search'
+        aria-label='サイト内検索'
+        onSubmit={handleSubmit}
+      >
         <input
           ref={inputRef}
           type='text'

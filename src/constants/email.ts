@@ -40,6 +40,42 @@ export function buildOtpEmailSubject(action: OtpAction): string {
  * @param action - OTPの用途
  * @returns 用途の明記と共有禁止の警告を含む本文
  */
+/**
+ * パスワードリセットメールの件名
+ */
+export function buildPasswordResetEmailSubject(): string {
+  return `[${APP_NAME}] パスワード再設定のご案内`;
+}
+
+/**
+ * パスワードリセットメール本文を生成する
+ *
+ * リンクの有効期限と、心当たりがない場合の案内を必ず入れる。
+ * 第三者がメールアドレスを入力しただけでも届くため。
+ *
+ * @param resetUrl - トークン付きの再設定URL
+ * @param expiryMinutes - リンクの有効期限（分）
+ * @returns メール本文
+ */
+export function buildPasswordResetEmailText(
+  resetUrl: string,
+  expiryMinutes: number,
+): string {
+  return `${APP_NAME}のパスワード再設定のご案内です。
+
+以下のリンクから新しいパスワードを設定してください。
+
+${resetUrl}
+
+このリンクは${expiryMinutes}分間有効で、1回のみ使用できます。
+
+⚠ このリンクを他人に教えないでください。
+${APP_NAME}からお客様にこのリンクをお尋ねすることはありません。
+
+心当たりがない場合は、このメールを無視してください。
+パスワードは変更されません。第三者がお客様のメールアドレスを入力した可能性があります。`;
+}
+
 export function buildOtpEmailText(code: string, action: OtpAction): string {
   return `${APP_NAME}の確認コードです。
 このコードは「${OTP_PURPOSE_LABEL[action]}」のために発行されました。

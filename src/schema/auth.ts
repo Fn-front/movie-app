@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { VALIDATION } from '@/constants';
 import { VALIDATION_MESSAGES } from '@/constants/auth';
+
 import { normalizeEmail } from '@/utils/email';
 
 /**
@@ -156,4 +157,52 @@ export const changePasswordApiSchema = z.object({
    * ユーザーは入力しようがないため、ここで一律必須にはできない。
    */
   currentPassword: z.string().optional(),
+});
+
+/**
+ * パスワードリセット発行リクエストのバリデーションスキーマ
+ */
+export const passwordResetRequestSchema = z.object({
+  // 表記ゆれが別アカウント・別レート制限カウンタになるのを防ぐため、
+  // スキーマの時点で畳む
+  email: normalizedEmailSchema,
+});
+
+/**
+ * パスワードリセット発行フォームの型
+ */
+export type PasswordResetRequestFormData = z.infer<
+  typeof passwordResetRequestSchema
+>;
+
+/**
+ * パスワード再設定フォームのバリデーションスキーマ
+ */
+export const passwordResetConfirmSchema = z
+  .object({
+    password: passwordSchema,
+    confirmPassword: z
+      .string()
+      .min(1, VALIDATION_MESSAGES.CONFIRM_PASSWORD_REQUIRED),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: VALIDATION_MESSAGES.PASSWORD_MISMATCH,
+    path: ['confirmPassword'],
+  });
+
+/**
+ * パスワード再設定フォームの型
+ */
+export type PasswordResetConfirmFormData = z.infer<
+  typeof passwordResetConfirmSchema
+>;
+
+/**
+ * パスワード再設定APIリクエストのバリデーションスキーマ
+ *
+ * トークンはメールのリンクに載っていた平文。サーバー側でハッシュ化して照合する。
+ */
+export const passwordResetConfirmApiSchema = z.object({
+  token: z.string().min(1, VALIDATION_MESSAGES.OTP_TOKEN_REQUIRED),
+  password: passwordSchema,
 });

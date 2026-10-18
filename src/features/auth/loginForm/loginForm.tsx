@@ -217,6 +217,15 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
 
       <SocialLoginButtons disabled={isSubmitting} callbackUrl={callbackUrl} />
 
+      <p className={styles.c_login_form__footer}>
+        <Link
+          href={ROUTES.FORGOT_PASSWORD}
+          className={styles.c_login_form__link}
+        >
+          パスワードをお忘れの方
+        </Link>
+      </p>
+
       {onOtpLoginClick && (
         <p className={styles.c_login_form__footer}>
           <button

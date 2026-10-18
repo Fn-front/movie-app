@@ -607,8 +607,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON accounts TO service_role;
 -- ============================================
 -- 5. 関数権限（最小権限）
 -- ============================================
--- PostgreSQL は CREATE FUNCTION 時に EXECUTE を PUBLIC へ自動付与するため、
--- 放置すると公開 anon キーから /rest/v1/rpc/<関数名> に到達できる。
+-- 関数の EXECUTE は PostgreSQL の PUBLIC 自動付与と、Supabase の
+-- ALTER DEFAULT PRIVILEGES による anon / authenticated 付与の2系統がある。
+-- 両方を剥奪しないと公開 anon キーから /rest/v1/rpc/<関数名> に到達できる。
 -- 既定権限そのものを絞り、DROP → CREATE で静かに復活するのも防ぐ。
 -- 対応マイグレーション: 20261018042537_revoke_function_execute_from_public.sql
 --
@@ -616,4 +617,4 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON accounts TO service_role;
 -- GRANT が必須。新しい関数を足すときは必ずセットで書くこと。
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;

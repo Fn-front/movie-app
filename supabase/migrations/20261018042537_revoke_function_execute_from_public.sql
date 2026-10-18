@@ -2,9 +2,15 @@
 -- 関数の EXECUTE を PUBLIC から剥奪し、search_path を固定する
 -- ============================================
 -- 背景:
--- PostgreSQL は CREATE FUNCTION 時に EXECUTE を PUBLIC へ自動付与する。
+-- 関数の EXECUTE は2系統で付与されており、両方を剥奪しないと anon から到達できる。
+--   1. PostgreSQL が CREATE FUNCTION 時に PUBLIC へ自動付与する分
+--   2. Supabase が ALTER DEFAULT PRIVILEGES で anon / authenticated へ付与する分
 -- 本リポジトリの RPC はいずれも REVOKE しておらず、公開されている anon キーから
 -- POST /rest/v1/rpc/<関数名> で呼び出し自体は到達できた。
+--
+-- ⚠️ 1 だけを剥奪しても 2 が残るため意味がない。実際、PUBLIC のみを剥奪した版を
+-- トランザクション内で試したところ、適用後も anon=X / authenticated=X が残った。
+-- 権限の確認は pg_proc.proacl を実測すること（REVOKE 文を読むだけでは分からない）。
 --
 -- 現時点で悪用可能な経路は無い（全関数が SECURITY INVOKER で、対象テーブルの
 -- RLS と GRANT が呼び出しロールの権限で弾く）。ただし多層防御が1枚しかない状態で、
@@ -25,11 +31,12 @@
 -- --------------------------------------------
 -- 1. 今後作られる関数にも自動で適用する
 -- --------------------------------------------
--- CREATE OR REPLACE は既存権限を保持するが、DROP → CREATE では PUBLIC EXECUTE が
--- 静かに復活する（20260314500000:29 が実際に DROP FUNCTION を使っている）。
+-- CREATE OR REPLACE は既存権限を保持するが、DROP → CREATE では PUBLIC / anon /
+-- authenticated への既定付与が静かに復活する
+-- （20260314500000:29 が実際に DROP FUNCTION を使っている）。
 -- 個別 REVOKE だけだと人間の記憶に依存するため、既定権限そのものを絞る。
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
 
 -- --------------------------------------------
 -- 2. SET search_path が漏れている2関数を揃える
@@ -95,8 +102,9 @@ $$;
 -- --------------------------------------------
 -- 3. EXECUTE を PUBLIC から剥奪し、必要なロールにだけ付与する
 -- --------------------------------------------
--- ⚠️ service_role は superuser ではないため、PUBLIC を剥奪したら明示的な
--- GRANT が必須。付け忘れるとサーバー側の全呼び出しが 42501 で落ちる。
+-- ⚠️ service_role は superuser ではないため、権限を剥奪したら明示的な GRANT が
+-- 必須。付け忘れるとサーバー側の全呼び出しが 42501 で落ちる。
+-- なお service_role は REVOKE の対象に含めない（含めると全機能が止まる）。
 --
 -- 呼び出し元の実測（src/ 全体の .rpc( を追跡）:
 --   - get_award_years          … createAnonClient()（src/app/api/awards/route.ts:151）
@@ -104,28 +112,27 @@ $$;
 --     （createServiceRoleClient() / withAuth / 各 sync 処理 / auth.ts）
 -- ブラウザ用 supabase クライアントから .rpc() を呼ぶコードは存在しない。
 
-REVOKE EXECUTE ON FUNCTION public.consume_rate_limit(TEXT, TEXT, INTEGER, INTEGER) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.consume_rate_limit(TEXT, TEXT, INTEGER, INTEGER) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.consume_rate_limit(TEXT, TEXT, INTEGER, INTEGER) TO service_role;
 
-REVOKE EXECUTE ON FUNCTION public.upsert_recommendations(UUID, JSONB) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.upsert_recommendations(UUID, JSONB) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.upsert_recommendations(UUID, JSONB) TO service_role;
 
-REVOKE EXECUTE ON FUNCTION public.upsert_movie_cache(JSONB, BOOLEAN) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.upsert_movie_cache(JSONB, BOOLEAN) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.upsert_movie_cache(JSONB, BOOLEAN) TO service_role;
 
-REVOKE EXECUTE ON FUNCTION public.sync_now_showing_movies(JSONB) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.sync_now_showing_movies(JSONB) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.sync_now_showing_movies(JSONB) TO service_role;
 
-REVOKE EXECUTE ON FUNCTION public.get_watchlist_by_proximity(UUID, INT, INT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_watchlist_by_proximity(UUID, INT, INT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_watchlist_by_proximity(UUID, INT, INT) TO service_role;
 
-REVOKE EXECUTE ON FUNCTION public.delete_expired_recommendation_events(INTEGER) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.delete_expired_recommendation_events(INTEGER) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_expired_recommendation_events(INTEGER) TO service_role;
 
--- get_award_years は 20260718103227:25 で anon / authenticated / service_role へ
--- GRANT 済みだが、PUBLIC が残っていたためその GRANT は実質的に no-op だった。
--- PUBLIC を剥奪して初めて「anon にだけ公開する」という意図が権限に反映される。
-REVOKE EXECUTE ON FUNCTION public.get_award_years() FROM PUBLIC;
+-- get_award_years だけは anon からの呼び出しが正規の経路（受賞ページ）。
+-- いったん3者から剥奪したうえで、必要なロールへ付け直して意図を明示する。
+REVOKE EXECUTE ON FUNCTION public.get_award_years() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_award_years() TO anon, authenticated, service_role;
 
 -- --------------------------------------------

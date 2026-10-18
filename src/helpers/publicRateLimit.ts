@@ -51,7 +51,21 @@ export async function enforcePublicRateLimit({
   // ここで止めると設定ミスで全機能が落ちるため、既存の fail-open に揃える。
   if (!client) return null;
 
-  const identifier = userId || getClientIp(request);
+  const clientIp = getClientIp(request);
+
+  // 送信元を特定できず認証もされていない場合は制限を掛けない。
+  //
+  // ここで 'unknown' を識別子にすると、**全ての未認証リクエストが1つの
+  // カウンタを共有**し、誰か1人が上限に達した時点で未認証の利用者全員が
+  // まとめて 429 になる。ロックされるのが試行した本人だけになるよう
+  // 識別子を選ぶという方針（buildLoginIdentifier と同じ考え方）に揃える。
+  //
+  // Vercel のエッジは x-vercel-forwarded-for を必ず付けるため、本番では
+  // この分岐に入らない。入りうるのはローカル起動や、転送ヘッダを付けない
+  // リバースプロキシ構成のみ。
+  if (!userId && clientIp === 'unknown') return null;
+
+  const identifier = userId || clientIp;
 
   const result = await checkRateLimit(
     client,

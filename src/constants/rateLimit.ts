@@ -103,24 +103,29 @@ export const RATE_LIMIT_CONFIG = {
    * 公開映画APIの上限。
    *
    * ⚠️ consume_rate_limit は**スライディングウィンドウではなく**
-   * 「累積 maxAttempts 到達で windowMinutes ロック」方式。通常利用で到達しない
-   * 値にすること。一覧は infinite query でスクロールごとに1本、検索は500msの
-   * デバウンスで打鍵ごとに発火しうるため、読み取り系は厚めに取る。
+   * 「累積 maxAttempts 到達で windowMinutes ロック」方式。カウンタは時間では
+   * 減らず、ロックが明けたときにだけ 1 に戻る。つまり長時間の閲覧でも
+   * 単調に積み上がるため、通常利用でも最終的にロックに到達しうる。
+   * 一覧は infinite query でスクロールごとに1本、検索は500msのデバウンスで
+   * 打鍵ごとに発火するので、読み取り系は十分に厚く取る必要がある。
+   *
+   * 0.5req/秒 相当（300回/10分）でも、TMDb が許す約50req/秒に対して
+   * 100分の1以下に抑えられるため、濫用対策としては機能する。
    *
    * ルートごとに別のカウンタにしている。1つにまとめると、一覧のスクロールで
    * 枠を使い切った利用者が詳細ページでも 429 になる。
    */
-  READ_MOVIES: { maxAttempts: 120, windowMinutes: 10 },
-  SEARCH_MOVIES: { maxAttempts: 60, windowMinutes: 10 },
-  READ_MOVIE_DETAIL: { maxAttempts: 120, windowMinutes: 10 },
-  READ_GENRES: { maxAttempts: 60, windowMinutes: 10 },
+  READ_MOVIES: { maxAttempts: 300, windowMinutes: 10 },
+  SEARCH_MOVIES: { maxAttempts: 120, windowMinutes: 10 },
+  READ_MOVIE_DETAIL: { maxAttempts: 300, windowMinutes: 10 },
+  READ_GENRES: { maxAttempts: 120, windowMinutes: 10 },
   /** 書き込み系は他のAPIと揃える */
   WRITE_FILTERS: { maxAttempts: 10, windowMinutes: 1 },
   /**
    * 認証必須の読み取り。カレンダーの月送りが最も回数を使うため厚めに取る。
    * 自分のデータしか読めず外部APIも呼ばないので、濫用の実害は小さい。
    */
-  READ_USER_DATA: { maxAttempts: 120, windowMinutes: 10 },
+  READ_USER_DATA: { maxAttempts: 300, windowMinutes: 10 },
   /**
    * ログイン試行のアカウント×送信元単位の上限。
    *

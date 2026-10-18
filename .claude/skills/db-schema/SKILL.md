@@ -67,12 +67,16 @@ CREATE TRIGGER set_updated_at
 -- ============================================
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public, pg_temp
+AS $$
 BEGIN
   NEW.updated_at = now();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 ```
 
 ## Data API公開のためのGRANT付与
@@ -99,6 +103,27 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO service_role;
 GRANT SELECT ON <table_name> TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO service_role;
 ```
+
+### パターンD: 関数（RPC・トリガー関数）
+
+> PostgreSQL は `CREATE FUNCTION` 時に **EXECUTE を PUBLIC へ自動付与**する。剥奪しないと、公開されている anon キーから `POST /rest/v1/rpc/<関数名>` で到達できる。
+
+```sql
+CREATE OR REPLACE FUNCTION public.<fn>(<args>)
+RETURNS <type>
+LANGUAGE plpgsql
+SECURITY INVOKER          -- DEFINER は RLS をバイパスする。使うなら理由をコメントで残す
+SET search_path = public, pg_temp
+AS $$ ... $$;
+
+REVOKE EXECUTE ON FUNCTION public.<fn>(<argtypes>) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.<fn>(<argtypes>) TO service_role;
+```
+
+- **`service_role` は superuser ではない。** PUBLIC を剥奪したら明示的に GRANT しないと、サーバー側の呼び出しが `42501` で全て落ちる
+- `anon` に付与するのは、未認証クライアントが実際に呼ぶ関数だけ
+- `CREATE OR REPLACE` は既存権限を保持するが、**`DROP FUNCTION` → `CREATE` では PUBLIC EXECUTE が復活しうる**
+- `RETURNS TRIGGER` の関数は PostgREST が RPC として公開しないため REVOKE 不要。ただし `search_path` は固定する
 
 ## Row Level Security (RLS) ポリシー
 

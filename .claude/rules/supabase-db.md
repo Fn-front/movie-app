@@ -43,6 +43,36 @@ GRANT SELECT ON public.<table_name> TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
 ```
 
+## 【必須】関数は EXECUTE を PUBLIC から剥奪する
+
+> 背景: PostgreSQL は `CREATE FUNCTION` 時に **EXECUTE を PUBLIC へ自動付与**する。剥奪しないと、公開されている anon キーから `POST /rest/v1/rpc/<関数名>` で到達できる。`SECURITY INVOKER` なら呼び出しロールの権限で弾かれるが、`SECURITY DEFINER` に変えた瞬間に実害へ変わる（過去に約1.8日間、anon キーだけで `now_showing_movies` を全件差し替えできる状態が実在した）。
+
+- 関数を作成したら、`REVOKE EXECUTE ... FROM PUBLIC` と必要ロールへの `GRANT EXECUTE` を**同じマイグレーションに書く**
+- **`service_role` は superuser ではない**。PUBLIC を剥奪したら明示的に GRANT しないと、サーバー側の呼び出しが `42501` で全て落ちる
+- `anon` に付与するのは、未認証クライアントが実際に呼ぶ関数だけ（現状は `get_award_years` のみ）
+- `SECURITY DEFINER` は原則使わない。RLS をバイパスするため、使うなら理由をコメントで残す
+- `SET search_path = public, pg_temp` を必ず付ける（Supabase lint: `function_search_path_mutable`）
+
+```sql
+CREATE OR REPLACE FUNCTION public.<fn>(<args>)
+RETURNS <type>
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public, pg_temp
+AS $$ ... $$;
+
+REVOKE EXECUTE ON FUNCTION public.<fn>(<argtypes>) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.<fn>(<argtypes>) TO service_role;
+```
+
+なお `20261018042537` で既定権限を絞っているため、以降に作る関数には自動で適用される。ただし**明示的に書くこと**（既定権限は環境差で効かない場合があり、意図も読み取れないため）。
+
+```sql
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+```
+
+⚠️ `CREATE OR REPLACE` は既存権限を保持するが、**`DROP FUNCTION` → `CREATE` では PUBLIC EXECUTE が復活しうる**。関数を作り直すときは権限を書き直すこと。
+
 ## 【必須】接続確認・プロジェクト操作は CLI 経由（curl 直叩き禁止）
 
 - Supabase への疎通確認・プロジェクト操作は **Supabase CLI（`supabase` / `npx supabase`）経由で行う**

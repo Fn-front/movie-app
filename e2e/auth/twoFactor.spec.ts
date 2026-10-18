@@ -8,8 +8,11 @@
  * テスト用の抜け道は作らず、DBの暗号文をアプリと同じ手順で復号して
  * コードを計算する（OTPコードの総当たりと同じ考え方）。
  *
- * ⚠️ テストユーザーの二段階認証を有効にしたまま終わると、storageState を使う
- * 他のテストがログインできなくなる。各テストの前後で必ず無効化する。
+ * ⚠️ 共有の `TEST_USER` は使わない（#750）。本 spec は二段階認証を有効化・
+ * 無効化してユーザーの状態を書き換えるため、同じユーザーを使う
+ * `otpFlow.spec.ts` などを並列実行時に壊す。`describe.configure({ mode: 'serial' })`
+ * はファイル内の直列化しかせず、ファイル間の並列は防げない。
+ * 専用ユーザーを作って完結させ、後片付けもそのユーザーに限定する。
  *
  * ユーザーストーリー網羅:
  * - 正常系: 有効化 → ログアウト → パスワード＋認証コードでログイン
@@ -22,11 +25,15 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
+import { getLatestOtpCode } from '../helpers/api';
 import {
-  cleanupAllRateLimits,
-  cleanupOtpCodes,
-  getLatestOtpCode,
-} from '../helpers/api';
+  cleanupLoginIpRateLimits,
+  cleanupOtpCodesForEmail,
+  cleanupRateLimitsForEmail,
+  cleanupRateLimitsForUser,
+  createVerifiedUser,
+  deleteUserByEmail,
+} from '../helpers/dedicatedUser';
 import {
   cleanupTotp,
   getCurrentTotpCode,
@@ -34,12 +41,23 @@ import {
   isRecoveryCodeStored,
   totpCodeFromSecret,
 } from '../helpers/totp';
-import { TEST_USER } from '../helpers/testUser';
+
+/**
+ * 本 spec 専用のユーザー。
+ * 他の spec と識別子が衝突しないよう、用途が分かる固定のメールアドレスにする。
+ */
+const USER = {
+  email: 'e2e-two-factor@example.com',
+  password: 'TwoFactorE2e1',
+} as const;
+
+/** 作成したユーザーのID（totp_verify のレート制限は user_id で数える） */
+let userId = '';
 
 /** ログイン画面でメールとパスワードを入力して送信する */
 async function submitCredentials(page: Page): Promise<void> {
-  await page.getByLabel('メールアドレス').fill(TEST_USER.email);
-  await page.getByLabel('パスワード').fill(TEST_USER.password);
+  await page.getByLabel('メールアドレス').fill(USER.email);
+  await page.getByLabel('パスワード').fill(USER.password);
   await page.getByRole('button', { name: 'ログイン', exact: true }).click();
 }
 
@@ -64,7 +82,7 @@ async function enableTwoFactor(page: Page): Promise<string[]> {
     page.getByRole('img', { name: '二段階認証のQRコード' }),
   ).toBeVisible();
 
-  const secret = await getTotpSecret(TEST_USER.email);
+  const secret = await getTotpSecret(USER.email);
   expect(secret).not.toBeNull();
 
   await page.getByLabel('認証コード').fill(totpCodeFromSecret(secret!));
@@ -80,8 +98,8 @@ async function enableTwoFactor(page: Page): Promise<string[]> {
 }
 
 /**
- * 全テストが同じテストユーザーの二段階認証を有効化・無効化するため、
- * 並列実行すると互いの状態を壊す。直列で回す。
+ * 本 spec 内のテストは同じ専用ユーザーの二段階認証を有効化・無効化するため、
+ * 互いに干渉する。ファイル内は直列で回す。
  *
  * 1テストあたりログインを2回行う（有効化 → ログアウト → 二段階認証付きログイン）
  * ものがあり、bcrypt とDB往復で既定の30秒では足りない。
@@ -91,20 +109,33 @@ test.describe.configure({ mode: 'serial', timeout: 90000 });
 test.describe('二段階認証', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test.beforeEach(async () => {
-    // 前のテストの試行回数を持ち越さない（ログイン5回/30分、コード5回/15分）
-    await cleanupAllRateLimits();
-    // 直前のOTPが残っていると再送間隔（60秒）に引っかかって送信できない
-    await cleanupOtpCodes(TEST_USER.email);
-    await cleanupTotp(TEST_USER.email);
+  test.beforeAll(async () => {
+    userId = await createVerifiedUser(USER);
   });
 
-  test.afterEach(async () => {
-    // 有効なまま残すと他のテストがログインできなくなる
-    await cleanupTotp(TEST_USER.email);
-    await cleanupOtpCodes(TEST_USER.email);
-    await cleanupAllRateLimits();
+  test.afterAll(async () => {
+    // 関連レコード（user_totp / totp_recovery_codes）は ON DELETE CASCADE で消える
+    await deleteUserByEmail(USER.email);
   });
+
+  /**
+   * 専用ユーザーに紐づく状態だけを消す。
+   * 全消し（cleanupAllRateLimits）は他の spec が依存する状態まで壊すため使わない（#750）。
+   */
+  const resetUserState = async (): Promise<void> => {
+    // ログイン5回/30分、コード5回/15分。持ち越すと後半のテストが弾かれる
+    await cleanupRateLimitsForEmail(USER.email);
+    await cleanupRateLimitsForUser(userId);
+    // 送信元IP単位の上限（20回/15分）はユーザーに紐づかず全 spec で共有される。
+    // 本 spec は1テストあたり最大3回ログインするため、他の spec と重なると到達する
+    await cleanupLoginIpRateLimits();
+    // 直前のOTPが残っていると再送間隔（60秒）に引っかかって送信できない
+    await cleanupOtpCodesForEmail(USER.email);
+    await cleanupTotp(USER.email);
+  };
+
+  test.beforeEach(resetUserState);
+  test.afterEach(resetUserState);
 
   test('有効化 → ログアウト → 認証コード付きでログインできる', async ({
     page,
@@ -127,7 +158,7 @@ test.describe('二段階認証', () => {
     await expect(totpField).toBeVisible();
     await expect(page).toHaveURL(/\/auth\/signin/);
 
-    const code = await getCurrentTotpCode(TEST_USER.email);
+    const code = await getCurrentTotpCode(USER.email);
     await totpField.fill(code!);
     await page.getByRole('button', { name: 'ログイン', exact: true }).click();
 
@@ -141,9 +172,7 @@ test.describe('二段階認証', () => {
 
     expect(recoveryCodes.length).toBeGreaterThan(0);
     // 表示された平文が実際に保存されているものと対応している
-    expect(await isRecoveryCodeStored(TEST_USER.email, recoveryCodes[0])).toBe(
-      true,
-    );
+    expect(await isRecoveryCodeStored(USER.email, recoveryCodes[0])).toBe(true);
 
     await page.context().clearCookies();
     await page.goto('/auth/signin');
@@ -155,7 +184,7 @@ test.describe('二段階認証', () => {
     await page.waitForURL('/');
 
     // 使い捨てなので、同じコードの2回目は通らない
-    expect(await isRecoveryCodeStored(TEST_USER.email, recoveryCodes[0])).toBe(
+    expect(await isRecoveryCodeStored(USER.email, recoveryCodes[0])).toBe(
       false,
     );
   });
@@ -184,7 +213,7 @@ test.describe('二段階認証', () => {
     await loginAndOpenSettings(page);
     await enableTwoFactor(page);
 
-    const code = await getCurrentTotpCode(TEST_USER.email);
+    const code = await getCurrentTotpCode(USER.email);
 
     await page.context().clearCookies();
     await page.goto('/auth/signin');
@@ -217,13 +246,13 @@ test.describe('二段階認証', () => {
     await page.goto('/auth/signin');
     await page.getByRole('button', { name: 'メールでログイン' }).click();
 
-    await page.getByLabel('メールアドレス').fill(TEST_USER.email);
+    await page.getByLabel('メールアドレス').fill(USER.email);
     await page.getByRole('button', { name: 'ログインコードを送信' }).click();
     await expect(
       page.getByRole('heading', { name: '確認コードを入力' }),
     ).toBeVisible();
 
-    const otpCode = await getLatestOtpCode(TEST_USER.email, 'login');
+    const otpCode = await getLatestOtpCode(USER.email, 'login');
     // exact 指定が無いと「確認コードを検証」ボタンにも一致する
     await page.getByLabel('確認コード', { exact: true }).fill(otpCode!);
 
@@ -272,7 +301,7 @@ test.describe('二段階認証', () => {
       .getByRole('button', { name: 'リカバリーコードを控えた' })
       .click();
 
-    const code = await getCurrentTotpCode(TEST_USER.email);
+    const code = await getCurrentTotpCode(USER.email);
     await page.getByLabel('認証コード').fill(code!);
     await page.getByRole('button', { name: '二段階認証を無効にする' }).click();
 

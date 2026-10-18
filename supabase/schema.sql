@@ -91,18 +91,21 @@ CREATE TRIGGER update_accounts_updated_at
 -- --------------------------------------------
 -- otp_codes（OTP検証コード）
 -- --------------------------------------------
+-- コードは平文で保存しない。HMAC-SHA256（鍵は OTP_HASH_PEPPER）だけを持つ。
+-- 6桁 = 100万通りしかなく、ソルト付きSHA-256でも特定の行を狙った総当たりは
+-- 1秒未満で終わるため、鍵をDBの外に置く（#640 / #698）。
 CREATE TABLE IF NOT EXISTS otp_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email VARCHAR(255) NOT NULL,
-  code VARCHAR(6) NOT NULL,
+  code_hash TEXT NOT NULL,
   action_type VARCHAR(50) NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0,
   expires_at TIMESTAMPTZ NOT NULL,
   verified_at TIMESTAMPTZ,
+  verification_token_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT chk_otp_action_type CHECK (action_type IN ('registration', 'login', 'password_change')),
-  CONSTRAINT chk_otp_attempts CHECK (attempts >= 0 AND attempts <= 5),
-  CONSTRAINT chk_otp_code_format CHECK (code ~ '^\d{6}$')
+  CONSTRAINT chk_otp_attempts CHECK (attempts >= 0 AND attempts <= 5)
 );
 
 -- インデックス

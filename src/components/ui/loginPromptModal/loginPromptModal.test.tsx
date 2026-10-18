@@ -57,18 +57,38 @@ describe('LoginPromptModal', () => {
     expect(screen.getByText('ログインが必要です')).toBeInTheDocument();
   });
 
-  it('フッターの閉じるボタンでcloseが呼ばれる', async () => {
+  it('フッターのキャンセルボタンでcloseが呼ばれる', async () => {
     const user = userEvent.setup();
     mockLoginPromptState.isOpen = true;
 
     render(<LoginPromptModal />);
 
-    // Modalの×ボタンとフッターの「閉じる」ボタンが存在する
-    const closeButtons = screen.getAllByRole('button', { name: '閉じる' });
-    // フッターの閉じるボタン（最後の要素）をクリック
-    await user.click(closeButtons[closeButtons.length - 1]);
+    await user.click(screen.getByRole('button', { name: 'キャンセル' }));
 
     expect(mockLoginPromptState.close).toHaveBeenCalled();
+  });
+
+  it('ヘッダーの閉じるボタンでcloseが呼ばれる', async () => {
+    const user = userEvent.setup();
+    mockLoginPromptState.isOpen = true;
+
+    render(<LoginPromptModal />);
+
+    await user.click(screen.getByRole('button', { name: '閉じる' }));
+
+    expect(mockLoginPromptState.close).toHaveBeenCalled();
+  });
+
+  it('同じアクセシブルネームのボタンが重複しない', () => {
+    mockLoginPromptState.isOpen = true;
+
+    render(<LoginPromptModal />);
+
+    const names = screen
+      .getAllByRole('button')
+      .map((b) => b.textContent?.trim());
+
+    expect(new Set(names).size).toBe(names.length);
   });
 
   it('ログインボタンでcloseとrouter.pushが呼ばれる', async () => {

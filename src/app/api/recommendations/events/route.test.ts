@@ -16,7 +16,23 @@ import { POST } from './route';
 // --- Mocks ---
 
 const mockUpsert = jest.fn();
-const mockFrom = jest.fn(() => ({ upsert: mockUpsert }));
+
+/** `recommendations` から返す「自分のレコメンド」。所有権チェックの入力になる */
+let ownedRecommendations: Array<{ id: string; tmdb_movie_id: number }> = [];
+let ownedError: { message: string } | null = null;
+
+const mockFrom = jest.fn((table: string) => {
+  if (table === 'recommendations') {
+    return {
+      select: () => ({
+        eq: () => ({
+          in: () => ({ data: ownedRecommendations, error: ownedError }),
+        }),
+      }),
+    };
+  }
+  return { upsert: mockUpsert };
+});
 jest.mock('@/helpers/supabase', () => ({
   createServiceRoleClient: () => ({ from: mockFrom }),
   dbConnectionErrorResponse: () =>
@@ -64,6 +80,8 @@ describe('POST /api/recommendations/events', () => {
     });
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockUpsert.mockResolvedValue({ error: null });
+    ownedRecommendations = [{ id: RECOMMENDATION_ID, tmdb_movie_id: 12345 }];
+    ownedError = null;
   });
 
   describe('正常系', () => {
@@ -203,6 +221,85 @@ describe('POST /api/recommendations/events', () => {
 
       expect(response.status).toBe(500);
       expect(json.success).toBe(false);
+    });
+  });
+
+  describe('所有権の検証', () => {
+    // zod の .uuid() はバージョン(3桁目)とバリアント(4桁目)を検証するため、
+    // 形式として妥当なUUIDを使う
+    const OTHER_ID = '11111111-2222-4333-8444-555555555555';
+
+    it('自分のものでないレコメンドIDは静かに捨てる', async () => {
+      // 他人のIDで click を投入して CTR を押し上げる経路を塞ぐ。
+      // 洗い替え直後に古いIDの impression が届くのは正常系なので、
+      // エラーにせず 201 + recorded:0 を返す
+      ownedRecommendations = [];
+
+      const response = await POST(
+        createRequest({
+          events: [createEvent({ recommendation_id: OTHER_ID })],
+        }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(json.success).toBe(true);
+      expect(json.data.recorded).toBe(0);
+      // 空配列を upsert に渡さない（PostgREST がエラーにするため）
+      expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('自分のものだけを記録し、他人のものは除外する', async () => {
+      const response = await POST(
+        createRequest({
+          events: [
+            createEvent(),
+            createEvent({
+              recommendation_id: OTHER_ID,
+              event_type: RECOMMENDATION_EVENT_TYPE.CLICK,
+            }),
+          ],
+        }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(json.data.recorded).toBe(1);
+      expect(mockUpsert.mock.calls[0][0]).toEqual([
+        {
+          user_id: 'user-123',
+          recommendation_id: RECOMMENDATION_ID,
+          tmdb_movie_id: 12345,
+          event_type: 'impression',
+        },
+      ]);
+    });
+
+    it('tmdb_movie_id はクライアント申告値ではなくサーバー側の値で記録する', async () => {
+      ownedRecommendations = [{ id: RECOMMENDATION_ID, tmdb_movie_id: 999 }];
+
+      await POST(
+        createRequest({ events: [createEvent({ tmdb_movie_id: 12345 })] }),
+      );
+
+      expect(mockUpsert.mock.calls[0][0][0].tmdb_movie_id).toBe(999);
+    });
+
+    it('所有権の確認は recommendations テーブルに対して行う', async () => {
+      await POST(createRequest({ events: [createEvent()] }));
+
+      expect(mockFrom).toHaveBeenCalledWith('recommendations');
+      expect(mockFrom).toHaveBeenCalledWith('recommendation_events');
+    });
+
+    it('所有権の確認に失敗した場合500を返す', async () => {
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      ownedError = { message: 'db error' };
+
+      const response = await POST(createRequest({ events: [createEvent()] }));
+
+      expect(response.status).toBe(500);
+      expect(mockUpsert).not.toHaveBeenCalled();
     });
   });
 });

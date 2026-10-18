@@ -107,6 +107,13 @@ DB と環境変数の両方を取られない限り、共有鍵は復号でき�
 - ローカル / GitHub Actions（E2E）/ Vercel の**3箇所すべて**に設定する。
   どれか1つでも欠けるとその環境で二段階認証が動かない
 
+**QRコードについて:**
+
+`otpauth://` URI のQRコード化には `uqr`（依存ゼロ・型同梱）を使う。
+サーバー側でSVGを生成し data URI にして返すため、クライアントに描画ライブラリは
+入らない。`<img>` で表示するので `dangerouslySetInnerHTML` も不要
+（`src/app/api/user/totp/setup/route.ts`）。
+
 ---
 
 ### OAuth認証（ソーシャルログイン）

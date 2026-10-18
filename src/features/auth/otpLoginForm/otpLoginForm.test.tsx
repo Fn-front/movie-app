@@ -395,6 +395,10 @@ describe('OtpLoginForm', () => {
         );
       });
 
+      // トーストは数秒で消えるため、画面にも残す
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        expectedMessage,
+      );
       expect(mockPush).not.toHaveBeenCalled();
     },
   );

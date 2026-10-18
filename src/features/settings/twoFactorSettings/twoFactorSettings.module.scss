@@ -1,0 +1,106 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_two_factor_settings {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+}
+
+.c_two_factor_settings__lead {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  line-height: $line-height-loose;
+}
+
+.c_two_factor_settings__status {
+  font-size: $font-size-sm;
+  color: $text-primary;
+}
+
+.c_two_factor_settings__setup {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+}
+
+.c_two_factor_settings__steps {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+  padding-left: $spacing-5;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  list-style: decimal;
+}
+
+.c_two_factor_settings__qr {
+  // 背景の白はSVG側に含まれている（uqr が白のrectを敷く）。
+  // ダークテーマでも読み取り精度が落ちないため、ここで色を指定しない
+  align-self: flex-start;
+  border-radius: $border-radius-md;
+}
+
+.c_two_factor_settings__secret {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+}
+
+.c_two_factor_settings__secret_value {
+  // 鍵は長いので折り返す。等幅にして読み違いを減らす
+  font-family: $font-family-mono;
+  font-size: $font-size-sm;
+  color: $text-primary;
+  word-break: break-all;
+}
+
+.c_two_factor_settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $spacing-3;
+}
+
+.c_two_factor_settings__recovery {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+}
+
+.c_two_factor_settings__codes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: $spacing-2;
+  padding: $spacing-4;
+  background-color: $background-secondary;
+  border-radius: $border-radius-md;
+  font-family: $font-family-mono;
+  font-size: $font-size-sm;
+  color: $text-primary;
+  list-style: none;
+
+  @include md {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.c_two_factor_settings__warning {
+  padding: $spacing-3 $spacing-4;
+  background-color: color-alpha(--warning-main, 10%);
+  border: $border-width-1 solid $warning-light;
+  border-radius: $border-radius-md;
+  color: $text-primary;
+  font-size: $font-size-sm;
+  line-height: $line-height-loose;
+}
+
+.c_two_factor_settings__error {
+  padding: $spacing-3 $spacing-4;
+  background-color: color-alpha(--error-main, 10%);
+  border: $border-width-1 solid $error-light;
+  border-radius: $border-radius-md;
+  color: $error-dark;
+  font-size: $font-size-sm;
+}

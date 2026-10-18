@@ -172,7 +172,6 @@ export const RegisterForm = memo(function RegisterForm() {
               size='lg'
               fullWidth
               isLoading={isSubmitting}
-              aria-label='新規登録'
             >
               登録する
             </Button>

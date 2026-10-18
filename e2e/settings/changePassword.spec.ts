@@ -79,9 +79,7 @@ async function advanceToNewPasswordStep(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: '確認コードを検証' }).click();
 
   // ステップ3: 新パスワード入力
-  await expect(
-    page.getByRole('button', { name: 'パスワードを変更' }),
-  ).toBeVisible();
+  await expect(page.getByRole('button', { name: '変更する' })).toBeVisible();
 }
 
 test.describe('パスワード変更ページ（認証済み）', () => {
@@ -107,7 +105,7 @@ test.describe('パスワード変更ページ（認証済み）', () => {
       .getByLabel('新しいパスワード', { exact: true })
       .fill('NewPass123');
     await page.getByLabel('新しいパスワード（確認）').fill('NewPass123');
-    await page.getByRole('button', { name: 'パスワードを変更' }).click();
+    await page.getByRole('button', { name: '変更する' }).click();
 
     // 成功トースト（本体とaria-liveで2要素のため first）
     await expect(page.getByText('パスワード変更完了').first()).toBeVisible();
@@ -133,7 +131,7 @@ test.describe('パスワード変更ページ（認証済み）', () => {
       .getByLabel('新しいパスワード', { exact: true })
       .fill('NewPass123');
     await page.getByLabel('新しいパスワード（確認）').fill('Different123');
-    await page.getByRole('button', { name: 'パスワードを変更' }).click();
+    await page.getByRole('button', { name: '変更する' }).click();
 
     await expect(page.getByText('パスワードが一致しません')).toBeVisible();
   });
@@ -160,7 +158,7 @@ test.describe('パスワード変更ページ（認証済み）', () => {
       .getByLabel('新しいパスワード', { exact: true })
       .fill('NewPass123');
     await page.getByLabel('新しいパスワード（確認）').fill('NewPass123');
-    await page.getByRole('button', { name: 'パスワードを変更' }).click();
+    await page.getByRole('button', { name: '変更する' }).click();
 
     await expect(page.getByText('パスワード変更エラー').first()).toBeVisible();
   });
@@ -202,7 +200,7 @@ test.describe('パスワード変更ページ — バリデーション/送信�
 
       await page.getByLabel('新しいパスワード', { exact: true }).fill(password);
       await page.getByLabel('新しいパスワード（確認）').fill(password);
-      await page.getByRole('button', { name: 'パスワードを変更' }).click();
+      await page.getByRole('button', { name: '変更する' }).click();
 
       await expect(page.getByText(message)).toBeVisible();
     });
@@ -218,7 +216,7 @@ test.describe('パスワード変更ページ — バリデーション/送信�
       .getByLabel('新しいパスワード', { exact: true })
       .fill('NewPass123');
     // 確認は未入力のまま送信
-    await page.getByRole('button', { name: 'パスワードを変更' }).click();
+    await page.getByRole('button', { name: '変更する' }).click();
 
     await expect(
       page.getByText('パスワード（確認）を入力してください'),

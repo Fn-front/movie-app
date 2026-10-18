@@ -135,7 +135,7 @@ describe('ChangePasswordForm', () => {
       screen.getByLabelText('新しいパスワード（確認）'),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'パスワードを変更' }),
+      screen.getByRole('button', { name: '変更する' }),
     ).toBeInTheDocument();
   });
 
@@ -144,7 +144,7 @@ describe('ChangePasswordForm', () => {
 
     await user.type(screen.getByLabelText('新しいパスワード'), 'Pw1');
     await user.type(screen.getByLabelText('新しいパスワード（確認）'), 'Pw1');
-    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+    await user.click(screen.getByRole('button', { name: '変更する' }));
 
     await waitFor(() => {
       expect(
@@ -165,7 +165,7 @@ describe('ChangePasswordForm', () => {
       screen.getByLabelText('新しいパスワード（確認）'),
       'Different123',
     );
-    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+    await user.click(screen.getByRole('button', { name: '変更する' }));
 
     await waitFor(() => {
       expect(screen.getByText('パスワードが一致しません')).toBeInTheDocument();
@@ -190,7 +190,7 @@ describe('ChangePasswordForm', () => {
       screen.getByLabelText('新しいパスワード（確認）'),
       'NewPassword1',
     );
-    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+    await user.click(screen.getByRole('button', { name: '変更する' }));
 
     await waitFor(() => {
       expect(mockChangePassword).toHaveBeenCalledWith({
@@ -230,7 +230,7 @@ describe('ChangePasswordForm', () => {
       screen.getByLabelText('新しいパスワード（確認）'),
       'NewPassword1',
     );
-    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+    await user.click(screen.getByRole('button', { name: '変更する' }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -284,7 +284,7 @@ describe('ChangePasswordForm — 現在のパスワード欄（#643）', () => {
       screen.getByLabelText('新しいパスワード（確認）'),
       'NewPassword1',
     );
-    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+    await user.click(screen.getByRole('button', { name: '変更する' }));
 
     await waitFor(() => {
       expect(
@@ -307,7 +307,7 @@ describe('ChangePasswordForm — 現在のパスワード欄（#643）', () => {
       screen.getByLabelText('新しいパスワード（確認）'),
       'NewPassword1',
     );
-    await user.click(screen.getByRole('button', { name: 'パスワードを変更' }));
+    await user.click(screen.getByRole('button', { name: '変更する' }));
 
     await waitFor(() => {
       expect(mockChangePassword).toHaveBeenCalledWith(

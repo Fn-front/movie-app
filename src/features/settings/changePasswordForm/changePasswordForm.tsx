@@ -249,7 +249,6 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
                   size='lg'
                   fullWidth
                   isLoading={isSubmitting}
-                  aria-label='パスワードを変更'
                 >
                   変更する
                 </Button>

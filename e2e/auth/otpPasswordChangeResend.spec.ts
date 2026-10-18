@@ -60,9 +60,7 @@ test.describe('パスワード変更OTP（認証済み・action_type password_ch
 
     // ステップ3: 新パスワード入力へ到達（＝password_change OTPの検証成立）
     // ※ 実PW変更は行わない
-    await expect(
-      page.getByRole('button', { name: 'パスワードを変更' }),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: '変更する' })).toBeVisible();
   });
 });
 
@@ -91,7 +89,7 @@ test.describe('OTP再送（未認証・新規登録OTP）', () => {
     await page.getByLabel('メールアドレス').fill(resendEmail);
     await page.getByLabel('パスワード', { exact: true }).fill('Password123');
     await page.getByLabel('パスワード（確認）').fill('Password123');
-    await page.getByRole('button', { name: '新規登録' }).click();
+    await page.getByRole('button', { name: '登録する' }).click();
 
     await expect(
       page.getByRole('heading', { name: '確認コードを入力' }),

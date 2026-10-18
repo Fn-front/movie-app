@@ -46,7 +46,7 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
       await page.getByLabel('メールアドレス').fill('notanemail');
       await page.getByLabel('パスワード', { exact: true }).fill('Password123');
       await page.getByLabel('パスワード（確認）').fill('Password123');
-      await page.getByRole('button', { name: '新規登録' }).click();
+      await page.getByRole('button', { name: '登録する' }).click();
 
       await expect(
         page.getByText('メールアドレスの形式が正しくありません'),
@@ -60,7 +60,7 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
       // 大文字・小文字・数字は満たすが8文字未満
       await page.getByLabel('パスワード', { exact: true }).fill('Ab1');
       await page.getByLabel('パスワード（確認）').fill('Ab1');
-      await page.getByRole('button', { name: '新規登録' }).click();
+      await page.getByRole('button', { name: '登録する' }).click();
 
       await expect(
         page.getByText('パスワードは8文字以上で入力してください'),
@@ -75,7 +75,7 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
       await page.getByLabel('メールアドレス').fill('valid@example.com');
       await page.getByLabel('パスワード', { exact: true }).fill('Password123');
       await page.getByLabel('パスワード（確認）').fill('Password999');
-      await page.getByRole('button', { name: '新規登録' }).click();
+      await page.getByRole('button', { name: '登録する' }).click();
 
       await expect(page.getByText('パスワードが一致しません')).toBeVisible();
     });
@@ -109,7 +109,7 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
         await page.getByLabel('メールアドレス').fill('valid@example.com');
         await page.getByLabel('パスワード', { exact: true }).fill(password);
         await page.getByLabel('パスワード（確認）').fill(password);
-        await page.getByRole('button', { name: '新規登録' }).click();
+        await page.getByRole('button', { name: '登録する' }).click();
 
         await expect(page.getByText(message)).toBeVisible();
       });
@@ -125,7 +125,7 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
       await page.getByLabel('メールアドレス').fill(longEmail);
       await page.getByLabel('パスワード', { exact: true }).fill('Password123');
       await page.getByLabel('パスワード（確認）').fill('Password123');
-      await page.getByRole('button', { name: '新規登録' }).click();
+      await page.getByRole('button', { name: '登録する' }).click();
 
       await expect(page.getByText('メールアドレスが長すぎます')).toBeVisible();
     });
@@ -139,7 +139,7 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
       await page.getByLabel('ユーザー名（任意）').fill('あ'.repeat(101));
       await page.getByLabel('パスワード', { exact: true }).fill('Password123');
       await page.getByLabel('パスワード（確認）').fill('Password123');
-      await page.getByRole('button', { name: '新規登録' }).click();
+      await page.getByRole('button', { name: '登録する' }).click();
 
       await expect(
         page.getByText('ユーザー名は100文字以内で入力してください'),

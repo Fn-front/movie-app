@@ -16,7 +16,7 @@ test.describe('新規登録フロー', () => {
     await page.getByLabel('ユーザー名（任意）').fill('テストユーザー');
     await page.getByLabel('パスワード', { exact: true }).fill('Password123');
     await page.getByLabel('パスワード（確認）').fill('Password123');
-    await page.getByRole('button', { name: '新規登録' }).click();
+    await page.getByRole('button', { name: '登録する' }).click();
 
     await expect(page).toHaveURL('/auth/signin');
   });

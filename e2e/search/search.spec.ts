@@ -31,7 +31,7 @@ test.describe('検索（公開）', () => {
     await page.goto('/search?query=バットマン');
 
     const firstTile = page
-      .locator('[class*="movie_tile"][role="button"]')
+      .locator('[class*="c_card"][class*="c_movie_tile"]')
       .first();
     await firstTile.waitFor({ timeout: 15000 });
     await firstTile.click();

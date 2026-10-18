@@ -8,7 +8,7 @@
 
 import { test, expect } from '../fixtures/auth';
 import { cleanupWatchlist } from '../helpers/api';
-import { movieTileButtons } from '../helpers/locators';
+import { movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 
 test.describe.configure({ mode: 'serial' });
@@ -27,7 +27,7 @@ function waitForWatchlistResponse(page: import('@playwright/test').Page) {
 test.describe('ウォッチリストボタン — 状態トグル', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/movies/now-showing');
-    await movieTileButtons(page).first().waitFor({ timeout: 30000 });
+    await movieTiles(page).first().waitFor({ timeout: 30000 });
   });
 
   test.afterEach(async () => {
@@ -35,7 +35,7 @@ test.describe('ウォッチリストボタン — 状態トグル', () => {
   });
 
   test('ウォッチリストボタンクリックでラベルが切り替わる', async ({ page }) => {
-    const firstTile = movieTileButtons(page).first();
+    const firstTile = movieTiles(page).first();
     const addButton = firstTile.getByRole('button', {
       name: 'ウォッチリストに追加',
     });
@@ -65,7 +65,7 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
   test.beforeEach(async ({ page }) => {
     await mockMovieDetail(page);
     await page.goto('/movies/now-showing');
-    await movieTileButtons(page).first().waitFor({ timeout: 30000 });
+    await movieTiles(page).first().waitFor({ timeout: 30000 });
   });
 
   test.afterEach(async () => {
@@ -75,7 +75,7 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
   test('モーダル内ウォッチリストボタンクリックでラベルが切り替わる', async ({
     page,
   }) => {
-    await movieTileButtons(page).first().click();
+    await movieTiles(page).first().click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 15000 });
@@ -108,7 +108,7 @@ test.describe('ウォッチリストボタン — モーダル↔タイル状態
   test('モーダルでウォッチリスト操作後、タイル側のボタンも同期される', async ({
     page,
   }) => {
-    const firstTile = movieTileButtons(page).first();
+    const firstTile = movieTiles(page).first();
 
     const tileAddButton = firstTile.getByRole('button', {
       name: 'ウォッチリストに追加',

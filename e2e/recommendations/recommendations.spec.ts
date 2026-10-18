@@ -43,7 +43,7 @@ test.describe('レコメンドセクション — ホームページ表示', () 
 
     // 最初のタイルの詳細ボタンをクリック
     const firstDetailButton = section
-      .locator('[class*="c_movie_tile"][role="button"]')
+      .locator('[class*="c_card"][class*="c_movie_tile"]')
       .first();
     await firstDetailButton.click();
 

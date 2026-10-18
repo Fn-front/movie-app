@@ -148,11 +148,39 @@ describe('ChangePasswordForm', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('パスワードは8文字以上で入力してください'),
+        screen.getByText('パスワードは12文字以上で入力してください'),
       ).toBeInTheDocument();
     });
     expect(mockChangePassword).not.toHaveBeenCalled();
   });
+
+  // bcrypt は72バイトで黙って切り詰めるため、上限を超える入力は受け付けない（#652）
+  it.each([
+    ['ASCII 73バイト', `Aa1${'x'.repeat(70)}`],
+    // 26文字しかないが75バイト。文字数で判定していたら通ってしまう
+    ['日本語を含む75バイト', `Aa1${'あ'.repeat(24)}`],
+  ])(
+    '新パスワードが%sだとバイト数の理由が表示される',
+    async (_label, password) => {
+      await goToNewPasswordStep();
+
+      await user.type(screen.getByLabelText('新しいパスワード'), password);
+      await user.type(
+        screen.getByLabelText('新しいパスワード（確認）'),
+        password,
+      );
+      await user.click(screen.getByRole('button', { name: '変更する' }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            'パスワードは72バイト以内で入力してください（日本語は1文字3バイト）',
+          ),
+        ).toBeInTheDocument();
+      });
+      expect(mockChangePassword).not.toHaveBeenCalled();
+    },
+  );
 
   it('新パスワード確認が一致しないとバリデーションエラーが表示される', async () => {
     await goToNewPasswordStep();
@@ -237,6 +265,41 @@ describe('ChangePasswordForm', () => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({ variant: 'error' }),
       );
+    });
+  });
+
+  it('漏洩パスワードはサーバーの理由がそのまま表示される（#652）', async () => {
+    // 漏洩照合はサーバー側でのみ行うため、クライアントには400で返ってくる
+    const message =
+      'このパスワードは過去の情報漏洩で確認されています。別のパスワードを設定してください';
+    mockChangePassword.mockRejectedValue(
+      new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, {
+        status: 400,
+        data: {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message },
+        },
+        statusText: 'Bad Request',
+        headers: {},
+        config: { headers: {} },
+      } as never),
+    );
+
+    await goToNewPasswordStep();
+
+    await user.type(
+      screen.getByLabelText('現在のパスワード'),
+      'CurrentPassword1',
+    );
+    await user.type(screen.getByLabelText('新しいパスワード'), 'NewPassword1');
+    await user.type(
+      screen.getByLabelText('新しいパスワード（確認）'),
+      'NewPassword1',
+    );
+    await user.click(screen.getByRole('button', { name: '変更する' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(message);
     });
   });
 });

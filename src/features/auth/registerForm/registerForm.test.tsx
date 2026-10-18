@@ -59,8 +59,8 @@ describe('RegisterForm', () => {
     const values = {
       email: 'test@example.com',
       name: 'テストユーザー',
-      password: 'Password1',
-      confirmPassword: 'Password1',
+      password: 'Password1234',
+      confirmPassword: 'Password1234',
       ...overrides,
     };
 
@@ -102,8 +102,11 @@ describe('RegisterForm', () => {
   it('メールアドレス未入力でバリデーションエラーが表示される', async () => {
     render(<RegisterForm />);
 
-    await user.type(screen.getByLabelText('パスワード'), 'Password123');
-    await user.type(screen.getByLabelText('パスワード（確認）'), 'Password123');
+    await user.type(screen.getByLabelText('パスワード'), 'Password1234');
+    await user.type(
+      screen.getByLabelText('パスワード（確認）'),
+      'Password1234',
+    );
     await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
@@ -127,11 +130,40 @@ describe('RegisterForm', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('パスワードは8文字以上で入力してください'),
+        screen.getByText('パスワードは12文字以上で入力してください'),
       ).toBeInTheDocument();
     });
     expect(mockRegisterUser).not.toHaveBeenCalled();
   });
+
+  // bcrypt は72バイトで黙って切り詰めるため、上限を超える入力は受け付けない（#652）
+  it.each([
+    ['ASCII 73バイト', `Aa1${'x'.repeat(70)}`],
+    // 26文字しかないが75バイト。文字数で判定していたら通ってしまう
+    ['日本語を含む75バイト', `Aa1${'あ'.repeat(24)}`],
+  ])(
+    'パスワードが%sだとバイト数の理由が表示される',
+    async (_label, password) => {
+      render(<RegisterForm />);
+
+      await user.type(
+        screen.getByLabelText('メールアドレス'),
+        'test@example.com',
+      );
+      await user.type(screen.getByLabelText('パスワード'), password);
+      await user.type(screen.getByLabelText('パスワード（確認）'), password);
+      await user.click(screen.getByRole('button', { name: '登録する' }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(
+            'パスワードは72バイト以内で入力してください（日本語は1文字3バイト）',
+          ),
+        ).toBeInTheDocument();
+      });
+      expect(mockRegisterUser).not.toHaveBeenCalled();
+    },
+  );
 
   it('パスワードに大文字がないとバリデーションエラーが表示される', async () => {
     render(<RegisterForm />);
@@ -140,8 +172,11 @@ describe('RegisterForm', () => {
       screen.getByLabelText('メールアドレス'),
       'test@example.com',
     );
-    await user.type(screen.getByLabelText('パスワード'), 'password123');
-    await user.type(screen.getByLabelText('パスワード（確認）'), 'password123');
+    await user.type(screen.getByLabelText('パスワード'), 'password1234');
+    await user.type(
+      screen.getByLabelText('パスワード（確認）'),
+      'password1234',
+    );
     await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
@@ -159,10 +194,10 @@ describe('RegisterForm', () => {
       screen.getByLabelText('メールアドレス'),
       'test@example.com',
     );
-    await user.type(screen.getByLabelText('パスワード'), 'Password123');
+    await user.type(screen.getByLabelText('パスワード'), 'Password1234');
     await user.type(
       screen.getByLabelText('パスワード（確認）'),
-      'Different123',
+      'Different1234',
     );
     await user.click(screen.getByRole('button', { name: '登録する' }));
 
@@ -186,7 +221,7 @@ describe('RegisterForm', () => {
     await waitFor(() => {
       expect(mockRegisterUser).toHaveBeenCalledWith({
         email: 'test@example.com',
-        password: 'Password1',
+        password: 'Password1234',
         name: 'テストユーザー',
       });
     });
@@ -249,6 +284,33 @@ describe('RegisterForm', () => {
 
     expect(mockPush).not.toHaveBeenCalled();
     // OTP検証画面は表示されない
+    expect(screen.queryByTestId('otp-verification')).not.toBeInTheDocument();
+  });
+
+  it('漏洩パスワードはサーバーの理由がそのまま表示される（#652）', async () => {
+    // 漏洩照合はサーバー側でのみ行うため、クライアントには400で返ってくる
+    const message =
+      'このパスワードは過去の情報漏洩で確認されています。別のパスワードを設定してください';
+    mockRegisterUser.mockRejectedValue(
+      new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, {
+        status: 400,
+        data: {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message },
+        },
+        statusText: 'Bad Request',
+        headers: {},
+        config: { headers: {} },
+      } as never),
+    );
+
+    render(<RegisterForm />);
+    await fillForm();
+    await user.click(screen.getByRole('button', { name: '登録する' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(message);
+    });
     expect(screen.queryByTestId('otp-verification')).not.toBeInTheDocument();
   });
 

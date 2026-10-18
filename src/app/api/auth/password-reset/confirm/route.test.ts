@@ -29,6 +29,12 @@ jest.mock('@/lib/auth/passwordResetToken', () => ({
   consumePasswordResetToken: (...args: unknown[]) => mockConsumeToken(...args),
 }));
 
+// 漏洩パスワード照合（HIBP）。既定では「漏洩していない」として通す
+const mockIsPasswordPwned = jest.fn();
+jest.mock('@/lib/auth/pwnedPassword', () => ({
+  isPasswordPwned: (...args: unknown[]) => mockIsPasswordPwned(...args),
+}));
+
 const mockCompare = jest.fn();
 const mockHash = jest.fn();
 jest.mock('bcryptjs', () => ({
@@ -84,6 +90,7 @@ describe('POST /api/auth/password-reset/confirm', () => {
     // 途中で返るテストが使い残したキューが次のテストへ漏れる
     mockFrom.mockReset();
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockIsPasswordPwned.mockResolvedValue(false);
     mockConsumeToken.mockResolvedValue('user-1');
     mockCompare.mockResolvedValue(false);
     mockHash.mockResolvedValue('new-hash');
@@ -209,9 +216,13 @@ describe('POST /api/auth/password-reset/confirm', () => {
       ['パスワード未指定', { token: 'valid-token' }],
       ['トークンが空文字', { token: '', password: VALID_PASSWORD }],
       ['パスワードが短い', { token: 'valid-token', password: 'Ab1' }],
-      ['大文字なし', { token: 'valid-token', password: 'password1' }],
-      ['小文字なし', { token: 'valid-token', password: 'PASSWORD1' }],
-      ['数字なし', { token: 'valid-token', password: 'PasswordAb' }],
+      ['大文字なし', { token: 'valid-token', password: 'password1234' }],
+      ['小文字なし', { token: 'valid-token', password: 'PASSWORD1234' }],
+      ['数字なし', { token: 'valid-token', password: 'PasswordAbcd' }],
+      [
+        '72バイト超',
+        { token: 'valid-token', password: `Aa1${'x'.repeat(70)}` },
+      ],
     ])('%s は400を返す', async (_label, body) => {
       const response = await POST(createRequest(body));
 
@@ -276,6 +287,36 @@ describe('POST /api/auth/password-reset/confirm', () => {
       );
 
       expect(mockCheckRateLimit).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+    });
+  });
+
+  describe('漏洩パスワードの照合（#652）', () => {
+    it('漏洩パスワードは400で拒否し、トークンを消費しない', async () => {
+      mockIsPasswordPwned.mockResolvedValue(true);
+
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.message).toBe(
+        'このパスワードは過去の情報漏洩で確認されています。別のパスワードを設定してください',
+      );
+      // 消費していたら、差し戻された利用者はリンクの再発行が必要になる
+      expect(mockConsumeToken).not.toHaveBeenCalled();
+    });
+
+    it('照合できなかった場合（API障害）は再設定を止めない', async () => {
+      // isPasswordPwned は障害時に false を返す（fail-open）
+      mockIsPasswordPwned.mockResolvedValue(false);
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+
       expect(response.status).toBe(200);
     });
   });

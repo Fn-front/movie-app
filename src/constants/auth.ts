@@ -147,6 +147,30 @@ export const SESSION_CONFIG = {
 export const BCRYPT_COST = 12;
 
 /**
+ * 漏洩パスワード照合（HIBP Pwned Passwords API）の設定
+ *
+ * NIST SP 800-63B は文字種の強制よりも漏洩パスワードリストとの照合を
+ * 推奨している。現行ポリシーだけでは `Password1234` のような漏洩上位の
+ * 文字列を通してしまい、クレデンシャルスタッフィングに直結する（#652）。
+ */
+export const PWNED_PASSWORD_CONFIG = {
+  /**
+   * k-anonymity 検索のエンドポイント
+   *
+   * SHA-1 の先頭5文字だけを送り、該当する接尾辞の一覧を受け取る。
+   * 平文もフルハッシュも外部に出さない。
+   */
+  API_BASE_URL: 'https://api.pwnedpasswords.com/range',
+  /**
+   * リクエストのタイムアウト（ミリ秒）
+   *
+   * 登録・パスワード変更の応答時間に直接乗るため短くする。超過時は
+   * 照合をスキップして通す（fail-open）。
+   */
+  TIMEOUT_MS: 3000,
+} as const;
+
+/**
  * ユーザーロール
  *
  * DB の users.role カラムに格納する値。将来的に 'admin' 等が増えても
@@ -181,6 +205,12 @@ export const VALIDATION_MESSAGES = {
   /** パスワード最小文字数 */
   PASSWORD_MIN_LENGTH: (min: number) =>
     `パスワードは${min}文字以上で入力してください`,
+  /** パスワード最大バイト数 */
+  PASSWORD_MAX_BYTES: (max: number) =>
+    `パスワードは${max}バイト以内で入力してください（日本語は1文字3バイト）`,
+  /** 漏洩が確認されているパスワード */
+  PASSWORD_PWNED:
+    'このパスワードは過去の情報漏洩で確認されています。別のパスワードを設定してください',
   /** パスワードに大文字を含める */
   PASSWORD_UPPERCASE: 'パスワードに大文字を含めてください',
   /** パスワードに小文字を含める */

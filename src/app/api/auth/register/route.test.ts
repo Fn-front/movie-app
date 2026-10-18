@@ -29,6 +29,12 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }));
 
+// 漏洩パスワード照合（HIBP）。既定では「漏洩していない」として通す
+const mockIsPasswordPwned = jest.fn().mockResolvedValue(false);
+jest.mock('@/lib/auth/pwnedPassword', () => ({
+  isPasswordPwned: (...args: unknown[]) => mockIsPasswordPwned(...args),
+}));
+
 const mockGenerateOtpCode = jest.fn().mockReturnValue('123456');
 const mockSendOtpEmail = jest.fn().mockResolvedValue(true);
 const mockRandomDelay = jest.fn().mockResolvedValue(undefined);
@@ -103,7 +109,7 @@ describe('POST /api/auth/register', () => {
     const response = await POST(
       createRequest({
         email: 'test@example.com',
-        password: 'Password1',
+        password: 'Password1234',
       }),
     );
     const json = await response.json();
@@ -150,7 +156,7 @@ describe('POST /api/auth/register', () => {
     const response = await POST(
       createRequest({
         email: 'existing@example.com',
-        password: 'Password1',
+        password: 'Password1234',
       }),
     );
     const json = await response.json();
@@ -173,7 +179,7 @@ describe('POST /api/auth/register', () => {
     // 新規登録の成功レスポンス
     setupSuccessMocks();
     const newUserRes = await POST(
-      createRequest({ email: 'new@example.com', password: 'Password1' }),
+      createRequest({ email: 'new@example.com', password: 'Password1234' }),
     );
     const newUserJson = await newUserRes.json();
 
@@ -191,7 +197,10 @@ describe('POST /api/auth/register', () => {
       }),
     });
     const existingRes = await POST(
-      createRequest({ email: 'existing@example.com', password: 'Password1' }),
+      createRequest({
+        email: 'existing@example.com',
+        password: 'Password1234',
+      }),
     );
     const existingJson = await existingRes.json();
 
@@ -230,7 +239,7 @@ describe('POST /api/auth/register', () => {
     const response = await POST(
       createRequest({
         email: 'test@example.com',
-        password: 'Password1',
+        password: 'Password1234',
       }),
     );
 
@@ -272,7 +281,7 @@ describe('POST /api/auth/register', () => {
     const response = await POST(
       createRequest({
         email: 'test@example.com',
-        password: 'Password1',
+        password: 'Password1234',
       }),
     );
     const json = await response.json();
@@ -293,7 +302,7 @@ describe('POST /api/auth/register', () => {
     const response = await POST(
       createRequest({
         email: 'test@example.com',
-        password: 'Password1',
+        password: 'Password1234',
       }),
     );
 
@@ -329,7 +338,7 @@ describe('POST /api/auth/register', () => {
     const response = await POST(
       createRequest({
         email: 'test@example.com',
-        password: 'Password1',
+        password: 'Password1234',
       }),
     );
 
@@ -391,7 +400,7 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     mockOtpReissue();
 
     const response = await POST(
-      createRequest({ email: 'victim@example.com', password: 'Password1' }),
+      createRequest({ email: 'victim@example.com', password: 'Password1234' }),
     );
     const json = await response.json();
 
@@ -414,7 +423,7 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     mockOtpReissue();
 
     await POST(
-      createRequest({ email: 'victim@example.com', password: 'Password1' }),
+      createRequest({ email: 'victim@example.com', password: 'Password1234' }),
     );
 
     expect(captured.payload).toEqual({
@@ -436,7 +445,7 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     mockFrom.mockReturnValueOnce({ insert: () => ({ error: null }) });
 
     await POST(
-      createRequest({ email: 'victim@example.com', password: 'Password1' }),
+      createRequest({ email: 'victim@example.com', password: 'Password1234' }),
     );
 
     expect(deleteCalls).toContain('otp_codes.delete');
@@ -455,7 +464,7 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     });
 
     const response = await POST(
-      createRequest({ email: 'owner@example.com', password: 'Password1' }),
+      createRequest({ email: 'owner@example.com', password: 'Password1234' }),
     );
     const json = await response.json();
 
@@ -489,7 +498,7 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     }));
 
     const response = await POST(
-      createRequest({ email: 'victim@example.com', password: 'Password1' }),
+      createRequest({ email: 'victim@example.com', password: 'Password1234' }),
     );
 
     expect(response.status).toBe(500);
@@ -504,7 +513,7 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
 
     await POST(
       createRequestFromIp(
-        { email: 'test@example.com', password: 'Password1' },
+        { email: 'test@example.com', password: 'Password1234' },
         '203.0.113.10',
       ),
     );
@@ -525,7 +534,7 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
 
     await POST(
       createRequestFromIp(
-        { email: 'test@example.com', password: 'Password1' },
+        { email: 'test@example.com', password: 'Password1234' },
         '203.0.113.10',
       ),
     );
@@ -553,7 +562,7 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
       .mockResolvedValueOnce({ allowed: false, retryAfter: 86400 });
 
     const response = await POST(
-      createRequest({ email: 'test@example.com', password: 'Password1' }),
+      createRequest({ email: 'test@example.com', password: 'Password1234' }),
     );
     const json = await response.json();
 
@@ -579,7 +588,7 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     });
 
     const response = await POST(
-      createRequest({ email: 'test@example.com', password: 'Password1' }),
+      createRequest({ email: 'test@example.com', password: 'Password1234' }),
     );
 
     // 列挙防止のため 201 を返すが、メールは送らないので枠も減らさない
@@ -600,7 +609,7 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     setupSuccessMocks();
 
     await POST(
-      createRequest({ email: 'TeSt@ExAmPle.COM', password: 'Password1' }),
+      createRequest({ email: 'TeSt@ExAmPle.COM', password: 'Password1234' }),
     );
 
     // 表記を変えても枠を分けられない＝同一メールボックスへの多重送信を塞ぐ
@@ -616,5 +625,63 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
       expect.any(String),
       'registration',
     );
+  });
+
+  // === 漏洩パスワードの照合（#652） ===
+
+  it('漏洩パスワードは400で拒否し、ユーザー行もOTPも作らない', async () => {
+    mockIsPasswordPwned.mockResolvedValueOnce(true);
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', password: 'Password1234' }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.message).toBe(
+      'このパスワードは過去の情報漏洩で確認されています。別のパスワードを設定してください',
+    );
+    // DBに一切触れていない（既存ユーザー検索すら走らない）
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
+  });
+
+  it('漏洩照合はレート制限を通過した後にだけ行う（外部APIの踏み台にしない）', async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 60,
+    });
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', password: 'Password1234' }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(mockIsPasswordPwned).not.toHaveBeenCalled();
+  });
+
+  it('照合できなかった場合（API障害）は登録を止めない', async () => {
+    // isPasswordPwned は障害時に false を返す（fail-open）
+    mockIsPasswordPwned.mockResolvedValueOnce(false);
+    setupSuccessMocks();
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', password: 'Password1234' }),
+    );
+
+    expect(response.status).toBe(201);
+    expect(mockSendOtpEmail).toHaveBeenCalled();
+  });
+
+  it('72バイトを超えるパスワードはバリデーションで弾く', async () => {
+    const response = await POST(
+      createRequest({
+        email: 'test@example.com',
+        password: `Aa1${'x'.repeat(70)}`,
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockFrom).not.toHaveBeenCalled();
   });
 });

@@ -103,8 +103,8 @@ test.describe('パスワード変更ページ（認証済み）', () => {
     await fillCurrentPassword(page);
     await page
       .getByLabel('新しいパスワード', { exact: true })
-      .fill('NewPass123');
-    await page.getByLabel('新しいパスワード（確認）').fill('NewPass123');
+      .fill('NewPassword123');
+    await page.getByLabel('新しいパスワード（確認）').fill('NewPassword123');
     await page.getByRole('button', { name: '変更する' }).click();
 
     // 成功トースト（本体とaria-liveで2要素のため first）
@@ -129,8 +129,10 @@ test.describe('パスワード変更ページ（認証済み）', () => {
 
     await page
       .getByLabel('新しいパスワード', { exact: true })
-      .fill('NewPass123');
-    await page.getByLabel('新しいパスワード（確認）').fill('Different123');
+      .fill('NewPassword123');
+    await page
+      .getByLabel('新しいパスワード（確認）')
+      .fill('DifferentPassword123');
     await page.getByRole('button', { name: '変更する' }).click();
 
     await expect(page.getByText('パスワードが一致しません')).toBeVisible();
@@ -156,8 +158,8 @@ test.describe('パスワード変更ページ（認証済み）', () => {
     await fillCurrentPassword(page);
     await page
       .getByLabel('新しいパスワード', { exact: true })
-      .fill('NewPass123');
-    await page.getByLabel('新しいパスワード（確認）').fill('NewPass123');
+      .fill('NewPassword123');
+    await page.getByLabel('新しいパスワード（確認）').fill('NewPassword123');
     await page.getByRole('button', { name: '変更する' }).click();
 
     await expect(page.getByText('パスワード変更エラー').first()).toBeVisible();
@@ -165,28 +167,42 @@ test.describe('パスワード変更ページ（認証済み）', () => {
 });
 
 test.describe('パスワード変更ページ — バリデーション/送信失敗（認証済み・#400）', () => {
-  // 新パスワードのバリデーション分岐（複雑性/長さ/必須）。
-  // zod の検証順（min → 大文字 → 小文字 → 数字）に沿い、直前チェックは通過して
-  // 対象チェックだけを失敗させる入力を用意する。
+  // 新パスワードのバリデーション分岐（複雑性/長さ/バイト数/必須）。
+  // zod の検証順（min → バイト数 → 大文字 → 小文字 → 数字）に沿い、直前チェックは
+  // 通過して対象チェックだけを失敗させる入力を用意する。
   const complexityCases = [
     {
-      title: '8文字未満',
+      title: '12文字未満',
       password: 'Pass1',
-      message: 'パスワードは8文字以上で入力してください',
+      message: 'パスワードは12文字以上で入力してください',
+    },
+    {
+      // bcrypt が72バイトで黙って切り詰めるため上限を設けている（#652）
+      title: '72バイト超',
+      password: `Aa1${'x'.repeat(70)}`,
+      message:
+        'パスワードは72バイト以内で入力してください（日本語は1文字3バイト）',
+    },
+    {
+      // 26文字しかないが75バイト。文字数で判定していたら通ってしまう
+      title: '日本語を含み72バイト超',
+      password: `Aa1${'あ'.repeat(24)}`,
+      message:
+        'パスワードは72バイト以内で入力してください（日本語は1文字3バイト）',
     },
     {
       title: '大文字欠落',
-      password: 'password123',
+      password: 'password1234',
       message: 'パスワードに大文字を含めてください',
     },
     {
       title: '小文字欠落',
-      password: 'PASSWORD123',
+      password: 'PASSWORD1234',
       message: 'パスワードに小文字を含めてください',
     },
     {
       title: '数字欠落',
-      password: 'PasswordAbc',
+      password: 'PasswordAbcd',
       message: 'パスワードに数字を含めてください',
     },
   ];
@@ -214,7 +230,7 @@ test.describe('パスワード変更ページ — バリデーション/送信�
 
     await page
       .getByLabel('新しいパスワード', { exact: true })
-      .fill('NewPass123');
+      .fill('NewPassword123');
     // 確認は未入力のまま送信
     await page.getByRole('button', { name: '変更する' }).click();
 

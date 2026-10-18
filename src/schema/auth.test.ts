@@ -5,14 +5,18 @@ import {
   loginSchema,
   changePasswordSchema,
   changePasswordApiSchema,
+  passwordResetConfirmApiSchema,
 } from './auth';
+import { VALIDATION } from '@/constants';
+import { VALIDATION_MESSAGES } from '@/constants/auth';
+import { getByteLength } from '@/utils/string';
 
 describe('registerSchema', () => {
   it('有効な入力でパースが成功する', () => {
     const result = registerSchema.safeParse({
       email: 'test@example.com',
-      password: 'Password1',
-      confirmPassword: 'Password1',
+      password: 'Password1234',
+      confirmPassword: 'Password1234',
       name: 'テスト',
     });
     expect(result.success).toBe(true);
@@ -21,8 +25,8 @@ describe('registerSchema', () => {
   it('名前なしでもパースが成功する', () => {
     const result = registerSchema.safeParse({
       email: 'test@example.com',
-      password: 'Password1',
-      confirmPassword: 'Password1',
+      password: 'Password1234',
+      confirmPassword: 'Password1234',
       name: '',
     });
     expect(result.success).toBe(true);
@@ -31,8 +35,8 @@ describe('registerSchema', () => {
   it('メールアドレスが空の場合エラーになる', () => {
     const result = registerSchema.safeParse({
       email: '',
-      password: 'Password1',
-      confirmPassword: 'Password1',
+      password: 'Password1234',
+      confirmPassword: 'Password1234',
     });
     expect(result.success).toBe(false);
   });
@@ -40,17 +44,17 @@ describe('registerSchema', () => {
   it('メールアドレスの形式が不正な場合エラーになる', () => {
     const result = registerSchema.safeParse({
       email: 'invalid-email',
-      password: 'Password1',
-      confirmPassword: 'Password1',
+      password: 'Password1234',
+      confirmPassword: 'Password1234',
     });
     expect(result.success).toBe(false);
   });
 
-  it('パスワードが8文字未満の場合エラーになる', () => {
+  it('パスワードが12文字未満の場合エラーになる', () => {
     const result = registerSchema.safeParse({
       email: 'test@example.com',
-      password: 'Pass1',
-      confirmPassword: 'Pass1',
+      password: 'Password123',
+      confirmPassword: 'Password123',
     });
     expect(result.success).toBe(false);
   });
@@ -58,8 +62,8 @@ describe('registerSchema', () => {
   it('パスワードに大文字がない場合エラーになる', () => {
     const result = registerSchema.safeParse({
       email: 'test@example.com',
-      password: 'password1',
-      confirmPassword: 'password1',
+      password: 'password1234',
+      confirmPassword: 'password1234',
     });
     expect(result.success).toBe(false);
   });
@@ -67,8 +71,8 @@ describe('registerSchema', () => {
   it('パスワードに小文字がない場合エラーになる', () => {
     const result = registerSchema.safeParse({
       email: 'test@example.com',
-      password: 'PASSWORD1',
-      confirmPassword: 'PASSWORD1',
+      password: 'PASSWORD1234',
+      confirmPassword: 'PASSWORD1234',
     });
     expect(result.success).toBe(false);
   });
@@ -76,8 +80,8 @@ describe('registerSchema', () => {
   it('パスワードに数字がない場合エラーになる', () => {
     const result = registerSchema.safeParse({
       email: 'test@example.com',
-      password: 'Password',
-      confirmPassword: 'Password',
+      password: 'PasswordAbcd',
+      confirmPassword: 'PasswordAbcd',
     });
     expect(result.success).toBe(false);
   });
@@ -85,8 +89,8 @@ describe('registerSchema', () => {
   it('パスワードが一致しない場合エラーになる', () => {
     const result = registerSchema.safeParse({
       email: 'test@example.com',
-      password: 'Password1',
-      confirmPassword: 'Password2',
+      password: 'Password1234',
+      confirmPassword: 'Password5678',
     });
     expect(result.success).toBe(false);
   });
@@ -96,8 +100,8 @@ describe('メールアドレスの正規化', () => {
   it('registerSchema: 大文字を小文字に正規化する', () => {
     const result = registerSchema.safeParse({
       email: 'TeSt@ExAmPle.COM',
-      password: 'Password1',
-      confirmPassword: 'Password1',
+      password: 'Password1234',
+      confirmPassword: 'Password1234',
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -108,7 +112,7 @@ describe('メールアドレスの正規化', () => {
   it('registerApiSchema: 前後の空白を落として小文字に正規化する', () => {
     const result = registerApiSchema.safeParse({
       email: '  TeSt@ExAmPle.COM  ',
-      password: 'Password1',
+      password: 'Password1234',
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -119,7 +123,7 @@ describe('メールアドレスの正規化', () => {
   it('loginSchema: 大文字を小文字に正規化する', () => {
     const result = loginSchema.safeParse({
       email: 'TeSt@ExAmPle.COM',
-      password: 'Password1',
+      password: 'Password1234',
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -132,7 +136,7 @@ describe('メールアドレスの正規化', () => {
     const parsed = variants.map((email) => {
       const result = registerApiSchema.safeParse({
         email,
-        password: 'Password1',
+        password: 'Password1234',
       });
       return result.success ? result.data.email : null;
     });
@@ -142,11 +146,11 @@ describe('メールアドレスの正規化', () => {
   it('ドット違いは別アドレスのまま残す（プロバイダ固有の正規化はしない）', () => {
     const a = registerApiSchema.safeParse({
       email: 'v.ictim@gmail.com',
-      password: 'Password1',
+      password: 'Password1234',
     });
     const b = registerApiSchema.safeParse({
       email: 'victim@gmail.com',
-      password: 'Password1',
+      password: 'Password1234',
     });
     expect(a.success && b.success).toBe(true);
     if (a.success && b.success) {
@@ -159,7 +163,7 @@ describe('loginSchema', () => {
   it('有効な入力でパースが成功する', () => {
     const result = loginSchema.safeParse({
       email: 'test@example.com',
-      password: 'Password1',
+      password: 'Password1234',
     });
     expect(result.success).toBe(true);
   });
@@ -167,7 +171,7 @@ describe('loginSchema', () => {
   it('メールアドレスが空の場合エラーになる', () => {
     const result = loginSchema.safeParse({
       email: '',
-      password: 'Password1',
+      password: 'Password1234',
     });
     expect(result.success).toBe(false);
   });
@@ -175,7 +179,7 @@ describe('loginSchema', () => {
   it('メールアドレスの形式が不正な場合エラーになる', () => {
     const result = loginSchema.safeParse({
       email: 'invalid-email',
-      password: 'Password1',
+      password: 'Password1234',
     });
     expect(result.success).toBe(false);
   });
@@ -193,7 +197,7 @@ describe('registerApiSchema', () => {
   it('有効な入力でパースが成功する', () => {
     const result = registerApiSchema.safeParse({
       email: 'test@example.com',
-      password: 'Password1',
+      password: 'Password1234',
       name: 'テスト',
     });
     expect(result.success).toBe(true);
@@ -202,7 +206,7 @@ describe('registerApiSchema', () => {
   it('confirmPasswordフィールドがなくても成功する', () => {
     const result = registerApiSchema.safeParse({
       email: 'test@example.com',
-      password: 'Password1',
+      password: 'Password1234',
     });
     expect(result.success).toBe(true);
   });
@@ -218,11 +222,11 @@ describe('changePasswordSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('新しいパスワードが8文字未満の場合エラーになる', () => {
+  it('新しいパスワードが12文字未満の場合エラーになる', () => {
     const result = changePasswordSchema.safeParse({
       currentPassword: 'CurrentPassword1',
-      newPassword: 'New1',
-      confirmNewPassword: 'New1',
+      newPassword: 'NewPassword',
+      confirmNewPassword: 'NewPassword',
     });
     expect(result.success).toBe(false);
   });
@@ -248,8 +252,8 @@ describe('changePasswordSchema', () => {
   it('新しいパスワードに数字がない場合エラーになる', () => {
     const result = changePasswordSchema.safeParse({
       currentPassword: 'CurrentPassword1',
-      newPassword: 'NewPassword',
-      confirmNewPassword: 'NewPassword',
+      newPassword: 'NewPasswordAbc',
+      confirmNewPassword: 'NewPasswordAbc',
     });
     expect(result.success).toBe(false);
   });
@@ -345,6 +349,73 @@ describe('buildChangePasswordSchema', () => {
         schema.safeParse({ ...base, confirmNewPassword: 'Different1' }).success,
       ).toBe(false);
     });
+  });
+});
+
+describe('パスワードのバイト長上限（#652）', () => {
+  /** 先頭の 'Aa1' でポリシー（大文字・小文字・数字）を満たし、残りで長さを作る */
+  const buildPassword = (filler: string, repeat: number) =>
+    `Aa1${filler.repeat(repeat)}`;
+
+  /** ASCII 72バイトちょうど（3 + 69） */
+  const EXACTLY_MAX = buildPassword('x', 69);
+  /** ASCII 73バイト */
+  const OVER_MAX = buildPassword('x', 70);
+  /** 日本語（1文字3バイト）で72バイトちょうど（3 + 3×23） */
+  const EXACTLY_MAX_JA = buildPassword('あ', 23);
+  /** 日本語で75バイト。文字数は26文字しかないが上限を超える */
+  const OVER_MAX_JA = buildPassword('あ', 24);
+
+  /** パスワード単体の検証結果を取り出す */
+  const parsePassword = (password: string) =>
+    registerApiSchema.safeParse({ email: 'test@example.com', password });
+
+  it('前提: 各入力のバイト長が意図どおり', () => {
+    expect(getByteLength(EXACTLY_MAX)).toBe(VALIDATION.PASSWORD_MAX_BYTES);
+    expect(getByteLength(OVER_MAX)).toBe(VALIDATION.PASSWORD_MAX_BYTES + 1);
+    expect(getByteLength(EXACTLY_MAX_JA)).toBe(VALIDATION.PASSWORD_MAX_BYTES);
+    expect(getByteLength(OVER_MAX_JA)).toBe(VALIDATION.PASSWORD_MAX_BYTES + 3);
+  });
+
+  it('72バイトちょうどは通る', () => {
+    expect(parsePassword(EXACTLY_MAX).success).toBe(true);
+  });
+
+  it('73バイトは拒否され、バイト数の理由が返る', () => {
+    const result = parsePassword(OVER_MAX);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].message).toBe(
+        VALIDATION_MESSAGES.PASSWORD_MAX_BYTES(VALIDATION.PASSWORD_MAX_BYTES),
+      );
+    }
+  });
+
+  it('日本語を含む場合も72バイトちょうどまでは通る', () => {
+    expect(parsePassword(EXACTLY_MAX_JA).success).toBe(true);
+  });
+
+  it('日本語を含む場合、文字数が上限未満でもバイト数で拒否される', () => {
+    // 26文字しかないが75バイト。文字数で判定していたら通ってしまう
+    expect(OVER_MAX_JA.length).toBeLessThan(VALIDATION.PASSWORD_MAX_BYTES);
+    expect(parsePassword(OVER_MAX_JA).success).toBe(false);
+  });
+
+  it('パスワード変更・パスワード再設定にも同じ上限が効く', () => {
+    expect(
+      changePasswordApiSchema.safeParse({
+        newPassword: OVER_MAX,
+        verificationToken: 'token',
+      }).success,
+    ).toBe(false);
+
+    expect(
+      passwordResetConfirmApiSchema.safeParse({
+        token: 'token',
+        password: OVER_MAX,
+      }).success,
+    ).toBe(false);
   });
 });
 

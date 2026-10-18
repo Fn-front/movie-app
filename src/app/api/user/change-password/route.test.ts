@@ -33,11 +33,18 @@ jest.mock('bcryptjs', () => ({
   hash: jest.fn().mockResolvedValue('new_hashed_password'),
 }));
 
+// 漏洩パスワード照合（HIBP）。既定では「漏洩していない」として通す
+jest.mock('@/lib/auth/pwnedPassword', () => ({
+  isPasswordPwned: jest.fn().mockResolvedValue(false),
+}));
+
 import bcrypt from 'bcryptjs';
 import { getAuthSession } from '@/helpers/auth';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { isPasswordPwned } from '@/lib/auth/pwnedPassword';
 
 const mockBcryptCompare = bcrypt.compare as jest.Mock;
+const mockIsPasswordPwned = isPasswordPwned as jest.Mock;
 
 // --- Helpers ---
 
@@ -382,5 +389,60 @@ describe('POST /api/user/change-password — 現在のパスワード確認（#6
     expect(response.status).toBe(400);
     // セッションだけではパスワードを総当たりできない
     expect(mockBcryptCompare).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/user/change-password — 漏洩パスワードの照合（#652）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      user: { id: 'user-123' },
+    });
+    (checkRateLimit as jest.Mock).mockResolvedValue({ allowed: true });
+  });
+
+  it('漏洩パスワードは400で拒否し、検証済みOTPを消費しない', async () => {
+    mockIsPasswordPwned.mockResolvedValueOnce(true);
+
+    const response = await POST(createRequest(validBody()));
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.message).toBe(
+      'このパスワードは過去の情報漏洩で確認されています。別のパスワードを設定してください',
+    );
+    // DBに触れていない＝OTPが消費されず、確認コードの再送からやり直さずに済む
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('照合できなかった場合（API障害）は変更を止めない', async () => {
+    // isPasswordPwned は障害時に false を返す（fail-open）
+    mockIsPasswordPwned.mockResolvedValueOnce(false);
+    mockUserSelect({
+      id: 'user-123',
+      email: 'test@example.com',
+      password_hash: 'old_hash',
+    });
+    mockOtpSelect({
+      id: 'otp-1',
+      email: 'test@example.com',
+      verified_at: new Date().toISOString(),
+    });
+    mockBcryptCompare.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mockOtpDelete();
+    mockUpdateSuccess();
+
+    const response = await POST(createRequest(validBody()));
+
+    expect(response.status).toBe(200);
+  });
+
+  it('72バイトを超える新パスワードはバリデーションで弾く', async () => {
+    const response = await POST(
+      createRequest(validBody(`Aa1${'x'.repeat(70)}`)),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mockIsPasswordPwned).not.toHaveBeenCalled();
   });
 });

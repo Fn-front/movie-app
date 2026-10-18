@@ -236,3 +236,6 @@ $z-index-popover: var(--z-index-popover);
 $z-index-tooltip: var(--z-index-tooltip);
 $z-index-toast: var(--z-index-toast);
 $z-index-header: var(--z-index-fixed);
+
+// スキップリンク（ヘッダーより前面に出す必要がある）
+$z-index-skip-link: var(--z-index-modal-backdrop);

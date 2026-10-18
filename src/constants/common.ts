@@ -3,6 +3,12 @@
  */
 
 /**
+ * メインコンテンツ領域のid
+ * スキップリンク（本文へ移動）の移動先として使う
+ */
+export const MAIN_CONTENT_ID = 'main-content';
+
+/**
  * ローカルストレージキー
  */
 export const STORAGE_KEYS = {

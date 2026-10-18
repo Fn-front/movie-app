@@ -171,7 +171,10 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
             認証アプリを失ったとき、これが唯一の復旧手段です。
           </p>
 
-          <ul className={styles.c_two_factor_settings__codes}>
+          <ul
+            className={styles.c_two_factor_settings__codes}
+            aria-label='リカバリーコード'
+          >
             {recoveryCodes.map((recoveryCode) => (
               <li key={recoveryCode}>
                 <code>{recoveryCode}</code>

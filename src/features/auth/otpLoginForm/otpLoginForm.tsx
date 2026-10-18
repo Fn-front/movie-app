@@ -66,6 +66,17 @@ export const OtpLoginForm = memo<OtpLoginFormProps>(function OtpLoginForm({
           onVerifySuccess={handleOtpVerifySuccess}
         />
 
+        {/*
+          コード検証後の signIn が失敗した場合の案内。
+          トーストは数秒で消えるため、ここに残さないと「二段階認証が有効なので
+          この方法は使えない」ことに気づけず、同じ操作を繰り返すことになる。
+        */}
+        {apiError && (
+          <p className={styles.c_otp_login_form__error} role='alert'>
+            {apiError}
+          </p>
+        )}
+
         <p className={styles.c_otp_login_form__footer}>
           <button
             type='button'

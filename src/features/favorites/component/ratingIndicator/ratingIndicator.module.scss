@@ -56,7 +56,7 @@
     &__selected {
       background-color: $secondary-600;
       border-color: $secondary-600;
-      color: $text-inverse;
+      color: $text-on-accent;
     }
   }
 }
@@ -78,7 +78,7 @@
       &:hover {
         background-color: $secondary-700;
         border-color: $secondary-700;
-        color: $text-inverse;
+        color: $text-on-accent;
       }
     }
   }

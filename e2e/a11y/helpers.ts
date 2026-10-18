@@ -53,6 +53,9 @@ export async function gotoWithTheme(
   await page.waitForLoadState('domcontentloaded');
   // data-theme が解決されるまで待つ（インラインスクリプト + ThemeProvider）
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+  // 本文が描画されるまで待つ。一覧ページはデータ取得後にツールバー（h1）が
+  // 出るため、ここで待たないとスケルトン状態のまま検査してしまう。
+  await expect(page.locator('h1').first()).toBeAttached({ timeout: 20000 });
 }
 
 /** 違反を人が読める形に整形する */

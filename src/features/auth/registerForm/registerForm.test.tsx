@@ -90,7 +90,7 @@ describe('RegisterForm', () => {
     expect(screen.getByLabelText('パスワード')).toBeInTheDocument();
     expect(screen.getByLabelText('パスワード（確認）')).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: '新規登録' }),
+      screen.getByRole('button', { name: '登録する' }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('social-login-buttons')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'ログイン' })).toHaveAttribute(
@@ -104,7 +104,7 @@ describe('RegisterForm', () => {
 
     await user.type(screen.getByLabelText('パスワード'), 'Password123');
     await user.type(screen.getByLabelText('パスワード（確認）'), 'Password123');
-    await user.click(screen.getByRole('button', { name: '新規登録' }));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
       expect(
@@ -123,7 +123,7 @@ describe('RegisterForm', () => {
     );
     await user.type(screen.getByLabelText('パスワード'), 'Pw1');
     await user.type(screen.getByLabelText('パスワード（確認）'), 'Pw1');
-    await user.click(screen.getByRole('button', { name: '新規登録' }));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
       expect(
@@ -142,7 +142,7 @@ describe('RegisterForm', () => {
     );
     await user.type(screen.getByLabelText('パスワード'), 'password123');
     await user.type(screen.getByLabelText('パスワード（確認）'), 'password123');
-    await user.click(screen.getByRole('button', { name: '新規登録' }));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
       expect(
@@ -164,7 +164,7 @@ describe('RegisterForm', () => {
       screen.getByLabelText('パスワード（確認）'),
       'Different123',
     );
-    await user.click(screen.getByRole('button', { name: '新規登録' }));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
       expect(screen.getByText('パスワードが一致しません')).toBeInTheDocument();
@@ -181,7 +181,7 @@ describe('RegisterForm', () => {
 
     render(<RegisterForm />);
     await fillForm();
-    await user.click(screen.getByRole('button', { name: '新規登録' }));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
       expect(mockRegisterUser).toHaveBeenCalledWith({
@@ -211,7 +211,7 @@ describe('RegisterForm', () => {
 
     render(<RegisterForm />);
     await fillForm();
-    await user.click(screen.getByRole('button', { name: '新規登録' }));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('otp-verification')).toBeInTheDocument();
@@ -238,7 +238,7 @@ describe('RegisterForm', () => {
 
     render(<RegisterForm />);
     await fillForm();
-    await user.click(screen.getByRole('button', { name: '新規登録' }));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -263,7 +263,7 @@ describe('RegisterForm', () => {
 
     render(<RegisterForm />);
     await fillForm({ email: 'existing@example.com' });
-    await user.click(screen.getByRole('button', { name: '新規登録' }));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('otp-verification')).toBeInTheDocument();
@@ -282,7 +282,7 @@ describe('RegisterForm', () => {
 
     render(<RegisterForm />);
     await fillForm({ name: '' });
-    await user.click(screen.getByRole('button', { name: '新規登録' }));
+    await user.click(screen.getByRole('button', { name: '登録する' }));
 
     await waitFor(() => {
       expect(mockRegisterUser).toHaveBeenCalledWith(

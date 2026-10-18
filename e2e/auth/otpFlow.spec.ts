@@ -67,7 +67,7 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
     await page.getByLabel('メールアドレス').fill(email);
     await page.getByLabel('パスワード', { exact: true }).fill('Password123');
     await page.getByLabel('パスワード（確認）').fill('Password123');
-    await page.getByRole('button', { name: '新規登録' }).click();
+    await page.getByRole('button', { name: '登録する' }).click();
     await expect(
       page.getByRole('heading', { name: '確認コードを入力' }),
     ).toBeVisible();
@@ -82,7 +82,7 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
     await page.getByLabel('メールアドレス').fill(signupEmail);
     await page.getByLabel('パスワード', { exact: true }).fill('Password123');
     await page.getByLabel('パスワード（確認）').fill('Password123');
-    await page.getByRole('button', { name: '新規登録' }).click();
+    await page.getByRole('button', { name: '登録する' }).click();
 
     // 確認コード入力画面に遷移
     await expect(
@@ -107,7 +107,7 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
     await page.getByLabel('メールアドレス').fill(errEmail);
     await page.getByLabel('パスワード', { exact: true }).fill('Password123');
     await page.getByLabel('パスワード（確認）').fill('Password123');
-    await page.getByRole('button', { name: '新規登録' }).click();
+    await page.getByRole('button', { name: '登録する' }).click();
 
     await expect(
       page.getByRole('heading', { name: '確認コードを入力' }),

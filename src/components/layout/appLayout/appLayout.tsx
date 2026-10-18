@@ -20,6 +20,7 @@ import { useMobileDrawer } from '@/components/layout/mobileDrawer/useMobileDrawe
 import { WatchlistPanel } from '@/features/watchlist/component/watchlistPanel/watchlistPanel';
 import { CalendarButton } from '@/features/calendar/component/calendarButton';
 import { LoginPromptModal } from '@/components/ui/loginPromptModal/loginPromptModal';
+import { MAIN_CONTENT_ID } from '@/constants';
 
 import styles from './appLayout.module.scss';
 
@@ -53,6 +54,18 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
 
   return (
     <div className={styles.c_app_layout}>
+      {/*
+        ヘッダーとサイドバーを飛ばして本文へ移動する導線（WCAG 2.4.1）。
+        DOM 上の最初のフォーカス可能要素にする必要があるため、
+        ヘッダーより前に置く。
+      */}
+      <a
+        href={`#${MAIN_CONTENT_ID}`}
+        className={styles.c_app_layout__skip_link}
+      >
+        本文へ移動
+      </a>
+
       <div className={styles.c_app_layout__header}>
         <Header
           searchBar={<SearchBar />}
@@ -74,7 +87,14 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
           </div>
         )}
 
-        <main className={styles.c_app_layout__main}>{children}</main>
+        {/* スキップリンクの移動先。tabIndex=-1 でプログラム的なフォーカスを受ける */}
+        <main
+          id={MAIN_CONTENT_ID}
+          tabIndex={-1}
+          className={styles.c_app_layout__main}
+        >
+          {children}
+        </main>
       </div>
 
       <div className={styles.c_app_layout__footer}>

@@ -51,6 +51,9 @@ jest.mock('@/features/calendar/component/calendarButton', () => ({
 
 import React from 'react';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+import { MAIN_CONTENT_ID } from '@/constants';
 
 import { AppLayout } from './appLayout';
 
@@ -144,6 +147,37 @@ describe('AppLayout', () => {
       mockUseSession.mockReturnValue(unauthenticatedSession);
       render(<AppLayout>コンテンツ</AppLayout>);
       expect(screen.queryByTestId('calendar-button')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('スキップリンク', () => {
+    it('本文へ移動するリンクが表示される', () => {
+      render(<AppLayout>コンテンツ</AppLayout>);
+      expect(
+        screen.getByRole('link', { name: '本文へ移動' }),
+      ).toBeInTheDocument();
+    });
+
+    it('main要素のidを参照している', () => {
+      render(<AppLayout>コンテンツ</AppLayout>);
+      const skipLink = screen.getByRole('link', { name: '本文へ移動' });
+      const main = screen.getByRole('main');
+
+      expect(skipLink).toHaveAttribute('href', `#${main.id}`);
+      expect(main.id).toBe(MAIN_CONTENT_ID);
+    });
+
+    it('mainがプログラム的なフォーカスを受けられる', () => {
+      render(<AppLayout>コンテンツ</AppLayout>);
+      expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+    });
+
+    it('DOM上で最初のフォーカス可能要素になっている', async () => {
+      const user = userEvent.setup();
+      render(<AppLayout>コンテンツ</AppLayout>);
+
+      await user.tab();
+      expect(screen.getByRole('link', { name: '本文へ移動' })).toHaveFocus();
     });
   });
 });

@@ -19,6 +19,47 @@ globs:
 - リモートDBへの反映は `supabase db push` で行う
 - 手動でSQLを直接実行してスキーマを変更しない
 
+### 「リモートにあるがローカルに無い」で push が拒否されたら
+
+```
+LegacyDbPushMissingLocalError: Remote migration versions not found in local migrations directory.
+```
+
+**これは異常ではない。** DBが1つしかなく、ローカル Postgres（`supabase start`）も使っていないため、作業中のブランチはスキーマ変更をリモートへ先行適用するしかない。その状態で main から push すると、main に無いマイグレーションを検出してこのエラーになる。**先行していたブランチがマージされれば自動的に解消する。**
+
+#### ⛔ `migration repair --status reverted` を実行しない
+
+CLI はこのエラーに対して次を提案してくるが、**適用済みのマイグレーションに対して使ってはいけない**。
+
+```bash
+supabase migration repair --status reverted <version>   # ← 実行しない
+```
+
+スキーマは変わったまま履歴だけ「未適用」に書き換わり、履歴とDBの実体が乖離する。次回以降の push が壊れ、復旧も難しくなる。
+
+#### 安全な回避手順
+
+先行しているマイグレーションを**一時的にローカルへ置いてから** push し、終わったら消す。マイグレーション履歴テーブルには触らない。
+
+```bash
+# 1. どのブランチの何が先行しているかを特定する
+git log --all --oneline --diff-filter=A --name-only -- 'supabase/migrations/<version>*'
+
+# 2. そのファイルだけを一時的に取り出す（コミットしない）
+git show <branch>:supabase/migrations/<file>.sql > supabase/migrations/<file>.sql
+
+# 3. 適用（自分のマイグレーションが先行分より古い場合は --include-all が要る）
+npx supabase db push --dry-run   # 対象が自分の1件だけか確認してから
+npx supabase db push
+
+# 4. 一時ファイルを消す
+rm supabase/migrations/<file>.sql
+```
+
+#### ブランチを破棄する場合
+
+自動解消しない唯一のケース。先行適用したマイグレーションが main に入らないまま終わると、**どのファイルにも記述が無いスキーマがDBに残り続ける**。ブランチを破棄するときは、その変更を打ち消す逆マイグレーションを作って適用すること。
+
 ## 【必須】型生成
 
 - スキーマ変更後は `supabase gen types typescript --project-id <project-id> > src/types/database.types.ts` で型定義を再生成する

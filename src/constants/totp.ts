@@ -62,4 +62,26 @@ export const TOTP_ERROR_MESSAGES = {
   ALREADY_ENABLED: '二段階認証は既に有効です。',
   /** 未設定 */
   NOT_CONFIGURED: '二段階認証が設定されていません。',
+  /** 設定を開始していない */
+  SETUP_NOT_STARTED: '設定が開始されていません。最初からやり直してください。',
+  /** 有効化に成功 */
+  ENABLED: '二段階認証を有効にしました。',
+  /** 無効化に成功 */
+  DISABLED: '二段階認証を無効にしました。',
+  /** リカバリーコードを再発行した */
+  RECOVERY_CODES_REGENERATED:
+    'リカバリーコードを再発行しました。以前のコードは使えません。',
+  /** 操作に失敗 */
+  OPERATION_FAILED: '処理に失敗しました。',
+} as const;
+
+/**
+ * 設定操作のレート制限（回 / 窓）
+ *
+ * 無効化・再発行はコードの所持を要求するため、ここが総当たりの入口になる。
+ * ログイン時（TOTP_VERIFY）と同じ厳しさにする。
+ */
+export const TOTP_SETTINGS_LIMIT = {
+  maxAttempts: 5,
+  windowMinutes: 15,
 } as const;

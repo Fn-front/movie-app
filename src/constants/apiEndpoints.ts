@@ -25,6 +25,16 @@ export const API_ENDPOINTS = {
   USER_SETTINGS: '/api/user/settings',
   /** パスワード変更 */
   USER_CHANGE_PASSWORD: '/api/user/change-password',
+  /** 二段階認証の状態取得 */
+  USER_TOTP: '/api/user/totp',
+  /** 二段階認証の設定開始（QRコード取得） */
+  USER_TOTP_SETUP: '/api/user/totp/setup',
+  /** 二段階認証の有効化 */
+  USER_TOTP_ENABLE: '/api/user/totp/enable',
+  /** 二段階認証の無効化 */
+  USER_TOTP_DISABLE: '/api/user/totp/disable',
+  /** リカバリーコードの再発行 */
+  USER_TOTP_RECOVERY_CODES: '/api/user/totp/recovery-codes',
 
   // --- お気に入り ---
   /** お気に入り一覧・追加 */

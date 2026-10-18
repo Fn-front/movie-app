@@ -11,6 +11,7 @@ import { Heading } from '@/components/ui/heading/heading';
 import { Skeleton } from '@/components/ui/skeleton/skeleton';
 import { DisplayNameForm } from '@/features/settings/displayNameForm/displayNameForm';
 import { ChangePasswordForm } from '@/features/settings/changePasswordForm/changePasswordForm';
+import { TwoFactorSettings } from '@/features/settings/twoFactorSettings/twoFactorSettings';
 import { NotificationSettings } from '@/features/settings/notificationSettings/notificationSettings';
 import { ThemeSettings } from '@/features/settings/themeSettings/themeSettings';
 import { DismissedMoviesList } from '@/features/dismissedMovies/component/dismissedMoviesList/dismissedMoviesList';
@@ -51,6 +52,11 @@ export const SettingsPage = memo(function SettingsPage() {
             </section>
           )
         )}
+
+        <section className={styles.c_settings_page__section}>
+          <Heading level={2}>二段階認証</Heading>
+          <TwoFactorSettings />
+        </section>
 
         <section className={styles.c_settings_page__section}>
           <Heading level={2}>通知</Heading>

@@ -23,6 +23,11 @@ jest.mock('@/helpers/auth', () => ({
     new Response(JSON.stringify({ success: false }), { status: 401 }),
 }));
 
+const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
 
 // --- Helpers ---
@@ -37,6 +42,7 @@ const createGetRequest = () =>
 describe('GET /api/recommendations/refresh-count', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -137,5 +143,26 @@ describe('GET /api/recommendations/refresh-count', () => {
     expect(response.status).toBe(200);
     expect(json.data.usedCount).toBe(0);
     expect(json.data.remainingCount).toBe(10);
+  });
+  describe('レート制限', () => {
+    it('上限超過で429を返す', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 600 });
+
+      const response = await GET(createGetRequest());
+
+      expect(response.status).toBe(429);
+    });
+
+    it('読み取り用の read_api_user_data として数える', async () => {
+      await GET(createGetRequest());
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+        'read_api_user_data',
+        120,
+        10,
+      );
+    });
   });
 });

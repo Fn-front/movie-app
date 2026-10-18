@@ -25,6 +25,11 @@ jest.mock('@/helpers/auth', () => ({
     new Response(JSON.stringify({ success: false }), { status: 401 }),
 }));
 
+const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
 
 // --- Tests ---
@@ -32,6 +37,7 @@ import { getAuthSession } from '@/helpers/auth';
 describe('GET /api/filters', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -195,5 +201,64 @@ describe('PUT /api/filters', () => {
     expect(json.success).toBe(false);
     expect(json.error.code).toBeDefined();
     expect(json.error.details).toBeDefined();
+  });
+  describe('レート制限', () => {
+    /** PUT 用の最小リクエスト */
+    const createPutRequest = () =>
+      new Request('http://localhost/api/filters', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sort_by: 'popularity' }),
+      });
+
+    it('GET: 上限超過で429を返し、DBを読まない', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 600 });
+
+      const response = await GET();
+
+      expect(response.status).toBe(429);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it('GET: 読み取り用の read_api_user_data として数える', async () => {
+      mockFrom.mockReturnValue({
+        select: () => ({
+          eq: () => ({ single: () => ({ data: null, error: null }) }),
+        }),
+      });
+
+      await GET();
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+        'read_api_user_data',
+        120,
+        10,
+      );
+    });
+
+    it('PUT: 上限超過で429を返し、保存しない', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 60 });
+
+      const response = await PUT(createPutRequest());
+
+      expect(response.status).toBe(429);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it('PUT: 書き込み用の write_api_filters として数える', async () => {
+      mockFrom.mockReturnValue({ upsert: () => ({ error: null }) });
+
+      await PUT(createPutRequest());
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+        'write_api_filters',
+        10,
+        1,
+      );
+    });
   });
 });

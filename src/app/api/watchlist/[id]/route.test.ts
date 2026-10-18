@@ -30,6 +30,11 @@ jest.mock('@/helpers/auth', () => ({
     new Response(JSON.stringify({ success: false }), { status: 401 }),
 }));
 
+const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
 
 // --- Helpers ---
@@ -46,6 +51,7 @@ const createDeleteRequest = (id: string) => ({
 describe('DELETE /api/watchlist/:id', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -185,5 +191,46 @@ describe('DELETE /api/watchlist/:id', () => {
     const response = await DELETE(request, { params });
 
     expect(response.status).toBe(500);
+  });
+
+  describe('レート制限', () => {
+    it('上限超過で429を返し、削除しない', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 60 });
+
+      const { request, params } = createDeleteRequest(VALID_UUID);
+      const response = await DELETE(request, { params });
+
+      expect(response.status).toBe(429);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it('追加(POST)と同じ write_api_watchlist を共有する', async () => {
+      // favorites/[id] は PATCH / DELETE の両方に制限があるのに
+      // watchlist 側だけ抜けていた。既存の値を再利用するため新規追加は不要
+      mockFrom.mockReturnValue({
+        update: () => ({
+          eq: () => ({
+            eq: () => ({
+              is: () => ({
+                select: () => ({
+                  single: () => ({ data: { id: VALID_UUID }, error: null }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const { request, params } = createDeleteRequest(VALID_UUID);
+      await DELETE(request, { params });
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+        'write_api_watchlist',
+        10,
+        1,
+      );
+    });
   });
 });

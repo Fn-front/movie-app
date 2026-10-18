@@ -25,6 +25,11 @@ jest.mock('@/helpers/auth', () => ({
 
 import { getAuthSession } from '@/helpers/auth';
 
+const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 // --- Helpers ---
 
 const createGetRequest = (params: Record<string, string> = {}) => {
@@ -61,6 +66,7 @@ const mockCalendarQuery = (data: unknown[] | null, error: unknown = null) => {
 describe('GET /api/watchlist/calendar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -221,11 +227,34 @@ describe('GET /api/watchlist/calendar', () => {
     mockCalendarQuery(mockItems);
 
     const response = await GET(createGetRequest({ month: '2026-06' }));
+
     const json = await response.json();
 
     expect(response.status).toBe(200);
     expect(json.data.movies_by_date['2026-06-01']).toHaveLength(2);
     expect(json.data.movies_by_date['2026-06-15']).toHaveLength(1);
     expect(json.data.movies_by_date['2026-06-30']).toHaveLength(1);
+  });
+  describe('レート制限', () => {
+    it('上限超過で429を返し、DBを読まない', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 600 });
+
+      const response = await GET(createGetRequest());
+
+      expect(response.status).toBe(429);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it('読み取り用の read_api_user_data として数える', async () => {
+      await GET(createGetRequest());
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+        'read_api_user_data',
+        120,
+        10,
+      );
+    });
   });
 });

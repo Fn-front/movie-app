@@ -16,7 +16,7 @@ test.describe('受賞作品（公開）', () => {
     await page.goto('/awards');
 
     await expect(
-      page.getByRole('heading', { name: '受賞作品', level: 2 }),
+      page.getByRole('heading', { name: '受賞作品', level: 1 }),
     ).toBeVisible();
     await expect(
       page.getByRole('combobox', { name: '年度を選択' }),

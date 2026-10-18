@@ -45,6 +45,14 @@ export const RATE_LIMIT_ACTION = {
   READ_MOVIE_DETAIL: 'read_api_movie_detail',
   /** ジャンル一覧の取得（送信元単位） */
   READ_GENRES: 'read_api_genres',
+  /** 保存済みフィルター条件の更新（ユーザー単位） */
+  WRITE_FILTERS: 'write_api_filters',
+  /**
+   * 認証必須の読み取りAPI（ユーザー単位）。
+   * user_id で絞ったDB読み取りのみで外部APIを呼ばないため、
+   * フィルター取得・カレンダー・レコメンド残回数で1つのカウンタを共有する。
+   */
+  READ_USER_DATA: 'read_api_user_data',
 } as const;
 
 /**
@@ -106,6 +114,13 @@ export const RATE_LIMIT_CONFIG = {
   SEARCH_MOVIES: { maxAttempts: 60, windowMinutes: 10 },
   READ_MOVIE_DETAIL: { maxAttempts: 120, windowMinutes: 10 },
   READ_GENRES: { maxAttempts: 60, windowMinutes: 10 },
+  /** 書き込み系は他のAPIと揃える */
+  WRITE_FILTERS: { maxAttempts: 10, windowMinutes: 1 },
+  /**
+   * 認証必須の読み取り。カレンダーの月送りが最も回数を使うため厚めに取る。
+   * 自分のデータしか読めず外部APIも呼ばないので、濫用の実害は小さい。
+   */
+  READ_USER_DATA: { maxAttempts: 120, windowMinutes: 10 },
   /**
    * ログイン試行のアカウント×送信元単位の上限。
    *

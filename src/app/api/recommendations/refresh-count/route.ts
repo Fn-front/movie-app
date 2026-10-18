@@ -11,11 +11,27 @@ import {
   HTTP_STATUS,
   RECOMMENDATION_REFRESH,
   RECOMMENDATION_REFRESH_MESSAGES,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
+import { rateLimitExceededResponse } from '@/helpers/apiHelpers';
 import { withAuth } from '@/helpers/routeHandler';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 
 export const GET = withAuth(
   async ({ session, supabase }) => {
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.READ_USER_DATA,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.maxAttempts,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     const now = new Date();
     const monthStart = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),

@@ -12,11 +12,15 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { filterConditionsSchema } from '@/schema/filters';
+import { rateLimitExceededResponse } from '@/helpers/apiHelpers';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
   HTTP_STATUS,
   ERROR_CODE,
   SUPABASE_ERROR_CODE,
   FILTER_ERROR_MESSAGES,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 
 export async function GET() {
@@ -28,6 +32,18 @@ export async function GET() {
     // Supabaseクライアント検証
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
+
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.READ_USER_DATA,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.maxAttempts,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
 
     // ユーザーの保存済みフィルターを取得
     const { data, error } = await supabase
@@ -74,6 +90,18 @@ export async function PUT(request: Request) {
     // Supabaseクライアント検証
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
+
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.WRITE_FILTERS,
+      RATE_LIMIT_CONFIG.WRITE_FILTERS.maxAttempts,
+      RATE_LIMIT_CONFIG.WRITE_FILTERS.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
 
     // リクエストボディの取得・バリデーション
     const body = await request.json();

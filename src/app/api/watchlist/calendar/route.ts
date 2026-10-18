@@ -11,11 +11,15 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { calendarQuerySchema } from '@/schema/calendar';
+import { rateLimitExceededResponse } from '@/helpers/apiHelpers';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
   HTTP_STATUS,
   ERROR_CODE,
   CALENDAR_ERROR_MESSAGES,
   WATCHLIST_SELECT,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 
 export async function GET(request: Request) {
@@ -27,6 +31,18 @@ export async function GET(request: Request) {
     // Supabaseクライアント検証
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
+
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.READ_USER_DATA,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.maxAttempts,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
 
     // クエリパラメータのバリデーション
     const { searchParams } = new URL(request.url);

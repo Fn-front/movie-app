@@ -273,54 +273,6 @@ CREATE TRIGGER update_saved_filters_updated_at
   EXECUTE FUNCTION update_updated_at_column();
 
 -- --------------------------------------------
--- user_preferences（ユーザー嗜好データ）
--- --------------------------------------------
-CREATE TABLE IF NOT EXISTS user_preferences (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-  favorite_genres JSONB,
-  preferred_languages JSONB,
-  analysis_data JSONB,
-  created_at TIMESTAMP NOT NULL DEFAULT now(),
-  updated_at TIMESTAMP NOT NULL DEFAULT now()
-);
-
--- インデックス
-CREATE UNIQUE INDEX IF NOT EXISTS idx_user_preferences_user_id ON user_preferences(user_id);
-
--- 更新日時自動更新トリガー
-CREATE TRIGGER update_user_preferences_updated_at
-  BEFORE UPDATE ON user_preferences
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
-
--- --------------------------------------------
--- reviews（レビュー・評価）
--- --------------------------------------------
-CREATE TABLE IF NOT EXISTS reviews (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  tmdb_movie_id INTEGER NOT NULL,
-  rating DECIMAL(2,1) NOT NULL,
-  comment TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT now(),
-  updated_at TIMESTAMP NOT NULL DEFAULT now(),
-  CONSTRAINT chk_rating CHECK (rating >= 0.5 AND rating <= 5.0),
-  CONSTRAINT chk_comment_length CHECK (char_length(comment) <= 500)
-);
-
--- インデックス
-CREATE INDEX IF NOT EXISTS idx_reviews_tmdb_movie_id ON reviews(tmdb_movie_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_user_movie ON reviews(user_id, tmdb_movie_id);
-CREATE INDEX IF NOT EXISTS idx_reviews_created_at ON reviews(created_at);
-
--- 更新日時自動更新トリガー
-CREATE TRIGGER update_reviews_updated_at
-  BEFORE UPDATE ON reviews
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
-
--- --------------------------------------------
 -- now_showing_movies（劇場公開中の人気映画）
 -- --------------------------------------------
 CREATE TABLE IF NOT EXISTS now_showing_movies (
@@ -354,8 +306,6 @@ ALTER TABLE movie_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE saved_filters ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE now_showing_movies ENABLE ROW LEVEL SECURITY;
 
 -- --------------------------------------------
@@ -524,54 +474,6 @@ CREATE POLICY saved_filters_update_own ON saved_filters
   USING (auth.uid() = user_id);
 
 CREATE POLICY saved_filters_delete_own ON saved_filters
-  FOR DELETE
-  USING (auth.uid() = user_id);
-
--- --------------------------------------------
--- user_preferences ポリシー
--- --------------------------------------------
-
--- SELECT: 自分の設定のみ閲覧可能
-CREATE POLICY user_preferences_select_own ON user_preferences
-  FOR SELECT
-  USING (auth.uid() = user_id);
-
--- INSERT: 自分の設定のみ追加可能
-CREATE POLICY user_preferences_insert_own ON user_preferences
-  FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
--- UPDATE: 自分の設定のみ更新可能
-CREATE POLICY user_preferences_update_own ON user_preferences
-  FOR UPDATE
-  USING (auth.uid() = user_id);
-
--- DELETE: 自分の設定のみ削除可能
-CREATE POLICY user_preferences_delete_own ON user_preferences
-  FOR DELETE
-  USING (auth.uid() = user_id);
-
--- --------------------------------------------
--- reviews ポリシー
--- --------------------------------------------
-
--- SELECT: 全員閲覧可能
-CREATE POLICY reviews_select_all ON reviews
-  FOR SELECT
-  USING (true);
-
--- INSERT: 自分のレビューのみ追加可能
-CREATE POLICY reviews_insert_own ON reviews
-  FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
--- UPDATE: 自分のレビューのみ更新可能
-CREATE POLICY reviews_update_own ON reviews
-  FOR UPDATE
-  USING (auth.uid() = user_id);
-
--- DELETE: 自分のレビューのみ削除可能
-CREATE POLICY reviews_delete_own ON reviews
   FOR DELETE
   USING (auth.uid() = user_id);
 

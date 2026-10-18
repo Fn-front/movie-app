@@ -6,16 +6,28 @@
 import { NextResponse } from 'next/server';
 
 import { getGenres } from '@/lib/tmdb/tmdb';
+import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import {
   HTTP_STATUS,
   ERROR_CODE,
   SEARCH_ERROR_MESSAGES,
   GENRE_NAME_OVERRIDES,
   CACHE_CONTROL,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    // getGenres() は in-process キャッシュを持たず毎回 TMDb を叩く。
+    // PUBLIC_7D は同一URLのCDNキャッシュに過ぎず、クエリを付ければ素通りする
+    const limited = await enforcePublicRateLimit({
+      request,
+      action: RATE_LIMIT_ACTION.READ_GENRES,
+      limit: RATE_LIMIT_CONFIG.READ_GENRES,
+    });
+    if (limited) return limited;
+
     const rawGenres: { id: number; name: string }[] = await getGenres();
     const genres = rawGenres.map((genre) => ({
       ...genre,

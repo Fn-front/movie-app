@@ -28,6 +28,12 @@ jest.mock('@/helpers/supabase', () => ({
   createServiceRoleClient: () => ({ from: mockFrom }),
 }));
 
+const mockEnforcePublicRateLimit = jest.fn();
+jest.mock('@/helpers/publicRateLimit', () => ({
+  enforcePublicRateLimit: (...args: unknown[]) =>
+    mockEnforcePublicRateLimit(...args),
+}));
+
 // --- Helpers ---
 
 const createRequest = (id: string) =>
@@ -40,6 +46,8 @@ const createParams = (id: string) => Promise.resolve({ id });
 describe('GET /api/movies/:id', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // 既定は上限内（null を返すと通過）
+    mockEnforcePublicRateLimit.mockResolvedValue(null);
   });
 
   it('正常に映画詳細を返す', async () => {
@@ -244,5 +252,54 @@ describe('GET /api/movies/:id', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.favorite).toBeUndefined();
+  });
+
+  describe('レート制限', () => {
+    it('上限超過の場合は TMDb を呼ばずに 429 を返す', async () => {
+      mockEnforcePublicRateLimit.mockResolvedValue(
+        new Response(JSON.stringify({ success: false }), { status: 429 }),
+      );
+
+      const response = await GET(createRequest('550'), {
+        params: Promise.resolve({ id: '550' }),
+      });
+
+      expect(response.status).toBe(429);
+      expect(mockGetMovieDetail).not.toHaveBeenCalled();
+    });
+
+    it('不正なIDはレート制限を消費しない', async () => {
+      const response = await GET(createRequest('abc'), {
+        params: Promise.resolve({ id: 'abc' }),
+      });
+
+      expect(response.status).toBe(400);
+      expect(mockEnforcePublicRateLimit).not.toHaveBeenCalled();
+    });
+
+    it('認証済みはユーザーID、未認証は送信元で数える', async () => {
+      mockGetMovieDetail.mockResolvedValue({ id: 550, title: 'Fight Club' });
+      mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
+      mockFrom.mockReturnValue({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              is: () => ({ single: () => ({ data: null, error: null }) }),
+            }),
+          }),
+        }),
+      });
+
+      await GET(createRequest('550'), {
+        params: Promise.resolve({ id: '550' }),
+      });
+
+      expect(mockEnforcePublicRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'read_api_movie_detail',
+          userId: 'user-123',
+        }),
+      );
+    });
   });
 });

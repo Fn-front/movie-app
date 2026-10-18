@@ -9,6 +9,7 @@ import { isAxiosError } from 'axios';
 
 import { getAuthSession } from '@/helpers/auth';
 import { createServiceRoleClient } from '@/helpers/supabase';
+import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import { getMovieDetail } from '@/lib/tmdb/tmdb';
 import {
   HTTP_STATUS,
@@ -16,13 +17,15 @@ import {
   MOVIES_ERROR_MESSAGES,
   API_ERROR_MESSAGES,
   CACHE_CONTROL,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 
 /**
  * 映画詳細を取得
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -42,11 +45,25 @@ export async function GET(
       );
     }
 
+    // 認証判定を TMDb 呼び出しより前に行う。
+    // 識別子にユーザーIDを使うため（NAT で同一IPを共有する利用者を
+    // まとめて巻き込まないため）、レート制限より先に必要になる
+    const session = await getAuthSession();
+
+    // 未認証で叩ける＝サーバーの TMDB_API_KEY を使った無認証プロキシになるため、
+    // TMDb を呼ぶ前に上限を掛ける。不正なIDは上の400で弾いており枠を消費しない
+    const limited = await enforcePublicRateLimit({
+      request,
+      action: RATE_LIMIT_ACTION.READ_MOVIE_DETAIL,
+      limit: RATE_LIMIT_CONFIG.READ_MOVIE_DETAIL,
+      userId: session?.user?.id,
+    });
+    if (limited) return limited;
+
     const movie = await getMovieDetail(movieId);
 
     // 認証済みの場合、お気に入り情報を付与
     let favorite = undefined;
-    const session = await getAuthSession();
 
     if (session) {
       const supabase = createServiceRoleClient();

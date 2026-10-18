@@ -18,6 +18,12 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
   discoverMovies: (...args: unknown[]) => mockDiscoverMovies(...args),
 }));
 
+const mockEnforcePublicRateLimit = jest.fn();
+jest.mock('@/helpers/publicRateLimit', () => ({
+  enforcePublicRateLimit: (...args: unknown[]) =>
+    mockEnforcePublicRateLimit(...args),
+}));
+
 // --- Helpers ---
 
 function createRequest(params: Record<string, string> = {}) {
@@ -86,6 +92,8 @@ const mockTMDbResponse = {
 describe('GET /api/movies/search', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // 既定は上限内（null を返すと通過）
+    mockEnforcePublicRateLimit.mockResolvedValue(null);
   });
 
   // === バリデーション ===
@@ -380,6 +388,35 @@ describe('GET /api/movies/search', () => {
       expect(response.status).toBe(500);
       expect(json.success).toBe(false);
       expect(json.error.code).toBe('SERVER_ERROR');
+    });
+  });
+
+  describe('レート制限', () => {
+    it('上限超過の場合は TMDb を呼ばずに 429 を返す', async () => {
+      mockEnforcePublicRateLimit.mockResolvedValue(
+        new Response(JSON.stringify({ success: false }), { status: 429 }),
+      );
+
+      const response = await GET(createRequest({ query: 'inception' }));
+
+      expect(response.status).toBe(429);
+      expect(mockSearchMovies).not.toHaveBeenCalled();
+      expect(mockDiscoverMovies).not.toHaveBeenCalled();
+    });
+
+    it('送信元単位の search_api_movies として数える', async () => {
+      mockSearchMovies.mockResolvedValue({
+        page: 1,
+        results: [],
+        total_pages: 1,
+        total_results: 0,
+      });
+
+      await GET(createRequest({ query: 'inception' }));
+
+      expect(mockEnforcePublicRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'search_api_movies' }),
+      );
     });
   });
 });

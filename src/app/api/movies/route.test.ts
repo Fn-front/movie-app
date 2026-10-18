@@ -106,6 +106,14 @@ jest.mock('@/helpers/supabase', () => ({
   dbConnectionErrorResponse: () => mockDbConnectionErrorResponse(),
 }));
 
+// レート制限は専用テストで検証する。ここでモックしないと
+// consume_rate_limit の rpc 呼び出しが mockRpc の順序を1つずらす
+const mockEnforcePublicRateLimit = jest.fn();
+jest.mock('@/helpers/publicRateLimit', () => ({
+  enforcePublicRateLimit: (...args: unknown[]) =>
+    mockEnforcePublicRateLimit(...args),
+}));
+
 // --- Helpers ---
 
 const createRequest = (params: Record<string, string> = {}) => {
@@ -354,6 +362,9 @@ describe('GET /api/movies', () => {
     jest.clearAllMocks();
     // genreCacheをリセットするためにモジュールをリロード
     jest.resetModules();
+
+    // 既定は上限内（null を返すと通過）
+    mockEnforcePublicRateLimit.mockResolvedValue(null);
 
     // Supabaseクライアントをデフォルトで有効化
     mockSupabaseClient = {
@@ -1624,5 +1635,41 @@ describe('GET /api/movies', () => {
 
     const upsertRows = mockSupabaseClient!.rpc.mock.calls[0][1].movies;
     expect(upsertRows[0].vote_count).toBe(0);
+  });
+
+  describe('レート制限', () => {
+    it('上限超過の場合は TMDb 同期を走らせずに 429 を返す', async () => {
+      mockEnforcePublicRateLimit.mockResolvedValue(
+        new Response(JSON.stringify({ success: false }), { status: 429 }),
+      );
+
+      const response = await GET(createRequest());
+
+      expect(response.status).toBe(429);
+      // キャッシュ失効時の同期は1回で200リクエスト規模になるため、
+      // 外部から誘発できないよう手前で止める
+      expect(mockSyncNowPlayingMovies).not.toHaveBeenCalled();
+      expect(mockDiscoverMovies).not.toHaveBeenCalled();
+    });
+
+    it('認証済みはユーザーIDで数える', async () => {
+      mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+      await GET(createRequest());
+
+      expect(mockEnforcePublicRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'read_api_movies',
+          userId: 'user-123',
+        }),
+      );
+    });
+
+    it('不正なクエリはレート制限を消費しない', async () => {
+      const response = await GET(createRequest({ page: '-1' }));
+
+      expect(response.status).toBe(400);
+      expect(mockEnforcePublicRateLimit).not.toHaveBeenCalled();
+    });
   });
 });

@@ -27,10 +27,13 @@ import {
   MIN_POPULARITY,
   MOVIES_ERROR_MESSAGES,
   ERROR_CODE,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
   GENRE_CACHE_DURATION_MS,
   DISCOVER_API_MAX_PAGES,
   GENRE_NAME_OVERRIDES,
 } from '@/constants';
+import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
 import { syncStreamingMovies } from '@/lib/sync/syncStreamingMovies';
@@ -125,6 +128,24 @@ export async function GET(request: Request) {
       release_date_lte,
       is_revival,
     } = queryResult.data;
+
+    // 認証判定を前倒しする。
+    // 識別子にユーザーIDを使うため（NAT で同一IPを共有する利用者を
+    // まとめて巻き込まないため）、レート制限より先に必要になる。
+    // 下部のお気に入り付与でも同じ session を使い回す
+    const session = await getAuthSession();
+
+    // 未認証で叩ける＝サーバーの TMDB_API_KEY を使った無認証プロキシになるうえ、
+    // キャッシュ失効時は TMDb の同期処理（1回で200リクエスト規模）まで誘発できる。
+    // 不正なクエリは上の400で弾いており枠を消費しない
+    const limited = await enforcePublicRateLimit({
+      request,
+      action: RATE_LIMIT_ACTION.READ_MOVIES,
+      limit: RATE_LIMIT_CONFIG.READ_MOVIES,
+      userId: session?.user?.id,
+      supabase,
+    });
+    if (limited) return limited;
 
     // ジャンルマップを取得
     const genreMap = await getGenreMap();
@@ -373,8 +394,7 @@ export async function GET(request: Request) {
 
     const hasNextPage = page < totalPages;
 
-    // 認証済みの場合、お気に入り情報を付与
-    const session = await getAuthSession();
+    // 認証済みの場合、お気に入り情報を付与（session は上部で取得済み）
     let moviesWithFavorites = movies ?? [];
 
     if (session && moviesWithFavorites.length > 0) {

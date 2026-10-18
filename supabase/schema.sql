@@ -105,7 +105,9 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   verification_token_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT chk_otp_action_type CHECK (action_type IN ('registration', 'login', 'password_change')),
-  CONSTRAINT chk_otp_attempts CHECK (attempts >= 0 AND attempts <= 5)
+  CONSTRAINT chk_otp_attempts CHECK (attempts >= 0 AND attempts <= 5),
+  -- HMAC-SHA256 の hex（64桁小文字）のみ。平文や別形式の書き込みをDB側で弾く
+  CONSTRAINT chk_otp_code_hash_format CHECK (code_hash ~ '^[0-9a-f]{64}$')
 );
 
 -- インデックス
@@ -113,6 +115,14 @@ CREATE INDEX IF NOT EXISTS idx_otp_codes_email_action_created
   ON otp_codes(email, action_type, created_at);
 CREATE INDEX IF NOT EXISTS idx_otp_codes_expires_at
   ON otp_codes(expires_at);
+-- 検証は code_hash の完全一致で引く
+CREATE INDEX IF NOT EXISTS idx_otp_codes_code_hash
+  ON otp_codes(code_hash);
+-- 検証済みトークンでの照合用。UNIQUE にして万一の重複をDB側で弾く。
+-- 未検証行は NULL のため部分インデックスで除外する
+CREATE UNIQUE INDEX IF NOT EXISTS idx_otp_codes_verification_token_hash
+  ON otp_codes(verification_token_hash)
+  WHERE verification_token_hash IS NOT NULL;
 
 -- --------------------------------------------
 -- watchlist（見たい映画リスト）

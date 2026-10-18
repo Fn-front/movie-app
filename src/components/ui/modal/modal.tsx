@@ -4,7 +4,7 @@
 
 'use client';
 
-import { type ReactNode, memo, useCallback } from 'react';
+import { type ReactNode, memo, useCallback, useEffect, useRef } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 
 import { ARIA_LABELS } from '@/constants';
@@ -108,6 +108,42 @@ export const Modal = memo<ModalProps>(function Modal({
     [onOpenChange],
   );
 
+  // 開く直前にフォーカスされていた要素を覚えておき、閉じたときにそこへ戻す。
+  // open を外から制御しており Dialog.Trigger を使わないため、Radix の
+  // 自動復帰が効かずフォーカスが body に落ちていた（WCAG 2.4.3）。
+  //
+  // 「閉じている間だけ focusin を監視する」ことで、ダイアログを開いた直後に
+  // 中へ移ったフォーカスを誤って記録しないようにしている。
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      return;
+    }
+
+    const handleFocusIn = () => {
+      if (document.activeElement instanceof HTMLElement) {
+        previouslyFocusedRef.current = document.activeElement;
+      }
+    };
+
+    document.addEventListener('focusin', handleFocusIn);
+    return () => document.removeEventListener('focusin', handleFocusIn);
+  }, [open]);
+
+  const handleCloseAutoFocus = useCallback((event: Event) => {
+    const previous = previouslyFocusedRef.current;
+
+    // 覚えた要素がDOMから消えている場合（一覧の再描画など）は
+    // Radix の既定動作に任せる
+    if (!previous || !previous.isConnected) {
+      return;
+    }
+
+    event.preventDefault();
+    previous.focus();
+  }, []);
+
   const contentClassNames = cn(
     styles.c_modal__content,
     styles[`c_modal__content__${size}`],
@@ -120,6 +156,7 @@ export const Modal = memo<ModalProps>(function Modal({
         <Dialog.Overlay className={styles.c_modal__overlay} />
         <Dialog.Content
           className={contentClassNames}
+          onCloseAutoFocus={handleCloseAutoFocus}
           onPointerDownOutside={(e) => {
             if (!closeOnOverlayClick) {
               e.preventDefault();

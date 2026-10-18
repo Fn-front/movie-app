@@ -83,21 +83,27 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 |---------|-----|------|-----------|------|
 | id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
 | email | VARCHAR(255) | NOT NULL | - | 送信先メールアドレス |
-| code | VARCHAR(6) | NOT NULL | - | 6桁OTPコード |
+| code_hash | TEXT | NOT NULL | - | OTPコードの HMAC-SHA256（鍵は `OTP_HASH_PEPPER`） |
 | action_type | VARCHAR(50) | NOT NULL | - | アクション種別（registration / login / password_change） |
 | attempts | INTEGER | NOT NULL | 0 | 検証試行回数 |
-| expires_at | TIMESTAMP | NOT NULL | - | 有効期限（作成時刻 + 10分） |
-| verified_at | TIMESTAMP | NULL | - | 検証完了日時 |
-| created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
+| expires_at | TIMESTAMPTZ | NOT NULL | - | 有効期限（作成時刻 + 10分） |
+| verified_at | TIMESTAMPTZ | NULL | - | 検証完了日時 |
+| verification_token_hash | TEXT | NULL | - | 検証済みトークンの SHA-256（ログイン・パスワード変更の本人確認に使う） |
+| created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
 
 **インデックス:**
 - `email, action_type, created_at` - メール・アクション・日時での検索用
 - `expires_at` - 期限切れレコードのクリーンアップ用
+- `verification_token_hash` - 検証済みトークンでの照合用
 
 **制約:**
 - `action_type` は 'registration', 'login', 'password_change' のいずれか（CHECK制約）
 - `attempts` は 0〜5 の範囲（CHECK制約）
-- `code` は 6桁数字（CHECK制約）
+
+**設計判断 — 平文を保存しない理由（#640 / #698）:**
+- OTPは6桁 = 100万通りしかなく、ソルト付きSHA-256でも特定の行を狙った総当たりは1秒未満で終わる
+- 鍵（`OTP_HASH_PEPPER`）をDBの外に置くことで、DBだけを手に入れた攻撃者がHMACを計算できないようにする
+- 移行期間は `code`（平文）と `code_hash` を並行させていたが、全レコードが新方式になった時点で `code` を削除し、`code_hash` に `NOT NULL` を付けた（#698）
 
 **設計判断 — user_id FKを持たない理由:**
 - 現在の設計では新規登録時にユーザーが先に作成される（is_verified = false）ため、user_id FKを持たせることは可能

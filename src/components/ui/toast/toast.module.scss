@@ -56,7 +56,7 @@
     border-color: $success-main;
 
     .c_toast__icon {
-      color: $success-main;
+      color: $text-success;
     }
   }
 
@@ -65,7 +65,7 @@
     border-color: $error-main;
 
     .c_toast__icon {
-      color: $error-main;
+      color: $text-danger;
     }
   }
 
@@ -74,7 +74,7 @@
     border-color: $warning-main;
 
     .c_toast__icon {
-      color: $warning-main;
+      color: $text-warning;
     }
   }
 
@@ -83,7 +83,7 @@
     border-color: $info-main;
 
     .c_toast__icon {
-      color: $info-main;
+      color: $text-info;
     }
   }
 

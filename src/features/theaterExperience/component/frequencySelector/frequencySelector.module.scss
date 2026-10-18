@@ -46,7 +46,7 @@
 
   &[data-state='on'] {
     background-color: $background-paper;
-    color: $primary-500;
+    color: $text-link;
     box-shadow: $shadow-sm;
     font-weight: $font-weight-medium;
   }
@@ -60,5 +60,6 @@
 .c_frequency_selector__item_freq {
   font-size: $font-size-2xs;
   line-height: $line-height-tight;
-  opacity: 0.7;
+  // opacity で薄めると文字色が背景と混ざり、10px の小さな文字でコントラストが
+  // AA を割る（ダーク 3.67:1 / ライト 2.63:1）。親の色をそのまま使う。
 }

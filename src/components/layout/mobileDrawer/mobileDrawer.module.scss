@@ -206,7 +206,7 @@
   @include focus-visible;
 
   &--destructive {
-    color: $error-main;
+    color: $text-danger;
 
     &:hover {
       background-color: color-alpha(--error-main, 10%);

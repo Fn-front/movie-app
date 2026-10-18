@@ -548,44 +548,6 @@ export type Database = {
           },
         ];
       };
-      reviews: {
-        Row: {
-          comment: string | null;
-          created_at: string;
-          id: string;
-          rating: number;
-          tmdb_movie_id: number;
-          updated_at: string;
-          user_id: string;
-        };
-        Insert: {
-          comment?: string | null;
-          created_at?: string;
-          id?: string;
-          rating: number;
-          tmdb_movie_id: number;
-          updated_at?: string;
-          user_id: string;
-        };
-        Update: {
-          comment?: string | null;
-          created_at?: string;
-          id?: string;
-          rating?: number;
-          tmdb_movie_id?: number;
-          updated_at?: string;
-          user_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'reviews_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
       saved_filters: {
         Row: {
           created_at: string;
@@ -832,44 +794,6 @@ export type Database = {
             foreignKeyName: 'totp_recovery_codes_user_id_fkey';
             columns: ['user_id'];
             isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
-      user_preferences: {
-        Row: {
-          analysis_data: Json | null;
-          created_at: string;
-          favorite_genres: Json | null;
-          id: string;
-          preferred_languages: Json | null;
-          updated_at: string;
-          user_id: string;
-        };
-        Insert: {
-          analysis_data?: Json | null;
-          created_at?: string;
-          favorite_genres?: Json | null;
-          id?: string;
-          preferred_languages?: Json | null;
-          updated_at?: string;
-          user_id: string;
-        };
-        Update: {
-          analysis_data?: Json | null;
-          created_at?: string;
-          favorite_genres?: Json | null;
-          id?: string;
-          preferred_languages?: Json | null;
-          updated_at?: string;
-          user_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'user_preferences_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: true;
             referencedRelation: 'users';
             referencedColumns: ['id'];
           },

@@ -17,12 +17,26 @@
  *   （enforce CSP に付与し、通常運用での違反を監視する）。
  *
  * 段階3 で追加:
- * - DOM-based XSS を型レベルで封じるため Trusted Types を導入する。まずは
+ * - DOM-based XSS を型レベルで封じるため Trusted Types を導入する。
  *   `Content-Security-Policy-Report-Only` に `require-trusted-types-for 'script'`
  *   と `trusted-types <policy>` を付与し、違反を `/api/csp-report` に収集する
  *   （enforce CSP＝unsafe-inline はそのまま維持し、既存機能を壊さない）。
- * - Report-Only 段階で違反が出ないことを確認してから、段階4 で enforce CSP へ
- *   `require-trusted-types-for 'script'` を昇格させる。
+ *
+ * ⚠️ 段階4（enforce 昇格）は現時点では実施できない（#649）:
+ * - Next.js は **webpack ランタイムにしか** Trusted Types を組み込んでいない
+ *   （`next/dist/esm/build/webpack-config.js` の
+ *   `output.trustedTypes = 'nextjs#bundler'`）。本プロジェクトは Turbopack で
+ *   ビルドしており、そのチャンクローダーは `script.src` へ生文字列を代入する。
+ *   許可リストに `nextjs` を入れてもポリシーを経由しないため効かない。
+ * - enforce にすると動的チャンクを読むルート（/theater-experience 等）が
+ *   `This document requires 'TrustedScriptURL' assignment.` で落ちる（実測）。
+ * - **Report-Only での「違反ゼロ」を昇格の根拠にしないこと。** この違反は
+ *   Report-Only では報告されず（`/api/csp-report` への送信0件を実測）、
+ *   enforce にして初めて顕在化する。検証は必ず本番ビルド
+ *   （`npm run build` → `npm start`）で、実際に enforce を有効化して行う。
+ *   dev サーバーでは React 開発モードの `eval()` エラーが先に出て判別できない。
+ * - 再開の条件は Turbopack 側の Trusted Types 対応。Next.js を上げた際に
+ *   上記の手順で確認する。
  */
 
 /**
@@ -47,8 +61,10 @@ export const CSP_REPORT_GROUP = 'csp-endpoint';
  *   enforce 昇格後も動作させるための named ポリシー。
  * - `dompurify`: DOMPurify が内部で生成し得るデフォルトポリシー名。明示的に
  *   許可リストへ含めておく（内部ポリシー利用時に enforce でブロックされないため）。
- * - `nextjs`: Next.js（App Router のスクリプト注入等）が利用し得るポリシー名。
- *   Report-Only 段階で違反を観測し、enforce 昇格時の許可要否を判断する。
+ * - `nextjs`: Next.js の `client/trusted-types.js` が生成するポリシー名。
+ *   ただし webpack ビルド／Pages Router の経路でしか使われず、Turbopack の
+ *   チャンクローダーは経由しない（#649 参照）。許可リストに残してあるのは、
+ *   Turbopack が対応した際にそのまま効くようにするため。
  */
 export const TRUSTED_TYPES_POLICIES = Object.freeze([
   'sanitize-html',

@@ -1,4 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 
@@ -215,6 +216,69 @@ describe('Modal', () => {
     // 最後の要素からTabで最初のフォーカス可能要素に戻る（フォーカストラップ）
     await user.tab();
     expect(closeButton).toHaveFocus();
+  });
+
+  describe('フォーカス復帰', () => {
+    /** open を外から制御する、実際の利用箇所と同じ構成のラッパー */
+    const ControlledModal = ({
+      withTrigger = true,
+    }: {
+      withTrigger?: boolean;
+    }) => {
+      const [open, setOpen] = useState(false);
+
+      return (
+        <>
+          {withTrigger && (
+            <button type='button' onClick={() => setOpen(true)}>
+              開く
+            </button>
+          )}
+          <Modal open={open} onOpenChange={setOpen} title='テストモーダル'>
+            <p>モーダルの内容</p>
+          </Modal>
+        </>
+      );
+    };
+
+    it('閉じたときにフォーカスがトリガーへ戻る', async () => {
+      const user = userEvent.setup();
+      render(<ControlledModal />);
+
+      const trigger = screen.getByRole('button', { name: '開く' });
+      await user.click(trigger);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: '閉じる' }));
+
+      await waitFor(() => expect(trigger).toHaveFocus());
+    });
+
+    it('Escapeで閉じたときもフォーカスがトリガーへ戻る', async () => {
+      const user = userEvent.setup();
+      render(<ControlledModal />);
+
+      const trigger = screen.getByRole('button', { name: '開く' });
+      await user.click(trigger);
+      await user.keyboard('{Escape}');
+
+      await waitFor(() => expect(trigger).toHaveFocus());
+    });
+
+    it('トリガーがDOMから消えていてもエラーにならない', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(<ControlledModal />);
+
+      await user.click(screen.getByRole('button', { name: '開く' }));
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+      // 開いている間にトリガーが消えるケース（一覧の再描画など）
+      rerender(<ControlledModal withTrigger={false} />);
+
+      await expect(
+        user.click(screen.getByRole('button', { name: '閉じる' })),
+      ).resolves.not.toThrow();
+    });
   });
 });
 

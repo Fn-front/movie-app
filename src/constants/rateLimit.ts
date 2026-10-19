@@ -100,8 +100,13 @@ export const RATE_LIMIT_CONFIG = {
   /**
    * レコメンド利用イベントの記録。
    *
-   * 表示イベントはスクロールや再訪のたびに発生しうるため、他の書き込みAPIより
-   * 緩くする。1リクエストで複数件まとめて送る前提。
+   * クライアントは発生したイベントを短い待ち時間でまとめ、1リクエストで
+   * 最大 RECOMMENDATION_EVENTS_MAX_PER_REQUEST 件を送る（#757）。
+   * 1ページ表示あたり表示イベントが1本、以降はクリック等の操作ごとに
+   * 数本という頻度なので、30回/分で通常利用には十分な余裕がある。
+   *
+   * ⚠️ 1件ずつ送る実装に戻すと、レコメンド最大10件 × リロードで即座に
+   * 上限へ到達する。送信をバッチ化したままにすること。
    */
   WRITE_RECOMMENDATION_EVENTS: { maxAttempts: 30, windowMinutes: 1 },
   REGISTER: { maxAttempts: 5, windowMinutes: 60 },

@@ -158,6 +158,28 @@ export const RECOMMENDATION_EVENT_RETENTION_DAYS = 90;
 export const RECOMMENDATION_EVENTS_MAX_PER_REQUEST = 40;
 
 /**
+ * 利用イベントをまとめて送るまでの待ち時間（ミリ秒）
+ *
+ * 表示イベントは画面表示時に一斉に発火するため、最初の1件からこの時間だけ
+ * 待ってまとめる。1件ずつ送るとレート制限に即到達する（#757）。
+ * 長くするとクリック直後の離脱で取りこぼす可能性が上がるため、
+ * 一斉発火がまとまる最小限にとどめる。
+ */
+export const RECOMMENDATION_EVENTS_FLUSH_DELAY_MS = 500;
+
+/**
+ * 送信済み利用イベントを記録する sessionStorage のキー
+ *
+ * 表示イベントは再訪のたびに再送されるが、サーバー側は
+ * (user_id, recommendation_id, event_type) の一意制約で重複を無視するため
+ * DB上は no-op で、レート制限の枠だけを消費していた。送信済みを
+ * タブ単位で覚えて無駄撃ちを止める。レコメンドは洗い替えのたびに
+ * recommendation_id が再採番されるため、更新後は自然に再送される。
+ */
+export const RECOMMENDATION_EVENTS_SENT_STORAGE_KEY =
+  'recommendationEvents.sent';
+
+/**
  * レコメンド手動更新設定
  */
 export const RECOMMENDATION_REFRESH = {

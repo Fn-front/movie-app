@@ -102,14 +102,18 @@ export async function cleanupFavorites(): Promise<void> {
 }
 
 /**
- * おすすめセクションを表示させるため、テストユーザーに
- * お気に入り1件＋おすすめ2件をシードする（refresh E2E用）。
- * おすすめは SSR で表示されるため、ページ遷移前に投入する。
+ * 指定ユーザーに お気に入り1件＋おすすめ をシードする。
+ *
+ * おすすめセクションは お気に入り0件だと登録促進テキストに切り替わるため、
+ * タイルを出すには両方が要る。おすすめは SSR 表示のため、ページ遷移前に投入する。
+ *
+ * @param userId - 対象ユーザーのID
+ * @param count - 投入するおすすめの件数
  */
-export async function seedRecommendations(): Promise<void> {
-  const userId = await getTestUserId();
-  if (!userId) return;
-
+export async function seedRecommendationsForUser(
+  userId: string,
+  count = 2,
+): Promise<void> {
   const post = (path: string, body: unknown) =>
     fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
       method: 'POST',
@@ -128,23 +132,28 @@ export async function seedRecommendations(): Promise<void> {
     title: 'E2Eお気に入り',
     rating: 8,
   });
-  // recommendations を2件
-  await post('recommendations', [
-    {
+  await post(
+    'recommendations',
+    Array.from({ length: count }, (_, i) => ({
       user_id: userId,
-      tmdb_movie_id: 999101,
-      title: 'E2Eおすすめ1',
-      reason: 'E2E用の理由1',
-      display_order: 1,
-    },
-    {
-      user_id: userId,
-      tmdb_movie_id: 999102,
-      title: 'E2Eおすすめ2',
-      reason: 'E2E用の理由2',
-      display_order: 2,
-    },
-  ]);
+      tmdb_movie_id: 999101 + i,
+      title: `E2Eおすすめ${i + 1}`,
+      reason: `E2E用の理由${i + 1}`,
+      display_order: i + 1,
+    })),
+  );
+}
+
+/**
+ * 共有テストユーザーに お気に入り1件＋おすすめ をシードする（refresh E2E用）。
+ *
+ * @param count - 投入するおすすめの件数
+ */
+export async function seedRecommendations(count = 2): Promise<void> {
+  const userId = await getTestUserId();
+  if (!userId) return;
+
+  await seedRecommendationsForUser(userId, count);
 }
 
 /** 相互排他バグ検証用の映画ID（movie_cache シード用） */

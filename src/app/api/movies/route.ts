@@ -11,6 +11,10 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
+import {
+  applyMovieCacheFilters,
+  type MovieCacheFilters,
+} from '@/helpers/movieCacheFilters';
 import { moviesQuerySchema, type MoviesQueryParams } from '@/schema/movies';
 import {
   HTTP_STATUS,
@@ -303,81 +307,59 @@ export async function GET(request: Request) {
     // time_frameに応じたDBクエリの日付範囲を決定
     const today = formatDateToString(new Date());
 
-    // 総件数クエリを構築
-    let countQuery = supabase
-      .from('movie_cache')
-      .select('id', { count: 'exact', head: true })
-      .eq('release_type', release_type);
-
-    // データクエリを構築
-    let dataQuery = supabase
-      .from('movie_cache')
-      .select(
-        'id, title, poster_path, backdrop_path, release_date, overview, vote_average, vote_count, popularity, genre_ids, release_type, is_now_playing, is_revival',
-      )
-      .eq('release_type', release_type)
-      .order(sortColumn, { ascending, nullsFirst: false })
-      .order('id', { ascending: true })
-      .range(offset, offset + PAGINATION.ITEMS_PER_PAGE - 1);
+    let dateGte: string | undefined;
+    let dateLte: string | undefined;
 
     if (isNowPlayingTheatrical) {
-      // now_showing + theatrical: is_now_playing フラグでフィルタ（日付範囲なし）
-      countQuery = countQuery.eq('is_now_playing', true);
-      dataQuery = dataQuery.eq('is_now_playing', true);
-
-      // ユーザー指定の日付範囲があれば追加フィルタとして適用
-      if (release_date_gte) {
-        countQuery = countQuery.gte('release_date', release_date_gte);
-        dataQuery = dataQuery.gte('release_date', release_date_gte);
-      }
-      if (release_date_lte) {
-        countQuery = countQuery.lte('release_date', release_date_lte);
-        dataQuery = dataQuery.lte('release_date', release_date_lte);
-      }
+      // now_showing + theatrical: is_now_playing フラグでフィルタするため
+      // 既定の日付範囲は設けない。ユーザー指定があれば追加フィルタとして適用
+      dateGte = release_date_gte;
+      dateLte = release_date_lte;
+    } else if (time_frame === 'now_showing') {
+      // streaming の now_showing
+      const pastDate = new Date();
+      pastDate.setMonth(pastDate.getMonth() - NOW_SHOWING_MONTHS_BACK);
+      const defaultGte = formatDateToString(pastDate);
+      dateGte =
+        release_date_gte && release_date_gte > defaultGte
+          ? release_date_gte
+          : defaultGte;
+      dateLte = release_date_lte || today;
     } else {
-      // 従来の日付範囲フィルタロジック
-      let effectiveDateGte: string;
-      let effectiveDateLte: string | undefined;
-
-      if (time_frame === 'now_showing') {
-        // streaming の now_showing
-        const pastDate = new Date();
-        pastDate.setMonth(pastDate.getMonth() - NOW_SHOWING_MONTHS_BACK);
-        const defaultGte = formatDateToString(pastDate);
-        effectiveDateGte =
-          release_date_gte && release_date_gte > defaultGte
-            ? release_date_gte
-            : defaultGte;
-        effectiveDateLte = release_date_lte || today;
-      } else {
-        effectiveDateGte =
-          release_date_gte && release_date_gte > today
-            ? release_date_gte
-            : today;
-        effectiveDateLte = release_date_lte;
-      }
-
-      countQuery = countQuery.gte('release_date', effectiveDateGte);
-      dataQuery = dataQuery.gte('release_date', effectiveDateGte);
-
-      if (effectiveDateLte) {
-        countQuery = countQuery.lte('release_date', effectiveDateLte);
-        dataQuery = dataQuery.lte('release_date', effectiveDateLte);
-      }
+      dateGte =
+        release_date_gte && release_date_gte > today ? release_date_gte : today;
+      dateLte = release_date_lte;
     }
 
-    if (is_revival !== undefined) {
-      countQuery = countQuery.eq('is_revival', is_revival);
-      dataQuery = dataQuery.eq('is_revival', is_revival);
-    }
+    // 総件数クエリとデータクエリで条件がずれるとページング判定が壊れるため、
+    // フィルタ条件は1箇所で組み立てて両方に同じものを適用する
+    const filters: MovieCacheFilters = {
+      releaseType: release_type,
+      isNowPlayingTheatrical,
+      dateGte,
+      dateLte,
+      isRevival: is_revival,
+      genreIds: genreIdArray,
+    };
 
-    if (genreIdArray.length > 0) {
-      const orConditions = genreIdArray
-        .map((id) => `genre_ids.cs.[${id}]`)
-        .join(',');
-      countQuery = countQuery.or(orConditions);
-      dataQuery = dataQuery.or(orConditions);
-    }
+    // 総件数クエリを構築
+    const countQuery = applyMovieCacheFilters(
+      supabase.from('movie_cache').select('id', { count: 'exact', head: true }),
+      filters,
+    );
+
+    // データクエリを構築
+    const dataQuery = applyMovieCacheFilters(
+      supabase
+        .from('movie_cache')
+        .select(
+          'id, title, poster_path, backdrop_path, release_date, overview, vote_average, vote_count, popularity, genre_ids, release_type, is_now_playing, is_revival',
+        )
+        .order(sortColumn, { ascending, nullsFirst: false })
+        .order('id', { ascending: true })
+        .range(offset, offset + PAGINATION.ITEMS_PER_PAGE - 1),
+      filters,
+    );
 
     const { count: totalItems } = await countQuery;
     const { data: movies, error: fetchError } = await dataQuery;

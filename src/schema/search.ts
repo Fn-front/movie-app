@@ -19,12 +19,17 @@ export const searchQuerySchema = z
       .min(1)
       .max(PAGINATION.MAX_PAGE)
       .default(PAGINATION.DEFAULT_PAGE),
+    // 映画一覧API（schema/movies.ts の genre_ids）と同じ検証・変換に揃える
     genre: z
       .string()
       .regex(
         /^\d+(,\d+)*$/,
         'ジャンルIDはカンマ区切りの正の整数で指定してください',
       )
+      .transform((val) => val.split(',').map(Number))
+      .refine((ids) => ids.length <= SEARCH_VALIDATION.MAX_GENRE_IDS, {
+        message: `ジャンルIDは${SEARCH_VALIDATION.MAX_GENRE_IDS}件以内で指定してください`,
+      })
       .optional(),
     year: z.coerce
       .number()

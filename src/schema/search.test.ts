@@ -2,6 +2,8 @@
  * 検索関連バリデーションスキーマのテスト
  */
 
+import { SEARCH_VALIDATION } from '@/constants';
+
 import { searchQuerySchema } from './search';
 
 describe('searchQuerySchema', () => {
@@ -51,14 +53,14 @@ describe('searchQuerySchema', () => {
   });
 
   describe('genre', () => {
-    it('単一のジャンルIDを受け入れること', () => {
+    it('単一のジャンルIDを数値配列に変換すること', () => {
       const result = searchQuerySchema.parse({ genre: '28' });
-      expect(result.genre).toBe('28');
+      expect(result.genre).toEqual([28]);
     });
 
-    it('カンマ区切りの複数ジャンルIDを受け入れること', () => {
+    it('カンマ区切りの複数ジャンルIDを数値配列に変換すること', () => {
       const result = searchQuerySchema.parse({ genre: '28,12,35' });
-      expect(result.genre).toBe('28,12,35');
+      expect(result.genre).toEqual([28, 12, 35]);
     });
 
     it('不正な形式のジャンルIDを拒否すること', () => {
@@ -69,6 +71,37 @@ describe('searchQuerySchema', () => {
     it('末尾にカンマがある場合を拒否すること', () => {
       const result = searchQuerySchema.safeParse({ genre: '28,' });
       expect(result.success).toBe(false);
+    });
+
+    it(`上限（${SEARCH_VALIDATION.MAX_GENRE_IDS}件）ちょうどを受け入れること`, () => {
+      const genre = Array.from(
+        { length: SEARCH_VALIDATION.MAX_GENRE_IDS },
+        (_, i) => i + 1,
+      ).join(',');
+      const result = searchQuerySchema.parse({ genre });
+      expect(result.genre).toHaveLength(SEARCH_VALIDATION.MAX_GENRE_IDS);
+    });
+
+    it(`上限（${SEARCH_VALIDATION.MAX_GENRE_IDS}件）を超える指定を拒否すること`, () => {
+      const genre = Array.from(
+        { length: SEARCH_VALIDATION.MAX_GENRE_IDS + 1 },
+        (_, i) => i + 1,
+      ).join(',');
+      const result = searchQuerySchema.safeParse({ genre });
+      expect(result.success).toBe(false);
+    });
+
+    it('上限超過エラーがfieldErrors側に入ること（検索条件なし判定を壊さない）', () => {
+      const genre = Array.from(
+        { length: SEARCH_VALIDATION.MAX_GENRE_IDS + 1 },
+        (_, i) => i + 1,
+      ).join(',');
+      const result = searchQuerySchema.safeParse({ genre });
+
+      expect(result.success).toBe(false);
+      const flattened = result.error!.flatten();
+      expect(flattened.formErrors).toHaveLength(0);
+      expect(flattened.fieldErrors.genre).toBeDefined();
     });
   });
 
@@ -136,7 +169,7 @@ describe('searchQuerySchema', () => {
 
     it('genreのみで検索できること', () => {
       const result = searchQuerySchema.parse({ genre: '28' });
-      expect(result.genre).toBe('28');
+      expect(result.genre).toEqual([28]);
     });
 
     it('yearのみで検索できること', () => {
@@ -161,7 +194,7 @@ describe('searchQuerySchema', () => {
       });
       expect(result.query).toBe('アクション');
       expect(result.page).toBe(2);
-      expect(result.genre).toBe('28,12');
+      expect(result.genre).toEqual([28, 12]);
       expect(result.year).toBe(2024);
       expect(result.vote_average_gte).toBe(7.5);
     });
@@ -173,7 +206,7 @@ describe('searchQuerySchema', () => {
         year: '2024',
       });
       expect(result.query).toBe('マーベル');
-      expect(result.genre).toBe('28');
+      expect(result.genre).toEqual([28]);
       expect(result.year).toBe(2024);
     });
   });

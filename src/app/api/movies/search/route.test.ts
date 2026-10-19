@@ -6,6 +6,8 @@
  * 映画検索API Route テスト
  */
 
+import { SEARCH_VALIDATION } from '@/constants/search';
+
 import { GET } from './route';
 
 // --- Mocks ---
@@ -118,6 +120,33 @@ describe('GET /api/movies/search', () => {
       const response = await GET(createRequest({ genre: 'abc' }));
 
       expect(response.status).toBe(400);
+    });
+
+    it(`ジャンルIDが上限（${SEARCH_VALIDATION.MAX_GENRE_IDS}件）ちょうどなら200を返す`, async () => {
+      mockDiscoverMovies.mockResolvedValue(mockTMDbResponse);
+
+      const genre = Array.from(
+        { length: SEARCH_VALIDATION.MAX_GENRE_IDS },
+        (_, i) => i + 1,
+      ).join(',');
+      const response = await GET(createRequest({ genre }));
+
+      expect(response.status).toBe(200);
+    });
+
+    it(`ジャンルIDが上限（${SEARCH_VALIDATION.MAX_GENRE_IDS}件）を超えると400を返す`, async () => {
+      const genre = Array.from(
+        { length: SEARCH_VALIDATION.MAX_GENRE_IDS + 1 },
+        (_, i) => i + 1,
+      ).join(',');
+      const response = await GET(createRequest({ genre }));
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      // 検索条件なし（formErrors）ではなくフィールドエラーとして返ること
+      expect(json.error.code).toBe('VALIDATION_ERROR');
+      expect(json.error.details).toBeDefined();
+      expect(json.error.details.genre).toBeDefined();
     });
 
     it('範囲外の評価値で400を返す', async () => {

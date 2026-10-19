@@ -2,6 +2,8 @@
  * フィルター条件バリデーションスキーマのテスト
  */
 
+import { SEARCH_VALIDATION } from '@/constants';
+
 import { filterConditionsSchema } from './filters';
 
 describe('filterConditionsSchema', () => {
@@ -111,6 +113,24 @@ describe('filterConditionsSchema', () => {
       const result = filterConditionsSchema.safeParse({
         genre_ids: ['28'],
       });
+      expect(result.success).toBe(false);
+    });
+
+    it(`上限（${SEARCH_VALIDATION.MAX_GENRE_IDS}件）ちょうどを受け入れること`, () => {
+      const genre_ids = Array.from(
+        { length: SEARCH_VALIDATION.MAX_GENRE_IDS },
+        (_, i) => i + 1,
+      );
+      const result = filterConditionsSchema.parse({ genre_ids });
+      expect(result.genre_ids).toHaveLength(SEARCH_VALIDATION.MAX_GENRE_IDS);
+    });
+
+    it(`上限（${SEARCH_VALIDATION.MAX_GENRE_IDS}件）を超える配列を拒否すること`, () => {
+      const genre_ids = Array.from(
+        { length: SEARCH_VALIDATION.MAX_GENRE_IDS + 1 },
+        (_, i) => i + 1,
+      );
+      const result = filterConditionsSchema.safeParse({ genre_ids });
       expect(result.success).toBe(false);
     });
   });

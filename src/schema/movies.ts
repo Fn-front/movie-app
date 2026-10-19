@@ -4,7 +4,7 @@
 
 import { z } from 'zod';
 
-import { PAGINATION } from '@/constants';
+import { PAGINATION, SEARCH_VALIDATION } from '@/constants';
 
 /**
  * 映画一覧クエリパラメータのバリデーションスキーマ
@@ -31,6 +31,9 @@ export const moviesQuerySchema = z.object({
       'ジャンルIDはカンマ区切りの正の整数で指定してください',
     )
     .transform((val) => val.split(',').map(Number))
+    .refine((ids) => ids.length <= SEARCH_VALIDATION.MAX_GENRE_IDS, {
+      message: `ジャンルIDは${SEARCH_VALIDATION.MAX_GENRE_IDS}件以内で指定してください`,
+    })
     .optional(),
   release_date_gte: z
     .string()

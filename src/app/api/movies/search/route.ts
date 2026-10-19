@@ -23,14 +23,6 @@ import {
 } from '@/constants';
 
 /**
- * ジャンルIDをパースしてnumber配列に変換
- * zodスキーマで /^\d+(,\d+)*$/ バリデーション済みのため、不正値は到達しない
- */
-function parseGenreIds(genre: string): number[] {
-  return genre.split(',').map(Number);
-}
-
-/**
  * サーバー側フィルタリング（キーワード検索 + フィルター併用時）
  */
 function filterMovies(
@@ -100,9 +92,14 @@ export async function GET(request: Request) {
       );
     }
 
-    const { query, page, genre, year, vote_average_gte } = queryResult.data;
-
-    const genreIds = genre ? parseGenreIds(genre) : undefined;
+    // genre はZodのtransformで数値配列に変換済み
+    const {
+      query,
+      page,
+      genre: genreIds,
+      year,
+      vote_average_gte,
+    } = queryResult.data;
 
     let result: TMDbResponse<Movie>;
 

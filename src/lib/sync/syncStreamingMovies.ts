@@ -9,16 +9,14 @@
 import { createClient } from '@supabase/supabase-js';
 
 import {
-  ALLOWED_LANGUAGES,
   DISCOVER_API_MAX_PAGES,
-  MIN_POPULARITY,
-  MIN_VOTE_AVERAGE,
   MOVIES_FETCH_MONTHS_AHEAD,
   NOW_SHOWING_MONTHS_BACK,
   RELEASE_TYPE,
   RELEASE_TYPE_MAP,
 } from '@/constants/movies';
 import { TMDB_SORT_BY } from '@/constants/tmdb';
+import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { discoverMovies } from '@/lib/tmdb/tmdb';
 
 /**
@@ -121,7 +119,6 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
   // 別release_type（theatrical）に存在するIDの除外は行わない。
   // movie_cache の PK は (id, release_type) のため DB 側で自然に共存でき、
   // 除外すると「劇場公開後に配信化された作品」が配信タブに一生出なくなる。
-  const allowedLangs: readonly string[] = ALLOWED_LANGUAGES;
   const now = new Date();
   const cachedAt = now.toISOString();
 
@@ -142,15 +139,8 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
         result.fetched += response.results.length;
 
         // adultコンテンツ・除外言語・低品質コンテンツを除外
-        const filteredResults = response.results.filter(
-          (movie) =>
-            !movie.adult &&
-            allowedLangs.includes(movie.original_language) &&
-            movie.genre_ids &&
-            movie.genre_ids.length > 0 &&
-            (movie.vote_average === 0 ||
-              movie.vote_average >= MIN_VOTE_AVERAGE) &&
-            movie.popularity >= MIN_POPULARITY,
+        const filteredResults = response.results.filter((movie) =>
+          isQualityMovie(movie),
         );
 
         result.skipped += response.results.length - filteredResults.length;

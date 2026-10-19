@@ -9,6 +9,10 @@ import { RELEASE_TYPE } from '@/constants/movies';
 import { EIGA_SCORING } from '@/constants/eiga';
 import { MS_PER_DAY } from '@/constants/time';
 import {
+  isQualityMovie,
+  type QualityFilterOptions,
+} from '@/lib/movies/qualityFilter';
+import {
   getJpTheatricalReleaseDates,
   hasExcludedKeyword,
   searchMovies,
@@ -16,6 +20,19 @@ import {
 import type { Movie } from '@/lib/types';
 
 import { fetchEigaMovies, fetchOriginalTitle, type EigaMovie } from './eiga';
+
+/**
+ * iCal経由の品質フィルタ設定
+ *
+ * 映画.comのフィードに載る時点で日本公開が確定しているため、
+ * 言語・ジャンル・評価・人気度では絞らない（adult除外のみ適用される）
+ */
+const EIGA_QUALITY_FILTER_OPTIONS: QualityFilterOptions = {
+  requireLanguage: false,
+  requireGenres: false,
+  requireVoteAverage: false,
+  requirePopularity: false,
+};
 
 /**
  * 同期結果の型
@@ -46,8 +63,10 @@ export function findBestMatch(
 ): Movie | null {
   if (candidates.length === 0) return null;
 
-  // 除外フィルタ適用（iCal経由は日本公開確定のため言語フィルタなし）
-  const filtered = candidates.filter((movie) => !movie.adult);
+  // 除外フィルタ適用（iCal経由は日本公開確定のため adult 以外では絞らない）
+  const filtered = candidates.filter((movie) =>
+    isQualityMovie(movie, EIGA_QUALITY_FILTER_OPTIONS),
+  );
 
   if (filtered.length === 0) return null;
 
@@ -264,7 +283,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
       }
 
       // post-filter: adultコンテンツを保存しない（iCal経由は言語フィルタなし）
-      if (movie.adult) {
+      if (!isQualityMovie(movie, EIGA_QUALITY_FILTER_OPTIONS)) {
         result.skipped++;
         continue;
       }

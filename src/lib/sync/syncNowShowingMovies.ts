@@ -10,6 +10,7 @@ import {
 } from '@/constants/movies';
 import { NOW_SHOWING_DISPLAY_COUNT } from '@/constants/nowShowing';
 import { TMDB_SORT_BY } from '@/constants/tmdb';
+import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { discoverMovies } from '@/lib/tmdb/tmdb';
 
 /**
@@ -70,7 +71,15 @@ export async function syncNowShowingMovies(): Promise<NowShowingSyncResult> {
 
   // adult作品を除外（discoverMoviesでも除外済みだが、now_showing_movies は
   // 未認証ユーザーにも公開されるため、保存直前でも明示的に弾く二重防御とする）
-  const safeResults = response.results.filter((movie) => !movie.adult);
+  // 表示順はDiscoverの人気度順をそのまま使うため、品質条件では絞らない
+  const safeResults = response.results.filter((movie) =>
+    isQualityMovie(movie, {
+      requireLanguage: false,
+      requireGenres: false,
+      requireVoteAverage: false,
+      requirePopularity: false,
+    }),
+  );
 
   const movies = safeResults.slice(0, NOW_SHOWING_DISPLAY_COUNT);
 

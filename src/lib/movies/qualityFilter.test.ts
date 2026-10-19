@@ -14,6 +14,7 @@ function createMovie(overrides: Partial<Movie> = {}): Movie {
   return {
     id: 1,
     title: 'テスト映画',
+    original_title: 'Test Movie',
     poster_path: '/poster.jpg',
     backdrop_path: '/backdrop.jpg',
     release_date: '2026-01-01',

@@ -26,9 +26,6 @@ import {
   NOW_SHOWING_MONTHS_BACK,
   RELEASE_TYPE,
   RELEASE_TYPE_MAP,
-  ALLOWED_LANGUAGES,
-  MIN_VOTE_AVERAGE,
-  MIN_POPULARITY,
   MOVIES_ERROR_MESSAGES,
   ERROR_CODE,
   RATE_LIMIT_ACTION,
@@ -38,6 +35,7 @@ import {
   GENRE_NAME_OVERRIDES,
 } from '@/constants';
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
+import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
 import { syncStreamingMovies } from '@/lib/sync/syncStreamingMovies';
@@ -254,16 +252,8 @@ export async function GET(request: Request) {
           if (tmdbResponse.results.length === 0) break;
 
           // adultコンテンツ・除外言語・低品質コンテンツを除外
-          const allowedLangs: readonly string[] = ALLOWED_LANGUAGES;
-          const filteredResults = tmdbResponse.results.filter(
-            (movie) =>
-              !movie.adult &&
-              allowedLangs.includes(movie.original_language) &&
-              movie.genre_ids &&
-              movie.genre_ids.length > 0 &&
-              (movie.vote_average === 0 ||
-                movie.vote_average >= MIN_VOTE_AVERAGE) &&
-              movie.popularity >= MIN_POPULARITY,
+          const filteredResults = tmdbResponse.results.filter((movie) =>
+            isQualityMovie(movie),
           );
 
           if (filteredResults.length === 0) continue;

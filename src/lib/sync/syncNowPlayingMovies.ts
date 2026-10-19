@@ -6,12 +6,10 @@ import { createClient } from '@supabase/supabase-js';
 
 import {
   EXCLUDED_GENRE_IDS,
-  ALLOWED_LANGUAGES,
-  MIN_POPULARITY,
-  MIN_VOTE_AVERAGE,
   NOW_PLAYING_SYNC_MAX_PAGES,
   RELEASE_TYPE,
 } from '@/constants/movies';
+import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { getNowPlayingMovies, hasExcludedKeyword } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
@@ -67,26 +65,15 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
 
   result.fetched = allMovies.length;
 
-  // 2. フィルタリング: adult・除外言語を除外
-  const allowedLangs: readonly string[] = ALLOWED_LANGUAGES;
+  // 2. フィルタリング: adult・除外言語・低品質コンテンツ・除外ジャンルを除外
   const excludedGenres: readonly number[] = EXCLUDED_GENRE_IDS;
   const filteredMovies = allMovies.filter((movie) => {
-    if (movie.adult || !allowedLangs.includes(movie.original_language)) {
+    if (!isQualityMovie(movie)) {
       result.skipped++;
       return false;
     }
-    if (!movie.genre_ids || movie.genre_ids.length === 0) {
-      result.skipped++;
-      return false;
-    }
-    if (movie.genre_ids.some((id) => excludedGenres.includes(id))) {
-      result.skipped++;
-      return false;
-    }
-    if (
-      (movie.vote_average > 0 && movie.vote_average < MIN_VOTE_AVERAGE) ||
-      movie.popularity < MIN_POPULARITY
-    ) {
+    // 除外ジャンル（tmdb.ts の excludeInappropriateMovies との二重防御）
+    if ((movie.genre_ids ?? []).some((id) => excludedGenres.includes(id))) {
       result.skipped++;
       return false;
     }

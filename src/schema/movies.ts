@@ -22,7 +22,16 @@ export const moviesQuerySchema = z.object({
   sort_order: z.enum(['asc', 'desc']).optional(),
   release_type: z.enum(['theatrical', 'streaming']).default('theatrical'),
   time_frame: z.enum(['upcoming', 'now_showing']).default('upcoming'),
-  genre_ids: z.string().optional(),
+  // 検索API（schema/search.ts の genre）と同じ regex で検証し、
+  // 数値配列に変換する。呼び出し側での再フィルタを不要にするため
+  genre_ids: z
+    .string()
+    .regex(
+      /^\d+(,\d+)*$/,
+      'ジャンルIDはカンマ区切りの正の整数で指定してください',
+    )
+    .transform((val) => val.split(',').map(Number))
+    .optional(),
   release_date_gte: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, '日付はYYYY-MM-DD形式で指定してください')

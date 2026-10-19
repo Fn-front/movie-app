@@ -63,7 +63,10 @@ export const DEFAULT_RELEASE_TYPE = RELEASE_TYPE.THEATRICAL;
 /**
  * TMDb APIのwith_release_typeパラメータへのマッピング
  */
-export const RELEASE_TYPE_MAP: Record<string, string> = {
+export const RELEASE_TYPE_MAP: Record<
+  (typeof RELEASE_TYPE)[keyof typeof RELEASE_TYPE],
+  string
+> = {
   [RELEASE_TYPE.THEATRICAL]: '2|3',
   [RELEASE_TYPE.STREAMING]: '4',
 };

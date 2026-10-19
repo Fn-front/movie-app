@@ -367,6 +367,56 @@ describe('checkCooldown', () => {
     expect(mockUpdate).not.toHaveBeenCalled();
   });
 
+  describe('非UTC環境での解釈（last_attempt_at は TIMESTAMPTZ である前提）', () => {
+    const ORIGINAL_TZ = process.env.TZ;
+
+    afterEach(() => {
+      process.env.TZ = ORIGINAL_TZ;
+    });
+
+    /** 20秒前の時刻を指定形式で返したクライアントで checkCooldown を実行する */
+    async function runWithLastAttemptAt(lastAttemptAt: string) {
+      const mockFrom = jest.fn().mockReturnValue({
+        select: mockSelectChain({
+          data: { id: 'record-1', last_attempt_at: lastAttemptAt },
+          error: null,
+        }),
+        update: jest.fn().mockReturnValue({ eq: jest.fn() }),
+      });
+
+      return checkCooldown(
+        { from: mockFrom } as unknown as SupabaseClient,
+        'user-1',
+        RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+        60,
+      );
+    }
+
+    // PostgREST は TIMESTAMPTZ をUTCオフセット付きで返す。
+    // オフセットがあれば JS の解釈はサーバーのタイムゾーンに依存しない。
+    it.each(['Asia/Tokyo', 'UTC', 'America/New_York'])(
+      'TZ=%s でもオフセット付きの値から同じ残り秒数を算出する',
+      async (tz) => {
+        process.env.TZ = tz;
+
+        expect(await runWithLastAttemptAt('2025-12-31T23:59:40+00:00')).toEqual(
+          { allowed: false, retryAfter: 40 },
+        );
+      },
+    );
+
+    // カラムを naive TIMESTAMP に戻すとオフセットが落ち、JS がローカル時刻として
+    // 解釈する。JST では実時刻より9時間古く見えるためクールダウンが素通りする。
+    // マイグレーション 20261019012324 が必要である根拠をテストとして残す（#759）。
+    it('オフセットが無い値はJSTで経過時間を誤り、クールダウンが素通りする', async () => {
+      process.env.TZ = 'Asia/Tokyo';
+
+      expect(await runWithLastAttemptAt('2025-12-31T23:59:40')).toEqual({
+        allowed: true,
+      });
+    });
+  });
+
   it('NOT_FOUND以外のDBエラーはthrowする', async () => {
     const dbError = { code: 'OTHER_ERROR', message: 'DB error' };
     const mockFrom = jest.fn().mockReturnValueOnce({

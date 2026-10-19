@@ -176,6 +176,7 @@ describe('checkRateLimit', () => {
           id: 'r1',
           attempts: 3,
           locked_until: null,
+          last_attempt_at: new Date().toISOString(),
         });
 
         const result = await checkRateLimit(supabase, 'user-1', 'login', 3, 30);
@@ -191,6 +192,7 @@ describe('checkRateLimit', () => {
           id: 'r1',
           attempts: 1,
           locked_until: null,
+          last_attempt_at: new Date().toISOString(),
         });
 
         await checkRateLimit(supabase, 'user-1', 'login');
@@ -207,6 +209,125 @@ describe('checkRateLimit', () => {
 
         expect(result).toEqual({ allowed: true });
         expect(insert).toHaveBeenCalled();
+      });
+
+      // RPC 本体（SQL）のスライディングウィンドウは SQL 側の CASE 式にあり
+      // 単体テストから検証できない。フォールバックは同じ優先順位を JS で
+      // 再現しているため、方式の回帰はこちらで固定する（#758）。
+      describe('スライディングウィンドウ', () => {
+        const NOW = '2026-01-01T00:00:00.000Z';
+        /** 上限1分・10回。NOW から見て 23:59:00 がウィンドウの開始点 */
+        const MAX_ATTEMPTS = 10;
+        const WINDOW_MINUTES = 1;
+
+        beforeEach(() => {
+          jest.useFakeTimers();
+          jest.setSystemTime(new Date(NOW));
+        });
+
+        afterEach(() => {
+          jest.useRealTimers();
+        });
+
+        /** 上限到達済みの行を last_attempt_at だけ変えて判定させる */
+        function runWithLastAttemptAt(lastAttemptAt: string) {
+          const { supabase, update } = createFallbackSupabase({
+            id: 'r1',
+            attempts: MAX_ATTEMPTS,
+            locked_until: null,
+            last_attempt_at: lastAttemptAt,
+          });
+
+          return {
+            update,
+            result: checkRateLimit(
+              supabase,
+              'user-1',
+              'login',
+              MAX_ATTEMPTS,
+              WINDOW_MINUTES,
+            ),
+          };
+        }
+
+        it('ウィンドウ経過後は上限到達済みでもカウンタをリセットして許可する', async () => {
+          const { update, result } = runWithLastAttemptAt(
+            '2025-12-31T23:58:00.000Z',
+          );
+
+          expect(await result).toEqual({ allowed: true });
+          expect(update).toHaveBeenCalledWith({
+            attempts: 1,
+            last_attempt_at: NOW,
+          });
+        });
+
+        it('境界値: ウィンドウ満了ちょうどはリセットする', async () => {
+          const { update, result } = runWithLastAttemptAt(
+            '2025-12-31T23:59:00.000Z',
+          );
+
+          expect(await result).toEqual({ allowed: true });
+          expect(update).toHaveBeenCalledWith({
+            attempts: 1,
+            last_attempt_at: NOW,
+          });
+        });
+
+        it('境界値: ウィンドウ満了の1ms手前は上限到達として拒否する', async () => {
+          const { update, result } = runWithLastAttemptAt(
+            '2025-12-31T23:59:00.001Z',
+          );
+
+          expect(await result).toEqual({ allowed: false, retryAfter: 60 });
+          expect(update).toHaveBeenCalledWith(
+            expect.objectContaining({ attempts: MAX_ATTEMPTS + 1 }),
+          );
+        });
+
+        it('ロック明けは上限到達済みでもリセットして許可する', async () => {
+          const { supabase, update } = createFallbackSupabase({
+            id: 'r1',
+            attempts: MAX_ATTEMPTS,
+            locked_until: '2025-12-31T23:59:30.000Z',
+            last_attempt_at: '2025-12-31T23:59:30.000Z',
+          });
+
+          const result = await checkRateLimit(
+            supabase,
+            'user-1',
+            'login',
+            MAX_ATTEMPTS,
+            WINDOW_MINUTES,
+          );
+
+          expect(result).toEqual({ allowed: true });
+          expect(update).toHaveBeenCalledWith({
+            attempts: 1,
+            locked_until: null,
+            last_attempt_at: NOW,
+          });
+        });
+
+        it('ロック中はカウンタを動かさず残り秒数を返す', async () => {
+          const { supabase, update } = createFallbackSupabase({
+            id: 'r1',
+            attempts: MAX_ATTEMPTS + 1,
+            locked_until: '2026-01-01T00:00:30.000Z',
+            last_attempt_at: '2025-12-31T23:59:30.000Z',
+          });
+
+          const result = await checkRateLimit(
+            supabase,
+            'user-1',
+            'login',
+            MAX_ATTEMPTS,
+            WINDOW_MINUTES,
+          );
+
+          expect(result).toEqual({ allowed: false, retryAfter: 30 });
+          expect(update).not.toHaveBeenCalled();
+        });
       });
     });
   });

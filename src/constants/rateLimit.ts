@@ -72,11 +72,25 @@ export type RateLimitActionType =
 /**
  * DB-based レート制限の閾値プリセット（maxAttempts 回 / windowMinutes 分）。
  * checkRateLimit(supabase, id, action, maxAttempts, windowMinutes) に渡す。
+ *
+ * consume_rate_limit は**スライディングウィンドウ**方式。直近 windowMinutes 以内の
+ * 試行が maxAttempts 回に達すると同じ長さだけロックし、最後の試行から
+ * windowMinutes 経過すればカウンタは 1 に戻る（#758）。
+ * 間隔を空けた通常利用でロックに到達することはない。
  */
 export const RATE_LIMIT_CONFIG = {
-  WRITE_FAVORITES: { maxAttempts: 10, windowMinutes: 1 },
-  WRITE_WATCHLIST: { maxAttempts: 10, windowMinutes: 1 },
-  WRITE_DISMISSED_MOVIES: { maxAttempts: 10, windowMinutes: 1 },
+  /**
+   * 一覧から次々に登録する操作が想定されるため、他の書き込みAPIより厚く取る。
+   *
+   * 追加・編集・削除はリソース単位で同じカウンタを共有する（HTTPメソッド単位では
+   * ない）。「6件追加して5件外す」も11回として数えられるため、UI操作1件=1回で
+   * 数えて余裕のある値にしている。1分30回は約2秒に1回ペースで、人間の連続操作は
+   * 通るがスクリプトによる乱用は止まる。
+   */
+  WRITE_FAVORITES: { maxAttempts: 30, windowMinutes: 1 },
+  WRITE_WATCHLIST: { maxAttempts: 30, windowMinutes: 1 },
+  WRITE_DISMISSED_MOVIES: { maxAttempts: 30, windowMinutes: 1 },
+  /** 単発の設定変更で連続操作が無いため、一括登録系より絞る */
   WRITE_PROFILE: { maxAttempts: 10, windowMinutes: 1 },
   WRITE_SETTINGS: { maxAttempts: 10, windowMinutes: 1 },
   READ_THEATERS: { maxAttempts: 30, windowMinutes: 1 },
@@ -102,12 +116,8 @@ export const RATE_LIMIT_CONFIG = {
   /**
    * 公開映画APIの上限。
    *
-   * ⚠️ consume_rate_limit は**スライディングウィンドウではなく**
-   * 「累積 maxAttempts 到達で windowMinutes ロック」方式。カウンタは時間では
-   * 減らず、ロックが明けたときにだけ 1 に戻る。つまり長時間の閲覧でも
-   * 単調に積み上がるため、通常利用でも最終的にロックに到達しうる。
    * 一覧は infinite query でスクロールごとに1本、検索は500msのデバウンスで
-   * 打鍵ごとに発火するので、読み取り系は十分に厚く取る必要がある。
+   * 打鍵ごとに発火するため、読み取り系は厚く取る。
    *
    * 0.5req/秒 相当（300回/10分）でも、TMDb が許す約50req/秒に対して
    * 100分の1以下に抑えられるため、濫用対策としては機能する。
@@ -119,7 +129,7 @@ export const RATE_LIMIT_CONFIG = {
   SEARCH_MOVIES: { maxAttempts: 120, windowMinutes: 10 },
   READ_MOVIE_DETAIL: { maxAttempts: 300, windowMinutes: 10 },
   READ_GENRES: { maxAttempts: 120, windowMinutes: 10 },
-  /** 書き込み系は他のAPIと揃える */
+  /** 単発の保存操作のため WRITE_PROFILE / WRITE_SETTINGS と揃える */
   WRITE_FILTERS: { maxAttempts: 10, windowMinutes: 1 },
   /**
    * 認証必須の読み取り。カレンダーの月送りが最も回数を使うため厚めに取る。

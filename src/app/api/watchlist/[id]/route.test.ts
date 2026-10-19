@@ -6,7 +6,7 @@
  * ウォッチリスト削除API Route テスト (DELETE)
  */
 
-import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants';
+import { RATE_LIMIT_CONFIG, WATCHLIST_SUCCESS_MESSAGES } from '@/constants';
 
 import { DELETE } from './route';
 
@@ -224,12 +224,13 @@ describe('DELETE /api/watchlist/:id', () => {
       const { request, params } = createDeleteRequest(VALID_UUID);
       await DELETE(request, { params });
 
+      // 閾値そのものではなく「POST と同じプリセットを使っている」ことを見る
       expect(mockCheckRateLimit).toHaveBeenCalledWith(
         expect.anything(),
         'user-123',
         'write_api_watchlist',
-        10,
-        1,
+        RATE_LIMIT_CONFIG.WRITE_WATCHLIST.maxAttempts,
+        RATE_LIMIT_CONFIG.WRITE_WATCHLIST.windowMinutes,
       );
     });
   });

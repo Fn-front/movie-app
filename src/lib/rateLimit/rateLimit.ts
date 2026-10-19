@@ -54,11 +54,15 @@ export interface RateLimitResult {
 /**
  * レート制限チェック
  *
+ * 直近 `windowMinutes` 以内の試行が `maxAttempts` 回に達すると、同じ長さだけ
+ * ロックする（スライディングウィンドウ）。最後の試行から windowMinutes 経過すれば
+ * カウンタは 1 に戻るため、間隔を空けた通常利用でロックされることはない。
+ *
  * @param supabase - Supabaseクライアント
  * @param identifier - 識別子（ユーザーIDやIPアドレス）
  * @param actionType - アクション種別
- * @param maxAttempts - 最大試行回数（デフォルト: 3）
- * @param windowMinutes - ロック時間（分）（デフォルト: 30）
+ * @param maxAttempts - ウィンドウ内の最大試行回数（デフォルト: 3）
+ * @param windowMinutes - ウィンドウの長さ兼ロック時間（分）（デフォルト: 30）
  * @returns レート制限チェック結果
  */
 export async function checkRateLimit(
@@ -127,6 +131,9 @@ export async function checkRateLimit(
  * SELECT → UPDATE の読み取り後書き込みのため並行リクエストで実効上限を
  * 超えられるが、「判定できないから全部通す」よりははるかにマシ。
  * RPC が全環境に行き渡ったら削除してよい。
+ *
+ * 判定の優先順位は RPC 側の CASE 式と揃えること。食い違うと、RPC の有無で
+ * 制限の強さが変わる。
  */
 async function checkRateLimitLegacy(
   supabase: SupabaseClient,
@@ -176,6 +183,19 @@ async function checkRateLimitLegacy(
         locked_until: null,
         last_attempt_at: now.toISOString(),
       })
+      .eq('id', data.id);
+    return { allowed: true };
+  }
+
+  // 直近の試行からウィンドウが経過していればカウンタをリセットする。
+  // これが無いと「累計 maxAttempts 回で永続ロック」になる（#758）。RPC 側の
+  // CASE 式と同じ優先順位（ロック判定 → ウィンドウ経過 → 上限判定）で並べる。
+  const windowStart = new Date(now.getTime() - windowMinutes * 60 * 1000);
+
+  if (new Date(data.last_attempt_at) <= windowStart) {
+    await supabase
+      .from('rate_limits')
+      .update({ attempts: 1, last_attempt_at: now.toISOString() })
       .eq('id', data.id);
     return { allowed: true };
   }

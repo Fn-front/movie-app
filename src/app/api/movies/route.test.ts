@@ -6,7 +6,10 @@
  * 映画一覧API Route テスト
  */
 
-import { MOVIES_ERROR_MESSAGES } from '@/constants/movies';
+import {
+  CACHE_DURATION_HOURS,
+  MOVIES_ERROR_MESSAGES,
+} from '@/constants/movies';
 
 // --- Mocks ---
 
@@ -650,6 +653,61 @@ describe('GET /api/movies', () => {
       }),
     );
     expect(response.status).toBe(200);
+  });
+
+  // === キャッシュ鮮度判定 ===
+
+  describe('キャッシュ鮮度判定（cached_at は TIMESTAMPTZ である前提）', () => {
+    const HOUR_MS = 60 * 60 * 1000;
+
+    /** 指定時間前に取得したキャッシュがある状態にする */
+    function setupCacheAgedBy(hours: number) {
+      setupFromMock({
+        cacheResult: {
+          data: {
+            cached_at: new Date(Date.now() - hours * HOUR_MS).toISOString(),
+          },
+          error: null,
+        },
+        countResult: { count: 0 },
+        dataResult: { data: [], error: null },
+      });
+    }
+
+    it('有効期間内のキャッシュなら TMDb を呼ばない', async () => {
+      const handler = await loadGET();
+      setupCacheAgedBy(CACHE_DURATION_HOURS - 1);
+
+      await handler(createRequest());
+
+      expect(mockDiscoverMovies).not.toHaveBeenCalled();
+    });
+
+    it('有効期間を超えたキャッシュでは TMDb を呼ぶ', async () => {
+      const handler = await loadGET();
+      setupCacheAgedBy(CACHE_DURATION_HOURS + 1);
+
+      await handler(createRequest());
+
+      expect(mockDiscoverMovies).toHaveBeenCalled();
+    });
+
+    // cached_at が naive TIMESTAMP のまま返ると TZ サフィックスが落ち、JS が
+    // ローカル時刻として解釈する。JST では実時刻より9時間古く見えるため、
+    // 6時間の有効期間を常に超過して毎回 TMDb を叩いていた（#763）。
+    //
+    // ⚠️ テスト内から実行環境のタイムゾーンは変えられない。Jest は各テストを
+    // 独立した VM コンテキストで実行するため、`process.env.TZ` に代入しても
+    // Date の解釈は変わらない。そのため「9時間古く見えている状態」を
+    // 時刻そのもので再現する。
+    it('9時間古く解釈されると、取得直後のキャッシュでも失効扱いになる', async () => {
+      const handler = await loadGET();
+      setupCacheAgedBy(9);
+
+      await handler(createRequest());
+
+      expect(mockDiscoverMovies).toHaveBeenCalled();
+    });
   });
 
   // === now_showing + theatrical パス ===

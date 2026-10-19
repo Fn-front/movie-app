@@ -60,8 +60,29 @@ export const TMDB_JP_COUNTRY_CODE = 'JP';
  */
 export const TMDB_THEATRICAL_RELEASE_TYPES = [2, 3] as const;
 
+/** デジタル（配信）公開を表す TMDb のリリースタイプ */
+export const TMDB_DIGITAL_RELEASE_TYPE = 4;
+
 /**
  * 映画詳細取得時に付与する append_to_response の値。
  * credits（キャスト・スタッフ）、watch/providers（配信情報）、videos（予告動画）を一度に取得。
  */
 export const TMDB_MOVIE_DETAIL_APPEND = 'credits,watch/providers,videos';
+
+/**
+ * JP配信実態の判定に必要な append_to_response の値。
+ *
+ * watch/providers と release_dates は別エンドポイントだが、append_to_response で
+ * 1リクエストにまとめられる。同期対象は毎回100件規模になるため、
+ * 2回に分けると TMDb のレート制限（50 req/s）に対する余裕が半減する。
+ */
+export const TMDB_STREAMING_AVAILABILITY_APPEND =
+  'watch/providers,release_dates';
+
+/**
+ * JP配信実態チェックの同時実行数
+ *
+ * TMDb のレート制限は 50 req/s。リトライ（最大3回）やネットワーク揺らぎの
+ * 余地を残すため、上限に張り付かない値にしている。
+ */
+export const TMDB_AVAILABILITY_CONCURRENCY = 10;

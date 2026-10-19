@@ -158,6 +158,9 @@ export async function GET(request: Request) {
     const now = new Date();
     const isNowPlayingTheatrical =
       time_frame === 'now_showing' && release_type === 'theatrical';
+    const isStreaming = release_type === RELEASE_TYPE.STREAMING;
+    // 配信予定タブ: まだ配信されておらず、JPのデジタル公開日が未来の作品
+    const isUpcomingStreaming = isStreaming && time_frame === 'upcoming';
 
     if (isNowPlayingTheatrical) {
       // now_showing + theatrical: is_now_playing フラグでフィルタ
@@ -315,6 +318,13 @@ export async function GET(request: Request) {
           ? release_date_gte
           : defaultGte;
       dateLte = release_date_lte || today;
+    } else if (isUpcomingStreaming) {
+      // 配信予定は digital_release_date で絞る。TMDb の release_date は
+      // 代表日（多くは劇場公開日）であり、「劇場公開済み・配信はこれから」の
+      // 作品を release_date >= today で弾いてしまうため既定の範囲は設けない。
+      // ユーザー指定があれば追加フィルタとして適用する
+      dateGte = release_date_gte;
+      dateLte = release_date_lte;
     } else {
       dateGte =
         release_date_gte && release_date_gte > today ? release_date_gte : today;
@@ -323,9 +333,14 @@ export async function GET(request: Request) {
 
     // 総件数クエリとデータクエリで条件がずれるとページング判定が壊れるため、
     // フィルタ条件は1箇所で組み立てて両方に同じものを適用する
+    // 配信タブは「日本で実際に配信されているか」で振り分ける。
+    // Discover の with_release_type=4 はどこかの国でのデジタル公開しか
+    // 意味せず、JP未配信作品や配信終了作品が混ざるため
     const filters: MovieCacheFilters = {
       releaseType: release_type,
       isNowPlayingTheatrical,
+      isCurrentlyStreaming: isStreaming ? !isUpcomingStreaming : undefined,
+      digitalReleaseDateGt: isUpcomingStreaming ? today : undefined,
       dateGte,
       dateLte,
       isRevival: is_revival,

@@ -2,7 +2,11 @@
  * 映画の品質フィルタのテスト
  */
 
-import { MIN_POPULARITY, MIN_VOTE_AVERAGE } from '@/constants/movies';
+import {
+  MIN_POPULARITY,
+  MIN_VOTE_AVERAGE,
+  STREAMING_MIN_POPULARITY,
+} from '@/constants/movies';
 import type { Movie } from '@/lib/types';
 
 import { isQualityMovie } from './qualityFilter';
@@ -46,9 +50,17 @@ describe('isQualityMovie', () => {
     });
 
     it('許可されていない言語の映画を除外すること', () => {
-      expect(isQualityMovie(createMovie({ original_language: 'ko' }))).toBe(
+      expect(isQualityMovie(createMovie({ original_language: 'ru' }))).toBe(
         false,
       );
+    });
+
+    it('韓国語・中国語・タイ語は許可すること', () => {
+      for (const language of ['ko', 'zh', 'th']) {
+        expect(
+          isQualityMovie(createMovie({ original_language: language })),
+        ).toBe(true);
+      }
     });
 
     it('ジャンルが空配列の映画を除外すること', () => {
@@ -95,7 +107,7 @@ describe('isQualityMovie', () => {
   describe('requireLanguage: false', () => {
     it('許可されていない言語でも通すこと', () => {
       expect(
-        isQualityMovie(createMovie({ original_language: 'ko' }), {
+        isQualityMovie(createMovie({ original_language: 'ru' }), {
           requireLanguage: false,
         }),
       ).toBe(true);
@@ -135,6 +147,34 @@ describe('isQualityMovie', () => {
       expect(
         isQualityMovie(createMovie({ popularity: 0 }), {
           requirePopularity: false,
+        }),
+      ).toBe(true);
+    });
+  });
+
+  describe('minPopularity', () => {
+    it('既定より緩い閾値を指定した場合、既定では落ちる映画を通すこと', () => {
+      expect(
+        isQualityMovie(createMovie({ popularity: MIN_POPULARITY - 0.1 }), {
+          minPopularity: STREAMING_MIN_POPULARITY,
+        }),
+      ).toBe(true);
+    });
+
+    it('指定した閾値未満は除外すること', () => {
+      expect(
+        isQualityMovie(
+          createMovie({ popularity: STREAMING_MIN_POPULARITY - 0.01 }),
+          { minPopularity: STREAMING_MIN_POPULARITY },
+        ),
+      ).toBe(false);
+    });
+
+    it('requirePopularity: false の場合は閾値を指定しても通すこと', () => {
+      expect(
+        isQualityMovie(createMovie({ popularity: 0 }), {
+          requirePopularity: false,
+          minPopularity: STREAMING_MIN_POPULARITY,
         }),
       ).toBe(true);
     });

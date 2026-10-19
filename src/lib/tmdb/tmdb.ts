@@ -9,10 +9,12 @@ import {
   EXCLUDED_KEYWORD_IDS,
   EXCLUDED_KEYWORDS_PARAM,
   PAGINATION,
+  TMDB_DIGITAL_RELEASE_TYPE,
   TMDB_ENDPOINTS,
   TMDB_MOVIE_DETAIL_APPEND,
   TMDB_JP_COUNTRY_CODE,
   TMDB_RETRY_CONFIG,
+  TMDB_STREAMING_AVAILABILITY_APPEND,
   TMDB_THEATRICAL_RELEASE_TYPES,
 } from '@/constants';
 import type {
@@ -22,6 +24,7 @@ import type {
   MovieSearchParams,
   TMDbReleaseDateCountry,
   TMDbResponse,
+  WatchProviders,
 } from '@/lib/types';
 
 import axios, { type AxiosError } from 'axios';
@@ -377,4 +380,70 @@ export async function getJpTheatricalReleaseDates(
     )
     .map((release) => release.release_date.slice(0, 10))
     .sort();
+}
+
+/**
+ * 日本での配信実態
+ */
+export interface JpStreamingAvailability {
+  /** 日本で現在配信中か（flatrate / rent / buy のいずれかにプロバイダーが存在） */
+  isCurrentlyStreaming: boolean;
+  /** 日本のデジタル公開日（YYYY-MM-DD）。情報が無ければ null */
+  digitalReleaseDate: string | null;
+}
+
+/**
+ * 日本での配信実態を取得する
+ *
+ * Discover の `with_release_type=4` は「どこかの国でデジタル公開された」しか
+ * 意味しない。日本の Netflix / Prime Video / U-NEXT 等で実際に観られるかは
+ * `watch/providers` の `results.JP` を見ないと判定できない。
+ *
+ * デジタル公開日も同様に `movie.release_date` からは取れない。TMDb は作品に対し
+ * 実質1つの代表日しか持たず、劇場公開日が入っていることが多いため、
+ * `release_dates` の JP / type=4 から別途取得する。
+ *
+ * 2つの情報は append_to_response で1リクエストにまとめて取得する。
+ *
+ * 取得に失敗した場合は**例外をそのまま投げる**。呼び出し側が「判定できなかった」
+ * ことを認識できないと、TMDbの一時障害で配信中の作品を一斉に配信終了扱いに
+ * してしまうため、ここで false にフォールバックしない。
+ *
+ * @param movieId - 映画ID
+ * @returns 日本での配信実態
+ * @throws TMDbへの問い合わせに失敗した場合
+ */
+export async function getJpStreamingAvailability(
+  movieId: number,
+): Promise<JpStreamingAvailability> {
+  const response = await tmdbClient.get<{
+    'watch/providers'?: WatchProviders;
+    release_dates?: { results: TMDbReleaseDateCountry[] };
+  }>(TMDB_ENDPOINTS.MOVIE_DETAIL(movieId), {
+    params: { append_to_response: TMDB_STREAMING_AVAILABILITY_APPEND },
+  });
+
+  const jpProviders =
+    response.data['watch/providers']?.results?.[TMDB_JP_COUNTRY_CODE];
+
+  const isCurrentlyStreaming = [
+    jpProviders?.flatrate,
+    jpProviders?.rent,
+    jpProviders?.buy,
+  ].some((providers) => (providers?.length ?? 0) > 0);
+
+  const jpReleases = (response.data.release_dates?.results ?? []).find(
+    (country) => country.iso_3166_1 === TMDB_JP_COUNTRY_CODE,
+  );
+
+  // 同じ type=4 が複数登録されていることがあるため、最も早い日付を採用する
+  const [digitalReleaseDate] = (jpReleases?.release_dates ?? [])
+    .filter((release) => release.type === TMDB_DIGITAL_RELEASE_TYPE)
+    .map((release) => release.release_date.slice(0, 10))
+    .sort();
+
+  return {
+    isCurrentlyStreaming,
+    digitalReleaseDate: digitalReleaseDate ?? null,
+  };
 }

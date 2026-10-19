@@ -82,6 +82,15 @@ export const MIN_VOTE_AVERAGE = 3;
 export const MIN_POPULARITY = 0.5;
 
 /**
+ * 配信作品フィルタリング: 最低人気度
+ *
+ * `MIN_POPULARITY` は劇場公開の新作を前提にした閾値。配信カタログには
+ * 公開から時間が経って popularity が下がった旧作が多く含まれ、同じ閾値では
+ * 日本で実配信中の作品まで落ちてしまうため、streaming では緩める。
+ */
+export const STREAMING_MIN_POPULARITY = 0.1;
+
+/**
  * TMDb Discover APIで除外するジャンルID
  */
 export const EXCLUDED_GENRE_IDS = [
@@ -130,6 +139,11 @@ export const ALLOWED_LANGUAGES = [
   'hi', // ヒンディー語
   'te', // テルグ語
   'ta', // タミル語
+  // 日本の配信市場では韓国・中華圏・タイ作品の需要が大きく、
+  // 除外すると明確な取りこぼしになるため許可する
+  'ko', // 韓国語
+  'zh', // 中国語
+  'th', // タイ語
 ] as const;
 
 /**

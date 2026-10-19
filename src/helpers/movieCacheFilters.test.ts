@@ -9,7 +9,7 @@ import {
 
 /** クエリビルダーに対する呼び出し記録 */
 interface RecordedCall {
-  method: 'eq' | 'gte' | 'lte' | 'or';
+  method: 'eq' | 'gt' | 'gte' | 'lte' | 'or';
   args: unknown[];
 }
 
@@ -25,6 +25,10 @@ function createQueryBuilderSpy() {
     calls,
     eq(column: string, value: string | boolean) {
       calls.push({ method: 'eq', args: [column, value] });
+      return builder;
+    },
+    gt(column: string, value: string) {
+      calls.push({ method: 'gt', args: [column, value] });
       return builder;
     },
     gte(column: string, value: string) {
@@ -101,6 +105,73 @@ describe('applyMovieCacheFilters', () => {
       expect(query.calls).not.toContainEqual(
         expect.objectContaining({ args: ['is_now_playing', true] }),
       );
+    });
+  });
+
+  describe('is_currently_streaming', () => {
+    it('trueの場合、配信中のみに絞り込むこと', () => {
+      const query = createQueryBuilderSpy();
+
+      applyMovieCacheFilters(query, {
+        ...baseFilters,
+        releaseType: 'streaming',
+        isCurrentlyStreaming: true,
+      });
+
+      expect(query.calls).toContainEqual({
+        method: 'eq',
+        args: ['is_currently_streaming', true],
+      });
+    });
+
+    it('falseの場合、未配信のみに絞り込むこと', () => {
+      const query = createQueryBuilderSpy();
+
+      applyMovieCacheFilters(query, {
+        ...baseFilters,
+        releaseType: 'streaming',
+        isCurrentlyStreaming: false,
+      });
+
+      expect(query.calls).toContainEqual({
+        method: 'eq',
+        args: ['is_currently_streaming', false],
+      });
+    });
+
+    it('undefinedの場合、配信状況で絞り込まないこと', () => {
+      const query = createQueryBuilderSpy();
+
+      applyMovieCacheFilters(query, baseFilters);
+
+      expect(
+        query.calls.some((call) => call.args[0] === 'is_currently_streaming'),
+      ).toBe(false);
+    });
+  });
+
+  describe('digital_release_date', () => {
+    it('指定された場合、デジタル公開日が指定日より後のものに絞り込むこと', () => {
+      const query = createQueryBuilderSpy();
+
+      applyMovieCacheFilters(query, {
+        ...baseFilters,
+        releaseType: 'streaming',
+        digitalReleaseDateGt: '2026-10-20',
+      });
+
+      expect(query.calls).toContainEqual({
+        method: 'gt',
+        args: ['digital_release_date', '2026-10-20'],
+      });
+    });
+
+    it('未指定の場合、デジタル公開日で絞り込まないこと', () => {
+      const query = createQueryBuilderSpy();
+
+      applyMovieCacheFilters(query, baseFilters);
+
+      expect(query.calls.some((call) => call.method === 'gt')).toBe(false);
     });
   });
 
@@ -283,10 +354,29 @@ describe('applyMovieCacheFilters', () => {
         filters: { ...baseFilters, genreIds: [28, 878] },
       },
       {
+        name: '配信中のみ',
+        filters: {
+          ...baseFilters,
+          releaseType: 'streaming',
+          isCurrentlyStreaming: true,
+        },
+      },
+      {
+        name: '配信予定のみ',
+        filters: {
+          ...baseFilters,
+          releaseType: 'streaming',
+          isCurrentlyStreaming: false,
+          digitalReleaseDateGt: '2026-10-20',
+        },
+      },
+      {
         name: '全条件',
         filters: {
           releaseType: 'streaming',
           isNowPlayingTheatrical: false,
+          isCurrentlyStreaming: false,
+          digitalReleaseDateGt: '2026-10-20',
           dateGte: '2026-01-01',
           dateLte: '2026-12-31',
           isRevival: false,

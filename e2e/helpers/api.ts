@@ -197,6 +197,31 @@ export async function cleanupCrossReleaseTypeMovie(): Promise<void> {
 }
 
 /**
+ * 指定ユーザーのレコメンド手動更新を「たった今実行した」状態にする。
+ *
+ * クールダウンの検証のために refresh API を2回叩くと、1回目でAI生成が走り
+ * 月間上限も消費してしまう。検証したいのは2回目が弾かれることだけなので、
+ * 直前の実行時刻を rate_limits に書き込み、1回目の呼び出しから
+ * クールダウンに当たる状態を作る。
+ *
+ * @param userId - 対象ユーザーのID
+ */
+export async function seedRecommendationRefreshCooldown(
+  userId: string,
+): Promise<void> {
+  await fetch(`${SUPABASE_URL}/rest/v1/rate_limits`, {
+    method: 'POST',
+    headers: { ...supabaseHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      identifier: userId,
+      action_type: 'recommendation_refresh',
+      attempts: 1,
+      last_attempt_at: new Date().toISOString(),
+    }),
+  });
+}
+
+/**
  * テストユーザーのおすすめを物理削除する（refresh E2Eの後始末用）。
  */
 export async function cleanupRecommendations(): Promise<void> {

@@ -38,9 +38,9 @@ async function getTestUserId(): Promise<string | null> {
  * テストユーザーの rate_limits レコードを物理削除する。
  *
  * 背景: WRITE_FAVORITES / WRITE_WATCHLIST 等の DB-based レート制限は
- * user_id を identifier として 10 attempts / 1min で制限する。E2E は
- * 短時間に多くの POST/PATCH/DELETE を発行するため、テスト毎にリセット
- * しないと後続テストが 429 で失敗する。
+ * user_id を identifier として制限する。E2E は短時間に多くのリクエストを
+ * 発行するため、テスト毎にリセットしないと後続テストが 429 で失敗する。
+ * 認証済みの読み取り系（READ_USER_DATA 等）も user_id 単位で積み上がる。
  */
 export async function cleanupRateLimits(): Promise<void> {
   const userId = await getTestUserId();
@@ -203,6 +203,31 @@ export async function cleanupCrossReleaseTypeMovie(): Promise<void> {
     `${SUPABASE_URL}/rest/v1/movie_cache?id=eq.${CROSS_RELEASE_TYPE_MOVIE_ID}`,
     { method: 'DELETE', headers: supabaseHeaders },
   );
+}
+
+/**
+ * 指定ユーザーのレコメンド手動更新を「たった今実行した」状態にする。
+ *
+ * クールダウンの検証のために refresh API を2回叩くと、1回目でAI生成が走り
+ * 月間上限も消費してしまう。検証したいのは2回目が弾かれることだけなので、
+ * 直前の実行時刻を rate_limits に書き込み、1回目の呼び出しから
+ * クールダウンに当たる状態を作る。
+ *
+ * @param userId - 対象ユーザーのID
+ */
+export async function seedRecommendationRefreshCooldown(
+  userId: string,
+): Promise<void> {
+  await fetch(`${SUPABASE_URL}/rest/v1/rate_limits`, {
+    method: 'POST',
+    headers: { ...supabaseHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      identifier: userId,
+      action_type: 'recommendation_refresh',
+      attempts: 1,
+      last_attempt_at: new Date().toISOString(),
+    }),
+  });
 }
 
 /**

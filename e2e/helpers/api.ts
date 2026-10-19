@@ -38,9 +38,9 @@ async function getTestUserId(): Promise<string | null> {
  * テストユーザーの rate_limits レコードを物理削除する。
  *
  * 背景: WRITE_FAVORITES / WRITE_WATCHLIST 等の DB-based レート制限は
- * user_id を identifier として 10 attempts / 1min で制限する。E2E は
- * 短時間に多くの POST/PATCH/DELETE を発行するため、テスト毎にリセット
- * しないと後続テストが 429 で失敗する。
+ * user_id を identifier として制限する。E2E は短時間に多くのリクエストを
+ * 発行するため、テスト毎にリセットしないと後続テストが 429 で失敗する。
+ * 認証済みの読み取り系（READ_USER_DATA 等）も user_id 単位で積み上がる。
  */
 export async function cleanupRateLimits(): Promise<void> {
   const userId = await getTestUserId();

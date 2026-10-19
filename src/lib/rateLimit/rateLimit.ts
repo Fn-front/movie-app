@@ -215,6 +215,12 @@ async function checkRateLimitLegacy(
  * 多重リクエストもブロックできる。拒否時は時刻を更新しないため、
  * クールダウンが連打で延長されることはない。
  *
+ * ⚠️ `rate_limits.last_attempt_at` は TIMESTAMPTZ であることが前提。naive な
+ * TIMESTAMP だと PostgREST がオフセット無しで返し、下の `new Date()` が
+ * 非UTC環境（ローカルのJST等）でローカル時刻として解釈する。実時刻より
+ * 9時間古く見えるため経過時間が常にクールダウンを上回り、この制限が
+ * 無言で素通りする（#759 / マイグレーション 20261019012324）。
+ *
  * @param supabase - Supabaseクライアント
  * @param identifier - 識別子（ユーザーIDやIPアドレス）
  * @param actionType - アクション種別

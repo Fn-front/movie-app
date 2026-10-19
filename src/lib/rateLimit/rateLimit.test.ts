@@ -214,6 +214,7 @@ describe('checkRateLimit', () => {
 
 describe('checkCooldown', () => {
   const NOW = '2026-01-01T00:00:00.000Z';
+  const MS_PER_MINUTE = 60 * 1000;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -368,13 +369,7 @@ describe('checkCooldown', () => {
   });
 
   describe('非UTC環境での解釈（last_attempt_at は TIMESTAMPTZ である前提）', () => {
-    const ORIGINAL_TZ = process.env.TZ;
-
-    afterEach(() => {
-      process.env.TZ = ORIGINAL_TZ;
-    });
-
-    /** 20秒前の時刻を指定形式で返したクライアントで checkCooldown を実行する */
+    /** 指定形式の last_attempt_at を返したクライアントで checkCooldown を実行する */
     async function runWithLastAttemptAt(lastAttemptAt: string) {
       const mockFrom = jest.fn().mockReturnValue({
         select: mockSelectChain({
@@ -393,25 +388,39 @@ describe('checkCooldown', () => {
     }
 
     // PostgREST は TIMESTAMPTZ をUTCオフセット付きで返す。
-    // オフセットがあれば JS の解釈はサーバーのタイムゾーンに依存しない。
-    it.each(['Asia/Tokyo', 'UTC', 'America/New_York'])(
-      'TZ=%s でもオフセット付きの値から同じ残り秒数を算出する',
-      async (tz) => {
-        process.env.TZ = tz;
-
-        expect(await runWithLastAttemptAt('2025-12-31T23:59:40+00:00')).toEqual(
-          { allowed: false, retryAfter: 40 },
-        );
+    // オフセットがあれば JS の解釈は実行環境のタイムゾーンに依存しない。
+    it.each(['+00:00', 'Z'])(
+      'オフセット表記 %s の値から残り秒数を算出する（20秒前 → 残り40秒）',
+      async (suffix) => {
+        expect(
+          await runWithLastAttemptAt(`2025-12-31T23:59:40${suffix}`),
+        ).toEqual({ allowed: false, retryAfter: 40 });
       },
     );
 
     // カラムを naive TIMESTAMP に戻すとオフセットが落ち、JS がローカル時刻として
-    // 解釈する。JST では実時刻より9時間古く見えるためクールダウンが素通りする。
-    // マイグレーション 20261019012324 が必要である根拠をテストとして残す（#759）。
-    it('オフセットが無い値はJSTで経過時間を誤り、クールダウンが素通りする', async () => {
-      process.env.TZ = 'Asia/Tokyo';
+    // 解釈する（#759 / マイグレーション 20261019012324 が必要な理由）。
+    //
+    // ⚠️ テスト内から実行環境のタイムゾーンは変えられない。Jest は各テストを
+    // 独立した VM コンテキストで実行するため、`process.env.TZ` に代入しても
+    // Date / Intl の解釈は変わらない（Node を直に動かした場合とは異なる）。
+    // そのため「どれだけずれるか」と「ずれると何が起きるか」を分けて、
+    // どちらも実行環境に依存しない形で固定する。
+    it('オフセットが無い値は実行環境のタイムゾーン分ずれて解釈される', () => {
+      const naive = '2025-12-31T23:59:40';
+      const asLocal = new Date(naive).getTime();
+      const asUtc = Date.parse(`${naive}Z`);
 
-      expect(await runWithLastAttemptAt('2025-12-31T23:59:40')).toEqual({
+      // UTC の CI では 0、JST では -9時間
+      expect(asLocal - asUtc).toBe(
+        new Date(naive).getTimezoneOffset() * MS_PER_MINUTE,
+      );
+    });
+
+    it('9時間古い時刻として解釈されるとクールダウンが素通りする', async () => {
+      // JST で naive 値を解釈したときに相当する時刻（現在時刻の9時間前）。
+      // 60秒のクールダウンを大きく超えるため、連打防止が効かなくなる
+      expect(await runWithLastAttemptAt('2025-12-31T15:00:00+00:00')).toEqual({
         allowed: true,
       });
     });

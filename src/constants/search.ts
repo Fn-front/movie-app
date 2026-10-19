@@ -30,4 +30,12 @@ export const SEARCH_VALIDATION = {
   VOTE_AVERAGE_MAX: 10,
   /** 年代の最小値 */
   YEAR_MIN: 1900,
+  /**
+   * ジャンルIDの最大指定数
+   *
+   * TMDbの映画ジャンルは19種類（constants/tmdb.ts の TMDB_GENRE_MAP）のため、
+   * 正常利用で超えることはない。巨大な指定でDBクエリのOR条件が
+   * 際限なく増えるのを防ぐための上限
+   */
+  MAX_GENRE_IDS: 20,
 } as const;

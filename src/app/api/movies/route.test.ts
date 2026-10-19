@@ -10,6 +10,7 @@ import {
   CACHE_DURATION_HOURS,
   MOVIES_ERROR_MESSAGES,
 } from '@/constants/movies';
+import { SEARCH_VALIDATION } from '@/constants/search';
 
 // --- Mocks ---
 
@@ -604,6 +605,38 @@ describe('GET /api/movies', () => {
     setupFromMock({});
 
     const response = await handler(createRequest({ genre_ids: '1,foo,3' }));
+
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.success).toBe(false);
+    expect(json.error.details).toBeDefined();
+  });
+
+  it(`genre_idsが上限（${SEARCH_VALIDATION.MAX_GENRE_IDS}件）ちょうどの場合、正常に処理される`, async () => {
+    const handler = await loadGET();
+    setupFromMock({
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    const genre_ids = Array.from(
+      { length: SEARCH_VALIDATION.MAX_GENRE_IDS },
+      (_, i) => i + 1,
+    ).join(',');
+    const response = await handler(createRequest({ genre_ids }));
+
+    expect(response.status).toBe(200);
+  });
+
+  it(`genre_idsが上限（${SEARCH_VALIDATION.MAX_GENRE_IDS}件）を超える場合、400を返す`, async () => {
+    const handler = await loadGET();
+    setupFromMock({});
+
+    const genre_ids = Array.from(
+      { length: SEARCH_VALIDATION.MAX_GENRE_IDS + 1 },
+      (_, i) => i + 1,
+    ).join(',');
+    const response = await handler(createRequest({ genre_ids }));
 
     expect(response.status).toBe(400);
     const json = await response.json();

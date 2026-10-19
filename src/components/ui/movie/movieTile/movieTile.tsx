@@ -52,6 +52,15 @@ export interface MovieTileProps {
    * 置かれるセクションの階層に合わせる（見出しレベルを飛ばさないため）
    */
   headingLevel?: 2 | 3 | 4;
+  /**
+   * 日付としてデジタル（配信）公開日を優先表示するか（既定: false）
+   *
+   * 配信予定タブ専用。`release_date` は作品につき実質1つの代表日で多くは
+   * 劇場公開日が入るため、配信予定の文脈では過去日が出てしまう。
+   * 劇場公開タブ・配信中タブ・他画面の表示を変えないよう、
+   * 呼び出し側が明示的に有効化する
+   */
+  preferDigitalReleaseDate?: boolean;
 }
 
 /**
@@ -69,6 +78,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   onDismiss,
   dismissDisabled = false,
   headingLevel = 3,
+  preferDigitalReleaseDate = false,
 }) {
   const Title = `h${headingLevel}` as const;
 
@@ -89,9 +99,12 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   }, [movie, onDismiss]);
 
   const posterUrl = getTMDbPosterUrl(movie.poster_path);
-  const formattedDate = movie.release_date
-    ? formatDate(movie.release_date)
-    : null;
+
+  // デジタル公開日を優先する場合でも、未登録なら従来どおり release_date を出す
+  const displayDate =
+    (preferDigitalReleaseDate ? movie.digital_release_date : null) ??
+    movie.release_date;
+  const formattedDate = displayDate ? formatDate(displayDate) : null;
 
   const ratingClassName = useMemo(() => {
     if (movie.vote_average == null || movie.vote_average <= 0) return '';

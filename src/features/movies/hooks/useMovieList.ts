@@ -57,6 +57,8 @@ export interface UseMovieListReturn {
   fetchNextPage: () => void;
   sortBy: string;
   releaseType: 'theatrical' | 'streaming';
+  /** 時間枠（home では undefined） */
+  timeFrame: 'upcoming' | 'now_showing' | undefined;
   genres: Record<number, string>;
   selectedGenreIds: number[];
   dateRange: DateRange;
@@ -448,6 +450,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       fetchNextPage,
       sortBy,
       releaseType,
+      timeFrame,
       genres,
       selectedGenreIds,
       dateRange,
@@ -467,6 +470,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       fetchNextPage,
       sortBy,
       releaseType,
+      timeFrame,
       genres,
       selectedGenreIds,
       dateRange,

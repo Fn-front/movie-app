@@ -104,14 +104,54 @@ describe('moviesQuerySchema', () => {
       expect(result.genre_ids).toBeUndefined();
     });
 
-    it('カンマ区切りの文字列を受け入れること', () => {
+    it('カンマ区切りの文字列を数値配列に変換すること', () => {
       const result = moviesQuerySchema.parse({ genre_ids: '28,12,878' });
-      expect(result.genre_ids).toBe('28,12,878');
+      expect(result.genre_ids).toEqual([28, 12, 878]);
     });
 
-    it('単一のジャンルIDを受け入れること', () => {
+    it('単一のジャンルIDを数値配列に変換すること', () => {
       const result = moviesQuerySchema.parse({ genre_ids: '28' });
-      expect(result.genre_ids).toBe('28');
+      expect(result.genre_ids).toEqual([28]);
+    });
+
+    it('数値以外を含む値を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({ genre_ids: '1,foo,3' });
+      expect(result.success).toBe(false);
+    });
+
+    it('空文字を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({ genre_ids: '' });
+      expect(result.success).toBe(false);
+    });
+
+    it('末尾がカンマの値を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({ genre_ids: '28,' });
+      expect(result.success).toBe(false);
+    });
+
+    it('先頭がカンマの値を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({ genre_ids: ',28' });
+      expect(result.success).toBe(false);
+    });
+
+    it('カンマが連続する値を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({ genre_ids: '28,,12' });
+      expect(result.success).toBe(false);
+    });
+
+    it('負の数を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({ genre_ids: '-28' });
+      expect(result.success).toBe(false);
+    });
+
+    it('小数を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({ genre_ids: '28.5' });
+      expect(result.success).toBe(false);
+    });
+
+    it('空白を含む値を拒否すること', () => {
+      const result = moviesQuerySchema.safeParse({ genre_ids: '28, 12' });
+      expect(result.success).toBe(false);
     });
   });
 
@@ -209,7 +249,7 @@ describe('moviesQuerySchema', () => {
       expect(result.page).toBe(2);
       expect(result.sort_by).toBe('popularity');
       expect(result.release_type).toBe('streaming');
-      expect(result.genre_ids).toBe('28,12');
+      expect(result.genre_ids).toEqual([28, 12]);
       expect(result.release_date_gte).toBe('2025-01-01');
       expect(result.release_date_lte).toBe('2025-06-30');
       expect(result.is_revival).toBe(true);

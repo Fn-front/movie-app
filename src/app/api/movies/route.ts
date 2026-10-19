@@ -11,7 +11,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { moviesQuerySchema } from '@/schema/movies';
+import { moviesQuerySchema, type MoviesQueryParams } from '@/schema/movies';
 import {
   HTTP_STATUS,
   CACHE_CONTROL,
@@ -40,8 +40,11 @@ import { syncStreamingMovies } from '@/lib/sync/syncStreamingMovies';
 
 /**
  * ソートカラムのマッピング
+ *
+ * Zodのsort_by enumをキーに取るため、enumへの値追加時は
+ * このマップの未定義キーがコンパイルエラーになる
  */
-const SORT_COLUMN_MAP: Record<string, string> = {
+const SORT_COLUMN_MAP: Record<MoviesQueryParams['sort_by'], string> = {
   release_date: 'release_date',
   popularity: 'popularity',
   vote_average: 'vote_average',
@@ -227,8 +230,7 @@ export async function GET(request: Request) {
           fetchDateLte = formatDateToString(futureDate);
         }
 
-        const withReleaseType =
-          RELEASE_TYPE_MAP[release_type] || RELEASE_TYPE_MAP.theatrical;
+        const withReleaseType = RELEASE_TYPE_MAP[release_type];
 
         // 別release_typeに存在するIDの除外は行わない。
         // movie_cache の PK は (id, release_type) のため DB 側で自然に共存でき、
@@ -288,20 +290,15 @@ export async function GET(request: Request) {
     }
 
     // DBからソート順で映画を取得
-    const sortColumn = SORT_COLUMN_MAP[sort_by] || 'release_date';
+    const sortColumn = SORT_COLUMN_MAP[sort_by];
     // sort_order指定時はそれに従う。未指定時はrelease_dateのみ昇順
     const ascending = sort_order
       ? sort_order === 'asc'
       : sort_by === 'release_date';
     const offset = (page - 1) * PAGINATION.ITEMS_PER_PAGE;
 
-    // genre_idsのパース
-    const genreIdArray = genre_ids
-      ? genre_ids
-          .split(',')
-          .map(Number)
-          .filter((id) => !isNaN(id) && id > 0)
-      : [];
+    // genre_ids はZodのtransformで数値配列に変換済み
+    const genreIdArray = genre_ids ?? [];
 
     // time_frameに応じたDBクエリの日付範囲を決定
     const today = formatDateToString(new Date());

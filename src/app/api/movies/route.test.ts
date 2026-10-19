@@ -576,15 +576,39 @@ describe('GET /api/movies', () => {
     expect(response.status).toBe(200);
   });
 
-  it('空のgenre_idsの場合、フィルタなしで処理される', async () => {
+  it('genre_idsが未指定の場合、フィルタなしで処理される', async () => {
     const handler = await loadGET();
     setupFromMock({
       countResult: { count: 0 },
       dataResult: { data: [], error: null },
     });
 
-    const response = await handler(createRequest({ genre_ids: '' }));
+    const response = await handler(createRequest({}));
     expect(response.status).toBe(200);
+  });
+
+  it('空のgenre_idsの場合、400を返す', async () => {
+    const handler = await loadGET();
+    setupFromMock({});
+
+    const response = await handler(createRequest({ genre_ids: '' }));
+
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('数値以外を含むgenre_idsの場合、400を返す', async () => {
+    const handler = await loadGET();
+    setupFromMock({});
+
+    const response = await handler(createRequest({ genre_ids: '1,foo,3' }));
+
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.success).toBe(false);
+    expect(json.error.details).toBeDefined();
   });
 
   // === is_revival フィルタ ===

@@ -39,8 +39,7 @@ export const CALENDAR_HEADINGS = {
   /** 選択日の見出し（例: 3月15日(日)（3件）） */
   selectedDate: (date: string, count: number) => `${date}（${count}件）`,
   /** 月全体の見出し（例: 3月の公開予定（5件）） */
-  month: (month: string, count: number) =>
-    `${month}の公開予定（${count}件）`,
+  month: (month: string, count: number) => `${month}の公開予定（${count}件）`,
 } as const;
 
 /**

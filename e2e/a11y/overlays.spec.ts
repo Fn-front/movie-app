@@ -79,7 +79,10 @@ test.describe('アクセシビリティ（オーバーレイ・認証済み）',
       });
 
       // 選択状態のリング・日別パネルを含めて検査する
-      await dialog.locator('td.fc-daygrid-day:not(.fc-day-other)').first().click();
+      await dialog
+        .locator('td.fc-daygrid-day:not(.fc-day-other)')
+        .first()
+        .click();
       await expect(dialog.locator('td.fc-day-selected')).toHaveCount(1);
 
       await expectNoA11yViolations(

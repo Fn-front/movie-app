@@ -95,7 +95,9 @@ export const CalendarMovieList = memo<CalendarMovieListProps>(
             <h3 className={styles.c_calendarMovieList__title}>{heading}</h3>
           )}
           <p className={styles.c_calendarMovieList__empty}>
-            {isDayMode ? EMPTY_MESSAGES.CALENDAR : EMPTY_MESSAGES.CALENDAR_MONTH}
+            {isDayMode
+              ? EMPTY_MESSAGES.CALENDAR
+              : EMPTY_MESSAGES.CALENDAR_MONTH}
           </p>
         </div>
       );

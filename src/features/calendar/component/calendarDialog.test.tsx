@@ -5,7 +5,12 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createElement, forwardRef, useImperativeHandle, type ReactNode } from 'react';
+import {
+  createElement,
+  forwardRef,
+  useImperativeHandle,
+  type ReactNode,
+} from 'react';
 
 import { CalendarDialog } from './calendarDialog';
 
@@ -316,9 +321,9 @@ describe('CalendarDialog', () => {
     });
 
     // 未選択ならどの日にも付かない
-    expect(mockDayCellClassNames({ date: new Date(2026, 2, 15) })).not.toContain(
-      'fc-day-selected',
-    );
+    expect(
+      mockDayCellClassNames({ date: new Date(2026, 2, 15) }),
+    ).not.toContain('fc-day-selected');
 
     await act(async () => {
       mockDateClick.getMockImplementation()!({
@@ -330,9 +335,9 @@ describe('CalendarDialog', () => {
     expect(mockDayCellClassNames({ date: new Date(2026, 2, 15) })).toContain(
       'fc-day-selected',
     );
-    expect(mockDayCellClassNames({ date: new Date(2026, 2, 16) })).not.toContain(
-      'fc-day-selected',
-    );
+    expect(
+      mockDayCellClassNames({ date: new Date(2026, 2, 16) }),
+    ).not.toContain('fc-day-selected');
   });
 
   it('前月・次月ボタンでカレンダーの月送りが呼ばれる', async () => {

@@ -72,7 +72,9 @@ jest.mock('@/features/calendar/component/calendarDialog', () => ({
 
 jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
   MovieDetailModal: ({ movieId }: { movieId: number | null }) =>
-    movieId ? <div data-testid='movie-detail-modal'>Movie {movieId}</div> : null,
+    movieId ? (
+      <div data-testid='movie-detail-modal'>Movie {movieId}</div>
+    ) : null,
 }));
 
 import React from 'react';

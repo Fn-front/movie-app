@@ -196,8 +196,7 @@
 
 // FullCalendar 既定の .fc .fc-daygrid-day.fc-day-today を上書きするため
 // セレクタを同じ形にして特異度で勝たせる（!important を使わない）
-.c_calendarDialog__calendar
-  :global(.fc .fc-daygrid-day.fc-day-today) {
+.c_calendarDialog__calendar :global(.fc .fc-daygrid-day.fc-day-today) {
   background-color: color-alpha(--primary-500, 14%);
 }
 

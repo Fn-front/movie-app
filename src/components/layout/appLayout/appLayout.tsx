@@ -6,6 +6,7 @@
 'use client';
 
 import { type ReactNode, memo } from 'react';
+import dynamic from 'next/dynamic';
 import { useSession } from 'next-auth/react';
 
 import { Header } from '@/components/layout/header/header';
@@ -19,10 +20,21 @@ import { MobileDrawer } from '@/components/layout/mobileDrawer/mobileDrawer';
 import { useMobileDrawer } from '@/components/layout/mobileDrawer/useMobileDrawer';
 import { WatchlistPanel } from '@/features/watchlist/component/watchlistPanel/watchlistPanel';
 import { CalendarButton } from '@/features/calendar/component/calendarButton';
+import { useCalendarDialog } from '@/features/calendar/hooks/useCalendarDialog';
+import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { LoginPromptModal } from '@/components/ui/loginPromptModal/loginPromptModal';
 import { MAIN_CONTENT_ID } from '@/constants';
 
 import styles from './appLayout.module.scss';
+
+// FullCalendar は重いので、カレンダーを開くまで読み込まない
+const CalendarDialog = dynamic(
+  () =>
+    import('@/features/calendar/component/calendarDialog').then((mod) => ({
+      default: mod.CalendarDialog,
+    })),
+  { ssr: false },
+);
 
 /**
  * AppLayoutコンポーネントのプロパティ
@@ -51,6 +63,17 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
   const { isOpen, handleToggle, handleOpenChange } = useMobileDrawer();
   const { status } = useSession();
   const isAuthenticated = status === 'authenticated';
+
+  // カレンダーのトリガーはサイドバーとモバイルドロワーの2か所にある。
+  // ドロワーは開くと同時に閉じてアンマウントされるため、ダイアログはここで持つ。
+  const {
+    isOpen: isCalendarOpen,
+    selectedMovieId,
+    openCalendar,
+    setOpen: setCalendarOpen,
+    selectMovie,
+    closeMovieDetail,
+  } = useCalendarDialog();
 
   return (
     <div className={styles.c_app_layout}>
@@ -81,7 +104,11 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
             <Sidebar
               navigation={<SideNav />}
               userSection={<UserMenu />}
-              calendarButton={isAuthenticated ? <CalendarButton /> : undefined}
+              calendarButton={
+                isAuthenticated ? (
+                  <CalendarButton onClick={openCalendar} />
+                ) : undefined
+              }
               watchlist={isAuthenticated ? <WatchlistPanel /> : undefined}
             />
           </div>
@@ -101,7 +128,24 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
         <Footer />
       </div>
 
-      <MobileDrawer open={isOpen} onOpenChange={handleOpenChange} />
+      <MobileDrawer
+        open={isOpen}
+        onOpenChange={handleOpenChange}
+        onCalendarClick={isAuthenticated ? openCalendar : undefined}
+      />
+      {isAuthenticated && (
+        <>
+          <CalendarDialog
+            open={isCalendarOpen}
+            onOpenChange={setCalendarOpen}
+            onMovieClick={selectMovie}
+          />
+          <MovieDetailModal
+            movieId={selectedMovieId}
+            onClose={closeMovieDetail}
+          />
+        </>
+      )}
       <LoginPromptModal />
     </div>
   );

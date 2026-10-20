@@ -15,13 +15,16 @@ import type {
   DatesSetArg,
   EventClickArg,
   EventContentArg,
+  MoreLinkMountArg,
 } from '@fullcalendar/core';
 import jaLocale from '@fullcalendar/core/locales/ja';
 import { IoChevronBack, IoChevronForward } from 'react-icons/io5';
 
 import { Modal, ModalBody } from '@/components/ui/modal/modal';
+import { CALENDAR_DAY_CELL_CLASSES, CALENDAR_MAX_EVENTS } from '@/constants';
 import { useCalendar, formatDate } from '@/features/calendar/hooks/useCalendar';
 
+import { CalendarEventChip } from './calendarEventChip';
 import { CalendarMovieList } from './calendarMovieList';
 import styles from './calendarDialog.module.scss';
 
@@ -39,19 +42,18 @@ export interface CalendarDialogProps {
 
 /**
  * イベントのカスタムレンダリング
+ *
+ * FullCalendar 側が既にフォーカス可能な要素で包むため、チップ自体には
+ * role や tabIndex を付けない。
  */
-const renderEventContent = (eventInfo: EventContentArg) => {
-  return (
-    <span
-      className={styles.c_calendarDialog__event}
-      role='button'
-      tabIndex={-1}
-      aria-label={`${eventInfo.event.title}の詳細を表示`}
-    >
-      {eventInfo.event.title}
-    </span>
-  );
-};
+const renderEventContent = (eventInfo: EventContentArg) => (
+  <CalendarEventChip
+    title={eventInfo.event.title}
+    posterPath={
+      (eventInfo.event.extendedProps.posterPath as string | null) ?? null
+    }
+  />
+);
 
 /**
  * CalendarDialogコンポーネント
@@ -61,7 +63,9 @@ export const CalendarDialog = memo<CalendarDialogProps>(
     const {
       currentMonth,
       selectedDate,
+      selectedDateKey,
       selectedDateMovies,
+      monthMovies,
       moviesByDate,
       calendarEvents,
       selectDate,
@@ -88,29 +92,49 @@ export const CalendarDialog = memo<CalendarDialogProps>(
       calendarApiRef.current?.getApi().next();
     }, []);
 
+    const handleToday = useCallback(() => {
+      calendarApiRef.current?.getApi().today();
+    }, []);
+
     const datesWithMoviesSet = useMemo(
       () => new Set(Object.keys(moviesByDate)),
       [moviesByDate],
     );
 
-    const handleDayCellDidMount = useCallback(
-      (arg: DayCellMountArg) => {
+    // クラス付与は描画のたびに評価される dayCellClassNames に寄せる。
+    // dayCellDidMount での classList 操作はマウント時しか走らず、
+    // データが後から届いたときに取りこぼす。
+    const handleDayCellClassNames = useCallback(
+      (arg: { date: Date }) => {
         const dateStr = formatDate(arg.date);
+        const classNames: string[] = [];
+
         if (datesWithMoviesSet.has(dateStr)) {
-          arg.el.classList.add('fc-day-has-events');
-          const count = moviesByDate[dateStr]?.length ?? 0;
-          arg.el.setAttribute(
-            'aria-label',
-            `${arg.date.getDate()}日 映画${count}件`,
-          );
+          classNames.push(CALENDAR_DAY_CELL_CLASSES.HAS_EVENTS);
         }
+        if (selectedDateKey === dateStr) {
+          classNames.push(CALENDAR_DAY_CELL_CLASSES.SELECTED);
+        }
+
+        return classNames;
       },
-      [datesWithMoviesSet, moviesByDate],
+      [datesWithMoviesSet, selectedDateKey],
     );
 
-    const handleDayCellWillUnmount = useCallback((arg: DayCellMountArg) => {
-      arg.el.classList.remove('fc-day-has-events');
-      arg.el.removeAttribute('aria-label');
+    // FullCalendar は日セル（gridcell）の名前を aria-labelledby で日付だけに固定する。
+    // セル内には作品名が並ぶため「可視テキストが名前に含まれない」状態になり、
+    // axe が label-content-name-mismatch（serious）を出す。
+    // 外して内容から名前を取らせると、日付（日付リンクの aria-label 由来）に加えて
+    // その日の作品名も読まれるようになり、情報量の面でも有利。
+    const handleDayCellDidMount = useCallback((arg: DayCellMountArg) => {
+      arg.el.removeAttribute('aria-labelledby');
+    }, []);
+
+    // FullCalendar 6.1 は href も role も持たない <a> に aria-expanded を付ける。
+    // generic ロールでは許可されない属性なので（axe: aria-allowed-attr / critical）、
+    // ポップオーバーを開くという実態どおり role=button を補う。
+    const handleMoreLinkDidMount = useCallback((arg: MoreLinkMountArg) => {
+      arg.el.setAttribute('role', 'button');
     }, []);
 
     const handleDateClick = useCallback(
@@ -160,30 +184,39 @@ export const CalendarDialog = memo<CalendarDialogProps>(
               <span>データの取得に失敗しました</span>
             </div>
           ) : (
-            <>
+            <div className={styles.c_calendarDialog__layout}>
               <div className={styles.c_calendarDialog__calendar}>
                 <div className={styles.c_calendarDialog__header}>
+                  <div className={styles.c_calendarDialog__nav}>
+                    <button
+                      type='button'
+                      className={styles.c_calendarDialog__navButton}
+                      onClick={handlePrev}
+                      aria-label='前月'
+                    >
+                      <IoChevronBack />
+                    </button>
+                    <span className={styles.c_calendarDialog__title}>
+                      {currentMonth.toLocaleDateString('ja-JP', {
+                        year: 'numeric',
+                        month: 'long',
+                      })}
+                    </span>
+                    <button
+                      type='button'
+                      className={styles.c_calendarDialog__navButton}
+                      onClick={handleNext}
+                      aria-label='次月'
+                    >
+                      <IoChevronForward />
+                    </button>
+                  </div>
                   <button
                     type='button'
-                    className={styles.c_calendarDialog__navButton}
-                    onClick={handlePrev}
-                    aria-label='前月'
+                    className={styles.c_calendarDialog__todayButton}
+                    onClick={handleToday}
                   >
-                    <IoChevronBack />
-                  </button>
-                  <span className={styles.c_calendarDialog__title}>
-                    {currentMonth.toLocaleDateString('ja-JP', {
-                      year: 'numeric',
-                      month: 'long',
-                    })}
-                  </span>
-                  <button
-                    type='button'
-                    className={styles.c_calendarDialog__navButton}
-                    onClick={handleNext}
-                    aria-label='次月'
-                  >
-                    <IoChevronForward />
+                    今日
                   </button>
                 </div>
                 <FullCalendar
@@ -197,22 +230,24 @@ export const CalendarDialog = memo<CalendarDialogProps>(
                   datesSet={handleDatesSetCallback}
                   eventContent={renderEventContent}
                   eventClick={handleEventClick}
+                  moreLinkDidMount={handleMoreLinkDidMount}
+                  dayCellClassNames={handleDayCellClassNames}
                   dayCellDidMount={handleDayCellDidMount}
-                  dayCellWillUnmount={handleDayCellWillUnmount}
                   headerToolbar={false}
                   height='auto'
-                  dayMaxEvents={3}
+                  dayMaxEvents={CALENDAR_MAX_EVENTS}
                   fixedWeekCount={false}
                 />
               </div>
-              {selectedDate && (
+              <div className={styles.c_calendarDialog__panel}>
                 <CalendarMovieList
-                  movies={selectedDateMovies}
+                  movies={selectedDate ? selectedDateMovies : monthMovies}
+                  currentMonth={currentMonth}
                   selectedDate={selectedDate}
                   onMovieClick={handleMovieClick}
                 />
-              )}
-            </>
+              </div>
+            </div>
           )}
         </ModalBody>
       </Modal>

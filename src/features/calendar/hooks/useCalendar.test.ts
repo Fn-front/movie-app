@@ -426,6 +426,54 @@ describe('useCalendar', () => {
     expect(result.current.selectedDate).toBeUndefined();
   });
 
+  it('monthMoviesが当月の全映画を公開日昇順で返す', async () => {
+    const { result } = renderHook(() => useCalendar(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.monthMovies.map((movie) => movie.title)).toEqual([
+      '映画A',
+      '映画B',
+      '映画C',
+    ]);
+  });
+
+  it('当月に映画がない場合monthMoviesは空配列になる', async () => {
+    mockGetCalendarMovies.mockResolvedValue(emptyCalendarResponse);
+
+    const { result } = renderHook(() => useCalendar(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.monthMovies).toEqual([]);
+  });
+
+  it('selectedDateKeyが選択日をYYYY-MM-DD形式で返す', async () => {
+    const { result } = renderHook(() => useCalendar(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.selectedDateKey).toBeUndefined();
+
+    act(() => {
+      result.current.selectDate(new Date(2026, 2, 15));
+    });
+
+    expect(result.current.selectedDateKey).toBe('2026-03-15');
+  });
+
   it('handleDatesSetで同月の場合は状態が変わらない', async () => {
     const { result } = renderHook(() => useCalendar(), {
       wrapper: createWrapper(),

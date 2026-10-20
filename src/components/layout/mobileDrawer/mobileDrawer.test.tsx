@@ -219,4 +219,53 @@ describe('MobileDrawer', () => {
       screen.getByRole('navigation', { name: 'モバイルナビゲーション' }),
     ).toBeInTheDocument();
   });
+
+  describe('公開カレンダー導線', () => {
+    it('認証済みの場合は公開カレンダーボタンが表示される', () => {
+      render(<MobileDrawer {...defaultProps} onCalendarClick={jest.fn()} />);
+
+      expect(
+        screen.getByRole('button', { name: '公開カレンダーを開く' }),
+      ).toBeInTheDocument();
+    });
+
+    it('未認証の場合は公開カレンダーボタンが表示されない', () => {
+      mockSessionData = { data: null, status: 'unauthenticated' };
+
+      render(<MobileDrawer {...defaultProps} onCalendarClick={jest.fn()} />);
+
+      expect(
+        screen.queryByRole('button', { name: '公開カレンダーを開く' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('公開カレンダーボタンでドロワーが閉じてコールバックが呼ばれる', async () => {
+      const user = userEvent.setup();
+      const onOpenChange = jest.fn();
+      const onCalendarClick = jest.fn();
+
+      render(
+        <MobileDrawer
+          {...defaultProps}
+          onOpenChange={onOpenChange}
+          onCalendarClick={onCalendarClick}
+        />,
+      );
+
+      await user.click(
+        screen.getByRole('button', { name: '公開カレンダーを開く' }),
+      );
+
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(onCalendarClick).toHaveBeenCalled();
+    });
+
+    it('コールバック未指定なら公開カレンダーボタンを表示しない', () => {
+      render(<MobileDrawer {...defaultProps} />);
+
+      expect(
+        screen.queryByRole('button', { name: '公開カレンダーを開く' }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

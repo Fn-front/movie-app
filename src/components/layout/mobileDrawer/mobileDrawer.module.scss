@@ -180,6 +180,34 @@
   color: $text-secondary;
 }
 
+// ナビゲーション以外のアクション（公開カレンダー等）。
+// 遷移ではなくダイアログを開くため nav の外に置く
+.c_mobile_drawer__actions {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-1;
+  padding: 0 $spacing-3 $spacing-3;
+}
+
+.c_mobile_drawer__action {
+  @include button-reset;
+
+  display: flex;
+  align-items: center;
+  gap: $spacing-3;
+  padding: $spacing-2 $spacing-3;
+  font-size: $font-size-sm;
+  color: $text-primary;
+  border-radius: $border-radius-md;
+  transition: $transition-bg;
+
+  &:hover {
+    background-color: $background-secondary;
+  }
+
+  @include focus-visible;
+}
+
 // ユーザーアクション
 .c_mobile_drawer__user_actions {
   display: flex;

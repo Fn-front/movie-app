@@ -70,6 +70,19 @@ export const TMDB_DIGITAL_RELEASE_TYPE = 4;
 export const TMDB_MOVIE_DETAIL_APPEND = 'credits,watch/providers,videos';
 
 /**
+ * 人物詳細取得時に付与する append_to_response の値。
+ *
+ * movie_credits（出演作）に加えて translations（各言語の略歴）も取る。
+ * TMDb の人物 `biography` は `language=ja-JP` だと未翻訳で空文字になることが
+ * 多く、英語原文へフォールバックしないとほぼ全員が「略歴なし」になるため。
+ * 2回目のリクエストを足さずに済むよう append にまとめている。
+ */
+export const TMDB_PERSON_DETAIL_APPEND = 'movie_credits,translations';
+
+/** 略歴のフォールバック元に使う言語コード */
+export const TMDB_FALLBACK_LANGUAGE = 'en';
+
+/**
  * JP配信実態の判定に必要な append_to_response の値。
  *
  * watch/providers と release_dates は別エンドポイントだが、append_to_response で

@@ -56,6 +56,8 @@ export const ROUTES = {
   AUTH_ERROR: '/auth/error',
   /** 映画詳細 */
   MOVIE_DETAIL: (id: string | number) => `/movies/${id}`,
+  /** 人物詳細（公開ページ。AUTH_REQUIRED_ROUTES には含めない） */
+  PERSON_DETAIL: (id: string | number) => `/person/${id}`,
 } as const;
 
 /**

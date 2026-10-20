@@ -43,6 +43,8 @@ export const RATE_LIMIT_ACTION = {
   SEARCH_MOVIES: 'search_api_movies',
   /** 映画詳細の取得（未認証は送信元単位 / 認証済みはユーザー単位） */
   READ_MOVIE_DETAIL: 'read_api_movie_detail',
+  /** 人物詳細の取得（未認証は送信元単位 / 認証済みはユーザー単位） */
+  READ_PERSON_DETAIL: 'read_api_person_detail',
   /** ジャンル一覧の取得（送信元単位） */
   READ_GENRES: 'read_api_genres',
   /** 保存済みフィルター条件の更新（ユーザー単位） */
@@ -133,6 +135,11 @@ export const RATE_LIMIT_CONFIG = {
   READ_MOVIES: { maxAttempts: 300, windowMinutes: 10 },
   SEARCH_MOVIES: { maxAttempts: 120, windowMinutes: 10 },
   READ_MOVIE_DETAIL: { maxAttempts: 300, windowMinutes: 10 },
+  /**
+   * 人物詳細も TMDb を叩く公開APIのため、映画詳細と同じ枠を別カウンタで持つ。
+   * 共有にすると、映画詳細を見ていた利用者が人物ページで 429 になる。
+   */
+  READ_PERSON_DETAIL: { maxAttempts: 300, windowMinutes: 10 },
   READ_GENRES: { maxAttempts: 120, windowMinutes: 10 },
   /** 単発の保存操作のため WRITE_PROFILE / WRITE_SETTINGS と揃える */
   WRITE_FILTERS: { maxAttempts: 10, windowMinutes: 1 },

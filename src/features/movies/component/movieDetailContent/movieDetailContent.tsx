@@ -7,6 +7,7 @@
 
 import { memo, useCallback, useMemo, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { IoPlayOutline } from 'react-icons/io5';
 import { Loading } from '@/components/ui/loading/loading';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
@@ -21,10 +22,17 @@ import {
   getTMDbProfileUrl,
   getTMDbProviderLogoUrl,
 } from '@/utils/image';
-import { IMAGE_SIZES, ICON_SIZES, DISPLAY_LIMITS } from '@/constants';
+import {
+  ARIA_LABELS,
+  DISPLAY_LIMITS,
+  EXCHANGE_RATE,
+  ICON_SIZES,
+  IMAGE_SIZES,
+  ROUTES,
+  UI_ERROR_MESSAGES,
+} from '@/constants';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
-import { ARIA_LABELS, UI_ERROR_MESSAGES, EXCHANGE_RATE } from '@/constants';
 import type { WatchProvider } from '@/lib/types';
 
 import styles from './movieDetailContent.module.scss';
@@ -39,6 +47,13 @@ export interface MovieDetailContentProps {
   showFinancialInfo?: boolean;
   /** 動画ダイアログの開閉状態変更コールバック */
   onVideoDialogOpenChange?: (open: boolean) => void;
+  /**
+   * 他ページへ遷移するためモーダルを閉じてほしいときのコールバック。
+   *
+   * キャストから人物ページへ移動する際、モーダルを開いたままだと
+   * 遷移先の上に被さり続けるため、遷移と同時に閉じる。
+   */
+  onRequestClose?: () => void;
 }
 
 /**
@@ -131,6 +146,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     movieId,
     showFinancialInfo = false,
     onVideoDialogOpenChange,
+    onRequestClose,
   }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
     const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
@@ -432,9 +448,12 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                     .map((actor) => {
                       const profileUrl = getTMDbProfileUrl(actor.profile_path);
                       return (
-                        <div
+                        <Link
                           key={actor.id}
+                          href={ROUTES.PERSON_DETAIL(actor.id)}
                           className={styles.c_movie_detail__cast_item}
+                          aria-label={`${actor.name}のプロフィール`}
+                          onClick={onRequestClose}
                         >
                           {profileUrl ? (
                             <Image
@@ -467,7 +486,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                               </span>
                             )}
                           </div>
-                        </div>
+                        </Link>
                       );
                     })}
                 </div>

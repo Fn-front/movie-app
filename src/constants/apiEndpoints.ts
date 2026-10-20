@@ -69,6 +69,10 @@ export const API_ENDPOINTS = {
   /** 原題提案 */
   MOVIES_SUGGEST_TITLE: '/api/movies/suggest-title',
 
+  // --- 人物 ---
+  /** 人物詳細（プロフィール＋出演作品） */
+  personById: (personId: number) => `/api/person/${personId}`,
+
   // --- 受賞・劇場・その他 ---
   /** 受賞作品 */
   AWARDS: '/api/awards',

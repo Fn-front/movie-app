@@ -125,6 +125,8 @@ export const TMDB_ENDPOINTS = {
   /** 映画リリース日（国別リリースタイプ取得用） */
   MOVIE_RELEASE_DATES: (movieId: number | string) =>
     `/movie/${movieId}/release_dates`,
+  /** 人物詳細（append_to_response で出演作・翻訳を同時取得する） */
+  PERSON_DETAIL: (personId: number | string) => `/person/${personId}`,
 } as const;
 
 /**

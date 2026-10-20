@@ -8,7 +8,7 @@
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { AwardMovie } from '@/features/awards/types';
-import type { Movie, NowShowingMovie } from '@/lib/types';
+import type { Movie, NowShowingMovie, PersonMovieCredit } from '@/lib/types';
 import type { Recommendation } from '@/schema/recommendations';
 
 /** Movie（検索API）→ MovieCacheItem */
@@ -27,6 +27,28 @@ export function movieToMovieCacheItem(
     vote_count: movie.vote_count,
     popularity: movie.popularity,
     genre_ids: movie.genre_ids,
+    release_type: 'theatrical',
+    is_revival: false,
+    favorite,
+  };
+}
+
+/** PersonMovieCredit（人物の出演作）→ MovieCacheItem */
+export function personCreditToMovieCacheItem(
+  credit: PersonMovieCredit,
+  favorite?: MovieFavoriteInfo | null,
+): MovieCacheItem {
+  return {
+    id: credit.id,
+    title: credit.title,
+    poster_path: credit.poster_path,
+    backdrop_path: credit.backdrop_path,
+    release_date: credit.release_date,
+    overview: credit.overview,
+    vote_average: credit.vote_average,
+    vote_count: credit.vote_count,
+    popularity: credit.popularity,
+    genre_ids: credit.genre_ids,
     release_type: 'theatrical',
     is_revival: false,
     favorite,

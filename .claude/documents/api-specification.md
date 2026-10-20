@@ -523,6 +523,69 @@ OTPコード検証
 
 ---
 
+## 人物API
+
+### GET /api/person/:id
+人物（俳優）のプロフィールと出演作品を取得（キャッシュなし、都度TMDb API取得）
+
+**内部処理フロー:**
+1. `id` を `/^[1-9]\d*$/` で検証（`1e3` / 前後空白などを弾く。不正なら 400）
+2. DB-based レート制限（`read_api_person_detail`: 300回/10分。認証済みはユーザー単位、未認証は送信元単位）
+3. TMDb API `/person/{person_id}` を `append_to_response=movie_credits,translations` で**1リクエスト**取得
+   - サーバー側で24時間キャッシュ（`unstable_cache`）。`generateMetadata` と共有するため、同じ人物へのTMDbリクエストは1回で済む
+4. 整形して返却
+   - 人物の `adult` が true なら 404（TMDb の `include_adult` は `/search` `/discover` にしか効かないため自前で弾く）
+   - 出演作から `adult` 作品・除外ジャンルを除去
+   - 同じ映画の複数役クレジットを1件に畳み、役名を `/` で連結
+   - 公開日降順にソート（公開日なしは末尾）
+   - `biography` が空（`language=ja-JP` では大半が未翻訳）なら `translations` の英語原文で補い、`is_biography_fallback: true` を立てる
+
+**Cache-Control:** `public, s-maxage=86400, stale-while-revalidate=604800`（認証有無で分岐しない。ユーザー固有情報を返さないため）
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 500,
+    "name": "トム・クルーズ",
+    "biography": "略歴テキスト",
+    "is_biography_fallback": false,
+    "birthday": "1962-07-03",
+    "deathday": null,
+    "place_of_birth": "Syracuse, New York, USA",
+    "profile_path": "/path/to/profile.jpg",
+    "known_for_department": "Acting",
+    "adult": false,
+    "cast": [
+      {
+        "id": 12345,
+        "title": "出演作タイトル",
+        "poster_path": "/path/to/poster.jpg",
+        "backdrop_path": null,
+        "overview": "概要",
+        "release_date": "2024-05-01",
+        "genre_ids": [28],
+        "original_language": "en",
+        "popularity": 30,
+        "vote_average": 7.2,
+        "vote_count": 250,
+        "adult": false,
+        "character": "役名"
+      }
+    ]
+  }
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: 人物IDの書式が不正（TMDbは呼ばず、レート制限枠も消費しない）
+- `404 Not Found`: 人物が存在しない、またはアダルト作品の出演者
+- `429 Too Many Requests`: レート制限超過
+- `500 Internal Server Error`: TMDbの一時障害等
+
+---
+
 ## ウォッチリストAPI
 
 ### GET /api/watchlist

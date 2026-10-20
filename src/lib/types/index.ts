@@ -189,6 +189,65 @@ export interface Cast {
 }
 
 /**
+ * 人物の出演作品（TMDb `/person/{id}/movie_credits` の cast 要素）
+ *
+ * `Movie` とほぼ同じ形だが `original_title` を含まない点だけ異なるため、
+ * 共通部分を `Movie` から引き継いで `character` を足している。
+ */
+export interface PersonMovieCredit extends Omit<
+  Movie,
+  'original_title' | 'release_date'
+> {
+  /** 公開日。未公開・未登録の作品は TMDb が空文字を返すため null に正規化する */
+  release_date: string | null;
+  /**
+   * 役名。
+   *
+   * 同じ映画で複数役を演じている場合、TMDb は同じ映画を複数件返す。
+   * アプリ側で1件に畳み込み、役名を「/」区切りで連結する。
+   */
+  character: string;
+}
+
+/**
+ * 人物詳細（TMDb `/person/{id}` をアプリ向けに整形したもの）
+ */
+export interface PersonDetail {
+  /** 人物ID */
+  id: number;
+  /** 氏名 */
+  name: string;
+  /**
+   * 略歴。
+   *
+   * `language=ja-JP` では未翻訳で空文字になる人物が大半のため、
+   * 空のときは `translations` の英語原文で補う（`is_biography_fallback` 参照）。
+   */
+  biography: string;
+  /** 略歴が英語原文のフォールバックかどうか */
+  is_biography_fallback: boolean;
+  /** 生年月日（YYYY-MM-DD） */
+  birthday: string | null;
+  /** 没年月日（YYYY-MM-DD）。存命なら null */
+  deathday: string | null;
+  /** 出生地 */
+  place_of_birth: string | null;
+  /** プロフィール画像パス */
+  profile_path: string | null;
+  /** 主な活動分野（TMDbは英語で返す） */
+  known_for_department: string;
+  /**
+   * アダルト作品の出演者フラグ。
+   *
+   * TMDb の `include_adult` は `/search` `/discover` 専用で `/person/{id}` には
+   * 効かないため、呼び出し側（API Route）がこのフラグを見て 404 に変換する。
+   */
+  adult: boolean;
+  /** 出演作品（不適切コンテンツ除外・重複排除・公開日降順で整形済み） */
+  cast: PersonMovieCredit[];
+}
+
+/**
  * ジャンル型
  */
 export interface Genre {

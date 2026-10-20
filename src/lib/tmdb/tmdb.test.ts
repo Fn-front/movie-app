@@ -48,6 +48,7 @@ import {
 } from '@/constants/movies';
 import {
   TMDB_MOVIE_DETAIL_APPEND,
+  TMDB_PERSON_DETAIL_APPEND,
   TMDB_STREAMING_AVAILABILITY_APPEND,
 } from '@/constants/tmdb';
 
@@ -1077,6 +1078,243 @@ describe('TMDb APIクライアント', () => {
       expect((config as { __retryCount?: number }).__retryCount).toBe(1);
 
       jest.useRealTimers();
+    });
+  });
+
+  describe('getPersonDetail', () => {
+    /** 出演作クレジットのファクトリ */
+    const createCredit = (overrides: Record<string, unknown> = {}) => ({
+      id: 100,
+      title: '出演作',
+      poster_path: '/p.jpg',
+      backdrop_path: null,
+      overview: '概要',
+      release_date: '2020-01-01',
+      genre_ids: [28],
+      original_language: 'en',
+      popularity: 10,
+      vote_average: 7,
+      vote_count: 100,
+      adult: false,
+      character: '本人',
+      ...overrides,
+    });
+
+    /** 人物レスポンスのファクトリ */
+    const createPersonResponse = (overrides: Record<string, unknown> = {}) => ({
+      data: {
+        id: 500,
+        name: 'テスト俳優',
+        biography: '日本語の略歴',
+        birthday: '1980-05-01',
+        deathday: null,
+        place_of_birth: '東京',
+        profile_path: '/profile.jpg',
+        known_for_department: 'Acting',
+        adult: false,
+        movie_credits: { cast: [createCredit()] },
+        ...overrides,
+      },
+    });
+
+    it('append_to_responseでmovie_creditsとtranslationsを同時に取得する', async () => {
+      mockGet.mockResolvedValue(createPersonResponse());
+
+      const { getPersonDetail } = require('./tmdb');
+      await getPersonDetail(500);
+
+      expect(mockGet).toHaveBeenCalledWith('/person/500', {
+        params: { append_to_response: TMDB_PERSON_DETAIL_APPEND },
+      });
+      // 1リクエストにまとめること（出演作を別途取りに行かない）
+      expect(mockGet).toHaveBeenCalledTimes(1);
+    });
+
+    it('adult作品を出演作から除外する', async () => {
+      mockGet.mockResolvedValue(
+        createPersonResponse({
+          movie_credits: {
+            cast: [
+              createCredit({ id: 1, title: '一般映画' }),
+              createCredit({ id: 2, title: 'アダルト作品', adult: true }),
+            ],
+          },
+        }),
+      );
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.cast.map((c: { id: number }) => c.id)).toEqual([1]);
+    });
+
+    it('除外ジャンルの作品を出演作から除外する', async () => {
+      mockGet.mockResolvedValue(
+        createPersonResponse({
+          movie_credits: {
+            cast: [
+              createCredit({ id: 1 }),
+              createCredit({ id: 2, genre_ids: [EXCLUDED_GENRE_IDS[0]] }),
+            ],
+          },
+        }),
+      );
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.cast.map((c: { id: number }) => c.id)).toEqual([1]);
+    });
+
+    it('同じ映画の複数役を1件にまとめ、役名を連結する', async () => {
+      mockGet.mockResolvedValue(
+        createPersonResponse({
+          movie_credits: {
+            cast: [
+              createCredit({ id: 1, character: '兄' }),
+              createCredit({ id: 1, character: '弟' }),
+            ],
+          },
+        }),
+      );
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.cast).toHaveLength(1);
+      expect(person.cast[0].character).toBe('兄 / 弟');
+    });
+
+    it('同じ役名が重複して返っても二重に連結しない', async () => {
+      mockGet.mockResolvedValue(
+        createPersonResponse({
+          movie_credits: {
+            cast: [
+              createCredit({ id: 1, character: '本人' }),
+              createCredit({ id: 1, character: '本人' }),
+            ],
+          },
+        }),
+      );
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.cast[0].character).toBe('本人');
+    });
+
+    it('公開日の新しい順に並べ、公開日が無い作品は末尾に置く', async () => {
+      mockGet.mockResolvedValue(
+        createPersonResponse({
+          movie_credits: {
+            cast: [
+              createCredit({ id: 1, release_date: '2010-01-01' }),
+              createCredit({ id: 2, release_date: '' }),
+              createCredit({ id: 3, release_date: '2024-06-01' }),
+            ],
+          },
+        }),
+      );
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.cast.map((c: { id: number }) => c.id)).toEqual([3, 1, 2]);
+      // 空文字の公開日は null に正規化する
+      expect(person.cast[2].release_date).toBeNull();
+    });
+
+    it('日本語の略歴があればフォールバックしない', async () => {
+      mockGet.mockResolvedValue(
+        createPersonResponse({
+          biography: '日本語の略歴',
+          translations: {
+            translations: [
+              { iso_639_1: 'en', data: { biography: 'English bio' } },
+            ],
+          },
+        }),
+      );
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.biography).toBe('日本語の略歴');
+      expect(person.is_biography_fallback).toBe(false);
+    });
+
+    it('日本語の略歴が空なら英語原文へフォールバックする', async () => {
+      mockGet.mockResolvedValue(
+        createPersonResponse({
+          biography: '',
+          translations: {
+            translations: [
+              { iso_639_1: 'fr', data: { biography: 'Biographie' } },
+              { iso_639_1: 'en', data: { biography: 'English bio' } },
+            ],
+          },
+        }),
+      );
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.biography).toBe('English bio');
+      expect(person.is_biography_fallback).toBe(true);
+    });
+
+    it('英語訳も空なら略歴は空文字でフォールバック扱いにしない', async () => {
+      mockGet.mockResolvedValue(
+        createPersonResponse({
+          biography: '   ',
+          translations: {
+            translations: [{ iso_639_1: 'en', data: { biography: '' } }],
+          },
+        }),
+      );
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.biography).toBe('');
+      expect(person.is_biography_fallback).toBe(false);
+    });
+
+    it('空文字の生没年月日・出生地はnullに正規化する', async () => {
+      mockGet.mockResolvedValue(
+        createPersonResponse({
+          birthday: '',
+          deathday: '',
+          place_of_birth: '',
+        }),
+      );
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.birthday).toBeNull();
+      expect(person.deathday).toBeNull();
+      expect(person.place_of_birth).toBeNull();
+    });
+
+    it('アダルト出演者フラグはそのまま返す（404への変換は呼び出し側の責務）', async () => {
+      mockGet.mockResolvedValue(createPersonResponse({ adult: true }));
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.adult).toBe(true);
+    });
+
+    it('movie_creditsが欠けていても空配列を返す', async () => {
+      mockGet.mockResolvedValue(
+        createPersonResponse({ movie_credits: undefined }),
+      );
+
+      const { getPersonDetail } = require('./tmdb');
+      const person = await getPersonDetail(500);
+
+      expect(person.cast).toEqual([]);
     });
   });
 });

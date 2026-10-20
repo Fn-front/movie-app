@@ -3,12 +3,13 @@
  */
 
 import type { AwardMovie } from '@/features/awards/types';
-import type { Movie, NowShowingMovie } from '@/lib/types';
+import type { Movie, NowShowingMovie, PersonMovieCredit } from '@/lib/types';
 import type { Recommendation } from '@/schema/recommendations';
 
 import {
   movieToMovieCacheItem,
   nowShowingToMovieCacheItem,
+  personCreditToMovieCacheItem,
   recommendationToMovieCacheItem,
   awardMovieToMovieCacheItem,
 } from './toMovieCacheItem';
@@ -61,6 +62,62 @@ describe('movieToMovieCacheItem', () => {
     const result = movieToMovieCacheItem(baseMovie, null);
 
     expect(result.favorite).toBeNull();
+  });
+});
+
+describe('personCreditToMovieCacheItem', () => {
+  const baseCredit: PersonMovieCredit = {
+    id: 300,
+    title: '出演作',
+    overview: '出演作の概要',
+    poster_path: '/credit.jpg',
+    backdrop_path: '/credit-bg.jpg',
+    release_date: '2021-07-01',
+    vote_average: 6.5,
+    vote_count: 320,
+    popularity: 45,
+    genre_ids: [18],
+    adult: false,
+    original_language: 'en',
+    character: '主人公',
+  };
+
+  it('PersonMovieCredit型をMovieCacheItemに正しく変換する', () => {
+    const result = personCreditToMovieCacheItem(baseCredit);
+
+    expect(result).toEqual({
+      id: 300,
+      title: '出演作',
+      poster_path: '/credit.jpg',
+      backdrop_path: '/credit-bg.jpg',
+      release_date: '2021-07-01',
+      overview: '出演作の概要',
+      vote_average: 6.5,
+      vote_count: 320,
+      popularity: 45,
+      genre_ids: [18],
+      release_type: 'theatrical',
+      is_revival: false,
+      favorite: undefined,
+    });
+  });
+
+  it('公開日が無い出演作はnullのまま変換する', () => {
+    const result = personCreditToMovieCacheItem({
+      ...baseCredit,
+      release_date: null,
+    });
+
+    expect(result.release_date).toBeNull();
+  });
+
+  it('お気に入り情報を含めて変換する', () => {
+    const result = personCreditToMovieCacheItem(baseCredit, {
+      id: 'fav-9',
+      rating: 7,
+    });
+
+    expect(result.favorite).toEqual({ id: 'fav-9', rating: 7 });
   });
 });
 

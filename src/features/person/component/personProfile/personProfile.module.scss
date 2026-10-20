@@ -1,0 +1,139 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_person_profile {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+
+  @include md {
+    flex-direction: row;
+    gap: $spacing-6;
+  }
+
+  &__visual {
+    flex-shrink: 0;
+    width: 140px;
+
+    @include md {
+      width: 185px;
+    }
+  }
+
+  &__image {
+    width: 100%;
+    height: auto;
+    border-radius: $border-radius-lg;
+    object-fit: cover;
+  }
+
+  &__placeholder {
+    @include flex-center;
+
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    border-radius: $border-radius-lg;
+    background-color: $background-secondary;
+    color: $text-secondary;
+    font-size: $font-size-4xl;
+    font-weight: $font-weight-medium;
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-3;
+    min-width: 0;
+  }
+
+  &__name {
+    margin: 0;
+    font-size: $font-size-2xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+
+    @include md {
+      font-size: $font-size-3xl;
+    }
+  }
+
+  &__department {
+    align-self: flex-start;
+    margin: 0;
+    padding: $spacing-1 $spacing-3;
+    border-radius: $border-radius-full;
+    background-color: $background-secondary;
+    color: $text-secondary;
+    font-size: $font-size-xs;
+  }
+
+  &__meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: $spacing-1 $spacing-4;
+    margin: 0;
+    font-size: $font-size-sm;
+  }
+
+  &__meta_label {
+    margin: 0;
+    color: $text-secondary;
+  }
+
+  &__meta_value {
+    margin: 0;
+    color: $text-primary;
+  }
+
+  &__biography {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-2;
+    margin-top: $spacing-2;
+  }
+
+  &__biography_heading {
+    margin: 0;
+    font-size: $font-size-lg;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+  }
+
+  &__biography_note {
+    margin: 0;
+    font-size: $font-size-xs;
+    color: $text-secondary;
+  }
+
+  &__biography_text {
+    margin: 0;
+    font-size: $font-size-sm;
+    line-height: 1.8;
+    color: $text-primary;
+    white-space: pre-wrap;
+  }
+
+  &__biography_text_clamped {
+    @include text-truncate-multiline(5);
+  }
+
+  &__biography_empty {
+    margin: 0;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+  }
+
+  &__biography_toggle {
+    @include button-reset;
+    @include focus-visible;
+
+    align-self: flex-start;
+    color: $text-link;
+    font-size: $font-size-sm;
+    text-decoration: underline;
+
+    &:hover {
+      color: $text-link-hover;
+    }
+  }
+}

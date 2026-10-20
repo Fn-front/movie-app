@@ -22,6 +22,8 @@ export interface MovieGridProps {
   hasNextPage: boolean;
   fetchNextPage: () => void;
   onMovieClick: (movieId: number) => void;
+  /** 日付としてデジタル（配信）公開日を優先表示するか（配信予定タブ用） */
+  preferDigitalReleaseDate?: boolean;
 }
 
 export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
@@ -32,6 +34,7 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
   hasNextPage,
   fetchNextPage,
   onMovieClick,
+  preferDigitalReleaseDate = false,
 }) {
   const { isInWatchlist, toggleWatchlist, isMovieToggling } =
     useWatchlistToggle();
@@ -65,6 +68,7 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
             watchlistDisabled={isMovieToggling(movie.id)}
             onFavoriteToggle={handleFavoriteToggle}
             favoriteDisabled={isFavoriteProcessing(movie.id)}
+            preferDigitalReleaseDate={preferDigitalReleaseDate}
           />
         ))}
       </MovieGridContainer>

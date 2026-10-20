@@ -20,6 +20,13 @@ export interface MovieCacheItem {
   backdrop_path: string | null;
   /** 公開日 */
   release_date: string | null;
+  /**
+   * 日本のデジタル（配信）公開日
+   *
+   * `release_date` は作品につき実質1つの代表日で、多くは劇場公開日が入る。
+   * 「いつ配信されるか」はこちらを見る必要がある
+   */
+  digital_release_date?: string | null;
   /** 概要 */
   overview: string | null;
   /** 評価平均 */

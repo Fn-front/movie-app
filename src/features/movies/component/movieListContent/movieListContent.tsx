@@ -9,7 +9,7 @@
 import { memo } from 'react';
 
 import { Tabs } from '@/components/ui/tabs/tabs';
-import { RELEASE_TYPE_OPTIONS } from '@/constants';
+import { RELEASE_TYPE, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { FilterModal } from '@/components/ui/movie/filterModal/filterModal';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { useMovieListContent } from '@/features/movies/hooks/useMovieListContent';
@@ -42,6 +42,7 @@ export const MovieListContent = memo<MovieListContentProps>(
       fetchNextPage,
       sortBy,
       releaseType,
+      timeFrame,
       genres,
       selectedGenreIds,
       dateRange,
@@ -67,6 +68,11 @@ export const MovieListContent = memo<MovieListContentProps>(
       handleReleaseTypeChange,
       handleFilterModalClose,
     );
+
+    // 配信予定タブだけは「いつ配信されるか」が知りたい情報のため、
+    // release_date（多くは劇場公開日）ではなくデジタル公開日を見せる
+    const preferDigitalReleaseDate =
+      releaseType === RELEASE_TYPE.STREAMING && timeFrame === 'upcoming';
 
     return (
       <div className={styles.c_movie_list}>
@@ -96,6 +102,7 @@ export const MovieListContent = memo<MovieListContentProps>(
             hasNextPage={hasNextPage}
             fetchNextPage={fetchNextPage}
             onMovieClick={handleMovieTileClick}
+            preferDigitalReleaseDate={preferDigitalReleaseDate}
           />
         </Tabs>
 

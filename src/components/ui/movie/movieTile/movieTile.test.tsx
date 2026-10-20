@@ -139,6 +139,61 @@ describe('MovieTile', () => {
     });
   });
 
+  describe('デジタル公開日の優先表示', () => {
+    it('既定ではデジタル公開日があってもrelease_dateを表示する', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie({
+            release_date: '2026-03-01',
+            digital_release_date: '2026-05-20',
+          })}
+        />,
+      );
+      expect(screen.getByText('2026年03月01日')).toBeInTheDocument();
+      expect(screen.queryByText('2026年05月20日')).not.toBeInTheDocument();
+    });
+
+    it('preferDigitalReleaseDateが有効ならデジタル公開日を表示する', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie({
+            release_date: '2026-03-01',
+            digital_release_date: '2026-05-20',
+          })}
+          preferDigitalReleaseDate
+        />,
+      );
+      expect(screen.getByText('2026年05月20日')).toBeInTheDocument();
+      expect(screen.queryByText('2026年03月01日')).not.toBeInTheDocument();
+    });
+
+    it('デジタル公開日がnullならrelease_dateにフォールバックする', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie({
+            release_date: '2026-03-01',
+            digital_release_date: null,
+          })}
+          preferDigitalReleaseDate
+        />,
+      );
+      expect(screen.getByText('2026年03月01日')).toBeInTheDocument();
+    });
+
+    it('デジタル公開日もrelease_dateもnullなら日付を表示しない', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie({
+            release_date: null,
+            digital_release_date: null,
+          })}
+          preferDigitalReleaseDate
+        />,
+      );
+      expect(screen.queryByText(/\d{4}年/)).not.toBeInTheDocument();
+    });
+  });
+
   describe('アクセシビリティ', () => {
     it('タイトルがbuttonのアクセシブルネームになる', () => {
       render(<MovieTile movie={createMockMovie()} />);

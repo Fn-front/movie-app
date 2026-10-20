@@ -94,6 +94,7 @@ const createMockMovieList = (
   fetchNextPage: jest.fn(),
   sortBy: 'release_date',
   releaseType: 'theatrical',
+  timeFrame: 'upcoming',
   genres: { 28: 'アクション' },
   selectedGenreIds: [],
   dateRange: {},
@@ -227,6 +228,60 @@ describe('MovieListContent', () => {
       expect(
         screen.queryByText('表示する映画がありません。'),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('配信予定タブの日付表示', () => {
+    /** 劇場公開日と配信開始日が異なる作品 */
+    const movieWithDigitalDate = createMockMovie({
+      release_type: 'streaming',
+      release_date: '2026-03-01',
+      digital_release_date: '2026-05-20',
+    });
+
+    it('配信予定タブではデジタル公開日を表示する', () => {
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            releaseType: 'streaming',
+            timeFrame: 'upcoming',
+            movies: [movieWithDigitalDate],
+          })}
+        />,
+      );
+      expect(screen.getByText('2026年05月20日')).toBeInTheDocument();
+      expect(screen.queryByText('2026年03月01日')).not.toBeInTheDocument();
+    });
+
+    it('配信中タブではrelease_dateを表示する', () => {
+      render(
+        <MovieListContent
+          title='公開中'
+          movieList={createMockMovieList({
+            releaseType: 'streaming',
+            timeFrame: 'now_showing',
+            movies: [movieWithDigitalDate],
+          })}
+        />,
+      );
+      expect(screen.getByText('2026年03月01日')).toBeInTheDocument();
+      expect(screen.queryByText('2026年05月20日')).not.toBeInTheDocument();
+    });
+
+    it('劇場公開タブではrelease_dateを表示する', () => {
+      render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({
+            releaseType: 'theatrical',
+            timeFrame: 'upcoming',
+            movies: [movieWithDigitalDate],
+          })}
+        />,
+      );
+      expect(screen.getByText('2026年03月01日')).toBeInTheDocument();
+      expect(screen.queryByText('2026年05月20日')).not.toBeInTheDocument();
     });
   });
 

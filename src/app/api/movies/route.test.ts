@@ -1022,6 +1022,95 @@ describe('GET /api/movies', () => {
     ]);
   });
 
+  it('upcoming+streamingの公開日順はdigital_release_dateで並べる', async () => {
+    const handler = await loadGET();
+    setupStreamingFromMock({
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(
+      createRequest({
+        time_frame: 'upcoming',
+        release_type: 'streaming',
+        sort_by: 'release_date',
+      }),
+    );
+
+    expect(collectFilterCalls('order')).toContainEqual([
+      'digital_release_date',
+      { ascending: true, nullsFirst: false },
+    ]);
+  });
+
+  it('upcoming+streamingでも人気度順はpopularityで並べる', async () => {
+    const handler = await loadGET();
+    setupStreamingFromMock({
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(
+      createRequest({
+        time_frame: 'upcoming',
+        release_type: 'streaming',
+        sort_by: 'popularity',
+      }),
+    );
+
+    expect(
+      collectFilterCalls('order').some(
+        ([column]) => column === 'digital_release_date',
+      ),
+    ).toBe(false);
+    expect(collectFilterCalls('order')).toContainEqual([
+      'popularity',
+      { ascending: false, nullsFirst: false },
+    ]);
+  });
+
+  it('now_showing+streamingの公開日順はrelease_dateで並べる', async () => {
+    const handler = await loadGET();
+    setupStreamingFromMock({
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(
+      createRequest({
+        time_frame: 'now_showing',
+        release_type: 'streaming',
+        sort_by: 'release_date',
+      }),
+    );
+
+    expect(
+      collectFilterCalls('order').some(
+        ([column]) => column === 'digital_release_date',
+      ),
+    ).toBe(false);
+  });
+
+  it('レスポンスのselectにdigital_release_dateを含める', async () => {
+    const handler = await loadGET();
+    setupStreamingFromMock({
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(
+      createRequest({ time_frame: 'upcoming', release_type: 'streaming' }),
+    );
+
+    expect(
+      collectFilterCalls('select').some(
+        ([columns]) =>
+          typeof columns === 'string' &&
+          columns.includes('digital_release_date'),
+      ),
+    ).toBe(true);
+  });
+
   it('theatricalでは配信状況で絞り込まない', async () => {
     const handler = await loadGET();
     setupFromMock({ countResult: { count: 0 } });

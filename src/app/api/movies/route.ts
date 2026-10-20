@@ -287,7 +287,14 @@ export async function GET(request: Request) {
     }
 
     // DBからソート順で映画を取得
-    const sortColumn = SORT_COLUMN_MAP[sort_by];
+    //
+    // 配信予定タブの「公開日順」はデジタル公開日で並べる。絞り込みを
+    // digital_release_date で行っているのに release_date で並べると、
+    // 劇場公開日順という利用者の意図しない並びになるため
+    const sortColumn =
+      isUpcomingStreaming && sort_by === 'release_date'
+        ? 'digital_release_date'
+        : SORT_COLUMN_MAP[sort_by];
     // sort_order指定時はそれに従う。未指定時はrelease_dateのみ昇順
     const ascending = sort_order
       ? sort_order === 'asc'
@@ -358,7 +365,7 @@ export async function GET(request: Request) {
       supabase
         .from('movie_cache')
         .select(
-          'id, title, poster_path, backdrop_path, release_date, overview, vote_average, vote_count, popularity, genre_ids, release_type, is_now_playing, is_revival',
+          'id, title, poster_path, backdrop_path, release_date, digital_release_date, overview, vote_average, vote_count, popularity, genre_ids, release_type, is_now_playing, is_revival',
         )
         .order(sortColumn, { ascending, nullsFirst: false })
         .order('id', { ascending: true })

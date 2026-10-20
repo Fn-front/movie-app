@@ -17,11 +17,7 @@ import {
   seedCrossReleaseTypeMovie,
   cleanupCrossReleaseTypeMovie,
 } from '../helpers/api';
-
-/** 一覧の日付範囲に確実に収まるよう、本日の日付を使う */
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { localDateFromToday } from '../helpers/date';
 
 /** 指定IDの映画がレスポンスに含まれるか */
 function includesSeededMovie(json: {
@@ -33,7 +29,13 @@ function includesSeededMovie(json: {
 }
 
 test.describe('劇場公開と配信の共存', () => {
-  const releaseDate = today();
+  // fullyParallel ではファイル内のテストが複数ワーカーに分散し、
+  // 先に終わったワーカーの afterAll がシードを削除してしまうため、
+  // 同一ワーカーで順に実行する
+  test.describe.configure({ mode: 'default' });
+
+  // 一覧の日付範囲に確実に収まるよう、本日の日付を使う
+  const releaseDate = localDateFromToday();
 
   test.beforeAll(async () => {
     await seedCrossReleaseTypeMovie(releaseDate);

@@ -631,4 +631,133 @@ describe('TheaterExperiencePage', () => {
       }
     });
   });
+
+  describe('視点操作（一人称）', () => {
+    const selectedSeat = mockTheaterDetail.theater.seats[0];
+
+    /** 一人称（座席選択済み）の状態でページを描画する */
+    const renderFirstPerson = (selectSeat = jest.fn()) => {
+      mockUseSeatSelection.mockReturnValue({
+        selectedSeat,
+        selectSeat,
+        clearSelection: jest.fn(),
+      });
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+      return selectSeat;
+    };
+
+    afterEach(() => {
+      // 他テストへ漏らさないよう既定（未選択）へ戻す
+      mockUseSeatSelection.mockReturnValue({
+        selectedSeat: null,
+        selectSeat: jest.fn(),
+        clearSelection: jest.fn(),
+      });
+    });
+
+    it('俯瞰では視点操作のUIを出さない', () => {
+      render(<TheaterExperiencePage initialSlug='standard-medium' />);
+
+      expect(screen.queryByRole('application')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: '視点を正面に戻す' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('座席選択時はフォーカス可能な操作領域と操作説明・リセットボタンを出す', () => {
+      renderFirstPerson();
+
+      const viewport = screen.getByRole('application');
+      expect(viewport).toHaveAttribute('tabindex', '0');
+      expect(viewport).toHaveAttribute(
+        'aria-label',
+        expect.stringContaining('矢印キー'),
+      );
+      expect(viewport).toHaveAttribute('aria-describedby', 'theater-look-hint');
+      expect(
+        screen.getByText(
+          'ドラッグで見回す／矢印キーで視点移動／ホイール・ピンチでズーム',
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: '視点を正面に戻す' }),
+      ).toBeInTheDocument();
+    });
+
+    it('WebGL2非対応なら座席選択中でも視点操作UIを出さない（操作対象の3Dが無い）', () => {
+      mockUseWebGL2Support.mockReturnValue({
+        isSupported: false,
+        isChecking: false,
+      });
+
+      renderFirstPerson();
+
+      expect(screen.queryByRole('application')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: '視点を正面に戻す' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('見回しドラッグ直後のクリックは席替えとして扱わない', () => {
+      const selectSeat = renderFirstPerson();
+      const viewport = screen.getByRole('application');
+
+      fireEvent.pointerDown(viewport, {
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(viewport, {
+        pointerId: 1,
+        clientX: 180,
+        clientY: 100,
+      });
+      fireEvent.pointerUp(viewport, {
+        pointerId: 1,
+        clientX: 180,
+        clientY: 100,
+      });
+      act(() => lastProps(mockSeatMeshes).onSeatClick(selectedSeat));
+
+      expect(selectSeat).not.toHaveBeenCalled();
+    });
+
+    it('ドラッグしていなければ3Dビューのクリックで席替えできる', () => {
+      const selectSeat = renderFirstPerson();
+      const viewport = screen.getByRole('application');
+
+      fireEvent.pointerDown(viewport, {
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerUp(viewport, {
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      });
+      act(() => lastProps(mockSeatMeshes).onSeatClick(selectedSeat));
+
+      expect(selectSeat).toHaveBeenCalledWith(selectedSeat);
+    });
+
+    it('座席一覧（2D）からの選択はドラッグ判定に影響されない', () => {
+      const selectSeat = renderFirstPerson();
+      const viewport = screen.getByRole('application');
+
+      fireEvent.pointerDown(viewport, {
+        pointerId: 1,
+        clientX: 100,
+        clientY: 100,
+      });
+      fireEvent.pointerMove(viewport, {
+        pointerId: 1,
+        clientX: 180,
+        clientY: 100,
+      });
+      act(() => lastProps(mockSeatA11yList).onSelectSeat(selectedSeat));
+
+      expect(selectSeat).toHaveBeenCalledWith(selectedSeat);
+    });
+  });
 });

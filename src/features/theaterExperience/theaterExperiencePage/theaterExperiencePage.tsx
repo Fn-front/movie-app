@@ -484,6 +484,18 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                 ) : (
                   <UnsupportedBrowserNotice />
                 )}
+                {/*
+                  操作の案内。3Dビューの下端に重ねたいので、キャンバス領域ではなく
+                  ビューポート（キャンバスと同じ高さ）を基準に配置する。
+                */}
+                {isLookControlEnabled && (
+                  <p
+                    id={LOOK_HINT_ID}
+                    className={styles.c_theater_experience__look_hint}
+                  >
+                    {LOOK_HINT_TEXT}
+                  </p>
+                )}
               </div>
               {/* 座席選択中はメインビューが一人称に切り替わるので俯瞰へ戻すボタンを表示 */}
               {isWebGL2Supported && selectedSeat && (
@@ -495,23 +507,15 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                   ← 俯瞰に戻る
                 </button>
               )}
-              {/* 視点操作の案内とリセット（一人称かつ3Dが描けているときだけ） */}
+              {/* 視点のリセット（一人称かつ3Dが描けているときだけ） */}
               {isLookControlEnabled && (
-                <>
-                  <button
-                    type='button'
-                    onClick={resetLook}
-                    className={styles.c_theater_experience__reset_look}
-                  >
-                    視点を正面に戻す
-                  </button>
-                  <p
-                    id={LOOK_HINT_ID}
-                    className={styles.c_theater_experience__look_hint}
-                  >
-                    {LOOK_HINT_TEXT}
-                  </p>
-                </>
+                <button
+                  type='button'
+                  onClick={resetLook}
+                  className={styles.c_theater_experience__reset_look}
+                >
+                  視点を正面に戻す
+                </button>
               )}
             </div>
 

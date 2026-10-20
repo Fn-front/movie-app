@@ -46,7 +46,10 @@ import {
   EXCLUDED_GENRES_PARAM,
   EXCLUDED_KEYWORDS_PARAM,
 } from '@/constants/movies';
-import { TMDB_MOVIE_DETAIL_APPEND } from '@/constants/tmdb';
+import {
+  TMDB_MOVIE_DETAIL_APPEND,
+  TMDB_STREAMING_AVAILABILITY_APPEND,
+} from '@/constants/tmdb';
 
 beforeAll(() => {
   process.env.TMDB_API_KEY = 'test-token';
@@ -660,6 +663,184 @@ describe('TMDb APIクライアント', () => {
       const { getJpTheatricalReleaseDates } = require('./tmdb');
 
       expect(await getJpTheatricalReleaseDates(1)).toEqual([]);
+    });
+  });
+
+  describe('getJpStreamingAvailability', () => {
+    /** watch/providers + release_dates の append レスポンスを組み立てる */
+    const availabilityResponse = (
+      providers: Record<string, unknown> | undefined,
+      releases: {
+        iso_3166_1: string;
+        release_dates: { type: number; release_date: string }[];
+      }[] = [],
+    ) => ({
+      data: {
+        id: 1,
+        'watch/providers': providers ? { results: providers } : undefined,
+        release_dates: { results: releases },
+      },
+    });
+
+    it('watch/providersとrelease_datesを1リクエストで取得する', async () => {
+      mockGet.mockResolvedValue(availabilityResponse({}));
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+      await getJpStreamingAvailability(1);
+
+      expect(mockGet).toHaveBeenCalledWith('/movie/1', {
+        params: { append_to_response: TMDB_STREAMING_AVAILABILITY_APPEND },
+      });
+    });
+
+    it('JPにflatrateがあれば配信中と判定する', async () => {
+      mockGet.mockResolvedValue(
+        availabilityResponse({
+          JP: { link: 'https://example.com', flatrate: [{ provider_id: 8 }] },
+        }),
+      );
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+
+      expect((await getJpStreamingAvailability(1)).isCurrentlyStreaming).toBe(
+        true,
+      );
+    });
+
+    it('JPにrentのみでも配信中と判定する', async () => {
+      mockGet.mockResolvedValue(
+        availabilityResponse({
+          JP: { link: 'https://example.com', rent: [{ provider_id: 10 }] },
+        }),
+      );
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+
+      expect((await getJpStreamingAvailability(1)).isCurrentlyStreaming).toBe(
+        true,
+      );
+    });
+
+    it('JPにbuyのみでも配信中と判定する', async () => {
+      mockGet.mockResolvedValue(
+        availabilityResponse({
+          JP: { link: 'https://example.com', buy: [{ provider_id: 2 }] },
+        }),
+      );
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+
+      expect((await getJpStreamingAvailability(1)).isCurrentlyStreaming).toBe(
+        true,
+      );
+    });
+
+    it('JP以外でしか配信されていない作品は配信中にしない', async () => {
+      mockGet.mockResolvedValue(
+        availabilityResponse({
+          US: { link: 'https://example.com', flatrate: [{ provider_id: 8 }] },
+        }),
+      );
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+
+      expect((await getJpStreamingAvailability(1)).isCurrentlyStreaming).toBe(
+        false,
+      );
+    });
+
+    it('JPのプロバイダーが空配列なら配信中にしない', async () => {
+      mockGet.mockResolvedValue(
+        availabilityResponse({
+          JP: { link: 'https://example.com', flatrate: [], rent: [], buy: [] },
+        }),
+      );
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+
+      expect((await getJpStreamingAvailability(1)).isCurrentlyStreaming).toBe(
+        false,
+      );
+    });
+
+    it('watch/providersが無くても例外にならず配信中にしない', async () => {
+      mockGet.mockResolvedValue(availabilityResponse(undefined));
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+
+      expect(await getJpStreamingAvailability(1)).toEqual({
+        isCurrentlyStreaming: false,
+        digitalReleaseDate: null,
+      });
+    });
+
+    it('JPのDigital（type=4）から最も早い日付を抽出する', async () => {
+      mockGet.mockResolvedValue(
+        availabilityResponse({}, [
+          {
+            iso_3166_1: 'JP',
+            release_dates: [
+              { type: 3, release_date: '2026-01-01T00:00:00.000Z' },
+              { type: 4, release_date: '2026-05-20T00:00:00.000Z' },
+              { type: 4, release_date: '2026-04-10T00:00:00.000Z' },
+            ],
+          },
+        ]),
+      );
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+
+      expect((await getJpStreamingAvailability(1)).digitalReleaseDate).toBe(
+        '2026-04-10',
+      );
+    });
+
+    it('他国のDigitalは採用しない', async () => {
+      mockGet.mockResolvedValue(
+        availabilityResponse({}, [
+          {
+            iso_3166_1: 'US',
+            release_dates: [
+              { type: 4, release_date: '2026-02-01T00:00:00.000Z' },
+            ],
+          },
+        ]),
+      );
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+
+      expect(
+        (await getJpStreamingAvailability(1)).digitalReleaseDate,
+      ).toBeNull();
+    });
+
+    it('JPにDigitalが無ければnullを返す（劇場公開のみ）', async () => {
+      mockGet.mockResolvedValue(
+        availabilityResponse({}, [
+          {
+            iso_3166_1: 'JP',
+            release_dates: [
+              { type: 3, release_date: '2026-02-01T00:00:00.000Z' },
+            ],
+          },
+        ]),
+      );
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+
+      expect(
+        (await getJpStreamingAvailability(1)).digitalReleaseDate,
+      ).toBeNull();
+    });
+
+    it('TMDb取得失敗時は例外をそのまま投げる（配信終了扱いにしない）', async () => {
+      mockGet.mockRejectedValue(new Error('TMDb API error'));
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+
+      await expect(getJpStreamingAvailability(1)).rejects.toThrow(
+        'TMDb API error',
+      );
     });
   });
 

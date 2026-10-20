@@ -47,10 +47,30 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
 }));
 
 /**
+ * 生成されたチェインモックの記録
+ *
+ * 総件数クエリとデータクエリは別インスタンスとして生成されるため、
+ * 「どのフィルタが適用されたか」はチェイン単体では追えない。
+ * 生成分をすべて記録しておき、横断してフィルタ呼び出しを検証する
+ */
+const createdChains: Record<string, jest.Mock>[] = [];
+
+/**
+ * 記録済みチェインに適用されたフィルタ呼び出しを集約する
+ *
+ * @param method - 収集対象のメソッド名（eq / gt など）
+ * @returns [カラム名, 値] の配列
+ */
+function collectFilterCalls(method: string): unknown[][] {
+  return createdChains.flatMap((chain) => chain[method]?.mock.calls ?? []);
+}
+
+/**
  * Supabaseチェイン可能なクエリビルダーのモックを作成
  */
 function createChainMock(resolveValue: unknown = { data: null, error: null }) {
   const chain: Record<string, jest.Mock> = {};
+  createdChains.push(chain);
   const methods = [
     'select',
     'eq',
@@ -61,6 +81,7 @@ function createChainMock(resolveValue: unknown = { data: null, error: null }) {
     'limit',
     'single',
     'range',
+    'gt',
     'gte',
     'lte',
     'or',
@@ -364,6 +385,7 @@ function setupExpiredCacheFromMock(options: {
 describe('GET /api/movies', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    createdChains.length = 0;
     // genreCacheをリセットするためにモジュールをリロード
     jest.resetModules();
 
@@ -912,6 +934,107 @@ describe('GET /api/movies', () => {
     );
 
     expect(response.status).toBe(200);
+  });
+
+  // === streaming: JP配信実態による振り分け ===
+
+  it('now_showing+streamingは配信中（is_currently_streaming=true）のみを返す', async () => {
+    const handler = await loadGET();
+    setupStreamingFromMock({
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    const response = await handler(
+      createRequest({ time_frame: 'now_showing', release_type: 'streaming' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(collectFilterCalls('eq')).toContainEqual([
+      'is_currently_streaming',
+      true,
+    ]);
+    // 配信中タブではデジタル公開日で絞らない
+    expect(
+      collectFilterCalls('gt').some(
+        ([column]) => column === 'digital_release_date',
+      ),
+    ).toBe(false);
+  });
+
+  it('upcoming+streamingは未配信かつデジタル公開日が未来のものを返す', async () => {
+    const handler = await loadGET();
+    setupStreamingFromMock({
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    const response = await handler(
+      createRequest({ time_frame: 'upcoming', release_type: 'streaming' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(collectFilterCalls('eq')).toContainEqual([
+      'is_currently_streaming',
+      false,
+    ]);
+    expect(
+      collectFilterCalls('gt').some(
+        ([column]) => column === 'digital_release_date',
+      ),
+    ).toBe(true);
+  });
+
+  it('upcoming+streamingはrelease_dateの既定範囲で絞り込まない（劇場公開済みの配信予定を拾う）', async () => {
+    const handler = await loadGET();
+    setupStreamingFromMock({
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(
+      createRequest({ time_frame: 'upcoming', release_type: 'streaming' }),
+    );
+
+    expect(
+      collectFilterCalls('gte').some(([column]) => column === 'release_date'),
+    ).toBe(false);
+  });
+
+  it('upcoming+streamingでもユーザー指定のrelease_date_gteは追加フィルタとして適用する', async () => {
+    const handler = await loadGET();
+    setupStreamingFromMock({
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(
+      createRequest({
+        time_frame: 'upcoming',
+        release_type: 'streaming',
+        release_date_gte: '2026-11-01',
+      }),
+    );
+
+    expect(collectFilterCalls('gte')).toContainEqual([
+      'release_date',
+      '2026-11-01',
+    ]);
+  });
+
+  it('theatricalでは配信状況で絞り込まない', async () => {
+    const handler = await loadGET();
+    setupFromMock({ countResult: { count: 0 } });
+
+    await handler(
+      createRequest({ time_frame: 'now_showing', release_type: 'theatrical' }),
+    );
+
+    expect(
+      collectFilterCalls('eq').some(
+        ([column]) => column === 'is_currently_streaming',
+      ),
+    ).toBe(false);
   });
 
   // === upcoming + theatrical (キャッシュ期限切れでDiscover API呼び出し) ===

@@ -10,26 +10,52 @@ import {
   DISCOVER_API_MAX_PAGES,
   MIN_POPULARITY,
   MIN_VOTE_AVERAGE,
+  STREAMING_MIN_POPULARITY,
 } from '@/constants/movies';
+import { TMDB_AVAILABILITY_CONCURRENCY } from '@/constants/tmdb';
 
 import { syncStreamingMovies } from './syncStreamingMovies';
 
 // --- Mocks ---
 
 const mockDiscoverMovies = jest.fn();
+const mockGetJpStreamingAvailability = jest.fn();
 jest.mock('@/lib/tmdb/tmdb', () => ({
   discoverMovies: (params: Record<string, unknown>) =>
     mockDiscoverMovies(params),
+  getJpStreamingAvailability: (movieId: number) =>
+    mockGetJpStreamingAvailability(movieId),
 }));
 
 const mockUpsert = jest.fn();
 const mockNeq = jest.fn();
+const mockUpdate = jest.fn();
+const mockClearNotIn = jest.fn();
+
+/** クリアクエリ（.update().eq().eq().not().select()）の解決値 */
+let clearResult: {
+  data: { id: number }[] | null;
+  error: { message: string } | null;
+};
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: () => ({
       select: () => ({ neq: (...args: unknown[]) => mockNeq(...args) }),
       upsert: (...args: unknown[]) => mockUpsert(...args),
+      update: (...args: unknown[]) => {
+        mockUpdate(...args);
+        // .eq().eq().not().select() のチェインを辿れるようにする
+        const chain = {
+          eq: () => chain,
+          not: (...notArgs: unknown[]) => {
+            mockClearNotIn(...notArgs);
+            return chain;
+          },
+          select: () => Promise.resolve(clearResult),
+        };
+        return chain;
+      },
     }),
   }),
 }));
@@ -59,6 +85,12 @@ const respondWith = (movies: Record<string, unknown>[], totalPages = 1) => ({
   total_pages: totalPages,
 });
 
+/** JP配信実態のレスポンスを生成 */
+const availability = (
+  isCurrentlyStreaming: boolean,
+  digitalReleaseDate: string | null = null,
+) => ({ isCurrentlyStreaming, digitalReleaseDate });
+
 // --- Tests ---
 
 describe('syncStreamingMovies', () => {
@@ -74,7 +106,11 @@ describe('syncStreamingMovies', () => {
     };
     mockNeq.mockResolvedValue({ data: [], error: null });
     mockUpsert.mockResolvedValue({ error: null });
+    clearResult = { data: [], error: null };
     mockDiscoverMovies.mockResolvedValue(respondWith([createMovie()]));
+    mockGetJpStreamingAvailability.mockResolvedValue(
+      availability(true, '2026-03-10'),
+    );
   });
 
   afterEach(() => {
@@ -140,7 +176,8 @@ describe('syncStreamingMovies', () => {
       expect(mockDiscoverMovies).toHaveBeenCalledTimes(
         DISCOVER_API_MAX_PAGES * 2,
       );
-      expect(result.tmdbRequests).toBe(DISCOVER_API_MAX_PAGES * 2);
+      // Discover の呼び出し + 配信実態チェック（重複排除後1件）
+      expect(result.tmdbRequests).toBe(DISCOVER_API_MAX_PAGES * 2 + 1);
     });
 
     it('結果が0件のページでループを打ち切る', async () => {
@@ -151,6 +188,15 @@ describe('syncStreamingMovies', () => {
       // time_frame ごとに1回ずつで打ち切り
       expect(mockDiscoverMovies).toHaveBeenCalledTimes(2);
       expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    it('両方のtime_frameに現れた映画は1件に重複排除する', async () => {
+      // 既定のモックは両 time_frame で同じ id=1 を返す
+      const result = await syncStreamingMovies();
+
+      expect(result.fetched).toBe(2);
+      expect(mockGetJpStreamingAvailability).toHaveBeenCalledTimes(1);
+      expect(result.upserted).toBe(1);
     });
   });
 
@@ -176,6 +222,22 @@ describe('syncStreamingMovies', () => {
 
       expect(mockUpsert).not.toHaveBeenCalled();
       expect(result.skipped).toBe(2);
+    });
+
+    it('韓国語・中国語・タイ語は除外しない', async () => {
+      for (const language of ['ko', 'zh', 'th']) {
+        jest.clearAllMocks();
+        mockUpsert.mockResolvedValue({ error: null });
+        mockGetJpStreamingAvailability.mockResolvedValue(availability(true));
+        mockDiscoverMovies.mockResolvedValue(
+          respondWith([createMovie({ original_language: language })]),
+        );
+
+        const result = await syncStreamingMovies();
+
+        expect(result.skipped).toBe(0);
+        expect(result.upserted).toBe(1);
+      }
     });
 
     it('ジャンル未設定の映画を除外する', async () => {
@@ -207,18 +269,143 @@ describe('syncStreamingMovies', () => {
 
       const result = await syncStreamingMovies();
 
-      expect(result.upserted).toBe(2);
+      expect(result.upserted).toBe(1);
     });
 
-    it('最低人気度未満の映画を除外する', async () => {
+    it('streaming用の緩い人気度閾値を使う（劇場用閾値未満でも残す）', async () => {
       mockDiscoverMovies.mockResolvedValue(
         respondWith([createMovie({ popularity: MIN_POPULARITY - 0.1 })]),
       );
 
       const result = await syncStreamingMovies();
 
+      expect(result.skipped).toBe(0);
+      expect(result.upserted).toBe(1);
+    });
+
+    it('streaming用の人気度閾値未満の映画は除外する', async () => {
+      mockDiscoverMovies.mockResolvedValue(
+        respondWith([
+          createMovie({ popularity: STREAMING_MIN_POPULARITY - 0.01 }),
+        ]),
+      );
+
+      const result = await syncStreamingMovies();
+
       expect(mockUpsert).not.toHaveBeenCalled();
       expect(result.skipped).toBe(2);
+    });
+  });
+
+  describe('JP配信実態の反映', () => {
+    it('JP配信中の作品はis_currently_streaming=trueで保存する', async () => {
+      mockGetJpStreamingAvailability.mockResolvedValue(
+        availability(true, '2026-03-10'),
+      );
+
+      const result = await syncStreamingMovies();
+
+      expect(mockUpsert.mock.calls[0][0][0]).toMatchObject({
+        is_currently_streaming: true,
+        digital_release_date: '2026-03-10',
+      });
+      expect(result.availableInJp).toBe(1);
+    });
+
+    it('JP未配信の作品はis_currently_streaming=falseで保存する', async () => {
+      mockGetJpStreamingAvailability.mockResolvedValue(
+        availability(false, '2026-06-01'),
+      );
+
+      const result = await syncStreamingMovies();
+
+      expect(mockUpsert.mock.calls[0][0][0]).toMatchObject({
+        is_currently_streaming: false,
+        digital_release_date: '2026-06-01',
+      });
+      expect(result.availableInJp).toBe(0);
+    });
+
+    it('デジタル公開日が無ければnullで保存する', async () => {
+      mockGetJpStreamingAvailability.mockResolvedValue(availability(true));
+
+      await syncStreamingMovies();
+
+      expect(mockUpsert.mock.calls[0][0][0].digital_release_date).toBeNull();
+    });
+
+    it('配信実態を取得できなかった作品はUPSERTせず既存値を保持する', async () => {
+      mockGetJpStreamingAvailability.mockRejectedValue(
+        new Error('TMDb unavailable'),
+      );
+
+      const result = await syncStreamingMovies();
+
+      expect(mockUpsert).not.toHaveBeenCalled();
+      expect(result.upserted).toBe(0);
+      expect(result.errors[0]).toContain('TMDb unavailable');
+    });
+
+    it('同時実行数を超える候補は分割して問い合わせる', async () => {
+      const movies = Array.from(
+        { length: TMDB_AVAILABILITY_CONCURRENCY + 3 },
+        (_, index) => createMovie({ id: index + 1 }),
+      );
+      mockDiscoverMovies.mockResolvedValue(respondWith(movies));
+
+      const result = await syncStreamingMovies();
+
+      expect(mockGetJpStreamingAvailability).toHaveBeenCalledTimes(
+        movies.length,
+      );
+      expect(result.upserted).toBe(movies.length);
+    });
+  });
+
+  describe('配信終了フラグのクリア', () => {
+    it('今回配信中と確認できた映画を保持対象にしてクリアする', async () => {
+      clearResult = { data: [{ id: 99 }], error: null };
+
+      const result = await syncStreamingMovies();
+
+      expect(mockUpdate).toHaveBeenCalledWith({
+        is_currently_streaming: false,
+      });
+      expect(mockClearNotIn).toHaveBeenCalledWith('id', 'in', '(1)');
+      expect(result.cleared).toBe(1);
+    });
+
+    it('配信実態を取得できなかった映画はクリア対象から除外する', async () => {
+      mockDiscoverMovies.mockResolvedValue(
+        respondWith([createMovie({ id: 1 }), createMovie({ id: 2 })]),
+      );
+      mockGetJpStreamingAvailability.mockImplementation((movieId: number) =>
+        movieId === 2
+          ? Promise.reject(new Error('TMDb unavailable'))
+          : Promise.resolve(availability(true)),
+      );
+
+      await syncStreamingMovies();
+
+      // 判定できなかった id=2 も保持対象に含める
+      expect(mockClearNotIn).toHaveBeenCalledWith('id', 'in', '(1,2)');
+    });
+
+    it('1件も配信中を確認できなければクリアしない（TMDb障害時の全消し防止）', async () => {
+      mockGetJpStreamingAvailability.mockResolvedValue(availability(false));
+
+      const result = await syncStreamingMovies();
+
+      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(result.cleared).toBe(0);
+    });
+
+    it('クリア失敗をerrorsに記録する', async () => {
+      clearResult = { data: null, error: { message: 'clear failed' } };
+
+      const result = await syncStreamingMovies();
+
+      expect(result.errors.some((e) => e.includes('clear failed'))).toBe(true);
     });
   });
 
@@ -231,7 +418,7 @@ describe('syncStreamingMovies', () => {
 
       // PK は (id, release_type) のため共存でき、除外してはいけない
       expect(result.skipped).toBe(0);
-      expect(result.upserted).toBe(2);
+      expect(result.upserted).toBe(1);
       expect(mockUpsert).toHaveBeenCalled();
     });
 
@@ -274,7 +461,6 @@ describe('syncStreamingMovies', () => {
 
       const result = await syncStreamingMovies();
 
-      expect(result.errors).toHaveLength(2);
       expect(result.errors[0]).toContain('upsert failed');
       expect(result.upserted).toBe(0);
     });
@@ -298,8 +484,10 @@ describe('syncStreamingMovies', () => {
       const result = await syncStreamingMovies();
 
       expect(result.fetched).toBe(2);
-      expect(result.upserted).toBe(2);
-      expect(result.tmdbRequests).toBe(2);
+      expect(result.upserted).toBe(1);
+      expect(result.availableInJp).toBe(1);
+      // Discover 2回 + 配信実態チェック1回
+      expect(result.tmdbRequests).toBe(3);
       expect(result.durationMs).toBeGreaterThanOrEqual(0);
       expect(result.errors).toEqual([]);
     });

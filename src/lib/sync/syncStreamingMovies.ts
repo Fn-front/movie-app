@@ -4,6 +4,11 @@
  * これまで streaming はリクエスト起点（/api/movies のキャッシュ失効時）でしか
  * 同期されず、失効直後のユーザーが Discover の直列実行を待たされていた。
  * CRON から事前にウォームアップするため、同期処理を関数として切り出している。
+ *
+ * Discover の `with_release_type=4` は「どこかの国でデジタル公開された」しか
+ * 意味しないため、各候補について `watch/providers` の JP を確認し、
+ * 日本での配信可否（is_currently_streaming）とデジタル公開日
+ * （digital_release_date）を併せて保存する。
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -14,10 +19,12 @@ import {
   NOW_SHOWING_MONTHS_BACK,
   RELEASE_TYPE,
   RELEASE_TYPE_MAP,
+  STREAMING_MIN_POPULARITY,
 } from '@/constants/movies';
-import { TMDB_SORT_BY } from '@/constants/tmdb';
+import { TMDB_AVAILABILITY_CONCURRENCY, TMDB_SORT_BY } from '@/constants/tmdb';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
-import { discoverMovies } from '@/lib/tmdb/tmdb';
+import { discoverMovies, getJpStreamingAvailability } from '@/lib/tmdb/tmdb';
+import type { Movie } from '@/lib/types';
 
 /**
  * Streaming 同期結果の型
@@ -29,6 +36,10 @@ export interface StreamingSyncResult {
   upserted: number;
   /** フィルタで除外した映画数 */
   skipped: number;
+  /** 日本で配信中と判定した映画数 */
+  availableInJp: number;
+  /** is_currently_streaming をクリアした映画数（配信終了） */
+  cleared: number;
   /** TMDb API の呼び出し回数 */
   tmdbRequests: number;
   /** 実行時間（ミリ秒） */
@@ -45,6 +56,16 @@ interface DateWindow {
   gte: string;
   /** 公開日の上限（YYYY-MM-DD） */
   lte: string;
+}
+
+/** JP配信実態を付与した同期対象 */
+interface StreamingCandidate {
+  /** TMDb の映画データ */
+  movie: Movie;
+  /** 日本で現在配信中か */
+  isCurrentlyStreaming: boolean;
+  /** 日本のデジタル公開日（YYYY-MM-DD）。情報が無ければ null */
+  digitalReleaseDate: string | null;
 }
 
 /**
@@ -86,10 +107,137 @@ function buildDateWindows(now: Date): DateWindow[] {
 }
 
 /**
+ * 配列を指定サイズのチャンクに分割する
+ */
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * TMDb Discover API から配信作品の候補を取得する
+ *
+ * upcoming / now_showing の両方の公開日範囲を走査する。
+ * 両範囲に同じ作品が現れることがあるため、ID で重複を排除する
+ * （後続の watch/providers 呼び出しを無駄に増やさないため）。
+ *
+ * @param windows - 走査する公開日範囲
+ * @param result - メトリクスの記録先（呼び出し側と共有）
+ * @returns 重複排除済みの候補映画
+ */
+async function fetchStreamingCandidates(
+  windows: DateWindow[],
+  result: StreamingSyncResult,
+): Promise<Movie[]> {
+  const candidates = new Map<number, Movie>();
+
+  for (const window of windows) {
+    for (let page = 1; page <= DISCOVER_API_MAX_PAGES; page++) {
+      try {
+        const response = await discoverMovies({
+          page,
+          'release_date.gte': window.gte,
+          'release_date.lte': window.lte,
+          with_release_type: RELEASE_TYPE_MAP[RELEASE_TYPE.STREAMING],
+          sort_by: TMDB_SORT_BY.POPULARITY_DESC,
+        });
+        result.tmdbRequests++;
+
+        if (response.results.length === 0) break;
+
+        result.fetched += response.results.length;
+
+        for (const movie of response.results) {
+          // 配信カタログは旧作が多く popularity が下がりやすいため、
+          // 人気度の閾値だけ streaming 用に緩める
+          if (
+            !isQualityMovie(movie, { minPopularity: STREAMING_MIN_POPULARITY })
+          ) {
+            result.skipped++;
+            continue;
+          }
+          candidates.set(movie.id, movie);
+        }
+
+        if (page >= response.total_pages) break;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        result.errors.push(`${window.timeFrame} page ${page}: ${message}`);
+        // 当該 time_frame の残ページはスキップし、次の time_frame へ進む
+        break;
+      }
+    }
+  }
+
+  return Array.from(candidates.values());
+}
+
+/**
+ * 候補ごとに日本での配信実態を問い合わせる
+ *
+ * 問い合わせに失敗した作品は同期対象から外す。false にフォールバックすると、
+ * TMDbの一時障害だけで配信中の作品が一斉に配信終了扱いになるため。
+ * 失敗した作品のIDは `unresolvedIds` に積み、配信終了フラグのクリア対象からも
+ * 除外して既存の値を保持する。
+ *
+ * @param movies - 候補映画
+ * @param result - メトリクスの記録先（呼び出し側と共有）
+ * @param unresolvedIds - 判定できなかった映画IDの記録先
+ * @returns JP配信実態を付与した同期対象
+ */
+async function resolveJpAvailability(
+  movies: Movie[],
+  result: StreamingSyncResult,
+  unresolvedIds: Set<number>,
+): Promise<StreamingCandidate[]> {
+  const resolved: StreamingCandidate[] = [];
+
+  // TMDb のレート制限（50 req/s）に収めるため、同時実行数を絞って順に流す
+  for (const batch of chunk(movies, TMDB_AVAILABILITY_CONCURRENCY)) {
+    const settled = await Promise.all(
+      batch.map(async (movie) => {
+        try {
+          const availability = await getJpStreamingAvailability(movie.id);
+          return { movie, availability, error: null as string | null };
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Unknown error';
+          return { movie, availability: null, error: message };
+        }
+      }),
+    );
+    result.tmdbRequests += batch.length;
+
+    for (const { movie, availability, error } of settled) {
+      if (!availability) {
+        unresolvedIds.add(movie.id);
+        result.errors.push(`availability ${movie.title}: ${error}`);
+        continue;
+      }
+
+      if (availability.isCurrentlyStreaming) result.availableInJp++;
+
+      resolved.push({
+        movie,
+        isCurrentlyStreaming: availability.isCurrentlyStreaming,
+        digitalReleaseDate: availability.digitalReleaseDate,
+      });
+    }
+  }
+
+  return resolved;
+}
+
+/**
  * TMDb Discover API から配信作品を取得し movie_cache に同期する
  *
  * upcoming / now_showing の両方の公開日範囲を事前生成する。
- * TMDb のレート制限（50 req/s）に配慮し、ページ取得は順次実行する。
+ * TMDb のレート制限（50 req/s）に配慮し、ページ取得は順次、
+ * 配信実態の問い合わせは同時実行数を絞って行う。
  *
  * @returns 同期結果（メトリクス込み）
  */
@@ -111,6 +259,8 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
     fetched: 0,
     upserted: 0,
     skipped: 0,
+    availableInJp: 0,
+    cleared: 0,
     tmdbRequests: 0,
     durationMs: 0,
     errors: [],
@@ -122,66 +272,74 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
   const now = new Date();
   const cachedAt = now.toISOString();
 
-  for (const window of buildDateWindows(now)) {
-    for (let page = 1; page <= DISCOVER_API_MAX_PAGES; page++) {
-      try {
-        const response = await discoverMovies({
-          page,
-          'release_date.gte': window.gte,
-          'release_date.lte': window.lte,
-          with_release_type: RELEASE_TYPE_MAP[RELEASE_TYPE.STREAMING],
-          sort_by: TMDB_SORT_BY.POPULARITY_DESC,
-        });
-        result.tmdbRequests++;
+  const candidates = await fetchStreamingCandidates(
+    buildDateWindows(now),
+    result,
+  );
 
-        if (response.results.length === 0) break;
+  const unresolvedIds = new Set<number>();
+  const resolved = await resolveJpAvailability(
+    candidates,
+    result,
+    unresolvedIds,
+  );
 
-        result.fetched += response.results.length;
+  const streamingIds = new Set<number>();
 
-        // adultコンテンツ・除外言語・低品質コンテンツを除外
-        const filteredResults = response.results.filter((movie) =>
-          isQualityMovie(movie),
-        );
+  for (const batch of chunk(resolved, TMDB_AVAILABILITY_CONCURRENCY)) {
+    const movieRows = batch.map(
+      ({ movie, isCurrentlyStreaming, digitalReleaseDate }) => ({
+        id: movie.id,
+        title: movie.title,
+        poster_path: movie.poster_path,
+        backdrop_path: movie.backdrop_path,
+        release_date: movie.release_date || null,
+        overview: movie.overview || null,
+        vote_average: movie.vote_average,
+        vote_count: movie.vote_count ?? 0,
+        popularity: movie.popularity,
+        genre_ids: movie.genre_ids,
+        release_type: RELEASE_TYPE.STREAMING,
+        is_currently_streaming: isCurrentlyStreaming,
+        digital_release_date: digitalReleaseDate,
+        cached_at: cachedAt,
+      }),
+    );
 
-        result.skipped += response.results.length - filteredResults.length;
+    const { error } = await supabase
+      .from('movie_cache')
+      .upsert(movieRows, { onConflict: 'id,release_type' });
 
-        if (filteredResults.length > 0) {
-          const movieRows = filteredResults.map((movie) => ({
-            id: movie.id,
-            title: movie.title,
-            poster_path: movie.poster_path,
-            backdrop_path: movie.backdrop_path,
-            release_date: movie.release_date || null,
-            overview: movie.overview || null,
-            vote_average: movie.vote_average,
-            vote_count: movie.vote_count ?? 0,
-            popularity: movie.popularity,
-            genre_ids: movie.genre_ids,
-            release_type: RELEASE_TYPE.STREAMING,
-            cached_at: cachedAt,
-          }));
+    if (error) {
+      result.errors.push(`upsert: ${error.message}`);
+      continue;
+    }
 
-          const { error } = await supabase
-            .from('movie_cache')
-            .upsert(movieRows, { onConflict: 'id,release_type' });
+    result.upserted += movieRows.length;
+    for (const { movie, isCurrentlyStreaming } of batch) {
+      if (isCurrentlyStreaming) streamingIds.add(movie.id);
+    }
+  }
 
-          if (error) {
-            result.errors.push(
-              `${window.timeFrame} page ${page}: ${error.message}`,
-            );
-          } else {
-            result.upserted += movieRows.length;
-          }
-        }
+  // 今回「配信中」と確認できなかった既存行のフラグを落とす（配信終了の反映）。
+  //
+  // 1件も配信中を確認できなかった場合はクリアしない。TMDb 障害やキー失効で
+  // 一覧全体が空になるのを避けるため、異常時は既存の表示を維持する。
+  if (streamingIds.size > 0) {
+    // 判定に失敗した作品は現状維持にしたいので、保持対象に含める
+    const keepIds = [...streamingIds, ...unresolvedIds];
+    const { data: clearedData, error: clearError } = await supabase
+      .from('movie_cache')
+      .update({ is_currently_streaming: false })
+      .eq('is_currently_streaming', true)
+      .eq('release_type', RELEASE_TYPE.STREAMING)
+      .not('id', 'in', `(${keepIds.join(',')})`)
+      .select('id');
 
-        if (page >= response.total_pages) break;
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'Unknown error';
-        result.errors.push(`${window.timeFrame} page ${page}: ${message}`);
-        // 当該 time_frame の残ページはスキップし、次の time_frame へ進む
-        break;
-      }
+    if (clearError) {
+      result.errors.push(`clear: ${clearError.message}`);
+    } else {
+      result.cleared = clearedData?.length ?? 0;
     }
   }
 
@@ -189,7 +347,8 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
 
   console.log(
     `[sync-streaming] fetched=${result.fetched} upserted=${result.upserted} ` +
-      `skipped=${result.skipped} tmdbRequests=${result.tmdbRequests} ` +
+      `skipped=${result.skipped} availableInJp=${result.availableInJp} ` +
+      `cleared=${result.cleared} tmdbRequests=${result.tmdbRequests} ` +
       `durationMs=${result.durationMs} errors=${result.errors.length}`,
   );
 

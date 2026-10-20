@@ -23,6 +23,8 @@ export interface QualityFilterOptions {
   requireVoteAverage?: boolean;
   /** 人気度が閾値以上であることを要求する（既定: true） */
   requirePopularity?: boolean;
+  /** 人気度の閾値（既定: MIN_POPULARITY）。配信カタログ等で緩める用途 */
+  minPopularity?: number;
 }
 
 /**
@@ -48,6 +50,7 @@ export function isQualityMovie(
     requireGenres = true,
     requireVoteAverage = true,
     requirePopularity = true,
+    minPopularity = MIN_POPULARITY,
   } = options;
 
   if (movie.adult) return false;
@@ -69,7 +72,7 @@ export function isQualityMovie(
     return false;
   }
 
-  if (requirePopularity && movie.popularity < MIN_POPULARITY) return false;
+  if (requirePopularity && movie.popularity < minPopularity) return false;
 
   return true;
 }

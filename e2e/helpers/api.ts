@@ -156,6 +156,27 @@ export async function seedRecommendations(count = 2): Promise<void> {
   await seedRecommendationsForUser(userId, count);
 }
 
+/**
+ * movie_cache へのシード・後始末のレスポンスを検証する
+ *
+ * 投入が失敗しても黙殺すると、各テストが「0件」で落ちるだけになり、
+ * アサーションのバグなのかシードのバグなのか切り分けられない。
+ * PostgREST は一括INSERTのキー不一致（PGRST102）でも全行を入れないため、
+ * ここで落として原因をそのまま見せる。
+ *
+ * @param response - fetch のレスポンス
+ * @param label - エラーメッセージに出す操作名
+ */
+async function assertMovieCacheWriteOk(
+  response: Response,
+  label: string,
+): Promise<void> {
+  if (response.ok) return;
+  throw new Error(
+    `${label} failed: ${response.status} ${await response.text()}`,
+  );
+}
+
 /** 相互排他バグ検証用の映画ID（movie_cache シード用） */
 export const CROSS_RELEASE_TYPE_MOVIE_ID = 999501;
 
@@ -164,6 +185,10 @@ export const CROSS_RELEASE_TYPE_MOVIE_ID = 999501;
  *
  * movie_cache の PK は (id, release_type) のため両立できる。
  * 「劇場公開後に配信化された作品」が配信一覧から消えないこと（Issue #580）の検証用。
+ *
+ * streaming 側は `is_currently_streaming=true` にする。配信タブは
+ * 「日本で実際に配信中か」で絞り込むため（Issue #582）、フラグを立てないと
+ * 「配信化された作品」ではなく「JP未配信の作品」をシードしたことになる。
  *
  * @param releaseDate - 公開日（YYYY-MM-DD）。一覧の日付範囲フィルタに合わせて指定する
  */
@@ -183,7 +208,88 @@ export async function seedCrossReleaseTypeMovie(
     genre_ids: [28],
   };
 
-  await fetch(`${SUPABASE_URL}/rest/v1/movie_cache`, {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/movie_cache`, {
+    method: 'POST',
+    headers: {
+      ...supabaseHeaders,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    // PostgREST の一括INSERTは全オブジェクトのキーが一致している必要がある
+    // （揃っていないと PGRST102 で全行が入らない）
+    body: JSON.stringify([
+      {
+        ...base,
+        release_type: 'theatrical',
+        is_currently_streaming: false,
+        digital_release_date: null,
+      },
+      {
+        ...base,
+        release_type: 'streaming',
+        is_currently_streaming: true,
+        digital_release_date: releaseDate,
+      },
+    ]),
+  });
+
+  await assertMovieCacheWriteOk(response, 'seedCrossReleaseTypeMovie');
+}
+
+/** シードした movie_cache の行を物理削除する */
+export async function cleanupCrossReleaseTypeMovie(): Promise<void> {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/movie_cache?id=eq.${CROSS_RELEASE_TYPE_MOVIE_ID}`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+
+  await assertMovieCacheWriteOk(response, 'cleanupCrossReleaseTypeMovie');
+}
+
+/**
+ * JP配信実態フィルタ（Issue #582）の検証用に投入する映画ID
+ */
+export const JP_AVAILABILITY_MOVIE_IDS = {
+  /** 日本で配信中 */
+  STREAMING_NOW: 999510,
+  /** TMDb上はデジタル公開済みだが、日本では配信されていない */
+  NOT_AVAILABLE_IN_JP: 999511,
+  /** 劇場公開済みで、日本の配信開始はこれから */
+  DIGITAL_UPCOMING: 999512,
+  /** 劇場公開作品（配信フラグは false のまま。劇場タブへの波及確認用） */
+  THEATRICAL_ONLY: 999513,
+} as const;
+
+/**
+ * JP配信実態の4パターンを movie_cache に投入する。
+ *
+ * Discover の `with_release_type=4` は「どこかの国でデジタル公開された」しか
+ * 意味しないため、以前は JP 未配信作品や配信終了作品が配信タブに混ざっていた。
+ * `is_currently_streaming` / `digital_release_date` による振り分けを検証する。
+ *
+ * @param dates - 各パターンの日付（YYYY-MM-DD）
+ */
+export async function seedJpAvailabilityMovies(dates: {
+  /** 配信中・JP未配信の作品に使う公開日（今日） */
+  today: string;
+  /** 配信予定作品の公開日（劇場公開済みを表す過去日） */
+  pastReleaseDate: string;
+  /** 配信予定作品のデジタル公開日（未来日） */
+  futureDigitalDate: string;
+  /** 劇場公開のみの作品の公開日（未来日） */
+  futureTheatricalDate: string;
+}): Promise<void> {
+  const base = {
+    poster_path: null,
+    backdrop_path: null,
+    overview: 'E2E用',
+    vote_average: 7.5,
+    vote_count: 100,
+    popularity: 50,
+    genre_ids: [28],
+  };
+
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/movie_cache`, {
     method: 'POST',
     headers: {
       ...supabaseHeaders,
@@ -191,18 +297,57 @@ export async function seedCrossReleaseTypeMovie(
       Prefer: 'resolution=merge-duplicates',
     },
     body: JSON.stringify([
-      { ...base, release_type: 'theatrical' },
-      { ...base, release_type: 'streaming' },
+      {
+        ...base,
+        id: JP_AVAILABILITY_MOVIE_IDS.STREAMING_NOW,
+        title: 'E2E日本で配信中の作品',
+        release_type: 'streaming',
+        release_date: dates.today,
+        is_currently_streaming: true,
+        digital_release_date: dates.today,
+      },
+      {
+        ...base,
+        id: JP_AVAILABILITY_MOVIE_IDS.NOT_AVAILABLE_IN_JP,
+        title: 'E2E日本では未配信の作品',
+        release_type: 'streaming',
+        release_date: dates.today,
+        is_currently_streaming: false,
+        digital_release_date: null,
+      },
+      {
+        ...base,
+        id: JP_AVAILABILITY_MOVIE_IDS.DIGITAL_UPCOMING,
+        title: 'E2E劇場公開済みで配信はこれからの作品',
+        release_type: 'streaming',
+        release_date: dates.pastReleaseDate,
+        is_currently_streaming: false,
+        digital_release_date: dates.futureDigitalDate,
+      },
+      {
+        ...base,
+        id: JP_AVAILABILITY_MOVIE_IDS.THEATRICAL_ONLY,
+        title: 'E2E劇場公開のみの作品',
+        release_type: 'theatrical',
+        release_date: dates.futureTheatricalDate,
+        is_currently_streaming: false,
+        digital_release_date: null,
+      },
     ]),
   });
+
+  await assertMovieCacheWriteOk(response, 'seedJpAvailabilityMovies');
 }
 
-/** シードした movie_cache の行を物理削除する */
-export async function cleanupCrossReleaseTypeMovie(): Promise<void> {
-  await fetch(
-    `${SUPABASE_URL}/rest/v1/movie_cache?id=eq.${CROSS_RELEASE_TYPE_MOVIE_ID}`,
+/** JP配信実態の検証用にシードした行を物理削除する */
+export async function cleanupJpAvailabilityMovies(): Promise<void> {
+  const ids = Object.values(JP_AVAILABILITY_MOVIE_IDS).join(',');
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/movie_cache?id=in.(${ids})`,
     { method: 'DELETE', headers: supabaseHeaders },
   );
+
+  await assertMovieCacheWriteOk(response, 'cleanupJpAvailabilityMovies');
 }
 
 /**

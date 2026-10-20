@@ -238,8 +238,10 @@ export type Database = {
         Row: {
           backdrop_path: string | null;
           cached_at: string;
+          digital_release_date: string | null;
           genre_ids: Json | null;
           id: number;
+          is_currently_streaming: boolean;
           is_now_playing: boolean;
           is_revival: boolean;
           overview: string | null;
@@ -255,8 +257,10 @@ export type Database = {
         Insert: {
           backdrop_path?: string | null;
           cached_at?: string;
+          digital_release_date?: string | null;
           genre_ids?: Json | null;
           id: number;
+          is_currently_streaming?: boolean;
           is_now_playing?: boolean;
           is_revival?: boolean;
           overview?: string | null;
@@ -272,8 +276,10 @@ export type Database = {
         Update: {
           backdrop_path?: string | null;
           cached_at?: string;
+          digital_release_date?: string | null;
           genre_ids?: Json | null;
           id?: number;
+          is_currently_streaming?: boolean;
           is_now_playing?: boolean;
           is_revival?: boolean;
           overview?: string | null;

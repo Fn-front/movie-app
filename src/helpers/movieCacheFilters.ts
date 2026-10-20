@@ -10,6 +10,10 @@ export interface MovieCacheFilters {
   releaseType: string;
   /** 公開中（劇場）フラグで絞り込むか */
   isNowPlayingTheatrical: boolean;
+  /** JP配信中フラグ（undefined なら絞り込まない） */
+  isCurrentlyStreaming?: boolean;
+  /** デジタル公開日の下限（これより後、YYYY-MM-DD。undefined なら絞り込まない） */
+  digitalReleaseDateGt?: string;
   /** 公開日の下限（YYYY-MM-DD） */
   dateGte?: string;
   /** 公開日の上限（YYYY-MM-DD） */
@@ -29,6 +33,7 @@ export interface MovieCacheFilters {
  */
 interface MovieCacheQueryBuilder {
   eq(column: string, value: string | boolean): this;
+  gt(column: string, value: string): this;
   gte(column: string, value: string): this;
   lte(column: string, value: string): this;
   or(filters: string): this;
@@ -61,6 +66,20 @@ export function applyMovieCacheFilters<T>(
 
   if (filters.isNowPlayingTheatrical) {
     filtered = filtered.eq('is_now_playing', true);
+  }
+
+  if (filters.isCurrentlyStreaming !== undefined) {
+    filtered = filtered.eq(
+      'is_currently_streaming',
+      filters.isCurrentlyStreaming,
+    );
+  }
+
+  if (filters.digitalReleaseDateGt) {
+    filtered = filtered.gt(
+      'digital_release_date',
+      filters.digitalReleaseDateGt,
+    );
   }
 
   if (filters.dateGte) {

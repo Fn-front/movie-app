@@ -1,0 +1,28 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_person_page {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+  padding: $spacing-4;
+
+  @include md {
+    gap: $spacing-8;
+    padding: $spacing-6;
+  }
+
+  &__status {
+    @include flex-center;
+
+    flex-direction: column;
+    gap: $spacing-4;
+    padding: $spacing-12 0;
+  }
+
+  &__message {
+    margin: 0;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+  }
+}

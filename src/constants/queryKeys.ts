@@ -11,6 +11,11 @@ export const movieKeys = {
   detail: (movieId: number) => ['movies', 'detail', movieId] as const,
 };
 
+export const personKeys = {
+  all: ['person'] as const,
+  detail: (personId: number) => ['person', 'detail', personId] as const,
+};
+
 export const filterKeys = {
   saved: ['savedFilter'] as const,
 };

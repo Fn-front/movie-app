@@ -57,6 +57,7 @@ export const MovieDetailModal = memo<MovieDetailModalProps>(
             movieId={movieId}
             showFinancialInfo={showFinancialInfo}
             onVideoDialogOpenChange={setIsVideoDialogOpen}
+            onRequestClose={onClose}
           />
         )}
       </Modal>

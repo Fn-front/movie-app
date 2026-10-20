@@ -11,7 +11,9 @@ import {
   PAGINATION,
   TMDB_DIGITAL_RELEASE_TYPE,
   TMDB_ENDPOINTS,
+  TMDB_FALLBACK_LANGUAGE,
   TMDB_MOVIE_DETAIL_APPEND,
+  TMDB_PERSON_DETAIL_APPEND,
   TMDB_JP_COUNTRY_CODE,
   TMDB_RETRY_CONFIG,
   TMDB_STREAMING_AVAILABILITY_APPEND,
@@ -22,6 +24,8 @@ import type {
   Movie,
   MovieDetail,
   MovieSearchParams,
+  PersonDetail,
+  PersonMovieCredit,
   TMDbReleaseDateCountry,
   TMDbResponse,
   WatchProviders,
@@ -106,10 +110,15 @@ function validatePage(page: number): number {
  * そこで取得後の結果に対して `adult` フラグと除外ジャンルを一律で弾き、
  * `include_adult=false` との二重防御とする。
  *
+ * `/person/{id}` の `movie_credits` も同様に `include_adult` が効かないため、
+ * `adult` / `genre_ids` を持つ形であれば何でも通せるよう型を緩めている。
+ *
  * @param movies - TMDbから取得した映画リスト
  * @returns 不適切コンテンツを除いた映画リスト
  */
-function excludeInappropriateMovies(movies: Movie[]): Movie[] {
+function excludeInappropriateMovies<
+  T extends Pick<Movie, 'adult' | 'genre_ids'>,
+>(movies: T[]): T[] {
   const excludedGenres: readonly number[] = EXCLUDED_GENRE_IDS;
 
   return movies.filter(
@@ -445,5 +454,162 @@ export async function getJpStreamingAvailability(
   return {
     isCurrentlyStreaming,
     digitalReleaseDate: digitalReleaseDate ?? null,
+  };
+}
+
+/**
+ * TMDb `/person/{id}` の生レスポンス（本アプリが参照する範囲）
+ */
+interface TMDbPersonResponse {
+  id: number;
+  name: string;
+  biography: string | null;
+  birthday: string | null;
+  deathday: string | null;
+  place_of_birth: string | null;
+  profile_path: string | null;
+  known_for_department: string | null;
+  adult: boolean;
+  movie_credits?: {
+    cast?: (Omit<PersonMovieCredit, 'release_date' | 'character'> & {
+      release_date?: string | null;
+      character?: string | null;
+    })[];
+  };
+  translations?: {
+    translations?: {
+      iso_639_1: string;
+      data?: { biography?: string | null };
+    }[];
+  };
+}
+
+/**
+ * 出演作の重複をまとめる
+ *
+ * 同じ映画で複数役を演じている場合、TMDb は同じ `id` の credit を役の数だけ返す。
+ * そのまま並べると一覧に同じ作品が何度も出るため、1件に畳んで役名を連結する。
+ */
+function mergeDuplicatedCredits(
+  credits: PersonMovieCredit[],
+): PersonMovieCredit[] {
+  const merged = new Map<number, PersonMovieCredit>();
+
+  for (const credit of credits) {
+    const existing = merged.get(credit.id);
+
+    if (!existing) {
+      merged.set(credit.id, credit);
+      continue;
+    }
+
+    const characters = [existing.character, credit.character].filter(Boolean);
+    existing.character = [...new Set(characters)].join(' / ');
+  }
+
+  return [...merged.values()];
+}
+
+/**
+ * 出演作を公開日の新しい順に並べる（日付が無いものは末尾）
+ *
+ * 未公開・公開日未登録の作品を先頭に出すと、代表作より先に情報の無い作品が
+ * 並んでしまうため末尾へ寄せる。
+ */
+function sortCreditsByReleaseDateDesc(
+  credits: PersonMovieCredit[],
+): PersonMovieCredit[] {
+  return [...credits].sort((a, b) => {
+    if (!a.release_date && !b.release_date) return 0;
+    if (!a.release_date) return 1;
+    if (!b.release_date) return -1;
+    return b.release_date.localeCompare(a.release_date);
+  });
+}
+
+/**
+ * 略歴を解決する
+ *
+ * `language=ja-JP` では未翻訳で空文字になる人物が大半のため、
+ * 空なら `translations` の英語原文で補う。
+ *
+ * @returns 略歴と、英語原文へフォールバックしたかどうか
+ */
+function resolveBiography(person: TMDbPersonResponse): {
+  biography: string;
+  isFallback: boolean;
+} {
+  const biography = (person.biography ?? '').trim();
+  if (biography) return { biography, isFallback: false };
+
+  const fallback = (person.translations?.translations ?? []).find(
+    (translation) =>
+      translation.iso_639_1 === TMDB_FALLBACK_LANGUAGE &&
+      (translation.data?.biography ?? '').trim(),
+  );
+
+  const fallbackBiography = (fallback?.data?.biography ?? '').trim();
+
+  return {
+    biography: fallbackBiography,
+    isFallback: fallbackBiography.length > 0,
+  };
+}
+
+/**
+ * 人物詳細を取得する
+ *
+ * プロフィールと出演作を `append_to_response` で1リクエストにまとめて取得し、
+ * アプリで表示できる形まで整形して返す。
+ *
+ * ⚠️ `include_adult=false` は tmdbClient の既定パラメータで常に送られるが、
+ * TMDb がこれを解釈するのは `/search` と `/discover` だけで、`/person/{id}` と
+ * その `movie_credits` には**効かない**。そのため出演作は取得後に
+ * `excludeInappropriateMovies` で弾く。人物自身の `adult` は呼び出し側が
+ * 404 に変換する（ここで例外にすると TMDb 障害と区別できなくなるため）。
+ *
+ * `isQualityMovie` は適用しない。あれはDBへ保存してよいかの基準（人気度・
+ * 言語の足切り）であり、フィルモグラフィに当てると旧作や非英語作品が
+ * 大量に落ちて一覧として成立しないため。
+ *
+ * @param personId - 人物ID
+ * @returns 整形済みの人物詳細
+ * @throws TMDbへの問い合わせに失敗した場合
+ */
+export async function getPersonDetail(
+  personId: number | string,
+): Promise<PersonDetail> {
+  const response = await tmdbClient.get<TMDbPersonResponse>(
+    TMDB_ENDPOINTS.PERSON_DETAIL(personId),
+    { params: { append_to_response: TMDB_PERSON_DETAIL_APPEND } },
+  );
+  const person = response.data;
+
+  const rawCast: PersonMovieCredit[] = (person.movie_credits?.cast ?? []).map(
+    (credit) => ({
+      ...credit,
+      release_date: credit.release_date?.trim() ? credit.release_date : null,
+      character: credit.character ?? '',
+    }),
+  );
+
+  const cast = sortCreditsByReleaseDateDesc(
+    mergeDuplicatedCredits(excludeInappropriateMovies(rawCast)),
+  );
+
+  const { biography, isFallback } = resolveBiography(person);
+
+  return {
+    id: person.id,
+    name: person.name,
+    biography,
+    is_biography_fallback: isFallback,
+    birthday: person.birthday || null,
+    deathday: person.deathday || null,
+    place_of_birth: person.place_of_birth || null,
+    profile_path: person.profile_path,
+    known_for_department: person.known_for_department ?? '',
+    adult: person.adult,
+    cast,
   };
 }

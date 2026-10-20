@@ -308,11 +308,26 @@
   }
 
   &__cast_item {
+    @include focus-visible;
+
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 64px;
+    width: 80px;
     gap: $spacing-1;
+    border-radius: $border-radius-md;
+    color: inherit;
+    text-decoration: none;
+
+    /*
+      グローバルの `a:hover` が下線とリンク色を付けるため、明示的に打ち消す。
+      名前と役名は本文として読ませたいので、ホバーの合図は不透明度だけにする
+    */
+    &:hover {
+      opacity: 0.8;
+      color: inherit;
+      text-decoration: none;
+    }
   }
 
   &__cast_image {
@@ -342,24 +357,33 @@
     width: 100%;
   }
 
+  /*
+    俳優名は2行まで折り返す。1行省略だと「伊藤雄之助」程度の長さでも
+    「…」で切れて誰か分からなくなるため。日本語は文字間で、英字は空白で
+    折り返るが、空白の無い長い英単語だけは折り返せないので
+    overflow-wrap で途中からでも折れるようにする
+  */
   &__cast_name {
-    font-size: $font-size-2xs;
+    @include text-truncate-multiline(2);
+
+    font-size: $font-size-xs;
     font-weight: $font-weight-medium;
+    line-height: 1.4;
+    /* 1行の名前でも2行分の高さを確保し、隣り合う役名の位置を揃える */
+    min-height: calc(1.4em * 2);
     color: $text-primary;
     text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
     width: 100%;
   }
 
+  /* 役名は補足情報なので、名前より小さいまま1行で省略する */
   &__cast_character {
+    @include text-truncate;
+
     font-size: $font-size-2xs;
     color: $text-secondary;
     text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     width: 100%;
   }
 }

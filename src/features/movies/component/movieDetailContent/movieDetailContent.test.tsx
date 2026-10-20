@@ -3,6 +3,7 @@
  */
 
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { MovieDetailContent } from './movieDetailContent';
 
@@ -372,6 +373,69 @@ describe('MovieDetailContent', () => {
 
     expect(screen.getByText('山田太郎')).toBeInTheDocument();
     expect(screen.getByText('山')).toBeInTheDocument();
+  });
+
+  describe('キャストから人物ページへの導線', () => {
+    const setupCast = () =>
+      setupMovie({
+        credits: {
+          cast: [
+            {
+              id: 42,
+              name: 'テスト俳優',
+              character: 'テスト役',
+              profile_path: '/actor.jpg',
+              order: 0,
+            },
+          ],
+        },
+      });
+
+    it('キャストが人物ページへのリンクになっている', () => {
+      setupCast();
+
+      render(<MovieDetailContent movieId={123} />);
+
+      const link = screen.getByRole('link', {
+        name: 'テスト俳優のプロフィール',
+      });
+      expect(link).toHaveAttribute('href', '/person/42');
+    });
+
+    it('キャストをクリックするとモーダルを閉じるよう要求する', async () => {
+      const user = userEvent.setup();
+      const onRequestClose = jest.fn();
+      setupCast();
+
+      render(
+        <MovieDetailContent movieId={123} onRequestClose={onRequestClose} />,
+      );
+      await user.click(
+        screen.getByRole('link', { name: 'テスト俳優のプロフィール' }),
+      );
+
+      expect(onRequestClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('キーボードでもキャストリンクを辿れる', async () => {
+      const user = userEvent.setup();
+      const onRequestClose = jest.fn();
+      setupCast();
+
+      render(
+        <MovieDetailContent movieId={123} onRequestClose={onRequestClose} />,
+      );
+
+      const link = screen.getByRole('link', {
+        name: 'テスト俳優のプロフィール',
+      });
+      link.focus();
+      expect(link).toHaveFocus();
+
+      await user.keyboard('{Enter}');
+
+      expect(onRequestClose).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('1万円未満の金額を正しくフォーマットする', () => {

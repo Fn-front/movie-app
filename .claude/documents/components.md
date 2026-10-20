@@ -452,8 +452,14 @@ interface FilterModalProps {
 interface MovieDetailContentProps {
   movieId: number;
   showFinancialInfo?: boolean;
+  onVideoDialogOpenChange?: (open: boolean) => void;
+  /** 人物ページへ遷移する際にモーダルを閉じてもらう */
+  onRequestClose?: () => void;
 }
 ```
+
+キャストは `<Link href={ROUTES.PERSON_DETAIL(actor.id)}>` で人物ページへ遷移する。
+クリック時に `onRequestClose` を呼び、モーダルが遷移先に被さり続けないようにする。
 
 ---
 
@@ -651,6 +657,54 @@ interface WatchlistListProps {
 検索結果ページ
 
 **Props:** なし（内部で `useSearchPage` フックを使用）
+
+---
+
+### PersonPage
+人物（俳優）ページ。プロフィールと出演作品一覧を表示する
+
+**Props:**
+```typescript
+interface PersonPageProps {
+  /** 人物ID（Server Component 側で検証済み） */
+  personId: number;
+}
+```
+
+`usePerson` でデータ取得。出演作品一覧は人物が切り替わってもページング位置が
+残らないよう `key={personId}` で作り直す。
+
+---
+
+### PersonProfile
+人物のプロフィール（写真・氏名・活動分野・生没年月日・出生地・略歴）
+
+**Props:**
+```typescript
+interface PersonProfileProps {
+  person: PersonDetail;
+}
+```
+
+- 写真が無い場合は氏名のイニシャルを表示
+- 略歴が英語原文へのフォールバックのときは注記を添える
+- 長い略歴は5行で折りたたみ、`aria-expanded` 付きのボタンで開閉
+
+---
+
+### PersonFilmography
+人物の出演作品一覧
+
+**Props:**
+```typescript
+interface PersonFilmographyProps {
+  /** 公開日降順で整形済みの出演作 */
+  credits: PersonMovieCredit[];
+}
+```
+
+`MovieTile` を再利用し、役名を副表示する。TMDb の `movie_credits` は
+ページングが無く全件返るため、`Pagination` でクライアント側ページングする。
 
 ---
 

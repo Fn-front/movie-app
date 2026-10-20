@@ -8,6 +8,7 @@ export * from './common';
 export * from './favorites';
 export * from './filters';
 export * from './movies';
+export * from './person';
 export * from './queryKeys';
 export * from './search';
 export * from './user';

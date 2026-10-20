@@ -20,6 +20,8 @@ export const IMAGE_SIZES = {
   AVATAR_MOBILE: { WIDTH: 40, HEIGHT: 40 },
   /** キャスト画像 */
   CAST: { WIDTH: 48, HEIGHT: 48 },
+  /** 人物ページのプロフィール画像（TMDbのw185に合わせた2:3比） */
+  PERSON_PROFILE: { WIDTH: 185, HEIGHT: 278 },
   /** プロバイダーロゴ */
   PROVIDER_LOGO: { WIDTH: 28, HEIGHT: 28 },
   /** TMDbロゴ（フッター） */

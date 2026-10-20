@@ -1,0 +1,45 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_person_filmography {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+
+  &__heading {
+    display: flex;
+    align-items: baseline;
+    gap: $spacing-2;
+    margin: 0;
+    font-size: $font-size-lg;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+  }
+
+  &__count {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-regular;
+    color: $text-secondary;
+  }
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-1;
+    min-width: 0;
+  }
+
+  &__character {
+    @include text-truncate;
+
+    margin: 0;
+    font-size: $font-size-xs;
+    color: $text-secondary;
+  }
+
+  &__pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: $spacing-2;
+  }
+}

@@ -1,0 +1,42 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_person_not_found {
+  @include flex-center;
+
+  flex-direction: column;
+  gap: $spacing-4;
+  padding: $spacing-16 $spacing-4;
+  text-align: center;
+
+  &__code {
+    margin: 0;
+    font-size: $font-size-5xl;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: $font-size-2xl;
+    font-weight: $font-weight-medium;
+    color: $text-primary;
+  }
+
+  &__message {
+    margin: 0;
+    color: $text-secondary;
+  }
+
+  &__link {
+    @include focus-visible;
+
+    margin-top: $spacing-4;
+    padding: $spacing-3 $spacing-6;
+    border-radius: $border-radius-md;
+    background-color: $primary-500;
+    color: $text-inverse;
+    font-size: $font-size-base;
+    text-decoration: none;
+  }
+}

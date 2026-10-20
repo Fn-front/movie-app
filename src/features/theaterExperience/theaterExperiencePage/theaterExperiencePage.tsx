@@ -8,6 +8,7 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 
 import { THEATER_MESSAGES } from '@/constants';
+import { cn } from '@/utils/cn';
 
 import type { FrequencyBand, TheaterSeat } from '../types';
 import { computeSeatXSegments } from '../utils/theaterGeometry';
@@ -18,6 +19,7 @@ import { useTheater } from '../hooks/useTheater';
 import { useTheaters } from '../hooks/useTheaters';
 import { useTheaterSelection } from '../hooks/useTheaterSelection';
 import { useSeatSelection } from '../hooks/useSeatSelection';
+import { useFirstPersonLook } from '../hooks/useFirstPersonLook';
 import { useFieldOfView } from '../hooks/useFieldOfView';
 import { useWebGL2Support } from '../hooks/useWebGL2Support';
 import { useAudioShader } from '../hooks/useAudioShader';
@@ -52,6 +54,13 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
+/** 視点操作の説明文。操作領域の説明としても参照する（aria-describedby） */
+const LOOK_HINT_ID = 'theater-look-hint';
+const LOOK_HINT_TEXT =
+  'ドラッグで見回す／矢印キーで視点移動／ホイール・ピンチでズーム';
+const LOOK_CONTROL_LABEL =
+  '一人称視点の視点操作。ドラッグまたは矢印キーで見回し、ホイールまたはプラス・マイナスキーでズームできます';
+
 export interface TheaterExperiencePageProps {
   /** 初期表示する劇場slug（URLクエリ由来、未指定時は既定劇場にフォールバック） */
   initialSlug: string;
@@ -76,6 +85,19 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
     const [isHeatmapVisible, setIsHeatmapVisible] = useState(false);
     const { isSupported: isWebGL2Supported, isChecking } = useWebGL2Support();
     const reducedMotion = useReducedMotion();
+
+    /*
+      視点操作は「3Dが描けていて、かつ一人称（座席選択中）」のときだけ有効にする。
+      WebGL非対応時は座席一覧から席を選べるが3Dビューが無いため操作対象がない。
+    */
+    const isLookControlEnabled = Boolean(isWebGL2Supported) && !!selectedSeat;
+    const {
+      lookRef,
+      containerRef: lookContainerRef,
+      handlers: lookHandlers,
+      reset: resetLook,
+      isDraggingRef,
+    } = useFirstPersonLook(isLookControlEnabled);
 
     const theater = theaterDetail?.theater;
     // theaterDetail 未取得時の `[]` フォールバックを毎レンダー新参照にしないよう
@@ -198,8 +220,23 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
         // キーボードフォーカスの強調が追従しなくなる（3D→2D のホバー漏れ）。
         setHoveredSeatId(null);
         setFocusedSeatId(null);
+        // 席が変われば見え方の基準も変わる。前の席で見回した向きは持ち越さない
+        resetLook();
       },
-      [selectSeat],
+      [selectSeat, resetLook],
+    );
+
+    /**
+     * 3Dビュー上の座席クリック。
+     * 見回しドラッグの直後にもクリックは発火するため、ドラッグだったときは
+     * 席替えとして扱わない（見回すたびに席が変わるのを防ぐ）。
+     */
+    const handleSeatMeshClick = useCallback(
+      (seat: TheaterSeat) => {
+        if (isDraggingRef.current) return;
+        handleSeatClick(seat);
+      },
+      [handleSeatClick, isDraggingRef],
     );
 
     const handleHoverSeat = useCallback((seatId: string | null) => {
@@ -264,6 +301,26 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
           selectedSeatId,
         ),
       [seats, occupancyLevel, selectedSeatId],
+    );
+
+    /**
+     * 3Dビューを包む操作領域に渡す属性。
+     * canvas 自体は装飾として aria-hidden のままなので、操作できることと操作方法は
+     * この領域で伝える。role='application' は矢印キーをスクリーンリーダーの
+     * ブラウズモードに奪われず、そのまま視点操作へ渡すために付ける。
+     */
+    const lookInteractionProps = useMemo(
+      () =>
+        isLookControlEnabled
+          ? {
+              role: 'application' as const,
+              tabIndex: 0,
+              'aria-label': LOOK_CONTROL_LABEL,
+              'aria-describedby': LOOK_HINT_ID,
+              ...lookHandlers,
+            }
+          : {},
+      [isLookControlEnabled, lookHandlers],
     );
 
     // ヘッダー（タイトル＋劇場セレクタ）はローディング/エラー時も表示し、
@@ -343,80 +400,91 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
           <div className={styles.c_theater_experience__main}>
             {/* 3Dビュー or フォールバック */}
             <div className={styles.c_theater_experience__canvas_area}>
-              {isWebGL2Supported ? (
-                <TheaterCanvas>
-                  <TheaterScene
-                    theme={interiorTheme}
-                    roomWidth={theater.room_width}
-                    roomDepth={theater.room_depth}
-                    roomHeight={theater.room_height}
-                    selectedSeat={selectedSeat}
-                    theater={theater}
-                    seatAreaFrontZ={seatAreaBounds.frontZ}
-                    seatAreaBackZ={seatAreaBounds.backZ}
-                    seatAreaMaxY={seatAreaBounds.maxY}
-                    rowZs={seatAreaBounds.rowZs}
-                    rowYs={seatAreaBounds.rowYs}
-                    seatSegments={seatAreaBounds.seatSegments}
-                    reducedMotion={reducedMotion}
-                  >
-                    <SeatMeshes
+              <div
+                ref={lookContainerRef}
+                className={cn(
+                  styles.c_theater_experience__viewport,
+                  isLookControlEnabled &&
+                    styles.c_theater_experience__viewport__interactive,
+                )}
+                {...lookInteractionProps}
+              >
+                {isWebGL2Supported ? (
+                  <TheaterCanvas>
+                    <TheaterScene
                       theme={interiorTheme}
-                      aisleSideSeatIds={aisleSideSeatIds}
-                      rowCurveRadius={theater.row_curve_radius}
-                      seats={seats}
-                      selectedSeatId={selectedSeatId}
-                      highlightedSeatId={highlightedSeatId}
-                      onSeatClick={handleSeatClick}
-                      onHoverSeat={handleHoverSeat}
-                      isHeatmapVisible={isHeatmapVisible}
-                    />
-                    <ScreenMesh
-                      theme={interiorTheme}
-                      curvature={theater.screen_curvature}
-                      width={theater.screen_width}
-                      height={theater.screen_height}
-                      centerX={theater.screen_center_x}
-                      centerY={theater.screen_center_y}
-                      centerZ={theater.screen_center_z}
+                      roomWidth={theater.room_width}
+                      roomDepth={theater.room_depth}
+                      roomHeight={theater.room_height}
+                      selectedSeat={selectedSeat}
+                      theater={theater}
+                      seatAreaFrontZ={seatAreaBounds.frontZ}
+                      seatAreaBackZ={seatAreaBounds.backZ}
+                      seatAreaMaxY={seatAreaBounds.maxY}
+                      rowZs={seatAreaBounds.rowZs}
+                      rowYs={seatAreaBounds.rowYs}
+                      seatSegments={seatAreaBounds.seatSegments}
                       reducedMotion={reducedMotion}
-                    />
-                    <AudienceMeshes
-                      theme={interiorTheme}
-                      seats={seats}
-                      occupiedSeatIds={occupiedSeatIds}
-                      rowCurveRadius={theater.row_curve_radius}
-                    />
-                    {speakers.length > 0 && (
-                      <>
-                        {/*
+                      lookRef={lookRef}
+                    >
+                      <SeatMeshes
+                        theme={interiorTheme}
+                        aisleSideSeatIds={aisleSideSeatIds}
+                        rowCurveRadius={theater.row_curve_radius}
+                        seats={seats}
+                        selectedSeatId={selectedSeatId}
+                        highlightedSeatId={highlightedSeatId}
+                        onSeatClick={handleSeatMeshClick}
+                        onHoverSeat={handleHoverSeat}
+                        isHeatmapVisible={isHeatmapVisible}
+                      />
+                      <ScreenMesh
+                        theme={interiorTheme}
+                        curvature={theater.screen_curvature}
+                        width={theater.screen_width}
+                        height={theater.screen_height}
+                        centerX={theater.screen_center_x}
+                        centerY={theater.screen_center_y}
+                        centerZ={theater.screen_center_z}
+                        reducedMotion={reducedMotion}
+                      />
+                      <AudienceMeshes
+                        theme={interiorTheme}
+                        seats={seats}
+                        occupiedSeatIds={occupiedSeatIds}
+                        rowCurveRadius={theater.row_curve_radius}
+                      />
+                      {speakers.length > 0 && (
+                        <>
+                          {/*
                         スピーカーは俯瞰・一人称いずれでも表示する。
                         スクリーンch(L/C/R/LFE)はSpeakerMeshes内で非表示にし、
                         目線より上の天井/サラウンドを残して設備感を出す。
                       */}
-                        <SpeakerMeshes
-                          speakers={speakers}
-                          theme={interiorTheme}
-                        />
-                        {isHeatmapVisible && (
-                          <AudioHeatmapPlane
-                            uniforms={audioUniforms}
-                            frequencyBand={frequencyBand}
-                            width={heatmapBounds.width}
-                            depth={heatmapBounds.depth}
-                            centerZ={heatmapBounds.centerZ}
-                            rowZs={seatAreaBounds.rowZs}
-                            rowYs={seatAreaBounds.rowYs}
-                            reducedMotion={reducedMotion}
+                          <SpeakerMeshes
+                            speakers={speakers}
+                            theme={interiorTheme}
                           />
-                        )}
-                      </>
-                    )}
-                  </TheaterScene>
-                </TheaterCanvas>
-              ) : (
-                <UnsupportedBrowserNotice />
-              )}
+                          {isHeatmapVisible && (
+                            <AudioHeatmapPlane
+                              uniforms={audioUniforms}
+                              frequencyBand={frequencyBand}
+                              width={heatmapBounds.width}
+                              depth={heatmapBounds.depth}
+                              centerZ={heatmapBounds.centerZ}
+                              rowZs={seatAreaBounds.rowZs}
+                              rowYs={seatAreaBounds.rowYs}
+                              reducedMotion={reducedMotion}
+                            />
+                          )}
+                        </>
+                      )}
+                    </TheaterScene>
+                  </TheaterCanvas>
+                ) : (
+                  <UnsupportedBrowserNotice />
+                )}
+              </div>
               {/* 座席選択中はメインビューが一人称に切り替わるので俯瞰へ戻すボタンを表示 */}
               {isWebGL2Supported && selectedSeat && (
                 <button
@@ -426,6 +494,24 @@ export const TheaterExperiencePage = memo<TheaterExperiencePageProps>(
                 >
                   ← 俯瞰に戻る
                 </button>
+              )}
+              {/* 視点操作の案内とリセット（一人称かつ3Dが描けているときだけ） */}
+              {isLookControlEnabled && (
+                <>
+                  <button
+                    type='button'
+                    onClick={resetLook}
+                    className={styles.c_theater_experience__reset_look}
+                  >
+                    視点を正面に戻す
+                  </button>
+                  <p
+                    id={LOOK_HINT_ID}
+                    className={styles.c_theater_experience__look_hint}
+                  >
+                    {LOOK_HINT_TEXT}
+                  </p>
+                </>
               )}
             </div>
 

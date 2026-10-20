@@ -43,6 +43,12 @@ import {
   resolveFlythroughStart,
 } from '../../utils/fieldOfView';
 import {
+  applyZoomToFov,
+  calcBaseOrientation,
+  clampTotalPitch,
+  type FirstPersonLookState,
+} from '../../utils/firstPersonLook';
+import {
   calcOverviewZoom,
   calcOverviewCameraPosition,
   interpolateFloorHeight,
@@ -111,6 +117,11 @@ export interface TheaterSceneProps {
   seatSegments: SeatXSegment[];
   /** prefers-reduced-motion 有効時は true（俯瞰→一人称のフライスルーを即時カットにする） */
   reducedMotion?: boolean;
+  /**
+   * 一人称視点のユーザー操作（見回し・ズーム）。
+   * 毎フレーム読むだけで再レンダーは起こさない（`useFirstPersonLook` が書き込む）。
+   */
+  lookRef: RefObject<FirstPersonLookState>;
   /** 子要素（座席、スクリーン、ヒートマップ等） */
   children: React.ReactNode;
 }
@@ -867,6 +878,12 @@ const PITCH_DEADZONE_RAD = (PITCH_DEADZONE_DEG * Math.PI) / 180;
 const FLYTHROUGH_DURATION_S = 0.55;
 
 /**
+ * 「視点を正面に戻す」の所要時間（秒）。見回した先から元の視線へ短く戻す。
+ * prefers-reduced-motion 有効時は 0 として即時カットにする。
+ */
+const LOOK_RESET_DURATION_S = 0.3;
+
+/**
  * 視点別ライティング。
  *
  * 実映画館は「暗闇＋局所照明」だが、俯瞰（等角投影）はそのまま座席選択UIなので
@@ -1083,6 +1100,9 @@ IsometricCameraRig.displayName = 'IsometricCameraRig';
  * 一人称カメラ（選択座席の目線位置）
  * 座席が変わるたびに位置・注視点・FOVを更新し、俯瞰視点から着座点への
  * 短いフライスルー（reduced-motion時は即時）で空間の対応付けを助ける。
+ *
+ * 自動で決まる「基準の視線」の上に、ユーザーの見回し・ズーム（`lookRef`）を
+ * 毎フレーム上乗せする。座席位置は動かさない。
  */
 const FirstPersonCameraRig = memo<{
   selectedSeat: TheaterSeat;
@@ -1091,6 +1111,7 @@ const FirstPersonCameraRig = memo<{
   roomDepth: number;
   roomHeight: number;
   reducedMotion: boolean;
+  lookRef: RefObject<FirstPersonLookState>;
 }>(function FirstPersonCameraRig({
   selectedSeat,
   theater,
@@ -1098,6 +1119,7 @@ const FirstPersonCameraRig = memo<{
   roomDepth,
   roomHeight,
   reducedMotion,
+  lookRef,
 }) {
   const cameraRef = useRef<PerspectiveCameraType | null>(null);
   const set = useThree((state) => state.set);
@@ -1218,12 +1240,26 @@ const FirstPersonCameraRig = memo<{
   // 現在の注視点（座席切替時に「今向いている点」から補間を再開するため保持）
   const currentTarget = useRef(new Vector3());
 
+  /*
+    ユーザーの見回し・ズームの適用値。
+    通常は lookRef の値をそのまま使う（ドラッグに追従遅れを作らない）。
+    リセット要求を受けたときだけ、直前の適用値を起点に短くイーズして戻す。
+  */
+  const appliedLook = useRef({ yaw: 0, pitch: 0, zoom: 1 });
+  const lookResetAnim = useRef({
+    elapsed: LOOK_RESET_DURATION_S,
+    from: { yaw: 0, pitch: 0, zoom: 1 },
+    // 実際の通し番号とは必ず異なる初期値。最初のフレームで同期する
+    token: -1,
+  });
+
   // 座席選択・切替時にフライスルーを（再）開始する。開始点の決定は
   // resolveFlythroughStart（純ロジック・単体テスト済み）に委譲する。
   useEffect(() => {
     const cam = cameraRef.current;
     if (!cam) return;
-    cam.fov = fov;
+    // 現在のズーム倍率を反映した画角で入る（以降は useFrame が毎フレーム更新する）
+    cam.fov = applyZoomToFov(fov, lookRef.current.zoom);
     cam.updateProjectionMatrix();
 
     const start = resolveFlythroughStart({
@@ -1248,7 +1284,16 @@ const FirstPersonCameraRig = memo<{
     anim.current.elapsed = start.elapsed;
     anim.current.started = true;
     set({ camera: cam });
-  }, [seatPos, target, fov, overviewPos, overviewTarget, reducedMotion, set]);
+  }, [
+    seatPos,
+    target,
+    fov,
+    overviewPos,
+    overviewTarget,
+    reducedMotion,
+    set,
+    lookRef,
+  ]);
 
   // 毎フレーム、開始点→着座点へ ease-out 補間する（満了後は着座点で静止＝冪等）
   useFrame((_, delta) => {
@@ -1269,7 +1314,57 @@ const FirstPersonCameraRig = memo<{
       a.fromTarget.y + (target[1] - a.fromTarget.y) * t,
       a.fromTarget.z + (target[2] - a.fromTarget.z) * t,
     );
-    cam.lookAt(currentTarget.current);
+
+    /*
+      ユーザー操作分の適用値を決める。
+      リセット要求（resetToken の変化）を検知したら、そのときの適用値を起点に
+      イーズを開始する。イーズ満了後は補間係数が 1 になり、適用値は lookRef の
+      値そのものになる（＝ドラッグは遅延なく反映される）。イーズ中にドラッグ
+      されても、補間先が新しい操作量に変わるだけなので打ち切り処理は要らない。
+    */
+    const look = lookRef.current;
+    const reset = lookResetAnim.current;
+    if (look.resetToken !== reset.token) {
+      reset.token = look.resetToken;
+      reset.from = { ...appliedLook.current };
+      reset.elapsed = reducedMotion ? LOOK_RESET_DURATION_S : 0;
+    }
+    if (reset.elapsed < LOOK_RESET_DURATION_S) {
+      reset.elapsed = Math.min(reset.elapsed + delta, LOOK_RESET_DURATION_S);
+    }
+    const lookT = easeOutCubic(reset.elapsed / LOOK_RESET_DURATION_S);
+    const applied = appliedLook.current;
+    applied.yaw = reset.from.yaw + (look.yaw - reset.from.yaw) * lookT;
+    applied.pitch = reset.from.pitch + (look.pitch - reset.from.pitch) * lookT;
+    applied.zoom = reset.from.zoom + (look.zoom - reset.from.zoom) * lookT;
+
+    /*
+      姿勢は lookAt ではなく Euler 'YXZ' で与える。見回し量を角度として
+      上乗せするため、基準の視線も一度角度に直す必要がある。
+    */
+    const base = calcBaseOrientation(
+      [cam.position.x, cam.position.y, cam.position.z],
+      [
+        currentTarget.current.x,
+        currentTarget.current.y,
+        currentTarget.current.z,
+      ],
+    );
+    // 上下の可動域を「基準＋操作分」で判定できるよう、基準角を入力側へ公開する
+    look.basePitch = base.pitch;
+    cam.rotation.set(
+      base.pitch + clampTotalPitch(base.pitch, applied.pitch),
+      base.yaw + applied.yaw,
+      0,
+      'YXZ',
+    );
+
+    // ズーム適用後のFOV。変化したときだけ投影行列を作り直す
+    const zoomedFov = applyZoomToFov(fov, applied.zoom);
+    if (cam.fov !== zoomedFov) {
+      cam.fov = zoomedFov;
+      cam.updateProjectionMatrix();
+    }
   });
 
   return (
@@ -1299,6 +1394,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
   rowYs,
   seatSegments,
   reducedMotion = false,
+  lookRef,
   children,
 }) {
   const halfWidth = roomWidth / 2;
@@ -1370,6 +1466,7 @@ export const TheaterScene = memo<TheaterSceneProps>(function TheaterScene({
           roomDepth={roomDepth}
           roomHeight={roomHeight}
           reducedMotion={reducedMotion}
+          lookRef={lookRef}
         />
       ) : (
         <IsometricCameraRig

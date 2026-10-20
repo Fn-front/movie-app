@@ -119,6 +119,63 @@ test.describe('シアター体験ページ', () => {
     await expect(page.getByText('座席を選択してください')).toBeVisible();
   });
 
+  test('一人称で視点を操作でき、見回しても席は変わらない', async ({ page }) => {
+    test.setTimeout(HEAVY_TEST_TIMEOUT_MS);
+
+    await page.goto('/theater-experience');
+    await waitForWebGL2(page);
+    await waitForTheaterReady(page);
+
+    const resetLook = page.getByRole('button', { name: '視点を正面に戻す' });
+    // 俯瞰では視点操作のUIを出さない（操作対象は一人称のときだけ）
+    await expect(resetLook).not.toBeVisible();
+
+    await page.getByRole('button', { name: /^A列1番、/ }).click();
+
+    // 一人称に入ると、操作領域・操作説明・リセットが現れる
+    const viewport = page.getByRole('application');
+    await expect(viewport).toBeVisible();
+    await expect(
+      page.getByText(
+        'ドラッグで見回す／矢印キーで視点移動／ホイール・ピンチでズーム',
+      ),
+    ).toBeVisible();
+    await expect(resetLook).toBeVisible();
+
+    /*
+      ドラッグで見回しても席替えは起きないこと。
+      3Dビュー上のクリックは席替えなので、しきい値を超えた移動を
+      クリックとして拾ってしまうと見回すたびに席が変わる。
+    */
+    const box = await viewport.boundingBox();
+    if (!box) throw new Error('操作領域の矩形が取得できませんでした');
+    const centerX = box.x + box.width / 2;
+    const centerY = box.y + box.height / 2;
+    await page.mouse.move(centerX, centerY);
+    await page.mouse.down();
+    await page.mouse.move(centerX + 160, centerY + 40, { steps: 8 });
+    await page.mouse.up();
+    await expect(page.getByRole('heading', { name: /A列\s*1番/ })).toBeVisible();
+
+    // キーボードだけでも見回し・ズームができる
+    await viewport.focus();
+    await expect(viewport).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('+');
+
+    // 視点を戻しても一人称のまま（俯瞰には戻らない）
+    await resetLook.click();
+    await expect(
+      page.getByRole('button', { name: '← 俯瞰に戻る' }),
+    ).toBeVisible();
+
+    // 俯瞰へ戻ると視点操作のUIは消える
+    await page.getByRole('button', { name: '← 俯瞰に戻る' }).click();
+    await expect(resetLook).not.toBeVisible();
+    await expect(viewport).not.toBeVisible();
+  });
+
   test('ヒートマップ表示/非表示を切り替えられる', async ({ page }) => {
     await page.goto('/theater-experience');
 

@@ -111,7 +111,13 @@ describe('applyDragDelta', () => {
   });
 
   it('縦も横と同じ画角レートで回る（斜めドラッグが歪まない）', () => {
-    const next = applyDragDelta(DEFAULT_LOOK_OFFSET, 120, 120, viewportWidth, 0);
+    const next = applyDragDelta(
+      DEFAULT_LOOK_OFFSET,
+      120,
+      120,
+      viewportWidth,
+      0,
+    );
     expect(next.pitch).toBeCloseTo(next.yaw, 6);
   });
 

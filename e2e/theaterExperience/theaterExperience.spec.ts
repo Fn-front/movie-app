@@ -155,7 +155,9 @@ test.describe('シアター体験ページ', () => {
     await page.mouse.down();
     await page.mouse.move(centerX + 160, centerY + 40, { steps: 8 });
     await page.mouse.up();
-    await expect(page.getByRole('heading', { name: /A列\s*1番/ })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /A列\s*1番/ }),
+    ).toBeVisible();
 
     // キーボードだけでも見回し・ズームができる
     await viewport.focus();

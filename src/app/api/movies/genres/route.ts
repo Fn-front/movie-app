@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 
+import { toSelectableGenres } from '@/lib/movies/genreFilter';
 import { getGenres } from '@/lib/tmdb/tmdb';
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import {
@@ -29,7 +30,8 @@ export async function GET(request: Request) {
     if (limited) return limited;
 
     const rawGenres: { id: number; name: string }[] = await getGenres();
-    const genres = rawGenres.map((genre) => ({
+    // 保存前フィルタで弾いているジャンルは、選んでも必ず0件になるため出さない
+    const genres = toSelectableGenres(rawGenres).map((genre) => ({
       ...genre,
       name: GENRE_NAME_OVERRIDES[genre.name] ?? genre.name,
     }));

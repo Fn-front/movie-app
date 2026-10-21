@@ -5,6 +5,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 import { BATCH_UPDATE_SIZE } from '@/constants/movies';
+import { hasExcludedGenre } from '@/lib/movies/genreFilter';
 import { getMovieDetail } from '@/lib/tmdb/tmdb';
 
 /**
@@ -21,6 +22,8 @@ export interface BatchUpdateResult {
   total: number;
   /** 更新成功数 */
   updated: number;
+  /** 除外ジャンルに該当して削除した行数 */
+  removed: number;
   /** エラーメッセージ */
   errors: string[];
 }
@@ -45,6 +48,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
   const result: BatchUpdateResult = {
     total: 0,
     updated: 0,
+    removed: 0,
     errors: [],
   };
 
@@ -94,6 +98,29 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
     for (const movieId of batchIds) {
       try {
         const detail = await getMovieDetail(movieId);
+        const matchingRowCount = rows.filter(
+          (row) => row.id === movieId,
+        ).length;
+
+        // TMDbは公開後にジャンルを追加することがあり、保存時点では対象外だった
+        // 作品が後から除外ジャンル（テレビ映画等）に該当するようになる。
+        // 保存前フィルタ（excludeInappropriateMovies）は保存の瞬間しか効かないため、
+        // 毎日全件の詳細を取得しているこの経路で再判定して取り除く。
+        // 詳細は既に取得済みなのでTMDbへの追加リクエストは発生しない
+        const genreIds = (detail.genres ?? []).map((genre) => genre.id);
+        if (hasExcludedGenre(genreIds)) {
+          const { error: deleteError } = await supabase
+            .from('movie_cache')
+            .delete()
+            .eq('id', movieId);
+
+          if (deleteError) {
+            result.errors.push(`ID ${movieId}: ${deleteError.message}`);
+          } else {
+            result.removed += matchingRowCount;
+          }
+          continue;
+        }
 
         // 同じmovie IDを持つ全行（theatrical/streaming）を更新
         const { error: updateError } = await supabase
@@ -110,8 +137,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
           result.errors.push(`ID ${movieId}: ${updateError.message}`);
         } else {
           // 更新された行数をカウント（同じIDで複数行ある場合も考慮）
-          const matchingRows = rows.filter((row) => row.id === movieId);
-          result.updated += matchingRows.length;
+          result.updated += matchingRowCount;
         }
       } catch (error) {
         const message =

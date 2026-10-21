@@ -13,6 +13,7 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
 
 import { createClient } from '@supabase/supabase-js';
 
+import { EXCLUDED_GENRE_IDS } from '@/constants';
 import { getMovieDetail } from '@/lib/tmdb/tmdb';
 import {
   updateMoviesCacheByBatch,
@@ -45,8 +46,14 @@ function createFromMock(options: {
   selectData?: { id: number; release_type: string }[];
   selectError?: { message: string } | null;
   updateError?: { message: string } | null;
+  deleteError?: { message: string } | null;
 }) {
-  const { selectData = [], selectError = null, updateError = null } = options;
+  const {
+    selectData = [],
+    selectError = null,
+    updateError = null,
+    deleteError = null,
+  } = options;
 
   const rangeMock = jest.fn((from: number, to: number) =>
     Promise.resolve({
@@ -54,6 +61,9 @@ function createFromMock(options: {
       error: selectError,
     }),
   );
+
+  const deleteEqMock = jest.fn().mockResolvedValue({ error: deleteError });
+  const deleteMock = jest.fn().mockReturnValue({ eq: deleteEqMock });
 
   const fromMock = jest.fn().mockReturnValue({
     select: jest.fn().mockReturnValue({
@@ -66,9 +76,10 @@ function createFromMock(options: {
         error: updateError,
       }),
     }),
+    delete: deleteMock,
   });
 
-  return Object.assign(fromMock, { rangeMock });
+  return Object.assign(fromMock, { rangeMock, deleteMock, deleteEqMock });
 }
 
 // ---------- 環境変数の保存・復元 ----------
@@ -98,11 +109,13 @@ describe('updateMoviesCacheByBatch', () => {
     const result: BatchUpdateResult = {
       total: 100,
       updated: 95,
+      removed: 2,
       errors: ['ID 1: error'],
     };
 
     expect(result.total).toBe(100);
     expect(result.updated).toBe(95);
+    expect(result.removed).toBe(2);
     expect(result.errors).toHaveLength(1);
   });
 
@@ -261,6 +274,119 @@ describe('updateMoviesCacheByBatch', () => {
   });
 
   // ---- バッチ更新処理 ----
+
+  describe('除外ジャンルの再判定', () => {
+    it('TMDbで後から除外ジャンルが付いた作品を削除すること', async () => {
+      setValidEnv();
+
+      const rows = [{ id: 1, release_type: 'theatrical' }];
+      const fromMock = createFromMock({ selectData: rows });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+
+      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
+        createMockMovieDetail({
+          id: 1,
+          genres: [
+            { id: 35, name: 'コメディ' },
+            { id: EXCLUDED_GENRE_IDS[0], name: 'テレビ映画' },
+          ],
+        }),
+      );
+
+      const result = await updateMoviesCacheByBatch();
+
+      expect(fromMock.deleteMock).toHaveBeenCalled();
+      expect(fromMock.deleteEqMock).toHaveBeenCalledWith('id', 1);
+      expect(result.removed).toBe(1);
+      expect(result.updated).toBe(0);
+    });
+
+    it('同一IDが複数 release_type にある場合はまとめて削除し行数を数えること', async () => {
+      setValidEnv();
+
+      const rows = [
+        { id: 1, release_type: 'theatrical' },
+        { id: 1, release_type: 'streaming' },
+      ];
+      const fromMock = createFromMock({ selectData: rows });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+
+      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
+        createMockMovieDetail({
+          id: 1,
+          genres: [{ id: EXCLUDED_GENRE_IDS[0], name: 'テレビ映画' }],
+        }),
+      );
+
+      const result = await updateMoviesCacheByBatch();
+
+      // delete は id 指定なので1回で両行が消える
+      expect(fromMock.deleteMock).toHaveBeenCalledTimes(1);
+      expect(result.removed).toBe(2);
+    });
+
+    it('除外ジャンルを含まない作品は削除せず更新すること', async () => {
+      setValidEnv();
+
+      const rows = [{ id: 1, release_type: 'theatrical' }];
+      const fromMock = createFromMock({ selectData: rows });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+
+      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
+        createMockMovieDetail({
+          id: 1,
+          genres: [{ id: 18, name: 'ドラマ' }],
+        }),
+      );
+
+      const result = await updateMoviesCacheByBatch();
+
+      expect(fromMock.deleteMock).not.toHaveBeenCalled();
+      expect(result.removed).toBe(0);
+      expect(result.updated).toBe(1);
+    });
+
+    it('genres が未設定の場合は削除しないこと', async () => {
+      setValidEnv();
+
+      const rows = [{ id: 1, release_type: 'theatrical' }];
+      const fromMock = createFromMock({ selectData: rows });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+
+      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
+        createMockMovieDetail({ id: 1 }),
+      );
+
+      const result = await updateMoviesCacheByBatch();
+
+      expect(fromMock.deleteMock).not.toHaveBeenCalled();
+      expect(result.updated).toBe(1);
+    });
+
+    it('削除に失敗した場合はエラーに記録し removed を増やさないこと', async () => {
+      setValidEnv();
+
+      const rows = [{ id: 1, release_type: 'theatrical' }];
+      const fromMock = createFromMock({
+        selectData: rows,
+        deleteError: { message: 'delete failed' },
+      });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+
+      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
+        createMockMovieDetail({
+          id: 1,
+          genres: [{ id: EXCLUDED_GENRE_IDS[0], name: 'テレビ映画' }],
+        }),
+      );
+
+      const result = await updateMoviesCacheByBatch();
+
+      expect(result.removed).toBe(0);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toContain('delete failed');
+    });
+  });
 
   describe('バッチ更新処理', () => {
     it('TMDb APIから最新情報を取得しDBを更新する', async () => {

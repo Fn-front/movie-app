@@ -6,6 +6,8 @@
  * ジャンル一覧API Route テスト
  */
 
+import { EXCLUDED_GENRE_IDS } from '@/constants';
+
 import { GET } from './route';
 
 // --- Mocks ---
@@ -51,6 +53,23 @@ describe('GET /api/movies/genres', () => {
     expect(json.success).toBe(true);
     expect(json.data.genres).toEqual(mockGenres);
     expect(json.data.genres).toHaveLength(3);
+  });
+
+  it('除外ジャンルを選択肢に含めない', async () => {
+    // 保存前フィルタで弾いているジャンルは、選んでも必ず0件になる
+    mockGetGenres.mockResolvedValue([
+      { id: 28, name: 'アクション' },
+      { id: EXCLUDED_GENRE_IDS[0], name: 'テレビ映画' },
+      { id: 18, name: 'ドラマ' },
+    ]);
+
+    const response = await GET(createRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.genres.map((genre: { id: number }) => genre.id)).toEqual([
+      28, 18,
+    ]);
   });
 
   it('空のジャンル一覧を返す', async () => {

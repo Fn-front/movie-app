@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { RELEASE_TYPE } from '@/constants/movies';
 import { EIGA_SCORING } from '@/constants/eiga';
 import { MS_PER_DAY } from '@/constants/time';
+import { isConcertFilm } from '@/lib/movies/concertFilm';
 import {
   isQualityMovie,
   type QualityFilterOptions,
@@ -290,6 +291,12 @@ export async function syncEigaMovies(): Promise<SyncResult> {
 
       // post-filter: 除外キーワードを含む映画を保存しない
       if (await hasExcludedKeyword(movie.id)) {
+        result.skipped++;
+        continue;
+      }
+
+      // post-filter: ライブビューイング・コンサート映像・舞台中継を保存しない
+      if (await isConcertFilm(movie)) {
         result.skipped++;
         continue;
       }

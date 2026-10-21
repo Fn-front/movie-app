@@ -35,6 +35,7 @@ import {
   GENRE_NAME_OVERRIDES,
 } from '@/constants';
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
+import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
@@ -255,8 +256,18 @@ export async function GET(request: Request) {
           if (tmdbResponse.results.length === 0) break;
 
           // adultコンテンツ・除外言語・低品質コンテンツを除外
-          const filteredResults = tmdbResponse.results.filter((movie) =>
+          const qualityResults = tmdbResponse.results.filter((movie) =>
             isQualityMovie(movie),
+          );
+
+          // ライブビューイング・コンサート映像・舞台中継を除外する。
+          // 判定にTMDbへの問い合わせを伴うが、候補はMusic系ジャンルのみの
+          // 作品に限られるため1ページあたり数件で済む
+          const concertFlags = await Promise.all(
+            qualityResults.map((movie) => isConcertFilm(movie)),
+          );
+          const filteredResults = qualityResults.filter(
+            (_, index) => !concertFlags[index],
           );
 
           if (filteredResults.length === 0) continue;

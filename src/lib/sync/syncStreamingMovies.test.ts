@@ -7,9 +7,12 @@
  */
 
 import {
+  CONCERT_KEYWORD_IDS,
   DISCOVER_API_MAX_PAGES,
+  DOCUMENTARY_GENRE_ID,
   MIN_POPULARITY,
   MIN_VOTE_AVERAGE,
+  MUSIC_GENRE_ID,
   STREAMING_MIN_POPULARITY,
 } from '@/constants/movies';
 import { TMDB_AVAILABILITY_CONCURRENCY } from '@/constants/tmdb';
@@ -20,7 +23,9 @@ import { syncStreamingMovies } from './syncStreamingMovies';
 
 const mockDiscoverMovies = jest.fn();
 const mockGetJpStreamingAvailability = jest.fn();
+const mockGetMovieKeywordIds = jest.fn().mockResolvedValue([]);
 jest.mock('@/lib/tmdb/tmdb', () => ({
+  getMovieKeywordIds: (...args: unknown[]) => mockGetMovieKeywordIds(...args),
   discoverMovies: (params: Record<string, unknown>) =>
     mockDiscoverMovies(params),
   getJpStreamingAvailability: (movieId: number) =>
@@ -238,6 +243,59 @@ describe('syncStreamingMovies', () => {
         expect(result.skipped).toBe(0);
         expect(result.upserted).toBe(1);
       }
+    });
+
+    it('ライブ興行作品を除外する', async () => {
+      mockDiscoverMovies.mockResolvedValue(
+        respondWith([
+          createMovie({
+            genre_ids: [MUSIC_GENRE_ID],
+            title: 'RADWIMPS 20th ANNIVERSARY LIVE TOUR',
+          }),
+        ]),
+      );
+
+      const result = await syncStreamingMovies();
+
+      expect(mockUpsert).not.toHaveBeenCalled();
+      // 重複排除のあとに判定するため、2つの公開日範囲に現れても1件分だけ数える
+      expect(result.skipped).toBe(1);
+    });
+
+    it('同じジャンル構成でも音楽ドキュメンタリーは除外しない', async () => {
+      mockUpsert.mockResolvedValue({ error: null });
+      mockGetJpStreamingAvailability.mockResolvedValue(availability(true));
+      mockGetMovieKeywordIds.mockResolvedValue([165194]); // music documentary
+      mockDiscoverMovies.mockResolvedValue(
+        respondWith([
+          createMovie({
+            genre_ids: [MUSIC_GENRE_ID, DOCUMENTARY_GENRE_ID],
+            title: 'オアシス：ドント・ルック・バック・イン・アンガー',
+          }),
+        ]),
+      );
+
+      const result = await syncStreamingMovies();
+
+      expect(result.skipped).toBe(0);
+      expect(result.upserted).toBe(1);
+    });
+
+    it('concert系キーワードを持つ作品を除外する', async () => {
+      mockGetMovieKeywordIds.mockResolvedValue([CONCERT_KEYWORD_IDS[0]]);
+      mockDiscoverMovies.mockResolvedValue(
+        respondWith([
+          createMovie({
+            genre_ids: [MUSIC_GENRE_ID, DOCUMENTARY_GENRE_ID],
+            title: 'Queen Budapest',
+          }),
+        ]),
+      );
+
+      const result = await syncStreamingMovies();
+
+      expect(mockUpsert).not.toHaveBeenCalled();
+      expect(result.skipped).toBe(1);
     });
 
     it('ジャンル未設定の映画を除外する', async () => {

@@ -10,11 +10,21 @@ jest.mock('@supabase/supabase-js', () => ({
 jest.mock('@/lib/tmdb/tmdb', () => ({
   getNowPlayingMovies: jest.fn(),
   hasExcludedKeyword: jest.fn(),
+  getMovieKeywordIds: jest.fn().mockResolvedValue([]),
 }));
 
 import { createClient } from '@supabase/supabase-js';
-import { EXCLUDED_GENRE_IDS } from '@/constants/movies';
-import { getNowPlayingMovies, hasExcludedKeyword } from '@/lib/tmdb/tmdb';
+import {
+  CONCERT_KEYWORD_IDS,
+  DOCUMENTARY_GENRE_ID,
+  EXCLUDED_GENRE_IDS,
+  MUSIC_GENRE_ID,
+} from '@/constants/movies';
+import {
+  getMovieKeywordIds,
+  getNowPlayingMovies,
+  hasExcludedKeyword,
+} from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 import { syncNowPlayingMovies } from './syncNowPlayingMovies';
 import type { NowPlayingSyncResult } from './syncNowPlayingMovies';
@@ -356,6 +366,92 @@ describe('syncNowPlayingMovies', () => {
 
       expect(result.skipped).toBe(1);
       expect(result.upserted).toBe(0);
+    });
+  });
+
+  describe('ライブ興行作品の除外', () => {
+    it('タイトルでライブ興行と判定できる作品をスキップする', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({
+        id: 300,
+        genre_ids: [MUSIC_GENRE_ID],
+        title: 'ヨルシカ LIVE「盗作」',
+      });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(result.skipped).toBe(1);
+      expect(result.upserted).toBe(0);
+      // タイトルで判定できるためキーワードは問い合わせない
+      expect(getMovieKeywordIds).not.toHaveBeenCalled();
+    });
+
+    it('concert系キーワードを持つ作品をスキップする', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({
+        id: 301,
+        genre_ids: [MUSIC_GENRE_ID, DOCUMENTARY_GENRE_ID],
+        title: 'Queen Budapest',
+      });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([
+        CONCERT_KEYWORD_IDS[0],
+      ]);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(result.skipped).toBe(1);
+      expect(result.upserted).toBe(0);
+    });
+
+    it('同じジャンル構成でも音楽ドキュメンタリーは保存する', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({
+        id: 302,
+        genre_ids: [MUSIC_GENRE_ID, DOCUMENTARY_GENRE_ID],
+        title: 'オアシス：ドント・ルック・バック・イン・アンガー',
+      });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([165194]);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(result.skipped).toBe(0);
+      expect(result.upserted).toBe(1);
     });
   });
 

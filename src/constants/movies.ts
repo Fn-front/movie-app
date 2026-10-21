@@ -123,6 +123,91 @@ export const EXCLUDED_KEYWORD_IDS = [
 export const EXCLUDED_KEYWORDS_PARAM = EXCLUDED_KEYWORD_IDS.join('|');
 
 /**
+ * 音楽ジャンルID（TMDb）
+ */
+export const MUSIC_GENRE_ID = 10402;
+
+/**
+ * ドキュメンタリージャンルID（TMDb）
+ */
+export const DOCUMENTARY_GENRE_ID = 99;
+
+/**
+ * ライブ興行作品の候補とみなすジャンル構成
+ *
+ * ライブビューイング・コンサート映像・舞台中継は Music 単体か
+ * Music + Documentary で登録され、劇映画ジャンルを持たない。
+ * これ以外のジャンルを併せ持つ作品はミュージカル映画や音楽伝記映画
+ * （『ボヘミアン・ラプソディ』等）なので候補にしない。
+ *
+ * ただしこの構成は音楽ドキュメンタリー映画（『オアシス：ドント・ルック・
+ * バック・イン・アンガー』等）と完全に同一であり、ジャンルだけでは
+ * 両者を区別できない。実際に除外するかはキーワードとタイトルで判定する。
+ */
+export const CONCERT_FILM_CANDIDATE_GENRE_IDS = [
+  MUSIC_GENRE_ID,
+  DOCUMENTARY_GENRE_ID,
+] as const;
+
+/**
+ * ライブ興行・観客参加型上映を示すTMDbキーワードID
+ *
+ * `concert footage`(177751) / `farewell concert`(13130) は過去のライブ映像を
+ * 引用する音楽ドキュメンタリーにも付くため含めない（『One to One：ジョン＆ヨーコ』が
+ * これに該当し、含めると誤って除外される）。
+ */
+export const CONCERT_KEYWORD_IDS = [
+  156205, // concert film
+  6029, // concert
+  318730, // live concert
+  162066, // rock concert
+  304615, // music concert
+  378298, // vr concert
+  324543, // anniversary concert
+  11634, // live performance
+  324094, // live musical performance
+  206353, // live show
+  161153, // sing-along（応援上映・シングアロング上映）
+] as const;
+
+/**
+ * ライブ興行を示すタイトル語（単語境界で判定、大文字化して比較）
+ *
+ * TMDbのキーワードは日本・アジア圏の新作ライブビューイングに付いていないことが
+ * 多く、キーワードだけでは半数近くを取りこぼす（『ヨルシカ LIVE「盗作」』
+ * 『ATEEZ: LIGHT THE WAY IN CINEMAS』等）。そのためタイトルでも判定する。
+ *
+ * 部分一致ではなく単語境界で判定するのは、`LIVE` が `ALIVE` / `OLIVE`、
+ * `TOUR` が `DETOUR` に誤マッチするため。
+ */
+export const CONCERT_TITLE_WORDS = [
+  'CONCERT',
+  'LIVE',
+  'LIVESTREAM',
+  'TOUR',
+] as const;
+
+/**
+ * ライブ興行を示すタイトル語句（部分一致で判定、大文字化して比較）
+ *
+ * 複合語とCJK圏の表記。単語境界による判定ができない（CJKは語間に区切りが無く、
+ * 複合語は語単位では誤爆する）ため部分一致で見る。
+ */
+export const CONCERT_TITLE_PHRASES = [
+  'IN CINEMAS',
+  'THE STAGE',
+  'THE MUSICAL',
+  'ライヴ',
+  'ライブ',
+  'ツアー',
+  'コンサート',
+  '公演',
+  '콘서트', // コンサート（韓国語）
+  '투어', // ツアー（韓国語）
+  '演唱会', // コンサート（中国語）
+] as const;
+
+/**
  * 許可する原語（ISO 639-1）
  * この一覧に含まれない言語の映画は除外される
  */

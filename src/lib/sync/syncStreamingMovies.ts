@@ -22,6 +22,7 @@ import {
   STREAMING_MIN_POPULARITY,
 } from '@/constants/movies';
 import { TMDB_AVAILABILITY_CONCURRENCY, TMDB_SORT_BY } from '@/constants/tmdb';
+import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { discoverMovies, getJpStreamingAvailability } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
@@ -173,7 +174,16 @@ async function fetchStreamingCandidates(
     }
   }
 
-  return Array.from(candidates.values());
+  // ライブビューイング・コンサート映像・舞台中継を候補から除く。
+  // 重複排除のあとに判定することで、同じ作品へのTMDb問い合わせを1回に抑える
+  const uniqueCandidates = Array.from(candidates.values());
+  const concertFlags = await Promise.all(
+    uniqueCandidates.map((movie) => isConcertFilm(movie)),
+  );
+  const filtered = uniqueCandidates.filter((_, index) => !concertFlags[index]);
+  result.skipped += uniqueCandidates.length - filtered.length;
+
+  return filtered;
 }
 
 /**

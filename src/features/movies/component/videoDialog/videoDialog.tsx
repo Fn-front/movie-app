@@ -44,6 +44,12 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
         <Dialog.Content
           className={styles.c_video_dialog__content}
           aria-label={`${movieTitle}の予告動画`}
+          /*
+            Radix は常に aria-describedby を出すが、ここでは Dialog.Description を
+            描画しないため、存在しないIDを指す dangling IDREF になる（#791）。
+            動画一覧に補足説明は不要なので属性ごと外す。
+          */
+          aria-describedby={undefined}
         >
           <Dialog.Title className={styles.c_video_dialog__sr_only}>
             {movieTitle}の予告動画

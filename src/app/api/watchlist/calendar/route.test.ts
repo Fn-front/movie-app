@@ -40,23 +40,25 @@ const createGetRequest = (params: Record<string, string> = {}) => {
   return new Request(url.toString());
 };
 
+/** is() に渡された (列, 値) を記録する */
+const isCalls: Array<[string, unknown]> = [];
+
 const mockCalendarQuery = (data: unknown[] | null, error: unknown = null) => {
+  isCalls.length = 0;
+  // deleted_at と watched_at の2回 is() が呼ばれるため、自分自身を返して連鎖させる
+  const chain: Record<string, unknown> = {
+    is: (column: string, value: unknown) => {
+      isCalls.push([column, value]);
+      return chain;
+    },
+    not: () => chain,
+    gte: () => chain,
+    lt: () => chain,
+    order: () => ({ data, error }),
+  };
   mockFrom.mockReturnValueOnce({
     select: () => ({
-      eq: () => ({
-        is: () => ({
-          not: () => ({
-            gte: () => ({
-              lt: () => ({
-                order: () => ({
-                  data,
-                  error,
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
+      eq: () => chain,
     }),
   });
 };
@@ -255,6 +257,26 @@ describe('GET /api/watchlist/calendar', () => {
         300,
         10,
       );
+    });
+  });
+
+  describe('視聴済みの除外', () => {
+    it('視聴済みをカレンダーから外す', async () => {
+      // カレンダーは「これから見る作品の公開日を追う」道具なので、
+      // 見終わった作品は出さない
+      mockCalendarQuery([]);
+
+      await GET(createGetRequest({ month: '2026-03' }));
+
+      expect(isCalls).toContainEqual(['watched_at', null]);
+    });
+
+    it('論理削除の除外も続けて行う', async () => {
+      mockCalendarQuery([]);
+
+      await GET(createGetRequest({ month: '2026-03' }));
+
+      expect(isCalls).toContainEqual(['deleted_at', null]);
     });
   });
 });

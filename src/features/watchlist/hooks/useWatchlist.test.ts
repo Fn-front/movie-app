@@ -13,11 +13,13 @@ import { useWatchlist } from './useWatchlist';
 const mockGetWatchlist = jest.fn();
 const mockAddWatchlist = jest.fn();
 const mockRemoveWatchlist = jest.fn();
+const mockUpdateWatched = jest.fn();
 
 jest.mock('@/lib/api/watchlist/watchlist', () => ({
   getWatchlist: (...args: unknown[]) => mockGetWatchlist(...args),
   addWatchlist: (...args: unknown[]) => mockAddWatchlist(...args),
   removeWatchlist: (...args: unknown[]) => mockRemoveWatchlist(...args),
+  updateWatched: (...args: unknown[]) => mockUpdateWatched(...args),
 }));
 
 import { useSession } from 'next-auth/react';
@@ -63,6 +65,7 @@ const mockWatchlistResponse = {
         poster_path: '/a.jpg',
         release_date: '2026-01-01',
         added_at: '2026-01-10T00:00:00Z',
+        watched_at: null,
       },
       {
         id: 'wl-2',
@@ -71,6 +74,7 @@ const mockWatchlistResponse = {
         poster_path: '/b.jpg',
         release_date: '2026-02-01',
         added_at: '2026-01-09T00:00:00Z',
+        watched_at: null,
       },
     ],
     next_cursor: null,
@@ -304,6 +308,136 @@ describe('useWatchlist', () => {
 
     await waitFor(() => {
       expect(result.current.watchlist).toHaveLength(2);
+    });
+  });
+
+  describe('視聴済みの付け外し', () => {
+    it('視聴済みにするとAPIを呼び出す', async () => {
+      mockUpdateWatched.mockResolvedValue({
+        success: true,
+        data: {
+          id: 'wl-1',
+          tmdb_movie_id: 100,
+          title: '映画A',
+          poster_path: '/a.jpg',
+          release_date: '2026-01-01',
+          added_at: '2026-01-10T00:00:00Z',
+          watched_at: '2026-03-01T00:00:00Z',
+        },
+      });
+
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.setWatched('wl-1', true);
+      });
+
+      // React Query v5 は mutationFn に第2引数（コンテキスト）を渡すため、
+      // 第1引数だけを見る
+      await waitFor(() => {
+        expect(mockUpdateWatched.mock.calls[0]?.[0]).toEqual({
+          id: 'wl-1',
+          watched: true,
+        });
+      });
+    });
+
+    it('未視聴に戻すときもAPIを呼び出す', async () => {
+      mockUpdateWatched.mockResolvedValue({ success: true, data: {} });
+
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.setWatched('wl-1', false);
+      });
+
+      await waitFor(() => {
+        expect(mockUpdateWatched.mock.calls[0]?.[0]).toEqual({
+          id: 'wl-1',
+          watched: false,
+        });
+      });
+    });
+
+    it('楽観的に視聴済みへ反映する', async () => {
+      // 解決しないPromiseにして、楽観更新だけを見る
+      mockUpdateWatched.mockReturnValue(new Promise(() => {}));
+
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.setWatched('wl-1', true);
+      });
+
+      await waitFor(() => {
+        const item = result.current.watchlist.find((i) => i.id === 'wl-1');
+        expect(item?.watched_at).not.toBeNull();
+      });
+    });
+
+    it('エラー時にロールバックしてトーストを出す', async () => {
+      mockUpdateWatched.mockRejectedValue(new Error('API Error'));
+
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.setWatched('wl-1', true);
+      });
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({ variant: 'error' }),
+        );
+      });
+
+      const item = result.current.watchlist.find((i) => i.id === 'wl-1');
+      expect(item?.watched_at).toBeNull();
+    });
+
+    it('更新中はisUpdatingWatchedがtrueになる', async () => {
+      mockUpdateWatched.mockReturnValue(new Promise(() => {}));
+
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      expect(result.current.isUpdatingWatched).toBe(false);
+
+      act(() => {
+        result.current.setWatched('wl-1', true);
+      });
+
+      await waitFor(() => {
+        expect(result.current.isUpdatingWatched).toBe(true);
+      });
     });
   });
 });

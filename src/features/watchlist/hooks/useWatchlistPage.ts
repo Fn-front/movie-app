@@ -32,6 +32,10 @@ export interface UseWatchlistPageReturn {
   fetchNextPage: () => void;
   /** ウォッチリストから削除 */
   removeFromWatchlist: (id: string) => void;
+  /** 視聴済みを付け外しする */
+  setWatched: (id: string, watched: boolean) => void;
+  /** 視聴済みの更新中 */
+  isUpdatingWatched: boolean;
   /** 現在のソートキー */
   sortBy: WatchlistSortOption;
   /** ソート変更ハンドラー */
@@ -51,6 +55,8 @@ export function useWatchlistPage(): UseWatchlistPageReturn {
     hasNextPage,
     fetchNextPage,
     removeFromWatchlist,
+    setWatched,
+    isUpdatingWatched,
   } = useWatchlist({ sort: sortBy });
 
   const handleSortChange = useCallback((value: string) => {
@@ -65,6 +71,8 @@ export function useWatchlistPage(): UseWatchlistPageReturn {
       hasNextPage,
       fetchNextPage,
       removeFromWatchlist,
+      setWatched,
+      isUpdatingWatched,
       sortBy,
       handleSortChange,
     }),
@@ -75,6 +83,8 @@ export function useWatchlistPage(): UseWatchlistPageReturn {
       hasNextPage,
       fetchNextPage,
       removeFromWatchlist,
+      setWatched,
+      isUpdatingWatched,
       sortBy,
       handleSortChange,
     ],

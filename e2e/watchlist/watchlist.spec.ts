@@ -161,3 +161,139 @@ test.describe('ウォッチリスト — サイドバー「すべて見る」遷
     ).toBeVisible({ timeout: 15000 });
   });
 });
+
+/**
+ * お気に入りの評価モーダル。
+ * 未登録なら「お気に入りに追加」、登録済みなら「お気に入りを編集」で開くため、
+ * どちらにも当たる形で取る（共有テストユーザーの登録状況に依存させない）
+ */
+function favoriteRatingModal(page: import('@playwright/test').Page) {
+  return page.getByRole('dialog', { name: /お気に入り(に追加|を編集)/ });
+}
+
+test.describe('ウォッチリスト — 視聴済み', () => {
+  test.beforeEach(async ({ page }) => {
+    await cleanupWatchlist();
+    await addMovieToWatchlist(page);
+  });
+
+  test.afterEach(async () => {
+    await cleanupWatchlist();
+  });
+
+  test('視聴済みにすると評価モーダルが開き、閉じても視聴済みが残る', async ({
+    page,
+  }) => {
+    await page.goto('/watchlist');
+
+    const watchedButton = page
+      .getByRole('button', { name: /を視聴済みにする$/ })
+      .first();
+    await expect(watchedButton).toBeVisible({ timeout: 30000 });
+
+    const patchResponse = page.waitForResponse(
+      (res) =>
+        res.url().includes('/api/watchlist/') &&
+        res.request().method() === 'PATCH',
+      { timeout: 30000 },
+    );
+    await watchedButton.click();
+    await patchResponse;
+
+    // お気に入りの評価モーダルが開く
+    const ratingModal = favoriteRatingModal(page);
+    await expect(ratingModal).toBeVisible({ timeout: 15000 });
+
+    // 登録せずに閉じても視聴済みは残る
+    await ratingModal.getByRole('button', { name: 'キャンセル' }).click();
+    await expect(ratingModal).not.toBeVisible();
+
+    await expect(page.getByText('視聴済み')).toBeVisible({ timeout: 15000 });
+
+    // リロードしても維持される
+    await page.reload();
+    await expect(page.getByText('視聴済み')).toBeVisible({ timeout: 30000 });
+  });
+
+  test('視聴済みはサイドバーと公開カレンダーから消える', async ({ page }) => {
+    await page.goto('/watchlist');
+
+    const watchedButton = page
+      .getByRole('button', { name: /を視聴済みにする$/ })
+      .first();
+    await expect(watchedButton).toBeVisible({ timeout: 30000 });
+
+    // 対象のタイトルを控えてから視聴済みにする
+    const label = await watchedButton.getAttribute('aria-label');
+    const title = (label ?? '').replace(/を視聴済みにする$/, '');
+
+    const patchResponse = page.waitForResponse(
+      (res) =>
+        res.url().includes('/api/watchlist/') &&
+        res.request().method() === 'PATCH',
+      { timeout: 30000 },
+    );
+    await watchedButton.click();
+    await patchResponse;
+
+    await favoriteRatingModal(page)
+      .getByRole('button', { name: 'キャンセル' })
+      .click();
+
+    // サイドバーの「公開日が近い映画」から消える
+    const sidebar = page.getByRole('complementary');
+    await expect(
+      sidebar.getByRole('button', { name: title, exact: true }),
+    ).toHaveCount(0, { timeout: 15000 });
+
+    // 公開カレンダーからも消える
+    await page.getByRole('button', { name: '公開カレンダーを開く' }).click();
+    const calendar = page.getByRole('dialog', { name: '公開カレンダー' });
+    await expect(calendar.getByText('読み込み中...')).not.toBeVisible({
+      timeout: 15000,
+    });
+    await expect(calendar.getByText(title, { exact: true })).toHaveCount(0);
+  });
+
+  test('視聴済みを解除すると元に戻る', async ({ page }) => {
+    await page.goto('/watchlist');
+
+    const watchedButton = page
+      .getByRole('button', { name: /を視聴済みにする$/ })
+      .first();
+    await expect(watchedButton).toBeVisible({ timeout: 30000 });
+
+    const markResponse = page.waitForResponse(
+      (res) =>
+        res.url().includes('/api/watchlist/') &&
+        res.request().method() === 'PATCH',
+      { timeout: 30000 },
+    );
+    await watchedButton.click();
+    await markResponse;
+
+    await favoriteRatingModal(page)
+      .getByRole('button', { name: 'キャンセル' })
+      .click();
+
+    const unmarkButton = page
+      .getByRole('button', { name: /を未視聴に戻す$/ })
+      .first();
+    await expect(unmarkButton).toBeVisible({ timeout: 15000 });
+
+    const unmarkResponse = page.waitForResponse(
+      (res) =>
+        res.url().includes('/api/watchlist/') &&
+        res.request().method() === 'PATCH',
+      { timeout: 30000 },
+    );
+    await unmarkButton.click();
+    await unmarkResponse;
+
+    // バッジが消え、視聴済みボタンに戻る
+    await expect(page.getByText('視聴済み')).toHaveCount(0, { timeout: 15000 });
+    await expect(
+      page.getByRole('button', { name: /を視聴済みにする$/ }).first(),
+    ).toBeVisible();
+  });
+});

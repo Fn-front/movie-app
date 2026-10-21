@@ -24,8 +24,12 @@ const mockUseWatchlist = {
   isRemoving: false,
 };
 
+const mockUseWatchlistSpy = jest.fn();
 jest.mock('@/features/watchlist/hooks/useWatchlist', () => ({
-  useWatchlist: () => mockUseWatchlist,
+  useWatchlist: (options: unknown) => {
+    mockUseWatchlistSpy(options);
+    return mockUseWatchlist;
+  },
 }));
 
 jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
@@ -56,6 +60,7 @@ const createMockItems = (count: number): WatchlistItem[] =>
     poster_path: i % 2 === 0 ? `/poster${i}.jpg` : null,
     release_date: '2026-03-01',
     added_at: `2026-03-${String(10 - i).padStart(2, '0')}T00:00:00Z`,
+    watched_at: null,
   }));
 
 // --- Tests ---
@@ -147,5 +152,15 @@ describe('WatchlistPanel', () => {
 
     expect(screen.getByRole('list')).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('視聴済みを除外して取得する', () => {
+    // クライアント側で弾くと上位10件の枠が視聴済みで埋まり表示件数が減るため、
+    // 取得の段階で落とす
+    render(<WatchlistPanel />);
+
+    expect(mockUseWatchlistSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ excludeWatched: true }),
+    );
   });
 });

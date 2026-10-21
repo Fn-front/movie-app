@@ -25,6 +25,8 @@ export interface WatchlistItem {
   release_date: string | null;
   /** 追加日時 */
   added_at: string;
+  /** 視聴済みにした日時。null は未視聴 */
+  watched_at: string | null;
 }
 
 /**
@@ -34,6 +36,8 @@ export interface GetWatchlistRequest {
   cursor?: string;
   limit?: number;
   sort?: WatchlistSortOption;
+  /** 視聴済みを除外するか（サイドバー用） */
+  exclude_watched?: boolean;
 }
 
 /**
@@ -96,4 +100,40 @@ export async function addWatchlist(
  */
 export async function removeWatchlist(id: string): Promise<void> {
   await axiosInstance.delete(API_ENDPOINTS.watchlistById(id));
+}
+
+/**
+ * 視聴済み更新リクエストの型
+ */
+export interface UpdateWatchedRequest {
+  /** ウォッチリストID */
+  id: string;
+  /** 視聴済みにするか */
+  watched: boolean;
+}
+
+/**
+ * 視聴済み更新レスポンスの型
+ */
+export interface UpdateWatchedResponse {
+  success: true;
+  message: string;
+  data: WatchlistItem;
+}
+
+/**
+ * 視聴済みを付け外しする
+ *
+ * @param params - ウォッチリストIDと視聴済みフラグ
+ * @returns 更新レスポンス
+ */
+export async function updateWatched({
+  id,
+  watched,
+}: UpdateWatchedRequest): Promise<UpdateWatchedResponse> {
+  const response = await axiosInstance.patch<UpdateWatchedResponse>(
+    API_ENDPOINTS.watchlistById(id),
+    { watched },
+  );
+  return response.data;
 }

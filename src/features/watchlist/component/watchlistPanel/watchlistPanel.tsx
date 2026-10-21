@@ -23,9 +23,12 @@ const SIDEBAR_DISPLAY_LIMIT = 10;
  * WatchlistPanelコンポーネント
  */
 export const WatchlistPanel = memo(function WatchlistPanel() {
+  // 視聴済みは除外する。クライアント側で弾くと上位10件の枠が
+  // 視聴済みで埋まって表示件数が減るため、取得の段階で落とす
   const { watchlist, isLoading, removeFromWatchlist } = useWatchlist({
     sort: 'release_date_proximity',
     limit: SIDEBAR_DISPLAY_LIMIT,
+    excludeWatched: true,
   });
 
   const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);

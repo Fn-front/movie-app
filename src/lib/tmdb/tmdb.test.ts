@@ -698,11 +698,13 @@ describe('TMDb APIクライアント', () => {
         iso_3166_1: string;
         release_dates: { type: number; release_date: string }[];
       }[] = [],
+      keywords: { id: number; name: string }[] = [],
     ) => ({
       data: {
         id: 1,
         'watch/providers': providers ? { results: providers } : undefined,
         release_dates: { results: releases },
+        keywords: { keywords },
       },
     });
 
@@ -795,7 +797,49 @@ describe('TMDb APIクライアント', () => {
       expect(await getJpStreamingAvailability(1)).toEqual({
         isCurrentlyStreaming: false,
         digitalReleaseDate: null,
+        keywordIds: [],
       });
+    });
+
+    it('キーワードIDを抽出して返す', async () => {
+      // プロレス興行の判定に使う。append_to_response で同時に取得している
+      mockGet.mockResolvedValue(
+        availabilityResponse(
+          {},
+          [],
+          [
+            { id: 5970, name: 'wrestling' },
+            { id: 206441, name: 'pro wrestling' },
+          ],
+        ),
+      );
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+      const result = await getJpStreamingAvailability(1);
+
+      expect(result.keywordIds).toEqual([5970, 206441]);
+    });
+
+    it('キーワードが無ければ空配列を返す', async () => {
+      mockGet.mockResolvedValue({
+        data: { id: 1, 'watch/providers': undefined, release_dates: undefined },
+      });
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+      const result = await getJpStreamingAvailability(1);
+
+      expect(result.keywordIds).toEqual([]);
+    });
+
+    it('append_to_response に keywords が含まれる', async () => {
+      mockGet.mockResolvedValue(availabilityResponse({}));
+
+      const { getJpStreamingAvailability } = require('./tmdb');
+      await getJpStreamingAvailability(1);
+
+      expect(mockGet.mock.calls[0][1].params.append_to_response).toContain(
+        'keywords',
+      );
     });
 
     it('JPのDigital（type=4）から最も早い日付を抽出する', async () => {

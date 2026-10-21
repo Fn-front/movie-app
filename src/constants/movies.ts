@@ -234,6 +234,45 @@ export const STAGE_BROADCAST_TITLE_PATTERNS: readonly RegExp[] = [
 ];
 
 /**
+ * プロレスを題材とすることを示すTMDbキーワードID
+ *
+ * **これ単独では興行と判定できない。** プロレスを題材にした劇映画にも付く。
+ * 実測では『レスラー』が `pro wrestling`、『ファイティング・ファミリー』と
+ * 『ナチョ・リブレ』が `wrestling` を持つ。興行の候補を絞る用途にのみ使い、
+ * 実際の判定は団体キーワードかタイトル語と組み合わせる。
+ */
+export const WRESTLING_KEYWORD_IDS = [
+  5970, // wrestling
+  206441, // pro wrestling
+] as const;
+
+/**
+ * プロレス団体を示すTMDbキーワードID
+ *
+ * 団体そのものを指すため、劇映画には付かない。これを持つ作品は興行と判断できる。
+ */
+export const WRESTLING_PROMOTION_KEYWORD_IDS = [
+  367574, // joshi puroresu（女子プロレス）
+  360477, // tokyo joshi pro-wrestling（東京女子プロレス）
+] as const;
+
+/**
+ * 興行（試合そのものの配信）であることを示すタイトル語
+ *
+ * 男子団体には団体キーワードが付かないことがあり（`DDT Judgement 2026` は
+ * `wrestling` / `pro wrestling` のみ）、その分をここで拾う。
+ *
+ * 判定は `WRESTLING_KEYWORD_IDS` を持つ作品に限って行う。タイトル語だけで
+ * 判定すると『エヴァンゲリオン放送30周年記念特別興行』のような無関係の作品を
+ * 巻き込むため。
+ */
+export const WRESTLING_EVENT_TITLE_PHRASES = [
+  '大会',
+  '興行',
+  'プロレス',
+] as const;
+
+/**
  * 許可する原語（ISO 639-1）
  * この一覧に含まれない言語の映画は除外される
  */

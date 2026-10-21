@@ -25,6 +25,7 @@ import { TMDB_AVAILABILITY_CONCURRENCY, TMDB_SORT_BY } from '@/constants/tmdb';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
+import { isWrestlingEvent } from '@/lib/movies/wrestlingEvent';
 import { discoverMovies, getJpStreamingAvailability } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
@@ -231,6 +232,14 @@ async function resolveJpAvailability(
       if (!availability) {
         unresolvedIds.add(movie.id);
         result.errors.push(`availability ${movie.title}: ${error}`);
+        continue;
+      }
+
+      // プロレス興行（試合そのものの配信）は映画ではないため保存しない。
+      // ジャンルでは劇映画と区別が付かず候補を絞れないが、判定に使う
+      // キーワードは配信実態と同じリクエストで取得済みのため追加コールは無い
+      if (isWrestlingEvent(availability.keywordIds, movie.title)) {
+        result.skipped++;
         continue;
       }
 

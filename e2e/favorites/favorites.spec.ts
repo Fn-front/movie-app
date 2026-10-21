@@ -12,33 +12,17 @@ import { test, expect } from '../fixtures/auth';
 import { cleanupFavorites } from '../helpers/api';
 import { movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
+import { waitForWriteResponse } from '../helpers/writeResponse';
 
 test.describe.configure({ mode: 'serial' });
 
-/**
- * お気に入りAPIレスポンスを待つ
- *
- * 待機条件にステータスを含めない。`status() < 500` で待つと 429（レート制限）や
- * 409（重複）が「成功」として解決し、UIが変わらないまま後続の要素待ちが
- * `element(s) not found` で落ちて原因が読めなくなる。5xx は述語に一致せず
- * タイムアウトになり、これも原因を指さない。
- * 解決後に `ok()` を検証して、失敗はステータス付きで落とす。
- */
-async function waitForFavoritesResponse(page: import('@playwright/test').Page) {
-  const res = await page.waitForResponse(
-    (r) =>
-      r.url().includes('/api/favorites') &&
-      (r.request().method() === 'POST' ||
-        r.request().method() === 'PATCH' ||
-        r.request().method() === 'DELETE'),
-  );
-
-  expect(
-    res.ok(),
-    `お気に入り書き込みが失敗した（${res.status()} ${res.request().method()}）`,
-  ).toBe(true);
-
-  return res;
+/** お気に入りAPIレスポンスを待つ */
+function waitForFavoritesResponse(page: import('@playwright/test').Page) {
+  return waitForWriteResponse(page, {
+    urlPart: '/api/favorites',
+    methods: ['POST', 'PATCH', 'DELETE'],
+    label: 'お気に入り書き込み',
+  });
 }
 
 test.describe('お気に入り — MovieTileから追加', () => {

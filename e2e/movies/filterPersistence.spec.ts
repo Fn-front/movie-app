@@ -7,6 +7,7 @@
 
 import { test, expect } from '../fixtures/auth';
 import { resetFilters } from '../helpers/api';
+import { waitForWriteResponse } from '../helpers/writeResponse';
 
 test.describe('フィルター条件がリロード後も保持される', () => {
   // goto×2＋フィルタ操作＋PUT/GET待ち＋reload と重く、並列負荷下で30秒予算を
@@ -34,20 +35,13 @@ test.describe('フィルター条件がリロード後も保持される', () =>
     await dialog.getByText('リバイバル除外').click();
 
     // 適用してPUTリクエストの内容を確認
-    const putPromise = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/filters') && res.request().method() === 'PUT',
-      { timeout: 30000 },
-    );
+    const putPromise = waitForWriteResponse(page, {
+      urlPart: '/api/filters',
+      methods: ['PUT'],
+      label: 'フィルター保存',
+    });
     await dialog.getByRole('button', { name: '適用' }).click();
     const putResponse = await putPromise;
-
-    // 429（レート制限）等を素通りさせない。失敗を「保存されていない」ではなく
-    // ステータス付きで落とす
-    expect(
-      putResponse.ok(),
-      `フィルター保存が失敗した（${putResponse.status()}）`,
-    ).toBe(true);
 
     const putBody = putResponse.request().postDataJSON();
 

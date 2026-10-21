@@ -37,6 +37,7 @@ import {
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
+import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
 import { syncStreamingMovies } from '@/lib/sync/syncStreamingMovies';
@@ -260,13 +261,18 @@ export async function GET(request: Request) {
             isQualityMovie(movie),
           );
 
-          // ライブビューイング・コンサート映像・舞台中継を除外する。
+          // 舞台・演劇の中継を除外する（タイトル判定のみで完結する）
+          const stageFiltered = qualityResults.filter(
+            (movie) => !isStageBroadcast(movie),
+          );
+
+          // ライブビューイング・コンサート映像を除外する。
           // 判定にTMDbへの問い合わせを伴うが、候補はMusic系ジャンルのみの
           // 作品に限られるため1ページあたり数件で済む
           const concertFlags = await Promise.all(
-            qualityResults.map((movie) => isConcertFilm(movie)),
+            stageFiltered.map((movie) => isConcertFilm(movie)),
           );
-          const filteredResults = qualityResults.filter(
+          const filteredResults = stageFiltered.filter(
             (_, index) => !concertFlags[index],
           );
 

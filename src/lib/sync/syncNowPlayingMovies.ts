@@ -11,6 +11,7 @@ import {
 } from '@/constants/movies';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
+import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
 import { getNowPlayingMovies, hasExcludedKeyword } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
@@ -98,8 +99,9 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
         continue;
       }
 
-      // ライブビューイング・コンサート映像・舞台中継を保存しない
-      if (await isConcertFilm(movie)) {
+      // ライブビューイング・コンサート映像・舞台中継を保存しない。
+      // 同期判定の isStageBroadcast を先に通し、TMDbへの問い合わせを省く
+      if (isStageBroadcast(movie) || (await isConcertFilm(movie))) {
         result.skipped++;
         continue;
       }

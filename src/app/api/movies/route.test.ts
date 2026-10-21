@@ -1875,6 +1875,64 @@ describe('GET /api/movies', () => {
     }
   });
 
+  // === 舞台・演劇中継の除外 ===
+
+  it('Discover同期で舞台中継をmovie_cacheに保存しない', async () => {
+    const handler = await loadGET();
+
+    const baseMovie = {
+      adult: false,
+      original_language: 'ja',
+      vote_average: 7.0,
+      vote_count: 10,
+      popularity: 50,
+      poster_path: null,
+      backdrop_path: null,
+      release_date: '2026-01-22',
+      overview: '',
+    };
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          ...baseMovie,
+          id: 910,
+          title: 'National Theatre Live: Hamlet',
+          genre_ids: [18],
+        },
+        {
+          ...baseMovie,
+          id: 911,
+          title: '舞台『龍が如く』-神室町八犬伝-',
+          genre_ids: [28, 18],
+        },
+        {
+          ...baseMovie,
+          id: 912,
+          // 「舞台」を含むが中継ではない作品は残す
+          title: 'ストレンジャー・シングス ～"最後の冒険"の舞台裏～',
+          genre_ids: [99],
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 910 }, { id: 911 }, { id: 912 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    const upsertedMovies = (
+      mockSupabaseClient!.rpc.mock.calls[0][1] as { movies: { id: number }[] }
+    ).movies;
+    expect(upsertedMovies.map((movie) => movie.id)).toEqual([912]);
+    // タイトルだけで判定できるためキーワードは問い合わせない
+    expect(mockGetMovieKeywordIds).not.toHaveBeenCalled();
+  });
+
   // === ライブ興行作品の除外 ===
 
   it('Discover同期でライブ興行作品をmovie_cacheに保存しない', async () => {

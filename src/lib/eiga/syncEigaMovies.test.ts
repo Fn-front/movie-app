@@ -680,6 +680,36 @@ describe('syncEigaMovies', () => {
     expect(mockUpsert).not.toHaveBeenCalled();
   });
 
+  it('舞台中継をpost-filterでスキップする', async () => {
+    const eigaMovie: EigaMovie = {
+      title: '舞台『龍が如く』-神室町八犬伝-',
+      releaseDate: '2026-08-29',
+      eigaUrl: null,
+    };
+
+    mockedFetchEigaMovies.mockResolvedValue([eigaMovie]);
+    mockedSearchMovies.mockResolvedValue({
+      results: [
+        createMockMovie({
+          id: 620,
+          title: '舞台『龍が如く』-神室町八犬伝-',
+          genre_ids: [28, 18],
+          release_date: '2026-08-29',
+        }),
+      ],
+      page: 1,
+      total_pages: 1,
+      total_results: 1,
+    });
+    mockedHasExcludedKeyword.mockResolvedValue(false);
+
+    const result = await syncEigaMovies();
+
+    expect(result.skipped).toBe(1);
+    expect(result.added).toBe(0);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
   it('ライブ興行作品をpost-filterでスキップする', async () => {
     const eigaMovie: EigaMovie = {
       title: 'ヨルシカ LIVE「盗作」',

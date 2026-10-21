@@ -24,6 +24,7 @@ import {
 import { TMDB_AVAILABILITY_CONCURRENCY, TMDB_SORT_BY } from '@/constants/tmdb';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
+import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
 import { discoverMovies, getJpStreamingAvailability } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
@@ -175,12 +176,16 @@ async function fetchStreamingCandidates(
   }
 
   // ライブビューイング・コンサート映像・舞台中継を候補から除く。
-  // 重複排除のあとに判定することで、同じ作品へのTMDb問い合わせを1回に抑える
+  // 重複排除のあとに判定することで、同じ作品へのTMDb問い合わせを1回に抑える。
+  // 同期判定の isStageBroadcast を先に通し、問い合わせ対象をさらに減らす
   const uniqueCandidates = Array.from(candidates.values());
-  const concertFlags = await Promise.all(
-    uniqueCandidates.map((movie) => isConcertFilm(movie)),
+  const stageFiltered = uniqueCandidates.filter(
+    (movie) => !isStageBroadcast(movie),
   );
-  const filtered = uniqueCandidates.filter((_, index) => !concertFlags[index]);
+  const concertFlags = await Promise.all(
+    stageFiltered.map((movie) => isConcertFilm(movie)),
+  );
+  const filtered = stageFiltered.filter((_, index) => !concertFlags[index]);
   result.skipped += uniqueCandidates.length - filtered.length;
 
   return filtered;

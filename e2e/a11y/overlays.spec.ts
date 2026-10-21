@@ -7,7 +7,23 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
+import { movieTiles } from '../helpers/locators';
+import { mockMovieDetail } from '../helpers/movieDetail';
 import { THEMES, gotoWithTheme, expectNoA11yViolations } from './helpers';
+
+/** 詳細モーダルの検査で使うキャスト（リンクが描画される最小構成） */
+const CAST_PRESENT = [
+  { id: 1, name: '俳優A', character: '役A', profile_path: null, order: 0 },
+];
+
+/**
+ * スクロール領域（`max-height: 300px`）を確実にはみ出させるあらすじ。
+ *
+ * 違反は「スクロール可能」かつ「フォーカス可能な子孫がゼロ」で成立する。
+ * 既定のモック（短いあらすじ）では、はみ出すかどうかがテーマやフォント指標で
+ * 揺れて検査が不安定になるため、長さで確定させる。
+ */
+const LONG_OVERVIEW = 'E2E用の長いあらすじテキストです。'.repeat(40);
 
 test.describe('アクセシビリティ（オーバーレイ・未認証）', () => {
   test.describe.configure({ timeout: 60000 });
@@ -43,6 +59,41 @@ test.describe('アクセシビリティ（オーバーレイ・未認証）', ()
 
       await expectNoA11yViolations(page, `フィルターモーダル / ${theme}`);
     });
+
+    /**
+     * 詳細モーダルのスクロール領域（あらすじ・詳細情報・キャスト）は
+     * `max-height` 固定で、フォーカス可能な子孫がキャストのリンクだけだった。
+     * キャスト情報を持たない作品でゼロになり、キーボードで到達できなくなる（#809）。
+     * キャスト有無の両方を検査する。
+     */
+    for (const [label, cast] of [
+      ['キャストあり', CAST_PRESENT],
+      ['キャストなし', []],
+    ] as const) {
+      test(`映画詳細モーダル（${label}） - ${theme}`, async ({ page }) => {
+        // TMDbのレート制限・一時障害に左右されないようモックする
+        await mockMovieDetail(page, {
+          overview: LONG_OVERVIEW,
+          credits: { cast: [...cast], crew: [] },
+        });
+        await gotoWithTheme(page, '/movies/now-showing', theme);
+
+        await movieTiles(page).first().waitFor({ timeout: 30000 });
+        await movieTiles(page).first().click();
+
+        const dialog = page.getByRole('dialog');
+        await expect(dialog).toBeVisible({ timeout: 15000 });
+        // 取得完了まで待つ（ローディング中に検査しない）
+        await expect(dialog.getByText('詳細情報')).toBeVisible({
+          timeout: 15000,
+        });
+
+        await expectNoA11yViolations(
+          page,
+          `映画詳細モーダル（${label}） / ${theme}`,
+        );
+      });
+    }
   }
 });
 

@@ -773,4 +773,35 @@ describe('MovieDetailContent', () => {
       expect(screen.getByTestId('video-dialog')).toBeInTheDocument();
     });
   });
+
+  describe('スクロール領域のキーボード操作', () => {
+    it('キャストがいなくてもスクロール領域にフォーカスできる', () => {
+      // max-height 固定のスクロール領域で、フォーカス可能な子孫が
+      // キャストのリンクだけだと、キャスト無しの作品でゼロになり
+      // axe の scrollable-region-focusable 違反になる（#809）
+      setupMovie({ credits: { cast: [] } });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      const region = screen.getByRole('region', { name: '作品情報' });
+      expect(region).toHaveAttribute('tabindex', '0');
+    });
+
+    it('キャストがいる場合もスクロール領域はフォーカス可能なまま', () => {
+      setupMovie({
+        credits: {
+          cast: [
+            { id: 1, name: '俳優A', character: '役A', profile_path: null },
+          ],
+        },
+      });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(screen.getByRole('region', { name: '作品情報' })).toHaveAttribute(
+        'tabindex',
+        '0',
+      );
+    });
+  });
 });

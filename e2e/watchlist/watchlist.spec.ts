@@ -22,6 +22,7 @@ import { cleanupWatchlistForUser } from '../helpers/api';
 import { movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 import { runScopedEmail } from '../helpers/runScope';
+import { waitForWriteResponse } from '../helpers/writeResponse';
 
 // 専用ユーザーの作成（bcrypt）とログインに加え、並列負荷下でも goto＋タイル待ち＋
 // API応答（前準備の beforeEach 含む）が予算切れしないよう、テストタイムアウトを延長する
@@ -33,52 +34,27 @@ const USER = {
   password: 'WatchlistPageE2e1',
 } as const;
 
-/**
- * ウォッチリストAPIレスポンスを待つ
- *
- * 待機条件にステータスを含めない。`status() < 500` で待つと 429（レート制限）や
- * 409（重複）が「成功」として解決し、UIが変わらないまま後続の要素待ちが
- * `element(s) not found` で落ちて原因が読めなくなる。5xx は述語に一致せず
- * タイムアウトになり、これも原因を指さない。
- * 解決後に `ok()` を検証して、失敗はステータス付きで落とす。
- *
- * timeout は並列負荷下で予算切れしないよう延長している（本ファイル冒頭のコメント参照）。
- */
-async function waitForWatchlistResponse(page: Page) {
-  const res = await page.waitForResponse(
-    (r) =>
-      r.url().includes('/api/watchlist') &&
-      (r.request().method() === 'POST' || r.request().method() === 'DELETE'),
-    { timeout: 30000 },
-  );
-
-  expect(
-    res.ok(),
-    `ウォッチリスト書き込みが失敗した（${res.status()} ${res.request().method()}）`,
-  ).toBe(true);
-
-  return res;
+/** ウォッチリストAPIレスポンスを待つ */
+function waitForWatchlistResponse(page: Page) {
+  return waitForWriteResponse(page, {
+    urlPart: '/api/watchlist',
+    methods: ['POST', 'DELETE'],
+    label: 'ウォッチリスト書き込み',
+  });
 }
 
 /**
  * 視聴済みトグル（PATCH）のレスポンスを待つ
  *
  * PATCH は POST / DELETE と同じ `WRITE_WATCHLIST` カウンタを共有するため、
- * こちらも 429 になりうる。`waitForWatchlistResponse` と同じ理由で
- * 解決後に `ok()` を検証する。
+ * こちらも 429 になりうる。
  */
-async function waitForWatchedPatchResponse(page: Page) {
-  const res = await page.waitForResponse(
-    (r) =>
-      r.url().includes('/api/watchlist/') && r.request().method() === 'PATCH',
-    { timeout: 30000 },
-  );
-
-  expect(res.ok(), `視聴済みの切り替えが失敗した（${res.status()}）`).toBe(
-    true,
-  );
-
-  return res;
+function waitForWatchedPatchResponse(page: Page) {
+  return waitForWriteResponse(page, {
+    urlPart: '/api/watchlist/',
+    methods: ['PATCH'],
+    label: '視聴済みの切り替え',
+  });
 }
 
 /** 映画をウォッチリストに追加する（前準備用） */

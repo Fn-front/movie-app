@@ -36,6 +36,7 @@ import {
 } from '@/constants';
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
+import { toSelectableGenres } from '@/lib/movies/genreFilter';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
@@ -82,7 +83,8 @@ async function getGenreMap(): Promise<Record<number, string>> {
 
   const genres: { id: number; name: string }[] = await getGenres();
   const genreMap: Record<number, string> = {};
-  for (const genre of genres) {
+  // 保存前フィルタで弾いているジャンルは、選んでも必ず0件になるため出さない
+  for (const genre of toSelectableGenres(genres)) {
     genreMap[genre.id] = GENRE_NAME_OVERRIDES[genre.name] ?? genre.name;
   }
 

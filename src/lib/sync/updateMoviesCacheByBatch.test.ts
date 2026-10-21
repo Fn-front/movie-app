@@ -9,12 +9,13 @@ jest.mock('@supabase/supabase-js', () => ({
 
 jest.mock('@/lib/tmdb/tmdb', () => ({
   getMovieDetail: jest.fn(),
+  getMovieCacheStats: jest.fn(),
 }));
 
 import { createClient } from '@supabase/supabase-js';
 
 import { EXCLUDED_GENRE_IDS } from '@/constants';
-import { getMovieDetail } from '@/lib/tmdb/tmdb';
+import { getMovieCacheStats, getMovieDetail } from '@/lib/tmdb/tmdb';
 import {
   updateMoviesCacheByBatch,
   type BatchUpdateResult,
@@ -22,12 +23,12 @@ import {
 
 // ---------- ヘルパー ----------
 
-/** テスト用の映画詳細データを生成する */
-function createMockMovieDetail(overrides: Record<string, unknown> = {}) {
+/** テスト用の同期指標データを生成する */
+function createMockCacheStats(overrides: Record<string, unknown> = {}) {
   return {
-    id: 1,
-    title: 'テスト映画',
-    vote_average: 8.0,
+    genreIds: [],
+    voteAverage: 8.0,
+    voteCount: 0,
     popularity: 150.5,
     ...overrides,
   };
@@ -168,7 +169,9 @@ describe('updateMoviesCacheByBatch', () => {
 
       const fromMock = createFromMock({ selectData: rows });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
-      (getMovieDetail as jest.Mock).mockResolvedValue(createMockMovieDetail());
+      (getMovieCacheStats as jest.Mock).mockResolvedValue(
+        createMockCacheStats(),
+      );
 
       const result = await updateMoviesCacheByBatch();
 
@@ -188,6 +191,25 @@ describe('updateMoviesCacheByBatch', () => {
       );
     });
 
+    it('予告動画を含まない軽量な取得関数を使う', async () => {
+      // 全件を毎日なめる経路なので、使わないクレジット・配信情報・予告動画を
+      // レスポンスに含めない（include_video_language で動画が100件超になる）
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 1, release_type: 'theatrical' }],
+      });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (getMovieCacheStats as jest.Mock).mockResolvedValue(
+        createMockCacheStats(),
+      );
+
+      await updateMoviesCacheByBatch();
+
+      expect(getMovieCacheStats).toHaveBeenCalledWith(1);
+      expect(getMovieDetail).not.toHaveBeenCalled();
+    });
+
     it('ちょうど1000件の場合、次ページを取得して空で打ち切る', async () => {
       setValidEnv();
 
@@ -198,7 +220,9 @@ describe('updateMoviesCacheByBatch', () => {
 
       const fromMock = createFromMock({ selectData: rows });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
-      (getMovieDetail as jest.Mock).mockResolvedValue(createMockMovieDetail());
+      (getMovieCacheStats as jest.Mock).mockResolvedValue(
+        createMockCacheStats(),
+      );
 
       const result = await updateMoviesCacheByBatch();
 
@@ -283,13 +307,10 @@ describe('updateMoviesCacheByBatch', () => {
       const fromMock = createFromMock({ selectData: rows });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
-      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
-        createMockMovieDetail({
+      (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
+        createMockCacheStats({
           id: 1,
-          genres: [
-            { id: 35, name: 'コメディ' },
-            { id: EXCLUDED_GENRE_IDS[0], name: 'テレビ映画' },
-          ],
+          genreIds: [35, EXCLUDED_GENRE_IDS[0]],
         }),
       );
 
@@ -311,10 +332,10 @@ describe('updateMoviesCacheByBatch', () => {
       const fromMock = createFromMock({ selectData: rows });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
-      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
-        createMockMovieDetail({
+      (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
+        createMockCacheStats({
           id: 1,
-          genres: [{ id: EXCLUDED_GENRE_IDS[0], name: 'テレビ映画' }],
+          genreIds: [EXCLUDED_GENRE_IDS[0]],
         }),
       );
 
@@ -332,10 +353,10 @@ describe('updateMoviesCacheByBatch', () => {
       const fromMock = createFromMock({ selectData: rows });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
-      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
-        createMockMovieDetail({
+      (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
+        createMockCacheStats({
           id: 1,
-          genres: [{ id: 18, name: 'ドラマ' }],
+          genreIds: [18],
         }),
       );
 
@@ -353,8 +374,8 @@ describe('updateMoviesCacheByBatch', () => {
       const fromMock = createFromMock({ selectData: rows });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
-      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
-        createMockMovieDetail({ id: 1 }),
+      (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
+        createMockCacheStats({ id: 1 }),
       );
 
       const result = await updateMoviesCacheByBatch();
@@ -373,10 +394,10 @@ describe('updateMoviesCacheByBatch', () => {
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
-      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
-        createMockMovieDetail({
+      (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
+        createMockCacheStats({
           id: 1,
-          genres: [{ id: EXCLUDED_GENRE_IDS[0], name: 'テレビ映画' }],
+          genreIds: [EXCLUDED_GENRE_IDS[0]],
         }),
       );
 
@@ -417,12 +438,12 @@ describe('updateMoviesCacheByBatch', () => {
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
-      (getMovieDetail as jest.Mock)
+      (getMovieCacheStats as jest.Mock)
         .mockResolvedValueOnce(
-          createMockMovieDetail({ id: 1, vote_average: 8.5, popularity: 200 }),
+          createMockCacheStats({ id: 1, voteAverage: 8.5, popularity: 200 }),
         )
         .mockResolvedValueOnce(
-          createMockMovieDetail({ id: 2, vote_average: 7.0, popularity: 100 }),
+          createMockCacheStats({ id: 2, voteAverage: 7.0, popularity: 100 }),
         );
 
       const result = await updateMoviesCacheByBatch();
@@ -430,7 +451,7 @@ describe('updateMoviesCacheByBatch', () => {
       expect(result.total).toBe(2);
       expect(result.updated).toBe(2);
       expect(result.errors).toHaveLength(0);
-      expect(getMovieDetail).toHaveBeenCalledTimes(2);
+      expect(getMovieCacheStats).toHaveBeenCalledTimes(2);
       expect(updateMock).toHaveBeenCalledTimes(2);
       expect(updateMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -468,13 +489,13 @@ describe('updateMoviesCacheByBatch', () => {
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
-      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
-        createMockMovieDetail({ id: 1, vote_average: 9.0, popularity: 300 }),
+      (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
+        createMockCacheStats({ id: 1, voteAverage: 9.0, popularity: 300 }),
       );
 
       const result = await updateMoviesCacheByBatch();
 
-      expect(getMovieDetail).toHaveBeenCalledTimes(1);
+      expect(getMovieCacheStats).toHaveBeenCalledTimes(1);
       expect(result.total).toBe(2);
       expect(result.updated).toBe(2);
     });
@@ -507,10 +528,10 @@ describe('updateMoviesCacheByBatch', () => {
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
-      (getMovieDetail as jest.Mock)
+      (getMovieCacheStats as jest.Mock)
         .mockRejectedValueOnce(new Error('Request failed with status 404'))
         .mockResolvedValueOnce(
-          createMockMovieDetail({ id: 2, vote_average: 7.5, popularity: 120 }),
+          createMockCacheStats({ id: 2, voteAverage: 7.5, popularity: 120 }),
         );
 
       const result = await updateMoviesCacheByBatch();
@@ -548,8 +569,8 @@ describe('updateMoviesCacheByBatch', () => {
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
-      (getMovieDetail as jest.Mock).mockResolvedValueOnce(
-        createMockMovieDetail({ id: 1 }),
+      (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
+        createMockCacheStats({ id: 1 }),
       );
 
       const result = await updateMoviesCacheByBatch();
@@ -581,7 +602,7 @@ describe('updateMoviesCacheByBatch', () => {
       });
       (createClient as jest.Mock).mockReturnValue({ from: fromMock });
 
-      (getMovieDetail as jest.Mock).mockRejectedValueOnce('string error');
+      (getMovieCacheStats as jest.Mock).mockRejectedValueOnce('string error');
 
       const result = await updateMoviesCacheByBatch();
 

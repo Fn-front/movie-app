@@ -23,6 +23,7 @@ import {
 import type {
   DismissSignals,
   Movie,
+  MovieCacheStats,
   MovieDetail,
   MovieSearchParams,
   PersonDetail,
@@ -202,6 +203,36 @@ export async function getMovieDismissSignals(
     keywords: (keywords?.keywords ?? []).map((k) => k.name),
     directorName: director?.name ?? null,
     releaseYear: Number.isNaN(releaseYear) ? null : releaseYear,
+  };
+}
+
+/**
+ * movie_cache の日次同期に使う指標だけを取得する
+ *
+ * `getMovieDetail` は `append_to_response` でクレジット・配信情報・予告動画を、
+ * さらに `include_video_language` で英語と言語タグ無しの動画まで取る。
+ * 同期が使うのはジャンル・評価・人気度だけなので、1作品あたり100件を超える
+ * 動画配列（例: スーパーガール 124件）が丸ごと無駄になる。
+ * movie_cache 全件を毎日なめる経路なので、ここは素の `/movie/{id}` で取る。
+ *
+ * @param movieId - 映画ID
+ * @returns 同期に必要な指標。`genres` が無ければ空配列、`vote_count` が無ければ0
+ * @throws TMDbへの問い合わせに失敗した場合
+ */
+export async function getMovieCacheStats(
+  movieId: number | string,
+): Promise<MovieCacheStats> {
+  const response = await tmdbClient.get<MovieDetail>(
+    TMDB_ENDPOINTS.MOVIE_DETAIL(movieId),
+  );
+
+  const { genres, vote_average, vote_count, popularity } = response.data;
+
+  return {
+    genreIds: (genres ?? []).map((genre) => genre.id),
+    voteAverage: vote_average,
+    voteCount: vote_count ?? 0,
+    popularity,
   };
 }
 

@@ -9,11 +9,12 @@ Playwright を使用したE2Eテスト基盤。storageStateによる認証セッ
 ```
 e2e/
 ├── .auth/
-│   └── storageState.json    # 認証セッション（.gitignore対象）
+│   └── storageState-<runId>.json  # 認証セッション（.gitignore対象）
 ├── fixtures/
 │   └── auth.ts              # 認証fixture（performLogin, globalAuthSetup, test拡張）
 ├── helpers/
-│   └── testUser.ts          # テストユーザー情報（環境変数から取得）
+│   ├── runScope.ts          # run単位の識別子（メール・送信元IP・映画ID）
+│   └── testUser.ts          # 共有テストユーザー（run単位で生成）
 ├── auth/
 │   ├── signin.spec.ts       # ログインページテスト
 │   ├── signup.spec.ts       # 新規登録ページテスト
@@ -29,7 +30,8 @@ e2e/
 │   └── watchlist.spec.ts    # ウォッチリストページテスト
 ├── settings/
 │   └── settings.spec.ts     # 設定ページテスト
-└── global.setup.ts          # グローバルセットアップ（storageState生成）
+├── global.setup.ts          # グローバルセットアップ（テストユーザー作成・storageState生成）
+└── global.teardown.ts       # グローバルティアダウン（run固有データの削除）
 ```
 
 ## 認証戦略
@@ -37,9 +39,10 @@ e2e/
 ### storageState方式
 
 1. `global.setup.ts` がsetupプロジェクトとして最初に実行される
-2. テストユーザーで `/auth/signin` にログイン
-3. 認証済みCookieを `e2e/.auth/storageState.json` に保存
+2. この run 専用の共有テストユーザーを作成し、`/auth/signin` にログイン
+3. 認証済みCookieを `e2e/.auth/storageState-<runId>.json` に保存
 4. 各ブラウザプロジェクトが `storageState` を読み込み、認証済み状態でテスト開始
+5. 全プロジェクト終了後、`global.teardown.ts` が run 固有データを削除する
 
 ### 未認証テスト
 
@@ -49,18 +52,57 @@ e2e/
 test.use({ storageState: { cookies: [], origins: [] } });
 ```
 
-## テストユーザー
+## テストデータの run 分離（#793）
 
-環境変数から取得:
+E2E は共有の Supabase DB に対して実行する。以前は固定のメールアドレス・
+固定の映画ID・固定の送信元IPを使っていたため、複数の run が同時に流れると
+互いのデータを消し合った。これを避けるためワークフロー側で
+`concurrency: e2e-shared-db` による直列化をしていたが、GitHub Actions は
+同一 concurrency group の pending を1つしか保持せず、**2つ目がキューに入ると
+古い pending を自動キャンセルする**。その結果、E2E が一度も実行されないまま
+PR をマージできていた。
 
-| 環境変数 | 用途 |
+そこで識別子を run 単位に分離し、直列化をやめた。採番は
+`e2e/helpers/runScope.ts` が担当する。
+
+| 対象 | 分離の方法 |
 |---|---|
-| `E2E_TEST_USER_EMAIL` | テストユーザーのメールアドレス |
-| `E2E_TEST_USER_PASSWORD` | テストユーザーのパスワード |
+| メールアドレス | `runScopedEmail('e2e-two-factor')` → `e2e-two-factor-<runId>@example.com` |
+| 共有テストユーザー | run ごとに作成・削除（`global.setup.ts` / `global.teardown.ts`） |
+| `movie_cache` のシードID | `runScopedMovieId(offset)` で run ごとのID領域を使う |
+| 送信元IP（IP単位のレート制限） | `x-forwarded-for: RUN_CLIENT_IP` を Playwright から送る |
+| storageState | `e2e/.auth/storageState-<runId>.json` |
 
-- ローカル: `.env.local` に設定
-- CI: GitHub Secrets（Production environment）に設定
-- Supabaseの `users` テーブルに事前登録済みのユーザーであること
+### run ID の決まり方
+
+| 環境 | 値 |
+|---|---|
+| `E2E_RUN_ID` 指定時 | その値（英数字以外は除去） |
+| CI | `<GITHUB_RUN_ID>x<GITHUB_RUN_ATTEMPT>` |
+| ローカル | `local` |
+
+> ⚠️ 値は **プロセスをまたいで同じ** である必要がある（setup / worker / teardown が
+> 別プロセスのため）。乱数ではなく環境変数から決定論的に導出すること。
+>
+> ⚠️ `E2E_RUN_ID` は **プロセスの環境変数として渡す**こと。`runScope.ts` は
+> `playwright.config.ts` の import として `dotenv.config()` より先に評価されるため、
+> `.env.local` に書いても効かない。
+
+ローカルで2つ同時に流して衝突しないことを確かめる例:
+
+```bash
+E2E_RUN_ID=cc1 npx playwright test --project=chromium --output=test-results/cc1 &
+E2E_RUN_ID=cc2 npx playwright test --project=chromium --output=test-results/cc2 &
+wait
+```
+
+### なぜ送信元IPを詐称するのか
+
+Next.js は `x-forwarded-for` が無いとソケットの remoteAddress を補う
+（`node_modules/next/dist/server/base-server.js`）。E2E は常に localhost 接続のため
+全 run が同じ `::1` になり、共有DB上で IP 単位のレート制限カウンタ
+（`awards_fetch` / `login_ip` / 公開映画API等）を食い合う。run 固有の
+プライベートIPを送ることで分離する。
 
 ## Playwright設定（playwright.config.ts）
 
@@ -68,10 +110,16 @@ test.use({ storageState: { cookies: [], origins: [] } });
 
 | プロジェクト | 実行環境 | 説明 |
 |---|---|---|
-| `setup` | CI・ローカル共通 | storageState生成 |
+| `setup` | CI・ローカル共通 | テストユーザー作成・storageState生成 |
+| `cleanup` | CI・ローカル共通 | run固有データの削除（setupのteardown） |
 | `chromium` | CI・ローカル共通 | Desktop Chrome |
 | `firefox` | ローカルのみ | Desktop Firefox |
 | `webkit` | ローカルのみ | Desktop Safari |
+
+### テストファイルの判別
+
+`testMatch: '**/*.spec.ts'` を指定し、Playwright が拾うのは `*.spec.ts` だけにしている。
+E2Eヘルパーの純粋なロジック（識別子の採番等）は `*.test.ts` として Jest が担当する。
 
 ### WebServer
 
@@ -245,8 +293,9 @@ page.getByRole('alert').filter({ hasText: 'エラーメッセージ' })
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase接続 |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase認証（RLSバイパス） |
 | `NEXTAUTH_SECRET` | NextAuth secret |
-| `E2E_TEST_USER_EMAIL` | テストユーザーメール |
-| `E2E_TEST_USER_PASSWORD` | テストユーザーパスワード |
+
+> 共有テストユーザーは run ごとに作って消すため、固定ユーザーの認証情報
+> （旧 `E2E_TEST_USER_EMAIL` / `E2E_TEST_USER_PASSWORD`）は不要になった（#793）。
 
 ### CI専用の追加環境変数
 

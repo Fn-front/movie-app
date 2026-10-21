@@ -21,6 +21,7 @@ import {
   createVerifiedUser,
   deleteUserByEmail,
 } from '../helpers/dedicatedUser';
+import { runScopedEmail } from '../helpers/runScope';
 
 /**
  * 1つのページをログイン済みのまま使い回すため直列で回す。
@@ -28,8 +29,9 @@ import {
  */
 test.describe.configure({ mode: 'serial', timeout: 90000 });
 
+/** 本 spec 専用のユーザー（run 単位。理由は runScope.ts を参照／#793） */
 const USER = {
-  email: 'e2e-recommendation-events@example.com',
+  email: runScopedEmail('e2e-recommendation-events'),
   password: 'E2eEventsPass123!',
 };
 

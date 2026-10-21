@@ -34,6 +34,7 @@ import {
   createVerifiedUser,
   deleteUserByEmail,
 } from '../helpers/dedicatedUser';
+import { runScopedEmail } from '../helpers/runScope';
 import {
   cleanupTotp,
   getCurrentTotpCode,
@@ -44,10 +45,13 @@ import {
 
 /**
  * 本 spec 専用のユーザー。
- * 他の spec と識別子が衝突しないよう、用途が分かる固定のメールアドレスにする。
+ *
+ * 他の spec と識別子が衝突しないよう用途が分かる名前にしたうえで、
+ * run 単位の接尾辞を付ける（#793）。固定のままだと、共有DBに複数の
+ * CI run が同時に流れたとき互いのユーザーを消し合う。
  */
 const USER = {
-  email: 'e2e-two-factor@example.com',
+  email: runScopedEmail('e2e-two-factor'),
   password: 'TwoFactorE2e1',
 } as const;
 
@@ -120,7 +124,8 @@ test.describe('二段階認証', () => {
 
   /**
    * 専用ユーザーに紐づく状態だけを消す。
-   * 全消し（cleanupAllRateLimits）は他の spec が依存する状態まで壊すため使わない（#750）。
+   * run 全体を対象にする cleanupRunRateLimits は、他の spec が依存する状態まで
+   * 壊すため使わない（#750）。
    */
   const resetUserState = async (): Promise<void> => {
     // ログイン5回/30分、コード5回/15分。持ち越すと後半のテストが弾かれる

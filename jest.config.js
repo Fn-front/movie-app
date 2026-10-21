@@ -44,6 +44,10 @@ const customJestConfig = {
     '<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/src/**/*.{spec,test}.{js,jsx,ts,tsx}',
     '<rootDir>/eslint-local-rules/**/*.test.{js,jsx,ts,tsx}',
+    // E2Eヘルパーの純粋なロジック（識別子の採番等）はJestで担保する。
+    // Playwright側は `*.spec.ts` だけをテスト扱いにしてあるため重複しない
+    // （playwright.config.ts の testMatch）
+    '<rootDir>/e2e/**/*.test.ts',
   ],
   coverageThreshold: {
     global: {

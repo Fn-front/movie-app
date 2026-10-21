@@ -62,9 +62,23 @@ export const WatchlistPanel = memo(function WatchlistPanel() {
   return (
     <div className={styles.c_watchlist_panel}>
       {watchlist.length === 0 ? (
-        <p className={styles.c_watchlist_panel__empty}>
-          ウォッチリストに映画を追加しましょう
-        </p>
+        <div className={styles.c_watchlist_panel__empty}>
+          <p className={styles.c_watchlist_panel__empty_text}>
+            ウォッチリストに映画を追加しましょう
+          </p>
+          {/*
+            このリンクは空状態の導線であると同時に、
+            サイドバーのスクロール領域（.c_sidebar__watchlist_content）に
+            フォーカス可能な要素を1つ以上残す役割も持つ。
+            無いと axe の scrollable-region-focusable 違反になる（#792）。
+          */}
+          <Link
+            href={ROUTES.UPCOMING}
+            className={styles.c_watchlist_panel__empty_link}
+          >
+            公開予定から探す
+          </Link>
+        </div>
       ) : (
         <>
           <div className={styles.c_watchlist_panel__list} role='list'>

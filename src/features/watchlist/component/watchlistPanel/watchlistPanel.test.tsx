@@ -88,6 +88,16 @@ describe('WatchlistPanel', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('空状態でも公開予定ページへのリンクが表示される', () => {
+    // スクロール領域にフォーカス可能な要素が1つも無いと
+    // axe の scrollable-region-focusable 違反になるため（#792）
+    mockUseWatchlist.watchlist = [];
+    render(<WatchlistPanel />);
+
+    const link = screen.getByRole('link', { name: '公開予定から探す' });
+    expect(link).toHaveAttribute('href', '/movies/upcoming');
+  });
+
   it('ローディング状態が表示される', () => {
     mockUseWatchlist.isLoading = true;
     render(<WatchlistPanel />);

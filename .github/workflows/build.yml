@@ -48,8 +48,10 @@ jobs:
         if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
         run: npm ci
 
+      # next/font/google の仮想モジュール解決が非決定的に失敗することがあるため
+      # リトライを挟む。詳細は scripts/ci-build-with-retry.sh と #787
       - name: app-build
-        run: npm run build
+        run: bash scripts/ci-build-with-retry.sh
         env:
           NEXT_TELEMETRY_DISABLED: 1
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}

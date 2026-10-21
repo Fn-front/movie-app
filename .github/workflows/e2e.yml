@@ -78,8 +78,11 @@ jobs:
         if: ${{ steps.playwright_cache.outputs.cache-hit == 'true' }}
         run: npx playwright install-deps chromium
 
+      # next/font/google の仮想モジュール解決が非決定的に失敗することがあるため
+      # リトライを挟む。ここで落ちると E2E ごと再実行になり待ち時間が大きい。
+      # 詳細は scripts/ci-build-with-retry.sh と #787
       - name: build
-        run: npm run build
+        run: bash scripts/ci-build-with-retry.sh
         env:
           NEXT_TELEMETRY_DISABLED: 1
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}

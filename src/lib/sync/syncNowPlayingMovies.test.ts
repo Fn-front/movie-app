@@ -369,6 +369,62 @@ describe('syncNowPlayingMovies', () => {
     });
   });
 
+  describe('舞台・演劇中継の除外', () => {
+    it('劇映画ジャンルの舞台中継をスキップする', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({
+        id: 400,
+        genre_ids: [18, 35],
+        title: 'National Theatre Live: Hamlet',
+      });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(result.skipped).toBe(1);
+      expect(result.upserted).toBe(0);
+      // タイトルだけで判定できるためキーワードは問い合わせない
+      expect(getMovieKeywordIds).not.toHaveBeenCalled();
+    });
+
+    it('「舞台」を含むだけの通常作品は保存する', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({
+        id: 401,
+        genre_ids: [99],
+        title: 'ストレンジャー・シングス 未知の世界 5 ～"最後の冒険"の舞台裏～',
+      });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(result.skipped).toBe(0);
+      expect(result.upserted).toBe(1);
+    });
+  });
+
   describe('ライブ興行作品の除外', () => {
     it('タイトルでライブ興行と判定できる作品をスキップする', async () => {
       setValidEnv();

@@ -13,6 +13,7 @@ import {
   isQualityMovie,
   type QualityFilterOptions,
 } from '@/lib/movies/qualityFilter';
+import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
 import {
   getJpTheatricalReleaseDates,
   hasExcludedKeyword,
@@ -295,8 +296,9 @@ export async function syncEigaMovies(): Promise<SyncResult> {
         continue;
       }
 
-      // post-filter: ライブビューイング・コンサート映像・舞台中継を保存しない
-      if (await isConcertFilm(movie)) {
+      // post-filter: ライブビューイング・コンサート映像・舞台中継を保存しない。
+      // 同期判定の isStageBroadcast を先に通し、TMDbへの問い合わせを省く
+      if (isStageBroadcast(movie) || (await isConcertFilm(movie))) {
         result.skipped++;
         continue;
       }

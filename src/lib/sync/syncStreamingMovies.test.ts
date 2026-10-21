@@ -245,6 +245,24 @@ describe('syncStreamingMovies', () => {
       }
     });
 
+    it('劇映画ジャンルの舞台中継を除外する', async () => {
+      mockDiscoverMovies.mockResolvedValue(
+        respondWith([
+          createMovie({
+            genre_ids: [18, 35],
+            title: 'National Theatre Live: Hamlet',
+          }),
+        ]),
+      );
+
+      const result = await syncStreamingMovies();
+
+      expect(mockUpsert).not.toHaveBeenCalled();
+      expect(result.skipped).toBe(1);
+      // タイトルだけで判定できるためキーワードは問い合わせない
+      expect(mockGetMovieKeywordIds).not.toHaveBeenCalled();
+    });
+
     it('ライブ興行作品を除外する', async () => {
       mockDiscoverMovies.mockResolvedValue(
         respondWith([

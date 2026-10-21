@@ -44,7 +44,9 @@ export function isConcertFilmCandidate(movie: Movie): boolean {
  * @returns ライブ興行を示す語を含む場合 true
  */
 export function hasConcertTitle(title: string): boolean {
-  const upperTitle = title.toUpperCase();
+  // 全角英字（ＬＩＶＥ）や半角カナ（ﾗｲﾌﾞ）を畳んでから判定する。
+  // toUpperCase() は全角英字を半角にしないため、正規化しないと取りこぼす
+  const upperTitle = title.normalize('NFKC').toUpperCase();
 
   const phrases: readonly string[] = CONCERT_TITLE_PHRASES;
   if (phrases.some((phrase) => upperTitle.includes(phrase))) return true;

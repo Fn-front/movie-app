@@ -150,7 +150,7 @@ export const CONCERT_FILM_CANDIDATE_GENRE_IDS = [
 ] as const;
 
 /**
- * ライブ・コンサート映像を示すTMDbキーワードID
+ * ライブ興行・観客参加型上映を示すTMDbキーワードID
  *
  * `concert footage`(177751) / `farewell concert`(13130) は過去のライブ映像を
  * 引用する音楽ドキュメンタリーにも付くため含めない（『One to One：ジョン＆ヨーコ』が
@@ -167,6 +167,7 @@ export const CONCERT_KEYWORD_IDS = [
   11634, // live performance
   324094, // live musical performance
   206353, // live show
+  161153, // sing-along（応援上映・シングアロング上映）
 ] as const;
 
 /**

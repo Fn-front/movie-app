@@ -134,6 +134,14 @@ describe('hasConcertTitle', () => {
   ])('語の一部に一致するだけのタイトルを検出しないこと: %s', (title) => {
     expect(hasConcertTitle(title)).toBe(false);
   });
+
+  it.each([
+    ['ＬＩＶＥ ＴＯＵＲ ２０２６'],
+    ['アーティスト名　ＣＯＮＣＥＲＴ'],
+    ['ｱｰﾃｨｽﾄ名 ﾗｲﾌﾞ'],
+  ])('全角英字・半角カナのタイトルも検出すること: %s', (title) => {
+    expect(hasConcertTitle(title)).toBe(true);
+  });
 });
 
 describe('isConcertFilm', () => {
@@ -160,6 +168,14 @@ describe('isConcertFilm', () => {
 
     expect(await isConcertFilm(movie)).toBe(true);
     expect(mockGetMovieKeywordIds).toHaveBeenCalledWith(movie.id, undefined);
+  });
+
+  it('sing-along キーワードを持つ応援上映を除外対象とすること', async () => {
+    // 『하이브 치어링 파티』はタイトルに手がかりが無く sing-along でのみ判定できる
+    mockGetMovieKeywordIds.mockResolvedValue([5699, 161153]); // music video, sing-along
+    const movie = createMovie({ title: '하이브 치어링 파티' });
+
+    expect(await isConcertFilm(movie)).toBe(true);
   });
 
   it('concert系キーワードを持たない作品を除外対象としないこと', async () => {

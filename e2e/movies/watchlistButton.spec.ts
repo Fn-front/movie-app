@@ -30,16 +30,29 @@ const USER = {
   password: 'WatchlistButtonE2e1',
 } as const;
 
-/** ウォッチリストAPIレスポンスを待つ */
-function waitForWatchlistResponse(page: Page) {
-  return page.waitForResponse(
-    (res) =>
-      res.url().includes('/api/watchlist') &&
-      (res.request().method() === 'POST' ||
-        res.request().method() === 'DELETE') &&
-      res.status() < 500,
+/**
+ * ウォッチリストAPIレスポンスを待つ
+ *
+ * 待機条件にステータスを含めない。`status() < 500` で待つと 429（レート制限）や
+ * 409（重複）が「成功」として解決し、UIが変わらないまま後続の要素待ちが
+ * `element(s) not found` で落ちて原因が読めなくなる。5xx は述語に一致せず
+ * タイムアウトになり、これも原因を指さない。
+ * 解決後に `ok()` を検証して、失敗はステータス付きで落とす。
+ */
+async function waitForWatchlistResponse(page: Page) {
+  const res = await page.waitForResponse(
+    (r) =>
+      r.url().includes('/api/watchlist') &&
+      (r.request().method() === 'POST' || r.request().method() === 'DELETE'),
     { timeout: 30000 },
   );
+
+  expect(
+    res.ok(),
+    `ウォッチリスト書き込みが失敗した（${res.status()} ${res.request().method()}）`,
+  ).toBe(true);
+
+  return res;
 }
 
 /**

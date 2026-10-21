@@ -159,6 +159,31 @@ test.describe('カレンダー', () => {
     ).toBeVisible();
   });
 
+  test('月グリッドがコンテナいっぱいに広がる', async ({ page }) => {
+    // モーダルは scale(0.96) から開く。FullCalendar がその最中に幅を測ると
+    // 「実幅 × 0.96」がテーブルに焼き込まれ、土曜カラムの右に余白が残る
+    await page.getByRole('button', { name: '公開カレンダーを開く' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('読み込み中...')).not.toBeVisible({
+      timeout: 10000,
+    });
+
+    await expect
+      .poll(() =>
+        dialog
+          .locator('.fc-scrollgrid-sync-table')
+          .first()
+          .evaluate((table) => {
+            const scroller = table.closest('.fc-scroller');
+            return scroller
+              ? scroller.clientWidth - table.getBoundingClientRect().width
+              : -1;
+          }),
+      )
+      .toBeLessThanOrEqual(1);
+  });
+
   test('ESCキーでダイアログが閉じる', async ({ page }) => {
     // カレンダーを開く
     await page.getByRole('button', { name: '公開カレンダーを開く' }).click();

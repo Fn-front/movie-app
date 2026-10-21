@@ -41,6 +41,12 @@ export interface CalendarDialogProps {
 }
 
 /**
+ * 拡大の完了を待つ上限フレーム数。
+ * 出現アニメーションは200ms（約12フレーム）なので十分な余裕を取る。
+ */
+const SETTLE_MAX_FRAMES = 40;
+
+/**
  * イベントのカスタムレンダリング
  *
  * FullCalendar 側が既にフォーカス可能な要素で包むため、チップ自体には
@@ -84,6 +90,45 @@ export const CalendarDialog = memo<CalendarDialogProps>(
       }
     }, [open, resetCache]);
 
+    // モーダルの出現アニメーションは scale(0.96) から始まる（modal.module.scss の contentShow）。
+    // FullCalendar は幅を getBoundingClientRect() で測る（internal-common.js の
+    // computeScrollerDims）が、この値は transform 適用後なので拡大途中では「実幅 × 0.96」に
+    // なる。測った幅はテーブルのインライン width に焼き込まれ、拡大完了後も再計算されないため、
+    // 土曜カラムの右に余白が残る。
+    //
+    // useEffect で待つと、open が true になった時点では Radix の Portal 内がまだ
+    // マウントされておらず要素を掴めない。要素のマウントそのものを起点にする。
+    //
+    // 拡大の完了は offsetWidth（レイアウト幅・transform の影響を受けない）と
+    // getBoundingClientRect().width（transform 込み）の一致で判定する。
+    // 「幅が変化しなくなったら完了」とすると、アニメーション開始前の
+    // 縮んだままの状態を完了と誤判定する。
+    const handleCalendarRef = useCallback((node: HTMLDivElement | null) => {
+      if (!node) return;
+
+      let frameId = 0;
+      let remainingFrames = SETTLE_MAX_FRAMES;
+
+      const settle = () => {
+        // 拡大中は transform 込みの幅がレイアウト幅より必ず小さい。
+        // 0.99 倍のような「ほぼ等倍」で妥協すると、FullCalendar の Math.floor で
+        // 1px 足りない幅が焼き込まれるため、等倍になるまで待つ
+        const isUnscaled =
+          node.getBoundingClientRect().width >= node.offsetWidth;
+
+        if (isUnscaled || remainingFrames <= 0) {
+          calendarApiRef.current?.getApi().updateSize();
+          return;
+        }
+
+        remainingFrames -= 1;
+        frameId = requestAnimationFrame(settle);
+      };
+
+      frameId = requestAnimationFrame(settle);
+      return () => cancelAnimationFrame(frameId);
+    }, []);
+
     const handlePrev = useCallback(() => {
       calendarApiRef.current?.getApi().prev();
     }, []);
@@ -122,10 +167,8 @@ export const CalendarDialog = memo<CalendarDialogProps>(
     );
 
     // FullCalendar は日セル（gridcell）の名前を aria-labelledby で日付だけに固定する。
-    // セル内には作品名が並ぶため「可視テキストが名前に含まれない」状態になり、
-    // axe が label-content-name-mismatch（serious）を出す。
     // 外して内容から名前を取らせると、日付（日付リンクの aria-label 由来）に加えて
-    // その日の作品名も読まれるようになり、情報量の面でも有利。
+    // その日の作品名も読まれるようになり、読み上げの情報量が増える。
     const handleDayCellDidMount = useCallback((arg: DayCellMountArg) => {
       arg.el.removeAttribute('aria-labelledby');
     }, []);
@@ -185,7 +228,10 @@ export const CalendarDialog = memo<CalendarDialogProps>(
             </div>
           ) : (
             <div className={styles.c_calendarDialog__layout}>
-              <div className={styles.c_calendarDialog__calendar}>
+              <div
+                className={styles.c_calendarDialog__calendar}
+                ref={handleCalendarRef}
+              >
                 <div className={styles.c_calendarDialog__header}>
                   <div className={styles.c_calendarDialog__nav}>
                     <button

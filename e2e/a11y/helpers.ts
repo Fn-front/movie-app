@@ -78,13 +78,17 @@ function formatViolations(
  * ページ全体に axe-core を実行し、違反が無いことを検証する
  *
  * @param label 失敗時に出す識別子（ページ名＋テーマ）
+ * @param extraDisabledRules この検査だけ除外するルール。
+ *   全体から外すほどではない、画面固有の事情があるときに使う。
+ *   追加するときは呼び出し側に理由をコメントで残すこと。
  */
 export async function expectNoA11yViolations(
   page: Page,
   label: string,
+  extraDisabledRules: readonly string[] = [],
 ): Promise<void> {
   const results = await new AxeBuilder({ page })
-    .disableRules([...DISABLED_RULES])
+    .disableRules([...DISABLED_RULES, ...extraDisabledRules])
     .analyze();
 
   expect(

@@ -33,6 +33,7 @@ const mockCalendarApi = {
   prev: jest.fn(),
   next: jest.fn(),
   today: jest.fn(),
+  updateSize: jest.fn(),
 };
 
 jest.mock('@fullcalendar/react', () => {
@@ -340,6 +341,84 @@ describe('CalendarDialog', () => {
     ).not.toContain('fc-day-selected');
   });
 
+  describe('出現アニメーション後の幅の測り直し', () => {
+    // モーダルは scale(0.96) から開く（modal.module.scss の contentShow）。
+    // FullCalendar がその最中に幅を測ると、縮んだ幅がテーブルに焼き込まれて
+    // 土曜カラムの右に余白が残るため、拡大が終わってから測り直させる。
+    const originalGetBoundingClientRect =
+      Element.prototype.getBoundingClientRect;
+    const originalOffsetWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'offsetWidth',
+    );
+
+    afterEach(() => {
+      Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+      if (originalOffsetWidth) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          'offsetWidth',
+          originalOffsetWidth,
+        );
+      }
+    });
+
+    it('描画幅が落ち着いたらサイズを測り直す', async () => {
+      render(
+        <CalendarDialog
+          open={true}
+          onOpenChange={jest.fn()}
+          onMovieClick={jest.fn()}
+        />,
+        { wrapper: createWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(mockCalendarApi.updateSize).toHaveBeenCalled();
+      });
+    });
+
+    it('拡大の途中では測り直さない', async () => {
+      // レイアウト幅 798 に対し、transform 込みの実測が 766（= 798 × 0.96）の状態
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        value: 798,
+      });
+      Element.prototype.getBoundingClientRect = () =>
+        ({
+          width: 766,
+          height: 0,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect;
+
+      render(
+        <CalendarDialog
+          open={true}
+          onOpenChange={jest.fn()}
+          onMovieClick={jest.fn()}
+        />,
+        { wrapper: createWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('fullcalendar')).toBeInTheDocument();
+      });
+
+      // 数フレーム進めても幅が変わり続けている間は測り直さない
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+
+      expect(mockCalendarApi.updateSize).not.toHaveBeenCalled();
+    });
+  });
+
   it('前月・次月ボタンでカレンダーの月送りが呼ばれる', async () => {
     const user = userEvent.setup();
 
@@ -482,8 +561,8 @@ describe('CalendarDialog', () => {
       expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
     });
 
-    // FullCalendar は日セルの名前を日付だけに固定するが、
-    // セル内には作品名が並ぶため可視テキストと名前がずれる
+    // FullCalendar は日セルの名前を日付だけに固定する。
+    // 外して内容から名前を取らせると、その日の作品名まで読み上げられる
     const cell = document.createElement('td');
     cell.setAttribute('aria-labelledby', 'fc-dom-1');
 

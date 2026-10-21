@@ -48,6 +48,7 @@ import {
 } from '@/constants/movies';
 import {
   TMDB_MOVIE_DETAIL_APPEND,
+  TMDB_VIDEO_LANGUAGES,
   TMDB_PERSON_DETAIL_APPEND,
   TMDB_STREAMING_AVAILABILITY_APPEND,
 } from '@/constants/tmdb';
@@ -193,7 +194,10 @@ describe('TMDb APIクライアント', () => {
       await getMovieDetail(123);
 
       expect(mockGet).toHaveBeenCalledWith('/movie/123', {
-        params: { append_to_response: TMDB_MOVIE_DETAIL_APPEND },
+        params: {
+          append_to_response: TMDB_MOVIE_DETAIL_APPEND,
+          include_video_language: TMDB_VIDEO_LANGUAGES,
+        },
       });
     });
 
@@ -204,8 +208,27 @@ describe('TMDb APIクライアント', () => {
       await getMovieDetail('456');
 
       expect(mockGet).toHaveBeenCalledWith('/movie/456', {
-        params: { append_to_response: TMDB_MOVIE_DETAIL_APPEND },
+        params: {
+          append_to_response: TMDB_MOVIE_DETAIL_APPEND,
+          include_video_language: TMDB_VIDEO_LANGUAGES,
+        },
       });
+    });
+
+    it('共通の language=ja-JP で予告動画が0件にならないよう英語・言語なしも取得する', async () => {
+      mockGet.mockResolvedValue(mockDetailResponse);
+
+      const { getMovieDetail } = require('./tmdb');
+      await getMovieDetail(123);
+
+      expect(mockGet).toHaveBeenCalledWith(
+        '/movie/123',
+        expect.objectContaining({
+          params: expect.objectContaining({
+            include_video_language: 'ja,en,null',
+          }),
+        }),
+      );
     });
 
     it('レスポンスデータが正しく返される', async () => {

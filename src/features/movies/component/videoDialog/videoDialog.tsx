@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { IoCloseOutline } from 'react-icons/io5';
 
@@ -22,29 +22,10 @@ export interface VideoDialogProps {
   open: boolean;
   /** ダイアログを閉じる時のコールバック */
   onOpenChange: (open: boolean) => void;
-  /** 動画一覧 */
+  /** 動画一覧（表示順に並べたもの。絞り込み・並び替えは selectTrailerVideos が担う） */
   videos: Video[];
   /** 映画タイトル */
   movieTitle: string;
-}
-
-/** 優先表示する動画タイプ（順序が優先度） */
-const PRIORITY_TYPES = ['Trailer', 'Teaser'];
-
-/**
- * Trailer/Teaserを優先してソート
- */
-function sortVideos(videos: Video[]): Video[] {
-  return [...videos].sort((a, b) => {
-    const aIndex = PRIORITY_TYPES.indexOf(a.type);
-    const bIndex = PRIORITY_TYPES.indexOf(b.type);
-    const aPriority = aIndex === -1 ? PRIORITY_TYPES.length : aIndex;
-    const bPriority = bIndex === -1 ? PRIORITY_TYPES.length : bIndex;
-    if (aPriority !== bPriority) return aPriority - bPriority;
-    return (
-      new Date(b.published_at).getTime() - new Date(a.published_at).getTime()
-    );
-  });
 }
 
 /**
@@ -56,8 +37,6 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
   videos,
   movieTitle,
 }) {
-  const sortedVideos = useMemo(() => sortVideos(videos), [videos]);
-
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -78,7 +57,7 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
           </Dialog.Close>
 
           <div className={styles.c_video_dialog__list}>
-            {sortedVideos.map((video) => (
+            {videos.map((video) => (
               <div key={video.id} className={styles.c_video_dialog__item}>
                 <div className={styles.c_video_dialog__video_wrapper}>
                   <iframe

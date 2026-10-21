@@ -33,6 +33,7 @@ import {
 } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
+import { selectTrailerVideos } from '@/features/movies/utils/selectTrailerVideos';
 import type { WatchProvider } from '@/lib/types';
 
 import styles from './movieDetailContent.module.scss';
@@ -211,8 +212,8 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
       [movie?.release_date],
     );
 
-    const youtubeVideos = useMemo(
-      () => movie?.videos?.results.filter((v) => v.site === 'YouTube') ?? [],
+    const trailerVideos = useMemo(
+      () => selectTrailerVideos(movie?.videos?.results),
       [movie],
     );
 
@@ -261,7 +262,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
               className={styles.c_movie_detail__backdrop_image}
             />
             <div className={styles.c_movie_detail__backdrop_overlay} />
-            {youtubeVideos.length > 0 && (
+            {trailerVideos.length > 0 && (
               <button
                 type='button'
                 className={styles.c_movie_detail__play_button}
@@ -495,11 +496,11 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
           </div>
         </div>
 
-        {youtubeVideos.length > 0 && (
+        {trailerVideos.length > 0 && (
           <VideoDialog
             open={isVideoDialogOpen}
             onOpenChange={handleVideoDialogOpenChange}
-            videos={youtubeVideos}
+            videos={trailerVideos}
             movieTitle={movie.title}
           />
         )}

@@ -58,11 +58,11 @@ export async function gotoWithTheme(
   await expect(page.locator('h1').first()).toBeAttached({ timeout: 20000 });
 }
 
-/** 違反を人が読める形に整形する */
-function formatViolations(
-  violations: Awaited<ReturnType<AxeBuilder['analyze']>>['violations'],
+/** axe の結果（violations / incomplete）を人が読める形に整形する */
+function formatResults(
+  results: Awaited<ReturnType<AxeBuilder['analyze']>>['violations'],
 ): string {
-  return violations
+  return results
     .map((v) => {
       const nodes = v.nodes
         .map(
@@ -75,17 +75,28 @@ function formatViolations(
 }
 
 /**
- * ページ全体に axe-core を実行し、違反が無いことを検証する
+ * ページ全体に axe-core を実行し、違反および要確認が無いことを検証する
+ *
+ * `results.violations` だけでなく `results.incomplete`（needs review）も見る。
+ * axe は判定しきれないものを incomplete に回すため、violations だけを見ていると
+ * 実際の不具合を取りこぼす。たとえば `aria-describedby` が存在しないIDを指す
+ * dangling IDREF は `aria-valid-attr-value` の incomplete になり、
+ * violations には現れない（#791 がこれで CI をすり抜けていた）。
  *
  * @param label 失敗時に出す識別子（ページ名＋テーマ）
  * @param extraDisabledRules この検査だけ除外するルール。
  *   全体から外すほどではない、画面固有の事情があるときに使う。
+ *   追加するときは呼び出し側に理由をコメントで残すこと。
+ * @param allowedIncompleteRules この検査だけ incomplete を許容するルール。
+ *   「axe が判定できないだけで実害が無い」と確認できたものに限る。
+ *   ルールごと無効化する `extraDisabledRules` と違い、violations 側は検出し続ける。
  *   追加するときは呼び出し側に理由をコメントで残すこと。
  */
 export async function expectNoA11yViolations(
   page: Page,
   label: string,
   extraDisabledRules: readonly string[] = [],
+  allowedIncompleteRules: readonly string[] = [],
 ): Promise<void> {
   const results = await new AxeBuilder({ page })
     .disableRules([...DISABLED_RULES, ...extraDisabledRules])
@@ -93,6 +104,16 @@ export async function expectNoA11yViolations(
 
   expect(
     results.violations,
-    `${label} (${page.url()}) でアクセシビリティ違反:\n${formatViolations(results.violations)}`,
+    `${label} (${page.url()}) でアクセシビリティ違反:\n${formatResults(results.violations)}`,
+  ).toEqual([]);
+
+  const unexpectedIncomplete = results.incomplete.filter(
+    (item) => !allowedIncompleteRules.includes(item.id),
+  );
+
+  expect(
+    unexpectedIncomplete,
+    `${label} (${page.url()}) でアクセシビリティ要確認（incomplete）:\n${formatResults(unexpectedIncomplete)}\n` +
+      '実害が無いと確認できたら、呼び出し側の allowedIncompleteRules に理由付きで追加すること。',
   ).toEqual([]);
 }

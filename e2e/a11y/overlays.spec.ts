@@ -118,6 +118,25 @@ test.describe('アクセシビリティ（オーバーレイ・認証済み）',
   const CALENDAR_DISABLED_RULES = ['label-content-name-mismatch'] as const;
 
   /**
+   * incomplete（needs review）を許容するルール。いずれも FullCalendar が
+   * 自前で描画する曜日見出し `<a class="fc-col-header-cell-cushion">日</a>` に対するもので、
+   * アプリ側のマークアップではない。FullCalendar の更新は #780 で追っている。
+   *
+   * - `aria-prohibited-attr`:
+   *   「role の無い `a` に aria-label は十分にサポートされていない」という指摘。
+   *   FullCalendar が曜日の略称（日・月…）に完全な曜日名を付けるための属性で、
+   *   主要ブラウザ・支援技術では読み上げられる。
+   * - `color-contrast`:
+   *   「要素の内容が短すぎてテキストかどうか判定できない」という指摘。
+   *   1文字（日・月…）のため axe がコントラストを計算できないだけで、
+   *   配色自体はテーマのトークンに従っている。
+   */
+  const CALENDAR_ALLOWED_INCOMPLETE = [
+    'aria-prohibited-attr',
+    'color-contrast',
+  ] as const;
+
+  /**
    * カレンダーの描画完了を待つ。
    *
    * モーダルは scale/opacity のアニメーションで開き、その完了後に
@@ -162,6 +181,7 @@ test.describe('アクセシビリティ（オーバーレイ・認証済み）',
         page,
         `公開カレンダー / ${theme}`,
         CALENDAR_DISABLED_RULES,
+        CALENDAR_ALLOWED_INCOMPLETE,
       );
     });
 
@@ -184,6 +204,7 @@ test.describe('アクセシビリティ（オーバーレイ・認証済み）',
         page,
         `公開カレンダー（日付選択後） / ${theme}`,
         CALENDAR_DISABLED_RULES,
+        CALENDAR_ALLOWED_INCOMPLETE,
       );
     });
   }

@@ -424,6 +424,78 @@ describe('TMDb APIクライアント', () => {
     });
   });
 
+  describe('getMovieCacheStats', () => {
+    const mockStatsResponse = {
+      data: {
+        id: 123,
+        genres: [
+          { id: 28, name: 'アクション' },
+          { id: 878, name: 'SF' },
+        ],
+        vote_average: 7.5,
+        vote_count: 1200,
+        popularity: 98.7,
+      },
+    };
+
+    it('append_to_response を付けずに映画詳細を取得する', async () => {
+      mockGet.mockResolvedValue(mockStatsResponse);
+
+      const { getMovieCacheStats } = require('./tmdb');
+      await getMovieCacheStats(123);
+
+      // 日次全件同期で呼ばれるため、使わない credits / watch providers /
+      // 予告動画をレスポンスに含めない
+      expect(mockGet).toHaveBeenCalledTimes(1);
+      expect(mockGet).toHaveBeenCalledWith('/movie/123');
+    });
+
+    it('同期に必要な項目だけを返す', async () => {
+      mockGet.mockResolvedValue(mockStatsResponse);
+
+      const { getMovieCacheStats } = require('./tmdb');
+      const result = await getMovieCacheStats(123);
+
+      expect(result).toEqual({
+        genreIds: [28, 878],
+        voteAverage: 7.5,
+        voteCount: 1200,
+        popularity: 98.7,
+      });
+    });
+
+    it('文字列のmovieIdが正しくパスに含まれる', async () => {
+      mockGet.mockResolvedValue(mockStatsResponse);
+
+      const { getMovieCacheStats } = require('./tmdb');
+      await getMovieCacheStats('456');
+
+      expect(mockGet).toHaveBeenCalledWith('/movie/456');
+    });
+
+    it('genres が欠けていても空配列を返す', async () => {
+      mockGet.mockResolvedValue({
+        data: { id: 123, vote_average: 0, popularity: 0 },
+      });
+
+      const { getMovieCacheStats } = require('./tmdb');
+      const result = await getMovieCacheStats(123);
+
+      expect(result.genreIds).toEqual([]);
+    });
+
+    it('vote_count が欠けていても0を返す', async () => {
+      mockGet.mockResolvedValue({
+        data: { id: 123, genres: [], vote_average: 0, popularity: 0 },
+      });
+
+      const { getMovieCacheStats } = require('./tmdb');
+      const result = await getMovieCacheStats(123);
+
+      expect(result.voteCount).toBe(0);
+    });
+  });
+
   describe('searchMovies', () => {
     it('query, page, year, genreがパラメータに含まれる', async () => {
       mockGet.mockResolvedValue(mockResponse);

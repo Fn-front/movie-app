@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { BATCH_UPDATE_SIZE } from '@/constants/movies';
 import { hasExcludedGenre } from '@/lib/movies/genreFilter';
-import { getMovieDetail } from '@/lib/tmdb/tmdb';
+import { getMovieCacheStats } from '@/lib/tmdb/tmdb';
 
 /**
  * 映画ID取得時の1ページあたり件数
@@ -97,7 +97,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
     // バッチ内の各映画を順次処理（レート制限対策）
     for (const movieId of batchIds) {
       try {
-        const detail = await getMovieDetail(movieId);
+        const stats = await getMovieCacheStats(movieId);
         const matchingRowCount = rows.filter(
           (row) => row.id === movieId,
         ).length;
@@ -106,9 +106,8 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
         // 作品が後から除外ジャンル（テレビ映画等）に該当するようになる。
         // 保存前フィルタ（excludeInappropriateMovies）は保存の瞬間しか効かないため、
         // 毎日全件の詳細を取得しているこの経路で再判定して取り除く。
-        // 詳細は既に取得済みなのでTMDbへの追加リクエストは発生しない
-        const genreIds = (detail.genres ?? []).map((genre) => genre.id);
-        if (hasExcludedGenre(genreIds)) {
+        // ジャンルは既に取得済みなのでTMDbへの追加リクエストは発生しない
+        if (hasExcludedGenre(stats.genreIds)) {
           const { error: deleteError } = await supabase
             .from('movie_cache')
             .delete()
@@ -126,9 +125,9 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
         const { error: updateError } = await supabase
           .from('movie_cache')
           .update({
-            vote_average: detail.vote_average,
-            vote_count: detail.vote_count ?? 0,
-            popularity: detail.popularity,
+            vote_average: stats.voteAverage,
+            vote_count: stats.voteCount,
+            popularity: stats.popularity,
             updated_at: now,
           })
           .eq('id', movieId);

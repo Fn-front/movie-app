@@ -74,7 +74,7 @@ export const TMDB_MOVIE_DETAIL_APPEND = 'credits,watch/providers,videos';
  *
  * TMDb の videos は共通パラメータの `language`（本アプリでは `ja-JP`）で絞り込まれる。
  * 日本語版予告がTMDbに登録されていない作品は0件で返ってしまい、
- * 英語の Official Trailer があっても「予告編を見る」ボタンすら出なかった。
+ * 英語の Official Trailer があっても「予告動画を再生」ボタンすら出なかった。
  * `null` は言語タグが付いていない動画を拾うために必要。
  */
 export const TMDB_VIDEO_LANGUAGES = 'ja,en,null';

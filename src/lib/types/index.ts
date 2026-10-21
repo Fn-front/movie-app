@@ -173,6 +173,20 @@ export interface DismissSignals {
 }
 
 /**
+ * movie_cache の日次同期に使う映画の指標
+ */
+export interface MovieCacheStats {
+  /** ジャンルID配列（除外ジャンルの再判定に使う） */
+  genreIds: number[];
+  /** 平均評価 */
+  voteAverage: number;
+  /** 評価数。TMDbが返さない場合は0 */
+  voteCount: number;
+  /** 人気度 */
+  popularity: number;
+}
+
+/**
  * キャスト型
  */
 export interface Cast {

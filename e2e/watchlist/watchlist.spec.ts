@@ -3,21 +3,38 @@
  * クリティカルユーザージャーニーのみ
  * - ウォッチリストページ表示 → 映画詳細モーダル
  * - サイドバー「すべて見る」→ ウォッチリストページ遷移
- * afterEachで全件クリーンアップするため、テスト内で「元に戻す」操作は不要
- * 同一ユーザーのウォッチリストを操作するため、シリアル実行
+ * - 視聴済みへの切り替えと解除
+ * beforeEachで全件クリーンアップしてから1件積むため、テスト内で「元に戻す」操作は不要
+ *
+ * ⚠️ 共有の `TEST_USER` は使わない（#806）。ウォッチリストを全件削除しながら
+ * 進めるため、同じユーザーを使う `watchlistButton.spec.ts` などを並列実行時に壊す。
+ * `describe.configure({ mode: 'serial' })` はファイル内の直列化しかせず、
+ * ファイル間の並列は防げない。専用ユーザーを作って完結させる。
  */
 
-import { test, expect } from '../fixtures/auth';
-import { cleanupWatchlist } from '../helpers/api';
+import { test, expect, type Page } from '@playwright/test';
+
+import {
+  openDedicatedSession,
+  type DedicatedSession,
+} from '../fixtures/dedicatedSession';
+import { cleanupWatchlistForUser } from '../helpers/api';
 import { movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
+import { runScopedEmail } from '../helpers/runScope';
 
-// 同一ユーザーのウォッチリストを直列操作。並列負荷下でも goto＋タイル待ち＋
+// 専用ユーザーの作成（bcrypt）とログインに加え、並列負荷下でも goto＋タイル待ち＋
 // API応答（前準備の beforeEach 含む）が予算切れしないよう、テストタイムアウトを延長する
 test.describe.configure({ mode: 'serial', timeout: 90000 });
 
+/** 本 spec 専用のユーザー（run 単位。理由は runScope.ts を参照／#793） */
+const USER = {
+  email: runScopedEmail('e2e-watchlist-page'),
+  password: 'WatchlistPageE2e1',
+} as const;
+
 /** ウォッチリストAPIレスポンスを待つ */
-function waitForWatchlistResponse(page: import('@playwright/test').Page) {
+function waitForWatchlistResponse(page: Page) {
   return page.waitForResponse(
     (res) =>
       res.url().includes('/api/watchlist') &&
@@ -29,7 +46,7 @@ function waitForWatchlistResponse(page: import('@playwright/test').Page) {
 }
 
 /** 映画をウォッチリストに追加する（前準備用） */
-async function addMovieToWatchlist(page: import('@playwright/test').Page) {
+async function addMovieToWatchlist(page: Page) {
   await page.goto('/movies/now-showing');
   await movieTiles(page).first().waitFor({ timeout: 30000 });
 
@@ -55,32 +72,87 @@ async function addMovieToWatchlist(page: import('@playwright/test').Page) {
   }
 }
 
-test.describe('ウォッチリスト — ページ表示・詳細モーダル', () => {
-  test.beforeEach(async ({ page }) => {
-    await cleanupWatchlist();
+/** ウォッチリストページを開き、取得完了まで待つ */
+async function gotoWatchlistPage(page: Page) {
+  const dataPromise = page.waitForResponse(
+    (res) =>
+      res.url().includes('/api/watchlist') &&
+      res.request().method() === 'GET' &&
+      res.status() === 200,
+    { timeout: 30000 },
+  );
+  await page.goto('/watchlist');
+  await dataPromise;
+  await expect(
+    page.getByRole('heading', { name: 'ウォッチリスト' }),
+  ).toBeVisible({ timeout: 15000 });
+}
+
+/**
+ * お気に入りの評価モーダル。
+ * 未登録なら「お気に入りに追加」、登録済みなら「お気に入りを編集」で開くため、
+ * どちらにも当たる形で取る
+ */
+function favoriteRatingModal(page: Page) {
+  return page.getByRole('dialog', { name: /お気に入り(に追加|を編集)/ });
+}
+
+/** 一覧の先頭を視聴済みにし、開いた評価モーダルを閉じる。対象のタイトルを返す */
+async function markFirstAsWatched(page: Page): Promise<string> {
+  const watchedButton = page
+    .getByRole('button', { name: /を視聴済みにする$/ })
+    .first();
+  await expect(watchedButton).toBeVisible({ timeout: 30000 });
+
+  const label = await watchedButton.getAttribute('aria-label');
+  const title = (label ?? '').replace(/を視聴済みにする$/, '');
+
+  const patchResponse = page.waitForResponse(
+    (res) =>
+      res.url().includes('/api/watchlist/') &&
+      res.request().method() === 'PATCH',
+    { timeout: 30000 },
+  );
+  await watchedButton.click();
+  await patchResponse;
+
+  // 視聴済みにするとお気に入りの評価モーダルが開く。登録せずに閉じる
+  const ratingModal = favoriteRatingModal(page);
+  await expect(ratingModal).toBeVisible({ timeout: 15000 });
+  await ratingModal.getByRole('button', { name: 'キャンセル' }).click();
+  await expect(ratingModal).not.toBeVisible();
+
+  return title;
+}
+
+test.describe('ウォッチリスト', () => {
+  /** ログインを1回で済ませるため、spec 全体で1つのページを使い回す */
+  let session: DedicatedSession;
+  let page: Page;
+
+  test.beforeAll(async ({ browser }, testInfo) => {
+    // describe の timeout はテストにしか効かない
+    testInfo.setTimeout(90000);
+
+    session = await openDedicatedSession(browser, USER);
+    page = session.page;
+
+    // ページを使い回すため、詳細モーダルのモックは1度だけ登録する
+    // （beforeEach で呼ぶとハンドラが積み上がる）
     await mockMovieDetail(page);
+  });
+
+  test.afterAll(async () => {
+    await session.close();
+  });
+
+  test.beforeEach(async () => {
+    await cleanupWatchlistForUser(session.userId);
     await addMovieToWatchlist(page);
   });
 
-  test.afterEach(async () => {
-    await cleanupWatchlist();
-  });
-
-  test('ウォッチリストページに映画が表示され、クリックで詳細モーダルが開く', async ({
-    page,
-  }) => {
-    // ウォッチリストデータ取得完了を待ってからページを表示
-    const dataPromise = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/watchlist') &&
-        res.request().method() === 'GET' &&
-        res.status() === 200,
-    );
-    await page.goto('/watchlist');
-    await dataPromise;
-    await expect(
-      page.getByRole('heading', { name: 'ウォッチリスト' }),
-    ).toBeVisible({ timeout: 15000 });
+  test('ウォッチリストページに映画が表示され、クリックで詳細モーダルが開く', async () => {
+    await gotoWatchlistPage(page);
 
     // ウォッチリストに映画が表示されている
     const detailButton = page
@@ -99,19 +171,8 @@ test.describe('ウォッチリスト — ページ表示・詳細モーダル', 
     await expect(dialog).not.toBeVisible();
   });
 
-  test('ウォッチリストページで削除すると映画が消える', async ({ page }) => {
-    // ウォッチリストデータ取得完了を待ってからページを表示
-    const dataPromise = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/watchlist') &&
-        res.request().method() === 'GET' &&
-        res.status() === 200,
-    );
-    await page.goto('/watchlist');
-    await dataPromise;
-    await expect(
-      page.getByRole('heading', { name: 'ウォッチリスト' }),
-    ).toBeVisible({ timeout: 15000 });
+  test('ウォッチリストページで削除すると映画が消える', async () => {
+    await gotoWatchlistPage(page);
 
     // 削除ボタンをクリック
     const deleteButton = page
@@ -128,21 +189,8 @@ test.describe('ウォッチリスト — ページ表示・詳細モーダル', 
       page.getByText('ウォッチリストに映画を追加しましょう'),
     ).toBeVisible({ timeout: 10000 });
   });
-});
 
-test.describe('ウォッチリスト — サイドバー「すべて見る」遷移', () => {
-  test.beforeEach(async ({ page }) => {
-    await cleanupWatchlist();
-    await addMovieToWatchlist(page);
-  });
-
-  test.afterEach(async () => {
-    await cleanupWatchlist();
-  });
-
-  test('サイドバーの「すべて見る」クリックでウォッチリストページに遷移する', async ({
-    page,
-  }) => {
+  test('サイドバーの「すべて見る」クリックでウォッチリストページに遷移する', async () => {
     // サイドバーが表示されるページに遷移
     await page.goto('/movies/now-showing');
     await movieTiles(page).first().waitFor({ timeout: 30000 });
@@ -160,53 +208,10 @@ test.describe('ウォッチリスト — サイドバー「すべて見る」遷
       page.getByRole('heading', { name: 'ウォッチリスト' }),
     ).toBeVisible({ timeout: 15000 });
   });
-});
 
-/**
- * お気に入りの評価モーダル。
- * 未登録なら「お気に入りに追加」、登録済みなら「お気に入りを編集」で開くため、
- * どちらにも当たる形で取る（共有テストユーザーの登録状況に依存させない）
- */
-function favoriteRatingModal(page: import('@playwright/test').Page) {
-  return page.getByRole('dialog', { name: /お気に入り(に追加|を編集)/ });
-}
-
-test.describe('ウォッチリスト — 視聴済み', () => {
-  test.beforeEach(async ({ page }) => {
-    await cleanupWatchlist();
-    await addMovieToWatchlist(page);
-  });
-
-  test.afterEach(async () => {
-    await cleanupWatchlist();
-  });
-
-  test('視聴済みにすると評価モーダルが開き、閉じても視聴済みが残る', async ({
-    page,
-  }) => {
+  test('視聴済みにすると評価モーダルが開き、閉じても視聴済みが残る', async () => {
     await page.goto('/watchlist');
-
-    const watchedButton = page
-      .getByRole('button', { name: /を視聴済みにする$/ })
-      .first();
-    await expect(watchedButton).toBeVisible({ timeout: 30000 });
-
-    const patchResponse = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/watchlist/') &&
-        res.request().method() === 'PATCH',
-      { timeout: 30000 },
-    );
-    await watchedButton.click();
-    await patchResponse;
-
-    // お気に入りの評価モーダルが開く
-    const ratingModal = favoriteRatingModal(page);
-    await expect(ratingModal).toBeVisible({ timeout: 15000 });
-
-    // 登録せずに閉じても視聴済みは残る
-    await ratingModal.getByRole('button', { name: 'キャンセル' }).click();
-    await expect(ratingModal).not.toBeVisible();
+    await markFirstAsWatched(page);
 
     await expect(page.getByText('視聴済み')).toBeVisible({ timeout: 15000 });
 
@@ -215,30 +220,9 @@ test.describe('ウォッチリスト — 視聴済み', () => {
     await expect(page.getByText('視聴済み')).toBeVisible({ timeout: 30000 });
   });
 
-  test('視聴済みはサイドバーと公開カレンダーから消える', async ({ page }) => {
+  test('視聴済みはサイドバーと公開カレンダーから消える', async () => {
     await page.goto('/watchlist');
-
-    const watchedButton = page
-      .getByRole('button', { name: /を視聴済みにする$/ })
-      .first();
-    await expect(watchedButton).toBeVisible({ timeout: 30000 });
-
-    // 対象のタイトルを控えてから視聴済みにする
-    const label = await watchedButton.getAttribute('aria-label');
-    const title = (label ?? '').replace(/を視聴済みにする$/, '');
-
-    const patchResponse = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/watchlist/') &&
-        res.request().method() === 'PATCH',
-      { timeout: 30000 },
-    );
-    await watchedButton.click();
-    await patchResponse;
-
-    await favoriteRatingModal(page)
-      .getByRole('button', { name: 'キャンセル' })
-      .click();
+    const title = await markFirstAsWatched(page);
 
     // サイドバーの「公開日が近い映画」から消える
     const sidebar = page.getByRole('complementary');
@@ -255,26 +239,9 @@ test.describe('ウォッチリスト — 視聴済み', () => {
     await expect(calendar.getByText(title, { exact: true })).toHaveCount(0);
   });
 
-  test('視聴済みを解除すると元に戻る', async ({ page }) => {
+  test('視聴済みを解除すると元に戻る', async () => {
     await page.goto('/watchlist');
-
-    const watchedButton = page
-      .getByRole('button', { name: /を視聴済みにする$/ })
-      .first();
-    await expect(watchedButton).toBeVisible({ timeout: 30000 });
-
-    const markResponse = page.waitForResponse(
-      (res) =>
-        res.url().includes('/api/watchlist/') &&
-        res.request().method() === 'PATCH',
-      { timeout: 30000 },
-    );
-    await watchedButton.click();
-    await markResponse;
-
-    await favoriteRatingModal(page)
-      .getByRole('button', { name: 'キャンセル' })
-      .click();
+    await markFirstAsWatched(page);
 
     const unmarkButton = page
       .getByRole('button', { name: /を未視聴に戻す$/ })

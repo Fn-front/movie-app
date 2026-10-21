@@ -104,6 +104,62 @@ Next.js は `x-forwarded-for` が無いとソケットの remoteAddress を補�
 （`awards_fetch` / `login_ip` / 公開映画API等）を食い合う。run 固有の
 プライベートIPを送ることで分離する。
 
+## spec 間のデータ分離（#806）
+
+上記は **run 間**の分離。同じ run の中でも、`fullyParallel: true` によって
+spec ファイルは別ワーカーで並列に走る。`describe.configure({ mode: 'serial' })` は
+**ファイル内**の直列化しかせず、ファイル間の並列は防げない。
+
+そのため「そのユーザーの全件を消す」後片付け（`cleanupWatchlistForUser()` 等）を
+共有テストユーザーに対して複数の spec が呼ぶと、互いのレコードを消し合う。
+user_id を識別子とするレート制限カウンタ（`write_api_watchlist` 等）も同様に
+枠を食い合う。
+
+### 専用ユーザーを使う spec
+
+自分のデータを占有する必要がある spec は、共有の `TEST_USER` ではなく
+`openDedicatedSession()`（`e2e/fixtures/dedicatedSession.ts`）で専用ユーザーを作る。
+
+```typescript
+test.describe.configure({ mode: 'serial', timeout: 90000 });
+
+const USER = {
+  email: runScopedEmail('e2e-<用途>'),
+  password: '<用途>E2e1',
+} as const;
+
+test.describe('...', () => {
+  // ログインを1回で済ませるため spec 全体で1つのページを使い回す
+  let session: DedicatedSession;
+  let page: Page;
+
+  test.beforeAll(async ({ browser }, testInfo) => {
+    // describe の timeout はテストにしか効かない
+    testInfo.setTimeout(90000);
+    session = await openDedicatedSession(browser, USER);
+    page = session.page;
+  });
+
+  test.afterAll(async () => {
+    await session.close();
+  });
+});
+```
+
+| spec | 専用ユーザーにした理由 |
+|---|---|
+| `auth/twoFactor.spec.ts` | 二段階認証の有効・無効でユーザーの状態を書き換える（#750） |
+| `auth/authFixture.spec.ts` | 同上 |
+| `recommendations/recommendationEvents.spec.ts` | お気に入り・おすすめを作り替える |
+| `rateLimit/recommendationRefreshCooldown.spec.ts` | 仕込んだクールダウンを他 spec に消されない |
+| `watchlist/watchlist.spec.ts` | ウォッチリストを全件削除しながら進める（#806） |
+| `movies/watchlistButton.spec.ts` | 同上 |
+| `rateLimit/writeApiRateLimit.spec.ts` | `write_api_watchlist` の枠を占有する（#806） |
+
+> ⚠️ ページを使い回すため、`page.route()` を使うモック（`mockMovieDetail()` 等）は
+> `beforeEach` ではなく `beforeAll` で1度だけ登録する。`beforeEach` で呼ぶと
+> ハンドラが積み上がる。
+
 ## Playwright設定（playwright.config.ts）
 
 ### プロジェクト構成

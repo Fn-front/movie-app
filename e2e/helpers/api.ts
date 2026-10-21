@@ -8,6 +8,7 @@ import { createHmac } from 'crypto';
 
 import type { APIRequestContext } from '@playwright/test';
 
+import { cleanupRateLimitsForUser } from './dedicatedUser';
 import {
   RUN_CLIENT_IP,
   RUN_EMAIL_LIKE_PATTERN,
@@ -43,21 +44,20 @@ async function getTestUserId(): Promise<string | null> {
 }
 
 /**
- * テストユーザーの rate_limits レコードを物理削除する。
+ * 共有テストユーザーの rate_limits レコードを物理削除する。
  *
  * 背景: WRITE_FAVORITES / WRITE_WATCHLIST 等の DB-based レート制限は
  * user_id を identifier として制限する。E2E は短時間に多くのリクエストを
  * 発行するため、テスト毎にリセットしないと後続テストが 429 で失敗する。
  * 認証済みの読み取り系（READ_USER_DATA 等）も user_id 単位で積み上がる。
+ *
+ * 専用ユーザーを使う spec は {@link cleanupRateLimitsForUser} を使う。
  */
-export async function cleanupRateLimits(): Promise<void> {
+async function cleanupRateLimits(): Promise<void> {
   const userId = await getTestUserId();
   if (!userId) return;
 
-  await fetch(`${SUPABASE_URL}/rest/v1/rate_limits?identifier=eq.${userId}`, {
-    method: 'DELETE',
-    headers: supabaseHeaders,
-  });
+  await cleanupRateLimitsForUser(userId);
 }
 
 /**
@@ -73,7 +73,7 @@ export async function cleanupRateLimits(): Promise<void> {
  *   `メール|送信元IP` のためワイルドカードで消す
  *
  * ユーザーID単位のカウンタはユーザー作成後にしかIDが分からないため、
- * {@link cleanupRateLimits} が担当する。
+ * {@link cleanupRateLimitsForUser} が担当する。
  */
 export async function cleanupRunRateLimits(): Promise<void> {
   const deleteBy = (filter: string) =>
@@ -91,18 +91,22 @@ export async function cleanupRunRateLimits(): Promise<void> {
 }
 
 /**
- * テストユーザーのウォッチリストを物理削除する（rate_limitsも同時にリセット）
+ * 指定ユーザーのウォッチリストを物理削除する（rate_limitsも同時にリセット）
+ *
+ * ⚠️ そのユーザーの**全件**を消す。共有テストユーザーに対して複数の spec が
+ * これを呼ぶと、`fullyParallel` で別ワーカーに分散したときに互いのレコードを
+ * 消し合う（#806）。ウォッチリストを書き換える spec は専用ユーザーを使うこと
+ * （`e2e/fixtures/dedicatedSession.ts` の `openDedicatedSession`）。
+ *
+ * @param userId - 対象ユーザーのID
  */
-export async function cleanupWatchlist(): Promise<void> {
-  const userId = await getTestUserId();
-  if (!userId) return;
-
+export async function cleanupWatchlistForUser(userId: string): Promise<void> {
   await Promise.all([
     fetch(`${SUPABASE_URL}/rest/v1/watchlist?user_id=eq.${userId}`, {
       method: 'DELETE',
       headers: supabaseHeaders,
     }),
-    cleanupRateLimits(),
+    cleanupRateLimitsForUser(userId),
   ]);
 }
 

@@ -35,10 +35,14 @@ export interface UseCalendarReturn {
   currentMonth: Date;
   /** 選択中の日付 */
   selectedDate: Date | undefined;
+  /** 選択中の日付のキー（YYYY-MM-DD） */
+  selectedDateKey: string | undefined;
   /** 日付ごとの映画マップ */
   moviesByDate: Record<string, CalendarMovieItem[]>;
   /** 選択中の日付の映画一覧 */
   selectedDateMovies: CalendarMovieItem[];
+  /** 表示中の月の全映画（公開日昇順） */
+  monthMovies: CalendarMovieItem[];
   /** 映画がある日付の一覧 */
   datesWithMovies: Date[];
   /** FullCalendar用イベント配列 */
@@ -82,12 +86,26 @@ export function useCalendar(): UseCalendarReturn {
     [calendarQuery.data],
   );
 
+  // 選択中の日付のキー
+  const selectedDateKey = useMemo(
+    () => (selectedDate ? formatDate(selectedDate) : undefined),
+    [selectedDate],
+  );
+
   // 選択中の日付の映画一覧
   const selectedDateMovies = useMemo(() => {
-    if (!selectedDate) return [];
-    const dateStr = formatDate(selectedDate);
-    return moviesByDate[dateStr] ?? [];
-  }, [selectedDate, moviesByDate]);
+    if (!selectedDateKey) return [];
+    return moviesByDate[selectedDateKey] ?? [];
+  }, [selectedDateKey, moviesByDate]);
+
+  // 表示中の月の全映画。日付キーは YYYY-MM-DD なので辞書順＝日付昇順になる
+  const monthMovies = useMemo(
+    () =>
+      Object.keys(moviesByDate)
+        .sort()
+        .flatMap((dateStr) => moviesByDate[dateStr]),
+    [moviesByDate],
+  );
 
   // 映画がある日付の一覧
   const datesWithMovies = useMemo(() => {
@@ -154,8 +172,10 @@ export function useCalendar(): UseCalendarReturn {
     () => ({
       currentMonth,
       selectedDate,
+      selectedDateKey,
       moviesByDate,
       selectedDateMovies,
+      monthMovies,
       datesWithMovies,
       calendarEvents,
       goToPreviousMonth,
@@ -169,8 +189,10 @@ export function useCalendar(): UseCalendarReturn {
     [
       currentMonth,
       selectedDate,
+      selectedDateKey,
       moviesByDate,
       selectedDateMovies,
+      monthMovies,
       datesWithMovies,
       calendarEvents,
       goToPreviousMonth,

@@ -55,8 +55,8 @@
 
 .c_calendarMovieList__poster {
   flex-shrink: 0;
-  width: 46px;
-  height: 69px;
+  width: 56px;
+  height: 84px;
   border-radius: $border-radius-sm;
   overflow: hidden;
 }
@@ -86,17 +86,34 @@
 }
 
 .c_calendarMovieList__movieTitle {
+  @include text-truncate-multiline(2);
+
   font-size: $font-size-sm;
   font-weight: $font-weight-medium;
   color: $text-primary;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.c_calendarMovieList__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: $spacing-2;
 }
 
 .c_calendarMovieList__releaseDate {
   font-size: $font-size-xs;
   color: $text-secondary;
+}
+
+// 公開日までの距離。グリッドは「いつ」しか示さないため、ここで今日との距離を補う
+.c_calendarMovieList__proximity {
+  padding: 1px $spacing-2;
+  border-radius: $border-radius-full;
+  background-color: color-alpha(--primary-500, 14%);
+  font-size: $font-size-2xs;
+  font-weight: $font-weight-medium;
+  color: $text-accent;
+  white-space: nowrap;
 }
 
 .c_calendarMovieList__arrow {

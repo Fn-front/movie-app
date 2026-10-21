@@ -30,6 +30,7 @@ export const NAV_ITEMS: NavItemBase[] = [
  * メニューアクション項目ラベル
  */
 export const MENU_LABELS = {
+  CALENDAR: '公開カレンダー',
   SETTINGS: '設定',
   LOGOUT: 'ログアウト',
   LOGIN: 'ログイン',

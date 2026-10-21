@@ -19,8 +19,33 @@
   color: $text-danger;
 }
 
+// 月グリッドと日別パネルの2カラム。
+// 狭い画面では縦積みにして、グリッドを「ナビ」・リストを「本体」として読ませる。
+.c_calendarDialog__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+
+  @include lg {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+
+// スクロールはモーダル本体に一本化する。
+// カラム側に overflow を付けると「他N件」のポップオーバーが
+// カラム境界で切れて閉じるボタンが押せなくなる
 .c_calendarDialog__calendar {
+  min-width: 0;
   padding: $spacing-4;
+}
+
+.c_calendarDialog__panel {
+  min-width: 0;
+  border-top: $border-width-1 solid $border-color;
+
+  @include lg {
+    border-top: none;
+    border-left: $border-width-1 solid $border-color;
+  }
 }
 
 // カスタムヘッダー（React Iconsによるナビゲーション）
@@ -28,7 +53,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: $spacing-2;
   padding: $spacing-2 $spacing-2 $spacing-4;
+}
+
+.c_calendarDialog__nav {
+  display: flex;
+  align-items: center;
+  gap: $spacing-2;
 }
 
 .c_calendarDialog__navButton {
@@ -58,6 +90,25 @@
   box-shadow: none;
 }
 
+.c_calendarDialog__todayButton {
+  height: 32px;
+  padding: 0 $spacing-3;
+  border: $border-width-1 solid $border-color;
+  border-radius: $border-radius-md;
+  background-color: $background-paper;
+  color: $text-primary;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  cursor: pointer;
+  transition: $transition-bg;
+
+  @include focus-visible;
+
+  &:hover {
+    background-color: $background-secondary;
+  }
+}
+
 .c_calendarDialog__title {
   font-size: $font-size-base;
   font-weight: $font-weight-bold;
@@ -77,56 +128,121 @@
   text-decoration: none;
 }
 
+// 日曜＝赤 / 土曜＝青は日本のカレンダーの慣習。
+// 色覚特性で赤青の判別が難しい場合に備え、曜日ヘッダーと日付の両方に付けて
+// 位置（左端・右端）からも読み取れるようにする。
+.c_calendarDialog__calendar
+  :global(.fc .fc-col-header-cell.fc-day-sun .fc-col-header-cell-cushion) {
+  color: $text-danger;
+}
+
+.c_calendarDialog__calendar
+  :global(.fc .fc-col-header-cell.fc-day-sat .fc-col-header-cell-cushion) {
+  color: $text-info;
+}
+
 .c_calendarDialog__calendar :global(.fc .fc-daygrid-day) {
   cursor: pointer;
   transition: $transition-bg;
 }
 
+// 空の週まで100px確保すると縦が伸びて日別パネルが画面外に落ちる。
+// 作品のある週だけ伸びるよう下限を低くする。
 .c_calendarDialog__calendar :global(.fc .fc-daygrid-day-frame) {
-  min-height: 100px;
+  min-height: 56px;
+
+  @include md {
+    min-height: 64px;
+  }
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-daygrid-day:hover) {
   background-color: color-alpha(--primary-500, 12%);
 }
 
+// ja ロケールの日付は「27日」と2文字ぶん幅を取る。
+// 390px だと1セル約48pxしかなく折り返すため、狭い画面では一段小さくする
 .c_calendarDialog__calendar :global(.fc .fc-daygrid-day-number) {
-  font-size: $font-size-sm;
+  font-size: $font-size-xs;
   color: $text-primary;
   text-decoration: none;
-  padding: $spacing-1;
+  padding: 2px;
+  white-space: nowrap;
+
+  @include md {
+    font-size: $font-size-sm;
+    padding: $spacing-1;
+  }
 }
 
-.c_calendarDialog__calendar :global(.fc .fc-day-today) {
-  background-color: color-alpha(--primary-500, 14%) !important;
+.c_calendarDialog__calendar :global(.fc .fc-day-sun .fc-daygrid-day-number) {
+  color: $text-danger;
 }
 
+.c_calendarDialog__calendar :global(.fc .fc-day-sat .fc-daygrid-day-number) {
+  color: $text-info;
+}
+
+// 前後月の日付は曜日色より優先して沈ませる。
+// FullCalendar 既定の opacity:0.3 をそのままにすると、薄い文字色と二重に掛かって
+// ダークで 1.36:1 まで落ちる（axe: color-contrast）。不透明にして色だけで差をつける
+.c_calendarDialog__calendar :global(.fc .fc-day-other .fc-daygrid-day-top) {
+  opacity: 1;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-day-other .fc-daygrid-day-number) {
+  color: $text-secondary;
+}
+
+// FullCalendar 既定の .fc .fc-daygrid-day.fc-day-today を上書きするため
+// セレクタを同じ形にして特異度で勝たせる（!important を使わない）
+.c_calendarDialog__calendar :global(.fc .fc-daygrid-day.fc-day-today) {
+  background-color: color-alpha(--primary-500, 14%);
+}
+
+// $primary-500 の面に乗る文字。白は 4.74:1 で AA を満たすが、
+// --text-on-accent（gray-900）はオレンジ面向けの値で 3.98:1 と足りない
 .c_calendarDialog__calendar :global(.fc .fc-day-today .fc-daygrid-day-number) {
   font-weight: $font-weight-bold;
-  color: $background-paper;
+  color: $text-inverse;
   background-color: $primary-500;
   border-radius: $border-radius-md;
   padding: 2px $spacing-1;
 }
 
-// 映画がある日のインジケーター
+// 選択日。today（塗り）・hover（薄い塗り）と重なっても区別できるよう枠で示す
+.c_calendarDialog__calendar :global(.fc .fc-day-selected) {
+  box-shadow: inset 0 0 0 2px $primary-500;
+}
+
+// 公開予定がある日のドット。
+// デスクトップはチップが並ぶので二重表示になるため隠し、
+// チップを出さないモバイルでだけ件数の手掛かりとして残す。
 .c_calendarDialog__calendar
   :global(.fc .fc-day-has-events .fc-daygrid-day-number)::after {
   content: '';
   display: block;
   width: 6px;
   height: 6px;
-  background-color: $primary-500;
+  background-color: $secondary-600;
   border-radius: 50%;
   margin: 2px auto 0;
+
+  @include md {
+    display: none;
+  }
 }
 
-.c_calendarDialog__calendar :global(.fc .fc-day-other .fc-daygrid-day-number) {
-  color: $text-disabled;
-}
-
+// モバイルはセルが約56pxしかなくチップが読めない。
+// display:none ならフォーカス順からも外れるので、隠れた作品名に
+// Tab が止まる問題も同時に避けられる。
 .c_calendarDialog__calendar :global(.fc .fc-daygrid-day-events) {
+  display: none;
   margin-top: 0;
+
+  @include md {
+    display: block;
+  }
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-daygrid-event) {
@@ -145,9 +261,34 @@
   font-weight: $font-weight-medium;
 }
 
+// 「他N件」のポップオーバー。FullCalendar 既定は --fc-page-bg-color（白）のままなので、
+// ダークテーマだと白地に白文字になる。アプリの面色に合わせる
 .c_calendarDialog__calendar :global(.fc .fc-popover) {
   border-radius: $border-radius-md;
   box-shadow: $shadow-md;
+  background-color: $background-paper;
+  border-color: $border-color;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-popover-header) {
+  background-color: $background-secondary;
+  color: $text-primary;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-popover-body) {
+  background-color: $background-paper;
+}
+
+.c_calendarDialog__calendar :global(.fc .fc-popover-close) {
+  color: $text-secondary;
+  opacity: 1;
+  cursor: pointer;
+
+  &:hover {
+    color: $text-primary;
+  }
 }
 
 .c_calendarDialog__calendar :global(.fc .fc-theme-standard td),
@@ -161,16 +302,4 @@
 
 .c_calendarDialog__calendar :global(.fc .fc-event) {
   cursor: pointer;
-}
-
-.c_calendarDialog__event {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  font-size: $font-size-xs;
-  color: $secondary-600;
-  white-space: normal;
-  overflow: hidden;
-  line-height: 1.4;
-  word-break: break-all;
 }

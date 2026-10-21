@@ -12,8 +12,10 @@ export const IMAGE_SIZES = {
   POSTER_DETAIL: { WIDTH: 200, HEIGHT: 300 },
   /** サムネイル画像（リスト表示用） */
   THUMBNAIL: { WIDTH: 36, HEIGHT: 54 },
-  /** カレンダーポスター画像 */
-  CALENDAR_POSTER: { WIDTH: 46, HEIGHT: 69 },
+  /** カレンダーポスター画像（日別リスト） */
+  CALENDAR_POSTER: { WIDTH: 56, HEIGHT: 84 },
+  /** カレンダーポスター画像（月グリッドのセル内チップ） */
+  CALENDAR_CHIP_POSTER: { WIDTH: 24, HEIGHT: 36 },
   /** ユーザーアバター（デスクトップ） */
   AVATAR: { WIDTH: 32, HEIGHT: 32 },
   /** ユーザーアバター（モバイル） */

@@ -1,71 +1,50 @@
 /**
  * CalendarButtonコンポーネント
- * サイドバーのカレンダーボタン + CalendarDialog + 映画詳細モーダル
+ * サイドバーから公開カレンダーを開くトリガー
  */
 
 'use client';
 
-import { memo, useState, useCallback } from 'react';
-import dynamic from 'next/dynamic';
+import { memo } from 'react';
 import { FiCalendar } from 'react-icons/fi';
 
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { ARIA_LABELS, MENU_LABELS } from '@/constants';
 
-const CalendarDialog = dynamic(
-  () =>
-    import('./calendarDialog').then((mod) => ({
-      default: mod.CalendarDialog,
-    })),
-  { ssr: false },
-);
 import styles from './calendarButton.module.scss';
 
 /**
- * CalendarButtonコンポーネント
+ * CalendarButtonコンポーネントのプロパティ
  */
-export const CalendarButton = memo(function CalendarButton() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
+export interface CalendarButtonProps {
+  /** クリック時のコールバック */
+  onClick: () => void;
+}
 
-  const handleOpen = useCallback(() => {
-    setIsOpen(true);
-  }, []);
-
-  const handleOpenChange = useCallback((open: boolean) => {
-    setIsOpen(open);
-  }, []);
-
-  const handleMovieClick = useCallback((tmdbMovieId: number) => {
-    setIsOpen(false);
-    setSelectedMovieId(tmdbMovieId);
-  }, []);
-
-  const handleModalClose = useCallback(() => {
-    setSelectedMovieId(null);
-  }, []);
-
-  return (
-    <>
+/**
+ * CalendarButtonコンポーネント
+ *
+ * ダイアログ本体は持たない。トリガーはサイドバーとモバイルドロワーの2か所にあり、
+ * ドロワーは開いた瞬間にアンマウントされるため、状態とダイアログは AppLayout が持つ。
+ */
+export const CalendarButton = memo<CalendarButtonProps>(
+  function CalendarButton({ onClick }) {
+    return (
       <button
         type='button'
         className={styles.c_calendarButton}
-        onClick={handleOpen}
-        aria-label='公開カレンダーを開く'
+        onClick={onClick}
+        aria-label={ARIA_LABELS.OPEN_CALENDAR}
       >
         <FiCalendar
           className={styles.c_calendarButton__icon}
           aria-hidden='true'
         />
-        <span className={styles.c_calendarButton__text}>公開カレンダー</span>
+        <span className={styles.c_calendarButton__text}>
+          {MENU_LABELS.CALENDAR}
+        </span>
       </button>
-      <CalendarDialog
-        open={isOpen}
-        onOpenChange={handleOpenChange}
-        onMovieClick={handleMovieClick}
-      />
-      <MovieDetailModal movieId={selectedMovieId} onClose={handleModalClose} />
-    </>
-  );
-});
+    );
+  },
+);
 
 CalendarButton.displayName = 'CalendarButton';

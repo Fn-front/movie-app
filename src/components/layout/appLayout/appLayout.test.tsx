@@ -46,7 +46,35 @@ jest.mock(
 );
 
 jest.mock('@/features/calendar/component/calendarButton', () => ({
-  CalendarButton: () => <div data-testid='calendar-button'>CalendarButton</div>,
+  CalendarButton: ({ onClick }: { onClick: () => void }) => (
+    <button type='button' data-testid='calendar-button' onClick={onClick}>
+      CalendarButton
+    </button>
+  ),
+}));
+
+jest.mock('@/features/calendar/component/calendarDialog', () => ({
+  CalendarDialog: ({
+    open,
+    onMovieClick,
+  }: {
+    open: boolean;
+    onMovieClick: (id: number) => void;
+  }) =>
+    open ? (
+      <div data-testid='calendar-dialog'>
+        <button type='button' onClick={() => onMovieClick(42)}>
+          映画を選ぶ
+        </button>
+      </div>
+    ) : null,
+}));
+
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: ({ movieId }: { movieId: number | null }) =>
+    movieId ? (
+      <div data-testid='movie-detail-modal'>Movie {movieId}</div>
+    ) : null,
 }));
 
 import React from 'react';
@@ -62,6 +90,8 @@ import { AppLayout } from './appLayout';
 const authenticatedSession = {
   data: {
     user: {
+      // MobileDrawer は無効化済みセッションと区別するため id の有無で判定する
+      id: 'user-123',
       name: 'テストユーザー',
       email: 'test@example.com',
       image: null,
@@ -147,6 +177,47 @@ describe('AppLayout', () => {
       mockUseSession.mockReturnValue(unauthenticatedSession);
       render(<AppLayout>コンテンツ</AppLayout>);
       expect(screen.queryByTestId('calendar-button')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('公開カレンダー', () => {
+    it('初期状態ではカレンダーが開いていない', () => {
+      render(<AppLayout>コンテンツ</AppLayout>);
+      expect(screen.queryByTestId('calendar-dialog')).not.toBeInTheDocument();
+    });
+
+    it('サイドバーのカレンダーボタンでカレンダーが開く', async () => {
+      const user = userEvent.setup();
+      render(<AppLayout>コンテンツ</AppLayout>);
+
+      await user.click(screen.getByTestId('calendar-button'));
+
+      expect(screen.getByTestId('calendar-dialog')).toBeInTheDocument();
+    });
+
+    it('カレンダーで映画を選ぶとカレンダーが閉じて詳細モーダルが開く', async () => {
+      const user = userEvent.setup();
+      render(<AppLayout>コンテンツ</AppLayout>);
+
+      await user.click(screen.getByTestId('calendar-button'));
+      await user.click(screen.getByRole('button', { name: '映画を選ぶ' }));
+
+      expect(screen.queryByTestId('calendar-dialog')).not.toBeInTheDocument();
+      expect(screen.getByTestId('movie-detail-modal')).toHaveTextContent(
+        'Movie 42',
+      );
+    });
+
+    it('モバイルメニューからカレンダーを開ける', async () => {
+      const user = userEvent.setup();
+      render(<AppLayout>コンテンツ</AppLayout>);
+
+      await user.click(screen.getByRole('button', { name: 'メニューを開く' }));
+      await user.click(
+        screen.getByRole('button', { name: '公開カレンダーを開く' }),
+      );
+
+      expect(screen.getByTestId('calendar-dialog')).toBeInTheDocument();
     });
   });
 

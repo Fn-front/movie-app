@@ -15,6 +15,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import {
   IoHomeOutline,
   IoCalendarOutline,
+  IoCalendarNumberOutline,
   IoPlayCircleOutline,
   IoHeartOutline,
   IoBookmarkOutline,
@@ -80,6 +81,12 @@ export interface MobileDrawerProps {
   open: boolean;
   /** Drawerの開閉コールバック */
   onOpenChange: (open: boolean) => void;
+  /**
+   * 公開カレンダーを開くコールバック。
+   * ダイアログ本体はドロワーの外（AppLayout）が持つため、ここでは通知だけする。
+   * 未指定なら導線を出さない。
+   */
+  onCalendarClick?: () => void;
 }
 
 /**
@@ -93,6 +100,7 @@ export interface MobileDrawerProps {
 export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
   open,
   onOpenChange,
+  onCalendarClick,
 }) {
   const { data: session, status } = useSession();
   const pathname = usePathname();
@@ -125,6 +133,12 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
     },
     [handleProtectedNavClick, onOpenChange],
   );
+
+  // ドロワーが開いたままだとカレンダーのモーダルが裏に隠れるため、先に閉じる
+  const handleCalendarClick = useCallback(() => {
+    onOpenChange(false);
+    onCalendarClick?.();
+  }, [onOpenChange, onCalendarClick]);
 
   const handleNavigateToSettings = useCallback(() => {
     router.push(ROUTES.SETTINGS);
@@ -190,6 +204,23 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
               ))}
             </ul>
           </nav>
+
+          {isAuthenticated && onCalendarClick && (
+            <div className={styles.c_mobile_drawer__actions}>
+              <button
+                type='button'
+                className={styles.c_mobile_drawer__action}
+                onClick={handleCalendarClick}
+                aria-label={ARIA_LABELS.OPEN_CALENDAR}
+              >
+                <IoCalendarNumberOutline
+                  size={ICON_SIZES.SM}
+                  aria-hidden='true'
+                />
+                <span>{MENU_LABELS.CALENDAR}</span>
+              </button>
+            </div>
+          )}
 
           {isAuthenticated && (
             <div className={styles.c_mobile_drawer__user}>

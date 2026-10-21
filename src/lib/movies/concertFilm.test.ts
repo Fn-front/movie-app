@@ -90,9 +90,9 @@ describe('isConcertFilmCandidate', () => {
   });
 
   it('ジャンルが未設定の作品を候補にしないこと', () => {
-    expect(
-      isConcertFilmCandidate(createMovie({ genre_ids: undefined })),
-    ).toBe(false);
+    expect(isConcertFilmCandidate(createMovie({ genre_ids: undefined }))).toBe(
+      false,
+    );
   });
 });
 

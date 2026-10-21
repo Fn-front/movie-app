@@ -10,7 +10,9 @@ import {
 } from '@/constants/movies';
 import { NOW_SHOWING_DISPLAY_COUNT } from '@/constants/nowShowing';
 import { TMDB_SORT_BY } from '@/constants/tmdb';
+import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
+import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
 import { discoverMovies } from '@/lib/tmdb/tmdb';
 
 /**
@@ -81,7 +83,18 @@ export async function syncNowShowingMovies(): Promise<NowShowingSyncResult> {
     }),
   );
 
-  const movies = safeResults.slice(0, NOW_SHOWING_DISPLAY_COUNT);
+  // ライブ・コンサート映像や舞台中継は映画ではないため表示しない。
+  // 同期判定の isStageBroadcast を先に通し、TMDbへの問い合わせを省く。
+  // 上位 NOW_SHOWING_DISPLAY_COUNT 件に絞る前に判定しないと、除外した分だけ
+  // 表示枠が減ってしまう
+  const concertFlags = await Promise.all(
+    safeResults.map(
+      async (movie) => isStageBroadcast(movie) || (await isConcertFilm(movie)),
+    ),
+  );
+  const filmResults = safeResults.filter((_, index) => !concertFlags[index]);
+
+  const movies = filmResults.slice(0, NOW_SHOWING_DISPLAY_COUNT);
 
   // 2. RPC関数でトランザクション内の全件洗い替え（DELETE → INSERT）をアトミックに実行
   const rows = movies.map((movie, index) => ({

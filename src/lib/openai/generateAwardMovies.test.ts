@@ -21,10 +21,14 @@ jest.mock('./client', () => ({
 
 const mockSearchMovies = jest.fn();
 const mockHasExcludedKeyword = jest.fn().mockResolvedValue(false);
+const mockGetMovieKeywordIds = jest.fn().mockResolvedValue([]);
 jest.mock('@/lib/tmdb/tmdb', () => ({
   searchMovies: (...args: unknown[]) => mockSearchMovies(...args),
   hasExcludedKeyword: (...args: unknown[]) => mockHasExcludedKeyword(...args),
+  getMovieKeywordIds: (...args: unknown[]) => mockGetMovieKeywordIds(...args),
 }));
+
+import { MUSIC_GENRE_ID } from '@/constants/movies';
 
 import {
   buildUserPrompt,
@@ -377,6 +381,76 @@ describe('resolveAwardsWithTMDb', () => {
     expect(result[0].category).toBe('best_picture');
     expect(result[0].is_winner).toBe(true);
     expect(result[0].display_order).toBe(1);
+  });
+
+  describe('ライブ興行・舞台中継の除外', () => {
+    it('ライブ映像を採用しないこと', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 940,
+            title: 'ヨルシカ LIVE「盗作」',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [MUSIC_GENRE_ID],
+          },
+        ],
+      });
+
+      const result = await resolveAwardsWithTMDb(
+        [createAwardItem()],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('舞台中継を採用しないこと', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 941,
+            title: 'National Theatre Live: Hamlet',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+
+      const result = await resolveAwardsWithTMDb(
+        [createAwardItem()],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('タイトルに「ライブ」を含む劇映画は採用すること', async () => {
+      // 『サタデー･ナイト／NYからライブ！』は Comedy/Drama のため候補外
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 942,
+            title: 'サタデー･ナイト／NYからライブ！',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [35, 18],
+          },
+        ],
+      });
+
+      const result = await resolveAwardsWithTMDb(
+        [createAwardItem()],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(942);
+    });
   });
 
   describe('アダルト作品の除外', () => {

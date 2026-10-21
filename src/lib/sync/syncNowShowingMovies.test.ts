@@ -6,14 +6,19 @@
  * 劇場公開中の人気映画同期ロジック テスト
  */
 
+import { DOCUMENTARY_GENRE_ID, MUSIC_GENRE_ID } from '@/constants/movies';
+
 import { syncNowShowingMovies } from './syncNowShowingMovies';
 
 // --- Mocks ---
 
 const mockDiscoverMovies = jest.fn();
+const mockGetMovieKeywordIds = jest.fn().mockResolvedValue([]);
+
 jest.mock('@/lib/tmdb/tmdb', () => ({
   discoverMovies: (params: Record<string, unknown>) =>
     mockDiscoverMovies(params),
+  getMovieKeywordIds: (...args: unknown[]) => mockGetMovieKeywordIds(...args),
 }));
 
 const mockRpc = jest.fn().mockReturnValue(Promise.resolve({ error: null }));
@@ -85,6 +90,93 @@ describe('syncNowShowingMovies', () => {
 
     const rpcMovies = mockRpc.mock.calls[0][1].movies;
     expect(rpcMovies).toHaveLength(10);
+  });
+
+  describe('ライブ興行・舞台中継の除外', () => {
+    it('ライブ映像をRPCに渡さない', async () => {
+      mockDiscoverMovies.mockResolvedValue({
+        results: [
+          {
+            ...createMovies(1)[0],
+            id: 901,
+            title: 'ヨルシカ LIVE「盗作」',
+            genre_ids: [MUSIC_GENRE_ID],
+          },
+          { ...createMovies(1)[0], id: 902, genre_ids: [28] },
+        ],
+      });
+
+      const result = await syncNowShowingMovies();
+
+      const rpcMovies = mockRpc.mock.calls[0][1].movies;
+      expect(
+        rpcMovies.map((m: { tmdb_movie_id: number }) => m.tmdb_movie_id),
+      ).toEqual([902]);
+      expect(result.synced).toBe(1);
+    });
+
+    it('舞台中継をRPCに渡さない', async () => {
+      mockDiscoverMovies.mockResolvedValue({
+        results: [
+          {
+            ...createMovies(1)[0],
+            id: 911,
+            title: 'National Theatre Live: Hamlet',
+            genre_ids: [18],
+          },
+          { ...createMovies(1)[0], id: 912, genre_ids: [28] },
+        ],
+      });
+
+      const result = await syncNowShowingMovies();
+
+      const rpcMovies = mockRpc.mock.calls[0][1].movies;
+      expect(
+        rpcMovies.map((m: { tmdb_movie_id: number }) => m.tmdb_movie_id),
+      ).toEqual([912]);
+      expect(result.synced).toBe(1);
+    });
+
+    it('除外後も表示上限まで埋める', async () => {
+      // 上限で切る前に判定しないと、除外した分だけ表示枠が減ってしまう
+      mockDiscoverMovies.mockResolvedValue({
+        results: [
+          {
+            ...createMovies(1)[0],
+            id: 920,
+            title: 'ライブビューイング作品',
+            genre_ids: [MUSIC_GENRE_ID],
+          },
+          ...createMovies(12, 921).map((m) => ({ ...m, genre_ids: [28] })),
+        ],
+      });
+
+      const result = await syncNowShowingMovies();
+
+      expect(result.synced).toBe(10);
+      const rpcMovies = mockRpc.mock.calls[0][1].movies;
+      expect(
+        rpcMovies.map((m: { tmdb_movie_id: number }) => m.tmdb_movie_id),
+      ).not.toContain(920);
+    });
+
+    it('音楽ドキュメンタリーは除外しない', async () => {
+      mockGetMovieKeywordIds.mockResolvedValue([165194]); // music documentary
+      mockDiscoverMovies.mockResolvedValue({
+        results: [
+          {
+            ...createMovies(1)[0],
+            id: 930,
+            title: 'オアシス：ドント・ルック・バック・イン・アンガー',
+            genre_ids: [MUSIC_GENRE_ID, DOCUMENTARY_GENRE_ID],
+          },
+        ],
+      });
+
+      const result = await syncNowShowingMovies();
+
+      expect(result.synced).toBe(1);
+    });
   });
 
   describe('アダルト作品の除外', () => {

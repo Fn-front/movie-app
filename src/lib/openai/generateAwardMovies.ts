@@ -9,6 +9,8 @@
 
 import type { AwardCategory, AwardDefinition } from '@/constants/awards';
 import { OPENAI_CONFIG } from '@/constants';
+import { isConcertFilm } from '@/lib/movies/concertFilm';
+import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
 import { hasExcludedKeyword, searchMovies } from '@/lib/tmdb/tmdb';
 import {
   openAiAwardsResponseSchema,
@@ -361,6 +363,13 @@ export async function resolveAwardsWithTMDb(
       // adult フラグだけでは `adult=false` のアダルト作品を通してしまうため、
       // 採用が確定する直前にTMDbへ1回だけ問い合わせる（呼び出し回数を最小化）。
       if (await hasExcludedKeyword(movie.id)) {
+        continue;
+      }
+
+      // ライブ・コンサート映像や舞台中継は映画賞の対象ではないが、
+      // AIが抽出したタイトルのTMDb検索で紛れ込みうるため弾く。
+      // 同期判定の isStageBroadcast を先に通し、TMDbへの問い合わせを省く
+      if (isStageBroadcast(movie) || (await isConcertFilm(movie))) {
         continue;
       }
 

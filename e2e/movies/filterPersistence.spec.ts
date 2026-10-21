@@ -41,6 +41,14 @@ test.describe('フィルター条件がリロード後も保持される', () =>
     );
     await dialog.getByRole('button', { name: '適用' }).click();
     const putResponse = await putPromise;
+
+    // 429（レート制限）等を素通りさせない。失敗を「保存されていない」ではなく
+    // ステータス付きで落とす
+    expect(
+      putResponse.ok(),
+      `フィルター保存が失敗した（${putResponse.status()}）`,
+    ).toBe(true);
+
     const putBody = putResponse.request().postDataJSON();
 
     // PUTにis_revival: falseが含まれていることを確認

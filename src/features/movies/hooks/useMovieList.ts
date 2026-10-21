@@ -24,6 +24,7 @@ import {
   MOVIES_ERROR_MESSAGES,
   movieKeys,
   filterKeys,
+  type WatchProviderOfferType,
 } from '@/constants';
 import {
   buildFilterSearchParams,
@@ -63,6 +64,10 @@ export interface UseMovieListReturn {
   selectedGenreIds: number[];
   dateRange: DateRange;
   isRevivalFilter: boolean | undefined;
+  /** 選択中の配信プロバイダーID */
+  selectedWatchProviderIds: number[];
+  /** 選択中の提供形態（空配列なら全形態） */
+  selectedOfferTypes: WatchProviderOfferType[];
   isFilterModalOpen: boolean;
   handleSortChange: (value: string) => void;
   handleReleaseTypeChange: (value: 'theatrical' | 'streaming') => void;
@@ -70,6 +75,8 @@ export interface UseMovieListReturn {
     genreIds: number[],
     dateRange: DateRange,
     isRevival: boolean | undefined,
+    watchProviderIds?: number[],
+    offerTypes?: WatchProviderOfferType[],
   ) => void;
   handleFilterModalOpen: () => void;
   handleFilterModalClose: () => void;
@@ -82,28 +89,43 @@ export interface UseMovieListReturn {
  * 省略するとonSuccess時のキャッシュ上書きで値が消失し、
  * 再マウント時にデフォルトへフォールバックするバグの原因となる。
  */
-function buildFilterConditions(
-  sortBy: string,
-  releaseType: 'theatrical' | 'streaming',
-  genreIds: number[],
-  dateRange: DateRange,
-  isRevival: boolean | undefined,
-): FilterConditions {
+/**
+ * 永続化するフィルター状態
+ *
+ * 位置引数だと呼び出し側で順序を取り違えやすいため、オブジェクトで受ける
+ */
+interface FilterState {
+  sortBy: string;
+  releaseType: 'theatrical' | 'streaming';
+  genreIds: number[];
+  dateRange: DateRange;
+  isRevival: boolean | undefined;
+  watchProviderIds: number[];
+  offerTypes: WatchProviderOfferType[];
+}
+
+function buildFilterConditions(state: FilterState): FilterConditions {
   const conditions: FilterConditions = {
-    sort_by: sortBy as FilterConditions['sort_by'],
-    release_type: releaseType,
+    sort_by: state.sortBy as FilterConditions['sort_by'],
+    release_type: state.releaseType,
   };
-  if (genreIds.length > 0) {
-    conditions.genre_ids = genreIds;
+  if (state.genreIds.length > 0) {
+    conditions.genre_ids = state.genreIds;
   }
-  if (dateRange.gte) {
-    conditions.date_range_gte = dateRange.gte;
+  if (state.dateRange.gte) {
+    conditions.date_range_gte = state.dateRange.gte;
   }
-  if (dateRange.lte) {
-    conditions.date_range_lte = dateRange.lte;
+  if (state.dateRange.lte) {
+    conditions.date_range_lte = state.dateRange.lte;
   }
-  if (isRevival !== undefined) {
-    conditions.is_revival = isRevival;
+  if (state.isRevival !== undefined) {
+    conditions.is_revival = state.isRevival;
+  }
+  if (state.watchProviderIds.length > 0) {
+    conditions.watch_providers = state.watchProviderIds;
+  }
+  if (state.offerTypes.length > 0) {
+    conditions.offer_types = state.offerTypes;
   }
   return conditions;
 }
@@ -166,6 +188,12 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const [isRevivalFilter, setIsRevivalFilter] = useState<boolean | undefined>(
     urlFilters.is_revival,
   );
+  const [selectedWatchProviderIds, setSelectedWatchProviderIds] = useState<
+    number[]
+  >(urlFilters.watch_providers ?? []);
+  const [selectedOfferTypes, setSelectedOfferTypes] = useState<
+    WatchProviderOfferType[]
+  >(urlFilters.offer_types ?? []);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const { toast } = useToast();
   const { data: session, status } = useSession();
@@ -205,6 +233,8 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       lte: conditions.date_range_lte || defaultDateRange.lte,
     });
     setIsRevivalFilter(conditions.is_revival);
+    setSelectedWatchProviderIds(conditions.watch_providers || []);
+    setSelectedOfferTypes(conditions.offer_types || []);
   }, [savedFilterApplied, savedFilterQuery.data, defaultDateRange]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -225,6 +255,9 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
         : undefined;
 
     const effectiveGenreIds = saved?.genre_ids ?? selectedGenreIds;
+    const effectiveWatchProviders =
+      saved?.watch_providers ?? selectedWatchProviderIds;
+    const effectiveOfferTypes = saved?.offer_types ?? selectedOfferTypes;
 
     return {
       sort_by: (saved?.sort_by ?? sortBy) as
@@ -241,6 +274,14 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       release_date_lte:
         (saved ? saved.date_range_lte : dateRange.lte) || undefined,
       is_revival: saved ? saved.is_revival : isRevivalFilter,
+      watch_providers:
+        effectiveWatchProviders.length > 0
+          ? effectiveWatchProviders.join(',')
+          : undefined,
+      offer_types:
+        effectiveOfferTypes.length > 0
+          ? effectiveOfferTypes.join(',')
+          : undefined,
     };
   }, [
     sortBy,
@@ -250,6 +291,8 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     selectedGenreIds,
     dateRange,
     isRevivalFilter,
+    selectedWatchProviderIds,
+    selectedOfferTypes,
     savedFilterApplied,
     savedFilterQuery.data,
   ]);
@@ -359,32 +402,60 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     (value: string) => {
       setSortBy(value);
       persistFilters(
-        buildFilterConditions(
-          value,
+        buildFilterConditions({
+          sortBy: value,
           releaseType,
-          selectedGenreIds,
+          genreIds: selectedGenreIds,
           dateRange,
-          isRevivalFilter,
-        ),
+          isRevival: isRevivalFilter,
+          watchProviderIds: selectedWatchProviderIds,
+          offerTypes: selectedOfferTypes,
+        }),
       );
     },
-    [releaseType, selectedGenreIds, dateRange, isRevivalFilter, persistFilters],
+    [
+      releaseType,
+      selectedGenreIds,
+      dateRange,
+      isRevivalFilter,
+      selectedWatchProviderIds,
+      selectedOfferTypes,
+      persistFilters,
+    ],
   );
 
   const handleReleaseTypeChange = useCallback(
     (value: 'theatrical' | 'streaming') => {
       setReleaseType(value);
+      // 配信サービスは streaming でしか効かない。劇場公開へ切り替えたときに
+      // 残しておくと、タブを戻すまで条件が見えないまま保持される
+      const nextWatchProviderIds =
+        value === 'streaming' ? selectedWatchProviderIds : [];
+      const nextOfferTypes = value === 'streaming' ? selectedOfferTypes : [];
+      setSelectedWatchProviderIds(nextWatchProviderIds);
+      setSelectedOfferTypes(nextOfferTypes);
+
       persistFilters(
-        buildFilterConditions(
+        buildFilterConditions({
           sortBy,
-          value,
-          selectedGenreIds,
+          releaseType: value,
+          genreIds: selectedGenreIds,
           dateRange,
-          isRevivalFilter,
-        ),
+          isRevival: isRevivalFilter,
+          watchProviderIds: nextWatchProviderIds,
+          offerTypes: nextOfferTypes,
+        }),
       );
     },
-    [sortBy, selectedGenreIds, dateRange, isRevivalFilter, persistFilters],
+    [
+      sortBy,
+      selectedGenreIds,
+      dateRange,
+      isRevivalFilter,
+      selectedWatchProviderIds,
+      selectedOfferTypes,
+      persistFilters,
+    ],
   );
 
   const handleFilterApply = useCallback(
@@ -392,19 +463,25 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       genreIds: number[],
       newDateRange: DateRange,
       isRevival: boolean | undefined,
+      watchProviderIds: number[] = [],
+      offerTypes: WatchProviderOfferType[] = [],
     ) => {
       setSelectedGenreIds(genreIds);
       setDateRange(newDateRange);
       setIsRevivalFilter(isRevival);
+      setSelectedWatchProviderIds(watchProviderIds);
+      setSelectedOfferTypes(offerTypes);
       setIsFilterModalOpen(false);
       persistFilters(
-        buildFilterConditions(
+        buildFilterConditions({
           sortBy,
           releaseType,
           genreIds,
-          newDateRange,
+          dateRange: newDateRange,
           isRevival,
-        ),
+          watchProviderIds,
+          offerTypes,
+        }),
       );
     },
     [sortBy, releaseType, persistFilters],
@@ -455,6 +532,8 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       selectedGenreIds,
       dateRange,
       isRevivalFilter,
+      selectedWatchProviderIds,
+      selectedOfferTypes,
       isFilterModalOpen,
       handleSortChange,
       handleReleaseTypeChange,
@@ -475,6 +554,8 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       selectedGenreIds,
       dateRange,
       isRevivalFilter,
+      selectedWatchProviderIds,
+      selectedOfferTypes,
       isFilterModalOpen,
       handleSortChange,
       handleReleaseTypeChange,

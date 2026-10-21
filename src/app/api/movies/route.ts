@@ -110,6 +110,8 @@ export async function GET(request: Request) {
       release_date_gte: searchParams.get('release_date_gte') ?? undefined,
       release_date_lte: searchParams.get('release_date_lte') ?? undefined,
       is_revival: searchParams.get('is_revival') ?? undefined,
+      watch_providers: searchParams.get('watch_providers') ?? undefined,
+      offer_types: searchParams.get('offer_types') ?? undefined,
     });
 
     if (!queryResult.success) {
@@ -136,6 +138,8 @@ export async function GET(request: Request) {
       release_date_gte,
       release_date_lte,
       is_revival,
+      watch_providers,
+      offer_types,
     } = queryResult.data;
 
     // 認証判定を前倒しする。
@@ -371,6 +375,10 @@ export async function GET(request: Request) {
       dateLte,
       isRevival: is_revival,
       genreIds: genreIdArray,
+      // 配信サービスは streaming タブでしか意味を持たない。theatrical で
+      // 指定されても無視し、意図しない0件表示を防ぐ
+      watchProviderIds: isStreaming ? (watch_providers ?? []) : [],
+      watchProviderOfferTypes: offer_types ?? [],
     };
 
     // 総件数クエリを構築

@@ -58,6 +58,21 @@ function normalizeIsRevival(raw: unknown): boolean | undefined {
   return undefined;
 }
 
+/**
+ * カンマ区切り文字列・配列のどちらで来ても文字列配列に正規化する
+ *
+ * URLは `offer_types=flatrate,rent` の文字列、localStorage は配列で来る。
+ */
+function normalizeStringList(raw: unknown): string[] | undefined {
+  const values = typeof raw === 'string' ? raw.split(',') : raw;
+  if (!Array.isArray(values)) return undefined;
+
+  const items = values.filter(
+    (value): value is string => typeof value === 'string' && value.length > 0,
+  );
+  return items.length > 0 ? items : undefined;
+}
+
 /** 検証前の生のフィルター値 */
 interface RawFilterConditions {
   sort_by?: unknown;
@@ -66,6 +81,8 @@ interface RawFilterConditions {
   date_range_gte?: unknown;
   date_range_lte?: unknown;
   is_revival?: unknown;
+  watch_providers?: unknown;
+  offer_types?: unknown;
 }
 
 /**
@@ -98,6 +115,19 @@ function validateFilterConditions(raw: RawFilterConditions): FilterConditions {
   );
   if (isRevival !== undefined) conditions.is_revival = isRevival;
 
+  // ジャンルIDと同じく、URLはカンマ区切り文字列・localStorage は配列で来る
+  const watchProviders = parseField(
+    'watch_providers',
+    normalizeGenreIds(raw.watch_providers),
+  );
+  if (watchProviders) conditions.watch_providers = watchProviders;
+
+  const offerTypes = parseField(
+    'offer_types',
+    normalizeStringList(raw.offer_types),
+  );
+  if (offerTypes) conditions.offer_types = offerTypes;
+
   return conditions;
 }
 
@@ -125,6 +155,10 @@ export function parseFilterConditionsFromParams(
       searchParams.get(MOVIE_FILTER_QUERY_PARAMS.DATE_RANGE_LTE) ?? undefined,
     is_revival:
       searchParams.get(MOVIE_FILTER_QUERY_PARAMS.IS_REVIVAL) ?? undefined,
+    watch_providers:
+      searchParams.get(MOVIE_FILTER_QUERY_PARAMS.WATCH_PROVIDERS) ?? undefined,
+    offer_types:
+      searchParams.get(MOVIE_FILTER_QUERY_PARAMS.OFFER_TYPES) ?? undefined,
   });
 }
 
@@ -173,6 +207,18 @@ export function buildFilterSearchParams(
     conditions.is_revival === undefined
       ? undefined
       : String(conditions.is_revival),
+  );
+  setOrDelete(
+    MOVIE_FILTER_QUERY_PARAMS.WATCH_PROVIDERS,
+    conditions.watch_providers && conditions.watch_providers.length > 0
+      ? conditions.watch_providers.join(',')
+      : undefined,
+  );
+  setOrDelete(
+    MOVIE_FILTER_QUERY_PARAMS.OFFER_TYPES,
+    conditions.offer_types && conditions.offer_types.length > 0
+      ? conditions.offer_types.join(',')
+      : undefined,
   );
 
   return params;

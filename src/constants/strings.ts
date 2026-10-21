@@ -128,6 +128,14 @@ export const FILTER_LABELS = {
   GENRE: 'ジャンル',
   /** 評価 */
   RATING: '評価',
+  /** 配信サービス */
+  WATCH_PROVIDER: '配信サービス',
+  /** 提供形態フィルタ（legend） */
+  OFFER_TYPE_FILTER: '提供形態フィルタ',
+  /** 見放題のみ */
+  OFFER_TYPE_FLATRATE: '見放題のみ',
+  /** レンタル・購入のみ */
+  OFFER_TYPE_PAID: 'レンタル・購入のみ',
 } as const;
 
 /**

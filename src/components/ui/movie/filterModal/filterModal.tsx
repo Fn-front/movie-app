@@ -9,7 +9,13 @@ import { memo, useState, useCallback, useMemo } from 'react';
 
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal/modal';
 import { Button } from '@/components/ui/button/button';
-import { MODAL_TITLES, BUTTON_LABELS, FILTER_LABELS } from '@/constants';
+import {
+  MODAL_TITLES,
+  BUTTON_LABELS,
+  FILTER_LABELS,
+  WATCH_PROVIDERS,
+  type WatchProviderOfferType,
+} from '@/constants';
 import type { DateRange } from '@/features/movies/types';
 
 import styles from './filterModal.module.scss';
@@ -30,11 +36,19 @@ export interface FilterModalProps {
   selectedDateRange: DateRange;
   /** リバイバルフィルタ */
   isRevivalFilter: boolean | undefined;
+  /** 公開種別。配信サービスの絞り込みは streaming でのみ意味を持つ */
+  releaseType: 'theatrical' | 'streaming';
+  /** 選択中の配信プロバイダーID */
+  selectedWatchProviderIds: number[];
+  /** 選択中の提供形態（空配列なら全形態） */
+  selectedOfferTypes: WatchProviderOfferType[];
   /** 適用コールバック */
   onApply: (
     genreIds: number[],
     dateRange: DateRange,
     isRevival: boolean | undefined,
+    watchProviderIds: number[],
+    offerTypes: WatchProviderOfferType[],
   ) => void;
 }
 
@@ -46,16 +60,24 @@ const FilterModalContent = memo<{
   selectedGenreIds: number[];
   selectedDateRange: DateRange;
   isRevivalFilter: boolean | undefined;
+  releaseType: 'theatrical' | 'streaming';
+  selectedWatchProviderIds: number[];
+  selectedOfferTypes: WatchProviderOfferType[];
   onApply: (
     genreIds: number[],
     dateRange: DateRange,
     isRevival: boolean | undefined,
+    watchProviderIds: number[],
+    offerTypes: WatchProviderOfferType[],
   ) => void;
 }>(function FilterModalContent({
   genres,
   selectedGenreIds,
   selectedDateRange,
   isRevivalFilter,
+  releaseType,
+  selectedWatchProviderIds,
+  selectedOfferTypes,
   onApply,
 }) {
   const [tempSelectedIds, setTempSelectedIds] =
@@ -65,6 +87,15 @@ const FilterModalContent = memo<{
   const [tempIsRevival, setTempIsRevival] = useState<boolean | undefined>(
     isRevivalFilter,
   );
+  const [tempWatchProviderIds, setTempWatchProviderIds] = useState<number[]>(
+    selectedWatchProviderIds,
+  );
+  const [tempOfferTypes, setTempOfferTypes] =
+    useState<WatchProviderOfferType[]>(selectedOfferTypes);
+
+  // 配信サービスは movie_cache の streaming 行にしか入らない。劇場公開タブで
+  // 出しても必ず0件になるため、選べないようにする
+  const showWatchProviders = releaseType === 'streaming';
 
   const sortedGenres = useMemo(() => {
     return Object.entries(genres)
@@ -110,15 +141,50 @@ const FilterModalContent = memo<{
     [],
   );
 
+  const handleWatchProviderToggle = useCallback((providerId: number) => {
+    setTempWatchProviderIds((prev) =>
+      prev.includes(providerId)
+        ? prev.filter((id) => id !== providerId)
+        : [...prev, providerId],
+    );
+  }, []);
+
+  const handleOfferTypeChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      // 「すべて」は空配列で表す（APIは未指定を全形態として扱う）
+      if (value === 'all') setTempOfferTypes([]);
+      else if (value === 'flatrate') setTempOfferTypes(['flatrate']);
+      else setTempOfferTypes(['rent', 'buy']);
+    },
+    [],
+  );
+
   const handleClear = useCallback(() => {
     setTempSelectedIds([]);
     setTempDateRange({});
     setTempIsRevival(undefined);
+    setTempWatchProviderIds([]);
+    setTempOfferTypes([]);
   }, []);
 
   const handleApply = useCallback(() => {
-    onApply(tempSelectedIds, tempDateRange, tempIsRevival);
-  }, [onApply, tempSelectedIds, tempDateRange, tempIsRevival]);
+    onApply(
+      tempSelectedIds,
+      tempDateRange,
+      tempIsRevival,
+      showWatchProviders ? tempWatchProviderIds : [],
+      showWatchProviders ? tempOfferTypes : [],
+    );
+  }, [
+    onApply,
+    tempSelectedIds,
+    tempDateRange,
+    tempIsRevival,
+    tempWatchProviderIds,
+    tempOfferTypes,
+    showWatchProviders,
+  ]);
 
   return (
     <>
@@ -204,6 +270,76 @@ const FilterModalContent = memo<{
           </fieldset>
         </div>
 
+        {showWatchProviders && (
+          <div className={styles.c_filter__section}>
+            <h3 className={styles.c_filter__section_title}>
+              {FILTER_LABELS.WATCH_PROVIDER}
+            </h3>
+            <fieldset className={styles.c_filter__revival}>
+              <legend className={styles.c_filter__visually_hidden}>
+                {FILTER_LABELS.OFFER_TYPE_FILTER}
+              </legend>
+              <label className={styles.c_filter__radio_item}>
+                <input
+                  type='radio'
+                  name='offerType'
+                  value='all'
+                  checked={tempOfferTypes.length === 0}
+                  onChange={handleOfferTypeChange}
+                  className={styles.c_filter__radio}
+                />
+                <span className={styles.c_filter__label}>
+                  {FILTER_LABELS.ALL}
+                </span>
+              </label>
+              <label className={styles.c_filter__radio_item}>
+                <input
+                  type='radio'
+                  name='offerType'
+                  value='flatrate'
+                  checked={
+                    tempOfferTypes.length === 1 &&
+                    tempOfferTypes[0] === 'flatrate'
+                  }
+                  onChange={handleOfferTypeChange}
+                  className={styles.c_filter__radio}
+                />
+                <span className={styles.c_filter__label}>
+                  {FILTER_LABELS.OFFER_TYPE_FLATRATE}
+                </span>
+              </label>
+              <label className={styles.c_filter__radio_item}>
+                <input
+                  type='radio'
+                  name='offerType'
+                  value='paid'
+                  checked={tempOfferTypes.length === 2}
+                  onChange={handleOfferTypeChange}
+                  className={styles.c_filter__radio}
+                />
+                <span className={styles.c_filter__label}>
+                  {FILTER_LABELS.OFFER_TYPE_PAID}
+                </span>
+              </label>
+            </fieldset>
+            <div className={styles.c_filter__tag_grid}>
+              {WATCH_PROVIDERS.map((provider) => (
+                <label key={provider.id} className={styles.c_filter__tag}>
+                  <input
+                    type='checkbox'
+                    checked={tempWatchProviderIds.includes(provider.id)}
+                    onChange={() => handleWatchProviderToggle(provider.id)}
+                    className={styles.c_filter__tag_input}
+                  />
+                  <span className={styles.c_filter__tag_label}>
+                    {provider.name}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className={styles.c_filter__section}>
           <h3 className={styles.c_filter__section_title}>
             {FILTER_LABELS.GENRE}
@@ -249,6 +385,9 @@ export const FilterModal = memo<FilterModalProps>(function FilterModal({
   selectedGenreIds,
   selectedDateRange,
   isRevivalFilter,
+  releaseType,
+  selectedWatchProviderIds,
+  selectedOfferTypes,
   onApply,
 }) {
   return (
@@ -265,6 +404,9 @@ export const FilterModal = memo<FilterModalProps>(function FilterModal({
           selectedGenreIds={selectedGenreIds}
           selectedDateRange={selectedDateRange}
           isRevivalFilter={isRevivalFilter}
+          releaseType={releaseType}
+          selectedWatchProviderIds={selectedWatchProviderIds}
+          selectedOfferTypes={selectedOfferTypes}
           onApply={onApply}
         />
       )}

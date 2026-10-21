@@ -99,6 +99,8 @@ const createMockMovieList = (
   selectedGenreIds: [],
   dateRange: {},
   isRevivalFilter: undefined,
+  selectedWatchProviderIds: [],
+  selectedOfferTypes: [],
   isFilterModalOpen: false,
   handleSortChange: jest.fn(),
   handleReleaseTypeChange: jest.fn(),

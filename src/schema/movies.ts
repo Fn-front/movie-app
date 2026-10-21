@@ -4,7 +4,12 @@
 
 import { z } from 'zod';
 
-import { PAGINATION, SEARCH_VALIDATION } from '@/constants';
+import {
+  PAGINATION,
+  SEARCH_VALIDATION,
+  WATCH_PROVIDER_OFFER_TYPES,
+} from '@/constants';
+import { isSelectableWatchProvider } from '@/lib/movies/watchProviders';
 
 /**
  * 映画一覧クエリパラメータのバリデーションスキーマ
@@ -46,6 +51,23 @@ export const moviesQuerySchema = z.object({
   is_revival: z
     .enum(['true', 'false'])
     .transform((val) => val === 'true')
+    .optional(),
+  // 配信サービスでの絞り込み。選択肢に無いIDはクエリに乗せても意味が無いため、
+  // 既知のプロバイダーだけを残す（空になったら未指定として扱う）
+  watch_providers: z
+    .string()
+    .regex(
+      /^\d+(,\d+)*$/,
+      'プロバイダーIDはカンマ区切りの正の整数で指定してください',
+    )
+    .transform((val) =>
+      val.split(',').map(Number).filter(isSelectableWatchProvider),
+    )
+    .optional(),
+  offer_types: z
+    .string()
+    .transform((val) => val.split(','))
+    .pipe(z.array(z.enum(WATCH_PROVIDER_OFFER_TYPES)))
     .optional(),
 });
 

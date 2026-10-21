@@ -870,6 +870,7 @@ describe('TMDb APIクライアント', () => {
         isCurrentlyStreaming: false,
         digitalReleaseDate: null,
         keywordIds: [],
+        watchProviderIds: { flatrate: [], rent: [], buy: [] },
       });
     });
 

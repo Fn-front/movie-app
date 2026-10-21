@@ -253,6 +253,9 @@ export type Database = {
           updated_at: string;
           vote_average: number | null;
           vote_count: number;
+          watch_provider_buy: Json | null;
+          watch_provider_flatrate: Json | null;
+          watch_provider_rent: Json | null;
         };
         Insert: {
           backdrop_path?: string | null;
@@ -272,6 +275,9 @@ export type Database = {
           updated_at?: string;
           vote_average?: number | null;
           vote_count?: number;
+          watch_provider_buy?: Json | null;
+          watch_provider_flatrate?: Json | null;
+          watch_provider_rent?: Json | null;
         };
         Update: {
           backdrop_path?: string | null;
@@ -291,6 +297,9 @@ export type Database = {
           updated_at?: string;
           vote_average?: number | null;
           vote_count?: number;
+          watch_provider_buy?: Json | null;
+          watch_provider_flatrate?: Json | null;
+          watch_provider_rent?: Json | null;
         };
         Relationships: [];
       };

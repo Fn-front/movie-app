@@ -373,7 +373,18 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
             </div>
           </div>
 
-          <div className={styles.c_movie_detail__scrollable}>
+          {/*
+            max-height 固定のスクロール領域。フォーカス可能な子孫はキャストの
+            リンクだけなので、キャスト情報が無い作品ではゼロになり、
+            キーボードでスクロールできなくなる（axe: scrollable-region-focusable）。
+            領域自体にタブストップを置いて到達できるようにする。
+          */}
+          <div
+            className={styles.c_movie_detail__scrollable}
+            role='region'
+            aria-label={ARIA_LABELS.MOVIE_DETAIL_INFO}
+            tabIndex={0}
+          >
             {movie.overview && (
               <div className={styles.c_movie_detail__overview}>
                 <h4 className={styles.c_movie_detail__section_title}>

@@ -48,6 +48,8 @@ export const ARIA_LABELS = {
   RESEND_OTP: '確認コードを再送信',
   /** 予告動画を再生 */
   PLAY_TRAILER: '予告動画を再生',
+  /** 映画詳細のスクロール領域（あらすじ・詳細情報・キャスト） */
+  MOVIE_DETAIL_INFO: '作品情報',
 } as const;
 
 /**

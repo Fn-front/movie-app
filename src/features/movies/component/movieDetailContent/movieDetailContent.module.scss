@@ -88,6 +88,13 @@
   &__scrollable {
     overflow-y: auto;
     max-height: 300px;
+
+    // tabindex="0" でタブストップになるため、到達したことが見えるようにする
+    &:focus-visible {
+      outline: $border-width-2 solid $primary-500;
+      outline-offset: 2px;
+      border-radius: $border-radius-sm;
+    }
   }
 
   // メインレイアウト（ポスター + 情報）

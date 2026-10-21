@@ -9,6 +9,7 @@ import {
   NOW_PLAYING_SYNC_MAX_PAGES,
   RELEASE_TYPE,
 } from '@/constants/movies';
+import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { getNowPlayingMovies, hasExcludedKeyword } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
@@ -23,7 +24,7 @@ export interface NowPlayingSyncResult {
   upserted: number;
   /** is_now_playing をクリアした映画数 */
   cleared: number;
-  /** スキップされた映画数（adult・除外言語・除外キーワード） */
+  /** スキップされた映画数（adult・除外言語・除外キーワード・ライブ興行） */
   skipped: number;
   /** エラーメッセージ */
   errors: string[];
@@ -93,6 +94,12 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
     try {
       // 除外キーワードチェック
       if (await hasExcludedKeyword(movie.id)) {
+        result.skipped++;
+        continue;
+      }
+
+      // ライブビューイング・コンサート映像・舞台中継を保存しない
+      if (await isConcertFilm(movie)) {
         result.skipped++;
         continue;
       }

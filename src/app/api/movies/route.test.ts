@@ -8,7 +8,9 @@
 
 import {
   CACHE_DURATION_HOURS,
+  DOCUMENTARY_GENRE_ID,
   MOVIES_ERROR_MESSAGES,
+  MUSIC_GENRE_ID,
 } from '@/constants/movies';
 import { SEARCH_VALIDATION } from '@/constants/search';
 
@@ -41,9 +43,11 @@ const mockGetGenres = jest.fn().mockResolvedValue([
   { id: 28, name: 'アクション' },
   { id: 35, name: 'コメディ' },
 ]);
+const mockGetMovieKeywordIds = jest.fn().mockResolvedValue([]);
 jest.mock('@/lib/tmdb/tmdb', () => ({
   discoverMovies: (...args: unknown[]) => mockDiscoverMovies(...args),
   getGenres: (...args: unknown[]) => mockGetGenres(...args),
+  getMovieKeywordIds: (...args: unknown[]) => mockGetMovieKeywordIds(...args),
 }));
 
 /**
@@ -1869,6 +1873,94 @@ describe('GET /api/movies', () => {
     for (const result of mockSupabaseClient!.from.mock.results) {
       expect(result.value.upsert).not.toHaveBeenCalled();
     }
+  });
+
+  // === ライブ興行作品の除外 ===
+
+  it('Discover同期でライブ興行作品をmovie_cacheに保存しない', async () => {
+    const handler = await loadGET();
+
+    const baseMovie = {
+      adult: false,
+      original_language: 'ja',
+      vote_average: 7.0,
+      vote_count: 10,
+      popularity: 50,
+      poster_path: null,
+      backdrop_path: null,
+      release_date: '2026-10-24',
+      overview: '',
+    };
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          ...baseMovie,
+          id: 900,
+          title: "투모로우바이투게더 월드 투어 ‘액트 : 투모로우'",
+          genre_ids: [MUSIC_GENRE_ID, DOCUMENTARY_GENRE_ID],
+        },
+        {
+          ...baseMovie,
+          id: 901,
+          title: '通常の劇映画',
+          genre_ids: [28],
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 900 }, { id: 901 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    const upsertedMovies = (
+      mockSupabaseClient!.rpc.mock.calls[0][1] as { movies: { id: number }[] }
+    ).movies;
+    expect(upsertedMovies.map((movie) => movie.id)).toEqual([901]);
+  });
+
+  it('同じジャンル構成でも音楽ドキュメンタリーはmovie_cacheに保存する', async () => {
+    const handler = await loadGET();
+
+    mockGetMovieKeywordIds.mockResolvedValue([165194]); // music documentary
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          id: 902,
+          title: 'オアシス：ドント・ルック・バック・イン・アンガー',
+          genre_ids: [DOCUMENTARY_GENRE_ID, MUSIC_GENRE_ID],
+          adult: false,
+          original_language: 'en',
+          vote_average: 7.0,
+          vote_count: 10,
+          popularity: 50,
+          poster_path: null,
+          backdrop_path: null,
+          release_date: '2026-09-11',
+          overview: '',
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 902 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    const upsertedMovies = (
+      mockSupabaseClient!.rpc.mock.calls[0][1] as { movies: { id: number }[] }
+    ).movies;
+    expect(upsertedMovies.map((movie) => movie.id)).toEqual([902]);
   });
 
   // === vote_count ===

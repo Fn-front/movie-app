@@ -7,6 +7,7 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
   searchMovies: jest.fn(),
   hasExcludedKeyword: jest.fn(),
   getJpTheatricalReleaseDates: jest.fn(),
+  getMovieKeywordIds: jest.fn().mockResolvedValue([]),
 }));
 
 jest.mock('@supabase/supabase-js', () => ({
@@ -19,10 +20,12 @@ jest.mock('./eiga', () => ({
 }));
 
 import { createClient } from '@supabase/supabase-js';
+import { DOCUMENTARY_GENRE_ID, MUSIC_GENRE_ID } from '@/constants/movies';
 import {
   searchMovies,
   hasExcludedKeyword,
   getJpTheatricalReleaseDates,
+  getMovieKeywordIds,
 } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
@@ -675,6 +678,66 @@ describe('syncEigaMovies', () => {
     expect(result.skipped).toBe(1);
     expect(result.added).toBe(0);
     expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('ライブ興行作品をpost-filterでスキップする', async () => {
+    const eigaMovie: EigaMovie = {
+      title: 'ヨルシカ LIVE「盗作」',
+      releaseDate: '2026-10-09',
+      eigaUrl: null,
+    };
+
+    mockedFetchEigaMovies.mockResolvedValue([eigaMovie]);
+    mockedSearchMovies.mockResolvedValue({
+      results: [
+        createMockMovie({
+          id: 610,
+          title: 'ヨルシカ LIVE「盗作」',
+          genre_ids: [MUSIC_GENRE_ID],
+          release_date: '2026-10-09',
+        }),
+      ],
+      page: 1,
+      total_pages: 1,
+      total_results: 1,
+    });
+    mockedHasExcludedKeyword.mockResolvedValue(false);
+
+    const result = await syncEigaMovies();
+
+    expect(result.skipped).toBe(1);
+    expect(result.added).toBe(0);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('同じジャンル構成でも音楽ドキュメンタリーは保存する', async () => {
+    const eigaMovie: EigaMovie = {
+      title: 'オアシス：ドント・ルック・バック・イン・アンガー',
+      releaseDate: '2026-09-11',
+      eigaUrl: null,
+    };
+
+    mockedFetchEigaMovies.mockResolvedValue([eigaMovie]);
+    mockedSearchMovies.mockResolvedValue({
+      results: [
+        createMockMovie({
+          id: 611,
+          title: 'オアシス：ドント・ルック・バック・イン・アンガー',
+          genre_ids: [MUSIC_GENRE_ID, DOCUMENTARY_GENRE_ID],
+          release_date: '2026-09-11',
+        }),
+      ],
+      page: 1,
+      total_pages: 1,
+      total_results: 1,
+    });
+    mockedHasExcludedKeyword.mockResolvedValue(false);
+    (getMovieKeywordIds as jest.Mock).mockResolvedValue([165194]);
+
+    const result = await syncEigaMovies();
+
+    expect(result.added).toBe(1);
+    expect(mockUpsert).toHaveBeenCalled();
   });
 
   it('リバイバル上映の場合、iCalの日付をrelease_dateとして使用する', async () => {

@@ -86,6 +86,8 @@ export async function GET(request: Request) {
       .select(WATCHLIST_SELECT)
       .eq('user_id', session.user.id)
       .is('deleted_at', null)
+      // カレンダーは「これから見る作品の公開日を追う」道具なので、視聴済みは出さない
+      .is('watched_at', null)
       .not('release_date', 'is', null)
       .gte('release_date', startDate)
       .lt('release_date', endDate)

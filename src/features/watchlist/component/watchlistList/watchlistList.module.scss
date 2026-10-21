@@ -85,6 +85,53 @@
     @include focus-visible;
   }
 
+  // 視聴済みボタンは削除ボタンの左隣に置く
+  &__watched_button {
+    position: absolute;
+    top: $spacing-2;
+    right: calc($spacing-2 + 28px + $spacing-1);
+  }
+
+  &__watched {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: $border-radius-full;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: $text-inverse;
+    font-size: $font-size-base;
+    cursor: pointer;
+    transition: $transition-all;
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.8);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    @include focus-visible;
+  }
+
+  // 視聴済みであることは色だけでなく文字でも示す
+  &__watched_badge {
+    position: absolute;
+    bottom: $spacing-2;
+    left: $spacing-2;
+    padding: 2px $spacing-2;
+    border-radius: $border-radius-full;
+    background-color: color-alpha(--primary-500, 90%);
+    color: $text-inverse;
+    font-size: $font-size-2xs;
+    font-weight: $font-weight-medium;
+  }
+
   &__info {
     display: flex;
     flex: 1;

@@ -932,6 +932,7 @@ export type Database = {
           title: string;
           tmdb_movie_id: number;
           user_id: string;
+          watched_at: string | null;
         };
         Insert: {
           added_at?: string;
@@ -944,6 +945,7 @@ export type Database = {
           title: string;
           tmdb_movie_id: number;
           user_id: string;
+          watched_at?: string | null;
         };
         Update: {
           added_at?: string;
@@ -956,6 +958,7 @@ export type Database = {
           title?: string;
           tmdb_movie_id?: number;
           user_id?: string;
+          watched_at?: string | null;
         };
         Relationships: [
           {
@@ -989,8 +992,14 @@ export type Database = {
         Returns: number;
       };
       get_award_years: { Args: never; Returns: number[] };
-      get_watchlist_by_proximity: {
-        Args: { p_limit: number; p_offset?: number; p_user_id: string };
+      get_watchlist_sorted: {
+        Args: {
+          p_exclude_watched?: boolean;
+          p_limit: number;
+          p_offset?: number;
+          p_sort: string;
+          p_user_id: string;
+        };
         Returns: {
           added_at: string;
           id: string;
@@ -999,6 +1008,7 @@ export type Database = {
           title: string;
           tmdb_movie_id: number;
           total_count: number;
+          watched_at: string;
         }[];
       };
       sync_now_showing_movies: { Args: { movies: Json }; Returns: number };

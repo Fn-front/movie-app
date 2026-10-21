@@ -19,6 +19,7 @@ const createMockItem = (
   poster_path: '/test.jpg',
   release_date: '2026-03-01',
   added_at: '2026-03-10T00:00:00Z',
+  watched_at: null,
   ...overrides,
 });
 

@@ -11,6 +11,9 @@ import { Select } from '@/components/ui/select/select';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { WatchlistList } from '@/features/watchlist/component/watchlistList/watchlistList';
+import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
+import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
+import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 import {
   useWatchlistPage,
   WATCHLIST_PAGE_SORT_OPTIONS,
@@ -36,9 +39,20 @@ export const WatchlistPage = memo(function WatchlistPage() {
     hasNextPage,
     fetchNextPage,
     removeFromWatchlist,
+    setWatched,
+    isUpdatingWatched,
     sortBy,
     handleSortChange,
   } = useWatchlistPage();
+
+  const {
+    modalState: favoriteModalState,
+    handleFavoriteToggle,
+    closeModal: closeFavoriteModal,
+    handleModalSubmit: handleFavoriteModalSubmit,
+    handleDelete: handleFavoriteDelete,
+    getFavoriteInfo,
+  } = useFavoriteToggle();
 
   const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
 
@@ -49,6 +63,31 @@ export const WatchlistPage = memo(function WatchlistPage() {
   const handleDetailModalClose = useCallback(() => {
     setSelectedMovieId(null);
   }, []);
+
+  /**
+   * 視聴済みの付け外し。
+   *
+   * 視聴済みにしたときだけ評価モーダルを開く。登録せずに閉じても視聴済みは残る
+   * （お気に入り登録は任意）ので、ここでは視聴済みの更新を先に確定させる。
+   */
+  const handleWatchedToggle = useCallback(
+    (item: WatchlistItem, watched: boolean) => {
+      setWatched(item.id, watched);
+
+      if (!watched) return;
+
+      handleFavoriteToggle(
+        {
+          id: item.tmdb_movie_id,
+          title: item.title,
+          poster_path: item.poster_path,
+          release_date: item.release_date,
+        },
+        getFavoriteInfo(item.tmdb_movie_id),
+      );
+    },
+    [setWatched, handleFavoriteToggle, getFavoriteInfo],
+  );
 
   const selectedMovieTitle = useMemo(
     () =>
@@ -81,6 +120,8 @@ export const WatchlistPage = memo(function WatchlistPage() {
         isLoading={isLoading}
         onClick={handleMovieClick}
         onDelete={removeFromWatchlist}
+        onWatchedToggle={handleWatchedToggle}
+        isWatchedUpdating={isUpdatingWatched}
       />
 
       {hasNextPage && (
@@ -98,6 +139,15 @@ export const WatchlistPage = memo(function WatchlistPage() {
         title={selectedMovieTitle}
         showFinancialInfo={false}
         onClose={handleDetailModalClose}
+      />
+
+      <FavoriteRatingModal
+        isOpen={favoriteModalState.isOpen}
+        onClose={closeFavoriteModal}
+        movieTitle={favoriteModalState.movie?.title ?? ''}
+        currentFavorite={favoriteModalState.currentFavorite}
+        onSubmit={handleFavoriteModalSubmit}
+        onDelete={handleFavoriteDelete}
       />
     </div>
   );

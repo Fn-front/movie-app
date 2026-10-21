@@ -205,6 +205,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         poster_path: newItem.poster_path ?? null,
         release_date: newItem.release_date ?? null,
         added_at: new Date().toISOString(),
+        watched_at: null,
       };
 
       const previousDataMap = optimisticAddToAllCaches(

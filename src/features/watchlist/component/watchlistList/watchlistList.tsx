@@ -7,12 +7,17 @@
 
 import { memo, useCallback } from 'react';
 import Image from 'next/image';
+import { IoCheckmarkCircle, IoCheckmarkCircleOutline } from 'react-icons/io5';
 
 import { Card } from '@/components/ui/card/card';
 import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
-import { IMAGE_SIZES, DISPLAY_LIMITS } from '@/constants';
+import {
+  IMAGE_SIZES,
+  DISPLAY_LIMITS,
+  EMPTY_MESSAGES,
+  WATCHLIST_WATCHED_LABELS,
+} from '@/constants';
 import { getTMDbPosterUrl } from '@/utils/image';
-import { EMPTY_MESSAGES } from '@/constants';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 
 import styles from './watchlistList.module.scss';
@@ -29,16 +34,25 @@ export interface WatchlistListProps {
   onClick?: (tmdbMovieId: number) => void;
   /** 削除コールバック */
   onDelete?: (id: string) => void;
+  /** 視聴済みの付け外しコールバック */
+  onWatchedToggle?: (item: WatchlistItem, watched: boolean) => void;
+  /** 視聴済みの更新中 */
+  isWatchedUpdating?: boolean;
 }
 
 /**
  * WatchlistListコンポーネント
+ *
+ * 視聴済みを最下部へ送る並びはサーバー側（get_watchlist_sorted）の責務。
+ * ここでは受け取った順にそのまま描画する。
  */
 export const WatchlistList = memo<WatchlistListProps>(function WatchlistList({
   watchlist,
   isLoading,
   onClick,
   onDelete,
+  onWatchedToggle,
+  isWatchedUpdating = false,
 }) {
   if (isLoading) {
     return (
@@ -64,6 +78,8 @@ export const WatchlistList = memo<WatchlistListProps>(function WatchlistList({
           item={item}
           onClick={onClick}
           onDelete={onDelete}
+          onWatchedToggle={onWatchedToggle}
+          isWatchedUpdating={isWatchedUpdating}
         />
       ))}
     </div>
@@ -82,6 +98,10 @@ interface WatchlistTileProps {
   onClick?: (tmdbMovieId: number) => void;
   /** 削除コールバック */
   onDelete?: (id: string) => void;
+  /** 視聴済みの付け外しコールバック */
+  onWatchedToggle?: (item: WatchlistItem, watched: boolean) => void;
+  /** 視聴済みの更新中 */
+  isWatchedUpdating?: boolean;
 }
 
 /**
@@ -91,8 +111,11 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
   item,
   onClick,
   onDelete,
+  onWatchedToggle,
+  isWatchedUpdating = false,
 }) {
   const posterUrl = getTMDbPosterUrl(item.poster_path);
+  const isWatched = item.watched_at !== null;
 
   const handleClick = useCallback(() => {
     onClick?.(item.tmdb_movie_id);
@@ -114,6 +137,26 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
       onDelete?.(item.id);
     },
     [item.id, onDelete],
+  );
+
+  const handleWatchedToggle = useCallback(
+    (e: React.MouseEvent) => {
+      // タイル本体のクリック（詳細モーダル）に伝播させない
+      e.stopPropagation();
+      onWatchedToggle?.(item, !isWatched);
+    },
+    [item, isWatched, onWatchedToggle],
+  );
+
+  const handleWatchedKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        onWatchedToggle?.(item, !isWatched);
+      }
+    },
+    [item, isWatched, onWatchedToggle],
   );
 
   const handleDeleteKeyDown = useCallback(
@@ -149,6 +192,37 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
           />
         ) : (
           <div className={styles.c_watchlist_tile__no_image}>No Image</div>
+        )}
+        {isWatched && (
+          <span
+            className={styles.c_watchlist_tile__watched_badge}
+            aria-hidden='true'
+          >
+            {WATCHLIST_WATCHED_LABELS.BADGE}
+          </span>
+        )}
+        {onWatchedToggle && (
+          <div className={styles.c_watchlist_tile__watched_button}>
+            <button
+              type='button'
+              onClick={handleWatchedToggle}
+              onKeyDown={handleWatchedKeyDown}
+              disabled={isWatchedUpdating}
+              className={styles.c_watchlist_tile__watched}
+              aria-label={`${item.title}を${
+                isWatched
+                  ? WATCHLIST_WATCHED_LABELS.UNMARK
+                  : WATCHLIST_WATCHED_LABELS.MARK
+              }`}
+              aria-pressed={isWatched}
+            >
+              {isWatched ? (
+                <IoCheckmarkCircle aria-hidden='true' />
+              ) : (
+                <IoCheckmarkCircleOutline aria-hidden='true' />
+              )}
+            </button>
+          </div>
         )}
         {onDelete && (
           <div className={styles.c_watchlist_tile__delete_button}>

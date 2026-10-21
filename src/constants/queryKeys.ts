@@ -22,7 +22,8 @@ export const filterKeys = {
 
 export const watchlistKeys = {
   all: ['watchlist'] as const,
-  list: (params?: { sort?: string }) => ['watchlist', 'list', params] as const,
+  list: (params?: { sort?: string; excludeWatched?: boolean }) =>
+    ['watchlist', 'list', params] as const,
 };
 
 export const calendarKeys = {

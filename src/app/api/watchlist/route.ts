@@ -35,6 +35,7 @@ export const GET = withAuth(
       cursor: searchParams.get('cursor') ?? undefined,
       limit: searchParams.get('limit') ?? undefined,
       sort: searchParams.get('sort') ?? undefined,
+      exclude_watched: searchParams.get('exclude_watched') ?? undefined,
     });
 
     if (!queryResult.success) {
@@ -51,85 +52,49 @@ export const GET = withAuth(
       );
     }
 
-    const { cursor, limit, sort } = queryResult.data;
+    const { cursor, limit, sort, exclude_watched } = queryResult.data;
 
-    if (sort === 'release_date_proximity') {
-      // 公開日が今日に近い順（ABS(release_date - NOW())昇順、NULLは末尾）
-      // Supabase SDKではカスタムORDERが使えないためRPCまたはraw SQLを使用
-      const offset = cursor ? parseInt(cursor, 10) : 0;
+    // 並び替えは get_watchlist_sorted（RPC）に一本化している。
+    // 視聴済みを最下部に送ると並び順の主キーが watched_at になり、
+    // added_at だけのキーセットカーソルでは次ページの境界を表せないため、
+    // 両ソートともオフセットページングにそろえた。
+    const offset = cursor ? Number.parseInt(cursor, 10) : 0;
 
-      if (Number.isNaN(offset)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: ERROR_CODE.VALIDATION_ERROR,
-              message: WATCHLIST_ERROR_MESSAGES.INVALID_QUERY,
-            },
-          },
-          { status: HTTP_STATUS.BAD_REQUEST },
-        );
-      }
-
-      const { data, error } = await supabase.rpc('get_watchlist_by_proximity', {
-        p_user_id: session.user.id,
-        p_limit: limit,
-        p_offset: offset,
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      const items = (data ?? []) as Array<
-        WatchlistItem & { total_count: number }
-      >;
-      const totalCount = items.length > 0 ? items[0].total_count : 0;
-      const hasMore = offset + limit < totalCount;
-      const nextCursor = hasMore ? String(offset + limit) : null;
-
-      // total_count をレスポンスから除外
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const watchlist = items.map(({ total_count, ...item }) => item);
-
+    if (Number.isNaN(offset) || offset < 0) {
       return NextResponse.json(
         {
-          success: true,
-          data: {
-            watchlist,
-            next_cursor: nextCursor,
-            has_more: hasMore,
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: WATCHLIST_ERROR_MESSAGES.INVALID_QUERY,
           },
         },
-        { status: HTTP_STATUS.OK },
+        { status: HTTP_STATUS.BAD_REQUEST },
       );
     }
 
-    // デフォルト: 追加日順（既存ロジック）
-    let query = supabase
-      .from('watchlist')
-      .select(WATCHLIST_SELECT)
-      .eq('user_id', session.user.id)
-      .is('deleted_at', null);
-
-    if (cursor) {
-      query = query.lt('added_at', cursor);
-    }
-
-    const { data, error } = await query
-      .order('added_at', { ascending: false })
-      .limit(limit + 1);
+    const { data, error } = await supabase.rpc('get_watchlist_sorted', {
+      p_user_id: session.user.id,
+      p_sort: sort,
+      p_limit: limit,
+      p_offset: offset,
+      p_exclude_watched: exclude_watched,
+    });
 
     if (error) {
       throw error;
     }
 
-    const items = data ?? [];
-    const hasMore = items.length > limit;
-    const watchlist = hasMore ? items.slice(0, limit) : items;
-    const nextCursor = hasMore
-      ? watchlist[watchlist.length - 1].added_at
-      : null;
+    const items = (data ?? []) as Array<
+      WatchlistItem & { total_count: number }
+    >;
+    const totalCount = items.length > 0 ? Number(items[0].total_count) : 0;
+    const hasMore = offset + limit < totalCount;
+    const nextCursor = hasMore ? String(offset + limit) : null;
+
+    // total_count をレスポンスから除外
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const watchlist = items.map(({ total_count, ...item }) => item);
 
     return NextResponse.json(
       {

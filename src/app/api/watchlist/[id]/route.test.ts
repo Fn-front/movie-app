@@ -8,7 +8,7 @@
 
 import { RATE_LIMIT_CONFIG, WATCHLIST_SUCCESS_MESSAGES } from '@/constants';
 
-import { DELETE } from './route';
+import { DELETE, PATCH } from './route';
 
 // --- Constants ---
 
@@ -233,5 +233,197 @@ describe('DELETE /api/watchlist/:id', () => {
         RATE_LIMIT_CONFIG.WRITE_WATCHLIST.windowMinutes,
       );
     });
+  });
+});
+
+describe('PATCH /api/watchlist/:id', () => {
+  /** update に渡された値を捕まえるためのモック */
+  const createUpdateMock = (result: {
+    data: unknown;
+    error: unknown;
+  }): { updateSpy: jest.Mock } => {
+    const updateSpy = jest.fn().mockReturnValue({
+      eq: () => ({
+        eq: () => ({
+          is: () => ({
+            select: () => ({
+              single: () => result,
+            }),
+          }),
+        }),
+      }),
+    });
+    mockFrom.mockReturnValue({ update: updateSpy });
+    return { updateSpy };
+  };
+
+  const createPatchRequest = (id: string, body: unknown) => ({
+    request: new Request(`http://localhost/api/watchlist/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+    params: Promise.resolve({ id }),
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      user: { id: 'user-123' },
+    });
+  });
+
+  it('視聴済みにできる', async () => {
+    const { updateSpy } = createUpdateMock({
+      data: { id: VALID_UUID, watched_at: '2026-10-21T00:00:00.000Z' },
+      error: null,
+    });
+
+    const { request, params } = createPatchRequest(VALID_UUID, {
+      watched: true,
+    });
+    const response = await PATCH(request, { params });
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.message).toBe(WATCHLIST_SUCCESS_MESSAGES.MARKED_WATCHED);
+    // watched_at に日時が入る
+    expect(updateSpy).toHaveBeenCalledWith({
+      watched_at: expect.any(String),
+    });
+  });
+
+  it('未視聴に戻せる', async () => {
+    const { updateSpy } = createUpdateMock({
+      data: { id: VALID_UUID, watched_at: null },
+      error: null,
+    });
+
+    const { request, params } = createPatchRequest(VALID_UUID, {
+      watched: false,
+    });
+    const response = await PATCH(request, { params });
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.message).toBe(WATCHLIST_SUCCESS_MESSAGES.UNMARKED_WATCHED);
+    expect(updateSpy).toHaveBeenCalledWith({ watched_at: null });
+  });
+
+  it('更新後のアイテムを返す', async () => {
+    createUpdateMock({
+      data: {
+        id: VALID_UUID,
+        tmdb_movie_id: 100,
+        title: '映画A',
+        watched_at: '2026-10-21T00:00:00.000Z',
+      },
+      error: null,
+    });
+
+    const { request, params } = createPatchRequest(VALID_UUID, {
+      watched: true,
+    });
+    const response = await PATCH(request, { params });
+    const json = await response.json();
+
+    expect(json.data.id).toBe(VALID_UUID);
+    expect(json.data.watched_at).toBe('2026-10-21T00:00:00.000Z');
+  });
+
+  it('視聴済みにしても論理削除はしない', async () => {
+    const { updateSpy } = createUpdateMock({
+      data: { id: VALID_UUID, watched_at: '2026-10-21T00:00:00.000Z' },
+      error: null,
+    });
+
+    const { request, params } = createPatchRequest(VALID_UUID, {
+      watched: true,
+    });
+    await PATCH(request, { params });
+
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.not.objectContaining({ deleted_at: expect.anything() }),
+    );
+  });
+
+  it('不正なID形式で400を返す', async () => {
+    const { request, params } = createPatchRequest('not-a-uuid', {
+      watched: true,
+    });
+    const response = await PATCH(request, { params });
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('watchedが真偽値でない場合400を返す', async () => {
+    const { request, params } = createPatchRequest(VALID_UUID, {
+      watched: 'yes',
+    });
+    const response = await PATCH(request, { params });
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('存在しないIDで404を返す', async () => {
+    createUpdateMock({ data: null, error: { code: 'PGRST116' } });
+
+    const { request, params } = createPatchRequest(OTHER_UUID, {
+      watched: true,
+    });
+    const response = await PATCH(request, { params });
+
+    expect(response.status).toBe(404);
+  });
+
+  it('未認証で401を返す', async () => {
+    (getAuthSession as jest.Mock).mockResolvedValue(null);
+
+    const { request, params } = createPatchRequest(VALID_UUID, {
+      watched: true,
+    });
+    const response = await PATCH(request, { params });
+
+    expect(response.status).toBe(401);
+  });
+
+  it('レート制限超過で429を返す', async () => {
+    mockCheckRateLimit.mockResolvedValue({
+      allowed: false,
+      retryAfterSeconds: 60,
+    });
+
+    const { request, params } = createPatchRequest(VALID_UUID, {
+      watched: true,
+    });
+    const response = await PATCH(request, { params });
+
+    expect(response.status).toBe(429);
+  });
+
+  it('DELETEと同じレート制限プリセットを使う', async () => {
+    createUpdateMock({
+      data: { id: VALID_UUID, watched_at: null },
+      error: null,
+    });
+
+    const { request, params } = createPatchRequest(VALID_UUID, {
+      watched: false,
+    });
+    await PATCH(request, { params });
+
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-123',
+      'write_api_watchlist',
+      RATE_LIMIT_CONFIG.WRITE_WATCHLIST.maxAttempts,
+      RATE_LIMIT_CONFIG.WRITE_WATCHLIST.windowMinutes,
+    );
   });
 });

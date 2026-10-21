@@ -32,6 +32,18 @@ export const watchlistAddSchema = z.object({
 export type WatchlistAddFormData = z.infer<typeof watchlistAddSchema>;
 
 /**
+ * 視聴済み更新のバリデーションスキーマ
+ */
+export const watchlistWatchedSchema = z.object({
+  watched: z.boolean({ error: '視聴済みは真偽値で指定してください' }),
+});
+
+/**
+ * 視聴済み更新フォームの型
+ */
+export type WatchlistWatchedFormData = z.infer<typeof watchlistWatchedSchema>;
+
+/**
  * ウォッチリストソート方式
  */
 export const WATCHLIST_SORT_OPTIONS = [
@@ -59,6 +71,15 @@ export const watchlistQuerySchema = z.object({
       error: `ソートはいずれかで指定してください: ${WATCHLIST_SORT_OPTIONS.join(', ')}`,
     })
     .default('added_at'),
+  /**
+   * 視聴済みを除外するか。サイドバー（公開日が近い映画）で使う。
+   * クライアント側で弾くと上位N件の枠が視聴済みで埋まって表示件数が減るため、
+   * 取得の段階で落とす。
+   */
+  exclude_watched: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
 });
 
 /**

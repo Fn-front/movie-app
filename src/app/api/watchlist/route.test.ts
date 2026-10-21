@@ -11,8 +11,9 @@ import { GET, POST } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
+const mockRpc = jest.fn();
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () => ({ from: mockFrom }),
+  createServiceRoleClient: () => ({ from: mockFrom, rpc: mockRpc }),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -57,39 +58,31 @@ describe('GET /api/watchlist', () => {
     });
   });
 
-  it('ウォッチリスト一覧を取得できる', async () => {
-    const mockItems = [
-      {
-        id: 'wl-1',
-        tmdb_movie_id: 100,
-        title: '映画A',
-        poster_path: '/a.jpg',
-        release_date: '2026-01-01',
-        added_at: '2026-01-10T00:00:00Z',
-      },
-      {
-        id: 'wl-2',
-        tmdb_movie_id: 200,
-        title: '映画B',
-        poster_path: '/b.jpg',
-        release_date: '2026-02-01',
-        added_at: '2026-01-09T00:00:00Z',
-      },
-    ];
-
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            order: () => ({
-              limit: () => ({
-                data: mockItems,
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      }),
+  it('ウォッチリスト一覧をRPC経由で取得できる', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'wl-1',
+          tmdb_movie_id: 100,
+          title: '映画A',
+          poster_path: '/a.jpg',
+          release_date: '2026-01-01',
+          added_at: '2026-01-10T00:00:00Z',
+          watched_at: null,
+          total_count: 2,
+        },
+        {
+          id: 'wl-2',
+          tmdb_movie_id: 200,
+          title: '映画B',
+          poster_path: '/b.jpg',
+          release_date: '2026-02-01',
+          added_at: '2026-01-09T00:00:00Z',
+          watched_at: '2026-03-01T00:00:00Z',
+          total_count: 2,
+        },
+      ],
+      error: null,
     });
 
     const response = await GET(createGetRequest());
@@ -102,62 +95,159 @@ describe('GET /api/watchlist', () => {
     expect(json.data.next_cursor).toBeNull();
   });
 
-  it('カーソルベースページングが正しく動作する', async () => {
-    // 21件返す → has_more = true
-    const mockItems = Array.from({ length: 21 }, (_, i) => ({
-      id: `wl-${i}`,
-      tmdb_movie_id: i,
-      title: `映画${i}`,
-      poster_path: null,
-      release_date: null,
-      added_at: `2026-01-${String(20 - i).padStart(2, '0')}T00:00:00Z`,
-    }));
-
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            order: () => ({
-              limit: () => ({
-                data: mockItems,
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      }),
+  it('視聴済みの日時を返す', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'wl-1',
+          tmdb_movie_id: 100,
+          title: '映画A',
+          poster_path: null,
+          release_date: null,
+          added_at: '2026-01-10T00:00:00Z',
+          watched_at: '2026-03-01T00:00:00Z',
+          total_count: 1,
+        },
+      ],
+      error: null,
     });
 
     const response = await GET(createGetRequest());
     const json = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(json.data.watchlist).toHaveLength(20);
-    expect(json.data.has_more).toBe(true);
-    expect(json.data.next_cursor).toBe(json.data.watchlist[19].added_at);
+    expect(json.data.watchlist[0].watched_at).toBe('2026-03-01T00:00:00Z');
   });
 
-  it('カーソル指定で次ページを取得できる', async () => {
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            lt: () => ({
-              order: () => ({
-                limit: () => ({
-                  data: [],
-                  error: null,
-                }),
-              }),
-            }),
-          }),
-        }),
-      }),
+  it('total_countはレスポンスに含めない', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'wl-1',
+          tmdb_movie_id: 100,
+          title: '映画A',
+          poster_path: null,
+          release_date: null,
+          added_at: '2026-01-10T00:00:00Z',
+          watched_at: null,
+          total_count: 1,
+        },
+      ],
+      error: null,
     });
 
-    const response = await GET(
-      createGetRequest({ cursor: '2026-01-05T00:00:00.000Z' }),
+    const response = await GET(createGetRequest());
+    const json = await response.json();
+
+    expect(json.data.watchlist[0]).not.toHaveProperty('total_count');
+  });
+
+  it('既定では追加日順・視聴済みを含めてRPCを呼ぶ', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    await GET(createGetRequest());
+
+    expect(mockRpc).toHaveBeenCalledWith('get_watchlist_sorted', {
+      p_user_id: 'user-123',
+      p_sort: 'added_at',
+      p_limit: 20,
+      p_offset: 0,
+      p_exclude_watched: false,
+    });
+  });
+
+  it('公開日が近い順を指定できる', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    await GET(createGetRequest({ sort: 'release_date_proximity' }));
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_watchlist_sorted',
+      expect.objectContaining({ p_sort: 'release_date_proximity' }),
     );
+  });
+
+  it('exclude_watched=trueで視聴済みを除外する', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    await GET(createGetRequest({ exclude_watched: 'true' }));
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_watchlist_sorted',
+      expect.objectContaining({ p_exclude_watched: true }),
+    );
+  });
+
+  it('オフセットページングが正しく動作する', async () => {
+    // 全40件中、先頭20件を返す
+    mockRpc.mockResolvedValueOnce({
+      data: Array.from({ length: 20 }, (_, i) => ({
+        id: `wl-${i}`,
+        tmdb_movie_id: i,
+        title: `映画${i}`,
+        poster_path: null,
+        release_date: null,
+        added_at: '2026-01-10T00:00:00Z',
+        watched_at: null,
+        total_count: 40,
+      })),
+      error: null,
+    });
+
+    const response = await GET(createGetRequest());
+    const json = await response.json();
+
+    expect(json.data.watchlist).toHaveLength(20);
+    expect(json.data.has_more).toBe(true);
+    expect(json.data.next_cursor).toBe('20');
+  });
+
+  it('カーソル指定で次ページのオフセットを渡す', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    await GET(createGetRequest({ cursor: '20' }));
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_watchlist_sorted',
+      expect.objectContaining({ p_offset: 20 }),
+    );
+  });
+
+  it('最終ページではhas_moreがfalseになる', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'wl-20',
+          tmdb_movie_id: 20,
+          title: '映画20',
+          poster_path: null,
+          release_date: null,
+          added_at: '2026-01-10T00:00:00Z',
+          watched_at: null,
+          total_count: 21,
+        },
+      ],
+      error: null,
+    });
+
+    const response = await GET(createGetRequest({ cursor: '20' }));
+    const json = await response.json();
+
+    expect(json.data.has_more).toBe(false);
+    expect(json.data.next_cursor).toBeNull();
+  });
+
+  it('数値でないカーソルで400を返す', async () => {
+    const response = await GET(createGetRequest({ cursor: 'not-a-number' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.success).toBe(false);
+  });
+
+  it('0件のときは空配列を返す', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    const response = await GET(createGetRequest());
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -182,47 +272,11 @@ describe('GET /api/watchlist', () => {
   });
 
   it('DBエラー時に500を返す', async () => {
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            order: () => ({
-              limit: () => ({
-                data: null,
-                error: new Error('DB error'),
-              }),
-            }),
-          }),
-        }),
-      }),
-    });
+    mockRpc.mockResolvedValueOnce({ data: null, error: new Error('DB error') });
 
     const response = await GET(createGetRequest());
 
     expect(response.status).toBe(500);
-  });
-
-  it('deleted_atがnullのレコードのみ取得する', async () => {
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            order: () => ({
-              limit: () => ({
-                data: [],
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      }),
-    });
-
-    const response = await GET(createGetRequest());
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.data.watchlist).toHaveLength(0);
   });
 });
 

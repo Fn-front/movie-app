@@ -131,6 +131,16 @@ describe('VideoDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('アクセシビリティ: aria-describedbyを付けない', () => {
+    // Radix は常に aria-describedby を出すため、Dialog.Description を
+    // 描画しないと存在しないIDを指す dangling IDREF になる（#791）
+    const videos = [createVideo()];
+
+    render(<VideoDialog {...defaultProps} videos={videos} />);
+
+    expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-describedby');
+  });
+
   it('アクセシビリティ: aria-labelが設定されている', () => {
     const videos = [createVideo()];
 

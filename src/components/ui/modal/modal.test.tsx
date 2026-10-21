@@ -36,6 +36,26 @@ describe('Modal', () => {
     expect(screen.getByText('確認してください')).toBeInTheDocument();
   });
 
+  it('description指定時はaria-describedbyが説明を指す', () => {
+    render(<Modal {...defaultProps} description='確認してください' />);
+
+    const dialog = screen.getByRole('dialog');
+    const describedBy = dialog.getAttribute('aria-describedby');
+
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy as string)).toHaveTextContent(
+      '確認してください',
+    );
+  });
+
+  it('description未指定時はaria-describedbyを付けない', () => {
+    // Radix は常に aria-describedby を出すため、説明を描画しないと
+    // 存在しないIDを指す dangling IDREF になる（#791）
+    render(<Modal {...defaultProps} />);
+
+    expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-describedby');
+  });
+
   it('閉じるボタンをクリックするとonOpenChangeが呼ばれる', async () => {
     const user = userEvent.setup();
     const handleOpenChange = jest.fn();

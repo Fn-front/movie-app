@@ -161,6 +161,14 @@ export const Modal = memo<ModalProps>(function Modal({
         <Dialog.Overlay className={styles.c_modal__overlay} />
         <Dialog.Content
           className={contentClassNames}
+          /*
+            Radix は常に aria-describedby を出すが、`description` が無いときは
+            Dialog.Description を描画しないため、存在しないIDを指す
+            dangling IDREF になる（ARIA仕様違反・コンソール警告）。
+            説明が無いときだけ属性ごと外す。`description` があるときは
+            Radix が付けたIDをそのまま使うため、何も渡さない。
+          */
+          {...(description ? {} : { 'aria-describedby': undefined })}
           onCloseAutoFocus={handleCloseAutoFocus}
           onPointerDownOutside={(e) => {
             if (!closeOnOverlayClick) {

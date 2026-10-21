@@ -20,6 +20,7 @@ import {
   expireOtpCode,
   maxOutOtpAttempts,
 } from '../helpers/api';
+import { runScopedEmail } from '../helpers/runScope';
 import { TEST_USER } from '../helpers/testUser';
 
 // 同一メールのOTPを直列で扱うためシリアル実行
@@ -37,10 +38,11 @@ const SIGNUP_PASSWORD = 'E2eOtpFlowKx7Qm2';
 test.describe('確認コード(OTP)フロー（未認証）', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  const signupEmail = 'signup-otp-e2e@example.com';
-  const errEmail = 'signup-otp-err-e2e@example.com';
-  const expiredEmail = 'signup-otp-expired-e2e@example.com';
-  const maxAttemptsEmail = 'signup-otp-maxatt-e2e@example.com';
+  // 登録に使うメールは run 単位にする（理由は runScope.ts を参照／#793）
+  const signupEmail = runScopedEmail('signup-otp-e2e');
+  const errEmail = runScopedEmail('signup-otp-err-e2e');
+  const expiredEmail = runScopedEmail('signup-otp-expired-e2e');
+  const maxAttemptsEmail = runScopedEmail('signup-otp-maxatt-e2e');
 
   test.afterAll(async () => {
     await cleanupAuthUser(signupEmail);

@@ -7,9 +7,15 @@
  *
  * 作成も後片付けも Supabase REST（service role）で行う。アプリの
  * 新規登録フローを通すとOTP送信の上限・クールダウンに引っかかるため。
+ *
+ * メールアドレスは `runScopedEmail` で run 単位にする（#793）。固定だと
+ * 共有DBに複数の run が同時に流れたとき、片方の後片付けが実行中の
+ * もう片方のユーザーを消してしまう。
  */
 
 import bcrypt from 'bcryptjs';
+
+import { RUN_CLIENT_IP, RUN_EMAIL_LIKE_PATTERN } from './runScope';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -99,7 +105,8 @@ export async function deleteUserByEmail(email: string): Promise<void> {
 /**
  * そのメールアドレスに紐づくレート制限カウンタだけを消す
  *
- * 全消し（`cleanupAllRateLimits`）は他の spec が依存する状態まで壊すため使わない。
+ * run 全体を対象にする `cleanupRunRateLimits` は、他の spec が依存する
+ * 状態まで壊すため spec の中では使わない。
  *
  * 識別子は2種類ある。
  * - メールアドレスそのもの（OTPの日次送信上限など）
@@ -139,15 +146,44 @@ export async function cleanupRateLimitsForUser(userId: string): Promise<void> {
  * 送信元IP単位のログイン試行カウンタ（`login_ip`）を消す
  *
  * この制限だけは識別子が送信元IPで、テストユーザーに紐づかない。
- * ローカルでも CI でも全 spec が同じIPからログインするため、
- * ログインを繰り返す spec が重なると 20回/15分 の上限に達する。
+ * 同じ run の全 spec が同じIPからログインするため、ログインを繰り返す
+ * spec が重なると 20回/15分 の上限に達する。
  *
- * 識別子ではなく **action_type で絞って** 消すことで、他の spec が使う
- * メールアドレス単位のカウンタには触れない。`login_ip` が非ゼロである
- * ことに依存するテストは無いため、消して問題ない。
+ * action_type に加えて **この run のIPで絞る**（#793）。全 run が
+ * 同じ `::1` を使っていた頃は action_type だけで消しても実害が無かったが、
+ * run ごとにIPを分けた今は他 run のカウンタに触れないようにする。
+ * `login_ip` が非ゼロであることに依存するテストは無いため、消して問題ない。
  */
 export async function cleanupLoginIpRateLimits(): Promise<void> {
-  await fetch(`${SUPABASE_URL}/rest/v1/rate_limits?action_type=eq.login_ip`, {
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/rate_limits?action_type=eq.login_ip` +
+      `&identifier=eq.${encodeURIComponent(RUN_CLIENT_IP)}`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+}
+
+/**
+ * この run が作ったユーザーとそのOTPコードをまとめて物理削除する
+ *
+ * 各 spec も自分のユーザーを消すが、途中で落ちると取りこぼす。
+ * run 単位のメールアドレス規約（`-<E2E_RUN_ID>@example.com`）を使って
+ * 後片付けの追従漏れをまとめて回収する。
+ *
+ * 前方一致で消すが、`example.com` は RFC 2606 で文書・テスト用に予約された
+ * ドメインで実在の利用者は持ち得ず、さらに run ID の接尾辞まで一致する
+ * 必要があるため、実ユーザーを巻き込むことはない。
+ *
+ * `users` の外部キーは ON DELETE CASCADE のため、user_id を持つ関連
+ * テーブルは連鎖削除される。`otp_codes` は user_id を持たないため先に消す。
+ */
+export async function deleteRunScopedUsers(): Promise<void> {
+  const pattern = encodeURIComponent(RUN_EMAIL_LIKE_PATTERN);
+
+  await fetch(`${SUPABASE_URL}/rest/v1/otp_codes?email=like.${pattern}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+  await fetch(`${SUPABASE_URL}/rest/v1/users?email=like.${pattern}`, {
     method: 'DELETE',
     headers: supabaseHeaders,
   });

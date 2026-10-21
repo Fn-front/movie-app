@@ -22,6 +22,7 @@ import {
   cleanupRateLimit,
   cleanupAuthUser,
 } from '../helpers/api';
+import { runScopedEmail } from '../helpers/runScope';
 import { TEST_USER } from '../helpers/testUser';
 
 test.describe.configure({ mode: 'serial' });
@@ -76,8 +77,9 @@ test.describe('パスワード変更OTP（認証済み・action_type password_ch
 test.describe('OTP再送（未認証・新規登録OTP）', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  // TEST_USER と衝突しないユニークなメール（registration OTP）
-  const resendEmail = 'resend-otp-e2e@example.com';
+  // TEST_USER と衝突しないユニークなメール（registration OTP）。
+  // run 単位にして他の run とも衝突させない（理由は runScope.ts を参照／#793）
+  const resendEmail = runScopedEmail('resend-otp-e2e');
 
   test.beforeEach(async () => {
     await cleanupAuthUser(resendEmail);

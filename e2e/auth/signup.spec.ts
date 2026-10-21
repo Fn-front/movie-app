@@ -5,6 +5,8 @@
 
 import { test, expect } from '@playwright/test';
 
+import { runScopedEmail } from '../helpers/runScope';
+
 /**
  * 登録に使うパスワード
  *
@@ -13,6 +15,14 @@ import { test, expect } from '@playwright/test';
  */
 const SIGNUP_PASSWORD = 'E2eSignupKx7Qm2';
 
+/**
+ * 登録に使うメールアドレス
+ *
+ * 現状このテストはスキップされているが、有効化したときに他の run と
+ * 衝突しないよう run 単位にしておく（理由は runScope.ts を参照／#793）。
+ */
+const SIGNUP_EMAIL = runScopedEmail('newuser');
+
 test.describe('新規登録フロー', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -20,7 +30,7 @@ test.describe('新規登録フロー', () => {
   test.skip('正常な登録フロー', async ({ page }) => {
     await page.goto('/auth/signup');
 
-    await page.getByLabel('メールアドレス').fill('newuser@example.com');
+    await page.getByLabel('メールアドレス').fill(SIGNUP_EMAIL);
     await page.getByLabel('ユーザー名（任意）').fill('テストユーザー');
     await page.getByLabel('パスワード', { exact: true }).fill(SIGNUP_PASSWORD);
     await page.getByLabel('パスワード（確認）').fill(SIGNUP_PASSWORD);

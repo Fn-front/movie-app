@@ -800,7 +800,7 @@ CIはGPU無効の SwiftShader なので、**席数がそのまま描画時間に
 
 その他の決めごと:
 
-- 認証は Playwright の E2E が生成する `e2e/.auth/storageState.json` を流用する（未生成なら `npx playwright test --project=setup`）
+- 認証は Playwright の E2E が生成する `e2e/.auth/storageState-<runId>.json` を流用する（未生成なら `npx playwright test --project=setup`。ローカルの runId は `local`）
 - `nextjs-portal { display: none !important }` を注入して Next.js の開発ツールバッジを隠す
 - **撮影前にポインタをキャンバス外へ逃がす**（`page.mouse.move(2, 2)`）。座席に乗っているとホバー枠と席番号ラベルが写り込む（実際に Dolby の撮影で「F13」のツールチップが入った）
 - リサイズ後はキャンバスが再構築されるため、撮影前に数秒待つ

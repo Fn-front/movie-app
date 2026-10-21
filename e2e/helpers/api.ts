@@ -8,6 +8,14 @@ import { createHmac } from 'crypto';
 
 import type { APIRequestContext } from '@playwright/test';
 
+import {
+  RUN_CLIENT_IP,
+  RUN_EMAIL_LIKE_PATTERN,
+  runScopedMovieId,
+  runScopedMovieIdRange,
+} from './runScope';
+import { TEST_USER } from './testUser';
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -24,9 +32,9 @@ let cachedTestUserId: string | null = null;
 async function getTestUserId(): Promise<string | null> {
   if (cachedTestUserId) return cachedTestUserId;
 
-  const email = process.env.E2E_TEST_USER_EMAIL;
+  const encodedEmail = encodeURIComponent(TEST_USER.email);
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/users?email=eq.${email}&select=id`,
+    `${SUPABASE_URL}/rest/v1/users?email=eq.${encodedEmail}&select=id`,
     { headers: supabaseHeaders },
   );
   const data = await res.json();
@@ -53,20 +61,33 @@ export async function cleanupRateLimits(): Promise<void> {
 }
 
 /**
- * すべての rate_limits レコードを物理削除する（グローバルセットアップ用）。
+ * この run が使う rate_limits レコードを物理削除する（セットアップ／後片付け用）。
  *
- * 背景: IP ベースのレート制限（AWARDS_FETCH / READ_THEATERS 等の公開API）は
- * CI ランナーの IP を identifier とするが、実行時までIPが分からないため
- * ユーザーID指定の cleanupRateLimits では消せない。E2E 開始時に一度だけ
- * 全レコードを削除して確定的な初期状態を作る。
+ * 以前は全件削除していた。共有DBに複数の run が同時に流れる構成では
+ * 他 run の実行中のカウンタまで巻き込むため、識別子を run 単位に絞る（#793）。
  *
- * ※ 本テーブルはユーザー由来の耐障害的なカウンタで、E2E 環境では消して問題ない。
+ * 消す対象は2種類。
+ * - 送信元IP単位（AWARDS_FETCH / LOGIN_IP 等）: {@link RUN_CLIENT_IP}
+ * - メール単位（OTP送信・検証、ログイン、登録）: この run のメールは
+ *   すべて `-<E2E_RUN_ID>@example.com` で終わる。identifier はメール単独か
+ *   `メール|送信元IP` のためワイルドカードで消す
+ *
+ * ユーザーID単位のカウンタはユーザー作成後にしかIDが分からないため、
+ * {@link cleanupRateLimits} が担当する。
  */
-export async function cleanupAllRateLimits(): Promise<void> {
-  await fetch(`${SUPABASE_URL}/rest/v1/rate_limits?id=not.is.null`, {
-    method: 'DELETE',
-    headers: supabaseHeaders,
-  });
+export async function cleanupRunRateLimits(): Promise<void> {
+  const deleteBy = (filter: string) =>
+    fetch(`${SUPABASE_URL}/rest/v1/rate_limits?${filter}`, {
+      method: 'DELETE',
+      headers: supabaseHeaders,
+    });
+
+  await Promise.all([
+    deleteBy(`identifier=eq.${encodeURIComponent(RUN_CLIENT_IP)}`),
+    deleteBy(
+      `identifier=like.${encodeURIComponent(`${RUN_EMAIL_LIKE_PATTERN}*`)}`,
+    ),
+  ]);
 }
 
 /**
@@ -177,8 +198,13 @@ async function assertMovieCacheWriteOk(
   );
 }
 
-/** 相互排他バグ検証用の映画ID（movie_cache シード用） */
-export const CROSS_RELEASE_TYPE_MOVIE_ID = 999501;
+/**
+ * 相互排他バグ検証用の映画ID（movie_cache シード用）
+ *
+ * movie_cache は全ユーザー共通のため、固定IDだと先に終わった run の
+ * 後片付けが実行中の別 run のシードを消す。IDを run 単位に分ける（#793）。
+ */
+export const CROSS_RELEASE_TYPE_MOVIE_ID = runScopedMovieId(1);
 
 /**
  * 同一IDを theatrical / streaming の両方の release_type で movie_cache に投入する。
@@ -248,16 +274,18 @@ export async function cleanupCrossReleaseTypeMovie(): Promise<void> {
 
 /**
  * JP配信実態フィルタ（Issue #582）の検証用に投入する映画ID
+ *
+ * {@link CROSS_RELEASE_TYPE_MOVIE_ID} と同じ理由で run 単位に分ける（#793）。
  */
 export const JP_AVAILABILITY_MOVIE_IDS = {
   /** 日本で配信中 */
-  STREAMING_NOW: 999510,
+  STREAMING_NOW: runScopedMovieId(10),
   /** TMDb上はデジタル公開済みだが、日本では配信されていない */
-  NOT_AVAILABLE_IN_JP: 999511,
+  NOT_AVAILABLE_IN_JP: runScopedMovieId(11),
   /** 劇場公開済みで、日本の配信開始はこれから */
-  DIGITAL_UPCOMING: 999512,
+  DIGITAL_UPCOMING: runScopedMovieId(12),
   /** 劇場公開作品（配信フラグは false のまま。劇場タブへの波及確認用） */
-  THEATRICAL_ONLY: 999513,
+  THEATRICAL_ONLY: runScopedMovieId(13),
 } as const;
 
 /**
@@ -348,6 +376,22 @@ export async function cleanupJpAvailabilityMovies(): Promise<void> {
   );
 
   await assertMovieCacheWriteOk(response, 'cleanupJpAvailabilityMovies');
+}
+
+/**
+ * この run に割り当てられたID領域の movie_cache 行をまとめて物理削除する。
+ *
+ * 各 spec の afterAll でも消しているが、異常終了すると取りこぼす。
+ * ID領域ごと消せば、シードが増えても後片付けの追従漏れが起きない。
+ */
+export async function cleanupRunMovieCache(): Promise<void> {
+  const { min, max } = runScopedMovieIdRange();
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/movie_cache?id=gte.${min}&id=lte.${max}`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+
+  await assertMovieCacheWriteOk(response, 'cleanupRunMovieCache');
 }
 
 /**

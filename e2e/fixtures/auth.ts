@@ -6,7 +6,8 @@
 import { test as base, type Page } from '@playwright/test';
 
 import { STORAGE_STATE } from '../../playwright.config';
-import { cleanupAllRateLimits } from '../helpers/api';
+import { cleanupRunRateLimits } from '../helpers/api';
+import { createVerifiedUser } from '../helpers/dedicatedUser';
 import { getCurrentTotpCode } from '../helpers/totp';
 import { TEST_USER } from '../helpers/testUser';
 
@@ -66,11 +67,16 @@ export async function performLogin(
  * グローバル認証セットアップ
  * setupプロジェクトからstorageStateを生成する。
  *
- * ここで rate_limits テーブルを全消しし、公開API (AWARDS_FETCH 等 IPベース)
- * とユーザー系 (WRITE_FAVORITES 等 user_idベース) の両方を確定的な初期状態にする。
+ * 共有テストユーザーはここで作る。以前は環境変数で指定したDB上の固定ユーザーを
+ * 使い回していたが、共有DBに複数のCI runが同時に流れると互いのデータを
+ * 消し合うため、run ごとに作り直す（#793。削除は global.teardown.ts）。
+ *
+ * rate_limits も、この run の識別子（送信元IP・run固有メール）に限って
+ * リセットし、確定的な初期状態から始める。
  */
 export async function globalAuthSetup(page: Page): Promise<void> {
-  await cleanupAllRateLimits();
+  await cleanupRunRateLimits();
+  await createVerifiedUser(TEST_USER);
   await performLogin(page);
   await page.context().storageState({ path: STORAGE_STATE });
 }

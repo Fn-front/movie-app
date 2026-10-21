@@ -23,12 +23,14 @@ import {
   createVerifiedUser,
   deleteUserByEmail,
 } from '../helpers/dedicatedUser';
+import { runScopedEmail } from '../helpers/runScope';
 
 /** 専用ユーザーの作成（bcrypt）とログインを含むので既定の30秒では足りない */
 test.describe.configure({ mode: 'serial', timeout: 90000 });
 
+/** 本 spec 専用のユーザー（run 単位。理由は runScope.ts を参照／#793） */
 const USER = {
-  email: 'e2e-refresh-cooldown@example.com',
+  email: runScopedEmail('e2e-refresh-cooldown'),
   password: 'E2eCooldownPass123!',
 };
 

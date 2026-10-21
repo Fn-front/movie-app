@@ -273,6 +273,55 @@ export const WRESTLING_EVENT_TITLE_PHRASES = [
 ] as const;
 
 /**
+ * 配信の提供形態（TMDb watch/providers のキー）
+ *
+ * 同じサービスでも見放題とレンタルでは意味が違う。実測では U-NEXT は
+ * rent のみで flatrate がゼロ件であり、区別しないと「加入していれば観られる」と
+ * 誤解させるため、形態ごとに保存・絞り込みを行う。
+ */
+export const WATCH_PROVIDER_OFFER_TYPES = ['flatrate', 'rent', 'buy'] as const;
+
+/** 配信の提供形態 */
+export type WatchProviderOfferType =
+  (typeof WATCH_PROVIDER_OFFER_TYPES)[number];
+
+/**
+ * 絞り込みの選択肢として出す配信サービス（表示順）
+ *
+ * TMDbは日本で71件のプロバイダーを返すが、その34件は `KADOKAWA channel
+ * Amazon Channel` のような Amazon Channel 系で、そのまま並べても選べない。
+ * 利用者が加入を判断する主要サービスに絞る。
+ *
+ * 表示名はTMDbの原名をそのまま使わない。`Apple TV`(350) は見放題（Apple TV+）、
+ * `Apple TV Store`(2) は購入・レンタルと実体が異なるため、区別できる名前にする。
+ */
+export const WATCH_PROVIDERS = [
+  { id: 8, name: 'Netflix' },
+  { id: 9, name: 'Amazon Prime Video' },
+  { id: 337, name: 'Disney+' },
+  { id: 15, name: 'Hulu' },
+  { id: 84, name: 'U-NEXT' },
+  { id: 350, name: 'Apple TV+' },
+  { id: 10, name: 'Amazon Video' },
+  { id: 2, name: 'Apple TV（購入・レンタル）' },
+  { id: 2683, name: 'FOD' },
+] as const;
+
+/**
+ * 同一サービスの別プロバイダーIDを代表IDへ束ねる
+ *
+ * TMDbは広告つきプランやAmazon Channel 経由を別プロバイダーとして返す。
+ * 実測では常に代表IDとペアで出現し（配信中28件で Netflix 15件 /
+ * Netflix Standard with Ads 15件と件数が一致）、そのまま保存すると
+ * 選択肢に同じサービスが二重に並ぶ。
+ */
+export const WATCH_PROVIDER_ALIASES: Record<number, number> = {
+  1796: 8, // Netflix Standard with Ads → Netflix
+  2100: 9, // Amazon Prime Video with Ads → Amazon Prime Video
+  2243: 350, // Apple TV Amazon Channel → Apple TV+
+};
+
+/**
  * 許可する原語（ISO 639-1）
  * この一覧に含まれない言語の映画は除外される
  */

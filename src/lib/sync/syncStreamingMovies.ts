@@ -20,6 +20,7 @@ import {
   RELEASE_TYPE,
   RELEASE_TYPE_MAP,
   STREAMING_MIN_POPULARITY,
+  type WatchProviderOfferType,
 } from '@/constants/movies';
 import { TMDB_AVAILABILITY_CONCURRENCY, TMDB_SORT_BY } from '@/constants/tmdb';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
@@ -69,6 +70,8 @@ interface StreamingCandidate {
   isCurrentlyStreaming: boolean;
   /** 日本のデジタル公開日（YYYY-MM-DD）。情報が無ければ null */
   digitalReleaseDate: string | null;
+  /** 提供形態ごとのプロバイダーID（代表IDへ正規化済み） */
+  watchProviderIds: Record<WatchProviderOfferType, number[]>;
 }
 
 /**
@@ -249,6 +252,7 @@ async function resolveJpAvailability(
         movie,
         isCurrentlyStreaming: availability.isCurrentlyStreaming,
         digitalReleaseDate: availability.digitalReleaseDate,
+        watchProviderIds: availability.watchProviderIds,
       });
     }
   }
@@ -312,7 +316,12 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
 
   for (const batch of chunk(resolved, TMDB_AVAILABILITY_CONCURRENCY)) {
     const movieRows = batch.map(
-      ({ movie, isCurrentlyStreaming, digitalReleaseDate }) => ({
+      ({
+        movie,
+        isCurrentlyStreaming,
+        digitalReleaseDate,
+        watchProviderIds,
+      }) => ({
         id: movie.id,
         title: movie.title,
         poster_path: movie.poster_path,
@@ -326,6 +335,9 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
         release_type: RELEASE_TYPE.STREAMING,
         is_currently_streaming: isCurrentlyStreaming,
         digital_release_date: digitalReleaseDate,
+        watch_provider_flatrate: watchProviderIds.flatrate,
+        watch_provider_rent: watchProviderIds.rent,
+        watch_provider_buy: watchProviderIds.buy,
         cached_at: cachedAt,
       }),
     );

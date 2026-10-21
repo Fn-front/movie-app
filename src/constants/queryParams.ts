@@ -30,4 +30,8 @@ export const MOVIE_FILTER_QUERY_PARAMS = {
   DATE_RANGE_LTE: 'date_range_lte',
   /** リバイバル上映フィルタ */
   IS_REVIVAL: 'is_revival',
+  /** 配信サービスのプロバイダーID（カンマ区切り） */
+  WATCH_PROVIDERS: 'watch_providers',
+  /** 配信の提供形態（カンマ区切り） */
+  OFFER_TYPES: 'offer_types',
 } as const;

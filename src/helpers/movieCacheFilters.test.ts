@@ -53,6 +53,8 @@ const baseFilters: MovieCacheFilters = {
   releaseType: 'theatrical',
   isNowPlayingTheatrical: false,
   genreIds: [],
+  watchProviderIds: [],
+  watchProviderOfferTypes: [],
 };
 
 describe('applyMovieCacheFilters', () => {
@@ -301,7 +303,7 @@ describe('applyMovieCacheFilters', () => {
       const query = createQueryBuilderSpy();
 
       applyMovieCacheFilters(query, {
-        releaseType: 'theatrical',
+        ...baseFilters,
         isNowPlayingTheatrical: true,
         dateGte: '2026-01-01',
         dateLte: '2026-12-31',
@@ -373,6 +375,7 @@ describe('applyMovieCacheFilters', () => {
       {
         name: '全条件',
         filters: {
+          ...baseFilters,
           releaseType: 'streaming',
           isNowPlayingTheatrical: false,
           isCurrentlyStreaming: false,
@@ -381,6 +384,8 @@ describe('applyMovieCacheFilters', () => {
           dateLte: '2026-12-31',
           isRevival: false,
           genreIds: [18],
+          watchProviderIds: [8],
+          watchProviderOfferTypes: ['flatrate'] as const,
         },
       },
     ];

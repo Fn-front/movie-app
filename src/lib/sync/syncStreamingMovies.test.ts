@@ -95,7 +95,17 @@ const availability = (
   isCurrentlyStreaming: boolean,
   digitalReleaseDate: string | null = null,
   keywordIds: number[] = [],
-) => ({ isCurrentlyStreaming, digitalReleaseDate, keywordIds });
+  watchProviderIds: Record<string, number[]> = {
+    flatrate: [],
+    rent: [],
+    buy: [],
+  },
+) => ({
+  isCurrentlyStreaming,
+  digitalReleaseDate,
+  keywordIds,
+  watchProviderIds,
+});
 
 // --- Tests ---
 

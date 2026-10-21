@@ -4,7 +4,8 @@
 
 import { z } from 'zod';
 
-import { SEARCH_VALIDATION } from '@/constants';
+import { SEARCH_VALIDATION, WATCH_PROVIDER_OFFER_TYPES } from '@/constants';
+import { isSelectableWatchProvider } from '@/lib/movies/watchProviders';
 
 /**
  * フィルター条件のバリデーションスキーマ
@@ -27,6 +28,15 @@ export const filterConditionsSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, '日付はYYYY-MM-DD形式で指定してください')
     .optional(),
   is_revival: z.boolean().optional(),
+  // 選択肢として用意していないプロバイダーIDは、送ってもAPI側で捨てられる。
+  // URL手打ちや古いブックマークで来た値をここで落としておく
+  watch_providers: z
+    .array(z.number().int().positive())
+    .refine((ids) => ids.every(isSelectableWatchProvider), {
+      message: '不明な配信サービスが指定されています',
+    })
+    .optional(),
+  offer_types: z.array(z.enum(WATCH_PROVIDER_OFFER_TYPES)).optional(),
 });
 
 /**

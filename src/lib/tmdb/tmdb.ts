@@ -19,7 +19,10 @@ import {
   TMDB_STREAMING_AVAILABILITY_APPEND,
   TMDB_THEATRICAL_RELEASE_TYPES,
   TMDB_VIDEO_LANGUAGES,
+  WATCH_PROVIDER_OFFER_TYPES,
+  type WatchProviderOfferType,
 } from '@/constants';
+import { normalizeWatchProviderIds } from '@/lib/movies/watchProviders';
 import type {
   DismissSignals,
   Movie,
@@ -407,6 +410,8 @@ export interface JpStreamingAvailability {
   digitalReleaseDate: string | null;
   /** TMDbキーワードID。プロレス興行の判定に使う */
   keywordIds: number[];
+  /** 提供形態ごとのプロバイダーID（代表IDへ正規化済み） */
+  watchProviderIds: Record<WatchProviderOfferType, number[]>;
 }
 
 /**
@@ -464,12 +469,25 @@ export async function getJpStreamingAvailability(
     .map((release) => release.release_date.slice(0, 10))
     .sort();
 
+  // 広告つきプランや Amazon Channel 経由は別IDで返るため代表IDへ束ねる
+  const watchProviderIds = Object.fromEntries(
+    WATCH_PROVIDER_OFFER_TYPES.map((offerType) => [
+      offerType,
+      normalizeWatchProviderIds(
+        (jpProviders?.[offerType] ?? []).map(
+          (provider) => provider.provider_id,
+        ),
+      ),
+    ]),
+  ) as Record<WatchProviderOfferType, number[]>;
+
   return {
     isCurrentlyStreaming,
     digitalReleaseDate: digitalReleaseDate ?? null,
     keywordIds: (response.data.keywords?.keywords ?? []).map(
       (keyword) => keyword.id,
     ),
+    watchProviderIds,
   };
 }
 

@@ -12,6 +12,9 @@ const defaultProps: FilterModalProps = {
   selectedGenreIds: [],
   selectedDateRange: {},
   isRevivalFilter: undefined,
+  releaseType: 'theatrical',
+  selectedWatchProviderIds: [],
+  selectedOfferTypes: [],
   onApply: jest.fn(),
 };
 
@@ -121,7 +124,7 @@ describe('FilterModal', () => {
         target: { value: '' },
       });
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], []);
     });
 
     it('終了日を空にするとundefinedに設定される', () => {
@@ -135,7 +138,7 @@ describe('FilterModal', () => {
         target: { value: '' },
       });
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], []);
     });
 
     it('終了日の変更が適用に反映される', () => {
@@ -150,6 +153,8 @@ describe('FilterModal', () => {
         [],
         { lte: '2026-08-01' },
         undefined,
+        [],
+        [],
       );
     });
   });
@@ -193,7 +198,7 @@ describe('FilterModal', () => {
       expect(screen.getByLabelText('リバイバル除外')).toBeChecked();
 
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, false);
+      expect(onApply).toHaveBeenCalledWith([], {}, false, [], []);
     });
 
     it('「リバイバルのみ」→「すべて」に戻すとundefinedが渡される', () => {
@@ -206,7 +211,101 @@ describe('FilterModal', () => {
       expect(screen.getByLabelText('すべて')).toBeChecked();
 
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], []);
+    });
+  });
+
+  describe('配信サービスフィルター', () => {
+    const streamingProps = { releaseType: 'streaming' as const };
+
+    it('劇場公開タブでは表示されない', () => {
+      // movie_cache の streaming 行にしか入らないため、選んでも必ず0件になる
+      renderFilterModal();
+
+      expect(screen.queryByText('配信サービス')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Netflix')).not.toBeInTheDocument();
+    });
+
+    it('ストリーミングタブで表示される', () => {
+      renderFilterModal(streamingProps);
+
+      expect(screen.getByText('配信サービス')).toBeInTheDocument();
+      expect(screen.getByLabelText('Netflix')).toBeInTheDocument();
+      expect(screen.getByLabelText('U-NEXT')).toBeInTheDocument();
+    });
+
+    it('選択済みのプロバイダーがチェックされている', () => {
+      renderFilterModal({
+        ...streamingProps,
+        selectedWatchProviderIds: [8],
+      });
+
+      expect(screen.getByLabelText('Netflix')).toBeChecked();
+      expect(screen.getByLabelText('U-NEXT')).not.toBeChecked();
+    });
+
+    it('プロバイダーを選択して適用すると渡される', () => {
+      const onApply = jest.fn();
+      renderFilterModal({ ...streamingProps, onApply });
+
+      fireEvent.click(screen.getByLabelText('Netflix'));
+      fireEvent.click(screen.getByText('適用'));
+
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [8], []);
+    });
+
+    it('提供形態のラジオが表示され既定は「すべて」', () => {
+      renderFilterModal(streamingProps);
+
+      expect(screen.getByLabelText('見放題のみ')).toBeInTheDocument();
+      expect(screen.getByLabelText('レンタル・購入のみ')).toBeInTheDocument();
+      // リバイバルの「すべて」と2つになるため、両方が既定で選択されていることを見る
+      const allRadios = screen.getAllByLabelText('すべて');
+      expect(allRadios).toHaveLength(2);
+      for (const radio of allRadios) {
+        expect(radio).toBeChecked();
+      }
+    });
+
+    it('「見放題のみ」を選んで適用するとflatrateが渡される', () => {
+      const onApply = jest.fn();
+      renderFilterModal({ ...streamingProps, onApply });
+
+      fireEvent.click(screen.getByLabelText('見放題のみ'));
+      fireEvent.click(screen.getByText('適用'));
+
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], ['flatrate']);
+    });
+
+    it('「レンタル・購入のみ」を選ぶとrent/buyが渡される', () => {
+      const onApply = jest.fn();
+      renderFilterModal({ ...streamingProps, onApply });
+
+      fireEvent.click(screen.getByLabelText('レンタル・購入のみ'));
+      fireEvent.click(screen.getByText('適用'));
+
+      expect(onApply).toHaveBeenCalledWith(
+        [],
+        {},
+        undefined,
+        [],
+        ['rent', 'buy'],
+      );
+    });
+
+    it('クリアで配信サービスの選択も解除される', () => {
+      renderFilterModal({
+        ...streamingProps,
+        selectedWatchProviderIds: [8],
+        selectedOfferTypes: ['flatrate'],
+      });
+
+      expect(screen.getByLabelText('Netflix')).toBeChecked();
+
+      fireEvent.click(screen.getByText('クリア'));
+
+      expect(screen.getByLabelText('Netflix')).not.toBeChecked();
+      expect(screen.getByLabelText('見放題のみ')).not.toBeChecked();
     });
   });
 
@@ -216,7 +315,7 @@ describe('FilterModal', () => {
       renderFilterModal({ onApply });
 
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], []);
     });
 
     it('フィルター選択後に適用すると選択値が渡される', () => {
@@ -229,7 +328,13 @@ describe('FilterModal', () => {
       });
 
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([28], { gte: '2026-05-01' }, true);
+      expect(onApply).toHaveBeenCalledWith(
+        [28],
+        { gte: '2026-05-01' },
+        true,
+        [],
+        [],
+      );
     });
 
     it('クリアボタンで全フィルターがリセットされる', () => {
@@ -252,7 +357,7 @@ describe('FilterModal', () => {
       expect(screen.getByLabelText('すべて')).toBeChecked();
 
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], []);
     });
   });
 });

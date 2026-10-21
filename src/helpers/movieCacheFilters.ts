@@ -2,6 +2,11 @@
  * movie_cache クエリのフィルタ適用ヘルパ
  */
 
+import {
+  WATCH_PROVIDER_OFFER_TYPES,
+  type WatchProviderOfferType,
+} from '@/constants';
+
 /**
  * movie_cache クエリに適用するフィルタ条件
  */
@@ -22,6 +27,10 @@ export interface MovieCacheFilters {
   isRevival?: boolean;
   /** 絞り込むジャンルID（空配列ならジャンル指定なし） */
   genreIds: number[];
+  /** 絞り込む配信プロバイダーID（空配列ならプロバイダー指定なし） */
+  watchProviderIds: number[];
+  /** 対象とする提供形態（空配列なら全形態） */
+  watchProviderOfferTypes: WatchProviderOfferType[];
 }
 
 /**
@@ -97,6 +106,25 @@ export function applyMovieCacheFilters<T>(
   if (filters.genreIds.length > 0) {
     const orConditions = filters.genreIds
       .map((id) => `genre_ids.cs.[${id}]`)
+      .join(',');
+    filtered = filtered.or(orConditions);
+  }
+
+  if (filters.watchProviderIds.length > 0) {
+    // 形態の指定が無ければ全形態を対象にする（どれかで観られれば該当）
+    const offerTypes =
+      filters.watchProviderOfferTypes.length > 0
+        ? filters.watchProviderOfferTypes
+        : WATCH_PROVIDER_OFFER_TYPES;
+
+    // 「プロバイダー × 形態」の組み合わせをすべて OR で繋ぐ。
+    // 形態ごとに列を分けているため、ジャンルと同じ containment で絞れる
+    const orConditions = offerTypes
+      .flatMap((offerType) =>
+        filters.watchProviderIds.map(
+          (id) => `watch_provider_${offerType}.cs.[${id}]`,
+        ),
+      )
       .join(',');
     filtered = filtered.or(orConditions);
   }

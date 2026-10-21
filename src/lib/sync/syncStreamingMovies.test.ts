@@ -94,7 +94,8 @@ const respondWith = (movies: Record<string, unknown>[], totalPages = 1) => ({
 const availability = (
   isCurrentlyStreaming: boolean,
   digitalReleaseDate: string | null = null,
-) => ({ isCurrentlyStreaming, digitalReleaseDate });
+  keywordIds: number[] = [],
+) => ({ isCurrentlyStreaming, digitalReleaseDate, keywordIds });
 
 // --- Tests ---
 
@@ -243,6 +244,60 @@ describe('syncStreamingMovies', () => {
         expect(result.skipped).toBe(0);
         expect(result.upserted).toBe(1);
       }
+    });
+
+    it('プロレス興行を除外する（団体キーワード）', async () => {
+      mockGetJpStreamingAvailability.mockResolvedValue(
+        availability(true, null, [367574]), // joshi puroresu
+      );
+      mockDiscoverMovies.mockResolvedValue(
+        respondWith([
+          createMovie({
+            genre_ids: [28, 18],
+            title: 'STARDOM CINDERELLA TOURNAMENT 2026 ～2回戦～',
+          }),
+        ]),
+      );
+
+      const result = await syncStreamingMovies();
+
+      expect(mockUpsert).not.toHaveBeenCalled();
+      expect(result.skipped).toBe(1);
+    });
+
+    it('プロレス興行を除外する（汎用キーワード＋タイトル語）', async () => {
+      mockGetJpStreamingAvailability.mockResolvedValue(
+        availability(true, null, [5970, 206441]), // wrestling, pro wrestling
+      );
+      mockDiscoverMovies.mockResolvedValue(
+        respondWith([
+          createMovie({
+            genre_ids: [28, 18, 35],
+            title: 'DDT Judgement 2026～旗揚げ29周年記念大会5時間スペシャル～',
+          }),
+        ]),
+      );
+
+      const result = await syncStreamingMovies();
+
+      expect(mockUpsert).not.toHaveBeenCalled();
+      expect(result.skipped).toBe(1);
+    });
+
+    it('プロレスを題材にした劇映画は除外しない', async () => {
+      // 『レスラー』は pro wrestling を持つがタイトルに興行語が無い
+      mockUpsert.mockResolvedValue({ error: null });
+      mockGetJpStreamingAvailability.mockResolvedValue(
+        availability(true, null, [206441]),
+      );
+      mockDiscoverMovies.mockResolvedValue(
+        respondWith([createMovie({ genre_ids: [18], title: 'レスラー' })]),
+      );
+
+      const result = await syncStreamingMovies();
+
+      expect(result.skipped).toBe(0);
+      expect(result.upserted).toBe(1);
     });
 
     it('劇映画ジャンルの舞台中継を除外する', async () => {

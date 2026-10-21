@@ -98,9 +98,13 @@ export const TMDB_FALLBACK_LANGUAGE = 'en';
  * watch/providers と release_dates は別エンドポイントだが、append_to_response で
  * 1リクエストにまとめられる。同期対象は毎回100件規模になるため、
  * 2回に分けると TMDb のレート制限（50 req/s）に対する余裕が半減する。
+ *
+ * keywords も同じ理由でここに含める。プロレス興行の判定に必要だが、
+ * ジャンルでは劇映画と区別が付かず候補を絞れない。配信候補は全件この
+ * リクエストを通るため、相乗りすれば追加リクエストが発生しない。
  */
 export const TMDB_STREAMING_AVAILABILITY_APPEND =
-  'watch/providers,release_dates';
+  'watch/providers,release_dates,keywords';
 
 /**
  * JP配信実態チェックの同時実行数

@@ -405,6 +405,8 @@ export interface JpStreamingAvailability {
   isCurrentlyStreaming: boolean;
   /** 日本のデジタル公開日（YYYY-MM-DD）。情報が無ければ null */
   digitalReleaseDate: string | null;
+  /** TMDbキーワードID。プロレス興行の判定に使う */
+  keywordIds: number[];
 }
 
 /**
@@ -418,7 +420,11 @@ export interface JpStreamingAvailability {
  * 実質1つの代表日しか持たず、劇場公開日が入っていることが多いため、
  * `release_dates` の JP / type=4 から別途取得する。
  *
- * 2つの情報は append_to_response で1リクエストにまとめて取得する。
+ * キーワードはプロレス興行の判定に使う。ジャンルでは劇映画と区別が付かず
+ * 候補を絞れないため全件分が必要になるが、ここに相乗りすれば追加リクエストは
+ * 発生しない。
+ *
+ * これらの情報は append_to_response で1リクエストにまとめて取得する。
  *
  * 取得に失敗した場合は**例外をそのまま投げる**。呼び出し側が「判定できなかった」
  * ことを認識できないと、TMDbの一時障害で配信中の作品を一斉に配信終了扱いに
@@ -434,6 +440,7 @@ export async function getJpStreamingAvailability(
   const response = await tmdbClient.get<{
     'watch/providers'?: WatchProviders;
     release_dates?: { results: TMDbReleaseDateCountry[] };
+    keywords?: { keywords?: { id: number; name: string }[] };
   }>(TMDB_ENDPOINTS.MOVIE_DETAIL(movieId), {
     params: { append_to_response: TMDB_STREAMING_AVAILABILITY_APPEND },
   });
@@ -460,6 +467,9 @@ export async function getJpStreamingAvailability(
   return {
     isCurrentlyStreaming,
     digitalReleaseDate: digitalReleaseDate ?? null,
+    keywordIds: (response.data.keywords?.keywords ?? []).map(
+      (keyword) => keyword.id,
+    ),
   };
 }
 

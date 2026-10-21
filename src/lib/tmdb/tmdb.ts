@@ -18,6 +18,7 @@ import {
   TMDB_RETRY_CONFIG,
   TMDB_STREAMING_AVAILABILITY_APPEND,
   TMDB_THEATRICAL_RELEASE_TYPES,
+  TMDB_VIDEO_LANGUAGES,
 } from '@/constants';
 import type {
   DismissSignals,
@@ -160,7 +161,12 @@ export async function getMovieDetail(
 ): Promise<MovieDetail> {
   const response = await tmdbClient.get<MovieDetail>(
     TMDB_ENDPOINTS.MOVIE_DETAIL(movieId),
-    { params: { append_to_response: TMDB_MOVIE_DETAIL_APPEND } },
+    {
+      params: {
+        append_to_response: TMDB_MOVIE_DETAIL_APPEND,
+        include_video_language: TMDB_VIDEO_LANGUAGES,
+      },
+    },
   );
   return response.data;
 }

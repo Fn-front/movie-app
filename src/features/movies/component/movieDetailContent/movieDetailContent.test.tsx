@@ -721,6 +721,46 @@ describe('MovieDetailContent', () => {
       ).not.toBeInTheDocument();
     });
 
+    it('予告編以外の動画のみの場合、再生ボタンを表示しない', () => {
+      setupMovie({
+        backdrop_path: '/backdrop.jpg',
+        videos: {
+          results: [
+            {
+              id: 'v1',
+              iso_639_1: 'en',
+              iso_3166_1: 'US',
+              key: 'abc123',
+              name: 'メイキング映像',
+              site: 'YouTube',
+              size: 1080,
+              type: 'Featurette',
+              official: true,
+              published_at: '2025-01-01T00:00:00.000Z',
+            },
+            {
+              id: 'v2',
+              iso_639_1: 'en',
+              iso_3166_1: 'US',
+              key: 'def456',
+              name: '本編クリップ',
+              site: 'YouTube',
+              size: 1080,
+              type: 'Clip',
+              official: true,
+              published_at: '2025-01-02T00:00:00.000Z',
+            },
+          ],
+        },
+      });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.queryByRole('button', { name: '予告動画を再生' }),
+      ).not.toBeInTheDocument();
+    });
+
     it('再生ボタンをクリックすると動画ダイアログが表示される', () => {
       setupMovie({ ...youtubeVideos, backdrop_path: '/backdrop.jpg' });
 

@@ -16,6 +16,7 @@ import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRati
 import { VideoDialog } from '@/features/movies/component/videoDialog/videoDialog';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
+import { isMovieReleased } from '@/utils/movie';
 import {
   getTMDbPosterUrl,
   getTMDbBackdropUrl,
@@ -212,6 +213,13 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
       [movie?.release_date],
     );
 
+    // カード（MovieTile）と同じ判定。詳細モーダルから登録できてしまうと
+    // 制限が見た目だけになるため揃える
+    const canFavorite = useMemo(
+      () => isMovieReleased(movie?.release_date, new Date()),
+      [movie?.release_date],
+    );
+
     const trailerVideos = useMemo(
       () => selectTrailerVideos(movie?.videos?.results),
       [movie],
@@ -293,12 +301,14 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
               <div className={styles.c_movie_detail__title_row}>
                 <h3 className={styles.c_movie_detail__title}>{movie.title}</h3>
                 <div className={styles.c_movie_detail__action_buttons}>
-                  <FavoriteButton
-                    favorite={movie.favorite ?? null}
-                    onClick={handleFavoriteClick}
-                    disabled={isFavoriteProcessing}
-                    size='md'
-                  />
+                  {canFavorite && (
+                    <FavoriteButton
+                      favorite={movie.favorite ?? null}
+                      onClick={handleFavoriteClick}
+                      disabled={isFavoriteProcessing}
+                      size='md'
+                    />
+                  )}
                   <WatchlistAddButton
                     isInWatchlist={inWatchlist}
                     onClick={handleWatchlistToggle}

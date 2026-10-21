@@ -575,6 +575,63 @@ describe('MovieDetailContent', () => {
     });
   });
 
+  describe('未公開作品のお気に入り', () => {
+    // カードから消しても詳細モーダルから登録できるなら制限が見た目だけになるため、
+    // 同じ判定で揃える
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    const freezeToday = () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date(2026, 9, 21)); // 2026-10-21
+    };
+
+    it('公開日が未来ならお気に入りボタンを表示しない', () => {
+      freezeToday();
+      setupMovie({ title: 'テスト映画', release_date: '2026-10-22' });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.queryByRole('button', { name: 'お気に入りに追加' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('公開日が当日ならお気に入りボタンを表示する', () => {
+      freezeToday();
+      setupMovie({ title: 'テスト映画', release_date: '2026-10-21' });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('button', { name: 'お気に入りに追加' }),
+      ).toBeInTheDocument();
+    });
+
+    it('公開日が不明ならお気に入りボタンを表示する', () => {
+      freezeToday();
+      setupMovie({ title: 'テスト映画', release_date: null });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('button', { name: 'お気に入りに追加' }),
+      ).toBeInTheDocument();
+    });
+
+    it('未公開でもウォッチリスト追加ボタンは表示する', () => {
+      freezeToday();
+      setupMovie({ title: 'テスト映画', release_date: '2026-10-22' });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+      ).toBeInTheDocument();
+    });
+  });
+
   it('お気に入りボタンをクリックするとhandleFavoriteToggleが呼ばれる', () => {
     setupMovie({
       title: 'テスト映画',

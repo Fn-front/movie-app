@@ -15,6 +15,7 @@ import { DismissButton } from '@/features/dismissedMovies/component/dismissButto
 import { getTMDbPosterUrl } from '@/utils/image';
 import { IMAGE_SIZES, RATING_THRESHOLDS, DISPLAY_LIMITS } from '@/constants';
 import { formatDate } from '@/utils/date';
+import { isMovieReleased } from '@/utils/movie';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
@@ -98,6 +99,16 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
     onDismiss?.(movie);
   }, [movie, onDismiss]);
 
+  // お気に入りは1〜10の評価とセットで登録する機能なので、まだ観られない作品では出さない。
+  // ウォッチリストと興味なしは公開前でも使うため、ここでは絞らない。
+  //
+  // リバイバル上映は除外する。カードが持つ release_date は「日本での再上映日」で
+  // 未来になるが、作品自体は過去に公開済み（詳細モーダルは元の公開日を表示する）。
+  const canFavorite = useMemo(
+    () => movie.is_revival || isMovieReleased(movie.release_date, new Date()),
+    [movie.is_revival, movie.release_date],
+  );
+
   const posterUrl = getTMDbPosterUrl(movie.poster_path);
 
   // デジタル公開日を優先する場合でも、未登録なら従来どおり release_date を出す
@@ -150,7 +161,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             <DismissButton onClick={handleDismiss} disabled={dismissDisabled} />
           </div>
         )}
-        {onFavoriteToggle && (
+        {onFavoriteToggle && canFavorite && (
           <div className={styles.c_movie_tile__favorite_button}>
             <FavoriteButton
               favorite={movie.favorite ?? null}

@@ -10,17 +10,20 @@
  * spec が「自分が作ったデータだけがある」前提を壊されて落ちる。
  */
 
-import type { Page, Request, Response } from '@playwright/test';
+import {
+  test,
+  expect,
+  type Page,
+  type Request,
+  type Response,
+} from '@playwright/test';
 
 import { RECOMMENDATIONS_MAX_COUNT } from '../../src/constants/recommendations';
-import { test, expect, performLogin } from '../fixtures/auth';
-import { seedRecommendationsForUser } from '../helpers/api';
 import {
-  cleanupLoginIpRateLimits,
-  cleanupRateLimitsForUser,
-  createVerifiedUser,
-  deleteUserByEmail,
-} from '../helpers/dedicatedUser';
+  openDedicatedSession,
+  type DedicatedSession,
+} from '../fixtures/dedicatedSession';
+import { seedRecommendationsForUser } from '../helpers/api';
 import { runScopedEmail } from '../helpers/runScope';
 
 /**
@@ -90,37 +93,25 @@ function trackEventRequests(page: Page) {
 
 test.describe('レコメンド利用イベントの計測', () => {
   /** ログインを1回で済ませるため、spec 全体で1つのページを使い回す */
+  let session: DedicatedSession;
   let page: Page;
-  let userId: string;
 
   test.beforeAll(async ({ browser }, testInfo) => {
     // describe の timeout はテストにしか効かない。ユーザー作成（bcrypt）と
     // ログイン（初回アクセスのコンパイル待ちを含む）は既定の30秒に収まらない
     testInfo.setTimeout(90000);
 
-    userId = await createVerifiedUser(USER);
+    session = await openDedicatedSession(browser, USER);
+    page = session.page;
+
     // 1件ずつ送っていた頃は1ページ表示で最大10リクエストが飛んでいた。
     // 当時の条件を再現するため、表示上限まで埋める。
-    await seedRecommendationsForUser(userId, RECOMMENDATIONS_MAX_COUNT);
-
-    // 送信元IP単位のログイン上限は全 spec で共有される
-    await cleanupLoginIpRateLimits();
-
-    // browser.newContext は config の use を引き継ぐ（baseURL はそれでよいが、
-    // storageState まで入ると共有テストユーザーでログイン済みになってしまう）
-    const context = await browser.newContext({
-      storageState: { cookies: [], origins: [] },
-    });
-    page = await context.newPage();
-    await performLogin(page, USER);
+    // 最初の goto より前であればよいので、ログインの後で構わない。
+    await seedRecommendationsForUser(session.userId, RECOMMENDATIONS_MAX_COUNT);
   });
 
   test.afterAll(async () => {
-    await page.context().close();
-    // rate_limits は user_id を持たず連鎖削除されないため個別に消す
-    await cleanupRateLimitsForUser(userId);
-    // お気に入り・おすすめ・計測イベントは ON DELETE CASCADE で連鎖削除される
-    await deleteUserByEmail(USER.email);
+    await session.close();
   });
 
   test('ホーム画面を5回開いてもイベント記録が429を返さない', async () => {

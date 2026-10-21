@@ -13,16 +13,13 @@
  * テスト毎に全消しするため、仕込んだクールダウンが並列実行中に消える。
  */
 
-import type { Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
-import { test, expect, performLogin } from '../fixtures/auth';
-import { seedRecommendationRefreshCooldown } from '../helpers/api';
 import {
-  cleanupLoginIpRateLimits,
-  cleanupRateLimitsForUser,
-  createVerifiedUser,
-  deleteUserByEmail,
-} from '../helpers/dedicatedUser';
+  openDedicatedSession,
+  type DedicatedSession,
+} from '../fixtures/dedicatedSession';
+import { seedRecommendationRefreshCooldown } from '../helpers/api';
 import { runScopedEmail } from '../helpers/runScope';
 
 /** 専用ユーザーの作成（bcrypt）とログインを含むので既定の30秒では足りない */
@@ -35,36 +32,24 @@ const USER = {
 };
 
 test.describe('レコメンド手動更新のクールダウン', () => {
+  /** ログインを1回で済ませるため、spec 全体で1つのページを使い回す */
+  let session: DedicatedSession;
   let page: Page;
-  let userId: string;
 
   test.beforeAll(async ({ browser }, testInfo) => {
     // describe の timeout はテストにしか効かない。ユーザー作成（bcrypt）と
     // ログイン（初回アクセスのコンパイル待ちを含む）は既定の30秒に収まらない
     testInfo.setTimeout(90000);
 
-    userId = await createVerifiedUser(USER);
-
-    // 送信元IP単位のログイン上限は全 spec で共有される
-    await cleanupLoginIpRateLimits();
-
-    // browser.newContext は config の use を引き継ぐ（baseURL はそれでよいが、
-    // storageState まで入ると共有テストユーザーでログイン済みになってしまう）
-    const context = await browser.newContext({
-      storageState: { cookies: [], origins: [] },
-    });
-    page = await context.newPage();
-    await performLogin(page, USER);
+    session = await openDedicatedSession(browser, USER);
+    page = session.page;
 
     // ログイン処理の後に仕込む（先に入れても消されはしないが順序を明示する）
-    await seedRecommendationRefreshCooldown(userId);
+    await seedRecommendationRefreshCooldown(session.userId);
   });
 
   test.afterAll(async () => {
-    await page.context().close();
-    // rate_limits は user_id を持たず連鎖削除されないため個別に消す
-    await cleanupRateLimitsForUser(userId);
-    await deleteUserByEmail(USER.email);
+    await session.close();
   });
 
   test('直前に更新していればクールダウンで弾かれる', async () => {

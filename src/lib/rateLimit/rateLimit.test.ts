@@ -10,6 +10,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 
 import { checkCooldown, checkRateLimit, resetRateLimit } from './rateLimit';
 import { SUPABASE_ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
+import type { RateLimitActionType } from '@/constants/rateLimit';
 
 // --- Helpers ---
 
@@ -110,9 +111,8 @@ describe('checkRateLimit', () => {
         error: { code: '23514', message: 'violates chk_action_type' },
       });
 
-      const result = await checkRateLimit(supabase, 'user-1', 'login');
+      await checkRateLimit(supabase, 'user-1', 'login');
 
-      expect(result).toEqual({ allowed: true });
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('この制限は機能していません'),
         expect.anything(),
@@ -124,19 +124,93 @@ describe('checkRateLimit', () => {
         error: { code: '08006', message: 'connection failure' },
       });
 
-      const result = await checkRateLimit(supabase, 'user-1', 'login');
+      await checkRateLimit(supabase, 'user-1', RATE_LIMIT_ACTION.READ_MOVIES);
 
-      expect(result).toEqual({ allowed: true });
       expect(errorSpy).toHaveBeenCalled();
     });
 
     it('RPCが行を返さない場合も記録する', async () => {
       const { supabase } = createRpcSupabase({ data: [] });
 
-      const result = await checkRateLimit(supabase, 'user-1', 'login');
+      await checkRateLimit(supabase, 'user-1', RATE_LIMIT_ACTION.READ_MOVIES);
 
-      expect(result).toEqual({ allowed: true });
       expect(errorSpy).toHaveBeenCalled();
+    });
+
+    describe('判定不能時の倒し方（認証系は拒否・それ以外は通す）', () => {
+      // 認証系は「判定できない＝通す」にすると、rate_limits への書き込みだけが
+      // 壊れた状況で総当たりが成立する。特にTOTPは6桁＝約20bitしかなく、
+      // 試行上限が唯一の防御になっている。
+      const FAIL_CLOSED: RateLimitActionType[] = [
+        RATE_LIMIT_ACTION.LOGIN_IP,
+        'login',
+        RATE_LIMIT_ACTION.TOTP_VERIFY,
+        RATE_LIMIT_ACTION.OTP_VERIFY,
+        RATE_LIMIT_ACTION.OTP_SEND_DAILY,
+        'registration',
+        RATE_LIMIT_ACTION.PASSWORD_RESET_REQUEST,
+        RATE_LIMIT_ACTION.PASSWORD_RESET_CONFIRM,
+        RATE_LIMIT_ACTION.CHANGE_PASSWORD,
+        'password_change',
+        RATE_LIMIT_ACTION.REGISTER,
+      ];
+
+      // 読み書きAPIは可用性を優先する。総当たりの標的ではないため、
+      // DBが応答しないだけで機能停止させる必要がない。
+      const FAIL_OPEN: RateLimitActionType[] = [
+        RATE_LIMIT_ACTION.READ_MOVIES,
+        RATE_LIMIT_ACTION.SEARCH_MOVIES,
+        RATE_LIMIT_ACTION.WRITE_FAVORITES,
+        RATE_LIMIT_ACTION.WRITE_WATCHLIST,
+        RATE_LIMIT_ACTION.READ_USER_DATA,
+      ];
+
+      it.each(FAIL_CLOSED)(
+        'RPCがエラーなら %s は拒否し、待ち時間を返す',
+        async (action) => {
+          const { supabase } = createRpcSupabase({
+            error: { code: '42501', message: 'permission denied' },
+          });
+
+          expect(await checkRateLimit(supabase, 'id-1', action, 5, 30)).toEqual(
+            { allowed: false, retryAfter: 1800 },
+          );
+        },
+      );
+
+      it.each(FAIL_CLOSED)(
+        'RPCが行を返さなくても %s は拒否する',
+        async (action) => {
+          const { supabase } = createRpcSupabase({ data: [] });
+
+          expect(await checkRateLimit(supabase, 'id-1', action, 5, 15)).toEqual(
+            { allowed: false, retryAfter: 900 },
+          );
+        },
+      );
+
+      it.each(FAIL_OPEN)(
+        'RPCがエラーでも %s は通す（可用性優先）',
+        async (action) => {
+          const { supabase } = createRpcSupabase({
+            error: { code: '42501', message: 'permission denied' },
+          });
+
+          expect(await checkRateLimit(supabase, 'id-1', action, 5, 30)).toEqual(
+            { allowed: true },
+          );
+        },
+      );
+
+      it('正常に判定できた場合は認証系でも通常どおり通す', async () => {
+        const { supabase } = createRpcSupabase({
+          data: [{ allowed: true, retry_after: null }],
+        });
+
+        expect(await checkRateLimit(supabase, 'id-1', 'login')).toEqual({
+          allowed: true,
+        });
+      });
     });
 
     describe('RPC未適用時のフォールバック（42883）', () => {
@@ -674,5 +748,94 @@ describe('checkCooldown の INSERT 失敗時の記録（fail-openの可視化）
     );
 
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  // INSERT が失敗すると行が作られないため、次回以降も毎回この分岐に入る。
+  // 通し続けると恒久的な素通しになる。
+  it('INSERTが失敗した場合、認証系アクションは拒否する', async () => {
+    const supabase = createSupabaseWithFailingInsert({
+      code: '08006',
+      message: 'connection failure',
+    });
+
+    expect(
+      await checkCooldown(supabase, 'user-1', 'password_change', 300),
+    ).toEqual({ allowed: false, retryAfter: 300 });
+  });
+
+  it('INSERTが失敗しても認証系以外は通す（可用性優先）', async () => {
+    const supabase = createSupabaseWithFailingInsert({
+      code: '08006',
+      message: 'connection failure',
+    });
+
+    expect(
+      await checkCooldown(
+        supabase,
+        'user-1',
+        RATE_LIMIT_ACTION.RECOMMENDATION_REFRESH,
+        60,
+      ),
+    ).toEqual({ allowed: true });
+  });
+});
+
+describe('checkRateLimitLegacy の INSERT 失敗時（RPC未適用時のフォールバック）', () => {
+  let errorSpy: jest.SpyInstance;
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  /** RPC は 42883 で落ち、旧実装の INSERT も失敗するクライアント */
+  function createLegacyFailingInsert() {
+    const insert = jest
+      .fn()
+      .mockResolvedValue({ error: { code: '08006', message: 'conn failure' } });
+    const from = jest.fn().mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            single: () => ({
+              data: null,
+              error: { code: SUPABASE_ERROR_CODE.NOT_FOUND },
+            }),
+          }),
+        }),
+      }),
+      insert,
+    });
+    const rpc = jest.fn().mockResolvedValue({
+      data: null,
+      error: { code: '42883', message: 'function does not exist' },
+    });
+
+    return { rpc, from } as unknown as SupabaseClient;
+  }
+
+  it('認証系アクションは拒否し、待ち時間を返す', async () => {
+    expect(
+      await checkRateLimit(createLegacyFailingInsert(), 'ip-1', 'login', 5, 15),
+    ).toEqual({ allowed: false, retryAfter: 900 });
+  });
+
+  it('認証系以外は通す（可用性優先）', async () => {
+    expect(
+      await checkRateLimit(
+        createLegacyFailingInsert(),
+        'ip-1',
+        RATE_LIMIT_ACTION.READ_MOVIES,
+        5,
+        15,
+      ),
+    ).toEqual({ allowed: true });
   });
 });

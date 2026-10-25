@@ -9,13 +9,38 @@ import {
   RATE_LIMIT_DEFAULT,
   SUPABASE_ERROR_CODE,
 } from '@/constants';
-import type { RateLimitActionType } from '@/constants/rateLimit';
+import {
+  isFailClosedAction,
+  type RateLimitActionType,
+} from '@/constants/rateLimit';
 
 /** Postgres の CHECK 制約違反 */
 const CHECK_VIOLATION_CODE = '23514';
 
 /** Postgres の「関数が存在しない」エラー（RPC 未適用時に返る） */
 const UNDEFINED_FUNCTION_CODE = '42883';
+
+/**
+ * 判定できなかったときの結果を返す
+ *
+ * 認証系（`FAIL_CLOSED_ACTIONS`）は拒否、それ以外は従来どおり通す。
+ * 拒否側では `retryAfter` を入れ、呼び出し元が `Retry-After` ヘッダを
+ * 組み立てられるようにする。
+ *
+ * @param actionType - アクション種別
+ * @param retryAfterSeconds - 拒否したときに提示する待ち時間（秒）
+ * @returns 判定不能時に返すレート制限結果
+ */
+function undeterminedResult(
+  actionType: RateLimitActionType,
+  retryAfterSeconds: number,
+): RateLimitResult {
+  if (!isFailClosedAction(actionType)) {
+    return { allowed: true };
+  }
+
+  return { allowed: false, retryAfter: retryAfterSeconds };
+}
 
 /**
  * rate_limits への書き込み失敗を記録する
@@ -105,10 +130,8 @@ export async function checkRateLimit(
     // 原因の大半は chk_action_type の許可リスト漏れ（23514）。
     logRateLimitWriteFailure('consume_rate_limit', actionType, error);
 
-    // 制限を判定できない場合は通す（既存の挙動を踏襲）。
-    // ログイン等を巻き込んで停止させないための fail-open だが、
-    // 上のログで検知できるようにしてある。
-    return { allowed: true };
+    // 認証系は拒否、それ以外は通す（undeterminedResult の説明を参照）。
+    return undeterminedResult(actionType, windowMinutes * 60);
   }
 
   const row = Array.isArray(data) ? data[0] : data;
@@ -117,7 +140,7 @@ export async function checkRateLimit(
     logRateLimitWriteFailure('consume_rate_limit', actionType, {
       message: 'RPC returned no row',
     });
-    return { allowed: true };
+    return undeterminedResult(actionType, windowMinutes * 60);
   }
 
   return row.allowed
@@ -158,6 +181,12 @@ async function checkRateLimitLegacy(
     });
 
     logRateLimitWriteFailure('insert', actionType, insertError);
+
+    // INSERT に失敗すると行が作られないため、次回以降も毎回この分岐に入る。
+    // 通し続けると**恒久的に**素通しになるので、認証系はここで拒否する。
+    if (insertError) {
+      return undeterminedResult(actionType, windowMinutes * 60);
+    }
 
     return { allowed: true };
   }
@@ -271,8 +300,13 @@ export async function checkCooldown(
       last_attempt_at: now.toISOString(),
     });
 
-    // 失敗すると行が作られず、以降も毎回ここに来てクールダウンが効かない
+    // 失敗すると行が作られず、以降も毎回ここに来てクールダウンが効かない。
+    // 認証系はこの状態で通さず拒否する（checkRateLimitLegacy と同じ理由）。
     logRateLimitWriteFailure('insert', actionType, insertError);
+
+    if (insertError) {
+      return undeterminedResult(actionType, cooldownSeconds);
+    }
 
     return { allowed: true };
   }

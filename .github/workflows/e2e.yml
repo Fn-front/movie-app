@@ -26,12 +26,17 @@ jobs:
     name: Playwright E2E
     runs-on: ubuntu-latest
     environment: Production
+    # playwright-report-summary が PR へ結果サマリを書くため pull-requests が要る。
+    # test.yml の coverage ジョブと同じ組み合わせ。
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # ratchet:actions/checkout@v4
 
       - name: setup-node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
@@ -41,14 +46,14 @@ jobs:
         run: echo "week=$(date +%Y-%V)" >> $GITHUB_OUTPUT
 
       - name: cache-node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         id: node_modules_cache
         with:
           path: '**/node_modules'
           key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
 
       - name: cache-nextjs-build
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         with:
           path: .next/cache
           key: ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
@@ -64,7 +69,7 @@ jobs:
         run: echo "version=$(npx playwright --version | awk '{print $2}')" >> $GITHUB_OUTPUT
 
       - name: cache-playwright-browsers
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         id: playwright_cache
         with:
           path: ~/.cache/ms-playwright
@@ -109,13 +114,13 @@ jobs:
           AUTH_TRUST_HOST: 'true'
 
       - name: playwright-report-summary
-        uses: daun/playwright-report-summary@v3
+        uses: daun/playwright-report-summary@1229105480a2a4bdd91598d8a146fbab41343fce # ratchet:daun/playwright-report-summary@v3
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         with:
           report-file: playwright-report/results.json
 
       - name: upload-playwright-report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
@@ -123,7 +128,7 @@ jobs:
           retention-days: 30
 
       - name: upload-test-results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: test-results

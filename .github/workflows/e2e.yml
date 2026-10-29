@@ -114,7 +114,7 @@ jobs:
           AUTH_TRUST_HOST: 'true'
 
       - name: playwright-report-summary
-        uses: daun/playwright-report-summary@1229105480a2a4bdd91598d8a146fbab41343fce # ratchet:daun/playwright-report-summary@v3
+        uses: daun/playwright-report-summary@5359ae22f265fd2dfdb7744a0cc6614c5c3abde6 # ratchet:daun/playwright-report-summary@v4.1.1
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         with:
           report-file: playwright-report/results.json

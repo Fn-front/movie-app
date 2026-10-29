@@ -72,6 +72,53 @@ export type RateLimitActionType =
   | 'password_change';
 
 /**
+ * 判定できなかったときに「拒否」側へ倒すアクション。
+ *
+ * `checkRateLimit` / `checkCooldown` は既定では判定不能時に通す（fail-open）。
+ * DB が応答しないときにアプリ全体を止めないための選択だが、**認証系では
+ * この理屈が成り立たない**。レート制限の判定直後には必ず DB 参照が続くため
+ * （`src/lib/auth/auth.ts` のユーザー取得、`verifySecondFactor` の
+ * `user_totp` 読み取り等）、DB が落ちていればどのみちそこで失敗する。
+ * つまり認証系だけ拒否側に倒しても可用性は下がらない。
+ *
+ * 一方で素通しした場合の損失は大きい。特に二段階認証のコードは6桁＝約20bit
+ * しかなく、試行上限が唯一の防御になっている。`rate_limits` への書き込みだけが
+ * 壊れた状況（関数の作り直しで service_role への GRANT 漏れ、接続逼迫など）では
+ * 読み取りは通るため、総当たりが成立してしまう。
+ *
+ * ⚠️ 認証・本人確認に関わるアクションを追加したら、ここにも必ず足すこと。
+ * ここに無いアクションは従来どおり fail-open のままになる。
+ */
+export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
+  // ログイン試行
+  RATE_LIMIT_ACTION.LOGIN_IP,
+  'login',
+  // 二段階認証コード（6桁。上限が唯一の防御）
+  RATE_LIMIT_ACTION.TOTP_VERIFY,
+  // メールのワンタイムコード
+  RATE_LIMIT_ACTION.OTP_VERIFY,
+  RATE_LIMIT_ACTION.OTP_SEND_DAILY,
+  'registration',
+  // パスワードの変更・再設定
+  RATE_LIMIT_ACTION.PASSWORD_RESET_REQUEST,
+  RATE_LIMIT_ACTION.PASSWORD_RESET_CONFIRM,
+  RATE_LIMIT_ACTION.CHANGE_PASSWORD,
+  'password_change',
+  // アカウント作成
+  RATE_LIMIT_ACTION.REGISTER,
+]);
+
+/**
+ * 判定不能時に拒否するアクションかどうか
+ *
+ * @param actionType - アクション種別
+ * @returns 拒否側へ倒すなら true
+ */
+export function isFailClosedAction(actionType: RateLimitActionType): boolean {
+  return FAIL_CLOSED_ACTIONS.has(actionType);
+}
+
+/**
  * DB-based レート制限の閾値プリセット（maxAttempts 回 / windowMinutes 分）。
  * checkRateLimit(supabase, id, action, maxAttempts, windowMinutes) に渡す。
  *

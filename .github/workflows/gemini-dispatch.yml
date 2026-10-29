@@ -95,7 +95,11 @@ jobs:
       pull-requests: 'write'
     with:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
-    secrets: 'inherit'
+    # 'inherit' は全シークレットを呼び出し先から参照可能にする。
+    # 呼び出し先が実際に使うのは GEMINI_API_KEY だけなので明示する
+    # （GITHUB_TOKEN は github.token として常に利用できる）。
+    secrets:
+      GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
 
   triage:
     needs: 'dispatch'
@@ -109,7 +113,11 @@ jobs:
       pull-requests: 'write'
     with:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
-    secrets: 'inherit'
+    # 'inherit' は全シークレットを呼び出し先から参照可能にする。
+    # 呼び出し先が実際に使うのは GEMINI_API_KEY だけなので明示する
+    # （GITHUB_TOKEN は github.token として常に利用できる）。
+    secrets:
+      GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
 
   invoke:
     needs: 'dispatch'
@@ -123,7 +131,11 @@ jobs:
       pull-requests: 'write'
     with:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
-    secrets: 'inherit'
+    # 'inherit' は全シークレットを呼び出し先から参照可能にする。
+    # 呼び出し先が実際に使うのは GEMINI_API_KEY だけなので明示する
+    # （GITHUB_TOKEN は github.token として常に利用できる）。
+    secrets:
+      GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
 
   fallthrough:
     needs:

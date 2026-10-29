@@ -1,0 +1,23 @@
+# Dependabot のバージョン更新設定
+#
+# セキュリティ更新（脆弱性アラート起点）はリポジトリ設定側で既に有効。
+# ここでは GitHub Actions のみを対象にする。
+#
+# Actions を SHA でピン止めしている以上、人手では更新されない。タグ参照と違って
+# 新しいバージョンが自動で降ってこないため、更新経路をここで用意しておかないと
+# 固まったまま脆弱性を抱え続ける。Dependabot は SHA とコメントの両方を
+# 書き換えてくれる。
+#
+# npm は対象にしない。セキュリティ更新は別経路で届いており、
+# 通常のバージョン更新PRまで自動で開くと件数が運用に見合わないため。
+version: 2
+updates:
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'upgrade(actions)'
+    labels:
+      - 'dependencies'

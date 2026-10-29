@@ -13,12 +13,14 @@ jobs:
     name: Next.js Build
     runs-on: ubuntu-latest
     environment: Production
+    permissions:
+      contents: read
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # ratchet:actions/checkout@v4
 
       - name: setup-node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
@@ -29,14 +31,14 @@ jobs:
           echo "week=$(date +%Y-%V)" >> $GITHUB_OUTPUT
 
       - name: cache-node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         id: node_modules_cache
         with:
           path: '**/node_modules'
           key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
 
       - name: cache-nextjs-build
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # ratchet:actions/cache@v4
         with:
           path: |
             .next/cache

@@ -31,7 +31,7 @@ jobs:
       pull-requests: 'write'
     steps:
       - name: 'Checkout Code'
-        uses: 'actions/checkout@v4' # ratchet:exclude
+        uses: 'actions/checkout@v7' # ratchet:exclude
         with:
           persist-credentials: 'false'
 

@@ -10,7 +10,7 @@
 
 import { test, expect } from '../fixtures/auth';
 import { cleanupFavorites } from '../helpers/api';
-import { movieTiles } from '../helpers/locators';
+import { firstFavoritableTile, movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 import { waitForWriteResponse } from '../helpers/writeResponse';
 
@@ -39,7 +39,7 @@ test.describe('お気に入り — MovieTileから追加', () => {
   test('MovieTileのお気に入りボタンから追加するとハートアイコンが変化する', async ({
     page,
   }) => {
-    const firstTile = movieTiles(page).first();
+    const firstTile = await firstFavoritableTile(page);
     const addButton = firstTile.getByRole('button', {
       name: 'お気に入りに追加',
     });
@@ -74,7 +74,7 @@ test.describe('お気に入り — 一覧ページ', () => {
     await page.goto('/movies/now-showing');
     await movieTiles(page).first().waitFor({ timeout: 30000 });
 
-    const firstTile = movieTiles(page).first();
+    const firstTile = await firstFavoritableTile(page);
     await firstTile.getByRole('button', { name: 'お気に入りに追加' }).click();
 
     const dialog = page.getByRole('dialog');
@@ -156,8 +156,10 @@ test.describe('お気に入り — 詳細モーダルとの連携', () => {
   test('詳細モーダルにお気に入りボタンが表示され、MovieTileの状態と連動する', async ({
     page,
   }) => {
-    // 詳細モーダルで「お気に入りに追加」ボタンが存在することを確認
-    await movieTiles(page).first().click();
+    // 詳細モーダルで「お気に入りに追加」ボタンが存在することを確認。
+    // 開くタイルと、後段でお気に入り操作するタイルは同一でなければならない
+    const firstTile = await firstFavoritableTile(page);
+    await firstTile.click();
     const detailDialog = page.getByRole('dialog');
     await expect(detailDialog).toBeVisible({ timeout: 15000 });
     await expect(detailDialog.getByText('詳細情報')).toBeVisible({
@@ -171,8 +173,7 @@ test.describe('お気に入り — 詳細モーダルとの連携', () => {
     await detailDialog.getByRole('button', { name: '閉じる' }).click();
     await expect(detailDialog).not.toBeVisible();
 
-    // MovieTileからお気に入りに追加
-    const firstTile = movieTiles(page).first();
+    // MovieTileからお気に入りに追加（詳細を開いたのと同じタイル）
     const addButton = firstTile.getByRole('button', {
       name: 'お気に入りに追加',
     });

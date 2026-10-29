@@ -119,6 +119,90 @@ describe('extractBestPictureNominees', () => {
     expect(result[0].title).toBe('Test&Movie');
   });
 
+  /** タイトル部分だけ差し替えて1件分のHTMLを組み立てる */
+  function buildSingleNomineeHtml(title: string): string {
+    return `
+      <div class="nominate_ctb">
+        <div class="contents_box_half float_r">
+          <div class="movie_title">
+            <h5 class="h5_link">
+              <a href="/movie/100001/"><i class="fa fa-caret-right">&nbsp;</i>${title}</a>
+            </h5>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  describe('サニタイズの正確性', () => {
+    // `[^>]*` が各 `<` から最初の `>` までを貪欲に消すため、`>` が後続する
+    // `<` は必ず同じ走査で一緒に消費される。入れ子でもタグは組み上がらない。
+    // CodeQL js/incomplete-multi-character-sanitization は誤検知。
+    it.each([
+      ['A<<b>script>B', 'Ascript>B'],
+      ['<scr<a>ipt>alert(1)</script>', 'ipt>alert(1)'],
+      ['X<<<i>i>i>Y', 'Xi>i>Y'],
+      ['<img src=x onerror=1>', ''],
+    ])('入れ子のタグ表記 %s を1回の走査で除去しきる', (input, expected) => {
+      const result = extractBestPictureNominees(buildSingleNomineeHtml(input));
+
+      const title = result.length > 0 ? result[0].title : '';
+      expect(title).toBe(expected);
+      // 残骸に `<` が無い＝これ以上タグが組み上がる余地が無い
+      expect(title).not.toContain('<');
+    });
+
+    // 数値参照を先に処理してから &amp; を & にしていたため、&amp;lt; が
+    // &lt; ではなく < になっていた（CodeQL js/double-escaping）
+    it('&amp; でエスケープされたエンティティを二重にデコードしない', () => {
+      const result = extractBestPictureNominees(
+        buildSingleNomineeHtml('A&amp;lt;B'),
+      );
+
+      expect(result[0].title).toBe('A&lt;B');
+    });
+
+    it('&amp;amp; は &amp; になる', () => {
+      const result = extractBestPictureNominees(
+        buildSingleNomineeHtml('A&amp;amp;B'),
+      );
+
+      expect(result[0].title).toBe('A&amp;B');
+    });
+
+    it('名前付きエンティティをデコードする', () => {
+      const result = extractBestPictureNominees(
+        buildSingleNomineeHtml('A&quot;B&apos;C&gt;D'),
+      );
+
+      expect(result[0].title).toBe('A"B\'C>D');
+    });
+
+    it('未知の名前付きエンティティは元の表記のまま残す', () => {
+      const result = extractBestPictureNominees(
+        buildSingleNomineeHtml('A&unknownentity;B'),
+      );
+
+      expect(result[0].title).toBe('A&unknownentity;B');
+    });
+
+    it('範囲外のコードポイントでも例外を投げず元の表記を残す', () => {
+      const result = extractBestPictureNominees(
+        buildSingleNomineeHtml('A&#99999999;B'),
+      );
+
+      expect(result[0].title).toBe('A&#99999999;B');
+    });
+
+    it('サロゲートペアが必要な文字も正しく復元する', () => {
+      const result = extractBestPictureNominees(
+        buildSingleNomineeHtml('A&#x1F600;B'),
+      );
+
+      expect(result[0].title).toBe('A\u{1F600}B');
+    });
+  });
+
   it('映画「...」ラッピングを除去する', () => {
     const html = `
       <div class="nominate_ctb">

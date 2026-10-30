@@ -1085,7 +1085,8 @@ describe('resolveRecommendationsWithTMDb', () => {
             release_date: '2019-03-01',
             vote_average: 6.7,
             vote_count: 11,
-            overview: '足の悪い兄と自閉症の妹が、貧困の底で生き延びようとする。',
+            overview:
+              '足の悪い兄と自閉症の妹が、貧困の底で生き延びようとする。',
           }),
         ],
       });

@@ -571,6 +571,99 @@ describe('jwt コールバック', () => {
     expect(token.invalidated).toBe(true);
   });
 
+  // ログイン時にしか取らないと、admin を剥奪してもトークンの絶対有効期限
+  // （7日）まで admin のまま管理機能を使えてしまう
+  describe('ロールの追従', () => {
+    /** users の select で返すロールを差し替える */
+    function setRole(role: string | null) {
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: { password_changed_at: null, password_hash: 'h', role },
+            error: null,
+          };
+        }
+        return { data: null, error: null };
+      });
+    }
+
+    it('チェック間隔を超えたらDBのロールに追従する', async () => {
+      setRole('user');
+
+      const token = await jwt({
+        token: {
+          id: 'u1',
+          role: 'admin', // トークンは古い値を持っている
+          issuedAt: Date.now(),
+          lastPasswordCheck: 0, // 間隔を超過させて照合を走らせる
+          lastLoginUpdate: Date.now(),
+          passwordChangedAt: null,
+        },
+        user: undefined,
+        account: null,
+      });
+
+      expect(token.role).toBe('user');
+    });
+
+    it('昇格も同じ経路で反映される', async () => {
+      setRole('admin');
+
+      const token = await jwt({
+        token: {
+          id: 'u1',
+          role: 'user',
+          issuedAt: Date.now(),
+          lastPasswordCheck: 0,
+          lastLoginUpdate: Date.now(),
+          passwordChangedAt: null,
+        },
+        user: undefined,
+        account: null,
+      });
+
+      expect(token.role).toBe('admin');
+    });
+
+    it('role が null なら user に畳む', async () => {
+      setRole(null);
+
+      const token = await jwt({
+        token: {
+          id: 'u1',
+          role: 'admin',
+          issuedAt: Date.now(),
+          lastPasswordCheck: 0,
+          lastLoginUpdate: Date.now(),
+          passwordChangedAt: null,
+        },
+        user: undefined,
+        account: null,
+      });
+
+      expect(token.role).toBe('user');
+    });
+
+    it('チェック間隔内なら問い合わせず既存のロールを保つ', async () => {
+      setRole('user');
+
+      const token = await jwt({
+        token: {
+          id: 'u1',
+          role: 'admin',
+          issuedAt: Date.now(),
+          lastPasswordCheck: Date.now(), // 間隔内なのでスキップされる
+          lastLoginUpdate: Date.now(),
+          passwordChangedAt: null,
+        },
+        user: undefined,
+        account: null,
+      });
+
+      expect(token.role).toBe('admin');
+    });
+  });
+
   it('last_login はスロットリング間隔を超えていれば更新される', async () => {
     let userUpdated = false;
     setResolver(({ table, ops }) => {

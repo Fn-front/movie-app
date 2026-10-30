@@ -467,6 +467,19 @@ describe('syncStreamingMovies', () => {
       expect(result.availableInJp).toBe(0);
     });
 
+    it('upsert に original_language を含める', async () => {
+      mockDiscoverMovies.mockResolvedValue(
+        respondWith([createMovie({ id: 701, original_language: 'th' })]),
+      );
+
+      await syncStreamingMovies();
+
+      expect(mockUpsert.mock.calls[0][0][0]).toMatchObject({
+        id: 701,
+        original_language: 'th',
+      });
+    });
+
     it('デジタル公開日が無ければnullで保存する', async () => {
       mockGetJpStreamingAvailability.mockResolvedValue(availability(true));
 

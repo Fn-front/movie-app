@@ -383,6 +383,36 @@ describe('syncEigaMovies', () => {
     );
   });
 
+  it('upsert に original_language を含める', async () => {
+    const eigaMovie: EigaMovie = {
+      title: 'テスト映画',
+      releaseDate: '2026-03-01',
+      eigaUrl: null,
+    };
+
+    mockedFetchEigaMovies.mockResolvedValue([eigaMovie]);
+    mockedSearchMovies.mockResolvedValue({
+      results: [
+        createMockMovie({
+          id: 801,
+          title: 'テスト映画',
+          original_language: 'ko',
+        }),
+      ],
+      page: 1,
+      total_pages: 1,
+      total_results: 1,
+    });
+    mockedHasExcludedKeyword.mockResolvedValue(false);
+
+    await syncEigaMovies();
+
+    expect(mockUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 801, original_language: 'ko' }),
+      { onConflict: 'id,release_type' },
+    );
+  });
+
   it('TMDb検索でマッチしない場合にスキップする', async () => {
     const eigaMovie: EigaMovie = {
       title: 'マッチしない映画',

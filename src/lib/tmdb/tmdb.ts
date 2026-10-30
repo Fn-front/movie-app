@@ -4,11 +4,13 @@
 
 import {
   API,
+  DOCUMENTARY_GENRE_ID,
   EXCLUDED_GENRE_IDS,
   EXCLUDED_GENRES_PARAM,
   EXCLUDED_KEYWORD_IDS,
   EXCLUDED_KEYWORDS_PARAM,
   PAGINATION,
+  PERSON_NON_ACTING_CHARACTER_PATTERN,
   TMDB_DIGITAL_RELEASE_TYPE,
   TMDB_ENDPOINTS,
   TMDB_FALLBACK_LANGUAGE,
@@ -550,6 +552,39 @@ interface TMDbPersonResponse {
 }
 
 /**
+ * 演技ではないクレジットかを判定する
+ *
+ * TMDb の `movie_credits.cast` は演技クレジットと本人出演を区別しない。
+ * メイキング映像・ドキュメンタリーへの本人出演・アーカイブ映像の使用が
+ * すべて「出演作」として並び、クリスチャン・ベールでは78件中23件、
+ * レオナルド・ディカプリオでは91件中47件を占めていた。
+ *
+ * 1. 役名が本人役を示すもの（`Self` / `Himself` / `archive footage` 等）
+ * 2. ドキュメンタリーで役名が空のもの
+ *
+ * 2 を「役名が空」だけで判定しないのは、邦画・邦ドラマが TMDb に役名を
+ * 登録していないことが多いため。役所広司の役名なし14件（『樅ノ木は残った』
+ * 『闇の歯車』等）はすべて実在の出演作で、ジャンルと組み合わせないと巻き込む。
+ *
+ * 逆にドキュメンタリーでも役名があれば演技側に残す。
+ * 『坂本龍一 芸術は長く、人生は短し』の `Narrator` のように、
+ * 本人が仕事として関わっているため。
+ *
+ * @param credit - 整形済みの出演クレジット
+ * @returns 演技ではないクレジットなら true
+ */
+function isNonActingCredit(credit: PersonMovieCredit): boolean {
+  const character = (credit.character ?? '').trim();
+
+  if (PERSON_NON_ACTING_CHARACTER_PATTERN.test(character)) {
+    return true;
+  }
+
+  const isDocumentary = (credit.genre_ids ?? []).includes(DOCUMENTARY_GENRE_ID);
+  return isDocumentary && character === '';
+}
+
+/**
  * 出演作の重複をまとめる
  *
  * 同じ映画で複数役を演じている場合、TMDb は同じ `id` の credit を役の数だけ返す。
@@ -580,11 +615,23 @@ function mergeDuplicatedCredits(
  *
  * 未公開・公開日未登録の作品を先頭に出すと、代表作より先に情報の無い作品が
  * 並んでしまうため末尾へ寄せる。
+ *
+ * メイキング・本人出演（`isNonActingCredit`）はさらに後ろへ回す。消さずに
+ * 末尾へ送るのは、長編ドキュメンタリーへの本人出演と特典映像のメイキングを
+ * 機械的に区別できないため。尺で分けようとすると153分のメイキング
+ * （`Keepers of the Covenant: Making 'Exodus: Gods and Kings'`）と44分の
+ * 正当なドキュメンタリー（`IMAX Hubble`）が逆転し、ジャンルは双方とも
+ * ドキュメンタリー、評価数は邦画が沈む。判断がつかないものを捨てるより、
+ * 一覧の先頭を演技クレジットで埋めて後ろに置く。
  */
 function sortCreditsByReleaseDateDesc(
   credits: PersonMovieCredit[],
 ): PersonMovieCredit[] {
   return [...credits].sort((a, b) => {
+    const aNonActing = isNonActingCredit(a);
+    const bNonActing = isNonActingCredit(b);
+    if (aNonActing !== bNonActing) return aNonActing ? 1 : -1;
+
     if (!a.release_date && !b.release_date) return 0;
     if (!a.release_date) return 1;
     if (!b.release_date) return -1;

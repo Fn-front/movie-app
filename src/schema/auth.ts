@@ -8,10 +8,7 @@ import { VALIDATION } from '@/constants';
 import { VALIDATION_MESSAGES } from '@/constants/auth';
 
 import { normalizeEmail } from '@/utils/email';
-import {
-  isEmailIdentifier,
-  isUsernameShape,
-} from '@/lib/auth/accountIdentity';
+import { isEmailIdentifier, isUsernameShape } from '@/lib/auth/accountIdentity';
 import { getByteLength } from '@/utils/string';
 
 /**

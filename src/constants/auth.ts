@@ -8,6 +8,8 @@ import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE } from './time';
  * 認証エラーメッセージ
  */
 export const AUTH_ERROR_MESSAGES = {
+  /** 権限不足。未認証（401）と区別する。再ログインしても解決しない */
+  FORBIDDEN: 'この操作を行う権限がありません。',
   /** データベース接続エラー */
   DB_CONNECTION_ERROR: 'データベース接続が利用できません。',
   /** 入力必須エラー */
@@ -178,6 +180,13 @@ export const PWNED_PASSWORD_CONFIG = {
  */
 export const USER_ROLE = {
   USER: 'user',
+  /**
+   * 管理者。アカウントの発行・再発行ができる。
+   *
+   * DB 側は `chk_user_role` で `'user' | 'admin'` に制限済み。
+   * 付与・剥奪はDBを直接更新する（画面からは変更できない）。
+   */
+  ADMIN: 'admin',
 } as const;
 export type UserRole = (typeof USER_ROLE)[keyof typeof USER_ROLE];
 

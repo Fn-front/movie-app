@@ -570,7 +570,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ) {
           const { data } = await supabase
             .from('users')
-            .select('password_hash, password_changed_at')
+            .select('password_hash, password_changed_at, role')
             .eq('id', token.id)
             .single();
 
@@ -591,6 +591,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // （パスワード変更フォームが「現在のパスワード」欄を出すかの判定に使う）
           if (data) {
             token.hasPassword = Boolean(data.password_hash);
+
+            // ロールも追従させる。ログイン時にしか取らないと、admin を剥奪しても
+            // トークンの絶対有効期限（7日）まで admin のまま管理機能を使えてしまう。
+            // 上のパスワード確認と同じ問い合わせに相乗りするため、クエリは増えない
+            token.role = data.role ?? USER_ROLE.USER;
           }
 
           token.lastPasswordCheck = now;

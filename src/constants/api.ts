@@ -34,6 +34,8 @@ export const HTTP_STATUS = {
   BAD_REQUEST: 400,
   /** 認証エラー */
   UNAUTHORIZED: 401,
+  /** 権限不足（ログイン済みだがロールが足りない） */
+  FORBIDDEN: 403,
   /** リソース未検出 */
   NOT_FOUND: 404,
   /** リソース競合（重複登録等） */
@@ -68,6 +70,8 @@ export const ERROR_CODE = {
   SERVER_ERROR: 'SERVER_ERROR',
   /** 認証エラー */
   UNAUTHORIZED: 'UNAUTHORIZED',
+  /** 権限不足（ログイン済みだがロールが足りない） */
+  FORBIDDEN: 'FORBIDDEN',
   /** バリデーションエラー */
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   /** クライアントエラー */

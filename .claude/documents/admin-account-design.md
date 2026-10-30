@@ -138,27 +138,27 @@ chk_user_role          CHECK (role IN ('user','admin'))   ← admin は既に許
 
 `feature/username-login`
 
-- [ ] マイグレーション: `users.username` 追加（`VARCHAR`, UNIQUE, NULL 許容）
-- [ ] ユーザー名のランダム生成（`src/lib/auth/` に新規）
+- [x] マイグレーション: `users.username` 追加（`VARCHAR`, UNIQUE, NULL 許容）
+- [x] ユーザー名のランダム生成（`src/lib/auth/` に新規）
   - `src/lib/totp/recoveryCodes.ts` の `ALPHABET`（紛らわしい文字を除いた29文字）を流用する
   - `randomInt` を使う（`Math.random` は不可）
-- [ ] 合成メールアドレスの生成（`<ランダム>@<ランダム>.invalid`）
-- [ ] `src/lib/auth/auth.ts` の `authorize()` にユーザー名分岐を追加
+- [x] 合成メールアドレスの生成（`<ランダム>@<ランダム>.invalid`）
+- [x] `src/lib/auth/auth.ts` の `authorize()` にユーザー名分岐を追加
   - レート制限・`bcrypt.compare`・TOTP 検証は**既存の共有パスをそのまま通す**
-- [ ] `loginSchema` をユーザー名入力に対応
-- [ ] 単体テスト（`auth.test.ts` に追加）
-- [ ] **完了条件**: アカウントを作る手段がまだ無いため、既存4経路（メール+パスワード / メールOTP / Google / GitHub）が無傷であることを E2E で確認できる
+- [x] `loginSchema` をユーザー名入力に対応
+- [x] 単体テスト（`auth.test.ts` に追加）
+- [x] **完了条件**: アカウントを作る手段がまだ無いため、既存4経路（メール+パスワード / メールOTP / Google / GitHub）が無傷であることを E2E で確認できる
 
 ### PR 2 — admin 認可の土台
 
 `feature/admin-authorization`
 
-- [ ] `USER_ROLE` に `ADMIN: 'admin'` を追加
-- [ ] `withAdminAuth` ヘルパー（`src/helpers/`）
-- [ ] `jwt` コールバックで `role` を定期的に DB から追従（現状はログイン時のみ）
-- [ ] `proxy.ts` で admin 画面を保護
-- [ ] 単体テスト
-- [ ] **完了条件**: admin 画面がまだ無いため、既存ユーザーへの影響がゼロであることを確認できる
+- [x] `USER_ROLE` に `ADMIN: 'admin'` を追加
+- [x] `withAdminAuth` ヘルパー（`src/helpers/`）
+- [x] `jwt` コールバックで `role` を定期的に DB から追従（現状はログイン時のみ）
+- [x] `proxy.ts` で admin 画面を保護
+- [x] 単体テスト
+- [x] **完了条件**: admin 画面がまだ無いため、既存ユーザーへの影響がゼロであることを確認できる
 
 ### PR 3 — アカウント管理画面
 

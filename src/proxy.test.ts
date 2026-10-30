@@ -365,6 +365,84 @@ describe('proxy', () => {
     });
   });
 
+  describe('admin 専用パス', () => {
+    const adminAuth = { user: { id: 'admin-1', role: 'admin' } };
+    const userAuth = { user: { id: 'user-1', role: 'user' } };
+
+    it('admin はアクセスできる', () => {
+      const req = createMockRequest({
+        pathname: '/admin/accounts',
+        auth: adminAuth,
+      });
+
+      proxy(req);
+
+      expect(mockNextResponseNext).toHaveBeenCalled();
+    });
+
+    // 404 ではなくホームへ送る。存在を隠しても守りにならない
+    // （APIを直接叩けば分かる）ため、素直にリダイレクトする
+    it('一般ユーザーはホームへリダイレクトされる', () => {
+      const req = createMockRequest({
+        pathname: '/admin/accounts',
+        auth: userAuth,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toContain('/');
+      expect(response.headers.get('location')).not.toContain('/admin');
+    });
+
+    it('role を持たないセッションもホームへリダイレクトされる', () => {
+      const req = createMockRequest({
+        pathname: '/admin/accounts',
+        auth: { user: { id: 'user-1' } },
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).not.toContain('/admin');
+    });
+
+    it('未認証はサインインへリダイレクトされる（戻り先を保持）', () => {
+      const req = createMockRequest({
+        pathname: '/admin/accounts',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = proxy(req);
+      const location = response.headers.get('location');
+
+      expect(location).toContain('/auth/signin');
+      expect(location).toContain('callbackUrl=%2Fadmin%2Faccounts');
+    });
+
+    it('配下のパスも startsWith で保護される', () => {
+      const req = createMockRequest({
+        pathname: '/admin/accounts/new',
+        auth: userAuth,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).not.toContain('/admin');
+    });
+
+    // `/api/*` は冒頭で素通しされる。ロールの最終判定は withAdminAuth が行う
+    it('/api/admin/* は proxy を素通りする', () => {
+      const req = createMockRequest({
+        pathname: '/api/admin/accounts',
+        auth: userAuth,
+      });
+
+      proxy(req);
+
+      expect(mockNextResponseNext).toHaveBeenCalled();
+    });
+  });
+
   describe('境界値: protectedPaths / authPaths のマッチング', () => {
     it('動的セグメント /theater-experience/[slug] も startsWith で保護される', () => {
       const req = createMockRequest({

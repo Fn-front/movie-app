@@ -42,6 +42,8 @@ export const ROUTES = {
   FAVORITES: '/favorites',
   /** ウォッチリスト */
   WATCHLIST: '/watchlist',
+  /** 管理者向けのアカウント管理（admin ロールのみ） */
+  ADMIN_ACCOUNTS: '/admin/accounts',
   /** 受賞作品 */
   AWARDS: '/awards',
   /** シアター体験 */
@@ -70,6 +72,15 @@ export const AUTH_REQUIRED_ROUTES = [
   ROUTES.FAVORITES,
   ROUTES.THEATER_EXPERIENCE,
 ] as const;
+
+/**
+ * admin ロールが必要なルート（proxy の判定に使う）
+ *
+ * ⚠️ ここでの保護は入口の体裁に過ぎない。`/api/*` は proxy の判定を素通りする
+ * ため、**ロールの最終判定は各 API Route の `withAdminAuth` で行う**。
+ * 画面だけ塞いでも、APIを直接叩かれれば意味がない。
+ */
+export const ADMIN_REQUIRED_ROUTES = [ROUTES.ADMIN_ACCOUNTS] as const;
 
 /**
  * エラーメッセージ生成ヘルパー

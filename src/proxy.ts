@@ -11,7 +11,12 @@
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/lib/auth/auth';
-import { ROUTES, AUTH_REQUIRED_ROUTES } from '@/constants/common';
+import {
+  ROUTES,
+  AUTH_REQUIRED_ROUTES,
+  ADMIN_REQUIRED_ROUTES,
+} from '@/constants/common';
+import { USER_ROLE } from '@/constants/auth';
 
 /** セッションcookie名（環境に応じて切り替え） */
 const SESSION_COOKIE_NAME =
@@ -24,6 +29,9 @@ const protectedPaths = AUTH_REQUIRED_ROUTES;
 
 /** 認証ページ */
 const authPaths = [ROUTES.LOGIN, ROUTES.REGISTER];
+
+/** admin ロールが必要なパス */
+const adminPaths = ADMIN_REQUIRED_ROUTES;
 
 export const proxy = auth((req) => {
   const { nextUrl } = req;
@@ -101,6 +109,28 @@ export const proxy = auth((req) => {
   // 未認証で保護されたパスにアクセス → サインインページへリダイレクト（戻り先を保持）
   if (isProtectedPath && !isAuthenticated) {
     return NextResponse.redirect(buildSignInUrl());
+  }
+
+  // admin 専用パス。
+  //
+  // 未認証なら上と同じくログインへ送り、ログイン済みで権限が足りなければ
+  // ホームへ送る。404 ではなくホームにするのは、存在そのものを隠しても
+  // 守りにならないため（APIを直接叩かれれば分かる）。
+  //
+  // ⚠️ これは入口の体裁に過ぎない。`/api/*` はこの判定を素通りするため、
+  // ロールの最終判定は各 API Route の `withAdminAuth` が行う。
+  const isAdminPath = adminPaths.some((path) =>
+    nextUrl.pathname.startsWith(path),
+  );
+
+  if (isAdminPath) {
+    if (!isAuthenticated) {
+      return NextResponse.redirect(buildSignInUrl());
+    }
+
+    if (req.auth?.user?.role !== USER_ROLE.ADMIN) {
+      return NextResponse.redirect(new URL(ROUTES.HOME, nextUrl));
+    }
   }
 
   // 認証済みで認証ページにアクセス → ホームへリダイレクト

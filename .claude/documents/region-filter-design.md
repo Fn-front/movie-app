@@ -44,12 +44,15 @@ TMDb は広東語を `cn`、北京語を `zh` と別コードで持つが、`ALL
 ```sql
 ALTER TABLE movie_cache ADD COLUMN original_language VARCHAR(10);
 
-CREATE INDEX IF NOT EXISTS idx_movie_cache_original_language
-  ON movie_cache(original_language);
-
 COMMENT ON COLUMN movie_cache.original_language IS
   'TMDbの原語（ISO 639-1）。地域フィルタの絞り込みに使う。NULLは未取得を表し、除外対象にしない。';
 ```
+
+**インデックスは作らない。** 読み取り側の述語は
+`original_language IS NULL OR original_language NOT IN (...)` という否定形で、かつ
+原語は数十種しかない低カーディナリティ列である。B-tree は選択されず、書き込みコスト
+だけが増える。`movie_cache` は 1,142 行（2026-10-31 時点）でシーケンシャルスキャンでも
+十分速い。行数が桁で増えたら `EXPLAIN` で再評価する。
 
 **言語コードをそのまま持ち、地域へのグルーピングはアプリ側の定数で行う。** 地域を列に
 持つと、グループ分けを変えるたびにマイグレーションとバックフィルが必要になる。

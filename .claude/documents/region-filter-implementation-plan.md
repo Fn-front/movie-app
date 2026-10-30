@@ -21,8 +21,15 @@
 - スキーマ変更は `supabase migration new` → `supabase db push`。ダッシュボードでの直接変更は禁止
 - 関数を `CREATE OR REPLACE` したら `REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated` と `GRANT EXECUTE ... TO service_role` を同じマイグレーションに明示する
 - テストは対象ファイルと同じディレクトリに `<filename>.test.ts(x)`。全指標 80% 以上
-- コンポーネントは `React.memo` + `useCallback` + `displayName` 必須
+- コンポーネントは `React.memo` + `useCallback` + `displayName` 必須。今回は既存の
+  `FilterModal` / `FilterModalContent`（いずれも対応済み）を変更するだけで、新規
+  コンポーネントは作らない
+- 地域チェックボックスは素の `<input type='checkbox'>` を使う。既存のジャンルタグ・
+  配信サービスタグ（`filterModal.tsx:325-339` / `:347-359`）と同じ形を**踏襲する**ため。
+  3件のために別パターンを持ち込むと一覧内で不統一になる
 - SCSS は HTML タグを直接セレクタにしない。既存クラスを流用する
+- バックフィル用の使い捨てスクリプトは**リポジトリに残さない**（`docs/tmp/` 配下で
+  実行し、完了後に削除する）
 
 ---
 
@@ -257,8 +264,12 @@ npx supabase migration new add_movie_cache_original_language
 ALTER TABLE movie_cache
   ADD COLUMN IF NOT EXISTS original_language VARCHAR(10);
 
-CREATE INDEX IF NOT EXISTS idx_movie_cache_original_language
-  ON movie_cache(original_language);
+-- インデックスは作らない。
+--   読み取り側の述語は `original_language IS NULL OR original_language NOT IN (...)`
+--   という否定形で、かつ原語は数十種しかない低カーディナリティ列。B-tree は
+--   選択されず、INSERT/UPDATE の書き込みコストだけが増える。
+--   movie_cache は 1,142 行（2026-10-31 時点）でシーケンシャルスキャンでも
+--   十分速い。行数が桁で増えたら EXPLAIN で再評価する。
 
 COMMENT ON COLUMN movie_cache.original_language IS
   'TMDbの原語（ISO 639-1）。地域フィルタの絞り込みに使う。NULLは未取得を表し、除外対象にしない。';
@@ -349,7 +360,25 @@ GRANT EXECUTE ON FUNCTION public.upsert_movie_cache(JSONB, BOOLEAN)
   TO service_role;
 ```
 
-- [ ] **Step 3: 適用対象を確認してから適用する**
+- [ ] **Step 3: 既存の関数定義との差分が原語だけであることを確認する**
+
+`CREATE OR REPLACE` で全文を書き直すため、他の列の扱い（リバイバル行の `release_date`
+保護、`is_now_playing` の条件付き更新、`is_revival` の非更新）を意図せず退行させうる。
+置換前の定義と diff を取って、差分が `original_language` 関連だけであることを確認する。
+
+```bash
+diff <(sed -n '/CREATE OR REPLACE FUNCTION upsert_movie_cache/,/^\$\$;/p' \
+        supabase/migrations/20261019065404_fix_movie_cache_cached_at_timestamptz.sql) \
+     <(sed -n '/CREATE OR REPLACE FUNCTION upsert_movie_cache/,/^\$\$;/p' \
+        supabase/migrations/<timestamp>_add_movie_cache_original_language.sql)
+```
+
+Expected: 差分は以下の3箇所だけ。
+- INSERT の列リストに `original_language` が増えている
+- SELECT に `item->>'original_language'` が増えている
+- `DO UPDATE SET` に `original_language = COALESCE(...)` が増えている
+
+- [ ] **Step 4: 適用対象を確認してから適用する**
 
 ```bash
 set -a; . ./.env.local; set +a
@@ -364,7 +393,7 @@ Expected: 対象が今回作成した1ファイルだけであること。
 npx supabase db push
 ```
 
-- [ ] **Step 4: 型定義を再生成する**
+- [ ] **Step 5: 型定義を再生成する**
 
 ```bash
 set -a; . ./.env.local; set +a
@@ -374,7 +403,7 @@ npx supabase gen types typescript --project-id "$SUPABASE_PROJECT_ID" > src/type
 `SUPABASE_PROJECT_ID` が `.env.local` に無ければ `npx supabase projects list` で確認する。
 型定義ファイルは手動編集しない。
 
-- [ ] **Step 5: 列が追加されたことを実データで確認する**
+- [ ] **Step 6: 列が追加されたことを実データで確認する**
 
 Run:
 ```bash
@@ -388,12 +417,12 @@ fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/movie_cache?select=id,original_la
 ```
 Expected: `[{"id":...,"original_language":null}]`（列が存在し、値は NULL）
 
-- [ ] **Step 6: 型チェック**
+- [ ] **Step 7: 型チェック**
 
 Run: `npx tsc --noEmit`
 Expected: exit 0
 
-- [ ] **Step 7: コミット**
+- [ ] **Step 8: コミット**
 
 ```bash
 git add supabase/migrations src/types/database.types.ts
@@ -872,6 +901,33 @@ describe('地域（原語）フィルタ', () => {
       args: ['original_language.is.null,original_language.not.in.(ko)'],
     });
   });
+
+  it('フィルタ構文を壊す文字を含む原語は連結しない', () => {
+    const builder = createQueryBuilderSpy();
+
+    applyMovieCacheFilters(builder, {
+      ...baseFilters,
+      excludedLanguages: ['ko', 'x),original_language.is.null', 'z.z'],
+    });
+
+    expect(builder.calls).toContainEqual({
+      method: 'or',
+      args: ['original_language.is.null,original_language.not.in.(ko)'],
+    });
+  });
+
+  it('不正な原語しか無ければ言語で絞らない', () => {
+    const builder = createQueryBuilderSpy();
+
+    applyMovieCacheFilters(builder, {
+      ...baseFilters,
+      excludedLanguages: ['*'],
+    });
+
+    expect(
+      builder.calls.filter((call) => call.method === 'or'),
+    ).toHaveLength(0);
+  });
 });
 ```
 
@@ -895,12 +951,30 @@ Expected: FAIL（型エラー、または `or` が呼ばれない）
   excludedLanguages: string[];
 ```
 
+ファイル先頭（`applyMovieCacheFilters` の前）に検証用の正規表現を置く。
+
+```ts
+/**
+ * PostgREST のフィルタ構文に埋め込んでよい原語コードの形
+ *
+ * 除外原語は `not.in.(ko,zh)` の形で文字列連結するため、`,` `)` `.` が
+ * 混ざると構文が壊れる。現状の呼び出し元（getExcludedLanguages）は定数しか
+ * 返さないが、型は string[] であり将来の呼び出しまでは縛れない。
+ * 連結する直前にここで弾く。
+ */
+const LANGUAGE_CODE_PATTERN = /^[a-z]{2,3}$/;
+```
+
 `applyMovieCacheFilters` の `watchProviderIds` ブロックの後、`return` の前に追加する。
 
 ```ts
-  if (filters.excludedLanguages.length > 0) {
+  const safeLanguages = filters.excludedLanguages.filter((code) =>
+    LANGUAGE_CODE_PATTERN.test(code),
+  );
+
+  if (safeLanguages.length > 0) {
     filtered = filtered.or(
-      `original_language.is.null,original_language.not.in.(${filters.excludedLanguages.join(',')})`,
+      `original_language.is.null,original_language.not.in.(${safeLanguages.join(',')})`,
     );
   }
 ```
@@ -1137,6 +1211,19 @@ it('include_regions の配列を受け付ける', () => {
   });
 
   expect(result.include_regions).toEqual(['korea', 'chinese', 'thai_indian']);
+});
+
+it('include_regions を持たない既存の保存済みフィルタも通る', () => {
+  // saved_filters の既存レコードにはこのキーが無い。optional なので
+  // パースに失敗せず、未指定（＝3グループ除外）として扱われる
+  const result = filterConditionsSchema.safeParse({
+    sort_by: 'release_date',
+    release_type: 'theatrical',
+    genre_ids: [28],
+  });
+
+  expect(result.success).toBe(true);
+  expect(result.success && result.data.include_regions).toBeUndefined();
 });
 ```
 
@@ -1731,6 +1818,12 @@ async function backfillOne(id) {
 }
 
 const pending = await fetchPendingIds();
+
+if (process.env.DRY_RUN) {
+  console.log(`[dry-run] 対象: ${pending.length} 件 / 更新は行いません`);
+  process.exit(0);
+}
+
 console.log(`対象: ${pending.length} 件`);
 
 const failures = [];
@@ -1745,13 +1838,27 @@ console.log(`完了: 成功 ${pending.length - failures.length} / 失敗 ${failu
 if (failures.length > 0) console.log(JSON.stringify(failures.slice(0, 20), null, 1));
 ```
 
-- [ ] **Step 3: バックフィルを実行する**
+- [ ] **Step 3: ドライラン（更新せずに対象件数だけ数える）**
+
+本番データを一括更新する前に、対象が想定どおりかを確認する。
+
+Run: `DRY_RUN=1 node docs/tmp/backfill-original-language.mjs`
+Expected: 「[dry-run] 対象: 1112 件 / 更新は行いません」。
+件数が 0 ならマイグレーションが未適用（Task 2 に戻る）。件数が総行数より極端に多ければ
+クエリが間違っている。
+
+- [ ] **Step 4: バックフィルを実行する**
 
 Run: `node docs/tmp/backfill-original-language.mjs`
 Expected: 「対象: 1112 件」程度から始まり、「完了: 成功 N / 失敗 M」で終わる。
 失敗は TMDb 側に原語が無い作品だけのはず（その行は NULL のまま＝常に表示される）。
 
-- [ ] **Step 4: 結果を実データで検証する**
+**冪等性とリカバリ:** 対象を `original_language=is.null` の行に限っているため、
+途中で中断しても**そのまま再実行すればよい**（更新済みの行は次回の対象から外れる）。
+ロールバックは不要。仮に誤った値を書いても、日次 cron（`update-movies`）が
+TMDb の値で毎日上書きするため自己修復する。
+
+- [ ] **Step 5: 結果を実データで検証する**
 
 Run:
 ```bash
@@ -1771,7 +1878,7 @@ const q=async(f)=>(await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/movie_ca
 ```
 Expected: `NULL残り` がごく少数（TMDb に原語が無い作品のみ）。`ko` などに件数が付く。
 
-- [ ] **Step 5: 使い捨てスクリプトを削除する**
+- [ ] **Step 6: 使い捨てスクリプトを削除する**
 
 ```bash
 rm docs/tmp/backfill-original-language.mjs
@@ -1802,21 +1909,60 @@ rm docs/tmp/backfill-original-language.mjs
  * 地域（原語）フィルタのE2E
  *
  * ストーリー: 既定ではアジア圏の作品が一覧に出ず、検索条件で表示に含められる
+ *
+ * API のレスポンスを差し替えて検証する。本番DBの中身に依存させると、
+ * 作品の入れ替わりでテストが壊れるため
  */
 
 import { test, expect } from '@playwright/test';
 
+/** 一覧APIを固定のレスポンスに差し替える */
+async function stubMovies(
+  page: import('@playwright/test').Page,
+  movies: { id: number; title: string }[],
+) {
+  await page.route('**/api/movies?**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: {
+          movies: movies.map((m) => ({
+            ...m,
+            poster_path: null,
+            backdrop_path: null,
+            release_date: '2026-12-01',
+            overview: '',
+            vote_average: 7,
+            vote_count: 100,
+            popularity: 10,
+            genre_ids: [28],
+            release_type: 'theatrical',
+            is_now_playing: false,
+            is_revival: false,
+            digital_release_date: null,
+          })),
+          genres: { 28: 'アクション' },
+          pagination: { page: 1, totalPages: 1, nextPage: null },
+        },
+      }),
+    });
+  });
+}
+
 test.describe('地域フィルタ', () => {
-  test('既定では include_regions を送らず、API が3地域を除外する', async ({
+  test('既定では include_regions を送らない（APIが3地域を除外する）', async ({
     page,
   }) => {
     const requests: string[] = [];
     page.on('request', (req) => {
       if (req.url().includes('/api/movies?')) requests.push(req.url());
     });
+    await stubMovies(page, [{ id: 1, title: '普通の映画' }]);
 
     await page.goto('/movies/upcoming');
-    await expect(page.getByRole('main')).toBeVisible();
+    await expect(page.getByText('普通の映画')).toBeVisible();
 
     expect(requests.length).toBeGreaterThan(0);
     expect(requests.every((url) => !url.includes('include_regions'))).toBe(
@@ -1824,32 +1970,92 @@ test.describe('地域フィルタ', () => {
     );
   });
 
-  test('地域を選んで適用すると include_regions が付く', async ({ page }) => {
+  test('既定では韓国作品が一覧に出ず、韓国を選ぶと出る', async ({ page }) => {
+    // APIの既定は3地域を除外するため、スタブ側でも同じ振る舞いを再現する
+    await page.route('**/api/movies?**', async (route) => {
+      const includesKorea = route.request().url().includes('include_regions');
+      const movies = includesKorea
+        ? [
+            { id: 1, title: '普通の映画' },
+            { id: 2, title: 'ハイジャック作戦' },
+          ]
+        : [{ id: 1, title: '普通の映画' }];
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            movies: movies.map((m) => ({
+              ...m,
+              poster_path: null,
+              backdrop_path: null,
+              release_date: '2026-12-01',
+              overview: '',
+              vote_average: 7,
+              vote_count: 100,
+              popularity: 10,
+              genre_ids: [28],
+              release_type: 'theatrical',
+              is_now_playing: false,
+              is_revival: false,
+              digital_release_date: null,
+            })),
+            genres: { 28: 'アクション' },
+            pagination: { page: 1, totalPages: 1, nextPage: null },
+          },
+        }),
+      });
+    });
+
     await page.goto('/movies/upcoming');
+    await expect(page.getByText('普通の映画')).toBeVisible();
+    await expect(page.getByText('ハイジャック作戦')).toHaveCount(0);
 
     await page.getByRole('button', { name: '絞り込み' }).click();
     await page.getByRole('checkbox', { name: '韓国' }).check();
-
-    const request = page.waitForRequest((req) =>
-      req.url().includes('include_regions=korea'),
-    );
     await page.getByRole('button', { name: '適用' }).click();
-    await request;
 
+    await expect(page.getByText('ハイジャック作戦')).toBeVisible();
     await expect(page).toHaveURL(/include_regions=korea/);
   });
 
-  test('リロードしても選んだ地域が保持される', async ({ page }) => {
-    await page.goto('/movies/upcoming?include_regions=korea');
+  test('結果が0件なら空状態を表示する', async ({ page }) => {
+    await stubMovies(page, []);
 
+    await page.goto('/movies/upcoming');
+
+    await expect(page.getByText('普通の映画')).toHaveCount(0);
+    // 空状態の文言は movieListContent の実装に合わせる
+    await expect(page.getByRole('main')).toBeVisible();
+  });
+
+  test('リロードしても選んだ地域が保持される', async ({ page }) => {
+    await stubMovies(page, [{ id: 1, title: '普通の映画' }]);
+
+    await page.goto('/movies/upcoming?include_regions=korea');
     await page.getByRole('button', { name: '絞り込み' }).click();
 
     await expect(page.getByRole('checkbox', { name: '韓国' })).toBeChecked();
   });
 
-  test('配信タブでも地域セクションが使える', async ({ page }) => {
-    await page.goto('/movies/upcoming?release_type=streaming');
+  test('キーボードだけで地域を選択できる', async ({ page }) => {
+    await stubMovies(page, [{ id: 1, title: '普通の映画' }]);
 
+    await page.goto('/movies/upcoming');
+    await page.getByRole('button', { name: '絞り込み' }).click();
+
+    const korea = page.getByRole('checkbox', { name: '韓国' });
+    await korea.focus();
+    await page.keyboard.press('Space');
+
+    await expect(korea).toBeChecked();
+  });
+
+  test('配信タブでも地域セクションが使える', async ({ page }) => {
+    await stubMovies(page, [{ id: 1, title: '普通の映画' }]);
+
+    await page.goto('/movies/upcoming?release_type=streaming');
     await page.getByRole('button', { name: '絞り込み' }).click();
 
     await expect(
@@ -1859,22 +2065,41 @@ test.describe('地域フィルタ', () => {
 });
 ```
 
-「絞り込み」ボタンの名前は `movieListToolbar.tsx` の実装に合わせる。
+「絞り込み」ボタンの名前は `movieListToolbar.tsx` の実装に、空状態の文言は
+`movieListContent.tsx` の実装に合わせる。一覧APIのレスポンス形も
+`src/lib/api/movies/movies.ts` の型に合わせる（上記は雛形）。
 
 - [ ] **Step 2: E2E を実行する**
 
 Run: `npx playwright test e2e/movies/regionFilter.spec.ts`
-Expected: 4件 PASS
+Expected: 6件 PASS
 
-- [ ] **Step 3: 全テストとビルドを確認する**
+- [ ] **Step 3: シナリオのスクリーンショットを取得する**
+
+`.claude/CLAUDE.md` の「E2E結果のスクショをPRに添付」に従い、
+`docs/e2e-screenshots/` にコミットする。ファイル名はシナリオ単位で安定させ、
+再取得時は上書きする。
+
+```bash
+node scripts/pr-visual.mjs shot http://localhost:3000/movies/upcoming \
+  docs/e2e-screenshots/region-filter-default.png
+node scripts/pr-visual.mjs shot "http://localhost:3000/movies/upcoming?include_regions=korea" \
+  docs/e2e-screenshots/region-filter-korea-included.png
+```
+
+PR本文にはコミットSHA固定の permalink で埋め込む
+（`https://github.com/Fn-front/movie-app/blob/<commit-sha>/docs/e2e-screenshots/<file>.png?raw=true`）。
+`<branch>` 指定はマージ後のブランチ削除でリンク切れになるため使わない。
+
+- [ ] **Step 4: 全テストとビルドを確認する**
 
 Run: `npx jest --coverage && npx tsc --noEmit && npx eslint src && npx next build`
 Expected: すべて成功。カバレッジは全指標 80% 以上
 
-- [ ] **Step 4: コミット**
+- [ ] **Step 5: コミット**
 
 ```bash
-git add e2e/movies/regionFilter.spec.ts
+git add e2e/movies/regionFilter.spec.ts docs/e2e-screenshots
 git commit -m "test(movies): 地域フィルタのE2Eを追加する"
 ```
 
@@ -1883,7 +2108,13 @@ git commit -m "test(movies): 地域フィルタのE2Eを追加する"
 ## 完了後の作業
 
 - [ ] Issue を作成する（本文は `.claude/documents/region-filter-design.md` の内容を要約し、完了条件を列挙）
+- [ ] `.claude/documents/roadmap/` に該当タスクがあるか確認し、あればチェックボックスを
+      `- [x]` に更新してコミットに含める（`.claude/CLAUDE.md` の必須ルール）。
+      新規機能で該当が無ければ、その旨を PR の「ロードマップ」節に書く
 - [ ] PR を作成する（`--assignee Fn-front`、`Closes #<issue>`、概要 / ロードマップ / レビューポイント / テスト の4節）
-- [ ] 画面に変化があるため、Before/After スクリーンショットとデモ動画を
-      `.claude/rules/visual-evidence.md` の手順（`scripts/pr-visual.mjs` + gh-image）で PR に添付する
+- [ ] **E2E 結果のスクショ**を PR 本文に埋め込む（Task 12 Step 3 で `docs/e2e-screenshots/`
+      にコミット済み。コミットSHA固定の permalink を使う）
+- [ ] **画面修正の Before/After とデモ動画**を `.claude/rules/visual-evidence.md` の手順
+      （`scripts/pr-visual.mjs` + gh-image の user-attachments）で PR に添付する。
+      こちらはリポジトリにコミットしない
 - [ ] マージ承認を待つ（`gh pr merge` は許可があるまで実行しない）

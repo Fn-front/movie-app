@@ -283,6 +283,7 @@ export type Database = {
           is_currently_streaming: boolean;
           is_now_playing: boolean;
           is_revival: boolean;
+          original_language: string | null;
           overview: string | null;
           popularity: number | null;
           poster_path: string | null;
@@ -305,6 +306,7 @@ export type Database = {
           is_currently_streaming?: boolean;
           is_now_playing?: boolean;
           is_revival?: boolean;
+          original_language?: string | null;
           overview?: string | null;
           popularity?: number | null;
           poster_path?: string | null;
@@ -327,6 +329,7 @@ export type Database = {
           is_currently_streaming?: boolean;
           is_now_playing?: boolean;
           is_revival?: boolean;
+          original_language?: string | null;
           overview?: string | null;
           popularity?: number | null;
           poster_path?: string | null;

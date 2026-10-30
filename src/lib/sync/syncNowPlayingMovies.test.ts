@@ -549,6 +549,29 @@ describe('syncNowPlayingMovies', () => {
       ).not.toHaveProperty('is_now_playing');
     });
 
+    it('upsert_movie_cache に original_language を渡す', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({ id: 501, original_language: 'ko' });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      await syncNowPlayingMovies();
+
+      expect(supabaseMock.rpcMock.mock.calls[0][1].movies[0]).toEqual(
+        expect.objectContaining({ id: 501, original_language: 'ko' }),
+      );
+    });
+
     it('UPSERTがエラーの場合errorsに記録される', async () => {
       setValidEnv();
 

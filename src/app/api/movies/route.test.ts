@@ -1875,6 +1875,43 @@ describe('GET /api/movies', () => {
     }
   });
 
+  it('Discover経由のUPSERTに original_language を含める', async () => {
+    const handler = await loadGET();
+
+    mockDiscoverMovies.mockResolvedValue({
+      results: [
+        {
+          id: 601,
+          title: '仏語作品',
+          adult: false,
+          original_language: 'fr',
+          genre_ids: [28],
+          vote_average: 7.0,
+          vote_count: 10,
+          popularity: 50,
+          poster_path: null,
+          backdrop_path: null,
+          release_date: '2026-12-01',
+          overview: '',
+        },
+      ],
+      total_pages: 1,
+    });
+
+    setupExpiredCacheFromMock({
+      discoverResults: [{ id: 601 }],
+      countResult: { count: 0 },
+      dataResult: { data: [], error: null },
+    });
+
+    await handler(createRequest());
+
+    const upsertRows = mockSupabaseClient!.rpc.mock.calls[0][1].movies;
+    expect(upsertRows).toContainEqual(
+      expect.objectContaining({ id: 601, original_language: 'fr' }),
+    );
+  });
+
   // === 舞台・演劇中継の除外 ===
 
   it('Discover同期で舞台中継をmovie_cacheに保存しない', async () => {

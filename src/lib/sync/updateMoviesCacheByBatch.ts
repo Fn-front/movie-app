@@ -128,6 +128,9 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
             vote_average: stats.voteAverage,
             vote_count: stats.voteCount,
             popularity: stats.popularity,
+            // 地域フィルタが参照する列。全件の詳細をここで毎日取得しているため、
+            // 追加のTMDb呼び出し無しに未取得の行が順次埋まる
+            original_language: stats.originalLanguage,
             updated_at: now,
           })
           .eq('id', movieId);

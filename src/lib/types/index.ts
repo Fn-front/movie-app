@@ -184,6 +184,8 @@ export interface MovieCacheStats {
   voteCount: number;
   /** 人気度 */
   popularity: number;
+  /** 原語（ISO 639-1）。TMDbが返さない場合は null */
+  originalLanguage: string | null;
 }
 
 /**

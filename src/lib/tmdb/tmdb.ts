@@ -231,13 +231,15 @@ export async function getMovieCacheStats(
     TMDB_ENDPOINTS.MOVIE_DETAIL(movieId),
   );
 
-  const { genres, vote_average, vote_count, popularity } = response.data;
+  const { genres, vote_average, vote_count, popularity, original_language } =
+    response.data;
 
   return {
     genreIds: (genres ?? []).map((genre) => genre.id),
     voteAverage: vote_average,
     voteCount: vote_count ?? 0,
     popularity,
+    originalLanguage: original_language ?? null,
   };
 }
 

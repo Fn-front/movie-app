@@ -42,6 +42,7 @@ jest.mock('axios', () => {
 });
 
 import {
+  DOCUMENTARY_GENRE_ID,
   EXCLUDED_GENRE_IDS,
   EXCLUDED_GENRES_PARAM,
   EXCLUDED_KEYWORDS_PARAM,
@@ -1304,6 +1305,154 @@ describe('TMDb APIクライアント', () => {
       const person = await getPersonDetail(500);
 
       expect(person.cast.map((c: { id: number }) => c.id)).toEqual([1]);
+    });
+
+    describe('本人出演・メイキングの後方配置', () => {
+      /** クレジットを並べ、整形後のID順を返す */
+      const resolveIds = async (
+        credits: {
+          id: number;
+          character: string;
+          genre_ids?: number[];
+          release_date?: string;
+        }[],
+      ) => {
+        mockGet.mockResolvedValue(
+          createPersonResponse({
+            movie_credits: { cast: credits.map((c) => createCredit(c)) },
+          }),
+        );
+        const { getPersonDetail } = require('./tmdb');
+        const person = await getPersonDetail(500);
+        return person.cast.map((c: { id: number }) => c.id);
+      };
+
+      it('役名が本人役のクレジットを演技クレジットより後ろに置く', async () => {
+        // 実データ: クリスチャン・ベールの78件中22件がこの形
+        const ids = await resolveIds([
+          { id: 1, character: 'Self', release_date: '2024-01-01' },
+          { id: 2, character: 'Self - Actor', release_date: '2023-01-01' },
+          { id: 3, character: 'Self - Gorr', release_date: '2022-01-01' },
+          { id: 4, character: 'Himself', release_date: '2021-01-01' },
+          { id: 5, character: 'Herself', release_date: '2020-01-01' },
+          { id: 6, character: 'Bruce Wayne', release_date: '2005-01-01' },
+        ]);
+
+        // 公開日では最古でも、演技クレジットが先頭に来る
+        expect(ids).toEqual([6, 1, 2, 3, 4, 5]);
+      });
+
+      it('役名にアーカイブ映像の注記があるクレジットを後ろに置く', async () => {
+        const ids = await resolveIds([
+          {
+            id: 1,
+            character: 'Batman (archive footage)',
+            release_date: '2024-01-01',
+          },
+          { id: 2, character: '(Archive footage)', release_date: '2023-01-01' },
+          {
+            id: 3,
+            character: 'Self (archive footage)',
+            release_date: '2022-01-01',
+          },
+          { id: 4, character: 'Bruce Wayne', release_date: '2005-01-01' },
+        ]);
+
+        expect(ids).toEqual([4, 1, 2, 3]);
+      });
+
+      it('「as Himself」のような前置きがある役名も後ろに置く', async () => {
+        const ids = await resolveIds([
+          {
+            id: 1,
+            character: 'Interviewee as Himself',
+            release_date: '2024-01-01',
+          },
+          { id: 2, character: 'Bruce Wayne', release_date: '2005-01-01' },
+        ]);
+
+        expect(ids).toEqual([2, 1]);
+      });
+
+      it('Selfridge のように self で始まる実在の役名は後ろに回さない', async () => {
+        // ジョヴァンニ・リビシの『アバター』シリーズ（Parker Selfridge, 34,930票）。
+        // /self/i の部分一致で判定すると代表作が末尾へ飛ばされる
+        const ids = await resolveIds([
+          { id: 1, character: 'Parker Selfridge', release_date: '2009-01-01' },
+          { id: 2, character: 'Self', release_date: '2024-01-01' },
+          { id: 3, character: 'Selfridge', release_date: '2022-01-01' },
+        ]);
+
+        expect(ids).toEqual([3, 1, 2]);
+      });
+
+      it('ドキュメンタリーで役名が無いクレジットを後ろに置く', async () => {
+        // 実データ: "A Ressureição de Cristo"（歴代のキリスト役を並べた
+        // 22分のアーカイブ編集もの）はキャスト全員の役名が空欄
+        const ids = await resolveIds([
+          {
+            id: 1,
+            character: '',
+            genre_ids: [DOCUMENTARY_GENRE_ID],
+            release_date: '2026-04-09',
+          },
+          { id: 2, character: '', genre_ids: [18], release_date: '1983-12-01' },
+        ]);
+
+        expect(ids).toEqual([2, 1]);
+      });
+
+      it('ドキュメンタリーでも役名があれば演技クレジット側に置く', async () => {
+        // ナレーション等で本人が仕事として関わっているもの
+        const ids = await resolveIds([
+          {
+            id: 1,
+            character: 'Self',
+            genre_ids: [DOCUMENTARY_GENRE_ID],
+            release_date: '2024-01-01',
+          },
+          {
+            id: 2,
+            character: 'Narrator / Dan Eldon (uncredited) (voice)',
+            genre_ids: [DOCUMENTARY_GENRE_ID],
+            release_date: '1998-09-14',
+          },
+        ]);
+
+        expect(ids).toEqual([2, 1]);
+      });
+
+      it('ドキュメンタリーでなければ役名が空でも演技クレジット側に置く', async () => {
+        // 邦画・邦ドラマは TMDb に役名が登録されていないことが多い。
+        // 役所広司の「役名なし」14件はすべて実在の出演作だった
+        const ids = await resolveIds([
+          { id: 1, character: 'Self', release_date: '2024-01-01' },
+          { id: 2, character: '', genre_ids: [18], release_date: '1983-12-01' },
+          {
+            id: 3,
+            character: '   ',
+            genre_ids: [28],
+            release_date: '1984-02-09',
+          },
+        ]);
+
+        expect(ids).toEqual([3, 2, 1]);
+      });
+
+      it('後ろに回したクレジットも1件も失わない', async () => {
+        const ids = await resolveIds([
+          { id: 1, character: 'Self', release_date: '2024-01-01' },
+          { id: 2, character: 'Bruce Wayne', release_date: '2005-01-01' },
+          {
+            id: 3,
+            character: '',
+            genre_ids: [DOCUMENTARY_GENRE_ID],
+            release_date: '2026-04-09',
+          },
+        ]);
+
+        expect(ids).toHaveLength(3);
+      });
     });
 
     it('同じ映画の複数役を1件にまとめ、役名を連結する', async () => {

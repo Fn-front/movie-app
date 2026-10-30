@@ -20,6 +20,25 @@ export const PERSON_ERROR_MESSAGES = {
 } as const;
 
 /**
+ * 演技ではないクレジットを示す役名のパターン
+ *
+ * TMDb の `movie_credits.cast` は演技クレジットと本人出演を区別しない。
+ * メイキング映像やドキュメンタリーへの本人出演、アーカイブ映像の使用も
+ * すべて cast として返るため、役名から判別する。
+ * クリスチャン・ベールでは78件中22件がこの形だった。
+ *
+ * ⚠️ `/self/i` の部分一致では判定できない。『アバター』の
+ * Parker Selfridge（34,930票）のような実在の役名が巻き込まれるため、
+ * 単語境界を必ず見ること。
+ *
+ *   Self / Self - Actor / Self - Gorr / Himself / Herself   → 除外
+ *   Batman (archive footage) / (Archive footage)            → 除外
+ *   Parker Selfridge / Selfridge                            → 残す
+ */
+export const PERSON_NON_ACTING_CHARACTER_PATTERN =
+  /^(self|himself|herself)\b|\bas (self|himself|herself)\b|\barchive footage\b/i;
+
+/**
  * 人物ページの表示メッセージ
  */
 export const PERSON_MESSAGES = {

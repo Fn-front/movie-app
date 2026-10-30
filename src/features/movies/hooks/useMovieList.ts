@@ -32,6 +32,7 @@ import {
   readStoredFilterConditions,
   writeStoredFilterConditions,
 } from '@/features/movies/utils/movieFilterParams';
+import type { RegionGroupKey } from '@/constants/movies';
 import type { FilterConditions } from '@/schema/filters';
 import type { DateRange } from '@/features/movies/types';
 
@@ -68,6 +69,8 @@ export interface UseMovieListReturn {
   selectedWatchProviderIds: number[];
   /** 選択中の提供形態（空配列なら全形態） */
   selectedOfferTypes: WatchProviderOfferType[];
+  /** 表示に含める地域グループ（空配列なら全地域を除外） */
+  selectedRegions: RegionGroupKey[];
   isFilterModalOpen: boolean;
   handleSortChange: (value: string) => void;
   handleReleaseTypeChange: (value: 'theatrical' | 'streaming') => void;
@@ -77,6 +80,7 @@ export interface UseMovieListReturn {
     isRevival: boolean | undefined,
     watchProviderIds?: number[],
     offerTypes?: WatchProviderOfferType[],
+    regions?: RegionGroupKey[],
   ) => void;
   handleFilterModalOpen: () => void;
   handleFilterModalClose: () => void;
@@ -102,6 +106,7 @@ interface FilterState {
   isRevival: boolean | undefined;
   watchProviderIds: number[];
   offerTypes: WatchProviderOfferType[];
+  regions: RegionGroupKey[];
 }
 
 function buildFilterConditions(state: FilterState): FilterConditions {
@@ -126,6 +131,9 @@ function buildFilterConditions(state: FilterState): FilterConditions {
   }
   if (state.offerTypes.length > 0) {
     conditions.offer_types = state.offerTypes;
+  }
+  if (state.regions.length > 0) {
+    conditions.include_regions = state.regions;
   }
   return conditions;
 }
@@ -194,6 +202,9 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const [selectedOfferTypes, setSelectedOfferTypes] = useState<
     WatchProviderOfferType[]
   >(urlFilters.offer_types ?? []);
+  const [selectedRegions, setSelectedRegions] = useState<RegionGroupKey[]>(
+    urlFilters.include_regions ?? [],
+  );
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const { toast } = useToast();
   const { data: session, status } = useSession();
@@ -235,6 +246,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     setIsRevivalFilter(conditions.is_revival);
     setSelectedWatchProviderIds(conditions.watch_providers || []);
     setSelectedOfferTypes(conditions.offer_types || []);
+    setSelectedRegions(conditions.include_regions || []);
   }, [savedFilterApplied, savedFilterQuery.data, defaultDateRange]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -258,6 +270,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     const effectiveWatchProviders =
       saved?.watch_providers ?? selectedWatchProviderIds;
     const effectiveOfferTypes = saved?.offer_types ?? selectedOfferTypes;
+    const effectiveRegions = saved?.include_regions ?? selectedRegions;
 
     return {
       sort_by: (saved?.sort_by ?? sortBy) as
@@ -282,6 +295,8 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
         effectiveOfferTypes.length > 0
           ? effectiveOfferTypes.join(',')
           : undefined,
+      include_regions:
+        effectiveRegions.length > 0 ? effectiveRegions.join(',') : undefined,
     };
   }, [
     sortBy,
@@ -293,6 +308,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     isRevivalFilter,
     selectedWatchProviderIds,
     selectedOfferTypes,
+    selectedRegions,
     savedFilterApplied,
     savedFilterQuery.data,
   ]);
@@ -410,6 +426,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
           isRevival: isRevivalFilter,
           watchProviderIds: selectedWatchProviderIds,
           offerTypes: selectedOfferTypes,
+          regions: selectedRegions,
         }),
       );
     },
@@ -420,6 +437,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       isRevivalFilter,
       selectedWatchProviderIds,
       selectedOfferTypes,
+      selectedRegions,
       persistFilters,
     ],
   );
@@ -444,6 +462,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
           isRevival: isRevivalFilter,
           watchProviderIds: nextWatchProviderIds,
           offerTypes: nextOfferTypes,
+          regions: selectedRegions,
         }),
       );
     },
@@ -454,6 +473,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       isRevivalFilter,
       selectedWatchProviderIds,
       selectedOfferTypes,
+      selectedRegions,
       persistFilters,
     ],
   );
@@ -465,12 +485,14 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       isRevival: boolean | undefined,
       watchProviderIds: number[] = [],
       offerTypes: WatchProviderOfferType[] = [],
+      regions: RegionGroupKey[] = [],
     ) => {
       setSelectedGenreIds(genreIds);
       setDateRange(newDateRange);
       setIsRevivalFilter(isRevival);
       setSelectedWatchProviderIds(watchProviderIds);
       setSelectedOfferTypes(offerTypes);
+      setSelectedRegions(regions);
       setIsFilterModalOpen(false);
       persistFilters(
         buildFilterConditions({
@@ -481,6 +503,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
           isRevival,
           watchProviderIds,
           offerTypes,
+          regions,
         }),
       );
     },
@@ -534,6 +557,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       isRevivalFilter,
       selectedWatchProviderIds,
       selectedOfferTypes,
+      selectedRegions,
       isFilterModalOpen,
       handleSortChange,
       handleReleaseTypeChange,
@@ -556,6 +580,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       isRevivalFilter,
       selectedWatchProviderIds,
       selectedOfferTypes,
+      selectedRegions,
       isFilterModalOpen,
       handleSortChange,
       handleReleaseTypeChange,

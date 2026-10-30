@@ -21,6 +21,11 @@ export const useUserMenu = () => {
     router.push(ROUTES.SETTINGS);
   }, [router]);
 
+  /** アカウント管理画面へ遷移（admin ロールのみ導線を出す） */
+  const handleNavigateToAdminAccounts = useCallback(() => {
+    router.push(ROUTES.ADMIN_ACCOUNTS);
+  }, [router]);
+
   /** ログアウト処理 */
   const handleLogout = useCallback(async () => {
     await signOut({ callbackUrl: ROUTES.LOGIN });
@@ -28,6 +33,7 @@ export const useUserMenu = () => {
 
   return {
     handleNavigateToSettings,
+    handleNavigateToAdminAccounts,
     handleLogout,
   };
 };

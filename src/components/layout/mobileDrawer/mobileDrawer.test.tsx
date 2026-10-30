@@ -15,7 +15,13 @@ jest.mock('next/navigation', () => ({
 const mockSignOut = jest.fn();
 let mockSessionData: {
   data: {
-    user: { id: string; name: string; email: string; image: string | null };
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      image: string | null;
+      role?: string;
+    };
     expires: string;
   } | null;
   status: string;
@@ -265,6 +271,71 @@ describe('MobileDrawer', () => {
 
       expect(
         screen.queryByRole('button', { name: '公開カレンダーを開く' }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('アカウント管理の導線', () => {
+    /** 認証済みセッションのロールを差し替える */
+    const setRole = (role: string) => {
+      mockSessionData = {
+        data: {
+          user: {
+            id: 'user-123',
+            name: 'テストユーザー',
+            email: 'test@example.com',
+            image: null,
+            role,
+          },
+          expires: '2099-12-31',
+        },
+        status: 'authenticated',
+      };
+    };
+
+    it('adminロールのとき「アカウント管理」ボタンが表示される', () => {
+      setRole('admin');
+      render(<MobileDrawer {...defaultProps} />);
+
+      expect(
+        screen.getByRole('button', { name: /アカウント管理/ }),
+      ).toBeInTheDocument();
+    });
+
+    it('adminロールで「アカウント管理」クリックで/admin/accountsに遷移する', async () => {
+      setRole('admin');
+      const user = userEvent.setup();
+      render(<MobileDrawer {...defaultProps} />);
+
+      await user.click(screen.getByRole('button', { name: /アカウント管理/ }));
+
+      expect(mockPush).toHaveBeenCalledWith('/admin/accounts');
+    });
+
+    it('一般ユーザーのときは「アカウント管理」ボタンが表示されない', () => {
+      setRole('user');
+      render(<MobileDrawer {...defaultProps} />);
+
+      expect(screen.getByRole('button', { name: /設定/ })).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /アカウント管理/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('ロール未設定のセッションでは「アカウント管理」ボタンが表示されない', () => {
+      render(<MobileDrawer {...defaultProps} />);
+
+      expect(
+        screen.queryByRole('button', { name: /アカウント管理/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('未認証のときは「アカウント管理」ボタンが表示されない', () => {
+      mockSessionData = { data: null, status: 'unauthenticated' };
+      render(<MobileDrawer {...defaultProps} />);
+
+      expect(
+        screen.queryByRole('button', { name: /アカウント管理/ }),
       ).not.toBeInTheDocument();
     });
   });

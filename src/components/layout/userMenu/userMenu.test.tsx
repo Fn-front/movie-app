@@ -45,6 +45,14 @@ const authenticatedSession = {
   status: 'authenticated',
 };
 
+/** ロールを差し替えた認証済みセッションを作る */
+const sessionWithRole = (role: string) => ({
+  ...authenticatedSession,
+  data: {
+    user: { ...authenticatedSession.data.user, role },
+  },
+});
+
 describe('UserMenu', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -190,5 +198,74 @@ describe('UserMenu', () => {
     );
 
     expect(mockToggleTheme).toHaveBeenCalled();
+  });
+
+  describe('アカウント管理の導線', () => {
+    const openMenu = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(
+        screen.getByRole('button', { name: 'テストユーザー ユーザーメニュー' }),
+      );
+    };
+
+    it('adminロールのときメニューに「アカウント管理」が表示される', async () => {
+      mockUseSession.mockReturnValue(sessionWithRole('admin'));
+      const user = userEvent.setup();
+      render(<UserMenu />);
+
+      await openMenu(user);
+
+      expect(
+        screen.getByRole('menuitem', { name: /アカウント管理/ }),
+      ).toBeInTheDocument();
+    });
+
+    it('adminロールで「アカウント管理」クリックで/admin/accountsに遷移する', async () => {
+      mockUseSession.mockReturnValue(sessionWithRole('admin'));
+      const user = userEvent.setup();
+      render(<UserMenu />);
+
+      await openMenu(user);
+      await user.click(
+        screen.getByRole('menuitem', { name: /アカウント管理/ }),
+      );
+
+      expect(mockPush).toHaveBeenCalledWith('/admin/accounts');
+    });
+
+    it('一般ユーザーのときは「アカウント管理」が表示されない', async () => {
+      mockUseSession.mockReturnValue(sessionWithRole('user'));
+      const user = userEvent.setup();
+      render(<UserMenu />);
+
+      await openMenu(user);
+
+      expect(
+        screen.getByRole('menuitem', { name: /設定/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('menuitem', { name: /アカウント管理/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('ロール未設定のセッションでは「アカウント管理」が表示されない', async () => {
+      const user = userEvent.setup();
+      render(<UserMenu />);
+
+      await openMenu(user);
+
+      expect(
+        screen.queryByRole('menuitem', { name: /アカウント管理/ }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('未認証のときは「アカウント管理」が表示されない', () => {
+      mockUseSession.mockReturnValue({
+        data: null,
+        status: 'unauthenticated',
+      });
+      render(<UserMenu />);
+
+      expect(screen.queryByText('アカウント管理')).not.toBeInTheDocument();
+    });
   });
 });

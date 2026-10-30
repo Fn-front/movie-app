@@ -20,6 +20,7 @@ import {
   IoHeartOutline,
   IoBookmarkOutline,
   IoSettingsOutline,
+  IoShieldCheckmarkOutline,
   IoLogOutOutline,
   IoLogInOutline,
   IoCloseOutline,
@@ -33,6 +34,7 @@ import {
   IMAGE_SIZES,
   ARIA_LABELS,
   MODAL_TITLES,
+  USER_ROLE,
 } from '@/constants';
 import { getInitial } from '@/utils/user';
 import { useNavAuthGuard } from '@/hooks/useNavAuthGuard';
@@ -144,6 +146,10 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
     router.push(ROUTES.SETTINGS);
   }, [router]);
 
+  const handleNavigateToAdminAccounts = useCallback(() => {
+    router.push(ROUTES.ADMIN_ACCOUNTS);
+  }, [router]);
+
   const handleLogin = useCallback(() => {
     router.push(ROUTES.LOGIN);
   }, [router]);
@@ -156,6 +162,10 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
   // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
   // id の有無で見る（getAuthSession と同じ基準）
   const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+
+  // 導線を出すかどうかの表示判定のみ。実際の認可は proxy.ts と withAdminAuth が担うため、
+  // JWT の role が古く（最大5分）て剥奪直後に残っても、遷移はそちらで弾かれる
+  const isAdmin = isAuthenticated && session?.user?.role === USER_ROLE.ADMIN;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -257,6 +267,19 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
                   <IoSettingsOutline size={ICON_SIZES.SM} aria-hidden='true' />
                   <span>{MENU_LABELS.SETTINGS}</span>
                 </button>
+                {isAdmin && (
+                  <button
+                    type='button'
+                    className={styles.c_mobile_drawer__user_action}
+                    onClick={handleNavigateToAdminAccounts}
+                  >
+                    <IoShieldCheckmarkOutline
+                      size={ICON_SIZES.SM}
+                      aria-hidden='true'
+                    />
+                    <span>{MENU_LABELS.ADMIN_ACCOUNTS}</span>
+                  </button>
+                )}
                 <button
                   type='button'
                   className={`${styles.c_mobile_drawer__user_action} ${styles['c_mobile_drawer__user_action--destructive']}`}

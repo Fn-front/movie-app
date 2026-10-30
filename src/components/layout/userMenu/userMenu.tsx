@@ -12,6 +12,7 @@ import Image from 'next/image';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import {
   IoSettingsOutline,
+  IoShieldCheckmarkOutline,
   IoLogOutOutline,
   IoLogInOutline,
   IoChevronForward,
@@ -20,6 +21,7 @@ import {
 } from 'react-icons/io5';
 
 import { MENU_LABELS, IMAGE_SIZES } from '@/constants';
+import { USER_ROLE } from '@/constants/auth';
 import { ROUTES } from '@/constants/common';
 import { getInitial } from '@/utils/user';
 import { useTheme } from '@/hooks/useTheme';
@@ -39,7 +41,11 @@ import styles from './userMenu.module.scss';
  */
 export const UserMenu = memo(function UserMenu() {
   const { data: session, status } = useSession();
-  const { handleNavigateToSettings, handleLogout } = useUserMenu();
+  const {
+    handleNavigateToSettings,
+    handleNavigateToAdminAccounts,
+    handleLogout,
+  } = useUserMenu();
   const { resolvedTheme, toggleTheme } = useTheme();
   const router = useRouter();
 
@@ -47,6 +53,9 @@ export const UserMenu = memo(function UserMenu() {
   const userEmail = session?.user?.email ?? '';
   const userImage = session?.user?.image;
   const isDark = resolvedTheme === 'dark';
+  // 導線を出すかどうかの表示判定のみ。実際の認可は proxy.ts と withAdminAuth が担うため、
+  // JWT の role が古く（最大5分）て剥奪直後に残っても、遷移はそちらで弾かれる
+  const isAdmin = session?.user?.role === USER_ROLE.ADMIN;
 
   const initial = useMemo(() => getInitial(userName), [userName]);
 
@@ -132,6 +141,23 @@ export const UserMenu = memo(function UserMenu() {
               <IoChevronForward />
             </span>
           </DropdownMenuPrimitive.Item>
+
+          {isAdmin && (
+            <DropdownMenuPrimitive.Item
+              className={styles.c_user_menu__item}
+              onSelect={handleNavigateToAdminAccounts}
+            >
+              <span className={styles.c_user_menu__item_icon}>
+                <IoShieldCheckmarkOutline />
+              </span>
+              <span className={styles.c_user_menu__item_label}>
+                {MENU_LABELS.ADMIN_ACCOUNTS}
+              </span>
+              <span className={styles.c_user_menu__item_arrow}>
+                <IoChevronForward />
+              </span>
+            </DropdownMenuPrimitive.Item>
+          )}
 
           <DropdownMenuPrimitive.CheckboxItem
             className={styles.c_user_menu__item}

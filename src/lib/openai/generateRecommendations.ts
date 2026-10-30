@@ -6,6 +6,7 @@ import {
   RECOMMENDATIONS_DISMISSED_TRAIT_LIMIT,
   RECOMMENDATIONS_HIGH_RATING_THRESHOLD,
   RECOMMENDATIONS_MAX_COUNT,
+  RECOMMENDATIONS_MIN_VOTE_COUNT,
   RECOMMENDATIONS_RATING_BANDS,
   RECOMMENDATIONS_YEAR_MATCH_TOLERANCE,
   TMDB_GENRE_MAP,
@@ -406,6 +407,26 @@ function filterByReleaseYear(results: Movie[], year: number): Movie[] {
 }
 
 /**
+ * 作品の実体が無いTMDbエントリかを判定する
+ *
+ * TMDbには数分尺の投稿動画や、登録だけされて中身の無いエントリが大量にある。
+ * これらは「Hunt」「Tunnel」のような汎用的な1単語の原題でタイトルが厳密一致し、
+ * 本来の作品を追い越して採用されてしまう（`findExactTitleMatches` は
+ * 一致したかどうかしか見ず、その候補が実在の作品かを問わないため）。
+ *
+ * 評価数だけで足切りすると『岬の兄妹』(11票) のような実在の邦画を巻き込むため、
+ * 説明文の有無と組み合わせて、両方とも欠けている候補だけを除外する。
+ *
+ * @param movie - TMDb検索結果の1件
+ * @returns 実体が無いとみなせる場合 true
+ */
+function isStubEntry(movie: Movie): boolean {
+  const hasOverview = (movie.overview ?? '').trim().length > 0;
+  const voteCount = movie.vote_count ?? 0;
+  return !hasOverview && voteCount < RECOMMENDATIONS_MIN_VOTE_COUNT;
+}
+
+/**
  * タイトル比較用に表記揺れを吸収する
  *
  * 中黒・空白・記号の有無だけが違う同一作品（「ナイト・クローラー」と
@@ -496,7 +517,9 @@ export async function resolveRecommendationsWithTMDb(
        */
       const searchSafely = async (query: string) => {
         const searchResult = await searchMovies({ query }, { signal });
-        return searchResult.results.filter((movie) => !movie.adult);
+        return searchResult.results.filter(
+          (movie) => !movie.adult && !isStubEntry(movie),
+        );
       };
 
       // 邦題・原題の順に検索し、タイトルが厳密に一致する候補を最優先で採用する。
@@ -530,9 +553,18 @@ export async function resolveRecommendationsWithTMDb(
           break;
         }
 
-        // 厳密一致が無い場合は作品を同定できていないため、従来どおり
-        // 公開年で絞ったうえで関連度最上位を採る
-        relevanceFallback ??= filterByReleaseYear(candidates, item.year)[0];
+        // 厳密一致が無い場合は作品を同定できていない。関連度1位が公開年も
+        // 一致するときだけ採る。
+        //
+        // 以前は「年が一致する候補のうち関連度が最も上のもの」を探しており、
+        // 関連度が下位の候補まで拾っていた。タイトルの類似は一切要求しないため、
+        // 検索語を含むだけの無関係な作品が年の一致だけで採用される
+        // （「Hunt(2022)」の検索で「ザ・パージ 魔法少女狩り(Witch Hunt, 2021)」を
+        // 採用していた）。1位でないなら作品の同定根拠が弱すぎるため採らない。
+        relevanceFallback ??= filterByReleaseYear(
+          candidates.slice(0, 1),
+          item.year,
+        )[0];
       }
 
       movie ??= relevanceFallback;

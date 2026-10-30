@@ -79,13 +79,20 @@ function createDismissed(
   };
 }
 
-/** TMDb検索結果の1件分を組み立てる（original_title は未指定なら title と同じ） */
+/**
+ * TMDb検索結果の1件分を組み立てる（original_title は未指定なら title と同じ）
+ *
+ * overview の既定は空文字。実体の無いエントリの除外は
+ * 「評価数が極端に少ない」かつ「説明文が無い」の両方が揃ったときだけ効くため、
+ * 既定の vote_count だけで除外されないことを担保する意図で空にしてある。
+ */
 function createSearchResult(
   overrides: Partial<{
     id: number;
     title: string;
     original_title: string;
     adult: boolean;
+    overview: string;
     poster_path: string | null;
     release_date: string;
     vote_average: number;
@@ -97,6 +104,7 @@ function createSearchResult(
   return {
     id: 100,
     adult: false,
+    overview: '',
     poster_path: null,
     release_date: '2020-01-01',
     vote_average: 7.0,
@@ -858,7 +866,7 @@ describe('resolveRecommendationsWithTMDb', () => {
       expect(result[0].tmdb_movie_id).toBe(2);
     });
 
-    it('邦題・原題とも厳密一致が無い場合は、関連度最上位の年一致候補を採用する', async () => {
+    it('邦題・原題とも厳密一致が無い場合、関連度1位が年も一致すれば採用する', async () => {
       mockSearchMovies.mockResolvedValue({
         results: [
           createSearchResult({
@@ -874,6 +882,36 @@ describe('resolveRecommendationsWithTMDb', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].tmdb_movie_id).toBe(50);
+    });
+
+    it('関連度1位が年と一致しない場合、下位の年一致候補は採用しない', async () => {
+      // フォールバックはタイトルの類似を一切要求しないため、関連度下位まで
+      // 拾うと検索語を含むだけの無関係な作品が年の一致だけで採用される。
+      // 「Hunt(2022)」の検索で「ザ・パージ 魔法少女狩り(Witch Hunt, 2021)」を
+      // 採用していた実例
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({
+            id: 514847,
+            title: 'ザ・ハント',
+            original_title: 'The Hunt',
+            release_date: '2020-03-11',
+            vote_count: 3884,
+          }),
+          createSearchResult({
+            id: 670429,
+            title: 'ザ・パージ 魔法少女狩り',
+            original_title: 'Witch Hunt',
+            release_date: '2021-10-01',
+            vote_count: 289,
+          }),
+        ],
+      });
+
+      const items = [createItem('Hunt', 2022, '理由', 'Hunt')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(0);
     });
 
     it('公開年が許容範囲を超えてずれていても、厳密一致する候補を採用する', async () => {
@@ -1002,6 +1040,137 @@ describe('resolveRecommendationsWithTMDb', () => {
 
       expect(result).toHaveLength(1);
       expect(mockSearchMovies).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('実体の無いTMDbエントリの除外', () => {
+    it('説明文が無く評価もほぼ付いていない候補は、タイトルが厳密一致しても採用しない', async () => {
+      // 本番で実際に採用されてしまった値。AIは韓国映画『헌트』(2022) を意図して
+      // 原題 "Hunt" を返したが、TMDbで "Hunt" に厳密一致するのは数分尺の
+      // 実体の無いエントリばかりで、そこから公開年が最も近いものが選ばれていた
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({
+            id: 334550,
+            title: 'Hunt',
+            release_date: '2015-04-05',
+            vote_average: 0,
+            vote_count: 0,
+          }),
+          createSearchResult({
+            id: 1384038,
+            title: 'Hunt',
+            release_date: '2024-11-07',
+            vote_average: 0,
+            vote_count: 0,
+          }),
+        ],
+      });
+
+      const items = [createItem('Hunt', 2022, '理由', 'Hunt')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('評価数が少なくても説明文があれば採用する（ミニシアター系の邦画）', async () => {
+      // 『岬の兄妹』は実在の劇場公開作だが TMDb では11票しかない。
+      // 誤採用された『Tunnel』(14票) より少ないため、評価数だけで足切りすると
+      // 正当な邦画を巻き込む
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({
+            id: 579057,
+            title: '岬の兄妹',
+            release_date: '2019-03-01',
+            vote_average: 6.7,
+            vote_count: 11,
+            overview: '足の悪い兄と自閉症の妹が、貧困の底で生き延びようとする。',
+          }),
+        ],
+      });
+
+      const items = [createItem('岬の兄妹', 2019, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(579057);
+    });
+
+    it('説明文が無くても評価数が十分なら採用する', async () => {
+      // 説明文の欠落だけを理由に落とすと、日本語訳が未登録の外国映画を失う
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({
+            id: 300,
+            title: '説明文未登録の作品',
+            release_date: '2020-01-01',
+            vote_count: 800,
+            overview: '',
+          }),
+        ],
+      });
+
+      const items = [createItem('説明文未登録の作品', 2020, '理由')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(300);
+    });
+
+    it('邦題の候補が全て除外された場合、原題で再検索して件数を落とさない', async () => {
+      // 足切りの結果「0件」で終わらせず、従来どおり原題のフォールバックへ進む
+      mockSearchMovies
+        .mockResolvedValueOnce({
+          results: [
+            createSearchResult({
+              id: 1104285,
+              title: 'Tunnel',
+              release_date: '2021-10-22',
+              vote_average: 3.4,
+              vote_count: 14,
+            }),
+          ],
+        })
+        .mockResolvedValueOnce({
+          results: [
+            createSearchResult({
+              id: 390497,
+              title: 'トンネル 闇に鎖された男',
+              original_title: '터널',
+              release_date: '2017-05-13',
+              vote_average: 7.3,
+              vote_count: 672,
+              overview: '崩落したトンネルに閉じ込められた男の生還劇。',
+            }),
+          ],
+        });
+
+      const items = [createItem('Tunnel', 2016, '理由', '터널')];
+      const result = await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(mockSearchMovies).toHaveBeenCalledTimes(2);
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(390497);
+    });
+
+    it('除外された候補ではキーワード判定を呼ばない（TMDb呼び出し削減）', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          createSearchResult({
+            id: 857033,
+            title: 'Tunnel',
+            release_date: '',
+            vote_average: 0,
+            vote_count: 0,
+          }),
+        ],
+      });
+
+      const items = [createItem('Tunnel', 2016, '理由', 'Tunnel')];
+      await resolveRecommendationsWithTMDb(items, new Set());
+
+      expect(mockHasExcludedKeyword).not.toHaveBeenCalled();
     });
   });
 

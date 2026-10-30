@@ -107,36 +107,9 @@ describe('proxy', () => {
     }
   });
 
-  describe('Vercel本番（VERCEL_ENV=production）', () => {
+  describe('Vercel本番デプロイ（VERCEL_ENV=production）', () => {
     beforeEach(() => {
       process.env.VERCEL_ENV = 'production';
-    });
-
-    // 以前は cron 以外を全て 404 で隠していた（サイト未公開のため）。
-    // 一般公開にあたりそのゲートを外したので、本番でも他の環境と同じ判定になる。
-    it('トップページは通常どおり表示される', () => {
-      const req = createMockRequest({
-        pathname: '/',
-        auth: null,
-        hasSessionCookie: false,
-      });
-
-      const response = proxy(req);
-
-      expect(response.status).toBe(200);
-      expect(mockNextResponseNext).toHaveBeenCalled();
-    });
-
-    it('保護ページは未認証ならサインインへリダイレクトされる', () => {
-      const req = createMockRequest({
-        pathname: '/favorites',
-        auth: null,
-        hasSessionCookie: false,
-      });
-
-      const response = proxy(req);
-
-      expect(response.headers.get('location')).toContain('/auth/signin');
     });
 
     it('/api/cron/* は通過する（Vercel Cronのため）', () => {
@@ -152,19 +125,41 @@ describe('proxy', () => {
       expect(response.status).toBe(200);
     });
 
-    // 認可は各 Route Handler が自前で行う（withAuth / withAdminAuth /
-    // verifyCronAuth）。proxy は素通しにする
-    it('その他の /api/* も通過する（認可はルート側が行う）', () => {
+    it('トップページは404で隠す', () => {
       const req = createMockRequest({
-        pathname: '/api/watchlist',
+        pathname: '/',
         auth: null,
         hasSessionCookie: false,
       });
 
       const response = proxy(req);
 
-      expect(mockNextResponseNext).toHaveBeenCalled();
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(404);
+    });
+
+    it('保護ページは404で隠す（サインインへリダイレクトしない）', () => {
+      const req = createMockRequest({
+        pathname: '/favorites',
+        auth: null,
+        hasSessionCookie: false,
+      });
+
+      const response = proxy(req);
+
+      expect(response.status).toBe(404);
+      expect(response.headers.get('location')).toBeNull();
+    });
+
+    it('cron以外の /api/* は404で隠す', () => {
+      const req = createMockRequest({
+        pathname: '/api/watchlist',
+        auth: mockAuth,
+        hasSessionCookie: true,
+      });
+
+      const response = proxy(req);
+
+      expect(response.status).toBe(404);
     });
   });
 

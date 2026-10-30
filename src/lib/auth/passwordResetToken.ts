@@ -25,11 +25,15 @@ import {
  *
  * @param supabase - service_role のクライアント
  * @param userId - 対象ユーザー
+ * @param expiryMinutes - 有効期限（分）。既定は利用者自身のリセット向けの値。
+ *   admin がアカウントを発行する経路は、受け取る相手が気づくまでの時間を
+ *   見込んで長めに取る（`ADMIN_ACCOUNT_CONFIG`）
  * @returns メールに載せる平文トークン
  */
 export async function issuePasswordResetToken(
   supabase: SupabaseClient,
   userId: string,
+  expiryMinutes: number = PASSWORD_RESET_CONFIG.EXPIRY_MINUTES,
 ): Promise<string> {
   const { token, tokenHash } = generateVerificationToken();
 
@@ -40,9 +44,7 @@ export async function issuePasswordResetToken(
     .eq('user_id', userId)
     .is('used_at', null);
 
-  const expiresAt = new Date(
-    Date.now() + PASSWORD_RESET_CONFIG.EXPIRY_MINUTES * 60 * 1000,
-  );
+  const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
 
   const { error } = await supabase.from('password_reset_tokens').insert({
     user_id: userId,

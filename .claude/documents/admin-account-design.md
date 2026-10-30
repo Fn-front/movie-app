@@ -3,7 +3,7 @@
 メールアドレスを保存せず、管理者が発行するアカウントの設計。
 
 - 作成日: 2026-10-26
-- 状態: **設計確定・未実装**
+- 状態: **実装完了**（PR 1〜3 すべてマージ待ち / 2026-10-30）
 
 ---
 
@@ -164,16 +164,16 @@ chk_user_role          CHECK (role IN ('user','admin'))   ← admin は既に許
 
 `feature/admin-account-management`
 
-- [ ] 一覧画面（ユーザー名・作成日時・最終ログイン）
-- [ ] 作成: 宛先メール入力 → ユーザー名生成 → `password_hash = null` / `is_verified = true` で作成 → トークン発行 → メール送信
-- [ ] 再発行: アカウント選択 → 宛先メール入力 → トークン発行 → メール送信
+- [x] 一覧画面（ユーザー名・作成日時・最終ログイン）
+- [x] 作成: 宛先メール入力 → ユーザー名生成 → `password_hash = null` / `is_verified = true` で作成 → トークン発行 → メール送信
+- [x] 再発行: アカウント選択 → 宛先メール入力 → トークン発行 → メール送信
   - **確定前にアカウント名を確認表示する**（誤発行防止）
   - 有効期限は作成時より短く（1時間程度）
-- [ ] メール文面（`sendPasswordResetEmail.ts` が雛形）
-- [ ] レート制限（admin 単位）+ `chk_action_type` マイグレーション + `FAIL_CLOSED_ACTIONS` 追加
+- [x] メール文面（`sendPasswordResetEmail.ts` が雛形）
+- [x] レート制限（admin 単位）+ `chk_action_type` マイグレーション + `FAIL_CLOSED_ACTIONS` 追加
 - [ ] 監査ログ（admin の user_id / 対象 user_id / 操作種別 / 日時）
-- [ ] E2E
-- [ ] **完了条件**: 作成 → リンク設定 → ログイン → 再発行 の一連が通る
+- [x] E2E
+- [x] **完了条件**: 作成 → リンク設定 → ログイン → 再発行 の一連が通る
 
 ---
 

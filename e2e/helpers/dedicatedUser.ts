@@ -42,6 +42,8 @@ const TEST_BCRYPT_COST = 8;
 export interface DedicatedUser {
   email: string;
   password: string;
+  /** 付与するロール。既定は一般ユーザー */
+  role?: 'user' | 'admin';
 }
 
 /**
@@ -64,6 +66,7 @@ export async function createVerifiedUser(user: DedicatedUser): Promise<string> {
       name: 'E2E Dedicated',
       password_hash: await bcrypt.hash(user.password, TEST_BCRYPT_COST),
       is_verified: true,
+      role: user.role ?? 'user',
     }),
   });
 
@@ -201,4 +204,29 @@ export async function cleanupOtpCodesForEmail(email: string): Promise<void> {
     `${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${encodeURIComponent(email)}`,
     { method: 'DELETE', headers: supabaseHeaders },
   );
+}
+
+/**
+ * ユーザー名でアカウントを削除する
+ *
+ * admin が発行したアカウントは合成アドレス（`<ランダム>@<ランダム>.invalid`）を
+ * 持つため、**メールアドレス一致の run 単位の後片付けでは消えない**。
+ * 発行を伴うテストは、作ったアカウント名をここへ渡して明示的に消すこと。
+ * 消し忘れると共有DBに実行のたびに溜まる。
+ *
+ * `admin_audit_logs.target_user_id` は ON DELETE CASCADE なので連鎖削除される。
+ *
+ * @param usernames - 削除するユーザー名
+ */
+export async function deleteUsersByUsernames(
+  usernames: string[],
+): Promise<void> {
+  if (usernames.length === 0) return;
+
+  const list = usernames.map((name) => `"${name}"`).join(',');
+
+  await fetch(`${SUPABASE_URL}/rest/v1/users?username=in.(${list})`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
 }

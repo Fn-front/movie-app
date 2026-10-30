@@ -90,3 +90,63 @@ ${APP_NAME}からお客様に確認コードをお尋ねすることはありま
 心当たりがない場合は、このメールを無視してください。
 第三者がお客様のメールアドレスを入力した可能性があります。`;
 }
+
+/**
+ * 管理者発行アカウントの案内メールの件名
+ *
+ * @param isReissue - 再発行かどうか
+ */
+export function buildAdminAccountEmailSubject(isReissue: boolean): string {
+  return isReissue
+    ? `[${APP_NAME}] パスワード設定リンクの再送`
+    : `[${APP_NAME}] アカウント発行のご案内`;
+}
+
+/**
+ * 管理者発行アカウントの案内メール本文を生成する
+ *
+ * **パスワードは載せない。** 載せると Resend のダッシュボードと受信箱に
+ * 有効な認証情報が残り続け、失効もできない。期限付き・1回限りのリンクを
+ * 渡し、本人にパスワードを決めてもらう。
+ *
+ * アカウント名は載せる。これが無いと受信者はログインできない。
+ *
+ * @param username - ログインに使うアカウント名
+ * @param setupUrl - トークン付きのパスワード設定URL
+ * @param expiryMinutes - リンクの有効期限（分）
+ * @param isReissue - 再発行かどうか
+ * @returns メール本文
+ */
+export function buildAdminAccountEmailText(
+  username: string,
+  setupUrl: string,
+  expiryMinutes: number,
+  isReissue: boolean,
+): string {
+  const hours = Math.round(expiryMinutes / 60);
+  const expiryLabel =
+    expiryMinutes >= 60 ? `${hours}時間` : `${expiryMinutes}分`;
+
+  const intro = isReissue
+    ? `${APP_NAME}のパスワード設定リンクを再送します。`
+    : `${APP_NAME}のアカウントを発行しました。`;
+
+  return `${intro}
+
+アカウント名: ${username}
+
+以下のリンクからパスワードを設定してください。
+
+${setupUrl}
+
+このリンクは${expiryLabel}有効で、1回のみ使用できます。
+期限が切れた場合は、発行を依頼した担当者にご連絡ください。
+
+ログインするときは、上記のアカウント名と設定したパスワードを使います。
+（このアカウントにメールアドレスは登録されていません）
+
+⚠ このリンクとアカウント名を他人に教えないでください。
+${APP_NAME}からお客様にこれらをお尋ねすることはありません。
+
+心当たりがない場合は、このメールを無視してください。`;
+}

@@ -55,6 +55,8 @@ export const RATE_LIMIT_ACTION = {
    * フィルター取得・カレンダー・レコメンド残回数で1つのカウンタを共有する。
    */
   READ_USER_DATA: 'read_api_user_data',
+  /** admin によるアカウント発行・再発行（admin 単位） */
+  ADMIN_ACCOUNT_ISSUE: 'admin_account_issue',
 } as const;
 
 /**
@@ -106,6 +108,9 @@ export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
   'password_change',
   // アカウント作成
   RATE_LIMIT_ACTION.REGISTER,
+  // admin によるアカウント発行。パスワード設定リンクを任意の宛先へ送れるため、
+  // 判定できないまま通すと踏み台として使われうる
+  RATE_LIMIT_ACTION.ADMIN_ACCOUNT_ISSUE,
 ]);
 
 /**

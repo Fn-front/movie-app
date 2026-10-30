@@ -25,6 +25,10 @@ export const API_ENDPOINTS = {
   USER_SETTINGS: '/api/user/settings',
   /** パスワード変更 */
   USER_CHANGE_PASSWORD: '/api/user/change-password',
+  /** 管理者発行アカウントの一覧・発行（admin 専用） */
+  ADMIN_ACCOUNTS: '/api/admin/accounts',
+  /** パスワード設定リンクの再発行（admin 専用） */
+  ADMIN_ACCOUNT_REISSUE: (id: string) => `/api/admin/accounts/${id}/reissue`,
   /** 二段階認証の状態取得 */
   USER_TOTP: '/api/user/totp',
   /** 二段階認証の設定開始（QRコード取得） */

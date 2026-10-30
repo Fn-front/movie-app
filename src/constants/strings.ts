@@ -138,6 +138,16 @@ export const FILTER_LABELS = {
   OFFER_TYPE_FLATRATE: '見放題のみ',
   /** レンタル・購入のみ */
   OFFER_TYPE_PAID: 'レンタル・購入のみ',
+  /** 地域 */
+  REGION: '地域',
+  /** 地域フィルタ（legend） */
+  REGION_FILTER: '地域フィルタ',
+  /** 韓国 */
+  REGION_KOREA: '韓国',
+  /** 中華圏 */
+  REGION_CHINESE: '中華圏',
+  /** タイ・インド */
+  REGION_THAI_INDIAN: 'タイ・インド',
 } as const;
 
 /**

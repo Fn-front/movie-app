@@ -44,7 +44,9 @@ export interface SyncResult {
   processed: number;
   /** 新規追加された映画数 */
   added: number;
-  /** スキップされた映画数（既存 or マッチなし） */
+  /** 既存行のリバイバル補正を行った映画数 */
+  revivalCorrected: number;
+  /** スキップされた映画数（補正不要の既存 or マッチなし） */
   skipped: number;
   /** エラーが発生した映画タイトル */
   errors: string[];
@@ -157,29 +159,42 @@ export function isRevival(
 const EXISTING_ID_CHUNK_SIZE = 200;
 
 /**
- * 指定したTMDb IDのうち、theatrical として既に movie_cache にある ID を返す
+ * リバイバル補正の要否を判定するために必要な既存行の列
+ */
+interface ExistingTheatricalRow {
+  /** 保存済みの公開日（YYYY-MM-DD） */
+  release_date: string | null;
+  /** リバイバル上映として保存済みか */
+  is_revival: boolean;
+}
+
+/**
+ * 指定したTMDb IDのうち、theatrical として既に movie_cache にある行を返す
  *
  * 全件SELECTだと PostgREST の暗黙1000行制限にかかるため、候補のIDだけを問い合わせる。
  * 取得に失敗した場合は例外を投げる（握りつぶすと全件が「未登録」扱いになり、
  * 無駄なTMDb呼び出しとUPSERTが大量に走るため）。
  *
+ * ID だけでなく release_date / is_revival も取るのは、既存行がリバイバル補正済みか
+ * を見て TMDb への再問い合わせを省くため。
+ *
  * @param supabase - Supabaseクライアント
  * @param movieIds - 問い合わせ対象のTMDb ID
- * @returns 既存のID集合
+ * @returns TMDb ID をキーとした既存行のMap
  */
-async function fetchExistingTheatricalIds(
+async function fetchExistingTheatricalRows(
   supabase: SupabaseClient,
   movieIds: number[],
-): Promise<Set<number>> {
+): Promise<Map<number, ExistingTheatricalRow>> {
   const uniqueIds = [...new Set(movieIds)];
-  const existing = new Set<number>();
+  const existing = new Map<number, ExistingTheatricalRow>();
 
   for (let i = 0; i < uniqueIds.length; i += EXISTING_ID_CHUNK_SIZE) {
     const chunk = uniqueIds.slice(i, i + EXISTING_ID_CHUNK_SIZE);
 
     const { data, error } = await supabase
       .from('movie_cache')
-      .select('id')
+      .select('id, release_date, is_revival')
       .eq('release_type', RELEASE_TYPE.THEATRICAL)
       .in('id', chunk);
 
@@ -188,11 +203,53 @@ async function fetchExistingTheatricalIds(
     }
 
     for (const row of data ?? []) {
-      existing.add((row as { id: number }).id);
+      const { id, release_date, is_revival } = row as {
+        id: number;
+        release_date: string | null;
+        is_revival: boolean;
+      };
+      existing.set(id, { release_date, is_revival });
     }
   }
 
   return existing;
+}
+
+/**
+ * 既存行をリバイバル上映として補正する
+ *
+ * `/api/movies` の Discover 経由で先に保存された行は、TMDbの代表公開日
+ * （多くは初公開日）を持つ。TMDbの `release_date.gte` は「いずれかの
+ * リリースレコード」で一致するため、再上映を控えた旧作が公開予定の
+ * Discover にヒットするが、保存されるのは代表日のままになる。
+ * その結果、同じ `/api/movies` が後段の `release_date >= today` で
+ * 自分の保存した行を弾き、公開予定タブに出てこない。
+ *
+ * 日本の劇場公開日の持ち主は映画.com 側（このモジュール）なので、ここで
+ * iCalの上映日に寄せ直す。更新対象を2列に限るのは、他の列の持ち主
+ * （TMDbの評価・人気度など）を侵さないため。
+ *
+ * @param supabase - Supabaseクライアント
+ * @param movieId - TMDb ID
+ * @param eigaReleaseDate - iCalの上映日（YYYY-MM-DD）
+ * @returns 更新に失敗した場合はエラーメッセージ、成功した場合はnull
+ */
+async function correctRevivalRow(
+  supabase: SupabaseClient,
+  movieId: number,
+  eigaReleaseDate: string,
+): Promise<string | null> {
+  const { error } = await supabase
+    .from('movie_cache')
+    .update({
+      release_date: eigaReleaseDate,
+      is_revival: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', movieId)
+    .eq('release_type', RELEASE_TYPE.THEATRICAL);
+
+  return error ? error.message : null;
 }
 
 /**
@@ -218,6 +275,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
   const result: SyncResult = {
     processed: eigaMovies.length,
     added: 0,
+    revivalCorrected: 0,
     skipped: 0,
     errors: [],
   };
@@ -266,21 +324,55 @@ export async function syncEigaMovies(): Promise<SyncResult> {
   //    movie_cache 全件を SELECT すると PostgREST の暗黙1000行制限にかかり、
   //    取得できなかった行が「未登録」と誤判定される（無駄なTMDb呼び出しとUPSERTが発生）。
   //    候補は iCal の件数（高々数百）なので、ID指定なら上限の影響を受けない。
-  const existingIds = await fetchExistingTheatricalIds(
+  const existingRows = await fetchExistingTheatricalRows(
     supabase,
     candidates.map((candidate) => candidate.movie.id),
   );
 
   const now = new Date().toISOString();
 
-  // 4. 新規の候補だけ post-filter を通して UPSERT する
-  const processedIds = new Set<number>(existingIds);
+  // 4. 新規の候補は post-filter を通して UPSERT し、既存行はリバイバル補正だけ行う
+  const processedIds = new Set<number>();
 
   for (const { eigaMovie, movie } of candidates) {
     try {
-      // 既存行は触らない（同じ映画が複数エントリにマッチした場合もここで弾く）
+      // 同じ映画が複数エントリにマッチした場合は最初の1件だけ処理する
       if (processedIds.has(movie.id)) {
         result.skipped++;
+        continue;
+      }
+      processedIds.add(movie.id);
+
+      const existingRow = existingRows.get(movie.id);
+
+      if (existingRow) {
+        // 既存行で触るのはリバイバル補正だけ。他の列は別経路の持ち主に任せる
+        const alreadyCorrected =
+          existingRow.is_revival &&
+          existingRow.release_date === eigaMovie.releaseDate;
+
+        if (alreadyCorrected) {
+          result.skipped++;
+          continue;
+        }
+
+        const jpDates = await getJpTheatricalReleaseDates(movie.id);
+        if (!isRevival(jpDates, eigaMovie.releaseDate)) {
+          result.skipped++;
+          continue;
+        }
+
+        const updateError = await correctRevivalRow(
+          supabase,
+          movie.id,
+          eigaMovie.releaseDate,
+        );
+
+        if (updateError) {
+          result.errors.push(`${eigaMovie.title}: ${updateError}`);
+        } else {
+          result.revivalCorrected++;
+        }
         continue;
       }
 
@@ -336,7 +428,6 @@ export async function syncEigaMovies(): Promise<SyncResult> {
         continue;
       }
 
-      processedIds.add(movie.id);
       result.added++;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

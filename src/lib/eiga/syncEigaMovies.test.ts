@@ -248,12 +248,14 @@ describe('syncEigaMovies', () => {
     const result: SyncResult = {
       processed: 10,
       added: 5,
+      revivalCorrected: 1,
       skipped: 4,
       errors: ['映画A: エラー'],
     };
 
     expect(result.processed).toBe(10);
     expect(result.added).toBe(5);
+    expect(result.revivalCorrected).toBe(1);
     expect(result.skipped).toBe(4);
     expect(result.errors).toHaveLength(1);
   });
@@ -262,9 +264,13 @@ describe('syncEigaMovies', () => {
 
   const mockFrom = jest.fn();
   const mockSelect = jest.fn();
-  /** 既存ID問い合わせ（select('id').eq(...).in(...)）の終端 */
+  /** 既存行問い合わせ（select(...).eq(...).in(...)）の終端 */
   const mockIn = jest.fn();
   const mockUpsert = jest.fn();
+  /** 既存行のリバイバル補正（update(...).eq('id').eq('release_type')） */
+  const mockUpdate = jest.fn();
+  const mockUpdateEqId = jest.fn();
+  const mockUpdateEqReleaseType = jest.fn();
 
   const mockedCreateClient = createClient as jest.MockedFunction<
     typeof createClient
@@ -300,9 +306,12 @@ describe('syncEigaMovies', () => {
       eq: jest.fn().mockReturnValue({ in: mockIn }),
     });
     mockUpsert.mockResolvedValue({ error: null });
+    mockUpdateEqReleaseType.mockResolvedValue({ error: null });
+    mockUpdateEqId.mockReturnValue({ eq: mockUpdateEqReleaseType });
+    mockUpdate.mockReturnValue({ eq: mockUpdateEqId });
     mockFrom.mockImplementation((table: string) => {
       if (table === 'movie_cache') {
-        return { select: mockSelect, upsert: mockUpsert };
+        return { select: mockSelect, upsert: mockUpsert, update: mockUpdate };
       }
       return {};
     });
@@ -494,8 +503,9 @@ describe('syncEigaMovies', () => {
 
       await syncEigaMovies();
 
-      // release_type で絞り、候補IDだけを in() で指定する
-      expect(mockSelect).toHaveBeenCalledWith('id');
+      // release_type で絞り、候補IDだけを in() で指定する。
+      // リバイバル補正の要否を判定するため release_date / is_revival も取る
+      expect(mockSelect).toHaveBeenCalledWith('id, release_date, is_revival');
       expect(mockIn).toHaveBeenCalledTimes(1);
       expect(mockIn).toHaveBeenCalledWith('id', [1000, 1001, 1002]);
     });
@@ -870,14 +880,153 @@ describe('syncEigaMovies', () => {
       );
     });
 
-    it('リバイバル判定は新規の候補にのみ行う（既存IDではTMDbを呼ばない）', async () => {
+    it('既存IDはUPSERTしない（新規追加の経路には乗せない）', async () => {
       setupSingle(900, '2026-10-30');
-      mockIn.mockResolvedValue({ data: [{ id: 900 }], error: null });
+      mockIn.mockResolvedValue({
+        data: [{ id: 900, release_date: '2026-10-30', is_revival: false }],
+        error: null,
+      });
 
       await syncEigaMovies();
 
-      expect(mockedGetJpTheatricalReleaseDates).not.toHaveBeenCalled();
       expect(mockUpsert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('既存行のリバイバル補正', () => {
+    /**
+     * iCal 1件 + TMDb検索結果1件を用意し、その映画を既存行として返す
+     *
+     * 南極料理人（TMDb 106378）の再現: Discover 経由で先に代表公開日のまま
+     * 保存され、iCal 同期が「既存だから」と素通りしていたケース。
+     */
+    const setupExisting = (
+      existingRow: {
+        release_date: string | null;
+        is_revival: boolean;
+      },
+      eigaReleaseDate = '2026-11-13',
+    ) => {
+      mockedFetchEigaMovies.mockResolvedValue([
+        {
+          title: '南極料理人',
+          releaseDate: eigaReleaseDate,
+          eigaUrl: null,
+        },
+      ]);
+      mockedSearchMovies.mockResolvedValue({
+        results: [
+          createMockMovie({
+            id: 106378,
+            title: '南極料理人',
+            release_date: '2009-08-08',
+          }),
+        ],
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+      });
+      mockedHasExcludedKeyword.mockResolvedValue(false);
+      mockIn.mockResolvedValue({
+        data: [{ id: 106378, ...existingRow }],
+        error: null,
+      });
+    };
+
+    it('既存行がリバイバルならiCalの上映日とis_revivalを補正する', async () => {
+      setupExisting({ release_date: '2009-08-08', is_revival: false });
+      mockedGetJpTheatricalReleaseDates.mockResolvedValue([
+        '2009-08-08',
+        '2026-11-13',
+      ]);
+
+      const result = await syncEigaMovies();
+
+      expect(mockUpdate).toHaveBeenCalledWith({
+        release_date: '2026-11-13',
+        is_revival: true,
+        updated_at: expect.any(String),
+      });
+      expect(mockUpdateEqId).toHaveBeenCalledWith('id', 106378);
+      expect(mockUpdateEqReleaseType).toHaveBeenCalledWith(
+        'release_type',
+        'theatrical',
+      );
+      expect(result.revivalCorrected).toBe(1);
+      expect(result.added).toBe(0);
+      expect(result.skipped).toBe(0);
+    });
+
+    it('既存行がリバイバルでなければ更新しない', async () => {
+      setupExisting({ release_date: '2026-11-13', is_revival: false });
+      // 90日以上前の劇場公開が無い＝再上映ではない
+      mockedGetJpTheatricalReleaseDates.mockResolvedValue(['2026-11-13']);
+
+      const result = await syncEigaMovies();
+
+      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(result.revivalCorrected).toBe(0);
+      expect(result.skipped).toBe(1);
+    });
+
+    it('既に補正済みの行ではTMDbを呼ばない（週次の再問い合わせを避ける）', async () => {
+      setupExisting({ release_date: '2026-11-13', is_revival: true });
+
+      const result = await syncEigaMovies();
+
+      expect(mockedGetJpTheatricalReleaseDates).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(result.skipped).toBe(1);
+    });
+
+    it('is_revivalが立っていても上映日がズレていれば補正する', async () => {
+      // 前回の補正後に iCal 側の上映日が変わったケース
+      setupExisting({ release_date: '2026-11-06', is_revival: true });
+      mockedGetJpTheatricalReleaseDates.mockResolvedValue([
+        '2009-08-08',
+        '2026-11-13',
+      ]);
+
+      const result = await syncEigaMovies();
+
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ release_date: '2026-11-13' }),
+      );
+      expect(result.revivalCorrected).toBe(1);
+    });
+
+    it('補正のUPDATEが失敗した場合はerrorsに追加する', async () => {
+      setupExisting({ release_date: '2009-08-08', is_revival: false });
+      mockedGetJpTheatricalReleaseDates.mockResolvedValue([
+        '2009-08-08',
+        '2026-11-13',
+      ]);
+      mockUpdateEqReleaseType.mockResolvedValue({
+        error: { message: 'DB書き込みエラー' },
+      });
+
+      const result = await syncEigaMovies();
+
+      expect(result.revivalCorrected).toBe(0);
+      expect(result.errors).toEqual(['南極料理人: DB書き込みエラー']);
+    });
+
+    it('同じ既存映画が複数エントリにマッチしても補正は1回だけ行う', async () => {
+      setupExisting({ release_date: '2009-08-08', is_revival: false });
+      mockedFetchEigaMovies.mockResolvedValue([
+        { title: '南極料理人', releaseDate: '2026-11-13', eigaUrl: null },
+        { title: '南極料理人', releaseDate: '2026-11-13', eigaUrl: null },
+      ]);
+      mockedGetJpTheatricalReleaseDates.mockResolvedValue([
+        '2009-08-08',
+        '2026-11-13',
+      ]);
+
+      const result = await syncEigaMovies();
+
+      expect(mockUpdate).toHaveBeenCalledTimes(1);
+      expect(result.revivalCorrected).toBe(1);
+      expect(result.skipped).toBe(1);
     });
   });
 

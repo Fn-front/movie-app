@@ -184,6 +184,46 @@ describe('loginSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  describe('アカウント名でのログイン', () => {
+    // admin が発行するアカウントはメールを持たず、ユーザー名でログインする
+    it.each([
+      ['K7M2-QXPT-9WFN', '区切りあり'],
+      ['K7M2QXPT9WFN', '区切りなし'],
+      ['k7m2-qxpt-9wfn', '小文字'],
+    ])('%s（%s）を受け付ける', (email) => {
+      expect(
+        loginSchema.safeParse({ email, password: 'Password1234' }).success,
+      ).toBe(true);
+    });
+
+    // メールと違いユーザー名は大文字で構成される。一律に小文字化すると
+    // 照合できなくなるため、スキーマでは畳まない（authorize が正規化する）
+    it('アカウント名は小文字化しない', () => {
+      const result = loginSchema.safeParse({
+        email: 'K7M2-QXPT-9WFN',
+        password: 'Password1234',
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.email).toBe('K7M2-QXPT-9WFN');
+      }
+    });
+
+    // 形を検証しないと「@ を打ち忘れたメール」が存在しないアカウント名として
+    // 処理され、利用者は形式エラーではなく認証失敗を見ることになる
+    it.each([
+      ['userexample.com', '@ の打ち忘れ'],
+      ['K7M2-QXPT', '短すぎる'],
+      ['K7M2-QXPT-9WFN-EXTRA', '長すぎる'],
+      ['IIII-OOOO-LLLL', '紛らわしい文字を含む'],
+    ])('%s（%s）は弾く', (email) => {
+      expect(
+        loginSchema.safeParse({ email, password: 'Password1234' }).success,
+      ).toBe(false);
+    });
+  });
+
   it('パスワードが空の場合エラーになる', () => {
     const result = loginSchema.safeParse({
       email: 'test@example.com',

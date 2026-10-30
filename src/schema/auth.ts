@@ -8,6 +8,10 @@ import { VALIDATION } from '@/constants';
 import { VALIDATION_MESSAGES } from '@/constants/auth';
 
 import { normalizeEmail } from '@/utils/email';
+import {
+  isEmailIdentifier,
+  isUsernameShape,
+} from '@/lib/auth/accountIdentity';
 import { getByteLength } from '@/utils/string';
 
 /**
@@ -24,6 +28,36 @@ const normalizedEmailSchema = z
   .max(VALIDATION.EMAIL_MAX_LENGTH, VALIDATION_MESSAGES.EMAIL_TOO_LONG)
   .email(VALIDATION_MESSAGES.EMAIL_INVALID)
   .transform(normalizeEmail);
+
+/**
+ * ログイン識別子（メールアドレス または アカウント名）
+ *
+ * admin が発行するアカウントはメールアドレスを持たず、ユーザー名でログインする
+ * （`.claude/documents/admin-account-design.md`）。入力欄は兼用で、`@` の有無で
+ * 振り分ける。ユーザー名の文字種に `@` を含めないため曖昧さは生じない。
+ *
+ * どちらの形にも当てはまらない入力は弾く。形を検証しないと、`@` を打ち忘れた
+ * メールアドレスが「存在しないアカウント名」として処理され、利用者は形式エラー
+ * ではなく認証失敗を見ることになる。
+ *
+ * メールのときだけ小文字化する。ユーザー名は大文字で構成されるため、
+ * 一律に畳むと照合できない（ユーザー名側の正規化は `authorize()` が行う）。
+ */
+const loginIdentifierSchema = z
+  .string()
+  .trim()
+  .min(1, VALIDATION_MESSAGES.EMAIL_REQUIRED)
+  .max(VALIDATION.EMAIL_MAX_LENGTH, VALIDATION_MESSAGES.EMAIL_TOO_LONG)
+  .refine(
+    (value) =>
+      isEmailIdentifier(value)
+        ? z.string().email().safeParse(value).success
+        : isUsernameShape(value),
+    { message: VALIDATION_MESSAGES.LOGIN_IDENTIFIER_INVALID },
+  )
+  .transform((value) =>
+    isEmailIdentifier(value) ? normalizeEmail(value) : value,
+  );
 
 /**
  * パスワードバリデーション（ポリシー付き）
@@ -87,7 +121,7 @@ export type RegisterFormData = z.infer<typeof registerSchema>;
  * ログインフォームのバリデーションスキーマ
  */
 export const loginSchema = z.object({
-  email: normalizedEmailSchema,
+  email: loginIdentifierSchema,
   password: z.string().min(1, VALIDATION_MESSAGES.PASSWORD_REQUIRED),
 });
 

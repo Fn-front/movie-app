@@ -27,9 +27,12 @@ const mockState: {
   resolver: (ctx: { table: string; ops: string[]; single: boolean }) => unknown;
   /** 書き込み系に渡されたペイロードの記録（何を保存しているかの検証用） */
   writes: Array<{ table: string; method: string; payload: unknown }>;
+  /** eq() の絞り込み条件（どの列で引いたかの検証用） */
+  filters: Array<{ table: string; column: unknown; value: unknown }>;
 } = {
   resolver: () => ({ data: null, error: null }),
   writes: [],
+  filters: [],
 };
 
 jest.mock('@supabase/supabase-js', () => {
@@ -52,10 +55,14 @@ jest.mock('@supabase/supabase-js', () => {
     ];
     const writeMethods = new Set(['insert', 'update', 'upsert']);
     for (const m of passthrough) {
-      builder[m] = jest.fn((payload: unknown) => {
+      builder[m] = jest.fn((payload: unknown, second?: unknown) => {
         ops.push(m);
         if (writeMethods.has(m)) {
           mockState.writes.push({ table, method: m, payload });
+        }
+        // どの列で絞り込んだかを残す（email / username の引き分けの検証用）
+        if (m === 'eq') {
+          mockState.filters.push({ table, column: payload, value: second });
         }
         return builder;
       });
@@ -1145,5 +1152,102 @@ describe('session コールバックの第2要素', () => {
 
     expect(result.user).toMatchObject({ id: 'u1', role: 'admin' });
     expect(result.totpPending).toBeUndefined();
+  });
+});
+
+describe('authorize のユーザー名ログイン', () => {
+  /** 指定の送信元IPでログインを試みるリクエストを作る */
+  function makeRequest(clientIp = '203.0.113.1'): Request {
+    const headers = new Headers();
+    headers.set('x-vercel-forwarded-for', clientIp);
+    return new Request('http://localhost/api/auth/callback/credentials', {
+      headers,
+    });
+  }
+
+  beforeEach(() => {
+    mockCheckRateLimit.mockReset();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockResetRateLimit.mockReset();
+    mockState.filters = [];
+    // ユーザー不在で返す。どの列で引いたかだけを見る
+    setResolver(() => ({ data: null, error: { code: 'PGRST116' } }));
+  });
+
+  /** users テーブルを引いた列を返す */
+  function userLookupColumns(): unknown[] {
+    return mockState.filters
+      .filter((f) => f.table === 'users')
+      .map((f) => f.column);
+  }
+
+  it('@ を含まない入力は username 列で引く', async () => {
+    await credentialsProvider
+      .authorize({ email: 'K7M2-QXPT-9WFN', password: 'pw' }, makeRequest())
+      .catch(() => {});
+
+    expect(userLookupColumns()).toContain('username');
+    expect(userLookupColumns()).not.toContain('email');
+  });
+
+  it('@ を含む入力は従来どおり email 列で引く', async () => {
+    await credentialsProvider
+      .authorize({ email: 'user@example.com', password: 'pw' }, makeRequest())
+      .catch(() => {});
+
+    expect(userLookupColumns()).toContain('email');
+    expect(userLookupColumns()).not.toContain('username');
+  });
+
+  // 利用者はメールで受け取った文字列を手で打ち込むため、表記の揺れを吸収する
+  it.each([
+    ['k7m2-qxpt-9wfn', '小文字'],
+    ['K7M2QXPT9WFN', '区切りなし'],
+    ['K7M2 QXPT 9WFN', '空白区切り'],
+  ])('%s（%s）でも同じ正規化済みの値で引く', async (input) => {
+    await credentialsProvider
+      .authorize({ email: input, password: 'pw' }, makeRequest())
+      .catch(() => {});
+
+    const usernameFilter = mockState.filters.find(
+      (f) => f.table === 'users' && f.column === 'username',
+    );
+
+    expect(usernameFilter?.value).toBe('K7M2QXPT9WFN');
+  });
+
+  it('レート制限の識別子にユーザー名と送信元を使う', async () => {
+    await credentialsProvider
+      .authorize({ email: 'K7M2-QXPT-9WFN', password: 'pw' }, makeRequest())
+      .catch(() => {});
+
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'K7M2QXPT9WFN|203.0.113.1',
+      'login',
+      5,
+      30,
+    );
+  });
+
+  // メールを持たないアカウントに確認コードは送れない。
+  // この経路を残すと「コードを受け取れないのに検証を求める」状態になる
+  it('ユーザー名でのOTPログインは拒否する', async () => {
+    setResolver(({ table }) =>
+      table === 'users'
+        ? { data: { id: 'u1', username: 'K7M2QXPT9WFN', is_verified: true } }
+        : { data: null, error: null },
+    );
+
+    await expect(
+      credentialsProvider.authorize(
+        {
+          email: 'K7M2-QXPT-9WFN',
+          loginMethod: 'otp',
+          verificationToken: 'token',
+        },
+        makeRequest(),
+      ),
+    ).rejects.toThrow();
   });
 });

@@ -177,17 +177,49 @@ chk_user_role          CHECK (role IN ('user','admin'))   ← admin は既に許
 
 ---
 
-## 7. 未決事項
+## 7. 決定事項（2026-10-30 確定）
 
-実装着手前に決める。
+### 7-1. ユーザー名の形式
 
-1. **ユーザー名の形式** — 「名の羅列系」という要望だったが具体像が未確定。
-   安全性の要件は「サーバー側でランダム生成」「列挙されても推測できない長さ」。
-   候補: 紛らわしい文字を除いた29文字 × 12文字（約58bit）を `XXXX-XXXX-XXXX` 形式で区切る
-2. **ログインフォームでのユーザー名の受け方**
-   - 案A: 既存のメール欄で受け、`@` の有無で判定（UI 変更なし。ユーザー名の文字種に `@` を含めなければ曖昧さは無い）
-   - 案B: 別フィールドを追加（明示的だが UI 変更が要る）
-3. **監査ログの保存先** — 新規テーブルか既存の仕組みに相乗りか
+**紛らわしい文字を除いた29文字 × 12文字を `XXXX-XXXX-XXXX` で区切る。**
+
+```
+K7M2-QXPT-9WFN
+```
+
+- `src/lib/totp/recoveryCodes.ts` の `ALPHABET`（`23456789ABCDEFGHJKMNPQRSTWXYZ`）をそのまま流用する。
+  `0/O`・`1/I/L`・`U/V` を除いてあるため、書き写しの読み違いが起きない
+- 29^12 ≈ 2^58。列挙されても推測できない
+- 生成は `randomInt`（CSPRNG・剰余の偏りなし）を使う。`Math.random` は不可
+- **`@` を含めない**こと。ログインフォームの判定に使う（7-2）
+
+### 7-2. ログインフォームでの受け方
+
+**既存のメールアドレス欄で兼用し、`@` の有無で判定する。**
+
+- ラベルを「メールアドレスまたはアカウント名」に変更する
+- `@` を含めばメール、含まなければユーザー名として扱う。ユーザー名の文字種に `@` が
+  無いため曖昧さは生じない
+- `loginSchema`（`src/schema/auth.ts:89`）が `normalizedEmailSchema` 固定のため、
+  両方を受け付ける形に変える
+- 画面・スキーマの追加が不要で、E2E の増加も最小で済む
+
+### 7-3. 監査ログ
+
+**新規テーブル `admin_audit_logs` を作る。**
+
+```sql
+admin_audit_logs
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid()
+  actor_user_id  UUID NOT NULL REFERENCES users(id)  -- 実行した admin
+  target_user_id UUID NOT NULL REFERENCES users(id)  -- 対象アカウント
+  action         TEXT NOT NULL                       -- 'create' / 'reissue'
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+- **宛先メールアドレスは記録しない**（保存しない方針を維持する）
+- 検索でき、保持期間を自分で決められる。将来 admin 操作が増えても同じ場所に載せられる
+- GRANT は `service_role` のみ（`anon` / `authenticated` には付与しない）
 
 ---
 

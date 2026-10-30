@@ -4,1160 +4,1199 @@ export type Json =
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[];
+  | Json[]
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: '14.1';
-  };
+    PostgrestVersion: "14.1"
+  }
   graphql_public: {
     Tables: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     Views: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     Functions: {
       graphql: {
         Args: {
-          extensions?: Json;
-          operationName?: string;
-          query?: string;
-          variables?: Json;
-        };
-        Returns: Json;
-      };
-    };
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
     Enums: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       accounts: {
         Row: {
-          created_at: string;
-          id: string;
-          provider: string;
-          provider_account_id: string;
-          type: string;
-          updated_at: string;
-          user_id: string;
-        };
+          created_at: string
+          id: string
+          provider: string
+          provider_account_id: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
         Insert: {
-          created_at?: string;
-          id?: string;
-          provider: string;
-          provider_account_id: string;
-          type?: string;
-          updated_at?: string;
-          user_id: string;
-        };
+          created_at?: string
+          id?: string
+          provider: string
+          provider_account_id: string
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
         Update: {
-          created_at?: string;
-          id?: string;
-          provider?: string;
-          provider_account_id?: string;
-          type?: string;
-          updated_at?: string;
-          user_id?: string;
-        };
+          created_at?: string
+          id?: string
+          provider?: string
+          provider_account_id?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'accounts_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "accounts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
+      admin_audit_logs: {
+        Row: {
+          action: string
+          actor_user_id: string
+          created_at: string
+          id: string
+          target_user_id: string
+        }
+        Insert: {
+          action: string
+          actor_user_id: string
+          created_at?: string
+          id?: string
+          target_user_id: string
+        }
+        Update: {
+          action?: string
+          actor_user_id?: string
+          created_at?: string
+          id?: string
+          target_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_logs_actor_user_id_fkey"
+            columns: ["actor_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_audit_logs_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       award_movies: {
         Row: {
-          award_name: string;
-          award_year: number;
-          category: string;
-          created_at: string;
-          display_order: number;
-          generated_at: string;
-          genre_ids: number[] | null;
-          id: string;
-          is_winner: boolean;
-          person_name: string | null;
-          poster_path: string | null;
-          release_date: string | null;
-          title: string;
-          tmdb_movie_id: number;
-          vote_average: number | null;
-          vote_count: number;
-        };
+          award_name: string
+          award_year: number
+          category: string
+          created_at: string
+          display_order: number
+          generated_at: string
+          genre_ids: number[] | null
+          id: string
+          is_winner: boolean
+          person_name: string | null
+          poster_path: string | null
+          release_date: string | null
+          title: string
+          tmdb_movie_id: number
+          vote_average: number | null
+          vote_count: number
+        }
         Insert: {
-          award_name: string;
-          award_year: number;
-          category: string;
-          created_at?: string;
-          display_order?: number;
-          generated_at?: string;
-          genre_ids?: number[] | null;
-          id?: string;
-          is_winner?: boolean;
-          person_name?: string | null;
-          poster_path?: string | null;
-          release_date?: string | null;
-          title: string;
-          tmdb_movie_id: number;
-          vote_average?: number | null;
-          vote_count?: number;
-        };
+          award_name: string
+          award_year: number
+          category: string
+          created_at?: string
+          display_order?: number
+          generated_at?: string
+          genre_ids?: number[] | null
+          id?: string
+          is_winner?: boolean
+          person_name?: string | null
+          poster_path?: string | null
+          release_date?: string | null
+          title: string
+          tmdb_movie_id: number
+          vote_average?: number | null
+          vote_count?: number
+        }
         Update: {
-          award_name?: string;
-          award_year?: number;
-          category?: string;
-          created_at?: string;
-          display_order?: number;
-          generated_at?: string;
-          genre_ids?: number[] | null;
-          id?: string;
-          is_winner?: boolean;
-          person_name?: string | null;
-          poster_path?: string | null;
-          release_date?: string | null;
-          title?: string;
-          tmdb_movie_id?: number;
-          vote_average?: number | null;
-          vote_count?: number;
-        };
-        Relationships: [];
-      };
+          award_name?: string
+          award_year?: number
+          category?: string
+          created_at?: string
+          display_order?: number
+          generated_at?: string
+          genre_ids?: number[] | null
+          id?: string
+          is_winner?: boolean
+          person_name?: string | null
+          poster_path?: string | null
+          release_date?: string | null
+          title?: string
+          tmdb_movie_id?: number
+          vote_average?: number | null
+          vote_count?: number
+        }
+        Relationships: []
+      }
       dismissed_movies: {
         Row: {
-          created_at: string;
-          deleted_at: string | null;
-          director_name: string | null;
-          genre_ids: number[] | null;
-          id: string;
-          keywords: string[] | null;
-          poster_path: string | null;
-          release_year: number | null;
-          title: string;
-          tmdb_movie_id: number;
-          updated_at: string;
-          user_id: string;
-        };
+          created_at: string
+          deleted_at: string | null
+          director_name: string | null
+          genre_ids: number[] | null
+          id: string
+          keywords: string[] | null
+          poster_path: string | null
+          release_year: number | null
+          title: string
+          tmdb_movie_id: number
+          updated_at: string
+          user_id: string
+        }
         Insert: {
-          created_at?: string;
-          deleted_at?: string | null;
-          director_name?: string | null;
-          genre_ids?: number[] | null;
-          id?: string;
-          keywords?: string[] | null;
-          poster_path?: string | null;
-          release_year?: number | null;
-          title: string;
-          tmdb_movie_id: number;
-          updated_at?: string;
-          user_id: string;
-        };
+          created_at?: string
+          deleted_at?: string | null
+          director_name?: string | null
+          genre_ids?: number[] | null
+          id?: string
+          keywords?: string[] | null
+          poster_path?: string | null
+          release_year?: number | null
+          title: string
+          tmdb_movie_id: number
+          updated_at?: string
+          user_id: string
+        }
         Update: {
-          created_at?: string;
-          deleted_at?: string | null;
-          director_name?: string | null;
-          genre_ids?: number[] | null;
-          id?: string;
-          keywords?: string[] | null;
-          poster_path?: string | null;
-          release_year?: number | null;
-          title?: string;
-          tmdb_movie_id?: number;
-          updated_at?: string;
-          user_id?: string;
-        };
+          created_at?: string
+          deleted_at?: string | null
+          director_name?: string | null
+          genre_ids?: number[] | null
+          id?: string
+          keywords?: string[] | null
+          poster_path?: string | null
+          release_year?: number | null
+          title?: string
+          tmdb_movie_id?: number
+          updated_at?: string
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'dismissed_movies_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "dismissed_movies_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       favorites: {
         Row: {
-          added_at: string;
-          deleted_at: string | null;
-          id: string;
-          poster_path: string | null;
-          rating: number;
-          release_date: string | null;
-          title: string;
-          tmdb_movie_id: number;
-          updated_at: string;
-          user_id: string;
-        };
+          added_at: string
+          deleted_at: string | null
+          id: string
+          poster_path: string | null
+          rating: number
+          release_date: string | null
+          title: string
+          tmdb_movie_id: number
+          updated_at: string
+          user_id: string
+        }
         Insert: {
-          added_at?: string;
-          deleted_at?: string | null;
-          id?: string;
-          poster_path?: string | null;
-          rating: number;
-          release_date?: string | null;
-          title: string;
-          tmdb_movie_id: number;
-          updated_at?: string;
-          user_id: string;
-        };
+          added_at?: string
+          deleted_at?: string | null
+          id?: string
+          poster_path?: string | null
+          rating: number
+          release_date?: string | null
+          title: string
+          tmdb_movie_id: number
+          updated_at?: string
+          user_id: string
+        }
         Update: {
-          added_at?: string;
-          deleted_at?: string | null;
-          id?: string;
-          poster_path?: string | null;
-          rating?: number;
-          release_date?: string | null;
-          title?: string;
-          tmdb_movie_id?: number;
-          updated_at?: string;
-          user_id?: string;
-        };
+          added_at?: string
+          deleted_at?: string | null
+          id?: string
+          poster_path?: string | null
+          rating?: number
+          release_date?: string | null
+          title?: string
+          tmdb_movie_id?: number
+          updated_at?: string
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'favorites_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "favorites_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       movie_cache: {
         Row: {
-          backdrop_path: string | null;
-          cached_at: string;
-          digital_release_date: string | null;
-          genre_ids: Json | null;
-          id: number;
-          is_currently_streaming: boolean;
-          is_now_playing: boolean;
-          is_revival: boolean;
-          overview: string | null;
-          popularity: number | null;
-          poster_path: string | null;
-          release_date: string | null;
-          release_type: string;
-          title: string;
-          updated_at: string;
-          vote_average: number | null;
-          vote_count: number;
-          watch_provider_buy: Json | null;
-          watch_provider_flatrate: Json | null;
-          watch_provider_rent: Json | null;
-        };
+          backdrop_path: string | null
+          cached_at: string
+          digital_release_date: string | null
+          genre_ids: Json | null
+          id: number
+          is_currently_streaming: boolean
+          is_now_playing: boolean
+          is_revival: boolean
+          overview: string | null
+          popularity: number | null
+          poster_path: string | null
+          release_date: string | null
+          release_type: string
+          title: string
+          updated_at: string
+          vote_average: number | null
+          vote_count: number
+          watch_provider_buy: Json | null
+          watch_provider_flatrate: Json | null
+          watch_provider_rent: Json | null
+        }
         Insert: {
-          backdrop_path?: string | null;
-          cached_at?: string;
-          digital_release_date?: string | null;
-          genre_ids?: Json | null;
-          id: number;
-          is_currently_streaming?: boolean;
-          is_now_playing?: boolean;
-          is_revival?: boolean;
-          overview?: string | null;
-          popularity?: number | null;
-          poster_path?: string | null;
-          release_date?: string | null;
-          release_type?: string;
-          title: string;
-          updated_at?: string;
-          vote_average?: number | null;
-          vote_count?: number;
-          watch_provider_buy?: Json | null;
-          watch_provider_flatrate?: Json | null;
-          watch_provider_rent?: Json | null;
-        };
+          backdrop_path?: string | null
+          cached_at?: string
+          digital_release_date?: string | null
+          genre_ids?: Json | null
+          id: number
+          is_currently_streaming?: boolean
+          is_now_playing?: boolean
+          is_revival?: boolean
+          overview?: string | null
+          popularity?: number | null
+          poster_path?: string | null
+          release_date?: string | null
+          release_type?: string
+          title: string
+          updated_at?: string
+          vote_average?: number | null
+          vote_count?: number
+          watch_provider_buy?: Json | null
+          watch_provider_flatrate?: Json | null
+          watch_provider_rent?: Json | null
+        }
         Update: {
-          backdrop_path?: string | null;
-          cached_at?: string;
-          digital_release_date?: string | null;
-          genre_ids?: Json | null;
-          id?: number;
-          is_currently_streaming?: boolean;
-          is_now_playing?: boolean;
-          is_revival?: boolean;
-          overview?: string | null;
-          popularity?: number | null;
-          poster_path?: string | null;
-          release_date?: string | null;
-          release_type?: string;
-          title?: string;
-          updated_at?: string;
-          vote_average?: number | null;
-          vote_count?: number;
-          watch_provider_buy?: Json | null;
-          watch_provider_flatrate?: Json | null;
-          watch_provider_rent?: Json | null;
-        };
-        Relationships: [];
-      };
+          backdrop_path?: string | null
+          cached_at?: string
+          digital_release_date?: string | null
+          genre_ids?: Json | null
+          id?: number
+          is_currently_streaming?: boolean
+          is_now_playing?: boolean
+          is_revival?: boolean
+          overview?: string | null
+          popularity?: number | null
+          poster_path?: string | null
+          release_date?: string | null
+          release_type?: string
+          title?: string
+          updated_at?: string
+          vote_average?: number | null
+          vote_count?: number
+          watch_provider_buy?: Json | null
+          watch_provider_flatrate?: Json | null
+          watch_provider_rent?: Json | null
+        }
+        Relationships: []
+      }
       now_showing_movies: {
         Row: {
-          display_order: number;
-          fetched_at: string;
-          id: string;
-          popularity: number | null;
-          poster_path: string | null;
-          release_date: string | null;
-          title: string;
-          tmdb_movie_id: number;
-          vote_average: number | null;
-          vote_count: number;
-        };
+          display_order: number
+          fetched_at: string
+          id: string
+          popularity: number | null
+          poster_path: string | null
+          release_date: string | null
+          title: string
+          tmdb_movie_id: number
+          vote_average: number | null
+          vote_count: number
+        }
         Insert: {
-          display_order: number;
-          fetched_at?: string;
-          id?: string;
-          popularity?: number | null;
-          poster_path?: string | null;
-          release_date?: string | null;
-          title: string;
-          tmdb_movie_id: number;
-          vote_average?: number | null;
-          vote_count?: number;
-        };
+          display_order: number
+          fetched_at?: string
+          id?: string
+          popularity?: number | null
+          poster_path?: string | null
+          release_date?: string | null
+          title: string
+          tmdb_movie_id: number
+          vote_average?: number | null
+          vote_count?: number
+        }
         Update: {
-          display_order?: number;
-          fetched_at?: string;
-          id?: string;
-          popularity?: number | null;
-          poster_path?: string | null;
-          release_date?: string | null;
-          title?: string;
-          tmdb_movie_id?: number;
-          vote_average?: number | null;
-          vote_count?: number;
-        };
-        Relationships: [];
-      };
+          display_order?: number
+          fetched_at?: string
+          id?: string
+          popularity?: number | null
+          poster_path?: string | null
+          release_date?: string | null
+          title?: string
+          tmdb_movie_id?: number
+          vote_average?: number | null
+          vote_count?: number
+        }
+        Relationships: []
+      }
       otp_codes: {
         Row: {
-          action_type: string;
-          attempts: number;
-          code_hash: string;
-          created_at: string;
-          email: string;
-          expires_at: string;
-          id: string;
-          verification_token_hash: string | null;
-          verified_at: string | null;
-        };
+          action_type: string
+          attempts: number
+          code_hash: string
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          verification_token_hash: string | null
+          verified_at: string | null
+        }
         Insert: {
-          action_type: string;
-          attempts?: number;
-          code_hash: string;
-          created_at?: string;
-          email: string;
-          expires_at: string;
-          id?: string;
-          verification_token_hash?: string | null;
-          verified_at?: string | null;
-        };
+          action_type: string
+          attempts?: number
+          code_hash: string
+          created_at?: string
+          email: string
+          expires_at: string
+          id?: string
+          verification_token_hash?: string | null
+          verified_at?: string | null
+        }
         Update: {
-          action_type?: string;
-          attempts?: number;
-          code_hash?: string;
-          created_at?: string;
-          email?: string;
-          expires_at?: string;
-          id?: string;
-          verification_token_hash?: string | null;
-          verified_at?: string | null;
-        };
-        Relationships: [];
-      };
+          action_type?: string
+          attempts?: number
+          code_hash?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          verification_token_hash?: string | null
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       password_reset_tokens: {
         Row: {
-          created_at: string;
-          expires_at: string;
-          id: string;
-          token_hash: string;
-          used_at: string | null;
-          user_id: string;
-        };
+          created_at: string
+          expires_at: string
+          id: string
+          token_hash: string
+          used_at: string | null
+          user_id: string
+        }
         Insert: {
-          created_at?: string;
-          expires_at: string;
-          id?: string;
-          token_hash: string;
-          used_at?: string | null;
-          user_id: string;
-        };
+          created_at?: string
+          expires_at: string
+          id?: string
+          token_hash: string
+          used_at?: string | null
+          user_id: string
+        }
         Update: {
-          created_at?: string;
-          expires_at?: string;
-          id?: string;
-          token_hash?: string;
-          used_at?: string | null;
-          user_id?: string;
-        };
+          created_at?: string
+          expires_at?: string
+          id?: string
+          token_hash?: string
+          used_at?: string | null
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'password_reset_tokens_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "password_reset_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       rate_limits: {
         Row: {
-          action_type: string;
-          attempts: number;
-          created_at: string;
-          id: string;
-          identifier: string;
-          last_attempt_at: string;
-          locked_until: string | null;
-          updated_at: string;
-        };
+          action_type: string
+          attempts: number
+          created_at: string
+          id: string
+          identifier: string
+          last_attempt_at: string
+          locked_until: string | null
+          updated_at: string
+        }
         Insert: {
-          action_type: string;
-          attempts?: number;
-          created_at?: string;
-          id?: string;
-          identifier: string;
-          last_attempt_at?: string;
-          locked_until?: string | null;
-          updated_at?: string;
-        };
+          action_type: string
+          attempts?: number
+          created_at?: string
+          id?: string
+          identifier: string
+          last_attempt_at?: string
+          locked_until?: string | null
+          updated_at?: string
+        }
         Update: {
-          action_type?: string;
-          attempts?: number;
-          created_at?: string;
-          id?: string;
-          identifier?: string;
-          last_attempt_at?: string;
-          locked_until?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
+          action_type?: string
+          attempts?: number
+          created_at?: string
+          id?: string
+          identifier?: string
+          last_attempt_at?: string
+          locked_until?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       recommendation_events: {
         Row: {
-          created_at: string;
-          event_type: string;
-          id: string;
-          recommendation_id: string;
-          tmdb_movie_id: number;
-          user_id: string;
-        };
+          created_at: string
+          event_type: string
+          id: string
+          recommendation_id: string
+          tmdb_movie_id: number
+          user_id: string
+        }
         Insert: {
-          created_at?: string;
-          event_type: string;
-          id?: string;
-          recommendation_id: string;
-          tmdb_movie_id: number;
-          user_id: string;
-        };
+          created_at?: string
+          event_type: string
+          id?: string
+          recommendation_id: string
+          tmdb_movie_id: number
+          user_id: string
+        }
         Update: {
-          created_at?: string;
-          event_type?: string;
-          id?: string;
-          recommendation_id?: string;
-          tmdb_movie_id?: number;
-          user_id?: string;
-        };
+          created_at?: string
+          event_type?: string
+          id?: string
+          recommendation_id?: string
+          tmdb_movie_id?: number
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'recommendation_events_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "recommendation_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       recommendation_refreshes: {
         Row: {
-          created_at: string;
-          id: string;
-          user_id: string;
-        };
+          created_at: string
+          id: string
+          user_id: string
+        }
         Insert: {
-          created_at?: string;
-          id?: string;
-          user_id: string;
-        };
+          created_at?: string
+          id?: string
+          user_id: string
+        }
         Update: {
-          created_at?: string;
-          id?: string;
-          user_id?: string;
-        };
+          created_at?: string
+          id?: string
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'recommendation_refreshes_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "recommendation_refreshes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       recommendations: {
         Row: {
-          created_at: string;
-          display_order: number;
-          generated_at: string;
-          genre_ids: number[] | null;
-          id: string;
-          poster_path: string | null;
-          reason: string;
-          release_date: string | null;
-          title: string;
-          tmdb_movie_id: number;
-          user_id: string;
-          vote_average: number | null;
-          vote_count: number;
-        };
+          created_at: string
+          display_order: number
+          generated_at: string
+          genre_ids: number[] | null
+          id: string
+          poster_path: string | null
+          reason: string
+          release_date: string | null
+          title: string
+          tmdb_movie_id: number
+          user_id: string
+          vote_average: number | null
+          vote_count: number
+        }
         Insert: {
-          created_at?: string;
-          display_order: number;
-          generated_at?: string;
-          genre_ids?: number[] | null;
-          id?: string;
-          poster_path?: string | null;
-          reason: string;
-          release_date?: string | null;
-          title: string;
-          tmdb_movie_id: number;
-          user_id: string;
-          vote_average?: number | null;
-          vote_count?: number;
-        };
+          created_at?: string
+          display_order: number
+          generated_at?: string
+          genre_ids?: number[] | null
+          id?: string
+          poster_path?: string | null
+          reason: string
+          release_date?: string | null
+          title: string
+          tmdb_movie_id: number
+          user_id: string
+          vote_average?: number | null
+          vote_count?: number
+        }
         Update: {
-          created_at?: string;
-          display_order?: number;
-          generated_at?: string;
-          genre_ids?: number[] | null;
-          id?: string;
-          poster_path?: string | null;
-          reason?: string;
-          release_date?: string | null;
-          title?: string;
-          tmdb_movie_id?: number;
-          user_id?: string;
-          vote_average?: number | null;
-          vote_count?: number;
-        };
+          created_at?: string
+          display_order?: number
+          generated_at?: string
+          genre_ids?: number[] | null
+          id?: string
+          poster_path?: string | null
+          reason?: string
+          release_date?: string | null
+          title?: string
+          tmdb_movie_id?: number
+          user_id?: string
+          vote_average?: number | null
+          vote_count?: number
+        }
         Relationships: [
           {
-            foreignKeyName: 'recommendations_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "recommendations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       saved_filters: {
         Row: {
-          created_at: string;
-          filter_conditions: Json;
-          id: string;
-          updated_at: string;
-          user_id: string;
-        };
+          created_at: string
+          filter_conditions: Json
+          id: string
+          updated_at: string
+          user_id: string
+        }
         Insert: {
-          created_at?: string;
-          filter_conditions?: Json;
-          id?: string;
-          updated_at?: string;
-          user_id: string;
-        };
+          created_at?: string
+          filter_conditions?: Json
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
         Update: {
-          created_at?: string;
-          filter_conditions?: Json;
-          id?: string;
-          updated_at?: string;
-          user_id?: string;
-        };
+          created_at?: string
+          filter_conditions?: Json
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'saved_filters_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: true;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "saved_filters_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       theater_seats: {
         Row: {
-          created_at: string;
-          id: string;
-          position_x: number;
-          position_y: number;
-          position_z: number;
-          row_label: string;
-          seat_number: number;
-          seat_type: string;
-          theater_id: string;
-        };
+          created_at: string
+          id: string
+          position_x: number
+          position_y: number
+          position_z: number
+          row_label: string
+          seat_number: number
+          seat_type: string
+          theater_id: string
+        }
         Insert: {
-          created_at?: string;
-          id?: string;
-          position_x: number;
-          position_y: number;
-          position_z: number;
-          row_label: string;
-          seat_number: number;
-          seat_type?: string;
-          theater_id: string;
-        };
+          created_at?: string
+          id?: string
+          position_x: number
+          position_y: number
+          position_z: number
+          row_label: string
+          seat_number: number
+          seat_type?: string
+          theater_id: string
+        }
         Update: {
-          created_at?: string;
-          id?: string;
-          position_x?: number;
-          position_y?: number;
-          position_z?: number;
-          row_label?: string;
-          seat_number?: number;
-          seat_type?: string;
-          theater_id?: string;
-        };
+          created_at?: string
+          id?: string
+          position_x?: number
+          position_y?: number
+          position_z?: number
+          row_label?: string
+          seat_number?: number
+          seat_type?: string
+          theater_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'theater_seats_theater_id_fkey';
-            columns: ['theater_id'];
-            isOneToOne: false;
-            referencedRelation: 'theaters';
-            referencedColumns: ['id'];
+            foreignKeyName: "theater_seats_theater_id_fkey"
+            columns: ["theater_id"]
+            isOneToOne: false
+            referencedRelation: "theaters"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       theater_speakers: {
         Row: {
-          channel: string;
-          created_at: string;
-          direction_x: number;
-          direction_y: number;
-          direction_z: number;
-          directivity_alpha: number;
-          id: string;
-          position_x: number;
-          position_y: number;
-          position_z: number;
-          power_watts: number;
-          theater_id: string;
-        };
+          channel: string
+          created_at: string
+          direction_x: number
+          direction_y: number
+          direction_z: number
+          directivity_alpha: number
+          id: string
+          position_x: number
+          position_y: number
+          position_z: number
+          power_watts: number
+          theater_id: string
+        }
         Insert: {
-          channel: string;
-          created_at?: string;
-          direction_x?: number;
-          direction_y?: number;
-          direction_z?: number;
-          directivity_alpha?: number;
-          id?: string;
-          position_x: number;
-          position_y: number;
-          position_z: number;
-          power_watts?: number;
-          theater_id: string;
-        };
+          channel: string
+          created_at?: string
+          direction_x?: number
+          direction_y?: number
+          direction_z?: number
+          directivity_alpha?: number
+          id?: string
+          position_x: number
+          position_y: number
+          position_z: number
+          power_watts?: number
+          theater_id: string
+        }
         Update: {
-          channel?: string;
-          created_at?: string;
-          direction_x?: number;
-          direction_y?: number;
-          direction_z?: number;
-          directivity_alpha?: number;
-          id?: string;
-          position_x?: number;
-          position_y?: number;
-          position_z?: number;
-          power_watts?: number;
-          theater_id?: string;
-        };
+          channel?: string
+          created_at?: string
+          direction_x?: number
+          direction_y?: number
+          direction_z?: number
+          directivity_alpha?: number
+          id?: string
+          position_x?: number
+          position_y?: number
+          position_z?: number
+          power_watts?: number
+          theater_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'theater_speakers_theater_id_fkey';
-            columns: ['theater_id'];
-            isOneToOne: false;
-            referencedRelation: 'theaters';
-            referencedColumns: ['id'];
+            foreignKeyName: "theater_speakers_theater_id_fkey"
+            columns: ["theater_id"]
+            isOneToOne: false
+            referencedRelation: "theaters"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       theaters: {
         Row: {
-          audio_layout: string;
-          created_at: string;
-          deleted_at: string | null;
-          description: string | null;
-          format: string;
-          id: string;
-          is_active: boolean;
-          name: string;
-          room_depth: number;
-          room_height: number;
-          room_width: number;
-          row_curve_radius: number;
-          screen_center_x: number;
-          screen_center_y: number;
-          screen_center_z: number;
-          screen_curvature: number;
-          screen_height: number;
-          screen_width: number;
-          slug: string;
-          updated_at: string;
-        };
+          audio_layout: string
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          format: string
+          id: string
+          is_active: boolean
+          name: string
+          room_depth: number
+          room_height: number
+          room_width: number
+          row_curve_radius: number
+          screen_center_x: number
+          screen_center_y: number
+          screen_center_z: number
+          screen_curvature: number
+          screen_height: number
+          screen_width: number
+          slug: string
+          updated_at: string
+        }
         Insert: {
-          audio_layout: string;
-          created_at?: string;
-          deleted_at?: string | null;
-          description?: string | null;
-          format: string;
-          id?: string;
-          is_active?: boolean;
-          name: string;
-          room_depth: number;
-          room_height: number;
-          room_width: number;
-          row_curve_radius?: number;
-          screen_center_x: number;
-          screen_center_y: number;
-          screen_center_z: number;
-          screen_curvature?: number;
-          screen_height: number;
-          screen_width: number;
-          slug: string;
-          updated_at?: string;
-        };
+          audio_layout: string
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          format: string
+          id?: string
+          is_active?: boolean
+          name: string
+          room_depth: number
+          room_height: number
+          room_width: number
+          row_curve_radius?: number
+          screen_center_x: number
+          screen_center_y: number
+          screen_center_z: number
+          screen_curvature?: number
+          screen_height: number
+          screen_width: number
+          slug: string
+          updated_at?: string
+        }
         Update: {
-          audio_layout?: string;
-          created_at?: string;
-          deleted_at?: string | null;
-          description?: string | null;
-          format?: string;
-          id?: string;
-          is_active?: boolean;
-          name?: string;
-          room_depth?: number;
-          room_height?: number;
-          room_width?: number;
-          row_curve_radius?: number;
-          screen_center_x?: number;
-          screen_center_y?: number;
-          screen_center_z?: number;
-          screen_curvature?: number;
-          screen_height?: number;
-          screen_width?: number;
-          slug?: string;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
+          audio_layout?: string
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          format?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          room_depth?: number
+          room_height?: number
+          room_width?: number
+          row_curve_radius?: number
+          screen_center_x?: number
+          screen_center_y?: number
+          screen_center_z?: number
+          screen_curvature?: number
+          screen_height?: number
+          screen_width?: number
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       title_suggestions: {
         Row: {
-          created_at: string;
-          id: string;
-          query_title: string;
-          suggestions: Json;
-        };
+          created_at: string
+          id: string
+          query_title: string
+          suggestions: Json
+        }
         Insert: {
-          created_at?: string;
-          id?: string;
-          query_title: string;
-          suggestions?: Json;
-        };
+          created_at?: string
+          id?: string
+          query_title: string
+          suggestions?: Json
+        }
         Update: {
-          created_at?: string;
-          id?: string;
-          query_title?: string;
-          suggestions?: Json;
-        };
-        Relationships: [];
-      };
+          created_at?: string
+          id?: string
+          query_title?: string
+          suggestions?: Json
+        }
+        Relationships: []
+      }
       totp_recovery_codes: {
         Row: {
-          code_hash: string;
-          created_at: string;
-          id: string;
-          used_at: string | null;
-          user_id: string;
-        };
+          code_hash: string
+          created_at: string
+          id: string
+          used_at: string | null
+          user_id: string
+        }
         Insert: {
-          code_hash: string;
-          created_at?: string;
-          id?: string;
-          used_at?: string | null;
-          user_id: string;
-        };
+          code_hash: string
+          created_at?: string
+          id?: string
+          used_at?: string | null
+          user_id: string
+        }
         Update: {
-          code_hash?: string;
-          created_at?: string;
-          id?: string;
-          used_at?: string | null;
-          user_id?: string;
-        };
+          code_hash?: string
+          created_at?: string
+          id?: string
+          used_at?: string | null
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'totp_recovery_codes_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "totp_recovery_codes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       user_settings: {
         Row: {
-          created_at: string;
-          id: string;
-          notification_enabled: boolean;
-          theme: string;
-          updated_at: string;
-          user_id: string;
-        };
+          created_at: string
+          id: string
+          notification_enabled: boolean
+          theme: string
+          updated_at: string
+          user_id: string
+        }
         Insert: {
-          created_at?: string;
-          id?: string;
-          notification_enabled?: boolean;
-          theme?: string;
-          updated_at?: string;
-          user_id: string;
-        };
+          created_at?: string
+          id?: string
+          notification_enabled?: boolean
+          theme?: string
+          updated_at?: string
+          user_id: string
+        }
         Update: {
-          created_at?: string;
-          id?: string;
-          notification_enabled?: boolean;
-          theme?: string;
-          updated_at?: string;
-          user_id?: string;
-        };
+          created_at?: string
+          id?: string
+          notification_enabled?: boolean
+          theme?: string
+          updated_at?: string
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'user_settings_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: true;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "user_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       user_totp: {
         Row: {
-          confirmed_at: string | null;
-          created_at: string;
-          encrypted_secret: string;
-          last_used_counter: number | null;
-          updated_at: string;
-          user_id: string;
-        };
+          confirmed_at: string | null
+          created_at: string
+          encrypted_secret: string
+          last_used_counter: number | null
+          updated_at: string
+          user_id: string
+        }
         Insert: {
-          confirmed_at?: string | null;
-          created_at?: string;
-          encrypted_secret: string;
-          last_used_counter?: number | null;
-          updated_at?: string;
-          user_id: string;
-        };
+          confirmed_at?: string | null
+          created_at?: string
+          encrypted_secret: string
+          last_used_counter?: number | null
+          updated_at?: string
+          user_id: string
+        }
         Update: {
-          confirmed_at?: string | null;
-          created_at?: string;
-          encrypted_secret?: string;
-          last_used_counter?: number | null;
-          updated_at?: string;
-          user_id?: string;
-        };
+          confirmed_at?: string | null
+          created_at?: string
+          encrypted_secret?: string
+          last_used_counter?: number | null
+          updated_at?: string
+          user_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: 'user_totp_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: true;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "user_totp_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       users: {
         Row: {
-          avatar_url: string | null;
-          created_at: string;
-          email: string;
-          id: string;
-          instant_recommendation_used_at: string | null;
-          is_verified: boolean;
-          last_login_at: string | null;
-          name: string | null;
-          password_changed_at: string | null;
-          password_hash: string | null;
-          role: string;
-          updated_at: string;
-        };
+          avatar_url: string | null
+          created_at: string
+          email: string
+          id: string
+          instant_recommendation_used_at: string | null
+          is_verified: boolean
+          last_login_at: string | null
+          name: string | null
+          password_changed_at: string | null
+          password_hash: string | null
+          role: string
+          updated_at: string
+          username: string | null
+        }
         Insert: {
-          avatar_url?: string | null;
-          created_at?: string;
-          email: string;
-          id?: string;
-          instant_recommendation_used_at?: string | null;
-          is_verified?: boolean;
-          last_login_at?: string | null;
-          name?: string | null;
-          password_changed_at?: string | null;
-          password_hash?: string | null;
-          role?: string;
-          updated_at?: string;
-        };
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          instant_recommendation_used_at?: string | null
+          is_verified?: boolean
+          last_login_at?: string | null
+          name?: string | null
+          password_changed_at?: string | null
+          password_hash?: string | null
+          role?: string
+          updated_at?: string
+          username?: string | null
+        }
         Update: {
-          avatar_url?: string | null;
-          created_at?: string;
-          email?: string;
-          id?: string;
-          instant_recommendation_used_at?: string | null;
-          is_verified?: boolean;
-          last_login_at?: string | null;
-          name?: string | null;
-          password_changed_at?: string | null;
-          password_hash?: string | null;
-          role?: string;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          instant_recommendation_used_at?: string | null
+          is_verified?: boolean
+          last_login_at?: string | null
+          name?: string | null
+          password_changed_at?: string | null
+          password_hash?: string | null
+          role?: string
+          updated_at?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       watchlist: {
         Row: {
-          added_at: string;
-          backdrop_path: string | null;
-          deleted_at: string | null;
-          id: string;
-          notes: string | null;
-          poster_path: string | null;
-          release_date: string | null;
-          title: string;
-          tmdb_movie_id: number;
-          user_id: string;
-          watched_at: string | null;
-        };
+          added_at: string
+          backdrop_path: string | null
+          deleted_at: string | null
+          id: string
+          notes: string | null
+          poster_path: string | null
+          release_date: string | null
+          title: string
+          tmdb_movie_id: number
+          user_id: string
+          watched_at: string | null
+        }
         Insert: {
-          added_at?: string;
-          backdrop_path?: string | null;
-          deleted_at?: string | null;
-          id?: string;
-          notes?: string | null;
-          poster_path?: string | null;
-          release_date?: string | null;
-          title: string;
-          tmdb_movie_id: number;
-          user_id: string;
-          watched_at?: string | null;
-        };
+          added_at?: string
+          backdrop_path?: string | null
+          deleted_at?: string | null
+          id?: string
+          notes?: string | null
+          poster_path?: string | null
+          release_date?: string | null
+          title: string
+          tmdb_movie_id: number
+          user_id: string
+          watched_at?: string | null
+        }
         Update: {
-          added_at?: string;
-          backdrop_path?: string | null;
-          deleted_at?: string | null;
-          id?: string;
-          notes?: string | null;
-          poster_path?: string | null;
-          release_date?: string | null;
-          title?: string;
-          tmdb_movie_id?: number;
-          user_id?: string;
-          watched_at?: string | null;
-        };
+          added_at?: string
+          backdrop_path?: string | null
+          deleted_at?: string | null
+          id?: string
+          notes?: string | null
+          poster_path?: string | null
+          release_date?: string | null
+          title?: string
+          tmdb_movie_id?: number
+          user_id?: string
+          watched_at?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: 'watchlist_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
+            foreignKeyName: "watchlist_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-    };
+        ]
+      }
+    }
     Views: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     Functions: {
       consume_rate_limit: {
         Args: {
-          p_action_type: string;
-          p_identifier: string;
-          p_max_attempts: number;
-          p_window_minutes: number;
-        };
+          p_action_type: string
+          p_identifier: string
+          p_max_attempts: number
+          p_window_minutes: number
+        }
         Returns: {
-          allowed: boolean;
-          retry_after: number;
-        }[];
-      };
+          allowed: boolean
+          retry_after: number
+        }[]
+      }
       delete_expired_recommendation_events: {
-        Args: { retention_days?: number };
-        Returns: number;
-      };
-      get_award_years: { Args: never; Returns: number[] };
+        Args: { retention_days?: number }
+        Returns: number
+      }
+      get_award_years: { Args: never; Returns: number[] }
       get_watchlist_sorted: {
         Args: {
-          p_exclude_watched?: boolean;
-          p_limit: number;
-          p_offset?: number;
-          p_sort: string;
-          p_user_id: string;
-        };
+          p_exclude_watched?: boolean
+          p_limit: number
+          p_offset?: number
+          p_sort: string
+          p_user_id: string
+        }
         Returns: {
-          added_at: string;
-          id: string;
-          poster_path: string;
-          release_date: string;
-          title: string;
-          tmdb_movie_id: number;
-          total_count: number;
-          watched_at: string;
-        }[];
-      };
-      sync_now_showing_movies: { Args: { movies: Json }; Returns: number };
+          added_at: string
+          id: string
+          poster_path: string
+          release_date: string
+          title: string
+          tmdb_movie_id: number
+          total_count: number
+          watched_at: string
+        }[]
+      }
+      sync_now_showing_movies: { Args: { movies: Json }; Returns: number }
       upsert_movie_cache: {
-        Args: { movies: Json; set_now_playing?: boolean };
-        Returns: number;
-      };
+        Args: { movies: Json; set_now_playing?: boolean }
+        Returns: number
+      }
       upsert_recommendations: {
-        Args: { p_recommendations: Json; p_user_id: string };
-        Returns: number;
-      };
-    };
+        Args: { p_recommendations: Json; p_user_id: string }
+        Returns: number
+      }
+    }
     Enums: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
-};
+      [_ in never]: never
+    }
+  }
+}
 
-type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>;
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<
-  keyof Database,
-  'public'
->];
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])
-    : never = never,
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
-  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])[TableName] extends {
-      Row: infer R;
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
     }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema['Tables'] &
-        DefaultSchema['Views'])
-    ? (DefaultSchema['Tables'] &
-        DefaultSchema['Views'])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R;
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
       }
       ? R
       : never
-    : never;
+    : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema['Tables']
+    | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
-    : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
-      Insert: infer I;
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
     }
     ? I
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
-    ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I;
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
       }
       ? I
       : never
-    : never;
+    : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema['Tables']
+    | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
-    : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
-      Update: infer U;
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
     }
     ? U
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
-    ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U;
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
       }
       ? U
       : never
-    : never;
+    : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema['Enums']
+    | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums']
-    : never = never,
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums'][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema['Enums']
-    ? DefaultSchema['Enums'][DefaultSchemaEnumNameOrOptions]
-    : never;
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema['CompositeTypes']
+    | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes']
-    : never = never,
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes'][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema['CompositeTypes']
-    ? DefaultSchema['CompositeTypes'][PublicCompositeTypeNameOrOptions]
-    : never;
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
 
 export const Constants = {
   graphql_public: {
@@ -1166,4 +1205,4 @@ export const Constants = {
   public: {
     Enums: {},
   },
-} as const;
+} as const

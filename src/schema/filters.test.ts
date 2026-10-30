@@ -254,4 +254,39 @@ describe('filterConditionsSchema', () => {
       expect('unknown_field' in result).toBe(false);
     });
   });
+
+  describe('include_regions', () => {
+    it('配列を受け付ける', () => {
+      const result = filterConditionsSchema.parse({
+        include_regions: ['korea', 'chinese', 'thai_indian'],
+      });
+
+      expect(result.include_regions).toEqual([
+        'korea',
+        'chinese',
+        'thai_indian',
+      ]);
+    });
+
+    it('未知のキーがあれば拒否する', () => {
+      const result = filterConditionsSchema.safeParse({
+        include_regions: ['korea', 'atlantis'],
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('include_regions を持たない既存の保存済みフィルタも通る', () => {
+      // saved_filters の既存レコードにはこのキーが無い。optional なので
+      // パースに失敗せず、未指定（＝3グループ除外）として扱われる
+      const result = filterConditionsSchema.safeParse({
+        sort_by: 'release_date',
+        release_type: 'theatrical',
+        genre_ids: [28],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.success && result.data.include_regions).toBeUndefined();
+    });
+  });
 });

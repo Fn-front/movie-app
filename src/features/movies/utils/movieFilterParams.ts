@@ -83,6 +83,7 @@ interface RawFilterConditions {
   is_revival?: unknown;
   watch_providers?: unknown;
   offer_types?: unknown;
+  include_regions?: unknown;
 }
 
 /**
@@ -128,6 +129,13 @@ function validateFilterConditions(raw: RawFilterConditions): FilterConditions {
   );
   if (offerTypes) conditions.offer_types = offerTypes;
 
+  // 提供形態と同じく、URLはカンマ区切り文字列・localStorage は配列で来る
+  const includeRegions = parseField(
+    'include_regions',
+    normalizeStringList(raw.include_regions),
+  );
+  if (includeRegions) conditions.include_regions = includeRegions;
+
   return conditions;
 }
 
@@ -159,6 +167,8 @@ export function parseFilterConditionsFromParams(
       searchParams.get(MOVIE_FILTER_QUERY_PARAMS.WATCH_PROVIDERS) ?? undefined,
     offer_types:
       searchParams.get(MOVIE_FILTER_QUERY_PARAMS.OFFER_TYPES) ?? undefined,
+    include_regions:
+      searchParams.get(MOVIE_FILTER_QUERY_PARAMS.INCLUDE_REGIONS) ?? undefined,
   });
 }
 
@@ -218,6 +228,12 @@ export function buildFilterSearchParams(
     MOVIE_FILTER_QUERY_PARAMS.OFFER_TYPES,
     conditions.offer_types && conditions.offer_types.length > 0
       ? conditions.offer_types.join(',')
+      : undefined,
+  );
+  setOrDelete(
+    MOVIE_FILTER_QUERY_PARAMS.INCLUDE_REGIONS,
+    conditions.include_regions && conditions.include_regions.length > 0
+      ? conditions.include_regions.join(',')
       : undefined,
   );
 

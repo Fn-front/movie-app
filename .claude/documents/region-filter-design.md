@@ -134,18 +134,29 @@ TMDb のレスポンスには `original_language` が含まれているため（
 
 ## 既存行のバックフィル
 
-`update-movies` の日次 cron（`src/lib/sync/updateMoviesCacheByBatch.ts`）に任せる。
+### 継続的な更新
+
+`update-movies` の日次 cron（`src/lib/sync/updateMoviesCacheByBatch.ts`）に組み込む。
 
 `getMovieCacheStats` は既に `/movie/{id}` の詳細を全件ぶん取得しているため、返り値に
 `originalLanguage` を足して `UPDATE` に含めるだけでよい。**追加の TMDb コストはゼロ**。
 
 ```
-src/lib/tmdb/tmdb.ts      getMovieCacheStats の返り値に originalLanguage を追加
+src/lib/tmdb/tmdb.ts                       getMovieCacheStats の返り値に originalLanguage を追加
 src/lib/sync/updateMoviesCacheByBatch.ts   UPDATE に original_language を追加
 ```
 
-全行が埋まるまでは NULL のまま表示され続ける。バックフィル専用のスクリプトやマイグレーションは
-作らない（TMDb への問い合わせが必要で SQL では完結せず、日次 cron が同じ処理を既に行っているため）。
+### 初回の一括埋め
+
+日次 cron を待たず、マイグレーション適用後に**一度だけ手動でバックフィルを実行する**。
+これによりリリース直後からフィルタが機能する。
+
+対象は 2026-10-31 時点で**ユニーク映画ID 1,112 件**（総行数 1,142）。TMDb のレート制限
+（50 req/s）に対し同時実行を 10 に絞っても 30 秒弱で完了する。日次 cron が毎日こなしている
+量と同じであり、負荷上の問題はない。
+
+バックフィル専用のスクリプトはリポジトリに残さない。SQL では完結せず（TMDb への問い合わせが
+必要）、かつ日次 cron が同じ処理を恒常的に行うため、永続化する価値がない。
 
 ## 読み取り側
 
@@ -249,8 +260,12 @@ UI の初期値だけで既定を表現する案は、URL 直叩き・初回の�
 
 ## リスク
 
-- **バックフィル完了まで絞り込みが効かない。** 日次 cron 1回で全行が埋まる想定だが、
-  `update-movies` は TMDb を1件ずつ直列で叩いており `maxDuration = 300` の上限がある。
-  打ち切られた場合は翌日以降に持ち越される（打ち切り自体は `errors[]` に載らない）。
+- **バックフィル後に追加された行は一時的に NULL になる。** 初回の一括埋めで既存行は
+  埋まるが、以降に各同期経路が追加する行は書き込み側の対応に依存する。4経路すべてに
+  列を通すことで塞ぐ（漏れた経路の行は NULL のまま表示され続け、絞り込みから漏れる）。
+- **`update-movies` の打ち切り。** 同 cron は TMDb を1件ずつ直列で叩いており
+  `maxDuration = 300` の上限がある。打ち切られた場合、その回の更新は翌日以降に
+  持ち越される（打ち切り自体は `errors[]` に載らない）。継続的な更新経路としては
+  既存の制約をそのまま引き継ぐ。
 - **`.or()` の増加。** 言語条件で `or=` が1つ増える。ジャンル・配信プロバイダーと併用した
   ときのクエリ長とプラン悪化を、実データで確認する必要がある。

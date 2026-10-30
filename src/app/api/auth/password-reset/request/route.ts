@@ -29,6 +29,7 @@ import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { issuePasswordResetToken } from '@/lib/auth/passwordResetToken';
 import { sendPasswordResetEmail } from '@/lib/auth/sendPasswordResetEmail';
 import { randomDelay } from '@/lib/otp';
+import { isSyntheticEmail } from '@/lib/auth/accountIdentity';
 import { getRequiredEnv } from '@/utils/env';
 
 /** 登録の有無にかかわらず返す応答 */
@@ -119,7 +120,12 @@ export async function POST(request: Request) {
     // 未確認のアカウントにリンクを送らないのは、他人のアドレスで登録しておいて
     // リセット経由でそのアドレスを「確認済み」相当に昇格させる筋を残さないため。
     // どちらの場合も応答は成功と同じにし、遅延を挟んで所要時間も揃える
-    if (!user || !user.is_verified) {
+    //
+    // 合成アドレス（admin 発行アカウント）も同じ扱いにする。`.invalid` 宛は
+    // 必ず送信に失敗し、下の `!sent` 分岐が 500 を返すため、そのアドレスが
+    // 登録済みであることが漏れる。これらの復旧は admin の再発行で行う
+    // （`.claude/documents/admin-account-design.md`）。
+    if (!user || !user.is_verified || isSyntheticEmail(email)) {
       await randomDelay();
       return acceptedResponse();
     }

@@ -26,6 +26,10 @@ import { hashVerificationToken } from '@/lib/otp/verificationToken';
 import { fetchVerifiedGitHubProfile } from '@/lib/auth/githubProfile';
 import { getClientIp } from '@/lib/http/getClientIp';
 import { normalizeEmail } from '@/utils/email';
+import {
+  isEmailIdentifier,
+  normalizeUsername,
+} from '@/lib/auth/accountIdentity';
 import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
@@ -74,13 +78,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.CREDENTIALS_REQUIRED);
         }
 
+        // ログイン欄はメールアドレスとユーザー名を兼用する。ユーザー名の文字種に
+        // `@` を含めないため、`@` の有無で曖昧さなく振り分けられる。
+        const rawIdentifier = credentials.email as string;
+        const isEmailLogin = isEmailIdentifier(rawIdentifier);
+
         // 表記揺れで別アカウント扱いにならないよう、DBを引く前に正規化する
-        const email = normalizeEmail(credentials.email as string);
+        const email = isEmailLogin ? normalizeEmail(rawIdentifier) : '';
+        const username = isEmailLogin ? '' : normalizeUsername(rawIdentifier);
+
         const loginMethod =
           (credentials.loginMethod as string) || LOGIN_METHOD.PASSWORD;
 
         const clientIp = getClientIp(request);
-        const loginIdentifier = buildLoginIdentifier(email, clientIp);
+        // レート制限の識別子は「アカウントを特定する文字列」であればよく、
+        // メールかユーザー名かは問わない（buildLoginIdentifier は単純連結）。
+        // 両者の文字空間は `@` の有無で分かれるため衝突しない。
+        const loginIdentifier = buildLoginIdentifier(
+          isEmailLogin ? email : username,
+          clientIp,
+        );
 
         // 送信元単位のレート制限。1つの送信元からの大量試行を止める
         if (clientIp !== 'unknown') {
@@ -112,14 +129,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED);
         }
 
-        // ユーザー取得
-        const { data: user, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', email)
-          .single();
+        // ユーザー取得。
+        // ユーザー名は大小文字・区切りの揺れを吸収して保存しているため、
+        // 照合も正規化済みの値で行う（idx_users_username_lower と対応）。
+        const { data: user, error } = isEmailLogin
+          ? await supabase.from('users').select('*').eq('email', email).single()
+          : await supabase
+              .from('users')
+              .select('*')
+              .eq('username', username)
+              .single();
 
         if (error || !user) {
+          throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+        }
+
+        // ユーザー名ログインはメールを持たないアカウント専用の経路。
+        // メール確認コードを前提とする OTP ログインは成立しない。
+        if (!isEmailLogin && loginMethod === LOGIN_METHOD.OTP) {
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 

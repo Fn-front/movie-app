@@ -77,6 +77,45 @@ export type Database = {
           },
         ];
       };
+      admin_audit_logs: {
+        Row: {
+          action: string;
+          actor_user_id: string;
+          created_at: string;
+          id: string;
+          target_user_id: string;
+        };
+        Insert: {
+          action: string;
+          actor_user_id: string;
+          created_at?: string;
+          id?: string;
+          target_user_id: string;
+        };
+        Update: {
+          action?: string;
+          actor_user_id?: string;
+          created_at?: string;
+          id?: string;
+          target_user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'admin_audit_logs_actor_user_id_fkey';
+            columns: ['actor_user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'admin_audit_logs_target_user_id_fkey';
+            columns: ['target_user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       award_movies: {
         Row: {
           award_name: string;
@@ -898,6 +937,7 @@ export type Database = {
           password_hash: string | null;
           role: string;
           updated_at: string;
+          username: string | null;
         };
         Insert: {
           avatar_url?: string | null;
@@ -912,6 +952,7 @@ export type Database = {
           password_hash?: string | null;
           role?: string;
           updated_at?: string;
+          username?: string | null;
         };
         Update: {
           avatar_url?: string | null;
@@ -926,6 +967,7 @@ export type Database = {
           password_hash?: string | null;
           role?: string;
           updated_at?: string;
+          username?: string | null;
         };
         Relationships: [];
       };

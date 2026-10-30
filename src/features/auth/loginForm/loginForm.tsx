@@ -154,10 +154,16 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
         noValidate
       >
         <div className={styles.c_login_form__fields}>
+          {/*
+            管理者が発行するアカウントはメールアドレスを持たず、ユーザー名で
+            ログインする。入力欄は兼用し、`@` の有無で振り分ける。
+            type='email' のままだとブラウザ側の検証でユーザー名が弾かれるため
+            type='text' にする（形式検証は loginSchema が担う）。
+          */}
           <Input
-            label='メールアドレス'
-            type='email'
-            autoComplete='email'
+            label='メールアドレスまたはアカウント名'
+            type='text'
+            autoComplete='username'
             placeholder='example@example.com'
             fullWidth
             error={errors.email?.message}

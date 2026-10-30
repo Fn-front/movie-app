@@ -44,7 +44,9 @@ describe('LoginForm', () => {
     expect(
       screen.getByRole('heading', { name: 'ログイン' }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('メールアドレス')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('パスワード')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'ログイン' }),
@@ -74,7 +76,7 @@ describe('LoginForm', () => {
     render(<LoginForm />);
 
     await user.type(
-      screen.getByLabelText('メールアドレス'),
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
       'test@example.com',
     );
     await user.click(screen.getByRole('button', { name: 'ログイン' }));
@@ -87,16 +89,23 @@ describe('LoginForm', () => {
     expect(mockSignIn).not.toHaveBeenCalled();
   });
 
+  // 入力欄はメールアドレスとアカウント名を兼用するため、どちらとしても
+  // 解釈できない入力を弾く
   it('メールアドレス形式不正でバリデーションエラーが表示される', async () => {
     render(<LoginForm />);
 
-    await user.type(screen.getByLabelText('メールアドレス'), 'invalid-email');
+    await user.type(
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
+      'invalid-email',
+    );
     await user.type(screen.getByLabelText('パスワード'), 'Password123');
     await user.click(screen.getByRole('button', { name: 'ログイン' }));
 
     await waitFor(() => {
       expect(
-        screen.getByText('メールアドレスの形式が正しくありません'),
+        screen.getByText(
+          'メールアドレスまたはアカウント名の形式が正しくありません',
+        ),
       ).toBeInTheDocument();
     });
     expect(mockSignIn).not.toHaveBeenCalled();
@@ -114,7 +123,7 @@ describe('LoginForm', () => {
     render(<LoginForm />);
 
     await user.type(
-      screen.getByLabelText('メールアドレス'),
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
       'test@example.com',
     );
     await user.type(screen.getByLabelText('パスワード'), 'Password1');
@@ -148,7 +157,7 @@ describe('LoginForm', () => {
     render(<LoginForm />);
 
     await user.type(
-      screen.getByLabelText('メールアドレス'),
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
       'test@example.com',
     );
     await user.type(screen.getByLabelText('パスワード'), 'Password1');
@@ -197,7 +206,7 @@ describe('LoginForm', () => {
     render(<LoginForm callbackUrl='/favorites' />);
 
     await user.type(
-      screen.getByLabelText('メールアドレス'),
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
       'test@example.com',
     );
     await user.type(screen.getByLabelText('パスワード'), 'Password1');
@@ -220,7 +229,7 @@ describe('LoginForm', () => {
     render(<LoginForm callbackUrl='https://evil.com/steal' />);
 
     await user.type(
-      screen.getByLabelText('メールアドレス'),
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
       'test@example.com',
     );
     await user.type(screen.getByLabelText('パスワード'), 'Password1');
@@ -235,7 +244,7 @@ describe('LoginForm', () => {
     /** メールとパスワードを入れてログインを押す */
     const submitCredentials = async () => {
       await user.type(
-        screen.getByLabelText('メールアドレス'),
+        screen.getByLabelText('メールアドレスまたはアカウント名'),
         'test@example.com',
       );
       await user.type(screen.getByLabelText('パスワード'), 'Password1');
@@ -384,7 +393,7 @@ describe('LoginForm', () => {
     render(<LoginForm />);
 
     await user.type(
-      screen.getByLabelText('メールアドレス'),
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
       'test@example.com',
     );
     await user.type(screen.getByLabelText('パスワード'), 'Password1');

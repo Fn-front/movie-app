@@ -208,3 +208,4 @@
 - `api-route.md` - API Routeルール（認証, レート制限, レスポンス形式）
 - `custom-hook.md` - カスタムフックルール（useCallback/useMemo, エラーハンドリング）
 - `supabase-db.md` - DB操作ルール（Supabase CLI, マイグレーション, 型生成）
+- `ci-secrets.md` - CIシークレット管理（Dependabot専用ストア, gh secret setの注意点）

@@ -12,15 +12,22 @@ test.describe('認証フォームのバリデーション（未認証）', () =>
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test.describe('ログイン', () => {
+    // 入力欄はメールアドレスとアカウント名を兼用する。`@` を含まない入力は
+    // アカウント名として扱われるため、アカウント名の形にも当てはまらない
+    // ものだけがエラーになる
     test('メール形式が不正だとエラーが表示され遷移しない', async ({ page }) => {
       await page.goto('/auth/signin');
 
-      await page.getByLabel('メールアドレス').fill('notanemail');
+      await page
+        .getByLabel('メールアドレスまたはアカウント名')
+        .fill('notanemail');
       await page.getByLabel('パスワード').fill('x');
       await page.getByRole('button', { name: 'ログイン', exact: true }).click();
 
       await expect(
-        page.getByText('メールアドレスの形式が正しくありません'),
+        page.getByText(
+          'メールアドレスまたはアカウント名の形式が正しくありません',
+        ),
       ).toBeVisible();
       await expect(page).toHaveURL(/\/auth\/signin/);
     });

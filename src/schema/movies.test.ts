@@ -275,4 +275,34 @@ describe('moviesQuerySchema', () => {
       expect(result.is_revival).toBe(true);
     });
   });
+
+  describe('include_regions', () => {
+    it('未指定なら undefined になる', () => {
+      const result = moviesQuerySchema.parse({});
+
+      expect(result.include_regions).toBeUndefined();
+    });
+
+    it('カンマ区切りを配列に変換する', () => {
+      const result = moviesQuerySchema.parse({
+        include_regions: 'korea,thai_indian',
+      });
+
+      expect(result.include_regions).toEqual(['korea', 'thai_indian']);
+    });
+
+    it('未知の地域キーは拒否する', () => {
+      const result = moviesQuerySchema.safeParse({
+        include_regions: 'korea,atlantis',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('空文字は拒否する', () => {
+      const result = moviesQuerySchema.safeParse({ include_regions: '' });
+
+      expect(result.success).toBe(false);
+    });
+  });
 });

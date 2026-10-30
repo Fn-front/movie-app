@@ -1875,6 +1875,61 @@ describe('GET /api/movies', () => {
     }
   });
 
+  describe('地域フィルタの既定', () => {
+    /** 原語に関する or 条件を1件取り出す（無ければ undefined） */
+    const findLanguageOr = (): string | undefined =>
+      collectFilterCalls('or')
+        .map((args) => String(args[0]))
+        .find((arg) => arg.includes('original_language'));
+
+    it('include_regions 未指定なら3グループの原語を除外する', async () => {
+      const handler = await loadGET();
+      setupExpiredCacheFromMock({
+        countResult: { count: 0 },
+        dataResult: { data: [], error: null },
+      });
+
+      await handler(createRequest());
+
+      const condition = findLanguageOr();
+      expect(condition).toContain('original_language.is.null');
+      for (const lang of ['ko', 'zh', 'th', 'hi', 'te', 'ta']) {
+        expect(condition).toContain(lang);
+      }
+    });
+
+    it('include_regions で指定した地域は除外しない', async () => {
+      const handler = await loadGET();
+      setupExpiredCacheFromMock({
+        countResult: { count: 0 },
+        dataResult: { data: [], error: null },
+      });
+
+      await handler(createRequest({ include_regions: 'korea' }));
+
+      // 除外リストの中身だけを見る（or 条件全体には列名が含まれるため）
+      const excluded = findLanguageOr()
+        ?.match(/not\.in\.\(([^)]*)\)/)?.[1]
+        .split(',');
+      expect(excluded).not.toContain('ko');
+      expect(excluded).toContain('zh');
+    });
+
+    it('全地域を指定すれば言語で絞らない', async () => {
+      const handler = await loadGET();
+      setupExpiredCacheFromMock({
+        countResult: { count: 0 },
+        dataResult: { data: [], error: null },
+      });
+
+      await handler(
+        createRequest({ include_regions: 'korea,chinese,thai_indian' }),
+      );
+
+      expect(findLanguageOr()).toBeUndefined();
+    });
+  });
+
   it('Discover経由のUPSERTに original_language を含める', async () => {
     const handler = await loadGET();
 

@@ -9,6 +9,7 @@ import {
   SEARCH_VALIDATION,
   WATCH_PROVIDER_OFFER_TYPES,
 } from '@/constants';
+import { REGION_GROUP_KEYS } from '@/constants/movies';
 import { isSelectableWatchProvider } from '@/lib/movies/watchProviders';
 
 /**
@@ -68,6 +69,13 @@ export const moviesQuerySchema = z.object({
     .string()
     .transform((val) => val.split(','))
     .pipe(z.array(z.enum(WATCH_PROVIDER_OFFER_TYPES)))
+    .optional(),
+  // 表示に含める地域グループ。未指定は「3グループすべて除外」を意味する
+  // （既定で非表示にする挙動をAPI層で担保する）
+  include_regions: z
+    .string()
+    .transform((val) => val.split(','))
+    .pipe(z.array(z.enum(REGION_GROUP_KEYS)))
     .optional(),
 });
 

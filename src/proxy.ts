@@ -36,16 +36,12 @@ const adminPaths = ADMIN_REQUIRED_ROUTES;
 export const proxy = auth((req) => {
   const { nextUrl } = req;
 
-  // 本番Vercelデプロイではローカル運用のためcron以外を全て404で隠す。
-  // Vercel Cronは /api/cron/* のみ通過させ、routeハンドラの Bearer 認証へ委ねる。
-  if (process.env.VERCEL_ENV === 'production') {
-    if (nextUrl.pathname.startsWith('/api/cron/')) {
-      return NextResponse.next();
-    }
-    return new NextResponse(null, { status: 404 });
-  }
-
-  // ローカル/Preview: NextAuth の API 系はミドルウェア判定をスキップする
+  // `/api/*` はここでの判定をスキップする。
+  //
+  // NextAuth 自身のエンドポイント（`/api/auth/*`）を阻害しないため、および
+  // API の認可は各 Route Handler が自前で行うため（`withAuth` / `withAdminAuth`
+  // / `verifyCronAuth`）。**画面側の判定に頼らない**ことが前提の設計で、
+  // ロールの最終判定もルート側にある。
   if (nextUrl.pathname.startsWith('/api/')) {
     return NextResponse.next();
   }
@@ -150,9 +146,11 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public (public files)
-     * NOTE: 本番Vercel環境で /api/* 配下も封鎖するため api は除外しない。
-     * ローカル/Preview では冒頭で /api/ を素通しにして NextAuth 等の
-     * 動作を阻害しないようにしている。
+     *
+     * `/api/*` は matcher から除外していないが、ハンドラ冒頭で素通しにしている。
+     * 除外しても動作は同じで、除外すれば1リクエストあたり数ミリ秒を省ける。
+     * ただし「API は proxy を通らない」という前提を暗黙にしたくないため、
+     * あえて通してハンドラ側に明示の分岐を置いている。
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],

@@ -31,7 +31,25 @@ export interface MovieCacheFilters {
   watchProviderIds: number[];
   /** 対象とする提供形態（空配列なら全形態） */
   watchProviderOfferTypes: WatchProviderOfferType[];
+  /**
+   * 除外する原語（ISO 639-1）。空配列なら言語で絞らない
+   *
+   * `original_language IS NULL` の行は常に含める。NULL は「未取得」を表し、
+   * 「対象地域である」こととは区別する。除外に倒すと、列追加直後や
+   * バックフィル未完了の行が一覧から消える
+   */
+  excludedLanguages: string[];
 }
+
+/**
+ * PostgREST のフィルタ構文に埋め込んでよい原語コードの形
+ *
+ * 除外原語は `not.in.(ko,zh)` の形で文字列連結するため、`,` `)` `.` が
+ * 混ざると構文が壊れる。現状の呼び出し元（getExcludedLanguages）は定数しか
+ * 返さないが、型は string[] であり将来の呼び出しまでは縛れない。
+ * 連結する直前にここで弾く。
+ */
+const LANGUAGE_CODE_PATTERN = /^[a-z]{2,3}$/;
 
 /**
  * フィルタ適用に必要な最小限のクエリビルダー
@@ -127,6 +145,16 @@ export function applyMovieCacheFilters<T>(
       )
       .join(',');
     filtered = filtered.or(orConditions);
+  }
+
+  const safeLanguages = filters.excludedLanguages.filter((code) =>
+    LANGUAGE_CODE_PATTERN.test(code),
+  );
+
+  if (safeLanguages.length > 0) {
+    filtered = filtered.or(
+      `original_language.is.null,original_language.not.in.(${safeLanguages.join(',')})`,
+    );
   }
 
   return filtered as T;

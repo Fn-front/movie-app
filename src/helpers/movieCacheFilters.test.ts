@@ -55,6 +55,7 @@ const baseFilters: MovieCacheFilters = {
   genreIds: [],
   watchProviderIds: [],
   watchProviderOfferTypes: [],
+  excludedLanguages: [],
 };
 
 describe('applyMovieCacheFilters', () => {
@@ -402,5 +403,80 @@ describe('applyMovieCacheFilters', () => {
         expect(countQuery.calls).toEqual(dataQuery.calls);
       },
     );
+  });
+
+  describe('地域（原語）フィルタ', () => {
+    it('除外原語があれば NULL を温存した or 条件を付ける', () => {
+      const builder = createQueryBuilderSpy();
+
+      applyMovieCacheFilters(builder, {
+        ...baseFilters,
+        excludedLanguages: ['ko', 'zh'],
+      });
+
+      expect(builder.calls).toContainEqual({
+        method: 'or',
+        args: ['original_language.is.null,original_language.not.in.(ko,zh)'],
+      });
+    });
+
+    it('除外原語が空なら言語で絞らない', () => {
+      const builder = createQueryBuilderSpy();
+
+      applyMovieCacheFilters(builder, {
+        ...baseFilters,
+        excludedLanguages: [],
+      });
+
+      expect(builder.calls.filter((call) => call.method === 'or')).toHaveLength(
+        0,
+      );
+    });
+
+    it('ジャンル条件と併用しても両方が適用される', () => {
+      const builder = createQueryBuilderSpy();
+
+      applyMovieCacheFilters(builder, {
+        ...baseFilters,
+        genreIds: [28],
+        excludedLanguages: ['ko'],
+      });
+
+      expect(builder.calls).toContainEqual({
+        method: 'or',
+        args: ['genre_ids.cs.[28]'],
+      });
+      expect(builder.calls).toContainEqual({
+        method: 'or',
+        args: ['original_language.is.null,original_language.not.in.(ko)'],
+      });
+    });
+
+    it('フィルタ構文を壊す文字を含む原語は連結しない', () => {
+      const builder = createQueryBuilderSpy();
+
+      applyMovieCacheFilters(builder, {
+        ...baseFilters,
+        excludedLanguages: ['ko', 'x),original_language.is.null', 'z.z'],
+      });
+
+      expect(builder.calls).toContainEqual({
+        method: 'or',
+        args: ['original_language.is.null,original_language.not.in.(ko)'],
+      });
+    });
+
+    it('不正な原語しか無ければ言語で絞らない', () => {
+      const builder = createQueryBuilderSpy();
+
+      applyMovieCacheFilters(builder, {
+        ...baseFilters,
+        excludedLanguages: ['*'],
+      });
+
+      expect(builder.calls.filter((call) => call.method === 'or')).toHaveLength(
+        0,
+      );
+    });
   });
 });

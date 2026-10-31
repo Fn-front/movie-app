@@ -57,6 +57,10 @@ export const RATE_LIMIT_ACTION = {
   READ_USER_DATA: 'read_api_user_data',
   /** admin によるアカウント発行・再発行（admin 単位） */
   ADMIN_ACCOUNT_ISSUE: 'admin_account_issue',
+  /** admin による受賞作品の手動同期の実行（admin 単位） */
+  ADMIN_AWARD_SYNC: 'admin_award_sync',
+  /** 手動同期ジョブの進捗ポーリング（admin 単位） */
+  ADMIN_AWARD_SYNC_STATUS: 'admin_award_sync_status',
 } as const;
 
 /**
@@ -111,6 +115,10 @@ export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
   // admin によるアカウント発行。パスワード設定リンクを任意の宛先へ送れるため、
   // 判定できないまま通すと踏み台として使われうる
   RATE_LIMIT_ACTION.ADMIN_ACCOUNT_ISSUE,
+  // ⚠️ ADMIN_AWARD_SYNC / ADMIN_AWARD_SYNC_STATUS はここに入れない。
+  //    認証・本人確認に関わらず、DB 不調時に拒否側へ倒すと admin 自身の
+  //    復旧手段まで塞ぐ。OpenAI の課金は伴うが、上限超過のリスクより
+  //    可用性を取る。
 ]);
 
 /**
@@ -218,6 +226,26 @@ export const RATE_LIMIT_CONFIG = {
    * 第三者が他人のアカウントをロックすることはできない）。
    */
   TOTP_VERIFY: { maxAttempts: 5, windowMinutes: 15 },
+  /**
+   * 受賞作品の手動同期。
+   *
+   * 1回の実行が最大約20分かかり、カンヌ・ゴールデングローブでは OpenAI の
+   * 課金が実際に発生する（部門数ぶん記事全文を送るため）。admin セッションを
+   * 奪われた場合の課金被害を上限で抑える。
+   *
+   * 年を1件ずつ投入する運用なので10回/時で十分な余裕がある。
+   */
+  ADMIN_AWARD_SYNC: { maxAttempts: 10, windowMinutes: 60 },
+  /**
+   * 手動同期ジョブの進捗ポーリング。
+   *
+   * AWARD_SYNC_POLL_INTERVAL_MS = 5000 で AWARD_SYNC_STALE_MINUTES = 25 分
+   * 回すと300回。読み取りのみで外部APIを呼ばないため、倍の余裕を取る。
+   *
+   * ⚠️ READ_USER_DATA に相乗りさせないこと。1ジョブで300回使うため、
+   *    共有カウンタだと他の認証必須読み取りを巻き込んで枯らす。
+   */
+  ADMIN_AWARD_SYNC_STATUS: { maxAttempts: 600, windowMinutes: 30 },
 } as const;
 
 /**

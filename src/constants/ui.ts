@@ -26,8 +26,17 @@ export const IMAGE_SIZES = {
   PERSON_PROFILE: { WIDTH: 185, HEIGHT: 278 },
   /** プロバイダーロゴ */
   PROVIDER_LOGO: { WIDTH: 28, HEIGHT: 28 },
-  /** TMDbロゴ（フッター） */
-  TMDB_LOGO: { WIDTH: 100, HEIGHT: 8 },
+  /**
+   * TMDbロゴ（フッター）
+   *
+   * tmdb-logo.svg の viewBox（489.04 × 35.4 = 約 13.81:1）に合わせる。
+   * next/image は実レンダリング値と属性値を突き合わせ、片方だけ変化していると
+   * 警告を出すため、比がズレていると CSS 幅が宣言幅と一致したときだけ
+   * 「幅は同じなのに高さだけ違う」状態になって警告が出る（#871）。
+   * 比が合っていれば `height: auto` で両方が連動するので発火しない。
+   * 表示サイズは footer.module.scss 側が決めるため、ここは比だけが意味を持つ
+   */
+  TMDB_LOGO: { WIDTH: 138, HEIGHT: 10 },
 } as const;
 
 /**

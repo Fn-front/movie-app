@@ -27,6 +27,13 @@ export interface AwardCategorySectionProps {
     favorite: MovieFavoriteInfo | null,
   ) => void;
   isFavoriteProcessing: (tmdbMovieId: number) => boolean;
+  /**
+   * このセクションがページ先頭かどうか（既定: false）
+   *
+   * 先頭カテゴリの受賞作タイルだけがフォールド上に来るため、そこだけ
+   * ポスターを即時読み込みする。2件目以降のカテゴリは遅延のままにする
+   */
+  isFirstSection?: boolean;
 }
 
 export const AwardCategorySection = memo<AwardCategorySectionProps>(
@@ -39,6 +46,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
     isMovieToggling,
     onFavoriteToggle,
     isFavoriteProcessing,
+    isFirstSection = false,
   }) {
     const winnerCacheItem = useMemo(
       () =>
@@ -82,6 +90,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
               <MovieTile
                 movie={winnerCacheItem}
                 headingLevel={4}
+                eager={isFirstSection}
                 onClick={onMovieClick}
                 isInWatchlist={isInWatchlist(winnerCacheItem.id)}
                 onWatchlistToggle={onWatchlistToggle}

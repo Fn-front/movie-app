@@ -17,6 +17,7 @@ import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggl
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
+import { DISPLAY_LIMITS } from '@/constants';
 import type { Movie } from '@/lib/types';
 import { movieToMovieCacheItem } from '@/utils/toMovieCacheItem';
 
@@ -119,12 +120,13 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
       </p>
 
       <MovieGridContainer isLoading={false} isEmpty={false}>
-        {movieCacheItems.map((movie) => (
+        {movieCacheItems.map((movie, index) => (
           <MovieTile
             key={movie.id}
             movie={movie}
             onClick={handleMovieClick}
             headingLevel={2}
+            eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
             isInWatchlist={isInWatchlist(movie.id)}
             onWatchlistToggle={toggleWatchlist}
             watchlistDisabled={isMovieToggling(movie.id)}

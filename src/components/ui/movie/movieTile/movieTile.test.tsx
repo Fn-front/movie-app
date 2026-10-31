@@ -580,4 +580,33 @@ describe('MovieTile', () => {
       ).toBeInTheDocument();
     });
   });
+
+  describe('ポスターの読み込み優先度', () => {
+    it('既定では遅延読み込みになる', () => {
+      render(<MovieTile movie={createMockMovie()} />);
+
+      expect(screen.getByAltText('テスト映画のポスター')).toHaveAttribute(
+        'loading',
+        'lazy',
+      );
+    });
+
+    it('eagerを指定すると即時読み込みになる', () => {
+      render(<MovieTile movie={createMockMovie()} eager />);
+
+      expect(screen.getByAltText('テスト映画のポスター')).toHaveAttribute(
+        'loading',
+        'eager',
+      );
+    });
+
+    it('eagerをfalseで明示しても遅延読み込みのまま', () => {
+      render(<MovieTile movie={createMockMovie()} eager={false} />);
+
+      expect(screen.getByAltText('テスト映画のポスター')).toHaveAttribute(
+        'loading',
+        'lazy',
+      );
+    });
+  });
 });

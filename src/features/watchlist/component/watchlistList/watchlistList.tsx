@@ -72,7 +72,7 @@ export const WatchlistList = memo<WatchlistListProps>(function WatchlistList({
 
   return (
     <div className={styles.c_watchlist_list__grid}>
-      {watchlist.map((item) => (
+      {watchlist.map((item, index) => (
         <WatchlistTile
           key={item.id}
           item={item}
@@ -80,6 +80,7 @@ export const WatchlistList = memo<WatchlistListProps>(function WatchlistList({
           onDelete={onDelete}
           onWatchedToggle={onWatchedToggle}
           isWatchedUpdating={isWatchedUpdating}
+          eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
         />
       ))}
     </div>
@@ -102,6 +103,13 @@ interface WatchlistTileProps {
   onWatchedToggle?: (item: WatchlistItem, watched: boolean) => void;
   /** 視聴済みの更新中 */
   isWatchedUpdating?: boolean;
+  /**
+   * ポスターを遅延せず即時読み込みするか（既定: false）
+   *
+   * フォールド上のタイルは LCP 要素になりうる。先頭数件にだけ渡すこと
+   * （MovieTile の同名 prop と同じ考え方）
+   */
+  eager?: boolean;
 }
 
 /**
@@ -113,6 +121,7 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
   onDelete,
   onWatchedToggle,
   isWatchedUpdating = false,
+  eager = false,
 }) {
   const posterUrl = getTMDbPosterUrl(item.poster_path);
   const isWatched = item.watched_at !== null;
@@ -188,6 +197,7 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
             alt={`${item.title}のポスター`}
             width={IMAGE_SIZES.POSTER.WIDTH}
             height={IMAGE_SIZES.POSTER.HEIGHT}
+            loading={eager ? 'eager' : 'lazy'}
             className={styles.c_watchlist_tile__image}
           />
         ) : (

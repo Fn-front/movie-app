@@ -32,6 +32,8 @@ export const NAV_ITEMS: NavItemBase[] = [
 export const MENU_LABELS = {
   CALENDAR: '公開カレンダー',
   SETTINGS: '設定',
+  /** admin ロールのみに表示するアカウント管理画面への導線 */
+  ADMIN_ACCOUNTS: 'アカウント管理',
   LOGOUT: 'ログアウト',
   LOGIN: 'ログイン',
   DARK_MODE: 'ダークモード',

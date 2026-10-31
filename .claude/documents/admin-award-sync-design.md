@@ -109,7 +109,15 @@ pending ──▶ running ──┬──▶ succeeded
                       └──▶ failed
 ```
 
-**孤児ジョブの扱い:** `after()` の実行中にプロセスが落ちると `running` のまま残る。DB 側で自動的に `failed` へ倒す仕組みは**入れない**。実際にはまだ動いている処理を失敗扱いにしてしまうため。代わりに画面側で、`started_at` から一定時間経過した `running` を「停止している可能性があります」と表示し、再実行の判断を人に委ねる。
+**孤児ジョブの扱い:** `after()` の実行中にプロセスが落ちると `running` のまま残る。DB 側で自動的に `failed` へ倒す仕組みは**入れない**。実際にはまだ動いている処理を失敗扱いにしてしまうため。
+
+ただし 4-4 の抑止と組み合わせると、孤児が残った時点で**新しいジョブを起票できなくなり機能全体が詰む**。自動失効を入れない以上、人が解ける出口を必ず用意する。
+
+- POST 時に `running` のジョブがあり、`started_at` から `AWARD_SYNC_STALE_MINUTES`（15分）を超えていたら、409 と「実行中のジョブがあります（開始から N 分経過）」を返す
+- 画面に「**強制的に失敗として閉じて再実行**」を出す。明示フラグ付きで再 POST され、旧ジョブを `failed`（`error_message` に失効の旨）にしてから新規を起票する
+- 経過時間が閾値未満なら強制操作は出さない。走っている最中の処理を誤って切らせないため
+
+「自動では倒さない／人の明示操作でだけ倒せる」という形にすることで、勝手な失敗化と詰みの両方を避ける。
 
 ### 4-3. 洗い替えの安全策
 
@@ -129,17 +137,23 @@ pending ──▶ running ──┬──▶ succeeded
 
 ### 4-4. 同時実行の抑止
 
-同じ `(award_name, award_year)` に対するジョブは、`pending` / `running` の間は1件までとする。**部分ユニークインデックスで DB 側に保証を置く。**
-
-理由は洗い替えとの組み合わせ。同一キーのジョブが並走すると、片方の DELETE がもう片方の INSERT を消す。アプリ側のチェックだけでは競合に負ける。
+アクティブなジョブ（`pending` / `running`）は**全体で1件まで**とする。賞・年が異なっても並走させない。**部分ユニークインデックスで DB 側に保証を置く。**
 
 ```sql
 CREATE UNIQUE INDEX uq_award_sync_jobs_active
-  ON public.award_sync_jobs (award_name, award_year)
+  ON public.award_sync_jobs ((true))
   WHERE status IN ('pending', 'running');
 ```
 
-異なる賞・異なる年の並走は許可する（データ上は独立しており、ローカル単一利用者なので外部API負荷も問題にならない）。
+定数式に対する一意制約なので、条件に合う行が同時に2つ存在できない。
+
+**同一キーを弾くだけでは不足する理由。** 洗い替えが DELETE → INSERT の2文に分かれるため、同じ `(award_name, award_year)` が並走すると片方の DELETE がもう片方の INSERT を消す。アプリ側の事前チェックは競合に負けるので DB 側に置く。
+
+**さらに全体で1件に絞る理由。** 運用上、年は1件ずつ投入する想定で確定した。異なる賞・年の並走を許す実益が無い一方、直列を不変条件にすると TMDb の 50req/s の食い合いと dev サーバー（`after()` は dev サーバーと同じ Node プロセスで動く）の負荷を検討対象から外せる。誤って連投したときに1件ずつしか走らないので、気づいて止める余地も残る。
+
+なお**直列化しても総コストは下がらない**（同じ回数を順に呼ぶだけ）。得られるのは負荷の平準化と事故時の被害抑制であって、OpenAI の課金削減ではない。
+
+キュー（`pending` を積んで順に消化する方式）は採用しない。複数年の一括投入が要件から外れたため、チェーン実行と停止したキューを拾う仕組みに見合う価値が無い。2件目は 409 で拒否する。
 
 ### 4-5. サービス層の切り出し
 
@@ -209,7 +223,7 @@ cron 側の挙動（月ベース判定・UPSERT・`?year=` のアカデミー賞
 | API | `src/app/api/admin/awards/sync/route.ts`（POST）<br>`src/app/api/admin/awards/sync/[id]/route.ts`（GET）<br>`src/schema/awardSync.ts`（zod） |
 | サービス | `src/lib/awards/syncAwardMoviesService.ts`（`syncSingleAward` 抽出）<br>`src/lib/awards/manualAwardSync.ts`（洗い替え + ジョブ更新）<br>`src/lib/awards/awardSyncJob.ts`（ジョブ CRUD） |
 | 画面 | `src/app/admin/awards/page.tsx` / `loader.tsx`<br>`src/features/admin/awardsSyncPage/awardsSyncPage.tsx` / `.module.scss`<br>`src/features/admin/awardsSyncPage/hooks/useAwardSync.ts` |
-| 定数 | `common.ts`（`ROUTES.ADMIN_AWARDS`、`ADMIN_REQUIRED_ROUTES`）<br>`rateLimit.ts`（`ADMIN_AWARD_SYNC`）<br>`awards.ts`（画面メッセージ、選択可能な賞）<br>`navigation.ts`（`MENU_LABELS`）<br>`apiEndpoints.ts` |
+| 定数 | `common.ts`（`ROUTES.ADMIN_AWARDS`、`ADMIN_REQUIRED_ROUTES`）<br>`rateLimit.ts`（`ADMIN_AWARD_SYNC`）<br>`awards.ts`（画面メッセージ、選択可能な賞、`AWARD_SYNC_STALE_MINUTES`、ポーリング間隔）<br>`navigation.ts`（`MENU_LABELS`）<br>`apiEndpoints.ts` |
 
 画面は `src/features/admin/accountsPage/accountsPage.tsx` に倣う（`React.memo` + `useCallback`、`@/components/ui/` の `Input`/`Button`/`Heading`、SCSS Modules、`robots: { index: false }`）。
 
@@ -273,8 +287,9 @@ eiga.com に `https://eiga.com/award/<slug>/<year>/` という**全賞共通レ�
 | 認証・認可 | 未認証 → 401、ログイン済み非admin → 403、画面は proxy でリダイレクト |
 | 空状態・0件 | 取得0件 → **既存データを消さない**、`failed` + 理由表示 |
 | エラー応答 | 取得失敗・TMDb失敗・DB失敗 → `failed` に遷移し `error_message` が入る |
-| 重複・競合 | 同一 `(賞, 年)` のジョブが実行中 → 二重起動を拒否。レート制限超過 → 429 |
-| 状態保持・遷移 | ポーリング中にリロード → ジョブIDから進捗を復元。`running` が長時間続く場合の表示 |
+| 重複・競合 | アクティブなジョブがある状態で起票 → 409。賞・年が違っても拒否される。レート制限超過 → 429 |
+| 状態保持・遷移 | ポーリング中にリロード → ジョブIDから進捗を復元 |
+| 期限切れ・試行上限 | `started_at` が閾値未満の `running` → 強制操作を出さない。閾値超過 → 強制失効ボタンが出る。強制フラグ付き再POST → 旧ジョブが `failed` になり新規が起票される |
 | セキュリティ | 他ユーザーのジョブIDを指定しても admin 以外は参照不可 |
 | アクセシビリティ | セレクト・入力のラベル紐付け、キーボードのみで実行完了、進捗の `aria-live` 通知 |
 
@@ -293,3 +308,6 @@ eiga.com に `https://eiga.com/award/<slug>/<year>/` という**全賞共通レ�
 | 日本アカデミー賞 | 選択肢に出さない | `AWARDS_EXCLUDED` の意図を維持 |
 | cron の `?year=` | 残す | 画面が使えない状況での逃げ道 |
 | 取得ロジックのスコープ | 共通パーサでカンヌ・GGの2賞のみ | アカデミー賞の動いている経路を置き換えるリスクを取らない |
+| 投入単位 | 年を1件ずつ | 複数年の一括投入は要件から外れた。キュー方式を採らない根拠 |
+| 同時実行 | アクティブなジョブは全体で1件 | 投入単位が1件ずつなら並走を許す実益が無く、直列を不変条件にできる |
+| 孤児ジョブ | 自動失効させず、閾値超過時に人の明示操作で失効させる | 自動で倒すと実行中の処理と矛盾する。一方で出口が無いと機能全体が詰む |

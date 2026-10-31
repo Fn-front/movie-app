@@ -820,6 +820,66 @@ describe('useMovieList', () => {
       });
     });
   });
+  describe('地域フィルタ', () => {
+    it('初期状態では selectedRegions が空（＝全地域を除外）', () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      expect(result.current.selectedRegions).toEqual([]);
+    });
+
+    it('URLの include_regions を初期stateに注入する', () => {
+      mockSearchParams = new URLSearchParams({ include_regions: 'korea' });
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      expect(result.current.selectedRegions).toEqual(['korea']);
+    });
+
+    it('地域が空なら include_regions を送らない', async () => {
+      renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(mockGetMovies).toHaveBeenCalledWith(
+          expect.objectContaining({ include_regions: undefined }),
+          expect.anything(),
+        );
+      });
+    });
+
+    it('適用するとAPIパラメータに include_regions が載る', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => expect(mockGetMovies).toHaveBeenCalled());
+
+      act(() => {
+        result.current.handleFilterApply(
+          [],
+          {},
+          undefined,
+          [],
+          [],
+          ['chinese'],
+        );
+      });
+
+      await waitFor(() => {
+        expect(mockGetMovies).toHaveBeenCalledWith(
+          expect.objectContaining({ include_regions: 'chinese' }),
+          expect.anything(),
+        );
+      });
+      expect(result.current.selectedRegions).toEqual(['chinese']);
+    });
+  });
+
   describe('URLクエリによるフィルター永続化', () => {
     it('URLのフィルターを初期stateに注入する（デフォルト値を経由しない）', () => {
       mockSearchParams = new URLSearchParams({

@@ -294,4 +294,49 @@ describe('localStorage への保存と復元', () => {
       writeStoredFilterConditions({ sort_by: 'popularity' }),
     ).not.toThrow();
   });
+
+  describe('include_regions の永続化', () => {
+    it('URLのカンマ区切りを配列に復元する', () => {
+      const params = new URLSearchParams('include_regions=korea,chinese');
+
+      const conditions = parseFilterConditionsFromParams(params);
+
+      expect(conditions.include_regions).toEqual(['korea', 'chinese']);
+    });
+
+    it('未知の地域キーが混ざるフィールドは捨てる', () => {
+      const params = new URLSearchParams('include_regions=korea,atlantis');
+
+      const conditions = parseFilterConditionsFromParams(params);
+
+      expect(conditions.include_regions).toBeUndefined();
+    });
+
+    it('localStorage の配列形式からも復元する', () => {
+      window.localStorage.setItem(
+        STORAGE_KEYS.MOVIE_FILTERS,
+        JSON.stringify({ include_regions: ['thai_indian'] }),
+      );
+
+      expect(readStoredFilterConditions().include_regions).toEqual([
+        'thai_indian',
+      ]);
+    });
+
+    it('配列をカンマ区切りでURLに書き戻す', () => {
+      const params = buildFilterSearchParams(new URLSearchParams(), {
+        include_regions: ['korea', 'thai_indian'],
+      });
+
+      expect(params.get('include_regions')).toBe('korea,thai_indian');
+    });
+
+    it('空配列はURLに書かない', () => {
+      const params = buildFilterSearchParams(new URLSearchParams(), {
+        include_regions: [],
+      });
+
+      expect(params.has('include_regions')).toBe(false);
+    });
+  });
 });

@@ -383,6 +383,97 @@ export async function cleanupJpAvailabilityMovies(): Promise<void> {
 }
 
 /**
+ * 地域（原語）フィルタの検証用に投入する映画ID
+ *
+ * {@link CROSS_RELEASE_TYPE_MOVIE_ID} と同じ理由で run 単位に分ける（#793）。
+ */
+export const REGION_FILTER_MOVIE_IDS = {
+  /** 韓国語作品（既定では一覧に出ない） */
+  KOREAN: runScopedMovieId(20),
+  /** タミル語作品（タイ・インドグループ。既定では一覧に出ない） */
+  TAMIL: runScopedMovieId(21),
+  /** 日本語作品（既定でも一覧に出る） */
+  JAPANESE: runScopedMovieId(22),
+  /** 原語が未取得の作品（NULLは除外対象にしないため既定でも出る） */
+  UNKNOWN_LANGUAGE: runScopedMovieId(23),
+} as const;
+
+/**
+ * 地域フィルタ検証用に、原語違いの劇場公開作品を movie_cache へ投入する
+ *
+ * `original_language IS NULL` の行が除外されないこと（バックフィル未完了の
+ * 作品を消さない仕様）も併せて検証できるよう、未取得の行も入れる。
+ *
+ * @param releaseDate - 公開日（YYYY-MM-DD）。一覧の日付範囲フィルタに合わせて指定する
+ */
+export async function seedRegionFilterMovies(
+  releaseDate: string,
+): Promise<void> {
+  const base = {
+    poster_path: null,
+    backdrop_path: null,
+    release_date: releaseDate,
+    overview: 'E2E用',
+    vote_average: 7.5,
+    vote_count: 100,
+    popularity: 50,
+    genre_ids: [28],
+    release_type: 'theatrical',
+    is_currently_streaming: false,
+    digital_release_date: null,
+  };
+
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/movie_cache`, {
+    method: 'POST',
+    headers: {
+      ...supabaseHeaders,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    // PostgREST の一括INSERTは全オブジェクトのキーが一致している必要がある
+    body: JSON.stringify([
+      {
+        ...base,
+        id: REGION_FILTER_MOVIE_IDS.KOREAN,
+        title: 'E2E韓国語作品',
+        original_language: 'ko',
+      },
+      {
+        ...base,
+        id: REGION_FILTER_MOVIE_IDS.TAMIL,
+        title: 'E2Eタミル語作品',
+        original_language: 'ta',
+      },
+      {
+        ...base,
+        id: REGION_FILTER_MOVIE_IDS.JAPANESE,
+        title: 'E2E日本語作品',
+        original_language: 'ja',
+      },
+      {
+        ...base,
+        id: REGION_FILTER_MOVIE_IDS.UNKNOWN_LANGUAGE,
+        title: 'E2E原語未取得作品',
+        original_language: null,
+      },
+    ]),
+  });
+
+  await assertMovieCacheWriteOk(response, 'seedRegionFilterMovies');
+}
+
+/** 地域フィルタ検証用にシードした movie_cache の行を物理削除する */
+export async function cleanupRegionFilterMovies(): Promise<void> {
+  const ids = Object.values(REGION_FILTER_MOVIE_IDS).join(',');
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/movie_cache?id=in.(${ids})`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+
+  await assertMovieCacheWriteOk(response, 'cleanupRegionFilterMovies');
+}
+
+/**
  * この run に割り当てられたID領域の movie_cache 行をまとめて物理削除する。
  *
  * 各 spec の afterAll でも消しているが、異常終了すると取りこぼす。

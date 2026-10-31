@@ -38,6 +38,7 @@ import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { toSelectableGenres } from '@/lib/movies/genreFilter';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
+import { getExcludedLanguages } from '@/lib/movies/regionFilter';
 import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
 import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
@@ -112,6 +113,7 @@ export async function GET(request: Request) {
       is_revival: searchParams.get('is_revival') ?? undefined,
       watch_providers: searchParams.get('watch_providers') ?? undefined,
       offer_types: searchParams.get('offer_types') ?? undefined,
+      include_regions: searchParams.get('include_regions') ?? undefined,
     });
 
     if (!queryResult.success) {
@@ -140,6 +142,7 @@ export async function GET(request: Request) {
       is_revival,
       watch_providers,
       offer_types,
+      include_regions,
     } = queryResult.data;
 
     // 認証判定を前倒しする。
@@ -296,6 +299,7 @@ export async function GET(request: Request) {
             vote_count: movie.vote_count ?? 0,
             popularity: movie.popularity,
             genre_ids: movie.genre_ids,
+            original_language: movie.original_language,
             release_type,
             cached_at: now.toISOString(),
           }));
@@ -379,6 +383,10 @@ export async function GET(request: Request) {
       // 指定されても無視し、意図しない0件表示を防ぐ
       watchProviderIds: isStreaming ? (watch_providers ?? []) : [],
       watchProviderOfferTypes: offer_types ?? [],
+      // 未指定なら3グループすべてを除外する（既定で非表示）。
+      // UIの初期値ではなくここで担保することで、URL直叩き・初回の
+      // サーバーレンダリング・保存済みフィルタの有無によらず揃う
+      excludedLanguages: getExcludedLanguages(include_regions),
     };
 
     // 総件数クエリを構築

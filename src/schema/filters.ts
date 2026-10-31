@@ -5,6 +5,7 @@
 import { z } from 'zod';
 
 import { SEARCH_VALIDATION, WATCH_PROVIDER_OFFER_TYPES } from '@/constants';
+import { REGION_GROUP_KEYS } from '@/constants/movies';
 import { isSelectableWatchProvider } from '@/lib/movies/watchProviders';
 
 /**
@@ -37,6 +38,9 @@ export const filterConditionsSchema = z.object({
     })
     .optional(),
   offer_types: z.array(z.enum(WATCH_PROVIDER_OFFER_TYPES)).optional(),
+  // 表示に含める地域グループ。未指定は「すべて除外」を意味する。
+  // 既存の保存済みフィルタにはこのキーが無く、未指定として扱われる
+  include_regions: z.array(z.enum(REGION_GROUP_KEYS)).optional(),
 });
 
 /**

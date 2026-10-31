@@ -39,12 +39,18 @@ test.describe('公開予定ページのソート・フィルター操作', () =>
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
-    // ジャンルのチェックボックスが存在する場合にクリック
-    const genreCheckbox = dialog.getByRole('checkbox').first();
-    const hasGenres = (await genreCheckbox.count()) > 0;
+    // ジャンル欄を見出しで特定する。dialog 直下の最初のチェックボックスは
+    // 地域フィルタのものになるため、セクションを限定しないと別物を掴む
+    const genreSection = dialog
+      .locator('div[class*="c_filter__section"]')
+      .filter({ has: page.getByRole('heading', { name: 'ジャンル' }) });
+    const genreTag = genreSection.locator('label[class*="c_filter__tag"]');
 
-    if (hasGenres) {
-      await genreCheckbox.click();
+    // 入力は視覚的に隠してあり、利用者はラベルをクリックして切り替える。
+    // 入力自体をクリックするとラベルが pointer events を奪って失敗する
+    if ((await genreTag.count()) > 0) {
+      await genreTag.first().click();
+      await expect(genreSection.getByRole('checkbox').first()).toBeChecked();
     }
 
     await dialog.getByRole('button', { name: '適用' }).click();
@@ -97,11 +103,15 @@ test.describe('公開中ページのソート・フィルター操作', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
-    const genreCheckbox = dialog.getByRole('checkbox').first();
-    const hasGenres = (await genreCheckbox.count()) > 0;
+    // 上と同じ理由でセクションを限定し、ラベルをクリックする
+    const genreSection = dialog
+      .locator('div[class*="c_filter__section"]')
+      .filter({ has: page.getByRole('heading', { name: 'ジャンル' }) });
+    const genreTag = genreSection.locator('label[class*="c_filter__tag"]');
 
-    if (hasGenres) {
-      await genreCheckbox.click();
+    if ((await genreTag.count()) > 0) {
+      await genreTag.first().click();
+      await expect(genreSection.getByRole('checkbox').first()).toBeChecked();
     }
 
     await dialog.getByRole('button', { name: '適用' }).click();

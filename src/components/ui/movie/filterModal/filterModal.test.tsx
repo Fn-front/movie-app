@@ -15,6 +15,7 @@ const defaultProps: FilterModalProps = {
   releaseType: 'theatrical',
   selectedWatchProviderIds: [],
   selectedOfferTypes: [],
+  selectedRegions: [],
   onApply: jest.fn(),
 };
 
@@ -124,7 +125,7 @@ describe('FilterModal', () => {
         target: { value: '' },
       });
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], []);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], [], []);
     });
 
     it('終了日を空にするとundefinedに設定される', () => {
@@ -138,7 +139,7 @@ describe('FilterModal', () => {
         target: { value: '' },
       });
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], []);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], [], []);
     });
 
     it('終了日の変更が適用に反映される', () => {
@@ -153,6 +154,7 @@ describe('FilterModal', () => {
         [],
         { lte: '2026-08-01' },
         undefined,
+        [],
         [],
         [],
       );
@@ -198,7 +200,7 @@ describe('FilterModal', () => {
       expect(screen.getByLabelText('リバイバル除外')).toBeChecked();
 
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, false, [], []);
+      expect(onApply).toHaveBeenCalledWith([], {}, false, [], [], []);
     });
 
     it('「リバイバルのみ」→「すべて」に戻すとundefinedが渡される', () => {
@@ -211,7 +213,7 @@ describe('FilterModal', () => {
       expect(screen.getByLabelText('すべて')).toBeChecked();
 
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], []);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], [], []);
     });
   });
 
@@ -251,7 +253,7 @@ describe('FilterModal', () => {
       fireEvent.click(screen.getByLabelText('Netflix'));
       fireEvent.click(screen.getByText('適用'));
 
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [8], []);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [8], [], []);
     });
 
     it('提供形態のラジオが表示され既定は「すべて」', () => {
@@ -274,7 +276,14 @@ describe('FilterModal', () => {
       fireEvent.click(screen.getByLabelText('見放題のみ'));
       fireEvent.click(screen.getByText('適用'));
 
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], ['flatrate']);
+      expect(onApply).toHaveBeenCalledWith(
+        [],
+        {},
+        undefined,
+        [],
+        ['flatrate'],
+        [],
+      );
     });
 
     it('「レンタル・購入のみ」を選ぶとrent/buyが渡される', () => {
@@ -290,6 +299,7 @@ describe('FilterModal', () => {
         undefined,
         [],
         ['rent', 'buy'],
+        [],
       );
     });
 
@@ -315,7 +325,7 @@ describe('FilterModal', () => {
       renderFilterModal({ onApply });
 
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], []);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], [], []);
     });
 
     it('フィルター選択後に適用すると選択値が渡される', () => {
@@ -332,6 +342,7 @@ describe('FilterModal', () => {
         [28],
         { gte: '2026-05-01' },
         true,
+        [],
         [],
         [],
       );
@@ -357,7 +368,82 @@ describe('FilterModal', () => {
       expect(screen.getByLabelText('すべて')).toBeChecked();
 
       fireEvent.click(screen.getByText('適用'));
-      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], []);
+      expect(onApply).toHaveBeenCalledWith([], {}, undefined, [], [], []);
+    });
+  });
+
+  describe('地域セクション', () => {
+    it('3つの地域チェックボックスを表示する', () => {
+      renderFilterModal();
+
+      expect(
+        screen.getByRole('checkbox', { name: '韓国' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('checkbox', { name: '中華圏' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('checkbox', { name: 'タイ・インド' }),
+      ).toBeInTheDocument();
+    });
+
+    it('既定ではすべて未選択', () => {
+      renderFilterModal({ selectedRegions: [] });
+
+      expect(screen.getByRole('checkbox', { name: '韓国' })).not.toBeChecked();
+      expect(
+        screen.getByRole('checkbox', { name: '中華圏' }),
+      ).not.toBeChecked();
+      expect(
+        screen.getByRole('checkbox', { name: 'タイ・インド' }),
+      ).not.toBeChecked();
+    });
+
+    it('選択済みの地域はチェックされる', () => {
+      renderFilterModal({ selectedRegions: ['korea'] });
+
+      expect(screen.getByRole('checkbox', { name: '韓国' })).toBeChecked();
+    });
+
+    it('チェックして適用すると地域が onApply に渡る', () => {
+      const onApply = jest.fn();
+      renderFilterModal({ onApply });
+
+      fireEvent.click(screen.getByRole('checkbox', { name: '中華圏' }));
+      fireEvent.click(screen.getByText('適用'));
+
+      expect(onApply).toHaveBeenCalledWith(
+        [],
+        {},
+        undefined,
+        [],
+        [],
+        ['chinese'],
+      );
+    });
+
+    it('クリアで地域の選択も解除される', () => {
+      renderFilterModal({ selectedRegions: ['korea'] });
+
+      fireEvent.click(screen.getByText('クリア'));
+
+      expect(screen.getByRole('checkbox', { name: '韓国' })).not.toBeChecked();
+    });
+
+    it('劇場公開タブでも地域セクションを表示する', () => {
+      renderFilterModal({ releaseType: 'theatrical' });
+
+      expect(
+        screen.getByRole('checkbox', { name: '韓国' }),
+      ).toBeInTheDocument();
+    });
+
+    it('配信タブでも地域セクションを表示する', () => {
+      renderFilterModal({ releaseType: 'streaming' });
+
+      expect(
+        screen.getByRole('checkbox', { name: 'タイ・インド' }),
+      ).toBeInTheDocument();
     });
   });
 });

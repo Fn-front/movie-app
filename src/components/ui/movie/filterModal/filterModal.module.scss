@@ -116,8 +116,19 @@
     cursor: pointer;
   }
 
+  // display: none だとアクセシビリティツリーから外れ、キーボードでも
+  // スクリーンリーダーでも到達できなくなる。見た目は隣のラベルで作るため、
+  // 入力自体は視覚的に隠すだけに留める（&__visually_hidden と同じ手法）
   &__tag_input {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
   }
 
   &__tag_label {
@@ -136,6 +147,12 @@
       background-color: color-alpha(--primary-500, 15%);
       border-color: $primary-500;
       font-weight: $font-weight-medium;
+    }
+
+    // 入力は視覚的に隠してあるため、フォーカス表示はラベル側に出す
+    .c_filter__tag_input:focus-visible + & {
+      outline: $border-width-2 solid $primary-500;
+      outline-offset: 2px;
     }
   }
 

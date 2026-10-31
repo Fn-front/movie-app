@@ -49,6 +49,7 @@ export const MovieListContent = memo<MovieListContentProps>(
       isRevivalFilter,
       selectedWatchProviderIds,
       selectedOfferTypes,
+      selectedRegions,
       isFilterModalOpen,
       handleSortChange,
       handleReleaseTypeChange,
@@ -118,6 +119,7 @@ export const MovieListContent = memo<MovieListContentProps>(
           releaseType={releaseType}
           selectedWatchProviderIds={selectedWatchProviderIds}
           selectedOfferTypes={selectedOfferTypes}
+          selectedRegions={selectedRegions}
           onApply={handleFilterApply}
         />
 

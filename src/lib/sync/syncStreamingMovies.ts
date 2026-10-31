@@ -332,6 +332,7 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
         vote_count: movie.vote_count ?? 0,
         popularity: movie.popularity,
         genre_ids: movie.genre_ids,
+        original_language: movie.original_language,
         release_type: RELEASE_TYPE.STREAMING,
         is_currently_streaming: isCurrentlyStreaming,
         digital_release_date: digitalReleaseDate,

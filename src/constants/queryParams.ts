@@ -34,4 +34,6 @@ export const MOVIE_FILTER_QUERY_PARAMS = {
   WATCH_PROVIDERS: 'watch_providers',
   /** 配信の提供形態（カンマ区切り） */
   OFFER_TYPES: 'offer_types',
+  /** 表示に含める地域グループ（カンマ区切り） */
+  INCLUDE_REGIONS: 'include_regions',
 } as const;

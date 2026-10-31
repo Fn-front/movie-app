@@ -16,9 +16,22 @@ import {
   WATCH_PROVIDERS,
   type WatchProviderOfferType,
 } from '@/constants';
+import type { RegionGroupKey } from '@/constants/movies';
 import type { DateRange } from '@/features/movies/types';
 
 import styles from './filterModal.module.scss';
+
+/**
+ * 地域フィルタの選択肢
+ *
+ * 既定ではすべて未選択＝非表示。APIは include_regions 未指定を
+ * 「3グループすべて除外」として扱う
+ */
+const REGION_OPTIONS: { key: RegionGroupKey; label: string }[] = [
+  { key: 'korea', label: FILTER_LABELS.REGION_KOREA },
+  { key: 'chinese', label: FILTER_LABELS.REGION_CHINESE },
+  { key: 'thai_indian', label: FILTER_LABELS.REGION_THAI_INDIAN },
+];
 
 /**
  * FilterModalコンポーネントのプロパティ
@@ -42,6 +55,8 @@ export interface FilterModalProps {
   selectedWatchProviderIds: number[];
   /** 選択中の提供形態（空配列なら全形態） */
   selectedOfferTypes: WatchProviderOfferType[];
+  /** 表示に含める地域グループ（空配列なら全地域を除外） */
+  selectedRegions: RegionGroupKey[];
   /** 適用コールバック */
   onApply: (
     genreIds: number[],
@@ -49,6 +64,7 @@ export interface FilterModalProps {
     isRevival: boolean | undefined,
     watchProviderIds: number[],
     offerTypes: WatchProviderOfferType[],
+    regions: RegionGroupKey[],
   ) => void;
 }
 
@@ -63,12 +79,14 @@ const FilterModalContent = memo<{
   releaseType: 'theatrical' | 'streaming';
   selectedWatchProviderIds: number[];
   selectedOfferTypes: WatchProviderOfferType[];
+  selectedRegions: RegionGroupKey[];
   onApply: (
     genreIds: number[],
     dateRange: DateRange,
     isRevival: boolean | undefined,
     watchProviderIds: number[],
     offerTypes: WatchProviderOfferType[],
+    regions: RegionGroupKey[],
   ) => void;
 }>(function FilterModalContent({
   genres,
@@ -78,6 +96,7 @@ const FilterModalContent = memo<{
   releaseType,
   selectedWatchProviderIds,
   selectedOfferTypes,
+  selectedRegions,
   onApply,
 }) {
   const [tempSelectedIds, setTempSelectedIds] =
@@ -92,6 +111,8 @@ const FilterModalContent = memo<{
   );
   const [tempOfferTypes, setTempOfferTypes] =
     useState<WatchProviderOfferType[]>(selectedOfferTypes);
+  const [tempRegions, setTempRegions] =
+    useState<RegionGroupKey[]>(selectedRegions);
 
   // 配信サービスは movie_cache の streaming 行にしか入らない。劇場公開タブで
   // 出しても必ず0件になるため、選べないようにする
@@ -160,12 +181,19 @@ const FilterModalContent = memo<{
     [],
   );
 
+  const handleRegionToggle = useCallback((key: RegionGroupKey) => {
+    setTempRegions((prev) =>
+      prev.includes(key) ? prev.filter((r) => r !== key) : [...prev, key],
+    );
+  }, []);
+
   const handleClear = useCallback(() => {
     setTempSelectedIds([]);
     setTempDateRange({});
     setTempIsRevival(undefined);
     setTempWatchProviderIds([]);
     setTempOfferTypes([]);
+    setTempRegions([]);
   }, []);
 
   const handleApply = useCallback(() => {
@@ -175,6 +203,7 @@ const FilterModalContent = memo<{
       tempIsRevival,
       showWatchProviders ? tempWatchProviderIds : [],
       showWatchProviders ? tempOfferTypes : [],
+      tempRegions,
     );
   }, [
     onApply,
@@ -183,6 +212,7 @@ const FilterModalContent = memo<{
     tempIsRevival,
     tempWatchProviderIds,
     tempOfferTypes,
+    tempRegions,
     showWatchProviders,
   ]);
 
@@ -342,6 +372,30 @@ const FilterModalContent = memo<{
 
         <div className={styles.c_filter__section}>
           <h3 className={styles.c_filter__section_title}>
+            {FILTER_LABELS.REGION}
+          </h3>
+          <fieldset className={styles.c_filter__tag_grid}>
+            <legend className={styles.c_filter__visually_hidden}>
+              {FILTER_LABELS.REGION_FILTER}
+            </legend>
+            {REGION_OPTIONS.map((option) => (
+              <label key={option.key} className={styles.c_filter__tag}>
+                <input
+                  type='checkbox'
+                  checked={tempRegions.includes(option.key)}
+                  onChange={() => handleRegionToggle(option.key)}
+                  className={styles.c_filter__tag_input}
+                />
+                <span className={styles.c_filter__tag_label}>
+                  {option.label}
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        </div>
+
+        <div className={styles.c_filter__section}>
+          <h3 className={styles.c_filter__section_title}>
             {FILTER_LABELS.GENRE}
           </h3>
           <div className={styles.c_filter__tag_grid}>
@@ -388,6 +442,7 @@ export const FilterModal = memo<FilterModalProps>(function FilterModal({
   releaseType,
   selectedWatchProviderIds,
   selectedOfferTypes,
+  selectedRegions,
   onApply,
 }) {
   return (
@@ -407,6 +462,7 @@ export const FilterModal = memo<FilterModalProps>(function FilterModal({
           releaseType={releaseType}
           selectedWatchProviderIds={selectedWatchProviderIds}
           selectedOfferTypes={selectedOfferTypes}
+          selectedRegions={selectedRegions}
           onApply={onApply}
         />
       )}

@@ -30,6 +30,7 @@ function createMockCacheStats(overrides: Record<string, unknown> = {}) {
     voteAverage: 8.0,
     voteCount: 0,
     popularity: 150.5,
+    originalLanguage: null,
     ...overrides,
   };
 }
@@ -66,21 +67,28 @@ function createFromMock(options: {
   const deleteEqMock = jest.fn().mockResolvedValue({ error: deleteError });
   const deleteMock = jest.fn().mockReturnValue({ eq: deleteEqMock });
 
+  const updateMock = jest.fn().mockReturnValue({
+    eq: jest.fn().mockResolvedValue({
+      error: updateError,
+    }),
+  });
+
   const fromMock = jest.fn().mockReturnValue({
     select: jest.fn().mockReturnValue({
       order: jest.fn().mockReturnValue({
         order: jest.fn().mockReturnValue({ range: rangeMock }),
       }),
     }),
-    update: jest.fn().mockReturnValue({
-      eq: jest.fn().mockResolvedValue({
-        error: updateError,
-      }),
-    }),
+    update: updateMock,
     delete: deleteMock,
   });
 
-  return Object.assign(fromMock, { rangeMock, deleteMock, deleteEqMock });
+  return Object.assign(fromMock, {
+    rangeMock,
+    updateMock,
+    deleteMock,
+    deleteEqMock,
+  });
 }
 
 // ---------- 環境変数の保存・復元 ----------
@@ -143,6 +151,26 @@ describe('updateMoviesCacheByBatch', () => {
   });
 
   // ---- 映画ID取得 ----
+
+  describe('原語のバックフィル', () => {
+    it('UPDATE に original_language を含める', async () => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 901, release_type: 'theatrical' }],
+      });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (getMovieCacheStats as jest.Mock).mockResolvedValue(
+        createMockCacheStats({ originalLanguage: 'ko' }),
+      );
+
+      await updateMoviesCacheByBatch();
+
+      expect(fromMock.updateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ original_language: 'ko' }),
+      );
+    });
+  });
 
   describe('映画ID取得', () => {
     it('DB取得エラーの場合エラーをスローする', async () => {

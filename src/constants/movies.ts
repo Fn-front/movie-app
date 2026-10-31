@@ -346,6 +346,33 @@ export const ALLOWED_LANGUAGES = [
 ] as const;
 
 /**
+ * 地域フィルタのグループキー
+ *
+ * 一覧（映画・配信）で既定非表示にする地域。原語を地域にまとめる対応表は
+ * アプリ側に置く。地域を列に持つと、グループ分けを変えるたびに
+ * マイグレーションと全行バックフィルが必要になるため。
+ */
+export const REGION_GROUP_KEYS = ['korea', 'chinese', 'thai_indian'] as const;
+
+/**
+ * 地域フィルタのグループキー
+ */
+export type RegionGroupKey = (typeof REGION_GROUP_KEYS)[number];
+
+/**
+ * 地域グループと原語（ISO 639-1）の対応
+ *
+ * TMDb は広東語を `cn`、北京語を `zh` と別コードで持つが、ALLOWED_LANGUAGES に
+ * `cn` が無いため広東語作品はそもそも保存されていない。今回も追加しない。
+ */
+export const REGION_LANGUAGE_GROUPS: Record<RegionGroupKey, readonly string[]> =
+  {
+    korea: ['ko'],
+    chinese: ['zh'],
+    thai_indian: ['th', 'hi', 'te', 'ta'],
+  };
+
+/**
  * バッチ更新: 1回のバッチで処理する映画数
  */
 export const BATCH_UPDATE_SIZE = 100;

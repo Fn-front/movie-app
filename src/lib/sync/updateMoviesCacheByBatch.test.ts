@@ -10,6 +10,11 @@ jest.mock('@supabase/supabase-js', () => ({
 jest.mock('@/lib/tmdb/tmdb', () => ({
   getMovieDetail: jest.fn(),
   getMovieCacheStats: jest.fn(),
+  // 純粋関数なので実装と同じ判定を置く（本体のテストは tmdb.test.ts 側）
+  isTmdbNotFoundError: (error: unknown) =>
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { response?: { status?: number } }).response?.status === 404,
 }));
 
 import { createClient } from '@supabase/supabase-js';
@@ -119,12 +124,14 @@ describe('updateMoviesCacheByBatch', () => {
       total: 100,
       updated: 95,
       removed: 2,
+      removedNotFound: 1,
       errors: ['ID 1: error'],
     };
 
     expect(result.total).toBe(100);
     expect(result.updated).toBe(95);
     expect(result.removed).toBe(2);
+    expect(result.removedNotFound).toBe(1);
     expect(result.errors).toHaveLength(1);
   });
 
@@ -151,6 +158,86 @@ describe('updateMoviesCacheByBatch', () => {
   });
 
   // ---- 映画ID取得 ----
+
+  describe('TMDbから消えた作品の削除', () => {
+    it('TMDbが404を返す作品はmovie_cacheから削除する', async () => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 956160, release_type: 'theatrical' }],
+      });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (getMovieCacheStats as jest.Mock).mockRejectedValue({
+        response: { status: 404 },
+      });
+
+      const result = await updateMoviesCacheByBatch();
+
+      expect(fromMock.deleteMock).toHaveBeenCalled();
+      expect(fromMock.deleteEqMock).toHaveBeenCalledWith('id', 956160);
+      expect(result.removedNotFound).toBe(1);
+      // 毎日同じエラーを出し続けないよう、errors には積まない
+      expect(result.errors).toHaveLength(0);
+      expect(result.updated).toBe(0);
+    });
+
+    it('404以外のエラーでは削除せずerrorsに積む（一時障害で消さない）', async () => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 500100, release_type: 'theatrical' }],
+      });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (getMovieCacheStats as jest.Mock).mockRejectedValue({
+        response: { status: 503 },
+      });
+
+      const result = await updateMoviesCacheByBatch();
+
+      expect(fromMock.deleteMock).not.toHaveBeenCalled();
+      expect(result.removedNotFound).toBe(0);
+      expect(result.errors).toHaveLength(1);
+    });
+
+    it('削除に失敗した場合はerrorsに積む', async () => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 956160, release_type: 'theatrical' }],
+        deleteError: { message: 'permission denied' },
+      });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (getMovieCacheStats as jest.Mock).mockRejectedValue({
+        response: { status: 404 },
+      });
+
+      const result = await updateMoviesCacheByBatch();
+
+      expect(result.removedNotFound).toBe(0);
+      expect(result.errors).toEqual(['ID 956160: permission denied']);
+    });
+
+    it('同じIDが複数のrelease_typeにある場合はまとめて数える', async () => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [
+          { id: 956160, release_type: 'theatrical' },
+          { id: 956160, release_type: 'streaming' },
+        ],
+      });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (getMovieCacheStats as jest.Mock).mockRejectedValue({
+        response: { status: 404 },
+      });
+
+      const result = await updateMoviesCacheByBatch();
+
+      // delete は id 指定なので1回で両方消える
+      expect(fromMock.deleteEqMock).toHaveBeenCalledTimes(1);
+      expect(result.removedNotFound).toBe(2);
+    });
+  });
 
   describe('原語のバックフィル', () => {
     it('UPDATE に original_language を含める', async () => {

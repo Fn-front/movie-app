@@ -186,6 +186,19 @@ export interface MovieCacheStats {
   popularity: number;
   /** 原語（ISO 639-1）。TMDbが返さない場合は null */
   originalLanguage: string | null;
+  /**
+   * 邦題。TMDbが返さない場合は null
+   *
+   * 以下4つは一覧が参照する表示列。公開前に登録された作品は、後から
+   * ポスターや邦題が決まっても行の作成時の値のまま残っていた（#883）
+   */
+  title: string | null;
+  /** あらすじ。TMDbが返さない場合は null */
+  overview: string | null;
+  /** ポスター画像のパス。TMDbが返さない場合は null */
+  posterPath: string | null;
+  /** 背景画像のパス。TMDbが返さない場合は null */
+  backdropPath: string | null;
 }
 
 /**

@@ -488,6 +488,10 @@ describe('TMDb APIクライアント', () => {
           { id: 28, name: 'アクション' },
           { id: 878, name: 'SF' },
         ],
+        title: 'ハートランド',
+        overview: 'あらすじ',
+        poster_path: '/poster.jpg',
+        backdrop_path: '/backdrop.jpg',
         vote_average: 7.5,
         vote_count: 1200,
         popularity: 98.7,
@@ -519,6 +523,12 @@ describe('TMDb APIクライアント', () => {
         voteCount: 1200,
         popularity: 98.7,
         originalLanguage: 'ja',
+        // 一覧が参照する表示列。公開前に登録された作品は後からポスターや
+        // 邦題が決まるため、日次同期で追従させる（#883）
+        title: 'ハートランド',
+        overview: 'あらすじ',
+        posterPath: '/poster.jpg',
+        backdropPath: '/backdrop.jpg',
       });
     });
 
@@ -537,6 +547,26 @@ describe('TMDb APIクライアント', () => {
       const result = await getMovieCacheStats(1);
 
       expect(result.originalLanguage).toBeNull();
+    });
+
+    it('表示列が無ければ null を返す', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          id: 1,
+          genres: [],
+          vote_average: 0,
+          vote_count: 0,
+          popularity: 0,
+        },
+      });
+
+      const { getMovieCacheStats } = require('./tmdb');
+      const result = await getMovieCacheStats(1);
+
+      expect(result.posterPath).toBeNull();
+      expect(result.backdropPath).toBeNull();
+      expect(result.title).toBeNull();
+      expect(result.overview).toBeNull();
     });
 
     it('文字列のmovieIdが正しくパスに含まれる', async () => {

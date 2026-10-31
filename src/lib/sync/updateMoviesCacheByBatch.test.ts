@@ -259,6 +259,81 @@ describe('updateMoviesCacheByBatch', () => {
     });
   });
 
+  // 表示列は行の作成時にしか書かれず、公開前に登録された作品は後から
+  // ポスターや邦題が決まっても一覧に反映されなかった（#883）
+  describe('表示列の追従', () => {
+    /** 表示列を指定して1件更新し、UPDATE に渡された値を返す */
+    const updateOne = async (stats: Record<string, unknown>) => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 901, release_type: 'theatrical' }],
+      });
+      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (getMovieCacheStats as jest.Mock).mockResolvedValue(
+        createMockCacheStats(stats),
+      );
+
+      await updateMoviesCacheByBatch();
+
+      return fromMock.updateMock.mock.calls[0][0];
+    };
+
+    it('後から付いたポスターを UPDATE に含める', async () => {
+      const payload = await updateOne({ posterPath: '/new-poster.jpg' });
+
+      expect(payload).toEqual(
+        expect.objectContaining({ poster_path: '/new-poster.jpg' }),
+      );
+    });
+
+    it('backdrop_path / title / overview も追従する', async () => {
+      const payload = await updateOne({
+        backdropPath: '/new-backdrop.jpg',
+        title: 'ハートランド',
+        overview: '新しいあらすじ',
+      });
+
+      expect(payload).toEqual(
+        expect.objectContaining({
+          backdrop_path: '/new-backdrop.jpg',
+          title: 'ハートランド',
+          overview: '新しいあらすじ',
+        }),
+      );
+    });
+
+    it('TMDbがポスターを持たない作品は null で上書きする', async () => {
+      const payload = await updateOne({ posterPath: null });
+
+      expect(payload).toEqual(expect.objectContaining({ poster_path: null }));
+    });
+
+    // title は NOT NULL 制約があり、空で上書きすると行が壊れる
+    it.each([null, ''])(
+      'title が %p のときは既存値を保つため UPDATE に含めない',
+      async (title) => {
+        const payload = await updateOne({ title });
+
+        expect(payload).not.toHaveProperty('title');
+      },
+    );
+
+    it('overview が空文字なら null に正規化する', async () => {
+      const payload = await updateOne({ overview: '' });
+
+      expect(payload).toEqual(expect.objectContaining({ overview: null }));
+    });
+
+    // リバイバル上映は eiga 同期が release_date を意図的に上書きしている。
+    // 毎日 TMDb の代表公開日で塗り潰すとその補正が消える
+    it('release_date は UPDATE に含めない', async () => {
+      const payload = await updateOne({ posterPath: '/p.jpg' });
+
+      expect(payload).not.toHaveProperty('release_date');
+    });
+  });
+
   describe('映画ID取得', () => {
     it('DB取得エラーの場合エラーをスローする', async () => {
       setValidEnv();

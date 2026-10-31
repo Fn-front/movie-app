@@ -77,7 +77,7 @@ describe('TitleSuggestion', () => {
     expect(mockPush).toHaveBeenCalledWith('/search?query=Pumping%20Iron');
   });
 
-  it('クリック時に候補配列全体を sessionStorage に保存する', async () => {
+  it('クリック時に遷移先のクエリと候補全体を sessionStorage に保存する', async () => {
     const user = userEvent.setup();
     const suggestions = ['The Shawshank Redemption', 'Pumping Iron'];
     const setItemSpy = jest.spyOn(Storage.prototype, 'setItem');
@@ -86,11 +86,30 @@ describe('TitleSuggestion', () => {
 
     await user.click(screen.getByRole('button', { name: 'Pumping Iron' }));
 
-    // TITLE_SUGGESTION.STORAGE_KEY に候補全体を JSON.stringify で保存
+    // クリックした候補が遷移先のqueryになる。対応付けが無いと別キーワードの
+    // 検索でも「提案クリック由来」と誤判定される（#824）
     expect(setItemSpy).toHaveBeenCalledWith(
       expect.any(String),
-      JSON.stringify(suggestions),
+      JSON.stringify({ query: 'Pumping Iron', suggestions }),
     );
+    setItemSpy.mockRestore();
+  });
+
+  it('sessionStorage に保存できなくても再検索の遷移は行う', async () => {
+    const user = userEvent.setup();
+    const setItemSpy = jest
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('SecurityError');
+      });
+
+    render(
+      <TitleSuggestion suggestions={['Pumping Iron']} isLoading={false} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Pumping Iron' }));
+
+    expect(mockPush).toHaveBeenCalledWith('/search?query=Pumping%20Iron');
     setItemSpy.mockRestore();
   });
 

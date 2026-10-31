@@ -13,12 +13,12 @@ import { useSession } from 'next-auth/react';
 import { searchMoviesApi } from '@/lib/api/search/search';
 import type { SearchMoviesRequest } from '@/lib/api/search/search';
 import type { Movie } from '@/lib/types';
-import {
-  searchKeys,
-  SEARCH_ERROR_MESSAGES,
-  TITLE_SUGGESTION,
-} from '@/constants';
+import { searchKeys, SEARCH_ERROR_MESSAGES } from '@/constants';
 import { useToast } from '@/hooks/useToast';
+import {
+  clearStoredSuggestion,
+  readSuggestionForQuery,
+} from '../utils/storedSuggestion';
 import { useTitleSuggestion } from './useTitleSuggestion';
 
 /**
@@ -45,20 +45,6 @@ export interface UseSearchReturn {
   suggestions: string[];
   /** 原題提案ローディング中 */
   isSuggestionLoading: boolean;
-}
-
-/**
- * sessionStorageから保持された提案を読み出す
- */
-function readStoredSuggestions(): string[] {
-  try {
-    const stored = sessionStorage.getItem(TITLE_SUGGESTION.STORAGE_KEY);
-    if (!stored) return [];
-    return JSON.parse(stored) as string[];
-  } catch {
-    sessionStorage.removeItem(TITLE_SUGGESTION.STORAGE_KEY);
-    return [];
-  }
 }
 
 /**
@@ -138,10 +124,22 @@ export function useSearch(): UseSearchReturn {
   );
   const pagination = searchQuery.data?.data.pagination;
 
-  // sessionStorageから保持された提案を読み出す（提案クリックで遷移した場合）
-  // queryが変わるたびに再読み込み（eslint-disable: queryは再読み込みトリガーとして必要）
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const storedSuggestions = useMemo(() => readStoredSuggestions(), [query]);
+  // 提案クリックで引き継いだ候補を読み出す。保存値が現在のqueryに対応しない
+  // （＝別キーワードを検索しただけ）なら引き継がず、AI提案を走らせる
+  const storedSuggestion = useMemo(
+    () => readSuggestionForQuery(query),
+    [query],
+  );
+  const storedSuggestions = storedSuggestion.suggestions;
+
+  // 対応しない保存値（別キーワード・旧形式・壊れた値）は取り除く。
+  // 描画中に消すとSearchBarのstartTransitionやStrictModeで破棄される
+  // レンダーでも消えてしまうため、確定後のEffectで行う
+  useEffect(() => {
+    if (storedSuggestion.isStale) {
+      clearStoredSuggestion();
+    }
+  }, [storedSuggestion]);
 
   // keepPreviousDataにより、クエリ切替中はisLoadingがfalseのまま前クエリの結果が返る。
   // この区間で0件と誤判定しないよう、現在のクエリの結果が確定していることを条件にする
@@ -162,15 +160,12 @@ export function useSearch(): UseSearchReturn {
   const { suggestions: apiSuggestions, isLoading: isSuggestionLoading } =
     useTitleSuggestion(query, hasNoResults);
 
-  // API提案がある場合はsessionStorageをクリアしてAPI提案を使用
-  // API提案がない場合（結果あり画面）はsessionStorageの提案を使用
+  // API提案を優先し、無ければ提案クリックで引き継いだ候補を使う。
+  // 未認証では引き継ぎ分も表示しない（同じタブでログアウトした場合に残るため）
   const suggestions = useMemo(() => {
-    if (apiSuggestions.length > 0) {
-      sessionStorage.removeItem(TITLE_SUGGESTION.STORAGE_KEY);
-      return apiSuggestions;
-    }
-    return storedSuggestions;
-  }, [apiSuggestions, storedSuggestions]);
+    if (!isAuthenticated) return [];
+    return apiSuggestions.length > 0 ? apiSuggestions : storedSuggestions;
+  }, [isAuthenticated, apiSuggestions, storedSuggestions]);
 
   return useMemo(
     () => ({

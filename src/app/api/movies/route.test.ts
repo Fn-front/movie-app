@@ -1882,6 +1882,17 @@ describe('GET /api/movies', () => {
         .map((args) => String(args[0]))
         .find((arg) => arg.includes('original_language'));
 
+    /**
+     * 除外対象の原語だけを取り出す
+     *
+     * or 条件全体に対する部分一致だと、`ta` が `original_language` に
+     * 含まれるといった取り違えで通ってしまうため、リストを解析して突き合わせる
+     */
+    const findExcludedLanguages = (): string[] | undefined =>
+      findLanguageOr()
+        ?.match(/not\.in\.\(([^)]*)\)/)?.[1]
+        .split(',');
+
     it('include_regions 未指定なら3グループの原語を除外する', async () => {
       const handler = await loadGET();
       setupExpiredCacheFromMock({
@@ -1891,11 +1902,41 @@ describe('GET /api/movies', () => {
 
       await handler(createRequest());
 
-      const condition = findLanguageOr();
-      expect(condition).toContain('original_language.is.null');
-      for (const lang of ['ko', 'zh', 'th', 'hi', 'te', 'ta']) {
-        expect(condition).toContain(lang);
-      }
+      expect(findLanguageOr()).toContain('original_language.is.null');
+      // TMDb 独自コードの広東語（cn）やインド諸語が抜けると、該当地域を
+      // 未チェックのまま一覧に出てしまう（#881）
+      expect(findExcludedLanguages()).toEqual(
+        expect.arrayContaining([
+          'ko',
+          'zh',
+          'cn',
+          'th',
+          'hi',
+          'te',
+          'ta',
+          'ml',
+          'kn',
+          'mr',
+          'bn',
+          'pa',
+          'gu',
+        ]),
+      );
+    });
+
+    it('中華圏を指定すれば北京語・広東語とも除外しない', async () => {
+      const handler = await loadGET();
+      setupExpiredCacheFromMock({
+        countResult: { count: 0 },
+        dataResult: { data: [], error: null },
+      });
+
+      await handler(createRequest({ include_regions: 'chinese' }));
+
+      const excluded = findExcludedLanguages();
+      expect(excluded).not.toContain('zh');
+      expect(excluded).not.toContain('cn');
+      expect(excluded).toContain('ko');
     });
 
     it('include_regions で指定した地域は除外しない', async () => {
@@ -1907,10 +1948,7 @@ describe('GET /api/movies', () => {
 
       await handler(createRequest({ include_regions: 'korea' }));
 
-      // 除外リストの中身だけを見る（or 条件全体には列名が含まれるため）
-      const excluded = findLanguageOr()
-        ?.match(/not\.in\.\(([^)]*)\)/)?.[1]
-        .split(',');
+      const excluded = findExcludedLanguages();
       expect(excluded).not.toContain('ko');
       expect(excluded).toContain('zh');
     });

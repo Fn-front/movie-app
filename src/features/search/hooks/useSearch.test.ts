@@ -15,10 +15,10 @@ jest.mock('next/navigation', () => ({
 }));
 
 jest.mock('next-auth/react', () => ({
-  useSession: () => ({
+  useSession: jest.fn(() => ({
     data: { user: { id: 'user-1' } },
     status: 'authenticated',
-  }),
+  })),
 }));
 
 jest.mock('@/lib/api/search/search', () => ({
@@ -39,6 +39,8 @@ jest.mock('@tanstack/react-query', () => {
 });
 
 import { useQuery } from '@tanstack/react-query';
+import { useSession } from 'next-auth/react';
+import { TITLE_SUGGESTION } from '@/constants';
 import { useTitleSuggestion } from './useTitleSuggestion';
 
 const mockUseSearchParams = useSearchParams as jest.MockedFunction<
@@ -47,6 +49,7 @@ const mockUseSearchParams = useSearchParams as jest.MockedFunction<
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 const mockUseQuery = useQuery as jest.MockedFunction<typeof useQuery>;
 const mockUseToast = useToast as jest.MockedFunction<typeof useToast>;
+const mockUseSession = useSession as jest.MockedFunction<typeof useSession>;
 const mockUseTitleSuggestion = useTitleSuggestion as jest.MockedFunction<
   typeof useTitleSuggestion
 >;
@@ -55,6 +58,19 @@ const mockUseTitleSuggestion = useTitleSuggestion as jest.MockedFunction<
 function lastSuggestionEnabled(): boolean | undefined {
   const calls = mockUseTitleSuggestion.mock.calls;
   return calls[calls.length - 1]?.[1];
+}
+
+/** 未認証状態にする */
+function setUnauthenticated(): void {
+  mockUseSession.mockReturnValue({
+    data: null,
+    status: 'unauthenticated',
+  } as unknown as ReturnType<typeof useSession>);
+}
+
+/** 原題提案APIが候補を返した状態にする */
+function setApiSuggestions(suggestions: string[]): void {
+  mockUseTitleSuggestion.mockReturnValue({ suggestions, isLoading: false });
 }
 
 // --- Helpers ---
@@ -108,10 +124,33 @@ const emptyResult = {
   },
 };
 
+/** 検索結果ありのレスポンス */
+const hitResult = {
+  success: true as const,
+  data: {
+    movies: [{ id: 1, title: 'テスト映画' }],
+    pagination: {
+      page: 1,
+      totalPages: 1,
+      totalResults: 1,
+      isServerFiltered: false,
+    },
+  },
+};
+
 describe('useSearch', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     sessionStorage.clear();
+    // clearAllMocks は mockReturnValue を戻さないため、既定値を明示的に敷き直す
+    mockUseSession.mockReturnValue({
+      data: { user: { id: 'user-1' } },
+      status: 'authenticated',
+    } as unknown as ReturnType<typeof useSession>);
+    mockUseTitleSuggestion.mockReturnValue({
+      suggestions: [],
+      isLoading: false,
+    });
   });
 
   describe('URLパラメータの読み取り', () => {
@@ -288,18 +327,6 @@ describe('useSearch', () => {
     });
 
     it('検索結果がある場合は提案APIを有効化しない', () => {
-      const hitResult = {
-        success: true as const,
-        data: {
-          movies: [{ id: 1, title: 'テスト映画' }],
-          pagination: {
-            page: 1,
-            totalPages: 1,
-            totalResults: 1,
-            isServerFiltered: false,
-          },
-        },
-      };
       setupMocks({ query: 'テスト' }, { data: hitResult });
 
       renderHook(() => useSearch());
@@ -313,6 +340,143 @@ describe('useSearch', () => {
       renderHook(() => useSearch());
 
       expect(lastSuggestionEnabled()).toBe(false);
+    });
+  });
+
+  describe('提案クリックからの引き継ぎ（sessionStorage）', () => {
+    /** 提案をクリックして遷移した状態を作る */
+    function storeSuggestionFor(query: string, suggestions: string[]): void {
+      sessionStorage.setItem(
+        TITLE_SUGGESTION.STORAGE_KEY,
+        JSON.stringify({ query, suggestions }),
+      );
+    }
+
+    /** sessionStorageに生の文字列を仕込む（旧形式・壊れた値の再現用） */
+    function storeRaw(value: string): void {
+      sessionStorage.setItem(TITLE_SUGGESTION.STORAGE_KEY, value);
+    }
+
+    it('提案クリック直後の遷移先では候補を引き継ぎ、提案APIを呼ばない', () => {
+      storeSuggestionFor('Gojira', ['Gojira', 'Godzilla']);
+      setupMocks({ query: 'Gojira' }, { data: emptyResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual(['Gojira', 'Godzilla']);
+      expect(lastSuggestionEnabled()).toBe(false);
+      // 引き継ぎ対象なので保存値は残す（リロードしても候補が消えない）
+      expect(
+        sessionStorage.getItem(TITLE_SUGGESTION.STORAGE_KEY),
+      ).not.toBeNull();
+    });
+
+    it('別キーワードで0件になったら候補を表示せず、提案APIを有効化する', () => {
+      storeSuggestionFor('Gojira', ['Gojira', 'Godzilla']);
+      setupMocks({ query: '別のキーワード' }, { data: emptyResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual([]);
+      expect(lastSuggestionEnabled()).toBe(true);
+    });
+
+    it('別キーワードへ移ったら保存値を取り除く', () => {
+      storeSuggestionFor('Gojira', ['Gojira']);
+      setupMocks({ query: '別のキーワード' }, { data: emptyResult });
+
+      renderHook(() => useSearch());
+
+      expect(sessionStorage.getItem(TITLE_SUGGESTION.STORAGE_KEY)).toBeNull();
+    });
+
+    it('別キーワードがヒットした場合も無関係な候補を表示しない', () => {
+      storeSuggestionFor('Gojira', ['Gojira']);
+      setupMocks({ query: 'バットマン' }, { data: hitResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual([]);
+      expect(result.current.movies).toHaveLength(1);
+    });
+
+    it('クエリ無し（ジャンルのみ）で0件になっても前回の候補を表示しない', () => {
+      storeSuggestionFor('Gojira', ['Gojira']);
+      setupMocks({ genre: '28' }, { data: emptyResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual([]);
+      expect(sessionStorage.getItem(TITLE_SUGGESTION.STORAGE_KEY)).toBeNull();
+    });
+
+    it('旧形式（裸の配列）は不正値として取り除き、提案APIを有効化する', () => {
+      storeRaw(JSON.stringify(['Gojira', 'Godzilla']));
+      setupMocks({ query: 'Gojira' }, { data: emptyResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual([]);
+      expect(lastSuggestionEnabled()).toBe(true);
+      expect(sessionStorage.getItem(TITLE_SUGGESTION.STORAGE_KEY)).toBeNull();
+    });
+
+    it('壊れた値は不正値として取り除き、提案APIを有効化する', () => {
+      storeRaw('{壊れたJSON');
+      setupMocks({ query: 'Gojira' }, { data: emptyResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual([]);
+      expect(lastSuggestionEnabled()).toBe(true);
+      expect(sessionStorage.getItem(TITLE_SUGGESTION.STORAGE_KEY)).toBeNull();
+    });
+
+    it('API提案がある場合は引き継ぎ分より優先する', () => {
+      storeSuggestionFor('Gojira', ['Gojira']);
+      setApiSuggestions(['Godzilla Minus One']);
+      setupMocks({ query: '別のキーワード' }, { data: emptyResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual(['Godzilla Minus One']);
+    });
+
+    it('提案APIが失敗して候補ゼロでも、検索結果は正常に返る', () => {
+      setApiSuggestions([]);
+      setupMocks({ query: 'バットマン' }, { data: hitResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual([]);
+      expect(result.current.movies).toHaveLength(1);
+      expect(result.current.isError).toBe(false);
+    });
+
+    it('未認証では引き継いだ候補を表示せず、提案APIも呼ばない', () => {
+      storeSuggestionFor('Gojira', ['Gojira', 'Godzilla']);
+      setUnauthenticated();
+      setupMocks({ query: 'Gojira' }, { data: emptyResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual([]);
+      expect(lastSuggestionEnabled()).toBe(false);
+    });
+
+    it('sessionStorageが使えない環境でも落ちずに検索できる', () => {
+      const getItemSpy = jest
+        .spyOn(Storage.prototype, 'getItem')
+        .mockImplementation(() => {
+          throw new Error('SecurityError');
+        });
+      setupMocks({ query: 'バットマン' }, { data: hitResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.movies).toHaveLength(1);
+      expect(result.current.suggestions).toEqual([]);
+      getItemSpy.mockRestore();
     });
   });
 });

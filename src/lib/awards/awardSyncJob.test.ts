@@ -4,6 +4,9 @@
 
 import {
   createRunningJob,
+  findJobById,
+  findLatestJob,
+  findRunningJob,
   finishJobIfRunning,
   isJobStale,
   isJobStillRunning,
@@ -148,6 +151,91 @@ describe('isJobStillRunning', () => {
     const { supabase } = createSelectMock(null);
 
     expect(await isJobStillRunning(supabase, JOB_ID)).toBe(false);
+  });
+});
+
+describe('ジョブの検索', () => {
+  const ROW = {
+    id: JOB_ID,
+    award_name: 'cannes',
+    award_year: 2024,
+    status: 'running' as const,
+    total_upserted: null,
+    error_message: null,
+    created_at: baseJob.createdAt,
+    started_at: baseJob.startedAt,
+    finished_at: null,
+  };
+
+  /** select(...).eq(...).maybeSingle() の鎖 */
+  function createEqMock(data: unknown) {
+    const maybeSingle = jest.fn().mockResolvedValue({ data });
+    const eq = jest.fn(() => ({ maybeSingle }));
+    const select = jest.fn(() => ({ eq }));
+    const supabase = {
+      from: jest.fn(() => ({ select })),
+    } as unknown as Parameters<typeof findRunningJob>[0];
+
+    return { supabase, eq, select };
+  }
+
+  /** select(...).order(...).limit(...).maybeSingle() の鎖 */
+  function createOrderMock(data: unknown) {
+    const maybeSingle = jest.fn().mockResolvedValue({ data });
+    const limit = jest.fn(() => ({ maybeSingle }));
+    const order = jest.fn(() => ({ limit }));
+    const select = jest.fn(() => ({ order }));
+    const supabase = {
+      from: jest.fn(() => ({ select })),
+    } as unknown as Parameters<typeof findLatestJob>[0];
+
+    return { supabase, order, limit };
+  }
+
+  it('findRunningJob は running で絞り、スネークケースを変換して返す', async () => {
+    const { supabase, eq } = createEqMock(ROW);
+
+    const job = await findRunningJob(supabase);
+
+    expect(eq).toHaveBeenCalledWith('status', 'running');
+    expect(job).toEqual(baseJob);
+  });
+
+  it('findRunningJob は該当なしで null を返す', async () => {
+    const { supabase } = createEqMock(null);
+
+    expect(await findRunningJob(supabase)).toBeNull();
+  });
+
+  it('findJobById は id で絞る', async () => {
+    const { supabase, eq } = createEqMock(ROW);
+
+    const job = await findJobById(supabase, JOB_ID);
+
+    expect(eq).toHaveBeenCalledWith('id', JOB_ID);
+    expect(job?.id).toBe(JOB_ID);
+  });
+
+  it('findJobById は該当なしで null を返す', async () => {
+    const { supabase } = createEqMock(null);
+
+    expect(await findJobById(supabase, JOB_ID)).toBeNull();
+  });
+
+  it('findLatestJob は作成日時の降順で1件取る', async () => {
+    const { supabase, order, limit } = createOrderMock(ROW);
+
+    const job = await findLatestJob(supabase);
+
+    expect(order).toHaveBeenCalledWith('created_at', { ascending: false });
+    expect(limit).toHaveBeenCalledWith(1);
+    expect(job).toEqual(baseJob);
+  });
+
+  it('findLatestJob は1件も無ければ null を返す', async () => {
+    const { supabase } = createOrderMock(null);
+
+    expect(await findLatestJob(supabase)).toBeNull();
   });
 });
 

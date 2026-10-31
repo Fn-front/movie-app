@@ -254,8 +254,17 @@ export async function getMovieCacheStats(
     TMDB_ENDPOINTS.MOVIE_DETAIL(movieId),
   );
 
-  const { genres, vote_average, vote_count, popularity, original_language } =
-    response.data;
+  const {
+    genres,
+    vote_average,
+    vote_count,
+    popularity,
+    original_language,
+    title,
+    overview,
+    poster_path,
+    backdrop_path,
+  } = response.data;
 
   return {
     genreIds: (genres ?? []).map((genre) => genre.id),
@@ -263,6 +272,10 @@ export async function getMovieCacheStats(
     voteCount: vote_count ?? 0,
     popularity,
     originalLanguage: original_language ?? null,
+    title: title ?? null,
+    overview: overview ?? null,
+    posterPath: poster_path ?? null,
+    backdropPath: backdrop_path ?? null,
   };
 }
 

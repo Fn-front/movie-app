@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 import { BATCH_UPDATE_SIZE } from '@/constants/movies';
 import { hasExcludedGenre } from '@/lib/movies/genreFilter';
 import { getMovieCacheStats, isTmdbNotFoundError } from '@/lib/tmdb/tmdb';
+import type { MovieCacheStats } from '@/lib/types';
 
 /**
  * 映画ID取得時の1ページあたり件数
@@ -28,6 +29,33 @@ export interface BatchUpdateResult {
   removedNotFound: number;
   /** エラーメッセージ */
   errors: string[];
+}
+
+/**
+ * 一覧が参照する表示列の更新値を組み立てる
+ *
+ * これらの列は行の作成時にしか書かれていなかった。公開前に登録された作品は
+ * 後からポスターや邦題が決まっても反映されず、一覧だけ No Image や英題のまま
+ * 残っていた（詳細画面はTMDbを直接引くため食い違う）。全件の詳細をここで
+ * 毎日取得しているので、追加のTMDb呼び出し無しに追従できる。
+ *
+ * `release_date` は対象にしない。リバイバル上映は eiga 同期が
+ * `correctRevivalRow` で意図的に上書きしており、TMDbの代表公開日で
+ * 毎日塗り潰すとその補正が消えるため。
+ *
+ * @param stats - TMDbから取得した同期指標
+ * @returns UPDATE に渡す表示列
+ */
+function buildDisplayColumns(stats: MovieCacheStats) {
+  return {
+    // title は NOT NULL 制約がある。TMDbが空を返したときに上書きすると
+    // 行が壊れるため、そのときだけ既存値を残す
+    ...(stats.title ? { title: stats.title } : {}),
+    // 空文字は「あらすじ無し」として保存経路と同じく null に寄せる
+    overview: stats.overview || null,
+    poster_path: stats.posterPath,
+    backdrop_path: stats.backdropPath,
+  };
 }
 
 /**
@@ -134,6 +162,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
             // 地域フィルタが参照する列。全件の詳細をここで毎日取得しているため、
             // 追加のTMDb呼び出し無しに未取得の行が順次埋まる
             original_language: stats.originalLanguage,
+            ...buildDisplayColumns(stats),
             updated_at: now,
           })
           .eq('id', movieId);

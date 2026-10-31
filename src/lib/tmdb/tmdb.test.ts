@@ -454,6 +454,32 @@ describe('TMDb APIクライアント', () => {
     });
   });
 
+  describe('without_keywords に興行キーワードを含める', () => {
+    it('不適切コンテンツと興行のキーワードをまとめて除外すること', () => {
+      const ids = EXCLUDED_KEYWORDS_PARAM.split('|').map(Number);
+
+      // 不適切コンテンツ（既存）
+      expect(ids).toContain(155477); // softcore
+      // プロレス団体
+      expect(ids).toContain(367574); // joshi puroresu
+      // 格闘技興行。Discover はキーワードを取得しないため、
+      // isFightEvent の1段目をここで代替する
+      expect(ids).toContain(192790); // combat sports
+      expect(ids).toContain(361498); // jmma
+      expect(ids).toContain(361499); // jkick
+    });
+
+    it('劇映画にも付く汎用キーワードは含めないこと', () => {
+      const ids = EXCLUDED_KEYWORDS_PARAM.split('|').map(Number);
+
+      // 『ウォーリアー』『キックボクサー』等を巻き込むため入れない
+      expect(ids).not.toContain(9917); // mixed martial arts (mma)
+      expect(ids).not.toContain(18111); // kickboxing
+      expect(ids).not.toContain(5970); // wrestling
+      expect(ids).not.toContain(206441); // pro wrestling
+    });
+  });
+
   describe('getMovieCacheStats', () => {
     const mockStatsResponse = {
       data: {

@@ -118,11 +118,6 @@ export const EXCLUDED_KEYWORD_IDS = [
 ] as const;
 
 /**
- * TMDb Discover APIのwithout_keywordsパラメータ値
- */
-export const EXCLUDED_KEYWORDS_PARAM = EXCLUDED_KEYWORD_IDS.join('|');
-
-/**
  * 音楽ジャンルID（TMDb）
  */
 export const MUSIC_GENRE_ID = 10402;
@@ -271,6 +266,63 @@ export const WRESTLING_EVENT_TITLE_PHRASES = [
   '興行',
   'プロレス',
 ] as const;
+
+/**
+ * 格闘技の興行であることを示すTMDbキーワードID
+ *
+ * プロレスの団体キーワードと同じ役割。実測では `combat sports` が付く60件の
+ * 大半が UFC / Krush / INOKI BOM-BA-YE といった興行で、`jmma` / `jkick` は
+ * ほぼ興行専用だった。これを持つ作品は興行と判断できる。
+ */
+export const COMBAT_SPORTS_EVENT_KEYWORD_IDS = [
+  192790, // combat sports
+  361498, // jmma（日本のMMA）
+  361499, // jkick（日本のキックボクシング）
+] as const;
+
+/**
+ * 格闘技を扱う作品に広く付くTMDbキーワードID
+ *
+ * 興行の候補を絞る用途にのみ使い、実際の判定はタイトル語と組み合わせる。
+ * 実測では『ウォーリアー』『スマッシング・マシーン』『デブ！！デブ！！デブ！！』が
+ * `mixed martial arts (mma)` を、『キックボクサー』等のアクション映画が
+ * `kickboxing` を持つ。単独で弾くと劇映画を巻き込む。
+ */
+export const COMBAT_SPORTS_KEYWORD_IDS = [
+  9917, // mixed martial arts (mma)
+  18111, // kickboxing
+] as const;
+
+/**
+ * 格闘技興行であることを示すタイトル語（団体・シリーズ名）
+ *
+ * 興行名はそれ自体が固有名詞のため、劇映画のタイトルに現れにくい。
+ * 判定は `COMBAT_SPORTS_KEYWORD_IDS` を持つ作品に限って行う。
+ *
+ * 大文字化して比較するため、ここも大文字で書く。
+ */
+export const COMBAT_SPORTS_EVENT_TITLE_PHRASES = [
+  'RIZIN',
+  'UFC',
+  'K-1',
+  'KRUSH',
+  'BELLATOR',
+  'PANCRASE',
+] as const;
+
+/**
+ * TMDb Discover APIのwithout_keywordsパラメータ値
+ *
+ * 不適切コンテンツに加えて、興行特有のキーワードもここで落とす。
+ * Discover 経由の取り込みは作品ごとのキーワード取得を行わないため、
+ * アプリ側の判定（`isFightEvent`）の1段目をAPIパラメータで代替する。
+ * TMDb側で弾けるので追加のリクエストは発生しない。
+ */
+export const EXCLUDED_KEYWORDS_PARAM = [
+  ...EXCLUDED_KEYWORD_IDS,
+  ...WRESTLING_PROMOTION_KEYWORD_IDS,
+  ...COMBAT_SPORTS_EVENT_KEYWORD_IDS,
+].join('|');
 
 /**
  * 配信の提供形態（TMDb watch/providers のキー）

@@ -307,7 +307,20 @@ export async function hasExcludedKeyword(
   movieId: number | string,
   options?: { signal?: AbortSignal },
 ): Promise<boolean> {
-  const keywordIds = await getMovieKeywordIds(movieId, options);
+  return containsExcludedKeyword(await getMovieKeywordIds(movieId, options));
+}
+
+/**
+ * 取得済みのキーワードIDに除外対象（アダルト系）が含まれるかを判定する
+ *
+ * 同じキーワードを興行判定（`isFightEvent`）にも使う経路では、
+ * `hasExcludedKeyword` を呼ぶとキーワード取得が二重になる。
+ * 取得は呼び出し側で1回だけ行い、判定だけをこの関数に任せる。
+ *
+ * @param keywordIds - TMDbキーワードID
+ * @returns 除外対象なら true
+ */
+export function containsExcludedKeyword(keywordIds: number[]): boolean {
   return keywordIds.some((id) =>
     (EXCLUDED_KEYWORD_IDS as readonly number[]).includes(id),
   );

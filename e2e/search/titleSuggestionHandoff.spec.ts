@@ -34,9 +34,14 @@ const SUGGEST_ENDPOINT = '**/api/movies/suggest-title*';
 const NO_HIT_A = 'zzzqqxyz存在しない映画A';
 const NO_HIT_B = 'zzzqqxyz存在しない映画B';
 
-/** スタブが返す候補。クエリから一意に決まるので取り違えを検出できる */
+/** スタブが返す1件目の候補。クエリから一意に決まるので取り違えを検出できる */
 function stubbedSuggestionFor(query: string): string {
   return `ORIGINALOF ${query}`;
+}
+
+/** スタブが返す2件目の候補。1件目をクリックした後に残るべきもの */
+function altSuggestionFor(query: string): string {
+  return `ALTOF ${query}`;
 }
 
 /**
@@ -44,8 +49,17 @@ function stubbedSuggestionFor(query: string): string {
  *
  * OpenAI を叩かないだけでなく、「どのクエリに対して提案が走ったか」を
  * 直接観測できるようにする。
+ *
+ * @param page - 対象ページ
+ * @param suggestionsFor - クエリに対して返す候補。既定は2件
  */
-async function stubSuggestApi(page: Page): Promise<{ queries: string[] }> {
+async function stubSuggestApi(
+  page: Page,
+  suggestionsFor: (query: string) => string[] = (query) => [
+    stubbedSuggestionFor(query),
+    altSuggestionFor(query),
+  ],
+): Promise<{ queries: string[] }> {
   const queries: string[] = [];
 
   await page.route(SUGGEST_ENDPOINT, async (route) => {
@@ -57,7 +71,7 @@ async function stubSuggestApi(page: Page): Promise<{ queries: string[] }> {
       contentType: 'application/json',
       body: JSON.stringify({
         success: true,
-        data: { suggestions: [stubbedSuggestionFor(query)], cached: true },
+        data: { suggestions: suggestionsFor(query), cached: true },
       }),
     });
   });
@@ -107,12 +121,16 @@ test.describe('原題提案の引き継ぎ', () => {
       await expect(candidateA).toBeVisible({ timeout: 20000 });
       expect(suggest.queries).toEqual([NO_HIT_A]);
 
-      // 2. 候補をクリック → 遷移先では引き継いだ候補を表示し、AIを呼び直さない
+      // 2. 候補をクリック → 遷移先では残りの候補だけを表示し、AIを呼び直さない。
+      //    クリック済みの候補は押しても同じURLなので選択肢から外す（#887）
       await candidateA.click();
       await page.waitForURL(
         `**/search?query=${encodeURIComponent(stubbedSuggestionFor(NO_HIT_A))}`,
       );
-      await expect(candidateA).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: altSuggestionFor(NO_HIT_A) }),
+      ).toBeVisible();
+      await expect(candidateA).toBeHidden();
       expect(suggest.queries).toEqual([NO_HIT_A]);
 
       // 3. 別のキーワードBで検索 → Bに対する提案が走る（ここが#824の不具合）
@@ -125,6 +143,39 @@ test.describe('原題提案の引き継ぎ', () => {
 
       // 4. Aの候補は残らない
       await expect(candidateA).toBeHidden();
+      await expect(
+        page.getByRole('button', { name: altSuggestionFor(NO_HIT_A) }),
+      ).toBeHidden();
+    } finally {
+      await page.unroute(SUGGEST_ENDPOINT);
+    }
+  });
+
+  test('候補が1件だけで遷移先も0件なら、もしかして自体を表示しない', async () => {
+    // 候補1件のみ。クリック済みを外すと表示できる候補が無くなる（#887）
+    const suggest = await stubSuggestApi(page, (query) => [
+      stubbedSuggestionFor(query),
+    ]);
+
+    try {
+      await page.goto(`/search?query=${encodeURIComponent(NO_HIT_A)}`);
+      const candidateA = page.getByRole('button', {
+        name: stubbedSuggestionFor(NO_HIT_A),
+      });
+      await expect(candidateA).toBeVisible({ timeout: 20000 });
+
+      await candidateA.click();
+      await page.waitForURL(
+        `**/search?query=${encodeURIComponent(stubbedSuggestionFor(NO_HIT_A))}`,
+      );
+
+      await expect(
+        page.getByText('検索結果が見つかりませんでした'),
+      ).toBeVisible({ timeout: 20000 });
+      await expect(candidateA).toBeHidden();
+      await expect(page.getByText('もしかして:')).toBeHidden();
+      // 遷移先でAIを呼び直さない（#824のコスト抑制を維持する）
+      expect(suggest.queries).toEqual([NO_HIT_A]);
     } finally {
       await page.unroute(SUGGEST_ENDPOINT);
     }

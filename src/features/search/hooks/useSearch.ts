@@ -130,7 +130,13 @@ export function useSearch(): UseSearchReturn {
     () => readSuggestionForQuery(query),
     [query],
   );
-  const storedSuggestions = storedSuggestion.suggestions;
+
+  // いま表示しているクエリ自身は選択肢から外す。押しても同じURLへ遷移するだけで
+  // 画面が変わらず、候補が1件だけだと手詰まりになる（#887）
+  const storedSuggestions = useMemo(
+    () => storedSuggestion.suggestions.filter((title) => title !== query),
+    [storedSuggestion, query],
+  );
 
   // 対応しない保存値（別キーワード・旧形式・壊れた値）は取り除く。
   // 描画中に消すとSearchBarのstartTransitionやStrictModeで破棄される
@@ -148,15 +154,19 @@ export function useSearch(): UseSearchReturn {
     !searchQuery.isFetching &&
     !searchQuery.isPlaceholderData;
 
-  // 検索結果が0件かつsessionStorageに提案がない場合のみ原題提案APIを有効化
-  // sessionStorageに提案がある = 提案クリックからの遷移なのでAI呼び出し不要
+  // 引き継いだ候補が現在のクエリだけだった場合も「提案クリックからの遷移」に
+  // 変わりはない。除外後の件数で判定するとAIを呼び直してしまう（#824のコスト抑制）
+  const isFromSuggestionClick = storedSuggestion.suggestions.length > 0;
+
+  // 検索結果が0件かつ提案クリック由来でない場合のみ原題提案APIを有効化
+  // 提案クリックからの遷移ならAI呼び出し不要
   // 未認証時はAI検索を無効化
   const hasNoResults =
     isAuthenticated &&
     isResultSettled &&
     requestParams !== null &&
     movies.length === 0 &&
-    storedSuggestions.length === 0;
+    !isFromSuggestionClick;
   const { suggestions: apiSuggestions, isLoading: isSuggestionLoading } =
     useTitleSuggestion(query, hasNoResults);
 

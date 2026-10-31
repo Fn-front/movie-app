@@ -10,9 +10,14 @@ import {
   RELEASE_TYPE,
 } from '@/constants/movies';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
+import { isFightEvent } from '@/lib/movies/fightEvent';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
-import { getNowPlayingMovies, hasExcludedKeyword } from '@/lib/tmdb/tmdb';
+import {
+  containsExcludedKeyword,
+  getMovieKeywordIds,
+  getNowPlayingMovies,
+} from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 
 /**
@@ -93,15 +98,23 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
 
   for (const movie of filteredMovies) {
     try {
+      // 除外キーワードと興行判定で同じキーワードを使うため、取得は1回に留める
+      const keywordIds = await getMovieKeywordIds(movie.id);
+
       // 除外キーワードチェック
-      if (await hasExcludedKeyword(movie.id)) {
+      if (containsExcludedKeyword(keywordIds)) {
         result.skipped++;
         continue;
       }
 
-      // ライブビューイング・コンサート映像・舞台中継を保存しない。
-      // 同期判定の isStageBroadcast を先に通し、TMDbへの問い合わせを省く
-      if (isStageBroadcast(movie) || (await isConcertFilm(movie))) {
+      // ライブビューイング・コンサート映像・舞台中継・格闘技興行を保存しない。
+      // 同期判定の isStageBroadcast / isFightEvent を先に通し、
+      // TMDbへの問い合わせを伴う isConcertFilm の対象を減らす
+      if (
+        isStageBroadcast(movie) ||
+        isFightEvent(keywordIds, movie.title) ||
+        (await isConcertFilm(movie))
+      ) {
         result.skipped++;
         continue;
       }

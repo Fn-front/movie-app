@@ -9,14 +9,16 @@ import { RELEASE_TYPE } from '@/constants/movies';
 import { EIGA_SCORING } from '@/constants/eiga';
 import { MS_PER_DAY } from '@/constants/time';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
+import { isFightEvent } from '@/lib/movies/fightEvent';
 import {
   isQualityMovie,
   type QualityFilterOptions,
 } from '@/lib/movies/qualityFilter';
 import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
 import {
+  containsExcludedKeyword,
   getJpTheatricalReleaseDates,
-  hasExcludedKeyword,
+  getMovieKeywordIds,
   searchMovies,
 } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
@@ -382,15 +384,23 @@ export async function syncEigaMovies(): Promise<SyncResult> {
         continue;
       }
 
+      // 除外キーワードと興行判定で同じキーワードを使うため、取得は1回に留める
+      const keywordIds = await getMovieKeywordIds(movie.id);
+
       // post-filter: 除外キーワードを含む映画を保存しない
-      if (await hasExcludedKeyword(movie.id)) {
+      if (containsExcludedKeyword(keywordIds)) {
         result.skipped++;
         continue;
       }
 
-      // post-filter: ライブビューイング・コンサート映像・舞台中継を保存しない。
-      // 同期判定の isStageBroadcast を先に通し、TMDbへの問い合わせを省く
-      if (isStageBroadcast(movie) || (await isConcertFilm(movie))) {
+      // post-filter: ライブビューイング・コンサート映像・舞台中継・格闘技興行を
+      // 保存しない。同期判定の isStageBroadcast / isFightEvent を先に通し、
+      // TMDbへの問い合わせを伴う isConcertFilm の対象を減らす
+      if (
+        isStageBroadcast(movie) ||
+        isFightEvent(keywordIds, movie.title) ||
+        (await isConcertFilm(movie))
+      ) {
         result.skipped++;
         continue;
       }

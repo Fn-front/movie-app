@@ -9,8 +9,12 @@ jest.mock('@supabase/supabase-js', () => ({
 
 jest.mock('@/lib/tmdb/tmdb', () => ({
   getNowPlayingMovies: jest.fn(),
-  hasExcludedKeyword: jest.fn(),
   getMovieKeywordIds: jest.fn().mockResolvedValue([]),
+  // 純粋関数なので実装と同じ判定を置く（本体のテストは tmdb.test.ts 側）
+  containsExcludedKeyword: (ids: number[]) =>
+    ids.some((id) =>
+      [155477, 190370, 10053, 445, 260863, 198385, 161919, 159551].includes(id),
+    ),
 }));
 
 import { createClient } from '@supabase/supabase-js';
@@ -20,11 +24,7 @@ import {
   EXCLUDED_GENRE_IDS,
   MUSIC_GENRE_ID,
 } from '@/constants/movies';
-import {
-  getMovieKeywordIds,
-  getNowPlayingMovies,
-  hasExcludedKeyword,
-} from '@/lib/tmdb/tmdb';
+import { getMovieKeywordIds, getNowPlayingMovies } from '@/lib/tmdb/tmdb';
 import type { Movie } from '@/lib/types';
 import { syncNowPlayingMovies } from './syncNowPlayingMovies';
 import type { NowPlayingSyncResult } from './syncNowPlayingMovies';
@@ -307,7 +307,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       // 別release_type に同じIDが存在する状況
       const supabaseMock = createSupabaseMock({ existingOtherTypeIds: [100] });
@@ -331,7 +331,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -357,7 +357,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(true);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([155477]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -385,7 +385,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -394,8 +394,9 @@ describe('syncNowPlayingMovies', () => {
 
       expect(result.skipped).toBe(1);
       expect(result.upserted).toBe(0);
-      // タイトルだけで判定できるためキーワードは問い合わせない
-      expect(getMovieKeywordIds).not.toHaveBeenCalled();
+      // 除外キーワード判定と興行判定でキーワードを共有するため、
+      // 問い合わせは1作品につき1回で済む（isConcertFilm 用に再取得しない）
+      expect(getMovieKeywordIds).toHaveBeenCalledTimes(1);
     });
 
     it('「舞台」を含むだけの通常作品は保存する', async () => {
@@ -413,7 +414,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -441,7 +442,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -450,8 +451,9 @@ describe('syncNowPlayingMovies', () => {
 
       expect(result.skipped).toBe(1);
       expect(result.upserted).toBe(0);
-      // タイトルで判定できるためキーワードは問い合わせない
-      expect(getMovieKeywordIds).not.toHaveBeenCalled();
+      // 除外キーワード判定と興行判定でキーワードを共有するため、
+      // 問い合わせは1作品につき1回で済む（isConcertFilm 用に再取得しない）
+      expect(getMovieKeywordIds).toHaveBeenCalledTimes(1);
     });
 
     it('concert系キーワードを持つ作品をスキップする', async () => {
@@ -469,7 +471,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
       (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([
         CONCERT_KEYWORD_IDS[0],
       ]);
@@ -498,7 +500,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
       (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([165194]);
 
       const supabaseMock = createSupabaseMock({});
@@ -523,7 +525,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -549,6 +551,54 @@ describe('syncNowPlayingMovies', () => {
       ).not.toHaveProperty('is_now_playing');
     });
 
+    it('格闘技興行を保存しない', async () => {
+      setValidEnv();
+
+      // 実測: RIZIN 55 は combat sports / jmma / jkick を持つ
+      const movie = createMockMovie({ id: 1747474, title: 'RIZIN 55' });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (getMovieKeywordIds as jest.Mock).mockResolvedValue([]);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValue([192790]);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(result.upserted).toBe(0);
+      expect(result.skipped).toBe(1);
+      expect(supabaseMock.rpcMock).not.toHaveBeenCalled();
+    });
+
+    it('格闘技を扱う劇映画は保存する', async () => {
+      setValidEnv();
+
+      // 実測: 『ウォーリアー』は mma を持つが興行ではない
+      const movie = createMockMovie({ id: 59440, title: 'ウォーリアー' });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (getMovieKeywordIds as jest.Mock).mockResolvedValue([]);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValue([9917]);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(result.upserted).toBe(1);
+    });
+
     it('upsert_movie_cache に original_language を渡す', async () => {
       setValidEnv();
 
@@ -560,7 +610,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -583,7 +633,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({
         upsertError: { message: 'duplicate key violation' },
@@ -611,7 +661,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const updateMock = jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
@@ -680,9 +730,9 @@ describe('syncNowPlayingMovies', () => {
         total_results: 2,
         results: [movie1, movie2],
       });
-      (hasExcludedKeyword as jest.Mock)
+      (getMovieKeywordIds as jest.Mock)
         .mockRejectedValueOnce(new Error('API rate limit exceeded'))
-        .mockResolvedValueOnce(false);
+        .mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -706,7 +756,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockRejectedValueOnce('string error');
+      (getMovieKeywordIds as jest.Mock).mockRejectedValueOnce('string error');
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -739,9 +789,9 @@ describe('syncNowPlayingMovies', () => {
           total_results: 2,
           results: [movie2],
         });
-      (hasExcludedKeyword as jest.Mock)
-        .mockResolvedValueOnce(false)
-        .mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -785,7 +835,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -815,7 +865,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);
@@ -838,7 +888,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({
         upsertError: { message: 'rpc failed' },
@@ -865,7 +915,7 @@ describe('syncNowPlayingMovies', () => {
         total_results: 1,
         results: [movie],
       });
-      (hasExcludedKeyword as jest.Mock).mockResolvedValueOnce(false);
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({});
       (createClient as jest.Mock).mockReturnValue(supabaseMock);

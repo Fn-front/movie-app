@@ -177,4 +177,57 @@ describe('FavoriteList', () => {
 
     expect(mockOnClick).toHaveBeenCalledWith(100);
   });
+
+  // 先頭タイルは LCP 要素になりうるため即時読み込みにする。
+  // 全件を即時にすると遅延読み込みが効かなくなるので、境界も確認する
+  describe('ポスターの読み込み優先度', () => {
+    const manyFavorites: FavoriteItem[] = Array.from(
+      { length: 14 },
+      (_, index) => ({
+        id: `fav-many-${index + 1}`,
+        tmdb_movie_id: 1000 + index,
+        title: `映画${index + 1}`,
+        poster_path: `/poster-${index + 1}.jpg`,
+        release_date: '2026-01-01',
+        rating: 8,
+        added_at: '2026-01-10T00:00:00Z',
+      }),
+    );
+
+    const renderList = () =>
+      render(
+        <FavoriteList
+          favorites={manyFavorites}
+          isLoading={false}
+          onFavoriteToggle={mockOnFavoriteToggle}
+        />,
+      );
+
+    it('先頭タイルのポスターは即時読み込みになる', () => {
+      renderList();
+
+      expect(screen.getByAltText('映画1のポスター')).toHaveAttribute(
+        'loading',
+        'eager',
+      );
+    });
+
+    it('上限（12件目）までは即時読み込みになる', () => {
+      renderList();
+
+      expect(screen.getByAltText('映画12のポスター')).toHaveAttribute(
+        'loading',
+        'eager',
+      );
+    });
+
+    it('上限を超えたタイルは遅延読み込みのまま', () => {
+      renderList();
+
+      expect(screen.getByAltText('映画13のポスター')).toHaveAttribute(
+        'loading',
+        'lazy',
+      );
+    });
+  });
 });

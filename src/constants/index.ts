@@ -25,6 +25,7 @@ export * from './tmdb';
 export * from './eiga';
 export * from './cron';
 export * from './awards';
+export * from './awardSync';
 export * from './navigation';
 export * from './ui';
 export * from './strings';

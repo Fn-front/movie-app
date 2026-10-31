@@ -425,6 +425,35 @@ describe('TMDb APIクライアント', () => {
     });
   });
 
+  describe('isTmdbNotFoundError', () => {
+    it('レスポンスが404のエラーをtrueと判定する', () => {
+      const { isTmdbNotFoundError } = require('./tmdb');
+
+      expect(isTmdbNotFoundError({ response: { status: 404 } })).toBe(true);
+    });
+
+    it('404以外のHTTPエラーはfalseを返す', () => {
+      const { isTmdbNotFoundError } = require('./tmdb');
+
+      expect(isTmdbNotFoundError({ response: { status: 500 } })).toBe(false);
+      expect(isTmdbNotFoundError({ response: { status: 429 } })).toBe(false);
+    });
+
+    it('レスポンスを持たないエラー（ネットワーク断等）はfalseを返す', () => {
+      const { isTmdbNotFoundError } = require('./tmdb');
+
+      expect(isTmdbNotFoundError(new Error('socket hang up'))).toBe(false);
+    });
+
+    it('nullやプリミティブはfalseを返す', () => {
+      const { isTmdbNotFoundError } = require('./tmdb');
+
+      expect(isTmdbNotFoundError(null)).toBe(false);
+      expect(isTmdbNotFoundError(undefined)).toBe(false);
+      expect(isTmdbNotFoundError('404')).toBe(false);
+    });
+  });
+
   describe('getMovieCacheStats', () => {
     const mockStatsResponse = {
       data: {

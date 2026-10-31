@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { BATCH_UPDATE_SIZE } from '@/constants/movies';
 import { hasExcludedGenre } from '@/lib/movies/genreFilter';
-import { getMovieCacheStats } from '@/lib/tmdb/tmdb';
+import { getMovieCacheStats, isTmdbNotFoundError } from '@/lib/tmdb/tmdb';
 
 /**
  * 映画ID取得時の1ページあたり件数
@@ -24,6 +24,8 @@ export interface BatchUpdateResult {
   updated: number;
   /** 除外ジャンルに該当して削除した行数 */
   removed: number;
+  /** TMDbから消えていた（404）ため削除した行数 */
+  removedNotFound: number;
   /** エラーメッセージ */
   errors: string[];
 }
@@ -49,6 +51,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
     total: 0,
     updated: 0,
     removed: 0,
+    removedNotFound: 0,
     errors: [],
   };
 
@@ -142,6 +145,30 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
           result.updated += matchingRowCount;
         }
       } catch (error) {
+        // TMDbは映画でないエントリ（ゲームのOP映像、記念映像など）を後から
+        // 削除する。消えた作品を残しておくと、詳細を開けないまま一覧に出続け、
+        // さらに毎日同じ404エラーを errors に積み続ける。ここで取り除く。
+        //
+        // 一時障害（429 / 503 / 504）では消さない。リトライ後もなお失敗した
+        // ものを消すと、TMDb側の不調だけでキャッシュが削られてしまう。
+        if (isTmdbNotFoundError(error)) {
+          const matchingRowCount = rows.filter(
+            (row) => row.id === movieId,
+          ).length;
+
+          const { error: deleteError } = await supabase
+            .from('movie_cache')
+            .delete()
+            .eq('id', movieId);
+
+          if (deleteError) {
+            result.errors.push(`ID ${movieId}: ${deleteError.message}`);
+          } else {
+            result.removedNotFound += matchingRowCount;
+          }
+          continue;
+        }
+
         const message =
           error instanceof Error ? error.message : 'Unknown error';
         result.errors.push(`ID ${movieId}: ${message}`);

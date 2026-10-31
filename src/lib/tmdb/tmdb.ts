@@ -9,6 +9,7 @@ import {
   EXCLUDED_GENRES_PARAM,
   EXCLUDED_KEYWORD_IDS,
   EXCLUDED_KEYWORDS_PARAM,
+  HTTP_STATUS,
   PAGINATION,
   PERSON_NON_ACTING_CHARACTER_PATTERN,
   TMDB_DIGITAL_RELEASE_TYPE,
@@ -224,6 +225,28 @@ export async function getMovieDismissSignals(
  * @returns 同期に必要な指標。`genres` が無ければ空配列、`vote_count` が無ければ0
  * @throws TMDbへの問い合わせに失敗した場合
  */
+/**
+ * TMDbが「その作品は存在しない」と答えたエラーかを判定する
+ *
+ * TMDbは映画でないエントリ（ゲームのOP映像、記念映像など）を後から削除する。
+ * 削除された作品は `/movie/{id}` が404を返し続けるため、キャッシュから
+ * 取り除く必要がある。一時障害（429 / 503 / 504）と区別するために使う。
+ *
+ * axios に依存せずレスポンスの形だけを見る。`axios.isAxiosError` を使うと
+ * 呼び出し側のテストで axios のモックに合わせる必要が出るため。
+ *
+ * @param error - 捕捉したエラー
+ * @returns TMDbが404を返した場合true
+ */
+export function isTmdbNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { response?: { status?: number } }).response?.status ===
+      HTTP_STATUS.NOT_FOUND
+  );
+}
+
 export async function getMovieCacheStats(
   movieId: number | string,
 ): Promise<MovieCacheStats> {

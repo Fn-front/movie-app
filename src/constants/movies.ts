@@ -414,14 +414,35 @@ export type RegionGroupKey = (typeof REGION_GROUP_KEYS)[number];
 /**
  * 地域グループと原語（ISO 639-1）の対応
  *
- * TMDb は広東語を `cn`、北京語を `zh` と別コードで持つが、ALLOWED_LANGUAGES に
- * `cn` が無いため広東語作品はそもそも保存されていない。今回も追加しない。
+ * ALLOWED_LANGUAGES に載っている原語だけでは足りない。映画.com の iCal 同期は
+ * `requireLanguage: false` で言語チェックを行わない（フィードに載る時点で
+ * 日本公開が確定しているため）ので、許可リスト外の原語も movie_cache に入る。
+ * ここは「保存されうる原語」を基準に揃える。
+ *
+ * TMDb は広東語を ISO 639-1 の `zh` ではなく独自コード `cn` で返すため、
+ * 中華圏は両方を持つ必要がある（#881）。
  */
 export const REGION_LANGUAGE_GROUPS: Record<RegionGroupKey, readonly string[]> =
   {
     korea: ['ko'],
-    chinese: ['zh'],
-    thai_indian: ['th', 'hi', 'te', 'ta'],
+    chinese: [
+      'zh', // 北京語
+      'cn', // 広東語（TMDb 独自コード）
+    ],
+    // インド側は主要な映画産業を持つ言語に揃える。作品数が極小の言語まで
+    // 広げると線引きが曖昧になるため、実際に流通する範囲で区切る
+    thai_indian: [
+      'th', // タイ語
+      'hi', // ヒンディー語
+      'te', // テルグ語
+      'ta', // タミル語
+      'ml', // マラヤーラム語
+      'kn', // カンナダ語
+      'mr', // マラーティー語
+      'bn', // ベンガル語
+      'pa', // パンジャブ語
+      'gu', // グジャラート語
+    ],
   };
 
 /**

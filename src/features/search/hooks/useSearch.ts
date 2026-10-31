@@ -143,12 +143,19 @@ export function useSearch(): UseSearchReturn {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const storedSuggestions = useMemo(() => readStoredSuggestions(), [query]);
 
+  // keepPreviousDataにより、クエリ切替中はisLoadingがfalseのまま前クエリの結果が返る。
+  // この区間で0件と誤判定しないよう、現在のクエリの結果が確定していることを条件にする
+  const isResultSettled =
+    !searchQuery.isLoading &&
+    !searchQuery.isFetching &&
+    !searchQuery.isPlaceholderData;
+
   // 検索結果が0件かつsessionStorageに提案がない場合のみ原題提案APIを有効化
   // sessionStorageに提案がある = 提案クリックからの遷移なのでAI呼び出し不要
   // 未認証時はAI検索を無効化
   const hasNoResults =
     isAuthenticated &&
-    !searchQuery.isLoading &&
+    isResultSettled &&
     requestParams !== null &&
     movies.length === 0 &&
     storedSuggestions.length === 0;

@@ -2,8 +2,9 @@
  * 管理者発行アカウント E2Eテスト
  *
  * クリティカルユーザージャーニー:
+ * - admin はユーザーメニューからアカウント管理画面へ辿り着ける
  * - admin がアカウントを発行 → 一覧に出る
- * - 一般ユーザーは画面にもAPIにも到達できない
+ * - 一般ユーザーは導線が出ず、画面にもAPIにも到達できない
  * - 未認証はログインへ誘導される
  *
  * メール実送信は E2E_TEST_MODE のバイパスでスキップされる。
@@ -30,6 +31,17 @@ const MEMBER = {
   email: runScopedEmail('admin-accounts-member'),
   password: 'MemberPassw0rd!',
 };
+
+/**
+ * 導線の検証に使うビューポート。
+ *
+ * PC（サイドバーの UserMenu）と SP（MobileDrawer）の出し分けは
+ * `$breakpoint-lg: 1024px` の CSS メディアクエリだけで決まる
+ * （`appLayout.module.scss` / `mobileMenuButton.module.scss`）。
+ * 専用ユーザーを増やさずに済むよう、同じセッションの幅を変えて両方を見る。
+ */
+const DESKTOP_VIEWPORT = { width: 1280, height: 720 };
+const MOBILE_VIEWPORT = { width: 375, height: 812 };
 
 /**
  * 発行したアカウント名の控え。
@@ -119,6 +131,54 @@ test.describe('アカウント管理（admin）', () => {
     // 既にデータが入っているアカウントを渡すため、確定前に対象を明示する
     await expect(page.getByText('の設定リンクを再送します')).toBeVisible();
   });
+
+  /**
+   * ユーザーメニューからの導線（#868）
+   *
+   * 単体テスト（userMenu.test.tsx / mobileDrawer.test.tsx）は `useSession` を
+   * モックするため、`auth.ts` の JWT / session コールバックが role を落としても
+   * 通ってしまう。実セッションを通るここで、導線が実際に出ることを担保する。
+   */
+  test.describe('アカウント管理への導線', () => {
+    // 幅を変えたまま後続の describe へ渡さない
+    test.afterAll(async () => {
+      await session.page.setViewportSize(DESKTOP_VIEWPORT);
+    });
+
+    test('PC: ユーザーメニューからアカウント管理画面へ遷移できる', async () => {
+      const { page } = session;
+
+      await page.setViewportSize(DESKTOP_VIEWPORT);
+      await page.goto('/');
+      await page.getByRole('button', { name: /ユーザーメニュー/ }).click();
+
+      const item = page.getByRole('menuitem', { name: 'アカウント管理' });
+      await expect(item).toBeVisible();
+      await item.click();
+
+      await expect(page).toHaveURL(/\/admin\/accounts/);
+      await expect(
+        page.getByRole('heading', { name: 'アカウント管理' }),
+      ).toBeVisible();
+    });
+
+    test('SP: ドロワーからアカウント管理画面へ遷移できる', async () => {
+      const { page } = session;
+
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await page.goto('/');
+      await page.getByRole('button', { name: 'メニューを開く' }).click();
+
+      const item = page.getByRole('button', { name: 'アカウント管理' });
+      await expect(item).toBeVisible();
+      await item.click();
+
+      await expect(page).toHaveURL(/\/admin\/accounts/);
+      await expect(
+        page.getByRole('heading', { name: 'アカウント管理' }),
+      ).toBeVisible();
+    });
+  });
 });
 
 test.describe('アカウント管理（権限なし）', () => {
@@ -169,6 +229,45 @@ test.describe('アカウント管理（権限なし）', () => {
     });
 
     expect(status).toBe(403);
+  });
+
+  /**
+   * 導線を出さないことの確認（#868）
+   *
+   * 画面とAPIが塞がっていても、導線が見えていれば「押せるのに弾かれる」
+   * という体験になる。メニュー自体は開いていること（＝項目だけが無いこと）も
+   * 併せて確かめる
+   */
+  test.describe('アカウント管理への導線', () => {
+    test.afterAll(async () => {
+      await session.page.setViewportSize(DESKTOP_VIEWPORT);
+    });
+
+    test('PC: ユーザーメニューにアカウント管理が出ない', async () => {
+      const { page } = session;
+
+      await page.setViewportSize(DESKTOP_VIEWPORT);
+      await page.goto('/');
+      await page.getByRole('button', { name: /ユーザーメニュー/ }).click();
+
+      await expect(page.getByRole('menuitem', { name: '設定' })).toBeVisible();
+      await expect(
+        page.getByRole('menuitem', { name: 'アカウント管理' }),
+      ).toHaveCount(0);
+    });
+
+    test('SP: ドロワーにアカウント管理が出ない', async () => {
+      const { page } = session;
+
+      await page.setViewportSize(MOBILE_VIEWPORT);
+      await page.goto('/');
+      await page.getByRole('button', { name: 'メニューを開く' }).click();
+
+      await expect(page.getByRole('button', { name: '設定' })).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: 'アカウント管理' }),
+      ).toHaveCount(0);
+    });
   });
 });
 

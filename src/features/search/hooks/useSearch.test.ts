@@ -357,18 +357,48 @@ describe('useSearch', () => {
       sessionStorage.setItem(TITLE_SUGGESTION.STORAGE_KEY, value);
     }
 
-    it('提案クリック直後の遷移先では候補を引き継ぎ、提案APIを呼ばない', () => {
+    it('提案クリック直後の遷移先では残りの候補を引き継ぎ、提案APIを呼ばない', () => {
       storeSuggestionFor('Gojira', ['Gojira', 'Godzilla']);
       setupMocks({ query: 'Gojira' }, { data: emptyResult });
 
       const { result } = renderHook(() => useSearch());
 
-      expect(result.current.suggestions).toEqual(['Gojira', 'Godzilla']);
+      // クリック済みの'Gojira'は押しても同じURLなので選択肢から外す（#887）
+      expect(result.current.suggestions).toEqual(['Godzilla']);
       expect(lastSuggestionEnabled()).toBe(false);
       // 引き継ぎ対象なので保存値は残す（リロードしても候補が消えない）
       expect(
         sessionStorage.getItem(TITLE_SUGGESTION.STORAGE_KEY),
       ).not.toBeNull();
+    });
+
+    it('クリック済みの候補しか無い場合は候補を表示しない', () => {
+      storeSuggestionFor('Gojira', ['Gojira']);
+      setupMocks({ query: 'Gojira' }, { data: emptyResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual([]);
+    });
+
+    it('クリック済みを除いて0件になっても提案APIは呼ばない', () => {
+      // 除外後の件数で判定するとAIを呼び直してしまう（#824のコスト抑制が崩れる）
+      storeSuggestionFor('Gojira', ['Gojira']);
+      setupMocks({ query: 'Gojira' }, { data: emptyResult });
+
+      renderHook(() => useSearch());
+
+      expect(lastSuggestionEnabled()).toBe(false);
+    });
+
+    it('遷移先がヒットした場合もクリック済みの候補は表示しない', () => {
+      storeSuggestionFor('Gojira', ['Gojira', 'Godzilla']);
+      setupMocks({ query: 'Gojira' }, { data: hitResult });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.suggestions).toEqual(['Godzilla']);
+      expect(result.current.movies).toHaveLength(1);
     });
 
     it('別キーワードで0件になったら候補を表示せず、提案APIを有効化する', () => {

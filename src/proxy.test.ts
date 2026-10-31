@@ -380,6 +380,31 @@ describe('proxy', () => {
       expect(mockNextResponseNext).toHaveBeenCalled();
     });
 
+    // ADMIN_REQUIRED_ROUTES に足しただけで保護されることを固定する。
+    // 配列への追加漏れは画面を無防備にするが、型では検出できない
+    it('受賞作品の同期も admin 専用として保護される', () => {
+      const req = createMockRequest({
+        pathname: '/admin/awards',
+        auth: userAuth,
+      });
+
+      const response = proxy(req);
+
+      expect(response.headers.get('location')).toContain('/');
+      expect(response.headers.get('location')).not.toContain('/admin');
+    });
+
+    it('受賞作品の同期に admin はアクセスできる', () => {
+      const req = createMockRequest({
+        pathname: '/admin/awards',
+        auth: adminAuth,
+      });
+
+      proxy(req);
+
+      expect(mockNextResponseNext).toHaveBeenCalled();
+    });
+
     // 404 ではなくホームへ送る。存在を隠しても守りにならない
     // （APIを直接叩けば分かる）ため、素直にリダイレクトする
     it('一般ユーザーはホームへリダイレクトされる', () => {

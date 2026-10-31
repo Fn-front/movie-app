@@ -232,6 +232,43 @@ describe('UserMenu', () => {
       expect(mockPush).toHaveBeenCalledWith('/admin/accounts');
     });
 
+    it('adminロールのときメニューに「受賞作品の同期」が表示される', async () => {
+      mockUseSession.mockReturnValue(sessionWithRole('admin'));
+      const user = userEvent.setup();
+      render(<UserMenu />);
+
+      await openMenu(user);
+
+      expect(
+        screen.getByRole('menuitem', { name: /受賞作品の同期/ }),
+      ).toBeInTheDocument();
+    });
+
+    it('adminロールで「受賞作品の同期」クリックで/admin/awardsに遷移する', async () => {
+      mockUseSession.mockReturnValue(sessionWithRole('admin'));
+      const user = userEvent.setup();
+      render(<UserMenu />);
+
+      await openMenu(user);
+      await user.click(
+        screen.getByRole('menuitem', { name: /受賞作品の同期/ }),
+      );
+
+      expect(mockPush).toHaveBeenCalledWith('/admin/awards');
+    });
+
+    it('一般ユーザーのときは「受賞作品の同期」が表示されない', async () => {
+      mockUseSession.mockReturnValue(sessionWithRole('user'));
+      const user = userEvent.setup();
+      render(<UserMenu />);
+
+      await openMenu(user);
+
+      expect(
+        screen.queryByRole('menuitem', { name: /受賞作品の同期/ }),
+      ).not.toBeInTheDocument();
+    });
+
     it('一般ユーザーのときは「アカウント管理」が表示されない', async () => {
       mockUseSession.mockReturnValue(sessionWithRole('user'));
       const user = userEvent.setup();

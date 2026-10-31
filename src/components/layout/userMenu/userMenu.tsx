@@ -44,6 +44,7 @@ export const UserMenu = memo(function UserMenu() {
   const {
     handleNavigateToSettings,
     handleNavigateToAdminAccounts,
+    handleNavigateToAdminAwardSync,
     handleLogout,
   } = useUserMenu();
   const { resolvedTheme, toggleTheme } = useTheme();
@@ -143,20 +144,37 @@ export const UserMenu = memo(function UserMenu() {
           </DropdownMenuPrimitive.Item>
 
           {isAdmin && (
-            <DropdownMenuPrimitive.Item
-              className={styles.c_user_menu__item}
-              onSelect={handleNavigateToAdminAccounts}
-            >
-              <span className={styles.c_user_menu__item_icon}>
-                <IoShieldCheckmarkOutline />
-              </span>
-              <span className={styles.c_user_menu__item_label}>
-                {MENU_LABELS.ADMIN_ACCOUNTS}
-              </span>
-              <span className={styles.c_user_menu__item_arrow}>
-                <IoChevronForward />
-              </span>
-            </DropdownMenuPrimitive.Item>
+            <>
+              <DropdownMenuPrimitive.Item
+                className={styles.c_user_menu__item}
+                onSelect={handleNavigateToAdminAccounts}
+              >
+                <span className={styles.c_user_menu__item_icon}>
+                  <IoShieldCheckmarkOutline />
+                </span>
+                <span className={styles.c_user_menu__item_label}>
+                  {MENU_LABELS.ADMIN_ACCOUNTS}
+                </span>
+                <span className={styles.c_user_menu__item_arrow}>
+                  <IoChevronForward />
+                </span>
+              </DropdownMenuPrimitive.Item>
+
+              <DropdownMenuPrimitive.Item
+                className={styles.c_user_menu__item}
+                onSelect={handleNavigateToAdminAwardSync}
+              >
+                <span className={styles.c_user_menu__item_icon}>
+                  <IoShieldCheckmarkOutline />
+                </span>
+                <span className={styles.c_user_menu__item_label}>
+                  {MENU_LABELS.ADMIN_AWARD_SYNC}
+                </span>
+                <span className={styles.c_user_menu__item_arrow}>
+                  <IoChevronForward />
+                </span>
+              </DropdownMenuPrimitive.Item>
+            </>
           )}
 
           <DropdownMenuPrimitive.CheckboxItem

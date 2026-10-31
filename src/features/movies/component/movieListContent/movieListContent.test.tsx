@@ -570,7 +570,7 @@ describe('MovieListContent', () => {
   // 先頭タイルは LCP 要素になりうるため即時読み込みにする。
   // 全件を即時にすると遅延読み込みが効かなくなるので、境界も確認する
   describe('ポスターの読み込み優先度', () => {
-    const movies = Array.from({ length: 8 }, (_, index) =>
+    const movies = Array.from({ length: 14 }, (_, index) =>
       createMockMovie({ id: index + 1, title: `映画${index + 1}` }),
     );
 
@@ -591,10 +591,10 @@ describe('MovieListContent', () => {
       );
     });
 
-    it('上限（6件目）までは即時読み込みになる', () => {
+    it('上限（12件目）までは即時読み込みになる', () => {
       renderList();
 
-      expect(screen.getByAltText('映画6のポスター')).toHaveAttribute(
+      expect(screen.getByAltText('映画12のポスター')).toHaveAttribute(
         'loading',
         'eager',
       );
@@ -603,7 +603,7 @@ describe('MovieListContent', () => {
     it('上限を超えたタイルは遅延読み込みのまま', () => {
       renderList();
 
-      expect(screen.getByAltText('映画7のポスター')).toHaveAttribute(
+      expect(screen.getByAltText('映画13のポスター')).toHaveAttribute(
         'loading',
         'lazy',
       );

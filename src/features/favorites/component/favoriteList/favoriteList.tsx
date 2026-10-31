@@ -62,13 +62,14 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
       emptyMessage={EMPTY_MESSAGES.FAVORITES}
       skeletonCount={DISPLAY_LIMITS.SKELETON_SMALL}
     >
-      {favorites.map((item) => (
+      {favorites.map((item, index) => (
         <FavoriteTile
           key={item.id}
           item={item}
           onFavoriteToggle={onFavoriteToggle}
           favoriteDisabled={isFavoriteProcessing?.(item.tmdb_movie_id) ?? false}
           onClick={onClick}
+          eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
         />
       ))}
     </MovieGridContainer>
@@ -89,6 +90,13 @@ interface FavoriteTileProps {
   favoriteDisabled: boolean;
   /** タイルクリック時のコールバック */
   onClick?: (tmdbMovieId: number) => void;
+  /**
+   * ポスターを遅延せず即時読み込みするか（既定: false）
+   *
+   * フォールド上のタイルは LCP 要素になりうる。先頭数件にだけ渡すこと
+   * （MovieTile / WatchlistTile の同名 prop と同じ考え方）
+   */
+  eager?: boolean;
 }
 
 /**
@@ -99,6 +107,7 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
   onFavoriteToggle,
   favoriteDisabled,
   onClick,
+  eager = false,
 }) {
   const posterUrl = getTMDbPosterUrl(item.poster_path);
 
@@ -146,6 +155,7 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
             alt={`${item.title}のポスター`}
             width={IMAGE_SIZES.POSTER.WIDTH}
             height={IMAGE_SIZES.POSTER.HEIGHT}
+            loading={eager ? 'eager' : 'lazy'}
             className={styles.c_favorite_tile__image}
           />
         ) : (

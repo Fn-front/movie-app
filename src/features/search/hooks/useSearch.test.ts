@@ -26,7 +26,7 @@ jest.mock('@/lib/api/search/search', () => ({
 }));
 jest.mock('@/hooks/useToast');
 jest.mock('./useTitleSuggestion', () => ({
-  useTitleSuggestion: () => ({ suggestions: [], isLoading: false }),
+  useTitleSuggestion: jest.fn(() => ({ suggestions: [], isLoading: false })),
 }));
 
 jest.mock('@tanstack/react-query', () => {
@@ -39,6 +39,7 @@ jest.mock('@tanstack/react-query', () => {
 });
 
 import { useQuery } from '@tanstack/react-query';
+import { useTitleSuggestion } from './useTitleSuggestion';
 
 const mockUseSearchParams = useSearchParams as jest.MockedFunction<
   typeof useSearchParams
@@ -46,6 +47,15 @@ const mockUseSearchParams = useSearchParams as jest.MockedFunction<
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 const mockUseQuery = useQuery as jest.MockedFunction<typeof useQuery>;
 const mockUseToast = useToast as jest.MockedFunction<typeof useToast>;
+const mockUseTitleSuggestion = useTitleSuggestion as jest.MockedFunction<
+  typeof useTitleSuggestion
+>;
+
+/** useTitleSuggestionに渡されたenabled（最後の呼び出し） */
+function lastSuggestionEnabled(): boolean | undefined {
+  const calls = mockUseTitleSuggestion.mock.calls;
+  return calls[calls.length - 1]?.[1];
+}
 
 // --- Helpers ---
 const mockPush = jest.fn();
@@ -76,15 +86,32 @@ function setupMocks(
   mockUseQuery.mockReturnValue({
     data: undefined,
     isLoading: false,
+    isFetching: false,
+    isPlaceholderData: false,
     isError: false,
     error: null,
     ...queryResult,
   } as unknown as ReturnType<typeof useQuery>);
 }
 
+/** 検索結果0件のレスポンス */
+const emptyResult = {
+  success: true as const,
+  data: {
+    movies: [],
+    pagination: {
+      page: 1,
+      totalPages: 0,
+      totalResults: 0,
+      isServerFiltered: false,
+    },
+  },
+};
+
 describe('useSearch', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    sessionStorage.clear();
   });
 
   describe('URLパラメータの読み取り', () => {
@@ -211,6 +238,81 @@ describe('useSearch', () => {
         expect.stringContaining('genre=28'),
       );
       expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('page=2'));
+    });
+  });
+
+  describe('原題提案の有効化判定', () => {
+    it('検索結果が確定して0件の場合は提案APIを有効化する', () => {
+      setupMocks({ query: '存在しない映画' }, { data: emptyResult });
+
+      renderHook(() => useSearch());
+
+      expect(mockUseTitleSuggestion).toHaveBeenCalledWith(
+        '存在しない映画',
+        true,
+      );
+    });
+
+    it('前クエリの結果が表示されている間（isPlaceholderData）は提案APIを有効化しない', () => {
+      // 0件だったキーワードAの結果を保持したまま、キーワードBを検索し始めた状態
+      setupMocks(
+        { query: 'ヒットするキーワード' },
+        { data: emptyResult, isFetching: true, isPlaceholderData: true },
+      );
+
+      renderHook(() => useSearch());
+
+      expect(lastSuggestionEnabled()).toBe(false);
+    });
+
+    it('再取得中（isFetching）は提案APIを有効化しない', () => {
+      setupMocks(
+        { query: 'テスト' },
+        { data: emptyResult, isFetching: true, isPlaceholderData: false },
+      );
+
+      renderHook(() => useSearch());
+
+      expect(lastSuggestionEnabled()).toBe(false);
+    });
+
+    it('初回ローディング中（isLoading）は提案APIを有効化しない', () => {
+      setupMocks(
+        { query: 'テスト' },
+        { data: undefined, isLoading: true, isFetching: true },
+      );
+
+      renderHook(() => useSearch());
+
+      expect(lastSuggestionEnabled()).toBe(false);
+    });
+
+    it('検索結果がある場合は提案APIを有効化しない', () => {
+      const hitResult = {
+        success: true as const,
+        data: {
+          movies: [{ id: 1, title: 'テスト映画' }],
+          pagination: {
+            page: 1,
+            totalPages: 1,
+            totalResults: 1,
+            isServerFiltered: false,
+          },
+        },
+      };
+      setupMocks({ query: 'テスト' }, { data: hitResult });
+
+      renderHook(() => useSearch());
+
+      expect(lastSuggestionEnabled()).toBe(false);
+    });
+
+    it('検索条件がない場合は提案APIを有効化しない', () => {
+      setupMocks({});
+
+      renderHook(() => useSearch());
+
+      expect(lastSuggestionEnabled()).toBe(false);
     });
   });
 });

@@ -62,6 +62,18 @@ export interface MovieTileProps {
    * 呼び出し側が明示的に有効化する
    */
   preferDigitalReleaseDate?: boolean;
+  /**
+   * ポスターを遅延せず即時読み込みするか（既定: false）
+   *
+   * フォールド上のタイルは LCP 要素になりうるため、遅延読み込みのままだと
+   * 表示開始が遅れる。グリッドは `auto-fill` で列数がビューポート幅により
+   * 変わり、どのタイルが LCP になるかが一意に定まらないため、`preload`
+   * ではなく `loading="eager"` を使う（next/image のドキュメントが
+   * 「LCP 候補が複数あるときは preload を使わない」と明示している）。
+   *
+   * 後続タイルの遅延読み込みを潰さないよう、**先頭数件にだけ**渡すこと。
+   */
+  eager?: boolean;
 }
 
 /**
@@ -80,6 +92,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   dismissDisabled = false,
   headingLevel = 3,
   preferDigitalReleaseDate = false,
+  eager = false,
 }) {
   const Title = `h${headingLevel}` as const;
 
@@ -148,6 +161,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             alt={`${movie.title}のポスター`}
             width={IMAGE_SIZES.POSTER.WIDTH}
             height={IMAGE_SIZES.POSTER.HEIGHT}
+            loading={eager ? 'eager' : 'lazy'}
             className={styles.c_movie_tile__image}
           />
         ) : (

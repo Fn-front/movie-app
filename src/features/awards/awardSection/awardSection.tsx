@@ -68,10 +68,11 @@ export const AwardSection = memo<AwardSectionProps>(function AwardSection({
         ))}
       </nav>
       <div className={styles.c_award_section__categories}>
-        {award.categories.map((category) => (
+        {award.categories.map((category, index) => (
           <AwardCategorySection
             key={category.category}
             category={category}
+            isFirstSection={index === 0}
             awardName={award.awardName}
             onMovieClick={onMovieClick}
             isInWatchlist={isInWatchlist}

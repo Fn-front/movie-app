@@ -12,6 +12,7 @@ import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/mov
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
+import { DISPLAY_LIMITS } from '@/constants';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
 export interface MovieGridProps {
@@ -56,12 +57,13 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
         hasNextPage={hasNextPage}
         fetchNextPage={fetchNextPage}
       >
-        {movies.map((movie) => (
+        {movies.map((movie, index) => (
           <MovieTile
             key={movie.id}
             movie={movie}
             genres={genres}
             headingLevel={2}
+            eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
             onClick={onMovieClick}
             isInWatchlist={isInWatchlist(movie.id)}
             onWatchlistToggle={toggleWatchlist}

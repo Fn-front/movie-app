@@ -9,7 +9,7 @@ import { memo, useMemo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
-import { NOW_SHOWING_SECTION_TITLE } from '@/constants';
+import { NOW_SHOWING_SECTION_TITLE, DISPLAY_LIMITS } from '@/constants';
 import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import type { NowShowingMovie } from '@/lib/types';
 import { nowShowingToMovieCacheItem } from '@/utils/toMovieCacheItem';
@@ -75,7 +75,11 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
                   <span className={styles.c_now_showing_movie_list__rank}>
                     {index + 1}
                   </span>
-                  <MovieTile movie={movie} onClick={handleMovieClick} />
+                  <MovieTile
+                    movie={movie}
+                    onClick={handleMovieClick}
+                    eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
+                  />
                 </div>
               ))}
             </div>

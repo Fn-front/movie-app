@@ -66,4 +66,12 @@ export const DISPLAY_LIMITS = {
   SKELETON_SMALL: 8,
   /** 興味なし映画の初期表示数 */
   DISMISSED_INITIAL: 10,
+  /**
+   * ポスターを即時読み込みするタイル数（一覧の先頭から）
+   *
+   * グリッドは `minmax(180px, 1fr)` の `auto-fill` なので、広めのデスクトップで
+   * おおよそ1行ぶん。これを超えると後続タイルの遅延読み込みが効かなくなるため、
+   * 増やす場合はフォールド上に収まるかを確認すること。
+   */
+  EAGER_TILE_MAX: 6,
 } as const;

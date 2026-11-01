@@ -79,6 +79,28 @@ UI でも「レンタル」の一語で足りるため。分けても表示に�
 `getJpStreamingAvailability` は `flatrate` / `rent` / `buy` を別々に返すので、
 `rent` と `buy` の和集合を取って `paid_provider_ids` に入れる処理は cron 側で行う。
 
+#### RLS と権限
+
+`.claude/rules/supabase-db.md` に従い、`CREATE TABLE` と同じマイグレーションで
+RLS を有効化し、GRANT を明示する。GRANT が無いと PostgREST は `42501` を返す。
+
+```sql
+ALTER TABLE public.movie_streaming_status ENABLE ROW LEVEL SECURITY;
+
+-- 作品単位の公開情報であり、ユーザーに紐づかない。
+-- 書き込みは cron と API（service role）だけが行う
+GRANT SELECT ON public.movie_streaming_status TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.movie_streaming_status TO service_role;
+```
+
+`anon` には付与しない。未認証で見る画面にこの情報は出ないため。
+
+RLS ポリシーは `authenticated` の SELECT のみを許可する。ユーザー固有のデータでは
+ないので `user_id` による絞り込みは無く、行全体を読める形にする。
+
+なお実際の読み取りは `get_watchlist_sorted` RPC 経由（service role）で行うため、
+`authenticated` の SELECT は PostgREST から直接引く将来の用途に備えた最小の付与である。
+
 #### `movie_cache` に相乗りしない理由
 
 1. `movie_cache` の主キーは `(id, release_type)` で、ウォッチリストの作品は release_type が定まらない
@@ -287,18 +309,38 @@ streaming_notice_scope TEXT NOT NULL DEFAULT 'any'  -- 'any' | 'flatrate'
 
 カバレッジは全指標 80% 以上を維持する。
 
+## スキーマ変更の手順
+
+テーブル追加・列追加・RPC の差し替えはすべて `supabase migration new <name>` で
+マイグレーション化する（ダッシュボードでの直接変更は禁止）。
+
+適用後は必ず型を再生成する。
+
+```bash
+npx supabase db push
+npx supabase gen types typescript --project-id <project-id> > src/types/database.types.ts
+npx prettier --write src/types/database.types.ts
+```
+
+生成物は Prettier 未適用の形で出るため、整形まで含めて1手順とする
+（整形を忘れると CI の Prettier Check が落ちる）。
+
+RPC（`get_watchlist_sorted`）は引数が増えるため、`CREATE OR REPLACE` では
+置き換えられない。`DROP FUNCTION` してから作り直し、**権限を明示的に書き直す**
+（`DROP` → `CREATE` では既定付与が復活しうる）。
+
 ## 実装の分割
 
 2つの PR に分ける。
 
 **PR1: 追跡基盤 + 優先表示**
-マイグレーション（テーブル）、cron、RPC の並び替え、API レスポンス拡張、
-カードのバッジとロゴ。設定は作らず `any` 固定で動かす。
+マイグレーション（`movie_streaming_status` + RLS/GRANT、`get_watchlist_sorted` の差し替え）、
+cron、API レスポンス拡張、カードのバッジとロゴ。設定は作らず `any` 固定で動かす。
 **ここまでで機能として完結する。**
 
 **PR2: ユーザー設定 + 導線**
-`users` の列追加、設定 API と設定ページ、Tooltip コンポーネント、
-ウォッチリストの ⓘ 導線。
+`users.streaming_notice_scope` の列追加、`get_watchlist_sorted` への引数追加、
+設定 API と設定ページ、Tooltip コンポーネント、ウォッチリストの ⓘ 導線。
 
 ## 関連
 

@@ -77,9 +77,14 @@ const SyncForm = memo(function SyncForm({
         fullWidth
         required
       />
+      {/*
+        日本語は JSX の改行が半角スペースになって語中で割れるため、
+        文字列として渡して折り返しをブラウザに任せる
+      */}
       <p className={styles.c_awards_sync__hint}>
-        指定した賞・年のデータを取り直します。取得できなかった場合、既存の
-        データは変更されません。
+        {
+          '指定した賞・年のデータを取り直します。取得できなかった場合、既存のデータは変更されません。'
+        }
       </p>
       <Button type='submit' disabled={isSubmitting || !year}>
         {isSubmitting ? '開始中...' : '同期を開始'}

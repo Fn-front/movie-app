@@ -5,6 +5,7 @@
 'use client';
 
 import { memo, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
@@ -21,8 +22,14 @@ import { awardMovieToMovieCacheItem } from '@/utils/toMovieCacheItem';
 import styles from './awardsPage.module.scss';
 
 export const AwardsPage = memo(function AwardsPage() {
+  // 管理画面の手動同期から「受賞作品ページで確認」で遷移したときだけ付く。
+  // /api/awards は public キャッシュを返すため、これを中継しないと
+  // 同期直後でもブラウザが古い結果を見せる（実測で transferSize=0 を確認）
+  const searchParams = useSearchParams();
+  const cacheBuster = searchParams.get('t') ?? undefined;
+
   const { data, isLoading, isError, selectedYear, handleYearChange } =
-    useAwards();
+    useAwards(cacheBuster);
 
   const {
     modalState: favoriteModalState,

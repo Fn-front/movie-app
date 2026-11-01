@@ -58,7 +58,14 @@ export const recommendationKeys = {
 
 export const awardKeys = {
   all: ['awards'] as const,
-  year: (year: number) => ['awards', year] as const,
+  /**
+   * @param cacheBuster 手動同期直後の取り直し用。キーに含めないと
+   *   React Query が前回の結果を返して古いデータが残る
+   */
+  year: (year: number, cacheBuster?: string) =>
+    cacheBuster
+      ? (['awards', year, cacheBuster] as const)
+      : (['awards', year] as const),
 };
 
 export const theaterKeys = {

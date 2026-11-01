@@ -4,6 +4,12 @@ import { AwardsPage } from './awardsPage';
 
 // --- Mocks ---
 
+/** URL の ?t= を差し替えるための可変値（各テストで入れ替える） */
+let mockSearchParams = new URLSearchParams();
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => mockSearchParams,
+}));
+
 jest.mock('@/components/ui/loading/loading', () => ({
   Loading: ({ label }: { label?: string }) => (
     <div data-testid='loading'>{label}</div>
@@ -110,8 +116,13 @@ const mockUseAwardsReturn = {
   handleYearChange: jest.fn(),
 };
 
+/** useAwards に渡された cacheBuster を検証するために控える */
+const useAwardsCalls: (string | undefined)[] = [];
 jest.mock('@/features/awards/hooks/useAwards', () => ({
-  useAwards: () => mockUseAwardsReturn,
+  useAwards: (cacheBuster?: string) => {
+    useAwardsCalls.push(cacheBuster);
+    return mockUseAwardsReturn;
+  },
 }));
 
 jest.mock('@/components/ui/select/select', () => ({
@@ -192,6 +203,31 @@ describe('AwardsPage', () => {
     mockUseAwardsReturn.isLoading = false;
     mockUseAwardsReturn.isError = false;
     mockUseAwardsReturn.selectedYear = 2026;
+    mockSearchParams = new URLSearchParams();
+    useAwardsCalls.length = 0;
+  });
+
+  /**
+   * /api/awards は public キャッシュを返すため、同じURLだとブラウザが
+   * キャッシュから返す（実測で transferSize=0 を確認）。管理画面の手動同期から
+   * 遷移したときだけ ?t= を中継して取り直させる。
+   */
+  describe('キャッシュバスターの中継', () => {
+    it('?t= があれば useAwards へ渡す', () => {
+      mockSearchParams = new URLSearchParams({
+        t: '2026-11-01T00:05:00.000Z',
+      });
+
+      render(<AwardsPage />);
+
+      expect(useAwardsCalls[0]).toBe('2026-11-01T00:05:00.000Z');
+    });
+
+    it('?t= が無ければ undefined を渡す（通常の閲覧ではキャッシュを活かす）', () => {
+      render(<AwardsPage />);
+
+      expect(useAwardsCalls[0]).toBeUndefined();
+    });
   });
 
   it('ローディング中にLoadingが表示される', () => {

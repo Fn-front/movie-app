@@ -105,6 +105,8 @@ const SyncForm = memo(function SyncForm({
   );
 });
 
+SyncForm.displayName = 'SyncForm';
+
 /** ジョブの状態表示 */
 const JobStatus = memo(function JobStatus({ job }: { job: AwardSyncJobView }) {
   const isRunning = job.status === AWARD_SYNC_STATUS.RUNNING;
@@ -150,6 +152,8 @@ const JobStatus = memo(function JobStatus({ job }: { job: AwardSyncJobView }) {
   );
 });
 
+JobStatus.displayName = 'JobStatus';
+
 /** 実行中ジョブがあるときの案内 */
 const ConflictNotice = memo(function ConflictNotice({
   isStale,
@@ -181,6 +185,8 @@ const ConflictNotice = memo(function ConflictNotice({
     </div>
   );
 });
+
+ConflictNotice.displayName = 'ConflictNotice';
 
 /** 受賞作品の手動同期ページ */
 export const AwardsSyncPage = memo(function AwardsSyncPage() {
@@ -249,3 +255,5 @@ export const AwardsSyncPage = memo(function AwardsSyncPage() {
     </div>
   );
 });
+
+AwardsSyncPage.displayName = 'AwardsSyncPage';

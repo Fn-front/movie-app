@@ -346,17 +346,33 @@ export type WatchProviderOfferType =
  *
  * 表示名はTMDbの原名をそのまま使わない。`Apple TV`(350) は見放題（Apple TV+）、
  * `Apple TV Store`(2) は購入・レンタルと実体が異なるため、区別できる名前にする。
+ *
+ * `logoPath` は TMDb の `/watch/providers/movie?watch_region=JP` から取得した値を
+ * 静的に持つ。毎回APIから引くとウォッチリスト表示のたびに追加リクエストが要るため。
+ * パスが変わることは稀で、変わってもロゴが出ないだけで機能は壊れない。
  */
 export const WATCH_PROVIDERS = [
-  { id: 8, name: 'Netflix' },
-  { id: 9, name: 'Amazon Prime Video' },
-  { id: 337, name: 'Disney+' },
-  { id: 15, name: 'Hulu' },
-  { id: 84, name: 'U-NEXT' },
-  { id: 350, name: 'Apple TV+' },
-  { id: 10, name: 'Amazon Video' },
-  { id: 2, name: 'Apple TV（購入・レンタル）' },
-  { id: 2683, name: 'FOD' },
+  { id: 8, name: 'Netflix', logoPath: '/rK1KljqmbvO9HQa1PBFLILWah72.png' },
+  {
+    id: 9,
+    name: 'Amazon Prime Video',
+    logoPath: '/gMZdpavHmxFNnLpMHwVxfqeux2g.png',
+  },
+  { id: 337, name: 'Disney+', logoPath: '/5eZ872CghnHFLB1j8grszbrx0dx.png' },
+  { id: 15, name: 'Hulu', logoPath: '/44uAnmSqvA4yBOdbPWN8YgQHjWm.png' },
+  { id: 84, name: 'U-NEXT', logoPath: '/3DGpCh83CR9lDzyKbNWlmUBexBF.png' },
+  { id: 350, name: 'Apple TV+', logoPath: '/9icYBfYFcwgCbky5VdGUIKJ4C5i.png' },
+  {
+    id: 10,
+    name: 'Amazon Video',
+    logoPath: '/jn6TLbtaTZntTRX9UYucHJvpQx1.png',
+  },
+  {
+    id: 2,
+    name: 'Apple TV（購入・レンタル）',
+    logoPath: '/qdEGArH3lKfFnAtYXMkSYk5wxuG.png',
+  },
+  { id: 2683, name: 'FOD', logoPath: '/m0tkTiV5TN7NWfazDEYc8NoVXSd.png' },
 ] as const;
 
 /**

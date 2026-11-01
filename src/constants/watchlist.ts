@@ -52,6 +52,30 @@ export const WATCHLIST_SUCCESS_MESSAGES = {
 } as const;
 
 /**
+ * ウォッチリストのカードに並べるプロバイダーロゴの上限
+ *
+ * 溢れた分は「+N」で畳む。小さなカードに4つ以上並べると判別できないため。
+ */
+export const WATCHLIST_PROVIDER_LOGO_MAX = 3;
+
+/**
+ * 配信バッジの表示ラベル
+ */
+export const WATCHLIST_STREAMING_LABELS = {
+  /** 見放題 */
+  FLATRATE: '見放題',
+  /** レンタル・購入 */
+  PAID: 'レンタル',
+  /** ロゴが溢れたときの表示: 「+2」 */
+  overflow: (count: number) => `+${count}`,
+  /** バッジ全体の読み上げ: 「U-NEXT、Netflix で見放題」 */
+  ariaLabel: (offerLabel: string, providerNames: string[]) =>
+    providerNames.length > 0
+      ? `${providerNames.join('、')} で${offerLabel}`
+      : `${offerLabel}で配信中`,
+} as const;
+
+/**
  * 視聴済みの表示ラベル
  */
 export const WATCHLIST_WATCHED_LABELS = {

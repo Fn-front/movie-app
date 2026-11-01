@@ -22,6 +22,7 @@
 - 関数を作ったら同じマイグレーションで `REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated` と `GRANT EXECUTE ... TO service_role` を書く。`SET search_path = public, pg_temp` を必ず付ける。
 - **`withAuth` は `createServiceRoleClient()` を使うため RLS はバイパスされる。** 他ユーザーの行を守るのはクエリの `user_id` 条件だけ。一括更新では特に落とさないこと。
 - 年の境界は `Asia/Tokyo` 固定。判定は必ずバックエンドで行う。
+- **`watchlist.added_at` / `deleted_at` は現状 `TIMESTAMP`（タイムゾーンなし）。** Task 3 で `TIMESTAMPTZ` に移行するまで、JST の年境界は正しく扱えない。Task 3 を飛ばして Task 5 以降に進まないこと。
 - 作業ブランチは `feature/watchlist-bulk-delete-by-year`（main 起点の worktree、作成済み）。
 
 ---
@@ -186,6 +187,22 @@ describe('watchlistWatchedQuerySchema', () => {
         .success,
     ).toBe(false);
   });
+
+  it('cursor 省略時は0になる', () => {
+    const result = watchlistWatchedQuerySchema.safeParse({ year: '2024' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cursor).toBe(0);
+    }
+  });
+
+  it('cursor が負数だと失敗する', () => {
+    expect(
+      watchlistWatchedQuerySchema.safeParse({ year: '2024', cursor: '-1' })
+        .success,
+    ).toBe(false);
+  });
 });
 
 describe('watchlistBulkDeleteSchema', () => {
@@ -338,7 +355,13 @@ export const watchlistWatchedQuerySchema = z.object({
       WATCHLIST_CLEANUP_MAX_YEAR,
       `追加年は${WATCHLIST_CLEANUP_MAX_YEAR}以下で指定してください`,
     ),
-  cursor: z.string().optional(),
+  // 既存の watchlistQuerySchema は cursor を z.string() のまま受け、route 側で
+  // parseInt と負数チェックをしている。ここはスキーマに寄せて二重化させない
+  cursor: z.coerce
+    .number({ error: 'カーソルは数値で指定してください' })
+    .int('カーソルは整数で指定してください')
+    .min(0, 'カーソルは0以上で指定してください')
+    .default(0),
   limit: z.coerce
     .number()
     .int()
@@ -407,10 +430,24 @@ git commit -m "feat(watchlist): 視聴済み一括削除の定数とバリデー
 
 ---
 
-### Task 3: 追加年の集計 RPC
+### Task 3: DB スキーマ変更（型移行 + 集計 RPC）
+
+**前提:** `watchlist.added_at` と `watchlist.deleted_at` は今も `TIMESTAMP`（タイムゾーンなし）。
+`20260319000000_index_and_schema_optimization.sql` で `TIMESTAMPTZ` へ移行されたのは
+`favorites` / `saved_filters` / `dismissed_movies` / `users` だけで、`watchlist` は対象外だった。
+
+`TIMESTAMP` のままだと本機能の JST 処理が2箇所とも壊れる。
+
+- `added_at AT TIME ZONE 'Asia/Tokyo'` は `timestamp` に適用すると**逆変換**になる
+  （壁時計時刻を JST とみなして `timestamptz` を返す）
+- `.gte('added_at', '2024-01-01T00:00:00+09:00')` は `timestamp` 列との比較で
+  オフセットが捨てられ、JST 補正が効かない
+
+先に型を揃えてから RPC を足す。`watched_at` は既に `TIMESTAMPTZ` なので対象外。
 
 **Files:**
-- Create: `supabase/migrations/<timestamp>_add_watchlist_watched_years_rpc.sql`
+- Create: `supabase/migrations/<timestamp1>_fix_watchlist_timestamptz.sql`
+- Create: `supabase/migrations/<timestamp2>_add_watchlist_watched_years_rpc.sql`
 - Modify: `src/types/database.types.ts`（`supabase gen types` による自動生成。手で編集しない）
 
 **Interfaces:**
@@ -418,7 +455,70 @@ git commit -m "feat(watchlist): 視聴済み一括削除の定数とバリデー
 - Produces: RPC `get_watchlist_watched_years(p_user_id UUID) → (added_year INT, watched_count BIGINT)[]`
   戻り値の列名は `added_year` / `watched_count`。`count` を列名にすると `COUNT(*)` と紛らわしいため避けている。
 
-- [ ] **Step 1: マイグレーションファイルを作る**
+- [ ] **Step 1: 型移行のマイグレーションを作る**
+
+```bash
+npx supabase migration new fix_watchlist_timestamptz
+```
+
+生成されたファイルに以下を書く。手順は `favorites` の前例
+（`20260319000000_index_and_schema_optimization.sql:60-96`）に合わせている。
+
+```sql
+-- watchlist の added_at / deleted_at を TIMESTAMPTZ に揃える
+--
+-- 背景:
+--   #160 で TIMESTAMP → TIMESTAMPTZ の統一を進めたとき、favorites /
+--   saved_filters / dismissed_movies / users は移行したが watchlist が漏れていた。
+--   watched_at だけは後から TIMESTAMPTZ で追加されており、同じテーブル内で
+--   型が食い違った状態になっている。
+--
+-- 今ここで直す理由:
+--   追加年（added_at）を JST で切る機能を足すため。TIMESTAMP のままだと
+--   AT TIME ZONE 'Asia/Tokyo' が逆変換になり、PostgREST にオフセット付きの
+--   境界値を渡してもオフセットが捨てられる。型を揃えないと、読んで正しそうに
+--   見えるクエリが9時間ズレる。
+--
+--   get_watchlist_sorted は RETURNS TABLE (added_at TIMESTAMPTZ) と宣言しており、
+--   実列が TIMESTAMP のため暗黙キャストが DB のタイムゾーン設定に依存していた。
+--   この移行でその曖昧さも消える。
+--
+-- 既存値の解釈:
+--   DEFAULT now() は DB のタイムゾーン（UTC）で書かれ、アプリも
+--   new Date().toISOString()（UTC）で渡している。よって AT TIME ZONE 'UTC' で
+--   解釈するのが正しい。
+
+-- deleted_at を参照するポリシーをDROP
+DROP POLICY IF EXISTS watchlist_select_own ON watchlist;
+
+-- deleted_at を WHERE 句に持つ部分インデックスをDROP
+DROP INDEX IF EXISTS idx_watchlist_user_movie;
+DROP INDEX IF EXISTS idx_watchlist_user_watched;
+
+-- 型変更
+ALTER TABLE watchlist
+  ALTER COLUMN added_at TYPE TIMESTAMPTZ USING added_at AT TIME ZONE 'UTC',
+  ALTER COLUMN deleted_at TYPE TIMESTAMPTZ USING deleted_at AT TIME ZONE 'UTC';
+
+-- ポリシーを再作成（定義は initial_schema と同一）
+CREATE POLICY watchlist_select_own ON watchlist
+  FOR SELECT
+  USING (auth.uid() = user_id AND deleted_at IS NULL);
+
+-- 部分インデックスを再作成（定義は元と同一）
+CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlist_user_movie
+  ON watchlist (user_id, tmdb_movie_id)
+  WHERE deleted_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_watchlist_user_watched
+  ON watchlist (user_id, watched_at)
+  WHERE deleted_at IS NULL;
+```
+
+`idx_watchlist_user_id` / `idx_watchlist_added_at` / `idx_watchlist_deleted_at` は
+部分インデックスではないため `ALTER COLUMN TYPE` が自動で再構築する。明示的な DROP は不要。
+
+- [ ] **Step 2: 集計 RPC のマイグレーションを作る**
 
 ```bash
 npx supabase migration new add_watchlist_watched_years_rpc
@@ -472,18 +572,18 @@ COMMENT ON FUNCTION public.get_watchlist_watched_years(UUID) IS
   '追加年（JST）ごとの視聴済み件数を降順で返す。0件の年は返さない。EXECUTE は service_role のみ。';
 ```
 
-- [ ] **Step 2: 適用対象を確認する**
+- [ ] **Step 3: 適用対象を確認する**
 
 ```bash
 set -a; . ./.env.local; set +a
 npx supabase db push --dry-run
 ```
 
-Expected: 対象が今回作ったファイル 1件だけであること。
+Expected: 対象が今回作った 2件だけで、型移行 → RPC の順に並んでいること。
 
 もし `LegacyDbPushMissingLocalError`（リモートにあるがローカルに無い）が出たら、`.claude/rules/supabase-db.md` の「安全な回避手順」に従う。**`migration repair --status reverted` は実行しない。**
 
-- [ ] **Step 3: 適用する**
+- [ ] **Step 4: 適用する**
 
 ```bash
 npx supabase db push
@@ -491,28 +591,41 @@ npx supabase db push
 
 Expected: 成功。エラーが出たら止めて報告する。
 
-- [ ] **Step 4: 型を再生成する**
+型移行は本番データを書き換える。失敗した場合、ポリシーとインデックスだけ DROP された
+中途半端な状態が残りうるので、**エラーが出たら自己判断で再実行せず報告する**。
+
+- [ ] **Step 5: 型を再生成する**
 
 ```bash
 npx supabase gen types typescript --project-id <project-id> > src/types/database.types.ts
 ```
 
 `<project-id>` は `npx supabase projects list` で確認する。
-生成後、`database.types.ts` に `get_watchlist_watched_years` が含まれることを確認する。
+生成後、RPC が型に出ていることを確認する。
 
 ```bash
 grep -n "get_watchlist_watched_years" src/types/database.types.ts
 ```
 
-- [ ] **Step 5: 型チェックが通ることを確認**
-
-Run: `npx tsc --noEmit`
-Expected: エラーなし
-
-- [ ] **Step 6: コミット**
+- [ ] **Step 6: 型チェックと既存テストが通ることを確認**
 
 ```bash
-git add supabase/migrations/ src/types/database.types.ts
+npx tsc --noEmit
+npx jest src/app/api/watchlist/ src/features/watchlist/
+```
+
+Expected: どちらもエラーなし。
+
+型移行で `get_watchlist_sorted` の暗黙キャストが解消されるため、既存の一覧・カレンダーが
+壊れていないことをここで確認する。落ちたら型移行の影響を疑う。
+
+- [ ] **Step 7: コミット（関心ごとに分ける）**
+
+```bash
+git add supabase/migrations/*_fix_watchlist_timestamptz.sql src/types/database.types.ts
+git commit -m "fix(watchlist): added_at/deleted_at を TIMESTAMPTZ に揃える"
+
+git add supabase/migrations/*_add_watchlist_watched_years_rpc.sql
 git commit -m "feat(watchlist): 追加年ごとの視聴済み件数を返すRPCを追加"
 ```
 
@@ -1039,23 +1152,9 @@ export const GET = withAuth(
       );
     }
 
-    const { year, cursor, limit } = queryResult.data;
-
-    // 一覧ページ（get_watchlist_sorted）と同じオフセットページング
-    const offset = cursor ? Number.parseInt(cursor, 10) : 0;
-
-    if (Number.isNaN(offset) || offset < 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.VALIDATION_ERROR,
-            message: WATCHLIST_ERROR_MESSAGES.INVALID_QUERY,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
+    // 一覧ページ（get_watchlist_sorted）と同じオフセットページング。
+    // cursor の数値化と負数チェックはスキーマ側に寄せている
+    const { year, cursor: offset, limit } = queryResult.data;
 
     // 年の境界は JST。UTC のまま切ると 1/1 早朝に追加した行が前年に落ちる
     const { start, end } = getJstYearRange(year);
@@ -1419,7 +1518,12 @@ export const POST = withAuth(
       .lt('added_at', end);
 
     // 空配列で not('id', 'in', '()') を組むと構文エラーになるため、
-    // 除外が無いときは条件自体を付けない
+    // 除外が無いときは条件自体を付けない。
+    //
+    // join で PostgREST のフィルタ構文を組み立てている。ここが安全なのは
+    // watchlistBulkDeleteSchema が各要素を UUID に限定しているからで、
+    // スキーマ側の検証を緩めるとそのままクエリ構文への注入経路になる。
+    // exclude_ids の型を変えるときは必ずこの行も見直すこと。
     if (exclude_ids.length > 0) {
       query = query.not('id', 'in', `(${exclude_ids.join(',')})`);
     }
@@ -1652,8 +1756,13 @@ export const watchlistKeys = {
     ['watchlist', 'list', params] as const,
   /** 視聴済みがある追加年の一覧 */
   watchedYears: () => ['watchlist', 'watchedYears'] as const,
-  /** 指定年の視聴済み一覧 */
-  watched: (year: number) => ['watchlist', 'watched', year] as const,
+  /**
+   * 指定年の視聴済み一覧
+   *
+   * 年が未選択（null）の状態でもキーは組まれる（クエリ自体は enabled で止める）。
+   * 架空の年 0 に丸めるとキャッシュの意味がずれるため、null のまま持つ。
+   */
+  watched: (year: number | null) => ['watchlist', 'watched', year] as const,
 };
 ```
 
@@ -2089,7 +2198,7 @@ export function useWatchlistCleanup({
 
   // 対象一覧（無限スクロール）
   const itemsQuery = useInfiniteQuery({
-    queryKey: watchlistKeys.watched(selectedYear ?? 0),
+    queryKey: watchlistKeys.watched(selectedYear),
     queryFn: ({ pageParam }) =>
       getWatchlistWatched({
         year: selectedYear as number,
@@ -2182,9 +2291,13 @@ export function useWatchlistCleanup({
     });
   }, [deleteMutation, selectedYear, excludeIds]);
 
+  // itemsQuery 全体を依存に入れると毎レンダー参照が変わり useCallback が効かない。
+  // react-query の fetchNextPage は参照が安定しているので、それだけを取り出す
+  const { fetchNextPage: fetchNextPageRaw } = itemsQuery;
+
   const fetchNextPage = useCallback(() => {
-    itemsQuery.fetchNextPage();
-  }, [itemsQuery]);
+    fetchNextPageRaw();
+  }, [fetchNextPageRaw]);
 
   return useMemo(
     () => ({

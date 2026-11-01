@@ -15,6 +15,7 @@
 
 ### 含む
 
+- `watchlist.added_at` / `deleted_at` の `TIMESTAMPTZ` 移行（本機能の前提。下記「前提」を参照）
 - 追加年ごとの視聴済み件数を返す集計 RPC
 - 対象一覧の取得 API（ページング）
 - 一括論理削除 API
@@ -33,17 +34,39 @@
 |---|---|
 | 削除 | 論理削除。`watchlist.deleted_at` に日時を入れる |
 | 視聴済み | `watchlist.watched_at`（`TIMESTAMPTZ`）。`NULL` は未視聴 |
-| 追加日 | `watchlist.added_at`（`TIMESTAMPTZ`）。DB のタイムゾーンは UTC |
+| 追加日 | `watchlist.added_at`。**現状は `TIMESTAMP`（タイムゾーンなし）**。下記の通り移行する |
 | 一覧取得 | `get_watchlist_sorted` RPC 経由（`src/app/api/watchlist/route.ts`） |
 | 件数上限 | 一覧は 50件/ページ（`WATCHLIST_MAX_LIMIT`） |
 | 再追加 | 追加の UNIQUE 制約は `deleted_at IS NULL` 条件付きのため、削除後に同じ映画を再追加できる |
 
+### 前提として `added_at` を `TIMESTAMPTZ` に移行する
+
+`watchlist.added_at` と `deleted_at` は今も `TIMESTAMP`（タイムゾーンなし）。
+`20260319000000_index_and_schema_optimization.sql` で `TIMESTAMPTZ` へ統一したとき、
+`favorites` / `saved_filters` / `dismissed_movies` / `users` は移行されたが **`watchlist` は漏れていた**。
+`watched_at` だけが後から `TIMESTAMPTZ` で追加されており、同じテーブル内で型が食い違っている。
+
+この型のままでは本機能の JST 処理が2箇所とも壊れる。
+
+| 箇所 | 書きたい形 | `TIMESTAMP` での実際の挙動 |
+|---|---|---|
+| RPC | `added_at AT TIME ZONE 'Asia/Tokyo'` | **逆変換**になる（壁時計時刻を JST とみなして `timestamptz` を返す）。9時間ズレる |
+| API | `.gte('added_at', '2024-01-01T00:00:00+09:00')` | `timestamp` 列との比較でオフセットが捨てられ、JST 補正が効かない |
+
+そこで本実装の最初に、`favorites` と同じ手順で型を揃える
+（`deleted_at` を参照する RLS ポリシーと部分インデックスを DROP → `ALTER COLUMN TYPE` → 再作成）。
+既存値は `DEFAULT now()`（DB の UTC）とアプリの `toISOString()`（UTC）で書かれているため、
+`USING added_at AT TIME ZONE 'UTC'` で解釈するのが正しい。
+
+副次的に、`get_watchlist_sorted` が `RETURNS TABLE (added_at TIMESTAMPTZ)` と宣言しながら
+実列は `TIMESTAMP` という暗黙キャスト（DB のタイムゾーン設定に依存）も解消される。
+
 ### 年の境界は JST で切る
 
-`added_at` は `TIMESTAMPTZ` で DB は UTC のため、`EXTRACT(YEAR FROM added_at)` をそのまま使うと
-`2025-01-01 05:00 JST` に追加した作品が **2024年扱い**になり、画面に表示されている日付とズレる。
+型を揃えたうえで、年の定義は `Asia/Tokyo` 固定とし、**判定は常にバックエンドで行う**。
+UTC のまま切ると `2025-01-01 05:00 JST` に追加した作品が 2024年扱いになり、
+画面に表示されている日付とズレる。
 
-年の定義は `Asia/Tokyo` 固定とし、**判定は常にバックエンドで行う**。
 フロントのローカルタイムゾーンで切ると、セレクトの選択肢と実際に削除される範囲がズレる余地が生まれる。
 
 ## データ層
@@ -268,7 +291,7 @@ supabase/migrations/<timestamp>_add_watchlist_watched_years_rpc.sql
 
 ## 実装順序
 
-1. マイグレーション作成 → `supabase db push` → 型再生成
+1. マイグレーション作成（`added_at` の型移行 → 集計 RPC の順）→ `supabase db push` → 型再生成
 2. zod スキーマ・定数 → API 3本 + それぞれのテスト
 3. API クライアント → `useWatchlistCleanup` + テスト
 4. `WatchlistCleanupModal` + テスト

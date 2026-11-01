@@ -120,7 +120,9 @@ export const WatchlistPage = memo(function WatchlistPage() {
             aria-label='ソート順を選択'
             className={styles.c_watchlist_page__sort}
           />
-          <Button variant='secondary' size='sm' onClick={handleCleanupOpen}>
+          {/* 一覧ページのツールバーに置く補助操作は ghost で揃える
+              （映画一覧の movieListToolbar と同じ扱い） */}
+          <Button variant='ghost' size='sm' onClick={handleCleanupOpen}>
             {WATCHLIST_CLEANUP_LABELS.OPEN_BUTTON}
           </Button>
         </div>

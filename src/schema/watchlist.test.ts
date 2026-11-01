@@ -2,7 +2,12 @@
  * ウォッチリスト zodスキーマ テスト
  */
 
-import { watchlistAddSchema, watchlistQuerySchema } from './watchlist';
+import {
+  watchlistAddSchema,
+  watchlistBulkDeleteSchema,
+  watchlistQuerySchema,
+  watchlistWatchedQuerySchema,
+} from './watchlist';
 
 describe('watchlistAddSchema', () => {
   it('有効な入力でパースが成功する', () => {
@@ -181,5 +186,106 @@ describe('watchlistQuerySchema', () => {
       sort: 'invalid_sort',
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('watchlistWatchedQuerySchema', () => {
+  it('年のみ指定で limit がデフォルト値になる', () => {
+    const result = watchlistWatchedQuerySchema.safeParse({ year: '2024' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.year).toBe(2024);
+      expect(result.data.limit).toBe(20);
+    }
+  });
+
+  it('年が下限より小さいと失敗する', () => {
+    expect(watchlistWatchedQuerySchema.safeParse({ year: '1999' }).success).toBe(
+      false,
+    );
+  });
+
+  it('年が上限より大きいと失敗する', () => {
+    expect(watchlistWatchedQuerySchema.safeParse({ year: '2101' }).success).toBe(
+      false,
+    );
+  });
+
+  it('年が数値でないと失敗する', () => {
+    expect(watchlistWatchedQuerySchema.safeParse({ year: 'abc' }).success).toBe(
+      false,
+    );
+  });
+
+  it('limit が上限を超えると失敗する', () => {
+    expect(
+      watchlistWatchedQuerySchema.safeParse({ year: '2024', limit: '51' })
+        .success,
+    ).toBe(false);
+  });
+
+  it('cursor 省略時は0になる', () => {
+    const result = watchlistWatchedQuerySchema.safeParse({ year: '2024' });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cursor).toBe(0);
+    }
+  });
+
+  it('cursor が負数だと失敗する', () => {
+    expect(
+      watchlistWatchedQuerySchema.safeParse({ year: '2024', cursor: '-1' })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe('watchlistBulkDeleteSchema', () => {
+  it('exclude_ids 省略時は空配列になる', () => {
+    const result = watchlistBulkDeleteSchema.safeParse({ year: 2024 });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.exclude_ids).toEqual([]);
+    }
+  });
+
+  it('UUID の配列を受け付ける', () => {
+    const result = watchlistBulkDeleteSchema.safeParse({
+      year: 2024,
+      exclude_ids: ['11111111-1111-4111-8111-111111111111'],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('UUID でない要素があると失敗する', () => {
+    const result = watchlistBulkDeleteSchema.safeParse({
+      year: 2024,
+      exclude_ids: ['not-a-uuid'],
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('exclude_ids が1001件だと失敗する', () => {
+    const ids = Array.from(
+      { length: 1001 },
+      (_, i) => `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`,
+    );
+    const result = watchlistBulkDeleteSchema.safeParse({
+      year: 2024,
+      exclude_ids: ids,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('年が範囲外だと失敗する', () => {
+    expect(watchlistBulkDeleteSchema.safeParse({ year: 1999 }).success).toBe(
+      false,
+    );
   });
 });

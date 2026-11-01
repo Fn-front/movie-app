@@ -59,6 +59,12 @@ export const API_ENDPOINTS = {
   watchlistById: (id: string) => `/api/watchlist/${id}`,
   /** ウォッチリストのカレンダー */
   WATCHLIST_CALENDAR: '/api/watchlist/calendar',
+  /** 視聴済みがある追加年の一覧 */
+  WATCHLIST_WATCHED_YEARS: '/api/watchlist/watched-years',
+  /** 指定年の視聴済み一覧 */
+  WATCHLIST_WATCHED: '/api/watchlist/watched',
+  /** 視聴済みの一括削除 */
+  WATCHLIST_BULK_DELETE: '/api/watchlist/bulk-delete',
 
   // --- 興味なし ---
   /** 興味なし一覧・追加 */

@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { AwardsPage } from './awardsPage';
 
@@ -114,6 +115,11 @@ const mockUseAwardsReturn = {
   isError: false,
   selectedYear: 2026,
   handleYearChange: jest.fn(),
+  awardOptions: [] as { label: string; value: string }[],
+  selectedAward: null as
+    | ReturnType<typeof createMockAwardsData>['awards'][0]
+    | null,
+  handleAwardChange: jest.fn(),
 };
 
 /** useAwards に渡された cacheBuster を検証するために控える */
@@ -194,6 +200,16 @@ const createMockAwardsData = () => ({
   ],
 });
 
+/**
+ * data と selectedAward をまとめて設定する。
+ * 画面は data.awards ではなく selectedAward を描画するため、両方要る
+ */
+function setAwardsData(awards = createMockAwardsData()) {
+  mockUseAwardsReturn.data = awards;
+  mockUseAwardsReturn.selectedAward = awards.awards[0] ?? null;
+  return awards;
+}
+
 // --- Tests ---
 
 describe('AwardsPage', () => {
@@ -203,6 +219,8 @@ describe('AwardsPage', () => {
     mockUseAwardsReturn.isLoading = false;
     mockUseAwardsReturn.isError = false;
     mockUseAwardsReturn.selectedYear = 2026;
+    mockUseAwardsReturn.awardOptions = [];
+    mockUseAwardsReturn.selectedAward = null;
     mockSearchParams = new URLSearchParams();
     useAwardsCalls.length = 0;
   });
@@ -227,6 +245,71 @@ describe('AwardsPage', () => {
       render(<AwardsPage />);
 
       expect(useAwardsCalls[0]).toBeUndefined();
+    });
+  });
+
+  /**
+   * 賞を縦に連結すると約28画面ぶんになるため、タブで1つずつ出す。
+   */
+  describe('賞タブ', () => {
+    it('賞が複数あればタブを出し、選択中の賞だけを描画する', () => {
+      const data = createMockAwardsData();
+      data.awards.push({
+        awardName: 'cannes',
+        label: 'カンヌ映画祭',
+        categories: [],
+      });
+      setAwardsData(data);
+      mockUseAwardsReturn.awardOptions = [
+        { label: 'アカデミー賞', value: 'academy_awards' },
+        { label: 'カンヌ映画祭', value: 'cannes' },
+      ];
+
+      render(<AwardsPage />);
+
+      expect(
+        screen.getByRole('tab', { name: 'アカデミー賞' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('tab', { name: 'カンヌ映画祭' }),
+      ).toBeInTheDocument();
+      // 選択中（アカデミー賞）の部門だけが出る
+      expect(screen.getAllByText('作品賞').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // Radix Tabs は fireEvent.click では反応しないため user-event を使う
+    it('タブを選ぶと handleAwardChange が呼ばれる', async () => {
+      const user = userEvent.setup();
+      const data = createMockAwardsData();
+      data.awards.push({
+        awardName: 'cannes',
+        label: 'カンヌ映画祭',
+        categories: [],
+      });
+      setAwardsData(data);
+      mockUseAwardsReturn.awardOptions = [
+        { label: 'アカデミー賞', value: 'academy_awards' },
+        { label: 'カンヌ映画祭', value: 'cannes' },
+      ];
+
+      render(<AwardsPage />);
+      await user.click(screen.getByRole('tab', { name: 'カンヌ映画祭' }));
+
+      expect(mockUseAwardsReturn.handleAwardChange).toHaveBeenCalledWith(
+        'cannes',
+      );
+    });
+
+    // 選択肢が1つだけのタブは意味がない
+    it('賞が1つならタブを出さずに中身だけ描画する', () => {
+      setAwardsData();
+      mockUseAwardsReturn.awardOptions = [];
+
+      render(<AwardsPage />);
+
+      expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+      expect(screen.getByText('アカデミー賞')).toBeInTheDocument();
+      expect(screen.getByText('受賞映画')).toBeInTheDocument();
     });
   });
 
@@ -264,7 +347,7 @@ describe('AwardsPage', () => {
   });
 
   it('受賞作品データが正しく表示される', () => {
-    mockUseAwardsReturn.data = createMockAwardsData();
+    setAwardsData();
 
     render(<AwardsPage />);
 
@@ -275,7 +358,7 @@ describe('AwardsPage', () => {
   });
 
   it('年度セレクトが表示される', () => {
-    mockUseAwardsReturn.data = createMockAwardsData();
+    setAwardsData();
 
     render(<AwardsPage />);
 
@@ -284,7 +367,7 @@ describe('AwardsPage', () => {
   });
 
   it('年度変更でhandleYearChangeが呼ばれる', () => {
-    mockUseAwardsReturn.data = createMockAwardsData();
+    setAwardsData();
 
     render(<AwardsPage />);
 
@@ -295,7 +378,7 @@ describe('AwardsPage', () => {
   });
 
   it('映画クリックでモーダルが表示される', () => {
-    mockUseAwardsReturn.data = createMockAwardsData();
+    setAwardsData();
 
     render(<AwardsPage />);
 
@@ -306,7 +389,7 @@ describe('AwardsPage', () => {
   });
 
   it('受賞ラベルが表示される', () => {
-    mockUseAwardsReturn.data = createMockAwardsData();
+    setAwardsData();
 
     render(<AwardsPage />);
 
@@ -314,7 +397,7 @@ describe('AwardsPage', () => {
   });
 
   it('ノミネートラベルが表示される', () => {
-    mockUseAwardsReturn.data = createMockAwardsData();
+    setAwardsData();
 
     render(<AwardsPage />);
 

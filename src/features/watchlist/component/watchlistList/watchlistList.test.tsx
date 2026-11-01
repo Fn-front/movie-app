@@ -320,4 +320,49 @@ describe('WatchlistList', () => {
       ).toBeDisabled();
     });
   });
+
+  describe('配信バッジ', () => {
+    it('配信中のアイテムにバッジを出す', () => {
+      const items = createMockItems(1).map((item) => ({
+        ...item,
+        streaming: {
+          offer_type: 'flatrate' as const,
+          provider_ids: [84],
+          resumed: false,
+        },
+      }));
+
+      render(<WatchlistList watchlist={items} isLoading={false} />);
+
+      expect(screen.getByText('見放題')).toBeInTheDocument();
+      expect(screen.getByAltText('U-NEXT')).toBeInTheDocument();
+    });
+
+    it('配信なしのアイテムにはバッジを出さない', () => {
+      const items = createMockItems(1);
+
+      render(<WatchlistList watchlist={items} isLoading={false} />);
+
+      expect(screen.queryByText('見放題')).toBeNull();
+      expect(screen.queryByText('レンタル')).toBeNull();
+    });
+
+    it('視聴済みのアイテムにはバッジを出さない', () => {
+      const items = createMockItems(1).map((item) => ({
+        ...item,
+        watched_at: '2026-04-01T00:00:00Z',
+        streaming: {
+          offer_type: 'flatrate' as const,
+          provider_ids: [84],
+          resumed: false,
+        },
+      }));
+
+      render(<WatchlistList watchlist={items} isLoading={false} />);
+
+      // 視聴済みバッジと同じ位置に置いているため、重ならないよう出さない
+      expect(screen.queryByText('見放題')).toBeNull();
+      expect(screen.getByText('視聴済み')).toBeInTheDocument();
+    });
+  });
 });

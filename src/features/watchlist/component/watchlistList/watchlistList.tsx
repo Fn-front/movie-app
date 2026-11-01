@@ -11,6 +11,7 @@ import { IoCheckmarkCircle, IoCheckmarkCircleOutline } from 'react-icons/io5';
 
 import { Card } from '@/components/ui/card/card';
 import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
+import { StreamingBadge } from '@/features/watchlist/component/streamingBadge/streamingBadge';
 import {
   IMAGE_SIZES,
   DISPLAY_LIMITS,
@@ -210,6 +211,13 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
           >
             {WATCHLIST_WATCHED_LABELS.BADGE}
           </span>
+        )}
+        {/* 視聴済みには出さない。優先表示の対象は未視聴だけで、
+            視聴済みバッジと同じ位置に置いているため重なりも避けられる */}
+        {!isWatched && item.streaming && (
+          <div className={styles.c_watchlist_tile__streaming}>
+            <StreamingBadge streaming={item.streaming} />
+          </div>
         )}
         {onWatchedToggle && (
           <div className={styles.c_watchlist_tile__watched_button}>

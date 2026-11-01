@@ -1137,6 +1137,7 @@ export type Database = {
           p_exclude_watched?: boolean;
           p_limit: number;
           p_offset?: number;
+          p_prioritize_streaming?: boolean;
           p_sort: string;
           p_user_id: string;
         };
@@ -1145,6 +1146,9 @@ export type Database = {
           id: string;
           poster_path: string;
           release_date: string;
+          streaming_offer_type: string;
+          streaming_provider_ids: Json;
+          streaming_resumed: boolean;
           title: string;
           tmdb_movie_id: number;
           total_count: number;

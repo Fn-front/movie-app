@@ -1,0 +1,100 @@
+@use '@/styles/variables' as *;
+
+.c_watchlist_cleanup {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+
+  &__header {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-3;
+  }
+
+  &__select_all {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: $spacing-3;
+    padding-bottom: $spacing-2;
+    border-bottom: $border-width-1 solid $border-color;
+  }
+
+  &__count {
+    color: $text-secondary;
+    font-size: $font-size-sm;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-2;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: $spacing-3;
+    padding: $spacing-2;
+    border-radius: $border-radius-md;
+  }
+
+  &__poster {
+    width: 36px;
+    height: 54px;
+    border-radius: $border-radius-sm;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  &__poster_fallback {
+    width: 36px;
+    height: 54px;
+    border-radius: $border-radius-sm;
+    background-color: $background-secondary;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: $text-disabled;
+    font-size: $font-size-2xs;
+  }
+
+  &__title {
+    flex: 1;
+    min-width: 0;
+    color: $text-primary;
+    font-size: $font-size-sm;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  &__date {
+    flex-shrink: 0;
+    color: $text-secondary;
+    font-size: $font-size-xs;
+  }
+
+  &__empty {
+    padding: $spacing-6 0;
+    color: $text-secondary;
+    font-size: $font-size-sm;
+    text-align: center;
+  }
+
+  &__loading {
+    display: flex;
+    justify-content: center;
+    padding: $spacing-4 0;
+  }
+
+  &__sentinel {
+    height: 1px;
+  }
+}

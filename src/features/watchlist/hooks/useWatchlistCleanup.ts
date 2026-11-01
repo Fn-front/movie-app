@@ -8,7 +8,7 @@
  * 除外数を引いて求める。未スクロール分も削除対象に含まれることと一致させるため。
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   useInfiniteQuery,
   useMutation,
@@ -92,7 +92,8 @@ export function useWatchlistCleanup({
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  // ユーザーがセレクトで明示的に選んだ年。未操作なら null
+  const [pickedYear, setPickedYear] = useState<number | null>(null);
   const [excludeIds, setExcludeIds] = useState<Set<string>>(new Set());
 
   // 年セレクトの選択肢
@@ -107,20 +108,20 @@ export function useWatchlistCleanup({
     [yearsQuery.data],
   );
 
-  // 年一覧が届いたら最新年を初期選択する。
-  // 選択済みの年が一覧から消えた場合（その年を消し切った直後など）も入れ直す
-  useEffect(() => {
-    if (years.length === 0) {
-      setSelectedYear(null);
-      return;
-    }
+  // 実効的な選択年を派生で求める。
+  //
+  // 「年一覧が届いたら最新年を入れる」を useEffect + setState で書くと、
+  // 描画後にもう一度レンダーが走るうえ react-hooks/set-state-in-effect に触れる。
+  // 選んだ年が一覧から消えたとき（その年を消し切った直後など）に最新年へ
+  // 戻す挙動も、ここで一緒に表現できる。
+  const selectedYear = useMemo(() => {
+    if (years.length === 0) return null;
 
-    setSelectedYear((current) =>
-      current !== null && years.some((entry) => entry.year === current)
-        ? current
-        : years[0].year,
-    );
-  }, [years]);
+    const isPickedAvailable =
+      pickedYear !== null && years.some((entry) => entry.year === pickedYear);
+
+    return isPickedAvailable ? pickedYear : years[0].year;
+  }, [years, pickedYear]);
 
   // 対象一覧（無限スクロール）
   const itemsQuery = useInfiniteQuery({
@@ -176,7 +177,7 @@ export function useWatchlistCleanup({
   });
 
   const handleYearChange = useCallback((value: string) => {
-    setSelectedYear(Number(value));
+    setPickedYear(Number(value));
     // 別の年は別の対象なので、除外選択を持ち越さない
     setExcludeIds(new Set());
   }, []);

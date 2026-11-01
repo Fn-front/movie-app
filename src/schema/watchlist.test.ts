@@ -201,15 +201,15 @@ describe('watchlistWatchedQuerySchema', () => {
   });
 
   it('年が下限より小さいと失敗する', () => {
-    expect(watchlistWatchedQuerySchema.safeParse({ year: '1999' }).success).toBe(
-      false,
-    );
+    expect(
+      watchlistWatchedQuerySchema.safeParse({ year: '1999' }).success,
+    ).toBe(false);
   });
 
   it('年が上限より大きいと失敗する', () => {
-    expect(watchlistWatchedQuerySchema.safeParse({ year: '2101' }).success).toBe(
-      false,
-    );
+    expect(
+      watchlistWatchedQuerySchema.safeParse({ year: '2101' }).success,
+    ).toBe(false);
   });
 
   it('年が数値でないと失敗する', () => {

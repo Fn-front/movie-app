@@ -30,14 +30,14 @@
 
 ## 前提
 
-| 項目 | 現状 |
-|---|---|
-| 削除 | 論理削除。`watchlist.deleted_at` に日時を入れる |
-| 視聴済み | `watchlist.watched_at`（`TIMESTAMPTZ`）。`NULL` は未視聴 |
-| 追加日 | `watchlist.added_at`。**現状は `TIMESTAMP`（タイムゾーンなし）**。下記の通り移行する |
-| 一覧取得 | `get_watchlist_sorted` RPC 経由（`src/app/api/watchlist/route.ts`） |
-| 件数上限 | 一覧は 50件/ページ（`WATCHLIST_MAX_LIMIT`） |
-| 再追加 | 追加の UNIQUE 制約は `deleted_at IS NULL` 条件付きのため、削除後に同じ映画を再追加できる |
+| 項目     | 現状                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------- |
+| 削除     | 論理削除。`watchlist.deleted_at` に日時を入れる                                          |
+| 視聴済み | `watchlist.watched_at`（`TIMESTAMPTZ`）。`NULL` は未視聴                                 |
+| 追加日   | `watchlist.added_at`。**現状は `TIMESTAMP`（タイムゾーンなし）**。下記の通り移行する     |
+| 一覧取得 | `get_watchlist_sorted` RPC 経由（`src/app/api/watchlist/route.ts`）                      |
+| 件数上限 | 一覧は 50件/ページ（`WATCHLIST_MAX_LIMIT`）                                              |
+| 再追加   | 追加の UNIQUE 制約は `deleted_at IS NULL` 条件付きのため、削除後に同じ映画を再追加できる |
 
 ### 前提として `added_at` を `TIMESTAMPTZ` に移行する
 
@@ -48,10 +48,10 @@
 
 この型のままでは本機能の JST 処理が2箇所とも壊れる。
 
-| 箇所 | 書きたい形 | `TIMESTAMP` での実際の挙動 |
-|---|---|---|
-| RPC | `added_at AT TIME ZONE 'Asia/Tokyo'` | **逆変換**になる（壁時計時刻を JST とみなして `timestamptz` を返す）。9時間ズレる |
-| API | `.gte('added_at', '2024-01-01T00:00:00+09:00')` | `timestamp` 列との比較でオフセットが捨てられ、JST 補正が効かない |
+| 箇所 | 書きたい形                                      | `TIMESTAMP` での実際の挙動                                                        |
+| ---- | ----------------------------------------------- | --------------------------------------------------------------------------------- |
+| RPC  | `added_at AT TIME ZONE 'Asia/Tokyo'`            | **逆変換**になる（壁時計時刻を JST とみなして `timestamptz` を返す）。9時間ズレる |
+| API  | `.gte('added_at', '2024-01-01T00:00:00+09:00')` | `timestamp` 列との比較でオフセットが捨てられ、JST 補正が効かない                  |
 
 そこで本実装の最初に、`favorites` と同じ手順で型を揃える
 （`deleted_at` を参照する RLS ポリシーと部分インデックスを DROP → `ALTER COLUMN TYPE` → 再作成）。
@@ -115,9 +115,9 @@ RPC も同様に、`p_user_id` 引数で絞る前提で設計する。
   "data": {
     "years": [
       { "year": 2025, "count": 3 },
-      { "year": 2024, "count": 12 }
-    ]
-  }
+      { "year": 2024, "count": 12 },
+    ],
+  },
 }
 ```
 
@@ -127,11 +127,11 @@ RPC も同様に、`p_user_id` 引数で絞る前提で設計する。
 
 モーダル内に出す対象一覧。既存の一覧ページと同じオフセットページング。
 
-| パラメータ | 内容 |
-|---|---|
-| `year` | 必須。整数。範囲は `2000` 〜 `2100` |
-| `cursor` | 省略時 `0`。オフセット |
-| `limit` | 省略時 `WATCHLIST_DEFAULT_LIMIT`、上限 `WATCHLIST_MAX_LIMIT` |
+| パラメータ | 内容                                                         |
+| ---------- | ------------------------------------------------------------ |
+| `year`     | 必須。整数。範囲は `2000` 〜 `2100`                          |
+| `cursor`   | 省略時 `0`。オフセット                                       |
+| `limit`    | 省略時 `WATCHLIST_DEFAULT_LIMIT`、上限 `WATCHLIST_MAX_LIMIT` |
 
 絞り込み条件:
 
@@ -232,13 +232,13 @@ added_at <  <year+1>-01-01T00:00+09:00
 
 `src/features/watchlist/hooks/useWatchlistCleanup.ts`
 
-| 状態 | 内容 |
-|---|---|
+| 状態                           | 内容                                                   |
+| ------------------------------ | ------------------------------------------------------ |
 | `selectedYear: number \| null` | 年セレクトの選択値。年一覧の取得完了時に最新年で初期化 |
-| `excludeIds: Set<string>` | チェックを外した ID。年の切り替えでクリア |
-| `years` | `useQuery`。`GET /api/watchlist/watched-years` |
-| `items` | `useInfiniteQuery`。`GET /api/watchlist/watched` |
-| `bulkDelete` | `useMutation`。`POST /api/watchlist/bulk-delete` |
+| `excludeIds: Set<string>`      | チェックを外した ID。年の切り替えでクリア              |
+| `years`                        | `useQuery`。`GET /api/watchlist/watched-years`         |
+| `items`                        | `useInfiniteQuery`。`GET /api/watchlist/watched`       |
+| `bulkDelete`                   | `useMutation`。`POST /api/watchlist/bulk-delete`       |
 
 削除成功時:
 
@@ -274,18 +274,18 @@ supabase/migrations/<timestamp>_add_watchlist_watched_years_rpc.sql
 
 `.claude/rules/testing.md` の観点チェックリストと照合した結果:
 
-| 観点 | テスト内容 |
-|---|---|
-| 正常系 | 年を選ぶ → 一覧表示 → 削除 → 件数トースト → 一覧が更新される |
-| 入力バリデーション | `year` が非数値 / 範囲外、`exclude_ids` が非UUID、1001件で 400 |
-| 認証・認可 | 未認証で 401。他ユーザーの行が削除されない（下記の注意を参照） |
-| 空状態・0件 | 視聴済みが1件も無い（`years: []`）→ 空状態表示。全件除外 → 削除ボタン `disabled` |
-| エラー応答 | 削除 API 失敗時にトーストを出し、モーダルは閉じない |
-| 重複・競合 | 既に削除済み / 視聴済みを外した行が対象から落ち、`deleted_count` に含まれない |
-| 期限切れ・試行回数上限 | レート制限超過で 429 |
-| 境界値 | `2025-01-01 05:00 JST`（UTC では前年）が **2025年** に含まれる |
-| 状態保持・遷移 | 年を切り替えると除外選択がリセットされる |
-| アクセシビリティ | キーボードのみで 年選択 → チェック操作 → 削除 まで到達できる |
+| 観点                   | テスト内容                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| 正常系                 | 年を選ぶ → 一覧表示 → 削除 → 件数トースト → 一覧が更新される                     |
+| 入力バリデーション     | `year` が非数値 / 範囲外、`exclude_ids` が非UUID、1001件で 400                   |
+| 認証・認可             | 未認証で 401。他ユーザーの行が削除されない（下記の注意を参照）                   |
+| 空状態・0件            | 視聴済みが1件も無い（`years: []`）→ 空状態表示。全件除外 → 削除ボタン `disabled` |
+| エラー応答             | 削除 API 失敗時にトーストを出し、モーダルは閉じない                              |
+| 重複・競合             | 既に削除済み / 視聴済みを外した行が対象から落ち、`deleted_count` に含まれない    |
+| 期限切れ・試行回数上限 | レート制限超過で 429                                                             |
+| 境界値                 | `2025-01-01 05:00 JST`（UTC では前年）が **2025年** に含まれる                   |
+| 状態保持・遷移         | 年を切り替えると除外選択がリセットされる                                         |
+| アクセシビリティ       | キーボードのみで 年選択 → チェック操作 → 削除 まで到達できる                     |
 
 カバレッジは全指標 80% 以上を維持する。
 

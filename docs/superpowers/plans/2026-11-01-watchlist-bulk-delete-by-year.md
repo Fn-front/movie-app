@@ -32,10 +32,12 @@
 `added_at` は `TIMESTAMPTZ` で DB は UTC。`2025-01-01 05:00 JST` に追加した行は UTC では `2024-12-31 20:00` なので、素朴に年で切ると前年扱いになる。年の境界を JST で表現する関数を先に作る。
 
 **Files:**
+
 - Modify: `src/utils/date.ts`（末尾に追記）
 - Test: `src/utils/date.test.ts`（末尾に追記）
 
 **Interfaces:**
+
 - Consumes: なし
 - Produces: `getJstYearRange(year: number): { start: string; end: string }`
   `start` は `YYYY-01-01T00:00:00+09:00`、`end` は翌年の同じ形式。PostgREST の `gte` / `lt` にそのまま渡せる。
@@ -80,7 +82,7 @@ Expected: FAIL（`getJstYearRange is not a function` / import エラー）
 
 `src/utils/date.ts` の末尾に追記する。
 
-```ts
+````ts
 /**
  * JST（Asia/Tokyo）における指定年の範囲を返す
  *
@@ -108,7 +110,7 @@ export function getJstYearRange(year: number): {
     end: `${year + 1}-01-01T00:00:00+09:00`,
   };
 }
-```
+````
 
 - [ ] **Step 4: テストを実行して通ることを確認**
 
@@ -129,12 +131,14 @@ git commit -m "feat(watchlist): JSTの年範囲を返すヘルパーを追加"
 API 3本とモーダルが共有する定数・バリデーションを先に置く。
 
 **Files:**
+
 - Modify: `src/constants/watchlist.ts`
 - Modify: `src/constants/apiEndpoints.ts:57-62`（ウォッチリストの節）
 - Modify: `src/schema/watchlist.ts`
 - Test: `src/schema/watchlist.test.ts`（末尾に追記）
 
 **Interfaces:**
+
 - Consumes: なし
 - Produces:
   - `WATCHLIST_CLEANUP_MIN_YEAR = 2000` / `WATCHLIST_CLEANUP_MAX_YEAR = 2100`
@@ -164,15 +168,15 @@ describe('watchlistWatchedQuerySchema', () => {
   });
 
   it('年が下限より小さいと失敗する', () => {
-    expect(watchlistWatchedQuerySchema.safeParse({ year: '1999' }).success).toBe(
-      false,
-    );
+    expect(
+      watchlistWatchedQuerySchema.safeParse({ year: '1999' }).success,
+    ).toBe(false);
   });
 
   it('年が上限より大きいと失敗する', () => {
-    expect(watchlistWatchedQuerySchema.safeParse({ year: '2101' }).success).toBe(
-      false,
-    );
+    expect(
+      watchlistWatchedQuerySchema.safeParse({ year: '2101' }).success,
+    ).toBe(false);
   });
 
   it('年が数値でないと失敗する', () => {
@@ -446,11 +450,13 @@ git commit -m "feat(watchlist): 視聴済み一括削除の定数とバリデー
 先に型を揃えてから RPC を足す。`watched_at` は既に `TIMESTAMPTZ` なので対象外。
 
 **Files:**
+
 - Create: `supabase/migrations/<timestamp1>_fix_watchlist_timestamptz.sql`
 - Create: `supabase/migrations/<timestamp2>_add_watchlist_watched_years_rpc.sql`
 - Modify: `src/types/database.types.ts`（`supabase gen types` による自動生成。手で編集しない）
 
 **Interfaces:**
+
 - Consumes: なし
 - Produces: RPC `get_watchlist_watched_years(p_user_id UUID) → (added_year INT, watched_count BIGINT)[]`
   戻り値の列名は `added_year` / `watched_count`。`count` を列名にすると `COUNT(*)` と紛らわしいため避けている。
@@ -636,10 +642,12 @@ git commit -m "feat(watchlist): 追加年ごとの視聴済み件数を返すRPC
 年セレクトの選択肢を返す。
 
 **Files:**
+
 - Create: `src/app/api/watchlist/watched-years/route.ts`
 - Test: `src/app/api/watchlist/watched-years/route.test.ts`
 
 **Interfaces:**
+
 - Consumes: RPC `get_watchlist_watched_years`（Task 3）、`WATCHLIST_ERROR_MESSAGES.YEARS_FETCH_FAILED`（Task 2）
 - Produces: `GET /api/watchlist/watched-years` → `{ success: true, data: { years: Array<{ year: number; count: number }> } }`
 
@@ -862,10 +870,12 @@ git commit -m "feat(watchlist): 視聴済みの追加年一覧APIを追加"
 モーダルに出す対象一覧。既存の一覧ページと同じオフセットページング。
 
 **Files:**
+
 - Create: `src/app/api/watchlist/watched/route.ts`
 - Test: `src/app/api/watchlist/watched/route.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getJstYearRange`（Task 1）、`watchlistWatchedQuerySchema`（Task 2）
 - Produces: `GET /api/watchlist/watched?year=&cursor=&limit=` →
   `{ success: true, data: { watchlist: WatchlistItem[]; next_cursor: string | null; has_more: boolean } }`
@@ -993,10 +1003,7 @@ describe('GET /api/watchlist/watched', () => {
 
     await GET(createGetRequest({ year: '2025' }));
 
-    expect(calls.gte).toContainEqual([
-      'added_at',
-      '2025-01-01T00:00:00+09:00',
-    ]);
+    expect(calls.gte).toContainEqual(['added_at', '2025-01-01T00:00:00+09:00']);
     expect(calls.lt).toContainEqual(['added_at', '2026-01-01T00:00:00+09:00']);
   });
 
@@ -1013,9 +1020,7 @@ describe('GET /api/watchlist/watched', () => {
   it('総件数が取得件数を上回るとき次カーソルを返す', async () => {
     mockWatchedQuery([sampleItem], 30);
 
-    const response = await GET(
-      createGetRequest({ year: '2024', limit: '20' }),
-    );
+    const response = await GET(createGetRequest({ year: '2024', limit: '20' }));
     const body = await response.json();
 
     expect(body.data.has_more).toBe(true);
@@ -1215,10 +1220,12 @@ git commit -m "feat(watchlist): 追加年を指定した視聴済み一覧APIを
 ### Task 6: `POST /api/watchlist/bulk-delete`
 
 **Files:**
+
 - Create: `src/app/api/watchlist/bulk-delete/route.ts`
 - Test: `src/app/api/watchlist/bulk-delete/route.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getJstYearRange`（Task 1）、`watchlistBulkDeleteSchema`（Task 2）
 - Produces: `POST /api/watchlist/bulk-delete` →
   `{ success: true, message: string, data: { deleted_count: number } }`
@@ -1360,10 +1367,7 @@ describe('POST /api/watchlist/bulk-delete', () => {
 
     await POST(createPostRequest({ year: 2025 }));
 
-    expect(calls.gte).toContainEqual([
-      'added_at',
-      '2025-01-01T00:00:00+09:00',
-    ]);
+    expect(calls.gte).toContainEqual(['added_at', '2025-01-01T00:00:00+09:00']);
     expect(calls.lt).toContainEqual(['added_at', '2026-01-01T00:00:00+09:00']);
   });
 
@@ -1569,11 +1573,13 @@ git commit -m "feat(watchlist): 追加年を指定した視聴済み一括削除
 ### Task 7: API クライアントとクエリキー
 
 **Files:**
+
 - Modify: `src/lib/api/watchlist/watchlist.ts`（末尾に追記）
 - Modify: `src/constants/queryKeys.ts:23-27`（`watchlistKeys` に追記）
 - Test: `src/lib/api/watchlist/watchlist.test.ts`（末尾に追記）
 
 **Interfaces:**
+
 - Consumes: Task 2 の `API_ENDPOINTS`、Task 4〜6 のエンドポイント
 - Produces:
   - `getWatchlistWatchedYears(): Promise<GetWatchlistWatchedYearsResponse>`
@@ -1786,10 +1792,12 @@ git commit -m "feat(watchlist): 一括削除のAPIクライアントとクエリ
 ### Task 8: `useWatchlistCleanup` フック
 
 **Files:**
+
 - Create: `src/features/watchlist/hooks/useWatchlistCleanup.ts`
 - Test: `src/features/watchlist/hooks/useWatchlistCleanup.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 7 の API クライアントとクエリキー、`WATCHLIST_ERROR_MESSAGES` / `WATCHLIST_SUCCESS_MESSAGES`（Task 2）
 - Produces:
 
@@ -2369,11 +2377,13 @@ git commit -m "feat(watchlist): 視聴済み一括削除のカスタムフック
 ### Task 9: `WatchlistCleanupModal` コンポーネント
 
 **Files:**
+
 - Create: `src/features/watchlist/component/watchlistCleanupModal/watchlistCleanupModal.tsx`
 - Create: `src/features/watchlist/component/watchlistCleanupModal/watchlistCleanupModal.module.scss`
 - Test: `src/features/watchlist/component/watchlistCleanupModal/watchlistCleanupModal.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `useWatchlistCleanup`（Task 8）、`WATCHLIST_CLEANUP_LABELS`（Task 2）
 - Produces:
 
@@ -2489,7 +2499,9 @@ describe('WatchlistCleanupModal', () => {
 
     render(<WatchlistCleanupModal open onOpenChange={jest.fn()} />);
 
-    expect(screen.getByRole('button', { name: '0件を削除する' })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: '0件を削除する' }),
+    ).toBeDisabled();
   });
 
   it('削除中は削除ボタンが無効になる', () => {
@@ -2500,7 +2512,9 @@ describe('WatchlistCleanupModal', () => {
 
     render(<WatchlistCleanupModal open onOpenChange={jest.fn()} />);
 
-    expect(screen.getByRole('button', { name: '3件を削除する' })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: '3件を削除する' }),
+    ).toBeDisabled();
   });
 
   it('視聴済みが無いときは空状態を出し、削除ボタンを出さない', () => {
@@ -2940,11 +2954,13 @@ git commit -m "feat(watchlist): 視聴済み一括削除の確認モーダルを
 ### Task 10: ツールバーへの結線
 
 **Files:**
+
 - Modify: `src/features/watchlist/watchlistPage/watchlistPage.tsx:103-116`（ツールバー）
 - Modify: `src/features/watchlist/watchlistPage/watchlistPage.module.scss`
 - Test: `src/features/watchlist/watchlistPage/watchlistPage.test.tsx`（追記）
 
 **Interfaces:**
+
 - Consumes: `WatchlistCleanupModal`（Task 9）、`WATCHLIST_CLEANUP_LABELS.OPEN_BUTTON`（Task 2）
 - Produces: なし（最終的な結線）
 
@@ -3006,37 +3022,34 @@ import { WATCHLIST_CLEANUP_LABELS } from '@/constants';
 状態とハンドラーを追加（既存の `selectedMovieId` の近く）:
 
 ```tsx
-  const [isCleanupOpen, setIsCleanupOpen] = useState(false);
+const [isCleanupOpen, setIsCleanupOpen] = useState(false);
 
-  const handleCleanupOpen = useCallback(() => {
-    setIsCleanupOpen(true);
-  }, []);
+const handleCleanupOpen = useCallback(() => {
+  setIsCleanupOpen(true);
+}, []);
 ```
 
 ツールバーの `__controls` を次の形にする:
 
 ```tsx
-        <div className={styles.c_watchlist_page__controls}>
-          <Select
-            options={SORT_OPTIONS}
-            value={sortBy}
-            onValueChange={handleSortChange}
-            aria-label='ソート順を選択'
-            className={styles.c_watchlist_page__sort}
-          />
-          <Button variant='secondary' size='sm' onClick={handleCleanupOpen}>
-            {WATCHLIST_CLEANUP_LABELS.OPEN_BUTTON}
-          </Button>
-        </div>
+<div className={styles.c_watchlist_page__controls}>
+  <Select
+    options={SORT_OPTIONS}
+    value={sortBy}
+    onValueChange={handleSortChange}
+    aria-label='ソート順を選択'
+    className={styles.c_watchlist_page__sort}
+  />
+  <Button variant='secondary' size='sm' onClick={handleCleanupOpen}>
+    {WATCHLIST_CLEANUP_LABELS.OPEN_BUTTON}
+  </Button>
+</div>
 ```
 
 `FavoriteRatingModal` の下にモーダルを足す:
 
 ```tsx
-      <WatchlistCleanupModal
-        open={isCleanupOpen}
-        onOpenChange={setIsCleanupOpen}
-      />
+<WatchlistCleanupModal open={isCleanupOpen} onOpenChange={setIsCleanupOpen} />
 ```
 
 `setIsCleanupOpen` は `useState` のセッターなので参照が安定しており、
@@ -3065,6 +3078,7 @@ git commit -m "feat(watchlist): ツールバーから視聴済み整理モーダ
 ### Task 11: 全体検証と PR
 
 **Files:**
+
 - Modify: `.claude/documents/roadmap.md`（該当タスクがあればチェックを付ける）
 
 - [ ] **Step 1: 型チェックと Lint**

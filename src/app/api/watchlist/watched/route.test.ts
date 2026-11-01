@@ -171,7 +171,9 @@ describe('GET /api/watchlist/watched', () => {
   });
 
   it('cursor が負数だと400を返す', async () => {
-    const response = await GET(createGetRequest({ year: '2024', cursor: '-1' }));
+    const response = await GET(
+      createGetRequest({ year: '2024', cursor: '-1' }),
+    );
 
     expect(response.status).toBe(400);
   });

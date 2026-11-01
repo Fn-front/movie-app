@@ -147,6 +147,59 @@ describe('WatchlistCleanupModal', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('年一覧の読み込み中は対象リストを出さない', () => {
+    (useWatchlistCleanup as jest.Mock).mockReturnValue({
+      ...mockCleanup,
+      isYearsLoading: true,
+      years: [],
+      items: [],
+    });
+
+    render(<WatchlistCleanupModal open onOpenChange={jest.fn()} />);
+
+    expect(screen.queryByText('映画A')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /件を削除する/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('対象リストの読み込み中は作品を出さない', () => {
+    (useWatchlistCleanup as jest.Mock).mockReturnValue({
+      ...mockCleanup,
+      isItemsLoading: true,
+    });
+
+    render(<WatchlistCleanupModal open onOpenChange={jest.fn()} />);
+
+    expect(screen.queryByText('映画A')).not.toBeInTheDocument();
+    // 削除ボタンは出たままにする（件数はサーバーの集計値で分かっている）
+    expect(
+      screen.getByRole('button', { name: '3件を削除する' }),
+    ).toBeInTheDocument();
+  });
+
+  it('ポスターがある作品は画像を表示する', () => {
+    (useWatchlistCleanup as jest.Mock).mockReturnValue({
+      ...mockCleanup,
+      items: [{ ...mockCleanup.items[0], poster_path: '/poster.jpg' }],
+    });
+
+    render(<WatchlistCleanupModal open onOpenChange={jest.fn()} />);
+
+    // 同じ行にタイトルがあるため alt は空（装飾的な画像）
+    const image = document.querySelector('img');
+    expect(image).toBeInTheDocument();
+    expect(image).toHaveAttribute('alt', '');
+  });
+
+  it('モーダルが閉じているときはフックのクエリを止める', () => {
+    render(<WatchlistCleanupModal open={false} onOpenChange={jest.fn()} />);
+
+    expect(useWatchlistCleanup).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
   it('キャンセルで onOpenChange(false) が呼ばれる', async () => {
     const user = userEvent.setup();
     const onOpenChange = jest.fn();

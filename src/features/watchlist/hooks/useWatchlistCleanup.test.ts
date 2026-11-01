@@ -17,10 +17,8 @@ const mockBulkDeleteWatchlist = jest.fn();
 jest.mock('@/lib/api/watchlist/watchlist', () => ({
   getWatchlistWatchedYears: (...args: unknown[]) =>
     mockGetWatchlistWatchedYears(...args),
-  getWatchlistWatched: (...args: unknown[]) =>
-    mockGetWatchlistWatched(...args),
-  bulkDeleteWatchlist: (...args: unknown[]) =>
-    mockBulkDeleteWatchlist(...args),
+  getWatchlistWatched: (...args: unknown[]) => mockGetWatchlistWatched(...args),
+  bulkDeleteWatchlist: (...args: unknown[]) => mockBulkDeleteWatchlist(...args),
 }));
 
 const mockToast = jest.fn();
@@ -219,6 +217,72 @@ describe('useWatchlistCleanup', () => {
 
     expect(result.current.selectedCount).toBe(3);
     expect(result.current.isAllSelected).toBe(true);
+  });
+
+  it('外したチェックをもう一度押すと選択に戻る', async () => {
+    const { result } = renderHook(
+      () => useWatchlistCleanup({ enabled: true, onDeleted }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+
+    act(() => result.current.toggleItem(UUID_A));
+    expect(result.current.isSelected(UUID_A)).toBe(false);
+
+    act(() => result.current.toggleItem(UUID_A));
+
+    expect(result.current.isSelected(UUID_A)).toBe(true);
+    expect(result.current.selectedCount).toBe(3);
+  });
+
+  it('年が未選択なら削除APIを呼ばない', async () => {
+    mockGetWatchlistWatchedYears.mockResolvedValue({
+      success: true,
+      data: { years: [] },
+    });
+
+    const { result } = renderHook(
+      () => useWatchlistCleanup({ enabled: true, onDeleted }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isYearsLoading).toBe(false));
+    act(() => result.current.handleDelete());
+
+    expect(mockBulkDeleteWatchlist).not.toHaveBeenCalled();
+  });
+
+  it('次ページがあるとき fetchNextPage で続きを読み込む', async () => {
+    mockGetWatchlistWatched
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          watchlist: [mockItem(UUID_A, '映画A')],
+          next_cursor: '20',
+          has_more: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          watchlist: [mockItem(UUID_B, '映画B')],
+          next_cursor: null,
+          has_more: false,
+        },
+      });
+
+    const { result } = renderHook(
+      () => useWatchlistCleanup({ enabled: true, onDeleted }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.hasNextPage).toBe(true));
+
+    act(() => result.current.fetchNextPage());
+
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+    expect(result.current.hasNextPage).toBe(false);
   });
 
   it('視聴済みが1件も無いとき selectedYear は null のまま', async () => {

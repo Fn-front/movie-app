@@ -140,6 +140,7 @@ export const AwardsPage = memo(function AwardsPage() {
                 value={selectedAward.awardName}
                 onValueChange={handleAwardChange}
                 aria-label='賞を選択'
+                contentClassName={styles.c_awards_page__tab_panel}
               >
                 <AwardSection
                   award={selectedAward}

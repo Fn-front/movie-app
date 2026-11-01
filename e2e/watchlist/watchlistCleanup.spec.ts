@@ -152,6 +152,76 @@ test.describe('視聴済みの一括削除', () => {
     });
   });
 
+  test('一括削除してもお気に入りは消えない', async () => {
+    await cleanupWatchlistForUser(session.userId);
+    await addMovieToWatchlist(page);
+
+    // 視聴済みにすると評価モーダルが開くので、そこでお気に入りに登録する。
+    // 削除対象を「ウォッチリストにもお気に入りにも入っている状態」にする
+    await page.goto('/watchlist');
+    const watchButton = page
+      .getByRole('button', { name: /を視聴済みにする$/ })
+      .first();
+    await expect(watchButton).toBeVisible({ timeout: 30000 });
+
+    const watchLabel = await watchButton.getAttribute('aria-label');
+    const targetTitle = (watchLabel ?? '').replace(/を視聴済みにする$/, '');
+
+    const patchResponse = waitForWriteResponse(page, {
+      urlPart: '/api/watchlist/',
+      methods: ['PATCH'],
+      label: '視聴済みの切り替え',
+    });
+    await watchButton.click();
+    await patchResponse;
+
+    const ratingModal = page.getByRole('dialog', {
+      name: /お気に入り(に追加|を編集)/,
+    });
+    await expect(ratingModal).toBeVisible({ timeout: 15000 });
+    await ratingModal.getByRole('radio', { name: '8点' }).click();
+
+    const favoriteResponse = waitForWriteResponse(page, {
+      urlPart: '/api/favorites',
+      methods: ['POST'],
+      label: 'お気に入り登録',
+    });
+    await ratingModal.getByRole('button', { name: '登録' }).click();
+    await favoriteResponse;
+    await expect(ratingModal).not.toBeVisible();
+
+    // 一括削除する
+    await page.getByRole('button', { name: '視聴済みを整理' }).click();
+    const dialog = page.getByRole('dialog', {
+      name: '視聴済みをまとめて削除',
+    });
+    await expect(dialog).toBeVisible({ timeout: 15000 });
+
+    const deleteResponse = waitForWriteResponse(page, {
+      urlPart: '/api/watchlist/bulk-delete',
+      methods: ['POST'],
+      label: '一括削除',
+    });
+    await dialog.getByRole('button', { name: /件を削除する$/ }).click();
+    await deleteResponse;
+    await expect(dialog).not.toBeVisible({ timeout: 15000 });
+
+    // ウォッチリストからは消えている
+    await expect(
+      page.getByRole('main').getByRole('heading', { name: targetTitle }),
+    ).toHaveCount(0, { timeout: 15000 });
+
+    // お気に入りには残っている（bulk-delete は watchlist しか触らない）
+    await page.goto('/favorites');
+    await expect(
+      page.getByRole('main').getByRole('heading', { name: targetTitle }),
+    ).toHaveCount(1, { timeout: 30000 });
+
+    await page.screenshot({
+      path: 'docs/e2e-screenshots/watchlist-cleanup-favorites-kept.png',
+    });
+  });
+
   test('視聴済みが無いときは空状態を出す', async () => {
     await cleanupWatchlistForUser(session.userId);
     await addMovieToWatchlist(page);

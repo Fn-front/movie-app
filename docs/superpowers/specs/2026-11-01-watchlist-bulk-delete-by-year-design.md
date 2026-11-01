@@ -71,6 +71,17 @@ get_watchlist_watched_years(p_user_id UUID) RETURNS TABLE (year INT, count BIGIN
 
 いずれも `withAuth` を通し、レスポンスは既存の統一形式に合わせる。
 
+### 注意: RLS は防御にならない
+
+`withAuth` は `createServiceRoleClient()` を使う（`src/helpers/routeHandler.ts`）。
+**service_role は RLS をバイパスする**ため、他ユーザーの行を守るのは
+クエリに付ける `user_id` 条件だけである。
+
+本機能は一度に多数の行を更新するため、この条件の欠落は被害が大きい。
+`bulk-delete` では `user_id` 条件を**必ず最初に**付け、
+「他ユーザーの行が削除されない」ことをテストで固定する。
+RPC も同様に、`p_user_id` 引数で絞る前提で設計する。
+
 ### `GET /api/watchlist/watched-years`
 
 年セレクトの選択肢を返す。
@@ -95,7 +106,7 @@ get_watchlist_watched_years(p_user_id UUID) RETURNS TABLE (year INT, count BIGIN
 
 | パラメータ | 内容 |
 |---|---|
-| `year` | 必須。整数。範囲は `2000` 〜 `現在年`（JST） |
+| `year` | 必須。整数。範囲は `2000` 〜 `2100` |
 | `cursor` | 省略時 `0`。オフセット |
 | `limit` | 省略時 `WATCHLIST_DEFAULT_LIMIT`、上限 `WATCHLIST_MAX_LIMIT` |
 
@@ -111,6 +122,10 @@ added_at <  <year+1>-01-01T00:00+09:00
 
 並びは `added_at DESC`。総件数は PostgREST の `count: 'exact'` で取得し、
 既存の一覧 API と同じく `next_cursor` / `has_more` を返す。
+
+`year` の範囲を `2000` 〜 `2100` の固定値にするのは、上限を「現在年」にすると
+バリデーションが実行時刻に依存してテストが不安定になるため。
+未来の年を指定しても対象は0件になるだけで害が無く、固定範囲で異常入力を弾く目的は足りる。
 
 既存の `get_watchlist_sorted` に年フィルタを足さず専用にする。
 あの RPC は「視聴済みを常に最後へ送る」並びを抱えており、
@@ -240,7 +255,7 @@ supabase/migrations/<timestamp>_add_watchlist_watched_years_rpc.sql
 |---|---|
 | 正常系 | 年を選ぶ → 一覧表示 → 削除 → 件数トースト → 一覧が更新される |
 | 入力バリデーション | `year` が非数値 / 範囲外、`exclude_ids` が非UUID、1001件で 400 |
-| 認証・認可 | 未認証で 401。他ユーザーの行は `user_id` 条件と RLS で削除されない |
+| 認証・認可 | 未認証で 401。他ユーザーの行が削除されない（下記の注意を参照） |
 | 空状態・0件 | 視聴済みが1件も無い（`years: []`）→ 空状態表示。全件除外 → 削除ボタン `disabled` |
 | エラー応答 | 削除 API 失敗時にトーストを出し、モーダルは閉じない |
 | 重複・競合 | 既に削除済み / 視聴済みを外した行が対象から落ち、`deleted_count` に含まれない |

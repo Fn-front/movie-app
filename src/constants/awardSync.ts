@@ -48,6 +48,26 @@ export const AWARD_SYNC_MIN_YEAR: Record<SyncableAwardName, number> = {
   cannes: 1946,
 };
 
+/**
+ * 入力された賞・年が同期可能な範囲に収まっているか
+ *
+ * 画面が既存件数を問い合わせてよいかの判定に使う。範囲外のまま叩くと
+ * 400 が返るだけで無駄になるため、入力途中（「20」など）では問い合わせない。
+ * サーバー側の最終判定は `awardSyncCreateSchema` が行う。
+ */
+export function isSyncableYear(awardName: string, year: number): boolean {
+  if (!(SYNCABLE_AWARD_NAMES as readonly string[]).includes(awardName)) {
+    return false;
+  }
+
+  if (!Number.isInteger(year)) return false;
+
+  const minYear = AWARD_SYNC_MIN_YEAR[awardName as SyncableAwardName];
+  const maxYear = new Date().getFullYear() + 1;
+
+  return year >= minYear && year <= maxYear;
+}
+
 /** ジョブの状態 */
 export const AWARD_SYNC_STATUS = {
   RUNNING: 'running',
@@ -82,6 +102,14 @@ export const AWARD_SYNC_POLL_INTERVAL_MS = 5_000;
 
 /** ポーリングを打ち切るまでの連続失敗回数 */
 export const AWARD_SYNC_MAX_POLL_FAILURES = 3;
+
+/**
+ * 既存件数を問い合わせるまでの入力待ち時間（ミリ秒）
+ *
+ * 年は数値入力なので「2024」で4回 change が走る。デバウンスしないと
+ * 1入力で4リクエストになり、ポーリングと共有しているカウンタを無駄に削る。
+ */
+export const AWARD_SYNC_COUNT_DEBOUNCE_MS = 500;
 
 /** 画面・APIのメッセージ */
 export const AWARD_SYNC_MESSAGES = {

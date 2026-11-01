@@ -10,6 +10,7 @@ import {
   extractConflict,
   extractMessage,
   fetchAwardSyncJob,
+  fetchExistingAwardCount,
   fetchLatestAwardSync,
   startAwardSync,
 } from './awardSync';
@@ -101,6 +102,23 @@ describe('fetchLatestAwardSync', () => {
     expect(snapshot).toEqual({ job: null, isStale: false });
     expect(mockedAxios.get).toHaveBeenCalledWith(
       API_ENDPOINTS.ADMIN_AWARD_SYNC,
+    );
+  });
+});
+
+describe('fetchExistingAwardCount', () => {
+  it('賞と年をクエリで渡して件数を返す', async () => {
+    mockedAxios.get.mockResolvedValue({ data: { data: { count: 42 } } });
+
+    const count = await fetchExistingAwardCount({
+      awardName: 'cannes',
+      year: 2024,
+    });
+
+    expect(count).toBe(42);
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      API_ENDPOINTS.ADMIN_AWARD_EXISTING,
+      { params: { awardName: 'cannes', year: 2024 } },
     );
   });
 });

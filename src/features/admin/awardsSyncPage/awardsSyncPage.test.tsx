@@ -38,6 +38,7 @@ const baseState = {
   isSubmitting: false,
   error: null,
   conflict: null,
+  existingCount: null,
   setAwardName: mockSetAwardName,
   setYear: mockSetYear,
   start: mockStart,
@@ -158,6 +159,41 @@ describe('AwardsSyncPage', () => {
     render(<AwardsSyncPage />);
 
     expect(screen.getByText('同期の開始に失敗しました')).toBeInTheDocument();
+  });
+
+  describe('既存件数の警告', () => {
+    it('既にデータがある年は件数と上書きの旨を出す', () => {
+      hookState = { ...baseState, year: '2024', existingCount: 42 };
+      render(<AwardsSyncPage />);
+
+      expect(
+        screen.getByText(
+          'この年は既に42件あります。実行すると置き換わります。',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('0件なら警告を出さない', () => {
+      hookState = { ...baseState, year: '2024', existingCount: 0 };
+      render(<AwardsSyncPage />);
+
+      expect(screen.queryByText(/既に/)).not.toBeInTheDocument();
+    });
+
+    // 未取得・範囲外・取得失敗はいずれも null。警告を出さず実行は妨げない
+    it('未取得なら警告を出さない', () => {
+      hookState = { ...baseState, year: '2024', existingCount: null };
+      render(<AwardsSyncPage />);
+
+      expect(screen.queryByText(/既に/)).not.toBeInTheDocument();
+    });
+
+    it('警告が出ていても実行ボタンは押せる', () => {
+      hookState = { ...baseState, year: '2024', existingCount: 42 };
+      render(<AwardsSyncPage />);
+
+      expect(screen.getByRole('button', { name: '同期を開始' })).toBeEnabled();
+    });
   });
 
   it('409かつ閾値未満なら強制失効ボタンを出さない', () => {

@@ -25,6 +25,13 @@
   font-size: $font-size-sm;
 }
 
+/* 既にデータがある年への注意喚起。実行は妨げないので控えめに出す */
+.c_awards_sync__warning {
+  margin: 0;
+  color: $text-warning;
+  font-size: $font-size-sm;
+}
+
 .c_awards_sync__section {
   margin-top: $spacing-8;
 }

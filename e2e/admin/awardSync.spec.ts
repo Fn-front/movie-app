@@ -147,6 +147,51 @@ test.describe('受賞作品の手動同期（admin）', () => {
     expect(consoleErrors).toEqual([]);
   });
 
+  // 既にデータがある年の取り直しは正当な用途なので弾かない。注意喚起に留める
+  test('既にデータがある年は件数を警告するが実行は妨げない', async () => {
+    const { page } = session;
+
+    await stubLatest(page, { job: null, isStale: false });
+    await page.route('**/api/admin/awards/existing*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        json: { success: true, data: { count: 42 } },
+      });
+    });
+
+    await openSyncPage(page);
+    await page.getByLabel('年（授賞式の年）').fill('2024');
+
+    await expect(
+      page.getByText('この年は既に42件あります。実行すると置き換わります。'),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: '同期を開始' }),
+    ).toBeEnabled();
+
+    await page.unroute('**/api/admin/awards/existing*');
+  });
+
+  test('0件の年では警告を出さない', async () => {
+    const { page } = session;
+
+    await stubLatest(page, { job: null, isStale: false });
+    await page.route('**/api/admin/awards/existing*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        json: { success: true, data: { count: 0 } },
+      });
+    });
+
+    await openSyncPage(page);
+    await page.getByLabel('年（授賞式の年）').fill('2024');
+    await page.waitForTimeout(1000);
+
+    await expect(page.getByText(/この年は既に/)).toHaveCount(0);
+
+    await page.unroute('**/api/admin/awards/existing*');
+  });
+
   test('取得0件で失敗したときは理由が表示される', async () => {
     const { page } = session;
 

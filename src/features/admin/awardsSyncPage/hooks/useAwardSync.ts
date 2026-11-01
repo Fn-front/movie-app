@@ -16,20 +16,24 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useDebounce } from '@/hooks/useDebounce';
 import {
   extractConflict,
   extractMessage,
   fetchAwardSyncJob,
+  fetchExistingAwardCount,
   fetchLatestAwardSync,
   startAwardSync,
   type AwardSyncJobView,
   type AwardSyncSnapshot,
 } from '@/lib/api/awardSync/awardSync';
 import {
+  AWARD_SYNC_COUNT_DEBOUNCE_MS,
   AWARD_SYNC_MAX_POLL_FAILURES,
   AWARD_SYNC_MESSAGES,
   AWARD_SYNC_POLL_INTERVAL_MS,
   AWARD_SYNC_STATUS,
+  isSyncableYear,
   SYNCABLE_AWARD_OPTIONS,
 } from '@/constants/awardSync';
 
@@ -43,6 +47,11 @@ export interface UseAwardSyncResult {
   error: string | null;
   /** 409 で返ってきた実行中ジョブ。強制失効の出し分けに使う */
   conflict: AwardSyncSnapshot | null;
+  /**
+   * 指定中の賞・年に既に入っている件数。
+   * 未取得・範囲外・取得失敗は null（警告を出さない）
+   */
+  existingCount: number | null;
   setAwardName: (value: string) => void;
   setYear: (value: string) => void;
   start: (options?: { force?: boolean }) => Promise<void>;
@@ -66,6 +75,9 @@ export function useAwardSync(): UseAwardSyncResult {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<AwardSyncSnapshot | null>(null);
+  const [existingCount, setExistingCount] = useState<number | null>(null);
+  /** 同期完了のたびに件数を取り直すためのトリガー */
+  const [countRevision, setCountRevision] = useState(0);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const failureCountRef = useRef(0);
@@ -82,7 +94,11 @@ export function useAwardSync(): UseAwardSyncResult {
       setJob(snapshot.job);
       setIsStale(snapshot.isStale);
 
-      if (isTerminal(snapshot.job)) stopPolling();
+      if (!isTerminal(snapshot.job)) return;
+
+      stopPolling();
+      // 入れ替わった後の件数を見せる必要がある
+      setCountRevision((n) => n + 1);
     },
     [stopPolling],
   );
@@ -147,6 +163,38 @@ export function useAwardSync(): UseAwardSyncResult {
   // アンマウント時に必ず止める
   useEffect(() => stopPolling, [stopPolling]);
 
+  // 既に入っている件数を知らせる。実行を弾くためではないので、
+  // 取得に失敗しても error にはせず黙って警告を出さないだけにする
+  const debouncedYear = useDebounce(year, AWARD_SYNC_COUNT_DEBOUNCE_MS);
+
+  useEffect(() => {
+    const parsedYear = Number(debouncedYear);
+
+    if (!debouncedYear || !isSyncableYear(awardName, parsedYear)) {
+      setExistingCount(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const count = await fetchExistingAwardCount({
+          awardName,
+          year: parsedYear,
+        });
+        if (!cancelled) setExistingCount(count);
+      } catch {
+        // 件数は補助情報。取れなければ警告を出さないだけで実行は妨げない
+        if (!cancelled) setExistingCount(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [awardName, debouncedYear, countRevision]);
+
   const start = useCallback(
     async (options?: { force?: boolean }) => {
       setIsSubmitting(true);
@@ -194,6 +242,7 @@ export function useAwardSync(): UseAwardSyncResult {
     isSubmitting,
     error,
     conflict,
+    existingCount,
     setAwardName,
     setYear,
     start,

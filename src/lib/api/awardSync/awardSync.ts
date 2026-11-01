@@ -67,6 +67,27 @@ export async function fetchLatestAwardSync(): Promise<AwardSyncSnapshot> {
   return data.data;
 }
 
+interface ExistingCountResponse {
+  success: true;
+  data: { count: number };
+}
+
+/**
+ * 指定した賞・年に既に入っている件数を取得する
+ *
+ * 実行を弾くためではなく、画面で「この年は既に N 件あります」と知らせるため。
+ */
+export async function fetchExistingAwardCount(input: {
+  awardName: string;
+  year: number;
+}): Promise<number> {
+  const { data } = await axiosInstance.get<ExistingCountResponse>(
+    API_ENDPOINTS.ADMIN_AWARD_EXISTING,
+    { params: { awardName: input.awardName, year: input.year } },
+  );
+  return data.data.count;
+}
+
 /**
  * 409 のボディから実行中ジョブを取り出す
  *

@@ -33,6 +33,7 @@ const SyncForm = memo(function SyncForm({
   awardName,
   year,
   isSubmitting,
+  existingCount,
   onAwardNameChange,
   onYearChange,
   onSubmit,
@@ -40,6 +41,7 @@ const SyncForm = memo(function SyncForm({
   awardName: string;
   year: string;
   isSubmitting: boolean;
+  existingCount: number | null;
   onAwardNameChange: (value: string) => void;
   onYearChange: (value: string) => void;
   onSubmit: () => void;
@@ -86,6 +88,16 @@ const SyncForm = memo(function SyncForm({
           '指定した賞・年のデータを取り直します。取得できなかった場合、既存のデータは変更されません。'
         }
       </p>
+      {/*
+        既にデータがある年の取り直しは正当な用途なので実行は妨げない。
+        誤って別の年を上書きするのを防ぐための注意喚起に留める
+      */}
+      {existingCount !== null && existingCount > 0 && (
+        <p className={styles.c_awards_sync__warning}>
+          {`この年は既に${existingCount}件あります。実行すると置き換わります。`}
+        </p>
+      )}
+
       <Button type='submit' disabled={isSubmitting || !year}>
         {isSubmitting ? '開始中...' : '同期を開始'}
       </Button>
@@ -180,6 +192,7 @@ export const AwardsSyncPage = memo(function AwardsSyncPage() {
     isSubmitting,
     error,
     conflict,
+    existingCount,
     setAwardName,
     setYear,
     start,
@@ -201,6 +214,7 @@ export const AwardsSyncPage = memo(function AwardsSyncPage() {
         awardName={awardName}
         year={year}
         isSubmitting={isSubmitting}
+        existingCount={existingCount}
         onAwardNameChange={setAwardName}
         onYearChange={setYear}
         onSubmit={handleSubmit}

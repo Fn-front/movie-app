@@ -4,6 +4,7 @@ import {
   AWARD_SYNC_MIN_YEAR,
   AWARD_SYNC_STALE_MINUTES,
   AWARD_SYNC_POLL_INTERVAL_MS,
+  isSyncableYear,
 } from './awardSync';
 import { OPENAI_CONFIG } from './openai';
 import { AWARDS_MAX_RETRIES, AWARD_DEFINITIONS } from './awards';
@@ -50,6 +51,33 @@ describe('awardSync constants', () => {
       maxCategories * AWARDS_MAX_RETRIES * OPENAI_CONFIG.REQUEST_TIMEOUT_MS;
 
     expect(AWARD_SYNC_STALE_MINUTES * 60_000).toBeGreaterThan(upperBoundMs);
+  });
+
+  describe('isSyncableYear', () => {
+    const currentYear = new Date().getFullYear();
+
+    it('賞ごとの下限と当年+1の範囲を判定する', () => {
+      expect(isSyncableYear('cannes', 1946)).toBe(true);
+      expect(isSyncableYear('cannes', 1945)).toBe(false);
+      expect(isSyncableYear('cannes', currentYear + 1)).toBe(true);
+      expect(isSyncableYear('cannes', currentYear + 2)).toBe(false);
+    });
+
+    it('賞ごとに下限が違う', () => {
+      expect(isSyncableYear('academy_awards', 1930)).toBe(true);
+      expect(isSyncableYear('cannes', 1930)).toBe(false);
+    });
+
+    it('同期対象外・不明な賞は false', () => {
+      expect(isSyncableYear('japan_academy_awards', 2024)).toBe(false);
+      expect(isSyncableYear('oscar', 2024)).toBe(false);
+    });
+
+    // 入力途中の「20」や NaN で問い合わせないための判定
+    it('整数でない年は false', () => {
+      expect(isSyncableYear('cannes', 2024.5)).toBe(false);
+      expect(isSyncableYear('cannes', Number('abc'))).toBe(false);
+    });
   });
 
   /** ポーリング回数がレート制限の上限に収まることを保証する */

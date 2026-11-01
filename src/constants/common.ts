@@ -44,6 +44,8 @@ export const ROUTES = {
   WATCHLIST: '/watchlist',
   /** 管理者向けのアカウント管理（admin ロールのみ） */
   ADMIN_ACCOUNTS: '/admin/accounts',
+  /** 管理者向けの受賞作品手動同期（admin ロールのみ） */
+  ADMIN_AWARDS: '/admin/awards',
   /** 受賞作品 */
   AWARDS: '/awards',
   /** シアター体験 */
@@ -80,7 +82,10 @@ export const AUTH_REQUIRED_ROUTES = [
  * ため、**ロールの最終判定は各 API Route の `withAdminAuth` で行う**。
  * 画面だけ塞いでも、APIを直接叩かれれば意味がない。
  */
-export const ADMIN_REQUIRED_ROUTES = [ROUTES.ADMIN_ACCOUNTS] as const;
+export const ADMIN_REQUIRED_ROUTES = [
+  ROUTES.ADMIN_ACCOUNTS,
+  ROUTES.ADMIN_AWARDS,
+] as const;
 
 /**
  * エラーメッセージ生成ヘルパー

@@ -312,6 +312,35 @@ describe('MobileDrawer', () => {
       expect(mockPush).toHaveBeenCalledWith('/admin/accounts');
     });
 
+    // SP の導線を忘れると、管理画面へ到達できる経路が PC だけになる
+    it('adminロールのとき「受賞作品の同期」ボタンが表示される', () => {
+      setRole('admin');
+      render(<MobileDrawer {...defaultProps} />);
+
+      expect(
+        screen.getByRole('button', { name: /受賞作品の同期/ }),
+      ).toBeInTheDocument();
+    });
+
+    it('adminロールで「受賞作品の同期」クリックで/admin/awardsに遷移する', async () => {
+      setRole('admin');
+      const user = userEvent.setup();
+      render(<MobileDrawer {...defaultProps} />);
+
+      await user.click(screen.getByRole('button', { name: /受賞作品の同期/ }));
+
+      expect(mockPush).toHaveBeenCalledWith('/admin/awards');
+    });
+
+    it('一般ユーザーのときは「受賞作品の同期」ボタンが表示されない', () => {
+      setRole('user');
+      render(<MobileDrawer {...defaultProps} />);
+
+      expect(
+        screen.queryByRole('button', { name: /受賞作品の同期/ }),
+      ).not.toBeInTheDocument();
+    });
+
     it('一般ユーザーのときは「アカウント管理」ボタンが表示されない', () => {
       setRole('user');
       render(<MobileDrawer {...defaultProps} />);

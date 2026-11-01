@@ -42,7 +42,9 @@ jest.mock('@/lib/eiga/fetchEigaOscarAwards', () => ({
 import {
   getAwardsForMonth,
   executeSyncAwardMoviesCron,
+  syncSingleAward,
 } from './syncAwardMoviesService';
+import { AWARD_DEFINITIONS } from '@/constants/awards';
 
 // --- Helper ---
 
@@ -388,5 +390,147 @@ describe('executeSyncAwardMoviesCron', () => {
 
     const resolveCallArgs = mockResolveAwardsWithTMDb.mock.calls[0][0];
     expect(resolveCallArgs[0].year).toBe(2025);
+  });
+});
+
+describe('syncSingleAward', () => {
+  /** upsert の引数を検査できる supabase モック */
+  function createCapturingSupabase(
+    upsertResult: { error: unknown } = { error: null },
+  ) {
+    const upsert = jest.fn().mockResolvedValue(upsertResult);
+    const supabase = {
+      from: jest.fn(() => ({ upsert })),
+    } as unknown as Parameters<typeof syncSingleAward>[0];
+
+    return { supabase, upsert };
+  }
+
+  const params = {
+    awardName: 'academy_awards' as const,
+    awardDef: AWARD_DEFINITIONS.academy_awards,
+    year: 2025,
+    generatedAt: '2026-10-31T00:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+  });
+
+  it('generatedAt を引数で受け取り、生成した行すべてに同じ値を入れる', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([
+      createResolvedMovie({ tmdb_movie_id: 1 }),
+      createResolvedMovie({ tmdb_movie_id: 2, display_order: 2 }),
+    ]);
+    const { supabase, upsert } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'synced', upsertedCount: 2 });
+
+    const rows = upsert.mock.calls[0][0] as { generated_at: string }[];
+    expect(rows).toHaveLength(2);
+    expect(
+      rows.every((r) => r.generated_at === '2026-10-31T00:00:00.000Z'),
+    ).toBe(true);
+  });
+
+  it('取得0件を no_items として返し、DBに触らない', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    mockFetchWikipediaArticle.mockResolvedValue(null);
+    const { supabase, upsert } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'no_items' });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('TMDb解決0件を no_tmdb_match として返し、DBに触らない', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([]);
+    const { supabase, upsert } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'no_tmdb_match' });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('UPSERT 失敗を write_failed として返す', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase } = createCapturingSupabase({
+      error: { message: 'boom' },
+    });
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'write_failed', error: 'boom' });
+  });
+
+  it('同じユニークキーの重複行を除外する', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    // 同一 tmdb_movie_id × 同一 category が2件返る
+    mockResolveAwardsWithTMDb.mockResolvedValue([
+      createResolvedMovie({ tmdb_movie_id: 1 }),
+      createResolvedMovie({
+        tmdb_movie_id: 1,
+        is_winner: false,
+        display_order: 2,
+      }),
+    ]);
+    const { supabase, upsert } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'synced', upsertedCount: 1 });
+    expect(upsert.mock.calls[0][0]).toHaveLength(1);
+  });
+
+  it('例外を握り潰さず呼び出し元へ投げる', async () => {
+    mockFetchEigaOscarAwards.mockRejectedValue(new Error('network down'));
+    const { supabase } = createCapturingSupabase();
+
+    await expect(syncSingleAward(supabase, params)).rejects.toThrow(
+      'network down',
+    );
   });
 });

@@ -48,6 +48,27 @@ describe('OpenAI client', () => {
 
       expect(client).toBeNull();
     });
+
+    /**
+     * SDK既定（timeout 10分 / maxRetries 2）のままだと1呼び出しが最大30分
+     * ブロックしうる。手動同期の失効閾値（AWARD_SYNC_STALE_MINUTES）は
+     * 実行時間の上界から導くため、ここが固定されていないと根拠が作れない。
+     */
+    it('明示的なタイムアウトとリトライ回数を渡す', async () => {
+      process.env.OPENAI_API_KEY = 'test-key';
+      const openaiModule = await import('openai');
+      const OpenAI = (openaiModule.default ??
+        openaiModule) as unknown as jest.Mock;
+      const { createOpenAIClient } = await import('./client');
+
+      createOpenAIClient();
+
+      expect(OpenAI).toHaveBeenCalledWith({
+        apiKey: 'test-key',
+        timeout: 45_000,
+        maxRetries: 0,
+      });
+    });
   });
 
   describe('getOpenAIModel', () => {

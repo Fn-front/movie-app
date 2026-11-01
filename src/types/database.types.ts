@@ -173,6 +173,53 @@ export type Database = {
         };
         Relationships: [];
       };
+      award_sync_jobs: {
+        Row: {
+          award_name: string;
+          award_year: number;
+          created_at: string;
+          error_message: string | null;
+          finished_at: string | null;
+          id: string;
+          requested_by: string;
+          started_at: string;
+          status: string;
+          total_upserted: number | null;
+        };
+        Insert: {
+          award_name: string;
+          award_year: number;
+          created_at?: string;
+          error_message?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          requested_by: string;
+          started_at?: string;
+          status: string;
+          total_upserted?: number | null;
+        };
+        Update: {
+          award_name?: string;
+          award_year?: number;
+          created_at?: string;
+          error_message?: string | null;
+          finished_at?: string | null;
+          id?: string;
+          requested_by?: string;
+          started_at?: string;
+          status?: string;
+          total_upserted?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'award_sync_jobs_requested_by_fkey';
+            columns: ['requested_by'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       dismissed_movies: {
         Row: {
           created_at: string;

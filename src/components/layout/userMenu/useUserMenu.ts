@@ -26,6 +26,11 @@ export const useUserMenu = () => {
     router.push(ROUTES.ADMIN_ACCOUNTS);
   }, [router]);
 
+  /** 受賞作品の手動同期画面へ遷移（admin ロールのみ導線を出す） */
+  const handleNavigateToAdminAwardSync = useCallback(() => {
+    router.push(ROUTES.ADMIN_AWARDS);
+  }, [router]);
+
   /** ログアウト処理 */
   const handleLogout = useCallback(async () => {
     await signOut({ callbackUrl: ROUTES.LOGIN });
@@ -34,6 +39,7 @@ export const useUserMenu = () => {
   return {
     handleNavigateToSettings,
     handleNavigateToAdminAccounts,
+    handleNavigateToAdminAwardSync,
     handleLogout,
   };
 };

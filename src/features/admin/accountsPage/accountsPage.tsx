@@ -69,6 +69,8 @@ const CreateForm = memo(function CreateForm({
   );
 });
 
+CreateForm.displayName = 'CreateForm';
+
 /** 1件分の行（再発行フォームを内包する） */
 const AccountRow = memo(function AccountRow({
   id,
@@ -168,6 +170,8 @@ const AccountRow = memo(function AccountRow({
   );
 });
 
+AccountRow.displayName = 'AccountRow';
+
 /**
  * 管理者発行アカウントの管理ページ
  */
@@ -243,3 +247,5 @@ export const AdminAccountsPage = memo(function AdminAccountsPage() {
     </div>
   );
 });
+
+AdminAccountsPage.displayName = 'AdminAccountsPage';

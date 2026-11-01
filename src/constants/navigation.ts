@@ -34,6 +34,8 @@ export const MENU_LABELS = {
   SETTINGS: '設定',
   /** admin ロールのみに表示するアカウント管理画面への導線 */
   ADMIN_ACCOUNTS: 'アカウント管理',
+  /** admin ロールのみに表示する受賞作品同期画面への導線 */
+  ADMIN_AWARD_SYNC: '受賞作品の同期',
   LOGOUT: 'ログアウト',
   LOGIN: 'ログイン',
   DARK_MODE: 'ダークモード',

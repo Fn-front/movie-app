@@ -150,6 +150,10 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
     router.push(ROUTES.ADMIN_ACCOUNTS);
   }, [router]);
 
+  const handleNavigateToAdminAwardSync = useCallback(() => {
+    router.push(ROUTES.ADMIN_AWARDS);
+  }, [router]);
+
   const handleLogin = useCallback(() => {
     router.push(ROUTES.LOGIN);
   }, [router]);
@@ -268,17 +272,30 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
                   <span>{MENU_LABELS.SETTINGS}</span>
                 </button>
                 {isAdmin && (
-                  <button
-                    type='button'
-                    className={styles.c_mobile_drawer__user_action}
-                    onClick={handleNavigateToAdminAccounts}
-                  >
-                    <IoShieldCheckmarkOutline
-                      size={ICON_SIZES.SM}
-                      aria-hidden='true'
-                    />
-                    <span>{MENU_LABELS.ADMIN_ACCOUNTS}</span>
-                  </button>
+                  <>
+                    <button
+                      type='button'
+                      className={styles.c_mobile_drawer__user_action}
+                      onClick={handleNavigateToAdminAccounts}
+                    >
+                      <IoShieldCheckmarkOutline
+                        size={ICON_SIZES.SM}
+                        aria-hidden='true'
+                      />
+                      <span>{MENU_LABELS.ADMIN_ACCOUNTS}</span>
+                    </button>
+                    <button
+                      type='button'
+                      className={styles.c_mobile_drawer__user_action}
+                      onClick={handleNavigateToAdminAwardSync}
+                    >
+                      <IoShieldCheckmarkOutline
+                        size={ICON_SIZES.SM}
+                        aria-hidden='true'
+                      />
+                      <span>{MENU_LABELS.ADMIN_AWARD_SYNC}</span>
+                    </button>
+                  </>
                 )}
                 <button
                   type='button'

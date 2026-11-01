@@ -29,6 +29,12 @@ export const API_ENDPOINTS = {
   ADMIN_ACCOUNTS: '/api/admin/accounts',
   /** パスワード設定リンクの再発行（admin 専用） */
   ADMIN_ACCOUNT_REISSUE: (id: string) => `/api/admin/accounts/${id}/reissue`,
+  /** 受賞作品の手動同期の起票・最新ジョブ取得（admin 専用） */
+  ADMIN_AWARD_SYNC: '/api/admin/awards/sync',
+  /** 同期ジョブの進捗取得（admin 専用） */
+  ADMIN_AWARD_SYNC_JOB: (id: string) => `/api/admin/awards/sync/${id}`,
+  /** 指定した賞・年に既に入っている件数（admin 専用） */
+  ADMIN_AWARD_EXISTING: '/api/admin/awards/existing',
   /** 二段階認証の状態取得 */
   USER_TOTP: '/api/user/totp',
   /** 二段階認証の設定開始（QRコード取得） */

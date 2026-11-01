@@ -1,0 +1,104 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_awards_sync {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: $spacing-4;
+
+  @include md {
+    padding: $spacing-8;
+  }
+}
+
+.c_awards_sync__form {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+  align-items: flex-start;
+  margin-top: $spacing-4;
+}
+
+.c_awards_sync__hint {
+  margin: 0;
+  color: $text-secondary;
+  font-size: $font-size-sm;
+}
+
+/* 既にデータがある年への注意喚起。実行は妨げないので控えめに出す */
+.c_awards_sync__warning {
+  margin: 0;
+  color: $text-warning;
+  font-size: $font-size-sm;
+}
+
+.c_awards_sync__section {
+  margin-top: $spacing-8;
+}
+
+.c_awards_sync__status {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+  align-items: flex-start;
+  margin-top: $spacing-4;
+  padding: $spacing-3;
+  border: $border-width-1 solid $border-color;
+  border-radius: $border-radius-md;
+}
+
+.c_awards_sync__status__running {
+  border-color: $warning-main;
+  color: $text-warning;
+}
+
+.c_awards_sync__status__succeeded {
+  border-color: $success-main;
+  color: $text-success;
+}
+
+.c_awards_sync__status__failed {
+  border-color: $error-main;
+  color: $text-danger;
+}
+
+/* 実行中の表示。アニメーションは opacity のみに収める */
+.c_awards_sync__pulse {
+  animation: c_awards_sync_pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes c_awards_sync_pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.c_awards_sync__meta {
+  margin: 0;
+  color: $text-secondary;
+  font-size: $font-size-xs;
+}
+
+.c_awards_sync__error {
+  margin-top: $spacing-4;
+  padding: $spacing-3;
+  border: $border-width-1 solid $error-main;
+  border-radius: $border-radius-md;
+  color: $text-danger;
+}
+
+.c_awards_sync__conflict {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+  align-items: flex-start;
+  margin-top: $spacing-4;
+  padding: $spacing-3;
+  border: $border-width-1 solid $warning-main;
+  border-radius: $border-radius-md;
+}

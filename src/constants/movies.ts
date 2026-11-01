@@ -499,3 +499,15 @@ export const MOVIES_SUCCESS_MESSAGES = {
   /** 映画キャッシュ更新完了 */
   CACHE_UPDATED: successMessage.updated('映画キャッシュ'),
 } as const;
+
+/**
+ * 配信が途切れてから再開したとき、「再配信」とみなす日数
+ *
+ * プロバイダー移行の過渡期や TMDb のデータが1日欠けただけで
+ * 「配信終了 → 再開」と誤検知すると、継続配信中の作品が最上位に浮上する。
+ * この日数未満の欠落は一時的なものとみなし、配信期間の開始日時を保つ。
+ *
+ * 再配信と誤判定しても先頭グループの末尾に回るだけなので、
+ * この値が多少ズレても実害は小さい。
+ */
+export const STREAMING_RESUME_THRESHOLD_DAYS = 7;

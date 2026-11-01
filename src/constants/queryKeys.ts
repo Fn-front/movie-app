@@ -24,6 +24,15 @@ export const watchlistKeys = {
   all: ['watchlist'] as const,
   list: (params?: { sort?: string; excludeWatched?: boolean }) =>
     ['watchlist', 'list', params] as const,
+  /** 視聴済みがある追加年の一覧 */
+  watchedYears: () => ['watchlist', 'watchedYears'] as const,
+  /**
+   * 指定年の視聴済み一覧
+   *
+   * 年が未選択（null）の状態でもキーは組まれる（クエリ自体は enabled で止める）。
+   * 架空の年 0 に丸めるとキャッシュの意味がずれるため、null のまま持つ。
+   */
+  watched: (year: number | null) => ['watchlist', 'watched', year] as const,
 };
 
 export const calendarKeys = {

@@ -7,6 +7,7 @@
 
 import { memo, useCallback } from 'react';
 
+import { cn } from '@/utils/cn';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import type { AwardData } from '@/features/awards/types';
@@ -25,6 +26,14 @@ export interface AwardSectionProps {
     favorite: MovieFavoriteInfo | null,
   ) => void;
   isFavoriteProcessing: (tmdbMovieId: number) => boolean;
+  /**
+   * 賞名の見出しを視覚的に隠す。
+   *
+   * タブで賞を切り替えるとき、選択中のタブと同じ文字列が見出しにも出て
+   * 二重表示になる。ただし削除すると h1 → h3 で階層が飛ぶため、
+   * スクリーンリーダー向けには残す。
+   */
+  hideTitle?: boolean;
 }
 
 export const AwardSection = memo<AwardSectionProps>(function AwardSection({
@@ -35,6 +44,7 @@ export const AwardSection = memo<AwardSectionProps>(function AwardSection({
   isMovieToggling,
   onFavoriteToggle,
   isFavoriteProcessing,
+  hideTitle = false,
 }) {
   const handleCategoryClick = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -50,7 +60,14 @@ export const AwardSection = memo<AwardSectionProps>(function AwardSection({
 
   return (
     <section className={styles.c_award_section} aria-label={award.label}>
-      <h2 className={styles.c_award_section__title}>{award.label}</h2>
+      <h2
+        className={cn(
+          styles.c_award_section__title,
+          hideTitle && styles.c_award_section__title__hidden,
+        )}
+      >
+        {award.label}
+      </h2>
       <nav
         className={styles.c_award_section__nav}
         aria-label={`${award.label}カテゴリナビゲーション`}

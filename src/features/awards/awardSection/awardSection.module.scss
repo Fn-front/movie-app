@@ -57,3 +57,12 @@
     gap: $spacing-8;
   }
 }
+
+/**
+ * タブで賞を切り替えるときの見出し。
+ * 選択中のタブと同じ文字列になるため視覚的には隠すが、
+ * h1 → h3 の階層飛びを避けるためDOMには残す。
+ */
+.c_award_section__title__hidden {
+  @include sr-only;
+}

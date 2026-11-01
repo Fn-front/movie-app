@@ -15,6 +15,7 @@ import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggl
 import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import { AWARDS_MESSAGES } from '@/constants';
 import { useAwards } from '@/features/awards/hooks/useAwards';
+import { Tabs } from '@/components/ui/tabs/tabs';
 import { AwardYearSelect } from '@/features/awards/awardYearSelect/awardYearSelect';
 import { AwardSection } from '@/features/awards/awardSection/awardSection';
 import { awardMovieToMovieCacheItem } from '@/utils/toMovieCacheItem';
@@ -28,8 +29,16 @@ export const AwardsPage = memo(function AwardsPage() {
   const searchParams = useSearchParams();
   const cacheBuster = searchParams.get('t') ?? undefined;
 
-  const { data, isLoading, isError, selectedYear, handleYearChange } =
-    useAwards(cacheBuster);
+  const {
+    data,
+    isLoading,
+    isError,
+    selectedYear,
+    handleYearChange,
+    awardOptions,
+    selectedAward,
+    handleAwardChange,
+  } = useAwards(cacheBuster);
 
   const {
     modalState: favoriteModalState,
@@ -119,12 +128,33 @@ export const AwardsPage = memo(function AwardsPage() {
           )}
         </div>
 
-        {data && data.awards.length > 0 ? (
+        {selectedAward ? (
           <div className={styles.c_awards_page__content}>
-            {data.awards.map((award) => (
+            {/*
+              賞は縦に連結せずタブで1つずつ出す。ポスターを並べると1部門が
+              約900pxになり、3賞23部門を積むと約28画面ぶんになるため
+            */}
+            {awardOptions.length > 0 ? (
+              <Tabs
+                options={awardOptions}
+                value={selectedAward.awardName}
+                onValueChange={handleAwardChange}
+                aria-label='賞を選択'
+              >
+                <AwardSection
+                  award={selectedAward}
+                  onMovieClick={handleMovieClick}
+                  isInWatchlist={isInWatchlist}
+                  onWatchlistToggle={toggleWatchlist}
+                  isMovieToggling={isMovieToggling}
+                  onFavoriteToggle={handleFavoriteToggle}
+                  isFavoriteProcessing={isFavoriteProcessing}
+                  hideTitle
+                />
+              </Tabs>
+            ) : (
               <AwardSection
-                key={award.awardName}
-                award={award}
+                award={selectedAward}
                 onMovieClick={handleMovieClick}
                 isInWatchlist={isInWatchlist}
                 onWatchlistToggle={toggleWatchlist}
@@ -132,7 +162,7 @@ export const AwardsPage = memo(function AwardsPage() {
                 onFavoriteToggle={handleFavoriteToggle}
                 isFavoriteProcessing={isFavoriteProcessing}
               />
-            ))}
+            )}
           </div>
         ) : (
           <p className={styles.c_awards_page__message}>

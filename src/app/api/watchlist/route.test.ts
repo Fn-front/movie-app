@@ -152,6 +152,8 @@ describe('GET /api/watchlist', () => {
       p_limit: 20,
       p_offset: 0,
       p_exclude_watched: false,
+      // 既定は従来の並び。サイドバーがこの既定で呼ぶ
+      p_prioritize_streaming: false,
     });
   });
 
@@ -517,5 +519,115 @@ describe('POST /api/watchlist', () => {
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('RATE_LIMIT_EXCEEDED');
     expect(json.error.details.retryAfter).toBe(60);
+  });
+});
+
+describe('GET /api/watchlist の配信情報', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      user: { id: 'user-123' },
+    });
+  });
+
+  /** RPC が返す1行を作る */
+  const rpcRow = (overrides: Record<string, unknown> = {}) => ({
+    id: 'wl-1',
+    tmdb_movie_id: 100,
+    title: '映画A',
+    poster_path: null,
+    release_date: null,
+    added_at: '2026-10-01T00:00:00Z',
+    watched_at: null,
+    streaming_offer_type: null,
+    streaming_provider_ids: [],
+    streaming_resumed: false,
+    total_count: 1,
+    ...overrides,
+  });
+
+  it('配信中のアイテムに streaming を付けて返す', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        rpcRow({
+          streaming_offer_type: 'flatrate',
+          streaming_provider_ids: [8, 84],
+          streaming_resumed: false,
+        }),
+      ],
+      error: null,
+    });
+
+    const response = await GET(createGetRequest());
+    const body = await response.json();
+
+    expect(body.data.watchlist[0].streaming).toEqual({
+      offer_type: 'flatrate',
+      provider_ids: [8, 84],
+      resumed: false,
+    });
+  });
+
+  it('配信なしのアイテムは streaming が null になる', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [rpcRow()], error: null });
+
+    const response = await GET(createGetRequest());
+    const body = await response.json();
+
+    expect(body.data.watchlist[0].streaming).toBeNull();
+  });
+
+  it('再配信のフラグを引き継ぐ', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        rpcRow({
+          streaming_offer_type: 'paid',
+          streaming_provider_ids: [10],
+          streaming_resumed: true,
+        }),
+      ],
+      error: null,
+    });
+
+    const response = await GET(createGetRequest());
+    const body = await response.json();
+
+    expect(body.data.watchlist[0].streaming.resumed).toBe(true);
+  });
+
+  it('内部用の列をレスポンスに含めない', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [rpcRow()], error: null });
+
+    const response = await GET(createGetRequest());
+    const body = await response.json();
+
+    const item = body.data.watchlist[0];
+    expect(item).not.toHaveProperty('total_count');
+    expect(item).not.toHaveProperty('streaming_offer_type');
+    expect(item).not.toHaveProperty('streaming_provider_ids');
+    expect(item).not.toHaveProperty('streaming_resumed');
+  });
+
+  it('prioritize_streaming=true を RPC に渡す', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    await GET(createGetRequest({ prioritize_streaming: 'true' }));
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_watchlist_sorted',
+      expect.objectContaining({ p_prioritize_streaming: true }),
+    );
+  });
+
+  it('prioritize_streaming 省略時は false を渡す', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    await GET(createGetRequest());
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_watchlist_sorted',
+      expect.objectContaining({ p_prioritize_streaming: false }),
+    );
   });
 });

@@ -57,7 +57,9 @@ export function useWatchlistPage(): UseWatchlistPageReturn {
     removeFromWatchlist,
     setWatched,
     isUpdatingWatched,
-  } = useWatchlist({ sort: sortBy });
+    // 一覧ページだけが配信中を先頭に出す。
+    // サイドバー（公開日が近い映画）に持ち込むと見出しと中身が食い違う
+  } = useWatchlist({ sort: sortBy, prioritizeStreaming: true });
 
   const handleSortChange = useCallback((value: string) => {
     setSortBy(value as WatchlistSortOption);

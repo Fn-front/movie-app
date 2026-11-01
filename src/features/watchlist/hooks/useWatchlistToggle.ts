@@ -206,6 +206,8 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         release_date: newItem.release_date ?? null,
         added_at: new Date().toISOString(),
         watched_at: null,
+        // 配信状況は cron が後から埋める。追加直後は不明なので null
+        streaming: null,
       };
 
       const previousDataMap = optimisticAddToAllCaches(

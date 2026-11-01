@@ -22,8 +22,12 @@ export const filterKeys = {
 
 export const watchlistKeys = {
   all: ['watchlist'] as const,
-  list: (params?: { sort?: string; excludeWatched?: boolean }) =>
-    ['watchlist', 'list', params] as const,
+  list: (params?: {
+    sort?: string;
+    excludeWatched?: boolean;
+    /** 配信中の未視聴を先頭に出すか。サイドバーと一覧でキャッシュを分ける */
+    prioritizeStreaming?: boolean;
+  }) => ['watchlist', 'list', params] as const,
   /** 視聴済みがある追加年の一覧 */
   watchedYears: () => ['watchlist', 'watchedYears'] as const,
   /**

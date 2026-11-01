@@ -60,3 +60,14 @@
     gap: $spacing-10;
   }
 }
+
+/**
+ * 賞タブのパネル。
+ *
+ * タブ表示時は AwardSection の見出しを sr-only にしているが、sr-only は
+ * position: absolute でフレックスフローから外れるため、見出しが持っていた
+ * 余白ごと消えてタブと部門リンクが密着する。パネル側で補う。
+ */
+.c_awards_page__tab_panel {
+  padding-top: $spacing-6;
+}

@@ -7,9 +7,12 @@
 
 import { memo, useCallback, useMemo, useState } from 'react';
 
+import { Button } from '@/components/ui/button/button';
 import { Select } from '@/components/ui/select/select';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { WATCHLIST_CLEANUP_LABELS } from '@/constants';
+import { WatchlistCleanupModal } from '@/features/watchlist/component/watchlistCleanupModal/watchlistCleanupModal';
 import { WatchlistList } from '@/features/watchlist/component/watchlistList/watchlistList';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
@@ -55,9 +58,14 @@ export const WatchlistPage = memo(function WatchlistPage() {
   } = useFavoriteToggle();
 
   const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
+  const [isCleanupOpen, setIsCleanupOpen] = useState(false);
 
   const handleMovieClick = useCallback((tmdbMovieId: number) => {
     setSelectedMovieId(tmdbMovieId);
+  }, []);
+
+  const handleCleanupOpen = useCallback(() => {
+    setIsCleanupOpen(true);
   }, []);
 
   const handleDetailModalClose = useCallback(() => {
@@ -112,6 +120,9 @@ export const WatchlistPage = memo(function WatchlistPage() {
             aria-label='ソート順を選択'
             className={styles.c_watchlist_page__sort}
           />
+          <Button variant='secondary' size='sm' onClick={handleCleanupOpen}>
+            {WATCHLIST_CLEANUP_LABELS.OPEN_BUTTON}
+          </Button>
         </div>
       </div>
 
@@ -148,6 +159,11 @@ export const WatchlistPage = memo(function WatchlistPage() {
         currentFavorite={favoriteModalState.currentFavorite}
         onSubmit={handleFavoriteModalSubmit}
         onDelete={handleFavoriteDelete}
+      />
+
+      <WatchlistCleanupModal
+        open={isCleanupOpen}
+        onOpenChange={setIsCleanupOpen}
       />
     </div>
   );

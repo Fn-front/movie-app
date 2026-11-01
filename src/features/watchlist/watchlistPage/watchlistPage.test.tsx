@@ -65,6 +65,14 @@ jest.mock('@/hooks/useIntersectionObserver', () => ({
   useIntersectionObserver: () => ({ current: null }),
 }));
 
+jest.mock(
+  '@/features/watchlist/component/watchlistCleanupModal/watchlistCleanupModal',
+  () => ({
+    WatchlistCleanupModal: ({ open }: { open: boolean }) =>
+      open ? <div data-testid='cleanup-modal' /> : null,
+  }),
+);
+
 jest.mock('next/image', () => ({
   __esModule: true,
   default: ({ alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
@@ -284,6 +292,27 @@ describe('WatchlistPage', () => {
         false,
       );
       expect(mockHandleFavoriteToggle).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('視聴済みの一括削除', () => {
+    it('整理ボタンを表示する', () => {
+      render(<WatchlistPage />);
+
+      expect(
+        screen.getByRole('button', { name: '視聴済みを整理' }),
+      ).toBeInTheDocument();
+    });
+
+    it('整理ボタンを押すとモーダルが開く', async () => {
+      const user = userEvent.setup();
+      render(<WatchlistPage />);
+
+      expect(screen.queryByTestId('cleanup-modal')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: '視聴済みを整理' }));
+
+      expect(screen.getByTestId('cleanup-modal')).toBeInTheDocument();
     });
   });
 });

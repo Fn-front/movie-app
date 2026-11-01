@@ -28,7 +28,12 @@ function getLatestAvailableYear(
   return Math.max(...data.availableYears);
 }
 
-export function useAwards(): UseAwardsReturn {
+/**
+ * @param cacheBuster URL の `t` クエリ。手動同期の直後に反映を確認するための
+ *   取り直し用で、通常の閲覧では undefined。`/api/awards` は public キャッシュを
+ *   返すため、これが無いとブラウザが古い結果を返す（実測で transferSize=0 を確認）
+ */
+export function useAwards(cacheBuster?: string): UseAwardsReturn {
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const [userSelectedYear, setUserSelectedYear] = useState<number | null>(null);
 
@@ -36,8 +41,8 @@ export function useAwards(): UseAwardsReturn {
 
   // 初回リクエストでavailableYearsを取得
   const { data: initialData } = useQuery({
-    queryKey: awardKeys.year(initialRequestYear),
-    queryFn: () => getAwards(initialRequestYear),
+    queryKey: awardKeys.year(initialRequestYear, cacheBuster),
+    queryFn: () => getAwards(initialRequestYear, cacheBuster),
   });
 
   // ユーザーが未選択の場合、availableYearsの最新年を使用
@@ -46,8 +51,8 @@ export function useAwards(): UseAwardsReturn {
 
   // selectedYearのデータを取得（initialRequestYear === selectedYearの場合はキャッシュから）
   const { data, isLoading, isError } = useQuery({
-    queryKey: awardKeys.year(selectedYear),
-    queryFn: () => getAwards(selectedYear),
+    queryKey: awardKeys.year(selectedYear, cacheBuster),
+    queryFn: () => getAwards(selectedYear, cacheBuster),
   });
 
   const handleYearChange = useCallback((value: string) => {

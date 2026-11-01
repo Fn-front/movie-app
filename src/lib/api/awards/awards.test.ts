@@ -59,6 +59,41 @@ describe('getAwards', () => {
     });
   });
 
+  /**
+   * /api/awards は public キャッシュを返すため、同じURLだとブラウザが
+   * キャッシュから返す（実測で transferSize=0 を確認）。同期直後に
+   * 反映を確認したいときは URL を変えて取り直させる必要がある。
+   */
+  it('cacheBuster を渡すとクエリに含める', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: { year: 2024, availableYears: [2024], awards: [] },
+      },
+    });
+
+    await getAwards(2024, '2026-11-01T00:05:00.000Z');
+
+    expect(mockGet).toHaveBeenCalledWith('/api/awards', {
+      params: { year: 2024, t: '2026-11-01T00:05:00.000Z' },
+    });
+  });
+
+  it('cacheBuster が空文字なら含めない', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: { year: 2024, availableYears: [2024], awards: [] },
+      },
+    });
+
+    await getAwards(2024, '');
+
+    expect(mockGet).toHaveBeenCalledWith('/api/awards', {
+      params: { year: 2024 },
+    });
+  });
+
   it('APIエラー時は例外がスローされる', async () => {
     mockGet.mockRejectedValue(new Error('Network error'));
 

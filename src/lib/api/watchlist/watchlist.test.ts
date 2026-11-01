@@ -4,7 +4,14 @@
 
 import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
-import { getWatchlist, addWatchlist, removeWatchlist } from './watchlist';
+import {
+  getWatchlist,
+  addWatchlist,
+  removeWatchlist,
+  getWatchlistWatchedYears,
+  getWatchlistWatched,
+  bulkDeleteWatchlist,
+} from './watchlist';
 
 // axiosInstanceをモック
 jest.mock('@/lib/axios/axios', () => ({
@@ -131,6 +138,65 @@ describe('watchlist API client', () => {
       await expect(removeWatchlist('non-existent')).rejects.toThrow(
         'Not Found',
       );
+    });
+  });
+
+  describe('getWatchlistWatchedYears', () => {
+    it('追加年一覧を取得する', async () => {
+      const mockResponse = {
+        success: true,
+        data: { years: [{ year: 2024, count: 12 }] },
+      };
+      mockedAxios.get.mockResolvedValue({ data: mockResponse });
+
+      const result = await getWatchlistWatchedYears();
+
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        '/api/watchlist/watched-years',
+      );
+      expect(result).toEqual(mockResponse);
+    });
+  });
+
+  describe('getWatchlistWatched', () => {
+    it('年とページングパラメータを渡す', async () => {
+      const mockResponse = {
+        success: true,
+        data: { watchlist: [], next_cursor: null, has_more: false },
+      };
+      mockedAxios.get.mockResolvedValue({ data: mockResponse });
+
+      const result = await getWatchlistWatched({ year: 2024, cursor: '20' });
+
+      expect(mockedAxios.get).toHaveBeenCalledWith('/api/watchlist/watched', {
+        params: { year: 2024, cursor: '20' },
+      });
+      expect(result).toEqual(mockResponse);
+    });
+  });
+
+  describe('bulkDeleteWatchlist', () => {
+    it('年と除外IDをPOSTする', async () => {
+      const mockResponse = {
+        success: true,
+        message: '10件を削除しました',
+        data: { deleted_count: 10 },
+      };
+      mockedAxios.post.mockResolvedValue({ data: mockResponse });
+
+      const result = await bulkDeleteWatchlist({
+        year: 2024,
+        exclude_ids: ['11111111-1111-4111-8111-111111111111'],
+      });
+
+      expect(mockedAxios.post).toHaveBeenCalledWith(
+        '/api/watchlist/bulk-delete',
+        {
+          year: 2024,
+          exclude_ids: ['11111111-1111-4111-8111-111111111111'],
+        },
+      );
+      expect(result).toEqual(mockResponse);
     });
   });
 });

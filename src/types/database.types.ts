@@ -1112,6 +1112,14 @@ export type Database = {
           watched_at: string;
         }[];
       };
+      get_watchlist_watched_years: {
+        Args: { p_user_id: string };
+        Returns: {
+          added_year: number;
+          unrated_count: number;
+          watched_count: number;
+        }[];
+      };
       sync_now_showing_movies: { Args: { movies: Json }; Returns: number };
       upsert_movie_cache: {
         Args: { movies: Json; set_now_playing?: boolean };

@@ -35,6 +35,8 @@ export const WATCHLIST_ERROR_MESSAGES = {
   INVALID_ID: errorMessage.invalid('ウォッチリストID'),
   INVALID_QUERY: errorMessage.invalid('クエリパラメータ'),
   INVALID_BODY: errorMessage.invalid('入力内容'),
+  YEARS_FETCH_FAILED: '追加年の取得に失敗しました',
+  BULK_DELETE_FAILED: '視聴済みの一括削除に失敗しました',
 } as const;
 
 /**
@@ -45,6 +47,8 @@ export const WATCHLIST_SUCCESS_MESSAGES = {
   REMOVED: successMessage.removed(TARGET),
   MARKED_WATCHED: '視聴済みにしました',
   UNMARKED_WATCHED: '未視聴に戻しました',
+  /** 一括削除成功: 「{件数}件を削除しました」 */
+  bulkDeleted: (count: number) => `${count}件を削除しました`,
 } as const;
 
 /**
@@ -57,4 +61,56 @@ export const WATCHLIST_WATCHED_LABELS = {
   UNMARK: '未視聴に戻す',
   /** 視聴済みバッジ */
   BADGE: '視聴済み',
+} as const;
+
+/**
+ * 一括削除で指定できる年の下限
+ *
+ * 上限を「現在年」にするとバリデーションが実行時刻に依存してテストが不安定になる。
+ * 未来の年を指定しても対象は0件になるだけなので、固定の範囲で異常入力だけ弾く。
+ */
+export const WATCHLIST_CLEANUP_MIN_YEAR = 2000;
+
+/**
+ * 一括削除で指定できる年の上限
+ */
+export const WATCHLIST_CLEANUP_MAX_YEAR = 2100;
+
+/**
+ * 一括削除で除外できる件数の上限
+ */
+export const WATCHLIST_BULK_DELETE_MAX_EXCLUDE_IDS = 1000;
+
+/**
+ * 視聴済み一括削除の表示ラベル
+ */
+export const WATCHLIST_CLEANUP_LABELS = {
+  /** ツールバーの起動ボタン */
+  OPEN_BUTTON: '視聴済みを整理',
+  /** モーダルのタイトル */
+  MODAL_TITLE: '視聴済みをまとめて削除',
+  /** 年セレクトのラベル */
+  YEAR_LABEL: '追加年',
+  /** 全選択チェックボックス */
+  SELECT_ALL: 'すべて選択',
+  /** 視聴済みが1件も無いときの表示 */
+  EMPTY: '整理できる視聴済みの作品がありません',
+  /** キャンセルボタン */
+  CANCEL: 'キャンセル',
+  /** 削除ボタン: 「{件数}件を削除する」 */
+  deleteButton: (count: number) => `${count}件を削除する`,
+  /** 選択件数の表示: 「{件数}件を選択中」 */
+  selectedCount: (count: number) => `${count}件を選択中`,
+  /** 年セレクトの選択肢: 「{年}年（{件数}件）」 */
+  yearOption: (year: number, count: number) => `${year}年（${count}件）`,
+  /** お気に入り未登録の行に付ける印 */
+  UNRATED_BADGE: '未評価',
+  /**
+   * お気に入り未登録がある年に出す注意書き
+   *
+   * 視聴済みにしても評価モーダルを閉じればお気に入りは未登録のまま残る。
+   * その作品を消すと観たという記録がアプリ上に残らないため、削除前に知らせる。
+   */
+  unratedNotice: (count: number) =>
+    `お気に入り未登録の${count}件は、削除すると視聴した記録が残りません`,
 } as const;

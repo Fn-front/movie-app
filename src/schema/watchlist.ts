@@ -4,7 +4,13 @@
 
 import { z } from 'zod';
 
-import { WATCHLIST_DEFAULT_LIMIT, WATCHLIST_MAX_LIMIT } from '@/constants';
+import {
+  WATCHLIST_BULK_DELETE_MAX_EXCLUDE_IDS,
+  WATCHLIST_CLEANUP_MAX_YEAR,
+  WATCHLIST_CLEANUP_MIN_YEAR,
+  WATCHLIST_DEFAULT_LIMIT,
+  WATCHLIST_MAX_LIMIT,
+} from '@/constants';
 
 /**
  * ウォッチリスト追加のバリデーションスキーマ
@@ -86,3 +92,81 @@ export const watchlistQuerySchema = z.object({
  * ウォッチリスト一覧取得クエリの型
  */
 export type WatchlistQueryParams = z.infer<typeof watchlistQuerySchema>;
+
+/**
+ * 一括削除の対象一覧取得クエリのバリデーションスキーマ
+ *
+ * year は必須。追加日（added_at）の年を JST で解釈する前提で、
+ * 実際の範囲計算は API 側の getJstYearRange が行う。
+ */
+export const watchlistWatchedQuerySchema = z.object({
+  year: z.coerce
+    .number({ error: '追加年は数値で指定してください' })
+    .int('追加年は整数で指定してください')
+    .min(
+      WATCHLIST_CLEANUP_MIN_YEAR,
+      `追加年は${WATCHLIST_CLEANUP_MIN_YEAR}以上で指定してください`,
+    )
+    .max(
+      WATCHLIST_CLEANUP_MAX_YEAR,
+      `追加年は${WATCHLIST_CLEANUP_MAX_YEAR}以下で指定してください`,
+    ),
+  // 既存の watchlistQuerySchema は cursor を z.string() のまま受け、route 側で
+  // parseInt と負数チェックをしている。ここはスキーマに寄せて二重化させない
+  cursor: z.coerce
+    .number({ error: 'カーソルは数値で指定してください' })
+    .int('カーソルは整数で指定してください')
+    .min(0, 'カーソルは0以上で指定してください')
+    .default(0),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1, '取得件数は1以上で指定してください')
+    .max(
+      WATCHLIST_MAX_LIMIT,
+      `取得件数は${WATCHLIST_MAX_LIMIT}以下で指定してください`,
+    )
+    .default(WATCHLIST_DEFAULT_LIMIT),
+});
+
+/**
+ * 一括削除の対象一覧取得クエリの型
+ */
+export type WatchlistWatchedQueryParams = z.infer<
+  typeof watchlistWatchedQuerySchema
+>;
+
+/**
+ * 視聴済み一括削除のバリデーションスキーマ
+ *
+ * exclude_ids は「チェックを外した作品」。空配列はその年の視聴済み全件が対象。
+ * include_ids への切り替えは持たない（全解除に近い使い方でもボディは数十KBに
+ * 収まり、分岐を増やす利得が無い）。
+ */
+export const watchlistBulkDeleteSchema = z.object({
+  year: z
+    .number({ error: '追加年は数値で指定してください' })
+    .int('追加年は整数で指定してください')
+    .min(
+      WATCHLIST_CLEANUP_MIN_YEAR,
+      `追加年は${WATCHLIST_CLEANUP_MIN_YEAR}以上で指定してください`,
+    )
+    .max(
+      WATCHLIST_CLEANUP_MAX_YEAR,
+      `追加年は${WATCHLIST_CLEANUP_MAX_YEAR}以下で指定してください`,
+    ),
+  exclude_ids: z
+    .array(z.string().uuid('除外IDの形式が不正です'))
+    .max(
+      WATCHLIST_BULK_DELETE_MAX_EXCLUDE_IDS,
+      `除外できるのは${WATCHLIST_BULK_DELETE_MAX_EXCLUDE_IDS}件までです`,
+    )
+    .default([]),
+});
+
+/**
+ * 視聴済み一括削除の型
+ */
+export type WatchlistBulkDeleteFormData = z.infer<
+  typeof watchlistBulkDeleteSchema
+>;

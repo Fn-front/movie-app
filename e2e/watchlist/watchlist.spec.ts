@@ -220,11 +220,17 @@ test.describe('ウォッチリスト', () => {
     await page.goto('/watchlist');
     await markFirstAsWatched(page);
 
-    await expect(page.getByText('視聴済み')).toBeVisible({ timeout: 15000 });
+    // exact を付けるのは、ツールバーの「視聴済みを整理」にも部分一致して
+    // strict mode violation になるため。バッジの文言は「視聴済み」ちょうど
+    await expect(page.getByText('視聴済み', { exact: true })).toBeVisible({
+      timeout: 15000,
+    });
 
     // リロードしても維持される
     await page.reload();
-    await expect(page.getByText('視聴済み')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText('視聴済み', { exact: true })).toBeVisible({
+      timeout: 30000,
+    });
   });
 
   test('視聴済みはサイドバーと公開カレンダーから消える', async () => {
@@ -259,8 +265,11 @@ test.describe('ウォッチリスト', () => {
     await unmarkButton.click();
     await unmarkResponse;
 
-    // バッジが消え、視聴済みボタンに戻る
-    await expect(page.getByText('視聴済み')).toHaveCount(0, { timeout: 15000 });
+    // バッジが消え、視聴済みボタンに戻る。
+    // exact が無いとツールバーの「視聴済みを整理」を数えてしまい 0 にならない
+    await expect(page.getByText('視聴済み', { exact: true })).toHaveCount(0, {
+      timeout: 15000,
+    });
     await expect(
       page.getByRole('button', { name: /を視聴済みにする$/ }).first(),
     ).toBeVisible();

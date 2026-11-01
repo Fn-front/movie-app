@@ -2,6 +2,7 @@ import {
   formatDate,
   formatDateTime,
   formatRelativeTime,
+  getJstYearRange,
   getYear,
 } from './date';
 
@@ -106,5 +107,30 @@ describe('getYear', () => {
   it('Dateオブジェクトから年の数値を返す', () => {
     const date = new Date(2024, 0, 15);
     expect(getYear(date)).toBe(2024);
+  });
+});
+
+describe('getJstYearRange', () => {
+  it('JSTの年初と翌年の年初を返す', () => {
+    expect(getJstYearRange(2024)).toEqual({
+      start: '2024-01-01T00:00:00+09:00',
+      end: '2025-01-01T00:00:00+09:00',
+    });
+  });
+
+  it('UTCでは前年になる時刻（1/1 05:00 JST）がその年に含まれる', () => {
+    const { start, end } = getJstYearRange(2025);
+    // UTC では 2024-12-31T20:00:00Z
+    const boundary = new Date('2025-01-01T05:00:00+09:00').getTime();
+
+    expect(boundary).toBeGreaterThanOrEqual(new Date(start).getTime());
+    expect(boundary).toBeLessThan(new Date(end).getTime());
+  });
+
+  it('大晦日 23:59 JST はその年に含まれ、翌年には含まれない', () => {
+    const { end } = getJstYearRange(2024);
+    const lastMoment = new Date('2024-12-31T23:59:59+09:00').getTime();
+
+    expect(lastMoment).toBeLessThan(new Date(end).getTime());
   });
 });

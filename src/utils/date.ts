@@ -129,3 +129,31 @@ export function getYear(
     return null;
   }
 }
+
+/**
+ * JST（Asia/Tokyo）における指定年の範囲を返す
+ *
+ * `added_at` などの TIMESTAMPTZ 列を「年」で絞るために使う。DB のタイムゾーンは
+ * UTC のため、EXTRACT(YEAR FROM added_at) で切ると 2025-01-01 05:00 JST に
+ * 追加した行が 2024年扱いになり、画面に出ている日付とズレる。
+ *
+ * 返す文字列はオフセット付きなので、PostgREST の gte / lt にそのまま渡せる。
+ *
+ * @param year - 対象の年（JST）
+ * @returns start（その年の始まり、含む）と end（翌年の始まり、含まない）
+ *
+ * @example
+ * ```ts
+ * getJstYearRange(2024);
+ * // => { start: '2024-01-01T00:00:00+09:00', end: '2025-01-01T00:00:00+09:00' }
+ * ```
+ */
+export function getJstYearRange(year: number): {
+  start: string;
+  end: string;
+} {
+  return {
+    start: `${year}-01-01T00:00:00+09:00`,
+    end: `${year + 1}-01-01T00:00:00+09:00`,
+  };
+}

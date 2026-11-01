@@ -49,8 +49,8 @@ describe('GET /api/watchlist/watched-years', () => {
   it('視聴済みがある年を件数付きで返す', async () => {
     mockRpc.mockResolvedValueOnce({
       data: [
-        { added_year: 2025, watched_count: 3 },
-        { added_year: 2024, watched_count: 12 },
+        { added_year: 2025, watched_count: 3, unrated_count: 1 },
+        { added_year: 2024, watched_count: 12, unrated_count: 5 },
       ],
       error: null,
     });
@@ -60,8 +60,22 @@ describe('GET /api/watchlist/watched-years', () => {
 
     expect(response.status).toBe(200);
     expect(body.data.years).toEqual([
-      { year: 2025, count: 3 },
-      { year: 2024, count: 12 },
+      { year: 2025, count: 3, unrated_count: 1 },
+      { year: 2024, count: 12, unrated_count: 5 },
+    ]);
+  });
+
+  it('お気に入り未登録が0件の年も返す', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: [{ added_year: 2024, watched_count: 4, unrated_count: 0 }],
+      error: null,
+    });
+
+    const response = await GET(createGetRequest());
+    const body = await response.json();
+
+    expect(body.data.years).toEqual([
+      { year: 2024, count: 4, unrated_count: 0 },
     ]);
   });
 

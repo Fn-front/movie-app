@@ -147,6 +147,13 @@ export interface WatchlistWatchedYear {
   year: number;
   /** その年の視聴済み件数 */
   count: number;
+  /**
+   * そのうちお気に入りに登録されていない件数
+   *
+   * 削除すると観たという記録が残らない作品の数。読み込み済みの行から数えると
+   * 無限スクロールの進み具合で変わるため、サーバーが年全体で数えた値を使う。
+   */
+  unrated_count: number;
 }
 
 /**
@@ -169,6 +176,29 @@ export interface GetWatchlistWatchedRequest {
   cursor?: string;
   /** 1ページあたりの取得件数 */
   limit?: number;
+}
+
+/**
+ * 一括削除の対象アイテムの型
+ *
+ * 一覧の `WatchlistItem` に、お気に入り登録の有無を足したもの。
+ * 未登録の作品は削除すると観たという記録が残らないため、モーダルで印を付ける。
+ */
+export interface WatchlistWatchedItem extends WatchlistItem {
+  /** お気に入りに登録されているか */
+  has_favorite: boolean;
+}
+
+/**
+ * 指定年の視聴済み一覧取得レスポンスの型
+ */
+export interface GetWatchlistWatchedResponse {
+  success: true;
+  data: {
+    watchlist: WatchlistWatchedItem[];
+    next_cursor: string | null;
+    has_more: boolean;
+  };
 }
 
 /**
@@ -202,8 +232,8 @@ export async function getWatchlistWatchedYears(): Promise<GetWatchlistWatchedYea
  */
 export async function getWatchlistWatched(
   params: GetWatchlistWatchedRequest,
-): Promise<GetWatchlistResponse> {
-  const response = await axiosInstance.get<GetWatchlistResponse>(
+): Promise<GetWatchlistWatchedResponse> {
+  const response = await axiosInstance.get<GetWatchlistWatchedResponse>(
     API_ENDPOINTS.WATCHLIST_WATCHED,
     { params },
   );

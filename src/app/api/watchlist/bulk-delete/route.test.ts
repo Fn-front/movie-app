@@ -51,6 +51,11 @@ const mockBulkDelete = (
 ) => {
   for (const key of Object.keys(calls)) delete calls[key];
 
+  // jest.clearAllMocks() は mockReturnValueOnce のキューを消さない。
+  // バリデーションで弾かれるケースは from を呼ばず未消費のまま残るため、
+  // ここで積み直してテスト間の漏れを防ぐ
+  mockFrom.mockReset();
+
   const record = (name: string) => {
     return (...args: unknown[]) => {
       calls[name] = [...(calls[name] ?? []), args];

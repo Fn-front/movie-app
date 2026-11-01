@@ -16,7 +16,7 @@ import { Select } from '@/components/ui/select/select';
 import { IMAGE_SIZES, WATCHLIST_CLEANUP_LABELS } from '@/constants';
 import { useWatchlistCleanup } from '@/features/watchlist/hooks/useWatchlistCleanup';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
-import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
+import type { WatchlistWatchedItem } from '@/lib/api/watchlist/watchlist';
 import { formatDate } from '@/utils/date';
 import { getTMDbImageUrl } from '@/utils/image';
 
@@ -52,6 +52,7 @@ export const WatchlistCleanupModal = memo<WatchlistCleanupModalProps>(
       hasNextPage,
       fetchNextPage,
       selectedCount,
+      unratedCount,
       isSelected,
       toggleItem,
       isAllSelected,
@@ -113,6 +114,13 @@ export const WatchlistCleanupModal = memo<WatchlistCleanupModalProps>(
                     aria-label={WATCHLIST_CLEANUP_LABELS.YEAR_LABEL}
                     disabled={isDeleting}
                   />
+                  {/* 削除はブロックしない。お気に入りに入れるほどでもない作品を
+                      片付けるのはこの機能の本来の用途なので、気づける形にとどめる */}
+                  {unratedCount > 0 && (
+                    <p className={styles.c_watchlist_cleanup__notice}>
+                      {WATCHLIST_CLEANUP_LABELS.unratedNotice(unratedCount)}
+                    </p>
+                  )}
                   <div className={styles.c_watchlist_cleanup__select_all}>
                     <Checkbox
                       checked={isAllSelected}
@@ -189,7 +197,7 @@ WatchlistCleanupModal.displayName = 'WatchlistCleanupModal';
  */
 interface CleanupRowProps {
   /** 対象アイテム */
-  item: WatchlistItem;
+  item: WatchlistWatchedItem;
   /** 削除対象として選択されているか */
   checked: boolean;
   /** 操作不可か */
@@ -241,6 +249,11 @@ const CleanupRow = memo<CleanupRowProps>(function CleanupRow({
         </div>
       )}
       <span className={styles.c_watchlist_cleanup__title}>{item.title}</span>
+      {!item.has_favorite && (
+        <span className={styles.c_watchlist_cleanup__unrated}>
+          {WATCHLIST_CLEANUP_LABELS.UNRATED_BADGE}
+        </span>
+      )}
       <span className={styles.c_watchlist_cleanup__date}>
         {formatDate(item.added_at)}
       </span>

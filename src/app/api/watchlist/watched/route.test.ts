@@ -43,12 +43,26 @@ const createGetRequest = (params: Record<string, string> = {}) => {
 /** eq / is / not / gte / lt / order / range に渡された引数を記録する */
 const calls: Record<string, unknown[][]> = {};
 
+/**
+ * watchlist の取得と、続けて呼ばれる favorites の取得をまとめてモックする
+ *
+ * @param data - watchlist の行
+ * @param count - watchlist の総件数
+ * @param error - watchlist クエリのエラー
+ * @param favoriteMovieIds - お気に入り登録済みの tmdb_movie_id
+ */
 const mockWatchedQuery = (
   data: unknown[] | null,
   count: number | null,
   error: unknown = null,
+  favoriteMovieIds: number[] = [],
 ) => {
   for (const key of Object.keys(calls)) delete calls[key];
+
+  // jest.clearAllMocks() は mockReturnValueOnce のキューを消さない。
+  // favorites を引かないケース（対象0件）で2つ目が未消費のまま残り、
+  // 次のテストの watchlist 取得に化けるため、ここで積み直す
+  mockFrom.mockReset();
 
   const record = (name: string) => {
     return (...args: unknown[]) => {
@@ -75,6 +89,23 @@ const mockWatchedQuery = (
       calls.select = [...(calls.select ?? []), args];
       return chain;
     },
+  });
+
+  // favorites の突き合わせクエリ（watchlist が1件以上のときだけ呼ばれる）
+  const favoriteChain: Record<string, unknown> = {
+    eq: () => favoriteChain,
+    is: () => favoriteChain,
+    in: (...args: unknown[]) => {
+      calls.favoriteIn = [...(calls.favoriteIn ?? []), args];
+      return Promise.resolve({
+        data: favoriteMovieIds.map((id) => ({ tmdb_movie_id: id })),
+        error: null,
+      });
+    },
+  };
+
+  mockFrom.mockReturnValueOnce({
+    select: () => favoriteChain,
   });
 };
 
@@ -200,5 +231,44 @@ describe('GET /api/watchlist/watched', () => {
     const response = await GET(createGetRequest({ year: '2024' }));
 
     expect(response.status).toBe(500);
+  });
+
+  describe('お気に入り登録の有無', () => {
+    it('お気に入り登録済みの行は has_favorite が true になる', async () => {
+      mockWatchedQuery([sampleItem], 1, null, [sampleItem.tmdb_movie_id]);
+
+      const response = await GET(createGetRequest({ year: '2024' }));
+      const body = await response.json();
+
+      expect(body.data.watchlist[0].has_favorite).toBe(true);
+    });
+
+    it('未登録の行は has_favorite が false になる', async () => {
+      mockWatchedQuery([sampleItem], 1, null, []);
+
+      const response = await GET(createGetRequest({ year: '2024' }));
+      const body = await response.json();
+
+      expect(body.data.watchlist[0].has_favorite).toBe(false);
+    });
+
+    it('表示中の映画IDだけで favorites を引く', async () => {
+      mockWatchedQuery([sampleItem], 1, null, []);
+
+      await GET(createGetRequest({ year: '2024' }));
+
+      expect(calls.favoriteIn).toContainEqual([
+        'tmdb_movie_id',
+        [sampleItem.tmdb_movie_id],
+      ]);
+    });
+
+    it('対象が0件なら favorites を引かない', async () => {
+      mockWatchedQuery([], 0);
+
+      await GET(createGetRequest({ year: '2024' }));
+
+      expect(calls.favoriteIn).toBeUndefined();
+    });
   });
 });

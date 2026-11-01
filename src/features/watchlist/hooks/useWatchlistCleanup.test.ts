@@ -68,8 +68,8 @@ describe('useWatchlistCleanup', () => {
       success: true,
       data: {
         years: [
-          { year: 2025, count: 3 },
-          { year: 2024, count: 12 },
+          { year: 2025, count: 3, unrated_count: 1 },
+          { year: 2024, count: 12, unrated_count: 5 },
         ],
       },
     });
@@ -217,6 +217,21 @@ describe('useWatchlistCleanup', () => {
 
     expect(result.current.selectedCount).toBe(3);
     expect(result.current.isAllSelected).toBe(true);
+  });
+
+  it('選択中の年のお気に入り未登録件数を返す', async () => {
+    const { result } = renderHook(
+      () => useWatchlistCleanup({ enabled: true, onDeleted }),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.selectedYear).toBe(2025));
+    expect(result.current.unratedCount).toBe(1);
+
+    act(() => result.current.handleYearChange('2024'));
+
+    await waitFor(() => expect(result.current.selectedYear).toBe(2024));
+    expect(result.current.unratedCount).toBe(5);
   });
 
   it('外したチェックをもう一度押すと選択に戻る', async () => {

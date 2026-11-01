@@ -80,12 +80,42 @@ export const GET = withAuth(
 
     const totalCount = count ?? 0;
     const hasMore = offset + limit < totalCount;
+    const items = data ?? [];
+
+    // お気に入り未登録の作品は、削除すると観たという記録が残らない。
+    // モーダルで印を付けられるよう、表示する分だけ突き合わせる。
+    //
+    // PostgREST の埋め込みリソースは使えない（favorites に watchlist への
+    // 外部キーが無いため）。1ページ分（最大 WATCHLIST_MAX_LIMIT 件）の
+    // 映画IDで引くだけなので、追加クエリ1回で足りる
+    const movieIds = items.map((item) => item.tmdb_movie_id);
+    const favoriteMovieIds = new Set<number>();
+
+    if (movieIds.length > 0) {
+      const { data: favorites, error: favoriteError } = await supabase
+        .from('favorites')
+        .select('tmdb_movie_id')
+        .eq('user_id', session.user.id)
+        .is('deleted_at', null)
+        .in('tmdb_movie_id', movieIds);
+
+      if (favoriteError) {
+        throw favoriteError;
+      }
+
+      for (const favorite of favorites ?? []) {
+        favoriteMovieIds.add(favorite.tmdb_movie_id);
+      }
+    }
 
     return NextResponse.json(
       {
         success: true,
         data: {
-          watchlist: data ?? [],
+          watchlist: items.map((item) => ({
+            ...item,
+            has_favorite: favoriteMovieIds.has(item.tmdb_movie_id),
+          })),
           next_cursor: hasMore ? String(offset + limit) : null,
           has_more: hasMore,
         },

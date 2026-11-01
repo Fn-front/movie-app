@@ -16,7 +16,10 @@ import {
   openDedicatedSession,
   type DedicatedSession,
 } from '../fixtures/dedicatedSession';
-import { cleanupWatchlistForUser } from '../helpers/api';
+import {
+  cleanupFavoritesForUser,
+  cleanupWatchlistForUser,
+} from '../helpers/api';
 import { movieTiles } from '../helpers/locators';
 import { runScopedEmail } from '../helpers/runScope';
 import { waitForWriteResponse } from '../helpers/writeResponse';
@@ -72,6 +75,7 @@ test.describe('視聴済みの一括削除', () => {
 
   test('年を指定して視聴済みをまとめて削除できる', async () => {
     await cleanupWatchlistForUser(session.userId);
+    await cleanupFavoritesForUser(session.userId);
     await addMovieToWatchlist(page);
 
     // 視聴済みにする
@@ -154,6 +158,7 @@ test.describe('視聴済みの一括削除', () => {
 
   test('一括削除してもお気に入りは消えない', async () => {
     await cleanupWatchlistForUser(session.userId);
+    await cleanupFavoritesForUser(session.userId);
     await addMovieToWatchlist(page);
 
     // 視聴済みにすると評価モーダルが開くので、そこでお気に入りに登録する。
@@ -222,8 +227,60 @@ test.describe('視聴済みの一括削除', () => {
     });
   });
 
+  test('お気に入り未登録の作品に未評価の印と注意書きを出す', async () => {
+    await cleanupWatchlistForUser(session.userId);
+    await cleanupFavoritesForUser(session.userId);
+    await addMovieToWatchlist(page);
+
+    // 視聴済みにして、評価モーダルは登録せずに閉じる＝お気に入り未登録のまま
+    await page.goto('/watchlist');
+    const watchButton = page
+      .getByRole('button', { name: /を視聴済みにする$/ })
+      .first();
+    await expect(watchButton).toBeVisible({ timeout: 30000 });
+
+    const patchResponse = waitForWriteResponse(page, {
+      urlPart: '/api/watchlist/',
+      methods: ['PATCH'],
+      label: '視聴済みの切り替え',
+    });
+    await watchButton.click();
+    await patchResponse;
+
+    const ratingModal = page.getByRole('dialog', {
+      name: /お気に入り(に追加|を編集)/,
+    });
+    await expect(ratingModal).toBeVisible({ timeout: 15000 });
+    await ratingModal.getByRole('button', { name: 'キャンセル' }).click();
+    await expect(ratingModal).not.toBeVisible();
+
+    await page.getByRole('button', { name: '視聴済みを整理' }).click();
+    const dialog = page.getByRole('dialog', {
+      name: '視聴済みをまとめて削除',
+    });
+    await expect(dialog).toBeVisible({ timeout: 15000 });
+
+    // 注意書きと行の印が出る
+    await expect(
+      dialog.getByText(
+        /お気に入り未登録の1件は、削除すると視聴した記録が残りません/,
+      ),
+    ).toBeVisible({ timeout: 15000 });
+    await expect(dialog.getByText('未評価')).toBeVisible();
+
+    // 削除はブロックされない
+    await expect(
+      dialog.getByRole('button', { name: /件を削除する$/ }),
+    ).toBeEnabled();
+
+    await page.screenshot({
+      path: 'docs/e2e-screenshots/watchlist-cleanup-unrated.png',
+    });
+  });
+
   test('視聴済みが無いときは空状態を出す', async () => {
     await cleanupWatchlistForUser(session.userId);
+    await cleanupFavoritesForUser(session.userId);
     await addMovieToWatchlist(page);
     await page.goto('/watchlist');
 

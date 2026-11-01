@@ -34,6 +34,7 @@ const mockCleanup = {
       release_date: '2024-03-15',
       added_at: '2025-03-01T00:00:00Z',
       watched_at: '2025-04-01T00:00:00Z',
+      has_favorite: true,
     },
   ],
   isItemsLoading: false,
@@ -42,6 +43,7 @@ const mockCleanup = {
   fetchNextPage: jest.fn(),
   selectedCount: 3,
   totalCount: 3,
+  unratedCount: 0,
   isSelected: jest.fn().mockReturnValue(true),
   toggleItem: jest.fn(),
   isAllSelected: true,
@@ -145,6 +147,72 @@ describe('WatchlistCleanupModal', () => {
     expect(
       screen.queryByRole('button', { name: /件を削除する/ }),
     ).not.toBeInTheDocument();
+  });
+
+  describe('お気に入り未登録の注意喚起', () => {
+    it('未登録があるとき件数付きの注意書きを出す', () => {
+      (useWatchlistCleanup as jest.Mock).mockReturnValue({
+        ...mockCleanup,
+        unratedCount: 5,
+      });
+
+      render(<WatchlistCleanupModal open onOpenChange={jest.fn()} />);
+
+      expect(
+        screen.getByText(
+          'お気に入り未登録の5件は、削除すると視聴した記録が残りません',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('未登録が0件なら注意書きを出さない', () => {
+      (useWatchlistCleanup as jest.Mock).mockReturnValue({
+        ...mockCleanup,
+        unratedCount: 0,
+      });
+
+      render(<WatchlistCleanupModal open onOpenChange={jest.fn()} />);
+
+      expect(
+        screen.queryByText(/削除すると視聴した記録が残りません/),
+      ).toBeNull();
+    });
+
+    it('未登録の行に「未評価」の印を出す', () => {
+      (useWatchlistCleanup as jest.Mock).mockReturnValue({
+        ...mockCleanup,
+        unratedCount: 1,
+        items: [{ ...mockCleanup.items[0], has_favorite: false }],
+      });
+
+      render(<WatchlistCleanupModal open onOpenChange={jest.fn()} />);
+
+      expect(screen.getByText('未評価')).toBeInTheDocument();
+    });
+
+    it('お気に入り登録済みの行には印を出さない', () => {
+      (useWatchlistCleanup as jest.Mock).mockReturnValue({
+        ...mockCleanup,
+        items: [{ ...mockCleanup.items[0], has_favorite: true }],
+      });
+
+      render(<WatchlistCleanupModal open onOpenChange={jest.fn()} />);
+
+      expect(screen.queryByText('未評価')).toBeNull();
+    });
+
+    it('削除はブロックしない（未登録があっても削除ボタンは押せる）', () => {
+      (useWatchlistCleanup as jest.Mock).mockReturnValue({
+        ...mockCleanup,
+        unratedCount: 3,
+      });
+
+      render(<WatchlistCleanupModal open onOpenChange={jest.fn()} />);
+
+      expect(
+        screen.getByRole('button', { name: '3件を削除する' }),
+      ).toBeEnabled();
+    });
   });
 
   it('年一覧の読み込み中は対象リストを出さない', () => {

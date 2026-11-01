@@ -111,6 +111,21 @@ export async function cleanupWatchlistForUser(userId: string): Promise<void> {
 }
 
 /**
+ * 指定ユーザーのお気に入りを物理削除する
+ *
+ * 専用ユーザー（`openDedicatedSession`）を使う spec 向け。
+ * 共有テストユーザー向けは `cleanupFavorites()` を使うこと。
+ *
+ * @param userId - 対象ユーザーのID
+ */
+export async function cleanupFavoritesForUser(userId: string): Promise<void> {
+  await fetch(`${SUPABASE_URL}/rest/v1/favorites?user_id=eq.${userId}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+}
+
+/**
  * テストユーザーのお気に入りを物理削除する（rate_limitsも同時にリセット）
  */
 export async function cleanupFavorites(): Promise<void> {

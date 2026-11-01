@@ -28,7 +28,7 @@ import {
   getWatchlistWatchedYears,
 } from '@/lib/api/watchlist/watchlist';
 import type {
-  WatchlistItem,
+  WatchlistWatchedItem,
   WatchlistWatchedYear,
 } from '@/lib/api/watchlist/watchlist';
 
@@ -55,7 +55,7 @@ export interface UseWatchlistCleanupReturn {
   /** 年の変更ハンドラー */
   handleYearChange: (value: string) => void;
   /** 読み込み済みの対象アイテム */
-  items: WatchlistItem[];
+  items: WatchlistWatchedItem[];
   /** 対象一覧の初回読み込み中 */
   isItemsLoading: boolean;
   /** 次ページ読み込み中 */
@@ -68,6 +68,12 @@ export interface UseWatchlistCleanupReturn {
   selectedCount: number;
   /** その年の視聴済み総件数 */
   totalCount: number;
+  /**
+   * その年のうち、お気に入り未登録の件数
+   *
+   * 削除すると観たという記録が残らない作品の数。注意書きの表示に使う。
+   */
+  unratedCount: number;
   /** 指定IDが削除対象か */
   isSelected: (id: string) => boolean;
   /** 指定IDの選択を切り替える */
@@ -145,11 +151,15 @@ export function useWatchlistCleanup({
     [itemsQuery.data],
   );
 
-  // 総件数は年一覧の集計を使う。対象一覧のページングとは独立して正しい値が得られる
-  const totalCount = useMemo(
-    () => years.find((entry) => entry.year === selectedYear)?.count ?? 0,
+  // 総件数と未登録件数は年一覧の集計を使う。
+  // 対象一覧のページングとは独立して、年全体の正しい値が得られる
+  const selectedYearEntry = useMemo(
+    () => years.find((entry) => entry.year === selectedYear),
     [years, selectedYear],
   );
+
+  const totalCount = selectedYearEntry?.count ?? 0;
+  const unratedCount = selectedYearEntry?.unrated_count ?? 0;
 
   const selectedCount = Math.max(0, totalCount - excludeIds.size);
   const isAllSelected = totalCount > 0 && excludeIds.size === 0;
@@ -239,6 +249,7 @@ export function useWatchlistCleanup({
       fetchNextPage,
       selectedCount,
       totalCount,
+      unratedCount,
       isSelected,
       toggleItem,
       isAllSelected,
@@ -258,6 +269,7 @@ export function useWatchlistCleanup({
       fetchNextPage,
       selectedCount,
       totalCount,
+      unratedCount,
       isSelected,
       toggleItem,
       isAllSelected,

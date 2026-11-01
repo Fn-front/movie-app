@@ -19,6 +19,8 @@ import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 interface WatchedYearRow {
   added_year: number;
   watched_count: number;
+  /** そのうちお気に入りに登録されていない件数 */
+  unrated_count: number;
 }
 
 export const GET = withAuth(
@@ -54,6 +56,7 @@ export const GET = withAuth(
           years: rows.map((row) => ({
             year: Number(row.added_year),
             count: Number(row.watched_count),
+            unrated_count: Number(row.unrated_count),
           })),
         },
       },

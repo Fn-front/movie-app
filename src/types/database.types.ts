@@ -1116,6 +1116,7 @@ export type Database = {
         Args: { p_user_id: string };
         Returns: {
           added_year: number;
+          unrated_count: number;
           watched_count: number;
         }[];
       };

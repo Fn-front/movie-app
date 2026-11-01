@@ -103,4 +103,14 @@ export const WATCHLIST_CLEANUP_LABELS = {
   selectedCount: (count: number) => `${count}件を選択中`,
   /** 年セレクトの選択肢: 「{年}年（{件数}件）」 */
   yearOption: (year: number, count: number) => `${year}年（${count}件）`,
+  /** お気に入り未登録の行に付ける印 */
+  UNRATED_BADGE: '未評価',
+  /**
+   * お気に入り未登録がある年に出す注意書き
+   *
+   * 視聴済みにしても評価モーダルを閉じればお気に入りは未登録のまま残る。
+   * その作品を消すと観たという記録がアプリ上に残らないため、削除前に知らせる。
+   */
+  unratedNotice: (count: number) =>
+    `お気に入り未登録の${count}件は、削除すると視聴した記録が残りません`,
 } as const;

@@ -26,15 +26,17 @@ describe('StreamingSortHint', () => {
     });
   });
 
-  it('ヘルプのトリガーを表示する', () => {
+  it('ⓘが設定ページへのリンクとして表示される', () => {
     render(<StreamingSortHint />);
 
-    expect(
-      screen.getByRole('button', { name: '並び順について' }),
-    ).toBeInTheDocument();
+    const trigger = screen.getByRole('link', {
+      name: '並び順について。設定を開く',
+    });
+    expect(trigger).toBeInTheDocument();
+    expect(trigger).toHaveAttribute('href', '/settings');
   });
 
-  it('フォーカスすると説明と設定リンクを出す', async () => {
+  it('フォーカスすると説明を出す', async () => {
     const user = userEvent.setup();
     render(<StreamingSortHint />);
 
@@ -43,10 +45,6 @@ describe('StreamingSortHint', () => {
     expect(
       await screen.findByText(/見放題・レンタルが対象です/),
     ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '設定で変更' })).toHaveAttribute(
-      'href',
-      '/settings',
-    );
   });
 
   it('見放題のみの設定なら文言が変わる', async () => {
@@ -73,5 +71,19 @@ describe('StreamingSortHint', () => {
     expect(
       await screen.findByText(/見放題・レンタルが対象です/),
     ).toBeInTheDocument();
+  });
+
+  it('キーボードだけでⓘにフォーカスでき、設定ページへ遷移できる状態になる', async () => {
+    const user = userEvent.setup();
+    render(<StreamingSortHint />);
+
+    // Tabのみでフォーカスが到達すること（Portal内の要素を経由しない）
+    await user.tab();
+
+    const link = screen.getByRole('link', {
+      name: '並び順について。設定を開く',
+    });
+    expect(link).toHaveFocus();
+    expect(link).toHaveAttribute('href', '/settings');
   });
 });

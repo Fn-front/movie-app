@@ -5,12 +5,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
-    border: none;
-    background: none;
     color: $text-secondary;
     font-size: $font-size-lg;
-    cursor: pointer;
+    text-decoration: none;
 
     &:hover {
       color: $text-primary;
@@ -25,16 +22,5 @@
 
   &__body {
     display: block;
-  }
-
-  &__link {
-    display: inline-block;
-    margin-left: $spacing-1;
-    color: $text-link;
-    text-decoration: underline;
-
-    &:hover {
-      color: $text-link-hover;
-    }
   }
 }

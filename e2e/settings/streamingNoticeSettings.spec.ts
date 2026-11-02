@@ -107,7 +107,9 @@ test.describe('配信開始のお知らせ設定', () => {
   test('ウォッチリストのヒントが設定を反映する', async () => {
     await page.goto('/watchlist');
 
-    const trigger = page.getByRole('button', { name: '並び順について' });
+    const trigger = page.getByRole('link', {
+      name: '並び順について。設定を開く',
+    });
     await expect(trigger).toBeVisible({ timeout: 30000 });
     await trigger.focus();
 
@@ -115,11 +117,40 @@ test.describe('配信開始のお知らせ設定', () => {
     await expect(page.getByText(/見放題のみが対象です/)).toBeVisible({
       timeout: 15000,
     });
-    await expect(page.getByRole('link', { name: '設定で変更' })).toBeVisible();
 
     await page.screenshot({
       path: 'docs/e2e-screenshots/watchlist-streaming-hint.png',
     });
+  });
+
+  test('ⓘをキーボードで辿って設定ページへ遷移できる', async () => {
+    await page.goto('/watchlist');
+
+    const trigger = page.getByRole('link', {
+      name: '並び順について。設定を開く',
+    });
+    await expect(trigger).toBeVisible({ timeout: 30000 });
+
+    // マウスを使わず、Tabだけでⓘにフォーカスを合わせる
+    // （手前にナビゲーション等のリンクがあるため、何回か送る）
+    const MAX_TAB_PRESSES = 20;
+    let reached = false;
+    for (let i = 0; i < MAX_TAB_PRESSES; i += 1) {
+      await page.keyboard.press('Tab');
+      reached = await trigger.evaluate((el) => el === document.activeElement);
+      if (reached) break;
+    }
+    expect(reached).toBe(true);
+    await expect(trigger).toBeFocused();
+
+    // フォーカスした状態で説明が読めること（キーボードユーザーにも見える）
+    await expect(page.getByText(/見放題のみが対象です/)).toBeVisible({
+      timeout: 15000,
+    });
+
+    // Enterキーだけで設定ページへ遷移できること
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/settings$/);
   });
 
   test('見放題のみの設定でもレンタルのバッジは残る', async () => {

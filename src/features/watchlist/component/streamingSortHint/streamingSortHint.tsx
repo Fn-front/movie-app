@@ -57,25 +57,20 @@ export const StreamingSortHint = memo(function StreamingSortHint() {
 
   return (
     <Tooltip
+      // ⓘ 自体をリンクにする。ツールチップの中身にリンクを置くと
+      // キーボード・スクリーンリーダーで操作できなくなるため
+      // （Radix Tooltip の仕様。操作可能な要素は Popover 等に置く）
       trigger={
-        <button
-          type='button'
+        <Link
+          href={ROUTES.SETTINGS}
           className={styles.c_streaming_sort_hint__trigger}
           aria-label={WATCHLIST_STREAMING_HINT_LABELS.TRIGGER_ARIA}
         >
           <IoInformationCircleOutline aria-hidden='true' />
-        </button>
+        </Link>
       }
     >
-      <span className={styles.c_streaming_sort_hint__body}>
-        {description}
-        <Link
-          href={ROUTES.SETTINGS}
-          className={styles.c_streaming_sort_hint__link}
-        >
-          {WATCHLIST_STREAMING_HINT_LABELS.SETTINGS_LINK}
-        </Link>
-      </span>
+      <span className={styles.c_streaming_sort_hint__body}>{description}</span>
     </Tooltip>
   );
 });

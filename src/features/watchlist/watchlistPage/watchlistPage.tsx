@@ -12,6 +12,7 @@ import { Select } from '@/components/ui/select/select';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { WATCHLIST_CLEANUP_LABELS } from '@/constants';
+import { StreamingSortHint } from '@/features/watchlist/component/streamingSortHint/streamingSortHint';
 import { WatchlistCleanupModal } from '@/features/watchlist/component/watchlistCleanupModal/watchlistCleanupModal';
 import { WatchlistList } from '@/features/watchlist/component/watchlistList/watchlistList';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
@@ -111,7 +112,10 @@ export const WatchlistPage = memo(function WatchlistPage() {
   return (
     <div className={styles.c_watchlist_page}>
       <div className={styles.c_watchlist_page__toolbar}>
-        <h1 className={styles.c_watchlist_page__title}>ウォッチリスト</h1>
+        <div className={styles.c_watchlist_page__title_group}>
+          <h1 className={styles.c_watchlist_page__title}>ウォッチリスト</h1>
+          <StreamingSortHint />
+        </div>
         <div className={styles.c_watchlist_page__controls}>
           <Select
             options={SORT_OPTIONS}

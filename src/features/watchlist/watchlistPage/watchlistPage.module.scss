@@ -17,6 +17,13 @@
     gap: $spacing-3;
   }
 
+  &__title_group {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
+    flex-shrink: 0;
+  }
+
   &__title {
     margin: 0;
     font-size: $font-size-xl;

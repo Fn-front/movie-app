@@ -73,6 +73,13 @@ jest.mock(
   }),
 );
 
+jest.mock(
+  '@/features/watchlist/component/streamingSortHint/streamingSortHint',
+  () => ({
+    StreamingSortHint: () => <div data-testid='streaming-sort-hint' />,
+  }),
+);
+
 jest.mock('next/image', () => ({
   __esModule: true,
   default: ({ alt, ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
@@ -138,6 +145,12 @@ describe('WatchlistPage', () => {
     expect(
       screen.getByRole('heading', { name: 'ウォッチリスト' }),
     ).toBeInTheDocument();
+  });
+
+  it('並び順のヒントを表示する', () => {
+    render(<WatchlistPage />);
+
+    expect(screen.getByTestId('streaming-sort-hint')).toBeInTheDocument();
   });
 
   it('ソートセレクトが表示される', () => {

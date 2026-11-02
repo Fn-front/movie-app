@@ -1,0 +1,13 @@
+@use '@/styles/variables' as *;
+
+.c_streaming_notice_settings {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+
+  &__description {
+    margin: 0;
+    color: $text-secondary;
+    font-size: $font-size-sm;
+  }
+}

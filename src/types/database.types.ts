@@ -947,6 +947,7 @@ export type Database = {
           created_at: string;
           id: string;
           notification_enabled: boolean;
+          streaming_notice_scope: string;
           theme: string;
           updated_at: string;
           user_id: string;
@@ -955,6 +956,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           notification_enabled?: boolean;
+          streaming_notice_scope?: string;
           theme?: string;
           updated_at?: string;
           user_id: string;
@@ -963,6 +965,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           notification_enabled?: boolean;
+          streaming_notice_scope?: string;
           theme?: string;
           updated_at?: string;
           user_id?: string;

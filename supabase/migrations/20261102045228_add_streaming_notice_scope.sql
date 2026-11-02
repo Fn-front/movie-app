@@ -16,6 +16,11 @@
 ALTER TABLE public.user_settings
   ADD COLUMN IF NOT EXISTS streaming_notice_scope TEXT NOT NULL DEFAULT 'any';
 
+-- 列側を IF NOT EXISTS にしている以上、制約側も再適用で落ちないようにする。
+-- ADD CONSTRAINT には IF NOT EXISTS が無いため、先に落としてから足す
+ALTER TABLE public.user_settings
+  DROP CONSTRAINT IF EXISTS chk_user_settings_streaming_notice_scope;
+
 ALTER TABLE public.user_settings
   ADD CONSTRAINT chk_user_settings_streaming_notice_scope
     CHECK (streaming_notice_scope IN ('any', 'flatrate'));

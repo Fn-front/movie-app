@@ -123,7 +123,9 @@ test.describe('配信開始のお知らせ設定', () => {
     });
   });
 
-  test('ⓘをキーボードで辿って設定ページへ遷移できる', async () => {
+  test('ⓘをキーボードで辿って設定ページへ遷移できる', async ({
+    browserName,
+  }) => {
     await page.goto('/watchlist');
 
     const trigger = page.getByRole('link', {
@@ -131,16 +133,28 @@ test.describe('配信開始のお知らせ設定', () => {
     });
     await expect(trigger).toBeVisible({ timeout: 30000 });
 
-    // マウスを使わず、Tabだけでⓘにフォーカスを合わせる
-    // （手前にナビゲーション等のリンクがあるため、何回か送る）
-    const MAX_TAB_PRESSES = 20;
-    let reached = false;
-    for (let i = 0; i < MAX_TAB_PRESSES; i += 1) {
-      await page.keyboard.press('Tab');
-      reached = await trigger.evaluate((el) => el === document.activeElement);
-      if (reached) break;
+    // WebKit は既定でリンクもボタンも Tab 順に含めない（Safari の
+    // 「フルキーボードアクセス」が無効なときの挙動）。実測でも Tab を15回
+    // 送って当たるのは input だけで、a と button は0件だった。
+    // ブラウザ側の設定であってアプリの性質ではないため、
+    // 「Tabで辿れる」ことの確認は他のブラウザで行う。
+    if (browserName !== 'webkit') {
+      // マウスを使わず、Tabだけでⓘにフォーカスを合わせる
+      // （手前にナビゲーション等のリンクがあるため、何回か送る）
+      const MAX_TAB_PRESSES = 20;
+      let reached = false;
+      for (let i = 0; i < MAX_TAB_PRESSES; i += 1) {
+        await page.keyboard.press('Tab');
+        reached = await trigger.evaluate((el) => el === document.activeElement);
+        if (reached) break;
+      }
+      expect(reached).toBe(true);
     }
-    expect(reached).toBe(true);
+
+    // フォーカスを当てられること自体はどのブラウザでも満たす。
+    // ここが崩れると、ツールチップの中にリンクを入れていた頃と同じく
+    // マウスでしか押せない導線に戻る
+    await trigger.focus();
     await expect(trigger).toBeFocused();
 
     // フォーカスした状態で説明が読めること（キーボードユーザーにも見える）

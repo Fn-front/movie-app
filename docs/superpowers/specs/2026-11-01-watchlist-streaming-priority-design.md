@@ -256,14 +256,22 @@ TMDb から毎回引くとウォッチリスト表示のたびに追加リクエ
 
 ### 設定
 
-`users` テーブルに列を1つ追加し、既存の `GET/PATCH /api/user/settings` に含める。
+`user_settings` テーブルに列を1つ追加し、既存の `GET/PUT /api/user/settings` に含める。
 
 ```sql
-streaming_notice_scope TEXT NOT NULL DEFAULT 'any'  -- 'any' | 'flatrate'
+streaming_notice_scope TEXT NOT NULL DEFAULT 'any'
+  CHECK (streaming_notice_scope IN ('any', 'flatrate'))
 ```
 
-`user_preferences` テーブルは使わない（定義だけあって未使用であり、
-`theme` / `notification_enabled` は `users` に置かれている。既存に揃える）。
+`user_settings` は `theme` / `notification_enabled` を持つ既存テーブルで、
+RLS と user_id ごとのポリシー（select / insert / update / delete）が既にある。
+列を足すだけで保存の仕組みは作らずに済む。
+
+`user_preferences` テーブルは使わない（定義だけあって未使用）。
+
+> **補足:** 設計当初このテーブルを `users` と書いていたが、実装前の確認で
+> `user_settings` が正しいと判明したため訂正した（`src/app/api/user/settings/route.ts`）。
+> API のメソッドも PATCH ではなく PUT。
 
 設定ページの「通知設定」に項目を追加する。
 
@@ -275,14 +283,20 @@ streaming_notice_scope TEXT NOT NULL DEFAULT 'any'  -- 'any' | 'flatrate'
 
 ### 導線
 
-優先表示グループの見出し横に ⓘ アイコンを置き、ツールチップで設定の存在を知らせる。
+ツールバーの見出し `ウォッチリスト` の横に ⓘ アイコンを置き、
+ツールチップで並びの理由と設定の存在を知らせる。
 設定ページに埋もれて気づかれないのを防ぐため。
 
 ```
-観られる作品  ⓘ
-            └─ 見放題・レンタルを対象にしています。
-               設定から変更できます →
+ウォッチリスト ⓘ   [追加日順 ▼] [視聴済みを整理]
+             └─ 配信中の作品を先頭に表示しています。
+                見放題・レンタルが対象です（設定で変更）
 ```
+
+> **補足:** 設計当初は「優先表示グループの見出し横」としていたが、
+> PR1 では一覧をグループ分けせずフラットなグリッドのまま先頭に寄せる実装にしたため、
+> その見出しが存在しない。グループ見出しを新設すると無限スクロールとの相性を
+> 考える必要があり、スコープが広がる。既にあるツールバーの見出し横に置く。
 
 `@radix-ui/react-tooltip` を依存に追加し、`src/components/ui/tooltip/` として
 他画面でも使える形で作る。既存の Radix 群（dialog / select / checkbox）と同じファミリで、
@@ -339,7 +353,7 @@ cron、API レスポンス拡張、カードのバッジとロゴ。設定は作
 **ここまでで機能として完結する。**
 
 **PR2: ユーザー設定 + 導線**
-`users.streaming_notice_scope` の列追加、`get_watchlist_sorted` への引数追加、
+`user_settings.streaming_notice_scope` の列追加、`get_watchlist_sorted` への引数追加、
 設定 API と設定ページ、Tooltip コンポーネント、ウォッチリストの ⓘ 導線。
 
 ## 関連

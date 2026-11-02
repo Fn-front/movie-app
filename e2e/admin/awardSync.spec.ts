@@ -83,7 +83,10 @@ async function openSyncPage(page: Page) {
 test.describe('受賞作品の手動同期（admin）', () => {
   let session: DedicatedSession;
 
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, testInfo) => {
+    // describe の timeout はテストにしか効かない。ユーザー作成（bcrypt）と
+    // 初回アクセスのコンパイル待ちは既定の30秒に収まらない
+    testInfo.setTimeout(90000);
     session = await openDedicatedSession(browser, ADMIN);
   });
 

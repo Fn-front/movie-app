@@ -13,22 +13,36 @@ test.describe('キーボード操作', () => {
 
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('スキップリンクで本文へ移動できる', async ({ page }) => {
+  test('スキップリンクで本文へ移動できる', async ({ page, browserName }) => {
     await gotoWithTheme(page, '/movies/now-showing', 'light');
 
-    // 1回目の Tab でスキップリンクにフォーカスが当たる
-    await page.keyboard.press('Tab');
     const skipLink = page.getByRole('link', { name: '本文へ移動' });
+
+    // WebKit は既定でリンクもボタンも Tab 順に含めない（Safari の
+    // 「フルキーボードアクセス」が無効なときの挙動）。Tab を15回送っても
+    // 当たるのは input だけで、a と button は0件だった。
+    // ブラウザ側の設定であってアプリの性質ではないため、Tab 順そのものの
+    // 確認は他のブラウザに任せ、WebKit では focus() で代替する。
+    if (browserName === 'webkit') {
+      await skipLink.focus();
+    } else {
+      // 1回目の Tab でスキップリンクにフォーカスが当たる
+      await page.keyboard.press('Tab');
+    }
     await expect(skipLink).toBeFocused();
 
     await page.keyboard.press('Enter');
 
-    // main にフォーカスが移る
+    // main にフォーカスが移る。ここはどのブラウザでも満たすべき性質で、
+    // 崩れるとスキップリンクが機能していないことになる
     await expect(page.locator('main')).toBeFocused();
 
-    // 次の Tab は本文内の要素に進む
-    await page.keyboard.press('Tab');
-    await expect(page.locator('main :focus')).toHaveCount(1);
+    // 次の Tab は本文内の要素に進む。
+    // 本文内の到達先もリンク・ボタンなので、WebKit では同じ理由で検証できない
+    if (browserName !== 'webkit') {
+      await page.keyboard.press('Tab');
+      await expect(page.locator('main :focus')).toHaveCount(1);
+    }
   });
 
   test('リリースタイプのタブを矢印キーで切り替えられる', async ({ page }) => {

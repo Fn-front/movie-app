@@ -85,24 +85,104 @@ export async function createVerifiedUser(user: DedicatedUser): Promise<string> {
 /**
  * メールアドレスでユーザーと関連レコードを削除する
  *
- * `users` の外部キーは ON DELETE CASCADE なので、user_id を持つ
- * 関連テーブル（user_totp / totp_recovery_codes 等）は連鎖削除される。
- * `otp_codes` と `rate_limits` は user_id を持たないため個別に消す。
+ * `users` を参照する外部キーはおおむね ON DELETE CASCADE なので、
+ * user_id を持つ関連テーブル（user_totp / totp_recovery_codes 等）は
+ * 連鎖削除される。`otp_codes` と `rate_limits` は user_id を持たず、
+ * `admin_audit_logs` は実行者側が ON DELETE RESTRICT のため、いずれも先に片付ける。
  *
  * @param email - 対象のメールアドレス
  */
 export async function deleteUserByEmail(email: string): Promise<void> {
   const enc = encodeURIComponent(email);
 
-  await fetch(`${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${enc}`, {
-    method: 'DELETE',
-    headers: supabaseHeaders,
-  });
+  await deleteOrThrow(`otp_codes?email=eq.${enc}`, 'OTPコード');
   await cleanupRateLimitsForEmail(email);
-  await fetch(`${SUPABASE_URL}/rest/v1/users?email=eq.${enc}`, {
+  // この admin が発行したアカウントを先に消して監査ログを連鎖削除させる
+  await deleteAccountsIssuedBy(await fetchUserIds(`email=eq.${enc}`));
+  await deleteOrThrow(`users?email=eq.${enc}`, email);
+}
+
+/**
+ * DELETE の失敗を握りつぶさずに投げる
+ *
+ * PostgREST は外部キー違反を 409 で返すが、`fetch` は 4xx でも reject しない。
+ * 返り値を見ないと「消えたつもりで消えていない」状態に気づけず、残骸が
+ * 次回以降の run の `createVerifiedUser` を 409（重複）で落とし続ける。
+ * しかもその失敗は beforeAll で起きるため afterAll の後片付けも動かず、
+ * 一度詰まると自力で抜け出せない。
+ *
+ * @param path - `/rest/v1/` 以降のパス
+ * @param label - 失敗時のメッセージに出す対象名
+ */
+async function deleteOrThrow(path: string, label: string): Promise<void> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     method: 'DELETE',
     headers: supabaseHeaders,
   });
+
+  if (!res.ok) {
+    throw new Error(
+      `${label} の削除に失敗した (${res.status}): ${await res.text()}`,
+    );
+  }
+}
+
+/** PostgREST から取得する */
+async function selectOrThrow<T>(path: string, label: string): Promise<T[]> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: supabaseHeaders,
+  });
+
+  if (!res.ok) {
+    throw new Error(
+      `${label} の取得に失敗した (${res.status}): ${await res.text()}`,
+    );
+  }
+
+  return res.json();
+}
+
+/**
+ * admin が発行したアカウントを消して、監査ログを連鎖削除させる
+ *
+ * `admin_audit_logs` は**追記専用**で、service_role も DELETE できない
+ * （`20261030101000_make_admin_audit_logs_append_only.sql`）。
+ * 一方 `actor_user_id` は ON DELETE RESTRICT なので、監査ログが残っている限り
+ * 実行者の admin を消せない。
+ *
+ * ただし `target_user_id` は ON DELETE CASCADE。発行されたアカウント
+ * （監査ログの対象）を先に消せば、記録ごと連鎖削除されて admin も消せる。
+ * 監査ログに直接触れずに済むので、追記専用という設計を壊さない。
+ *
+ * @param actorIds - 実行者となった admin のID
+ */
+async function deleteAccountsIssuedBy(actorIds: string[]): Promise<void> {
+  if (actorIds.length === 0) return;
+
+  const logs = await selectOrThrow<{ target_user_id: string }>(
+    `admin_audit_logs?actor_user_id=in.(${actorIds.join(',')})&select=target_user_id`,
+    '監査ログ',
+  );
+  const targets = [...new Set(logs.map((log) => log.target_user_id))];
+  if (targets.length === 0) return;
+
+  await deleteOrThrow(
+    `users?id=in.(${targets.join(',')})`,
+    'admin が発行したアカウント',
+  );
+}
+
+/**
+ * 条件に一致するユーザーのIDを引く
+ *
+ * @param filter - PostgREST のフィルタ（例: `email=like.*-local@example.com`）
+ */
+async function fetchUserIds(filter: string): Promise<string[]> {
+  const rows = await selectOrThrow<{ id: string }>(
+    `users?${filter}&select=id`,
+    'ユーザーID',
+  );
+  return rows.map((row) => row.id);
 }
 
 /**
@@ -176,20 +256,20 @@ export async function cleanupLoginIpRateLimits(): Promise<void> {
  * ドメインで実在の利用者は持ち得ず、さらに run ID の接尾辞まで一致する
  * 必要があるため、実ユーザーを巻き込むことはない。
  *
- * `users` の外部キーは ON DELETE CASCADE のため、user_id を持つ関連
- * テーブルは連鎖削除される。`otp_codes` は user_id を持たないため先に消す。
+ * `users` を参照する外部キーはおおむね ON DELETE CASCADE のため、user_id を
+ * 持つ関連テーブルは連鎖削除される。`otp_codes` は user_id を持たず、
+ * `admin_audit_logs` は実行者側が ON DELETE RESTRICT のため、いずれも先に片付ける。
+ *
+ * 削除に失敗したら投げる。握りつぶすと残骸が次の run を
+ * `createVerifiedUser` の 409（重複）で落とし続ける。
  */
 export async function deleteRunScopedUsers(): Promise<void> {
   const pattern = encodeURIComponent(RUN_EMAIL_LIKE_PATTERN);
 
-  await fetch(`${SUPABASE_URL}/rest/v1/otp_codes?email=like.${pattern}`, {
-    method: 'DELETE',
-    headers: supabaseHeaders,
-  });
-  await fetch(`${SUPABASE_URL}/rest/v1/users?email=like.${pattern}`, {
-    method: 'DELETE',
-    headers: supabaseHeaders,
-  });
+  await deleteOrThrow(`otp_codes?email=like.${pattern}`, 'OTPコード');
+  // admin が発行したアカウントを先に消して監査ログを連鎖削除させる
+  await deleteAccountsIssuedBy(await fetchUserIds(`email=like.${pattern}`));
+  await deleteOrThrow(`users?email=like.${pattern}`, 'run固有ユーザー');
 }
 
 /**

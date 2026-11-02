@@ -69,14 +69,22 @@ async function issueAccount(page: Page, email: string): Promise<void> {
 test.describe('アカウント管理（admin）', () => {
   let session: DedicatedSession;
 
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, testInfo) => {
+    // describe の timeout はテストにしか効かない。ユーザー作成（bcrypt）と
+    // 初回アクセスのコンパイル待ちは既定の30秒に収まらない
+    testInfo.setTimeout(90000);
     session = await openDedicatedSession(browser, ADMIN);
   });
 
   test.afterAll(async () => {
-    await session.close();
-    // 合成アドレスのアカウントは run 単位の後片付けで消えない
+    // 発行したアカウントを先に消す。
+    // `admin_audit_logs` は追記専用で消せず、実行者側（actor_user_id）は
+    // ON DELETE RESTRICT なので、記録が残っている限り admin を削除できない。
+    // 対象側（target_user_id）は ON DELETE CASCADE なので、発行アカウントを
+    // 先に消せば記録ごと連鎖削除され、続く session.close() が通る。
+    // 合成アドレスのアカウントは run 単位の後片付けでは消えない
     await deleteUsersByUsernames(issuedUsernames);
+    await session.close();
   });
 
   test('アカウントを発行すると一覧に表示される', async () => {
@@ -184,7 +192,9 @@ test.describe('アカウント管理（admin）', () => {
 test.describe('アカウント管理（権限なし）', () => {
   let session: DedicatedSession;
 
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, testInfo) => {
+    // 同上。専用ユーザーを作ってログインするまでに30秒を超えることがある
+    testInfo.setTimeout(90000);
     session = await openDedicatedSession(browser, MEMBER);
   });
 

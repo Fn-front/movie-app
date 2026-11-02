@@ -1,0 +1,30 @@
+@use '@/styles/variables' as *;
+
+.c_streaming_badge {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-1;
+  padding: $spacing-1 $spacing-2;
+  border-radius: $border-radius-sm;
+  background-color: $background-secondary;
+
+  &__label {
+    color: $text-primary;
+    font-size: $font-size-2xs;
+    font-weight: $font-weight-bold;
+    white-space: nowrap;
+  }
+
+  &__logo {
+    width: 16px;
+    height: 16px;
+    border-radius: $border-radius-sm;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  &__overflow {
+    color: $text-secondary;
+    font-size: $font-size-2xs;
+  }
+}

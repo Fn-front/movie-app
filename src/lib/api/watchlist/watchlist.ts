@@ -11,6 +11,18 @@ import type {
 } from '@/schema/watchlist';
 
 /**
+ * ウォッチリストアイテムの配信情報
+ */
+export interface WatchlistStreaming {
+  /** 提供形態。見放題とレンタルの両方で観られる場合は flatrate を返す */
+  offer_type: 'flatrate' | 'paid';
+  /** 表示するプロバイダーID（代表IDへ正規化済み） */
+  provider_ids: number[];
+  /** 一度途切れたあとの再配信か */
+  resumed: boolean;
+}
+
+/**
  * ウォッチリストアイテムの型
  */
 export interface WatchlistItem {
@@ -28,6 +40,8 @@ export interface WatchlistItem {
   added_at: string;
   /** 視聴済みにした日時。null は未視聴 */
   watched_at: string | null;
+  /** 配信情報。配信されていなければ null */
+  streaming: WatchlistStreaming | null;
 }
 
 /**
@@ -39,6 +53,8 @@ export interface GetWatchlistRequest {
   sort?: WatchlistSortOption;
   /** 視聴済みを除外するか（サイドバー用） */
   exclude_watched?: boolean;
+  /** 配信中の未視聴を先頭に出すか（一覧ページのみ） */
+  prioritize_streaming?: boolean;
 }
 
 /**

@@ -20,6 +20,9 @@ export const CRON_ERROR_MESSAGES = {
   GENERATE_RECOMMENDATIONS: 'レコメンド生成中にエラーが発生しました。',
   /** 受賞作品同期エラー */
   SYNC_AWARD_MOVIES: '受賞作品同期中にエラーが発生しました。',
+  /** ウォッチリスト配信状況の同期エラー */
+  SYNC_WATCHLIST_STREAMING:
+    'ウォッチリストの配信状況同期中にエラーが発生しました。',
   /** ユーザー取得失敗 */
   FETCH_USERS_FAILED: 'ユーザー取得に失敗しました',
   /** アクティブユーザー取得失敗 */

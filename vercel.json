@@ -21,6 +21,10 @@
       "schedule": "0 19 * * *"
     },
     {
+      "path": "/api/cron/sync-watchlist-streaming",
+      "schedule": "0 20 * * *"
+    },
+    {
       "path": "/api/cron/generate-recommendations",
       "schedule": "0 18 * * *"
     },

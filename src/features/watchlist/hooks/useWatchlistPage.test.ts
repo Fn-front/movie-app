@@ -37,7 +37,10 @@ describe('useWatchlistPage', () => {
     const { result } = renderHook(() => useWatchlistPage());
 
     expect(result.current.sortBy).toBe('added_at');
-    expect(mockUseWatchlist).toHaveBeenCalledWith({ sort: 'added_at' });
+    expect(mockUseWatchlist).toHaveBeenCalledWith({
+      sort: 'added_at',
+      prioritizeStreaming: true,
+    });
   });
 
   it('handleSortChangeでsortByが変更される', () => {
@@ -50,6 +53,7 @@ describe('useWatchlistPage', () => {
     expect(result.current.sortBy).toBe('release_date_proximity');
     expect(mockUseWatchlist).toHaveBeenCalledWith({
       sort: 'release_date_proximity',
+      prioritizeStreaming: true,
     });
   });
 
@@ -66,7 +70,10 @@ describe('useWatchlistPage', () => {
     });
     expect(result.current.sortBy).toBe('added_at');
     // 最後の呼び出しは added_at で行われる
-    expect(mockUseWatchlist).toHaveBeenLastCalledWith({ sort: 'added_at' });
+    expect(mockUseWatchlist).toHaveBeenLastCalledWith({
+      sort: 'added_at',
+      prioritizeStreaming: true,
+    });
   });
 
   it('useWatchlistの返り値が正しく返される', () => {

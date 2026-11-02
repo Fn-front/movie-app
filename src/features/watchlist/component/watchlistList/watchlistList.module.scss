@@ -120,6 +120,14 @@
   }
 
   // 視聴済みであることは色だけでなく文字でも示す
+  // 配信バッジ。視聴済みバッジと同じ位置に置く（同時には出ない）
+  &__streaming {
+    position: absolute;
+    bottom: $spacing-2;
+    left: $spacing-2;
+    z-index: 1;
+  }
+
   &__watched_badge {
     position: absolute;
     bottom: $spacing-2;

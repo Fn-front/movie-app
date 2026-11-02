@@ -61,6 +61,7 @@ const createMockItems = (count: number): WatchlistItem[] =>
     release_date: '2026-03-01',
     added_at: `2026-03-${String(10 - i).padStart(2, '0')}T00:00:00Z`,
     watched_at: null,
+    streaming: null,
   }));
 
 // --- Tests ---

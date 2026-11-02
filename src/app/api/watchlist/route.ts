@@ -36,6 +36,8 @@ export const GET = withAuth(
       limit: searchParams.get('limit') ?? undefined,
       sort: searchParams.get('sort') ?? undefined,
       exclude_watched: searchParams.get('exclude_watched') ?? undefined,
+      prioritize_streaming:
+        searchParams.get('prioritize_streaming') ?? undefined,
     });
 
     if (!queryResult.success) {
@@ -52,7 +54,8 @@ export const GET = withAuth(
       );
     }
 
-    const { cursor, limit, sort, exclude_watched } = queryResult.data;
+    const { cursor, limit, sort, exclude_watched, prioritize_streaming } =
+      queryResult.data;
 
     // 並び替えは get_watchlist_sorted（RPC）に一本化している。
     // 視聴済みを最下部に送ると並び順の主キーが watched_at になり、
@@ -79,6 +82,7 @@ export const GET = withAuth(
       p_limit: limit,
       p_offset: offset,
       p_exclude_watched: exclude_watched,
+      p_prioritize_streaming: prioritize_streaming,
     });
 
     if (error) {
@@ -86,15 +90,38 @@ export const GET = withAuth(
     }
 
     const items = (data ?? []) as Array<
-      WatchlistItem & { total_count: number }
+      WatchlistItem & {
+        total_count: number;
+        streaming_offer_type: 'flatrate' | 'paid' | null;
+        streaming_provider_ids: number[];
+        streaming_resumed: boolean;
+      }
     >;
     const totalCount = items.length > 0 ? Number(items[0].total_count) : 0;
     const hasMore = offset + limit < totalCount;
     const nextCursor = hasMore ? String(offset + limit) : null;
 
-    // total_count をレスポンスから除外
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const watchlist = items.map(({ total_count, ...item }) => item);
+    // RPC は列をフラットに返すため、配信情報だけ入れ子に組み直す。
+    // total_count は内部用なのでレスポンスから除く
+    const watchlist = items.map(
+      ({
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        total_count,
+        streaming_offer_type,
+        streaming_provider_ids,
+        streaming_resumed,
+        ...item
+      }) => ({
+        ...item,
+        streaming: streaming_offer_type
+          ? {
+              offer_type: streaming_offer_type,
+              provider_ids: streaming_provider_ids ?? [],
+              resumed: streaming_resumed,
+            }
+          : null,
+      }),
+    );
 
     return NextResponse.json(
       {

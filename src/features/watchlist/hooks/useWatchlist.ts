@@ -42,6 +42,8 @@ export interface UseWatchlistOptions {
   limit?: number;
   /** 視聴済みを除外するか（サイドバー用） */
   excludeWatched?: boolean;
+  /** 配信中の未視聴を先頭に出すか（一覧ページのみ true） */
+  prioritizeStreaming?: boolean;
 }
 
 /**
@@ -86,6 +88,7 @@ export function useWatchlist(
     sort = 'added_at',
     limit = WATCHLIST_DEFAULT_LIMIT,
     excludeWatched = false,
+    prioritizeStreaming = false,
   } = options;
   const { data: session, status } = useSession();
   // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
@@ -97,13 +100,14 @@ export function useWatchlist(
 
   // ウォッチリスト一覧取得（無限スクロール）
   const watchlistQuery = useInfiniteQuery({
-    queryKey: watchlistKeys.list({ sort, excludeWatched }),
+    queryKey: watchlistKeys.list({ sort, excludeWatched, prioritizeStreaming }),
     queryFn: ({ pageParam }) =>
       getWatchlist({
         cursor: pageParam,
         limit,
         sort,
         exclude_watched: excludeWatched,
+        prioritize_streaming: prioritizeStreaming,
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
@@ -113,7 +117,11 @@ export function useWatchlist(
     enabled: isAuthenticated,
   });
 
-  const queryKey = watchlistKeys.list({ sort, excludeWatched });
+  const queryKey = watchlistKeys.list({
+    sort,
+    excludeWatched,
+    prioritizeStreaming,
+  });
 
   // 追加mutation（楽観的UI更新）
   const addMutation = useMutation({
@@ -135,6 +143,7 @@ export function useWatchlist(
         release_date: newItem.release_date ?? null,
         added_at: new Date().toISOString(),
         watched_at: null,
+        streaming: null,
       };
 
       queryClient.setQueryData<{

@@ -25,6 +25,62 @@ const supabaseHeaders = {
   Authorization: `Bearer ${SUPABASE_KEY}`,
 };
 
+/**
+ * movie_streaming_status に配信状況を直接入れる（E2E用）
+ *
+ * TMDb の実データに依存させると、配信状況が変わるたびにテストが壊れる。
+ * 画面の検証に必要な状態だけを直接作る。
+ *
+ * @param params - 対象の映画IDと配信状況
+ */
+export async function seedStreamingStatus(params: {
+  tmdbMovieId: number;
+  flatrateProviderIds?: number[];
+  paidProviderIds?: number[];
+  resumed?: boolean;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  const flatrate = params.flatrateProviderIds ?? [];
+  const paid = params.paidProviderIds ?? [];
+
+  await fetch(`${SUPABASE_URL}/rest/v1/movie_streaming_status`, {
+    method: 'POST',
+    headers: {
+      ...supabaseHeaders,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({
+      tmdb_movie_id: params.tmdbMovieId,
+      flatrate_provider_ids: flatrate,
+      paid_provider_ids: paid,
+      flatrate_since: flatrate.length > 0 ? now : null,
+      paid_since: paid.length > 0 ? now : null,
+      flatrate_last_seen_at: flatrate.length > 0 ? now : null,
+      paid_last_seen_at: paid.length > 0 ? now : null,
+      flatrate_resumed: params.resumed ?? false,
+      paid_resumed: params.resumed ?? false,
+      checked_at: now,
+    }),
+  });
+}
+
+/**
+ * E2E で入れた配信状況を消す
+ *
+ * @param tmdbMovieIds - 対象の映画ID
+ */
+export async function cleanupStreamingStatus(
+  tmdbMovieIds: number[],
+): Promise<void> {
+  if (tmdbMovieIds.length === 0) return;
+
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/movie_streaming_status?tmdb_movie_id=in.(${tmdbMovieIds.join(',')})`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+}
+
 let cachedTestUserId: string | null = null;
 
 /**

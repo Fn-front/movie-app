@@ -86,6 +86,16 @@ export const watchlistQuerySchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
+  /**
+   * 配信中の未視聴を先頭に出すか。
+   *
+   * サイドバー（公開日が近い映画）でこの並びを使うと見出しと中身が
+   * 食い違うため、一覧ページだけが true を渡す。
+   */
+  prioritize_streaming: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
 });
 
 /**

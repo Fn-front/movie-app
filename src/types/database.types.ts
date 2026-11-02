@@ -392,6 +392,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      movie_streaming_status: {
+        Row: {
+          checked_at: string;
+          flatrate_last_seen_at: string | null;
+          flatrate_provider_ids: Json;
+          flatrate_resumed: boolean;
+          flatrate_since: string | null;
+          paid_last_seen_at: string | null;
+          paid_provider_ids: Json;
+          paid_resumed: boolean;
+          paid_since: string | null;
+          tmdb_movie_id: number;
+        };
+        Insert: {
+          checked_at?: string;
+          flatrate_last_seen_at?: string | null;
+          flatrate_provider_ids?: Json;
+          flatrate_resumed?: boolean;
+          flatrate_since?: string | null;
+          paid_last_seen_at?: string | null;
+          paid_provider_ids?: Json;
+          paid_resumed?: boolean;
+          paid_since?: string | null;
+          tmdb_movie_id: number;
+        };
+        Update: {
+          checked_at?: string;
+          flatrate_last_seen_at?: string | null;
+          flatrate_provider_ids?: Json;
+          flatrate_resumed?: boolean;
+          flatrate_since?: string | null;
+          paid_last_seen_at?: string | null;
+          paid_provider_ids?: Json;
+          paid_resumed?: boolean;
+          paid_since?: string | null;
+          tmdb_movie_id?: number;
+        };
+        Relationships: [];
+      };
       now_showing_movies: {
         Row: {
           display_order: number;
@@ -1098,6 +1137,7 @@ export type Database = {
           p_exclude_watched?: boolean;
           p_limit: number;
           p_offset?: number;
+          p_prioritize_streaming?: boolean;
           p_sort: string;
           p_user_id: string;
         };
@@ -1106,6 +1146,9 @@ export type Database = {
           id: string;
           poster_path: string;
           release_date: string;
+          streaming_offer_type: string;
+          streaming_provider_ids: Json;
+          streaming_resumed: boolean;
           title: string;
           tmdb_movie_id: number;
           total_count: number;

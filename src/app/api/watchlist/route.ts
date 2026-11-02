@@ -122,6 +122,17 @@ export const GET = withAuth(
     const hasMore = offset + limit < totalCount;
     const nextCursor = hasMore ? String(offset + limit) : null;
 
+    // 見放題のみを対象にしているユーザーには、レンタルのみの作品の
+    // バッジを出さない。「見放題になったときだけ」を選んでいる人にとって
+    // レンタルは観るきっかけにならず、一覧では雑音になるため。
+    //
+    // RPC 側は範囲に関わらず実態を返す（並び順の判定にしか使っていない）。
+    // 表示をどう削るかは利用者の設定の話なので、この層で決める。
+    //
+    // 情報自体は失わない。詳細モーダルは別経路で
+    // 「配信 / レンタル / 購入」を出し続ける。
+    const hidesPaidBadge = streamingScope === 'flatrate';
+
     // RPC は列をフラットに返すため、配信情報だけ入れ子に組み直す。
     // total_count は内部用なのでレスポンスから除く
     const watchlist = items.map(
@@ -132,16 +143,22 @@ export const GET = withAuth(
         streaming_provider_ids,
         streaming_resumed,
         ...item
-      }) => ({
-        ...item,
-        streaming: streaming_offer_type
-          ? {
-              offer_type: streaming_offer_type,
-              provider_ids: streaming_provider_ids ?? [],
-              resumed: streaming_resumed,
-            }
-          : null,
-      }),
+      }) => {
+        const showsBadge =
+          streaming_offer_type !== null &&
+          !(hidesPaidBadge && streaming_offer_type === 'paid');
+
+        return {
+          ...item,
+          streaming: showsBadge
+            ? {
+                offer_type: streaming_offer_type,
+                provider_ids: streaming_provider_ids ?? [],
+                resumed: streaming_resumed,
+              }
+            : null,
+        };
+      },
     );
 
     return NextResponse.json(

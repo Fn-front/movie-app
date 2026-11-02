@@ -58,7 +58,13 @@ describe('StreamingSortHint', () => {
 
     await user.tab();
 
-    expect(await screen.findByText(/見放題のみが対象です/)).toBeInTheDocument();
+    // 並び順だけでなく、レンタルのバッジを出さないことも伝える（#907）
+    expect(
+      await screen.findByText(/見放題のみを対象にしているため/),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/レンタルのみの作品にはバッジを出しません/),
+    ).toBeInTheDocument();
   });
 
   it('設定の取得に失敗しても既定の文言を出す', async () => {

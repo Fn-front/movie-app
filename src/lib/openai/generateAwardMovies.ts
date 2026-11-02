@@ -280,13 +280,30 @@ export async function fetchAwardsFromOpenAI(
 /**
  * TMDb検索結果から公開年が一致する映画を優先選択する
  * 一致するものがなければ先頭結果をフォールバックとして返す
+ *
+ * ⚠️ `year` と `release_date` は基準が違う。`year` は受賞作品データ側の
+ *    **本国公開年**（eiga.com 経路は `ceremonyYear - 1`、OpenAI 経路は
+ *    「映画の公開年」）だが、`release_date` は tmdbClient が `region: 'JP'` を
+ *    付けているため **日本公開日**で返る。洋画の日本公開は本国の翌年にずれるのが
+ *    通常なので、`year` だけで突き合わせると本命が必ず外れる。
+ *
+ *    実例: 第96回アカデミー賞の『オッペンハイマー』(872585) は本国2023年公開・
+ *    日本公開2024-03-29。`year=2023` と一致しないため関連度1位にいても飛ばされ、
+ *    2023年日本公開の同名別作品『オッペンハイマーの真実』(1230570) が
+ *    選ばれていた。
+ *
+ *    そのため当年と翌年の両方を一致候補とする。候補が複数残る場合は
+ *    `find` が TMDb の関連度順で先頭を拾うため、関連度を壊さない。
  */
 function findBestMatch<T extends { id: number; release_date?: string }>(
   results: T[],
   year: number,
 ): T | undefined {
+  const acceptedYears = new Set([String(year), String(year + 1)]);
+
   return (
-    results.find((m) => m.release_date?.startsWith(String(year))) ?? results[0]
+    results.find((m) => acceptedYears.has(m.release_date?.slice(0, 4) ?? '')) ??
+    results[0]
   );
 }
 

@@ -803,6 +803,74 @@ describe('resolveAwardsWithTMDb', () => {
     expect(result[0].tmdb_movie_id).toBe(601);
   });
 
+  it('日本公開が翌年にずれていても本命を選ぶ', async () => {
+    // 第96回アカデミー賞の実データ。TMDbクライアントは region=JP のため
+    // 『オッペンハイマー』の release_date は日本公開日 2024-03-29 で返るが、
+    // item.year は本国公開年 2023。翌年を許容しないと関連度1位を飛ばして
+    // 同名の別作品（2023年日本公開のドキュメンタリー）を拾ってしまう
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 872585,
+          title: 'オッペンハイマー',
+          poster_path: '/oppenheimer.jpg',
+          release_date: '2024-03-29',
+          vote_average: 8.1,
+          genre_ids: [18, 36],
+        },
+        {
+          id: 1230570,
+          title: 'オッペンハイマーの真実',
+          poster_path: null,
+          release_date: '2023-08-01',
+          vote_average: 6.0,
+          genre_ids: [99],
+        },
+      ],
+    });
+
+    const items = [
+      createAwardItem({
+        title_ja: 'オッペンハイマー',
+        title_en: 'Oppenheimer',
+        year: 2023,
+      }),
+    ];
+    const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].tmdb_movie_id).toBe(872585);
+  });
+
+  it('許容するずれは翌年までで、翌々年の候補は優先しない', async () => {
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 610,
+          title: '同名映画（翌々年公開）',
+          poster_path: null,
+          release_date: '2028-01-01',
+          vote_average: 8.0,
+          genre_ids: [18],
+        },
+        {
+          id: 611,
+          title: '同名映画（本命）',
+          poster_path: null,
+          release_date: '2026-05-01',
+          vote_average: 6.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    const items = [createAwardItem({ year: 2026 })];
+    const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].tmdb_movie_id).toBe(611);
+  });
+
   it('公開年一致がない場合は先頭結果にフォールバックする', async () => {
     mockSearchMovies.mockResolvedValue({
       results: [

@@ -703,3 +703,123 @@ describe('配信範囲の設定', () => {
     );
   });
 });
+
+describe('見放題のみの設定でのバッジの絞り込み', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      user: { id: 'user-123' },
+    });
+  });
+
+  /** user_settings の取得をモックする */
+  const mockUserSettings = (scope: string | null) => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () =>
+            Promise.resolve({
+              data: scope === null ? null : { streaming_notice_scope: scope },
+              error: null,
+            }),
+        }),
+      }),
+    });
+  };
+
+  /** RPC が返す1行を作る */
+  const rpcRow = (overrides: Record<string, unknown> = {}) => ({
+    id: 'wl-1',
+    tmdb_movie_id: 100,
+    title: '映画A',
+    poster_path: null,
+    release_date: null,
+    added_at: '2026-10-01T00:00:00Z',
+    watched_at: null,
+    streaming_offer_type: null,
+    streaming_provider_ids: [],
+    streaming_resumed: false,
+    total_count: 1,
+    ...overrides,
+  });
+
+  it('見放題のみの設定では、レンタルのみの作品に streaming を付けない', async () => {
+    mockUserSettings('flatrate');
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        rpcRow({ streaming_offer_type: 'paid', streaming_provider_ids: [10] }),
+      ],
+      error: null,
+    });
+
+    const response = await GET(
+      createGetRequest({ prioritize_streaming: 'true' }),
+    );
+    const body = await response.json();
+
+    expect(body.data.watchlist[0].streaming).toBeNull();
+  });
+
+  it('見放題のみの設定でも、見放題の作品にはバッジを出す', async () => {
+    mockUserSettings('flatrate');
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        rpcRow({
+          streaming_offer_type: 'flatrate',
+          streaming_provider_ids: [8],
+        }),
+      ],
+      error: null,
+    });
+
+    const response = await GET(
+      createGetRequest({ prioritize_streaming: 'true' }),
+    );
+    const body = await response.json();
+
+    expect(body.data.watchlist[0].streaming).toEqual({
+      offer_type: 'flatrate',
+      provider_ids: [8],
+      resumed: false,
+    });
+  });
+
+  it('レンタルも含める設定なら、レンタルのバッジを出す', async () => {
+    mockUserSettings('any');
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        rpcRow({ streaming_offer_type: 'paid', streaming_provider_ids: [10] }),
+      ],
+      error: null,
+    });
+
+    const response = await GET(
+      createGetRequest({ prioritize_streaming: 'true' }),
+    );
+    const body = await response.json();
+
+    expect(body.data.watchlist[0].streaming).toEqual({
+      offer_type: 'paid',
+      provider_ids: [10],
+      resumed: false,
+    });
+  });
+
+  it('優先表示しない呼び出し（サイドバー）では絞り込まない', async () => {
+    // 設定を引かないので範囲は既定の any のまま。
+    // サイドバーはバッジ自体を描画しないため実害は無いが、
+    // 「設定を引いていないのに絞る」という不整合を作らない
+    mockRpc.mockResolvedValueOnce({
+      data: [
+        rpcRow({ streaming_offer_type: 'paid', streaming_provider_ids: [10] }),
+      ],
+      error: null,
+    });
+
+    const response = await GET(createGetRequest());
+    const body = await response.json();
+
+    expect(body.data.watchlist[0].streaming).not.toBeNull();
+  });
+});

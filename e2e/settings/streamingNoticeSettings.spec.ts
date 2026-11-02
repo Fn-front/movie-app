@@ -114,7 +114,7 @@ test.describe('配信開始のお知らせ設定', () => {
     await trigger.focus();
 
     // 直前のテストで flatrate にしてある
-    await expect(page.getByText(/見放題のみが対象です/)).toBeVisible({
+    await expect(page.getByText(/見放題のみを対象にしているため/)).toBeVisible({
       timeout: 15000,
     });
 
@@ -158,7 +158,7 @@ test.describe('配信開始のお知らせ設定', () => {
     await expect(trigger).toBeFocused();
 
     // フォーカスした状態で説明が読めること（キーボードユーザーにも見える）
-    await expect(page.getByText(/見放題のみが対象です/)).toBeVisible({
+    await expect(page.getByText(/見放題のみを対象にしているため/)).toBeVisible({
       timeout: 15000,
     });
 
@@ -167,7 +167,7 @@ test.describe('配信開始のお知らせ設定', () => {
     await expect(page).toHaveURL(/\/settings$/);
   });
 
-  test('見放題のみの設定でもレンタルのバッジは残る', async () => {
+  test('見放題のみの設定ではレンタルのバッジを出さない', async () => {
     await cleanupWatchlistForUser(session.userId);
     const movie = await addMovieToWatchlist(page);
     seededMovieIds.push(movie.tmdbMovieId);
@@ -180,9 +180,11 @@ test.describe('配信開始のお知らせ設定', () => {
 
     await page.goto('/watchlist');
 
-    // 先頭には来ないが、バッジ自体は出る。
-    // 設定は「何を先頭に出すか」であって「何を隠すか」ではない
+    // 作品自体は一覧に出る（消えるのはバッジだけ）
     const main = page.getByRole('main');
-    await expect(main.getByText('レンタル')).toBeVisible({ timeout: 30000 });
+    await expect(main.getByText(movie.title)).toBeVisible({ timeout: 30000 });
+
+    // 見放題のみを対象にしているので、レンタルの表記は出さない（#907）
+    await expect(main.getByText('レンタル')).toHaveCount(0);
   });
 });

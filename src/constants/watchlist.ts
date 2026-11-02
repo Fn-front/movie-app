@@ -138,3 +138,60 @@ export const WATCHLIST_CLEANUP_LABELS = {
   unratedNotice: (count: number) =>
     `お気に入り未登録の${count}件は、削除すると視聴した記録が残りません`,
 } as const;
+
+/**
+ * 「配信中」とみなす範囲の選択肢
+ *
+ * any      : 見放題・レンタル・購入のいずれかで観られる
+ * flatrate : 見放題になったときだけ
+ */
+export const STREAMING_SCOPE_VALUES = ['any', 'flatrate'] as const;
+
+/**
+ * 「配信中」とみなす範囲
+ */
+export type StreamingScope = (typeof STREAMING_SCOPE_VALUES)[number];
+
+/**
+ * 初期値
+ *
+ * 実測では未視聴26件のうち見放題10件・レンタルのみ5件で、any にしても
+ * 先頭が埋まりすぎることはなかった。バッジで形態を区別できるため
+ * 含めても誤解させない。
+ */
+export const STREAMING_SCOPE_DEFAULT: StreamingScope = 'any';
+
+/**
+ * 配信範囲設定の表示ラベル
+ */
+export const WATCHLIST_STREAMING_SCOPE_LABELS = {
+  /** 設定セクションの見出し */
+  HEADING: '配信開始のお知らせ',
+  /** 設定の説明 */
+  DESCRIPTION:
+    'ウォッチリストで、どの状態になった作品を先頭に表示するかを選べます',
+  /** any の選択肢 */
+  ANY: 'レンタル・購入も含める',
+  /** flatrate の選択肢 */
+  FLATRATE: '見放題になったときだけ',
+  /** ラジオグループの読み上げ名 */
+  GROUP_ARIA: '配信開始のお知らせの対象',
+  /** 更新成功 */
+  UPDATED: '配信開始のお知らせを更新しました',
+  /** 更新失敗 */
+  UPDATE_FAILED: '配信設定の更新に失敗しました',
+} as const;
+
+/**
+ * ウォッチリストのツールバーに出す、並びの説明
+ */
+export const WATCHLIST_STREAMING_HINT_LABELS = {
+  /** ⓘ ボタンの読み上げ名 */
+  TRIGGER_ARIA: '並び順について',
+  /** 本文（any のとき） */
+  ANY: '配信中の作品を先頭に表示しています。見放題・レンタルが対象です。',
+  /** 本文（flatrate のとき） */
+  FLATRATE: '配信中の作品を先頭に表示しています。見放題のみが対象です。',
+  /** 設定ページへのリンク文言 */
+  SETTINGS_LINK: '設定で変更',
+} as const;

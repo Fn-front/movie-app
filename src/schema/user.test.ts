@@ -50,3 +50,37 @@ describe('updateSettingsSchema', () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe('updateSettingsSchema の streamingNoticeScope', () => {
+  it("'any' を受け付ける", () => {
+    const result = updateSettingsSchema.safeParse({
+      streamingNoticeScope: 'any',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("'flatrate' を受け付ける", () => {
+    const result = updateSettingsSchema.safeParse({
+      streamingNoticeScope: 'flatrate',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('未知の値は失敗する', () => {
+    const result = updateSettingsSchema.safeParse({
+      streamingNoticeScope: 'rent-only',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('省略できる（他の設定だけ更新できる）', () => {
+    const result = updateSettingsSchema.safeParse({
+      notificationEnabled: true,
+    });
+
+    expect(result.success).toBe(true);
+  });
+});

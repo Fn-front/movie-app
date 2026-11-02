@@ -1142,6 +1142,7 @@ export type Database = {
           p_offset?: number;
           p_prioritize_streaming?: boolean;
           p_sort: string;
+          p_streaming_scope?: string;
           p_user_id: string;
         };
         Returns: {

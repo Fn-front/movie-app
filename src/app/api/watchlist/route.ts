@@ -14,7 +14,9 @@ import {
   WATCHLIST_SUCCESS_MESSAGES,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  STREAMING_SCOPE_DEFAULT,
 } from '@/constants';
+import type { StreamingScope } from '@/constants';
 import {
   checkDuplicate,
   conflictResponse,
@@ -76,6 +78,24 @@ export const GET = withAuth(
       );
     }
 
+    // 優先表示するときだけ設定を引く。
+    // サイドバーは prioritize_streaming=false で呼ぶので、余計なクエリを増やさない
+    let streamingScope: StreamingScope = STREAMING_SCOPE_DEFAULT;
+
+    if (prioritize_streaming) {
+      // 取得に失敗しても既定値で並べる。設定が読めないだけで
+      // 一覧全体が見られなくなる方が困るため
+      const { data: settings } = await supabase
+        .from('user_settings')
+        .select('streaming_notice_scope')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      // 設定が未作成、または列を足す前に作られた行は既定値に倒す
+      streamingScope = (settings?.streaming_notice_scope ??
+        STREAMING_SCOPE_DEFAULT) as StreamingScope;
+    }
+
     const { data, error } = await supabase.rpc('get_watchlist_sorted', {
       p_user_id: session.user.id,
       p_sort: sort,
@@ -83,6 +103,7 @@ export const GET = withAuth(
       p_offset: offset,
       p_exclude_watched: exclude_watched,
       p_prioritize_streaming: prioritize_streaming,
+      p_streaming_scope: streamingScope,
     });
 
     if (error) {

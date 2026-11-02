@@ -790,6 +790,20 @@ export async function cleanupOtpCodes(
 }
 
 /**
+ * 指定ユーザーの設定を物理削除する（E2E用）
+ *
+ * 設定は upsert で作られるため、消せば既定値に戻る。
+ *
+ * @param userId - 対象ユーザーのID
+ */
+export async function cleanupUserSettings(userId: string): Promise<void> {
+  await fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${userId}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+}
+
+/**
  * 指定メールのユーザーとOTPコードを物理削除する（signupテストの後始末用）。
  */
 export async function cleanupAuthUser(email: string): Promise<void> {

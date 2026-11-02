@@ -1,0 +1,26 @@
+@use '@/styles/variables' as *;
+
+.c_streaming_sort_hint {
+  &__trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: $text-secondary;
+    font-size: $font-size-lg;
+    text-decoration: none;
+
+    &:hover {
+      color: $text-primary;
+    }
+
+    &:focus-visible {
+      outline: $border-width-2 solid $primary-500;
+      outline-offset: 2px;
+      border-radius: $border-radius-sm;
+    }
+  }
+
+  &__body {
+    display: block;
+  }
+}

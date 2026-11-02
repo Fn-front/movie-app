@@ -1,0 +1,18 @@
+@use '@/styles/variables' as *;
+
+.c_tooltip {
+  max-width: 280px;
+  padding: $spacing-2 $spacing-3;
+  border-radius: $border-radius-md;
+  background-color: $background-paper;
+  border: $border-width-1 solid $border-color;
+  box-shadow: $shadow-md;
+  color: $text-primary;
+  font-size: $font-size-sm;
+  line-height: 1.6;
+  z-index: $z-index-tooltip;
+
+  &__arrow {
+    fill: $background-paper;
+  }
+}

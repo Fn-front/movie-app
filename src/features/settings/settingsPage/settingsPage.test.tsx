@@ -94,6 +94,13 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('heading', { name: '外観' })).toBeInTheDocument();
   });
 
+  it('配信開始のお知らせセクションが表示される', () => {
+    render(<SettingsPage />);
+    expect(
+      screen.getByRole('heading', { name: '配信開始のお知らせ' }),
+    ).toBeInTheDocument();
+  });
+
   it('興味なし一覧セクションが表示される', () => {
     render(<SettingsPage />);
     expect(

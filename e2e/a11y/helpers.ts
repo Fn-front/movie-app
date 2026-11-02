@@ -8,6 +8,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page } from '@playwright/test';
 
+import {
+  filterUnexpectedIncomplete,
+  type AllowedIncomplete,
+} from './allowedIncomplete';
+
+export type { AllowedIncomplete };
+
 const THEME_STORAGE_KEY = 'movie-app:theme';
 
 /** 検査するテーマ */
@@ -90,13 +97,15 @@ function formatResults(
  * @param allowedIncompleteRules この検査だけ incomplete を許容するルール。
  *   「axe が判定できないだけで実害が無い」と確認できたものに限る。
  *   ルールごと無効化する `extraDisabledRules` と違い、violations 側は検出し続ける。
+ *   ルールIDだけでなく `{ id, messageKey, targetIncludes }` で条件を絞れる。
+ *   同じルールでも事情の違うものを取りこぼさないよう、可能な限り絞ること。
  *   追加するときは呼び出し側に理由をコメントで残すこと。
  */
 export async function expectNoA11yViolations(
   page: Page,
   label: string,
   extraDisabledRules: readonly string[] = [],
-  allowedIncompleteRules: readonly string[] = [],
+  allowedIncompleteRules: readonly AllowedIncomplete[] = [],
 ): Promise<void> {
   const results = await new AxeBuilder({ page })
     .disableRules([...DISABLED_RULES, ...extraDisabledRules])
@@ -107,8 +116,9 @@ export async function expectNoA11yViolations(
     `${label} (${page.url()}) でアクセシビリティ違反:\n${formatResults(results.violations)}`,
   ).toEqual([]);
 
-  const unexpectedIncomplete = results.incomplete.filter(
-    (item) => !allowedIncompleteRules.includes(item.id),
+  const unexpectedIncomplete = filterUnexpectedIncomplete(
+    results.incomplete,
+    allowedIncompleteRules,
   );
 
   expect(

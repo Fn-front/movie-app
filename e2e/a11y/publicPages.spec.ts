@@ -15,7 +15,26 @@ import { THEMES, gotoWithTheme, expectNoA11yViolations } from './helpers';
  * incomplete（needs review）のルール。理由を必ず添えること。
  */
 const PUBLIC_PAGES = [
-  { name: 'ホーム', path: '/' },
+  {
+    name: 'ホーム',
+    path: '/',
+    // 横スクロールのカルーセルには、表示幅の右端で切れるカードが必ず1枚できる
+    // （カード幅196pxに対し表示幅は1002px＝5.11枚分で、割り切れない）。
+    // その切れたカードのタイトルが2行に折り返すと、axe は要素がクリップ境界を
+    // またぐために背景色を決定できず color-contrast を incomplete に回す。
+    // コントラスト自体は正常で、スクロールして全体が見える位置に来ると消える。
+    // 右端にどの作品が来るかは TMDb のデータ次第なので、日によって出たり消えたりする。
+    //
+    // messageKey と対象セレクタの両方で絞っているため、カルーセル外（画像の上の
+    // 文字など）の「背景色を決定できない」は従来どおり落ちる。
+    allowedIncomplete: [
+      {
+        id: 'color-contrast',
+        messageKey: 'elmPartiallyObscuring',
+        targetIncludes: 'movie_list__item',
+      },
+    ],
+  },
   { name: '公開中', path: '/movies/now-showing' },
   { name: '公開予定', path: '/movies/upcoming' },
   {

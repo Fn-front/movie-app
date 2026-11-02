@@ -46,5 +46,6 @@ export async function updateSettings(
   await axiosInstance.put(API_ENDPOINTS.USER_SETTINGS, {
     theme: settings.theme,
     notificationEnabled: settings.notificationEnabled,
+    streamingNoticeScope: settings.streamingNoticeScope,
   });
 }

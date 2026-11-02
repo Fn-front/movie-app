@@ -4,6 +4,9 @@
 
 import { z } from 'zod';
 
+import { STREAMING_SCOPE_VALUES } from '@/constants';
+import type { StreamingScope } from '@/constants';
+
 /**
  * テーマの選択肢
  * `system` は OS 設定（prefers-color-scheme）に追従する未設定既定値。
@@ -34,6 +37,8 @@ export type UpdateProfileFormData = z.infer<typeof updateProfileSchema>;
 export const updateSettingsSchema = z.object({
   theme: z.enum(THEME_VALUES).optional(),
   notificationEnabled: z.boolean().optional(),
+  /** ウォッチリストで「配信中」とみなす範囲 */
+  streamingNoticeScope: z.enum(STREAMING_SCOPE_VALUES).optional(),
 });
 
 /**
@@ -47,4 +52,6 @@ export type UpdateSettingsFormData = z.infer<typeof updateSettingsSchema>;
 export interface UserSettings {
   theme: (typeof THEME_VALUES)[number];
   notificationEnabled: boolean;
+  /** ウォッチリストで「配信中」とみなす範囲 */
+  streamingNoticeScope: StreamingScope;
 }

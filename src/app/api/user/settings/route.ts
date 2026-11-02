@@ -25,12 +25,15 @@ import {
   THEME_DEFAULTS,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  STREAMING_SCOPE_DEFAULT,
 } from '@/constants';
+import type { StreamingScope } from '@/constants';
 
 /** デフォルトのユーザー設定 */
 const DEFAULT_SETTINGS: UserSettings = {
   theme: THEME_DEFAULTS.DEFAULT,
   notificationEnabled: false,
+  streamingNoticeScope: STREAMING_SCOPE_DEFAULT,
 };
 
 export async function GET() {
@@ -46,7 +49,7 @@ export async function GET() {
     // 設定取得
     const { data, error } = await supabase
       .from('user_settings')
-      .select('theme, notification_enabled')
+      .select('theme, notification_enabled, streaming_notice_scope')
       .eq('user_id', session.user.id)
       .single();
 
@@ -71,6 +74,9 @@ export async function GET() {
         data: {
           theme: data.theme,
           notificationEnabled: data.notification_enabled,
+          // 列を足す前に作られた行は NULL になりうるため既定値へ倒す
+          streamingNoticeScope: (data.streaming_notice_scope ??
+            STREAMING_SCOPE_DEFAULT) as StreamingScope,
         } satisfies UserSettings,
       },
       { status: HTTP_STATUS.OK },
@@ -139,6 +145,9 @@ export async function PUT(request: Request) {
     }
     if (result.data.notificationEnabled !== undefined) {
       updateData.notification_enabled = result.data.notificationEnabled;
+    }
+    if (result.data.streamingNoticeScope !== undefined) {
+      updateData.streaming_notice_scope = result.data.streamingNoticeScope;
     }
 
     // upsert（存在しなければ作成、存在すれば更新）

@@ -154,6 +154,8 @@ describe('GET /api/watchlist', () => {
       p_exclude_watched: false,
       // 既定は従来の並び。サイドバーがこの既定で呼ぶ
       p_prioritize_streaming: false,
+      // 優先表示しないため設定は引かず、既定値を渡す
+      p_streaming_scope: 'any',
     });
   });
 
@@ -610,6 +612,14 @@ describe('GET /api/watchlist の配信情報', () => {
   });
 
   it('prioritize_streaming=true を RPC に渡す', async () => {
+    // 優先表示時は user_settings を引くためモックしておく
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        }),
+      }),
+    });
     mockRpc.mockResolvedValueOnce({ data: [], error: null });
 
     await GET(createGetRequest({ prioritize_streaming: 'true' }));
@@ -628,6 +638,68 @@ describe('GET /api/watchlist の配信情報', () => {
     expect(mockRpc).toHaveBeenCalledWith(
       'get_watchlist_sorted',
       expect.objectContaining({ p_prioritize_streaming: false }),
+    );
+  });
+});
+
+describe('配信範囲の設定', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      user: { id: 'user-123' },
+    });
+  });
+
+  /** user_settings の取得をモックする */
+  const mockUserSettings = (scope: string | null) => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () =>
+            Promise.resolve({
+              data: scope === null ? null : { streaming_notice_scope: scope },
+              error: null,
+            }),
+        }),
+      }),
+    });
+  };
+
+  it('ユーザー設定を RPC に渡す', async () => {
+    mockUserSettings('flatrate');
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    await GET(createGetRequest({ prioritize_streaming: 'true' }));
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_watchlist_sorted',
+      expect.objectContaining({ p_streaming_scope: 'flatrate' }),
+    );
+  });
+
+  it('設定が未作成なら any を渡す', async () => {
+    mockUserSettings(null);
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    await GET(createGetRequest({ prioritize_streaming: 'true' }));
+
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_watchlist_sorted',
+      expect.objectContaining({ p_streaming_scope: 'any' }),
+    );
+  });
+
+  it('優先表示しないときは設定を引かない', async () => {
+    mockRpc.mockResolvedValueOnce({ data: [], error: null });
+
+    await GET(createGetRequest());
+
+    // サイドバーからの呼び出しで余計なクエリを増やさない
+    expect(mockFrom).not.toHaveBeenCalledWith('user_settings');
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_watchlist_sorted',
+      expect.objectContaining({ p_streaming_scope: 'any' }),
     );
   });
 });

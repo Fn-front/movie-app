@@ -75,6 +75,7 @@ describe('GET /api/user/settings', () => {
     expect(json.data).toEqual({
       theme: 'dark',
       notificationEnabled: true,
+      streamingNoticeScope: 'any',
     });
   });
 
@@ -98,6 +99,7 @@ describe('GET /api/user/settings', () => {
     expect(json.data).toEqual({
       theme: 'system',
       notificationEnabled: false,
+      streamingNoticeScope: 'any',
     });
   });
 
@@ -149,6 +151,7 @@ describe('GET /api/user/settings', () => {
     expect(json.data).toEqual({
       theme: 'system',
       notificationEnabled: false,
+      streamingNoticeScope: 'any',
     });
   });
 });
@@ -229,5 +232,110 @@ describe('PUT /api/user/settings', () => {
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('RATE_LIMIT_EXCEEDED');
     expect(json.error.details.retryAfter).toBe(60);
+  });
+});
+
+describe('配信範囲設定', () => {
+  /** upsert に渡された行を記録する */
+  let upsertedData: Record<string, unknown> = {};
+
+  /** user_settings の upsert をモックする */
+  const mockUpsert = () => {
+    upsertedData = {};
+    mockFrom.mockReturnValueOnce({
+      upsert: (row: Record<string, unknown>) => {
+        upsertedData = row;
+        return { error: null };
+      },
+    });
+  };
+
+  it('GET で streamingNoticeScope を返す', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: {
+              theme: 'dark',
+              notification_enabled: true,
+              streaming_notice_scope: 'flatrate',
+            },
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(json.data.streamingNoticeScope).toBe('flatrate');
+  });
+
+  it('設定が未作成なら既定の any を返す', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: null,
+            error: { code: SUPABASE_ERROR_CODE.NOT_FOUND },
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(json.data.streamingNoticeScope).toBe('any');
+  });
+
+  it('列を足す前に作られた行は既定値に倒す', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: {
+              theme: 'dark',
+              notification_enabled: true,
+              streaming_notice_scope: null,
+            },
+            error: null,
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(json.data.streamingNoticeScope).toBe('any');
+  });
+
+  it('PUT で streamingNoticeScope を保存する', async () => {
+    mockUpsert();
+
+    const response = await PUT(
+      createPutRequest({ streamingNoticeScope: 'flatrate' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(upsertedData.streaming_notice_scope).toBe('flatrate');
+  });
+
+  it('未知の値は400を返す', async () => {
+    const response = await PUT(
+      createPutRequest({ streamingNoticeScope: 'rent-only' }),
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('他の設定だけ更新しても配信範囲に触れない', async () => {
+    mockUpsert();
+
+    await PUT(createPutRequest({ notificationEnabled: true }));
+
+    expect(upsertedData).not.toHaveProperty('streaming_notice_scope');
   });
 });

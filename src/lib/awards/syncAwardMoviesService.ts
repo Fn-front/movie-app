@@ -27,6 +27,7 @@ import {
   resolveAwardsWithTMDb,
 } from '@/lib/openai/generateAwardMovies';
 import { fetchWikipediaArticle } from '@/lib/wikipedia/fetchArticle';
+import { fetchGoldenGlobesFromWikitext } from '@/lib/wikipedia/parseGoldenGlobesAwards';
 
 /** 同期処理のサマリー */
 export interface SyncAwardMoviesSummary {
@@ -141,6 +142,9 @@ export async function fetchAndResolveAward(
       );
       allAiItems = await fetchAwardItemsViaWikipedia(awardName, awardDef, year);
     }
+  } else if (awardName === 'golden_globes') {
+    // ゴールデングローブ賞: wikitext を直接パースする（OpenAIを使わない）
+    allAiItems = await fetchGoldenGlobesAwards(awardDef, year);
   } else {
     // その他の賞: Wikipedia + OpenAI で構造化
     allAiItems = await fetchAwardItemsViaWikipedia(awardName, awardDef, year);
@@ -304,8 +308,43 @@ export async function executeSyncAwardMoviesCron(
 }
 
 /**
+ * ゴールデングローブ賞の受賞作品データを wikitext から取得する
+ *
+ * **OpenAI を使わない。** 記事の表を直接読むため決定的で、同じ年を同期し直しても
+ * 件数が変わらない。人名も取れる。
+ *
+ * 取得0件でも OpenAI 経路にフォールバックしない。記事の書式が変わったときに
+ * 静かに非決定的な経路へ戻るより、0件として表に出したい（取得0件のときは
+ * 呼び出し元が既存データに触らない）。
+ */
+async function fetchGoldenGlobesAwards(
+  awardDef: (typeof AWARD_DEFINITIONS)[AwardName],
+  ceremonyYear: number,
+): Promise<OpenAiAwardItem[]> {
+  const wikipediaTitle = buildWikipediaTitle(ceremonyYear, awardDef);
+  const articleText = await fetchWikipediaArticle(wikipediaTitle);
+
+  if (!articleText) {
+    console.warn(
+      `Wikipedia article not found for golden_globes: "${wikipediaTitle}"`,
+    );
+    return [];
+  }
+
+  const items = fetchGoldenGlobesFromWikitext(articleText, ceremonyYear);
+
+  if (items.length === 0) {
+    console.warn(
+      `No entries parsed from "${wikipediaTitle}". 記事の書式が変わった可能性がある`,
+    );
+  }
+
+  return items;
+}
+
+/**
  * Wikipedia + OpenAI で受賞作品データを取得
- * アカデミー賞以外の賞で使用
+ * カンヌ映画祭で使用（アカデミー賞・ゴールデングローブ賞は専用の抽出経路を持つ）
  */
 async function fetchAwardItemsViaWikipedia(
   awardName: string,

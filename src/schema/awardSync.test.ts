@@ -40,13 +40,14 @@ describe('awardSyncCreateSchema', () => {
   });
 
   it('賞ごとの下限より前の年を拒否する', () => {
-    // カンヌの第1回は1946年
+    // カンヌは1948・1950が中止で、回数と開催年の差が一定になるのは
+    // 第4回（1951年）以降。それより前は記事タイトルを算出できない
     expect(
-      awardSyncCreateSchema.safeParse({ awardName: 'cannes', year: 1945 })
+      awardSyncCreateSchema.safeParse({ awardName: 'cannes', year: 1950 })
         .success,
     ).toBe(false);
     expect(
-      awardSyncCreateSchema.safeParse({ awardName: 'cannes', year: 1946 })
+      awardSyncCreateSchema.safeParse({ awardName: 'cannes', year: 1951 })
         .success,
     ).toBe(true);
   });

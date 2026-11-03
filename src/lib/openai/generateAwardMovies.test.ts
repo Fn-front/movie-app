@@ -6,7 +6,7 @@
  * 受賞作品取得ロジック テスト
  */
 
-import type { AwardDefinition } from '@/constants/awards';
+import { AWARD_DEFINITIONS, type AwardDefinition } from '@/constants/awards';
 import type { OpenAiAwardItem } from '@/schema/awards';
 
 // --- Mocks ---
@@ -94,6 +94,32 @@ describe('buildWikipediaTitle', () => {
     };
     const title = buildWikipediaTitle(2026, def);
     expect(title).toBe('2026年のテスト映画祭');
+  });
+
+  /**
+   * 実在する記事名と突き合わせた値で固定する。
+   * 定義を変えるとカンヌの同期が丸ごと0件になるため、
+   * 実際の記事名を知らない後任が気づけるようにしておく。
+   */
+  it.each([
+    [2024, '第77回カンヌ国際映画祭'],
+    [2025, '第78回カンヌ国際映画祭'],
+    [2026, '第79回カンヌ国際映画祭'],
+    [1951, '第4回カンヌ国際映画祭'],
+  ])('カンヌ %i年 → %s', (year, expected) => {
+    expect(buildWikipediaTitle(year, AWARD_DEFINITIONS.cannes)).toBe(expected);
+  });
+
+  it.each([
+    [2024, '第96回アカデミー賞'],
+    [2025, '第82回ゴールデングローブ賞'],
+  ])('%i年 → %s', (year, expected) => {
+    const awardName = expected.includes('アカデミー')
+      ? ('academy_awards' as const)
+      : ('golden_globes' as const);
+    expect(buildWikipediaTitle(year, AWARD_DEFINITIONS[awardName])).toBe(
+      expected,
+    );
   });
 });
 

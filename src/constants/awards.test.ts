@@ -61,6 +61,16 @@ describe('AWARD_DEFINITIONS', () => {
     expect(AWARD_DEFINITIONS.cannes.categories).toHaveLength(8);
   });
 
+  it('カンヌ映画祭は回数ベースのWikipediaテンプレートを使う', () => {
+    // `{year}年のカンヌ国際映画祭` という記事は日本語Wikipediaに存在せず、
+    // 実在するのは `第{edition}回カンヌ国際映画祭`。年ベースのままだと
+    // 記事取得が必ず失敗し、同期が常に0件で終わる
+    expect(AWARD_DEFINITIONS.cannes.wikipediaTemplate).toBe(
+      '第{edition}回カンヌ国際映画祭',
+    );
+    expect(AWARD_DEFINITIONS.cannes.firstEditionYear).toBe(1947);
+  });
+
   it('ゴールデングローブ賞は1月で9部門', () => {
     expect(AWARD_DEFINITIONS.golden_globes.label).toBe('ゴールデングローブ賞');
     expect(AWARD_DEFINITIONS.golden_globes.month).toBe(1);

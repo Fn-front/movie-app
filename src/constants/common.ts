@@ -20,6 +20,23 @@ export const STORAGE_KEYS = {
   RECENT_SEARCHES: 'movie-app:recent-searches',
   /** 一覧画面のフィルター条件 */
   MOVIE_FILTERS: 'movie-app:movie-filters',
+  /**
+   * アクセス解析Cookieへの同意状態（granted / denied のみ。未決定は未保存）
+   *
+   * 下の3キーと合わせて1件の同意レコードを成す。あえて1本のJSONにしないのは、
+   * layout.tsx の <head> インラインスクリプトが JSON.parse を挟まずに
+   * 同期読みできるようにするため。
+   *
+   * 書き込みは OWNER → VERSION → AT → この順で行い、このキーをコミット点と
+   * する。消去は逆順。詳細は docs/superpowers/specs/2026-11-03-ga4-cookie-consent-design.md
+   */
+  COOKIE_CONSENT: 'movie-app:cookie-consent',
+  /** 同意／撤回した日時（ISO 8601） */
+  COOKIE_CONSENT_AT: 'movie-app:cookie-consent-at',
+  /** 同意を操作したユーザーID。未ログイン時の操作は空文字 */
+  COOKIE_CONSENT_OWNER: 'movie-app:cookie-consent-owner',
+  /** 同意を操作した時点のポリシー版（COOKIE_CONSENT_VERSION） */
+  COOKIE_CONSENT_VERSION: 'movie-app:cookie-consent-version',
 } as const;
 
 /**
@@ -48,6 +65,8 @@ export const ROUTES = {
   ADMIN_AWARDS: '/admin/awards',
   /** 受賞作品 */
   AWARDS: '/awards',
+  /** プライバシーポリシー（公開ページ。AUTH_REQUIRED_ROUTES には含めない） */
+  PRIVACY: '/privacy',
   /** シアター体験 */
   THEATER_EXPERIENCE: '/theater-experience',
   /** 二段階認証コードの入力（第2要素が未了のときだけ到達する） */

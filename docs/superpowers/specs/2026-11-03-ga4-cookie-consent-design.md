@@ -23,21 +23,21 @@
 
 ### 1.2 確定した仕様
 
-| 論点                     | 決定                                                                                      |
-| ------------------------ | ----------------------------------------------------------------------------------------- |
-| 同意前の gtag の振る舞い | **Consent Mode v2（advanced）**。gtag.js は読み込み、`analytics_storage: 'denied'` で開始 |
-| 同意取得UI（バナー）     | `NEXT_PUBLIC_GA_ID` が有効なときのみ表示                                                  |
-| 撤回UI（トグル）         | GA ID の有無によらず、保存済み状態が `unset` 以外なら表示                                 |
-| 同意状態の保存           | localStorage を正とし、ログイン中は `user_settings` にも同期する                          |
-| **同期の発火条件**       | **認証済みであること。GA ID の有無は条件に含めない**                                      |
-| 衝突解決                 | 有効なレコードのうち `at` が新しい方。同値・判定不能はサーバー優先                        |
-| **PUT の条件**           | **状態または版が異なるときのみ。`at` の差だけでは送らない**（収束のため）                 |
-| 同意の版                 | サーバーが書く。クライアントからは送らせない                                              |
-| page_view の計上         | 手動送信。GA4 の拡張計測「ブラウザの履歴イベント」はオフ                                  |
-| **バナーの配置**         | **`position: fixed` ＋ 各コンテナから `var(--cookie-banner-height)` を引く**              |
-| 撤回導線                 | `/settings` と `/privacy` の両方                                                          |
-| プライバシーポリシー     | 本 PR に含める                                                                            |
-| 本番での実測確認         | ローカル本番ビルドで行い、Vercel 実機確認は #169 へ申し送る                               |
+| 論点                     | 決定                                                                                                 |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| 同意前の gtag の振る舞い | **Consent Mode v2（advanced）**。gtag.js は読み込み、`analytics_storage: 'denied'` で開始            |
+| 同意取得UI（バナー）     | `NEXT_PUBLIC_GA_ID` が有効なときのみ表示                                                             |
+| 撤回UI（トグル）         | GA ID の有無によらず、保存済み状態が `unset` 以外なら表示                                            |
+| 同意状態の保存           | localStorage を正とし、ログイン中は `user_settings` にも同期する                                     |
+| **同期の発火条件**       | **認証済みであること。GA ID の有無は条件に含めない**                                                 |
+| 衝突解決                 | 有効なレコードのうち `at` が明確に新しい方。決着しないときは `denied` 優先 → 時刻を持つ方 → サーバー |
+| **PUT の条件**           | **状態または版が異なるときのみ。`at` の差だけでは送らない**（収束のため）                            |
+| 同意の版                 | サーバーが書く。クライアントからは送らせない                                                         |
+| page_view の計上         | 手動送信。GA4 の拡張計測「ブラウザの履歴イベント」はオフ                                             |
+| **バナーの配置**         | **`position: fixed` ＋ 各コンテナから `var(--cookie-banner-height)` を引く**                         |
+| 撤回導線                 | `/settings` と `/privacy` の両方                                                                     |
+| プライバシーポリシー     | 本 PR に含める                                                                                       |
+| 本番での実測確認         | ローカル本番ビルドで行い、Vercel 実機確認は #169 へ申し送る                                          |
 
 ### 1.3 Consent Mode advanced を採る判断と、その代償
 
@@ -229,6 +229,8 @@ export type CookieConsentState = 'unknown' | ConsentValue; // UI が使う 4 値
 
 購読側の通知（カスタムイベント / `storage`）は**状態キーの変化だけ**をトリガにする。未知の値・読み取り失敗は `unset` として扱う。
 
+**版キーは文字列で保存されるので、読み出し時に数値へ正規化する。** `Number.parseInt` が `NaN` を返したら `null` に倒す。`§5.2` の head スクリプトだけは localStorage の生文字列と `String(COOKIE_CONSENT_VERSION)` を比較する（同期読みで数値化を挟まないため）。**この二重基準を実装時に取り違えないこと**。どちらも「現行版と一致するか」を見る点は同じである。
+
 #### ログアウト時
 
 **`owner` が空でないレコードは 4 キーすべてを消し、`_ga` 系 Cookie も削除する。** `owner` が空文字（未認証時の同意）は残す。
@@ -313,12 +315,28 @@ else if (!effectiveServer) adopted = effectiveLocal;
 else {
   const le = toEpoch(effectiveLocal.at);
   const se = toEpoch(effectiveServer.at);
-  if (le !== null && se !== null)
-    adopted = le > se ? effectiveLocal : effectiveServer;
-  else if (le !== null)
+  if (le !== null && se !== null && le !== se) {
+    adopted = le > se ? effectiveLocal : effectiveServer; // 明確に新しい方
+  } else if (
+    effectiveLocal.state === 'denied' &&
+    effectiveServer.state !== 'denied'
+  ) {
+    // 時刻で決着しないとき（同値・片方 null・双方 null・パース不能）は denied を採る。
+    // at が欠けている／壊れているだけで撤回が同意へ差し戻されるのを防ぐ。
+    // §4.3 の消去が途中で止まった場合などに現実に起きる
+    adopted = effectiveLocal;
+  } else if (
+    effectiveServer.state === 'denied' &&
+    effectiveLocal.state !== 'denied'
+  ) {
+    adopted = effectiveServer;
+  } else if (le !== null && se === null) {
     adopted = effectiveLocal; // 時刻を持つ方を優先
-  else if (se !== null) adopted = effectiveServer;
-  else adopted = effectiveServer; // 双方不明 → サーバー
+  } else if (se !== null && le === null) {
+    adopted = effectiveServer;
+  } else {
+    adopted = effectiveServer; // 完全に決着しない → サーバー
+  }
 }
 
 // 4. UI と gtag が従う値
@@ -331,11 +349,14 @@ if (adopted === null) {
   // （effectiveState が 'unset' なのでバナーは出る）
   if (isForeign) localWrite = { action: 'clear' };
 } else {
+  // 端末の at がパース不能なら、値が実質同じでも書き直して修復する
+  const atBroken = local.at !== null && toEpoch(local.at) === null;
   const same =
     adopted.state === local.state &&
     toEpoch(adopted.at) === toEpoch(local.at) &&
     adopted.version === local.version &&
-    local.owner === userId; // owner は userId と比較する
+    local.owner === userId && // owner は userId と比較する
+    !atBroken;
   if (!same)
     localWrite = { action: 'write', record: { ...adopted, owner: userId } };
 }
@@ -352,7 +373,34 @@ if (adopted !== null && !isFutureServer) {
     putBody = { cookieConsent: adopted.state, cookieConsentAt: adopted.at };
   }
 }
+
+// 7. reason（テストと障害調査のため、結論に至った理由を返す）
+// 出力 3 列からは一意に決まらないので、中間変数から別途決める
+const reason: ConsentMergeReason =
+  adopted === null
+    ? isForeign
+      ? 'clear-foreign'
+      : isStaleLocal
+        ? 'stale-local'
+        : 'undecided'
+    : isFutureServer
+      ? 'skip-future-server'
+      : localWrite === null && putBody === null
+        ? 'in-sync'
+        : localWrite !== null &&
+            putBody === null &&
+            adopted.state === local.state &&
+            adopted.version === local.version &&
+            local.owner !== userId
+          ? 'claim-owner' // 値は一致。owner だけ付け替える
+          : adopted === effectiveServer
+            ? 'adopt-server'
+            : 'adopt-local';
+
+return { effectiveState, localWrite, putBody, reason };
 ```
+
+**`localWrite.action === 'write'` は 4 キーすべてを確定する。** `record.at` や `record.version` が `null` のときは `removeItem` する。「`null` ならスキップ」にすると、他人のレコードを上書きする行 11 で**他人の `at` が端末に残る**。
 
 **収束性**: 行 13（端末が現行版・サーバーが旧版・状態同値）では `putBody` が立つ。サーバーは §4.8 により `cookieConsent` を含む PUT で**状態の変化有無によらず版を現行版で書く**ため、次回は `adopted.version === server.version` となり `putBody = null`。1 往復で収束する。`at` が端末とサーバーで食い違ったまま残ることは許容する（PUT 条件に含めないため振動しない）。
 
@@ -362,27 +410,37 @@ if (adopted !== null && !isFutureServer) {
 
 `at` は相対的な新旧のみ示す（T1 < T2）。`ver` 列の「現」= `currentVersion`。
 
-| #   | 端末 state | owner | ver | at   | サーバー state | ver  | at  | effectiveState | localWrite | putBody  | reason                             |
-| --- | ---------- | ----- | --- | ---- | -------------- | ---- | --- | -------------- | ---------- | -------- | ---------------------------------- |
-| 1   | unset      | ''    | –   | –    | unset          | –    | –   | unset          | null       | null     | undecided                          |
-| 2   | unset      | ''    | –   | –    | granted        | 現   | T1  | granted        | write      | null     | adopt-server                       |
-| 3   | unset      | ''    | –   | –    | denied         | 現   | T1  | denied         | write      | null     | adopt-server                       |
-| 4   | granted    | ''    | 現  | T1   | unset          | –    | –   | granted        | write      | **あり** | adopt-local                        |
-| 5   | denied     | ''    | 現  | T1   | unset          | –    | –   | denied         | write      | **あり** | adopt-local                        |
-| 6   | granted    | 自分  | 現  | T1   | denied         | 現   | T2  | denied         | write      | null     | adopt-server                       |
-| 7   | denied     | 自分  | 現  | T2   | granted        | 現   | T1  | denied         | null       | あり     | adopt-local                        |
-| 8   | granted    | 自分  | 現  | T1   | granted        | 現   | T1  | granted        | **null**   | **null** | in-sync                            |
-| 9   | granted    | ''    | 現  | T2   | denied         | 現   | T1  | granted        | write      | あり     | claim-owner                        |
-| 10  | granted    | 他人  | 現  | T1   | unset          | –    | –   | unset          | **clear**  | null     | clear-foreign                      |
-| 11  | granted    | 他人  | 現  | T1   | denied         | 現   | T2  | denied         | write      | null     | adopt-server                       |
-| 12  | granted    | 自分  | 旧  | T1   | unset          | –    | –   | unset          | **null**   | null     | stale-local                        |
-| 13  | granted    | 自分  | 現  | T1   | granted        | 旧   | T1  | granted        | null       | **あり** | adopt-local                        |
-| 14  | granted    | 自分  | 現  | T1   | granted        | 未来 | T1  | granted        | null       | **null** | skip-future-server                 |
-| 15  | granted    | 自分  | 現  | T1   | denied         | 現   | T1  | denied         | write      | null     | adopt-server（同時刻タイブレーク） |
-| 16  | granted    | 自分  | 現  | null | granted        | 現   | T1  | granted        | write      | null     | adopt-server（時刻を持つ方）       |
-| 17  | granted    | 自分  | 現  | 不正 | denied         | 現   | T1  | denied         | write      | null     | adopt-server（NaN は null 扱い）   |
+| #   | 端末 state | owner | ver  | at   | サーバー state | ver  | at  | effectiveState | localWrite | putBody  | reason                              |
+| --- | ---------- | ----- | ---- | ---- | -------------- | ---- | --- | -------------- | ---------- | -------- | ----------------------------------- |
+| 1   | unset      | ''    | –    | –    | unset          | –    | –   | unset          | null       | null     | undecided                           |
+| 2   | unset      | ''    | –    | –    | granted        | 現   | T1  | granted        | write      | null     | adopt-server                        |
+| 3   | unset      | ''    | –    | –    | denied         | 現   | T1  | denied         | write      | null     | adopt-server                        |
+| 4   | granted    | ''    | 現   | T1   | unset          | –    | –   | granted        | write      | **あり** | adopt-local                         |
+| 5   | denied     | ''    | 現   | T1   | unset          | –    | –   | denied         | write      | **あり** | adopt-local                         |
+| 6   | granted    | 自分  | 現   | T1   | denied         | 現   | T2  | denied         | write      | null     | adopt-server                        |
+| 7   | denied     | 自分  | 現   | T2   | granted        | 現   | T1  | denied         | null       | あり     | adopt-local                         |
+| 8   | granted    | 自分  | 現   | T1   | granted        | 現   | T1  | granted        | **null**   | **null** | in-sync                             |
+| 9   | granted    | ''    | 現   | T2   | denied         | 現   | T1  | granted        | write      | あり     | adopt-local                         |
+| 10  | granted    | 他人  | 現   | T1   | unset          | –    | –   | unset          | **clear**  | null     | clear-foreign                       |
+| 11  | granted    | 他人  | 現   | T1   | denied         | 現   | T2  | denied         | write      | null     | adopt-server                        |
+| 12  | granted    | 自分  | 旧   | T1   | unset          | –    | –   | unset          | **null**   | null     | stale-local                         |
+| 13  | granted    | 自分  | 現   | T1   | granted        | 旧   | T1  | granted        | null       | **あり** | adopt-local                         |
+| 14  | granted    | 自分  | 現   | T1   | granted        | 未来 | T1  | granted        | null       | **null** | skip-future-server                  |
+| 15  | granted    | 自分  | 現   | T1   | denied         | 現   | T1  | denied         | write      | null     | adopt-server（同時刻タイブレーク）  |
+| 16  | granted    | 自分  | 現   | null | granted        | 現   | T1  | granted        | write      | null     | adopt-server（時刻を持つ方）        |
+| 17  | granted    | 自分  | 現   | 不正 | denied         | 現   | T1  | denied         | write      | null     | adopt-server（NaN は null 扱い）    |
+| 18  | granted    | ''    | 現   | T1   | granted        | 現   | T1  | granted        | write      | null     | claim-owner（値は同じ。owner のみ） |
+| 19  | denied     | 自分  | 現   | null | granted        | 現   | T1  | **denied**     | null       | あり     | adopt-local（denied 優先）          |
+| 20  | granted    | 自分  | 旧   | T1   | granted        | 現   | T2  | granted        | write      | null     | adopt-server（版の追いつき）        |
+| 21  | unset      | ''    | –    | –    | granted        | 旧   | T1  | unset          | null       | null     | undecided（旧記録は消さない）       |
+| 22  | granted    | 自分  | 未来 | T1   | unset          | –    | –   | unset          | null       | null     | stale-local（ロールバック時）       |
+| 23  | granted    | 自分  | 現   | T1   | granted        | null | T1  | granted        | null       | あり     | adopt-local（版 null の移行行）     |
 
-行 8 が最頻ケースで「何も書かない」ことを固定する。行 5・7 で端末 `denied` の伝播を担保する（撤回の経路なので法的に最重要）。行 13 が「版だけ古いサーバーを更新する」経路、行 14 がその逆方向の保護。
+行 8 が最頻ケースで「何も書かない」ことを固定する。行 5・7・**19** で端末 `denied` の伝播を担保する（撤回の経路なので法的に最重要）。行 13 が「版だけ古いサーバーを更新する」経路、行 14 がその逆方向の保護、行 20 が版を上げた後に 2 台目が追いつく経路。
+
+**行 19 が無いと撤回が差し戻される。** `at` が欠けている・壊れているだけで、時刻比較では決着せずサーバーの `granted` が採用されてしまう。手順 3 の denied 優先がこれを防ぐ。
+
+**行 18 は「値が同じなら書かない」と最適化すると壊れる。** owner の付け替えだけが目的の書き込みである。
 
 ### 4.5 同期のライフサイクル（`useConsentServerSync`）
 
@@ -394,22 +452,33 @@ if (adopted !== null && !isFutureServer) {
 
 ```
 1. 端末レコード（4 キー）を読む。スナップショットとして保持する
-2. モジュールスコープの inFlightPromise があればそれを await する
+2. モジュールスコープの inFlight（{ userId, promise }）が
+   同じ userId のものであれば、その promise を await する
    （StrictMode の二重マウントで同期が一度も成立しないのを防ぐ。
      フラグで弾くと 1 回目が cancelled、2 回目が skip になり両方落ちる）
-   無ければ GET を発行し、その Promise を inFlightPromise に入れる
+   無ければ GET を発行し、{ userId, promise } を入れる。
+   settle したら必ず null へ戻す（残すと再試行が解決済み Promise を
+   await するだけになる）
 3. resolveConsentMerge を呼ぶ
-4. 書き込み直前に 4 キーすべてを再読し、1 のスナップショットと比較する
+4. 書き込み直前に状態キーを再読し、1 のスナップショットと比較する
      一致   → localWrite / putBody を適用する
      不一致 → 応答待ちの間に利用者が操作した。
-              マージ結果は捨て、「現在の端末値」をサーバーへ PUT する
+              再読した端末レコードと 2 で取得済みのサーバー値で
+              resolveConsentMerge を「もう一度」実行し、その結果を適用する
               （捨てるだけだと、その操作は変更追随の発火条件
-                「初回マージ完了後の変化」も満たさず永久に送られない）
-5. GET と、必要だった書き込み・PUT がすべて成功したときだけ
-   syncedUserId を確定する。失敗時は確定せず次回マウントで再試行する
+                「初回マージ完了後の変化」も満たさず永久に送られない。
+                一方で端末値をそのまま PUT すると unset を送って
+                サーバーの証跡を潰しうるし、未来版サーバーの保護も迂回する）
+5. 適用した effectiveState で変更追随の ref をシードする
+6. GET と、必要だった書き込み・PUT がすべて成功したときだけ
+   syncedUserId を確定する。失敗時は確定しない
 ```
 
-`getSettings()` は `AbortSignal` を受け取らないので、クリーンアップは `cancelled` フラグで結果の適用のみを抑止する（リクエスト自体はキャンセルしない）。
+**手順 4 の再読は状態キーだけを見る。** §4.3 のとおり状態キーがコミット点なので、4 キーすべてを比較すると別タブの書き込み途中（付随情報は新しいが状態はまだ古い）を「利用者が操作した」と誤判定し、ちぐはぐな中間値を送ることになる。
+
+`getSettings()` は `AbortSignal` を受け取らないので、クリーンアップは**関数スコープの** `cancelled` フラグで結果の適用のみを抑止する（リクエスト自体はキャンセルしない）。§4.3 の「モジュールスコープの同期ガード」とは別物なので混同しないこと。
+
+**失敗時の再試行はフルリロードまで起きない。** `analyticsProvider` は §3.3 のとおり単一マウントなので、SPA セッション中に「次回マウント」は来ない。`syncedUserId` を確定しないことで次のページロードでは再試行される、という意味であり、同一セッション内での自動リトライは行わない。
 
 テスト用に `__resetConsentSyncForTest()` を export する（モジュールスコープの状態が Jest のモジュールキャッシュを跨ぐため）。
 
@@ -417,7 +486,8 @@ if (adopted !== null && !isFutureServer) {
 
 初回マージの完了後、`effectiveState` が変化したら PUT する。
 
-- **直近送信値の ref は、初回マージの結果（`adopted`）でシードする。** 未初期化だと、ハイドレーションの `unknown → granted` を「変化」と見なして再訪問のたびに PUT が飛ぶ。また初回マージが `localWrite` したときもカスタムイベント経由で発火するので、**サーバーから取ってきたばかりの値を送り返してしまう**
+- **直近送信値の ref は、初回マージが適用した `effectiveState`（`ConsentValue`）でシードする。** 比較対象が `effectiveState` なので `adopted`（レコード）ではシードできない（`adopted === null` の行もある）。未初期化だと、ハイドレーションの `unknown → granted` を「変化」と見なして再訪問のたびに PUT が飛ぶ。また初回マージが `localWrite` したときもカスタムイベント経由で発火するので、**サーバーから取ってきたばかりの値を送り返してしまう**
+- **ref の更新は PUT 成功後に行う。** 先に更新すると、失敗した値が二度と送られない
 - 未認証なら何もしない（localStorage への保存のみ）
 - 失敗しても localStorage は巻き戻さない
 
@@ -879,7 +949,7 @@ useEffect(() => {
 | ファイル                                            | 観点                                                                                                                                                                                                                                                                                                                               |
 | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/utils/cookieConsent.test.ts`                   | 読み書き / **書き込み順（所有者→版→時刻→状態）** / **消去順（逆順）** / 途中の `setItem` が throw / 未知の値は `unset` / `clearOwnedConsent` は owner 付きのみ消す / SSR 安全 / イベント発火                                                                                                                                       |
-| `src/utils/resolveConsentMerge.test.ts`             | **§4.4 の分岐表 17 ケース全て** / `userId === ''` で throw / `…Z` と `…+00:00` が同値と判定される                                                                                                                                                                                                                                  |
+| `src/utils/resolveConsentMerge.test.ts`             | **§4.4 の分岐表 23 ケース全て** / `userId === ''` で throw / `…Z` と `…+00:00` が同値と判定される                                                                                                                                                                                                                                  |
 | `src/utils/analytics.test.ts`                       | GA ID 検証（未設定・空文字・前後空白・不正形式・`GT-`）/ **`buildConsentBootstrapScript` の出力に版とキーが補間される** / **生成文字列を評価して「旧版 granted → denied が積まれる」「push が Arguments である」** / `setBannerHeightVar`（px 付き・null で removeProperty）/ `_ga` 削除（サブドメイン・localhost・残存時の warn） |
 | `src/hooks/useCookieConsent.test.ts`                | 初期状態 / `grant()` / `deny()` / カスタムイベントと `storage` での同期 / **版違いなら `unset` を返す** / 同期ロジックを持たないこと                                                                                                                                                                                               |
 | `src/hooks/useConsentServerSync.test.ts`            | `renderHook` で：初回マージ 1 回 / StrictMode 二重マウントで in-flight を共有 / **CAS 不一致時に現在値を PUT** / 変更追随の ref シード / 失敗時にガードを立てず再試行 / 失敗トースト / 未認証では GET しない / **GA ID 無効でも同期する** / `unauthenticated` で owner 付きを消す                                                  |
@@ -968,7 +1038,7 @@ GA 連動部分は GA ID 未設定で描画されないが、**§8.1 のレイ�
 
 ### 同意と同期
 
-- [ ] `resolveConsentMerge` が §4.4 の分岐表 17 ケースすべてで期待どおり
+- [ ] `resolveConsentMerge` が §4.4 の分岐表 23 ケースすべてで期待どおり
 - [ ] `…Z` と `…+00:00` が同値と判定され、同じ値で PUT が繰り返されない
 - [ ] バナーで同意したらそのページロード中に PUT される
 - [ ] 同期応答の到着中にバナーを操作しても、選択が覆らず**かつサーバーへ届く**

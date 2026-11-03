@@ -1,0 +1,15 @@
+@use '@/styles/variables' as *;
+
+.c_cookie_consent_toggle {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-3;
+
+  // 説明文
+  &__description {
+    margin: 0;
+    font-size: $font-size-sm;
+    line-height: $line-height-loose;
+    color: $text-secondary;
+  }
+}

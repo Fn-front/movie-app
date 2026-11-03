@@ -74,6 +74,26 @@ export const TRUSTED_TYPES_POLICIES = Object.freeze([
 ]);
 
 /**
+ * GA4（gtag.js）のオリジン。
+ *
+ * [Google 公式 CSP ガイド](https://developers.google.com/tag-platform/security/guides/csp)
+ * の「GA4・広告機能なし」構成に準拠する。広告機能や Google シグナルを
+ * 有効化する場合は `https://*.g.doubleclick.net` などが追加で要るほか、
+ * **`frame-src` にも `https://www.googletagmanager.com` を明示追加すること**。
+ * 本リポジトリの `frame-src` は YouTube のみを明示指定しており
+ * `default-src` にフォールバックしないため、書かないとブロックされる。
+ *
+ * `https://*.analytics.google.com` は公式の列挙に含まれないため入れていない。
+ * 必要になったら `/api/csp-report` の違反を見て追加する（ただしサイト公開
+ * 前は本番が 404 で封鎖されており違反レポートが集まらない。#169 参照）。
+ */
+const GA_SCRIPT_ORIGIN = 'https://www.googletagmanager.com';
+const GA_IMG_ORIGINS =
+  'https://www.googletagmanager.com https://*.google-analytics.com';
+const GA_CONNECT_ORIGINS =
+  'https://www.googletagmanager.com https://*.google-analytics.com https://*.google.com';
+
+/**
  * CSP ディレクティブ配列を生成する。
  *
  * @param {object} [options] 生成オプション
@@ -91,15 +111,24 @@ export function getCspDirectives({
     "default-src 'self'",
     // 静的プリレンダを維持するため 'unsafe-inline' を許容する。
     // dev は Next.js 開発ツールが eval を利用するため 'unsafe-eval' も付与する。
-    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+    //
+    // googletagmanager は gtag.js（GA4）の配信元。Consent Mode では同意の
+    // 有無によらず読み込むため常時必要になる。公式ガイドは script-src-elem に
+    // 記載しているが、本リポジトリは script-src-elem を定義していないので
+    // script-src への追加で足りる（fallback が効く）。
+    // 'unsafe-eval' より前に置く（末尾追記だと dev で順序が入れ替わる）
+    `script-src 'self' 'unsafe-inline' ${GA_SCRIPT_ORIGIN}${isDev ? " 'unsafe-eval'" : ''}`,
     // style-src は Next.js / 各種ライブラリのインラインスタイルに依存するため
     // 'unsafe-inline' を維持する。
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' https://image.tmdb.org data: blob:",
+    // GA はピクセル経由でもヒットを送るため img-src にも許可が要る。
+    // ただし https://*.google.com は公式の「広告機能なし」構成に含まれない
+    // （広告あり構成のもの）。accounts.google.com 等まで開けないよう入れない
+    `img-src 'self' https://image.tmdb.org data: blob: ${GA_IMG_ORIGINS}`,
     // data: は @fullcalendar/core が内部でアイコンフォント(fcicons)を
     // base64エンコードした data: URI で読み込むために必要
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co",
+    `connect-src 'self' https://*.supabase.co ${GA_CONNECT_ORIGINS}`,
     'frame-src https://www.youtube.com',
     "frame-ancestors 'none'",
     "base-uri 'self'",

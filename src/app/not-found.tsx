@@ -8,7 +8,8 @@ const containerStyle: CSSProperties = {
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  minHeight: '100vh',
+  // 同意バナー（position: fixed）の分を空ける。無いときは 0px
+  minHeight: 'calc(100vh - var(--cookie-banner-height, 0px))',
   padding: 'var(--spacing-4)',
   textAlign: 'center',
 };

@@ -26,15 +26,52 @@ import {
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
   STREAMING_SCOPE_DEFAULT,
+  COOKIE_CONSENT_VERSION,
+  COOKIE_CONSENT_MIN_AT,
 } from '@/constants';
-import type { StreamingScope } from '@/constants';
+import type { ConsentValue, StreamingScope } from '@/constants';
 
 /** デフォルトのユーザー設定 */
 const DEFAULT_SETTINGS: UserSettings = {
   theme: THEME_DEFAULTS.DEFAULT,
   notificationEnabled: false,
   streamingNoticeScope: STREAMING_SCOPE_DEFAULT,
+  cookieConsent: 'unset',
+  cookieConsentAt: null,
+  cookieConsentVersion: null,
 };
+
+/** 端末の時計ずれを見込んで未来を許容する幅（ミリ秒） */
+const CONSENT_AT_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
+
+/**
+ * クライアントが申告した同意日時を保存できる形へ正規化する
+ *
+ * 不正でも 400 にはしない。拒否すると「端末の時計が進んでいる利用者は
+ * 同意状態が永久に保存されず、リトライがレート制限を食い潰す」という
+ * 詰みが起きる。同意状態そのものは必ず保存し、日時だけを丸める。
+ */
+function normalizeConsentAt(
+  consent: ConsentValue,
+  rawAt: string | null,
+): string | null {
+  // 未決定に日時は持たせない（CHECK 制約 chk_user_settings_cookie_consent_at）
+  if (consent === 'unset') return null;
+  if (rawAt === null) return null;
+
+  const parsed = Date.parse(rawAt);
+  // zod を通っていればここには来ないが、保存前の最後の砦として残す
+  if (Number.isNaN(parsed)) return null;
+
+  const now = Date.now();
+  if (parsed > now + CONSENT_AT_FUTURE_TOLERANCE_MS) {
+    return new Date(now).toISOString();
+  }
+  if (parsed < Date.parse(COOKIE_CONSENT_MIN_AT)) {
+    return new Date(now).toISOString();
+  }
+  return new Date(parsed).toISOString();
+}
 
 export async function GET() {
   try {
@@ -49,7 +86,9 @@ export async function GET() {
     // 設定取得
     const { data, error } = await supabase
       .from('user_settings')
-      .select('theme, notification_enabled, streaming_notice_scope')
+      .select(
+        'theme, notification_enabled, streaming_notice_scope, cookie_consent, cookie_consent_at, cookie_consent_version',
+      )
       .eq('user_id', session.user.id)
       .single();
 
@@ -77,6 +116,9 @@ export async function GET() {
           // 列を足す前に作られた行は NULL になりうるため既定値へ倒す
           streamingNoticeScope: (data.streaming_notice_scope ??
             STREAMING_SCOPE_DEFAULT) as StreamingScope,
+          cookieConsent: (data.cookie_consent ?? 'unset') as ConsentValue,
+          cookieConsentAt: data.cookie_consent_at ?? null,
+          cookieConsentVersion: data.cookie_consent_version ?? null,
         } satisfies UserSettings,
       },
       { status: HTTP_STATUS.OK },
@@ -107,21 +149,29 @@ export async function PUT(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    // レート制限チェック
-    const rateLimitResult = await checkRateLimit(
-      supabase,
-      session.user.id,
-      RATE_LIMIT_ACTION.WRITE_SETTINGS,
-      RATE_LIMIT_CONFIG.WRITE_SETTINGS.maxAttempts,
-      RATE_LIMIT_CONFIG.WRITE_SETTINGS.windowMinutes,
-    );
-
-    if (!rateLimitResult.allowed) {
-      return rateLimitExceededResponse(rateLimitResult);
+    // リクエストボディの取得・バリデーション
+    //
+    // レート制限より前に行う。不正なリクエストでカウンタを消費させないため
+    // （PR #325 のレビュー指摘）。既存の入力は enum だけだったので順序の
+    // 弱さが表に出なかったが、cookieConsentAt は端末の時計という外部要因で
+    // 弾かれうる初の入力なので、ここで直しておく。
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      // JSON として壊れている。catch へ落とすと 500 かつカウンタ未消費になる
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: API_ERROR_MESSAGES.VALIDATION_ERROR,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
     }
 
-    // リクエストボディの取得・バリデーション
-    const body = await request.json();
     const result = updateSettingsSchema.safeParse(body);
 
     if (!result.success) {
@@ -138,6 +188,19 @@ export async function PUT(request: Request) {
       );
     }
 
+    // レート制限チェック
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.WRITE_SETTINGS,
+      RATE_LIMIT_CONFIG.WRITE_SETTINGS.maxAttempts,
+      RATE_LIMIT_CONFIG.WRITE_SETTINGS.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     // DB用のカラム名に変換
     const updateData: Record<string, unknown> = {};
     if (result.data.theme !== undefined) {
@@ -148,6 +211,37 @@ export async function PUT(request: Request) {
     }
     if (result.data.streamingNoticeScope !== undefined) {
       updateData.streaming_notice_scope = result.data.streamingNoticeScope;
+    }
+
+    if (result.data.cookieConsent !== undefined) {
+      const consent = result.data.cookieConsent;
+      updateData.cookie_consent = consent;
+      // 版はサーバーが書く。状態が変わらない更新でも必ず書くこと。
+      // 書かないと旧版のまま残り、別端末が毎回「版違い＝未決定」と判定して
+      // バナーを無限に再表示する
+      updateData.cookie_consent_version = COOKIE_CONSENT_VERSION;
+
+      // 現在値を読んで、状態が変わらないなら日時を据え置く
+      // （最初の意思表示時刻を証跡として保つ）。
+      // 行が無い利用者（初回同意がまさにそれ）で落ちないよう maybeSingle を使う
+      const { data: current } = await supabase
+        .from('user_settings')
+        .select('cookie_consent, cookie_consent_version')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      // 版が上がったあとの再同意では、状態が granted のままでも日時を
+      // 更新する。据え置くと「v2 がまだ存在しなかった日付で v2 に同意した」
+      // という矛盾した証跡になる
+      const isReconsentForNewVersion =
+        current?.cookie_consent_version !== COOKIE_CONSENT_VERSION;
+
+      if (current?.cookie_consent !== consent || isReconsentForNewVersion) {
+        updateData.cookie_consent_at = normalizeConsentAt(
+          consent,
+          result.data.cookieConsentAt ?? null,
+        );
+      }
     }
 
     // upsert（存在しなければ作成、存在すれば更新）

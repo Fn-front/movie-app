@@ -33,15 +33,14 @@
     }
   }
 
-  // ナビゲーション（SP: 非表示）
+  // ナビゲーション
+  //
+  // SP でも表示する。プライバシーポリシーは「容易に知り得る状態」に
+  // 置く必要があり、同意バナーは選択後に消えるため恒久的な導線が要る
   &__nav {
-    display: none;
+    display: flex;
     align-items: center;
     gap: $spacing-6;
-
-    @include lg {
-      display: flex;
-    }
   }
 
   // リンク

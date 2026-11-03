@@ -26,6 +26,10 @@ body {
   background: $background-default;
   margin: 0;
   min-height: 100vh;
+  // 同意バナーは position: fixed。AppLayout を通らないページ
+  // （/theater-experience・/admin/*）でも本文末尾が隠れないよう場所を空ける。
+  // バナーが無いときは 0px なので見た目は変わらない
+  padding-bottom: var(--cookie-banner-height, 0px);
 }
 
 // ============================================================

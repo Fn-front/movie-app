@@ -139,6 +139,17 @@ export default defineConfig({
     // OTPフローE2E用: メール実送信をスキップ（コードはDBから取得して検証）。
     // E2E_TEST_MODE=true は positive guard の必須シグナル（これが無いとバイパスは無効）。
     // ローカルで reuseExistingServer 時は、起動済みdevサーバーにも同フラグが必要。
-    env: { E2E_TEST_MODE: 'true', OTP_EMAIL_TEST_BYPASS: 'true' },
+    // NEXT_PUBLIC_GA_ID を空にして同意バナーと GA を無効化する。
+    // ⚠️ 効くのは Playwright が dev サーバーを新規起動するときだけ。
+    //   - reuseExistingServer: !isCI のため、起動済みサーバーには適用されない
+    //   - CI は npm start で、NEXT_PUBLIC_* はビルド時に静的置換済み
+    // CI で GA が入らない根拠は e2e.yml の build step に渡していないこと。
+    // ローカルでは「GA ID 付きの本番ビルドを確認したらサーバーを落としてから
+    // E2E を回す」運用で担保する
+    env: {
+      E2E_TEST_MODE: 'true',
+      OTP_EMAIL_TEST_BYPASS: 'true',
+      NEXT_PUBLIC_GA_ID: '',
+    },
   },
 });

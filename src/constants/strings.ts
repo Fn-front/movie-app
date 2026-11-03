@@ -50,6 +50,10 @@ export const ARIA_LABELS = {
   PLAY_TRAILER: '予告動画を再生',
   /** 映画詳細のスクロール領域（あらすじ・詳細情報・キャスト） */
   MOVIE_DETAIL_INFO: '作品情報',
+  /** Cookie同意バナー（ランドマーク化してキーボードから到達できるようにする） */
+  COOKIE_BANNER: 'Cookieの利用について',
+  /** フッターのナビゲーション（同一ページ内に複数の nav があるため名前が要る） */
+  FOOTER_NAV: 'フッターナビゲーション',
 } as const;
 
 /**

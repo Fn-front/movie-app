@@ -1,16 +1,17 @@
 import type { Metadata } from 'next';
 import { Noto_Sans_JP } from 'next/font/google';
 
-import {
-  AnalyticsProvider,
-  getConsentBootstrapScript,
-} from '@/components/providers/analyticsProvider';
+import { AnalyticsProvider } from '@/components/providers/analyticsProvider';
 import { AppQueryProvider } from '@/components/providers/queryProvider';
 import { AppSessionProvider } from '@/components/providers/sessionProvider';
 import { AppToastProvider } from '@/components/providers/toastProvider';
 import { ThemeProvider } from '@/components/providers/themeProvider';
 import { APP_NAME } from '@/constants/app';
 import { CookieConsentBanner } from '@/features/cookieConsent/component/cookieConsentBanner/cookieConsentBanner';
+import {
+  buildConsentBootstrapScript,
+  getGaMeasurementId,
+} from '@/utils/analytics';
 import '@/styles/app.scss';
 
 const noto = Noto_Sans_JP({
@@ -29,7 +30,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const consentBootstrapScript = getConsentBootstrapScript();
+  // analyticsProvider は 'use client' なので、サーバーからは呼べない。
+  // 文字列の組み立てはサーバー安全な utils/analytics から直接行う
+  const consentBootstrapScript =
+    getGaMeasurementId() === null ? null : buildConsentBootstrapScript();
 
   return (
     <html lang='ja' suppressHydrationWarning>

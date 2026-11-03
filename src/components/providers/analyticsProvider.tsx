@@ -18,28 +18,15 @@ import { memo, useEffect, useRef } from 'react';
 import Script from 'next/script';
 import { usePathname } from 'next/navigation';
 
-import { COOKIE_CONSENT_VERSION } from '@/constants';
 import { useConsentServerSync } from '@/hooks/useConsentServerSync';
 import { useCookieConsent } from '@/hooks/useCookieConsent';
 import {
-  buildConsentBootstrapScript,
   buildGtagInitScript,
   deleteGaCookies,
   getGaMeasurementId,
   sendConsentUpdate,
   sendPageView,
 } from '@/utils/analytics';
-
-/**
- * `consent default` を積む <head> 用のスクリプト
- *
- * Server Component から埋め込むため、プロバイダ本体とは別に export する。
- * GA ID が無効なら null を返し、何も出力しない。
- */
-export function getConsentBootstrapScript(): string | null {
-  if (getGaMeasurementId() === null) return null;
-  return buildConsentBootstrapScript(COOKIE_CONSENT_VERSION);
-}
 
 export const AnalyticsProvider = memo(function AnalyticsProvider() {
   const { consent } = useCookieConsent();

@@ -226,11 +226,17 @@ export async function PUT(request: Request) {
       // 行が無い利用者（初回同意がまさにそれ）で落ちないよう maybeSingle を使う
       const { data: current } = await supabase
         .from('user_settings')
-        .select('cookie_consent')
+        .select('cookie_consent, cookie_consent_version')
         .eq('user_id', session.user.id)
         .maybeSingle();
 
-      if (current?.cookie_consent !== consent) {
+      // 版が上がったあとの再同意では、状態が granted のままでも日時を
+      // 更新する。据え置くと「v2 がまだ存在しなかった日付で v2 に同意した」
+      // という矛盾した証跡になる
+      const isReconsentForNewVersion =
+        current?.cookie_consent_version !== COOKIE_CONSENT_VERSION;
+
+      if (current?.cookie_consent !== consent || isReconsentForNewVersion) {
         updateData.cookie_consent_at = normalizeConsentAt(
           consent,
           result.data.cookieConsentAt ?? null,

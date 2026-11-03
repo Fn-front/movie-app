@@ -6,9 +6,9 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
 
 import { ROUTES } from '@/constants/common';
+import { logout } from '@/lib/auth/logout';
 
 /**
  * UserMenuのロジックを管理するカスタムフック
@@ -33,7 +33,7 @@ export const useUserMenu = () => {
 
   /** ログアウト処理 */
   const handleLogout = useCallback(async () => {
-    await signOut({ callbackUrl: ROUTES.LOGIN });
+    await logout();
   }, []);
 
   return {

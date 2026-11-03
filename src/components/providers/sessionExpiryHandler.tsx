@@ -12,10 +12,11 @@
 'use client';
 
 import { memo, useEffect, useRef } from 'react';
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 
 import { ROUTES } from '@/constants';
+import { logout } from '@/lib/auth/logout';
 
 /** signOut対象外のパス（認証ページ） */
 const AUTH_PATHS = [ROUTES.LOGIN, ROUTES.REGISTER];
@@ -33,7 +34,7 @@ export function useSessionExpiry() {
     const isAuthPage = AUTH_PATHS.some((path) => pathname.startsWith(path));
 
     if (wasAuthenticated && status === 'unauthenticated' && !isAuthPage) {
-      signOut({ callbackUrl: ROUTES.LOGIN });
+      void logout();
     }
     prevStatusRef.current = status;
   }, [status, pathname]);

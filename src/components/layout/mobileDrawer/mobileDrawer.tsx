@@ -7,7 +7,7 @@
 
 import { memo, useCallback, useMemo } from 'react';
 import type { MouseEvent } from 'react';
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -38,6 +38,7 @@ import {
 } from '@/constants';
 import { getInitial } from '@/utils/user';
 import { useNavAuthGuard } from '@/hooks/useNavAuthGuard';
+import { logout } from '@/lib/auth/logout';
 
 import styles from './mobileDrawer.module.scss';
 
@@ -159,7 +160,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
   }, [router]);
 
   const handleLogout = useCallback(async () => {
-    await signOut({ callbackUrl: ROUTES.LOGIN });
+    await logout();
   }, []);
 
   // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が

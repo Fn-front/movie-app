@@ -358,8 +358,12 @@ describe('Cookie同意', () => {
    * select → upsert の2段チェーンを順に積む。
    *
    * @param currentConsent 既存行の cookie_consent。null なら行が無い状態
+   * @param currentVersion 既存行の cookie_consent_version。既定は現行版
    */
-  const mockConsentPut = (currentConsent: string | null) => {
+  const mockConsentPut = (
+    currentConsent: string | null,
+    currentVersion: number | null = 1,
+  ) => {
     upsertedData = {};
     mockFrom.mockReturnValueOnce({
       select: () => ({
@@ -368,7 +372,10 @@ describe('Cookie同意', () => {
             data:
               currentConsent === null
                 ? null
-                : { cookie_consent: currentConsent },
+                : {
+                    cookie_consent: currentConsent,
+                    cookie_consent_version: currentVersion,
+                  },
             error: null,
           }),
         }),
@@ -500,6 +507,29 @@ describe('Cookie同意', () => {
 
       expect(upsertedData).not.toHaveProperty('cookie_consent_at');
       expect(upsertedData.cookie_consent_version).toBe(1);
+    });
+
+    it('版が上がったあとの再同意では日時も更新する', async () => {
+      // 据え置くと「新しい版がまだ存在しなかった日付でその版に同意した」
+      // という矛盾した証跡になる
+      mockConsentPut('granted', 0);
+
+      await PUT(
+        createPutRequest({ cookieConsent: 'granted', cookieConsentAt: AT }),
+      );
+
+      expect(upsertedData.cookie_consent_at).toBe(AT);
+      expect(upsertedData.cookie_consent_version).toBe(1);
+    });
+
+    it('版が未記録の移行行でも日時を更新する', async () => {
+      mockConsentPut('granted', null);
+
+      await PUT(
+        createPutRequest({ cookieConsent: 'granted', cookieConsentAt: AT }),
+      );
+
+      expect(upsertedData.cookie_consent_at).toBe(AT);
     });
 
     it('状態が変わるときは日時を更新する', async () => {

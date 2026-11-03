@@ -17,7 +17,9 @@ describe('getCspDirectives', () => {
   it('デフォルト（引数なし）は本番相当・レポートなし', () => {
     const directives = getCspDirectives();
     const scriptSrc = directives.find((d) => d.startsWith('script-src'));
-    expect(scriptSrc).toBe("script-src 'self' 'unsafe-inline'");
+    expect(scriptSrc).toBe(
+      "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
+    );
     expect(directives.some((d) => d.startsWith('report-to'))).toBe(false);
     expect(directives.some((d) => d.startsWith('report-uri'))).toBe(false);
   });
@@ -25,7 +27,9 @@ describe('getCspDirectives', () => {
   it("isDev=true で script-src に 'unsafe-eval' を付与する", () => {
     const directives = getCspDirectives({ isDev: true });
     const scriptSrc = directives.find((d) => d.startsWith('script-src'));
-    expect(scriptSrc).toBe("script-src 'self' 'unsafe-inline' 'unsafe-eval'");
+    expect(scriptSrc).toBe(
+      "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com 'unsafe-eval'",
+    );
   });
 
   it("isDev=false で 'unsafe-eval' を付与しない", () => {
@@ -45,15 +49,55 @@ describe('getCspDirectives', () => {
     expect(directives).toContain("default-src 'self'");
     expect(directives).toContain("style-src 'self' 'unsafe-inline'");
     expect(directives).toContain(
-      "img-src 'self' https://image.tmdb.org data: blob:",
+      "img-src 'self' https://image.tmdb.org data: blob: https://www.googletagmanager.com https://*.google-analytics.com",
     );
     expect(directives).toContain("font-src 'self' data:");
-    expect(directives).toContain("connect-src 'self' https://*.supabase.co");
     expect(directives).toContain('frame-src https://www.youtube.com');
     expect(directives).toContain("frame-ancestors 'none'");
     expect(directives).toContain("base-uri 'self'");
     expect(directives).toContain("form-action 'self'");
     expect(directives).toContain("object-src 'none'");
+  });
+
+  describe('GA4（Consent Mode では同意の有無によらず読み込む）', () => {
+    const directives = getCspDirectives();
+    const find = (name: string) =>
+      directives.find((d) => d.startsWith(`${name} `)) ?? '';
+
+    it('script-src に gtag.js の配信元を許可する', () => {
+      expect(find('script-src')).toContain('https://www.googletagmanager.com');
+    });
+
+    it('connect-src に計測ビーコンの送信先を許可する', () => {
+      const connectSrc = find('connect-src');
+      expect(connectSrc).toContain('https://www.googletagmanager.com');
+      expect(connectSrc).toContain('https://*.google-analytics.com');
+      expect(connectSrc).toContain('https://*.google.com');
+      // 既存の許可を落としていない
+      expect(connectSrc).toContain('https://*.supabase.co');
+    });
+
+    it('img-src にピクセル送信先を許可する', () => {
+      const imgSrc = find('img-src');
+      expect(imgSrc).toContain('https://www.googletagmanager.com');
+      expect(imgSrc).toContain('https://*.google-analytics.com');
+      expect(imgSrc).toContain('https://image.tmdb.org');
+    });
+
+    it('img-src に *.google.com を入れない（広告機能なし構成には不要）', () => {
+      // accounts.google.com 等まで含む広いワイルドカードを開けない
+      expect(find('img-src')).not.toContain('https://*.google.com');
+    });
+
+    it('*.analytics.google.com は入れない（公式の列挙に無い）', () => {
+      expect(directives.join('; ')).not.toContain(
+        'https://*.analytics.google.com',
+      );
+    });
+
+    it('frame-src は YouTube のみのまま（広告機能を使わないため）', () => {
+      expect(find('frame-src')).toBe('frame-src https://www.youtube.com');
+    });
   });
 });
 

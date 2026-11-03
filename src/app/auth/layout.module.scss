@@ -8,4 +8,19 @@
   // 同意バナー（position: fixed）の分を空ける。無いときは 0px
   min-height: calc(100vh - var(--cookie-banner-height));
   padding: $spacing-4;
+
+  // プライバシーポリシーへの導線
+  &__privacy {
+    margin: $spacing-6 0 0;
+    font-size: $font-size-sm;
+
+    a {
+      color: $text-secondary;
+      text-decoration: underline;
+
+      &:hover {
+        color: $text-link;
+      }
+    }
+  }
 }

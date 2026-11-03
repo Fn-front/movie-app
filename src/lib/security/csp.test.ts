@@ -44,11 +44,37 @@ describe('buildCspHeader', () => {
       expect(header).toContain("form-action 'self'");
       expect(header).toContain('frame-src https://www.youtube.com');
       expect(header).toContain("connect-src 'self' https://*.supabase.co");
-      expect(header).toContain(
-        "img-src 'self' https://image.tmdb.org data: blob:",
-      );
+      expect(header).toContain("img-src 'self' https://image.tmdb.org data:");
       expect(header).toContain("font-src 'self' data:");
       expect(header).toContain("style-src 'self' 'unsafe-inline'");
+    });
+
+    // このファイルの assert はヘッダ文字列への部分一致なので、既存値の末尾へ
+    // 追記しただけでは落ちない。GA オリジンの追加を検知できるよう、能動的に
+    // 確認する項目を置く
+    describe('GA4 のオリジン', () => {
+      const directiveOf = (name: string) =>
+        header.split('; ').find((d) => d.startsWith(`${name} `)) ?? '';
+
+      it('script-src に gtag.js の配信元を含む', () => {
+        expect(directiveOf('script-src')).toContain(
+          'https://www.googletagmanager.com',
+        );
+      });
+
+      it('connect-src に計測ビーコンの送信先を含む', () => {
+        const connectSrc = directiveOf('connect-src');
+        expect(connectSrc).toContain('https://www.googletagmanager.com');
+        expect(connectSrc).toContain('https://*.google-analytics.com');
+        expect(connectSrc).toContain('https://*.google.com');
+      });
+
+      it('img-src にピクセル送信先を含み、*.google.com は含まない', () => {
+        const imgSrc = directiveOf('img-src');
+        expect(imgSrc).toContain('https://www.googletagmanager.com');
+        expect(imgSrc).toContain('https://*.google-analytics.com');
+        expect(imgSrc).not.toContain('https://*.google.com');
+      });
     });
 
     it('ディレクティブは "; " で連結される', () => {

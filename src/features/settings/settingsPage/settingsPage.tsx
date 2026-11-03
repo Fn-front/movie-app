@@ -17,6 +17,8 @@ import { NotificationSettings } from '@/features/settings/notificationSettings/n
 import { StreamingNoticeSettings } from '@/features/settings/streamingNoticeSettings/streamingNoticeSettings';
 import { ThemeSettings } from '@/features/settings/themeSettings/themeSettings';
 import { DismissedMoviesList } from '@/features/dismissedMovies/component/dismissedMoviesList/dismissedMoviesList';
+import { CookieConsentToggle } from '@/features/cookieConsent/component/cookieConsentToggle/cookieConsentToggle';
+import { useCookieConsent } from '@/hooks/useCookieConsent';
 
 import styles from './settingsPage.module.scss';
 
@@ -24,6 +26,8 @@ import styles from './settingsPage.module.scss';
  * 設定ページ
  */
 export const SettingsPage = memo(function SettingsPage() {
+  const { consent } = useCookieConsent();
+  const hasConsentDecision = consent === 'granted' || consent === 'denied';
   const { data: session, status } = useSession();
   const email = session?.user?.email ?? '';
   // パスワード未設定（ソーシャルログインのみ）のユーザーには
@@ -76,6 +80,17 @@ export const SettingsPage = memo(function SettingsPage() {
           <Heading level={2}>外観</Heading>
           <ThemeSettings />
         </section>
+
+        {/*
+          未決定のときはトグルが何も返さないので、見出しだけの空セクションに
+          ならないよう section ごと出し分ける（未決定の利用者にはバナーが出る）
+        */}
+        {hasConsentDecision && (
+          <section className={styles.c_settings_page__section}>
+            <Heading level={2}>Cookie</Heading>
+            <CookieConsentToggle />
+          </section>
+        )}
 
         <section className={styles.c_settings_page__section}>
           <Heading level={2}>興味なし一覧</Heading>

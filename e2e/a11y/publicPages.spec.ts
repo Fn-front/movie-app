@@ -51,6 +51,9 @@ const PUBLIC_PAGES = [
   { name: 'ログイン', path: '/auth/signin' },
   { name: '新規登録', path: '/auth/signup' },
   { name: 'パスワードを忘れた', path: '/auth/forgot-password' },
+  // 同意UI（バナー・撤回トグル）は NEXT_PUBLIC_GA_ID 未設定の E2E では
+  // 描画されないが、本文は描画されるので回帰を見る価値がある
+  { name: 'プライバシーポリシー', path: '/privacy' },
 ] as const;
 
 test.describe('アクセシビリティ（未認証ページ）', () => {

@@ -8,7 +8,7 @@ import { type HTMLAttributes, type ReactNode, memo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { IMAGE_SIZES, ASSET_PATHS } from '@/constants';
+import { ARIA_LABELS, IMAGE_SIZES, ASSET_PATHS } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './footer.module.scss';
@@ -59,7 +59,12 @@ export const Footer = memo<FooterProps>(function Footer({
         <p className={styles.c_footer__copyright}>{copyright}</p>
 
         {links && links.length > 0 && (
-          <nav className={styles.c_footer__nav}>
+          // 同一ページに複数の nav があるため名前を付ける
+          // （axe の landmark-unique / WCAG 1.3.1）
+          <nav
+            aria-label={ARIA_LABELS.FOOTER_NAV}
+            className={styles.c_footer__nav}
+          >
             {links.map((link) => (
               <Link
                 key={link.href}

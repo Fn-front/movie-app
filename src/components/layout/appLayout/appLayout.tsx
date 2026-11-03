@@ -23,9 +23,12 @@ import { CalendarButton } from '@/features/calendar/component/calendarButton';
 import { useCalendarDialog } from '@/features/calendar/hooks/useCalendarDialog';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { LoginPromptModal } from '@/components/ui/loginPromptModal/loginPromptModal';
-import { MAIN_CONTENT_ID } from '@/constants';
+import { MAIN_CONTENT_ID, ROUTES } from '@/constants';
 
 import styles from './appLayout.module.scss';
+
+/** フッターに常設するリンク */
+const FOOTER_LINKS = [{ label: 'プライバシーポリシー', href: ROUTES.PRIVACY }];
 
 // FullCalendar は重いので、カレンダーを開くまで読み込まない
 const CalendarDialog = dynamic(
@@ -125,7 +128,11 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
       </div>
 
       <div className={styles.c_app_layout__footer}>
-        <Footer />
+        {/*
+          プライバシーポリシーは「容易に知り得る状態」に置く必要がある。
+          同意バナーは選択後に消えるため、恒久的な導線としてフッターに出す
+        */}
+        <Footer links={FOOTER_LINKS} />
       </div>
 
       <MobileDrawer

@@ -269,7 +269,14 @@ NODE_ENV=development  # development | production | test
 # Sentry（エラートラッキング）
 NEXT_PUBLIC_SENTRY_DSN=https://xxxx@xxx.ingest.sentry.io/xxxxx
 
-# Google Analytics
+# Google Analytics（任意）
+#
+# 設定先は Vercel の Production スコープのみ。Preview / Development と
+# .env.local には入れない。NEXT_PUBLIC_* はビルド時に静的置換されるため、
+# .env.local に置くとローカル E2E（npm run dev）で GA4 に開発データが混入する。
+# 未設定なら gtag.js も同意バナーも一切出力されない。
+# 値は G- で始まる測定ID。前後に空白が入ると無効扱いになる（trim はするが
+# 形式検証で弾かれる値は dev で console.warn が出る）。
 NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
 
 # Vercel Analytics
@@ -422,7 +429,7 @@ export function validateEnv() {
 
 ### 監視・ロギング
 - [ ] **Sentry**: 導入する？しない？
-- [ ] **Google Analytics**: 導入する？しない？
+- [x] **Google Analytics**: 導入する（#892）。GA4 を Consent Mode v2（advanced）で導入し、オプトインの同意UIを付けた（#893 で方針B、実装は #920）。`NEXT_PUBLIC_GA_ID` は**任意**で、Vercel の Production スコープにだけ設定する。未設定なら gtag.js も同意UIも一切出力されない
 - [ ] **ログ出力先**: ファイル？コンソール？外部サービス？
 
 ### セキュリティ

@@ -89,7 +89,7 @@ gtag('consent', 'update', { analytics_storage: 'granted' }); // 同意後
 
 | #   | ファイル                                                           | 役割                                                                      |
 | --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| 1   | `src/utils/cookieConsent.ts`                                       | 同意状態の読み書きとイベント発火。SSR 安全                                |
+| 1   | `src/utils/cookieConsent.ts`                                       | 同意状態と同意時刻の読み書き、イベント発火。SSR 安全                      |
 | 2   | `src/utils/analytics.ts`                                           | GA ID の取得と形式検証、`gtag('consent','update')` の送出、GA Cookie 削除 |
 | 3   | `src/hooks/useCookieConsent.ts`                                    | `useSyncExternalStore` で 1 を購読。`grant()` / `deny()` とサーバー同期   |
 | 4   | `src/components/providers/analyticsProvider.tsx`                   | gtag.js の読み込みと、同意状態の `consent update` への反映                |
@@ -101,18 +101,18 @@ gtag('consent', 'update', { analytics_storage: 'granted' }); // 同意後
 
 ### 3.2 変更
 
-| #   | ファイル                                              | 内容                                                               |
-| --- | ----------------------------------------------------- | ------------------------------------------------------------------ |
-| 10  | `src/constants/common.ts`                             | `STORAGE_KEYS.COOKIE_CONSENT` と `ROUTES.PRIVACY` を追加           |
-| 11  | `src/schema/user.ts`                                  | `UserSettings` と `updateSettingsSchema` に `cookieConsent` を追加 |
-| 12  | `src/app/api/user/settings/route.ts`                  | GET の `select` と PUT の受け口に 11 を反映                        |
-| 13  | `src/lib/api/user/user.ts`                            | `updateSettings` で `cookieConsent` を送る                         |
-| 14  | `src/types/database.types.ts`                         | スキーマ変更後に再生成（手編集しない）                             |
-| 15  | `src/lib/security/cspDirectives.mjs`                  | GA オリジンを 3 ディレクティブへ追加                               |
-| 16  | `src/app/layout.tsx`                                  | Consent Mode の `default` インラインスクリプト、4 と 5 を描画      |
-| 17  | `src/components/layout/appLayout/appLayout.tsx`       | `Footer` に `links` を渡す                                         |
-| 18  | `src/components/layout/footer/footer.module.scss`     | `&__nav` を SP でも表示する                                        |
-| 19  | `src/features/settings/settingsPage/settingsPage.tsx` | 「Cookie」セクションを追加                                         |
+| #   | ファイル                                              | 内容                                                                                    |
+| --- | ----------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 10  | `src/constants/common.ts`                             | `STORAGE_KEYS.COOKIE_CONSENT` / `COOKIE_CONSENT_AT` と `ROUTES.PRIVACY` を追加          |
+| 11  | `src/schema/user.ts`                                  | `UserSettings` と `updateSettingsSchema` に `cookieConsent` と `cookieConsentAt` を追加 |
+| 12  | `src/app/api/user/settings/route.ts`                  | GET の `select` と PUT の受け口に 11 を反映。時刻の妥当性検証（§4.4）                   |
+| 13  | `src/lib/api/user/user.ts`                            | `updateSettings` で `cookieConsent` と `cookieConsentAt` を送る                         |
+| 14  | `src/types/database.types.ts`                         | スキーマ変更後に再生成（手編集しない）                                                  |
+| 15  | `src/lib/security/cspDirectives.mjs`                  | GA オリジンを 3 ディレクティブへ追加                                                    |
+| 16  | `src/app/layout.tsx`                                  | Consent Mode の `default` インラインスクリプト、4 と 5 を描画                           |
+| 17  | `src/components/layout/appLayout/appLayout.tsx`       | `Footer` に `links` を渡す                                                              |
+| 18  | `src/components/layout/footer/footer.module.scss`     | `&__nav` を SP でも表示する                                                             |
+| 19  | `src/features/settings/settingsPage/settingsPage.tsx` | 「Cookie」セクションを追加                                                              |
 
 依存の向きは 1 → 3 → {4, 5, 6} の一方向で、循環しない。2 は 4 と 6 からのみ参照される。
 
@@ -146,10 +146,18 @@ React 側の `unknown` はバナーの表示制御にのみ使う。`analytics_s
 
 **localStorage を正（source of truth）とする。**
 
-- 保存先: `localStorage['movie-app:cookie-consent']`。値は `granted` / `denied` のみ
+キーは 2 本に分ける。1 本の JSON にまとめないのは、`layout.tsx` のインラインスクリプト（§5.2）が同意状態だけを同期読みするためで、`JSON.parse` を挟まず単純なままにしておきたいため。
+
+| キー                          | 値                                    |
+| ----------------------------- | ------------------------------------- |
+| `movie-app:cookie-consent`    | `granted` / `denied` のみ             |
+| `movie-app:cookie-consent-at` | 同意／撤回した時刻（ISO 8601 文字列） |
+
 - 未知の値・読み取り失敗は `unset` として扱う（壊れた値で同意済み扱いにしない）
+- 時刻は状態を書き込むのと同じタイミングで必ず更新する。状態だけあって時刻が無い場合は時刻を `null` 扱いにし、状態は有効とみなす
 - 同一タブ内の同期: カスタムイベント `movie-app:cookie-consent-change`
 - 別タブとの同期: `storage` イベント
+- **ログアウトしても消さない。** `useTheme` がログアウトでテーマを消さないのと揃える。`_ga` Cookie 自体は端末に残り続けるため、同意の記録だけ消すのは不整合になる
 
 `useTheme` が `localStorage` 書き込み → `window.dispatchEvent(new Event(THEME_CHANGE_EVENT))` で購読側へ通知している形をそのまま踏襲する。
 
@@ -169,11 +177,25 @@ React 側の `unknown` はバナーの表示制御にのみ使う。`analytics_s
 
 この規則なら、ログイン直後に利用者の選択が勝手に覆ることがない。別端末で同意済みなら、新しい端末ではログイン後にバナーが消える。
 
+サーバー値を書き戻すときは `cookie_consent_at` も一緒に localStorage へ戻す。逆に端末値でサーバーを上書きするときは、端末が保持している時刻（`movie-app:cookie-consent-at`）を一緒に送る。
+
 同期は「ログイン済み」かつ「`NEXT_PUBLIC_GA_ID` が設定済み」のときだけ行う。未設定時は同意を求める対象が無いため、API も呼ばない。
 
 サーバー保存が失敗しても localStorage 側の決定は巻き戻さない。同意の判断は端末側で完結しており、通信失敗で利用者の意思表示を無かったことにする方が有害なため。`useTheme` がロールバックしているのとは逆の判断になるので、実装時にコメントで理由を残すこと。
 
-### 4.4 DB スキーマ
+### 4.4 未認証で同意した場合の証跡
+
+バナーは未認証でも表示される。その時点ではサーバーに書けないため、**同意した時刻を端末に持っておき、後でログインしたときに状態と一緒に送る**。これで `cookie_consent_at` が「ログインして同期された時刻」ではなく「実際に同意した時刻」になる。未認証で書き込める API を新設せずに済む。
+
+**限界を明記しておく。** この時刻はクライアントの時計に基づく申告値であり、改ざん不能な証跡ではない。サーバー側では次だけ検証する。
+
+- ISO 8601 としてパースできること
+- 未来でないこと（端末の時計ずれを見込んで +5 分まで許容）
+- Unix epoch より後であること
+
+厳密な証跡（サーバー受信時刻の独立記録、監査ログ）が必要になった場合は、本設計の範囲外として別途検討する。
+
+### 4.5 DB スキーマ
 
 `20261102045228_add_streaming_notice_scope.sql` と同じ形で `user_settings` に 2 列を足す。新規テーブルではないため GRANT・RLS の追加は不要（既存ポリシーが `user_id` 単位で効く）。
 
@@ -336,26 +358,26 @@ SP でフッターナビが非表示のままだと、バナーが消えた後�
 
 ### 9.1 新規の単体テスト（Jest + React Testing Library）
 
-| ファイル                                              | 観点                                                                                                                                      |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/utils/cookieConsent.test.ts`                     | 保存と読み出し / 未知の値は `unset` / localStorage 例外時のフォールバック / SSR（`window` 未定義）安全 / イベント発火                     |
-| `src/utils/analytics.test.ts`                         | GA ID 未設定・空文字・不正形式を弾く / 正しい形式を通す / `consent update` の送出内容 / `_ga` Cookie の削除                               |
-| `src/hooks/useCookieConsent.test.ts`                  | 初期状態 / `grant()` / `deny()` / カスタムイベントと `storage` での同期 / マージ規則 5 パターン（§4.3）/ サーバー保存失敗時に巻き戻さない |
-| `src/components/providers/analyticsProvider.test.tsx` | GA ID 未設定・空文字・不正形式で描画しない / 設定時は同意状態によらず `<Script>` を描画する / 状態変化で `consent update` を送る          |
-| `cookieConsentBanner.test.tsx`                        | 4 状態それぞれの表示可否 / 「同意する」「同意しない」の反映 / ポリシーへのリンク / キーボード操作 / ARIA 属性                             |
-| `cookieConsentToggle.test.tsx`                        | 初期選択（未決定時は「同意しない」側）/ 切り替えの反映 / GA ID 未設定時は描画しない                                                       |
-| `privacyPage.test.tsx`                                | 見出し構造 / 外部送信先 7 件の記載 / Consent Mode の挙動（§7.3 の 3 点）/ 撤回UIの存在                                                    |
+| ファイル                                              | 観点                                                                                                                                                                            |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/utils/cookieConsent.test.ts`                     | 保存と読み出し / 状態と時刻が同時に書かれる / 未知の値は `unset` / 時刻だけ欠けても状態は有効 / localStorage 例外時のフォールバック / SSR（`window` 未定義）安全 / イベント発火 |
+| `src/utils/analytics.test.ts`                         | GA ID 未設定・空文字・不正形式を弾く / 正しい形式を通す / `consent update` の送出内容 / `_ga` Cookie の削除                                                                     |
+| `src/hooks/useCookieConsent.test.ts`                  | 初期状態 / `grant()` / `deny()` / カスタムイベントと `storage` での同期 / マージ規則 5 パターン（§4.3）/ サーバー保存失敗時に巻き戻さない                                       |
+| `src/components/providers/analyticsProvider.test.tsx` | GA ID 未設定・空文字・不正形式で描画しない / 設定時は同意状態によらず `<Script>` を描画する / 状態変化で `consent update` を送る                                                |
+| `cookieConsentBanner.test.tsx`                        | 4 状態それぞれの表示可否 / 「同意する」「同意しない」の反映 / ポリシーへのリンク / キーボード操作 / ARIA 属性                                                                   |
+| `cookieConsentToggle.test.tsx`                        | 初期選択（未決定時は「同意しない」側）/ 切り替えの反映 / GA ID 未設定時は描画しない                                                                                             |
+| `privacyPage.test.tsx`                                | 見出し構造 / 外部送信先 7 件の記載 / Consent Mode の挙動（§7.3 の 3 点）/ 撤回UIの存在                                                                                          |
 
 ### 9.2 既存テストの更新
 
-| ファイル                                       | 内容                                                                                                                   |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `src/lib/security/cspDirectives.test.ts`       | `:20` と `:28` の `toBe()` による完全一致 assert が落ちるため期待値を更新。`img-src` / `connect-src` の `toContain` も |
-| `src/lib/security/csp.test.ts`                 | 部分一致（`toContain`）のため**追記だけでは落ちない**。GA オリジンを含む assert を能動的に追加する                     |
-| `src/app/api/user/settings/route.test.ts`      | `cookieConsent` の GET 返却・PUT 受理・不正値の拒否・列が NULL の既存行の扱い                                          |
-| `src/lib/api/user/user.test.ts`                | `updateSettings` が `cookieConsent` を送ること                                                                         |
-| `src/components/layout/footer/footer.test.tsx` | `links` を渡したときのリンク描画                                                                                       |
-| `settingsPage.test.tsx`                        | Cookie セクションの追加                                                                                                |
+| ファイル                                       | 内容                                                                                                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/lib/security/cspDirectives.test.ts`       | `:20` と `:28` の `toBe()` による完全一致 assert が落ちるため期待値を更新。`img-src` / `connect-src` の `toContain` も                                       |
+| `src/lib/security/csp.test.ts`                 | 部分一致（`toContain`）のため**追記だけでは落ちない**。GA オリジンを含む assert を能動的に追加する                                                           |
+| `src/app/api/user/settings/route.test.ts`      | `cookieConsent` の GET 返却・PUT 受理・不正値の拒否・列が NULL の既存行の扱い / `cookieConsentAt` の検証（未来・epoch 以前・非 ISO を拒否、+5 分以内は許容） |
+| `src/lib/api/user/user.test.ts`                | `updateSettings` が `cookieConsent` と `cookieConsentAt` を送ること                                                                                          |
+| `src/components/layout/footer/footer.test.tsx` | `links` を渡したときのリンク描画                                                                                                                             |
+| `settingsPage.test.tsx`                        | Cookie セクションの追加                                                                                                                                      |
 
 ### 9.3 カバレッジ
 
@@ -372,6 +394,9 @@ SP でフッターナビが非表示のままだと、バナーが消えた後�
 - [ ] バナーから同意 / 拒否ができ、`consent update` が送られる
 - [ ] `/settings` と `/privacy` の両方から撤回でき、`_ga` Cookie が削除される
 - [ ] マージ規則（§4.3）の 5 パターンが期待どおりに動く
+- [ ] 未認証で同意した時刻が端末に残り、ログイン後に `cookie_consent_at` へ反映される
+- [ ] 不正な `cookieConsentAt`（未来・epoch 以前・非 ISO）が API で拒否される
+- [ ] ログアウトしても同意状態が端末に残り、バナーが再表示されない
 - [ ] サーバー保存が失敗しても端末側の決定が巻き戻らない
 - [ ] `/privacy` に外部送信先 7 件と Consent Mode の挙動（§7.3）が記載されている
 - [ ] フッターから `/privacy` へ到達できる（PC・SP の両方）

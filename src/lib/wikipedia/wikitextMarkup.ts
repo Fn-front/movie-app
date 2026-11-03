@@ -14,15 +14,29 @@ const EN_DISAMBIGUATION =
  *
  * `<ref name="x" />` の自己完結形と `<ref ...>...</ref>` の両方を消す。
  * 残すと `(死後ノミネート)` や国名が作品名に混ざる。
+ *
+ * ⚠️ **対になっていない残骸も落とす。** 上の各置換は閉じタグ・閉じ記号が
+ *    揃っている前提で、`<!--` だけ・`<ref` だけが残ると出力に markup の
+ *    開始記号が残る。この関数の戻り値はプレーンテキストとして扱われる前提
+ *    なので、最後に残ったタグと `<` をまとめて落とす。CodeQL の
+ *    `js/incomplete-multi-character-sanitization` が指摘するのもここ。
  */
 export function stripAnnotations(raw: string): string {
-  return raw
-    .replace(/<ref[^>]*\/>/g, '')
-    .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '')
-    .replace(/<small>[\s\S]*?<\/small>/g, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/\{\{[Ff]lag[^}]*\}\}/g, '')
-    .replace(/\{\{[A-Z]{3}\}\}/g, '');
+  return (
+    raw
+      .replace(/<ref[^>]*\/>/g, '')
+      .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '')
+      .replace(/<small>[\s\S]*?<\/small>/g, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      // 閉じ忘れのコメントは以降をすべて隠す（MediaWiki・ブラウザと同じ挙動）
+      .replace(/<!--[\s\S]*$/, '')
+      // 閉じられていない注釈・タグの残骸
+      .replace(/-->/g, '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/</g, '')
+      .replace(/\{\{[Ff]lag[^}]*\}\}/g, '')
+      .replace(/\{\{[A-Z]{3}\}\}/g, '')
+  );
 }
 
 /** `'''太字'''` `''斜体''` のマークアップを落とす */

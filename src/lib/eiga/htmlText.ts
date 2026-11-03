@@ -73,6 +73,14 @@ export function decodeHtmlEntities(text: string): string {
  * 残ることはない（`Ascript>B` になる）。繰り返し適用しても結果は変わらないため
  * ループは設けない。
  *
+ * ⚠️ **残った `<` も落とす。** `a<script` のように閉じ `>` が無い入力では
+ *    タグ除去の正規表現が一致せず、`<script` が出力に残る。この関数の戻り値は
+ *    プレーンテキストとして扱われる前提なので、markup の開始記号を残さない。
+ *    CodeQL の `js/incomplete-multi-character-sanitization` が指摘するのもここ。
+ *
+ * ⚠️ **落とすのは `decodeHtmlEntities` より前。** 順序を逆にすると
+ *    `&lt;` 由来の正当な `<` まで消える。
+ *
  * ⚠️ 連続空白は畳まない。呼び出し側で必要に応じて行うこと。ここで畳むと
  *    `fetchEigaOscarAwards` の既存の抽出結果が変わる。
  */
@@ -80,6 +88,7 @@ export function cleanHtmlText(raw: string): string {
   return decodeHtmlEntities(
     raw
       .replace(/<[^>]*>/g, '')
+      .replace(/</g, '')
       .replace(/&nbsp;/g, '')
       .trim(),
   );

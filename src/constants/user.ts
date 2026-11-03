@@ -57,6 +57,16 @@ export type ConsentValue = (typeof COOKIE_CONSENT_VALUES)[number];
 export const COOKIE_CONSENT_VERSION = 1;
 
 /**
+ * Cookie同意まわりの文言
+ */
+export const COOKIE_CONSENT_MESSAGES = {
+  /** 同意の意思表示は端末に残っているので、失敗を過大に伝えない */
+  SYNC_FAILED_TITLE: '設定の同期に失敗しました',
+  SYNC_FAILED_DESCRIPTION:
+    'この端末には反映済みです。他の端末への反映は次回アクセス時に再試行します。',
+} as const;
+
+/**
  * 同意日時として受け付ける下限
  *
  * 同意日時はクライアントが申告した値なので、機能が存在しなかった時期を

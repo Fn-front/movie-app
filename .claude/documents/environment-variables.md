@@ -230,6 +230,11 @@ publicリポジトリのため、スクレイピング対象の外部URLはソ�
 # eiga.com アカデミー賞特集ページのベースURL（末尾スラッシュなし）
 EIGA_OSCAR_BASE_URL=
 
+# eiga.com 賞一覧ページのベースURL（末尾スラッシュなし）
+# `<base>/<賞スラッグ>/<年>/` の形で参照する。アカデミー賞が使う
+# EIGA_OSCAR_BASE_URL とはパスが違うため別の変数にしている
+EIGA_AWARD_BASE_URL=
+
 # eiga.com 公開予定作品のiCalフィードURL
 EIGA_ICAL_URL=
 
@@ -239,8 +244,9 @@ WIKIPEDIA_API_BASE_URL=
 
 **利用箇所:**
 - `EIGA_OSCAR_BASE_URL`: `src/lib/eiga/fetchEigaOscarAwards.ts`（アカデミー賞ノミネート・受賞データ取得）
+- `EIGA_AWARD_BASE_URL`: `src/lib/eiga/fetchEigaGoldenGlobes.ts`（ゴールデングローブ賞ノミネート・受賞データ取得）
 - `EIGA_ICAL_URL`: `src/lib/eiga/eiga.ts`（公開予定映画のiCalフィード取得）
-- `WIKIPEDIA_API_BASE_URL`: `src/lib/wikipedia/fetchArticle.ts`（受賞記事のwikitext取得）
+- `WIKIPEDIA_API_BASE_URL`: `src/lib/wikipedia/fetchArticle.ts`（カンヌ受賞記事のwikitext取得）
 
 **注意:** これらはサーバーサイドのみで使用（`NEXT_PUBLIC_` 不要）。いずれも未設定時は `getRequiredEnv`（`src/utils/env.ts`）が明確なエラーを投げて設定漏れを早期検知する。
 
@@ -316,6 +322,7 @@ TMDB_API_KEY=your_tmdb_api_key_here
 
 # スクレイピング対象URL（値は非公開。実URLは記載しない）
 EIGA_OSCAR_BASE_URL=
+EIGA_AWARD_BASE_URL=
 EIGA_ICAL_URL=
 WIKIPEDIA_API_BASE_URL=
 

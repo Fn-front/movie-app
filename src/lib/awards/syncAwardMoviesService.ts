@@ -27,8 +27,8 @@ import {
   resolveAwardsWithTMDb,
 } from '@/lib/openai/generateAwardMovies';
 import { fetchWikipediaArticle } from '@/lib/wikipedia/fetchArticle';
+import { fetchEigaGoldenGlobes } from '@/lib/eiga/fetchEigaGoldenGlobes';
 import { fetchCannesFromWikitext } from '@/lib/wikipedia/parseCannesAwards';
-import { fetchGoldenGlobesFromWikitext } from '@/lib/wikipedia/parseGoldenGlobesAwards';
 
 /** 同期処理のサマリー */
 export interface SyncAwardMoviesSummary {
@@ -143,9 +143,12 @@ export async function fetchAndResolveAward(
       );
       allAiItems = await fetchAwardItemsViaWikipedia(awardName, awardDef, year);
     }
-  } else if (awardName === 'golden_globes' || awardName === 'cannes') {
-    // wikitext を直接パースする（OpenAIを使わない）。
-    // 賞ごとに記事の構造が違うためパーサは分かれている
+  } else if (awardName === 'golden_globes') {
+    // ゴールデングローブ賞: eiga.com から正規表現で抽出（OpenAIを使わない）
+    allAiItems = await fetchEigaGoldenGlobes(year);
+  } else if (awardName === 'cannes') {
+    // カンヌ: wikitext を直接パースする（OpenAIを使わない）。
+    // eiga.com のカンヌは作品リンクが3割欠落し2012〜2016が旧レイアウトのため使わない
     allAiItems = await fetchAwardItemsFromWikitext(awardName, awardDef, year);
   } else {
     // その他の賞: Wikipedia + OpenAI で構造化
@@ -312,14 +315,13 @@ export async function executeSyncAwardMoviesCron(
 /**
  * 賞ごとの wikitext パーサ
  *
- * 記事の構造が賞で根本的に違うため、1つのパーサにまとめられない。
- * ゴールデングローブ賞は表組みで受賞とノミネートを並べるが、カンヌは
- * 定義リストで受賞だけを並べる。
+ * 現在はカンヌのみ。ゴールデングローブ賞は eiga.com のほうが精度が高く
+ * （Wikipedia は記事自体にノミネートの欠落と誤リンクがある）、
+ * 逆にカンヌは eiga.com だと作品リンクが3割欠落するため分かれている。
  */
 const WIKITEXT_PARSERS: Readonly<
   Record<string, (wikitext: string, ceremonyYear: number) => OpenAiAwardItem[]>
 > = {
-  golden_globes: fetchGoldenGlobesFromWikitext,
   cannes: fetchCannesFromWikitext,
 };
 

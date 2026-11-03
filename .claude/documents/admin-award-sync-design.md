@@ -73,6 +73,8 @@ if (process.env.VERCEL_ENV === 'production') {
 | カンヌ | Wikipedia + OpenAI | Wikipedia 1回 + OpenAI 8回（部門数）〜最大24回 |
 | ゴールデングローブ | Wikipedia + OpenAI | Wikipedia 1回 + OpenAI 9回（部門数）〜最大27回 |
 
+> **この表は設計当時のもの。現在は §6 の結論のとおりカンヌ・GG とも OpenAI を使わず、いずれも数秒で終わる。**
+
 補足（レビューで訂正した点）:
 
 - OpenAI は**部門ごとに記事全文を送り直す**（`buildUserPrompt`）ため、部門数ぶん呼ぶ
@@ -332,11 +334,29 @@ GRANT SELECT, INSERT, UPDATE ON public.award_sync_jobs TO service_role;
 
 ---
 
-## 6. 次のサブプロジェクト（カンヌ・GGの取得ロジック）
+## 6. カンヌ・GGの取得ロジック（実装済み）
 
-本設計の対象外。調査結果を失わないよう記録する。**以下はレビューで実測し直した値**で、初版に書いた範囲は過小だった。
+> **結論（2026-11-03 追記）**
+>
+> | 賞 | 採用した取得元 | 実装 |
+> | --- | --- | --- |
+> | アカデミー賞 | eiga.com（`/official/oscar` の旧レイアウト） | `fetchEigaOscarAwards.ts` |
+> | ゴールデングローブ賞 | **eiga.com**（`/award/golden-globe`） | `fetchEigaGoldenGlobes.ts`（#924） |
+> | カンヌ | **Wikipedia wikitext** | `parseCannesAwards.ts`（#921） |
+>
+> **OpenAI を通る賞は無くなった。** 残っているのはアカデミー賞が eiga.com の
+> 取得に失敗したときのフォールバックのみ。
+>
+> カンヌを Wikipedia にしたのは §6-2 のとおり eiga.com が不利なため。GG は
+> 一度 Wikipedia で実装した（#919）が、日本語Wikipediaの記事自体にノミネートの
+> 欠落と誤リンクがあり、eiga.com へ移した（#924）。本節の調査は当時から
+> 存在したのに参照されていなかった。
+>
+> 以下の調査結果には**実測で判明した訂正**がある。6-1 を参照。
 
-eiga.com に `https://eiga.com/award/<slug>/<year>/` という全賞共通レイアウトのページ群がある。
+以下は調査当時の記録。**レビューで実測し直した値**で、初版に書いた範囲は過小だった。
+
+eiga.com に `<EIGA_AWARD_BASE_URL>/<slug>/<year>/` という全賞共通レイアウトのページ群がある（実URLは env。6-3 の注意を参照）。
 
 | 賞 | slug | 取得できる年 | `/official/` へ飛ぶ年（旧レイアウト） |
 | --- | --- | --- | --- |
@@ -369,6 +389,18 @@ eiga.com に `https://eiga.com/award/<slug>/<year>/` という全賞共通レイ
 - 補助シグナル: `th` が映画のテーブルは `<table class="_a">`、`th` が人名のテーブルは素の `<table>`（oscar/GG で一貫）
 - **OpenAI が不要になる**（ハルシネーション消滅・コストゼロ・分単位→数秒）
 
+**実装時の訂正（#924）。この調査で見落としていた点が2つある。**
+
+1. **`tr.prize` は100%付かない。** 第72回（2015年）の最優秀主演女優賞（コメディ／ミュージカル）は、実際の受賞者（エイミー・アダムス『ビッグ・アイズ』）がいるのに `prize` クラスが無い。14部門中1部門。本節の調査は「受賞行数」の件数しか見ておらず、**受賞0件の部門があることを検出できていなかった**。受賞0件でもノミネートとして取り込み、件数を警告に出す実装にしている
+2. **部門名は完全一致で引けない。** 括弧内の語順が年で入れ替わる。
+
+   ```
+   2025年: 最優秀作品賞（ミュージカル／コメディ）  Best Motion Picture - Musical Or Comedy
+   2015年: 最優秀作品賞（コメディ／ミュージカル）  Best Motion Picture - Comedy Or Musical
+   ```
+
+   日本語・英語とも入れ替わるため、括弧を除いた基本名と括弧内のキーワードで判定する
+
 **`class="award-wrapper cannes"` の `cannes` は全賞共通のリテラル**で、カンヌ固有ではない。賞の識別には使えない。
 
 ### 6-2. カンヌは別物（ここが難所）
@@ -399,7 +431,9 @@ eiga.com に `https://eiga.com/award/<slug>/<year>/` という全賞共通レイ
 - カンヌ2020は受賞ゼロが正常（コロナで中止、出品作56行のみ）。空振りをエラー扱いしない
 - 見出しテキスト → `AWARD_DEFINITIONS` の `category.key` のマッピング表が賞ごとに必要
 
-現行のアカデミー賞スクレイパが見ているのは別物（`EIGA_OSCAR_BASE_URL` は `getRequiredEnv` で読む必須 env。`https://eiga.com/official/oscar/2025/all.html` が `nominate_ctb` を含むことを実測確認）。動いているので今回も次回も触らない。
+現行のアカデミー賞スクレイパが見ているのは別物（`EIGA_OSCAR_BASE_URL` は `getRequiredEnv` で読む必須 env。旧レイアウトの特集ページで `nominate_ctb` を含むことを実測確認）。動いているので触らない。GG が使う `/award/<slug>/<year>/` はパスが違うため、`EIGA_AWARD_BASE_URL` を別に持つ。
+
+⚠️ 実URLをこのドキュメントに書かないこと（`.claude/documents/environment-variables.md` の方針）。初版はここに実URLを書いてしまっていた。
 
 検証したのは **HTML 構造と件数まで**で、全部門・全年で正しく抽出できるかの実地検証は未実施。
 

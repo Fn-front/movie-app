@@ -10,17 +10,51 @@ const EN_DISAMBIGUATION =
   /\s*\((?:[^()]*\b(?:film|movie)\b[^()]*|\d{4})\)\s*$/i;
 
 /**
+ * コメント（`<!-- ... -->`）を落とす
+ *
+ * 閉じ `-->` が無い場合は**以降をすべて隠す**。MediaWiki とブラウザの挙動に
+ * 合わせており、結果として `<!--` が戻り値に残らない。
+ *
+ * ⚠️ **正規表現（`/<!--[\s\S]*?-->/g`）で書かないこと。** CodeQL の
+ *    `js/incomplete-multi-character-sanitization`（high）が「多文字を一度だけ
+ *    置換するサニタイザ」として指摘する。閉じ忘れの `<!--` が残るのが理由。
+ *    `src/lib/eiga/htmlText.ts` の `stripHtmlTags` と同じ事情で走査にしている。
+ */
+function stripHtmlComments(raw: string): string {
+  let result = '';
+  let index = 0;
+
+  while (index < raw.length) {
+    const start = raw.indexOf('<!--', index);
+
+    if (start === -1) {
+      result += raw.slice(index);
+      break;
+    }
+
+    result += raw.slice(index, start);
+
+    const end = raw.indexOf('-->', start + '<!--'.length);
+    // 閉じ忘れのコメントは以降をすべて隠す
+    if (end === -1) break;
+
+    index = end + '-->'.length;
+  }
+
+  return result;
+}
+
+/**
  * `<ref>` や `<small>` などの注釈・装飾テンプレートを落とす
  *
  * `<ref name="x" />` の自己完結形と `<ref ...>...</ref>` の両方を消す。
  * 残すと `(死後ノミネート)` や国名が作品名に混ざる。
  */
 export function stripAnnotations(raw: string): string {
-  return raw
+  return stripHtmlComments(raw)
     .replace(/<ref[^>]*\/>/g, '')
     .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '')
     .replace(/<small>[\s\S]*?<\/small>/g, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/\{\{[Ff]lag[^}]*\}\}/g, '')
     .replace(/\{\{[A-Z]{3}\}\}/g, '');
 }

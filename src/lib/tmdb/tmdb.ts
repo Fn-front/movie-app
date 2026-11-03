@@ -21,6 +21,7 @@ import {
   TMDB_RETRY_CONFIG,
   TMDB_STREAMING_AVAILABILITY_APPEND,
   TMDB_THEATRICAL_RELEASE_TYPES,
+  TMDB_TITLE_ALIAS_APPEND,
   TMDB_VIDEO_LANGUAGES,
   WATCH_PROVIDER_OFFER_TYPES,
   type WatchProviderOfferType,
@@ -295,6 +296,52 @@ export async function getMovieKeywordIds(
     keywords: { id: number; name: string }[];
   }>(TMDB_ENDPOINTS.MOVIE_KEYWORDS(movieId), { signal: options?.signal });
   return response.data.keywords.map((k) => k.id);
+}
+
+/**
+ * 映画の別名・翻訳タイトルを取得する
+ *
+ * `title` / `original_title` も含めて返す。呼び出し側が「検索語がこの作品を
+ * 指しているか」を1つの集合で判定できるようにするため。
+ *
+ * 検索（`/search/movie`）のレスポンスには別名・翻訳が含まれないが、TMDbの
+ * 検索はそれらでもヒットする。そのため検索結果の2フィールドだけで同定すると
+ * 正解を取りこぼす（`TMDB_TITLE_ALIAS_APPEND` のコメント参照）。
+ *
+ * 取得に失敗した場合は**例外をそのまま投げる**。`hasExcludedKeyword` と同じく、
+ * 呼び出し側は try/catch で当該映画をスキップする（fail-closed）。判定できない
+ * 映画を採用しないことを優先する。
+ *
+ * @param movieId - 映画ID
+ * @param options - リクエストオプション（中断シグナル）
+ * @returns 重複を除いたタイトル文字列の配列（正規化はしない）
+ * @throws TMDbへの問い合わせに失敗した場合
+ */
+export async function getMovieTitleAliases(
+  movieId: number | string,
+  options?: { signal?: AbortSignal },
+): Promise<string[]> {
+  const response = await tmdbClient.get<{
+    title?: string;
+    original_title?: string;
+    alternative_titles?: { titles?: { title?: string }[] };
+    translations?: { translations?: { data?: { title?: string } }[] };
+  }>(TMDB_ENDPOINTS.MOVIE_DETAIL(movieId), {
+    params: { append_to_response: TMDB_TITLE_ALIAS_APPEND },
+    signal: options?.signal,
+  });
+
+  const { title, original_title, alternative_titles, translations } =
+    response.data;
+
+  const collected = [
+    title,
+    original_title,
+    ...(alternative_titles?.titles ?? []).map((t) => t?.title),
+    ...(translations?.translations ?? []).map((t) => t?.data?.title),
+  ];
+
+  return [...new Set(collected.filter((t): t is string => Boolean(t?.trim())))];
 }
 
 /**

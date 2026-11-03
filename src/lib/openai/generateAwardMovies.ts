@@ -8,10 +8,15 @@
  */
 
 import type { AwardCategory, AwardDefinition } from '@/constants/awards';
+import { AWARD_TITLE_MATCH_MAX_CANDIDATES } from '@/constants/awards';
 import { OPENAI_CONFIG } from '@/constants';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
-import { hasExcludedKeyword, searchMovies } from '@/lib/tmdb/tmdb';
+import {
+  getMovieTitleAliases,
+  hasExcludedKeyword,
+  searchMovies,
+} from '@/lib/tmdb/tmdb';
 import {
   openAiAwardsResponseSchema,
   type OpenAiAwardItem,
@@ -278,8 +283,13 @@ export async function fetchAwardsFromOpenAI(
 }
 
 /**
- * TMDb検索結果から、公開年が当年・翌年のものを TMDb の関連度順で選ぶ
- * どちらにも該当しなければ先頭結果をフォールバックとして返す
+ * TMDb検索結果から、公開年が当年・翌年のものを TMDb の関連度順で返す
+ *
+ * **該当が無ければ空配列を返す。先頭結果へのフォールバックはしない。**
+ * かつては `?? results[0]` で先頭を無条件採用していたが、年もタイトルも
+ * 手がかりが無い候補を採ると無関係な作品が公開データに載る。実害として
+ * 第82回ゴールデングローブ賞の『マリア』(2024) に、2017年のドキュメンタリー
+ * 『私は、マリア・カラス』(465871) が入っていた。
  *
  * ⚠️ `year` と `release_date` は基準が違う。`year` は受賞作品データ側の
  *    **本国公開年**（eiga.com 経路は `ceremonyYear - 1`、OpenAI 経路は
@@ -295,27 +305,84 @@ export async function fetchAwardsFromOpenAI(
  *
  * ⚠️ **当年を優先して翌年はフォールバック、という順序にしてはいけない。**
  *    それでは上の実例が直らない（`1230570` が当年完全一致で勝ち続ける）。
- *    当年・翌年を対等に扱い、その中では `find` が TMDb の関連度順で先頭を
- *    拾うのが要点。「年一致を最優先する」から「年ウィンドウ内で関連度順の
- *    先頭を採る」への意図的な方針転換であり、翌年候補が当年完全一致より
- *    上位にいれば翌年候補が勝つ。
+ *    当年・翌年を対等に扱い、その中は TMDb の関連度順のまま返すのが要点。
+ *    「年一致を最優先する」から「年ウィンドウ内で関連度順に見る」への
+ *    意図的な方針転換であり、翌年候補が当年完全一致より上位にいれば
+ *    翌年候補が先に来る。
  *
  * ⚠️ 窓を広げた影響は呼び出し元の4経路で重みが違う。`year` 付きの検索は
  *    TMDb 側で既に年が絞られた集合の再ランキングなので安全だが、`year`
- *    なしのフォールバック検索ではここが唯一の年ガードになるため、誤爆の
- *    余地が倍になる。タイトル類似度を見ていないこと自体は別の課題
- *    （`?? results[0]` が無条件採用になっている点）。
+ *    なしのフォールバック検索ではここが唯一の年ガードになる。そのため
+ *    年だけで同定を決めず、採用前に `matchesAwardTitle` を必ず通す。
  */
-function findBestMatch<T extends { id: number; release_date?: string }>(
-  results: T[],
-  year: number,
-): T | undefined {
+function selectYearWindowCandidates<
+  T extends { id: number; release_date?: string },
+>(results: T[], year: number): T[] {
   const acceptedYears = new Set([String(year), String(year + 1)]);
 
-  return (
-    results.find((m) => acceptedYears.has(m.release_date?.slice(0, 4) ?? '')) ??
-    results[0]
+  return results.filter((m) =>
+    acceptedYears.has(m.release_date?.slice(0, 4) ?? ''),
   );
+}
+
+/**
+ * タイトル比較で無視する記号
+ *
+ * 長音符（U+30FC `ー`）は**含めない**。ハイフンに見えるが意味を持つ文字で、
+ * 落とすと「ローマ」と「ロマ」が同じになる。NFKC は長音符を変換しないため、
+ * ここで明示的に除外しない限り保持される。
+ */
+const TITLE_NOISE_PATTERN =
+  /[\s・:;,.!?"'~_|()[\]{}\-‐–—、。！？「」『』【】（）〜”“’]/g;
+
+/**
+ * タイトルを比較用に正規化する
+ *
+ * NFKC で全角英数・半角カナを畳み、小文字化し、区切り記号を落とす。
+ * Wikipedia の表記と TMDb の登録タイトルは中黒・コロン・副題の括弧などが
+ * 揺れるため、素の文字列比較では一致しない。
+ */
+function normalizeTitle(raw: string | undefined): string {
+  if (!raw) return '';
+  return raw.normalize('NFKC').toLowerCase().replace(TITLE_NOISE_PATTERN, '');
+}
+
+/**
+ * TMDbの候補が、探している受賞作品かをタイトルで確かめる
+ *
+ * 検索でヒットしたことは「その作品である」ことを意味しない。TMDbの検索は
+ * 部分一致でも返すため、`resolveAwardsWithTMDb` は同定の裏付けを別に持つ必要が
+ * ある。実例として、検索語「マリア・カラス」に対し2017年のドキュメンタリー
+ * 『私は、マリア・カラス』が返り、そのまま保存されていた。
+ *
+ * **まず検索レスポンスの `title` / `original_title` で判定し、一致しなければ
+ * 初めて別名を問い合わせる。** 大半の候補は追加の問い合わせなしで確定するため、
+ * TMDbへの呼び出しを最小限に抑えられる。
+ *
+ * 別名まで見る必要がある実例: 『ザ・ルーム・ネクスト・ドア』(1088514) は
+ * 邦題が日本語、原題がスペイン語（La habitación de al lado）で、検索語の英題
+ * "The Room Next Door" はどちらとも一致しない。別名を見ないと正解を捨てる。
+ *
+ * ⚠️ これは「別作品を採らない」ための検査であって、同名異作を見分ける力は無い。
+ *    第82回ゴールデングローブ賞の『マリア』(1038263) と、原題 Mary の別作品
+ *    『マリア』(1243381) はどちらも邦題が「マリア」で、タイトルだけでは
+ *    区別できない。見分けるには監督名など別の手がかりが要る。
+ */
+async function matchesAwardTitle(
+  movie: { id: number; title: string; original_title?: string },
+  item: OpenAiAwardItem,
+): Promise<boolean> {
+  const needles = [item.title_ja, item.title_en]
+    .map(normalizeTitle)
+    .filter(Boolean);
+
+  if (needles.length === 0) return false;
+
+  const direct = [movie.title, movie.original_title].map(normalizeTitle);
+  if (needles.some((n) => direct.includes(n))) return true;
+
+  const aliases = (await getMovieTitleAliases(movie.id)).map(normalizeTitle);
+  return needles.some((n) => aliases.includes(n));
 }
 
 /**
@@ -340,40 +407,90 @@ export async function resolveAwardsWithTMDb(
 
     try {
       /**
-       * adult作品を除外して最良一致を選ぶ
+       * adult作品を除外し、公開年が当年・翌年に入る候補を関連度順で返す
        *
        * searchMoviesでも除外済みだが、受賞作品はDBに保存され未認証ユーザーにも
        * 表示されるため、採用直前でも明示的に弾く二重防御とする。
        * フォールバック検索が4パターンあるためヘルパー化して漏れを防ぐ。
+       *
+       * 件数を `AWARD_TITLE_MATCH_MAX_CANDIDATES` で切るのは、後段のタイトル
+       * 照合が候補ごとにTMDbへ問い合わせうるため。
        */
-      const searchSafely = async (params: { query: string; year?: number }) => {
+      const searchCandidates = async (params: {
+        query: string;
+        year?: number;
+      }) => {
+        if (!params.query?.trim()) return [];
+
         const searchResult = await searchMovies(params);
         const safeResults = searchResult.results.filter((m) => !m.adult);
-        return findBestMatch(safeResults, item.year);
+        return selectYearWindowCandidates(safeResults, item.year).slice(
+          0,
+          AWARD_TITLE_MATCH_MAX_CANDIDATES,
+        );
       };
 
-      // 日本語タイトル+公開年で検索、見つからなければ年指定なしで再検索
-      let movie = await searchSafely({
-        query: item.title_ja,
-        year: item.year,
-      });
+      // 日本語タイトル+公開年 → 日本語のみ → 英語+公開年 → 英語のみ の順に探す。
+      // 前段で採用できた時点で打ち切る
+      const searchStages: { query: string; year?: number }[] = [
+        { query: item.title_ja, year: item.year },
+        { query: item.title_ja },
+        { query: item.title_en, year: item.year },
+        { query: item.title_en },
+      ];
 
-      if (!movie) {
-        movie = await searchSafely({ query: item.title_ja });
-      }
+      let movie:
+        | Awaited<ReturnType<typeof searchCandidates>>[number]
+        | undefined;
 
-      // 日本語で見つからなければ英語タイトルで同様に検索
-      if (!movie) {
-        movie = await searchSafely({ query: item.title_en, year: item.year });
-      }
+      // 一度却下した映画を段をまたいで再判定しない。検索語を変えても同じ映画が
+      // 返るのは普通で、記録しないと同じ作品に対して最大4回ぶんの問い合わせを
+      // 繰り返す（判定結果は変わらないので、増えるのはコストだけ）
+      const rejectedMovieIds = new Set<number>();
 
-      if (!movie) {
-        movie = await searchSafely({ query: item.title_en });
+      for (const stage of searchStages) {
+        const candidates = await searchCandidates(stage);
+
+        for (const candidate of candidates) {
+          if (rejectedMovieIds.has(candidate.id)) continue;
+
+          // ライブ・コンサート映像や舞台中継は映画賞の対象ではないが、
+          // AIが抽出したタイトルのTMDb検索で紛れ込みうるため弾く。
+          // 同期判定の isStageBroadcast を先に通し、TMDbへの問い合わせを省く
+          if (isStageBroadcast(candidate)) {
+            rejectedMovieIds.add(candidate.id);
+            continue;
+          }
+
+          // 検索でヒットしただけでは同定にならない。無関係な作品を公開データに
+          // 載せないため、ここで必ず裏を取る
+          if (!(await matchesAwardTitle(candidate, item))) {
+            rejectedMovieIds.add(candidate.id);
+            continue;
+          }
+
+          // 除外キーワード（ポルノ・ピンク映画等）を含む映画を弾く。
+          // adult フラグだけでは `adult=false` のアダルト作品を通してしまう
+          if (await hasExcludedKeyword(candidate.id)) {
+            rejectedMovieIds.add(candidate.id);
+            continue;
+          }
+
+          if (await isConcertFilm(candidate)) {
+            rejectedMovieIds.add(candidate.id);
+            continue;
+          }
+
+          movie = candidate;
+          break;
+        }
+
+        if (movie) break;
       }
 
       if (!movie) {
         console.warn(
-          `TMDb search failed for "${item.title_ja}" / "${item.title_en}"`,
+          `TMDb match failed for "${item.title_ja}" / "${item.title_en}" (year=${item.year})`,
         );
         continue;
       }
@@ -384,20 +501,6 @@ export async function resolveAwardsWithTMDb(
           (r) => r.tmdb_movie_id === movie.id && r.category === item.category,
         )
       ) {
-        continue;
-      }
-
-      // 除外キーワード（ポルノ・ピンク映画等）を含む映画を弾く。
-      // adult フラグだけでは `adult=false` のアダルト作品を通してしまうため、
-      // 採用が確定する直前にTMDbへ1回だけ問い合わせる（呼び出し回数を最小化）。
-      if (await hasExcludedKeyword(movie.id)) {
-        continue;
-      }
-
-      // ライブ・コンサート映像や舞台中継は映画賞の対象ではないが、
-      // AIが抽出したタイトルのTMDb検索で紛れ込みうるため弾く。
-      // 同期判定の isStageBroadcast を先に通し、TMDbへの問い合わせを省く
-      if (isStageBroadcast(movie) || (await isConcertFilm(movie))) {
         continue;
       }
 

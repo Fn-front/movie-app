@@ -18,6 +18,12 @@
 import { AWARD_DEFINITIONS } from '@/constants/awards';
 import type { OpenAiAwardItem } from '@/schema/awards';
 
+import {
+  flattenMarkup,
+  stripAnnotations,
+  stripEmphasis,
+} from './wikitextMarkup';
+
 /**
  * Wikipedia のリンク先 → `AWARD_DEFINITIONS.golden_globes` の部門キー
  *
@@ -66,10 +72,6 @@ const NAME_FILM_SEPARATOR = /[–—−]/;
 /** 役名の接尾辞（`- ウィリアム・リー役` のような末尾を落とす） */
 const ROLE_SUFFIX = /^(.*?)\s*[–—−\-－]\s*[^–—−\-－]*役\s*$/;
 
-/** 英語版記事名から曖昧さ回避の括弧を落とす（`Black Dog (2024 film)` → `Black Dog`） */
-const EN_DISAMBIGUATION =
-  /\s*\((?:[^()]*\b(?:film|movie)\b[^()]*|\d{4})\)\s*$/i;
-
 /** パース結果の1件 */
 export interface ParsedAwardEntry {
   categoryKey: string;
@@ -77,85 +79,6 @@ export interface ParsedAwardEntry {
   titleEn: string;
   isWinner: boolean;
   personName?: string;
-}
-
-/**
- * `<ref>` や `<small>` などの注釈を落とす
- *
- * `<ref name="x" />` の自己完結形と `<ref ...>...</ref>` の両方を消す。
- * 残すと `(死後ノミネート)` のような文字列が作品名に混ざる。
- */
-function stripAnnotations(raw: string): string {
-  return raw
-    .replace(/<ref[^>]*\/>/g, '')
-    .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '')
-    .replace(/<small>[\s\S]*?<\/small>/g, '')
-    .replace(/\{\{[Ff]lag[^}]*\}\}/g, '')
-    .replace(/\{\{[A-Z]{3}\}\}/g, '');
-}
-
-/** `'''太字'''` `''斜体''` のマークアップを落とす */
-function stripEmphasis(raw: string): string {
-  return raw.replace(/'{2,}/g, '');
-}
-
-/**
- * `[[link|display]]` → display、`[[link]]` → link、`[[link#section]]` → link
- */
-function resolveLink(content: string): string {
-  if (content.includes('|')) return content.split('|').pop()!.trim();
-  if (content.includes('#')) return content.split('#')[0].trim();
-  return content.trim();
-}
-
-/**
- * `{{仮リンク|...}}` から表示テキストと英語版記事名を取り出す
- *
- * 2つの書き方がある。
- *   `{{仮リンク|表示テキスト|en|English Title}}`
- *   `{{仮リンク|日本語記事名|label=表示テキスト|en|English Title}}`
- */
-function parseKariLink(body: string): { display: string; en?: string } {
-  const parts = body.split('|').map((p) => p.trim());
-  const labelPart = parts.find((p) => p.startsWith('label='));
-  const display = labelPart ? labelPart.slice('label='.length) : parts[0];
-
-  const enIndex = parts.indexOf('en');
-  const en = enIndex >= 0 ? parts[enIndex + 1] : undefined;
-
-  return { display, en: en || undefined };
-}
-
-/**
- * wikitextの断片を表示テキストに均し、見つかった英語タイトルも返す
- *
- * 英語タイトルは `{{仮リンク|...|en|X}}` と `[[:en:X|...]]` から拾う。
- * 記事が邦題しか持たない作品では取れないため、呼び出し側で邦題に倒す。
- */
-function flattenMarkup(raw: string): { text: string; en?: string } {
-  let en: string | undefined;
-
-  let text = raw.replace(/\{\{仮リンク\|([^}]+)\}\}/g, (_, body: string) => {
-    const parsed = parseKariLink(body);
-    if (!en && parsed.en) en = parsed.en;
-    return parsed.display;
-  });
-
-  text = text.replace(/\[\[([^\]]+)\]\]/g, (_, content: string) => {
-    const enPrefix = content.match(/^:en:([^|]+)(?:\|(.*))?$/);
-    if (enPrefix) {
-      if (!en) en = enPrefix[1];
-      return (enPrefix[2] ?? enPrefix[1]).trim();
-    }
-    return resolveLink(content);
-  });
-
-  return { text: text.trim(), en: en ? normalizeEnTitle(en) : undefined };
-}
-
-/** 英語版記事名を作品タイトルとして使えるよう整える */
-function normalizeEnTitle(raw: string): string {
-  return raw.replace(EN_DISAMBIGUATION, '').trim();
 }
 
 /**

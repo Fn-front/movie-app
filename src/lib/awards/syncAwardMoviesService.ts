@@ -27,6 +27,7 @@ import {
   resolveAwardsWithTMDb,
 } from '@/lib/openai/generateAwardMovies';
 import { fetchWikipediaArticle } from '@/lib/wikipedia/fetchArticle';
+import { fetchCannesFromWikitext } from '@/lib/wikipedia/parseCannesAwards';
 import { fetchGoldenGlobesFromWikitext } from '@/lib/wikipedia/parseGoldenGlobesAwards';
 
 /** 同期処理のサマリー */
@@ -142,9 +143,10 @@ export async function fetchAndResolveAward(
       );
       allAiItems = await fetchAwardItemsViaWikipedia(awardName, awardDef, year);
     }
-  } else if (awardName === 'golden_globes') {
-    // ゴールデングローブ賞: wikitext を直接パースする（OpenAIを使わない）
-    allAiItems = await fetchGoldenGlobesAwards(awardDef, year);
+  } else if (awardName === 'golden_globes' || awardName === 'cannes') {
+    // wikitext を直接パースする（OpenAIを使わない）。
+    // 賞ごとに記事の構造が違うためパーサは分かれている
+    allAiItems = await fetchAwardItemsFromWikitext(awardName, awardDef, year);
   } else {
     // その他の賞: Wikipedia + OpenAI で構造化
     allAiItems = await fetchAwardItemsViaWikipedia(awardName, awardDef, year);
@@ -308,30 +310,51 @@ export async function executeSyncAwardMoviesCron(
 }
 
 /**
- * ゴールデングローブ賞の受賞作品データを wikitext から取得する
+ * 賞ごとの wikitext パーサ
  *
- * **OpenAI を使わない。** 記事の表を直接読むため決定的で、同じ年を同期し直しても
+ * 記事の構造が賞で根本的に違うため、1つのパーサにまとめられない。
+ * ゴールデングローブ賞は表組みで受賞とノミネートを並べるが、カンヌは
+ * 定義リストで受賞だけを並べる。
+ */
+const WIKITEXT_PARSERS: Readonly<
+  Record<string, (wikitext: string, ceremonyYear: number) => OpenAiAwardItem[]>
+> = {
+  golden_globes: fetchGoldenGlobesFromWikitext,
+  cannes: fetchCannesFromWikitext,
+};
+
+/**
+ * 受賞作品データを wikitext から取得する
+ *
+ * **OpenAI を使わない。** 記事を直接読むため決定的で、同じ年を同期し直しても
  * 件数が変わらない。人名も取れる。
  *
  * 取得0件でも OpenAI 経路にフォールバックしない。記事の書式が変わったときに
  * 静かに非決定的な経路へ戻るより、0件として表に出したい（取得0件のときは
  * 呼び出し元が既存データに触らない）。
  */
-async function fetchGoldenGlobesAwards(
+async function fetchAwardItemsFromWikitext(
+  awardName: string,
   awardDef: (typeof AWARD_DEFINITIONS)[AwardName],
   ceremonyYear: number,
 ): Promise<OpenAiAwardItem[]> {
+  const parse = WIKITEXT_PARSERS[awardName];
+  if (!parse) {
+    console.warn(`No wikitext parser for ${awardName}`);
+    return [];
+  }
+
   const wikipediaTitle = buildWikipediaTitle(ceremonyYear, awardDef);
   const articleText = await fetchWikipediaArticle(wikipediaTitle);
 
   if (!articleText) {
     console.warn(
-      `Wikipedia article not found for golden_globes: "${wikipediaTitle}"`,
+      `Wikipedia article not found for ${awardName}: "${wikipediaTitle}"`,
     );
     return [];
   }
 
-  const items = fetchGoldenGlobesFromWikitext(articleText, ceremonyYear);
+  const items = parse(articleText, ceremonyYear);
 
   if (items.length === 0) {
     console.warn(
@@ -344,7 +367,10 @@ async function fetchGoldenGlobesAwards(
 
 /**
  * Wikipedia + OpenAI で受賞作品データを取得
- * カンヌ映画祭で使用（アカデミー賞・ゴールデングローブ賞は専用の抽出経路を持つ）
+ *
+ * 現時点でこの経路を通る賞は無い（アカデミー賞は eiga.com、ゴールデン
+ * グローブ賞とカンヌは wikitext パーサを持つ）。アカデミー賞が eiga.com の
+ * 取得に失敗したときのフォールバックとしてのみ使う。
  */
 async function fetchAwardItemsViaWikipedia(
   awardName: string,

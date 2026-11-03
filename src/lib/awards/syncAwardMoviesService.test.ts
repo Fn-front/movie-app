@@ -63,6 +63,18 @@ const GOLDEN_GLOBES_WIKITEXT = `== 受賞とノミネート ==
 ** 『[[テスト映画2]]』
 |}`;
 
+/**
+ * カンヌ映画祭のwikitext（最小形）
+ *
+ * ゴールデングローブ賞と同じく OpenAI を通さないが、記事構造が違うため
+ * 別のパーサを通る。パーサ自体の検証は
+ * `src/lib/wikipedia/parseCannesAwards.test.ts` で行う。
+ */
+const CANNES_WIKITEXT = `==受賞作品==
+=== 公式選出 ===
+; コンペティション
+* [[パルム・ドール]] - 『[[テスト映画]]』（[[テスト監督]]監督）`;
+
 function createMockSupabase(upsertResult = { error: null }) {
   return {
     from: jest.fn(() => ({
@@ -184,6 +196,29 @@ describe('executeSyncAwardMoviesCron', () => {
     ]);
     expect(items[0].is_winner).toBe(true);
     expect(items[1].is_winner).toBe(false);
+  });
+
+  it('カンヌ映画祭でもOpenAIを呼ばず、全件を受賞として扱う', async () => {
+    // 5月（カンヌ）
+    jest.setSystemTime(new Date('2026-05-15T00:00:00Z'));
+
+    mockFetchWikipediaArticle.mockResolvedValue(CANNES_WIKITEXT);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+
+    const supabase = createMockSupabase();
+    await executeSyncAwardMoviesCron(supabase);
+
+    expect(mockFetchAwardsFromOpenAI).not.toHaveBeenCalled();
+
+    const items = mockResolveAwardsWithTMDb.mock.calls[0][0];
+    expect(items).toEqual([
+      expect.objectContaining({
+        title_ja: 'テスト映画',
+        category: 'palme_dor',
+        is_winner: true,
+        person_name: 'テスト監督',
+      }),
+    ]);
   });
 
   it('ゴールデングローブ賞で記事が取得できない場合はスキップする', async () => {
@@ -372,9 +407,11 @@ describe('executeSyncAwardMoviesCron', () => {
   });
 
   it('wikitextに存在しないタイトルはハルシネーションとして除外する', async () => {
-    // 5月（カンヌ）。ゴールデングローブ賞はwikitextを直接パースするため
-    // OpenAI経路を通らず、この検証の対象外になった
-    jest.setSystemTime(new Date('2026-05-15T00:00:00Z'));
+    // Wikipedia+OpenAI 経路に残っているのは、アカデミー賞が eiga.com の
+    // 取得に失敗したときのフォールバックだけ。他の賞は wikitext を直接
+    // パースするためこの経路を通らない
+    jest.setSystemTime(new Date('2026-07-15T00:00:00Z'));
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
 
     // wikitextには「テスト映画」のみ存在
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
@@ -385,14 +422,14 @@ describe('executeSyncAwardMoviesCron', () => {
         {
           title_ja: 'テスト映画',
           title_en: 'Test Movie',
-          category: 'best_drama',
+          category: 'best_picture',
           is_winner: true,
           year: 2025,
         },
         {
           title_ja: 'ハルシネーション映画',
           title_en: 'Hallucinated Movie',
-          category: 'best_drama',
+          category: 'best_picture',
           is_winner: false,
           year: 2025,
         },
@@ -401,7 +438,7 @@ describe('executeSyncAwardMoviesCron', () => {
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
-    await executeSyncAwardMoviesCron(supabase);
+    await executeSyncAwardMoviesCron(supabase, 2026);
 
     // resolveAwardsWithTMDbに渡されるアイテムからハルシネーションが除外されている
     const resolveCallArgs = mockResolveAwardsWithTMDb.mock.calls[0][0];
@@ -410,8 +447,9 @@ describe('executeSyncAwardMoviesCron', () => {
   });
 
   it('yearが授賞式年から大きく外れている場合は補正する', async () => {
-    // 5月（カンヌ）。ゴールデングローブ賞はOpenAI経路を通らなくなった
-    jest.setSystemTime(new Date('2026-05-15T00:00:00Z'));
+    // 同上。アカデミー賞の eiga.com フォールバック経路で検証する
+    jest.setSystemTime(new Date('2026-07-15T00:00:00Z'));
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
 
     mockExtractMovieTitlesFromWikitext.mockReturnValue(
       new Set(['秒速5センチメートル']),
@@ -422,7 +460,7 @@ describe('executeSyncAwardMoviesCron', () => {
         {
           title_ja: '秒速5センチメートル',
           title_en: '5 Centimeters Per Second',
-          category: 'best_drama',
+          category: 'best_picture',
           is_winner: false,
           year: 2007,
         },
@@ -431,7 +469,7 @@ describe('executeSyncAwardMoviesCron', () => {
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
-    await executeSyncAwardMoviesCron(supabase);
+    await executeSyncAwardMoviesCron(supabase, 2026);
 
     const resolveCallArgs = mockResolveAwardsWithTMDb.mock.calls[0][0];
     expect(resolveCallArgs[0].year).toBe(2025);

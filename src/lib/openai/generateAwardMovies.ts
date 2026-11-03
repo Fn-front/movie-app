@@ -278,15 +278,43 @@ export async function fetchAwardsFromOpenAI(
 }
 
 /**
- * TMDb検索結果から公開年が一致する映画を優先選択する
- * 一致するものがなければ先頭結果をフォールバックとして返す
+ * TMDb検索結果から、公開年が当年・翌年のものを TMDb の関連度順で選ぶ
+ * どちらにも該当しなければ先頭結果をフォールバックとして返す
+ *
+ * ⚠️ `year` と `release_date` は基準が違う。`year` は受賞作品データ側の
+ *    **本国公開年**（eiga.com 経路は `ceremonyYear - 1`、OpenAI 経路は
+ *    「映画の公開年」）だが、`release_date` は tmdbClient が `region: 'JP'` を
+ *    付けているため**日本のリリース代表日**で返る。洋画の日本公開は本国より
+ *    遅れて年をまたぐことが珍しくないため、`year` だけで突き合わせると
+ *    本命が外れる。
+ *
+ *    実例: 第96回アカデミー賞の『オッペンハイマー』(872585) は本国2023年公開・
+ *    日本公開2024-03-29。`year=2023` と一致しないため関連度1位にいても飛ばされ、
+ *    2023年日本公開の同名別作品『オッペンハイマーの真実』(1230570) が
+ *    選ばれていた。
+ *
+ * ⚠️ **当年を優先して翌年はフォールバック、という順序にしてはいけない。**
+ *    それでは上の実例が直らない（`1230570` が当年完全一致で勝ち続ける）。
+ *    当年・翌年を対等に扱い、その中では `find` が TMDb の関連度順で先頭を
+ *    拾うのが要点。「年一致を最優先する」から「年ウィンドウ内で関連度順の
+ *    先頭を採る」への意図的な方針転換であり、翌年候補が当年完全一致より
+ *    上位にいれば翌年候補が勝つ。
+ *
+ * ⚠️ 窓を広げた影響は呼び出し元の4経路で重みが違う。`year` 付きの検索は
+ *    TMDb 側で既に年が絞られた集合の再ランキングなので安全だが、`year`
+ *    なしのフォールバック検索ではここが唯一の年ガードになるため、誤爆の
+ *    余地が倍になる。タイトル類似度を見ていないこと自体は別の課題
+ *    （`?? results[0]` が無条件採用になっている点）。
  */
 function findBestMatch<T extends { id: number; release_date?: string }>(
   results: T[],
   year: number,
 ): T | undefined {
+  const acceptedYears = new Set([String(year), String(year + 1)]);
+
   return (
-    results.find((m) => m.release_date?.startsWith(String(year))) ?? results[0]
+    results.find((m) => acceptedYears.has(m.release_date?.slice(0, 4) ?? '')) ??
+    results[0]
   );
 }
 

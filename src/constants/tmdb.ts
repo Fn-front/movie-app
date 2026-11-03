@@ -70,6 +70,22 @@ export const TMDB_DIGITAL_RELEASE_TYPE = 4;
 export const TMDB_MOVIE_DETAIL_APPEND = 'credits,watch/providers,videos';
 
 /**
+ * 別名タイトル取得時に付与する append_to_response の値。
+ *
+ * 受賞作品の同定（`resolveAwardsWithTMDb`）で、検索語が本当にその作品を
+ * 指しているかを確かめるために使う。検索レスポンスの `title` /
+ * `original_title` だけでは足りない。TMDbは別名・翻訳でもヒットさせるが、
+ * それらは検索レスポンスに含まれないため。
+ *
+ * 実例: 『ザ・ルーム・ネクスト・ドア』は邦題が日本語、原題がスペイン語
+ * （La habitación de al lado）で、検索語の英題 "The Room Next Door" は
+ * どちらとも一致しない。別名を見ないと正解を捨ててしまう。
+ *
+ * 2つとも別エンドポイントだが append_to_response で1リクエストにまとめられる。
+ */
+export const TMDB_TITLE_ALIAS_APPEND = 'alternative_titles,translations';
+
+/**
  * 予告動画を取得する言語。
  *
  * TMDb の videos は共通パラメータの `language`（本アプリでは `ja-JP`）で絞り込まれる。

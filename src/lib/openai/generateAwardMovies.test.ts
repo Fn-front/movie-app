@@ -22,10 +22,13 @@ jest.mock('./client', () => ({
 const mockSearchMovies = jest.fn();
 const mockHasExcludedKeyword = jest.fn().mockResolvedValue(false);
 const mockGetMovieKeywordIds = jest.fn().mockResolvedValue([]);
+const mockGetMovieTitleAliases = jest.fn().mockResolvedValue([]);
 jest.mock('@/lib/tmdb/tmdb', () => ({
   searchMovies: (...args: unknown[]) => mockSearchMovies(...args),
   hasExcludedKeyword: (...args: unknown[]) => mockHasExcludedKeyword(...args),
   getMovieKeywordIds: (...args: unknown[]) => mockGetMovieKeywordIds(...args),
+  getMovieTitleAliases: (...args: unknown[]) =>
+    mockGetMovieTitleAliases(...args),
 }));
 
 import { MUSIC_GENRE_ID } from '@/constants/movies';
@@ -399,7 +402,12 @@ describe('resolveAwardsWithTMDb', () => {
       });
 
       const result = await resolveAwardsWithTMDb(
-        [createAwardItem()],
+        [
+          createAwardItem({
+            title_ja: 'ヨルシカ LIVE「盗作」',
+            title_en: 'ヨルシカ LIVE「盗作」',
+          }),
+        ],
         testAwardDefinition,
       );
 
@@ -421,7 +429,12 @@ describe('resolveAwardsWithTMDb', () => {
       });
 
       const result = await resolveAwardsWithTMDb(
-        [createAwardItem()],
+        [
+          createAwardItem({
+            title_ja: 'National Theatre Live: Hamlet',
+            title_en: 'National Theatre Live: Hamlet',
+          }),
+        ],
         testAwardDefinition,
       );
 
@@ -444,7 +457,12 @@ describe('resolveAwardsWithTMDb', () => {
       });
 
       const result = await resolveAwardsWithTMDb(
-        [createAwardItem()],
+        [
+          createAwardItem({
+            title_ja: 'サタデー･ナイト／NYからライブ！',
+            title_en: 'Saturday Night',
+          }),
+        ],
         testAwardDefinition,
       );
 
@@ -539,7 +557,7 @@ describe('resolveAwardsWithTMDb', () => {
           results: [
             {
               id: 935,
-              title: 'Clean Movie',
+              title: 'Test Movie',
               adult: false,
               poster_path: null,
               release_date: '2026-01-01',
@@ -584,7 +602,7 @@ describe('resolveAwardsWithTMDb', () => {
         results: [
           {
             id: 920,
-            title: 'キーワード該当作',
+            title: 'テスト映画',
             poster_path: null,
             release_date: '2026-01-01',
             vote_average: 6.0,
@@ -779,7 +797,7 @@ describe('resolveAwardsWithTMDb', () => {
       results: [
         {
           id: 600,
-          title: '同名映画（旧作）',
+          title: 'テスト映画',
           poster_path: null,
           release_date: '2010-01-01',
           vote_average: 6.0,
@@ -787,7 +805,7 @@ describe('resolveAwardsWithTMDb', () => {
         },
         {
           id: 601,
-          title: '同名映画（新作）',
+          title: 'テスト映画',
           poster_path: null,
           release_date: '2026-05-01',
           vote_average: 8.0,
@@ -847,7 +865,7 @@ describe('resolveAwardsWithTMDb', () => {
       results: [
         {
           id: 610,
-          title: '同名映画（翌々年公開）',
+          title: 'テスト映画',
           poster_path: null,
           release_date: '2028-01-01',
           vote_average: 8.0,
@@ -855,7 +873,7 @@ describe('resolveAwardsWithTMDb', () => {
         },
         {
           id: 611,
-          title: '同名映画（本命）',
+          title: 'テスト映画',
           poster_path: null,
           release_date: '2026-05-01',
           vote_average: 6.0,
@@ -871,12 +889,14 @@ describe('resolveAwardsWithTMDb', () => {
     expect(result[0].tmdb_movie_id).toBe(611);
   });
 
-  it('公開年一致がない場合は先頭結果にフォールバックする', async () => {
+  it('公開年が当年・翌年のいずれにも一致しない候補は採用しない', async () => {
+    // 以前は `?? results[0]` で先頭を無条件採用していた。年もタイトルも
+    // 手がかりが無い候補を採ると、無関係な作品が公開データに載る
     mockSearchMovies.mockResolvedValue({
       results: [
         {
           id: 700,
-          title: 'フォールバック映画',
+          title: 'テスト映画',
           poster_path: null,
           release_date: '2024-01-01',
           vote_average: 7.0,
@@ -888,8 +908,262 @@ describe('resolveAwardsWithTMDb', () => {
     const items = [createAwardItem({ year: 2026 })];
     const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].tmdb_movie_id).toBe(700);
+    expect(result).toHaveLength(0);
+  });
+
+  describe('タイトルの照合', () => {
+    it('title が一致すれば別名を問い合わせない', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 1000,
+            title: 'テスト映画',
+            original_title: 'Totally Different',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+
+      const result = await resolveAwardsWithTMDb(
+        [createAwardItem()],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(1000);
+      expect(mockGetMovieTitleAliases).not.toHaveBeenCalled();
+    });
+
+    it('original_title が一致すれば採用する', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 1001,
+            title: '全く違う邦題',
+            original_title: 'Test Movie',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+
+      const result = await resolveAwardsWithTMDb(
+        [createAwardItem()],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(1001);
+    });
+
+    it('title にも original_title にも無いが別名にあれば採用する', async () => {
+      // 『ザ・ルーム・ネクスト・ドア』の実データ。邦題は日本語、原題はスペイン語で、
+      // 検索語の英題はどちらとも一致しない。TMDbは別名・翻訳でヒットさせており、
+      // その情報は検索レスポンスに含まれないため問い合わせが要る
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 1088514,
+            title: 'ザ・ルーム・ネクスト・ドア',
+            original_title: 'La habitación de al lado',
+            poster_path: null,
+            release_date: '2024-10-07',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+      mockGetMovieTitleAliases.mockResolvedValueOnce([
+        'The Room Next Door',
+        'La stanza accanto',
+      ]);
+
+      const result = await resolveAwardsWithTMDb(
+        [
+          createAwardItem({
+            title_ja: 'ザ・ルーム・ネクスト・ドア',
+            title_en: 'The Room Next Door',
+            year: 2024,
+          }),
+        ],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(1088514);
+    });
+
+    it('どこにも一致しないタイトルの候補は採用しない', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 1002,
+            title: '無関係な映画',
+            original_title: 'Unrelated Movie',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+      mockGetMovieTitleAliases.mockResolvedValue(['Something Else']);
+
+      const result = await resolveAwardsWithTMDb(
+        [createAwardItem()],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(0);
+    });
+
+    it('窓内の先頭がタイトル不一致でも、後続の一致する候補を採用する', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 1003,
+            title: '無関係な映画',
+            original_title: 'Unrelated Movie',
+            poster_path: null,
+            release_date: '2026-02-01',
+            vote_average: 9.0,
+            genre_ids: [18],
+          },
+          {
+            id: 1004,
+            title: 'テスト映画',
+            original_title: 'Test Movie',
+            poster_path: null,
+            release_date: '2026-03-01',
+            vote_average: 5.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+      mockGetMovieTitleAliases.mockResolvedValue([]);
+
+      const result = await resolveAwardsWithTMDb(
+        [createAwardItem()],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(1004);
+    });
+
+    it('表記ゆれ（全角半角・大文字小文字・区切り記号）を吸収して一致とみなす', async () => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 1005,
+            title: 'ＴＥＳＴ・ＭＯＶＩＥ',
+            original_title: 'Unrelated',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+
+      const result = await resolveAwardsWithTMDb(
+        [
+          createAwardItem({
+            title_ja: 'test movie',
+            title_en: 'test movie',
+          }),
+        ],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(1005);
+    });
+
+    it('一度却下した映画を次の検索段で再判定しない', async () => {
+      // 検索語を変えても同じ映画が返るのは普通。記録しないと同じ作品に対して
+      // 最大4回ぶんの問い合わせを繰り返す
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 1006,
+            title: 'テスト映画',
+            original_title: 'Test Movie',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+      mockHasExcludedKeyword.mockResolvedValue(true);
+
+      const result = await resolveAwardsWithTMDb(
+        [createAwardItem()],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(0);
+      // 4段すべてで同じ映画が返るが、判定は1回だけ
+      expect(mockHasExcludedKeyword).toHaveBeenCalledTimes(1);
+
+      mockHasExcludedKeyword.mockResolvedValue(false);
+    });
+
+    it('第82回ゴールデングローブ賞『マリア』の実データで正しい作品を選ぶ', async () => {
+      // OpenAI が抽出した邦題は「マリア・カラス」。この語では
+      //   1. 日本語+year → 0件
+      //   2. 日本語のみ  → 465871『私は、マリア・カラス』(2017年のドキュメンタリー)
+      //   3. 英語+year   → 1038263 Maria (パブロ・ラライン、2024) ← 正解
+      // となる。2 は公開年が窓外、かつタイトルも別名に無いため採ってはいけない
+      mockSearchMovies
+        .mockResolvedValueOnce({ results: [] })
+        .mockResolvedValueOnce({
+          results: [
+            {
+              id: 465871,
+              title: '私は、マリア・カラス',
+              original_title: 'Maria by Callas',
+              poster_path: null,
+              release_date: '2018-12-21',
+              vote_average: 7.0,
+              genre_ids: [99],
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          results: [
+            {
+              id: 1038263,
+              title: 'Maria',
+              original_title: 'Maria',
+              poster_path: '/maria.jpg',
+              release_date: '2024-11-27',
+              vote_average: 6.8,
+              genre_ids: [18],
+            },
+          ],
+        });
+
+      const result = await resolveAwardsWithTMDb(
+        [
+          createAwardItem({
+            title_ja: 'マリア・カラス',
+            title_en: 'Maria',
+            year: 2024,
+          }),
+        ],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].tmdb_movie_id).toBe(1038263);
+    });
   });
 
   it('display_orderが部門ごとの連番になる', async () => {

@@ -344,6 +344,96 @@ describe('TMDb APIクライアント', () => {
     });
   });
 
+  describe('getMovieTitleAliases', () => {
+    /** 『ザ・ルーム・ネクスト・ドア』相当のレスポンス */
+    const mockAliasResponse = {
+      data: {
+        id: 1088514,
+        title: 'ザ・ルーム・ネクスト・ドア',
+        original_title: 'La habitación de al lado',
+        alternative_titles: {
+          titles: [
+            { title: 'The Room Next Door' },
+            { title: 'La stanza accanto' },
+          ],
+        },
+        translations: {
+          translations: [
+            { data: { title: 'ザ・ルーム・ネクスト・ドア' } },
+            { data: { title: 'A Sala ao Lado' } },
+          ],
+        },
+      },
+    };
+
+    it('別名・翻訳を append して取得し、title と original_title も含めて返す', async () => {
+      mockGet.mockResolvedValue(mockAliasResponse);
+
+      const { getMovieTitleAliases } = require('./tmdb');
+      const result = await getMovieTitleAliases(1088514);
+
+      expect(mockGet).toHaveBeenCalledWith('/movie/1088514', {
+        params: { append_to_response: 'alternative_titles,translations' },
+        signal: undefined,
+      });
+      expect(result).toEqual([
+        'ザ・ルーム・ネクスト・ドア',
+        'La habitación de al lado',
+        'The Room Next Door',
+        'La stanza accanto',
+        'A Sala ao Lado',
+      ]);
+    });
+
+    it('重複するタイトルは1件にまとめる', async () => {
+      mockGet.mockResolvedValue(mockAliasResponse);
+
+      const { getMovieTitleAliases } = require('./tmdb');
+      const result = await getMovieTitleAliases(1088514);
+
+      // translations 側にも邦題が入っているが1件だけ
+      expect(
+        result.filter((t: string) => t === 'ザ・ルーム・ネクスト・ドア'),
+      ).toHaveLength(1);
+    });
+
+    it('別名・翻訳が無くても落ちない', async () => {
+      mockGet.mockResolvedValue({
+        data: { id: 1, title: 'Only Title', original_title: 'Only Title' },
+      });
+
+      const { getMovieTitleAliases } = require('./tmdb');
+      const result = await getMovieTitleAliases(1);
+
+      expect(result).toEqual(['Only Title']);
+    });
+
+    it('空文字や空白だけのタイトルは除外する', async () => {
+      mockGet.mockResolvedValue({
+        data: {
+          id: 2,
+          title: 'Valid',
+          original_title: '',
+          alternative_titles: { titles: [{ title: '   ' }, { title: 'Alt' }] },
+          translations: { translations: [{ data: {} }, {}] },
+        },
+      });
+
+      const { getMovieTitleAliases } = require('./tmdb');
+      const result = await getMovieTitleAliases(2);
+
+      expect(result).toEqual(['Valid', 'Alt']);
+    });
+
+    it('取得に失敗した場合は例外をそのまま投げる（fail-closed）', async () => {
+      mockGet.mockRejectedValue(new Error('TMDb error'));
+
+      const { getMovieTitleAliases } = require('./tmdb');
+
+      await expect(getMovieTitleAliases(3)).rejects.toThrow('TMDb error');
+    });
+  });
+
   describe('getMovieDismissSignals', () => {
     /** credits と keywords を append した映画詳細レスポンス */
     const mockSignalsResponse = {

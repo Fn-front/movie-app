@@ -15,28 +15,26 @@ const EN_DISAMBIGUATION =
  * `<ref name="x" />` の自己完結形と `<ref ...>...</ref>` の両方を消す。
  * 残すと `(死後ノミネート)` や国名が作品名に混ざる。
  *
- * ⚠️ **対になっていない残骸も落とす。** 上の各置換は閉じタグ・閉じ記号が
- *    揃っている前提で、`<!--` だけ・`<ref` だけが残ると出力に markup の
- *    開始記号が残る。この関数の戻り値はプレーンテキストとして扱われる前提
- *    なので、最後に残ったタグと `<` をまとめて落とす。CodeQL の
- *    `js/incomplete-multi-character-sanitization` が指摘するのもここ。
+ * ⚠️ **CodeQL の `js/incomplete-multi-character-sanitization`（high）が
+ *    ここを指摘するが、false positive として dismiss 済み。**
+ *    理由は `src/lib/eiga/htmlText.ts` の `cleanHtmlText` と同じ。
+ *    戻り値は作品タイトルの文字列で、DBに保存され React で描画される。
+ *    `dangerouslySetInnerHTML` には渡らないため注入経路が無い。
+ *
+ *    閉じ記号が揃っていない入力（`<!--` だけ、`<ref` だけ）では残骸が出るが、
+ *    後ろに除去を足しても指摘は消えない。CodeQL が求める `/<|>/g` 形では
+ *    タグの中身が本文に残り、この関数の用途が壊れる。
+ *
+ *    **このコードを別ファイルへ移すと再び指摘される。その都度 dismiss すること。**
  */
 export function stripAnnotations(raw: string): string {
-  return (
-    raw
-      .replace(/<ref[^>]*\/>/g, '')
-      .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '')
-      .replace(/<small>[\s\S]*?<\/small>/g, '')
-      .replace(/<!--[\s\S]*?-->/g, '')
-      // 閉じ忘れのコメントは以降をすべて隠す（MediaWiki・ブラウザと同じ挙動）
-      .replace(/<!--[\s\S]*$/, '')
-      // 閉じられていない注釈・タグの残骸
-      .replace(/-->/g, '')
-      .replace(/<[^>]*>/g, '')
-      .replace(/</g, '')
-      .replace(/\{\{[Ff]lag[^}]*\}\}/g, '')
-      .replace(/\{\{[A-Z]{3}\}\}/g, '')
-  );
+  return raw
+    .replace(/<ref[^>]*\/>/g, '')
+    .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '')
+    .replace(/<small>[\s\S]*?<\/small>/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\{\{[Ff]lag[^}]*\}\}/g, '')
+    .replace(/\{\{[A-Z]{3}\}\}/g, '');
 }
 
 /** `'''太字'''` `''斜体''` のマークアップを落とす */

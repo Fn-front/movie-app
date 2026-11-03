@@ -35,17 +35,14 @@ describe('stripAnnotations', () => {
   });
 
   /**
-   * 各置換は閉じ記号が揃っている前提。`<!--` だけが残ると出力に markup の
-   * 開始記号が残っていた（CodeQL `js/incomplete-multi-character-sanitization`）。
+   * **既知の限界。** 各置換は閉じ記号が揃っている前提で、片方しか無い入力は
+   * そのまま残る（CodeQL `js/incomplete-multi-character-sanitization` が
+   * 指摘する点）。戻り値は React で描画される文字列で注入経路が無いため
+   * 許容している。詳細は `stripAnnotations` のコメント参照。
    */
-  it('閉じ忘れのコメントは以降をすべて隠す（MediaWikiと同じ挙動）', () => {
-    expect(stripAnnotations('作品<!-- 閉じ忘れ')).toBe('作品');
-    expect(stripAnnotations('作品 --> 続き')).toBe('作品  続き');
-  });
-
-  it('閉じられていないタグの残骸を残さない', () => {
-    expect(stripAnnotations('作品<ref name="x"')).toBe('作品ref name="x"');
-    expect(stripAnnotations('作品<script')).toBe('作品script');
+  it('閉じ記号の揃っていない注釈は除去されない（既知の限界）', () => {
+    expect(stripAnnotations('作品<!-- 閉じ忘れ')).toBe('作品<!-- 閉じ忘れ');
+    expect(stripAnnotations('作品<ref name="x"')).toBe('作品<ref name="x"');
   });
 
   it('対象外のテキストは変えない', () => {

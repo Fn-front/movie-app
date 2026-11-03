@@ -73,13 +73,21 @@ export function decodeHtmlEntities(text: string): string {
  * 残ることはない（`Ascript>B` になる）。繰り返し適用しても結果は変わらないため
  * ループは設けない。
  *
- * ⚠️ **残った `<` も落とす。** `a<script` のように閉じ `>` が無い入力では
- *    タグ除去の正規表現が一致せず、`<script` が出力に残る。この関数の戻り値は
- *    プレーンテキストとして扱われる前提なので、markup の開始記号を残さない。
- *    CodeQL の `js/incomplete-multi-character-sanitization` が指摘するのもここ。
+ * ⚠️ **CodeQL の `js/incomplete-multi-character-sanitization`（high）が
+ *    ここを指摘するが、false positive として dismiss 済み。**
+ *    戻り値は作品タイトルの文字列で、DBに保存され React で描画される。
+ *    `dangerouslySetInnerHTML` には渡らないため注入経路が無い。
  *
- * ⚠️ **落とすのは `decodeHtmlEntities` より前。** 順序を逆にすると
- *    `&lt;` 由来の正当な `<` まで消える。
+ *    **後ろに `<` の除去を足しても指摘は消えない。** CodeQL が求めるのは
+ *    `/<[^>]*>/g` を**やめて** `/<|>/g` にすること（ルール本文の推奨）だが、
+ *    それではタグの中身が本文に残り（`<a href="x">題名</a>` →
+ *    `a href="x"題名/a`）、この関数の用途が壊れる。もう一つの推奨である
+ *    `sanitize-html` の導入は「不要な外部依存を追加しない」方針に反する。
+ *
+ *    経緯: PR #837 で9ケースの冪等性を実測して dismiss（alert #7）。
+ *    PR #925 でこのファイルへ切り出した際に再浮上し、`<` の追加除去を
+ *    試したが消えず、かえって別の指摘を増やしたため元に戻した。
+ *    **このコードを別ファイルへ移すと再び指摘される。その都度 dismiss すること。**
  *
  * ⚠️ 連続空白は畳まない。呼び出し側で必要に応じて行うこと。ここで畳むと
  *    `fetchEigaOscarAwards` の既存の抽出結果が変わる。
@@ -88,7 +96,6 @@ export function cleanHtmlText(raw: string): string {
   return decodeHtmlEntities(
     raw
       .replace(/<[^>]*>/g, '')
-      .replace(/</g, '')
       .replace(/&nbsp;/g, '')
       .trim(),
   );

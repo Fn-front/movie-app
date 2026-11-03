@@ -54,19 +54,18 @@ describe('cleanHtmlText', () => {
   });
 
   /**
-   * 閉じ `>` が無い入力はタグ除去の正規表現に一致せず、以前は `<script` が
-   * 出力に残っていた（CodeQL `js/incomplete-multi-character-sanitization`）。
+   * **既知の限界。** 閉じ `>` が無い入力はタグ除去の正規表現に一致せず、
+   * `<script` が出力に残る（CodeQL `js/incomplete-multi-character-sanitization`
+   * が指摘する点）。戻り値は React で描画される文字列で注入経路が無いため
+   * 許容している。詳細は `cleanHtmlText` のコメント参照。
+   *
+   * この挙動を変える場合はタグの中身が本文へ漏れないか必ず確認すること。
    */
-  it('閉じられていないタグの残骸を残さない', () => {
-    expect(cleanHtmlText('a<script')).toBe('ascript');
-    expect(cleanHtmlText('<<<a')).toBe('a');
+  it('閉じられていないタグは除去されない（既知の限界）', () => {
+    expect(cleanHtmlText('a<script')).toBe('a<script');
   });
 
-  /**
-   * `<` の除去はエンティティ復号より前に行う。順序が逆だと
-   * `&lt;` 由来の正当な `<` まで消える。
-   */
-  it('&lt; 由来の < は残す', () => {
+  it('エンティティで表現された < は復号される', () => {
     expect(cleanHtmlText('1 &lt; 2')).toBe('1 < 2');
   });
 

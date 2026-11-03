@@ -267,6 +267,30 @@ const CASES: Case[] = [
     reason: 'stale-local',
   },
   {
+    // ケース15・19 の鏡像。これが無いと「サーバーが denied なら優先」の
+    // 分岐を削っても23ケースのどれも落ちない（行は通るが結果が変わらない）
+    no: 24,
+    title: 'サーバーに日時が無くても、サーバーの撤回が同意へ差し戻されない',
+    local: { state: 'granted', at: T1, owner: ME, version: V },
+    server: { state: 'denied', at: null, version: V },
+    effectiveState: 'denied',
+    localWrite: { state: 'denied', at: null, owner: ME, version: V },
+    putBody: null,
+    reason: 'adopt-server',
+  },
+  {
+    // ケース16 の鏡像。これが無いと「時刻を持つ方を優先」の端末側の分岐に
+    // 一度も到達しない
+    no: 25,
+    title: 'サーバーに日時が無ければ、日時を持つ端末を採る',
+    local: { state: 'granted', at: T1, owner: ME, version: V },
+    server: { state: 'granted', at: null, version: V },
+    effectiveState: 'granted',
+    localWrite: null,
+    putBody: null,
+    reason: 'in-sync',
+  },
+  {
     no: 23,
     title: 'サーバーの版が null（移行行）なら版を書きにいく',
     local: { state: 'granted', at: T1, owner: ME, version: V },
@@ -308,11 +332,36 @@ describe('resolveConsentMerge', () => {
   describe('時刻の比較', () => {
     it('表記が違っても同一インスタントなら一致扱いにする', () => {
       // クライアントは toISOString() で "…Z"、PostgREST は "…+00:00" を返す。
-      // 文字列比較だと辞書順で '+' < 'Z' となり「端末が新しい」と誤判定され、
-      // 毎ページロードで PUT が飛び続ける
+      // 文字列比較だと辞書順で '+'(0x2B) < 'Z'(0x5A) なので「端末が新しい」と
+      // 誤判定される。
+      //
+      // 状態を揃えると、どちらを採っても出力が同じになって検知できない。
+      // 状態を変えて「同時刻のタイブレーク（サーバー優先）」に落ちることを見る
       const result = resolveConsentMerge({
         local: {
           state: 'granted',
+          at: '2026-11-03T00:00:00.000Z',
+          owner: ME,
+          version: V,
+        },
+        server: {
+          state: 'denied',
+          at: '2026-11-03T00:00:00.000+00:00',
+          version: V,
+        },
+        userId: ME,
+        currentVersion: V,
+      });
+
+      // 文字列比較だと端末（granted）が新しいと判定されてしまう
+      expect(result.effectiveState).toBe('denied');
+      expect(result.reason).toBe('adopt-server');
+    });
+
+    it('表記違いで「端末が新しい」と誤判定しない（逆向き）', () => {
+      const result = resolveConsentMerge({
+        local: {
+          state: 'denied',
           at: '2026-11-03T00:00:00.000Z',
           owner: ME,
           version: V,
@@ -326,9 +375,9 @@ describe('resolveConsentMerge', () => {
         currentVersion: V,
       });
 
-      expect(result.reason).toBe('in-sync');
-      expect(result.localWrite).toBeNull();
-      expect(result.putBody).toBeNull();
+      // 同時刻なので denied 優先の分岐に落ちる（時刻差では決めない）
+      expect(result.effectiveState).toBe('denied');
+      expect(result.reason).toBe('adopt-local');
     });
 
     it('ミリ秒単位の差も新旧として扱う', () => {

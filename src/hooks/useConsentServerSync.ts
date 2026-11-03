@@ -23,7 +23,7 @@ import { getSettings, updateSettings } from '@/lib/api/user/user';
 import {
   clearConsentRecord,
   clearOwnedConsent,
-  getStoredConsentAt,
+  getSendableConsentAt,
   getStoredConsentRecord,
   getStoredConsentState,
   writeConsentRecord,
@@ -124,6 +124,13 @@ export function useConsentServerSync(consent: CookieConsentState): void {
       } catch {
         inFlight = null;
         if (!cancelled) notifyFailure();
+        // GET に失敗しても変更追随は動かす。ここで止めると、以降その
+        // SPA セッション中の同意・撤回が一切サーバーへ届かないまま
+        // トーストも出ない（プロバイダは単一マウントで、セッション内の
+        // 自動リトライも無いため、フルリロードまで復旧しない）。
+        // サーバー値が分からないので ref はシードせず、次の変更で送る
+        mergeDoneRef.current = true;
+        lastSentRef.current = null;
         return;
       }
       inFlight = null;
@@ -191,7 +198,7 @@ export function useConsentServerSync(consent: CookieConsentState): void {
       try {
         await updateSettings({
           cookieConsent: consent,
-          cookieConsentAt: getStoredConsentAt(),
+          cookieConsentAt: getSendableConsentAt(),
         });
         // ref の更新は成功後。先に更新すると失敗した値が二度と送られない
         if (!cancelled) lastSentRef.current = consent;

@@ -49,7 +49,11 @@ const createPutRequest = (body: Record<string, unknown>) =>
 
 describe('GET /api/user/settings', () => {
   beforeEach(() => {
+    // clearAllMocks は mockReturnValueOnce のキューを捨てない（捨てるのは
+    // mockReset）。消費され残った once が次のテストへ持ち越されると、
+    // 以降すべてのモック応答が1つずれて不可解な失敗になる
     jest.clearAllMocks();
+    mockFrom.mockReset();
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -167,7 +171,11 @@ describe('GET /api/user/settings', () => {
 
 describe('PUT /api/user/settings', () => {
   beforeEach(() => {
+    // clearAllMocks は mockReturnValueOnce のキューを捨てない（捨てるのは
+    // mockReset）。消費され残った once が次のテストへ持ち越されると、
+    // 以降すべてのモック応答が1つずれて不可解な失敗になる
     jest.clearAllMocks();
+    mockFrom.mockReset();
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -389,22 +397,21 @@ describe('Cookie同意', () => {
     });
   };
 
-  /** 日時のクランプを検証するため、現在時刻を固定する */
-  const NOW = '2026-11-10T00:00:00.000Z';
-  /** COOKIE_CONSENT_MIN_AT より後、かつ NOW より前の妥当な同意日時 */
-  const AT = '2026-11-05T12:00:00.000Z';
-
-  beforeAll(() => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date(NOW));
-  });
-
-  afterAll(() => {
-    jest.useRealTimers();
-  });
+  /**
+   * COOKIE_CONSENT_MIN_AT より後、かつ常に過去になる妥当な同意日時
+   *
+   * ここでは実時計のまま動かす。fake timer を describe 全体へ張ると、
+   * undici の `request.json()` と同居して不安定になる。時刻固定が要るのは
+   * クランプの検証だけなので、そちらの describe に閉じ込める
+   */
+  const AT = '2026-11-03T00:30:00.000Z';
 
   beforeEach(() => {
+    // clearAllMocks は mockReturnValueOnce のキューを捨てない（捨てるのは
+    // mockReset）。消費され残った once が次のテストへ持ち越されると、
+    // 以降すべてのモック応答が1つずれて不可解な失敗になる
     jest.clearAllMocks();
+    mockFrom.mockReset();
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -581,6 +588,18 @@ describe('Cookie同意', () => {
   });
 
   describe('日時のクランプ', () => {
+    /** 丸め先を検証するため、ここだけ現在時刻を固定する */
+    const NOW = '2026-11-10T00:00:00.000Z';
+
+    beforeAll(() => {
+      jest.useFakeTimers({ doNotFake: ['queueMicrotask', 'nextTick'] });
+      jest.setSystemTime(new Date(NOW));
+    });
+
+    afterAll(() => {
+      jest.useRealTimers();
+    });
+
     it('未来すぎる日時はサーバー受信時刻へ丸める', async () => {
       // 端末の時計が進んでいても同意状態そのものは必ず保存する。
       // 400 で拒否すると永久に保存されず、リトライがレート制限を食い潰す

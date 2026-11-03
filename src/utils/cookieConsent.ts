@@ -84,10 +84,35 @@ export function getEffectiveConsentState(): ConsentValue {
   return getStoredConsentVersion() === COOKIE_CONSENT_VERSION ? state : 'unset';
 }
 
-/** 保存された同意日時を読む（未保存・空文字は null） */
+/**
+ * 保存された同意日時を読む（未保存・空文字は null）
+ *
+ * 生値をそのまま返す。マージ規則は「パース不能なら日時なし扱いにして
+ * 書き直す」ために壊れた値も見る必要があるため。
+ * サーバーへ送る前には getSendableConsentAt を使うこと。
+ */
 export function getStoredConsentAt(): string | null {
   const value = readKey(STORAGE_KEYS.COOKIE_CONSENT_AT);
   return value === null || value === '' ? null : value;
+}
+
+/**
+ * サーバーへ送れる形の同意日時を返す
+ *
+ * パース不能な値は `null` に倒す。そのまま送ると zod（`z.iso.datetime`）が
+ * 400 を返し、端末側のレコードは修復されないまま同意操作のたびに失敗
+ * トーストが出続ける。サーバー側のクランプは zod を通った後なので、
+ * 「形式が妥当で範囲外」しか救えずここには届かない。
+ */
+export function getSendableConsentAt(): string | null {
+  const raw = getStoredConsentAt();
+  if (raw === null) return null;
+
+  const parsed = Date.parse(raw);
+  if (Number.isNaN(parsed)) return null;
+
+  // PostgREST 形式（+00:00）などを受け取っていても、送信時は Z 形式へ正規化する
+  return new Date(parsed).toISOString();
 }
 
 /** 保存された所有者（ユーザーID）を読む。未ログイン時の操作は空文字 */
@@ -211,8 +236,17 @@ export function recordConsentDecision(
  * 再レンダリングしても意味がないため。
  */
 export function subscribeConsent(onStoreChange: () => void): () => void {
+  // 版キーも監視する。getEffectiveConsentState は状態と版の両方に依存するため、
+  // 「版を上げたあと同じ値で再同意」したときは状態キーが同値で storage が
+  // 発火せず、版キーだけが変わる。これを拾わないと別タブがバナーを出し続ける
+  const watchedKeys: readonly string[] = [
+    STORAGE_KEYS.COOKIE_CONSENT,
+    STORAGE_KEYS.COOKIE_CONSENT_VERSION,
+  ];
+
   const handleStorage = (event: StorageEvent) => {
-    if (event.key !== null && event.key !== STORAGE_KEYS.COOKIE_CONSENT) return;
+    // key === null は localStorage.clear()
+    if (event.key !== null && !watchedKeys.includes(event.key)) return;
     onStoreChange();
   };
   window.addEventListener(COOKIE_CONSENT_CHANGE_EVENT, onStoreChange);

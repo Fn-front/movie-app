@@ -122,6 +122,51 @@ describe('useConsentServerSync', () => {
       expect(mockGetSettings).toHaveBeenCalledTimes(1);
     });
 
+    it('ユーザーが切り替わったら前のユーザーの応答を使い回さない', async () => {
+      // inFlight を userId で keying していないと、A の GET の応答が
+      // B のマージに使われ、A の同意が B のレコードへ書かれうる
+      let resolveA: (value: unknown) => void = () => {};
+      mockGetSettings.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveA = resolve;
+        }),
+      );
+
+      const first = render();
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalledTimes(1));
+      first.unmount();
+
+      // A の応答が返る前に B へ切り替わる
+      mockUseSession.mockReturnValue({
+        data: { user: { id: OTHER } },
+        status: 'authenticated',
+      });
+      mockGetSettings.mockResolvedValue(serverSettings('unset', null, null));
+      render();
+
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalledTimes(2));
+
+      // 遅れて返ってきた A の応答が B へ適用されない
+      await act(async () => {
+        resolveA(serverSettings('granted', T1, COOKIE_CONSENT_VERSION));
+      });
+      expect(getStoredConsentRecord().owner).not.toBe(ME);
+    });
+
+    it('セッションが変わらない限り再マウントでも GET しない', async () => {
+      // syncedUserId のガード。外すとマウントのたびに GET が飛ぶ
+      mockGetSettings.mockResolvedValue(serverSettings('unset', null, null));
+
+      const first = render();
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalledTimes(1));
+      first.unmount();
+
+      render();
+      await act(async () => {});
+
+      expect(mockGetSettings).toHaveBeenCalledTimes(1);
+    });
+
     it('StrictMode の二重マウントでも同期が成立する', async () => {
       // フラグで2回目を弾くと、1回目は cleanup で cancelled、2回目は skip に
       // なって同期が一度も成立しない。進行中の Promise を共有して回避する
@@ -328,7 +373,9 @@ describe('useConsentServerSync', () => {
       expect(mockUpdateSettings).toHaveBeenCalledTimes(1);
     });
 
-    it('失敗した値は次の機会に再送される（ref を先に進めない）', async () => {
+    it('失敗した値は同じ値のまま再送できる（ref を先に進めない）', async () => {
+      // 別の値へ切り替えるだけだと、ref が進んでいても通ってしまう。
+      // 「失敗した値そのもの」が再送されることを見る
       mockGetSettings.mockResolvedValue(serverSettings('unset', null, null));
 
       const { rerender } = render('unset');
@@ -340,10 +387,43 @@ describe('useConsentServerSync', () => {
       });
       rerender({ value: 'denied' });
       await waitFor(() => expect(mockToast).toHaveBeenCalled());
+      expect(mockUpdateSettings).toHaveBeenCalledTimes(1);
 
-      // 別の値を挟んでから戻しても、ref が進んでいないので送れる
+      // いったん別の値を経由して同じ値へ戻す。ref が 'denied' まで進んで
+      // いたら、この2回目は送られない
       rerender({ value: 'granted' });
       await waitFor(() => expect(mockUpdateSettings).toHaveBeenCalledTimes(2));
+      rerender({ value: 'denied' });
+      await waitFor(() => expect(mockUpdateSettings).toHaveBeenCalledTimes(3));
+      expect(mockUpdateSettings).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cookieConsent: 'denied' }),
+      );
+    });
+
+    it('壊れた日時は送らず null にする（400 ループを避ける）', async () => {
+      // そのまま送ると zod が 400 を返し、端末側は修復されないまま
+      // 同意操作のたびに失敗トーストが出続ける
+      mockGetSettings.mockResolvedValue(serverSettings('unset', null, null));
+
+      const { rerender } = render('unset');
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+
+      act(() => {
+        writeConsentRecord({
+          state: 'denied',
+          at: 'not-a-date',
+          owner: ME,
+          version: COOKIE_CONSENT_VERSION,
+        });
+      });
+      rerender({ value: 'denied' });
+
+      await waitFor(() =>
+        expect(mockUpdateSettings).toHaveBeenCalledWith({
+          cookieConsent: 'denied',
+          cookieConsentAt: null,
+        }),
+      );
     });
   });
 

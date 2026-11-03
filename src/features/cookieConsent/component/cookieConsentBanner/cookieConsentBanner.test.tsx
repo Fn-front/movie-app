@@ -5,8 +5,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { ARIA_LABELS, ROUTES } from '@/constants';
-import { recordConsentDecision } from '@/utils/cookieConsent';
+import { ARIA_LABELS, COOKIE_CONSENT_VERSION, ROUTES } from '@/constants';
+import {
+  getStoredConsentRecord,
+  getStoredConsentState,
+  recordConsentDecision,
+} from '@/utils/cookieConsent';
 import { CookieConsentBanner } from './cookieConsentBanner';
 
 jest.mock('next-auth/react', () => ({
@@ -73,22 +77,38 @@ describe('CookieConsentBanner', () => {
   });
 
   describe('操作', () => {
-    it('「同意する」で同意を記録し、バナーが消える', async () => {
+    it('「同意する」で granted を記録し、バナーが消える', async () => {
+      // 「消えたこと」だけを見ると、2つのハンドラを取り違えても通ってしまう。
+      // 同意ボタンが拒否を記録する実装が CI を素通りするのは実害が大きい
       const user = userEvent.setup();
       render(<CookieConsentBanner />);
 
       await user.click(screen.getByRole('button', { name: '同意する' }));
 
+      expect(getStoredConsentState()).toBe('granted');
       expect(screen.queryByRole('region')).not.toBeInTheDocument();
     });
 
-    it('「同意しない」で拒否を記録し、バナーが消える', async () => {
+    it('「同意しない」で denied を記録し、バナーが消える', async () => {
       const user = userEvent.setup();
       render(<CookieConsentBanner />);
 
       await user.click(screen.getByRole('button', { name: '同意しない' }));
 
+      expect(getStoredConsentState()).toBe('denied');
       expect(screen.queryByRole('region')).not.toBeInTheDocument();
+    });
+
+    it('操作した利用者と現行版を添えて記録する', async () => {
+      const user = userEvent.setup();
+      render(<CookieConsentBanner />);
+
+      await user.click(screen.getByRole('button', { name: '同意する' }));
+
+      const record = getStoredConsentRecord();
+      expect(record.owner).toBe('user-1');
+      expect(record.version).toBe(COOKIE_CONSENT_VERSION);
+      expect(record.at).not.toBeNull();
     });
 
     it('キーボードで両方のボタンへ到達できる', async () => {

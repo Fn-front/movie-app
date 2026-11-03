@@ -40,12 +40,14 @@ jest.mock(
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 
+import { recordConsentDecision } from '@/utils/cookieConsent';
 import { SettingsPage } from './settingsPage';
 
 // --- Tests ---
 
 describe('SettingsPage', () => {
   beforeEach(() => {
+    localStorage.clear();
     mockUseSession.mockReturnValue({
       data: {
         user: {
@@ -186,5 +188,27 @@ describe('SettingsPage', () => {
     expect(
       screen.queryByTestId('change-password-form'),
     ).not.toBeInTheDocument();
+  });
+  describe('Cookie セクション', () => {
+    it('同意済みなら表示する', () => {
+      recordConsentDecision('granted', 'user-1');
+
+      render(<SettingsPage />);
+
+      expect(
+        screen.getByRole('heading', { name: 'Cookie' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('radiogroup', { name: 'アクセス解析Cookieの利用' }),
+      ).toBeInTheDocument();
+    });
+
+    it('未決定なら見出しごと出さない（空セクションを作らない）', () => {
+      render(<SettingsPage />);
+
+      expect(
+        screen.queryByRole('heading', { name: 'Cookie' }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

@@ -6,7 +6,7 @@
   justify-content: center;
   align-items: center;
   // 同意バナー（position: fixed）の分を空ける。無いときは 0px
-  min-height: calc(100vh - var(--cookie-banner-height));
+  min-height: calc(100vh - var(--cookie-banner-height, 0px));
   padding: $spacing-4;
 
   // プライバシーポリシーへの導線

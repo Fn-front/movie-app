@@ -36,8 +36,6 @@ export const AnalyticsProvider = memo(function AnalyticsProvider() {
   // 直近に送った page_view のパス。同一パスへの二重送信を防ぐ
   const lastPageViewRef = useRef<string | null>(null);
 
-  useConsentServerSync(consent);
-
   // 1. 同意状態の反映
   //
   // 同意が成立しても page_view は送り直さない。Consent Mode advanced では
@@ -85,6 +83,13 @@ export const AnalyticsProvider = memo(function AnalyticsProvider() {
 
     return () => cancelAnimationFrame(frame);
   }, [measurementId, pathname]);
+
+  // 3〜4. サーバー同期（初回マージ・変更追随）
+  //
+  // フックの呼び出し順＝effect の実行順なので、gtag まわりの 1・2 より
+  // 後に置く。前に置くと冒頭のコメントと実際の順序が食い違い、
+  // 「コメントどおりに並べ替えたら壊れる」状態になる
+  useConsentServerSync(consent);
 
   if (measurementId === null) return null;
 

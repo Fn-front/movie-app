@@ -31,8 +31,10 @@ const CLIENT_TRANSMISSIONS = [
     purpose: 'アクセス状況の分析とレポートの作成',
   },
   {
+    // ファサード（クリックで読み込む仕組み）は無く、ダイアログを開いた時点で
+    // iframe が生成される。「再生した際」と書くと実態より後ろにずれる
     to: 'YouTube（Google）',
-    data: '予告編を再生した際のIPアドレス・Cookie',
+    data: '予告編のダイアログを開いた際のIPアドレス・Cookie',
     purpose: '動画の配信と再生品質の計測',
   },
   {
@@ -51,8 +53,8 @@ const CLIENT_TRANSMISSIONS = [
 const SERVER_TRANSMISSIONS = [
   {
     to: 'OpenAI',
-    data: 'お気に入り作品のタイトルと評価、興味なしリスト、ウォッチリストの作品名',
-    purpose: 'おすすめ作品の生成',
+    data: 'お気に入り作品のタイトルと評価、興味なしリスト、ウォッチリストの作品名、検索時に入力された作品名',
+    purpose: 'おすすめ作品の生成と、検索時の原題候補の提示',
   },
   {
     to: 'Have I Been Pwned',
@@ -111,8 +113,11 @@ export function PrivacyPage() {
             技術情報（IPアドレス、セッションCookie、コンテンツセキュリティポリシー違反のレポート）
           </li>
           {/*
-            admin_audit_logs（管理者の操作記録）は載せない。管理者は運営者
-            本人のみで、利用者について取得する情報ではないため
+            admin_audit_logs は §1 の表には載せない。記録するのは
+            (操作者, 対象, 操作, 日時) の4項目のみで、メールアドレス等の
+            内容を持たないため。ただし target_user_id に紐づく以上、当該
+            利用者の保有個人データではあるので、§2 の利用目的で
+            「管理操作の記録」として覆っている（法32条1項2号）
           */}
         </ul>
       </section>
@@ -122,7 +127,9 @@ export function PrivacyPage() {
         <ul className={styles.c_privacy_page__list}>
           <li>認証とアカウントの管理</li>
           <li>おすすめ作品の生成</li>
-          <li>不正利用の防止（アクセス回数の制限）</li>
+          <li>
+            不正利用の防止および管理操作の記録（アクセス回数の制限、アカウントの発行・再発行の監査）
+          </li>
           <li>障害の調査と品質の改善</li>
           <li>利用状況の把握（同意いただいた場合のみ）</li>
         </ul>
@@ -197,6 +204,11 @@ export function PrivacyPage() {
             （アクセス解析に同意いただいた場合のみ）
           </li>
           <li>
+            Cookie: YouTube
+            が設定するもの（予告編のダイアログを開いた場合。同意の有無に
+            かかわらず設定されます）
+          </li>
+          <li>
             ローカルストレージ:
             表示テーマ、作品一覧の絞り込み条件、Cookie同意の状態・日時・対象者・版
           </li>
@@ -266,6 +278,9 @@ export function PrivacyPage() {
         </p>
         <p>
           <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+        </p>
+        <p>
+          ご本人確認のため、ご登録のメールアドレスからご連絡ください。代理人によるご請求の場合は委任状をご提出ください。
         </p>
         <p>運営者の氏名および住所は、ご請求に応じて遅滞なく回答します。</p>
       </section>

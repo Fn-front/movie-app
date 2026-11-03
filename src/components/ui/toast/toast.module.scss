@@ -6,7 +6,7 @@
   &__viewport {
     position: fixed;
     // 同意バナー（position: fixed）と重ならないよう押し上げる
-    bottom: var(--cookie-banner-height);
+    bottom: var(--cookie-banner-height, 0px);
     right: 0;
     display: flex;
     flex-direction: column;

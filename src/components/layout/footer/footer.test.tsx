@@ -52,6 +52,18 @@ describe('Footer', () => {
     expect(footer?.className).toContain('custom-class');
   });
 
+  it('nav に名前を付ける（同一ページに複数 nav があるため）', () => {
+    // 名前の無い nav を全ページに増やすと axe の landmark-unique に対して
+    // 脆くなる
+    render(
+      <Footer links={[{ label: 'プライバシーポリシー', href: '/privacy' }]} />,
+    );
+
+    expect(
+      screen.getByRole('navigation', { name: 'フッターナビゲーション' }),
+    ).toBeInTheDocument();
+  });
+
   it('境界値: links が空配列の場合、nav 要素が描画されない', () => {
     const { container } = render(<Footer links={[]} />);
     expect(container.querySelector('nav')).not.toBeInTheDocument();

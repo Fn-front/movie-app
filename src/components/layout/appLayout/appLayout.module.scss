@@ -9,7 +9,7 @@
   // これに依存している。
   // 同意バナーは position: fixed なので、その分だけ縮めてフッターが
   // 覆われないようにする。バナーが無いときは calc(100vh - 0px) で現状と同一
-  height: calc(100vh - var(--cookie-banner-height));
+  height: calc(100vh - var(--cookie-banner-height, 0px));
   background-color: $background-default;
 
   // スキップリンク（本文へ移動）

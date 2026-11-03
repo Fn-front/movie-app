@@ -28,7 +28,10 @@ import styles from './cookieConsentBanner.module.scss';
  *   到達性の要求は緩く、ランドマークか Tab 順の末尾で到達できれば足りる
  * - 初回描画なので aria-live は不適。ランドマーク化で担保する
  * - 「同意する」と「同意しない」は同じ variant にして視覚的重みを揃える。
- *   閉じる × は置かない（ダークパターンの回避）
+ *   閉じる × は置かない（ダークパターンの回避）。
+ *   ghost（枠線のみ）にしているのは、バナー自体が画面下部の帯として十分
+ *   目立つため。塗りつぶしの variant だと全幅のボタンが2つ並んで画面の
+ *   基調から浮く
  */
 export const CookieConsentBanner = memo(function CookieConsentBanner() {
   const { consent, grant, deny } = useCookieConsent();
@@ -84,10 +87,10 @@ export const CookieConsentBanner = memo(function CookieConsentBanner() {
         </p>
 
         <div className={styles.c_cookie_banner__actions}>
-          <Button variant='secondary' onClick={handleDeny}>
+          <Button variant='ghost' onClick={handleDeny}>
             同意しない
           </Button>
-          <Button variant='secondary' onClick={handleGrant}>
+          <Button variant='ghost' onClick={handleGrant}>
             同意する
           </Button>
         </div>

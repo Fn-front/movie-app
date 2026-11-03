@@ -110,7 +110,10 @@ export function PrivacyPage() {
           <li>
             技術情報（IPアドレス、セッションCookie、コンテンツセキュリティポリシー違反のレポート）
           </li>
-          <li>管理者による操作の記録</li>
+          {/*
+            admin_audit_logs（管理者の操作記録）は載せない。管理者は運営者
+            本人のみで、利用者について取得する情報ではないため
+          */}
         </ul>
       </section>
 

@@ -705,26 +705,26 @@ Arguments であることの assert は、**`buildConsentBootstrapScript` の出
 - `usePathname()` を依存にした effect で送る。**初回マウントでも送る**（初回スキップのガードを入れるとランディングページが計上されない）
 - `useSearchParams()` は依存に入れない。root layout で使うと `BailoutToCSRError` で静的プリレンダから外れる。`page_location` は送信時点で `window.location.href` を読む（`HistoryUpdater` が `useInsertionEffect` で history を書くため、passive effect の時点で URL は更新済み）
 - **`page_title` は `requestAnimationFrame` を 1 フレーム待ってから `document.title` を読む。** App Router のメタデータは Suspense 越しに解決されるため、effect の時点では前ページのタイトルが残っていることがある（`person/[id]` は async `generateMetadata` なので確実にずれる）。拡張計測を否定した理由（§1.4-9）と同じ失敗なので、手動送信でも同じ手当てが要る
-- **「直近送信した pathname」を ref に持ち、同一 pathname への二重送信を防ぐ。** §5.6 の「同意成立時の追加 page_view」と競合しうるため
+- **「直近送信した pathname」を ref に持ち、同一 pathname への二重送信を防ぐ**
 
 `usePathname()` は Server Component の子で問題なく動く。`cacheComponents` は無効なので Suspense 境界は不要。dev では StrictMode により 2 回走る（本番では起きない）。
 
 ### 5.6 同意状態の変更を反映する
 
-| 遷移                           | `consent update`   | 追加 page_view | 備考                                                           |
-| ------------------------------ | ------------------ | -------------- | -------------------------------------------------------------- |
-| `unknown` → `granted`          | 送る               | **送らない**   | 再訪問者のハイドレーション。`pathname` effect が既に送っている |
-| `unknown` → `unset` / `denied` | 送る               | 送らない       | 同上                                                           |
-| `unset` → `granted`            | 送る               | **送る**       | 同意成立。それまで cookieless だった                           |
-| `unset` → `denied`             | 送る               | 送らない       | 既定値と同じ                                                   |
-| `granted` → `denied`           | 送る               | 送らない       | `_ga` 系 Cookie を削除（§5.7）                                 |
-| `denied` → `granted`           | 送る               | 送る           |                                                                |
-| **`granted` → `unset`**        | **送る（denied）** | 送らない       | **ログアウト（§4.3）／版の切り上げ。** `_ga` も削除            |
-| **`denied` → `unset`**         | 送る（denied）     | 送らない       | 同上                                                           |
+| 遷移                           | `consent update`   | 備考                                                |
+| ------------------------------ | ------------------ | --------------------------------------------------- |
+| `unknown` → `granted`          | 送る               | 再訪問者のハイドレーション                          |
+| `unknown` → `unset` / `denied` | 送る               |                                                     |
+| `unset` → `granted`            | 送る               | 同意成立                                            |
+| `unset` → `denied`             | 送る               | 既定値と同じ                                        |
+| `granted` → `denied`           | 送る               | `_ga` 系 Cookie を削除（§5.7）                      |
+| `denied` → `granted`           | 送る               |                                                     |
+| **`granted` → `unset`**        | **送る（denied）** | **ログアウト（§4.3）／版の切り上げ。** `_ga` も削除 |
+| **`denied` → `unset`**         | 送る（denied）     | 同上                                                |
 
 下 2 行は §4.3 のログアウト消去と §4.6 の版切り上げで実際に起きる。表から漏らすと、**ログアウト後も同一 SPA セッションの間 GA が granted のまま動き続ける**。
 
-追加 page_view は「直前が `unset` または `denied`」かつ「§5.5 の ref が示す直近送信 pathname と異なる」ときに限る。
+**同意が成立しても page_view は送り直さない（実装時に方針変更）。** 第 5 版までは「`unset → granted` では追加の page_view を送る」としていたが、これは**同意まで gtag.js を読み込まない basic 構成の発想**だった。本構成は advanced なので、未同意の時点で既に Cookie を伴わない page_view が送られており、再送すると同じ閲覧が 2 件計上される。page_view は §5.5 の `pathname` effect だけが送る。
 
 `window.gtag` が未定義のとき（GA ID 無効で head スクリプトが出ていない）は `consent update` をスキップし、Cookie 削除のみ行う。
 

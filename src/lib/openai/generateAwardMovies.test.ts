@@ -1145,6 +1145,39 @@ describe('resolveAwardsWithTMDb', () => {
       expect(result[0].tmdb_movie_id).toBe(1007);
     });
 
+    /**
+     * `/` を落とす緩和で誤一致が増えないことを確かめる。
+     * 区切り記号を取り除いても、残りの文字列が違えば不一致のままでなければ
+     * ならない。
+     */
+    it.each([
+      ['名もなき者 A COMPLETE UNKNOWN', '名もなき者/A DIFFERENT TITLE'],
+      ['クィア QUEER', 'クィア／JAPAN'],
+      ['AIR エア', 'AIR/エアポート'],
+    ])('区切りを落としても別作品は一致しない: %s', async (source, tmdb) => {
+      mockSearchMovies.mockResolvedValue({
+        results: [
+          {
+            id: 1008,
+            title: tmdb,
+            original_title: 'Unrelated Original',
+            poster_path: null,
+            release_date: '2026-01-01',
+            vote_average: 7.0,
+            genre_ids: [18],
+          },
+        ],
+      });
+      mockGetMovieTitleAliases.mockResolvedValue([]);
+
+      const result = await resolveAwardsWithTMDb(
+        [createAwardItem({ title_ja: source, title_en: source })],
+        testAwardDefinition,
+      );
+
+      expect(result).toHaveLength(0);
+    });
+
     it('一度却下した映画を次の検索段で再判定しない', async () => {
       // 検索語を変えても同じ映画が返るのは普通。記録しないと同じ作品に対して
       // 最大4回ぶんの問い合わせを繰り返す

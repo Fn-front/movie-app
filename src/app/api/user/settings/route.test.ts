@@ -76,6 +76,9 @@ describe('GET /api/user/settings', () => {
       theme: 'dark',
       notificationEnabled: true,
       streamingNoticeScope: 'any',
+      cookieConsent: 'unset',
+      cookieConsentAt: null,
+      cookieConsentVersion: null,
     });
   });
 
@@ -100,6 +103,9 @@ describe('GET /api/user/settings', () => {
       theme: 'system',
       notificationEnabled: false,
       streamingNoticeScope: 'any',
+      cookieConsent: 'unset',
+      cookieConsentAt: null,
+      cookieConsentVersion: null,
     });
   });
 
@@ -152,6 +158,9 @@ describe('GET /api/user/settings', () => {
       theme: 'system',
       notificationEnabled: false,
       streamingNoticeScope: 'any',
+      cookieConsent: 'unset',
+      cookieConsentAt: null,
+      cookieConsentVersion: null,
     });
   });
 });
@@ -337,5 +346,335 @@ describe('配信範囲設定', () => {
     await PUT(createPutRequest({ notificationEnabled: true }));
 
     expect(upsertedData).not.toHaveProperty('streaming_notice_scope');
+  });
+});
+
+describe('Cookie同意', () => {
+  /** upsert に渡された行を記録する */
+  let upsertedData: Record<string, unknown> = {};
+
+  /**
+   * cookieConsent を含む PUT は upsert の前に現在値を select する。
+   * select → upsert の2段チェーンを順に積む。
+   *
+   * @param currentConsent 既存行の cookie_consent。null なら行が無い状態
+   */
+  const mockConsentPut = (currentConsent: string | null) => {
+    upsertedData = {};
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: () => ({
+            data:
+              currentConsent === null
+                ? null
+                : { cookie_consent: currentConsent },
+            error: null,
+          }),
+        }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({
+      upsert: (row: Record<string, unknown>) => {
+        upsertedData = row;
+        return { error: null };
+      },
+    });
+  };
+
+  /** 日時のクランプを検証するため、現在時刻を固定する */
+  const NOW = '2026-11-10T00:00:00.000Z';
+  /** COOKIE_CONSENT_MIN_AT より後、かつ NOW より前の妥当な同意日時 */
+  const AT = '2026-11-05T12:00:00.000Z';
+
+  beforeAll(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date(NOW));
+  });
+
+  afterAll(() => {
+    jest.useRealTimers();
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      user: { id: 'user-123' },
+    });
+  });
+
+  describe('GET', () => {
+    it('3フィールドを返す', async () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            single: () => ({
+              data: {
+                theme: 'dark',
+                notification_enabled: true,
+                streaming_notice_scope: 'any',
+                cookie_consent: 'granted',
+                cookie_consent_at: AT,
+                cookie_consent_version: 1,
+              },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const response = await GET();
+      const json = await response.json();
+
+      expect(json.data.cookieConsent).toBe('granted');
+      expect(json.data.cookieConsentAt).toBe(AT);
+      expect(json.data.cookieConsentVersion).toBe(1);
+    });
+
+    it('列を足す前に作られた行は未決定・null に倒す', async () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            single: () => ({
+              data: {
+                theme: 'dark',
+                notification_enabled: true,
+                streaming_notice_scope: 'any',
+                cookie_consent: null,
+                cookie_consent_at: null,
+                cookie_consent_version: null,
+              },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const response = await GET();
+      const json = await response.json();
+
+      expect(json.data.cookieConsent).toBe('unset');
+      expect(json.data.cookieConsentAt).toBeNull();
+      expect(json.data.cookieConsentVersion).toBeNull();
+    });
+  });
+
+  describe('PUT', () => {
+    it('同意状態と日時を保存し、版はサーバーが書く', async () => {
+      mockConsentPut(null);
+
+      const response = await PUT(
+        createPutRequest({ cookieConsent: 'granted', cookieConsentAt: AT }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(upsertedData.cookie_consent).toBe('granted');
+      expect(upsertedData.cookie_consent_at).toBe(AT);
+      expect(upsertedData.cookie_consent_version).toBe(1);
+    });
+
+    it('クライアントが送った版は無視する', async () => {
+      // 版をクライアント申告にすると、古い同意を現行版に見せかけて
+      // 再同意を回避できてしまう
+      mockConsentPut(null);
+
+      await PUT(
+        createPutRequest({
+          cookieConsent: 'granted',
+          cookieConsentAt: AT,
+          cookieConsentVersion: 99,
+        }),
+      );
+
+      expect(upsertedData.cookie_consent_version).toBe(1);
+    });
+
+    it('状態が変わらないときは日時を据え置き、版だけ書く', async () => {
+      // 最初の意思表示時刻を証跡として保つ。版を書かないと別端末が毎回
+      // 「版違い＝未決定」と判定してバナーを無限に再表示する
+      mockConsentPut('granted');
+
+      await PUT(
+        createPutRequest({ cookieConsent: 'granted', cookieConsentAt: AT }),
+      );
+
+      expect(upsertedData).not.toHaveProperty('cookie_consent_at');
+      expect(upsertedData.cookie_consent_version).toBe(1);
+    });
+
+    it('状態が変わるときは日時を更新する', async () => {
+      mockConsentPut('granted');
+
+      await PUT(
+        createPutRequest({ cookieConsent: 'denied', cookieConsentAt: AT }),
+      );
+
+      expect(upsertedData.cookie_consent_at).toBe(AT);
+    });
+
+    it('行が無い利用者でも500にならない（初回同意）', async () => {
+      mockConsentPut(null);
+
+      const response = await PUT(
+        createPutRequest({ cookieConsent: 'granted', cookieConsentAt: AT }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(upsertedData.cookie_consent_at).toBe(AT);
+    });
+
+    it('未決定を送ると日時を null へ正規化する（CHECK制約を満たす）', async () => {
+      mockConsentPut('granted');
+
+      await PUT(
+        createPutRequest({ cookieConsent: 'unset', cookieConsentAt: AT }),
+      );
+
+      expect(upsertedData.cookie_consent).toBe('unset');
+      expect(upsertedData.cookie_consent_at).toBeNull();
+    });
+
+    it('他の設定だけ更新しても同意に触れない', async () => {
+      upsertedData = {};
+      mockFrom.mockReturnValueOnce({
+        upsert: (row: Record<string, unknown>) => {
+          upsertedData = row;
+          return { error: null };
+        },
+      });
+
+      await PUT(createPutRequest({ theme: 'dark' }));
+
+      expect(upsertedData).not.toHaveProperty('cookie_consent');
+      expect(upsertedData).not.toHaveProperty('cookie_consent_version');
+    });
+  });
+
+  describe('日時のクランプ', () => {
+    it('未来すぎる日時はサーバー受信時刻へ丸める', async () => {
+      // 端末の時計が進んでいても同意状態そのものは必ず保存する。
+      // 400 で拒否すると永久に保存されず、リトライがレート制限を食い潰す
+      mockConsentPut(null);
+      const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+      const response = await PUT(
+        createPutRequest({ cookieConsent: 'granted', cookieConsentAt: future }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(upsertedData.cookie_consent).toBe('granted');
+      expect(upsertedData.cookie_consent_at).toBe(NOW);
+    });
+
+    it('時計ずれの範囲（+5分以内）はそのまま通す', async () => {
+      mockConsentPut(null);
+      const slightlyAhead = new Date(Date.now() + 60 * 1000).toISOString();
+
+      await PUT(
+        createPutRequest({
+          cookieConsent: 'granted',
+          cookieConsentAt: slightlyAhead,
+        }),
+      );
+
+      expect(upsertedData.cookie_consent_at).toBe(slightlyAhead);
+    });
+
+    it('機能リリース前の日時はサーバー受信時刻へ丸める', async () => {
+      mockConsentPut(null);
+
+      await PUT(
+        createPutRequest({
+          cookieConsent: 'granted',
+          cookieConsentAt: '2020-01-02T00:00:00.000Z',
+        }),
+      );
+
+      expect(upsertedData.cookie_consent_at).toBe(NOW);
+    });
+  });
+
+  describe('バリデーション', () => {
+    it('同意状態だけ送ると400（証跡の改ざんを防ぐ）', async () => {
+      const response = await PUT(createPutRequest({ cookieConsent: 'denied' }));
+
+      expect(response.status).toBe(400);
+    });
+
+    it('日時だけ送ると400', async () => {
+      const response = await PUT(createPutRequest({ cookieConsentAt: AT }));
+
+      expect(response.status).toBe(400);
+    });
+
+    it('未知の同意状態は400', async () => {
+      const response = await PUT(
+        createPutRequest({ cookieConsent: 'maybe', cookieConsentAt: AT }),
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    it('ISO 8601 でない日時は400', async () => {
+      const response = await PUT(
+        createPutRequest({
+          cookieConsent: 'granted',
+          cookieConsentAt: 'not-a-date',
+        }),
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    it('PostgREST 形式（+00:00）の日時も受け付ける', async () => {
+      // サーバーから降ろした値をそのまま送り返す経路があるため
+      mockConsentPut(null);
+
+      const response = await PUT(
+        createPutRequest({
+          cookieConsent: 'granted',
+          cookieConsentAt: '2026-11-03T12:00:00+00:00',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+  });
+
+  describe('処理順', () => {
+    it('バリデーションエラー時はレート制限を消費しない', async () => {
+      // 認証 → バリデーション → レート制限 の順であることの回帰テスト。
+      // 逆順だと、端末の時計ずれ由来の400でカウンタを食い潰し、
+      // テーマ変更など他の設定まで429になる
+      const response = await PUT(createPutRequest({ cookieConsent: 'denied' }));
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).not.toHaveBeenCalled();
+    });
+
+    it('壊れたJSONは400で、レート制限も消費しない', async () => {
+      const request = new Request('http://localhost/api/user/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{"theme":',
+      });
+
+      const response = await PUT(request);
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.code).toBe('VALIDATION_ERROR');
+      expect(mockCheckRateLimit).not.toHaveBeenCalled();
+    });
+
+    it('正常系ではレート制限を消費する', async () => {
+      mockConsentPut(null);
+
+      await PUT(
+        createPutRequest({ cookieConsent: 'granted', cookieConsentAt: AT }),
+      );
+
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
   });
 });

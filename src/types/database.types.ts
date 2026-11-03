@@ -944,6 +944,9 @@ export type Database = {
       };
       user_settings: {
         Row: {
+          cookie_consent: string;
+          cookie_consent_at: string | null;
+          cookie_consent_version: number | null;
           created_at: string;
           id: string;
           notification_enabled: boolean;
@@ -953,6 +956,9 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          cookie_consent?: string;
+          cookie_consent_at?: string | null;
+          cookie_consent_version?: number | null;
           created_at?: string;
           id?: string;
           notification_enabled?: boolean;
@@ -962,6 +968,9 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          cookie_consent?: string;
+          cookie_consent_at?: string | null;
+          cookie_consent_version?: number | null;
           created_at?: string;
           id?: string;
           notification_enabled?: boolean;

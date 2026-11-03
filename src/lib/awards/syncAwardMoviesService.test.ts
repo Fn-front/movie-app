@@ -39,6 +39,12 @@ jest.mock('@/lib/eiga/fetchEigaOscarAwards', () => ({
     mockFetchEigaOscarAwards(...args),
 }));
 
+const mockFetchEigaGoldenGlobes = jest.fn();
+jest.mock('@/lib/eiga/fetchEigaGoldenGlobes', () => ({
+  fetchEigaGoldenGlobes: (...args: unknown[]) =>
+    mockFetchEigaGoldenGlobes(...args),
+}));
+
 import {
   getAwardsForMonth,
   executeSyncAwardMoviesCron,
@@ -49,19 +55,25 @@ import { AWARD_DEFINITIONS } from '@/constants/awards';
 // --- Helper ---
 
 /**
- * ゴールデングローブ賞のwikitext（最小形）
- *
- * この賞は OpenAI を通さず wikitext を直接パースするため、記事本文を
- * 返さないと0件になる。パーサ自体の検証は
- * `src/lib/wikipedia/parseGoldenGlobesAwards.test.ts` で行う。
+ * ゴールデングローブ賞は eiga.com から取る（OpenAIもWikipediaも通らない）。
+ * 抽出ロジックの検証は `src/lib/eiga/fetchEigaGoldenGlobes.test.ts` で行う。
  */
-const GOLDEN_GLOBES_WIKITEXT = `== 受賞とノミネート ==
-{| class="wikitable"
-| valign="top" |{{Award category|#F9EFAA|[[ゴールデングローブ賞 映画部門 作品賞 (ドラマ部門)|作品賞 (ドラマ部門)]]}}
-
-* '''『[[テスト映画]]』'''
-** 『[[テスト映画2]]』
-|}`;
+const GOLDEN_GLOBES_ITEMS = [
+  {
+    title_ja: 'テスト映画',
+    title_en: 'テスト映画',
+    category: 'best_drama',
+    is_winner: true,
+    year: 2025,
+  },
+  {
+    title_ja: 'テスト映画2',
+    title_en: 'テスト映画2',
+    category: 'best_drama',
+    is_winner: false,
+    year: 2025,
+  },
+];
 
 /**
  * カンヌ映画祭のwikitext（最小形）
@@ -164,7 +176,7 @@ describe('executeSyncAwardMoviesCron', () => {
     // 1月に設定（ゴールデングローブ賞）
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchWikipediaArticle.mockResolvedValue(GOLDEN_GLOBES_WIKITEXT);
+    mockFetchEigaGoldenGlobes.mockResolvedValue(GOLDEN_GLOBES_ITEMS);
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -177,18 +189,20 @@ describe('executeSyncAwardMoviesCron', () => {
     }
   });
 
-  it('ゴールデングローブ賞ではOpenAIを呼ばない', async () => {
+  it('ゴールデングローブ賞はeiga.comから取得し、OpenAIもWikipediaも使わない', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchWikipediaArticle.mockResolvedValue(GOLDEN_GLOBES_WIKITEXT);
+    mockFetchEigaGoldenGlobes.mockResolvedValue(GOLDEN_GLOBES_ITEMS);
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
     await executeSyncAwardMoviesCron(supabase);
 
+    expect(mockFetchEigaGoldenGlobes).toHaveBeenCalledWith(2026);
     expect(mockFetchAwardsFromOpenAI).not.toHaveBeenCalled();
+    expect(mockFetchWikipediaArticle).not.toHaveBeenCalled();
 
-    // wikitextから読んだ内容がそのまま解決へ渡る
+    // eiga.com から読んだ内容がそのまま解決へ渡る
     const items = mockResolveAwardsWithTMDb.mock.calls[0][0];
     expect(items.map((i: { title_ja: string }) => i.title_ja)).toEqual([
       'テスト映画',
@@ -221,10 +235,10 @@ describe('executeSyncAwardMoviesCron', () => {
     ]);
   });
 
-  it('ゴールデングローブ賞で記事が取得できない場合はスキップする', async () => {
+  it('ゴールデングローブ賞でeiga.comが0件を返した場合はスキップする', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchWikipediaArticle.mockResolvedValue(null);
+    mockFetchEigaGoldenGlobes.mockResolvedValue([]);
 
     const supabase = createMockSupabase();
     const result = await executeSyncAwardMoviesCron(supabase);
@@ -233,6 +247,7 @@ describe('executeSyncAwardMoviesCron', () => {
     if (result.type === 'success') {
       expect(result.data.skipped_awards).toContain('golden_globes');
     }
+    // 静かに OpenAI 経路へ落ちない
     expect(mockFetchAwardsFromOpenAI).not.toHaveBeenCalled();
   });
 

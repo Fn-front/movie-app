@@ -39,13 +39,16 @@ export const SYNCABLE_AWARD_OPTIONS = SYNCABLE_AWARD_NAMES.map((name) => ({
  * 記事が存在しない年を指定すると OpenAI 到達前に空配列が返るため暴発は
  * しないが、記事がある年なら無駄に全部門ぶん課金してしまう。
  *
- * カンヌは `firstEditionYear` が 0（Wikipedia テンプレートが年ベースのため
- * 回数計算が不要）なので、第1回の開催年を明示する。
+ * カンヌだけ `firstEditionYear` を使わず明示値にしている。1948・1950が
+ * 中止になっており、回数と開催年の差が一定にならないため。実測した対応は
+ * 第1回=1946 / 第2回=1947 / 第3回=1949 / 第4回=1951 で、差が 1947 に
+ * 固定されるのは第4回（1951年）以降。それより前は
+ * `buildWikipediaTitle` が実在しない回数を算出する。
  */
 export const AWARD_SYNC_MIN_YEAR: Record<SyncableAwardName, number> = {
   academy_awards: AWARD_DEFINITIONS.academy_awards.firstEditionYear,
   golden_globes: AWARD_DEFINITIONS.golden_globes.firstEditionYear,
-  cannes: 1946,
+  cannes: 1951,
 };
 
 /**

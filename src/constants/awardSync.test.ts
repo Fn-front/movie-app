@@ -34,8 +34,9 @@ describe('awardSync constants', () => {
   it('賞ごとに取得可能な最小年を持つ', () => {
     expect(AWARD_SYNC_MIN_YEAR.academy_awards).toBe(1928);
     expect(AWARD_SYNC_MIN_YEAR.golden_globes).toBe(1943);
-    // カンヌは firstEditionYear が 0（年ベーステンプレート）なので明示値
-    expect(AWARD_SYNC_MIN_YEAR.cannes).toBe(1946);
+    // カンヌは1948・1950の中止で回数と開催年の差が一定にならない。
+    // 差が1947で固定されるのは第4回（1951年）以降
+    expect(AWARD_SYNC_MIN_YEAR.cannes).toBe(1951);
   });
 
   /**
@@ -57,8 +58,8 @@ describe('awardSync constants', () => {
     const currentYear = new Date().getFullYear();
 
     it('賞ごとの下限と当年+1の範囲を判定する', () => {
-      expect(isSyncableYear('cannes', 1946)).toBe(true);
-      expect(isSyncableYear('cannes', 1945)).toBe(false);
+      expect(isSyncableYear('cannes', 1951)).toBe(true);
+      expect(isSyncableYear('cannes', 1950)).toBe(false);
       expect(isSyncableYear('cannes', currentYear + 1)).toBe(true);
       expect(isSyncableYear('cannes', currentYear + 2)).toBe(false);
     });

@@ -22,7 +22,16 @@ export interface AwardDefinition {
   month: number;
   /** Wikipedia記事タイトルのテンプレート（{edition}が回数、{year}が年に置換される） */
   wikipediaTemplate: string;
-  /** 第1回の開催年（回数計算用） */
+  /**
+   * 回数計算の基準年。`edition = 開催年 - firstEditionYear` で使う
+   *
+   * 「第1回の開催年」ではなく**その前年**にあたる。アカデミー賞の第1回は
+   * 1929年だが、ここは 1928 を持つ。
+   *
+   * ⚠️ 中止年がある賞は差が一定にならない。カンヌは1948・1950が中止のため、
+   *    この式が成立するのは第4回（1951年）以降。下限は
+   *    `AWARD_SYNC_MIN_YEAR`（`./awardSync.ts`）で別に持つ。
+   */
   firstEditionYear: number;
   /** 部門一覧 */
   categories: readonly AwardCategory[];
@@ -69,8 +78,14 @@ export const AWARD_DEFINITIONS = {
   cannes: {
     label: 'カンヌ映画祭',
     month: 5,
-    wikipediaTemplate: '{year}年のカンヌ国際映画祭',
-    firstEditionYear: 0, // 年ベーステンプレートのため回数計算不要
+    /**
+     * ⚠️ 年ベース（`{year}年のカンヌ国際映画祭`）にしないこと。
+     *    その名前の記事は日本語Wikipediaに存在せず、記事取得が必ず失敗して
+     *    同期が常に0件で終わる（実際に長期間その状態だった）。
+     *    実在するのは回数ベースの `第{edition}回カンヌ国際映画祭`。
+     */
+    wikipediaTemplate: '第{edition}回カンヌ国際映画祭',
+    firstEditionYear: 1947,
     categories: [
       { key: 'palme_dor', label: 'パルムドール' },
       { key: 'grand_prix', label: 'グランプリ' },

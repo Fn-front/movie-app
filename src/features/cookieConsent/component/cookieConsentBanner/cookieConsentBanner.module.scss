@@ -1,0 +1,73 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+// 同意バナー
+//
+// position: fixed にして、高さの分だけ AppLayout・body・トーストから
+// 差し引く（--cookie-banner-height）。フロー配置にすると
+// .c_app_layout が height: 100vh を使い切った下に積まれ、初期表示で
+// 画面外に出てしまう。
+//
+// z-index はヘッダーと同値（1030）。モーダル(1050)・トースト(1080)より
+// 下なので、ダイアログ表示中にバナーが前へ出ることはない。
+.c_cookie_banner {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: $z-index-fixed;
+  background-color: $background-paper;
+  border-top: $border-width-1 solid $border-color;
+  box-shadow: $shadow-lg;
+
+  // コンテナ
+  &__container {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-3;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: $spacing-4;
+
+    @include lg {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: $spacing-6;
+      padding: $spacing-4 $spacing-6;
+    }
+  }
+
+  // 説明文
+  &__text {
+    margin: 0;
+    font-size: $font-size-sm;
+    line-height: $line-height-loose;
+    color: $text-primary;
+  }
+
+  // プライバシーポリシーへのリンク
+  &__link {
+    color: $text-link;
+    text-decoration: underline;
+
+    @include focus-visible;
+  }
+
+  // 操作ボタン
+  //
+  // 「同意する」と「同意しない」は同じ variant で、幅も揃える。
+  // 片方を目立たせるとダークパターンになる
+  &__actions {
+    display: flex;
+    gap: $spacing-3;
+    flex-shrink: 0;
+
+    > * {
+      flex: 1;
+
+      @include lg {
+        flex: 0 0 auto;
+        min-width: 140px;
+      }
+    }
+  }
+}

@@ -1,11 +1,16 @@
 import type { Metadata } from 'next';
 import { Noto_Sans_JP } from 'next/font/google';
 
+import {
+  AnalyticsProvider,
+  getConsentBootstrapScript,
+} from '@/components/providers/analyticsProvider';
 import { AppQueryProvider } from '@/components/providers/queryProvider';
 import { AppSessionProvider } from '@/components/providers/sessionProvider';
 import { AppToastProvider } from '@/components/providers/toastProvider';
 import { ThemeProvider } from '@/components/providers/themeProvider';
 import { APP_NAME } from '@/constants/app';
+import { CookieConsentBanner } from '@/features/cookieConsent/component/cookieConsentBanner/cookieConsentBanner';
 import '@/styles/app.scss';
 
 const noto = Noto_Sans_JP({
@@ -24,6 +29,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const consentBootstrapScript = getConsentBootstrapScript();
+
   return (
     <html lang='ja' suppressHydrationWarning>
       <head>
@@ -45,12 +52,33 @@ export default function RootLayout({
               "(function(){try{var t=localStorage.getItem('movie-app:theme');var d=t==='dark'||((t==='system'||t===null||t==='')&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.setAttribute('data-theme',d?'dark':'light')}catch(e){}})()",
           }}
         />
+        {/*
+          Consent Mode の default。gtag.js の読み込みより前に dataLayer へ
+          積まれている必要があるため <head> に置く。localStorage を同期読みして
+          初期値を決めるので、同意済みの再訪問者に「denied で始めて update する」
+          往復が起きない。
+          文字列は buildConsentBootstrapScript が組み立てる（ストレージキーと
+          版を補間して定数との同期漏れを防ぐため）。GA ID が無効なら null。
+          テーマ初期化と同じく SSR で静的に埋め込むインラインスクリプトなので、
+          Trusted Types の対象外。
+        */}
+        {consentBootstrapScript !== null && (
+          <script
+            dangerouslySetInnerHTML={{ __html: consentBootstrapScript }}
+          />
+        )}
       </head>
       <body className={noto.className}>
         <AppSessionProvider>
           <AppQueryProvider>
             <ThemeProvider />
+            <AnalyticsProvider />
             <AppToastProvider>{children}</AppToastProvider>
+            {/*
+              バナーは本文の後ろに置く。AppLayout のスキップリンクが
+              「DOM 上で最初のフォーカス可能要素」である前提を崩さないため
+            */}
+            <CookieConsentBanner />
           </AppQueryProvider>
         </AppSessionProvider>
       </body>

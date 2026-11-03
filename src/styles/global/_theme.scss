@@ -233,6 +233,10 @@
   --z-index-tooltip: 1070;
   --z-index-toast: 1080;
 
+  // 同意バナーの実高。バナー自身が ResizeObserver で px 付きに上書きする。
+  // 非表示のときは 0px のままなので、差し引いても現状と同一になる
+  --cookie-banner-height: 0px;
+
   // スクロールバー
   --color-scrollbar-track: var(--gray-100);
   --color-scrollbar-thumb: var(--gray-400);

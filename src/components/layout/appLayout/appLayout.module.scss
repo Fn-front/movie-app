@@ -4,7 +4,12 @@
 .c_app_layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  // 定高を維持する。&__body / &__main の内部スクロールと、
+  // サイドバー（.c_sidebar → .c_watchlist_panel の height: 100% チェーン）が
+  // これに依存している。
+  // 同意バナーは position: fixed なので、その分だけ縮めてフッターが
+  // 覆われないようにする。バナーが無いときは calc(100vh - 0px) で現状と同一
+  height: calc(100vh - var(--cookie-banner-height));
   background-color: $background-default;
 
   // スキップリンク（本文へ移動）

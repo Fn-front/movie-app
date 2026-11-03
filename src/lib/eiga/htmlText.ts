@@ -65,37 +65,53 @@ export function decodeHtmlEntities(text: string): string {
 }
 
 /**
- * HTMLタグとエンティティを除去してテキストを取得
+ * HTMLタグを除去する
  *
- * タグ除去は1回の置換で完結する。`[^>]*` が各 `<` から最初の `>` までを貪欲に
- * 消すため、`>` が後続する `<` は必ず同じ走査で一緒に消費される。走査後に残る
- * `<` には後続の `>` が無く、`A<<b>script>B` のような入れ子でもタグが組み上がって
- * 残ることはない（`Ascript>B` になる）。繰り返し適用しても結果は変わらないため
- * ループは設けない。
+ * `<` を見つけたら対応する `>` までを捨てる。`>` が見つからない場合は
+ * `<` だけを捨てて走査を続ける。**戻り値に `<` は残らない。**
  *
- * ⚠️ **CodeQL の `js/incomplete-multi-character-sanitization`（high）が
- *    ここを指摘するが、false positive として dismiss 済み。**
- *    戻り値は作品タイトルの文字列で、DBに保存され React で描画される。
- *    `dangerouslySetInnerHTML` には渡らないため注入経路が無い。
+ * ⚠️ **正規表現（`/<[^>]*>/g`）で書かないこと。** 挙動は同じだが、CodeQL の
+ *    `js/incomplete-multi-character-sanitization`（high）が「多文字を一度だけ
+ *    置換するサニタイザ」として high で指摘する。`a<script` のように閉じ `>` が
+ *    無い入力で `<script` が残るのがその理由。
  *
- *    **後ろに `<` の除去を足しても指摘は消えない。** CodeQL が求めるのは
- *    `/<[^>]*>/g` を**やめて** `/<|>/g` にすること（ルール本文の推奨）だが、
- *    それではタグの中身が本文に残り（`<a href="x">題名</a>` →
- *    `a href="x"題名/a`）、この関数の用途が壊れる。もう一つの推奨である
+ *    ルール本文が示す代替（`/<|>/g` で1文字ずつ落とす）は、タグの中身が本文に
+ *    残るため使えない（`<a href="x">題名</a>` → `a href="x"題名/a`）。
  *    `sanitize-html` の導入は「不要な外部依存を追加しない」方針に反する。
+ *    そこで置換ではなく走査にして、構造ごと解消している。
  *
- *    経緯: PR #837 で9ケースの冪等性を実測して dismiss（alert #7）。
- *    PR #925 でこのファイルへ切り出した際に再浮上し、`<` の追加除去を
- *    試したが消えず、かえって別の指摘を増やしたため元に戻した。
- *    **このコードを別ファイルへ移すと再び指摘される。その都度 dismiss すること。**
+ * 入れ子でもタグは組み上がらない。`A<<b>script>B` は最初の `<` から
+ * 最初の `>` までを捨てて `Ascript>B` になる（PR #837 で実測した挙動と同じ）。
+ */
+function stripHtmlTags(raw: string): string {
+  let result = '';
+  let index = 0;
+
+  while (index < raw.length) {
+    if (raw[index] !== '<') {
+      result += raw[index];
+      index += 1;
+      continue;
+    }
+
+    const closingIndex = raw.indexOf('>', index + 1);
+
+    // 閉じ `>` が無いタグは `<` だけ捨てて中身はテキストとして残す
+    index = closingIndex === -1 ? index + 1 : closingIndex + 1;
+  }
+
+  return result;
+}
+
+/**
+ * HTMLタグとエンティティを除去してテキストを取得
  *
  * ⚠️ 連続空白は畳まない。呼び出し側で必要に応じて行うこと。ここで畳むと
  *    `fetchEigaOscarAwards` の既存の抽出結果が変わる。
  */
 export function cleanHtmlText(raw: string): string {
   return decodeHtmlEntities(
-    raw
-      .replace(/<[^>]*>/g, '')
+    stripHtmlTags(raw)
       .replace(/&nbsp;/g, '')
       .trim(),
   );

@@ -54,15 +54,26 @@ describe('cleanHtmlText', () => {
   });
 
   /**
-   * **既知の限界。** 閉じ `>` が無い入力はタグ除去の正規表現に一致せず、
-   * `<script` が出力に残る（CodeQL `js/incomplete-multi-character-sanitization`
-   * が指摘する点）。戻り値は React で描画される文字列で注入経路が無いため
-   * 許容している。詳細は `cleanHtmlText` のコメント参照。
-   *
-   * この挙動を変える場合はタグの中身が本文へ漏れないか必ず確認すること。
+   * 正規表現 `/<[^>]*>/g` では閉じ `>` が無い入力に一致せず `<script` が
+   * 残っていた（CodeQL `js/incomplete-multi-character-sanitization` の指摘点）。
+   * 走査に置き換えたことで `<` は残らない。
    */
-  it('閉じられていないタグは除去されない（既知の限界）', () => {
-    expect(cleanHtmlText('a<script')).toBe('a<script');
+  it('閉じられていないタグでも < を残さない', () => {
+    expect(cleanHtmlText('a<script')).toBe('ascript');
+    expect(cleanHtmlText('<<<a')).toBe('a');
+  });
+
+  it('戻り値にタグの開始記号が残らない', () => {
+    const inputs = [
+      'A<<b>script>B',
+      '<scr<a>ipt>alert(1)</script>',
+      'X<<<i>i>i>Y',
+      'a<script',
+      '<',
+    ];
+    for (const input of inputs) {
+      expect(cleanHtmlText(input)).not.toContain('<');
+    }
   });
 
   it('エンティティで表現された < は復号される', () => {

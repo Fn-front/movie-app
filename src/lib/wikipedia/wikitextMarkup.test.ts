@@ -35,14 +35,25 @@ describe('stripAnnotations', () => {
   });
 
   /**
-   * **既知の限界。** 各置換は閉じ記号が揃っている前提で、片方しか無い入力は
-   * そのまま残る（CodeQL `js/incomplete-multi-character-sanitization` が
-   * 指摘する点）。戻り値は React で描画される文字列で注入経路が無いため
-   * 許容している。詳細は `stripAnnotations` のコメント参照。
+   * 正規表現 `/<!--[\s\S]*?-->/g` では閉じ忘れの `<!--` が残っていた
+   * （CodeQL `js/incomplete-multi-character-sanitization` の指摘点）。
+   * 走査に置き換え、MediaWiki と同じく以降をすべて隠すようにした。
    */
-  it('閉じ記号の揃っていない注釈は除去されない（既知の限界）', () => {
-    expect(stripAnnotations('作品<!-- 閉じ忘れ')).toBe('作品<!-- 閉じ忘れ');
-    expect(stripAnnotations('作品<ref name="x"')).toBe('作品<ref name="x"');
+  it('閉じ忘れのコメントは以降をすべて隠す', () => {
+    expect(stripAnnotations('作品<!-- 閉じ忘れ')).toBe('作品');
+    expect(stripAnnotations('A<!--x-->B<!--閉じ忘れ')).toBe('AB');
+  });
+
+  it('戻り値にコメントの開始記号が残らない', () => {
+    const inputs = [
+      '作品<!-- メモ -->',
+      '作品<!-- 閉じ忘れ',
+      '<!--',
+      '<!--<!--',
+    ];
+    for (const input of inputs) {
+      expect(stripAnnotations(input)).not.toContain('<!--');
+    }
   });
 
   it('対象外のテキストは変えない', () => {

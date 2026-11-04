@@ -58,6 +58,17 @@ export function describeAwardFetchFailure(failure: AwardFetchFailure): string {
       return `${AWARD_SYNC_MESSAGES.NO_SECTION}: ${failure.wikipediaTitle}`;
     case 'no_tmdb_match':
       return AWARD_SYNC_MESSAGES.NO_TMDB_MATCH;
+    case 'source_unavailable':
+      // eiga.com の URL は環境変数で非公開にしている。画面に出さない
+      return failure.source === 'eiga'
+        ? AWARD_SYNC_MESSAGES.SOURCE_UNAVAILABLE_EIGA
+        : AWARD_SYNC_MESSAGES.SOURCE_UNAVAILABLE_OPENAI;
+    case 'source_changed':
+      return AWARD_SYNC_MESSAGES.SOURCE_CHANGED_EIGA;
+    case 'openai_not_configured':
+      return AWARD_SYNC_MESSAGES.OPENAI_NOT_CONFIGURED;
+    case 'all_hallucinated':
+      return AWARD_SYNC_MESSAGES.ALL_HALLUCINATED;
     case 'no_items':
       return AWARD_SYNC_MESSAGES.NO_ITEMS;
     default: {

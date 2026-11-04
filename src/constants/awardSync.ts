@@ -127,6 +127,16 @@ export const AWARD_SYNC_MESSAGES = {
     'Wikipedia記事が見つかりません。記事名が正しいか確認してください（既存データは変更していません）',
   ARTICLE_UNAVAILABLE:
     'Wikipediaの取得に失敗しました。時間をおいて再実行してください（既存データは変更していません）',
+  SOURCE_UNAVAILABLE_EIGA:
+    '取得元のサイトにアクセスできませんでした。時間をおいて再実行してください（既存データは変更していません）',
+  SOURCE_CHANGED_EIGA:
+    '取得元のページから受賞作品を読み取れませんでした。ページの構成が変わった可能性があります（既存データは変更していません）',
+  OPENAI_NOT_CONFIGURED:
+    'OpenAIのAPIキーが設定されていません（既存データは変更していません）',
+  ALL_HALLUCINATED:
+    '抽出した作品がWikipedia記事に存在しないものばかりでした（既存データは変更していません）',
+  SOURCE_UNAVAILABLE_OPENAI:
+    'OpenAIの呼び出しに失敗しました。時間をおいて再実行してください（既存データは変更していません）',
   NO_SECTION:
     'Wikipedia記事に受賞・ノミネートのセクションが見つかりません。記事の構成が変わった可能性があります（既存データは変更していません）',
   NO_TMDB_MATCH:

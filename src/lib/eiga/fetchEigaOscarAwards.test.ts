@@ -14,8 +14,18 @@ import {
   extractPersonCategoryNominees,
   extractOthersPageNominees,
 } from './fetchEigaOscarAwards';
+import type { EigaFetchOutcome } from './types';
+import type { OpenAiAwardItem } from '@/schema/awards';
 
 jest.mock('axios');
+
+/** ok を前提に items を取り出す。ok でなければその場で落とす */
+function itemsOf(outcome: EigaFetchOutcome): OpenAiAwardItem[] {
+  if (outcome.type !== 'ok') {
+    throw new Error(`期待: ok, 実際: ${outcome.type}`);
+  }
+  return outcome.items;
+}
 
 describe('extractBestPictureNominees', () => {
   it('作品賞ページから受賞作品とノミネート作品を抽出する', () => {
@@ -428,20 +438,24 @@ describe('fetchEigaOscarAwards', () => {
 
     const result = await fetchEigaOscarAwards(2026);
 
-    expect(result.length).toBeGreaterThan(0);
+    expect(itemsOf(result).length).toBeGreaterThan(0);
     // 作品賞
-    const bestPicture = result.find((r) => r.category === 'best_picture');
+    const bestPicture = itemsOf(result).find(
+      (r: { category: string }) => r.category === 'best_picture',
+    );
     expect(bestPicture).toBeDefined();
     expect(bestPicture!.title_ja).toBe('受賞作品');
     expect(bestPicture!.is_winner).toBe(true);
     expect(bestPicture!.year).toBe(2025);
     // 監督賞
-    const bestDirector = result.find((r) => r.category === 'best_director');
+    const bestDirector = itemsOf(result).find(
+      (r: { category: string }) => r.category === 'best_director',
+    );
     expect(bestDirector).toBeDefined();
     expect(bestDirector!.person_name).toBe('テスト俳優');
     // 助演男優賞
-    const supportingActor = result.find(
-      (r) => r.category === 'best_supporting_actor',
+    const supportingActor = itemsOf(result).find(
+      (r: { category: string }) => r.category === 'best_supporting_actor',
     );
     expect(supportingActor).toBeDefined();
     expect(supportingActor!.title_ja).toBe('助演映画');
@@ -458,17 +472,35 @@ describe('fetchEigaOscarAwards', () => {
     const result = await fetchEigaOscarAwards(2026);
 
     // 作品賞はスキップされるが他の部門は取得できる
-    const bestPicture = result.find((r) => r.category === 'best_picture');
+    const bestPicture = itemsOf(result).find(
+      (r: { category: string }) => r.category === 'best_picture',
+    );
     expect(bestPicture).toBeUndefined();
-    expect(result.length).toBeGreaterThan(0);
+    expect(itemsOf(result).length).toBeGreaterThan(0);
   });
 
-  it('全ページ取得失敗時は空配列を返す', async () => {
+  it('全ページ取得失敗時は unavailable を返す', async () => {
     mockedAxios.get.mockRejectedValue(new Error('Network error'));
 
     const result = await fetchEigaOscarAwards(2026);
 
-    expect(result).toEqual([]);
+    // 取得できなかったことを理由として返す。0件と混ぜない
+    expect(result).toEqual({ type: 'unavailable' });
+  });
+
+  it('一部ページだけ失敗して0件なら unavailable を返す', async () => {
+    // 取れたページには該当が無く、取れなかったページに入っていたかもしれない。
+    // 「ページ構造が変わった」と断定できない
+    mockedAxios.get
+      .mockResolvedValueOnce({ data: '' })
+      .mockResolvedValueOnce({ data: '' })
+      .mockResolvedValueOnce({ data: '' })
+      .mockResolvedValueOnce({ data: '' })
+      .mockRejectedValueOnce(new Error('Network error'));
+
+    const result = await fetchEigaOscarAwards(2026);
+
+    expect(result).toEqual({ type: 'unavailable' });
   });
 
   it('all-othersページで対象外セクションのノミネートはスキップされる', async () => {
@@ -491,8 +523,9 @@ describe('fetchEigaOscarAwards', () => {
 
     const result = await fetchEigaOscarAwards(2026);
 
-    // 脚本賞はSECTION_TO_CATEGORYに含まれないためスキップ
-    expect(result).toEqual([]);
+    // 脚本賞はSECTION_TO_CATEGORYに含まれないためスキップ。
+    // 全ページ取得できているので「構造が変わった」側になる
+    expect(result).toEqual({ type: 'empty' });
   });
 
   it('正しいURLパターンでリクエストする', async () => {

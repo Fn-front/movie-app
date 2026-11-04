@@ -114,6 +114,52 @@ describe('describeAwardFetchFailure', () => {
     expect(message).toContain('第78回カンヌ国際映画祭');
   });
 
+  it('取得元に到達できないとき、eiga と OpenAI で文言を分ける', () => {
+    const eiga = describeAwardFetchFailure({
+      type: 'source_unavailable',
+      source: 'eiga',
+    });
+    const openai = describeAwardFetchFailure({
+      type: 'source_unavailable',
+      source: 'openai',
+    });
+
+    expect(eiga).toBe(AWARD_SYNC_MESSAGES.SOURCE_UNAVAILABLE_EIGA);
+    expect(openai).toBe(AWARD_SYNC_MESSAGES.SOURCE_UNAVAILABLE_OPENAI);
+    expect(eiga).not.toBe(openai);
+  });
+
+  it('取得元の URL を画面に出さない', () => {
+    // eiga.com のURLは環境変数で非公開にしている
+    const messages = [
+      describeAwardFetchFailure({ type: 'source_unavailable', source: 'eiga' }),
+      describeAwardFetchFailure({ type: 'source_changed', source: 'eiga' }),
+    ];
+
+    for (const message of messages) {
+      expect(message).not.toMatch(/https?:\/\//);
+      expect(message).not.toContain('eiga.com');
+    }
+  });
+
+  it('OpenAIの設定ミスと呼び出し失敗を分ける', () => {
+    expect(describeAwardFetchFailure({ type: 'openai_not_configured' })).toBe(
+      AWARD_SYNC_MESSAGES.OPENAI_NOT_CONFIGURED,
+    );
+    expect(
+      describeAwardFetchFailure({
+        type: 'source_unavailable',
+        source: 'openai',
+      }),
+    ).toBe(AWARD_SYNC_MESSAGES.SOURCE_UNAVAILABLE_OPENAI);
+  });
+
+  it('全件がハルシネーションだったことを伝える', () => {
+    expect(describeAwardFetchFailure({ type: 'all_hallucinated' })).toBe(
+      AWARD_SYNC_MESSAGES.ALL_HALLUCINATED,
+    );
+  });
+
   it('理由ごとに別の文言になる（1つに畳まない）', () => {
     const messages = [
       describeAwardFetchFailure({
@@ -127,6 +173,14 @@ describe('describeAwardFetchFailure', () => {
       describeAwardFetchFailure({ type: 'no_section', wikipediaTitle: 'X' }),
       describeAwardFetchFailure({ type: 'no_items' }),
       describeAwardFetchFailure({ type: 'no_tmdb_match' }),
+      describeAwardFetchFailure({ type: 'source_unavailable', source: 'eiga' }),
+      describeAwardFetchFailure({
+        type: 'source_unavailable',
+        source: 'openai',
+      }),
+      describeAwardFetchFailure({ type: 'source_changed', source: 'eiga' }),
+      describeAwardFetchFailure({ type: 'openai_not_configured' }),
+      describeAwardFetchFailure({ type: 'all_hallucinated' }),
     ];
 
     expect(new Set(messages).size).toBe(messages.length);

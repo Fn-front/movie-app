@@ -16,6 +16,8 @@ import {
   parseGoldenGlobeRow,
   resolveGoldenGlobeCategoryKey,
 } from './fetchEigaGoldenGlobes';
+import type { EigaFetchOutcome } from './types';
+import type { OpenAiAwardItem } from '@/schema/awards';
 
 jest.mock('axios');
 
@@ -40,6 +42,14 @@ const HTML_72ND = `<div class="award-wrapper cannes">
 <h2><strong>最優秀主演女優賞（コメディ／ミュージカル）</strong><span>Best Performance by an Actress in a Motion Picture - Comedy Or Musical</span></h2>
 <table> <tr> <th scope="row"> <a href="/person/19498/">エイミー・アダムス</a> </th> <td> <a href="/movie/80494/">ビッグ・アイズ</a> </td> </tr> <tr> <th scope="row"> <a href="/person/40141/">エミリー・ブラント</a> </th> <td> <a href="/movie/81238/">イントゥ・ザ・ウッズ</a> </td> </tr> </table>
 </div>`;
+
+/** ok を前提に items を取り出す。ok でなければその場で落とす */
+function itemsOf(outcome: EigaFetchOutcome): OpenAiAwardItem[] {
+  if (outcome.type !== 'ok') {
+    throw new Error(`期待: ok, 実際: ${outcome.type}`);
+  }
+  return outcome.items;
+}
 
 describe('resolveGoldenGlobeCategoryKey', () => {
   it('括弧なしの部門を解決する', () => {
@@ -224,7 +234,7 @@ describe('fetchEigaGoldenGlobes', () => {
       `${EIGA_AWARD_BASE_URL}/golden-globe/2025/`,
       expect.objectContaining({ responseType: 'text' }),
     );
-    expect(result).toContainEqual({
+    expect(itemsOf(result)).toContainEqual({
       title_ja: 'ブルータリスト',
       title_en: 'ブルータリスト',
       category: 'best_drama',
@@ -238,14 +248,14 @@ describe('fetchEigaGoldenGlobes', () => {
 
     const result = await fetchEigaGoldenGlobes(2025);
 
-    expect(result.every((i) => i.year === 2024)).toBe(true);
+    expect(itemsOf(result).every((i) => i.year === 2024)).toBe(true);
   });
 
   it('演技賞では person_name を持たせる', async () => {
     mockedAxios.get.mockResolvedValue({ data: HTML_82ND });
 
     const result = await fetchEigaGoldenGlobes(2025);
-    const maria = result.find((i) => i.title_ja === 'マリア');
+    const maria = itemsOf(result).find((i) => i.title_ja === 'マリア');
 
     expect(maria?.person_name).toBe('アンジェリーナ・ジョリー');
     expect(maria?.category).toBe('best_actress_drama');
@@ -260,7 +270,7 @@ describe('fetchEigaGoldenGlobes', () => {
 
     const result = await fetchEigaGoldenGlobes(2015);
 
-    expect(result.length).toBeGreaterThan(0);
+    expect(itemsOf(result).length).toBeGreaterThan(0);
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('best_actress_musical_comedy'),
     );
@@ -274,11 +284,23 @@ describe('fetchEigaGoldenGlobes', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it('取得に失敗した場合は空配列を返す', async () => {
+  it('ページを取得できなかった場合は unavailable を返す', async () => {
     mockedAxios.get.mockRejectedValue(new Error('Network error'));
 
-    await expect(fetchEigaGoldenGlobes(2025)).resolves.toEqual([]);
+    // 取得できなかったことを理由として返す。0件と混ぜない
+    await expect(fetchEigaGoldenGlobes(2025)).resolves.toEqual({
+      type: 'unavailable',
+    });
     expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('ページは取れたが抽出0件なら empty を返す', async () => {
+    // ページ構造が変わったケース。取得失敗とは対処が違う
+    mockedAxios.get.mockResolvedValue({ data: '<html><body></body></html>' });
+
+    await expect(fetchEigaGoldenGlobes(2025)).resolves.toEqual({
+      type: 'empty',
+    });
   });
 
   it('環境変数が未設定なら例外を投げる', async () => {

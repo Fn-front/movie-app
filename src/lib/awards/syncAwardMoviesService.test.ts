@@ -16,6 +16,7 @@ const mockBuildWikipediaTitle = jest
   .fn<string, [unknown, unknown]>()
   .mockReturnValue('第26回テスト賞');
 const mockExtractMovieTitlesFromWikitext = jest.fn<Set<string>, [string]>();
+const mockExtractPersonNamesFromWikitext = jest.fn<Set<string>, [string]>();
 jest.mock('@/lib/openai/generateAwardMovies', () => ({
   fetchAwardsFromOpenAI: (...args: unknown[]) =>
     mockFetchAwardsFromOpenAI(...args),
@@ -25,6 +26,8 @@ jest.mock('@/lib/openai/generateAwardMovies', () => ({
     mockBuildWikipediaTitle(a, b),
   extractMovieTitlesFromWikitext: (text: string) =>
     mockExtractMovieTitlesFromWikitext(text),
+  extractPersonNamesFromWikitext: (text: string) =>
+    mockExtractPersonNamesFromWikitext(text),
 }));
 
 const mockFetchWikipediaArticle = jest.fn();
@@ -86,6 +89,10 @@ const CANNES_WIKITEXT = `==受賞作品==
 === 公式選出 ===
 ; コンペティション
 * [[パルム・ドール]] - 『[[テスト映画]]』（[[テスト監督]]監督）`;
+
+/** 人名の検証テスト用（OpenAI フォールバック経路） */
+const WIKITEXT_WITH_PERSON =
+  "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』";
 
 function createMockSupabase(upsertResult = { error: null }) {
   return {
@@ -160,6 +167,7 @@ describe('executeSyncAwardMoviesCron', () => {
     mockExtractMovieTitlesFromWikitext.mockReturnValue(
       new Set(['テスト映画', 'テスト']),
     );
+    mockExtractPersonNamesFromWikitext.mockReturnValue(new Set());
     // デフォルトでeiga.comが空配列を返す状態
     mockFetchEigaOscarAwards.mockResolvedValue([]);
   });
@@ -532,6 +540,7 @@ describe('syncSingleAward', () => {
     jest.clearAllMocks();
     mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
+    mockExtractPersonNamesFromWikitext.mockReturnValue(new Set());
     mockFetchEigaOscarAwards.mockResolvedValue([]);
   });
 
@@ -560,6 +569,129 @@ describe('syncSingleAward', () => {
     expect(
       rows.every((r) => r.generated_at === '2026-10-31T00:00:00.000Z'),
     ).toBe(true);
+  });
+
+  it('姓だけの人名は捨てる（部分一致を通さない）', async () => {
+    // articleText.includes だと「ペン」が「ショーン・ペン」に部分一致して通る。
+    // 監督賞の問い合わせに俳優名が混ざっても検知できなくなる
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue(WIKITEXT_WITH_PERSON);
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
+    mockExtractPersonNamesFromWikitext.mockReturnValue(
+      new Set(['ショーン・ペン']),
+    );
+    mockFetchAwardsFromOpenAI.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+        person_name: 'ペン',
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase } = createCapturingSupabase();
+
+    await syncSingleAward(supabase, params);
+
+    const items = mockResolveAwardsWithTMDb.mock.calls[0][0] as {
+      person_name?: string;
+    }[];
+    expect(items.every((i) => i.person_name === undefined)).toBe(true);
+  });
+
+  it('半角中黒や余分な括弧があっても実在する人名は通す', async () => {
+    // OpenAI の出力は非決定的で表記が揺れる。NFKC 正規化して突き合わせる
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue(WIKITEXT_WITH_PERSON);
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
+    mockExtractPersonNamesFromWikitext.mockReturnValue(
+      new Set(['ショーン・ペン']),
+    );
+    mockFetchAwardsFromOpenAI.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+        // 半角中黒（U+FF65）
+        person_name: 'ショーン･ペン',
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase } = createCapturingSupabase();
+
+    await syncSingleAward(supabase, params);
+
+    const items = mockResolveAwardsWithTMDb.mock.calls[0][0] as {
+      person_name?: string;
+    }[];
+    expect(items.every((i) => i.person_name === 'ショーン･ペン')).toBe(true);
+  });
+
+  it('wikitext に無い人名は捨てて作品だけ残す', async () => {
+    // OpenAI 経路は捏造しうる。タイトルと同じく wikitext と突き合わせる
+    // （eiga.com / wikitext パーサは正規表現なので捏造の余地が無い）
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue(
+      "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』",
+    );
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
+    mockFetchAwardsFromOpenAI.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+        person_name: '実在しない人名',
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase } = createCapturingSupabase();
+
+    await syncSingleAward(supabase, params);
+
+    // AWARD_DEFINITIONS の部門ぶんループするので件数は複数になる。
+    // 見たいのは「作品は残り、人名だけ落ちる」こと
+    const items = mockResolveAwardsWithTMDb.mock.calls[0][0] as {
+      title_ja: string;
+      person_name?: string;
+    }[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((i) => i.title_ja === 'テスト映画')).toBe(true);
+    expect(items.every((i) => i.person_name === undefined)).toBe(true);
+  });
+
+  it('wikitext にある人名はそのまま通す', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue(WIKITEXT_WITH_PERSON);
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
+    mockExtractPersonNamesFromWikitext.mockReturnValue(
+      new Set(['ショーン・ペン']),
+    );
+    mockFetchAwardsFromOpenAI.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+        person_name: 'ショーン・ペン',
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase } = createCapturingSupabase();
+
+    await syncSingleAward(supabase, params);
+
+    const items = mockResolveAwardsWithTMDb.mock.calls[0][0] as {
+      person_name?: string;
+    }[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((i) => i.person_name === 'ショーン・ペン')).toBe(true);
   });
 
   it('取得0件を no_items として返し、DBに触らない', async () => {

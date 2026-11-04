@@ -69,6 +69,42 @@ export function extractMovieTitlesFromWikitext(wikitext: string): Set<string> {
   return titles;
 }
 
+/**
+ * 受賞一覧の行から人名を抽出する
+ *
+ * `extractMovieTitlesFromWikitext` の人名版。OpenAI 経路だけが人名を捏造しうる
+ * ため、タイトルと同じく wikitext と突き合わせるための集合を作る。
+ *
+ * **記事全体への部分一致で済ませてはいけない。** `articleText.includes('ペン')`
+ * は『ショーン・ペン』に当たってしまい、姓だけ・名だけが素通りする。司会者や
+ * 追悼セクションの人名も通るため、監督賞の問い合わせに俳優名が返っても検知
+ * できない。`*` / `**` で始まる受賞一覧の行だけを見て、完全一致で照合する。
+ *
+ * 行の形: `* '''[[人名]]''' - 『'''[[作品]]'''』 : 役名 {{Double-dagger}}`
+ * 人名は ` - ` より前に入る。作品賞のように人名を伴わない行は空になる
+ */
+export function extractPersonNamesFromWikitext(wikitext: string): Set<string> {
+  const names = new Set<string>();
+
+  for (const line of wikitext.split('\n')) {
+    if (!line.match(/^\*{1,2}\s/)) continue;
+
+    // 『』を含む行だけが「人名 - 『作品』」の形。作品賞の行には人名が無い
+    const separatorIndex = line.indexOf(' - ');
+    if (separatorIndex === -1 || !line.includes('『')) continue;
+
+    const personPart = line.slice(0, separatorIndex).replace(/^\*{1,2}\s*/, '');
+
+    // 作品賞は「『作品』 - プロデューサー」と順序が逆。- の前が『』なら作品名なので捨てる
+    if (personPart.includes('『')) continue;
+
+    const name = resolveWikitextToDisplayText(personPart);
+    if (name) names.add(name);
+  }
+
+  return names;
+}
+
 /** wikitext内のマークアップを解決して表示テキストを取得 */
 function resolveWikitextToDisplayText(raw: string): string {
   // '''太字'''を除去
@@ -138,6 +174,14 @@ function buildSystemPrompt(): string {
 - 記事中のすべてのノミネート者を1人も欠落なく抽出すること
 - アダルト作品（ポルノ・成人指定作品・ピンク映画等）は抽出対象に含めないこと
 
+## person_name（人名）のルール
+- 演技賞・監督賞など人に贈られる部門では、受賞者・候補者の氏名を person_name に入れること
+- 作品賞など作品に贈られる部門では person_name は null にすること
+- 氏名はwikitext中の表記をそのまま使うこと。[[ショーン・ペン]] や {{仮リンク|ウンミ・モサク|en|Wunmi Mosaku}} のような記法からは、表示される日本語表記だけを取り出すこと
+- 読み・英字表記・敬称を足さないこと。「不明」「該当なし」などの文字列も入れないこと
+- 記事から氏名が読み取れない場合は null にすること（推測で埋めないこと）
+- 同じ作品から複数人がノミネートされている場合は、人ごとに別の項目として返すこと
+
 レスポンスは以下のJSON形式で返してください:
 {
   "awards": [
@@ -146,7 +190,8 @@ function buildSystemPrompt(): string {
       "title_en": "英語タイトル",
       "category": "部門キー",
       "is_winner": true,
-      "year": 2025
+      "year": 2025,
+      "person_name": "人に贈られる部門なら氏名、作品に贈られる部門なら null"
     }
   ]
 }`;
@@ -232,6 +277,9 @@ export async function fetchAwardsFromOpenAI(
                     category: { type: 'string' },
                     is_winner: { type: 'boolean' },
                     year: { type: 'number' },
+                    // 作品に贈られる部門では null。strict モードは properties の
+                    // 全キーを required に入れる必要があるため省略できない
+                    person_name: { type: ['string', 'null'] },
                   },
                   required: [
                     'title_ja',
@@ -239,6 +287,7 @@ export async function fetchAwardsFromOpenAI(
                     'category',
                     'is_winner',
                     'year',
+                    'person_name',
                   ],
                   additionalProperties: false,
                 },

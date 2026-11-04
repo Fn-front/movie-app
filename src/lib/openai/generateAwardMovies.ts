@@ -506,10 +506,20 @@ export async function resolveAwardsWithTMDb(
         continue;
       }
 
-      // 同じ映画×同じ部門の重複を防止（DBユニーク制約に合わせる）
+      // 空白だけの人名は「人名なし」に寄せる。DB の一意キーは NULL 同士を
+      // 重複とみなす（NULLS NOT DISTINCT）ため、空文字を素通しすると
+      // 同じ作品賞が「空文字の行」と「NULLの行」で2行入る
+      const personName = item.person_name?.trim() || undefined;
+
+      // 同じ映画×同じ部門×同じ人の重複を防止（DBユニーク制約に合わせる）。
+      // 人名まで見るのは、演技賞で同じ作品から複数人がノミネートされるため。
+      // 人名を無視すると先に来た1人だけが残り、受賞者が後ろにいると受賞が消える
       if (
         resolved.some(
-          (r) => r.tmdb_movie_id === movie.id && r.category === item.category,
+          (r) =>
+            r.tmdb_movie_id === movie.id &&
+            r.category === item.category &&
+            r.person_name === personName,
         )
       ) {
         continue;
@@ -530,7 +540,7 @@ export async function resolveAwardsWithTMDb(
         category: item.category,
         is_winner: item.is_winner,
         display_order: currentOrder,
-        person_name: item.person_name,
+        person_name: personName,
       });
     } catch (error) {
       console.error(`TMDb search failed for "${item.title_ja}":`, error);

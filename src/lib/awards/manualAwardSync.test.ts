@@ -4,6 +4,7 @@
 
 import { executeManualAwardSync } from './manualAwardSync';
 import { AWARD_SYNC_MESSAGES } from '@/constants/awardSync';
+import { AWARD_MOVIES_CONFLICT_TARGET } from '@/constants/awards';
 
 const mockFetchAndResolveAward = jest.fn();
 jest.mock('./syncAwardMoviesService', () => ({
@@ -100,6 +101,20 @@ describe('executeManualAwardSync', () => {
       JOB_ID,
       { status: 'succeeded', totalUpserted: 1 },
     );
+  });
+
+  it('UPSERT の競合キーに person_name を含める', async () => {
+    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    const db = createSupabase();
+
+    await executeManualAwardSync(wrap(db), params);
+
+    // 定数そのものを突き合わせる。文字列を直書きすると、本物の定数が
+    // 変わってもこのテストが緑のまま通ってしまう
+    expect(db.upsert.mock.calls[0][1]).toEqual({
+      onConflict: AWARD_MOVIES_CONFLICT_TARGET,
+    });
+    expect(AWARD_MOVIES_CONFLICT_TARGET).toContain('person_name');
   });
 
   it('取得0件なら award_movies に一切触らず failed にする', async () => {

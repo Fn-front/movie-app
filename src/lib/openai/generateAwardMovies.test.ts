@@ -770,7 +770,7 @@ describe('resolveAwardsWithTMDb', () => {
     expect(mockSearchMovies).not.toHaveBeenCalled();
   });
 
-  it('同じ映画×同じ部門の重複はスキップする', async () => {
+  it('同じ映画×同じ部門×人名なしの重複はスキップする', async () => {
     mockSearchMovies.mockResolvedValue({
       results: [
         {
@@ -791,6 +791,65 @@ describe('resolveAwardsWithTMDb', () => {
     const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
 
     expect(result).toHaveLength(1);
+  });
+
+  it('空白だけの人名は人名なしとして扱い、重複を1件に潰す', async () => {
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 310,
+          title: 'テスト映画',
+          poster_path: null,
+          release_date: '2026-01-01',
+          vote_average: 7.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    // DB の一意キーは NULL 同士を重複とみなす（NULLS NOT DISTINCT）。
+    // 空文字を素通しすると DB 側で別キー扱いになり、作品賞が2行入る
+    const items = [
+      createAwardItem({ person_name: '' }),
+      createAwardItem({ person_name: '   ' }),
+      createAwardItem({}),
+    ];
+    const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].person_name).toBeUndefined();
+  });
+
+  it('同じ映画×同じ部門でも人名が異なれば両方残す', async () => {
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 974950,
+          title: 'テスト映画',
+          poster_path: null,
+          release_date: '2026-01-01',
+          vote_average: 7.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    // 第82回ゴールデングローブ賞 助演女優賞の『エミリア・ペレス』と同じ形。
+    // 受賞者が後ろにいるため、先勝ちで潰すと受賞が丸ごと消える
+    const items = [
+      createAwardItem({ is_winner: false, person_name: 'セレーナ・ゴメス' }),
+      createAwardItem({ is_winner: true, person_name: 'ゾーイ・サルダナ' }),
+    ];
+    const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+    expect(result.map((r) => r.person_name)).toEqual([
+      'セレーナ・ゴメス',
+      'ゾーイ・サルダナ',
+    ]);
+    expect(result.map((r) => r.display_order)).toEqual([1, 2]);
+    expect(result.find((r) => r.is_winner)?.person_name).toBe(
+      'ゾーイ・サルダナ',
+    );
   });
 
   it('同じ映画でも部門が異なれば別々に追加する', async () => {

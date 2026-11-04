@@ -17,7 +17,10 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { AWARD_DEFINITIONS } from '@/constants/awards';
+import {
+  AWARD_DEFINITIONS,
+  AWARD_MOVIES_CONFLICT_TARGET,
+} from '@/constants/awards';
 import {
   AWARD_SYNC_MESSAGES,
   AWARD_SYNC_STATUS,
@@ -85,7 +88,7 @@ export async function executeManualAwardSync(
     const { error: upsertError } = await supabase
       .from('award_movies')
       .upsert(resolved.rows, {
-        onConflict: 'tmdb_movie_id,award_name,award_year,category',
+        onConflict: AWARD_MOVIES_CONFLICT_TARGET,
       });
 
     // UPSERT が失敗したらここで終わる。DELETE へ進むと既存データを失う

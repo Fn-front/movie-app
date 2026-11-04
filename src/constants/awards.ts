@@ -160,6 +160,15 @@ export const AWARD_TITLE_MATCH_MAX_CANDIDATES = 3;
 export const AWARDS_EXCLUDED = ['japan_academy_awards'] as const;
 
 /**
+ * award_movies の一意キー（DB の uq_award_movies_entry と同じ並び）
+ *
+ * UPSERT の競合キーとして supabase-js に渡す。DB 側の制約を変えたらここも直す。
+ * cron と手動同期の両方から参照するため、副作用の無いこのモジュールに置く
+ */
+export const AWARD_MOVIES_CONFLICT_TARGET =
+  'tmdb_movie_id,award_name,award_year,category,person_name';
+
+/**
  * 受賞年バリデーション範囲
  */
 export const AWARD_YEAR_RANGE = {

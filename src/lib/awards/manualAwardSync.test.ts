@@ -2,7 +2,10 @@
  * @jest-environment node
  */
 
-import { executeManualAwardSync } from './manualAwardSync';
+import {
+  describeAwardFetchFailure,
+  executeManualAwardSync,
+} from './manualAwardSync';
 import { AWARD_SYNC_MESSAGES } from '@/constants/awardSync';
 import { AWARD_MOVIES_CONFLICT_TARGET } from '@/constants/awards';
 
@@ -77,6 +80,66 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockIsJobStillRunning.mockResolvedValue(true);
   mockFinishJobIfRunning.mockResolvedValue(true);
+});
+
+describe('describeAwardFetchFailure', () => {
+  // 本Issueの肝。記事名が出れば、それが実在するかを admin がその場で確かめられる
+  it('記事が無いときは記事名を添える', () => {
+    const message = describeAwardFetchFailure({
+      type: 'no_article',
+      wikipediaTitle: '第152回カンヌ国際映画祭',
+    });
+
+    expect(message).toContain(AWARD_SYNC_MESSAGES.NO_ARTICLE);
+    expect(message).toContain('第152回カンヌ国際映画祭');
+  });
+
+  it('取得に失敗したときは記事名を添えて再実行を促す', () => {
+    const message = describeAwardFetchFailure({
+      type: 'article_unavailable',
+      wikipediaTitle: '第78回カンヌ国際映画祭',
+    });
+
+    expect(message).toContain(AWARD_SYNC_MESSAGES.ARTICLE_UNAVAILABLE);
+    expect(message).toContain('第78回カンヌ国際映画祭');
+  });
+
+  it('セクションが無いときは記事名を添える', () => {
+    const message = describeAwardFetchFailure({
+      type: 'no_section',
+      wikipediaTitle: '第78回カンヌ国際映画祭',
+    });
+
+    expect(message).toContain(AWARD_SYNC_MESSAGES.NO_SECTION);
+    expect(message).toContain('第78回カンヌ国際映画祭');
+  });
+
+  it('理由ごとに別の文言になる（1つに畳まない）', () => {
+    const messages = [
+      describeAwardFetchFailure({
+        type: 'no_article',
+        wikipediaTitle: 'X',
+      }),
+      describeAwardFetchFailure({
+        type: 'article_unavailable',
+        wikipediaTitle: 'X',
+      }),
+      describeAwardFetchFailure({ type: 'no_section', wikipediaTitle: 'X' }),
+      describeAwardFetchFailure({ type: 'no_items' }),
+      describeAwardFetchFailure({ type: 'no_tmdb_match' }),
+    ];
+
+    expect(new Set(messages).size).toBe(messages.length);
+  });
+
+  it('TMDb解決0件と取得0件は従来どおりの文言', () => {
+    expect(describeAwardFetchFailure({ type: 'no_tmdb_match' })).toBe(
+      AWARD_SYNC_MESSAGES.NO_TMDB_MATCH,
+    );
+    expect(describeAwardFetchFailure({ type: 'no_items' })).toBe(
+      AWARD_SYNC_MESSAGES.NO_ITEMS,
+    );
+  });
 });
 
 describe('executeManualAwardSync', () => {
@@ -182,6 +245,28 @@ describe('executeManualAwardSync', () => {
       onConflict: AWARD_MOVIES_CONFLICT_TARGET,
     });
     expect(AWARD_MOVIES_CONFLICT_TARGET).toContain('person_name');
+  });
+
+  it('記事が無いときは記事名付きのメッセージで failed にする', async () => {
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'no_article',
+      wikipediaTitle: '第152回カンヌ国際映画祭',
+    });
+    const db = createSupabase();
+
+    await executeManualAwardSync(wrap(db), params);
+
+    expect(db.upsert).not.toHaveBeenCalled();
+    expect(mockFinishJobIfRunning).toHaveBeenCalledWith(
+      expect.anything(),
+      JOB_ID,
+      {
+        status: 'failed',
+        errorMessage: expect.stringContaining(
+          '第152回カンヌ国際映画祭',
+        ) as unknown as string,
+      },
+    );
   });
 
   it('取得0件なら award_movies に一切触らず failed にする', async () => {

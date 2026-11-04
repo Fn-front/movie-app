@@ -28,7 +28,10 @@ import {
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
 } from '@/lib/openai/generateAwardMovies';
-import { fetchWikipediaArticle } from '@/lib/wikipedia/fetchArticle';
+import {
+  fetchWikipediaArticle,
+  type SectionLookup,
+} from '@/lib/wikipedia/fetchArticle';
 import { fetchEigaGoldenGlobes } from '@/lib/eiga/fetchEigaGoldenGlobes';
 import { fetchCannesFromWikitext } from '@/lib/wikipedia/parseCannesAwards';
 
@@ -42,8 +45,8 @@ import { deleteStaleAwardRows } from './deleteStaleAwardRows';
  */
 export interface SkippedAward {
   award_name: string;
-  /** `AwardFetchFailure['type']` のほか、書き込み失敗は `write_failed`、例外は `error` */
-  reason: string;
+  /** 取得できなかった理由。書き込み失敗は `write_failed`、例外は `error` */
+  reason: AwardFetchFailure['type'] | 'write_failed' | 'error';
   /** 記事名やエラーメッセージなど、理由を特定するための補足 */
   detail?: string;
 }
@@ -532,15 +535,27 @@ async function fetchAwardItemsFromWikitext(
     console.warn(
       `No entries parsed from "${wikipediaTitle}". 記事の書式が変わった可能性がある`,
     );
-    return {
-      items,
-      failure: article.sectionFound
-        ? { type: 'no_items' }
-        : { type: 'no_section', wikipediaTitle },
-    };
+    return { items, failure: toEmptyFailure(article, wikipediaTitle) };
   }
 
   return { items };
+}
+
+/**
+ * 記事は取れたが抽出0件だったときの理由を決める
+ *
+ * `no_section` を名乗れるのは、セクション一覧を**読めたうえで**該当が
+ * 無かった（`absent`）ときだけ。一覧自体を読めなかった（`unknown`）ときに
+ * 「記事の構成が変わった」と出すと、実際には変わっていないパーサの調査へ
+ * admin を誘導してしまう
+ */
+function toEmptyFailure(
+  article: { sectionLookup: SectionLookup },
+  wikipediaTitle: string,
+): AwardFetchFailure {
+  return article.sectionLookup === 'absent'
+    ? { type: 'no_section', wikipediaTitle }
+    : { type: 'no_items' };
 }
 
 /** 記事取得の失敗を同期側の理由へ移す */
@@ -548,8 +563,9 @@ function toArticleFailure(
   article: { type: 'not_found' | 'fetch_failed' },
   wikipediaTitle: string,
 ): AwardFetchFailure {
+  // 「記事が無い」のログは fetchWikipediaArticle が既に出している。
+  // ここでは取得失敗だけを、賞ではなく記事名で記録する
   if (article.type === 'not_found') {
-    console.warn(`Wikipedia article not found: "${wikipediaTitle}"`);
     return { type: 'no_article', wikipediaTitle };
   }
 
@@ -641,9 +657,7 @@ async function fetchAwardItemsViaWikipedia(
   if (allAiItems.length === 0) {
     return {
       items: allAiItems,
-      failure: article.sectionFound
-        ? { type: 'no_items' }
-        : { type: 'no_section', wikipediaTitle },
+      failure: toEmptyFailure(article, wikipediaTitle),
     };
   }
 

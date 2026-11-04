@@ -60,7 +60,7 @@ describe('fetchWikipediaArticle', () => {
     expect(result).toEqual({
       type: 'ok',
       wikitext: '== 受賞とノミネート ==\nテスト本文',
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
@@ -80,7 +80,7 @@ describe('fetchWikipediaArticle', () => {
     expect(result).toEqual({
       type: 'ok',
       wikitext: 'ノミネートデータ',
-      sectionFound: true,
+      sectionLookup: 'found',
     });
   });
 
@@ -96,11 +96,11 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    // 受賞セクションが無いことは呼び出し元が理由として使う
+    // 一覧は取れて該当が無かった。呼び出し元が no_section の根拠に使う
     expect(result).toEqual({
       type: 'ok',
       wikitext: '記事全体のテキスト',
-      sectionFound: false,
+      sectionLookup: 'absent',
     });
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
@@ -112,9 +112,11 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toMatchObject({
+    // 一覧自体が取れていない。「セクションが無い」とは言い切れない
+    expect(result).toEqual({
       type: 'ok',
       wikitext: 'フォールバックテキスト',
+      sectionLookup: 'unknown',
     });
   });
 
@@ -127,9 +129,10 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toMatchObject({
+    expect(result).toEqual({
       type: 'ok',
       wikitext: 'フォールバックテキスト',
+      sectionLookup: 'unknown',
     });
   });
 
@@ -145,7 +148,12 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toMatchObject({ type: 'ok', wikitext: '全体テキスト' });
+    // セクションは見つかっていた。本文が取れなかっただけ
+    expect(result).toEqual({
+      type: 'ok',
+      wikitext: '全体テキスト',
+      sectionLookup: 'found',
+    });
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
@@ -222,6 +230,11 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toMatchObject({ type: 'ok', wikitext: '全体テキスト' });
+    // sections が配列でない＝一覧として読めていない
+    expect(result).toEqual({
+      type: 'ok',
+      wikitext: '全体テキスト',
+      sectionLookup: 'unknown',
+    });
   });
 });

@@ -95,7 +95,7 @@ const WIKITEXT_WITH_PERSON =
   "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』";
 
 function createMockSupabase(
-  upsertResult = { error: null },
+  upsertResult: { error: { message: string } | null } = { error: null },
   deleteResult: { error: unknown } = { error: null },
 ) {
   return {
@@ -168,7 +168,7 @@ describe('executeSyncAwardMoviesCron', () => {
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: '== テスト記事 ==',
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     // デフォルトですべてのタイトルを許可
     mockExtractMovieTitlesFromWikitext.mockReturnValue(
@@ -267,7 +267,14 @@ describe('executeSyncAwardMoviesCron', () => {
   it('例外で落ちた賞も理由付きで残す', async () => {
     jest.setSystemTime(new Date('2026-05-15T00:00:00Z'));
 
-    mockFetchWikipediaArticle.mockRejectedValue(new Error('network down'));
+    // fetchWikipediaArticle は例外を内部で握るので reject しない。
+    // 実際に投げうるのは TMDb 解決のほう
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: CANNES_WIKITEXT,
+      sectionLookup: 'found',
+    });
+    mockResolveAwardsWithTMDb.mockRejectedValue(new Error('network down'));
 
     const supabase = createMockSupabase();
     const result = await executeSyncAwardMoviesCron(supabase);
@@ -279,6 +286,27 @@ describe('executeSyncAwardMoviesCron', () => {
           award_name: 'cannes',
           reason: 'error',
           detail: 'network down',
+        },
+      ]);
+    }
+  });
+
+  it('書き込みに失敗した賞は理由とエラーメッセージを残す', async () => {
+    jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
+
+    mockFetchEigaGoldenGlobes.mockResolvedValue(GOLDEN_GLOBES_ITEMS);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+
+    const supabase = createMockSupabase({ error: { message: 'upsert boom' } });
+    const result = await executeSyncAwardMoviesCron(supabase);
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.data.skipped_awards).toEqual([
+        {
+          award_name: 'golden_globes',
+          reason: 'write_failed',
+          detail: 'upsert boom',
         },
       ]);
     }
@@ -314,7 +342,7 @@ describe('executeSyncAwardMoviesCron', () => {
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: CANNES_WIKITEXT,
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
@@ -429,7 +457,7 @@ describe('executeSyncAwardMoviesCron', () => {
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: '== テスト記事 ==',
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト']));
     mockFetchAwardsFromOpenAI.mockResolvedValue(null);
@@ -512,7 +540,7 @@ describe('executeSyncAwardMoviesCron', () => {
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: '== テスト記事 ==',
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockFetchAwardsFromOpenAI.mockResolvedValue([
@@ -640,7 +668,7 @@ describe('syncSingleAward', () => {
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: '== テスト記事 ==',
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockExtractPersonNamesFromWikitext.mockReturnValue(new Set());
@@ -681,7 +709,7 @@ describe('syncSingleAward', () => {
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: WIKITEXT_WITH_PERSON,
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockExtractPersonNamesFromWikitext.mockReturnValue(
@@ -714,7 +742,7 @@ describe('syncSingleAward', () => {
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: WIKITEXT_WITH_PERSON,
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockExtractPersonNamesFromWikitext.mockReturnValue(
@@ -749,7 +777,7 @@ describe('syncSingleAward', () => {
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』",
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockFetchAwardsFromOpenAI.mockResolvedValue([
@@ -783,7 +811,7 @@ describe('syncSingleAward', () => {
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: WIKITEXT_WITH_PERSON,
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockExtractPersonNamesFromWikitext.mockReturnValue(
@@ -847,7 +875,7 @@ describe('syncSingleAward', () => {
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: '== 概要 ==\n本文',
-      sectionFound: false,
+      sectionLookup: 'absent',
     });
     mockFetchAwardsFromOpenAI.mockResolvedValue(null);
     const { supabase } = createCapturingSupabase();
@@ -860,12 +888,29 @@ describe('syncSingleAward', () => {
     });
   });
 
+  it('セクション一覧を読めなかったときは no_section を名乗らない', async () => {
+    // 一覧APIが一時的に落ちただけ。「記事の構成が変わった」と出すと、
+    // 実際には変わっていないパーサの調査へ admin を誘導してしまう
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== 概要 ==\n本文',
+      sectionLookup: 'unknown',
+    });
+    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    const { supabase } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'no_items' });
+  });
+
   it('セクションはあるが抽出0件なら no_items を返す', async () => {
     mockFetchEigaOscarAwards.mockResolvedValue([]);
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: '== 受賞とノミネート ==\n本文',
-      sectionFound: true,
+      sectionLookup: 'found',
     });
     mockFetchAwardsFromOpenAI.mockResolvedValue(null);
     const { supabase } = createCapturingSupabase();

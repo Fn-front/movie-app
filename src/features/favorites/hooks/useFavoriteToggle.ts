@@ -7,6 +7,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 
 import { useFavorites } from '@/features/favorites/hooks/useFavorites';
+import { useFavoriteLookup } from '@/features/favorites/hooks/useFavoriteLookup';
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
@@ -75,11 +76,14 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
     addToFavorites,
     updateRating,
     removeFromFavorites,
-    getFavoriteInfo,
     isAdding,
     isUpdating,
     isRemoving,
   } = useFavorites();
+
+  // 登録済み判定は一覧（1ページ20件）ではなく専用の照会から引く。
+  // 一覧から引くと21件目以降が未登録と判定されていた（#829）
+  const { getFavoriteInfo } = useFavoriteLookup();
 
   const { status } = useSession();
   const isAuthenticated = status === 'authenticated';

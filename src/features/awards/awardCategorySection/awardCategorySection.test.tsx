@@ -10,11 +10,16 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
     movie,
     onClick,
   }: {
-    movie: { id: number; title: string };
+    movie: {
+      id: number;
+      title: string;
+      favorite?: { id: string; rating: number } | null;
+    };
     onClick?: (movieId: number) => void;
   }) => (
     <div
       data-testid={`movie-tile-${movie.id}`}
+      data-favorite-rating={movie.favorite ? String(movie.favorite.rating) : ''}
       role='button'
       tabIndex={0}
       onClick={() => onClick?.(movie.id)}
@@ -60,6 +65,7 @@ const defaultProps = {
   isMovieToggling: jest.fn().mockReturnValue(false),
   onFavoriteToggle: jest.fn(),
   isFavoriteProcessing: jest.fn().mockReturnValue(false),
+  getFavoriteInfo: jest.fn().mockReturnValue(null),
 };
 
 // --- Tests ---
@@ -299,5 +305,103 @@ describe('AwardCategorySection', () => {
     // personName が null のデフォルトデータでは人名要素が存在しない
     const personNames = document.querySelectorAll('[class*="person_name"]');
     expect(personNames).toHaveLength(0);
+  });
+
+  /**
+   * 受賞作品APIはお気に入りを返さないため、ここで結合しないと
+   * 登録済みでも未登録表示のままになる（#830）
+   */
+  describe('お気に入りの結合', () => {
+    it('getFavoriteInfo の結果が受賞・ノミネート両方のタイルへ渡る', () => {
+      const category = createMockCategory();
+      const getFavoriteInfo = jest.fn((tmdbMovieId: number) =>
+        tmdbMovieId === 100 ? { id: 'fav-100', rating: 9 } : null,
+      );
+
+      render(
+        <AwardCategorySection
+          category={category}
+          {...defaultProps}
+          getFavoriteInfo={getFavoriteInfo}
+        />,
+      );
+
+      expect(screen.getByTestId('movie-tile-100')).toHaveAttribute(
+        'data-favorite-rating',
+        '9',
+      );
+      expect(screen.getByTestId('movie-tile-200')).toHaveAttribute(
+        'data-favorite-rating',
+        '',
+      );
+    });
+
+    // 依存配列に getFavoriteInfo が無いと、お気に入りを操作しても
+    // useMemo が再計算されず表示が追従しない
+    it('getFavoriteInfo が変わるとタイルの評価が追従する', () => {
+      const category = createMockCategory();
+
+      const { rerender } = render(
+        <AwardCategorySection
+          category={category}
+          {...defaultProps}
+          getFavoriteInfo={() => null}
+        />,
+      );
+
+      expect(screen.getByTestId('movie-tile-100')).toHaveAttribute(
+        'data-favorite-rating',
+        '',
+      );
+
+      rerender(
+        <AwardCategorySection
+          category={category}
+          {...defaultProps}
+          getFavoriteInfo={() => ({ id: 'fav-100', rating: 6 })}
+        />,
+      );
+
+      expect(screen.getByTestId('movie-tile-100')).toHaveAttribute(
+        'data-favorite-rating',
+        '6',
+      );
+    });
+
+    // 年度を切り替えると category が丸ごと差し替わる
+    it('カテゴリのデータが差し替わっても結合が維持される', () => {
+      const getFavoriteInfo = jest.fn((tmdbMovieId: number) =>
+        tmdbMovieId === 400 ? { id: 'fav-400', rating: 3 } : null,
+      );
+
+      const { rerender } = render(
+        <AwardCategorySection
+          category={createMockCategory()}
+          {...defaultProps}
+          getFavoriteInfo={getFavoriteInfo}
+        />,
+      );
+
+      rerender(
+        <AwardCategorySection
+          category={createMockCategory({
+            nominees: [
+              createAwardMovie({
+                tmdbMovieId: 400,
+                title: '別年度の受賞映画',
+                isWinner: true,
+              }),
+            ],
+          })}
+          {...defaultProps}
+          getFavoriteInfo={getFavoriteInfo}
+        />,
+      );
+
+      expect(screen.getByTestId('movie-tile-400')).toHaveAttribute(
+        'data-favorite-rating',
+        '3',
+      );
+    });
   });
 });

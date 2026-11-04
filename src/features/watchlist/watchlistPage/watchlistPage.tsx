@@ -139,6 +139,7 @@ export const WatchlistPage = memo(function WatchlistPage() {
         onDelete={removeFromWatchlist}
         onWatchedToggle={handleWatchedToggle}
         isWatchedUpdating={isUpdatingWatched}
+        getFavoriteInfo={getFavoriteInfo}
       />
 
       {hasNextPage && (

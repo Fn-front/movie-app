@@ -5,9 +5,14 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, createElement } from 'react';
+import { AxiosError, AxiosHeaders } from 'axios';
 
 import { useFavorites } from './useFavorites';
-import { movieKeys } from '@/constants';
+import {
+  favoriteKeys,
+  movieKeys,
+  FAVORITES_ERROR_MESSAGES,
+} from '@/constants';
 
 // --- Mocks ---
 
@@ -429,6 +434,326 @@ describe('useFavorites', () => {
         data: { favorite: { id: string; rating: number } | null };
       }>(movieKeys.detail(100));
       expect(detail?.data.favorite).toBeNull();
+    });
+  });
+
+  /**
+   * 照会キャッシュ（favoriteKeys.lookup）は一覧とは別キーのため、
+   * movieKeys.all の楽観的更新では追従しない。ここを更新しないと
+   * 検索結果・受賞作品・ウォッチリストの表示が再取得1往復ぶん遅れる
+   */
+  describe('お気に入り照会キャッシュの楽観的更新', () => {
+    const seedLookup = (
+      queryClient: QueryClient,
+      favorites: { id: string; tmdb_movie_id: number; rating: number }[],
+    ) => {
+      queryClient.setQueryData(favoriteKeys.lookup(), {
+        success: true,
+        data: { favorites },
+      });
+    };
+
+    const readLookup = (queryClient: QueryClient) =>
+      queryClient.getQueryData<{
+        success: true;
+        data: {
+          favorites: { id: string; tmdb_movie_id: number; rating: number }[];
+        };
+      }>(favoriteKeys.lookup())?.data.favorites;
+
+    it('追加すると照会キャッシュへ実IDで反映される', async () => {
+      mockAddFavorite.mockResolvedValue({
+        success: true,
+        message: 'お気に入りに追加しました',
+        data: {
+          id: 'fav-new',
+          tmdb_movie_id: 300,
+          title: '映画C',
+          poster_path: null,
+          release_date: null,
+          rating: 7,
+          added_at: '2026-03-10T00:00:00Z',
+        },
+      });
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      seedLookup(queryClient, []);
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.addToFavorites({
+          tmdb_movie_id: 300,
+          title: '映画C',
+          rating: 7,
+        });
+      });
+
+      await waitFor(() => {
+        expect(readLookup(queryClient)).toEqual([
+          { id: 'fav-new', tmdb_movie_id: 300, rating: 7 },
+        ]);
+      });
+    });
+
+    it('追加に失敗すると照会キャッシュが元に戻る', async () => {
+      mockAddFavorite.mockRejectedValue(new Error('network error'));
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      seedLookup(queryClient, []);
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.addToFavorites({
+          tmdb_movie_id: 300,
+          title: '映画C',
+          rating: 7,
+        });
+      });
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({ variant: 'error' }),
+        );
+      });
+      expect(readLookup(queryClient)).toEqual([]);
+    });
+
+    it('評価を更新すると照会キャッシュの評価も変わる', async () => {
+      mockUpdateFavoriteRating.mockResolvedValue({
+        success: true,
+        message: '評価を更新しました',
+        data: {
+          id: 'fav-1',
+          tmdb_movie_id: 100,
+          title: '映画A',
+          poster_path: '/a.jpg',
+          release_date: '2026-01-01',
+          rating: 9,
+          added_at: '2026-01-10T00:00:00Z',
+        },
+      });
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      seedLookup(queryClient, [
+        { id: 'fav-1', tmdb_movie_id: 100, rating: 8 },
+      ]);
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.updateRating('fav-1', 9);
+      });
+
+      await waitFor(() => {
+        expect(readLookup(queryClient)).toEqual([
+          { id: 'fav-1', tmdb_movie_id: 100, rating: 9 },
+        ]);
+      });
+    });
+
+    it('削除すると照会キャッシュから消える', async () => {
+      mockRemoveFavorite.mockResolvedValue(undefined);
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      seedLookup(queryClient, [
+        { id: 'fav-1', tmdb_movie_id: 100, rating: 8 },
+        { id: 'fav-2', tmdb_movie_id: 200, rating: 5 },
+      ]);
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.removeFromFavorites('fav-1');
+      });
+
+      await waitFor(() => {
+        expect(readLookup(queryClient)).toEqual([
+          { id: 'fav-2', tmdb_movie_id: 200, rating: 5 },
+        ]);
+      });
+    });
+
+    it('削除に失敗すると照会キャッシュが元に戻る', async () => {
+      mockRemoveFavorite.mockRejectedValue(new Error('network error'));
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      seedLookup(queryClient, [
+        { id: 'fav-1', tmdb_movie_id: 100, rating: 8 },
+      ]);
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.removeFromFavorites('fav-1');
+      });
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({ variant: 'error' }),
+        );
+      });
+      expect(readLookup(queryClient)).toEqual([
+        { id: 'fav-1', tmdb_movie_id: 100, rating: 8 },
+      ]);
+    });
+
+    it('照会キャッシュが未取得でも追加が成功する', async () => {
+      mockAddFavorite.mockResolvedValue({
+        success: true,
+        message: 'お気に入りに追加しました',
+        data: {
+          id: 'fav-new',
+          tmdb_movie_id: 300,
+          title: '映画C',
+          poster_path: null,
+          release_date: null,
+          rating: 7,
+          added_at: '2026-03-10T00:00:00Z',
+        },
+      });
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.addToFavorites({
+          tmdb_movie_id: 300,
+          title: '映画C',
+          rating: 7,
+        });
+      });
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({ variant: 'success' }),
+        );
+      });
+      expect(readLookup(queryClient)).toBeUndefined();
+    });
+  });
+
+  /**
+   * 他タブで先に登録された等、クライアントが知り得ない重複では 409 が返る。
+   * 汎用の「追加に失敗しました」だけだと原因が伝わらないため文言を分ける
+   */
+  describe('重複（409）のハンドリング', () => {
+    const createConflictError = () => {
+      const error = new AxiosError('Request failed with status code 409');
+      error.response = {
+        status: 409,
+        statusText: 'Conflict',
+        data: {
+          success: false,
+          error: { code: 'CONFLICT', message: '既に登録されています' },
+        },
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+      };
+      return error;
+    };
+
+    it('409なら重複だと分かるトーストを出す', async () => {
+      mockAddFavorite.mockRejectedValue(createConflictError());
+
+      const { result } = renderHook(() => useFavorites(), {
+        wrapper: createWrapper(),
+      });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.addToFavorites({
+          tmdb_movie_id: 300,
+          title: '映画C',
+          rating: 7,
+        });
+      });
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({
+            description: FAVORITES_ERROR_MESSAGES.ALREADY_EXISTS,
+            variant: 'error',
+          }),
+        );
+      });
+    });
+
+    it('409以外は従来どおり汎用の失敗メッセージを出す', async () => {
+      mockAddFavorite.mockRejectedValue(new Error('network error'));
+
+      const { result } = renderHook(() => useFavorites(), {
+        wrapper: createWrapper(),
+      });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.addToFavorites({
+          tmdb_movie_id: 300,
+          title: '映画C',
+          rating: 7,
+        });
+      });
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({
+            description: FAVORITES_ERROR_MESSAGES.ADD_FAILED,
+            variant: 'error',
+          }),
+        );
+      });
+    });
+
+    // onSettled の invalidate で照会が取り直され、実際の登録状態に追従する
+    it('409でもお気に入りキャッシュが無効化される', async () => {
+      mockAddFavorite.mockRejectedValue(createConflictError());
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.addToFavorites({
+          tmdb_movie_id: 300,
+          title: '映画C',
+          rating: 7,
+        });
+      });
+
+      await waitFor(() => {
+        expect(invalidateSpy).toHaveBeenCalledWith({
+          queryKey: favoriteKeys.all,
+        });
+      });
     });
   });
 

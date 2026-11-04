@@ -10,6 +10,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
+import { AxiosError } from 'axios';
 
 import {
   getFavorites,
@@ -19,6 +20,8 @@ import {
 } from '@/lib/api/favorites/favorites';
 import type {
   FavoriteItem,
+  FavoriteLookupItem,
+  GetFavoriteLookupResponse,
   GetFavoritesRequest,
   MovieFavoriteInfo,
 } from '@/lib/api/favorites/favorites';
@@ -27,10 +30,25 @@ import { useToast } from '@/hooks/useToast';
 import {
   favoriteKeys,
   movieKeys,
+  HTTP_STATUS,
   FAVORITES_ERROR_MESSAGES,
   FAVORITES_SUCCESS_MESSAGES,
 } from '@/constants';
 import type { GetMoviesResponse } from '@/lib/api/movies/movies';
+
+/**
+ * 他タブなどで先に登録されていて重複エラー（409）になったかどうか
+ *
+ * クライアントは自分が知っている状態でしか判断できないため、この経路は
+ * 原理的に残る。汎用の「追加に失敗しました」だけだと何が起きたのか
+ * 伝わらないので、文言を分けて onSettled の再取得で表示を追従させる
+ */
+function isConflictError(error: unknown): boolean {
+  return (
+    error instanceof AxiosError &&
+    error.response?.status === HTTP_STATUS.CONFLICT
+  );
+}
 
 /**
  * useFavoritesフックの返り値
@@ -52,8 +70,6 @@ export interface UseFavoritesReturn {
   updateRating: (id: string, rating: number) => void;
   /** お気に入りから削除 */
   removeFromFavorites: (id: string) => void;
-  /** 指定映画のお気に入り情報を取得（未登録ならnull） */
-  getFavoriteInfo: (tmdbMovieId: number) => MovieFavoriteInfo | null;
   /** 追加中 */
   isAdding: boolean;
   /** 更新中 */
@@ -137,46 +153,113 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
     [queryClient],
   );
 
+  // お気に入り照会キャッシュ（favoriteKeys.lookup）の更新ユーティリティ
+  //
+  // 照会は一覧とは別キーなので movieKeys.all の楽観的更新では追従しない。
+  // ここを更新しないと、評価を付けた直後に検索結果・受賞作品・ウォッチリストの
+  // 表示が再取得1往復ぶん遅れる
+  const updateLookupCache = useCallback(
+    (updater: (items: FavoriteLookupItem[]) => FavoriteLookupItem[]) => {
+      queryClient.setQueryData<GetFavoriteLookupResponse>(
+        favoriteKeys.lookup(),
+        (old) =>
+          old
+            ? {
+                ...old,
+                data: { ...old.data, favorites: updater(old.data.favorites) },
+              }
+            : old,
+      );
+    },
+    [queryClient],
+  );
+
+  // 失敗時に巻き戻せるよう、書き換える前の照会キャッシュを控える
+  const snapshotLookupCache = useCallback(
+    () =>
+      queryClient.getQueryData<GetFavoriteLookupResponse>(
+        favoriteKeys.lookup(),
+      ),
+    [queryClient],
+  );
+
+  const restoreLookupCache = useCallback(
+    (previous: GetFavoriteLookupResponse | undefined) => {
+      // 未取得（undefined）だったときは楽観的更新も行われていないため戻さない
+      if (!previous) return;
+      queryClient.setQueryData(favoriteKeys.lookup(), previous);
+    },
+    [queryClient],
+  );
+
   // 追加mutation（楽観的UI更新）
   const addMutation = useMutation({
     mutationFn: addFavorite,
     onMutate: async (newItem) => {
       await queryClient.cancelQueries({ queryKey: movieKeys.all });
+      await queryClient.cancelQueries({ queryKey: favoriteKeys.lookup() });
 
       // 映画一覧キャッシュの現在値を保存
       const previousMoviesCache = queryClient.getQueriesData<{
         pages: GetMoviesResponse[];
         pageParams: number[];
       }>({ queryKey: movieKeys.all });
+      const previousLookup = snapshotLookupCache();
+
+      // サーバーが採番するまでの仮ID。一覧・照会の両方で同じ値を使い、
+      // onSuccess でまとめて実際のIDに差し替える
+      const optimisticId = `optimistic-${Date.now()}`;
 
       // 楽観的に映画一覧キャッシュを更新
       updateMovieCacheFavorite(newItem.tmdb_movie_id, {
-        id: `optimistic-${Date.now()}`,
+        id: optimisticId,
         rating: newItem.rating,
       });
+      updateLookupCache((items) => [
+        ...items.filter((item) => item.tmdb_movie_id !== newItem.tmdb_movie_id),
+        {
+          id: optimisticId,
+          tmdb_movie_id: newItem.tmdb_movie_id,
+          rating: newItem.rating,
+        },
+      ]);
 
-      return { previousMoviesCache };
+      return { previousMoviesCache, previousLookup, optimisticId };
     },
-    onSuccess: (response) => {
+    onSuccess: (response, _newItem, context) => {
       // 楽観的IDを実際のIDで上書き
       updateMovieCacheFavorite(response.data.tmdb_movie_id, {
         id: response.data.id,
         rating: response.data.rating,
       });
+      updateLookupCache((items) =>
+        items.map((item) =>
+          item.id === context?.optimisticId
+            ? {
+                id: response.data.id,
+                tmdb_movie_id: response.data.tmdb_movie_id,
+                rating: response.data.rating,
+              }
+            : item,
+        ),
+      );
       toast({
         title: FAVORITES_SUCCESS_MESSAGES.ADDED,
         variant: 'success',
       });
     },
-    onError: (_error, _newItem, context) => {
+    onError: (error, _newItem, context) => {
       if (context?.previousMoviesCache) {
         for (const [key, data] of context.previousMoviesCache) {
           queryClient.setQueryData(key, data);
         }
       }
+      restoreLookupCache(context?.previousLookup);
       toast({
         title: 'エラー',
-        description: FAVORITES_ERROR_MESSAGES.ADD_FAILED,
+        description: isConflictError(error)
+          ? FAVORITES_ERROR_MESSAGES.ALREADY_EXISTS
+          : FAVORITES_ERROR_MESSAGES.ADD_FAILED,
         variant: 'error',
       });
     },
@@ -191,11 +274,17 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
       updateFavoriteRating(id, { rating }),
     onMutate: async ({ id, rating }) => {
       await queryClient.cancelQueries({ queryKey: movieKeys.all });
+      await queryClient.cancelQueries({ queryKey: favoriteKeys.lookup() });
 
       const previousMoviesCache = queryClient.getQueriesData<{
         pages: GetMoviesResponse[];
         pageParams: number[];
       }>({ queryKey: movieKeys.all });
+      const previousLookup = snapshotLookupCache();
+
+      updateLookupCache((items) =>
+        items.map((item) => (item.id === id ? { ...item, rating } : item)),
+      );
 
       // 映画関連キャッシュからお気に入りIDを探して楽観的更新（一覧＋詳細）
       queryClient.setQueriesData(
@@ -241,7 +330,7 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
         },
       );
 
-      return { previousMoviesCache };
+      return { previousMoviesCache, previousLookup };
     },
     onSuccess: () => {
       toast({
@@ -255,6 +344,7 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
           queryClient.setQueryData(key, data);
         }
       }
+      restoreLookupCache(context?.previousLookup);
       toast({
         title: 'エラー',
         description: FAVORITES_ERROR_MESSAGES.UPDATE_FAILED,
@@ -271,11 +361,15 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
     mutationFn: removeFavorite,
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: movieKeys.all });
+      await queryClient.cancelQueries({ queryKey: favoriteKeys.lookup() });
 
       const previousMoviesCache = queryClient.getQueriesData<{
         pages: GetMoviesResponse[];
         pageParams: number[];
       }>({ queryKey: movieKeys.all });
+      const previousLookup = snapshotLookupCache();
+
+      updateLookupCache((items) => items.filter((item) => item.id !== id));
 
       // 映画関連キャッシュからお気に入りをnullに設定（一覧＋詳細）
       queryClient.setQueriesData(
@@ -318,7 +412,7 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
         },
       );
 
-      return { previousMoviesCache };
+      return { previousMoviesCache, previousLookup };
     },
     onSuccess: () => {
       toast({
@@ -332,6 +426,7 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
           queryClient.setQueryData(key, data);
         }
       }
+      restoreLookupCache(context?.previousLookup);
       toast({
         title: 'エラー',
         description: FAVORITES_ERROR_MESSAGES.REMOVE_FAILED,
@@ -371,15 +466,6 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
     [removeMutation],
   );
 
-  const getFavoriteInfo = useCallback(
-    (tmdbMovieId: number): MovieFavoriteInfo | null => {
-      const item = favorites.find((f) => f.tmdb_movie_id === tmdbMovieId);
-      if (!item) return null;
-      return { id: item.id, rating: item.rating };
-    },
-    [favorites],
-  );
-
   const fetchNextPage = useCallback(() => {
     favoritesQuery.fetchNextPage();
   }, [favoritesQuery]);
@@ -394,7 +480,6 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
       addToFavorites,
       updateRating,
       removeFromFavorites,
-      getFavoriteInfo,
       isAdding: addMutation.isPending,
       isUpdating: updateMutation.isPending,
       isRemoving: removeMutation.isPending,
@@ -408,7 +493,6 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
       addToFavorites,
       updateRating,
       removeFromFavorites,
-      getFavoriteInfo,
       addMutation.isPending,
       updateMutation.isPending,
       removeMutation.isPending,

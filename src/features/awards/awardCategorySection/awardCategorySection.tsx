@@ -27,6 +27,8 @@ export interface AwardCategorySectionProps {
     favorite: MovieFavoriteInfo | null,
   ) => void;
   isFavoriteProcessing: (tmdbMovieId: number) => boolean;
+  /** 指定映画のお気に入り情報を取得（未登録ならnull） */
+  getFavoriteInfo: (tmdbMovieId: number) => MovieFavoriteInfo | null;
   /**
    * このセクションがページ先頭かどうか（既定: false）
    *
@@ -46,8 +48,13 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
     isMovieToggling,
     onFavoriteToggle,
     isFavoriteProcessing,
+    getFavoriteInfo,
     isFirstSection = false,
   }) {
+    // 受賞作品APIはお気に入りを返さない（公開API＋共有キャッシュのため）。
+    // ここでクライアント側のお気に入り情報と結合する。
+    // getFavoriteInfo を依存に含めないと、お気に入りを操作しても
+    // 再計算されずカードの表示が追従しない
     const { winners, nominees } = useMemo(() => {
       const entries = category.nominees.map((award) => ({
         /**
@@ -58,14 +65,17 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
          */
         key: `${award.tmdbMovieId}:${award.personName ?? ''}`,
         award,
-        movie: awardMovieToMovieCacheItem(award),
+        movie: awardMovieToMovieCacheItem(
+          award,
+          getFavoriteInfo(award.tmdbMovieId),
+        ),
       }));
 
       return {
         winners: entries.filter((e) => e.award.isWinner),
         nominees: entries.filter((e) => !e.award.isWinner),
       };
-    }, [category.nominees]);
+    }, [category.nominees, getFavoriteInfo]);
 
     // 一覧とラベルを紐づける。同点受賞で複数枚並ぶため、
     // 「受賞」ラベルの隣接だけでは2枚目以降が受賞だと伝わらない

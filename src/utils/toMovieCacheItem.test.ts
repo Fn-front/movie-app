@@ -267,7 +267,23 @@ describe('awardMovieToMovieCacheItem', () => {
       genre_ids: [18, 36],
       release_type: 'theatrical',
       is_revival: false,
+      favorite: undefined,
     });
+  });
+
+  it('お気に入り情報を含めて変換する', () => {
+    const result = awardMovieToMovieCacheItem(baseAwardMovie, {
+      id: 'fav-1',
+      rating: 9,
+    });
+
+    expect(result.favorite).toEqual({ id: 'fav-1', rating: 9 });
+  });
+
+  it('お気に入り未登録のときは null を保持する', () => {
+    const result = awardMovieToMovieCacheItem(baseAwardMovie, null);
+
+    expect(result.favorite).toBeNull();
   });
 
   it('tmdbMovieIdがidにマッピングされる', () => {

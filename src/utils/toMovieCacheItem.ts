@@ -95,8 +95,16 @@ export function recommendationToMovieCacheItem(
   };
 }
 
-/** AwardMovie（受賞作品）→ MovieCacheItem */
-export function awardMovieToMovieCacheItem(movie: AwardMovie): MovieCacheItem {
+/**
+ * AwardMovie（受賞作品）→ MovieCacheItem
+ *
+ * 受賞作品APIは公開APIで共有キャッシュを返すため、お気に入り情報を
+ * レスポンスに載せられない。呼び出し側がクライアントで結合する
+ */
+export function awardMovieToMovieCacheItem(
+  movie: AwardMovie,
+  favorite?: MovieFavoriteInfo | null,
+): MovieCacheItem {
   return {
     id: movie.tmdbMovieId,
     title: movie.title,
@@ -111,5 +119,6 @@ export function awardMovieToMovieCacheItem(movie: AwardMovie): MovieCacheItem {
     genre_ids: movie.genreIds,
     release_type: 'theatrical',
     is_revival: false,
+    favorite,
   };
 }

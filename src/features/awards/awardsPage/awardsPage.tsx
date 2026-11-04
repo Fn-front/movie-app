@@ -47,6 +47,7 @@ export const AwardsPage = memo(function AwardsPage() {
     handleModalSubmit: handleFavoriteModalSubmit,
     handleDelete: handleFavoriteDelete,
     isFavoriteProcessing,
+    getFavoriteInfo,
   } = useFavoriteToggle();
 
   const { isInWatchlist, toggleWatchlist, isMovieToggling } =
@@ -54,11 +55,16 @@ export const AwardsPage = memo(function AwardsPage() {
 
   const awards = data?.awards;
 
+  // 詳細モーダルの一覧。お気に入りは結合しない。
+  // 消費先（useMovieDetailModal）は id と title しか読まず、モーダル自体は
+  // 映画詳細APIが返す favorite を使うため、ここで結合しても効果が無い。
+  // 依存に getFavoriteInfo を足すと、お気に入り操作のたびに
+  // 全受賞作の再マッピングが走るだけになる
   const allMovieCacheItems = useMemo(() => {
     if (!awards) return [];
     return awards.flatMap((award) =>
       award.categories.flatMap((cat) =>
-        cat.nominees.map(awardMovieToMovieCacheItem),
+        cat.nominees.map((nominee) => awardMovieToMovieCacheItem(nominee)),
       ),
     );
   }, [awards]);
@@ -150,6 +156,7 @@ export const AwardsPage = memo(function AwardsPage() {
                   isMovieToggling={isMovieToggling}
                   onFavoriteToggle={handleFavoriteToggle}
                   isFavoriteProcessing={isFavoriteProcessing}
+                  getFavoriteInfo={getFavoriteInfo}
                   hideTitle
                 />
               </Tabs>
@@ -162,6 +169,7 @@ export const AwardsPage = memo(function AwardsPage() {
                 isMovieToggling={isMovieToggling}
                 onFavoriteToggle={handleFavoriteToggle}
                 isFavoriteProcessing={isFavoriteProcessing}
+                getFavoriteInfo={getFavoriteInfo}
               />
             )}
           </div>

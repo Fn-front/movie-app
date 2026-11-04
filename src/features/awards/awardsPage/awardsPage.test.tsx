@@ -22,11 +22,18 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
     movie,
     onClick,
   }: {
-    movie: { id: number; title: string };
+    movie: {
+      id: number;
+      title: string;
+      favorite?: { id: string; rating: number } | null;
+    };
     onClick?: (movieId: number) => void;
   }) => (
     <div
       data-testid={`movie-tile-${movie.id}`}
+      // 実際の FavoriteButton は movie.favorite を見て表示を切り替える。
+      // 結合できているかをここで観測する
+      data-favorite-rating={movie.favorite ? String(movie.favorite.rating) : ''}
       role='button'
       tabIndex={0}
       onClick={() => onClick?.(movie.id)}
@@ -60,6 +67,11 @@ jest.mock(
   }),
 );
 
+/** 映画IDごとのお気に入り情報。各テストで入れ替える */
+let mockFavorites = new Map<number, { id: string; rating: number }>();
+const mockGetFavoriteInfo = (tmdbMovieId: number) =>
+  mockFavorites.get(tmdbMovieId) ?? null;
+
 jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
   useFavoriteToggle: () => ({
     modalState: { isOpen: false, movie: null, currentFavorite: null },
@@ -68,6 +80,7 @@ jest.mock('@/features/favorites/hooks/useFavoriteToggle', () => ({
     handleModalSubmit: jest.fn(),
     handleDelete: jest.fn(),
     isFavoriteProcessing: jest.fn().mockReturnValue(false),
+    getFavoriteInfo: mockGetFavoriteInfo,
   }),
 }));
 
@@ -210,6 +223,67 @@ describe('AwardsPage', () => {
     mockUseAwardsReturn.selectedAward = null;
     mockSearchParams = new URLSearchParams();
     useAwardsCalls.length = 0;
+    mockFavorites = new Map();
+  });
+
+  /**
+   * 受賞作品APIは公開API＋共有キャッシュのためお気に入りを返せない。
+   * クライアント側で結合しないと、登録済みでもカードが未登録表示のままになり、
+   * そこから押すと重複エラー（409）になる（#830）
+   */
+  describe('お気に入りの結合', () => {
+    it('登録済みの作品は受賞・ノミネートの両方のカードに評価が渡る', () => {
+      setAwardsData();
+      mockFavorites.set(100, { id: 'fav-100', rating: 9 });
+      mockFavorites.set(200, { id: 'fav-200', rating: 4 });
+
+      render(<AwardsPage />);
+
+      expect(screen.getByTestId('movie-tile-100')).toHaveAttribute(
+        'data-favorite-rating',
+        '9',
+      );
+      expect(screen.getByTestId('movie-tile-200')).toHaveAttribute(
+        'data-favorite-rating',
+        '4',
+      );
+    });
+
+    it('お気に入り0件なら全カードが未登録のまま', () => {
+      setAwardsData();
+
+      render(<AwardsPage />);
+
+      expect(screen.getByTestId('movie-tile-100')).toHaveAttribute(
+        'data-favorite-rating',
+        '',
+      );
+      expect(screen.getByTestId('movie-tile-200')).toHaveAttribute(
+        'data-favorite-rating',
+        '',
+      );
+    });
+
+    // 年度切り替えでデータが差し替わったときの追従は
+    // awardCategorySection.test.tsx（useMemo の依存）で担保している
+    it('年度を切り替えた後のデータでも結合される', () => {
+      const nextYear = createMockAwardsData();
+      nextYear.year = 2025;
+      nextYear.awards[0].categories[0].nominees[1].tmdbMovieId = 300;
+      setAwardsData(nextYear);
+      mockFavorites.set(300, { id: 'fav-300', rating: 7 });
+
+      render(<AwardsPage />);
+
+      expect(screen.getByTestId('movie-tile-300')).toHaveAttribute(
+        'data-favorite-rating',
+        '7',
+      );
+      expect(screen.getByTestId('movie-tile-100')).toHaveAttribute(
+        'data-favorite-rating',
+        '',
+      );
+    });
   });
 
   /**

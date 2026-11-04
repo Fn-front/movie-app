@@ -53,6 +53,7 @@ const defaultProps = {
   isMovieToggling: jest.fn().mockReturnValue(false),
   onFavoriteToggle: jest.fn(),
   isFavoriteProcessing: jest.fn().mockReturnValue(false),
+  getFavoriteInfo: jest.fn().mockReturnValue(null),
 };
 
 // --- Tests ---

@@ -308,6 +308,46 @@ describe('WatchlistPage', () => {
     });
   });
 
+  /**
+   * 付けた点数をお気に入り画面へ移動せずに確認できるようにする（#827）
+   */
+  describe('カードの評価表示', () => {
+    it('視聴済み＋評価登録済みのカードに評価が出る', () => {
+      mockGetFavoriteInfo.mockReturnValue({ id: 'fav-1', rating: 8 });
+      mockUseWatchlistPage.watchlist = createMockItems(1).map((item) => ({
+        ...item,
+        watched_at: '2026-03-01T00:00:00Z',
+      }));
+
+      render(<WatchlistPage />);
+
+      expect(
+        screen.getByRole('img', { name: '評価: 8/10' }),
+      ).toBeInTheDocument();
+    });
+
+    it('未視聴のカードには評価を出さない', () => {
+      mockGetFavoriteInfo.mockReturnValue({ id: 'fav-1', rating: 8 });
+      mockUseWatchlistPage.watchlist = createMockItems(1);
+
+      render(<WatchlistPage />);
+
+      expect(screen.queryByRole('img', { name: /評価:/ })).toBeNull();
+    });
+
+    it('評価未登録なら視聴済みでも評価を出さない', () => {
+      mockGetFavoriteInfo.mockReturnValue(null);
+      mockUseWatchlistPage.watchlist = createMockItems(1).map((item) => ({
+        ...item,
+        watched_at: '2026-03-01T00:00:00Z',
+      }));
+
+      render(<WatchlistPage />);
+
+      expect(screen.queryByRole('img', { name: /評価:/ })).toBeNull();
+    });
+  });
+
   describe('視聴済みの一括削除', () => {
     it('整理ボタンを表示する', () => {
       render(<WatchlistPage />);

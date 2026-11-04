@@ -40,6 +40,30 @@ export interface MovieFavoriteInfo {
 }
 
 /**
+ * お気に入り照会アイテムの型
+ *
+ * 「登録済みか・何点か」の判定に必要な列だけを持つ軽量版。
+ */
+export interface FavoriteLookupItem {
+  /** お気に入りID */
+  id: string;
+  /** TMDb映画ID */
+  tmdb_movie_id: number;
+  /** ユーザー評価（1〜10） */
+  rating: number;
+}
+
+/**
+ * お気に入り照会レスポンスの型
+ */
+export interface GetFavoriteLookupResponse {
+  success: true;
+  data: {
+    favorites: FavoriteLookupItem[];
+  };
+}
+
+/**
  * お気に入り一覧取得リクエストの型
  */
 export interface GetFavoritesRequest {
@@ -102,6 +126,20 @@ export async function getFavorites(
   const response = await axiosInstance.get<GetFavoritesResponse>(
     API_ENDPOINTS.FAVORITES,
     { params },
+  );
+  return response.data;
+}
+
+/**
+ * お気に入りの照会用データ（ID・映画ID・評価）を全件取得
+ *
+ * ページングしない。理由は `src/app/api/favorites/lookup/route.ts` を参照。
+ *
+ * @returns お気に入り照会レスポンス
+ */
+export async function getFavoriteLookup(): Promise<GetFavoriteLookupResponse> {
+  const response = await axiosInstance.get<GetFavoriteLookupResponse>(
+    API_ENDPOINTS.FAVORITES_LOOKUP,
   );
   return response.data;
 }

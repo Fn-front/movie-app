@@ -21,6 +21,14 @@ export const FAVORITES_SELECT =
   'id, tmdb_movie_id, title, poster_path, release_date, rating, added_at';
 
 /**
+ * お気に入り照会SELECTカラム
+ *
+ * 「この映画は登録済みか・何点か」の判定にしか使わないため、
+ * タイトルやポスターは載せない。全件返しても軽量に保つための絞り込み。
+ */
+export const FAVORITES_LOOKUP_SELECT = 'id, tmdb_movie_id, rating';
+
+/**
  * お気に入り評価の最小値
  */
 export const FAVORITES_RATING_MIN = 1;

@@ -44,11 +44,6 @@ const createMockCategory = (
 ): AwardCategoryData => ({
   category: 'best_picture',
   label: '作品賞',
-  winner: createAwardMovie({
-    tmdbMovieId: 100,
-    title: '受賞映画',
-    isWinner: true,
-  }),
   nominees: [
     createAwardMovie({ tmdbMovieId: 100, title: '受賞映画', isWinner: true }),
     createAwardMovie({ tmdbMovieId: 200, title: 'ノミネート映画A' }),
@@ -122,7 +117,6 @@ describe('AwardCategorySection', () => {
 
   it('受賞者なしの場合は受賞セクションが表示されない', () => {
     const category = createMockCategory({
-      winner: null,
       nominees: [
         createAwardMovie({ tmdbMovieId: 200, title: 'ノミネート映画A' }),
         createAwardMovie({ tmdbMovieId: 300, title: 'ノミネート映画B' }),
@@ -156,12 +150,6 @@ describe('AwardCategorySection', () => {
     const category = createMockCategory({
       category: 'jury_prize',
       label: '審査員賞',
-      winner: createAwardMovie({
-        tmdbMovieId: 1151272,
-        title: 'シラート',
-        personName: 'オリヴァー・ラクセ',
-        isWinner: true,
-      }),
       nominees: [
         createAwardMovie({
           tmdbMovieId: 1151272,
@@ -200,12 +188,6 @@ describe('AwardCategorySection', () => {
     const category = createMockCategory({
       category: 'best_supporting_actress',
       label: '助演女優賞',
-      winner: createAwardMovie({
-        tmdbMovieId: 1078605,
-        title: 'WEAPONS／ウェポンズ',
-        personName: 'エイミー・マディガン',
-        isWinner: true,
-      }),
       nominees: [
         createAwardMovie({
           tmdbMovieId: 1078605,
@@ -249,12 +231,6 @@ describe('AwardCategorySection', () => {
     const category = createMockCategory({
       category: 'best_supporting_actress',
       label: '助演女優賞',
-      winner: createAwardMovie({
-        tmdbMovieId: 974950,
-        title: 'エミリア・ペレス',
-        personName: 'ゾーイ・サルダナ',
-        isWinner: true,
-      }),
       nominees: [
         createAwardMovie({
           tmdbMovieId: 974950,
@@ -289,12 +265,6 @@ describe('AwardCategorySection', () => {
 
   it('personNameがある場合はMovieTileの下に人名が表示される', () => {
     const category = createMockCategory({
-      winner: createAwardMovie({
-        tmdbMovieId: 100,
-        title: '受賞映画',
-        personName: '山田太郎',
-        isWinner: true,
-      }),
       nominees: [
         createAwardMovie({
           tmdbMovieId: 100,

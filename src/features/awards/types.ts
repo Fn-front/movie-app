@@ -17,7 +17,7 @@ export interface AwardMovie {
    * この行が受賞かどうか
    *
    * 同点受賞（複数作品が同じ部門を同時受賞）があるため、受賞かどうかは
-   * 行ごとに持つ必要がある。`AwardCategoryData.winner` との一致では判定できない
+   * 行ごとに持つ。部門に受賞を1件だけ持たせる形では2件目を落とす
    */
   isWinner: boolean;
 }
@@ -29,13 +29,12 @@ export interface AwardCategoryData {
   category: string;
   label: string;
   /**
-   * 受賞のうち最初の1件
+   * 受賞・ノミネートを問わず、その部門の全行（`display_order` 昇順）
    *
-   * ⚠️ 同点受賞ではここに1件しか入らない。表示側は `nominees` を
-   * `isWinner` で振り分けること
+   * 受賞だけを別フィールドで持たせない。同点受賞があるため1件では足りず、
+   * 2つの表現があるとどちらが正かを常に気にすることになる。
+   * 受賞は `nominees.filter((n) => n.isWinner)` で取る
    */
-  winner: AwardMovie | null;
-  /** 受賞・ノミネートを問わず、その部門の全行 */
   nominees: AwardMovie[];
 }
 

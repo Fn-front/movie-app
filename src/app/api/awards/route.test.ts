@@ -33,10 +33,38 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: jest.fn().mockResolvedValue({ allowed: true }),
 }));
 
-import { GET } from './route';
+import { GET, type AwardMovieRow } from './route';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import type { AwardMovie } from '@/features/awards/types';
 
 // --- Helpers ---
+
+/** レスポンスの nominees から取り出して検証する項目 */
+type NomineeShape = Pick<AwardMovie, 'tmdbMovieId' | 'isWinner'>;
+
+/**
+ * award_movies の1行（SELECT で取るカラムぶん）
+ *
+ * `Partial<AwardMovieRow>` にして override のキーを型で縛る。
+ * `Record<string, unknown>` だと `is_winer` のような打ち間違いが素通りする
+ */
+function createAwardRow(overrides: Partial<AwardMovieRow> = {}) {
+  return {
+    tmdb_movie_id: 100,
+    title: 'テスト映画',
+    poster_path: '/poster.jpg',
+    release_date: '2025-12-01',
+    vote_average: 8.5,
+    genre_ids: [18],
+    person_name: null,
+    award_name: 'academy_awards',
+    award_year: 2026,
+    category: 'best_picture',
+    is_winner: false,
+    display_order: 1,
+    ...overrides,
+  };
+}
 
 function createRequest(yearParam?: string, ip?: string): Request {
   const url = yearParam
@@ -77,6 +105,19 @@ describe('GET /api/awards', () => {
     jest.clearAllMocks();
     lastSelectColumns = undefined;
     (checkRateLimit as jest.Mock).mockResolvedValue({ allowed: true });
+  });
+
+  it('カテゴリに winner フィールドを含めない', async () => {
+    mockYearQuery([2026]);
+    mockAwardDataQuery([createAwardRow({ is_winner: true })]);
+
+    const response = await GET(createRequest('2026'));
+    const body = await response.json();
+
+    // 受賞かどうかは nominees の各行が isWinner で持つ。
+    // winner は最初の1件しか入らず同点受賞を落とすため、誤用の元になる
+    const category = body.data.awards[0].categories[0];
+    expect(category).not.toHaveProperty('winner');
   });
 
   it('レスポンスの組み立てに必要なカラムをすべて SELECT する', async () => {
@@ -156,8 +197,9 @@ describe('GET /api/awards', () => {
     expect(body.data.awards).toHaveLength(1);
     expect(body.data.awards[0].awardName).toBe('academy_awards');
     expect(body.data.awards[0].categories).toHaveLength(1);
-    expect(body.data.awards[0].categories[0].winner).not.toBeNull();
-    expect(body.data.awards[0].categories[0].winner.tmdbMovieId).toBe(100);
+    expect(body.data.awards[0].categories[0].nominees).toEqual([
+      expect.objectContaining({ tmdbMovieId: 100, isWinner: true }),
+    ]);
   });
 
   it('Cache-Controlヘッダーが設定される', async () => {
@@ -182,45 +224,31 @@ describe('GET /api/awards', () => {
     expect(body.data.awards).toEqual([]);
   });
 
-  it('受賞者とノミネートが正しく分離される', async () => {
+  it('受賞を先頭に寄せず、DBから返った順をそのまま保つ', async () => {
     mockYearQuery([2026]);
+    // 並び替えは DB 側（.order('display_order')）に任せており、
+    // route は受け取った順を崩さない。受賞を真ん中に置いて確かめる
     mockAwardDataQuery([
-      {
-        tmdb_movie_id: 100,
-        title: '受賞映画',
-        poster_path: '/winner.jpg',
-        release_date: '2025-12-01',
-        vote_average: 8.5,
-        genre_ids: [18],
-        person_name: null,
-        award_name: 'academy_awards',
-        award_year: 2026,
-        category: 'best_picture',
-        is_winner: true,
-        display_order: 1,
-      },
-      {
+      createAwardRow({ tmdb_movie_id: 100, display_order: 1 }),
+      createAwardRow({
         tmdb_movie_id: 200,
-        title: 'ノミネート映画',
-        poster_path: '/nominee.jpg',
-        release_date: '2025-11-01',
-        vote_average: 7.5,
-        genre_ids: [18],
-        person_name: null,
-        award_name: 'academy_awards',
-        award_year: 2026,
-        category: 'best_picture',
-        is_winner: false,
+        is_winner: true,
         display_order: 2,
-      },
+      }),
+      createAwardRow({ tmdb_movie_id: 300, display_order: 3 }),
     ]);
 
     const response = await GET(createRequest('2026'));
     const body = await response.json();
 
     const category = body.data.awards[0].categories[0];
-    expect(category.winner.tmdbMovieId).toBe(100);
-    expect(category.nominees).toHaveLength(2);
+    expect(
+      category.nominees.map((n: NomineeShape) => [n.tmdbMovieId, n.isWinner]),
+    ).toEqual([
+      [100, false],
+      [200, true],
+      [300, false],
+    ]);
   });
 
   it('nominees の各要素が isWinner を持つ', async () => {
@@ -261,15 +289,11 @@ describe('GET /api/awards', () => {
 
     const category = body.data.awards[0].categories[0];
     expect(
-      category.nominees.map((n: { tmdbMovieId: number; isWinner: boolean }) => [
-        n.tmdbMovieId,
-        n.isWinner,
-      ]),
+      category.nominees.map((n: NomineeShape) => [n.tmdbMovieId, n.isWinner]),
     ).toEqual([
       [100, true],
       [200, false],
     ]);
-    expect(category.winner.isWinner).toBe(true);
   });
 
   it('同点受賞は全件が isWinner=true で返る', async () => {
@@ -313,7 +337,7 @@ describe('GET /api/awards', () => {
       (c: { category: string }) => c.category === 'jury_prize',
     );
     expect(
-      category.nominees.filter((n: { isWinner: boolean }) => n.isWinner),
+      category.nominees.filter((n: NomineeShape) => n.isWinner),
     ).toHaveLength(2);
   });
 

@@ -35,13 +35,11 @@ const createMockAward = (overrides: Partial<AwardData> = {}): AwardData => ({
     {
       category: 'best_picture',
       label: '作品賞',
-      winner: null,
       nominees: [],
     },
     {
       category: 'best_director',
       label: '監督賞',
-      winner: null,
       nominees: [],
     },
   ],

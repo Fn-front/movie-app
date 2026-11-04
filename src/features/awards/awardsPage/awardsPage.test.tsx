@@ -91,15 +91,6 @@ const mockUseAwardsReturn = {
           categories: {
             category: string;
             label: string;
-            winner: {
-              tmdbMovieId: number;
-              title: string;
-              posterPath: string | null;
-              releaseDate: string | null;
-              voteAverage: number | null;
-              genreIds: number[] | null;
-              isWinner: boolean;
-            } | null;
             nominees: {
               tmdbMovieId: number;
               title: string;
@@ -170,15 +161,6 @@ const createMockAwardsData = () => ({
         {
           category: 'best_picture',
           label: '作品賞',
-          winner: {
-            tmdbMovieId: 100,
-            title: '受賞映画',
-            posterPath: '/winner.jpg',
-            releaseDate: '2025-12-01',
-            voteAverage: 8.5,
-            genreIds: [18],
-            isWinner: true,
-          },
           nominees: [
             {
               tmdbMovieId: 100,

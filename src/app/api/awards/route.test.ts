@@ -190,6 +190,100 @@ describe('GET /api/awards', () => {
     expect(category.nominees).toHaveLength(2);
   });
 
+  it('nominees の各要素が isWinner を持つ', async () => {
+    mockYearQuery([2026]);
+    mockAwardDataQuery([
+      {
+        tmdb_movie_id: 100,
+        title: '受賞映画',
+        poster_path: '/winner.jpg',
+        release_date: '2025-12-01',
+        vote_average: 8.5,
+        genre_ids: [18],
+        person_name: null,
+        award_name: 'academy_awards',
+        award_year: 2026,
+        category: 'best_picture',
+        is_winner: true,
+        display_order: 1,
+      },
+      {
+        tmdb_movie_id: 200,
+        title: 'ノミネート映画',
+        poster_path: '/nominee.jpg',
+        release_date: '2025-11-01',
+        vote_average: 7.5,
+        genre_ids: [18],
+        person_name: null,
+        award_name: 'academy_awards',
+        award_year: 2026,
+        category: 'best_picture',
+        is_winner: false,
+        display_order: 2,
+      },
+    ]);
+
+    const response = await GET(createRequest('2026'));
+    const body = await response.json();
+
+    const category = body.data.awards[0].categories[0];
+    expect(
+      category.nominees.map((n: { tmdbMovieId: number; isWinner: boolean }) => [
+        n.tmdbMovieId,
+        n.isWinner,
+      ]),
+    ).toEqual([
+      [100, true],
+      [200, false],
+    ]);
+    expect(category.winner.isWinner).toBe(true);
+  });
+
+  it('同点受賞は全件が isWinner=true で返る', async () => {
+    mockYearQuery([2025]);
+    // 第78回カンヌ 審査員賞は『シラート』と『落下音』の同点受賞
+    mockAwardDataQuery([
+      {
+        tmdb_movie_id: 1151272,
+        title: 'シラート',
+        poster_path: null,
+        release_date: '2025-05-01',
+        vote_average: 7.0,
+        genre_ids: [18],
+        person_name: 'オリヴァー・ラクセ',
+        award_name: 'cannes',
+        award_year: 2025,
+        category: 'jury_prize',
+        is_winner: true,
+        display_order: 1,
+      },
+      {
+        tmdb_movie_id: 1221061,
+        title: '落下音',
+        poster_path: null,
+        release_date: '2025-05-01',
+        vote_average: 7.0,
+        genre_ids: [18],
+        person_name: 'マーシャ・シリンスキー',
+        award_name: 'cannes',
+        award_year: 2025,
+        category: 'jury_prize',
+        is_winner: true,
+        display_order: 2,
+      },
+    ]);
+
+    const response = await GET(createRequest('2025'));
+    const body = await response.json();
+
+    const category = body.data.awards[0].categories.find(
+      (c: { category: string }) => c.category === 'jury_prize',
+    );
+    expect(
+      category.nominees.filter((n: { isWinner: boolean }) => n.isWinner),
+    ).toHaveLength(2);
+  });
+
   it('AWARD_DEFINITIONSの定義順でカテゴリが返される', async () => {
     mockYearQuery([2026]);
     // best_directorを先にDBから返しても、best_pictureが先に来ること

@@ -30,18 +30,42 @@
     width: fit-content;
   }
 
+  /**
+   * 受賞タイルの並び
+   *
+   * 同点受賞（複数作品が同じ部門を同時受賞）があるため横並びにする。
+   * 単独受賞のときは1枚だけが並び、見た目は従来と変わらない
+   */
+  &__winner_tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-4;
+  }
+
   &__winner_tile {
+    // 横並びにすると MovieTile（高さ100%）が親の高さを決めてしまい、
+    // 下に置く人名がはみ出す。ノミネート側の __item と同じ組み方で防ぐ
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 140px;
     max-width: 140px;
 
+    > :first-child {
+      flex: 1;
+    }
+
     @include sm {
+      flex-basis: 150px;
       max-width: 150px;
     }
 
     @include md {
+      flex-basis: 160px;
       max-width: 160px;
     }
 
     @include lg {
+      flex-basis: calc((100% - $spacing-4 * 4) / 5);
       max-width: calc((100% - $spacing-4 * 4) / 5);
     }
   }

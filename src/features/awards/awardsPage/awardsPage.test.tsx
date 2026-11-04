@@ -98,6 +98,7 @@ const mockUseAwardsReturn = {
               releaseDate: string | null;
               voteAverage: number | null;
               genreIds: number[] | null;
+              isWinner: boolean;
             } | null;
             nominees: {
               tmdbMovieId: number;
@@ -106,6 +107,7 @@ const mockUseAwardsReturn = {
               releaseDate: string | null;
               voteAverage: number | null;
               genreIds: number[] | null;
+              isWinner: boolean;
             }[];
           }[];
         }[];
@@ -175,6 +177,7 @@ const createMockAwardsData = () => ({
             releaseDate: '2025-12-01',
             voteAverage: 8.5,
             genreIds: [18],
+            isWinner: true,
           },
           nominees: [
             {
@@ -184,6 +187,7 @@ const createMockAwardsData = () => ({
               releaseDate: '2025-12-01',
               voteAverage: 8.5,
               genreIds: [18],
+              isWinner: true,
             },
             {
               tmdbMovieId: 200,
@@ -192,6 +196,7 @@ const createMockAwardsData = () => ({
               releaseDate: '2025-11-01',
               voteAverage: 7.5,
               genreIds: [18],
+              isWinner: false,
             },
           ],
         },

@@ -35,6 +35,7 @@ const createAwardMovie = (overrides: Partial<AwardMovie> = {}): AwardMovie => ({
   voteAverage: 8.5,
   genreIds: [18],
   personName: null,
+  isWinner: false,
   ...overrides,
 });
 
@@ -43,9 +44,13 @@ const createMockCategory = (
 ): AwardCategoryData => ({
   category: 'best_picture',
   label: '作品賞',
-  winner: createAwardMovie({ tmdbMovieId: 100, title: '受賞映画' }),
+  winner: createAwardMovie({
+    tmdbMovieId: 100,
+    title: '受賞映画',
+    isWinner: true,
+  }),
   nominees: [
-    createAwardMovie({ tmdbMovieId: 100, title: '受賞映画' }),
+    createAwardMovie({ tmdbMovieId: 100, title: '受賞映画', isWinner: true }),
     createAwardMovie({ tmdbMovieId: 200, title: 'ノミネート映画A' }),
     createAwardMovie({ tmdbMovieId: 300, title: 'ノミネート映画B' }),
   ],
@@ -118,7 +123,13 @@ describe('AwardCategorySection', () => {
   });
 
   it('受賞者なしの場合は受賞セクションが表示されない', () => {
-    const category = createMockCategory({ winner: null });
+    const category = createMockCategory({
+      winner: null,
+      nominees: [
+        createAwardMovie({ tmdbMovieId: 200, title: 'ノミネート映画A' }),
+        createAwardMovie({ tmdbMovieId: 300, title: 'ノミネート映画B' }),
+      ],
+    });
 
     render(<AwardCategorySection category={category} {...defaultProps} />);
 
@@ -127,12 +138,90 @@ describe('AwardCategorySection', () => {
 
   it('ノミネートが受賞者のみの場合はノミネートセクションが表示されない', () => {
     const category = createMockCategory({
-      nominees: [createAwardMovie({ tmdbMovieId: 100, title: '受賞映画' })],
+      nominees: [
+        createAwardMovie({
+          tmdbMovieId: 100,
+          title: '受賞映画',
+          isWinner: true,
+        }),
+      ],
     });
 
     render(<AwardCategorySection category={category} {...defaultProps} />);
 
     expect(screen.queryByText('ノミネート')).not.toBeInTheDocument();
+  });
+
+  it('同点受賞は全件が受賞として表示され、受賞ラベルは1つだけ出る', () => {
+    // 第78回カンヌ 審査員賞は『シラート』と『落下音』の同点受賞。
+    // カンヌの記事はノミネートを載せないため、この部門にノミネートは存在しない
+    const category = createMockCategory({
+      category: 'jury_prize',
+      label: '審査員賞',
+      winner: createAwardMovie({
+        tmdbMovieId: 1151272,
+        title: 'シラート',
+        personName: 'オリヴァー・ラクセ',
+        isWinner: true,
+      }),
+      nominees: [
+        createAwardMovie({
+          tmdbMovieId: 1151272,
+          title: 'シラート',
+          personName: 'オリヴァー・ラクセ',
+          isWinner: true,
+        }),
+        createAwardMovie({
+          tmdbMovieId: 1221061,
+          title: '落下音',
+          personName: 'マーシャ・シリンスキー',
+          isWinner: true,
+        }),
+      ],
+    });
+
+    render(<AwardCategorySection category={category} {...defaultProps} />);
+
+    expect(screen.getByTestId('movie-tile-1151272')).toBeInTheDocument();
+    expect(screen.getByTestId('movie-tile-1221061')).toBeInTheDocument();
+    expect(screen.getAllByText('受賞')).toHaveLength(1);
+    // 受賞作がノミネート側へ流れていない
+    expect(screen.queryByText('ノミネート')).not.toBeInTheDocument();
+  });
+
+  it('同じ作品が同じ部門で複数ノミネートされても全員分が人名付きで表示される', () => {
+    // 第82回ゴールデングローブ賞 助演女優賞の『エミリア・ペレス』は2人
+    const category = createMockCategory({
+      category: 'best_supporting_actress',
+      label: '助演女優賞',
+      winner: createAwardMovie({
+        tmdbMovieId: 974950,
+        title: 'エミリア・ペレス',
+        personName: 'ゾーイ・サルダナ',
+        isWinner: true,
+      }),
+      nominees: [
+        createAwardMovie({
+          tmdbMovieId: 974950,
+          title: 'エミリア・ペレス',
+          personName: 'セレーナ・ゴメス',
+        }),
+        createAwardMovie({
+          tmdbMovieId: 974950,
+          title: 'エミリア・ペレス',
+          personName: 'ゾーイ・サルダナ',
+          isWinner: true,
+        }),
+      ],
+    });
+
+    render(<AwardCategorySection category={category} {...defaultProps} />);
+
+    // 同じ映画IDが受賞側とノミネート側に1件ずつ出る
+    expect(screen.getAllByTestId('movie-tile-974950')).toHaveLength(2);
+    // 人名は行ごとに出し分ける（映画IDで引くと後勝ちで取り違える）
+    expect(screen.getByText('ゾーイ・サルダナ')).toBeInTheDocument();
+    expect(screen.getByText('セレーナ・ゴメス')).toBeInTheDocument();
   });
 
   it('ノミネートが空の場合はノミネートセクションが表示されない', () => {

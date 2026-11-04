@@ -248,6 +248,7 @@ describe('awardMovieToMovieCacheItem', () => {
     voteAverage: 8.5,
     genreIds: [18, 36],
     personName: null,
+    isWinner: true,
   };
 
   it('AwardMovieをMovieCacheItemに正しく変換する', () => {

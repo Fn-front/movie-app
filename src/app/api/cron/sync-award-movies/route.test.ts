@@ -87,6 +87,7 @@ describe('GET /api/cron/sync-award-movies', () => {
         month: 3,
         synced_awards: ['academy_awards'],
         skipped_awards: [],
+        delete_failed_awards: [],
         total_upserted: 10,
       },
     });
@@ -158,6 +159,7 @@ describe('GET /api/cron/sync-award-movies', () => {
         month: null,
         synced_awards: ['academy_awards'],
         skipped_awards: [],
+        delete_failed_awards: [],
         total_upserted: 5,
       },
     });

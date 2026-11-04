@@ -92,6 +92,22 @@
   color: $text-danger;
 }
 
+/*
+ * 成功だが気に留めてほしいこと（旧世代が消せなかった等）
+ *
+ * `__warning` は既にフォームの「既に N 件あります」で使っている。
+ * CSS Modules は同名クラスに同じ生成名を割り当てるため、使い回すと
+ * 向こうにもこの枠線・余白が当たってしまう
+ */
+.c_awards_sync__job_warning {
+  margin: $spacing-2 0 0;
+  padding: $spacing-2 $spacing-3;
+  border: $border-width-1 solid $warning-main;
+  border-radius: $border-radius-md;
+  color: $text-warning;
+  font-size: $font-size-sm;
+}
+
 .c_awards_sync__conflict {
   display: flex;
   flex-direction: column;

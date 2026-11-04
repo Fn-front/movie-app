@@ -138,6 +138,15 @@ const JobStatus = memo(function JobStatus({ job }: { job: AwardSyncJobView }) {
           >
             受賞作品ページで確認
           </a>
+          {/*
+            成功だが気に留めてほしいこと（旧世代が消せず残留が残った等）。
+            「完了しました」だけだと admin が残留に気づけない
+          */}
+          {job.warningMessage && (
+            <p className={styles.c_awards_sync__job_warning}>
+              {job.warningMessage}
+            </p>
+          )}
         </>
       )}
 

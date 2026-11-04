@@ -33,6 +33,8 @@ export interface AwardSyncJob {
   status: AwardSyncStatus;
   totalUpserted: number | null;
   errorMessage: string | null;
+  /** 成功時の警告。旧世代の削除に失敗して残留が残った場合など */
+  warningMessage: string | null;
   createdAt: string;
   startedAt: string;
   finishedAt: string | null;
@@ -46,13 +48,14 @@ interface AwardSyncJobRow {
   status: AwardSyncStatus;
   total_upserted: number | null;
   error_message: string | null;
+  warning_message: string | null;
   created_at: string;
   started_at: string;
   finished_at: string | null;
 }
 
 const SELECT_COLUMNS =
-  'id, award_name, award_year, status, total_upserted, error_message, created_at, started_at, finished_at';
+  'id, award_name, award_year, status, total_upserted, error_message, warning_message, created_at, started_at, finished_at';
 
 function toJob(row: AwardSyncJobRow): AwardSyncJob {
   return {
@@ -62,6 +65,7 @@ function toJob(row: AwardSyncJobRow): AwardSyncJob {
     status: row.status,
     totalUpserted: row.total_upserted,
     errorMessage: row.error_message,
+    warningMessage: row.warning_message,
     createdAt: row.created_at,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
@@ -168,6 +172,8 @@ export async function finishJobIfRunning(
       | typeof AWARD_SYNC_STATUS.FAILED;
     totalUpserted?: number;
     errorMessage?: string;
+    /** 成功扱いのまま残したい警告。status は変えない */
+    warningMessage?: string;
   },
 ): Promise<boolean> {
   const { data, error } = await supabase
@@ -176,6 +182,7 @@ export async function finishJobIfRunning(
       status: patch.status,
       total_upserted: patch.totalUpserted ?? null,
       error_message: patch.errorMessage ?? null,
+      warning_message: patch.warningMessage ?? null,
       finished_at: new Date().toISOString(),
     })
     .eq('id', id)

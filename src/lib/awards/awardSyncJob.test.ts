@@ -24,6 +24,7 @@ const baseJob: AwardSyncJob = {
   status: 'running',
   totalUpserted: null,
   errorMessage: null,
+  warningMessage: null,
   createdAt: '2026-10-31T00:00:00.000Z',
   startedAt: '2026-10-31T00:00:00.000Z',
   finishedAt: null,
@@ -92,6 +93,29 @@ describe('finishJobIfRunning', () => {
       status: 'succeeded',
       total_upserted: 12,
       error_message: null,
+      warning_message: null,
+    });
+  });
+
+  it('警告を付けて succeeded にできる（旧世代が消せなかったとき）', async () => {
+    const { supabase, patches } = createUpdateMock({
+      data: [{ id: JOB_ID }],
+      error: null,
+    });
+
+    const updated = await finishJobIfRunning(supabase, JOB_ID, {
+      status: 'succeeded',
+      totalUpserted: 12,
+      warningMessage: '旧世代の削除に失敗しました: timeout',
+    });
+
+    expect(updated).toBe(true);
+    expect(patches[0]).toMatchObject({
+      status: 'succeeded',
+      total_upserted: 12,
+      // 失敗ではないので error_message は空のまま
+      error_message: null,
+      warning_message: '旧世代の削除に失敗しました: timeout',
     });
   });
 
@@ -155,6 +179,13 @@ describe('isJobStillRunning', () => {
 });
 
 describe('ジョブの検索', () => {
+  /** 直近の `.select()` に渡された文字列。カラムの取り漏れを検知する */
+  let selectedColumns: string | undefined;
+
+  beforeEach(() => {
+    selectedColumns = undefined;
+  });
+
   const ROW = {
     id: JOB_ID,
     award_name: 'cannes',
@@ -162,6 +193,7 @@ describe('ジョブの検索', () => {
     status: 'running' as const,
     total_upserted: null,
     error_message: null,
+    warning_message: null,
     created_at: baseJob.createdAt,
     started_at: baseJob.startedAt,
     finished_at: null,
@@ -171,7 +203,10 @@ describe('ジョブの検索', () => {
   function createEqMock(data: unknown) {
     const maybeSingle = jest.fn().mockResolvedValue({ data });
     const eq = jest.fn(() => ({ maybeSingle }));
-    const select = jest.fn(() => ({ eq }));
+    const select = jest.fn((columns: string) => {
+      selectedColumns = columns;
+      return { eq };
+    });
     const supabase = {
       from: jest.fn(() => ({ select })),
     } as unknown as Parameters<typeof findRunningJob>[0];
@@ -191,6 +226,29 @@ describe('ジョブの検索', () => {
 
     return { supabase, order, limit };
   }
+
+  it('ジョブの組み立てに必要なカラムをすべて SELECT する', async () => {
+    // 型は守ってくれない（toJob が row をキャストで受けるため）。
+    // 落とすと該当項目が undefined のまま JSON から消え、機能が静かに無効化される
+    const { supabase } = createEqMock(ROW);
+
+    await findRunningJob(supabase);
+
+    for (const column of [
+      'id',
+      'award_name',
+      'award_year',
+      'status',
+      'total_upserted',
+      'error_message',
+      'warning_message',
+      'created_at',
+      'started_at',
+      'finished_at',
+    ]) {
+      expect(selectedColumns).toContain(column);
+    }
+  });
 
   it('findRunningJob は running で絞り、スネークケースを変換して返す', async () => {
     const { supabase, eq } = createEqMock(ROW);

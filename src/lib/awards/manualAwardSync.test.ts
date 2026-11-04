@@ -34,7 +34,7 @@ const ROWS = [
 /** award_movies の upsert / delete をモックする */
 function createSupabase(options?: {
   upsertError?: { message: string } | null;
-  deleteError?: { message: string } | null;
+  deleteError?: { message: string; code?: string } | null;
 }) {
   const upsert = jest
     .fn()
@@ -142,6 +142,23 @@ describe('executeManualAwardSync', () => {
 
     expect(db.upsert).toHaveBeenCalledTimes(1);
     expect(db.del).not.toHaveBeenCalled();
+    expect(mockFinishJobIfRunning).toHaveBeenCalledWith(
+      expect.anything(),
+      JOB_ID,
+      { status: 'succeeded', totalUpserted: 1 },
+    );
+  });
+
+  it('DELETE に成功したら警告を付けない', async () => {
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
+    const db = createSupabase();
+
+    await executeManualAwardSync(wrap(db), params);
+
     expect(mockFinishJobIfRunning).toHaveBeenCalledWith(
       expect.anything(),
       JOB_ID,
@@ -271,14 +288,30 @@ describe('executeManualAwardSync', () => {
       rows: ROWS,
       deletableCategories: ['palme_dor'],
     });
-    const db = createSupabase({ deleteError: { message: 'delete boom' } });
+    const db = createSupabase({
+      deleteError: { message: 'delete boom', code: '57014' },
+    });
 
     await executeManualAwardSync(wrap(db), params);
 
+    // ステータスは成功のまま。残留が残ったことは警告として画面へ届ける
     expect(mockFinishJobIfRunning).toHaveBeenCalledWith(
       expect.anything(),
       JOB_ID,
-      { status: 'succeeded', totalUpserted: 1 },
+      {
+        status: 'succeeded',
+        totalUpserted: 1,
+        warningMessage: expect.stringContaining(
+          AWARD_SYNC_MESSAGES.STALE_DELETE_FAILED,
+        ) as unknown as string,
+      },
     );
+    // 原因の切り分けに使うので DB のメッセージも残す
+    const patch = mockFinishJobIfRunning.mock.calls[0][2] as {
+      warningMessage: string;
+    };
+    expect(patch.warningMessage).toContain('delete boom');
+    // 42501（権限）と 57014（タイムアウト）は対処が違うので code も残す
+    expect(patch.warningMessage).toContain('57014');
   });
 });

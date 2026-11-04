@@ -425,6 +425,39 @@ describe('WatchlistList', () => {
       expect(screen.queryByRole('img', { name: /評価:/ })).toBeNull();
     });
 
+    /**
+     * 評価はカード本体（role='button'）の内側にある。ARIA の
+     * Children Presentational により role='button' の子孫は読み上げから
+     * 刈られる実装があるため、カードの名前そのものに畳み込む
+     */
+    it('評価をカードのアクセシブル名に含める', () => {
+      render(
+        <WatchlistList
+          watchlist={watchedItems()}
+          isLoading={false}
+          onClick={jest.fn()}
+          getFavoriteInfo={getFavorite}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: '映画0（評価 8/10）' }),
+      ).toBeInTheDocument();
+    });
+
+    it('評価が無いときはカード名をタイトルだけにする', () => {
+      render(
+        <WatchlistList
+          watchlist={watchedItems()}
+          isLoading={false}
+          onClick={jest.fn()}
+          getFavoriteInfo={() => null}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: '映画0' })).toBeInTheDocument();
+    });
+
     it('評価はタイル本体のクリックを妨げない', async () => {
       const user = userEvent.setup();
       const onClick = jest.fn();

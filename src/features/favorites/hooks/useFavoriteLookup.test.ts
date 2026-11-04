@@ -67,12 +67,10 @@ describe('useFavoriteLookup', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.getFavoriteInfo(1001)).toEqual({
-      id: 'fav-1',
-      rating: 1,
+      expect(result.current.getFavoriteInfo(1001)).toEqual({
+        id: 'fav-1',
+        rating: 1,
+      });
     });
   });
 
@@ -81,8 +79,9 @@ describe('useFavoriteLookup', () => {
       wrapper: createWrapper(),
     });
 
+    // 読み込み前も null なので、取得が反映されたことを確かめてから判定する
     await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
+      expect(result.current.getFavoriteInfo(1001)).not.toBeNull();
     });
 
     expect(result.current.getFavoriteInfo(9999)).toBeNull();
@@ -99,14 +98,12 @@ describe('useFavoriteLookup', () => {
       wrapper: createWrapper(),
     });
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
     // 21件目（index 20）と最後の25件目
-    expect(result.current.getFavoriteInfo(1021)).toEqual({
-      id: 'fav-21',
-      rating: 1,
+    await waitFor(() => {
+      expect(result.current.getFavoriteInfo(1021)).toEqual({
+        id: 'fav-21',
+        rating: 1,
+      });
     });
     expect(result.current.getFavoriteInfo(1025)).toEqual({
       id: 'fav-25',
@@ -122,7 +119,7 @@ describe('useFavoriteLookup', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
+      expect(mockGetFavoriteLookup).toHaveBeenCalled();
     });
 
     expect(result.current.getFavoriteInfo(1001)).toBeNull();
@@ -137,9 +134,10 @@ describe('useFavoriteLookup', () => {
     });
 
     await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
+      expect(mockGetFavoriteLookup).toHaveBeenCalled();
     });
 
+    // 例外が投げられず、全作品が未登録として扱われる
     expect(result.current.getFavoriteInfo(1001)).toBeNull();
   });
 

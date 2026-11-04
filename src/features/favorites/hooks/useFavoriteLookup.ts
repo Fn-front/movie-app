@@ -17,8 +17,6 @@ import { favoriteKeys } from '@/constants';
 export interface UseFavoriteLookupReturn {
   /** 指定映画のお気に入り情報を取得（未登録ならnull） */
   getFavoriteInfo: (tmdbMovieId: number) => MovieFavoriteInfo | null;
-  /** 照会の読み込み中 */
-  isLoading: boolean;
 }
 
 /**
@@ -59,11 +57,5 @@ export function useFavoriteLookup(): UseFavoriteLookupReturn {
     [favoriteMap],
   );
 
-  return useMemo(
-    () => ({
-      getFavoriteInfo,
-      isLoading: lookupQuery.isLoading,
-    }),
-    [getFavoriteInfo, lookupQuery.isLoading],
-  );
+  return useMemo(() => ({ getFavoriteInfo }), [getFavoriteInfo]);
 }

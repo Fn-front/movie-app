@@ -17,6 +17,7 @@ import {
   IMAGE_SIZES,
   DISPLAY_LIMITS,
   EMPTY_MESSAGES,
+  FAVORITES_RATING_MAX,
   WATCHLIST_WATCHED_LABELS,
 } from '@/constants';
 import { getTMDbPosterUrl } from '@/utils/image';
@@ -144,6 +145,14 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
   // 視聴済みを解除すれば、お気に入り登録が残っていても消える
   const showsRating = isWatched && favorite !== null;
 
+  // 評価はカード本体（role='button'）の内側にある。ARIA の
+  // Children Presentational により、role='button' の子孫はアクセシビリティ
+  // ツリーから刈られる実装があるため、RatingIndicator の aria-label だけでは
+  // 読み上げに届かない。カードの名前そのものに畳み込む
+  const cardLabel = showsRating
+    ? `${item.title}（評価 ${favorite.rating}/${FAVORITES_RATING_MAX}）`
+    : item.title;
+
   const handleClick = useCallback(() => {
     onClick?.(item.tmdb_movie_id);
   }, [item.tmdb_movie_id, onClick]);
@@ -206,7 +215,7 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
       onKeyDown={onClick ? handleKeyDown : undefined}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
-      aria-label={onClick ? item.title : undefined}
+      aria-label={onClick ? cardLabel : undefined}
     >
       <div className={styles.c_watchlist_tile__poster}>
         {posterUrl ? (

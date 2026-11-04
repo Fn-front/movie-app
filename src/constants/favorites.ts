@@ -29,6 +29,21 @@ export const FAVORITES_SELECT =
 export const FAVORITES_LOOKUP_SELECT = 'id, tmdb_movie_id, rating';
 
 /**
+ * お気に入り照会の1回あたり取得件数
+ *
+ * PostgREST の max_rows（supabase/config.toml は 1000）以下にする。
+ * 超える値を指定しても黙って打ち切られ、続きがあるのか判別できなくなる
+ */
+export const FAVORITES_LOOKUP_PAGE_SIZE = 1000;
+
+/**
+ * お気に入り照会で読むページ数の上限
+ *
+ * 10ページ = 10,000件。暴走を止めるための保険で、現実的な利用では到達しない
+ */
+export const FAVORITES_LOOKUP_MAX_PAGES = 10;
+
+/**
  * お気に入り評価の最小値
  */
 export const FAVORITES_RATING_MIN = 1;

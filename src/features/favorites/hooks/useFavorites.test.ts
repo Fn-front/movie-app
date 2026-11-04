@@ -556,6 +556,31 @@ describe('useFavorites', () => {
       });
     });
 
+    it('評価の更新に失敗すると照会キャッシュが元に戻る', async () => {
+      mockUpdateFavoriteRating.mockRejectedValue(new Error('network error'));
+
+      const { wrapper, queryClient } = createWrapperWithClient();
+      seedLookup(queryClient, [{ id: 'fav-1', tmdb_movie_id: 100, rating: 8 }]);
+
+      const { result } = renderHook(() => useFavorites(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.updateRating('fav-1', 2);
+      });
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({ variant: 'error' }),
+        );
+      });
+      expect(readLookup(queryClient)).toEqual([
+        { id: 'fav-1', tmdb_movie_id: 100, rating: 8 },
+      ]);
+    });
+
     it('削除すると照会キャッシュから消える', async () => {
       mockRemoveFavorite.mockResolvedValue(undefined);
 
@@ -665,7 +690,9 @@ describe('useFavorites', () => {
       return error;
     };
 
-    it('409なら重複だと分かるトーストを出す', async () => {
+    // 重複は失敗ではなく「すでに望みどおりの状態」。
+    // 赤いエラーだと「やり直さなければ」と誤解させる
+    it('409なら重複だと分かる警告トーストを出す', async () => {
       mockAddFavorite.mockRejectedValue(createConflictError());
 
       const { result } = renderHook(() => useFavorites(), {
@@ -686,8 +713,8 @@ describe('useFavorites', () => {
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith(
           expect.objectContaining({
-            description: FAVORITES_ERROR_MESSAGES.ALREADY_EXISTS,
-            variant: 'error',
+            title: FAVORITES_ERROR_MESSAGES.ALREADY_EXISTS,
+            variant: 'warning',
           }),
         );
       });

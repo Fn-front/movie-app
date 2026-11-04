@@ -88,13 +88,34 @@ describe('initMovieStreamingStatus', () => {
 
     expect(outcome).toBe('initialized');
     expect(mockGetJpStreamingAvailability).toHaveBeenCalledWith(12345);
+    // 「1作品につきTMDbは1回だけ」は Issue の完了条件なので回数まで固定する
+    expect(mockGetJpStreamingAvailability).toHaveBeenCalledTimes(1);
     expect(supabase.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         tmdb_movie_id: 12345,
         flatrate_provider_ids: [84],
         paid_provider_ids: [],
       }),
-      { onConflict: 'tmdb_movie_id' },
+      { onConflict: 'tmdb_movie_id', ignoreDuplicates: true },
+    );
+  });
+
+  /**
+   * SELECT と書き込みの間に Cron や他リクエストが行を作ることがある。
+   * この関数の役目は「無ければ作る」だけなので、競合したら何もしないのが正しい。
+   * 既定の merge-duplicates だと相手の行を黙って上書きしてしまう
+   */
+  it('競合時に既存行を上書きしない（ON CONFLICT DO NOTHING）', async () => {
+    const supabase = createSupabase({ data: null, error: null });
+    mockGetJpStreamingAvailability.mockResolvedValue(
+      availability({ flatrate: [84] }),
+    );
+
+    await initMovieStreamingStatus(supabase.client, 12345, NOW);
+
+    expect(supabase.upsert).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ ignoreDuplicates: true }),
     );
   });
 

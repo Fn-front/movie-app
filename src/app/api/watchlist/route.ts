@@ -30,6 +30,14 @@ import { initMovieStreamingStatus } from '@/lib/sync/initMovieStreamingStatus';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 import { watchlistQuerySchema, watchlistAddSchema } from '@/schema/watchlist';
 
+/**
+ * 追加時に TMDb へ1回問い合わせる（配信状況の初期化）ぶんの余裕を持たせる。
+ *
+ * TMDb 側は1リクエスト10秒で打ち切る（TMDB_REQUEST_TIMEOUT_MS）ので、
+ * 最悪でもそこで失敗して追加は成功する。環境の既定値に依存させないために明示する
+ */
+export const maxDuration = 30;
+
 export const GET = withAuth(
   async ({ session, supabase, request }) => {
     // クエリパラメータのバリデーション

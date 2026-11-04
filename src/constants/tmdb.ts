@@ -3,6 +3,18 @@
  */
 
 /**
+ * TMDb への1リクエストの制限時間（ミリ秒）
+ *
+ * 未設定だと axios は無制限に待つ。日次Cronのようなバックグラウンド処理なら
+ * それでも実害は無かったが、ウォッチリスト追加のような対話的な書き込みから
+ * 呼ぶようになると、TMDb が応答を返さないだけで関数タイムアウトまで待たされる。
+ *
+ * タイムアウトはレスポンスを伴わないため `RETRYABLE_STATUS_CODES` に当たらず、
+ * リトライせずその場で失敗する（＝最悪でもこの時間で打ち切られる）。
+ */
+export const TMDB_REQUEST_TIMEOUT_MS = 10000;
+
+/**
  * TMDb API リトライ設定
  */
 export const TMDB_RETRY_CONFIG = {
@@ -10,6 +22,13 @@ export const TMDB_RETRY_CONFIG = {
   MAX_RETRY_COUNT: 3,
   /** リトライ待機時間（ミリ秒） */
   RETRY_DELAY_MS: 1000,
+  /**
+   * リトライ待機時間の上限（ミリ秒）
+   *
+   * TMDb が返す `Retry-After` をそのまま使うと、`Retry-After: 30` のときに
+   * 3回で90秒待つことになる。対話的な経路から呼ぶには長すぎるため頭を打つ
+   */
+  MAX_RETRY_DELAY_MS: 5000,
   /** リトライ対象のHTTPステータスコード */
   RETRYABLE_STATUS_CODES: [429, 503, 504] as readonly number[],
 } as const;

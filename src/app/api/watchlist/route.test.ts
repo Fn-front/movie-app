@@ -588,8 +588,10 @@ describe('POST /api/watchlist の配信状況の初期化', () => {
     const response = await POST(addRequest());
 
     expect(response.status).toBe(201);
+    // service role のクライアントが渡っていること。expect.anything() だと
+    // 誤って別のオブジェクトを渡してもパスしてしまう
     expect(mockInitMovieStreamingStatus).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.objectContaining({ from: mockFrom }),
       12345,
     );
   });

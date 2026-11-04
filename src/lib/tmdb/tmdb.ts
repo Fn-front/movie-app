@@ -18,6 +18,7 @@ import {
   TMDB_MOVIE_DETAIL_APPEND,
   TMDB_PERSON_DETAIL_APPEND,
   TMDB_JP_COUNTRY_CODE,
+  TMDB_REQUEST_TIMEOUT_MS,
   TMDB_RETRY_CONFIG,
   TMDB_STREAMING_AVAILABILITY_APPEND,
   TMDB_THEATRICAL_RELEASE_TYPES,
@@ -56,6 +57,9 @@ if (!TMDB_ACCESS_TOKEN) {
  */
 const tmdbClient = axios.create({
   baseURL: API.TMDB_BASE_URL,
+  // 既定（0 = 無制限）のままだと、TMDb が応答を返さないときに呼び出し側が
+  // いつまでも待つ。対話的な書き込み経路からも呼ぶため上限を設ける
+  timeout: TMDB_REQUEST_TIMEOUT_MS,
   headers: {
     Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
   },
@@ -94,8 +98,10 @@ tmdbClient.interceptors.response.use(undefined, async (error: AxiosError) => {
   (config as { __retryCount?: number }).__retryCount = retryCount + 1;
 
   const retryAfter = error.response?.headers?.['retry-after'];
+  // Retry-After をそのまま使うと、大きい値を返されたとき呼び出し側が
+  // 待たされ続ける（3回で retryAfter × 3 秒）。上限で頭を打つ
   const delay = retryAfter
-    ? Number(retryAfter) * 1000
+    ? Math.min(Number(retryAfter) * 1000, TMDB_RETRY_CONFIG.MAX_RETRY_DELAY_MS)
     : TMDB_RETRY_CONFIG.RETRY_DELAY_MS;
 
   await new Promise((resolve) => setTimeout(resolve, delay));

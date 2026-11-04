@@ -21,6 +21,7 @@ import {
 } from '@/constants/awards';
 import type { OpenAiAwardItem } from '@/schema/awards';
 import { fetchEigaOscarAwards } from '@/lib/eiga/fetchEigaOscarAwards';
+import type { EigaFetchOutcome } from '@/lib/eiga/types';
 import {
   buildWikipediaTitle,
   extractMovieTitlesFromWikitext,
@@ -33,10 +34,7 @@ import {
   fetchWikipediaArticle,
   type SectionLookup,
 } from '@/lib/wikipedia/fetchArticle';
-import {
-  fetchEigaGoldenGlobes,
-  type EigaFetchOutcome,
-} from '@/lib/eiga/fetchEigaGoldenGlobes';
+import { fetchEigaGoldenGlobes } from '@/lib/eiga/fetchEigaGoldenGlobes';
 import { fetchCannesFromWikitext } from '@/lib/wikipedia/parseCannesAwards';
 
 import { deleteStaleAwardRows } from './deleteStaleAwardRows';
@@ -240,9 +238,11 @@ export async function fetchAndResolveAward(
     if (eiga.type === 'ok') {
       fetched = { items: eiga.items };
     } else {
-      // eiga.com取得失敗時はWikipedia+OpenAIにフォールバック
+      // eiga.com が駄目なときは Wikipedia+OpenAI にフォールバックする。
+      // フォールバック先も失敗したらそちらの理由を返すため、eiga 側の理由は
+      // 画面には出ない。ログには残す（"0件" と "到達できなかった" は別物）
       console.warn(
-        `eiga.com returned 0 items for ${year}, falling back to Wikipedia+OpenAI`,
+        `eiga.com for ${year} was ${eiga.type}, falling back to Wikipedia+OpenAI`,
       );
       fetched = await fetchAwardItemsViaWikipedia(awardName, awardDef, year);
     }
@@ -393,6 +393,19 @@ function toSkippedAward(
       award_name: awardName,
       reason: result.type,
       detail: result.wikipediaTitle,
+    };
+  }
+
+  // どの取得元で起きたかを残す。reason だけでは eiga 由来か openai 由来か
+  // 判別できない。cron は Bearer 認証の裏なので取得元名を出してよい
+  if (
+    result.type === 'source_unavailable' ||
+    result.type === 'source_changed'
+  ) {
+    return {
+      award_name: awardName,
+      reason: result.type,
+      detail: result.source,
     };
   }
 

@@ -15,8 +15,8 @@ import {
   fetchEigaGoldenGlobes,
   parseGoldenGlobeRow,
   resolveGoldenGlobeCategoryKey,
-  type EigaFetchOutcome,
 } from './fetchEigaGoldenGlobes';
+import type { EigaFetchOutcome } from './types';
 import type { OpenAiAwardItem } from '@/schema/awards';
 
 jest.mock('axios');
@@ -248,18 +248,14 @@ describe('fetchEigaGoldenGlobes', () => {
 
     const result = await fetchEigaGoldenGlobes(2025);
 
-    expect(
-      itemsOf(result).every((i: { year: number }) => i.year === 2024),
-    ).toBe(true);
+    expect(itemsOf(result).every((i) => i.year === 2024)).toBe(true);
   });
 
   it('演技賞では person_name を持たせる', async () => {
     mockedAxios.get.mockResolvedValue({ data: HTML_82ND });
 
     const result = await fetchEigaGoldenGlobes(2025);
-    const maria = itemsOf(result).find(
-      (i: { title_ja: string }) => i.title_ja === 'マリア',
-    );
+    const maria = itemsOf(result).find((i) => i.title_ja === 'マリア');
 
     expect(maria?.person_name).toBe('アンジェリーナ・ジョリー');
     expect(maria?.category).toBe('best_actress_drama');
@@ -288,7 +284,7 @@ describe('fetchEigaGoldenGlobes', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  it('取得に失敗した場合は空配列を返す', async () => {
+  it('ページを取得できなかった場合は unavailable を返す', async () => {
     mockedAxios.get.mockRejectedValue(new Error('Network error'));
 
     // 取得できなかったことを理由として返す。0件と混ぜない

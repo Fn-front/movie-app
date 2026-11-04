@@ -175,8 +175,12 @@ describe('executeSyncAwardMoviesCron', () => {
       new Set(['テスト映画', 'テスト']),
     );
     mockExtractPersonNamesFromWikitext.mockReturnValue(new Set());
-    // デフォルトでeiga.comが空配列を返す状態
+    // デフォルトでeiga.comが0件を返す状態。
+    // ⚠️ ゴールデングローブ賞は eiga.com だけを見る。ここで既定値を与えないと
+    //    undefined が返って TypeError になり、「スキップされた」ことだけを見る
+    //    アサーションがエラー経由で通ってしまう（理由を検証できない）
     mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
+    mockFetchEigaGoldenGlobes.mockResolvedValue({ type: 'empty' });
   });
 
   afterEach(() => {
@@ -292,6 +296,27 @@ describe('executeSyncAwardMoviesCron', () => {
           award_name: 'cannes',
           reason: 'error',
           detail: 'network down',
+        },
+      ]);
+    }
+  });
+
+  it('取得元に到達できなかった賞は、どの取得元かをサマリーに残す', async () => {
+    // reason だけだと eiga 由来か openai 由来か判別できない
+    jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
+
+    mockFetchEigaGoldenGlobes.mockResolvedValue({ type: 'unavailable' });
+
+    const supabase = createMockSupabase();
+    const result = await executeSyncAwardMoviesCron(supabase);
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.data.skipped_awards).toEqual([
+        {
+          award_name: 'golden_globes',
+          reason: 'source_unavailable',
+          detail: 'eiga',
         },
       ]);
     }
@@ -413,17 +438,9 @@ describe('executeSyncAwardMoviesCron', () => {
   it('TMDb解決が空結果の場合は該当賞をスキップする', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchAwardsFromOpenAI.mockResolvedValue({
+    mockFetchEigaGoldenGlobes.mockResolvedValue({
       type: 'ok',
-      items: [
-        {
-          title_ja: 'テスト',
-          title_en: 'Test',
-          category: 'best_drama',
-          is_winner: true,
-          year: 2025,
-        },
-      ],
+      items: GOLDEN_GLOBES_ITEMS,
     });
     mockResolveAwardsWithTMDb.mockResolvedValue([]);
 
@@ -432,26 +449,18 @@ describe('executeSyncAwardMoviesCron', () => {
 
     expect(result.type).toBe('success');
     if (result.type === 'success') {
-      expect(result.data.skipped_awards.map((s) => s.award_name)).toContain(
-        'golden_globes',
-      );
+      expect(result.data.skipped_awards).toEqual([
+        { award_name: 'golden_globes', reason: 'no_tmdb_match' },
+      ]);
     }
   });
 
   it('UPSERT失敗時は該当賞をスキップする', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchAwardsFromOpenAI.mockResolvedValue({
+    mockFetchEigaGoldenGlobes.mockResolvedValue({
       type: 'ok',
-      items: [
-        {
-          title_ja: 'テスト',
-          title_en: 'Test',
-          category: 'best_drama',
-          is_winner: true,
-          year: 2025,
-        },
-      ],
+      items: GOLDEN_GLOBES_ITEMS,
     });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
@@ -462,9 +471,13 @@ describe('executeSyncAwardMoviesCron', () => {
 
     expect(result.type).toBe('success');
     if (result.type === 'success') {
-      expect(result.data.skipped_awards.map((s) => s.award_name)).toContain(
-        'golden_globes',
-      );
+      expect(result.data.skipped_awards).toEqual([
+        {
+          award_name: 'golden_globes',
+          reason: 'write_failed',
+          detail: 'DB error',
+        },
+      ]);
     }
   });
 
@@ -970,6 +983,39 @@ describe('syncSingleAward', () => {
         },
       ],
     });
+    const { supabase } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'all_hallucinated' });
+  });
+
+  it('部門ごとに結果が違うとき、捏造を取得失敗より優先して報告する', async () => {
+    // 部門Aは返ってきたが全件が捏造、部門Bは呼び出し自体が失敗。
+    // 「APIが落ちている」より「返ってきた内容が信用できない」を先に伝える
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== 受賞とノミネート ==\n本文',
+      sectionLookup: 'found',
+    });
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(
+      new Set(['実在する映画']),
+    );
+    mockFetchAwardsFromOpenAI
+      .mockResolvedValueOnce({
+        type: 'ok',
+        items: [
+          {
+            title_ja: '捏造された映画',
+            title_en: 'Fabricated',
+            category: 'best_picture',
+            is_winner: true,
+            year: 2024,
+          },
+        ],
+      })
+      .mockResolvedValue({ type: 'unavailable' });
     const { supabase } = createCapturingSupabase();
 
     const result = await syncSingleAward(supabase, params);

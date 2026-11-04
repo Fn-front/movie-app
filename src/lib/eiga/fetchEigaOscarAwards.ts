@@ -11,7 +11,7 @@ import { EIGA_FETCH_TIMEOUT_MS } from '@/constants';
 import type { OpenAiAwardItem } from '@/schema/awards';
 import { getRequiredEnv } from '@/utils/env';
 
-import type { EigaFetchOutcome } from './fetchEigaGoldenGlobes';
+import type { EigaFetchOutcome } from './types';
 
 import { cleanHtmlText, decodeHtmlEntities } from './htmlText';
 

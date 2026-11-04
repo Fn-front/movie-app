@@ -14,7 +14,7 @@ import {
   extractPersonCategoryNominees,
   extractOthersPageNominees,
 } from './fetchEigaOscarAwards';
-import type { EigaFetchOutcome } from './fetchEigaGoldenGlobes';
+import type { EigaFetchOutcome } from './types';
 import type { OpenAiAwardItem } from '@/schema/awards';
 
 jest.mock('axios');

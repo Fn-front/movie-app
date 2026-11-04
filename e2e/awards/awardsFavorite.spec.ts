@@ -92,9 +92,9 @@ test.describe('受賞作品 — カードからお気に入りを操作する', 
     const addDialog = page.getByRole('dialog');
     await expect(addDialog).toBeVisible();
     // 未登録なので新規登録の体裁（削除ボタンが無い）
-    await expect(
-      addDialog.getByRole('button', { name: '削除' }),
-    ).toHaveCount(0);
+    await expect(addDialog.getByRole('button', { name: '削除' })).toHaveCount(
+      0,
+    );
 
     await addDialog.getByRole('radio', { name: '8点' }).click();
     const added = waitForFavoritesResponse(page);

@@ -8,11 +8,7 @@ import { type ReactNode, createElement } from 'react';
 import { AxiosError, AxiosHeaders } from 'axios';
 
 import { useFavorites } from './useFavorites';
-import {
-  favoriteKeys,
-  movieKeys,
-  FAVORITES_ERROR_MESSAGES,
-} from '@/constants';
+import { favoriteKeys, movieKeys, FAVORITES_ERROR_MESSAGES } from '@/constants';
 
 // --- Mocks ---
 
@@ -542,9 +538,7 @@ describe('useFavorites', () => {
       });
 
       const { wrapper, queryClient } = createWrapperWithClient();
-      seedLookup(queryClient, [
-        { id: 'fav-1', tmdb_movie_id: 100, rating: 8 },
-      ]);
+      seedLookup(queryClient, [{ id: 'fav-1', tmdb_movie_id: 100, rating: 8 }]);
 
       const { result } = renderHook(() => useFavorites(), { wrapper });
       await waitFor(() => {
@@ -591,9 +585,7 @@ describe('useFavorites', () => {
       mockRemoveFavorite.mockRejectedValue(new Error('network error'));
 
       const { wrapper, queryClient } = createWrapperWithClient();
-      seedLookup(queryClient, [
-        { id: 'fav-1', tmdb_movie_id: 100, rating: 8 },
-      ]);
+      seedLookup(queryClient, [{ id: 'fav-1', tmdb_movie_id: 100, rating: 8 }]);
 
       const { result } = renderHook(() => useFavorites(), { wrapper });
       await waitFor(() => {

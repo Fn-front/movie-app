@@ -34,10 +34,7 @@ const createGetRequest = () =>
  * `.select().eq().is()` のチェーンを組み立てる。
  * 各段の引数を控えて、ユーザー絞り込みと論理削除の除外を検証できるようにする
  */
-const mockQueryChain = (result: {
-  data: unknown[] | null;
-  error: unknown;
-}) => {
+const mockQueryChain = (result: { data: unknown[] | null; error: unknown }) => {
   const select = jest.fn();
   const eq = jest.fn();
   const is = jest.fn().mockReturnValue(result);

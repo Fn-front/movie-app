@@ -279,7 +279,9 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
           {item.release_date && (
             <p className={styles.c_watchlist_tile__date}>{item.release_date}</p>
           )}
-          {showsRating && <RatingIndicator rating={favorite.rating} size='sm' />}
+          {showsRating && (
+            <RatingIndicator rating={favorite.rating} size='sm' />
+          )}
         </div>
       </div>
     </Card>

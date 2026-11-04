@@ -236,9 +236,12 @@ describe('initMovieStreamingStatus', () => {
   });
 
   it('保存に失敗しても例外を投げず failed を返す', async () => {
-    const supabase = createSupabase({ data: null, error: null }, {
-      message: 'upsert failed',
-    });
+    const supabase = createSupabase(
+      { data: null, error: null },
+      {
+        message: 'upsert failed',
+      },
+    );
     mockGetJpStreamingAvailability.mockResolvedValue(
       availability({ flatrate: [84] }),
     );

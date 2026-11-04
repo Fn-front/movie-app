@@ -24,6 +24,7 @@ import { fetchEigaOscarAwards } from '@/lib/eiga/fetchEigaOscarAwards';
 import {
   buildWikipediaTitle,
   extractMovieTitlesFromWikitext,
+  extractPersonNamesFromWikitext,
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
 } from '@/lib/openai/generateAwardMovies';
@@ -64,6 +65,16 @@ export type SyncAwardMoviesCronResult = CronSuccess | CronError | CronSkipped;
 
 /** CRON同期対象外の賞 */
 const EXCLUDED_AWARDS: ReadonlySet<string> = new Set(AWARDS_EXCLUDED);
+
+/**
+ * 人名の表記ゆれを吸収する
+ *
+ * OpenAI の出力は非決定的で、半角中黒（U+FF65）や全角英数が混ざる。
+ * NFKC で寄せてから突き合わせないと、実在する人名を捏造と誤判定して落とす
+ */
+function normalizePersonName(raw: string): string {
+  return raw.normalize('NFKC').trim();
+}
 
 /** award_movies への UPSERT 用の1行 */
 export interface AwardMovieRow {
@@ -454,6 +465,10 @@ async function fetchAwardItemsViaWikipedia(
   }
 
   const validTitles = extractMovieTitlesFromWikitext(articleText);
+  // 人名は表記が揺れるため正規化した集合で持つ（半角中黒・全角英数など）
+  const validPersonNames = new Set(
+    [...extractPersonNamesFromWikitext(articleText)].map(normalizePersonName),
+  );
 
   for (const category of awardDef.categories) {
     let categoryItems: Awaited<ReturnType<typeof fetchAwardsFromOpenAI>> = null;
@@ -485,7 +500,9 @@ async function fetchAwardItemsViaWikipedia(
         // 作品自体は残し、裏が取れない氏名だけを落とす
         .map((item) => {
           const personName = item.person_name?.trim();
-          if (!personName || articleText.includes(personName)) return item;
+          if (!personName) return item;
+          if (validPersonNames.has(normalizePersonName(personName)))
+            return item;
 
           console.warn(
             `Hallucination detected: person "${personName}" not found in wikitext, dropping the name`,

@@ -37,6 +37,7 @@ import {
   buildUserPrompt,
   buildWikipediaTitle,
   extractMovieTitlesFromWikitext,
+  extractPersonNamesFromWikitext,
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
 } from './generateAwardMovies';
@@ -120,6 +121,67 @@ describe('buildWikipediaTitle', () => {
     expect(buildWikipediaTitle(year, AWARD_DEFINITIONS[awardName])).toBe(
       expected,
     );
+  });
+});
+
+describe('extractPersonNamesFromWikitext', () => {
+  // 第98回アカデミー賞 助演男優賞／助演女優賞の実際の形
+  const wikitext = [
+    '{{Award category|#eedd82|[[アカデミー助演男優賞|助演男優賞]]}}',
+    "* '''[[ショーン・ペン]]''' - 『'''[[ワン・バトル・アフター・アナザー]]'''』 : '''役名''' {{Double-dagger}}",
+    '** [[ベニチオ・デル・トロ]] - 『[[ワン・バトル・アフター・アナザー]]』 : 役名',
+    '** {{仮リンク|ウンミ・モサク|en|Wunmi Mosaku}} - 『[[罪人たち]]』 : アニー役',
+    '',
+    '司会は[[コナン・オブライエン]]が務めた。',
+  ].join('\n');
+
+  it('受賞者・ノミネート者の氏名を抽出する', () => {
+    const names = extractPersonNamesFromWikitext(wikitext);
+
+    expect(names.has('ショーン・ペン')).toBe(true);
+    expect(names.has('ベニチオ・デル・トロ')).toBe(true);
+  });
+
+  it('仮リンクは表示テキスト側を取る', () => {
+    const names = extractPersonNamesFromWikitext(wikitext);
+
+    expect(names.has('ウンミ・モサク')).toBe(true);
+    // 英語記事名は人名として扱わない
+    expect(names.has('Wunmi Mosaku')).toBe(false);
+  });
+
+  it('受賞一覧の行以外に出てくる人名は拾わない', () => {
+    // 司会者・プレゼンター・追悼セクションの人名が通ると、
+    // 別部門に無関係な人名が紛れ込む
+    const names = extractPersonNamesFromWikitext(wikitext);
+
+    expect(names.has('コナン・オブライエン')).toBe(false);
+  });
+
+  it('姓だけ・名だけは含まない（部分一致を許さないため）', () => {
+    const names = extractPersonNamesFromWikitext(wikitext);
+
+    expect(names.has('ペン')).toBe(false);
+    expect(names.has('デル・トロ')).toBe(false);
+  });
+
+  it('作品名は人名として拾わない', () => {
+    const names = extractPersonNamesFromWikitext(wikitext);
+
+    expect(names.has('ワン・バトル・アフター・アナザー')).toBe(false);
+    expect(names.has('罪人たち')).toBe(false);
+  });
+
+  it('作品賞の行（作品名 - プロデューサー）から作品名を拾わない', () => {
+    // 作品賞は「『作品』 - プロデューサー」の順で、- の前が作品名になる。
+    // 演技賞と逆なので、そのまま取ると作品名が人名の集合に入る
+    const names = extractPersonNamesFromWikitext(
+      "* '''『[[ワン・バトル・アフター・アナザー]]』''' - [[ポール・トーマス・アンダーソン]] {{Double-dagger}}",
+    );
+
+    expect(names.has('『ワン・バトル・アフター・アナザー』')).toBe(false);
+    expect(names.has('ワン・バトル・アフター・アナザー')).toBe(false);
+    expect(names.size).toBe(0);
   });
 });
 
@@ -401,8 +463,14 @@ describe('fetchAwardsFromOpenAI', () => {
     );
 
     const instructions = mockCreate.mock.calls[0][0].instructions as string;
-    expect(instructions).toContain('person_name');
-    expect(instructions).toContain('null');
+    // JSON の出力例にも person_name と null が出るため、
+    // それだけを見るとルール本文を消しても通ってしまう。固有語句で固定する
+    expect(instructions).toContain('人に贈られる部門');
+    expect(instructions).toContain(
+      '作品に贈られる部門では person_name は null',
+    );
+    expect(instructions).toContain('人ごとに別の項目として返す');
+    expect(instructions).toContain('推測で埋めないこと');
   });
 
   it('person_name を含むレスポンスをそのまま返す', async () => {

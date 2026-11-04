@@ -18,6 +18,38 @@ describe('openAiAwardItemSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('person_name が null でも有効（作品賞）', () => {
+    // OpenAI の Structured Outputs は strict モードで全キーを required にするため、
+    // 作品賞では null が返る。ここで弾くとレスポンス全体が不正扱いになり取得0件になる
+    const result = openAiAwardItemSchema.safeParse({
+      ...validItem,
+      person_name: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('person_name が無くても有効（eiga.com / wikitext 経路）', () => {
+    // これらのパーサは人名が取れないとき項目自体を省く
+    const result = openAiAwardItemSchema.safeParse(validItem);
+    expect(result.success).toBe(true);
+  });
+
+  it('person_name に文字列を入れられる（演技賞）', () => {
+    const result = openAiAwardItemSchema.safeParse({
+      ...validItem,
+      person_name: 'ショーン・ペン',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('person_name が数値の場合エラーになる', () => {
+    const result = openAiAwardItemSchema.safeParse({
+      ...validItem,
+      person_name: 123,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('title_jaが空の場合エラーになる', () => {
     const result = openAiAwardItemSchema.safeParse({
       ...validItem,

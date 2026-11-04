@@ -96,17 +96,30 @@ export type SyncSingleAwardResult =
   | { type: 'write_failed'; error: string };
 
 /**
- * 同じユニークキー（tmdb_movie_id × award_name × award_year × category）の行を除く
+ * award_movies の一意キー（DB の uq_award_movies_entry と同じ並び）
+ *
+ * UPSERT の競合キーとして supabase-js に渡す。DB 側の制約を変えたらここも直す
+ */
+export const AWARD_MOVIES_CONFLICT_TARGET =
+  'tmdb_movie_id,award_name,award_year,category,person_name';
+
+/**
+ * 同じユニークキー
+ * （tmdb_movie_id × award_name × award_year × category × person_name）の行を除く
  *
  * `resolveAwardsWithTMDb` は重複を返しうる。cron の UPSERT なら onConflict が
  * 吸収するが、手動同期は一意制約違反が多行まとめて1文のロールバックに直結する
  * ため、両経路でこの除去を共有する。
+ *
+ * **人名までキーに含める。** 演技賞では同じ作品から複数人がノミネートされる
+ * （第82回ゴールデングローブ賞 助演女優賞の『エミリア・ペレス』が2人）。
+ * 人名を無視すると先に来た1人だけが残り、受賞者が後ろにいると受賞が消える
  */
 export function dedupeAwardRows(rows: AwardMovieRow[]): AwardMovieRow[] {
   const seen = new Set<string>();
 
   return rows.filter((r) => {
-    const key = `${r.tmdb_movie_id}:${r.award_name}:${r.award_year}:${r.category}`;
+    const key = `${r.tmdb_movie_id}:${r.award_name}:${r.award_year}:${r.category}:${r.person_name ?? ''}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -206,7 +219,7 @@ export async function syncSingleAward(
   }
 
   const { error } = await supabase.from('award_movies').upsert(resolved.rows, {
-    onConflict: 'tmdb_movie_id,award_name,award_year,category',
+    onConflict: AWARD_MOVIES_CONFLICT_TARGET,
   });
 
   if (error) {

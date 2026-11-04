@@ -506,10 +506,15 @@ export async function resolveAwardsWithTMDb(
         continue;
       }
 
-      // 同じ映画×同じ部門の重複を防止（DBユニーク制約に合わせる）
+      // 同じ映画×同じ部門×同じ人の重複を防止（DBユニーク制約に合わせる）。
+      // 人名まで見るのは、演技賞で同じ作品から複数人がノミネートされるため。
+      // 人名を無視すると先に来た1人だけが残り、受賞者が後ろにいると受賞が消える
       if (
         resolved.some(
-          (r) => r.tmdb_movie_id === movie.id && r.category === item.category,
+          (r) =>
+            r.tmdb_movie_id === movie.id &&
+            r.category === item.category &&
+            (r.person_name ?? null) === (item.person_name ?? null),
         )
       ) {
         continue;

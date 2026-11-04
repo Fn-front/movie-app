@@ -7,6 +7,10 @@ import { AWARD_SYNC_MESSAGES } from '@/constants/awardSync';
 
 const mockFetchAndResolveAward = jest.fn();
 jest.mock('./syncAwardMoviesService', () => ({
+  // 競合キーは cron 側と同じ定数を使う。ここで実値を持たせることで、
+  // manualAwardSync が独自の文字列を書いたら検知できる
+  AWARD_MOVIES_CONFLICT_TARGET:
+    'tmdb_movie_id,award_name,award_year,category,person_name',
   fetchAndResolveAward: (...args: unknown[]) =>
     mockFetchAndResolveAward(...args),
 }));
@@ -100,6 +104,17 @@ describe('executeManualAwardSync', () => {
       JOB_ID,
       { status: 'succeeded', totalUpserted: 1 },
     );
+  });
+
+  it('UPSERT の競合キーに person_name を含める', async () => {
+    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    const db = createSupabase();
+
+    await executeManualAwardSync(wrap(db), params);
+
+    expect(db.upsert.mock.calls[0][1]).toEqual({
+      onConflict: 'tmdb_movie_id,award_name,award_year,category,person_name',
+    });
   });
 
   it('取得0件なら award_movies に一切触らず failed にする', async () => {

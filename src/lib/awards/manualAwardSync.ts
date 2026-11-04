@@ -24,7 +24,10 @@ import {
   type SyncableAwardName,
 } from '@/constants/awardSync';
 
-import { fetchAndResolveAward } from './syncAwardMoviesService';
+import {
+  AWARD_MOVIES_CONFLICT_TARGET,
+  fetchAndResolveAward,
+} from './syncAwardMoviesService';
 import { finishJobIfRunning, isJobStillRunning } from './awardSyncJob';
 
 interface ManualAwardSyncParams {
@@ -85,7 +88,7 @@ export async function executeManualAwardSync(
     const { error: upsertError } = await supabase
       .from('award_movies')
       .upsert(resolved.rows, {
-        onConflict: 'tmdb_movie_id,award_name,award_year,category',
+        onConflict: AWARD_MOVIES_CONFLICT_TARGET,
       });
 
     // UPSERT が失敗したらここで終わる。DELETE へ進むと既存データを失う

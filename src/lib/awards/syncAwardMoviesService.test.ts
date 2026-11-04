@@ -623,6 +623,60 @@ describe('syncSingleAward', () => {
     expect(upsert.mock.calls[0][0]).toHaveLength(1);
   });
 
+  it('同じ映画×同じ部門でも人名が異なれば両方 UPSERT する', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    // 演技賞では同じ作品から複数人がノミネートされる。受賞者が後ろにいると
+    // 先勝ちで潰した場合に受賞が消える
+    mockResolveAwardsWithTMDb.mockResolvedValue([
+      createResolvedMovie({
+        tmdb_movie_id: 1,
+        is_winner: false,
+        display_order: 1,
+        person_name: 'セレーナ・ゴメス',
+      }),
+      createResolvedMovie({
+        tmdb_movie_id: 1,
+        is_winner: true,
+        display_order: 2,
+        person_name: 'ゾーイ・サルダナ',
+      }),
+    ]);
+    const { supabase, upsert } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'synced', upsertedCount: 2 });
+    expect(upsert.mock.calls[0][0]).toHaveLength(2);
+  });
+
+  it('UPSERT の競合キーに person_name を含める', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase, upsert } = createCapturingSupabase();
+
+    await syncSingleAward(supabase, params);
+
+    expect(upsert.mock.calls[0][1]).toEqual({
+      onConflict: 'tmdb_movie_id,award_name,award_year,category,person_name',
+    });
+  });
+
   it('例外を握り潰さず呼び出し元へ投げる', async () => {
     mockFetchEigaOscarAwards.mockRejectedValue(new Error('network down'));
     const { supabase } = createCapturingSupabase();

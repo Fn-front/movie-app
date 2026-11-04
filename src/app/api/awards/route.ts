@@ -45,7 +45,7 @@ const AWARD_MOVIES_SELECT =
  * 受賞作品の行型
  * ※ AWARD_MOVIES_SELECT と必ず同期すること
  */
-interface AwardMovieRow {
+export interface AwardMovieRow {
   tmdb_movie_id: number;
   title: string;
   poster_path: string | null;

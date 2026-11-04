@@ -33,7 +33,7 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: jest.fn().mockResolvedValue({ allowed: true }),
 }));
 
-import { GET } from './route';
+import { GET, type AwardMovieRow } from './route';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import type { AwardMovie } from '@/features/awards/types';
 
@@ -42,8 +42,13 @@ import type { AwardMovie } from '@/features/awards/types';
 /** レスポンスの nominees から取り出して検証する項目 */
 type NomineeShape = Pick<AwardMovie, 'tmdbMovieId' | 'isWinner'>;
 
-/** award_movies の1行（SELECT で取るカラムぶん） */
-function createAwardRow(overrides: Record<string, unknown> = {}) {
+/**
+ * award_movies の1行（SELECT で取るカラムぶん）
+ *
+ * `Partial<AwardMovieRow>` にして override のキーを型で縛る。
+ * `Record<string, unknown>` だと `is_winer` のような打ち間違いが素通りする
+ */
+function createAwardRow(overrides: Partial<AwardMovieRow> = {}) {
   return {
     tmdb_movie_id: 100,
     title: 'テスト映画',
@@ -104,22 +109,7 @@ describe('GET /api/awards', () => {
 
   it('カテゴリに winner フィールドを含めない', async () => {
     mockYearQuery([2026]);
-    mockAwardDataQuery([
-      {
-        tmdb_movie_id: 100,
-        title: '受賞映画',
-        poster_path: '/winner.jpg',
-        release_date: '2025-12-01',
-        vote_average: 8.5,
-        genre_ids: [18],
-        person_name: null,
-        award_name: 'academy_awards',
-        award_year: 2026,
-        category: 'best_picture',
-        is_winner: true,
-        display_order: 1,
-      },
-    ]);
+    mockAwardDataQuery([createAwardRow({ is_winner: true })]);
 
     const response = await GET(createRequest('2026'));
     const body = await response.json();
@@ -347,7 +337,7 @@ describe('GET /api/awards', () => {
       (c: { category: string }) => c.category === 'jury_prize',
     );
     expect(
-      category.nominees.filter((n: { isWinner: boolean }) => n.isWinner),
+      category.nominees.filter((n: NomineeShape) => n.isWinner),
     ).toHaveLength(2);
   });
 

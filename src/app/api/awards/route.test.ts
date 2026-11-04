@@ -54,13 +54,19 @@ function mockYearQuery(years: number[]) {
   mockAnonRpc.mockResolvedValueOnce({ data: years, error: null });
 }
 
+/** 直近の `.select()` に渡された文字列。カラムの取り漏れを検知するために記録する */
+let lastSelectColumns: string | undefined;
+
 function mockAwardDataQuery(rows: Record<string, unknown>[]) {
   mockAnonFrom.mockReturnValueOnce({
-    select: () => ({
-      eq: () => ({
-        order: () => Promise.resolve({ data: rows, error: null }),
-      }),
-    }),
+    select: (columns: string) => {
+      lastSelectColumns = columns;
+      return {
+        eq: () => ({
+          order: () => Promise.resolve({ data: rows, error: null }),
+        }),
+      };
+    },
   });
 }
 
@@ -69,7 +75,34 @@ function mockAwardDataQuery(rows: Record<string, unknown>[]) {
 describe('GET /api/awards', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    lastSelectColumns = undefined;
     (checkRateLimit as jest.Mock).mockResolvedValue({ allowed: true });
+  });
+
+  it('レスポンスの組み立てに必要なカラムをすべて SELECT する', async () => {
+    mockYearQuery([2026]);
+    mockAwardDataQuery([]);
+
+    await GET(createRequest('2026'));
+
+    // どれか1つでも落ちると、その項目が undefined のまま返る。
+    // 特に is_winner は受賞／ノミネートの振り分けの唯一のソースで、
+    // 落ちると全部門の「受賞」が消えてノミネート扱いになる
+    for (const column of [
+      'tmdb_movie_id',
+      'title',
+      'poster_path',
+      'release_date',
+      'vote_average',
+      'genre_ids',
+      'person_name',
+      'award_name',
+      'category',
+      'is_winner',
+      'display_order',
+    ]) {
+      expect(lastSelectColumns).toContain(column);
+    }
   });
 
   it('yearパラメータなしの場合400を返す', async () => {
@@ -188,6 +221,100 @@ describe('GET /api/awards', () => {
     const category = body.data.awards[0].categories[0];
     expect(category.winner.tmdbMovieId).toBe(100);
     expect(category.nominees).toHaveLength(2);
+  });
+
+  it('nominees の各要素が isWinner を持つ', async () => {
+    mockYearQuery([2026]);
+    mockAwardDataQuery([
+      {
+        tmdb_movie_id: 100,
+        title: '受賞映画',
+        poster_path: '/winner.jpg',
+        release_date: '2025-12-01',
+        vote_average: 8.5,
+        genre_ids: [18],
+        person_name: null,
+        award_name: 'academy_awards',
+        award_year: 2026,
+        category: 'best_picture',
+        is_winner: true,
+        display_order: 1,
+      },
+      {
+        tmdb_movie_id: 200,
+        title: 'ノミネート映画',
+        poster_path: '/nominee.jpg',
+        release_date: '2025-11-01',
+        vote_average: 7.5,
+        genre_ids: [18],
+        person_name: null,
+        award_name: 'academy_awards',
+        award_year: 2026,
+        category: 'best_picture',
+        is_winner: false,
+        display_order: 2,
+      },
+    ]);
+
+    const response = await GET(createRequest('2026'));
+    const body = await response.json();
+
+    const category = body.data.awards[0].categories[0];
+    expect(
+      category.nominees.map((n: { tmdbMovieId: number; isWinner: boolean }) => [
+        n.tmdbMovieId,
+        n.isWinner,
+      ]),
+    ).toEqual([
+      [100, true],
+      [200, false],
+    ]);
+    expect(category.winner.isWinner).toBe(true);
+  });
+
+  it('同点受賞は全件が isWinner=true で返る', async () => {
+    mockYearQuery([2025]);
+    // 第78回カンヌ 審査員賞は『シラート』と『落下音』の同点受賞
+    mockAwardDataQuery([
+      {
+        tmdb_movie_id: 1151272,
+        title: 'シラート',
+        poster_path: null,
+        release_date: '2025-05-01',
+        vote_average: 7.0,
+        genre_ids: [18],
+        person_name: 'オリヴァー・ラクセ',
+        award_name: 'cannes',
+        award_year: 2025,
+        category: 'jury_prize',
+        is_winner: true,
+        display_order: 1,
+      },
+      {
+        tmdb_movie_id: 1221061,
+        title: '落下音',
+        poster_path: null,
+        release_date: '2025-05-01',
+        vote_average: 7.0,
+        genre_ids: [18],
+        person_name: 'マーシャ・シリンスキー',
+        award_name: 'cannes',
+        award_year: 2025,
+        category: 'jury_prize',
+        is_winner: true,
+        display_order: 2,
+      },
+    ]);
+
+    const response = await GET(createRequest('2025'));
+    const body = await response.json();
+
+    const category = body.data.awards[0].categories.find(
+      (c: { category: string }) => c.category === 'jury_prize',
+    );
+    expect(
+      category.nominees.filter((n: { isWinner: boolean }) => n.isWinner),
+    ).toHaveLength(2);
   });
 
   it('AWARD_DEFINITIONSの定義順でカテゴリが返される', async () => {

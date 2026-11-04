@@ -59,16 +59,13 @@ interface AwardMovieRow {
   display_order: number;
 }
 
-/** DBレコードをAwardMovie型に変換 */
-function toAwardMovie(row: {
-  tmdb_movie_id: number;
-  title: string;
-  poster_path: string | null;
-  release_date: string | null;
-  vote_average: number | null;
-  genre_ids: number[] | null;
-  person_name: string | null;
-}): AwardMovie {
+/**
+ * DBレコードをAwardMovie型に変換
+ *
+ * 引数の形を並べ直さず `AwardMovieRow` をそのまま受ける。カラム一覧が
+ * SELECT・行型・ここの3箇所に散ると、足し忘れが起きる
+ */
+function toAwardMovie(row: AwardMovieRow): AwardMovie {
   return {
     tmdbMovieId: row.tmdb_movie_id,
     title: row.title,
@@ -77,6 +74,7 @@ function toAwardMovie(row: {
     voteAverage: row.vote_average,
     genreIds: row.genre_ids,
     personName: row.person_name,
+    isWinner: row.is_winner,
   };
 }
 
@@ -186,6 +184,8 @@ export async function GET(request: Request) {
 
         if (categoryRows.length === 0) continue;
 
+        // `winner` は後方互換のために残す最初の1件。同点受賞を落とすため、
+        // 表示側は `nominees` を `isWinner` で振り分ける
         const winner = categoryRows.find((r) => r.is_winner) ?? null;
         const nominees = categoryRows.map(toAwardMovie);
 

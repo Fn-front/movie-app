@@ -48,74 +48,92 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
     isFavoriteProcessing,
     isFirstSection = false,
   }) {
-    const winnerCacheItem = useMemo(
-      () =>
-        category.winner ? awardMovieToMovieCacheItem(category.winner) : null,
-      [category.winner],
-    );
+    const { winners, nominees } = useMemo(() => {
+      const entries = category.nominees.map((award) => ({
+        /**
+         * 行を一意に識別するキー
+         *
+         * 同じ作品から複数人がノミネートされるため、映画IDだけでは衝突する
+         * （DBの一意キーも映画・部門・人名の組）
+         */
+        key: `${award.tmdbMovieId}:${award.personName ?? ''}`,
+        award,
+        movie: awardMovieToMovieCacheItem(award),
+      }));
 
-    const nomineeCacheItems = useMemo(
-      () =>
-        category.nominees
-          .filter(
-            (nominee) =>
-              !category.winner ||
-              nominee.tmdbMovieId !== category.winner.tmdbMovieId,
-          )
-          .map(awardMovieToMovieCacheItem),
-      [category.nominees, category.winner],
-    );
-
-    const personNameMap = useMemo(() => {
-      const map = new Map<number, string>();
-      for (const nominee of category.nominees) {
-        if (nominee.personName) {
-          map.set(nominee.tmdbMovieId, nominee.personName);
-        }
-      }
-      return map;
+      return {
+        winners: entries.filter((e) => e.award.isWinner),
+        nominees: entries.filter((e) => !e.award.isWinner),
+      };
     }, [category.nominees]);
 
+    // 一覧とラベルを紐づける。同点受賞で複数枚並ぶため、
+    // 「受賞」ラベルの隣接だけでは2枚目以降が受賞だと伝わらない
+    const sectionId = `category-${awardName}-${category.category}`;
+    const winnerLabelId = `${sectionId}-winner-label`;
+    const nomineeLabelId = `${sectionId}-nominee-label`;
+
     return (
-      <div
-        id={`category-${awardName}-${category.category}`}
-        className={styles.c_award_category}
-      >
+      <div id={sectionId} className={styles.c_award_category}>
         <h3 className={styles.c_award_category__title}>{category.label}</h3>
 
-        {winnerCacheItem && (
+        {winners.length > 0 && (
           <div className={styles.c_award_category__winner}>
-            <span className={styles.c_award_category__winner_label}>受賞</span>
-            <div className={styles.c_award_category__winner_tile}>
-              <MovieTile
-                movie={winnerCacheItem}
-                headingLevel={4}
-                eager={isFirstSection}
-                onClick={onMovieClick}
-                isInWatchlist={isInWatchlist(winnerCacheItem.id)}
-                onWatchlistToggle={onWatchlistToggle}
-                watchlistDisabled={isMovieToggling(winnerCacheItem.id)}
-                onFavoriteToggle={onFavoriteToggle}
-                favoriteDisabled={isFavoriteProcessing(winnerCacheItem.id)}
-              />
-              {personNameMap.get(winnerCacheItem.id) && (
-                <p className={styles.c_award_category__person_name}>
-                  {personNameMap.get(winnerCacheItem.id)}
-                </p>
-              )}
+            <span
+              id={winnerLabelId}
+              className={styles.c_award_category__winner_label}
+            >
+              受賞
+            </span>
+            <div
+              className={styles.c_award_category__winner_tiles}
+              role='list'
+              aria-labelledby={winnerLabelId}
+            >
+              {winners.map(({ key, award, movie }) => (
+                <div
+                  key={key}
+                  role='listitem'
+                  className={styles.c_award_category__winner_tile}
+                >
+                  <MovieTile
+                    movie={movie}
+                    headingLevel={4}
+                    eager={isFirstSection}
+                    onClick={onMovieClick}
+                    isInWatchlist={isInWatchlist(movie.id)}
+                    onWatchlistToggle={onWatchlistToggle}
+                    watchlistDisabled={isMovieToggling(movie.id)}
+                    onFavoriteToggle={onFavoriteToggle}
+                    favoriteDisabled={isFavoriteProcessing(movie.id)}
+                  />
+                  {award.personName && (
+                    <p className={styles.c_award_category__person_name}>
+                      {award.personName}
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {nomineeCacheItems.length > 0 && (
+        {nominees.length > 0 && (
           <div className={styles.c_award_category__nominees}>
-            <span className={styles.c_award_category__nominees_label}>
+            <span
+              id={nomineeLabelId}
+              className={styles.c_award_category__nominees_label}
+            >
               ノミネート
             </span>
-            <div className={styles.c_award_category__grid} role='list'>
-              {nomineeCacheItems.map((movie) => (
+            <div
+              className={styles.c_award_category__grid}
+              role='list'
+              aria-labelledby={nomineeLabelId}
+            >
+              {nominees.map(({ key, award, movie }) => (
                 <div
-                  key={movie.id}
+                  key={key}
                   role='listitem'
                   className={styles.c_award_category__item}
                 >
@@ -129,9 +147,9 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                     onFavoriteToggle={onFavoriteToggle}
                     favoriteDisabled={isFavoriteProcessing(movie.id)}
                   />
-                  {personNameMap.get(movie.id) && (
+                  {award.personName && (
                     <p className={styles.c_award_category__person_name}>
-                      {personNameMap.get(movie.id)}
+                      {award.personName}
                     </p>
                   )}
                 </div>

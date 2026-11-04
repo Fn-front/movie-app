@@ -15,6 +15,8 @@ export interface AwardSyncJobView {
   status: 'running' | 'succeeded' | 'failed';
   totalUpserted: number | null;
   errorMessage: string | null;
+  /** 成功時の警告。旧世代の削除に失敗して残留が残った場合など */
+  warningMessage: string | null;
   createdAt: string;
   startedAt: string;
   finishedAt: string | null;

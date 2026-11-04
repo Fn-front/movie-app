@@ -41,6 +41,14 @@ export interface SyncAwardMoviesSummary {
   synced_awards: string[];
   skipped_awards: string[];
   total_upserted: number;
+  /**
+   * 旧世代の削除に失敗した賞
+   *
+   * UPSERT は成功しておりデータは新しいので `synced_awards` にも入る。
+   * 残留行が残っている可能性だけをここに残す。無人の cron では
+   * `console.error` を誰も見ないため、レスポンスに出さないと気づけない
+   */
+  delete_failed_awards: string[];
 }
 
 /** Discriminated Union: CRON成功結果 */
@@ -104,7 +112,12 @@ export interface SyncSingleAwardParams {
 
 /** 1賞ぶんの同期結果 */
 export type SyncSingleAwardResult =
-  | { type: 'synced'; upsertedCount: number }
+  | {
+      type: 'synced';
+      upsertedCount: number;
+      /** 旧世代の削除に失敗したときだけ入る。成功扱いは変えない */
+      deleteError?: string;
+    }
   | { type: 'no_items' }
   | { type: 'no_tmdb_match' }
   | { type: 'write_failed'; error: string };
@@ -279,11 +292,17 @@ export async function syncSingleAward(
 
   if (deleteError) {
     // UPSERT は成功しているのでデータは新しい。残留が消えなかっただけなので
-    // 成功扱いにする（次回の同期で消える）
+    // 成功扱いにする。ただし結果には残す（アカデミー賞の cron は年1回なので、
+    // 「次回の同期で消える」は1年後を意味する）
     console.error(
       `[syncSingleAward] 旧世代の削除に失敗しました award=${params.awardName} year=${params.year}`,
       deleteError,
     );
+    return {
+      type: 'synced',
+      upsertedCount: resolved.rows.length,
+      deleteError: deleteError.message,
+    };
   }
 
   return { type: 'synced', upsertedCount: resolved.rows.length };
@@ -345,6 +364,7 @@ export async function executeSyncAwardMoviesCron(
 
   const syncedAwards: string[] = [];
   const skippedAwards: string[] = [];
+  const deleteFailedAwards: string[] = [];
   let totalUpserted = 0;
 
   for (const [awardName, awardDef] of targetAwards) {
@@ -359,6 +379,8 @@ export async function executeSyncAwardMoviesCron(
       if (result.type === 'synced') {
         totalUpserted += result.upsertedCount;
         syncedAwards.push(awardName);
+        // データは新しいので synced のまま。残留が残った事実だけを別に残す
+        if (result.deleteError) deleteFailedAwards.push(awardName);
         continue;
       }
 
@@ -379,6 +401,7 @@ export async function executeSyncAwardMoviesCron(
       month: isManualSync ? null : currentMonth,
       synced_awards: syncedAwards,
       skipped_awards: skippedAwards,
+      delete_failed_awards: deleteFailedAwards,
       total_upserted: totalUpserted,
     },
   };

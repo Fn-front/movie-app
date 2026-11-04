@@ -113,7 +113,8 @@ export async function executeManualAwardSync(
 
     if (deleteError) {
       // UPSERT は成功しているのでデータは新しい。残留が消えなかっただけなので
-      // 成功扱いにする（次回の同期で消える）
+      // 成功扱いにする。ただし「完了しました」だけだと残留に気づけないため、
+      // 警告として画面まで届ける
       console.error(
         `[manualAwardSync] 旧世代の削除に失敗しました award=${awardName} year=${year}`,
         deleteError,
@@ -123,6 +124,11 @@ export async function executeManualAwardSync(
     await finishJobIfRunning(supabase, jobId, {
       status: AWARD_SYNC_STATUS.SUCCEEDED,
       totalUpserted: resolved.rows.length,
+      ...(deleteError
+        ? {
+            warningMessage: `${AWARD_SYNC_MESSAGES.STALE_DELETE_FAILED}: ${deleteError.message}`,
+          }
+        : {}),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

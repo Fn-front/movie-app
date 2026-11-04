@@ -24,6 +24,7 @@ const baseJob: AwardSyncJob = {
   status: 'running',
   totalUpserted: null,
   errorMessage: null,
+  warningMessage: null,
   createdAt: '2026-10-31T00:00:00.000Z',
   startedAt: '2026-10-31T00:00:00.000Z',
   finishedAt: null,
@@ -92,6 +93,29 @@ describe('finishJobIfRunning', () => {
       status: 'succeeded',
       total_upserted: 12,
       error_message: null,
+      warning_message: null,
+    });
+  });
+
+  it('警告を付けて succeeded にできる（旧世代が消せなかったとき）', async () => {
+    const { supabase, patches } = createUpdateMock({
+      data: [{ id: JOB_ID }],
+      error: null,
+    });
+
+    const updated = await finishJobIfRunning(supabase, JOB_ID, {
+      status: 'succeeded',
+      totalUpserted: 12,
+      warningMessage: '旧世代の削除に失敗しました: timeout',
+    });
+
+    expect(updated).toBe(true);
+    expect(patches[0]).toMatchObject({
+      status: 'succeeded',
+      total_upserted: 12,
+      // 失敗ではないので error_message は空のまま
+      error_message: null,
+      warning_message: '旧世代の削除に失敗しました: timeout',
     });
   });
 
@@ -162,6 +186,7 @@ describe('ジョブの検索', () => {
     status: 'running' as const,
     total_upserted: null,
     error_message: null,
+    warning_message: null,
     created_at: baseJob.createdAt,
     started_at: baseJob.startedAt,
     finished_at: null,

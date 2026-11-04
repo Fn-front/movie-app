@@ -94,7 +94,10 @@ const CANNES_WIKITEXT = `==受賞作品==
 const WIKITEXT_WITH_PERSON =
   "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』";
 
-function createMockSupabase(upsertResult = { error: null }) {
+function createMockSupabase(
+  upsertResult = { error: null },
+  deleteResult: { error: unknown } = { error: null },
+) {
   return {
     from: jest.fn(() => ({
       upsert: jest.fn(() => upsertResult),
@@ -103,7 +106,7 @@ function createMockSupabase(upsertResult = { error: null }) {
         eq: jest.fn(() => ({
           eq: jest.fn(() => ({
             in: jest.fn(() => ({
-              lt: jest.fn().mockResolvedValue({ error: null }),
+              lt: jest.fn().mockResolvedValue(deleteResult),
             })),
           })),
         })),
@@ -204,6 +207,31 @@ describe('executeSyncAwardMoviesCron', () => {
     if (result.type === 'success') {
       expect(result.data.synced_awards).toContain('golden_globes');
       expect(result.data.total_upserted).toBeGreaterThan(0);
+      // 削除に失敗していなければ空
+      expect(result.data.delete_failed_awards).toEqual([]);
+    }
+  });
+
+  it('旧世代の削除に失敗した賞をサマリーに残す', async () => {
+    // 無人の cron では console.error を誰も見ない。レスポンスに残さないと
+    // 残留が1年（アカデミー賞は年1回）放置されても気づけない
+    jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
+
+    mockFetchEigaGoldenGlobes.mockResolvedValue(GOLDEN_GLOBES_ITEMS);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+
+    const supabase = createMockSupabase(
+      { error: null },
+      { error: { message: 'canceling statement due to statement timeout' } },
+    );
+    const result = await executeSyncAwardMoviesCron(supabase);
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      // データは新しいので synced のまま
+      expect(result.data.synced_awards).toContain('golden_globes');
+      expect(result.data.skipped_awards).not.toContain('golden_globes');
+      expect(result.data.delete_failed_awards).toEqual(['golden_globes']);
     }
   });
 
@@ -873,6 +901,29 @@ describe('syncSingleAward', () => {
       { error: null },
       { error: { message: 'delete boom' } },
     );
+
+    const result = await syncSingleAward(supabase, params);
+
+    // 成功扱いは変えない。ただし残留が残ったことは結果に残す
+    expect(result).toEqual({
+      type: 'synced',
+      upsertedCount: 1,
+      deleteError: 'delete boom',
+    });
+  });
+
+  it('削除に成功したら deleteError を含めない', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase } = createCapturingSupabase();
 
     const result = await syncSingleAward(supabase, params);
 

@@ -126,6 +126,8 @@ export const AWARD_SYNC_MESSAGES = {
   NO_TMDB_MATCH:
     'TMDbで該当する映画を特定できませんでした（既存データは変更していません）',
   WRITE_FAILED: 'データベースへの書き込みに失敗しました',
+  STALE_DELETE_FAILED:
+    '同期は完了しましたが、前回のデータの削除に失敗しました（古い行が残っている可能性があります）',
   SUPERSEDED: '強制失効により中断されました',
   STALE_HINT: '実行中の処理自体は止まりません（OpenAI の課金は続きます）',
 } as const;

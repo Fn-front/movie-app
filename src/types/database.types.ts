@@ -185,6 +185,7 @@ export type Database = {
           started_at: string;
           status: string;
           total_upserted: number | null;
+          warning_message: string | null;
         };
         Insert: {
           award_name: string;
@@ -197,6 +198,7 @@ export type Database = {
           started_at?: string;
           status: string;
           total_upserted?: number | null;
+          warning_message?: string | null;
         };
         Update: {
           award_name?: string;
@@ -209,6 +211,7 @@ export type Database = {
           started_at?: string;
           status?: string;
           total_upserted?: number | null;
+          warning_message?: string | null;
         };
         Relationships: [
           {

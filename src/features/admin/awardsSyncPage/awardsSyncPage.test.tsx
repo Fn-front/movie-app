@@ -138,6 +138,40 @@ describe('AwardsSyncPage', () => {
     ).toHaveAttribute('href', '/awards?t=2026-10-31T00%3A05%3A00.000Z');
   });
 
+  it('成功でも警告があれば出す（旧世代が消せなかったとき）', () => {
+    // 「完了しました」だけだと、残留が残ったことに admin が気づけない
+    hookState = {
+      ...baseState,
+      job: job({
+        status: 'succeeded',
+        totalUpserted: 12,
+        warningMessage: '旧世代の削除に失敗しました: timeout',
+        finishedAt: '2026-10-31T00:05:00.000Z',
+      }),
+    };
+    render(<AwardsSyncPage />);
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('12件');
+    expect(status).toHaveTextContent('旧世代の削除に失敗しました: timeout');
+  });
+
+  it('成功で警告が無ければ警告を出さない', () => {
+    hookState = {
+      ...baseState,
+      job: job({
+        status: 'succeeded',
+        totalUpserted: 12,
+        finishedAt: '2026-10-31T00:05:00.000Z',
+      }),
+    };
+    render(<AwardsSyncPage />);
+
+    expect(
+      document.querySelector('[class*="warning"]'),
+    ).not.toBeInTheDocument();
+  });
+
   it('失敗時はエラーメッセージを出す', () => {
     hookState = {
       ...baseState,

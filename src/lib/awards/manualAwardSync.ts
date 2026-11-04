@@ -16,7 +16,7 @@
  * 設計: `.claude/documents/admin-award-sync-design.md` 4-3
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 
 import {
   AWARD_DEFINITIONS,
@@ -31,6 +31,11 @@ import {
 import { deleteStaleAwardRows } from './deleteStaleAwardRows';
 import { fetchAndResolveAward } from './syncAwardMoviesService';
 import { finishJobIfRunning, isJobStillRunning } from './awardSyncJob';
+
+/** 事後調査に使えるよう code を添えて1行にする */
+function formatPostgrestError(error: PostgrestError): string {
+  return error.code ? `${error.message} (${error.code})` : error.message;
+}
 
 interface ManualAwardSyncParams {
   jobId: string;
@@ -126,7 +131,8 @@ export async function executeManualAwardSync(
       totalUpserted: resolved.rows.length,
       ...(deleteError
         ? {
-            warningMessage: `${AWARD_SYNC_MESSAGES.STALE_DELETE_FAILED}: ${deleteError.message}`,
+            // code も残す。42501（権限）と 57014（タイムアウト）は対処が違う
+            warningMessage: `${AWARD_SYNC_MESSAGES.STALE_DELETE_FAILED}: ${formatPostgrestError(deleteError)}`,
           }
         : {}),
     });

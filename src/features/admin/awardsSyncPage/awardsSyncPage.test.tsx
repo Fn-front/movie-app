@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { AwardsSyncPage } from './awardsSyncPage';
@@ -157,8 +157,12 @@ describe('AwardsSyncPage', () => {
   });
 
   it('成功で警告が無ければ警告を出さない', () => {
+    // クラス名で引くと、同名クラスのフォーム側ヒントを拾ってしまう。
+    // status の中に絞って見る
     hookState = {
       ...baseState,
+      year: '2024',
+      existingCount: 3,
       job: job({
         status: 'succeeded',
         totalUpserted: 12,
@@ -167,9 +171,35 @@ describe('AwardsSyncPage', () => {
     };
     render(<AwardsSyncPage />);
 
-    expect(
-      document.querySelector('[class*="warning"]'),
-    ).not.toBeInTheDocument();
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('12件');
+    expect(within(status).queryByText(/削除に失敗/)).not.toBeInTheDocument();
+  });
+
+  it('ジョブの警告とフォームの既存件数ヒントは別のスタイルを使う', () => {
+    // CSS Modules は同名クラスに同じ生成名を割り当てる。使い回すと、
+    // 既存件数ヒントにジョブ警告の枠線・余白が当たって見た目が変わる
+    hookState = {
+      ...baseState,
+      year: '2024',
+      existingCount: 42,
+      job: job({
+        status: 'succeeded',
+        totalUpserted: 12,
+        warningMessage: '旧世代の削除に失敗しました: timeout',
+        finishedAt: '2026-10-31T00:05:00.000Z',
+      }),
+    };
+    render(<AwardsSyncPage />);
+
+    const hint = screen.getByText(
+      'この年は既に42件あります。実行すると置き換わります。',
+    );
+    const jobWarning = screen.getByText('旧世代の削除に失敗しました: timeout');
+
+    expect(hint.className).not.toBe('');
+    expect(jobWarning.className).not.toBe('');
+    expect(jobWarning.className).not.toBe(hint.className);
   });
 
   it('失敗時はエラーメッセージを出す', () => {

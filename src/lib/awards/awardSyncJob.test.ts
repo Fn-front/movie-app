@@ -179,6 +179,13 @@ describe('isJobStillRunning', () => {
 });
 
 describe('ジョブの検索', () => {
+  /** 直近の `.select()` に渡された文字列。カラムの取り漏れを検知する */
+  let selectedColumns: string | undefined;
+
+  beforeEach(() => {
+    selectedColumns = undefined;
+  });
+
   const ROW = {
     id: JOB_ID,
     award_name: 'cannes',
@@ -196,7 +203,10 @@ describe('ジョブの検索', () => {
   function createEqMock(data: unknown) {
     const maybeSingle = jest.fn().mockResolvedValue({ data });
     const eq = jest.fn(() => ({ maybeSingle }));
-    const select = jest.fn(() => ({ eq }));
+    const select = jest.fn((columns: string) => {
+      selectedColumns = columns;
+      return { eq };
+    });
     const supabase = {
       from: jest.fn(() => ({ select })),
     } as unknown as Parameters<typeof findRunningJob>[0];
@@ -216,6 +226,29 @@ describe('ジョブの検索', () => {
 
     return { supabase, order, limit };
   }
+
+  it('ジョブの組み立てに必要なカラムをすべて SELECT する', async () => {
+    // 型は守ってくれない（toJob が row をキャストで受けるため）。
+    // 落とすと該当項目が undefined のまま JSON から消え、機能が静かに無効化される
+    const { supabase } = createEqMock(ROW);
+
+    await findRunningJob(supabase);
+
+    for (const column of [
+      'id',
+      'award_name',
+      'award_year',
+      'status',
+      'total_upserted',
+      'error_message',
+      'warning_message',
+      'created_at',
+      'started_at',
+      'finished_at',
+    ]) {
+      expect(selectedColumns).toContain(column);
+    }
+  });
 
   it('findRunningJob は running で絞り、スネークケースを変換して返す', async () => {
     const { supabase, eq } = createEqMock(ROW);

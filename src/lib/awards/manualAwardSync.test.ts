@@ -34,7 +34,7 @@ const ROWS = [
 /** award_movies の upsert / delete をモックする */
 function createSupabase(options?: {
   upsertError?: { message: string } | null;
-  deleteError?: { message: string } | null;
+  deleteError?: { message: string; code?: string } | null;
 }) {
   const upsert = jest
     .fn()
@@ -288,7 +288,9 @@ describe('executeManualAwardSync', () => {
       rows: ROWS,
       deletableCategories: ['palme_dor'],
     });
-    const db = createSupabase({ deleteError: { message: 'delete boom' } });
+    const db = createSupabase({
+      deleteError: { message: 'delete boom', code: '57014' },
+    });
 
     await executeManualAwardSync(wrap(db), params);
 
@@ -309,5 +311,7 @@ describe('executeManualAwardSync', () => {
       warningMessage: string;
     };
     expect(patch.warningMessage).toContain('delete boom');
+    // 42501（権限）と 57014（タイムアウト）は対処が違うので code も残す
+    expect(patch.warningMessage).toContain('57014');
   });
 });

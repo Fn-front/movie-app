@@ -289,6 +289,7 @@ cron も同じクライアントを使うため、設定値は cron の実行時
 | `requested_by` | uuid NOT NULL | `users(id)` 参照。**`ON DELETE` を明示する**（先例 `admin_audit_logs` は RESTRICT/CASCADE を明示）。admin 削除時にジョブ履歴をどうするかを決めて書く |
 | `total_upserted` | int | 成功時のみ |
 | `error_message` | text | 失敗時のみ。取得0件もここに理由を入れる |
+| `warning_message` | text | **成功時のみ**（#953 で追加）。旧世代の削除に失敗して残留が残った等。`error_message` と兼用しない（succeeded と同時に埋まると成功かエラーか読み取れない） |
 | `created_at` | timestamptz NOT NULL | `now()` |
 | `started_at` | timestamptz NOT NULL | INSERT 時に `now()`（4-2 で `pending` を廃したため NOT NULL） |
 | `finished_at` | timestamptz | |

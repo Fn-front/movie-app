@@ -143,7 +143,7 @@ const JobStatus = memo(function JobStatus({ job }: { job: AwardSyncJobView }) {
             「完了しました」だけだと admin が残留に気づけない
           */}
           {job.warningMessage && (
-            <p className={styles.c_awards_sync__warning}>
+            <p className={styles.c_awards_sync__job_warning}>
               {job.warningMessage}
             </p>
           )}

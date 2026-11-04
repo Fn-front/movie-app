@@ -519,7 +519,7 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 | created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
 
 **インデックス:**
-- `tmdb_movie_id, award_name, award_year, category` (UNIQUE) - 重複防止・UPSERT用
+- `tmdb_movie_id, award_name, award_year, category, person_name` (UNIQUE NULLS NOT DISTINCT) - 重複防止・UPSERT用。演技賞で同じ作品から複数人がノミネートされるため人名まで含める。`NULLS NOT DISTINCT` は作品賞系（`person_name` が NULL）の重複を防ぐため
 - `award_name, award_year` - 賞・年ごとの絞り込み用
 - `is_winner` - 受賞作品フィルタ用
 

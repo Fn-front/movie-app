@@ -13,6 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
   AWARD_DEFINITIONS,
+  AWARD_MOVIES_CONFLICT_TARGET,
   AWARDS_EXCLUDED,
   AWARDS_MAX_RETRIES,
   AWARDS_YEAR_MATCH_TOLERANCE,
@@ -94,14 +95,6 @@ export type SyncSingleAwardResult =
   | { type: 'no_items' }
   | { type: 'no_tmdb_match' }
   | { type: 'write_failed'; error: string };
-
-/**
- * award_movies の一意キー（DB の uq_award_movies_entry と同じ並び）
- *
- * UPSERT の競合キーとして supabase-js に渡す。DB 側の制約を変えたらここも直す
- */
-export const AWARD_MOVIES_CONFLICT_TARGET =
-  'tmdb_movie_id,award_name,award_year,category,person_name';
 
 /**
  * 同じユニークキー

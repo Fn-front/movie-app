@@ -17,17 +17,17 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { AWARD_DEFINITIONS } from '@/constants/awards';
+import {
+  AWARD_DEFINITIONS,
+  AWARD_MOVIES_CONFLICT_TARGET,
+} from '@/constants/awards';
 import {
   AWARD_SYNC_MESSAGES,
   AWARD_SYNC_STATUS,
   type SyncableAwardName,
 } from '@/constants/awardSync';
 
-import {
-  AWARD_MOVIES_CONFLICT_TARGET,
-  fetchAndResolveAward,
-} from './syncAwardMoviesService';
+import { fetchAndResolveAward } from './syncAwardMoviesService';
 import { finishJobIfRunning, isJobStillRunning } from './awardSyncJob';
 
 interface ManualAwardSyncParams {

@@ -793,6 +793,33 @@ describe('resolveAwardsWithTMDb', () => {
     expect(result).toHaveLength(1);
   });
 
+  it('空白だけの人名は人名なしとして扱い、重複を1件に潰す', async () => {
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 310,
+          title: 'テスト映画',
+          poster_path: null,
+          release_date: '2026-01-01',
+          vote_average: 7.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    // DB の一意キーは NULL 同士を重複とみなす（NULLS NOT DISTINCT）。
+    // 空文字を素通しすると DB 側で別キー扱いになり、作品賞が2行入る
+    const items = [
+      createAwardItem({ person_name: '' }),
+      createAwardItem({ person_name: '   ' }),
+      createAwardItem({}),
+    ];
+    const result = await resolveAwardsWithTMDb(items, testAwardDefinition);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].person_name).toBeUndefined();
+  });
+
   it('同じ映画×同じ部門でも人名が異なれば両方残す', async () => {
     mockSearchMovies.mockResolvedValue({
       results: [

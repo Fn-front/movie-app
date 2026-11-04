@@ -4,13 +4,10 @@
 
 import { executeManualAwardSync } from './manualAwardSync';
 import { AWARD_SYNC_MESSAGES } from '@/constants/awardSync';
+import { AWARD_MOVIES_CONFLICT_TARGET } from '@/constants/awards';
 
 const mockFetchAndResolveAward = jest.fn();
 jest.mock('./syncAwardMoviesService', () => ({
-  // 競合キーは cron 側と同じ定数を使う。ここで実値を持たせることで、
-  // manualAwardSync が独自の文字列を書いたら検知できる
-  AWARD_MOVIES_CONFLICT_TARGET:
-    'tmdb_movie_id,award_name,award_year,category,person_name',
   fetchAndResolveAward: (...args: unknown[]) =>
     mockFetchAndResolveAward(...args),
 }));
@@ -112,9 +109,12 @@ describe('executeManualAwardSync', () => {
 
     await executeManualAwardSync(wrap(db), params);
 
+    // 定数そのものを突き合わせる。文字列を直書きすると、本物の定数が
+    // 変わってもこのテストが緑のまま通ってしまう
     expect(db.upsert.mock.calls[0][1]).toEqual({
-      onConflict: 'tmdb_movie_id,award_name,award_year,category,person_name',
+      onConflict: AWARD_MOVIES_CONFLICT_TARGET,
     });
+    expect(AWARD_MOVIES_CONFLICT_TARGET).toContain('person_name');
   });
 
   it('取得0件なら award_movies に一切触らず failed にする', async () => {

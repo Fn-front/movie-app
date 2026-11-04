@@ -49,6 +49,8 @@ export const API_ENDPOINTS = {
   // --- お気に入り ---
   /** お気に入り一覧・追加 */
   FAVORITES: '/api/favorites',
+  /** お気に入り照会（登録済み判定用の軽量版・全件） */
+  FAVORITES_LOOKUP: '/api/favorites/lookup',
   /** お気に入り個別（更新・削除） */
   favoriteById: (id: string) => `/api/favorites/${id}`,
 

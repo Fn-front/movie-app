@@ -6,7 +6,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 
-import { useFavorites } from '@/features/favorites/hooks/useFavorites';
+import { useFavoriteMutations } from '@/features/favorites/hooks/useFavoriteMutations';
+import { useFavoriteLookup } from '@/features/favorites/hooks/useFavoriteLookup';
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
@@ -71,15 +72,21 @@ const INITIAL_MODAL_STATE: FavoriteModalState = {
  * お気に入りトグル カスタムフック
  */
 export function useFavoriteToggle(): UseFavoriteToggleReturn {
+  // 一覧（useFavorites）ではなく書き込みだけを取る。
+  // この経路は一覧を読まないので、誰も参照しない
+  // `GET /api/favorites?page=1` を走らせないため
   const {
     addToFavorites,
     updateRating,
     removeFromFavorites,
-    getFavoriteInfo,
     isAdding,
     isUpdating,
     isRemoving,
-  } = useFavorites();
+  } = useFavoriteMutations();
+
+  // 登録済み判定は一覧（1ページ20件）ではなく専用の照会から引く。
+  // 一覧から引くと21件目以降が未登録と判定されていた（#829）
+  const { getFavoriteInfo } = useFavoriteLookup();
 
   const { status } = useSession();
   const isAuthenticated = status === 'authenticated';

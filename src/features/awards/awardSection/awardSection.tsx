@@ -26,6 +26,8 @@ export interface AwardSectionProps {
     favorite: MovieFavoriteInfo | null,
   ) => void;
   isFavoriteProcessing: (tmdbMovieId: number) => boolean;
+  /** 指定映画のお気に入り情報を取得（未登録ならnull） */
+  getFavoriteInfo: (tmdbMovieId: number) => MovieFavoriteInfo | null;
   /**
    * 賞名の見出しを視覚的に隠す。
    *
@@ -44,6 +46,7 @@ export const AwardSection = memo<AwardSectionProps>(function AwardSection({
   isMovieToggling,
   onFavoriteToggle,
   isFavoriteProcessing,
+  getFavoriteInfo,
   hideTitle = false,
 }) {
   const handleCategoryClick = useCallback(
@@ -97,6 +100,7 @@ export const AwardSection = memo<AwardSectionProps>(function AwardSection({
             isMovieToggling={isMovieToggling}
             onFavoriteToggle={onFavoriteToggle}
             isFavoriteProcessing={isFavoriteProcessing}
+            getFavoriteInfo={getFavoriteInfo}
           />
         ))}
       </div>

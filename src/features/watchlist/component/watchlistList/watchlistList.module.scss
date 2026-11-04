@@ -159,9 +159,17 @@
     @include text-truncate-multiline(2);
   }
 
+  // 公開日と評価はカード下端に寄せる。タイトルの行数が違っても
+  // カード同士で高さが揃うようにするため
+  &__meta {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-1;
+    margin-top: auto;
+  }
+
   &__date {
     margin: 0;
-    margin-top: auto;
     font-size: $font-size-xs;
     color: $text-secondary;
   }

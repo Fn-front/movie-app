@@ -11,14 +11,17 @@ import { IoCheckmarkCircle, IoCheckmarkCircleOutline } from 'react-icons/io5';
 
 import { Card } from '@/components/ui/card/card';
 import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
+import { RatingIndicator } from '@/features/favorites/component/ratingIndicator/ratingIndicator';
 import { StreamingBadge } from '@/features/watchlist/component/streamingBadge/streamingBadge';
 import {
   IMAGE_SIZES,
   DISPLAY_LIMITS,
   EMPTY_MESSAGES,
+  FAVORITES_RATING_MAX,
   WATCHLIST_WATCHED_LABELS,
 } from '@/constants';
 import { getTMDbPosterUrl } from '@/utils/image';
+import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 
 import styles from './watchlistList.module.scss';
@@ -39,6 +42,13 @@ export interface WatchlistListProps {
   onWatchedToggle?: (item: WatchlistItem, watched: boolean) => void;
   /** 視聴済みの更新中 */
   isWatchedUpdating?: boolean;
+  /**
+   * 指定映画のお気に入り情報を取得（未登録ならnull）
+   *
+   * 視聴済みの作品に付けた評価をカードに出すために使う。
+   * 渡さなければ評価は表示しない（サイドバーなど評価を出さない場所向け）
+   */
+  getFavoriteInfo?: (tmdbMovieId: number) => MovieFavoriteInfo | null;
 }
 
 /**
@@ -54,6 +64,7 @@ export const WatchlistList = memo<WatchlistListProps>(function WatchlistList({
   onDelete,
   onWatchedToggle,
   isWatchedUpdating = false,
+  getFavoriteInfo,
 }) {
   if (isLoading) {
     return (
@@ -82,6 +93,7 @@ export const WatchlistList = memo<WatchlistListProps>(function WatchlistList({
           onWatchedToggle={onWatchedToggle}
           isWatchedUpdating={isWatchedUpdating}
           eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
+          favorite={getFavoriteInfo?.(item.tmdb_movie_id) ?? null}
         />
       ))}
     </div>
@@ -111,6 +123,8 @@ interface WatchlistTileProps {
    * （MovieTile の同名 prop と同じ考え方）
    */
   eager?: boolean;
+  /** この作品のお気に入り情報（未登録なら null） */
+  favorite?: MovieFavoriteInfo | null;
 }
 
 /**
@@ -123,9 +137,21 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
   onWatchedToggle,
   isWatchedUpdating = false,
   eager = false,
+  favorite = null,
 }) {
   const posterUrl = getTMDbPosterUrl(item.poster_path);
   const isWatched = item.watched_at !== null;
+  // 「観た作品に何点を付けたか」を見せるための表示なので、視聴済みのときだけ出す。
+  // 視聴済みを解除すれば、お気に入り登録が残っていても消える
+  const showsRating = isWatched && favorite !== null;
+
+  // 評価はカード本体（role='button'）の内側にある。ARIA の
+  // Children Presentational により、role='button' の子孫はアクセシビリティ
+  // ツリーから刈られる実装があるため、RatingIndicator の aria-label だけでは
+  // 読み上げに届かない。カードの名前そのものに畳み込む
+  const cardLabel = showsRating
+    ? `${item.title}（評価 ${favorite.rating}/${FAVORITES_RATING_MAX}）`
+    : item.title;
 
   const handleClick = useCallback(() => {
     onClick?.(item.tmdb_movie_id);
@@ -189,7 +215,7 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
       onKeyDown={onClick ? handleKeyDown : undefined}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
-      aria-label={onClick ? item.title : undefined}
+      aria-label={onClick ? cardLabel : undefined}
     >
       <div className={styles.c_watchlist_tile__poster}>
         {posterUrl ? (
@@ -258,9 +284,14 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
       </div>
       <div className={styles.c_watchlist_tile__info}>
         <h2 className={styles.c_watchlist_tile__title}>{item.title}</h2>
-        {item.release_date && (
-          <p className={styles.c_watchlist_tile__date}>{item.release_date}</p>
-        )}
+        <div className={styles.c_watchlist_tile__meta}>
+          {item.release_date && (
+            <p className={styles.c_watchlist_tile__date}>{item.release_date}</p>
+          )}
+          {showsRating && (
+            <RatingIndicator rating={favorite.rating} size='sm' />
+          )}
+        </div>
       </div>
     </Card>
   );

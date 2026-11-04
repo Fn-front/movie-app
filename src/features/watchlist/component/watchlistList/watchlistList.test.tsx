@@ -365,4 +365,115 @@ describe('WatchlistList', () => {
       expect(screen.getByText('視聴済み')).toBeInTheDocument();
     });
   });
+
+  /**
+   * 「観た作品に何点を付けたか」をウォッチリスト上で確認できるようにする（#827）。
+   * 視聴済みかつ評価登録済みのときだけ出す
+   */
+  describe('評価の表示', () => {
+    const watchedItems = () =>
+      createMockItems(1).map((item) => ({
+        ...item,
+        watched_at: '2026-04-01T00:00:00Z',
+      }));
+
+    const getFavorite = () => ({ id: 'fav-1', rating: 8 });
+
+    it('視聴済み＋評価登録済みなら評価を表示する', () => {
+      render(
+        <WatchlistList
+          watchlist={watchedItems()}
+          isLoading={false}
+          getFavoriteInfo={getFavorite}
+        />,
+      );
+
+      expect(
+        screen.getByRole('img', { name: '評価: 8/10' }),
+      ).toBeInTheDocument();
+    });
+
+    it('視聴済みでも評価未登録なら表示しない', () => {
+      render(
+        <WatchlistList
+          watchlist={watchedItems()}
+          isLoading={false}
+          getFavoriteInfo={() => null}
+        />,
+      );
+
+      expect(screen.queryByRole('img', { name: /評価:/ })).toBeNull();
+    });
+
+    // 視聴済みを解除したら、お気に入りが残っていても消す
+    it('未視聴なら評価登録済みでも表示しない', () => {
+      render(
+        <WatchlistList
+          watchlist={createMockItems(1)}
+          isLoading={false}
+          getFavoriteInfo={getFavorite}
+        />,
+      );
+
+      expect(screen.queryByRole('img', { name: /評価:/ })).toBeNull();
+    });
+
+    // サイドバーなど評価を出さない場所では渡さない
+    it('getFavoriteInfo が無ければ表示しない', () => {
+      render(<WatchlistList watchlist={watchedItems()} isLoading={false} />);
+
+      expect(screen.queryByRole('img', { name: /評価:/ })).toBeNull();
+    });
+
+    /**
+     * 評価はカード本体（role='button'）の内側にある。ARIA の
+     * Children Presentational により role='button' の子孫は読み上げから
+     * 刈られる実装があるため、カードの名前そのものに畳み込む
+     */
+    it('評価をカードのアクセシブル名に含める', () => {
+      render(
+        <WatchlistList
+          watchlist={watchedItems()}
+          isLoading={false}
+          onClick={jest.fn()}
+          getFavoriteInfo={getFavorite}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: '映画0（評価 8/10）' }),
+      ).toBeInTheDocument();
+    });
+
+    it('評価が無いときはカード名をタイトルだけにする', () => {
+      render(
+        <WatchlistList
+          watchlist={watchedItems()}
+          isLoading={false}
+          onClick={jest.fn()}
+          getFavoriteInfo={() => null}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: '映画0' })).toBeInTheDocument();
+    });
+
+    it('評価はタイル本体のクリックを妨げない', async () => {
+      const user = userEvent.setup();
+      const onClick = jest.fn();
+
+      render(
+        <WatchlistList
+          watchlist={watchedItems()}
+          isLoading={false}
+          onClick={onClick}
+          getFavoriteInfo={getFavorite}
+        />,
+      );
+
+      await user.click(screen.getByRole('img', { name: '評価: 8/10' }));
+
+      expect(onClick).toHaveBeenCalledWith(100);
+    });
+  });
 });

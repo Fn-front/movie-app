@@ -62,6 +62,14 @@ export const favoriteKeys = {
   all: ['favorites'] as const,
   list: (params?: { sort_by?: string; sort_order?: string }) =>
     ['favorites', 'list', params] as const,
+  /**
+   * 登録済み判定用の照会（全件・ページングなし）
+   *
+   * ソート条件を持たないので、どの画面から呼んでも同じキーになる。
+   * `list` とキーが分かれているのは意図通りで、お気に入りページでの
+   * 並び替えが他画面の判定に影響しないようにしている
+   */
+  lookup: () => ['favorites', 'lookup'] as const,
 };
 
 export const recommendationKeys = {

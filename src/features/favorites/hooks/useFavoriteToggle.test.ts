@@ -32,14 +32,17 @@ jest.mock('next-auth/react', () => ({
   useSession: () => mockUseSession(),
 }));
 
-jest.mock('@/features/favorites/hooks/useFavorites', () => ({
-  useFavorites: () => ({
-    favorites: undefined,
-    isLoading: false,
+jest.mock('@/features/favorites/hooks/useFavoriteLookup', () => ({
+  useFavoriteLookup: () => ({
+    getFavoriteInfo: mockGetFavoriteInfo,
+  }),
+}));
+
+jest.mock('@/features/favorites/hooks/useFavoriteMutations', () => ({
+  useFavoriteMutations: () => ({
     addToFavorites: mockAddToFavorites,
     updateRating: mockUpdateRating,
     removeFromFavorites: mockRemoveFromFavorites,
-    getFavoriteInfo: mockGetFavoriteInfo,
     get isAdding() {
       return mockMutationState.isAdding;
     },

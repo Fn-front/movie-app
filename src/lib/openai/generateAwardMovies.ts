@@ -138,6 +138,14 @@ function buildSystemPrompt(): string {
 - 記事中のすべてのノミネート者を1人も欠落なく抽出すること
 - アダルト作品（ポルノ・成人指定作品・ピンク映画等）は抽出対象に含めないこと
 
+## person_name（人名）のルール
+- 演技賞・監督賞など**人に贈られる部門**では、受賞者・候補者の氏名を person_name に入れること
+- 作品賞など**作品に贈られる部門**では person_name は null にすること
+- 氏名はwikitext中の表記をそのまま使うこと。[[ショーン・ペン]] や {{仮リンク|ウンミ・モサク|en|Wunmi Mosaku}} のような記法からは、表示される日本語表記だけを取り出すこと
+- 読み・英字表記・敬称を足さないこと。「不明」「該当なし」などの文字列も入れないこと
+- 記事から氏名が読み取れない場合は null にすること（推測で埋めないこと）
+- 同じ作品から複数人がノミネートされている場合は、人ごとに別の項目として返すこと
+
 レスポンスは以下のJSON形式で返してください:
 {
   "awards": [
@@ -146,7 +154,8 @@ function buildSystemPrompt(): string {
       "title_en": "英語タイトル",
       "category": "部門キー",
       "is_winner": true,
-      "year": 2025
+      "year": 2025,
+      "person_name": "人に贈られる部門なら氏名、作品に贈られる部門なら null"
     }
   ]
 }`;
@@ -232,6 +241,9 @@ export async function fetchAwardsFromOpenAI(
                     category: { type: 'string' },
                     is_winner: { type: 'boolean' },
                     year: { type: 'number' },
+                    // 作品に贈られる部門では null。strict モードは properties の
+                    // 全キーを required に入れる必要があるため省略できない
+                    person_name: { type: ['string', 'null'] },
                   },
                   required: [
                     'title_ja',
@@ -239,6 +251,7 @@ export async function fetchAwardsFromOpenAI(
                     'category',
                     'is_winner',
                     'year',
+                    'person_name',
                   ],
                   additionalProperties: false,
                 },

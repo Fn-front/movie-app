@@ -365,6 +365,105 @@ describe('fetchAwardsFromOpenAI', () => {
     expect(callArgs.text.format.strict).toBe(true);
   });
 
+  it('json_schema が person_name を要求する', async () => {
+    mockCreate.mockResolvedValue(
+      createMockResponseOutput(JSON.stringify({ awards: [] })),
+    );
+
+    await fetchAwardsFromOpenAI(
+      2026,
+      'テスト賞',
+      testCategory,
+      testArticleText,
+    );
+
+    const item =
+      mockCreate.mock.calls[0][0].text.format.schema.properties.awards.items;
+
+    // strict + additionalProperties:false のため、スキーマに無い項目は
+    // プロンプトで頼んでもモデルが返せない
+    expect(item.properties.person_name).toEqual({ type: ['string', 'null'] });
+    // strict モードは properties の全キーを required に入れる必要がある。
+    // 作品賞では省略できないので null を返させる
+    expect(item.required).toContain('person_name');
+  });
+
+  it('システムプロンプトが人名の抽出ルールを含む', async () => {
+    mockCreate.mockResolvedValue(
+      createMockResponseOutput(JSON.stringify({ awards: [] })),
+    );
+
+    await fetchAwardsFromOpenAI(
+      2026,
+      'テスト賞',
+      testCategory,
+      testArticleText,
+    );
+
+    const instructions = mockCreate.mock.calls[0][0].instructions as string;
+    expect(instructions).toContain('person_name');
+    expect(instructions).toContain('null');
+  });
+
+  it('person_name を含むレスポンスをそのまま返す', async () => {
+    mockCreate.mockResolvedValue(
+      createMockResponseOutput(
+        JSON.stringify({
+          awards: [
+            {
+              title_ja: 'ワン・バトル・アフター・アナザー',
+              title_en: 'One Battle After Another',
+              category: 'best_supporting_actor',
+              is_winner: true,
+              year: 2025,
+              person_name: 'ショーン・ペン',
+            },
+          ],
+        }),
+      ),
+    );
+
+    const result = await fetchAwardsFromOpenAI(
+      2026,
+      'テスト賞',
+      testCategory,
+      testArticleText,
+    );
+
+    expect(result?.[0].person_name).toBe('ショーン・ペン');
+  });
+
+  it('person_name が null のレスポンスを弾かない', async () => {
+    // 作品賞は null が返る。zod が optional のままだと null を弾き、
+    // レスポンス全体が不正扱いになって取得0件になる
+    mockCreate.mockResolvedValue(
+      createMockResponseOutput(
+        JSON.stringify({
+          awards: [
+            {
+              title_ja: 'テスト映画',
+              title_en: 'Test Movie',
+              category: 'best_picture',
+              is_winner: true,
+              year: 2025,
+              person_name: null,
+            },
+          ],
+        }),
+      ),
+    );
+
+    const result = await fetchAwardsFromOpenAI(
+      2026,
+      'テスト賞',
+      testCategory,
+      testArticleText,
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result?.[0].person_name).toBeNull();
+  });
+
   it('システムプロンプトにアダルト作品の除外指示が含まれる', async () => {
     mockCreate.mockResolvedValue(
       createMockResponseOutput(JSON.stringify({ awards: [] })),

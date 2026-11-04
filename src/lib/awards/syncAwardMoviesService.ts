@@ -472,13 +472,26 @@ async function fetchAwardItemsViaWikipedia(
     }
 
     if (categoryItems && categoryItems.length > 0) {
-      const verified = categoryItems.filter((item) => {
-        if (validTitles.has(item.title_ja)) return true;
-        console.warn(
-          `Hallucination detected: "${item.title_ja}" not found in wikitext, skipping`,
-        );
-        return false;
-      });
+      const verified = categoryItems
+        .filter((item) => {
+          if (validTitles.has(item.title_ja)) return true;
+          console.warn(
+            `Hallucination detected: "${item.title_ja}" not found in wikitext, skipping`,
+          );
+          return false;
+        })
+        // 人名も wikitext と突き合わせる。この経路だけが捏造しうる
+        // （eiga.com / wikitext パーサは正規表現なので捏造の余地が無い）。
+        // 作品自体は残し、裏が取れない氏名だけを落とす
+        .map((item) => {
+          const personName = item.person_name?.trim();
+          if (!personName || articleText.includes(personName)) return item;
+
+          console.warn(
+            `Hallucination detected: person "${personName}" not found in wikitext, dropping the name`,
+          );
+          return { ...item, person_name: undefined };
+        });
       const corrected = verified.map((item) => {
         if (Math.abs(item.year - currentYear) > AWARDS_YEAR_MATCH_TOLERANCE) {
           console.warn(

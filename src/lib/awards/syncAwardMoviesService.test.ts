@@ -562,6 +562,68 @@ describe('syncSingleAward', () => {
     ).toBe(true);
   });
 
+  it('wikitext に無い人名は捨てて作品だけ残す', async () => {
+    // OpenAI 経路は捏造しうる。タイトルと同じく wikitext と突き合わせる
+    // （eiga.com / wikitext パーサは正規表現なので捏造の余地が無い）
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue(
+      "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』",
+    );
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
+    mockFetchAwardsFromOpenAI.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+        person_name: '実在しない人名',
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase } = createCapturingSupabase();
+
+    await syncSingleAward(supabase, params);
+
+    // AWARD_DEFINITIONS の部門ぶんループするので件数は複数になる。
+    // 見たいのは「作品は残り、人名だけ落ちる」こと
+    const items = mockResolveAwardsWithTMDb.mock.calls[0][0] as {
+      title_ja: string;
+      person_name?: string;
+    }[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((i) => i.title_ja === 'テスト映画')).toBe(true);
+    expect(items.every((i) => i.person_name === undefined)).toBe(true);
+  });
+
+  it('wikitext にある人名はそのまま通す', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue(
+      "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』",
+    );
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
+    mockFetchAwardsFromOpenAI.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+        person_name: 'ショーン・ペン',
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase } = createCapturingSupabase();
+
+    await syncSingleAward(supabase, params);
+
+    const items = mockResolveAwardsWithTMDb.mock.calls[0][0] as {
+      person_name?: string;
+    }[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((i) => i.person_name === 'ショーン・ペン')).toBe(true);
+  });
+
   it('取得0件を no_items として返し、DBに触らない', async () => {
     mockFetchEigaOscarAwards.mockResolvedValue([]);
     mockFetchAwardsFromOpenAI.mockResolvedValue(null);

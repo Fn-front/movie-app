@@ -13,7 +13,15 @@ export const openAiAwardItemSchema = z.object({
   category: z.string().min(1, '部門キーは必須です'),
   is_winner: z.boolean(),
   year: z.number().int().min(1900).max(2100),
-  person_name: z.string().optional(),
+  /**
+   * 人に贈られる部門の氏名
+   *
+   * `.nullish()` にしているのは、OpenAI の Structured Outputs が strict モードで
+   * **全キーを required にする**ため、作品賞では `null` が返るから。
+   * `.optional()` だと `null` を弾き、レスポンス全体が不正扱いになって取得0件になる。
+   * eiga.com / wikitext パーサは人名なしのとき項目自体を省くので undefined も許す
+   */
+  person_name: z.string().nullish(),
 });
 
 /**

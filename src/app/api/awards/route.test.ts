@@ -54,13 +54,19 @@ function mockYearQuery(years: number[]) {
   mockAnonRpc.mockResolvedValueOnce({ data: years, error: null });
 }
 
+/** 直近の `.select()` に渡された文字列。カラムの取り漏れを検知するために記録する */
+let lastSelectColumns: string | undefined;
+
 function mockAwardDataQuery(rows: Record<string, unknown>[]) {
   mockAnonFrom.mockReturnValueOnce({
-    select: () => ({
-      eq: () => ({
-        order: () => Promise.resolve({ data: rows, error: null }),
-      }),
-    }),
+    select: (columns: string) => {
+      lastSelectColumns = columns;
+      return {
+        eq: () => ({
+          order: () => Promise.resolve({ data: rows, error: null }),
+        }),
+      };
+    },
   });
 }
 
@@ -69,7 +75,34 @@ function mockAwardDataQuery(rows: Record<string, unknown>[]) {
 describe('GET /api/awards', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    lastSelectColumns = undefined;
     (checkRateLimit as jest.Mock).mockResolvedValue({ allowed: true });
+  });
+
+  it('レスポンスの組み立てに必要なカラムをすべて SELECT する', async () => {
+    mockYearQuery([2026]);
+    mockAwardDataQuery([]);
+
+    await GET(createRequest('2026'));
+
+    // どれか1つでも落ちると、その項目が undefined のまま返る。
+    // 特に is_winner は受賞／ノミネートの振り分けの唯一のソースで、
+    // 落ちると全部門の「受賞」が消えてノミネート扱いになる
+    for (const column of [
+      'tmdb_movie_id',
+      'title',
+      'poster_path',
+      'release_date',
+      'vote_average',
+      'genre_ids',
+      'person_name',
+      'award_name',
+      'category',
+      'is_winner',
+      'display_order',
+    ]) {
+      expect(lastSelectColumns).toContain(column);
+    }
   });
 
   it('yearパラメータなしの場合400を返す', async () => {

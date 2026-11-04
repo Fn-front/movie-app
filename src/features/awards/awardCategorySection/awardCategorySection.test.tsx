@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 import { AwardCategorySection } from './awardCategorySection';
 import type { AwardCategoryData, AwardMovie } from '@/features/awards/types';
@@ -113,11 +113,9 @@ describe('AwardCategorySection', () => {
 
     render(<AwardCategorySection category={category} {...defaultProps} />);
 
-    const nomineeList = screen.getByRole('list');
-    const nomineeItems = screen.getAllByRole('listitem');
-    expect(nomineeList).toBeInTheDocument();
+    const nomineeList = screen.getByRole('list', { name: 'ノミネート' });
     // 受賞者(id=100)はノミネートリストから除外される
-    expect(nomineeItems).toHaveLength(2);
+    expect(within(nomineeList).getAllByRole('listitem')).toHaveLength(2);
     expect(screen.getByText('ノミネート映画A')).toBeInTheDocument();
     expect(screen.getByText('ノミネート映画B')).toBeInTheDocument();
   });
@@ -187,6 +185,63 @@ describe('AwardCategorySection', () => {
     expect(screen.getAllByText('受賞')).toHaveLength(1);
     // 受賞作がノミネート側へ流れていない
     expect(screen.queryByText('ノミネート')).not.toBeInTheDocument();
+
+    // 複数並ぶので一覧として読み上げられる必要がある
+    const winnerList = screen.getByRole('list', { name: '受賞' });
+    expect(within(winnerList).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('同じ作品の非受賞2件が同じノミネート一覧に並んでも key が衝突しない', () => {
+    // 第98回アカデミー賞 助演女優賞の『センチメンタル・バリュー』は
+    // エル・ファニングとインガ・イブスドッテル・リッレオースの2人。
+    // どちらも非受賞なので、同じリストの兄弟として並ぶ
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const category = createMockCategory({
+      category: 'best_supporting_actress',
+      label: '助演女優賞',
+      winner: createAwardMovie({
+        tmdbMovieId: 1078605,
+        title: 'WEAPONS／ウェポンズ',
+        personName: 'エイミー・マディガン',
+        isWinner: true,
+      }),
+      nominees: [
+        createAwardMovie({
+          tmdbMovieId: 1078605,
+          title: 'WEAPONS／ウェポンズ',
+          personName: 'エイミー・マディガン',
+          isWinner: true,
+        }),
+        createAwardMovie({
+          tmdbMovieId: 1124566,
+          title: 'センチメンタル・バリュー',
+          personName: 'エル・ファニング',
+        }),
+        createAwardMovie({
+          tmdbMovieId: 1124566,
+          title: 'センチメンタル・バリュー',
+          personName: 'インガ・イブスドッテル・リッレオース',
+        }),
+      ],
+    });
+
+    render(<AwardCategorySection category={category} {...defaultProps} />);
+
+    const nomineeList = screen.getByRole('list', { name: 'ノミネート' });
+    expect(within(nomineeList).getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getByText('エル・ファニング')).toBeInTheDocument();
+    expect(
+      screen.getByText('インガ・イブスドッテル・リッレオース'),
+    ).toBeInTheDocument();
+
+    // 映画IDだけを key にすると React が重複を警告する
+    const keyWarning = errorSpy.mock.calls.some((args) =>
+      args.some((a) => typeof a === 'string' && a.includes('same key')),
+    );
+    expect(keyWarning).toBe(false);
+
+    errorSpy.mockRestore();
   });
 
   it('同じ作品が同じ部門で複数ノミネートされても全員分が人名付きで表示される', () => {
@@ -238,12 +293,14 @@ describe('AwardCategorySection', () => {
         tmdbMovieId: 100,
         title: '受賞映画',
         personName: '山田太郎',
+        isWinner: true,
       }),
       nominees: [
         createAwardMovie({
           tmdbMovieId: 100,
           title: '受賞映画',
           personName: '山田太郎',
+          isWinner: true,
         }),
         createAwardMovie({
           tmdbMovieId: 200,

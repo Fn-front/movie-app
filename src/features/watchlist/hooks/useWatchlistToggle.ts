@@ -206,7 +206,9 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         release_date: newItem.release_date ?? null,
         added_at: new Date().toISOString(),
         watched_at: null,
-        // 配信状況は cron が後から埋める。追加直後は不明なので null
+        // サーバーが追加時に配信状況を埋める（initMovieStreamingStatus）。
+        // 楽観アイテムの時点では結果が分からないので null で置き、
+        // onSettled の再取得でバッジの有無が確定する
         streaming: null,
       };
 

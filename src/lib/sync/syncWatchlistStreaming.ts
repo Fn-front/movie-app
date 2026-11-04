@@ -7,7 +7,8 @@
  * 直接 TMDb に問い合わせる。
  *
  * 状態遷移（初配信 / 継続 / 一時的な欠落 / 再配信）の判定は
- * resolveStreamingOffer に切り出してある。
+ * resolveStreamingOffer に、保存する行の組み立ては buildStreamingStatusRow に
+ * 切り出してある。後者はウォッチリスト追加時の初期化と共有している。
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -15,9 +16,10 @@ import { createClient } from '@supabase/supabase-js';
 import { TMDB_AVAILABILITY_CONCURRENCY } from '@/constants/tmdb';
 import { getJpStreamingAvailability } from '@/lib/tmdb/tmdb';
 import {
-  resolveStreamingOffer,
-  type StreamingOfferState,
-} from '@/lib/sync/resolveStreamingStatus';
+  buildStreamingStatusRow,
+  type MovieStreamingStatusRow,
+} from '@/lib/sync/buildStreamingStatusRow';
+import { type StreamingOfferState } from '@/lib/sync/resolveStreamingStatus';
 
 /**
  * 同期結果
@@ -150,8 +152,7 @@ export async function syncWatchlistStreaming(): Promise<WatchlistStreamingSyncRe
   );
 
   const now = new Date();
-  const nowIso = now.toISOString();
-  const rowsToUpsert: Record<string, unknown>[] = [];
+  const rowsToUpsert: MovieStreamingStatusRow[] = [];
 
   // TMDb のレート制限（50 req/s）に収めるため、同時実行数を絞って順に流す
   for (const batch of chunk(movieIds, TMDB_AVAILABILITY_CONCURRENCY)) {
@@ -179,43 +180,27 @@ export async function syncWatchlistStreaming(): Promise<WatchlistStreamingSyncRe
 
       const previous = toOfferStates(statusById.get(movieId));
 
-      // rent と buy は UI 上どちらも「レンタル」で足りるためまとめる
-      const paidIds = [
-        ...new Set([
-          ...availability.watchProviderIds.rent,
-          ...availability.watchProviderIds.buy,
-        ]),
-      ];
-
-      const flatrate = resolveStreamingOffer(
-        previous.flatrate,
-        availability.watchProviderIds.flatrate,
+      // 行の組み立てはウォッチリスト追加時の初期化と共有する。
+      // 別々に組むと、列を足したときに片方だけ更新される
+      const row = buildStreamingStatusRow(
+        movieId,
+        previous,
+        availability.watchProviderIds,
         now,
       );
-      const paid = resolveStreamingOffer(previous.paid, paidIds, now);
 
       const wasAvailable =
         (previous.flatrate?.providerIds.length ?? 0) > 0 ||
         (previous.paid?.providerIds.length ?? 0) > 0;
       const isAvailable =
-        flatrate.providerIds.length > 0 || paid.providerIds.length > 0;
+        row.flatrate_provider_ids.length > 0 ||
+        row.paid_provider_ids.length > 0;
 
       if (!wasAvailable && isAvailable) {
         result.newlyAvailable++;
       }
 
-      rowsToUpsert.push({
-        tmdb_movie_id: movieId,
-        flatrate_provider_ids: flatrate.providerIds,
-        paid_provider_ids: paid.providerIds,
-        flatrate_since: flatrate.since,
-        paid_since: paid.since,
-        flatrate_last_seen_at: flatrate.lastSeenAt,
-        paid_last_seen_at: paid.lastSeenAt,
-        flatrate_resumed: flatrate.resumed,
-        paid_resumed: paid.resumed,
-        checked_at: nowIso,
-      });
+      rowsToUpsert.push(row);
     }
   }
 

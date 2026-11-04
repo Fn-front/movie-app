@@ -49,6 +49,7 @@ import {
 } from '@/constants/movies';
 import {
   TMDB_MOVIE_DETAIL_APPEND,
+  TMDB_RETRY_CONFIG,
   TMDB_VIDEO_LANGUAGES,
   TMDB_PERSON_DETAIL_APPEND,
   TMDB_STREAMING_AVAILABILITY_APPEND,
@@ -1385,6 +1386,34 @@ describe('TMDb APIクライアント', () => {
 
       // retry-after=2秒なので2000ms待つ
       jest.advanceTimersByTime(2000);
+
+      await retryPromise;
+
+      jest.useRealTimers();
+    });
+
+    /**
+     * retry-after をそのまま使うと、大きい値を返されたとき3回で
+     * retryAfter × 3 秒待つことになる。ウォッチリスト追加のような
+     * 対話的な経路から呼ぶには長すぎるため上限で頭を打つ
+     */
+    it('retry-afterが上限を超える場合は上限まで待って再試行する', async () => {
+      require('./tmdb');
+
+      jest.useFakeTimers();
+
+      const config = { url: '/test' };
+      const error = {
+        config,
+        response: { status: 429, headers: { 'retry-after': '30' } },
+      };
+
+      mockGet.mockResolvedValueOnce(mockResponse);
+
+      const retryPromise = interceptorRejected(error);
+
+      // 上限（5000ms）を進めただけで再試行が走る
+      jest.advanceTimersByTime(TMDB_RETRY_CONFIG.MAX_RETRY_DELAY_MS);
 
       await retryPromise;
 

@@ -29,6 +29,14 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }));
 
+// 配信状況の初期化そのものは initMovieStreamingStatus.test.ts で見る。
+// ここでは「追加後に呼ばれること」と「失敗しても追加が成功すること」だけ
+const mockInitMovieStreamingStatus = jest.fn().mockResolvedValue('initialized');
+jest.mock('@/lib/sync/initMovieStreamingStatus', () => ({
+  initMovieStreamingStatus: (...args: unknown[]) =>
+    mockInitMovieStreamingStatus(...args),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
 
 // --- Helpers ---
@@ -521,6 +529,116 @@ describe('POST /api/watchlist', () => {
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('RATE_LIMIT_EXCEEDED');
     expect(json.error.details.retryAfter).toBe(60);
+  });
+});
+
+/**
+ * 配信バッジの元データ（movie_streaming_status）は日次 Cron でしか作られず、
+ * 追加時点ですでに配信中の作品でも最長で約24時間バッジが出なかった（#942）。
+ * 追加の経路でも埋める
+ */
+describe('POST /api/watchlist の配信状況の初期化', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockInitMovieStreamingStatus.mockResolvedValue('initialized');
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      user: { id: 'user-123' },
+    });
+  });
+
+  /** 重複なし → INSERT 成功 のモックを積む */
+  const mockSuccessfulInsert = () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: jest.fn().mockReturnValue({
+          eq: () => ({
+            is: () => ({
+              single: () => ({ data: null, error: { code: 'PGRST116' } }),
+            }),
+          }),
+        }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({
+      insert: () => ({
+        select: () => ({
+          single: () => ({
+            data: {
+              id: 'new-wl-id',
+              tmdb_movie_id: 12345,
+              title: 'テスト映画',
+              poster_path: null,
+              release_date: null,
+              added_at: '2026-03-10T00:00:00Z',
+            },
+            error: null,
+          }),
+        }),
+      }),
+    });
+  };
+
+  const addRequest = () =>
+    createPostRequest({ tmdb_movie_id: 12345, title: 'テスト映画' });
+
+  it('追加した作品のIDで初期化を呼ぶ', async () => {
+    mockSuccessfulInsert();
+
+    const response = await POST(addRequest());
+
+    expect(response.status).toBe(201);
+    // service role のクライアントが渡っていること。expect.anything() だと
+    // 誤って別のオブジェクトを渡してもパスしてしまう
+    expect(mockInitMovieStreamingStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ from: mockFrom }),
+      12345,
+    );
+  });
+
+  // バッジが出ないだけで追加操作が失敗する方が困る
+  it('初期化が失敗しても追加は成功する', async () => {
+    mockSuccessfulInsert();
+    mockInitMovieStreamingStatus.mockResolvedValue('failed');
+
+    const response = await POST(addRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(json.success).toBe(true);
+    expect(json.data.tmdb_movie_id).toBe(12345);
+  });
+
+  it('重複で409になったときは初期化を呼ばない', async () => {
+    // 重複チェック: 存在する
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: jest.fn().mockReturnValue({
+          eq: () => ({
+            is: () => ({
+              single: () => ({ data: { id: 'existing' }, error: null }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(addRequest());
+
+    expect(response.status).toBe(409);
+    expect(mockInitMovieStreamingStatus).not.toHaveBeenCalled();
+  });
+
+  it('レート制限で止まったときは初期化を呼ばない', async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 60,
+    });
+
+    const response = await POST(addRequest());
+
+    expect(response.status).toBe(429);
+    expect(mockInitMovieStreamingStatus).not.toHaveBeenCalled();
   });
 });
 

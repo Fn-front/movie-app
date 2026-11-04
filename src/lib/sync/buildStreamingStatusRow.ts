@@ -1,0 +1,82 @@
+/**
+ * movie_streaming_status の1行を組み立てる
+ *
+ * 書き手は日次Cron（syncWatchlistStreaming）とウォッチリスト追加
+ * （initMovieStreamingStatus）の2つある。両方で別々に組むと、列を足したときに
+ * 片方だけ更新される。列の対応づけはここに1箇所だけ置く。
+ *
+ * DB にも TMDb にも触らない純粋関数。
+ */
+
+import {
+  resolveStreamingOffer,
+  type StreamingOfferState,
+} from '@/lib/sync/resolveStreamingStatus';
+
+/** movie_streaming_status の1行（upsert に渡す形） */
+export interface MovieStreamingStatusRow {
+  tmdb_movie_id: number;
+  flatrate_provider_ids: number[];
+  paid_provider_ids: number[];
+  flatrate_since: string | null;
+  paid_since: string | null;
+  flatrate_last_seen_at: string | null;
+  paid_last_seen_at: string | null;
+  flatrate_resumed: boolean;
+  paid_resumed: boolean;
+  checked_at: string;
+}
+
+/** 提供形態ごとの保存済み状態。未登録なら両方 null */
+export interface PreviousOfferStates {
+  flatrate: StreamingOfferState | null;
+  paid: StreamingOfferState | null;
+}
+
+/** TMDb が返した提供形態ごとのプロバイダーID（この関数が使う分だけ） */
+export interface OfferProviderIds {
+  flatrate: number[];
+  rent: number[];
+  buy: number[];
+}
+
+/**
+ * 保存済みの状態と今回の問い合わせ結果から、保存すべき1行を作る
+ *
+ * rent と buy は paid にまとめる。実測で「購入のみ」は0件で、UI でも
+ * 「レンタル」の一語で足りるため分けても表示に差が出ない。
+ *
+ * @param tmdbMovieId - 対象のTMDb映画ID
+ * @param previous - 保存済みの状態。行が無ければ両方 null
+ * @param providerIds - 今回確認できたプロバイダーID
+ * @param now - 現在時刻
+ * @returns upsert に渡す1行
+ */
+export function buildStreamingStatusRow(
+  tmdbMovieId: number,
+  previous: PreviousOfferStates,
+  providerIds: OfferProviderIds,
+  now: Date,
+): MovieStreamingStatusRow {
+  const paidIds = [...new Set([...providerIds.rent, ...providerIds.buy])];
+
+  const flatrate = resolveStreamingOffer(
+    previous.flatrate,
+    providerIds.flatrate,
+    now,
+  );
+  const paid = resolveStreamingOffer(previous.paid, paidIds, now);
+
+  return {
+    tmdb_movie_id: tmdbMovieId,
+    flatrate_provider_ids: flatrate.providerIds,
+    paid_provider_ids: paid.providerIds,
+    flatrate_since: flatrate.since,
+    paid_since: paid.since,
+    flatrate_last_seen_at: flatrate.lastSeenAt,
+    paid_last_seen_at: paid.lastSeenAt,
+    flatrate_resumed: flatrate.resumed,
+    paid_resumed: paid.resumed,
+    checked_at: now.toISOString(),
+  };
+}

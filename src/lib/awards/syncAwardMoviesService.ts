@@ -27,6 +27,7 @@ import {
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
 } from '@/lib/openai/generateAwardMovies';
+import { deleteStaleAwardRows } from '@/lib/awards/deleteStaleAwardRows';
 import { fetchWikipediaArticle } from '@/lib/wikipedia/fetchArticle';
 import { fetchEigaGoldenGlobes } from '@/lib/eiga/fetchEigaGoldenGlobes';
 import { fetchCannesFromWikitext } from '@/lib/wikipedia/parseCannesAwards';
@@ -195,7 +196,7 @@ export async function fetchAndResolveAward(
 }
 
 /**
- * 1賞ぶんを取得して UPSERT する（cron 用）
+ * 1賞ぶんを取得して UPSERT し、旧世代を消す（cron 用）
  *
  * 例外は**握り潰さずに投げる**。cron 側のループが従来どおり catch して
  * 「エラーでも他の賞は続行」を維持する。ここで握り潰すと、手動同期側が
@@ -215,9 +216,26 @@ export async function syncSingleAward(
     onConflict: AWARD_MOVIES_CONFLICT_TARGET,
   });
 
+  // UPSERT が失敗したらここで終わる。DELETE へ進むと既存データを失う
   if (error) {
     console.error(`Failed to upsert ${params.awardName}:`, error);
     return { type: 'write_failed', error: error.message };
+  }
+
+  const deleteError = await deleteStaleAwardRows(supabase, {
+    awardName: params.awardName,
+    year: params.year,
+    generatedAt: params.generatedAt,
+    rows: resolved.rows,
+  });
+
+  if (deleteError) {
+    // UPSERT は成功しているのでデータは新しい。残留が消えなかっただけなので
+    // 成功扱いにする（次回の同期で消える）
+    console.error(
+      `[syncSingleAward] 旧世代の削除に失敗しました award=${params.awardName} year=${params.year}`,
+      deleteError.message,
+    );
   }
 
   return { type: 'synced', upsertedCount: resolved.rows.length };

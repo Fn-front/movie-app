@@ -42,7 +42,8 @@ function createSupabase(options?: {
   const lt = jest
     .fn()
     .mockResolvedValue({ error: options?.deleteError ?? null });
-  const eqYear = jest.fn(() => ({ lt }));
+  const inCategories = jest.fn(() => ({ lt }));
+  const eqYear = jest.fn(() => ({ in: inCategories }));
   const eqName = jest.fn(() => ({ eq: eqYear }));
   const del = jest.fn(() => ({ eq: eqName }));
   const from = jest.fn(() => ({ upsert, delete: del }));
@@ -54,6 +55,7 @@ function createSupabase(options?: {
     del,
     eqName,
     eqYear,
+    inCategories,
     lt,
   };
 }
@@ -101,6 +103,30 @@ describe('executeManualAwardSync', () => {
       JOB_ID,
       { status: 'succeeded', totalUpserted: 1 },
     );
+  });
+
+  it('削除対象を今回取得できた部門だけに絞る', async () => {
+    // 部分取得（eiga.com が一部ページだけ落ちる等）のときに、
+    // 賞・年まるごと消すと取得できなかった部門が全滅する
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: [
+        { ...ROWS[0], category: 'palme_dor' },
+        { ...ROWS[0], tmdb_movie_id: 2, category: 'palme_dor' },
+        { ...ROWS[0], tmdb_movie_id: 3, category: 'grand_prix' },
+      ],
+    });
+    const db = createSupabase();
+
+    await executeManualAwardSync(wrap(db), params);
+
+    expect(db.inCategories).toHaveBeenCalledTimes(1);
+    const [column, categories] = db.inCategories.mock.calls[0] as unknown as [
+      string,
+      string[],
+    ];
+    expect(column).toBe('category');
+    expect([...categories].sort()).toEqual(['grand_prix', 'palme_dor']);
   });
 
   it('UPSERT の競合キーに person_name を含める', async () => {

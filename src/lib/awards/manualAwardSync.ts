@@ -27,6 +27,7 @@ import {
   type SyncableAwardName,
 } from '@/constants/awardSync';
 
+import { deleteStaleAwardRows } from './deleteStaleAwardRows';
 import { fetchAndResolveAward } from './syncAwardMoviesService';
 import { finishJobIfRunning, isJobStillRunning } from './awardSyncJob';
 
@@ -101,13 +102,13 @@ export async function executeManualAwardSync(
     }
 
     // 今回更新されなかった行＝前回あって今回無い残留だけを消す。
-    // UPSERT 済みの行は generated_at が今回の値になっているので残る
-    const { error: deleteError } = await supabase
-      .from('award_movies')
-      .delete()
-      .eq('award_name', awardName)
-      .eq('award_year', year)
-      .lt('generated_at', generatedAt);
+    // 削除範囲の絞り込みは cron と同じ関数に任せる（挙動を2通り持たない）
+    const deleteError = await deleteStaleAwardRows(supabase, {
+      awardName,
+      year,
+      generatedAt,
+      rows: resolved.rows,
+    });
 
     if (deleteError) {
       // UPSERT は成功しているのでデータは新しい。残留が消えなかっただけなので

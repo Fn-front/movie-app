@@ -26,6 +26,7 @@ import {
 import { parseAndValidate } from '@/helpers/requestValidation';
 import { withAuth } from '@/helpers/routeHandler';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { initMovieStreamingStatus } from '@/lib/sync/initMovieStreamingStatus';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 import { watchlistQuerySchema, watchlistAddSchema } from '@/schema/watchlist';
 
@@ -233,6 +234,17 @@ export const POST = withAuth(
       }
       throw insertError;
     }
+
+    // 配信バッジの元データを、ここで1回だけ埋める。
+    // 日次 Cron だけに任せると、追加時点ですでに配信中の作品でも
+    // 最長で約24時間バッジが出なかった（#942）。
+    //
+    // after() ではなくレスポンス前に待つ。クライアントは追加直後に
+    // 一覧を取り直すため、後回しにすると結局その場では反映されない。
+    // 行がある作品では TMDb を引かないので、追加のたびに遅くなるわけではない。
+    //
+    // 失敗しても追加自体は成功させる（内部でログを出して握る）
+    await initMovieStreamingStatus(supabase, parsed.data.tmdb_movie_id);
 
     return NextResponse.json(
       {

@@ -313,12 +313,15 @@ describe('fetchAwardsFromOpenAI', () => {
       testArticleText,
     );
 
-    expect(result).toHaveLength(1);
-    expect(result![0].title_ja).toBe('テスト映画');
-    expect(result![0].is_winner).toBe(true);
+    expect(result).toEqual({
+      type: 'ok',
+      items: [
+        expect.objectContaining({ title_ja: 'テスト映画', is_winner: true }),
+      ],
+    });
   });
 
-  it('OpenAIクライアントがnullの場合、nullを返す', async () => {
+  it('APIキー未設定なら not_configured を返す', async () => {
     const { createOpenAIClient } = await import('./client');
     (createOpenAIClient as jest.Mock).mockReturnValueOnce(null);
 
@@ -329,10 +332,10 @@ describe('fetchAwardsFromOpenAI', () => {
       testArticleText,
     );
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ type: 'not_configured' });
   });
 
-  it('メッセージ出力がない場合、nullを返す', async () => {
+  it('メッセージ出力がない場合は unavailable を返す', async () => {
     mockCreate.mockResolvedValue({ output: [] });
 
     const result = await fetchAwardsFromOpenAI(
@@ -342,10 +345,10 @@ describe('fetchAwardsFromOpenAI', () => {
       testArticleText,
     );
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ type: 'unavailable' });
   });
 
-  it('テキストコンテンツがない場合、nullを返す', async () => {
+  it('テキストコンテンツがない場合は unavailable を返す', async () => {
     mockCreate.mockResolvedValue({
       output: [
         {
@@ -362,10 +365,10 @@ describe('fetchAwardsFromOpenAI', () => {
       testArticleText,
     );
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ type: 'unavailable' });
   });
 
-  it('不正なJSONレスポンスの場合、nullを返す', async () => {
+  it('不正なJSONレスポンスなら unavailable を返す', async () => {
     mockCreate.mockResolvedValue(createMockResponseOutput('not json'));
 
     const result = await fetchAwardsFromOpenAI(
@@ -375,10 +378,10 @@ describe('fetchAwardsFromOpenAI', () => {
       testArticleText,
     );
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ type: 'unavailable' });
   });
 
-  it('zodバリデーション失敗の場合、nullを返す', async () => {
+  it('zodバリデーション失敗なら unavailable を返す', async () => {
     mockCreate.mockResolvedValue(
       createMockResponseOutput(JSON.stringify({ awards: [{ invalid: true }] })),
     );
@@ -390,10 +393,10 @@ describe('fetchAwardsFromOpenAI', () => {
       testArticleText,
     );
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ type: 'unavailable' });
   });
 
-  it('API呼び出し失敗の場合、nullを返す', async () => {
+  it('API呼び出し失敗なら unavailable を返す', async () => {
     mockCreate.mockRejectedValue(new Error('API error'));
 
     const result = await fetchAwardsFromOpenAI(
@@ -403,7 +406,7 @@ describe('fetchAwardsFromOpenAI', () => {
       testArticleText,
     );
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ type: 'unavailable' });
   });
 
   it('Responses APIのパラメータが正しく設定される', async () => {
@@ -498,7 +501,10 @@ describe('fetchAwardsFromOpenAI', () => {
       testArticleText,
     );
 
-    expect(result?.[0].person_name).toBe('ショーン・ペン');
+    expect(result).toMatchObject({
+      type: 'ok',
+      items: [expect.objectContaining({ person_name: 'ショーン・ペン' })],
+    });
   });
 
   it('person_name が null のレスポンスを弾かない', async () => {
@@ -528,8 +534,10 @@ describe('fetchAwardsFromOpenAI', () => {
       testArticleText,
     );
 
-    expect(result).toHaveLength(1);
-    expect(result?.[0].person_name).toBeNull();
+    expect(result).toMatchObject({
+      type: 'ok',
+      items: [expect.objectContaining({ person_name: null })],
+    });
   });
 
   it('システムプロンプトにアダルト作品の除外指示が含まれる', async () => {

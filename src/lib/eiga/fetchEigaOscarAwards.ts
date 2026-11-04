@@ -11,6 +11,8 @@ import { EIGA_FETCH_TIMEOUT_MS } from '@/constants';
 import type { OpenAiAwardItem } from '@/schema/awards';
 import { getRequiredEnv } from '@/utils/env';
 
+import type { EigaFetchOutcome } from './fetchEigaGoldenGlobes';
+
 import { cleanHtmlText, decodeHtmlEntities } from './htmlText';
 
 /** eiga.comページと対応する部門のマッピング */
@@ -60,9 +62,10 @@ export interface ExtractedNominee {
  */
 export async function fetchEigaOscarAwards(
   ceremonyYear: number,
-): Promise<OpenAiAwardItem[]> {
+): Promise<EigaFetchOutcome> {
   const baseUrl = getRequiredEnv('EIGA_OSCAR_BASE_URL');
   const allItems: OpenAiAwardItem[] = [];
+  let failedPages = 0;
 
   for (const page of EIGA_OSCAR_PAGES) {
     const url = `${baseUrl}/${ceremonyYear}/${page.path}`;
@@ -71,6 +74,7 @@ export async function fetchEigaOscarAwards(
       html = await fetchHtml(url);
     } catch (error) {
       console.warn(`Failed to fetch ${url}:`, error);
+      failedPages += 1;
       continue;
     }
 
@@ -110,7 +114,16 @@ export async function fetchEigaOscarAwards(
     }
   }
 
-  return allItems;
+  if (allItems.length > 0) return { type: 'ok', items: allItems };
+
+  // 1ページでも落ちていれば「構造が変わった」とは断定できない。
+  // 取れなかったページに入っていた可能性があるため unavailable に倒す
+  if (failedPages > 0) return { type: 'unavailable' };
+
+  console.warn(
+    `No entries extracted for academy awards ${ceremonyYear}. ページ構造が変わった可能性がある`,
+  );
+  return { type: 'empty' };
 }
 
 async function fetchHtml(url: string): Promise<string> {

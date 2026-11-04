@@ -27,12 +27,16 @@ import {
   extractPersonNamesFromWikitext,
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
+  type OpenAiFetchOutcome,
 } from '@/lib/openai/generateAwardMovies';
 import {
   fetchWikipediaArticle,
   type SectionLookup,
 } from '@/lib/wikipedia/fetchArticle';
-import { fetchEigaGoldenGlobes } from '@/lib/eiga/fetchEigaGoldenGlobes';
+import {
+  fetchEigaGoldenGlobes,
+  type EigaFetchOutcome,
+} from '@/lib/eiga/fetchEigaGoldenGlobes';
 import { fetchCannesFromWikitext } from '@/lib/wikipedia/parseCannesAwards';
 
 import { deleteStaleAwardRows } from './deleteStaleAwardRows';
@@ -142,7 +146,15 @@ export type AwardFetchFailure =
   | { type: 'article_unavailable'; wikipediaTitle: string }
   /** 記事はあるが「受賞」「ノミネート」のセクションが無く、抽出も0件だった */
   | { type: 'no_section'; wikipediaTitle: string }
-  /** 取得元から0件（eiga.com が0件、記事はあるが抽出0件 等） */
+  /** 取得元に到達できなかった（eiga.com のHTTPエラー、OpenAI の呼び出し失敗） */
+  | { type: 'source_unavailable'; source: 'eiga' | 'openai' }
+  /** ページ・記事は取れたが1件も抽出できなかった。構造が変わった可能性 */
+  | { type: 'source_changed'; source: 'eiga' }
+  /** OpenAI のAPIキーが未設定 */
+  | { type: 'openai_not_configured' }
+  /** 抽出はできたが、全件がハルシネーション検証で落ちた */
+  | { type: 'all_hallucinated' }
+  /** 取得元から0件（上記のどれにも当てはまらない） */
   | { type: 'no_items' }
   /** 抽出はできたが TMDb で1件も特定できなかった */
   | { type: 'no_tmdb_match' };
@@ -224,9 +236,9 @@ export async function fetchAndResolveAward(
 
   if (awardName === 'academy_awards') {
     // アカデミー賞: eiga.com から正規表現で抽出（ハルシネーションなし）
-    const eigaItems = await fetchEigaOscarAwards(year);
-    if (eigaItems.length > 0) {
-      fetched = { items: eigaItems };
+    const eiga = await fetchEigaOscarAwards(year);
+    if (eiga.type === 'ok') {
+      fetched = { items: eiga.items };
     } else {
       // eiga.com取得失敗時はWikipedia+OpenAIにフォールバック
       console.warn(
@@ -236,7 +248,7 @@ export async function fetchAndResolveAward(
     }
   } else if (awardName === 'golden_globes') {
     // ゴールデングローブ賞: eiga.com から正規表現で抽出（OpenAIを使わない）
-    fetched = { items: await fetchEigaGoldenGlobes(year) };
+    fetched = toEigaResult(await fetchEigaGoldenGlobes(year));
   } else if (awardName === 'cannes') {
     // カンヌ: wikitext を直接パースする（OpenAIを使わない）。
     // eiga.com のカンヌは作品リンクが3割欠落し2012〜2016が旧レイアウトのため使わない
@@ -541,6 +553,19 @@ async function fetchAwardItemsFromWikitext(
   return { items };
 }
 
+/** eiga.com の結果を取得結果へ移す */
+function toEigaResult(outcome: EigaFetchOutcome): AwardItemsResult {
+  if (outcome.type === 'ok') return { items: outcome.items };
+
+  return {
+    items: [],
+    failure:
+      outcome.type === 'unavailable'
+        ? { type: 'source_unavailable', source: 'eiga' }
+        : { type: 'source_changed', source: 'eiga' },
+  };
+}
+
 /**
  * 記事は取れたが抽出0件だったときの理由を決める
  *
@@ -602,23 +627,38 @@ async function fetchAwardItemsViaWikipedia(
     [...extractPersonNamesFromWikitext(articleText)].map(normalizePersonName),
   );
 
+  // 全部門ぶんを畳んだ理由。0件で終わったときだけ使う
+  let notConfigured = false;
+  let openAiUnavailable = false;
+  let extractedButAllDropped = false;
+
   for (const category of awardDef.categories) {
-    let categoryItems: Awaited<ReturnType<typeof fetchAwardsFromOpenAI>> = null;
+    let outcome: OpenAiFetchOutcome = { type: 'unavailable' };
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      categoryItems = await fetchAwardsFromOpenAI(
+      outcome = await fetchAwardsFromOpenAI(
         currentYear,
         awardDef.label,
         category,
         articleText,
       );
-      if (categoryItems && categoryItems.length > 0) break;
+      // APIキー未設定はリトライしても変わらない
+      if (outcome.type === 'not_configured') break;
+      if (outcome.type === 'ok' && outcome.items.length > 0) break;
       console.warn(
         `No AI results for ${awardName}/${category.key} ${currentYear} (attempt ${attempt}/${maxRetries})`,
       );
     }
 
-    if (categoryItems && categoryItems.length > 0) {
+    if (outcome.type === 'not_configured') {
+      notConfigured = true;
+      break;
+    }
+    if (outcome.type === 'unavailable') openAiUnavailable = true;
+
+    const categoryItems = outcome.type === 'ok' ? outcome.items : [];
+
+    if (categoryItems.length > 0) {
       const verified = categoryItems
         .filter((item) => {
           if (validTitles.has(item.title_ja)) return true;
@@ -650,6 +690,8 @@ async function fetchAwardItemsViaWikipedia(
         }
         return item;
       });
+      // 抽出はできたのに検証で全部落ちた＝捏造しか返っていない
+      if (corrected.length === 0) extractedButAllDropped = true;
       allAiItems.push(...corrected);
     }
   }
@@ -657,9 +699,36 @@ async function fetchAwardItemsViaWikipedia(
   if (allAiItems.length === 0) {
     return {
       items: allAiItems,
-      failure: toEmptyFailure(article, wikipediaTitle),
+      failure: toOpenAiFailure(
+        { notConfigured, openAiUnavailable, extractedButAllDropped },
+        article,
+        wikipediaTitle,
+      ),
     };
   }
 
   return { items: allAiItems };
+}
+
+/**
+ * OpenAI 経路で0件に終わったときの理由を決める
+ *
+ * 設定の問題・API の不調・捏造だけが返った、を切り分ける。
+ * どれでもなければ記事側の理由（セクションが無い等）に落とす
+ */
+function toOpenAiFailure(
+  flags: {
+    notConfigured: boolean;
+    openAiUnavailable: boolean;
+    extractedButAllDropped: boolean;
+  },
+  article: { sectionLookup: SectionLookup },
+  wikipediaTitle: string,
+): AwardFetchFailure {
+  if (flags.notConfigured) return { type: 'openai_not_configured' };
+  if (flags.extractedButAllDropped) return { type: 'all_hallucinated' };
+  if (flags.openAiUnavailable) {
+    return { type: 'source_unavailable', source: 'openai' };
+  }
+  return toEmptyFailure(article, wikipediaTitle);
 }

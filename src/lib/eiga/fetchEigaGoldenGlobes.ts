@@ -18,6 +18,20 @@ import { EIGA_FETCH_TIMEOUT_MS } from '@/constants';
 import type { OpenAiAwardItem } from '@/schema/awards';
 import { getRequiredEnv } from '@/utils/env';
 
+/**
+ * eiga.com からの取得結果
+ *
+ * **「取得できなかった」と「取得できたが0件」を分ける。** 前者はサイトの一時障害や
+ * URLの誤りで、再実行・設定確認が要る。後者はページ構造の変更で、パーサの修正が要る。
+ * どちらも0件として畳むと、原因の違いが画面から判別できない（#918 / #956）。
+ */
+export type EigaFetchOutcome =
+  | { type: 'ok'; items: OpenAiAwardItem[] }
+  /** ページを取得できなかった（HTTPエラー・タイムアウト） */
+  | { type: 'unavailable' }
+  /** ページは取得できたが1件も抽出できなかった */
+  | { type: 'empty' };
+
 import { cleanHtmlText } from './htmlText';
 
 /** eiga.com の賞ページにおけるゴールデングローブ賞のスラッグ */
@@ -197,7 +211,7 @@ async function fetchHtml(url: string): Promise<string> {
  */
 export async function fetchEigaGoldenGlobes(
   ceremonyYear: number,
-): Promise<OpenAiAwardItem[]> {
+): Promise<EigaFetchOutcome> {
   const baseUrl = getRequiredEnv('EIGA_AWARD_BASE_URL');
   const url = `${baseUrl}/${GOLDEN_GLOBE_SLUG}/${ceremonyYear}/`;
 
@@ -206,13 +220,20 @@ export async function fetchEigaGoldenGlobes(
     html = await fetchHtml(url);
   } catch (error) {
     console.warn(`Failed to fetch ${url}:`, error);
-    return [];
+    return { type: 'unavailable' };
   }
 
   const entries = extractGoldenGlobeEntries(html);
   warnCategoriesWithoutWinner(entries, ceremonyYear);
 
-  return entries.map((entry) => ({
+  if (entries.length === 0) {
+    console.warn(
+      `No entries extracted for golden globes ${ceremonyYear}. ページ構造が変わった可能性がある`,
+    );
+    return { type: 'empty' };
+  }
+
+  const items = entries.map((entry) => ({
     title_ja: entry.title,
     title_en: entry.title,
     category: entry.categoryKey,
@@ -222,6 +243,8 @@ export async function fetchEigaGoldenGlobes(
     year: ceremonyYear - 1,
     ...(entry.personName ? { person_name: entry.personName } : {}),
   }));
+
+  return { type: 'ok', items };
 }
 
 /** 受賞が1件も取れなかった部門を警告に出す */

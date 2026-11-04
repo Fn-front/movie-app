@@ -133,6 +133,20 @@ function resolveWikitextLink(content: string): string {
   return content;
 }
 
+/**
+ * OpenAI からの取得結果
+ *
+ * **APIキー未設定を独立させる。** 設定の問題（`not_configured`）と呼び出しの
+ * 失敗（`unavailable`）は対処が違う。`null` に畳むと、画面には
+ * 「受賞作品を取得できませんでした」としか出ず切り分けられない（#956）。
+ */
+export type OpenAiFetchOutcome =
+  | { type: 'ok'; items: OpenAiAwardItem[] }
+  /** APIキーが設定されていない */
+  | { type: 'not_configured' }
+  /** API 呼び出しまたはレスポンスの解釈に失敗した */
+  | { type: 'unavailable' };
+
 /** TMDb検索で解決済みの受賞作品情報 */
 export interface ResolvedAwardMovie {
   tmdb_movie_id: number;
@@ -241,11 +255,11 @@ export async function fetchAwardsFromOpenAI(
   awardLabel: string,
   category: AwardCategory,
   articleText: string,
-): Promise<OpenAiAwardItem[] | null> {
+): Promise<OpenAiFetchOutcome> {
   const client = createOpenAIClient();
   if (!client) {
     console.error('OpenAI API key is not configured');
-    return null;
+    return { type: 'not_configured' };
   }
 
   const userPrompt = buildUserPrompt(
@@ -305,7 +319,7 @@ export async function fetchAwardsFromOpenAI(
     const textOutput = response.output.find((o) => o.type === 'message');
     if (!textOutput || textOutput.type !== 'message') {
       console.error('OpenAI returned no message output');
-      return null;
+      return { type: 'unavailable' };
     }
 
     const textContent = textOutput.content.find(
@@ -313,7 +327,7 @@ export async function fetchAwardsFromOpenAI(
     );
     if (!textContent || textContent.type !== 'output_text') {
       console.error('OpenAI returned no text content');
-      return null;
+      return { type: 'unavailable' };
     }
 
     const parsed = JSON.parse(textContent.text);
@@ -321,13 +335,13 @@ export async function fetchAwardsFromOpenAI(
 
     if (!result.success) {
       console.error('OpenAI response validation failed:', result.error);
-      return null;
+      return { type: 'unavailable' };
     }
 
-    return result.data.awards;
+    return { type: 'ok', items: result.data.awards };
   } catch (error) {
     console.error('OpenAI API call failed:', error);
-    return null;
+    return { type: 'unavailable' };
   }
 }
 

@@ -176,7 +176,7 @@ describe('executeSyncAwardMoviesCron', () => {
     );
     mockExtractPersonNamesFromWikitext.mockReturnValue(new Set());
     // デフォルトでeiga.comが空配列を返す状態
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
   });
 
   afterEach(() => {
@@ -201,7 +201,10 @@ describe('executeSyncAwardMoviesCron', () => {
     // 1月に設定（ゴールデングローブ賞）
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchEigaGoldenGlobes.mockResolvedValue(GOLDEN_GLOBES_ITEMS);
+    mockFetchEigaGoldenGlobes.mockResolvedValue({
+      type: 'ok',
+      items: GOLDEN_GLOBES_ITEMS,
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -221,7 +224,10 @@ describe('executeSyncAwardMoviesCron', () => {
     // 残留が1年（アカデミー賞は年1回）放置されても気づけない
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchEigaGoldenGlobes.mockResolvedValue(GOLDEN_GLOBES_ITEMS);
+    mockFetchEigaGoldenGlobes.mockResolvedValue({
+      type: 'ok',
+      items: GOLDEN_GLOBES_ITEMS,
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase(
@@ -294,7 +300,10 @@ describe('executeSyncAwardMoviesCron', () => {
   it('書き込みに失敗した賞は理由とエラーメッセージを残す', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchEigaGoldenGlobes.mockResolvedValue(GOLDEN_GLOBES_ITEMS);
+    mockFetchEigaGoldenGlobes.mockResolvedValue({
+      type: 'ok',
+      items: GOLDEN_GLOBES_ITEMS,
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase({ error: { message: 'upsert boom' } });
@@ -315,7 +324,10 @@ describe('executeSyncAwardMoviesCron', () => {
   it('ゴールデングローブ賞はeiga.comから取得し、OpenAIもWikipediaも使わない', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchEigaGoldenGlobes.mockResolvedValue(GOLDEN_GLOBES_ITEMS);
+    mockFetchEigaGoldenGlobes.mockResolvedValue({
+      type: 'ok',
+      items: GOLDEN_GLOBES_ITEMS,
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -365,7 +377,7 @@ describe('executeSyncAwardMoviesCron', () => {
   it('ゴールデングローブ賞でeiga.comが0件を返した場合はスキップする', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchEigaGoldenGlobes.mockResolvedValue([]);
+    mockFetchEigaGoldenGlobes.mockResolvedValue({ type: 'empty' });
 
     const supabase = createMockSupabase();
     const result = await executeSyncAwardMoviesCron(supabase);
@@ -384,7 +396,7 @@ describe('executeSyncAwardMoviesCron', () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
     // 全部門でnullを返す（リトライ含む）
-    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({ type: 'unavailable' });
 
     const supabase = createMockSupabase();
     const result = await executeSyncAwardMoviesCron(supabase);
@@ -401,15 +413,18 @@ describe('executeSyncAwardMoviesCron', () => {
   it('TMDb解決が空結果の場合は該当賞をスキップする', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchAwardsFromOpenAI.mockResolvedValue([
-      {
-        title_ja: 'テスト',
-        title_en: 'Test',
-        category: 'best_drama',
-        is_winner: true,
-        year: 2025,
-      },
-    ]);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト',
+          title_en: 'Test',
+          category: 'best_drama',
+          is_winner: true,
+          year: 2025,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([]);
 
     const supabase = createMockSupabase();
@@ -426,15 +441,18 @@ describe('executeSyncAwardMoviesCron', () => {
   it('UPSERT失敗時は該当賞をスキップする', async () => {
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchAwardsFromOpenAI.mockResolvedValue([
-      {
-        title_ja: 'テスト',
-        title_en: 'Test',
-        category: 'best_drama',
-        is_winner: true,
-        year: 2025,
-      },
-    ]);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト',
+          title_en: 'Test',
+          category: 'best_drama',
+          is_winner: true,
+          year: 2025,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase({
@@ -460,7 +478,7 @@ describe('executeSyncAwardMoviesCron', () => {
       sectionLookup: 'found',
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト']));
-    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({ type: 'unavailable' });
     mockResolveAwardsWithTMDb.mockResolvedValue([]);
 
     const supabase = createMockSupabase();
@@ -478,15 +496,18 @@ describe('executeSyncAwardMoviesCron', () => {
     jest.setSystemTime(new Date('2026-07-15T00:00:00Z'));
 
     // eiga.comが受賞作品を返す
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'テスト映画',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'テスト映画',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -507,15 +528,18 @@ describe('executeSyncAwardMoviesCron', () => {
     jest.setSystemTime(new Date('2026-03-15T00:00:00Z'));
 
     // eiga.comが受賞作品を返す
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'テスト映画',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2025,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'テスト映画',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2025,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -535,7 +559,7 @@ describe('executeSyncAwardMoviesCron', () => {
     jest.setSystemTime(new Date('2026-03-15T00:00:00Z'));
 
     // eiga.comが空配列を返す
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
     // Wikipedia+OpenAIが結果を返す
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
@@ -543,15 +567,18 @@ describe('executeSyncAwardMoviesCron', () => {
       sectionLookup: 'found',
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
-    mockFetchAwardsFromOpenAI.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test Movie',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2025,
-      },
-    ]);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test Movie',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2025,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -571,30 +598,33 @@ describe('executeSyncAwardMoviesCron', () => {
     // 取得に失敗したときのフォールバックだけ。他の賞は wikitext を直接
     // パースするためこの経路を通らない
     jest.setSystemTime(new Date('2026-07-15T00:00:00Z'));
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
 
     // wikitextには「テスト映画」のみ存在
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
 
     // 最初の部門のみ正常+ハルシネーションを返し、残りはnull
     mockFetchAwardsFromOpenAI
-      .mockResolvedValueOnce([
-        {
-          title_ja: 'テスト映画',
-          title_en: 'Test Movie',
-          category: 'best_picture',
-          is_winner: true,
-          year: 2025,
-        },
-        {
-          title_ja: 'ハルシネーション映画',
-          title_en: 'Hallucinated Movie',
-          category: 'best_picture',
-          is_winner: false,
-          year: 2025,
-        },
-      ])
-      .mockResolvedValue(null);
+      .mockResolvedValueOnce({
+        type: 'ok',
+        items: [
+          {
+            title_ja: 'テスト映画',
+            title_en: 'Test Movie',
+            category: 'best_picture',
+            is_winner: true,
+            year: 2025,
+          },
+          {
+            title_ja: 'ハルシネーション映画',
+            title_en: 'Hallucinated Movie',
+            category: 'best_picture',
+            is_winner: false,
+            year: 2025,
+          },
+        ],
+      })
+      .mockResolvedValue({ type: 'ok', items: [] });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -609,23 +639,26 @@ describe('executeSyncAwardMoviesCron', () => {
   it('yearが授賞式年から大きく外れている場合は補正する', async () => {
     // 同上。アカデミー賞の eiga.com フォールバック経路で検証する
     jest.setSystemTime(new Date('2026-07-15T00:00:00Z'));
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
 
     mockExtractMovieTitlesFromWikitext.mockReturnValue(
       new Set(['秒速5センチメートル']),
     );
 
     mockFetchAwardsFromOpenAI
-      .mockResolvedValueOnce([
-        {
-          title_ja: '秒速5センチメートル',
-          title_en: '5 Centimeters Per Second',
-          category: 'best_picture',
-          is_winner: false,
-          year: 2007,
-        },
-      ])
-      .mockResolvedValue(null);
+      .mockResolvedValueOnce({
+        type: 'ok',
+        items: [
+          {
+            title_ja: '秒速5センチメートル',
+            title_en: '5 Centimeters Per Second',
+            category: 'best_picture',
+            is_winner: false,
+            year: 2007,
+          },
+        ],
+      })
+      .mockResolvedValue({ type: 'ok', items: [] });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -672,19 +705,22 @@ describe('syncSingleAward', () => {
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockExtractPersonNamesFromWikitext.mockReturnValue(new Set());
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
   });
 
   it('generatedAt を引数で受け取り、生成した行すべてに同じ値を入れる', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([
       createResolvedMovie({ tmdb_movie_id: 1 }),
       createResolvedMovie({ tmdb_movie_id: 2, display_order: 2 }),
@@ -705,7 +741,7 @@ describe('syncSingleAward', () => {
   it('姓だけの人名は捨てる（部分一致を通さない）', async () => {
     // articleText.includes だと「ペン」が「ショーン・ペン」に部分一致して通る。
     // 監督賞の問い合わせに俳優名が混ざっても検知できなくなる
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: WIKITEXT_WITH_PERSON,
@@ -715,16 +751,19 @@ describe('syncSingleAward', () => {
     mockExtractPersonNamesFromWikitext.mockReturnValue(
       new Set(['ショーン・ペン']),
     );
-    mockFetchAwardsFromOpenAI.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-        person_name: 'ペン',
-      },
-    ]);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+          person_name: 'ペン',
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
     const { supabase } = createCapturingSupabase();
 
@@ -738,7 +777,7 @@ describe('syncSingleAward', () => {
 
   it('半角中黒や余分な括弧があっても実在する人名は通す', async () => {
     // OpenAI の出力は非決定的で表記が揺れる。NFKC 正規化して突き合わせる
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: WIKITEXT_WITH_PERSON,
@@ -748,17 +787,20 @@ describe('syncSingleAward', () => {
     mockExtractPersonNamesFromWikitext.mockReturnValue(
       new Set(['ショーン・ペン']),
     );
-    mockFetchAwardsFromOpenAI.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-        // 半角中黒（U+FF65）
-        person_name: 'ショーン･ペン',
-      },
-    ]);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+          // 半角中黒（U+FF65）
+          person_name: 'ショーン･ペン',
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
     const { supabase } = createCapturingSupabase();
 
@@ -773,23 +815,26 @@ describe('syncSingleAward', () => {
   it('wikitext に無い人名は捨てて作品だけ残す', async () => {
     // OpenAI 経路は捏造しうる。タイトルと同じく wikitext と突き合わせる
     // （eiga.com / wikitext パーサは正規表現なので捏造の余地が無い）
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』",
       sectionLookup: 'found',
     });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
-    mockFetchAwardsFromOpenAI.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-        person_name: '実在しない人名',
-      },
-    ]);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+          person_name: '実在しない人名',
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
     const { supabase } = createCapturingSupabase();
 
@@ -807,7 +852,7 @@ describe('syncSingleAward', () => {
   });
 
   it('wikitext にある人名はそのまま通す', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: WIKITEXT_WITH_PERSON,
@@ -817,16 +862,19 @@ describe('syncSingleAward', () => {
     mockExtractPersonNamesFromWikitext.mockReturnValue(
       new Set(['ショーン・ペン']),
     );
-    mockFetchAwardsFromOpenAI.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-        person_name: 'ショーン・ペン',
-      },
-    ]);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+          person_name: 'ショーン・ペン',
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
     const { supabase } = createCapturingSupabase();
 
@@ -839,9 +887,99 @@ describe('syncSingleAward', () => {
     expect(items.every((i) => i.person_name === 'ショーン・ペン')).toBe(true);
   });
 
+  it('eiga.com に到達できないとき source_unavailable を返す', async () => {
+    // ゴールデングローブ賞は eiga.com のみを使う
+    mockFetchEigaGoldenGlobes.mockResolvedValue({ type: 'unavailable' });
+    const { supabase, upsert } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, {
+      ...params,
+      awardName: 'golden_globes',
+      awardDef: AWARD_DEFINITIONS.golden_globes,
+    });
+
+    expect(result).toEqual({ type: 'source_unavailable', source: 'eiga' });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('eiga.com のページから抽出できないとき source_changed を返す', async () => {
+    mockFetchEigaGoldenGlobes.mockResolvedValue({ type: 'empty' });
+    const { supabase } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, {
+      ...params,
+      awardName: 'golden_globes',
+      awardDef: AWARD_DEFINITIONS.golden_globes,
+    });
+
+    expect(result).toEqual({ type: 'source_changed', source: 'eiga' });
+  });
+
+  it('OpenAIのAPIキーが未設定なら openai_not_configured を返す', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== 受賞とノミネート ==\n本文',
+      sectionLookup: 'found',
+    });
+    mockFetchAwardsFromOpenAI.mockResolvedValue({ type: 'not_configured' });
+    const { supabase } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'openai_not_configured' });
+    // 設定の問題なのでリトライしない
+    expect(mockFetchAwardsFromOpenAI).toHaveBeenCalledTimes(1);
+  });
+
+  it('OpenAIの呼び出しに失敗したら source_unavailable を返す', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== 受賞とノミネート ==\n本文',
+      sectionLookup: 'found',
+    });
+    mockFetchAwardsFromOpenAI.mockResolvedValue({ type: 'unavailable' });
+    const { supabase } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'source_unavailable', source: 'openai' });
+  });
+
+  it('抽出はできたが全件が検証で落ちたら all_hallucinated を返す', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== 受賞とノミネート ==\n本文',
+      sectionLookup: 'found',
+    });
+    // wikitext に存在しないタイトルしか返ってこない
+    mockExtractMovieTitlesFromWikitext.mockReturnValue(
+      new Set(['実在する映画']),
+    );
+    mockFetchAwardsFromOpenAI.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: '捏造された映画',
+          title_en: 'Fabricated',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
+    const { supabase } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'all_hallucinated' });
+  });
+
   it('Wikipedia記事が存在しないとき no_article を記事名付きで返す', async () => {
     // 記事名の誤り。画面に記事名が出れば、それが実在するかその場で確かめられる
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
     mockFetchWikipediaArticle.mockResolvedValue({ type: 'not_found' });
     const { supabase, upsert } = createCapturingSupabase();
 
@@ -856,7 +994,7 @@ describe('syncSingleAward', () => {
 
   it('Wikipediaの取得に失敗したとき article_unavailable を返す', async () => {
     // 一時的な障害。記事名の誤りとは対処が違う（再実行で直る）
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
     mockFetchWikipediaArticle.mockResolvedValue({ type: 'fetch_failed' });
     const { supabase, upsert } = createCapturingSupabase();
 
@@ -871,13 +1009,14 @@ describe('syncSingleAward', () => {
 
   it('受賞セクションが無く抽出0件なら no_section を返す', async () => {
     // 記事はあるが構成が変わった可能性。記事が無いのとは別物
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: '== 概要 ==\n本文',
       sectionLookup: 'absent',
     });
-    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    // OpenAI は応答したが0件。取得失敗とは別物
+    mockFetchAwardsFromOpenAI.mockResolvedValue({ type: 'ok', items: [] });
     const { supabase } = createCapturingSupabase();
 
     const result = await syncSingleAward(supabase, params);
@@ -891,13 +1030,13 @@ describe('syncSingleAward', () => {
   it('セクション一覧を読めなかったときは no_section を名乗らない', async () => {
     // 一覧APIが一時的に落ちただけ。「記事の構成が変わった」と出すと、
     // 実際には変わっていないパーサの調査へ admin を誘導してしまう
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: '== 概要 ==\n本文',
       sectionLookup: 'unknown',
     });
-    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({ type: 'ok', items: [] });
     const { supabase } = createCapturingSupabase();
 
     const result = await syncSingleAward(supabase, params);
@@ -906,13 +1045,13 @@ describe('syncSingleAward', () => {
   });
 
   it('セクションはあるが抽出0件なら no_items を返す', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
     mockFetchWikipediaArticle.mockResolvedValue({
       type: 'ok',
       wikitext: '== 受賞とノミネート ==\n本文',
       sectionLookup: 'found',
     });
-    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    mockFetchAwardsFromOpenAI.mockResolvedValue({ type: 'ok', items: [] });
     const { supabase } = createCapturingSupabase();
 
     const result = await syncSingleAward(supabase, params);
@@ -921,8 +1060,8 @@ describe('syncSingleAward', () => {
   });
 
   it('取得0件なら理由によらず DBに触らない', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([]);
-    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    mockFetchEigaOscarAwards.mockResolvedValue({ type: 'empty' });
+    mockFetchAwardsFromOpenAI.mockResolvedValue({ type: 'unavailable' });
     mockFetchWikipediaArticle.mockResolvedValue({ type: 'not_found' });
     const { supabase, upsert, del } = createCapturingSupabase();
 
@@ -935,15 +1074,18 @@ describe('syncSingleAward', () => {
   });
 
   it('UPSERT してから旧世代を削除する', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
     const { supabase, upsert, del, eqName, eqYear, lt } =
       createCapturingSupabase();
@@ -964,15 +1106,18 @@ describe('syncSingleAward', () => {
     // eiga.com は取得に失敗したページを黙って飛ばす（continue）。全体が0件で
     // なければ早期 return に掛からないため、賞・年まるごと消すと
     // 未取得の部門が全滅する
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([
       createResolvedMovie({ tmdb_movie_id: 1, category: 'best_picture' }),
       createResolvedMovie({ tmdb_movie_id: 2, category: 'best_picture' }),
@@ -996,15 +1141,18 @@ describe('syncSingleAward', () => {
     // 部門が丸ごと欠けるのではなく「10件あるはずが2件しか解決できなかった」
     // ケース。ここで消すと残り8件が恒久的に失われる（アカデミー賞の cron は
     // 年1回なので次の自動実行は1年後）
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockImplementation(
       (_items: unknown, _def: unknown, unresolved?: Set<string>) => {
         unresolved?.add('best_picture');
@@ -1026,15 +1174,18 @@ describe('syncSingleAward', () => {
   });
 
   it('すべての部門で取りこぼしたら何も削除しない', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockImplementation(
       (_items: unknown, _def: unknown, unresolved?: Set<string>) => {
         unresolved?.add('best_picture');
@@ -1054,15 +1205,18 @@ describe('syncSingleAward', () => {
   });
 
   it('人名が変わった行は旧世代として消える', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     // 人名は一意キーに入っているため、表記が変われば別の行になる。
     // 旧行は UPSERT されず generated_at が古いまま残るので削除対象になる
     mockResolveAwardsWithTMDb.mockResolvedValue([
@@ -1084,15 +1238,18 @@ describe('syncSingleAward', () => {
   });
 
   it('旧世代の削除に失敗しても synced を返す', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
     // UPSERT は成功しているのでデータは新しい。残留が消えなかっただけ
     const { supabase } = createCapturingSupabase(
@@ -1111,15 +1268,18 @@ describe('syncSingleAward', () => {
   });
 
   it('削除に成功したら deleteError を含めない', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
     const { supabase } = createCapturingSupabase();
 
@@ -1129,15 +1289,18 @@ describe('syncSingleAward', () => {
   });
 
   it('UPSERT に失敗したら削除へ進まない', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
     const { supabase, del } = createCapturingSupabase({
       error: { message: 'boom' },
@@ -1149,15 +1312,18 @@ describe('syncSingleAward', () => {
   });
 
   it('TMDb解決0件を no_tmdb_match として返し、DBに触らない', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([]);
     const { supabase, upsert, del } = createCapturingSupabase();
 
@@ -1169,15 +1335,18 @@ describe('syncSingleAward', () => {
   });
 
   it('UPSERT 失敗を write_failed として返す', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
     const { supabase } = createCapturingSupabase({
       error: { message: 'boom' },
@@ -1189,15 +1358,18 @@ describe('syncSingleAward', () => {
   });
 
   it('同じユニークキーの重複行を除外する', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     // 同一 tmdb_movie_id × 同一 category が2件返る
     mockResolveAwardsWithTMDb.mockResolvedValue([
       createResolvedMovie({ tmdb_movie_id: 1 }),
@@ -1216,15 +1388,18 @@ describe('syncSingleAward', () => {
   });
 
   it('同じ映画×同じ部門でも人名が異なれば両方 UPSERT する', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     // 演技賞では同じ作品から複数人がノミネートされる。受賞者が後ろにいると
     // 先勝ちで潰した場合に受賞が消える
     mockResolveAwardsWithTMDb.mockResolvedValue([
@@ -1250,15 +1425,18 @@ describe('syncSingleAward', () => {
   });
 
   it('UPSERT の競合キーに person_name を含める', async () => {
-    mockFetchEigaOscarAwards.mockResolvedValue([
-      {
-        title_ja: 'テスト映画',
-        title_en: 'Test',
-        category: 'best_picture',
-        is_winner: true,
-        year: 2024,
-      },
-    ]);
+    mockFetchEigaOscarAwards.mockResolvedValue({
+      type: 'ok',
+      items: [
+        {
+          title_ja: 'テスト映画',
+          title_en: 'Test',
+          category: 'best_picture',
+          is_winner: true,
+          year: 2024,
+        },
+      ],
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
     const { supabase, upsert } = createCapturingSupabase();
 

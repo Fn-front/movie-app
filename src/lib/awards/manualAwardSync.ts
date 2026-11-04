@@ -1,9 +1,10 @@
 /**
  * 管理画面からの受賞作品手動同期
  *
- * cron（UPSERT のみ）と違い、残留レコードを消す「世代付き入れ替え」を行う。
- * 手動同期は「データがおかしいからやり直す」場面が主で、前回あって今回無い
- * レコードが残り続けると直したことにならないため。
+ * 残留レコードを消す「世代付き入れ替え」を行う。前回あって今回無いレコードが
+ * 残り続けると「データがおかしいからやり直す」場面で直したことにならないため。
+ * cron（`syncSingleAward`）も同じ入れ替えを行い、削除は
+ * `deleteStaleAwardRows` を共有する。
  *
  * ⚠️ DELETE → INSERT の順にしてはいけない。supabase-js の DELETE と INSERT は
  * 別々の文でそれぞれ自動コミットされるため、DELETE 後に INSERT が失敗すると
@@ -27,6 +28,7 @@ import {
   type SyncableAwardName,
 } from '@/constants/awardSync';
 
+import { deleteStaleAwardRows } from './deleteStaleAwardRows';
 import { fetchAndResolveAward } from './syncAwardMoviesService';
 import { finishJobIfRunning, isJobStillRunning } from './awardSyncJob';
 
@@ -101,13 +103,13 @@ export async function executeManualAwardSync(
     }
 
     // 今回更新されなかった行＝前回あって今回無い残留だけを消す。
-    // UPSERT 済みの行は generated_at が今回の値になっているので残る
-    const { error: deleteError } = await supabase
-      .from('award_movies')
-      .delete()
-      .eq('award_name', awardName)
-      .eq('award_year', year)
-      .lt('generated_at', generatedAt);
+    // 削除範囲の絞り込みは cron と同じ関数に任せる（挙動を2通り持たない）
+    const deleteError = await deleteStaleAwardRows(supabase, {
+      awardName,
+      year,
+      generatedAt,
+      categories: resolved.deletableCategories,
+    });
 
     if (deleteError) {
       // UPSERT は成功しているのでデータは新しい。残留が消えなかっただけなので

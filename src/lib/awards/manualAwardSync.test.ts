@@ -42,7 +42,8 @@ function createSupabase(options?: {
   const lt = jest
     .fn()
     .mockResolvedValue({ error: options?.deleteError ?? null });
-  const eqYear = jest.fn(() => ({ lt }));
+  const inCategories = jest.fn(() => ({ lt }));
+  const eqYear = jest.fn(() => ({ in: inCategories }));
   const eqName = jest.fn(() => ({ eq: eqYear }));
   const del = jest.fn(() => ({ eq: eqName }));
   const from = jest.fn(() => ({ upsert, delete: del }));
@@ -54,6 +55,7 @@ function createSupabase(options?: {
     del,
     eqName,
     eqYear,
+    inCategories,
     lt,
   };
 }
@@ -79,7 +81,11 @@ beforeEach(() => {
 
 describe('executeManualAwardSync', () => {
   it('UPSERT してから旧世代だけを削除し、succeeded にする', async () => {
-    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
     const db = createSupabase();
 
     await executeManualAwardSync(wrap(db), params);
@@ -103,8 +109,52 @@ describe('executeManualAwardSync', () => {
     );
   });
 
+  it('削除対象を今回取得できた部門だけに絞る', async () => {
+    // 部分取得（eiga.com が一部ページだけ落ちる等）のときに、
+    // 賞・年まるごと消すと取得できなかった部門が全滅する
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: [
+        { ...ROWS[0], category: 'palme_dor' },
+        { ...ROWS[0], tmdb_movie_id: 2, category: 'palme_dor' },
+        { ...ROWS[0], tmdb_movie_id: 3, category: 'grand_prix' },
+      ],
+      // 取りこぼしが出た部門は fetchAndResolveAward 側で除外済み
+      deletableCategories: ['palme_dor'],
+    });
+    const db = createSupabase();
+
+    await executeManualAwardSync(wrap(db), params);
+
+    expect(db.inCategories).toHaveBeenCalledWith('category', ['palme_dor']);
+  });
+
+  it('削除してよい部門が0件なら DELETE しない', async () => {
+    // すべての部門で取りこぼしが出たケース。UPSERT は走るが削除はしない
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: [],
+    });
+    const db = createSupabase();
+
+    await executeManualAwardSync(wrap(db), params);
+
+    expect(db.upsert).toHaveBeenCalledTimes(1);
+    expect(db.del).not.toHaveBeenCalled();
+    expect(mockFinishJobIfRunning).toHaveBeenCalledWith(
+      expect.anything(),
+      JOB_ID,
+      { status: 'succeeded', totalUpserted: 1 },
+    );
+  });
+
   it('UPSERT の競合キーに person_name を含める', async () => {
-    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
     const db = createSupabase();
 
     await executeManualAwardSync(wrap(db), params);
@@ -152,7 +202,11 @@ describe('executeManualAwardSync', () => {
    * その賞・年のデータが消えたまま復旧しない。
    */
   it('UPSERT が失敗したら DELETE へ進まない（既存データを守る）', async () => {
-    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
     const db = createSupabase({ upsertError: { message: 'boom' } });
 
     await executeManualAwardSync(wrap(db), params);
@@ -172,7 +226,11 @@ describe('executeManualAwardSync', () => {
   });
 
   it('強制失効されていたら書き込まずに終了する', async () => {
-    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
     mockIsJobStillRunning.mockResolvedValue(false);
     const db = createSupabase();
 
@@ -208,7 +266,11 @@ describe('executeManualAwardSync', () => {
   });
 
   it('DELETE が失敗しても succeeded にする（データは新しい）', async () => {
-    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
     const db = createSupabase({ deleteError: { message: 'delete boom' } });
 
     await executeManualAwardSync(wrap(db), params);

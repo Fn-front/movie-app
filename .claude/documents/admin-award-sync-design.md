@@ -150,9 +150,14 @@ supabase-js の DELETE と INSERT は別々の文でそれぞれ自動コミッ�
 5. UPSERT（onConflict: tmdb_movie_id,award_name,award_year,category）
      ├ 今回取得できた行には新しい generated_at が入る
      └ 失敗したら ここで終了。既存データは無傷
-6. DELETE WHERE award_name = ? AND award_year = ? AND generated_at < 今回の値
+6. DELETE WHERE award_name = ? AND award_year = ? AND category IN (削除可能な部門)
+                AND generated_at < 今回の値
      └ 今回取得できなかった残留だけが消える
 ```
+
+**削除範囲は部門単位で絞る（#946）。** ステップ3のガードは「全体が0件」しか見ないため、*部分*取得を素通しする。`fetchEigaOscarAwards` は取得に失敗したページを飛ばして残りを返し、`resolveAwardsWithTMDb` は TMDb が落ちた作品だけを黙って落とす（リトライ対象は 429/503/504 のみ）。賞・年まるごと消すと、取れなかったぶんの既存行が失われる。
+
+`fetchAndResolveAward` が返す `deletableCategories`（＝今回行が取れた部門から、取りこぼしが出た部門を引いたもの）だけを削除対象にする。削除処理自体は cron と手動同期で `deleteStaleAwardRows` を共有する。
 
 これで得られる性質:
 
@@ -188,6 +193,8 @@ CREATE UNIQUE INDEX uq_award_sync_jobs_active
 **23505 を 409 にマップする。** POST は「アクティブ有無チェック → INSERT」の2段になるため、その隙に別リクエストが INSERT すると 23505 になる。強制失効も「UPDATE → INSERT」の2文なので同じ。既存ヘルパー `isUniqueViolation`（`src/helpers/apiHelpers.ts:63`）と `conflictResponse`（同 `:75`）をそのまま使う。`src/app/api/favorites/route.ts:165-169` が同じ構造で使っている。
 
 **このインデックスは cron を管轄しない。** `award_sync_jobs` に行を作るのは手動ジョブだけ。一方 Vercel cron は本番で同じ Supabase を触る（`vercel.json`: `0 18 28 * *`）。3月28日に cron が academy_awards を UPSERT している最中にローカルで同じ賞・年を同期すると、インデックスは何も防がない。「直列が不変条件」なのは**手動ジョブ同士に限った話**。確率は低いが、そう理解して扱う。
+
+⚠️ **#946 以降、この競合は双方向になった。** cron も旧世代を削除するようになったため、「手動の DELETE が cron の UPSERT を消す」だけでなく「cron の DELETE が手動の UPSERT を消す」も起きうる。手動が `T1` に開始してフェッチ中、cron が `T2 (> T1)` で開始 → cron が先に UPSERT → 手動が UPSERT（行が `T1` に戻る）→ cron が `generated_at < T2` で DELETE → その行が消える。手動側は `succeeded` を返すため画面上は成功に見える。該当するのは3月28日のアカデミー賞だけで、起きても再同期で直る。
 
 キュー（終端待ちを積んで順に消化する方式）は採用しない。複数年の一括投入が要件から外れたため、チェーン実行と停止したキューを拾う仕組みに見合う価値が無い。2件目は 409 で拒否する。
 

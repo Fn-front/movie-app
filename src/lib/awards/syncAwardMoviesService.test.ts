@@ -91,6 +91,16 @@ function createMockSupabase(upsertResult = { error: null }) {
   return {
     from: jest.fn(() => ({
       upsert: jest.fn(() => upsertResult),
+      // UPSERT のあとに旧世代を消す。.eq().eq().in().lt() の順にチェーンする
+      delete: jest.fn(() => ({
+        eq: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            in: jest.fn(() => ({
+              lt: jest.fn().mockResolvedValue({ error: null }),
+            })),
+          })),
+        })),
+      })),
     })),
   } as unknown as Parameters<typeof executeSyncAwardMoviesCron>[0];
 }
@@ -495,13 +505,20 @@ describe('syncSingleAward', () => {
   /** upsert の引数を検査できる supabase モック */
   function createCapturingSupabase(
     upsertResult: { error: unknown } = { error: null },
+    deleteResult: { error: unknown } = { error: null },
   ) {
     const upsert = jest.fn().mockResolvedValue(upsertResult);
+    // DELETE は .eq().eq().in().lt() の順にチェーンする
+    const lt = jest.fn().mockResolvedValue(deleteResult);
+    const inCategories = jest.fn(() => ({ lt }));
+    const eqYear = jest.fn(() => ({ in: inCategories }));
+    const eqName = jest.fn(() => ({ eq: eqYear }));
+    const del = jest.fn(() => ({ eq: eqName }));
     const supabase = {
-      from: jest.fn(() => ({ upsert })),
+      from: jest.fn(() => ({ upsert, delete: del })),
     } as unknown as Parameters<typeof syncSingleAward>[0];
 
-    return { supabase, upsert };
+    return { supabase, upsert, del, eqName, eqYear, inCategories, lt };
   }
 
   const params = {
@@ -549,12 +566,205 @@ describe('syncSingleAward', () => {
     mockFetchEigaOscarAwards.mockResolvedValue([]);
     mockFetchAwardsFromOpenAI.mockResolvedValue(null);
     mockFetchWikipediaArticle.mockResolvedValue(null);
-    const { supabase, upsert } = createCapturingSupabase();
+    const { supabase, upsert, del } = createCapturingSupabase();
 
     const result = await syncSingleAward(supabase, params);
 
     expect(result).toEqual({ type: 'no_items' });
     expect(upsert).not.toHaveBeenCalled();
+    // 「0件でUPSERT → 全部DELETE」になると全損する
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('UPSERT してから旧世代を削除する', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase, upsert, del, eqName, eqYear, lt } =
+      createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'synced', upsertedCount: 1 });
+    // 逆順だと UPSERT 失敗時にその賞・年のデータが消えたまま復旧しない
+    expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(
+      del.mock.invocationCallOrder[0],
+    );
+    expect(eqName).toHaveBeenCalledWith('award_name', 'academy_awards');
+    expect(eqYear).toHaveBeenCalledWith('award_year', 2025);
+    expect(lt).toHaveBeenCalledWith('generated_at', '2026-10-31T00:00:00.000Z');
+  });
+
+  it('取得できなかった部門を削除対象に含めない', async () => {
+    // eiga.com は取得に失敗したページを黙って飛ばす（continue）。全体が0件で
+    // なければ早期 return に掛からないため、賞・年まるごと消すと
+    // 未取得の部門が全滅する
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([
+      createResolvedMovie({ tmdb_movie_id: 1, category: 'best_picture' }),
+      createResolvedMovie({ tmdb_movie_id: 2, category: 'best_picture' }),
+      createResolvedMovie({ tmdb_movie_id: 3, category: 'best_director' }),
+    ]);
+    const { supabase, inCategories } = createCapturingSupabase();
+
+    await syncSingleAward(supabase, params);
+
+    expect(inCategories).toHaveBeenCalledTimes(1);
+    const [column, categories] = inCategories.mock.calls[0] as unknown as [
+      string,
+      string[],
+    ];
+    expect(column).toBe('category');
+    // best_actor など今回1件も取れなかった部門は対象外
+    expect([...categories].sort()).toEqual(['best_director', 'best_picture']);
+  });
+
+  it('一部の作品がTMDb解決に失敗した部門は削除対象から外す', async () => {
+    // 部門が丸ごと欠けるのではなく「10件あるはずが2件しか解決できなかった」
+    // ケース。ここで消すと残り8件が恒久的に失われる（アカデミー賞の cron は
+    // 年1回なので次の自動実行は1年後）
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockImplementation(
+      (_items: unknown, _def: unknown, unresolved?: Set<string>) => {
+        unresolved?.add('best_picture');
+        return Promise.resolve([
+          createResolvedMovie({ tmdb_movie_id: 1, category: 'best_picture' }),
+          createResolvedMovie({ tmdb_movie_id: 3, category: 'best_director' }),
+        ]);
+      },
+    );
+    const { supabase, inCategories } = createCapturingSupabase();
+
+    await syncSingleAward(supabase, params);
+
+    const [, categories] = inCategories.mock.calls[0] as unknown as [
+      string,
+      string[],
+    ];
+    expect(categories).toEqual(['best_director']);
+  });
+
+  it('すべての部門で取りこぼしたら何も削除しない', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockImplementation(
+      (_items: unknown, _def: unknown, unresolved?: Set<string>) => {
+        unresolved?.add('best_picture');
+        return Promise.resolve([
+          createResolvedMovie({ tmdb_movie_id: 1, category: 'best_picture' }),
+        ]);
+      },
+    );
+    const { supabase, upsert, del } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    // UPSERT は走る（取れたぶんは最新化する）が、削除はしない
+    expect(result).toEqual({ type: 'synced', upsertedCount: 1 });
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('人名が変わった行は旧世代として消える', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    // 人名は一意キーに入っているため、表記が変われば別の行になる。
+    // 旧行は UPSERT されず generated_at が古いまま残るので削除対象になる
+    mockResolveAwardsWithTMDb.mockResolvedValue([
+      createResolvedMovie({
+        tmdb_movie_id: 1,
+        category: 'best_picture',
+        person_name: 'ゾーイ・サルダーニャ',
+      }),
+    ]);
+    const { supabase, upsert, inCategories, lt } = createCapturingSupabase();
+
+    await syncSingleAward(supabase, params);
+
+    const rows = upsert.mock.calls[0][0] as { person_name: string }[];
+    expect(rows[0].person_name).toBe('ゾーイ・サルダーニャ');
+    // 同じ部門の「ゾーイ・サルダナ」の行は generated_at が古いまま残るため消える
+    expect(inCategories).toHaveBeenCalledWith('category', ['best_picture']);
+    expect(lt).toHaveBeenCalledWith('generated_at', params.generatedAt);
+  });
+
+  it('旧世代の削除に失敗しても synced を返す', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    // UPSERT は成功しているのでデータは新しい。残留が消えなかっただけ
+    const { supabase } = createCapturingSupabase(
+      { error: null },
+      { error: { message: 'delete boom' } },
+    );
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'synced', upsertedCount: 1 });
+  });
+
+  it('UPSERT に失敗したら削除へ進まない', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([
+      {
+        title_ja: 'テスト映画',
+        title_en: 'Test',
+        category: 'best_picture',
+        is_winner: true,
+        year: 2024,
+      },
+    ]);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+    const { supabase, del } = createCapturingSupabase({
+      error: { message: 'boom' },
+    });
+
+    await syncSingleAward(supabase, params);
+
+    expect(del).not.toHaveBeenCalled();
   });
 
   it('TMDb解決0件を no_tmdb_match として返し、DBに触らない', async () => {
@@ -568,12 +778,13 @@ describe('syncSingleAward', () => {
       },
     ]);
     mockResolveAwardsWithTMDb.mockResolvedValue([]);
-    const { supabase, upsert } = createCapturingSupabase();
+    const { supabase, upsert, del } = createCapturingSupabase();
 
     const result = await syncSingleAward(supabase, params);
 
     expect(result).toEqual({ type: 'no_tmdb_match' });
     expect(upsert).not.toHaveBeenCalled();
+    expect(del).not.toHaveBeenCalled();
   });
 
   it('UPSERT 失敗を write_failed として返す', async () => {

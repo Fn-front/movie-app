@@ -6,7 +6,7 @@
  * 1. 当年・現在月に該当する賞を AWARD_DEFINITIONS から特定
  * 2. アカデミー賞: eiga.com から正規表現で抽出 → TMDb で映画情報解決
  *    その他の賞: Wikipedia + OpenAI で構造化 → TMDb で映画情報解決
- * 3. award_movies テーブルに UPSERT
+ * 3. award_movies テーブルに UPSERT し、旧世代を削除する
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -30,6 +30,8 @@ import {
 import { fetchWikipediaArticle } from '@/lib/wikipedia/fetchArticle';
 import { fetchEigaGoldenGlobes } from '@/lib/eiga/fetchEigaGoldenGlobes';
 import { fetchCannesFromWikitext } from '@/lib/wikipedia/parseCannesAwards';
+
+import { deleteStaleAwardRows } from './deleteStaleAwardRows';
 
 /** 同期処理のサマリー */
 export interface SyncAwardMoviesSummary {
@@ -122,16 +124,27 @@ export function dedupeAwardRows(rows: AwardMovieRow[]): AwardMovieRow[] {
 /**
  * 1賞ぶんの受賞作品を取得し、UPSERT 用の行に整形する
  *
- * **書き込みは行わない。** cron は UPSERT のみ、手動同期は UPSERT してから
- * 旧世代を削除するという違いがあるため、書き込み方法は呼び出し元に委ねる。
+ * **書き込みは行わない。** cron と手動同期では書き込み後の後処理（ジョブの
+ * 終端状態の記録など）が違うため、書き込み方法は呼び出し元に委ねる。
+ * UPSERT → 旧世代削除という順序は両経路で同じ。
  *
- * 「取得0件」と「TMDb解決0件」を区別して返す。手動同期は取得0件のときに
+ * 「取得0件」と「TMDb解決0件」を区別して返す。呼び出し元は取得0件のときに
  * 既存データへ一切触れないガードを掛けるため、潰してはいけない。
  */
 export async function fetchAndResolveAward(
   params: SyncSingleAwardParams,
 ): Promise<
-  | { type: 'rows'; rows: AwardMovieRow[] }
+  | {
+      type: 'rows';
+      rows: AwardMovieRow[];
+      /**
+       * 旧世代を消してよい部門
+       *
+       * 今回行が取れた部門のうち、**取りこぼしが1件も無かったもの**だけ。
+       * 取りこぼした部門を含めると、残っている既存行まで消してしまう
+       */
+      deletableCategories: string[];
+    }
   | { type: 'no_items' }
   | { type: 'no_tmdb_match' }
 > {
@@ -165,7 +178,13 @@ export async function fetchAndResolveAward(
     return { type: 'no_items' };
   }
 
-  const resolved = await resolveAwardsWithTMDb(allAiItems, awardDef);
+  // 取りこぼしが出た部門を受け取る。旧世代削除の対象から外すために使う
+  const unresolvedCategories = new Set<string>();
+  const resolved = await resolveAwardsWithTMDb(
+    allAiItems,
+    awardDef,
+    unresolvedCategories,
+  );
 
   if (resolved.length === 0) {
     console.warn(`No TMDb results for ${awardName} ${year}`);
@@ -191,11 +210,30 @@ export async function fetchAndResolveAward(
     generated_at: generatedAt,
   }));
 
-  return { type: 'rows', rows: dedupeAwardRows(rows) };
+  const deduped = dedupeAwardRows(rows);
+
+  /**
+   * 旧世代を消してよい部門
+   *
+   * 今回行が取れた部門から、取りこぼしが出た部門を引く。
+   *
+   * - **部門がまるごと欠けた場合**: そもそもこの集合に入らない
+   *   （`fetchEigaOscarAwards` は取得に失敗したページを飛ばして残りを返す）
+   * - **部門内で件数だけ減った場合**: `unresolvedCategories` で除外する。
+   *   TMDb のリトライ対象は 429/503/504 のみで、ECONNRESET や 500 は
+   *   作品ごとの catch で握られその作品だけ落ちる。ここを除外しないと、
+   *   10件あるはずが2件しか解決できなかったときに残り8件を消してしまう
+   *   （アカデミー賞の cron は年1回なので次の自動実行は1年後）
+   */
+  const deletableCategories = [
+    ...new Set(deduped.map((r) => r.category)),
+  ].filter((category) => !unresolvedCategories.has(category));
+
+  return { type: 'rows', rows: deduped, deletableCategories };
 }
 
 /**
- * 1賞ぶんを取得して UPSERT する（cron 用）
+ * 1賞ぶんを取得して UPSERT し、旧世代を消す（cron 用）
  *
  * 例外は**握り潰さずに投げる**。cron 側のループが従来どおり catch して
  * 「エラーでも他の賞は続行」を維持する。ここで握り潰すと、手動同期側が
@@ -215,9 +253,26 @@ export async function syncSingleAward(
     onConflict: AWARD_MOVIES_CONFLICT_TARGET,
   });
 
+  // UPSERT が失敗したらここで終わる。DELETE へ進むと既存データを失う
   if (error) {
     console.error(`Failed to upsert ${params.awardName}:`, error);
     return { type: 'write_failed', error: error.message };
+  }
+
+  const deleteError = await deleteStaleAwardRows(supabase, {
+    awardName: params.awardName,
+    year: params.year,
+    generatedAt: params.generatedAt,
+    categories: resolved.deletableCategories,
+  });
+
+  if (deleteError) {
+    // UPSERT は成功しているのでデータは新しい。残留が消えなかっただけなので
+    // 成功扱いにする（次回の同期で消える）
+    console.error(
+      `[syncSingleAward] 旧世代の削除に失敗しました award=${params.awardName} year=${params.year}`,
+      deleteError,
+    );
   }
 
   return { type: 'synced', upsertedCount: resolved.rows.length };

@@ -1,9 +1,10 @@
 /**
  * 管理画面からの受賞作品手動同期
  *
- * cron（UPSERT のみ）と違い、残留レコードを消す「世代付き入れ替え」を行う。
- * 手動同期は「データがおかしいからやり直す」場面が主で、前回あって今回無い
- * レコードが残り続けると直したことにならないため。
+ * 残留レコードを消す「世代付き入れ替え」を行う。前回あって今回無いレコードが
+ * 残り続けると「データがおかしいからやり直す」場面で直したことにならないため。
+ * cron（`syncSingleAward`）も同じ入れ替えを行い、削除は
+ * `deleteStaleAwardRows` を共有する。
  *
  * ⚠️ DELETE → INSERT の順にしてはいけない。supabase-js の DELETE と INSERT は
  * 別々の文でそれぞれ自動コミットされるため、DELETE 後に INSERT が失敗すると
@@ -107,7 +108,7 @@ export async function executeManualAwardSync(
       awardName,
       year,
       generatedAt,
-      rows: resolved.rows,
+      categories: resolved.deletableCategories,
     });
 
     if (deleteError) {

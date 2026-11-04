@@ -402,6 +402,15 @@ async function matchesAwardTitle(
 export async function resolveAwardsWithTMDb(
   items: OpenAiAwardItem[],
   awardDefinition: AwardDefinition,
+  /**
+   * 解決に失敗した作品が出た部門を積む集合（省略可）
+   *
+   * TMDb のリトライ対象は 429/503/504 のみで、ECONNRESET や 500 は作品ごとの
+   * catch で握られ**その作品だけ黙って落ちる**。取りこぼした部門は
+   * 「前回あって今回無い行」の判定に使えないため、呼び出し元が旧世代削除の
+   * 対象から外せるように記録する
+   */
+  unresolvedCategories?: Set<string>,
 ): Promise<ResolvedAwardMovie[]> {
   const resolved: ResolvedAwardMovie[] = [];
   const validCategoryKeys = new Set(
@@ -503,6 +512,7 @@ export async function resolveAwardsWithTMDb(
         console.warn(
           `TMDb match failed for "${item.title_ja}" / "${item.title_en}" (year=${item.year})`,
         );
+        unresolvedCategories?.add(item.category);
         continue;
       }
 
@@ -544,6 +554,7 @@ export async function resolveAwardsWithTMDb(
       });
     } catch (error) {
       console.error(`TMDb search failed for "${item.title_ja}":`, error);
+      unresolvedCategories?.add(item.category);
       continue;
     }
   }

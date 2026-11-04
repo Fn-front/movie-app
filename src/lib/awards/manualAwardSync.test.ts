@@ -81,7 +81,11 @@ beforeEach(() => {
 
 describe('executeManualAwardSync', () => {
   it('UPSERT してから旧世代だけを削除し、succeeded にする', async () => {
-    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
     const db = createSupabase();
 
     await executeManualAwardSync(wrap(db), params);
@@ -115,22 +119,42 @@ describe('executeManualAwardSync', () => {
         { ...ROWS[0], tmdb_movie_id: 2, category: 'palme_dor' },
         { ...ROWS[0], tmdb_movie_id: 3, category: 'grand_prix' },
       ],
+      // 取りこぼしが出た部門は fetchAndResolveAward 側で除外済み
+      deletableCategories: ['palme_dor'],
     });
     const db = createSupabase();
 
     await executeManualAwardSync(wrap(db), params);
 
-    expect(db.inCategories).toHaveBeenCalledTimes(1);
-    const [column, categories] = db.inCategories.mock.calls[0] as unknown as [
-      string,
-      string[],
-    ];
-    expect(column).toBe('category');
-    expect([...categories].sort()).toEqual(['grand_prix', 'palme_dor']);
+    expect(db.inCategories).toHaveBeenCalledWith('category', ['palme_dor']);
+  });
+
+  it('削除してよい部門が0件なら DELETE しない', async () => {
+    // すべての部門で取りこぼしが出たケース。UPSERT は走るが削除はしない
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: [],
+    });
+    const db = createSupabase();
+
+    await executeManualAwardSync(wrap(db), params);
+
+    expect(db.upsert).toHaveBeenCalledTimes(1);
+    expect(db.del).not.toHaveBeenCalled();
+    expect(mockFinishJobIfRunning).toHaveBeenCalledWith(
+      expect.anything(),
+      JOB_ID,
+      { status: 'succeeded', totalUpserted: 1 },
+    );
   });
 
   it('UPSERT の競合キーに person_name を含める', async () => {
-    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
     const db = createSupabase();
 
     await executeManualAwardSync(wrap(db), params);
@@ -178,7 +202,11 @@ describe('executeManualAwardSync', () => {
    * その賞・年のデータが消えたまま復旧しない。
    */
   it('UPSERT が失敗したら DELETE へ進まない（既存データを守る）', async () => {
-    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
     const db = createSupabase({ upsertError: { message: 'boom' } });
 
     await executeManualAwardSync(wrap(db), params);
@@ -198,7 +226,11 @@ describe('executeManualAwardSync', () => {
   });
 
   it('強制失効されていたら書き込まずに終了する', async () => {
-    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
     mockIsJobStillRunning.mockResolvedValue(false);
     const db = createSupabase();
 
@@ -234,7 +266,11 @@ describe('executeManualAwardSync', () => {
   });
 
   it('DELETE が失敗しても succeeded にする（データは新しい）', async () => {
-    mockFetchAndResolveAward.mockResolvedValue({ type: 'rows', rows: ROWS });
+    mockFetchAndResolveAward.mockResolvedValue({
+      type: 'rows',
+      rows: ROWS,
+      deletableCategories: ['palme_dor'],
+    });
     const db = createSupabase({ deleteError: { message: 'delete boom' } });
 
     await executeManualAwardSync(wrap(db), params);

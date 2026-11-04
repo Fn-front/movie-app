@@ -762,6 +762,61 @@ describe('resolveAwardsWithTMDb', () => {
     expect(mockSearchMovies).toHaveBeenCalledTimes(4);
   });
 
+  it('TMDbで解決できなかった部門を unresolvedCategories に記録する', async () => {
+    // 取りこぼした部門は「前回あって今回無い行」の判定に使えない。
+    // 呼び出し元がこの部門を旧世代削除の対象から外せるようにする
+    mockSearchMovies.mockResolvedValue({ results: [] });
+
+    const unresolved = new Set<string>();
+    await resolveAwardsWithTMDb(
+      [createAwardItem({ category: 'best_picture' })],
+      testAwardDefinition,
+      unresolved,
+    );
+
+    expect([...unresolved]).toEqual(['best_picture']);
+  });
+
+  it('TMDb検索が例外を投げた部門も unresolvedCategories に記録する', async () => {
+    // TMDb のリトライ対象は 429/503/504 のみ。ECONNRESET や 500 は
+    // 作品ごとの catch で握られ、その作品だけ黙って落ちる
+    mockSearchMovies.mockRejectedValue(new Error('ECONNRESET'));
+
+    const unresolved = new Set<string>();
+    await resolveAwardsWithTMDb(
+      [createAwardItem({ category: 'best_director' })],
+      testAwardDefinition,
+      unresolved,
+    );
+
+    expect([...unresolved]).toEqual(['best_director']);
+  });
+
+  it('全件解決できた部門は unresolvedCategories に入れない', async () => {
+    mockSearchMovies.mockResolvedValue({
+      results: [
+        {
+          id: 320,
+          title: 'テスト映画',
+          poster_path: null,
+          release_date: '2026-01-01',
+          vote_average: 7.0,
+          genre_ids: [18],
+        },
+      ],
+    });
+
+    const unresolved = new Set<string>();
+    const result = await resolveAwardsWithTMDb(
+      [createAwardItem()],
+      testAwardDefinition,
+      unresolved,
+    );
+
+    expect(result).toHaveLength(1);
+    expect([...unresolved]).toEqual([]);
+  });
+
   it('不明な部門キーはスキップする', async () => {
     const items = [createAwardItem({ category: 'unknown_category' })];
     const result = await resolveAwardsWithTMDb(items, testAwardDefinition);

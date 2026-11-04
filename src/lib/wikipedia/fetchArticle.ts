@@ -15,28 +15,52 @@ const WIKIPEDIA_FETCH_OPTIONS: RequestInit = {
 };
 
 /**
+ * 記事取得の結果
+ *
+ * **失敗を1つに畳まない。** 記事名の誤り（`not_found`）と一時的な障害
+ * （`fetch_failed`）は対処が違う。前者は記事名を直す、後者は再実行する。
+ * `null` を返していたときは画面に「取得できませんでした」としか出せず、
+ * カンヌの記事名が実在しないまま長期間気づけなかった（#916）。
+ */
+export type WikipediaArticleResult =
+  | {
+      type: 'ok';
+      wikitext: string;
+      /**
+       * 「受賞」「ノミネート」を含むセクションが見つかったか
+       *
+       * false のときは記事全体にフォールバックしている。抽出が0件だった場合、
+       * 呼び出し元は「記事の構成が変わった」と判断できる
+       */
+      sectionFound: boolean;
+    }
+  | { type: 'not_found' }
+  | { type: 'fetch_failed' };
+
+/**
  * Wikipedia記事の「受賞とノミネート」セクションをwikitext形式で取得
  *
  * @param title - Wikipedia記事タイトル（例: "第97回アカデミー賞"）
- * @returns 記事のwikitext、取得失敗時はnull
  */
 export async function fetchWikipediaArticle(
   title: string,
-): Promise<string | null> {
+): Promise<WikipediaArticleResult> {
   try {
     // セクション一覧を取得して「受賞とノミネート」のセクション番号を特定
     const sectionIndex = await findAwardSectionIndex(title);
 
     if (sectionIndex !== null) {
       const sectionText = await fetchWikitextSection(title, sectionIndex);
-      if (sectionText) return sectionText;
+      if (sectionText) {
+        return { type: 'ok', wikitext: sectionText, sectionFound: true };
+      }
     }
 
     // フォールバック: セクション特定できなかった場合、記事全体のwikitextを取得
-    return await fetchFullWikitext(title);
+    return await fetchFullWikitext(title, sectionIndex !== null);
   } catch (error) {
     console.error(`Failed to fetch Wikipedia article "${title}":`, error);
-    return null;
+    return { type: 'fetch_failed' };
   }
 }
 
@@ -102,7 +126,10 @@ async function fetchWikitextSection(
 /**
  * 記事全体のwikitextを取得（フォールバック用）
  */
-async function fetchFullWikitext(title: string): Promise<string | null> {
+async function fetchFullWikitext(
+  title: string,
+  sectionFound: boolean,
+): Promise<WikipediaArticleResult> {
   const params = new URLSearchParams({
     action: 'parse',
     page: title,
@@ -115,23 +142,24 @@ async function fetchFullWikitext(title: string): Promise<string | null> {
     WIKIPEDIA_FETCH_OPTIONS,
   );
   if (!response.ok) {
+    // HTTP エラーは一時的なことが多い。記事名の誤りと混ぜない
     console.error(`Wikipedia API error: ${response.status}`);
-    return null;
+    return { type: 'fetch_failed' };
   }
 
   const data = await response.json();
 
   if (data.error) {
     console.warn(`Wikipedia article not found: "${title}"`);
-    return null;
+    return { type: 'not_found' };
   }
 
   const wikitext = data.parse?.wikitext?.['*'];
 
   if (!wikitext || wikitext.length === 0) {
     console.warn(`Wikipedia article has no content: "${title}"`);
-    return null;
+    return { type: 'not_found' };
   }
 
-  return wikitext;
+  return { type: 'ok', wikitext, sectionFound };
 }

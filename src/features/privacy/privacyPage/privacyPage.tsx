@@ -21,7 +21,7 @@ const ESTABLISHED_AT = '2026年11月3日';
 const LAST_UPDATED = '2026年11月3日';
 
 /** 問い合わせ・開示請求の窓口 */
-const CONTACT_EMAIL = '';
+const CONTACT_EMAIL = 'support@example.com';
 
 /** ご利用の端末から外部へ送信される情報（電気通信事業法 外部送信規律） */
 const CLIENT_TRANSMISSIONS = [

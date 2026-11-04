@@ -95,7 +95,7 @@ const WIKITEXT_WITH_PERSON =
   "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』";
 
 function createMockSupabase(
-  upsertResult = { error: null },
+  upsertResult: { error: { message: string } | null } = { error: null },
   deleteResult: { error: unknown } = { error: null },
 ) {
   return {
@@ -165,7 +165,11 @@ describe('executeSyncAwardMoviesCron', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     // デフォルトでWikipedia記事が取得できる状態
-    mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== テスト記事 ==',
+      sectionLookup: 'found',
+    });
     // デフォルトですべてのタイトルを許可
     mockExtractMovieTitlesFromWikitext.mockReturnValue(
       new Set(['テスト映画', 'テスト']),
@@ -230,8 +234,81 @@ describe('executeSyncAwardMoviesCron', () => {
     if (result.type === 'success') {
       // データは新しいので synced のまま
       expect(result.data.synced_awards).toContain('golden_globes');
-      expect(result.data.skipped_awards).not.toContain('golden_globes');
+      // 要素が構造体になったので、賞名で引かないと何も検証しない
+      expect(result.data.skipped_awards.map((a) => a.award_name)).not.toContain(
+        'golden_globes',
+      );
       expect(result.data.delete_failed_awards).toEqual(['golden_globes']);
+    }
+  });
+
+  it('スキップした賞に理由を残す', async () => {
+    // 賞名だけだと「なぜ入らなかったのか」が Vercel のログを見ないと分からない
+    jest.setSystemTime(new Date('2026-05-15T00:00:00Z'));
+
+    mockFetchWikipediaArticle.mockResolvedValue({ type: 'not_found' });
+
+    const supabase = createMockSupabase();
+    const result = await executeSyncAwardMoviesCron(supabase);
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.data.synced_awards).toEqual([]);
+      expect(result.data.skipped_awards).toEqual([
+        {
+          award_name: 'cannes',
+          reason: 'no_article',
+          detail: '第26回テスト賞',
+        },
+      ]);
+    }
+  });
+
+  it('例外で落ちた賞も理由付きで残す', async () => {
+    jest.setSystemTime(new Date('2026-05-15T00:00:00Z'));
+
+    // fetchWikipediaArticle は例外を内部で握るので reject しない。
+    // 実際に投げうるのは TMDb 解決のほう
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: CANNES_WIKITEXT,
+      sectionLookup: 'found',
+    });
+    mockResolveAwardsWithTMDb.mockRejectedValue(new Error('network down'));
+
+    const supabase = createMockSupabase();
+    const result = await executeSyncAwardMoviesCron(supabase);
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.data.skipped_awards).toEqual([
+        {
+          award_name: 'cannes',
+          reason: 'error',
+          detail: 'network down',
+        },
+      ]);
+    }
+  });
+
+  it('書き込みに失敗した賞は理由とエラーメッセージを残す', async () => {
+    jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
+
+    mockFetchEigaGoldenGlobes.mockResolvedValue(GOLDEN_GLOBES_ITEMS);
+    mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
+
+    const supabase = createMockSupabase({ error: { message: 'upsert boom' } });
+    const result = await executeSyncAwardMoviesCron(supabase);
+
+    expect(result.type).toBe('success');
+    if (result.type === 'success') {
+      expect(result.data.skipped_awards).toEqual([
+        {
+          award_name: 'golden_globes',
+          reason: 'write_failed',
+          detail: 'upsert boom',
+        },
+      ]);
     }
   });
 
@@ -262,7 +339,11 @@ describe('executeSyncAwardMoviesCron', () => {
     // 5月（カンヌ）
     jest.setSystemTime(new Date('2026-05-15T00:00:00Z'));
 
-    mockFetchWikipediaArticle.mockResolvedValue(CANNES_WIKITEXT);
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: CANNES_WIKITEXT,
+      sectionLookup: 'found',
+    });
     mockResolveAwardsWithTMDb.mockResolvedValue([createResolvedMovie()]);
 
     const supabase = createMockSupabase();
@@ -291,7 +372,9 @@ describe('executeSyncAwardMoviesCron', () => {
 
     expect(result.type).toBe('success');
     if (result.type === 'success') {
-      expect(result.data.skipped_awards).toContain('golden_globes');
+      expect(result.data.skipped_awards.map((s) => s.award_name)).toContain(
+        'golden_globes',
+      );
     }
     // 静かに OpenAI 経路へ落ちない
     expect(mockFetchAwardsFromOpenAI).not.toHaveBeenCalled();
@@ -308,7 +391,9 @@ describe('executeSyncAwardMoviesCron', () => {
 
     expect(result.type).toBe('success');
     if (result.type === 'success') {
-      expect(result.data.skipped_awards).toContain('golden_globes');
+      expect(result.data.skipped_awards.map((s) => s.award_name)).toContain(
+        'golden_globes',
+      );
       expect(result.data.synced_awards).toHaveLength(0);
     }
   });
@@ -332,7 +417,9 @@ describe('executeSyncAwardMoviesCron', () => {
 
     expect(result.type).toBe('success');
     if (result.type === 'success') {
-      expect(result.data.skipped_awards).toContain('golden_globes');
+      expect(result.data.skipped_awards.map((s) => s.award_name)).toContain(
+        'golden_globes',
+      );
     }
   });
 
@@ -357,7 +444,9 @@ describe('executeSyncAwardMoviesCron', () => {
 
     expect(result.type).toBe('success');
     if (result.type === 'success') {
-      expect(result.data.skipped_awards).toContain('golden_globes');
+      expect(result.data.skipped_awards.map((s) => s.award_name)).toContain(
+        'golden_globes',
+      );
     }
   });
 
@@ -365,7 +454,11 @@ describe('executeSyncAwardMoviesCron', () => {
     // 1月に設定（ゴールデングローブ賞のみ）
     jest.setSystemTime(new Date('2026-01-15T00:00:00Z'));
 
-    mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== テスト記事 ==',
+      sectionLookup: 'found',
+    });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト']));
     mockFetchAwardsFromOpenAI.mockResolvedValue(null);
     mockResolveAwardsWithTMDb.mockResolvedValue([]);
@@ -375,7 +468,9 @@ describe('executeSyncAwardMoviesCron', () => {
 
     expect(result.type).toBe('success');
     if (result.type === 'success') {
-      expect(result.data.skipped_awards).toContain('golden_globes');
+      expect(result.data.skipped_awards.map((s) => s.award_name)).toContain(
+        'golden_globes',
+      );
     }
   });
 
@@ -442,7 +537,11 @@ describe('executeSyncAwardMoviesCron', () => {
     // eiga.comが空配列を返す
     mockFetchEigaOscarAwards.mockResolvedValue([]);
     // Wikipedia+OpenAIが結果を返す
-    mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== テスト記事 ==',
+      sectionLookup: 'found',
+    });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockFetchAwardsFromOpenAI.mockResolvedValue([
       {
@@ -566,7 +665,11 @@ describe('syncSingleAward', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFetchWikipediaArticle.mockResolvedValue('== テスト記事 ==');
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== テスト記事 ==',
+      sectionLookup: 'found',
+    });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockExtractPersonNamesFromWikitext.mockReturnValue(new Set());
     mockFetchEigaOscarAwards.mockResolvedValue([]);
@@ -603,7 +706,11 @@ describe('syncSingleAward', () => {
     // articleText.includes だと「ペン」が「ショーン・ペン」に部分一致して通る。
     // 監督賞の問い合わせに俳優名が混ざっても検知できなくなる
     mockFetchEigaOscarAwards.mockResolvedValue([]);
-    mockFetchWikipediaArticle.mockResolvedValue(WIKITEXT_WITH_PERSON);
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: WIKITEXT_WITH_PERSON,
+      sectionLookup: 'found',
+    });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockExtractPersonNamesFromWikitext.mockReturnValue(
       new Set(['ショーン・ペン']),
@@ -632,7 +739,11 @@ describe('syncSingleAward', () => {
   it('半角中黒や余分な括弧があっても実在する人名は通す', async () => {
     // OpenAI の出力は非決定的で表記が揺れる。NFKC 正規化して突き合わせる
     mockFetchEigaOscarAwards.mockResolvedValue([]);
-    mockFetchWikipediaArticle.mockResolvedValue(WIKITEXT_WITH_PERSON);
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: WIKITEXT_WITH_PERSON,
+      sectionLookup: 'found',
+    });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockExtractPersonNamesFromWikitext.mockReturnValue(
       new Set(['ショーン・ペン']),
@@ -663,9 +774,11 @@ describe('syncSingleAward', () => {
     // OpenAI 経路は捏造しうる。タイトルと同じく wikitext と突き合わせる
     // （eiga.com / wikitext パーサは正規表現なので捏造の余地が無い）
     mockFetchEigaOscarAwards.mockResolvedValue([]);
-    mockFetchWikipediaArticle.mockResolvedValue(
-      "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』",
-    );
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: "* '''[[ショーン・ペン]]''' - 『'''[[テスト映画]]'''』",
+      sectionLookup: 'found',
+    });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockFetchAwardsFromOpenAI.mockResolvedValue([
       {
@@ -695,7 +808,11 @@ describe('syncSingleAward', () => {
 
   it('wikitext にある人名はそのまま通す', async () => {
     mockFetchEigaOscarAwards.mockResolvedValue([]);
-    mockFetchWikipediaArticle.mockResolvedValue(WIKITEXT_WITH_PERSON);
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: WIKITEXT_WITH_PERSON,
+      sectionLookup: 'found',
+    });
     mockExtractMovieTitlesFromWikitext.mockReturnValue(new Set(['テスト映画']));
     mockExtractPersonNamesFromWikitext.mockReturnValue(
       new Set(['ショーン・ペン']),
@@ -722,15 +839,96 @@ describe('syncSingleAward', () => {
     expect(items.every((i) => i.person_name === 'ショーン・ペン')).toBe(true);
   });
 
-  it('取得0件を no_items として返し、DBに触らない', async () => {
+  it('Wikipedia記事が存在しないとき no_article を記事名付きで返す', async () => {
+    // 記事名の誤り。画面に記事名が出れば、それが実在するかその場で確かめられる
     mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue({ type: 'not_found' });
+    const { supabase, upsert } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({
+      type: 'no_article',
+      wikipediaTitle: '第26回テスト賞',
+    });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('Wikipediaの取得に失敗したとき article_unavailable を返す', async () => {
+    // 一時的な障害。記事名の誤りとは対処が違う（再実行で直る）
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue({ type: 'fetch_failed' });
+    const { supabase, upsert } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({
+      type: 'article_unavailable',
+      wikipediaTitle: '第26回テスト賞',
+    });
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('受賞セクションが無く抽出0件なら no_section を返す', async () => {
+    // 記事はあるが構成が変わった可能性。記事が無いのとは別物
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== 概要 ==\n本文',
+      sectionLookup: 'absent',
+    });
     mockFetchAwardsFromOpenAI.mockResolvedValue(null);
-    mockFetchWikipediaArticle.mockResolvedValue(null);
-    const { supabase, upsert, del } = createCapturingSupabase();
+    const { supabase } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({
+      type: 'no_section',
+      wikipediaTitle: '第26回テスト賞',
+    });
+  });
+
+  it('セクション一覧を読めなかったときは no_section を名乗らない', async () => {
+    // 一覧APIが一時的に落ちただけ。「記事の構成が変わった」と出すと、
+    // 実際には変わっていないパーサの調査へ admin を誘導してしまう
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== 概要 ==\n本文',
+      sectionLookup: 'unknown',
+    });
+    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    const { supabase } = createCapturingSupabase();
 
     const result = await syncSingleAward(supabase, params);
 
     expect(result).toEqual({ type: 'no_items' });
+  });
+
+  it('セクションはあるが抽出0件なら no_items を返す', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchWikipediaArticle.mockResolvedValue({
+      type: 'ok',
+      wikitext: '== 受賞とノミネート ==\n本文',
+      sectionLookup: 'found',
+    });
+    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    const { supabase } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result).toEqual({ type: 'no_items' });
+  });
+
+  it('取得0件なら理由によらず DBに触らない', async () => {
+    mockFetchEigaOscarAwards.mockResolvedValue([]);
+    mockFetchAwardsFromOpenAI.mockResolvedValue(null);
+    mockFetchWikipediaArticle.mockResolvedValue({ type: 'not_found' });
+    const { supabase, upsert, del } = createCapturingSupabase();
+
+    const result = await syncSingleAward(supabase, params);
+
+    expect(result.type).not.toBe('rows');
     expect(upsert).not.toHaveBeenCalled();
     // 「0件でUPSERT → 全部DELETE」になると全損する
     expect(del).not.toHaveBeenCalled();

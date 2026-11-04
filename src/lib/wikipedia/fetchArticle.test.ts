@@ -57,7 +57,11 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('第97回アカデミー賞');
 
-    expect(result).toBe('== 受賞とノミネート ==\nテスト本文');
+    expect(result).toEqual({
+      type: 'ok',
+      wikitext: '== 受賞とノミネート ==\nテスト本文',
+      sectionLookup: 'found',
+    });
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
@@ -73,7 +77,11 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toBe('ノミネートデータ');
+    expect(result).toEqual({
+      type: 'ok',
+      wikitext: 'ノミネートデータ',
+      sectionLookup: 'found',
+    });
   });
 
   it('受賞セクションが見つからない場合、記事全体のwikitextを返す', async () => {
@@ -88,7 +96,12 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toBe('記事全体のテキスト');
+    // 一覧は取れて該当が無かった。呼び出し元が no_section の根拠に使う
+    expect(result).toEqual({
+      type: 'ok',
+      wikitext: '記事全体のテキスト',
+      sectionLookup: 'absent',
+    });
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
@@ -99,7 +112,12 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toBe('フォールバックテキスト');
+    // 一覧自体が取れていない。「セクションが無い」とは言い切れない
+    expect(result).toEqual({
+      type: 'ok',
+      wikitext: 'フォールバックテキスト',
+      sectionLookup: 'unknown',
+    });
   });
 
   it('セクションAPIがエラーを返した場合、記事全体にフォールバックする', async () => {
@@ -111,7 +129,11 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toBe('フォールバックテキスト');
+    expect(result).toEqual({
+      type: 'ok',
+      wikitext: 'フォールバックテキスト',
+      sectionLookup: 'unknown',
+    });
   });
 
   it('セクションwikitext取得が空の場合、記事全体にフォールバックする', async () => {
@@ -126,21 +148,27 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toBe('全体テキスト');
+    // セクションは見つかっていた。本文が取れなかっただけ
+    expect(result).toEqual({
+      type: 'ok',
+      wikitext: '全体テキスト',
+      sectionLookup: 'found',
+    });
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
-  it('記事全体のwikitextも取得できない場合、nullを返す', async () => {
+  it('記事全体の取得がHTTPエラーなら fetch_failed を返す', async () => {
     mockFetch
       .mockResolvedValueOnce(createSectionsResponse([]))
       .mockResolvedValueOnce(createJsonResponse({}, false));
 
     const result = await fetchWikipediaArticle('存在しない記事');
 
-    expect(result).toBeNull();
+    // 一時的な障害。記事名の誤りとは区別する
+    expect(result).toEqual({ type: 'fetch_failed' });
   });
 
-  it('記事全体がWikipediaエラーの場合、nullを返す', async () => {
+  it('記事が存在しない場合は not_found を返す', async () => {
     mockFetch
       .mockResolvedValueOnce(createSectionsResponse([]))
       .mockResolvedValueOnce(
@@ -149,10 +177,11 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('存在しない記事');
 
-    expect(result).toBeNull();
+    // 記事名の誤り。画面に記事名を出して確かめられるようにする
+    expect(result).toEqual({ type: 'not_found' });
   });
 
-  it('記事全体のwikitextが空の場合、nullを返す', async () => {
+  it('記事全体のwikitextが空の場合は not_found を返す', async () => {
     mockFetch
       .mockResolvedValueOnce(createSectionsResponse([]))
       .mockResolvedValueOnce(
@@ -161,15 +190,15 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('空の記事');
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ type: 'not_found' });
   });
 
-  it('fetchが例外をスローした場合、nullを返す', async () => {
+  it('fetchが例外をスローした場合は fetch_failed を返す', async () => {
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ type: 'fetch_failed' });
   });
 
   it('User-Agentヘッダーが設定される', async () => {
@@ -185,12 +214,12 @@ describe('fetchWikipediaArticle', () => {
     expect(firstCallOptions.headers['User-Agent']).toContain('MovieApp');
   });
 
-  it('WIKIPEDIA_API_BASE_URL 未設定時はfetchせずnullを返す', async () => {
+  it('WIKIPEDIA_API_BASE_URL 未設定時はfetchせず fetch_failed を返す', async () => {
     delete process.env.WIKIPEDIA_API_BASE_URL;
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ type: 'fetch_failed' });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -201,6 +230,11 @@ describe('fetchWikipediaArticle', () => {
 
     const result = await fetchWikipediaArticle('テスト記事');
 
-    expect(result).toBe('全体テキスト');
+    // sections が配列でない＝一覧として読めていない
+    expect(result).toEqual({
+      type: 'ok',
+      wikitext: '全体テキスト',
+      sectionLookup: 'unknown',
+    });
   });
 });

@@ -28,18 +28,35 @@ import {
   fetchAwardsFromOpenAI,
   resolveAwardsWithTMDb,
 } from '@/lib/openai/generateAwardMovies';
-import { fetchWikipediaArticle } from '@/lib/wikipedia/fetchArticle';
+import {
+  fetchWikipediaArticle,
+  type SectionLookup,
+} from '@/lib/wikipedia/fetchArticle';
 import { fetchEigaGoldenGlobes } from '@/lib/eiga/fetchEigaGoldenGlobes';
 import { fetchCannesFromWikitext } from '@/lib/wikipedia/parseCannesAwards';
 
 import { deleteStaleAwardRows } from './deleteStaleAwardRows';
+
+/**
+ * スキップした賞と、その理由
+ *
+ * 賞名だけだと「なぜ入らなかったのか」が Vercel のログを見ないと分からない。
+ * 原因の違う失敗を畳むと設定ミスを長期間見逃す（#916 / #918）
+ */
+export interface SkippedAward {
+  award_name: string;
+  /** 取得できなかった理由。書き込み失敗は `write_failed`、例外は `error` */
+  reason: AwardFetchFailure['type'] | 'write_failed' | 'error';
+  /** 記事名やエラーメッセージなど、理由を特定するための補足 */
+  detail?: string;
+}
 
 /** 同期処理のサマリー */
 export interface SyncAwardMoviesSummary {
   year: number;
   month: number | null;
   synced_awards: string[];
-  skipped_awards: string[];
+  skipped_awards: SkippedAward[];
   total_upserted: number;
   /**
    * 旧世代の削除に失敗した賞
@@ -110,6 +127,37 @@ export interface SyncSingleAwardParams {
   generatedAt: string;
 }
 
+/**
+ * 取得できなかった理由
+ *
+ * **1つに畳まない。** 原因が違えば対処も違う。記事名の誤り（`no_article`）は
+ * 記事名を直す、一時障害（`article_unavailable`）は再実行する、記事の構成が
+ * 変わった（`no_section`）はパーサを直す。畳むと設定ミスを長期間見逃す
+ * （カンヌの記事名が実在せず同期が一度も成功していなかった #916）。
+ */
+export type AwardFetchFailure =
+  /** Wikipedia に記事が存在しない。記事名の誤り・改名・未作成 */
+  | { type: 'no_article'; wikipediaTitle: string }
+  /** Wikipedia の取得に失敗した（HTTPエラー・ネットワーク断）。再実行で直りうる */
+  | { type: 'article_unavailable'; wikipediaTitle: string }
+  /** 記事はあるが「受賞」「ノミネート」のセクションが無く、抽出も0件だった */
+  | { type: 'no_section'; wikipediaTitle: string }
+  /** 取得元から0件（eiga.com が0件、記事はあるが抽出0件 等） */
+  | { type: 'no_items' }
+  /** 抽出はできたが TMDb で1件も特定できなかった */
+  | { type: 'no_tmdb_match' };
+
+/**
+ * 取得元の結果
+ *
+ * 0件のときに「なぜ0件なのか」を一緒に返す。`failure` が無い0件は
+ * 「取得元には繋がったが該当が無かった」という意味になる
+ */
+interface AwardItemsResult {
+  items: OpenAiAwardItem[];
+  failure?: AwardFetchFailure;
+}
+
 /** 1賞ぶんの同期結果 */
 export type SyncSingleAwardResult =
   | {
@@ -118,8 +166,7 @@ export type SyncSingleAwardResult =
       /** 旧世代の削除に失敗したときだけ入る。成功扱いは変えない */
       deleteError?: string;
     }
-  | { type: 'no_items' }
-  | { type: 'no_tmdb_match' }
+  | AwardFetchFailure
   | { type: 'write_failed'; error: string };
 
 /**
@@ -169,37 +216,41 @@ export async function fetchAndResolveAward(
        */
       deletableCategories: string[];
     }
-  | { type: 'no_items' }
-  | { type: 'no_tmdb_match' }
+  | AwardFetchFailure
 > {
   const { awardName, awardDef, year, generatedAt } = params;
 
-  let allAiItems: OpenAiAwardItem[];
+  let fetched: AwardItemsResult;
 
   if (awardName === 'academy_awards') {
     // アカデミー賞: eiga.com から正規表現で抽出（ハルシネーションなし）
-    allAiItems = await fetchEigaOscarAwards(year);
-    if (allAiItems.length === 0) {
+    const eigaItems = await fetchEigaOscarAwards(year);
+    if (eigaItems.length > 0) {
+      fetched = { items: eigaItems };
+    } else {
       // eiga.com取得失敗時はWikipedia+OpenAIにフォールバック
       console.warn(
         `eiga.com returned 0 items for ${year}, falling back to Wikipedia+OpenAI`,
       );
-      allAiItems = await fetchAwardItemsViaWikipedia(awardName, awardDef, year);
+      fetched = await fetchAwardItemsViaWikipedia(awardName, awardDef, year);
     }
   } else if (awardName === 'golden_globes') {
     // ゴールデングローブ賞: eiga.com から正規表現で抽出（OpenAIを使わない）
-    allAiItems = await fetchEigaGoldenGlobes(year);
+    fetched = { items: await fetchEigaGoldenGlobes(year) };
   } else if (awardName === 'cannes') {
     // カンヌ: wikitext を直接パースする（OpenAIを使わない）。
     // eiga.com のカンヌは作品リンクが3割欠落し2012〜2016が旧レイアウトのため使わない
-    allAiItems = await fetchAwardItemsFromWikitext(awardName, awardDef, year);
+    fetched = await fetchAwardItemsFromWikitext(awardName, awardDef, year);
   } else {
     // その他の賞: Wikipedia + OpenAI で構造化
-    allAiItems = await fetchAwardItemsViaWikipedia(awardName, awardDef, year);
+    fetched = await fetchAwardItemsViaWikipedia(awardName, awardDef, year);
   }
 
+  const allAiItems = fetched.items;
+
   if (allAiItems.length === 0) {
-    return { type: 'no_items' };
+    // 取得元が理由を持っていればそれを返す。無ければ単に0件
+    return fetched.failure ?? { type: 'no_items' };
   }
 
   // 取りこぼしが出た部門を受け取る。旧世代削除の対象から外すために使う
@@ -308,6 +359,34 @@ export async function syncSingleAward(
   return { type: 'synced', upsertedCount: resolved.rows.length };
 }
 
+/** スキップ結果を理由付きのサマリー項目へ変換する */
+function toSkippedAward(
+  awardName: string,
+  result: Exclude<SyncSingleAwardResult, { type: 'synced' }>,
+): SkippedAward {
+  if (result.type === 'write_failed') {
+    return {
+      award_name: awardName,
+      reason: 'write_failed',
+      detail: result.error,
+    };
+  }
+
+  if (
+    result.type === 'no_article' ||
+    result.type === 'article_unavailable' ||
+    result.type === 'no_section'
+  ) {
+    return {
+      award_name: awardName,
+      reason: result.type,
+      detail: result.wikipediaTitle,
+    };
+  }
+
+  return { award_name: awardName, reason: result.type };
+}
+
 /**
  * 現在月に該当する賞を取得
  */
@@ -363,7 +442,7 @@ export async function executeSyncAwardMoviesCron(
   }
 
   const syncedAwards: string[] = [];
-  const skippedAwards: string[] = [];
+  const skippedAwards: SkippedAward[] = [];
   const deleteFailedAwards: string[] = [];
   let totalUpserted = 0;
 
@@ -384,13 +463,15 @@ export async function executeSyncAwardMoviesCron(
         continue;
       }
 
-      // cron は「取得0件」「TMDb解決0件」「書き込み失敗」を区別しない。
-      // 月次実行のサマリーとしては skipped にまとめれば足りる
-      // （区別が要るのは手動同期側。syncSingleAward の戻り値で判別する）
-      skippedAwards.push(awardName);
+      // 理由ごと残す。無人の cron ではここが唯一の手がかりになる
+      skippedAwards.push(toSkippedAward(awardName, result));
     } catch (error) {
       console.error(`Error processing ${awardName}:`, error);
-      skippedAwards.push(awardName);
+      skippedAwards.push({
+        award_name: awardName,
+        reason: 'error',
+        detail: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -434,32 +515,62 @@ async function fetchAwardItemsFromWikitext(
   awardName: string,
   awardDef: (typeof AWARD_DEFINITIONS)[AwardName],
   ceremonyYear: number,
-): Promise<OpenAiAwardItem[]> {
+): Promise<AwardItemsResult> {
   const parse = WIKITEXT_PARSERS[awardName];
   if (!parse) {
     console.warn(`No wikitext parser for ${awardName}`);
-    return [];
+    return { items: [] };
   }
 
   const wikipediaTitle = buildWikipediaTitle(ceremonyYear, awardDef);
-  const articleText = await fetchWikipediaArticle(wikipediaTitle);
+  const article = await fetchWikipediaArticle(wikipediaTitle);
 
-  if (!articleText) {
-    console.warn(
-      `Wikipedia article not found for ${awardName}: "${wikipediaTitle}"`,
-    );
-    return [];
+  if (article.type !== 'ok') {
+    return { items: [], failure: toArticleFailure(article, wikipediaTitle) };
   }
 
-  const items = parse(articleText, ceremonyYear);
+  const items = parse(article.wikitext, ceremonyYear);
 
   if (items.length === 0) {
     console.warn(
       `No entries parsed from "${wikipediaTitle}". 記事の書式が変わった可能性がある`,
     );
+    return { items, failure: toEmptyFailure(article, wikipediaTitle) };
   }
 
-  return items;
+  return { items };
+}
+
+/**
+ * 記事は取れたが抽出0件だったときの理由を決める
+ *
+ * `no_section` を名乗れるのは、セクション一覧を**読めたうえで**該当が
+ * 無かった（`absent`）ときだけ。一覧自体を読めなかった（`unknown`）ときに
+ * 「記事の構成が変わった」と出すと、実際には変わっていないパーサの調査へ
+ * admin を誘導してしまう
+ */
+function toEmptyFailure(
+  article: { sectionLookup: SectionLookup },
+  wikipediaTitle: string,
+): AwardFetchFailure {
+  return article.sectionLookup === 'absent'
+    ? { type: 'no_section', wikipediaTitle }
+    : { type: 'no_items' };
+}
+
+/** 記事取得の失敗を同期側の理由へ移す */
+function toArticleFailure(
+  article: { type: 'not_found' | 'fetch_failed' },
+  wikipediaTitle: string,
+): AwardFetchFailure {
+  // 「記事が無い」のログは fetchWikipediaArticle が既に出している。
+  // ここでは取得失敗だけを、賞ではなく記事名で記録する
+  if (article.type === 'not_found') {
+    return { type: 'no_article', wikipediaTitle };
+  }
+
+  console.warn(`Wikipedia article unavailable: "${wikipediaTitle}"`);
+  return { type: 'article_unavailable', wikipediaTitle };
 }
 
 /**
@@ -473,20 +584,18 @@ async function fetchAwardItemsViaWikipedia(
   awardName: string,
   awardDef: (typeof AWARD_DEFINITIONS)[AwardName],
   currentYear: number,
-): Promise<OpenAiAwardItem[]> {
+): Promise<AwardItemsResult> {
   const allAiItems: OpenAiAwardItem[] = [];
   const maxRetries = AWARDS_MAX_RETRIES;
 
   const wikipediaTitle = buildWikipediaTitle(currentYear, awardDef);
-  const articleText = await fetchWikipediaArticle(wikipediaTitle);
+  const article = await fetchWikipediaArticle(wikipediaTitle);
 
-  if (!articleText) {
-    console.warn(
-      `Wikipedia article not found for ${awardName}: "${wikipediaTitle}"`,
-    );
-    return [];
+  if (article.type !== 'ok') {
+    return { items: [], failure: toArticleFailure(article, wikipediaTitle) };
   }
 
+  const articleText = article.wikitext;
   const validTitles = extractMovieTitlesFromWikitext(articleText);
   // 人名は表記が揺れるため正規化した集合で持つ（半角中黒・全角英数など）
   const validPersonNames = new Set(
@@ -545,5 +654,12 @@ async function fetchAwardItemsViaWikipedia(
     }
   }
 
-  return allAiItems;
+  if (allAiItems.length === 0) {
+    return {
+      items: allAiItems,
+      failure: toEmptyFailure(article, wikipediaTitle),
+    };
+  }
+
+  return { items: allAiItems };
 }

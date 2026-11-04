@@ -123,6 +123,12 @@ export const AWARD_SYNC_MESSAGES = {
   START_ERROR: '同期の開始に失敗しました',
   FETCH_ERROR: '同期の状態取得に失敗しました',
   NO_ITEMS: '受賞作品を取得できませんでした（既存データは変更していません）',
+  NO_ARTICLE:
+    'Wikipedia記事が見つかりません。記事名が正しいか確認してください（既存データは変更していません）',
+  ARTICLE_UNAVAILABLE:
+    'Wikipediaの取得に失敗しました。時間をおいて再実行してください（既存データは変更していません）',
+  NO_SECTION:
+    'Wikipedia記事に受賞・ノミネートのセクションが見つかりません。記事の構成が変わった可能性があります（既存データは変更していません）',
   NO_TMDB_MATCH:
     'TMDbで該当する映画を特定できませんでした（既存データは変更していません）',
   WRITE_FAILED: 'データベースへの書き込みに失敗しました',

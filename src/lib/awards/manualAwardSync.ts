@@ -29,12 +29,44 @@ import {
 } from '@/constants/awardSync';
 
 import { deleteStaleAwardRows } from './deleteStaleAwardRows';
-import { fetchAndResolveAward } from './syncAwardMoviesService';
+import {
+  fetchAndResolveAward,
+  type AwardFetchFailure,
+} from './syncAwardMoviesService';
 import { finishJobIfRunning, isJobStillRunning } from './awardSyncJob';
 
 /** 事後調査に使えるよう code を添えて1行にする */
 function formatPostgrestError(error: PostgrestError): string {
   return error.code ? `${error.message} (${error.code})` : error.message;
+}
+
+/**
+ * 取得できなかった理由を画面に出す文言へ変換する
+ *
+ * **記事名を含める。** 記事名が出れば、それが実在するかを admin がその場で
+ * 確かめられる。「受賞作品を取得できませんでした」だけでは、記事名の誤りと
+ * 一時障害と記事構成の変更を切り分けられない（#916 / #918）。
+ * admin 専用画面にしか出ないため、Wikipedia の記事名を出して差し支えない。
+ */
+export function describeAwardFetchFailure(failure: AwardFetchFailure): string {
+  switch (failure.type) {
+    case 'no_article':
+      return `${AWARD_SYNC_MESSAGES.NO_ARTICLE}: ${failure.wikipediaTitle}`;
+    case 'article_unavailable':
+      return `${AWARD_SYNC_MESSAGES.ARTICLE_UNAVAILABLE}: ${failure.wikipediaTitle}`;
+    case 'no_section':
+      return `${AWARD_SYNC_MESSAGES.NO_SECTION}: ${failure.wikipediaTitle}`;
+    case 'no_tmdb_match':
+      return AWARD_SYNC_MESSAGES.NO_TMDB_MATCH;
+    case 'no_items':
+      return AWARD_SYNC_MESSAGES.NO_ITEMS;
+    default: {
+      // 理由を足したらここで型エラーになる。default で畳むと、
+      // 本Issueが潰した「1つにまとめる」が静かに再発する
+      const unhandled: never = failure;
+      return unhandled;
+    }
+  }
 }
 
 interface ManualAwardSyncParams {
@@ -67,18 +99,10 @@ export async function executeManualAwardSync(
 
     // 取得できなかったときは既存データに一切触れない。
     // ここで素通しすると「0件でUPSERT → 全部DELETE」になり全損する
-    if (resolved.type === 'no_items') {
+    if (resolved.type !== 'rows') {
       await finishJobIfRunning(supabase, jobId, {
         status: AWARD_SYNC_STATUS.FAILED,
-        errorMessage: AWARD_SYNC_MESSAGES.NO_ITEMS,
-      });
-      return;
-    }
-
-    if (resolved.type === 'no_tmdb_match') {
-      await finishJobIfRunning(supabase, jobId, {
-        status: AWARD_SYNC_STATUS.FAILED,
-        errorMessage: AWARD_SYNC_MESSAGES.NO_TMDB_MATCH,
+        errorMessage: describeAwardFetchFailure(resolved),
       });
       return;
     }

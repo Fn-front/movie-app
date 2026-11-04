@@ -67,19 +67,35 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
       };
     }, [category.nominees]);
 
+    // 一覧とラベルを紐づける。同点受賞で複数枚並ぶため、
+    // 「受賞」ラベルの隣接だけでは2枚目以降が受賞だと伝わらない
+    const sectionId = `category-${awardName}-${category.category}`;
+    const winnerLabelId = `${sectionId}-winner-label`;
+    const nomineeLabelId = `${sectionId}-nominee-label`;
+
     return (
-      <div
-        id={`category-${awardName}-${category.category}`}
-        className={styles.c_award_category}
-      >
+      <div id={sectionId} className={styles.c_award_category}>
         <h3 className={styles.c_award_category__title}>{category.label}</h3>
 
         {winners.length > 0 && (
           <div className={styles.c_award_category__winner}>
-            <span className={styles.c_award_category__winner_label}>受賞</span>
-            <div className={styles.c_award_category__winner_tiles}>
+            <span
+              id={winnerLabelId}
+              className={styles.c_award_category__winner_label}
+            >
+              受賞
+            </span>
+            <div
+              className={styles.c_award_category__winner_tiles}
+              role='list'
+              aria-labelledby={winnerLabelId}
+            >
               {winners.map(({ key, award, movie }) => (
-                <div key={key} className={styles.c_award_category__winner_tile}>
+                <div
+                  key={key}
+                  role='listitem'
+                  className={styles.c_award_category__winner_tile}
+                >
                   <MovieTile
                     movie={movie}
                     headingLevel={4}
@@ -104,10 +120,17 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
 
         {nominees.length > 0 && (
           <div className={styles.c_award_category__nominees}>
-            <span className={styles.c_award_category__nominees_label}>
+            <span
+              id={nomineeLabelId}
+              className={styles.c_award_category__nominees_label}
+            >
               ノミネート
             </span>
-            <div className={styles.c_award_category__grid} role='list'>
+            <div
+              className={styles.c_award_category__grid}
+              role='list'
+              aria-labelledby={nomineeLabelId}
+            >
               {nominees.map(({ key, award, movie }) => (
                 <div
                   key={key}

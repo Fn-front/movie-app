@@ -59,17 +59,13 @@ interface AwardMovieRow {
   display_order: number;
 }
 
-/** DBレコードをAwardMovie型に変換 */
-function toAwardMovie(row: {
-  tmdb_movie_id: number;
-  title: string;
-  poster_path: string | null;
-  release_date: string | null;
-  vote_average: number | null;
-  genre_ids: number[] | null;
-  person_name: string | null;
-  is_winner: boolean;
-}): AwardMovie {
+/**
+ * DBレコードをAwardMovie型に変換
+ *
+ * 引数の形を並べ直さず `AwardMovieRow` をそのまま受ける。カラム一覧が
+ * SELECT・行型・ここの3箇所に散ると、足し忘れが起きる
+ */
+function toAwardMovie(row: AwardMovieRow): AwardMovie {
   return {
     tmdbMovieId: row.tmdb_movie_id,
     title: row.title,

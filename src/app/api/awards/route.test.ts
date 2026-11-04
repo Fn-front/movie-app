@@ -79,6 +79,39 @@ describe('GET /api/awards', () => {
     (checkRateLimit as jest.Mock).mockResolvedValue({ allowed: true });
   });
 
+  it('カテゴリに winner フィールドを含めない', async () => {
+    mockYearQuery([2026]);
+    mockAwardDataQuery([
+      {
+        tmdb_movie_id: 100,
+        title: '受賞映画',
+        poster_path: '/winner.jpg',
+        release_date: '2025-12-01',
+        vote_average: 8.5,
+        genre_ids: [18],
+        person_name: null,
+        award_name: 'academy_awards',
+        award_year: 2026,
+        category: 'best_picture',
+        is_winner: true,
+        display_order: 1,
+      },
+    ]);
+
+    const response = await GET(createRequest('2026'));
+    const body = await response.json();
+
+    // 受賞かどうかは nominees の各行が isWinner で持つ。
+    // winner は最初の1件しか入らず同点受賞を落とすため、誤用の元になる
+    const category = body.data.awards[0].categories[0];
+    expect(category).not.toHaveProperty('winner');
+    expect(Object.keys(category).sort()).toEqual([
+      'category',
+      'label',
+      'nominees',
+    ]);
+  });
+
   it('レスポンスの組み立てに必要なカラムをすべて SELECT する', async () => {
     mockYearQuery([2026]);
     mockAwardDataQuery([]);
@@ -156,8 +189,9 @@ describe('GET /api/awards', () => {
     expect(body.data.awards).toHaveLength(1);
     expect(body.data.awards[0].awardName).toBe('academy_awards');
     expect(body.data.awards[0].categories).toHaveLength(1);
-    expect(body.data.awards[0].categories[0].winner).not.toBeNull();
-    expect(body.data.awards[0].categories[0].winner.tmdbMovieId).toBe(100);
+    expect(body.data.awards[0].categories[0].nominees).toEqual([
+      expect.objectContaining({ tmdbMovieId: 100, isWinner: true }),
+    ]);
   });
 
   it('Cache-Controlヘッダーが設定される', async () => {
@@ -182,7 +216,7 @@ describe('GET /api/awards', () => {
     expect(body.data.awards).toEqual([]);
   });
 
-  it('受賞者とノミネートが正しく分離される', async () => {
+  it('受賞もノミネートも同じ nominees に display_order 順で入る', async () => {
     mockYearQuery([2026]);
     mockAwardDataQuery([
       {
@@ -219,8 +253,15 @@ describe('GET /api/awards', () => {
     const body = await response.json();
 
     const category = body.data.awards[0].categories[0];
-    expect(category.winner.tmdbMovieId).toBe(100);
-    expect(category.nominees).toHaveLength(2);
+    expect(
+      category.nominees.map((n: { tmdbMovieId: number; isWinner: boolean }) => [
+        n.tmdbMovieId,
+        n.isWinner,
+      ]),
+    ).toEqual([
+      [100, true],
+      [200, false],
+    ]);
   });
 
   it('nominees の各要素が isWinner を持つ', async () => {
@@ -269,7 +310,6 @@ describe('GET /api/awards', () => {
       [100, true],
       [200, false],
     ]);
-    expect(category.winner.isWinner).toBe(true);
   });
 
   it('同点受賞は全件が isWinner=true で返る', async () => {

@@ -184,16 +184,12 @@ export async function GET(request: Request) {
 
         if (categoryRows.length === 0) continue;
 
-        // `winner` は後方互換のために残す最初の1件。同点受賞を落とすため、
-        // 表示側は `nominees` を `isWinner` で振り分ける
-        const winner = categoryRows.find((r) => r.is_winner) ?? null;
-        const nominees = categoryRows.map(toAwardMovie);
-
+        // 受賞は行ごとの `isWinner` が持つ。部門に1件だけ別で持たせると
+        // 同点受賞の2件目を落とす
         categories.push({
           category: categoryDef.key,
           label: categoryDef.label,
-          winner: winner ? toAwardMovie(winner) : null,
-          nominees,
+          nominees: categoryRows.map(toAwardMovie),
         });
       }
 

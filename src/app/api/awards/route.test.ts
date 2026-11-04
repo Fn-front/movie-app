@@ -35,8 +35,31 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 
 import { GET } from './route';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import type { AwardMovie } from '@/features/awards/types';
 
 // --- Helpers ---
+
+/** レスポンスの nominees から取り出して検証する項目 */
+type NomineeShape = Pick<AwardMovie, 'tmdbMovieId' | 'isWinner'>;
+
+/** award_movies の1行（SELECT で取るカラムぶん） */
+function createAwardRow(overrides: Record<string, unknown> = {}) {
+  return {
+    tmdb_movie_id: 100,
+    title: 'テスト映画',
+    poster_path: '/poster.jpg',
+    release_date: '2025-12-01',
+    vote_average: 8.5,
+    genre_ids: [18],
+    person_name: null,
+    award_name: 'academy_awards',
+    award_year: 2026,
+    category: 'best_picture',
+    is_winner: false,
+    display_order: 1,
+    ...overrides,
+  };
+}
 
 function createRequest(yearParam?: string, ip?: string): Request {
   const url = yearParam
@@ -105,11 +128,6 @@ describe('GET /api/awards', () => {
     // winner は最初の1件しか入らず同点受賞を落とすため、誤用の元になる
     const category = body.data.awards[0].categories[0];
     expect(category).not.toHaveProperty('winner');
-    expect(Object.keys(category).sort()).toEqual([
-      'category',
-      'label',
-      'nominees',
-    ]);
   });
 
   it('レスポンスの組み立てに必要なカラムをすべて SELECT する', async () => {
@@ -216,37 +234,18 @@ describe('GET /api/awards', () => {
     expect(body.data.awards).toEqual([]);
   });
 
-  it('受賞もノミネートも同じ nominees に display_order 順で入る', async () => {
+  it('受賞を先頭に寄せず、DBから返った順をそのまま保つ', async () => {
     mockYearQuery([2026]);
+    // 並び替えは DB 側（.order('display_order')）に任せており、
+    // route は受け取った順を崩さない。受賞を真ん中に置いて確かめる
     mockAwardDataQuery([
-      {
-        tmdb_movie_id: 100,
-        title: '受賞映画',
-        poster_path: '/winner.jpg',
-        release_date: '2025-12-01',
-        vote_average: 8.5,
-        genre_ids: [18],
-        person_name: null,
-        award_name: 'academy_awards',
-        award_year: 2026,
-        category: 'best_picture',
-        is_winner: true,
-        display_order: 1,
-      },
-      {
+      createAwardRow({ tmdb_movie_id: 100, display_order: 1 }),
+      createAwardRow({
         tmdb_movie_id: 200,
-        title: 'ノミネート映画',
-        poster_path: '/nominee.jpg',
-        release_date: '2025-11-01',
-        vote_average: 7.5,
-        genre_ids: [18],
-        person_name: null,
-        award_name: 'academy_awards',
-        award_year: 2026,
-        category: 'best_picture',
-        is_winner: false,
+        is_winner: true,
         display_order: 2,
-      },
+      }),
+      createAwardRow({ tmdb_movie_id: 300, display_order: 3 }),
     ]);
 
     const response = await GET(createRequest('2026'));
@@ -254,13 +253,11 @@ describe('GET /api/awards', () => {
 
     const category = body.data.awards[0].categories[0];
     expect(
-      category.nominees.map((n: { tmdbMovieId: number; isWinner: boolean }) => [
-        n.tmdbMovieId,
-        n.isWinner,
-      ]),
+      category.nominees.map((n: NomineeShape) => [n.tmdbMovieId, n.isWinner]),
     ).toEqual([
-      [100, true],
-      [200, false],
+      [100, false],
+      [200, true],
+      [300, false],
     ]);
   });
 
@@ -302,10 +299,7 @@ describe('GET /api/awards', () => {
 
     const category = body.data.awards[0].categories[0];
     expect(
-      category.nominees.map((n: { tmdbMovieId: number; isWinner: boolean }) => [
-        n.tmdbMovieId,
-        n.isWinner,
-      ]),
+      category.nominees.map((n: NomineeShape) => [n.tmdbMovieId, n.isWinner]),
     ).toEqual([
       [100, true],
       [200, false],

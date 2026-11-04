@@ -13,6 +13,13 @@ export interface AwardMovie {
   voteAverage: number | null;
   genreIds: number[] | null;
   personName: string | null;
+  /**
+   * この行が受賞かどうか
+   *
+   * 同点受賞（複数作品が同じ部門を同時受賞）があるため、受賞かどうかは
+   * 行ごとに持つ必要がある。`AwardCategoryData.winner` との一致では判定できない
+   */
+  isWinner: boolean;
 }
 
 /**
@@ -21,7 +28,14 @@ export interface AwardMovie {
 export interface AwardCategoryData {
   category: string;
   label: string;
+  /**
+   * 受賞のうち最初の1件
+   *
+   * ⚠️ 同点受賞ではここに1件しか入らない。表示側は `nominees` を
+   * `isWinner` で振り分けること
+   */
   winner: AwardMovie | null;
+  /** 受賞・ノミネートを問わず、その部門の全行 */
   nominees: AwardMovie[];
 }
 

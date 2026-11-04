@@ -68,6 +68,7 @@ function toAwardMovie(row: {
   vote_average: number | null;
   genre_ids: number[] | null;
   person_name: string | null;
+  is_winner: boolean;
 }): AwardMovie {
   return {
     tmdbMovieId: row.tmdb_movie_id,
@@ -77,6 +78,7 @@ function toAwardMovie(row: {
     voteAverage: row.vote_average,
     genreIds: row.genre_ids,
     personName: row.person_name,
+    isWinner: row.is_winner,
   };
 }
 
@@ -186,6 +188,8 @@ export async function GET(request: Request) {
 
         if (categoryRows.length === 0) continue;
 
+        // `winner` は後方互換のために残す最初の1件。同点受賞を落とすため、
+        // 表示側は `nominees` を `isWinner` で振り分ける
         const winner = categoryRows.find((r) => r.is_winner) ?? null;
         const nominees = categoryRows.map(toAwardMovie);
 

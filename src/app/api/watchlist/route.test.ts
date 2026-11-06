@@ -290,6 +290,42 @@ describe('GET /api/watchlist', () => {
 
     expect(response.status).toBe(500);
   });
+
+  describe('レート制限（#934）', () => {
+    it('読み取り用の read_api_user_data として数える', async () => {
+      await GET(createGetRequest());
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+        'read_api_user_data',
+        1200,
+        10,
+      );
+    });
+
+    it('上限超過で429を返し、DBを読まない', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 600,
+      });
+
+      const response = await GET(createGetRequest());
+
+      expect(response.status).toBe(429);
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    it('クエリが不正でもレート制限を消費する（検証より先に判定する）', async () => {
+      // 認証 → レート制限 → バリデーション（`.claude/rules/api-route.md`）
+      const response = await GET(
+        new Request('http://localhost/api/watchlist?limit=-1'),
+      );
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 describe('POST /api/watchlist', () => {

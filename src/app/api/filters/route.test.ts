@@ -236,7 +236,7 @@ describe('PUT /api/filters', () => {
         expect.anything(),
         'user-123',
         'read_api_user_data',
-        300,
+        1200,
         10,
       );
     });

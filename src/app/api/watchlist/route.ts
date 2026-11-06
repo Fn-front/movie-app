@@ -40,6 +40,21 @@ export const maxDuration = 30;
 
 export const GET = withAuth(
   async ({ session, supabase, request }) => {
+    // レート制限チェック（#934）。
+    // 識別子がセッションなので検証より前に置く
+    // （`.claude/rules/api-route.md`「レート制限と検証の順序」）
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.READ_USER_DATA,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.maxAttempts,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     // クエリパラメータのバリデーション
     const { searchParams } = new URL(request.url);
     const queryResult = watchlistQuerySchema.safeParse({

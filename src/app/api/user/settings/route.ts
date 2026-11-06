@@ -83,6 +83,19 @@ export async function GET() {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
+    // レート制限チェック（#934）
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.READ_USER_DATA,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.maxAttempts,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     // 設定取得
     const { data, error } = await supabase
       .from('user_settings')

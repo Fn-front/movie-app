@@ -31,12 +31,18 @@ jest.mock('@/lib/auth/totpVerification', () => ({
     mockCountUnusedRecoveryCodes(...args),
 }));
 
+const mockCheckRateLimit = jest.fn();
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 // --- Tests ---
 
 describe('GET /api/user/totp', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
   });
 
   it('有効なユーザーの状態と残数を返す', async () => {
@@ -76,5 +82,33 @@ describe('GET /api/user/totp', () => {
     const response = await GET();
 
     expect(response.status).toBe(500);
+  });
+
+  describe('レート制限（#934）', () => {
+    it('読み取り用の read_api_user_data として数える', async () => {
+      mockIsTotpEnabled.mockResolvedValue(false);
+
+      await GET();
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        'read_api_user_data',
+        1200,
+        10,
+      );
+    });
+
+    it('上限超過で429を返し、DBを読まない', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 600,
+      });
+
+      const response = await GET();
+
+      expect(response.status).toBe(429);
+      expect(mockIsTotpEnabled).not.toHaveBeenCalled();
+    });
   });
 });

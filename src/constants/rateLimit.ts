@@ -213,10 +213,33 @@ export const RATE_LIMIT_CONFIG = {
   /** 単発の保存操作のため WRITE_PROFILE / WRITE_SETTINGS と揃える */
   WRITE_FILTERS: { maxAttempts: 10, windowMinutes: 1 },
   /**
-   * 認証必須の読み取り。カレンダーの月送りが最も回数を使うため厚めに取る。
-   * 自分のデータしか読めず外部APIも呼ばないので、濫用の実害は小さい。
+   * 認証必須の読み取り。自分のデータしか読めず外部APIも呼ばないので、
+   * 濫用の実害は小さい。
+   *
+   * ⚠️ これは**13ルートが共有する**カウンタ。1画面を開くだけで複数本消費する。
+   * #934 で欠けていた7ルート（settings/totp/favorites/favorites-lookup/
+   * watchlist/dismissed-movies/admin-accounts の各 GET）を足した結果、
+   * `/watchlist` のコールドロード1回で **5〜7回** 消費するようになった（実測）。
+   * 最悪ケース7回の内訳:
+   *
+   * | 内訳 | 回数 |
+   * |---|---|
+   * | `user/settings` GET | 3（#934 の本文のとおり3本飛ぶ） |
+   * | `watchlist` GET | 2 |
+   * | `watchlist/calendar` GET | 1 |
+   * | `favorites/lookup` GET | 1 |
+   *
+   * 300 のままだと **42画面遷移/10分** で上限に達し、少し活発に操作するだけで
+   * 13ルート全部が10分間 429 になる。追加前は1回/画面だったので、
+   * 枠を据え置くと余裕が7分の1になる計算。
+   *
+   * そこで 1200（最悪ケースで171画面遷移/10分、約17回/分）に引き上げる。
+   * 人間の操作速度では到達しない一方、自動化された総なめは止まる。
+   *
+   * 本来は消費側を減らすべき（`user/settings` の3本を1本にまとめる）だが、
+   * React Query 未使用の共有フック化が要るため #934 の対応方針3 に残っている。
    */
-  READ_USER_DATA: { maxAttempts: 300, windowMinutes: 10 },
+  READ_USER_DATA: { maxAttempts: 1200, windowMinutes: 10 },
   /**
    * ログイン試行のアカウント×送信元単位の上限。
    *

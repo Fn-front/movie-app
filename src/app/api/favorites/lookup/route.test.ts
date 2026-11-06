@@ -23,6 +23,11 @@ jest.mock('@/helpers/auth', () => ({
     new Response(JSON.stringify({ success: false }), { status: 401 }),
 }));
 
+const mockCheckRateLimit = jest.fn();
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 import { getAuthSession } from '@/helpers/auth';
 
 // --- Helpers ---
@@ -73,6 +78,7 @@ const lookupRows = (count: number, startId = 1000) =>
 describe('GET /api/favorites/lookup', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -224,5 +230,34 @@ describe('GET /api/favorites/lookup', () => {
 
     expect(response.status).toBe(500);
     expect(json.success).toBe(false);
+  });
+
+  describe('レート制限（#934）', () => {
+    it('読み取り用の read_api_user_data として数える', async () => {
+      mockQueryChain({ data: [], error: null });
+
+      await GET(createGetRequest());
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+        'read_api_user_data',
+        1200,
+        10,
+      );
+    });
+
+    it('上限超過で429を返し、DBを読まない', async () => {
+      // 1リクエストで最大ページ数ぶん読むため、無制限だと負荷が大きい
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 600,
+      });
+
+      const response = await GET(createGetRequest());
+
+      expect(response.status).toBe(429);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
   });
 });

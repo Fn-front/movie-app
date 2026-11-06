@@ -37,6 +37,12 @@ export interface UseFavoritesPageReturn {
   hasNextPage: boolean;
   /** 次ページを読み込む */
   fetchNextPage: () => void;
+  /** 前ページ読み込み中 */
+  isFetchingPreviousPage: boolean;
+  /** 前ページがあるか（maxPages で捨てられた先頭ページがある） */
+  hasPreviousPage: boolean;
+  /** 前ページを読み込む */
+  fetchPreviousPage: () => void;
   /** 現在のソートキー */
   sortBy: SortByValue;
   /** ソート変更ハンドラー */
@@ -57,6 +63,9 @@ export function useFavoritesPage(): UseFavoritesPageReturn {
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
+    isFetchingPreviousPage,
+    hasPreviousPage,
+    fetchPreviousPage,
   } = useFavorites({
     sort_by: sortBy,
     sort_order: FAVORITES_SORT_ORDER.DESC,
@@ -75,6 +84,9 @@ export function useFavoritesPage(): UseFavoritesPageReturn {
       isFetchingNextPage,
       hasNextPage,
       fetchNextPage,
+      isFetchingPreviousPage,
+      hasPreviousPage,
+      fetchPreviousPage,
       sortBy,
       handleSortChange,
       favoriteToggle,
@@ -85,6 +97,9 @@ export function useFavoritesPage(): UseFavoritesPageReturn {
       isFetchingNextPage,
       hasNextPage,
       fetchNextPage,
+      isFetchingPreviousPage,
+      hasPreviousPage,
+      fetchPreviousPage,
       sortBy,
       handleSortChange,
       favoriteToggle,

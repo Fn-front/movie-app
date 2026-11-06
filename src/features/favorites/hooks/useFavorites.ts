@@ -20,7 +20,7 @@ import {
   useFavoriteMutations,
   type UseFavoriteMutationsReturn,
 } from '@/features/favorites/hooks/useFavoriteMutations';
-import { favoriteKeys } from '@/constants';
+import { favoriteKeys, FAVORITES_MAX_CACHED_PAGES } from '@/constants';
 
 /**
  * useFavoritesフックの返り値
@@ -36,6 +36,17 @@ export interface UseFavoritesReturn extends UseFavoriteMutationsReturn {
   hasNextPage: boolean;
   /** 次ページを読み込む */
   fetchNextPage: () => void;
+  /** 前ページ読み込み中 */
+  isFetchingPreviousPage: boolean;
+  /**
+   * 前ページがあるか
+   *
+   * `maxPages` で先頭ページが捨てられたときに true になる。
+   * 捨てられたページを取り直す導線が無いと、画面に出ていた項目が消える（#972）
+   */
+  hasPreviousPage: boolean;
+  /** 前ページを読み込む */
+  fetchPreviousPage: () => void;
 }
 
 /**
@@ -64,6 +75,16 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
     initialPageParam: 1,
     getNextPageParam: (lastPage) =>
       lastPage.data.pagination.nextPage ?? undefined,
+    // 上方向。`maxPages` を効かせるには双方向である必要がある（#972）
+    getPreviousPageParam: (firstPage) => {
+      const { currentPage } = firstPage.data.pagination;
+      return currentPage > 1 ? currentPage - 1 : undefined;
+    },
+    // 保持ページ数の上限。無制限だと invalidate のたびに読み込み済みの
+    // 全ページを順に取り直す。お気に入りは実質 append-only（実測で削除率
+    // 1.5%）で増え続けるため、年単位で見ると1操作あたりのリクエストが
+    // 無視できなくなる
+    maxPages: FAVORITES_MAX_CACHED_PAGES,
     enabled: isAuthenticated,
   });
 
@@ -78,6 +99,10 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
     favoritesQuery.fetchNextPage();
   }, [favoritesQuery]);
 
+  const fetchPreviousPage = useCallback(() => {
+    favoritesQuery.fetchPreviousPage();
+  }, [favoritesQuery]);
+
   return useMemo(
     () => ({
       ...mutations,
@@ -86,6 +111,9 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
       isFetchingNextPage: favoritesQuery.isFetchingNextPage,
       hasNextPage: favoritesQuery.hasNextPage,
       fetchNextPage,
+      isFetchingPreviousPage: favoritesQuery.isFetchingPreviousPage,
+      hasPreviousPage: favoritesQuery.hasPreviousPage,
+      fetchPreviousPage,
     }),
     [
       mutations,
@@ -94,6 +122,9 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
       favoritesQuery.isFetchingNextPage,
       favoritesQuery.hasNextPage,
       fetchNextPage,
+      favoritesQuery.isFetchingPreviousPage,
+      favoritesQuery.hasPreviousPage,
+      fetchPreviousPage,
     ],
   );
 }

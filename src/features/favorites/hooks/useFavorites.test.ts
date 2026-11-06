@@ -795,4 +795,105 @@ describe('useFavorites', () => {
       status: 'authenticated',
     });
   });
+
+  describe('双方向ページング（#972）', () => {
+    /** 指定ページのレスポンスを作る（全 totalPages ページあるものとする） */
+    const pageResponse = (page: number, totalPages: number) => ({
+      success: true,
+      data: {
+        favorites: [
+          {
+            id: `fav-p${page}`,
+            tmdb_movie_id: 100 + page,
+            title: `映画P${page}`,
+            poster_path: null,
+            release_date: null,
+            rating: 5,
+            added_at: '2026-01-10T00:00:00Z',
+          },
+        ],
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalItems: totalPages,
+          itemsPerPage: 20,
+          hasNextPage: page < totalPages,
+          nextPage: page < totalPages ? page + 1 : null,
+        },
+      },
+    });
+
+    it('先頭ページでは前ページが無い', async () => {
+      mockGetFavorites.mockResolvedValue(pageResponse(1, 3));
+
+      const { result } = renderHook(() => useFavorites(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      expect(result.current.hasPreviousPage).toBe(false);
+    });
+
+    it('maxPages を超えて進むと先頭ページが捨てられ、前ページを取り直せる', async () => {
+      // 保持は5ページ。6ページ目を読むと1ページ目が落ちる
+      mockGetFavorites.mockImplementation(({ page }: { page?: number }) =>
+        Promise.resolve(pageResponse(page ?? 1, 10)),
+      );
+
+      const { result } = renderHook(() => useFavorites(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      // 6ページ目まで進める
+      for (let i = 0; i < 5; i++) {
+        await act(async () => {
+          result.current.fetchNextPage();
+        });
+        await waitFor(() =>
+          expect(result.current.isFetchingNextPage).toBe(false),
+        );
+      }
+
+      // 保持は5ページぶんで頭打ち。これが invalidate 時の再取得数の上限になる
+      expect(result.current.favorites).toHaveLength(5);
+      // 先頭が捨てられたので取り直せる
+      expect(result.current.hasPreviousPage).toBe(true);
+      expect(result.current.favorites[0].title).toBe('映画P2');
+    });
+
+    it('前ページを取り直すと先頭に戻る', async () => {
+      mockGetFavorites.mockImplementation(({ page }: { page?: number }) =>
+        Promise.resolve(pageResponse(page ?? 1, 10)),
+      );
+
+      const { result } = renderHook(() => useFavorites(), {
+        wrapper: createWrapper(),
+      });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      for (let i = 0; i < 5; i++) {
+        await act(async () => {
+          result.current.fetchNextPage();
+        });
+        await waitFor(() =>
+          expect(result.current.isFetchingNextPage).toBe(false),
+        );
+      }
+      expect(result.current.favorites[0].title).toBe('映画P2');
+
+      await act(async () => {
+        result.current.fetchPreviousPage();
+      });
+      await waitFor(() =>
+        expect(result.current.isFetchingPreviousPage).toBe(false),
+      );
+
+      // 捨てられていた1ページ目が戻る（＝画面から項目が消えたままにならない）
+      expect(result.current.favorites[0].title).toBe('映画P1');
+      expect(result.current.favorites).toHaveLength(5);
+    });
+  });
 });

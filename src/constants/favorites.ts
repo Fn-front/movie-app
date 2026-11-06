@@ -95,3 +95,33 @@ export const FAVORITES_SUCCESS_MESSAGES = {
   REMOVED: successMessage.removed(TARGET),
   UPDATED: successMessage.updated('評価'),
 } as const;
+
+/**
+ * お気に入り一覧でキャッシュに保持する最大ページ数
+ *
+ * `useInfiniteQuery` の `maxPages`。これを超えると、進んだ方向と反対側の
+ * ページがキャッシュから捨てられる。
+ *
+ * ## なぜ要るか
+ *
+ * 無制限（既定）だと、invalidate のたびに**読み込み済みの全ページを順に
+ * 取り直す**。お気に入りは実質 append-only（実測で削除率 1.5%。ウォッチリストは
+ * 32.1%）で増え続けるため、年単位で見ると操作1回あたりのリクエストが
+ * 無視できなくなる（#972）。
+ *
+ * 実測の増加ペース（0.53件/日）だと、3年後に約711件＝36ページ。
+ * 評価の更新1回ごとに36リクエストが飛ぶ計算になる。
+ *
+ * ## なぜ5か
+ *
+ * 1ページ20件なので100件ぶん。画面に収まる量（グリッドで概ね4〜5行）に対して
+ * 十分な前後の余白がある一方、invalidate の再取得は最大5本で頭打ちになる。
+ *
+ * 小さくすると上下スクロールのたびに取り直しが増え、大きくすると
+ * invalidate のコストが戻る。
+ *
+ * ⚠️ `maxPages` は双方向リストでしか使えない。`getPreviousPageParam` と
+ * 上方向のロード導線（`favoritesPage` の先頭センチネル）が前提。
+ * 片方でも欠けると、捨てられたページを取り直せず**表示中の項目が消える**。
+ */
+export const FAVORITES_MAX_CACHED_PAGES = 5;

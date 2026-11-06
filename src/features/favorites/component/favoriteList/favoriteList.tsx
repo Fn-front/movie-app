@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo, useCallback } from 'react';
+import { memo, useCallback, type Ref } from 'react';
 import Image from 'next/image';
 
 import { Card } from '@/components/ui/card/card';
@@ -27,6 +27,8 @@ import styles from './favoriteList.module.scss';
 export interface FavoriteListProps {
   /** お気に入り一覧 */
   favorites: FavoriteItem[];
+  /** グリッド要素への ref（スクロール位置の補正に使う / #972） */
+  gridRef?: Ref<HTMLDivElement>;
   /** 読み込み中 */
   isLoading: boolean;
   /** お気に入りボタンクリック時のコールバック */
@@ -54,9 +56,11 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
   onFavoriteToggle,
   isFavoriteProcessing,
   onClick,
+  gridRef,
 }) {
   return (
     <MovieGridContainer
+      gridRef={gridRef}
       isLoading={isLoading}
       isEmpty={favorites.length === 0}
       emptyMessage={EMPTY_MESSAGES.FAVORITES}

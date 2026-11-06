@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo, type ReactNode } from 'react';
+import { memo, type ReactNode, type Ref } from 'react';
 
 import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
 import { Loading } from '@/components/ui/loading/loading';
@@ -33,6 +33,13 @@ export interface MovieGridContainerProps {
   hasNextPage?: boolean;
   /** 次ページ取得関数 */
   fetchNextPage?: () => void;
+  /**
+   * グリッド要素への ref
+   *
+   * 双方向リストでスクロール位置を補正するために、項目の直接の親が要る
+   * （`usePrependScrollAnchor`）。渡さなければ何も起きない
+   */
+  gridRef?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -48,6 +55,7 @@ export const MovieGridContainer = memo<MovieGridContainerProps>(
     isFetchingNextPage = false,
     hasNextPage = false,
     fetchNextPage,
+    gridRef,
   }) {
     const loadMoreRef = useIntersectionObserver(fetchNextPage ?? (() => {}), {
       enabled: hasNextPage && !isFetchingNextPage && !!fetchNextPage,
@@ -69,7 +77,9 @@ export const MovieGridContainer = memo<MovieGridContainerProps>(
 
     return (
       <>
-        <div className={styles.c_movie_grid_container__grid}>{children}</div>
+        <div ref={gridRef} className={styles.c_movie_grid_container__grid}>
+          {children}
+        </div>
 
         {isFetchingNextPage && (
           <div className={styles.c_movie_grid_container__loading}>

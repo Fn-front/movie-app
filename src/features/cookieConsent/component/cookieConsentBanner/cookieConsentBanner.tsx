@@ -15,7 +15,10 @@ import { ARIA_LABELS, ROUTES } from '@/constants';
 import { useCookieConsent } from '@/hooks/useCookieConsent';
 import { getGaMeasurementId } from '@/utils/analytics';
 
-import { setBannerHeightVar } from '../../utils/bannerHeight';
+import {
+  resolveBannerHeight,
+  setBannerHeightVar,
+} from '../../utils/bannerHeight';
 import styles from './cookieConsentBanner.module.scss';
 
 /**
@@ -45,7 +48,8 @@ export const CookieConsentBanner = memo(function CookieConsentBanner() {
     if (!element) return;
 
     const observer = new ResizeObserver(([entry]) => {
-      setBannerHeightVar(Math.ceil(entry.contentRect.height));
+      // 境界ボックスで測る。切り上げは setBannerHeightVar 側で行う
+      setBannerHeightVar(resolveBannerHeight(entry));
     });
     observer.observe(element);
 

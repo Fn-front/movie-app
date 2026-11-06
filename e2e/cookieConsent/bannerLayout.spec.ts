@@ -28,53 +28,30 @@ test.describe('Cookie同意 / バナー表示中のレイアウト', () => {
     const bannerBox = await banner.boundingBox();
     expect(bannerBox).not.toBeNull();
 
-    // 実装が渡しているのは ResizeObserver の `entry.contentRect`＝**内容ボックス**
-    // なので、境界線と padding を引いた値と突き合わせる。
-    //
-    // ⚠️ `.c_cookie_banner` には `border-top: 1px` があるため、この値は実際の
-    // バナー高さ（境界ボックス）より 1px 小さい。つまりレイアウトが空ける場所が
-    // 1px 足りず、フッターの最下 1px が枠線に重なる。本 Issue（#931）は E2E の
-    // 追加が範囲なので直さず、#966 に切り出した
-    const geometry = await banner.evaluate((element) => {
-      const style = getComputedStyle(element);
-      const border =
-        parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
-      const padding =
-        parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-      return {
-        borderBoxHeight: element.getBoundingClientRect().height,
-        contentBoxHeight:
-          element.getBoundingClientRect().height - border - padding,
-        borderTopWidth: parseFloat(style.borderTopWidth),
-      };
-    });
+    // 実装が渡すのは ResizeObserver の `borderBoxSize`＝**境界ボックス**（#966）。
+    // バナーは position: fixed なので、画面を覆うのは境界線を含めた高さ。
+    // 内容ボックスで測っていた頃は border-top ぶん 1px 足りず、フッターの
+    // 最下 1px に枠線が重なっていた
+    const geometry = await banner.evaluate((element) => ({
+      borderBoxHeight: element.getBoundingClientRect().height,
+    }));
 
     // ResizeObserver から渡す値と同じく切り上げる
-    const expected = `${Math.ceil(geometry.contentBoxHeight)}px`;
-
-    // 失敗時に #966 の存在が分かるようにする。コメントまで遡らないと
-    // 「わざと現状を固定している」と気づけないため
-    const pendingFix =
-      '#966（--cookie-banner-height が境界線ぶん 1px 足りない）を直したら、' +
-      '期待値を境界ボックス基準へ変えること';
+    const expected = `${Math.ceil(geometry.borderBoxHeight)}px`;
 
     // ResizeObserver 経由なので1フレーム遅れる
-    await expect
-      .poll(() => readBannerHeightVar(page), { message: pendingFix })
-      .toBe(expected);
+    await expect.poll(() => readBannerHeightVar(page)).toBe(expected);
 
     const paddingBottom = await page.evaluate(
       () => getComputedStyle(document.body).paddingBottom,
     );
-    expect(paddingBottom, pendingFix).toBe(expected);
+    expect(paddingBottom).toBe(expected);
 
-    // フッターの下端がバナーの上端より上にある＝覆われていない。
-    // 許容するのは上記の境界線ぶんだけ（直ったらここも 0 に絞れる）
+    // フッターの下端がバナーの上端を越えない＝1pxも覆われていない。
+    // #966 以前はここに border-top ぶんの許容が要った
     const footerBox = await page.getByRole('contentinfo').boundingBox();
     expect(footerBox).not.toBeNull();
-    expect(footerBox!.y + footerBox!.height).toBeLessThanOrEqual(
-      bannerBox!.y + geometry.borderTopWidth,
-    );
+    expect(footerBox!.y + footerBox!.height).toBeLessThanOrEqual(bannerBox!.y);
 
     await page.screenshot({
       path: 'docs/e2e-screenshots/cookie-consent-banner.png',

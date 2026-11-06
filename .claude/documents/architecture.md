@@ -164,6 +164,7 @@ UI Re-render
 | GET | `/api/awards` | 受賞作品一覧取得 |
 | GET | `/api/cron/generate-recommendations` | AIレコメンド生成（日次） |
 | GET | `/api/cron/sync-award-movies` | 受賞作品同期（月次） |
+| GET | `/api/cron/cleanup-rate-limits` | `rate_limits` の保持期間切れ削除（日次） |
 
 ## 主要機能のアーキテクチャ
 
@@ -308,8 +309,13 @@ UI Re-render
 | `/api/cron/sync-now-playing` | `0 18 * * *` | 毎日 03:00 | 上映中映画同期（日次） |
 | `/api/cron/update-movies` | `0 18 * * *` | 毎日 03:00 | 映画評価・人気度更新（日次） |
 | `/api/cron/sync-now-showing` | `0 18 * * *` | 毎日 03:00 | 映画.com上映中情報同期（日次） |
-| `/api/cron/generate-recommendations` | `0 3 * * *` | 毎日 12:00 | AIレコメンド生成（日次） |
+| `/api/cron/sync-streaming` | `0 19 * * *` | 毎日 04:00 | 配信作品同期（日次） |
+| `/api/cron/sync-watchlist-streaming` | `0 20 * * *` | 毎日 05:00 | ウォッチリストの配信状況同期（日次） |
+| `/api/cron/generate-recommendations` | `0 18 * * *` | 毎日 03:00 | AIレコメンド生成（日次）。保持期間切れの `recommendation_events` 削除も相乗り |
 | `/api/cron/sync-award-movies` | `0 18 28 * *` | 毎月28日 03:00 | 受賞作品同期（月次） |
+| `/api/cron/cleanup-rate-limits` | `0 17 * * *` | 毎日 02:00 | `rate_limits` の保持期間切れ削除（日次。#933） |
+
+> この表は `vercel.json` と手で同期している。`sync-streaming` / `sync-watchlist-streaming` の欠落と、`generate-recommendations` のスケジュール誤記（`0 3 * * *` → 実際は `0 18 * * *`）は #933 の作業中に発見して直した。
 
 ## セキュリティヘッダー
 

@@ -23,6 +23,9 @@ export const CRON_ERROR_MESSAGES = {
   /** ウォッチリスト配信状況の同期エラー */
   SYNC_WATCHLIST_STREAMING:
     'ウォッチリストの配信状況同期中にエラーが発生しました。',
+  /** レート制限の保持期間切れ削除エラー */
+  CLEANUP_RATE_LIMITS:
+    'レート制限レコードの保持期間切れ削除中にエラーが発生しました。',
   /** ユーザー取得失敗 */
   FETCH_USERS_FAILED: 'ユーザー取得に失敗しました',
   /** アクティブユーザー取得失敗 */

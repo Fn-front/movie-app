@@ -328,3 +328,31 @@ export const RATE_LIMIT_DEFAULT = {
 export const IN_MEMORY_RATE_LIMIT = {
   CSP_REPORT: { maxRequests: 60, windowMs: 60 * 1000 },
 } as const;
+
+/**
+ * `rate_limits` の保持期間（時間）
+ *
+ * identifier にメールアドレス・IPアドレス・ユーザーIDが入るため、レート制限と
+ * いう目的を達した行は残さない（個人情報保護法22条。#933）。
+ *
+ * ⚠️ 24時間にしてはいけない。最長ウィンドウは `OTP_CONFIG.DAILY_SEND_WINDOW_MINUTES`
+ * （= 1440分）で**ちょうど24時間**のため、24時間だと有効なカウンタを消しうる。
+ * 余裕を見て48時間にしている。
+ *
+ * 値を変えるときは、同じ数字が散っている以下もすべて揃えること。
+ *
+ * | 場所 | 内容 |
+ * |---|---|
+ * | `src/features/privacy/privacyPage/privacyPage.tsx` | この定数を描画（自動追従） |
+ * | `supabase/migrations/20261106104932_*.sql` | 関数の `DEFAULT 48` と `COMMENT ON TABLE` |
+ * | `supabase/migrations/20261106112019_*.sql` | 同上（`CREATE OR REPLACE` で再掲） |
+ * | `.claude/documents/database-schema.md` | rate_limits のクリーンアップ節 |
+ *
+ * SQL の `DEFAULT` は呼び出し側が常に引数を渡すため実際には使われないが、
+ * 手で RPC を叩いたときの安全側の値として揃えておく。
+ *
+ * ⚠️ 「保持期間 > 全レート制限ウィンドウの最大値」は
+ * `src/lib/rateLimit/cleanupRateLimits.test.ts` が自動で検証する。
+ * 新しいウィンドウを足して超えた瞬間にテストが落ちる。
+ */
+export const RATE_LIMIT_RETENTION_HOURS = 48;

@@ -146,6 +146,122 @@ export async function cleanupRunRateLimits(): Promise<void> {
   ]);
 }
 
+/** `rate_limits` の1行（保持期間テスト用） */
+export interface RateLimitRowSeed {
+  identifier: string;
+  actionType: string;
+  attempts: number;
+  /** 直近の試行時刻（ISO 8601） */
+  lastAttemptAt: string;
+  /** ロック解除時刻（ISO 8601）。ロックしていなければ null */
+  lockedUntil: string | null;
+}
+
+/**
+ * `rate_limits` に行を直接作る（E2E用）
+ *
+ * `consume_rate_limit` 経由では「最終試行が48時間前」のような状態を作れない
+ * （常に now で書かれる）。保持期間の削除条件を検証するには直接書くしかない。
+ *
+ * @param seed - 作る行
+ */
+export async function seedRateLimitRow(seed: RateLimitRowSeed): Promise<void> {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/rate_limits?on_conflict=identifier,action_type`,
+    {
+      method: 'POST',
+      headers: {
+        ...supabaseHeaders,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        identifier: seed.identifier,
+        action_type: seed.actionType,
+        attempts: seed.attempts,
+        last_attempt_at: seed.lastAttemptAt,
+        locked_until: seed.lockedUntil,
+      }),
+    },
+  );
+
+  // 握りつぶさない。CHECK 制約（chk_action_type）違反で書けていないと、
+  // 後続のアサーションが「消えた」と誤判定する
+  if (!response.ok) {
+    throw new Error(
+      `rate_limits のseedに失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+}
+
+/**
+ * `rate_limits` の行が残っているか調べる（E2E用）
+ *
+ * @returns 残っていれば行、消えていれば null
+ */
+export async function getRateLimitRow(
+  identifier: string,
+  actionType: string,
+): Promise<{ attempts: number; locked_until: string | null } | null> {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/rate_limits` +
+      `?identifier=eq.${encodeURIComponent(identifier)}` +
+      `&action_type=eq.${encodeURIComponent(actionType)}` +
+      `&select=attempts,locked_until`,
+    { headers: supabaseHeaders },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `rate_limits の取得に失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+
+  const rows = (await response.json()) as {
+    attempts: number;
+    locked_until: string | null;
+  }[];
+
+  if (!Array.isArray(rows)) {
+    throw new Error(
+      `rate_limits の取得が配列を返さなかった: ${JSON.stringify(rows)}`,
+    );
+  }
+
+  return rows[0] ?? null;
+}
+
+/**
+ * 保持期間切れの `rate_limits` を削除する RPC を呼ぶ（E2E用）
+ *
+ * ⚠️ この RPC は**テーブル全体**が対象。共有DB上の、保持期間を過ぎて
+ * ロックも明けた行はすべて消える。ただしそれらは定義上すでに期限切れで
+ * 誰の試行カウントでもないため、他の run には影響しない。
+ *
+ * @param retentionHours - 保持期間（時間）
+ * @returns 削除件数
+ */
+export async function runDeleteExpiredRateLimits(
+  retentionHours: number,
+): Promise<number> {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/rpc/delete_expired_rate_limits`,
+    {
+      method: 'POST',
+      headers: { ...supabaseHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ retention_hours: retentionHours }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `delete_expired_rate_limits の呼び出しに失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+
+  return (await response.json()) as number;
+}
+
 /**
  * 指定ユーザーのウォッチリストを物理削除する（rate_limitsも同時にリセット）
  *

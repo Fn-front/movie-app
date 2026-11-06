@@ -12,13 +12,14 @@
  */
 
 import { Heading } from '@/components/ui/heading/heading';
+import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
 import { CookieConsentToggle } from '@/features/cookieConsent/component/cookieConsentToggle/cookieConsentToggle';
 
 import styles from './privacyPage.module.scss';
 
 /** 制定日。改定したら LAST_UPDATED を更新する */
 const ESTABLISHED_AT = '2026年11月3日';
-const LAST_UPDATED = '2026年11月3日';
+const LAST_UPDATED = '2026年11月6日';
 
 /** 問い合わせ・開示請求の窓口 */
 const CONTACT_EMAIL = 'support@example.com';
@@ -252,7 +253,18 @@ export function PrivacyPage() {
           削除のご希望は下記の窓口で承り、手作業で対応します。
         </p>
         <p>
-          不正利用の防止に用いるアクセス記録（IPアドレスを含みます）は、現在自動削除の仕組みを設けていません。削除のご希望は窓口へご連絡ください。
+          不正利用の防止に用いる試行回数の記録（メールアドレス・IPアドレスを含みます）は、最後の試行から
+          {RATE_LIMIT_RETENTION_HOURS}
+          時間が過ぎたものを毎日自動削除します。制限中（ロック中）のものは、解除されるまで保持します。
+        </p>
+        {/*
+          自動削除の対象は試行回数の記録（rate_limits）だけ。アカウント発行の
+          監査ログ（admin_audit_logs）と確認コード（otp_codes）には定期削除が
+          無い。上の段落だけを置くと「不正利用防止目的の記録は48時間で消える」と
+          読めてしまうため、対象外を明示する（#933）
+        */}
+        <p>
+          アカウントの発行・再発行の監査記録や、メールでお送りした確認コードは、現在自動削除の仕組みを設けていません。削除のご希望は窓口へご連絡ください。
         </p>
       </section>
 

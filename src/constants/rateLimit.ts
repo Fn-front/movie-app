@@ -328,3 +328,17 @@ export const RATE_LIMIT_DEFAULT = {
 export const IN_MEMORY_RATE_LIMIT = {
   CSP_REPORT: { maxRequests: 60, windowMs: 60 * 1000 },
 } as const;
+
+/**
+ * `rate_limits` の保持期間（時間）
+ *
+ * identifier にメールアドレス・IPアドレス・ユーザーIDが入るため、レート制限と
+ * いう目的を達した行は残さない（個人情報保護法22条。#933）。
+ *
+ * ⚠️ 24時間にしてはいけない。最長ウィンドウは `OTP_CONFIG.DAILY_SEND_WINDOW_MINUTES`
+ * （= 1440分）で**ちょうど24時間**のため、24時間だと有効なカウンタを消しうる。
+ * 余裕を見て48時間にしている。
+ *
+ * 値を変えるときは `/privacy` の「保存期間と削除」の記述も必ず揃えること。
+ */
+export const RATE_LIMIT_RETENTION_HOURS = 48;

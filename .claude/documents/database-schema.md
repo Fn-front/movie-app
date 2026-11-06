@@ -113,8 +113,8 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
   - RLSを使わずservice roleでの操作に統一できる（OTPはサーバー側でのみ操作）
 
 **クリーンアップ:**
-- 有効期限切れ（`expires_at < now()`）のレコードはVercel Cron Jobsで定期削除（rate_limitsと同一ジョブ）
 - 検証成功時のレコードは即座に削除
+- ⚠️ **有効期限切れレコードの定期削除は未実装。** かつて「rate_limits と同一ジョブで削除」と書かれていたが、そのようなジョブは存在しなかった。rate_limits 側は #933 で `/api/cron/cleanup-rate-limits` を用意したが、otp_codes は対象外（別途 Issue 化が必要）
 
 ---
 
@@ -357,14 +357,15 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 | identifier | VARCHAR(255) | NOT NULL | - | 識別子（IPアドレス or ユーザーID） |
 | action_type | VARCHAR(50) | NOT NULL | - | アクション種別（login / otp_verify） |
 | attempts | INTEGER | NOT NULL | 0 | 試行回数 |
-| locked_until | TIMESTAMP | NULL | - | ロック解除時刻 |
-| last_attempt_at | TIMESTAMP | NOT NULL | now() | 最終試行時刻 |
-| created_at | TIMESTAMP | NOT NULL | now() | 作成日時 |
-| updated_at | TIMESTAMP | NOT NULL | now() | 更新日時 |
+| locked_until | TIMESTAMPTZ | NULL | - | ロック解除時刻（20260628111105 で naive から変換） |
+| last_attempt_at | TIMESTAMPTZ | NOT NULL | now() | 最終試行時刻（20261019012324 で naive から変換） |
+| created_at | TIMESTAMP | NOT NULL | now() | 作成日時（naive のまま。JS 側で時刻比較していない） |
+| updated_at | TIMESTAMP | NOT NULL | now() | 更新日時（同上） |
 
 **インデックス:**
 - `identifier, action_type` (UNIQUE) - 重複防止
 - `locked_until` - ロック解除チェック用
+- `last_attempt_at` - 保持期間切れの削除用（#933）
 
 **制約:**
 - `action_type` は 'login', 'change_password', 'otp_verify' 等（CHECK制約）
@@ -374,9 +375,13 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 - **change_password**: 3回失敗で30分ロック
 - **otp_verify**: 5回失敗で該当OTP無効化
 
-**クリーンアップ:**
-- ロック解除時刻を過ぎたレコードは定期的に削除（Vercel Cron Jobs）
-- または、レコード取得時に`locked_until < now()`をチェックして自動リセット
+**クリーンアップ（#933）:**
+- 日次 Cron `/api/cron/cleanup-rate-limits` が `delete_expired_rate_limits` RPC を呼ぶ
+- 保持期間は **48時間**（`RATE_LIMIT_RETENTION_HOURS`）。最長ウィンドウ（`OTP_SEND_DAILY` = 1440分）がちょうど24時間のため、24時間では足りない
+- 削除条件は「`last_attempt_at` が保持期間より古い **かつ** ロックが明けている」
+  - `created_at` は使えない。行は upsert で再利用され初回作成時刻のままなので、カウント中の行まで消える
+  - `last_attempt_at` だけでも足りない。ロック中は `last_attempt_at` を更新しないため、ロックが早期解除される
+- 回復（ロック明けのリセット）は削除とは別で、`consume_rate_limit` が行取得時に判定する
 
 ---
 

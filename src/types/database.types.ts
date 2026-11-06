@@ -1142,6 +1142,10 @@ export type Database = {
           retry_after: number;
         }[];
       };
+      delete_expired_rate_limits: {
+        Args: { retention_hours?: number };
+        Returns: number;
+      };
       delete_expired_recommendation_events: {
         Args: { retention_days?: number };
         Returns: number;

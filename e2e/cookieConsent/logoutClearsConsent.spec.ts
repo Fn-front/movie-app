@@ -15,10 +15,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
-import {
-  openDedicatedSession,
-  type DedicatedSession,
-} from '../fixtures/dedicatedSession';
+import type { DedicatedSession } from '../fixtures/dedicatedSession';
 import { cleanupUserSettings } from '../helpers/api';
 import { runScopedEmail } from '../helpers/runScope';
 
@@ -28,6 +25,7 @@ import {
   consentBanner,
   gaCookieNames,
   grantButton,
+  openGaDedicatedSession,
   readStoredConsent,
   type GaProbe,
 } from './fixtures';
@@ -46,10 +44,8 @@ test.describe('Cookie同意 / ログアウト', () => {
 
   test.beforeAll(async ({ browser }, testInfo) => {
     testInfo.setTimeout(120000);
-    // ログイン画面でも gtag.js は動くため、遮断は performLogin より前に張る
-    session = await openDedicatedSession(browser, USER, async (context) => {
-      probe = await attachGaProbe(context);
-    });
+    // 遮断はログインの前に張る（openGaDedicatedSession がそれを保証する）
+    ({ session, probe } = await openGaDedicatedSession(browser, USER));
     page = session.page;
   });
 

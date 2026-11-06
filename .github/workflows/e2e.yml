@@ -10,6 +10,10 @@ on:
   push:
     branches:
       - main
+  # e2e-ga は main への push でしか動かないため、これが無いとマージするまで
+  # CI 経路（GA ID 付きビルド + `npm start --port 3001`）を一度も確かめられない。
+  # 手動実行の口を開けておく（#931）
+  workflow_dispatch:
 
 # concurrency は設定しない。
 #
@@ -143,9 +147,10 @@ jobs:
   #
   # PR では回さない。googletagmanager.com への外部依存があり、ビルドも1回増えるため、
   # 常時 PR に乗せるコストに見合わないと判断した（#931 で決定）。
+  # そのぶん workflow_dispatch を受け付け、マージ前に手動で確かめられるようにしてある。
   e2e-ga:
     name: Playwright E2E (GA有効)
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     environment: Production
     permissions:

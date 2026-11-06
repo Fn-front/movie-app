@@ -15,10 +15,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
-import {
-  openDedicatedSession,
-  type DedicatedSession,
-} from '../fixtures/dedicatedSession';
+import type { DedicatedSession } from '../fixtures/dedicatedSession';
 import {
   cleanupUserSettings,
   getUserConsent,
@@ -29,10 +26,10 @@ import { runScopedEmail } from '../helpers/runScope';
 import {
   CURRENT_CONSENT_VERSION,
   GA_COOKIE_NAMES,
-  attachGaProbe,
   consentBanner,
   consentToggleRadio,
   gaCookieNames,
+  openGaDedicatedSession,
   readStoredConsent,
   type GaProbe,
 } from './fixtures';
@@ -59,9 +56,7 @@ test.describe('Cookie同意 / サーバー同期', () => {
 
   test.beforeAll(async ({ browser }, testInfo) => {
     testInfo.setTimeout(180000);
-    session = await openDedicatedSession(browser, USER, async (context) => {
-      probe = await attachGaProbe(context);
-    });
+    ({ session, probe } = await openGaDedicatedSession(browser, USER));
     page = session.page;
   });
 

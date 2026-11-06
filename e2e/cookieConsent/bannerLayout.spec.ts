@@ -52,13 +52,21 @@ test.describe('Cookie同意 / バナー表示中のレイアウト', () => {
     // ResizeObserver から渡す値と同じく切り上げる
     const expected = `${Math.ceil(geometry.contentBoxHeight)}px`;
 
+    // 失敗時に #966 の存在が分かるようにする。コメントまで遡らないと
+    // 「わざと現状を固定している」と気づけないため
+    const pendingFix =
+      '#966（--cookie-banner-height が境界線ぶん 1px 足りない）を直したら、' +
+      '期待値を境界ボックス基準へ変えること';
+
     // ResizeObserver 経由なので1フレーム遅れる
-    await expect.poll(() => readBannerHeightVar(page)).toBe(expected);
+    await expect
+      .poll(() => readBannerHeightVar(page), { message: pendingFix })
+      .toBe(expected);
 
     const paddingBottom = await page.evaluate(
       () => getComputedStyle(document.body).paddingBottom,
     );
-    expect(paddingBottom).toBe(expected);
+    expect(paddingBottom, pendingFix).toBe(expected);
 
     // フッターの下端がバナーの上端より上にある＝覆われていない。
     // 許容するのは上記の境界線ぶんだけ（直ったらここも 0 に絞れる）

@@ -96,12 +96,14 @@ test.describe('Cookie同意 / 同意と撤回', () => {
       .click();
 
     await expect(consentBanner(page)).toBeHidden();
-    expect(await gaCookieNames(context)).toEqual([]);
+    // 「無いこと」は待ってから確認する。即時に見ると、少し遅れて Cookie が
+    // 書かれる回帰を素通りする
+    await expect.poll(() => gaCookieNames(context)).toEqual([]);
 
     // 決定済みなので、再訪問してもバナーは出ない（操作を強制しない設計だが、
     // 一度断った利用者に出し続けるのもダークパターンになる）
     await page.goto('/');
     await expect(consentBanner(page)).toBeHidden();
-    expect(await gaCookieNames(context)).toEqual([]);
+    await expect.poll(() => gaCookieNames(context)).toEqual([]);
   });
 });

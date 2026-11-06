@@ -8,6 +8,7 @@
 import {
   test as base,
   expect,
+  type Browser,
   type BrowserContext,
   type Locator,
   type Page,
@@ -18,36 +19,71 @@ import { ARIA_LABELS } from '@/constants';
 import { STORAGE_KEYS } from '@/constants/common';
 import { COOKIE_CONSENT_VERSION } from '@/constants/user';
 
-import { E2E_GA_MEASUREMENT_ID } from '../../playwright.ga.config';
+import {
+  openDedicatedSession,
+  type DedicatedSession,
+} from '../fixtures/dedicatedSession';
+import type { DedicatedUser } from '../helpers/dedicatedUser';
+
+import { E2E_GA_MEASUREMENT_ID, GA_COOKIE_NAMES } from './constants';
+
+export { E2E_GA_MEASUREMENT_ID, GA_COOKIE_NAMES };
 
 /**
- * GA の収集ビーコン
+ * 遮断する GA の通信
  *
- * 実測では **2ホスト** へ飛ぶ（`www.google-analytics.com/g/collect` と
- * `www.google.com/g/collect`。後者はクエリに `gaf=1` が付く）。
- * ホストを列挙せずパスで絞ることで、どちらも1つのパターンで捕まえる。
+ * 実測で収集ビーコンは **2ホスト** へ飛ぶ（`www.google-analytics.com/g/collect`
+ * と `www.google.com/g/collect`。後者はクエリに `gaf=1` が付く）。ホストを
+ * 列挙せずパスで絞ることで、どちらも1つのパターンで捕まる。
  *
  * ⚠️ `googletagmanager.com` ごと遮断してはいけない。`_ga` Cookie を書くのは
  * gtag.js 本体なので、遮断すると Cookie の検証が原理的に成立しなくなる。
- * 止めるのは収集ビーコンだけにする。
+ * 逆に `google-analytics.com` は丸ごと止めてよい（Cookie の読み書きはすべて
+ * クライアント側の JS で完結するため、計測の送信先を塞いでも検証に影響しない）。
  */
-const COLLECT_BEACON_PATTERN = '**/g/collect*';
+const BLOCKED_PATTERNS = [
+  // 計測の送信先はホストごと塞ぐ（region1.* などのリージョン別ホストも含む）
+  '**google-analytics.com/**',
+  // google.com 側へ飛ぶぶんはパスで絞る
+  '**/g/collect*',
+  '**/j/collect*',
+  '**/ccm/collect*',
+] as const;
+
+/** GA の収集エンドポイントのパス */
+const COLLECT_PATHS = ['/g/collect', '/j/collect', '/ccm/collect'];
 
 /** gtag.js 本体のURL判定 */
 function isGtagScript(url: string): boolean {
   return url.includes('googletagmanager.com/gtag/js');
 }
 
-/** 収集ビーコンのURL判定（`page.route` のパターンと同じ条件を手で書いたもの） */
-function isCollectBeacon(url: string): boolean {
-  return new URL(url).pathname === '/g/collect';
+/**
+ * 計測の送信とみなす URL かどうか
+ *
+ * **遮断（glob）とは別経路で判定する。** 同じ定義を使うと「glob の書き方が
+ * ずれた」以外の取りこぼしに気づけない。ここではホスト（`google-analytics.com`
+ * とそのサブドメイン）と収集パスの**どちらか**に当たれば検知する。
+ *
+ * `new URL` は `request.url()` が常に絶対URLなので実際には throw しないが、
+ * これは EventEmitter のリスナから呼ばれる。例外が出るとテスト失敗ではなく
+ * **ワーカープロセスごと落ちる**ため、握りつぶす。
+ */
+function isAnalyticsBeacon(url: string): boolean {
+  try {
+    const { hostname, pathname } = new URL(url);
+    if (/(^|\.)google-analytics\.com$/.test(hostname)) return true;
+    return COLLECT_PATHS.includes(pathname);
+  } catch {
+    return false;
+  }
 }
 
 /** GA の挙動を観測するためのプローブ */
 export interface GaProbe {
-  /** 遮断した収集ビーコンのURL（ネットワークへは出ていない） */
+  /** 遮断した通信のURL（ネットワークへは出ていない） */
   readonly blockedBeacons: string[];
-  /** 遮断をすり抜けて**実際に完了した**収集ビーコンのURL。常に空であること */
+  /** 遮断をすり抜けて**実際に完了した**計測の送信。常に空であること */
   readonly escapedBeacons: string[];
   /** gtag.js 本体のレスポンス */
   readonly gtagScriptResponses: { url: string; status: number }[];
@@ -69,15 +105,18 @@ export async function attachGaProbe(context: BrowserContext): Promise<GaProbe> {
   const escapedBeacons: string[] = [];
   const gtagScriptResponses: { url: string; status: number }[] = [];
 
-  await context.route(COLLECT_BEACON_PATTERN, async (route) => {
-    blockedBeacons.push(route.request().url());
-    await route.abort();
-  });
+  for (const pattern of BLOCKED_PATTERNS) {
+    await context.route(pattern, async (route) => {
+      blockedBeacons.push(route.request().url());
+      await route.abort();
+    });
+  }
 
-  // route のパターンが取りこぼしたときに気づくための独立した検査。
+  // 遮断が取りこぼしたときに気づくための独立した検査。判定を glob ではなく
+  // URL の解析で行うことで、パターンの書き方に依存しない網を張る。
   // abort したリクエストは requestfailed になるため、ここには現れない
   context.on('requestfinished', (request: Request) => {
-    if (isCollectBeacon(request.url())) escapedBeacons.push(request.url());
+    if (isAnalyticsBeacon(request.url())) escapedBeacons.push(request.url());
   });
 
   context.on('response', (response) => {
@@ -121,16 +160,41 @@ export const test = base.extend<{ ga: GaProbe }>({
 
 export { expect };
 
+/** プローブ付きの専用ユーザーセッション */
+export interface GaDedicatedSession {
+  session: DedicatedSession;
+  probe: GaProbe;
+}
+
 /**
- * GA が置く Cookie の名前
+ * 専用ユーザーのセッションを、プローブを仕掛けた状態で開く
  *
- * `_ga_<コンテナID>` のコンテナIDは測定IDから `G-` を除いた部分
- * （`G-TEST1234567` → `_ga_TEST1234567`）。
+ * 認証が要る spec は `openDedicatedSession` を直接呼ばずこちらを使うこと。
+ * 素で呼ぶと `attachGaProbe` を忘れたときに**遮断も検知も効かない**まま
+ * 通ってしまう（`ga` auto fixture は既定のコンテキストにしか効かない）。
+ *
+ * 遮断はログインの**前**に張る。ログイン画面でも gtag.js は動くため、
+ * ログイン後に張ると最初のページビューを取りこぼす。
+ *
+ * @param browser - `beforeAll` が受け取る browser
+ * @param user - 作成する専用ユーザー。メールは `runScopedEmail()` で作る
  */
-export const GA_COOKIE_NAMES = [
-  '_ga',
-  `_ga_${E2E_GA_MEASUREMENT_ID.slice('G-'.length)}`,
-].sort();
+export async function openGaDedicatedSession(
+  browser: Browser,
+  user: DedicatedUser,
+): Promise<GaDedicatedSession> {
+  let probe: GaProbe | null = null;
+
+  const session = await openDedicatedSession(browser, user, async (context) => {
+    probe = await attachGaProbe(context);
+  });
+
+  if (probe === null) {
+    throw new Error('attachGaProbe が呼ばれませんでした');
+  }
+
+  return { session, probe };
+}
 
 /** 端末に保存された同意レコード（localStorage の生値） */
 export interface StoredConsent {

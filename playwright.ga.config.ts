@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 import path from 'path';
 
+import { E2E_GA_MEASUREMENT_ID } from './e2e/cookieConsent/constants';
 import { RUN_CLIENT_IP } from './e2e/helpers/runScope';
 
 /**
@@ -33,23 +34,34 @@ const isCI = !!process.env.CI;
  * ジョブがジョブ固有の値を渡している。
  */
 
-/** 既存 E2E（3000番）と同時に起動できるよう別ポートにする */
+/**
+ * 既存 E2E（3000番）とポートを分ける
+ *
+ * ⚠️ ポートを分けても、**同一チェックアウトから `next dev` を2つ同時に起動しては
+ * いけない。** どちらも同じ `.next` へ書き、Next.js は distDir の中身を随時
+ * 削除する（`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/distDir.md:20`）。
+ * CI は別ランナーなので無関係。ローカルで両方回すときは順番に流すこと。
+ */
 const PORT = 3001;
 
 const BASE_URL = `http://localhost:${PORT}`;
 
 /**
- * E2E 専用のダミー測定ID
+ * run スコープが通常の E2E と衝突していないことを保証する
  *
- * 実在の GA4 プロパティを指さない。`src/utils/analytics.ts` の
- * `MEASUREMENT_ID_PATTERN`（`/^G-[A-Z0-9]{6,20}$/`）を満たす必要がある。
- *
- * gtag.js は**未登録のIDでも 200 を返して動作し**、`_ga` と
- * `_ga_<`G-` を除いた部分>` を書く。そのため Cookie の検証はダミーIDで成立する。
- * 収集ビーコン（`/g/collect`）は `e2e/cookieConsent/fixtures.ts` が遮断するので、
- * このIDのヒットが実際に Google へ飛ぶことはない。
+ * `e2e/helpers/runScope.ts` は import 時に `E2E_RUN_ID` を読んで確定させるため、
+ * ここで既定値を**入れることはできない**（この config より先に評価される）。
+ * 未設定のまま走ると `local` になり、通常のローカル E2E と run 固有の識別子
+ * （メールアドレス・送信元IP・`movie_cache` のID領域）が完全に一致して、
+ * 片方の teardown がもう片方のユーザーを消す。黙って壊れるより落とす。
  */
-export const E2E_GA_MEASUREMENT_ID = 'G-TEST1234567';
+if (!process.env.E2E_RUN_ID) {
+  throw new Error(
+    'playwright.ga.config.ts は E2E_RUN_ID が必要です。' +
+      '`npm run test:e2e:ga`（既定値 `ga` を渡す）経由で実行するか、' +
+      '`E2E_RUN_ID=<通常のE2Eと異なる値>` を環境変数で渡してください。',
+  );
+}
 
 /**
  * @see https://playwright.dev/docs/test-configuration

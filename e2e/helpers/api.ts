@@ -828,20 +828,34 @@ export async function seedUserConsent(
   // `on_conflict` を明示する。user_settings の主キーは id（UUID）で、
   // user_id は UNIQUE 制約側にあるため、省略すると主キーで衝突判定されて
   // 既存行を更新できず重複挿入になる
-  await fetch(`${SUPABASE_URL}/rest/v1/user_settings?on_conflict=user_id`, {
-    method: 'POST',
-    headers: {
-      ...supabaseHeaders,
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates',
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_settings?on_conflict=user_id`,
+    {
+      method: 'POST',
+      headers: {
+        ...supabaseHeaders,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        cookie_consent: record.state,
+        cookie_consent_at: record.at,
+        cookie_consent_version: record.version,
+      }),
     },
-    body: JSON.stringify({
-      user_id: userId,
-      cookie_consent: record.state,
-      cookie_consent_at: record.at,
-      cookie_consent_version: record.version,
-    }),
-  });
+  );
+
+  // 握りつぶさない。`fetch` は 4xx でも reject しないため、CHECK 制約違反
+  // （`cookie_consent <> 'unset' OR cookie_consent_at IS NULL`）や衝突解決の
+  // 失敗が黙って通る。これは**テストの前提条件を作る処理**なので、失敗すると
+  // 後続が「マージ規則が壊れた」ように見えて原因に辿り着けない
+  // （`dedicatedUser.ts` の `deleteOrThrow` と同じ理由）
+  if (!response.ok) {
+    throw new Error(
+      `${userId} の同意レコードのseedに失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
 }
 
 /**
@@ -858,11 +872,25 @@ export async function getUserConsent(
     { headers: supabaseHeaders },
   );
 
+  if (!response.ok) {
+    throw new Error(
+      `${userId} の同意レコードの取得に失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+
   const rows = (await response.json()) as {
     cookie_consent: string;
     cookie_consent_at: string | null;
     cookie_consent_version: number | null;
   }[];
+
+  // PostgREST はエラー時に配列ではなくオブジェクトを返す。そのまま [0] を
+  // 読むと undefined → null になり、「行が無い」と見分けがつかなくなる
+  if (!Array.isArray(rows)) {
+    throw new Error(
+      `${userId} の同意レコードの取得が配列を返さなかった: ${JSON.stringify(rows)}`,
+    );
+  }
 
   const row = rows[0];
   if (!row) return null;

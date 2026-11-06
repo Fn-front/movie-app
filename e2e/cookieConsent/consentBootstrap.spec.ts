@@ -12,6 +12,7 @@
 
 import {
   CURRENT_CONSENT_VERSION,
+  E2E_GA_MEASUREMENT_ID,
   GA_COOKIE_NAMES,
   consentBanner,
   expect,
@@ -46,8 +47,19 @@ test.describe('Cookie同意 / <head> のブートストラップ', () => {
       .poll(() => ga.gtagScriptResponses.map((response) => response.status))
       .toContain(200);
 
-    // denied で始まっている以上、Cookie は1つも置かれない
-    expect(await gaCookieNames(context)).toEqual([]);
+    // ビルドへ埋まった測定IDが、こちらの期待する値と一致していること。
+    // CI では `.github/workflows/e2e.yml` の build step が渡しており、
+    // ずれると `_ga_<別名>` が来て Cookie 系の spec が遠回りな落ち方をする
+    expect(
+      ga.gtagScriptResponses.some((response) =>
+        response.url.includes(E2E_GA_MEASUREMENT_ID),
+      ),
+      `読み込まれた gtag.js が ${E2E_GA_MEASUREMENT_ID} ではない（ビルド時の NEXT_PUBLIC_GA_ID を確認すること）`,
+    ).toBe(true);
+
+    // denied で始まっている以上、Cookie は1つも置かれない。
+    // 「少し遅れて書かれる」回帰を素通ししないよう、待ってから確認する
+    await expect.poll(() => gaCookieNames(context)).toEqual([]);
   });
 
   test('同意済みの再訪問は denied を経ずに granted で始まる', async ({
@@ -92,6 +104,6 @@ test.describe('Cookie同意 / <head> のブートストラップ', () => {
     expect(commands[0]?.params.analytics_storage).toBe('denied');
 
     await expect(consentBanner(page)).toBeVisible();
-    expect(await gaCookieNames(context)).toEqual([]);
+    await expect.poll(() => gaCookieNames(context)).toEqual([]);
   });
 });

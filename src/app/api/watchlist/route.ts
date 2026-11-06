@@ -264,7 +264,9 @@ export const POST = withAuth(
     //
     // after() ではなくレスポンス前に待つ。クライアントは追加直後に
     // 一覧を取り直すため、後回しにすると結局その場では反映されない。
-    // 行がある作品では TMDb を引かないので、追加のたびに遅くなるわけではない。
+    // TMDb を引くのは「行が無い」か「行が古い（7日超）」ときだけ。
+    // ただしスキップ率は作品の重複度に依存するので、常に速いとは限らない
+    // （#960）。最悪ケースは TMDB_REQUEST_TIMEOUT_MS × リトライ回数ぶん待つ。
     //
     // 失敗しても追加自体は成功させる（内部でログを出して握る）
     await initMovieStreamingStatus(supabase, parsed.data.tmdb_movie_id);

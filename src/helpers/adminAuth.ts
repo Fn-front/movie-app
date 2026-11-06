@@ -13,11 +13,18 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
 import { handleRouteError } from '@/helpers/routeError';
+import { rateLimitExceededResponse } from '@/helpers/apiHelpers';
 import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { HTTP_STATUS, ERROR_CODE } from '@/constants';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
+} from '@/constants';
 import { AUTH_ERROR_MESSAGES, USER_ROLE } from '@/constants/auth';
 
 /** admin 専用ルートハンドラーに渡されるコンテキスト */
@@ -79,6 +86,26 @@ export function withAdminAuth(
 
       const supabase = createServiceRoleClient();
       if (!supabase) return dbConnectionErrorResponse();
+
+      // ロール確認より前に消費する（#965）。
+      //
+      // ロールは毎回DBから読む必要がある（下記）が、その SELECT が
+      // 無制限だと、ログイン済みの非 admin が admin ルートを連打するだけで
+      // `users` を好きなだけ読ませられる。識別子はセッションなのでここで
+      // 確定しており、`.claude/rules/api-route.md` の原則どおり前に置ける。
+      //
+      // 各ルート固有の制限（ADMIN_ACCOUNT_ISSUE 等）は handler 内に残す。
+      const limitResult = await checkRateLimit(
+        supabase,
+        session.user.id,
+        RATE_LIMIT_ACTION.ADMIN_ROLE_CHECK,
+        RATE_LIMIT_CONFIG.ADMIN_ROLE_CHECK.maxAttempts,
+        RATE_LIMIT_CONFIG.ADMIN_ROLE_CHECK.windowMinutes,
+      );
+
+      if (!limitResult.allowed) {
+        return rateLimitExceededResponse(limitResult);
+      }
 
       const { data: actor } = await supabase
         .from('users')

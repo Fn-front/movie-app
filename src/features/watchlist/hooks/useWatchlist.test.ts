@@ -6,6 +6,8 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, createElement } from 'react';
 
+import { ANALYTICS_EVENTS } from '@/constants/analytics';
+
 import { useWatchlist } from './useWatchlist';
 
 // --- Mocks ---
@@ -438,6 +440,112 @@ describe('useWatchlist', () => {
       await waitFor(() => {
         expect(result.current.isUpdatingWatched).toBe(true);
       });
+    });
+  });
+
+  /**
+   * 一覧ページとサイドバーの削除はこの経路を通る。useWatchlistToggle
+   * （詳細モーダル）だけに計測を置くと、追加は全経路・削除は詳細モーダル
+   * のみとなり、追加/削除比が構造的に歪む（#938）
+   */
+  describe('GA4 計測', () => {
+    const gtag = jest.fn();
+
+    beforeEach(() => {
+      window.gtag = gtag;
+      mockRemoveWatchlist.mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+      delete window.gtag;
+    });
+
+    it('削除で watchlist_remove を作品IDに引き直して送る', async () => {
+      // 引数は watchlist の行ID（wl-1）だが、送るのは作品ID（100）
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.removeFromWatchlist('wl-1');
+      });
+
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.WATCHLIST_REMOVE,
+        { movie_id: 100 },
+      );
+    });
+
+    it('作品タイトルを送らない', async () => {
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.removeFromWatchlist('wl-1');
+      });
+
+      expect(JSON.stringify(gtag.mock.calls)).not.toContain('映画A');
+    });
+
+    it('一覧に無いIDでは送らない（作品IDを引けないため）', async () => {
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.removeFromWatchlist('wl-unknown');
+      });
+
+      expect(gtag).not.toHaveBeenCalled();
+      // 削除そのものは実行する（計測の都合で操作を止めない）
+      await waitFor(() => {
+        expect(mockRemoveWatchlist).toHaveBeenCalled();
+      });
+      expect(mockRemoveWatchlist.mock.calls[0][0]).toBe('wl-unknown');
+    });
+
+    it('削除に失敗しても watchlist_remove は送られたまま（試行数を数える）', async () => {
+      // 操作時点で送る設計の帰結。「削除された数」ではなく
+      // 「削除を試みた数」になることを明示して固定する（#938）
+      mockRemoveWatchlist.mockRejectedValue(new Error('Not Found'));
+
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.removeFromWatchlist('wl-1');
+      });
+
+      // ロールバックまで進めてからでも消えない
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({ variant: 'error' }),
+        );
+      });
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.WATCHLIST_REMOVE,
+        { movie_id: 100 },
+      );
     });
   });
 });

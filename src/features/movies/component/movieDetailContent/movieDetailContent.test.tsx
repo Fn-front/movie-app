@@ -5,6 +5,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { ANALYTICS_EVENTS } from '@/constants/analytics';
+
 import { MovieDetailContent } from './movieDetailContent';
 
 // --- Mocks ---
@@ -47,8 +49,25 @@ jest.mock(
 );
 
 jest.mock('@/features/movies/component/videoDialog/videoDialog', () => ({
-  VideoDialog: ({ open, movieTitle }: { open: boolean; movieTitle: string }) =>
-    open ? <div data-testid='video-dialog'>{movieTitle}の予告動画</div> : null,
+  // 閉じる操作も再現する。開閉のコールバックは共通（onOpenChange）なので、
+  // 閉じたときに計測が走らないことを確かめるには閉じられる必要がある
+  VideoDialog: ({
+    open,
+    movieTitle,
+    onOpenChange,
+  }: {
+    open: boolean;
+    movieTitle: string;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    open ? (
+      <div data-testid='video-dialog'>
+        {movieTitle}の予告動画
+        <button type='button' onClick={() => onOpenChange(false)}>
+          予告動画を閉じる
+        </button>
+      </div>
+    ) : null,
 }));
 
 jest.mock('next/image', () => ({
@@ -828,6 +847,84 @@ describe('MovieDetailContent', () => {
       fireEvent.click(screen.getByRole('button', { name: '予告動画を再生' }));
 
       expect(screen.getByTestId('video-dialog')).toBeInTheDocument();
+    });
+
+    /**
+     * 計測できるのは「開いた」まで。予告編は YouTube IFrame API を使わない
+     * 素の iframe 埋め込みなので、実際に再生したかは検知できない（#938）
+     */
+    describe('GA4 計測', () => {
+      const gtag = jest.fn();
+
+      beforeEach(() => {
+        window.gtag = gtag;
+      });
+
+      afterEach(() => {
+        delete window.gtag;
+      });
+
+      it('ダイアログを開くと trailer_open を作品IDだけ付けて送る', async () => {
+        const user = userEvent.setup();
+        setupMovie({ ...youtubeVideos, backdrop_path: '/backdrop.jpg' });
+
+        render(<MovieDetailContent movieId={123} />);
+        await user.click(
+          screen.getByRole('button', { name: '予告動画を再生' }),
+        );
+
+        expect(gtag).toHaveBeenCalledWith(
+          'event',
+          ANALYTICS_EVENTS.TRAILER_OPEN,
+          { movie_id: 123 },
+        );
+      });
+
+      it('開く前は送らない', () => {
+        setupMovie({ ...youtubeVideos, backdrop_path: '/backdrop.jpg' });
+
+        render(<MovieDetailContent movieId={123} />);
+
+        expect(gtag).not.toHaveBeenCalled();
+      });
+
+      it('閉じるときは送らない', async () => {
+        // handleVideoDialogOpenChange は閉じるときにも呼ばれる。
+        // そちらに計測を置くと開閉で2件計上される
+        const user = userEvent.setup();
+        setupMovie({ ...youtubeVideos, backdrop_path: '/backdrop.jpg' });
+
+        render(<MovieDetailContent movieId={123} />);
+        await user.click(
+          screen.getByRole('button', { name: '予告動画を再生' }),
+        );
+        await user.click(
+          screen.getByRole('button', { name: '予告動画を閉じる' }),
+        );
+
+        expect(screen.queryByTestId('video-dialog')).not.toBeInTheDocument();
+        expect(
+          gtag.mock.calls.filter(
+            (args) => args[1] === ANALYTICS_EVENTS.TRAILER_OPEN,
+          ),
+        ).toHaveLength(1);
+      });
+
+      it('作品タイトルを送らない', async () => {
+        const user = userEvent.setup();
+        setupMovie({
+          ...youtubeVideos,
+          backdrop_path: '/backdrop.jpg',
+          title: 'ダークナイト',
+        });
+
+        render(<MovieDetailContent movieId={123} />);
+        await user.click(
+          screen.getByRole('button', { name: '予告動画を再生' }),
+        );
+
+        expect(JSON.stringify(gtag.mock.calls)).not.toContain('ダークナイト');
+      });
     });
   });
 

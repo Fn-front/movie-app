@@ -4,6 +4,7 @@
 
 import { renderHook, act } from '@testing-library/react';
 
+import { ANALYTICS_EVENTS } from '@/constants/analytics';
 import { WATCHLIST_SUCCESS_MESSAGES } from '@/constants/watchlist';
 
 import { useWatchlistToggle } from './useWatchlistToggle';
@@ -186,5 +187,103 @@ describe('useWatchlistToggle', () => {
       'ウォッチリストに追加するにはログインが必要です。',
     );
     expect(mockAddWatchlist).not.toHaveBeenCalled();
+  });
+
+  /**
+   * sendEvent はモックせず window.gtag を差し替える。
+   * 実際に gtag へ渡る引数まで見ないと「余計な値を送っていないこと」を
+   * 保証できないため（#938）
+   */
+  describe('GA4 計測', () => {
+    const gtag = jest.fn();
+
+    beforeEach(() => {
+      window.gtag = gtag;
+    });
+
+    afterEach(() => {
+      delete window.gtag;
+    });
+
+    it('追加で watchlist_add を作品IDだけ付けて送る', () => {
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      act(() => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.WATCHLIST_ADD,
+        {
+          movie_id: 42,
+        },
+      );
+    });
+
+    it('削除で watchlist_remove を作品IDだけ付けて送る', () => {
+      setupCacheWithItem(42, 'watchlist-id-123');
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      act(() => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.WATCHLIST_REMOVE,
+        { movie_id: 42 },
+      );
+    });
+
+    it('作品タイトルを送らない', () => {
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      act(() => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(JSON.stringify(gtag.mock.calls)).not.toContain('テスト映画');
+    });
+
+    it('未認証なら送らない（操作自体が成立しないため）', () => {
+      mockUseSession.mockReturnValue({ data: null, status: 'unauthenticated' });
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      act(() => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(gtag).not.toHaveBeenCalled();
+    });
+
+    it('gtag が無くても操作は成立する', () => {
+      delete window.gtag;
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      expect(() => {
+        act(() => {
+          result.current.toggleWatchlist(createMovie());
+        });
+      }).not.toThrow();
+      expect(mockAddWatchlist).toHaveBeenCalled();
+    });
+
+    it('mutation の完了を待たずに送る（試行数を数える）', () => {
+      // 操作時点で送る設計の帰結。「追加された数」ではなく「追加を試みた数」
+      // になる。通信が解決する前に送られていることで固定する（#938）。
+      // 失敗時も送られたままになる側は useWatchlist.test.ts で検証している
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      act(() => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.WATCHLIST_ADD,
+        { movie_id: 42 },
+      );
+    });
   });
 });

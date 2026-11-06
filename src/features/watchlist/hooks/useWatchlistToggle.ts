@@ -12,8 +12,9 @@ import {
   WATCHLIST_ERROR_MESSAGES,
   WATCHLIST_SUCCESS_MESSAGES,
 } from '@/constants/watchlist';
-import { watchlistKeys } from '@/constants';
+import { ANALYTICS_EVENTS, watchlistKeys } from '@/constants';
 import { addWatchlist, removeWatchlist } from '@/lib/api/watchlist/watchlist';
+import { sendEvent } from '@/utils/analytics';
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
 import type {
   WatchlistItem,
@@ -301,6 +302,10 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
 
       togglingIdRef.current = movie.id;
 
+      // GA4 への送信は操作時点で行う（mutation の成否は待たない）。楽観的な
+      // トーストと同じ位置に揃えるため。通信失敗分も計上される代わりに、
+      // 成功時送信で必要になる togglingIdRef 経由のID解決を避けられる
+      // （連続操作で ref が上書きされ、別作品のIDで送る事故が起きうる）
       if (isInWatchlist(movie.id)) {
         const watchlistId = getWatchlistId(movie.id);
         if (watchlistId) {
@@ -312,6 +317,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
             return next;
           });
           removeMutation.mutate(watchlistId);
+          sendEvent(ANALYTICS_EVENTS.WATCHLIST_REMOVE, { movie_id: movie.id });
           toast({
             title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
             variant: 'success',
@@ -331,6 +337,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
           poster_path: movie.poster_path,
           release_date: movie.release_date,
         });
+        sendEvent(ANALYTICS_EVENTS.WATCHLIST_ADD, { movie_id: movie.id });
         toast({
           title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
           variant: 'success',

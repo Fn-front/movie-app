@@ -6,9 +6,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 
+import { ANALYTICS_EVENTS } from '@/constants';
 import { useFavoriteMutations } from '@/features/favorites/hooks/useFavoriteMutations';
 import { useFavoriteLookup } from '@/features/favorites/hooks/useFavoriteLookup';
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
+import { sendEvent } from '@/utils/analytics';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
 /**
@@ -117,47 +119,46 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
     setModalState(INITIAL_MODAL_STATE);
   }, []);
 
+  // 対象作品は冒頭で一度だけ解決する。分岐ごとに modalState.movie を
+  // 見に行くと、登録は早期returnなのに更新・削除は計測だけ黙って落ちる、
+  // という非対称な書き方になる（しかも両方とも到達不能な分岐が増える）
+  const { movie, currentFavorite } = modalState;
+
   const handleModalSubmit = useCallback(
     (rating: number) => {
-      if (modalState.movie) {
-        processingIdRef.current = modalState.movie.id;
-      }
-      if (modalState.currentFavorite) {
-        updateRating(modalState.currentFavorite.id, rating);
+      if (!movie) return;
+
+      processingIdRef.current = movie.id;
+
+      // GA4 へは作品IDだけを送る。rating（★の数）は送らない。
+      // Consent Mode advanced では未同意の利用者の分も Google へ届くため、
+      // 作品に対する評価という嗜好情報を渡さない（#938）
+      if (currentFavorite) {
+        updateRating(currentFavorite.id, rating);
+        sendEvent(ANALYTICS_EVENTS.FAVORITE_UPDATE, { movie_id: movie.id });
       } else {
-        if (!modalState.movie) return;
         addToFavorites({
-          tmdb_movie_id: modalState.movie.id,
-          title: modalState.movie.title,
-          poster_path: modalState.movie.poster_path,
-          release_date: modalState.movie.release_date,
+          tmdb_movie_id: movie.id,
+          title: movie.title,
+          poster_path: movie.poster_path,
+          release_date: movie.release_date,
           rating,
         });
+        sendEvent(ANALYTICS_EVENTS.FAVORITE_ADD, { movie_id: movie.id });
       }
       closeModal();
     },
-    [
-      modalState.movie,
-      modalState.currentFavorite,
-      addToFavorites,
-      updateRating,
-      closeModal,
-    ],
+    [movie, currentFavorite, addToFavorites, updateRating, closeModal],
   );
 
   const handleDelete = useCallback(() => {
-    if (!modalState.currentFavorite) return;
-    if (modalState.movie) {
-      processingIdRef.current = modalState.movie.id;
-    }
-    removeFromFavorites(modalState.currentFavorite.id);
+    if (!currentFavorite || !movie) return;
+
+    processingIdRef.current = movie.id;
+    removeFromFavorites(currentFavorite.id);
+    sendEvent(ANALYTICS_EVENTS.FAVORITE_REMOVE, { movie_id: movie.id });
     closeModal();
-  }, [
-    modalState.currentFavorite,
-    modalState.movie,
-    removeFromFavorites,
-    closeModal,
-  ]);
+  }, [currentFavorite, movie, removeFromFavorites, closeModal]);
 
   const isFavoriteProcessing = useCallback(
     (tmdbMovieId: number) =>

@@ -317,6 +317,55 @@ export async function readConsentCommands(
   });
 }
 
+/** dataLayer へ積まれた `event` コマンド */
+export interface EventCommand {
+  /** イベント名（`page_view` / `search` など） */
+  name: string;
+  /** パラメータ（値はすべて文字列へ正規化する） */
+  params: Record<string, string>;
+}
+
+/**
+ * dataLayer から `event` コマンドだけを取り出す
+ *
+ * `readConsentCommands` と同じ理由でブラウザ側で文字列へ落としてから返す。
+ * gtag.js が内部で積む要素には循環参照を含むものがあるため。
+ */
+export async function readEventCommands(page: Page): Promise<EventCommand[]> {
+  return page.evaluate(() => {
+    const layer =
+      (window as unknown as { dataLayer?: ArrayLike<unknown>[] }).dataLayer ??
+      [];
+
+    const commands: { name: string; params: Record<string, string> }[] = [];
+
+    for (const raw of Array.from(layer)) {
+      let entry: unknown[];
+      try {
+        entry = Array.from(raw as ArrayLike<unknown>);
+      } catch {
+        continue;
+      }
+
+      if (entry[0] !== 'event') continue;
+
+      const params: Record<string, string> = {};
+      const source = entry[2];
+      if (source !== null && typeof source === 'object') {
+        for (const [key, value] of Object.entries(
+          source as Record<string, unknown>,
+        )) {
+          params[key] = String(value);
+        }
+      }
+
+      commands.push({ name: String(entry[1]), params });
+    }
+
+    return commands;
+  });
+}
+
 /** GA が置いた Cookie の名前を昇順で返す */
 export async function gaCookieNames(
   context: BrowserContext,

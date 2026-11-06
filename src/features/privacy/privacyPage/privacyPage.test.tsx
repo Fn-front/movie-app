@@ -84,6 +84,63 @@ describe('PrivacyPage', () => {
       expect(row?.textContent).toContain('再生状況');
     });
 
+    it('Google の送信情報に、計測しているカスタムイベントが入っている', () => {
+      // #938 で操作の計測を足した。表に書かないと外部送信規律の
+      // 「送信される情報の内容」が実装より狭くなる
+      render(<PrivacyPage />);
+
+      const row = screen.getByRole('rowheader', {
+        name: /^Google（Google アナリティクス）/,
+      }).parentElement;
+
+      expect(row?.textContent).toContain('ウォッチリスト');
+      expect(row?.textContent).toContain('お気に入り');
+      expect(row?.textContent).toContain('検索の実行');
+      expect(row?.textContent).toContain('予告編を表示した作品のID');
+      expect(row?.textContent).toContain('対象作品のID');
+    });
+
+    it('Google へ検索キーワードや作品名を送らないことを書く', () => {
+      // 「検索の実行」とだけ書くと、読み手はキーワードも送られると受け取る
+      render(<PrivacyPage />);
+
+      const row = screen.getByRole('rowheader', {
+        name: /^Google（Google アナリティクス）/,
+      }).parentElement;
+
+      expect(row?.textContent).toContain(
+        '検索キーワードや作品名は送信しません',
+      );
+    });
+
+    it('Google へ送るURLがクエリ文字列を除くことを書く', () => {
+      // 「検索キーワードを送らない」はクエリ文字列を落とすことで成立している。
+      // URL を限定せずにキーワード不送信だけ書くと、同じセル内で矛盾する
+      render(<PrivacyPage />);
+
+      const row = screen.getByRole('rowheader', {
+        name: /^Google（Google アナリティクス）/,
+      }).parentElement;
+
+      expect(row?.textContent).toContain(
+        '閲覧したページのURL（クエリ文字列を除く）',
+      );
+    });
+
+    it('Google へ送る検索の内訳が実装と一致する', () => {
+      // search イベントは作品IDを送らない。「対象作品のIDまで」とだけ書くと
+      // 実際に送っている件数・ページ番号・絞り込み種別が未開示になる
+      render(<PrivacyPage />);
+
+      const row = screen.getByRole('rowheader', {
+        name: /^Google（Google アナリティクス）/,
+      }).parentElement;
+
+      expect(row?.textContent).toContain(
+        '検索の実行とその絞り込み種別・結果件数・ページ番号',
+      );
+    });
+
     it('埋め込み先のホスト名が実装と一致する', () => {
       render(<PrivacyPage />);
 
@@ -136,8 +193,12 @@ describe('PrivacyPage', () => {
     it('同意の有無によらずタグが読み込まれることを書く', () => {
       render(<PrivacyPage />);
 
+      // 「同意の有無にかかわらず」はカスタムイベントの記述にも出るため、
+      // 文として指定する（#938）
       expect(
-        within(section()).getByText(/同意の有無にかかわらず/),
+        within(section()).getByText(
+          /同意の有無にかかわらず、アクセス解析のタグ自体は読み込まれます/,
+        ),
       ).toBeInTheDocument();
     });
 
@@ -155,6 +216,49 @@ describe('PrivacyPage', () => {
 
       expect(
         within(section()).getByText(/同意いただいた場合に限り識別用Cookie/),
+      ).toBeInTheDocument();
+    });
+
+    it('操作の計測も同意の有無によらず送られることを書く', () => {
+      // Consent Mode advanced では未同意でもカスタムイベントが送られる。
+      // 「同意した場合だけ計測する」と読める書き方をしてはいけない（#938）
+      render(<PrivacyPage />);
+
+      expect(
+        within(section()).getByText(
+          /操作も送信します。これらも同意の有無にかかわらず送信されます/,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('操作の計測で何を送るかを書く', () => {
+      render(<PrivacyPage />);
+
+      expect(
+        within(section()).getByText(
+          /対象作品のID（ウォッチリスト・お気に入り・予告編）と、検索の絞り込み種別・結果件数・ページ番号/,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('操作の計測で作品ID以外を送らないことを書く', () => {
+      render(<PrivacyPage />);
+
+      expect(
+        within(section()).getByText(
+          /検索キーワード・作品名・評価の点数・お客様のアカウント情報は含みません/,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('URLはクエリ文字列を除いて送ることを書く', () => {
+      // §3 の表と §7 で記述が食い違わないようにする
+      render(<PrivacyPage />);
+
+      expect(
+        within(section()).getByText(
+          /URLもクエリ文字列を除いた部分のみを送信します/,
+        ),
       ).toBeInTheDocument();
     });
 

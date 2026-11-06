@@ -40,7 +40,7 @@ jest.mock('@tanstack/react-query', () => {
 
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
-import { TITLE_SUGGESTION } from '@/constants';
+import { ANALYTICS_EVENTS, TITLE_SUGGESTION } from '@/constants';
 import { useTitleSuggestion } from './useTitleSuggestion';
 
 const mockUseSearchParams = useSearchParams as jest.MockedFunction<
@@ -507,6 +507,155 @@ describe('useSearch', () => {
       expect(result.current.movies).toHaveLength(1);
       expect(result.current.suggestions).toEqual([]);
       getItemSpy.mockRestore();
+    });
+  });
+
+  /**
+   * sendEvent はモックせず window.gtag を差し替える。
+   * 実際に gtag へ渡る引数まで見ないと「検索キーワードを送っていないこと」を
+   * 保証できないため（#938）
+   */
+  describe('GA4 計測', () => {
+    const gtag = jest.fn();
+
+    /** 検索イベントの引数（最後の search 呼び出し） */
+    function lastSearchEvent(): Record<string, unknown> | undefined {
+      const call = gtag.mock.calls
+        .filter((args) => args[1] === ANALYTICS_EVENTS.SEARCH)
+        .at(-1);
+      return call?.[2];
+    }
+
+    beforeEach(() => {
+      window.gtag = gtag;
+    });
+
+    afterEach(() => {
+      delete window.gtag;
+    });
+
+    it('結果が確定したら search を送る', () => {
+      setupMocks({ query: 'バットマン' }, { data: hitResult, isSuccess: true });
+
+      renderHook(() => useSearch());
+
+      expect(lastSearchEvent()).toEqual({
+        has_query: true,
+        filter_types: 'none',
+        results_count: 1,
+        result_page: 1,
+      });
+    });
+
+    it('検索キーワード本文を送らない', () => {
+      setupMocks({ query: 'バットマン' }, { data: hitResult, isSuccess: true });
+
+      renderHook(() => useSearch());
+
+      expect(JSON.stringify(gtag.mock.calls)).not.toContain('バットマン');
+    });
+
+    it('絞り込み種別を固定順のカンマ区切りで送る', () => {
+      // 並び順は buildSearchFilterTypes が固定する。呼び出しごとに
+      // 変わると同じ組み合わせが別の値として集計される
+      setupMocks(
+        { year: '2020', genre: '28', vote_average_gte: '7' },
+        { data: hitResult, isSuccess: true },
+      );
+
+      renderHook(() => useSearch());
+
+      expect(lastSearchEvent()).toEqual({
+        has_query: false,
+        filter_types: 'genre,vote_average_gte,year',
+        results_count: 1,
+        result_page: 1,
+      });
+    });
+
+    it('0件でも送る（空振りの検索を把握するため）', () => {
+      setupMocks({ query: 'ないない' }, { data: emptyResult, isSuccess: true });
+
+      renderHook(() => useSearch());
+
+      expect(lastSearchEvent()).toMatchObject({ results_count: 0 });
+    });
+
+    it('ページ送りは result_page を変えて送る', () => {
+      setupMocks(
+        { query: 'バットマン', page: '3' },
+        { data: hitResult, isSuccess: true },
+      );
+
+      renderHook(() => useSearch());
+
+      expect(lastSearchEvent()).toMatchObject({ result_page: 3 });
+    });
+
+    it('不正な page クエリでも NaN を送らない', () => {
+      // URLは利用者が編集できる。Number('abc') は NaN で、`?? 1` は
+      // nullish でない NaN を救えない
+      setupMocks(
+        { query: 'バットマン', page: 'abc' },
+        { data: hitResult, isSuccess: true },
+      );
+
+      renderHook(() => useSearch());
+
+      expect(lastSearchEvent()).toMatchObject({ result_page: 1 });
+    });
+
+    it('同一条件の再レンダリングでは二重に送らない', () => {
+      setupMocks({ query: 'バットマン' }, { data: hitResult, isSuccess: true });
+
+      const { rerender } = renderHook(() => useSearch());
+      rerender();
+      rerender();
+
+      expect(
+        gtag.mock.calls.filter((args) => args[1] === ANALYTICS_EVENTS.SEARCH),
+      ).toHaveLength(1);
+    });
+
+    it('検索条件が無ければ送らない', () => {
+      setupMocks({}, { isSuccess: true });
+
+      renderHook(() => useSearch());
+
+      expect(lastSearchEvent()).toBeUndefined();
+    });
+
+    it('前クエリの結果を表示している間は送らない', () => {
+      // keepPreviousData 中に送ると、まだ確定していない条件の件数を
+      // 前クエリの結果で報告してしまう
+      setupMocks(
+        { query: 'バットマン' },
+        { data: hitResult, isSuccess: true, isPlaceholderData: true },
+      );
+
+      renderHook(() => useSearch());
+
+      expect(lastSearchEvent()).toBeUndefined();
+    });
+
+    it('失敗した検索は送らない', () => {
+      setupMocks(
+        { query: 'バットマン' },
+        { data: undefined, isSuccess: false, isError: true },
+      );
+
+      renderHook(() => useSearch());
+
+      expect(lastSearchEvent()).toBeUndefined();
+    });
+
+    it('gtag が無くても検索は成立する', () => {
+      delete window.gtag;
+      setupMocks({ query: 'バットマン' }, { data: hitResult, isSuccess: true });
+
+      const { result } = renderHook(() => useSearch());
+
+      expect(result.current.movies).toHaveLength(1);
     });
   });
 });

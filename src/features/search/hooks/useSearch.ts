@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
@@ -13,7 +13,14 @@ import { useSession } from 'next-auth/react';
 import { searchMoviesApi } from '@/lib/api/search/search';
 import type { SearchMoviesRequest } from '@/lib/api/search/search';
 import type { Movie } from '@/lib/types';
-import { searchKeys, SEARCH_ERROR_MESSAGES } from '@/constants';
+import {
+  ANALYTICS_EVENTS,
+  ANALYTICS_NO_FILTER,
+  QUERY_PARAMS,
+  searchKeys,
+  SEARCH_ERROR_MESSAGES,
+} from '@/constants';
+import { sendEvent } from '@/utils/analytics';
 import { useToast } from '@/hooks/useToast';
 import {
   clearStoredSuggestion,
@@ -62,13 +69,36 @@ function buildSearchParams(
   const hasSearchCriteria = query || genre || year || voteAverageGte;
   if (!hasSearchCriteria) return null;
 
+  // URLは利用者が編集できるので ?page=abc が来る。Number('abc') は NaN で、
+  // `?? 1` は nullish でない NaN を救えない。そのまま使うと APIリクエストにも
+  // GA4 の result_page にも NaN が載るため、ここで1へ丸める
+  const pageNumber = page ? Number(page) : 1;
+
   return {
     query,
-    page: page ? Number(page) : 1,
+    page: Number.isFinite(pageNumber) ? pageNumber : 1,
     genre,
     year: year ? Number(year) : undefined,
     vote_average_gte: voteAverageGte ? Number(voteAverageGte) : undefined,
   };
+}
+
+/**
+ * 適用中の絞り込み種別を GA4 のスカラー値へ畳む
+ *
+ * GA4 のイベントパラメータは配列を受け付けないのでカンマ区切りにする。
+ * 並び順はこの関数で固定する（呼び出しごとに変わると、同じ組み合わせが
+ * 別の値として集計されてしまう）。種別名は URL クエリのキーを流用し、
+ * 画面の絞り込みと対応を取りやすくしている。
+ */
+function buildSearchFilterTypes(params: SearchMoviesRequest): string {
+  const types: string[] = [];
+  if (params.genre) types.push(QUERY_PARAMS.GENRE);
+  if (params.vote_average_gte !== undefined) {
+    types.push(QUERY_PARAMS.VOTE_AVERAGE_GTE);
+  }
+  if (params.year !== undefined) types.push(QUERY_PARAMS.YEAR);
+  return types.length > 0 ? types.join(',') : ANALYTICS_NO_FILTER;
 }
 
 /**
@@ -107,6 +137,46 @@ export function useSearch(): UseSearchReturn {
       });
     }
   }, [searchQuery.isError, toast]);
+
+  // 直近に GA4 へ送った検索条件。同一条件での再レンダー・再フェッチと、
+  // StrictMode による effect の二重実行で重複して数えないよう比較する。
+  //
+  // ref はアンマウントで破棄されるので、ページを離れて戻ってきた場合は
+  // 防げない（react-query のキャッシュから即 isSuccess になり再計上される）。
+  // それは「検索画面へ戻ってきた」という別の訪問なので許容する。
+  // AnalyticsProvider の lastPageViewRef が再マウントを考えなくてよいのは、
+  // あちらが root layout に単一マウントされるため
+  const lastSearchEventKeyRef = useRef<string | null>(null);
+
+  // 検索イベントの送信
+  //
+  // ⚠️ 検索キーワード本文は送らない（#938）。Consent Mode advanced では
+  // 未同意の利用者の分も Google へ届くため、何を探したかは渡さず
+  // has_query で有無だけを表す。
+  //
+  // 結果が確定してから送るので、入力途中のクエリでは発火しない。
+  // ページ送りも検索の再実行なので計上する（result_page で切り分けられる）。
+  // 失敗した検索は送らない（上の isError 側で扱う）
+  useEffect(() => {
+    if (requestParams === null) return;
+    if (!searchQuery.isSuccess || searchQuery.isPlaceholderData) return;
+
+    const key = JSON.stringify(requestParams);
+    if (lastSearchEventKeyRef.current === key) return;
+    lastSearchEventKeyRef.current = key;
+
+    sendEvent(ANALYTICS_EVENTS.SEARCH, {
+      has_query: Boolean(requestParams.query),
+      filter_types: buildSearchFilterTypes(requestParams),
+      results_count: searchQuery.data?.data.pagination.totalResults ?? 0,
+      result_page: requestParams.page ?? 1,
+    });
+  }, [
+    requestParams,
+    searchQuery.isSuccess,
+    searchQuery.isPlaceholderData,
+    searchQuery.data,
+  ]);
 
   const handlePageChange = useCallback(
     (page: number) => {

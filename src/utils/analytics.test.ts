@@ -7,15 +7,18 @@
  * 出力は版によらず同一なので版の判定を検証できない。
  */
 
+import { ANALYTICS_EVENTS, ANALYTICS_NO_FILTER } from '@/constants/analytics';
 import { STORAGE_KEYS } from '@/constants/common';
 import { COOKIE_CONSENT_VERSION } from '@/constants/user';
 import {
   buildConsentBootstrapScript,
   buildDomainCandidates,
   buildGtagInitScript,
+  buildPageLocation,
   deleteGaCookies,
   getGaMeasurementId,
   sendConsentUpdate,
+  sendEvent,
   sendPageView,
 } from './analytics';
 
@@ -265,6 +268,143 @@ describe('analytics', () => {
       expect(() =>
         sendPageView({ pagePath: '/', pageLocation: '/', pageTitle: '' }),
       ).not.toThrow();
+    });
+  });
+
+  /**
+   * jsdom の window.location は差し替えられないため、URL から同じ組み立てを
+   * 行う純粋関数で境界を検証する（buildDomainCandidates と同じ方針）
+   */
+  describe('buildPageLocation', () => {
+    /** buildPageLocation と同じ組み立てを、任意の URL に対して行う */
+    const build = (href: string) => {
+      const url = new URL(href);
+      return `${url.origin}${url.pathname}`;
+    };
+
+    it('現在のオリジンとパスだけを返す', () => {
+      expect(buildPageLocation()).toBe(
+        `${window.location.origin}${window.location.pathname}`,
+      );
+      expect(buildPageLocation()).not.toContain('?');
+    });
+
+    it('検索キーワードを落とす', () => {
+      // /search?query=<キーワード> をそのまま送ると、未同意の利用者の分も
+      // 含めて「何を探したか」が Google に渡る（#938）
+      expect(
+        build(
+          'https://example.com/search?query=%E3%83%90%E3%83%83%E3%83%88%E3%83%9E%E3%83%B3',
+        ),
+      ).toBe('https://example.com/search');
+    });
+
+    it('パスワード再設定トークンを落とす', () => {
+      // 同ページは「トークンがURLに載るため」と noindex を付けているのに、
+      // 計測では同じURLを外部送信していた
+      expect(
+        build('https://example.com/auth/reset-password?token=secret-token'),
+      ).toBe('https://example.com/auth/reset-password');
+    });
+
+    it('ハッシュも落とす', () => {
+      expect(build('https://example.com/privacy#section-7')).toBe(
+        'https://example.com/privacy',
+      );
+    });
+  });
+
+  describe('sendEvent', () => {
+    it('イベント名とパラメータをそのまま渡す', () => {
+      const gtag = jest.fn();
+      window.gtag = gtag;
+
+      sendEvent(ANALYTICS_EVENTS.WATCHLIST_ADD, { movie_id: 550 });
+
+      expect(gtag).toHaveBeenCalledWith('event', 'watchlist_add', {
+        movie_id: 550,
+      });
+    });
+
+    it('gtag が未定義でも落ちない', () => {
+      expect(() =>
+        sendEvent(ANALYTICS_EVENTS.SEARCH, {
+          has_query: false,
+          filter_types: ANALYTICS_NO_FILTER,
+          results_count: 0,
+          result_page: 1,
+        }),
+      ).not.toThrow();
+    });
+
+    /**
+     * 個人を特定しうる値の混入を型で弾けていることを固定する
+     *
+     * `@ts-expect-error` は「エラーが出なくなったらコンパイルを失敗させる」
+     * 向きの検査なので、パラメータ型を Record<string, …> のような緩い型に
+     * 戻すとここで CI が落ちる。実行時の assertion では表せない回帰なので
+     * この形で残す（#938）。
+     */
+    it('設計外のパラメータを型で弾く', () => {
+      const gtag = jest.fn();
+      window.gtag = gtag;
+
+      // 検索キーワード本文を足せない
+      sendEvent(ANALYTICS_EVENTS.SEARCH, {
+        has_query: true,
+        filter_types: ANALYTICS_NO_FILTER,
+        results_count: 1,
+        result_page: 1,
+        // @ts-expect-error search_term は AnalyticsEventParamMap に無い
+        search_term: 'バットマン',
+      });
+
+      // 作品タイトルを足せない
+      sendEvent(ANALYTICS_EVENTS.WATCHLIST_ADD, {
+        movie_id: 550,
+        // @ts-expect-error movie_title は AnalyticsEventParamMap に無い
+        movie_title: 'ファイト・クラブ',
+      });
+
+      // 評価の点数を足せない
+      // @ts-expect-error rating は AnalyticsEventParamMap に無い
+      sendEvent(ANALYTICS_EVENTS.FAVORITE_ADD, { movie_id: 550, rating: 5 });
+
+      // 型エラーでも実行自体は通る（上の3件がそのまま渡っている）
+      expect(gtag).toHaveBeenCalledTimes(3);
+    });
+
+    it('同意状態を見ずに送る（Consent Mode advanced の建て付け）', () => {
+      // advanced では未同意でも Cookie を伴わないヒットが送られる。
+      // ここで同意状態によるガードを足すと basic 相当の設計変更になるため、
+      // denied のまま送られることを回帰テストで固定する
+      const gtag = jest.fn();
+      window.gtag = gtag;
+
+      sendConsentUpdate(false);
+      sendEvent(ANALYTICS_EVENTS.FAVORITE_ADD, { movie_id: 550 });
+
+      expect(gtag).toHaveBeenNthCalledWith(1, 'consent', 'update', {
+        analytics_storage: 'denied',
+      });
+      expect(gtag).toHaveBeenNthCalledWith(2, 'event', 'favorite_add', {
+        movie_id: 550,
+      });
+    });
+
+    it('同意の有無でパラメータが変わらない', () => {
+      const gtag = jest.fn();
+      window.gtag = gtag;
+
+      sendConsentUpdate(false);
+      sendEvent(ANALYTICS_EVENTS.WATCHLIST_ADD, { movie_id: 550 });
+      const denied = gtag.mock.calls.at(-1);
+
+      sendConsentUpdate(true);
+      sendEvent(ANALYTICS_EVENTS.WATCHLIST_ADD, { movie_id: 550 });
+      const granted = gtag.mock.calls.at(-1);
+
+      expect(granted).toEqual(denied);
     });
   });
 

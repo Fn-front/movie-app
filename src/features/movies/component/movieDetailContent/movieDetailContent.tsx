@@ -24,6 +24,7 @@ import {
   getTMDbProviderLogoUrl,
 } from '@/utils/image';
 import {
+  ANALYTICS_EVENTS,
   ARIA_LABELS,
   DISPLAY_LIMITS,
   EXCHANGE_RATE,
@@ -32,6 +33,7 @@ import {
   ROUTES,
   UI_ERROR_MESSAGES,
 } from '@/constants';
+import { sendEvent } from '@/utils/analytics';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
 import { selectTrailerVideos } from '@/features/movies/utils/selectTrailerVideos';
@@ -227,7 +229,12 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
 
     const handleOpenVideoDialog = useCallback(() => {
       handleVideoDialogOpenChange(true);
-    }, [handleVideoDialogOpenChange]);
+      // 計測は「開いた」まで。予告編は YouTube IFrame API を使わない素の
+      // iframe 埋め込みなので、実際に再生したかは検知できない。
+      // handleVideoDialogOpenChange ではなくこちらに置くのは、前者が
+      // 閉じるときにも呼ばれるため
+      sendEvent(ANALYTICS_EVENTS.TRAILER_OPEN, { movie_id: movieId });
+    }, [handleVideoDialogOpenChange, movieId]);
 
     const jpProviders = useMemo(
       () => movie?.['watch/providers']?.results?.JP ?? null,

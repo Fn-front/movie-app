@@ -408,6 +408,61 @@ describe('initMovieStreamingStatus', () => {
       );
     });
 
+    /**
+     * 引き直し経路では「7日間見えなかった」が成立しない。
+     * 7日間**一度も観測していない**だけで、配信が途切れた証拠ではない。
+     *
+     * 抑止しないと、引き直しのしきい値（7日）と
+     * STREAMING_RESUME_THRESHOLD_DAYS（7日）が同値のため
+     * 再配信判定が構造的に必ず成立してしまう
+     */
+    it('引き直しでは再配信と判定しない（since も動かさない）', async () => {
+      const supabase = createSupabase({
+        // 配信が一度見えなくなった状態で取り残された行
+        data: storedRow({
+          checked_at: '2026-10-01T12:00:00.000Z',
+          flatrate_provider_ids: [],
+          flatrate_since: '2026-05-01T00:00:00.000Z',
+          flatrate_last_seen_at: '2026-09-20T00:00:00.000Z',
+        }),
+        error: null,
+      });
+      // いま引き直すと配信中だった
+      mockGetJpStreamingAvailability.mockResolvedValue(
+        availability({ flatrate: [84] }),
+      );
+
+      await initMovieStreamingStatus(supabase.client, 12345, NOW);
+
+      expect(supabase.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          flatrate_provider_ids: [84],
+          // 再配信グループへ降格させない
+          flatrate_resumed: false,
+          // 元の配信開始日時を保つ（now に書き換えない）
+          flatrate_since: '2026-05-01T00:00:00.000Z',
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('行が無い場合は従来どおり初配信として扱う（#942 の挙動）', async () => {
+      const supabase = createSupabase({ data: null, error: null });
+      mockGetJpStreamingAvailability.mockResolvedValue(
+        availability({ flatrate: [84] }),
+      );
+
+      await initMovieStreamingStatus(supabase.client, 12345, NOW);
+
+      expect(supabase.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          flatrate_since: NOW.toISOString(),
+          flatrate_resumed: false,
+        }),
+        expect.anything(),
+      );
+    });
+
     it('古い行の引き直しでは上書きする（ignoreDuplicates を外す）', async () => {
       const supabase = createSupabase({
         data: storedRow({ checked_at: '2026-10-01T12:00:00.000Z' }),

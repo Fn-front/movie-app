@@ -93,6 +93,9 @@ export interface OfferProviderIds {
  * @param previous - 保存済みの状態。行が無ければ両方 null
  * @param providerIds - 今回確認できたプロバイダーID
  * @param now - 現在時刻
+ * @param canDetectResume - 再配信を判定してよいか。既定 true。
+ *   観測が途切れていた経路（古い行の引き直し）では false を渡す。
+ *   詳細は `resolveStreamingOffer` のコメント
  * @returns upsert に渡す1行
  */
 export function buildStreamingStatusRow(
@@ -100,6 +103,7 @@ export function buildStreamingStatusRow(
   previous: PreviousOfferStates,
   providerIds: OfferProviderIds,
   now: Date,
+  canDetectResume: boolean = true,
 ): MovieStreamingStatusRow {
   const paidIds = [...new Set([...providerIds.rent, ...providerIds.buy])];
 
@@ -107,8 +111,14 @@ export function buildStreamingStatusRow(
     previous.flatrate,
     providerIds.flatrate,
     now,
+    canDetectResume,
   );
-  const paid = resolveStreamingOffer(previous.paid, paidIds, now);
+  const paid = resolveStreamingOffer(
+    previous.paid,
+    paidIds,
+    now,
+    canDetectResume,
+  );
 
   return {
     tmdb_movie_id: tmdbMovieId,

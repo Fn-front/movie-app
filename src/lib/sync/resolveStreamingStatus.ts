@@ -44,12 +44,15 @@ const RESUME_THRESHOLD_MS =
  * @param previous - 保存済みの状態。未登録なら null
  * @param currentProviderIds - 今回確認できたプロバイダーID（空なら配信なし）
  * @param now - 現在時刻
+ * @param canDetectResume - 再配信を判定してよいか。既定 true。
+ *   **観測が途切れていた経路では false を渡すこと**（下記）
  * @returns 保存すべき状態
  */
 export function resolveStreamingOffer(
   previous: StreamingOfferState | null,
   currentProviderIds: number[],
   now: Date,
+  canDetectResume: boolean = true,
 ): StreamingOfferState {
   const state = previous ?? EMPTY_STATE;
 
@@ -81,11 +84,21 @@ export function resolveStreamingOffer(
     };
   }
 
-  // 空から復活した。空いた期間で一時的な欠落か再配信かを分ける
+  // 空から復活した。空いた期間で一時的な欠落か再配信かを分ける。
+  //
+  // ⚠️ この判定は「毎日観測していて、それでも N 日見えなかった」ことを根拠に
+  // している。観測自体が途切れていた経路（`initMovieStreamingStatus` の
+  // 引き直し）では前提が成立せず、ギャップは「終了した」ではなく
+  // 「見ていなかった」を意味する。その場合 canDetectResume=false で抑止する。
+  //
+  // 抑止しないと、引き直しのしきい値（7日）と RESUME_THRESHOLD_DAYS（7日）が
+  // 同値であることから **isResumed が構造的に必ず true** になり、ずっと配信中
+  // だった作品が再配信グループへ降格する（#960 のレビューで判明）
   const lastSeenTime = state.lastSeenAt
     ? new Date(state.lastSeenAt).getTime()
     : 0;
-  const isResumed = now.getTime() - lastSeenTime >= RESUME_THRESHOLD_MS;
+  const isResumed =
+    canDetectResume && now.getTime() - lastSeenTime >= RESUME_THRESHOLD_MS;
 
   return {
     providerIds: currentProviderIds,

@@ -15,16 +15,18 @@
 
 import { test, expect } from '@playwright/test';
 
+import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
+
 import {
-  cleanupRunRateLimits,
+  cleanupRateLimit,
   getRateLimitRow,
   runDeleteExpiredRateLimits,
   seedRateLimitRow,
 } from '../helpers/api';
 import { runScopedEmail } from '../helpers/runScope';
 
-/** 保持期間（`src/constants/rateLimit.ts` の RATE_LIMIT_RETENTION_HOURS と揃える） */
-const RETENTION_HOURS = 48;
+/** 保持期間。直書きせず実装から取る（二重管理にしない） */
+const RETENTION_HOURS = RATE_LIMIT_RETENTION_HOURS;
 
 /**
  * `chk_action_type` が許す値を使う
@@ -48,7 +50,19 @@ const ROWS = {
     lastAttemptAt: hoursAgo(RETENTION_HOURS + 24),
     lockedUntil: null,
   },
-  /** 保持期間を過ぎているが、ロック中 → 残る */
+  /**
+   * 保持期間を過ぎているが、ロック中 → 残る
+   *
+   * ⚠️ この状態は**現在のアプリからは発生しない**。`consume_rate_limit` は
+   * ロック設定時に `locked_until = now + ウィンドウ`（最長24h）と
+   * `last_attempt_at = now` を同時に書くため、常に
+   * `locked_until ≤ last_attempt_at + 24h` が成り立ち、48h 経過時点で
+   * ロックは必ず明けている。
+   *
+   * つまりここが固定しているのは「SQL の `AND (locked_until ...)` 節が
+   * 効いていること」であって、現在の設定での早期解除ではない。
+   * ウィンドウを48時間より長くしたときに効いてくる回帰ガードとして残す。
+   */
   locked: {
     identifier: runScopedEmail('e2e-retention-locked'),
     lastAttemptAt: hoursAgo(RETENTION_HOURS + 24),
@@ -90,8 +104,15 @@ test.describe('レート制限レコードの保持期間', () => {
   });
 
   test.afterAll(async () => {
-    // global.teardown でも消えるが、同じ run の他 spec へ残骸を持ち越さない
-    await cleanupRunRateLimits();
+    // ⚠️ `cleanupRunRateLimits` は使わない。run 全体が対象なので、`fullyParallel`
+    // で並走している他 spec の送信元IP・メール単位のカウンタまで消す
+    // （`e2e/helpers/dedicatedUser.ts:190-192` が明示的に禁止している）。
+    // 仕込んだのは自分の identifier だけなので、そこに絞って消す
+    await Promise.all(
+      Object.values(ROWS).map((row) =>
+        cleanupRateLimit(row.identifier, [ACTION_TYPE]),
+      ),
+    );
   });
 
   test('保持期間を過ぎ、ロックもしていない行は消える', async () => {

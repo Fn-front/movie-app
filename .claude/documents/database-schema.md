@@ -114,7 +114,7 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 
 **クリーンアップ:**
 - 検証成功時のレコードは即座に削除
-- ⚠️ **有効期限切れレコードの定期削除は未実装。** かつて「rate_limits と同一ジョブで削除」と書かれていたが、そのようなジョブは存在しなかった。rate_limits 側は #933 で `/api/cron/cleanup-rate-limits` を用意したが、otp_codes は対象外（別途 Issue 化が必要）
+- ⚠️ **有効期限切れレコードの定期削除は未実装（#978）。** かつて「rate_limits と同一ジョブで削除」と書かれていたが、そのようなジョブは存在しなかった。rate_limits 側は #933 で `/api/cron/cleanup-rate-limits` を用意したが、otp_codes は対象外
 
 ---
 
@@ -366,6 +366,7 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 - `identifier, action_type` (UNIQUE) - 重複防止
 - `locked_until` - ロック解除チェック用
 - `last_attempt_at` - 保持期間切れの削除用（#933）
+  - ⚠️ **書き込み側に代償がある。** `last_attempt_at` は `consume_rate_limit` のたびに更新されるため、この索引があると当該 UPDATE が HOT 更新の対象外になり、毎回の索引書き込みとページ膨張が発生する。読み手は日次1回の DELETE だけで、しかもこの掃除が機能していればテーブルは小さいまま（実測で pkey 88 kB / UNIQUE 144 kB）。**行数が増えないなら索引を外して seq scan に任せる選択も成立する。** 残しているのは、掃除が止まったときに DELETE が重くならないようにするため
 
 **制約:**
 - `action_type` は 'login', 'change_password', 'otp_verify' 等（CHECK制約）

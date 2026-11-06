@@ -10,6 +10,10 @@ on:
   push:
     branches:
       - main
+  # e2e-ga は main への push でしか動かないため、これが無いとマージするまで
+  # CI 経路（GA ID 付きビルド + `npm start --port 3001`）を一度も確かめられない。
+  # 手動実行の口を開けておく（#931）
+  workflow_dispatch:
 
 # concurrency は設定しない。
 #
@@ -133,4 +137,123 @@ jobs:
         with:
           name: test-results
           path: test-results/
+          retention-days: 30
+
+  # GA4 を有効にした E2E（#931）
+  #
+  # 同意バナー・gtag.js・_ga Cookie は NEXT_PUBLIC_GA_ID が無いと一切描画されない。
+  # 上の e2e ジョブはビルドに GA ID を渡していないため、これらを検証できない。
+  # ここだけ GA ID 付きでビルドし、playwright.ga.config.ts（ポート3001）で回す。
+  #
+  # PR では回さない。googletagmanager.com への外部依存があり、ビルドも1回増えるため、
+  # 常時 PR に乗せるコストに見合わないと判断した（#931 で決定）。
+  # そのぶん workflow_dispatch を受け付け、マージ前に手動で確かめられるようにしてある。
+  e2e-ga:
+    name: Playwright E2E (GA有効)
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    environment: Production
+    permissions:
+      contents: read
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+
+      - name: setup-node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # ratchet:actions/setup-node@v7.1.0
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Get date info
+        id: date
+        run: echo "week=$(date +%Y-%V)" >> $GITHUB_OUTPUT
+
+      - name: cache-node-modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # ratchet:actions/cache@v6.1.0
+        id: node_modules_cache
+        with:
+          path: '**/node_modules'
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
+
+      # ⚠️ e2e ジョブとはキーを分ける。NEXT_PUBLIC_* はビルド時に静的置換されるため、
+      # GA ID の有無で成果物が変わる。同じキーでコンパイルキャッシュを共有すると
+      # 「GA ID が埋まっていないチャンク」を再利用しうる
+      - name: cache-nextjs-build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # ratchet:actions/cache@v6.1.0
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-nextjs-build-ga-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-build-ga-${{ steps.date.outputs.week }}-
+
+      - name: npm-install
+        if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
+        run: npm ci
+
+      - name: get-playwright-version
+        id: playwright_version
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> $GITHUB_OUTPUT
+
+      - name: cache-playwright-browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # ratchet:actions/cache@v6.1.0
+        id: playwright_cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright_version.outputs.version }}-chromium
+
+      - name: install-playwright-browsers
+        if: ${{ steps.playwright_cache.outputs.cache-hit != 'true' }}
+        run: npx playwright install --with-deps chromium
+
+      - name: install-playwright-deps
+        if: ${{ steps.playwright_cache.outputs.cache-hit == 'true' }}
+        run: npx playwright install-deps chromium
+
+      # ⚠️ GA を有効にできるのはこの step だけ。NEXT_PUBLIC_* はビルド時に
+      # 静的置換されるため、playwright.ga.config.ts の webServer.env は
+      # `npm start`（CI）には効かない。ここに渡していることが CI での根拠になる。
+      # 値は playwright.ga.config.ts の E2E_GA_MEASUREMENT_ID と一致させること
+      - name: build
+        run: bash scripts/ci-build-with-retry.sh
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          NEXT_PUBLIC_GA_ID: G-TEST1234567
+
+      - name: run-e2e-ga-tests
+        run: npm run test:e2e:ga
+        env:
+          CI: true
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OTP_HASH_PEPPER: ${{ secrets.OTP_HASH_PEPPER }}
+          TOTP_ENCRYPTION_KEY: ${{ secrets.TOTP_ENCRYPTION_KEY }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+          # ポートは playwright.ga.config.ts に合わせる（3000 は e2e ジョブが使う）
+          NEXTAUTH_URL: http://localhost:3001
+          AUTH_TRUST_HOST: 'true'
+          # ⚠️ 必須。既定の導出は GITHUB_RUN_ID × GITHUB_RUN_ATTEMPT なので、
+          # 同じ run の e2e ジョブと同じ値になる。run 固有の識別子
+          # （メールアドレス・送信元IP・movie_cache のID領域）を共有してしまい、
+          # 先に終わった方の teardown がもう片方のユーザーを消す（#793 / #931）
+          E2E_RUN_ID: ${{ github.run_id }}ga${{ github.run_attempt }}
+
+      - name: upload-playwright-report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # ratchet:actions/upload-artifact@v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-ga
+          path: playwright-report/ga/
+          retention-days: 30
+
+      - name: upload-test-results
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # ratchet:actions/upload-artifact@v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: test-results-ga
+          path: test-results/ga/
           retention-days: 30

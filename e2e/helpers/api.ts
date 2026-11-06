@@ -803,6 +803,105 @@ export async function cleanupUserSettings(userId: string): Promise<void> {
   });
 }
 
+/** サーバー側に保存された Cookie 同意レコード */
+export interface ServerConsentRecord {
+  state: string;
+  at: string | null;
+  version: number | null;
+}
+
+/**
+ * 指定ユーザーの Cookie 同意をサーバー側へ直接書く（E2E用）
+ *
+ * マージ規則（`src/utils/resolveConsentMerge.ts`）は「端末とサーバーの食い違い」が
+ * 入力なので、アプリのAPI経由では作れない状態を用意する必要がある。
+ * `PUT /api/user/settings` は日時と版をサーバーが決めるため、
+ * 「サーバーのほうが古い」といった状況を作れない。
+ *
+ * @param userId - 対象ユーザーのID
+ * @param record - 書き込む同意レコード
+ */
+export async function seedUserConsent(
+  userId: string,
+  record: ServerConsentRecord,
+): Promise<void> {
+  // `on_conflict` を明示する。user_settings の主キーは id（UUID）で、
+  // user_id は UNIQUE 制約側にあるため、省略すると主キーで衝突判定されて
+  // 既存行を更新できず重複挿入になる
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_settings?on_conflict=user_id`,
+    {
+      method: 'POST',
+      headers: {
+        ...supabaseHeaders,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        cookie_consent: record.state,
+        cookie_consent_at: record.at,
+        cookie_consent_version: record.version,
+      }),
+    },
+  );
+
+  // 握りつぶさない。`fetch` は 4xx でも reject しないため、CHECK 制約違反
+  // （`cookie_consent <> 'unset' OR cookie_consent_at IS NULL`）や衝突解決の
+  // 失敗が黙って通る。これは**テストの前提条件を作る処理**なので、失敗すると
+  // 後続が「マージ規則が壊れた」ように見えて原因に辿り着けない
+  // （`dedicatedUser.ts` の `deleteOrThrow` と同じ理由）
+  if (!response.ok) {
+    throw new Error(
+      `${userId} の同意レコードのseedに失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+}
+
+/**
+ * 指定ユーザーの Cookie 同意をサーバーから読む（E2E用）
+ *
+ * @param userId - 対象ユーザーのID
+ * @returns 同意レコード。行が無ければ null
+ */
+export async function getUserConsent(
+  userId: string,
+): Promise<ServerConsentRecord | null> {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${userId}&select=cookie_consent,cookie_consent_at,cookie_consent_version`,
+    { headers: supabaseHeaders },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `${userId} の同意レコードの取得に失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+
+  const rows = (await response.json()) as {
+    cookie_consent: string;
+    cookie_consent_at: string | null;
+    cookie_consent_version: number | null;
+  }[];
+
+  // PostgREST はエラー時に配列ではなくオブジェクトを返す。そのまま [0] を
+  // 読むと undefined → null になり、「行が無い」と見分けがつかなくなる
+  if (!Array.isArray(rows)) {
+    throw new Error(
+      `${userId} の同意レコードの取得が配列を返さなかった: ${JSON.stringify(rows)}`,
+    );
+  }
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    state: row.cookie_consent,
+    at: row.cookie_consent_at,
+    version: row.cookie_consent_version,
+  };
+}
+
 /**
  * 指定メールのユーザーとOTPコードを物理削除する（signupテストの後始末用）。
  */

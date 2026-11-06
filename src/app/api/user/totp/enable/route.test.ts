@@ -71,7 +71,7 @@ describe('POST /api/user/totp/enable', () => {
     expect(mockResetRateLimit).toHaveBeenCalledWith(
       expect.anything(),
       'user-1',
-      'totp_verify',
+      'totp_settings_verify',
     );
   });
 
@@ -123,5 +123,26 @@ describe('POST /api/user/totp/enable', () => {
     const response = await POST(createRequest({ code: '123456' }));
 
     expect(response.status).toBe(500);
+  });
+
+  describe('処理順', () => {
+    // 認証 → レート制限 → バリデーション（#940）。
+    // 識別子が session.user.id なので検証より前に確定している。
+    // 逆順だと、桁数を崩したコードを挟むだけでカウンタを消費せずに
+    // 6桁の総当たりを続けられる（`.claude/rules/api-route.md`）
+    it('バリデーションエラー時もレート制限を消費する', async () => {
+      const response = await POST(createRequest({ code: 'abcdef' }));
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it('レート制限超過時は、コードが不正でも429を返す（検証より先に判定する）', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 900 });
+
+      const response = await POST(createRequest({ code: 'abcdef' }));
+
+      expect(response.status).toBe(429);
+    });
   });
 });

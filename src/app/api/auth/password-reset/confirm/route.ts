@@ -47,28 +47,13 @@ export async function POST(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    const body = await request.json();
-    const result = passwordResetConfirmApiSchema.safeParse(body);
-
-    if (!result.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.VALIDATION_ERROR,
-            message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
-            details: result.error.flatten().fieldErrors,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
-
-    const { token, password } = result.data;
-
     // 失敗リクエストを垂れ流させない。
     // トークンは256bitの乱数なので総当たりは成立しないが、送信元単位で止める。
-    // 識別子にトークンを使うと、毎回違う値になって制限が機能しない
+    // 識別子にトークンを使うと、毎回違う値になって制限が機能しない。
+    //
+    // 送信元IPは検証より前に確定しているので、ここで消費する。検証を先に置くと、
+    // 形式だけ崩したリクエストを挟んでカウンタを消費せずに試行を続けられる
+    // （`.claude/rules/api-route.md`「レート制限と検証の順序」）
     const clientIp = getClientIp(request);
 
     if (clientIp !== 'unknown') {
@@ -98,6 +83,25 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    const body = await request.json();
+    const result = passwordResetConfirmApiSchema.safeParse(body);
+
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
+            details: result.error.flatten().fieldErrors,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
+    }
+
+    const { token, password } = result.data;
 
     // 漏洩パスワードの照合。
     //

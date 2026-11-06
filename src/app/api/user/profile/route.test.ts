@@ -142,4 +142,27 @@ describe('PUT /api/user/profile', () => {
     expect(json.error.code).toBe('RATE_LIMIT_EXCEEDED');
     expect(json.error.details.retryAfter).toBe(60);
   });
+
+  describe('処理順', () => {
+    // 認証 → レート制限 → バリデーション（#940）。
+    // 識別子が session.user.id なので検証より前に確定している
+    // （`.claude/rules/api-route.md`）
+    it('バリデーションエラー時もレート制限を消費する', async () => {
+      const response = await PUT(createPutRequest({ name: '' }));
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it('レート制限超過時は、ボディが不正でも429を返す（検証より先に判定する）', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 60,
+      });
+
+      const response = await PUT(createPutRequest({ name: '' }));
+
+      expect(response.status).toBe(429);
+    });
+  });
 });

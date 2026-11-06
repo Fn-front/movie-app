@@ -80,6 +80,11 @@ export const TOTP_ERROR_MESSAGES = {
  *
  * 無効化・再発行はコードの所持を要求するため、ここが総当たりの入口になる。
  * ログイン時（TOTP_VERIFY）と同じ厳しさにする。
+ *
+ * ⚠️ 厳しさは同じだが**カウンタは分ける**（`TOTP_SETTINGS_VERIFY`）。
+ * 同じ `action_type` を使っていた頃は識別子もユーザーIDで同一だったため、
+ * rate_limits の同じ行を共有していた。設定画面での誤操作がログインの
+ * 第2要素まで巻き添えでロックするため、#940 で分離した。
  */
 export const TOTP_SETTINGS_LIMIT = {
   maxAttempts: 5,

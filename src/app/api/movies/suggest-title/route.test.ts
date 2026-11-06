@@ -197,4 +197,27 @@ describe('GET /api/movies/suggest-title', () => {
     expect(body.success).toBe(false);
     expect(body.error.code).toBe('SERVER_ERROR');
   });
+
+  describe('処理順', () => {
+    // バリデーション → キャッシュ照合 → レート制限（#940 の例外2）。
+    // 守っているのは DB ではなく OpenAI の呼び出し費用なので、費用が
+    // 発生しないキャッシュヒットでは消費させない。キャッシュの照合には
+    // 検証済みの query が要るため前には出せない（`.claude/rules/api-route.md`）
+    it('バリデーションエラー時はレート制限を消費しない', async () => {
+      await GET(createRequest());
+
+      expect(mockCheckRateLimit).not.toHaveBeenCalled();
+    });
+
+    it('レート制限超過中でも、queryが無ければ400を返す', async () => {
+      mockCheckRateLimit.mockResolvedValue({
+        allowed: false,
+        retryAfter: 3600,
+      });
+
+      const response = await GET(createRequest());
+
+      expect(response.status).toBe(400);
+    });
+  });
 });

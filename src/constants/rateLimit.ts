@@ -31,8 +31,16 @@ export const RATE_LIMIT_ACTION = {
   OTP_SEND_DAILY: 'otp_send_daily',
   /** OTP 検証試行の上限（メールアドレス単位。OTP行の attempts とは独立した多層防御） */
   OTP_VERIFY: 'otp_verify',
-  /** 二段階認証コードの検証試行の上限（ユーザー単位） */
+  /** ログイン時の二段階認証コードの検証試行の上限（ユーザー単位） */
   TOTP_VERIFY: 'totp_verify',
+  /**
+   * 設定画面での二段階認証操作の上限（ユーザー単位）
+   *
+   * ログインの `TOTP_VERIFY` とは**別のカウンタ**にする。同じにすると、
+   * 設定画面での誤操作（コード欄が空のまま送信など）でログインの第2要素まで
+   * ロックされ、利用者が自力で解除できない（#940）。
+   */
+  TOTP_SETTINGS_VERIFY: 'totp_settings_verify',
   /** パスワードリセットの発行上限（メールアドレス単位） */
   PASSWORD_RESET_REQUEST: 'password_reset_request',
   /** パスワードリセットの検証試行の上限（送信元単位） */
@@ -101,6 +109,7 @@ export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
   'login',
   // 二段階認証コード（6桁。上限が唯一の防御）
   RATE_LIMIT_ACTION.TOTP_VERIFY,
+  RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
   // メールのワンタイムコード
   RATE_LIMIT_ACTION.OTP_VERIFY,
   RATE_LIMIT_ACTION.OTP_SEND_DAILY,

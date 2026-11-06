@@ -597,4 +597,32 @@ describe('POST /api/auth/otp/send', () => {
       'login',
     );
   });
+
+  describe('処理順', () => {
+    // バリデーション → … → レート制限（#940 の例外1・例外2の両方）。
+    // 識別子が検証済みのメールアドレスであること、守る資源がメールボックスで
+    // 送信の実行と1対1に対応させる必要があることの2つが理由
+    // （`.claude/rules/api-route.md`）
+    it('バリデーションエラー時はレート制限を消費しない', async () => {
+      const response = await POST(
+        createRequest({ email: 'not-an-email', action: 'login' }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).not.toHaveBeenCalled();
+    });
+
+    it('レート制限超過中でも、メール形式が不正なら400を返す', async () => {
+      mockCheckRateLimit.mockResolvedValue({
+        allowed: false,
+        retryAfter: 3600,
+      });
+
+      const response = await POST(
+        createRequest({ email: 'not-an-email', action: 'login' }),
+      );
+
+      expect(response.status).toBe(400);
+    });
+  });
 });

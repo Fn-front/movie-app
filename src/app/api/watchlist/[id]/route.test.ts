@@ -426,4 +426,33 @@ describe('PATCH /api/watchlist/:id', () => {
       RATE_LIMIT_CONFIG.WRITE_WATCHLIST.windowMinutes,
     );
   });
+
+  describe('処理順', () => {
+    // 認証 → レート制限 → バリデーション（#940）。
+    // 検証は `parseAndValidate` ヘルパー経由だが、順序の扱いは同じ
+    // （`.claude/rules/api-route.md`）
+    it('バリデーションエラー時もレート制限を消費する', async () => {
+      const { request, params } = createPatchRequest(VALID_UUID, {
+        watched: 'yes',
+      });
+      const response = await PATCH(request, { params });
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it('レート制限超過時は、ボディが不正でも429を返す', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 60,
+      });
+
+      const { request, params } = createPatchRequest(VALID_UUID, {
+        watched: 'yes',
+      });
+      const response = await PATCH(request, { params });
+
+      expect(response.status).toBe(429);
+    });
+  });
 });

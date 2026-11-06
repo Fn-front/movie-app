@@ -446,3 +446,35 @@ describe('POST /api/user/change-password — 漏洩パスワードの照合（#6
     expect(mockIsPasswordPwned).not.toHaveBeenCalled();
   });
 });
+
+describe('POST /api/user/change-password — 処理順（#940）', () => {
+  // 認証 → レート制限 → バリデーション。
+  // 識別子が session.user.id なので検証より前に確定している。
+  // 逆順だと、形式だけ崩した新パスワードを挟むだけでカウンタを消費せずに
+  // currentPassword の総当たりを続けられる（`.claude/rules/api-route.md`）
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (getAuthSession as jest.Mock).mockResolvedValue({
+      user: { id: 'user-123' },
+    });
+    (checkRateLimit as jest.Mock).mockResolvedValue({ allowed: true });
+  });
+
+  it('バリデーションエラー時もレート制限を消費する', async () => {
+    const response = await POST(createRequest(validBody('short')));
+
+    expect(response.status).toBe(400);
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it('レート制限超過時は、ボディが不正でも429を返す（検証より先に判定する）', async () => {
+    (checkRateLimit as jest.Mock).mockResolvedValue({
+      allowed: false,
+      retryAfter: 900,
+    });
+
+    const response = await POST(createRequest(validBody('short')));
+
+    expect(response.status).toBe(429);
+  });
+});

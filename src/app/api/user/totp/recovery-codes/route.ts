@@ -13,7 +13,10 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { requireSecondFactor } from '@/helpers/totpGuard';
+import {
+  checkSecondFactorRateLimit,
+  requireSecondFactor,
+} from '@/helpers/totpGuard';
 import { regenerateRecoveryCodes } from '@/lib/auth/totpSetup';
 import { totpVerifySchema } from '@/schema/totp';
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';
@@ -27,6 +30,14 @@ export async function POST(request: Request) {
 
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
+
+    // レート制限は検証より前。識別子がセッションなのでここで確定している
+    // （`.claude/rules/api-route.md`「レート制限と検証の順序」）
+    const limitResponse = await checkSecondFactorRateLimit(
+      supabase,
+      session.user.id,
+    );
+    if (limitResponse) return limitResponse;
 
     const body = await request.json();
     const result = totpVerifySchema.safeParse(body);

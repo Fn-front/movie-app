@@ -122,6 +122,9 @@ describe('GET /api/filters', () => {
 describe('PUT /api/filters', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks は実装を消さないため、ここで戻さないと先行テストの
+    // allowed:false が次のテストへ漏れる
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -273,10 +276,6 @@ describe('PUT /api/filters', () => {
         });
 
       it('PUT: バリデーションエラー時もレート制限を消費する', async () => {
-        // 同じ describe の先行テストが allowed:false を残すため明示的に戻す
-        // （clearAllMocks は実装を消さない）
-        mockCheckRateLimit.mockResolvedValue({ allowed: true });
-
         const response = await PUT(createInvalidPutRequest());
 
         expect(response.status).toBe(400);

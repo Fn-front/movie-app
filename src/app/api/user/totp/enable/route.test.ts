@@ -71,7 +71,7 @@ describe('POST /api/user/totp/enable', () => {
     expect(mockResetRateLimit).toHaveBeenCalledWith(
       expect.anything(),
       'user-1',
-      'totp_verify',
+      'totp_settings_verify',
     );
   });
 

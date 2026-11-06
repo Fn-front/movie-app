@@ -32,8 +32,13 @@ const errorResponse = (code: string, message: string, status: number) =>
  * これを呼び、通過してから検証と `requireSecondFactor` に進むこと。
  *
  * なお #940 以前は `isTotpEnabled` の後で数えていたため、二段階認証が未設定の
- * ユーザーは枠を消費しなかった。現在は先に数える。画面上そこへ到達できるのは
- * 設定済みの利用者だけなので実害は無い。
+ * ユーザーは枠を消費しなかった。現在は先に数えるので、未設定のまま叩き続けると
+ * `TOTP_SETTINGS_VERIFY` がロックされ、その間 `totp/setup` と `totp/enable` も
+ * 429 になる。
+ *
+ * これを起こせるのはセッションを持つ者だけで、被害も「2FA を設定し直すのが
+ * 15分遅れる」に留まる（ログインの `TOTP_VERIFY` は別カウンタなので無傷）。
+ * 画面からは未設定で到達できないため、通常利用では発生しない。
  *
  * @param supabase - service_role のクライアント
  * @param userId - 対象ユーザー
@@ -43,11 +48,13 @@ export async function checkSecondFactorRateLimit(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<NextResponse | null> {
-  // ここが総当たりの入口になるため、ログイン時と同じ厳しさで止める
+  // ここが総当たりの入口になるため、ログイン時と同じ厳しさで止める。
+  // ただしカウンタは `TOTP_SETTINGS_VERIFY` で分ける。ログインと共有すると、
+  // 設定画面での誤操作がログインの第2要素まで巻き添えでロックする（#940）
   const limitResult = await checkRateLimit(
     supabase,
     userId,
-    RATE_LIMIT_ACTION.TOTP_VERIFY,
+    RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
     TOTP_SETTINGS_LIMIT.maxAttempts,
     TOTP_SETTINGS_LIMIT.windowMinutes,
   );
@@ -105,7 +112,11 @@ export async function requireSecondFactor(
     );
   }
 
-  await resetRateLimit(supabase, userId, RATE_LIMIT_ACTION.TOTP_VERIFY);
+  await resetRateLimit(
+    supabase,
+    userId,
+    RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
+  );
 
   return null;
 }

@@ -718,7 +718,12 @@ describe('Cookie同意', () => {
     });
 
     it('レート制限超過時は、ボディが不正でも429を返す（検証より先に判定する）', async () => {
-      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 60 });
+      // Once にすること。mockResolvedValue だと clearAllMocks でも実装が残り、
+      // 次の「正常系」が 429 経路を走って緑のまま無意味になる
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 60,
+      });
 
       const response = await PUT(createPutRequest({ cookieConsent: 'denied' }));
 
@@ -728,10 +733,11 @@ describe('Cookie同意', () => {
     it('正常系ではレート制限を消費する', async () => {
       mockConsentPut(null);
 
-      await PUT(
+      const response = await PUT(
         createPutRequest({ cookieConsent: 'granted', cookieConsentAt: AT }),
       );
 
+      expect(response.status).toBe(200);
       expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
     });
   });

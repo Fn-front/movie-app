@@ -156,9 +156,16 @@ export async function PUT(request: Request) {
     // 書き込みを試し続けられる（`.claude/rules/api-route.md`）。
     //
     // #940 以前は逆順だった。当時の理由は「cookieConsentAt は端末の時計という
-    // 外部要因で弾かれうる」だが、これは誤り。スキーマ（`src/schema/user.ts:55`）
-    // が見るのは ISO 8601 の形式だけで、時計のずれは 400 にせず
-    // `normalizeConsentAt` が丸める。正規の画面から来る限り弾かれない
+    // 外部要因で弾かれうる」だが、**時計のずれでは弾かれない**。スキーマ
+    // （`src/schema/user.ts:55`）が見るのは ISO 8601 の形式だけで、ずれた時刻は
+    // 400 にせず `normalizeConsentAt` が丸めるため。
+    //
+    // ⚠️ ただし懸念そのものは別の形で実在する。localStorage の `at` が壊れている
+    // 端末では、初回マージの PUT（`useConsentServerSync.ts:171`）が生値を送るため
+    // 400 になり、失敗すると `syncedUserId` を更新せず毎ロード再送する。
+    // 変更追随側（同 `:201`）は `getSendableConsentAt()` で正規化しているので、
+    // マージ側だけが素通しになっている。この順序変更でその 400 もカウンタを
+    // 消費するようになった。根治はクライアント側（#962）。
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,

@@ -124,7 +124,26 @@ export async function POST(request: Request) {
 
 レート制限と検証の両方を持つハンドラのテストには `処理順` の describe があり、
 「レート制限超過 かつ 入力が不正」のリクエストが 429 を返すか 400 を返すかで
-順序を回帰テストしている。
+順序を回帰テストしている。新しくそういうハンドラを足すときは、同じ describe を
+付けること。
+
+> 例外: `admin/accounts` POST と `admin/accounts/[id]/reissue` POST は
+> **テストファイル自体が存在しない**ため未検証。順序は実装で確認済み
+> （どちらも原則どおり）。テストの新規作成は #940 のスコープ外。
+
+### 棚卸しのしかた
+
+検証の書き方が複数あるので、grep 1本では必ず取りこぼす。#940 では3回見落とした。
+
+| 検証 | レート制限 |
+|---|---|
+| `safeParse(` | `checkRateLimit(` |
+| `parseAndValidate(`（`src/helpers/requestValidation.ts`） | `enforcePublicRateLimit(`（`src/helpers/publicRateLimit.ts`） |
+| 手書き（`Number.isNaN` / 範囲チェック等） | `checkSecondFactorRateLimit(`（`src/helpers/totpGuard.ts`） |
+| | `createInMemoryRateLimiter(`（`csp-report` のみ） |
+
+確実なのは `VALIDATION_ERROR` / `HTTP_STATUS.BAD_REQUEST` の出現行と、上記
+レート制限呼び出しの行番号を**ハンドラ単位で**比較する方法。
 
 ### 公開ルート（未認証で叩ける）
 

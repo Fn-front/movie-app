@@ -50,7 +50,7 @@ describe('requireSecondFactor', () => {
     expect(mockResetRateLimit).toHaveBeenCalledWith(
       supabase,
       USER_ID,
-      'totp_verify',
+      'totp_settings_verify',
     );
   });
 
@@ -132,9 +132,24 @@ describe('checkSecondFactorRateLimit', () => {
     expect(mockCheckRateLimit).toHaveBeenCalledWith(
       supabase,
       USER_ID,
-      'totp_verify',
+      'totp_settings_verify',
       5,
       15,
+    );
+  });
+
+  it('ログインの totp_verify とはカウンタを分ける', async () => {
+    // 共有していた頃は、設定画面でコード欄を空のまま5回送るだけで
+    // ログインの第2要素まで15分ロックされた。resetRateLimit は検証成功時に
+    // しか走らないため、利用者が自力で解除する手段も無かった（#940）
+    await checkSecondFactorRateLimit(supabase, USER_ID);
+
+    expect(mockCheckRateLimit).not.toHaveBeenCalledWith(
+      supabase,
+      USER_ID,
+      'totp_verify',
+      expect.anything(),
+      expect.anything(),
     );
   });
 

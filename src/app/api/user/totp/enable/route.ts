@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     const limitResult = await checkRateLimit(
       supabase,
       session.user.id,
-      RATE_LIMIT_ACTION.TOTP_VERIFY,
+      RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
       TOTP_SETTINGS_LIMIT.maxAttempts,
       TOTP_SETTINGS_LIMIT.windowMinutes,
     );
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     await resetRateLimit(
       supabase,
       session.user.id,
-      RATE_LIMIT_ACTION.TOTP_VERIFY,
+      RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
     );
 
     return NextResponse.json(

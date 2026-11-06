@@ -530,6 +530,29 @@ describe('POST /api/watchlist', () => {
     expect(json.error.code).toBe('RATE_LIMIT_EXCEEDED');
     expect(json.error.details.retryAfter).toBe(60);
   });
+
+  describe('処理順', () => {
+    // 認証 → レート制限 → バリデーション（#940）。
+    // 検証は `parseAndValidate` ヘルパー経由だが、順序の扱いは同じ
+    // （`.claude/rules/api-route.md`）
+    it('バリデーションエラー時もレート制限を消費する', async () => {
+      const response = await POST(createPostRequest({}));
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it('レート制限超過時は、ボディが不正でも429を返す', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 60,
+      });
+
+      const response = await POST(createPostRequest({}));
+
+      expect(response.status).toBe(429);
+    });
+  });
 });
 
 /**

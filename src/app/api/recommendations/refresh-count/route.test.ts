@@ -160,8 +160,8 @@ describe('GET /api/recommendations/refresh-count', () => {
         expect.anything(),
         'user-123',
         'read_api_user_data',
-        300,
-        10,
+        200,
+        1,
       );
     });
   });

@@ -14,7 +14,14 @@ import {
   countUnusedRecoveryCodes,
   isTotpEnabled,
 } from '@/lib/auth/totpVerification';
-import { HTTP_STATUS, ERROR_CODE } from '@/constants';
+import { rateLimitExceededResponse } from '@/helpers/apiHelpers';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
+} from '@/constants';
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
 
 export async function GET() {
@@ -24,6 +31,19 @@ export async function GET() {
 
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
+
+    // レート制限チェック（#934）
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.READ_USER_DATA,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.maxAttempts,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
 
     const enabled = await isTotpEnabled(supabase, session.user.id);
 

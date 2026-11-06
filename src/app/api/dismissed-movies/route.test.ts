@@ -168,6 +168,49 @@ describe('GET /api/dismissed-movies', () => {
     // モックを元に戻す
     originalMock.createServiceRoleClient = originalFn;
   });
+
+  describe('レート制限（#934）', () => {
+    it('読み取り用の read_api_user_data として数える', async () => {
+      // Once にすること。このファイルの他14箇所もすべて Once で、
+      // beforeEach は clearAllMocks のみ（実装は消えない）。
+      // mockReturnValue にすると POST / DELETE の describe まで
+      // GET 用のチェーンを返し続ける
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            is: () => ({ order: () => ({ data: [], error: null }) }),
+          }),
+        }),
+      });
+
+      const response = await GET(
+        new Request('http://localhost/api/dismissed-movies'),
+      );
+
+      expect(response.status).toBe(200);
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+        'read_api_user_data',
+        200,
+        1,
+      );
+    });
+
+    it('上限超過で429を返し、DBを読まない', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 600,
+      });
+
+      const response = await GET(
+        new Request('http://localhost/api/dismissed-movies'),
+      );
+
+      expect(response.status).toBe(429);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('POST /api/dismissed-movies', () => {

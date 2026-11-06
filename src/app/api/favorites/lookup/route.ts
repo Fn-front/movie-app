@@ -11,8 +11,12 @@ import {
   FAVORITES_LOOKUP_PAGE_SIZE,
   FAVORITES_LOOKUP_SELECT,
   FAVORITES_ERROR_MESSAGES,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
 import { withAuth } from '@/helpers/routeHandler';
+import { rateLimitExceededResponse } from '@/helpers/apiHelpers';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 
 /**
  * お気に入り照会API
@@ -34,6 +38,21 @@ import { withAuth } from '@/helpers/routeHandler';
  */
 export const GET = withAuth(
   async ({ session, supabase }) => {
+    // レート制限チェック（#934）。
+    // 1リクエストで最大 FAVORITES_LOOKUP_MAX_PAGES 回 DB を読むため、
+    // 無制限だと他の読み取りより負荷が大きい
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.READ_USER_DATA,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.maxAttempts,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     // PostgREST は max_rows（本プロジェクトは 1000 / supabase/config.toml）で
     // 黙って打ち切る。エラーも truncation フラグも返らないため、
     // 絞り込み無しで投げると 1001 件目以降が静かに消え、

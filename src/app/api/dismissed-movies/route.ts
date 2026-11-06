@@ -31,6 +31,19 @@ import { dismissedMoviesAddSchema } from '@/schema/dismissedMovies';
 
 export const GET = withAuth(
   async ({ session, supabase }) => {
+    // レート制限チェック（#934）
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.READ_USER_DATA,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.maxAttempts,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
     const { data, error } = await supabase
       .from('dismissed_movies')
       .select(DISMISSED_MOVIES_SELECT)

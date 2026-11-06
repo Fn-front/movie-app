@@ -167,6 +167,39 @@ describe('GET /api/user/settings', () => {
       cookieConsentVersion: null,
     });
   });
+
+  describe('レート制限（#934）', () => {
+    it('読み取り用の read_api_user_data として数える', async () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({ single: () => ({ data: null, error: null }) }),
+        }),
+      });
+
+      await GET();
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+        'read_api_user_data',
+        200,
+        1,
+      );
+    });
+
+    it('上限超過で429を返し、DBを読まない', async () => {
+      // /settings を開くと同一の GET が3本飛ぶ。PUT だけ守っても意味が薄い
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 600,
+      });
+
+      const response = await GET();
+
+      expect(response.status).toBe(429);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('PUT /api/user/settings', () => {

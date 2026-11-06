@@ -213,6 +213,78 @@ describe('GET /api/favorites', () => {
 
     expect(response.status).toBe(500);
   });
+
+  describe('レート制限（#934）', () => {
+    /** 正常系の件数取得＋データ取得をモックする */
+    const mockEmptyList = () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({ is: () => ({ count: 0, error: null }) }),
+        }),
+      });
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            is: () => ({
+              order: () => ({ range: () => ({ data: [], error: null }) }),
+            }),
+          }),
+        }),
+      });
+    };
+
+    it('読み取り用の read_api_user_data として数える', async () => {
+      // 下流をモックしないと例外→500 でもこのテストは通ってしまう。
+      // 正常系（200）を走らせたうえで引数を見る
+      mockEmptyList();
+
+      const response = await GET(createGetRequest());
+
+      expect(response.status).toBe(200);
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-123',
+        'read_api_user_data',
+        200,
+        1,
+      );
+    });
+
+    it('上限超過で429を返し、DBを読まない', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 600,
+      });
+
+      const response = await GET(createGetRequest());
+
+      expect(response.status).toBe(429);
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('処理順', () => {
+    // 認証 → レート制限 → バリデーション（#940）。
+    // 識別子が session.user.id なので検証より前に確定している
+    // （`.claude/rules/api-route.md`）
+    it('クエリが不正でもレート制限を消費する', async () => {
+      const response = await GET(createGetRequest({ page: '-1' }));
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it('レート制限超過時は、クエリが不正でも429を返す', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 60,
+      });
+
+      const response = await GET(createGetRequest({ page: '-1' }));
+
+      expect(response.status).toBe(429);
+    });
+  });
 });
 
 describe('POST /api/favorites', () => {

@@ -30,11 +30,28 @@ import {
   HTTP_STATUS,
   ERROR_CODE,
   RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
   CACHE_CONTROL,
 } from '@/constants';
 
 export const GET = withAdminAuth(
-  async ({ supabase }) => {
+  async ({ session, supabase }) => {
+    // レート制限チェック（#934）。
+    // 画面を開いたときの一覧取得で、ポーリングではないため
+    // READ_USER_DATA に相乗りさせる（専用カウンタが要るのは
+    // `admin/awards/sync/[id]` のような高頻度ポーリングだけ）
+    const limitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.READ_USER_DATA,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.maxAttempts,
+      RATE_LIMIT_CONFIG.READ_USER_DATA.windowMinutes,
+    );
+
+    if (!limitResult.allowed) {
+      return rateLimitExceededResponse(limitResult);
+    }
+
     const accounts = await listIssuedAccounts(
       supabase,
       ADMIN_ACCOUNT_LIST_LIMIT,

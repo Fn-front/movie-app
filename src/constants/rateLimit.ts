@@ -63,6 +63,14 @@ export const RATE_LIMIT_ACTION = {
    * フィルター取得・カレンダー・レコメンド残回数で1つのカウンタを共有する。
    */
   READ_USER_DATA: 'read_api_user_data',
+  /**
+   * admin ルートのロール確認（セッション単位）
+   *
+   * `withAdminAuth` がロールをDBから読む前に消費する。これが無いと、
+   * ログイン済みの非 admin が admin ルートを連打するだけで
+   * `users` への SELECT が無制限に走る（#965）。
+   */
+  ADMIN_ROLE_CHECK: 'admin_role_check',
   /** admin によるアカウント発行・再発行（admin 単位） */
   ADMIN_ACCOUNT_ISSUE: 'admin_account_issue',
   /** admin による受賞作品の手動同期の実行（admin 単位） */
@@ -283,6 +291,25 @@ export const RATE_LIMIT_CONFIG = {
    *    共有カウンタだと他の認証必須読み取りを巻き込んで枯らす。
    */
   ADMIN_AWARD_SYNC_STATUS: { maxAttempts: 600, windowMinutes: 30 },
+  /**
+   * admin ルートのロール確認（#965）。
+   *
+   * `withAdminAuth` はロールを**毎回DBから読む**（JWT の role は最大5分古く、
+   * 剥奪直後の管理操作を通してしまうため）。その SELECT がレート制限より前に
+   * あると、ログイン済みの非 admin が連打するだけで無制限に DB を読める。
+   *
+   * 識別子はセッションのユーザーID。admin かどうかの判定前なので、
+   * **非 admin も含めた全ログインユーザー**がこのカウンタを持つ。
+   *
+   * 上限は受賞同期の進捗ポーリング（5秒間隔 = 12回/分、
+   * `AWARD_SYNC_POLL_INTERVAL_MS`）の10倍を取る。admin の正常操作では
+   * 到達せず、連打は止まる。
+   *
+   * ⚠️ `FAIL_CLOSED_ACTIONS` には入れない。ここは全 admin ルートの入口なので、
+   * rate_limits の不調で拒否側へ倒すと admin 自身の復旧手段まで塞ぐ
+   * （ADMIN_AWARD_SYNC_STATUS と同じ判断）。
+   */
+  ADMIN_ROLE_CHECK: { maxAttempts: 120, windowMinutes: 1 },
 } as const;
 
 /**

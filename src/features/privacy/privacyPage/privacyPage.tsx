@@ -1,26 +1,31 @@
 /**
  * プライバシーポリシー
  *
- * GA4 の導入（#892）に伴って用意するが、対象は GA4 だけではない。
- * OpenAI・Have I Been Pwned・YouTube 埋め込みなど、GA4 以前から存在する
- * 外部送信もここで公表する。
+ * 公表するのは法令が求める範囲に絞る。義務の無い節を増やすと、実装を変える
+ * たびに本文だけ古くなって嘘になる（#933 / #937 はどちらもその修正だった）。
  *
- * 電気通信事業法の外部送信規律は「送信される情報の内容」「送信先」
- * 「送信先での利用目的」の3点を求めるため、端末から出るものの表には
- * 利用目的の列を置く。個人情報保護法27条・28条の委託先とは適用法令が
- * 違うので表を分ける。
+ * 載せる根拠は2系統あり、適用法令が違うので節を分ける。
+ * - 電気通信事業法27条の12（外部送信規律）… 端末から直接出るもの。
+ *   「送信される情報の内容」「送信先」「送信先での利用目的」の3点を求める
+ * - 個人情報保護法32条1項 … 利用目的・安全管理措置・開示等の請求手続・苦情の申出先
+ *
+ * 意図的に載せていないもの（いずれも公表義務が無い）。消したくなった節を
+ * 足し戻す前に、ここを読むこと:
+ * - 取得する情報の項目一覧 … 32条が求めるのは利用目的であって項目の列挙ではない
+ * - サーバー側の委託先一覧 … 法27条5項1号により第三者提供に当たらない。
+ *   外国での取扱いは §4 で国名を示すことで足りる（事業者名は不要）
+ * - Cookie・ローカルストレージの中身 … 外部送信を伴わない端末内保存は規律の対象外
+ * - 保存期間 … 32条1項に保存期間は含まれない（GDPR 13条と混同しやすい）
  */
 
 import { Heading } from '@/components/ui/heading/heading';
 import { EXTERNAL_URLS } from '@/constants/external';
-import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
 import { CookieConsentToggle } from '@/features/cookieConsent/component/cookieConsentToggle/cookieConsentToggle';
 
 import styles from './privacyPage.module.scss';
 
-/** 制定日。改定したら LAST_UPDATED を更新する */
-const ESTABLISHED_AT = '2026年11月3日';
-const LAST_UPDATED = '2026年11月6日';
+/** 改定したら更新する。§3 の再同意の説明がこの日付を前提にしている */
+const LAST_UPDATED = '2026年11月7日';
 
 /**
  * 予告編の埋め込み先ホスト名
@@ -34,7 +39,17 @@ const YOUTUBE_EMBED_HOST = new URL(EXTERNAL_URLS.YOUTUBE_EMBED).hostname;
 /** 問い合わせ・開示請求の窓口 */
 const CONTACT_EMAIL = 'support@example.com';
 
-/** ご利用の端末から外部へ送信される情報（電気通信事業法 外部送信規律） */
+/**
+ * ご利用の端末から外部へ送信される情報（電気通信事業法 外部送信規律）
+ *
+ * 法27条の12 ただし書き一号により「当該電気通信役務の提供のために真に必要な
+ * 情報」は対象外。総務省ガイドラインが除外例として挙げる「認証に用いる情報」
+ * 「コンテンツの表示に必要な情報」に当たるものは、ここに載せない。
+ * - ソーシャルログイン（Google / GitHub）への認証情報 … 認証に必要
+ * - TMDb へのポスター画像取得に伴うIPアドレス … 画像の表示に必要
+ *
+ * 逆に下の2件は、配信そのものを超えた「計測」が目的に含まれるため載せる。
+ */
 const CLIENT_TRANSMISSIONS = [
   {
     // 操作の記録（カスタムイベント）は #938 で追加した。Consent Mode は
@@ -56,11 +71,7 @@ const CLIENT_TRANSMISSIONS = [
     // ファサード（クリックで読み込む仕組み）は無く、ダイアログを開いた時点で
     // iframe が生成される。「再生した際」と書くと実態より後ろにずれる。
     //
-    // Cookie は挙げない。プライバシー強化モード（youtube-nocookie.com）へ
-    // 切り替えた結果、ダイアログを開いても再生しても Cookie が設定されないことを
-    // 実測で確認している（#937。切り替え前は開いた時点で5件設定されていた）。
-    //
-    // 一方で「計測」と書く以上、計測対象を列挙しないと目的と内容が食い違う。
+    // 「計測」と書く以上、計測対象を列挙しないと目的と内容が食い違う。
     // 送信先は動画配信・不正検知の関連ドメイン（googlevideo.com /
     // jnn-pa.googleapis.com 等）にも及ぶため、括弧で含む旨を書く。
     // URL が「オリジンまで」なのは next.config.mjs:103-104 の
@@ -69,93 +80,16 @@ const CLIENT_TRANSMISSIONS = [
     data: '予告編のダイアログを開いた際のIPアドレス・ブラウザの種類・視聴する動画の識別子・本サービスのURL（オリジンまで）・再生状況',
     purpose: '動画の配信と再生品質の計測',
   },
-  {
-    to: 'Google / GitHub',
-    data: 'ソーシャルログインを選択した際の認証情報',
-    purpose: '本人確認（OAuth 認証）',
-  },
-  {
-    to: 'TMDb',
-    data: '設定画面の「興味なし一覧」を表示する際のIPアドレス',
-    purpose: 'ポスター画像の配信',
-  },
-];
-
-/** 当社サーバーから取扱いを委託している先（個人情報保護法 27条・28条） */
-const SERVER_TRANSMISSIONS = [
-  {
-    to: 'OpenAI',
-    data: 'お気に入り作品のタイトルと評価、興味なしリスト、ウォッチリストの作品名、検索時に入力された作品名',
-    purpose: 'おすすめ作品の生成と、検索時の原題候補の提示',
-  },
-  {
-    to: 'Have I Been Pwned',
-    data: 'パスワードから生成したハッシュ値の先頭5文字（パスワードそのものは送信しません）',
-    purpose: '漏洩が確認されたパスワードの使用を防ぐため',
-  },
-  {
-    to: 'Resend',
-    data: '確認コード・パスワード再設定メールの宛先メールアドレス',
-    purpose: 'メールの送信',
-  },
-  {
-    to: 'TMDb',
-    data: '作品の検索キーワード（利用者を識別する情報は含みません）',
-    purpose: '作品情報の取得',
-  },
-  {
-    to: 'GitHub',
-    data: 'ソーシャルログイン利用時のアクセストークン',
-    purpose: '検証済みメールアドレスの取得',
-  },
-  {
-    to: 'Supabase / Vercel',
-    data: '本ポリシーに記載するすべての情報',
-    purpose: 'データの保管およびアプリケーションの配信',
-  },
 ];
 
 export function PrivacyPage() {
   return (
     <div className={styles.c_privacy_page}>
       <Heading level={1}>プライバシーポリシー</Heading>
-      <p className={styles.c_privacy_page__meta}>
-        制定日: {ESTABLISHED_AT} / 最終改定日: {LAST_UPDATED}
-      </p>
+      <p className={styles.c_privacy_page__meta}>最終改定日: {LAST_UPDATED}</p>
 
       <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>1. 取得する情報</Heading>
-        <ul className={styles.c_privacy_page__list}>
-          <li>
-            アカウント情報（メールアドレス、ユーザー名、ハッシュ化したパスワード）
-          </li>
-          <li>
-            ソーシャルログインで取得するプロフィール（メールアドレス、表示名）
-          </li>
-          <li>
-            二段階認証の共有鍵（暗号化して保管します）およびリカバリコード
-          </li>
-          <li>
-            利用データ（お気に入り、ウォッチリスト、興味なしリスト、評価、保存した絞り込み条件、各種設定）
-          </li>
-          <li>
-            Cookie同意の状態と日時（ログイン中はアカウントにも保存します）
-          </li>
-          <li>
-            技術情報（IPアドレス、セッションCookie、コンテンツセキュリティポリシー違反のレポート）
-          </li>
-          {/*
-            admin_audit_logs は §1 の表には載せない。記録するのは
-            (操作者, 対象, 操作, 日時) の4項目のみで、メールアドレス等の
-            内容を持たないため。ただし target_user_id に紐づく以上、当該
-            利用者の保有個人データではあるので、§2 の利用目的で
-            「管理操作の記録」として覆っている（法32条1項2号）
-          */}
-        </ul>
-      </section>
-
-      <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>2. 利用目的</Heading>
+        <Heading level={2}>1. 利用目的</Heading>
         <ul className={styles.c_privacy_page__list}>
           <li>認証とアカウントの管理</li>
           <li>おすすめ作品の生成</li>
@@ -168,7 +102,7 @@ export function PrivacyPage() {
       </section>
 
       <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>3. ご利用の端末から外部へ送信される情報</Heading>
+        <Heading level={2}>2. ご利用の端末から外部へ送信される情報</Heading>
         <p>
           本サービスの利用にあたり、お客様の端末から次の送信先へ情報が送信されます。
         </p>
@@ -190,73 +124,20 @@ export function PrivacyPage() {
             ))}
           </tbody>
         </table>
-      </section>
-
-      <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>4. 取扱いを委託している先</Heading>
+        {/*
+          Cookie を設定しない旨は #937 の実測に基づく。切り替え前はダイアログを
+          開いた時点で5件設定されていたため、埋め込み先を戻すとこの記述は嘘になる
+        */}
         <p>
-          本サービスのサーバーから、次の事業者へ情報の取扱いを委託しています。
-        </p>
-        <table className={styles.c_privacy_page__table}>
-          <thead>
-            <tr>
-              <th scope='col'>委託先</th>
-              <th scope='col'>取り扱う情報</th>
-              <th scope='col'>委託の目的</th>
-            </tr>
-          </thead>
-          <tbody>
-            {SERVER_TRANSMISSIONS.map((row) => (
-              <tr key={`${row.to}-${row.purpose}`}>
-                <th scope='row'>{row.to}</th>
-                <td>{row.data}</td>
-                <td>{row.purpose}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>5. 外国にある第三者への提供</Heading>
-        <p>
-          上記の委託先およびGoogleには、米国など日本国外に所在する事業者が含まれます。個人情報保護委員会規則で定める基準に適合する体制を整備した事業者を選定しています。移転先の国名や講じている措置の詳細は、下記の窓口へのご請求に応じて情報提供します。
+          予告編の埋め込みには YouTube のプライバシー強化モード（
+          <code>{YOUTUBE_EMBED_HOST}</code>
+          ）を利用しており、当社が確認した範囲では、ダイアログを開いても再生しても
+          YouTube の Cookie は設定されません。
         </p>
       </section>
 
       <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>6. Cookie とブラウザの保存領域</Heading>
-        <ul className={styles.c_privacy_page__list}>
-          <li>
-            Cookie:
-            ログイン状態を保持するためのセッショントークン、CSRF対策のトークン、ログイン後の戻り先
-          </li>
-          <li>
-            Cookie: <code>_ga</code> および <code>_ga_&lt;コンテナID&gt;</code>
-            （アクセス解析に同意いただいた場合のみ）
-          </li>
-          <li>
-            Cookie: 予告編の埋め込みは YouTube のプライバシー強化モード（
-            <code>{YOUTUBE_EMBED_HOST}</code>
-            ）を利用しており、当社が確認した範囲では、ダイアログを開いても再生しても
-            YouTube の Cookie は設定されません
-          </li>
-          <li>
-            YouTube のプレイヤーによるローカルストレージ・IndexedDB:
-            字幕の表示設定など、再生に関する設定（上記のモードでも保存されます）
-          </li>
-          <li>
-            ローカルストレージ:
-            表示テーマ、作品一覧の絞り込み条件、Cookie同意の状態・日時・対象者・版
-          </li>
-          <li>
-            セッションストレージ: おすすめ表示の送信済み記録、検索時の原題候補
-          </li>
-        </ul>
-      </section>
-
-      <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>7. アクセス解析と同意</Heading>
+        <Heading level={2}>3. アクセス解析と同意</Heading>
         <p>
           本サービスは Google アナリティクス 4 を利用しています。Google
           同意モードにより、お客様の同意状態をタグへ伝えています。
@@ -282,68 +163,65 @@ export function PrivacyPage() {
         <p>
           広告関連の機能（広告用ストレージ、広告目的でのユーザーデータの送信、広告のパーソナライズ）は常に無効にしています。
         </p>
+        {/*
+          同意の版（user_settings.cookie_consent_version）を上げると再同意を求める
+          実装になっている。その挙動の説明なので、改定告知の節を削っても残す
+        */}
+        <p>
+          送信先や送信する情報の内容を変更したときは、本ページに最終改定日を記載して公表し、アクセス解析への同意をあらためて確認させていただきます。
+        </p>
         <CookieConsentToggle />
       </section>
 
       <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>8. 保存期間と削除</Heading>
+        <Heading level={2}>4. 外国における個人データの取扱い</Heading>
         <p>
-          アカウントに紐づく情報は、アカウントが存在する間保存します。
-          <strong>
-            現在、画面からアカウントを削除する機能は提供していません。
-          </strong>
-          削除のご希望は下記の窓口で承り、手作業で対応します。
-        </p>
-        <p>
-          不正利用の防止に用いる試行回数の記録（メールアドレス・IPアドレスを含みます）は、最後の試行から
-          {RATE_LIMIT_RETENTION_HOURS}
-          時間が過ぎたものを毎日自動削除します。制限中（ロック中）のものは、解除されるまで保持します。
-        </p>
-        {/*
-          自動削除の対象は試行回数の記録（rate_limits）だけ。アカウント発行の
-          監査ログ（admin_audit_logs）と確認コード（otp_codes）には定期削除が
-          無い。上の段落だけを置くと「不正利用防止目的の記録は48時間で消える」と
-          読めてしまうため、対象外を明示する（#933）
-        */}
-        <p>
-          アカウントの発行・再発行の監査記録や、メールでお送りした確認コードは、現在自動削除の仕組みを設けていません。削除のご希望は窓口へご連絡ください。
+          本サービスは、アプリケーションの実行および一部の処理の委託に伴い、
+          <strong>米国</strong>
+          において個人データを取り扱っています。委託先には、個人情報保護委員会規則で定める基準に適合する体制を整備した事業者を選定しています。委託先の名称、当該国の個人情報の保護に関する制度、および講じている措置の詳細は、下記の窓口へのご請求に応じて情報提供します。
         </p>
       </section>
 
       <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>9. 安全管理措置</Heading>
+        <Heading level={2}>5. 安全管理措置</Heading>
+        {/*
+          法32条1項4号。ガイドライン通則編により「概要」で足り、かつ「本人の
+          知り得る状態に置くことにより支障を及ぼすおそれがあるもの」は除いてよい。
+          ハッシュ関数名や鍵長のような実装詳細は攻撃者への情報提供になるため書かない
+        */}
         <ul className={styles.c_privacy_page__list}>
-          <li>パスワードはハッシュ化して保管し、平文では保存しません。</li>
-          <li>二段階認証の共有鍵は暗号化して保管しています。</li>
           <li>通信はすべて暗号化（HTTPS）しています。</li>
           <li>
-            データベースへのアクセスはサーバー側に限定し、権限を必要最小限にしています。
+            パスワードおよび二段階認証の共有鍵は、ハッシュ化または暗号化して保管し、平文では保存しません。
           </li>
           <li>
-            外国において個人データを取り扱っています（詳細は第5項をご覧ください）。
+            個人データへのアクセスはサーバー側に限定し、権限を必要最小限にしています。
+          </li>
+          <li>
+            外国において個人データを取り扱っています（詳細は第4項をご覧ください）。
           </li>
         </ul>
       </section>
 
       <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>10. 開示等のご請求と苦情の申出先</Heading>
+        <Heading level={2}>6. 開示等のご請求と苦情の申出先</Heading>
         <p>
           保有個人データの利用目的の通知、開示、訂正、利用停止、消去のご請求、および苦情の申出は次の窓口で承ります。手数料はいただきません。
         </p>
         <p>
           <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
         </p>
+        {/*
+          公表義務は無いが、画面から消せないことを事前に知れないと利用者が
+          窓口の存在に辿り着けない。実装上の制約の開示として1文だけ残す
+        */}
+        <p>
+          現在、画面からアカウントを削除する機能は提供していません。アカウントの削除をご希望の場合も同じ窓口で承り、手作業で対応します。
+        </p>
         <p>
           ご本人確認のため、ご登録のメールアドレスからご連絡ください。代理人によるご請求の場合は委任状をご提出ください。
         </p>
         <p>運営者の氏名および住所は、ご請求に応じて遅滞なく回答します。</p>
-      </section>
-
-      <section className={styles.c_privacy_page__section}>
-        <Heading level={2}>11. 本ポリシーの改定について</Heading>
-        <p>
-          本ポリシーの内容を変更する場合は、本ページに最終改定日を記載して公表します。送信先や送信する情報の内容を変更したときは、アクセス解析への同意をあらためて確認させていただきます。
-        </p>
       </section>
     </div>
   );

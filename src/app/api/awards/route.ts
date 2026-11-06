@@ -80,33 +80,13 @@ function toAwardMovie(row: AwardMovieRow): AwardMovie {
 
 export async function GET(request: Request) {
   try {
-    // バリデーション（不正リクエストはレートリミット消費対象外）
-    const { searchParams } = new URL(request.url);
-    const yearParam = searchParams.get('year');
-
-    const year = Number(yearParam);
-
-    if (
-      !yearParam ||
-      isNaN(year) ||
-      year < AWARD_YEAR_RANGE.MIN ||
-      year > AWARD_YEAR_RANGE.MAX
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.VALIDATION_ERROR,
-            message: `yearパラメータは必須です（${AWARD_YEAR_RANGE.MIN}〜${AWARD_YEAR_RANGE.MAX}の数値）`,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
-
     // レートリミットチェック（service roleで rate_limits テーブルにアクセス）
     // ※ checkRateLimitは「N回到達でロック」方式のバースト保護。
     //   スライディングウィンドウ方式ではないが、Cache-Controlとの併用で十分な保護を提供する。
+    //
+    // 検証より前に置く。識別子が送信元IPなのでこの時点で確定している。
+    // 検証を先にすると、year を壊すだけでカウンタを消費せずに叩き続けられる
+    // （`.claude/rules/api-route.md`）
     const serviceSupabase = createServiceRoleClient();
     if (serviceSupabase) {
       const clientIp = getClientIp(request);
@@ -138,6 +118,30 @@ export async function GET(request: Request) {
           },
         );
       }
+    }
+
+    // バリデーション
+    const { searchParams } = new URL(request.url);
+    const yearParam = searchParams.get('year');
+
+    const year = Number(yearParam);
+
+    if (
+      !yearParam ||
+      isNaN(year) ||
+      year < AWARD_YEAR_RANGE.MIN ||
+      year > AWARD_YEAR_RANGE.MAX
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: `yearパラメータは必須です（${AWARD_YEAR_RANGE.MIN}〜${AWARD_YEAR_RANGE.MAX}の数値）`,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
     }
 
     // データ取得はanonキー（RLS有効）

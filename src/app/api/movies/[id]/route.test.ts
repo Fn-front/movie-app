@@ -268,13 +268,31 @@ describe('GET /api/movies/:id', () => {
       expect(mockGetMovieDetail).not.toHaveBeenCalled();
     });
 
-    it('不正なIDはレート制限を消費しない', async () => {
-      const response = await GET(createRequest('abc'), {
-        params: Promise.resolve({ id: 'abc' }),
+    describe('処理順', () => {
+      // レート制限 → バリデーション（#940）。
+      // 識別子はセッションか送信元IPなので検証より前に確定している。
+      // 逆順だと、不正なIDを混ぜるだけでカウンタを消費せずに叩き続けられる
+      // （`.claude/rules/api-route.md`）
+      it('不正なIDでもレート制限を消費する', async () => {
+        const response = await GET(createRequest('abc'), {
+          params: Promise.resolve({ id: 'abc' }),
+        });
+
+        expect(response.status).toBe(400);
+        expect(mockEnforcePublicRateLimit).toHaveBeenCalledTimes(1);
       });
 
-      expect(response.status).toBe(400);
-      expect(mockEnforcePublicRateLimit).not.toHaveBeenCalled();
+      it('レート制限超過時は、IDが不正でも429を返す', async () => {
+        mockEnforcePublicRateLimit.mockResolvedValueOnce(
+          new Response(JSON.stringify({ success: false }), { status: 429 }),
+        );
+
+        const response = await GET(createRequest('abc'), {
+          params: Promise.resolve({ id: 'abc' }),
+        });
+
+        expect(response.status).toBe(429);
+      });
     });
 
     it('認証済みはユーザーID、未認証は送信元で数える', async () => {

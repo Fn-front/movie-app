@@ -162,10 +162,28 @@ describe('GET /api/awards', () => {
     expect(body.success).toBe(false);
   });
 
-  it('不正なリクエストはレートリミットを消費しない', async () => {
-    await GET(createRequest());
+  describe('処理順', () => {
+    // レート制限 → バリデーション（#940）。
+    // 識別子が送信元IPなので検証より前に確定している。逆順だと、
+    // year を壊すだけでカウンタを消費せずに叩き続けられる
+    // （`.claude/rules/api-route.md`）
+    it('不正なリクエストでもレートリミットを消費する', async () => {
+      const response = await GET(createRequest());
 
-    expect(checkRateLimit).not.toHaveBeenCalled();
+      expect(response.status).toBe(400);
+      expect(checkRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it('レートリミット超過時は、yearが不正でも429を返す', async () => {
+      (checkRateLimit as jest.Mock).mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 600,
+      });
+
+      const response = await GET(createRequest());
+
+      expect(response.status).toBe(429);
+    });
   });
 
   it('正常にデータを取得する', async () => {

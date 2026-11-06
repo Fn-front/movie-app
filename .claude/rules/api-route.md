@@ -85,31 +85,62 @@ export async function POST(request: Request) {
 
 ### 新しいルートを書くとき
 
-1. 識別子は何か → `session.user.id` / `clientIp` なら**原則どおり検証より前**
-2. ボディ由来なら → 例外1。検証の直後
-3. 守るものが外部APIやメールなら → 例外2。資源の直前
+**レート制限1つにつき1回、上から順に判定する。** 最初に当たったものを採る。
+1ハンドラに複数のレート制限がある場合（`auth/register` は2つ）は、それぞれ別々に
+判定すること。
+
+1. 守るものが**外部APIの費用やメールボックス**で、そこへ到達するのが検証の後か
+   → **例外2**。資源を消費する直前に置く
+2. 識別子が**検証済みのボディの値**から作られるか
+   → **例外1**。検証の直後に置く
+3. それ以外（識別子がセッション / 送信元IP / パス・クエリから直接取れる）
+   → **原則**。検証より前に置く
 4. **例外を選んだらコメントに理由を書く**。後から読む人が原則違反と誤認して
    戻してしまう（`settings` PUT が実際にそうなった）
 
-### 現状の一覧（#940 時点）
+> ⚠️ 順番が逆だと誤判定する。`movies/suggest-title` の識別子は `session.user.id`
+> なので、3 を先に当てると「原則」と出るが、正解は例外2（守っているのは
+> OpenAI の費用であり、キャッシュ照合には検証済みの query が要る）。
 
-検証を伴うルートの全16ハンドラ。これ以外は検証が無いか、レート制限が無い。
+### ここでいう「検証」
 
-| 原則どおり（レート制限 → 検証） | 例外（検証 → レート制限） |
+**リクエストの入力を検査して 400 を返す処理すべて**を指す。zod の `safeParse` に
+限らない。`movies/[id]` の `Number.isNaN(movieId)`、`awards` の year 範囲チェックの
+ような手書きの検査も同じ扱いにする。
+
+### 例外の一覧（ここだけが検証より後ろ）
+
+**これ以外のハンドラはすべて原則どおり**（レート制限 → 検証）。個別の一覧は
+ルート追加で必ず腐るため置かない。逆順にするときは必ずこの表へ追記すること。
+
+| ハンドラ | 該当 |
 |---|---|
-| `auth/password-reset/confirm` POST | `auth/otp/send` POST（例外1・2） |
-| `filters` PUT | `auth/otp/verify` POST（例外1） |
-| `theaters/[slug]` GET | `auth/register` POST（例外1・2） |
-| `user/change-password` POST | `auth/password-reset/request` POST（例外1） |
-| `user/profile` PUT | `movies/suggest-title` GET（例外2） |
-| `user/settings` PUT | |
-| `user/totp/enable` POST | |
-| `user/totp/disable` POST | |
-| `user/totp/recovery-codes` POST | |
-| `watchlist/calendar` GET | |
-| `watchlist/watched` GET | |
+| `auth/otp/send` POST | 例外1・例外2 |
+| `auth/otp/verify` POST | 例外1 |
+| `auth/register` POST（`REGISTER`） | 例外1 |
+| `auth/register` POST（`OTP_SEND_DAILY`） | 例外2 |
+| `auth/password-reset/request` POST | 例外1 |
+| `movies/suggest-title` GET | 例外2 |
 
-各ハンドラのテストに `処理順` の describe があり、順序を回帰テストしている。
+レート制限と検証の両方を持つハンドラのテストには `処理順` の describe があり、
+「レート制限超過 かつ 入力が不正」のリクエストが 429 を返すか 400 を返すかで
+順序を回帰テストしている。
+
+### 公開ルート（未認証で叩ける）
+
+`src/helpers/publicRateLimit.ts` の `enforcePublicRateLimit` を使う。識別子は
+認証済みならユーザーID、そうでなければ送信元IP。**どちらも検証より前に確定する
+ので原則どおり**に置く（`movies` / `movies/[id]` / `movies/search` /
+`movies/genres` / `person/[id]`）。
+
+⚠️ このヘルパーは2つの条件で**制限を掛けずに通す**（fail-open）。順序を正しく
+しても保護が無い場合があることに注意。
+
+- service role クライアントを作れない（環境変数未設定）— `publicRateLimit.ts:52`
+- 未認証かつ送信元IPが `unknown` — 同 `:66`（本番の Vercel エッジでは発生しない）
+
+同じく `auth/password-reset/confirm` も `clientIp === 'unknown'` のときは
+レート制限そのものを実行しない（`route.ts:58`）。
 
 ## 【必須】レスポンス形式
 

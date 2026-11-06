@@ -29,6 +29,25 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    // 認証判定を TMDb 呼び出しより前に行う。
+    // 識別子にユーザーIDを使うため（NAT で同一IPを共有する利用者を
+    // まとめて巻き込まないため）、レート制限より先に必要になる
+    const session = await getAuthSession();
+
+    // 未認証で叩ける＝サーバーの TMDB_API_KEY を使った無認証プロキシになるため、
+    // TMDb を呼ぶ前に上限を掛ける。
+    //
+    // 検証より前に置く。識別子はセッションか送信元IPで、どちらもこの時点で
+    // 確定している。検証を先にすると、不正なIDを混ぜるだけでカウンタを
+    // 消費せずに叩き続けられる（`.claude/rules/api-route.md`）
+    const limited = await enforcePublicRateLimit({
+      request,
+      action: RATE_LIMIT_ACTION.READ_MOVIE_DETAIL,
+      limit: RATE_LIMIT_CONFIG.READ_MOVIE_DETAIL,
+      userId: session?.user?.id,
+    });
+    if (limited) return limited;
+
     const { id } = await params;
     const movieId = Number(id);
 
@@ -44,21 +63,6 @@ export async function GET(
         { status: HTTP_STATUS.BAD_REQUEST },
       );
     }
-
-    // 認証判定を TMDb 呼び出しより前に行う。
-    // 識別子にユーザーIDを使うため（NAT で同一IPを共有する利用者を
-    // まとめて巻き込まないため）、レート制限より先に必要になる
-    const session = await getAuthSession();
-
-    // 未認証で叩ける＝サーバーの TMDB_API_KEY を使った無認証プロキシになるため、
-    // TMDb を呼ぶ前に上限を掛ける。不正なIDは上の400で弾いており枠を消費しない
-    const limited = await enforcePublicRateLimit({
-      request,
-      action: RATE_LIMIT_ACTION.READ_MOVIE_DETAIL,
-      limit: RATE_LIMIT_CONFIG.READ_MOVIE_DETAIL,
-      userId: session?.user?.id,
-    });
-    if (limited) return limited;
 
     const movie = await getMovieDetail(movieId);
 

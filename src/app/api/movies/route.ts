@@ -99,6 +99,28 @@ export async function GET(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
+    // 認証判定を前倒しする。
+    // 識別子にユーザーIDを使うため（NAT で同一IPを共有する利用者を
+    // まとめて巻き込まないため）、レート制限より先に必要になる。
+    // 下部のお気に入り付与でも同じ session を使い回す
+    const session = await getAuthSession();
+
+    // 未認証で叩ける＝サーバーの TMDB_API_KEY を使った無認証プロキシになるうえ、
+    // キャッシュ失効時は TMDb の同期処理（1回で200リクエスト規模）まで誘発できる。
+    //
+    // 検証より前に置く。識別子はセッションか送信元IPで、どちらもこの時点で
+    // 確定している。検証を先にすると、不正なクエリを混ぜるだけでカウンタを
+    // 消費せずに叩き続けられる。兄弟の `movies/search` と順序を揃える
+    // （`.claude/rules/api-route.md`）
+    const limited = await enforcePublicRateLimit({
+      request,
+      action: RATE_LIMIT_ACTION.READ_MOVIES,
+      limit: RATE_LIMIT_CONFIG.READ_MOVIES,
+      userId: session?.user?.id,
+      supabase,
+    });
+    if (limited) return limited;
+
     // クエリパラメータのバリデーション
     const { searchParams } = new URL(request.url);
     const queryResult = moviesQuerySchema.safeParse({
@@ -144,24 +166,6 @@ export async function GET(request: Request) {
       offer_types,
       include_regions,
     } = queryResult.data;
-
-    // 認証判定を前倒しする。
-    // 識別子にユーザーIDを使うため（NAT で同一IPを共有する利用者を
-    // まとめて巻き込まないため）、レート制限より先に必要になる。
-    // 下部のお気に入り付与でも同じ session を使い回す
-    const session = await getAuthSession();
-
-    // 未認証で叩ける＝サーバーの TMDB_API_KEY を使った無認証プロキシになるうえ、
-    // キャッシュ失効時は TMDb の同期処理（1回で200リクエスト規模）まで誘発できる。
-    // 不正なクエリは上の400で弾いており枠を消費しない
-    const limited = await enforcePublicRateLimit({
-      request,
-      action: RATE_LIMIT_ACTION.READ_MOVIES,
-      limit: RATE_LIMIT_CONFIG.READ_MOVIES,
-      userId: session?.user?.id,
-      supabase,
-    });
-    if (limited) return limited;
 
     // ジャンルマップを取得
     const genreMap = await getGenreMap();

@@ -2272,11 +2272,27 @@ describe('GET /api/movies', () => {
       );
     });
 
-    it('不正なクエリはレート制限を消費しない', async () => {
-      const response = await GET(createRequest({ page: '-1' }));
+    describe('処理順', () => {
+      // レート制限 → バリデーション（#940）。
+      // 識別子はセッションか送信元IPなので検証より前に確定している。
+      // 兄弟の `movies/search` と順序が逆だったのを揃えた
+      // （`.claude/rules/api-route.md`）
+      it('不正なクエリでもレート制限を消費する', async () => {
+        const response = await GET(createRequest({ page: '-1' }));
 
-      expect(response.status).toBe(400);
-      expect(mockEnforcePublicRateLimit).not.toHaveBeenCalled();
+        expect(response.status).toBe(400);
+        expect(mockEnforcePublicRateLimit).toHaveBeenCalledTimes(1);
+      });
+
+      it('レート制限超過時は、クエリが不正でも429を返す', async () => {
+        mockEnforcePublicRateLimit.mockResolvedValueOnce(
+          new Response(JSON.stringify({ success: false }), { status: 429 }),
+        );
+
+        const response = await GET(createRequest({ page: '-1' }));
+
+        expect(response.status).toBe(429);
+      });
     });
   });
 });

@@ -26,15 +26,26 @@ on:
 # 衝突の原因だった固定の識別子（メールアドレス・movie_cache のID・送信元IP）は
 # run 単位に分離した（e2e/helpers/runScope.ts）。直列化は不要になったため外す。
 jobs:
+  # シャード分割した本体（#834）
+  #
+  # ⚠️ このジョブ名は必須ステータスチェックではない。matrix はジョブ名に
+  # `(1)` のような接尾辞が付くため、固定名のチェックには使えない。
+  # 必須チェック `Playwright E2E` は下の集約ジョブが名乗り、ここの結果を
+  # そのまま引き継ぐ。
   e2e:
-    name: Playwright E2E
+    name: E2Eシャード ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
     environment: Production
-    # playwright-report-summary が PR へ結果サマリを書くため pull-requests が要る。
-    # test.yml の coverage ジョブと同じ組み合わせ。
     permissions:
       contents: read
-      pull-requests: write
+    strategy:
+      # 1つのシャードが落ちても残りを最後まで流す。途中でキャンセルすると
+      # 集約レポートが歯抜けになり、他シャードの失敗を見落とす
+      fail-fast: false
+      matrix:
+        # 分割数を変えるときはここだけ。`--shard` の分母は
+        # `strategy.job-total` から取るため追従する
+        shard: [1, 2, 3, 4]
     steps:
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
@@ -97,7 +108,7 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
       - name: run-e2e-tests
-        run: npm run test:e2e
+        run: npm run test:e2e -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
         env:
           CI: true
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
@@ -111,33 +122,131 @@ jobs:
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           AUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           # 共有テストユーザーは run ごとに作って消すため、固定ユーザーの
-          # 認証情報（旧 E2E_TEST_USER_EMAIL / _PASSWORD）は渡さない。
-          # run の識別子に使う GITHUB_RUN_ID / GITHUB_RUN_ATTEMPT は
-          # Actions が既定で渡すため明示指定も不要（#793）。
+          # 認証情報（旧 E2E_TEST_USER_EMAIL / _PASSWORD）は渡さない（#793）。
+          #
+          # ⚠️ 必須。既定の導出は GITHUB_RUN_ID × GITHUB_RUN_ATTEMPT だが、
+          # シャードは「同じ run の中の別ジョブ」なので全シャードで同値になる。
+          # run 固有の識別子（メールアドレス・送信元IP・movie_cache のID領域）を
+          # 共有してしまい、さらに setup/cleanup プロジェクトはシャードごとに
+          # 走るため、先に終わったシャードの teardown が実行中の他シャードの
+          # ユーザーを消す（#793 / #834）。
+          # `sanitizeRunId()` が英数字以外を落とすため区切りは `x` / `s` を使う
+          E2E_RUN_ID: ${{ github.run_id }}x${{ github.run_attempt }}s${{ matrix.shard }}
           NEXTAUTH_URL: http://localhost:3000
           AUTH_TRUST_HOST: 'true'
 
-      - name: playwright-report-summary
-        uses: daun/playwright-report-summary@5359ae22f265fd2dfdb7744a0cc6614c5c3abde6 # ratchet:daun/playwright-report-summary@v4.1.1
-        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
-        with:
-          report-file: playwright-report/results.json
-
-      - name: upload-playwright-report
+      # 集約ジョブが merge-reports で1つにまとめる元データ。
+      # アーティファクト名は重複できないためシャード番号を付ける
+      - name: upload-blob-report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # ratchet:actions/upload-artifact@v7.0.2
         if: ${{ !cancelled() }}
         with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 30
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report/
+          # 集約ジョブが読んだら用済み。マージ済みレポートの方を長く残す
+          retention-days: 1
 
       - name: upload-test-results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # ratchet:actions/upload-artifact@v7.0.2
         if: ${{ !cancelled() }}
         with:
-          name: test-results
+          name: test-results-${{ matrix.shard }}
           path: test-results/
           retention-days: 30
+
+  # シャードの結果を1つに束ねる（#834）
+  #
+  # ⚠️ このジョブ名 `Playwright E2E` は main のリポジトリルールで必須
+  # ステータスチェックとして登録されている。変更するとルール側も直さない限り
+  # 「永遠に pending の必須チェック」になり、PR がマージできなくなる。
+  #
+  # 役割は2つ。
+  #   1. 全シャードの blob を1つの results.json にまとめ、PR のサマリを
+  #      分割前と同じ見え方に保つ
+  #   2. シャードの成否をこのジョブの成否として引き継ぐ（最後の step）
+  e2e-report:
+    name: Playwright E2E
+    needs: e2e
+    # シャードが落ちてもサマリは出す。成否は最後の step で引き継ぐ
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    # playwright-report-summary が PR へ結果サマリを書くため pull-requests が要る。
+    # test.yml の coverage ジョブと同じ組み合わせ。
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+
+      - name: setup-node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # ratchet:actions/setup-node@v7.1.0
+        with:
+          node-version: 20
+          cache: npm
+
+      # merge-reports に @playwright/test が要る。ブラウザは不要
+      - name: cache-node-modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # ratchet:actions/cache@v6.1.0
+        id: node_modules_cache
+        with:
+          path: '**/node_modules'
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
+
+      - name: npm-install
+        if: ${{ steps.node_modules_cache.outputs.cache-hit != 'true' }}
+        run: npm ci
+
+      - name: download-blob-reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # ratchet:actions/download-artifact@v8.0.2
+        with:
+          pattern: blob-report-*
+          # シャードごとの zip は `report-1.zip` のように名前が割れるため、
+          # 1ディレクトリへ混ぜても衝突しない
+          merge-multiple: true
+          path: all-blob-reports
+        continue-on-error: true
+
+      # シャードが全滅するとアーティファクトが1つも無く merge が落ちる。
+      # サマリは諦め、成否の引き継ぎ（最後の step）だけ行う
+      - name: check-blob-reports-exist
+        id: blob_reports
+        run: |
+          if [ -n "$(find all-blob-reports -name '*.zip' -type f 2>/dev/null | head -n 1)" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::blob レポートが1つも無いため集約をスキップします"
+          fi
+
+      - name: merge-reports
+        if: ${{ steps.blob_reports.outputs.found == 'true' }}
+        run: npx playwright merge-reports --reporter json all-blob-reports
+        env:
+          # 既定では標準出力へ出る。分割前と同じパスへ書かせる
+          PLAYWRIGHT_JSON_OUTPUT_FILE: playwright-report/results.json
+
+      - name: playwright-report-summary
+        uses: daun/playwright-report-summary@5359ae22f265fd2dfdb7744a0cc6614c5c3abde6 # ratchet:daun/playwright-report-summary@v4.1.1
+        if: ${{ steps.blob_reports.outputs.found == 'true' && github.event_name == 'pull_request' }}
+        with:
+          report-file: playwright-report/results.json
+
+      - name: upload-playwright-report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # ratchet:actions/upload-artifact@v7.0.2
+        if: ${{ steps.blob_reports.outputs.found == 'true' }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+      # ⚠️ 最後に置くこと。これより前に落とすとサマリが投稿されない。
+      # これが無いと、シャードが失敗しても必須チェックが緑になる
+      - name: inherit-shard-result
+        if: ${{ needs.e2e.result != 'success' }}
+        run: |
+          echo "::error::E2E シャードが success ではありません（結果: ${{ needs.e2e.result }}）"
+          exit 1
 
   # GA4 を有効にした E2E（#931）
   #

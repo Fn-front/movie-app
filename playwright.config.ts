@@ -40,9 +40,13 @@ export default defineConfig({
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
   workers: isCI ? 2 : undefined,
-  reporter: isCI
-    ? [['github'], ['json', { outputFile: 'playwright-report/results.json' }]]
-    : 'html',
+  // CI は `e2e.yml` が `--shard` で分割するため、シャードごとに部分レポート
+  // （blob）を出す。PR のサマリに使う `results.json` は、全シャードの blob を
+  // 集めた `Playwright E2E` ジョブが `playwright merge-reports` で1つに
+  // まとめて生成する（#834）。
+  // ⚠️ ここを `json` に戻すとシャードの数だけ部分 JSON ができ、サマリが
+  //   1/4 の結果しか映さなくなる
+  reporter: isCI ? [['github'], ['blob']] : 'html',
   timeout: 30000,
   expect: {
     timeout: 10000,

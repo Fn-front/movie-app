@@ -184,3 +184,77 @@ describe('runScopedMovieIdRange', () => {
     expect(runScopedMovieId(99)).toBe(max);
   });
 });
+
+/**
+ * CI のシャード分割（#834）
+ *
+ * `.github/workflows/e2e.yml` は `--shard` でジョブを分け、各ジョブへ
+ * `<run_id>x<attempt>s<shard>` という E2E_RUN_ID を渡す。シャードは同じ run の
+ * 中の別ジョブなので、既定の導出（GITHUB_RUN_ID × GITHUB_RUN_ATTEMPT）のままだと
+ * 全シャードが同値になる。さらに setup / cleanup プロジェクトはシャードごとに
+ * 走るため、先に終わったシャードの teardown が実行中の他シャードのデータを消す。
+ *
+ * 識別子がシャード間で分離されていることを、ここで回帰テストする。
+ */
+describe('シャード分割した run スコープ', () => {
+  /** ワークフローと同じ組み立て方で E2E_RUN_ID を作る */
+  const shardRunId = (shard: number) => `39622116175x1s${shard}`;
+
+  /** 設定中の分割数ぶんの runScope を読み込む */
+  const loadShards = () =>
+    [1, 2, 3, 4].map((shard) =>
+      loadRunScope({ E2E_RUN_ID: shardRunId(shard) }),
+    );
+
+  it('シャードごとに別の run IDになり、24文字の上限にも収まる', () => {
+    const ids = loadShards().map((shard) => shard.E2E_RUN_ID);
+
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) {
+      // sanitizeRunId に落とされる文字が混ざっていないこと
+      expect(id).toMatch(/^39622116175x1s\d+$/);
+      expect(id.length).toBeLessThanOrEqual(24);
+    }
+  });
+
+  it('専用ユーザーのメールアドレスがシャード間で衝突しない', () => {
+    const emails = loadShards().map((shard) =>
+      shard.runScopedEmail('e2e-shared'),
+    );
+
+    expect(new Set(emails).size).toBe(emails.length);
+  });
+
+  it('後片付けの like パターンが自分のシャードのユーザーだけに一致する', () => {
+    const shards = loadShards();
+
+    shards.forEach((shard, index) => {
+      // PostgREST の `*` を正規表現に読み替える
+      const matcher = new RegExp(
+        `^${shard.RUN_EMAIL_LIKE_PATTERN.split('*').join('.*')}$`,
+      );
+
+      shards.forEach((other, otherIndex) => {
+        expect(matcher.test(other.runScopedEmail('e2e-shared'))).toBe(
+          index === otherIndex,
+        );
+      });
+    });
+  });
+
+  it('送信元IPがシャード間で衝突しない（レート制限カウンタを食い合わない）', () => {
+    const ips = loadShards().map((shard) => shard.RUN_CLIENT_IP);
+
+    expect(new Set(ips).size).toBe(ips.length);
+  });
+
+  it('movie_cache のID領域がシャード間で重ならない', () => {
+    const ranges = loadShards().map((shard) => shard.runScopedMovieIdRange());
+
+    ranges.forEach((range, index) => {
+      ranges.slice(index + 1).forEach((other) => {
+        expect(range.min > other.max || other.min > range.max).toBe(true);
+      });
+    });
+  });
+});

@@ -11,7 +11,10 @@
  * という切り分けにくい壊れ方をする。window.gtag(...) だけを経由すること。
  */
 
-import type { AnalyticsEventName } from '@/constants/analytics';
+import type {
+  AnalyticsEventName,
+  AnalyticsEventParamMap,
+} from '@/constants/analytics';
 import { STORAGE_KEYS } from '@/constants/common';
 import { COOKIE_CONSENT_VERSION } from '@/constants/user';
 
@@ -105,6 +108,33 @@ export function sendConsentUpdate(granted: boolean): void {
   });
 }
 
+/**
+ * `page_location` に載せる URL を組み立てる
+ *
+ * **クエリ文字列とハッシュを落とす。** `window.location.href` をそのまま
+ * 送っていた時期は、本アプリでは次の2つが Google へ渡っていた（#938 の
+ * レビューで判明）。
+ *
+ * - 検索キーワード: `/search?query=<キーワード>`
+ *   （`searchBar.tsx` が `router.push` で組み立てる）
+ * - パスワード再設定トークン: `/auth/reset-password?token=<トークン>`
+ *   （同ページは「トークンがURLに載るため」と noindex を付けているのに、
+ *   同じ URL を計測で外部送信していた）
+ *
+ * Consent Mode advanced では未同意でも送られるため、同意の有無では防げない。
+ * `page_path` は元から pathname のみなので、落としても GA4 のページ別
+ * レポートは変わらない。失うのは「ページパスとクエリ文字列」ディメンションの
+ * クエリ部分だけで、代わりに検索の内訳はカスタムイベント `search` が
+ * キーワード抜きで持つ。
+ *
+ * ⚠️ ここを `window.location.href` に戻さないこと。戻すと上の2つが即座に
+ * 復活する。`/privacy` の「検索キーワードや作品名は送信しません」という
+ * 公表も嘘になる。
+ */
+export function buildPageLocation(): string {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
 /** page_view を手動送信する */
 export function sendPageView(params: {
   pagePath: string;
@@ -119,14 +149,6 @@ export function sendPageView(params: {
 }
 
 /**
- * カスタムイベントのパラメータ
- *
- * GA4 が受け付けるのはスカラー値のみ。配列・オブジェクトは送れないので、
- * 複数値は呼び出し側で文字列へ畳んでから渡す（`filter_types` など）。
- */
-export type AnalyticsEventParams = Record<string, string | number | boolean>;
-
-/**
  * カスタムイベントを送信する
  *
  * ガードは `sendPageView` と同じく gtag の存在のみで、**同意状態は見ない**。
@@ -136,12 +158,16 @@ export type AnalyticsEventParams = Record<string, string | number | boolean>;
  * ここで `useCookieConsent` を参照しないことには意味がある。購読を増やすと
  * 送信箇所のコンポーネントが同意状態の変化で再レンダリングされる（#939）。
  *
- * ⚠️ パラメータに個人を特定しうる値を入れないこと。理由と禁止事項は
- * `src/constants/analytics.ts` の冒頭に書いてある。
+ * パラメータはイベント名ごとに `AnalyticsEventParamMap` で固定してある。
+ * 個人を特定しうる値の混入は型で弾かれるので、呼び出し側のレビューに
+ * 頼らなくてよい。何を送ってよいかの判断は定数側に集約する。
+ *
+ * GA4 が受け付けるのはスカラー値のみ。配列・オブジェクトは送れないので、
+ * 複数値は呼び出し側で文字列へ畳んでから渡す（`filter_types` など）。
  */
-export function sendEvent(
-  name: AnalyticsEventName,
-  params?: AnalyticsEventParams,
+export function sendEvent<N extends AnalyticsEventName>(
+  name: N,
+  params: AnalyticsEventParamMap[N],
 ): void {
   window.gtag?.('event', name, params);
 }

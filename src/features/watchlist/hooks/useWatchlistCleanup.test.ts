@@ -6,6 +6,8 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode, createElement } from 'react';
 
+import { ANALYTICS_EVENTS } from '@/constants/analytics';
+
 import { useWatchlistCleanup } from './useWatchlistCleanup';
 
 // --- Mocks ---
@@ -314,5 +316,87 @@ describe('useWatchlistCleanup', () => {
     await waitFor(() => expect(result.current.isYearsLoading).toBe(false));
     expect(result.current.selectedYear).toBeNull();
     expect(result.current.years).toEqual([]);
+  });
+
+  /**
+   * 1件ずつの削除（watchlist_remove）とはイベント名を分ける。同じ名前だと
+   * 一括削除1回が数十件として計上され、削除の傾向を読み違える（#938）
+   */
+  describe('GA4 計測', () => {
+    const gtag = jest.fn();
+
+    beforeEach(() => {
+      window.gtag = gtag;
+    });
+
+    afterEach(() => {
+      delete window.gtag;
+    });
+
+    it('一括削除で watchlist_bulk_remove を件数付きで送る', async () => {
+      const { result } = renderHook(
+        () => useWatchlistCleanup({ enabled: true, onDeleted }),
+        { wrapper: createWrapper() },
+      );
+
+      await waitFor(() => expect(result.current.items).toHaveLength(2));
+      act(() => result.current.handleDelete());
+
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.WATCHLIST_BULK_REMOVE,
+        { item_count: 3 },
+      );
+    });
+
+    it('除外した分を引いた件数を送る', async () => {
+      const { result } = renderHook(
+        () => useWatchlistCleanup({ enabled: true, onDeleted }),
+        { wrapper: createWrapper() },
+      );
+
+      await waitFor(() => expect(result.current.items).toHaveLength(2));
+      act(() => result.current.toggleItem(UUID_A));
+      act(() => result.current.handleDelete());
+
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.WATCHLIST_BULK_REMOVE,
+        { item_count: 2 },
+      );
+    });
+
+    it('作品名も対象の年も送らない', async () => {
+      // 年は利用者のウォッチリストの中身が分かるため送らない
+      const { result } = renderHook(
+        () => useWatchlistCleanup({ enabled: true, onDeleted }),
+        { wrapper: createWrapper() },
+      );
+
+      await waitFor(() => expect(result.current.items).toHaveLength(2));
+      act(() => result.current.handleDelete());
+
+      const sent = JSON.stringify(gtag.mock.calls);
+      expect(sent).not.toContain('year');
+      expect(sent).not.toContain('2025');
+    });
+
+    it('年が未選択なら送らない（削除も走らないため）', async () => {
+      mockGetWatchlistWatchedYears.mockResolvedValue({
+        success: true,
+        data: { years: [] },
+      });
+
+      const { result } = renderHook(
+        () => useWatchlistCleanup({ enabled: true, onDeleted }),
+        { wrapper: createWrapper() },
+      );
+
+      await waitFor(() => expect(result.current.isYearsLoading).toBe(false));
+      act(() => result.current.handleDelete());
+
+      expect(gtag).not.toHaveBeenCalled();
+      expect(mockBulkDeleteWatchlist).not.toHaveBeenCalled();
+    });
   });
 });

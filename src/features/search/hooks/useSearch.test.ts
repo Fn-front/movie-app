@@ -555,7 +555,9 @@ describe('useSearch', () => {
       expect(JSON.stringify(gtag.mock.calls)).not.toContain('バットマン');
     });
 
-    it('絞り込み種別を昇順のカンマ区切りで送る', () => {
+    it('絞り込み種別を固定順のカンマ区切りで送る', () => {
+      // 並び順は buildSearchFilterTypes が固定する。呼び出しごとに
+      // 変わると同じ組み合わせが別の値として集計される
       setupMocks(
         { year: '2020', genre: '28', vote_average_gte: '7' },
         { data: hitResult, isSuccess: true },
@@ -588,6 +590,19 @@ describe('useSearch', () => {
       renderHook(() => useSearch());
 
       expect(lastSearchEvent()).toMatchObject({ result_page: 3 });
+    });
+
+    it('不正な page クエリでも NaN を送らない', () => {
+      // URLは利用者が編集できる。Number('abc') は NaN で、`?? 1` は
+      // nullish でない NaN を救えない
+      setupMocks(
+        { query: 'バットマン', page: 'abc' },
+        { data: hitResult, isSuccess: true },
+      );
+
+      renderHook(() => useSearch());
+
+      expect(lastSearchEvent()).toMatchObject({ result_page: 1 });
     });
 
     it('同一条件の再レンダリングでは二重に送らない', () => {

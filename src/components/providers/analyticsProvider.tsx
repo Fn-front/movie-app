@@ -22,6 +22,7 @@ import { useConsentServerSync } from '@/hooks/useConsentServerSync';
 import { useCookieConsent } from '@/hooks/useCookieConsent';
 import {
   buildGtagInitScript,
+  buildPageLocation,
   deleteGaCookies,
   getGaMeasurementId,
   sendConsentUpdate,
@@ -76,7 +77,9 @@ export const AnalyticsProvider = memo(function AnalyticsProvider() {
       lastPageViewRef.current = pathname;
       sendPageView({
         pagePath: pathname,
-        pageLocation: window.location.href,
+        // window.location.href は使わない。クエリ文字列に検索キーワードや
+        // パスワード再設定トークンが載るため（buildPageLocation 参照）
+        pageLocation: buildPageLocation(),
         pageTitle: document.title,
       });
     });

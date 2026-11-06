@@ -69,9 +69,14 @@ function buildSearchParams(
   const hasSearchCriteria = query || genre || year || voteAverageGte;
   if (!hasSearchCriteria) return null;
 
+  // URLは利用者が編集できるので ?page=abc が来る。Number('abc') は NaN で、
+  // `?? 1` は nullish でない NaN を救えない。そのまま使うと APIリクエストにも
+  // GA4 の result_page にも NaN が載るため、ここで1へ丸める
+  const pageNumber = page ? Number(page) : 1;
+
   return {
     query,
-    page: page ? Number(page) : 1,
+    page: Number.isFinite(pageNumber) ? pageNumber : 1,
     genre,
     year: year ? Number(year) : undefined,
     vote_average_gte: voteAverageGte ? Number(voteAverageGte) : undefined,
@@ -133,8 +138,14 @@ export function useSearch(): UseSearchReturn {
     }
   }, [searchQuery.isError, toast]);
 
-  // 直近に GA4 へ送った検索条件。同一条件での再マウント・再フェッチで
-  // 二重に数えないよう比較する（AnalyticsProvider の lastPageViewRef と同じ手）
+  // 直近に GA4 へ送った検索条件。同一条件での再レンダー・再フェッチと、
+  // StrictMode による effect の二重実行で重複して数えないよう比較する。
+  //
+  // ref はアンマウントで破棄されるので、ページを離れて戻ってきた場合は
+  // 防げない（react-query のキャッシュから即 isSuccess になり再計上される）。
+  // それは「検索画面へ戻ってきた」という別の訪問なので許容する。
+  // AnalyticsProvider の lastPageViewRef が再マウントを考えなくてよいのは、
+  // あちらが root layout に単一マウントされるため
   const lastSearchEventKeyRef = useRef<string | null>(null);
 
   // 検索イベントの送信

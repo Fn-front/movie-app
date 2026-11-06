@@ -268,5 +268,22 @@ describe('useWatchlistToggle', () => {
       }).not.toThrow();
       expect(mockAddWatchlist).toHaveBeenCalled();
     });
+
+    it('mutation の完了を待たずに送る（試行数を数える）', () => {
+      // 操作時点で送る設計の帰結。「追加された数」ではなく「追加を試みた数」
+      // になる。通信が解決する前に送られていることで固定する（#938）。
+      // 失敗時も送られたままになる側は useWatchlist.test.ts で検証している
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      act(() => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.WATCHLIST_ADD,
+        { movie_id: 42 },
+      );
+    });
   });
 });

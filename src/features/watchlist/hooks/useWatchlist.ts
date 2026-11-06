@@ -27,10 +27,12 @@ import type {
 } from '@/schema/watchlist';
 import { useToast } from '@/hooks/useToast';
 import {
+  ANALYTICS_EVENTS,
   watchlistKeys,
   WATCHLIST_DEFAULT_LIMIT,
   WATCHLIST_ERROR_MESSAGES,
 } from '@/constants';
+import { sendEvent } from '@/utils/analytics';
 
 /**
  * useWatchlistフックのオプション
@@ -301,9 +303,21 @@ export function useWatchlist(
 
   const removeFromWatchlist = useCallback(
     (id: string) => {
+      // 一覧ページとサイドバーの削除はこの経路を通る。useWatchlistToggle
+      // （詳細モーダルのトグル）とは別実装なので、そちらだけに計測を置くと
+      // 追加は全経路・削除は詳細モーダルのみとなり、追加/削除比が歪む。
+      //
+      // 引数は watchlist の行IDなので、作品IDは一覧から引き直す。
+      // この経路の呼び出し元は対象行を描画しているため必ず見つかる
+      const movieId = watchlist.find((item) => item.id === id)?.tmdb_movie_id;
+
       removeMutation.mutate(id);
+
+      if (movieId !== undefined) {
+        sendEvent(ANALYTICS_EVENTS.WATCHLIST_REMOVE, { movie_id: movieId });
+      }
     },
-    [removeMutation],
+    [removeMutation, watchlist],
   );
 
   const setWatched = useCallback(

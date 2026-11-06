@@ -157,9 +157,24 @@ describe('AnalyticsProvider（page_view）', () => {
 
     expect(pageViews()[0][2]).toEqual({
       page_path: '/',
-      page_location: window.location.href,
+      // window.location.href ではない。クエリ文字列を落とす（#938）
+      page_location: `${window.location.origin}${window.location.pathname}`,
       page_title: 'テストページ | Movie App',
     });
+  });
+
+  it('page_location にクエリ文字列を載せない', () => {
+    // href をそのまま送ると /search?query=<キーワード> と
+    // /auth/reset-password?token=<トークン> が Google へ渡る（#938）。
+    // 同意の有無では防げないため、送信側で落とす
+    render(<AnalyticsProvider />);
+    flushFrames();
+
+    const location = (pageViews()[0][2] as { page_location: string })
+      .page_location;
+
+    expect(location).not.toContain('?');
+    expect(location).not.toContain('#');
   });
 
   it('タイトルは1フレーム待ってから読む', () => {

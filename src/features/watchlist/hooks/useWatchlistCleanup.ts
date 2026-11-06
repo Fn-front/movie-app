@@ -17,10 +17,12 @@ import {
 } from '@tanstack/react-query';
 
 import {
+  ANALYTICS_EVENTS,
   watchlistKeys,
   WATCHLIST_DEFAULT_LIMIT,
   WATCHLIST_ERROR_MESSAGES,
 } from '@/constants';
+import { sendEvent } from '@/utils/analytics';
 import { useToast } from '@/hooks/useToast';
 import {
   bulkDeleteWatchlist,
@@ -226,7 +228,14 @@ export function useWatchlistCleanup({
       year: selectedYear,
       exclude_ids: Array.from(excludeIds),
     });
-  }, [deleteMutation, selectedYear, excludeIds]);
+
+    // 1件ずつの削除とはイベント名を分ける。同じ watchlist_remove にすると
+    // 一括削除1回が数十件として計上され、削除の傾向を読み違える。
+    // 対象の年は送らない（利用者のウォッチリストの中身が分かるため）
+    sendEvent(ANALYTICS_EVENTS.WATCHLIST_BULK_REMOVE, {
+      item_count: selectedCount,
+    });
+  }, [deleteMutation, selectedYear, excludeIds, selectedCount]);
 
   // itemsQuery 全体を依存に入れると毎レンダー参照が変わり useCallback が効かない。
   // react-query の fetchNextPage は参照が安定しているので、それだけを取り出す

@@ -65,7 +65,7 @@ describe('VideoDialog', () => {
     const iframe = screen.getByTitle('予告編1');
     expect(iframe).toHaveAttribute(
       'src',
-      'https://www.youtube.com/embed/test-key-123',
+      'https://www.youtube-nocookie.com/embed/test-key-123',
     );
   });
 
@@ -77,7 +77,7 @@ describe('VideoDialog', () => {
     const iframe = screen.getByTitle('予告編1');
     expect(iframe).toHaveAttribute(
       'src',
-      `https://www.youtube.com/embed/${encodeURIComponent('key/with?special&chars')}`,
+      `https://www.youtube-nocookie.com/embed/${encodeURIComponent('key/with?special&chars')}`,
     );
   });
 

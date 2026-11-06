@@ -52,7 +52,7 @@ describe('getCspDirectives', () => {
       "img-src 'self' https://image.tmdb.org data: blob: https://www.googletagmanager.com https://*.google-analytics.com",
     );
     expect(directives).toContain("font-src 'self' data:");
-    expect(directives).toContain('frame-src https://www.youtube.com');
+    expect(directives).toContain('frame-src https://www.youtube-nocookie.com');
     expect(directives).toContain("frame-ancestors 'none'");
     expect(directives).toContain("base-uri 'self'");
     expect(directives).toContain("form-action 'self'");
@@ -96,7 +96,9 @@ describe('getCspDirectives', () => {
     });
 
     it('frame-src は YouTube のみのまま（広告機能を使わないため）', () => {
-      expect(find('frame-src')).toBe('frame-src https://www.youtube.com');
+      expect(find('frame-src')).toBe(
+        'frame-src https://www.youtube-nocookie.com',
+      );
     });
   });
 });

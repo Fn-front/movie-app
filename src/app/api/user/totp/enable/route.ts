@@ -28,24 +28,11 @@ export async function POST(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    const body = await request.json();
-    const result = totpEnableSchema.safeParse(body);
-
-    if (!result.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: ERROR_CODE.VALIDATION_ERROR,
-            message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
-            details: result.error.flatten().fieldErrors,
-          },
-        },
-        { status: HTTP_STATUS.BAD_REQUEST },
-      );
-    }
-
-    // 6桁 = 100万通り。上限が無いと総当たりで有効化できてしまう
+    // 6桁 = 100万通り。上限が無いと総当たりで有効化できてしまう。
+    //
+    // 識別子はセッションなので検証より前に確定している。検証を先に置くと、
+    // 形式だけ崩したリクエストを挟んでカウンタを消費せずに試行を続けられる
+    // （`.claude/rules/api-route.md`「レート制限と検証の順序」）
     const limitResult = await checkRateLimit(
       supabase,
       session.user.id,
@@ -64,6 +51,23 @@ export async function POST(request: Request) {
           },
         },
         { status: HTTP_STATUS.TOO_MANY_REQUESTS },
+      );
+    }
+
+    const body = await request.json();
+    const result = totpEnableSchema.safeParse(body);
+
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
+            details: result.error.flatten().fieldErrors,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
       );
     }
 

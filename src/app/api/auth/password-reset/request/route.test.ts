@@ -203,6 +203,29 @@ describe('POST /api/auth/password-reset/request', () => {
       expect(response.headers.get('Retry-After')).toBe('3600');
       expect(mockSendEmail).not.toHaveBeenCalled();
     });
+
+    describe('処理順', () => {
+      // バリデーション → レート制限（#940 の例外1）。
+      // 識別子が検証済みのメールアドレスなので、検証より前には出せない。
+      // IP単独に替えて前倒しすると、同一メールボックスへの送信数を
+      // IP数だけ掛け算できて保護の目的が壊れる（`.claude/rules/api-route.md`）
+      it('バリデーションエラー時はレート制限を消費しない', async () => {
+        await POST(createRequest({ email: 'not-an-email' }));
+
+        expect(mockCheckRateLimit).not.toHaveBeenCalled();
+      });
+
+      it('レート制限超過中でも、メール形式が不正なら400を返す', async () => {
+        mockCheckRateLimit.mockResolvedValue({
+          allowed: false,
+          retryAfter: 3600,
+        });
+
+        const response = await POST(createRequest({ email: 'not-an-email' }));
+
+        expect(response.status).toBe(400);
+      });
+    });
   });
 
   describe('エラー応答', () => {

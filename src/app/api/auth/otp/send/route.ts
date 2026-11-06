@@ -181,6 +181,9 @@ export async function POST(request: Request) {
     // 識別子は正規化済みメールアドレスのまま（送信元IPを混ぜない）。IPごとに
     // カウンタが分かれると、同一メールボックスへの送信数をIP数だけ
     // 掛け算できてしまい、保護の目的そのものが壊れる。
+    //
+    // 検証より後ろなのは意図的（`.claude/rules/api-route.md`「レート制限と
+    // 検証の順序」の例外1・例外2の両方に当たる）
     const dailyLimitResult = await checkRateLimit(
       supabase,
       email,

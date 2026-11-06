@@ -291,6 +291,31 @@ describe('POST /api/auth/password-reset/confirm', () => {
     });
   });
 
+  describe('処理順', () => {
+    // レート制限 → バリデーション（#940）。
+    // 識別子が送信元IPなので検証より前に確定している。逆順だと、
+    // パスワードの形式を崩したリクエストを挟むだけでカウンタを消費せずに
+    // 試行を続けられる（`.claude/rules/api-route.md`）
+    it('バリデーションエラー時もレート制限を消費する', async () => {
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: 'short' }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it('レート制限超過時は、ボディが不正でも429を返す（検証より先に判定する）', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 900 });
+
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: 'short' }),
+      );
+
+      expect(response.status).toBe(429);
+    });
+  });
+
   describe('漏洩パスワードの照合（#652）', () => {
     it('漏洩パスワードは400で拒否し、トークンを消費しない', async () => {
       mockIsPasswordPwned.mockResolvedValue(true);

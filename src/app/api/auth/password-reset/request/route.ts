@@ -82,7 +82,10 @@ export async function POST(request: Request) {
 
     // 発行上限。識別子はメールアドレスのまま（送信元IPを混ぜない）。
     // IPごとにカウンタが分かれると、同一メールボックスへの送信数を
-    // IP数だけ掛け算できてしまい、保護の目的そのものが壊れる（#641 と同じ理屈）
+    // IP数だけ掛け算できてしまい、保護の目的そのものが壊れる（#641 と同じ理屈）。
+    //
+    // 識別子が検証済みのボディ由来なので、検証より前には出せない
+    // （`.claude/rules/api-route.md`「レート制限と検証の順序」の例外1）
     const limitResult = await checkRateLimit(
       supabase,
       email,

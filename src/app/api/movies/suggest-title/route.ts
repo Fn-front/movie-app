@@ -74,7 +74,12 @@ export async function GET(request: Request) {
       );
     }
 
-    // 5. レートリミットチェック（OpenAI API呼び出し前、キャッシュヒット時は消費しない）
+    // 5. レートリミットチェック
+    //
+    // このルートだけ検証より後ろにある。守っているのは DB ではなく OpenAI の
+    // 呼び出し費用で、キャッシュヒットなら費用が発生しないため消費させない。
+    // キャッシュの照合には検証済みの query が要るので、前には出せない
+    // （`.claude/rules/api-route.md`「レート制限と検証の順序」の例外2）
     const rateLimitResult = await checkRateLimit(
       supabase,
       session.user.id,

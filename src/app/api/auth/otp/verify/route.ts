@@ -59,6 +59,9 @@ export async function POST(request: Request) {
     // 送信元を含めればロックされるのは試行した本人だけになる。
     // コード総当たりに対しては、OTP行自身の attempts（MAX_ATTEMPTS）が
     // 送信元に関係なく効くため、この変更で弱くはならない。
+    //
+    // 識別子が検証済みのボディ由来なので、検証より前には出せない
+    // （`.claude/rules/api-route.md`「レート制限と検証の順序」の例外1）
     const verifyIdentifier = buildLoginIdentifier(email, getClientIp(request));
 
     const verifyLimitResult = await checkRateLimit(

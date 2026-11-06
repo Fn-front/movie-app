@@ -271,4 +271,28 @@ describe('GET /api/watchlist/watched', () => {
       expect(calls.favoriteIn).toBeUndefined();
     });
   });
+
+  describe('処理順', () => {
+    // 認証 → レート制限 → バリデーション（#940）。
+    // 識別子が session.user.id なので検証より前に確定している
+    // （`.claude/rules/api-route.md`）
+    it('バリデーションエラー時もレート制限を消費する', async () => {
+      // 先行テストが allowed:false を残すため明示的に戻す
+      // （clearAllMocks は実装を消さない）
+      mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+      const response = await GET(createGetRequest());
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it('レート制限超過時は、yearが無くても429を返す', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 600 });
+
+      const response = await GET(createGetRequest());
+
+      expect(response.status).toBe(429);
+    });
+  });
 });

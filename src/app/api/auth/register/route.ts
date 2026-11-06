@@ -63,6 +63,9 @@ export async function POST(request: Request) {
     // 数回POSTするだけで本人を60分間登録不能にできた（#644と同種）。
     // 送信元を含めればロックされるのは試行した本人だけになる。
     // メールボックス側の保護は、下部の日次送信上限（OTP_SEND_DAILY）が担う。
+    //
+    // 識別子が検証済みのボディ由来なので、検証より前には出せない
+    // （`.claude/rules/api-route.md`「レート制限と検証の順序」の例外1）
     const clientIp = getClientIp(request);
     const rateLimitResult = await checkRateLimit(
       supabase,
@@ -136,6 +139,8 @@ export async function POST(request: Request) {
     // 位置の意図:
     // - 認証済みメールの早期return（上）より後 … 1通も送らないパスで枠を減らさない
     // - ユーザー作成（下）より前 … 枠切れのときに未検証ユーザー行を作らない
+    // - 検証より後 … 守る資源がメールボックスなので送信の直前に置く
+    //   （`.claude/rules/api-route.md`「レート制限と検証の順序」の例外2）
     const dailyLimitResult = await checkRateLimit(
       supabase,
       email,

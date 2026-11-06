@@ -260,5 +260,39 @@ describe('PUT /api/filters', () => {
         1,
       );
     });
+
+    describe('処理順', () => {
+      // 認証 → レート制限 → バリデーション（#940）。
+      // 識別子が session.user.id なので検証より前に確定している
+      // （`.claude/rules/api-route.md`）
+      const createInvalidPutRequest = () =>
+        new Request('http://localhost/api/filters', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sort_by: 'invalid_value' }),
+        });
+
+      it('PUT: バリデーションエラー時もレート制限を消費する', async () => {
+        // 同じ describe の先行テストが allowed:false を残すため明示的に戻す
+        // （clearAllMocks は実装を消さない）
+        mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+        const response = await PUT(createInvalidPutRequest());
+
+        expect(response.status).toBe(400);
+        expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+      });
+
+      it('PUT: レート制限超過時は、ボディが不正でも429を返す', async () => {
+        mockCheckRateLimit.mockResolvedValue({
+          allowed: false,
+          retryAfter: 60,
+        });
+
+        const response = await PUT(createInvalidPutRequest());
+
+        expect(response.status).toBe(429);
+      });
+    });
   });
 });

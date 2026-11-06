@@ -26,8 +26,11 @@ jest.mock('@/helpers/auth', () => ({
 }));
 
 const mockRequireSecondFactor = jest.fn();
+const mockCheckSecondFactorRateLimit = jest.fn();
 jest.mock('@/helpers/totpGuard', () => ({
   requireSecondFactor: (...args: unknown[]) => mockRequireSecondFactor(...args),
+  checkSecondFactorRateLimit: (...args: unknown[]) =>
+    mockCheckSecondFactorRateLimit(...args),
 }));
 
 const mockDisableTotp = jest.fn();
@@ -51,6 +54,7 @@ describe('POST /api/user/totp/disable', () => {
     jest.clearAllMocks();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
     mockRequireSecondFactor.mockResolvedValue(null);
+    mockCheckSecondFactorRateLimit.mockResolvedValue(null);
     mockDisableTotp.mockResolvedValue(undefined);
   });
 
@@ -113,5 +117,32 @@ describe('POST /api/user/totp/disable', () => {
     const response = await POST(createRequest({ code: '123456' }));
 
     expect(response.status).toBe(500);
+  });
+
+  describe('処理順', () => {
+    // 認証 → レート制限 → バリデーション → 所持の証明（#940）。
+    // レート制限の識別子は session.user.id なので検証より前に確定している。
+    // 総当たりの入口であるこのルートで、形式を崩したコードを挟むだけで
+    // カウンタを回避できる余地を残さない（`.claude/rules/api-route.md`）
+    it('バリデーションエラー時もレート制限を消費する', async () => {
+      const response = await POST(createRequest({ code: '' }));
+
+      expect(response.status).toBe(400);
+      expect(mockCheckSecondFactorRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+      );
+    });
+
+    it('レート制限超過時は、コードが不正でも429を返し検証もしない', async () => {
+      mockCheckSecondFactorRateLimit.mockResolvedValue(
+        new Response(JSON.stringify({ success: false }), { status: 429 }),
+      );
+
+      const response = await POST(createRequest({ code: '' }));
+
+      expect(response.status).toBe(429);
+      expect(mockRequireSecondFactor).not.toHaveBeenCalled();
+    });
   });
 });

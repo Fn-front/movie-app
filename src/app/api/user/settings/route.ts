@@ -149,17 +149,35 @@ export async function PUT(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    // リクエストボディの取得・バリデーション
+    // レート制限チェック
     //
-    // レート制限より前に行う。不正なリクエストでカウンタを消費させないため
-    // （PR #325 のレビュー指摘）。既存の入力は enum だけだったので順序の
-    // 弱さが表に出なかったが、cookieConsentAt は端末の時計という外部要因で
-    // 弾かれうる初の入力なので、ここで直しておく。
+    // 検証より前に置く。識別子がセッションなのでこの時点で確定しており、
+    // 検証を先にすると形式だけ崩したリクエストでカウンタを消費せずに
+    // 書き込みを試し続けられる（`.claude/rules/api-route.md`）。
+    //
+    // #940 以前は逆順だった。当時の理由は「cookieConsentAt は端末の時計という
+    // 外部要因で弾かれうる」だが、これは誤り。スキーマ（`src/schema/user.ts:55`）
+    // が見るのは ISO 8601 の形式だけで、時計のずれは 400 にせず
+    // `normalizeConsentAt` が丸める。正規の画面から来る限り弾かれない
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.WRITE_SETTINGS,
+      RATE_LIMIT_CONFIG.WRITE_SETTINGS.maxAttempts,
+      RATE_LIMIT_CONFIG.WRITE_SETTINGS.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitExceededResponse(rateLimitResult);
+    }
+
+    // リクエストボディの取得・バリデーション
     let body: unknown;
     try {
       body = await request.json();
     } catch {
-      // JSON として壊れている。catch へ落とすと 500 かつカウンタ未消費になる
+      // JSON として壊れている。catch へ落とすと 500 になり、
+      // 利用者側の誤りがサーバーエラーとして見えてしまう
       return NextResponse.json(
         {
           success: false,
@@ -186,19 +204,6 @@ export async function PUT(request: Request) {
         },
         { status: HTTP_STATUS.BAD_REQUEST },
       );
-    }
-
-    // レート制限チェック
-    const rateLimitResult = await checkRateLimit(
-      supabase,
-      session.user.id,
-      RATE_LIMIT_ACTION.WRITE_SETTINGS,
-      RATE_LIMIT_CONFIG.WRITE_SETTINGS.maxAttempts,
-      RATE_LIMIT_CONFIG.WRITE_SETTINGS.windowMinutes,
-    );
-
-    if (!rateLimitResult.allowed) {
-      return rateLimitExceededResponse(rateLimitResult);
     }
 
     // DB用のカラム名に変換

@@ -715,4 +715,37 @@ describe('POST /api/auth/otp/verify', () => {
       10,
     );
   });
+
+  describe('処理順', () => {
+    // バリデーション → レート制限（#940 の例外1）。
+    // 識別子 `email|ip` が検証済みのボディ由来なので、検証より前には出せない。
+    // IP単独に替えて前倒しすると、同じIPの別アカウントまで巻き込む
+    // （`.claude/rules/api-route.md`）
+    it('バリデーションエラー時はレート制限を消費しない', async () => {
+      const response = await POST(
+        createRequest({
+          email: 'not-an-email',
+          code: '123456',
+          action: 'login',
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).not.toHaveBeenCalled();
+    });
+
+    it('レート制限超過中でも、メール形式が不正なら400を返す', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 600 });
+
+      const response = await POST(
+        createRequest({
+          email: 'not-an-email',
+          code: '123456',
+          action: 'login',
+        }),
+      );
+
+      expect(response.status).toBe(400);
+    });
+  });
 });

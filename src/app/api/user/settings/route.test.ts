@@ -691,17 +691,18 @@ describe('Cookie同意', () => {
   });
 
   describe('処理順', () => {
-    it('バリデーションエラー時はレート制限を消費しない', async () => {
-      // 認証 → バリデーション → レート制限 の順であることの回帰テスト。
-      // 逆順だと、端末の時計ずれ由来の400でカウンタを食い潰し、
-      // テーマ変更など他の設定まで429になる
+    // 認証 → レート制限 → バリデーション の順であることの回帰テスト（#940）。
+    // 識別子が session.user.id なので検証より前に確定しており、
+    // 逆順だと形式だけ崩したリクエストでカウンタを消費せずに書き込みを
+    // 試し続けられる（`.claude/rules/api-route.md`）
+    it('バリデーションエラー時もレート制限を消費する', async () => {
       const response = await PUT(createPutRequest({ cookieConsent: 'denied' }));
 
       expect(response.status).toBe(400);
-      expect(mockCheckRateLimit).not.toHaveBeenCalled();
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
     });
 
-    it('壊れたJSONは400で、レート制限も消費しない', async () => {
+    it('壊れたJSONでもレート制限を消費し、400を返す', async () => {
       const request = new Request('http://localhost/api/user/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -713,7 +714,15 @@ describe('Cookie同意', () => {
 
       expect(response.status).toBe(400);
       expect(json.error.code).toBe('VALIDATION_ERROR');
-      expect(mockCheckRateLimit).not.toHaveBeenCalled();
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it('レート制限超過時は、ボディが不正でも429を返す（検証より先に判定する）', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 60 });
+
+      const response = await PUT(createPutRequest({ cookieConsent: 'denied' }));
+
+      expect(response.status).toBe(429);
     });
 
     it('正常系ではレート制限を消費する', async () => {

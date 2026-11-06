@@ -67,6 +67,12 @@ describe('setBannerHeightVar', () => {
 });
 
 describe('resolveBannerHeight', () => {
+  // 最後のケースが setBannerHeightVar を呼んで変数を残すため、
+  // 後ろにテストを足したときに前の値を拾わないようにする
+  beforeEach(() => {
+    document.documentElement.style.removeProperty(BANNER_HEIGHT_VAR);
+  });
+
   /**
    * ResizeObserver の entry を模す
    *
@@ -98,9 +104,12 @@ describe('resolveBannerHeight', () => {
   });
 
   it('内容ボックスの高さは使わない', () => {
+    // 差を大きく取り、かつ**肯定形**で固定する。
+    // `not.toBe(50)` だと「内容ボックス + 1px」という実装も通ってしまい、
+    // 境界線幅が 1px 以外になった瞬間に無言で壊れる
     const entry = createEntry(100, 50);
 
-    expect(resolveBannerHeight(entry)).not.toBe(50);
+    expect(resolveBannerHeight(entry)).toBe(100);
   });
 
   it('borderBoxSize が無い環境では境界ボックスの実測へフォールバックする', () => {

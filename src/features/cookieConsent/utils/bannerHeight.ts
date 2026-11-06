@@ -29,16 +29,20 @@ export const BANNER_HEIGHT_VAR = '--cookie-banner-height';
  * @returns 境界ボックスの高さ（ピクセル）
  */
 export function resolveBannerHeight(entry: ResizeObserverEntry): number {
-  // `observe()` のボックス指定に関わらず、entry には borderBoxSize が常に
-  // 設定される（observedBox が決めるのは発火条件だけ）。
   // blockSize が height と一致するのは横書きのとき。本リポジトリに
   // writing-mode の指定は0件なので問題ない
   const blockSize = entry.borderBoxSize?.[0]?.blockSize;
   if (blockSize !== undefined) return blockSize;
 
-  // borderBoxSize は Safari 15.4 以降。それ以前向けの保険。
+  // ⚠️ 下は**型の上では到達しない**。`lib.dom.d.ts` の `borderBoxSize` は
+  // 非 optional な `ReadonlyArray` で、`noUncheckedIndexedAccess` も無効なため
+  // `blockSize` は `number` に推論される。それでも残すのは、これが型ではなく
+  // **実行時のエンジン差**に対する防御だから（borderBoxSize は Safari 15.4 以降）。
+  // 「不要な条件」として消さないこと。
+  //
   // getBoundingClientRect は transform 込みのため、将来バナーにスライドインを
-  // 足すとこの経路だけ値がずれる点に注意
+  // 足すとこの経路だけ値がずれる点に注意。なお offsetHeight は整数へ丸めるため
+  // 使わない（切り上げの安全側が崩れ、本来直した1px不足が別経路で復活する）
   return entry.target.getBoundingClientRect().height;
 }
 

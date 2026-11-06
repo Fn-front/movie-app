@@ -134,17 +134,20 @@ describe('GET /api/admin/accounts', () => {
       expect(mockListIssuedAccounts).not.toHaveBeenCalled();
     });
 
-    it('admin 判定を通る前にレート制限は消費しない（現状の記録 / #965）', async () => {
-      // ⚠️ これは「望ましい仕様」ではなく**現状の記録**。
-      // `withAdminAuth` はロールをDBから読んでから handler を呼ぶため、
-      // 非 admin が連打すると `users` への SELECT が無制限に走り、
-      // カウンタは消費されない。#934 の動機と矛盾するので #965 で扱う。
-      // 方針が決まったらこのテストごと書き換えること
+    it('admin でなければルート固有のカウンタは消費しない', async () => {
+      // ロール確認自体のレート制限は `withAdminAuth` 側（admin_role_check /
+      // #965）が受け持つ。READ_USER_DATA は handler に入って初めて消費する
       mockAdminRoleLookup('user');
 
       await GET(createGetRequest());
 
-      expect(mockCheckRateLimit).not.toHaveBeenCalled();
+      expect(mockCheckRateLimit).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'read_api_user_data',
+        expect.anything(),
+        expect.anything(),
+      );
     });
   });
 });

@@ -39,6 +39,35 @@ const availability = (providers: {
 });
 
 /**
+ * `movie_streaming_status` の保存済み行を作る
+ *
+ * 既定は「配信なしで確認済み」。`checked_at` の新しさで引き直すか決まるため
+ * （#960）、呼び出し側で必ず指定する
+ */
+const storedRow = (overrides: {
+  checked_at: string;
+  flatrate_provider_ids?: number[];
+  paid_provider_ids?: number[];
+  flatrate_since?: string | null;
+  paid_since?: string | null;
+  flatrate_last_seen_at?: string | null;
+  paid_last_seen_at?: string | null;
+  flatrate_resumed?: boolean;
+  paid_resumed?: boolean;
+}) => ({
+  tmdb_movie_id: 12345,
+  flatrate_provider_ids: overrides.flatrate_provider_ids ?? [],
+  paid_provider_ids: overrides.paid_provider_ids ?? [],
+  flatrate_since: overrides.flatrate_since ?? null,
+  paid_since: overrides.paid_since ?? null,
+  flatrate_last_seen_at: overrides.flatrate_last_seen_at ?? null,
+  paid_last_seen_at: overrides.paid_last_seen_at ?? null,
+  flatrate_resumed: overrides.flatrate_resumed ?? false,
+  paid_resumed: overrides.paid_resumed ?? false,
+  checked_at: overrides.checked_at,
+});
+
+/**
  * `from('movie_streaming_status')` の select / upsert を差し替えたクライアントを作る
  *
  * @param existing - 既存行の検索結果
@@ -182,11 +211,12 @@ describe('initMovieStreamingStatus', () => {
 
   /**
    * movie_streaming_status は作品単位の共有テーブル。
-   * 他ユーザーが先に追加していれば行があるので問い合わせない
+   * 他ユーザーが先に追加していて、行がまだ新しければ問い合わせない
    */
-  it('すでに行があればTMDbに問い合わせない', async () => {
+  it('新しい行があればTMDbに問い合わせない', async () => {
     const supabase = createSupabase({
-      data: { tmdb_movie_id: 12345 },
+      // 1日前に確認済み（しきい値は7日）
+      data: storedRow({ checked_at: '2026-11-03T12:00:00.000Z' }),
       error: null,
     });
 
@@ -270,5 +300,140 @@ describe('initMovieStreamingStatus', () => {
     const outcome = await initMovieStreamingStatus(supabase.client, 12345, NOW);
 
     expect(outcome).toBe('failed');
+  });
+
+  describe('古い行の引き直し（#960）', () => {
+    /**
+     * Cron が更新するのは「誰かのウォッチリストにあって未視聴」の作品だけ。
+     * 全員が視聴済みにすると行が取り残され、その間に配信が始まっても
+     * 行があるせいで引き直されなかった
+     */
+    it('しきい値より古い行は引き直す', async () => {
+      const supabase = createSupabase({
+        // 8日前（しきい値は7日）
+        data: storedRow({ checked_at: '2026-10-27T12:00:00.000Z' }),
+        error: null,
+      });
+      mockGetJpStreamingAvailability.mockResolvedValue(
+        availability({ flatrate: [84] }),
+      );
+
+      const outcome = await initMovieStreamingStatus(
+        supabase.client,
+        12345,
+        NOW,
+      );
+
+      expect(outcome).toBe('initialized');
+      expect(mockGetJpStreamingAvailability).toHaveBeenCalledWith(12345);
+      expect(supabase.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ flatrate_provider_ids: [84] }),
+        expect.anything(),
+      );
+    });
+
+    it('しきい値ちょうど（7日前）は古いものとして引き直す', async () => {
+      const supabase = createSupabase({
+        data: storedRow({ checked_at: '2026-10-28T12:00:00.000Z' }),
+        error: null,
+      });
+      mockGetJpStreamingAvailability.mockResolvedValue(availability({}));
+
+      const outcome = await initMovieStreamingStatus(
+        supabase.client,
+        12345,
+        NOW,
+      );
+
+      expect(outcome).toBe('initialized');
+    });
+
+    it('しきい値の直前（7日未満）は引き直さない', async () => {
+      const supabase = createSupabase({
+        data: storedRow({ checked_at: '2026-10-28T12:00:00.001Z' }),
+        error: null,
+      });
+
+      const outcome = await initMovieStreamingStatus(
+        supabase.client,
+        12345,
+        NOW,
+      );
+
+      expect(outcome).toBe('skipped');
+      expect(mockGetJpStreamingAvailability).not.toHaveBeenCalled();
+    });
+
+    it('checked_at が壊れていたら引き直す', async () => {
+      const supabase = createSupabase({
+        data: storedRow({ checked_at: 'not-a-date' }),
+        error: null,
+      });
+      mockGetJpStreamingAvailability.mockResolvedValue(availability({}));
+
+      const outcome = await initMovieStreamingStatus(
+        supabase.client,
+        12345,
+        NOW,
+      );
+
+      expect(outcome).toBe('initialized');
+    });
+
+    it('引き直すとき、既存の配信履歴を前回値として渡す', async () => {
+      // 両方 null で渡すと、ずっと配信中だった作品まで「いま検知した」扱いに
+      // なって配信優先ソートの先頭に割り込む
+      const supabase = createSupabase({
+        data: storedRow({
+          checked_at: '2026-10-01T12:00:00.000Z',
+          flatrate_provider_ids: [84],
+          flatrate_since: '2026-09-01T00:00:00.000Z',
+          flatrate_last_seen_at: '2026-10-01T12:00:00.000Z',
+        }),
+        error: null,
+      });
+      mockGetJpStreamingAvailability.mockResolvedValue(
+        availability({ flatrate: [84] }),
+      );
+
+      await initMovieStreamingStatus(supabase.client, 12345, NOW);
+
+      expect(supabase.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // 継続配信なので since は据え置き（now に書き換わらない）
+          flatrate_since: '2026-09-01T00:00:00.000Z',
+          flatrate_resumed: false,
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('古い行の引き直しでは上書きする（ignoreDuplicates を外す）', async () => {
+      const supabase = createSupabase({
+        data: storedRow({ checked_at: '2026-10-01T12:00:00.000Z' }),
+        error: null,
+      });
+      mockGetJpStreamingAvailability.mockResolvedValue(availability({}));
+
+      await initMovieStreamingStatus(supabase.client, 12345, NOW);
+
+      expect(supabase.upsert).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ ignoreDuplicates: false }),
+      );
+    });
+
+    it('行が無いときは競合時に何もしない（ignoreDuplicates を付ける）', async () => {
+      // 間に Cron が作った行を黙って上書きしないため
+      const supabase = createSupabase({ data: null, error: null });
+      mockGetJpStreamingAvailability.mockResolvedValue(availability({}));
+
+      await initMovieStreamingStatus(supabase.client, 12345, NOW);
+
+      expect(supabase.upsert).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ ignoreDuplicates: true }),
+      );
+    });
   });
 });

@@ -12,9 +12,30 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { buildStreamingStatusRow } from '@/lib/sync/buildStreamingStatusRow';
+import {
+  buildStreamingStatusRow,
+  toOfferStates,
+} from '@/lib/sync/buildStreamingStatusRow';
 import { getJpStreamingAvailability } from '@/lib/tmdb/tmdb';
 import type { JpStreamingAvailability } from '@/lib/tmdb/tmdb';
+import { STREAMING_STATUS_FRESH_MS } from '@/constants/watchlist';
+
+/**
+ * 保存済み行がまだ新しいか判定する
+ *
+ * @param checkedAt - 行の `checked_at`
+ * @param now - 現在時刻
+ * @returns 新しければ true（引き直さない）
+ */
+function isFresh(checkedAt: string | null, now: Date): boolean {
+  if (!checkedAt) return false;
+
+  const checked = Date.parse(checkedAt);
+  // パースできない値は古い扱いにして引き直す（放置して陳腐化させるより安全）
+  if (Number.isNaN(checked)) return false;
+
+  return now.getTime() - checked < STREAMING_STATUS_FRESH_MS;
+}
 
 /**
  * 初期化の結果
@@ -53,7 +74,9 @@ export async function initMovieStreamingStatus(
 ): Promise<StreamingStatusInitOutcome> {
   const { data: existing, error: selectError } = await supabase
     .from('movie_streaming_status')
-    .select('tmdb_movie_id')
+    .select(
+      'tmdb_movie_id, checked_at, flatrate_provider_ids, paid_provider_ids, flatrate_since, paid_since, flatrate_last_seen_at, paid_last_seen_at, flatrate_resumed, paid_resumed',
+    )
     .eq('tmdb_movie_id', tmdbMovieId)
     .maybeSingle();
 
@@ -65,7 +88,13 @@ export async function initMovieStreamingStatus(
     return 'failed';
   }
 
-  if (existing) return 'skipped';
+  // 行の**有無**ではなく新しさで判断する（#960）。
+  //
+  // このテーブルは作品単位の共有だが、日次Cron が更新するのは「誰かの
+  // ウォッチリストにあって未視聴」の作品だけ。全員が視聴済みにすると以後
+  // 更新されず、取り残される期間に上限が無い。その間に配信が始まると、
+  // 行があるせいで引き直されず #942 と同じ症状が再発していた
+  if (existing && isFresh(existing.checked_at, now)) return 'skipped';
 
   let availability: JpStreamingAvailability;
   try {
@@ -78,10 +107,12 @@ export async function initMovieStreamingStatus(
     return 'failed';
   }
 
-  // 保存済みの状態は無い（上で行が無いことを確認済み）ので previous は両方 null
+  // 古い行がある場合はその状態を前回値として渡す。両方 null で渡すと
+  // `since` / `last_seen_at` の履歴が失われ、ずっと配信中だった作品まで
+  // 「いま検知した」扱いになって配信優先ソートの先頭に割り込む
   const row = buildStreamingStatusRow(
     tmdbMovieId,
-    { flatrate: null, paid: null },
+    toOfferStates(existing),
     availability.watchProviderIds,
     now,
   );
@@ -89,13 +120,20 @@ export async function initMovieStreamingStatus(
   // 配信が無くても行は作る。「確認済みで配信なし」を残しておけば、
   // 同じ作品を別のユーザーが追加したときに TMDb を引き直さずに済む。
   //
-  // ignoreDuplicates を付けて ON CONFLICT DO NOTHING にする。既定の
-  // merge-duplicates だと、上の SELECT とこの書き込みの間に Cron や
-  // 他リクエストが作った行を黙って上書きしてしまう。
-  // この関数の役目は「無ければ作る」だけなので、競合したら何もしないのが正しい
+  // 競合時の扱いは経路で分かれる。
+  //
+  // - **行が無かった**: `ignoreDuplicates` で ON CONFLICT DO NOTHING。
+  //   上の SELECT とこの書き込みの間に Cron や他リクエストが作った行を
+  //   黙って上書きしないため。この経路の役目は「無ければ作る」だけ
+  // - **古い行があった**: 上書きする（#960）。引き直した結果を捨てては
+  //   意味が無い。間に Cron が更新していた場合は、ほぼ同時刻の値で
+  //   上書きすることになるが、どちらも今回の問い合わせ結果なので実害は無い
   const { error: upsertError } = await supabase
     .from('movie_streaming_status')
-    .upsert(row, { onConflict: 'tmdb_movie_id', ignoreDuplicates: true });
+    .upsert(row, {
+      onConflict: 'tmdb_movie_id',
+      ignoreDuplicates: existing === null,
+    });
 
   if (upsertError) {
     console.error(

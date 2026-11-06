@@ -33,6 +33,49 @@ export interface PreviousOfferStates {
   paid: StreamingOfferState | null;
 }
 
+/** 保存済み行のうち、前回状態の復元に要る列 */
+export interface StoredOfferRow {
+  flatrate_provider_ids: number[] | null;
+  paid_provider_ids: number[] | null;
+  flatrate_since: string | null;
+  paid_since: string | null;
+  flatrate_last_seen_at: string | null;
+  paid_last_seen_at: string | null;
+  flatrate_resumed: boolean;
+  paid_resumed: boolean;
+}
+
+/**
+ * 保存済み行を `buildStreamingStatusRow` に渡せる形へ戻す
+ *
+ * 行↔状態の対応づけはこのファイルに集約する。書き手は日次Cron
+ * （`syncWatchlistStreaming`）とウォッチリスト追加（`initMovieStreamingStatus`）の
+ * 2つあり、別々に組むと列を足したときに片方だけ更新される。
+ *
+ * @param row - 保存済み行。未登録なら undefined
+ * @returns 提供形態ごとの前回状態
+ */
+export function toOfferStates(
+  row: StoredOfferRow | undefined | null,
+): PreviousOfferStates {
+  if (!row) return { flatrate: null, paid: null };
+
+  return {
+    flatrate: {
+      providerIds: row.flatrate_provider_ids ?? [],
+      since: row.flatrate_since,
+      lastSeenAt: row.flatrate_last_seen_at,
+      resumed: row.flatrate_resumed,
+    },
+    paid: {
+      providerIds: row.paid_provider_ids ?? [],
+      since: row.paid_since,
+      lastSeenAt: row.paid_last_seen_at,
+      resumed: row.paid_resumed,
+    },
+  };
+}
+
 /** TMDb が返した提供形態ごとのプロバイダーID（この関数が使う分だけ） */
 export interface OfferProviderIds {
   flatrate: number[];

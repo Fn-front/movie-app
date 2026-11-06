@@ -3,6 +3,7 @@
  */
 
 import { errorMessage, successMessage } from './common';
+import { MS_PER_DAY } from './time';
 
 /**
  * ウォッチリストのデフォルト取得件数
@@ -194,3 +195,26 @@ export const WATCHLIST_STREAMING_HINT_LABELS = {
   FLATRATE:
     '配信中の作品を先頭に表示しています。見放題のみを対象にしているため、レンタルのみの作品にはバッジを出しません。ここから設定を変更できます。',
 } as const;
+
+/**
+ * `movie_streaming_status` の行を「新しい」とみなす上限（ミリ秒）
+ *
+ * ウォッチリスト追加時（`initMovieStreamingStatus`）に、この期間より古い行は
+ * TMDb へ引き直す。行の**有無**しか見ていなかった頃は、古い行が残っている
+ * 作品で配信バッジの遅延が再発していた（#960）。
+ *
+ * ## なぜ行が陳腐化するか
+ *
+ * `movie_streaming_status` は作品単位の共有テーブルだが、日次Cron
+ * （`syncWatchlistStreaming`）が更新するのは**誰かのウォッチリストに入っていて
+ * 未視聴**の作品だけ。全員が視聴済みにする／削除すると以後は一切更新されず、
+ * 取り残される期間に上限が無い。
+ *
+ * ## なぜ7日か
+ *
+ * Cron は毎日回るため、誰かのウォッチリストに入っている作品なら最長でも
+ * 1日で更新される。7日経っても更新されていない＝その間どのウォッチリストにも
+ * 入っていなかった、とみなせる。短くすると追加のたびにTMDbを引く頻度が上がり、
+ * 長くすると陳腐化した行をそのまま使う窓が広がる。
+ */
+export const STREAMING_STATUS_FRESH_MS = 7 * MS_PER_DAY;

@@ -17,9 +17,9 @@ import { TMDB_AVAILABILITY_CONCURRENCY } from '@/constants/tmdb';
 import { getJpStreamingAvailability } from '@/lib/tmdb/tmdb';
 import {
   buildStreamingStatusRow,
+  toOfferStates,
   type MovieStreamingStatusRow,
 } from '@/lib/sync/buildStreamingStatusRow';
-import { type StreamingOfferState } from '@/lib/sync/resolveStreamingStatus';
 
 /**
  * 同期結果
@@ -61,31 +61,6 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(i, i + size));
   }
   return chunks;
-}
-
-/**
- * 保存済み行を、形態ごとの状態に分解する
- */
-function toOfferStates(row: StatusRow | undefined): {
-  flatrate: StreamingOfferState | null;
-  paid: StreamingOfferState | null;
-} {
-  if (!row) return { flatrate: null, paid: null };
-
-  return {
-    flatrate: {
-      providerIds: row.flatrate_provider_ids ?? [],
-      since: row.flatrate_since,
-      lastSeenAt: row.flatrate_last_seen_at,
-      resumed: row.flatrate_resumed,
-    },
-    paid: {
-      providerIds: row.paid_provider_ids ?? [],
-      since: row.paid_since,
-      lastSeenAt: row.paid_last_seen_at,
-      resumed: row.paid_resumed,
-    },
-  };
 }
 
 /**

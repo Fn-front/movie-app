@@ -415,6 +415,51 @@ describe('resolveConsentMerge', () => {
     });
   });
 
+  describe('PUT に載せる日時の正規化（#962）', () => {
+    // localStorage の `at` は生値をそのまま読むため壊れた値が入りうる。
+    // そのまま送るとサーバーの zod（`z.iso.datetime`）が 400 を返し、
+    // 呼び出し元は syncedUserId を更新せず return するため毎ロード再送になる
+    it('パース不能な日時は null にして送る', () => {
+      const result = resolveConsentMerge({
+        local: { state: 'denied', at: 'not-a-date', owner: ME, version: V },
+        server: SERVER_UNSET,
+        userId: ME,
+        currentVersion: V,
+      });
+
+      expect(result.putBody).toEqual({
+        cookieConsent: 'denied',
+        cookieConsentAt: null,
+      });
+    });
+
+    it('状態そのものは送る（日時だけ落とす）', () => {
+      const result = resolveConsentMerge({
+        local: { state: 'granted', at: '', owner: ME, version: V },
+        server: SERVER_UNSET,
+        userId: ME,
+        currentVersion: V,
+      });
+
+      expect(result.putBody?.cookieConsent).toBe('granted');
+      expect(result.putBody?.cookieConsentAt).toBeNull();
+    });
+
+    it('妥当な日時はそのまま送る', () => {
+      const result = resolveConsentMerge({
+        local: { state: 'granted', at: T1, owner: ME, version: V },
+        server: SERVER_UNSET,
+        userId: ME,
+        currentVersion: V,
+      });
+
+      expect(result.putBody).toEqual({
+        cookieConsent: 'granted',
+        cookieConsentAt: T1,
+      });
+    });
+  });
+
   describe('副作用を持たない', () => {
     it('引数のオブジェクトを変更しない', () => {
       const local: LocalConsentRecord = {

@@ -14,6 +14,39 @@
 export const BANNER_HEIGHT_VAR = '--cookie-banner-height';
 
 /**
+ * ResizeObserver の entry から、画面を覆う高さを取り出す
+ *
+ * **境界ボックス**を返す。バナーは `position: fixed` なので、フッターや本文を
+ * 覆うのは境界線を含めた高さ。`entry.contentRect` は内容ボックスで境界線を
+ * 含まないため、`border-top: 1px`（`cookieConsentBanner.module.scss:18`）の
+ * ぶんだけ足りず、フッター最下 1px にバナーの境界線が重なっていた（#966）。
+ *
+ * コンポーネント側に置くと検証できない。`jest.setup.js` の ResizeObserver は
+ * コールバックが発火しない no-op スタブなので、純関数として切り出して
+ * entry のモックで固定する。
+ *
+ * @param entry ResizeObserver のエントリ
+ * @returns 境界ボックスの高さ（ピクセル）
+ */
+export function resolveBannerHeight(entry: ResizeObserverEntry): number {
+  // blockSize が height と一致するのは横書きのとき。本リポジトリに
+  // writing-mode の指定は0件なので問題ない
+  const blockSize = entry.borderBoxSize?.[0]?.blockSize;
+  if (blockSize !== undefined) return blockSize;
+
+  // ⚠️ 下は**型の上では到達しない**。`lib.dom.d.ts` の `borderBoxSize` は
+  // 非 optional な `ReadonlyArray` で、`noUncheckedIndexedAccess` も無効なため
+  // `blockSize` は `number` に推論される。それでも残すのは、これが型ではなく
+  // **実行時のエンジン差**に対する防御だから（borderBoxSize は Safari 15.4 以降）。
+  // 「不要な条件」として消さないこと。
+  //
+  // getBoundingClientRect は transform 込みのため、将来バナーにスライドインを
+  // 足すとこの経路だけ値がずれる点に注意。なお offsetHeight は整数へ丸めるため
+  // 使わない（切り上げの安全側が崩れ、本来直した1px不足が別経路で復活する）
+  return entry.target.getBoundingClientRect().height;
+}
+
+/**
  * バナー高さを反映する
  *
  * @param px 高さ（ピクセル）。null ならバナーが消えたとみなして変数を外す

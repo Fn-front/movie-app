@@ -15,7 +15,10 @@ import { ARIA_LABELS, ROUTES } from '@/constants';
 import { useCookieConsent } from '@/hooks/useCookieConsent';
 import { getGaMeasurementId } from '@/utils/analytics';
 
-import { setBannerHeightVar } from '../../utils/bannerHeight';
+import {
+  resolveBannerHeight,
+  setBannerHeightVar,
+} from '../../utils/bannerHeight';
 import styles from './cookieConsentBanner.module.scss';
 
 /**
@@ -45,9 +48,14 @@ export const CookieConsentBanner = memo(function CookieConsentBanner() {
     if (!element) return;
 
     const observer = new ResizeObserver(([entry]) => {
-      setBannerHeightVar(Math.ceil(entry.contentRect.height));
+      // 境界ボックスで測る。切り上げは setBannerHeightVar 側で行う
+      setBannerHeightVar(resolveBannerHeight(entry));
     });
-    observer.observe(element);
+    // 境界ボックスの変化で発火させる。既定（content-box）のままだと、
+    // 文量が同じで境界線幅だけ変わったときにコールバックが呼ばれず、
+    // CSS 変数が古い値のまま残る。現状 border-width は定数なので実害は
+    // 無いが、その前提に寄りかからずに済む
+    observer.observe(element, { box: 'border-box' });
 
     return () => {
       // カスタム lint は ResizeObserver を検出しないので手動で担保する

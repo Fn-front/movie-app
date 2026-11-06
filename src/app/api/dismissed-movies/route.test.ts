@@ -171,7 +171,11 @@ describe('GET /api/dismissed-movies', () => {
 
   describe('レート制限（#934）', () => {
     it('読み取り用の read_api_user_data として数える', async () => {
-      mockFrom.mockReturnValue({
+      // Once にすること。このファイルの他14箇所もすべて Once で、
+      // beforeEach は clearAllMocks のみ（実装は消えない）。
+      // mockReturnValue にすると POST / DELETE の describe まで
+      // GET 用のチェーンを返し続ける
+      mockFrom.mockReturnValueOnce({
         select: () => ({
           eq: () => ({
             is: () => ({ order: () => ({ data: [], error: null }) }),
@@ -179,14 +183,17 @@ describe('GET /api/dismissed-movies', () => {
         }),
       });
 
-      await GET(new Request('http://localhost/api/dismissed-movies'));
+      const response = await GET(
+        new Request('http://localhost/api/dismissed-movies'),
+      );
 
+      expect(response.status).toBe(200);
       expect(mockCheckRateLimit).toHaveBeenCalledWith(
         expect.anything(),
         'user-123',
         'read_api_user_data',
-        1200,
-        10,
+        200,
+        1,
       );
     });
 

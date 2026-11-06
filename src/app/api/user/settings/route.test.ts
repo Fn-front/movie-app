@@ -182,8 +182,8 @@ describe('GET /api/user/settings', () => {
         expect.anything(),
         'user-123',
         'read_api_user_data',
-        1200,
-        10,
+        200,
+        1,
       );
     });
 

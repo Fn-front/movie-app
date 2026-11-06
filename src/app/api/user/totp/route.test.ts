@@ -94,8 +94,8 @@ describe('GET /api/user/totp', () => {
         expect.anything(),
         'user-1',
         'read_api_user_data',
-        1200,
-        10,
+        200,
+        1,
       );
     });
 

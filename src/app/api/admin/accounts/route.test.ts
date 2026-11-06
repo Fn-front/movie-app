@@ -114,14 +114,19 @@ describe('GET /api/admin/accounts', () => {
         expect.anything(),
         'admin-1',
         'read_api_user_data',
-        1200,
-        10,
+        200,
+        1,
       );
     });
 
     it('上限超過で429を返し、一覧を引かない', async () => {
       mockAdminRoleLookup('admin');
-      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 600 });
+      // 他の新規テストと揃えて Once にする。beforeEach の戻しが消されても
+      // 以降が全部429経路になることを防ぐ
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 600,
+      });
 
       const response = await GET(createGetRequest());
 
@@ -129,9 +134,12 @@ describe('GET /api/admin/accounts', () => {
       expect(mockListIssuedAccounts).not.toHaveBeenCalled();
     });
 
-    it('admin 判定を通る前にレート制限は消費しない', async () => {
-      // ロール確認は withAdminAuth が先に行う。権限の無い相手に
-      // admin のカウンタを消費させない
+    it('admin 判定を通る前にレート制限は消費しない（現状の記録 / #965）', async () => {
+      // ⚠️ これは「望ましい仕様」ではなく**現状の記録**。
+      // `withAdminAuth` はロールをDBから読んでから handler を呼ぶため、
+      // 非 admin が連打すると `users` への SELECT が無制限に走り、
+      // カウンタは消費されない。#934 の動機と矛盾するので #965 で扱う。
+      // 方針が決まったらこのテストごと書き換えること
       mockAdminRoleLookup('user');
 
       await GET(createGetRequest());

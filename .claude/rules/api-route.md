@@ -127,9 +127,9 @@ export async function POST(request: Request) {
 順序を回帰テストしている。新しくそういうハンドラを足すときは、同じ describe を
 付けること。
 
-> 例外: `admin/accounts` POST と `admin/accounts/[id]/reissue` POST は
-> **テストファイル自体が存在しない**ため未検証。順序は実装で確認済み
-> （どちらも原則どおり）。テストの新規作成は #940 のスコープ外。
+> 例外: `admin/accounts` POST と `admin/accounts/[id]/reissue` POST は未検証。
+> 前者は #934 でテストファイルを作ったが GET のみ、後者はファイルが無い。
+> 順序は実装で確認済み（どちらも原則どおり）。
 
 ### 棚卸しのしかた
 

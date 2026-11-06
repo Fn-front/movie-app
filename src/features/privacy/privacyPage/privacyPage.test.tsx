@@ -1,8 +1,12 @@
 /**
  * プライバシーポリシーのテスト
  *
- * 公表事項の抜けを検知するのが目的。外部送信先の列挙と、Consent Mode の
- * 挙動（同意しなくても送られるものがある）の記載を固定する。
+ * 目的は2つある。
+ * 1. 法令が求める公表事項の抜けを検知する
+ * 2. 載せない判断をした項目が、根拠を確かめずに足し戻されるのを検知する
+ *
+ * 2 のために「無いこと」を見るテストを置いている。足し戻すときは
+ * privacyPage.tsx 冒頭のコメントにある根拠を先に読むこと。
  */
 
 import { render, screen, within } from '@testing-library/react';
@@ -33,17 +37,62 @@ describe('PrivacyPage', () => {
       ).toBeInTheDocument();
     });
 
-    it('11項目を h2 で並べる', () => {
+    it('6項目を h2 で並べる', () => {
       render(<PrivacyPage />);
 
-      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(11);
+      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(6);
     });
 
-    it('制定日と最終改定日を示す', () => {
+    it('最終改定日を示す（再同意の告知がこの日付を指す）', () => {
       render(<PrivacyPage />);
 
-      expect(screen.getByText(/制定日:/)).toBeInTheDocument();
       expect(screen.getByText(/最終改定日:/)).toBeInTheDocument();
+    });
+  });
+
+  describe('法32条1項の公表事項', () => {
+    it.each([
+      /利用目的/,
+      /安全管理措置/,
+      /外国における個人データの取扱い/,
+      /開示等のご請求と苦情の申出先/,
+    ])('%s の節を持つ', (name) => {
+      render(<PrivacyPage />);
+
+      expect(
+        screen.getByRole('heading', { level: 2, name }),
+      ).toBeInTheDocument();
+    });
+
+    it('外的環境の把握として国名を明示する', () => {
+      // 法32条1項4号。「本人の求めに応じて」で足りる28条3項と違い、
+      // 国名は公表が要る（個人情報保護委員会 Q&A 10-25）
+      render(<PrivacyPage />);
+
+      const section = screen
+        .getByRole('heading', { level: 2, name: /外国における個人データ/ })
+        .closest('section') as HTMLElement;
+
+      expect(within(section).getByText('米国')).toBeInTheDocument();
+    });
+
+    it('安全管理措置に実装の詳細を書かない', () => {
+      // 「支障を及ぼすおそれがあるもの」は公表しなくてよい（施行令10条1号）。
+      // ハッシュ関数名や鍵長は攻撃者への情報提供になる
+      render(<PrivacyPage />);
+
+      const section = screen
+        .getByRole('heading', { level: 2, name: /安全管理措置/ })
+        .closest('section') as HTMLElement;
+
+      expect(section.textContent).not.toMatch(/bcrypt|SHA|AES|ビット|鍵長/);
+    });
+
+    it('開示請求の窓口を示す', () => {
+      render(<PrivacyPage />);
+
+      const link = screen.getByRole('link', { name: /@/ });
+      expect(link).toHaveAttribute('href', expect.stringContaining('mailto:'));
     });
   });
 
@@ -62,14 +111,28 @@ describe('PrivacyPage', () => {
     });
 
     // 送信先には補足の括弧が付くことがあるため前方一致で見る
-    it.each([
-      /^Google（Google アナリティクス）/,
-      /^YouTube（Google/,
-      /^Google \/ GitHub/,
-    ])('%s を列挙する', (name) => {
+    it.each([/^Google（Google アナリティクス）/, /^YouTube（Google/])(
+      '%s を列挙する',
+      (name) => {
+        render(<PrivacyPage />);
+
+        expect(screen.getByRole('rowheader', { name })).toBeInTheDocument();
+      },
+    );
+
+    it('適用除外のものを載せない', () => {
+      // 法27条の12 ただし書き一号「役務の提供のために真に必要な情報」。
+      // ソーシャルログインの認証情報と、ポスター画像取得に伴うIPアドレスが該当する。
+      // 足し戻す前に privacyPage.tsx 冒頭の根拠を読むこと
       render(<PrivacyPage />);
 
-      expect(screen.getByRole('rowheader', { name })).toBeInTheDocument();
+      const rowHeaders = screen
+        .getAllByRole('rowheader')
+        .map((cell) => cell.textContent ?? '');
+
+      expect(rowHeaders).toHaveLength(2);
+      expect(rowHeaders.some((text) => text.includes('GitHub'))).toBe(false);
+      expect(rowHeaders.some((text) => text.includes('TMDb'))).toBe(false);
     });
 
     it('YouTube の送信情報に、目的（計測）に対応する項目が入っている', () => {
@@ -151,36 +214,22 @@ describe('PrivacyPage', () => {
     });
   });
 
-  describe('サーバーからの委託先（個人情報保護法）', () => {
-    it.each([
-      'OpenAI',
-      'Have I Been Pwned',
-      'Resend',
-      'GitHub',
-      'Supabase / Vercel',
-    ])('%s を列挙する', (name) => {
+  describe('公表義務が無いため載せない項目', () => {
+    it('サーバー側の委託先一覧を持たない', () => {
+      // 法27条5項1号により第三者提供に当たらず、公表義務が無い。
+      // 外国での取扱いは §4 の国名で足りる
       render(<PrivacyPage />);
 
-      expect(screen.getByRole('rowheader', { name })).toBeInTheDocument();
+      expect(screen.queryByText(/OpenAI|Have I Been Pwned|Resend/)).toBeNull();
     });
 
-    it('パスワードそのものは送らないと明記する', () => {
+    it('保存期間の節を持たない', () => {
+      // 法32条1項に保存期間は含まれない（GDPR 13条と混同しやすい）
       render(<PrivacyPage />);
 
       expect(
-        screen.getByText(/パスワードそのものは送信しません/),
-      ).toBeInTheDocument();
-    });
-
-    it('外国にある第三者への提供の項を持つ', () => {
-      render(<PrivacyPage />);
-
-      expect(
-        screen.getByRole('heading', {
-          level: 2,
-          name: /外国にある第三者への提供/,
-        }),
-      ).toBeInTheDocument();
+        screen.queryByRole('heading', { level: 2, name: /保存期間/ }),
+      ).toBeNull();
     });
   });
 
@@ -252,13 +301,23 @@ describe('PrivacyPage', () => {
     });
 
     it('URLはクエリ文字列を除いて送ることを書く', () => {
-      // §3 の表と §7 で記述が食い違わないようにする
+      // §2 の表と §3 で記述が食い違わないようにする
       render(<PrivacyPage />);
 
       expect(
         within(section()).getByText(
           /URLもクエリ文字列を除いた部分のみを送信します/,
         ),
+      ).toBeInTheDocument();
+    });
+
+    it('送信内容を変えたら再同意を求めることを書く', () => {
+      // user_settings.cookie_consent_version を上げると再同意になる実装の説明。
+      // 改定告知の節を削った際、この1文だけは残している
+      render(<PrivacyPage />);
+
+      expect(
+        within(section()).getByText(/あらためて確認させていただきます/),
       ).toBeInTheDocument();
     });
 
@@ -297,13 +356,6 @@ describe('PrivacyPage', () => {
       expect(
         screen.getByText(/アカウントを削除する機能は提供していません/),
       ).toBeInTheDocument();
-    });
-
-    it('開示請求の窓口を示す', () => {
-      render(<PrivacyPage />);
-
-      const link = screen.getByRole('link', { name: /@/ });
-      expect(link).toHaveAttribute('href', expect.stringContaining('mailto:'));
     });
   });
 });

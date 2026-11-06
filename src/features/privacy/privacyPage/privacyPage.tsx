@@ -12,6 +12,7 @@
  */
 
 import { Heading } from '@/components/ui/heading/heading';
+import { EXTERNAL_URLS } from '@/constants/external';
 import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
 import { CookieConsentToggle } from '@/features/cookieConsent/component/cookieConsentToggle/cookieConsentToggle';
 
@@ -20,6 +21,15 @@ import styles from './privacyPage.module.scss';
 /** 制定日。改定したら LAST_UPDATED を更新する */
 const ESTABLISHED_AT = '2026年11月3日';
 const LAST_UPDATED = '2026年11月6日';
+
+/**
+ * 予告編の埋め込み先ホスト名
+ *
+ * ポリシー本文にホスト名を直書きすると、埋め込み先を変えたときに記述だけ
+ * 古いまま残る（しかもテストでは落ちない）。実装から導出して構造的に外れない
+ * ようにする（#937）。
+ */
+const YOUTUBE_EMBED_HOST = new URL(EXTERNAL_URLS.YOUTUBE_EMBED).hostname;
 
 /** 問い合わせ・開示請求の窓口 */
 const CONTACT_EMAIL = 'support@example.com';
@@ -33,9 +43,19 @@ const CLIENT_TRANSMISSIONS = [
   },
   {
     // ファサード（クリックで読み込む仕組み）は無く、ダイアログを開いた時点で
-    // iframe が生成される。「再生した際」と書くと実態より後ろにずれる
-    to: 'YouTube（Google）',
-    data: '予告編のダイアログを開いた際のIPアドレス・Cookie',
+    // iframe が生成される。「再生した際」と書くと実態より後ろにずれる。
+    //
+    // Cookie は挙げない。プライバシー強化モード（youtube-nocookie.com）へ
+    // 切り替えた結果、ダイアログを開いても再生しても Cookie が設定されないことを
+    // 実測で確認している（#937。切り替え前は開いた時点で5件設定されていた）。
+    //
+    // 一方で「計測」と書く以上、計測対象を列挙しないと目的と内容が食い違う。
+    // 送信先は動画配信・不正検知の関連ドメイン（googlevideo.com /
+    // jnn-pa.googleapis.com 等）にも及ぶため、括弧で含む旨を書く。
+    // URL が「オリジンまで」なのは next.config.mjs:103-104 の
+    // Referrer-Policy: strict-origin-when-cross-origin による
+    to: 'YouTube（Google。動画配信・不正検知の関連ドメインを含みます）',
+    data: '予告編のダイアログを開いた際のIPアドレス・ブラウザの種類・視聴する動画の識別子・本サービスのURL（オリジンまで）・再生状況',
     purpose: '動画の配信と再生品質の計測',
   },
   {
@@ -205,9 +225,14 @@ export function PrivacyPage() {
             （アクセス解析に同意いただいた場合のみ）
           </li>
           <li>
-            Cookie: YouTube
-            が設定するもの（予告編のダイアログを開いた場合。同意の有無に
-            かかわらず設定されます）
+            Cookie: 予告編の埋め込みは YouTube のプライバシー強化モード（
+            <code>{YOUTUBE_EMBED_HOST}</code>
+            ）を利用しており、当社が確認した範囲では、ダイアログを開いても再生しても
+            YouTube の Cookie は設定されません
+          </li>
+          <li>
+            YouTube のプレイヤーによるローカルストレージ・IndexedDB:
+            字幕の表示設定など、再生に関する設定（上記のモードでも保存されます）
           </li>
           <li>
             ローカルストレージ:

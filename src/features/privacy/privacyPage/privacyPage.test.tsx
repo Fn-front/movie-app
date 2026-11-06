@@ -7,6 +7,7 @@
 
 import { render, screen, within } from '@testing-library/react';
 
+import { EXTERNAL_URLS } from '@/constants/external';
 import { recordConsentDecision } from '@/utils/cookieConsent';
 import { PrivacyPage } from './privacyPage';
 
@@ -60,14 +61,36 @@ describe('PrivacyPage', () => {
       expect(headers).toContain('送信先での利用目的');
     });
 
+    // 送信先には補足の括弧が付くことがあるため前方一致で見る
     it.each([
-      'Google（Google アナリティクス）',
-      'YouTube（Google）',
-      'Google / GitHub',
+      /^Google（Google アナリティクス）/,
+      /^YouTube（Google/,
+      /^Google \/ GitHub/,
     ])('%s を列挙する', (name) => {
       render(<PrivacyPage />);
 
       expect(screen.getByRole('rowheader', { name })).toBeInTheDocument();
+    });
+
+    it('YouTube の送信情報に、目的（計測）に対応する項目が入っている', () => {
+      render(<PrivacyPage />);
+
+      // 「再生品質の計測」と書く以上、何を計測しているかを欠いてはいけない
+      const row = screen.getByRole('rowheader', {
+        name: /^YouTube（Google/,
+      }).parentElement;
+
+      expect(row?.textContent).toContain('視聴する動画の識別子');
+      expect(row?.textContent).toContain('再生状況');
+    });
+
+    it('埋め込み先のホスト名が実装と一致する', () => {
+      render(<PrivacyPage />);
+
+      // ポリシー本文に直書きすると、埋め込み先を変えたとき記述だけ古く残る
+      const host = new URL(EXTERNAL_URLS.YOUTUBE_EMBED).hostname;
+
+      expect(screen.getByText(host)).toBeInTheDocument();
     });
   });
 

@@ -80,8 +80,8 @@ export const TRUSTED_TYPES_POLICIES = Object.freeze([
  * の「GA4・広告機能なし」構成に準拠する。広告機能や Google シグナルを
  * 有効化する場合は `https://*.g.doubleclick.net` などが追加で要るほか、
  * **`frame-src` にも `https://www.googletagmanager.com` を明示追加すること**。
- * 本リポジトリの `frame-src` は YouTube のみを明示指定しており
- * `default-src` にフォールバックしないため、書かないとブロックされる。
+ * 本リポジトリの `frame-src` は YouTube（nocookie ドメイン）のみを明示指定して
+ * おり `default-src` にフォールバックしないため、書かないとブロックされる。
  *
  * `https://*.analytics.google.com` は公式の列挙に含まれないため入れていない。
  * 必要になったら `/api/csp-report` の違反を見て追加する（ただしサイト公開
@@ -129,7 +129,10 @@ export function getCspDirectives({
     // base64エンコードした data: URI で読み込むために必要
     "font-src 'self' data:",
     `connect-src 'self' https://*.supabase.co ${GA_CONNECT_ORIGINS}`,
-    'frame-src https://www.youtube.com',
+    // 予告編の埋め込み先。プライバシー強化モードのドメインだけを許可する（#937）。
+    // `www.youtube.com` は入れない。入れておくと、埋め込み先を元へ戻しても
+    // CSP が通ってしまい、変更に気づけない
+    'frame-src https://www.youtube-nocookie.com',
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

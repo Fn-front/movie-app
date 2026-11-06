@@ -42,7 +42,7 @@ describe('buildCspHeader', () => {
       expect(header).toContain("frame-ancestors 'none'");
       expect(header).toContain("base-uri 'self'");
       expect(header).toContain("form-action 'self'");
-      expect(header).toContain('frame-src https://www.youtube.com');
+      expect(header).toContain('frame-src https://www.youtube-nocookie.com');
       expect(header).toContain("connect-src 'self' https://*.supabase.co");
       expect(header).toContain("img-src 'self' https://image.tmdb.org data:");
       expect(header).toContain("font-src 'self' data:");

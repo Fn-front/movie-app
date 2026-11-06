@@ -2,6 +2,8 @@
  * CSP ディレクティブ共有モジュール（単一ソース）のテスト
  */
 
+import { EXTERNAL_URLS } from '@/constants/external';
+
 import {
   CSP_REPORT_GROUP,
   CSP_REPORT_PATH,
@@ -52,7 +54,7 @@ describe('getCspDirectives', () => {
       "img-src 'self' https://image.tmdb.org data: blob: https://www.googletagmanager.com https://*.google-analytics.com",
     );
     expect(directives).toContain("font-src 'self' data:");
-    expect(directives).toContain('frame-src https://www.youtube.com');
+    expect(directives).toContain('frame-src https://www.youtube-nocookie.com');
     expect(directives).toContain("frame-ancestors 'none'");
     expect(directives).toContain("base-uri 'self'");
     expect(directives).toContain("form-action 'self'");
@@ -95,8 +97,29 @@ describe('getCspDirectives', () => {
       );
     });
 
-    it('frame-src は YouTube のみのまま（広告機能を使わないため）', () => {
-      expect(find('frame-src')).toBe('frame-src https://www.youtube.com');
+    it('frame-src は nocookie ドメインのみ（GA を足しても増えない / youtube.com を足し戻さない）', () => {
+      expect(find('frame-src')).toBe(
+        'frame-src https://www.youtube-nocookie.com',
+      );
+    });
+  });
+
+  /**
+   * 埋め込み先（`EXTERNAL_URLS.YOUTUBE_EMBED`）と `frame-src` は別々のリテラルで、
+   * ずれると本番で埋め込みが丸ごとブロックされる。
+   *
+   * ⚠️ 上の厳密一致だけでは**片方向しか守れない**。`external.ts` を
+   * `youtube.com` に戻し、`videoDialog.test.tsx` の期待値も直すと、
+   * 全テストが緑のまま本番だけ壊れる。導出して突き合わせる。
+   */
+  describe('埋め込み先との整合（#937）', () => {
+    it('frame-src が EXTERNAL_URLS.YOUTUBE_EMBED のオリジンと一致する', () => {
+      const directives = getCspDirectives();
+      const frameSrc = directives.find((d) => d.startsWith('frame-src'));
+
+      expect(frameSrc).toBe(
+        `frame-src ${new URL(EXTERNAL_URLS.YOUTUBE_EMBED).origin}`,
+      );
     });
   });
 });

@@ -15,6 +15,7 @@
     "test:coverage": "jest --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:e2e:ga": "E2E_RUN_ID=${E2E_RUN_ID:-ga} playwright test --config=playwright.ga.config.ts",
     "cron": "node scripts/run-cron.mjs",
     "analyze": "ANALYZE=true next build",
     "prepare": "husky",

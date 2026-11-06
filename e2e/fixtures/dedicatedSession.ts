@@ -11,7 +11,7 @@
  * 完結させる（#750 で二段階認証の spec に導入したやり方）。
  */
 
-import type { Browser, Page } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
 
 import {
   cleanupLoginIpRateLimits,
@@ -42,10 +42,15 @@ export interface DedicatedSession {
  *
  * @param browser - `beforeAll` が受け取る browser
  * @param user - 作成する専用ユーザー。メールは `runScopedEmail()` で作る
+ * @param beforeLogin - ログイン前にコンテキストへ仕掛ける処理。最初の
+ *   ナビゲーションより前に `route` を張りたいときに使う（GA の収集ビーコン
+ *   遮断など。#931。ログイン画面でも gtag.js は動くため、ログイン後に張ると
+ *   取りこぼす）
  */
 export async function openDedicatedSession(
   browser: Browser,
   user: DedicatedUser,
+  beforeLogin?: (context: BrowserContext) => Promise<void>,
 ): Promise<DedicatedSession> {
   const userId = await createVerifiedUser(user);
 
@@ -57,6 +62,8 @@ export async function openDedicatedSession(
   const context = await browser.newContext({
     storageState: { cookies: [], origins: [] },
   });
+  await beforeLogin?.(context);
+
   const page = await context.newPage();
   await performLogin(page, user);
 

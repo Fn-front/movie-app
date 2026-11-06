@@ -32,6 +32,10 @@ export default defineConfig({
   // （`*.test.ts`）は Jest が担当するため、Playwright の既定（spec/test 両方を
   // テスト扱い）のままだと両方のランナーが同じファイルを拾ってしまう
   testMatch: '**/*.spec.ts',
+  // 同意UIの spec は playwright.ga.config.ts が担当する（#931）。この config の
+  // サーバーは下の webServer.env で GA を無効にしており、同意バナーも gtag.js も
+  // 描画されないため、ここで拾うと必ず落ちる
+  testIgnore: '**/cookieConsent/**',
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,

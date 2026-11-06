@@ -174,7 +174,20 @@ export function resolveConsentMerge({
     const sameAsServer =
       adopted.state === server.state && adopted.version === server.version;
     if (!sameAsServer) {
-      putBody = { cookieConsent: adopted.state, cookieConsentAt: adopted.at };
+      putBody = {
+        cookieConsent: adopted.state,
+        // パース不能な日時は null に倒す（#962）。
+        //
+        // localStorage の `at` は生値をそのまま読む（`getStoredConsentAt`）。
+        // 壊れた値を載せると `updateSettings` が zod（`z.iso.datetime`）で
+        // 400 になり、呼び出し元は `syncedUserId` を更新せず return するため
+        // **毎ページロードで同じ PUT を送り続ける**（収束しない）。
+        //
+        // 状態そのものは送る必要がある。日時だけ落として保存を通す。
+        // サーバー側のクランプ（`normalizeConsentAt`）は zod を通った後なので、
+        // 「形式は妥当だが範囲外」しか救えずここには届かない。
+        cookieConsentAt: toEpoch(adopted.at) === null ? null : adopted.at,
+      };
     }
   }
 

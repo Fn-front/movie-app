@@ -7,6 +7,7 @@
  * 出力は版によらず同一なので版の判定を検証できない。
  */
 
+import { ANALYTICS_EVENTS } from '@/constants/analytics';
 import { STORAGE_KEYS } from '@/constants/common';
 import { COOKIE_CONSENT_VERSION } from '@/constants/user';
 import {
@@ -16,6 +17,7 @@ import {
   deleteGaCookies,
   getGaMeasurementId,
   sendConsentUpdate,
+  sendEvent,
   sendPageView,
 } from './analytics';
 
@@ -265,6 +267,67 @@ describe('analytics', () => {
       expect(() =>
         sendPageView({ pagePath: '/', pageLocation: '/', pageTitle: '' }),
       ).not.toThrow();
+    });
+  });
+
+  describe('sendEvent', () => {
+    it('イベント名とパラメータをそのまま渡す', () => {
+      const gtag = jest.fn();
+      window.gtag = gtag;
+
+      sendEvent(ANALYTICS_EVENTS.WATCHLIST_ADD, { movie_id: 550 });
+
+      expect(gtag).toHaveBeenCalledWith('event', 'watchlist_add', {
+        movie_id: 550,
+      });
+    });
+
+    it('パラメータ無しでも送れる', () => {
+      const gtag = jest.fn();
+      window.gtag = gtag;
+
+      sendEvent(ANALYTICS_EVENTS.TRAILER_OPEN);
+
+      expect(gtag).toHaveBeenCalledWith('event', 'trailer_open', undefined);
+    });
+
+    it('gtag が未定義でも落ちない', () => {
+      expect(() =>
+        sendEvent(ANALYTICS_EVENTS.SEARCH, { results_count: 0 }),
+      ).not.toThrow();
+    });
+
+    it('同意状態を見ずに送る（Consent Mode advanced の建て付け）', () => {
+      // advanced では未同意でも Cookie を伴わないヒットが送られる。
+      // ここで同意状態によるガードを足すと basic 相当の設計変更になるため、
+      // denied のまま送られることを回帰テストで固定する
+      const gtag = jest.fn();
+      window.gtag = gtag;
+
+      sendConsentUpdate(false);
+      sendEvent(ANALYTICS_EVENTS.FAVORITE_ADD, { movie_id: 550 });
+
+      expect(gtag).toHaveBeenNthCalledWith(1, 'consent', 'update', {
+        analytics_storage: 'denied',
+      });
+      expect(gtag).toHaveBeenNthCalledWith(2, 'event', 'favorite_add', {
+        movie_id: 550,
+      });
+    });
+
+    it('同意の有無でパラメータが変わらない', () => {
+      const gtag = jest.fn();
+      window.gtag = gtag;
+
+      sendConsentUpdate(false);
+      sendEvent(ANALYTICS_EVENTS.WATCHLIST_ADD, { movie_id: 550 });
+      const denied = gtag.mock.calls.at(-1);
+
+      sendConsentUpdate(true);
+      sendEvent(ANALYTICS_EVENTS.WATCHLIST_ADD, { movie_id: 550 });
+      const granted = gtag.mock.calls.at(-1);
+
+      expect(granted).toEqual(denied);
     });
   });
 

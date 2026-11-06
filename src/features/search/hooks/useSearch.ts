@@ -5,7 +5,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
@@ -13,7 +13,14 @@ import { useSession } from 'next-auth/react';
 import { searchMoviesApi } from '@/lib/api/search/search';
 import type { SearchMoviesRequest } from '@/lib/api/search/search';
 import type { Movie } from '@/lib/types';
-import { searchKeys, SEARCH_ERROR_MESSAGES } from '@/constants';
+import {
+  ANALYTICS_EVENTS,
+  ANALYTICS_NO_FILTER,
+  QUERY_PARAMS,
+  searchKeys,
+  SEARCH_ERROR_MESSAGES,
+} from '@/constants';
+import { sendEvent } from '@/utils/analytics';
 import { useToast } from '@/hooks/useToast';
 import {
   clearStoredSuggestion,
@@ -72,6 +79,24 @@ function buildSearchParams(
 }
 
 /**
+ * 適用中の絞り込み種別を GA4 のスカラー値へ畳む
+ *
+ * GA4 のイベントパラメータは配列を受け付けないのでカンマ区切りにする。
+ * 並び順はこの関数で固定する（呼び出しごとに変わると、同じ組み合わせが
+ * 別の値として集計されてしまう）。種別名は URL クエリのキーを流用し、
+ * 画面の絞り込みと対応を取りやすくしている。
+ */
+function buildSearchFilterTypes(params: SearchMoviesRequest): string {
+  const types: string[] = [];
+  if (params.genre) types.push(QUERY_PARAMS.GENRE);
+  if (params.vote_average_gte !== undefined) {
+    types.push(QUERY_PARAMS.VOTE_AVERAGE_GTE);
+  }
+  if (params.year !== undefined) types.push(QUERY_PARAMS.YEAR);
+  return types.length > 0 ? types.join(',') : ANALYTICS_NO_FILTER;
+}
+
+/**
  * 検索カスタムフック
  */
 export function useSearch(): UseSearchReturn {
@@ -107,6 +132,40 @@ export function useSearch(): UseSearchReturn {
       });
     }
   }, [searchQuery.isError, toast]);
+
+  // 直近に GA4 へ送った検索条件。同一条件での再マウント・再フェッチで
+  // 二重に数えないよう比較する（AnalyticsProvider の lastPageViewRef と同じ手）
+  const lastSearchEventKeyRef = useRef<string | null>(null);
+
+  // 検索イベントの送信
+  //
+  // ⚠️ 検索キーワード本文は送らない（#938）。Consent Mode advanced では
+  // 未同意の利用者の分も Google へ届くため、何を探したかは渡さず
+  // has_query で有無だけを表す。
+  //
+  // 結果が確定してから送るので、入力途中のクエリでは発火しない。
+  // ページ送りも検索の再実行なので計上する（result_page で切り分けられる）。
+  // 失敗した検索は送らない（上の isError 側で扱う）
+  useEffect(() => {
+    if (requestParams === null) return;
+    if (!searchQuery.isSuccess || searchQuery.isPlaceholderData) return;
+
+    const key = JSON.stringify(requestParams);
+    if (lastSearchEventKeyRef.current === key) return;
+    lastSearchEventKeyRef.current = key;
+
+    sendEvent(ANALYTICS_EVENTS.SEARCH, {
+      has_query: Boolean(requestParams.query),
+      filter_types: buildSearchFilterTypes(requestParams),
+      results_count: searchQuery.data?.data.pagination.totalResults ?? 0,
+      result_page: requestParams.page ?? 1,
+    });
+  }, [
+    requestParams,
+    searchQuery.isSuccess,
+    searchQuery.isPlaceholderData,
+    searchQuery.data,
+  ]);
 
   const handlePageChange = useCallback(
     (page: number) => {

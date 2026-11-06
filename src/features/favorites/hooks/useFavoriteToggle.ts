@@ -6,9 +6,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 
+import { ANALYTICS_EVENTS } from '@/constants';
 import { useFavoriteMutations } from '@/features/favorites/hooks/useFavoriteMutations';
 import { useFavoriteLookup } from '@/features/favorites/hooks/useFavoriteLookup';
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
+import { sendEvent } from '@/utils/analytics';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
 /**
@@ -122,8 +124,16 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       if (modalState.movie) {
         processingIdRef.current = modalState.movie.id;
       }
+      // GA4 へは作品IDだけを送る。rating（★の数）は送らない。
+      // Consent Mode advanced では未同意の利用者の分も Google へ届くため、
+      // 作品に対する評価という嗜好情報を渡さない（#938）
       if (modalState.currentFavorite) {
         updateRating(modalState.currentFavorite.id, rating);
+        if (modalState.movie) {
+          sendEvent(ANALYTICS_EVENTS.FAVORITE_UPDATE, {
+            movie_id: modalState.movie.id,
+          });
+        }
       } else {
         if (!modalState.movie) return;
         addToFavorites({
@@ -132,6 +142,9 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
           poster_path: modalState.movie.poster_path,
           release_date: modalState.movie.release_date,
           rating,
+        });
+        sendEvent(ANALYTICS_EVENTS.FAVORITE_ADD, {
+          movie_id: modalState.movie.id,
         });
       }
       closeModal();
@@ -151,6 +164,11 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       processingIdRef.current = modalState.movie.id;
     }
     removeFromFavorites(modalState.currentFavorite.id);
+    if (modalState.movie) {
+      sendEvent(ANALYTICS_EVENTS.FAVORITE_REMOVE, {
+        movie_id: modalState.movie.id,
+      });
+    }
     closeModal();
   }, [
     modalState.currentFavorite,

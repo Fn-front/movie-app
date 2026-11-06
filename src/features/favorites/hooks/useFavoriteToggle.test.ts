@@ -4,6 +4,8 @@
 
 import { renderHook, act } from '@testing-library/react';
 
+import { ANALYTICS_EVENTS } from '@/constants/analytics';
+
 import { useFavoriteToggle } from './useFavoriteToggle';
 
 // --- Mocks ---
@@ -262,5 +264,121 @@ describe('useFavoriteToggle', () => {
       'お気に入りに追加するにはログインが必要です。',
     );
     expect(result.current.modalState.isOpen).toBe(false);
+  });
+
+  /**
+   * sendEvent はモックせず window.gtag を差し替える。
+   * 実際に gtag へ渡る引数まで見ないと「余計な値を送っていないこと」を
+   * 保証できないため（#938）
+   */
+  describe('GA4 計測', () => {
+    const gtag = jest.fn();
+
+    beforeEach(() => {
+      window.gtag = gtag;
+    });
+
+    afterEach(() => {
+      delete window.gtag;
+    });
+
+    it('新規登録で favorite_add を作品IDだけ付けて送る', () => {
+      const { result } = renderHook(() => useFavoriteToggle());
+
+      act(() => {
+        result.current.handleFavoriteToggle(createMovie(), null);
+      });
+      act(() => {
+        result.current.handleModalSubmit(7);
+      });
+
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.FAVORITE_ADD,
+        {
+          movie_id: 42,
+        },
+      );
+    });
+
+    it('評価更新で favorite_update を送る', () => {
+      const { result } = renderHook(() => useFavoriteToggle());
+
+      act(() => {
+        result.current.handleFavoriteToggle(createMovie(), {
+          id: 'fav-1',
+          rating: 5,
+        });
+      });
+      act(() => {
+        result.current.handleModalSubmit(9);
+      });
+
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.FAVORITE_UPDATE,
+        { movie_id: 42 },
+      );
+    });
+
+    it('削除で favorite_remove を送る', () => {
+      const { result } = renderHook(() => useFavoriteToggle());
+
+      act(() => {
+        result.current.handleFavoriteToggle(createMovie(), {
+          id: 'fav-1',
+          rating: 5,
+        });
+      });
+      act(() => {
+        result.current.handleDelete();
+      });
+
+      expect(gtag).toHaveBeenCalledWith(
+        'event',
+        ANALYTICS_EVENTS.FAVORITE_REMOVE,
+        { movie_id: 42 },
+      );
+    });
+
+    it('評価の点数と作品タイトルを送らない', () => {
+      // rating は未同意の利用者の分も Google へ届く嗜好情報なので含めない
+      const { result } = renderHook(() => useFavoriteToggle());
+
+      act(() => {
+        result.current.handleFavoriteToggle(createMovie(), null);
+      });
+      act(() => {
+        result.current.handleModalSubmit(7);
+      });
+
+      const sent = JSON.stringify(gtag.mock.calls);
+      expect(sent).not.toContain('テスト映画');
+      expect(sent).not.toContain('rating');
+    });
+
+    it('モーダルを開いただけでは送らない', () => {
+      const { result } = renderHook(() => useFavoriteToggle());
+
+      act(() => {
+        result.current.handleFavoriteToggle(createMovie(), null);
+      });
+
+      expect(gtag).not.toHaveBeenCalled();
+    });
+
+    it('未認証なら送らない（モーダルが開かないため）', () => {
+      mockUseSession.mockReturnValue({ data: null, status: 'unauthenticated' });
+      const { result } = renderHook(() => useFavoriteToggle());
+
+      act(() => {
+        result.current.handleFavoriteToggle(createMovie(), null);
+      });
+      act(() => {
+        result.current.handleModalSubmit(7);
+      });
+
+      expect(gtag).not.toHaveBeenCalled();
+    });
   });
 });

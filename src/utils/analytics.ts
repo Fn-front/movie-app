@@ -11,6 +11,7 @@
  * という切り分けにくい壊れ方をする。window.gtag(...) だけを経由すること。
  */
 
+import type { AnalyticsEventName } from '@/constants/analytics';
 import { STORAGE_KEYS } from '@/constants/common';
 import { COOKIE_CONSENT_VERSION } from '@/constants/user';
 
@@ -115,6 +116,34 @@ export function sendPageView(params: {
     page_location: params.pageLocation,
     page_title: params.pageTitle,
   });
+}
+
+/**
+ * カスタムイベントのパラメータ
+ *
+ * GA4 が受け付けるのはスカラー値のみ。配列・オブジェクトは送れないので、
+ * 複数値は呼び出し側で文字列へ畳んでから渡す（`filter_types` など）。
+ */
+export type AnalyticsEventParams = Record<string, string | number | boolean>;
+
+/**
+ * カスタムイベントを送信する
+ *
+ * ガードは `sendPageView` と同じく gtag の存在のみで、**同意状態は見ない**。
+ * Consent Mode v2 advanced の建て付けどおりの挙動で、未同意でも Cookie を
+ * 伴わないヒットとして送られる。同意済み・未同意でパラメータは変わらない。
+ *
+ * ここで `useCookieConsent` を参照しないことには意味がある。購読を増やすと
+ * 送信箇所のコンポーネントが同意状態の変化で再レンダリングされる（#939）。
+ *
+ * ⚠️ パラメータに個人を特定しうる値を入れないこと。理由と禁止事項は
+ * `src/constants/analytics.ts` の冒頭に書いてある。
+ */
+export function sendEvent(
+  name: AnalyticsEventName,
+  params?: AnalyticsEventParams,
+): void {
+  window.gtag?.('event', name, params);
 }
 
 /**

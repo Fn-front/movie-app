@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 
 import { Select } from '@/components/ui/select/select';
 import { Loading } from '@/components/ui/loading/loading';
@@ -13,6 +13,7 @@ import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailM
 import { FavoriteList } from '@/features/favorites/component/favoriteList/favoriteList';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
+import { usePrependScrollAnchor } from '@/hooks/usePrependScrollAnchor';
 import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import {
   useFavoritesPage,
@@ -31,6 +32,9 @@ export const FavoritesPage = memo(function FavoritesPage() {
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
+    isFetchingPreviousPage,
+    hasPreviousPage,
+    fetchPreviousPage,
     sortBy,
     handleSortChange,
     favoriteToggle,
@@ -70,6 +74,25 @@ export const FavoritesPage = memo(function FavoritesPage() {
     enabled: hasNextPage && !isFetchingNextPage,
   });
 
+  // 上方向のロード（#972）。
+  //
+  // `maxPages` を付けたため、先に進むと先頭ページがキャッシュから捨てられる。
+  // この導線が無いと、戻ったときに表示中だった項目がそのまま消える
+  // 依存は**先頭の識別子**。件数だと `maxPages` で増減が相殺され発火しない
+  const { listRef, captureBeforePrepend } =
+    usePrependScrollAnchor<HTMLDivElement>(favorites[0]?.id);
+
+  // 取得の直前に寸法を控える。先頭に項目が差し込まれるぶんだけ
+  // 下の内容が押し下げられるため、補正しないと見ていた場所が飛ぶ
+  const handleFetchPrevious = useCallback(() => {
+    captureBeforePrepend();
+    fetchPreviousPage();
+  }, [captureBeforePrepend, fetchPreviousPage]);
+
+  const loadPreviousRef = useIntersectionObserver(handleFetchPrevious, {
+    enabled: hasPreviousPage && !isFetchingPreviousPage,
+  });
+
   return (
     <div className={styles.c_favorites_page}>
       <div className={styles.c_favorites_page__toolbar}>
@@ -85,7 +108,16 @@ export const FavoritesPage = memo(function FavoritesPage() {
         </div>
       </div>
 
+      <div ref={loadPreviousRef} />
+
+      {isFetchingPreviousPage && (
+        <div className={styles.c_favorites_page__loading}>
+          <Loading size='sm' label='読み込み中...' />
+        </div>
+      )}
+
       <FavoriteList
+        gridRef={listRef}
         favorites={favorites}
         isLoading={isLoading}
         onFavoriteToggle={handleFavoriteToggle}

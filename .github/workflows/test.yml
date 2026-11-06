@@ -81,7 +81,7 @@ jobs:
         run: npx jest --coverage --ci --json --testLocationInResults --outputFile=report.json || true
 
       - name: coverage-report
-        uses: ArtiomTr/jest-coverage-report-action@v2
+        uses: ArtiomTr/jest-coverage-report-action@262a7bb0b20c4d1d6b6b026af0f008f78da72788 # ratchet:ArtiomTr/jest-coverage-report-action@v2.3.1
         with:
           skip-step: all
           annotations: none

@@ -5,7 +5,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import { useSearch } from './useSearch';
 
 // --- Mocks ---
@@ -48,7 +48,9 @@ const mockUseSearchParams = useSearchParams as jest.MockedFunction<
 >;
 const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 const mockUseQuery = useQuery as jest.MockedFunction<typeof useQuery>;
-const mockUseToast = useToast as jest.MockedFunction<typeof useToast>;
+const mockUseToastDispatch = useToastDispatch as jest.MockedFunction<
+  typeof useToastDispatch
+>;
 const mockUseSession = useSession as jest.MockedFunction<typeof useSession>;
 const mockUseTitleSuggestion = useTitleSuggestion as jest.MockedFunction<
   typeof useTitleSuggestion
@@ -92,9 +94,8 @@ function setupMocks(
   mockUseRouter.mockReturnValue({ push: mockPush } as unknown as ReturnType<
     typeof useRouter
   >);
-  mockUseToast.mockReturnValue({
+  mockUseToastDispatch.mockReturnValue({
     toast: mockToast,
-    toasts: [],
     removeToast: jest.fn(),
     clearToasts: jest.fn(),
   });

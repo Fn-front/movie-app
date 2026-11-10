@@ -61,6 +61,11 @@ jest.mock('@/hooks/useToast', () => ({
     removeToast: jest.fn(),
     clearToasts: jest.fn(),
   }),
+  useToastDispatch: () => ({
+    toast: mockToast,
+    removeToast: jest.fn(),
+    clearToasts: jest.fn(),
+  }),
 }));
 
 // --- Helpers ---

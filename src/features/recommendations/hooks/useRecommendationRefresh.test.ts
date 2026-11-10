@@ -11,6 +11,7 @@ import type { Recommendation } from '@/schema/recommendations';
 const mockToast = jest.fn();
 jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mockToast }),
+  useToastDispatch: () => ({ toast: mockToast }),
 }));
 
 jest.mock('@/lib/api/recommendations/recommendations', () => ({

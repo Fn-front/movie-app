@@ -21,7 +21,7 @@ import {
   SEARCH_ERROR_MESSAGES,
 } from '@/constants';
 import { sendEvent } from '@/utils/analytics';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import {
   clearStoredSuggestion,
   readSuggestionForQuery,
@@ -107,7 +107,7 @@ function buildSearchFilterTypes(params: SearchMoviesRequest): string {
 export function useSearch(): UseSearchReturn {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const { status } = useSession();
   const isAuthenticated = status === 'authenticated';
 

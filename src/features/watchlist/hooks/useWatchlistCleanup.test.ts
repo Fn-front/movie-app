@@ -26,6 +26,7 @@ jest.mock('@/lib/api/watchlist/watchlist', () => ({
 const mockToast = jest.fn();
 jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mockToast }),
+  useToastDispatch: () => ({ toast: mockToast }),
 }));
 
 // --- Helpers ---

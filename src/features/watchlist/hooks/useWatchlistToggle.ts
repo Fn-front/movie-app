@@ -181,6 +181,20 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
   // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
   // id の有無で見る（getAuthSession と同じ基準）
   const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+  // ⚠️ ここだけ useToastDispatch へ移していない（#939）。
+  //
+  // 下の isInWatchlist は queryClient のキャッシュを**命令的に読むだけ**で
+  // 購読していない。楽観状態（optimisticAdds / Removes）はフックの
+  // インスタンスごとに持つので、モーダルで操作してもタイル側のインスタンスは
+  // 再レンダリングされない。
+  //
+  // 実際には「トーストが出る → useToast() の toasts 購読で全消費者が
+  // 再レンダリング → タイルがキャッシュを読み直す」という**偶然の依存**で
+  // 同期していた。toasts の購読を外すと E2E の
+  // 「モーダルでウォッチリスト操作後、タイル側のボタンも同期される」が落ちる。
+  //
+  // 購読を正しく張り直すのは別の関心事なので #1009 に切り出した。
+  // それが入るまでは意図的に toasts を購読したままにする。
   const { toast } = useToast();
   const openLoginPrompt = useLoginPromptStore((s) => s.open);
 

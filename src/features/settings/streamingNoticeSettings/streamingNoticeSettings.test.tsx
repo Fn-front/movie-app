@@ -19,6 +19,7 @@ jest.mock('@/lib/api/user/user', () => ({
 const mockToast = jest.fn();
 jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mockToast }),
+  useToastDispatch: () => ({ toast: mockToast }),
 }));
 
 // jsdomには fetch の Response グローバルが無く、handleApiError の

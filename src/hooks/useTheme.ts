@@ -11,7 +11,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import { updateSettings } from '@/lib/api/user/user';
 import { handleApiError } from '@/utils/error';
 import { STORAGE_KEYS } from '@/constants/common';
@@ -51,7 +51,7 @@ function getServerSnapshot(): ResolvedTheme {
  * テーマの取得・切り替えを行うフック
  */
 export function useTheme(): UseThemeReturn {
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const resolvedTheme = useSyncExternalStore(
     subscribe,
     getAppliedTheme,

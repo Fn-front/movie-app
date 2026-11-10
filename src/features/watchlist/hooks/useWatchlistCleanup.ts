@@ -23,7 +23,7 @@ import {
   WATCHLIST_ERROR_MESSAGES,
 } from '@/constants';
 import { sendEvent } from '@/utils/analytics';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import {
   bulkDeleteWatchlist,
   getWatchlistWatched,
@@ -98,7 +98,7 @@ export function useWatchlistCleanup({
   onDeleted,
 }: UseWatchlistCleanupOptions): UseWatchlistCleanupReturn {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
 
   // ユーザーがセレクトで明示的に選んだ年。未操作なら null
   const [pickedYear, setPickedYear] = useState<number | null>(null);

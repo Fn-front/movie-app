@@ -120,6 +120,25 @@ export const FILTER_LABELS = {
   DATE_FROM: '開始日',
   /** 終了日 */
   DATE_TO: '終了日',
+  /**
+   * 公開日で選べる範囲の説明（タブごとに変わる）
+   *
+   * グレーアウトだけでは「なぜこの日付が選べないのか」が伝わらない
+   * （WCAG 3.3.2 Labels or Instructions）。`aria-describedby` で
+   * 日付入力に紐づける（#994）
+   */
+  DATE_RANGE_HINT: {
+    /** 劇場 × 公開予定 */
+    THEATRICAL_UPCOMING: 'このタブは今日以降に公開される作品のみです。',
+    /** 劇場 × 公開中 */
+    THEATRICAL_NOW_SHOWING: 'このタブは公開中の作品のみです。',
+    /** 配信 × 配信中 */
+    STREAMING_NOW_SHOWING: 'このタブは直近2ヶ月に公開された配信中の作品です。',
+  },
+  /** 公開日の範囲外を指定したときのエラー */
+  DATE_OUT_OF_RANGE: '選べる期間の外の日付が入力されています。',
+  /** 開始日が終了日より後のときのエラー */
+  DATE_RANGE_REVERSED: '終了日は開始日以降の日付を指定してください。',
   /** リバイバル上映 */
   REVIVAL: 'リバイバル上映',
   /** リバイバル上映フィルタ（legend） */

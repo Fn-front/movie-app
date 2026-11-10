@@ -522,3 +522,24 @@ export const MOVIES_SUCCESS_MESSAGES = {
  * この値が多少ズレても実害は小さい。
  */
 export const STREAMING_RESUME_THRESHOLD_DAYS = 7;
+
+/**
+ * 予告動画ダイアログのラベル
+ */
+export const VIDEO_DIALOG_LABELS = {
+  /** YouTube の視聴ページへのリンク（可視テキスト） */
+  WATCH_ON_YOUTUBE: 'YouTubeで見る',
+  /**
+   * リンク名の補足（読み上げ専用）
+   *
+   * 1つのダイアログに動画が複数並ぶため、リンクだけを拾って読む操作で
+   * どの動画のものか分かるよう名前に動画名を含める。あわせて新しいタブで
+   * 開くことを伝える。
+   *
+   * `aria-label` で上書きせず可視テキストの**後ろに足す**形にしているのは、
+   * アクセシブル名が可視ラベルを含む必要があるため（WCAG 2.5.3
+   * Label in Name）。音声入力で「YouTubeで見る」と言ったときに一致する
+   */
+  WATCH_ON_YOUTUBE_DETAIL: (videoName: string) =>
+    `（${videoName}・新しいタブで開きます）`,
+} as const;

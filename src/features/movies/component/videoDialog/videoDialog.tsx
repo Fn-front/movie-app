@@ -7,9 +7,14 @@
 
 import { memo } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { IoCloseOutline } from 'react-icons/io5';
+import { IoCloseOutline, IoLogoYoutube } from 'react-icons/io5';
 
-import { ICON_SIZES, ARIA_LABELS, EXTERNAL_URLS } from '@/constants';
+import {
+  ICON_SIZES,
+  ARIA_LABELS,
+  EXTERNAL_URLS,
+  VIDEO_DIALOG_LABELS,
+} from '@/constants';
 import type { Video } from '@/lib/types';
 
 import styles from './videoDialog.module.scss';
@@ -81,6 +86,23 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
                   <span className={styles.c_video_dialog__video_type}>
                     {video.type}
                   </span>
+                  {/*
+                    埋め込みが使えないときの代替導線（#980）。
+                    クロスオリジンの iframe は onError が発火せず失敗を
+                    検知できないため、出し分けずに常時置く
+                  */}
+                  <a
+                    href={`${EXTERNAL_URLS.YOUTUBE_WATCH}?v=${encodeURIComponent(video.key)}`}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className={styles.c_video_dialog__youtube_link}
+                  >
+                    <IoLogoYoutube size={ICON_SIZES.SM} aria-hidden='true' />
+                    {VIDEO_DIALOG_LABELS.WATCH_ON_YOUTUBE}
+                    <span className={styles.c_video_dialog__sr_only}>
+                      {VIDEO_DIALOG_LABELS.WATCH_ON_YOUTUBE_DETAIL(video.name)}
+                    </span>
+                  </a>
                 </div>
               </div>
             ))}

@@ -16,6 +16,22 @@ export const EXTERNAL_URLS = {
    * 片方だけ変えると埋め込みが丸ごとブロックされる。
    */
   YOUTUBE_EMBED: 'https://www.youtube-nocookie.com/embed',
+  /**
+   * YouTube の視聴ページURL（埋め込みが使えないときの代替導線 / #980）
+   *
+   * クロスオリジンの iframe は `onError` が発火せず、埋め込みの失敗を
+   * **検知できない**。そのため出し分けはせず常時表示する。埋め込みが
+   * 禁止されている動画・年齢制限・削除済み・CSPでのブロックなど、
+   * 空のプレイヤーになる経路はいずれもこのリンクで迂回できる。
+   *
+   * 埋め込みと違い `youtube-nocookie.com` ではなく `youtube.com` を指す。
+   * nocookie 側に視聴ページが無いため。**トップレベル遷移なので
+   * `frame-src` の管轄外**で、片方を変えてももう片方は壊れない。
+   *
+   * 利用者がクリックしたときだけ遷移するので、端末からの自動送信は
+   * 増えない（#937 の「同意前の送信を減らす」方針と矛盾しない）。
+   */
+  YOUTUBE_WATCH: 'https://www.youtube.com/watch',
   /** プレースホルダー画像ベースURL */
   PLACEHOLDER_IMAGE: 'https://placehold.co',
 } as const;

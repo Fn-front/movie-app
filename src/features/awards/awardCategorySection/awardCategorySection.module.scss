@@ -30,46 +30,6 @@
     width: fit-content;
   }
 
-  /**
-   * 受賞タイルの並び
-   *
-   * 同点受賞（複数作品が同じ部門を同時受賞）があるため横並びにする。
-   * 単独受賞のときは1枚だけが並び、見た目は従来と変わらない
-   */
-  &__winner_tiles {
-    display: flex;
-    flex-wrap: wrap;
-    gap: $spacing-4;
-  }
-
-  &__winner_tile {
-    // 横並びにすると MovieTile（高さ100%）が親の高さを決めてしまい、
-    // 下に置く人名がはみ出す。ノミネート側の __item と同じ組み方で防ぐ
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 140px;
-    max-width: 140px;
-
-    > :first-child {
-      flex: 1;
-    }
-
-    @include sm {
-      flex-basis: 150px;
-      max-width: 150px;
-    }
-
-    @include md {
-      flex-basis: 160px;
-      max-width: 160px;
-    }
-
-    @include lg {
-      flex-basis: calc((100% - $spacing-4 * 4) / 5);
-      max-width: calc((100% - $spacing-4 * 4) / 5);
-    }
-  }
-
   &__nominees {
     display: flex;
     flex-direction: column;
@@ -87,6 +47,21 @@
     width: fit-content;
   }
 
+  /**
+   * 受賞タイル・ノミネートタイルの並び
+   *
+   * 受賞側は同点受賞（複数作品が同じ部門を同時受賞）で複数枚並ぶ。
+   *
+   * 両者を**同じ定義**にまとめているのは、別々に書いていたせいで幅の
+   * 決め方がずれ、lg 未満で受賞カードだけノミネートより小さく出ていた
+   * ため（#987）。受賞側は `max-width` で 140px に張り付き、ノミネート側は
+   * `1fr` で伸びていた。片方だけ直すとまた離れるので、1箇所にする。
+   *
+   * `auto-fit` ではなく `auto-fill` であることが単独受賞で効く。空の
+   * トラックが残るため、受賞が1枚でもカードは1カラム分の幅に収まり、
+   * ノミネートと一致する（`auto-fit` だと1枚が全幅に伸びる）。
+   */
+  &__winner_tiles,
   &__grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -105,6 +80,9 @@
     }
   }
 
+  // MovieTile は高さ100%のため、そのまま置くと親の高さを決めてしまい
+  // 下に置く人名がはみ出す。タイル側を flex: 1 にして人名の場所を残す（#949）
+  &__winner_tile,
   &__item {
     display: flex;
     flex-direction: column;

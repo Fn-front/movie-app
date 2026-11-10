@@ -73,4 +73,46 @@ test.describe('受賞作品（公開）', () => {
       timeout: 15000,
     });
   });
+
+  // 受賞側だけ max-width で 140px に張り付き、lg 未満でノミネートより
+  // 小さく表示されていた（#987）。幅の決め方が再び分かれたら気づけるようにする。
+  // jsdom の単体テストでは CSS が効かず検出できないためここで見る
+  test('スマホ幅で受賞カードとノミネートカードの幅が一致する', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/awards');
+    await expect(page.locator('[class*="movie_tile"]').first()).toBeVisible({
+      timeout: 15000,
+    });
+
+    const measured = await page.evaluate(() => {
+      const sections = Array.from(
+        document.querySelectorAll('[id^="category-"]'),
+      );
+      for (const section of sections) {
+        const winner = section.querySelector(
+          '[class*="winner_tiles"] > [role="listitem"]',
+        );
+        const nominee = section.querySelector(
+          '[class*="__grid"] > [role="listitem"]',
+        );
+        if (!winner || !nominee) continue;
+        return {
+          label: section.querySelector('h3')?.textContent ?? '',
+          winner: winner.getBoundingClientRect().width,
+          nominee: nominee.getBoundingClientRect().width,
+        };
+      }
+      return null;
+    });
+
+    // 受賞のみ／ノミネートのみの賞（カンヌ等）しか無い年度ではスキップする
+    test.skip(
+      measured === null,
+      '受賞とノミネートの両方がある部門が無いためスキップ',
+    );
+
+    expect(measured!.winner).toBeCloseTo(measured!.nominee, 0);
+  });
 });

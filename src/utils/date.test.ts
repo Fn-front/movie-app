@@ -4,6 +4,7 @@ import {
   formatRelativeTime,
   getJstYearRange,
   getYear,
+  isRealCalendarDate,
 } from './date';
 
 describe('formatDate', () => {
@@ -132,5 +133,49 @@ describe('getJstYearRange', () => {
     const lastMoment = new Date('2024-12-31T23:59:59+09:00').getTime();
 
     expect(lastMoment).toBeLessThan(new Date(end).getTime());
+  });
+});
+
+describe('isRealCalendarDate', () => {
+  it.each([
+    ['通常の日付', '2026-11-10'],
+    ['年始', '2026-01-01'],
+    ['年末', '2026-12-31'],
+    ['うるう年の2月29日', '2024-02-29'],
+    ['30日までの月の月末', '2026-04-30'],
+  ])('%s（%s）を実在する日付と判定する', (_label, value) => {
+    expect(isRealCalendarDate(value)).toBe(true);
+  });
+
+  it.each([
+    ['月が範囲外', '2026-13-45'],
+    ['日が範囲外', '2026-02-30'],
+    ['ゼロ日付', '0000-00-00'],
+    ['うるう年でない2月29日', '2026-02-29'],
+    ['31日の無い月', '2026-04-31'],
+    ['0月', '2026-00-10'],
+    ['0日', '2026-10-00'],
+    ['13月', '2026-13-01'],
+    ['32日', '2026-01-32'],
+  ])('%s（%s）を実在しない日付と判定する', (_label, value) => {
+    expect(isRealCalendarDate(value)).toBe(false);
+  });
+
+  it.each([
+    ['スラッシュ区切り', '2026/11/10'],
+    ['ゼロ埋めなし', '2026-1-5'],
+    ['時刻付き', '2026-11-10T00:00:00Z'],
+    ['空文字', ''],
+    ['日付でない文字列', 'yesterday'],
+    ['桁数過多', '20260-11-10'],
+  ])('%s（%s）を形式の時点で弾く', (_label, value) => {
+    expect(isRealCalendarDate(value)).toBe(false);
+  });
+
+  // new Date('2026-02-30') は Invalid Date ではなく 2026-03-02 へ
+  // 繰り上がる。パースの成否だけで判定すると取りこぼす
+  it('繰り上がる日付をパース成功とみなさない', () => {
+    expect(Number.isNaN(new Date('2026-02-30').getTime())).toBe(false);
+    expect(isRealCalendarDate('2026-02-30')).toBe(false);
   });
 });

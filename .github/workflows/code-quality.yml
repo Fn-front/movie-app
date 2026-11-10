@@ -95,3 +95,20 @@ jobs:
 
       - name: typecheck
         run: npx tsc --noEmit
+
+  # リポジトリ設定 `sha_pinning_required` の代わりに、自分たちが書き換えられる
+  # 範囲だけを強制する。設定は呼び出した Action の内部まで見るため、上流が
+  # タグ参照のままにしている推移的な依存（run-gemini-cli → auth@v3 等）で
+  # 全PRが落ちていた（#1001）。
+  # 依存のインストールが要らないので npm ci は挟まない。
+  action-pins:
+    name: Action Pin Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+
+      - name: check-workflow-pins
+        run: npm run lint:workflows

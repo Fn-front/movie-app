@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "lint:workflows": "node scripts/checkWorkflowPins.js",
     "prettier": "prettier --write .",
     "prettier:check": "prettier --check .",
     "test": "jest",

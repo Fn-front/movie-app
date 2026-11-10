@@ -44,6 +44,8 @@ const customJestConfig = {
     '<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/src/**/*.{spec,test}.{js,jsx,ts,tsx}',
     '<rootDir>/eslint-local-rules/**/*.test.{js,jsx,ts,tsx}',
+    // CIの補助スクリプト（ワークフローのSHA固定チェック等）
+    '<rootDir>/scripts/**/*.test.{js,ts}',
     // E2Eヘルパーの純粋なロジック（識別子の採番等）はJestで担保する。
     // Playwright側は `*.spec.ts` だけをテスト扱いにしてあるため重複しない
     // （playwright.config.ts の testMatch）

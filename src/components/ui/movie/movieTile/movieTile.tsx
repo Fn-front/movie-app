@@ -161,6 +161,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             alt={`${movie.title}のポスター`}
             width={IMAGE_SIZES.POSTER.WIDTH}
             height={IMAGE_SIZES.POSTER.HEIGHT}
+            sizes={IMAGE_SIZES.POSTER.SIZES}
             loading={eager ? 'eager' : 'lazy'}
             className={styles.c_movie_tile__image}
           />

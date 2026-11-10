@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { MovieTile } from './movieTile';
+import { IMAGE_SIZES } from '@/constants';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
 // --- Helpers ---
@@ -607,6 +608,31 @@ describe('MovieTile', () => {
         'loading',
         'lazy',
       );
+    });
+  });
+
+  // sizes が無いと next/image は「固定サイズの画像」とみなして srcset を
+  // 1x/2x の2本しか出さず、186pxの枠へ元画像(500px)が落ちてくる（#982）。
+  // 小さい候補（256w/384w）が srcset に並ぶことまで固定する
+  describe('ポスターのレスポンシブ配信', () => {
+    it('sizesが指定されている', () => {
+      render(<MovieTile movie={createMockMovie()} />);
+
+      expect(screen.getByAltText('テスト映画のポスター')).toHaveAttribute(
+        'sizes',
+        IMAGE_SIZES.POSTER.SIZES,
+      );
+    });
+
+    it('srcsetに枠に見合う小さい候補（256w / 384w）が並ぶ', () => {
+      render(<MovieTile movie={createMockMovie()} />);
+
+      const srcSet =
+        screen.getByAltText('テスト映画のポスター').getAttribute('srcset') ??
+        '';
+
+      expect(srcSet).toContain('256w');
+      expect(srcSet).toContain('384w');
     });
   });
 });

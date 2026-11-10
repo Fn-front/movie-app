@@ -7,6 +7,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { FavoriteList } from './favoriteList';
+import { IMAGE_SIZES } from '@/constants';
 import type { FavoriteItem } from '@/lib/api/favorites/favorites';
 
 // next/imageモック
@@ -229,5 +230,22 @@ describe('FavoriteList', () => {
         'lazy',
       );
     });
+  });
+
+  // sizes が無いと next/image は srcset を 1x/2x しか出さず、
+  // 枠（実測140〜241px）へ元画像(500px)が落ちてくる（#982）
+  it('ポスターにsizesが指定されている', () => {
+    render(
+      <FavoriteList
+        favorites={mockFavorites}
+        isLoading={false}
+        onFavoriteToggle={mockOnFavoriteToggle}
+      />,
+    );
+
+    expect(screen.getByAltText('映画Aのポスター')).toHaveAttribute(
+      'sizes',
+      IMAGE_SIZES.POSTER.SIZES,
+    );
   });
 });

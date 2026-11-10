@@ -203,6 +203,108 @@ describe('moviesQuerySchema', () => {
     });
   });
 
+  // 正規表現は桁数しか見ないため、存在しない日付が通過して
+  // Postgres の date 比較で 500 になっていた（#995）
+  describe('日付の実在性', () => {
+    it.each([
+      ['月が範囲外', '2026-13-45'],
+      ['日が範囲外', '2026-02-30'],
+      ['ゼロ日付', '0000-00-00'],
+      ['うるう年でない2月29日', '2026-02-29'],
+      ['31日の無い月', '2026-04-31'],
+      ['0月', '2026-00-10'],
+      ['0日', '2026-10-00'],
+    ])('%s（%s）を開始日で拒否する', (_label, value) => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_gte: value,
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it.each([
+      ['月が範囲外', '2026-13-45'],
+      ['うるう年でない2月29日', '2026-02-29'],
+    ])('%s（%s）を終了日でも拒否する', (_label, value) => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_lte: value,
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('うるう年の2月29日は受け入れる', () => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_gte: '2024-02-29',
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('月末の日付を受け入れる', () => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_gte: '2026-01-31',
+        release_date_lte: '2026-12-31',
+      });
+
+      expect(result.success).toBe(true);
+    });
+  });
+
+  // 開始日が終了日より後だと、どう絞り込んでも空集合になる。
+  // 200 / 0件で返していたため「該当なし」と区別が付かなかった（#995）
+  describe('開始日と終了日の相関', () => {
+    it('開始日が終了日より後なら拒否する', () => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_gte: '2027-01-01',
+        release_date_lte: '2026-01-01',
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('エラーは終了日のフィールドに付く', () => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_gte: '2027-01-01',
+        release_date_lte: '2026-01-01',
+      });
+
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error.flatten().fieldErrors.release_date_lte).toEqual([
+        '終了日は開始日以降の日付を指定してください',
+      ]);
+    });
+
+    it('開始日と終了日が同じなら受け入れる（その日1日の絞り込み）', () => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_gte: '2026-05-01',
+        release_date_lte: '2026-05-01',
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('開始日が終了日より前なら受け入れる', () => {
+      const result = moviesQuerySchema.safeParse({
+        release_date_gte: '2026-01-01',
+        release_date_lte: '2026-12-31',
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it.each([
+      ['開始日のみ', { release_date_gte: '2027-01-01' }],
+      ['終了日のみ', { release_date_lte: '2020-01-01' }],
+      ['どちらも未指定', {}],
+    ])('%s なら相関チェックは走らない', (_label, input) => {
+      const result = moviesQuerySchema.safeParse(input);
+
+      expect(result.success).toBe(true);
+    });
+  });
+
   describe('release_date_lte', () => {
     it('デフォルトでundefinedであること', () => {
       const result = moviesQuerySchema.parse({});

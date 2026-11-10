@@ -2,7 +2,7 @@
  * 日付ユーティリティ
  */
 
-import { format as dateFnsFormat, parseISO } from 'date-fns';
+import { format as dateFnsFormat, isValid, parseISO } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
 import { DATE_FORMATS } from '@/constants';
@@ -156,4 +156,33 @@ export function getJstYearRange(year: number): {
     start: `${year}-01-01T00:00:00+09:00`,
     end: `${year + 1}-01-01T00:00:00+09:00`,
   };
+}
+
+/**
+ * `YYYY-MM-DD` が実在する日付かどうか
+ *
+ * 形式の正規表現だけでは**桁数しか見られない**。`2026-13-45` や
+ * `2026-02-30` が通過し、Postgres の `date` 比較で例外になって
+ * API が 500 を返していた（#995）。
+ *
+ * ⚠️ `new Date()` では判定できない。`new Date('2026-02-30')` は
+ * Invalid Date ではなく **2026-03-02 へ繰り上がる**ため、パースの
+ * 成否だけでは実在性を見られない。`parseISO` は日・月の範囲まで
+ * 検証するので、うるう年（`2024-02-29` は可 / `2026-02-29` は不可）も
+ * 正しく判定できる。
+ *
+ * @param value - 検証する文字列
+ * @returns 実在する日付なら true
+ *
+ * @example
+ * ```ts
+ * isRealCalendarDate('2024-02-29'); // => true（うるう年）
+ * isRealCalendarDate('2026-02-29'); // => false
+ * isRealCalendarDate('2026-13-45'); // => false
+ * ```
+ */
+export function isRealCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
+  return isValid(parseISO(value));
 }

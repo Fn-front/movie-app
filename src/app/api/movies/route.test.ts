@@ -487,6 +487,131 @@ describe('GET /api/movies', () => {
     expect(response.status).toBe(400);
   });
 
+  // 形式の正規表現は桁数しか見ないため、存在しない日付が Postgres の
+  // date 比較まで到達して 500 になっていた（#995）。
+  // 実測では「文字列比較で today を超える値」だけが丸めを免れて到達する
+  // （`2026-13-45` は 500 / `2026-02-30` は today へ丸められて 200）。
+  // 到達するかに関係なく、入口で 400 にする
+  describe('日付の実在性（#995）', () => {
+    it.each([
+      ['月が範囲外', '2026-13-45'],
+      ['日が範囲外', '2026-02-30'],
+      ['ゼロ日付', '0000-00-00'],
+      ['うるう年でない2月29日', '2026-02-29'],
+    ])(
+      '開始日が%s（%s）の場合、500ではなく400を返す',
+      async (_label, value) => {
+        const handler = await loadGET();
+        setupFromMock({});
+
+        const response = await handler(
+          createRequest({ release_date_gte: value }),
+        );
+
+        expect(response.status).toBe(400);
+        const json = await response.json();
+        expect(json.success).toBe(false);
+        expect(json.error.code).toBe('VALIDATION_ERROR');
+      },
+    );
+
+    it('終了日が存在しない日付でも400を返す', async () => {
+      const handler = await loadGET();
+      setupFromMock({});
+
+      const response = await handler(
+        createRequest({ release_date_lte: '2026-13-45' }),
+      );
+
+      expect(response.status).toBe(400);
+    });
+
+    it('うるう年の2月29日は従来どおり200を返す', async () => {
+      const handler = await loadGET();
+      setupFromMock({
+        countResult: { count: 0 },
+        dataResult: { data: [], error: null },
+      });
+
+      const response = await handler(
+        createRequest({ release_date_gte: '2024-02-29' }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+  });
+
+  // 開始日が終了日より後だと、どう絞り込んでも空集合になる。
+  // 200 / 0件で返していたため「該当なし」と区別が付かなかった（#995）
+  describe('開始日と終了日の相関（#995）', () => {
+    it('開始日が終了日より後の場合、400を返す', async () => {
+      const handler = await loadGET();
+      setupFromMock({});
+
+      const response = await handler(
+        createRequest({
+          release_date_gte: '2027-01-01',
+          release_date_lte: '2026-01-01',
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      const json = await response.json();
+      expect(json.error.code).toBe('VALIDATION_ERROR');
+      expect(json.error.details.release_date_lte).toEqual([
+        '終了日は開始日以降の日付を指定してください',
+      ]);
+    });
+
+    it('開始日と終了日が同じ場合は200を返す（その日1日の絞り込み）', async () => {
+      const handler = await loadGET();
+      setupFromMock({
+        countResult: { count: 0 },
+        dataResult: { data: [], error: null },
+      });
+
+      const response = await handler(
+        createRequest({
+          release_date_gte: '2026-05-01',
+          release_date_lte: '2026-05-01',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('開始日が終了日より前の場合は従来どおり200を返す', async () => {
+      const handler = await loadGET();
+      setupFromMock({
+        countResult: { count: 0 },
+        dataResult: { data: [], error: null },
+      });
+
+      const response = await handler(
+        createRequest({
+          release_date_gte: '2026-01-01',
+          release_date_lte: '2026-12-31',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it('片側のみの指定では相関チェックが働かない', async () => {
+      const handler = await loadGET();
+      setupFromMock({
+        countResult: { count: 0 },
+        dataResult: { data: [], error: null },
+      });
+
+      const response = await handler(
+        createRequest({ release_date_lte: '2020-01-01' }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+  });
+
   // === 正常系: upcoming + theatrical (デフォルト) ===
 
   it('デフォルトパラメータで正常に200を返す', async () => {

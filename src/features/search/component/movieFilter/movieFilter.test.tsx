@@ -2,7 +2,7 @@
  * MovieFilterコンポーネントのテスト
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { Select } from '@/components/ui/select/select';
@@ -280,6 +280,132 @@ describe('MovieFilter', () => {
   describe('displayName', () => {
     it('displayNameが設定されている', () => {
       expect(MovieFilter.displayName).toBe('MovieFilter');
+    });
+  });
+
+  // 年（代表公開日の年）と期間（いずれかの国のリリース）は意味が違うため
+  // 混ぜない。APIも同時指定を400で弾く（#997）
+  describe('公開期間', () => {
+    it('開始日・終了日の入力が表示される', () => {
+      render(<MovieFilter {...createDefaultProps()} />);
+
+      expect(screen.getByLabelText('開始日')).toBeInTheDocument();
+      expect(screen.getByLabelText('終了日')).toBeInTheDocument();
+    });
+
+    it('現在の値が反映される', () => {
+      render(
+        <MovieFilter
+          {...createDefaultProps({
+            currentFilters: {
+              release_date_gte: '2026-04-01',
+              release_date_lte: '2026-06-30',
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByLabelText('開始日')).toHaveValue('2026-04-01');
+      expect(screen.getByLabelText('終了日')).toHaveValue('2026-06-30');
+    });
+
+    it('開始日を変更するとonFilterChangeが呼ばれる', () => {
+      const onFilterChange = jest.fn();
+      render(<MovieFilter {...createDefaultProps({ onFilterChange })} />);
+
+      fireEvent.change(screen.getByLabelText('開始日'), {
+        target: { value: '2026-04-01' },
+      });
+
+      expect(onFilterChange).toHaveBeenCalledWith(
+        expect.objectContaining({ release_date_gte: '2026-04-01' }),
+      );
+    });
+
+    it('期間を指定すると公開年が解除される', () => {
+      const onFilterChange = jest.fn();
+      render(
+        <MovieFilter
+          {...createDefaultProps({
+            onFilterChange,
+            currentFilters: { year: 2026 },
+          })}
+        />,
+      );
+
+      fireEvent.change(screen.getByLabelText('開始日'), {
+        target: { value: '2026-04-01' },
+      });
+
+      expect(onFilterChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          year: undefined,
+          release_date_gte: '2026-04-01',
+        }),
+      );
+    });
+
+    it('公開年を選ぶと期間が解除される', () => {
+      const onFilterChange = jest.fn();
+      render(
+        <MovieFilter
+          {...createDefaultProps({
+            onFilterChange,
+            currentFilters: {
+              release_date_gte: '2026-04-01',
+              release_date_lte: '2026-06-30',
+            },
+          })}
+        />,
+      );
+
+      const yearCallProps = (
+        mockSelect as unknown as jest.Mock
+      ).mock.calls.find(
+        (call: unknown[]) => (call[0] as { label: string }).label === '公開年',
+      )?.[0] as { onValueChange: (value: string) => void };
+      yearCallProps.onValueChange('2026');
+
+      expect(onFilterChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          year: 2026,
+          release_date_gte: undefined,
+          release_date_lte: undefined,
+        }),
+      );
+    });
+
+    it('開始日と終了日が相互に連動する', () => {
+      render(
+        <MovieFilter
+          {...createDefaultProps({
+            currentFilters: {
+              release_date_gte: '2026-04-01',
+              release_date_lte: '2026-06-30',
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByLabelText('開始日')).toHaveAttribute(
+        'max',
+        '2026-06-30',
+      );
+      expect(screen.getByLabelText('終了日')).toHaveAttribute(
+        'min',
+        '2026-04-01',
+      );
+    });
+
+    it('排他である旨が aria-describedby で伝わる', () => {
+      render(<MovieFilter {...createDefaultProps()} />);
+
+      const hintId = screen.getByText('公開年とは同時に指定できません。').id;
+
+      expect(screen.getByLabelText('開始日')).toHaveAttribute(
+        'aria-describedby',
+        hintId,
+      );
     });
   });
 });

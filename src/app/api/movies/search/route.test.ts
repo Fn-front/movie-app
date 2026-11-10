@@ -473,4 +473,94 @@ describe('GET /api/movies/search', () => {
       });
     });
   });
+
+  // 年（primary_release_year）と期間（release_date.gte/lte）は
+  // TMDb 上で意味が違う。置き換えずに別パラメータとして足した（#997）
+  describe('公開期間での絞り込み', () => {
+    it('期間のみ指定でDiscover APIへ release_date.gte/lte を渡す', async () => {
+      mockDiscoverMovies.mockResolvedValue(mockTMDbResponse);
+
+      const response = await GET(
+        createRequest({
+          release_date_gte: '2026-04-01',
+          release_date_lte: '2026-06-30',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(mockDiscoverMovies).toHaveBeenCalledWith(
+        expect.objectContaining({
+          'release_date.gte': '2026-04-01',
+          'release_date.lte': '2026-06-30',
+          primary_release_year: undefined,
+        }),
+      );
+    });
+
+    it('年のみ指定なら従来どおり primary_release_year を渡す（デグレなし）', async () => {
+      mockDiscoverMovies.mockResolvedValue(mockTMDbResponse);
+
+      await GET(createRequest({ year: '2024' }));
+
+      expect(mockDiscoverMovies).toHaveBeenCalledWith(
+        expect.objectContaining({
+          primary_release_year: 2024,
+          'release_date.gte': undefined,
+          'release_date.lte': undefined,
+        }),
+      );
+    });
+
+    it('年と期間の同時指定は400で弾く', async () => {
+      const response = await GET(
+        createRequest({ year: '2026', release_date_gte: '2026-04-01' }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.code).toBe('VALIDATION_ERROR');
+      expect(mockDiscoverMovies).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['存在しない日付', { release_date_gte: '2026-13-45' }],
+      ['うるう年でない2月29日', { release_date_gte: '2026-02-29' }],
+      [
+        '開始日が終了日より後',
+        { release_date_gte: '2026-07-01', release_date_lte: '2026-06-30' },
+      ],
+    ])('%s は400で弾く', async (_label, params) => {
+      const response = await GET(createRequest(params));
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    // TMDb /search/movie は期間に非対応。代表公開日でサーバー側に絞る
+    it('キーワード検索では代表公開日でサーバー側フィルタする', async () => {
+      mockSearchMovies.mockResolvedValue({
+        ...mockTMDbResponse,
+        results: [
+          { ...mockTMDbResponse.results[0], id: 1, release_date: '2026-05-01' },
+          { ...mockTMDbResponse.results[0], id: 2, release_date: '2026-09-01' },
+          { ...mockTMDbResponse.results[0], id: 3, release_date: '' },
+        ],
+      });
+
+      const response = await GET(
+        createRequest({
+          query: 'テスト',
+          release_date_gte: '2026-04-01',
+          release_date_lte: '2026-06-30',
+        }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.data.pagination.isServerFiltered).toBe(true);
+      // 範囲内の1件だけ。公開日が無い作品は判定できないので外す
+      expect(json.data.movies.map((m: { id: number }) => m.id)).toEqual([1]);
+    });
+  });
 });

@@ -16,8 +16,12 @@ export interface SearchMoviesRequest {
   page?: number;
   /** ジャンルID（カンマ区切り） */
   genre?: string;
-  /** 公開年 */
+  /** 公開年（TMDbの代表公開日の年で絞る） */
   year?: number;
+  /** 公開期間の開始日（YYYY-MM-DD）。year とは排他 */
+  release_date_gte?: string;
+  /** 公開期間の終了日（YYYY-MM-DD）。year とは排他 */
+  release_date_lte?: string;
   /** 最低評価 */
   vote_average_gte?: number;
 }

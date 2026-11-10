@@ -16,8 +16,12 @@ import { QUERY_PARAMS } from '@/constants';
 export interface FilterOptions {
   /** ジャンルID配列 */
   genre?: number[];
-  /** 公開年 */
+  /** 公開年（期間とは排他） */
   year?: number;
+  /** 公開期間の開始日（YYYY-MM-DD）。年とは排他 */
+  release_date_gte?: string;
+  /** 公開期間の終了日（YYYY-MM-DD）。年とは排他 */
+  release_date_lte?: string;
   /** 最低評価 */
   vote_average_gte?: number;
 }
@@ -42,6 +46,8 @@ export interface UseMovieFilterReturn {
 function parseFiltersFromParams(searchParams: URLSearchParams): FilterOptions {
   const genreParam = searchParams.get(QUERY_PARAMS.GENRE);
   const yearParam = searchParams.get(QUERY_PARAMS.YEAR);
+  const dateGteParam = searchParams.get(QUERY_PARAMS.RELEASE_DATE_GTE);
+  const dateLteParam = searchParams.get(QUERY_PARAMS.RELEASE_DATE_LTE);
   const voteParam = searchParams.get(QUERY_PARAMS.VOTE_AVERAGE_GTE);
 
   return {
@@ -52,6 +58,8 @@ function parseFiltersFromParams(searchParams: URLSearchParams): FilterOptions {
           .filter((n) => !Number.isNaN(n))
       : undefined,
     year: yearParam ? Number(yearParam) : undefined,
+    release_date_gte: dateGteParam ?? undefined,
+    release_date_lte: dateLteParam ?? undefined,
     vote_average_gte: voteParam ? Number(voteParam) : undefined,
   };
 }
@@ -82,6 +90,19 @@ function buildSearchParamsFromFilters(
     params.delete(QUERY_PARAMS.YEAR);
   }
 
+  // 公開期間（年とは排他。UI側で切り替える）
+  if (filters.release_date_gte !== undefined) {
+    params.set(QUERY_PARAMS.RELEASE_DATE_GTE, filters.release_date_gte);
+  } else {
+    params.delete(QUERY_PARAMS.RELEASE_DATE_GTE);
+  }
+
+  if (filters.release_date_lte !== undefined) {
+    params.set(QUERY_PARAMS.RELEASE_DATE_LTE, filters.release_date_lte);
+  } else {
+    params.delete(QUERY_PARAMS.RELEASE_DATE_LTE);
+  }
+
   // 最低評価
   if (filters.vote_average_gte !== undefined) {
     params.set(QUERY_PARAMS.VOTE_AVERAGE_GTE, String(filters.vote_average_gte));
@@ -108,6 +129,8 @@ export function useMovieFilter(): UseMovieFilterReturn {
     () =>
       (currentFilters.genre !== undefined && currentFilters.genre.length > 0) ||
       currentFilters.year !== undefined ||
+      currentFilters.release_date_gte !== undefined ||
+      currentFilters.release_date_lte !== undefined ||
       currentFilters.vote_average_gte !== undefined,
     [currentFilters],
   );

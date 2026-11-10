@@ -63,6 +63,9 @@ function generateRatingOptions() {
 const YEAR_OPTIONS = generateYearOptions();
 const RATING_OPTIONS = generateRatingOptions();
 
+/** 公開期間の説明文のID（`aria-describedby` から参照する） */
+const DATE_RANGE_HINT_ID = 'search-filter-date-range-hint';
+
 /**
  * MovieFilterコンポーネント
  */
@@ -100,11 +103,37 @@ export const MovieFilter = memo<MovieFilterProps>(function MovieFilter({
     [genres, selectedGenres, currentFilters, onFilterChange],
   );
 
+  // 年と期間は意味論が違うので混ぜない（APIも同時指定を400で弾く）。
+  // 片方を触ったらもう片方を落とす（#997）
   const handleYearChange = useCallback(
     (value: string) => {
       onFilterChange({
         ...currentFilters,
         year: Number(value),
+        release_date_gte: undefined,
+        release_date_lte: undefined,
+      });
+    },
+    [currentFilters, onFilterChange],
+  );
+
+  const handleDateGteChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onFilterChange({
+        ...currentFilters,
+        year: undefined,
+        release_date_gte: e.target.value || undefined,
+      });
+    },
+    [currentFilters, onFilterChange],
+  );
+
+  const handleDateLteChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onFilterChange({
+        ...currentFilters,
+        year: undefined,
+        release_date_lte: e.target.value || undefined,
       });
     },
     [currentFilters, onFilterChange],
@@ -173,6 +202,49 @@ export const MovieFilter = memo<MovieFilterProps>(function MovieFilter({
           aria-label='公開年を選択'
           fullWidth
         />
+      </div>
+
+      {/*
+        年より細かい期間での絞り込み（#997）。
+
+        年指定（primary_release_year＝代表公開日の年）とは意味が違い、
+        こちらは「いずれかの国のリリースが範囲に入るか」で絞るため、
+        同じ「2026年」でも結果が一致しない。混ぜると説明できないので、
+        どちらかを触るともう片方は解除される
+      */}
+      <div className={styles.c_movie_filter__section}>
+        <h3 className={styles.c_movie_filter__section_title}>公開期間</h3>
+        <p
+          id={DATE_RANGE_HINT_ID}
+          className={styles.c_movie_filter__section_hint}
+        >
+          公開年とは同時に指定できません。
+        </p>
+        <div className={styles.c_movie_filter__date_range}>
+          <label className={styles.c_movie_filter__date_field}>
+            <span className={styles.c_movie_filter__date_label}>開始日</span>
+            <input
+              type='date'
+              value={currentFilters.release_date_gte ?? ''}
+              onChange={handleDateGteChange}
+              max={currentFilters.release_date_lte}
+              aria-describedby={DATE_RANGE_HINT_ID}
+              className={styles.c_movie_filter__date_input}
+            />
+          </label>
+          <span className={styles.c_movie_filter__date_separator}>〜</span>
+          <label className={styles.c_movie_filter__date_field}>
+            <span className={styles.c_movie_filter__date_label}>終了日</span>
+            <input
+              type='date'
+              value={currentFilters.release_date_lte ?? ''}
+              onChange={handleDateLteChange}
+              min={currentFilters.release_date_gte}
+              aria-describedby={DATE_RANGE_HINT_ID}
+              className={styles.c_movie_filter__date_input}
+            />
+          </label>
+        </div>
       </div>
 
       <div className={styles.c_movie_filter__section}>

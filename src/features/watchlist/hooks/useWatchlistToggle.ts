@@ -21,7 +21,7 @@ import type {
   GetWatchlistResponse,
 } from '@/lib/api/watchlist/watchlist';
 import type { WatchlistAddFormData } from '@/schema/watchlist';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 
 /**
  * トグル対象の映画データ（最小限のフィールド）
@@ -181,7 +181,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
   // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
   // id の有無で見る（getAuthSession と同じ基準）
   const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const openLoginPrompt = useLoginPromptStore((s) => s.open);
 
   const togglingIdRef = useRef<number | null>(null);

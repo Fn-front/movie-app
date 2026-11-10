@@ -11,7 +11,7 @@ import {
   getRefreshCount,
 } from '@/lib/api/recommendations/recommendations';
 import { useRecommendationRefreshStore } from '@/features/recommendations/store/recommendationRefreshStore';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import {
   RECOMMENDATION_REFRESH,
   RECOMMENDATION_REFRESH_MESSAGES,
@@ -49,7 +49,7 @@ export interface UseRecommendationRefreshReturn {
 export function useRecommendationRefresh(
   onSuccess?: (recommendations: Recommendation[]) => void,
 ): UseRecommendationRefreshReturn {
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const queryClient = useQueryClient();
 
   // 画面遷移でアンマウントしても進行状態が消えないようグローバルストアで保持する

@@ -6,6 +6,7 @@ import { THEME_CHANGE_EVENT } from '@/utils/theme';
 const mockToast = jest.fn();
 jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mockToast }),
+  useToastDispatch: () => ({ toast: mockToast }),
 }));
 
 const mockUpdateSettings = jest.fn();

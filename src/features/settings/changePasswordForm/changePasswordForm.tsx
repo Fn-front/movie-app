@@ -26,7 +26,7 @@ import {
   VALIDATION_MESSAGES,
 } from '@/constants';
 import { changePassword, sendOtp } from '@/lib/api/auth/auth';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import styles from './changePasswordForm.module.scss';
 
@@ -48,7 +48,7 @@ interface ChangePasswordFormProps {
  */
 export const ChangePasswordForm = memo<ChangePasswordFormProps>(
   function ChangePasswordForm({ email, hasPassword }) {
-    const { toast } = useToast();
+    const { toast } = useToastDispatch();
     const [step, setStep] = useState<Step>('send_otp');
     const [isSendingOtp, setIsSendingOtp] = useState(false);
     const [apiError, setApiError] = useState<string | null>(null);

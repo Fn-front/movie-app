@@ -16,7 +16,7 @@ import {
 import type { DismissedMovieItem } from '@/lib/api/dismissedMovies/dismissedMovies';
 import { EmptyState } from '@/components/ui/emptyState/emptyState';
 import { Loading } from '@/components/ui/loading/loading';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import { getTMDbImageUrl } from '@/utils/image';
 import {
   DISMISSED_MOVIES_SUCCESS_MESSAGES,
@@ -35,7 +35,7 @@ const INITIAL_DISPLAY_COUNT = DISPLAY_LIMITS.DISMISSED_INITIAL;
  * 興味なし映画一覧
  */
 export const DismissedMoviesList = memo(function DismissedMoviesList() {
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const queryClient = useQueryClient();
 
   const { data: movies = [], isLoading } = useQuery({

@@ -9,7 +9,7 @@ import { memo, useCallback, useState, useEffect } from 'react';
 import { Checkbox } from '@/components/ui/checkbox/checkbox';
 import { Skeleton } from '@/components/ui/skeleton/skeleton';
 import { getSettings, updateSettings } from '@/lib/api/user/user';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import styles from './notificationSettings.module.scss';
 
@@ -17,7 +17,7 @@ import styles from './notificationSettings.module.scss';
  * 通知設定
  */
 export const NotificationSettings = memo(function NotificationSettings() {
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 

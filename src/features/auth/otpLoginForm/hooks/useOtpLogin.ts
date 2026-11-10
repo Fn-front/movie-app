@@ -17,7 +17,7 @@ import {
   TOAST_TITLES,
   TOAST_MESSAGES,
 } from '@/constants';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import { resolveSafeCallbackUrl } from '@/utils/url';
 
@@ -49,7 +49,7 @@ interface UseOtpLoginReturn {
 
 export function useOtpLogin(callbackUrl?: string): UseOtpLoginReturn {
   const router = useRouter();
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const [step, setStep] = useState<OtpLoginStep>('email');
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);

@@ -25,7 +25,7 @@ import type {
   WatchlistAddFormData,
   WatchlistSortOption,
 } from '@/schema/watchlist';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import {
   ANALYTICS_EVENTS,
   watchlistKeys,
@@ -98,7 +98,7 @@ export function useWatchlist(
   // id の有無で見る（getAuthSession と同じ基準）
   const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
 
   // ウォッチリスト一覧取得（無限スクロール）
   const watchlistQuery = useInfiniteQuery({

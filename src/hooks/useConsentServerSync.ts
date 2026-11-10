@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 
 import { COOKIE_CONSENT_MESSAGES, COOKIE_CONSENT_VERSION } from '@/constants';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import type { CookieConsentState } from '@/hooks/useCookieConsent';
 import { getSettings, updateSettings } from '@/lib/api/user/user';
 import {
@@ -64,7 +64,7 @@ export function __resetConsentSyncForTest(): void {
  */
 export function useConsentServerSync(consent: CookieConsentState): void {
   const { data: session, status } = useSession();
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
 
   const userId = session?.user?.id ?? '';
   /** 直近でサーバーへ送った値。初回マージの結果でシードする */

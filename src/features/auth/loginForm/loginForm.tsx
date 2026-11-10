@@ -22,7 +22,7 @@ import {
   TOAST_MESSAGES,
   ROUTES,
 } from '@/constants';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import { resolveSafeCallbackUrl } from '@/utils/url';
 import { SocialLoginButtons } from '@/features/auth/socialLoginButtons/socialLoginButtons';
@@ -61,7 +61,7 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
   callbackUrl,
 }) {
   const router = useRouter();
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const [apiError, setApiError] = useState<string | null>(null);
   /**
    * 第2要素の入力欄を出すか。

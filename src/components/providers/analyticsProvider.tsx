@@ -9,7 +9,7 @@
  * 送るため、この順序を変えないこと。
  *   1. consent update（同意状態の反映。GA ID 無効でも Cookie 削除は行う）
  *   2. page_view（GA ID 有効時のみ）
- *   3〜4. サーバー同期（useConsentServerSync の内部）
+ *   3〜5. サーバー同期（useConsentServerSync の内部に3つ）
  */
 
 'use client';
@@ -87,7 +87,7 @@ export const AnalyticsProvider = memo(function AnalyticsProvider() {
     return () => cancelAnimationFrame(frame);
   }, [measurementId, pathname]);
 
-  // 3〜4. サーバー同期（初回マージ・変更追随）
+  // 3〜5. サーバー同期（未認証時の掃除・初回マージ・変更追随）
   //
   // フックの呼び出し順＝effect の実行順なので、gtag まわりの 1・2 より
   // 後に置く。前に置くと冒頭のコメントと実際の順序が食い違い、

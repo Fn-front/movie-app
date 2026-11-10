@@ -9,6 +9,7 @@ import { ChangePasswordForm } from './changePasswordForm';
 const mockToast = jest.fn();
 jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mockToast }),
+  useToastDispatch: () => ({ toast: mockToast }),
 }));
 
 const mockSendOtp = jest.fn();

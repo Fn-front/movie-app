@@ -13,7 +13,7 @@ import {
   WATCHLIST_STREAMING_SCOPE_LABELS,
 } from '@/constants';
 import type { StreamingScope } from '@/constants';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import { getSettings, updateSettings } from '@/lib/api/user/user';
 import { handleApiError } from '@/utils/error';
 
@@ -32,7 +32,7 @@ const SCOPE_OPTIONS = [
  * 失敗したら選択を元に戻す。
  */
 export const StreamingNoticeSettings = memo(function StreamingNoticeSettings() {
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const [scope, setScope] = useState<StreamingScope>(STREAMING_SCOPE_DEFAULT);
   const [isLoading, setIsLoading] = useState(true);
 

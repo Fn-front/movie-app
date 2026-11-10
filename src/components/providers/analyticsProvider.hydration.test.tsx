@@ -29,6 +29,7 @@ jest.mock('next-auth/react', () => ({
 
 jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: jest.fn() }),
+  useToastDispatch: () => ({ toast: jest.fn() }),
 }));
 
 jest.mock('@/lib/api/user/user', () => ({

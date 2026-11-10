@@ -54,6 +54,7 @@ jest.mock('@/lib/api/dismissedMovies/dismissedMovies', () => ({
 
 jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: jest.fn() }),
+  useToastDispatch: () => ({ toast: jest.fn() }),
 }));
 
 const mockMovies: DismissedMovieItem[] = [

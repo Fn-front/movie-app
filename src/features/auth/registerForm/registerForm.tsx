@@ -25,7 +25,7 @@ import {
 } from '@/constants';
 import { OTP_ACTION } from '@/constants/otp';
 import { registerUser } from '@/lib/api/auth/auth';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import { OtpVerification } from '@/features/auth/otpVerification/otpVerification';
 import { SocialLoginButtons } from '@/features/auth/socialLoginButtons/socialLoginButtons';
@@ -36,7 +36,7 @@ import styles from './registerForm.module.scss';
  */
 export const RegisterForm = memo(function RegisterForm() {
   const router = useRouter();
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const [apiError, setApiError] = useState<string | null>(null);
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
 

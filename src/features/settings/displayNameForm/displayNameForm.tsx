@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input/input';
 import { Button } from '@/components/ui/button/button';
 import { updateProfileSchema, type UpdateProfileFormData } from '@/schema/user';
 import { updateProfile } from '@/lib/api/user/user';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import styles from './displayNameForm.module.scss';
 
@@ -22,7 +22,7 @@ import styles from './displayNameForm.module.scss';
  */
 export const DisplayNameForm = memo(function DisplayNameForm() {
   const { data: session, update: updateSession } = useSession();
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const [apiError, setApiError] = useState<string | null>(null);
 
   const {

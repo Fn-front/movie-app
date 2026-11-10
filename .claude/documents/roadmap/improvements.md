@@ -55,6 +55,7 @@
 - [x] #982 — 一覧のポスターに sizes を追加し、枠に見合う幅を配信する
 - [x] #983 — 一覧APIの now_showing 同期をCRON前提にし、失効直後の待ちを解消
 - [x] #984 — next/image の formats に AVIF を追加する
+- [x] #939 — useToast を送出専用（useToastDispatch）と一覧購読に分け、無駄な再レンダリングを止める
 
 #### CI
 - [x] #1001 — Actions のSHA固定を自前Lintで担保し、Geminiレビューが全PRで落ちる状態を解消

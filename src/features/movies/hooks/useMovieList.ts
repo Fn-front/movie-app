@@ -16,7 +16,7 @@ import {
 import { getMovies } from '@/lib/api/movies/movies';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import { getSavedFilter, saveFilter } from '@/lib/api/filters/filters';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import {
   DEFAULT_SORT,
   DEFAULT_RELEASE_TYPE,
@@ -206,7 +206,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     urlFilters.include_regions ?? [],
   );
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
   const { data: session, status } = useSession();
   // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
   // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。

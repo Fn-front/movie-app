@@ -23,7 +23,7 @@ import type {
   MovieFavoriteInfo,
 } from '@/lib/api/favorites/favorites';
 import type { FavoritesAddFormData } from '@/schema/favorites';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 import {
   favoriteKeys,
   movieKeys,
@@ -70,7 +70,7 @@ export interface UseFavoriteMutationsReturn {
  */
 export function useFavoriteMutations(): UseFavoriteMutationsReturn {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const { toast } = useToastDispatch();
 
   // 映画関連キャッシュ内のfavoriteフィールドを更新するユーティリティ
   // movieKeys.all (= ['movies']) は一覧 (pages 構造) と詳細 ({ data: MovieDetail } 構造)

@@ -12,6 +12,7 @@ import { FILTER_ERROR_MESSAGES } from '@/constants/filters';
 const mockToast = jest.fn();
 jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mockToast }),
+  useToastDispatch: () => ({ toast: mockToast }),
 }));
 
 let mockSessionStatus = 'unauthenticated';

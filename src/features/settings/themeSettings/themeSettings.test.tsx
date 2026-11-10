@@ -8,6 +8,7 @@ import { ThemeSettings } from './themeSettings';
 const mockToast = jest.fn();
 jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({ toast: mockToast }),
+  useToastDispatch: () => ({ toast: mockToast }),
 }));
 
 const mockUpdateSettings = jest.fn();

@@ -56,6 +56,9 @@
 - [x] #983 — 一覧APIの now_showing 同期をCRON前提にし、失効直後の待ちを解消
 - [x] #984 — next/image の formats に AVIF を追加する
 
+#### CI
+- [x] #1001 — Actions のSHA固定を自前Lintで担保し、Geminiレビューが全PRで落ちる状態を解消
+
 #### 依存パッケージ
 - [ ] #780 — FullCalendar 6.1.20 → 7.x へ更新し、a11y 回避策を削除する
 

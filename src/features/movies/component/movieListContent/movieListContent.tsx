@@ -117,6 +117,10 @@ export const MovieListContent = memo<MovieListContentProps>(
           selectedDateRange={dateRange}
           isRevivalFilter={isRevivalFilter}
           releaseType={releaseType}
+          // useMovieList の timeFrame は任意。未指定のときサーバーは
+          // 'upcoming' を既定にする（moviesQuerySchema）ので、UI の
+          // 選べる範囲もそれに合わせる
+          timeFrame={timeFrame ?? 'upcoming'}
           selectedWatchProviderIds={selectedWatchProviderIds}
           selectedOfferTypes={selectedOfferTypes}
           selectedRegions={selectedRegions}

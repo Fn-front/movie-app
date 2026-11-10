@@ -16,10 +16,41 @@ import {
   WATCH_PROVIDERS,
   type WatchProviderOfferType,
 } from '@/constants';
-import type { RegionGroupKey } from '@/constants/movies';
+import { RELEASE_TYPE, type RegionGroupKey } from '@/constants/movies';
+import {
+  getDateFilterBounds,
+  isWithinDateFilterBounds,
+} from '@/features/movies/dateFilterBounds';
 import type { DateRange } from '@/features/movies/types';
 
 import styles from './filterModal.module.scss';
+
+/** 公開日の説明文のID（`aria-describedby` から参照する） */
+const DATE_HINT_ID = 'filter-date-range-hint';
+
+/** 公開日のエラー文のID */
+const DATE_ERROR_ID = 'filter-date-range-error';
+
+/**
+ * タブごとの「なぜこの範囲なのか」の説明
+ *
+ * 配信 × 配信予定は制約を付けられないため説明も出さない
+ * （`getDateFilterBounds` の JSDoc 参照）
+ */
+function getDateRangeHint(
+  releaseType: 'theatrical' | 'streaming',
+  timeFrame: 'upcoming' | 'now_showing',
+): string | null {
+  if (releaseType === RELEASE_TYPE.THEATRICAL) {
+    return timeFrame === 'upcoming'
+      ? FILTER_LABELS.DATE_RANGE_HINT.THEATRICAL_UPCOMING
+      : FILTER_LABELS.DATE_RANGE_HINT.THEATRICAL_NOW_SHOWING;
+  }
+
+  return timeFrame === 'now_showing'
+    ? FILTER_LABELS.DATE_RANGE_HINT.STREAMING_NOW_SHOWING
+    : null;
+}
 
 /**
  * 地域フィルタの選択肢
@@ -51,6 +82,12 @@ export interface FilterModalProps {
   isRevivalFilter: boolean | undefined;
   /** 公開種別。配信サービスの絞り込みは streaming でのみ意味を持つ */
   releaseType: 'theatrical' | 'streaming';
+  /**
+   * 時間軸。公開日で選べる範囲がこれと releaseType の組で変わる（#994）
+   *
+   * 任意にすると渡し漏れを TypeScript で検知できないため必須にする
+   */
+  timeFrame: 'upcoming' | 'now_showing';
   /** 選択中の配信プロバイダーID */
   selectedWatchProviderIds: number[];
   /** 選択中の提供形態（空配列なら全形態） */
@@ -77,6 +114,7 @@ const FilterModalContent = memo<{
   selectedDateRange: DateRange;
   isRevivalFilter: boolean | undefined;
   releaseType: 'theatrical' | 'streaming';
+  timeFrame: 'upcoming' | 'now_showing';
   selectedWatchProviderIds: number[];
   selectedOfferTypes: WatchProviderOfferType[];
   selectedRegions: RegionGroupKey[];
@@ -94,6 +132,7 @@ const FilterModalContent = memo<{
   selectedDateRange,
   isRevivalFilter,
   releaseType,
+  timeFrame,
   selectedWatchProviderIds,
   selectedOfferTypes,
   selectedRegions,
@@ -113,10 +152,49 @@ const FilterModalContent = memo<{
     useState<WatchProviderOfferType[]>(selectedOfferTypes);
   const [tempRegions, setTempRegions] =
     useState<RegionGroupKey[]>(selectedRegions);
+  /** 適用を拒んだ理由。null なら問題なし */
+  const [dateError, setDateError] = useState<string | null>(null);
 
   // 配信サービスは movie_cache の streaming 行にしか入らない。劇場公開タブで
   // 出しても必ず0件になるため、選べないようにする
   const showWatchProviders = releaseType === 'streaming';
+
+  // モーダルは開くたびに再マウントされるので、ここで new Date() を読んでも
+  // 開いている間に日付が変わらない限り値は動かない。SSR でも描画されない
+  // （`{open && ...}` でマウントされる）のでハイドレーション不一致も起きない
+  const dateBounds = useMemo(
+    () => getDateFilterBounds({ releaseType, timeFrame }),
+    [releaseType, timeFrame],
+  );
+
+  const dateRangeHint = useMemo(
+    () => getDateRangeHint(releaseType, timeFrame),
+    [releaseType, timeFrame],
+  );
+
+  // 開始日と終了日を相互に連動させる。gte > lte をピッカーの時点で防ぐ
+  const gteMax = useMemo(() => {
+    if (tempDateRange.lte === undefined) return dateBounds.max;
+    if (dateBounds.max === undefined) return tempDateRange.lte;
+    return tempDateRange.lte < dateBounds.max
+      ? tempDateRange.lte
+      : dateBounds.max;
+  }, [tempDateRange.lte, dateBounds.max]);
+
+  const lteMin = useMemo(() => {
+    if (tempDateRange.gte === undefined) return dateBounds.min;
+    if (dateBounds.min === undefined) return tempDateRange.gte;
+    return tempDateRange.gte > dateBounds.min
+      ? tempDateRange.gte
+      : dateBounds.min;
+  }, [tempDateRange.gte, dateBounds.min]);
+
+  // 2つの入力から同じ説明・同じエラーを参照する。
+  // モーダルは同時に1つしか開かないので固定IDで衝突しない
+  const dateDescriptionIds =
+    [dateRangeHint ? DATE_HINT_ID : null, dateError ? DATE_ERROR_ID : null]
+      .filter(Boolean)
+      .join(' ') || undefined;
 
   const sortedGenres = useMemo(() => {
     return Object.entries(genres)
@@ -134,6 +212,8 @@ const FilterModalContent = memo<{
 
   const handleDateGteChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      // 入力し直したら前回のエラーは消す。直したのに赤いまま、を避ける
+      setDateError(null);
       setTempDateRange((prev) => ({
         ...prev,
         gte: e.target.value || undefined,
@@ -144,6 +224,7 @@ const FilterModalContent = memo<{
 
   const handleDateLteChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      setDateError(null);
       setTempDateRange((prev) => ({
         ...prev,
         lte: e.target.value || undefined,
@@ -194,9 +275,33 @@ const FilterModalContent = memo<{
     setTempWatchProviderIds([]);
     setTempOfferTypes([]);
     setTempRegions([]);
+    setDateError(null);
   }, []);
 
   const handleApply = useCallback(() => {
+    // min / max はピッカーを制限するだけで、手入力された値は強制されない。
+    // 2つの入力は <form> の外にあり「適用」も素の <button> なので、
+    // :invalid も submit のブロックも効かない（#994）
+    const outOfRange =
+      !isWithinDateFilterBounds(tempDateRange.gte, dateBounds) ||
+      !isWithinDateFilterBounds(tempDateRange.lte, dateBounds);
+
+    if (outOfRange) {
+      setDateError(FILTER_LABELS.DATE_OUT_OF_RANGE);
+      return;
+    }
+
+    const reversed =
+      tempDateRange.gte !== undefined &&
+      tempDateRange.lte !== undefined &&
+      tempDateRange.gte > tempDateRange.lte;
+
+    if (reversed) {
+      setDateError(FILTER_LABELS.DATE_RANGE_REVERSED);
+      return;
+    }
+
+    setDateError(null);
     onApply(
       tempSelectedIds,
       tempDateRange,
@@ -214,6 +319,7 @@ const FilterModalContent = memo<{
     tempOfferTypes,
     tempRegions,
     showWatchProviders,
+    dateBounds,
   ]);
 
   return (
@@ -232,6 +338,10 @@ const FilterModalContent = memo<{
                 type='date'
                 value={tempDateRange.gte || ''}
                 onChange={handleDateGteChange}
+                min={dateBounds.min}
+                max={gteMax}
+                aria-describedby={dateDescriptionIds}
+                aria-invalid={dateError !== null || undefined}
                 className={styles.c_filter__date_input}
               />
             </label>
@@ -244,10 +354,28 @@ const FilterModalContent = memo<{
                 type='date'
                 value={tempDateRange.lte || ''}
                 onChange={handleDateLteChange}
+                min={lteMin}
+                max={dateBounds.max}
+                aria-describedby={dateDescriptionIds}
+                aria-invalid={dateError !== null || undefined}
                 className={styles.c_filter__date_input}
               />
             </label>
           </div>
+          {dateRangeHint && (
+            <p id={DATE_HINT_ID} className={styles.c_filter__date_hint}>
+              {dateRangeHint}
+            </p>
+          )}
+          {dateError && (
+            <p
+              id={DATE_ERROR_ID}
+              role='alert'
+              className={styles.c_filter__date_error}
+            >
+              {dateError}
+            </p>
+          )}
         </div>
 
         <div className={styles.c_filter__section}>
@@ -440,6 +568,7 @@ export const FilterModal = memo<FilterModalProps>(function FilterModal({
   selectedDateRange,
   isRevivalFilter,
   releaseType,
+  timeFrame,
   selectedWatchProviderIds,
   selectedOfferTypes,
   selectedRegions,
@@ -460,6 +589,7 @@ export const FilterModal = memo<FilterModalProps>(function FilterModal({
           selectedDateRange={selectedDateRange}
           isRevivalFilter={isRevivalFilter}
           releaseType={releaseType}
+          timeFrame={timeFrame}
           selectedWatchProviderIds={selectedWatchProviderIds}
           selectedOfferTypes={selectedOfferTypes}
           selectedRegions={selectedRegions}

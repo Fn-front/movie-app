@@ -52,6 +52,27 @@
       outline: none;
       border-color: $primary-500;
     }
+
+    // 範囲外を適用しようとしたときの枠。色だけに頼らず、
+    // 下のエラー文（role="alert"）と併せて伝える
+    &[aria-invalid='true'] {
+      border-color: $error-main;
+    }
+  }
+
+  // 選べる範囲の説明（なぜこの日付しか選べないのか）
+  &__date_hint {
+    margin: $spacing-2 0 0;
+    font-size: $font-size-xs;
+    line-height: $line-height-normal;
+    color: $text-secondary;
+  }
+
+  &__date_error {
+    margin: $spacing-1 0 0;
+    font-size: $font-size-xs;
+    line-height: $line-height-normal;
+    color: $text-danger;
   }
 
   &__date_separator {

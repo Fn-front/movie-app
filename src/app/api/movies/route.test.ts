@@ -243,17 +243,19 @@ function createThenableProxy(
 
 /**
  * now_showing+theatricalパス用のfromモック
+ * 1回目: is_now_playing 件数チェック（フォールバック判定 / #983）
+ * 2回目: カウントクエリ
+ * 3回目: データクエリ
+ *
+ * existingCount: movie_cache にある is_now_playing=true の件数
  */
 function setupNowPlayingFromMock(options: {
-  cacheResult?: { data: unknown; error: unknown };
+  existingCount?: number;
   countResult?: { count: number };
   dataResult?: { data: unknown[]; error: unknown };
 }) {
   const {
-    cacheResult = {
-      data: { cached_at: new Date().toISOString() },
-      error: null,
-    },
+    existingCount = 100,
     countResult = { count: 0 },
     dataResult = { data: [], error: null },
   } = options;
@@ -265,8 +267,8 @@ function setupNowPlayingFromMock(options: {
     const currentCall = callTracker.count;
 
     if (currentCall === 1) {
-      // キャッシュチェッククエリ (is_now_playing用)
-      return createChainMock(cacheResult);
+      // is_now_playing 件数チェック
+      return createChainMock({ count: existingCount });
     }
     if (currentCall === 2) {
       // カウントクエリ
@@ -794,14 +796,14 @@ describe('GET /api/movies', () => {
   });
 
   // === now_showing + theatrical パス ===
+  //
+  // 事前同期は /api/cron/sync-now-playing（日次）が行う。リクエスト起点の
+  // 同期は「レコードが0件」のフォールバックだけに絞っている（#983）
 
-  it('now_showing+theatricalでキャッシュが有効な場合、syncを呼ばない', async () => {
+  it('now_showing+theatricalでキャッシュ済みレコードがある場合、syncを呼ばない', async () => {
     const handler = await loadGET();
     setupNowPlayingFromMock({
-      cacheResult: {
-        data: { cached_at: new Date().toISOString() },
-        error: null,
-      },
+      existingCount: 100,
       countResult: { count: 0 },
       dataResult: { data: [], error: null },
     });
@@ -817,16 +819,34 @@ describe('GET /api/movies', () => {
     expect(mockSyncNowPlayingMovies).not.toHaveBeenCalled();
   });
 
-  it('now_showing+theatricalでキャッシュが期限切れの場合、syncを呼ぶ', async () => {
+  // 失効直後のユーザーを数十秒待たせないため、古いだけでは同期しない。
+  // cached_at を参照しない設計なので、どれだけ古くても走らない
+  it('now_showing+theatricalはキャッシュが古くてもリクエスト起点で同期しない', async () => {
     const handler = await loadGET();
-    const expiredDate = new Date();
-    expiredDate.setHours(expiredDate.getHours() - 25); // 24時間超過
-
     setupNowPlayingFromMock({
-      cacheResult: {
-        data: { cached_at: expiredDate.toISOString() },
+      existingCount: 1,
+      countResult: { count: 1 },
+      dataResult: {
+        data: [{ id: 500, title: '公開中の映画' }],
         error: null,
       },
+    });
+
+    const response = await handler(
+      createRequest({
+        time_frame: 'now_showing',
+        release_type: 'theatrical',
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockSyncNowPlayingMovies).not.toHaveBeenCalled();
+  });
+
+  it('now_showing+theatricalでレコードが0件の場合のみ、フォールバックとして同期する', async () => {
+    const handler = await loadGET();
+    setupNowPlayingFromMock({
+      existingCount: 0,
       countResult: { count: 0 },
       dataResult: { data: [], error: null },
     });
@@ -842,10 +862,12 @@ describe('GET /api/movies', () => {
     expect(mockSyncNowPlayingMovies).toHaveBeenCalledTimes(1);
   });
 
-  it('now_showing+theatricalでキャッシュが存在しない場合、syncを呼ぶ', async () => {
+  // count が null（head クエリが件数を返せなかった）でも、
+  // 「0件」と同じくフォールバックへ倒して一覧が空のままになるのを防ぐ
+  it('now_showing+theatricalでcountがnullの場合もフォールバック同期が走る', async () => {
     const handler = await loadGET();
     setupNowPlayingFromMock({
-      cacheResult: { data: null, error: null },
+      existingCount: null as unknown as number,
       countResult: { count: 0 },
       dataResult: { data: [], error: null },
     });

@@ -21,7 +21,6 @@ import {
   CACHE_CONTROL,
   PAGINATION,
   CACHE_DURATION_HOURS,
-  NOW_PLAYING_CACHE_DURATION_HOURS,
   MOVIES_FETCH_MONTHS_AHEAD,
   NOW_SHOWING_MONTHS_BACK,
   RELEASE_TYPE,
@@ -178,24 +177,18 @@ export async function GET(request: Request) {
     const isUpcomingStreaming = isStreaming && time_frame === 'upcoming';
 
     if (isNowPlayingTheatrical) {
-      // now_showing + theatrical: is_now_playing フラグでフィルタ
-      // キャッシュ鮮度チェック（is_now_playing=true のレコードの cached_at を確認）
-      const { data: cacheInfo } = await supabase
+      // now_showing + theatrical: CRON（/api/cron/sync-now-playing、日次）で
+      // 事前同期する。キャッシュが単に古いだけのケースで同期を直列実行すると、
+      // 失効直後のユーザーが数十秒待たされるため同期は行わない（#983）。
+      // CRONが一度も走っていない場合に一覧が空になるのを避けるため、
+      // レコードが1件も無いときだけフォールバックとして同期する。
+      const { count: nowPlayingCount } = await supabase
         .from('movie_cache')
-        .select('cached_at')
+        .select('id', { count: 'exact', head: true })
         .eq('is_now_playing', true)
-        .eq('release_type', 'theatrical')
-        .order('cached_at', { ascending: false })
-        .limit(1)
-        .single();
+        .eq('release_type', RELEASE_TYPE.THEATRICAL);
 
-      const nowPlayingCacheExpired =
-        !cacheInfo ||
-        now.getTime() - new Date(cacheInfo.cached_at).getTime() >
-          NOW_PLAYING_CACHE_DURATION_HOURS * 60 * 60 * 1000;
-
-      // キャッシュが古い or 存在しない場合、オンデマンドで同期実行
-      if (nowPlayingCacheExpired) {
+      if (!nowPlayingCount) {
         await syncNowPlayingMovies();
       }
     } else if (release_type === RELEASE_TYPE.STREAMING) {
@@ -214,6 +207,21 @@ export async function GET(request: Request) {
       }
     } else {
       // theatrical + upcoming: 従来のDiscover APIロジック
+      //
+      // ⚠️ ここだけ他の2分岐と揃えていない（#983）。揃えると
+      // **公開予定一覧に新作が入ってこなくなる**ため。
+      //
+      // 他の2分岐は事前同期するCRONがあるので、リクエスト起点の同期を
+      // 0件フォールバックへ落とせる（now_showing → /api/cron/sync-now-playing、
+      // streaming → /api/cron/sync-streaming）。これに対し TMDb Discover で
+      // 公開予定を拾ってくるのは**この分岐だけ**で、対応するCRONが無い。
+      // `updateMoviesCacheByBatch`（/api/cron/update-movies）は既存行の
+      // vote_average・popularity・表示列を更新するだけで、新しい作品を
+      // 追加しない。残る追加経路は週次の映画.com iCal（/api/cron/sync-movies）
+      // のみになり、TMDb由来の作品が一覧から失われる。
+      //
+      // そのため、キャッシュ失効時の同期をCRONへ移すには先に
+      // Discover専用のCRONが要る。揃えるのはそれからにする。
       const { data: cacheInfo } = await supabase
         .from('movie_cache')
         .select('cached_at')

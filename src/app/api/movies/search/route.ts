@@ -30,6 +30,8 @@ function filterMovies(
   options: {
     genreIds?: number[];
     voteAverageGte?: number;
+    releaseDateGte?: string;
+    releaseDateLte?: string;
   },
 ): Movie[] {
   return movies.filter((movie) => {
@@ -44,6 +46,33 @@ function filterMovies(
     // 評価フィルター: vote_averageが閾値以上か
     if (options.voteAverageGte !== undefined) {
       if (movie.vote_average < options.voteAverageGte) return false;
+    }
+
+    // 公開期間フィルター（#997）
+    //
+    // ⚠️ ここで見るのは `movie.release_date`＝TMDbの**代表公開日**。
+    // Discover の `release_date.gte/lte`（いずれかの国のリリースで一致）
+    // とは意味が違い、キーワード検索では代表日しか手元に無い。
+    // 同じ期間を指定しても2つの経路で結果が一致しない場合がある。
+    //
+    // 代表日が無い作品は期間を指定した時点で候補から外す（判定できないため）
+    if (
+      options.releaseDateGte !== undefined ||
+      options.releaseDateLte !== undefined
+    ) {
+      if (!movie.release_date) return false;
+      if (
+        options.releaseDateGte !== undefined &&
+        movie.release_date < options.releaseDateGte
+      ) {
+        return false;
+      }
+      if (
+        options.releaseDateLte !== undefined &&
+        movie.release_date > options.releaseDateLte
+      ) {
+        return false;
+      }
     }
 
     return true;
@@ -69,6 +98,8 @@ export async function GET(request: Request) {
       page: searchParams.get('page') ?? undefined,
       genre: searchParams.get('genre') ?? undefined,
       year: searchParams.get('year') ?? undefined,
+      release_date_gte: searchParams.get('release_date_gte') ?? undefined,
+      release_date_lte: searchParams.get('release_date_lte') ?? undefined,
       vote_average_gte: searchParams.get('vote_average_gte') ?? undefined,
     });
 
@@ -98,6 +129,8 @@ export async function GET(request: Request) {
       page,
       genre: genreIds,
       year,
+      release_date_gte,
+      release_date_lte,
       vote_average_gte,
     } = queryResult.data;
 
@@ -111,14 +144,20 @@ export async function GET(request: Request) {
       // TMDb /search/movie は year パラメータをサポートしているためAPI側に渡す
       result = await searchMovies({ query, page, year });
 
-      // genre・vote_average_gte はTMDb /search/movieが非対応のためサーバー側でフィルタリング
+      // genre・vote_average_gte・公開期間はTMDb /search/movieが非対応のため
+      // サーバー側でフィルタリングする
       const needsServerFilter =
-        (genreIds && genreIds.length > 0) || vote_average_gte !== undefined;
+        (genreIds && genreIds.length > 0) ||
+        vote_average_gte !== undefined ||
+        release_date_gte !== undefined ||
+        release_date_lte !== undefined;
 
       if (needsServerFilter) {
         const filteredMovies = filterMovies(result.results, {
           genreIds,
           voteAverageGte: vote_average_gte,
+          releaseDateGte: release_date_gte,
+          releaseDateLte: release_date_lte,
         });
 
         isServerFiltered = true;
@@ -132,10 +171,16 @@ export async function GET(request: Request) {
       }
     } else {
       // パターン2: フィルターのみ検索（Discover API）
+      //
+      // year と期間はスキーマで排他にしてあるので、両方が乗ることはない。
+      // 意味論が違う（year＝代表公開日の年 / 期間＝いずれかの国のリリース）
+      // ため混ぜると説明できない結果になる
       result = await discoverMovies({
         page,
         with_genres: genreIds?.join(','),
         primary_release_year: year,
+        'release_date.gte': release_date_gte,
+        'release_date.lte': release_date_lte,
         'vote_average.gte': vote_average_gte,
         sort_by: 'popularity.desc',
       });

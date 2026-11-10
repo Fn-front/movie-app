@@ -64,9 +64,17 @@ function buildSearchParams(
   const page = searchParams.get('page');
   const genre = searchParams.get('genre') ?? undefined;
   const year = searchParams.get('year');
+  const releaseDateGte = searchParams.get('release_date_gte');
+  const releaseDateLte = searchParams.get('release_date_lte');
   const voteAverageGte = searchParams.get('vote_average_gte');
 
-  const hasSearchCriteria = query || genre || year || voteAverageGte;
+  const hasSearchCriteria =
+    query ||
+    genre ||
+    year ||
+    releaseDateGte ||
+    releaseDateLte ||
+    voteAverageGte;
   if (!hasSearchCriteria) return null;
 
   // URLは利用者が編集できるので ?page=abc が来る。Number('abc') は NaN で、
@@ -79,6 +87,8 @@ function buildSearchParams(
     page: Number.isFinite(pageNumber) ? pageNumber : 1,
     genre,
     year: year ? Number(year) : undefined,
+    release_date_gte: releaseDateGte ?? undefined,
+    release_date_lte: releaseDateLte ?? undefined,
     vote_average_gte: voteAverageGte ? Number(voteAverageGte) : undefined,
   };
 }
@@ -98,6 +108,12 @@ function buildSearchFilterTypes(params: SearchMoviesRequest): string {
     types.push(QUERY_PARAMS.VOTE_AVERAGE_GTE);
   }
   if (params.year !== undefined) types.push(QUERY_PARAMS.YEAR);
+  if (params.release_date_gte !== undefined) {
+    types.push(QUERY_PARAMS.RELEASE_DATE_GTE);
+  }
+  if (params.release_date_lte !== undefined) {
+    types.push(QUERY_PARAMS.RELEASE_DATE_LTE);
+  }
   return types.length > 0 ? types.join(',') : ANALYTICS_NO_FILTER;
 }
 

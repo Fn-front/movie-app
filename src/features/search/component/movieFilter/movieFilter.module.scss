@@ -45,4 +45,52 @@
   &__genre_item {
     flex-shrink: 0;
   }
+
+  // 公開期間（#997）
+  &__section_hint {
+    margin: 0;
+    font-size: $font-size-xs;
+    line-height: $line-height-normal;
+    color: $text-secondary;
+  }
+
+  &__date_range {
+    display: flex;
+    align-items: flex-end;
+    gap: $spacing-2;
+  }
+
+  &__date_field {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: $spacing-1;
+    min-width: 0;
+  }
+
+  &__date_label {
+    font-size: $font-size-xs;
+    color: $text-secondary;
+  }
+
+  &__date_input {
+    width: 100%;
+    padding: $spacing-2;
+    font-size: $font-size-sm;
+    color: $text-primary;
+    background-color: $background-paper;
+    border: $border-width-1 solid $border-color;
+    border-radius: $border-radius-md;
+
+    &:focus {
+      outline: none;
+      border-color: $primary-500;
+    }
+  }
+
+  &__date_separator {
+    padding-bottom: $spacing-2;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+  }
 }

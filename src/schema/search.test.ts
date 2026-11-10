@@ -210,4 +210,94 @@ describe('searchQuerySchema', () => {
       expect(result.year).toBe(2024);
     });
   });
+
+  // 年（primary_release_year）と期間（release_date.gte/lte）は
+  // 意味論が違うため、置き換えではなく別パラメータとして足した（#997）
+  describe('公開期間（release_date_gte / release_date_lte）', () => {
+    it('期間だけでも検索条件として成立する', () => {
+      const result = searchQuerySchema.safeParse({
+        release_date_gte: '2026-04-01',
+        release_date_lte: '2026-06-30',
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('開始日のみでも成立する', () => {
+      expect(
+        searchQuerySchema.safeParse({ release_date_gte: '2026-04-01' }).success,
+      ).toBe(true);
+    });
+
+    it('終了日のみでも成立する', () => {
+      expect(
+        searchQuerySchema.safeParse({ release_date_lte: '2026-06-30' }).success,
+      ).toBe(true);
+    });
+
+    it.each([
+      ['月が範囲外', '2026-13-45'],
+      ['日が範囲外', '2026-02-30'],
+      ['うるう年でない2月29日', '2026-02-29'],
+      ['形式違い', '2026/04/01'],
+    ])('%s（%s）を拒否する', (_label, value) => {
+      expect(
+        searchQuerySchema.safeParse({ release_date_gte: value }).success,
+      ).toBe(false);
+    });
+
+    it('開始日が終了日より後なら拒否する', () => {
+      const result = searchQuerySchema.safeParse({
+        release_date_gte: '2026-07-01',
+        release_date_lte: '2026-06-30',
+      });
+
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error.flatten().fieldErrors.release_date_lte).toEqual([
+        '終了日は開始日以降の日付を指定してください',
+      ]);
+    });
+
+    it('開始日と終了日が同じなら受け入れる', () => {
+      expect(
+        searchQuerySchema.safeParse({
+          release_date_gte: '2026-06-01',
+          release_date_lte: '2026-06-01',
+        }).success,
+      ).toBe(true);
+    });
+  });
+
+  // 同じ「2026年」でも year と期間で結果が食い違うため混ぜない
+  describe('公開年と公開期間の排他', () => {
+    it.each([
+      ['開始日と同時', { year: '2026', release_date_gte: '2026-04-01' }],
+      ['終了日と同時', { year: '2026', release_date_lte: '2026-06-30' }],
+      [
+        '両方と同時',
+        {
+          year: '2026',
+          release_date_gte: '2026-04-01',
+          release_date_lte: '2026-06-30',
+        },
+      ],
+    ])('年を%sに指定すると拒否する', (_label, input) => {
+      const result = searchQuerySchema.safeParse(input);
+
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error.flatten().fieldErrors.year).toEqual([
+        '公開年と公開期間は同時に指定できません',
+      ]);
+    });
+
+    it('年だけなら従来どおり受け入れる', () => {
+      const result = searchQuerySchema.safeParse({ year: '2026' });
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.year).toBe(2026);
+    });
+  });
 });

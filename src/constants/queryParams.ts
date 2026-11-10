@@ -9,6 +9,16 @@ export const QUERY_PARAMS = {
   GENRE: 'genre',
   /** 公開年 */
   YEAR: 'year',
+  /**
+   * 公開期間の開始日（YYYY-MM-DD）
+   *
+   * ⚠️ YEAR とは意味が違う（#997）。YEAR は TMDb の代表公開日の年で絞るが、
+   * こちらは「いずれかの国のリリースが範囲に入るか」で絞る。混ぜると
+   * 説明できない結果になるため、APIは同時指定を 400 で弾く
+   */
+  RELEASE_DATE_GTE: 'release_date_gte',
+  /** 公開期間の終了日（YYYY-MM-DD） */
+  RELEASE_DATE_LTE: 'release_date_lte',
   /** 最低評価 */
   VOTE_AVERAGE_GTE: 'vote_average_gte',
 } as const;

@@ -6,6 +6,7 @@
 'use client';
 
 import { memo, useState, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal/modal';
 import { Button } from '@/components/ui/button/button';
@@ -14,6 +15,7 @@ import {
   BUTTON_LABELS,
   FILTER_LABELS,
   WATCH_PROVIDERS,
+  QUERY_PARAMS,
   type WatchProviderOfferType,
 } from '@/constants';
 import { RELEASE_TYPE, type RegionGroupKey } from '@/constants/movies';
@@ -50,6 +52,22 @@ function getDateRangeHint(
   return timeFrame === 'now_showing'
     ? FILTER_LABELS.DATE_RANGE_HINT.STREAMING_NOW_SHOWING
     : null;
+}
+
+/**
+ * 過去作品の探し方を出すか（#996）
+ *
+ * **過去日を選べなくしたタブにだけ**出す。劇場×公開中は過去日が正しい
+ * 用途（ロングラン・リバイバル）なので出すと的外れになる。
+ * 配信×配信予定はそもそも制限していない。
+ */
+function showsPastMoviesGuide(
+  releaseType: 'theatrical' | 'streaming',
+  timeFrame: 'upcoming' | 'now_showing',
+): boolean {
+  if (releaseType === RELEASE_TYPE.THEATRICAL) return timeFrame === 'upcoming';
+
+  return timeFrame === 'now_showing';
 }
 
 /**
@@ -171,6 +189,13 @@ const FilterModalContent = memo<{
     () => getDateRangeHint(releaseType, timeFrame),
     [releaseType, timeFrame],
   );
+
+  const pastMoviesGuide = showsPastMoviesGuide(releaseType, timeFrame);
+
+  // 検索は公開年だけでも成立する（`hasSearchCriteria` に year が入っており、
+  // キーワード未入力でも検索が走る）。既定を今年にしておけば開いた直後から
+  // 結果が出る。`/search` は searchBar / titleSuggestion と同じくリテラル
+  const pastMoviesSearchHref = `/search?${QUERY_PARAMS.YEAR}=${new Date().getFullYear()}`;
 
   // 開始日と終了日を相互に連動させる。gte > lte をピッカーの時点で防ぐ
   const gteMax = useMemo(() => {
@@ -365,6 +390,19 @@ const FilterModalContent = memo<{
           {dateRangeHint && (
             <p id={DATE_HINT_ID} className={styles.c_filter__date_hint}>
               {dateRangeHint}
+              {/* 過去日を選べなくしたタブにだけ、ではどこで探せるのかを示す（#996） */}
+              {pastMoviesGuide && (
+                <>
+                  {FILTER_LABELS.PAST_MOVIES_GUIDE}
+                  {/* 遷移でページごと差し替わるため、モーダルを閉じる処理は要らない */}
+                  <Link
+                    href={pastMoviesSearchHref}
+                    className={styles.c_filter__date_hint_link}
+                  >
+                    {FILTER_LABELS.PAST_MOVIES_LINK}
+                  </Link>
+                </>
+              )}
             </p>
           )}
           {dateError && (

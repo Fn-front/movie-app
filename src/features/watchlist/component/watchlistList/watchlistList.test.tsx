@@ -6,6 +6,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { WatchlistList } from './watchlistList';
+import { IMAGE_SIZES } from '@/constants';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 
 // --- Mocks ---
@@ -67,6 +68,17 @@ describe('WatchlistList', () => {
     render(<WatchlistList watchlist={createMockItems(1)} isLoading={false} />);
 
     expect(screen.getByAltText('映画0のポスター')).toBeInTheDocument();
+  });
+
+  // sizes が無いと next/image は srcset を 1x/2x しか出さず、
+  // 枠（実測140〜241px）へ元画像(500px)が落ちてくる（#982）
+  it('ポスターにsizesが指定されている', () => {
+    render(<WatchlistList watchlist={createMockItems(1)} isLoading={false} />);
+
+    expect(screen.getByAltText('映画0のポスター')).toHaveAttribute(
+      'sizes',
+      IMAGE_SIZES.POSTER.SIZES,
+    );
   });
 
   it('ポスター画像がない場合はNo Imageが表示される', () => {

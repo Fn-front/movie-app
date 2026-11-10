@@ -159,6 +159,7 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
             alt={`${item.title}のポスター`}
             width={IMAGE_SIZES.POSTER.WIDTH}
             height={IMAGE_SIZES.POSTER.HEIGHT}
+            sizes={IMAGE_SIZES.POSTER.SIZES}
             loading={eager ? 'eager' : 'lazy'}
             className={styles.c_favorite_tile__image}
           />

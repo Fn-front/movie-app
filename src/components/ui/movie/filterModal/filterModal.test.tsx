@@ -586,7 +586,7 @@ describe('FilterModal', () => {
     ])('%s で説明を出す', (_label, releaseType, timeFrame, hint) => {
       renderFilterModal({ releaseType, timeFrame });
 
-      expect(screen.getByText(hint)).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(hint))).toBeInTheDocument();
     });
 
     it('制限の無い配信×配信予定では説明を出さない', () => {
@@ -599,7 +599,7 @@ describe('FilterModal', () => {
       renderFilterModal({ releaseType: 'theatrical', timeFrame: 'upcoming' });
 
       const hintId = screen.getByText(
-        'このタブは今日以降に公開される作品のみです。',
+        /このタブは今日以降に公開される作品のみです。/,
       ).id;
 
       expect(screen.getByLabelText('開始日')).toHaveAttribute(
@@ -776,6 +776,57 @@ describe('FilterModal', () => {
         [],
         [],
         [],
+      );
+    });
+  });
+
+  // 範囲を絞ると「選べない」ことは伝わるが「ではどこで探せるのか」は
+  // 伝わらない。/search は公開年だけで検索できる（#996）
+  describe('過去作品への導線', () => {
+    it.each([
+      ['劇場×公開予定', 'theatrical' as const, 'upcoming' as const],
+      ['配信×配信中', 'streaming' as const, 'now_showing' as const],
+    ])('%s では検索へのリンクを出す', (_label, releaseType, timeFrame) => {
+      renderFilterModal({ releaseType, timeFrame });
+
+      expect(
+        screen.getByRole('link', { name: '公開年で検索する' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/過去の作品は検索から公開年で探せます。/),
+      ).toBeInTheDocument();
+    });
+
+    // 過去日が正しい用途のタブに出すと的外れになる
+    it.each([
+      ['劇場×公開中', 'theatrical' as const, 'now_showing' as const],
+      ['配信×配信予定', 'streaming' as const, 'upcoming' as const],
+    ])('%s では出さない', (_label, releaseType, timeFrame) => {
+      renderFilterModal({ releaseType, timeFrame });
+
+      expect(
+        screen.queryByRole('link', { name: '公開年で検索する' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('リンク先が今年の公開年を指定した検索になる', () => {
+      renderFilterModal({ releaseType: 'theatrical', timeFrame: 'upcoming' });
+
+      // 「今日」は 2026-06-15 に固定している
+      expect(
+        screen.getByRole('link', { name: '公開年で検索する' }),
+      ).toHaveAttribute('href', '/search?year=2026');
+    });
+
+    it('導線も日付入力に aria-describedby で紐づく', () => {
+      renderFilterModal({ releaseType: 'theatrical', timeFrame: 'upcoming' });
+
+      const hintId =
+        screen.getByText(/過去の作品は検索から公開年で探せます。/).id;
+
+      expect(screen.getByLabelText('開始日')).toHaveAttribute(
+        'aria-describedby',
+        expect.stringContaining(hintId),
       );
     });
   });

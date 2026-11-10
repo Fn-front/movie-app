@@ -103,6 +103,29 @@
     align-items: center;
     gap: $spacing-2;
     padding: 0 $spacing-1;
+    // 狭い画面では YouTube へのリンクを次の行へ送る。
+    // 1行に収めようとすると動画名が過度に省略される
+    flex-wrap: wrap;
+  }
+
+  // YouTube の視聴ページへのリンク（埋め込みが使えないときの代替導線 / #980）
+  &__youtube_link {
+    display: inline-flex;
+    align-items: center;
+    gap: $spacing-1;
+    flex-shrink: 0;
+    margin-left: auto;
+    font-size: $font-size-xs;
+    // ダイアログは暗いオーバーレイの上に出るため、動画名と同じ色を使う
+    color: $text-inverse;
+    text-decoration: underline;
+    border-radius: $border-radius-sm;
+
+    &:hover {
+      text-decoration: none;
+    }
+
+    @include focus-visible;
   }
 
   // 動画名

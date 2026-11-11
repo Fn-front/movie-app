@@ -188,6 +188,43 @@ describe('useOverlayHistory', () => {
     expect(onCloseSecond).toHaveBeenCalledTimes(1);
   });
 
+  it('自分が積んだエントリが最前面でなければ畳まない', async () => {
+    // 入れ子の内側が積んだエントリが最前面に残っているとき、外側が
+    // 閉じても畳んではいけない（他人のエントリを消してしまう）。
+    // 目印を真偽値で持つと所有者を区別できず、取り違える
+    const outer = renderHook(({ open }) => useOverlayHistory(open, jest.fn()), {
+      initialProps: { open: true },
+    });
+    renderHook(() => useOverlayHistory(true, jest.fn()));
+
+    act(() => outer.result.current.notifyDismissed());
+    act(() => outer.rerender({ open: false }));
+    await flushAsyncBack();
+
+    expect(backSpy).not.toHaveBeenCalled();
+  });
+
+  it('前回の目印が履歴に残っていても、それを自分のものとして畳まない', async () => {
+    // Next のルーターは state を引き継いで replaceState するため、
+    // オーバーレイを開いたままリロードすると目印だけが残りうる
+    window.history.replaceState(
+      { __overlayHistory: 'overlay-stale' },
+      '',
+      '/movies/now-showing',
+    );
+
+    const { result, rerender } = renderHook(
+      ({ open }) => useOverlayHistory(open, jest.fn()),
+      { initialProps: { open: false } },
+    );
+
+    act(() => result.current.notifyDismissed());
+    act(() => rerender({ open: false }));
+    await flushAsyncBack();
+
+    expect(backSpy).not.toHaveBeenCalled();
+  });
+
   it('単独のとき、× で閉じた後の戻るで余計に閉じない', async () => {
     const onClose = jest.fn();
     const { result, rerender } = renderHook(

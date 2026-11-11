@@ -15,12 +15,26 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 /**
- * 自分が積んだエントリであることの目印。
+ * 履歴エントリに載せる所有者トークンのキー。
  *
- * ルーターの遷移で閉じた場合に、間違って `history.back()` して遷移を
- * 取り消さないための判定に使う。
+ * 真偽値だと「誰かのオーバーレイが積んだ」ことしか分からず、入れ子では
+ * **他人のエントリを自分のものとして畳んでしまう**（例: 映画詳細の上で
+ * 評価モーダルを開き、評価モーダルを閉じずに詳細を × で閉じると、
+ * 詳細が評価モーダルのエントリを消す）。エントリごとに一意の値を入れ、
+ * 「最前面が自分のものか」を厳密に判定する。
+ *
+ * ルーターが遷移すると state ごと差し替わるため、遷移に伴う close で
+ * 間違って `history.back()` して遷移を取り消すことも防げる。
  */
 const OVERLAY_STATE_KEY = '__overlayHistory';
+
+let nextOverlayToken = 0;
+
+/** エントリ固有のトークンを採番する（`crypto` に依存しない） */
+function createOverlayToken(): string {
+  nextOverlayToken += 1;
+  return `overlay-${nextOverlayToken}`;
+}
 
 /** 開いているオーバーレイ。末尾が最前面 */
 interface OverlayEntry {
@@ -42,8 +56,9 @@ let isListening = false;
  * （＝外側）を閉じてしまう。自分で起こした分はここで数えて読み飛ばす。
  *
  * 「popstate が来ずカウンタが詰まる」心配は要らない。畳むのは
- * `history.state` に自分の目印がある＝自分がエントリを積んだ直後だけで、
- * そのときは必ず1つ前のエントリが存在するため `back()` は空振りしない。
+ * 最前面が**自分のトークンを持つエントリ**のときだけで、それは
+ * `pushState` で作った同一ドキュメント・同一URLのエントリなので、
+ * 必ず1つ前が存在し `back()` が空振りしない。
  */
 let pendingSelfBacks = 0;
 
@@ -170,12 +185,13 @@ export function useOverlayHistory(
       close: () => onCloseRef.current(),
       popped: false,
     };
+    const token = createOverlayToken();
 
     openOverlays.push(entry);
     startListening();
 
     window.history.pushState(
-      { ...window.history.state, [OVERLAY_STATE_KEY]: true },
+      { ...window.history.state, [OVERLAY_STATE_KEY]: token },
       '',
       window.location.href,
     );
@@ -190,11 +206,13 @@ export function useOverlayHistory(
       // 畳むかどうかを先に決める。
       // - popped: 戻るで外れた分。ここで畳むと1つ余計に戻ってしまう
       // - !dismissed: 遷移やURL更新に伴う close。畳むとその遷移を取り消す
-      // - 目印が無い: ルーターが新しいエントリを積んでおり、最前面は自分ではない
+      // - トークン不一致: 最前面は自分のエントリではない。
+      //   入れ子の内側が畳まずに残した場合や、ルーターが遷移した場合。
+      //   ここで畳むと他人のエントリや遷移を消してしまう
       const shouldFold =
         !entry.popped &&
         dismissedRef.current &&
-        Boolean(window.history.state?.[OVERLAY_STATE_KEY]);
+        window.history.state?.[OVERLAY_STATE_KEY] === token;
 
       if (shouldFold) {
         foldOwnEntry();

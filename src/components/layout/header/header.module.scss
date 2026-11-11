@@ -1,9 +1,11 @@
 @use '@/styles/variables' as *;
 @use '@/styles/mixins' as *;
 
+// 固定表示はこの要素では行わない。
+// 包含ブロックがラッパー（.c_app_layout__header）で高さが同じため、
+// ここに position: sticky を書いても動く余地がゼロで発動しない。
+// 実体は appLayout.module.scss の &__header にある。
 .c_header {
-  position: sticky;
-  top: 0;
   z-index: $z-index-header;
   background-color: $background-paper;
   border-bottom: $border-width-1 solid $border-color;

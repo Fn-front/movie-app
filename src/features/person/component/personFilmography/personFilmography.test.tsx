@@ -5,7 +5,11 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { PERSON_FILMOGRAPHY_PAGE_SIZE, PERSON_MESSAGES } from '@/constants';
+import {
+  ARIA_LABELS,
+  PERSON_FILMOGRAPHY_PAGE_SIZE,
+  PERSON_MESSAGES,
+} from '@/constants';
 import type { PersonMovieCredit } from '@/lib/types';
 
 import { PersonFilmography } from './personFilmography';
@@ -145,6 +149,36 @@ describe('PersonFilmography', () => {
 
     expect(screen.getByTestId('movie-tile-1')).toBeInTheDocument();
     expect(screen.queryByText('主人公')).not.toBeInTheDocument();
+  });
+
+  // 表示切替は共通設定（#1014）。この画面にも導線が要る
+  describe('表示モード', () => {
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it('表示切替のトグルを出す', () => {
+      render(<PersonFilmography credits={createCredits(3)} />);
+
+      expect(
+        screen.getByRole('button', { name: ARIA_LABELS.SWITCH_TO_LIST_VIEW }),
+      ).toBeInTheDocument();
+    });
+
+    it('リストに切り替えると一覧がリストの並びになる', async () => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <PersonFilmography credits={createCredits(3)} />,
+      );
+
+      await user.click(
+        screen.getByRole('button', { name: ARIA_LABELS.SWITCH_TO_LIST_VIEW }),
+      );
+
+      expect(
+        container.querySelector('.c_movie_grid_container__list'),
+      ).toBeInTheDocument();
+    });
   });
 
   describe('ページング', () => {

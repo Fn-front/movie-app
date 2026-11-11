@@ -7,8 +7,14 @@ import { render, screen } from '@testing-library/react';
 import { MovieGridContainer } from './movieGridContainer';
 
 jest.mock('@/components/ui/movie/movieTileSkeleton/movieTileSkeleton', () => ({
-  MovieTileSkeleton: ({ count }: { count?: number }) => (
-    <div data-testid='skeleton' data-count={count} />
+  MovieTileSkeleton: ({
+    count,
+    viewMode,
+  }: {
+    count?: number;
+    viewMode?: string;
+  }) => (
+    <div data-testid='skeleton' data-count={count} data-view-mode={viewMode} />
   ),
 }));
 
@@ -121,5 +127,59 @@ describe('MovieGridContainer', () => {
     );
 
     expect(container.querySelector('[class*="sentinel"]')).toBeInTheDocument();
+  });
+
+  // リスト表示（#1014）
+  describe('表示モード', () => {
+    it('既定ではグリッドのクラスを使う', () => {
+      const { container } = render(
+        <MovieGridContainer isLoading={false} isEmpty={false}>
+          <div>content</div>
+        </MovieGridContainer>,
+      );
+
+      expect(
+        container.querySelector('.c_movie_grid_container__grid'),
+      ).toBeInTheDocument();
+      expect(
+        container.querySelector('.c_movie_grid_container__list'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('viewMode="list" ではリストのクラスを使う', () => {
+      const { container } = render(
+        <MovieGridContainer isLoading={false} isEmpty={false} viewMode='list'>
+          <div>content</div>
+        </MovieGridContainer>,
+      );
+
+      expect(
+        container.querySelector('.c_movie_grid_container__list'),
+      ).toBeInTheDocument();
+      expect(
+        container.querySelector('.c_movie_grid_container__grid'),
+      ).not.toBeInTheDocument();
+    });
+
+    // 読み込み中だけグリッドに戻ると、切替直後にレイアウトが二度変わる
+    it('viewMode="list" のスケルトンもリストのクラスを使う', () => {
+      const { container } = render(
+        <MovieGridContainer isLoading isEmpty={false} viewMode='list' />,
+      );
+
+      expect(
+        container.querySelector('.c_movie_grid_container__list'),
+      ).toBeInTheDocument();
+    });
+
+    // 並びだけリストにしてスケルトンを縦長のまま出すと、1件で画面が埋まる
+    it('スケルトンにも同じ表示モードを渡す', () => {
+      render(<MovieGridContainer isLoading isEmpty={false} viewMode='list' />);
+
+      expect(screen.getByTestId('skeleton')).toHaveAttribute(
+        'data-view-mode',
+        'list',
+      );
+    });
   });
 });

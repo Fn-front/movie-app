@@ -17,6 +17,7 @@ import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggl
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
+import { useMovieViewMode } from '@/hooks/useMovieViewMode';
 import { DISPLAY_LIMITS } from '@/constants';
 import type { Movie } from '@/lib/types';
 import { movieToMovieCacheItem } from '@/utils/toMovieCacheItem';
@@ -85,10 +86,12 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
     handleModalClose,
   } = useMovieDetailModal(movieCacheItems);
 
+  const { viewMode } = useMovieViewMode();
+
   if (isLoading) {
     return (
       <div className={styles.c_search_results}>
-        <MovieGridContainer isLoading isEmpty={false} />
+        <MovieGridContainer isLoading isEmpty={false} viewMode={viewMode} />
       </div>
     );
   }
@@ -119,7 +122,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
         {totalResults.toLocaleString()}件の検索結果
       </p>
 
-      <MovieGridContainer isLoading={false} isEmpty={false}>
+      <MovieGridContainer isLoading={false} isEmpty={false} viewMode={viewMode}>
         {movieCacheItems.map((movie, index) => (
           <MovieTile
             key={movie.id}
@@ -132,6 +135,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
             watchlistDisabled={isMovieToggling(movie.id)}
             onFavoriteToggle={handleFavoriteToggle}
             favoriteDisabled={isFavoriteProcessing(movie.id)}
+            viewMode={viewMode}
           />
         ))}
       </MovieGridContainer>

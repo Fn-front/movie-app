@@ -18,6 +18,10 @@ export const ARIA_LABELS = {
   SEARCH: '検索',
   /** 映画を検索 */
   SEARCH_MOVIES: '映画を検索',
+  /** リスト表示に切り替え */
+  SWITCH_TO_LIST_VIEW: 'リスト表示に切り替え',
+  /** グリッド表示に切り替え */
+  SWITCH_TO_GRID_VIEW: 'グリッド表示に切り替え',
   /** メニューを開く */
   OPEN_MENU: 'メニューを開く',
   /** メニューを閉じる */

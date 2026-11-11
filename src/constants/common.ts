@@ -20,6 +20,8 @@ export const STORAGE_KEYS = {
   RECENT_SEARCHES: 'movie-app:recent-searches',
   /** 一覧画面のフィルター条件 */
   MOVIE_FILTERS: 'movie-app:movie-filters',
+  /** 映画一覧の表示モード（グリッド／リスト） */
+  MOVIE_VIEW_MODE: 'movie-app:movie-view-mode',
   /**
    * アクセス解析Cookieへの同意状態（granted / denied のみ。未決定は未保存）
    *

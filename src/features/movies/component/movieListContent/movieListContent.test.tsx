@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 
 import { MovieListContent } from './movieListContent';
+import { ARIA_LABELS } from '@/constants';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
@@ -147,6 +148,16 @@ describe('MovieListContent', () => {
       );
       expect(
         screen.getByRole('combobox', { name: 'ソート順を選択' }),
+      ).toBeInTheDocument();
+    });
+
+    // 表示切替は共通設定（#1014）。この画面にも導線が要る
+    it('表示切替のトグルが表示される', () => {
+      render(
+        <MovieListContent title='公開予定' movieList={createMockMovieList()} />,
+      );
+      expect(
+        screen.getByRole('button', { name: ARIA_LABELS.SWITCH_TO_LIST_VIEW }),
       ).toBeInTheDocument();
     });
   });

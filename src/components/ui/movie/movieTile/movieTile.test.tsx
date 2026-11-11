@@ -611,6 +611,60 @@ describe('MovieTile', () => {
     });
   });
 
+  // リスト表示は CSS だけで横並びへ組み替える（#1014）。DOM を変えると
+  // タイトル button の ::after によるカード全面の当たり判定（#719）が壊れるため、
+  // 「モードが変わっても中身の構造は同じ」ことまで固定する
+  describe('表示モード', () => {
+    it('既定ではリスト用のクラスが付かない', () => {
+      const { container } = render(<MovieTile movie={createMockMovie()} />);
+
+      expect(
+        container.querySelector('.c_movie_tile--list'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('viewMode="list" でリスト用のクラスが付く', () => {
+      const { container } = render(
+        <MovieTile movie={createMockMovie()} viewMode='list' />,
+      );
+
+      expect(
+        container.querySelector('.c_movie_tile--list'),
+      ).toBeInTheDocument();
+    });
+
+    it('リスト表示でもタイトル・ポスター・操作ボタンは同じように使える', async () => {
+      const user = userEvent.setup();
+      const onClick = jest.fn();
+      const onWatchlistToggle = jest.fn();
+
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          genres={genres}
+          viewMode='list'
+          onClick={onClick}
+          onWatchlistToggle={onWatchlistToggle}
+        />,
+      );
+
+      expect(screen.getByAltText('テスト映画のポスター')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'テスト映画' }));
+      expect(onClick).toHaveBeenCalledWith(1);
+    });
+
+    // ジャンルタグが2行に折り返すと行の高さが揃わず、
+    // 1画面に入る件数が1件ぶん減る
+    it('リスト表示ではジャンルタグを出さない', () => {
+      render(
+        <MovieTile movie={createMockMovie()} genres={genres} viewMode='list' />,
+      );
+
+      expect(screen.queryByText('アクション')).not.toBeInTheDocument();
+    });
+  });
+
   // sizes が無いと next/image は「固定サイズの画像」とみなして srcset を
   // 1x/2x の2本しか出さず、186pxの枠へ元画像(500px)が落ちてくる（#982）。
   // 小さい候補（256w/384w）が srcset に並ぶことまで固定する

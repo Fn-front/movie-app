@@ -15,7 +15,17 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    // 見出しは検索語を含むため長い。SP 幅で1行に並べきれないと
+    // 右側が画面外へ切れる（#1015 と同じ事象）
+    flex-wrap: wrap;
     gap: $spacing-3;
+    flex-shrink: 0;
+  }
+
+  &__controls {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
     flex-shrink: 0;
   }
 

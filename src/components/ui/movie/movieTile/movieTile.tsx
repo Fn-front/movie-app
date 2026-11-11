@@ -16,6 +16,11 @@ import { getTMDbPosterUrl } from '@/utils/image';
 import { IMAGE_SIZES, RATING_THRESHOLDS, DISPLAY_LIMITS } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { isMovieReleased } from '@/utils/movie';
+import { cn } from '@/utils/cn';
+import {
+  DEFAULT_MOVIE_VIEW_MODE,
+  type MovieViewMode,
+} from '@/hooks/useMovieViewMode';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
@@ -74,6 +79,14 @@ export interface MovieTileProps {
    * 後続タイルの遅延読み込みを潰さないよう、**先頭数件にだけ**渡すこと。
    */
   eager?: boolean;
+  /**
+   * 表示モード（既定: グリッド）
+   *
+   * `list` では横並びへ組み替え、ジャンルタグだけ落とす。構造は変えない。
+   * タイトル button の ::after によるカード全面の当たり判定（#719）と、
+   * ボタンを入れ子にしない構造をそのまま保つため。
+   */
+  viewMode?: MovieViewMode;
 }
 
 /**
@@ -93,6 +106,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   headingLevel = 3,
   preferDigitalReleaseDate = false,
   eager = false,
+  viewMode = DEFAULT_MOVIE_VIEW_MODE,
 }) {
   const Title = `h${headingLevel}` as const;
 
@@ -140,6 +154,9 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   }, [movie.vote_average]);
 
   const genreNames = useMemo(() => {
+    // リスト行はジャンルタグが2行に折り返すと行の高さが揃わず、
+    // 1画面に入る件数が1件ぶん減る。リストでは出さない（#1014）
+    if (viewMode === 'list') return [];
     if (!genres || !movie.genre_ids || movie.genre_ids.length === 0) {
       return [];
     }
@@ -147,13 +164,20 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       .slice(0, DISPLAY_LIMITS.GENRE_MAX)
       .map((id) => genres[id])
       .filter(Boolean);
-  }, [genres, movie.genre_ids]);
+  }, [genres, movie.genre_ids, viewMode]);
 
   return (
     // カード全体を role="button" にすると、内側のお気に入り等のボタンが
     // インタラクティブ要素の入れ子になり ARIA 上不正になる（axe: nested-interactive）。
     // 代わりにタイトルを本物の button にし、::after でカード全面を当たり判定にする。
-    <Card hoverable noPadding className={styles.c_movie_tile}>
+    <Card
+      hoverable
+      noPadding
+      className={cn(
+        styles.c_movie_tile,
+        viewMode === 'list' && styles['c_movie_tile--list'],
+      )}
+    >
       <div className={styles.c_movie_tile__poster}>
         {posterUrl ? (
           <Image

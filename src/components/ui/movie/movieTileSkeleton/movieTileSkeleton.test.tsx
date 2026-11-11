@@ -30,4 +30,24 @@ describe('MovieTileSkeleton', () => {
       container.querySelector('.c_movie_tile_skeleton__info'),
     ).toBeInTheDocument();
   });
+
+  // リスト表示（#1014）。グリッド用の縦長のまま出すと、1件で画面が
+  // 埋まってしまい読み込み後のレイアウトと大きくずれる
+  describe('表示モード', () => {
+    it('既定ではリスト用のクラスが付かない', () => {
+      const { container } = render(<MovieTileSkeleton count={1} />);
+      expect(
+        container.querySelector('.c_movie_tile_skeleton--list'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('viewMode="list" でリスト用のクラスが付く', () => {
+      const { container } = render(
+        <MovieTileSkeleton count={1} viewMode='list' />,
+      );
+      expect(
+        container.querySelector('.c_movie_tile_skeleton--list'),
+      ).toBeInTheDocument();
+    });
+  });
 });

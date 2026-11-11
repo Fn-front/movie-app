@@ -6,6 +6,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { SearchPage } from './searchPage';
+import { ARIA_LABELS } from '@/constants';
 import type { UseSearchReturn } from './hooks/useSearch';
 import type { UseMovieFilterReturn } from './hooks/useMovieFilter';
 import type { UseGenresReturn } from './hooks/useGenres';
@@ -174,6 +175,17 @@ describe('SearchPage', () => {
     const toggleButton = screen.getByRole('button', { name: /フィルター/ });
     expect(toggleButton).toBeInTheDocument();
     expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  // 表示切替は共通設定（#1014）。この画面にも導線が要る
+  it('表示切替のトグルが表示される', () => {
+    setupDefaultMocks();
+
+    render(<SearchPage />);
+
+    expect(
+      screen.getByRole('button', { name: ARIA_LABELS.SWITCH_TO_LIST_VIEW }),
+    ).toBeInTheDocument();
   });
 
   it('フィルタートグルボタンクリックでaria-expandedが切り替わる', async () => {

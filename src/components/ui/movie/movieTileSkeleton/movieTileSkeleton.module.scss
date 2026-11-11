@@ -5,6 +5,23 @@
   flex-direction: column;
   overflow: hidden;
 
+  // リスト表示（#1014）。MovieTile のリスト行と同じ高さ・同じポスター幅にする
+  &--list {
+    flex-direction: row;
+    align-items: stretch;
+
+    .c_movie_tile_skeleton__poster {
+      // Skeleton は width を inline style で当てるので、
+      // flex-basis で上書きする（横並びでは flex-basis が width より優先される）
+      flex: 0 0 56px;
+    }
+
+    .c_movie_tile_skeleton__info {
+      flex: 1;
+      justify-content: center;
+    }
+  }
+
   &__poster {
     aspect-ratio: 2 / 3;
   }

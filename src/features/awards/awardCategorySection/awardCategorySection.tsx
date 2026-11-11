@@ -8,6 +8,8 @@
 import { memo, useMemo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
+import { useMovieViewMode } from '@/hooks/useMovieViewMode';
+import { cn } from '@/utils/cn';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import type { AwardCategoryData } from '@/features/awards/types';
@@ -77,6 +79,16 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
       };
     }, [category.nominees, getFavoriteInfo]);
 
+    const { viewMode } = useMovieViewMode();
+    // 受賞・ノミネートは並びの定義を共有する（#987）。リストでも揃える
+    const isList = viewMode === 'list';
+    const tilesClassName = isList
+      ? styles['c_award_category__tiles--list']
+      : undefined;
+    const itemClassName = isList
+      ? styles['c_award_category__item--list']
+      : undefined;
+
     // 一覧とラベルを紐づける。同点受賞で複数枚並ぶため、
     // 「受賞」ラベルの隣接だけでは2枚目以降が受賞だと伝わらない
     const sectionId = `category-${awardName}-${category.category}`;
@@ -96,7 +108,10 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
               受賞
             </span>
             <div
-              className={styles.c_award_category__winner_tiles}
+              className={cn(
+                styles.c_award_category__winner_tiles,
+                tilesClassName,
+              )}
               role='list'
               aria-labelledby={winnerLabelId}
             >
@@ -104,7 +119,10 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                 <div
                   key={key}
                   role='listitem'
-                  className={styles.c_award_category__winner_tile}
+                  className={cn(
+                    styles.c_award_category__winner_tile,
+                    itemClassName,
+                  )}
                 >
                   <MovieTile
                     movie={movie}
@@ -116,6 +134,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                     watchlistDisabled={isMovieToggling(movie.id)}
                     onFavoriteToggle={onFavoriteToggle}
                     favoriteDisabled={isFavoriteProcessing(movie.id)}
+                    viewMode={viewMode}
                   />
                   {award.personName && (
                     <p className={styles.c_award_category__person_name}>
@@ -137,7 +156,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
               ノミネート
             </span>
             <div
-              className={styles.c_award_category__grid}
+              className={cn(styles.c_award_category__grid, tilesClassName)}
               role='list'
               aria-labelledby={nomineeLabelId}
             >
@@ -145,7 +164,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                 <div
                   key={key}
                   role='listitem'
-                  className={styles.c_award_category__item}
+                  className={cn(styles.c_award_category__item, itemClassName)}
                 >
                   <MovieTile
                     movie={movie}
@@ -156,6 +175,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                     watchlistDisabled={isMovieToggling(movie.id)}
                     onFavoriteToggle={onFavoriteToggle}
                     favoriteDisabled={isFavoriteProcessing(movie.id)}
+                    viewMode={viewMode}
                   />
                   {award.personName && (
                     <p className={styles.c_award_category__person_name}>

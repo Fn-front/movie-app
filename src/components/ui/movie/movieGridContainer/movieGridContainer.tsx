@@ -10,6 +10,10 @@ import { memo, type ReactNode, type Ref } from 'react';
 import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
 import { Loading } from '@/components/ui/loading/loading';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
+import {
+  DEFAULT_MOVIE_VIEW_MODE,
+  type MovieViewMode,
+} from '@/hooks/useMovieViewMode';
 
 import styles from './movieGridContainer.module.scss';
 
@@ -40,6 +44,13 @@ export interface MovieGridContainerProps {
    * （`usePrependScrollAnchor`）。渡さなければ何も起きない
    */
   gridRef?: Ref<HTMLDivElement>;
+  /**
+   * 表示モード（既定: グリッド）
+   *
+   * 子に渡す `MovieTile` の `viewMode` と必ず揃えること。
+   * ここだけ切り替えても、タイル側はグリッド用の縦並びのままになる
+   */
+  viewMode?: MovieViewMode;
 }
 
 /**
@@ -56,15 +67,22 @@ export const MovieGridContainer = memo<MovieGridContainerProps>(
     hasNextPage = false,
     fetchNextPage,
     gridRef,
+    viewMode = DEFAULT_MOVIE_VIEW_MODE,
   }) {
     const loadMoreRef = useIntersectionObserver(fetchNextPage ?? (() => {}), {
       enabled: hasNextPage && !isFetchingNextPage && !!fetchNextPage,
     });
 
+    // 読み込み中だけグリッドに戻すと、切替直後にレイアウトが二度変わる
+    const containerClassName =
+      viewMode === 'list'
+        ? styles.c_movie_grid_container__list
+        : styles.c_movie_grid_container__grid;
+
     if (isLoading) {
       return (
-        <div className={styles.c_movie_grid_container__grid}>
-          <MovieTileSkeleton count={skeletonCount} />
+        <div className={containerClassName}>
+          <MovieTileSkeleton count={skeletonCount} viewMode={viewMode} />
         </div>
       );
     }
@@ -77,7 +95,7 @@ export const MovieGridContainer = memo<MovieGridContainerProps>(
 
     return (
       <>
-        <div ref={gridRef} className={styles.c_movie_grid_container__grid}>
+        <div ref={gridRef} className={containerClassName}>
           {children}
         </div>
 

@@ -17,6 +17,21 @@
     }
   }
 
+  // リスト表示（#1014）
+  // 1件を1行に積む。グリッドの最小幅（140px）に縛られないので、
+  // 375px 幅でも6件以上が1画面に収まる
+  &__list {
+    display: flex;
+    flex-direction: column;
+    // SP は間隔を詰める。1行あたり4px でも6件目が1画面に収まるかどうかが
+    // 変わる。行の区切りはカードの枠線で足りる
+    gap: $spacing-1;
+
+    @include sm {
+      gap: $spacing-3;
+    }
+  }
+
   &__empty {
     display: flex;
     justify-content: center;

@@ -12,6 +12,7 @@ import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/mov
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
+import { useMovieViewMode } from '@/hooks/useMovieViewMode';
 import { DISPLAY_LIMITS } from '@/constants';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
@@ -47,6 +48,7 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
     handleDelete: handleFavoriteDelete,
     isFavoriteProcessing,
   } = useFavoriteToggle();
+  const { viewMode } = useMovieViewMode();
 
   return (
     <>
@@ -56,6 +58,7 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
         isFetchingNextPage={isFetchingNextPage}
         hasNextPage={hasNextPage}
         fetchNextPage={fetchNextPage}
+        viewMode={viewMode}
       >
         {movies.map((movie, index) => (
           <MovieTile
@@ -71,6 +74,7 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
             onFavoriteToggle={handleFavoriteToggle}
             favoriteDisabled={isFavoriteProcessing(movie.id)}
             preferDigitalReleaseDate={preferDigitalReleaseDate}
+            viewMode={viewMode}
           />
         ))}
       </MovieGridContainer>

@@ -26,10 +26,19 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    // 表示切替を足して1行に並べきれなくなった。折り返さないと見出しが
+    // 1文字ずつ縦に潰れる（320px で確認。#1015 と同じ事象）
+    flex-wrap: wrap;
     gap: $spacing-3;
   }
 
   &__title {
+    // 折り返しの基準を実際の文字幅ではなく 5rem にする。
+    // 375px では見出しが2行になるだけで操作列と同じ行に収まり、
+    // 320px でだけ操作列が下の行へ落ちる（min-width のメディアクエリしか
+    // 無いので、幅ではなく基準サイズで出し分ける）
+    flex: 1 1 5rem;
+    min-width: 0;
     margin: 0;
     font-size: $font-size-xl;
     font-weight: $font-weight-bold;

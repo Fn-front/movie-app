@@ -10,6 +10,7 @@ import { memo } from 'react';
 import { Button } from '@/components/ui/button/button';
 import { Select } from '@/components/ui/select/select';
 import { FilterIcon } from '@/components/icons/filterIcon/filterIcon';
+import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { SORT_OPTIONS } from '@/constants';
 
 import styles from './movieListContent.module.scss';
@@ -44,6 +45,7 @@ export const MovieListToolbar = memo<MovieListToolbarProps>(
       <div className={styles.c_movie_list__toolbar}>
         <h1 className={styles.c_movie_list__title}>{title}</h1>
         <div className={styles.c_movie_list__controls}>
+          <ViewModeToggle />
           <Button
             variant='ghost'
             size='sm'

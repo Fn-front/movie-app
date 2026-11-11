@@ -17,6 +17,85 @@
     transform: scale(0.98);
   }
 
+  // リスト表示（#1014）
+  //
+  // DOM は変えずにレイアウトだけ横並びへ組み替える。タイトル button の
+  // ::after によるカード全面の当たり判定（#719）と、入れ子にしない
+  // ボタン構造をそのまま保てる。
+  &--list {
+    flex-direction: row;
+    align-items: stretch;
+    // 行の高さはポスター（56px ÷ 2 × 3 = 84px）で決まる
+    height: auto;
+
+    .c_movie_tile__poster {
+      // 操作ボタンはポスターの上ではなく行の右端へ出すので、
+      // 絶対配置の基準をカード側（.c_movie_tile）に戻す
+      position: static;
+      flex-shrink: 0;
+      // 56 × 84。1行の高さはここで決まるので、6件を1画面に収めるための値
+      width: 56px;
+    }
+
+    .c_movie_tile__info {
+      height: auto;
+      justify-content: center;
+      // 1行省略したタイトルの min-content 幅でカードから溢れるのを防ぐ
+      // （flex item の min-width は既定が auto）
+      min-width: 0;
+      // 右端の操作ボタン（28px × 2 ＋ 間隔8px × 3）と文字が重ならないよう空ける
+      padding-right: calc($spacing-2 * 3 + 56px);
+    }
+
+    // タイトルは1行に省略する。行数が揃わないと行の高さがばらつき、
+    // 1画面に入る件数が減る。
+    //
+    // `-webkit-line-clamp` は使えない。`__title` は `__info`（flex）の
+    // 子でブロック化されるため `display: -webkit-box` が `flow-root` に
+    // なり、クランプが効かない（Chrome 157 で実測）。
+    // 省略記号は実際に溢れる要素＝ button 側に出す
+    .c_movie_tile__title,
+    .c_movie_tile__title_button {
+      @include text-truncate;
+    }
+
+    .c_movie_tile__footer {
+      // グリッドではカード下端へ寄せているが、リストでは中央寄せにする
+      margin-top: 0;
+    }
+
+    // ポスター基準だった操作ボタンを、行の右端へ横並びで置き直す。
+    // 見た目のサイズ（28px）は変えず、間隔は 8px 以上空ける（#1017）
+    .c_movie_tile__dismiss_button,
+    .c_movie_tile__favorite_button,
+    .c_movie_tile__watchlist_button {
+      top: 50%;
+      bottom: auto;
+      transform: translateY(-50%);
+    }
+
+    .c_movie_tile__watchlist_button {
+      right: $spacing-2;
+    }
+
+    .c_movie_tile__favorite_button {
+      right: calc($spacing-2 * 2 + 28px);
+    }
+
+    .c_movie_tile__dismiss_button {
+      right: calc($spacing-2 * 3 + 56px);
+    }
+
+    .c_movie_tile__revival {
+      // 小さいポスターに収まるよう一回り小さくする
+      top: $spacing-1;
+      left: $spacing-1;
+      height: 16px;
+      padding: 0 $spacing-1;
+      font-size: $font-size-2xs;
+    }
+  }
+
   &__poster {
     position: relative;
     aspect-ratio: 2 / 3;

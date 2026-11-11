@@ -3,10 +3,12 @@
  */
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
+    replace: mockReplace,
   }),
 }));
 
@@ -91,7 +93,7 @@ describe('LoginPromptModal', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('ログインボタンでcloseとrouter.pushが呼ばれる', async () => {
+  it('ログインボタンでcloseとrouter.replaceが呼ばれる', async () => {
     const user = userEvent.setup();
     mockLoginPromptState.isOpen = true;
 
@@ -100,6 +102,7 @@ describe('LoginPromptModal', () => {
     await user.click(screen.getByRole('button', { name: 'ログイン' }));
 
     expect(mockLoginPromptState.close).toHaveBeenCalled();
-    expect(mockPush).toHaveBeenCalledWith('/auth/signin');
+    // モーダルが積んだ履歴エントリを食わせるため replace（#1043）
+    expect(mockReplace).toHaveBeenCalledWith('/auth/signin');
   });
 });

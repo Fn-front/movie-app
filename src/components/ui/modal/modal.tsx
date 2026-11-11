@@ -4,11 +4,54 @@
 
 'use client';
 
-import { type ReactNode, memo, useCallback, useEffect, useRef } from 'react';
+import {
+  type ReactNode,
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 
 import { ARIA_LABELS } from '@/constants';
 import { useOverlayHistory } from '@/hooks/useOverlayHistory';
+
+/**
+ * モーダルの中から「閉じると同時に URL を変える」ことを伝えるための口。
+ *
+ * 畳む処理は非同期なので、申告が無いと後から届く back が router の
+ * 更新を打ち消す（#1043）。モーダルの外では何もしない
+ */
+interface ModalNavigation {
+  /** モーダル内からの遷移を replace にすべきか（自分のエントリが積まれているか） */
+  shouldReplaceNavigation: boolean;
+  /** 閉じるのと同時に router で URL を変えることを伝える */
+  notifyNavigating: () => void;
+}
+
+const ModalNavigationContext = createContext<ModalNavigation>({
+  shouldReplaceNavigation: false,
+  notifyNavigating: () => {},
+});
+
+/**
+ * モーダルを閉じるのと同時に router で URL を変えるとき、その直前に呼ぶ。
+ *
+ * @example
+ * ```tsx
+ * const { notifyNavigating } = useModalNavigation();
+ * const handleApply = () => {
+ *   notifyNavigating();
+ *   onApply(values); // 内部で router.replace しつつモーダルを閉じる
+ * };
+ * ```
+ */
+export function useModalNavigation() {
+  return useContext(ModalNavigationContext);
+}
 import { cn } from '@/utils/cn';
 
 import styles from './modal.module.scss';
@@ -112,18 +155,14 @@ export const Modal = memo<ModalProps>(function Modal({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  const { notifyDismissed } = useOverlayHistory(open, handleHistoryClose);
+  const { shouldReplaceNavigation, notifyNavigating } = useOverlayHistory(
+    open,
+    handleHistoryClose,
+  );
 
-  const handleOpenChange = useCallback(
-    (newOpen: boolean) => {
-      // ここに来る false は Radix の閉じる操作（× / Esc / 外側クリック）。
-      // アプリ側が open を落とす経路は通らないので、履歴を畳んでよいのはここだけ
-      if (!newOpen) {
-        notifyDismissed();
-      }
-      onOpenChange(newOpen);
-    },
-    [onOpenChange, notifyDismissed],
+  const navigationValue = useMemo(
+    () => ({ shouldReplaceNavigation, notifyNavigating }),
+    [shouldReplaceNavigation, notifyNavigating],
   );
 
   // 開く直前にフォーカスされていた要素を覚えておき、閉じたときにそこへ戻す。
@@ -169,7 +208,7 @@ export const Modal = memo<ModalProps>(function Modal({
   );
 
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.c_modal__overlay} />
         <Dialog.Content
@@ -231,7 +270,9 @@ export const Modal = memo<ModalProps>(function Modal({
               )}
             </div>
           )}
-          {children}
+          <ModalNavigationContext.Provider value={navigationValue}>
+            {children}
+          </ModalNavigationContext.Provider>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

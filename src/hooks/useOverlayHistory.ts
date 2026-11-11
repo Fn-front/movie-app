@@ -12,7 +12,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * 履歴エントリに載せる所有者トークンのキー。
@@ -61,6 +61,64 @@ let isListening = false;
  * 必ず1つ前が存在し `back()` が空振りしない。
  */
 let pendingSelfBacks = 0;
+
+/**
+ * 閉じたオーバーレイが残した、まだ畳んでいないエントリのトークン。
+ *
+ * **`history.back()` を即座に呼んではいけない。** back は非同期で、
+ * 呼んでから解決するまでの間に `pushState` されたエントリは捨てられる。
+ * 「閉じるのと同時に別のオーバーレイが開く」経路（ドロワー → ログイン誘導、
+ * ドロワー → 公開カレンダー、カレンダー → 映画詳細）では、React が
+ * **cleanup を先に、新しい effect を後に**走らせるため、素直に畳むと
+ * 新しいオーバーレイのエントリが消える。戻るとページごと離脱してしまい、
+ * #1026 が直した問題がそのまま戻る（実測で確認）。
+ *
+ * そこで畳むのを1マイクロタスク遅らせる。その間に新しいオーバーレイが
+ * 開いたら、そちらが**このエントリを引き継ぐ**（下記 `adoptPendingEntry`）。
+ * 引き継がれなければ予定どおり畳む。
+ */
+const pendingFolds: string[] = [];
+
+/**
+ * 畳む予定のエントリを引き継ぐ。
+ *
+ * 引き継げた場合は `true` を返す。呼び出し側は `pushState` せず、
+ * `replaceState` で自分のトークンに書き換えるだけでよい
+ */
+function adoptPendingEntry(): boolean {
+  if (pendingFolds.pop() === undefined) {
+    return false;
+  }
+
+  // 予約していた戻り1回分を返上する
+  pendingSelfBacks -= 1;
+  return true;
+}
+
+/** 引き継がれなかったエントリを畳む */
+function flushPendingFolds(): void {
+  while (pendingFolds.length > 0) {
+    const token = pendingFolds.pop();
+
+    // 最前面が当のエントリでなければ触らない。ルーターが遷移した後か、
+    // 別のオーバーレイが上に積まれている
+    if (window.history.state?.[OVERLAY_STATE_KEY] !== token) {
+      pendingSelfBacks -= 1;
+      continue;
+    }
+
+    window.history.back();
+
+    // back は非同期。この時点では最前面がまだ変わっていないので、
+    // 残りのトークンを続けて判定しても正しく比較できない。
+    // 1コミットで2つ以上のオーバーレイが畳まれる経路は無い
+    break;
+  }
+
+  // 畳まなかったぶんの予約を返上する
+  pendingSelfBacks -= pendingFolds.length;
+  pendingFolds.length = 0;
+}
 
 /**
  * 戻る操作で最前面のオーバーレイだけを閉じる。
@@ -113,21 +171,50 @@ function stopListening(): void {
   isListening = false;
 }
 
-/** 自分が積んだエントリを1つ畳む */
-function foldOwnEntry(): void {
+/**
+ * 自分が積んだエントリを畳む予定に入れる。
+ *
+ * 実際に畳むのはマイクロタスクの後。同じコミットで開く
+ * オーバーレイがあれば、そちらが引き継いで畳まれない
+ */
+function scheduleFold(token: string): void {
+  pendingFolds.push(token);
+  // 実際に back を呼ぶのは後だが、予約はここで立てる。
+  // そうしないと stopListening() が「自分の戻りは未着なし」と誤認して
+  // 購読を外し、後から届く popstate を読み飛ばせなくなる
   pendingSelfBacks += 1;
-  window.history.back();
+  queueMicrotask(flushPendingFolds);
 }
 
 /** {@link useOverlayHistory} の戻り値 */
 export interface OverlayHistoryHandlers {
   /**
-   * 「ユーザーがオーバーレイを閉じた」ことを伝える。
+   * オーバーレイの中から画面遷移するとき、`push` ではなく `replace` を使うか。
    *
-   * ×・Esc・オーバーレイ外クリックのように**オーバーレイ自身の閉じる操作**で
-   * 閉じたときだけ呼ぶこと。呼ばれた場合に限り、積んだ履歴エントリを畳む。
+   * 自分のエントリが積まれているあいだだけ `true`。そこから `push` すると
+   * **エントリが遷移の下に埋まり、戻るが空振りする**（#1043）。`replace` なら
+   * 自分のエントリが遷移に置き換わり、戻ると元のページへ出られる。
+   *
+   * ⚠️ `open` と同値にしてはいけない。エントリが無いときに `replace` すると
+   * 置き換わるのは**利用者の実ページのエントリ**で、履歴が1つ失われる。
+   *
+   * @example
+   * ```tsx
+   * <Link href={href} replace={shouldReplaceNavigation}>…</Link>
+   * ```
    */
-  notifyDismissed: () => void;
+  shouldReplaceNavigation: boolean;
+  /**
+   * 「閉じるのと同時に router で URL を変える」ことを伝える。
+   *
+   * 畳む処理（`history.back()`）は**非同期**なので、閉じた直後に
+   * `router.replace` が走る経路では back が後から届いてその更新を
+   * 取り消してしまう（フィルターの「適用」で実測）。
+   *
+   * 既定は「閉じたら畳む」なので、**この経路だけ**明示的に申告すること。
+   * 呼ぶのは router を呼ぶ直前。
+   */
+  notifyNavigating: () => void;
 }
 
 /**
@@ -135,23 +222,25 @@ export interface OverlayHistoryHandlers {
  *
  * @param open オーバーレイが開いているか
  * @param onClose 戻る操作で閉じるときに呼ばれる。呼び出し側は `open` を false にすること
- * @returns ユーザー操作で閉じたことを伝えるハンドラ
+ * @returns オーバーレイ内からの遷移の仕方
  *
  * @example
  * ```tsx
- * const { notifyDismissed } = useOverlayHistory(open, handleHistoryClose);
- *
- * // Radix が閉じようとしたとき（× / Esc / 外側クリック）だけ通知する
- * const handleOpenChange = (next: boolean) => {
- *   if (!next) notifyDismissed();
- *   onOpenChange(next);
- * };
+ * const { shouldReplaceNavigation } = useOverlayHistory(open, handleClose);
  * ```
  */
 export function useOverlayHistory(
   open: boolean,
   onClose: () => void,
 ): OverlayHistoryHandlers {
+  /**
+   * 自分のエントリが実際に積まれているか。
+   *
+   * `open` では代用できない。effect が走る前や、履歴を扱えない環境では
+   * 開いていてもエントリが無い
+   */
+  const [hasEntry, setHasEntry] = useState(false);
+
   // onClose の参照が変わるたびに履歴を積み直さないよう、ref 経由で読む
   const onCloseRef = useRef(onClose);
 
@@ -160,18 +249,17 @@ export function useOverlayHistory(
   }, [onClose]);
 
   /**
-   * ユーザー操作で閉じたか。
+   * 閉じるのと同時にルーターが URL を変えるか。
    *
-   * アプリ側が `open` を false にして閉じる場合（フィルターの「適用」で
-   * URL を更新する、ナビゲーションリンクで遷移する等）に履歴を畳むと、
-   * 非同期の `history.back()` がその遷移を取り消してしまう。実際に
-   * `include_regions` の反映・ログイン誘導・カレンダー・キャスト遷移が壊れた。
-   * そのため「自分で畳んでよいのは、ユーザーが閉じたときだけ」に限定する。
+   * トークン一致の判定だけでは足りない。`router.replace` は cleanup の
+   * **後**に history へ適用されるため、cleanup の時点では自分のエントリが
+   * まだ最前面に見える（実測）。そのまま畳むと、後から届く back が
+   * replace を打ち消す
    */
-  const dismissedRef = useRef(false);
+  const navigatingRef = useRef(false);
 
-  const notifyDismissed = useCallback(() => {
-    dismissedRef.current = true;
+  const notifyNavigating = useCallback(() => {
+    navigatingRef.current = true;
   }, []);
 
   useEffect(() => {
@@ -179,7 +267,7 @@ export function useOverlayHistory(
       return;
     }
 
-    dismissedRef.current = false;
+    navigatingRef.current = false;
 
     const entry: OverlayEntry = {
       close: () => onCloseRef.current(),
@@ -190,32 +278,59 @@ export function useOverlayHistory(
     openOverlays.push(entry);
     startListening();
 
-    window.history.pushState(
-      { ...window.history.state, [OVERLAY_STATE_KEY]: token },
-      '',
-      window.location.href,
-    );
+    // 直前に閉じたオーバーレイのエントリがまだ畳まれずに残っていれば、
+    // 新しく積まずにそれを引き継ぐ。積んでしまうと、畳むための
+    // 非同期の back がこちらのエントリを巻き添えにする（#1043）
+    const nextState = {
+      ...window.history.state,
+      [OVERLAY_STATE_KEY]: token,
+    };
+
+    if (adoptPendingEntry()) {
+      window.history.replaceState(nextState, '', window.location.href);
+    } else {
+      window.history.pushState(nextState, '', window.location.href);
+    }
+
+    /*
+      エントリを積んだ事実を描画へ反映するには、ここで state を更新するしか
+      ない。描画中に history は触れないし、ref では再描画が起きないため
+      `<Link replace={…}>` に正しい値が渡らない。`open` で代用すると、
+      エントリが無いときに replace して利用者の実ページを消す（#1043）
+    */
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setHasEntry(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     return () => {
+      setHasEntry(false);
+
       const index = openOverlays.indexOf(entry);
 
       if (index !== -1) {
         openOverlays.splice(index, 1);
       }
 
-      // 畳むかどうかを先に決める。
+      // 畳むかどうかを先に決める。判断材料は2つだけ。
+      //
       // - popped: 戻るで外れた分。ここで畳むと1つ余計に戻ってしまう
-      // - !dismissed: 遷移やURL更新に伴う close。畳むとその遷移を取り消す
-      // - トークン不一致: 最前面は自分のエントリではない。
-      //   入れ子の内側が畳まずに残した場合や、ルーターが遷移した場合。
-      //   ここで畳むと他人のエントリや遷移を消してしまう
+      // - トークン一致: 最前面が自分のエントリであること。
+      //   一致しないのは「入れ子の内側が畳まずに残した」か
+      //   「ルーターが遷移して state ごと差し替わった」場合で、
+      //   畳むと他人のエントリや遷移を消してしまう
+      //
+      // 以前は「ユーザーが閉じたときだけ」という条件も課していたが、
+      // アプリ側が open を false にする閉じ方（フィルターの適用、ナビ
+      // リンク、評価モーダルの登録…）でエントリが残り、戻るが空振り
+      // した（#1043）。遷移の取り消しはトークン一致の判定で防げるため、
+      // 閉じ方では分けない
       const shouldFold =
         !entry.popped &&
-        dismissedRef.current &&
+        !navigatingRef.current &&
         window.history.state?.[OVERLAY_STATE_KEY] === token;
 
       if (shouldFold) {
-        foldOwnEntry();
+        scheduleFold(token);
       }
 
       // 購読の解除は畳む判断の後。先に外すと、自分で起こした戻りの
@@ -224,5 +339,5 @@ export function useOverlayHistory(
     };
   }, [open]);
 
-  return { notifyDismissed };
+  return { shouldReplaceNavigation: hasEntry, notifyNavigating };
 }

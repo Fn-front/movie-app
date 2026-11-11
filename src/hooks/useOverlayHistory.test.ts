@@ -42,6 +42,8 @@ function installAsyncBack(): jest.SpyInstance {
 /** キューに積まれた popstate を流す */
 async function flushAsyncBack(): Promise<void> {
   await act(async () => {
+    // 畳む判断はマイクロタスク後に確定する（引き継ぎの猶予）
+    await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
@@ -61,7 +63,11 @@ describe('useOverlayHistory', () => {
     // アンマウント時にも履歴を畳むことがあるので、先に unmount させてから
     // キューに残った自分の戻りを消化する（RTL の自動 cleanup はこの
     // afterEach より後に走るため、順序を自分で決める必要がある）
-    cleanup();
+    // act で包まないと unmount の cleanup が後のタスクへ回り、
+    // 畳むための back がこの afterEach の外で走って次のテストへ漏れる
+    await act(async () => {
+      cleanup();
+    });
     await flushAsyncBack();
     backSpy.mockRestore();
   });
@@ -97,7 +103,7 @@ describe('useOverlayHistory', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('戻って閉じたときは履歴を二重に消費しない', () => {
+  it('戻って閉じたときは履歴を二重に消費しない', async () => {
     const onClose = jest.fn();
     const { rerender } = renderHook(
       ({ open }) => useOverlayHistory(open, onClose),
@@ -107,33 +113,57 @@ describe('useOverlayHistory', () => {
     dispatchPopState();
     // onClose を受けて呼び出し側が閉じる
     act(() => rerender({ open: false }));
+    await flushAsyncBack();
 
     expect(backSpy).not.toHaveBeenCalled();
   });
 
-  it('× やEscで閉じたときは積んだエントリを自分で畳む', () => {
-    const { result, rerender } = renderHook(
-      ({ open }) => useOverlayHistory(open, jest.fn()),
-      { initialProps: { open: true } },
-    );
-
-    act(() => result.current.notifyDismissed());
-    act(() => rerender({ open: false }));
-
-    expect(backSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('アプリ側が閉じたときは畳まない（URL更新や遷移を取り消さない）', () => {
-    // フィルターの「適用」のように、閉じると同時に router が URL を変える経路。
-    // ここで畳むと非同期の history.back() がその更新を打ち消す
+  it('アプリ側が閉じた場合も畳む（閉じ方で分けない）', async () => {
+    // 以前は「ユーザーが閉じたときだけ」に限っていたため、フィルターの
+    // 「適用」やナビリンクのようにアプリ側が open を落とす経路で
+    // エントリが残り、戻るが空振りした（#1043）
     const { rerender } = renderHook(
       ({ open }) => useOverlayHistory(open, jest.fn()),
       { initialProps: { open: true } },
     );
 
     act(() => rerender({ open: false }));
+    await flushAsyncBack();
+
+    expect(backSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('遷移を申告したときは畳まない（router の URL 更新を取り消さない）', async () => {
+    // フィルターの「適用」のように、閉じるのと同時に router.replace が走る経路。
+    // router の履歴操作は cleanup の後に効くため、cleanup 時点では自分の
+    // エントリがまだ最前面に見える。そのまま畳むと後から届く back が
+    // その更新を打ち消す（実測で確認）
+    const { result, rerender } = renderHook(
+      ({ open }) => useOverlayHistory(open, jest.fn()),
+      { initialProps: { open: true } },
+    );
+
+    act(() => result.current.notifyNavigating());
+    act(() => rerender({ open: false }));
+    await flushAsyncBack();
 
     expect(backSpy).not.toHaveBeenCalled();
+  });
+
+  it('開き直すと遷移の申告は持ち越さない', async () => {
+    const { result, rerender } = renderHook(
+      ({ open }) => useOverlayHistory(open, jest.fn()),
+      { initialProps: { open: true } },
+    );
+
+    act(() => result.current.notifyNavigating());
+    act(() => rerender({ open: false }));
+    act(() => rerender({ open: true }));
+    act(() => rerender({ open: false }));
+    await flushAsyncBack();
+
+    // 2回目は普通に閉じただけなので畳む
+    expect(backSpy).toHaveBeenCalledTimes(1);
   });
 
   it('入れ子のとき、戻るは最前面のオーバーレイだけを閉じる', () => {
@@ -161,7 +191,6 @@ describe('useOverlayHistory', () => {
       { initialProps: { open: true } },
     );
 
-    act(() => inner.result.current.notifyDismissed());
     act(() => inner.rerender({ open: false }));
     await flushAsyncBack();
 
@@ -176,7 +205,6 @@ describe('useOverlayHistory', () => {
     const first = renderHook(({ open }) => useOverlayHistory(open, jest.fn()), {
       initialProps: { open: true },
     });
-    act(() => first.result.current.notifyDismissed());
     act(() => first.rerender({ open: false }));
     await flushAsyncBack();
 
@@ -197,7 +225,6 @@ describe('useOverlayHistory', () => {
     });
     renderHook(() => useOverlayHistory(true, jest.fn()));
 
-    act(() => outer.result.current.notifyDismissed());
     act(() => outer.rerender({ open: false }));
     await flushAsyncBack();
 
@@ -213,26 +240,113 @@ describe('useOverlayHistory', () => {
       '/movies/now-showing',
     );
 
-    const { result, rerender } = renderHook(
+    const { rerender } = renderHook(
       ({ open }) => useOverlayHistory(open, jest.fn()),
-      { initialProps: { open: false } },
+      { initialProps: { open: true } },
     );
 
-    act(() => result.current.notifyDismissed());
+    // 自分のトークンではなく、前回の残骸が最前面にある状態に戻す
+    window.history.replaceState(
+      { __overlayHistory: 'overlay-stale' },
+      '',
+      '/movies/now-showing',
+    );
+
     act(() => rerender({ open: false }));
     await flushAsyncBack();
 
     expect(backSpy).not.toHaveBeenCalled();
   });
 
-  it('単独のとき、× で閉じた後の戻るで余計に閉じない', async () => {
+  /**
+   * 閉じるのと同時に別のオーバーレイが開く経路。
+   *
+   * `history.back()` は非同期で、呼んでから解決するまでの間に `pushState`
+   * されたエントリは捨てられる。素直に畳むと新しいオーバーレイのエントリが
+   * 消え、戻るとページごと離脱する（#1026 の回帰）。
+   * 畳むのを1マイクロタスク遅らせ、その間に開いた側が引き継ぐ
+   */
+  describe('エントリの引き継ぎ', () => {
+    it('閉じるのと同時に開くと、積まずに引き継いで back も呼ばない', async () => {
+      const pushSpy = jest.spyOn(window.history, 'pushState');
+      const replaceSpy = jest.spyOn(window.history, 'replaceState');
+
+      const first = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn()),
+        { initialProps: { open: true } },
+      );
+      expect(pushSpy).toHaveBeenCalledTimes(1);
+
+      pushSpy.mockClear();
+      replaceSpy.mockClear();
+
+      // 同じコミットで「1つ目が閉じ、2つ目が開く」を再現する
+      act(() => {
+        first.rerender({ open: false });
+        renderHook(() => useOverlayHistory(true, jest.fn()));
+      });
+      await flushAsyncBack();
+
+      expect(replaceSpy).toHaveBeenCalledTimes(1);
+      expect(pushSpy).not.toHaveBeenCalled();
+      expect(backSpy).not.toHaveBeenCalled();
+
+      pushSpy.mockRestore();
+      replaceSpy.mockRestore();
+    });
+  });
+
+  /**
+   * オーバーレイ内からの遷移を `replace` にしてよいかの判定。
+   *
+   * `open` で代用すると、エントリが無いときに replace して
+   * **利用者の実ページ**を消す（実測で確認）
+   */
+  describe('shouldReplaceNavigation', () => {
+    it('閉じているあいだは false', () => {
+      const { result } = renderHook(() => useOverlayHistory(false, jest.fn()));
+
+      expect(result.current.shouldReplaceNavigation).toBe(false);
+    });
+
+    /**
+     * `open` で代用すると、エントリを積む effect が走る前の描画でも
+     * true になる。その瞬間に遷移すると置き換わるのは実ページのエントリ
+     */
+    it('開いた直後の最初の描画はまだ false で、エントリを積んでから true になる', () => {
+      const seen: boolean[] = [];
+
+      renderHook(() => {
+        const handlers = useOverlayHistory(true, jest.fn());
+        seen.push(handlers.shouldReplaceNavigation);
+        return handlers;
+      });
+
+      expect(seen[0]).toBe(false);
+      expect(seen[seen.length - 1]).toBe(true);
+    });
+
+    it('閉じたら false に戻る', async () => {
+      const { result, rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn()),
+        { initialProps: { open: true } },
+      );
+      expect(result.current.shouldReplaceNavigation).toBe(true);
+
+      act(() => rerender({ open: false }));
+      await flushAsyncBack();
+
+      expect(result.current.shouldReplaceNavigation).toBe(false);
+    });
+  });
+
+  it('単独のとき、閉じた後の戻るで余計に閉じない', async () => {
     const onClose = jest.fn();
-    const { result, rerender } = renderHook(
+    const { rerender } = renderHook(
       ({ open }) => useOverlayHistory(open, onClose),
       { initialProps: { open: true } },
     );
 
-    act(() => result.current.notifyDismissed());
     act(() => rerender({ open: false }));
     await flushAsyncBack();
 
@@ -252,17 +366,15 @@ describe('useOverlayHistory', () => {
     expect(window.history.length).toBe(before + 1);
   });
 
-  it('ユーザーが閉じていても、ルーターが先に遷移していれば畳まない', () => {
-    const { result, unmount } = renderHook(() =>
-      useOverlayHistory(true, jest.fn()),
-    );
+  it('ルーターが先に遷移していれば畳まない', async () => {
+    const { unmount } = renderHook(() => useOverlayHistory(true, jest.fn()));
 
-    act(() => result.current.notifyDismissed());
     // ルーターが遷移し、自分が積んだエントリはもう最前面ではない
     act(() => {
       window.history.pushState({ router: 'next' }, '', '/person/500');
     });
     act(() => unmount());
+    await flushAsyncBack();
 
     expect(backSpy).not.toHaveBeenCalled();
   });

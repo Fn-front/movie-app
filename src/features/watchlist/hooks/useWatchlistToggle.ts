@@ -171,6 +171,14 @@ interface OptimisticStore {
   version: number;
 }
 
+/**
+ * データが変わるキャッシュイベント。
+ *
+ * 観測者の増減（observerAdded 等）まで拾うと、画面を開くだけで
+ * 全消費者が再描画される
+ */
+const CACHE_DATA_EVENTS = new Set(['added', 'removed', 'updated']);
+
 const optimisticStores = new WeakMap<object, OptimisticStore>();
 
 function getOptimisticStore(queryClient: object): OptimisticStore {
@@ -213,11 +221,12 @@ function rollbackCaches(
 /**
  * ウォッチリスト追加/削除トグル カスタムフック
  *
- * useWatchlist()を呼ばず、既存のウォッチリストキャッシュを直接参照することで
- * 重複リクエストを防止する。楽観的UI更新は全キャッシュ + ローカルstateで管理。
+ * useWatchlist() を呼ばず、既存のウォッチリストキャッシュを直接参照することで
+ * 重複リクエストを防止する。
  *
- * queryClient.getQueriesData()はリアクティブではないため、
- * ローカルstateで楽観的なトグル状態を追跡し、即座にUIへ反映する。
+ * queryClient.getQueriesData() はリアクティブでないため、キャッシュと楽観状態の
+ * 両方を useSyncExternalStore で購読する。楽観状態は QueryClient 単位で共有し、
+ * 詳細モーダルでの操作がタイル側のインスタンスにも伝わるようにしている（#1009）。
  */
 export function useWatchlistToggle(): UseWatchlistToggleReturn {
   const queryClient = useQueryClient();
@@ -251,6 +260,14 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
           if (event.query.queryKey[0] !== watchlistKeys.all[0]) {
             return;
           }
+          // 観測者の増減など、データが変わらないイベントで再描画しない
+          if (!CACHE_DATA_EVENTS.has(event.type)) {
+            return;
+          }
+          // ⚠️ 通知するだけでは再描画されない。useSyncExternalStore は
+          // 通知のたびに getSnapshot() を読み直し、Object.is で同値なら
+          // 打ち切る。スナップショット（version）を進めること
+          store.version += 1;
           onStoreChange();
         });
 
@@ -334,8 +351,16 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
     onMutate: async (id: string) => {
       await queryClient.cancelQueries({ queryKey: watchlistKeys.all });
 
+      // 対象の映画IDは mutation ごとに運ぶ。ref で持つと、別の作品を
+      // 続けて操作したときに上書きされ、**違う作品の楽観状態を消し残す**。
+      // 楽観状態は QueryClient 単位で共有しているので、取り残すと
+      // アプリ全体がリロードまで誤った表示になる
+      const tmdbMovieId = getWatchlistItemsFromCache(queryClient).find(
+        (item) => item.id === id,
+      )?.tmdb_movie_id;
+
       const previousDataMap = optimisticRemoveFromAllCaches(queryClient, id);
-      return { previousDataMap };
+      return { previousDataMap, tmdbMovieId };
     },
     onError: (_error, _id, context) => {
       if (context?.previousDataMap) {
@@ -347,16 +372,19 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         variant: 'error',
       });
     },
-    onSettled: () => {
-      // 対象の映画IDは ref から取る
-      if (togglingIdRef.current !== null) {
+    onSettled: (_data, _error, _id, context) => {
+      if (context?.tmdbMovieId !== undefined) {
         const settledStore = getOptimisticStore(queryClient);
-        settledStore.removes.delete(togglingIdRef.current);
+        settledStore.removes.delete(context.tmdbMovieId);
         notifyOptimisticChange(settledStore);
       }
       queryClient.invalidateQueries({ queryKey: watchlistKeys.all });
     },
   });
+
+  // mutation オブジェクトは毎描画で作り直されるが、mutate 自体は安定している
+  const addMutate = addMutation.mutate;
+  const removeMutate = removeMutation.mutate;
 
   const isInWatchlist = useCallback(
     (tmdbMovieId: number) => {
@@ -368,7 +396,31 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       const items = getWatchlistItemsFromCache(queryClient);
       return items.some((item) => item.tmdb_movie_id === tmdbMovieId);
     },
+    // version は値としては使わないが、**参照を変えるために必須**。
+    // 呼び出し側に useMemo(() => isInWatchlist(id), [isInWatchlist, id]) と
+    // 書かれたものがあり（movieDetailContent.tsx）、外すと値が凍る。
+    // ESLint は「不要」と言うが、消すと E2E 1本だけが落ちる壊れ方をする
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [isAuthenticated, store, queryClient, version],
+  );
+
+  /**
+   * 参照が変わらない版の判定。
+   *
+   * `isInWatchlist` は version に依存して毎回作り直される（呼び出し側が
+   * 参照の変化で再計算する契約のため）。それを toggleWatchlist が使うと
+   * **こちらの参照も毎回変わり**、タイルへ関数として渡している
+   * `React.memo` が全件で無効になる
+   */
+  const checkInWatchlist = useCallback(
+    (tmdbMovieId: number) => {
+      if (!isAuthenticated) return false;
+      if (store.adds.has(tmdbMovieId)) return true;
+      if (store.removes.has(tmdbMovieId)) return false;
+      const items = getWatchlistItemsFromCache(queryClient);
+      return items.some((item) => item.tmdb_movie_id === tmdbMovieId);
+    },
+    [isAuthenticated, store, queryClient],
   );
 
   const getWatchlistId = useCallback(
@@ -392,14 +444,14 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       // トーストと同じ位置に揃えるため。通信失敗分も計上される代わりに、
       // 成功時送信で必要になる togglingIdRef 経由のID解決を避けられる
       // （連続操作で ref が上書きされ、別作品のIDで送る事故が起きうる）
-      if (isInWatchlist(movie.id)) {
+      if (checkInWatchlist(movie.id)) {
         const watchlistId = getWatchlistId(movie.id);
         if (watchlistId) {
           // 楽観状態を更新（即座にUIへ反映。他のインスタンスにも伝わる）
           store.removes.add(movie.id);
           store.adds.delete(movie.id);
           notifyOptimisticChange(store);
-          removeMutation.mutate(watchlistId);
+          removeMutate(watchlistId);
           sendEvent(ANALYTICS_EVENTS.WATCHLIST_REMOVE, { movie_id: movie.id });
           toast({
             title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
@@ -411,7 +463,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         store.adds.add(movie.id);
         store.removes.delete(movie.id);
         notifyOptimisticChange(store);
-        addMutation.mutate({
+        addMutate({
           tmdb_movie_id: movie.id,
           title: movie.title,
           poster_path: movie.poster_path,
@@ -427,10 +479,10 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
     [
       isAuthenticated,
       openLoginPrompt,
-      isInWatchlist,
+      checkInWatchlist,
       getWatchlistId,
-      addMutation,
-      removeMutation,
+      addMutate,
+      removeMutate,
       toast,
       store,
     ],

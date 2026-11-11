@@ -1,4 +1,12 @@
-import { act, renderHook } from '@testing-library/react';
+/**
+ * useOverlayHistory のテスト
+ *
+ * ⚠️ 実タイマー前提。`history.back()` の非同期性こそが検証対象（#1041）なので、
+ * fake timers は使わない。このファイルに fake timers を持ち込むと、
+ * popstate が流れず無言で素通りする。
+ */
+
+import { act, cleanup, renderHook } from '@testing-library/react';
 
 import { useOverlayHistory } from './useOverlayHistory';
 
@@ -15,17 +23,46 @@ function dispatchPopState(): void {
   });
 }
 
+/**
+ * `history.back()` が実ブラウザでするのと同じことを再現する。
+ *
+ * ブラウザは back() の呼び出しをキューに積み、**非同期に** popstate を出す。
+ * ここを同期の no-op にしてしまうと「自分が起こした戻りが自分のリスナーに
+ * 届く」経路が一度も走らず、入れ子の取り違え（#1039 と同種の見落とし）を
+ * 検出できない。
+ */
+function installAsyncBack(): jest.SpyInstance {
+  return jest.spyOn(window.history, 'back').mockImplementation(() => {
+    setTimeout(() => {
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }, 0);
+  });
+}
+
+/** キューに積まれた popstate を流す */
+async function flushAsyncBack(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 describe('useOverlayHistory', () => {
   let backSpy: jest.SpyInstance;
 
   beforeEach(() => {
     window.history.replaceState(null, '', '/movies/now-showing');
     // 実際に戻すと jsdom の履歴ポインタが動いてテスト間で干渉するため、
-    // 「エントリを畳んだか」は呼び出しの有無で見る
-    backSpy = jest.spyOn(window.history, 'back').mockImplementation(() => {});
+    // ポインタは動かさずに popstate だけを実ブラウザと同じ非同期で再現する
+    backSpy = installAsyncBack();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // フックはモジュールスコープに状態を持つため、テスト間で持ち越さない。
+    // アンマウント時にも履歴を畳むことがあるので、先に unmount させてから
+    // キューに残った自分の戻りを消化する（RTL の自動 cleanup はこの
+    // afterEach より後に走るため、順序を自分で決める必要がある）
+    cleanup();
+    await flushAsyncBack();
     backSpy.mockRestore();
   });
 
@@ -110,6 +147,96 @@ describe('useOverlayHistory', () => {
 
     expect(closeInner).toHaveBeenCalledTimes(1);
     expect(closeOuter).not.toHaveBeenCalled();
+  });
+
+  it('入れ子のとき、内側を × で閉じても外側は閉じない', async () => {
+    // 内側の cleanup が履歴を畳むために呼ぶ history.back() は非同期。
+    // その popstate を自分のリスナーが拾うと、最前面＝外側を閉じてしまう
+    const closeOuter = jest.fn();
+    const closeInner = jest.fn();
+
+    renderHook(() => useOverlayHistory(true, closeOuter));
+    const inner = renderHook(
+      ({ open }) => useOverlayHistory(open, closeInner),
+      { initialProps: { open: true } },
+    );
+
+    act(() => inner.result.current.notifyDismissed());
+    act(() => inner.rerender({ open: false }));
+    await flushAsyncBack();
+
+    expect(backSpy).toHaveBeenCalledTimes(1);
+    expect(closeOuter).not.toHaveBeenCalled();
+  });
+
+  it('× で閉じた後に開き直しても、次の戻るを飲み込まない', async () => {
+    // 畳むための history.back() は非同期なので、その popstate を
+    // 読み飛ばす仕組みが要る。ただし読み飛ばしが次の「本物の戻る」にまで
+    // 効いてしまうと、オーバーレイが閉じなくなる
+    const first = renderHook(({ open }) => useOverlayHistory(open, jest.fn()), {
+      initialProps: { open: true },
+    });
+    act(() => first.result.current.notifyDismissed());
+    act(() => first.rerender({ open: false }));
+    await flushAsyncBack();
+
+    const onCloseSecond = jest.fn();
+    renderHook(() => useOverlayHistory(true, onCloseSecond));
+
+    dispatchPopState();
+
+    expect(onCloseSecond).toHaveBeenCalledTimes(1);
+  });
+
+  it('自分が積んだエントリが最前面でなければ畳まない', async () => {
+    // 入れ子の内側が積んだエントリが最前面に残っているとき、外側が
+    // 閉じても畳んではいけない（他人のエントリを消してしまう）。
+    // 目印を真偽値で持つと所有者を区別できず、取り違える
+    const outer = renderHook(({ open }) => useOverlayHistory(open, jest.fn()), {
+      initialProps: { open: true },
+    });
+    renderHook(() => useOverlayHistory(true, jest.fn()));
+
+    act(() => outer.result.current.notifyDismissed());
+    act(() => outer.rerender({ open: false }));
+    await flushAsyncBack();
+
+    expect(backSpy).not.toHaveBeenCalled();
+  });
+
+  it('前回の目印が履歴に残っていても、それを自分のものとして畳まない', async () => {
+    // Next のルーターは state を引き継いで replaceState するため、
+    // オーバーレイを開いたままリロードすると目印だけが残りうる
+    window.history.replaceState(
+      { __overlayHistory: 'overlay-stale' },
+      '',
+      '/movies/now-showing',
+    );
+
+    const { result, rerender } = renderHook(
+      ({ open }) => useOverlayHistory(open, jest.fn()),
+      { initialProps: { open: false } },
+    );
+
+    act(() => result.current.notifyDismissed());
+    act(() => rerender({ open: false }));
+    await flushAsyncBack();
+
+    expect(backSpy).not.toHaveBeenCalled();
+  });
+
+  it('単独のとき、× で閉じた後の戻るで余計に閉じない', async () => {
+    const onClose = jest.fn();
+    const { result, rerender } = renderHook(
+      ({ open }) => useOverlayHistory(open, onClose),
+      { initialProps: { open: true } },
+    );
+
+    act(() => result.current.notifyDismissed());
+    act(() => rerender({ open: false }));
+    await flushAsyncBack();
+
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('onClose の参照が変わっても履歴を積み直さない', () => {

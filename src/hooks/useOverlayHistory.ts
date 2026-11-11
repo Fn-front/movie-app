@@ -15,12 +15,26 @@
 import { useCallback, useEffect, useRef } from 'react';
 
 /**
- * 自分が積んだエントリであることの目印。
+ * 履歴エントリに載せる所有者トークンのキー。
  *
- * ルーターの遷移で閉じた場合に、間違って `history.back()` して遷移を
- * 取り消さないための判定に使う。
+ * 真偽値だと「誰かのオーバーレイが積んだ」ことしか分からず、入れ子では
+ * **他人のエントリを自分のものとして畳んでしまう**（例: 映画詳細の上で
+ * 評価モーダルを開き、評価モーダルを閉じずに詳細を × で閉じると、
+ * 詳細が評価モーダルのエントリを消す）。エントリごとに一意の値を入れ、
+ * 「最前面が自分のものか」を厳密に判定する。
+ *
+ * ルーターが遷移すると state ごと差し替わるため、遷移に伴う close で
+ * 間違って `history.back()` して遷移を取り消すことも防げる。
  */
 const OVERLAY_STATE_KEY = '__overlayHistory';
+
+let nextOverlayToken = 0;
+
+/** エントリ固有のトークンを採番する（`crypto` に依存しない） */
+function createOverlayToken(): string {
+  nextOverlayToken += 1;
+  return `overlay-${nextOverlayToken}`;
+}
 
 /** 開いているオーバーレイ。末尾が最前面 */
 interface OverlayEntry {
@@ -34,6 +48,21 @@ const openOverlays: OverlayEntry[] = [];
 let isListening = false;
 
 /**
+ * 自分が積んだエントリを畳むために呼んだ `history.back()` のうち、
+ * まだ popstate が届いていない数。
+ *
+ * `history.back()` は**非同期**なので、入れ子のときに残っているリスナーが
+ * その popstate を拾い、「ユーザーが戻った」と誤解して別のオーバーレイ
+ * （＝外側）を閉じてしまう。自分で起こした分はここで数えて読み飛ばす。
+ *
+ * 「popstate が来ずカウンタが詰まる」心配は要らない。畳むのは
+ * 最前面が**自分のトークンを持つエントリ**のときだけで、それは
+ * `pushState` で作った同一ドキュメント・同一URLのエントリなので、
+ * 必ず1つ前が存在し `back()` が空振りしない。
+ */
+let pendingSelfBacks = 0;
+
+/**
  * 戻る操作で最前面のオーバーレイだけを閉じる。
  *
  * 入れ子（映画詳細の上に予告動画）のとき、各フックが個別に popstate を
@@ -41,6 +70,15 @@ let isListening = false;
  * スタックの最後だけに伝える。
  */
 function handlePopState(): void {
+  if (pendingSelfBacks > 0) {
+    // 自分が畳むために起こした戻り。オーバーレイには伝えない。
+    // 最後の1つを消化し終え、開いているオーバーレイも無ければ購読を外す
+    // （cleanup 側は未着の戻りがあるあいだ外さずに残している）
+    pendingSelfBacks -= 1;
+    stopListening();
+    return;
+  }
+
   const top = openOverlays[openOverlays.length - 1];
 
   if (!top) {
@@ -60,13 +98,25 @@ function startListening(): void {
   isListening = true;
 }
 
+/**
+ * 購読を外す。
+ *
+ * 自分で起こした戻りが未着のあいだは外さない。外すと popstate を
+ * 読み飛ばせず、`pendingSelfBacks` が減らないまま次の戻るを飲み込む。
+ */
 function stopListening(): void {
-  if (!isListening || openOverlays.length > 0) {
+  if (!isListening || openOverlays.length > 0 || pendingSelfBacks > 0) {
     return;
   }
 
   window.removeEventListener('popstate', handlePopState);
   isListening = false;
+}
+
+/** 自分が積んだエントリを1つ畳む */
+function foldOwnEntry(): void {
+  pendingSelfBacks += 1;
+  window.history.back();
 }
 
 /** {@link useOverlayHistory} の戻り値 */
@@ -135,12 +185,13 @@ export function useOverlayHistory(
       close: () => onCloseRef.current(),
       popped: false,
     };
+    const token = createOverlayToken();
 
     openOverlays.push(entry);
     startListening();
 
     window.history.pushState(
-      { ...window.history.state, [OVERLAY_STATE_KEY]: true },
+      { ...window.history.state, [OVERLAY_STATE_KEY]: token },
       '',
       window.location.href,
     );
@@ -152,24 +203,24 @@ export function useOverlayHistory(
         openOverlays.splice(index, 1);
       }
 
+      // 畳むかどうかを先に決める。
+      // - popped: 戻るで外れた分。ここで畳むと1つ余計に戻ってしまう
+      // - !dismissed: 遷移やURL更新に伴う close。畳むとその遷移を取り消す
+      // - トークン不一致: 最前面は自分のエントリではない。
+      //   入れ子の内側が畳まずに残した場合や、ルーターが遷移した場合。
+      //   ここで畳むと他人のエントリや遷移を消してしまう
+      const shouldFold =
+        !entry.popped &&
+        dismissedRef.current &&
+        window.history.state?.[OVERLAY_STATE_KEY] === token;
+
+      if (shouldFold) {
+        foldOwnEntry();
+      }
+
+      // 購読の解除は畳む判断の後。先に外すと、自分で起こした戻りの
+      // popstate を読み飛ばせず、次の戻るを飲み込んでしまう
       stopListening();
-
-      if (entry.popped) {
-        // 戻るで外れた分なので、ここで畳むと1つ余計に戻ってしまう
-        return;
-      }
-
-      if (!dismissedRef.current) {
-        // 遷移やURL更新に伴う close。畳むとその遷移を取り消してしまう
-        return;
-      }
-
-      // ルーターが新しいエントリを積んでいたら、最前面はもう自分ではない
-      if (!window.history.state?.[OVERLAY_STATE_KEY]) {
-        return;
-      }
-
-      window.history.back();
     };
   }, [open]);
 

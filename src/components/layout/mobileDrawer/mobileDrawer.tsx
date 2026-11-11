@@ -38,6 +38,7 @@ import {
 } from '@/constants';
 import { getInitial } from '@/utils/user';
 import { useNavAuthGuard } from '@/hooks/useNavAuthGuard';
+import { useOverlayHistory } from '@/hooks/useOverlayHistory';
 import { logout } from '@/lib/auth/logout';
 
 import styles from './mobileDrawer.module.scss';
@@ -116,6 +117,25 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
 
   const initial = useMemo(() => getInitial(userName), [userName]);
 
+  // 戻る操作で「閉じる」ようにする。履歴に載せないとページごと離脱する（#1026）
+  const handleHistoryClose = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  const { notifyDismissed } = useOverlayHistory(open, handleHistoryClose);
+
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      // Radix の閉じる操作のときだけ履歴を畳む（useOverlayHistory 参照）。
+      // ナビゲーションリンクで閉じる経路はここを通らない
+      if (!next) {
+        notifyDismissed();
+      }
+      onOpenChange(next);
+    },
+    [onOpenChange, notifyDismissed],
+  );
+
   const navItems = useMemo(
     () =>
       MOBILE_NAV_ITEMS.map((item) => ({
@@ -173,7 +193,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
   const isAdmin = isAuthenticated && session?.user?.role === USER_ROLE.ADMIN;
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.c_mobile_drawer__overlay} />
         <Dialog.Content

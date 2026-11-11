@@ -54,6 +54,81 @@ test.describe('モバイルナビゲーション', () => {
     await expect(page.getByText('メニュー')).not.toBeVisible();
   });
 
+  test('ドロワーを開いた状態で戻るとドロワーだけが閉じる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/upcoming');
+
+    await page.getByRole('button', { name: 'メニューを開く' }).click();
+    await expect(page.getByText('メニュー')).toBeVisible();
+
+    // Android の戻るはオーバーレイを閉じる操作として使われる。
+    // 履歴に載っていないとページごと離脱してしまう（#1026）
+    await page.goBack();
+
+    await expect(page.getByText('メニュー')).not.toBeVisible();
+    await expect(page).toHaveURL(/\/movies\/upcoming$/);
+  });
+
+  test('映画詳細を開いた状態で戻るとダイアログだけが閉じる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+
+    // `movie_tile` だけだとスケルトン（c_movie_tile_skeleton）にも当たるため、
+    // 詳細を開く実体のボタンで絞る
+    const movieTile = page
+      .locator('button[class*="movie_tile__title_button"]')
+      .first();
+    const isTileVisible = await movieTile
+      .waitFor({ state: 'visible', timeout: 10000 })
+      .then(() => true)
+      .catch(() => false);
+
+    test.skip(!isTileVisible, '映画データが存在しないためスキップ');
+
+    await movieTile.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 15000 });
+
+    await page.goBack();
+
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(/\/movies\/now-showing$/);
+  });
+
+  test('ダイアログを閉じてから戻ると前のページへ遷移する', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/upcoming');
+    await page.goto('/movies/now-showing');
+
+    // `movie_tile` だけだとスケルトン（c_movie_tile_skeleton）にも当たるため、
+    // 詳細を開く実体のボタンで絞る
+    const movieTile = page
+      .locator('button[class*="movie_tile__title_button"]')
+      .first();
+    const isTileVisible = await movieTile
+      .waitFor({ state: 'visible', timeout: 10000 })
+      .then(() => true)
+      .catch(() => false);
+
+    test.skip(!isTileVisible, '映画データが存在しないためスキップ');
+
+    await movieTile.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 15000 });
+
+    // × で閉じた場合は、積んだ履歴エントリを自分で畳む必要がある。
+    // 残したままだと戻るが1回空振りする（#1026）
+    await dialog.getByRole('button', { name: '閉じる' }).click();
+    await expect(dialog).toBeHidden();
+
+    await page.goBack();
+
+    await expect(page).toHaveURL(/\/movies\/upcoming$/);
+  });
+
   test('デスクトップ幅ではハンバーガーメニューが非表示になる', async ({
     authenticatedPage: page,
   }) => {

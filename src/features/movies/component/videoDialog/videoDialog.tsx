@@ -5,7 +5,7 @@
 
 'use client';
 
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { IoCloseOutline, IoLogoYoutube } from 'react-icons/io5';
 
@@ -15,6 +15,7 @@ import {
   EXTERNAL_URLS,
   VIDEO_DIALOG_LABELS,
 } from '@/constants';
+import { useOverlayHistory } from '@/hooks/useOverlayHistory';
 import type { Video } from '@/lib/types';
 
 import styles from './videoDialog.module.scss';
@@ -42,8 +43,26 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
   videos,
   movieTitle,
 }) {
+  // 映画詳細の上に重なるため、戻る1回でこちらだけが閉じる必要がある（#1026）
+  const handleHistoryClose = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  const { notifyDismissed } = useOverlayHistory(open, handleHistoryClose);
+
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      // Radix の閉じる操作のときだけ履歴を畳む（useOverlayHistory 参照）
+      if (!next) {
+        notifyDismissed();
+      }
+      onOpenChange(next);
+    },
+    [onOpenChange, notifyDismissed],
+  );
+
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.c_video_dialog__overlay} />
         <Dialog.Content

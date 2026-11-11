@@ -8,6 +8,7 @@ import { type ReactNode, memo, useCallback, useEffect, useRef } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 
 import { ARIA_LABELS } from '@/constants';
+import { useOverlayHistory } from '@/hooks/useOverlayHistory';
 import { cn } from '@/utils/cn';
 
 import styles from './modal.module.scss';
@@ -106,11 +107,23 @@ export const Modal = memo<ModalProps>(function Modal({
   size = 'md',
   showCloseButton = true,
 }) {
+  // 戻る操作で「閉じる」ようにする。履歴に載せないとページごと離脱する（#1026）
+  const handleHistoryClose = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  const { notifyDismissed } = useOverlayHistory(open, handleHistoryClose);
+
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
+      // ここに来る false は Radix の閉じる操作（× / Esc / 外側クリック）。
+      // アプリ側が open を落とす経路は通らないので、履歴を畳んでよいのはここだけ
+      if (!newOpen) {
+        notifyDismissed();
+      }
       onOpenChange(newOpen);
     },
-    [onOpenChange],
+    [onOpenChange, notifyDismissed],
   );
 
   // 開く直前にフォーカスされていた要素を覚えておき、閉じたときにそこへ戻す。

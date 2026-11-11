@@ -23,9 +23,7 @@
   &__list {
     display: flex;
     flex-direction: column;
-    // SP は間隔を詰める。1行あたり4px でも6件目が1画面に収まるかどうかが
-    // 変わる。行の区切りはカードの枠線で足りる
-    gap: $spacing-1;
+    gap: $spacing-2;
 
     @include sm {
       gap: $spacing-3;

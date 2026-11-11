@@ -234,7 +234,7 @@ describe('AwardsPage', () => {
     render(<AwardsPage />);
 
     expect(
-      screen.getByRole('button', { name: ARIA_LABELS.SWITCH_TO_LIST_VIEW }),
+      screen.getByRole('button', { name: ARIA_LABELS.LIST_VIEW }),
     ).toBeInTheDocument();
   });
 

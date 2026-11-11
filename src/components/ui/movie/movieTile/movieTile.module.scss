@@ -19,22 +19,22 @@
 
   // リスト表示（#1014）
   //
-  // DOM は変えずにレイアウトだけ横並びへ組み替える。タイトル button の
-  // ::after によるカード全面の当たり判定（#719）と、入れ子にしない
-  // ボタン構造をそのまま保てる。
-  &--list {
+  // 自身のクラスを重ねて詳細度を (0,2,0) にする。`.c_card` の
+  // `flex-direction: column` と同点だと、勝ち負けが CSS Modules の
+  // 出力順に左右されて本番ビルドで反転しうる
+  &#{&}--list {
     flex-direction: row;
     align-items: stretch;
-    // 行の高さはポスター（56px ÷ 2 × 3 = 84px）で決まる
     height: auto;
 
     .c_movie_tile__poster {
-      // 操作ボタンはポスターの上ではなく行の右端へ出すので、
-      // 絶対配置の基準をカード側（.c_movie_tile）に戻す
-      position: static;
+      // 行の高さはポスター（56 ÷ 2 × 3 = 84px）で決める。
+      // stretch のままだとクロスサイズが確定値になって aspect-ratio を
+      // 上回り、ルートフォントを大きくした環境で縦に伸びる（実測で
+      // 16px 指定時に 56×102 まで伸びた）
+      align-self: flex-start;
       flex-shrink: 0;
-      // 56 × 84。1行の高さはここで決まるので、6件を1画面に収めるための値
-      width: 56px;
+      width: $movie-tile-list-poster-width;
     }
 
     .c_movie_tile__info {
@@ -43,8 +43,6 @@
       // 1行省略したタイトルの min-content 幅でカードから溢れるのを防ぐ
       // （flex item の min-width は既定が auto）
       min-width: 0;
-      // 右端の操作ボタン（28px × 2 ＋ 間隔8px × 3）と文字が重ならないよう空ける
-      padding-right: calc($spacing-2 * 3 + 56px);
     }
 
     // タイトルは1行に省略する。行数が揃わないと行の高さがばらつき、
@@ -60,30 +58,20 @@
     }
 
     .c_movie_tile__footer {
-      // グリッドではカード下端へ寄せているが、リストでは中央寄せにする
+      // グリッドはカード下端へ寄せるが、リストは横幅をそのまま使うので
+      // space-between だと日付と評価が画面幅ぶん離れる
+      justify-content: flex-start;
+      gap: $spacing-3;
       margin-top: 0;
     }
 
-    // ポスター基準だった操作ボタンを、行の右端へ横並びで置き直す。
-    // 見た目のサイズ（28px）は変えず、間隔は 8px 以上空ける（#1017）
+    // 操作ボタンはカードの実要素として並べる。絶対配置のままだと
+    // ボタンの数に応じた右余白を `__info` 側で言い当てる必要があり、
+    // 3つ目（興味なし）でタイトルに重なる
     .c_movie_tile__dismiss_button,
     .c_movie_tile__favorite_button,
     .c_movie_tile__watchlist_button {
-      top: 50%;
-      bottom: auto;
-      transform: translateY(-50%);
-    }
-
-    .c_movie_tile__watchlist_button {
-      right: $spacing-2;
-    }
-
-    .c_movie_tile__favorite_button {
-      right: calc($spacing-2 * 2 + 28px);
-    }
-
-    .c_movie_tile__dismiss_button {
-      right: calc($spacing-2 * 3 + 56px);
+      position: static;
     }
 
     .c_movie_tile__revival {
@@ -94,6 +82,19 @@
       padding: 0 $spacing-1;
       font-size: $font-size-2xs;
     }
+  }
+
+  // リスト行の右端に置く操作ボタン列
+  &__list_actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    // 間隔は 8px 以上空ける（#1017 の誤爆対策）
+    gap: $spacing-2;
+    padding-right: $spacing-2;
+    // タイトル button の ::after（カード全面の当たり判定）より上に置く
+    position: relative;
+    z-index: 1;
   }
 
   &__poster {

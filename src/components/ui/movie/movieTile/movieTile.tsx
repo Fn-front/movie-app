@@ -82,9 +82,10 @@ export interface MovieTileProps {
   /**
    * 表示モード（既定: グリッド）
    *
-   * `list` では横並びへ組み替え、ジャンルタグだけ落とす。構造は変えない。
+   * `list` では横並びへ組み替え、ジャンルタグを落とし、操作ボタンを
+   * タイトルの後ろへ移す（視覚順と DOM 順を揃えるため）。
    * タイトル button の ::after によるカード全面の当たり判定（#719）と、
-   * ボタンを入れ子にしない構造をそのまま保つため。
+   * ボタンを入れ子にしない構造はそのまま保つ。
    */
   viewMode?: MovieViewMode;
 }
@@ -166,6 +167,48 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       .filter(Boolean);
   }, [genres, movie.genre_ids, viewMode]);
 
+  const isList = viewMode === 'list';
+
+  /**
+   * 操作ボタン群
+   *
+   * グリッドはポスターに重ねるので `__poster` の中、リストは行の右端に置くので
+   * `__info` の後ろに出す。**視覚順と DOM 順（＝ Tab 順・読み上げ順）を
+   * 揃えるため**で、リストでも `__poster` の中に置くと「右端のボタン →
+   * 左のタイトル」と毎行逆走する（WCAG 1.3.2 / 2.4.3）
+   */
+  const actionButtons = (
+    <>
+      {onDismiss && (
+        <div className={styles.c_movie_tile__dismiss_button}>
+          <DismissButton onClick={handleDismiss} disabled={dismissDisabled} />
+        </div>
+      )}
+      {onFavoriteToggle && canFavorite && (
+        <div className={styles.c_movie_tile__favorite_button}>
+          <FavoriteButton
+            favorite={movie.favorite ?? null}
+            onClick={handleFavoriteToggle}
+            disabled={favoriteDisabled}
+          />
+        </div>
+      )}
+      {onWatchlistToggle && (
+        <div className={styles.c_movie_tile__watchlist_button}>
+          <WatchlistAddButton
+            isInWatchlist={isInWatchlist}
+            onClick={handleWatchlistToggle}
+            disabled={watchlistDisabled}
+          />
+        </div>
+      )}
+    </>
+  );
+
+  const hasActions = Boolean(
+    onDismiss || (onFavoriteToggle && canFavorite) || onWatchlistToggle,
+  );
+
   return (
     // カード全体を role="button" にすると、内側のお気に入り等のボタンが
     // インタラクティブ要素の入れ子になり ARIA 上不正になる（axe: nested-interactive）。
@@ -175,7 +218,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       noPadding
       className={cn(
         styles.c_movie_tile,
-        viewMode === 'list' && styles['c_movie_tile--list'],
+        isList && styles['c_movie_tile--list'],
       )}
     >
       <div className={styles.c_movie_tile__poster}>
@@ -185,7 +228,13 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             alt={`${movie.title}のポスター`}
             width={IMAGE_SIZES.POSTER.WIDTH}
             height={IMAGE_SIZES.POSTER.HEIGHT}
-            sizes={IMAGE_SIZES.POSTER.SIZES}
+            // リストの枠は 56px しかない。グリッド用の 190px のままだと
+            // 3倍以上大きい候補を取りに行く（#982 で sizes を入れた意図）
+            sizes={
+              isList
+                ? `${IMAGE_SIZES.CALENDAR_POSTER.WIDTH}px`
+                : IMAGE_SIZES.POSTER.SIZES
+            }
             loading={eager ? 'eager' : 'lazy'}
             className={styles.c_movie_tile__image}
           />
@@ -195,29 +244,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
         {movie.is_revival && (
           <span className={styles.c_movie_tile__revival}>リバイバル</span>
         )}
-        {onDismiss && (
-          <div className={styles.c_movie_tile__dismiss_button}>
-            <DismissButton onClick={handleDismiss} disabled={dismissDisabled} />
-          </div>
-        )}
-        {onFavoriteToggle && canFavorite && (
-          <div className={styles.c_movie_tile__favorite_button}>
-            <FavoriteButton
-              favorite={movie.favorite ?? null}
-              onClick={handleFavoriteToggle}
-              disabled={favoriteDisabled}
-            />
-          </div>
-        )}
-        {onWatchlistToggle && (
-          <div className={styles.c_movie_tile__watchlist_button}>
-            <WatchlistAddButton
-              isInWatchlist={isInWatchlist}
-              onClick={handleWatchlistToggle}
-              disabled={watchlistDisabled}
-            />
-          </div>
-        )}
+        {!isList && actionButtons}
       </div>
       <div className={styles.c_movie_tile__info}>
         <Title className={styles.c_movie_tile__title}>
@@ -251,6 +278,9 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
           )}
         </div>
       </div>
+      {isList && hasActions && (
+        <div className={styles.c_movie_tile__list_actions}>{actionButtons}</div>
+      )}
     </Card>
   );
 });

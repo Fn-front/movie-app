@@ -157,7 +157,7 @@ describe('MovieListContent', () => {
         <MovieListContent title='公開予定' movieList={createMockMovieList()} />,
       );
       expect(
-        screen.getByRole('button', { name: ARIA_LABELS.SWITCH_TO_LIST_VIEW }),
+        screen.getByRole('button', { name: ARIA_LABELS.LIST_VIEW }),
       ).toBeInTheDocument();
     });
   });

@@ -633,7 +633,7 @@ describe('MovieTile', () => {
       ).toBeInTheDocument();
     });
 
-    it('リスト表示でもタイトル・ポスター・操作ボタンは同じように使える', async () => {
+    it('リスト表示でもタイトル・ポスター・操作ボタンが同じように使える', async () => {
       const user = userEvent.setup();
       const onClick = jest.fn();
       const onWatchlistToggle = jest.fn();
@@ -652,6 +652,61 @@ describe('MovieTile', () => {
 
       await user.click(screen.getByRole('button', { name: 'テスト映画' }));
       expect(onClick).toHaveBeenCalledWith(1);
+
+      await user.click(
+        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+      );
+      expect(onWatchlistToggle).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * 視覚順（タイトル → 操作ボタン）と DOM 順を揃える
+     *
+     * リストでも操作ボタンをポスターの中に置くと、Tab と読み上げが
+     * 1行ごとに「右端のボタン → 左のタイトル」と逆走する（WCAG 1.3.2 / 2.4.3）
+     */
+    it('リスト表示では操作ボタンがタイトルより後ろに並ぶ', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          viewMode='list'
+          onClick={jest.fn()}
+          onWatchlistToggle={jest.fn()}
+          onFavoriteToggle={jest.fn()}
+        />,
+      );
+
+      const names = screen
+        .getAllByRole('button')
+        .map((el) => el.getAttribute('aria-label') ?? el.textContent);
+
+      expect(names).toEqual([
+        'テスト映画',
+        'お気に入りに追加',
+        'ウォッチリストに追加',
+      ]);
+    });
+
+    it('グリッド表示では操作ボタンがタイトルより前に並ぶ', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onClick={jest.fn()}
+          onWatchlistToggle={jest.fn()}
+          onFavoriteToggle={jest.fn()}
+        />,
+      );
+
+      const names = screen
+        .getAllByRole('button')
+        .map((el) => el.getAttribute('aria-label') ?? el.textContent);
+
+      // グリッドはボタンがポスターの上＝タイトルより視覚的に前
+      expect(names).toEqual([
+        'お気に入りに追加',
+        'ウォッチリストに追加',
+        'テスト映画',
+      ]);
     });
 
     // ジャンルタグが2行に折り返すと行の高さが揃わず、
@@ -662,6 +717,16 @@ describe('MovieTile', () => {
       );
 
       expect(screen.queryByText('アクション')).not.toBeInTheDocument();
+    });
+
+    // 枠は 56px しかないのに 190px のままだと3倍以上の候補を取りに行く
+    it('リスト表示ではポスターの sizes を枠に合わせる', () => {
+      render(<MovieTile movie={createMockMovie()} viewMode='list' />);
+
+      expect(screen.getByAltText('テスト映画のポスター')).toHaveAttribute(
+        'sizes',
+        `${IMAGE_SIZES.CALENDAR_POSTER.WIDTH}px`,
+      );
     });
   });
 

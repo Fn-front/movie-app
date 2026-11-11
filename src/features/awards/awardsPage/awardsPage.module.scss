@@ -10,6 +10,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    // 表示切替を足した分、狭い幅で1行に並べきれない（#1015 と同じ事象）
+    flex-wrap: wrap;
     gap: $spacing-3;
   }
 

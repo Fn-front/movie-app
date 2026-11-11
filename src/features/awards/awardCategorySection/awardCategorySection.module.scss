@@ -89,15 +89,8 @@
     @include sm {
       gap: $spacing-3;
     }
-  }
 
-  // リストでは行の高さをポスターが決めるので、グリッド用の高さ100%を外す
-  &__item--list {
-    height: auto;
-
-    > :first-child {
-      flex: none;
-    }
+    // `&__winner_tiles, &__grid` と同詳細度なので、必ずその後ろに置くこと
   }
 
   // MovieTile は高さ100%のため、そのまま置くと親の高さを決めてしまい
@@ -110,6 +103,16 @@
 
     > :first-child {
       flex: 1;
+    }
+  }
+
+  // リストでは行の高さをポスターが決めるので、グリッド用の高さ100%を外す。
+  // `&__winner_tile, &__item` と同詳細度なので、必ずその後ろに置くこと
+  &__item--list {
+    height: auto;
+
+    > :first-child {
+      flex: none;
     }
   }
 

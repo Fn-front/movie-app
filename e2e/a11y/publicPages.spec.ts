@@ -80,4 +80,19 @@ test.describe('アクセシビリティ（未認証ページ）', () => {
       });
     }
   }
+
+  /**
+   * リスト表示（#1014）
+   *
+   * 表示モードは localStorage に持つため、未設定だと axe は常にグリッドだけを
+   * 検査する。リストは DOM の並びも操作ボタンの位置も変わるので別に回す。
+   */
+  test('公開中の映画（リスト表示） - dark', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('movie-app:movie-view-mode', 'list');
+    });
+    await gotoWithTheme(page, '/movies/now-showing', 'dark');
+
+    await expectNoA11yViolations(page, '公開中の映画（リスト表示） / dark');
+  });
 });

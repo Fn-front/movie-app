@@ -40,7 +40,9 @@
 
   &__title {
     margin: 0;
-    flex-shrink: 0;
+    // 見出しは検索語を含むので長くなる。縮めないと折り返しても
+    // 見出し自体が画面外へ切れたまま（横スクロールも無いので読めない）
+    min-width: 0;
     font-size: $font-size-xl;
     font-weight: $font-weight-bold;
     color: $text-primary;

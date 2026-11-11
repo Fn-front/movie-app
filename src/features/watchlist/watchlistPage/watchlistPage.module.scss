@@ -15,6 +15,9 @@
     align-items: center;
     justify-content: space-between;
     gap: $spacing-3;
+    // 見出しもコントロールも flex-shrink: 0（さらに __sort は固定幅）で
+    // 縮む余地が無いため、SP 幅では折り返さないと右端がクリップされる（#1015）
+    flex-wrap: wrap;
   }
 
   &__title_group {

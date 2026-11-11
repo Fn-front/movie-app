@@ -4,13 +4,20 @@
 .c_app_layout {
   display: flex;
   flex-direction: column;
-  // 定高を維持する。&__body / &__main の内部スクロールと、
-  // サイドバー（.c_sidebar → .c_watchlist_panel の height: 100% チェーン）が
-  // これに依存している。
+  // SP はドキュメントをスクロールさせる（#1027）。
+  // 内部スクロールだと履歴のスクロール位置が復元されない（ブラウザも
+  // Next.js もルートスクローラーしか復元しないため）。
   // 同意バナーは position: fixed なので、その分だけ縮めてフッターが
   // 覆われないようにする。バナーが無いときは calc(100vh - 0px) で現状と同一
-  height: calc(100vh - var(--cookie-banner-height, 0px));
+  min-height: calc(100vh - var(--cookie-banner-height, 0px));
   background-color: $background-default;
+
+  // lg 以上は定高を維持する。&__body / &__main の内部スクロールと、
+  // サイドバー（.c_sidebar → .c_watchlist_panel の height: 100% チェーン）が
+  // これに依存している。
+  @include lg {
+    height: calc(100vh - var(--cookie-banner-height, 0px));
+  }
 
   // スキップリンク（本文へ移動）
   // 普段は画面外に逃がし、キーボードでフォーカスしたときだけ左上に表示する
@@ -48,8 +55,12 @@
   &__body {
     display: flex;
     flex: 1;
-    min-height: 0;
-    overflow: hidden;
+
+    // lg 以上だけ内部スクロールにする（SP はドキュメントスクロール。#1027）
+    @include lg {
+      min-height: 0;
+      overflow: hidden;
+    }
   }
 
   // サイドバー（lg未満で非表示）
@@ -65,7 +76,6 @@
   // メインコンテンツ
   &__main {
     flex: 1;
-    overflow-y: auto;
     padding: $spacing-3;
     max-width: 1440px;
     margin: 0 auto;
@@ -75,7 +85,9 @@
       padding: $spacing-4;
     }
 
+    // lg 以上だけ内部スクロールにする（SP はドキュメントスクロール。#1027）
     @include lg {
+      overflow-y: auto;
       padding: $spacing-6;
     }
   }

@@ -146,3 +146,62 @@ test.describe('モバイルナビゲーション', () => {
     ).toBeVisible();
   });
 });
+
+/**
+ * SP 幅ではドキュメントをスクロールさせる（#1027）。
+ *
+ * `main` の内部スクロールだと、ブラウザも Next.js も履歴のスクロール位置を
+ * 復元できない（復元対象はルートスクローラーのため）。1ページ20件で
+ * 約5画面分あるので、戻るたびに先頭へ飛ぶと探し直しになる。
+ */
+test.describe('SP幅のスクロール', () => {
+  const SCROLL_TARGET = 1200;
+
+  test('一覧がドキュメントスクロールになっている', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    await page.waitForLoadState('networkidle');
+
+    await page.evaluate((top) => window.scrollTo(0, top), SCROLL_TARGET);
+
+    await expect
+      .poll(() => page.evaluate(() => Math.round(window.scrollY)))
+      .toBeGreaterThan(0);
+  });
+
+  test('ドロワーから別画面へ移動して戻るとスクロール位置が復元される', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    await page.waitForLoadState('networkidle');
+    await page.evaluate((top) => window.scrollTo(0, top), SCROLL_TARGET);
+    await expect
+      .poll(() => page.evaluate(() => Math.round(window.scrollY)))
+      .toBeGreaterThan(0);
+
+    // アプリ内のクライアント遷移で確認する。ハードリロードを挟むと
+    // 復元前に本文が揃わず、ブラウザが復元できないため区別すること。
+    //
+    // ⚠️ メニューボタンは sticky ヘッダーの中にある。Playwright の click は
+    // 対象を「フロー上の位置」まで見せようとするため、sticky 要素だと
+    // ドキュメントが先頭まで戻ってしまう（実ブラウザのタップでは起きない）。
+    // ここだけ DOM の click で開く。ドロワー自体は position: fixed なので
+    // 中のリンクは通常の click で問題ない。
+    await page.evaluate(() => {
+      document
+        .querySelector<HTMLButtonElement>('button[class*=mobile_menu_button]')
+        ?.click();
+    });
+    await page.getByRole('link', { name: '受賞作品' }).click();
+    await page.waitForURL('/awards');
+
+    await page.goBack();
+    await page.waitForURL('/movies/now-showing');
+
+    // 厳密な一致はレイアウト差で揺れるため、先頭へ戻っていないことを見る
+    await expect
+      .poll(() => page.evaluate(() => Math.round(window.scrollY)))
+      .toBeGreaterThan(SCROLL_TARGET / 2);
+  });
+});

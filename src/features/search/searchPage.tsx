@@ -15,6 +15,7 @@ import { useSearch } from '@/features/search/hooks/useSearch';
 import { useMovieFilter } from '@/features/search/hooks/useMovieFilter';
 import { useGenres } from '@/features/search/hooks/useGenres';
 import { Button } from '@/components/ui/button/button';
+import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { cn } from '@/utils/cn';
 
 import styles from './searchPage.module.scss';
@@ -56,17 +57,20 @@ export const SearchPage = memo(function SearchPage() {
         <h1 className={styles.c_search_page__title}>
           {query ? `「${query}」の検索結果` : '検索結果'}
         </h1>
-        <Button
-          variant='secondary'
-          size='sm'
-          onClick={handleFilterToggle}
-          className={styles.c_search_page__filter_toggle}
-          aria-expanded={isFilterOpen}
-          aria-controls='search-filter'
-        >
-          <IoFilterOutline />
-          フィルター
-        </Button>
+        <div className={styles.c_search_page__controls}>
+          <ViewModeToggle />
+          <Button
+            variant='secondary'
+            size='sm'
+            onClick={handleFilterToggle}
+            className={styles.c_search_page__filter_toggle}
+            aria-expanded={isFilterOpen}
+            aria-controls='search-filter'
+          >
+            <IoFilterOutline />
+            フィルター
+          </Button>
+        </div>
       </div>
 
       {/*

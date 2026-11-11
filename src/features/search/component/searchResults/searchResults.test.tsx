@@ -6,14 +6,16 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { SearchResults } from './searchResults';
+import { STORAGE_KEYS } from '@/constants';
 import type { SearchResultsProps } from './searchResults';
 import type { Movie } from '@/lib/types';
 
 // --- Mocks ---
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
-  MovieTile: jest.fn(({ movie, onClick }) => (
+  MovieTile: jest.fn(({ movie, onClick, viewMode }) => (
     <div
       data-testid={`movie-tile-${movie.id}`}
+      data-view-mode={viewMode}
       onClick={() => onClick?.(movie.id)}
     >
       {movie.title}
@@ -134,6 +136,47 @@ const renderSearchResults = (overrides?: Partial<SearchResultsProps>) => {
 describe('SearchResults', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // 表示モードは localStorage に残るので、テスト間で引きずらせない
+    localStorage.clear();
+  });
+
+  // 表示切替は共通設定（#1014）
+  describe('表示モード', () => {
+    it('既定ではグリッドの並びで出す', () => {
+      const { container } = renderSearchResults();
+
+      expect(
+        container.querySelector('.c_movie_grid_container__grid'),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('movie-tile-1')).toHaveAttribute(
+        'data-view-mode',
+        'grid',
+      );
+    });
+
+    it('リスト設定なら一覧もタイルもリストになる', () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+      const { container } = renderSearchResults();
+
+      expect(
+        container.querySelector('.c_movie_grid_container__list'),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('movie-tile-1')).toHaveAttribute(
+        'data-view-mode',
+        'list',
+      );
+    });
+
+    it('読み込み中のスケルトンもリストの並びにする', () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+      const { container } = renderSearchResults({ isLoading: true });
+
+      expect(
+        container.querySelector('.c_movie_grid_container__list'),
+      ).toBeInTheDocument();
+    });
   });
 
   describe('検索結果の表示', () => {

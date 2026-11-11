@@ -15,7 +15,17 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    // 見出しは検索語を含むため長い。SP 幅で1行に並べきれないと
+    // 右側が画面外へ切れる（#1015 と同じ事象）
+    flex-wrap: wrap;
     gap: $spacing-3;
+    flex-shrink: 0;
+  }
+
+  &__controls {
+    display: flex;
+    align-items: center;
+    gap: $spacing-2;
     flex-shrink: 0;
   }
 
@@ -30,7 +40,9 @@
 
   &__title {
     margin: 0;
-    flex-shrink: 0;
+    // 見出しは検索語を含むので長くなる。縮めないと折り返しても
+    // 見出し自体が画面外へ切れたまま（横スクロールも無いので読めない）
+    min-width: 0;
     font-size: $font-size-xl;
     font-weight: $font-weight-bold;
     color: $text-primary;

@@ -80,6 +80,19 @@
     }
   }
 
+  // リスト表示（#1014）。受賞・ノミネートとも1行1件に積む
+  &__tiles--list {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-2;
+
+    @include sm {
+      gap: $spacing-3;
+    }
+
+    // `&__winner_tiles, &__grid` と同詳細度なので、必ずその後ろに置くこと
+  }
+
   // MovieTile は高さ100%のため、そのまま置くと親の高さを決めてしまい
   // 下に置く人名がはみ出す。タイル側を flex: 1 にして人名の場所を残す（#949）
   &__winner_tile,
@@ -90,6 +103,16 @@
 
     > :first-child {
       flex: 1;
+    }
+  }
+
+  // リストでは行の高さをポスターが決めるので、グリッド用の高さ100%を外す。
+  // `&__winner_tile, &__item` と同詳細度なので、必ずその後ろに置くこと
+  &__item--list {
+    height: auto;
+
+    > :first-child {
+      flex: none;
     }
   }
 

@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { AwardsPage } from './awardsPage';
+import { ARIA_LABELS } from '@/constants';
 
 // --- Mocks ---
 
@@ -224,6 +225,17 @@ describe('AwardsPage', () => {
     mockSearchParams = new URLSearchParams();
     useAwardsCalls.length = 0;
     mockFavorites = new Map();
+  });
+
+  // 表示切替は共通設定（#1014）。この画面にも導線が要る
+  it('年度の選択肢があれば表示切替のトグルを出す', () => {
+    setAwardsData();
+
+    render(<AwardsPage />);
+
+    expect(
+      screen.getByRole('button', { name: ARIA_LABELS.LIST_VIEW }),
+    ).toBeInTheDocument();
   });
 
   /**

@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 
 import { AwardCategorySection } from './awardCategorySection';
+import { STORAGE_KEYS } from '@/constants';
 import type { AwardCategoryData, AwardMovie } from '@/features/awards/types';
 
 // --- Mocks ---
@@ -9,6 +10,7 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: ({
     movie,
     onClick,
+    viewMode,
   }: {
     movie: {
       id: number;
@@ -16,9 +18,11 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
       favorite?: { id: string; rating: number } | null;
     };
     onClick?: (movieId: number) => void;
+    viewMode?: string;
   }) => (
     <div
       data-testid={`movie-tile-${movie.id}`}
+      data-view-mode={viewMode}
       data-favorite-rating={movie.favorite ? String(movie.favorite.rating) : ''}
       role='button'
       tabIndex={0}
@@ -73,6 +77,68 @@ const defaultProps = {
 describe('AwardCategorySection', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // 表示モードは localStorage に残るので、テスト間で引きずらせない
+    localStorage.clear();
+  });
+
+  // 表示切替は共通設定（#1014）。受賞・ノミネートとも追随する必要がある
+  describe('表示モード', () => {
+    it('既定ではグリッドの並びで出す', () => {
+      const { container } = render(
+        <AwardCategorySection
+          category={createMockCategory()}
+          {...defaultProps}
+        />,
+      );
+
+      expect(
+        container.querySelector('.c_award_category__tiles--list'),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId('movie-tile-100')).toHaveAttribute(
+        'data-view-mode',
+        'grid',
+      );
+    });
+
+    it('リスト設定なら受賞もノミネートもリストの並びになる', () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+      const { container } = render(
+        <AwardCategorySection
+          category={createMockCategory()}
+          {...defaultProps}
+        />,
+      );
+
+      // 受賞側とノミネート側で2つ
+      expect(
+        container.querySelectorAll('.c_award_category__tiles--list'),
+      ).toHaveLength(2);
+      // コンテナだけ切り替えてタイルがグリッドのままだと縦長カードが1列に並ぶ
+      expect(screen.getByTestId('movie-tile-100')).toHaveAttribute(
+        'data-view-mode',
+        'list',
+      );
+      expect(screen.getByTestId('movie-tile-200')).toHaveAttribute(
+        'data-view-mode',
+        'list',
+      );
+    });
+
+    it('リストでは人名の場所を潰さないよう高さの指定を外す', () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+      const { container } = render(
+        <AwardCategorySection
+          category={createMockCategory()}
+          {...defaultProps}
+        />,
+      );
+
+      expect(
+        container.querySelectorAll('.c_award_category__item--list').length,
+      ).toBeGreaterThan(0);
+    });
   });
 
   it('カテゴリラベルがh3で表示される', () => {

@@ -26,10 +26,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    // 表示切替を足して1行に並べきれなくなった。折り返さないと見出しが
+    // 1文字ずつ縦に潰れる（320px で確認。#1015 と同じ事象）
+    flex-wrap: wrap;
     gap: $spacing-3;
   }
 
   &__title {
+    min-width: 0;
     margin: 0;
     font-size: $font-size-xl;
     font-weight: $font-weight-bold;

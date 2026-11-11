@@ -16,6 +16,8 @@ import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRati
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
+import { useMovieViewMode } from '@/hooks/useMovieViewMode';
+import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { PERSON_FILMOGRAPHY_PAGE_SIZE, PERSON_MESSAGES } from '@/constants';
 import { personCreditToMovieCacheItem } from '@/utils/toMovieCacheItem';
 import type { PersonMovieCredit } from '@/lib/types';
@@ -48,6 +50,7 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
       isFavoriteProcessing,
       getFavoriteInfo,
     } = useFavoriteToggle();
+    const { viewMode } = useMovieViewMode();
 
     // TMDb の movie_credits はページングが無く全件を一括で返すため、
     // 表示件数の制御はクライアント側で行う
@@ -97,14 +100,21 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
 
     return (
       <section className={styles.c_person_filmography}>
-        <h2 className={styles.c_person_filmography__heading}>
-          {PERSON_MESSAGES.FILMOGRAPHY_HEADING}
-          <span className={styles.c_person_filmography__count}>
-            {credits.length}件
-          </span>
-        </h2>
+        <div className={styles.c_person_filmography__header}>
+          <h2 className={styles.c_person_filmography__heading}>
+            {PERSON_MESSAGES.FILMOGRAPHY_HEADING}
+            <span className={styles.c_person_filmography__count}>
+              {credits.length}件
+            </span>
+          </h2>
+          <ViewModeToggle />
+        </div>
 
-        <MovieGridContainer isLoading={false} isEmpty={false}>
+        <MovieGridContainer
+          isLoading={false}
+          isEmpty={false}
+          viewMode={viewMode}
+        >
           {movieCacheItems.map((movie, index) => (
             <div key={movie.id} className={styles.c_person_filmography__item}>
               <MovieTile
@@ -116,6 +126,7 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
                 watchlistDisabled={isMovieToggling(movie.id)}
                 onFavoriteToggle={handleFavoriteToggle}
                 favoriteDisabled={isFavoriteProcessing(movie.id)}
+                viewMode={viewMode}
               />
               {visibleCredits[index].character && (
                 <p className={styles.c_person_filmography__character}>

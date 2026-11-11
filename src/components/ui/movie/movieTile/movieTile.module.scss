@@ -17,6 +17,86 @@
     transform: scale(0.98);
   }
 
+  // リスト表示（#1014）
+  //
+  // 自身のクラスを重ねて詳細度を (0,2,0) にする。`.c_card` の
+  // `flex-direction: column` と同点だと、勝ち負けが CSS Modules の
+  // 出力順に左右されて本番ビルドで反転しうる
+  &#{&}--list {
+    flex-direction: row;
+    align-items: stretch;
+    height: auto;
+
+    .c_movie_tile__poster {
+      // 行の高さはポスター（56 ÷ 2 × 3 = 84px）で決める。
+      // stretch のままだとクロスサイズが確定値になって aspect-ratio を
+      // 上回り、ルートフォントを大きくした環境で縦に伸びる（実測で
+      // 16px 指定時に 56×102 まで伸びた）
+      align-self: flex-start;
+      flex-shrink: 0;
+      width: $movie-tile-list-poster-width;
+    }
+
+    .c_movie_tile__info {
+      height: auto;
+      justify-content: center;
+      // 1行省略したタイトルの min-content 幅でカードから溢れるのを防ぐ
+      // （flex item の min-width は既定が auto）
+      min-width: 0;
+    }
+
+    // タイトルは1行に省略する。行数が揃わないと行の高さがばらつき、
+    // 1画面に入る件数が減る。
+    //
+    // `-webkit-line-clamp` は使えない。`__title` は `__info`（flex）の
+    // 子でブロック化されるため `display: -webkit-box` が `flow-root` に
+    // なり、クランプが効かない（Chrome 157 で実測）。
+    // 省略記号は実際に溢れる要素＝ button 側に出す
+    .c_movie_tile__title,
+    .c_movie_tile__title_button {
+      @include text-truncate;
+    }
+
+    .c_movie_tile__footer {
+      // グリッドはカード下端へ寄せるが、リストは横幅をそのまま使うので
+      // space-between だと日付と評価が画面幅ぶん離れる
+      justify-content: flex-start;
+      gap: $spacing-3;
+      margin-top: 0;
+    }
+
+    // 操作ボタンはカードの実要素として並べる。絶対配置のままだと
+    // ボタンの数に応じた右余白を `__info` 側で言い当てる必要があり、
+    // 3つ目（興味なし）でタイトルに重なる
+    .c_movie_tile__dismiss_button,
+    .c_movie_tile__favorite_button,
+    .c_movie_tile__watchlist_button {
+      position: static;
+    }
+
+    .c_movie_tile__revival {
+      // 小さいポスターに収まるよう一回り小さくする
+      top: $spacing-1;
+      left: $spacing-1;
+      height: 16px;
+      padding: 0 $spacing-1;
+      font-size: $font-size-2xs;
+    }
+  }
+
+  // リスト行の右端に置く操作ボタン列
+  &__list_actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    // 間隔は 8px 以上空ける（#1017 の誤爆対策）
+    gap: $spacing-2;
+    padding-right: $spacing-2;
+    // タイトル button の ::after（カード全面の当たり判定）より上に置く
+    position: relative;
+    z-index: 1;
+  }
+
   &__poster {
     position: relative;
     aspect-ratio: 2 / 3;

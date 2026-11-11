@@ -1,0 +1,26 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_view_mode_toggle {
+  @include button-reset;
+  @include flex-center;
+
+  // タップ領域は 44×44 以上を確保する（#1017 の基準）
+  width: 4.4rem;
+  height: 4.4rem;
+  flex-shrink: 0;
+  border-radius: $border-radius-md;
+  color: $text-secondary;
+  transition: $transition-all;
+
+  &:hover {
+    color: $text-link;
+    background-color: $background-secondary;
+  }
+
+  &[aria-pressed='true'] {
+    color: $text-link;
+  }
+
+  @include focus-visible;
+}

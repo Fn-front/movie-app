@@ -16,6 +16,11 @@ import { getTMDbPosterUrl } from '@/utils/image';
 import { IMAGE_SIZES, RATING_THRESHOLDS, DISPLAY_LIMITS } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { isMovieReleased } from '@/utils/movie';
+import { cn } from '@/utils/cn';
+import {
+  DEFAULT_MOVIE_VIEW_MODE,
+  type MovieViewMode,
+} from '@/hooks/useMovieViewMode';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 
@@ -74,6 +79,15 @@ export interface MovieTileProps {
    * 後続タイルの遅延読み込みを潰さないよう、**先頭数件にだけ**渡すこと。
    */
   eager?: boolean;
+  /**
+   * 表示モード（既定: グリッド）
+   *
+   * `list` では横並びへ組み替え、ジャンルタグを落とし、操作ボタンを
+   * タイトルの後ろへ移す（視覚順と DOM 順を揃えるため）。
+   * タイトル button の ::after によるカード全面の当たり判定（#719）と、
+   * ボタンを入れ子にしない構造はそのまま保つ。
+   */
+  viewMode?: MovieViewMode;
 }
 
 /**
@@ -93,6 +107,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   headingLevel = 3,
   preferDigitalReleaseDate = false,
   eager = false,
+  viewMode = DEFAULT_MOVIE_VIEW_MODE,
 }) {
   const Title = `h${headingLevel}` as const;
 
@@ -140,6 +155,9 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   }, [movie.vote_average]);
 
   const genreNames = useMemo(() => {
+    // リスト行はジャンルタグが2行に折り返すと行の高さが揃わず、
+    // 1画面に入る件数が1件ぶん減る。リストでは出さない（#1014）
+    if (viewMode === 'list') return [];
     if (!genres || !movie.genre_ids || movie.genre_ids.length === 0) {
       return [];
     }
@@ -147,13 +165,62 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       .slice(0, DISPLAY_LIMITS.GENRE_MAX)
       .map((id) => genres[id])
       .filter(Boolean);
-  }, [genres, movie.genre_ids]);
+  }, [genres, movie.genre_ids, viewMode]);
+
+  const isList = viewMode === 'list';
+
+  /**
+   * 操作ボタン群
+   *
+   * グリッドはポスターに重ねるので `__poster` の中、リストは行の右端に置くので
+   * `__info` の後ろに出す。**視覚順と DOM 順（＝ Tab 順・読み上げ順）を
+   * 揃えるため**で、リストでも `__poster` の中に置くと「右端のボタン →
+   * 左のタイトル」と毎行逆走する（WCAG 1.3.2 / 2.4.3）
+   */
+  const actionButtons = (
+    <>
+      {onDismiss && (
+        <div className={styles.c_movie_tile__dismiss_button}>
+          <DismissButton onClick={handleDismiss} disabled={dismissDisabled} />
+        </div>
+      )}
+      {onFavoriteToggle && canFavorite && (
+        <div className={styles.c_movie_tile__favorite_button}>
+          <FavoriteButton
+            favorite={movie.favorite ?? null}
+            onClick={handleFavoriteToggle}
+            disabled={favoriteDisabled}
+          />
+        </div>
+      )}
+      {onWatchlistToggle && (
+        <div className={styles.c_movie_tile__watchlist_button}>
+          <WatchlistAddButton
+            isInWatchlist={isInWatchlist}
+            onClick={handleWatchlistToggle}
+            disabled={watchlistDisabled}
+          />
+        </div>
+      )}
+    </>
+  );
+
+  const hasActions = Boolean(
+    onDismiss || (onFavoriteToggle && canFavorite) || onWatchlistToggle,
+  );
 
   return (
     // カード全体を role="button" にすると、内側のお気に入り等のボタンが
     // インタラクティブ要素の入れ子になり ARIA 上不正になる（axe: nested-interactive）。
     // 代わりにタイトルを本物の button にし、::after でカード全面を当たり判定にする。
-    <Card hoverable noPadding className={styles.c_movie_tile}>
+    <Card
+      hoverable
+      noPadding
+      className={cn(
+        styles.c_movie_tile,
+        isList && styles['c_movie_tile--list'],
+      )}
+    >
       <div className={styles.c_movie_tile__poster}>
         {posterUrl ? (
           <Image
@@ -161,7 +228,13 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             alt={`${movie.title}のポスター`}
             width={IMAGE_SIZES.POSTER.WIDTH}
             height={IMAGE_SIZES.POSTER.HEIGHT}
-            sizes={IMAGE_SIZES.POSTER.SIZES}
+            // リストの枠は 56px しかない。グリッド用の 190px のままだと
+            // 3倍以上大きい候補を取りに行く（#982 で sizes を入れた意図）
+            sizes={
+              isList
+                ? `${IMAGE_SIZES.CALENDAR_POSTER.WIDTH}px`
+                : IMAGE_SIZES.POSTER.SIZES
+            }
             loading={eager ? 'eager' : 'lazy'}
             className={styles.c_movie_tile__image}
           />
@@ -171,29 +244,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
         {movie.is_revival && (
           <span className={styles.c_movie_tile__revival}>リバイバル</span>
         )}
-        {onDismiss && (
-          <div className={styles.c_movie_tile__dismiss_button}>
-            <DismissButton onClick={handleDismiss} disabled={dismissDisabled} />
-          </div>
-        )}
-        {onFavoriteToggle && canFavorite && (
-          <div className={styles.c_movie_tile__favorite_button}>
-            <FavoriteButton
-              favorite={movie.favorite ?? null}
-              onClick={handleFavoriteToggle}
-              disabled={favoriteDisabled}
-            />
-          </div>
-        )}
-        {onWatchlistToggle && (
-          <div className={styles.c_movie_tile__watchlist_button}>
-            <WatchlistAddButton
-              isInWatchlist={isInWatchlist}
-              onClick={handleWatchlistToggle}
-              disabled={watchlistDisabled}
-            />
-          </div>
-        )}
+        {!isList && actionButtons}
       </div>
       <div className={styles.c_movie_tile__info}>
         <Title className={styles.c_movie_tile__title}>
@@ -227,6 +278,9 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
           )}
         </div>
       </div>
+      {isList && hasActions && (
+        <div className={styles.c_movie_tile__list_actions}>{actionButtons}</div>
+      )}
     </Card>
   );
 });

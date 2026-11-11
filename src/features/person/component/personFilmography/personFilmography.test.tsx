@@ -5,7 +5,11 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { PERSON_FILMOGRAPHY_PAGE_SIZE, PERSON_MESSAGES } from '@/constants';
+import {
+  ARIA_LABELS,
+  PERSON_FILMOGRAPHY_PAGE_SIZE,
+  PERSON_MESSAGES,
+} from '@/constants';
 import type { PersonMovieCredit } from '@/lib/types';
 
 import { PersonFilmography } from './personFilmography';
@@ -13,9 +17,10 @@ import { PersonFilmography } from './personFilmography';
 // --- Mocks ---
 
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
-  MovieTile: jest.fn(({ movie, onClick }) => (
+  MovieTile: jest.fn(({ movie, onClick, viewMode }) => (
     <div
       data-testid={`movie-tile-${movie.id}`}
+      data-view-mode={viewMode}
       onClick={() => onClick?.(movie.id)}
     >
       {movie.title}
@@ -114,6 +119,11 @@ const createCredits = (count: number) =>
 // --- Tests ---
 
 describe('PersonFilmography', () => {
+  // 表示モードは localStorage に残る。消さないと後続のテストへ漏れる
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it('出演作が0件のときは空状態を表示する', () => {
     render(<PersonFilmography credits={[]} />);
 
@@ -145,6 +155,59 @@ describe('PersonFilmography', () => {
 
     expect(screen.getByTestId('movie-tile-1')).toBeInTheDocument();
     expect(screen.queryByText('主人公')).not.toBeInTheDocument();
+  });
+
+  // 表示切替は共通設定（#1014）。この画面にも導線が要る
+  describe('表示モード', () => {
+    it('表示切替のトグルを出す', () => {
+      render(<PersonFilmography credits={createCredits(3)} />);
+
+      expect(
+        screen.getByRole('button', { name: ARIA_LABELS.LIST_VIEW }),
+      ).toBeInTheDocument();
+    });
+
+    it('リストに切り替えると一覧とタイルの両方がリストになる', async () => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <PersonFilmography credits={createCredits(3)} />,
+      );
+
+      await user.click(
+        screen.getByRole('button', { name: ARIA_LABELS.LIST_VIEW }),
+      );
+
+      expect(
+        container.querySelector('.c_movie_grid_container__list'),
+      ).toBeInTheDocument();
+      // コンテナだけ切り替えてタイルがグリッドのままだと、
+      // 縦長カードが1列に並ぶだけで一覧性が上がらない
+      expect(screen.getByTestId('movie-tile-1')).toHaveAttribute(
+        'data-view-mode',
+        'list',
+      );
+    });
+
+    it('もう一度押すとグリッドへ戻る', async () => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <PersonFilmography credits={createCredits(3)} />,
+      );
+      const toggle = screen.getByRole('button', {
+        name: ARIA_LABELS.LIST_VIEW,
+      });
+
+      await user.click(toggle);
+      await user.click(toggle);
+
+      expect(
+        container.querySelector('.c_movie_grid_container__grid'),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('movie-tile-1')).toHaveAttribute(
+        'data-view-mode',
+        'grid',
+      );
+    });
   });
 
   describe('ページング', () => {

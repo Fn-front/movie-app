@@ -9,6 +9,7 @@ import { useSearchParams } from 'next/navigation';
 
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
@@ -124,6 +125,7 @@ export const AwardsPage = memo(function AwardsPage() {
           </h1>
           {data && data.availableYears.length > 0 && (
             <div className={styles.c_awards_page__controls}>
+              <ViewModeToggle />
               <AwardYearSelect
                 availableYears={data.availableYears}
                 selectedYear={selectedYear}

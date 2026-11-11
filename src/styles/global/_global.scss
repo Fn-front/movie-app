@@ -16,16 +16,27 @@ body {
   max-width: 100vw;
 }
 
-// 横はみ出しのクリップは html だけに置く。
-//
-// html の overflow はビューポートへ伝播し、html 自身は visible として扱われる。
-// 一方 body に overflow-x を書くと伝播せず body に残り、CSS の計算値規則で
-// overflow-y が visible → auto に昇格して **body がスクロールコンテナになる**。
-// body の高さは内容と同じなので決してスクロールせず、その中の
-// position: sticky は基準スクロールポートが動かないため永久に発動しない。
-// 実際これで SP のヘッダーが固定されなくなっていた（#1036 の回帰）。
 html {
   overflow-x: hidden;
+  // sticky なヘッダーの下にジャンプ先が潜らないようにする。
+  // scrollIntoView / ハッシュ遷移 / スキップリンクはビューポートの上端に
+  // 揃えるため、何もしないと見出しがヘッダーに完全に隠れる
+  scroll-padding-top: $header-height;
+}
+
+// body 側のクリップは hidden ではなく clip にする。
+//
+// hidden だと CSS の計算値規則で overflow-y が visible → auto に昇格し、
+// **body がスクロールコンテナになる**。body の高さは内容と同じなので
+// 決してスクロールせず、その中の position: sticky は基準スクロールポートが
+// 動かないため永久に発動しない。実際これで SP のヘッダーが固定されなく
+// なっていた（#1036 の回帰）。
+//
+// clip は他方の軸を昇格させないのでスクロールコンテナを作らず、
+// はみ出しのクリップだけを残せる。未対応ブラウザでは宣言が捨てられ、
+// html 側の伝播によるクリップだけが効く（＝安全側に倒れる）。
+body {
+  overflow-x: clip;
 }
 
 body {

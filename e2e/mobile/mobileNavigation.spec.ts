@@ -164,17 +164,47 @@ test.describe('SP幅のスクロール', () => {
     await page.waitForLoadState('networkidle');
 
     await page.evaluate((top) => window.scrollTo(0, top), SCROLL_TARGET);
-    await expect
-      .poll(() => page.evaluate(() => Math.round(window.scrollY)))
-      .toBeGreaterThan(0);
 
     // SP ではハンバーガーと検索がヘッダー専有なので、流れて消えると
-    // スクロール中にナビゲーションへ到達できなくなる（#1036 の回帰）
-    const headerTop = await page.evaluate(() =>
-      Math.round(document.querySelector('header')!.getBoundingClientRect().top),
-    );
+    // スクロール中にナビゲーションへ到達できなくなる（#1036 の回帰）。
+    // scrollY と headerTop は同じ evaluate で読む。別々にすると、
+    // 間にスクロールが戻った場合に「固定されている」と誤判定する
+    const { scrollY, headerTop } = await page.evaluate(() => ({
+      scrollY: Math.round(window.scrollY),
+      headerTop: Math.round(
+        document.querySelector('header')!.getBoundingClientRect().top,
+      ),
+    }));
 
+    expect(scrollY).toBeGreaterThan(SCROLL_TARGET / 2);
     expect(headerTop).toBe(0);
+  });
+
+  test('スクロールジャンプがヘッダーの高さぶん手前で止まる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/awards');
+    await page.waitForLoadState('networkidle');
+
+    // `scrollIntoView` / ハッシュ遷移 / スキップリンクはビューポート上端に
+    // 揃えるため、scroll-padding が無いとジャンプ先が sticky ヘッダーに
+    // 完全に隠れる。
+    //
+    // ⚠️ 「ジャンプして位置を測る」形にすると、対象が文書末尾付近で
+    // スクロールしきれない場合に偶然通ってしまう。ここでは
+    // scroll-padding が実測のヘッダー高以上であることを直接見る
+    const { headerHeight, scrollPaddingTop } = await page.evaluate(() => ({
+      headerHeight: Math.round(
+        document.querySelector('header')!.getBoundingClientRect().height,
+      ),
+      scrollPaddingTop:
+        parseFloat(
+          getComputedStyle(document.documentElement).scrollPaddingTop,
+        ) || 0,
+    }));
+
+    expect(headerHeight).toBeGreaterThan(0);
+    expect(scrollPaddingTop).toBeGreaterThanOrEqual(headerHeight);
   });
 
   test('スクロール後もメニューボタンを押せる', async ({
@@ -191,7 +221,7 @@ test.describe('SP幅のスクロール', () => {
     await expect(page.getByText('メニュー')).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => Math.round(window.scrollY)))
-      .toBeGreaterThan(0);
+      .toBeGreaterThan(SCROLL_TARGET / 2);
   });
 
   test('一覧がドキュメントスクロールになっている', async ({

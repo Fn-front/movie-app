@@ -161,6 +161,9 @@
   --spacing-1: 0.4rem;
   --spacing-2: 0.8rem;
   --spacing-3: 1.2rem;
+  // ヘッダーの高さ（上下 padding + アイコンボタンの高さ + 下境界線）。
+  // sticky なヘッダーの下にジャンプ先が潜らないよう scroll-padding に使う
+  --header-height: calc(var(--spacing-3) * 2 + 4rem + 1px);
   --spacing-4: 1.6rem;
   --spacing-5: 2rem;
   --spacing-6: 2.4rem;

@@ -15,8 +15,10 @@ test.describe('検索（公開）', () => {
   test('ヘッダーから検索すると結果一覧が表示される', async ({ page }) => {
     await page.goto('/');
 
-    await page.getByLabel('映画を検索').fill('バットマン');
-    await page.getByLabel('映画を検索').press('Enter');
+    // 検索ページは本文側にも同じラベルの検索欄を持つため、ヘッダーに絞る（#1016）
+    const headerSearch = page.getByRole('banner').getByLabel('映画を検索');
+    await headerSearch.fill('バットマン');
+    await headerSearch.press('Enter');
 
     await page.waitForURL(/\/search\?query=/);
     await expect(

@@ -3,7 +3,7 @@
  * SP表示幅での主要ページ表示確認
  */
 
-import { WATCHLIST_CLEANUP_LABELS } from '@/constants';
+import { ARIA_LABELS, WATCHLIST_CLEANUP_LABELS } from '@/constants';
 import { test, expect } from '../fixtures/auth';
 
 /** SP 表示幅。はみ出し判定のしきい値にも使うため定数にする */
@@ -51,6 +51,36 @@ test.describe('モバイルレスポンシブ表示', () => {
     // フィルタートグルをクリック
     await filterToggle.click();
     expect(await filterToggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  test('検索ページに検索入力欄が最初から表示される', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/search?query=mission');
+
+    // SP ではヘッダーの検索欄がトグルの中に隠れるため、本文側に置いている。
+    // 無いと「別のキーワードで検索してみてください」の案内に従えない（#1016）
+    const searchInput = page
+      .getByRole('main')
+      .getByLabel(ARIA_LABELS.SEARCH_MOVIES);
+
+    await expect(searchInput).toBeVisible();
+  });
+
+  test('検索ページの入力欄から検索し直せる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/search?query=mission');
+
+    const searchInput = page
+      .getByRole('main')
+      .getByLabel(ARIA_LABELS.SEARCH_MOVIES);
+    await expect(searchInput).toBeVisible();
+
+    await searchInput.fill('matrix');
+    await searchInput.press('Enter');
+
+    await page.waitForURL(/query=matrix/);
   });
 
   test('ウォッチリストの「視聴済みを整理」がSP幅で画面内に収まる', async ({

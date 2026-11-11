@@ -8,6 +8,7 @@
 import { memo, useCallback, useState } from 'react';
 import { IoFilterOutline } from 'react-icons/io5';
 
+import { SearchBar } from '@/components/layout/searchBar/searchBar';
 import { SearchResults } from '@/features/search/component/searchResults/searchResults';
 import { MovieFilter } from '@/features/search/component/movieFilter/movieFilter';
 import { useSearch } from '@/features/search/hooks/useSearch';
@@ -67,6 +68,17 @@ export const SearchPage = memo(function SearchPage() {
           フィルター
         </Button>
       </div>
+
+      {/*
+        lg 未満ではヘッダーの検索欄がトグルの中に隠れており、この画面から
+        キーワードを打ち直す手段が無かった（#1016）。本文側にも置く。
+        lg 以上はヘッダーに常時出ているため非表示にする
+      */}
+      <SearchBar
+        variant='inline'
+        defaultValue={query ?? ''}
+        className={styles.c_search_page__search}
+      />
 
       <div className={styles.c_search_page__content}>
         <aside

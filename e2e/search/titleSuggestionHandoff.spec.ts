@@ -79,10 +79,16 @@ async function stubSuggestApi(
   return { queries };
 }
 
-/** ヘッダーの検索バーから検索する */
+/**
+ * ヘッダーの検索バーから検索する。
+ *
+ * 検索ページは本文側にも同じラベルの検索欄を持つ（#1016）。
+ * ランドマークで絞らないと2件に解決して strict mode に引っかかる。
+ */
 async function searchFromHeader(page: Page, query: string): Promise<void> {
-  await page.getByLabel('映画を検索').fill(query);
-  await page.getByLabel('映画を検索').press('Enter');
+  const input = page.getByRole('banner').getByLabel('映画を検索');
+  await input.fill(query);
+  await input.press('Enter');
   await page.waitForURL(`**/search?query=${encodeURIComponent(query)}`);
 }
 

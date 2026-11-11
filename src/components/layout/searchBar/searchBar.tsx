@@ -25,6 +25,14 @@ import { cn } from '@/utils/cn';
 import styles from './searchBar.module.scss';
 
 /**
+ * SearchBar の見せ方
+ *
+ * - `header`: ヘッダー用。SP では検索アイコンをタップして全幅オーバーレイに展開する
+ * - `inline`: 本文用。常に展開済みで、トグル・閉じる・オーバーレイを持たない
+ */
+export type SearchBarVariant = 'header' | 'inline';
+
+/**
  * SearchBarコンポーネントのプロパティ
  */
 export interface SearchBarProps {
@@ -34,6 +42,8 @@ export interface SearchBarProps {
   placeholder?: string;
   /** カスタムクラス名 */
   className?: string;
+  /** 見せ方。既定はヘッダー用 */
+  variant?: SearchBarVariant;
 }
 
 /**
@@ -48,7 +58,9 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
   defaultValue = '',
   placeholder = '映画を検索...',
   className,
+  variant = 'header',
 }) {
+  const isInline = variant === 'inline';
   const router = useRouter();
   const [query, setQuery] = useState(defaultValue);
   const [isPending, startTransition] = useTransition();
@@ -85,24 +97,32 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
     setQuery('');
   }, []);
 
-  const classNames = cn(styles.c_search_bar, className);
+  const classNames = cn(
+    styles.c_search_bar,
+    isInline && styles['c_search_bar--inline'],
+    className,
+  );
 
   const formClassNames = cn(
     styles.c_search_bar__form,
-    isExpanded && styles['c_search_bar__form--expanded'],
+    isInline
+      ? styles['c_search_bar__form--inline']
+      : isExpanded && styles['c_search_bar__form--expanded'],
   );
 
   return (
     <div className={classNames}>
-      {/* SP: 検索アイコンボタン（展開トリガー） */}
-      <button
-        type='button'
-        className={styles.c_search_bar__toggle}
-        onClick={handleExpand}
-        aria-label={ARIA_LABELS.OPEN_SEARCH}
-      >
-        <IoSearchOutline size={ICON_SIZES.SM} aria-hidden='true' />
-      </button>
+      {/* SP: 検索アイコンボタン（展開トリガー）。inline は常に展開済みなので持たない */}
+      {!isInline && (
+        <button
+          type='button'
+          className={styles.c_search_bar__toggle}
+          onClick={handleExpand}
+          aria-label={ARIA_LABELS.OPEN_SEARCH}
+        >
+          <IoSearchOutline size={ICON_SIZES.SM} aria-hidden='true' />
+        </button>
+      )}
 
       {/* 検索フォーム（PC: 常に表示、SP: 展開時のみ表示） */}
       <form
@@ -128,19 +148,21 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
         >
           <IoSearchOutline size={ICON_SIZES.SM} aria-hidden='true' />
         </button>
-        {/* SP: 閉じるボタン */}
-        <button
-          type='button'
-          className={styles.c_search_bar__close}
-          onClick={handleCollapse}
-          aria-label={ARIA_LABELS.CLOSE_SEARCH}
-        >
-          <IoCloseOutline size={ICON_SIZES.SM} aria-hidden='true' />
-        </button>
+        {/* SP: 閉じるボタン。inline は閉じる対象が無いので持たない */}
+        {!isInline && (
+          <button
+            type='button'
+            className={styles.c_search_bar__close}
+            onClick={handleCollapse}
+            aria-label={ARIA_LABELS.CLOSE_SEARCH}
+          >
+            <IoCloseOutline size={ICON_SIZES.SM} aria-hidden='true' />
+          </button>
+        )}
       </form>
 
       {/* SP: 展開時のオーバーレイ */}
-      {isExpanded && (
+      {!isInline && isExpanded && (
         <button
           type='button'
           className={styles.c_search_bar__overlay}

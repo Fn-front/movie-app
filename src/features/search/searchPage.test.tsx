@@ -40,6 +40,13 @@ jest.mock('@/features/search/component/movieFilter/movieFilter', () => ({
   MovieFilter: jest.fn(() => <div data-testid='movie-filter' />),
 }));
 
+// 本文側の検索欄（#1016）が useRouter を使うため、ルーターを差し替える
+const mockPush = jest.fn();
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
 // --- Helpers ---
 function createMockUseSearchReturn(
   overrides?: Partial<UseSearchReturn>,
@@ -101,6 +108,24 @@ describe('SearchPage', () => {
     expect(
       screen.getByRole('heading', { name: '「テスト映画」の検索結果' }),
     ).toBeInTheDocument();
+  });
+
+  it('本文側に検索入力欄を置き、現在の検索語を初期値にする', () => {
+    // SP ではヘッダーの検索欄がトグルの中に隠れるため、ここから打ち直せる
+    // ようにしている（#1016）
+    setupDefaultMocks({ query: 'テスト映画' });
+
+    render(<SearchPage />);
+
+    expect(screen.getByLabelText('映画を検索')).toHaveValue('テスト映画');
+  });
+
+  it('検索キーワードが無いときは本文側の検索入力欄が空になる', () => {
+    setupDefaultMocks({ query: undefined });
+
+    render(<SearchPage />);
+
+    expect(screen.getByLabelText('映画を検索')).toHaveValue('');
   });
 
   it('検索キーワードがない場合は汎用タイトルを表示する', () => {

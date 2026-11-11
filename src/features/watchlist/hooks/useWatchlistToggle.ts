@@ -6,6 +6,7 @@
 
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 
 import {
@@ -161,7 +162,11 @@ function optimisticRemoveFromAllCaches(
  * useToast() の toasts 購読で全消費者が再レンダリング」という**偶然の依存**で
  * 同期していた（#1009）。
  *
- * キャッシュと同じ寿命・同じ範囲で共有したいので QueryClient 単位で持つ
+ * キャッシュと同じ寿命・同じ範囲で共有したいので QueryClient 単位で持つ。
+ *
+ * ⚠️ ログアウトで前の利用者の楽観状態が残らないのは、ログアウトが
+ * `window.location` の完全遷移だから（src/lib/auth/logout.ts）。
+ * クライアント遷移に変えるならここをクリアすること
  */
 interface OptimisticStore {
   adds: Set<number>;
@@ -179,9 +184,9 @@ interface OptimisticStore {
  */
 const CACHE_DATA_EVENTS = new Set(['added', 'removed', 'updated']);
 
-const optimisticStores = new WeakMap<object, OptimisticStore>();
+const optimisticStores = new WeakMap<QueryClient, OptimisticStore>();
 
-function getOptimisticStore(queryClient: object): OptimisticStore {
+function getOptimisticStore(queryClient: QueryClient): OptimisticStore {
   const existing = optimisticStores.get(queryClient);
 
   if (existing) {

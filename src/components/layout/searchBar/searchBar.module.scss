@@ -7,6 +7,12 @@
   align-items: center;
   margin-left: auto;
 
+  // 本文に置く版。ヘッダーの右寄せは効かせず、幅いっぱいに広げる（#1016）
+  &--inline {
+    margin-left: 0;
+    width: 100%;
+  }
+
   // SP: 検索アイコンボタン（トグル）
   &__toggle {
     @include button-reset;
@@ -35,6 +41,24 @@
   &__form {
     // SP: デフォルトで非表示
     display: none;
+
+    // 本文に置く版。常に表示し、フローの中に収める
+    // （ヘッダー版の --expanded は position: fixed の全幅オーバーレイなので使えない）
+    &--inline {
+      display: flex;
+      position: static;
+      width: 100%;
+      padding: 0;
+      background-color: $background-secondary;
+      border: $border-width-1 solid $border-color;
+      border-radius: $border-radius-full;
+      transition: $transition-all;
+
+      &:focus-within {
+        border-color: $primary-500;
+        box-shadow: 0 0 0 3px color-alpha(--primary-500, 10%);
+      }
+    }
 
     // SP: 展開時
     &--expanded {
@@ -84,6 +108,13 @@
     background-color: $background-secondary;
     border: $border-width-1 solid $border-color;
     border-radius: $border-radius-full;
+
+    // 本文版は外側のフォームがピル型の枠を持つので、自前の枠は消す
+    .c_search_bar__form--inline & {
+      background-color: transparent;
+      border: none;
+      border-radius: 0;
+    }
 
     @include lg {
       background-color: transparent;

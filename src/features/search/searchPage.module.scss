@@ -19,6 +19,15 @@
     flex-shrink: 0;
   }
 
+  // 本文側の検索欄。lg 以上はヘッダーに常時出ているので二重に見せない（#1016）
+  &__search {
+    flex-shrink: 0;
+
+    @include lg {
+      display: none;
+    }
+  }
+
   &__title {
     margin: 0;
     flex-shrink: 0;

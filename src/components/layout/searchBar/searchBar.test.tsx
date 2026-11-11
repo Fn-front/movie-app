@@ -133,4 +133,55 @@ describe('SearchBar', () => {
       '/search?query=%E3%83%90%E3%83%83%E3%83%88%E3%83%9E%E3%83%B3',
     );
   });
+
+  /**
+   * 本文に置く版。ヘッダー版と違い、常に展開済みで開閉の仕組みを持たない。
+   * SP でヘッダーの検索欄がトグルの中に隠れる問題への対応（#1016）。
+   */
+  describe('variant="inline"', () => {
+    it('展開トリガーを持たない（常に表示されているため）', () => {
+      render(<SearchBar variant='inline' />);
+
+      expect(screen.queryByLabelText('検索を開く')).not.toBeInTheDocument();
+    });
+
+    it('閉じるボタンを持たない', () => {
+      render(<SearchBar variant='inline' />);
+
+      expect(screen.queryByLabelText('検索を閉じる')).not.toBeInTheDocument();
+    });
+
+    it('検索フォームと入力欄は表示される', () => {
+      render(<SearchBar variant='inline' />);
+
+      expect(
+        screen.getByRole('search', { name: 'サイト内検索' }),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText('映画を検索')).toBeInTheDocument();
+    });
+
+    it('初期値に現在の検索語が入る', () => {
+      render(<SearchBar variant='inline' defaultValue='mission' />);
+
+      expect(screen.getByLabelText('映画を検索')).toHaveValue('mission');
+    });
+
+    it('送信すると検索ページへ遷移する', async () => {
+      const user = userEvent.setup();
+      render(<SearchBar variant='inline' defaultValue='mission' />);
+
+      const input = screen.getByLabelText('映画を検索');
+      await user.clear(input);
+      await user.type(input, 'matrix');
+      await user.keyboard('{Enter}');
+
+      expect(mockPush).toHaveBeenCalledWith('/search?query=matrix');
+    });
+
+    it('既定（ヘッダー版）は展開トリガーを持つ', () => {
+      render(<SearchBar />);
+
+      expect(screen.getByLabelText('検索を開く')).toBeInTheDocument();
+    });
+  });
 });

@@ -4,7 +4,7 @@
  * 重複リクエストを防止する
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
 
@@ -21,7 +21,7 @@ import type {
   GetWatchlistResponse,
 } from '@/lib/api/watchlist/watchlist';
 import type { WatchlistAddFormData } from '@/schema/watchlist';
-import { useToast } from '@/hooks/useToast';
+import { useToastDispatch } from '@/hooks/useToast';
 
 /**
  * トグル対象の映画データ（最小限のフィールド）
@@ -154,6 +154,51 @@ function optimisticRemoveFromAllCaches(
 }
 
 /**
+ * 楽観的なトグル状態と、その購読者。
+ *
+ * `useState` でフックのインスタンスごとに持つと、詳細モーダルで操作しても
+ * タイル側のインスタンスは再レンダリングされない。以前は「トーストが出る →
+ * useToast() の toasts 購読で全消費者が再レンダリング」という**偶然の依存**で
+ * 同期していた（#1009）。
+ *
+ * キャッシュと同じ寿命・同じ範囲で共有したいので QueryClient 単位で持つ
+ */
+interface OptimisticStore {
+  adds: Set<number>;
+  removes: Set<number>;
+  listeners: Set<() => void>;
+  /** 変化のたびに増える。useSyncExternalStore のスナップショットに使う */
+  version: number;
+}
+
+const optimisticStores = new WeakMap<object, OptimisticStore>();
+
+function getOptimisticStore(queryClient: object): OptimisticStore {
+  const existing = optimisticStores.get(queryClient);
+
+  if (existing) {
+    return existing;
+  }
+
+  const created: OptimisticStore = {
+    adds: new Set(),
+    removes: new Set(),
+    listeners: new Set(),
+    version: 0,
+  };
+  optimisticStores.set(queryClient, created);
+  return created;
+}
+
+/** 購読者へ変更を伝える */
+function notifyOptimisticChange(store: OptimisticStore): void {
+  store.version += 1;
+  for (const listener of store.listeners) {
+    listener();
+  }
+}
+
+/**
  * キャッシュをロールバックする
  */
 function rollbackCaches(
@@ -181,31 +226,64 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
   // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
   // id の有無で見る（getAuthSession と同じ基準）
   const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
-  // ⚠️ ここだけ useToastDispatch へ移していない（#939）。
-  //
-  // 下の isInWatchlist は queryClient のキャッシュを**命令的に読むだけ**で
-  // 購読していない。楽観状態（optimisticAdds / Removes）はフックの
-  // インスタンスごとに持つので、モーダルで操作してもタイル側のインスタンスは
-  // 再レンダリングされない。
-  //
-  // 実際には「トーストが出る → useToast() の toasts 購読で全消費者が
-  // 再レンダリング → タイルがキャッシュを読み直す」という**偶然の依存**で
-  // 同期していた。toasts の購読を外すと E2E の
-  // 「モーダルでウォッチリスト操作後、タイル側のボタンも同期される」が落ちる。
-  //
-  // 購読を正しく張り直すのは別の関心事なので #1009 に切り出した。
-  // それが入るまでは意図的に toasts を購読したままにする。
-  const { toast } = useToast();
+  // トーストは送出するだけ。一覧は購読しない（#939 / #1009）
+  const { toast } = useToastDispatch();
   const openLoginPrompt = useLoginPromptStore((s) => s.open);
 
   const togglingIdRef = useRef<number | null>(null);
 
-  // 楽観的なトグル状態をローカルで追跡（queryClient.getQueriesDataはリアクティブでないため）
-  const [optimisticAdds, setOptimisticAdds] = useState<Set<number>>(
-    () => new Set(),
+  const store = getOptimisticStore(queryClient);
+
+  /**
+   * 楽観状態とキャッシュの変化を購読する。
+   *
+   * queryClient.getQueriesData() はリアクティブではないので、これが無いと
+   * 「キャッシュが変わってもタイルを再レンダリングさせるものが無い」状態に
+   * なる。以前はトーストの再レンダリングに相乗りしていた（#1009）
+   */
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      store.listeners.add(onStoreChange);
+
+      const unsubscribeCache = queryClient
+        .getQueryCache()
+        .subscribe((event) => {
+          if (event.query.queryKey[0] !== watchlistKeys.all[0]) {
+            return;
+          }
+          onStoreChange();
+        });
+
+      return () => {
+        store.listeners.delete(onStoreChange);
+        unsubscribeCache();
+      };
+    },
+    [queryClient, store],
   );
-  const [optimisticRemoves, setOptimisticRemoves] = useState<Set<number>>(
-    () => new Set(),
+
+  /**
+   * 変化を表す値。
+   *
+   * キャッシュの中身を返すと毎回新しい参照になり、useSyncExternalStore の
+   * Object.is 比較で無限ループになる。「何か変わった」ことだけを数値で伝え、
+   * 実際の値は読む時点で取りに行く
+   */
+  const getSnapshot = useCallback(() => store.version, [store]);
+  const getServerSnapshot = useCallback(() => 0, []);
+
+  /**
+   * 変化のたびに増える値。
+   *
+   * isInWatchlist の依存に入れて**参照を変える**ために要る。呼び出し側には
+   * `useMemo(() => isInWatchlist(id), [isInWatchlist, id])` のように
+   * 「答えが変わるときは参照も変わる」前提で書かれたものがある
+   * （movieDetailContent.tsx）。安定させると値が凍る
+   */
+  const version = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
   );
 
   const addMutation = useMutation({
@@ -244,12 +322,9 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       });
     },
     onSettled: (_data, _error, variables) => {
-      // ローカル楽観状態をクリア
-      setOptimisticAdds((prev) => {
-        const next = new Set(prev);
-        next.delete(variables.tmdb_movie_id);
-        return next;
-      });
+      const settledStore = getOptimisticStore(queryClient);
+      settledStore.adds.delete(variables.tmdb_movie_id);
+      notifyOptimisticChange(settledStore);
       queryClient.invalidateQueries({ queryKey: watchlistKeys.all });
     },
   });
@@ -273,14 +348,11 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       });
     },
     onSettled: () => {
-      // ローカル楽観状態をクリア（tmdbMovieIdはrefから取得）
+      // 対象の映画IDは ref から取る
       if (togglingIdRef.current !== null) {
-        const movieId = togglingIdRef.current;
-        setOptimisticRemoves((prev) => {
-          const next = new Set(prev);
-          next.delete(movieId);
-          return next;
-        });
+        const settledStore = getOptimisticStore(queryClient);
+        settledStore.removes.delete(togglingIdRef.current);
+        notifyOptimisticChange(settledStore);
       }
       queryClient.invalidateQueries({ queryKey: watchlistKeys.all });
     },
@@ -290,13 +362,13 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
     (tmdbMovieId: number) => {
       if (!isAuthenticated) return false;
       // ローカル楽観状態を優先チェック
-      if (optimisticAdds.has(tmdbMovieId)) return true;
-      if (optimisticRemoves.has(tmdbMovieId)) return false;
+      if (store.adds.has(tmdbMovieId)) return true;
+      if (store.removes.has(tmdbMovieId)) return false;
       // キャッシュから確認
       const items = getWatchlistItemsFromCache(queryClient);
       return items.some((item) => item.tmdb_movie_id === tmdbMovieId);
     },
-    [isAuthenticated, optimisticAdds, optimisticRemoves, queryClient],
+    [isAuthenticated, store, queryClient, version],
   );
 
   const getWatchlistId = useCallback(
@@ -323,13 +395,10 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       if (isInWatchlist(movie.id)) {
         const watchlistId = getWatchlistId(movie.id);
         if (watchlistId) {
-          // ローカル楽観状態を更新（即座にUIへ反映）
-          setOptimisticRemoves((prev) => new Set(prev).add(movie.id));
-          setOptimisticAdds((prev) => {
-            const next = new Set(prev);
-            next.delete(movie.id);
-            return next;
-          });
+          // 楽観状態を更新（即座にUIへ反映。他のインスタンスにも伝わる）
+          store.removes.add(movie.id);
+          store.adds.delete(movie.id);
+          notifyOptimisticChange(store);
           removeMutation.mutate(watchlistId);
           sendEvent(ANALYTICS_EVENTS.WATCHLIST_REMOVE, { movie_id: movie.id });
           toast({
@@ -338,13 +407,10 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
           });
         }
       } else {
-        // ローカル楽観状態を更新（即座にUIへ反映）
-        setOptimisticAdds((prev) => new Set(prev).add(movie.id));
-        setOptimisticRemoves((prev) => {
-          const next = new Set(prev);
-          next.delete(movie.id);
-          return next;
-        });
+        // 楽観状態を更新（即座にUIへ反映。他のインスタンスにも伝わる）
+        store.adds.add(movie.id);
+        store.removes.delete(movie.id);
+        notifyOptimisticChange(store);
         addMutation.mutate({
           tmdb_movie_id: movie.id,
           title: movie.title,
@@ -366,6 +432,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       addMutation,
       removeMutation,
       toast,
+      store,
     ],
   );
 

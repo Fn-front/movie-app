@@ -11,8 +11,10 @@ import { memo, useEffect } from 'react';
 import {
   THEME_CHANGE_EVENT,
   applyTheme,
+  getStoredPreference,
   getSystemTheme,
   isSystemMode,
+  resolveTheme,
 } from '@/utils/theme';
 
 /**
@@ -20,10 +22,12 @@ import {
  */
 export const ThemeProvider = memo(function ThemeProvider() {
   useEffect(() => {
-    // 明示設定が無ければ OS 設定へ解決して適用（インラインスクリプトと二重だが無害）
-    if (isSystemMode()) {
-      applyTheme(getSystemTheme());
-    }
+    // 明示設定の有無によらず適用する。
+    // `notFound()` のページは `<html id="__next_error__">` の最小シェルで返り、
+    // layout のインラインスクリプトを含まない。ここを OS 追従時だけにすると、
+    // 明示設定のユーザーに data-theme が一度も付かない（#1013）。
+    // 通常ページではインラインスクリプトと同じ値を入れ直すだけで無害。
+    applyTheme(resolveTheme(getStoredPreference()));
 
     if (!window.matchMedia) return;
 

@@ -32,6 +32,26 @@ body {
   padding-bottom: var(--cookie-banner-height, 0px);
 }
 
+// data-theme が付くまでのちらつきを抑える（#1013）。
+//
+// layout のインラインスクリプトは <head> の末尾で走るため、通常ページでは
+// body が描かれる時点で必ず data-theme が付いており、このセレクタは一致しない。
+// 一致するのは `notFound()` が返す `<html id="__next_error__">` の最小シェル
+// （スクリプトを含まない）だけで、そこは本文もハイドレーション後に描かれる。
+//
+// JS が遅い・失敗した場合でも必ず表示されるよう、待ち時間を過ぎたら
+// アニメーションで戻す（0s なので動きは無く、opacity が切り替わるだけ）。
+html:not([data-theme]) body {
+  opacity: 0;
+  animation: theme-pending-reveal 0s $duration-theme-pending forwards;
+}
+
+@keyframes theme-pending-reveal {
+  to {
+    opacity: 1;
+  }
+}
+
 // ============================================================
 // レイアウト
 // ============================================================

@@ -173,8 +173,18 @@ test.describe('ウォッチリストボタン', () => {
 
     if (await tileAdd.isVisible().catch(() => false)) {
       const added = waitForWatchlistResponse(page);
+      // 追加直後のサイドバーは楽観アイテム（id が `optimistic-...`）を
+      // 出している。そのまま削除を押すと仮IDで DELETE して 400 になるため、
+      // 本物のIDに入れ替わる再取得まで待つ
+      const refetched = page.waitForResponse(
+        (res) =>
+          res.url().includes('/api/watchlist') &&
+          res.request().method() === 'GET' &&
+          res.ok(),
+      );
       await tileAdd.click();
       await added;
+      await refetched;
     }
     await expect(tileRemove).toBeVisible({ timeout: 10000 });
 

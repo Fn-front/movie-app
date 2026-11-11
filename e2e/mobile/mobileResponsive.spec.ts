@@ -3,10 +3,17 @@
  * SP表示幅での主要ページ表示確認
  */
 
+import { WATCHLIST_CLEANUP_LABELS } from '@/constants';
 import { test, expect } from '../fixtures/auth';
 
+/** SP 表示幅。はみ出し判定のしきい値にも使うため定数にする */
+const SP_VIEWPORT_WIDTH = 375;
+
+/** 最狭幅（iPhone SE 相当）。SP 幅で収まっても崩れることがあるため別途見る */
+const NARROW_VIEWPORT_WIDTH = 320;
+
 test.use({
-  viewport: { width: 375, height: 812 },
+  viewport: { width: SP_VIEWPORT_WIDTH, height: 812 },
 });
 
 test.describe('モバイルレスポンシブ表示', () => {
@@ -46,6 +53,23 @@ test.describe('モバイルレスポンシブ表示', () => {
     expect(await filterToggle.getAttribute('aria-expanded')).toBe('true');
   });
 
+  test('ウォッチリストの「視聴済みを整理」がSP幅で画面内に収まる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/watchlist');
+
+    const cleanupButton = page.getByRole('button', {
+      name: WATCHLIST_CLEANUP_LABELS.OPEN_BUTTON,
+    });
+    await expect(cleanupButton).toBeVisible();
+
+    // 見出し・並び替え・整理ボタンを1行に並べると SP 幅では収まらず、
+    // ページの横スクロールも無いので右側が永久にクリップされる（#1015）
+    const box = await cleanupButton.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(SP_VIEWPORT_WIDTH);
+  });
+
   test('SP幅で映画詳細モーダルが表示される', async ({
     authenticatedPage: page,
   }) => {
@@ -71,7 +95,32 @@ test.describe('モバイルレスポンシブ表示', () => {
     expect(dialogBox).not.toBeNull();
 
     if (dialogBox) {
-      expect(dialogBox.width).toBeLessThanOrEqual(375);
+      expect(dialogBox.width).toBeLessThanOrEqual(SP_VIEWPORT_WIDTH);
     }
+  });
+});
+
+/**
+ * 最狭幅（iPhone SE 相当）での崩れを検知する。
+ * 375px で収まっても 320px では溢れることがあるため、幅を分けて見る。
+ */
+test.describe('最狭幅での表示', () => {
+  test.use({
+    viewport: { width: NARROW_VIEWPORT_WIDTH, height: 812 },
+  });
+
+  test('ウォッチリストの「視聴済みを整理」が画面内に収まる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/watchlist');
+
+    const cleanupButton = page.getByRole('button', {
+      name: WATCHLIST_CLEANUP_LABELS.OPEN_BUTTON,
+    });
+    await expect(cleanupButton).toBeVisible();
+
+    const box = await cleanupButton.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(NARROW_VIEWPORT_WIDTH);
   });
 });

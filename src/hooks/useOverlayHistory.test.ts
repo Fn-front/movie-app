@@ -258,6 +258,88 @@ describe('useOverlayHistory', () => {
     expect(backSpy).not.toHaveBeenCalled();
   });
 
+  /**
+   * 閉じるのと同時に別のオーバーレイが開く経路。
+   *
+   * `history.back()` は非同期で、呼んでから解決するまでの間に `pushState`
+   * されたエントリは捨てられる。素直に畳むと新しいオーバーレイのエントリが
+   * 消え、戻るとページごと離脱する（#1026 の回帰）。
+   * 畳むのを1マイクロタスク遅らせ、その間に開いた側が引き継ぐ
+   */
+  describe('エントリの引き継ぎ', () => {
+    it('閉じるのと同時に開くと、積まずに引き継いで back も呼ばない', async () => {
+      const pushSpy = jest.spyOn(window.history, 'pushState');
+      const replaceSpy = jest.spyOn(window.history, 'replaceState');
+
+      const first = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn()),
+        { initialProps: { open: true } },
+      );
+      expect(pushSpy).toHaveBeenCalledTimes(1);
+
+      pushSpy.mockClear();
+      replaceSpy.mockClear();
+
+      // 同じコミットで「1つ目が閉じ、2つ目が開く」を再現する
+      act(() => {
+        first.rerender({ open: false });
+        renderHook(() => useOverlayHistory(true, jest.fn()));
+      });
+      await flushAsyncBack();
+
+      expect(replaceSpy).toHaveBeenCalledTimes(1);
+      expect(pushSpy).not.toHaveBeenCalled();
+      expect(backSpy).not.toHaveBeenCalled();
+
+      pushSpy.mockRestore();
+      replaceSpy.mockRestore();
+    });
+  });
+
+  /**
+   * オーバーレイ内からの遷移を `replace` にしてよいかの判定。
+   *
+   * `open` で代用すると、エントリが無いときに replace して
+   * **利用者の実ページ**を消す（実測で確認）
+   */
+  describe('shouldReplaceNavigation', () => {
+    it('閉じているあいだは false', () => {
+      const { result } = renderHook(() => useOverlayHistory(false, jest.fn()));
+
+      expect(result.current.shouldReplaceNavigation).toBe(false);
+    });
+
+    /**
+     * `open` で代用すると、エントリを積む effect が走る前の描画でも
+     * true になる。その瞬間に遷移すると置き換わるのは実ページのエントリ
+     */
+    it('開いた直後の最初の描画はまだ false で、エントリを積んでから true になる', () => {
+      const seen: boolean[] = [];
+
+      renderHook(() => {
+        const handlers = useOverlayHistory(true, jest.fn());
+        seen.push(handlers.shouldReplaceNavigation);
+        return handlers;
+      });
+
+      expect(seen[0]).toBe(false);
+      expect(seen[seen.length - 1]).toBe(true);
+    });
+
+    it('閉じたら false に戻る', async () => {
+      const { result, rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn()),
+        { initialProps: { open: true } },
+      );
+      expect(result.current.shouldReplaceNavigation).toBe(true);
+
+      act(() => rerender({ open: false }));
+      await flushAsyncBack();
+
+      expect(result.current.shouldReplaceNavigation).toBe(false);
+    });
+  });
+
   it('単独のとき、閉じた後の戻るで余計に閉じない', async () => {
     const onClose = jest.fn();
     const { rerender } = renderHook(

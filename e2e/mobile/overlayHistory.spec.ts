@@ -67,6 +67,18 @@ const waitForFold = (page: Page) =>
     .poll(() => page.evaluate(() => history.state?.__overlayHistory ?? null))
     .toBeNull();
 
+/**
+ * オーバーレイのエントリが実在することを確かめる。
+ *
+ * `waitForFold` は「トークンが消えるまで待つ」ので、**最初から無ければ
+ * 即座に解決して何も待たない**。閉じる前にここで実在を固定しないと、
+ * エントリが消えている不具合を素通りさせる（前回のレビューで実際に見逃した）
+ */
+const expectEntryExists = (page: Page) =>
+  expect
+    .poll(() => page.evaluate(() => history.state?.__overlayHistory ?? null))
+    .not.toBeNull();
+
 test.describe('オーバーレイを閉じたあとの戻る', () => {
   test('ドロワーのナビリンクで遷移したあと、戻る1回で前のページへ出る', async ({
     authenticatedPage: page,
@@ -114,6 +126,30 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     await page.goBack();
 
     await expect(page).toHaveURL(/\/movies\/upcoming/);
+  });
+
+  /**
+   * ログイン誘導と同じ「閉じると同時に別のオーバーレイが開く」型。
+   * こちらは Radix の外（zustand ではなく親の state）で開くので、
+   * 引き継ぎが効くかを別途固定しておく
+   */
+  test('公開カレンダーが開いている状態で戻ると、カレンダーだけが閉じる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    await waitForList(page);
+
+    await page.getByRole('button', { name: ARIA_LABELS.OPEN_MENU }).click();
+    await page.getByRole('button', { name: ARIA_LABELS.OPEN_CALENDAR }).click();
+
+    const calendar = page.getByRole('dialog').last();
+    await expect(calendar).toBeVisible();
+    await expectEntryExists(page);
+
+    await page.goBack();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/movies\/now-showing/);
   });
 
   /**
@@ -175,10 +211,39 @@ test.describe('未認証のログイン誘導を閉じたあとの戻る', () =>
 
     const prompt = page.getByRole('dialog').last();
     await expect(prompt).toBeVisible();
+    // 引き継ぎが効いていないとエントリごと消える
+    await expectEntryExists(page);
 
     await page.goBack();
 
     await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/movies\/now-showing/);
+  });
+
+  /**
+   * ログイン誘導から実際に遷移する経路。
+   *
+   * モーダルのエントリが無い状態で `router.replace` すると、置き換わるのは
+   * **利用者の実ページ**で履歴が1つ失われる（旧実装で `/movies/upcoming`
+   * まで飛ぶことを実測）
+   */
+  test('ログインへ進んで戻ると、誘導を出した画面へ戻る', async ({ page }) => {
+    await page.goto('/movies/upcoming');
+    await waitForList(page);
+    await page.goto('/movies/now-showing');
+    await waitForList(page);
+
+    await page.getByRole('button', { name: ARIA_LABELS.OPEN_MENU }).click();
+    await page.getByRole('link', { name: 'ウォッチリスト' }).click();
+
+    const prompt = page.getByRole('dialog').last();
+    await expect(prompt).toBeVisible();
+
+    await prompt.getByRole('button', { name: 'ログイン' }).click();
+    await page.waitForURL(/\/auth\/signin/);
+
+    await page.goBack();
+
     await expect(page).toHaveURL(/\/movies\/now-showing/);
   });
 

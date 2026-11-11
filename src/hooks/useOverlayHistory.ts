@@ -303,9 +303,7 @@ export function useOverlayHistory(
     /* eslint-enable react-hooks/set-state-in-effect */
 
     return () => {
-      /* eslint-disable react-hooks/set-state-in-effect */
       setHasEntry(false);
-      /* eslint-enable react-hooks/set-state-in-effect */
 
       const index = openOverlays.indexOf(entry);
 

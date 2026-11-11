@@ -48,21 +48,10 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  const { notifyDismissed } = useOverlayHistory(open, handleHistoryClose);
-
-  const handleOpenChange = useCallback(
-    (next: boolean) => {
-      // Radix の閉じる操作のときだけ履歴を畳む（useOverlayHistory 参照）
-      if (!next) {
-        notifyDismissed();
-      }
-      onOpenChange(next);
-    },
-    [onOpenChange, notifyDismissed],
-  );
+  useOverlayHistory(open, handleHistoryClose);
 
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.c_video_dialog__overlay} />
         <Dialog.Content

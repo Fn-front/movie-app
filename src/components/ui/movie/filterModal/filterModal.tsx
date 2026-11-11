@@ -8,7 +8,12 @@
 import { memo, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal/modal';
+import {
+  Modal,
+  ModalBody,
+  ModalFooter,
+  useModalNavigation,
+} from '@/components/ui/modal/modal';
 import { Button } from '@/components/ui/button/button';
 import {
   MODAL_TITLES,
@@ -170,6 +175,8 @@ const FilterModalContent = memo<{
     useState<WatchProviderOfferType[]>(selectedOfferTypes);
   const [tempRegions, setTempRegions] =
     useState<RegionGroupKey[]>(selectedRegions);
+  const { notifyNavigating } = useModalNavigation();
+
   /** 適用を拒んだ理由。null なら問題なし */
   const [dateError, setDateError] = useState<string | null>(null);
 
@@ -327,6 +334,9 @@ const FilterModalContent = memo<{
     }
 
     setDateError(null);
+    // 「適用」はモーダルを閉じるのと同時に router.replace で URL を変える。
+    // 申告しないと、履歴を畳む非同期の back がその更新を打ち消す（#1043）
+    notifyNavigating();
     onApply(
       tempSelectedIds,
       tempDateRange,
@@ -336,6 +346,7 @@ const FilterModalContent = memo<{
       tempRegions,
     );
   }, [
+    notifyNavigating,
     onApply,
     tempSelectedIds,
     tempDateRange,

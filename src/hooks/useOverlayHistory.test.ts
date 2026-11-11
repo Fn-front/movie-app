@@ -111,21 +111,7 @@ describe('useOverlayHistory', () => {
     expect(backSpy).not.toHaveBeenCalled();
   });
 
-  it('× やEscで閉じたときは積んだエントリを自分で畳む', () => {
-    const { result, rerender } = renderHook(
-      ({ open }) => useOverlayHistory(open, jest.fn()),
-      { initialProps: { open: true } },
-    );
-
-    act(() => result.current.notifyDismissed());
-    act(() => rerender({ open: false }));
-
-    expect(backSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('アプリ側が閉じたときは畳まない（URL更新や遷移を取り消さない）', () => {
-    // フィルターの「適用」のように、閉じると同時に router が URL を変える経路。
-    // ここで畳むと非同期の history.back() がその更新を打ち消す
+  it('閉じたときは積んだエントリを自分で畳む', () => {
     const { rerender } = renderHook(
       ({ open }) => useOverlayHistory(open, jest.fn()),
       { initialProps: { open: true } },
@@ -133,7 +119,52 @@ describe('useOverlayHistory', () => {
 
     act(() => rerender({ open: false }));
 
+    expect(backSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('アプリ側が閉じた場合も畳む（閉じ方で分けない）', () => {
+    // 以前は「ユーザーが閉じたときだけ」に限っていたため、フィルターの
+    // 「適用」やナビリンクのようにアプリ側が open を落とす経路で
+    // エントリが残り、戻るが空振りした（#1043）
+    const { rerender } = renderHook(
+      ({ open }) => useOverlayHistory(open, jest.fn()),
+      { initialProps: { open: true } },
+    );
+
+    act(() => rerender({ open: false }));
+
+    expect(backSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('遷移を申告したときは畳まない（router の URL 更新を取り消さない）', () => {
+    // フィルターの「適用」のように、閉じるのと同時に router.replace が走る経路。
+    // router の履歴操作は cleanup の後に効くため、cleanup 時点では自分の
+    // エントリがまだ最前面に見える。そのまま畳むと後から届く back が
+    // その更新を打ち消す（実測で確認）
+    const { result, rerender } = renderHook(
+      ({ open }) => useOverlayHistory(open, jest.fn()),
+      { initialProps: { open: true } },
+    );
+
+    act(() => result.current.notifyNavigating());
+    act(() => rerender({ open: false }));
+
     expect(backSpy).not.toHaveBeenCalled();
+  });
+
+  it('開き直すと遷移の申告は持ち越さない', () => {
+    const { result, rerender } = renderHook(
+      ({ open }) => useOverlayHistory(open, jest.fn()),
+      { initialProps: { open: true } },
+    );
+
+    act(() => result.current.notifyNavigating());
+    act(() => rerender({ open: false }));
+    act(() => rerender({ open: true }));
+    act(() => rerender({ open: false }));
+
+    // 2回目は普通に閉じただけなので畳む
+    expect(backSpy).toHaveBeenCalledTimes(1);
   });
 
   it('入れ子のとき、戻るは最前面のオーバーレイだけを閉じる', () => {
@@ -161,7 +192,6 @@ describe('useOverlayHistory', () => {
       { initialProps: { open: true } },
     );
 
-    act(() => inner.result.current.notifyDismissed());
     act(() => inner.rerender({ open: false }));
     await flushAsyncBack();
 
@@ -176,7 +206,6 @@ describe('useOverlayHistory', () => {
     const first = renderHook(({ open }) => useOverlayHistory(open, jest.fn()), {
       initialProps: { open: true },
     });
-    act(() => first.result.current.notifyDismissed());
     act(() => first.rerender({ open: false }));
     await flushAsyncBack();
 
@@ -197,7 +226,6 @@ describe('useOverlayHistory', () => {
     });
     renderHook(() => useOverlayHistory(true, jest.fn()));
 
-    act(() => outer.result.current.notifyDismissed());
     act(() => outer.rerender({ open: false }));
     await flushAsyncBack();
 
@@ -213,26 +241,24 @@ describe('useOverlayHistory', () => {
       '/movies/now-showing',
     );
 
-    const { result, rerender } = renderHook(
+    const { rerender } = renderHook(
       ({ open }) => useOverlayHistory(open, jest.fn()),
       { initialProps: { open: false } },
     );
 
-    act(() => result.current.notifyDismissed());
     act(() => rerender({ open: false }));
     await flushAsyncBack();
 
     expect(backSpy).not.toHaveBeenCalled();
   });
 
-  it('単独のとき、× で閉じた後の戻るで余計に閉じない', async () => {
+  it('単独のとき、閉じた後の戻るで余計に閉じない', async () => {
     const onClose = jest.fn();
-    const { result, rerender } = renderHook(
+    const { rerender } = renderHook(
       ({ open }) => useOverlayHistory(open, onClose),
       { initialProps: { open: true } },
     );
 
-    act(() => result.current.notifyDismissed());
     act(() => rerender({ open: false }));
     await flushAsyncBack();
 
@@ -252,12 +278,9 @@ describe('useOverlayHistory', () => {
     expect(window.history.length).toBe(before + 1);
   });
 
-  it('ユーザーが閉じていても、ルーターが先に遷移していれば畳まない', () => {
-    const { result, unmount } = renderHook(() =>
-      useOverlayHistory(true, jest.fn()),
-    );
+  it('ルーターが先に遷移していれば畳まない', () => {
+    const { unmount } = renderHook(() => useOverlayHistory(true, jest.fn()));
 
-    act(() => result.current.notifyDismissed());
     // ルーターが遷移し、自分が積んだエントリはもう最前面ではない
     act(() => {
       window.history.pushState({ router: 'next' }, '', '/person/500');

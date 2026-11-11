@@ -4,11 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { MobileDrawer } from './mobileDrawer';
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 let mockPathname = '/';
 
 jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname,
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
 }));
 
 // useSession / signOut のモック
@@ -176,7 +177,8 @@ describe('MobileDrawer', () => {
     const user = userEvent.setup();
     render(<MobileDrawer {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /ログイン/ }));
-    expect(mockPush).toHaveBeenCalledWith('/auth/signin');
+    // ドロワーが積んだエントリを食わせるため replace を使う（#1043）
+    expect(mockReplace).toHaveBeenCalledWith('/auth/signin');
   });
 
   it('未認証で保護ルート(お気に入り)クリックでログイン誘導が表示されドロワーが閉じる', async () => {
@@ -200,7 +202,7 @@ describe('MobileDrawer', () => {
     const user = userEvent.setup();
     render(<MobileDrawer {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /設定/ }));
-    expect(mockPush).toHaveBeenCalledWith('/settings');
+    expect(mockReplace).toHaveBeenCalledWith('/settings');
   });
 
   it('ログアウトボタンクリックでsignOutが呼ばれる', async () => {
@@ -309,7 +311,7 @@ describe('MobileDrawer', () => {
 
       await user.click(screen.getByRole('button', { name: /アカウント管理/ }));
 
-      expect(mockPush).toHaveBeenCalledWith('/admin/accounts');
+      expect(mockReplace).toHaveBeenCalledWith('/admin/accounts');
     });
 
     // SP の導線を忘れると、管理画面へ到達できる経路が PC だけになる
@@ -329,7 +331,7 @@ describe('MobileDrawer', () => {
 
       await user.click(screen.getByRole('button', { name: /受賞作品の同期/ }));
 
-      expect(mockPush).toHaveBeenCalledWith('/admin/awards');
+      expect(mockReplace).toHaveBeenCalledWith('/admin/awards');
     });
 
     it('一般ユーザーのときは「受賞作品の同期」ボタンが表示されない', () => {

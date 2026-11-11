@@ -10,6 +10,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { IoPlayOutline } from 'react-icons/io5';
 import { Loading } from '@/components/ui/loading/loading';
+import { useModalNavigation } from '@/components/ui/modal/modal';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
@@ -153,6 +154,14 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     onRequestClose,
   }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
+    const { notifyNavigating } = useModalNavigation();
+
+    // キャストから人物ページへ出る経路。モーダルを閉じるのと同時に
+    // 遷移するので、履歴を畳む非同期の back に取り消されないよう申告する（#1043）
+    const handleCastClick = useCallback(() => {
+      notifyNavigating();
+      onRequestClose?.();
+    }, [notifyNavigating, onRequestClose]);
     const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
     const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
 
@@ -482,7 +491,8 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                           href={ROUTES.PERSON_DETAIL(actor.id)}
                           className={styles.c_movie_detail__cast_item}
                           aria-label={`${actor.name}のプロフィール`}
-                          onClick={onRequestClose}
+                          replace
+                          onClick={handleCastClick}
                         >
                           {profileUrl ? (
                             <Image

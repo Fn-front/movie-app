@@ -122,18 +122,11 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  const { notifyDismissed } = useOverlayHistory(open, handleHistoryClose);
-
-  const handleOpenChange = useCallback(
-    (next: boolean) => {
-      // Radix の閉じる操作のときだけ履歴を畳む（useOverlayHistory 参照）。
-      // ナビゲーションリンクで閉じる経路はここを通らない
-      if (!next) {
-        notifyDismissed();
-      }
-      onOpenChange(next);
-    },
-    [onOpenChange, notifyDismissed],
+  // ドロワーが積んだエントリの上に遷移を push すると、エントリが
+  // 下に埋まって戻るが空振りする。replace でエントリごと置き換える（#1043）
+  const { shouldReplaceNavigation } = useOverlayHistory(
+    open,
+    handleHistoryClose,
   );
 
   const navItems = useMemo(
@@ -163,21 +156,34 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
     onCalendarClick?.();
   }, [onOpenChange, onCalendarClick]);
 
+  // ドロワーから出る遷移は replace にする。push だとドロワーが積んだ
+  // エントリが下に埋まり、戻るが空振りする（#1043）
+  const navigateFromDrawer = useCallback(
+    (href: string) => {
+      if (shouldReplaceNavigation) {
+        router.replace(href);
+        return;
+      }
+      router.push(href);
+    },
+    [router, shouldReplaceNavigation],
+  );
+
   const handleNavigateToSettings = useCallback(() => {
-    router.push(ROUTES.SETTINGS);
-  }, [router]);
+    navigateFromDrawer(ROUTES.SETTINGS);
+  }, [navigateFromDrawer]);
 
   const handleNavigateToAdminAccounts = useCallback(() => {
-    router.push(ROUTES.ADMIN_ACCOUNTS);
-  }, [router]);
+    navigateFromDrawer(ROUTES.ADMIN_ACCOUNTS);
+  }, [navigateFromDrawer]);
 
   const handleNavigateToAdminAwardSync = useCallback(() => {
-    router.push(ROUTES.ADMIN_AWARDS);
-  }, [router]);
+    navigateFromDrawer(ROUTES.ADMIN_AWARDS);
+  }, [navigateFromDrawer]);
 
   const handleLogin = useCallback(() => {
-    router.push(ROUTES.LOGIN);
-  }, [router]);
+    navigateFromDrawer(ROUTES.LOGIN);
+  }, [navigateFromDrawer]);
 
   const handleLogout = useCallback(async () => {
     await logout();
@@ -193,7 +199,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
   const isAdmin = isAuthenticated && session?.user?.role === USER_ROLE.ADMIN;
 
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={styles.c_mobile_drawer__overlay} />
         <Dialog.Content
@@ -223,6 +229,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
                 >
                   <Link
                     href={item.href}
+                    replace={shouldReplaceNavigation}
                     className={`${styles.c_mobile_drawer__nav_link} ${item.isActive ? styles['c_mobile_drawer__nav_link--active'] : ''}`}
                     aria-current={item.isActive ? 'page' : undefined}
                     onClick={handleNavLinkClick(item.href)}

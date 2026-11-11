@@ -213,6 +213,9 @@
   --duration-fast: 150ms;
   --duration-normal: 300ms;
   --duration-slow: 500ms;
+  // data-theme が付くのを待つ上限。これを過ぎたら、テーマが未解決でも本文を出す
+  // （JS が遅い・失敗したときに真っ白のままにしないための保険。#1013）
+  --duration-theme-pending: 1000ms;
 
   // 基本トランジション
   --transition-all: all var(--duration-normal) var(--ease-in-out);

@@ -114,3 +114,67 @@ test.describe('テーマのデフォルト（未認証・OS追従）', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
 });
+
+/**
+ * `notFound()` のページは `<html id="__next_error__">` の最小シェルで返り、
+ * layout のインラインスクリプトを含まない。ThemeProvider が OS 追従のときしか
+ * 適用しないと、明示設定のユーザーに data-theme が一度も付かなかった（#1013）。
+ */
+test.describe('テーマの適用（notFound ページ）', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('明示設定がOS設定と異なっていても適用される', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.addInitScript((key) => {
+      window.localStorage.setItem(key, 'dark');
+    }, THEME_STORAGE_KEY);
+
+    await page.goto('/person/999999999');
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  });
+
+  test('OS追従のときも従来どおり適用される', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+
+    await page.goto('/person/999999999');
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  });
+
+  test('テーマ解決後に本文が表示される（ちらつき抑止が解除される）', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.addInitScript((key) => {
+      window.localStorage.setItem(key, 'dark');
+    }, THEME_STORAGE_KEY);
+
+    await page.goto('/person/999999999');
+
+    // data-theme が付くまで body を隠しているため、解除されることまで確認する
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.locator('body')).toHaveCSS('opacity', '1');
+  });
+});
+
+/**
+ * ちらつき抑止（`html:not([data-theme]) body`）が通常ページに影響しないこと。
+ * インラインスクリプトは `<head>` 末尾で走るため、body が描かれる時点では
+ * 必ず data-theme が付いており、このセレクタは一致しないはず。
+ */
+test.describe('ちらつき抑止の影響範囲', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('通常ページでは本文が隠れない', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.addInitScript((key) => {
+      window.localStorage.setItem(key, 'dark');
+    }, THEME_STORAGE_KEY);
+
+    await page.goto('/auth/signin');
+
+    await expect(page.locator('body')).toHaveCSS('opacity', '1');
+    await expect(page.getByRole('heading', { name: 'ログイン' })).toBeVisible();
+  });
+});

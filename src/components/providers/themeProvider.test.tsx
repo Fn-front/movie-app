@@ -1,10 +1,13 @@
 /**
  * ThemeProviderコンポーネントのテスト
  *
- * 新仕様:
- * - 明示設定（localStorage=light/dark）時は data-theme を上書きしない（初回描画は
- *   layout のインラインスクリプトが担当するため）
+ * 仕様:
+ * - マウント時、明示設定の有無によらず解決済みテーマを適用する
  * - 未設定/system 時は OS（prefers-color-scheme）を解決して適用し、OS変更に追従する
+ *
+ * 以前は「明示設定時は layout のインラインスクリプトが適用済み」という前提で
+ * 上書きしない作りだった。しかし `notFound()` のページはインラインスクリプトを
+ * 含まない最小シェルで返るため、明示設定のユーザーに一度も適用されなかった（#1013）。
  */
 
 jest.mock('@/constants/common', () => ({ STORAGE_KEYS: { THEME: 'theme' } }));
@@ -45,13 +48,38 @@ describe('ThemeProvider', () => {
     setupMatchMedia();
   });
 
-  it('明示 dark 設定時は data-theme を上書きしない', () => {
+  it('明示 dark 設定かつ OS ライトなら data-theme=dark を適用する', () => {
+    // notFound() のページではインラインスクリプトが流れてこないため、
+    // ここで適用しないと明示設定が一度も反映されない（#1013）
     localStorage.setItem('theme', 'dark');
+    mediaState.dark = false;
 
     render(<ThemeProvider />);
 
-    // 明示設定は Provider の対象外（インラインスクリプトが適用済みの想定）
-    expect(document.documentElement.getAttribute('data-theme')).toBeNull();
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('明示 light 設定かつ OS ダークなら data-theme=light を適用する', () => {
+    localStorage.setItem('theme', 'light');
+    mediaState.dark = true;
+
+    render(<ThemeProvider />);
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('明示設定時は OS 変更に追従しない', () => {
+    localStorage.setItem('theme', 'dark');
+    mediaState.dark = false;
+    render(<ThemeProvider />);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+
+    act(() => {
+      mediaState.dark = true;
+      listeners.forEach((listener) => listener());
+    });
+
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 
   it('未設定かつ OS ダーク時は data-theme=dark を適用する', () => {

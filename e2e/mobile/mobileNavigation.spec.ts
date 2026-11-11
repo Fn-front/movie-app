@@ -157,6 +157,43 @@ test.describe('モバイルナビゲーション', () => {
 test.describe('SP幅のスクロール', () => {
   const SCROLL_TARGET = 1200;
 
+  test('スクロールしてもヘッダーが画面内に留まる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    await page.waitForLoadState('networkidle');
+
+    await page.evaluate((top) => window.scrollTo(0, top), SCROLL_TARGET);
+    await expect
+      .poll(() => page.evaluate(() => Math.round(window.scrollY)))
+      .toBeGreaterThan(0);
+
+    // SP ではハンバーガーと検索がヘッダー専有なので、流れて消えると
+    // スクロール中にナビゲーションへ到達できなくなる（#1036 の回帰）
+    const headerTop = await page.evaluate(() =>
+      Math.round(document.querySelector('header')!.getBoundingClientRect().top),
+    );
+
+    expect(headerTop).toBe(0);
+  });
+
+  test('スクロール後もメニューボタンを押せる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    await page.waitForLoadState('networkidle');
+    await page.evaluate((top) => window.scrollTo(0, top), SCROLL_TARGET);
+
+    // ヘッダーが固定されていれば、Playwright の click でも
+    // 先頭へ戻されずにそのまま押せる
+    await page.getByRole('button', { name: 'メニューを開く' }).click();
+
+    await expect(page.getByText('メニュー')).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => Math.round(window.scrollY)))
+      .toBeGreaterThan(0);
+  });
+
   test('一覧がドキュメントスクロールになっている', async ({
     authenticatedPage: page,
   }) => {
@@ -181,18 +218,8 @@ test.describe('SP幅のスクロール', () => {
       .toBeGreaterThan(0);
 
     // アプリ内のクライアント遷移で確認する。ハードリロードを挟むと
-    // 復元前に本文が揃わず、ブラウザが復元できないため区別すること。
-    //
-    // ⚠️ メニューボタンは sticky ヘッダーの中にある。Playwright の click は
-    // 対象を「フロー上の位置」まで見せようとするため、sticky 要素だと
-    // ドキュメントが先頭まで戻ってしまう（実ブラウザのタップでは起きない）。
-    // ここだけ DOM の click で開く。ドロワー自体は position: fixed なので
-    // 中のリンクは通常の click で問題ない。
-    await page.evaluate(() => {
-      document
-        .querySelector<HTMLButtonElement>('button[class*=mobile_menu_button]')
-        ?.click();
-    });
+    // 復元前に本文が揃わず、ブラウザが復元できないため区別すること
+    await page.getByRole('button', { name: 'メニューを開く' }).click();
     await page.getByRole('link', { name: '受賞作品' }).click();
     await page.waitForURL('/awards');
 

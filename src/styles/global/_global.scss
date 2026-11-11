@@ -14,6 +14,17 @@ html {
 html,
 body {
   max-width: 100vw;
+}
+
+// 横はみ出しのクリップは html だけに置く。
+//
+// html の overflow はビューポートへ伝播し、html 自身は visible として扱われる。
+// 一方 body に overflow-x を書くと伝播せず body に残り、CSS の計算値規則で
+// overflow-y が visible → auto に昇格して **body がスクロールコンテナになる**。
+// body の高さは内容と同じなので決してスクロールせず、その中の
+// position: sticky は基準スクロールポートが動かないため永久に発動しない。
+// 実際これで SP のヘッダーが固定されなくなっていた（#1036 の回帰）。
+html {
   overflow-x: hidden;
 }
 

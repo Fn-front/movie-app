@@ -46,9 +46,15 @@
   }
 
   // ヘッダー
+  //
+  // sticky はこのラッパー側に置く。中の .c_header に書いても、包含ブロックが
+  // このラッパー（高さ＝ヘッダーと同じ）になり動く余地がゼロで発動しない。
+  // ここなら包含ブロックが .c_app_layout になり、本文の高さぶん効く。
   &__header {
     flex-shrink: 0;
     z-index: $z-index-header;
+    position: sticky;
+    top: 0;
   }
 
   // ボディ（サイドバー + メインコンテンツ）

@@ -3,7 +3,13 @@ import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'jest-axe';
 
-import { Modal, ModalHeader, ModalBody, ModalFooter } from './modal';
+import {
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  useModalNavigation,
+} from './modal';
 
 // --- Tests ---
 
@@ -341,5 +347,36 @@ describe('ModalFooter', () => {
       <ModalFooter className='custom-footer'>フッター内容</ModalFooter>,
     );
     expect(container.firstChild).toHaveClass('custom-footer');
+  });
+});
+
+/**
+ * モーダルの中から遷移の申告を取れること。
+ *
+ * context の既定値は無言の no-op なので、Provider を外しても
+ * 子は動き続けてしまう。ここで provider の存在を固定する（#1043）
+ */
+describe('useModalNavigation', () => {
+  const Probe = () => {
+    const { shouldReplaceNavigation } = useModalNavigation();
+    return <span data-testid='probe'>{String(shouldReplaceNavigation)}</span>;
+  };
+
+  it('Modal の中では自分のエントリの有無を取れる', async () => {
+    render(
+      <Modal open onOpenChange={jest.fn()} title='テスト'>
+        <Probe />
+      </Modal>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('probe')).toHaveTextContent('true');
+    });
+  });
+
+  it('Modal の外では false になる', () => {
+    render(<Probe />);
+
+    expect(screen.getByTestId('probe')).toHaveTextContent('false');
   });
 });

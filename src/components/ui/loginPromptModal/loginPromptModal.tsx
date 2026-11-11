@@ -30,7 +30,7 @@ import styles from './loginPromptModal.module.scss';
 const LoginPromptActions = memo<{ onClose: () => void }>(
   function LoginPromptActions({ onClose }) {
     const router = useRouter();
-    const { notifyNavigating } = useModalNavigation();
+    const { shouldReplaceNavigation, notifyNavigating } = useModalNavigation();
 
     const handleLogin = useCallback(() => {
       // 閉じるのと同時に遷移する。申告しないと、履歴を畳む非同期の
@@ -38,9 +38,14 @@ const LoginPromptActions = memo<{ onClose: () => void }>(
       notifyNavigating();
       onClose();
       // モーダルが積んだエントリを食わせる。push だとエントリが
-      // 遷移の下に埋まり、戻るが空振りする
-      router.replace(ROUTES.LOGIN);
-    }, [notifyNavigating, onClose, router]);
+      // 遷移の下に埋まり、戻るが空振りする。
+      // エントリが無いときに replace すると実ページを消してしまう
+      if (shouldReplaceNavigation) {
+        router.replace(ROUTES.LOGIN);
+        return;
+      }
+      router.push(ROUTES.LOGIN);
+    }, [notifyNavigating, onClose, router, shouldReplaceNavigation]);
 
     return (
       <>

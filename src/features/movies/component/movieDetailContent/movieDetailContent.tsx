@@ -154,7 +154,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     onRequestClose,
   }) {
     const { movie, isLoading, isError } = useMovieDetail(movieId);
-    const { notifyNavigating } = useModalNavigation();
+    const { shouldReplaceNavigation, notifyNavigating } = useModalNavigation();
 
     // キャストから人物ページへ出る経路。モーダルを閉じるのと同時に
     // 遷移するので、履歴を畳む非同期の back に取り消されないよう申告する（#1043）
@@ -491,7 +491,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                           href={ROUTES.PERSON_DETAIL(actor.id)}
                           className={styles.c_movie_detail__cast_item}
                           aria-label={`${actor.name}のプロフィール`}
-                          replace
+                          replace={shouldReplaceNavigation}
                           onClick={handleCastClick}
                         >
                           {profileUrl ? (

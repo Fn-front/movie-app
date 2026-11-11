@@ -151,6 +151,37 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
 test.describe('未認証のログイン誘導を閉じたあとの戻る', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
+  /**
+   * 「閉じるのと同時に別のオーバーレイが開く」経路。
+   *
+   * ドロワーを畳むための `history.back()` は非同期なので、素直に畳むと
+   * **その後に積まれたログイン誘導のエントリが捨てられる**。戻ると
+   * モーダルが閉じるのではなくページごと離脱し、#1026 が直した問題が
+   * そのまま戻る（実測で確認）。
+   *
+   * 「閉じたあと戻る」だけを見ていると、エントリが消えていても
+   * 期待どおりの URL に着いてしまい**気づけない**
+   */
+  test('ログイン誘導が開いている状態で戻ると、モーダルだけが閉じる', async ({
+    page,
+  }) => {
+    await page.goto('/movies/upcoming');
+    await waitForList(page);
+    await page.goto('/movies/now-showing');
+    await waitForList(page);
+
+    await page.getByRole('button', { name: ARIA_LABELS.OPEN_MENU }).click();
+    await page.getByRole('link', { name: 'ウォッチリスト' }).click();
+
+    const prompt = page.getByRole('dialog').last();
+    await expect(prompt).toBeVisible();
+
+    await page.goBack();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/movies\/now-showing/);
+  });
+
   test('キャンセルで閉じたあと、戻る1回で前のページへ出る', async ({
     page,
   }) => {

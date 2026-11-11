@@ -25,7 +25,15 @@ import { useOverlayHistory } from '@/hooks/useOverlayHistory';
  * 畳む処理は非同期なので、申告が無いと後から届く back が router の
  * 更新を打ち消す（#1043）。モーダルの外では何もしない
  */
-const ModalNavigationContext = createContext<{ notifyNavigating: () => void }>({
+interface ModalNavigation {
+  /** モーダル内からの遷移を replace にすべきか（自分のエントリが積まれているか） */
+  shouldReplaceNavigation: boolean;
+  /** 閉じるのと同時に router で URL を変えることを伝える */
+  notifyNavigating: () => void;
+}
+
+const ModalNavigationContext = createContext<ModalNavigation>({
+  shouldReplaceNavigation: false,
   notifyNavigating: () => {},
 });
 
@@ -147,11 +155,14 @@ export const Modal = memo<ModalProps>(function Modal({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  const { notifyNavigating } = useOverlayHistory(open, handleHistoryClose);
+  const { shouldReplaceNavigation, notifyNavigating } = useOverlayHistory(
+    open,
+    handleHistoryClose,
+  );
 
   const navigationValue = useMemo(
-    () => ({ notifyNavigating }),
-    [notifyNavigating],
+    () => ({ shouldReplaceNavigation, notifyNavigating }),
+    [shouldReplaceNavigation, notifyNavigating],
   );
 
   // 開く直前にフォーカスされていた要素を覚えておき、閉じたときにそこへ戻す。

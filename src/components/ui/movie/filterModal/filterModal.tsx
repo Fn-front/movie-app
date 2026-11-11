@@ -175,7 +175,7 @@ const FilterModalContent = memo<{
     useState<WatchProviderOfferType[]>(selectedOfferTypes);
   const [tempRegions, setTempRegions] =
     useState<RegionGroupKey[]>(selectedRegions);
-  const { notifyNavigating } = useModalNavigation();
+  const { shouldReplaceNavigation, notifyNavigating } = useModalNavigation();
 
   /** 適用を拒んだ理由。null なら問題なし */
   const [dateError, setDateError] = useState<string | null>(null);
@@ -405,9 +405,14 @@ const FilterModalContent = memo<{
               {pastMoviesGuide && (
                 <>
                   {FILTER_LABELS.PAST_MOVIES_GUIDE}
-                  {/* 遷移でページごと差し替わるため、モーダルを閉じる処理は要らない */}
+                  {/*
+                    遷移でページごと差し替わるため、モーダルを閉じる処理は要らない。
+                    ただし push だとモーダルが積んだエントリが遷移の下に埋まり、
+                    戻るが空振りする。replace でエントリごと置き換える（#1043）
+                  */}
                   <Link
                     href={pastMoviesSearchHref}
+                    replace={shouldReplaceNavigation}
                     className={styles.c_filter__date_hint_link}
                   >
                     {FILTER_LABELS.PAST_MOVIES_LINK}

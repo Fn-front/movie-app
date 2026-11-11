@@ -150,4 +150,54 @@ test.describe('ウォッチリストボタン', () => {
       timeout: 10000,
     });
   });
+  /**
+   * サイドバーからの削除はキャッシュ経由でしか伝わらない。
+   *
+   * 楽観状態の共有だけでは直らず、**キャッシュの購読**が効いていないと
+   * タイルが永久に古いまま残る。トーストの自動消滅による再描画に
+   * 相乗りしていた頃は、約5秒遅れて直っていた（#1009）
+   */
+  test('サイドバーから削除するとタイル側も追従する', async () => {
+    // 直前のテストの後始末は API を直接叩くため、キャッシュが古いまま残る。
+    // この spec は1つのページを使い回すので、ここで取り直す
+    await page.reload();
+    await expect(movieTiles(page).first()).toBeVisible({ timeout: 15000 });
+
+    const tile = movieTiles(page).first();
+    const tileAdd = tile.getByRole('button', { name: 'ウォッチリストに追加' });
+    const tileRemove = tile.getByRole('button', {
+      name: 'ウォッチリストから削除',
+    });
+
+    await expect(tileAdd.or(tileRemove)).toBeVisible({ timeout: 10000 });
+
+    if (await tileAdd.isVisible().catch(() => false)) {
+      const added = waitForWatchlistResponse(page);
+      // 追加直後のサイドバーは楽観アイテム（id が `optimistic-...`）を
+      // 出している。そのまま削除を押すと仮IDで DELETE して 400 になるため、
+      // 本物のIDに入れ替わる再取得まで待つ
+      const refetched = page.waitForResponse(
+        (res) =>
+          res.url().includes('/api/watchlist') &&
+          res.request().method() === 'GET' &&
+          res.ok(),
+      );
+      await tileAdd.click();
+      await added;
+      await refetched;
+    }
+    await expect(tileRemove).toBeVisible({ timeout: 10000 });
+
+    const sidebarRemove = page
+      .getByRole('complementary')
+      .getByRole('button', { name: /ウォッチリストから削除$/ })
+      .first();
+    await expect(sidebarRemove).toBeVisible({ timeout: 10000 });
+
+    const removed = waitForWatchlistResponse(page);
+    await sidebarRemove.click();
+    await removed;
+
+    await expect(tileAdd).toBeVisible({ timeout: 10000 });
+  });
 });

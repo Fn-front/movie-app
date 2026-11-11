@@ -19,19 +19,78 @@ const mockCancelQueries = jest.fn().mockResolvedValue(undefined);
 const mockGetQueriesData = jest.fn().mockReturnValue([]);
 const mockSetQueryData = jest.fn();
 
+/**
+ * 本物の `useQueryClient` は同じインスタンスを返す。
+ * 毎回別オブジェクトを返すと、クライアント単位で持つ状態が
+ * インスタンス間で共有されず、実アプリと挙動が食い違う
+ */
+const makeQueryClient = () => ({
+  getQueriesData: mockGetQueriesData,
+  invalidateQueries: mockInvalidateQueries,
+  cancelQueries: mockCancelQueries,
+  setQueryData: mockSetQueryData,
+  getQueryCache: () => mockQueryCache,
+});
+
+let mockQueryClient = makeQueryClient();
+
+/**
+ * キャッシュ購読を実際に検証できるようにする。
+ *
+ * no-op にすると「購読しているが再描画が起きない」種類の不具合を
+ * 構造的に captures できない（実際に見逃した）
+ */
+const cacheListeners = new Set<() => void>();
+
+const mockQueryCache = {
+  subscribe: (listener: () => void) => {
+    cacheListeners.add(listener);
+    return () => cacheListeners.delete(listener);
+  },
+};
+
+/** キャッシュの変化を模す */
+const emitCacheEvent = (
+  queryKey: readonly unknown[] = ['watchlist'],
+  type = 'updated',
+) => {
+  for (const listener of [...cacheListeners]) {
+    (listener as unknown as (event: unknown) => void)({
+      type,
+      query: { queryKey },
+    });
+  }
+};
+
 jest.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => ({
-    getQueriesData: mockGetQueriesData,
-    invalidateQueries: mockInvalidateQueries,
-    cancelQueries: mockCancelQueries,
-    setQueryData: mockSetQueryData,
-  }),
-  useMutation: ({
-    mutationFn,
-  }: {
-    mutationFn: (...args: unknown[]) => Promise<unknown>;
+  useQueryClient: () => mockQueryClient,
+  /**
+   * onMutate / onError / onSettled まで走らせる。
+   *
+   * mutationFn を呼ぶだけのモックだと、楽観状態の後始末（onSettled）が
+   * 一度も実行されず、そこに入れたバグを誰も検出できない
+   */
+  useMutation: (options: {
+    mutationFn: (variables: never) => Promise<unknown>;
+    onMutate?: (variables: never) => Promise<unknown> | unknown;
+    onError?: (error: unknown, variables: never, context: unknown) => void;
+    onSettled?: (
+      data: unknown,
+      error: unknown,
+      variables: never,
+      context: unknown,
+    ) => void;
   }) => ({
-    mutate: mutationFn,
+    mutate: async (variables: never) => {
+      const context = await options.onMutate?.(variables);
+      try {
+        const data = await options.mutationFn(variables);
+        options.onSettled?.(data, null, variables, context);
+      } catch (error) {
+        options.onError?.(error, variables, context);
+        options.onSettled?.(undefined, error, variables, context);
+      }
+    },
     isPending: false,
   }),
 }));
@@ -77,6 +136,35 @@ const createMovie = () => ({
   release_date: '2026-01-01',
 });
 
+const setupCacheWithItems = (
+  items: { tmdbMovieId: number; watchlistId: string }[],
+) => {
+  mockGetQueriesData.mockReturnValue([
+    [
+      ['watchlist', 'list', { sort: 'release_date_proximity' }],
+      {
+        pages: [
+          {
+            data: {
+              watchlist: items.map(({ tmdbMovieId, watchlistId }) => ({
+                id: watchlistId,
+                tmdb_movie_id: tmdbMovieId,
+                title: 'テスト映画',
+                poster_path: '/poster.jpg',
+                release_date: '2026-01-01',
+                added_at: '2026-01-01T00:00:00Z',
+              })),
+              next_cursor: null,
+              has_more: false,
+            },
+          },
+        ],
+        pageParams: [undefined],
+      },
+    ],
+  ]);
+};
+
 const setupCacheWithItem = (tmdbMovieId: number, watchlistId: string) => {
   mockGetQueriesData.mockReturnValue([
     [
@@ -111,6 +199,9 @@ const setupCacheWithItem = (tmdbMovieId: number, watchlistId: string) => {
 describe('useWatchlistToggle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // クライアント単位で持つ楽観状態をテスト間で持ち越さない
+    mockQueryClient = makeQueryClient();
+    cacheListeners.clear();
     mockGetQueriesData.mockReturnValue([]);
     mockUseSession.mockReturnValue({
       data: { user: { id: 'user-1' } },
@@ -137,10 +228,10 @@ describe('useWatchlistToggle', () => {
     expect(result.current.isInWatchlist(42)).toBe(true);
   });
 
-  it('ウォッチリストにない映画のトグルでaddWatchlistが呼ばれる', () => {
+  it('ウォッチリストにない映画のトグルでaddWatchlistが呼ばれる', async () => {
     const { result } = renderHook(() => useWatchlistToggle());
 
-    act(() => {
+    await act(async () => {
       result.current.toggleWatchlist(createMovie());
     });
 
@@ -156,11 +247,11 @@ describe('useWatchlistToggle', () => {
     });
   });
 
-  it('ウォッチリストにある映画のトグルでremoveWatchlistが呼ばれる', () => {
+  it('ウォッチリストにある映画のトグルでremoveWatchlistが呼ばれる', async () => {
     setupCacheWithItem(42, 'watchlist-id-123');
     const { result } = renderHook(() => useWatchlistToggle());
 
-    act(() => {
+    await act(async () => {
       result.current.toggleWatchlist(createMovie());
     });
 
@@ -262,15 +353,14 @@ describe('useWatchlistToggle', () => {
       expect(gtag).not.toHaveBeenCalled();
     });
 
-    it('gtag が無くても操作は成立する', () => {
+    it('gtag が無くても操作は成立する', async () => {
       delete window.gtag;
       const { result } = renderHook(() => useWatchlistToggle());
 
-      expect(() => {
-        act(() => {
-          result.current.toggleWatchlist(createMovie());
-        });
-      }).not.toThrow();
+      // 例外が出ればこの await で落ちる
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+      });
       expect(mockAddWatchlist).toHaveBeenCalled();
     });
 
@@ -289,6 +379,115 @@ describe('useWatchlistToggle', () => {
         ANALYTICS_EVENTS.WATCHLIST_ADD,
         { movie_id: 42 },
       );
+    });
+  });
+  /**
+   * タイルと詳細モーダルは別インスタンス。
+   *
+   * 以前は `useToast()` の toasts 購読で全消費者が再レンダリングされる
+   * という**偶然の依存**で同期していた。購読を外すと壊れる状態だった（#1009）
+   */
+  describe('インスタンス間の同期', () => {
+    it('別インスタンスで追加すると、こちらの isInWatchlist も true になる', () => {
+      const tile = renderHook(() => useWatchlistToggle());
+      const modal = renderHook(() => useWatchlistToggle());
+
+      expect(tile.result.current.isInWatchlist(42)).toBe(false);
+
+      act(() => {
+        modal.result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(tile.result.current.isInWatchlist(42)).toBe(true);
+    });
+
+    /**
+     * 本丸。キャッシュ**だけ**が変わったときに追従できるか。
+     *
+     * 楽観状態の共有だけでは「モーダル → タイル」は直るが、
+     * 「サイドバーから削除 → タイル」のようにキャッシュ経由でしか
+     * 伝わらない変化が永久に反映されない（#1009 の原因記述そのもの）
+     */
+    it('キャッシュだけが変わっても追従する', () => {
+      const { result } = renderHook(() => useWatchlistToggle());
+      const before = result.current.isInWatchlist;
+
+      expect(before(42)).toBe(false);
+
+      act(() => {
+        setupCacheWithItem(42, 'watchlist-1');
+        emitCacheEvent();
+      });
+
+      // 値だけ見ても意味が無い。isInWatchlist はクロージャなので、
+      // **再描画されなくても**呼び直せば新しいキャッシュを読んで true を返す。
+      // 画面に出るかどうかは「参照が変わった＝再描画された」かで決まる
+      expect(result.current.isInWatchlist).not.toBe(before);
+      expect(result.current.isInWatchlist(42)).toBe(true);
+    });
+
+    /**
+     * 楽観状態を QueryClient 単位で共有したため、後始末で対象を
+     * 取り違えるとアプリ全体がリロードまで誤った表示になる。
+     * 以前は ref で持っていたので、続けて別の作品を操作すると上書きされた
+     */
+    it('削除の後始末が、別の作品の楽観状態を消さない', async () => {
+      setupCacheWithItems([
+        { tmdbMovieId: 42, watchlistId: 'watchlist-42' },
+        { tmdbMovieId: 99, watchlistId: 'watchlist-99' },
+      ]);
+
+      // どちらの通信も保留にして、42 だけ先に完了させる
+      const resolvers = new Map<string, () => void>();
+      mockRemoveWatchlist.mockImplementation(
+        (id: string) =>
+          new Promise<void>((resolve) => {
+            resolvers.set(id, resolve);
+          }),
+      );
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist({ ...createMovie(), id: 42 });
+      });
+      await act(async () => {
+        result.current.toggleWatchlist({ ...createMovie(), id: 99 });
+      });
+
+      // 42 の後始末が走る。ここで 99 を消すと、99 がキャッシュ由来の
+      // 「まだ入っている」に戻ってしまう
+      await act(async () => {
+        resolvers.get('watchlist-42')?.();
+      });
+
+      expect(result.current.isInWatchlist(99)).toBe(false);
+    });
+
+    it('無関係なキーのキャッシュ変化では追従しない', () => {
+      const { result } = renderHook(() => useWatchlistToggle());
+      const before = result.current.isInWatchlist;
+
+      act(() => {
+        emitCacheEvent(['movies', 'detail', 1]);
+      });
+
+      expect(result.current.isInWatchlist).toBe(before);
+    });
+
+    it('別インスタンスで削除すると、こちらの isInWatchlist も false になる', () => {
+      setupCacheWithItem(42, 'watchlist-1');
+
+      const tile = renderHook(() => useWatchlistToggle());
+      const modal = renderHook(() => useWatchlistToggle());
+
+      expect(tile.result.current.isInWatchlist(42)).toBe(true);
+
+      act(() => {
+        modal.result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(tile.result.current.isInWatchlist(42)).toBe(false);
     });
   });
 });

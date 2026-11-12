@@ -14,6 +14,11 @@ import type { Page } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 import { test, expect } from '../fixtures/auth';
+import {
+  clickOutsideDialog,
+  expectEntryExists,
+  waitForFold,
+} from '../helpers/overlayHistory';
 
 test.use({ viewport: { width: 375, height: 812 } });
 
@@ -55,29 +60,8 @@ const expectNoGhostEntry = async (
   await expect.poll(() => historyLength(page)).toBe(before + expectedGrowth);
 };
 
-/**
- * 積んだエントリが畳み終わるまで待つ。
- *
- * 畳む処理は `history.back()` ＝**非同期**なので、閉じた直後に
- * `goBack()` すると2回ぶん戻ってしまう。テスト側のレースであって
- * 実装の問題ではない（利用者がそこまで速く押すことはない）
- */
-const waitForFold = (page: Page) =>
-  expect
-    .poll(() => page.evaluate(() => history.state?.__overlayHistory ?? null))
-    .toBeNull();
-
-/**
- * オーバーレイのエントリが実在することを確かめる。
- *
- * `waitForFold` は「トークンが消えるまで待つ」ので、**最初から無ければ
- * 即座に解決して何も待たない**。閉じる前にここで実在を固定しないと、
- * エントリが消えている不具合を素通りさせる（前回のレビューで実際に見逃した）
- */
-const expectEntryExists = (page: Page) =>
-  expect
-    .poll(() => page.evaluate(() => history.state?.__overlayHistory ?? null))
-    .not.toBeNull();
+// 「畳み終わるまで待つ」「エントリの実在を固定する」「外側クリック」は
+// `e2e/helpers/overlayHistory.ts` に置いている（同じ判定を使う spec が複数あるため）
 
 test.describe('オーバーレイを閉じたあとの戻る', () => {
   test('ドロワーのナビリンクで遷移したあと、戻る1回で前のページへ出る', async ({
@@ -120,6 +104,38 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     await expect(dialog).toBeVisible({ timeout: 15000 });
 
     await dialog.getByRole('button', { name: ARIA_LABELS.CLOSE }).click();
+    await expect(dialog).not.toBeVisible();
+    await waitForFold(page);
+
+    await page.goBack();
+
+    await expect(page).toHaveURL(/\/movies\/upcoming/);
+  });
+
+  /**
+   * 外側クリックは Radix の `onPointerDownOutside` を通るので、× や Esc と
+   * 同じく畳まれる側の経路。#1052 で畳む条件を「閉じ方」から
+   * 「自分のエントリが最前面か」に変えたため、**従来どおり畳まれることを
+   * 固定しておく**（#1043 の完了条件「×・Esc・外側クリックの挙動が従来どおり」）。
+   *
+   * リポジトリ全体で外側クリックを押す E2E はこれが最初の1本
+   */
+  test('フィルターを外側クリックで閉じたあと、戻る1回で前のページへ出る', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/upcoming');
+    await waitForList(page);
+    await page.goto('/movies/now-showing');
+    await waitForList(page);
+
+    await page.getByRole('button', { name: 'フィルター' }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // 閉じる前に実在を固定する。無いまま進むと waitForFold が素通りする
+    await expectEntryExists(page);
+
+    await clickOutsideDialog(page, dialog);
     await expect(dialog).not.toBeVisible();
     await waitForFold(page);
 

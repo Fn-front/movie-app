@@ -9,6 +9,23 @@ import { WatchlistPanel } from './watchlistPanel';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 
 // --- Mocks ---
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn((movieId: number) => {
+  mockSelectedMovieId = movieId;
+});
+const mockCloseMovieDetail = jest.fn(() => {
+  mockSelectedMovieId = null;
+});
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
+}));
 
 const mockUseWatchlist = {
   watchlist: [] as WatchlistItem[],
@@ -69,6 +86,8 @@ const createMockItems = (count: number): WatchlistItem[] =>
 describe('WatchlistPanel', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // URL のクエリ相当。テスト間で持ち越すと前のテストのモーダルが残る
+    mockSelectedMovieId = null;
     mockUseWatchlist.watchlist = [];
     mockUseWatchlist.isLoading = false;
   });
@@ -111,12 +130,16 @@ describe('WatchlistPanel', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
-  it('アイテムクリックで映画詳細モーダルが表示される', async () => {
+  /**
+   * ⚠️ サイドバーだけは URL ではなくローカル state で開く。
+   * URL の movie_id を読むとページ側のモーダルと2枚同時に開くため（#1077）
+   */
+  it('タイトルのリンクで詳細モーダルが開く', async () => {
     const user = userEvent.setup();
     mockUseWatchlist.watchlist = createMockItems(1);
     render(<WatchlistPanel />);
 
-    await user.click(screen.getByRole('button', { name: '映画0' }));
+    await user.click(screen.getByRole('link', { name: '映画0' }));
 
     expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
     expect(screen.getByText('Movie 100')).toBeInTheDocument();
@@ -127,10 +150,19 @@ describe('WatchlistPanel', () => {
     mockUseWatchlist.watchlist = createMockItems(1);
     render(<WatchlistPanel />);
 
-    await user.click(screen.getByRole('button', { name: '映画0' }));
+    await user.click(screen.getByRole('link', { name: '映画0' }));
     expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
 
     await user.click(screen.getByTestId('close-modal'));
+    expect(screen.queryByTestId('movie-detail-modal')).not.toBeInTheDocument();
+  });
+
+  it('URLに movie_id があってもサイドバーのモーダルは開かない', () => {
+    mockUseWatchlist.watchlist = createMockItems(1);
+    mockSelectedMovieId = 100;
+
+    render(<WatchlistPanel />);
+
     expect(screen.queryByTestId('movie-detail-modal')).not.toBeInTheDocument();
   });
 

@@ -7,13 +7,20 @@
 
 import { memo, useCallback, type Ref } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { Card } from '@/components/ui/card/card';
 import { RatingIndicator } from '@/features/favorites/component/ratingIndicator/ratingIndicator';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
-import { IMAGE_SIZES, DISPLAY_LIMITS, EMPTY_MESSAGES } from '@/constants';
+import {
+  IMAGE_SIZES,
+  DISPLAY_LIMITS,
+  EMPTY_MESSAGES,
+  ROUTES,
+} from '@/constants';
 import { getTMDbPosterUrl } from '@/utils/image';
+import { shouldLetBrowserHandle } from '@/utils/linkClick';
 import type {
   FavoriteItem,
   MovieFavoriteInfo,
@@ -127,16 +134,16 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
     );
   }, [item, onFavoriteToggle]);
 
-  const handleClick = useCallback(() => {
-    onClick?.(item.tmdb_movie_id);
-  }, [item.tmdb_movie_id, onClick]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        onClick?.(item.tmdb_movie_id);
+  // タイトルのリンクをカード全面の当たり判定にするので、左クリックだけ
+  // 横取りしてモーダルで開く。修飾キー付き・中クリックは既定動作に任せる
+  const handleTitleClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!onClick || shouldLetBrowserHandle(event)) {
+        return;
       }
+
+      event.preventDefault();
+      onClick(item.tmdb_movie_id);
     },
     [item.tmdb_movie_id, onClick],
   );
@@ -144,13 +151,12 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
   return (
     <Card
       noPadding
-      clickable={!!onClick}
+      hoverable
+      // カード全体を role="button" にすると、内側のお気に入りボタンが
+      // インタラクティブ要素の入れ子になり ARIA 上不正になる
+      // （axe: nested-interactive / #1060）。代わりにタイトルを本物のリンクに
+      // し、::after でカード全面を当たり判定にする（#719 の MovieTile と同じ）
       className={styles.c_favorite_tile}
-      onClick={onClick ? handleClick : undefined}
-      onKeyDown={onClick ? handleKeyDown : undefined}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      aria-label={onClick ? item.title : undefined}
     >
       <div className={styles.c_favorite_tile__poster}>
         {posterUrl ? (
@@ -175,7 +181,19 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
         </div>
       </div>
       <div className={styles.c_favorite_tile__info}>
-        <h2 className={styles.c_favorite_tile__title}>{item.title}</h2>
+        <h2 className={styles.c_favorite_tile__title}>
+          {onClick ? (
+            <Link
+              href={ROUTES.MOVIE_DETAIL(item.tmdb_movie_id)}
+              className={styles.c_favorite_tile__title_link}
+              onClick={handleTitleClick}
+            >
+              {item.title}
+            </Link>
+          ) : (
+            item.title
+          )}
+        </h2>
         <div className={styles.c_favorite_tile__rating}>
           <RatingIndicator rating={item.rating} size='sm' />
         </div>

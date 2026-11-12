@@ -2,6 +2,9 @@
 @use '@/styles/mixins' as *;
 
 .c_favorite_tile {
+  // タイトルのリンクの ::after（カード全面の当たり判定）の基準にする。
+  // 無いと ::after が遠くの祖先いっぱいに広がる（#1060）
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -33,6 +36,8 @@
 
   &__favorite_button {
     position: absolute;
+    // タイトルのリンクの ::after より上に置く。無いと覆われて押せない（#1060）
+    z-index: 1;
     top: $spacing-2;
     right: $spacing-2;
   }
@@ -54,6 +59,36 @@
     line-height: $line-height-tight;
 
     @include text-truncate-multiline(2);
+  }
+
+  // タイトルのリンクをカード全面の当たり判定にする（stretched link パターン）。
+  // カード全体を role="button" にせずに「どこを押しても詳細が開く」を保つ
+  // （#719 の MovieTile と同じ作り / #1060）
+  &__title_link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+    }
+
+    // マウス操作でのフォーカスにはリングを出さない
+    &:focus:not(:focus-visible) {
+      outline: none;
+    }
+
+    &:focus-visible {
+      outline: none;
+
+      &::after {
+        outline: $border-width-2 solid $primary-500;
+        outline-offset: -2px;
+      }
+    }
   }
 
   &__rating {

@@ -2,21 +2,17 @@
 @use '@/styles/mixins' as *;
 
 .c_watchlist_item {
+  // タイトルのリンクの ::after（行全面の当たり判定）の基準にする（#1064）
+  position: relative;
   display: flex;
   align-items: center;
   gap: $spacing-2;
   padding: $spacing-2;
   border-radius: $border-radius-md;
-  cursor: pointer;
   transition: background-color $duration-fast $ease-in-out;
 
   &:hover {
     background-color: $background-secondary;
-  }
-
-  &:focus-visible {
-    outline: $border-width-2 solid $primary-500;
-    outline-offset: -$border-width-2;
   }
 
   &__poster {
@@ -54,6 +50,35 @@
     @include text-truncate-multiline(3);
   }
 
+  // タイトルのリンクを行全面の当たり判定にする（stretched link パターン）。
+  // 行全体を role="button" にせずに「どこを押しても詳細が開く」を保つ（#1064）
+  &__title_link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+    }
+
+    &:focus:not(:focus-visible) {
+      outline: none;
+    }
+
+    &:focus-visible {
+      outline: none;
+
+      &::after {
+        outline: $border-width-2 solid $primary-500;
+        outline-offset: -$border-width-2;
+      }
+    }
+  }
+
   &__release_date {
     margin: $spacing-1 0 0;
     font-size: $font-size-2xs;
@@ -61,6 +86,9 @@
   }
 
   &__delete {
+    // タイトルのリンクの ::after より上に置く。無いと覆われて押せない（#1064）
+    position: relative;
+    z-index: 1;
     flex-shrink: 0;
     display: flex;
     align-items: center;

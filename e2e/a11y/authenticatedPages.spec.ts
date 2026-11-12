@@ -11,7 +11,7 @@
  *
  * | 対象 | 理由 |
  * | --- | --- |
- * | `/watchlist` `/favorites` | #1060（タイルがクリック可能カードの中に操作ボタンを入れ子にしている / `nested-interactive` / serious）が未修正で、入れると必ず落ちる。#1033 Phase 2 でタイルを stretched Link に作り替えるときに一緒に足す |
+ * | ~~`/watchlist` `/favorites`~~ | **#1033 Phase 2 で対応済み**。タイルを stretched Link に作り替えて #1060 を解消したので検査対象に入れた |
  * | サイドバーの `WatchlistItem` | 同じ入れ子が #1064 にある。下の「サイドバー」を参照 |
  * | `/admin/accounts` `/admin/awards` | admin ロールの専用ユーザーが要る（`e2e/admin/` の前例）。#1065 に残す |
  * | `/theater-experience` | WebGL（three.js）の描画完了を待つ仕掛けが別途要る。#1065 に残す |
@@ -84,6 +84,13 @@ const AUTHENTICATED_PAGES = [
   { name: '公開中', path: '/movies/now-showing' },
   { name: '公開予定', path: '/movies/upcoming' },
   { name: '設定', path: '/settings' },
+  // #1033 Phase 2 でタイルを stretched Link に作り替え、#1060 の
+  // nested-interactive が解消したので検査対象に入れる。
+  // ⚠️ 共有テストユーザーのウォッチリスト／お気に入りは空のことがある。
+  //    空状態でも検査する価値はあるが、タイルの回帰を見たい場合は
+  //    データを入れる必要がある（#1056 の範囲）
+  { name: 'ウォッチリスト', path: '/watchlist' },
+  { name: 'お気に入り', path: '/favorites' },
   // クエリのキーは `query`（`ROUTES.SEARCH` のコメント／`useSearch.ts`）。
   // `q` だと検索が走らず、クエリなしの画面を検査することになる
   { name: '検索（結果あり）', path: '/search?query=inception' },

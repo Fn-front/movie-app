@@ -159,21 +159,24 @@ test.describe('ウォッチリスト', () => {
   test('ウォッチリストページに映画が表示され、クリックで詳細モーダルが開く', async () => {
     await gotoWatchlistPage(page);
 
-    // ウォッチリストに映画が表示されている
-    const detailButton = page
-      .locator('[class*="c_watchlist_tile"][role="button"]')
+    // ウォッチリストに映画が表示されている。
+    // タイトルはリンク（#1060 でカードの role="button" をやめた）
+    const detailLink = page
+      .locator('a[class*="c_watchlist_tile__title_link"]')
       .first();
-    await expect(detailButton).toBeVisible({ timeout: 10000 });
+    await expect(detailLink).toBeVisible({ timeout: 10000 });
 
-    // タイルクリックで詳細モーダルが開く
-    await detailButton.click();
+    // 押すとモーダルで開き、URL に movie_id が付く（#1033）
+    await detailLink.click();
+    await expect(page).toHaveURL(/movie_id=\d+/);
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 15000 });
     await expect(dialog.getByText('詳細情報')).toBeVisible({ timeout: 15000 });
 
-    // モーダルを閉じる
+    // モーダルを閉じると movie_id が外れる
     await dialog.getByRole('button', { name: '閉じる' }).click();
     await expect(dialog).not.toBeVisible();
+    await expect(page).toHaveURL(/\/watchlist$/);
   });
 
   test('ウォッチリストページで削除すると映画が消える', async () => {

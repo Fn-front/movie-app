@@ -105,7 +105,7 @@ describe('WatchlistList', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: '映画0' }));
+    await user.click(screen.getByRole('link', { name: '映画0' }));
     expect(handleClick).toHaveBeenCalledWith(100);
   });
 
@@ -129,21 +129,49 @@ describe('WatchlistList', () => {
     expect(handleDelete).toHaveBeenCalledWith('wl-0');
   });
 
-  it('キーボード操作でタイルクリックが動作する', async () => {
-    const user = userEvent.setup();
-    const handleClick = jest.fn();
+  /**
+   * タイトルはリンクなので、キーボードの起動は Enter のみ（Space は効かない）。
+   * カード全体を role="button" にしていた頃の自前ハンドラは消した（#1060）
+   */
+  it('タイトルは詳細ページへのリンクで、フォーカスできる', () => {
     render(
       <WatchlistList
         watchlist={createMockItems(1)}
         isLoading={false}
-        onClick={handleClick}
+        onClick={jest.fn()}
       />,
     );
 
-    const tile = screen.getByRole('button', { name: '映画0' });
-    tile.focus();
-    await user.keyboard('{Enter}');
-    expect(handleClick).toHaveBeenCalledWith(100);
+    const link = screen.getByRole('link', { name: '映画0' });
+    link.focus();
+
+    expect(link).toHaveAttribute('href', '/movies/100');
+    expect(link).toHaveFocus();
+  });
+
+  /**
+   * カード全体を role="button" にすると、内側の視聴済み・削除ボタンが
+   * 入れ子になり axe の nested-interactive に触れる（#1060）
+   */
+  it('カード全体はボタンではない', () => {
+    render(
+      <WatchlistList
+        watchlist={createMockItems(1)}
+        isLoading={false}
+        onClick={jest.fn()}
+        onDelete={jest.fn()}
+        onWatchedToggle={jest.fn()}
+      />,
+    );
+
+    const names = screen
+      .getAllByRole('button')
+      .map((button) => button.getAttribute('aria-label'));
+
+    expect(names).toEqual([
+      '映画0を視聴済みにする',
+      '映画0をウォッチリストから削除',
+    ]);
   });
 
   describe('視聴済み', () => {
@@ -466,11 +494,11 @@ describe('WatchlistList', () => {
     });
 
     /**
-     * 評価はカード本体（role='button'）の内側にある。ARIA の
-     * Children Presentational により role='button' の子孫は読み上げから
-     * 刈られる実装があるため、カードの名前そのものに畳み込む
+     * カードの名前に評価を畳み込む回避は不要になった（#1060）。
+     * タイトルがリンクになり role="button" の子孫ではなくなったので、
+     * RatingIndicator の aria-label がそのまま読まれる
      */
-    it('評価をカードのアクセシブル名に含める', () => {
+    it('評価はカード名に畳み込まず、独立して読まれる', () => {
       render(
         <WatchlistList
           watchlist={watchedItems()}
@@ -480,40 +508,32 @@ describe('WatchlistList', () => {
         />,
       );
 
+      expect(screen.getByRole('link', { name: '映画0' })).toBeInTheDocument();
       expect(
-        screen.getByRole('button', { name: '映画0（評価 8/10）' }),
+        screen.getByRole('img', { name: '評価: 8/10' }),
       ).toBeInTheDocument();
     });
 
-    it('評価が無いときはカード名をタイトルだけにする', () => {
+    /**
+     * 当たり判定は ::after（カード全面）が担うので、評価の上を押しても
+     * 詳細が開く。jsdom は ::after を持たないため、ここでは
+     * 「評価がリンクの子孫になっていない」ことだけを固定する
+     * （入れ子になっていると nested-interactive に戻る）
+     */
+    it('評価はタイトルのリンクの中に入っていない', () => {
       render(
         <WatchlistList
           watchlist={watchedItems()}
           isLoading={false}
           onClick={jest.fn()}
-          getFavoriteInfo={() => null}
-        />,
-      );
-
-      expect(screen.getByRole('button', { name: '映画0' })).toBeInTheDocument();
-    });
-
-    it('評価はタイル本体のクリックを妨げない', async () => {
-      const user = userEvent.setup();
-      const onClick = jest.fn();
-
-      render(
-        <WatchlistList
-          watchlist={watchedItems()}
-          isLoading={false}
-          onClick={onClick}
           getFavoriteInfo={getFavorite}
         />,
       );
 
-      await user.click(screen.getByRole('img', { name: '評価: 8/10' }));
+      const link = screen.getByRole('link', { name: '映画0' });
+      const rating = screen.getByRole('img', { name: '評価: 8/10' });
 
-      expect(onClick).toHaveBeenCalledWith(100);
+      expect(link.contains(rating)).toBe(false);
     });
   });
 });

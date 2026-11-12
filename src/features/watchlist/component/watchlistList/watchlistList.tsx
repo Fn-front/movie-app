@@ -254,11 +254,10 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
               onKeyDown={handleWatchedKeyDown}
               disabled={isWatchedUpdating}
               className={styles.c_watchlist_tile__watched}
-              aria-label={`${item.title}を${
-                isWatched
-                  ? WATCHLIST_WATCHED_LABELS.UNMARK
-                  : WATCHLIST_WATCHED_LABELS.MARK
-              }`}
+              // 状態は aria-pressed だけで伝える。ラベルを状態で入れ替えると
+              // 視聴済みの行が「○○を未視聴に戻す、オン」と読まれ、未視聴だと
+              // 解釈される（#1046）。作品名は行の特定に要るので残す
+              aria-label={`${item.title}を${WATCHLIST_WATCHED_LABELS.MARK}`}
               aria-pressed={isWatched}
             >
               {isWatched ? (

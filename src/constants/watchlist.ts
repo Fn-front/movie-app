@@ -80,10 +80,15 @@ export const WATCHLIST_STREAMING_LABELS = {
  * 視聴済みの表示ラベル
  */
 export const WATCHLIST_WATCHED_LABELS = {
-  /** 視聴済みにする */
+  /**
+   * 視聴済みトグルのラベル（`${作品名}を視聴済みにする`）
+   *
+   * 状態は `aria-pressed` だけで伝えるので、ラベルは状態で変えない。
+   * 「未視聴に戻す」と出し分けると、視聴済みの行が
+   * 「○○を未視聴に戻す、オン」と読まれて意味が反転する
+   * （ARIA APG のボタンパターン／#1046）
+   */
   MARK: '視聴済みにする',
-  /** 未視聴に戻す */
-  UNMARK: '未視聴に戻す',
   /** 視聴済みバッジ */
   BADGE: '視聴済み',
 } as const;

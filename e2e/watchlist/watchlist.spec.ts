@@ -19,7 +19,7 @@ import {
   type DedicatedSession,
 } from '../fixtures/dedicatedSession';
 import { cleanupWatchlistForUser } from '../helpers/api';
-import { movieTiles } from '../helpers/locators';
+import { movieTiles, watchedToggles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 import { runScopedEmail } from '../helpers/runScope';
 import { waitForWriteResponse } from '../helpers/writeResponse';
@@ -111,9 +111,7 @@ function favoriteRatingModal(page: Page) {
 
 /** 一覧の先頭を視聴済みにし、開いた評価モーダルを閉じる。対象のタイトルを返す */
 async function markFirstAsWatched(page: Page): Promise<string> {
-  const watchedButton = page
-    .getByRole('button', { name: /を視聴済みにする$/ })
-    .first();
+  const watchedButton = watchedToggles(page, false).first();
   await expect(watchedButton).toBeVisible({ timeout: 30000 });
 
   const label = await watchedButton.getAttribute('aria-label');
@@ -256,9 +254,7 @@ test.describe('ウォッチリスト', () => {
     await page.goto('/watchlist');
     await markFirstAsWatched(page);
 
-    const unmarkButton = page
-      .getByRole('button', { name: /を未視聴に戻す$/ })
-      .first();
+    const unmarkButton = watchedToggles(page, true).first();
     await expect(unmarkButton).toBeVisible({ timeout: 15000 });
 
     const unmarkResponse = waitForWatchedPatchResponse(page);
@@ -270,8 +266,6 @@ test.describe('ウォッチリスト', () => {
     await expect(page.getByText('視聴済み', { exact: true })).toHaveCount(0, {
       timeout: 15000,
     });
-    await expect(
-      page.getByRole('button', { name: /を視聴済みにする$/ }).first(),
-    ).toBeVisible();
+    await expect(watchedToggles(page, false).first()).toBeVisible();
   });
 });

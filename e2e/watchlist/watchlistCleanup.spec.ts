@@ -20,7 +20,7 @@ import {
   cleanupFavoritesForUser,
   cleanupWatchlistForUser,
 } from '../helpers/api';
-import { movieTiles } from '../helpers/locators';
+import { movieTiles, watchedToggles } from '../helpers/locators';
 import { runScopedEmail } from '../helpers/runScope';
 import { waitForWriteResponse } from '../helpers/writeResponse';
 
@@ -80,9 +80,7 @@ test.describe('視聴済みの一括削除', () => {
 
     // 視聴済みにする
     await page.goto('/watchlist');
-    const watchButton = page
-      .getByRole('button', { name: /を視聴済みにする$/ })
-      .first();
+    const watchButton = watchedToggles(page, false).first();
     await expect(watchButton).toBeVisible({ timeout: 30000 });
 
     const patchResponse = waitForWriteResponse(page, {
@@ -164,9 +162,7 @@ test.describe('視聴済みの一括削除', () => {
     // 視聴済みにすると評価モーダルが開くので、そこでお気に入りに登録する。
     // 削除対象を「ウォッチリストにもお気に入りにも入っている状態」にする
     await page.goto('/watchlist');
-    const watchButton = page
-      .getByRole('button', { name: /を視聴済みにする$/ })
-      .first();
+    const watchButton = watchedToggles(page, false).first();
     await expect(watchButton).toBeVisible({ timeout: 30000 });
 
     const watchLabel = await watchButton.getAttribute('aria-label');
@@ -234,9 +230,7 @@ test.describe('視聴済みの一括削除', () => {
 
     // 視聴済みにして、評価モーダルは登録せずに閉じる＝お気に入り未登録のまま
     await page.goto('/watchlist');
-    const watchButton = page
-      .getByRole('button', { name: /を視聴済みにする$/ })
-      .first();
+    const watchButton = watchedToggles(page, false).first();
     await expect(watchButton).toBeVisible({ timeout: 30000 });
 
     const patchResponse = waitForWriteResponse(page, {

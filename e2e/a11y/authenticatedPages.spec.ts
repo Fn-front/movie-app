@@ -58,26 +58,6 @@ import {
 } from './helpers';
 
 /**
- * デスクトップ幅の検査だけ除外するルール
- *
- * ⚠️ **これは実在する違反の一時的な除外であり、「問題が無い」という判断ではない。**
- *
- * サイドバーのユーザーメニュー（`userMenu.tsx`）が、アバター画像を持たない
- * 利用者に対して表示名の頭文字を span で描いている。その結果ボタンの可視テキストが
- * 「頭文字 + 表示名」になり、`aria-label`（「表示名 ユーザーメニュー」）に
- * 含まれなくなるため `label-content-name-mismatch`（serious / WCAG 2.5.3）が出る。
- *
- * サイドバーは共通レイアウトにあるので、**下のページ全部が同じ1件で落ちる**。
- * 製品コードの修正は #1069 の担当範囲。ここで除外しているのは、1件の既知の違反の
- * ために認証済みページの回帰検査をまるごと入れられない状態にしないため。
- *
- * **#1069 が直ったらこの定数ごと消すこと。**（#1069 の完了条件に入れてある）
- *
- * SP 幅はサイドバーが `display: none` で検査対象に入らないため、除外しない。
- */
-const AUTHENTICATED_DISABLED_RULES = ['label-content-name-mismatch'] as const;
-
-/**
  * 認証済みで表示するページ
  *
  * `allowedIncomplete` は「axe が判定できないだけで実害が無い」と確認できた
@@ -165,12 +145,45 @@ test.describe('アクセシビリティ（認証済みページ）', () => {
         await expectNoA11yViolations(
           page,
           `${name} / ${theme}`,
-          AUTHENTICATED_DISABLED_RULES,
+          [],
           allowedIncomplete,
         );
       });
     }
   }
+
+  /**
+   * ユーザーメニューの頭文字（#1069）
+   *
+   * `label-content-name-mismatch` を避けるため、頭文字は DOM のテキストではなく
+   * `userMenu.module.scss` の `::before { content: attr(data-initial) }` で描いている。
+   *
+   * **この CSS を消しても他のどのテストも落ちない。** jest は `next/jest` で
+   * CSS Modules をプロキシに差し替えるので SCSS を評価せず、axe は
+   * 「文字が無い」ことを違反としない。つまり画面から頭文字だけが黙って消える。
+   * ここだけが実ブラウザの computed style を見てそれを止める。
+   */
+  test('ユーザーメニューの頭文字が ::before で描かれている', async ({
+    page,
+  }) => {
+    await gotoWithTheme(page, '/', 'light');
+    await waitForSidebar(page);
+
+    const sidebar = page.getByRole('complementary', { name: 'サイドバー' });
+    const avatar = sidebar.locator('[data-initial]');
+
+    // アバター画像を持つ利用者では頭文字そのものが描かれない。
+    // 共有テストユーザーは画像なしなので、居ないなら前提が崩れている
+    await expect(avatar).toHaveCount(1);
+
+    const initial = await avatar.getAttribute('data-initial');
+    expect(initial).toBeTruthy();
+
+    const content = await avatar.evaluate(
+      (el) => window.getComputedStyle(el, '::before').content,
+    );
+    expect(content).toBe(`"${initial}"`);
+  });
 
   /**
    * SP 幅（#1065 のコメント）

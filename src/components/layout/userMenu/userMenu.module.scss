@@ -30,6 +30,10 @@
   }
 
   // イニシャルアバター
+  // アバター画像が無い利用者の代わりに表示名の頭文字を出す。
+  // 中身は ::before で描く（テキストノードにすると、aria-label を持つ
+  // トリガーの可視テキストが「頭文字 + 表示名」になって WCAG 2.5.3 に
+  // 違反する / #1069）。文字は data-initial から読む
   &__avatar_initial {
     @include flex-center;
 
@@ -41,6 +45,10 @@
     font-size: $font-size-sm;
     font-weight: $font-weight-bold;
     flex-shrink: 0;
+
+    &::before {
+      content: attr(data-initial);
+    }
   }
 
   // ログインボタン（未認証時）

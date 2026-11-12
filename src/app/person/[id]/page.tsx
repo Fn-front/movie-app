@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { APP_NAME, PERSON_DEPARTMENT_LABELS } from '@/constants';
 import { getCachedPersonDetail } from '@/lib/api/person/person.server';
-import { parsePersonId } from '@/lib/person/personId';
+import { parsePositiveIntId } from '@/lib/routeId';
 import type { PersonDetail } from '@/lib/types';
 
 import { PersonPageLoader } from './loader';
@@ -22,7 +22,7 @@ type PersonPageProps = {
  * @returns 人物詳細。表示対象でなければ null
  */
 async function findVisiblePerson(id: string): Promise<PersonDetail | null> {
-  const personId = parsePersonId(id);
+  const personId = parsePositiveIntId(id);
   if (personId === null) return null;
 
   try {

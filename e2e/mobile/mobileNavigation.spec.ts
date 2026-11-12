@@ -76,9 +76,9 @@ test.describe('モバイルナビゲーション', () => {
     await page.goto('/movies/now-showing');
 
     // `movie_tile` だけだとスケルトン（c_movie_tile_skeleton）にも当たるため、
-    // 詳細を開く実体のボタンで絞る
+    // 詳細を開く実体のリンクで絞る（#1033 で button から Link になった）
     const movieTile = page
-      .locator('button[class*="movie_tile__title_button"]')
+      .locator('[class*="c_movie_tile__title_link"]')
       .first();
     const isTileVisible = await movieTile
       .waitFor({ state: 'visible', timeout: 10000 })
@@ -104,9 +104,9 @@ test.describe('モバイルナビゲーション', () => {
     await page.goto('/movies/now-showing');
 
     // `movie_tile` だけだとスケルトン（c_movie_tile_skeleton）にも当たるため、
-    // 詳細を開く実体のボタンで絞る
+    // 詳細を開く実体のリンクで絞る（#1033 で button から Link になった）
     const movieTile = page
-      .locator('button[class*="movie_tile__title_button"]')
+      .locator('[class*="c_movie_tile__title_link"]')
       .first();
     const isTileVisible = await movieTile
       .waitFor({ state: 'visible', timeout: 10000 })

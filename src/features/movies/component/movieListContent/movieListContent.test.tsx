@@ -7,6 +7,51 @@ import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
 // --- Mocks ---
 
+// 予算・興行収入の判定は詳細APIを引くため、ここでは差し替える
+// （判定そのものは useShowFinancialInfo.test.ts が担保する）
+let mockShowFinancialInfo = false;
+jest.mock('@/features/movies/hooks/useShowFinancialInfo', () => ({
+  useShowFinancialInfo: () => mockShowFinancialInfo,
+}));
+
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn();
+const mockCloseMovieDetail = jest.fn();
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
+}));
+
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: ({
+    movieId,
+    title,
+    showFinancialInfo,
+    onClose,
+  }: {
+    movieId: number | null;
+    title?: string;
+    showFinancialInfo?: boolean;
+    onClose: () => void;
+  }) =>
+    movieId === null ? null : (
+      <div
+        data-testid='movie-detail-modal'
+        data-financial={String(Boolean(showFinancialInfo))}
+      >
+        <span>{`Movie ID: ${movieId}`}</span>
+        <span>{title}</span>
+        <button onClick={onClose}>閉じる</button>
+      </div>
+    ),
+}));
+
 jest.mock('@/hooks/useIntersectionObserver', () => ({
   useIntersectionObserver: () => ({ current: null }),
 }));
@@ -36,34 +81,6 @@ jest.mock(
     FavoriteRatingModal: () => null,
   }),
 );
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-let capturedMovieDetailProps: {
-  movieId: number | null;
-  showFinancialInfo: boolean;
-  onClose: () => void;
-} | null = null;
-
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: (props: {
-    movieId: number | null;
-    showFinancialInfo: boolean;
-    onClose: () => void;
-  }) => {
-    capturedMovieDetailProps = props;
-    return props.movieId !== null ? (
-      <div data-testid='movie-detail-modal'>
-        <span data-testid='detail-movie-id'>{props.movieId}</span>
-        <span data-testid='detail-financial'>
-          {String(props.showFinancialInfo)}
-        </span>
-        <button data-testid='close-detail' onClick={props.onClose}>
-          閉じる
-        </button>
-      </div>
-    ) : null;
-  },
-}));
 
 // --- Helpers ---
 
@@ -115,6 +132,11 @@ const createMockMovieList = (
 // --- Tests ---
 
 describe('MovieListContent', () => {
+  beforeEach(() => {
+    mockSelectedMovieId = null;
+    mockShowFinancialInfo = false;
+  });
+
   describe('表示', () => {
     it('タイトルが表示される', () => {
       render(
@@ -376,133 +398,22 @@ describe('MovieListContent', () => {
       expect(handleFilterModalOpen).toHaveBeenCalled();
     });
 
-    it('映画タイルクリックで詳細モーダルにmovieIdが渡される', () => {
-      const pastDate = '2020-01-01';
+    // 映画詳細は /movies/[id] というURLを持つルートになった（#1033）。
+    // 予算・興行収入の出し分けは詳細側（useShowFinancialInfo）へ移っている
+    it('映画タイルのタイトルが映画詳細へのリンクになる', () => {
       render(
         <MovieListContent
           title='公開予定'
           movieList={createMockMovieList({
-            movies: [
-              createMockMovie({
-                id: 42,
-                title: 'クリック映画',
-                release_date: pastDate,
-              }),
-            ],
+            movies: [createMockMovie({ id: 42, title: 'リンク映画' })],
           })}
         />,
       );
 
-      // MovieTileをクリック
-      fireEvent.click(screen.getByText('クリック映画'));
-      expect(screen.getByTestId('detail-movie-id')).toHaveTextContent('42');
-    });
-
-    it('公開済み映画クリックでshowFinancialInfo=trueが渡される', () => {
-      const pastDate = '2020-01-01';
-      render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({
-            movies: [
-              createMockMovie({
-                id: 10,
-                title: '公開済み映画',
-                release_date: pastDate,
-              }),
-            ],
-          })}
-        />,
+      expect(screen.getByRole('link', { name: 'リンク映画' })).toHaveAttribute(
+        'href',
+        '/movies/42',
       );
-
-      fireEvent.click(screen.getByText('公開済み映画'));
-      expect(screen.getByTestId('detail-financial')).toHaveTextContent('true');
-    });
-
-    it('未公開映画クリックでshowFinancialInfo=falseが渡される', () => {
-      const futureDate = '2099-12-31';
-      render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({
-            movies: [
-              createMockMovie({
-                id: 20,
-                title: '未公開映画',
-                release_date: futureDate,
-                is_revival: false,
-              }),
-            ],
-          })}
-        />,
-      );
-
-      fireEvent.click(screen.getByText('未公開映画'));
-      expect(screen.getByTestId('detail-financial')).toHaveTextContent('false');
-    });
-
-    it('リバイバル映画クリックでshowFinancialInfo=trueが渡される', () => {
-      const futureDate = '2099-12-31';
-      render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({
-            movies: [
-              createMockMovie({
-                id: 30,
-                title: 'リバイバル映画',
-                release_date: futureDate,
-                is_revival: true,
-              }),
-            ],
-          })}
-        />,
-      );
-
-      fireEvent.click(screen.getByText('リバイバル映画'));
-      expect(screen.getByTestId('detail-financial')).toHaveTextContent('true');
-    });
-
-    it('release_dateがnullの映画クリックでshowFinancialInfo=falseが渡される', () => {
-      render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({
-            movies: [
-              createMockMovie({
-                id: 40,
-                title: '日付なし映画',
-                release_date: null as unknown as string,
-                is_revival: false,
-              }),
-            ],
-          })}
-        />,
-      );
-
-      fireEvent.click(screen.getByText('日付なし映画'));
-      expect(screen.getByTestId('detail-financial')).toHaveTextContent('false');
-    });
-
-    it('詳細モーダルを閉じるとmovieIdがnullに戻る', () => {
-      render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({
-            movies: [createMockMovie({ id: 50, title: '閉じるテスト映画' })],
-          })}
-        />,
-      );
-
-      // 映画をクリックしてモーダルを開く
-      fireEvent.click(screen.getByText('閉じるテスト映画'));
-      expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
-
-      // モーダルを閉じる
-      fireEvent.click(screen.getByTestId('close-detail'));
-      expect(
-        screen.queryByTestId('movie-detail-modal'),
-      ).not.toBeInTheDocument();
     });
   });
 

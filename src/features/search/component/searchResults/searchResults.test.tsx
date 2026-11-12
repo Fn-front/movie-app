@@ -11,6 +11,44 @@ import type { SearchResultsProps } from './searchResults';
 import type { Movie } from '@/lib/types';
 
 // --- Mocks ---
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn();
+const mockCloseMovieDetail = jest.fn();
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
+}));
+
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: ({
+    movieId,
+    title,
+    showFinancialInfo,
+    onClose,
+  }: {
+    movieId: number | null;
+    title?: string;
+    showFinancialInfo?: boolean;
+    onClose: () => void;
+  }) =>
+    movieId === null ? null : (
+      <div
+        data-testid='movie-detail-modal'
+        data-financial={String(Boolean(showFinancialInfo))}
+      >
+        <span>{`Movie ID: ${movieId}`}</span>
+        <span>{title}</span>
+        <button onClick={onClose}>閉じる</button>
+      </div>
+    ),
+}));
+
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: jest.fn(({ movie, onClick, viewMode }) => (
     <div
@@ -47,10 +85,6 @@ jest.mock('@/components/ui/emptyState/emptyState', () => ({
       <p>{description}</p>
     </div>
   )),
-}));
-
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: jest.fn(() => null),
 }));
 
 jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
@@ -135,6 +169,7 @@ const renderSearchResults = (overrides?: Partial<SearchResultsProps>) => {
 // --- Tests ---
 describe('SearchResults', () => {
   beforeEach(() => {
+    mockSelectedMovieId = null;
     jest.clearAllMocks();
     // 表示モードは localStorage に残るので、テスト間で引きずらせない
     localStorage.clear();
@@ -264,21 +299,20 @@ describe('SearchResults', () => {
     });
   });
 
-  describe('映画クリック', () => {
-    it('映画タイルをクリックすると詳細モーダルが表示される', async () => {
-      const { MovieDetailModal } = jest.requireMock(
-        '@/components/ui/movie/detailModal/movieDetailModal',
+  // 映画詳細は /movies/[id] というURLを持つルートになった（#1033）。
+  // 遷移はタイル側のリンクが担うので、一覧は関与しない
+  describe('詳細への導線', () => {
+    it('MovieTileにクリックハンドラを渡さない', () => {
+      const { MovieTile } = jest.requireMock(
+        '@/components/ui/movie/movieTile/movieTile',
       );
 
       renderSearchResults();
 
-      const user = userEvent.setup();
-      await user.click(screen.getByTestId('movie-tile-1'));
-
-      expect(MovieDetailModal).toHaveBeenLastCalledWith(
-        expect.objectContaining({ movieId: 1 }),
-        undefined,
-      );
+      expect(MovieTile).toHaveBeenCalled();
+      for (const [props] of MovieTile.mock.calls) {
+        expect(props.onClick).toBeUndefined();
+      }
     });
   });
 });

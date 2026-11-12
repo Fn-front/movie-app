@@ -24,6 +24,19 @@ export const QUERY_PARAMS = {
 } as const;
 
 /**
+ * 開いている映画詳細モーダルを表すURLクエリパラメータキー
+ *
+ * 一覧の URL に足すことで、モーダルが**リロードしても復元され、戻るで
+ * 閉じられる**ようになる（#1033）。共有するのはモーダルの URL ではなく
+ * `ROUTES.MOVIE_DETAIL`（全画面ページ）であることに注意。
+ *
+ * ⚠️ これは**フィルターではない**。`MOVIE_FILTER_QUERY_PARAMS` に足さないこと。
+ * 足すと `useMovieList` の URL 追従がモーダルの開閉をフィルター変更と
+ * 誤認し、条件の state を作り直してしまう（#1051 / #1059）。
+ */
+export const MOVIE_DETAIL_QUERY_PARAM = 'movie_id';
+
+/**
  * 一覧画面（/ , /movies/upcoming, /movies/now-showing）の
  * フィルター状態を保持するURLクエリパラメータキー
  */

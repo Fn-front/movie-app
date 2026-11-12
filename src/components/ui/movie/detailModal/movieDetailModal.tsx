@@ -26,13 +26,30 @@ export interface MovieDetailModalProps {
   showFinancialInfo?: boolean;
   /** モーダルを閉じるコールバック */
   onClose: () => void;
+  /**
+   * 履歴エントリを自分で積むか（既定 true）
+   *
+   * `useMovieDetailQuery` のように **URL で開閉を持つ呼び出し側は `false`**。
+   * ルーターの push が既にエントリを積んでいるので、ここでも積むと
+   * 開くたびに履歴が2つ伸びる（#1033）。
+   *
+   * 既定が true なのは、URL を持てない経路（`AppLayout` の公開カレンダー）が
+   * まだあるため。
+   */
+  manageHistory?: boolean;
 }
 
 /**
  * MovieDetailModalコンポーネント
  */
 export const MovieDetailModal = memo<MovieDetailModalProps>(
-  function MovieDetailModal({ movieId, title, showFinancialInfo, onClose }) {
+  function MovieDetailModal({
+    movieId,
+    title,
+    showFinancialInfo,
+    onClose,
+    manageHistory = true,
+  }) {
     const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
 
     const handleOpenChange = useCallback(
@@ -50,6 +67,7 @@ export const MovieDetailModal = memo<MovieDetailModalProps>(
         onOpenChange={handleOpenChange}
         title={title ?? MODAL_TITLES.MOVIE_DETAIL}
         size='lg'
+        manageHistory={manageHistory}
         className={cn(isVideoDialogOpen && styles.c_movie_detail_modal__dimmed)}
       >
         {movieId !== null && (
@@ -57,7 +75,6 @@ export const MovieDetailModal = memo<MovieDetailModalProps>(
             movieId={movieId}
             showFinancialInfo={showFinancialInfo}
             onVideoDialogOpenChange={setIsVideoDialogOpen}
-            onRequestClose={onClose}
           />
         )}
       </Modal>

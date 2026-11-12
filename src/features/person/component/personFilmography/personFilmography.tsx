@@ -11,11 +11,11 @@ import { EmptyState } from '@/components/ui/emptyState/emptyState';
 import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
-import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import { useMovieViewMode } from '@/hooks/useMovieViewMode';
 import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { PERSON_FILMOGRAPHY_PAGE_SIZE, PERSON_MESSAGES } from '@/constants';
@@ -72,12 +72,13 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
       [visibleCredits, getFavoriteInfo],
     );
 
-    const {
-      selectedMovieId,
-      selectedMovieTitle,
-      handleMovieClick,
-      handleModalClose,
-    } = useMovieDetailModal(movieCacheItems);
+    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+      useMovieDetailQuery();
+
+    const selectedMovieTitle = useMemo(
+      () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
+      [movieCacheItems, selectedMovieId],
+    );
 
     const handlePageChange = useCallback((page: number) => {
       setCurrentPage(page);
@@ -119,7 +120,7 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
             <div key={movie.id} className={styles.c_person_filmography__item}>
               <MovieTile
                 movie={movie}
-                onClick={handleMovieClick}
+                onSelect={openMovieDetail}
                 headingLevel={3}
                 isInWatchlist={isInWatchlist(movie.id)}
                 onWatchlistToggle={toggleWatchlist}
@@ -145,10 +146,11 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
         />
 
         <MovieDetailModal
+          // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
+          manageHistory={false}
           movieId={selectedMovieId}
           title={selectedMovieTitle}
-          showFinancialInfo={false}
-          onClose={handleModalClose}
+          onClose={closeMovieDetail}
         />
 
         <FavoriteRatingModal

@@ -8,6 +8,8 @@ import { expect, test } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 
+import { MOVIE_ID } from '../helpers/movieDetail';
+
 import {
   THEMES,
   gotoWithTheme,
@@ -53,6 +55,9 @@ const PUBLIC_PAGES = [
   },
   { name: '公開中', path: '/movies/now-showing' },
   { name: '公開予定', path: '/movies/upcoming' },
+  // 映画詳細の全画面ページ（#1033）。モーダルとは見出しレベル（h1/h2）も
+  // スクロール領域の tabIndex も切り替わるため、別の回帰対象として見る
+  { name: '映画詳細', path: `/movies/${MOVIE_ID}` },
   {
     name: '受賞作品',
     path: '/awards',

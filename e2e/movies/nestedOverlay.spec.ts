@@ -12,6 +12,7 @@
 import type { Page } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
+import { movieTileDetailLinks } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 import { test, expect } from '../fixtures/auth';
 
@@ -43,9 +44,7 @@ async function openNestedOverlays(page: Page): Promise<void> {
 
   await page.goto('/movies/now-showing');
 
-  const tile = page
-    .locator('button[class*="movie_tile__title_button"]')
-    .first();
+  const tile = movieTileDetailLinks(page).first();
   await expect(tile).toBeVisible({ timeout: 15000 });
   await tile.click();
 
@@ -102,7 +101,9 @@ test.describe('入れ子オーバーレイ', () => {
     await page.goBack();
 
     await expectOnlyOuterRemains(page);
-    await expect(page).toHaveURL(/\/movies\/now-showing$/);
+    // 映画詳細は一覧のURLに movie_id を足した状態なので、一覧から出ない
+    // （戻るで外れたのは予告動画のエントリ・#1033）
+    await expect(page).toHaveURL(/movie_id=\d+/);
   });
 
   test('入れ子を閉じた後、戻るで前のページまで出られる', async ({

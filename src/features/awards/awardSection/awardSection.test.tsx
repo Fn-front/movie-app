@@ -47,7 +47,7 @@ const createMockAward = (overrides: Partial<AwardData> = {}): AwardData => ({
 });
 
 const defaultProps = {
-  onMovieClick: jest.fn(),
+  onMovieSelect: jest.fn(),
   isInWatchlist: jest.fn().mockReturnValue(false),
   onWatchlistToggle: jest.fn(),
   isMovieToggling: jest.fn().mockReturnValue(false),

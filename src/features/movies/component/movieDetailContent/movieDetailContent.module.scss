@@ -6,6 +6,20 @@
   flex: 1;
   min-height: 0;
 
+  // 全画面ページ版（/movies/[id]）
+  //
+  // 自身のクラスを重ねて詳細度を上げる。`__scrollable` の max-height と
+  // 同点だと、勝ち負けが CSS Modules の出力順に左右されて本番ビルドで
+  // 反転しうる（movieTile のリスト表示と同じ理由）
+  &#{&}--page {
+    // 器の高さが決まっているモーダル用の内部スクロールを外す。
+    // ページでは本文のスクロールと二重になるだけ（#1023）
+    .c_movie_detail__scrollable {
+      overflow-y: visible;
+      max-height: none;
+    }
+  }
+
   // ローディング
   &__loading {
     @include flex-center;
@@ -153,6 +167,25 @@
 
     @include md {
       gap: $spacing-2;
+    }
+  }
+
+  // お気に入り・ウォッチリストのボタンと見た目を揃える（md サイズ）
+  &__share_button {
+    @include button-reset;
+    @include flex-center;
+    @include focus-visible;
+
+    width: 36px;
+    height: 36px;
+    font-size: $font-size-xl;
+    color: $text-secondary;
+    border-radius: $border-radius-full;
+    transition: $transition-all;
+
+    &:hover {
+      color: $text-primary;
+      background-color: $background-secondary;
     }
   }
 

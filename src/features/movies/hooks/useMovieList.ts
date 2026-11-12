@@ -28,6 +28,7 @@ import {
 } from '@/constants';
 import {
   buildFilterSearchParams,
+  extractFilterSearch,
   parseFilterConditionsFromParams,
   readStoredFilterConditions,
   writeStoredFilterConditions,
@@ -268,7 +269,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
    * ナビリンク経由の遷移で localStorage から復元した値を、空のURLで消してしまう。
    * フィルター以外のクエリ（`?utm_source=…` など）が付いた入口でも同じ。
    */
-  const syncedSearchRef = useRef(searchParams.toString());
+  const syncedSearchRef = useRef(extractFilterSearch(searchParams));
 
   // URL追従: 戻る／進むでURLが変わったら、フィルターstateをURLから作り直す。
   //
@@ -290,7 +291,9 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   // ガードを素通りして、適用したばかりの絞り込みを解除してしまう。
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    const search = searchParams.toString();
+    // フィルターに関係するキーだけを比べる。クエリ文字列そのものを比べると、
+    // 映画詳細モーダルの movie_id（#1033）が増減しただけで作り直してしまう
+    const search = extractFilterSearch(searchParams);
     if (search === syncedSearchRef.current) return;
     syncedSearchRef.current = search;
 
@@ -498,8 +501,9 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       const queryString = params.toString();
 
       // 自分が書いたURLであることを残す。これが無いと、直後に走る
-      // URL追従 effect が戻る操作と区別できず、state を作り直してループする
-      syncedSearchRef.current = queryString;
+      // URL追従 effect が戻る操作と区別できず、state を作り直してループする。
+      // 比較と同じ正規化（フィルターキーのみ）を通すこと
+      syncedSearchRef.current = extractFilterSearch(params);
 
       router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
         scroll: false,

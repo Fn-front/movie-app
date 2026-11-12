@@ -63,7 +63,7 @@ const createMockCategory = (
 
 const defaultProps = {
   awardName: 'academy_awards',
-  onMovieClick: jest.fn(),
+  onMovieSelect: jest.fn(),
   isInWatchlist: jest.fn().mockReturnValue(false),
   onWatchlistToggle: jest.fn(),
   isMovieToggling: jest.fn().mockReturnValue(false),

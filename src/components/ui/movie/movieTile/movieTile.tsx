@@ -7,13 +7,19 @@
 
 import { memo, useCallback, useMemo } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { Card } from '@/components/ui/card/card';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { DismissButton } from '@/features/dismissedMovies/component/dismissButton/dismissButton';
 import { getTMDbPosterUrl } from '@/utils/image';
-import { IMAGE_SIZES, RATING_THRESHOLDS, DISPLAY_LIMITS } from '@/constants';
+import {
+  IMAGE_SIZES,
+  RATING_THRESHOLDS,
+  DISPLAY_LIMITS,
+  ROUTES,
+} from '@/constants';
 import { formatDate } from '@/utils/date';
 import { isMovieReleased } from '@/utils/movie';
 import { cn } from '@/utils/cn';
@@ -34,8 +40,26 @@ export interface MovieTileProps {
   movie: MovieCacheItem;
   /** ジャンルマップ */
   genres?: Record<number, string>;
-  /** クリック時のコールバック */
+  /**
+   * タイトルが押されたことを記録するコールバック（計測用）
+   *
+   * **遷移には使わない。** 新しいタブで開かれたときも含め、押されれば必ず
+   * 呼ぶ（レコメンドのクリック計測が取りこぼさないようにするため）。
+   */
   onClick?: (movieId: number) => void;
+  /**
+   * タイトルを「その場で開く」ときのコールバック
+   *
+   * 渡すと、**修飾キーなしの左クリックだけ**を横取りして遷移を止め、
+   * 代わりにこれを呼ぶ。呼び出し側は一覧の URL に `?movie_id=<id>` を足して
+   * モーダルを重ねる（#1033）。
+   *
+   * 渡さなければ素のリンクとして `/movies/<id>` へ遷移する。
+   *
+   * ⚠️ Ctrl・⌘・中クリック・Shift は横取りしない。新しいタブ／ウィンドウで
+   * 開く操作を奪うと、リンクである意味が無くなる。
+   */
+  onSelect?: (movieId: number) => void;
   /** ウォッチリストに追加済みかどうか */
   isInWatchlist?: boolean;
   /** ウォッチリストボタンクリック時のコールバック */
@@ -84,7 +108,7 @@ export interface MovieTileProps {
    *
    * `list` では横並びへ組み替え、ジャンルタグを落とし、操作ボタンを
    * タイトルの後ろへ移す（視覚順と DOM 順を揃えるため）。
-   * タイトル button の ::after によるカード全面の当たり判定（#719）と、
+   * タイトルリンクの ::after によるカード全面の当たり判定（#719）と、
    * ボタンを入れ子にしない構造はそのまま保つ。
    */
   viewMode?: MovieViewMode;
@@ -97,6 +121,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   movie,
   genres,
   onClick,
+  onSelect,
   isInWatchlist = false,
   onWatchlistToggle,
   watchlistDisabled = false,
@@ -111,9 +136,30 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
 }) {
   const Title = `h${headingLevel}` as const;
 
-  const handleClick = useCallback(() => {
-    onClick?.(movie.id);
-  }, [movie.id, onClick]);
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      // 計測は遷移の仕方によらず走らせる（新しいタブで開かれた分も数える）
+      onClick?.(movie.id);
+
+      if (!onSelect) return;
+
+      // 新しいタブ・ウィンドウで開く操作と、既に止められたイベントには触らない
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      onSelect(movie.id);
+    },
+    [movie.id, onClick, onSelect],
+  );
 
   const handleWatchlistToggle = useCallback(() => {
     onWatchlistToggle?.(movie);
@@ -212,7 +258,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   return (
     // カード全体を role="button" にすると、内側のお気に入り等のボタンが
     // インタラクティブ要素の入れ子になり ARIA 上不正になる（axe: nested-interactive）。
-    // 代わりにタイトルを本物の button にし、::after でカード全面を当たり判定にする。
+    // 代わりにタイトルを本物のリンクにし、::after でカード全面を当たり判定にする（#719）。
     <Card
       hoverable
       noPadding
@@ -248,13 +294,13 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       </div>
       <div className={styles.c_movie_tile__info}>
         <Title className={styles.c_movie_tile__title}>
-          <button
-            type='button'
-            className={styles.c_movie_tile__title_button}
+          <Link
+            href={ROUTES.MOVIE_DETAIL(movie.id)}
+            className={styles.c_movie_tile__title_link}
             onClick={handleClick}
           >
             {movie.title}
-          </button>
+          </Link>
         </Title>
         {genreNames.length > 0 && (
           <div className={styles.c_movie_tile__genres}>

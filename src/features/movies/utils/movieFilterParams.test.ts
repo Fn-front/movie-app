@@ -8,6 +8,7 @@
 import {
   buildFilterSearchParams,
   parseFilterConditionsFromParams,
+  extractFilterSearch,
   readStoredFilterConditions,
   writeStoredFilterConditions,
 } from './movieFilterParams';
@@ -338,5 +339,57 @@ describe('localStorage への保存と復元', () => {
 
       expect(params.has('include_regions')).toBe(false);
     });
+  });
+});
+
+/**
+ * フィルター以外のクエリを無視して比較するための正規化（#1033）
+ *
+ * 映画詳細モーダルは一覧の URL に `movie_id` を足して開く。これを
+ * 「フィルターが変わった」と誤認すると、モーダルの開閉だけで条件の state が
+ * 作り直される
+ */
+describe('extractFilterSearch', () => {
+  it('フィルターキーだけを残す', () => {
+    const params = new URLSearchParams({
+      sort_by: 'popularity',
+      movie_id: '550',
+      utm_source: 'mail',
+    });
+
+    expect(extractFilterSearch(params)).toBe('sort_by=popularity');
+  });
+
+  it('movie_id の有無で結果が変わらない', () => {
+    const withModal = new URLSearchParams({
+      genre_ids: '28,12',
+      movie_id: '550',
+    });
+    const withoutModal = new URLSearchParams({ genre_ids: '28,12' });
+
+    expect(extractFilterSearch(withModal)).toBe(
+      extractFilterSearch(withoutModal),
+    );
+  });
+
+  // URL 上の並び順はルーターや利用者の操作で変わりうる
+  it('キーの並び順が違っても同じ文字列になる', () => {
+    const a = new URLSearchParams({ sort_by: 'popularity', genre_ids: '28' });
+    const b = new URLSearchParams({ genre_ids: '28', sort_by: 'popularity' });
+
+    expect(extractFilterSearch(a)).toBe(extractFilterSearch(b));
+  });
+
+  it('フィルターが変われば結果も変わる', () => {
+    const before = new URLSearchParams({ genre_ids: '28' });
+    const after = new URLSearchParams({ genre_ids: '12' });
+
+    expect(extractFilterSearch(before)).not.toBe(extractFilterSearch(after));
+  });
+
+  it('フィルターが無ければ空文字', () => {
+    expect(extractFilterSearch(new URLSearchParams({ movie_id: '550' }))).toBe(
+      '',
+    );
   });
 });

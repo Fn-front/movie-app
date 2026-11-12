@@ -80,6 +80,16 @@ export interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   /** 閉じるボタンを表示 */
   showCloseButton?: boolean;
+  /**
+   * 履歴エントリを自分で積むか（既定 true）
+   *
+   * 既定では `useOverlayHistory` で1つ積み、戻るで閉じられるようにする（#1026）。
+   *
+   * **開閉を URL で持つモーダルは `false` にすること。** ルーターの遷移が既に
+   * エントリを1つ積んでいるので、ここでも積むと**開くたびに履歴が2つ伸びる**。
+   * 見た目の挙動は正しいままなので気づきにくい（#1033 の実測で判明）。
+   */
+  manageHistory?: boolean;
 }
 
 /**
@@ -149,14 +159,17 @@ export const Modal = memo<ModalProps>(function Modal({
   closeOnEscape = true,
   size = 'md',
   showCloseButton = true,
+  manageHistory = true,
 }) {
   // 戻る操作で「閉じる」ようにする。履歴に載せないとページごと離脱する（#1026）
   const handleHistoryClose = useCallback(() => {
     onOpenChange(false);
   }, [onOpenChange]);
 
+  // 開閉を URL で持つモーダルは、ルーターの遷移が既にエントリを積んでいる。
+  // ここでも積むと開くたびに履歴が2つ伸びる
   const { shouldReplaceNavigation, notifyNavigating } = useOverlayHistory(
-    open,
+    manageHistory && open,
     handleHistoryClose,
   );
 

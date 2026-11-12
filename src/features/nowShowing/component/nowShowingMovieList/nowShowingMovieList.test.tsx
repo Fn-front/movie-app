@@ -1,46 +1,50 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 
 import { NowShowingMovieList } from './nowShowingMovieList';
 import type { NowShowingMovie } from '@/lib/types';
 
 // --- Mocks ---
 
-jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
-  MovieTile: ({
-    movie,
-    onClick,
-  }: {
-    movie: { id: number; title: string };
-    onClick?: (movieId: number) => void;
-  }) => (
-    <div
-      data-testid={`movie-tile-${movie.id}`}
-      role='button'
-      tabIndex={0}
-      aria-label={`${movie.title}`}
-      onClick={() => onClick?.(movie.id)}
-      onKeyDown={() => {}}
-    >
-      {movie.title}
-    </div>
-  ),
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn();
+const mockCloseMovieDetail = jest.fn();
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
 }));
 
 jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
   MovieDetailModal: ({
     movieId,
+    title,
+    showFinancialInfo,
     onClose,
   }: {
     movieId: number | null;
+    title?: string;
+    showFinancialInfo?: boolean;
     onClose: () => void;
   }) =>
-    movieId ? (
-      <div data-testid='movie-detail-modal'>
-        <span>Movie ID: {movieId}</span>
+    movieId === null ? null : (
+      <div
+        data-testid='movie-detail-modal'
+        data-financial={String(Boolean(showFinancialInfo))}
+      >
+        <span>{`Movie ID: ${movieId}`}</span>
+        <span>{title}</span>
         <button onClick={onClose}>閉じる</button>
       </div>
-    ) : null,
+    ),
 }));
+
+// MovieTile は本物を使う。「タイルが映画詳細のURLへのリンクになっているか」が
+// この画面の主要な導線で、差し替えると配線を確認できないため（#1033）
 
 // --- Helpers ---
 
@@ -62,6 +66,7 @@ const createMockMovies = (count: number): NowShowingMovie[] =>
 
 describe('NowShowingMovieList', () => {
   beforeEach(() => {
+    mockSelectedMovieId = null;
     jest.clearAllMocks();
   });
 
@@ -106,37 +111,23 @@ describe('NowShowingMovieList', () => {
     it('NowShowingMovieがMovieCacheItemに変換されてMovieTileに渡される', () => {
       render(<NowShowingMovieList movies={createMockMovies(1)} />);
       // tmdb_movie_id (100) がMovieTileのmovie.idとして使われる
-      expect(screen.getByTestId('movie-tile-100')).toBeInTheDocument();
+      expect(screen.getByAltText('人気映画 1のポスター')).toBeInTheDocument();
     });
   });
 
-  describe('モーダル連携', () => {
-    it('カードクリックで映画詳細モーダルが表示される', () => {
-      render(<NowShowingMovieList movies={createMockMovies(1)} />);
+  // 映画詳細はモーダルではなく /movies/[id] というURLを持つ（#1033）
+  describe('詳細への導線', () => {
+    it('各タイルのタイトルが映画詳細へのリンクになる', () => {
+      render(<NowShowingMovieList movies={createMockMovies(2)} />);
 
-      fireEvent.click(
-        screen.getByRole('button', {
-          name: '人気映画 1',
-        }),
+      expect(screen.getByRole('link', { name: '人気映画 1' })).toHaveAttribute(
+        'href',
+        '/movies/100',
       );
-      expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
-      expect(screen.getByText('Movie ID: 100')).toBeInTheDocument();
-    });
-
-    it('モーダルの閉じるボタンでモーダルが非表示になる', () => {
-      render(<NowShowingMovieList movies={createMockMovies(1)} />);
-
-      fireEvent.click(
-        screen.getByRole('button', {
-          name: '人気映画 1',
-        }),
+      expect(screen.getByRole('link', { name: '人気映画 2' })).toHaveAttribute(
+        'href',
+        '/movies/101',
       );
-      expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
-
-      fireEvent.click(screen.getByText('閉じる'));
-      expect(
-        screen.queryByTestId('movie-detail-modal'),
-      ).not.toBeInTheDocument();
     });
   });
 

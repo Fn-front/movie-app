@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button/button';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
@@ -23,7 +24,6 @@ import {
   RECOMMENDATION_EVENT_TYPE,
   RECOMMENDATION_REFRESH_MESSAGES,
 } from '@/constants';
-import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { Recommendation } from '@/schema/recommendations';
 import { recommendationToMovieCacheItem } from '@/utils/toMovieCacheItem';
@@ -114,21 +114,14 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       [recommendations, getFavoriteInfo, dismissedIds],
     );
 
-    const {
-      selectedMovieId,
-      selectedMovieTitle,
-      handleMovieClick,
-      handleModalClose,
-    } = useMovieDetailModal(movieCacheItems);
-
+    // タイルのタイトルは /movies/[id] へのリンクになったので、ここでは
+    // 遷移させず「押された」ことだけ記録する（レコメンドの精度計測に使う）
     const handleTileClick = useCallback(
       (movieId: number) => {
         trackEvent(movieId, RECOMMENDATION_EVENT_TYPE.CLICK);
-        handleMovieClick(movieId);
       },
-      [handleMovieClick, trackEvent],
+      [trackEvent],
     );
-
     const handleWatchlistToggle = useCallback(
       (movie: MovieCacheItem) => {
         // 追加時のみ計測する（解除は「興味がある」シグナルではない）
@@ -138,6 +131,14 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
         toggleWatchlist(movie);
       },
       [isInWatchlist, toggleWatchlist, trackEvent],
+    );
+
+    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+      useMovieDetailQuery();
+
+    const selectedMovieTitle = useMemo(
+      () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
+      [movieCacheItems, selectedMovieId],
     );
 
     const reasonMap = useMemo(
@@ -237,6 +238,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
                   <MovieTile
                     movie={movie}
                     onClick={handleTileClick}
+                    onSelect={openMovieDetail}
                     isInWatchlist={isInWatchlist(movie.id)}
                     onWatchlistToggle={handleWatchlistToggle}
                     watchlistDisabled={isMovieToggling(movie.id)}
@@ -256,9 +258,11 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
           </div>
         </section>
         <MovieDetailModal
+          // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
+          manageHistory={false}
           movieId={selectedMovieId}
           title={selectedMovieTitle}
-          onClose={handleModalClose}
+          onClose={closeMovieDetail}
         />
         <FavoriteRatingModal
           isOpen={favoriteModalState.isOpen}

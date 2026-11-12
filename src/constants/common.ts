@@ -81,7 +81,13 @@ export const ROUTES = {
   RESET_PASSWORD: '/auth/reset-password',
   /** 認証エラー */
   AUTH_ERROR: '/auth/error',
-  /** 映画詳細 */
+  /**
+   * 映画詳細（全画面ページ）
+   *
+   * 一覧からはモーダルで開くが、そのときもタイトルはこの URL へのリンクのまま。
+   * Ctrl・中クリックで新しいタブに開けること、クローラから辿れることを
+   * 失わないため（#1033）
+   */
   MOVIE_DETAIL: (id: string | number) => `/movies/${id}`,
   /** 人物詳細（公開ページ。AUTH_REQUIRED_ROUTES には含めない） */
   PERSON_DETAIL: (id: string | number) => `/person/${id}`,

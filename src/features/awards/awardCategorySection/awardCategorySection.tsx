@@ -20,7 +20,8 @@ import styles from './awardCategorySection.module.scss';
 export interface AwardCategorySectionProps {
   category: AwardCategoryData;
   awardName: string;
-  onMovieClick: (movieId: number) => void;
+  /** タイルのタイトルを修飾キーなしで押したとき（モーダルで開く） */
+  onMovieSelect: (movieId: number) => void;
   isInWatchlist: (tmdbMovieId: number) => boolean;
   onWatchlistToggle: (movie: MovieCacheItem) => void;
   isMovieToggling: (tmdbMovieId: number) => boolean;
@@ -44,7 +45,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
   function AwardCategorySection({
     category,
     awardName,
-    onMovieClick,
+    onMovieSelect,
     isInWatchlist,
     onWatchlistToggle,
     isMovieToggling,
@@ -127,8 +128,8 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                   <MovieTile
                     movie={movie}
                     headingLevel={4}
+                    onSelect={onMovieSelect}
                     eager={isFirstSection}
-                    onClick={onMovieClick}
                     isInWatchlist={isInWatchlist(movie.id)}
                     onWatchlistToggle={onWatchlistToggle}
                     watchlistDisabled={isMovieToggling(movie.id)}
@@ -168,9 +169,9 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                 >
                   <MovieTile
                     movie={movie}
-                    onClick={onMovieClick}
                     isInWatchlist={isInWatchlist(movie.id)}
                     headingLevel={4}
+                    onSelect={onMovieSelect}
                     onWatchlistToggle={onWatchlistToggle}
                     watchlistDisabled={isMovieToggling(movie.id)}
                     onFavoriteToggle={onFavoriteToggle}

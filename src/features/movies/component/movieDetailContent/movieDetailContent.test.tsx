@@ -13,6 +13,21 @@ import { MovieDetailContent } from './movieDetailContent';
 
 const mockUseMovieDetail = jest.fn();
 
+// モーダルの外（全画面ページ）でも使うコンポーネントなので、
+// 履歴まわりの連携は差し替えて観測する
+const mockNotifyNavigating = jest.fn();
+jest.mock('@/components/ui/modal/modal', () => ({
+  useModalNavigation: () => ({
+    shouldReplaceNavigation: false,
+    notifyNavigating: mockNotifyNavigating,
+  }),
+}));
+
+const mockShareMovie = jest.fn();
+jest.mock('@/features/movies/hooks/useShareMovie', () => ({
+  useShareMovie: () => ({ shareMovie: mockShareMovie }),
+}));
+
 jest.mock('@/features/movies/hooks/useMovieDetail', () => ({
   useMovieDetail: (...args: unknown[]) => mockUseMovieDetail(...args),
 }));
@@ -421,29 +436,28 @@ describe('MovieDetailContent', () => {
       expect(link).toHaveAttribute('href', '/person/42');
     });
 
-    it('キャストをクリックするとモーダルを閉じるよう要求する', async () => {
+    /**
+     * 遷移で器ごとアンマウントされるので、閉じる指示は出さない。
+     * かわりに `notifyNavigating()` で「遷移する」と申告し、履歴を畳む
+     * 非同期の back に遷移を取り消されないようにする（#1043）
+     */
+    it('キャストをクリックすると遷移すると申告する', async () => {
       const user = userEvent.setup();
-      const onRequestClose = jest.fn();
       setupCast();
 
-      render(
-        <MovieDetailContent movieId={123} onRequestClose={onRequestClose} />,
-      );
+      render(<MovieDetailContent movieId={123} />);
       await user.click(
         screen.getByRole('link', { name: 'テスト俳優のプロフィール' }),
       );
 
-      expect(onRequestClose).toHaveBeenCalledTimes(1);
+      expect(mockNotifyNavigating).toHaveBeenCalledTimes(1);
     });
 
     it('キーボードでもキャストリンクを辿れる', async () => {
       const user = userEvent.setup();
-      const onRequestClose = jest.fn();
       setupCast();
 
-      render(
-        <MovieDetailContent movieId={123} onRequestClose={onRequestClose} />,
-      );
+      render(<MovieDetailContent movieId={123} />);
 
       const link = screen.getByRole('link', {
         name: 'テスト俳優のプロフィール',
@@ -453,7 +467,7 @@ describe('MovieDetailContent', () => {
 
       await user.keyboard('{Enter}');
 
-      expect(onRequestClose).toHaveBeenCalledTimes(1);
+      expect(mockNotifyNavigating).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -956,6 +970,129 @@ describe('MovieDetailContent', () => {
         'tabindex',
         '0',
       );
+    });
+  });
+
+  /**
+   * `/movies/[id]` の全画面ページ（#1033）
+   *
+   * モーダルは Radix の Dialog.Title（h2）が上にあるので h3 から始めるが、
+   * ページでは作品名が h1 になる。ずらさないと h1 の無いページになる
+   */
+  describe('variant="page"', () => {
+    it('既定（モーダル）では作品名が h3 になる', () => {
+      setupMovie({ overview: 'あらすじ' });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('heading', { level: 3, name: 'テスト' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 4, name: 'あらすじ' }),
+      ).toBeInTheDocument();
+    });
+
+    it('ページでは作品名が h1、セクションが h2 になる', () => {
+      setupMovie({ overview: 'あらすじ' });
+
+      render(<MovieDetailContent movieId={123} variant='page' />);
+
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'テスト' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: 'あらすじ' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: '詳細情報' }),
+      ).toBeInTheDocument();
+    });
+
+    // 内部スクロールを外すので、タブストップを置く理由も無くなる
+    it('ページではスクロール領域にタブストップを置かない', () => {
+      setupMovie({ credits: { cast: [] } });
+
+      render(<MovieDetailContent movieId={123} variant='page' />);
+
+      expect(
+        screen.getByRole('region', { name: '作品情報' }),
+      ).not.toHaveAttribute('tabindex');
+    });
+
+    it('ページではページ用のクラスが付く', () => {
+      setupMovie();
+
+      const { container } = render(
+        <MovieDetailContent movieId={123} variant='page' />,
+      );
+
+      expect(
+        container.querySelector('.c_movie_detail--page'),
+      ).toBeInTheDocument();
+    });
+
+    it('既定ではページ用のクラスが付かない', () => {
+      setupMovie();
+
+      const { container } = render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        container.querySelector('.c_movie_detail--page'),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * 共有ボタン（#1033）
+   *
+   * 共有するのは全画面ページの URL。モーダルで開いているときの URL
+   * （一覧 + `?movie_id=…`）を渡すと、絞り込みごと共有してしまう
+   */
+  describe('共有', () => {
+    it('作品名を含むラベルのボタンを出す', () => {
+      setupMovie();
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('button', { name: 'テストを共有' }),
+      ).toBeInTheDocument();
+    });
+
+    it('押すと映画IDと作品名で共有する', async () => {
+      const user = userEvent.setup();
+      setupMovie();
+
+      render(<MovieDetailContent movieId={123} />);
+      await user.click(screen.getByRole('button', { name: 'テストを共有' }));
+
+      expect(mockShareMovie).toHaveBeenCalledWith(123, 'テスト');
+    });
+
+    it('全画面ページでも共有できる', () => {
+      setupMovie();
+
+      render(<MovieDetailContent movieId={123} variant='page' />);
+
+      expect(
+        screen.getByRole('button', { name: 'テストを共有' }),
+      ).toBeInTheDocument();
+    });
+
+    // 読み込み中・失敗時は共有すべき対象が無い
+    it('読み込み中は共有ボタンを出さない', () => {
+      mockUseMovieDetail.mockReturnValue({
+        movie: undefined,
+        isLoading: true,
+        isError: false,
+      });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.queryByRole('button', { name: /を共有$/ }),
+      ).not.toBeInTheDocument();
     });
   });
 });

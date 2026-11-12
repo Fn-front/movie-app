@@ -1,17 +1,19 @@
 /**
- * 人物IDパースのテスト
+ * URLパラメータのIDパースのテスト
  */
 
-import { parsePersonId } from './personId';
+import { parsePositiveIntId } from './routeId';
 
-describe('parsePersonId', () => {
+describe('parsePositiveIntId', () => {
   it('10進の正の整数をそのまま数値にする', () => {
-    expect(parsePersonId('500')).toBe(500);
-    expect(parsePersonId('1')).toBe(1);
+    expect(parsePositiveIntId('550')).toBe(550);
+    expect(parsePositiveIntId('500')).toBe(500);
+    expect(parsePositiveIntId('1')).toBe(1);
   });
 
   it.each([
     ['非数値', 'abc'],
+    ['静的セグメント名', 'now-showing'],
     ['空文字', ''],
     ['負数', '-1'],
     ['ゼロ', '0'],
@@ -20,13 +22,13 @@ describe('parsePersonId', () => {
     ['指数表記', '1e3'],
     ['先頭ゼロ', '0123'],
     ['16進表記', '0x10'],
-    ['全角数字', '５００'],
+    ['全角数字', '５５０'],
     ['記号混じり', '12+3'],
   ])('%s は null を返す', (_label, input) => {
-    expect(parsePersonId(input)).toBeNull();
+    expect(parsePositiveIntId(input)).toBeNull();
   });
 
   it('安全な整数の範囲を超えるIDは null を返す', () => {
-    expect(parsePersonId('9007199254740993')).toBeNull();
+    expect(parsePositiveIntId('9007199254740993')).toBeNull();
   });
 });

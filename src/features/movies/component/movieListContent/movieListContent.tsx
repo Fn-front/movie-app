@@ -6,12 +6,14 @@
 
 'use client';
 
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { RELEASE_TYPE, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { FilterModal } from '@/components/ui/movie/filterModal/filterModal';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
+import { useShowFinancialInfo } from '@/features/movies/hooks/useShowFinancialInfo';
 import { useMovieListContent } from '@/features/movies/hooks/useMovieListContent';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 
@@ -58,19 +60,20 @@ export const MovieListContent = memo<MovieListContentProps>(
       handleFilterModalClose,
     } = movieList;
 
-    const {
-      selectedMovieId,
-      showFinancialInfo,
-      selectedMovieTitle,
-      handleMovieTileClick,
-      handleDetailModalClose,
-      handleTabValueChange,
-      handleFilterModalOpenChange,
-    } = useMovieListContent(
-      movies,
-      handleReleaseTypeChange,
-      handleFilterModalClose,
+    const { handleTabValueChange, handleFilterModalOpenChange } =
+      useMovieListContent(handleReleaseTypeChange, handleFilterModalClose);
+
+    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+      useMovieDetailQuery();
+
+    const selectedMovieTitle = useMemo(
+      () => movies.find((movie) => movie.id === selectedMovieId)?.title,
+      [movies, selectedMovieId],
     );
+
+    // 予算・興行収入を出すのはこの一覧から開いたときだけ（main と同じ範囲）。
+    // 判定は一覧カードではなく詳細データで行う（#1033）
+    const showFinancialInfo = useShowFinancialInfo(selectedMovieId);
 
     // 配信予定タブだけは「いつ配信されるか」が知りたい情報のため、
     // release_date（多くは劇場公開日）ではなくデジタル公開日を見せる
@@ -104,7 +107,7 @@ export const MovieListContent = memo<MovieListContentProps>(
             isFetchingNextPage={isFetchingNextPage}
             hasNextPage={hasNextPage}
             fetchNextPage={fetchNextPage}
-            onMovieClick={handleMovieTileClick}
+            onMovieSelect={openMovieDetail}
             preferDigitalReleaseDate={preferDigitalReleaseDate}
           />
         </Tabs>
@@ -128,10 +131,12 @@ export const MovieListContent = memo<MovieListContentProps>(
         />
 
         <MovieDetailModal
+          // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
+          manageHistory={false}
           movieId={selectedMovieId}
           title={selectedMovieTitle}
           showFinancialInfo={showFinancialInfo}
-          onClose={handleDetailModalClose}
+          onClose={closeMovieDetail}
         />
       </div>
     );

@@ -9,8 +9,8 @@ import { memo, useMemo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { NOW_SHOWING_SECTION_TITLE, DISPLAY_LIMITS } from '@/constants';
-import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import type { NowShowingMovie } from '@/lib/types';
 import { nowShowingToMovieCacheItem } from '@/utils/toMovieCacheItem';
 
@@ -34,12 +34,13 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
       [movies],
     );
 
-    const {
-      selectedMovieId,
-      selectedMovieTitle,
-      handleMovieClick,
-      handleModalClose,
-    } = useMovieDetailModal(movieCacheItems);
+    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+      useMovieDetailQuery();
+
+    const selectedMovieTitle = useMemo(
+      () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
+      [movieCacheItems, selectedMovieId],
+    );
 
     if (movies.length === 0) {
       return (
@@ -77,7 +78,7 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
                   </span>
                   <MovieTile
                     movie={movie}
-                    onClick={handleMovieClick}
+                    onSelect={openMovieDetail}
                     eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
                   />
                 </div>
@@ -86,9 +87,11 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
           </div>
         </section>
         <MovieDetailModal
+          // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
+          manageHistory={false}
           movieId={selectedMovieId}
           title={selectedMovieTitle}
-          onClose={handleModalClose}
+          onClose={closeMovieDetail}
         />
       </>
     );

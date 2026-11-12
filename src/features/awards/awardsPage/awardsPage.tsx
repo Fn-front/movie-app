@@ -9,17 +9,17 @@ import { useSearchParams } from 'next/navigation';
 
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
+import { awardMovieToMovieCacheItem } from '@/utils/toMovieCacheItem';
 import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
-import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import { AWARDS_MESSAGES } from '@/constants';
 import { useAwards } from '@/features/awards/hooks/useAwards';
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { AwardYearSelect } from '@/features/awards/awardYearSelect/awardYearSelect';
 import { AwardSection } from '@/features/awards/awardSection/awardSection';
-import { awardMovieToMovieCacheItem } from '@/utils/toMovieCacheItem';
 
 import styles from './awardsPage.module.scss';
 
@@ -54,37 +54,25 @@ export const AwardsPage = memo(function AwardsPage() {
   const { isInWatchlist, toggleWatchlist, isMovieToggling } =
     useWatchlistToggle();
 
-  const awards = data?.awards;
+  const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+    useMovieDetailQuery();
 
-  // 詳細モーダルの一覧。お気に入りは結合しない。
-  // 消費先（useMovieDetailModal）は id と title しか読まず、モーダル自体は
-  // 映画詳細APIが返す favorite を使うため、ここで結合しても効果が無い。
-  // 依存に getFavoriteInfo を足すと、お気に入り操作のたびに
-  // 全受賞作の再マッピングが走るだけになる
-  const allMovieCacheItems = useMemo(() => {
-    if (!awards) return [];
-    return awards.flatMap((award) =>
-      award.categories.flatMap((cat) =>
-        cat.nominees.map((nominee) => awardMovieToMovieCacheItem(nominee)),
-      ),
-    );
-  }, [awards]);
+  // モーダルのタイトル用。お気に入りは結合しない（モーダル自体が
+  // 映画詳細APIの favorite を見るため、ここで結合しても効果が無い）
+  const selectedMovieTitle = useMemo(() => {
+    if (selectedMovieId === null) return undefined;
 
-  const uniqueMovieCacheItems = useMemo(() => {
-    const seen = new Set<number>();
-    return allMovieCacheItems.filter((item) => {
-      if (seen.has(item.id)) return false;
-      seen.add(item.id);
-      return true;
-    });
-  }, [allMovieCacheItems]);
+    for (const award of data?.awards ?? []) {
+      for (const category of award.categories) {
+        const hit = category.nominees.find(
+          (nominee) => nominee.tmdbMovieId === selectedMovieId,
+        );
+        if (hit) return awardMovieToMovieCacheItem(hit).title;
+      }
+    }
 
-  const {
-    selectedMovieId,
-    selectedMovieTitle,
-    handleMovieClick,
-    handleModalClose,
-  } = useMovieDetailModal(uniqueMovieCacheItems);
+    return undefined;
+  }, [data?.awards, selectedMovieId]);
 
   if (isLoading) {
     return (
@@ -152,7 +140,7 @@ export const AwardsPage = memo(function AwardsPage() {
               >
                 <AwardSection
                   award={selectedAward}
-                  onMovieClick={handleMovieClick}
+                  onMovieSelect={openMovieDetail}
                   isInWatchlist={isInWatchlist}
                   onWatchlistToggle={toggleWatchlist}
                   isMovieToggling={isMovieToggling}
@@ -165,7 +153,7 @@ export const AwardsPage = memo(function AwardsPage() {
             ) : (
               <AwardSection
                 award={selectedAward}
-                onMovieClick={handleMovieClick}
+                onMovieSelect={openMovieDetail}
                 isInWatchlist={isInWatchlist}
                 onWatchlistToggle={toggleWatchlist}
                 isMovieToggling={isMovieToggling}
@@ -182,9 +170,11 @@ export const AwardsPage = memo(function AwardsPage() {
         )}
       </div>
       <MovieDetailModal
+        // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
+        manageHistory={false}
         movieId={selectedMovieId}
         title={selectedMovieTitle}
-        onClose={handleModalClose}
+        onClose={closeMovieDetail}
       />
       <FavoriteRatingModal
         isOpen={favoriteModalState.isOpen}

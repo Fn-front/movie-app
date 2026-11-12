@@ -12,11 +12,11 @@ import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/mov
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { EmptyState } from '@/components/ui/emptyState/emptyState';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { TitleSuggestion } from '@/features/search/component/titleSuggestion/titleSuggestion';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
-import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import { useMovieViewMode } from '@/hooks/useMovieViewMode';
 import { DISPLAY_LIMITS } from '@/constants';
 import type { Movie } from '@/lib/types';
@@ -79,14 +79,14 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
     [movies, getFavoriteInfo],
   );
 
-  const {
-    selectedMovieId,
-    selectedMovieTitle,
-    handleMovieClick,
-    handleModalClose,
-  } = useMovieDetailModal(movieCacheItems);
-
   const { viewMode } = useMovieViewMode();
+  const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+    useMovieDetailQuery();
+
+  const selectedMovieTitle = useMemo(
+    () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
+    [movieCacheItems, selectedMovieId],
+  );
 
   if (isLoading) {
     return (
@@ -127,7 +127,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
           <MovieTile
             key={movie.id}
             movie={movie}
-            onClick={handleMovieClick}
+            onSelect={openMovieDetail}
             headingLevel={2}
             eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
             isInWatchlist={isInWatchlist(movie.id)}
@@ -148,10 +148,11 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
       />
 
       <MovieDetailModal
+        // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
+        manageHistory={false}
         movieId={selectedMovieId}
         title={selectedMovieTitle}
-        showFinancialInfo={false}
-        onClose={handleModalClose}
+        onClose={closeMovieDetail}
       />
 
       <FavoriteRatingModal

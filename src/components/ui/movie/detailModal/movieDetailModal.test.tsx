@@ -17,11 +17,16 @@ jest.mock(
     MovieDetailContent: ({
       movieId,
       showFinancialInfo,
+      onRequestClose,
     }: {
       movieId: number;
       showFinancialInfo?: boolean;
+      onRequestClose?: () => void;
     }) => (
-      <div data-testid='movie-detail-content'>
+      <div
+        data-testid='movie-detail-content'
+        data-has-request-close={String(Boolean(onRequestClose))}
+      >
         Movie {movieId}
         {showFinancialInfo && (
           <span data-testid='financial-info'>financial</span>

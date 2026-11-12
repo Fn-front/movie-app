@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { MovieTile } from './movieTile';
@@ -30,6 +30,17 @@ const genres: Record<number, string> = {
   12: 'アドベンチャー',
   35: 'コメディ',
 };
+
+/**
+ * タブ順（＝ DOM 順）のフォーカス可能要素の名前を並べる
+ *
+ * タイトルはリンク、操作はボタンと役割が混ざるため、`getAllByRole` では
+ * 1回のクエリで順番を取れない。DOM から直接拾う
+ */
+const focusableNames = (container: HTMLElement): (string | null)[] =>
+  Array.from(container.querySelectorAll('a, button')).map(
+    (el) => el.getAttribute('aria-label') ?? el.textContent,
+  );
 
 // --- Tests ---
 
@@ -195,42 +206,161 @@ describe('MovieTile', () => {
     });
   });
 
-  describe('アクセシビリティ', () => {
-    it('タイトルがbuttonのアクセシブルネームになる', () => {
-      render(<MovieTile movie={createMockMovie()} />);
-      expect(
-        screen.getByRole('button', { name: 'テスト映画' }),
-      ).toBeInTheDocument();
+  // 映画詳細は `/movies/[id]` という URL を持つルートになった（#1033）。
+  // タイトルは button ではなくリンクで、押すと遷移する
+  describe('詳細への導線', () => {
+    it('タイトルが映画詳細へのリンクになる', () => {
+      render(<MovieTile movie={createMockMovie({ id: 42 })} />);
+
+      expect(screen.getByRole('link', { name: 'テスト映画' })).toHaveAttribute(
+        'href',
+        '/movies/42',
+      );
     });
 
-    it('タイトルが見出しとして露出する', () => {
+    it('タイトルが見出しの中のリンクとして露出する', () => {
       render(<MovieTile movie={createMockMovie()} />);
-      expect(
-        screen.getByRole('heading', { level: 3, name: 'テスト映画' }),
-      ).toBeInTheDocument();
+
+      const heading = screen.getByRole('heading', {
+        level: 3,
+        name: 'テスト映画',
+      });
+      expect(heading).toContainElement(
+        screen.getByRole('link', { name: 'テスト映画' }),
+      );
     });
 
-    it('操作ボタンが詳細ボタンの子孫にならない（nested-interactive対策）', () => {
+    it('操作ボタンが詳細リンクの子孫にならない（nested-interactive対策）', () => {
       render(
         <MovieTile
           movie={createMockMovie()}
-          onClick={jest.fn()}
           onWatchlistToggle={jest.fn()}
           onFavoriteToggle={jest.fn()}
           onDismiss={jest.fn()}
         />,
       );
 
-      const detailButton = screen.getByRole('button', { name: 'テスト映画' });
+      const detailLink = screen.getByRole('link', { name: 'テスト映画' });
       for (const name of [
         'ウォッチリストに追加',
         'お気に入りに追加',
         '興味なし',
       ]) {
-        expect(detailButton).not.toContainElement(
+        expect(detailLink).not.toContainElement(
           screen.getByRole('button', { name }),
         );
       }
+    });
+
+    // 当たり判定はリンクの ::after がカード全面に広がることで成立する（#719）。
+    // DOM では「カードの中にリンクが1つ」という構造が保たれていればよい
+    it('カードの中に詳細リンクが1つだけある（stretched link の前提）', () => {
+      const { container } = render(<MovieTile movie={createMockMovie()} />);
+
+      const card = container.querySelector('.c_movie_tile');
+      expect(card).toContainElement(
+        screen.getByRole('link', { name: 'テスト映画' }),
+      );
+      expect(
+        container.querySelectorAll('.c_movie_tile__title_link'),
+      ).toHaveLength(1);
+    });
+  });
+
+  /**
+   * 一覧ではモーダルで開くが、タイトルは `/movies/<id>` へのリンクのまま（#1033）。
+   * 修飾キー付きのクリックを横取りすると、新しいタブで開く操作を奪ってしまう
+   */
+  describe('その場で開く（onSelect）', () => {
+    it('修飾キーなしの左クリックは遷移せず onSelect を呼ぶ', () => {
+      const onSelect = jest.fn();
+      render(<MovieTile movie={createMockMovie()} onSelect={onSelect} />);
+
+      const link = screen.getByRole('link', { name: 'テスト映画' });
+      const event = createEvent.click(link, { button: 0 });
+      fireEvent(link, event);
+
+      expect(onSelect).toHaveBeenCalledWith(1);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it.each([
+      ['Ctrl', { ctrlKey: true }],
+      ['Meta', { metaKey: true }],
+      ['Shift', { shiftKey: true }],
+      ['Alt', { altKey: true }],
+    ])(
+      '%s+クリックは横取りしない（新しいタブに任せる）',
+      (_label, modifier) => {
+        const onSelect = jest.fn();
+        render(<MovieTile movie={createMockMovie()} onSelect={onSelect} />);
+
+        const link = screen.getByRole('link', { name: 'テスト映画' });
+        const event = createEvent.click(link, { button: 0, ...modifier });
+        fireEvent(link, event);
+
+        expect(onSelect).not.toHaveBeenCalled();
+        expect(event.defaultPrevented).toBe(false);
+      },
+    );
+
+    it('中クリックは横取りしない', () => {
+      const onSelect = jest.fn();
+      render(<MovieTile movie={createMockMovie()} onSelect={onSelect} />);
+
+      const link = screen.getByRole('link', { name: 'テスト映画' });
+      const event = createEvent.click(link, { button: 1 });
+      fireEvent(link, event);
+
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it('onSelect が無ければ素のリンクとして遷移させる', () => {
+      render(<MovieTile movie={createMockMovie()} />);
+
+      const link = screen.getByRole('link', { name: 'テスト映画' });
+      const event = createEvent.click(link, { button: 0 });
+      fireEvent(link, event);
+
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    // 計測は遷移の仕方によらず走らせる（新しいタブで開かれた分も数える）
+    it('onClick（計測）は修飾キー付きでも呼ばれる', () => {
+      const onClick = jest.fn();
+      const onSelect = jest.fn();
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onClick={onClick}
+          onSelect={onSelect}
+        />,
+      );
+
+      const link = screen.getByRole('link', { name: 'テスト映画' });
+      fireEvent(link, createEvent.click(link, { button: 0, ctrlKey: true }));
+
+      expect(onClick).toHaveBeenCalledWith(1);
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('onClick と onSelect の両方が呼ばれる（通常クリック）', () => {
+      const onClick = jest.fn();
+      const onSelect = jest.fn();
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onClick={onClick}
+          onSelect={onSelect}
+        />,
+      );
+
+      const link = screen.getByRole('link', { name: 'テスト映画' });
+      fireEvent(link, createEvent.click(link, { button: 0 }));
+
+      expect(onClick).toHaveBeenCalledWith(1);
+      expect(onSelect).toHaveBeenCalledWith(1);
     });
   });
 
@@ -240,7 +370,7 @@ describe('MovieTile', () => {
       const onClick = jest.fn();
       render(<MovieTile movie={createMockMovie()} onClick={onClick} />);
 
-      await user.click(screen.getByRole('button', { name: 'テスト映画' }));
+      await user.click(screen.getByRole('link', { name: 'テスト映画' }));
       expect(onClick).toHaveBeenCalledWith(1);
     });
 
@@ -249,19 +379,21 @@ describe('MovieTile', () => {
       const onClick = jest.fn();
       render(<MovieTile movie={createMockMovie()} onClick={onClick} />);
 
-      screen.getByRole('button', { name: 'テスト映画' }).focus();
+      screen.getByRole('link', { name: 'テスト映画' }).focus();
       await user.keyboard('{Enter}');
       expect(onClick).toHaveBeenCalledWith(1);
     });
 
-    it('Spaceキーでクリックが発火する', async () => {
+    // リンクはキーボードでは Enter だけで起動する（button との違い）。
+    // Space を押しても遷移しないのが標準の挙動
+    it('Spaceキーではクリックが発火しない', async () => {
       const user = userEvent.setup();
       const onClick = jest.fn();
       render(<MovieTile movie={createMockMovie()} onClick={onClick} />);
 
-      screen.getByRole('button', { name: 'テスト映画' }).focus();
+      screen.getByRole('link', { name: 'テスト映画' }).focus();
       await user.keyboard('{ }');
-      expect(onClick).toHaveBeenCalledWith(1);
+      expect(onClick).not.toHaveBeenCalled();
     });
 
     it('他のキーではonClickが呼ばれない', async () => {
@@ -269,17 +401,17 @@ describe('MovieTile', () => {
       const onClick = jest.fn();
       render(<MovieTile movie={createMockMovie()} onClick={onClick} />);
 
-      screen.getByRole('button', { name: 'テスト映画' }).focus();
+      screen.getByRole('link', { name: 'テスト映画' }).focus();
       await user.keyboard('{Escape}');
       expect(onClick).not.toHaveBeenCalled();
     });
 
-    it('Tabキーで詳細ボタンに到達できる', async () => {
+    it('Tabキーで詳細リンクに到達できる', async () => {
       const user = userEvent.setup();
-      render(<MovieTile movie={createMockMovie()} onClick={jest.fn()} />);
+      render(<MovieTile movie={createMockMovie()} />);
 
       await user.tab();
-      expect(screen.getByRole('button', { name: 'テスト映画' })).toHaveFocus();
+      expect(screen.getByRole('link', { name: 'テスト映画' })).toHaveFocus();
     });
 
     it('onClickが未指定でもエラーにならない', async () => {
@@ -287,7 +419,7 @@ describe('MovieTile', () => {
       render(<MovieTile movie={createMockMovie()} />);
 
       await expect(
-        user.click(screen.getByRole('button', { name: 'テスト映画' })),
+        user.click(screen.getByRole('link', { name: 'テスト映画' })),
       ).resolves.not.toThrow();
     });
   });
@@ -612,7 +744,7 @@ describe('MovieTile', () => {
   });
 
   // リスト表示は CSS だけで横並びへ組み替える（#1014）。DOM を変えると
-  // タイトル button の ::after によるカード全面の当たり判定（#719）が壊れるため、
+  // タイトルリンクの ::after によるカード全面の当たり判定（#719）が壊れるため、
   // 「モードが変わっても中身の構造は同じ」ことまで固定する
   describe('表示モード', () => {
     it('既定ではリスト用のクラスが付かない', () => {
@@ -650,7 +782,11 @@ describe('MovieTile', () => {
 
       expect(screen.getByAltText('テスト映画のポスター')).toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: 'テスト映画' }));
+      expect(screen.getByRole('link', { name: 'テスト映画' })).toHaveAttribute(
+        'href',
+        '/movies/1',
+      );
+      await user.click(screen.getByRole('link', { name: 'テスト映画' }));
       expect(onClick).toHaveBeenCalledWith(1);
 
       await user.click(
@@ -666,21 +802,16 @@ describe('MovieTile', () => {
      * 1行ごとに「右端のボタン → 左のタイトル」と逆走する（WCAG 1.3.2 / 2.4.3）
      */
     it('リスト表示では操作ボタンがタイトルより後ろに並ぶ', () => {
-      render(
+      const { container } = render(
         <MovieTile
           movie={createMockMovie()}
           viewMode='list'
-          onClick={jest.fn()}
           onWatchlistToggle={jest.fn()}
           onFavoriteToggle={jest.fn()}
         />,
       );
 
-      const names = screen
-        .getAllByRole('button')
-        .map((el) => el.getAttribute('aria-label') ?? el.textContent);
-
-      expect(names).toEqual([
+      expect(focusableNames(container)).toEqual([
         'テスト映画',
         'お気に入りに追加',
         'ウォッチリストに追加',
@@ -688,21 +819,16 @@ describe('MovieTile', () => {
     });
 
     it('グリッド表示では操作ボタンがタイトルより前に並ぶ', () => {
-      render(
+      const { container } = render(
         <MovieTile
           movie={createMockMovie()}
-          onClick={jest.fn()}
           onWatchlistToggle={jest.fn()}
           onFavoriteToggle={jest.fn()}
         />,
       );
 
-      const names = screen
-        .getAllByRole('button')
-        .map((el) => el.getAttribute('aria-label') ?? el.textContent);
-
       // グリッドはボタンがポスターの上＝タイトルより視覚的に前
-      expect(names).toEqual([
+      expect(focusableNames(container)).toEqual([
         'お気に入りに追加',
         'ウォッチリストに追加',
         'テスト映画',

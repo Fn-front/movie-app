@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { AwardsPage } from './awardsPage';
@@ -8,6 +8,44 @@ import { ARIA_LABELS } from '@/constants';
 
 /** URL の ?t= を差し替えるための可変値（各テストで入れ替える） */
 let mockSearchParams = new URLSearchParams();
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn();
+const mockCloseMovieDetail = jest.fn();
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
+}));
+
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: ({
+    movieId,
+    title,
+    showFinancialInfo,
+    onClose,
+  }: {
+    movieId: number | null;
+    title?: string;
+    showFinancialInfo?: boolean;
+    onClose: () => void;
+  }) =>
+    movieId === null ? null : (
+      <div
+        data-testid='movie-detail-modal'
+        data-financial={String(Boolean(showFinancialInfo))}
+      >
+        <span>{`Movie ID: ${movieId}`}</span>
+        <span>{title}</span>
+        <button onClick={onClose}>閉じる</button>
+      </div>
+    ),
+}));
+
 jest.mock('next/navigation', () => ({
   useSearchParams: () => mockSearchParams,
 }));
@@ -21,44 +59,23 @@ jest.mock('@/components/ui/loading/loading', () => ({
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: ({
     movie,
-    onClick,
   }: {
     movie: {
       id: number;
       title: string;
       favorite?: { id: string; rating: number } | null;
     };
-    onClick?: (movieId: number) => void;
   }) => (
     <div
       data-testid={`movie-tile-${movie.id}`}
       // 実際の FavoriteButton は movie.favorite を見て表示を切り替える。
       // 結合できているかをここで観測する
       data-favorite-rating={movie.favorite ? String(movie.favorite.rating) : ''}
-      role='button'
-      tabIndex={0}
-      onClick={() => onClick?.(movie.id)}
-      onKeyDown={() => {}}
     >
-      {movie.title}
+      {/* 詳細への遷移はタイル側のリンクが担う（#1033） */}
+      <a href={`/movies/${movie.id}`}>{movie.title}</a>
     </div>
   ),
-}));
-
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: ({
-    movieId,
-    onClose,
-  }: {
-    movieId: number | null;
-    onClose: () => void;
-  }) =>
-    movieId ? (
-      <div data-testid='movie-detail-modal'>
-        <span>Movie ID: {movieId}</span>
-        <button onClick={onClose}>閉じる</button>
-      </div>
-    ) : null,
 }));
 
 jest.mock(
@@ -215,6 +232,7 @@ function setAwardsData(awards = createMockAwardsData()) {
 
 describe('AwardsPage', () => {
   beforeEach(() => {
+    mockSelectedMovieId = null;
     jest.clearAllMocks();
     mockUseAwardsReturn.data = undefined;
     mockUseAwardsReturn.isLoading = false;
@@ -450,15 +468,15 @@ describe('AwardsPage', () => {
     expect(mockUseAwardsReturn.handleYearChange).toHaveBeenCalledWith('2025');
   });
 
-  it('映画クリックでモーダルが表示される', () => {
+  // 映画詳細は /movies/[id] というURLを持つルートになった（#1033）
+  it('受賞作のタイルが映画詳細へのリンクを持つ', () => {
     setAwardsData();
 
     render(<AwardsPage />);
 
-    const movieTile = screen.getByTestId('movie-tile-200');
-    fireEvent.click(movieTile);
-
-    expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('movie-tile-200')).getByRole('link'),
+    ).toHaveAttribute('href', '/movies/200');
   });
 
   it('受賞ラベルが表示される', () => {

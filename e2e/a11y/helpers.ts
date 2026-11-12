@@ -22,6 +22,30 @@ export const THEMES = ['light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
 
 /**
+ * ホームで許容する incomplete
+ *
+ * 横スクロールのカルーセルには、表示幅の右端で切れるカードが必ず1枚できる
+ * （カード幅196pxに対し表示幅は割り切れない）。その切れたカードのタイトルが
+ * 2行に折り返すと、axe は要素がクリップ境界をまたぐために背景色を決定できず
+ * color-contrast を incomplete に回す。コントラスト自体は正常で、スクロールして
+ * 全体が見える位置に来ると消える。右端にどの作品が来るかは TMDb のデータ次第
+ * なので、日によって出たり消えたりする。
+ *
+ * messageKey と対象セレクタの両方で絞っているため、カルーセル外（画像の上の
+ * 文字など）の「背景色を決定できない」は従来どおり落ちる。
+ *
+ * ホームは未認証（`publicPages.spec.ts`）・認証済み（`authenticatedPages.spec.ts`）
+ * × デスクトップ／SP の4通りで検査し、どれも同じカルーセルを見るためここで共有する。
+ */
+export const HOME_ALLOWED_INCOMPLETE: readonly AllowedIncomplete[] = [
+  {
+    id: 'color-contrast',
+    messageKey: 'elmPartiallyObscuring',
+    targetIncludes: 'movie_list__item',
+  },
+];
+
+/**
  * 除外するルール
  *
  * ここに足すときは「なぜ現状のままで問題ないか」を必ず書くこと。

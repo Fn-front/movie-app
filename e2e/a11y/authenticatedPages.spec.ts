@@ -153,6 +153,39 @@ test.describe('アクセシビリティ（認証済みページ）', () => {
   }
 
   /**
+   * ユーザーメニューの頭文字（#1069）
+   *
+   * `label-content-name-mismatch` を避けるため、頭文字は DOM のテキストではなく
+   * `userMenu.module.scss` の `::before { content: attr(data-initial) }` で描いている。
+   *
+   * **この CSS を消しても他のどのテストも落ちない。** jest は `next/jest` で
+   * CSS Modules をプロキシに差し替えるので SCSS を評価せず、axe は
+   * 「文字が無い」ことを違反としない。つまり画面から頭文字だけが黙って消える。
+   * ここだけが実ブラウザの computed style を見てそれを止める。
+   */
+  test('ユーザーメニューの頭文字が ::before で描かれている', async ({
+    page,
+  }) => {
+    await gotoWithTheme(page, '/', 'light');
+    await waitForSidebar(page);
+
+    const sidebar = page.getByRole('complementary', { name: 'サイドバー' });
+    const avatar = sidebar.locator('[data-initial]');
+
+    // アバター画像を持つ利用者では頭文字そのものが描かれない。
+    // 共有テストユーザーは画像なしなので、居ないなら前提が崩れている
+    await expect(avatar).toHaveCount(1);
+
+    const initial = await avatar.getAttribute('data-initial');
+    expect(initial).toBeTruthy();
+
+    const content = await avatar.evaluate(
+      (el) => window.getComputedStyle(el, '::before').content,
+    );
+    expect(content).toBe(`"${initial}"`);
+  });
+
+  /**
    * SP 幅（#1065 のコメント）
    *
    * 上のケースは `playwright.config.ts` の Desktop Chrome（1280×720）で走る。

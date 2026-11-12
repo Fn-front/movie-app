@@ -65,11 +65,20 @@ describe('UserMenu', () => {
     expect(screen.getByText('テストユーザー')).toBeInTheDocument();
   });
 
-  it('アバター未設定時にイニシャルが表示される', () => {
+  /**
+   * ⚠️ これは「頭文字が**画面に出ている**」ことの検証にはならない。
+   *
+   * 頭文字は `userMenu.module.scss` の `::before { content: attr(data-initial) }`
+   * が描く。jest は `next/jest` で CSS Modules をプロキシに差し替えるため
+   * **SCSS は一度も評価されない**。つまりその1ブロックを消しても、ここも tsc も
+   * lint も通ったまま画面から頭文字だけが消える。
+   *
+   * 実際に描かれていることは `e2e/a11y/authenticatedPages.spec.ts` の
+   * 「ユーザーメニューの頭文字が `::before` で描かれている」が見ている。
+   */
+  it('アバター未設定時にイニシャルの元になる属性が付く', () => {
     const { container } = render(<UserMenu />);
 
-    // 頭文字は ::before の content なので DOM のテキストにはならない（#1069）。
-    // 元になる data-initial を見る
     expect(
       container.querySelector('[data-initial]')?.getAttribute('data-initial'),
     ).toBe('テ');
@@ -95,6 +104,11 @@ describe('UserMenu', () => {
     });
 
     expect(trigger.textContent).toBe('テストユーザー');
+    // ⚠️ `toContain` は axe の判定の**近似でしかない**。axe は NFKD 正規化 →
+    // 括弧内の除去 → 単語分割のうえで「連続する単語列か」を見る。
+    // 例えば `ユーザーメニュー（テストユーザー）` はここを通るが axe では落ちる
+    // （括弧内が落とされるため）。本当の砦は e2e の axe 検査のほう。
+    // 上の textContent アサーションが無いと `toContain('')` で常に真になる点にも注意
     expect(trigger.getAttribute('aria-label')).toContain(trigger.textContent);
   });
 

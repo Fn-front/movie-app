@@ -107,6 +107,7 @@ export const UserMenu = memo(function UserMenu() {
           ) : (
             /*
               頭文字は**テキストノードではなく `::before` で描く**（#1069）。
+              文字は data-initial から読む（userMenu.module.scss）。
 
               このボタンは `aria-label` を持つので、頭文字を素のテキストで置くと
               可視テキストが「頭文字 + 表示名」になり、aria-label に含まれなくなる
@@ -116,6 +117,15 @@ export const UserMenu = memo(function UserMenu() {
               `labelContentNameMismatchEvaluate` は `visibleVirtual(..., screenReader: false)`
               で**画面に見えている文字**を取るため、aria-hidden を見ない。
               音声入力の利用者には実際に見えている以上、仕様としても正しい。
+
+              ⚠️ 「疑似要素だから支援技術に読まれない」わけではない。accname の
+              name-from-content は `::before` / `::after` の生成テキストも含める。
+              ここで読まれないのは (1) `aria-label` が名前計算で勝つ
+              (2) `button` ロールが children-presentational（axe の標準表でも
+              `childrenPresentational: true`）という2点による。
+              **この手法を他所へ転用するときは要注意**。`link` ロールは
+              children-presentational ではないので、aria-label の無いリンクに
+              同じことをすると生成テキストが名前に混ざる。
             */
             <span
               className={styles.c_user_menu__avatar_initial}

@@ -3,7 +3,7 @@
  * upcoming / nowShowing / home で共有するロジック
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
@@ -150,7 +150,15 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
 
   // フィルターの初期値を決める。useEffectでの後追い反映だと、初期レンダリングで
   // 一瞬デフォルト値が表示されるため、初期stateに直接注入する。
-  // 初期化は1回だけ（以降のURL変更は自前のrouter.replaceによるもののため追従不要）。
+  //
+  // ここで読むのはマウント時の1回だけ。マウント後のURL変更（戻る／進む）への
+  // 追従は下の「URL追従」effect が担う。
+  // かつては「以降のURL変更は自前の router.replace によるもののため追従不要」と
+  // していたが、#1026 でフィルターモーダルが履歴エントリを積むようになって
+  // 成立しなくなった。syncFiltersToUrl の router.replace が**ページではなく
+  // モーダルのエントリ**を置き換えるため、「絞り込み前のURL」が履歴に残り、
+  // 戻ると URL だけクエリが消えて一覧は絞り込まれたまま、という食い違いが
+  // 起きていた（#1051）。
   //
   // 優先順位: URL > localStorage > saved_filters > デフォルト
   // URLは共有・ブラウザバックの正であり最優先。クエリを持たないナビリンク経由の
@@ -215,6 +223,65 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   // URL または localStorage に値がある場合はそれを正とし、saved_filters で上書きしない
   const [savedFilterApplied, setSavedFilterApplied] = useState(hasUrlFilters);
   const queryClient = useQueryClient();
+
+  /**
+   * 「URLと現在のstateは一致している」と最後に判断したクエリ文字列。
+   *
+   * 自前の `router.replace` で起きたURL変更と、戻る／進むで起きたURL変更を
+   * 見分けるために持つ。前者で state を作り直すと
+   * **replace → searchParams の変化 → setState → replace** のループになる。
+   *
+   * 初期値はマウント時のクエリ。初期stateは既にURLから作ってあるので、
+   * マウント直後に追従処理を走らせてはいけない。走らせると、クエリを持たない
+   * ナビリンク経由の遷移で localStorage から復元した値を、空のURLで消してしまう。
+   */
+  const syncedSearchRef = useRef(searchParams.toString());
+
+  /*
+    URL追従: 戻る／進むでURLが変わったら、フィルターstateをURLから作り直す。
+
+    URLを正とする。クエリが消えたなら絞り込みも解除されるべきで、
+    「URLはクエリなし・一覧は絞り込み済み」という食い違いを残さない（#1051）。
+
+    ここでの setState は URL（外部の状態）からUIローカル状態への同期のため、
+    effect 内で行う必要がある。
+
+    localStorage は読み直さない。戻る操作は「さっきのURLの状態に戻す」ことが
+    期待値で、端末に残った別の条件を持ち出す場面ではない。
+    localStorage は従来どおり「クエリを持たない経路で入り直したとき」の
+    受け皿として、マウント時の初期化だけで使う。
+
+    ※ 自前の replace 直後にもこの effect は走るが、クエリ文字列が
+    `syncedSearchRef` と一致するため何もしない。万一 Next 側で文字列が
+    正規化されて一致しなくても、同じ値を1回入れ直すだけでループはしない。
+  */
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const search = searchParams.toString();
+    if (search === syncedSearchRef.current) return;
+    syncedSearchRef.current = search;
+
+    const conditions = parseFilterConditionsFromParams(
+      new URLSearchParams(search),
+    );
+
+    setSortBy(conditions.sort_by ?? DEFAULT_SORT);
+    setReleaseType(conditions.release_type ?? DEFAULT_RELEASE_TYPE);
+    setSelectedGenreIds(conditions.genre_ids ?? []);
+    setDateRange({
+      gte: conditions.date_range_gte ?? defaultDateRange.gte,
+      lte: conditions.date_range_lte ?? defaultDateRange.lte,
+    });
+    setIsRevivalFilter(conditions.is_revival);
+    setSelectedWatchProviderIds(conditions.watch_providers ?? []);
+    setSelectedOfferTypes(conditions.offer_types ?? []);
+    setSelectedRegions(conditions.include_regions ?? []);
+
+    // 以降はURLが正。後から届く saved_filters で上書きさせない
+    // （上書きするとURLと画面がまた食い違う）
+    setSavedFilterApplied(true);
+  }, [searchParams, defaultDateRange]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 保存済みフィルターの取得
   const savedFilterQuery = useQuery({
@@ -390,6 +457,10 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
         urlConditions,
       );
       const queryString = params.toString();
+
+      // 自分が書いたURLであることを残す。これが無いと、直後に走る
+      // URL追従 effect が戻る操作と区別できず、state を作り直してループする
+      syncedSearchRef.current = queryString;
 
       router.replace(queryString ? `${pathname}?${queryString}` : pathname, {
         scroll: false,

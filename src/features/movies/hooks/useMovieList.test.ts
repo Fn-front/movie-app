@@ -1046,6 +1046,224 @@ describe('useMovieList', () => {
       expect(result.current.releaseType).toBe('theatrical');
     });
   });
+
+  /**
+   * 戻る／進むでURLが変わったときの追従（#1051）
+   *
+   * Next の `useSearchParams` は popstate でも更新されるため、ここでは
+   * `mockSearchParams` を差し替えて再レンダリングすることで戻る／進むを模す。
+   */
+  describe('URL変更への追従（戻る／進む）', () => {
+    /** 戻る／進むでURLが変わった状態にする */
+    const navigateTo = (query: Record<string, string>) => {
+      mockSearchParams = new URLSearchParams(query);
+    };
+
+    it('戻ってクエリが消えたら、絞り込みも解除される', async () => {
+      navigateTo({
+        sort_by: 'popularity',
+        genre_ids: '28',
+        is_revival: 'true',
+      });
+
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      expect(result.current.selectedGenreIds).toEqual([28]);
+
+      navigateTo({});
+      rerender();
+
+      expect(result.current.sortBy).toBe('release_date');
+      expect(result.current.selectedGenreIds).toEqual([]);
+      expect(result.current.isRevivalFilter).toBeUndefined();
+    });
+
+    it('URLから消えた条件はAPIリクエストからも外れる', async () => {
+      navigateTo({ genre_ids: '28' });
+
+      const { rerender } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(mockGetMovies).toHaveBeenCalledWith(
+          expect.objectContaining({ genre_ids: '28' }),
+          expect.anything(),
+        );
+      });
+
+      navigateTo({});
+      rerender();
+
+      await waitFor(() => {
+        expect(mockGetMovies).toHaveBeenCalledWith(
+          expect.objectContaining({ genre_ids: undefined }),
+          expect.anything(),
+        );
+      });
+    });
+
+    it('進んでクエリが戻ったら、その条件で絞り込み直す', async () => {
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      expect(result.current.selectedGenreIds).toEqual([]);
+
+      navigateTo({
+        genre_ids: '12,16',
+        release_type: 'streaming',
+        date_range_gte: '2026-05-01',
+      });
+      rerender();
+
+      expect(result.current.selectedGenreIds).toEqual([12, 16]);
+      expect(result.current.releaseType).toBe('streaming');
+      expect(result.current.dateRange.gte).toBe('2026-05-01');
+    });
+
+    it('URLに日付が無くなればページ既定の範囲に戻す', async () => {
+      navigateTo({
+        date_range_gte: '2026-05-01',
+        date_range_lte: '2026-06-30',
+      });
+
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      navigateTo({});
+      rerender();
+
+      expect(result.current.dateRange).toEqual({
+        gte: '2026-02-11',
+        lte: undefined,
+      });
+    });
+
+    it('URL追従ではURLを書き戻さない（replaceのループを作らない）', async () => {
+      navigateTo({ genre_ids: '28' });
+
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      mockRouterReplace.mockClear();
+
+      navigateTo({});
+      rerender();
+
+      expect(result.current.selectedGenreIds).toEqual([]);
+      expect(mockRouterReplace).not.toHaveBeenCalled();
+    });
+
+    it('自分が書いたURLに追従しても、ソートの状態もURLも揺り戻さない', async () => {
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleSortChange('popularity');
+      });
+
+      // router.replace の結果を Next が searchParams へ反映した状態を作る
+      const url = mockRouterReplace.mock.calls[0][0] as string;
+      mockSearchParams = new URLSearchParams(url.split('?')[1] ?? '');
+      rerender();
+
+      expect(result.current.sortBy).toBe('popularity');
+      expect(mockRouterReplace).toHaveBeenCalledTimes(1);
+    });
+
+    it('クエリが変わっていない再レンダリングでは復元済みの状態を壊さない', async () => {
+      // localStorage 由来の復元はURLに現れない。URLが変わっていないのに
+      // 追従処理が走ると、空のクエリでこれを消してしまう
+      window.localStorage.setItem(
+        STORAGE_KEYS.MOVIE_FILTERS,
+        JSON.stringify({ sort_by: 'popularity', genre_ids: [28] }),
+      );
+
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      expect(result.current.sortBy).toBe('popularity');
+
+      // useSearchParams は再レンダリングのたびに別インスタンスを返しうる
+      mockSearchParams = new URLSearchParams();
+      rerender();
+
+      expect(result.current.sortBy).toBe('popularity');
+      expect(result.current.selectedGenreIds).toEqual([28]);
+    });
+
+    it('URL変更のあとに届いた保存済みフィルターで上書きしない', async () => {
+      mockSessionStatus = 'authenticated';
+      mockSessionData = { user: { id: 'user-123', name: 'テストユーザー' } };
+
+      let resolveSavedFilter: (
+        value: Record<string, unknown>,
+      ) => void = () => {};
+      mockGetSavedFilter.mockReturnValue(
+        new Promise<Record<string, unknown>>((resolve) => {
+          resolveSavedFilter = resolve;
+        }),
+      );
+
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      // 戻る／進むでURLにフィルターが現れる
+      navigateTo({ sort_by: 'popularity' });
+      rerender();
+      expect(result.current.sortBy).toBe('popularity');
+
+      // 遅れて保存済みフィルターが届いてもURLが正
+      await act(async () => {
+        resolveSavedFilter({
+          sort_by: 'vote_average',
+          release_type: 'streaming',
+        });
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      expect(result.current.sortBy).toBe('popularity');
+      expect(result.current.releaseType).toBe('theatrical');
+    });
+  });
+
   describe('localStorageによるフィルター永続化（ナビリンク経由）', () => {
     /** localStorage にフィルターを仕込む */
     const seedStorage = (conditions: Record<string, unknown>) => {

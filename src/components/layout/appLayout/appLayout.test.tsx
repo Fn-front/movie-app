@@ -81,7 +81,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { MAIN_CONTENT_ID } from '@/constants';
+import { ARIA_LABELS, MAIN_CONTENT_ID } from '@/constants';
 
 import { AppLayout } from './appLayout';
 
@@ -152,6 +152,15 @@ describe('AppLayout', () => {
     render(<AppLayout>コンテンツ</AppLayout>);
     expect(screen.getByRole('search')).toBeInTheDocument();
     expect(screen.getByLabelText('映画を検索')).toBeInTheDocument();
+  });
+
+  it('BottomNavが表示される', () => {
+    // SP の主要導線（#1028）。lg 以上は CSS で隠すが、DOM には常に居る。
+    // ここを見ていないと <BottomNav /> の1行が消えても誰も落ちない
+    render(<AppLayout>コンテンツ</AppLayout>);
+    expect(
+      screen.getByRole('navigation', { name: ARIA_LABELS.PRIMARY_NAV }),
+    ).toBeInTheDocument();
   });
 
   describe('認証状態による表示制御', () => {

@@ -17,6 +17,7 @@ import {
   ANALYTICS_EVENTS,
   ANALYTICS_NO_FILTER,
   QUERY_PARAMS,
+  ROUTES,
   searchKeys,
   SEARCH_ERROR_MESSAGES,
 } from '@/constants';
@@ -198,7 +199,7 @@ export function useSearch(): UseSearchReturn {
     (page: number) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set('page', String(page));
-      router.push(`/search?${params.toString()}`);
+      router.push(`${ROUTES.SEARCH}?${params.toString()}`);
     },
     [searchParams, router],
   );

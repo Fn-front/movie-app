@@ -8,7 +8,12 @@
 
 import { render, screen, within } from '@testing-library/react';
 
-import { ARIA_LABELS, ROUTES } from '@/constants';
+import {
+  ARIA_LABELS,
+  AUTH_REQUIRED_ROUTES,
+  NAV_ITEMS,
+  ROUTES,
+} from '@/constants';
 
 import { BottomNav } from './bottomNav';
 import {
@@ -25,9 +30,18 @@ jest.mock('next/navigation', () => ({
 
 let mockStatus: 'authenticated' | 'unauthenticated' | 'loading' =
   'authenticated';
+/**
+ * 無効化済みセッション（パスワード変更・絶対期限切れ）は status が
+ * `authenticated` のまま user が空文字で埋められて返る。id の有無だけが
+ * 両者を分けるので、テストでもそこを動かせるようにしておく
+ */
+let mockUserId: string | undefined = 'user-123';
 
 jest.mock('next-auth/react', () => ({
-  useSession: () => ({ status: mockStatus }),
+  useSession: () => ({
+    status: mockStatus,
+    data: { user: { id: mockUserId } },
+  }),
 }));
 
 /** ボトムナビのランドマーク内のリンクを、表示順のラベルで返す */
@@ -40,6 +54,7 @@ describe('BottomNav', () => {
   beforeEach(() => {
     mockPathname = '/';
     mockStatus = 'authenticated';
+    mockUserId = 'user-123';
     document.documentElement.style.removeProperty(BOTTOM_NAV_HEIGHT_VAR);
   });
 
@@ -68,6 +83,16 @@ describe('BottomNav', () => {
       expect(
         screen.queryByRole('link', { name: 'お気に入り' }),
       ).not.toBeInTheDocument();
+    });
+
+    it('無効化済みセッション（id が無い）では保護された2件を出さない', () => {
+      // status は authenticated のままなので、status だけで判定すると
+      // 同じ SP 画面でドロワーは保護導線を隠しボトムナビは出す、という
+      // 食い違いが起きる（mobileDrawer.tsx と同じ基準に揃える）
+      mockUserId = undefined;
+      render(<BottomNav />);
+
+      expect(navLinkLabels()).toEqual(['ホーム', '公開中', '検索']);
     });
 
     it('セッション判定中は未認証と同じ3件を出す', () => {
@@ -123,6 +148,86 @@ describe('BottomNav', () => {
       expect(screen.getByRole('link', { name: 'ホーム' })).not.toHaveAttribute(
         'aria-label',
       );
+    });
+  });
+
+  /**
+   * 高さの CSS 変数（マウント／アンマウント）
+   *
+   * jest.setup.js の ResizeObserver は no-op スタブなので、ここで観測できるのは
+   * **RO に頼らない同期経路だけ**。それがまさに検証したいもの（#1028 N-3）。
+   */
+  describe('高さの反映', () => {
+    /** 実レイアウトを持たない jsdom の代わりに高さを固定する */
+    const stubHeight = (height: number) =>
+      jest
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockReturnValue({ height } as DOMRect);
+
+    const readVar = () =>
+      document.documentElement.style.getPropertyValue(BOTTOM_NAV_HEIGHT_VAR);
+
+    it('マウント時に同期で書く（RO の初回観測を待たない）', () => {
+      const spy = stubHeight(57);
+
+      render(<BottomNav />);
+
+      // RO の初回観測は次フレーム。それを待つと、AppLayout が remount する
+      // セクション間遷移のたびに変数が消える1フレームが生まれる
+      expect(readVar()).toBe('57px');
+      spy.mockRestore();
+    });
+
+    it('アンマウントで変数を外す', () => {
+      const spy = stubHeight(57);
+
+      const { unmount } = render(<BottomNav />);
+      expect(readVar()).toBe('57px');
+
+      unmount();
+
+      // documentElement.style は React ツリーの外にある。外し忘れると
+      // ボトムナビを描かない画面でも本文の下に余白が残り続ける
+      expect(readVar()).toBe('');
+      spy.mockRestore();
+    });
+  });
+
+  describe('共通定数からの導出', () => {
+    it('ラベルを NAV_ITEMS から引く（ドロワーと呼び名が食い違わない）', () => {
+      render(<BottomNav />);
+
+      // ここでラベルを再宣言していると、NAV_ITEMS を「上映中」に変えたとき
+      // 同じ SP 画面でドロワーだけ呼び名が変わる。どちらのテストも自分の
+      // 文字列を見ているので、この比較が無いと誰も落ちない
+      for (const href of [
+        ROUTES.NOW_SHOWING,
+        ROUTES.WATCHLIST,
+        ROUTES.FAVORITES,
+      ]) {
+        const shared = NAV_ITEMS.find((item) => item.href === href);
+        expect(shared).toBeDefined();
+        expect(
+          screen.getByRole('link', { name: shared!.label }),
+        ).toHaveAttribute('href', href);
+      }
+    });
+
+    it('保護対象かどうかを AUTH_REQUIRED_ROUTES から導出する', () => {
+      mockStatus = 'unauthenticated';
+      render(<BottomNav />);
+
+      const hrefs = within(
+        screen.getByRole('navigation', { name: ARIA_LABELS.PRIMARY_NAV }),
+      )
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href'));
+
+      // proxy と共通の真実源。ここで `requiresAuth` を手で持つと、
+      // AUTH_REQUIRED_ROUTES にルートを足してもボトムナビだけ出続ける
+      for (const route of AUTH_REQUIRED_ROUTES) {
+        expect(hrefs).not.toContain(route);
+      }
     });
   });
 

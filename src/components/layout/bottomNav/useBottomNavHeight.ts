@@ -13,7 +13,14 @@
 
 'use client';
 
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
+
+/**
+ * SSR では `useLayoutEffect` が動かず警告になるので、サーバーでは `useEffect` に倒す。
+ * この成分はクライアント専用の処理しか持たないため、どちらでも結果は変わらない
+ */
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 /**
  * ボトムナビの実高を持つ CSS 変数名
@@ -78,18 +85,33 @@ export function setBottomNavHeightVar(px: number | null): void {
  *
  * **lg 以上で `display: none` になると 0px が書かれる。** ResizeObserver は
  * 箱を失った要素を 0×0 として報告するため、メディアクエリを JS 側へ
- * 二重定義しなくても本文の padding が戻る。逆に lg でマウントしたときは
- * 一度も発火しない（初期サイズが 0×0 なので「変化なし」）が、
- * 参照側が `var(--bottom-nav-height, 0px)` と既定値つきで読むので同じ結果になる。
+ * 二重定義しなくても本文の padding が戻る。lg で初回マウントしたときも、
+ * Chromium は `display: none` の要素に対して**初回観測を1回返す**ので
+ * （1280px でハードリロードした `/privacy` の `documentElement` に
+ * `--bottom-nav-height: 0px` がインラインで載ることを実測）、同じく 0px になる。
+ * どちらにせよ参照側は `var(--bottom-nav-height, 0px)` と既定値つきで読むため
+ * 結果は変わらない。
  *
  * @returns ナビ要素に渡す ref
  */
 export function useBottomNavHeight(): RefObject<HTMLElement | null> {
   const ref = useRef<HTMLElement>(null);
 
-  useEffect(() => {
+  // レイアウト効果にするのは、下の同期書き込みを**初回ペイント前**に
+  // 済ませるため。useEffect だと1フレームぶん変数が未確定のまま描かれる
+  useIsomorphicLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
+
+    // ⚠️ RO を張る前に一度**同期で**書く。RO の初回観測は次フレームなので、
+    // それだけに任せると変数が未確定の窓ができる。`AppLayout` はセクションを
+    // またぐ遷移のたびに remount するため、この窓は毎回開く：cleanup の
+    // removeProperty が先に走り、新しい観測が来るまでの間だけ本文の
+    // padding-bottom とトーストの bottom が 0 に落ちる（`/privacy` →
+    // `/search` を 8ms 間隔で採ると 372 サンプル中1件で再現）。
+    // 同意バナー（`bannerHeight.ts`）がこれを持たないのは、あちらが
+    // セッション中に一度しかマウントしないため
+    setBottomNavHeightVar(element.getBoundingClientRect().height);
 
     const observer = new ResizeObserver(([entry]) => {
       setBottomNavHeightVar(resolveNavHeight(entry));

@@ -10,6 +10,12 @@
  * - lg 以上で消えたあとに余計な padding が残らないか
  * - タップ領域が実寸で 44×44 以上あるか（#1017）
  *
+ * ここに無いボトムナビの検証:
+ * - 320px で横に溢れないこと → `mobileResponsive.spec.ts` の「最狭幅での表示」
+ *   （最狭幅の崩れを機能横断でまとめている既存の describe に寄せた）
+ * - 実バナーが出た状態で重ならないこと → `e2e/cookieConsent/bottomNavOverlap.spec.ts`
+ *   （同意UIは `playwright.ga.config.ts` の担当。#931）
+ *
  * ⚠️ 同意バナーそのものは**この config では出ない**。`playwright.config.ts` の
  * `webServer.env` が `NEXT_PUBLIC_GA_ID: ''` にしているため（同意UIは
  * `playwright.ga.config.ts` の担当。#931）。ここでは実装と同じ経路——
@@ -204,10 +210,12 @@ test.describe('lg 以上のボトムナビゲーション', () => {
     await expect(nav).toBeVisible();
     await expect.poll(() => readNavHeightVar(page)).not.toBe('0px');
 
-    // SP → lg の順に広げる。lg で読み込んだ場合は変数が未設定のまま
-    // 既定値 0px に倒れるだけだが、こちらは
-    // 「display: none になった要素を ResizeObserver が 0 と報告する」経路を通る。
-    // ここが効いていないと lg の本文下端に SP 用の余白が残る
+    // SP → lg の順に広げ、「display: none になった要素を ResizeObserver が
+    // 0 と報告する」経路を通す。ここが効いていないと lg の本文下端に
+    // SP 用の余白が残る。
+    // （lg で読み込んだ場合も Chromium は display:none の要素に初回観測を
+    //   1回返すので 0px が書かれる。どちらにせよ参照側は
+    //   `var(--bottom-nav-height, 0px)` なので結果は同じ）
     await page.setViewportSize({ width: 1280, height: 800 });
 
     await expect(nav).toBeHidden();

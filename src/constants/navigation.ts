@@ -2,6 +2,16 @@
  * ナビゲーション関連の定数
  */
 
+import type { IconType } from 'react-icons';
+import {
+  IoBookmarkOutline,
+  IoCalendarOutline,
+  IoHeartOutline,
+  IoHomeOutline,
+  IoPlayCircleOutline,
+  IoSearchOutline,
+} from 'react-icons/io5';
+
 import { ROUTES } from './common';
 
 /**
@@ -25,6 +35,29 @@ export const NAV_ITEMS: NavItemBase[] = [
   { label: '受賞作品', href: ROUTES.AWARDS },
   { label: 'シアター体験', href: ROUTES.THEATER_EXPERIENCE },
 ];
+
+/**
+ * ルートごとのナビゲーションアイコン
+ *
+ * ドロワーとボトムナビが同じ行き先に同じ絵を使うための真実源。片方だけ
+ * 差し替わると、同じ SP 画面で同じ行き先が別の絵になり覚え直しが要る。
+ *
+ * 要素ではなく**コンポーネント**を持つ。サイズは表示側が `ICON_SIZES` から
+ * 決めるので、ここで固定すると使い回せない（この定数は `.ts` なので
+ * JSX も書けない）。
+ *
+ * ⚠️ 受賞作品・シアター体験は未定義のまま残している。ドロワーは
+ * `?? null` でアイコン無しに倒れる既知の状態で、#1020 の担当範囲。
+ * ここへ足すとあちらの Issue の前提が変わるので触らないこと。
+ */
+export const NAV_ICON_MAP: Record<string, IconType> = {
+  [ROUTES.HOME]: IoHomeOutline,
+  [ROUTES.UPCOMING]: IoCalendarOutline,
+  [ROUTES.NOW_SHOWING]: IoPlayCircleOutline,
+  [ROUTES.SEARCH]: IoSearchOutline,
+  [ROUTES.FAVORITES]: IoHeartOutline,
+  [ROUTES.WATCHLIST]: IoBookmarkOutline,
+};
 
 /**
  * メニューアクション項目ラベル

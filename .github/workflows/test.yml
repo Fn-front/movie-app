@@ -44,6 +44,14 @@ jobs:
         if: github.event_name == 'pull_request'
         run: npx jest --changedSince=origin/main --passWithNoTests
 
+      # `--changedSince` は jest のモジュールグラフを辿るので、`.sh` を変えても
+      # 1件も走らない（`--findRelatedTests scripts/ci-build-with-retry.sh` は0件）。
+      # `--passWithNoTests` と合わせて、シェルスクリプトだけを壊すPRが
+      # 緑のまま通ってしまうため無条件に回す。件数が少なく数秒で終わる（#1080）
+      - name: run-tests-scripts
+        if: github.event_name == 'pull_request'
+        run: npx jest scripts
+
       - name: run-tests-all
         if: github.event_name == 'push'
         run: npx jest

@@ -16,7 +16,21 @@
 #   アプリ側では直せない。ジョブごと手で再実行するのは待ち時間が大きいため、
 #   ここで吸収する。
 #
-#   恒久対応は next/font/local への移行（ビルド時のフォント取得をなくす）。
+#   恒久対応は next/font/local への移行（ビルド時のフォント取得をなくす）→ #1083。
+#
+# ⚠️ 再試行の前に .next を消すこと（#1080）:
+#   next build は cleanDistDir（既定 true）で毎回 .next を消すが、`cache` は
+#   残す（node_modules/next/dist/esm/build/index.js の除外リスト）。
+#   Turbopack の永続キャッシュ（.next/cache/turbopack。
+#   experimental.turbopackFileSystemCacheForBuild が既定 true）に1回目の
+#   失敗結果が乗るため、消さずに引き直すと**引き直しにならない**。
+#
+#     試行1: 12.68秒 → 496 errors
+#     試行2:  0.94秒 → 496 errors（同一）
+#     試行3:  0.61秒 → 496 errors（同一）
+#
+#   この run を手で再実行すると、同じキャッシュキーから復元して成功した。
+#   入力が壊れているのではなく、失敗結果がキャッシュされているだけ。
 #
 # 環境変数:
 #   BUILD_MAX_ATTEMPTS  最大試行回数（既定 3）
@@ -43,11 +57,16 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
   fi
   echo "::endgroup::"
 
+  # 最終試行の失敗では .next を残す。失敗したビルドの成果物とログを
+  # アーティファクトから拾えるようにするため
   if [ "$attempt" -ge "$ATTEMPTS" ]; then
     echo "::error::next build が ${ATTEMPTS} 回とも失敗しました"
     exit "$status"
   fi
 
-  echo "::warning::next build に失敗しました（試行 ${attempt}/${ATTEMPTS}）。${DELAY} 秒後に再試行します"
+  # 失敗結果を捨ててから引き直す。消さないと2回目以降が同じ結論を
+  # 再生するだけになる（冒頭の ⚠️ / #1080）
+  echo "::warning::next build に失敗しました（試行 ${attempt}/${ATTEMPTS}）。.next を捨てて ${DELAY} 秒後に再試行します"
+  rm -rf .next
   sleep "$DELAY"
 done

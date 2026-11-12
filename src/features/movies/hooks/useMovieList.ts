@@ -225,6 +225,38 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const queryClient = useQueryClient();
 
   /**
+   * ページ既定の日付範囲を effect から読むための控え。
+   *
+   * ⚠️ 呼び出し側（`useNowShowing` / `useUpcoming` / `useHome`）は
+   * `defaultDateRange: {}` を**毎レンダー新しいオブジェクトリテラル**で渡す。
+   * これを effect の依存配列に入れると、URLが変わっていなくても毎レンダー
+   * 再実行される。下の「URL追従」effect にとってそれは致命的なので
+   * （理由は当該コメント）、フック側で閉じて呼び出し側のメモ化に依存しない。
+   */
+  const defaultDateRangeRef = useRef(defaultDateRange);
+
+  useEffect(() => {
+    defaultDateRangeRef.current = defaultDateRange;
+  }, [defaultDateRange]);
+
+  /**
+   * saved_filters による上書きを打ち切ったか。
+   *
+   * state だけでは **同じコミット内の決定が見えない**。「URLの変更」と
+   * 「saved_filters の到着」が同じコミットに乗ると、後に宣言された復元 effect が
+   * 古い `savedFilterApplied === false` を読み、URL由来の state を踏み潰す。
+   * 以降この状態は自己修復しないため、#1051 と同じ食い違いが恒久的に残る。
+   * ref なら直前の決定がその場で見えるので、effect の宣言順に依存しない。
+   */
+  const savedFilterAppliedRef = useRef(savedFilterApplied);
+
+  /** 以降は saved_filters で上書きしないと決める */
+  const markSavedFilterApplied = useCallback(() => {
+    savedFilterAppliedRef.current = true;
+    setSavedFilterApplied(true);
+  }, []);
+
+  /**
    * 「URLと現在のstateは一致している」と最後に判断したクエリ文字列。
    *
    * 自前の `router.replace` で起きたURL変更と、戻る／進むで起きたURL変更を
@@ -234,27 +266,28 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
    * 初期値はマウント時のクエリ。初期stateは既にURLから作ってあるので、
    * マウント直後に追従処理を走らせてはいけない。走らせると、クエリを持たない
    * ナビリンク経由の遷移で localStorage から復元した値を、空のURLで消してしまう。
+   * フィルター以外のクエリ（`?utm_source=…` など）が付いた入口でも同じ。
    */
   const syncedSearchRef = useRef(searchParams.toString());
 
-  /*
-    URL追従: 戻る／進むでURLが変わったら、フィルターstateをURLから作り直す。
-
-    URLを正とする。クエリが消えたなら絞り込みも解除されるべきで、
-    「URLはクエリなし・一覧は絞り込み済み」という食い違いを残さない（#1051）。
-
-    ここでの setState は URL（外部の状態）からUIローカル状態への同期のため、
-    effect 内で行う必要がある。
-
-    localStorage は読み直さない。戻る操作は「さっきのURLの状態に戻す」ことが
-    期待値で、端末に残った別の条件を持ち出す場面ではない。
-    localStorage は従来どおり「クエリを持たない経路で入り直したとき」の
-    受け皿として、マウント時の初期化だけで使う。
-
-    ※ 自前の replace 直後にもこの effect は走るが、クエリ文字列が
-    `syncedSearchRef` と一致するため何もしない。万一 Next 側で文字列が
-    正規化されて一致しなくても、同じ値を1回入れ直すだけでループはしない。
-  */
+  // URL追従: 戻る／進むでURLが変わったら、フィルターstateをURLから作り直す。
+  //
+  // URLを正とする。クエリが消えたなら絞り込みも解除されるべきで、
+  // 「URLはクエリなし・一覧は絞り込み済み」という食い違いを残さない（#1051）。
+  //
+  // ここでの setState は URL（外部の状態）からUIローカル状態への同期のため、
+  // effect 内で行う必要がある。
+  //
+  // localStorage は読み直さない。戻る操作は「さっきのURLの状態に戻す」ことが
+  // 期待値で、端末に残った別の条件を持ち出す場面ではない。
+  // localStorage は従来どおり「クエリを持たない経路で入り直したとき」の
+  // 受け皿として、マウント時の初期化だけで使う。
+  //
+  // ⚠️ 依存配列は searchParams だけに保つこと。毎レンダー変わる値を混ぜると
+  // URLが変わっていなくても再実行され、**自前の replace が着地する前**に走る。
+  // `router.replace` はトランジションなので同期レーンのコミットが先に走り、
+  // その時点では searchParams はまだ古く syncedSearchRef はもう新しい。
+  // ガードを素通りして、適用したばかりの絞り込みを解除してしまう。
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const search = searchParams.toString();
@@ -264,13 +297,14 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     const conditions = parseFilterConditionsFromParams(
       new URLSearchParams(search),
     );
+    const pageDefaultDateRange = defaultDateRangeRef.current;
 
     setSortBy(conditions.sort_by ?? DEFAULT_SORT);
     setReleaseType(conditions.release_type ?? DEFAULT_RELEASE_TYPE);
     setSelectedGenreIds(conditions.genre_ids ?? []);
     setDateRange({
-      gte: conditions.date_range_gte ?? defaultDateRange.gte,
-      lte: conditions.date_range_lte ?? defaultDateRange.lte,
+      gte: conditions.date_range_gte ?? pageDefaultDateRange.gte,
+      lte: conditions.date_range_lte ?? pageDefaultDateRange.lte,
     });
     setIsRevivalFilter(conditions.is_revival);
     setSelectedWatchProviderIds(conditions.watch_providers ?? []);
@@ -279,8 +313,8 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
 
     // 以降はURLが正。後から届く saved_filters で上書きさせない
     // （上書きするとURLと画面がまた食い違う）
-    setSavedFilterApplied(true);
-  }, [searchParams, defaultDateRange]);
+    markSavedFilterApplied();
+  }, [searchParams, markSavedFilterApplied]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // 保存済みフィルターの取得
@@ -293,28 +327,33 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
 
   // 保存済みフィルターをUIステートに1回だけ反映
   // savedFilterQuery.dataはサーバー状態からUIローカル状態への初期同期のため、useEffect内のsetStateが必要
+  //
+  // 適用済みの判定は state ではなく ref で行う。同じコミットで上のURL追従が
+  // 決着をつけていても、state 経由では古い値しか見えず上書きしてしまう
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (savedFilterApplied) return;
+    if (savedFilterAppliedRef.current) return;
     if (!savedFilterQuery.data) return;
 
-    setSavedFilterApplied(true);
+    markSavedFilterApplied();
     const conditions = savedFilterQuery.data;
     const hasConditions = Object.keys(conditions).length > 0;
     if (!hasConditions) return;
+
+    const pageDefaultDateRange = defaultDateRangeRef.current;
 
     setSortBy(conditions.sort_by || DEFAULT_SORT);
     setReleaseType(conditions.release_type || DEFAULT_RELEASE_TYPE);
     setSelectedGenreIds(conditions.genre_ids || []);
     setDateRange({
-      gte: conditions.date_range_gte || defaultDateRange.gte,
-      lte: conditions.date_range_lte || defaultDateRange.lte,
+      gte: conditions.date_range_gte || pageDefaultDateRange.gte,
+      lte: conditions.date_range_lte || pageDefaultDateRange.lte,
     });
     setIsRevivalFilter(conditions.is_revival);
     setSelectedWatchProviderIds(conditions.watch_providers || []);
     setSelectedOfferTypes(conditions.offer_types || []);
     setSelectedRegions(conditions.include_regions || []);
-  }, [savedFilterApplied, savedFilterQuery.data, defaultDateRange]);
+  }, [savedFilterQuery.data, markSavedFilterApplied]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // フィルター準備完了の判定

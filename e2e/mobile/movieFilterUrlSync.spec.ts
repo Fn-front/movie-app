@@ -7,7 +7,7 @@
  * **URL からクエリが消えるのに一覧は絞り込まれたまま**になっていた（#1051）。
  *
  * ⚠️ **URL だけを見ても検出できない。** 戻った先の URL は期待どおりに
- * 見えるからで、食い違っているのは画面側。URL のクエリの有無と
+ * 見えるからで、食い違っているのは画面側。URL のジャンル指定の有無と
  * 絞り込みバッジの有無を**必ず対で**確かめること。
  *
  * SP 幅で起票された事象であり、`playwright.config.ts` のプロジェクトは
@@ -41,37 +41,53 @@ const FILTER_BADGE_SELECTOR = '[class*="filter_count"]';
 /** 絞り込みに使うジャンル。どのページの一覧にも含まれる */
 const GENRE_NAME = 'アクション';
 
+/** 0件のときに出る文言（`movieGridContainer` の既定） */
+const EMPTY_MESSAGE = '表示する映画がありません。';
+
 /** URL と画面が「絞り込みあり」で揃っている状態 */
-const FILTERED = 'URL:クエリあり / バッジ:あり';
+const FILTERED = 'URL:ジャンル指定あり / バッジ:あり';
 
 /** URL と画面が「絞り込みなし」で揃っている状態 */
-const UNFILTERED = 'URL:クエリなし / バッジ:なし';
-
-/** 一覧が描画されるまで待つ（データ0件なら false） */
-const waitForList = (page: Page) =>
-  page
-    .locator(TILE_SELECTOR)
-    .first()
-    .waitFor({ state: 'visible', timeout: 15000 })
-    .then(() => true)
-    .catch(() => false);
+const UNFILTERED = 'URL:ジャンル指定なし / バッジ:なし';
 
 /**
- * URL のクエリ有無と絞り込みバッジ有無を1つの文字列にまとめて読む。
+ * 一覧が決着するまで待ち、タイルが1件以上あったかを返す。
+ *
+ * ⚠️ **失敗を握りつぶさないこと。** `.catch(() => false)` にすると、
+ * JS エラーで描画できない・タイルのクラス名が変わったといった**本物の回帰**まで
+ * 「データ無し」に化けてスキップされ、緑になる。
+ * 0件は専用の文言が出る正常な終着点なので、そちらを明示的に待ち分ける
+ */
+const waitForList = async (page: Page) => {
+  await page
+    .locator(TILE_SELECTOR)
+    .first()
+    .or(page.getByText(EMPTY_MESSAGE))
+    .first()
+    .waitFor({ state: 'visible', timeout: 15000 });
+
+  return (await page.locator(TILE_SELECTOR).count()) > 0;
+};
+
+/**
+ * URL のジャンル指定の有無と絞り込みバッジ有無を1つの文字列にまとめて読む。
  *
  * 2つを別々に assert すると、**両方とも「絞り込みなし」に見える一瞬**で
  * たまたま通ってしまう。対にして `FILTERED` / `UNFILTERED` と突き合わせれば、
  * 一致していることと、どちらの状態であるかを同時に固定できる。
- * 落ちたときにどちら側が食い違ったかもメッセージに出る
+ * 落ちたときにどちら側が食い違ったかもメッセージに出る。
+ *
+ * 見るのは `genre_ids` だけ。`sort_by` などは絞り込みでなくても付くため、
+ * 「クエリの有無」では絞り込み状態を表せない
  */
 const readFilterState = async (page: Page) => {
-  const hasQuery = new URL(page.url()).searchParams.has(
+  const hasGenre = new URL(page.url()).searchParams.has(
     MOVIE_FILTER_QUERY_PARAMS.GENRE_IDS,
   );
   const hasBadge = (await page.locator(FILTER_BADGE_SELECTOR).count()) > 0;
 
   return [
-    hasQuery ? 'URL:クエリあり' : 'URL:クエリなし',
+    hasGenre ? 'URL:ジャンル指定あり' : 'URL:ジャンル指定なし',
     hasBadge ? 'バッジ:あり' : 'バッジ:なし',
   ].join(' / ');
 };
@@ -111,6 +127,7 @@ test.describe('フィルター適用後の戻る／進む', () => {
 
   test('公開中: 戻ると URL も一覧の絞り込みも解除される', async ({ page }) => {
     await page.goto('/movies/now-showing');
+    // ジャンルの選択肢は一覧のレスポンス由来。0件では絞り込みを試せない
     const hasTile = await waitForList(page);
     test.skip(!hasTile, '映画データが無いためスキップ');
 
@@ -175,6 +192,8 @@ test.describe('ソートの Select（モーダルを介さない経路）', () =
   test('並び順の変更は履歴を積まず、表示も URL と揃ったまま', async ({
     page,
   }) => {
+    // 他のテストと違い test.skip しない。ソートの Select は一覧のデータに
+    // 依存せず常に描画されるため、0件でも判定が成立する
     await page.goto('/movies/upcoming');
     await waitForList(page);
 

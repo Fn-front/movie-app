@@ -88,6 +88,25 @@ const defaultOptions: UseMovieListOptions = {
   defaultDateRange: { gte: '2026-02-11' },
 };
 
+/**
+ * 本番と同じく options を**毎レンダー新しいオブジェクト**で渡して描画する。
+ *
+ * `useNowShowing` / `useUpcoming` / `useHome` はいずれも
+ * `defaultDateRange: {}` をレンダーのたびに作り直して渡す。モジュール定数の
+ * `defaultOptions` で描画すると identity が安定してしまい、依存配列に
+ * 毎レンダー変わる値を混ぜた欠陥を**構造的に踏めない**（#1059 B-1）。
+ * URL と state の同期に関わるテストはこちらを使うこと。
+ */
+const renderMovieList = () =>
+  renderHook(
+    () =>
+      useMovieList({
+        timeFrame: 'upcoming',
+        defaultDateRange: { gte: '2026-02-11' },
+      }),
+    { wrapper: createQueryWrapper() },
+  );
+
 // --- Tests ---
 
 describe('useMovieList', () => {
@@ -1261,6 +1280,206 @@ describe('useMovieList', () => {
       });
       expect(result.current.sortBy).toBe('popularity');
       expect(result.current.releaseType).toBe('theatrical');
+    });
+
+    it('URL変更と保存済みフィルター到着が同じコミットでもURLが勝つ', async () => {
+      // 逐次なら上のテストで押さえているが、同じコミットに乗ると
+      // 復元 effect が古い savedFilterApplied を読んで踏み潰す（#1059 S-1）。
+      // 自己修復しないため、この食い違いは以降ずっと残る
+      mockSessionStatus = 'authenticated';
+      mockSessionData = { user: { id: 'user-123', name: 'テストユーザー' } };
+
+      let resolveSavedFilter: (
+        value: Record<string, unknown>,
+      ) => void = () => {};
+      mockGetSavedFilter.mockReturnValue(
+        new Promise<Record<string, unknown>>((resolve) => {
+          resolveSavedFilter = resolve;
+        }),
+      );
+
+      const { result, rerender } = renderMovieList();
+
+      await act(async () => {
+        navigateTo({ sort_by: 'popularity' });
+        resolveSavedFilter({
+          sort_by: 'vote_average',
+          release_type: 'streaming',
+        });
+        rerender();
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      expect(result.current.sortBy).toBe('popularity');
+      expect(result.current.releaseType).toBe('theatrical');
+    });
+
+    it('戻ると配信プロバイダー・提供形態・地域も解除される', async () => {
+      // バッジ（hasActiveFilters）はこの3つを見ないため、E2Eでは観測できない
+      navigateTo({
+        release_type: 'streaming',
+        watch_providers: '8,9',
+        offer_types: 'flatrate',
+        include_regions: 'korea',
+      });
+
+      const { result, rerender } = renderMovieList();
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      expect(result.current.selectedWatchProviderIds).toEqual([8, 9]);
+      expect(result.current.selectedOfferTypes).toEqual(['flatrate']);
+      expect(result.current.selectedRegions).toEqual(['korea']);
+
+      navigateTo({});
+      rerender();
+
+      expect(result.current.releaseType).toBe('theatrical');
+      expect(result.current.selectedWatchProviderIds).toEqual([]);
+      expect(result.current.selectedOfferTypes).toEqual([]);
+      expect(result.current.selectedRegions).toEqual([]);
+    });
+
+    it('進むと配信プロバイダー・提供形態・地域が復元される', async () => {
+      const { result, rerender } = renderMovieList();
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      navigateTo({
+        release_type: 'streaming',
+        watch_providers: '8,9',
+        offer_types: 'flatrate',
+        include_regions: 'korea',
+      });
+      rerender();
+
+      expect(result.current.releaseType).toBe('streaming');
+      expect(result.current.selectedWatchProviderIds).toEqual([8, 9]);
+      expect(result.current.selectedOfferTypes).toEqual(['flatrate']);
+      expect(result.current.selectedRegions).toEqual(['korea']);
+    });
+
+    it('自分が書いたURLが着地しても、触っていない条件のstateを作り直さない', async () => {
+      navigateTo({ genre_ids: '28' });
+
+      const { result, rerender } = renderMovieList();
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      const genreIdsBefore = result.current.selectedGenreIds;
+
+      act(() => {
+        result.current.handleSortChange('popularity');
+      });
+
+      // ソートしか変えていないので、ジャンルは同じ配列の実体のまま
+      expect(result.current.selectedGenreIds).toBe(genreIdsBefore);
+
+      // router.replace の結果を Next が searchParams へ反映した状態を作る
+      const url = mockRouterReplace.mock.calls[0][0] as string;
+      mockSearchParams = new URLSearchParams(url.split('?')[1] ?? '');
+      rerender();
+
+      // 自分で書いたURLなので追従は走らない。走ると同じ内容の別配列に化ける
+      expect(result.current.selectedGenreIds).toBe(genreIdsBefore);
+      expect(result.current.sortBy).toBe('popularity');
+    });
+
+    it('フィルター以外のクエリが付いた入口でも、localStorageの復元を消さない', async () => {
+      // 計測パラメータ付きのURLは実在の経路。マウント時のクエリを
+      // 基準にしていないと、ここで追従が走って復元を消す
+      window.localStorage.setItem(
+        STORAGE_KEYS.MOVIE_FILTERS,
+        JSON.stringify({ sort_by: 'popularity', genre_ids: [28] }),
+      );
+      navigateTo({ utm_source: 'newsletter' });
+
+      const { result, rerender } = renderMovieList();
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      expect(result.current.sortBy).toBe('popularity');
+      expect(result.current.selectedGenreIds).toEqual([28]);
+
+      navigateTo({ utm_source: 'newsletter' });
+      rerender();
+
+      expect(result.current.sortBy).toBe('popularity');
+      expect(result.current.selectedGenreIds).toEqual([28]);
+    });
+  });
+
+  /**
+   * options を毎レンダー作り直す呼び出し方での回帰（#1059 B-1）
+   *
+   * 追従 effect の依存配列に毎レンダー変わる値が混ざると、URLが変わって
+   * いなくても再実行される。`router.replace` はトランジションなので同期
+   * レーンのコミットが先に走り、そのとき searchParams はまだ古い。
+   * 結果、適用・ソート変更の**直後に state が巻き戻る**。
+   */
+  describe('options を毎レンダー新しいオブジェクトで渡す場合', () => {
+    it('フィルター適用の直後に絞り込みが巻き戻らない', async () => {
+      const { result } = renderMovieList();
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      mockGetMovies.mockClear();
+
+      act(() => {
+        result.current.handleFilterApply([28], {}, undefined);
+      });
+
+      expect(result.current.selectedGenreIds).toEqual([28]);
+
+      const url = mockRouterReplace.mock.calls[0][0] as string;
+      expect(url).toContain('genre_ids=28');
+
+      // 巻き戻ると、絞り込み無しの余分なリクエストが混ざる
+      await waitFor(() => {
+        expect(mockGetMovies).toHaveBeenCalled();
+      });
+      const requestedGenreIds = mockGetMovies.mock.calls.map(
+        (call) => (call[0] as { genre_ids?: string }).genre_ids,
+      );
+      expect(requestedGenreIds).toEqual(['28']);
+    });
+
+    it('ソート変更の直後に前の値へ戻らない', async () => {
+      const { result } = renderMovieList();
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleSortChange('popularity');
+      });
+
+      expect(result.current.sortBy).toBe('popularity');
+    });
+
+    it('フィルター適用の直後に日付範囲が巻き戻らない', async () => {
+      const { result } = renderMovieList();
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleFilterApply([], { gte: '2026-05-01' }, true);
+      });
+
+      expect(result.current.dateRange.gte).toBe('2026-05-01');
+      expect(result.current.isRevivalFilter).toBe(true);
     });
   });
 

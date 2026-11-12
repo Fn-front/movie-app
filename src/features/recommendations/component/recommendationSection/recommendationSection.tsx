@@ -11,7 +11,6 @@ import { IoRefreshOutline } from 'react-icons/io5';
 import { Button } from '@/components/ui/button/button';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
@@ -133,13 +132,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       [isInWatchlist, toggleWatchlist, trackEvent],
     );
 
-    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
-      useMovieDetailQuery();
-
-    const selectedMovieTitle = useMemo(
-      () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
-      [movieCacheItems, selectedMovieId],
-    );
+    const { openMovieDetail } = useMovieDetailQuery();
 
     const reasonMap = useMemo(
       () => new Map(recommendations.map((r) => [r.tmdb_movie_id, r.reason])),
@@ -257,13 +250,6 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
             </div>
           </div>
         </section>
-        <MovieDetailModal
-          // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
-          manageHistory={false}
-          movieId={selectedMovieId}
-          title={selectedMovieTitle}
-          onClose={closeMovieDetail}
-        />
         <FavoriteRatingModal
           isOpen={favoriteModalState.isOpen}
           onClose={closeFavoriteModal}

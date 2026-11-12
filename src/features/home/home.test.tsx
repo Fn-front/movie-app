@@ -28,6 +28,15 @@ jest.mock(
   }),
 );
 
+jest.mock(
+  '@/features/home/component/homeMovieDetailModal/homeMovieDetailModal',
+  () => ({
+    HomeMovieDetailModal: () => (
+      <div data-testid='home-movie-detail-modal'>映画詳細モーダル</div>
+    ),
+  }),
+);
+
 // --- Tests ---
 
 describe('HomePage', () => {
@@ -86,5 +95,38 @@ describe('HomePage', () => {
     expect(
       screen.queryByTestId('recommendation-section'),
     ).not.toBeInTheDocument();
+  });
+
+  /**
+   * 詳細モーダルはホームに1つだけ
+   *
+   * 以前は `NowShowingMovieList` と `RecommendationSection` が**両方**
+   * モーダルを描いていた。どちらも URL の `movie_id` を読むため、
+   * タイルを押すと2枚同時に開いていた（E2E が
+   * `getByRole('dialog') resolved to 2 elements` で落ちた）。
+   * セクション側に戻すとこのテストが落ちる。
+   */
+  it('詳細モーダルは認証状態にかかわらず1つだけ描かれる', () => {
+    const { rerender } = render(
+      <HomePage
+        nowShowingMovies={[]}
+        recommendations={[]}
+        hasFavorites={false}
+        isAuthenticated={true}
+      />,
+    );
+
+    expect(screen.getAllByTestId('home-movie-detail-modal')).toHaveLength(1);
+
+    rerender(
+      <HomePage
+        nowShowingMovies={[]}
+        recommendations={[]}
+        hasFavorites={false}
+        isAuthenticated={false}
+      />,
+    );
+
+    expect(screen.getAllByTestId('home-movie-detail-modal')).toHaveLength(1);
   });
 });

@@ -35,6 +35,7 @@ import {
   UI_ERROR_MESSAGES,
 } from '@/constants';
 import { sendEvent } from '@/utils/analytics';
+import { cn } from '@/utils/cn';
 import { formatDate } from '@/utils/date';
 import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
 import { selectTrailerVideos } from '@/features/movies/utils/selectTrailerVideos';
@@ -50,6 +51,18 @@ export interface MovieDetailContentProps {
   movieId: number;
   /** 予算・興行収入を表示するか */
   showFinancialInfo?: boolean;
+  /**
+   * 置かれる器（既定: モーダル）
+   *
+   * `page` は `/movies/[id]` の全画面ページ用。
+   *
+   * - 見出しレベルを1つ上げる。モーダルは Radix の Dialog.Title（h2）が
+   *   上にあるので h3/h4 で始めるが、ページでは作品名が h1 になる。
+   *   ここをずらさないと h1 が無いページか、h1 → h3 の飛びになる
+   * - あらすじ以降の内部スクロール（300px）を外す。器の高さが決まっている
+   *   モーダルのための制約で、ページでは二重スクロールになるだけ（#1023）
+   */
+  variant?: 'modal' | 'page';
   /** 動画ダイアログの開閉状態変更コールバック */
   onVideoDialogOpenChange?: (open: boolean) => void;
   /**
@@ -150,9 +163,13 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
   function MovieDetailContent({
     movieId,
     showFinancialInfo = false,
+    variant = 'modal',
     onVideoDialogOpenChange,
     onRequestClose,
   }) {
+    const isPage = variant === 'page';
+    const TitleTag = isPage ? 'h1' : 'h3';
+    const SectionTag = isPage ? 'h2' : 'h4';
     const { movie, isLoading, isError } = useMovieDetail(movieId);
     const { shouldReplaceNavigation, notifyNavigating } = useModalNavigation();
 
@@ -275,7 +292,12 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     }
 
     return (
-      <div className={styles.c_movie_detail}>
+      <div
+        className={cn(
+          styles.c_movie_detail,
+          isPage && styles['c_movie_detail--page'],
+        )}
+      >
         {backdropUrl && (
           <div className={styles.c_movie_detail__backdrop}>
             <Image
@@ -315,7 +337,9 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
 
             <div className={styles.c_movie_detail__info}>
               <div className={styles.c_movie_detail__title_row}>
-                <h3 className={styles.c_movie_detail__title}>{movie.title}</h3>
+                <TitleTag className={styles.c_movie_detail__title}>
+                  {movie.title}
+                </TitleTag>
                 <div className={styles.c_movie_detail__action_buttons}>
                   {canFavorite && (
                     <FavoriteButton
@@ -404,25 +428,30 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
             リンクだけなので、キャスト情報が無い作品ではゼロになり、
             キーボードでスクロールできなくなる（axe: scrollable-region-focusable）。
             領域自体にタブストップを置いて到達できるようにする。
+
+            ページ版はこの領域がスクロールしないので、タブストップは置かない
+            （到達する理由が無いのにタブ順へ割り込むだけになる）。
           */}
           <div
             className={styles.c_movie_detail__scrollable}
             role='region'
             aria-label={ARIA_LABELS.MOVIE_DETAIL_INFO}
-            tabIndex={0}
+            tabIndex={isPage ? undefined : 0}
           >
             {movie.overview && (
               <div className={styles.c_movie_detail__overview}>
-                <h4 className={styles.c_movie_detail__section_title}>
+                <SectionTag className={styles.c_movie_detail__section_title}>
                   あらすじ
-                </h4>
+                </SectionTag>
                 <p className={styles.c_movie_detail__overview_text}>
                   {movie.overview}
                 </p>
               </div>
             )}
             <div className={styles.c_movie_detail__additional}>
-              <h4 className={styles.c_movie_detail__section_title}>詳細情報</h4>
+              <SectionTag className={styles.c_movie_detail__section_title}>
+                詳細情報
+              </SectionTag>
               <dl className={styles.c_movie_detail__info_list}>
                 {movie.production_companies.length > 0 && (
                   <>
@@ -477,9 +506,9 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
 
             {movie.credits && movie.credits.cast.length > 0 && (
               <div className={styles.c_movie_detail__cast}>
-                <h4 className={styles.c_movie_detail__section_title}>
+                <SectionTag className={styles.c_movie_detail__section_title}>
                   キャスト
-                </h4>
+                </SectionTag>
                 <div className={styles.c_movie_detail__cast_list}>
                   {movie.credits.cast
                     .slice(0, DISPLAY_LIMITS.CAST_MAX)

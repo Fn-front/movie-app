@@ -4,22 +4,19 @@
 
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 import { Loading } from '@/components/ui/loading/loading';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
-import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import { AWARDS_MESSAGES } from '@/constants';
 import { useAwards } from '@/features/awards/hooks/useAwards';
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { AwardYearSelect } from '@/features/awards/awardYearSelect/awardYearSelect';
 import { AwardSection } from '@/features/awards/awardSection/awardSection';
-import { awardMovieToMovieCacheItem } from '@/utils/toMovieCacheItem';
 
 import styles from './awardsPage.module.scss';
 
@@ -53,38 +50,6 @@ export const AwardsPage = memo(function AwardsPage() {
 
   const { isInWatchlist, toggleWatchlist, isMovieToggling } =
     useWatchlistToggle();
-
-  const awards = data?.awards;
-
-  // 詳細モーダルの一覧。お気に入りは結合しない。
-  // 消費先（useMovieDetailModal）は id と title しか読まず、モーダル自体は
-  // 映画詳細APIが返す favorite を使うため、ここで結合しても効果が無い。
-  // 依存に getFavoriteInfo を足すと、お気に入り操作のたびに
-  // 全受賞作の再マッピングが走るだけになる
-  const allMovieCacheItems = useMemo(() => {
-    if (!awards) return [];
-    return awards.flatMap((award) =>
-      award.categories.flatMap((cat) =>
-        cat.nominees.map((nominee) => awardMovieToMovieCacheItem(nominee)),
-      ),
-    );
-  }, [awards]);
-
-  const uniqueMovieCacheItems = useMemo(() => {
-    const seen = new Set<number>();
-    return allMovieCacheItems.filter((item) => {
-      if (seen.has(item.id)) return false;
-      seen.add(item.id);
-      return true;
-    });
-  }, [allMovieCacheItems]);
-
-  const {
-    selectedMovieId,
-    selectedMovieTitle,
-    handleMovieClick,
-    handleModalClose,
-  } = useMovieDetailModal(uniqueMovieCacheItems);
 
   if (isLoading) {
     return (
@@ -152,7 +117,6 @@ export const AwardsPage = memo(function AwardsPage() {
               >
                 <AwardSection
                   award={selectedAward}
-                  onMovieClick={handleMovieClick}
                   isInWatchlist={isInWatchlist}
                   onWatchlistToggle={toggleWatchlist}
                   isMovieToggling={isMovieToggling}
@@ -165,7 +129,6 @@ export const AwardsPage = memo(function AwardsPage() {
             ) : (
               <AwardSection
                 award={selectedAward}
-                onMovieClick={handleMovieClick}
                 isInWatchlist={isInWatchlist}
                 onWatchlistToggle={toggleWatchlist}
                 isMovieToggling={isMovieToggling}
@@ -181,11 +144,6 @@ export const AwardsPage = memo(function AwardsPage() {
           </p>
         )}
       </div>
-      <MovieDetailModal
-        movieId={selectedMovieId}
-        title={selectedMovieTitle}
-        onClose={handleModalClose}
-      />
       <FavoriteRatingModal
         isOpen={favoriteModalState.isOpen}
         onClose={closeFavoriteModal}

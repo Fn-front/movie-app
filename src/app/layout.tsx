@@ -27,8 +27,21 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
+  modal,
 }: Readonly<{
   children: React.ReactNode;
+  /**
+   * `@modal` スロット（`src/app/@modal/`）
+   *
+   * intercepting route で開く映画詳細モーダルが入る（#1033）。当たらない
+   * ときは `@modal/default.tsx` が null を返すので何も描画されない。
+   *
+   * ルートレイアウトに置くのは、`AppLayout` を持つルートグループ
+   * （movies / person / search …）のどこから開いても同じスロットに
+   * 入れるため。モーダルは Portal で body 直下へ出るので、
+   * `AppLayout` の外にあっても見え方は変わらない。
+   */
+  modal: React.ReactNode;
 }>) {
   // analyticsProvider は 'use client' なので、サーバーからは呼べない。
   // 文字列の組み立てはサーバー安全な utils/analytics から直接行う
@@ -77,7 +90,10 @@ export default function RootLayout({
           <AppQueryProvider>
             <ThemeProvider />
             <AnalyticsProvider />
-            <AppToastProvider>{children}</AppToastProvider>
+            <AppToastProvider>
+              {children}
+              {modal}
+            </AppToastProvider>
             {/*
               バナーは本文の後ろに置く。AppLayout のスキップリンクが
               「DOM 上で最初のフォーカス可能要素」である前提を崩さないため

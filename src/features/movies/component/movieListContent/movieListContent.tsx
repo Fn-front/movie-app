@@ -11,7 +11,6 @@ import { memo } from 'react';
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { RELEASE_TYPE, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { FilterModal } from '@/components/ui/movie/filterModal/filterModal';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { useMovieListContent } from '@/features/movies/hooks/useMovieListContent';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 
@@ -58,19 +57,8 @@ export const MovieListContent = memo<MovieListContentProps>(
       handleFilterModalClose,
     } = movieList;
 
-    const {
-      selectedMovieId,
-      showFinancialInfo,
-      selectedMovieTitle,
-      handleMovieTileClick,
-      handleDetailModalClose,
-      handleTabValueChange,
-      handleFilterModalOpenChange,
-    } = useMovieListContent(
-      movies,
-      handleReleaseTypeChange,
-      handleFilterModalClose,
-    );
+    const { handleTabValueChange, handleFilterModalOpenChange } =
+      useMovieListContent(handleReleaseTypeChange, handleFilterModalClose);
 
     // 配信予定タブだけは「いつ配信されるか」が知りたい情報のため、
     // release_date（多くは劇場公開日）ではなくデジタル公開日を見せる
@@ -104,7 +92,6 @@ export const MovieListContent = memo<MovieListContentProps>(
             isFetchingNextPage={isFetchingNextPage}
             hasNextPage={hasNextPage}
             fetchNextPage={fetchNextPage}
-            onMovieClick={handleMovieTileClick}
             preferDigitalReleaseDate={preferDigitalReleaseDate}
           />
         </Tabs>
@@ -125,13 +112,6 @@ export const MovieListContent = memo<MovieListContentProps>(
           selectedOfferTypes={selectedOfferTypes}
           selectedRegions={selectedRegions}
           onApply={handleFilterApply}
-        />
-
-        <MovieDetailModal
-          movieId={selectedMovieId}
-          title={selectedMovieTitle}
-          showFinancialInfo={showFinancialInfo}
-          onClose={handleDetailModalClose}
         />
       </div>
     );

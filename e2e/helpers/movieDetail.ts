@@ -16,6 +16,18 @@ import type { MovieDetail } from '@/lib/types';
 const MOVIE_DETAIL_URL = /\/api\/movies\/\d+(?:$|\?)/;
 
 /**
+ * E2Eで使う映画ID（TMDb: Fight Club）。
+ *
+ * `/movies/[id]` ページの存在確認と `<title>` 生成はサーバ側で TMDb を
+ * 直接呼ぶため route モックが効かない。長期間存在しているIDを使う
+ * （`e2e/helpers/person.ts` の `PERSON_ID` と同じ理由）。
+ */
+export const MOVIE_ID = 550;
+
+/** TMDb に存在しない映画ID（404ページの検証用） */
+export const MISSING_MOVIE_ID = 999999999;
+
+/**
  * 「詳細情報」セクションが確実に描画される、型を満たした完全な MovieDetail を返す。
  * 配列は空配列、数値は数値で埋め、favorite は null（お気に入り未登録）。
  */

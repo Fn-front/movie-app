@@ -23,7 +23,6 @@ export interface MovieGridProps {
   isFetchingNextPage: boolean;
   hasNextPage: boolean;
   fetchNextPage: () => void;
-  onMovieClick: (movieId: number) => void;
   /** 日付としてデジタル（配信）公開日を優先表示するか（配信予定タブ用） */
   preferDigitalReleaseDate?: boolean;
 }
@@ -35,7 +34,6 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
   isFetchingNextPage,
   hasNextPage,
   fetchNextPage,
-  onMovieClick,
   preferDigitalReleaseDate = false,
 }) {
   const { isInWatchlist, toggleWatchlist, isMovieToggling } =
@@ -67,7 +65,6 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
             genres={genres}
             headingLevel={2}
             eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
-            onClick={onMovieClick}
             isInWatchlist={isInWatchlist(movie.id)}
             onWatchlistToggle={toggleWatchlist}
             watchlistDisabled={isMovieToggling(movie.id)}

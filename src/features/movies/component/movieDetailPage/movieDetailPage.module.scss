@@ -1,0 +1,12 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_movie_detail_page {
+  display: flex;
+  flex-direction: column;
+  padding: $spacing-4;
+
+  @include md {
+    padding: $spacing-6;
+  }
+}

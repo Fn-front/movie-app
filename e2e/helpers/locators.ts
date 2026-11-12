@@ -9,7 +9,7 @@ import type { Page, Locator } from '@playwright/test';
  * 映画タイル（カード本体）のロケータを取得
  *
  * カード自体は role を持たない。インタラクティブ要素の入れ子を避けるため、
- * 詳細を開くボタンはタイトル側にあり、::after でカード全面が当たり判定に
+ * 詳細へのリンクはタイトル側にあり、::after でカード全面が当たり判定に
  * なっている（クリックはカードのどこを押しても詳細が開く）。
  *
  * `c_card` と `c_movie_tile` の両方を持つのはカードのルート要素だけ。
@@ -23,9 +23,15 @@ export function movieTiles(page: Page): Locator {
   );
 }
 
-/** 映画タイルの「詳細を開く」ボタン（タイトル）のロケータを取得 */
-export function movieTileDetailButtons(page: Page): Locator {
-  return page.locator('[class*="c_movie_tile__title_button"]');
+/**
+ * 映画タイルの「詳細を開く」リンク（タイトル）のロケータを取得
+ *
+ * ⚠️ `button[class*=...]` のようにタグで絞らないこと。映画詳細が
+ * `/movies/[id]` という URL を持つルートになり、タイトルは `<a>` になった
+ * （#1033）。タグ名を書いた spec は一斉に落ちる
+ */
+export function movieTileDetailLinks(page: Page): Locator {
+  return page.locator('[class*="c_movie_tile__title_link"]');
 }
 
 /**

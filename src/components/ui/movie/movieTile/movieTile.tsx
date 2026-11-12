@@ -7,13 +7,19 @@
 
 import { memo, useCallback, useMemo } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { Card } from '@/components/ui/card/card';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { DismissButton } from '@/features/dismissedMovies/component/dismissButton/dismissButton';
 import { getTMDbPosterUrl } from '@/utils/image';
-import { IMAGE_SIZES, RATING_THRESHOLDS, DISPLAY_LIMITS } from '@/constants';
+import {
+  IMAGE_SIZES,
+  RATING_THRESHOLDS,
+  DISPLAY_LIMITS,
+  ROUTES,
+} from '@/constants';
 import { formatDate } from '@/utils/date';
 import { isMovieReleased } from '@/utils/movie';
 import { cn } from '@/utils/cn';
@@ -34,7 +40,13 @@ export interface MovieTileProps {
   movie: MovieCacheItem;
   /** ジャンルマップ */
   genres?: Record<number, string>;
-  /** クリック時のコールバック */
+  /**
+   * タイトルを押したときのコールバック
+   *
+   * **遷移には使わない。** 映画詳細は `/movies/[id]` という URL を持つ
+   * ルートになったので、タイトルは素の `<Link>` で遷移する（#1033）。
+   * ここに渡すのは「押されたこと」を記録したい側（レコメンドの計測）だけ。
+   */
   onClick?: (movieId: number) => void;
   /** ウォッチリストに追加済みかどうか */
   isInWatchlist?: boolean;
@@ -84,7 +96,7 @@ export interface MovieTileProps {
    *
    * `list` では横並びへ組み替え、ジャンルタグを落とし、操作ボタンを
    * タイトルの後ろへ移す（視覚順と DOM 順を揃えるため）。
-   * タイトル button の ::after によるカード全面の当たり判定（#719）と、
+   * タイトルリンクの ::after によるカード全面の当たり判定（#719）と、
    * ボタンを入れ子にしない構造はそのまま保つ。
    */
   viewMode?: MovieViewMode;
@@ -212,7 +224,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   return (
     // カード全体を role="button" にすると、内側のお気に入り等のボタンが
     // インタラクティブ要素の入れ子になり ARIA 上不正になる（axe: nested-interactive）。
-    // 代わりにタイトルを本物の button にし、::after でカード全面を当たり判定にする。
+    // 代わりにタイトルを本物のリンクにし、::after でカード全面を当たり判定にする（#719）。
     <Card
       hoverable
       noPadding
@@ -248,13 +260,13 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       </div>
       <div className={styles.c_movie_tile__info}>
         <Title className={styles.c_movie_tile__title}>
-          <button
-            type='button'
-            className={styles.c_movie_tile__title_button}
+          <Link
+            href={ROUTES.MOVIE_DETAIL(movie.id)}
+            className={styles.c_movie_tile__title_link}
             onClick={handleClick}
           >
             {movie.title}
-          </button>
+          </Link>
         </Title>
         {genreNames.length > 0 && (
           <div className={styles.c_movie_tile__genres}>

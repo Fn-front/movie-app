@@ -958,4 +958,74 @@ describe('MovieDetailContent', () => {
       );
     });
   });
+
+  /**
+   * `/movies/[id]` の全画面ページ（#1033）
+   *
+   * モーダルは Radix の Dialog.Title（h2）が上にあるので h3 から始めるが、
+   * ページでは作品名が h1 になる。ずらさないと h1 の無いページになる
+   */
+  describe('variant="page"', () => {
+    it('既定（モーダル）では作品名が h3 になる', () => {
+      setupMovie({ overview: 'あらすじ' });
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('heading', { level: 3, name: 'テスト' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 4, name: 'あらすじ' }),
+      ).toBeInTheDocument();
+    });
+
+    it('ページでは作品名が h1、セクションが h2 になる', () => {
+      setupMovie({ overview: 'あらすじ' });
+
+      render(<MovieDetailContent movieId={123} variant='page' />);
+
+      expect(
+        screen.getByRole('heading', { level: 1, name: 'テスト' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: 'あらすじ' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 2, name: '詳細情報' }),
+      ).toBeInTheDocument();
+    });
+
+    // 内部スクロールを外すので、タブストップを置く理由も無くなる
+    it('ページではスクロール領域にタブストップを置かない', () => {
+      setupMovie({ credits: { cast: [] } });
+
+      render(<MovieDetailContent movieId={123} variant='page' />);
+
+      expect(
+        screen.getByRole('region', { name: '作品情報' }),
+      ).not.toHaveAttribute('tabindex');
+    });
+
+    it('ページではページ用のクラスが付く', () => {
+      setupMovie();
+
+      const { container } = render(
+        <MovieDetailContent movieId={123} variant='page' />,
+      );
+
+      expect(
+        container.querySelector('.c_movie_detail--page'),
+      ).toBeInTheDocument();
+    });
+
+    it('既定ではページ用のクラスが付かない', () => {
+      setupMovie();
+
+      const { container } = render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        container.querySelector('.c_movie_detail--page'),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

@@ -47,7 +47,8 @@ jest.mock(
 const VALID_GA_ID = 'G-PSW1MY7HB4';
 const ORIGINAL_GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
-const renderLayout = () => renderToStaticMarkup(<RootLayout>本文</RootLayout>);
+const renderLayout = (modal: React.ReactNode = null) =>
+  renderToStaticMarkup(<RootLayout modal={modal}>本文</RootLayout>);
 
 describe('RootLayout', () => {
   afterEach(() => {
@@ -127,6 +128,25 @@ describe('RootLayout', () => {
       const html = renderLayout();
 
       expect(html.indexOf('本文')).toBeLessThan(html.indexOf('cookie-banner'));
+    });
+
+    // intercepting route の映画詳細モーダルが入るスロット（#1033）。
+    // 受け取り忘れるとモーダルが一切描画されないが、ビルドは通ってしまう
+    it('@modal スロットを本文と並べて描画する', () => {
+      process.env.NEXT_PUBLIC_GA_ID = VALID_GA_ID;
+
+      const html = renderLayout(<div data-testid='modal-slot' />);
+
+      expect(html).toContain('modal-slot');
+      expect(html.indexOf('本文')).toBeLessThan(html.indexOf('modal-slot'));
+    });
+
+    it('@modal スロットが空でも本文を描画する', () => {
+      process.env.NEXT_PUBLIC_GA_ID = VALID_GA_ID;
+
+      const html = renderLayout();
+
+      expect(html).toContain('本文');
     });
   });
 });

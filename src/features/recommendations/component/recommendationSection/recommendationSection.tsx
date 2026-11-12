@@ -11,7 +11,6 @@ import { IoRefreshOutline } from 'react-icons/io5';
 import { Button } from '@/components/ui/button/button';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
@@ -23,7 +22,6 @@ import {
   RECOMMENDATION_EVENT_TYPE,
   RECOMMENDATION_REFRESH_MESSAGES,
 } from '@/constants';
-import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import type { Recommendation } from '@/schema/recommendations';
 import { recommendationToMovieCacheItem } from '@/utils/toMovieCacheItem';
@@ -114,21 +112,14 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       [recommendations, getFavoriteInfo, dismissedIds],
     );
 
-    const {
-      selectedMovieId,
-      selectedMovieTitle,
-      handleMovieClick,
-      handleModalClose,
-    } = useMovieDetailModal(movieCacheItems);
-
+    // タイルのタイトルは /movies/[id] へのリンクになったので、ここでは
+    // 遷移させず「押された」ことだけ記録する（レコメンドの精度計測に使う）
     const handleTileClick = useCallback(
       (movieId: number) => {
         trackEvent(movieId, RECOMMENDATION_EVENT_TYPE.CLICK);
-        handleMovieClick(movieId);
       },
-      [handleMovieClick, trackEvent],
+      [trackEvent],
     );
-
     const handleWatchlistToggle = useCallback(
       (movie: MovieCacheItem) => {
         // 追加時のみ計測する（解除は「興味がある」シグナルではない）
@@ -255,11 +246,6 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
             </div>
           </div>
         </section>
-        <MovieDetailModal
-          movieId={selectedMovieId}
-          title={selectedMovieTitle}
-          onClose={handleModalClose}
-        />
         <FavoriteRatingModal
           isOpen={favoriteModalState.isOpen}
           onClose={closeFavoriteModal}

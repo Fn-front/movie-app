@@ -25,6 +25,15 @@ export const DEFAULT_SORT = 'release_date' as const;
 export const CACHE_DURATION_HOURS = 6;
 
 /**
+ * 映画詳細のキャッシュ秒数（24時間）。
+ *
+ * `/movies/[id]` の `generateMetadata` がサーバー側で TMDb を引くときに使う。
+ * `/api/movies/[id]` が未認証向けに返す `Cache-Control`（PUBLIC_24H_SWR_7D）と
+ * 同じ長さに揃える。
+ */
+export const MOVIE_DETAIL_REVALIDATE_SECONDS = 86400;
+
+/**
  * 映画取得範囲（何ヶ月先まで）
  */
 export const MOVIES_FETCH_MONTHS_AHEAD = 3;

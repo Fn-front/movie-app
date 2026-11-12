@@ -81,8 +81,15 @@ export const ROUTES = {
   RESET_PASSWORD: '/auth/reset-password',
   /** 認証エラー */
   AUTH_ERROR: '/auth/error',
-  /** 映画詳細 */
-  MOVIE_DETAIL: (id: string | number) => `/movies/${id}`,
+  /**
+   * 映画詳細
+   *
+   * ⚠️ `/movies/<id>` にはできない。intercepting route（#1033）は URL の形だけで
+   * 一致を判定するため、`(.)movies/[id]` が `/movies/now-showing` や
+   * `/movies/upcoming` まで横取りしてしまう（一覧のまま URL だけ変わるのを実測）。
+   * セグメントを1つ挟んで、静的な一覧ページと長さで区別する
+   */
+  MOVIE_DETAIL: (id: string | number) => `/movies/detail/${id}`,
   /** 人物詳細（公開ページ。AUTH_REQUIRED_ROUTES には含めない） */
   PERSON_DETAIL: (id: string | number) => `/person/${id}`,
 } as const;

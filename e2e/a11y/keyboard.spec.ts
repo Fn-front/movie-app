@@ -66,7 +66,7 @@ test.describe('キーボード操作', () => {
     );
   });
 
-  test('映画タイルの詳細・操作ボタンがそれぞれ独立して到達できる', async ({
+  test('映画タイルの詳細リンク・操作ボタンがそれぞれ独立して到達できる', async ({
     page,
   }) => {
     await gotoWithTheme(page, '/movies/now-showing', 'light');
@@ -76,18 +76,19 @@ test.describe('キーボード操作', () => {
 
     const title = await firstTile.locator('h1,h2,h3,h4').first().innerText();
 
-    // タイトル（詳細を開くボタン）と操作ボタンが別々の button になっている
-    const detailButton = page.getByRole('button', { name: title.trim() });
-    await expect(detailButton).toBeVisible();
+    // タイトル（詳細へのリンク・#1033）と操作ボタンが別々の要素になっている
+    const detailLink = page.getByRole('link', { name: title.trim() });
+    await expect(detailLink).toBeVisible();
+    await expect(detailLink).toHaveAttribute('href', /^\/movies\/detail\/\d+$/);
 
     const watchlistButton = firstTile.getByRole('button', {
       name: /ウォッチリスト/,
     });
     await expect(watchlistButton).toBeVisible();
 
-    // 詳細ボタンは操作ボタンを含まない（入れ子になっていない）
+    // 詳細リンクは操作ボタンを含まない（入れ子になっていない）
     await expect(
-      detailButton.getByRole('button', { name: /ウォッチリスト/ }),
+      detailLink.getByRole('button', { name: /ウォッチリスト/ }),
     ).toHaveCount(0);
   });
 

@@ -53,7 +53,7 @@
     // なり、クランプが効かない（Chrome 157 で実測）。
     // 省略記号は実際に溢れる要素＝ button 側に出す
     .c_movie_tile__title,
-    .c_movie_tile__title_button {
+    .c_movie_tile__title_link {
       @include text-truncate;
     }
 
@@ -203,15 +203,15 @@
     @include text-truncate-multiline(2);
   }
 
-  // タイトルの button をカード全面の当たり判定にする（stretched link パターン）。
+  // タイトルのリンクをカード全面の当たり判定にする（stretched link パターン）。
   // カード全体を role="button" にせずに「どこを押しても詳細が開く」を保つための実装。
-  &__title_button {
-    @include button-reset;
+  &__title_link {
     display: block;
     width: 100%;
     text-align: left;
     font: inherit;
     color: inherit;
+    text-decoration: none;
     cursor: pointer;
 
     &::after {

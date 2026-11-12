@@ -14,6 +14,7 @@ import type { Page } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 import { test, expect } from '../fixtures/auth';
+import { movieTileDetailLinks } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 import {
   clickOutsideDialog,
@@ -141,30 +142,32 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     await expect(page).toHaveURL(/\/movies\/upcoming/);
   });
 
+  /**
+   * 映画詳細は `/movies/[id]` というURLを持つルートになった（#1033）。
+   * 履歴エントリを積むのは**遷移そのもの**で、`useOverlayHistory` は使わない。
+   *
+   * 二重に積んでいると × で2つ分戻って一覧を飛び越すため、
+   * 「× の直後が一覧」「戻る1回で前のページ」の2点で固定する
+   */
   test('映画詳細を × で閉じたあと、戻る1回で前のページへ出る', async ({
     authenticatedPage: page,
   }) => {
-    // 従来どおり畳まれる経路。回帰で壊さないことを固定する
     await page.goto('/movies/upcoming');
     await waitForList(page);
     await page.goto('/movies/now-showing');
     const hasTile = await waitForList(page);
     test.skip(!hasTile, '映画データが無いためスキップ');
 
-    await page
-      .locator('button[class*="movie_tile__title_button"]')
-      .first()
-      .click();
+    await movieTileDetailLinks(page).first().click();
+    await expect(page).toHaveURL(/\/movies\/detail\/\d+$/);
 
     const dialog = page.getByRole('dialog').first();
     await expect(dialog).toBeVisible({ timeout: 15000 });
-    // 閉じる前に実在を固定する。無いまま進むと waitForFold が素通りし、
-    // 「エントリを積まない」不具合を見逃す（実測で素通りすることを確認済み）
-    await expectEntryExists(page);
 
     await dialog.getByRole('button', { name: ARIA_LABELS.CLOSE }).click();
     await expect(dialog).not.toBeVisible();
-    await waitForFold(page);
+    // × は router.back()。詰んだぶんだけ戻るので一覧に出る
+    await expect(page).toHaveURL(/\/movies\/now-showing/);
 
     await page.goBack();
 
@@ -278,15 +281,16 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
   });
 
   /**
-   * 映画詳細のキャストから人物ページへ出る経路
-   * （`movieDetailContent.tsx` の `handleCastClick`）。
+   * 映画詳細のキャストから人物ページへ出る経路。
    *
-   * 閉じるのと同時に遷移するため `notifyNavigating()` を申告しており、
-   * 申告が漏れると畳むための非同期 `back()` が遷移を取り消す。
-   * `push` のままだとエントリが遷移の下に埋まり、**戻るが空振りする**。
+   * 詳細が URL を持つようになったので（#1033）、履歴は
+   * `一覧 → /movies/<id> → /person/<id>` と素直に積まれる。戻ると詳細の
+   * URL へ戻り、**モーダルが開き直る**のが期待動作。
    *
-   * 空振りは「戻ったら前のページの URL だった」では見つからない（埋まった
-   * エントリは同じ URL のため）。戻る2回で `/movies/upcoming` まで出られることで見る
+   * ここで見ている不具合は2つ。
+   * - 空振りのエントリが残っていないか（戻る3回で `/movies/upcoming` まで出る）
+   * - 遷移してもスロットが閉じず、人物ページにモーダルが被さったままにならないか
+   *   （パラレルルートの既定の挙動。`@modal/[...catchAll]` で閉じている）
    */
   test('詳細のキャストから人物ページへ出たあと、戻るが空振りしない', async ({
     authenticatedPage: page,
@@ -299,25 +303,32 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     const hasTile = await waitForList(page);
     test.skip(!hasTile, '映画データが無いためスキップ');
 
-    await page
-      .locator('button[class*="movie_tile__title_button"]')
-      .first()
-      .click();
+    await movieTileDetailLinks(page).first().click();
+    await expect(page).toHaveURL(/\/movies\/detail\/\d+$/);
     await expect(page.getByRole('dialog').first()).toBeVisible({
       timeout: 15000,
     });
-    await expectEntryExists(page);
 
     await page
       .getByRole('link', { name: `${CAST_NAME}のプロフィール` })
       .click();
     await page.waitForURL(`/person/${PERSON_ID}`);
 
+    // 遷移先にモーダルが残らない
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await page.goBack();
+
+    // 詳細の URL へ戻り、モーダルが開き直る
+    await expect(page).toHaveURL(/\/movies\/detail\/\d+$/);
+    await expect(page.getByRole('dialog').first()).toBeVisible({
+      timeout: 15000,
+    });
+
     await page.goBack();
 
     await expect(page).toHaveURL(/\/movies\/now-showing/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await waitForFold(page);
 
     await page.goBack();
 

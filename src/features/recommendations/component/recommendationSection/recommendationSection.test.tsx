@@ -20,15 +20,14 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
     onDismiss?: (movie: { id: number; title: string }) => void;
     dismissDisabled?: boolean;
   }) => (
-    <div
-      data-testid={`movie-tile-${movie.id}`}
-      role='button'
-      tabIndex={0}
-      aria-label={`${movie.title}`}
-      onClick={() => onClick?.(movie.id)}
-      onKeyDown={() => {}}
-    >
-      {movie.title}
+    <div data-testid={`movie-tile-${movie.id}`}>
+      {/* 詳細への遷移はタイル側のリンクが担う。onClick は計測用（#1033） */}
+      <a
+        href={`/movies/detail/${movie.id}`}
+        onClick={() => onClick?.(movie.id)}
+      >
+        {movie.title}
+      </a>
       {onFavoriteToggle && (
         <button
           data-testid={`favorite-btn-${movie.id}`}
@@ -65,22 +64,6 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
       )}
     </div>
   ),
-}));
-
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: ({
-    movieId,
-    onClose,
-  }: {
-    movieId: number | null;
-    onClose: () => void;
-  }) =>
-    movieId ? (
-      <div data-testid='movie-detail-modal'>
-        <span>Movie ID: {movieId}</span>
-        <button onClick={onClose}>閉じる</button>
-      </div>
-    ) : null,
 }));
 
 const mockHandleFavoriteToggle = jest.fn();
@@ -299,8 +282,10 @@ describe('RecommendationSection', () => {
     });
   });
 
-  describe('モーダル連携', () => {
-    it('タイルクリックでMovieDetailModalが表示される', () => {
+  // 映画詳細は /movies/[id] というURLを持つルートになった（#1033）。
+  // タイルは遷移せず「押された」ことだけを計測に渡す
+  describe('詳細への導線', () => {
+    it('タイルのタイトルが映画詳細へのリンクになる', () => {
       render(
         <RecommendationSection
           recommendations={createMockRecommendations(1)}
@@ -308,34 +293,9 @@ describe('RecommendationSection', () => {
         />,
       );
 
-      fireEvent.click(
-        screen.getByRole('button', {
-          name: 'おすすめ映画 1',
-        }),
-      );
-      expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
-      expect(screen.getByText('Movie ID: 100')).toBeInTheDocument();
-    });
-
-    it('モーダルの閉じるボタンでモーダルが非表示になる', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
-
-      fireEvent.click(
-        screen.getByRole('button', {
-          name: 'おすすめ映画 1',
-        }),
-      );
-      expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
-
-      fireEvent.click(screen.getByText('閉じる'));
       expect(
-        screen.queryByTestId('movie-detail-modal'),
-      ).not.toBeInTheDocument();
+        screen.getByRole('link', { name: 'おすすめ映画 1' }),
+      ).toHaveAttribute('href', '/movies/detail/100');
     });
   });
 
@@ -646,7 +606,7 @@ describe('RecommendationSection', () => {
         />,
       );
 
-      fireEvent.click(screen.getByTestId('movie-tile-100'));
+      fireEvent.click(screen.getByRole('link', { name: 'おすすめ映画 1' }));
 
       expect(mockTrackEvent).toHaveBeenCalledWith(100, 'click');
     });

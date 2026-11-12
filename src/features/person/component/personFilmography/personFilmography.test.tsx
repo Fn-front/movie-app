@@ -17,13 +17,10 @@ import { PersonFilmography } from './personFilmography';
 // --- Mocks ---
 
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
-  MovieTile: jest.fn(({ movie, onClick, viewMode }) => (
-    <div
-      data-testid={`movie-tile-${movie.id}`}
-      data-view-mode={viewMode}
-      onClick={() => onClick?.(movie.id)}
-    >
-      {movie.title}
+  MovieTile: jest.fn(({ movie, viewMode }) => (
+    <div data-testid={`movie-tile-${movie.id}`} data-view-mode={viewMode}>
+      {/* 詳細への遷移はタイル側のリンクが担う（#1033） */}
+      <a href={`/movies/detail/${movie.id}`}>{movie.title}</a>
     </div>
   )),
 }));
@@ -50,17 +47,6 @@ jest.mock('@/components/ui/emptyState/emptyState', () => ({
       <p>{description}</p>
     </div>
   )),
-}));
-
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: jest.fn(({ movieId, title }) =>
-    movieId === null ? null : (
-      <div data-testid='movie-detail-modal'>
-        <span>{`Movie ID: ${movieId}`}</span>
-        <span>{title}</span>
-      </div>
-    ),
-  ),
 }));
 
 jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
@@ -248,17 +234,14 @@ describe('PersonFilmography', () => {
     });
   });
 
-  it('出演作クリックで映画詳細モーダルが開く', async () => {
-    const user = userEvent.setup();
+  // 映画詳細は /movies/[id] というURLを持つルートになった（#1033）
+  it('出演作のタイルが映画詳細へのリンクを持つ', () => {
     render(<PersonFilmography credits={createCredits(2)} />);
 
-    expect(screen.queryByTestId('movie-detail-modal')).not.toBeInTheDocument();
-
-    await user.click(screen.getByTestId('movie-tile-2'));
-
-    const modal = within(screen.getByTestId('movie-detail-modal'));
-    expect(modal.getByText('Movie ID: 2')).toBeInTheDocument();
-    // モーダルのタイトルに選択した作品名が渡る
-    expect(modal.getByText('出演作2')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('movie-tile-2')).getByRole('link', {
+        name: '出演作2',
+      }),
+    ).toHaveAttribute('href', '/movies/detail/2');
   });
 });

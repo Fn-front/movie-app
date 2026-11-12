@@ -11,12 +11,10 @@ import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { EmptyState } from '@/components/ui/emptyState/emptyState';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { TitleSuggestion } from '@/features/search/component/titleSuggestion/titleSuggestion';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
-import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
 import { useMovieViewMode } from '@/hooks/useMovieViewMode';
 import { DISPLAY_LIMITS } from '@/constants';
 import type { Movie } from '@/lib/types';
@@ -79,13 +77,6 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
     [movies, getFavoriteInfo],
   );
 
-  const {
-    selectedMovieId,
-    selectedMovieTitle,
-    handleMovieClick,
-    handleModalClose,
-  } = useMovieDetailModal(movieCacheItems);
-
   const { viewMode } = useMovieViewMode();
 
   if (isLoading) {
@@ -127,7 +118,6 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
           <MovieTile
             key={movie.id}
             movie={movie}
-            onClick={handleMovieClick}
             headingLevel={2}
             eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
             isInWatchlist={isInWatchlist(movie.id)}
@@ -145,13 +135,6 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
         totalPages={totalPages}
         onPageChange={onPageChange}
         className={styles.c_search_results__pagination}
-      />
-
-      <MovieDetailModal
-        movieId={selectedMovieId}
-        title={selectedMovieTitle}
-        showFinancialInfo={false}
-        onClose={handleModalClose}
       />
 
       <FavoriteRatingModal

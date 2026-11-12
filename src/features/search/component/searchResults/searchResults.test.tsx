@@ -49,10 +49,6 @@ jest.mock('@/components/ui/emptyState/emptyState', () => ({
   )),
 }));
 
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: jest.fn(() => null),
-}));
-
 jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
   useWatchlistToggle: () => ({
     isInWatchlist: jest.fn(() => false),
@@ -264,21 +260,20 @@ describe('SearchResults', () => {
     });
   });
 
-  describe('映画クリック', () => {
-    it('映画タイルをクリックすると詳細モーダルが表示される', async () => {
-      const { MovieDetailModal } = jest.requireMock(
-        '@/components/ui/movie/detailModal/movieDetailModal',
+  // 映画詳細は /movies/[id] というURLを持つルートになった（#1033）。
+  // 遷移はタイル側のリンクが担うので、一覧は関与しない
+  describe('詳細への導線', () => {
+    it('MovieTileにクリックハンドラを渡さない', () => {
+      const { MovieTile } = jest.requireMock(
+        '@/components/ui/movie/movieTile/movieTile',
       );
 
       renderSearchResults();
 
-      const user = userEvent.setup();
-      await user.click(screen.getByTestId('movie-tile-1'));
-
-      expect(MovieDetailModal).toHaveBeenLastCalledWith(
-        expect.objectContaining({ movieId: 1 }),
-        undefined,
-      );
+      expect(MovieTile).toHaveBeenCalled();
+      for (const [props] of MovieTile.mock.calls) {
+        expect(props.onClick).toBeUndefined();
+      }
     });
   });
 });

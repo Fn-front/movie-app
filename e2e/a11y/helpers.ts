@@ -60,9 +60,31 @@ export async function gotoWithTheme(
   await page.waitForLoadState('domcontentloaded');
   // data-theme が解決されるまで待つ（インラインスクリプト + ThemeProvider）
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-  // 本文が描画されるまで待つ。一覧ページはデータ取得後にツールバー（h1）が
-  // 出るため、ここで待たないとスケルトン状態のまま検査してしまう。
+  // ページの骨格が出るまで待つ。
+  //
+  // ⚠️ **h1 はデータ取得より先に出る。** 一覧ページのツールバーはスケルトン段階で
+  // 既に描かれているので、ここを抜けてもタイルは0枚のことがある。
+  // 一覧の中身まで検査したいときは `waitForMovieTiles()` を併用すること（#1071）
   await expect(page.locator('h1').first()).toBeAttached({ timeout: 20000 });
+}
+
+/**
+ * 映画タイルが描画されるまで待つ
+ *
+ * `gotoWithTheme()` だけでは**スケルトンを検査して緑になる**（#1071）。
+ * h1 到達が約160ms、axe の完了が約543msで、タイルの出現がちょうどその前後に
+ * 来るため、結果が実行環境の速度で決まっていた。
+ *
+ * タイルの実体だけを引く（スケルトンと子要素を除く）のは
+ * `e2e/helpers/locators.ts` の `movieTiles()` と同じ条件。
+ */
+export async function waitForMovieTiles(page: Page): Promise<void> {
+  await page
+    .locator(
+      '[class*="c_card"][class*="c_movie_tile"]:not([class*="c_movie_tile_skeleton"])',
+    )
+    .first()
+    .waitFor({ state: 'visible', timeout: 20000 });
 }
 
 /** axe の結果（violations / incomplete）を人が読める形に整形する */

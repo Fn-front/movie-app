@@ -75,11 +75,16 @@
     }
 
     .c_movie_tile__revival {
-      // 小さいポスターに収まるよう一回り小さくする
+      // 小さいポスターに収まるよう一回り小さくする。
+      //
+      // 幅は shrink-to-fit だが `position: absolute` なので
+      // 「ポスター幅 - left」で頭打ちになる。`left` と左右 padding を詰めないと
+      // 「リバイバル」（10px × 5文字 = 50px）が入らず折り返し、
+      // 高さ固定のチップから文字が上下へはみ出してポスター画像に直接重なる（#1072）
       top: $spacing-1;
-      left: $spacing-1;
+      left: 0;
       height: 16px;
-      padding: 0 $spacing-1;
+      padding: 0 2px;
       font-size: $font-size-2xs;
     }
   }
@@ -170,6 +175,8 @@
     justify-content: center;
     height: 24px;
     padding: 0 $spacing-2;
+    // 高さが固定なので、折り返すと文字がチップの外へ出る（#1072）
+    white-space: nowrap;
     font-size: $font-size-xs;
     font-weight: $font-weight-bold;
     color: $text-on-accent;

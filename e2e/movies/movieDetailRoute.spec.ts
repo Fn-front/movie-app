@@ -51,6 +51,8 @@ test.describe('映画詳細のURL化', () => {
     const hasTile = await waitForList(page);
     test.skip(!hasTile, '映画データが無いためスキップ');
 
+    const before = await page.evaluate(() => history.length);
+
     await movieTileDetailLinks(page).first().click();
 
     // 一覧のページから出ない（上に重なるだけ）
@@ -61,6 +63,13 @@ test.describe('映画詳細のURL化', () => {
     });
     // 一覧は残っている（Radix が背景を aria-hidden にするので CSS で見る）
     await expect(page.locator('h1')).toHaveText('公開中の映画');
+
+    // 増えてよいのは router.push の1つだけ。`Modal` が `useOverlayHistory` で
+    // 自前のエントリも積むと2つ伸びる。戻る／進む／× の見え方は二重でも
+    // 正しいままなので、ここで数えないと気づけない（#1033）
+    await expect
+      .poll(() => page.evaluate(() => history.length))
+      .toBe(before + 1);
   });
 
   /**

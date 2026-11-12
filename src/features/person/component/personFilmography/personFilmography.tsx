@@ -146,6 +146,8 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
         />
 
         <MovieDetailModal
+          // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
+          manageHistory={false}
           movieId={selectedMovieId}
           title={selectedMovieTitle}
           onClose={closeMovieDetail}

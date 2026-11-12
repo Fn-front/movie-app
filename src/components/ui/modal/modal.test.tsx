@@ -306,6 +306,43 @@ describe('Modal', () => {
       ).resolves.not.toThrow();
     });
   });
+
+  /**
+   * 開閉を URL で持つモーダル（`useMovieDetailQuery` 経由）は、ルーターの push が
+   * 既に履歴エントリを積んでいる。`Modal` がここでも積むと**開くたびに履歴が
+   * 2つ伸びる**（#1033 の実測で判明）。
+   *
+   * 見た目の挙動（戻るで閉じる／進むで開き直す／× で一覧へ）は二重でも
+   * 正しいままなので、E2E では気づけない。`history.state` を直接見る
+   */
+  describe('manageHistory', () => {
+    const overlayToken = () =>
+      (window.history.state as Record<string, unknown> | null)?.[
+        '__overlayHistory'
+      ] ?? null;
+
+    // jsdom の history は spec 内で共有される。前のテストが積んだトークンが
+    // 残っていると「積んでいない」を確認できない
+    beforeEach(() => {
+      window.history.replaceState({}, '');
+    });
+
+    it('既定では履歴エントリを積む', () => {
+      render(<Modal {...defaultProps}>内容</Modal>);
+
+      expect(overlayToken()).not.toBeNull();
+    });
+
+    it('manageHistory が false のときは積まない', () => {
+      render(
+        <Modal {...defaultProps} manageHistory={false}>
+          内容
+        </Modal>,
+      );
+
+      expect(overlayToken()).toBeNull();
+    });
+  });
 });
 
 describe('ModalHeader', () => {

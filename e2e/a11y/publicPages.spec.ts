@@ -11,35 +11,12 @@ import { ARIA_LABELS } from '@/constants';
 import { MOVIE_ID } from '../helpers/movieDetail';
 
 import {
+  HOME_ALLOWED_INCOMPLETE,
   THEMES,
   gotoWithTheme,
   expectNoA11yViolations,
   waitForMovieTiles,
-  type AllowedIncomplete,
 } from './helpers';
-
-/**
- * ホームで許容する incomplete
- *
- * 横スクロールのカルーセルには、表示幅の右端で切れるカードが必ず1枚できる
- * （カード幅196pxに対し表示幅は1002px＝5.11枚分で、割り切れない）。
- * その切れたカードのタイトルが2行に折り返すと、axe は要素がクリップ境界を
- * またぐために背景色を決定できず color-contrast を incomplete に回す。
- * コントラスト自体は正常で、スクロールして全体が見える位置に来ると消える。
- * 右端にどの作品が来るかは TMDb のデータ次第なので、日によって出たり消えたりする。
- *
- * messageKey と対象セレクタの両方で絞っているため、カルーセル外（画像の上の
- * 文字など）の「背景色を決定できない」は従来どおり落ちる。
- *
- * SP 幅のケースでも同じカルーセルを見るため、定数として共有する。
- */
-const HOME_ALLOWED_INCOMPLETE: readonly AllowedIncomplete[] = [
-  {
-    id: 'color-contrast',
-    messageKey: 'elmPartiallyObscuring',
-    targetIncludes: 'movie_list__item',
-  },
-];
 
 /**
  * 未認証でも表示できるページ

@@ -7,6 +7,8 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
+import { ARIA_LABELS, MENU_LABELS } from '@/constants';
+
 import { movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 import { THEMES, gotoWithTheme, expectNoA11yViolations } from './helpers';
@@ -168,6 +170,38 @@ test.describe('アクセシビリティ（オーバーレイ・認証済み）',
   };
 
   for (const theme of THEMES) {
+    /**
+     * 認証済みのモバイルドロワー（#1065）
+     *
+     * 未認証版（上の describe）とは中身が違う。認証済みだけに出るのは、
+     * 利用者の情報（アバター／頭文字・表示名・メールアドレス）と、設定・
+     * ログアウト・公開カレンダーのボタン（`mobileDrawer.tsx`）。
+     * 未認証版はログインボタンしか持たないため、ここを足さないと
+     * ドロワーの半分が検査されないまま残る。
+     */
+    test(`モバイルドロワー（認証済み） - ${theme}`, async ({ page }) => {
+      await page.setViewportSize({ width: 375, height: 812 });
+      await gotoWithTheme(page, '/movies/now-showing', theme);
+
+      await page.getByRole('button', { name: 'メニュー' }).click();
+      const drawer = page.getByRole('dialog');
+      await expect(drawer).toBeVisible();
+
+      // 認証済みでしか出ない領域が描かれてから検査する。
+      // 未認証で走っていたらここで落ちる（ログインボタンしか無い）
+      await expect(
+        drawer.getByRole('button', { name: MENU_LABELS.SETTINGS }),
+      ).toBeVisible();
+      await expect(
+        drawer.getByRole('button', { name: ARIA_LABELS.OPEN_CALENDAR }),
+      ).toBeVisible();
+
+      await expectNoA11yViolations(
+        page,
+        `モバイルドロワー（認証済み） / ${theme}`,
+      );
+    });
+
     test(`公開カレンダー - ${theme}`, async ({ page }) => {
       await gotoWithTheme(page, '/', theme);
 

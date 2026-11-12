@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { NowShowingMovieList } from './nowShowingMovieList';
 import type { NowShowingMovie } from '@/lib/types';
@@ -128,6 +129,33 @@ describe('NowShowingMovieList', () => {
         'href',
         '/movies/101',
       );
+    });
+
+    it('タイルを押すとURLのクエリで詳細を開く', async () => {
+      const user = userEvent.setup();
+      render(<NowShowingMovieList movies={createMockMovies(1)} />);
+
+      await user.click(screen.getByRole('link', { name: '人気映画 1' }));
+
+      expect(mockOpenMovieDetail).toHaveBeenCalledWith(100);
+    });
+
+    /**
+     * モーダルはここではなくホームに1つだけ置く（`HomeMovieDetailModal`）
+     *
+     * 以前はこのコンポーネントと `RecommendationSection` の**両方**が
+     * URL の `movie_id` を読むモーダルを描いていたため、ホームで
+     * **2枚同時に開いていた**（E2E が
+     * `getByRole('dialog') resolved to 2 elements` で落ちた / #1033）。
+     * ここにモーダルを戻すとこのテストが落ちる。
+     */
+    it('モーダル自体は描かない（ホームに1つだけ置くため）', () => {
+      mockSelectedMovieId = 100;
+      render(<NowShowingMovieList movies={createMockMovies(1)} />);
+
+      expect(
+        screen.queryByTestId('movie-detail-modal'),
+      ).not.toBeInTheDocument();
     });
   });
 

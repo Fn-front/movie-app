@@ -9,6 +9,23 @@ import userEvent from '@testing-library/user-event';
 import { FavoritesPage } from './favoritesPage';
 
 // --- Mocks ---
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn((movieId: number) => {
+  mockSelectedMovieId = movieId;
+});
+const mockCloseMovieDetail = jest.fn(() => {
+  mockSelectedMovieId = null;
+});
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
+}));
 
 const mockHandleFavoriteToggle = jest.fn();
 const mockCloseModal = jest.fn();
@@ -83,6 +100,8 @@ jest.mock('@/hooks/useIntersectionObserver', () => ({
 describe('FavoritesPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // URL のクエリ相当。テスト間で持ち越すと前のテストのモーダルが残る
+    mockSelectedMovieId = null;
     mockSortBy = 'added_at';
     mockIsLoading = false;
     mockIsFetchingNextPage = false;
@@ -163,19 +182,30 @@ describe('FavoritesPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('タイルクリックで詳細モーダルにmovieIdが渡される', async () => {
-    const { MovieDetailModal } = jest.requireMock(
-      '@/components/ui/movie/detailModal/movieDetailModal',
-    );
-
+  /**
+   * 詳細の開閉は URL の movie_id が持つ（#1033）。ページは state を持たず、
+   * タイトルのリンクを押すと openMovieDetail が呼ばれるだけ
+   */
+  it('タイトルのリンクで詳細を開く', async () => {
     const user = userEvent.setup();
 
     render(<FavoritesPage />);
 
-    await user.click(screen.getByText('映画A'));
+    await user.click(screen.getByRole('link', { name: '映画A' }));
+
+    expect(mockOpenMovieDetail).toHaveBeenCalledWith(100);
+  });
+
+  it('URLに movie_id があるとモーダルへ渡す', () => {
+    const { MovieDetailModal } = jest.requireMock(
+      '@/components/ui/movie/detailModal/movieDetailModal',
+    );
+    mockSelectedMovieId = 100;
+
+    render(<FavoritesPage />);
 
     expect(MovieDetailModal).toHaveBeenLastCalledWith(
-      expect.objectContaining({ movieId: 100 }),
+      expect.objectContaining({ movieId: 100, manageHistory: false }),
       undefined,
     );
   });

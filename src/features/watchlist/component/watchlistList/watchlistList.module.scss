@@ -28,10 +28,19 @@
 }
 
 .c_watchlist_tile {
+  // タイトルのリンクの ::after（カード全面の当たり判定）の基準にする。
+  // 無いと ::after が遠くの祖先いっぱいに広がる（#1060）
+  position: relative;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition: $transition-all;
+
+  // Card の clickable をやめたので、押し込みのフィードバックは自前で持つ
+  // （MovieTile と同じ / #1060）
+  &:active {
+    transform: scale(0.98);
+  }
 
   &__poster {
     position: relative;
@@ -59,6 +68,8 @@
 
   &__delete_button {
     position: absolute;
+    // タイトルのリンクの ::after より上に置く。無いと覆われて押せない（#1060）
+    z-index: 1;
     top: $spacing-2;
     right: $spacing-2;
   }
@@ -88,6 +99,8 @@
   // 視聴済みボタンは削除ボタンの左隣に置く
   &__watched_button {
     position: absolute;
+    // タイトルのリンクの ::after より上に置く（#1060）
+    z-index: 1;
     top: $spacing-2;
     right: calc($spacing-2 + 28px + $spacing-1);
   }
@@ -126,6 +139,10 @@
     bottom: $spacing-2;
     left: $spacing-2;
     z-index: 1;
+    // 配信バッジは飾りなので、クリックはカード全面の当たり判定
+    // （__title_link の ::after）へ通す。z-index で ::after より上に
+    // 来るため、これが無いとバッジの上だけ詳細が開かない死角になる（#1060）
+    pointer-events: none;
   }
 
   &__watched_badge {
@@ -157,6 +174,37 @@
     line-height: $line-height-tight;
 
     @include text-truncate-multiline(2);
+  }
+
+  // タイトルのリンクをカード全面の当たり判定にする（stretched link パターン）。
+  // カード全体を role="button" にせずに「どこを押しても詳細が開く」を保つ
+  // （#719 の MovieTile と同じ作り / #1060）
+  &__title_link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      // カードと同じ角丸にする。inherit は <a> の値（0）を引くので四角くなる
+      border-radius: $border-radius-lg;
+    }
+
+    // マウス操作でのフォーカスにはリングを出さない
+    &:focus:not(:focus-visible) {
+      outline: none;
+    }
+
+    &:focus-visible {
+      outline: none;
+
+      &::after {
+        outline: $border-width-2 solid $primary-500;
+        outline-offset: -$border-width-2;
+      }
+    }
   }
 
   // 公開日と評価はカード下端に寄せる。タイトルの行数が違っても

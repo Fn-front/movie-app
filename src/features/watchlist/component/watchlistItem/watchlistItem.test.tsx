@@ -2,7 +2,7 @@
  * WatchlistItemコンポーネント テスト
  */
 
-import { render, screen } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { WatchlistItem } from './watchlistItem';
@@ -61,7 +61,7 @@ describe('WatchlistItem', () => {
       <WatchlistItem item={item} onClick={onClick} onDelete={jest.fn()} />,
     );
 
-    await user.click(screen.getByRole('button', { name: 'テスト映画' }));
+    await user.click(screen.getByRole('link', { name: 'テスト映画' }));
     expect(onClick).toHaveBeenCalledWith(456);
   });
 
@@ -98,9 +98,10 @@ describe('WatchlistItem', () => {
       <WatchlistItem item={item} onClick={jest.fn()} onDelete={jest.fn()} />,
     );
 
-    expect(
-      screen.getByRole('button', { name: '映画タイトル' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '映画タイトル' })).toHaveAttribute(
+      'href',
+      '/movies/123',
+    );
     expect(
       screen.getByRole('button', {
         name: '映画タイトルをウォッチリストから削除',
@@ -108,20 +109,54 @@ describe('WatchlistItem', () => {
     ).toBeInTheDocument();
   });
 
-  it('Enterキーでアイテムのクリックが発火する', async () => {
-    const user = userEvent.setup();
+  /**
+   * タイトルはリンクなので、キーボードの起動は Enter のみ（Space は効かない）。
+   * ブラウザの標準挙動に委ねており、行全体を role="button" にしていた頃の
+   * 自前ハンドラは消した（#1064）
+   */
+  it('修飾キーなしの左クリックは遷移せず onClick を呼ぶ', () => {
     const onClick = jest.fn();
-    const item = createMockItem();
     render(
-      <WatchlistItem item={item} onClick={onClick} onDelete={jest.fn()} />,
+      <WatchlistItem
+        item={createMockItem()}
+        onClick={onClick}
+        onDelete={jest.fn()}
+      />,
     );
 
-    const itemButton = screen.getByRole('button', {
-      name: 'テスト映画',
-    });
-    itemButton.focus();
-    await user.keyboard('{Enter}');
+    const link = screen.getByRole('link', { name: 'テスト映画' });
+    const event = createEvent.click(link, { button: 0 });
+    fireEvent(link, event);
+
     expect(onClick).toHaveBeenCalledWith(123);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  /**
+   * サイドバーは全ページに出るので、ここが壊れると ⌘+クリックで作品を
+   * 新しいタブに開く導線がアプリ全体で死ぬ（`shouldLetBrowserHandle` / #1033）
+   */
+  it.each([
+    ['Ctrl', { ctrlKey: true }],
+    ['Meta', { metaKey: true }],
+    ['Shift', { shiftKey: true }],
+    ['Alt', { altKey: true }],
+  ])('%s+クリックは横取りしない（新しいタブに任せる）', (_label, modifier) => {
+    const onClick = jest.fn();
+    render(
+      <WatchlistItem
+        item={createMockItem()}
+        onClick={onClick}
+        onDelete={jest.fn()}
+      />,
+    );
+
+    const link = screen.getByRole('link', { name: 'テスト映画' });
+    const event = createEvent.click(link, { button: 0, ...modifier });
+    fireEvent(link, event);
+
+    expect(onClick).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('削除ボタンのEnterキーでonDeleteが呼ばれonClickは発火しない', async () => {
@@ -141,20 +176,22 @@ describe('WatchlistItem', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('Spaceキーでアイテムのクリックが発火する', async () => {
-    const user = userEvent.setup();
-    const onClick = jest.fn();
+  /**
+   * 行全体を role="button" にすると、内側の削除ボタンが入れ子になり
+   * axe の nested-interactive に触れる（#1064）。行はボタンではない
+   */
+  it('行全体はボタンではない（削除ボタンだけがボタン）', () => {
     const item = createMockItem();
     render(
-      <WatchlistItem item={item} onClick={onClick} onDelete={jest.fn()} />,
+      <WatchlistItem item={item} onClick={jest.fn()} onDelete={jest.fn()} />,
     );
 
-    const itemButton = screen.getByRole('button', {
-      name: 'テスト映画',
-    });
-    itemButton.focus();
-    await user.keyboard('{ }');
-    expect(onClick).toHaveBeenCalledWith(123);
+    const buttons = screen.getAllByRole('button');
+
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveAccessibleName(
+      'テスト映画をウォッチリストから削除',
+    );
   });
 
   it('削除ボタンのSpaceキーでonDeleteが呼ばれる', async () => {
@@ -172,22 +209,6 @@ describe('WatchlistItem', () => {
     await user.keyboard('{ }');
 
     expect(onDelete).toHaveBeenCalledWith('wl-space');
-  });
-
-  it('他のキーではアイテムのクリックは発火しない', async () => {
-    const user = userEvent.setup();
-    const onClick = jest.fn();
-    const item = createMockItem();
-    render(
-      <WatchlistItem item={item} onClick={onClick} onDelete={jest.fn()} />,
-    );
-
-    const itemButton = screen.getByRole('button', {
-      name: 'テスト映画',
-    });
-    itemButton.focus();
-    await user.keyboard('{Tab}');
-    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('削除ボタンの他のキーではonDeleteが呼ばれない', async () => {

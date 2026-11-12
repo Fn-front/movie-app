@@ -4,6 +4,7 @@
  */
 
 import { AppLayout } from '@/components/layout/appLayout/appLayout';
+import { HomeMovieDetailModal } from '@/features/home/component/homeMovieDetailModal/homeMovieDetailModal';
 import { NowShowingMovieList } from '@/features/nowShowing/component/nowShowingMovieList/nowShowingMovieList';
 import { RecommendationSection } from '@/features/recommendations/component/recommendationSection/recommendationSection';
 import type { NowShowingMovie } from '@/lib/types';
@@ -47,6 +48,14 @@ export function HomePage({
           hasFavorites={hasFavorites}
         />
       )}
+      {/*
+        詳細モーダルはホームに1つだけ。各セクションに持たせると、どちらも
+        URL の `movie_id` を読むため2枚同時に開く（#1033）
+      */}
+      <HomeMovieDetailModal
+        nowShowingMovies={nowShowingMovies}
+        recommendations={recommendations}
+      />
     </AppLayout>
   );
 }

@@ -11,23 +11,31 @@
  *
  * | 対象 | 理由 |
  * | --- | --- |
- * | `/watchlist` `/favorites` | #1060（タイルがクリック可能カードの中に操作ボタンを入れ子にしている / `nested-interactive` / serious）が未修正で、入れると必ず落ちる。#1033 Phase 2 でタイルを stretched Link に作り替えるときに一緒に足す |
- * | サイドバーの `WatchlistItem` | 同じ入れ子が #1064 にある。下の「サイドバー」を参照 |
+ * | `/watchlist` `/favorites` の**タイル** | ページ自体は検査対象に入れたが、共有テストユーザーのデータが**必ず空**なのでタイルは1枚も描かれない。下の「データが空であること」を参照 |
+ * | サイドバーの `WatchlistItem` | 同じ理由。行が1つも描かれない。下の「サイドバー」を参照 |
  * | `/admin/accounts` `/admin/awards` | admin ロールの専用ユーザーが要る（`e2e/admin/` の前例）。#1065 に残す |
  * | `/theater-experience` | WebGL（three.js）の描画完了を待つ仕掛けが別途要る。#1065 に残す |
  * | `/person/[id]` | 未認証でも開けるので `publicPages.spec.ts` の担当。そちらも未対象のまま |
  * | オーバーレイ（ドロワー・カレンダー等） | `overlays.spec.ts` の担当。認証済みのモバイルドロワーはそちらに足した |
  *
- * ## サイドバー
+ * ## データが空であること（サイドバー・`/watchlist`・`/favorites`）
  *
- * **ウォッチリストは空のまま検査している。** 共有テストユーザーのウォッチリストは
- * どの spec も書き換えないため（書き込む spec はすべて専用ユーザーを使う）、
- * ここでは必ず空状態（「公開予定から探す」リンク）になる。
+ * 共有テストユーザーの**ウォッチリストは必ず空**。書き込む spec はすべて
+ * 専用ユーザー（`openDedicatedSession`）を使うため。
+ * **お気に入りもほぼ必ず空**で、共有ユーザーを使う `favorites.spec.ts` が
+ * before/afterEach で `cleanupFavorites()` を回す（`fullyParallel` なので
+ * その spec の実行中だけ一時的に1件入りうる）。
  *
- * 1件以上入れた状態は検査できない。行を描く `WatchlistItem` が
- * `role="button"` の中に削除ボタンを入れ子にしており（#1064）、データを入れると
- * `nested-interactive` で必ず落ちるため。#1064 が直ったら、ここに
- * 「ウォッチリスト1件以上」のケースを足すこと。
+ * つまり**この3箇所はいずれも「空状態の画面」しか検査していない**。
+ * `WatchlistTile` / `FavoriteTile` / `WatchlistItem` に axe が当たることはない。
+ * #1033 Phase 2 で `nested-interactive`（#1060 / #1064）を直したが、
+ * **その回帰をここで止めることはできない。**
+ *
+ * さらに `waitForSidebar()` は空状態の導線（「公開予定から探す」）が出るまで待つ。
+ * サイドバーに1件でも入っていればこの待ちがタイムアウトして落ちるので、
+ * **データを入れるなら待ち方も一緒に直すこと**。
+ *
+ * 1件以上の状態を検査するにはシード付きの専用ユーザーが要る（#1056 の範囲）。
  *
  * ## 本文（一覧）の描画は待っていない
  *
@@ -84,6 +92,13 @@ const AUTHENTICATED_PAGES = [
   { name: '公開中', path: '/movies/now-showing' },
   { name: '公開予定', path: '/movies/upcoming' },
   { name: '設定', path: '/settings' },
+  // #1033 Phase 2 でタイルを stretched Link に作り替え、#1060 の
+  // nested-interactive が解消したので検査対象に入れる。
+  // ⚠️ ただし共有テストユーザーのデータは**必ず空**なので、ここで検査できるのは
+  //    空状態の画面（見出し・ツールバー・空メッセージ）だけ。タイルには
+  //    axe が当たらない。理由と直し方は冒頭の「データが空であること」を参照
+  { name: 'ウォッチリスト', path: '/watchlist' },
+  { name: 'お気に入り', path: '/favorites' },
   // クエリのキーは `query`（`ROUTES.SEARCH` のコメント／`useSearch.ts`）。
   // `q` だと検索が走らず、クエリなしの画面を検査することになる
   { name: '検索（結果あり）', path: '/search?query=inception' },

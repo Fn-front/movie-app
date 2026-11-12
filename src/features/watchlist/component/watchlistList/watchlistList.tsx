@@ -7,6 +7,7 @@
 
 import { memo, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { IoCheckmarkCircle, IoCheckmarkCircleOutline } from 'react-icons/io5';
 
 import { Card } from '@/components/ui/card/card';
@@ -17,10 +18,11 @@ import {
   IMAGE_SIZES,
   DISPLAY_LIMITS,
   EMPTY_MESSAGES,
-  FAVORITES_RATING_MAX,
+  ROUTES,
   WATCHLIST_WATCHED_LABELS,
 } from '@/constants';
 import { getTMDbPosterUrl } from '@/utils/image';
+import { shouldLetBrowserHandle } from '@/utils/linkClick';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 
@@ -145,77 +147,37 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
   // 視聴済みを解除すれば、お気に入り登録が残っていても消える
   const showsRating = isWatched && favorite !== null;
 
-  // 評価はカード本体（role='button'）の内側にある。ARIA の
-  // Children Presentational により、role='button' の子孫はアクセシビリティ
-  // ツリーから刈られる実装があるため、RatingIndicator の aria-label だけでは
-  // 読み上げに届かない。カードの名前そのものに畳み込む
-  const cardLabel = showsRating
-    ? `${item.title}（評価 ${favorite.rating}/${FAVORITES_RATING_MAX}）`
-    : item.title;
-
-  const handleClick = useCallback(() => {
-    onClick?.(item.tmdb_movie_id);
-  }, [item.tmdb_movie_id, onClick]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        onClick?.(item.tmdb_movie_id);
+  // タイトルのリンクをカード全面の当たり判定にするので、左クリックだけ
+  // 横取りしてモーダルで開く。修飾キー付き・中クリックは既定動作に任せる
+  const handleTitleClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!onClick || shouldLetBrowserHandle(event)) {
+        return;
       }
+
+      event.preventDefault();
+      onClick(item.tmdb_movie_id);
     },
     [item.tmdb_movie_id, onClick],
   );
 
-  const handleDelete = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      onDelete?.(item.id);
-    },
-    [item.id, onDelete],
-  );
+  const handleDelete = useCallback(() => {
+    onDelete?.(item.id);
+  }, [item.id, onDelete]);
 
-  const handleWatchedToggle = useCallback(
-    (e: React.MouseEvent) => {
-      // タイル本体のクリック（詳細モーダル）に伝播させない
-      e.stopPropagation();
-      onWatchedToggle?.(item, !isWatched);
-    },
-    [item, isWatched, onWatchedToggle],
-  );
-
-  const handleWatchedKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        e.stopPropagation();
-        onWatchedToggle?.(item, !isWatched);
-      }
-    },
-    [item, isWatched, onWatchedToggle],
-  );
-
-  const handleDeleteKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        e.stopPropagation();
-        onDelete?.(item.id);
-      }
-    },
-    [item.id, onDelete],
-  );
+  const handleWatchedToggle = useCallback(() => {
+    onWatchedToggle?.(item, !isWatched);
+  }, [item, isWatched, onWatchedToggle]);
 
   return (
     <Card
       noPadding
-      clickable={!!onClick}
+      hoverable
+      // カード全体を role="button" にすると、内側の視聴済み・削除ボタンが
+      // インタラクティブ要素の入れ子になり ARIA 上不正になる
+      // （axe: nested-interactive / #1060）。代わりにタイトルを本物のリンクに
+      // し、::after でカード全面を当たり判定にする（#719 の MovieTile と同じ）
       className={styles.c_watchlist_tile}
-      onClick={onClick ? handleClick : undefined}
-      onKeyDown={onClick ? handleKeyDown : undefined}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      aria-label={onClick ? cardLabel : undefined}
     >
       <div className={styles.c_watchlist_tile__poster}>
         {posterUrl ? (
@@ -251,7 +213,6 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
             <button
               type='button'
               onClick={handleWatchedToggle}
-              onKeyDown={handleWatchedKeyDown}
               disabled={isWatchedUpdating}
               className={styles.c_watchlist_tile__watched}
               // 状態は aria-pressed だけで伝える。ラベルを状態で入れ替えると
@@ -273,7 +234,6 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
             <button
               type='button'
               onClick={handleDelete}
-              onKeyDown={handleDeleteKeyDown}
               className={styles.c_watchlist_tile__delete}
               aria-label={`${item.title}をウォッチリストから削除`}
             >
@@ -283,7 +243,19 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
         )}
       </div>
       <div className={styles.c_watchlist_tile__info}>
-        <h2 className={styles.c_watchlist_tile__title}>{item.title}</h2>
+        <h2 className={styles.c_watchlist_tile__title}>
+          {onClick ? (
+            <Link
+              href={ROUTES.MOVIE_DETAIL(item.tmdb_movie_id)}
+              className={styles.c_watchlist_tile__title_link}
+              onClick={handleTitleClick}
+            >
+              {item.title}
+            </Link>
+          ) : (
+            item.title
+          )}
+        </h2>
         <div className={styles.c_watchlist_tile__meta}>
           {item.release_date && (
             <p className={styles.c_watchlist_tile__date}>{item.release_date}</p>

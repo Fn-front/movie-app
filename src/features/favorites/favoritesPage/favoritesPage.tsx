@@ -14,7 +14,7 @@ import { FavoriteList } from '@/features/favorites/component/favoriteList/favori
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
 import { usePrependScrollAnchor } from '@/hooks/usePrependScrollAnchor';
-import { useMovieDetailModal } from '@/hooks/useMovieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import {
   useFavoritesPage,
   FAVORITES_PAGE_SORT_OPTIONS,
@@ -49,17 +49,13 @@ export const FavoritesPage = memo(function FavoritesPage() {
     isFavoriteProcessing,
   } = favoriteToggle;
 
-  const modalItems = useMemo(
-    () => favorites.map((f) => ({ id: f.tmdb_movie_id, title: f.title })),
-    [favorites],
-  );
+  const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+    useMovieDetailQuery();
 
-  const {
-    selectedMovieId,
-    selectedMovieTitle,
-    handleMovieClick,
-    handleModalClose,
-  } = useMovieDetailModal(modalItems);
+  const selectedMovieTitle = useMemo(
+    () => favorites.find((f) => f.tmdb_movie_id === selectedMovieId)?.title,
+    [favorites, selectedMovieId],
+  );
 
   const sortOptions = useMemo(
     () =>
@@ -122,7 +118,7 @@ export const FavoritesPage = memo(function FavoritesPage() {
         isLoading={isLoading}
         onFavoriteToggle={handleFavoriteToggle}
         isFavoriteProcessing={isFavoriteProcessing}
-        onClick={handleMovieClick}
+        onClick={openMovieDetail}
       />
 
       {isFetchingNextPage && (
@@ -134,10 +130,12 @@ export const FavoritesPage = memo(function FavoritesPage() {
       <div ref={loadMoreRef} />
 
       <MovieDetailModal
+        // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
+        manageHistory={false}
         movieId={selectedMovieId}
         title={selectedMovieTitle}
         showFinancialInfo={false}
-        onClose={handleModalClose}
+        onClose={closeMovieDetail}
       />
 
       <FavoriteRatingModal

@@ -109,13 +109,19 @@ function favoriteRatingModal(page: Page) {
   return page.getByRole('dialog', { name: /お気に入り(に追加|を編集)/ });
 }
 
-/** 一覧の先頭を視聴済みにし、開いた評価モーダルを閉じる。対象のタイトルを返す */
-async function markFirstAsWatched(page: Page): Promise<string> {
+/** 一覧の先頭にある未視聴作品のタイトル（視聴済みトグルの aria-label から取る） */
+async function firstUnwatchedTitle(page: Page): Promise<string> {
   const watchedButton = watchedToggles(page, false).first();
   await expect(watchedButton).toBeVisible({ timeout: 30000 });
 
   const label = await watchedButton.getAttribute('aria-label');
-  const title = (label ?? '').replace(/を視聴済みにする$/, '');
+  return (label ?? '').replace(/を視聴済みにする$/, '');
+}
+
+/** 一覧の先頭を視聴済みにし、開いた評価モーダルを閉じる。対象のタイトルを返す */
+async function markFirstAsWatched(page: Page): Promise<string> {
+  const title = await firstUnwatchedTitle(page);
+  const watchedButton = watchedToggles(page, false).first();
 
   const patchResponse = waitForWatchedPatchResponse(page);
   await watchedButton.click();
@@ -159,21 +165,24 @@ test.describe('ウォッチリスト', () => {
   test('ウォッチリストページに映画が表示され、クリックで詳細モーダルが開く', async () => {
     await gotoWatchlistPage(page);
 
-    // ウォッチリストに映画が表示されている
-    const detailButton = page
-      .locator('[class*="c_watchlist_tile"][role="button"]')
+    // ウォッチリストに映画が表示されている。
+    // タイトルはリンク（#1060 でカードの role="button" をやめた）
+    const detailLink = page
+      .locator('a[class*="c_watchlist_tile__title_link"]')
       .first();
-    await expect(detailButton).toBeVisible({ timeout: 10000 });
+    await expect(detailLink).toBeVisible({ timeout: 10000 });
 
-    // タイルクリックで詳細モーダルが開く
-    await detailButton.click();
+    // 押すとモーダルで開き、URL に movie_id が付く（#1033）
+    await detailLink.click();
+    await expect(page).toHaveURL(/movie_id=\d+/);
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 15000 });
     await expect(dialog.getByText('詳細情報')).toBeVisible({ timeout: 15000 });
 
-    // モーダルを閉じる
+    // モーダルを閉じると movie_id が外れる
     await dialog.getByRole('button', { name: '閉じる' }).click();
     await expect(dialog).not.toBeVisible();
+    await expect(page).toHaveURL(/\/watchlist$/);
   });
 
   test('ウォッチリストページで削除すると映画が消える', async () => {
@@ -233,13 +242,23 @@ test.describe('ウォッチリスト', () => {
 
   test('視聴済みはサイドバーと公開カレンダーから消える', async () => {
     await page.goto('/watchlist');
+
+    // サイドバーの行は作品名のリンク。#1033 Phase 2 より前は行全体が
+    // role="button" だったので、ボタンで引くと**常に0件になり素通りする**
+    const sidebar = page.getByRole('complementary');
+    const sidebarRow = (title: string) =>
+      sidebar.getByRole('link', { name: title, exact: true });
+
+    // 消えることを見るテストなので、消す前に居ることを確かめる。
+    // これが無いと「最初から居ない」でも通ってしまう
+    const target = await firstUnwatchedTitle(page);
+    await expect(sidebarRow(target)).toHaveCount(1, { timeout: 15000 });
+
     const title = await markFirstAsWatched(page);
+    expect(title).toBe(target);
 
     // サイドバーの「公開日が近い映画」から消える
-    const sidebar = page.getByRole('complementary');
-    await expect(
-      sidebar.getByRole('button', { name: title, exact: true }),
-    ).toHaveCount(0, { timeout: 15000 });
+    await expect(sidebarRow(title)).toHaveCount(0, { timeout: 15000 });
 
     // 公開カレンダーからも消える
     await page.getByRole('button', { name: '公開カレンダーを開く' }).click();

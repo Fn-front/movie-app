@@ -31,13 +31,24 @@ export const WatchlistPanel = memo(function WatchlistPanel() {
     excludeWatched: true,
   });
 
+  /**
+   * ⚠️ ここだけ URL ではなくローカル state で持つ。
+   *
+   * サイドバーは `AppLayout` を通る**全ページ**に出る。URL の `movie_id` を
+   * 読むと、同じクエリを読んでいるページ側のモーダルと**2枚同時に開く**
+   * （実測: /watchlist で dialog が2つ）。かといってサイドバー側だけ
+   * モーダルを持たない形にすると、詳細モーダルを持たないページ
+   * （/settings など）で押しても何も開かなくなる。
+   *
+   * 本来はモーダルを `AppLayout` に1つだけ置くのが筋。→ #1077
+   */
   const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
 
-  const handleItemClick = useCallback((tmdbMovieId: number) => {
+  const openMovieDetail = useCallback((tmdbMovieId: number) => {
     setSelectedMovieId(tmdbMovieId);
   }, []);
 
-  const handleModalClose = useCallback(() => {
+  const closeMovieDetail = useCallback(() => {
     setSelectedMovieId(null);
   }, []);
 
@@ -89,7 +100,7 @@ export const WatchlistPanel = memo(function WatchlistPanel() {
               <div key={item.id} role='listitem'>
                 <WatchlistItem
                   item={item}
-                  onClick={handleItemClick}
+                  onClick={openMovieDetail}
                   onDelete={handleDelete}
                 />
               </div>
@@ -108,7 +119,7 @@ export const WatchlistPanel = memo(function WatchlistPanel() {
       <MovieDetailModal
         movieId={selectedMovieId}
         title={selectedMovieTitle}
-        onClose={handleModalClose}
+        onClose={closeMovieDetail}
       />
     </div>
   );

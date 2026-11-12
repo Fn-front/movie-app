@@ -8,7 +8,6 @@
 import { memo, useMemo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { NOW_SHOWING_SECTION_TITLE, DISPLAY_LIMITS } from '@/constants';
 import type { NowShowingMovie } from '@/lib/types';
@@ -34,13 +33,7 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
       [movies],
     );
 
-    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
-      useMovieDetailQuery();
-
-    const selectedMovieTitle = useMemo(
-      () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
-      [movieCacheItems, selectedMovieId],
-    );
+    const { openMovieDetail } = useMovieDetailQuery();
 
     if (movies.length === 0) {
       return (
@@ -58,42 +51,33 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
     }
 
     return (
-      <>
-        <section aria-label={NOW_SHOWING_SECTION_TITLE}>
-          <div className={styles.c_now_showing_movie_list__header}>
-            <h2 className={styles.c_now_showing_movie_list__title}>
-              {NOW_SHOWING_SECTION_TITLE}
-            </h2>
+      <section aria-label={NOW_SHOWING_SECTION_TITLE}>
+        <div className={styles.c_now_showing_movie_list__header}>
+          <h2 className={styles.c_now_showing_movie_list__title}>
+            {NOW_SHOWING_SECTION_TITLE}
+          </h2>
+        </div>
+        <div className={styles.c_now_showing_movie_list__scroll_container}>
+          <div className={styles.c_now_showing_movie_list__list} role='list'>
+            {movieCacheItems.map((movie, index) => (
+              <div
+                key={movie.id}
+                role='listitem'
+                className={styles.c_now_showing_movie_list__item}
+              >
+                <span className={styles.c_now_showing_movie_list__rank}>
+                  {index + 1}
+                </span>
+                <MovieTile
+                  movie={movie}
+                  onSelect={openMovieDetail}
+                  eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
+                />
+              </div>
+            ))}
           </div>
-          <div className={styles.c_now_showing_movie_list__scroll_container}>
-            <div className={styles.c_now_showing_movie_list__list} role='list'>
-              {movieCacheItems.map((movie, index) => (
-                <div
-                  key={movie.id}
-                  role='listitem'
-                  className={styles.c_now_showing_movie_list__item}
-                >
-                  <span className={styles.c_now_showing_movie_list__rank}>
-                    {index + 1}
-                  </span>
-                  <MovieTile
-                    movie={movie}
-                    onSelect={openMovieDetail}
-                    eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-        <MovieDetailModal
-          // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
-          manageHistory={false}
-          movieId={selectedMovieId}
-          title={selectedMovieTitle}
-          onClose={closeMovieDetail}
-        />
-      </>
+        </div>
+      </section>
     );
   },
 );

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button/button';
 import { Select } from '@/components/ui/select/select';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { WATCHLIST_CLEANUP_LABELS } from '@/constants';
 import { StreamingSortHint } from '@/features/watchlist/component/streamingSortHint/streamingSortHint';
 import { WatchlistCleanupModal } from '@/features/watchlist/component/watchlistCleanupModal/watchlistCleanupModal';
@@ -58,19 +59,12 @@ export const WatchlistPage = memo(function WatchlistPage() {
     getFavoriteInfo,
   } = useFavoriteToggle();
 
-  const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
+  const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+    useMovieDetailQuery();
   const [isCleanupOpen, setIsCleanupOpen] = useState(false);
-
-  const handleMovieClick = useCallback((tmdbMovieId: number) => {
-    setSelectedMovieId(tmdbMovieId);
-  }, []);
 
   const handleCleanupOpen = useCallback(() => {
     setIsCleanupOpen(true);
-  }, []);
-
-  const handleDetailModalClose = useCallback(() => {
-    setSelectedMovieId(null);
   }, []);
 
   /**
@@ -135,7 +129,7 @@ export const WatchlistPage = memo(function WatchlistPage() {
       <WatchlistList
         watchlist={watchlist}
         isLoading={isLoading}
-        onClick={handleMovieClick}
+        onClick={openMovieDetail}
         onDelete={removeFromWatchlist}
         onWatchedToggle={handleWatchedToggle}
         isWatchedUpdating={isUpdatingWatched}
@@ -153,10 +147,12 @@ export const WatchlistPage = memo(function WatchlistPage() {
       )}
 
       <MovieDetailModal
+        // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
+        manageHistory={false}
         movieId={selectedMovieId}
         title={selectedMovieTitle}
         showFinancialInfo={false}
-        onClose={handleDetailModalClose}
+        onClose={closeMovieDetail}
       />
 
       <FavoriteRatingModal

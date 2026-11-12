@@ -8,6 +8,23 @@ import userEvent from '@testing-library/user-event';
 import { WatchlistPage } from './watchlistPage';
 
 // --- Mocks ---
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn((movieId: number) => {
+  mockSelectedMovieId = movieId;
+});
+const mockCloseMovieDetail = jest.fn(() => {
+  mockSelectedMovieId = null;
+});
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
+}));
 
 const mockUseWatchlistPage = {
   watchlist: [] as Array<{
@@ -130,6 +147,8 @@ const createMockItems = (count: number) =>
 describe('WatchlistPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // URL のクエリ相当。テスト間で持ち越すと前のテストのモーダルが残る
+    mockSelectedMovieId = null;
     mockUseWatchlistPage.watchlist = [];
     mockUseWatchlistPage.isLoading = false;
     mockUseWatchlistPage.isFetchingNextPage = false;
@@ -178,25 +197,38 @@ describe('WatchlistPage', () => {
     expect(screen.getByText('映画2')).toBeInTheDocument();
   });
 
-  it('タイルクリックで詳細モーダルが表示される', async () => {
+  /**
+   * 詳細の開閉は URL の movie_id が持つ（#1033）。ページは state を持たず、
+   * タイトルのリンクを押すと openMovieDetail が呼ばれるだけ
+   */
+  it('タイトルのリンクで詳細を開く', async () => {
     const user = userEvent.setup();
     mockUseWatchlistPage.watchlist = createMockItems(1);
     render(<WatchlistPage />);
 
-    await user.click(screen.getByRole('button', { name: '映画0' }));
+    await user.click(screen.getByRole('link', { name: '映画0' }));
+
+    expect(mockOpenMovieDetail).toHaveBeenCalledWith(100);
+  });
+
+  it('URLに movie_id があるとモーダルが出る', () => {
+    mockUseWatchlistPage.watchlist = createMockItems(1);
+    mockSelectedMovieId = 100;
+
+    render(<WatchlistPage />);
 
     expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
   });
 
-  it('モーダル閉じるで非表示になる', async () => {
+  it('モーダルを閉じると closeMovieDetail が呼ばれる', async () => {
     const user = userEvent.setup();
     mockUseWatchlistPage.watchlist = createMockItems(1);
+    mockSelectedMovieId = 100;
     render(<WatchlistPage />);
 
-    await user.click(screen.getByRole('button', { name: '映画0' }));
     await user.click(screen.getByTestId('close-modal'));
 
-    expect(screen.queryByTestId('movie-detail-modal')).not.toBeInTheDocument();
+    expect(mockCloseMovieDetail).toHaveBeenCalled();
   });
 
   it('削除でremoveFromWatchlistが呼ばれる', async () => {

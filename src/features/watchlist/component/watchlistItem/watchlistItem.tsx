@@ -7,10 +7,12 @@
 
 import { memo, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 
-import { IMAGE_SIZES } from '@/constants';
+import { IMAGE_SIZES, ROUTES } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { getTMDbImageUrl } from '@/utils/image';
+import { shouldLetBrowserHandle } from '@/utils/linkClick';
 import type { WatchlistItem as WatchlistItemType } from '@/lib/api/watchlist/watchlist';
 
 import styles from './watchlistItem.module.scss';
@@ -35,50 +37,32 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
   onClick,
   onDelete,
 }) {
-  const handleClick = useCallback(() => {
-    onClick(item.tmdb_movie_id);
-  }, [onClick, item.tmdb_movie_id]);
-
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onClick(item.tmdb_movie_id);
+  // タイトルのリンクを行全面の当たり判定にするので、左クリックだけ
+  // 横取りしてモーダルで開く。修飾キー付き・中クリックは既定動作に任せる
+  const handleTitleClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (shouldLetBrowserHandle(event)) {
+        return;
       }
+
+      event.preventDefault();
+      onClick(item.tmdb_movie_id);
     },
     [onClick, item.tmdb_movie_id],
   );
 
-  const handleDelete = useCallback(
-    (event: React.MouseEvent) => {
-      event.stopPropagation();
-      onDelete(item.id);
-    },
-    [onDelete, item.id],
-  );
-
-  const handleDeleteKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        event.stopPropagation();
-        onDelete(item.id);
-      }
-    },
-    [onDelete, item.id],
-  );
+  const handleDelete = useCallback(() => {
+    onDelete(item.id);
+  }, [onDelete, item.id]);
 
   const posterUrl = getTMDbImageUrl(item.poster_path, 'w92');
 
   return (
-    <div
-      className={styles.c_watchlist_item}
-      role='button'
-      tabIndex={0}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      aria-label={item.title}
-    >
+    // 行全体を role="button" にすると、内側の削除ボタンが
+    // インタラクティブ要素の入れ子になり ARIA 上不正になる
+    // （axe: nested-interactive / #1064）。タイトルを本物のリンクにし、
+    // ::after で行全面を当たり判定にする（#719 の MovieTile と同じ）
+    <div className={styles.c_watchlist_item}>
       {posterUrl ? (
         <Image
           className={styles.c_watchlist_item__poster}
@@ -98,7 +82,13 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
 
       <div className={styles.c_watchlist_item__info}>
         <p className={styles.c_watchlist_item__title} title={item.title}>
-          {item.title}
+          <Link
+            href={ROUTES.MOVIE_DETAIL(item.tmdb_movie_id)}
+            className={styles.c_watchlist_item__title_link}
+            onClick={handleTitleClick}
+          >
+            {item.title}
+          </Link>
         </p>
         {item.release_date && (
           <p className={styles.c_watchlist_item__release_date}>
@@ -110,7 +100,6 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
       <button
         className={styles.c_watchlist_item__delete}
         onClick={handleDelete}
-        onKeyDown={handleDeleteKeyDown}
         aria-label={`${item.title}をウォッチリストから削除`}
         type='button'
       >

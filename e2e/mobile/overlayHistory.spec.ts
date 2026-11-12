@@ -14,8 +14,69 @@ import type { Page } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 import { test, expect } from '../fixtures/auth';
+import { mockMovieDetail } from '../helpers/movieDetail';
+import {
+  clickOutsideDialog,
+  expectEntryExists,
+  waitForFold,
+} from '../helpers/overlayHistory';
+import { PERSON_ID, mockPersonDetail } from '../helpers/person';
 
 test.use({ viewport: { width: 375, height: 812 } });
+
+/** キャストから人物ページへ出る経路を固定するためのモック */
+const CAST_NAME = 'E2Eテスト俳優';
+
+const CAST = [
+  {
+    id: PERSON_ID,
+    name: CAST_NAME,
+    character: 'E2E役',
+    profile_path: null,
+    order: 0,
+  },
+];
+
+/** カレンダーに必ず1件出すための作品名 */
+const CALENDAR_MOVIE_TITLE = 'E2Eカレンダー作品';
+
+/**
+ * 公開カレンダーに作品が1件ある状態をモックで作る。
+ *
+ * カレンダーが出すのは**利用者のウォッチリストのうち、その月に公開される作品**
+ * （`/api/watchlist/calendar`）。実データに頼ると、共有テストユーザーの
+ * ウォッチリストが空の run で**テストが黙って skip される**ため固定する
+ */
+async function mockCalendarWithOneMovie(page: Page): Promise<void> {
+  await page.route('**/api/watchlist/calendar*', async (route) => {
+    const month = new URL(route.request().url()).searchParams.get('month');
+    // 月が未指定のときは当月。FullCalendar が開く月に必ず載せる
+    const target = month ?? new Date().toISOString().slice(0, 7);
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        success: true,
+        data: {
+          month: target,
+          movies_by_date: {
+            [`${target}-15`]: [
+              {
+                id: 'e2e-calendar-1',
+                tmdb_movie_id: 550,
+                title: CALENDAR_MOVIE_TITLE,
+                poster_path: null,
+                release_date: `${target}-15`,
+                added_at: `${target}-01T00:00:00Z`,
+              },
+            ],
+          },
+        },
+      }),
+    });
+  });
+}
 
 /** 一覧タイルの実体（スケルトン・子要素を除く） */
 const TILE_SELECTOR =
@@ -55,29 +116,8 @@ const expectNoGhostEntry = async (
   await expect.poll(() => historyLength(page)).toBe(before + expectedGrowth);
 };
 
-/**
- * 積んだエントリが畳み終わるまで待つ。
- *
- * 畳む処理は `history.back()` ＝**非同期**なので、閉じた直後に
- * `goBack()` すると2回ぶん戻ってしまう。テスト側のレースであって
- * 実装の問題ではない（利用者がそこまで速く押すことはない）
- */
-const waitForFold = (page: Page) =>
-  expect
-    .poll(() => page.evaluate(() => history.state?.__overlayHistory ?? null))
-    .toBeNull();
-
-/**
- * オーバーレイのエントリが実在することを確かめる。
- *
- * `waitForFold` は「トークンが消えるまで待つ」ので、**最初から無ければ
- * 即座に解決して何も待たない**。閉じる前にここで実在を固定しないと、
- * エントリが消えている不具合を素通りさせる（前回のレビューで実際に見逃した）
- */
-const expectEntryExists = (page: Page) =>
-  expect
-    .poll(() => page.evaluate(() => history.state?.__overlayHistory ?? null))
-    .not.toBeNull();
+// 「畳み終わるまで待つ」「エントリの実在を固定する」「外側クリック」は
+// `e2e/helpers/overlayHistory.ts` に置いている（同じ判定を使う spec が複数あるため）
 
 test.describe('オーバーレイを閉じたあとの戻る', () => {
   test('ドロワーのナビリンクで遷移したあと、戻る1回で前のページへ出る', async ({
@@ -118,8 +158,46 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
 
     const dialog = page.getByRole('dialog').first();
     await expect(dialog).toBeVisible({ timeout: 15000 });
+    // 閉じる前に実在を固定する。無いまま進むと waitForFold が素通りし、
+    // 「エントリを積まない」不具合を見逃す（実測で素通りすることを確認済み）
+    await expectEntryExists(page);
 
     await dialog.getByRole('button', { name: ARIA_LABELS.CLOSE }).click();
+    await expect(dialog).not.toBeVisible();
+    await waitForFold(page);
+
+    await page.goBack();
+
+    await expect(page).toHaveURL(/\/movies\/upcoming/);
+  });
+
+  /**
+   * 外側クリックは Radix の `onPointerDownOutside` を通るので、× や Esc と
+   * 同じく畳まれる側の経路。#1052 で畳む条件を「閉じ方」から
+   * 「自分のエントリが最前面か」に変えたため、**従来どおり畳まれることを
+   * 固定しておく**（#1043 の完了条件「×・Esc・外側クリックの挙動が従来どおり」）。
+   *
+   * リポジトリ全体で外側クリックを押す E2E はこれが最初の1本
+   */
+  test('フィルターを外側クリックで閉じたあと、戻る1回で前のページへ出る', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/upcoming');
+    await page.goto('/movies/now-showing');
+
+    // このテストが要るのは履歴エントリとフィルターボタンだけ。
+    // ツールバーは一覧データと関係なく描画されるので、タイルは待たない
+    // （`waitForList` は15秒待つので、2回で30秒のテスト予算を使い切る）
+    const filterButton = page.getByRole('button', { name: 'フィルター' });
+    await filterButton.waitFor({ timeout: 15000 });
+    await filterButton.click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // 閉じる前に実在を固定する。無いまま進むと waitForFold が素通りする
+    await expectEntryExists(page);
+
+    await clickOutsideDialog(page, dialog);
     await expect(dialog).not.toBeVisible();
     await waitForFold(page);
 
@@ -150,6 +228,100 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
 
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page).toHaveURL(/\/movies\/now-showing/);
+  });
+
+  /**
+   * カレンダーで作品を選ぶ経路（`useCalendarDialog` の `selectMovie`）。
+   *
+   * `setIsOpen(false)` と `setSelectedMovieId()` を同時に呼ぶので、**閉じるのと
+   * 同時に映画詳細が開く**。#1052 はここで畳まずに**エントリを引き継ぐ**作りに
+   * している。引き継ぎが効かないと、畳むための非同期 `back()` が詳細モーダルの
+   * エントリを巻き込み、1回目の戻るでページごと離脱する
+   */
+  test('カレンダーで作品を選んだあと、戻るで詳細だけが閉じる', async ({
+    authenticatedPage: page,
+  }) => {
+    await mockCalendarWithOneMovie(page);
+    await mockMovieDetail(page);
+
+    await page.goto('/movies/upcoming');
+    await page.goto('/movies/now-showing');
+
+    await page.getByRole('button', { name: ARIA_LABELS.OPEN_MENU }).click();
+    await page.getByRole('button', { name: ARIA_LABELS.OPEN_CALENDAR }).click();
+    await expect(page.getByRole('dialog').last()).toBeVisible();
+    await expectEntryExists(page);
+
+    // モックで1件だけ載せているので、一覧のボタンは必ずこれ1つ
+    const movieButton = page
+      .locator('button[class*="calendarMovieList__button"]')
+      .first();
+    await expect(movieButton).toHaveAccessibleName(CALENDAR_MOVIE_TITLE);
+
+    await movieButton.click();
+
+    // カレンダーが閉じて詳細が開く。エントリは引き継がれて残る
+    const detail = page.getByRole('dialog').last();
+    await expect(detail).toBeVisible({ timeout: 15000 });
+    await expectEntryExists(page);
+
+    await page.goBack();
+
+    // 1回目は詳細が閉じるだけ。ページからは出ない
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/movies\/now-showing/);
+    await waitForFold(page);
+
+    await page.goBack();
+
+    await expect(page).toHaveURL(/\/movies\/upcoming/);
+  });
+
+  /**
+   * 映画詳細のキャストから人物ページへ出る経路
+   * （`movieDetailContent.tsx` の `handleCastClick`）。
+   *
+   * 閉じるのと同時に遷移するため `notifyNavigating()` を申告しており、
+   * 申告が漏れると畳むための非同期 `back()` が遷移を取り消す。
+   * `push` のままだとエントリが遷移の下に埋まり、**戻るが空振りする**。
+   *
+   * 空振りは「戻ったら前のページの URL だった」では見つからない（埋まった
+   * エントリは同じ URL のため）。戻る2回で `/movies/upcoming` まで出られることで見る
+   */
+  test('詳細のキャストから人物ページへ出たあと、戻るが空振りしない', async ({
+    authenticatedPage: page,
+  }) => {
+    await mockMovieDetail(page, { credits: { cast: CAST } });
+    await mockPersonDetail(page);
+
+    await page.goto('/movies/upcoming');
+    await page.goto('/movies/now-showing');
+    const hasTile = await waitForList(page);
+    test.skip(!hasTile, '映画データが無いためスキップ');
+
+    await page
+      .locator('button[class*="movie_tile__title_button"]')
+      .first()
+      .click();
+    await expect(page.getByRole('dialog').first()).toBeVisible({
+      timeout: 15000,
+    });
+    await expectEntryExists(page);
+
+    await page
+      .getByRole('link', { name: `${CAST_NAME}のプロフィール` })
+      .click();
+    await page.waitForURL(`/person/${PERSON_ID}`);
+
+    await page.goBack();
+
+    await expect(page).toHaveURL(/\/movies\/now-showing/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await waitForFold(page);
+
+    await page.goBack();
+
+    await expect(page).toHaveURL(/\/movies\/upcoming/);
   });
 
   /**
@@ -262,6 +434,8 @@ test.describe('未認証のログイン誘導を閉じたあとの戻る', () =>
 
     const prompt = page.getByRole('dialog').last();
     await expect(prompt).toBeVisible();
+    // 閉じる前に実在を固定する。無いまま進むと waitForFold が素通りする
+    await expectEntryExists(page);
 
     // × や Esc では畳まれるのに「キャンセル」だけ残る、という非対称を潰す
     await prompt.getByRole('button', { name: 'キャンセル' }).click();

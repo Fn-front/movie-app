@@ -39,11 +39,24 @@ export const expectEntryExists = (page: Page) =>
   expect.poll(() => overlayToken(page)).not.toBeNull();
 
 /**
+ * 中央寄せのダイアログで、上端より上は必ずオーバーレイと言える最小の余白（px）。
+ *
+ * これを下回るものは中央寄せではない（画面上端から始まるドロワー等）ので、
+ * 座標クリックの前提が崩れる
+ */
+const MIN_TOP_GAP = 8;
+
+/**
  * ダイアログの外側をクリックして閉じる。
  *
  * コンテンツは中央寄せ（`modal.module.scss` の `top/left: 50%` + translate）なので、
  * **上端より上は必ずオーバーレイ**。`locator.click()` ではコンテンツに
- * 覆われた位置を押しに行くことがあるため、座標で指定する
+ * 覆われた位置を押しに行くことがあるため、座標で指定する。
+ *
+ * ⚠️ 中央寄せでないオーバーレイには使えない。ドロワー
+ * （`mobileDrawer.module.scss` の `top: 0; left: 0; bottom: 0`）は上端が 0 なので、
+ * 上半分を押すとドロワーの中身を押してしまう。**clamp して無理に押さず**、
+ * 前提が崩れていることを失敗として出す
  */
 export const clickOutsideDialog = async (page: Page, dialog: Locator) => {
   const box = await dialog.boundingBox();
@@ -52,5 +65,11 @@ export const clickOutsideDialog = async (page: Page, dialog: Locator) => {
     throw new Error('ダイアログの位置を取得できませんでした');
   }
 
-  await page.mouse.click(box.x + box.width / 2, Math.max(box.y / 2, 2));
+  if (box.y < MIN_TOP_GAP) {
+    throw new Error(
+      `上端の余白が ${box.y}px しかありません。中央寄せでないオーバーレイには clickOutsideDialog を使えません`,
+    );
+  }
+
+  await page.mouse.click(box.x + box.width / 2, box.y / 2);
 };

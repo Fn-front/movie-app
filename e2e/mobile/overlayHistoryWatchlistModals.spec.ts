@@ -29,9 +29,15 @@ import {
   cleanupFavoritesForUser,
   cleanupWatchlistForUser,
 } from '../helpers/api';
-import { movieTiles } from '../helpers/locators';
 import { expectEntryExists, waitForFold } from '../helpers/overlayHistory';
 import { runScopedEmail } from '../helpers/runScope';
+import {
+  addMovieToWatchlist,
+  cleanupModal,
+  markWatched,
+  ratingModal,
+  registerFavoriteFromRatingModal,
+} from '../helpers/watchlistFlows';
 import { waitForWriteResponse } from '../helpers/writeResponse';
 
 test.describe.configure({ mode: 'serial', timeout: 120000 });
@@ -47,76 +53,32 @@ const SP_VIEWPORT = { width: 375, height: 812 } as const;
 /** 「戻る1回で出られること」を見るための1つ前のページ */
 const PREVIOUS_PAGE = '/movies/upcoming';
 
-/** 評価モーダル。登録前は「追加」、登録後は「編集」になる */
-const ratingModal = (page: Page) =>
-  page.getByRole('dialog', { name: /お気に入り(に追加|を編集)/ });
-
-/** 視聴済みの一括削除モーダル */
-const cleanupModal = (page: Page) =>
-  page.getByRole('dialog', { name: '視聴済みをまとめて削除' });
-
 /**
  * 1つ前のページを積んでから対象ページを開く。
  *
  * 前準備でオーバーレイを開け閉てしていても、ここで積み直すので
- * 「戻る1回で `PREVIOUS_PAGE` へ出る」が前準備の履歴に影響されない
+ * 「戻る1回で `PREVIOUS_PAGE` へ出る」が前準備の履歴に影響されない。
+ *
+ * ⚠️ `page.goto` は**同一 URL だと push ではなく replace** になる。
+ * 既に `PREVIOUS_PAGE` にいると1つ前が積まれず、各テストの最後の
+ * `goBack()` が別のエントリへ着いてしまうので、前提として弾く
  */
 async function openWithPreviousPage(page: Page, path: string): Promise<void> {
+  expect(
+    new URL(page.url()).pathname,
+    `${PREVIOUS_PAGE} にいる状態では1つ前を積めません`,
+  ).not.toBe(PREVIOUS_PAGE);
+
   await page.goto(PREVIOUS_PAGE);
   await page.goto(path);
 }
 
-/** 映画をウォッチリストに追加する（前準備用） */
-async function addMovieToWatchlist(page: Page): Promise<void> {
-  await page.goto('/movies/now-showing');
-  await movieTiles(page).first().waitFor({ timeout: 30000 });
-
-  const firstTile = movieTiles(page).first();
-  const addButton = firstTile.getByRole('button', {
-    name: 'ウォッチリストに追加',
-  });
-  const removeButton = firstTile.getByRole('button', {
-    name: 'ウォッチリストから削除',
-  });
-
-  await expect(addButton.or(removeButton)).toBeVisible({ timeout: 10000 });
-
-  if (await addButton.isVisible().catch(() => false)) {
-    const added = waitForWriteResponse(page, {
-      urlPart: '/api/watchlist',
-      methods: ['POST'],
-      label: 'ウォッチリスト追加',
-    });
-    await addButton.click();
-    await added;
-    await expect(removeButton).toBeVisible({ timeout: 10000 });
-  }
-}
-
 /**
- * ウォッチリストの作品を視聴済みにする。
+ * 視聴済みの作品が1件だけある状態にする（評価モーダルは閉じた状態）
  *
- * 視聴済みにすると評価モーダルが自動で開くので、開いたところで返す。
- * 閉じ方はテストごとに変わる
+ * 前準備で開いたモーダルの畳みは**非同期**なので、終わるまで待ってから返す。
+ * 待たずに次の `goto` を出すと、畳みが途中のまま履歴が動いて偽の失敗になる
  */
-async function markWatched(page: Page): Promise<void> {
-  const watchButton = page
-    .getByRole('button', { name: /を視聴済みにする$/ })
-    .first();
-  await expect(watchButton).toBeVisible({ timeout: 30000 });
-
-  const patched = waitForWriteResponse(page, {
-    urlPart: '/api/watchlist/',
-    methods: ['PATCH'],
-    label: '視聴済みの切り替え',
-  });
-  await watchButton.click();
-  await patched;
-
-  await expect(ratingModal(page)).toBeVisible({ timeout: 15000 });
-}
-
-/** 視聴済みの作品が1件だけある状態にする（評価モーダルは閉じた状態） */
 async function prepareWatchedMovie(session: DedicatedSession): Promise<void> {
   const { page } = session;
 
@@ -128,6 +90,7 @@ async function prepareWatchedMovie(session: DedicatedSession): Promise<void> {
   await markWatched(page);
   await ratingModal(page).getByRole('button', { name: 'キャンセル' }).click();
   await expect(ratingModal(page)).not.toBeVisible();
+  await waitForFold(page);
 }
 
 test.describe('アプリ側で閉じるオーバーレイの戻る', () => {
@@ -158,15 +121,7 @@ test.describe('アプリ側で閉じるオーバーレイの戻る', () => {
     // 閉じる前に実在を固定する。無いまま進むと waitForFold が素通りする
     await expectEntryExists(page);
 
-    await modal.getByRole('radio', { name: '8点' }).click();
-    const registered = waitForWriteResponse(page, {
-      urlPart: '/api/favorites',
-      methods: ['POST'],
-      label: 'お気に入り登録',
-    });
-    await modal.getByRole('button', { name: '登録' }).click();
-    await registered;
-
+    await registerFavoriteFromRatingModal(page);
     await expect(modal).not.toBeVisible();
     await waitForFold(page);
 
@@ -184,15 +139,8 @@ test.describe('アプリ側で閉じるオーバーレイの戻る', () => {
     // 削除ボタンは登録済み（編集モード）のときだけ出る
     await page.goto('/watchlist');
     await markWatched(page);
-    await ratingModal(page).getByRole('radio', { name: '8点' }).click();
-    const registered = waitForWriteResponse(page, {
-      urlPart: '/api/favorites',
-      methods: ['POST'],
-      label: 'お気に入り登録',
-    });
-    await ratingModal(page).getByRole('button', { name: '登録' }).click();
-    await registered;
-    await expect(ratingModal(page)).not.toBeVisible();
+    await registerFavoriteFromRatingModal(page);
+    await waitForFold(page);
 
     await openWithPreviousPage(page, '/favorites');
 

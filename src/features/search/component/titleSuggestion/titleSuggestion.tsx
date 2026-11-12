@@ -9,7 +9,7 @@ import { memo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Loading } from '@/components/ui/loading/loading';
-import { TITLE_SUGGESTION_MESSAGES } from '@/constants';
+import { ROUTES, TITLE_SUGGESTION_MESSAGES } from '@/constants';
 import { writeStoredSuggestion } from '@/features/search/utils/storedSuggestion';
 
 import styles from './titleSuggestion.module.scss';
@@ -37,7 +37,7 @@ export const TitleSuggestion = memo<TitleSuggestionProps>(
         // 検索したときも「提案クリック由来」と誤判定され、AI提案が無効化された
         // まま無関係な候補が表示され続ける（#824）
         writeStoredSuggestion({ query: title, suggestions });
-        router.push(`/search?query=${encodeURIComponent(title)}`);
+        router.push(`${ROUTES.SEARCH}?query=${encodeURIComponent(title)}`);
       },
       [router, suggestions],
     );

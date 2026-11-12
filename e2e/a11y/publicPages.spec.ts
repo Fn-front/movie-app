@@ -4,9 +4,39 @@
  * ライト／ダーク両テーマで axe-core を実行し、違反ゼロを維持する。
  */
 
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-import { THEMES, gotoWithTheme, expectNoA11yViolations } from './helpers';
+import { ARIA_LABELS } from '@/constants';
+
+import {
+  THEMES,
+  gotoWithTheme,
+  expectNoA11yViolations,
+  type AllowedIncomplete,
+} from './helpers';
+
+/**
+ * ホームで許容する incomplete
+ *
+ * 横スクロールのカルーセルには、表示幅の右端で切れるカードが必ず1枚できる
+ * （カード幅196pxに対し表示幅は1002px＝5.11枚分で、割り切れない）。
+ * その切れたカードのタイトルが2行に折り返すと、axe は要素がクリップ境界を
+ * またぐために背景色を決定できず color-contrast を incomplete に回す。
+ * コントラスト自体は正常で、スクロールして全体が見える位置に来ると消える。
+ * 右端にどの作品が来るかは TMDb のデータ次第なので、日によって出たり消えたりする。
+ *
+ * messageKey と対象セレクタの両方で絞っているため、カルーセル外（画像の上の
+ * 文字など）の「背景色を決定できない」は従来どおり落ちる。
+ *
+ * SP 幅のケースでも同じカルーセルを見るため、定数として共有する。
+ */
+const HOME_ALLOWED_INCOMPLETE: readonly AllowedIncomplete[] = [
+  {
+    id: 'color-contrast',
+    messageKey: 'elmPartiallyObscuring',
+    targetIncludes: 'movie_list__item',
+  },
+];
 
 /**
  * 未認証でも表示できるページ
@@ -18,22 +48,7 @@ const PUBLIC_PAGES = [
   {
     name: 'ホーム',
     path: '/',
-    // 横スクロールのカルーセルには、表示幅の右端で切れるカードが必ず1枚できる
-    // （カード幅196pxに対し表示幅は1002px＝5.11枚分で、割り切れない）。
-    // その切れたカードのタイトルが2行に折り返すと、axe は要素がクリップ境界を
-    // またぐために背景色を決定できず color-contrast を incomplete に回す。
-    // コントラスト自体は正常で、スクロールして全体が見える位置に来ると消える。
-    // 右端にどの作品が来るかは TMDb のデータ次第なので、日によって出たり消えたりする。
-    //
-    // messageKey と対象セレクタの両方で絞っているため、カルーセル外（画像の上の
-    // 文字など）の「背景色を決定できない」は従来どおり落ちる。
-    allowedIncomplete: [
-      {
-        id: 'color-contrast',
-        messageKey: 'elmPartiallyObscuring',
-        targetIncludes: 'movie_list__item',
-      },
-    ],
+    allowedIncomplete: HOME_ALLOWED_INCOMPLETE,
   },
   { name: '公開中', path: '/movies/now-showing' },
   { name: '公開予定', path: '/movies/upcoming' },
@@ -94,5 +109,40 @@ test.describe('アクセシビリティ（未認証ページ）', () => {
     await gotoWithTheme(page, '/movies/now-showing', 'dark');
 
     await expectNoA11yViolations(page, '公開中の映画（リスト表示） / dark');
+  });
+
+  /**
+   * SP 幅（#1028）
+   *
+   * 上のケースはすべて `playwright.config.ts` の Desktop Chrome（1280×720）で
+   * 走るため、**SP でしか描かれない要素が axe を一度も通らない**。
+   * ボトムナビ（lg 以上は `display: none`）とヘッダーの検索トグルがこれに当たる。
+   * 幅を変えると DOM ではなく CSS の都合で検査対象が変わる点が、上の
+   * 「リスト表示」を別に回しているのと同じ理由。
+   *
+   * 未認証なのでボトムナビは2件。認証済みの4件も同じマークアップなので、
+   * ログインを挟むコストに見合う差は無いと判断した。
+   */
+  test.describe('SP 幅', () => {
+    test.use({ viewport: { width: 375, height: 812 } });
+
+    for (const theme of THEMES) {
+      test(`ホーム（SP） - ${theme}`, async ({ page }) => {
+        await gotoWithTheme(page, '/', theme);
+
+        // ボトムナビが描かれてから検査する（lg だと display: none で
+        // 検査対象に入らないため、ここが空振りすると意味が無い）
+        await expect(
+          page.getByRole('navigation', { name: ARIA_LABELS.PRIMARY_NAV }),
+        ).toBeVisible();
+
+        await expectNoA11yViolations(
+          page,
+          `ホーム（SP） / ${theme}`,
+          [],
+          HOME_ALLOWED_INCOMPLETE,
+        );
+      });
+    }
   });
 });

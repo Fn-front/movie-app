@@ -8,7 +8,7 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-import { QUERY_PARAMS } from '@/constants';
+import { QUERY_PARAMS, ROUTES } from '@/constants';
 
 /**
  * フィルターオプションの型
@@ -141,7 +141,7 @@ export function useMovieFilter(): UseMovieFilterReturn {
   const handleFilterChange = useCallback(
     (filters: FilterOptions) => {
       const params = buildSearchParamsFromFilters(searchParams, filters);
-      router.replace(`/search?${params.toString()}`);
+      router.replace(`${ROUTES.SEARCH}?${params.toString()}`);
     },
     [searchParams, router],
   );
@@ -152,7 +152,7 @@ export function useMovieFilter(): UseMovieFilterReturn {
     params.delete(QUERY_PARAMS.YEAR);
     params.delete(QUERY_PARAMS.VOTE_AVERAGE_GTE);
     params.delete(QUERY_PARAMS.PAGE);
-    router.replace(`/search?${params.toString()}`);
+    router.replace(`${ROUTES.SEARCH}?${params.toString()}`);
   }, [searchParams, router]);
 
   return useMemo(

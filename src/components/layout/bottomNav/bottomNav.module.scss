@@ -1,0 +1,108 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+// ボトムナビゲーション（SP 専用。#1028）
+//
+// 同意バナーと同じ position: fixed の帯。バナーが出ているときは
+// `--cookie-banner-height` のぶん持ち上げてバナーの**上**へ積む
+// （バナーが無ければ 0px で画面下端）。
+//
+// z-index はヘッダー・同意バナーと同値（$z-index-fixed = 1030）。
+// モーダル／ドロワー（1050）・トースト（1080）より下なので、
+// それらの表示中にナビが前へ出ることはない。
+//
+// ⚠️ **同意バナーと同値なのは意図的**。同値だと勝敗は DOM 順で決まり、
+// バナー（`layout.tsx` で本文の後ろに置く）が必ず勝つ。重ならないのは
+// 上の `bottom` オフセット頼みなので、**オフセットが1pxでもずれると
+// 「少し重なる」ではなくナビが丸ごと隠れて押せなくなる**（RO が高さを
+// 書く前の1フレームが実際にその状態になる）。それでもバナーを上に
+// 置いているのは、同意／非同意の意思表示をナビより優先させるため。
+// ナビを前に出したくなったら、先に同意ボタンが隠れないことを確かめること。
+// 重ならないことは `e2e/cookieConsent/bottomNavOverlap.spec.ts` が
+// 実バナーの出た状態で見ている。
+.c_bottom_nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--cookie-banner-height, 0px);
+  z-index: $z-index-fixed;
+  background-color: $background-paper;
+  border-top: $border-width-1 solid $border-color;
+  // iOS のホームインジケータにタップ領域を潰されないよう下端を空ける。
+  // この余白も込みの高さが --bottom-nav-height に出る
+  padding-bottom: env(safe-area-inset-bottom);
+
+  // lg 以上はサイドバーのナビで足りるので出さない。
+  // display: none になると ResizeObserver が 0×0 を報告し、
+  // --bottom-nav-height も 0px に戻るため本文に余計な padding は残らない
+  // （`useBottomNavHeight.ts`）
+  @include lg {
+    display: none;
+  }
+
+  &__list {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  // 等幅に割る。4件なら 375px で 93.75px、未認証の2件なら 187.5px。
+  // どちらも #1017 の基準（44×44）を大きく上回る
+  &__item {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  &__link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: $spacing-1;
+    // タップ領域の高さ。幅は &__item の等幅が担保する
+    height: 5.6rem;
+    // 左右の padding は置かない。375px の4分割は1件 93.75px あるが、
+    // 「ウォッチリスト」は 12px × 7文字 = 84px で余白は 9.75px しかなく、
+    // 4px ずつ削ると 360px 幅（1件 90px）で入らなくなる
+    padding: 0;
+    color: $text-secondary;
+    text-decoration: none;
+    transition: $transition-color;
+
+    &:hover {
+      color: $text-primary;
+    }
+
+    // 枠の外に出すと帯に隠れるため内側に描く
+    &:focus-visible {
+      outline: $border-width-2 solid $primary-500;
+      outline-offset: -2px;
+    }
+
+    // 現在地。固定の淡青＋青文字はダークで明ブロック化するため、
+    // ドロワーと同じテーマ追従の青ティントにする
+    &--active {
+      color: $text-primary;
+      font-weight: $font-weight-bold;
+      background-color: color-alpha(--primary-500, 15%);
+    }
+  }
+
+  // インラインの行ボックスぶん高さがずれないよう flex にする
+  &__icon {
+    display: flex;
+  }
+
+  // 本文と同じ 12px。検索をヘッダーの検索トグルに任せて4件にしたことで、
+  // 1件 93.75px（375px 幅）になり「ウォッチリスト」の7文字が収まるようになった。
+  // 10px まで落とすと #1018（スマホで 10px の文字が読みにくい）と逆を向く。
+  // 320px では 1件 80px で収まらないので、省略も効かせておく
+  &__label {
+    max-width: 100%;
+    font-size: $font-size-xs;
+    line-height: $line-height-tight;
+
+    @include text-truncate;
+  }
+}

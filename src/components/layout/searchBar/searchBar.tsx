@@ -19,7 +19,7 @@ import { useRouter } from 'next/navigation';
 import { IoSearchOutline, IoCloseOutline } from 'react-icons/io5';
 
 import { Loading } from '@/components/ui/loading/loading';
-import { ICON_SIZES, ARIA_LABELS } from '@/constants';
+import { ICON_SIZES, ARIA_LABELS, ROUTES } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './searchBar.module.scss';
@@ -77,7 +77,7 @@ export const SearchBar = memo<SearchBarProps>(function SearchBar({
       const trimmed = query.trim();
       if (!trimmed) return;
       startTransition(() => {
-        router.push(`/search?query=${encodeURIComponent(trimmed)}`);
+        router.push(`${ROUTES.SEARCH}?query=${encodeURIComponent(trimmed)}`);
       });
       setIsExpanded(false);
     },

@@ -47,6 +47,48 @@ export const expectEntryExists = (page: Page) =>
 const MIN_TOP_GAP = 8;
 
 /**
+ * ダイアログの寸法が落ち着くまで待ってから位置を返す。
+ *
+ * 中身を非同期に足すダイアログ（フィルターのジャンル一覧など）は、開いた直後は
+ * まだ伸びている。中央寄せなので**伸びると上端が上へ動く**ため、先に測った
+ * 「上端より上」の座標が、押す頃にはコンテンツの内側になっている。
+ * そこを押すとダイアログの中を押すことになり、当然閉じない。
+ *
+ * もともと潜在していたレースで、`/movies/now-showing` のフィルターが
+ * ジャンル取得を待つあいだに開くため表面化しやすい。ボトムナビ（#1028）が
+ * 各ページで3〜5本の RSC プリフェッチを足したことで取得が後ろへずれ、
+ * **毎回負けるようになった**（実測: 5回中5回失敗 → この待機で 5/5 成功）。
+ *
+ * 連続2回**同じ**矩形を読めたら落ち着いたとみなす。`expect.poll` の間隔は
+ * 100ms 以上空くので、開くアニメーション（200ms）も自然に待てる
+ */
+const waitForStableBox = async (dialog: Locator) => {
+  let previousKey = '';
+
+  await expect
+    .poll(
+      async () => {
+        const box = await dialog.boundingBox();
+        if (box === null) {
+          previousKey = '';
+          return false;
+        }
+
+        const key = [box.x, box.y, box.width, box.height]
+          .map((value) => Math.round(value))
+          .join(',');
+        const isStable = key === previousKey;
+        previousKey = key;
+        return isStable;
+      },
+      { message: 'ダイアログの寸法が落ち着きませんでした' },
+    )
+    .toBe(true);
+
+  return dialog.boundingBox();
+};
+
+/**
  * ダイアログの外側をクリックして閉じる。
  *
  * コンテンツは中央寄せ（`modal.module.scss` の `top/left: 50%` + translate）なので、
@@ -59,7 +101,8 @@ const MIN_TOP_GAP = 8;
  * 前提が崩れていることを失敗として出す
  */
 export const clickOutsideDialog = async (page: Page, dialog: Locator) => {
-  const box = await dialog.boundingBox();
+  // 伸びている途中を測ると、押す頃には上端が座標より上へ来ている
+  const box = await waitForStableBox(dialog);
 
   if (!box) {
     throw new Error('ダイアログの位置を取得できませんでした');

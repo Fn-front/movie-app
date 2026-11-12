@@ -21,6 +21,7 @@ import {
   FILTER_LABELS,
   WATCH_PROVIDERS,
   QUERY_PARAMS,
+  ROUTES,
   type WatchProviderOfferType,
 } from '@/constants';
 import { RELEASE_TYPE, type RegionGroupKey } from '@/constants/movies';
@@ -201,8 +202,8 @@ const FilterModalContent = memo<{
 
   // 検索は公開年だけでも成立する（`hasSearchCriteria` に year が入っており、
   // キーワード未入力でも検索が走る）。既定を今年にしておけば開いた直後から
-  // 結果が出る。`/search` は searchBar / titleSuggestion と同じくリテラル
-  const pastMoviesSearchHref = `/search?${QUERY_PARAMS.YEAR}=${new Date().getFullYear()}`;
+  // 結果が出る
+  const pastMoviesSearchHref = `${ROUTES.SEARCH}?${QUERY_PARAMS.YEAR}=${new Date().getFullYear()}`;
 
   // 開始日と終了日を相互に連動させる。gte > lte をピッカーの時点で防ぐ
   const gteMax = useMemo(() => {

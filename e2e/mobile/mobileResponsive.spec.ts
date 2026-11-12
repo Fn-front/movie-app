@@ -153,4 +153,29 @@ test.describe('最狭幅での表示', () => {
     expect(box).not.toBeNull();
     expect(box!.x + box!.width).toBeLessThanOrEqual(NARROW_VIEWPORT_WIDTH);
   });
+
+  /**
+   * ボトムナビ（#1028）は4件を等幅で割るため、幅がいちばん厳しいのがここ。
+   * 320px では1件 80px しかなく「ウォッチリスト」（12px × 7文字 = 84px）が
+   * 入らないので省略記号に落ちる。**それ自体は許容**だが、省略が効かずに
+   * 横へ溢れると画面全体がスクロールしてレイアウトが崩れる。
+   * 実装の詳細（ラベルのフォントサイズ）に寄らない「溢れていないこと」で見る
+   */
+  test('ボトムナビが横に溢れない', async ({ authenticatedPage: page }) => {
+    await page.goto('/');
+
+    const nav = page.getByRole('navigation', { name: ARIA_LABELS.PRIMARY_NAV });
+    await expect(nav).toBeVisible();
+
+    const overflow = await nav.evaluate((el) => ({
+      navScrollWidth: el.scrollWidth,
+      navClientWidth: el.clientWidth,
+      docScrollWidth: document.documentElement.scrollWidth,
+      docClientWidth: document.documentElement.clientWidth,
+    }));
+
+    expect(overflow.navScrollWidth).toBe(overflow.navClientWidth);
+    expect(overflow.docScrollWidth).toBe(overflow.docClientWidth);
+    expect(overflow.docClientWidth).toBe(NARROW_VIEWPORT_WIDTH);
+  });
 });

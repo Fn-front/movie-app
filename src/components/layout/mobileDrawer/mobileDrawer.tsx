@@ -13,12 +13,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
-  IoHomeOutline,
-  IoCalendarOutline,
   IoCalendarNumberOutline,
-  IoPlayCircleOutline,
-  IoHeartOutline,
-  IoBookmarkOutline,
   IoSettingsOutline,
   IoShieldCheckmarkOutline,
   IoLogOutOutline,
@@ -29,6 +24,7 @@ import {
 import {
   ROUTES,
   NAV_ITEMS,
+  NAV_ICON_MAP,
   MENU_LABELS,
   ICON_SIZES,
   IMAGE_SIZES,
@@ -53,13 +49,15 @@ interface MobileNavItem {
 }
 
 /**
- * アイコンマッピング
+ * 行き先からアイコンを描く
+ *
+ * アイコンの対応表は `@/constants` の `NAV_ICON_MAP` が真実源（ボトムナビと
+ * 共有している）。未定義のルート（受賞作品・シアター体験）は null に倒れる
+ * 既知の状態で、#1020 の担当範囲
  */
-const NAV_ICON_MAP: Record<string, React.ReactNode> = {
-  [ROUTES.UPCOMING]: <IoCalendarOutline size={ICON_SIZES.SM} />,
-  [ROUTES.NOW_SHOWING]: <IoPlayCircleOutline size={ICON_SIZES.SM} />,
-  [ROUTES.FAVORITES]: <IoHeartOutline size={ICON_SIZES.SM} />,
-  [ROUTES.WATCHLIST]: <IoBookmarkOutline size={ICON_SIZES.SM} />,
+const renderNavIcon = (href: string): React.ReactNode => {
+  const Icon = NAV_ICON_MAP[href];
+  return Icon ? <Icon size={ICON_SIZES.SM} /> : null;
 };
 
 /**
@@ -69,11 +67,11 @@ const MOBILE_NAV_ITEMS: MobileNavItem[] = [
   {
     label: 'ホーム',
     href: ROUTES.HOME,
-    icon: <IoHomeOutline size={ICON_SIZES.SM} />,
+    icon: renderNavIcon(ROUTES.HOME),
   },
   ...NAV_ITEMS.map((item) => ({
     ...item,
-    icon: NAV_ICON_MAP[item.href] ?? null,
+    icon: renderNavIcon(item.href),
   })),
 ];
 

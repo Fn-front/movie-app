@@ -10,13 +10,23 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { MOVIE_DETAIL_QUERY_PARAM } from '@/constants';
 import { parsePositiveIntId } from '@/lib/routeId';
 
+/**
+ * 「このエントリは自分が積んだ」ことの目印（#1079）
+ *
+ * `history.state` に置く。`useRef` では足りない。ホームは**開く側と
+ * 閉じる側が別インスタンス**（`nowShowingMovieList` / `recommendationSection`
+ * が開き、`homeMovieDetailModal` が閉じる）なので、コンポーネントに
+ * 持たせると共有されない。
+ */
+const MOVIE_DETAIL_STATE_KEY = '__movieDetailQuery';
+
 /** {@link useMovieDetailQuery} の戻り値 */
 export interface UseMovieDetailQueryReturn {
   /** 表示中の映画ID。モーダルを開いていなければ null */
   selectedMovieId: number | null;
   /** モーダルを開く（URLに `movie_id` を足す） */
   openMovieDetail: (movieId: number) => void;
-  /** モーダルを閉じる（1つ前の履歴へ戻る） */
+  /** モーダルを閉じる（自分が積んだエントリなら戻る、そうでなければクエリを落とす） */
   closeMovieDetail: () => void;
 }
 
@@ -27,14 +37,39 @@ export interface UseMovieDetailQueryReturn {
  * **リロードで消え、戻るでも閉じられない**（#1033 以前の挙動）。URL に
  * 置けばリロードで復元でき、戻る／進むがブラウザ標準の挙動になる。
  *
- * - 開く: `push`。`replace` にすると戻るで閉じられなくなる
- * - 閉じる: `back`。`push` した1つ分をちょうど戻す
- *
- * `scroll: false` を付けるのは、クエリが変わるだけで一覧の位置は
- * 変わらないため。既定のままだと先頭へ跳ぶ。
- *
  * ⚠️ 共有するURLはこのクエリ付きURLではなく `/movies/<id>`（全画面ページ）。
  * 共有ボタンは `MovieDetailContent` が持つ。
+ *
+ * ## 開く: `router.push` ではなく `history.pushState`
+ *
+ * **URLと「自分が積んだ」目印を1回の同期的な呼び出しで同時に確定させるため**（#1079）。
+ *
+ * `router.push` だと目印を置けない。Next は push / replace のとき
+ * custom history state を捨てる（`app-router.js` の
+ * `pushRef.preserveCustomHistoryState` が push/replace 時は false）。
+ * push のあとに `replaceState` で書こうとしても、Next の履歴書き込みは
+ * `useInsertionEffect` なので**1つ前のエントリに付く**。
+ *
+ * Next.js 16 は同一ページのクエリ更新に native History API を使うことを
+ * 公式にサポートしており、`usePathname` / `useSearchParams` と同期する。
+ * パッチされた `pushState` が `__NA` と内部ツリーを**現在のエントリから
+ * コピーしてくれる**ので、戻るも通常どおり動く。
+ *
+ * ⚠️ 渡す state に `__NA` を**含めてはいけない**。含めるとパッチが
+ * 「Next 内部からの呼び出し」と判断して早期 return し、**URL が更新されない**
+ * （`app-router.js:289`）。`{...window.history.state, …}` と書かないこと。
+ * `useOverlayHistory` は URL を変えないのでスプレッドしていても問題にならない。
+ *
+ * ## 閉じる: 自分が積んだときだけ `back`
+ *
+ * 常に `back()` にすると、**履歴を1つも持たないタブで
+ * `/watchlist?movie_id=550` に着地した利用者がモーダルから出られない**（#1079）。
+ * `open` は URL から導出しているので、`back()` が no-op なら閉じるボタンも
+ * Esc も背景クリックも効かない（WCAG 2.1.2 キーボードトラップ）。
+ * 外部サイトから来た場合は逆に、閉じるとアプリの外へ出てしまう。
+ *
+ * 目印が無いエントリ（＝自分で開いていない）はクエリだけ `replace` で落とす。
+ * 一覧からタイルを押して開いた場合は従来どおり戻るで閉じられる。
  */
 export function useMovieDetailQuery(): UseMovieDetailQueryReturn {
   const router = useRouter();
@@ -52,14 +87,34 @@ export function useMovieDetailQuery(): UseMovieDetailQueryReturn {
     (movieId: number) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set(MOVIE_DETAIL_QUERY_PARAM, String(movieId));
-      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+
+      window.history.pushState(
+        { [MOVIE_DETAIL_STATE_KEY]: true },
+        '',
+        `${pathname}?${params.toString()}`,
+      );
     },
-    [pathname, router, searchParams],
+    [pathname, searchParams],
   );
 
   const closeMovieDetail = useCallback(() => {
-    router.back();
-  }, [router]);
+    // 自分が積んだエントリなら、push した1つ分をちょうど戻す。
+    // replace で消すと「進む」で開き直せない
+    if (window.history.state?.[MOVIE_DETAIL_STATE_KEY]) {
+      router.back();
+      return;
+    }
+
+    // 直接着地したエントリ。戻る先はアプリの外か、そもそも無い。
+    // クエリだけ落として、履歴はこれ以上増やさない
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete(MOVIE_DETAIL_QUERY_PARAM);
+    const query = params.toString();
+
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
+  }, [pathname, router, searchParams]);
 
   return { selectedMovieId, openMovieDetail, closeMovieDetail };
 }

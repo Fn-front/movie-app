@@ -165,7 +165,11 @@ test.describe('映画詳細のURL化', () => {
 
     await dialog.getByRole('button', { name: /を共有$/ }).click();
 
-    await expect(page.getByText('リンクをコピーしました')).toBeVisible();
+    // Radix のトーストは読み上げ用の複製を同時に出すため2件一致する。
+    // 既存の E2E（recommendationDismiss / changePassword ほか）と同じく first() で絞る
+    await expect(
+      page.getByText('リンクをコピーしました').first(),
+    ).toBeVisible();
 
     const copied = await page.evaluate(
       () => (window as unknown as { __copied?: string }).__copied,

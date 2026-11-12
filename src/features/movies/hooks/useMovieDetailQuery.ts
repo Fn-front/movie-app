@@ -55,10 +55,18 @@ export interface UseMovieDetailQueryReturn {
  * パッチされた `pushState` が `__NA` と内部ツリーを**現在のエントリから
  * コピーしてくれる**ので、戻るも通常どおり動く。
  *
+ * 目印が消えないのは、この後 Next が `HistoryUpdater` の `useInsertionEffect`
+ * で打つ `replaceState` が `{...window.history.state, …}` とスプレッドするから。
+ * その経路は `preserveCustomHistoryState` が `true` のとき（traverse と初回描画）
+ * を通るので、**リロードして開き直しても目印は生き残る**。
+ *
  * ⚠️ 渡す state に `__NA` を**含めてはいけない**。含めるとパッチが
- * 「Next 内部からの呼び出し」と判断して早期 return し、**URL が更新されない**
- * （`app-router.js:289`）。`{...window.history.state, …}` と書かないこと。
- * `useOverlayHistory` は URL を変えないのでスプレッドしていても問題にならない。
+ * 「Next 内部からの呼び出し」と判断して早期 return する（`app-router.js:289`）。
+ * `originalPushState` は呼ばれるのでアドレスバーの URL は変わるが、
+ * **`applyUrlFromHistoryPushReplace` が走らずルーターが追従しない**ため
+ * `useSearchParams` が古いままになり、モーダルが開かない。
+ * `{...window.history.state, …}` と書かないこと。`useOverlayHistory` は
+ * URL を変えないのでスプレッドしていても問題にならない。
  *
  * ## 閉じる: 自分が積んだときだけ `back`
  *
@@ -85,6 +93,13 @@ export function useMovieDetailQuery(): UseMovieDetailQueryReturn {
 
   const openMovieDetail = useCallback(
     (movieId: number) => {
+      // 同じ作品をもう一度開いても積まない。`router.push` は同一URLのとき
+      // replace に倒していたが（`app-router.js:103-110`）、素の pushState には
+      // その判定が無いので、同じエントリが2つ並んで戻るが空振りする
+      if (searchParams.get(MOVIE_DETAIL_QUERY_PARAM) === String(movieId)) {
+        return;
+      }
+
       const params = new URLSearchParams(searchParams.toString());
       params.set(MOVIE_DETAIL_QUERY_PARAM, String(movieId));
 

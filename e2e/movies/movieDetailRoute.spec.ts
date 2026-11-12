@@ -66,7 +66,7 @@ test.describe('映画詳細のURL化', () => {
     // 一覧は残っている（Radix が背景を aria-hidden にするので CSS で見る）
     await expect(page.locator('h1')).toHaveText('公開中の映画');
 
-    // 増えてよいのは router.push の1つだけ。`Modal` が `useOverlayHistory` で
+    // 増えてよいのは history.pushState の1つだけ。`Modal` が `useOverlayHistory` で
     // 自前のエントリも積むと2つ伸びる。戻る／進む／× の見え方は二重でも
     // 正しいままなので、ここで数えないと気づけない（#1033）
     await expect
@@ -106,6 +106,37 @@ test.describe('映画詳細のURL化', () => {
 
     await expect(page).toHaveURL(/\/movies\/now-showing$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await page.goForward();
+
+    await expect(page).toHaveURL(MODAL_URL);
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
+  });
+
+  /**
+   * 自分で開いた場合は × も `back` で閉じる（#1079）
+   *
+   * 閉じ方が2通りに分かれたので、`back` 側が生きていることを実ブラウザで見る。
+   * **決め手は `goForward`。** 目印が読めずに `replace` へ落ちると
+   * モーダルは同じように閉じるが、履歴が消えて「進む」が空振りする。
+   * URL と見た目だけでは区別できないので、ここを見ないと
+   * サイレントに劣化する
+   */
+  test('一覧から開いたモーダルは × で閉じても進むで開き直せる', async ({
+    page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    const hasTile = await waitForList(page);
+    test.skip(!hasTile, '映画データが無いためスキップ');
+
+    await movieTileDetailLinks(page).first().click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 15000 });
+
+    await dialog.getByRole('button', { name: '閉じる' }).click();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/movies\/now-showing$/);
 
     await page.goForward();
 
@@ -390,7 +421,7 @@ test.describe('映画詳細のURL化', () => {
       // 詳細はまだ開いている
       await expect(page).toHaveURL(/movie_id=/);
 
-      await dialog.getByRole('button', { name: '閉じる' }).first().click();
+      await dialog.getByRole('button', { name: '閉じる' }).click();
 
       await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(page).toHaveURL(/\/movies\/now-showing$/);

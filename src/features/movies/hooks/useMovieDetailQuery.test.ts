@@ -26,14 +26,27 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(mockSearch),
 }));
 
+/**
+ * Next が書いたエントリの形
+ *
+ * ⚠️ **空オブジェクトで代用してはいけない。** `{}` だと禁じ手の
+ * `{...window.history.state, [KEY]: true}` でも結果が同じになり、
+ * 「`__NA` を混ぜていないこと」のテストが素通りする。
+ * jsdom には Next のパッチが無いので、ここで現実の形を与えるしかない。
+ */
+const NEXT_ENTRY = {
+  __NA: true,
+  __PRIVATE_NEXTJS_INTERNALS_TREE: { tree: [], renderedSearch: null },
+};
+
 /** 自分が積んだエントリ（目印あり）に見立てる */
 const pushedByUs = () => {
-  window.history.replaceState({ __movieDetailQuery: true }, '');
+  window.history.replaceState({ ...NEXT_ENTRY, __movieDetailQuery: true }, '');
 };
 
 /** 直接着地したエントリ（目印なし）に見立てる */
 const landedDirectly = () => {
-  window.history.replaceState({}, '');
+  window.history.replaceState({ ...NEXT_ENTRY }, '');
 };
 
 describe('useMovieDetailQuery', () => {
@@ -121,6 +134,22 @@ describe('useMovieDetailQuery', () => {
       act(() => result.current.openMovieDetail(680));
 
       expect(window.location.search).toBe('?movie_id=680');
+    });
+
+    /**
+     * `router.push` は同一URLを replace に倒していた（`app-router.js:103-110`）。
+     * 素の `pushState` にその判定は無いので、同じエントリが2つ並び
+     * **× を1回押しても閉じない**（back が同じ `movie_id` に着地する）
+     */
+    it('開いている作品をもう一度開いても履歴を積まない', () => {
+      mockSearch = 'movie_id=550';
+      const before = window.history.length;
+
+      const { result } = renderHook(() => useMovieDetailQuery());
+
+      act(() => result.current.openMovieDetail(550));
+
+      expect(window.history.length).toBe(before);
     });
   });
 

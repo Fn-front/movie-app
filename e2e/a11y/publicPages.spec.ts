@@ -12,6 +12,7 @@ import {
   THEMES,
   gotoWithTheme,
   expectNoA11yViolations,
+  waitForMovieTiles,
   type AllowedIncomplete,
 } from './helpers';
 
@@ -60,8 +61,10 @@ const PUBLIC_PAGES = [
     // 飛びも逆転も無い。直前の見出しを特定できないという axe 側の制約。
     allowedIncomplete: ['heading-order'],
   },
-  { name: '検索（結果あり）', path: '/search?q=inception' },
-  { name: '検索（0件）', path: '/search?q=zzzzzzqqqq' },
+  // ⚠️ クエリパラメータは `query`。`q` だと検索語なしと同じ扱いになり、
+  //    「結果あり」のつもりで0件画面を検査することになる（#1073）
+  { name: '検索（結果あり）', path: '/search?query=inception' },
+  { name: '検索（0件）', path: '/search?query=zzzzzzqqqq' },
   { name: '検索（クエリなし）', path: '/search' },
   { name: 'ログイン', path: '/auth/signin' },
   { name: '新規登録', path: '/auth/signup' },
@@ -101,12 +104,16 @@ test.describe('アクセシビリティ（未認証ページ）', () => {
    *
    * 表示モードは localStorage に持つため、未設定だと axe は常にグリッドだけを
    * 検査する。リストは DOM の並びも操作ボタンの位置も変わるので別に回す。
+   *
+   * ⚠️ タイルの描画を待つこと。待たないとスケルトンを検査して緑になり、
+   * 速いときは素通り・遅いときは赤という実行環境依存のテストになる（#1071）
    */
   test('公開中の映画（リスト表示） - dark', async ({ page }) => {
     await page.addInitScript(() => {
       window.localStorage.setItem('movie-app:movie-view-mode', 'list');
     });
     await gotoWithTheme(page, '/movies/now-showing', 'dark');
+    await waitForMovieTiles(page);
 
     await expectNoA11yViolations(page, '公開中の映画（リスト表示） / dark');
   });

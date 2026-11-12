@@ -31,6 +31,19 @@ const USER = {
   password: 'WatchlistCleanupE2e1',
 } as const;
 
+/**
+ * 未視聴の作品に出ている視聴済みトグル。
+ *
+ * ラベルは状態で変えない（`aria-pressed` だけが状態を表す／#1046）ため、
+ * 「まだ視聴済みにしていない行」は `pressed: false` で絞る
+ */
+function unwatchedToggles(page: Page) {
+  return page.getByRole('button', {
+    name: /を視聴済みにする$/,
+    pressed: false,
+  });
+}
+
 /** 映画をウォッチリストに追加する（前準備用） */
 async function addMovieToWatchlist(page: Page) {
   await page.goto('/movies/now-showing');
@@ -80,9 +93,7 @@ test.describe('視聴済みの一括削除', () => {
 
     // 視聴済みにする
     await page.goto('/watchlist');
-    const watchButton = page
-      .getByRole('button', { name: /を視聴済みにする$/ })
-      .first();
+    const watchButton = unwatchedToggles(page).first();
     await expect(watchButton).toBeVisible({ timeout: 30000 });
 
     const patchResponse = waitForWriteResponse(page, {
@@ -164,9 +175,7 @@ test.describe('視聴済みの一括削除', () => {
     // 視聴済みにすると評価モーダルが開くので、そこでお気に入りに登録する。
     // 削除対象を「ウォッチリストにもお気に入りにも入っている状態」にする
     await page.goto('/watchlist');
-    const watchButton = page
-      .getByRole('button', { name: /を視聴済みにする$/ })
-      .first();
+    const watchButton = unwatchedToggles(page).first();
     await expect(watchButton).toBeVisible({ timeout: 30000 });
 
     const watchLabel = await watchButton.getAttribute('aria-label');
@@ -234,9 +243,7 @@ test.describe('視聴済みの一括削除', () => {
 
     // 視聴済みにして、評価モーダルは登録せずに閉じる＝お気に入り未登録のまま
     await page.goto('/watchlist');
-    const watchButton = page
-      .getByRole('button', { name: /を視聴済みにする$/ })
-      .first();
+    const watchButton = unwatchedToggles(page).first();
     await expect(watchButton).toBeVisible({ timeout: 30000 });
 
     const patchResponse = waitForWriteResponse(page, {

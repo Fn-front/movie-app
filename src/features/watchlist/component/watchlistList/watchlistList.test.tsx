@@ -147,6 +147,22 @@ describe('WatchlistList', () => {
   });
 
   describe('視聴済み', () => {
+    /**
+     * 視聴済みトグル。
+     * ラベルは状態非依存なので、視聴済み／未視聴は `pressed` で絞る（#1046）
+     */
+    const watchedToggle = (options?: { pressed?: boolean }) =>
+      screen.getByRole('button', {
+        name: '映画0を視聴済みにする',
+        ...options,
+      });
+
+    const watchedItems = () =>
+      createMockItems(1).map((item) => ({
+        ...item,
+        watched_at: '2026-03-01T00:00:00Z',
+      }));
+
     it('onWatchedToggleが渡された場合、視聴済みボタンが表示される', () => {
       render(
         <WatchlistList
@@ -156,9 +172,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      expect(
-        screen.getByRole('button', { name: '映画0を視聴済みにする' }),
-      ).toBeInTheDocument();
+      expect(watchedToggle({ pressed: false })).toBeInTheDocument();
     });
 
     it('onWatchedToggleが無い場合は視聴済みボタンを出さない', () => {
@@ -183,9 +197,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      await user.click(
-        screen.getByRole('button', { name: '映画0を視聴済みにする' }),
-      );
+      await user.click(watchedToggle({ pressed: false }));
 
       expect(handleWatchedToggle).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'wl-0' }),
@@ -193,45 +205,63 @@ describe('WatchlistList', () => {
       );
     });
 
-    it('視聴済みのアイテムはバッジと解除ボタンになる', () => {
-      const items = createMockItems(1).map((item) => ({
-        ...item,
-        watched_at: '2026-03-01T00:00:00Z',
-      }));
-
+    it('視聴済みのアイテムはバッジが出てトグルが押下状態になる', () => {
       render(
         <WatchlistList
-          watchlist={items}
+          watchlist={watchedItems()}
           isLoading={false}
           onWatchedToggle={jest.fn()}
         />,
       );
 
       expect(screen.getByText('視聴済み')).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: '映画0を未視聴に戻す' }),
-      ).toBeInTheDocument();
+      expect(watchedToggle({ pressed: true })).toBeInTheDocument();
+    });
+
+    /**
+     * ラベルを状態で入れ替えると `aria-pressed` と意味が衝突し、
+     * 視聴済みの行が「○○を未視聴に戻す、オン」と読まれて未視聴に見える（#1046）。
+     * 状態は `aria-pressed` だけで伝える
+     */
+    it('ラベルは状態によらず変わらない', () => {
+      const { rerender } = render(
+        <WatchlistList
+          watchlist={createMockItems(1)}
+          isLoading={false}
+          onWatchedToggle={jest.fn()}
+        />,
+      );
+
+      expect(watchedToggle({ pressed: false })).toHaveAccessibleName(
+        '映画0を視聴済みにする',
+      );
+
+      rerender(
+        <WatchlistList
+          watchlist={watchedItems()}
+          isLoading={false}
+          onWatchedToggle={jest.fn()}
+        />,
+      );
+
+      expect(watchedToggle({ pressed: true })).toHaveAccessibleName(
+        '映画0を視聴済みにする',
+      );
     });
 
     it('視聴済みのアイテムをクリックすると解除として渡す', async () => {
       const user = userEvent.setup();
       const handleWatchedToggle = jest.fn();
-      const items = createMockItems(1).map((item) => ({
-        ...item,
-        watched_at: '2026-03-01T00:00:00Z',
-      }));
 
       render(
         <WatchlistList
-          watchlist={items}
+          watchlist={watchedItems()}
           isLoading={false}
           onWatchedToggle={handleWatchedToggle}
         />,
       );
 
-      await user.click(
-        screen.getByRole('button', { name: '映画0を未視聴に戻す' }),
-      );
+      await user.click(watchedToggle({ pressed: true }));
 
       expect(handleWatchedToggle).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'wl-0' }),
@@ -264,9 +294,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      await user.click(
-        screen.getByRole('button', { name: '映画0を視聴済みにする' }),
-      );
+      await user.click(watchedToggle({ pressed: false }));
 
       expect(handleClick).not.toHaveBeenCalled();
     });
@@ -285,7 +313,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      screen.getByRole('button', { name: '映画0を視聴済みにする' }).focus();
+      watchedToggle({ pressed: false }).focus();
       await user.keyboard('{Enter}');
 
       // keydown で preventDefault するため、クリックとの二重発火にならない
@@ -327,9 +355,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      expect(
-        screen.getByRole('button', { name: '映画0を視聴済みにする' }),
-      ).toBeDisabled();
+      expect(watchedToggle({ pressed: false })).toBeDisabled();
     });
   });
 

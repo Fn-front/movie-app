@@ -109,11 +109,19 @@ function favoriteRatingModal(page: Page) {
   return page.getByRole('dialog', { name: /お気に入り(に追加|を編集)/ });
 }
 
+/**
+ * 視聴済みトグル。
+ *
+ * ラベルは状態で変えない（`aria-pressed` だけが状態を表す／#1046）。
+ * 未視聴の行だけ・視聴済みの行だけを取るには `pressed` で絞る
+ */
+function watchedToggles(page: Page, pressed: boolean) {
+  return page.getByRole('button', { name: /を視聴済みにする$/, pressed });
+}
+
 /** 一覧の先頭を視聴済みにし、開いた評価モーダルを閉じる。対象のタイトルを返す */
 async function markFirstAsWatched(page: Page): Promise<string> {
-  const watchedButton = page
-    .getByRole('button', { name: /を視聴済みにする$/ })
-    .first();
+  const watchedButton = watchedToggles(page, false).first();
   await expect(watchedButton).toBeVisible({ timeout: 30000 });
 
   const label = await watchedButton.getAttribute('aria-label');
@@ -256,9 +264,7 @@ test.describe('ウォッチリスト', () => {
     await page.goto('/watchlist');
     await markFirstAsWatched(page);
 
-    const unmarkButton = page
-      .getByRole('button', { name: /を未視聴に戻す$/ })
-      .first();
+    const unmarkButton = watchedToggles(page, true).first();
     await expect(unmarkButton).toBeVisible({ timeout: 15000 });
 
     const unmarkResponse = waitForWatchedPatchResponse(page);
@@ -270,8 +276,6 @@ test.describe('ウォッチリスト', () => {
     await expect(page.getByText('視聴済み', { exact: true })).toHaveCount(0, {
       timeout: 15000,
     });
-    await expect(
-      page.getByRole('button', { name: /を視聴済みにする$/ }).first(),
-    ).toBeVisible();
+    await expect(watchedToggles(page, false).first()).toBeVisible();
   });
 });

@@ -5,6 +5,10 @@
  * 従来 SP の移動手段はドロワーだけで、どこへ行くにも「≡ を押す → 項目を押す」の
  * 2タップが要り、しかも ≡ は画面最上部の左端＝片手で最も届きにくい位置にある。
  * 往復の多い主要導線だけを親指の届く下端へ出し、残りはドロワーに置いたままにする。
+ *
+ * **検索は出さない。** ヘッダー右上の検索トグルが、押すとその場で入力欄を開いて
+ * 送信で `/search?query=` へ飛ぶ（`searchBar.tsx`）。すでに1タップで到達できるので、
+ * `/search` ページへ行くだけの項目を並べても枠を1つ食うだけの重複導線になる。
  */
 
 'use client';
@@ -40,7 +44,6 @@ import { useBottomNavHeight } from './useBottomNavHeight';
 const BOTTOM_NAV_HREFS: string[] = [
   ROUTES.HOME,
   ROUTES.NOW_SHOWING,
-  ROUTES.SEARCH,
   ROUTES.WATCHLIST,
   ROUTES.FAVORITES,
 ];
@@ -48,12 +51,11 @@ const BOTTOM_NAV_HREFS: string[] = [
 /**
  * `NAV_ITEMS` に無い行き先のラベル
  *
- * ホームと検索はサイドナビ／ドロワーの共通項目ではないため引けない。
+ * ホームはサイドナビ／ドロワーの共通項目ではないため引けない。
  * ここだけがボトムナビ固有のベタ書きになる
  */
 const OWN_LABELS: Record<string, string> = {
   [ROUTES.HOME]: 'ホーム',
-  [ROUTES.SEARCH]: '検索',
 };
 
 /** ボトムナビの項目（共通定数から組み立てた結果） */
@@ -63,8 +65,9 @@ interface BottomNavItem {
   /**
    * 未認証では出さない項目
    *
-   * 押しても `LoginPromptModal` が出るだけの導線を、限られた5枠に
-   * 常設しない。未認証は3件になる（ログイン誘導はドロワーが持つ）
+   * 押しても `LoginPromptModal` が出るだけの導線を、限られた枠に常設しない。
+   * 未認証は2件まで減る。少ないのは承知のうえで、保護項目を隠す方針を優先する
+   * （ログイン誘導はドロワーが持つ）
    */
   requiresAuth: boolean;
 }
@@ -90,9 +93,9 @@ export const BottomNav = memo(function BottomNav() {
   const navRef = useBottomNavHeight();
 
   /**
-   * `loading` の間は未認証と同じ3件にする。
+   * `loading` の間は未認証と同じ2件にする。
    *
-   * セッションが確定した瞬間に横の並びが 3→5 へ変わる。高さは変わらないので
+   * セッションが確定した瞬間に横の並びが 2→4 へ変わる。高さは変わらないので
    * 本文が縦にずれることは無いが、押そうとしていた項目の位置は動きうる。
    * 「先に5件出して未認証なら減らす」ほうが損失が大きい（押せる導線が消える）
    * ため、増える側に倒す。#1028 で承認済みのトレードオフ。

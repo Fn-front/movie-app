@@ -9,7 +9,6 @@ import {
   IoHeartOutline,
   IoHomeOutline,
   IoPlayCircleOutline,
-  IoSearchOutline,
 } from 'react-icons/io5';
 
 import { ROUTES } from './common';
@@ -54,7 +53,6 @@ export const NAV_ICON_MAP: Record<string, IconType> = {
   [ROUTES.HOME]: IoHomeOutline,
   [ROUTES.UPCOMING]: IoCalendarOutline,
   [ROUTES.NOW_SHOWING]: IoPlayCircleOutline,
-  [ROUTES.SEARCH]: IoSearchOutline,
   [ROUTES.FAVORITES]: IoHeartOutline,
   [ROUTES.WATCHLIST]: IoBookmarkOutline,
 };

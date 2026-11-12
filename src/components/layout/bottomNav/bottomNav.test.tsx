@@ -59,24 +59,34 @@ describe('BottomNav', () => {
   });
 
   describe('項目の出し分け', () => {
-    it('認証済みでは5件すべて出る', () => {
+    it('認証済みでは4件すべて出る', () => {
       render(<BottomNav />);
 
+      // 検索は出さない。ヘッダーの検索トグルがすでに1タップで入力欄を開くので、
+      // /search ページへ行くだけの項目は枠を1つ食う重複導線になる
       expect(navLinkLabels()).toEqual([
         'ホーム',
         '公開中',
-        '検索',
         'ウォッチリスト',
         'お気に入り',
       ]);
     });
 
-    it('未認証では保護された2件を出さず3件になる', () => {
+    it('検索は出さない（ヘッダーの検索トグルと重複するため）', () => {
+      render(<BottomNav />);
+
+      expect(
+        screen.queryByRole('link', { name: '検索' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('未認証では保護された2件を出さず2件になる', () => {
       mockStatus = 'unauthenticated';
       render(<BottomNav />);
 
-      // 押しても LoginPromptModal が出るだけの導線を5枠に常設しない
-      expect(navLinkLabels()).toEqual(['ホーム', '公開中', '検索']);
+      // 押しても LoginPromptModal が出るだけの導線を常設しない。
+      // 2件まで減るのは承知のうえで、保護項目を隠す方針を優先する
+      expect(navLinkLabels()).toEqual(['ホーム', '公開中']);
       expect(
         screen.queryByRole('link', { name: 'ウォッチリスト' }),
       ).not.toBeInTheDocument();
@@ -92,16 +102,16 @@ describe('BottomNav', () => {
       mockUserId = undefined;
       render(<BottomNav />);
 
-      expect(navLinkLabels()).toEqual(['ホーム', '公開中', '検索']);
+      expect(navLinkLabels()).toEqual(['ホーム', '公開中']);
     });
 
-    it('セッション判定中は未認証と同じ3件を出す', () => {
-      // 先に5件出して減らすと「押そうとした導線が消える」ほうの揺れになる。
+    it('セッション判定中は未認証と同じ2件を出す', () => {
+      // 先に4件出して減らすと「押そうとした導線が消える」ほうの揺れになる。
       // 増える側に倒すのが #1028 で承認済みのトレードオフ
       mockStatus = 'loading';
       render(<BottomNav />);
 
-      expect(navLinkLabels()).toEqual(['ホーム', '公開中', '検索']);
+      expect(navLinkLabels()).toEqual(['ホーム', '公開中']);
     });
   });
 
@@ -119,7 +129,7 @@ describe('BottomNav', () => {
       mockPathname = ROUTES.WATCHLIST;
       render(<BottomNav />);
 
-      for (const label of ['ホーム', '公開中', '検索', 'お気に入り']) {
+      for (const label of ['ホーム', '公開中', 'お気に入り']) {
         expect(screen.getByRole('link', { name: label })).not.toHaveAttribute(
           'aria-current',
         );
@@ -238,7 +248,6 @@ describe('BottomNav', () => {
       const expected: [string, string][] = [
         ['ホーム', ROUTES.HOME],
         ['公開中', ROUTES.NOW_SHOWING],
-        ['検索', ROUTES.SEARCH],
         ['ウォッチリスト', ROUTES.WATCHLIST],
         ['お気に入り', ROUTES.FAVORITES],
       ];

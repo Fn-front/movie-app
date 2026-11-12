@@ -20,7 +20,7 @@ import { ARIA_LABELS } from '@/constants';
 
 import { consentBanner, expect, grantButton, test } from './fixtures';
 
-/** iPhone 相当。未認証なので保護2件は出ず3件になる */
+/** iPhone 相当。未認証なので保護2件は出ず2件になる */
 test.use({ viewport: { width: 375, height: 812 } });
 
 /** ボトムナビのランドマーク */

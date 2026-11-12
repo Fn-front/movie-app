@@ -32,7 +32,7 @@ import { ARIA_LABELS } from '@/constants';
 
 import { test, expect } from '../fixtures/auth';
 
-/** iPhone 相当。5件を等幅で割ると1件 75px */
+/** iPhone 相当。認証済みの4件を等幅で割ると1件 93.75px */
 const SP_VIEWPORT = { width: 375, height: 812 };
 
 /** #1017 のタップ領域の基準 */
@@ -101,12 +101,12 @@ test.describe('SP のボトムナビゲーション（認証済み）', () => {
     await page.goto('/');
 
     const links = bottomNav(page).getByRole('link');
-    await expect(links).toHaveCount(5);
+    await expect(links).toHaveCount(4);
 
     for (const link of await links.all()) {
       const box = await link.boundingBox();
       expect(box).not.toBeNull();
-      // 375px を5等分して 75px。3件なら 125px
+      // 375px を4等分して 93.75px。未認証の2件なら 187.5px
       expect(box!.width).toBeGreaterThanOrEqual(MIN_TAP_SIZE);
       expect(box!.height).toBeGreaterThanOrEqual(MIN_TAP_SIZE);
     }
@@ -182,15 +182,15 @@ test.describe('SP のボトムナビゲーション（未認証）', () => {
     viewport: SP_VIEWPORT,
   });
 
-  test('保護された2件を出さず3件になる', async ({ page }) => {
+  test('保護された2件を出さず2件になる', async ({ page }) => {
     await page.goto('/');
 
     const nav = bottomNav(page);
     await expect(nav).toBeVisible();
 
-    // 押してもログイン誘導が出るだけの導線を、限られた5枠に常設しない。
-    // ログインへの導線はドロワーが持つ（#1028 で承認済み）
-    await expect(nav.getByRole('link')).toHaveCount(3);
+    // 押してもログイン誘導が出るだけの導線を常設しない。2件まで減るのは
+    // 承知のうえで、保護項目を隠す方針を優先する（ログイン誘導はドロワーが持つ）
+    await expect(nav.getByRole('link')).toHaveCount(2);
     await expect(nav.getByRole('link', { name: 'ウォッチリスト' })).toHaveCount(
       0,
     );

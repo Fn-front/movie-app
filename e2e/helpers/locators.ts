@@ -29,6 +29,23 @@ export function movieTileDetailButtons(page: Page): Locator {
 }
 
 /**
+ * ウォッチリストの視聴済みトグルを、押下状態で絞って取得
+ *
+ * ラベルは `${作品名}を視聴済みにする` で固定されており、状態では変わらない。
+ * 状態を伝えるのは `aria-pressed` だけ（#1046）。ラベルとの併用は
+ * 「○○を未視聴に戻す、オン」のように意味が反転して読まれるため避けている。
+ *
+ * その結果、**ラベルだけでは視聴済みの行と未視聴の行を区別できない**。
+ * どちらを狙うかは必ず `pressed` で指定すること。
+ *
+ * @param page - 対象ページ
+ * @param pressed - true なら視聴済みの行、false なら未視聴の行
+ */
+export function watchedToggles(page: Page, pressed: boolean): Locator {
+  return page.getByRole('button', { name: /を視聴済みにする$/, pressed });
+}
+
+/**
  * お気に入りに追加できる最初の映画タイルを、位置で固定して返す
  *
  * お気に入りボタンは**未公開作品のカードには出ない**（#818）。評価とセットで

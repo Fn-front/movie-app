@@ -234,19 +234,23 @@ describe('WatchlistPage', () => {
   describe('視聴済み', () => {
     /**
      * 視聴済みトグル。
-     * ラベルは状態非依存なので、視聴済み／未視聴は `pressed` で絞る（#1046）
+     *
+     * ラベルは状態非依存なので、視聴済み／未視聴は `pressed` でしか区別できない
+     * （#1046）。省略を許すと名前だけで引くロケータが戻ってくるため必須にする
+     *
+     * @param pressed - true なら視聴済み、false なら未視聴
      */
-    const watchedToggle = (options?: { pressed?: boolean }) =>
+    const watchedToggle = (pressed: boolean) =>
       screen.getByRole('button', {
         name: '映画0を視聴済みにする',
-        ...options,
+        pressed,
       });
 
     it('視聴済みボタンが表示される', () => {
       mockUseWatchlistPage.watchlist = createMockItems(1);
       render(<WatchlistPage />);
 
-      expect(watchedToggle({ pressed: false })).toBeInTheDocument();
+      expect(watchedToggle(false)).toBeInTheDocument();
     });
 
     it('視聴済みにするとsetWatchedが呼ばれる', async () => {
@@ -254,7 +258,7 @@ describe('WatchlistPage', () => {
       mockUseWatchlistPage.watchlist = createMockItems(1);
       render(<WatchlistPage />);
 
-      await user.click(watchedToggle({ pressed: false }));
+      await user.click(watchedToggle(false));
 
       expect(mockUseWatchlistPage.setWatched).toHaveBeenCalledWith(
         'wl-0',
@@ -267,7 +271,7 @@ describe('WatchlistPage', () => {
       mockUseWatchlistPage.watchlist = createMockItems(1);
       render(<WatchlistPage />);
 
-      await user.click(watchedToggle({ pressed: false }));
+      await user.click(watchedToggle(false));
 
       expect(mockHandleFavoriteToggle).toHaveBeenCalledWith(
         expect.objectContaining({ id: 100, title: '映画0' }),
@@ -282,7 +286,7 @@ describe('WatchlistPage', () => {
       mockUseWatchlistPage.watchlist = createMockItems(1);
       render(<WatchlistPage />);
 
-      await user.click(watchedToggle({ pressed: false }));
+      await user.click(watchedToggle(false));
 
       expect(mockHandleFavoriteToggle).toHaveBeenCalledWith(
         expect.anything(),
@@ -298,7 +302,7 @@ describe('WatchlistPage', () => {
       }));
       render(<WatchlistPage />);
 
-      await user.click(watchedToggle({ pressed: true }));
+      await user.click(watchedToggle(true));
 
       expect(mockUseWatchlistPage.setWatched).toHaveBeenCalledWith(
         'wl-0',

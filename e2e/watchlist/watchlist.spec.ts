@@ -19,7 +19,7 @@ import {
   type DedicatedSession,
 } from '../fixtures/dedicatedSession';
 import { cleanupWatchlistForUser } from '../helpers/api';
-import { movieTiles } from '../helpers/locators';
+import { movieTiles, watchedToggles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 import { runScopedEmail } from '../helpers/runScope';
 import { waitForWriteResponse } from '../helpers/writeResponse';
@@ -107,16 +107,6 @@ async function gotoWatchlistPage(page: Page) {
  */
 function favoriteRatingModal(page: Page) {
   return page.getByRole('dialog', { name: /お気に入り(に追加|を編集)/ });
-}
-
-/**
- * 視聴済みトグル。
- *
- * ラベルは状態で変えない（`aria-pressed` だけが状態を表す／#1046）。
- * 未視聴の行だけ・視聴済みの行だけを取るには `pressed` で絞る
- */
-function watchedToggles(page: Page, pressed: boolean) {
-  return page.getByRole('button', { name: /を視聴済みにする$/, pressed });
 }
 
 /** 一覧の先頭を視聴済みにし、開いた評価モーダルを閉じる。対象のタイトルを返す */

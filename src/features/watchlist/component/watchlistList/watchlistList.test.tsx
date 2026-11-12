@@ -149,12 +149,16 @@ describe('WatchlistList', () => {
   describe('視聴済み', () => {
     /**
      * 視聴済みトグル。
-     * ラベルは状態非依存なので、視聴済み／未視聴は `pressed` で絞る（#1046）
+     *
+     * ラベルは状態非依存なので、視聴済み／未視聴は `pressed` でしか区別できない
+     * （#1046）。省略を許すと名前だけで引くロケータが戻ってくるため必須にする
+     *
+     * @param pressed - true なら視聴済み、false なら未視聴
      */
-    const watchedToggle = (options?: { pressed?: boolean }) =>
+    const watchedToggle = (pressed: boolean) =>
       screen.getByRole('button', {
         name: '映画0を視聴済みにする',
-        ...options,
+        pressed,
       });
 
     const watchedItems = () =>
@@ -172,7 +176,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      expect(watchedToggle({ pressed: false })).toBeInTheDocument();
+      expect(watchedToggle(false)).toBeInTheDocument();
     });
 
     it('onWatchedToggleが無い場合は視聴済みボタンを出さない', () => {
@@ -197,7 +201,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      await user.click(watchedToggle({ pressed: false }));
+      await user.click(watchedToggle(false));
 
       expect(handleWatchedToggle).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'wl-0' }),
@@ -215,7 +219,7 @@ describe('WatchlistList', () => {
       );
 
       expect(screen.getByText('視聴済み')).toBeInTheDocument();
-      expect(watchedToggle({ pressed: true })).toBeInTheDocument();
+      expect(watchedToggle(true)).toBeInTheDocument();
     });
 
     /**
@@ -232,7 +236,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      expect(watchedToggle({ pressed: false })).toHaveAccessibleName(
+      expect(watchedToggle(false)).toHaveAccessibleName(
         '映画0を視聴済みにする',
       );
 
@@ -244,9 +248,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      expect(watchedToggle({ pressed: true })).toHaveAccessibleName(
-        '映画0を視聴済みにする',
-      );
+      expect(watchedToggle(true)).toHaveAccessibleName('映画0を視聴済みにする');
     });
 
     it('視聴済みのアイテムをクリックすると解除として渡す', async () => {
@@ -261,7 +263,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      await user.click(watchedToggle({ pressed: true }));
+      await user.click(watchedToggle(true));
 
       expect(handleWatchedToggle).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'wl-0' }),
@@ -294,7 +296,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      await user.click(watchedToggle({ pressed: false }));
+      await user.click(watchedToggle(false));
 
       expect(handleClick).not.toHaveBeenCalled();
     });
@@ -313,7 +315,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      watchedToggle({ pressed: false }).focus();
+      watchedToggle(false).focus();
       await user.keyboard('{Enter}');
 
       // keydown で preventDefault するため、クリックとの二重発火にならない
@@ -355,7 +357,7 @@ describe('WatchlistList', () => {
         />,
       );
 
-      expect(watchedToggle({ pressed: false })).toBeDisabled();
+      expect(watchedToggle(false)).toBeDisabled();
     });
   });
 

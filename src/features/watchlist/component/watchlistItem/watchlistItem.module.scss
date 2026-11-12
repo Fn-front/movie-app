@@ -62,7 +62,8 @@
       content: '';
       position: absolute;
       inset: 0;
-      border-radius: inherit;
+      // 行と同じ角丸にする。inherit は <a> の値（0）を引くので四角くなる
+      border-radius: $border-radius-md;
     }
 
     &:focus:not(:focus-visible) {

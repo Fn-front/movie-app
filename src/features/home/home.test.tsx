@@ -103,8 +103,13 @@ describe('HomePage', () => {
    * 以前は `NowShowingMovieList` と `RecommendationSection` が**両方**
    * モーダルを描いていた。どちらも URL の `movie_id` を読むため、
    * タイルを押すと2枚同時に開いていた（E2E が
-   * `getByRole('dialog') resolved to 2 elements` で落ちた）。
-   * セクション側に戻すとこのテストが落ちる。
+   * `getByRole('dialog') resolved to 2 elements` で落ちた / #1033）。
+   *
+   * ⚠️ ここは**セクションがモーダルを描き直す退行は検出しない**。上で
+   * セクションを両方ともモックしているため、中身が見えないため。
+   * その退行は各セクションのテスト（`nowShowingMovieList.test.tsx` /
+   * `recommendationSection.test.tsx` の「モーダル自体は描かない」）が受け持つ。
+   * ここで見るのは「ホーム側のモーダルが認証状態で増減しないこと」だけ。
    */
   it('詳細モーダルは認証状態にかかわらず1つだけ描かれる', () => {
     const { rerender } = render(

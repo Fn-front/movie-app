@@ -2,7 +2,7 @@
  * WatchlistItemコンポーネント テスト
  */
 
-import { render, screen } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { WatchlistItem } from './watchlistItem';
@@ -114,16 +114,49 @@ describe('WatchlistItem', () => {
    * ブラウザの標準挙動に委ねており、行全体を role="button" にしていた頃の
    * 自前ハンドラは消した（#1064）
    */
-  it('タイトルはリンクで、フォーカスできる', () => {
-    const item = createMockItem();
+  it('修飾キーなしの左クリックは遷移せず onClick を呼ぶ', () => {
+    const onClick = jest.fn();
     render(
-      <WatchlistItem item={item} onClick={jest.fn()} onDelete={jest.fn()} />,
+      <WatchlistItem
+        item={createMockItem()}
+        onClick={onClick}
+        onDelete={jest.fn()}
+      />,
     );
 
     const link = screen.getByRole('link', { name: 'テスト映画' });
-    link.focus();
+    const event = createEvent.click(link, { button: 0 });
+    fireEvent(link, event);
 
-    expect(link).toHaveFocus();
+    expect(onClick).toHaveBeenCalledWith(123);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  /**
+   * サイドバーは全ページに出るので、ここが壊れると ⌘+クリックで作品を
+   * 新しいタブに開く導線がアプリ全体で死ぬ（`shouldLetBrowserHandle` / #1033）
+   */
+  it.each([
+    ['Ctrl', { ctrlKey: true }],
+    ['Meta', { metaKey: true }],
+    ['Shift', { shiftKey: true }],
+    ['Alt', { altKey: true }],
+  ])('%s+クリックは横取りしない（新しいタブに任せる）', (_label, modifier) => {
+    const onClick = jest.fn();
+    render(
+      <WatchlistItem
+        item={createMockItem()}
+        onClick={onClick}
+        onDelete={jest.fn()}
+      />,
+    );
+
+    const link = screen.getByRole('link', { name: 'テスト映画' });
+    const event = createEvent.click(link, { button: 0, ...modifier });
+    fireEvent(link, event);
+
+    expect(onClick).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('削除ボタンのEnterキーでonDeleteが呼ばれonClickは発火しない', async () => {

@@ -14,6 +14,7 @@ import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddB
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { DismissButton } from '@/features/dismissedMovies/component/dismissButton/dismissButton';
 import { getTMDbPosterUrl } from '@/utils/image';
+import { shouldLetBrowserHandle } from '@/utils/linkClick';
 import {
   IMAGE_SIZES,
   RATING_THRESHOLDS,
@@ -144,16 +145,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
       if (!onSelect) return;
 
       // 新しいタブ・ウィンドウで開く操作と、既に止められたイベントには触らない
-      if (
-        event.defaultPrevented ||
-        event.button !== 0 ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.shiftKey ||
-        event.altKey
-      ) {
-        return;
-      }
+      if (shouldLetBrowserHandle(event)) return;
 
       event.preventDefault();
       onSelect(movie.id);

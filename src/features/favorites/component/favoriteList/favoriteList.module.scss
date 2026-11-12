@@ -10,6 +10,12 @@
   overflow: hidden;
   transition: $transition-all;
 
+  // Card の clickable をやめたので、押し込みのフィードバックは自前で持つ
+  // （MovieTile と同じ / #1060）
+  &:active {
+    transform: scale(0.98);
+  }
+
   &__poster {
     position: relative;
     aspect-ratio: 2 / 3;
@@ -73,7 +79,8 @@
       content: '';
       position: absolute;
       inset: 0;
-      border-radius: inherit;
+      // カードと同じ角丸にする。inherit は <a> の値（0）を引くので四角くなる
+      border-radius: $border-radius-lg;
     }
 
     // マウス操作でのフォーカスにはリングを出さない
@@ -86,7 +93,7 @@
 
       &::after {
         outline: $border-width-2 solid $primary-500;
-        outline-offset: -2px;
+        outline-offset: -$border-width-2;
       }
     }
   }

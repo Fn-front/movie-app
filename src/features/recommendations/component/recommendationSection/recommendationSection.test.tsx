@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { RecommendationSection } from './recommendationSection';
 
@@ -46,6 +47,7 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: ({
     movie,
     onClick,
+    onSelect,
     onFavoriteToggle,
     onWatchlistToggle,
     onDismiss,
@@ -53,14 +55,28 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   }: {
     movie: { id: number; title: string };
     onClick?: (movieId: number) => void;
+    onSelect?: (movieId: number) => void;
     onFavoriteToggle?: () => void;
     onWatchlistToggle?: (movie: { id: number; title: string }) => void;
     onDismiss?: (movie: { id: number; title: string }) => void;
     dismissDisabled?: boolean;
   }) => (
     <div data-testid={`movie-tile-${movie.id}`}>
-      {/* 詳細への遷移はタイル側のリンクが担う。onClick は計測用（#1033） */}
-      <a href={`/movies/${movie.id}`} onClick={() => onClick?.(movie.id)}>
+      {/*
+        本物の MovieTile と同じ配線にする。`onClick` は計測用で遷移の仕方に
+        よらず走り、`onSelect` は左クリックだけ横取りしてモーダルで開く（#1033）。
+        `onSelect` を無視するモックにすると、セクションが `openMovieDetail` を
+        渡さなくなっても気づけない
+      */}
+      <a
+        href={`/movies/${movie.id}`}
+        onClick={(e) => {
+          onClick?.(movie.id);
+          if (!onSelect) return;
+          e.preventDefault();
+          onSelect(movie.id);
+        }}
+      >
         {movie.title}
       </a>
       {onFavoriteToggle && (
@@ -332,6 +348,43 @@ describe('RecommendationSection', () => {
       expect(
         screen.getByRole('link', { name: 'おすすめ映画 1' }),
       ).toHaveAttribute('href', '/movies/100');
+    });
+
+    it('タイルを押すとURLのクエリで詳細を開く', async () => {
+      const user = userEvent.setup();
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      await user.click(screen.getByRole('link', { name: 'おすすめ映画 1' }));
+
+      expect(mockOpenMovieDetail).toHaveBeenCalledWith(100);
+    });
+
+    /**
+     * モーダルはここではなくホームに1つだけ置く（`HomeMovieDetailModal`）
+     *
+     * 以前はこのコンポーネントと `NowShowingMovieList` の**両方**が
+     * URL の `movie_id` を読むモーダルを描いていたため、ホームで
+     * **2枚同時に開いていた**（E2E が
+     * `getByRole('dialog') resolved to 2 elements` で落ちた / #1033）。
+     * ここにモーダルを戻すとこのテストが落ちる。
+     */
+    it('モーダル自体は描かない（ホームに1つだけ置くため）', () => {
+      mockSelectedMovieId = 100;
+      render(
+        <RecommendationSection
+          recommendations={createMockRecommendations(1)}
+          hasFavorites={true}
+        />,
+      );
+
+      expect(
+        screen.queryByTestId('movie-detail-modal'),
+      ).not.toBeInTheDocument();
     });
   });
 

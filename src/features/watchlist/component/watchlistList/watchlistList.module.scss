@@ -36,6 +36,12 @@
   overflow: hidden;
   transition: $transition-all;
 
+  // Card の clickable をやめたので、押し込みのフィードバックは自前で持つ
+  // （MovieTile と同じ / #1060）
+  &:active {
+    transform: scale(0.98);
+  }
+
   &__poster {
     position: relative;
     aspect-ratio: 2 / 3;
@@ -133,6 +139,10 @@
     bottom: $spacing-2;
     left: $spacing-2;
     z-index: 1;
+    // 配信バッジは飾りなので、クリックはカード全面の当たり判定
+    // （__title_link の ::after）へ通す。z-index で ::after より上に
+    // 来るため、これが無いとバッジの上だけ詳細が開かない死角になる（#1060）
+    pointer-events: none;
   }
 
   &__watched_badge {
@@ -178,7 +188,8 @@
       content: '';
       position: absolute;
       inset: 0;
-      border-radius: inherit;
+      // カードと同じ角丸にする。inherit は <a> の値（0）を引くので四角くなる
+      border-radius: $border-radius-lg;
     }
 
     // マウス操作でのフォーカスにはリングを出さない
@@ -191,7 +202,7 @@
 
       &::after {
         outline: $border-width-2 solid $primary-500;
-        outline-offset: -2px;
+        outline-offset: -$border-width-2;
       }
     }
   }

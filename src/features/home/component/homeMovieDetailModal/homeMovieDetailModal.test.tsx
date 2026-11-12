@@ -38,6 +38,7 @@ jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
     movieId === null ? null : (
       <div
         data-testid='movie-detail-modal'
+        data-movie-id={String(movieId)}
         data-title={title ?? ''}
         data-manage-history={String(manageHistory)}
       >
@@ -107,20 +108,20 @@ describe('HomeMovieDetailModal', () => {
     mockSelectedMovieId = 101;
     renderModal();
 
-    expect(screen.getByTestId('movie-detail-modal')).toHaveAttribute(
-      'data-title',
-      '公開中の映画',
-    );
+    const modal = screen.getByTestId('movie-detail-modal');
+    // URL の値がそのまま渡ること自体も見る。これが無いと movieId を
+    // 固定値にしても全テストが通ってしまう
+    expect(modal).toHaveAttribute('data-movie-id', '101');
+    expect(modal).toHaveAttribute('data-title', '公開中の映画');
   });
 
   it('レコメンドの映画のタイトルをダイアログ名に使う', () => {
     mockSelectedMovieId = 202;
     renderModal();
 
-    expect(screen.getByTestId('movie-detail-modal')).toHaveAttribute(
-      'data-title',
-      'おすすめの映画',
-    );
+    const modal = screen.getByTestId('movie-detail-modal');
+    expect(modal).toHaveAttribute('data-movie-id', '202');
+    expect(modal).toHaveAttribute('data-title', 'おすすめの映画');
   });
 
   // 「他の作品を見る」で差し替わったレコメンドはここに届かないため、

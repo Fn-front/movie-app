@@ -15,6 +15,7 @@ import { Sidebar } from '@/components/layout/sidebar/sidebar';
 import { SideNav } from '@/components/layout/sideNav/sideNav';
 import { UserMenu } from '@/components/layout/userMenu/userMenu';
 import { Footer } from '@/components/layout/footer/footer';
+import { BottomNav } from '@/components/layout/bottomNav/bottomNav';
 import { MobileMenuButton } from '@/components/layout/mobileMenuButton/mobileMenuButton';
 import { MobileDrawer } from '@/components/layout/mobileDrawer/mobileDrawer';
 import { useMobileDrawer } from '@/components/layout/mobileDrawer/useMobileDrawer';
@@ -134,6 +135,12 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
         */}
         <Footer links={FOOTER_LINKS} />
       </div>
+
+      {/*
+        SP の主要導線（#1028）。position: fixed なので DOM 上の位置は
+        見た目に影響しないが、視覚順と Tab 順を合わせるためフッターの後ろに置く
+      */}
+      <BottomNav />
 
       <MobileDrawer
         open={isOpen}

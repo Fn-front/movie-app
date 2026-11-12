@@ -10,6 +10,12 @@
   // 同意バナーは position: fixed なので、その分だけ縮めてフッターが
   // 覆われないようにする。バナーが無いときは calc(100vh - 0px) で現状と同一
   min-height: calc(100vh - var(--cookie-banner-height, 0px));
+  // ボトムナビ（SP 専用・position: fixed）のぶん場所を空ける（#1028）。
+  // box-sizing: border-box なので、この padding は min-height の内側を削る。
+  // フッターは margin-top: auto でその上端まで押し上がり、覆われない。
+  // lg 以上はナビが display: none になり変数が 0px へ戻るので、
+  // ここで打ち消さなくても余白は残らない（`useBottomNavHeight.ts`）
+  padding-bottom: var(--bottom-nav-height, 0px);
   background-color: $background-default;
 
   // lg 以上は定高を維持する。&__body / &__main の内部スクロールと、

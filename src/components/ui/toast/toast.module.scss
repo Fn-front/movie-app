@@ -5,8 +5,11 @@
   // ビューポート
   &__viewport {
     position: fixed;
-    // 同意バナー（position: fixed）と重ならないよう押し上げる
-    bottom: var(--cookie-banner-height, 0px);
+    // 同意バナーとボトムナビ（どちらも position: fixed）に重ならないよう
+    // 押し上げる。2つは積み重なる（ナビがバナーの上）ので合算する（#1028）
+    bottom: calc(
+      var(--cookie-banner-height, 0px) + var(--bottom-nav-height, 0px)
+    );
     right: 0;
     display: flex;
     flex-direction: column;

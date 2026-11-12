@@ -53,6 +53,8 @@ export const ROUTES = {
   REGISTER: '/auth/signup',
   /** アカウント設定 */
   SETTINGS: '/settings',
+  /** 検索（公開ページ。クエリは `?query=` で渡す） */
+  SEARCH: '/search',
   /** 公開予定 */
   UPCOMING: '/movies/upcoming',
   /** 公開中 */

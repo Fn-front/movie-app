@@ -96,7 +96,14 @@ function WatchlistTile() {
  */
 function WatchlistPanelStub() {
   const { isLoading } = useInfiniteQuery({
-    queryKey: watchlistKeys.list({ sort: 'added_at' }),
+    // 実アプリ（useWatchlist.ts:105）と同じ形のキーにする。購読は
+    // queryKey[0] の prefix で判定するので機構の再現には効かないが、
+    // 「サイドバー相当」と読まれるので実在しない形を置かない
+    queryKey: watchlistKeys.list({
+      sort: 'added_at',
+      excludeWatched: true,
+      prioritizeStreaming: false,
+    }),
     queryFn: () => Promise.resolve(watchlistPage),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: () => undefined,
@@ -166,11 +173,10 @@ describe('useWatchlistToggle のキャッシュ購読（本物の QueryClient）
     ).toHaveTextContent('読み込み完了');
 
     // 本丸。`added` を購読していると、WatchlistPanelStub のレンダー中に
-    // WatchlistTile の更新がスケジュールされ React がこれを報告する
-    expect(
-      consoleErrors.filter((message) =>
-        message.includes('Cannot update a component'),
-      ),
-    ).toEqual([]);
+    // WatchlistTile の更新がスケジュールされ React がこれを報告する。
+    //
+    // 文言で絞らず**1件も出ていないこと**を見る。絞ると React がメッセージを
+    // 変えたときに無言で通るうえ、他のエラー（act 警告など）も握りつぶす
+    expect(consoleErrors).toEqual([]);
   });
 });

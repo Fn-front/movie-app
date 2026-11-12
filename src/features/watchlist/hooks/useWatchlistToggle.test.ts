@@ -486,6 +486,14 @@ describe('useWatchlistToggle', () => {
       expect(result.current.isInWatchlist).toBe(before);
     });
 
+    /**
+     * 実際に起きる順序を1本に収めて記録する。
+     *
+     * ⚠️ `added` を購読に戻してもこのテストは通る（それを捕まえるのは
+     * 上の「added だけでは再描画しない」と renderPhase の方）。ここが落ちるのは
+     * `updated` の購読を壊したときで、その意味では
+     * 「キャッシュだけが変わっても追従する」と検出力が重なっている
+     */
     it('added を拾わなくても、後から来る updated で追従する', () => {
       const { result } = renderHook(() => useWatchlistToggle());
       const before = result.current.isInWatchlist;

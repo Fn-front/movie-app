@@ -183,23 +183,31 @@ interface OptimisticStore {
  * 全消費者が再描画される。
  *
  * ⚠️ `added` を入れてはいけない（#1061）。react-query は useInfiniteQuery の
- * observer を作る時点＝**レンダリング中**に queryCache.build() →
+ * observer を作る時点＝**レンダリング中**に queryCache.build() → add() →
  * notify({type:'added'}) を**同期で**発火する（notifyManager.batch は
  * コールバックを同期実行する）。拾うと「WatchlistPanel のレンダリング中に
  * MovieGrid の更新をスケジュールした」と React に報告され続ける。
  *
- * 取りこぼさない根拠は、このリポジトリでは `added` の直後に必ず `updated` が
- * 来ること:
- * - キャッシュが空の初回取得 … fetch 開始と data 到着で `updated` が来る
- * - `setQueryData`（新規キー）… build() の直後に setData() が走る
- * - 楽観更新（optimisticAddToAllCaches 等）… 既存クエリにしか書かないので
- *   そもそも `added` が起きない
+ * **`added` を外せば十分**な理由は、レンダリング中に飛ぶキャッシュイベントが
+ * `added` だけだから。レンダリング中にキャッシュを変えるのは
+ * `queryObserver` の build() だけで、`removed` は scheduleGc のタイマー経由、
+ * `updated` は dispatch 経由でいずれもレンダリングの外。
+ * ⚠️ レンダリング中に `setQueryData` を呼ぶコードを足すと `updated` が
+ * レンダリング中に飛び、同じ警告が戻る。
  *
- * ⚠️ ただしこれは**無条件に成り立つ前提ではない**。queryCache.build() は
- * 第3引数で state を渡せるため、データ入りの Query が `added` だけを伴って
- * 生まれる経路が存在する（query-core の hydration）。現状この
- * リポジトリは HydrationBoundary / dehydrate / prefetchQuery を使っていない
- * ので安全だが、**SSR プリフェッチを導入する際はこの購読を見直すこと**。
+ * **取りこぼさない根拠は「このリポジトリでは `added` がデータを伴わない」こと。**
+ * 生まれたてのクエリは data を持たないので、`added` 起因の再描画は常に直前と
+ * 同じ値を計算していた。データは必ず `updated` で届く。
+ *
+ * 「`added` の直後に必ず `updated` が来る」とは書けない。`enabled: false` の
+ * クエリ（useWatchlistCleanup の watchedYears / watched）は作られるだけで
+ * fetch されず、`added` しか飛ばない。data を持たないので今は実害が無いだけ。
+ *
+ * ⚠️ したがって**この前提は無条件ではない**。queryCache.build() は第3引数で
+ * state を渡せるため、データ入りの Query が `added` だけを伴って生まれる経路が
+ * 存在する（query-core の hydration）。現状このリポジトリは HydrationBoundary /
+ * dehydrate / prefetchQuery / initialData を使っていないので安全だが、
+ * **SSR プリフェッチや initialData を導入する際はこの購読を見直すこと**。
  */
 const CACHE_DATA_EVENTS = new Set(['removed', 'updated']);
 

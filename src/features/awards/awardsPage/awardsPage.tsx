@@ -4,10 +4,13 @@
 
 'use client';
 
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 import { Loading } from '@/components/ui/loading/loading';
+import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
+import { awardMovieToMovieCacheItem } from '@/utils/toMovieCacheItem';
 import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
@@ -50,6 +53,26 @@ export const AwardsPage = memo(function AwardsPage() {
 
   const { isInWatchlist, toggleWatchlist, isMovieToggling } =
     useWatchlistToggle();
+
+  const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+    useMovieDetailQuery();
+
+  // モーダルのタイトル用。お気に入りは結合しない（モーダル自体が
+  // 映画詳細APIの favorite を見るため、ここで結合しても効果が無い）
+  const selectedMovieTitle = useMemo(() => {
+    if (selectedMovieId === null) return undefined;
+
+    for (const award of data?.awards ?? []) {
+      for (const category of award.categories) {
+        const hit = category.nominees.find(
+          (nominee) => nominee.tmdbMovieId === selectedMovieId,
+        );
+        if (hit) return awardMovieToMovieCacheItem(hit).title;
+      }
+    }
+
+    return undefined;
+  }, [data?.awards, selectedMovieId]);
 
   if (isLoading) {
     return (
@@ -117,6 +140,7 @@ export const AwardsPage = memo(function AwardsPage() {
               >
                 <AwardSection
                   award={selectedAward}
+                  onMovieSelect={openMovieDetail}
                   isInWatchlist={isInWatchlist}
                   onWatchlistToggle={toggleWatchlist}
                   isMovieToggling={isMovieToggling}
@@ -129,6 +153,7 @@ export const AwardsPage = memo(function AwardsPage() {
             ) : (
               <AwardSection
                 award={selectedAward}
+                onMovieSelect={openMovieDetail}
                 isInWatchlist={isInWatchlist}
                 onWatchlistToggle={toggleWatchlist}
                 isMovieToggling={isMovieToggling}
@@ -144,6 +169,11 @@ export const AwardsPage = memo(function AwardsPage() {
           </p>
         )}
       </div>
+      <MovieDetailModal
+        movieId={selectedMovieId}
+        title={selectedMovieTitle}
+        onClose={closeMovieDetail}
+      />
       <FavoriteRatingModal
         isOpen={favoriteModalState.isOpen}
         onClose={closeFavoriteModal}

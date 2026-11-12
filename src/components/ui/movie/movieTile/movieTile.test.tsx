@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { MovieTile } from './movieTile';
@@ -214,7 +214,7 @@ describe('MovieTile', () => {
 
       expect(screen.getByRole('link', { name: 'テスト映画' })).toHaveAttribute(
         'href',
-        '/movies/detail/42',
+        '/movies/42',
       );
     });
 
@@ -264,6 +264,103 @@ describe('MovieTile', () => {
       expect(
         container.querySelectorAll('.c_movie_tile__title_link'),
       ).toHaveLength(1);
+    });
+  });
+
+  /**
+   * 一覧ではモーダルで開くが、タイトルは `/movies/<id>` へのリンクのまま（#1033）。
+   * 修飾キー付きのクリックを横取りすると、新しいタブで開く操作を奪ってしまう
+   */
+  describe('その場で開く（onSelect）', () => {
+    it('修飾キーなしの左クリックは遷移せず onSelect を呼ぶ', () => {
+      const onSelect = jest.fn();
+      render(<MovieTile movie={createMockMovie()} onSelect={onSelect} />);
+
+      const link = screen.getByRole('link', { name: 'テスト映画' });
+      const event = createEvent.click(link, { button: 0 });
+      fireEvent(link, event);
+
+      expect(onSelect).toHaveBeenCalledWith(1);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it.each([
+      ['Ctrl', { ctrlKey: true }],
+      ['Meta', { metaKey: true }],
+      ['Shift', { shiftKey: true }],
+      ['Alt', { altKey: true }],
+    ])(
+      '%s+クリックは横取りしない（新しいタブに任せる）',
+      (_label, modifier) => {
+        const onSelect = jest.fn();
+        render(<MovieTile movie={createMockMovie()} onSelect={onSelect} />);
+
+        const link = screen.getByRole('link', { name: 'テスト映画' });
+        const event = createEvent.click(link, { button: 0, ...modifier });
+        fireEvent(link, event);
+
+        expect(onSelect).not.toHaveBeenCalled();
+        expect(event.defaultPrevented).toBe(false);
+      },
+    );
+
+    it('中クリックは横取りしない', () => {
+      const onSelect = jest.fn();
+      render(<MovieTile movie={createMockMovie()} onSelect={onSelect} />);
+
+      const link = screen.getByRole('link', { name: 'テスト映画' });
+      const event = createEvent.click(link, { button: 1 });
+      fireEvent(link, event);
+
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it('onSelect が無ければ素のリンクとして遷移させる', () => {
+      render(<MovieTile movie={createMockMovie()} />);
+
+      const link = screen.getByRole('link', { name: 'テスト映画' });
+      const event = createEvent.click(link, { button: 0 });
+      fireEvent(link, event);
+
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    // 計測は遷移の仕方によらず走らせる（新しいタブで開かれた分も数える）
+    it('onClick（計測）は修飾キー付きでも呼ばれる', () => {
+      const onClick = jest.fn();
+      const onSelect = jest.fn();
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onClick={onClick}
+          onSelect={onSelect}
+        />,
+      );
+
+      const link = screen.getByRole('link', { name: 'テスト映画' });
+      fireEvent(link, createEvent.click(link, { button: 0, ctrlKey: true }));
+
+      expect(onClick).toHaveBeenCalledWith(1);
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('onClick と onSelect の両方が呼ばれる（通常クリック）', () => {
+      const onClick = jest.fn();
+      const onSelect = jest.fn();
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onClick={onClick}
+          onSelect={onSelect}
+        />,
+      );
+
+      const link = screen.getByRole('link', { name: 'テスト映画' });
+      fireEvent(link, createEvent.click(link, { button: 0 }));
+
+      expect(onClick).toHaveBeenCalledWith(1);
+      expect(onSelect).toHaveBeenCalledWith(1);
     });
   });
 
@@ -687,7 +784,7 @@ describe('MovieTile', () => {
 
       expect(screen.getByRole('link', { name: 'テスト映画' })).toHaveAttribute(
         'href',
-        '/movies/detail/1',
+        '/movies/1',
       );
       await user.click(screen.getByRole('link', { name: 'テスト映画' }));
       expect(onClick).toHaveBeenCalledWith(1);

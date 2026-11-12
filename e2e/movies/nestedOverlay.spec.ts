@@ -101,9 +101,9 @@ test.describe('入れ子オーバーレイ', () => {
     await page.goBack();
 
     await expectOnlyOuterRemains(page);
-    // 映画詳細自体が URL を持つようになったため、ここは一覧ではなく
-    // /movies/<id> のまま（戻るで外れたのは予告動画のエントリ・#1033）
-    await expect(page).toHaveURL(/\/movies\/detail\/\d+$/);
+    // 映画詳細は一覧のURLに movie_id を足した状態なので、一覧から出ない
+    // （戻るで外れたのは予告動画のエントリ・#1033）
+    await expect(page).toHaveURL(/movie_id=\d+/);
   });
 
   test('入れ子を閉じた後、戻るで前のページまで出られる', async ({

@@ -221,6 +221,12 @@
       border-radius: inherit;
     }
 
+    // マウス操作でのフォーカスにはリングを出さない。
+    // button だった頃は button-reset mixin が担っていた分（#1033 でリンク化）
+    &:focus:not(:focus-visible) {
+      outline: none;
+    }
+
     &:focus-visible {
       outline: none;
 

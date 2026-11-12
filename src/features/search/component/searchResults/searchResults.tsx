@@ -11,6 +11,8 @@ import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
 import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { EmptyState } from '@/components/ui/emptyState/emptyState';
+import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { TitleSuggestion } from '@/features/search/component/titleSuggestion/titleSuggestion';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
@@ -78,6 +80,13 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
   );
 
   const { viewMode } = useMovieViewMode();
+  const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+    useMovieDetailQuery();
+
+  const selectedMovieTitle = useMemo(
+    () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
+    [movieCacheItems, selectedMovieId],
+  );
 
   if (isLoading) {
     return (
@@ -118,6 +127,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
           <MovieTile
             key={movie.id}
             movie={movie}
+            onSelect={openMovieDetail}
             headingLevel={2}
             eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
             isInWatchlist={isInWatchlist(movie.id)}
@@ -135,6 +145,12 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
         totalPages={totalPages}
         onPageChange={onPageChange}
         className={styles.c_search_results__pagination}
+      />
+
+      <MovieDetailModal
+        movieId={selectedMovieId}
+        title={selectedMovieTitle}
+        onClose={closeMovieDetail}
       />
 
       <FavoriteRatingModal

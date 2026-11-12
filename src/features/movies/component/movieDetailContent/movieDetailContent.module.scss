@@ -170,6 +170,25 @@
     }
   }
 
+  // お気に入り・ウォッチリストのボタンと見た目を揃える（md サイズ）
+  &__share_button {
+    @include button-reset;
+    @include flex-center;
+    @include focus-visible;
+
+    width: 36px;
+    height: 36px;
+    font-size: $font-size-xl;
+    color: $text-secondary;
+    border-radius: $border-radius-full;
+    transition: $transition-all;
+
+    &:hover {
+      color: $text-primary;
+      background-color: $background-secondary;
+    }
+  }
+
   // タイトル
   &__title {
     margin: 0;

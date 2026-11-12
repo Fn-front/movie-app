@@ -159,15 +159,15 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     test.skip(!hasTile, '映画データが無いためスキップ');
 
     await movieTileDetailLinks(page).first().click();
-    await expect(page).toHaveURL(/\/movies\/detail\/\d+$/);
+    await expect(page).toHaveURL(/movie_id=\d+/);
 
     const dialog = page.getByRole('dialog').first();
     await expect(dialog).toBeVisible({ timeout: 15000 });
 
     await dialog.getByRole('button', { name: ARIA_LABELS.CLOSE }).click();
     await expect(dialog).not.toBeVisible();
-    // × は router.back()。詰んだぶんだけ戻るので一覧に出る
-    await expect(page).toHaveURL(/\/movies\/now-showing/);
+    // × は router.back()。movie_id が外れて一覧だけになる
+    await expect(page).toHaveURL(/\/movies\/now-showing$/);
 
     await page.goBack();
 
@@ -283,14 +283,14 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
   /**
    * 映画詳細のキャストから人物ページへ出る経路。
    *
-   * 詳細が URL を持つようになったので（#1033）、履歴は
-   * `一覧 → /movies/<id> → /person/<id>` と素直に積まれる。戻ると詳細の
-   * URL へ戻り、**モーダルが開き直る**のが期待動作。
+   * 詳細モーダルは一覧の URL に `?movie_id=` を足して開く（#1033）。
+   * 戻ると詳細の URL へ戻り、**モーダルが開き直る**のが期待動作。
    *
-   * ここで見ている不具合は2つ。
+   * ここで見ている不具合は3つ。
+   * - 閉じる指示と遷移が競合して**人物ページへ行けない**ことがないか
+   *   （`onRequestClose` で `router.back()` していたときに実測で再現した）
+   * - 遷移先にモーダルが被さったまま残らないか
    * - 空振りのエントリが残っていないか（戻る3回で `/movies/upcoming` まで出る）
-   * - 遷移してもスロットが閉じず、人物ページにモーダルが被さったままにならないか
-   *   （パラレルルートの既定の挙動。`@modal/[...catchAll]` で閉じている）
    */
   test('詳細のキャストから人物ページへ出たあと、戻るが空振りしない', async ({
     authenticatedPage: page,
@@ -304,7 +304,7 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     test.skip(!hasTile, '映画データが無いためスキップ');
 
     await movieTileDetailLinks(page).first().click();
-    await expect(page).toHaveURL(/\/movies\/detail\/\d+$/);
+    await expect(page).toHaveURL(/movie_id=\d+/);
     await expect(page.getByRole('dialog').first()).toBeVisible({
       timeout: 15000,
     });
@@ -320,14 +320,14 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     await page.goBack();
 
     // 詳細の URL へ戻り、モーダルが開き直る
-    await expect(page).toHaveURL(/\/movies\/detail\/\d+$/);
+    await expect(page).toHaveURL(/movie_id=\d+/);
     await expect(page.getByRole('dialog').first()).toBeVisible({
       timeout: 15000,
     });
 
     await page.goBack();
 
-    await expect(page).toHaveURL(/\/movies\/now-showing/);
+    await expect(page).toHaveURL(/\/movies\/now-showing$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     await page.goBack();

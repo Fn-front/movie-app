@@ -11,7 +11,7 @@
 
 import { AxiosError } from 'axios';
 
-import MovieDetail, { generateMetadata } from './page';
+import MovieDetailRoute, { generateMetadata } from './page';
 
 // --- Mocks ---
 
@@ -103,14 +103,25 @@ describe('映画詳細ページ', () => {
       expect(metadata.description).toBe('テストのあらすじ');
     });
 
-    it('長いあらすじは120文字で切る', async () => {
+    // 省略記号が無いと、文の途中で終わったのか続きがあるのか読み手に伝わらない
+    it('長いあらすじは120文字＋省略記号で切る', async () => {
       mockGetCachedMovieDetail.mockResolvedValue(
         createMovie({ overview: 'あ'.repeat(300) }),
       );
 
       const metadata = await generateMetadata({ params: params('550') });
 
-      expect(metadata.description).toHaveLength(120);
+      expect(metadata.description).toBe(`${'あ'.repeat(120)}…`);
+    });
+
+    it('120文字ちょうどなら省略記号を足さない', async () => {
+      mockGetCachedMovieDetail.mockResolvedValue(
+        createMovie({ overview: 'あ'.repeat(120) }),
+      );
+
+      const metadata = await generateMetadata({ params: params('550') });
+
+      expect(metadata.description).toBe('あ'.repeat(120));
     });
 
     // 邦題未登録の洋画などはあらすじが空で返る
@@ -167,7 +178,7 @@ describe('映画詳細ページ', () => {
     it('表示できる映画なら全画面表示を返す', async () => {
       mockGetCachedMovieDetail.mockResolvedValue(createMovie());
 
-      const element = await MovieDetail({ params: params('550') });
+      const element = await MovieDetailRoute({ params: params('550') });
 
       expect(element).not.toBeNull();
       expect(mockNotFound).not.toHaveBeenCalled();
@@ -179,7 +190,7 @@ describe('映画詳細ページ', () => {
       ['ゼロ', '0'],
       ['静的セグメント名', 'now-showing'],
     ])('%s のIDは404にする', async (_label, id) => {
-      await expect(MovieDetail({ params: params(id) })).rejects.toThrow(
+      await expect(MovieDetailRoute({ params: params(id) })).rejects.toThrow(
         NotFoundError,
       );
       expect(mockGetCachedMovieDetail).not.toHaveBeenCalled();
@@ -188,15 +199,15 @@ describe('映画詳細ページ', () => {
     it('TMDbが404なら404にする', async () => {
       mockGetCachedMovieDetail.mockRejectedValue(createNotFoundError());
 
-      await expect(MovieDetail({ params: params('999999') })).rejects.toThrow(
-        NotFoundError,
-      );
+      await expect(
+        MovieDetailRoute({ params: params('999999') }),
+      ).rejects.toThrow(NotFoundError);
     });
 
     it('TMDbが一時障害でも404にする（ページとしては出せないため）', async () => {
       mockGetCachedMovieDetail.mockRejectedValue(new Error('boom'));
 
-      await expect(MovieDetail({ params: params('550') })).rejects.toThrow(
+      await expect(MovieDetailRoute({ params: params('550') })).rejects.toThrow(
         NotFoundError,
       );
     });
@@ -204,7 +215,7 @@ describe('映画詳細ページ', () => {
     it('アダルト作品は404にする', async () => {
       mockGetCachedMovieDetail.mockResolvedValue(createMovie({ adult: true }));
 
-      await expect(MovieDetail({ params: params('550') })).rejects.toThrow(
+      await expect(MovieDetailRoute({ params: params('550') })).rejects.toThrow(
         NotFoundError,
       );
     });
@@ -214,7 +225,7 @@ describe('映画詳細ページ', () => {
     mockGetCachedMovieDetail.mockResolvedValue(createMovie());
 
     await generateMetadata({ params: params('550') });
-    await MovieDetail({ params: params('550') });
+    await MovieDetailRoute({ params: params('550') });
 
     // 呼び出し先は常にキャッシュ済み関数。同じ引数なので TMDb へは1回しか出ない
     expect(mockGetCachedMovieDetail).toHaveBeenCalledTimes(2);

@@ -16,11 +16,49 @@ import { PersonFilmography } from './personFilmography';
 
 // --- Mocks ---
 
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn();
+const mockCloseMovieDetail = jest.fn();
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
+}));
+
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: ({
+    movieId,
+    title,
+    showFinancialInfo,
+    onClose,
+  }: {
+    movieId: number | null;
+    title?: string;
+    showFinancialInfo?: boolean;
+    onClose: () => void;
+  }) =>
+    movieId === null ? null : (
+      <div
+        data-testid='movie-detail-modal'
+        data-financial={String(Boolean(showFinancialInfo))}
+      >
+        <span>{`Movie ID: ${movieId}`}</span>
+        <span>{title}</span>
+        <button onClick={onClose}>閉じる</button>
+      </div>
+    ),
+}));
+
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: jest.fn(({ movie, viewMode }) => (
     <div data-testid={`movie-tile-${movie.id}`} data-view-mode={viewMode}>
       {/* 詳細への遷移はタイル側のリンクが担う（#1033） */}
-      <a href={`/movies/detail/${movie.id}`}>{movie.title}</a>
+      <a href={`/movies/${movie.id}`}>{movie.title}</a>
     </div>
   )),
 }));
@@ -107,6 +145,7 @@ const createCredits = (count: number) =>
 describe('PersonFilmography', () => {
   // 表示モードは localStorage に残る。消さないと後続のテストへ漏れる
   beforeEach(() => {
+    mockSelectedMovieId = null;
     localStorage.clear();
   });
 
@@ -242,6 +281,6 @@ describe('PersonFilmography', () => {
       within(screen.getByTestId('movie-tile-2')).getByRole('link', {
         name: '出演作2',
       }),
-    ).toHaveAttribute('href', '/movies/detail/2');
+    ).toHaveAttribute('href', '/movies/2');
   });
 });

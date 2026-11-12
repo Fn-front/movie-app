@@ -41,13 +41,25 @@ export interface MovieTileProps {
   /** ジャンルマップ */
   genres?: Record<number, string>;
   /**
-   * タイトルを押したときのコールバック
+   * タイトルが押されたことを記録するコールバック（計測用）
    *
-   * **遷移には使わない。** 映画詳細は `/movies/[id]` という URL を持つ
-   * ルートになったので、タイトルは素の `<Link>` で遷移する（#1033）。
-   * ここに渡すのは「押されたこと」を記録したい側（レコメンドの計測）だけ。
+   * **遷移には使わない。** 新しいタブで開かれたときも含め、押されれば必ず
+   * 呼ぶ（レコメンドのクリック計測が取りこぼさないようにするため）。
    */
   onClick?: (movieId: number) => void;
+  /**
+   * タイトルを「その場で開く」ときのコールバック
+   *
+   * 渡すと、**修飾キーなしの左クリックだけ**を横取りして遷移を止め、
+   * 代わりにこれを呼ぶ。呼び出し側は一覧の URL に `?movie_id=<id>` を足して
+   * モーダルを重ねる（#1033）。
+   *
+   * 渡さなければ素のリンクとして `/movies/<id>` へ遷移する。
+   *
+   * ⚠️ Ctrl・⌘・中クリック・Shift は横取りしない。新しいタブ／ウィンドウで
+   * 開く操作を奪うと、リンクである意味が無くなる。
+   */
+  onSelect?: (movieId: number) => void;
   /** ウォッチリストに追加済みかどうか */
   isInWatchlist?: boolean;
   /** ウォッチリストボタンクリック時のコールバック */
@@ -109,6 +121,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   movie,
   genres,
   onClick,
+  onSelect,
   isInWatchlist = false,
   onWatchlistToggle,
   watchlistDisabled = false,
@@ -123,9 +136,30 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
 }) {
   const Title = `h${headingLevel}` as const;
 
-  const handleClick = useCallback(() => {
-    onClick?.(movie.id);
-  }, [movie.id, onClick]);
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>) => {
+      // 計測は遷移の仕方によらず走らせる（新しいタブで開かれた分も数える）
+      onClick?.(movie.id);
+
+      if (!onSelect) return;
+
+      // 新しいタブ・ウィンドウで開く操作と、既に止められたイベントには触らない
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      onSelect(movie.id);
+    },
+    [movie.id, onClick, onSelect],
+  );
 
   const handleWatchlistToggle = useCallback(() => {
     onWatchlistToggle?.(movie);

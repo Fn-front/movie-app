@@ -10,6 +10,8 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/ui/emptyState/emptyState';
 import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
+import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
@@ -70,6 +72,14 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
       [visibleCredits, getFavoriteInfo],
     );
 
+    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+      useMovieDetailQuery();
+
+    const selectedMovieTitle = useMemo(
+      () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
+      [movieCacheItems, selectedMovieId],
+    );
+
     const handlePageChange = useCallback((page: number) => {
       setCurrentPage(page);
     }, []);
@@ -110,6 +120,7 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
             <div key={movie.id} className={styles.c_person_filmography__item}>
               <MovieTile
                 movie={movie}
+                onSelect={openMovieDetail}
                 headingLevel={3}
                 isInWatchlist={isInWatchlist(movie.id)}
                 onWatchlistToggle={toggleWatchlist}
@@ -132,6 +143,12 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
           totalPages={totalPages}
           onPageChange={handlePageChange}
           className={styles.c_person_filmography__pagination}
+        />
+
+        <MovieDetailModal
+          movieId={selectedMovieId}
+          title={selectedMovieTitle}
+          onClose={closeMovieDetail}
         />
 
         <FavoriteRatingModal

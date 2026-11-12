@@ -79,7 +79,7 @@ test.describe('キーボード操作', () => {
     // タイトル（詳細へのリンク・#1033）と操作ボタンが別々の要素になっている
     const detailLink = page.getByRole('link', { name: title.trim() });
     await expect(detailLink).toBeVisible();
-    await expect(detailLink).toHaveAttribute('href', /^\/movies\/detail\/\d+$/);
+    await expect(detailLink).toHaveAttribute('href', /^\/movies\/\d+$/);
 
     const watchlistButton = firstTile.getByRole('button', {
       name: /ウォッチリスト/,

@@ -8,6 +8,8 @@
 import { memo, useMemo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
+import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { NOW_SHOWING_SECTION_TITLE, DISPLAY_LIMITS } from '@/constants';
 import type { NowShowingMovie } from '@/lib/types';
 import { nowShowingToMovieCacheItem } from '@/utils/toMovieCacheItem';
@@ -32,6 +34,14 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
       [movies],
     );
 
+    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+      useMovieDetailQuery();
+
+    const selectedMovieTitle = useMemo(
+      () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
+      [movieCacheItems, selectedMovieId],
+    );
+
     if (movies.length === 0) {
       return (
         <section aria-label={NOW_SHOWING_SECTION_TITLE}>
@@ -48,32 +58,40 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
     }
 
     return (
-      <section aria-label={NOW_SHOWING_SECTION_TITLE}>
-        <div className={styles.c_now_showing_movie_list__header}>
-          <h2 className={styles.c_now_showing_movie_list__title}>
-            {NOW_SHOWING_SECTION_TITLE}
-          </h2>
-        </div>
-        <div className={styles.c_now_showing_movie_list__scroll_container}>
-          <div className={styles.c_now_showing_movie_list__list} role='list'>
-            {movieCacheItems.map((movie, index) => (
-              <div
-                key={movie.id}
-                role='listitem'
-                className={styles.c_now_showing_movie_list__item}
-              >
-                <span className={styles.c_now_showing_movie_list__rank}>
-                  {index + 1}
-                </span>
-                <MovieTile
-                  movie={movie}
-                  eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
-                />
-              </div>
-            ))}
+      <>
+        <section aria-label={NOW_SHOWING_SECTION_TITLE}>
+          <div className={styles.c_now_showing_movie_list__header}>
+            <h2 className={styles.c_now_showing_movie_list__title}>
+              {NOW_SHOWING_SECTION_TITLE}
+            </h2>
           </div>
-        </div>
-      </section>
+          <div className={styles.c_now_showing_movie_list__scroll_container}>
+            <div className={styles.c_now_showing_movie_list__list} role='list'>
+              {movieCacheItems.map((movie, index) => (
+                <div
+                  key={movie.id}
+                  role='listitem'
+                  className={styles.c_now_showing_movie_list__item}
+                >
+                  <span className={styles.c_now_showing_movie_list__rank}>
+                    {index + 1}
+                  </span>
+                  <MovieTile
+                    movie={movie}
+                    onSelect={openMovieDetail}
+                    eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+        <MovieDetailModal
+          movieId={selectedMovieId}
+          title={selectedMovieTitle}
+          onClose={closeMovieDetail}
+        />
+      </>
     );
   },
 );

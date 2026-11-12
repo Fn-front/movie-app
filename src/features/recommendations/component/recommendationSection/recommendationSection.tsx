@@ -11,6 +11,8 @@ import { IoRefreshOutline } from 'react-icons/io5';
 import { Button } from '@/components/ui/button/button';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
+import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
@@ -131,6 +133,14 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       [isInWatchlist, toggleWatchlist, trackEvent],
     );
 
+    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
+      useMovieDetailQuery();
+
+    const selectedMovieTitle = useMemo(
+      () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
+      [movieCacheItems, selectedMovieId],
+    );
+
     const reasonMap = useMemo(
       () => new Map(recommendations.map((r) => [r.tmdb_movie_id, r.reason])),
       [recommendations],
@@ -228,6 +238,7 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
                   <MovieTile
                     movie={movie}
                     onClick={handleTileClick}
+                    onSelect={openMovieDetail}
                     isInWatchlist={isInWatchlist(movie.id)}
                     onWatchlistToggle={handleWatchlistToggle}
                     watchlistDisabled={isMovieToggling(movie.id)}
@@ -246,6 +257,11 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
             </div>
           </div>
         </section>
+        <MovieDetailModal
+          movieId={selectedMovieId}
+          title={selectedMovieTitle}
+          onClose={closeMovieDetail}
+        />
         <FavoriteRatingModal
           isOpen={favoriteModalState.isOpen}
           onClose={closeFavoriteModal}

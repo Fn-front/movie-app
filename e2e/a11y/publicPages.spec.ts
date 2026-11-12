@@ -8,6 +8,8 @@ import { expect, test } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 
+import { MOVIE_ID } from '../helpers/movieDetail';
+
 import {
   THEMES,
   gotoWithTheme,
@@ -40,6 +42,32 @@ const HOME_ALLOWED_INCOMPLETE: readonly AllowedIncomplete[] = [
 ];
 
 /**
+ * リスト表示で許容する incomplete
+ *
+ * リバイバルバッジ（「リバイバル」）に対し axe が「背景色を決定できない」を
+ * 返すことがある。バッジはポスター画像の上に重なるため、axe が背景色を
+ * 1色に決められないケース。**違反（violation）ではなく要確認（incomplete）**。
+ *
+ * 実害が無いことは実測で確認済み。
+ * - バッジは最前面（`elementsFromPoint` の先頭）で、何にも覆われていない
+ * - クリップもされていない（リスト幅で 52×16 が 56×84 のポスターに収まる）
+ * - 配色はデザインシステムの固定値（`$secondary-900` / `$text-on-accent`）
+ *
+ * 出るかどうかはポスター画像が描画済みかで変わるため、実行順やキャッシュの
+ * 温まり具合で揺れる。ホームのカルーセル（HOME_ALLOWED_INCOMPLETE）と同種。
+ *
+ * 対象を `movie_tile__revival` に絞っているので、他の要素のコントラストは
+ * 従来どおり落ちる。
+ */
+const LIST_ALLOWED_INCOMPLETE: readonly AllowedIncomplete[] = [
+  {
+    id: 'color-contrast',
+    messageKey: 'elmPartiallyObscured',
+    targetIncludes: 'movie_tile__revival',
+  },
+];
+
+/**
  * 未認証でも表示できるページ
  *
  * `allowedIncomplete` は「axe が判定できないだけで実害が無い」と確認できた
@@ -53,6 +81,9 @@ const PUBLIC_PAGES = [
   },
   { name: '公開中', path: '/movies/now-showing' },
   { name: '公開予定', path: '/movies/upcoming' },
+  // 映画詳細の全画面ページ（#1033）。モーダルとは見出しレベル（h1/h2）も
+  // スクロール領域の tabIndex も切り替わるため、別の回帰対象として見る
+  { name: '映画詳細', path: `/movies/${MOVIE_ID}` },
   {
     name: '受賞作品',
     path: '/awards',
@@ -115,7 +146,12 @@ test.describe('アクセシビリティ（未認証ページ）', () => {
     await gotoWithTheme(page, '/movies/now-showing', 'dark');
     await waitForMovieTiles(page);
 
-    await expectNoA11yViolations(page, '公開中の映画（リスト表示） / dark');
+    await expectNoA11yViolations(
+      page,
+      '公開中の映画（リスト表示） / dark',
+      [],
+      LIST_ALLOWED_INCOMPLETE,
+    );
   });
 
   /**

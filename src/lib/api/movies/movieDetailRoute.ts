@@ -1,31 +1,37 @@
+/**
+ * 映画詳細ルートの共有ロジック
+ *
+ * 全画面ページ（`app/movies/[id]`）の `generateMetadata` と本体で共有する。
+ * 同じ映画を2回引かないようにするためのまとめ。
+ */
+
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
 
 import { APP_NAME, DISPLAY_LIMITS } from '@/constants';
-import { MovieDetailPage } from '@/features/movies/component/movieDetailPage/movieDetailPage';
 import { getCachedMovieDetail } from '@/lib/api/movies/movies.server';
-import { parseMovieId } from '@/lib/movies/movieId';
+import { parsePositiveIntId } from '@/lib/routeId';
 import type { MovieDetail } from '@/lib/types';
 import { getTMDbPosterUrl } from '@/utils/image';
 
-type MovieDetailPageProps = {
-  params: Promise<{ id: string }>;
-};
-
-/** OG の description に載せるあらすじの最大文字数 */
+/**
+ * OG の description に載せるあらすじの最大文字数（省略記号を除く）
+ */
 const OG_DESCRIPTION_MAX_CHARS = 120;
 
 /**
  * 表示してよい映画を取得する
  *
  * ID書式・TMDbの404・アダルト作品を全て「存在しない」として扱う。
- * `getCachedMovieDetail` は generateMetadata とページ本体で共有しており、
- * 同じ映画への TMDb リクエストは1回で済む。
+ * `getCachedMovieDetail` を通すので、`generateMetadata`・ページ本体・
+ * 割り込みのモーダルが同じ映画を見ても TMDb へのリクエストは1回で済む。
  *
+ * @param id - URL から受け取った文字列
  * @returns 映画詳細。表示対象でなければ null
  */
-async function findVisibleMovie(id: string): Promise<MovieDetail | null> {
-  const movieId = parseMovieId(id);
+export async function findVisibleMovie(
+  id: string,
+): Promise<MovieDetail | null> {
+  const movieId = parsePositiveIntId(id);
   if (movieId === null) return null;
 
   try {
@@ -38,12 +44,15 @@ async function findVisibleMovie(id: string): Promise<MovieDetail | null> {
   }
 }
 
-export async function generateMetadata({
-  params,
-}: MovieDetailPageProps): Promise<Metadata> {
-  const { id } = await params;
-  const movie = await findVisibleMovie(id);
-
+/**
+ * 映画詳細の `<title>` と OG を組み立てる
+ *
+ * モーダルで開いているときも同じものを使う。URL を持たせた目的が共有と
+ * ブックマークなので、**器がモーダルかページかでタイトルが変わってはいけない**。
+ *
+ * @param movie - 表示対象の映画。null なら未検出用のタイトルだけ返す
+ */
+export function buildMovieDetailMetadata(movie: MovieDetail | null): Metadata {
   if (!movie) {
     return { title: `映画が見つかりません | ${APP_NAME}` };
   }
@@ -57,7 +66,7 @@ export async function generateMetadata({
   // あらすじが無い作品も多い（邦題未登録の洋画など）。その場合は
   // ジャンルと公開日で最低限の説明を組み立てる
   const description = movie.overview
-    ? movie.overview.slice(0, OG_DESCRIPTION_MAX_CHARS)
+    ? truncate(movie.overview, OG_DESCRIPTION_MAX_CHARS)
     : [movie.title, genreNames, movie.release_date].filter(Boolean).join(' / ');
 
   const posterUrl = getTMDbPosterUrl(movie.poster_path);
@@ -75,19 +84,11 @@ export async function generateMetadata({
 }
 
 /**
- * 映画詳細ページ
+ * 文中で切れたことが分かるように省略記号を足して切り詰める
  *
- * 直接アクセス・リロード・共有リンクで開かれる全画面表示。一覧からの
- * ソフト遷移では `src/app/@modal/(.)movies/detail/[id]/page.tsx` が割り込み、
- * 同じURLのままモーダルで出る（#1033）。
+ * 単に `slice` すると OG の説明が文の途中でぶつ切りになり、続きがあるのか
+ * そこで終わりなのかが読み手に伝わらない。
  */
-export default async function MovieDetail({ params }: MovieDetailPageProps) {
-  const { id } = await params;
-  const movie = await findVisibleMovie(id);
-
-  if (!movie) {
-    notFound();
-  }
-
-  return <MovieDetailPage movieId={movie.id} />;
+function truncate(text: string, maxChars: number): string {
+  return text.length <= maxChars ? text : `${text.slice(0, maxChars)}…`;
 }

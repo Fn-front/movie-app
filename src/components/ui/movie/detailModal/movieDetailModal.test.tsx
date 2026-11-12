@@ -42,21 +42,15 @@ jest.mock('@/components/ui/modal/modal', () => ({
     children,
     title,
     onOpenChange,
-    manageHistory,
   }: {
     open: boolean;
     children: React.ReactNode;
     title: string;
     onOpenChange: (open: boolean) => void;
-    manageHistory?: boolean;
   }) => {
     capturedOnOpenChange = onOpenChange;
     return open ? (
-      <div
-        data-testid='modal'
-        aria-label={title}
-        data-manage-history={String(manageHistory)}
-      >
+      <div data-testid='modal' aria-label={title}>
         <button data-testid='close-trigger' onClick={() => onOpenChange(false)}>
           閉じる
         </button>
@@ -135,57 +129,5 @@ describe('MovieDetailModal', () => {
     expect(
       screen.queryByTestId('movie-detail-content'),
     ).not.toBeInTheDocument();
-  });
-
-  // intercepting route から開くときは開閉をルーターが持つ（#1033）
-  describe('manageHistory', () => {
-    it('既定では履歴エントリを自分で積む', () => {
-      render(<MovieDetailModal movieId={123} onClose={jest.fn()} />);
-
-      expect(screen.getByTestId('modal')).toHaveAttribute(
-        'data-manage-history',
-        'true',
-      );
-    });
-
-    it('falseならModalにも積ませない', () => {
-      render(
-        <MovieDetailModal
-          movieId={123}
-          onClose={jest.fn()}
-          manageHistory={false}
-        />,
-      );
-
-      expect(screen.getByTestId('modal')).toHaveAttribute(
-        'data-manage-history',
-        'false',
-      );
-    });
-
-    it('既定ではキャスト遷移時の閉じる要求を中身へ渡す', () => {
-      render(<MovieDetailModal movieId={123} onClose={jest.fn()} />);
-
-      expect(screen.getByTestId('movie-detail-content')).toHaveAttribute(
-        'data-has-request-close',
-        'true',
-      );
-    });
-
-    // 遷移でスロットごと閉じるので、重ねて router.back() を呼ぶと競合する
-    it('falseなら閉じる要求を渡さない', () => {
-      render(
-        <MovieDetailModal
-          movieId={123}
-          onClose={jest.fn()}
-          manageHistory={false}
-        />,
-      );
-
-      expect(screen.getByTestId('movie-detail-content')).toHaveAttribute(
-        'data-has-request-close',
-        'false',
-      );
-    });
   });
 });

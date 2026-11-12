@@ -24,6 +24,17 @@ const MOVIE_DETAIL_URL = /\/api\/movies\/\d+(?:$|\?)/;
  */
 export const MOVIE_ID = 550;
 
+/**
+ * {@link MOVIE_ID} の邦題。
+ *
+ * `<title>` の検証に使う。**接尾辞だけ（`/\| Movie App$/`）では検証にならない**。
+ * アプリのどのページもその形なので、404 でも未検出でも通ってしまう。
+ * ID を固定している以上、作品名も固定して完全一致で見る。
+ *
+ * ⚠️ TMDb 側で邦題が変わったらここも直すこと（その場合このテストが落ちる）。
+ */
+export const MOVIE_TITLE = 'ファイト・クラブ';
+
 /** TMDb に存在しない映画ID（404ページの検証用） */
 export const MISSING_MOVIE_ID = 999999999;
 

@@ -8,6 +8,44 @@ import { ARIA_LABELS } from '@/constants';
 
 /** URL の ?t= を差し替えるための可変値（各テストで入れ替える） */
 let mockSearchParams = new URLSearchParams();
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn();
+const mockCloseMovieDetail = jest.fn();
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
+}));
+
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: ({
+    movieId,
+    title,
+    showFinancialInfo,
+    onClose,
+  }: {
+    movieId: number | null;
+    title?: string;
+    showFinancialInfo?: boolean;
+    onClose: () => void;
+  }) =>
+    movieId === null ? null : (
+      <div
+        data-testid='movie-detail-modal'
+        data-financial={String(Boolean(showFinancialInfo))}
+      >
+        <span>{`Movie ID: ${movieId}`}</span>
+        <span>{title}</span>
+        <button onClick={onClose}>閉じる</button>
+      </div>
+    ),
+}));
+
 jest.mock('next/navigation', () => ({
   useSearchParams: () => mockSearchParams,
 }));
@@ -35,7 +73,7 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
       data-favorite-rating={movie.favorite ? String(movie.favorite.rating) : ''}
     >
       {/* 詳細への遷移はタイル側のリンクが担う（#1033） */}
-      <a href={`/movies/detail/${movie.id}`}>{movie.title}</a>
+      <a href={`/movies/${movie.id}`}>{movie.title}</a>
     </div>
   ),
 }));
@@ -194,6 +232,7 @@ function setAwardsData(awards = createMockAwardsData()) {
 
 describe('AwardsPage', () => {
   beforeEach(() => {
+    mockSelectedMovieId = null;
     jest.clearAllMocks();
     mockUseAwardsReturn.data = undefined;
     mockUseAwardsReturn.isLoading = false;
@@ -437,7 +476,7 @@ describe('AwardsPage', () => {
 
     expect(
       within(screen.getByTestId('movie-tile-200')).getByRole('link'),
-    ).toHaveAttribute('href', '/movies/detail/200');
+    ).toHaveAttribute('href', '/movies/200');
   });
 
   it('受賞ラベルが表示される', () => {

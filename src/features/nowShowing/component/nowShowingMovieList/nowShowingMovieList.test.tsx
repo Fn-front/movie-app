@@ -3,6 +3,46 @@ import { render, screen } from '@testing-library/react';
 import { NowShowingMovieList } from './nowShowingMovieList';
 import type { NowShowingMovie } from '@/lib/types';
 
+// --- Mocks ---
+
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn();
+const mockCloseMovieDetail = jest.fn();
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
+}));
+
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: ({
+    movieId,
+    title,
+    showFinancialInfo,
+    onClose,
+  }: {
+    movieId: number | null;
+    title?: string;
+    showFinancialInfo?: boolean;
+    onClose: () => void;
+  }) =>
+    movieId === null ? null : (
+      <div
+        data-testid='movie-detail-modal'
+        data-financial={String(Boolean(showFinancialInfo))}
+      >
+        <span>{`Movie ID: ${movieId}`}</span>
+        <span>{title}</span>
+        <button onClick={onClose}>閉じる</button>
+      </div>
+    ),
+}));
+
 // MovieTile は本物を使う。「タイルが映画詳細のURLへのリンクになっているか」が
 // この画面の主要な導線で、差し替えると配線を確認できないため（#1033）
 
@@ -26,6 +66,7 @@ const createMockMovies = (count: number): NowShowingMovie[] =>
 
 describe('NowShowingMovieList', () => {
   beforeEach(() => {
+    mockSelectedMovieId = null;
     jest.clearAllMocks();
   });
 
@@ -81,11 +122,11 @@ describe('NowShowingMovieList', () => {
 
       expect(screen.getByRole('link', { name: '人気映画 1' })).toHaveAttribute(
         'href',
-        '/movies/detail/100',
+        '/movies/100',
       );
       expect(screen.getByRole('link', { name: '人気映画 2' })).toHaveAttribute(
         'href',
-        '/movies/detail/101',
+        '/movies/101',
       );
     });
   });

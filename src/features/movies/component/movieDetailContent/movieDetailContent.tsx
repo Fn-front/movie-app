@@ -8,7 +8,7 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { IoPlayOutline } from 'react-icons/io5';
+import { IoPlayOutline, IoShareOutline } from 'react-icons/io5';
 import { Loading } from '@/components/ui/loading/loading';
 import { useModalNavigation } from '@/components/ui/modal/modal';
 import { WatchlistAddButton } from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton';
@@ -17,6 +17,7 @@ import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRati
 import { VideoDialog } from '@/features/movies/component/videoDialog/videoDialog';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
+import { useShareMovie } from '@/features/movies/hooks/useShareMovie';
 import { isMovieReleased } from '@/utils/movie';
 import {
   getTMDbPosterUrl,
@@ -65,13 +66,6 @@ export interface MovieDetailContentProps {
   variant?: 'modal' | 'page';
   /** 動画ダイアログの開閉状態変更コールバック */
   onVideoDialogOpenChange?: (open: boolean) => void;
-  /**
-   * 他ページへ遷移するためモーダルを閉じてほしいときのコールバック。
-   *
-   * キャストから人物ページへ移動する際、モーダルを開いたままだと
-   * 遷移先の上に被さり続けるため、遷移と同時に閉じる。
-   */
-  onRequestClose?: () => void;
 }
 
 /**
@@ -165,7 +159,6 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     showFinancialInfo = false,
     variant = 'modal',
     onVideoDialogOpenChange,
-    onRequestClose,
   }) {
     const isPage = variant === 'page';
     const TitleTag = isPage ? 'h1' : 'h3';
@@ -173,13 +166,18 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     const { movie, isLoading, isError } = useMovieDetail(movieId);
     const { shouldReplaceNavigation, notifyNavigating } = useModalNavigation();
 
-    // キャストから人物ページへ出る経路。モーダルを閉じるのと同時に
-    // 遷移するので、履歴を畳む非同期の back に取り消されないよう申告する（#1043）
+    /**
+     * キャストから人物ページへ出る経路
+     *
+     * モーダルは遷移で器ごとアンマウントされるので、閉じる指示は要らない。
+     * ⚠️ `notifyNavigating()` は必須。これが無いと、履歴を畳む非同期の
+     * `history.back()` が遷移を取り消してしまう（#1043）。
+     */
     const handleCastClick = useCallback(() => {
       notifyNavigating();
-      onRequestClose?.();
-    }, [notifyNavigating, onRequestClose]);
+    }, [notifyNavigating]);
     const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
+    const { shareMovie } = useShareMovie();
     const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
 
     const handleVideoDialogOpenChange = useCallback(
@@ -212,6 +210,16 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
         release_date: movie.release_date ?? null,
       });
     }, [movie, movieId, toggleWatchlist]);
+
+    /**
+     * 共有するのは全画面ページの URL（`/movies/<id>`）。
+     * モーダルは一覧の URL にクエリを足した状態なので、そのまま渡すと
+     * 「どの一覧をどう絞り込んで開いたか」まで共有してしまう
+     */
+    const handleShare = useCallback(() => {
+      if (!movie) return;
+      void shareMovie(movieId, movie.title);
+    }, [movie, movieId, shareMovie]);
 
     const handleFavoriteClick = useCallback(() => {
       if (!movie) return;
@@ -341,6 +349,14 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                   {movie.title}
                 </TitleTag>
                 <div className={styles.c_movie_detail__action_buttons}>
+                  <button
+                    type='button'
+                    className={styles.c_movie_detail__share_button}
+                    onClick={handleShare}
+                    aria-label={ARIA_LABELS.SHARE_MOVIE(movie.title)}
+                  >
+                    <IoShareOutline aria-hidden='true' />
+                  </button>
                   {canFavorite && (
                     <FavoriteButton
                       favorite={movie.favorite ?? null}

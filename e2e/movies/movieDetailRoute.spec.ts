@@ -1,12 +1,14 @@
 /**
- * 映画詳細ルート E2Eテスト（#1033）
+ * 映画詳細のURL化 E2Eテスト（#1033）
  *
- * 映画詳細は `/movies/detail/[id]` という URL を持つ。一覧からのソフト遷移では
- * intercepting route がモーダルで重ね、直接アクセス・リロード・共有では
- * 全画面ページになる。
+ * - 一覧からはモーダルで開く。状態は一覧のURLに `?movie_id=<id>` で持つので、
+ *   **リロードしても一覧ごと復元される**し、戻るで閉じられる
+ * - タイトルはリンクのままなので、Ctrl・中クリックで `/movies/<id>`
+ *   （全画面ページ）が新しいタブに開く
+ * - 共有ボタンが共有するのは、モーダルのURLではなく `/movies/<id>`
  *
  * 表示内容は /api/movies/:id をモックして TMDb 非依存にする。ただし
- * ページ本体（Server Component）の存在確認と `<title>` 生成だけは
+ * 全画面ページ（Server Component）の存在確認と `<title>` 生成だけは
  * サーバ側で TMDb を呼ぶため、実在が安定している MOVIE_ID を使う。
  */
 
@@ -17,6 +19,7 @@ import { movieTileDetailLinks, movieTiles } from '../helpers/locators';
 import {
   MISSING_MOVIE_ID,
   MOVIE_ID,
+  MOVIE_TITLE,
   mockMovieDetail,
 } from '../helpers/movieDetail';
 
@@ -30,47 +33,54 @@ const waitForList = (page: Page) =>
     .then(() => true)
     .catch(() => false);
 
-/** 詳細の URL（/movies/detail/<数値>） */
-const DETAIL_URL = /\/movies\/detail\/\d+$/;
+/** モーダルを開いている一覧のURL（/movies/now-showing?...movie_id=<数値>） */
+const MODAL_URL = /\/movies\/now-showing\?.*movie_id=\d+/;
 
-test.describe('映画詳細ルート', () => {
+/** 全画面ページのURL（/movies/<数値>） */
+const PAGE_URL = /\/movies\/\d+$/;
+
+test.describe('映画詳細のURL化', () => {
   test.beforeEach(async ({ page }) => {
     await mockMovieDetail(page);
   });
 
-  test('一覧から開くとモーダルで表示され、URLが /movies/detail/<id> になる', async ({
+  test('一覧から開くとモーダルが出て、URLに movie_id が付く', async ({
     page,
   }) => {
     await page.goto('/movies/now-showing');
     const hasTile = await waitForList(page);
     test.skip(!hasTile, '映画データが無いためスキップ');
 
-    // 一覧はそのまま残り、上にモーダルが重なる
     await movieTileDetailLinks(page).first().click();
 
-    await expect(page).toHaveURL(DETAIL_URL);
+    // 一覧のページから出ない（上に重なるだけ）
+    await expect(page).toHaveURL(MODAL_URL);
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('dialog').getByText('詳細情報')).toBeVisible({
       timeout: 15000,
     });
+    // 一覧は残っている（Radix が背景を aria-hidden にするので CSS で見る）
+    await expect(page.locator('h1')).toHaveText('公開中の映画');
   });
 
-  test('モーダル表示中にリロードすると専用ページになる', async ({ page }) => {
+  /**
+   * この設計の主目的。状態をコンポーネントに持っていた頃は、リロードで
+   * モーダルが消えて一覧だけになっていた
+   */
+  test('モーダル表示中にリロードすると一覧ごと復元される', async ({ page }) => {
     await page.goto('/movies/now-showing');
     const hasTile = await waitForList(page);
     test.skip(!hasTile, '映画データが無いためスキップ');
 
     await movieTileDetailLinks(page).first().click();
+    await expect(page).toHaveURL(MODAL_URL);
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
 
     await page.reload();
 
-    // 割り込みは効かず、同じURLが全画面ページになる
-    await expect(page).toHaveURL(DETAIL_URL);
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({
-      timeout: 20000,
-    });
+    await expect(page).toHaveURL(MODAL_URL);
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('h1')).toHaveText('公開中の映画');
   });
 
   test('戻るでモーダルが閉じ、進むで再び開く', async ({ page }) => {
@@ -79,61 +89,134 @@ test.describe('映画詳細ルート', () => {
     test.skip(!hasTile, '映画データが無いためスキップ');
 
     await movieTileDetailLinks(page).first().click();
-    await expect(page).toHaveURL(DETAIL_URL);
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
 
     await page.goBack();
 
-    // 1回で一覧へ戻る。モーダル側でも履歴を積んでいると2つ分戻って飛び越す
     await expect(page).toHaveURL(/\/movies\/now-showing$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     await page.goForward();
 
-    await expect(page).toHaveURL(DETAIL_URL);
+    await expect(page).toHaveURL(MODAL_URL);
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
   });
 
-  test('/movies/detail/<id> を直接開くと専用ページが全画面で表示される', async ({
+  /**
+   * モーダルで開く都合でリンクを捨てると、新しいタブで開けなくなる。
+   * 左クリックだけを横取りしていることを実際の操作で固定する
+   */
+  test('Ctrl+クリックで全画面ページが新しいタブに開く', async ({ page }) => {
+    await page.goto('/movies/now-showing');
+    const hasTile = await waitForList(page);
+    test.skip(!hasTile, '映画データが無いためスキップ');
+
+    const [newPage] = await Promise.all([
+      page.context().waitForEvent('page'),
+      movieTileDetailLinks(page)
+        .first()
+        .click({ modifiers: ['ControlOrMeta'] }),
+    ]);
+
+    await expect(newPage).toHaveURL(PAGE_URL);
+    // 元のタブは一覧のまま（モーダルも開かない）
+    await expect(page).toHaveURL(/\/movies\/now-showing$/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await newPage.close();
+  });
+
+  /**
+   * 共有するのは全画面ページのURL。モーダルのURL（一覧＋クエリ）を渡すと、
+   * 受け取った人に一覧の絞り込みごと共有してしまう
+   */
+  test('共有ボタンが全画面ページのURLをコピーする', async ({ page }) => {
+    // 共有シートが無い環境（PCのブラウザ）に揃え、コピー先を観測可能にする
+    await page.addInitScript(() => {
+      // @ts-expect-error 共有シートが無い環境を再現する
+      delete window.navigator.share;
+      Object.defineProperty(window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: (text: string) => {
+            (window as unknown as { __copied?: string }).__copied = text;
+            return Promise.resolve();
+          },
+        },
+      });
+    });
+
+    await page.goto('/movies/now-showing');
+    const hasTile = await waitForList(page);
+    test.skip(!hasTile, '映画データが無いためスキップ');
+
+    await movieTileDetailLinks(page).first().click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 15000 });
+
+    await dialog.getByRole('button', { name: /を共有$/ }).click();
+
+    await expect(page.getByText('リンクをコピーしました')).toBeVisible();
+
+    const copied = await page.evaluate(
+      () => (window as unknown as { __copied?: string }).__copied,
+    );
+    expect(copied).toMatch(/\/movies\/\d+$/);
+    expect(copied).not.toContain('movie_id');
+    expect(copied).not.toContain('now-showing');
+  });
+
+  test('/movies/<id> を直接開くと専用ページが全画面で表示される', async ({
     page,
   }) => {
-    await page.goto(`/movies/detail/${MOVIE_ID}`);
+    await page.goto(`/movies/${MOVIE_ID}`);
 
     await expect(page.getByRole('dialog')).toHaveCount(0);
     // 作品名が h1。モーダルでは h3 なので、器が切り替わったことまで見える
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({
       timeout: 20000,
     });
-    // ヘッダー・サイドバーを持つ通常のアプリ画面として出る
+    // ヘッダーを持つ通常のアプリ画面として出る
     await expect(page.getByRole('banner')).toBeVisible();
   });
 
+  /**
+   * ⚠️ 接尾辞（`/\| Movie App$/`）では検証にならない。アプリのどのページも
+   * その形なので、存在しないIDに差し替えても通ってしまう。完全一致で見る
+   */
   test('直接アクセスでは作品名がタイトルになる', async ({ page }) => {
-    await page.goto(`/movies/detail/${MOVIE_ID}`);
+    await page.goto(`/movies/${MOVIE_ID}`);
 
-    await expect(page).toHaveTitle(/\| Movie App$/);
+    await expect(page).toHaveTitle(`${MOVIE_TITLE} | Movie App`);
   });
 
   test('存在しない映画IDは404ページになる', async ({ page }) => {
-    const response = await page.goto(`/movies/detail/${MISSING_MOVIE_ID}`);
+    const response = await page.goto(`/movies/${MISSING_MOVIE_ID}`);
 
     expect(response?.status()).toBe(404);
   });
 
   test('書式が不正な映画IDは404ページになる', async ({ page }) => {
-    const response = await page.goto('/movies/detail/abc');
+    const response = await page.goto('/movies/abc');
 
     expect(response?.status()).toBe(404);
   });
 
   /**
-   * 一覧と詳細の衝突（#1033 で実際に踏んだ）
-   *
-   * 割り込みの一致は URL の形だけで決まるため、詳細を `/movies/[id]` に
-   * 置くと `(.)movies/[id]` が `/movies/upcoming` まで横取りし、
-   * **一覧を表示したまま URL だけ変わる**。`detail` を挟んでセグメント数で
-   * 分けているので、リンクで行き来しても中身が入れ替わる
+   * `/movies/[id]` は `/movies/now-showing` の兄弟になる。ページ解決では
+   * 静的セグメントが優先されるので、一覧は一覧のまま出る
    */
+  test('一覧ページは動的セグメントに食われない', async ({ page }) => {
+    for (const path of ['/movies/now-showing', '/movies/upcoming']) {
+      const response = await page.goto(path);
+
+      expect(response?.status()).toBe(200);
+      await expect(page.getByRole('tab', { name: '劇場公開' })).toBeVisible({
+        timeout: 20000,
+      });
+    }
+  });
+
   test('一覧ページどうしをリンクで行き来しても中身が入れ替わる', async ({
     page,
   }) => {
@@ -157,14 +240,33 @@ test.describe('映画詳細ルート', () => {
     ).toBeVisible({ timeout: 20000 });
   });
 
-  test('一覧ページは動的セグメントに食われない', async ({ page }) => {
-    for (const path of ['/movies/now-showing', '/movies/upcoming']) {
-      const response = await page.goto(path);
+  /**
+   * 絞り込みとモーダルは別の関心事。`movie_id` の増減でフィルターが
+   * 作り直されると、条件は同じでも配列の実体が差し替わって再描画が広がる
+   * （#1051 / #1059 の作りと噛み合わせる必要がある）
+   */
+  test('絞り込んだままモーダルを開いても絞り込みが消えない', async ({
+    page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    const hasTile = await waitForList(page);
+    test.skip(!hasTile, '映画データが無いためスキップ');
 
-      expect(response?.status()).toBe(200);
-      await expect(page.getByRole('tab', { name: '劇場公開' })).toBeVisible({
-        timeout: 20000,
-      });
-    }
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: '人気順' }).click();
+    await expect(page).toHaveURL(/sort_by=popularity/);
+
+    await movieTileDetailLinks(page).first().click();
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
+
+    // 並び順はURLにもUIにも残る（背景は aria-hidden なので CSS で見る）
+    await expect(page).toHaveURL(/sort_by=popularity/);
+    await expect(page).toHaveURL(/movie_id=\d+/);
+    await expect(page.locator('[role="combobox"]')).toContainText('人気順');
+
+    await page.goBack();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('combobox')).toContainText('人気順');
   });
 });

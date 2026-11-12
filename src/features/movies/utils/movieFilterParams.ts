@@ -241,6 +241,35 @@ export function buildFilterSearchParams(
 }
 
 /**
+ * URLクエリのうち**フィルターに関係する部分だけ**を正規化した文字列にする
+ *
+ * 「URLが変わったからフィルターstateを作り直す」判定に使う。クエリ文字列
+ * そのものを比べると、フィルター以外のパラメータが増減しただけで作り直して
+ * しまう。実際、映画詳細モーダルの `movie_id`（#1033）は開閉のたびに
+ * 増減するため、**モーダルを開くだけで全フィルターのstateが別実体に
+ * 差し替わる**（`React.memo` が広範囲で無効化され、saved_filters の
+ * 打ち切りフラグまで立つ）。
+ *
+ * キーの順序は `MOVIE_FILTER_QUERY_PARAMS` の宣言順に揃える。URL 上の
+ * 並び順が違うだけで「変わった」と誤認しないため。
+ *
+ * @param searchParams - URLSearchParams
+ * @returns フィルターキーだけを宣言順に並べたクエリ文字列
+ */
+export function extractFilterSearch(searchParams: URLSearchParams): string {
+  const filtered = new URLSearchParams();
+
+  for (const key of Object.values(MOVIE_FILTER_QUERY_PARAMS)) {
+    const value = searchParams.get(key);
+    if (value !== null) {
+      filtered.set(key, value);
+    }
+  }
+
+  return filtered.toString();
+}
+
+/**
  * localStorage からフィルター条件を復元する
  *
  * サイドナビのリンクなどクエリを持たない経路で入ったときの復元手段。

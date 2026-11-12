@@ -13,7 +13,7 @@ import { isAxiosError } from 'axios';
 import { getAuthSession } from '@/helpers/auth';
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import { getCachedPersonDetail } from '@/lib/api/person/person.server';
-import { parsePersonId } from '@/lib/person/personId';
+import { parsePositiveIntId } from '@/lib/routeId';
 import {
   HTTP_STATUS,
   ERROR_CODE,
@@ -66,7 +66,7 @@ export async function GET(
     if (limited) return limited;
 
     const { id } = await params;
-    const personId = parsePersonId(id);
+    const personId = parsePositiveIntId(id);
 
     if (personId === null) {
       return NextResponse.json(

@@ -80,17 +80,6 @@ export interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   /** 閉じるボタンを表示 */
   showCloseButton?: boolean;
-  /**
-   * 開いているあいだ履歴エントリを自分で積むか（既定: true）
-   *
-   * URL を持たないオーバーレイは、履歴に載っていないと戻る操作で
-   * ページごと離脱する（#1026）。既定で積むのはそのため。
-   *
-   * **ルート（intercepting route）として開くモーダルでは `false` にする。**
-   * 遷移そのものが既に履歴エントリなので、ここで積むと1つの戻る操作で
-   * 2つ分戻ることになり、進むで開き直せなくなる（#1033）。
-   */
-  manageHistory?: boolean;
 }
 
 /**
@@ -160,17 +149,14 @@ export const Modal = memo<ModalProps>(function Modal({
   closeOnEscape = true,
   size = 'md',
   showCloseButton = true,
-  manageHistory = true,
 }) {
   // 戻る操作で「閉じる」ようにする。履歴に載せないとページごと離脱する（#1026）
   const handleHistoryClose = useCallback(() => {
     onOpenChange(false);
   }, [onOpenChange]);
 
-  // 自分で積まないときは「開いていない」とみなして渡す。フックは条件付きで
-  // 呼べないため、無効化はこの引数で行う
   const { shouldReplaceNavigation, notifyNavigating } = useOverlayHistory(
-    open && manageHistory,
+    open,
     handleHistoryClose,
   );
 

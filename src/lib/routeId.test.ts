@@ -1,13 +1,14 @@
 /**
- * 映画IDパースのテスト
+ * URLパラメータのIDパースのテスト
  */
 
-import { parseMovieId } from './movieId';
+import { parsePositiveIntId } from './routeId';
 
-describe('parseMovieId', () => {
+describe('parsePositiveIntId', () => {
   it('10進の正の整数をそのまま数値にする', () => {
-    expect(parseMovieId('550')).toBe(550);
-    expect(parseMovieId('1')).toBe(1);
+    expect(parsePositiveIntId('550')).toBe(550);
+    expect(parsePositiveIntId('500')).toBe(500);
+    expect(parsePositiveIntId('1')).toBe(1);
   });
 
   it.each([
@@ -24,10 +25,10 @@ describe('parseMovieId', () => {
     ['全角数字', '５５０'],
     ['記号混じり', '12+3'],
   ])('%s は null を返す', (_label, input) => {
-    expect(parseMovieId(input)).toBeNull();
+    expect(parsePositiveIntId(input)).toBeNull();
   });
 
   it('安全な整数の範囲を超えるIDは null を返す', () => {
-    expect(parseMovieId('9007199254740993')).toBeNull();
+    expect(parsePositiveIntId('9007199254740993')).toBeNull();
   });
 });

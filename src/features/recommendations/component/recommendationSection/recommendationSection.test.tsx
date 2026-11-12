@@ -4,6 +4,44 @@ import { RecommendationSection } from './recommendationSection';
 
 // --- Mocks ---
 
+// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
+
+let mockSelectedMovieId: number | null = null;
+const mockOpenMovieDetail = jest.fn();
+const mockCloseMovieDetail = jest.fn();
+
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useMovieDetailQuery: () => ({
+    selectedMovieId: mockSelectedMovieId,
+    openMovieDetail: mockOpenMovieDetail,
+    closeMovieDetail: mockCloseMovieDetail,
+  }),
+}));
+
+jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
+  MovieDetailModal: ({
+    movieId,
+    title,
+    showFinancialInfo,
+    onClose,
+  }: {
+    movieId: number | null;
+    title?: string;
+    showFinancialInfo?: boolean;
+    onClose: () => void;
+  }) =>
+    movieId === null ? null : (
+      <div
+        data-testid='movie-detail-modal'
+        data-financial={String(Boolean(showFinancialInfo))}
+      >
+        <span>{`Movie ID: ${movieId}`}</span>
+        <span>{title}</span>
+        <button onClick={onClose}>閉じる</button>
+      </div>
+    ),
+}));
+
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   MovieTile: ({
     movie,
@@ -22,10 +60,7 @@ jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
   }) => (
     <div data-testid={`movie-tile-${movie.id}`}>
       {/* 詳細への遷移はタイル側のリンクが担う。onClick は計測用（#1033） */}
-      <a
-        href={`/movies/detail/${movie.id}`}
-        onClick={() => onClick?.(movie.id)}
-      >
+      <a href={`/movies/${movie.id}`} onClick={() => onClick?.(movie.id)}>
         {movie.title}
       </a>
       {onFavoriteToggle && (
@@ -170,6 +205,7 @@ const createMockRecommendations = (count: number) =>
 
 describe('RecommendationSection', () => {
   beforeEach(() => {
+    mockSelectedMovieId = null;
     jest.clearAllMocks();
     mockDismissedIds.clear();
     mockGetFavoriteInfo.mockReturnValue(null);
@@ -295,7 +331,7 @@ describe('RecommendationSection', () => {
 
       expect(
         screen.getByRole('link', { name: 'おすすめ映画 1' }),
-      ).toHaveAttribute('href', '/movies/detail/100');
+      ).toHaveAttribute('href', '/movies/100');
     });
   });
 

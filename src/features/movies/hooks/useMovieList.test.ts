@@ -1629,4 +1629,105 @@ describe('useMovieList', () => {
       expect(result.current.releaseType).toBe('streaming');
     });
   });
+
+  /**
+   * 映画詳細モーダルのクエリ（#1033）との噛み合わせ
+   *
+   * モーダルは一覧の URL に `movie_id` を足して開く。URL追従のガードが
+   * クエリ文字列**全体**を比べていると、開閉のたびにフィルター state を
+   * 作り直してしまう。条件の値は同じでも**配列の実体が別物に差し替わる**ため
+   * React.memo が広範囲で無効化され、saved_filters の打ち切りフラグも立つ。
+   */
+  describe('映画詳細モーダルのクエリ（movie_id）', () => {
+    const navigateTo = (query: Record<string, string>) => {
+      mockSearchParams = new URLSearchParams(query);
+    };
+
+    it('movie_id を足してもフィルター state の参照が変わらない', async () => {
+      navigateTo({ genre_ids: '28,12', sort_by: 'popularity' });
+
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      const genreIdsBefore = result.current.selectedGenreIds;
+      const dateRangeBefore = result.current.dateRange;
+
+      navigateTo({
+        genre_ids: '28,12',
+        sort_by: 'popularity',
+        movie_id: '550',
+      });
+      rerender();
+
+      expect(result.current.selectedGenreIds).toBe(genreIdsBefore);
+      expect(result.current.dateRange).toBe(dateRangeBefore);
+      expect(result.current.sortBy).toBe('popularity');
+    });
+
+    it('movie_id を外してもフィルター state の参照が変わらない', async () => {
+      navigateTo({ genre_ids: '28,12', movie_id: '550' });
+
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      const genreIdsBefore = result.current.selectedGenreIds;
+
+      navigateTo({ genre_ids: '28,12' });
+      rerender();
+
+      expect(result.current.selectedGenreIds).toBe(genreIdsBefore);
+    });
+
+    // movie_id の増減でURLを書き戻すと、モーダルを開くたびに replace が走る
+    it('movie_id の増減でURLを書き戻さない', async () => {
+      navigateTo({ genre_ids: '28' });
+
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      mockRouterReplace.mockClear();
+
+      navigateTo({ genre_ids: '28', movie_id: '550' });
+      rerender();
+
+      expect(mockRouterReplace).not.toHaveBeenCalled();
+    });
+
+    // movie_id が付いていてもフィルターの変更自体は従来どおり追従する
+    it('movie_id が付いたままでもフィルターの変更には追従する', async () => {
+      navigateTo({ genre_ids: '28', movie_id: '550' });
+
+      const { result, rerender } = renderHook(
+        () => useMovieList(defaultOptions),
+        { wrapper: createQueryWrapper() },
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      expect(result.current.selectedGenreIds).toEqual([28]);
+
+      navigateTo({ genre_ids: '12,16', movie_id: '550' });
+      rerender();
+
+      expect(result.current.selectedGenreIds).toEqual([12, 16]);
+    });
+  });
 });

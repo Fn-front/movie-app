@@ -464,6 +464,52 @@ describe('useWatchlistToggle', () => {
       expect(result.current.isInWatchlist(99)).toBe(false);
     });
 
+    /**
+     * `added` は react-query が observer を作る時点＝**レンダリング中**に
+     * 同期で飛ぶ。拾うと別コンポーネントのレンダリング中に更新を
+     * スケジュールしてしまうので購読から外してある（#1061）。
+     *
+     * ここで固定するのは「外しても取りこぼさない」側だけ。
+     * レンダリング中の setState そのものはこのファイルの pub/sub が
+     * 手書きのフェイクなので再現できず、
+     * useWatchlistToggle.renderPhase.test.tsx で本物の QueryClient を使う
+     */
+    it('added だけでは再描画しない', () => {
+      const { result } = renderHook(() => useWatchlistToggle());
+      const before = result.current.isInWatchlist;
+
+      act(() => {
+        setupCacheWithItem(42, 'watchlist-1');
+        emitCacheEvent(['watchlist'], 'added');
+      });
+
+      expect(result.current.isInWatchlist).toBe(before);
+    });
+
+    /**
+     * 実際に起きる順序を1本に収めて記録する。
+     *
+     * ⚠️ `added` を購読に戻してもこのテストは通る（それを捕まえるのは
+     * 上の「added だけでは再描画しない」と renderPhase の方）。ここが落ちるのは
+     * `updated` の購読を壊したときで、その意味では
+     * 「キャッシュだけが変わっても追従する」と検出力が重なっている
+     */
+    it('added を拾わなくても、後から来る updated で追従する', () => {
+      const { result } = renderHook(() => useWatchlistToggle());
+      const before = result.current.isInWatchlist;
+
+      // 実際の順序。キャッシュに Query が作られ（added。この時点では空）、
+      // その後データが入る（updated）
+      act(() => {
+        emitCacheEvent(['watchlist'], 'added');
+        setupCacheWithItem(42, 'watchlist-1');
+        emitCacheEvent(['watchlist'], 'updated');
+      });
+
+      expect(result.current.isInWatchlist).not.toBe(before);
+      expect(result.current.isInWatchlist(42)).toBe(true);
+    });
+
     it('無関係なキーのキャッシュ変化では追従しない', () => {
       const { result } = renderHook(() => useWatchlistToggle());
       const before = result.current.isInWatchlist;

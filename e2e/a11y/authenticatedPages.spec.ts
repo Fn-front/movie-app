@@ -58,26 +58,6 @@ import {
 } from './helpers';
 
 /**
- * デスクトップ幅の検査だけ除外するルール
- *
- * ⚠️ **これは実在する違反の一時的な除外であり、「問題が無い」という判断ではない。**
- *
- * サイドバーのユーザーメニュー（`userMenu.tsx`）が、アバター画像を持たない
- * 利用者に対して表示名の頭文字を span で描いている。その結果ボタンの可視テキストが
- * 「頭文字 + 表示名」になり、`aria-label`（「表示名 ユーザーメニュー」）に
- * 含まれなくなるため `label-content-name-mismatch`（serious / WCAG 2.5.3）が出る。
- *
- * サイドバーは共通レイアウトにあるので、**下のページ全部が同じ1件で落ちる**。
- * 製品コードの修正は #1069 の担当範囲。ここで除外しているのは、1件の既知の違反の
- * ために認証済みページの回帰検査をまるごと入れられない状態にしないため。
- *
- * **#1069 が直ったらこの定数ごと消すこと。**（#1069 の完了条件に入れてある）
- *
- * SP 幅はサイドバーが `display: none` で検査対象に入らないため、除外しない。
- */
-const AUTHENTICATED_DISABLED_RULES = ['label-content-name-mismatch'] as const;
-
-/**
  * 認証済みで表示するページ
  *
  * `allowedIncomplete` は「axe が判定できないだけで実害が無い」と確認できた
@@ -165,7 +145,7 @@ test.describe('アクセシビリティ（認証済みページ）', () => {
         await expectNoA11yViolations(
           page,
           `${name} / ${theme}`,
-          AUTHENTICATED_DISABLED_RULES,
+          [],
           allowedIncomplete,
         );
       });

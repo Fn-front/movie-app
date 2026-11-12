@@ -105,9 +105,22 @@ export const UserMenu = memo(function UserMenu() {
               className={styles.c_user_menu__avatar}
             />
           ) : (
-            <span className={styles.c_user_menu__avatar_initial}>
-              {initial}
-            </span>
+            /*
+              頭文字は**テキストノードではなく `::before` で描く**（#1069）。
+
+              このボタンは `aria-label` を持つので、頭文字を素のテキストで置くと
+              可視テキストが「頭文字 + 表示名」になり、aria-label に含まれなくなる
+              （axe: label-content-name-mismatch / WCAG 2.5.3 Label in Name）。
+
+              ⚠️ `aria-hidden='true'` では直らない。axe の
+              `labelContentNameMismatchEvaluate` は `visibleVirtual(..., screenReader: false)`
+              で**画面に見えている文字**を取るため、aria-hidden を見ない。
+              音声入力の利用者には実際に見えている以上、仕様としても正しい。
+            */
+            <span
+              className={styles.c_user_menu__avatar_initial}
+              data-initial={initial}
+            />
           )}
           <span className={styles.c_user_menu__name}>{userName}</span>
         </button>

@@ -66,8 +66,36 @@ describe('UserMenu', () => {
   });
 
   it('アバター未設定時にイニシャルが表示される', () => {
+    const { container } = render(<UserMenu />);
+
+    // 頭文字は ::before の content なので DOM のテキストにはならない（#1069）。
+    // 元になる data-initial を見る
+    expect(
+      container.querySelector('[data-initial]')?.getAttribute('data-initial'),
+    ).toBe('テ');
+  });
+
+  /**
+   * WCAG 2.5.3 Label in Name（axe: label-content-name-mismatch / #1069）
+   *
+   * トリガーは `aria-label` を持つので、**見えている文字がすべて
+   * `aria-label` に含まれていないといけない**。頭文字をテキストノードで
+   * 置くと可視テキストが「テテストユーザー」になり違反する。
+   *
+   * ⚠️ `getByRole('button', { name })` は**アクセシブル名**を見るため、
+   * 違反していても通る。可視テキスト側（textContent）を見ること。
+   * ⚠️ `aria-hidden='true'` を付けても axe は通らない。このルールは
+   * `visibleVirtual(..., screenReader: false)` で画面上の文字を取る。
+   */
+  it('トリガーの可視テキストは表示名だけで、aria-label に含まれる', () => {
     render(<UserMenu />);
-    expect(screen.getByText('テ')).toBeInTheDocument();
+
+    const trigger = screen.getByRole('button', {
+      name: 'テストユーザー ユーザーメニュー',
+    });
+
+    expect(trigger.textContent).toBe('テストユーザー');
+    expect(trigger.getAttribute('aria-label')).toContain(trigger.textContent);
   });
 
   it('アバター画像が設定されている場合にimg要素が表示される', () => {

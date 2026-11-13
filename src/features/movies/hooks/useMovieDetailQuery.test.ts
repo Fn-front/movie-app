@@ -3,7 +3,12 @@
  *
  * モーダルの開閉をURLクエリで持つ（#1033）。リロードで復元でき、
  * 戻るで閉じられることがこのフックの存在理由なので、
- * 「push で開く」「back で閉じる」を固定する。
+ * 「pushState で開く」「back で閉じる」を固定する。
+ *
+ * ⚠️ **「履歴が無いまま着地すると閉じられない」（#1079）を固定できるのはここだけ。**
+ * Playwright は `about:blank` から `goto` するため `history.length === 2` になり、
+ * そのケースを再現できない。E2E が見られるのは「外部から来た場合に
+ * アプリの外へ出ない」ほうだけ。
  */
 
 import { renderHook, act } from '@testing-library/react';
@@ -11,19 +16,45 @@ import { renderHook, act } from '@testing-library/react';
 import { useMovieDetailQuery } from './useMovieDetailQuery';
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 const mockBack = jest.fn();
 let mockSearch = '';
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace, back: mockBack }),
   usePathname: () => '/movies/now-showing',
   useSearchParams: () => new URLSearchParams(mockSearch),
 }));
+
+/**
+ * Next が書いたエントリの形
+ *
+ * ⚠️ **空オブジェクトで代用してはいけない。** `{}` だと禁じ手の
+ * `{...window.history.state, [KEY]: true}` でも結果が同じになり、
+ * 「`__NA` を混ぜていないこと」のテストが素通りする。
+ * jsdom には Next のパッチが無いので、ここで現実の形を与えるしかない。
+ */
+const NEXT_ENTRY = {
+  __NA: true,
+  __PRIVATE_NEXTJS_INTERNALS_TREE: { tree: [], renderedSearch: null },
+};
+
+/** 自分が積んだエントリ（目印あり）に見立てる */
+const pushedByUs = () => {
+  window.history.replaceState({ ...NEXT_ENTRY, __movieDetailQuery: true }, '');
+};
+
+/** 直接着地したエントリ（目印なし）に見立てる */
+const landedDirectly = () => {
+  window.history.replaceState({ ...NEXT_ENTRY }, '');
+};
 
 describe('useMovieDetailQuery', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSearch = '';
+    // 他のテストが残した history.state を持ち越さない
+    landedDirectly();
   });
 
   describe('選択中の映画', () => {
@@ -58,17 +89,28 @@ describe('useMovieDetailQuery', () => {
 
   describe('開く', () => {
     // replace にすると戻るで閉じられなくなる
-    it('push で movie_id を足す', () => {
+    it('pushState で movie_id を足す', () => {
       const { result } = renderHook(() => useMovieDetailQuery());
 
       act(() => result.current.openMovieDetail(550));
 
-      expect(mockPush).toHaveBeenCalledWith(
-        '/movies/now-showing?movie_id=550',
-        {
-          scroll: false,
-        },
-      );
+      expect(window.location.search).toBe('?movie_id=550');
+      // ルーターは使わない。push だと目印を置けない（#1079）
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    /**
+     * 目印が無いと、閉じるときに「自分が積んだ」と判断できない。
+     * ⚠️ `__NA` を混ぜてはいけない。Next のパッチが内部からの呼び出しと
+     * 判断して早期 return し、URL が更新されなくなる
+     */
+    it('自分が積んだ目印を history.state に残す', () => {
+      const { result } = renderHook(() => useMovieDetailQuery());
+
+      act(() => result.current.openMovieDetail(550));
+
+      expect(window.history.state).toEqual({ __movieDetailQuery: true });
+      expect(window.history.state).not.toHaveProperty('__NA');
     });
 
     it('既存のクエリ（フィルター）を保つ', () => {
@@ -78,22 +120,10 @@ describe('useMovieDetailQuery', () => {
 
       act(() => result.current.openMovieDetail(550));
 
-      const [url] = mockPush.mock.calls[0];
-      const params = new URLSearchParams(String(url).split('?')[1]);
+      const params = new URLSearchParams(window.location.search);
       expect(params.get('sort_by')).toBe('popularity');
       expect(params.get('release_type')).toBe('theatrical');
       expect(params.get('movie_id')).toBe('550');
-    });
-
-    // 先頭へ跳ぶと、一覧のどこを見ていたか分からなくなる
-    it('スクロール位置を動かさない', () => {
-      const { result } = renderHook(() => useMovieDetailQuery());
-
-      act(() => result.current.openMovieDetail(550));
-
-      expect(mockPush).toHaveBeenCalledWith(expect.any(String), {
-        scroll: false,
-      });
     });
 
     it('別の映画を開くと movie_id を差し替える', () => {
@@ -103,26 +133,93 @@ describe('useMovieDetailQuery', () => {
 
       act(() => result.current.openMovieDetail(680));
 
-      expect(mockPush).toHaveBeenCalledWith(
-        '/movies/now-showing?movie_id=680',
-        {
-          scroll: false,
-        },
-      );
+      expect(window.location.search).toBe('?movie_id=680');
+    });
+
+    /**
+     * `router.push` は同一URLを replace に倒していた（`app-router.js:103-110`）。
+     * 素の `pushState` にその判定は無いので、同じエントリが2つ並び
+     * **× を1回押しても閉じない**（back が同じ `movie_id` に着地する）
+     */
+    it('開いている作品をもう一度開いても履歴を積まない', () => {
+      mockSearch = 'movie_id=550';
+      const before = window.history.length;
+
+      const { result } = renderHook(() => useMovieDetailQuery());
+
+      act(() => result.current.openMovieDetail(550));
+
+      expect(window.history.length).toBe(before);
     });
   });
 
-  describe('閉じる', () => {
+  describe('閉じる（自分が開いた場合）', () => {
+    beforeEach(() => {
+      mockSearch = 'movie_id=550';
+      pushedByUs();
+    });
+
     // push した1つ分をちょうど戻す。replace で消すと進むで開き直せない
     it('1つ前の履歴へ戻る', () => {
+      const { result } = renderHook(() => useMovieDetailQuery());
+
+      act(() => result.current.closeMovieDetail());
+
+      expect(mockBack).toHaveBeenCalledTimes(1);
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * 直接着地（#1079）
+   *
+   * 新しいタブで `/watchlist?movie_id=550` を開くと履歴が1つしか無く、
+   * `back()` は何も起きない。`open` は URL から導出しているので、
+   * 閉じるボタンも Esc も背景クリックも効かず**モーダルから出られない**。
+   * 外部サイトから来た場合は逆に、閉じるとアプリの外へ出てしまう。
+   */
+  describe('閉じる（直接着地した場合）', () => {
+    beforeEach(() => {
+      landedDirectly();
+    });
+
+    it('戻らずにクエリだけ落とす', () => {
       mockSearch = 'movie_id=550';
 
       const { result } = renderHook(() => useMovieDetailQuery());
 
       act(() => result.current.closeMovieDetail());
 
-      expect(mockBack).toHaveBeenCalledTimes(1);
-      expect(mockPush).not.toHaveBeenCalled();
+      expect(mockBack).not.toHaveBeenCalled();
+      expect(mockReplace).toHaveBeenCalledWith('/movies/now-showing', {
+        scroll: false,
+      });
+    });
+
+    it('他のクエリ（フィルター）は残す', () => {
+      mockSearch = 'sort_by=popularity&movie_id=550';
+
+      const { result } = renderHook(() => useMovieDetailQuery());
+
+      act(() => result.current.closeMovieDetail());
+
+      expect(mockReplace).toHaveBeenCalledWith(
+        '/movies/now-showing?sort_by=popularity',
+        { scroll: false },
+      );
+    });
+
+    // 先頭へ跳ぶと、一覧のどこを見ていたか分からなくなる
+    it('スクロール位置を動かさない', () => {
+      mockSearch = 'movie_id=550';
+
+      const { result } = renderHook(() => useMovieDetailQuery());
+
+      act(() => result.current.closeMovieDetail());
+
+      expect(mockReplace).toHaveBeenCalledWith(expect.any(String), {
+        scroll: false,
+      });
     });
   });
 });

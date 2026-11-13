@@ -30,7 +30,7 @@ export interface MovieDetailModalProps {
    * 履歴エントリを自分で積むか（既定 true）
    *
    * `useMovieDetailQuery` のように **URL で開閉を持つ呼び出し側は `false`**。
-   * ルーターの push が既にエントリを積んでいるので、ここでも積むと
+   * 開く側の `history.pushState` が既にエントリを積んでいるので、ここでも積むと
    * 開くたびに履歴が2つ伸びる（#1033）。
    *
    * 既定が true なのは、URL を持てない経路（`AppLayout` の公開カレンダー）が

@@ -15,6 +15,8 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
 
+import { ARIA_LABELS } from '@/constants';
+
 import { movieTileDetailLinks, movieTiles } from '../helpers/locators';
 import {
   MISSING_MOVIE_ID,
@@ -64,7 +66,7 @@ test.describe('映画詳細のURL化', () => {
     // 一覧は残っている（Radix が背景を aria-hidden にするので CSS で見る）
     await expect(page.locator('h1')).toHaveText('公開中の映画');
 
-    // 増えてよいのは router.push の1つだけ。`Modal` が `useOverlayHistory` で
+    // 増えてよいのは history.pushState の1つだけ。`Modal` が `useOverlayHistory` で
     // 自前のエントリも積むと2つ伸びる。戻る／進む／× の見え方は二重でも
     // 正しいままなので、ここで数えないと気づけない（#1033）
     await expect
@@ -104,6 +106,37 @@ test.describe('映画詳細のURL化', () => {
 
     await expect(page).toHaveURL(/\/movies\/now-showing$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await page.goForward();
+
+    await expect(page).toHaveURL(MODAL_URL);
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
+  });
+
+  /**
+   * 自分で開いた場合は × も `back` で閉じる（#1079）
+   *
+   * 閉じ方が2通りに分かれたので、`back` 側が生きていることを実ブラウザで見る。
+   * **決め手は `goForward`。** 目印が読めずに `replace` へ落ちると
+   * モーダルは同じように閉じるが、履歴が消えて「進む」が空振りする。
+   * URL と見た目だけでは区別できないので、ここを見ないと
+   * サイレントに劣化する
+   */
+  test('一覧から開いたモーダルは × で閉じても進むで開き直せる', async ({
+    page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    const hasTile = await waitForList(page);
+    test.skip(!hasTile, '映画データが無いためスキップ');
+
+    await movieTileDetailLinks(page).first().click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 15000 });
+
+    await dialog.getByRole('button', { name: '閉じる' }).click();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/movies\/now-showing$/);
 
     await page.goForward();
 
@@ -281,5 +314,135 @@ test.describe('映画詳細のURL化', () => {
 
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByRole('combobox')).toContainText('人気順');
+  });
+
+  /**
+   * 直接着地したモーダル（#1079）
+   *
+   * 閉じる処理が `router.back()` だけだと、**自分で開いていないエントリ**に
+   * 着地したときに出口が無くなる。`open` は URL から導出しているので、
+   * `back()` が効かない／アプリの外へ出る、のどちらかになる。
+   *
+   * ⚠️ **「履歴が1つも無いタブ」は Playwright では再現できない。**
+   * `about:blank` から `goto` するので必ず `history.length >= 2` になる。
+   * そちらは `useMovieDetailQuery.test.ts` が固定している。
+   * ここで見られるのは「戻る先がアプリの外」のケース。
+   */
+  test.describe('直接着地したモーダル', () => {
+    /** アプリの外から `?movie_id=` 付きのURLへ着地した状態を作る */
+    const landFromOutside = async (page: Page) => {
+      // 1つ前のエントリをアプリ外にする。about:blank はナビゲーションとして
+      // 履歴に積まれるので、ここから goto すれば「外から来た」形になる
+      await page.goto('about:blank');
+      await page.goto(`/movies/now-showing?movie_id=${MOVIE_ID}`);
+
+      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 20000 });
+    };
+
+    test('閉じてもアプリの外へ出ず、一覧が残る', async ({ page }) => {
+      await landFromOutside(page);
+
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: '閉じる' })
+        .click();
+
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page).toHaveURL(/\/movies\/now-showing$/);
+      await expect(page.locator('h1')).toHaveText('公開中の映画');
+    });
+
+    test('Esc でも閉じる', async ({ page }) => {
+      await landFromOutside(page);
+
+      await page.keyboard.press('Escape');
+
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page).toHaveURL(/\/movies\/now-showing$/);
+    });
+
+    // 閉じるのは `replace` なので履歴は増えない。`push` で閉じると
+    // 「戻る」でモーダルが開き直してしまう
+    test('閉じても履歴が増えない', async ({ page }) => {
+      await landFromOutside(page);
+
+      const before = await page.evaluate(() => history.length);
+
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: '閉じる' })
+        .click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+
+      await expect.poll(() => page.evaluate(() => history.length)).toBe(before);
+    });
+
+    /**
+     * 入れ子のダイアログ（予告編）を開閉したあとでも閉じられること
+     *
+     * 予告編ダイアログは `useOverlayHistory` で**自分のエントリを積む**。
+     * そのとき `{...window.history.state, …}` と前のエントリの state を
+     * 引き継ぐので、こちらの目印も一緒にコピーされる。閉じると畳まれて
+     * 元の位置に戻るため、そのあとの × が空振りしないことを見る。
+     */
+    test('予告編を開閉したあとでも閉じられる', async ({ page }) => {
+      // 予告編ボタンは背景画像の上に出るので backdrop_path も要る
+      await mockMovieDetail(page, {
+        backdrop_path: '/e2e-backdrop.jpg',
+        videos: {
+          results: [
+            {
+              id: 'v1',
+              iso_639_1: 'ja',
+              iso_3166_1: 'JP',
+              key: 'dQw4w9WgXcQ',
+              name: 'E2E予告編',
+              site: 'YouTube',
+              size: 1080,
+              type: 'Trailer',
+              official: true,
+              published_at: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        },
+      });
+
+      await landFromOutside(page);
+      const dialog = page.getByRole('dialog');
+
+      await dialog
+        .getByRole('button', { name: ARIA_LABELS.PLAY_TRAILER })
+        .click();
+      const videoDialog = page.getByRole('dialog', { name: /の予告動画$/ });
+      await expect(videoDialog).toBeVisible({ timeout: 15000 });
+
+      await page.keyboard.press('Escape');
+      await expect(videoDialog).toHaveCount(0);
+      // 詳細はまだ開いている
+      await expect(page).toHaveURL(/movie_id=/);
+
+      await dialog.getByRole('button', { name: '閉じる' }).click();
+
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page).toHaveURL(/\/movies\/now-showing$/);
+    });
+
+    // 他のクエリまで落とすと、絞り込んだ一覧が初期状態に戻ってしまう
+    test('他のクエリは残したまま movie_id だけ落とす', async ({ page }) => {
+      await page.goto('about:blank');
+      await page.goto(
+        `/movies/now-showing?sort_by=popularity&movie_id=${MOVIE_ID}`,
+      );
+      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 20000 });
+
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: '閉じる' })
+        .click();
+
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page).toHaveURL(/sort_by=popularity/);
+      await expect(page).not.toHaveURL(/movie_id=/);
+    });
   });
 });

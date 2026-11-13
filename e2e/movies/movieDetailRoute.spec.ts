@@ -416,7 +416,31 @@ test.describe('映画詳細のURL化', () => {
       const videoDialog = page.getByRole('dialog', { name: /の予告動画$/ });
       await expect(videoDialog).toBeVisible({ timeout: 15000 });
 
-      await page.keyboard.press('Escape');
+      /*
+        ⚠️ **Escape では閉じない。** 予告編ダイアログは YouTube の iframe を
+        埋め込んでおり、プレイヤーがフォーカスを取ると keydown は別オリジンの
+        iframe の document に入る。Radix の escape 検知は本体側の document で
+        待っているので届かない。
+
+        実測（ローカル）: フォーカスが閉じるボタンにある間は Escape で閉じるが、
+        iframe にフォーカスを移すと閉じない。CI ではプレイヤーの読み込み時間
+        次第でどちらにもなり、このテストが断続的に落ちていた
+        （`14 × locator resolved to 1 element` / #1086 で混入）。
+
+        ここで確かめたいのは「入れ子を開閉したあとに詳細を閉じられるか」なので、
+        閉じ方は確実なボタンにする。Escape が効かないこと自体は製品側の
+        課題として #1092 に切り出した。
+      */
+
+      // CI で落ちていた状態（プレイヤーにフォーカスがある）を**こちらから作る**。
+      // 環境任せにすると、ローカルでは常に閉じるボタンにフォーカスが残って
+      // 再現せず、CI でだけ落ちる
+      await videoDialog
+        .locator('iframe')
+        .first()
+        .evaluate((el) => (el as HTMLIFrameElement).focus());
+
+      await videoDialog.getByRole('button', { name: '閉じる' }).click();
       await expect(videoDialog).toHaveCount(0);
       // 詳細はまだ開いている
       await expect(page).toHaveURL(/movie_id=/);

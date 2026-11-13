@@ -25,11 +25,97 @@ const supabaseHeaders = {
   Authorization: `Bearer ${SUPABASE_KEY}`,
 };
 
+/** `movie_streaming_status` の1行 */
+export interface MovieStreamingStatusRow {
+  tmdb_movie_id: number;
+  flatrate_provider_ids: number[];
+  paid_provider_ids: number[];
+  flatrate_since: string | null;
+  paid_since: string | null;
+  flatrate_last_seen_at: string | null;
+  paid_last_seen_at: string | null;
+  flatrate_resumed: boolean;
+  paid_resumed: boolean;
+  checked_at: string;
+}
+
+const STREAMING_STATUS_URL = `${SUPABASE_URL}/rest/v1/movie_streaming_status`;
+
+/**
+ * seed で上書きする前の行。値が null は「元から行が無かった」を表す。
+ *
+ * ⚠️ `movie_streaming_status` は `tmdb_movie_id` が主キーの**作品単位・
+ * 全ユーザー共有**テーブルで、ユーザーにも run にも紐づかない。しかも
+ * `addMovieToWatchlist()` が `/movies/now-showing` の先頭タイルを UI から
+ * 追加するため、ここに入る ID は **実在の TMDb ID** になる。
+ * 後片付けで消すと、日次 Cron が全利用者のために作った実データが
+ * 道連れになる（#1116: 本番で `南極料理人` の配信バッジが消えた）。
+ * run スコープの合成ID（`runScopedMovieId`）は `movie_cache` 用で、
+ * この経路には効かない。
+ *
+ * 消すのではなく、seed 前の状態へ戻す。
+ */
+const streamingStatusSnapshots = new Map<
+  number,
+  MovieStreamingStatusRow | null
+>();
+
+/**
+ * `movie_streaming_status` の行を読む（E2E用）
+ *
+ * @param tmdbMovieId - 対象の映画ID
+ * @returns 行があれば行、無ければ null
+ */
+export async function getStreamingStatusRow(
+  tmdbMovieId: number,
+): Promise<MovieStreamingStatusRow | null> {
+  const response = await fetch(
+    `${STREAMING_STATUS_URL}?tmdb_movie_id=eq.${tmdbMovieId}&select=*`,
+    { headers: supabaseHeaders },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `movie_streaming_status の取得に失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+
+  const rows = (await response.json()) as MovieStreamingStatusRow[];
+  return rows[0] ?? null;
+}
+
+/** `movie_streaming_status` に1行を書く（既存行は上書き） */
+async function upsertStreamingStatusRow(
+  row: MovieStreamingStatusRow,
+  context: string,
+): Promise<void> {
+  const response = await fetch(STREAMING_STATUS_URL, {
+    method: 'POST',
+    headers: {
+      ...supabaseHeaders,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify(row),
+  });
+
+  // 握りつぶさない。seed が効いていないと後続のアサーションが
+  // 「バッジが出ない」と誤判定し、復元に失敗すると本番データが壊れたまま残る
+  if (!response.ok) {
+    throw new Error(
+      `movie_streaming_status の${context}に失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+}
+
 /**
  * movie_streaming_status に配信状況を直接入れる（E2E用）
  *
  * TMDb の実データに依存させると、配信状況が変わるたびにテストが壊れる。
  * 画面の検証に必要な状態だけを直接作る。
+ *
+ * 上書き前の行は {@link streamingStatusSnapshots} に退避し、
+ * {@link cleanupStreamingStatus} が書き戻す。
  *
  * @param params - 対象の映画IDと配信状況
  */
@@ -39,18 +125,21 @@ export async function seedStreamingStatus(params: {
   paidProviderIds?: number[];
   resumed?: boolean;
 }): Promise<void> {
+  // 退避は作品ごとに1回だけ。2回目以降を上書きすると、1回目の seed 結果を
+  // 「元の状態」として記録してしまい、復元しても E2E のダミー値が残る
+  if (!streamingStatusSnapshots.has(params.tmdbMovieId)) {
+    streamingStatusSnapshots.set(
+      params.tmdbMovieId,
+      await getStreamingStatusRow(params.tmdbMovieId),
+    );
+  }
+
   const now = new Date().toISOString();
   const flatrate = params.flatrateProviderIds ?? [];
   const paid = params.paidProviderIds ?? [];
 
-  await fetch(`${SUPABASE_URL}/rest/v1/movie_streaming_status`, {
-    method: 'POST',
-    headers: {
-      ...supabaseHeaders,
-      'Content-Type': 'application/json',
-      Prefer: 'resolution=merge-duplicates',
-    },
-    body: JSON.stringify({
+  await upsertStreamingStatusRow(
+    {
       tmdb_movie_id: params.tmdbMovieId,
       flatrate_provider_ids: flatrate,
       paid_provider_ids: paid,
@@ -61,24 +150,84 @@ export async function seedStreamingStatus(params: {
       flatrate_resumed: params.resumed ?? false,
       paid_resumed: params.resumed ?? false,
       checked_at: now,
-    }),
-  });
+    },
+    'seed',
+  );
 }
 
 /**
- * E2E で入れた配信状況を消す
+ * E2E で入れた配信状況を、seed 前の状態へ戻す
+ *
+ * **削除ではなく復元する。** 理由は {@link streamingStatusSnapshots} を参照。
+ * 元から行が無かった作品だけ削除する。
+ *
+ * seed していない ID には触れない。E2E が作っていない行を消す理由が無く、
+ * 呼び出し側が実在IDを渡しても被害が出ないようにするため。
  *
  * @param tmdbMovieIds - 対象の映画ID
  */
 export async function cleanupStreamingStatus(
   tmdbMovieIds: number[],
 ): Promise<void> {
-  if (tmdbMovieIds.length === 0) return;
+  for (const tmdbMovieId of tmdbMovieIds) {
+    // 同じIDが複数回積まれることがある（テストごとに push する）。
+    // 復元は1回でよいので、処理した分は退避から外す
+    if (!streamingStatusSnapshots.has(tmdbMovieId)) continue;
 
-  await fetch(
-    `${SUPABASE_URL}/rest/v1/movie_streaming_status?tmdb_movie_id=in.(${tmdbMovieIds.join(',')})`,
+    const original = streamingStatusSnapshots.get(tmdbMovieId) ?? null;
+    streamingStatusSnapshots.delete(tmdbMovieId);
+
+    if (original === null) {
+      const response = await fetch(
+        `${STREAMING_STATUS_URL}?tmdb_movie_id=eq.${tmdbMovieId}`,
+        { method: 'DELETE', headers: supabaseHeaders },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `movie_streaming_status の削除に失敗した (${response.status}): ${await response.text()}`,
+        );
+      }
+      continue;
+    }
+
+    await upsertStreamingStatusRow(original, '復元');
+  }
+}
+
+/**
+ * `movie_streaming_status` に行を直接書く（検証用）
+ *
+ * 退避を伴わない。「日次 Cron がすでに行を作っている」状況を組み立てるために使う。
+ * 画面検証のための seed には {@link seedStreamingStatus} を使うこと。
+ *
+ * @param row - 書き込む行
+ */
+export async function writeStreamingStatusRow(
+  row: MovieStreamingStatusRow,
+): Promise<void> {
+  await upsertStreamingStatusRow(row, '書き込み');
+}
+
+/**
+ * この run に割り当てられたID領域の `movie_streaming_status` 行を消す。
+ *
+ * 各 spec の afterAll でも戻しているが、異常終了すると取りこぼす。
+ * 対象は合成ID領域（`runScopedMovieIdRange`）だけなので、実在作品の行には
+ * 当たらない（#1116）。`cleanupRunMovieCache` と同じ考え方。
+ */
+export async function cleanupRunStreamingStatus(): Promise<void> {
+  const { min, max } = runScopedMovieIdRange();
+  const response = await fetch(
+    `${STREAMING_STATUS_URL}?tmdb_movie_id=gte.${min}&tmdb_movie_id=lte.${max}`,
     { method: 'DELETE', headers: supabaseHeaders },
   );
+
+  if (!response.ok) {
+    throw new Error(
+      `movie_streaming_status の run 単位の削除に失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
 }
 
 let cachedTestUserId: string | null = null;

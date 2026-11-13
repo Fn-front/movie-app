@@ -43,14 +43,45 @@ describe('WatchlistItem', () => {
     ).toBeInTheDocument();
   });
 
-  it('公開日がnullの場合は公開日が表示されない', () => {
-    const item = createMockItem({ release_date: null });
-    render(
-      <WatchlistItem item={item} onClick={jest.fn()} onDelete={jest.fn()} />,
-    );
+  describe('公開日', () => {
+    /** 公開日の行（role もラベルも無いのでクラス名で引く） */
+    const dateRow = (container: HTMLElement) =>
+      container.querySelector('[class*="c_watchlist_item__release_date"]');
 
-    expect(screen.getByText('テスト映画')).toBeInTheDocument();
-    expect(screen.queryByText(/\d{4}年/)).not.toBeInTheDocument();
+    it('公開日がnullの場合は公開日が表示されない', () => {
+      const item = createMockItem({ release_date: null });
+      const { container } = render(
+        <WatchlistItem item={item} onClick={jest.fn()} onDelete={jest.fn()} />,
+      );
+
+      expect(screen.getByText('テスト映画')).toBeInTheDocument();
+      expect(screen.queryByText(/\d{4}年/)).not.toBeInTheDocument();
+      // 文字が無いだけでなく、入れ物ごと出ていないこと
+      expect(dateRow(container)).not.toBeInTheDocument();
+    });
+
+    /**
+     * `formatDate` は不正な日付で null を返す。`item.release_date` で描画を
+     * 判定していると、中身の無い `<p>` が残る（#1091）
+     */
+    it('公開日が不正な場合は公開日の行ごと出さない', () => {
+      // formatDate は握りつぶすときに console.error を出す。想定どおりなので
+      // 黙らせるが、復元は afterEach（失敗時も確実に戻すため）
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const item = createMockItem({ release_date: 'not-a-date' });
+      const { container } = render(
+        <WatchlistItem item={item} onClick={jest.fn()} onDelete={jest.fn()} />,
+      );
+
+      expect(dateRow(container)).not.toBeInTheDocument();
+    });
+
+    // ⚠️ この describe の中に閉じる。トップレベルに置くとファイル内の
+    // 全テストに掛かり、後から誰かが足した spy を毎回剥がしてしまう
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
   });
 
   it('アイテムクリック時にonClickが映画IDで呼ばれる', async () => {

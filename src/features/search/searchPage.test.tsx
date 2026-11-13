@@ -33,6 +33,10 @@ jest.mock('@/features/search/component/searchResults/searchResults', () => ({
     <div data-testid='search-results'>
       <span data-testid='total-results'>{props.totalResults}</span>
       <span data-testid='current-page'>{props.currentPage}</span>
+      {/* 検索条件の有無が渡っているかを見る（#1024 のレビュー指摘） */}
+      <span data-testid='has-search-criteria'>
+        {String(props.hasSearchCriteria)}
+      </span>
     </div>
   )),
 }));
@@ -54,6 +58,7 @@ function createMockUseSearchReturn(
 ): UseSearchReturn {
   return {
     query: '',
+    hasSearchCriteria: false,
     movies: [],
     totalResults: 0,
     currentPage: 1,
@@ -149,6 +154,26 @@ describe('SearchPage', () => {
 
     expect(screen.getByTestId('total-results')).toHaveTextContent('50');
     expect(screen.getByTestId('current-page')).toHaveTextContent('3');
+  });
+
+  /**
+   * 検索条件の有無は `useSearch` が持つ（URL の query / genre / year /
+   * release_date_* / vote_average_gte から導出）。ここで渡し忘れると
+   * 検索結果が丸ごと隠れる（#1024 のレビュー指摘）
+   */
+  it('検索条件の有無をSearchResultsへ渡す', () => {
+    setupDefaultMocks({ hasSearchCriteria: true });
+    const { unmount } = render(<SearchPage />);
+
+    expect(screen.getByTestId('has-search-criteria')).toHaveTextContent('true');
+    unmount();
+
+    setupDefaultMocks({ hasSearchCriteria: false });
+    render(<SearchPage />);
+
+    expect(screen.getByTestId('has-search-criteria')).toHaveTextContent(
+      'false',
+    );
   });
 
   it('SearchResultsコンポーネントが表示される', () => {

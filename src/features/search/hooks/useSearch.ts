@@ -35,6 +35,16 @@ import { useTitleSuggestion } from './useTitleSuggestion';
 export interface UseSearchReturn {
   /** 検索キーワード */
   query: string;
+  /**
+   * 検索条件が1つでもあるか（キーワード・ジャンル・公開年・公開日・評価）
+   *
+   * ⚠️ **キーワードの有無とは別物。** この画面はキーワード無しでも
+   * フィルターだけで検索できる（`/api/movies/search` のパターン2、
+   * フィルターモーダルの「公開年で検索する」導線）。
+   * 「まだ検索していない」をキーワードの有無で判定すると、
+   * フィルターのみの検索結果が丸ごと隠れる（#1024）
+   */
+  hasSearchCriteria: boolean;
   /** 検索結果の映画一覧 */
   movies: Movie[];
   /** 総件数 */
@@ -267,6 +277,7 @@ export function useSearch(): UseSearchReturn {
   return useMemo(
     () => ({
       query,
+      hasSearchCriteria: requestParams !== null,
       movies,
       totalResults: pagination?.totalResults ?? 0,
       currentPage: pagination?.page ?? 1,
@@ -279,6 +290,7 @@ export function useSearch(): UseSearchReturn {
     }),
     [
       query,
+      requestParams,
       movies,
       pagination,
       searchQuery.isLoading,

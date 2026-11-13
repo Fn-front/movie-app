@@ -18,7 +18,7 @@ import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggl
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useMovieViewMode } from '@/hooks/useMovieViewMode';
-import { DISPLAY_LIMITS } from '@/constants';
+import { DISPLAY_LIMITS, SEARCH_MESSAGES } from '@/constants';
 import type { Movie } from '@/lib/types';
 import { movieToMovieCacheItem } from '@/utils/toMovieCacheItem';
 
@@ -28,6 +28,18 @@ import styles from './searchResults.module.scss';
  * SearchResultsコンポーネントのプロパティ
  */
 export interface SearchResultsProps {
+  /**
+   * 検索条件が1つでもあるか（キーワード・ジャンル・公開年・公開日・評価）
+   *
+   * 「まだ検索していない」と「検索して0件」を区別するために要る。
+   * 件数だけでは区別できない（どちらも movies が空 / #1024）。
+   *
+   * ⚠️ **キーワードの有無で判定してはいけない。** この画面はキーワード無しでも
+   * フィルターだけで検索できる（`/api/movies/search` のパターン2、
+   * フィルターモーダルの「公開年で検索する」導線）。キーワードで判定すると
+   * フィルターのみの検索結果が丸ごと隠れる
+   */
+  hasSearchCriteria: boolean;
   /** 検索結果の映画一覧 */
   movies: Movie[];
   /** 総件数 */
@@ -50,6 +62,7 @@ export interface SearchResultsProps {
  * SearchResultsコンポーネント
  */
 export const SearchResults = memo<SearchResultsProps>(function SearchResults({
+  hasSearchCriteria,
   movies,
   totalResults,
   currentPage,
@@ -96,6 +109,21 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
     );
   }
 
+  // まだ検索していない状態。0件と同じ文言を出すと
+  // 「別のキーワードで検索してみてください」が意味を成さない（#1024）。
+  // 原題の提案も、元になるクエリが無いので出さない
+  if (!hasSearchCriteria) {
+    return (
+      <div className={styles.c_search_results}>
+        <EmptyState
+          title={SEARCH_MESSAGES.NO_QUERY_TITLE}
+          description={SEARCH_MESSAGES.NO_QUERY_DESCRIPTION}
+          headingLevel={2}
+        />
+      </div>
+    );
+  }
+
   if (movies.length === 0) {
     return (
       <div className={styles.c_search_results}>
@@ -104,8 +132,8 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
           isLoading={isSuggestionLoading ?? false}
         />
         <EmptyState
-          title='検索結果が見つかりませんでした'
-          description='別のキーワードで検索してみてください'
+          title={SEARCH_MESSAGES.NO_RESULTS_TITLE}
+          description={SEARCH_MESSAGES.NO_RESULTS_DESCRIPTION}
           headingLevel={2}
         />
       </div>

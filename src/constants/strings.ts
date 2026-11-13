@@ -98,6 +98,22 @@ export const EMPTY_MESSAGES = {
 } as const;
 
 /**
+ * 検索結果ページの状態別メッセージ
+ *
+ * ⚠️ 「まだ検索していない」と「検索したが0件」は**別の状態**。同じ文言に
+ * すると、クエリなしで開いた利用者に「別のキーワードで検索してみてください」と
+ * 出てしまい意味が通らない（#1024）。
+ */
+export const SEARCH_MESSAGES = {
+  /** クエリが空（まだ検索していない） */
+  NO_QUERY_TITLE: 'キーワードを入力してください',
+  NO_QUERY_DESCRIPTION: '作品名で映画を検索できます',
+  /** 検索した結果が0件 */
+  NO_RESULTS_TITLE: '検索結果が見つかりませんでした',
+  NO_RESULTS_DESCRIPTION: '別のキーワードで検索してみてください',
+} as const;
+
+/**
  * モーダルタイトル
  */
 export const MODAL_TITLES = {

@@ -56,6 +56,10 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
   }, [onDelete, item.id]);
 
   const posterUrl = getTMDbImageUrl(item.poster_path, 'w92');
+  // 整形後の値でガードする。`item.release_date` で判定すると、`formatDate` が
+  // null を返す値（不正な日付）のときに中身の無い `<p>` が残る（#1091）。
+  // `MovieTile` / `WatchlistTile` も同じ形
+  const formattedDate = formatDate(item.release_date);
 
   return (
     // 行全体を role="button" にすると、内側の削除ボタンが
@@ -90,9 +94,9 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
             {item.title}
           </Link>
         </p>
-        {item.release_date && (
+        {formattedDate && (
           <p className={styles.c_watchlist_item__release_date}>
-            {formatDate(item.release_date)}
+            {formattedDate}
           </p>
         )}
       </div>

@@ -264,7 +264,7 @@ describe('TwoFactorSettings', () => {
       await user.type(await screen.findByLabelText('認証コード'), '123456');
       await user.click(
         screen.getByRole('button', {
-          name: `リカバリーコードを${RECOVERY_CODE_CONFIG.COUNT}個再発行する`,
+          name: 'リカバリーコードを再発行する',
         }),
       );
 
@@ -280,12 +280,12 @@ describe('TwoFactorSettings', () => {
       await user.type(await screen.findByLabelText('認証コード'), '123456');
       await user.click(
         screen.getByRole('button', {
-          name: `リカバリーコードを${RECOVERY_CODE_CONFIG.COUNT}個再発行する`,
+          name: 'リカバリーコードを再発行する',
         }),
       );
       await user.click(
         await screen.findByRole('button', {
-          name: 'リカバリーコードを控えた',
+          name: 'リカバリーコードを控えました',
         }),
       );
 

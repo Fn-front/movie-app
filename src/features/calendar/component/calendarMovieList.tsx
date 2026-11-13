@@ -113,21 +113,32 @@ export const CalendarMovieList = memo<CalendarMovieListProps>(
                 type='button'
                 className={styles.c_calendarMovieList__button}
                 onClick={() => handleMovieClick(movie.tmdb_movie_id)}
-                aria-label={movie.title}
+                /*
+                  ⚠️ aria-label を付けない（#1085）。button は
+                  children-presentational なので、名前は中の可視テキスト
+                  （作品名 + 公開日 + 公開までの日数）から作られる。
+                  作品名だけの aria-label を付けると、見えている文字の大半が
+                  名前に入らず WCAG 2.5.3 Label in Name に反する。
+                  可視テキストに任せれば、文言が増えても自動で追従する
+                */
               >
                 <div className={styles.c_calendarMovieList__poster}>
                   {movie.poster_path ? (
                     <Image
                       src={`${API.TMDB_IMAGE_BASE_URL}/${TMDB_IMAGE_SIZES.POSTER.SMALL}${movie.poster_path}`}
-                      alt={movie.title}
+                      // 作品名はすぐ下に文字として出る。alt を付けると
+                      // ボタンの名前で作品名が2回読まれる
+                      alt=''
                       width={IMAGE_SIZES.CALENDAR_POSTER.WIDTH}
                       height={IMAGE_SIZES.CALENDAR_POSTER.HEIGHT}
                       className={styles.c_calendarMovieList__posterImage}
                     />
                   ) : (
-                    <div className={styles.c_calendarMovieList__posterFallback}>
-                      <span>No Image</span>
-                    </div>
+                    // 文言は CSS の content で出す（#1085）。
+                    // 文字ノードにするとボタンの名前に入ってしまう
+                    <div
+                      className={styles.c_calendarMovieList__posterFallback}
+                    />
                   )}
                 </div>
                 <div className={styles.c_calendarMovieList__info}>

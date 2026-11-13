@@ -54,7 +54,9 @@ async function enableTwoFactor(page: Page): Promise<void> {
   await expect(
     page.getByRole('list', { name: 'リカバリーコード' }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'リカバリーコードを控えた' }).click();
+  await page
+    .getByRole('button', { name: 'リカバリーコードを控えました' })
+    .click();
   await expect(page.getByText('二段階認証は')).toBeVisible();
 }
 

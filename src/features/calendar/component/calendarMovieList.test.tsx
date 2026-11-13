@@ -79,8 +79,19 @@ describe('CalendarMovieList', () => {
         />,
       );
 
-      expect(screen.getByAltText('映画A')).toBeInTheDocument();
-      expect(screen.getByText('No Image')).toBeInTheDocument();
+      // ポスターは装飾（alt='')。作品名はすぐ下に文字として出るので、
+      // alt を付けるとボタンの名前で2回読まれる（#1085）
+      const poster = screen
+        .getByRole('button', { name: /映画A/ })
+        .querySelector('img');
+      expect(poster).not.toBeNull();
+      expect(poster).toHaveAttribute('alt', '');
+      // 「No Image」は CSS の content で出す（#1085）。文字ノードにすると
+      // ボタンの名前に入ってしまうため、要素の存在で見る
+      // （jest では CSS Modules が identity proxy なのでクラス名がそのまま出る）
+      expect(
+        document.querySelector('.c_calendarMovieList__posterFallback'),
+      ).not.toBeNull();
     });
 
     it('映画クリックでイベントが発火する', async () => {
@@ -96,10 +107,10 @@ describe('CalendarMovieList', () => {
         />,
       );
 
-      await user.click(screen.getByLabelText('映画A'));
+      await user.click(screen.getByRole('button', { name: /映画A/ }));
       expect(onMovieClick).toHaveBeenCalledWith(100);
 
-      await user.click(screen.getByLabelText('映画B'));
+      await user.click(screen.getByRole('button', { name: /映画B/ }));
       expect(onMovieClick).toHaveBeenCalledWith(101);
     });
 

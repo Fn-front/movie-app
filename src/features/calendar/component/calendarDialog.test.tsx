@@ -264,7 +264,7 @@ describe('CalendarDialog', () => {
     await waitFor(() => {
       expect(screen.getByText('3月15日(日)（1件）')).toBeInTheDocument();
     });
-    expect(screen.getByLabelText('映画A')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /映画A/ })).toBeInTheDocument();
   });
 
   it('日付未選択でも表示中の月の公開予定を一覧表示する', async () => {
@@ -283,7 +283,7 @@ describe('CalendarDialog', () => {
 
     const currentMonthLabel = `${new Date().getMonth() + 1}月の公開予定（1件）`;
     expect(screen.getByText(currentMonthLabel)).toBeInTheDocument();
-    expect(screen.getByLabelText('映画A')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /映画A/ })).toBeInTheDocument();
   });
 
   it('「今日」ボタンで当月へ戻る', async () => {
@@ -542,7 +542,7 @@ describe('CalendarDialog', () => {
       expect(screen.queryByText('読み込み中...')).not.toBeInTheDocument();
     });
 
-    await user.click(screen.getByLabelText('映画A'));
+    await user.click(screen.getByRole('button', { name: /映画A/ }));
 
     expect(onMovieClick).toHaveBeenCalledWith(100);
   });

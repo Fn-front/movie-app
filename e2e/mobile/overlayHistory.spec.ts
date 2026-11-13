@@ -259,7 +259,11 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     const movieButton = page
       .locator('button[class*="calendarMovieList__button"]')
       .first();
-    await expect(movieButton).toHaveAccessibleName(CALENDAR_MOVIE_TITLE);
+    // aria-label を外したので、名前は可視テキスト（作品名 + 公開日 +
+    // 公開までの日数）から作られる（#1085）
+    await expect(movieButton).toHaveAccessibleName(
+      new RegExp(CALENDAR_MOVIE_TITLE),
+    );
 
     await movieButton.click();
 
@@ -310,7 +314,8 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     });
 
     await page
-      .getByRole('link', { name: `${CAST_NAME}のプロフィール` })
+      // aria-label を外したので、名前は可視テキスト（俳優名 + 役名）になる（#1085）
+      .getByRole('link', { name: new RegExp(CAST_NAME) })
       .click();
     await page.waitForURL(`/person/${PERSON_ID}`);
 

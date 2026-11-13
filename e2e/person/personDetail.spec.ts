@@ -48,7 +48,8 @@ test.describe('人物ページ', () => {
 
     // キャストから人物ページへ
     await page
-      .getByRole('link', { name: 'E2Eテスト俳優のプロフィール' })
+      // aria-label を外したので、名前は可視テキスト（俳優名 + 役名）になる（#1085）
+      .getByRole('link', { name: /E2Eテスト俳優/ })
       .click();
     await page.waitForURL(`/person/${PERSON_ID}`);
 

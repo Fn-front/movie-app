@@ -76,6 +76,15 @@
   background-color: $background-secondary;
   color: $text-secondary;
   font-size: $font-size-2xs;
+
+  // ⚠️ 文言は content で出す（#1085）。ボタンは aria-label を持たず
+  // 中身から名前が作られるので、文字ノードにすると
+  // 「No Image 作品名 公開日 …」と読まれる。
+  // button は children-presentational なので生成テキストは名前に入らない
+  // （link では同じ手が使えない。movieDetailContent のキャスト参照）
+  &::after {
+    content: 'No Image';
+  }
 }
 
 .c_calendarMovieList__info {

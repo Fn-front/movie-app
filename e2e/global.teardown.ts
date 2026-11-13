@@ -11,11 +11,20 @@
 
 import { test as teardown } from '@playwright/test';
 
-import { cleanupRunMovieCache, cleanupRunRateLimits } from './helpers/api';
+import {
+  cleanupRunMovieCache,
+  cleanupRunRateLimits,
+  cleanupRunStreamingStatus,
+} from './helpers/api';
 import { deleteRunScopedUsers } from './helpers/dedicatedUser';
 
 teardown('run固有のテストデータを削除', async () => {
   // ユーザーを先に消す。関連テーブルは ON DELETE CASCADE で連鎖削除される
   await deleteRunScopedUsers();
-  await Promise.all([cleanupRunMovieCache(), cleanupRunRateLimits()]);
+  await Promise.all([
+    cleanupRunMovieCache(),
+    cleanupRunRateLimits(),
+    // 合成ID領域のみ。実在作品の行はここでも消さない（#1116）
+    cleanupRunStreamingStatus(),
+  ]);
 });

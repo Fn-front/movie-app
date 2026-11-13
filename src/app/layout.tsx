@@ -8,6 +8,7 @@ import { AppToastProvider } from '@/components/providers/toastProvider';
 import { ThemeProvider } from '@/components/providers/themeProvider';
 import { APP_NAME } from '@/constants/app';
 import { CookieConsentBanner } from '@/features/cookieConsent/component/cookieConsentBanner/cookieConsentBanner';
+import { buildZodJitlessScript } from '@/lib/security/zodJitless';
 import {
   buildConsentBootstrapScript,
   getGaMeasurementId,
@@ -34,10 +35,22 @@ export default function RootLayout({
   // 文字列の組み立てはサーバー安全な utils/analytics から直接行う
   const consentBootstrapScript =
     getGaMeasurementId() === null ? null : buildConsentBootstrapScript();
+  const zodJitlessScript = buildZodJitlessScript();
 
   return (
     <html lang='ja' suppressHydrationWarning>
       <head>
+        {/*
+          ⚠️ **zod のチャンクより先に実行されること**が前提（#1099）。
+          ⚠️ ドキュメント順では React が hoist するチャンクのほうが先にある。
+          先に走るのは async スクリプトがパーサの同期処理に割り込めないため。
+          zod は JIT を使えるかを
+          `new Function("")` で試すので、本番の CSP（'unsafe-eval' 無し）に
+          当たって enforce の違反が毎ロード報告される。スキーマは
+          src/schema/*.ts のトップレベルで作られるため、普通のモジュールから
+          z.config() を呼んでも間に合わない。理由は lib/security/zodJitless.ts
+        */}
+        <script dangerouslySetInnerHTML={{ __html: zodJitlessScript }} />
         {/* ストレージキーは STORAGE_KEYS.THEME ('movie-app:theme') と同期すること */}
         {/* CSP は script-src 'unsafe-inline' を許容するため nonce は付与しない */}
         {/*

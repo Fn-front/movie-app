@@ -30,7 +30,13 @@ const TRAILER_VIDEO = {
   published_at: '2026-01-01T00:00:00.000Z',
 } as const;
 
-/** 2本目。1件だけだと「2本目以降は戻る距離が伸びる」が隠れる */
+/**
+ * 2本目。
+ *
+ * 「最後尾から Tab 1回」が**件数によらない**ことを見るため、1件では足りない。
+ * あわせて `toHaveCount(2)` が描画完了の待ちも兼ねる（1件しか出ていない瞬間に
+ * `.last()` が1本目のリンクを掴むと、Tab で2本目の iframe へ進んで落ちる）
+ */
 const SECOND_TRAILER_VIDEO = {
   ...TRAILER_VIDEO,
   id: 'v2',
@@ -135,24 +141,32 @@ test.describe('キーボード操作', () => {
    *     フォーカス = 閉じるボタン → Escape で閉じる
    *     フォーカス = iframe       → Escape では閉じない
    *
-   * したがって**保証できる脱出路は Tab 移動と Enter**。
+   * したがって、**閉じるボタンかその脇のリンクまで来ていれば** Tab 移動と
+   * Enter で閉じられる。プレイヤーの中からは下記のとおり扱えない。
    *
    * ## ⚠️ プレイヤーの中からは検証できない（#1100）
    *
    * 以前はここで `iframe.focus()` してから Tab を2回送っていたが、
    * **断続的に落ちた**（`--workers=1 --repeat-each=5` で5本中5本）。
-   * 原因を実測したところ、フォーカスが iframe に入ると**Tab を何回送っても
-   * 親へ戻らない**:
+   *
+   * **実測した事実**（本番ビルド / chromium / 空のスタブ / Playwright 経由の
+   * キー送出）。`iframe.focus()` のあと、親の `document.activeElement` は
+   * Tab を3回送っても変わらなかった:
    *
    *     iframe.focus() 直後 → IFRAME
    *     Tab 1回目           → IFRAME
    *     Tab 2回目           → IFRAME
    *     Tab 3回目           → IFRAME
    *
-   * 親へ送った Tab は別プロセスの iframe（OOPIF）側で処理され、スタブは
-   * フォーカス可能な要素を持たないのでそこに留まる。たまに通っていたのは、
-   * `focus()` の委譲がまだ子へ伝わる前に Tab が届いた場合だけ。
-   * **キー入力が観測できないのと同じ構造的な制約**で、Escape と同じ。
+   * ⚠️ **ここから言えるのは「親の要素へ戻らなかった」ことだけ。** フォーカスが
+   * 子フレームのどこにあっても親の `activeElement` は `<iframe>` 要素を返すので、
+   * 「Tab が子側で処理された」とまでは示していない。**機構は未確定**で、
+   * Playwright がキーをどのフレームへ送っているか（`Input.dispatchKeyEvent` の
+   * 配送先）も確かめていない。
+   *
+   * 分かっているのは、**この手順では安定して検証できない**ということ。
+   * たまに通っていたのは `focus()` の委譲が子へ伝わる前に Tab が届いた場合
+   * と思われる（これも推測）。
    *
    * ## 代わりに何を固定するか
    *
@@ -160,31 +174,43 @@ test.describe('キーボード操作', () => {
    *
    * DOM は `閉じる → iframe1 → YouTubeリンク1 → iframe2 → YouTubeリンク2 → …`
    * の順で、動画は最大5件並ぶ（`TRAILER_DISPLAY_LIMIT`）。
-   * Radix の `FocusScope` は `loop: true`（`@radix-ui/react-dialog`）なので、
    * **最後の YouTube リンクから Tab 1回で先頭＝閉じるボタンへ戻る**。
    * 動画が何件でもこの回数は変わらない（最後尾だけを見ているため）。
+   *
+   * ### なぜ決定的なのか
+   *
+   * この回り込みは**ブラウザのネイティブな Tab 順ではなく Radix の JS 実装**で
+   * 起きる。`FocusScope` の `handleKeyDown` が
+   * 「`document.activeElement === last` かつ Tab」のとき `preventDefault()` して
+   * `focus(first)` を呼ぶ（`@radix-ui/react-focus-scope/dist/index.mjs`。
+   * `loop: true` は `@radix-ui/react-dialog` が渡している）。
+   *
+   * つまり**親ドキュメント内で完結する**ので、クロスプロセスの競合が
+   * 原理的に入らない。WebKit で skip しない理由もここ（下記）。
    *
    * ここが壊れる＝閉じるボタンを後ろへ動かすと、プレイヤーの脇にある
    * リンクまで来たキーボード利用者の出口が遠くなる。
    */
-  test('予告編は最後尾から Tab 1回で閉じるボタンへ戻れる', async ({
-    page,
-    browserName,
-  }) => {
-    // WebKit は既定でボタンもリンクも Tab 順に含めない（このファイル冒頭の
-    // 実測コメント）。Tab 移動そのものを見るテストなので、ブラウザ側の設定差で落ちる
-    test.skip(
-      browserName === 'webkit',
-      'WebKit は既定で button / a を Tab 順に含めない（冒頭の実測コメント参照）',
-    );
+  test('予告編は最後尾から Tab 1回で閉じるボタンへ戻れる', async ({ page }) => {
+    /*
+      ⚠️ **このテストは WebKit でも skip しない。**
+
+      冒頭のスキップリンクのテストと違い、ネイティブの Tab 順に依存しない。
+      起点は `locator.focus()`（プログラム的）で、Tab は上記のとおり Radix の
+      ハンドラが `preventDefault()` して処理するため、ブラウザが a / button を
+      Tab 順に含めるかは関係ない。
+
+      実測で確認済み（本番ビルド）: webkit `--repeat-each=5` で5本、
+      firefox `--repeat-each=3` で3本とも通過。
+    */
 
     // 実物の埋め込みを読ませるとプレイヤーがフォーカスを奪い、
     // どの要素にフォーカスがあるかが環境依存になる（#1093）
     await stubTrailerEmbed(page);
     await mockMovieDetail(page, {
       backdrop_path: '/e2e-backdrop.jpg',
-      // 2件入れる。1件だと「最後尾から」という条件が自明になり、
-      // 2本目以降で DOM 順が崩れても気づけない
+      // 2件入れる。回り込みが件数によらないことと、描画完了の待ちのため
+      // （定数の JSDoc 参照）。中間項目の DOM 順はこのテストでは見ていない
       videos: { results: [TRAILER_VIDEO, SECOND_TRAILER_VIDEO] },
     });
 
@@ -216,6 +242,8 @@ test.describe('キーボード操作', () => {
     const youtubeLinks = videoDialog.getByRole('link');
     await expect(youtubeLinks).toHaveCount(2);
     await youtubeLinks.last().focus();
+    // 起点が取れたことを先に確定させる（落ちたとき原因を切り分けやすい）
+    await expect(youtubeLinks.last()).toBeFocused();
 
     // 3. そこから Tab 1回で先頭へ回り込む（FocusScope の loop）
     await page.keyboard.press('Tab');

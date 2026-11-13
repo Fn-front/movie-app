@@ -5,6 +5,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { ARIA_LABELS } from '@/constants';
+
 import { VideoDialog } from './videoDialog';
 
 import type { Video } from '@/lib/types';
@@ -263,6 +265,38 @@ describe('VideoDialog', () => {
       }
 
       expect(link).toHaveFocus();
+    });
+
+    /**
+     * ⚠️ **閉じるボタンが DOM 上で最初のフォーカス可能要素であること**を固定する。
+     *
+     * これが崩れると、`FocusScope` の `loop` で最後尾から戻ってくる先が
+     * 閉じるボタンでなくなり、プレイヤーの脇まで来たキーボード利用者の出口が
+     * 遠くなる（#1092 / #1100）。
+     *
+     * E2E（`e2e/a11y/keyboard.spec.ts`）でも見ているが、あちらは chromium だけが
+     * CI で回る。DOM 順そのものは iframe のフォーカス委譲が絡まないので、
+     * ここで決定的に固定できる。
+     */
+    it('閉じるボタンが最初のフォーカス可能要素になっている', () => {
+      render(
+        <VideoDialog
+          {...defaultProps}
+          videos={[createVideo(), createVideo({ id: '2', key: 'key2' })]}
+        />,
+      );
+
+      const dialog = screen.getByRole('dialog');
+      const focusable = [
+        ...dialog.querySelectorAll(
+          'a[href], button, iframe, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ];
+
+      expect(focusable.length).toBeGreaterThan(1);
+      expect(focusable[0]).toBe(
+        screen.getByRole('button', { name: ARIA_LABELS.CLOSE }),
+      );
     });
   });
 });

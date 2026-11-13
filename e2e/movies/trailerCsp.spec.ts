@@ -44,7 +44,11 @@ import { expect, test } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 
-import { collectCspViolations, readCspViolations } from '../helpers/csp';
+import {
+  collectCspViolations,
+  readCspViolations,
+  type CspViolation,
+} from '../helpers/csp';
 import {
   MOVIE_ID,
   mockMovieDetail,
@@ -76,6 +80,25 @@ const SECOND_TRAILER_VIDEO = {
 /** 本体から読んではいけないホスト */
 const THUMBNAIL_HOST = 'i.ytimg.com';
 
+/**
+ * CSP が遮断したのがサムネイルのホストか
+ *
+ * ⚠️ **部分一致で判定しない。** `blockedURI.includes('i.ytimg.com')` は
+ * `https://evil.example/?x=i.ytimg.com` のような無関係なURLにも当たる
+ * （CodeQL の `js/incomplete-url-substring-sanitization`）。host を
+ * 取り出して**完全一致**で比べる。
+ *
+ * `blockedURI` は URL とは限らない（`eval` / `inline` など）ので、
+ * パースに失敗したら対象外として扱う。
+ */
+function isThumbnailBlocked(violation: CspViolation): boolean {
+  try {
+    return new URL(violation.blockedURI).hostname === THUMBNAIL_HOST;
+  } catch {
+    return false;
+  }
+}
+
 test.describe('予告編のサムネイル', () => {
   test.describe.configure({ timeout: 90000 });
 
@@ -105,25 +128,39 @@ test.describe('予告編のサムネイル', () => {
     // --- 1. DOM 参照（next/image で実装された facade を捕まえる） ---
     //
     // `next/image` は src を `/_next/image?url=<URLエンコード>` へ書き換えるので、
-    // 生の URL だけを見ていると素通りする。デコードしてから探す
+    // 生の URL だけを見ていると素通りする。`url` パラメータも展開して見る
     const thumbnailRefs = await page.evaluate((host) => {
+      /**
+       * ⚠️ **部分一致で判定しない。** `url.includes('i.ytimg.com')` は
+       * `https://evil.example/?x=i.ytimg.com` のような無関係なURLにも当たる
+       * （CodeQL の `js/incomplete-url-substring-sanitization`）。
+       * host を取り出して**完全一致**で比べる
+       */
+      const matchesHost = (rawUrl: string): boolean => {
+        try {
+          const url = new URL(rawUrl, document.baseURI);
+          if (url.hostname === host) return true;
+          // next/image 経由。`url` パラメータに元のURLが入る
+          const inner = url.searchParams.get('url');
+          return inner
+            ? new URL(inner, document.baseURI).hostname === host
+            : false;
+        } catch {
+          return false;
+        }
+      };
+
       const urls: string[] = [];
       for (const el of document.querySelectorAll('img, source')) {
-        urls.push(
-          el.getAttribute('src') ?? '',
-          el.getAttribute('srcset') ?? '',
-        );
+        const src = el.getAttribute('src');
+        if (src) urls.push(src);
+        // srcset は「URL 記述子, URL 記述子, ...」の形
+        for (const candidate of (el.getAttribute('srcset') ?? '').split(',')) {
+          const url = candidate.trim().split(/\s+/)[0];
+          if (url) urls.push(url);
+        }
       }
-      return urls
-        .filter(Boolean)
-        .map((url) => {
-          try {
-            return decodeURIComponent(url);
-          } catch {
-            return url;
-          }
-        })
-        .filter((url) => url.includes(host));
+      return urls.filter(matchesHost);
     }, THUMBNAIL_HOST);
 
     expect(
@@ -138,11 +175,9 @@ test.describe('予告編のサムネイル', () => {
 
     // --- 2. CSP（素の <img> で実装された facade を捕まえる） ---
     const violations = await readCspViolations(page);
-    const blockedThumbnails = violations.filter((v) =>
-      // ディレクティブ名で絞らない。img-src を消して default-src へ
-      // フォールバックした場合も拾うため
-      v.blockedURI.includes(THUMBNAIL_HOST),
-    );
+    // ディレクティブ名で絞らない。img-src を消して default-src へ
+    // フォールバックした場合も拾うため
+    const blockedThumbnails = violations.filter(isThumbnailBlocked);
 
     expect(
       blockedThumbnails,
@@ -164,8 +199,7 @@ test.describe('予告編のサムネイル', () => {
       .poll(
         async () => {
           const all = await readCspViolations(page);
-          return all.filter((v) => v.blockedURI.includes(THUMBNAIL_HOST))
-            .length;
+          return all.filter(isThumbnailBlocked).length;
         },
         {
           message:

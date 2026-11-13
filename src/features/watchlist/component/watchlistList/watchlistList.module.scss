@@ -78,6 +78,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    // 見た目はポスターを塞がない 28px のまま、スマホでのヒット領域だけ
+    // 44px にする（#1017）
+    @include tap-target;
     width: 28px;
     height: 28px;
     padding: 0;
@@ -102,13 +105,18 @@
     // タイトルのリンクの ::after より上に置く（#1060）
     z-index: 1;
     top: $spacing-2;
-    right: calc($spacing-2 + 28px + $spacing-1);
+    // 広げたヒット領域（44px）が削除ボタンと重ならないよう、見た目 28px との
+    // 差分 16px を空ける。削除は破壊的操作なので誤爆を避ける（#1017。以前は 4px）
+    right: calc($spacing-2 + 28px + $spacing-4);
   }
 
   &__watched {
     display: flex;
     align-items: center;
     justify-content: center;
+    // 見た目はポスターを塞がない 28px のまま、スマホでのヒット領域だけ
+    // 44px にする（#1017）
+    @include tap-target;
     width: 28px;
     height: 28px;
     padding: 0;

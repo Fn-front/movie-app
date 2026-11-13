@@ -59,8 +59,9 @@
   @include button-reset;
   @include flex-center;
 
-  width: 3.6rem;
-  height: 3.6rem;
+  // 指で押せる大きさにする（#1017）
+  width: $tap-target-min;
+  height: $tap-target-min;
   border-radius: $border-radius-md;
   color: $text-secondary;
   transition: $transition-bg;
@@ -195,6 +196,9 @@
   display: flex;
   align-items: center;
   gap: $spacing-3;
+  // 行の高さが 37px しかなかった。padding ではなく min-height で
+  // 指で押せる高さを確保する（#1017）
+  min-height: $tap-target-min;
   padding: $spacing-2 $spacing-3;
   font-size: $font-size-sm;
   color: $text-primary;
@@ -221,6 +225,9 @@
   display: flex;
   align-items: center;
   gap: $spacing-3;
+  // 行の高さが 37px しかなかった。padding ではなく min-height で
+  // 指で押せる高さを確保する（#1017）
+  min-height: $tap-target-min;
   padding: $spacing-2 $spacing-3;
   font-size: $font-size-sm;
   color: $text-primary;

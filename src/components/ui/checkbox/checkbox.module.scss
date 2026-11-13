@@ -5,14 +5,24 @@
   display: inline-flex;
   align-items: center;
   gap: $spacing-2;
+  // 行ごと指で押せる高さにする。ラベルは <label htmlFor> で本体と同じ操作に
+  // なるので、行を伸ばしてラベルを縦いっぱいに広げれば丸の外でも押せる（#1017）。
+  // 擬似要素で広げないのは、縦に並ぶ項目どうしで領域が重なるため
+  min-height: $tap-target-min;
+
+  @include md {
+    min-height: 0;
+  }
 
   // ルート（チェックボックス本体）
   &__root {
     @include button-reset;
     @include flex-center;
 
-    width: 20px;
-    height: 20px;
+    // WCAG 2.5.8 AA の下限。<label htmlFor> で広がるため違反ではなかったが、
+    // 要素そのものでも満たしておく（axe の target-size はラベルを見ない）
+    width: $tap-target-aa;
+    height: $tap-target-aa;
     background-color: $background-paper;
     border: $border-width-1 solid $border-color;
     border-radius: $border-radius-sm;
@@ -49,6 +59,10 @@
 
   // ラベル
   &__label {
+    // 行の高さいっぱいに広げる（上の min-height と対）
+    display: flex;
+    align-items: center;
+    align-self: stretch;
     font-size: $font-size-base;
     color: $text-primary;
     cursor: pointer;

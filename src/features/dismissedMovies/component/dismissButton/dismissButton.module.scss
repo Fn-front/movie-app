@@ -33,6 +33,10 @@
     cursor: not-allowed;
   }
 
+  // 見た目は 28/36px のまま、スマホでのヒット領域だけ 44px にする（#1017）。
+  // 隣接するボタンとの間隔は呼び出し側で確保すること（movieTile）
+  @include tap-target;
+
   &__sm {
     width: 28px;
     height: 28px;

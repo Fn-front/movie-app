@@ -51,6 +51,57 @@
   }
 }
 
+// タップ領域を広げる（#1017）
+//
+// **見た目の大きさは変えない。** `::after` を重ねてヒット領域だけ
+// $tap-target-min（44px）にする。ポスター上の操作ボタンは見た目を大きくすると
+// カードの情報量を圧迫するため（Issue の案B を採らなかった理由）。
+//
+// スマホ幅だけに効かせ、md 以上では見た目どおりに戻す。指で押すための
+// 余白なので、ポインタで操作する幅では隣のクリックを吸うだけになる。
+//
+// ⚠️ 使うときの前提:
+//
+// - 対象が `position: static` であること。絶対配置の要素に当てると
+//   基準がずれる。絶対配置された**親**の中の button に当てること
+// - 隣に別の操作要素があるなら**間隔を $tap-target-min - 見た目の幅**以上
+//   空けること。足りないと領域が重なり、DOM で後ろの要素が手前を食う
+//   （例: 見た目 28px なら 16px、36px なら 8px）
+// - axe-core の `target-size` はこれを見ない（getBoundingClientRect のみ）。
+//   WCAG AA の 24px は要素そのものの大きさで満たすこと
+//
+// ⚠️ **`overflow: hidden` の祖先があると、はみ出した分は切られる。**
+// ポスター上のボタンは全てカード（`overflow: hidden`）の中にあるので、
+// これは実際に効いている制約。いま成立しているのは**寸法がちょうど
+// 合っているから**で、余裕はゼロ:
+//
+//     端からの距離 8px + ボタンの半分 14px = 22px = 44px の半分
+//
+// `top` / `right` を $spacing-1 に詰めると、**黙って削れる**。
+// 位置を変えるときは `e2e/mobile/tapTarget.spec.ts` の四隅テストを
+// その要素にも足すこと
+@mixin tap-target($size: $tap-target-min) {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    // 見た目より小さくならないようにする（md 以上のボタンに当てたとき）
+    min-width: 100%;
+    min-height: 100%;
+    width: $size;
+    height: $size;
+    transform: translate(-50%, -50%);
+
+    @include md {
+      width: 100%;
+      height: 100%;
+    }
+  }
+}
+
 // スクリーンリーダー専用テキスト
 @mixin sr-only {
   position: absolute;

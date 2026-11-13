@@ -8,6 +8,9 @@
   flex-shrink: 0;
   border: none;
   border-radius: $border-radius-full;
+  // 見た目は 28/36px のまま、スマホでのヒット領域だけ 44px にする（#1017）。
+  // 隣接するボタンとの間隔は呼び出し側で確保すること（movieTile / watchlistList）
+  @include tap-target;
   // ポスター上のオーバーレイ。テーマ追従の frosted サーフェスにし、
   // ライト=白 / ダーク=暗 のピルへ切り替える（ダークで白ピルが浮く問題を解消）。
   background-color: color-alpha(--background-paper, 85%);

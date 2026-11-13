@@ -159,15 +159,14 @@
     }
   }
 
-  // アクションボタン群（お気に入り + ウォッチリスト）
+  // アクションボタン群（共有 + お気に入り + ウォッチリスト）
   &__action_buttons {
     display: flex;
-    gap: $spacing-1;
+    // 広げたヒット領域（44px）どうしが重ならないよう、見た目 36px との
+    // 差分 8px を空ける。4px だった頃は、ハートのすぐ右を押すと
+    // ウォッチリストが反応していた（#1017）
+    gap: $spacing-2;
     flex-shrink: 0;
-
-    @include md {
-      gap: $spacing-2;
-    }
   }
 
   // お気に入り・ウォッチリストのボタンと見た目を揃える（md サイズ）
@@ -175,6 +174,8 @@
     @include button-reset;
     @include flex-center;
     @include focus-visible;
+    // 見た目は 36px のまま、スマホでのヒット領域だけ 44px にする（#1017）
+    @include tap-target;
 
     width: 36px;
     height: 36px;

@@ -1,10 +1,18 @@
 @use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
 
 .c_streaming_sort_hint {
   &__trigger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    // ⓘ のグリフは 1em（18px）しかなく、**唯一 WCAG 2.5.8 AA を下回って**いた。
+    // ラベル等による拡張も無いので、要素そのものを 24px 以上にする（#1017）。
+    // 画面幅によらず適用する。AA はデスクトップでも満たす必要がある
+    min-width: $tap-target-aa;
+    min-height: $tap-target-aa;
+    // スマホでは指で押せる大きさまでヒット領域だけ広げる
+    @include tap-target;
     color: $text-secondary;
     font-size: $font-size-lg;
     text-decoration: none;

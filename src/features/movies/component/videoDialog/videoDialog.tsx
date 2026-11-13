@@ -81,9 +81,15 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
             閉じない。CI の E2E が断続的に落ちて判明した。
 
             そのため**保証できる脱出路はこのボタン**になる。DOM 上で最初の
-            フォーカス可能要素にしておくことで、プレイヤーから Shift+Tab 1回で
-            戻れる。順番を変えると、プレイヤーを操作したキーボード利用者の
-            出口が遠くなる。`e2e/a11y/keyboard.spec.ts` が固定している。
+            フォーカス可能要素にしておくことで、`FocusScope` の `loop` により
+            **最後尾から前方向へ回り込んで戻れる**（動画の件数によらず一定）。
+
+            ⚠️ 逆向き（Shift+Tab）で1回で戻れるのは**先頭の動画からだけ**。
+            動画は最大5件並び（`TRAILER_DISPLAY_LIMIT`）、各件が iframe と
+            「YouTubeで見る」リンクを持つので、後ろの動画ほど遡る距離が伸びる。
+
+            順番を変えると、プレイヤーを操作したキーボード利用者の出口が
+            遠くなる。`e2e/a11y/keyboard.spec.ts` が固定している。
           */}
           <Dialog.Close className={styles.c_video_dialog__close}>
             <IoCloseOutline size={ICON_SIZES.MD} aria-hidden='true' />

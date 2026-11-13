@@ -8,7 +8,11 @@ import { test, expect } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 
-import { MOVIE_ID, mockMovieDetail } from '../helpers/movieDetail';
+import {
+  MOVIE_ID,
+  mockMovieDetail,
+  stubTrailerEmbed,
+} from '../helpers/movieDetail';
 
 import { gotoWithTheme } from './helpers';
 
@@ -24,6 +28,14 @@ const TRAILER_VIDEO = {
   type: 'Trailer',
   official: true,
   published_at: '2026-01-01T00:00:00.000Z',
+} as const;
+
+/** 2本目。1件だけだと「2本目以降は戻る距離が伸びる」が隠れる */
+const SECOND_TRAILER_VIDEO = {
+  ...TRAILER_VIDEO,
+  id: 'v2',
+  key: 'oHg5SJYRHA0',
+  name: 'E2E予告編2',
 } as const;
 
 test.describe('キーボード操作', () => {
@@ -123,17 +135,37 @@ test.describe('キーボード操作', () => {
    *     フォーカス = 閉じるボタン → Escape で閉じる
    *     フォーカス = iframe       → Escape では閉じない
    *
-   * したがって**保証できる脱出路は Tab 移動と Enter**。閉じるボタンは
-   * ダイアログ内で最初のフォーカス可能要素なので、プレイヤーから
-   * Shift+Tab 1回で戻れる。ここが壊れると、プレイヤーを操作した
-   * キーボード利用者の出口が無くなる
+   * したがって**保証できる脱出路は Tab 移動と Enter**。
+   *
+   * ⚠️ 「Shift+Tab 1回」が成り立つのは**先頭の動画からだけ**。DOM は
+   * `閉じる → iframe1 → YouTubeリンク1 → iframe2 → …` の順で、動画は最大5件
+   * 並ぶ（`TRAILER_DISPLAY_LIMIT`）。2本目以降からは手前の要素を遡る分だけ増える。
+   *
+   * そこで**最後尾から前方向へ回り込む**形で押さえる。Radix の `FocusScope` は
+   * `loop: true`（`@radix-ui/react-dialog`）なので、最後の要素から Tab すると
+   * 先頭＝閉じるボタンへ戻る。最後の iframe からは「iframe → リンク → 閉じる」の
+   * 2回で、**動画が何件でもこの回数は変わらない**。
+   *
+   * ここが壊れると、プレイヤーを操作したキーボード利用者の出口が遠くなる
    */
   test('予告編はプレイヤーにフォーカスがあってもキーボードで閉じられる', async ({
     page,
+    browserName,
   }) => {
+    // WebKit は既定でボタンを Tab 順に含めない（このファイル冒頭の実測コメント）。
+    // Tab 移動そのものを見るテストなので、ブラウザ側の設定差で落ちる
+    test.skip(
+      browserName === 'webkit',
+      'WebKit は既定で button を Tab 順に含めない（冒頭の実測コメント参照）',
+    );
+
+    // 実物の埋め込みを読ませるとプレイヤーがフォーカスを奪い、
+    // どの要素にフォーカスがあるかが環境依存になる（#1093）
+    await stubTrailerEmbed(page);
     await mockMovieDetail(page, {
       backdrop_path: '/e2e-backdrop.jpg',
-      videos: { results: [TRAILER_VIDEO] },
+      // 2件入れる。1件だと「2本目以降は Shift+Tab 1回では戻れない」が隠れる
+      videos: { results: [TRAILER_VIDEO, SECOND_TRAILER_VIDEO] },
     });
 
     await gotoWithTheme(
@@ -151,14 +183,16 @@ test.describe('キーボード操作', () => {
     const videoDialog = page.getByRole('dialog', { name: /の予告動画$/ });
     await expect(videoDialog).toBeVisible({ timeout: 15000 });
 
-    // プレイヤーを操作した状態を作る
+    // 最後の動画のプレイヤーにフォーカスを移す（フレームの先頭に入った状態）
     await videoDialog
       .locator('iframe')
-      .first()
+      .last()
       .evaluate((el) => (el as HTMLIFrameElement).focus());
 
-    // Shift+Tab 1回で閉じるボタンへ戻れること（ここが肝）
-    await page.keyboard.press('Shift+Tab');
+    // 最後の iframe → その YouTube リンク → 先頭へ回り込み、で閉じるボタン。
+    // 動画が何件でもこの2回で済む（最後尾だけを見ているため）
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
     await expect(
       videoDialog.getByRole('button', { name: ARIA_LABELS.CLOSE }),
     ).toBeFocused();

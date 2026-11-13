@@ -13,7 +13,7 @@ import type { Page } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 import { movieTileDetailLinks } from '../helpers/locators';
-import { mockMovieDetail } from '../helpers/movieDetail';
+import { mockMovieDetail, stubTrailerEmbed } from '../helpers/movieDetail';
 import { test, expect } from '../fixtures/auth';
 
 /** DOM 上のダイアログ。Radix が背面に aria-hidden を付けるため role では数えられない */
@@ -37,6 +37,11 @@ const TRAILER = {
 async function openNestedOverlays(page: Page): Promise<void> {
   // 再生ボタンは背景画像のブロックの中にあるため、backdrop_path が無いと
   // 予告動画があっても描画されない（movieDetailContent.tsx:270-290）
+  // 実物の埋め込みを読ませると、プレイヤーがフォーカスを奪った瞬間に
+  // Escape が効かなくなる（keydown が iframe 側の document に入る / #1092）。
+  // このファイルは Escape で閉じる前提なので、潰しておかないと
+  // 読み込み時間次第で断続的に落ちる（#1093 で実測）
+  await stubTrailerEmbed(page);
   await mockMovieDetail(page, {
     backdrop_path: '/e2eBackdrop.jpg',
     videos: { results: [TRAILER] },

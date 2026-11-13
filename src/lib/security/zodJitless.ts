@@ -56,9 +56,11 @@ const ZOD_GLOBAL_CONFIG_KEY = '__zod_globalConfig';
  * 既に設定があれば壊さないよう、プロパティを足す形にする。
  */
 export function buildZodJitlessScript(): string {
+  const key = ZOD_GLOBAL_CONFIG_KEY;
+
   return (
-    `(function(){try{var g=globalThis;` +
-    `var c=g.${ZOD_GLOBAL_CONFIG_KEY}||(g.${ZOD_GLOBAL_CONFIG_KEY}={});` +
-    `c.jitless=true}catch(e){}})()`
+    '(function(){try{var g=globalThis;' +
+    `var c=g.${key}||(g.${key}={});` +
+    'c.jitless=true}catch(e){}})()'
   );
 }

@@ -112,28 +112,59 @@ h6 {
   line-height: $line-height-tight;
 }
 
+/*
+  素のタグにもブレークポイントを入れる。
+  Heading コンポーネント（`c_heading__level__*`）はモバイルファーストで
+  出し分けていたが、こちらは全幅共通で PC 用の値だけだった。そのため
+  Heading を使わず素の `<h1>` を書いた箇所は、375px でも 36px になっていた。
+  値は Heading コンポーネントと揃える。
+*/
 h1 {
-  font-size: $font-size-4xl;
+  font-size: $font-size-2xl;
+
+  @include md {
+    font-size: $font-size-4xl;
+  }
 }
 
 h2 {
-  font-size: $font-size-3xl;
+  font-size: $font-size-xl;
+
+  @include md {
+    font-size: $font-size-3xl;
+  }
 }
 
 h3 {
-  font-size: $font-size-2xl;
+  font-size: $font-size-base;
+
+  @include md {
+    font-size: $font-size-2xl;
+  }
 }
 
 h4 {
-  font-size: $font-size-xl;
+  font-size: $font-size-sm;
+
+  @include md {
+    font-size: $font-size-xl;
+  }
 }
 
 h5 {
-  font-size: $font-size-lg;
+  font-size: $font-size-sm;
+
+  @include md {
+    font-size: $font-size-lg;
+  }
 }
 
 h6 {
-  font-size: $font-size-base;
+  font-size: $font-size-sm;
+
+  @include md {
+    font-size: $font-size-base;
+  }
 }
 
 a {

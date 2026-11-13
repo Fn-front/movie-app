@@ -149,12 +149,19 @@
   }
 
   // タイトル行（タイトル + アクションボタン）
+  //
+  // スマホでは縦に積む。375px では情報エリアが 175px しか無く、その中で
+  // アクションボタン3つが 124px（36px×3 + gap 8px×2）を占めるため、
+  // タイトルに残る幅が 43px しか無かった（「アメリ」が2行に折り返していた）。
+  // ボタン群は 124px なので、縦に積めばタイトルは 175px を丸ごと使える。
   &__title_row {
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
     gap: $spacing-2;
 
     @include md {
+      flex-direction: row;
       gap: $spacing-3;
     }
   }
@@ -191,9 +198,13 @@
   }
 
   // タイトル
+  //
+  // スマホ値は `lg`（トークンを下げられない段）なので直接1段下げる。
+  // ここは右にアクションボタン3つが並ぶぶん表示幅が狭く（375px で 43px）、
+  // 作品名が数文字で折り返していた
   &__title {
     margin: 0;
-    font-size: $font-size-lg;
+    font-size: $font-size-base;
     font-weight: $font-weight-bold;
     color: $text-primary;
     line-height: $line-height-tight;

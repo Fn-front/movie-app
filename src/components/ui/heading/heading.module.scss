@@ -8,6 +8,13 @@
   color: $text-primary;
 }
 
+/*
+  level 1・2 のスマホ値はトークン側で下がる（`_theme.scss` の
+  `--font-size-xl` 以上をスマホだけ1段階下げている）。ここでは触らない。
+
+  level 3・4 のスマホ値は `lg` / `base` で、これらは本文やロゴでも使うため
+  トークンを下げられない。1段階下げた値を直接指定する。
+*/
 .c_heading__level__1 {
   font-size: $font-size-2xl;
 
@@ -25,7 +32,7 @@
 }
 
 .c_heading__level__3 {
-  font-size: $font-size-lg;
+  font-size: $font-size-base;
 
   @include md {
     font-size: $font-size-2xl;
@@ -33,7 +40,7 @@
 }
 
 .c_heading__level__4 {
-  font-size: $font-size-base;
+  font-size: $font-size-sm;
 
   @include md {
     font-size: $font-size-xl;

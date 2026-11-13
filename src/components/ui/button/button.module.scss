@@ -104,10 +104,20 @@
   }
 
   // サイズ: Large
+  //
+  // スマホでは md 相当に落とす。375px の実測で高さ 59px あり、
+  // ログイン画面のように lg を縦に3つ並べる画面で縦を食っていた。
+  // 下限は $tap-target-min（44px）。md 相当でも 48px あるので下回らない。
   &__size__lg {
-    padding: $spacing-4 $spacing-8;
-    font-size: $font-size-lg;
-    min-height: 48px;
+    padding: $spacing-3 $spacing-6;
+    font-size: $font-size-base;
+    min-height: 44px;
+
+    @include md {
+      padding: $spacing-4 $spacing-8;
+      font-size: $font-size-lg;
+      min-height: 48px;
+    }
   }
 
   // 全幅

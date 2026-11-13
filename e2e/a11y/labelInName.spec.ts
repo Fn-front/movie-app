@@ -20,18 +20,31 @@
  */
 
 import AxeBuilder from '@axe-core/playwright';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 
 import {
   openDedicatedSession,
   type DedicatedSession,
 } from '../fixtures/dedicatedSession';
+import { MOVIE_ID, mockMovieDetail } from '../helpers/movieDetail';
 import { runScopedEmail } from '../helpers/runScope';
 import { addMovieToWatchlist } from '../helpers/watchlistFlows';
 import { totpCodeFromSecret, getTotpSecret } from '../helpers/totp';
 
+/** カレンダーに必ず1件出すための作品名 */
+const CALENDAR_MOVIE_TITLE = 'ラベル検証用の作品';
+
 /** このルールだけを検査する */
 const RULE = 'label-content-name-mismatch';
+
+type AxeResults = Awaited<ReturnType<AxeBuilder['analyze']>>;
+
+/** 評価されたノード（セレクタの文字列）を集める */
+function evaluatedTargets(results: AxeResults): string[] {
+  return [...results.violations, ...results.incomplete, ...results.passes]
+    .flatMap((r) => r.nodes)
+    .map((n) => n.target.join(' '));
+}
 
 /**
  * 対象のルールだけを実行し、violations と incomplete の両方を見る
@@ -40,60 +53,63 @@ const RULE = 'label-content-name-mismatch';
  * `isHumanInterpretable` が0を返すため violation ではなく incomplete に落ちる。
  * 共通ヘルパー（`expectNoA11yViolations`）も incomplete で落とすので、
  * ここで見ておかないと**データを入れた瞬間に他の spec が落ちる**。
+ *
+ * @param target 評価されたことを確認したい要素。
+ *   ⚠️ **省略できない**（理由は下記の positive control）
  */
-type AxeResults = Awaited<ReturnType<AxeBuilder['analyze']>>;
-
-/** 評価されたノードの総数 */
-function countNodes(results: AxeResults): number {
-  return [
-    ...results.violations,
-    ...results.incomplete,
-    ...results.passes,
-  ].flatMap((r) => r.nodes).length;
-}
-
 async function expectNoLabelMismatch(
   page: Page,
   label: string,
-  /*
-    対象ノードが1件も無いことを許すか。
-
-    ⚠️ **既定は false（1件以上を要求する）。** 直した結果 `aria-label` 自体が
-    無くなった画面では、このルールの対象が0件になるのが正常なので、
-    そこだけ true にして**別の形で**固定すること（カレンダーがその例）
-  */
-  options: { allowNoTarget?: boolean } = {},
+  target: Locator,
 ): Promise<void> {
   let results: AxeResults | null = null;
 
   /*
-    ⚠️ **1ノードでも評価されるまで待つ（positive control）。**
+    ⚠️ **狙った要素が評価されるまで待つ（positive control）。**
 
-    レイアウトが落ち着く前に掛けると、ルールごと inapplicable になって
-    **何も見ずに緑**になる。実測で踏んだ: ダイアログを開いた直後は
-    `inapplicable=1 / viol=0` だったものが、落ち着いてから掛けると
-    `viol=1` になった（ボタンの寸法も 276×96 → 287×100 と動いていた）。
+    レイアウトが落ち着く前に掛けると、その要素がルールの対象から外れて
+    **何も見ずに緑**になる。実測で踏んだ: カレンダーのダイアログを開いた
+    直後は `inapplicable=1 / viol=0` だったものが、落ち着いてから掛けると
+    `viol=1` になった。
 
-    `label-content-name-mismatch` の matches は `widget-not-inline-matches`
-    （`isInTextBlock` を含む）で、計算済みレイアウトに依存する。
-    件数が0のまま進ませないこと。
+    ⚠️ **「1件以上」では足りない**（レビュー指摘）。認証済みページには
+    ユーザーメニューのトリガー（`aria-label` + 可視の表示名）が常設されていて、
+    それだけで件数条件を満たしてしまう。**狙った要素そのもの**を見ること。
+
+    対象から外れる仕組みは `label-content-name-mismatch-matches` が
+    `visibleVirtual()` で可視テキストを取るところ。**可視判定は
+    `overflow: hidden` の祖先の矩形と重なるかを見る**ので、スクロール領域の
+    外にある要素は「見えていない」扱いで評価されない（実測: 映画詳細モーダルの
+    キャストは矩形 937–1038 に対しモーダルが 74–647 で、評価ノード0件だった）。
   */
   await expect
     .poll(
       async () => {
         results = await new AxeBuilder({ page }).withRules([RULE]).analyze();
-        return countNodes(results);
+        // axe が返すのはセレクタ文字列。引いた要素が狙ったものと同じかを見る
+        // （クラス名の部分一致だと、ハッシュ付きの別要素に当たりうる）
+        return target.evaluate(
+          (el, selectors) =>
+            selectors.some((selector) => {
+              try {
+                return document.querySelector(selector) === el;
+              } catch {
+                return false;
+              }
+            }),
+          evaluatedTargets(results),
+        );
       },
       {
         message:
-          `${label} で ${RULE} の対象が1件も評価されなかった。` +
-          '検査が成立していないので、0件を根拠にできない',
+          `${label} で狙った要素が ${RULE} の対象にならなかった。` +
+          '検査が成立していないので、違反0件を根拠にできない',
         timeout: 20000,
       },
     )
-    .toBeGreaterThanOrEqual(options.allowNoTarget === true ? 0 : 1);
+    .toBe(true);
 
-  const evaluated = results as unknown as AxeResults;
+  const evaluated: AxeResults = results!;
 
   const format = (items: AxeResults['violations']) =>
     items
@@ -111,6 +127,35 @@ async function expectNoLabelMismatch(
     evaluated.incomplete,
     `${label} で ${RULE} の要確認:\n${format(evaluated.incomplete)}`,
   ).toEqual([]);
+}
+
+/**
+ * 可視テキストを持たない（アイコンだけの）ボタンであることを確認する
+ *
+ * ⚠️ **axe では固定できない。** テキストノードを消した結果、このルールの
+ * 対象から外れる（matches が可視テキストの有無を見るため）。
+ * 「違反が無い」と「検査していない」を区別できないので、構造で見る。
+ *
+ * 文字の `✕` に戻すと、`isHumanInterpretable` が「1文字の非数字」を0と
+ * 判定するため **incomplete**（要確認）に落ちる。共通ヘルパー
+ * （`expectNoA11yViolations`）は incomplete でも落とすので、
+ * データが入った瞬間に認証済みの全ページが落ちる（#1056）。
+ *
+ * ⚠️ `aria-hidden` では直らない。このルールは `screenReader = false` で
+ * 可視テキストを取るため、隠しても可視テキストとしては残る。
+ */
+async function expectIconOnlyButton(
+  target: Locator,
+  label: string,
+): Promise<void> {
+  const text = (await target.innerText()).trim();
+  expect(
+    text,
+    `${label} の削除ボタンに可視テキストがある。アイコン（SVG）で描くこと`,
+  ).toBe('');
+
+  // 名前が消えていないこと（テキストを消したぶん aria-label が要る）
+  await expect(target).toHaveAccessibleName(/ウォッチリストから削除$/);
 }
 
 test.describe('Label in Name（データを入れた状態）', () => {
@@ -164,15 +209,22 @@ test.describe('Label in Name（データを入れた状態）', () => {
     await expect(
       page.getByRole('list', { name: 'リカバリーコード' }),
     ).toBeVisible({ timeout: 30000 });
-    await expectNoLabelMismatch(page, 'リカバリーコード画面');
 
-    await page.getByRole('button', { name: '控えました' }).click();
+    const dismissButton = page.getByRole('button', { name: '控えました' });
+    await expectNoLabelMismatch(page, 'リカバリーコード画面', dismissButton);
+
+    await dismissButton.click();
 
     // 有効な状態（「リカバリーコードを再発行」ボタンがある）
-    await expect(
-      page.getByRole('button', { name: 'リカバリーコードを再発行' }),
-    ).toBeVisible({ timeout: 30000 });
-    await expectNoLabelMismatch(page, '二段階認証が有効な設定画面');
+    const regenerateButton = page.getByRole('button', {
+      name: 'リカバリーコードを再発行',
+    });
+    await expect(regenerateButton).toBeVisible({ timeout: 30000 });
+    await expectNoLabelMismatch(
+      page,
+      '二段階認証が有効な設定画面',
+      regenerateButton,
+    );
   });
 
   /**
@@ -205,7 +257,7 @@ test.describe('Label in Name（データを入れた状態）', () => {
                 {
                   id: 'label-in-name-1',
                   tmdb_movie_id: 550,
-                  title: 'ラベル検証用の作品',
+                  title: CALENDAR_MOVIE_TITLE,
                   poster_path: null,
                   release_date: dateKey,
                   added_at: `${dateKey}T00:00:00.000Z`,
@@ -244,19 +296,71 @@ test.describe('Label in Name（データを入れた状態）', () => {
     await expect(movieButton).not.toHaveAttribute('aria-label');
     await expect(movieButton).not.toHaveAttribute('aria-labelledby');
 
-    // 名前が可視テキストを含むこと（属性が無いことの裏返しを実際に確認する）
-    const visibleText = (await movieButton.innerText()).replace(/\s+/g, '');
-    const accessibleName = await movieButton.evaluate((el) =>
-      (el.textContent ?? '').replace(/\s+/g, ''),
+    // 名前が可視テキストから作られていること
+    await expect(movieButton).toHaveAccessibleName(
+      new RegExp(CALENDAR_MOVIE_TITLE),
     );
-    expect(accessibleName).toContain(visibleText);
+  });
 
-    // ダイアログの他の要素（閉じる・月送り等）も見る
-    await expectNoLabelMismatch(page, '公開カレンダー（作品あり）', {
-      allowNoTarget: true,
+  /**
+   * 4: 映画詳細のキャスト
+   *
+   * `{俳優名}のプロフィール` に対し、可視テキストは
+   * （プロフィール画像が無ければ頭文字 +）俳優名 + **役名**。
+   *
+   * ⚠️ **既存の `overlays.spec.ts`「映画詳細モーダル（キャストあり）」では
+   * 検査できていなかった**（レビュー指摘。実測で確認）。
+   * キャストはモーダルの可視矩形の外にあり、axe の可視判定
+   * （`overflow: hidden` の祖先の矩形との重なり）で落ちるため、
+   * ルールの評価ノードが**0件**だった:
+   *
+   *     キャストリンクの矩形 937–1038 / モーダル 74–647 → 評価ノード0件
+   *
+   * ここでは**スクロールして可視にしてから**検査する。
+   */
+  test('映画詳細のキャスト（役名あり）', async () => {
+    await mockMovieDetail(page, {
+      backdrop_path: '/e2e-backdrop.jpg',
+      credits: {
+        // 役名があるときだけ可視テキストが名前からはみ出す。
+        // 画像を持たせないことで頭文字の placeholder も入る
+        cast: [
+          {
+            id: 1,
+            name: 'ラベル検証用の俳優',
+            character: 'ラベル検証用の役',
+            profile_path: null,
+            order: 0,
+          },
+        ],
+        crew: [],
+      },
     });
 
-    await page.unroute('**/api/watchlist/calendar**');
+    await page.goto(`/movies/now-showing?movie_id=${MOVIE_ID}`);
+
+    const detail = page.getByRole('dialog');
+    await expect(detail).toBeVisible({ timeout: 30000 });
+
+    const castLink = detail
+      .getByRole('link', { name: /ラベル検証用の俳優/ })
+      .first();
+    await castLink.scrollIntoViewIfNeeded();
+    await expect(castLink).toBeVisible({ timeout: 20000 });
+
+    /*
+      ⚠️ **属性で固定する。** 直した結果 `aria-label` 自体が無くなったので、
+      axe では「違反が無い」と「検査していない」を区別できない（カレンダーと同じ）。
+
+      名前は可視テキスト（頭文字 + 俳優名 + 役名）から作られる。
+      `{俳優名}のプロフィール` を足すと役名が名前に入らず WCAG 2.5.3 に反する。
+
+      ⚠️ 頭文字を ::before の content へ逃がす手は使えない。button と違って
+      **link は children-presentational ではない**ので生成テキストも名前に入る
+    */
+    await expect(castLink).not.toHaveAttribute('aria-label');
+    await expect(castLink).not.toHaveAttribute('aria-labelledby');
+    await expect(castLink).toHaveAccessibleName(/ラベル検証用の役/);
   });
 
   /**
@@ -272,21 +376,22 @@ test.describe('Label in Name（データを入れた状態）', () => {
     await addMovieToWatchlist(page);
 
     // サイドバー（complementary）は一覧ページに常設。行の ✕ がここにある
-    await expect(
-      page
-        .getByRole('complementary')
-        .getByRole('button', { name: /ウォッチリストから削除$/ })
-        .first(),
-    ).toBeVisible({ timeout: 30000 });
+    const sidebarDelete = page
+      .getByRole('complementary')
+      .getByRole('button', { name: /ウォッチリストから削除$/ })
+      .first();
+    await expect(sidebarDelete).toBeVisible({ timeout: 30000 });
+    await expectIconOnlyButton(sidebarDelete, 'ウォッチリストのサイドバー');
 
-    await expectNoLabelMismatch(page, 'ウォッチリストのサイドバー');
-
-    // タイル側の ✕ は /watchlist にある
+    // タイル側の ✕ は /watchlist にある。
+    // ⚠️ main でスコープすること。同じ名前のボタンがサイドバーにもあるので、
+    // 無スコープだとタイルが0枚でも通ってしまう
     await page.goto('/watchlist');
-    await expect(
-      page.getByRole('button', { name: /をウォッチリストから削除$/ }).first(),
-    ).toBeVisible({ timeout: 30000 });
-
-    await expectNoLabelMismatch(page, '/watchlist（作品あり）');
+    const tileDelete = page
+      .getByRole('main')
+      .getByRole('button', { name: /をウォッチリストから削除$/ })
+      .first();
+    await expect(tileDelete).toBeVisible({ timeout: 30000 });
+    await expectIconOnlyButton(tileDelete, '/watchlist のタイル');
   });
 });

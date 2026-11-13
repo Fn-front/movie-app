@@ -86,7 +86,12 @@ describe('CalendarMovieList', () => {
         .querySelector('img');
       expect(poster).not.toBeNull();
       expect(poster).toHaveAttribute('alt', '');
-      expect(screen.getByText('No Image')).toBeInTheDocument();
+      // 「No Image」は CSS の content で出す（#1085）。文字ノードにすると
+      // ボタンの名前に入ってしまうため、要素の存在で見る
+      // （jest では CSS Modules が identity proxy なのでクラス名がそのまま出る）
+      expect(
+        document.querySelector('.c_calendarMovieList__posterFallback'),
+      ).not.toBeNull();
     });
 
     it('映画クリックでイベントが発火する', async () => {

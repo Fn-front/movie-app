@@ -134,9 +134,11 @@ export const CalendarMovieList = memo<CalendarMovieListProps>(
                       className={styles.c_calendarMovieList__posterImage}
                     />
                   ) : (
-                    <div className={styles.c_calendarMovieList__posterFallback}>
-                      <span>No Image</span>
-                    </div>
+                    // 文言は CSS の content で出す（#1085）。
+                    // 文字ノードにするとボタンの名前に入ってしまう
+                    <div
+                      className={styles.c_calendarMovieList__posterFallback}
+                    />
                   )}
                 </div>
                 <div className={styles.c_calendarMovieList__info}>

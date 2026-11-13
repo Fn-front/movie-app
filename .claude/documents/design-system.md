@@ -275,6 +275,7 @@ $breakpoint-2xl: 1536px;  // 大型デスクトップ
 | `--font-size-3xl` | 30px | **24px** |
 | `--font-size-4xl` | 36px | **30px** |
 | `--font-size-5xl` | 48px | **36px** |
+| `--spacing-4` | 16px | **12px** |
 | `--spacing-5` | 20px | **16px** |
 | `--spacing-6` | 24px | **20px** |
 | `--spacing-8` | 32px | **24px** |
@@ -288,8 +289,9 @@ $breakpoint-2xl: 1536px;  // 大型デスクトップ
 
 - **`--font-size-lg`（18px）以下** — 本文・ロゴ・入力欄で使う。とくに入力欄の
   16px を下げると iOS がフォーカス時に自動ズームする
-- **`--spacing-4`（16px）以下** — 要素間の詰め。これ以上詰めると窮屈になる。
-  `--header-height` が `--spacing-3` に依存している点にも注意
+- **`--spacing-3`（12px）以下** — 要素間の詰め。これ以上詰めると窮屈になる。
+  `--header-height` が `--spacing-3` に依存しており、下げるとヘッダーの高さまで
+  変わってしまう点にも注意
 
 ### コンポーネント側に個別指定を増やさない
 

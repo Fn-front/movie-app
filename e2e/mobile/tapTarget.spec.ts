@@ -364,7 +364,14 @@ test.describe('スマホ幅のタップ領域', () => {
       // ⚠️ `elementFromPoint` は**ビューポート外の座標で null を返す**。
       // 設定のチェックボックスは y=875（高さ 812）にあり、スクロールせずに
       // 測ると「押せない」と誤判定する
-      await label.scrollIntoViewIfNeeded();
+      //
+      // ⚠️ `scrollIntoViewIfNeeded` ではなく**中央へ寄せる**。前者は最小限しか
+      // スクロールしないため要素が画面下端に着地し、そこは固定のボトムナビ
+      // （57px）の下になる。ラベル全体がナビに覆われ、3点とも
+      // `c_bottom_nav__link` が返って「押せない」と誤判定した。
+      // 余白を詰めてページの高さが変われば着地位置も変わるので、
+      // レイアウトの寸法に依存しない形にしておく
+      await label.evaluate((el) => el.scrollIntoView({ block: 'center' }));
 
       // スクロールの反映を待つ。並列実行で負荷が高いと、evaluate の時点で
       // まだ画面外にいて elementFromPoint が null を返すことがある

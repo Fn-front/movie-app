@@ -191,9 +191,13 @@
   }
 
   // タイトル
+  //
+  // スマホ値は `lg`（トークンを下げられない段）なので直接1段下げる。
+  // ここは右にアクションボタン3つが並ぶぶん表示幅が狭く（375px で 43px）、
+  // 作品名が数文字で折り返していた
   &__title {
     margin: 0;
-    font-size: $font-size-lg;
+    font-size: $font-size-base;
     font-weight: $font-weight-bold;
     color: $text-primary;
     line-height: $line-height-tight;

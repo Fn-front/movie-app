@@ -68,6 +68,23 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
             {movieTitle}の予告動画
           </Dialog.Title>
 
+          {/*
+            ⚠️ **閉じるボタンは iframe より前に置く**（#1092）。
+
+            このダイアログは Escape で閉じられないことがある。埋め込みが
+            別オリジンの iframe（youtube-nocookie.com）なので、プレイヤーに
+            フォーカスが移ると keydown はその iframe の document に入り、
+            Radix の escape 検知（本体側の document）に届かない。別オリジンで
+            ある以上、本体側からキー入力は観測できない。
+
+            実測: フォーカスが閉じるボタンなら Escape で閉じるが、iframe だと
+            閉じない。CI の E2E が断続的に落ちて判明した。
+
+            そのため**保証できる脱出路はこのボタン**になる。DOM 上で最初の
+            フォーカス可能要素にしておくことで、プレイヤーから Shift+Tab 1回で
+            戻れる。順番を変えると、プレイヤーを操作したキーボード利用者の
+            出口が遠くなる。`e2e/a11y/keyboard.spec.ts` が固定している。
+          */}
           <Dialog.Close className={styles.c_video_dialog__close}>
             <IoCloseOutline size={ICON_SIZES.MD} aria-hidden='true' />
             <span className={styles.c_video_dialog__sr_only}>

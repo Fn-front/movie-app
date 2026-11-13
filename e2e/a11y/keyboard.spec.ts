@@ -6,7 +6,25 @@
 
 import { test, expect } from '@playwright/test';
 
+import { ARIA_LABELS } from '@/constants';
+
+import { MOVIE_ID, mockMovieDetail } from '../helpers/movieDetail';
+
 import { gotoWithTheme } from './helpers';
+
+/** 予告編の検証用。実データに依存させない */
+const TRAILER_VIDEO = {
+  id: 'v1',
+  iso_639_1: 'ja',
+  iso_3166_1: 'JP',
+  key: 'dQw4w9WgXcQ',
+  name: 'E2E予告編',
+  site: 'YouTube',
+  size: 1080,
+  type: 'Trailer',
+  official: true,
+  published_at: '2026-01-01T00:00:00.000Z',
+} as const;
 
 test.describe('キーボード操作', () => {
   test.describe.configure({ timeout: 60000 });
@@ -90,6 +108,66 @@ test.describe('キーボード操作', () => {
     await expect(
       detailLink.getByRole('button', { name: /ウォッチリスト/ }),
     ).toHaveCount(0);
+  });
+
+  /**
+   * 予告編ダイアログからの脱出（#1092）
+   *
+   * ⚠️ **ここだけ Escape を使わない。** 予告編は別オリジンの iframe
+   * （youtube-nocookie.com）で、プレイヤーにフォーカスが移ると keydown は
+   * その iframe の document に入り、Radix の escape 検知（本体側の document）
+   * に届かない。別オリジンである以上、本体側からキー入力は観測できない。
+   *
+   * 実測（本番ビルド / chromium）:
+   *
+   *     フォーカス = 閉じるボタン → Escape で閉じる
+   *     フォーカス = iframe       → Escape では閉じない
+   *
+   * したがって**保証できる脱出路は Tab 移動と Enter**。閉じるボタンは
+   * ダイアログ内で最初のフォーカス可能要素なので、プレイヤーから
+   * Shift+Tab 1回で戻れる。ここが壊れると、プレイヤーを操作した
+   * キーボード利用者の出口が無くなる
+   */
+  test('予告編はプレイヤーにフォーカスがあってもキーボードで閉じられる', async ({
+    page,
+  }) => {
+    await mockMovieDetail(page, {
+      backdrop_path: '/e2e-backdrop.jpg',
+      videos: { results: [TRAILER_VIDEO] },
+    });
+
+    await gotoWithTheme(
+      page,
+      `/movies/now-showing?movie_id=${MOVIE_ID}`,
+      'light',
+    );
+
+    const detail = page.getByRole('dialog');
+    await expect(detail).toBeVisible({ timeout: 20000 });
+
+    await detail
+      .getByRole('button', { name: ARIA_LABELS.PLAY_TRAILER })
+      .click();
+    const videoDialog = page.getByRole('dialog', { name: /の予告動画$/ });
+    await expect(videoDialog).toBeVisible({ timeout: 15000 });
+
+    // プレイヤーを操作した状態を作る
+    await videoDialog
+      .locator('iframe')
+      .first()
+      .evaluate((el) => (el as HTMLIFrameElement).focus());
+
+    // Shift+Tab 1回で閉じるボタンへ戻れること（ここが肝）
+    await page.keyboard.press('Shift+Tab');
+    await expect(
+      videoDialog.getByRole('button', { name: ARIA_LABELS.CLOSE }),
+    ).toBeFocused();
+
+    await page.keyboard.press('Enter');
+
+    await expect(videoDialog).toHaveCount(0);
+    // 下の映画詳細は開いたまま
+    await expect(detail).toBeVisible();
   });
 
   test('モーダルを閉じるとフォーカスがトリガーへ戻る', async ({ page }) => {

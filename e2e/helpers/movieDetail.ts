@@ -101,3 +101,29 @@ export async function mockMovieDetail(
     });
   });
 }
+
+/**
+ * 予告編の埋め込み（youtube-nocookie.com）を空のページに差し替える
+ *
+ * 予告編ダイアログは別オリジンの iframe を読み込む。**実物を読ませると
+ * プレイヤーがフォーカスを奪い、その瞬間に Escape が効かなくなる**
+ * （keydown が iframe 側の document に入り、Radix の検知に届かない / #1092）。
+ * 読み込み時間は環境依存なので、Escape を使うテストは CI で断続的に落ちる
+ * （#1093 で実測）。
+ *
+ * ここで中身を潰しておけば、フォーカスを奪う主体がいなくなり決定的になる。
+ * あわせて E2E から外部ネットワーク依存も消える。
+ *
+ * ⚠️ URL は差し替えないので**別オリジンのままである性質は保たれる**。
+ * 「iframe にフォーカスがあると Escape が効かない」こと自体を確かめたい
+ * テストは、この後で明示的にフォーカスを移すこと。
+ */
+export async function stubTrailerEmbed(page: Page): Promise<void> {
+  await page.route('**://*.youtube-nocookie.com/**', (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><title>stub</title>',
+    }),
+  );
+}

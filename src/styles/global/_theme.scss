@@ -161,9 +161,14 @@
   --spacing-1: 0.4rem;
   --spacing-2: 0.8rem;
   --spacing-3: 1.2rem;
+  // タップ領域（#1017）。詳細は $tap-target-min / $tap-target-aa の定義を参照
+  --tap-target-aa: 2.4rem;
+  --tap-target-min: 4.4rem;
   // ヘッダーの高さ（上下 padding + アイコンボタンの高さ + 下境界線）。
-  // sticky なヘッダーの下にジャンプ先が潜らないよう scroll-padding に使う
-  --header-height: calc(var(--spacing-3) * 2 + 4rem + 1px);
+  // sticky なヘッダーの下にジャンプ先が潜らないよう scroll-padding に使う。
+  // ⚠️ アイコンボタンの高さは --tap-target-min で決まる。直接 4rem 等と
+  // 書くと、ボタンを大きくしたときにジャンプ先がヘッダーの下へ潜る
+  --header-height: calc(var(--spacing-3) * 2 + var(--tap-target-min) + 1px);
   // 映画タイルのリスト表示のポスター幅。高さは aspect-ratio 2/3 で決まり、
   // それが行の高さ＝1画面に入る件数を決める（#1014）。
   // TS 側は IMAGE_SIZES.CALENDAR_POSTER が同値（src/constants/ui.ts）

@@ -102,8 +102,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    // 指で押せる大きさにする（#1017）。周囲に他の操作要素が無く、
+    // 見た目を大きくしても情報量を圧迫しないので要素そのものを広げる
+    width: $tap-target-min;
+    height: $tap-target-min;
     margin-left: $spacing-4;
     color: $text-secondary;
     border-radius: $border-radius-md;

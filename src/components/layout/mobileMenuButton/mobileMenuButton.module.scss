@@ -5,8 +5,9 @@
   @include button-reset;
   @include flex-center;
 
-  width: 4rem;
-  height: 4rem;
+  // 指で押せる大きさにする（#1017）
+  width: $tap-target-min;
+  height: $tap-target-min;
   border-radius: $border-radius-md;
   color: $text-primary;
   transition: $transition-bg;

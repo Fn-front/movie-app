@@ -94,8 +94,9 @@
     display: flex;
     flex-shrink: 0;
     align-items: center;
-    // 間隔は 8px 以上空ける（#1017 の誤爆対策）
-    gap: $spacing-2;
+    // 広げたヒット領域（44px）どうしが重ならないよう、見た目 28px との
+    // 差分 16px を空ける。隣の操作を誤爆しない最低限（#1017）
+    gap: $spacing-4;
     padding-right: $spacing-2;
     // タイトル button の ::after（カード全面の当たり判定）より上に置く
     position: relative;
@@ -148,7 +149,9 @@
     position: absolute;
     z-index: 1;
     top: $spacing-2;
-    right: calc($spacing-2 + 32px);
+    // お気に入りの左隣。広げたヒット領域（44px）が重ならないよう、
+    // 見た目 28px との差分 16px を空ける（#1017。以前は 4px だった）
+    right: calc($spacing-2 + 28px + $spacing-4);
   }
 
   &__favorite_button {

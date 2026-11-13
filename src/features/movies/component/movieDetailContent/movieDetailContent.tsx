@@ -543,14 +543,26 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                           key={actor.id}
                           href={ROUTES.PERSON_DETAIL(actor.id)}
                           className={styles.c_movie_detail__cast_item}
-                          aria-label={`${actor.name}のプロフィール`}
+                          /*
+                            ⚠️ aria-label を付けない（#1085）。中の可視テキスト
+                            （プロフィール画像が無ければ頭文字、俳優名、役名）が
+                            そのまま名前になる。
+                            「{名前}のプロフィール」だと役名が名前に入らず、
+                            役名を持つ作品でだけ WCAG 2.5.3 に反していた。
+
+                            ⚠️ 頭文字を ::before の content へ逃がす手は使えない。
+                            button と違って **link は children-presentational では
+                            ない**ので、生成テキストも名前に含まれる（#1069）
+                          */
                           replace={shouldReplaceNavigation}
                           onClick={handleCastClick}
                         >
                           {profileUrl ? (
                             <Image
                               src={profileUrl}
-                              alt={actor.name}
+                              // 俳優名はすぐ右に文字として出る。alt を付けると
+                              // リンクの名前で名前が2回読まれる
+                              alt=''
                               width={IMAGE_SIZES.CAST.WIDTH}
                               height={IMAGE_SIZES.CAST.HEIGHT}
                               className={styles.c_movie_detail__cast_image}

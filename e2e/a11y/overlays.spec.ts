@@ -107,24 +107,6 @@ test.describe('アクセシビリティ（オーバーレイ・認証済み）',
   test.describe.configure({ timeout: 60000 });
 
   /**
-   * 月グリッドの日セル（gridcell）は「日付のラベル」と「その日の作品名」の両方を持つ。
-   * axe の label-content-name-mismatch は可視テキストがアクセシブル名に
-   * そのまま含まれることを求めるため、ラベル付きコンテナに任意の中身が入る
-   * この構造では原理的に満たせない（FullCalendar の aria-labelledby を外して
-   * 内容から名前を取らせても、文字列の連結が一致せず同じ結果になる）。
-   *
-   * このルールは音声入力で「見えている文字」を読み上げて操作する利用者向けだが、
-   * セル内の各作品はそれぞれ独立したリンクとして名前を持っており、
-   * セル自体を名前で呼び出す操作は想定されないため、ここでは除外する。
-   *
-   * ⚠️ **この除外は gridcell 以外も隠している。** `calendarMovieList.tsx` の
-   * ボタン（FullCalendar ではなくアプリ自前のマークアップ）も同じルールで
-   * 違反している。gridcell 側を直しても**この定数は消せない**ので、
-   * 消す前に実際に通ることを確かめること（#1069 のレビューで判明）。
-   */
-  const CALENDAR_DISABLED_RULES = ['label-content-name-mismatch'] as const;
-
-  /**
    * incomplete（needs review）を許容するルール。いずれも FullCalendar が
    * 自前で描画する曜日見出し `<a class="fc-col-header-cell-cushion">日</a>` に対するもので、
    * アプリ側のマークアップではない。FullCalendar の更新は #780 で追っている。
@@ -219,7 +201,7 @@ test.describe('アクセシビリティ（オーバーレイ・認証済み）',
       await expectNoA11yViolations(
         page,
         `公開カレンダー / ${theme}`,
-        CALENDAR_DISABLED_RULES,
+        [],
         CALENDAR_ALLOWED_INCOMPLETE,
       );
     });
@@ -242,7 +224,7 @@ test.describe('アクセシビリティ（オーバーレイ・認証済み）',
       await expectNoA11yViolations(
         page,
         `公開カレンダー（日付選択後） / ${theme}`,
-        CALENDAR_DISABLED_RULES,
+        [],
         CALENDAR_ALLOWED_INCOMPLETE,
       );
     });

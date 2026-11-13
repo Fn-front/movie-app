@@ -470,7 +470,8 @@ describe('MovieDetailContent', () => {
       render(<MovieDetailContent movieId={123} />);
 
       const link = screen.getByRole('link', {
-        name: 'テスト俳優のプロフィール',
+        // aria-label を外したので、名前は可視テキスト（俳優名 + 役名）になる（#1085）
+        name: 'テスト俳優 テスト役',
       });
       expect(link).toHaveAttribute('href', '/person/42');
     });
@@ -486,7 +487,7 @@ describe('MovieDetailContent', () => {
 
       render(<MovieDetailContent movieId={123} />);
       await user.click(
-        screen.getByRole('link', { name: 'テスト俳優のプロフィール' }),
+        screen.getByRole('link', { name: 'テスト俳優 テスト役' }),
       );
 
       expect(mockNotifyNavigating).toHaveBeenCalledTimes(1);
@@ -499,7 +500,8 @@ describe('MovieDetailContent', () => {
       render(<MovieDetailContent movieId={123} />);
 
       const link = screen.getByRole('link', {
-        name: 'テスト俳優のプロフィール',
+        // aria-label を外したので、名前は可視テキスト（俳優名 + 役名）になる（#1085）
+        name: 'テスト俳優 テスト役',
       });
       link.focus();
       expect(link).toHaveFocus();

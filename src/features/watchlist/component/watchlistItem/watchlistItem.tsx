@@ -8,6 +8,7 @@
 import { memo, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { IoCloseOutline } from 'react-icons/io5';
 
 import { IMAGE_SIZES, ROUTES } from '@/constants';
 import { formatDate } from '@/utils/date';
@@ -107,7 +108,15 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
         aria-label={`${item.title}をウォッチリストから削除`}
         type='button'
       >
-        ✕
+        {/*
+          ⚠️ 文字の ✕ を置かない（#1085）。axe の
+          label-content-name-mismatch は可視テキストを
+          screenReader=false で取るため aria-hidden が効かず、
+          「1文字の非数字」は人が解釈できる文字列と見なされないので
+          incomplete（要確認）に落ちる。アイコンにすればテキスト
+          ノードそのものが無くなる
+        */}
+        <IoCloseOutline aria-hidden='true' />
       </button>
     </div>
   );

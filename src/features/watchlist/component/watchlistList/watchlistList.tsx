@@ -8,7 +8,11 @@
 import { memo, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { IoCheckmarkCircle, IoCheckmarkCircleOutline } from 'react-icons/io5';
+import {
+  IoCheckmarkCircle,
+  IoCheckmarkCircleOutline,
+  IoCloseOutline,
+} from 'react-icons/io5';
 
 import { Card } from '@/components/ui/card/card';
 import { MovieTileSkeleton } from '@/components/ui/movie/movieTileSkeleton/movieTileSkeleton';
@@ -243,7 +247,15 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
               className={styles.c_watchlist_tile__delete}
               aria-label={`${item.title}をウォッチリストから削除`}
             >
-              ✕
+              {/*
+                ⚠️ 文字の ✕ を置かない（#1085）。axe の
+                label-content-name-mismatch は可視テキストを
+                screenReader=false で取るため aria-hidden が効かず、
+                「1文字の非数字」は人が解釈できる文字列と見なされないので
+                incomplete（要確認）に落ちる。アイコンにすればテキスト
+                ノードそのものが無くなる
+              */}
+              <IoCloseOutline aria-hidden='true' />
             </button>
           </div>
         )}

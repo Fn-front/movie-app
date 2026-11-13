@@ -9,7 +9,6 @@ import { memo, useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button/button';
 import { Input } from '@/components/ui/input/input';
 import { Skeleton } from '@/components/ui/skeleton/skeleton';
-import { RECOVERY_CODE_CONFIG } from '@/constants/totp';
 
 import {
   TWO_FACTOR_VIEW,
@@ -186,7 +185,12 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
             type='button'
             variant='primary'
             onClick={dismissRecoveryCodes}
-            aria-label='リカバリーコードを控えた'
+            /*
+              ⚠️ 可視テキスト（控えました）を**そのまま含む**こと（#1085）。
+              WCAG 2.5.3 Label in Name。音声入力で見えている文字を読み上げて
+              操作する利用者が、見えているとおりに言っても反応しなくなる
+            */
+            aria-label='リカバリーコードを控えました'
           >
             控えました
           </Button>
@@ -233,7 +237,13 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
                 variant='secondary'
                 onClick={handleRegenerate}
                 isLoading={isSubmitting}
-                aria-label={`リカバリーコードを${RECOVERY_CODE_CONFIG.COUNT}個再発行する`}
+                /*
+                  ⚠️ 可視テキスト（リカバリーコードを再発行）を**そのまま含む**
+                  こと（#1085）。個数は上の「未使用のリカバリーコードは N 個
+                  あります」で読めるので、ここには入れない。
+                  入れると可視テキストが途切れて WCAG 2.5.3 に反する
+                */
+                aria-label='リカバリーコードを再発行する'
               >
                 リカバリーコードを再発行
               </Button>

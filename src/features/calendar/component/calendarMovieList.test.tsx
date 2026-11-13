@@ -79,7 +79,13 @@ describe('CalendarMovieList', () => {
         />,
       );
 
-      expect(screen.getByAltText('映画A')).toBeInTheDocument();
+      // ポスターは装飾（alt='')。作品名はすぐ下に文字として出るので、
+      // alt を付けるとボタンの名前で2回読まれる（#1085）
+      const poster = screen
+        .getByRole('button', { name: /映画A/ })
+        .querySelector('img');
+      expect(poster).not.toBeNull();
+      expect(poster).toHaveAttribute('alt', '');
       expect(screen.getByText('No Image')).toBeInTheDocument();
     });
 
@@ -96,10 +102,10 @@ describe('CalendarMovieList', () => {
         />,
       );
 
-      await user.click(screen.getByLabelText('映画A'));
+      await user.click(screen.getByRole('button', { name: /映画A/ }));
       expect(onMovieClick).toHaveBeenCalledWith(100);
 
-      await user.click(screen.getByLabelText('映画B'));
+      await user.click(screen.getByRole('button', { name: /映画B/ }));
       expect(onMovieClick).toHaveBeenCalledWith(101);
     });
 

@@ -176,7 +176,8 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     const handleCastClick = useCallback(() => {
       notifyNavigating();
     }, [notifyNavigating]);
-    const { isInWatchlist, toggleWatchlist, isToggling } = useWatchlistToggle();
+    const { isInWatchlist, toggleWatchlist, isMovieToggling } =
+      useWatchlistToggle();
     const { shareMovie } = useShareMovie();
     const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
 
@@ -199,6 +200,13 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     const inWatchlist = useMemo(
       () => isInWatchlist(movieId),
       [isInWatchlist, movieId],
+    );
+
+    // この作品の通信中だけ無効にする。以前は「どれか1件でも処理中」を
+    // 見ており、裏の一覧で別の作品を操作すると**ここまで無効**になっていた（#1055）
+    const isWatchlistToggling = useMemo(
+      () => isMovieToggling(movieId),
+      [isMovieToggling, movieId],
     );
 
     const handleWatchlistToggle = useCallback(() => {
@@ -368,7 +376,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                   <WatchlistAddButton
                     isInWatchlist={inWatchlist}
                     onClick={handleWatchlistToggle}
-                    disabled={isToggling}
+                    disabled={isWatchlistToggling}
                     size='md'
                   />
                 </div>

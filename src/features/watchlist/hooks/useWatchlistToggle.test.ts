@@ -262,10 +262,10 @@ describe('useWatchlistToggle', () => {
     });
   });
 
-  it('isTogglingがfalseを返す（mutation非実行時）', () => {
+  it('何も操作していなければ isMovieToggling は false', () => {
     const { result } = renderHook(() => useWatchlistToggle());
 
-    expect(result.current.isToggling).toBe(false);
+    expect(result.current.isMovieToggling(42)).toBe(false);
   });
 
   it('未認証時のtoggleWatchlistでログイン誘導モーダルが表示される', () => {
@@ -534,6 +534,129 @@ describe('useWatchlistToggle', () => {
       });
 
       expect(tile.result.current.isInWatchlist(42)).toBe(false);
+    });
+  });
+
+  /**
+   * 通信中かどうかの判定（#1055）
+   *
+   * ⚠️ **ここは useMutation の isPending では検証できない。** このファイルの
+   * モックは isPending を常に false で返すし、本物でも mutation 1つにつき
+   * フラグ1つなので「同時に2件飛んでいる」状態を表現できない。
+   * 判定は QueryClient 単位の `toggling` を見ること。
+   *
+   * 手法は「削除の後始末が、別の作品の楽観状態を消さない」と同じで、
+   * **両方の通信を保留にして片方だけ完了させる**（PR #1054）
+   */
+  describe('通信中の判定', () => {
+    /** 完了を test 側から制御できる removeWatchlist に差し替える */
+    const pendRemovals = () => {
+      const resolvers = new Map<string, () => void>();
+      mockRemoveWatchlist.mockImplementation(
+        (id: string) =>
+          new Promise<void>((resolve) => {
+            resolvers.set(id, resolve);
+          }),
+      );
+      return resolvers;
+    };
+
+    it('作品Aの通信中に作品Bを操作しても、Aは通信中のまま', async () => {
+      setupCacheWithItems([
+        { tmdbMovieId: 42, watchlistId: 'watchlist-42' },
+        { tmdbMovieId: 99, watchlistId: 'watchlist-99' },
+      ]);
+      pendRemovals();
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist({ ...createMovie(), id: 42 });
+      });
+      expect(result.current.isMovieToggling(42)).toBe(true);
+
+      // ref で持っていた頃は、この操作で 42 の印が 99 に上書きされ、
+      // **42 のボタンが通信中なのに有効へ戻って**いた
+      await act(async () => {
+        result.current.toggleWatchlist({ ...createMovie(), id: 99 });
+      });
+
+      expect(result.current.isMovieToggling(42)).toBe(true);
+      expect(result.current.isMovieToggling(99)).toBe(true);
+    });
+
+    it('片方の通信が終わっても、もう片方は通信中のまま', async () => {
+      setupCacheWithItems([
+        { tmdbMovieId: 42, watchlistId: 'watchlist-42' },
+        { tmdbMovieId: 99, watchlistId: 'watchlist-99' },
+      ]);
+      const resolvers = pendRemovals();
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist({ ...createMovie(), id: 42 });
+      });
+      await act(async () => {
+        result.current.toggleWatchlist({ ...createMovie(), id: 99 });
+      });
+
+      await act(async () => {
+        resolvers.get('watchlist-42')?.();
+      });
+
+      // 終わった方だけ押せるようになる。両方 false なら 99 のボタンが
+      // 通信中に押せてしまい、両方 true ならリロードまで押せないままになる
+      expect(result.current.isMovieToggling(42)).toBe(false);
+      expect(result.current.isMovieToggling(99)).toBe(true);
+    });
+
+    it('同じ作品を連打しても重複リクエストが飛ばない', async () => {
+      setupCacheWithItem(42, 'watchlist-42');
+      pendRemovals();
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+        result.current.toggleWatchlist(createMovie());
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(mockRemoveWatchlist).toHaveBeenCalledTimes(1);
+      // 2回目以降が素通りすると、楽観状態が removes → adds と反転して
+      // **削除の最中に追加**が飛ぶ
+      expect(mockAddWatchlist).not.toHaveBeenCalled();
+    });
+
+    it('通信が失敗しても通信中のままにならない', async () => {
+      setupCacheWithItem(42, 'watchlist-42');
+      mockRemoveWatchlist.mockRejectedValueOnce(new Error('失敗'));
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      // 後始末を onSettled に置く理由。onSuccess だと失敗した作品の
+      // ボタンがリロードまで無効のままになる
+      expect(result.current.isMovieToggling(42)).toBe(false);
+    });
+
+    it('未認証なら通信中にならない', async () => {
+      mockUseSession.mockReturnValue({ data: null, status: 'unauthenticated' });
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      // 通信は出ない。認証チェックより前に印を付けると、ログイン誘導を
+      // 閉じた後もそのボタンがリロードまで無効のままになる
+      expect(mockAddWatchlist).not.toHaveBeenCalled();
+      expect(result.current.isMovieToggling(42)).toBe(false);
     });
   });
 });

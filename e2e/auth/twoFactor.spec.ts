@@ -150,7 +150,7 @@ test.describe('二段階認証', () => {
 
     // 控えて有効状態へ
     await page
-      .getByRole('button', { name: 'リカバリーコードを控えた' })
+      .getByRole('button', { name: 'リカバリーコードを控えました' })
       .click();
     await expect(page.getByText('二段階認証は')).toBeVisible();
 
@@ -282,7 +282,7 @@ test.describe('二段階認証', () => {
     await loginAndOpenSettings(page);
     await enableTwoFactor(page);
     await page
-      .getByRole('button', { name: 'リカバリーコードを控えた' })
+      .getByRole('button', { name: 'リカバリーコードを控えました' })
       .click();
 
     await page.getByLabel('認証コード').fill('000000');
@@ -303,7 +303,7 @@ test.describe('二段階認証', () => {
     await loginAndOpenSettings(page);
     await enableTwoFactor(page);
     await page
-      .getByRole('button', { name: 'リカバリーコードを控えた' })
+      .getByRole('button', { name: 'リカバリーコードを控えました' })
       .click();
 
     const code = await getCurrentTotpCode(USER.email);

@@ -586,10 +586,26 @@ export const REGION_FILTER_MOVIE_IDS = {
 } as const;
 
 /**
+ * 地域フィルタ検証用に、現実にはありえない人気度を与える
+ *
+ * 一覧APIは1ページ20件。既定の並び（公開日昇順）では同じ公開日の行が
+ * **IDの昇順**で並ぶため、run スコープの巨大なID（20億台）を持つシード行は
+ * 必ず最後尾に回り、実データが20件に達した時点でページ1から押し出される。
+ *
+ * 実際にそうなって main の E2E が落ちた（実測: 既定の窓で実データが19件、
+ * 地域を含めると21〜25件）。人気度順で引けばシードが先頭に来るので、
+ * 実データの増減に左右されなくなる。
+ */
+export const REGION_FILTER_SEED_POPULARITY = 9_999_999;
+
+/**
  * 地域フィルタ検証用に、原語違いの劇場公開作品を movie_cache へ投入する
  *
  * `original_language IS NULL` の行が除外されないこと（バックフィル未完了の
  * 作品を消さない仕様）も併せて検証できるよう、未取得の行も入れる。
+ *
+ * ⚠️ 呼び出し側は `sort_by=popularity&sort_order=desc` で引くこと。
+ * 既定の公開日順だとページ1に入らない（`REGION_FILTER_SEED_POPULARITY`）。
  *
  * @param releaseDate - 公開日（YYYY-MM-DD）。一覧の日付範囲フィルタに合わせて指定する
  */
@@ -603,7 +619,7 @@ export async function seedRegionFilterMovies(
     overview: 'E2E用',
     vote_average: 7.5,
     vote_count: 100,
-    popularity: 50,
+    popularity: REGION_FILTER_SEED_POPULARITY,
     genre_ids: [28],
     release_type: 'theatrical',
     is_currently_streaming: false,

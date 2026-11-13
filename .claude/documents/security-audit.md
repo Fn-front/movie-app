@@ -172,7 +172,8 @@ nonce / strict-dynamic はリクエスト毎に値が変わるため、全ペー
 - [x] セキュリティヘッダー: CSP（`unsafe-inline` 許容）/HSTS/X-Frame-Options/X-Content-Type-Options
 - [x] 環境変数: NEXT_PUBLIC_にサーバー秘密鍵なし
 - [x] エラー応答: スタックトレース非公開
-- [x] 本番は `/api/cron/*` 以外を404にする（`src/proxy.ts`）
+- [x] 本番の保護は二層（`src/proxy.ts` の認証・ロール判定 ＋ 各 Route Handler の認可）
+      ※ かつて本番だけ `/api/cron/*` 以外を404で隠していたが、一般公開にあたり解除した
 
 ### 依存パッケージ
 - [x] npm audit: 脆弱性0件

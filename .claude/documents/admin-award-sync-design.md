@@ -47,7 +47,12 @@
 
 ### 3-1. この画面は本番では動かない
 
-`src/proxy.ts:41-46` により、本番 Vercel は `/api/cron/*` 以外を 404 にしている。
+> ⚠️ **この前提は現在は成り立たない。** 一般公開にあたり `src/proxy.ts` の本番404ゲートを
+> 解除したため、`/admin/*` は本番でも admin ロールがあれば到達できる。以下は設計当時の
+> 記述として残す。**Vercel 上で実行した場合は `maxDuration` と関数の寿命が実際に掛かる**
+> ため、長時間ジョブは途中で切れうる。運用は引き続きローカル実行を前提とすること。
+
+設計当時、`src/proxy.ts` は本番 Vercel で `/api/cron/*` 以外を 404 にしていた。
 
 ```ts
 if (process.env.VERCEL_ENV === 'production') {
@@ -56,7 +61,7 @@ if (process.env.VERCEL_ENV === 'production') {
 }
 ```
 
-（厳密には `config.matcher` が `_next/static` 等を除外しているので「すべて404」ではないが、画面と API はすべて封鎖される。）
+（厳密には `config.matcher` が `_next/static` 等を除外しているので「すべて404」ではなかったが、画面と API はすべて封鎖されていた。）
 
 したがって本機能は `/admin/accounts` と同様 **ローカル（`npm run dev`）専用**。これは設計上2つの意味を持つ。
 

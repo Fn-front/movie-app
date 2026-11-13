@@ -505,9 +505,13 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         return;
       }
 
-      // GA4 への送信は操作時点で行う（mutation の成否は待たない）。楽観的な
-      // トーストと同じ位置に揃えるため。通信失敗分も計上される代わりに、
-      // 完了時に解決すると「どの作品の完了か」を別途持つ必要が出る
+      // GA4 への送信は操作時点で行う（mutation の成否は待たない）。
+      // 楽観的なトーストと同じ位置に揃えるため。通信失敗分も計上される。
+      //
+      // ⚠️ 以前は「完了時に解決すると、どの作品の完了かを別途持つ必要が出る」と
+      // 書いていたが、**その理由はもう成立しない**。両 mutation が variables に
+      // 映画IDを載せたので、onSettled だけで作品が分かる（#1055）。
+      // 位置を変えない理由はトーストと揃えること1点
       if (checkInWatchlist(movie.id)) {
         const watchlistId = getWatchlistId(movie.id);
         if (watchlistId) {

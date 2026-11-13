@@ -549,13 +549,31 @@ describe('useWatchlistToggle', () => {
    * **両方の通信を保留にして片方だけ完了させる**（PR #1054）
    */
   describe('通信中の判定', () => {
-    /** 完了を test 側から制御できる removeWatchlist に差し替える */
+    /**
+     * 完了を test 側から制御できる removeWatchlist / addWatchlist に差し替える
+     *
+     * ⚠️ `jest.clearAllMocks()` は mockImplementation を消さない。
+     * この describe の後ろに別の describe を足すと、保留のまま解決されない
+     * 実装が漏れて**そちらがハングする**。足すときは戻すこと
+     */
     const pendRemovals = () => {
       const resolvers = new Map<string, () => void>();
       mockRemoveWatchlist.mockImplementation(
         (id: string) =>
           new Promise<void>((resolve) => {
             resolvers.set(id, resolve);
+          }),
+      );
+      return resolvers;
+    };
+
+    /** 追加側。キーは tmdb_movie_id */
+    const pendAdds = () => {
+      const resolvers = new Map<number, () => void>();
+      mockAddWatchlist.mockImplementation(
+        (item: { tmdb_movie_id: number }) =>
+          new Promise<void>((resolve) => {
+            resolvers.set(item.tmdb_movie_id, resolve);
           }),
       );
       return resolvers;
@@ -642,6 +660,69 @@ describe('useWatchlistToggle', () => {
       // 後始末を onSettled に置く理由。onSuccess だと失敗した作品の
       // ボタンがリロードまで無効のままになる
       expect(result.current.isMovieToggling(42)).toBe(false);
+    });
+
+    /**
+     * ⚠️ **追加側も別に見る。** 削除側だけだと、`addMutation.onSettled` の
+     * 後始末を消しても `toggleWatchlist` の印を消しても**1本も落ちない**
+     * （レビュー指摘で実測）。消し残すとボタンがリロードまで無効になる
+     */
+    it('未登録の作品を連打しても重複リクエストが飛ばない', async () => {
+      pendAdds();
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+        result.current.toggleWatchlist(createMovie());
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(mockAddWatchlist).toHaveBeenCalledTimes(1);
+      expect(result.current.isMovieToggling(42)).toBe(true);
+    });
+
+    it('追加でも、片方の通信が終わればもう片方は通信中のまま', async () => {
+      const resolvers = pendAdds();
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist({ ...createMovie(), id: 42 });
+      });
+      await act(async () => {
+        result.current.toggleWatchlist({ ...createMovie(), id: 99 });
+      });
+
+      expect(result.current.isMovieToggling(42)).toBe(true);
+      expect(result.current.isMovieToggling(99)).toBe(true);
+
+      await act(async () => {
+        resolvers.get(42)?.();
+      });
+
+      expect(result.current.isMovieToggling(42)).toBe(false);
+      expect(result.current.isMovieToggling(99)).toBe(true);
+    });
+
+    /**
+     * `isInWatchlist` と同じく、**答えが変わるときは参照も変わる**契約。
+     * 呼び出し側が `useMemo(() => isMovieToggling(id), [isMovieToggling, id])`
+     * と書いている（movieDetailContent.tsx / awardsPage.tsx 経由の memo 済み
+     * コンポーネント）。useCallback の deps から version を外すと値が凍る
+     */
+    it('通信中になると isMovieToggling の参照も変わる', async () => {
+      setupCacheWithItem(42, 'watchlist-42');
+      pendRemovals();
+
+      const { result } = renderHook(() => useWatchlistToggle());
+      const before = result.current.isMovieToggling;
+
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(result.current.isMovieToggling).not.toBe(before);
     });
 
     it('未認証なら通信中にならない', async () => {

@@ -128,6 +128,11 @@ function setupMovie(overrides: Record<string, unknown> = {}) {
 describe('MovieDetailContent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // ⚠️ clearAllMocks は mockImplementation を消さない（jest 設定にも
+    // resetMocks は無い）。戻さないと、通信中にしたテストの実装が後続へ漏れて
+    // 「ボタンが無効のままクリックが通らない」形で**別のテストが落ちる**
+    mockUseWatchlistToggle.isMovieToggling.mockReturnValue(false);
+    mockUseWatchlistToggle.isInWatchlist.mockReturnValue(false);
   });
 
   it('ローディング中はスピナーを表示する', () => {

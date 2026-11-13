@@ -26,6 +26,7 @@ import styles from './searchPage.module.scss';
 export const SearchPage = memo(function SearchPage() {
   const {
     query,
+    hasSearchCriteria,
     movies,
     totalResults,
     currentPage,
@@ -104,7 +105,7 @@ export const SearchPage = memo(function SearchPage() {
 
         <div className={styles.c_search_page__results}>
           <SearchResults
-            query={query}
+            hasSearchCriteria={hasSearchCriteria}
             movies={movies}
             totalResults={totalResults}
             currentPage={currentPage}

@@ -149,7 +149,7 @@ const createMockMovie = (overrides?: Partial<Movie>): Movie => ({
 });
 
 const defaultProps: SearchResultsProps = {
-  query: 'inception',
+  hasSearchCriteria: true,
   movies: [
     createMockMovie({ id: 1, title: '映画1' }),
     createMockMovie({ id: 2, title: '映画2' }),
@@ -255,9 +255,9 @@ describe('SearchResults', () => {
    * 「まだ検索していない」と「検索して0件」は別の状態（#1024）。
    * どちらも `movies` が空なので、件数だけでは区別できない
    */
-  describe('検索前（クエリが空）', () => {
+  describe('検索前（検索条件が1つも無い）', () => {
     it('キーワード入力を促す文言を出す', () => {
-      renderSearchResults({ query: '', movies: [] });
+      renderSearchResults({ hasSearchCriteria: false, movies: [] });
 
       expect(
         screen.getByText('キーワードを入力してください'),
@@ -265,32 +265,62 @@ describe('SearchResults', () => {
     });
 
     it('0件の文言は出さない', () => {
-      renderSearchResults({ query: '', movies: [] });
+      renderSearchResults({ hasSearchCriteria: false, movies: [] });
 
       expect(
         screen.queryByText('検索結果が見つかりませんでした'),
       ).not.toBeInTheDocument();
     });
 
-    // 空白だけの入力も「検索していない」として扱う
-    it('空白だけのクエリも検索前として扱う', () => {
-      renderSearchResults({ query: '   ', movies: [] });
-
-      expect(
-        screen.getByText('キーワードを入力してください'),
-      ).toBeInTheDocument();
-    });
-
-    // 元になるクエリが無いので原題の提案も出しようがない
+    // 検索条件が無ければ提案APIも呼ばれないので、出しようがない
     it('原題の提案は出さない', () => {
       renderSearchResults({
-        query: '',
+        hasSearchCriteria: false,
         movies: [],
         suggestions: ['Inception'],
         isSuggestionLoading: false,
       });
 
       expect(screen.queryByTestId('title-suggestion')).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * キーワード無し＋フィルターのみの検索（#1024 のレビュー指摘）
+   *
+   * この画面は**キーワードが無くても検索が成立する**。`/api/movies/search` の
+   * パターン2（Discover）がそれで、フィルターモーダルの
+   * 「公開年で検索する」（`/search?year=<年>`）はこの経路に着地する。
+   *
+   * 「まだ検索していない」をキーワードの有無で判定すると、ここで返ってきた
+   * 結果が丸ごと隠れる。**この describe がその回帰を止める。**
+   */
+  describe('キーワード無し＋フィルターのみ', () => {
+    it('結果があれば一覧を出す', () => {
+      renderSearchResults({ hasSearchCriteria: true });
+
+      expect(screen.getByTestId('movie-tile-1')).toBeInTheDocument();
+      expect(screen.getByText('100件の検索結果')).toBeInTheDocument();
+    });
+
+    it('入力を促す文言は出さない', () => {
+      renderSearchResults({ hasSearchCriteria: true });
+
+      expect(
+        screen.queryByText('キーワードを入力してください'),
+      ).not.toBeInTheDocument();
+    });
+
+    // フィルターを緩めてほしい状況なので、入力を促すのは誤り
+    it('0件なら0件の文言を出す', () => {
+      renderSearchResults({ hasSearchCriteria: true, movies: [] });
+
+      expect(
+        screen.getByText('検索結果が見つかりませんでした'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText('キーワードを入力してください'),
+      ).not.toBeInTheDocument();
     });
   });
 

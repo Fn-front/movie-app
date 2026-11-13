@@ -88,10 +88,38 @@ describe('WatchlistList', () => {
     expect(screen.getByText('No Image')).toBeInTheDocument();
   });
 
-  it('公開日がある場合は表示される', () => {
+  /**
+   * API は ISO 形式（`2026-03-01`）で返すが、そのまま出すと
+   * 他の一覧（`MovieTile`・サイドバー）と表記が揃わない（#1019）
+   */
+  it('公開日が他画面と同じ和暦表記で表示される', () => {
     render(<WatchlistList watchlist={createMockItems(1)} isLoading={false} />);
 
-    expect(screen.getByText('2026-03-01')).toBeInTheDocument();
+    expect(screen.getByText('2026年03月01日')).toBeInTheDocument();
+    expect(screen.queryByText('2026-03-01')).not.toBeInTheDocument();
+  });
+
+  // 不正な日付では `formatDate` が null を返す。空の <p> を出さない
+  it('日付が不正な場合は公開日の行ごと出さない', () => {
+    // formatDate は握りつぶすときに console.error を出す。
+    // ここでは想定どおりなので、テスト出力を汚さないよう黙らせる
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    const [item] = createMockItems(1);
+    const { container } = render(
+      <WatchlistList
+        watchlist={[{ ...item, release_date: 'not-a-date' }]}
+        isLoading={false}
+      />,
+    );
+
+    expect(
+      container.querySelector('[class*="c_watchlist_tile__date"]'),
+    ).not.toBeInTheDocument();
+
+    consoleError.mockRestore();
   });
 
   it('onClickが渡された場合、タイルクリックでコールバックが呼ばれる', async () => {

@@ -21,6 +21,7 @@ import {
   ROUTES,
   WATCHLIST_WATCHED_LABELS,
 } from '@/constants';
+import { formatDate } from '@/utils/date';
 import { getTMDbPosterUrl } from '@/utils/image';
 import { shouldLetBrowserHandle } from '@/utils/linkClick';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
@@ -143,6 +144,11 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
 }) {
   const posterUrl = getTMDbPosterUrl(item.poster_path);
   const isWatched = item.watched_at !== null;
+  // API は ISO 形式（2026-11-03）で返す。他の一覧（`MovieTile`・サイドバーの
+  // `WatchlistItem`）と同じ `formatDate` を通さないと、同じ作品の公開日が
+  // 画面ごとに違う表記になる（#1019）。不正な日付では null が返るので
+  // 空の <p> を出さないよう、描くかどうかもこの値で判定する
+  const formattedDate = formatDate(item.release_date);
   // 「観た作品に何点を付けたか」を見せるための表示なので、視聴済みのときだけ出す。
   // 視聴済みを解除すれば、お気に入り登録が残っていても消える
   const showsRating = isWatched && favorite !== null;
@@ -257,8 +263,8 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
           )}
         </h2>
         <div className={styles.c_watchlist_tile__meta}>
-          {item.release_date && (
-            <p className={styles.c_watchlist_tile__date}>{item.release_date}</p>
+          {formattedDate && (
+            <p className={styles.c_watchlist_tile__date}>{formattedDate}</p>
           )}
           {showsRating && (
             <RatingIndicator rating={favorite.rating} size='sm' />

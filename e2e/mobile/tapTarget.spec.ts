@@ -19,9 +19,14 @@
  *
  * - **`::after` で広げたヒット領域を見ない。** `getBoundingClientRect` しか
  *   使わないので、44px へ広げても 28px のままと判定する
- * - **18×18 だったⓘも `passes` 側に入る。** axe は「文章の中に収まる要素」を
- *   WCAG のインライン例外として除外する（ⓘ は h1 と同じ行にある）。
+ * - **18×18 だったⓘを拾わない。** `target-size` の `matches` は
+ *   `widget-not-inline-matches`（＝`isInTextBlock` を含む）なので、
+ *   文章の中に収まる要素は**評価対象から外れる**（`passes` ではなく
+ *   inapplicable）。ⓘ は h1 と同じ行にあるため当たらない。
  *   だからⓘは上の実測で個別に押さえている
+ * - **孤立した小さい要素も拾わないことがある。** ルールは
+ *   `any: [target-size, target-offset]` で、**どちらか一方が通れば pass**。
+ *   周囲に他のターゲットが無ければ `target-offset` 側で通る
  *
  * それでも残すのは、**新しく足した要素**が 24px を割ったときに気づけるため。
  * 修正後の実測で、各ページ 12〜80 ノードが実際に評価されている
@@ -121,7 +126,10 @@ async function hitAreaCorners(
     const rect = el.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-    const offset = targetSize / 2 - 1;
+    // 端ちょうどは隣と取り合いになるうえ、カードの角丸（border-radius +
+    // overflow: hidden）で**クリップされる境界とほぼ一致**する。
+    // 実測で 21.0px は card、20.5px は button に当たった。2px 内側を見る
+    const offset = targetSize / 2 - 2;
 
     return [
       [centerX - offset, centerY - offset],
@@ -152,8 +160,9 @@ test.describe('スマホ幅のタップ領域', () => {
    * ⓘ は 18×18 で、**唯一 WCAG 2.5.8 AA の 24px を下回って**いた（#1017）。
    * ラベル等による拡張も無いので、要素そのものを広げるしかない。
    *
-   * ⚠️ **axe は拾わない。** h1 と同じ行にあるため、インライン例外として
-   * `passes` に入る（修正前のビルドで確認）。ここで大きさを直に測る
+   * ⚠️ **axe は拾わない。** h1 と同じ行にあるため `target-size` の
+   * `matches`（`isInTextBlock` を含む）から外れ、評価対象にならない
+   * （修正前のビルドで違反0件を確認）。ここで大きさを直に測る
    */
   test('ウォッチリストの並び替えヒント（ⓘ）が AA を満たす', async ({
     authenticatedPage: page,
@@ -196,6 +205,86 @@ test.describe('スマホ幅のタップ領域', () => {
     expect(box!.width).toBeLessThan(TAP_TARGET_MIN);
 
     await expectTapAreaAtLeast(button, '一覧タイルのウォッチリストボタン');
+  });
+
+  /**
+   * カードの角丸（`border-radius` + `overflow: hidden`）の真上に来るので、
+   * 広げた領域の角がクリップされやすい。ウォッチリスト（右下）とは
+   * 別に見る必要がある
+   */
+  test('一覧タイルのお気に入りボタンが指で押せる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+
+    const tile = movieTiles(page).first();
+    await expect(tile).toBeVisible({ timeout: 20000 });
+
+    const button = tile.getByRole('button', { name: /お気に入り/ });
+    await expect(button).toBeVisible();
+
+    await expectTapAreaAtLeast(button, '一覧タイルのお気に入りボタン');
+  });
+
+  /**
+   * 映画詳細の操作列（共有 / お気に入り / ウォッチリスト）は 36px が
+   * **4px 間隔**で並んでいた。44px に広げると領域が重なり、DOM で後ろの
+   * ウォッチリストが手前を食う＝**ハートのすぐ右を押すとウォッチリストが
+   * 反応する**（#1017）。間隔を 8px にして解消した
+   */
+  test('映画詳細の操作ボタンが食い合わない', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+
+    await page.locator('[class*="c_movie_tile__title_link"]').first().click();
+
+    const detail = page.getByRole('dialog');
+    await expect(detail).toBeVisible({ timeout: 30000 });
+
+    const watchlistButton = detail
+      .getByRole('button', { name: /ウォッチリスト/ })
+      .first();
+    const favoriteButton = detail
+      .getByRole('button', { name: /お気に入り/ })
+      .first();
+    await expect(watchlistButton).toBeVisible({ timeout: 20000 });
+    await expect(favoriteButton).toBeVisible();
+
+    // ⚠️ **開くアニメーションの最中に測らないこと。** Radix の
+    // `data-state="open"` アニメーションで一時的に縮んで見え（実測 36 → 34.56px）、
+    // 必要な間隔が 8px ではなく 9.44px と算出されて落ちる。
+    // 固定待ちではなく、条件が満たされるまでリトライする形で待つ
+    await expect
+      .poll(
+        async () => {
+          const [watchlistBox, favoriteBox] = await Promise.all([
+            watchlistButton.boundingBox(),
+            favoriteButton.boundingBox(),
+          ]);
+          if (!watchlistBox || !favoriteBox) return -1;
+          // 見た目 36px なら 8px 空いていれば 44px の領域が重ならない
+          const gap = watchlistBox.x - (favoriteBox.x + favoriteBox.width);
+          return gap - (TAP_TARGET_MIN - favoriteBox.width);
+        },
+        {
+          message:
+            'お気に入りとウォッチリストの間隔が足りず、44px の領域が重なる',
+          timeout: 15000,
+        },
+      )
+      .toBeGreaterThanOrEqual(0);
+
+    // ハートのすぐ右（かつてウォッチリストが食っていた位置）を押すと
+    // お気に入りに当たる
+    const hitsFavorite = await favoriteButton.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.right + 2, r.top + r.height / 2);
+      return hit === el || el.contains(hit);
+    });
+    expect(hitsFavorite, 'お気に入りのすぐ右が別のボタンに食われている').toBe(
+      true,
+    );
   });
 
   test('ヘッダーのメニューボタンが指で押せる', async ({
@@ -247,11 +336,11 @@ test.describe('スマホ幅のタップ領域', () => {
     // 行ごと押せる形にしている（丸・四角そのものは 24px のまま）
     for (const role of ['checkbox', 'radio'] as const) {
       const control = page.getByRole(role).first();
-      const exists = await control
-        .waitFor({ state: 'visible', timeout: 10000 })
-        .then(() => true)
-        .catch(() => false);
-      if (!exists) continue;
+      // ⚠️ 見つからなかったら落とす。`continue` で飛ばしていた頃は、
+      // 要素が1つも無くてもこのテストが緑だった
+      await expect(control, `${role} が見つからない`).toBeVisible({
+        timeout: 15000,
+      });
 
       const row = control.locator('xpath=..');
       const rowBox = await row.boundingBox();
@@ -260,6 +349,40 @@ test.describe('スマホ幅のタップ領域', () => {
         rowBox!.height,
         `${role} の行の高さが ${TAP_TARGET_MIN}px 未満`,
       ).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
+
+      // ⚠️ **高さだけでは足りない。** 行を高くしても、ラベルを縦いっぱいに
+      // 伸ばしていなければ**押せるのは丸・四角の 24px だけ**で、行の上下は
+      // 素通りする。実際に押して効くかを見る
+      const label = row.locator('label');
+      const labelBox = await label.boundingBox();
+      expect(labelBox, `${role} のラベルが測れない`).not.toBeNull();
+      expect(
+        labelBox!.height,
+        `${role} のラベルが行の高さまで伸びていない（align-self: stretch）`,
+      ).toBeGreaterThanOrEqual(TAP_TARGET_MIN);
+
+      // ⚠️ `elementFromPoint` は**ビューポート外の座標で null を返す**。
+      // 設定のチェックボックスは y=875（高さ 812）にあり、スクロールせずに
+      // 測ると「押せない」と誤判定する
+      await label.scrollIntoViewIfNeeded();
+
+      // スクロールの反映を待つ。並列実行で負荷が高いと、evaluate の時点で
+      // まだ画面外にいて elementFromPoint が null を返すことがある
+      await expect
+        .poll(
+          async () =>
+            label.evaluate((el) => {
+              const r = el.getBoundingClientRect();
+              // ラベルの左端・下端寄り。文字の無い余白でも効くこと
+              const hit = document.elementFromPoint(r.left + 2, r.bottom - 2);
+              return hit === el || el.contains(hit);
+            }),
+          {
+            message: `${role} のラベル下端を押しても当たらない`,
+            timeout: 10000,
+          },
+        )
+        .toBe(true);
     }
   });
 
@@ -306,7 +429,8 @@ test.describe('ウォッチリストのタップ領域', () => {
     testInfo.setTimeout(120000);
     session = await openDedicatedSession(browser, USER);
     page = session.page;
-    // 専用コンテキストは config の viewport を引き継ぐので、SP 幅に直す
+    // ⚠️ `browser.newContext()` は config の `use` を引き継がない。
+    // Playwright 既定の 1280×720 で開くので SP 幅に直す
     await page.setViewportSize({
       width: SP_VIEWPORT_WIDTH,
       height: 812,

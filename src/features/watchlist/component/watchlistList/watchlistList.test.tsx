@@ -89,37 +89,65 @@ describe('WatchlistList', () => {
   });
 
   /**
-   * API は ISO 形式（`2026-03-01`）で返すが、そのまま出すと
-   * 他の一覧（`MovieTile`・サイドバー）と表記が揃わない（#1019）
+   * 公開日の表記（#1019）
+   *
+   * ⚠️ 日付の `<p>` には role もラベルも無いのでクラス名で引いている。
+   * CSS Modules のクラス名を変えると**黙って素通りする**（jest は
+   * `next/jest` でクラス名をそのまま文字列にするので今は当たる）。
    */
-  it('公開日が他画面と同じ和暦表記で表示される', () => {
-    render(<WatchlistList watchlist={createMockItems(1)} isLoading={false} />);
+  describe('公開日', () => {
+    /** 日付の行（role もラベルも無いのでクラス名で引く） */
+    const dateRow = (container: HTMLElement) =>
+      container.querySelector('[class*="c_watchlist_tile__date"]');
 
-    expect(screen.getByText('2026年03月01日')).toBeInTheDocument();
-    expect(screen.queryByText('2026-03-01')).not.toBeInTheDocument();
-  });
+    // API は ISO 形式（2026-03-01）で返すが、そのまま出すと
+    // 他の一覧（MovieTile・サイドバー）と表記が揃わない
+    it('他画面と同じ日本語表記で表示される', () => {
+      render(
+        <WatchlistList watchlist={createMockItems(1)} isLoading={false} />,
+      );
 
-  // 不正な日付では `formatDate` が null を返す。空の <p> を出さない
-  it('日付が不正な場合は公開日の行ごと出さない', () => {
-    // formatDate は握りつぶすときに console.error を出す。
-    // ここでは想定どおりなので、テスト出力を汚さないよう黙らせる
-    const consoleError = jest
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+      expect(screen.getByText('2026年03月01日')).toBeInTheDocument();
+      expect(screen.queryByText('2026-03-01')).not.toBeInTheDocument();
+    });
 
-    const [item] = createMockItems(1);
-    const { container } = render(
-      <WatchlistList
-        watchlist={[{ ...item, release_date: 'not-a-date' }]}
-        isLoading={false}
-      />,
-    );
+    // #1019 の完了条件「日付が無い作品で空表示のまま崩れない」
+    it('日付が無い作品では公開日の行ごと出さない', () => {
+      const [item] = createMockItems(1);
+      const { container } = render(
+        <WatchlistList
+          watchlist={[{ ...item, release_date: null }]}
+          isLoading={false}
+        />,
+      );
 
-    expect(
-      container.querySelector('[class*="c_watchlist_tile__date"]'),
-    ).not.toBeInTheDocument();
+      expect(dateRow(container)).not.toBeInTheDocument();
+    });
 
-    consoleError.mockRestore();
+    /**
+     * 不正な日付では `formatDate` が null を返す。
+     * `item.release_date` で描画を判定したままだと、中身の無い `<p>` が残る
+     */
+    it('日付が不正な場合も公開日の行ごと出さない', () => {
+      // formatDate は握りつぶすときに console.error を出す。想定どおりなので
+      // 黙らせるが、**復元は afterEach で行う**（ここで mockRestore すると
+      // アサーション失敗時に復元されず、以降のテストで警告が消える）
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      const [item] = createMockItems(1);
+      const { container } = render(
+        <WatchlistList
+          watchlist={[{ ...item, release_date: 'not-a-date' }]}
+          isLoading={false}
+        />,
+      );
+
+      expect(dateRow(container)).not.toBeInTheDocument();
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
   });
 
   it('onClickが渡された場合、タイルクリックでコールバックが呼ばれる', async () => {

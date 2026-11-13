@@ -137,26 +137,45 @@ test.describe('キーボード操作', () => {
    *
    * したがって**保証できる脱出路は Tab 移動と Enter**。
    *
-   * ⚠️ 「Shift+Tab 1回」が成り立つのは**先頭の動画からだけ**。DOM は
-   * `閉じる → iframe1 → YouTubeリンク1 → iframe2 → …` の順で、動画は最大5件
-   * 並ぶ（`TRAILER_DISPLAY_LIMIT`）。2本目以降からは手前の要素を遡る分だけ増える。
+   * ## ⚠️ プレイヤーの中からは検証できない（#1100）
    *
-   * そこで**最後尾から前方向へ回り込む**形で押さえる。Radix の `FocusScope` は
-   * `loop: true`（`@radix-ui/react-dialog`）なので、最後の要素から Tab すると
-   * 先頭＝閉じるボタンへ戻る。最後の iframe からは「iframe → リンク → 閉じる」の
-   * 2回で、**動画が何件でもこの回数は変わらない**。
+   * 以前はここで `iframe.focus()` してから Tab を2回送っていたが、
+   * **断続的に落ちた**（`--workers=1 --repeat-each=5` で5本中5本）。
+   * 原因を実測したところ、フォーカスが iframe に入ると**Tab を何回送っても
+   * 親へ戻らない**:
    *
-   * ここが壊れると、プレイヤーを操作したキーボード利用者の出口が遠くなる
+   *     iframe.focus() 直後 → IFRAME
+   *     Tab 1回目           → IFRAME
+   *     Tab 2回目           → IFRAME
+   *     Tab 3回目           → IFRAME
+   *
+   * 親へ送った Tab は別プロセスの iframe（OOPIF）側で処理され、スタブは
+   * フォーカス可能な要素を持たないのでそこに留まる。たまに通っていたのは、
+   * `focus()` の委譲がまだ子へ伝わる前に Tab が届いた場合だけ。
+   * **キー入力が観測できないのと同じ構造的な制約**で、Escape と同じ。
+   *
+   * ## 代わりに何を固定するか
+   *
+   * 親ドキュメント側で保証できるのは**DOM 順と回り込み**の2つ。
+   *
+   * DOM は `閉じる → iframe1 → YouTubeリンク1 → iframe2 → YouTubeリンク2 → …`
+   * の順で、動画は最大5件並ぶ（`TRAILER_DISPLAY_LIMIT`）。
+   * Radix の `FocusScope` は `loop: true`（`@radix-ui/react-dialog`）なので、
+   * **最後の YouTube リンクから Tab 1回で先頭＝閉じるボタンへ戻る**。
+   * 動画が何件でもこの回数は変わらない（最後尾だけを見ているため）。
+   *
+   * ここが壊れる＝閉じるボタンを後ろへ動かすと、プレイヤーの脇にある
+   * リンクまで来たキーボード利用者の出口が遠くなる。
    */
-  test('予告編はプレイヤーにフォーカスがあってもキーボードで閉じられる', async ({
+  test('予告編は最後尾から Tab 1回で閉じるボタンへ戻れる', async ({
     page,
     browserName,
   }) => {
-    // WebKit は既定でボタンを Tab 順に含めない（このファイル冒頭の実測コメント）。
-    // Tab 移動そのものを見るテストなので、ブラウザ側の設定差で落ちる
+    // WebKit は既定でボタンもリンクも Tab 順に含めない（このファイル冒頭の
+    // 実測コメント）。Tab 移動そのものを見るテストなので、ブラウザ側の設定差で落ちる
     test.skip(
       browserName === 'webkit',
-      'WebKit は既定で button を Tab 順に含めない（冒頭の実測コメント参照）',
+      'WebKit は既定で button / a を Tab 順に含めない（冒頭の実測コメント参照）',
     );
 
     // 実物の埋め込みを読ませるとプレイヤーがフォーカスを奪い、
@@ -164,7 +183,8 @@ test.describe('キーボード操作', () => {
     await stubTrailerEmbed(page);
     await mockMovieDetail(page, {
       backdrop_path: '/e2e-backdrop.jpg',
-      // 2件入れる。1件だと「2本目以降は Shift+Tab 1回では戻れない」が隠れる
+      // 2件入れる。1件だと「最後尾から」という条件が自明になり、
+      // 2本目以降で DOM 順が崩れても気づけない
       videos: { results: [TRAILER_VIDEO, SECOND_TRAILER_VIDEO] },
     });
 
@@ -183,19 +203,23 @@ test.describe('キーボード操作', () => {
     const videoDialog = page.getByRole('dialog', { name: /の予告動画$/ });
     await expect(videoDialog).toBeVisible({ timeout: 15000 });
 
-    // 最後の動画のプレイヤーにフォーカスを移す（フレームの先頭に入った状態）
-    await videoDialog
-      .locator('iframe')
-      .last()
-      .evaluate((el) => (el as HTMLIFrameElement).focus());
+    const closeButton = videoDialog.getByRole('button', {
+      name: ARIA_LABELS.CLOSE,
+    });
 
-    // 最後の iframe → その YouTube リンク → 先頭へ回り込み、で閉じるボタン。
-    // 動画が何件でもこの2回で済む（最後尾だけを見ているため）
+    // 1. 閉じるボタンが先頭＝開いた直後にフォーカスされる。
+    //    これが成り立たないと、下の「回り込んで戻る」も意味を失う
+    await expect(closeButton).toBeFocused();
+
+    // 2. 親ドキュメント上の最後のフォーカス可能要素は、最後の動画の
+    //    「YouTubeで見る」リンク。動画の件数ぶん並ぶ
+    const youtubeLinks = videoDialog.getByRole('link');
+    await expect(youtubeLinks).toHaveCount(2);
+    await youtubeLinks.last().focus();
+
+    // 3. そこから Tab 1回で先頭へ回り込む（FocusScope の loop）
     await page.keyboard.press('Tab');
-    await page.keyboard.press('Tab');
-    await expect(
-      videoDialog.getByRole('button', { name: ARIA_LABELS.CLOSE }),
-    ).toBeFocused();
+    await expect(closeButton).toBeFocused();
 
     await page.keyboard.press('Enter');
 

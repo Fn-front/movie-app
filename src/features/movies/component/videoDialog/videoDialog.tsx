@@ -80,16 +80,26 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
             実測: フォーカスが閉じるボタンなら Escape で閉じるが、iframe だと
             閉じない。CI の E2E が断続的に落ちて判明した。
 
-            そのため**保証できる脱出路はこのボタン**になる。DOM 上で最初の
-            フォーカス可能要素にしておくことで、`FocusScope` の `loop` により
-            **最後尾から前方向へ回り込んで戻れる**（動画の件数によらず一定）。
+            ⚠️ **Tab も同じ**（#1100）。フォーカスがプレイヤーに入ると、
+            本体へ送った Tab は別プロセスの iframe 側で処理され、何回送っても
+            親へ戻らない（実測: Tab 3回とも activeElement は iframe のまま）。
+            つまり**プレイヤーの中からの脱出は、こちらでは保証できない**。
+            実際の YouTube 埋め込みにはプレイヤー側の操作要素があるので、
+            そちらを辿れば出られるが、それは YouTube の挙動であってこちらの
+            責任範囲ではない。
+
+            **こちらが保証するのは DOM 順と回り込み**。このボタンを DOM 上で
+            最初のフォーカス可能要素にしておくと、`FocusScope` の `loop` により
+            **最後の「YouTubeで見る」リンクから Tab 1回で戻れる**
+            （動画の件数によらず一定）。プレイヤーの脇まで来た利用者の出口が
+            これで決まる。
 
             ⚠️ 逆向き（Shift+Tab）で1回で戻れるのは**先頭の動画からだけ**。
             動画は最大5件並び（`TRAILER_DISPLAY_LIMIT`）、各件が iframe と
             「YouTubeで見る」リンクを持つので、後ろの動画ほど遡る距離が伸びる。
 
-            順番を変えると、プレイヤーを操作したキーボード利用者の出口が
-            遠くなる。`e2e/a11y/keyboard.spec.ts` が固定している。
+            順番を変えると、キーボード利用者の出口が遠くなる。
+            `e2e/a11y/keyboard.spec.ts` が固定している。
           */}
           <Dialog.Close className={styles.c_video_dialog__close}>
             <IoCloseOutline size={ICON_SIZES.MD} aria-hidden='true' />

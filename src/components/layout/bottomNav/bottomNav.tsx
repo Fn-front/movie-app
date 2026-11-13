@@ -26,6 +26,7 @@ import {
   NAV_ITEMS,
   ROUTES,
 } from '@/constants';
+import type { NavIconRoute } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './bottomNav.module.scss';
@@ -41,7 +42,9 @@ import { useBottomNavHeight } from './useBottomNavHeight';
  * 2箇所で呼び名が食い違い、どちらのテストも自分の文字列を見ているので
  * 検知できない。
  */
-const BOTTOM_NAV_HREFS: string[] = [
+// 型は NavIconRoute。アイコンのある行き先しか出せないので、
+// アイコン未定義のルートを足すとここでコンパイルエラーになる（#1020）
+const BOTTOM_NAV_HREFS: readonly NavIconRoute[] = [
   ROUTES.HOME,
   ROUTES.NOW_SHOWING,
   ROUTES.WATCHLIST,
@@ -54,6 +57,10 @@ const BOTTOM_NAV_HREFS: string[] = [
  * ホームはサイドナビ／ドロワーの共通項目ではないため引けない。
  * ここだけがボトムナビ固有のベタ書きになる
  */
+// ⚠️ ここは `Record<string, string>` のまま。`BOTTOM_NAV_HREFS` の型を
+// `NavIconRoute` に絞ったことで、HOME 以外は必ず `NAV_ITEMS` から引けるため
+// 実質的な取りこぼしは塞がっている。キーを `typeof ROUTES.HOME` に絞ると
+// 下の `OWN_LABELS[href]` が `NavIconRoute` で引けなくなる
 const OWN_LABELS: Record<string, string> = {
   [ROUTES.HOME]: 'ホーム',
 };
@@ -61,7 +68,8 @@ const OWN_LABELS: Record<string, string> = {
 /** ボトムナビの項目（共通定数から組み立てた結果） */
 interface BottomNavItem {
   label: string;
-  href: string;
+  /** アイコンのある行き先に限る（`NAV_ICON_MAP` の引き当てに使う / #1020） */
+  href: NavIconRoute;
   /**
    * 未認証では出さない項目
    *
@@ -141,7 +149,8 @@ export const BottomNav = memo(function BottomNav() {
                 aria-current={item.isActive ? 'page' : undefined}
               >
                 <span className={styles.c_bottom_nav__icon} aria-hidden='true'>
-                  {Icon ? <Icon size={ICON_SIZES.SM} /> : null}
+                  {/* NAV_ICON_MAP は全行き先必須なので必ず引ける（#1020） */}
+                  <Icon size={ICON_SIZES.SM} />
                 </span>
                 <span className={styles.c_bottom_nav__label}>{item.label}</span>
               </Link>

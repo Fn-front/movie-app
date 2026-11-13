@@ -32,6 +32,7 @@ import {
   MODAL_TITLES,
   USER_ROLE,
 } from '@/constants';
+import type { NavIconRoute } from '@/constants';
 import { getInitial } from '@/utils/user';
 import { useNavAuthGuard } from '@/hooks/useNavAuthGuard';
 import { useOverlayHistory } from '@/hooks/useOverlayHistory';
@@ -52,12 +53,17 @@ interface MobileNavItem {
  * 行き先からアイコンを描く
  *
  * アイコンの対応表は `@/constants` の `NAV_ICON_MAP` が真実源（ボトムナビと
- * 共有している）。未定義のルート（受賞作品・シアター体験）は null に倒れる
- * 既知の状態で、#1020 の担当範囲
+ * 共有している）。`Record<NavIconRoute, IconType>` で全行き先必須なので、
+ * 引数を `NavIconRoute` に絞れば**必ず引ける**（#1020）。
+ *
+ * ⚠️ 以前の `?? null` フォールバックは消した。代償として、万一 undefined が
+ * 入ると `MOBILE_NAV_ITEMS` がモジュール読み込み時に `<undefined />` を作り、
+ * ドロワーの描画ごと例外になる。ドロワーは `AppLayout` に常設なので
+ * 画面全体が落ちる。対応表を `Record<string, …>` に緩めないこと
  */
-const renderNavIcon = (href: string): React.ReactNode => {
+const renderNavIcon = (href: NavIconRoute): React.ReactNode => {
   const Icon = NAV_ICON_MAP[href];
-  return Icon ? <Icon size={ICON_SIZES.SM} /> : null;
+  return <Icon size={ICON_SIZES.SM} />;
 };
 
 /**

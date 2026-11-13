@@ -32,9 +32,23 @@ test.describe('地域（原語）フィルタ', () => {
   // 一覧の日付範囲に確実に収まるよう、本日の日付を使う
   const releaseDate = localDateFromToday();
 
-  /** シードした作品だけに絞り込んだ一覧APIのパス */
+  /**
+   * シードした作品だけに絞り込んだ一覧APIのパス
+   *
+   * ⚠️ **人気度の降順で引く。** 既定は公開日の昇順で、同じ公開日の行は
+   * IDの昇順に並ぶ。シードは run スコープの巨大なID（20億台）なので必ず
+   * 最後尾に回り、**実データが1ページ（20件）を埋めた時点で押し出される**。
+   * 実際にそうなって main の E2E が落ちた（実測: 既定の窓に実データが19件、
+   * 地域を含めると21〜25件）。
+   *
+   * シードには現実にはありえない人気度（`REGION_FILTER_SEED_POPULARITY`）を
+   * 与えてあるので、この並びなら必ずページ1の先頭に来る。
+   * **否定側のアサーション（`not.toContain`）もこれで初めて意味を持つ** ―
+   * 公開日順のままでは「除外された」のか「ページから溢れた」のか区別できない。
+   */
   const listPath = (query = '') =>
     `/api/movies?release_type=theatrical&time_frame=upcoming` +
+    `&sort_by=popularity&sort_order=desc` +
     `&release_date_gte=${releaseDate}&release_date_lte=${releaseDate}${query}`;
 
   test.beforeAll(async () => {

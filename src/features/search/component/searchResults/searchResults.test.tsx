@@ -149,6 +149,7 @@ const createMockMovie = (overrides?: Partial<Movie>): Movie => ({
 });
 
 const defaultProps: SearchResultsProps = {
+  query: 'inception',
   movies: [
     createMockMovie({ id: 1, title: '映画1' }),
     createMockMovie({ id: 2, title: '映画2' }),
@@ -247,6 +248,49 @@ describe('SearchResults', () => {
       renderSearchResults({ isLoading: true });
 
       expect(screen.queryByText('100件の検索結果')).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * 「まだ検索していない」と「検索して0件」は別の状態（#1024）。
+   * どちらも `movies` が空なので、件数だけでは区別できない
+   */
+  describe('検索前（クエリが空）', () => {
+    it('キーワード入力を促す文言を出す', () => {
+      renderSearchResults({ query: '', movies: [] });
+
+      expect(
+        screen.getByText('キーワードを入力してください'),
+      ).toBeInTheDocument();
+    });
+
+    it('0件の文言は出さない', () => {
+      renderSearchResults({ query: '', movies: [] });
+
+      expect(
+        screen.queryByText('検索結果が見つかりませんでした'),
+      ).not.toBeInTheDocument();
+    });
+
+    // 空白だけの入力も「検索していない」として扱う
+    it('空白だけのクエリも検索前として扱う', () => {
+      renderSearchResults({ query: '   ', movies: [] });
+
+      expect(
+        screen.getByText('キーワードを入力してください'),
+      ).toBeInTheDocument();
+    });
+
+    // 元になるクエリが無いので原題の提案も出しようがない
+    it('原題の提案は出さない', () => {
+      renderSearchResults({
+        query: '',
+        movies: [],
+        suggestions: ['Inception'],
+        isSuggestionLoading: false,
+      });
+
+      expect(screen.queryByTestId('title-suggestion')).not.toBeInTheDocument();
     });
   });
 

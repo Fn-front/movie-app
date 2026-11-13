@@ -50,4 +50,23 @@ test.describe('検索（公開）', () => {
       timeout: 15000,
     });
   });
+
+  /**
+   * 検索前と0件は別の状態（#1024）
+   *
+   * どちらも結果は空なので、**0件側の文言が出ていないこと**まで見ないと
+   * 区別できているか分からない
+   */
+  test('クエリなしで開くと0件ではなく入力を促す文言が出る', async ({
+    page,
+  }) => {
+    await page.goto('/search');
+
+    await expect(page.getByText('キーワードを入力してください')).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(page.getByText('検索結果が見つかりませんでした')).toHaveCount(
+      0,
+    );
+  });
 });

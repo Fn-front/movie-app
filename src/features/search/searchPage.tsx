@@ -104,6 +104,7 @@ export const SearchPage = memo(function SearchPage() {
 
         <div className={styles.c_search_page__results}>
           <SearchResults
+            query={query}
             movies={movies}
             totalResults={totalResults}
             currentPage={currentPage}

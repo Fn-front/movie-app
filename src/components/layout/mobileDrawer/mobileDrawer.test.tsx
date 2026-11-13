@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { NAV_ITEMS } from '@/constants';
+import { ARIA_LABELS, NAV_ITEMS } from '@/constants';
 
 import { MobileDrawer } from './mobileDrawer';
 
@@ -106,10 +106,15 @@ describe('MobileDrawer', () => {
     render(<MobileDrawer {...defaultProps} />);
 
     const nav = screen.getByRole('navigation', {
-      name: 'モバイルナビゲーション',
+      name: ARIA_LABELS.MOBILE_NAV,
     });
     const links = within(nav).getAllByRole('link');
-    expect(links).toHaveLength(NAV_ITEMS.length + 1); // ホームの分
+    // 件数だけでなく並びとラベルも固定する。ホームだけがドロワー固有で、
+    // 残りは `NAV_ITEMS` の順にそのまま出る
+    expect(links.map((link) => link.textContent)).toEqual([
+      'ホーム',
+      ...NAV_ITEMS.map((item) => item.label),
+    ]);
 
     for (const link of links) {
       // アイコンの span は aria-hidden なのでロールで引けない。

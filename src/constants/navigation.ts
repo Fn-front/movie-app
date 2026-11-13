@@ -26,12 +26,15 @@ export interface NavItemBase {
 }
 
 /**
- * サイドナビゲーション項目
+ * ナビゲーション項目（サイドナビ・ドロワー・ボトムナビの共通の真実源）
  *
  * ⚠️ `NavItemBase[]` と**型注釈しない**。注釈すると `href` が `string` に
  * 広がり、`NAV_ICON_MAP` の「全行き先にアイコンが要る」という型が
  * `Record<string, …>` と同じになって効かなくなる（#1020）。
  * `satisfies` なら形を検査しつつリテラル型を残せる。
+ *
+ * ⚠️ `readonly` になるので、`NavItemBase[]` を取る関数へ渡すと型が合わない。
+ * 受け取る側のシグネチャを `readonly NavItemBase[]` にすること。
  */
 export const NAV_ITEMS = [
   { label: '公開予定', href: ROUTES.UPCOMING },

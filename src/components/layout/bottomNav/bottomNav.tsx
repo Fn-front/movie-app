@@ -57,6 +57,10 @@ const BOTTOM_NAV_HREFS: readonly NavIconRoute[] = [
  * ホームはサイドナビ／ドロワーの共通項目ではないため引けない。
  * ここだけがボトムナビ固有のベタ書きになる
  */
+// ⚠️ ここは `Record<string, string>` のまま。`BOTTOM_NAV_HREFS` の型を
+// `NavIconRoute` に絞ったことで、HOME 以外は必ず `NAV_ITEMS` から引けるため
+// 実質的な取りこぼしは塞がっている。キーを `typeof ROUTES.HOME` に絞ると
+// 下の `OWN_LABELS[href]` が `NavIconRoute` で引けなくなる
 const OWN_LABELS: Record<string, string> = {
   [ROUTES.HOME]: 'ホーム',
 };
@@ -145,7 +149,8 @@ export const BottomNav = memo(function BottomNav() {
                 aria-current={item.isActive ? 'page' : undefined}
               >
                 <span className={styles.c_bottom_nav__icon} aria-hidden='true'>
-                  {Icon ? <Icon size={ICON_SIZES.SM} /> : null}
+                  {/* NAV_ICON_MAP は全行き先必須なので必ず引ける（#1020） */}
+                  <Icon size={ICON_SIZES.SM} />
                 </span>
                 <span className={styles.c_bottom_nav__label}>{item.label}</span>
               </Link>

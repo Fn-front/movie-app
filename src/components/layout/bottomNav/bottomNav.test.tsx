@@ -58,6 +58,24 @@ describe('BottomNav', () => {
     document.documentElement.style.removeProperty(BOTTOM_NAV_HEIGHT_VAR);
   });
 
+  /**
+   * アイコンの対応表（`NAV_ICON_MAP`）は型で全行き先必須にしてあるが、
+   * **型が守るのは対応表であって描画ではない**。ドロワー側と同じ観点で
+   * ここも見る（#1020）
+   */
+  it('すべての項目にアイコンが描かれる', () => {
+    render(<BottomNav />);
+
+    const links = within(
+      screen.getByRole('navigation', { name: ARIA_LABELS.PRIMARY_NAV }),
+    ).getAllByRole('link');
+
+    for (const link of links) {
+      // アイコンの span は aria-hidden なのでロールで引けない
+      expect(link.querySelector('svg')).toBeInTheDocument();
+    }
+  });
+
   describe('項目の出し分け', () => {
     it('認証済みでは4件すべて出る', () => {
       render(<BottomNav />);

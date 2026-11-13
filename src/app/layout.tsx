@@ -41,7 +41,10 @@ export default function RootLayout({
     <html lang='ja' suppressHydrationWarning>
       <head>
         {/*
-          ⚠️ **チャンクより先に置くこと**（#1099）。zod は JIT を使えるかを
+          ⚠️ **zod のチャンクより先に実行されること**が前提（#1099）。
+          ⚠️ ドキュメント順では React が hoist するチャンクのほうが先にある。
+          先に走るのは async スクリプトがパーサの同期処理に割り込めないため。
+          zod は JIT を使えるかを
           `new Function("")` で試すので、本番の CSP（'unsafe-eval' 無し）に
           当たって enforce の違反が毎ロード報告される。スキーマは
           src/schema/*.ts のトップレベルで作られるため、普通のモジュールから

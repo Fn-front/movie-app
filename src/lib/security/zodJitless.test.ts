@@ -48,14 +48,26 @@ describe('buildZodJitlessScript', () => {
   });
 
   /**
-   * ⚠️ **例外を外へ出さないこと。** `<head>` の最初に置くので、ここで
-   * 落ちるとテーマ初期化も Consent Mode も走らない
+   * ⚠️ **例外を外へ出さないこと。** `<head>` に置くので、ここで落ちると
+   * テーマ初期化も Consent Mode も走らない。
+   *
+   * ⚠️ `Object.freeze({})` では検証にならない（レビュー指摘）。インライン
+   * スクリプトは sloppy mode なので、凍結オブジェクトへの代入は**黙って
+   * 失敗する**だけで throw しない。try/catch を外しても通ってしまう。
+   * **読むだけで throw する**形を渡すこと
    */
-  it('globalThis が触れなくても例外を投げない', () => {
-    const frozen = Object.freeze({});
+  it('設定の読み取りで例外が出ても外へ出さない', () => {
+    const hostile = new Proxy({} as Record<string, unknown>, {
+      get() {
+        throw new Error('読めない');
+      },
+      set() {
+        throw new Error('書けない');
+      },
+    });
 
     expect(() =>
-      new Function('globalThis', buildZodJitlessScript())(frozen),
+      new Function('globalThis', buildZodJitlessScript())(hostile),
     ).not.toThrow();
   });
 });

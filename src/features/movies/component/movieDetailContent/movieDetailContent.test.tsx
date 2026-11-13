@@ -35,7 +35,9 @@ jest.mock('@/features/movies/hooks/useMovieDetail', () => ({
 const mockUseWatchlistToggle = {
   isInWatchlist: jest.fn().mockReturnValue(false),
   toggleWatchlist: jest.fn(),
-  isToggling: false,
+  // 映画IDを受け取る。「どれか1件でも処理中」を返す isToggling は
+  // 廃止された（#1055）
+  isMovieToggling: jest.fn().mockReturnValue(false),
 };
 
 jest.mock('@/features/watchlist/hooks/useWatchlistToggle', () => ({
@@ -126,6 +128,11 @@ function setupMovie(overrides: Record<string, unknown> = {}) {
 describe('MovieDetailContent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // ⚠️ clearAllMocks は mockImplementation を消さない（jest 設定にも
+    // resetMocks は無い）。戻さないと、通信中にしたテストの実装が後続へ漏れて
+    // 「ボタンが無効のままクリックが通らない」形で**別のテストが落ちる**
+    mockUseWatchlistToggle.isMovieToggling.mockReturnValue(false);
+    mockUseWatchlistToggle.isInWatchlist.mockReturnValue(false);
   });
 
   it('ローディング中はスピナーを表示する', () => {
@@ -335,6 +342,38 @@ describe('MovieDetailContent', () => {
       expect(
         screen.getByRole('button', { name: 'ウォッチリストから削除' }),
       ).toBeInTheDocument();
+    });
+
+    it('この作品の通信中はボタンを無効にする', () => {
+      setupMovie(movieWithPoster);
+      mockUseWatchlistToggle.isInWatchlist.mockReturnValue(false);
+      mockUseWatchlistToggle.isMovieToggling.mockImplementation(
+        (id: number) => id === 123,
+      );
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+      ).toBeDisabled();
+    });
+
+    /**
+     * 以前は「どれか1件でも処理中」で無効にしていたため、裏の一覧で
+     * 別の作品を操作すると、開いている詳細のボタンまで無効になった（#1055）
+     */
+    it('別の作品の通信中はボタンを無効にしない', () => {
+      setupMovie(movieWithPoster);
+      mockUseWatchlistToggle.isInWatchlist.mockReturnValue(false);
+      mockUseWatchlistToggle.isMovieToggling.mockImplementation(
+        (id: number) => id === 999,
+      );
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+      ).toBeEnabled();
     });
   });
 

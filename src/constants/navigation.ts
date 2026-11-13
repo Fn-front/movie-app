@@ -6,9 +6,11 @@ import type { IconType } from 'react-icons';
 import {
   IoBookmarkOutline,
   IoCalendarOutline,
+  IoFilmOutline,
   IoHeartOutline,
   IoHomeOutline,
   IoPlayCircleOutline,
+  IoTrophyOutline,
 } from 'react-icons/io5';
 
 import { ROUTES } from './common';
@@ -25,15 +27,31 @@ export interface NavItemBase {
 
 /**
  * サイドナビゲーション項目
+ *
+ * ⚠️ `NavItemBase[]` と**型注釈しない**。注釈すると `href` が `string` に
+ * 広がり、`NAV_ICON_MAP` の「全行き先にアイコンが要る」という型が
+ * `Record<string, …>` と同じになって効かなくなる（#1020）。
+ * `satisfies` なら形を検査しつつリテラル型を残せる。
  */
-export const NAV_ITEMS: NavItemBase[] = [
+export const NAV_ITEMS = [
   { label: '公開予定', href: ROUTES.UPCOMING },
   { label: '公開中', href: ROUTES.NOW_SHOWING },
   { label: 'お気に入り', href: ROUTES.FAVORITES },
   { label: 'ウォッチリスト', href: ROUTES.WATCHLIST },
   { label: '受賞作品', href: ROUTES.AWARDS },
   { label: 'シアター体験', href: ROUTES.THEATER_EXPERIENCE },
-];
+] as const satisfies readonly NavItemBase[];
+
+/**
+ * アイコンを用意しなければならない行き先
+ *
+ * ドロワーは `NAV_ITEMS` 全部に、ボトムナビはそこへホームを足した集合から
+ * 選んで出す。`NAV_ICON_MAP` をこの型で縛ることで、**ナビ項目を足して
+ * アイコンを定義し忘れるとコンパイルエラーになる**（#1020）。
+ */
+export type NavIconRoute =
+  | typeof ROUTES.HOME
+  | (typeof NAV_ITEMS)[number]['href'];
 
 /**
  * ルートごとのナビゲーションアイコン
@@ -45,16 +63,19 @@ export const NAV_ITEMS: NavItemBase[] = [
  * 決めるので、ここで固定すると使い回せない（この定数は `.ts` なので
  * JSX も書けない）。
  *
- * ⚠️ 受賞作品・シアター体験は未定義のまま残している。ドロワーは
- * `?? null` でアイコン無しに倒れる既知の状態で、#1020 の担当範囲。
- * ここへ足すとあちらの Issue の前提が変わるので触らないこと。
+ * ⚠️ キーは `NavIconRoute` で**全行き先必須**にしてある。`NAV_ITEMS` に
+ * 項目を足したらここにも足さないとビルドが通らない。`Record<string, …>` に
+ * 緩めると、受賞作品とシアター体験だけアイコンが無かった状態（#1020）へ
+ * 黙って戻る。
  */
-export const NAV_ICON_MAP: Record<string, IconType> = {
+export const NAV_ICON_MAP: Record<NavIconRoute, IconType> = {
   [ROUTES.HOME]: IoHomeOutline,
   [ROUTES.UPCOMING]: IoCalendarOutline,
   [ROUTES.NOW_SHOWING]: IoPlayCircleOutline,
   [ROUTES.FAVORITES]: IoHeartOutline,
   [ROUTES.WATCHLIST]: IoBookmarkOutline,
+  [ROUTES.AWARDS]: IoTrophyOutline,
+  [ROUTES.THEATER_EXPERIENCE]: IoFilmOutline,
 };
 
 /**

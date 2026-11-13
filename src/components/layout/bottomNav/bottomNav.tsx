@@ -26,6 +26,7 @@ import {
   NAV_ITEMS,
   ROUTES,
 } from '@/constants';
+import type { NavIconRoute } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './bottomNav.module.scss';
@@ -41,7 +42,9 @@ import { useBottomNavHeight } from './useBottomNavHeight';
  * 2箇所で呼び名が食い違い、どちらのテストも自分の文字列を見ているので
  * 検知できない。
  */
-const BOTTOM_NAV_HREFS: string[] = [
+// 型は NavIconRoute。アイコンのある行き先しか出せないので、
+// アイコン未定義のルートを足すとここでコンパイルエラーになる（#1020）
+const BOTTOM_NAV_HREFS: readonly NavIconRoute[] = [
   ROUTES.HOME,
   ROUTES.NOW_SHOWING,
   ROUTES.WATCHLIST,
@@ -61,7 +64,8 @@ const OWN_LABELS: Record<string, string> = {
 /** ボトムナビの項目（共通定数から組み立てた結果） */
 interface BottomNavItem {
   label: string;
-  href: string;
+  /** アイコンのある行き先に限る（`NAV_ICON_MAP` の引き当てに使う / #1020） */
+  href: NavIconRoute;
   /**
    * 未認証では出さない項目
    *

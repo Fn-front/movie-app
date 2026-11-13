@@ -1,5 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+import { NAV_ITEMS } from '@/constants';
 
 import { MobileDrawer } from './mobileDrawer';
 
@@ -91,6 +93,29 @@ describe('MobileDrawer', () => {
     expect(screen.getByText('公開中')).toBeInTheDocument();
     expect(screen.getByText('お気に入り')).toBeInTheDocument();
     expect(screen.getByText('ウォッチリスト')).toBeInTheDocument();
+    expect(screen.getByText('受賞作品')).toBeInTheDocument();
+    expect(screen.getByText('シアター体験')).toBeInTheDocument();
+  });
+
+  /**
+   * 以前は受賞作品とシアター体験だけアイコンが無く、アイコン列が
+   * 虫食いになっていた（#1020）。`NAV_ICON_MAP` への追記漏れは
+   * 型で止まるようになったが、**描画まで届いていること**はここで見る
+   */
+  it('すべてのナビゲーション項目にアイコンが描かれる', () => {
+    render(<MobileDrawer {...defaultProps} />);
+
+    const nav = screen.getByRole('navigation', {
+      name: 'モバイルナビゲーション',
+    });
+    const links = within(nav).getAllByRole('link');
+    expect(links).toHaveLength(NAV_ITEMS.length + 1); // ホームの分
+
+    for (const link of links) {
+      // アイコンの span は aria-hidden なのでロールで引けない。
+      // 空の span だけ出ている（= アイコン未定義）状態を svg の有無で弾く
+      expect(link.querySelector('svg')).toBeInTheDocument();
+    }
   });
 
   it('現在のページのリンクにaria-current="page"が設定される', () => {

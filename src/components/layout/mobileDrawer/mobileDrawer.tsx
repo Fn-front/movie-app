@@ -32,6 +32,7 @@ import {
   MODAL_TITLES,
   USER_ROLE,
 } from '@/constants';
+import type { NavIconRoute } from '@/constants';
 import { getInitial } from '@/utils/user';
 import { useNavAuthGuard } from '@/hooks/useNavAuthGuard';
 import { useOverlayHistory } from '@/hooks/useOverlayHistory';
@@ -55,9 +56,9 @@ interface MobileNavItem {
  * 共有している）。未定義のルート（受賞作品・シアター体験）は null に倒れる
  * 既知の状態で、#1020 の担当範囲
  */
-const renderNavIcon = (href: string): React.ReactNode => {
+const renderNavIcon = (href: NavIconRoute): React.ReactNode => {
   const Icon = NAV_ICON_MAP[href];
-  return Icon ? <Icon size={ICON_SIZES.SM} /> : null;
+  return <Icon size={ICON_SIZES.SM} />;
 };
 
 /**

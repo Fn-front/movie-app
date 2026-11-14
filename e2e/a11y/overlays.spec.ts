@@ -55,9 +55,30 @@ const LONG_OVERVIEW = 'E2E用の長いあらすじテキストです。'.repeat(
  * ⚠️ **`finished` の reject を握ること。** キャンセルされたアニメーションの
  * `finished` は `AbortError` で reject する。`Promise.all` は1つでも reject
  * すると全体が reject するので、**待ちではなくテストの失敗**になる。
- * 実測で `モバイルドロワー - dark` が
- * `page.evaluate: AbortError: The user aborted a request.` で落ちた。
- * キャンセルされた＝もう動いていないので、待つ目的は果たせている。
+ * 握らないと `モバイルドロワー` が 16 run 中 9 run で
+ * `page.evaluate: AbortError: The user aborted a request.` で落ちた
+ * （dark 6/8・light 3/8）。握れば 16/16 通る。
+ *
+ * reject するのは毎回**トリガーボタンの hover transition 1本だけ**で、
+ * オーバーレイ本体（`overlayFadeIn` / `drawerSlideIn` / `contentShow`）は
+ * 毎回 resolve する。クリックでポインタが外れ、hover が巻き戻るため。
+ *
+ * ⚠️ **「キャンセルされた＝もう動いていない」ではない。** 実測では、
+ * reject の瞬間に**同じ要素で差し替えの transition が `currentTime: 0` で
+ * 走り始めて**おり、そのときのスタイルは中間値だった（7件中6件）。
+ * 差し替え分はスナップショットの後に生成されるので `Promise.all` の
+ * 待機対象に入らない。
+ *
+ * それでも安全なのは、**巻き戻しが短いから**。実測の duration は 26〜138ms で、
+ * 同時に待っているオーバーレイ（150 / 200 / 300ms）より先に終わる。待ち終わりの
+ * 時点で `document.getAnimations()` は 20/20 run で空、実効スタイルも +600ms 後と
+ * 完全に一致した。
+ *
+ * ⚠️ つまり**キャンセルされた側が最長になると、黙って中間色を測る**。
+ * `.c_side_nav__link` は `transition: all 300ms` で hover 時に文字色が変わるため、
+ * そうなれば `color-contrast` に直撃する。その場合はスナップショットを待つのを
+ * やめ、`page.waitForFunction` で毎回取り直して全件 `finished` / `idle` に
+ * なるまで待つ形へ変えること（16 run で検証済み・所要時間も同等）。
  */
 const waitForOverlayAnimations = async (page: Page) => {
   await page.evaluate(() =>

@@ -49,6 +49,7 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
       handleDelete: handleFavoriteDelete,
       isFavoriteProcessing,
       getFavoriteInfo,
+      isFavoriteResolving,
     } = useFavoriteToggle();
     const { viewMode } = useMovieViewMode();
 
@@ -127,6 +128,7 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
                 watchlistDisabled={isMovieToggling(movie.id)}
                 onFavoriteToggle={handleFavoriteToggle}
                 favoriteDisabled={isFavoriteProcessing(movie.id)}
+                isFavoriteResolving={isFavoriteResolving}
                 viewMode={viewMode}
               />
               {visibleCredits[index].character && (

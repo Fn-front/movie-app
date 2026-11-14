@@ -82,6 +82,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
     handleDelete: handleFavoriteDelete,
     isFavoriteProcessing,
     getFavoriteInfo,
+    isFavoriteResolving,
   } = useFavoriteToggle();
 
   const movieCacheItems = useMemo(
@@ -163,6 +164,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
             watchlistDisabled={isMovieToggling(movie.id)}
             onFavoriteToggle={handleFavoriteToggle}
             favoriteDisabled={isFavoriteProcessing(movie.id)}
+            isFavoriteResolving={isFavoriteResolving}
             viewMode={viewMode}
           />
         ))}

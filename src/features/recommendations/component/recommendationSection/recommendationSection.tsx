@@ -141,6 +141,7 @@ const RecommendationSectionContent = memo<RecommendationSectionContentProps>(
       handleDelete: handleFavoriteDelete,
       isFavoriteProcessing,
       getFavoriteInfo,
+      isFavoriteResolving,
     } = useFavoriteToggle();
 
     const { isInWatchlist, toggleWatchlist, isMovieToggling } =
@@ -303,6 +304,7 @@ const RecommendationSectionContent = memo<RecommendationSectionContentProps>(
                     watchlistDisabled={isMovieToggling(movie.id)}
                     onFavoriteToggle={handleFavoriteToggle}
                     favoriteDisabled={isFavoriteProcessing(movie.id)}
+                    isFavoriteResolving={isFavoriteResolving}
                     onDismiss={handleDismiss}
                     dismissDisabled={
                       isDismissingMovie(movie.id) || !!movie.favorite

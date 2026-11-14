@@ -74,6 +74,14 @@ export interface MovieTileProps {
   ) => void;
   /** お気に入りボタン無効化 */
   favoriteDisabled?: boolean;
+  /**
+   * お気に入りの登録状況がまだ分からない（既定: false）
+   *
+   * `useFavoriteLookup` から `favorite` を詰めている画面で渡す。照会が
+   * 終わるまでハートを出さず、「未登録を見せてから塗りつぶす」のを防ぐ
+   * （#1135）。一覧APIが `favorite` を返す画面（`/movies/*`）では不要
+   */
+  isFavoriteResolving?: boolean;
   /** 興味なしボタンクリック時のコールバック */
   onDismiss?: (movie: MovieCacheItem) => void;
   /** 興味なしボタン無効化 */
@@ -128,6 +136,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   watchlistDisabled = false,
   onFavoriteToggle,
   favoriteDisabled = false,
+  isFavoriteResolving = false,
   onDismiss,
   dismissDisabled = false,
   headingLevel = 3,
@@ -228,6 +237,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             favorite={movie.favorite ?? null}
             onClick={handleFavoriteToggle}
             disabled={favoriteDisabled}
+            isResolving={isFavoriteResolving}
           />
         </div>
       )}

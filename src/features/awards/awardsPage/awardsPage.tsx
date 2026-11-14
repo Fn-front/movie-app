@@ -49,6 +49,7 @@ export const AwardsPage = memo(function AwardsPage() {
     handleDelete: handleFavoriteDelete,
     isFavoriteProcessing,
     getFavoriteInfo,
+    isFavoriteResolving,
   } = useFavoriteToggle();
 
   const { isInWatchlist, toggleWatchlist, isMovieToggling } =
@@ -147,6 +148,7 @@ export const AwardsPage = memo(function AwardsPage() {
                   onFavoriteToggle={handleFavoriteToggle}
                   isFavoriteProcessing={isFavoriteProcessing}
                   getFavoriteInfo={getFavoriteInfo}
+                  isFavoriteResolving={isFavoriteResolving}
                   hideTitle
                 />
               </Tabs>
@@ -160,6 +162,7 @@ export const AwardsPage = memo(function AwardsPage() {
                 onFavoriteToggle={handleFavoriteToggle}
                 isFavoriteProcessing={isFavoriteProcessing}
                 getFavoriteInfo={getFavoriteInfo}
+                isFavoriteResolving={isFavoriteResolving}
               />
             )}
           </div>

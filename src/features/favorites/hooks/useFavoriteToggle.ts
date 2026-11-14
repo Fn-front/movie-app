@@ -62,6 +62,14 @@ export interface UseFavoriteToggleReturn {
   isFavoriteProcessing: (tmdbMovieId: number) => boolean;
   /** 指定映画のお気に入り情報を取得（未登録ならnull） */
   getFavoriteInfo: (tmdbMovieId: number) => MovieFavoriteInfo | null;
+  /**
+   * お気に入りの登録状況がまだ分からない
+   *
+   * `getFavoriteInfo` は「まだ取れていない」と「登録されていない」を
+   * どちらも `null` で返す。この値が `true` の間は未登録として
+   * 描いてはいけない（#1135）
+   */
+  isFavoriteResolving: boolean;
 }
 
 const INITIAL_MODAL_STATE: FavoriteModalState = {
@@ -88,7 +96,8 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
 
   // 登録済み判定は一覧（1ページ20件）ではなく専用の照会から引く。
   // 一覧から引くと21件目以降が未登録と判定されていた（#829）
-  const { getFavoriteInfo } = useFavoriteLookup();
+  const { getFavoriteInfo, isResolving: isFavoriteResolving } =
+    useFavoriteLookup();
 
   const { isAuthenticated, isResolving } = useAuthStatus();
   const openLoginPrompt = useLoginPromptStore((s) => s.open);
@@ -180,6 +189,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       isProcessing: isAdding || isUpdating || isRemoving,
       isFavoriteProcessing,
       getFavoriteInfo,
+      isFavoriteResolving,
     }),
     [
       modalState,
@@ -192,6 +202,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       isRemoving,
       isFavoriteProcessing,
       getFavoriteInfo,
+      isFavoriteResolving,
     ],
   );
 }

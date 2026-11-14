@@ -17,6 +17,17 @@ import { favoriteKeys } from '@/constants';
 export interface UseFavoriteLookupReturn {
   /** 指定映画のお気に入り情報を取得（未登録ならnull） */
   getFavoriteInfo: (tmdbMovieId: number) => MovieFavoriteInfo | null;
+  /**
+   * 登録状況がまだ分からない
+   *
+   * `getFavoriteInfo` は「まだ取れていない」と「登録されていない」を
+   * どちらも `null` で返すため、これが `true` の間は未登録として
+   * 描いてはいけない（#1135）。
+   *
+   * 取得に**失敗**したときは `false`（確定）になる。全作品を未登録として
+   * 扱うのが既存の方針なので、失敗を未確定のままにすると描画が止まる
+   */
+  isResolving: boolean;
 }
 
 /**
@@ -30,7 +41,7 @@ export interface UseFavoriteLookupReturn {
  * 判定が取れないだけで画面自体が見られなくなる方が困るため。
  */
 export function useFavoriteLookup(): UseFavoriteLookupReturn {
-  const { isAuthenticated } = useAuthStatus();
+  const { isAuthenticated, isResolving: isSessionResolving } = useAuthStatus();
 
   const lookupQuery = useQuery({
     queryKey: favoriteKeys.lookup(),
@@ -54,5 +65,13 @@ export function useFavoriteLookup(): UseFavoriteLookupReturn {
     [favoriteMap],
   );
 
-  return useMemo(() => ({ getFavoriteInfo }), [getFavoriteInfo]);
+  // 取得に失敗したら確定として扱う（`isLoading` はエラー時 false になる）。
+  // 未認証ならクエリは無効のままなので、セッションが確定した時点で確定
+  const isResolving =
+    isSessionResolving || (isAuthenticated && lookupQuery.isLoading);
+
+  return useMemo(
+    () => ({ getFavoriteInfo, isResolving }),
+    [getFavoriteInfo, isResolving],
+  );
 }

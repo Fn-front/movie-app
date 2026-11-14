@@ -102,6 +102,45 @@ describe('StreamingNoticeSettings', () => {
   });
 
   /**
+   * ロールバック先は「直前の表示値」であって、サーバー値ではない
+   *
+   * サーバー値へ戻すと、1回目の選択が成功したあと2回目が失敗したときに
+   * **1回目の成功ぶんまで巻き戻る**。`settings` は再取得していないので
+   * 古いままで、保存済みの値と画面が食い違う
+   */
+  it('2回目の更新が失敗しても、1回目の成功ぶんまで戻さない', async () => {
+    const user = userEvent.setup();
+    render(<StreamingNoticeSettings />);
+
+    // 1回目: any → flatrate（成功）
+    mockUpdateSettings.mockResolvedValueOnce(undefined);
+    await user.click(
+      await screen.findByRole('radio', { name: '見放題になったときだけ' }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole('radio', { name: '見放題になったときだけ' }),
+      ).toBeChecked(),
+    );
+
+    // 2回目: flatrate → any（失敗）
+    mockUpdateSettings.mockRejectedValueOnce(new Error('boom'));
+    await user.click(
+      screen.getByRole('radio', { name: 'レンタル・購入も含める' }),
+    );
+
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'error' }),
+      ),
+    );
+    // 保存済みの値（flatrate）に戻る。サーバー値へ戻すと any になってしまう
+    expect(
+      screen.getByRole('radio', { name: '見放題になったときだけ' }),
+    ).toBeChecked();
+  });
+
+  /**
    * 読み取り失敗を既定値で描かない（#1163）
    *
    * ⚠️ ここは以前「設定の取得に失敗しても既定値で表示する」として

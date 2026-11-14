@@ -115,6 +115,38 @@ describe('NotificationSettings', () => {
   });
 
   /**
+   * ロールバック先は「直前の表示値」であって、サーバー値ではない
+   *
+   * サーバー値へ戻すと、1回目の操作が成功したあと2回目が失敗したときに
+   * **1回目の成功ぶんまで巻き戻る**。`settings` は再取得していないので
+   * 古いままで、保存済みの値と画面が食い違う
+   */
+  it('2回目の更新が失敗しても、1回目の成功ぶんまで戻さない', async () => {
+    render(<NotificationSettings />);
+
+    const checkbox = await screen.findByRole('checkbox', {
+      name: '公開日リマインダーを受け取る',
+    });
+
+    // 1回目: オフ → オン（成功）
+    mockUpdateSettings.mockResolvedValueOnce({});
+    await user.click(checkbox);
+    expect(checkbox).toBeChecked();
+
+    // 2回目: オン → オフ（失敗）
+    mockUpdateSettings.mockRejectedValueOnce(new Error('Update failed'));
+    await user.click(checkbox);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'error' }),
+      );
+    });
+    // 保存済みの値（オン）に戻る。サーバー値へ戻すとオフになってしまう
+    expect(checkbox).toBeChecked();
+  });
+
+  /**
    * 読み取り失敗を既定値で描かない（#1163）
    *
    * ⚠️ ここは以前「設定取得失敗時にデフォルト値で表示される」として

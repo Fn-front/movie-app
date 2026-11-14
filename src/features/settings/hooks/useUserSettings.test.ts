@@ -64,25 +64,39 @@ describe('useUserSettings', () => {
     expect(result.current.settings).toEqual(SETTINGS);
   });
 
-  it('アンマウント後の応答では状態を更新しない', async () => {
-    let resolveFn: (value: unknown) => void = () => {};
-    mockGetSettings.mockReturnValue(
-      new Promise((resolve) => {
-        resolveFn = resolve;
+  /**
+   * 古い応答が新しい結果を上書きしない
+   *
+   * ⚠️ 「アンマウント後に setState しないこと」を React の警告で見る案は
+   * 使えない。React 19 はその警告を**廃止している**ので、番兵を全部外しても
+   * 素通りする（実際に外して確認済み）。観測できる状態で見る。
+   *
+   * ⚠️ 番兵は **effect ごとのローカル変数**でなければならない。`useRef` に
+   * して実行のたびに false へ戻すと、cleanup が立てた旗が次の実行で消え、
+   * ここが落ちる
+   */
+  it('前回の取得が遅れて失敗しても、新しい結果を上書きしない', async () => {
+    let rejectFirst: (reason: unknown) => void = () => {};
+    mockGetSettings.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectFirst = reject;
       }),
     );
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-    const { unmount } = renderHook(() => useUserSettings());
-    unmount();
+    const { result } = renderHook(() => useUserSettings());
 
+    // 1回目が宙に浮いたまま retry（2回目は即座に成功する）
     await act(async () => {
-      resolveFn(SETTINGS);
+      result.current.retry();
+    });
+    await waitFor(() => expect(result.current.settings).toEqual(SETTINGS));
+
+    // ここで1回目が失敗して返ってくる
+    await act(async () => {
+      rejectFirst(new Error('late failure'));
     });
 
-    // React は解放済みコンポーネントへの setState を警告する。
-    // 出ていなければ取りこぼしていない
-    expect(errorSpy).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
+    expect(result.current.settings).toEqual(SETTINGS);
+    expect(result.current.hasFailed).toBe(false);
   });
 });

@@ -26,15 +26,18 @@ interface SettingsLoadErrorProps {
  * データの誤りへ変わる経路も同時に塞ぐ。
  *
  * `role="alert"` にしているのは、読み込み中のスケルトンから置き換わる
- * ＝利用者が見ていない可能性があるため。
+ * ＝利用者が見ていない可能性があるため。**コンテナ側に付ける**こと。
+ * 見出しの `<p>` だけに付けると、補足文と「再読み込み」ボタンが
+ * ライブリージョンの外になり、再試行の導線が読み上げられない
+ * （`src/features/person/personPage.tsx` も同じ形）。
  */
 export const SettingsLoadError = memo(function SettingsLoadError({
   label,
   onRetry,
 }: SettingsLoadErrorProps) {
   return (
-    <div className={styles.c_settings_load_error}>
-      <p role='alert' className={styles.c_settings_load_error__message}>
+    <div role='alert' className={styles.c_settings_load_error}>
+      <p className={styles.c_settings_load_error__message}>
         {label}を読み込めませんでした
       </p>
       <p className={styles.c_settings_load_error__note}>

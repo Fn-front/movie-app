@@ -11,7 +11,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { getSettings } from '@/lib/api/user/user';
 import type { UserSettings } from '@/schema/user';
@@ -39,27 +39,27 @@ export function useUserSettings(): UserSettingsState {
   const [hasFailed, setHasFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
-  // アンマウント後に setState しないための番兵。
-  // 設定画面は他ページへの遷移で普通に消える
-  const cancelledRef = useRef(false);
-
   useEffect(() => {
-    cancelledRef.current = false;
+    // ⚠️ **effect ごとのローカル変数にすること。** `useRef` にして
+    // 実行のたびに false へ戻すと、cleanup が立てた番兵が次の実行で消え、
+    // **遅れて返った古い応答が新しい結果を上書きする**（StrictMode の
+    // 二重実行で実際に起きる）。クロージャなら各実行が自分の旗を持つ
+    let cancelled = false;
     setIsLoading(true);
 
     const fetchSettings = async () => {
       try {
         const next = await getSettings();
-        if (cancelledRef.current) return;
+        if (cancelled) return;
         setSettings(next);
         setHasFailed(false);
       } catch {
-        if (cancelledRef.current) return;
+        if (cancelled) return;
         // 既定値で埋めない。null のままにして「分からない」を伝える
         setSettings(null);
         setHasFailed(true);
       } finally {
-        if (!cancelledRef.current) {
+        if (!cancelled) {
           setIsLoading(false);
         }
       }
@@ -68,7 +68,7 @@ export function useUserSettings(): UserSettingsState {
     fetchSettings();
 
     return () => {
-      cancelledRef.current = true;
+      cancelled = true;
     };
   }, [attempt]);
 

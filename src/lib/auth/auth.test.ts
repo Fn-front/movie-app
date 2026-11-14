@@ -1115,6 +1115,38 @@ describe('jwt コールバックの第2要素', () => {
     expect(token.totpPending).toBe(false);
   });
 
+  /**
+   * ⚠️ ここで throw するとセッションが壊れる
+   *
+   * `@auth/core/lib/actions/session.js` は jwt コールバックの例外を
+   * **すべて**捕まえて `sessionStore.clean()` でセッションCookieを削除する
+   * （「JWT が検証できない」ケースを想定した後始末だが、例外の種類を見ない）。
+   *
+   * Cookie が消えると認証コード画面は「正しくありません」を出し続け、
+   * 利用者は OAuth ログインからやり直すしかなくなる。第2要素は通さずに、
+   * セッションだけは残す
+   */
+  it('検証が DB エラーで落ちても、例外を外へ出さず totpPending を残す', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mockVerifySecondFactor.mockRejectedValue(
+        new Error('connection terminated unexpectedly'),
+      );
+
+      const token = await jwt({
+        token: { id: 'u1', totpPending: true, issuedAt: Date.now() },
+        user: undefined,
+        account: null,
+        trigger: 'update',
+        session: { totpCode: '123456' },
+      });
+
+      expect(token.totpPending).toBe(true);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
   it.each([
     ['誤ったコード', 'invalid'],
     ['使い回したコード', 'reused'],

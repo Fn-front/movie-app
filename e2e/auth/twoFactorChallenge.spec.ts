@@ -141,10 +141,22 @@ test.describe('第2要素の入力画面', () => {
   }) => {
     await setUpPendingSession(page);
 
-    await page.goto(ROUTES.TOTP_CHALLENGE);
+    const response = await page.goto(ROUTES.TOTP_CHALLENGE);
     await expect(totpInput(page)).toBeVisible();
 
-    // 消えていると、次のリクエストで未ログイン扱いになる
+    // ⚠️ **レスポンスヘッダで見る。** ブラウザの Cookie 壺だけを見ると
+    // CI（production）で回帰を検知できない。proxy が呼ぶ
+    // `response.cookies.delete(name)` は Next の実装上 `Secure` を付けず
+    // （`@edge-runtime/cookies` の delete は options を渡さない）、
+    // production の Cookie 名は `__Secure-` 接頭辞付きなので、
+    // **ブラウザがその Set-Cookie を拒否して Cookie が残ってしまう**。
+    // つまり「壺に残っている」は削除されなかった証明にならない
+    const setCookie = (await response!.headerValues('set-cookie')).join('\n');
+    expect(setCookie).not.toMatch(/next-auth\.session-token=;/);
+
+    // 壺のほうも見ておく。jwt コールバックの例外で `@auth/core` が消す経路
+    // （`sessionStore.clean()`）は options ごと渡すので Secure が付き、
+    // こちらは実際に消える
     await expect(resolveSessionCookie(page.context())).resolves.toBeDefined();
   });
 
@@ -159,8 +171,11 @@ test.describe('第2要素の入力画面', () => {
       ROUTES.PRIVACY,
       ROUTES.ADMIN_ACCOUNTS,
     ]) {
+      // `goto` がリダイレクト完走まで待つので `waitForURL` は要らない。
+      // 使うと、URL が違うだけなのに「Test timeout」に化けて原因が見えなくなる
+      // （`navigationTimeout` 未設定＝無制限のため）
       await page.goto(path);
-      await page.waitForURL(ROUTES.TOTP_CHALLENGE);
+      await expect(page).toHaveURL(ROUTES.TOTP_CHALLENGE);
       await expect(totpInput(page)).toBeVisible();
     }
   });
@@ -191,6 +206,14 @@ test.describe('第2要素の入力画面', () => {
     await totpInput(page).fill('000000');
     await page.getByRole('button', { name: '認証コードを確認' }).click();
 
+    // ⚠️ 「URLが変わらない」だけでは足りない。ハイドレーション前の fill で
+    // 値が巻き戻り、`useTwoFactorChallenge.ts` の空文字ガードで早期 return
+    // しても同じ結果になる。**拒否されたこと**を文言で確かめる
+    await expect(
+      page
+        .getByRole('alert')
+        .filter({ hasText: '認証コードが正しくありません。' }),
+    ).toBeVisible();
     await expect(page).toHaveURL(ROUTES.TOTP_CHALLENGE);
     // ここでセッションが壊れていると、正しいコードを入れても復帰できない
     await expect(resolveSessionCookie(page.context())).resolves.toBeDefined();

@@ -1,8 +1,37 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 
 import { FavoriteButton } from './favoriteButton';
+import styles from './favoriteButton.module.scss';
 
 describe('FavoriteButton', () => {
+  /**
+   * 登録状況が分かるまでは見せない（#1135）
+   *
+   * `favorite` が null でも「未登録」とは限らない（照会がまだ終わって
+   * いないだけのことがある）。空のハートを出すと、確定後に一斉に
+   * 塗りつぶされて「誤った状態を見せてから直す」ことになる
+   */
+  describe('登録状況が未確定のとき', () => {
+    it('ハートを見せない', () => {
+      render(
+        <FavoriteButton favorite={null} onClick={jest.fn()} isResolving />,
+      );
+
+      // jsdom は SCSS を評価しないのでクラスで確認する
+      expect(screen.getByRole('button')).toHaveClass(
+        styles['c_favorite_button--resolving'],
+      );
+    });
+
+    it('確定したら見せる', () => {
+      render(<FavoriteButton favorite={null} onClick={jest.fn()} />);
+
+      expect(screen.getByRole('button')).not.toHaveClass(
+        styles['c_favorite_button--resolving'],
+      );
+    });
+  });
+
   describe('未登録時', () => {
     it('aria-label「お気に入りに追加」が設定される', () => {
       render(<FavoriteButton favorite={null} onClick={jest.fn()} />);

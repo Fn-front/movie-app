@@ -1,6 +1,8 @@
 import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import favoriteButtonStyles from '@/features/favorites/component/favoriteButton/favoriteButton.module.scss';
+
 import { MovieTile } from './movieTile';
 import { IMAGE_SIZES } from '@/constants';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
@@ -525,6 +527,21 @@ describe('MovieTile', () => {
       expect(
         screen.getByRole('button', { name: 'お気に入りを編集' }),
       ).toBeInTheDocument();
+    });
+
+    it('登録状況が未確定なら FavoriteButton へ伝える', () => {
+      // 照会が終わるまで「未登録」のハートを見せないため（#1135）
+      render(
+        <MovieTile
+          movie={createMockMovie({ favorite: undefined })}
+          onFavoriteToggle={jest.fn()}
+          isFavoriteResolving
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'お気に入りに追加' }),
+      ).toHaveClass(favoriteButtonStyles['c_favorite_button--resolving']);
     });
   });
 

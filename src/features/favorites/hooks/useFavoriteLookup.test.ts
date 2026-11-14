@@ -74,6 +74,60 @@ describe('useFavoriteLookup', () => {
     });
   });
 
+  /**
+   * 「まだ分からない」と「登録されていない」を区別する（#1135）
+   *
+   * `getFavoriteInfo` はどちらでも null を返すため、呼び出し側は
+   * 取得前の作品をすべて「未登録」として描いてしまう
+   */
+  describe('登録状況が確定したか', () => {
+    it('セッション判定中は未確定', () => {
+      (useSession as jest.Mock).mockReturnValue({
+        data: null,
+        status: 'loading',
+      });
+
+      const { result } = renderHook(() => useFavoriteLookup(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.isResolving).toBe(true);
+    });
+
+    it('取得が終わるまでは未確定', async () => {
+      const { result } = renderHook(() => useFavoriteLookup(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.isResolving).toBe(true);
+      await waitFor(() => expect(result.current.isResolving).toBe(false));
+    });
+
+    it('未認証なら確定（全件が未登録で正しい）', () => {
+      (useSession as jest.Mock).mockReturnValue({
+        data: null,
+        status: 'unauthenticated',
+      });
+
+      const { result } = renderHook(() => useFavoriteLookup(), {
+        wrapper: createWrapper(),
+      });
+
+      expect(result.current.isResolving).toBe(false);
+    });
+
+    it('取得に失敗しても確定として扱う（全件を未登録にする既存方針）', async () => {
+      mockGetFavoriteLookup.mockRejectedValue(new Error('boom'));
+
+      const { result } = renderHook(() => useFavoriteLookup(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isResolving).toBe(false));
+      expect(result.current.getFavoriteInfo(1001)).toBeNull();
+    });
+  });
+
   it('未登録の映画は null を返す', async () => {
     const { result } = renderHook(() => useFavoriteLookup(), {
       wrapper: createWrapper(),

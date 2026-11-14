@@ -9,6 +9,7 @@ import { memo, useCallback } from 'react';
 import { IoHeart, IoHeartOutline } from 'react-icons/io5';
 
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
+import { cn } from '@/utils/cn';
 
 import styles from './favoriteButton.module.scss';
 
@@ -24,6 +25,14 @@ export interface FavoriteButtonProps {
   disabled?: boolean;
   /** サイズ */
   size?: 'sm' | 'md';
+  /**
+   * 登録状況がまだ分からない（既定: false）
+   *
+   * `favorite` が null でも「未登録」とは限らず、照会が終わっていない
+   * だけのことがある（`useFavoriteLookup` の `isResolving`）。その間に
+   * 空のハートを出すと、確定後に一斉に塗りつぶされる（#1135）
+   */
+  isResolving?: boolean;
 }
 
 /**
@@ -35,6 +44,7 @@ export const FavoriteButton = memo<FavoriteButtonProps>(
     onClick,
     disabled = false,
     size = 'sm',
+    isResolving = false,
   }) {
     const isFavorite = favorite !== null;
 
@@ -65,7 +75,12 @@ export const FavoriteButton = memo<FavoriteButtonProps>(
     return (
       <button
         type='button'
-        className={`${styles.c_favorite_button} ${sizeClassName} ${isFavorite ? styles.c_favorite_button__active : ''}`}
+        className={cn(
+          styles.c_favorite_button,
+          sizeClassName,
+          isFavorite && styles.c_favorite_button__active,
+          isResolving && styles['c_favorite_button--resolving'],
+        )}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         disabled={disabled}

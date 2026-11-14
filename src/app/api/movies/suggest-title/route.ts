@@ -16,6 +16,7 @@ import {
   TITLE_SUGGESTION_ERROR_MESSAGES,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  SUPABASE_ERROR_CODE,
 } from '@/constants';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { titleSuggestionQuerySchema } from '@/schema/titleSuggestion';
@@ -61,7 +62,19 @@ export async function GET(request: Request) {
       .eq('query_title', query)
       .single();
 
-    if (!cacheError && cached) {
+    // ⚠️ 読み取り失敗を「キャッシュミス」に倒さない。下の OpenAI 呼び出しは
+    // 課金が発生するうえ、レートリミットの消費もここより後ろなので、DB が
+    // 詰まっている間は枠を使い切るまで呼び続けることになる。守っている資源が
+    // 費用である以上、読めないなら止める（#1164）。
+    // 行が無い（PGRST116）＝本当に未キャッシュは従来どおり OpenAI へ進む
+    if (cacheError && cacheError.code !== SUPABASE_ERROR_CODE.NOT_FOUND) {
+      throw cacheError;
+    }
+
+    // 上のガードを抜けた時点で cacheError は NOT_FOUND だけ（そのとき
+    // cached は null）なので、`!cacheError &&` は恒真になる。残すと
+    // 「エラーがあっても cached が入りうる」と誤読させるので落とす
+    if (cached) {
       return NextResponse.json(
         {
           success: true,

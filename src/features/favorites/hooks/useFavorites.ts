@@ -9,8 +9,8 @@
 
 import { useCallback, useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useSession } from 'next-auth/react';
 
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { getFavorites } from '@/lib/api/favorites/favorites';
 import type {
   FavoriteItem,
@@ -53,11 +53,7 @@ export interface UseFavoritesReturn extends UseFavoriteMutationsReturn {
  * お気に入り カスタムフック
  */
 export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
-  const { data: session, status } = useSession();
-  // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
-  // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
-  // id の有無で見る（getAuthSession と同じ基準）
-  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+  const { isAuthenticated, isResolving } = useAuthStatus();
 
   const mutations = useFavoriteMutations();
 
@@ -107,7 +103,15 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
     () => ({
       ...mutations,
       favorites,
-      isLoading: favoritesQuery.isLoading,
+      // セッション未確定で、まだ何も無いときは読み込み中として返す。
+      // react-query は無効化中のクエリの isLoading を false にするため、
+      // 素通しすると「0件が確定した」ように見えて空メッセージが先に出る（#1132）。
+      //
+      // 件数を条件に入れるのは、`useSession().update()`（表示名の保存など）が
+      // status を loading へ戻すため。無条件だと埋まっている一覧が
+      // スケルトンに化ける
+      isLoading:
+        (isResolving && favorites.length === 0) || favoritesQuery.isLoading,
       isFetchingNextPage: favoritesQuery.isFetchingNextPage,
       hasNextPage: favoritesQuery.hasNextPage,
       fetchNextPage,
@@ -118,6 +122,7 @@ export function useFavorites(params?: GetFavoritesRequest): UseFavoritesReturn {
     [
       mutations,
       favorites,
+      isResolving,
       favoritesQuery.isLoading,
       favoritesQuery.isFetchingNextPage,
       favoritesQuery.hasNextPage,

@@ -4,9 +4,9 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useSession } from 'next-auth/react';
 
 import { ANALYTICS_EVENTS } from '@/constants';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { useFavoriteMutations } from '@/features/favorites/hooks/useFavoriteMutations';
 import { useFavoriteLookup } from '@/features/favorites/hooks/useFavoriteLookup';
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
@@ -90,8 +90,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
   // 一覧から引くと21件目以降が未登録と判定されていた（#829）
   const { getFavoriteInfo } = useFavoriteLookup();
 
-  const { status } = useSession();
-  const isAuthenticated = status === 'authenticated';
+  const { isAuthenticated, isResolving } = useAuthStatus();
   const openLoginPrompt = useLoginPromptStore((s) => s.open);
 
   const [modalState, setModalState] =
@@ -101,6 +100,10 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
 
   const handleFavoriteToggle = useCallback(
     (movie: FavoriteToggleMovie, favorite: MovieFavoriteInfo | null) => {
+      // 未確定の間は誘導しない。ログイン済みの利用者がフルロード直後に
+      // 押したときだけ「ログインが必要です」が出ていた（#1131）
+      if (isResolving) return;
+
       if (!isAuthenticated) {
         openLoginPrompt('お気に入りに追加するにはログインが必要です。');
         return;
@@ -112,7 +115,7 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
         currentFavorite: favorite ?? null,
       });
     },
-    [isAuthenticated, openLoginPrompt],
+    [isAuthenticated, isResolving, openLoginPrompt],
   );
 
   const closeModal = useCallback(() => {

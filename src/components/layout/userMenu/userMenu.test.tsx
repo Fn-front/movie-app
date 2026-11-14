@@ -30,6 +30,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { UserMenu } from './userMenu';
+import styles from './userMenu.module.scss';
 
 // --- Tests ---
 
@@ -143,6 +144,32 @@ describe('UserMenu', () => {
       screen.getByRole('button', { name: 'ログイン' }),
     ).toBeInTheDocument();
     expect(screen.getByText('ログイン')).toBeInTheDocument();
+  });
+
+  /**
+   * セッション判定中は、ログイン導線を見せない（#1131）
+   *
+   * 出してしまうと、ログイン済みの利用者がフルロードするたびに
+   * 「ログイン」ボタンが一瞬見える。枠は保ったまま隠し、確定後に
+   * 正しいほうを出す
+   */
+  it('セッション判定中はログイン導線を見せない', () => {
+    mockUseSession.mockReturnValue({ data: null, status: 'loading' });
+    render(<UserMenu />);
+
+    // jsdom は SCSS を評価しないのでクラスで確認する
+    expect(screen.getByRole('button', { name: 'ログイン' })).toHaveClass(
+      styles['c_user_menu--resolving'],
+    );
+  });
+
+  it('セッションが確定したらログイン導線を見せる', () => {
+    mockUseSession.mockReturnValue({ data: null, status: 'unauthenticated' });
+    render(<UserMenu />);
+
+    expect(screen.getByRole('button', { name: 'ログイン' })).not.toHaveClass(
+      styles['c_user_menu--resolving'],
+    );
   });
 
   it('未認証時のログインボタンクリックで/auth/signinに遷移する', async () => {

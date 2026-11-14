@@ -5,8 +5,8 @@
 
 import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useSession } from 'next-auth/react';
 
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { getFavoriteLookup } from '@/lib/api/favorites/favorites';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import { favoriteKeys } from '@/constants';
@@ -30,10 +30,7 @@ export interface UseFavoriteLookupReturn {
  * 判定が取れないだけで画面自体が見られなくなる方が困るため。
  */
 export function useFavoriteLookup(): UseFavoriteLookupReturn {
-  const { data: session, status } = useSession();
-  // 無効化済みセッションは user が空文字で埋まったオブジェクトとして返るため、
-  // 存在確認では判定できない（useFavorites と同じ基準）
-  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+  const { isAuthenticated } = useAuthStatus();
 
   const lookupQuery = useQuery({
     queryKey: favoriteKeys.lookup(),

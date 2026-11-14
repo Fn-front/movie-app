@@ -7,7 +7,6 @@
 
 import { type ReactNode, memo } from 'react';
 import dynamic from 'next/dynamic';
-import { useSession } from 'next-auth/react';
 
 import { Header } from '@/components/layout/header/header';
 import { SearchBar } from '@/components/layout/searchBar/searchBar';
@@ -25,6 +24,7 @@ import { useCalendarDialog } from '@/features/calendar/hooks/useCalendarDialog';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { LoginPromptModal } from '@/components/ui/loginPromptModal/loginPromptModal';
 import { MAIN_CONTENT_ID, ROUTES } from '@/constants';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 
 import styles from './appLayout.module.scss';
 
@@ -65,8 +65,13 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
   showSidebar = true,
 }) {
   const { isOpen, handleToggle, handleOpenChange } = useMobileDrawer();
-  const { status } = useSession();
-  const isAuthenticated = status === 'authenticated';
+  // 判定は useAuthStatus に集約（#1134）。ここは以前 user.id を見ておらず、
+  // 無効化済みセッションに対してサイドバーの保護導線を出していた
+  //
+  // ⚠️ 未確定（isResolving）は未ログイン扱いのまま。カレンダーボタンと
+  // ウォッチリストパネルを仮置きすると、未ログインの利用者側に逆の
+  // ちらつきが出る。どちらを優先するかは #1131 で別途判断する
+  const { isAuthenticated } = useAuthStatus();
 
   // カレンダーのトリガーはサイドバーとモバイルドロワーの2か所にある。
   // ドロワーは開くと同時に閉じてアンマウントされるため、ダイアログはここで持つ。

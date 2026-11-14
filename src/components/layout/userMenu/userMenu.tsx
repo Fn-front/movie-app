@@ -24,6 +24,7 @@ import { MENU_LABELS, IMAGE_SIZES } from '@/constants';
 import { USER_ROLE } from '@/constants/auth';
 import { ROUTES } from '@/constants/common';
 import { getInitial } from '@/utils/user';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/utils/cn';
 
@@ -40,7 +41,8 @@ import styles from './userMenu.module.scss';
  * ```
  */
 export const UserMenu = memo(function UserMenu() {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
+  const { isAuthenticated, isResolving } = useAuthStatus();
   const {
     handleNavigateToSettings,
     handleNavigateToAdminAccounts,
@@ -73,11 +75,19 @@ export const UserMenu = memo(function UserMenu() {
     [toggleTheme],
   );
 
-  // 無効化済みセッションは user が空文字で埋められて返るため id で判定する
-  if (status !== 'authenticated' || !session?.user?.id) {
+  // 判定は useAuthStatus に集約（無効化済みセッションの扱いを含む / #1134）。
+  //
+  // 未確定（isResolving）の間は**ログイン導線を見せない**（#1131）。
+  // 出してしまうと、ログイン済みの利用者がフルロードするたびに
+  // 「ログイン」ボタンが一瞬見える。枠は保ったまま隠し、確定後に
+  // 正しいほうを出す（隠し方の理由は userMenu.module.scss）
+  if (!isAuthenticated) {
     return (
       <button
-        className={styles.c_user_menu__login_button}
+        className={cn(
+          styles.c_user_menu__login_button,
+          isResolving && styles['c_user_menu--resolving'],
+        )}
         onClick={handleLogin}
         aria-label={MENU_LABELS.LOGIN}
       >

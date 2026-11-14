@@ -62,7 +62,10 @@ describe('useRecommendations', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetRecommendations.mockResolvedValue(sampleData);
-    mockUseSession.mockReturnValue({ status: 'authenticated' });
+    mockUseSession.mockReturnValue({
+      data: { user: { id: 'user-1' } },
+      status: 'authenticated',
+    });
   });
 
   it('認証済みならレコメンドを取得する', async () => {
@@ -126,6 +129,21 @@ describe('useRecommendations', () => {
     });
     expect(result.current.isPending).toBe(false);
     expect(result.current.hasFavorites).toBe(false);
+  });
+
+  it('無効化済みセッションでは取得しない', () => {
+    // status は authenticated のまま user が空文字で埋められて返る。
+    // status だけで判定していた頃は、401 が返る状態で取得を試みていた（#1134）
+    mockUseSession.mockReturnValue({
+      data: { user: { id: '' } },
+      status: 'authenticated',
+    });
+
+    const { result } = renderUseRecommendations();
+
+    expect(mockGetRecommendations).not.toHaveBeenCalled();
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.isPending).toBe(false);
   });
 
   it('未認証なら isError は立たない', () => {

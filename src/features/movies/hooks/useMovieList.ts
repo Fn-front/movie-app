@@ -5,7 +5,6 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import {
   useQuery,
   useInfiniteQuery,
@@ -16,6 +15,7 @@ import {
 import { getMovies } from '@/lib/api/movies/movies';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import { getSavedFilter, saveFilter } from '@/lib/api/filters/filters';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { useToastDispatch } from '@/hooks/useToast';
 import {
   DEFAULT_SORT,
@@ -256,11 +256,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   );
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const { toast } = useToastDispatch();
-  const { data: session, status } = useSession();
-  // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
-  // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
-  // id の有無で見る（getAuthSession と同じ基準）
-  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+  const { isAuthenticated, isResolving } = useAuthStatus();
   // URL または localStorage に値がある場合はそれを正とし、saved_filters で上書きしない
   const [savedFilterApplied, setSavedFilterApplied] = useState(hasUrlFilters);
   const queryClient = useQueryClient();
@@ -402,7 +398,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   // フィルター準備完了の判定
   // 認証済みユーザーはsavedFilterの取得完了まで映画取得を待機
   const isFilterReady =
-    status !== 'loading' &&
+    !isResolving &&
     (!isAuthenticated ||
       savedFilterQuery.isFetched ||
       savedFilterQuery.isError);

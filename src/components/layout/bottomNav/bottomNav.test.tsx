@@ -16,6 +16,7 @@ import {
 } from '@/constants';
 
 import { BottomNav } from './bottomNav';
+import styles from './bottomNav.module.scss';
 import {
   BOTTOM_NAV_HEIGHT_VAR,
   resolveNavHeight,
@@ -123,13 +124,48 @@ describe('BottomNav', () => {
       expect(navLinkLabels()).toEqual(['ホーム', '公開中']);
     });
 
-    it('セッション判定中は未認証と同じ2件を出す', () => {
-      // 先に4件出して減らすと「押そうとした導線が消える」ほうの揺れになる。
-      // 増える側に倒すのが #1028 で承認済みのトレードオフ
+    /**
+     * セッション判定中の扱い（#1131 で #1028 の判断を変更）
+     *
+     * `__item` は `flex: 1 1 0` の等幅なので、件数が 2↔4 で変わると
+     * **全項目の位置が動く**。#1028 は「増える側へ倒す」で合意していたが、
+     * それはログイン済みの利用者に未ログインの導線を見せる側でもあった。
+     *
+     * どちらの件数で描いても片方はズレるため、**確定するまでナビ自体を
+     * 見せない**方針へ変更した。枠は確保したまま隠すので、本文の
+     * padding-bottom（`--bottom-nav-height`）は動かない。
+     */
+    it('セッション判定中はナビを見せない', () => {
       mockStatus = 'loading';
       render(<BottomNav />);
 
-      expect(navLinkLabels()).toEqual(['ホーム', '公開中']);
+      // jsdom は SCSS を評価しないのでクラスで確認する。
+      // 実際に隠れていることは e2e/mobile/bottomNav.spec.ts が見る
+      expect(
+        screen.getByRole('navigation', { name: ARIA_LABELS.PRIMARY_NAV }),
+      ).toHaveClass(styles['c_bottom_nav--resolving']);
+    });
+
+    it('セッション判定中も認証済みと同じ件数の枠を確保する', () => {
+      // 隠している間に確定後と同じ並びにしておけば、現れる瞬間に
+      // 再配置が起きない（ログイン済みの利用者にはズレが一切無い）
+      mockStatus = 'loading';
+      render(<BottomNav />);
+
+      expect(navLinkLabels()).toEqual([
+        'ホーム',
+        '公開中',
+        'ウォッチリスト',
+        'お気に入り',
+      ]);
+    });
+
+    it('セッションが確定したらナビを見せる', () => {
+      render(<BottomNav />);
+
+      expect(
+        screen.getByRole('navigation', { name: ARIA_LABELS.PRIMARY_NAV }),
+      ).not.toHaveClass(styles['c_bottom_nav--resolving']);
     });
   });
 

@@ -266,6 +266,36 @@ describe('useFavoriteToggle', () => {
     expect(result.current.modalState.isOpen).toBe(false);
   });
 
+  it('セッション未確定の間はログイン誘導を出さない', () => {
+    // ログイン済みの利用者がフルロードした直後に当たる窓（#1131）。
+    // ここで弾くと「ログイン済みなのにログインを求められる」になる
+    mockUseSession.mockReturnValue({ data: null, status: 'loading' });
+    const { result } = renderHook(() => useFavoriteToggle());
+
+    act(() => {
+      result.current.handleFavoriteToggle(createMovie(), null);
+    });
+
+    expect(mockOpenLoginPrompt).not.toHaveBeenCalled();
+    // 誘導を出さない代わりにモーダルを開いてしまっては意味がない
+    expect(result.current.modalState.isOpen).toBe(false);
+  });
+
+  it('無効化済みセッションはログイン誘導を出す', () => {
+    // user が空文字で埋まって返る（#699 / #1134）
+    mockUseSession.mockReturnValue({
+      data: { user: { id: '' } },
+      status: 'authenticated',
+    });
+    const { result } = renderHook(() => useFavoriteToggle());
+
+    act(() => {
+      result.current.handleFavoriteToggle(createMovie(), null);
+    });
+
+    expect(mockOpenLoginPrompt).toHaveBeenCalled();
+  });
+
   /**
    * sendEvent はモックせず window.gtag を差し替える。
    * 実際に gtag へ渡る引数まで見ないと「余計な値を送っていないこと」を

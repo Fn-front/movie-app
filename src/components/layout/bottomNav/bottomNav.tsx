@@ -16,7 +16,6 @@
 import { memo, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 
 import {
   ARIA_LABELS,
@@ -27,6 +26,7 @@ import {
   ROUTES,
 } from '@/constants';
 import type { NavIconRoute } from '@/constants';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { cn } from '@/utils/cn';
 
 import styles from './bottomNav.module.scss';
@@ -97,7 +97,6 @@ const BOTTOM_NAV_ITEMS: BottomNavItem[] = BOTTOM_NAV_HREFS.map((href) => ({
  */
 export const BottomNav = memo(function BottomNav() {
   const pathname = usePathname();
-  const { data: session, status } = useSession();
   const navRef = useBottomNavHeight();
 
   /**
@@ -108,26 +107,45 @@ export const BottomNav = memo(function BottomNav() {
    * 「先に5件出して未認証なら減らす」ほうが損失が大きい（押せる導線が消える）
    * ため、増える側に倒す。#1028 で承認済みのトレードオフ。
    *
-   * 無効化済みセッション（パスワード変更・絶対期限切れ）は user が空文字で
-   * 埋められたオブジェクトとして返るため、存在確認では判定できない。id の
-   * 有無で見る（`mobileDrawer.tsx` / `getAuthSession` と同じ基準）。ドロワーと
-   * 揃えないと、同じ SP 画面でドロワーは保護導線を隠しボトムナビは出す、
-   * という食い違いが起きる
+   * 判定そのものは `useAuthStatus` に集約した（#1134）。無効化済みセッション
+   * （パスワード変更・絶対期限切れ）を認証済みと誤認しない基準も含む。
+   * ドロワーと揃えないと、同じ SP 画面でドロワーは保護導線を隠しボトムナビは
+   * 出す、という食い違いが起きる
+   *
+   * ## セッション判定中は、ナビごと隠す（#1131 で #1028 の判断を変更）
+   *
+   * `__item` は `flex: 1 1 0` の等幅なので、件数が 2↔4 で変わると
+   * **全項目の位置が動く**。#1028 は「増える側へ倒す（＝2件で描く）」で
+   * 合意していたが、それはログイン済みの利用者に未ログインの導線を見せ、
+   * 確定時に 2→4 でズラす側でもあった。どちらの件数で描いても片方は
+   * 必ずズレるため、**確定するまで見せない**ことにした。
+   *
+   * 隠している間も**認証済みと同じ並びで描いておく**。現れる瞬間に
+   * 再配置が起きないので、ログイン済みの利用者にはズレが一切無い。
+   * 未ログインの利用者には、隠れている間に 4→2 の再配置が済む。
+   *
+   * ⚠️ `display: none` にはしない。ResizeObserver が 0×0 を報告して
+   * `--bottom-nav-height` が 0px に戻り、本文の padding-bottom が動く
+   * （`useBottomNavHeight.ts`）。枠は保ったまま隠すこと
    */
-  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+  const { isAuthenticated, isResolving } = useAuthStatus();
+  const showsProtected = isAuthenticated || isResolving;
 
   const navItems = useMemo(
     () =>
       BOTTOM_NAV_ITEMS.filter(
-        (item) => !item.requiresAuth || isAuthenticated,
+        (item) => !item.requiresAuth || showsProtected,
       ).map((item) => ({ ...item, isActive: pathname === item.href })),
-    [isAuthenticated, pathname],
+    [showsProtected, pathname],
   );
 
   return (
     <nav
       ref={navRef}
-      className={styles.c_bottom_nav}
+      className={cn(
+        styles.c_bottom_nav,
+        isResolving && styles['c_bottom_nav--resolving'],
+      )}
       aria-label={ARIA_LABELS.PRIMARY_NAV}
     >
       <ul className={styles.c_bottom_nav__list}>

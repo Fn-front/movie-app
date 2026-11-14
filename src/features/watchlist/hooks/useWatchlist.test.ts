@@ -91,6 +91,12 @@ describe('useWatchlist', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetWatchlist.mockResolvedValue(mockWatchlistResponse);
+    // セッションは毎回ここで戻す。テスト本体の末尾で戻す書き方だと、
+    // そのテストが落ちた時点で復元が実行されず後続を巻き込む
+    (useSession as jest.Mock).mockReturnValue({
+      data: { user: { id: 'user-123' } },
+      status: 'authenticated',
+    });
   });
 
   it('ウォッチリスト一覧を取得する', async () => {
@@ -256,6 +262,47 @@ describe('useWatchlist', () => {
     (useSession as jest.Mock).mockReturnValue({
       data: { user: { id: 'user-123' } },
       status: 'authenticated',
+    });
+  });
+
+  it('セッション未確定の間は読み込み中として返す', () => {
+    // react-query は無効化中のクエリの isLoading を false にするため、
+    // 素通しすると「0件が確定した」ように見えて空メッセージが出る（#1132）
+    (useSession as jest.Mock).mockReturnValue({
+      data: null,
+      status: 'loading',
+    });
+
+    const { result } = renderHook(() => useWatchlist(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.watchlist).toHaveLength(0);
+    expect(mockGetWatchlist).not.toHaveBeenCalled();
+  });
+
+  it('一覧を描いた後に未確定へ戻ってもスケルトンに差し替えない', () => {
+    // `useSession().update()`（表示名の保存など）は status を loading へ
+    // 戻す。未確定を無条件に読み込み中とすると、埋まっている一覧が
+    // スケルトンに化ける
+    const { result, rerender } = renderHook(() => useWatchlist(), {
+      wrapper: createWrapper(),
+    });
+
+    return waitFor(() =>
+      expect(result.current.watchlist.length).toBeGreaterThan(0),
+    ).then(() => {
+      const loaded = result.current.watchlist.length;
+
+      (useSession as jest.Mock).mockReturnValue({
+        data: null,
+        status: 'loading',
+      });
+      rerender();
+
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.watchlist).toHaveLength(loaded);
     });
   });
 

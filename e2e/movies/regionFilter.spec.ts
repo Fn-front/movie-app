@@ -15,6 +15,7 @@ import {
   seedRegionFilterMovies,
   cleanupRegionFilterMovies,
   resetFilters,
+  clearSavedFiltersForTestUser,
 } from '../helpers/api';
 import { localDateFromToday } from '../helpers/date';
 
@@ -138,6 +139,18 @@ test.describe('地域（原語）フィルタ', () => {
     // 後続テストへ漏れる。各テストの前に消す
     test.beforeEach(async ({ request }) => {
       await resetFilters(request);
+    });
+
+    /**
+     * 適用したフィルターを残さない（#1062）。
+     *
+     * ⚠️ 共有の `TEST_USER` で `saved_filters` を書くため、片付けないと後に走る
+     * spec が「保存済みフィルターを持つ利用者」として始まる。復元結果は URL へ
+     * 書き戻されるので、`/…$/` で URL を厳密に見ている spec が落ちる。
+     * CI は `fullyParallel` ＋ `--shard` で、ファイルの実行順では守れない
+     */
+    test.afterEach(async () => {
+      await clearSavedFiltersForTestUser();
     });
 
     /** 一覧の描画を待ってからフィルターモーダルを開く */

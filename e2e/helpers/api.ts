@@ -1040,6 +1040,27 @@ export async function cleanupDismissedMovies(): Promise<void> {
 }
 
 /**
+ * テストユーザーの `saved_filters` をDB直叩きで消す
+ *
+ * ⚠️ **後片付けに `resetFilters` を使わないこと。** あちらは
+ * `PUT /api/filters` を叩くため**レート制限を消費する**。共有の `TEST_USER` で
+ * before/after に仕込むと、1 run の PUT 回数が一気に増えて 429 になり、
+ * 本来の保存テストが「フィルター保存が失敗した（429 PUT）」で落ちる（実測）。
+ *
+ * 片付けは利用者の操作ではないので、APIを通す必要がない。
+ * 行ごと消せば次の取得で既定に戻る（`GET /api/filters` は行が無くても
+ * 既定を返す）
+ */
+export async function clearSavedFiltersForTestUser(): Promise<void> {
+  const userId = await getTestUserId();
+  if (!userId) return;
+
+  await fetch(`${SUPABASE_URL}/rest/v1/saved_filters?user_id=eq.${userId}`, {
+    method: 'DELETE',
+    headers: supabaseHeaders,
+  });
+}
+/**
  * テストユーザーのフィルター条件をデフォルト状態にリセットする
  */
 export async function resetFilters(request: APIRequestContext): Promise<void> {

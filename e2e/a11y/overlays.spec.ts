@@ -11,7 +11,12 @@ import { ARIA_LABELS, MENU_LABELS } from '@/constants';
 
 import { movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
-import { THEMES, gotoWithTheme, expectNoA11yViolations } from './helpers';
+import {
+  THEMES,
+  gotoWithTheme,
+  expectNoA11yViolations,
+  expectAxeEvaluated,
+} from './helpers';
 
 /** 詳細モーダルの検査で使うキャスト（リンクが描画される最小構成） */
 const CAST_PRESENT = [
@@ -94,6 +99,32 @@ test.describe('アクセシビリティ（オーバーレイ・未認証）', ()
           page,
           `映画詳細モーダル（${label}） / ${theme}`,
         );
+
+        /*
+          ⚠️ **ここが無いと、上の0件は「検査していない」と区別できない**（#1107）。
+
+          キャストは `max-height: 300px` のスクロール領域の中で、
+          `LONG_OVERVIEW` と「詳細情報」の後ろにある。axe の可視判定は
+          `overflow` を持つ祖先の矩形との重なりを見るため、送らないと
+          評価されない。実測（light / デスクトップ幅）:
+
+            キャスト名の矩形 937–1038 / スクロール領域 323–623 → 範囲外
+            送った後          522–623                        → 範囲内
+
+          **`color-contrast` を指定するのが要点。** `link-name` のように
+          可視判定を使わないルールは送らなくても評価されるので、
+          ルールを指定しないと掃引が壊れても気づけない。実測で、送った後に
+          だけ評価されるノードは9件あり、**全部 `color-contrast`** だった
+          （キャスト名・役名・プレースホルダ・詳細情報の dt/dd ほか）。
+        */
+        if (cast.length > 0) {
+          await expectAxeEvaluated(
+            page,
+            dialog.locator('[class*="c_movie_detail__cast_name"]').first(),
+            `映画詳細モーダルのキャスト名 / ${theme}`,
+            ['color-contrast'],
+          );
+        }
       });
     }
   }

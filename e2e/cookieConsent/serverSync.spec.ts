@@ -81,6 +81,15 @@ test.describe('Cookie同意 / サーバー同期', () => {
 
     await expect(consentBanner(page)).toBeHidden();
 
+    // ⚠️ **バナーが消えたことを同期完了の合図にしない。** #1141 以降、
+    // バナーは初回マージの応答待ちの間も抑止されて消えている
+    // （`bannerSuppression.ts`）。つまり `toBeHidden()` は往復の完了を
+    // 待たず、直後に localStorage を読むと null が返る。
+    // 以前は「マージが終わってから消える」挙動に暗黙に依存していた
+    await expect
+      .poll(async () => (await readStoredConsent(page)).state)
+      .toBe('granted');
+
     const stored = await readStoredConsent(page);
     expect(stored.state).toBe('granted');
     // 所有者は現在のユーザーへ付け替わる

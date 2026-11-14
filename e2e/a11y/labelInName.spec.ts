@@ -394,4 +394,56 @@ test.describe('Label in Name（データを入れた状態）', () => {
     await expect(tileDelete).toBeVisible({ timeout: 30000 });
     await expectIconOnlyButton(tileDelete, '/watchlist のタイル');
   });
+
+  /**
+   * 6: シアター体験の周波数セレクター（#1106）
+   *
+   * `低音（80 Hz）` を `aria-label` に入れていたが、**括弧が効かない**。
+   * `curateTokens()` は NFKD 正規化で全角括弧を半角に落としたあと
+   * `removeParentheticals()` で括弧内を捨てるため、名前側は `["低音"]`
+   * だけになり、可視側の `["低音","80","hz"]` を含まない。
+   *
+   * ⚠️ 実測では **violation ではなく incomplete**（要確認）に落ちていた。
+   * axe 4.14 の `valueTextRoles` に `radio` が含まれており、一致しなかった
+   * radio は判定が保留されるため。ただし共通ヘルパー
+   * `expectNoA11yViolations` は incomplete でも落とすので、`✕` の削除ボタン
+   * （上の5番 / #1056）と同じく、放置すると画面を検査対象に入れた瞬間に赤くなる。
+   *
+   * ⚠️ 兄弟の `OccupancySelector` / `HeatmapToggle` は同じ書き方に見えるが
+   * 問題ない。`客席を満席にする` は `Intl.Segmenter` で
+   * `["客席","を","満席","に","する"]` に分かれ、可視の `["満席"]` を
+   * **連続部分列として含む**（実測で `passes` に入ることを確認済み）。
+   * 括弧を使った本件だけが外れる。
+   *
+   * ⚠️ **ここも axe では固定できない**（カレンダー・キャストと同じ）。
+   * `aria-label` を外すと `label-content-name-mismatch-matches` の
+   * 「`aria-label` か `aria-labelledby` を持つこと」で弾かれ、ルールの
+   * 対象が0件になる。「違反が無い」と「検査していない」を区別できないので
+   * 属性で見る。
+   */
+  test('シアター体験の周波数セレクター', async () => {
+    await page.goto('/theater-experience');
+
+    // サイドバーは WebGL2 の可否に関わらず描かれるが、劇場データの取得は待つ
+    const sidebar = page.getByRole('complementary', {
+      name: '座席・音響の設定',
+    });
+    await expect(sidebar).toBeVisible({ timeout: 30000 });
+
+    for (const [label, frequency] of [
+      ['低音', '80 Hz'],
+      ['中音', '1 kHz'],
+      ['高音', '8 kHz'],
+    ]) {
+      const item = sidebar.getByRole('radio', { name: new RegExp(label) });
+      await expect(item).toBeVisible({ timeout: 30000 });
+
+      await expect(item).not.toHaveAttribute('aria-label');
+      await expect(item).not.toHaveAttribute('aria-labelledby');
+
+      // 見えている文字がすべて名前に入っている
+      await expect(item).toHaveAccessibleName(new RegExp(label));
+      await expect(item).toHaveAccessibleName(new RegExp(frequency));
+    }
+  });
 });

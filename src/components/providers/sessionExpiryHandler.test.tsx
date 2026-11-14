@@ -2,7 +2,7 @@
  * SessionExpiryHandlerのテスト
  */
 
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 
 import { useSessionExpiry } from './sessionExpiryHandler';
 
@@ -13,6 +13,11 @@ let mockStatus = 'loading';
 jest.mock('next-auth/react', () => ({
   useSession: () => ({ status: mockStatus }),
   signOut: (...args: unknown[]) => mockSignOut(...args),
+}));
+
+const mockConfirmSignedOut = jest.fn();
+jest.mock('@/lib/auth/sessionProbe', () => ({
+  confirmSignedOut: () => mockConfirmSignedOut(),
 }));
 
 let mockPathname = '/movies/now-showing';
@@ -29,6 +34,8 @@ describe('useSessionExpiry', () => {
     mockSignOut.mockClear();
     mockStatus = 'loading';
     mockPathname = '/movies/now-showing';
+    // 既定は「ログアウト済みだとサーバーが明示した」
+    mockConfirmSignedOut.mockReset().mockResolvedValue(true);
   });
 
   it('初回レンダリング時にsignOutを呼ばないこと', () => {
@@ -37,16 +44,56 @@ describe('useSessionExpiry', () => {
     expect(mockSignOut).not.toHaveBeenCalled();
   });
 
-  it('authenticated → unauthenticated に変化した時にsignOutを呼ぶこと', () => {
+  it('authenticated → unauthenticated に変化した時にsignOutを呼ぶこと', async () => {
     mockStatus = 'authenticated';
     const { rerender } = renderHook(() => useSessionExpiry());
 
     mockStatus = 'unauthenticated';
     rerender();
 
-    expect(mockSignOut).toHaveBeenCalledWith({
-      callbackUrl: '/auth/signin',
-    });
+    await waitFor(() =>
+      expect(mockSignOut).toHaveBeenCalledWith({
+        callbackUrl: '/auth/signin',
+      }),
+    );
+  });
+
+  // 以下2件は #1136。next-auth は `/api/auth/session` の通信失敗も非2xxも
+  // null に潰すため、unauthenticated への変化だけでは強制ログアウトの
+  // 根拠にならない。瞬断でサーバー側のセッションまで破棄してしまう
+  it('セッションの不在を確認できなければsignOutしないこと', async () => {
+    mockConfirmSignedOut.mockResolvedValue(false);
+    mockStatus = 'authenticated';
+    const { rerender } = renderHook(() => useSessionExpiry());
+
+    mockStatus = 'unauthenticated';
+    rerender();
+
+    await waitFor(() => expect(mockConfirmSignedOut).toHaveBeenCalled());
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('確認中に認証済みへ戻ったらsignOutしないこと', async () => {
+    let resolveProbe: (value: boolean) => void = () => {};
+    mockConfirmSignedOut.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        resolveProbe = resolve;
+      }),
+    );
+    mockStatus = 'authenticated';
+    const { rerender } = renderHook(() => useSessionExpiry());
+
+    mockStatus = 'unauthenticated';
+    rerender();
+    await waitFor(() => expect(mockConfirmSignedOut).toHaveBeenCalled());
+
+    // 応答待ちの間に再取得が成功した
+    mockStatus = 'authenticated';
+    rerender();
+    resolveProbe(true);
+
+    await waitFor(() => expect(mockConfirmSignedOut).toHaveBeenCalled());
+    expect(mockSignOut).not.toHaveBeenCalled();
   });
 
   it('loading → authenticated に変化した時にsignOutを呼ばないこと', () => {
@@ -100,7 +147,7 @@ describe('useSessionExpiry', () => {
     expect(mockSignOut).not.toHaveBeenCalled();
   });
 
-  it('signOutは1回だけ呼ばれること', () => {
+  it('signOutは1回だけ呼ばれること', async () => {
     mockStatus = 'authenticated';
     const { rerender } = renderHook(() => useSessionExpiry());
 
@@ -108,6 +155,7 @@ describe('useSessionExpiry', () => {
     rerender();
     rerender();
 
-    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mockSignOut).toHaveBeenCalledTimes(1));
+    expect(mockConfirmSignedOut).toHaveBeenCalledTimes(1);
   });
 });

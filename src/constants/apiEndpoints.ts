@@ -17,6 +17,14 @@ export const API_ENDPOINTS = {
   PASSWORD_RESET_REQUEST: '/api/auth/password-reset/request',
   /** パスワード再設定の実行 */
   PASSWORD_RESET_CONFIRM: '/api/auth/password-reset/confirm',
+  /**
+   * 現在のセッション（NextAuth が提供するエンドポイント）
+   *
+   * 通常は `useSession()` を使う。これを直接叩くのは、next-auth が
+   * 通信失敗と未認証をどちらも `null` に潰すため区別が要るときだけ
+   * （`src/lib/auth/sessionProbe.ts`）
+   */
+  AUTH_SESSION: '/api/auth/session',
 
   // --- ユーザー ---
   /** プロフィール更新 */

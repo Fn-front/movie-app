@@ -5,22 +5,61 @@
  * - 未認証: URLクエリによるページ遷移後の復元（Issue #567）
  */
 
+import type { Page } from '@playwright/test';
+
 import { test, expect } from '../fixtures/auth';
+import {
+  openDedicatedSession,
+  type DedicatedSession,
+} from '../fixtures/dedicatedSession';
 import { resetFilters } from '../helpers/api';
+import { runScopedEmail } from '../helpers/runScope';
 import { waitForWriteResponse } from '../helpers/writeResponse';
+
+/**
+ * 本 describe 専用のユーザー
+ *
+ * ⚠️ **共有の TEST_USER を使わない。** このテストが待つ
+ * `GET /api/filters` は `READ_USER_DATA`（200回/分・**ユーザー単位**）で
+ * 制限され、そのカウンタを `watchlist` / `favorites/lookup` /
+ * `user/settings` / `watchlist/calendar` など**7ルートで共有**している
+ * （`src/constants/rateLimit.ts`）。
+ *
+ * シャードは `fullyParallel` で共有ユーザーのまま多数の画面を開くため、
+ * 枠が尽きると GET が 429 になり、200 を待つここが 30 秒でタイムアウトする。
+ * 実際に CI のトレースで `/api/filters` を含む6エンドポイントが同時に
+ * 429 を返していた。専用ユーザーなら自分のカウンタだけを使う（#750 と同じ方針）
+ */
+const USER = {
+  email: runScopedEmail('e2e-filter-persistence'),
+  password: 'FilterPersistE2e1',
+} as const;
 
 test.describe('フィルター条件がリロード後も保持される', () => {
   // goto×2＋フィルタ操作＋PUT/GET待ち＋reload と重く、並列負荷下で30秒予算を
-  // 超過しうるためタイムアウトを延長する
-  test.describe.configure({ timeout: 60000 });
+  // 超過しうるためタイムアウトを延長する。ユーザー作成（bcrypt）も挟む
+  test.describe.configure({ timeout: 120000 });
 
-  test.beforeEach(async ({ request }) => {
-    await resetFilters(request);
+  let session: DedicatedSession;
+  let page: Page;
+
+  test.beforeAll(async ({ browser }, testInfo) => {
+    testInfo.setTimeout(120000);
+    session = await openDedicatedSession(browser, USER);
+    page = session.page;
   });
 
-  test('リバイバル除外 → リロード → APIレスポンスと復元を確認', async ({
-    page,
-  }) => {
+  test.afterAll(async () => {
+    await session.close();
+  });
+
+  test.beforeEach(async () => {
+    // 専用ユーザーのセッションで消す。共有の `request` を使うと別人の
+    // 行を消すうえ、共有カウンタも減らしてしまう
+    await resetFilters(page.request);
+  });
+
+  test('リバイバル除外 → リロード → APIレスポンスと復元を確認', async () => {
     await page.goto('/movies/upcoming');
     await page
       .locator('[class*="movie_tile"]')

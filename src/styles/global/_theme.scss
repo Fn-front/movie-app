@@ -185,9 +185,16 @@
   // なって、**検索フォームが最長要素に入れ替わる**。
   //
   // ⚠️ **それでも実害は無いので式は直していない。** 唯一の消費者である
-  // scroll-padding-top（_global.scss）は、lg 以上では参照されない。
-  // lg は appLayout が内部スクロールへ切り替わり（#1027）、スクローラーが
-  // .c_app_layout__main になるためドキュメントがスクロールしないため。
+  // scroll-padding-top（_global.scss）は、lg 以上では
+  // **AppLayout を通るページで**参照されない。lg は appLayout が内部スクロールへ
+  // 切り替わり（#1027）、スクローラーが .c_app_layout__main になるため
+  // （scroll-padding は継承しないので html の値は使われない）。
+  //
+  // AppLayout を通らないページ（/auth/* ・/admin/* ・/theater-experience）は
+  // lg でもドキュメントがスクローラーのままで、この値は生きている。
+  // ただしそれらには sticky なヘッダー自体が無い（sticky は
+  // appLayout.module.scss の1箇所、<Header> も appLayout.tsx でしか使われない）
+  // ので、やはり潜り込みは起きない。
   //
   // main の上端はヘッダーの下端なので、main 内でジャンプしても必ずその下に
   // 着地する。実測（/awards の見出しへ scrollIntoView、ヘッダー下端 / 着地位置）:

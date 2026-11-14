@@ -229,7 +229,7 @@ test.describe('SP幅のスクロール', () => {
     await page.goto('/awards');
     await page.waitForLoadState('networkidle');
 
-    const { headerHeight, scrollPaddingTop, documentScrolls } =
+    const { headerHeight, scrollPaddingTop, mainOverflowY } =
       await page.evaluate(() => ({
         headerHeight: Math.round(
           document.querySelector('header')!.getBoundingClientRect().height,
@@ -238,14 +238,21 @@ test.describe('SP幅のスクロール', () => {
           parseFloat(
             getComputedStyle(document.documentElement).scrollPaddingTop,
           ) || 0,
-        // この帯ではドキュメント自身がスクロールする＝値が効いている
-        documentScrolls:
-          document.documentElement.scrollHeight -
-            document.documentElement.clientHeight >
-          0,
+        /*
+          この帯ではドキュメント自身がスクロールする＝値が効いている。
+
+          「実際にスクロールするか」（scrollHeight > clientHeight）では測らない。
+          /awards が0件だと1画面に収まり、`--header-height` とは無関係な理由で
+          落ちるため。lg で内部スクロールへ切り替わるのは appLayout.module.scss の
+          `&__main { @include lg { overflow-y: auto } }` なので、そこを直接見れば
+          データ量に左右されずに「まだドキュメントがスクローラー」だと言える。
+        */
+        mainOverflowY: getComputedStyle(
+          document.querySelector('[class*="c_app_layout__main"]')!,
+        ).overflowY,
       }));
 
-    expect(documentScrolls).toBe(true);
+    expect(mainOverflowY).not.toBe('auto');
     expect(headerHeight).toBeGreaterThan(0);
     expect(scrollPaddingTop).toBeGreaterThanOrEqual(headerHeight);
   });

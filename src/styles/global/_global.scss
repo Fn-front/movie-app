@@ -28,6 +28,11 @@ html {
   // （main 側は auto＝0）。main の上端はヘッダーの下端なので、そもそも
   // 潜り込まない。
   //
+  // 厳密には「lg 以上の AppLayout を通るページ」。AppLayout 外
+  // （/auth/* ・/admin/* ・/theater-experience）は lg でもドキュメントが
+  // スクローラーなのでこの値は生きているが、そこには sticky なヘッダーが
+  // 無いため潜り込む対象もない。
+  //
   // つまり `--header-height` が lg の実高（75px）とずれていても害は無い。
   // 詳しい内訳は `_theme.scss` の定義側コメントに書いてある
   scroll-padding-top: $header-height;

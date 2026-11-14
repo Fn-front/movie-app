@@ -28,6 +28,7 @@ import {
   ERROR_CODE,
   AUTH_ERROR_MESSAGES,
   RATE_LIMIT_ACTION,
+  SUPABASE_ERROR_CODE,
 } from '@/constants';
 
 export async function POST(request: Request) {
@@ -71,11 +72,25 @@ export async function POST(request: Request) {
         return unauthorizedResponse();
       }
 
-      const { data: sessionUser } = await supabase
+      const { data: sessionUser, error: sessionUserError } = await supabase
         .from('users')
         .select('email')
         .eq('id', session.user.id)
         .single();
+
+      // ⚠️ error を捨ててはいけない。`.single()` は読み取りに失敗しても
+      // `data: null` を返すため、DB の一時障害が下の 401 に化ける。
+      // セッションは有効なので「未認証」は誤りで、本来は 500。
+      // このルートは axios 経由（`src/lib/api/auth/auth.ts`）なので、
+      // #1157 以前はその場で強制ログアウトしていた（#1151 / #1165）。
+      // 行が無い（PGRST116）のは本当にアカウントが消えた場合なので、
+      // そちらは従来どおり 401 のままにする
+      if (
+        sessionUserError &&
+        sessionUserError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
+      ) {
+        throw sessionUserError;
+      }
 
       if (!sessionUser) {
         return unauthorizedResponse();

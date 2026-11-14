@@ -16,7 +16,8 @@
 
 import type { Locator, Page } from '@playwright/test';
 
-import { MOVIE_FILTER_QUERY_PARAMS } from '@/constants';
+import { FILTER_LABELS, MOVIE_FILTER_QUERY_PARAMS } from '@/constants';
+import { filterButton } from '../helpers/locators';
 import { test, expect } from '../fixtures/auth';
 
 /**
@@ -34,9 +35,6 @@ test.use({
 /** 一覧タイルの実体（スケルトン・子要素を除く） */
 const TILE_SELECTOR =
   '[class*="c_card"][class*="c_movie_tile"]:not([class*="c_movie_tile_skeleton"])';
-
-/** 絞り込み中を示すバッジ */
-const FILTER_BADGE_SELECTOR = '[class*="filter_count"]';
 
 /** 絞り込みに使うジャンル。どのページの一覧にも含まれる */
 const GENRE_NAME = 'アクション';
@@ -84,7 +82,18 @@ const readFilterState = async (page: Page) => {
   const hasGenre = new URL(page.url()).searchParams.has(
     MOVIE_FILTER_QUERY_PARAMS.GENRE_IDS,
   );
-  const hasBadge = (await page.locator(FILTER_BADGE_SELECTOR).count()) > 0;
+  /*
+    絞り込み中は支援技術にも伝わる形で出る（#1063）。CSS クラス名では引かない。
+
+    ⚠️ **属性の有無で判定しないこと。** 参照先の id が消えても
+    `aria-describedby` の属性は残るので、支援技術には何も伝わらない状態
+    （dangling IDREF）でも緑のままになる。参照先まで解決して文言を確かめる
+  */
+  const describedBy = await filterButton(page).getAttribute('aria-describedby');
+  const hasBadge = describedBy
+    ? (await page.locator(`#${describedBy}`).innerText()) ===
+      FILTER_LABELS.FILTER_ACTIVE
+    : false;
 
   return [
     hasGenre ? 'URL:ジャンル指定あり' : 'URL:ジャンル指定なし',
@@ -94,7 +103,7 @@ const readFilterState = async (page: Page) => {
 
 /** フィルターモーダルを開く */
 const openFilterModal = async (page: Page) => {
-  await page.getByRole('button', { name: 'フィルター' }).click();
+  await filterButton(page).click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();

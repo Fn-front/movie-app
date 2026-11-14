@@ -14,7 +14,7 @@ import type { Page } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 import { test, expect } from '../fixtures/auth';
-import { movieTileDetailLinks } from '../helpers/locators';
+import { filterButton, movieTileDetailLinks } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 import {
   clickOutsideDialog,
@@ -82,9 +82,6 @@ async function mockCalendarWithOneMovie(page: Page): Promise<void> {
 /** 一覧タイルの実体（スケルトン・子要素を除く） */
 const TILE_SELECTOR =
   '[class*="c_card"][class*="c_movie_tile"]:not([class*="c_movie_tile_skeleton"])';
-
-/** 絞り込み中を示すバッジ */
-const FILTER_BADGE_SELECTOR = '[class*="filter_count"]';
 
 /** 一覧が描画されるまで待つ（データ0件でも先へ進む） */
 const waitForList = (page: Page) =>
@@ -191,9 +188,8 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     // このテストが要るのは履歴エントリとフィルターボタンだけ。
     // ツールバーは一覧データと関係なく描画されるので、タイルは待たない
     // （`waitForList` は15秒待つので、2回で30秒のテスト予算を使い切る）
-    const filterButton = page.getByRole('button', { name: 'フィルター' });
-    await filterButton.waitFor({ timeout: 15000 });
-    await filterButton.click();
+    await filterButton(page).waitFor({ timeout: 15000 });
+    await filterButton(page).click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
@@ -355,7 +351,7 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     const hasTile = await waitForList(page);
     test.skip(!hasTile, '映画データが無いためスキップ');
 
-    await page.getByRole('button', { name: 'フィルター' }).click();
+    await filterButton(page).click();
 
     const filterDialog = page.getByRole('dialog');
     await expect(filterDialog).toBeVisible();
@@ -363,7 +359,7 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     await filterDialog.getByRole('button', { name: '適用' }).click();
 
     await expect(page).toHaveURL(/genre_ids=/);
-    await expect(page.locator(FILTER_BADGE_SELECTOR)).toBeVisible();
+    await expect(filterButton(page)).toHaveAccessibleDescription('絞り込み中');
   });
 });
 

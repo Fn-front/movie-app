@@ -88,3 +88,23 @@ export async function firstFavoritableTile(page: Page): Promise<Locator> {
       '一覧が未公開作品のみになっている可能性があります。',
   );
 }
+
+/**
+ * 一覧ツールバーのフィルターボタン
+ *
+ * 絞り込み中かどうかは、このボタンの**アクセシブルな説明**に出る
+ * （`aria-describedby` →「絞り込み中」）。
+ *
+ * ⚠️ **青いドットを CSS クラス名で引かないこと**（#1063）。
+ * `[class*="filter_count"]` は CSS Modules のハッシュ付きクラス名に
+ * 依存するうえ、**支援技術に何も伝わらない状態を前提にしたテスト**になる。
+ * ドット自体は `aria-hidden` の装飾で、意味は説明側が持つ。
+ *
+ * ```ts
+ * await expect(filterButton(page)).toHaveAccessibleDescription('絞り込み中');
+ * await expect(filterButton(page)).toHaveAccessibleDescription('');
+ * ```
+ */
+export function filterButton(page: Page): Locator {
+  return page.getByRole('button', { name: 'フィルター' });
+}

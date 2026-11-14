@@ -325,6 +325,41 @@ describe('POST /api/auth/otp/send', () => {
     expect(response.status).toBe(401);
   });
 
+  /**
+   * DB障害を「未認証」に化かさない（#1165）
+   *
+   * `.single()` はどんなエラーでも `data: null` を返すため、`error` を
+   * 見ないと読み取り失敗が上のテストと同じ 401 になる。セッションは
+   * 有効なので本来は 500。このルートは axios 経由（`src/lib/api/auth/auth.ts`）
+   * なので、#1157 以前は**その場で強制ログアウト**していた
+   */
+  it('password_change: セッションユーザーの読み取りに失敗したら401ではなく500を返す', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: null,
+            error: { code: '57P01', message: 'connection terminated' },
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({
+        email: 'test@example.com',
+        action: 'password_change',
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    // 宛先が決まらないまま先へ進んでいないこと。メールも送らず、
+    // 日次送信枠（メールボックス保護）も消費しない
+    const { sendOtpEmail } = await import('@/lib/otp');
+    expect(sendOtpEmail).not.toHaveBeenCalled();
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
+  });
+
   it('login: 正常にOTPを送信できる', async () => {
     // ユーザー検索
     mockFrom.mockReturnValueOnce({

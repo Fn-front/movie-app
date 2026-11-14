@@ -9,6 +9,7 @@ import type { Page } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 import { test, expect } from '../fixtures/auth';
+import { expectTapAreaAtLeast, TAP_TARGET_MIN } from '../helpers/tapTarget';
 
 /** SP 表示幅 */
 const SP_VIEWPORT_WIDTH = 375;
@@ -32,6 +33,12 @@ const TILE_SELECTOR =
 /** リスト表示のタイル。`c_movie_tile_skeleton--list` には当たらない */
 const LIST_TILE_SELECTOR = `${TILE_SELECTOR}[class*="movie_tile--list"]`;
 
+/** リスト行の右端に並ぶ操作ボタン（タイトルのリンクは `<a>` なので混ざらない） */
+const ACTION_BUTTON_SELECTOR = '[class*="c_movie_tile__list_actions"] button';
+
+/** 操作ボタンの見た目サイズ（`$tap-target-min` との差分が必要な間隔になる） */
+const TILE_BUTTON_SIZE = 28;
+
 test.use({
   viewport: { width: SP_VIEWPORT_WIDTH, height: SP_VIEWPORT_HEIGHT },
 });
@@ -50,6 +57,32 @@ const waitForTiles = async (page: Page) => {
 /** 表示切替のトグル */
 const viewToggle = (page: Page) =>
   page.getByRole('button', { name: ARIA_LABELS.LIST_VIEW });
+
+/**
+ * 操作ボタンが2つ以上あるリスト行を、位置で固定して返す
+ *
+ * お気に入りボタンは**未公開作には出ない**（`movieTile.tsx` の `canFavorite`）。
+ * `first()` を決め打ちすると、先頭が未公開作の日は1ボタンになり、
+ * **隣接間隔のアサーションが空配列になって何も検証せずに緑になる**。
+ * `firstFavoritableTile()`（`e2e/helpers/locators.ts`）と同じ考え方で、
+ * 一度だけ位置を解決して `nth()` を返す。
+ *
+ * @returns 2つ以上ある最初の行。1つも無ければ null
+ */
+async function firstMultiActionListTile(page: Page) {
+  const tiles = page.locator(LIST_TILE_SELECTOR);
+  await tiles.first().waitFor({ state: 'visible', timeout: 15000 });
+
+  const total = await tiles.count();
+  for (let index = 0; index < total; index += 1) {
+    const tile = tiles.nth(index);
+    if ((await tile.locator(ACTION_BUTTON_SELECTOR).count()) >= 2) {
+      return tile;
+    }
+  }
+
+  return null;
+}
 
 /**
  * ビューポート内に全体が収まっているタイルの数
@@ -187,7 +220,14 @@ test.describe('映画一覧の表示モード切替', () => {
     }
   });
 
-  test('リスト行の操作ボタンが重ならず8px以上空く', async ({
+  /**
+   * ポスターから行の右端へ移したときに重ねてしまうと誤爆する（#1017）。
+   *
+   * ⚠️ **間隔だけでは重なりを検知できない。** 8px しか見ていなかったため、
+   * `$spacing-4` がスマホで 12px に下がっても通り続けていた（#1119）。
+   * 実際に押したら何に当たるかを `expectTapAreaAtLeast` で併せて見る
+   */
+  test('リスト行の操作ボタンが重ならず16px以上空く', async ({
     authenticatedPage: page,
   }) => {
     await page.goto('/movies/now-showing');
@@ -195,25 +235,92 @@ test.describe('映画一覧の表示モード切替', () => {
 
     await viewToggle(page).click();
 
-    const listTile = page.locator(LIST_TILE_SELECTOR).first();
-    await expect(listTile).toBeVisible();
+    const listTile = await firstMultiActionListTile(page);
+    test.skip(
+      listTile === null,
+      '操作ボタンが2つ以上ある行が無いためスキップ（未公開作のみだとお気に入りが出ない）',
+    );
 
-    // ポスターから行の右端へ移したときに重ねてしまうと誤爆する（#1017）
-    const gaps = await listTile.evaluate((tile) => {
-      const buttons = Array.from(tile.querySelectorAll('button'))
+    const actionButtons = listTile!.locator(ACTION_BUTTON_SELECTOR);
+    const actionCount = await actionButtons.count();
+
+    for (let index = 0; index < actionCount; index += 1) {
+      const button = actionButtons.nth(index);
+      await expectTapAreaAtLeast(
+        button,
+        `リスト行の操作ボタン ${await button.getAttribute('aria-label')}`,
+      );
+    }
+
+    const gaps = await listTile!.evaluate((tile, selector) => {
+      const rects = Array.from(tile.querySelectorAll(selector))
         .map((el) => el.getBoundingClientRect())
-        // タイトルの button はカード全面の当たり判定なので除く（#719）
-        .filter((rect) => rect.width > 0 && rect.width <= 44)
         .sort((a, b) => a.left - b.left);
 
-      return buttons
+      return rects
         .slice(1)
-        .map((rect, index) => rect.left - buttons[index].right);
-    });
+        .map((rect, index) => rect.left - rects[index].right);
+    }, ACTION_BUTTON_SELECTOR);
 
+    // ⚠️ **ここを落とさないこと。** 空配列だと下のループが0回で回り、
+    // 何も検証せずに緑になる（間隔を 12px に戻しても落ちない / #1119）
     expect(gaps.length).toBeGreaterThan(0);
+
+    // 44px のヒット領域は見た目 28px の左右へ 8px ずつはみ出す。
+    // 16px 空けないと領域が重なり、DOM で後ろのボタンが手前を食う
     for (const gap of gaps) {
-      expect(gap).toBeGreaterThanOrEqual(8);
+      expect(gap).toBeGreaterThanOrEqual(TAP_TARGET_MIN - TILE_BUTTON_SIZE);
     }
+  });
+
+  /**
+   * 最狭幅での溢れ
+   *
+   * 間隔を広げたぶん操作列が 4px 広がる（#1119）。
+   *
+   * ⚠️ **ドキュメント幅だけ見ても検知できない。** カードは
+   * `overflow: hidden` なので、行の中で溢れても外へは出ない。
+   * 操作列の右端がカードの内側に収まっているかを直接見る
+   */
+  test.describe('最狭幅', () => {
+    test.use({ viewport: { width: 320, height: SP_VIEWPORT_HEIGHT } });
+
+    test('リスト行の操作列がカードから溢れない', async ({
+      authenticatedPage: page,
+    }) => {
+      await page.goto('/movies/now-showing');
+      test.skip(
+        (await waitForTiles(page)) === 0,
+        '映画データが無いためスキップ',
+      );
+
+      await viewToggle(page).click();
+
+      const listTile = page.locator(LIST_TILE_SELECTOR).first();
+      await expect(listTile).toBeVisible();
+
+      const measured = await listTile.evaluate((tile) => {
+        const actions = tile.querySelector(
+          '[class*="c_movie_tile__list_actions"]',
+        );
+        return {
+          tileRight: tile.getBoundingClientRect().right,
+          actionsRight: actions?.getBoundingClientRect().right ?? null,
+          tileScrollWidth: tile.scrollWidth,
+          tileClientWidth: tile.clientWidth,
+          docScrollWidth: document.documentElement.scrollWidth,
+          docClientWidth: document.documentElement.clientWidth,
+        };
+      });
+
+      expect(measured.actionsRight).not.toBeNull();
+      expect(measured.actionsRight!).toBeLessThanOrEqual(measured.tileRight);
+      expect(measured.tileScrollWidth).toBeLessThanOrEqual(
+        measured.tileClientWidth,
+      );
+      expect(measured.docScrollWidth).toBeLessThanOrEqual(
+        measured.docClientWidth,
+      );
+    });
   });
 });

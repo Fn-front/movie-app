@@ -475,10 +475,6 @@ test.describe('未認証のログイン誘導を閉じたあとの戻る', () =>
  * フックが面倒を見ているのはフィルターモーダルのような URL を持たない
  * オーバーレイのほう。
  */
-/** 一覧ツールバーのフィルターボタン */
-const filterButton = (page: Page) =>
-  page.getByRole('button', { name: 'フィルター' });
-
 test.describe('閉じたオーバーレイを進むで開き直す', () => {
   test('戻るで閉じたフィルターが、進むで開き直り、次の戻るで閉じる', async ({
     authenticatedPage: page,

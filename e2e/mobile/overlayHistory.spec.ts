@@ -14,7 +14,7 @@ import type { Page } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 import { test, expect } from '../fixtures/auth';
-import { clearSavedFiltersForTestUser, resetFilters } from '../helpers/api';
+import { clearSavedFiltersForTestUser } from '../helpers/api';
 import { filterButton, movieTileDetailLinks } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 import {

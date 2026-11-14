@@ -5,7 +5,7 @@
  */
 
 import { test, expect } from '../fixtures/auth';
-import { clearSavedFiltersForTestUser, resetFilters } from '../helpers/api';
+import { clearSavedFiltersForTestUser } from '../helpers/api';
 
 test.describe('公開予定ページのソート・フィルター操作', () => {
   /**

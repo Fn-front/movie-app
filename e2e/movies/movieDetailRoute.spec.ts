@@ -18,7 +18,7 @@ import { test, expect } from '@playwright/test';
 import { ARIA_LABELS } from '@/constants';
 
 import { movieTileDetailLinks, movieTiles } from '../helpers/locators';
-import { clearSavedFiltersForTestUser, resetFilters } from '../helpers/api';
+import { clearSavedFiltersForTestUser } from '../helpers/api';
 import {
   MISSING_MOVIE_ID,
   MOVIE_ID,

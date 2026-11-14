@@ -6,7 +6,10 @@
 import { test as base, type Page } from '@playwright/test';
 
 import { STORAGE_STATE } from '../../playwright.config';
-import { cleanupRunRateLimits } from '../helpers/api';
+import {
+  cleanupRunRateLimits,
+  cleanupSharedUserRateLimits,
+} from '../helpers/api';
 import { createVerifiedUser } from '../helpers/dedicatedUser';
 import { getCurrentTotpCode } from '../helpers/totp';
 import { TEST_USER } from '../helpers/testUser';
@@ -85,7 +88,29 @@ export async function globalAuthSetup(page: Page): Promise<void> {
  * 認証済みページfixture
  * authenticatedPageを使うとstorageState適用済みページが提供される
  */
-export const test = base.extend<{ authenticatedPage: Page }>({
+export const test = base.extend<{
+  authenticatedPage: Page;
+  freshRateLimitCounters: void;
+}>({
+  /**
+   * 共有テストユーザーのレート制限カウンタを毎テスト戻す（#1177）
+   *
+   * `auto: true` にして、この fixture を使う全 spec へ自動で効かせる。
+   * 理由は `cleanupSharedUserRateLimits` のコメントを参照。要点は
+   * 「`READ_USER_DATA` の 200回/分を7ルートで共有しており、`fullyParallel`
+   * のシャードが同じユーザーで走ると尽きる」こと。
+   *
+   * ⚠️ **個別の spec に足して回らないこと。** 尽きた枠はシャード内の
+   * どのテストにも当たるため、落ちたテストだけ直しても別のテストへ移るだけ。
+   */
+  freshRateLimitCounters: [
+    async ({}, use) => {
+      await cleanupSharedUserRateLimits();
+      await use();
+    },
+    { auto: true },
+  ],
+
   authenticatedPage: async ({ page }, use) => {
     await use(page);
   },

@@ -266,6 +266,30 @@ async function cleanupRateLimits(): Promise<void> {
 }
 
 /**
+ * 共有テストユーザーの rate_limits を消す（全テスト共通の前処理用）
+ *
+ * ⚠️ **これが無いとシャードが無関係なテストで落ちる（#1177）。**
+ * `READ_USER_DATA`（200回/分・ユーザー単位）は7ルートで1つのカウンタを
+ * 共有しており（`src/constants/rateLimit.ts`）、画面を1つ開くたびに数本が
+ * 飛ぶ。シャードは `fullyParallel` で**同じユーザー**として多数の画面を
+ * 開くため、200回/分は現実的に到達する。
+ *
+ * 尽きると `/api/filters` `/api/watchlist` `/api/user/settings` などが
+ * 一斉に 429 を返し、**どのテストが落ちるかは実行順とシャード分配で
+ * 変わる**。新しい spec を1本足すだけで落ちるテストが入れ替わるため、
+ * 個別のフレークとして追いかけても収束しない。
+ *
+ * 人間の最速は 70回/分（`rateLimit.ts` の見積もり）で上限の3分の1。
+ * 尽きるのは**テストの並列度という実運用に無い条件**なので、カウンタを
+ * 毎テスト戻すのが筋。制限そのものの検証は
+ * `e2e/rateLimit/writeApiRateLimit.spec.ts` が別の識別子で行っており、
+ * あちらは共有ユーザーの fixture を使っていないので影響しない。
+ */
+export async function cleanupSharedUserRateLimits(): Promise<void> {
+  await cleanupRateLimits();
+}
+
+/**
  * この run が使う rate_limits レコードを物理削除する（セットアップ／後片付け用）。
  *
  * 以前は全件削除していた。共有DBに複数の run が同時に流れる構成では

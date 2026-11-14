@@ -126,11 +126,17 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
     onOpenChange(false);
   }, [onOpenChange]);
 
+  // 進むで戻ってきたら開き直す。開き直せないと次の戻るが空振りする（#1053）
+  const handleHistoryReopen = useCallback(() => {
+    onOpenChange(true);
+  }, [onOpenChange]);
+
   // ドロワーが積んだエントリの上に遷移を push すると、エントリが
   // 下に埋まって戻るが空振りする。replace でエントリごと置き換える（#1043）
   const { shouldReplaceNavigation } = useOverlayHistory(
     open,
     handleHistoryClose,
+    handleHistoryReopen,
   );
 
   const navItems = useMemo(

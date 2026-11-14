@@ -12,6 +12,7 @@ import { useMovieListContent } from './useMovieListContent';
 describe('useMovieListContent', () => {
   const mockHandleReleaseTypeChange = jest.fn();
   const mockHandleFilterModalClose = jest.fn();
+  const mockHandleFilterModalOpen = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -23,6 +24,7 @@ describe('useMovieListContent', () => {
         useMovieListContent(
           mockHandleReleaseTypeChange,
           mockHandleFilterModalClose,
+          mockHandleFilterModalOpen,
         ),
       );
 
@@ -40,6 +42,7 @@ describe('useMovieListContent', () => {
         useMovieListContent(
           mockHandleReleaseTypeChange,
           mockHandleFilterModalClose,
+          mockHandleFilterModalOpen,
         ),
       );
 
@@ -50,11 +53,17 @@ describe('useMovieListContent', () => {
       expect(mockHandleFilterModalClose).toHaveBeenCalled();
     });
 
-    it('handleFilterModalOpenChange(true)ではhandleFilterModalCloseが呼ばれない', () => {
+    /*
+      進むで履歴エントリが復活すると Modal から true が来る（#1053）。
+      握りつぶすとエントリだけ戻ってモーダルは閉じたままになり、
+      次の戻るが空振りする
+    */
+    it('handleFilterModalOpenChange(true)でhandleFilterModalOpenが呼ばれる', () => {
       const { result } = renderHook(() =>
         useMovieListContent(
           mockHandleReleaseTypeChange,
           mockHandleFilterModalClose,
+          mockHandleFilterModalOpen,
         ),
       );
 
@@ -62,6 +71,7 @@ describe('useMovieListContent', () => {
         result.current.handleFilterModalOpenChange(true);
       });
 
+      expect(mockHandleFilterModalOpen).toHaveBeenCalled();
       expect(mockHandleFilterModalClose).not.toHaveBeenCalled();
     });
   });

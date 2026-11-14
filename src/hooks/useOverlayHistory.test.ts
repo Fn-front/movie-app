@@ -366,6 +366,178 @@ describe('useOverlayHistory', () => {
     expect(window.history.length).toBe(before + 1);
   });
 
+  /**
+   * 進むで開き直す（#1053）
+   *
+   * 戻るで閉じても**履歴エントリは消えていない**。進むでそれが復活したとき、
+   * 以前は「閉じる」方向にしか解釈しておらず、エントリだけ戻って
+   * オーバーレイは閉じたまま＝次の戻るが空振りした。
+   *
+   * ⚠️ ブラウザの進むは「履歴ポインタを進める（state が入れ替わる）」→
+   * 「popstate を発火」の順。state を戻さずに popstate だけ起こしても
+   * 実機の再現にならないので、state の入れ替えも再現する。
+   */
+  describe('進むで開き直す', () => {
+    /** 現在のエントリに載っているトークン */
+    const currentToken = (): unknown =>
+      (window.history.state ?? {})['__overlayHistory'];
+
+    /** 履歴ポインタの移動（state の入れ替え）を再現してから popstate を出す */
+    const movePointerTo = (state: unknown): void => {
+      act(() => {
+        window.history.replaceState(state, '', window.location.href);
+      });
+      dispatchPopState();
+    };
+
+    it('戻るで閉じたあと進むと onReopen を呼ぶ', async () => {
+      const onClose = jest.fn();
+      const onReopen = jest.fn();
+      const { rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, onClose, onReopen),
+        { initialProps: { open: true } },
+      );
+
+      const token = currentToken();
+      expect(token).toBeTruthy();
+
+      // 戻る: 1つ前のエントリへ（トークンは載っていない）
+      movePointerTo(null);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      rerender({ open: false });
+      await flushAsyncBack();
+
+      // 進む: 自分のエントリが復活する
+      movePointerTo({ __overlayHistory: token });
+
+      expect(onReopen).toHaveBeenCalledTimes(1);
+    });
+
+    it('× で閉じたあと進んでも開き直す（back は前方のエントリを消さない）', async () => {
+      const onClose = jest.fn();
+      const onReopen = jest.fn();
+      const { rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, onClose, onReopen),
+        { initialProps: { open: true } },
+      );
+
+      const token = currentToken();
+
+      // × で閉じる（アプリ側が open を false にする）
+      rerender({ open: false });
+      await flushAsyncBack();
+      expect(onClose).not.toHaveBeenCalled();
+
+      movePointerTo({ __overlayHistory: token });
+
+      expect(onReopen).toHaveBeenCalledTimes(1);
+    });
+
+    it('開き直しても履歴は増えない', async () => {
+      const onReopen = jest.fn();
+      const { rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), onReopen),
+        { initialProps: { open: true } },
+      );
+
+      const token = currentToken();
+      const afterOpen = window.history.length;
+
+      movePointerTo(null);
+      rerender({ open: false });
+      await flushAsyncBack();
+
+      movePointerTo({ __overlayHistory: token });
+      // 呼び出し側が開き直す
+      rerender({ open: true });
+
+      // エントリは進むで戻ってきている。積み直すと戻る回数が合わなくなる
+      expect(window.history.length).toBe(afterOpen);
+      expect(currentToken()).toBe(token);
+    });
+
+    it('開き直したあとの戻るで閉じる（空振りしない）', async () => {
+      const onClose = jest.fn();
+      const onReopen = jest.fn();
+      const { rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, onClose, onReopen),
+        { initialProps: { open: true } },
+      );
+
+      const token = currentToken();
+
+      movePointerTo(null);
+      rerender({ open: false });
+      await flushAsyncBack();
+
+      movePointerTo({ __overlayHistory: token });
+      rerender({ open: true });
+
+      onClose.mockClear();
+      movePointerTo(null);
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    // onReopen を渡さないオーバーレイは従来どおり。壊れるより何も起きないほうがまし
+    it('onReopen を渡していなければ何も起きない', async () => {
+      const onClose = jest.fn();
+      const { rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, onClose),
+        { initialProps: { open: true } },
+      );
+
+      const token = currentToken();
+
+      movePointerTo(null);
+      rerender({ open: false });
+      await flushAsyncBack();
+
+      onClose.mockClear();
+      movePointerTo({ __overlayHistory: token });
+
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    // 進むで復活したエントリは、そのオーバーレイのものだけに届く
+    it('入れ子では、進んだ先のエントリを持つオーバーレイだけが開き直す', async () => {
+      const outerReopen = jest.fn();
+      const innerReopen = jest.fn();
+
+      const outer = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), outerReopen),
+        { initialProps: { open: true } },
+      );
+      const outerToken = currentToken();
+
+      const inner = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), innerReopen),
+        { initialProps: { open: true } },
+      );
+      const innerToken = currentToken();
+      expect(innerToken).not.toBe(outerToken);
+
+      // 内側 → 外側 の順に戻って閉じる
+      movePointerTo({ __overlayHistory: outerToken });
+      inner.rerender({ open: false });
+      await flushAsyncBack();
+
+      movePointerTo(null);
+      outer.rerender({ open: false });
+      await flushAsyncBack();
+
+      // 進む1回目は外側のエントリ
+      movePointerTo({ __overlayHistory: outerToken });
+      expect(outerReopen).toHaveBeenCalledTimes(1);
+      expect(innerReopen).not.toHaveBeenCalled();
+
+      // 進む2回目で内側
+      outer.rerender({ open: true });
+      movePointerTo({ __overlayHistory: innerToken });
+      expect(innerReopen).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('ルーターが先に遷移していれば畳まない', async () => {
     const { unmount } = renderHook(() => useOverlayHistory(true, jest.fn()));
 

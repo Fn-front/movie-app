@@ -459,3 +459,80 @@ test.describe('未認証のログイン誘導を閉じたあとの戻る', () =>
     await expect(page).toHaveURL(/\/movies\/upcoming/);
   });
 });
+
+/**
+ * 戻るで閉じたオーバーレイを「進む」で開き直す（#1053）
+ *
+ * 戻るで閉じても**履歴エントリは消えていない**。進むでそれが復活したとき、
+ * 以前はエントリだけ戻ってオーバーレイは閉じたままになり、
+ * **次の戻るが空振り**していた。
+ *
+ * ⚠️ **`goForward()` を使うテストはこれが最初**。進む方向は E2E に1本も
+ * 無かったため、この空振りは誰も踏んでいなかった。
+ *
+ * ⚠️ 映画詳細モーダルはここでは見ない。#1033 で `movie_id` を持つ URL に
+ * なり、進むで URL ごと戻るため**フックを通らずに開き直る**（実測で確認）。
+ * フックが面倒を見ているのはフィルターモーダルのような URL を持たない
+ * オーバーレイのほう。
+ */
+/** 一覧ツールバーのフィルターボタン */
+const filterButton = (page: Page) =>
+  page.getByRole('button', { name: 'フィルター' });
+
+test.describe('閉じたオーバーレイを進むで開き直す', () => {
+  test('戻るで閉じたフィルターが、進むで開き直り、次の戻るで閉じる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    await filterButton(page).waitFor({ timeout: 15000 });
+
+    await filterButton(page).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // 閉じる前に実在を固定する。無いまま進むと以降の判定が素通りする
+    await expectEntryExists(page);
+
+    await page.goBack();
+    await expect(dialog).not.toBeVisible();
+
+    // #1053: ここでエントリだけ戻り、モーダルは閉じたままだった
+    await page.goForward();
+    await expect(dialog).toBeVisible();
+
+    // 開き直したあとの戻るが空振りしないこと。
+    // ⚠️ ここを「URL が変わらないこと」で見てはいけない。このオーバーレイは
+    // URL を変えないので、空振りしていても URL は同じに見える
+    await page.goBack();
+    await expect(dialog).not.toBeVisible();
+  });
+
+  /**
+   * × で閉じた場合も同じ
+   *
+   * ⚠️ Issue 本文は「× で閉じればエントリを畳むので進む先が無い」と
+   * していたが、**`history.back()` は前方のエントリを消さない**。
+   * 実測で、× の直後に進むとエントリが復活する。戻るで閉じた場合と
+   * まったく同じ空振りが起きていた
+   */
+  test('× で閉じたフィルターも、進むで開き直る', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+    await filterButton(page).waitFor({ timeout: 15000 });
+
+    await filterButton(page).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expectEntryExists(page);
+
+    await dialog.getByRole('button', { name: ARIA_LABELS.CLOSE }).click();
+    await expect(dialog).not.toBeVisible();
+    await waitForFold(page);
+
+    await page.goForward();
+    await expect(dialog).toBeVisible();
+
+    await page.goBack();
+    await expect(dialog).not.toBeVisible();
+  });
+});

@@ -16,6 +16,7 @@ import {
   markSigningOut,
   setConsentSyncPending,
 } from '../../utils/bannerSuppression';
+import { BANNER_HEIGHT_VAR } from '../../utils/bannerHeight';
 import { CookieConsentBanner } from './cookieConsentBanner';
 
 jest.mock('next-auth/react', () => ({
@@ -78,6 +79,43 @@ describe('CookieConsentBanner', () => {
       expect(
         screen.getByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),
       ).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * 高さの CSS 変数を**ペイント前**に書く（#1155）
+   *
+   * `--cookie-banner-height` は本文の `padding-bottom`、ボトムナビの
+   * `bottom`、レイアウトの `height` の3つが読んでいる。既定は 0px なので、
+   * 書き込みがペイント後だと1フレームぶん全部が跳ねる。特にボトムナビは
+   * バナーの裏に潜って押せなくなる。
+   *
+   * ⚠️ jsdom の ResizeObserver はダミー（`jest.setup.js`）でコールバックを
+   * 発火しない。つまり**同期書き込みが無いと変数は一度も設定されない**ので、
+   * ここで「設定されていること」を見れば同期書き込みの有無を検証できる。
+   * 実際の高さは jsdom がレイアウトしないため 0 になる
+   */
+  describe('高さの CSS 変数', () => {
+    afterEach(() => {
+      document.documentElement.style.removeProperty(BANNER_HEIGHT_VAR);
+    });
+
+    it('描画した時点で既に書かれている（ResizeObserver を待たない）', () => {
+      render(<CookieConsentBanner />);
+
+      expect(
+        document.documentElement.style.getPropertyValue(BANNER_HEIGHT_VAR),
+      ).not.toBe('');
+    });
+
+    it('バナーが消えたら変数も外す', () => {
+      const { unmount } = render(<CookieConsentBanner />);
+
+      unmount();
+
+      expect(
+        document.documentElement.style.getPropertyValue(BANNER_HEIGHT_VAR),
+      ).toBe('');
     });
   });
 

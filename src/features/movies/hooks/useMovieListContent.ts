@@ -16,6 +16,7 @@ export interface UseMovieListContentReturn {
 export function useMovieListContent(
   handleReleaseTypeChange: (value: 'theatrical' | 'streaming') => void,
   handleFilterModalClose: () => void,
+  handleFilterModalOpen: () => void,
 ): UseMovieListContentReturn {
   const handleTabValueChange = useCallback(
     (value: string) => {
@@ -24,13 +25,24 @@ export function useMovieListContent(
     [handleReleaseTypeChange],
   );
 
+  /*
+    ⚠️ **open === true も受けること**（#1053）。
+
+    以前は閉じる方向しか扱っていなかった。開くのはトリガーのボタンだけ、
+    という前提だったが、**進むで履歴エントリが復活したとき**にも
+    Modal から true が来る。握りつぶすとエントリだけ戻って
+    モーダルは閉じたままになり、次の戻るが空振りする。
+  */
   const handleFilterModalOpenChange = useCallback(
     (open: boolean) => {
-      if (!open) {
-        handleFilterModalClose();
+      if (open) {
+        handleFilterModalOpen();
+        return;
       }
+
+      handleFilterModalClose();
     },
-    [handleFilterModalClose],
+    [handleFilterModalClose, handleFilterModalOpen],
   );
 
   return {

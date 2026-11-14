@@ -48,7 +48,12 @@ export const VideoDialog = memo<VideoDialogProps>(function VideoDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
-  useOverlayHistory(open, handleHistoryClose);
+  // 進むで戻ってきたら開き直す。開き直せないと次の戻るが空振りする（#1053）
+  const handleHistoryReopen = useCallback(() => {
+    onOpenChange(true);
+  }, [onOpenChange]);
+
+  useOverlayHistory(open, handleHistoryClose, handleHistoryReopen);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>

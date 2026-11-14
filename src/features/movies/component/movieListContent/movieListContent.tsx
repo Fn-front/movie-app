@@ -62,7 +62,11 @@ export const MovieListContent = memo<MovieListContentProps>(
     } = movieList;
 
     const { handleTabValueChange, handleFilterModalOpenChange } =
-      useMovieListContent(handleReleaseTypeChange, handleFilterModalClose);
+      useMovieListContent(
+        handleReleaseTypeChange,
+        handleFilterModalClose,
+        handleFilterModalOpen,
+      );
 
     const { selectedMovieId, openMovieDetail, closeMovieDetail } =
       useMovieDetailQuery();

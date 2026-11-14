@@ -166,11 +166,17 @@ export const Modal = memo<ModalProps>(function Modal({
     onOpenChange(false);
   }, [onOpenChange]);
 
+  // 進むで戻ってきたら開き直す。開き直せないと次の戻るが空振りする（#1053）
+  const handleHistoryReopen = useCallback(() => {
+    onOpenChange(true);
+  }, [onOpenChange]);
+
   // 開閉を URL で持つモーダルは、ルーターの遷移が既にエントリを積んでいる。
   // ここでも積むと開くたびに履歴が2つ伸びる
   const { shouldReplaceNavigation, notifyNavigating } = useOverlayHistory(
     manageHistory && open,
     handleHistoryClose,
+    handleHistoryReopen,
   );
 
   const navigationValue = useMemo(

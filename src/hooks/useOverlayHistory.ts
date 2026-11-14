@@ -45,6 +45,48 @@ interface OverlayEntry {
 
 const openOverlays: OverlayEntry[] = [];
 
+/**
+ * 戻るで閉じたオーバーレイ（トークン → 開き直す関数）
+ *
+ * 戻るで閉じても**履歴エントリは消えていない**。進むを押すとそのエントリが
+ * 復活するが、以前は「閉じる」方向にしか解釈していなかったため、
+ * エントリだけ戻ってオーバーレイは閉じたまま＝**次の戻るが空振り**した（#1053）。
+ *
+ * 進むで自分のエントリに入ったことはトークンで分かるが、
+ * **どの UI を開き直すかはフックからは分からない**。閉じるときに
+ * 開き直す手段（`onReopen`）をここへ預けておく。
+ *
+ * ⚠️ `onReopen` を渡さないオーバーレイは従来どおり（進んでも開き直らない）。
+ * 壊れるより何も起きないほうがましなので、既定はそちらに倒す。
+ */
+const dormantOverlays = new Map<string, () => void>();
+
+/**
+ * 休止中として覚えておく上限
+ *
+ * 進むで戻れる範囲は限られるうえ、`onReopen` は呼び出し側のクロージャを
+ * 掴む。際限なく溜めない
+ */
+const MAX_DORMANT_OVERLAYS = 10;
+
+/**
+ * 進むで復活し、まだ開き直す側の effect に引き継がれていないトークン
+ *
+ * ⚠️ 開き直すときに `pushState` してはいけない。エントリは進むで既に
+ * 戻ってきているので、積むと履歴が1つ増えて戻るの回数が合わなくなる。
+ */
+const resurrectedTokens = new Set<string>();
+
+/** 休止中のオーバーレイとして覚える（古いものから捨てる） */
+function rememberDormantOverlay(token: string, reopen: () => void): void {
+  while (dormantOverlays.size >= MAX_DORMANT_OVERLAYS) {
+    const oldest = dormantOverlays.keys().next().value;
+    if (oldest === undefined) break;
+    dormantOverlays.delete(oldest);
+  }
+  dormantOverlays.set(token, reopen);
+}
+
 let isListening = false;
 
 /**
@@ -137,6 +179,30 @@ function handlePopState(): void {
     return;
   }
 
+  const token = window.history.state?.[OVERLAY_STATE_KEY];
+
+  /*
+    進むで、戻るで閉じたオーバーレイのエントリに入った（#1053）。
+
+    このとき `openOverlays` は空なので、以前はここで素通りしていた。
+    エントリだけ復活してオーバーレイは閉じたままになり、次の戻るは
+    「エントリが1つ外れるだけ」で画面が変わらなかった。
+
+    ⚠️ 閉じる方向には解釈しないこと。同じ popstate を両方の意味に
+    取ると、開き直した直後に閉じてしまう
+  */
+  if (typeof token === 'string') {
+    const reopen = dormantOverlays.get(token);
+
+    if (reopen) {
+      dormantOverlays.delete(token);
+      // 開き直す側の effect が pushState せず、このエントリを引き継ぐための印
+      resurrectedTokens.add(token);
+      reopen();
+      return;
+    }
+  }
+
   const top = openOverlays[openOverlays.length - 1];
 
   if (!top) {
@@ -163,7 +229,14 @@ function startListening(): void {
  * 読み飛ばせず、`pendingSelfBacks` が減らないまま次の戻るを飲み込む。
  */
 function stopListening(): void {
-  if (!isListening || openOverlays.length > 0 || pendingSelfBacks > 0) {
+  if (
+    !isListening ||
+    openOverlays.length > 0 ||
+    pendingSelfBacks > 0 ||
+    // ⚠️ 休止中のオーバーレイがあるあいだは外さない。外すと**進むの
+    // popstate を聞けず**、開き直す経路がまるごと死ぬ（#1053）
+    dormantOverlays.size > 0
+  ) {
     return;
   }
 
@@ -232,6 +305,7 @@ export interface OverlayHistoryHandlers {
 export function useOverlayHistory(
   open: boolean,
   onClose: () => void,
+  onReopen?: () => void,
 ): OverlayHistoryHandlers {
   /**
    * 自分のエントリが実際に積まれているか。
@@ -247,6 +321,20 @@ export function useOverlayHistory(
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  const onReopenRef = useRef(onReopen);
+
+  useEffect(() => {
+    onReopenRef.current = onReopen;
+  }, [onReopen]);
+
+  /**
+   * このフックが採番したトークン
+   *
+   * アンマウント時に自分の休止登録だけを取り消すために持つ。
+   * 残したままだと、進むで**消えたコンポーネントを開き直そうとする**
+   */
+  const ownTokensRef = useRef<Set<string>>(new Set());
 
   /**
    * 閉じるのと同時にルーターが URL を変えるか。
@@ -273,23 +361,45 @@ export function useOverlayHistory(
       close: () => onCloseRef.current(),
       popped: false,
     };
-    const token = createOverlayToken();
+    /*
+      進むで自分のエントリが復活し、その popstate で開き直された場合は
+      **エントリがもう存在する**。積み直すと履歴が1つ増え、戻る回数が
+      合わなくなる（#1053）。トークンもそのまま引き継いで、
+      cleanup のトークン一致判定が成立するようにする。
 
+      ⚠️ **自分が採番したトークンに限ること。** `onReopen` を渡していても
+      呼び出し側が `open === true` を無視するオーバーレイ（ログイン誘導・
+      評価モーダル）では、進んでも開かないので印が消えずに残る。
+      自分のものか見ないと、**次に開いた別のオーバーレイが他人のトークンを
+      引き継ぎ、自分のエントリを積まない**（実測で履歴が1つ足りなくなった）。
+    */
+    const resurrected = window.history.state?.[OVERLAY_STATE_KEY];
+    const isResurrected =
+      typeof resurrected === 'string' &&
+      resurrectedTokens.has(resurrected) &&
+      ownTokensRef.current.has(resurrected);
+    const token = isResurrected ? resurrected : createOverlayToken();
+
+    ownTokensRef.current.add(token);
     openOverlays.push(entry);
     startListening();
 
-    // 直前に閉じたオーバーレイのエントリがまだ畳まれずに残っていれば、
-    // 新しく積まずにそれを引き継ぐ。積んでしまうと、畳むための
-    // 非同期の back がこちらのエントリを巻き添えにする（#1043）
-    const nextState = {
-      ...window.history.state,
-      [OVERLAY_STATE_KEY]: token,
-    };
-
-    if (adoptPendingEntry()) {
-      window.history.replaceState(nextState, '', window.location.href);
+    if (isResurrected) {
+      resurrectedTokens.delete(token);
     } else {
-      window.history.pushState(nextState, '', window.location.href);
+      // 直前に閉じたオーバーレイのエントリがまだ畳まれずに残っていれば、
+      // 新しく積まずにそれを引き継ぐ。積んでしまうと、畳むための
+      // 非同期の back がこちらのエントリを巻き添えにする（#1043）
+      const nextState = {
+        ...window.history.state,
+        [OVERLAY_STATE_KEY]: token,
+      };
+
+      if (adoptPendingEntry()) {
+        window.history.replaceState(nextState, '', window.location.href);
+      } else {
+        window.history.pushState(nextState, '', window.location.href);
+      }
     }
 
     /*
@@ -333,11 +443,53 @@ export function useOverlayHistory(
         scheduleFold(token);
       }
 
+      /*
+        進むでそこへ入ったら開き直せるよう、手段を預けておく（#1053）。
+
+        ⚠️ **閉じ方では分けない。** `× / Esc` で畳んだ分も対象にする。
+        畳むのは `history.back()` だが、**back は前方のエントリを消さない**。
+        実測: × で閉じた直後に進むと `__overlayHistory` が復活する
+        （`{"tag":"×で閉じる","tok":null}` → `{"tag":"進む","tok":"overlay-1"}`）。
+        Issue 本文は「× で閉じればエントリを畳むので進む先が無い」と
+        していたが、そうなっていない。戻るで閉じた場合とまったく同じ
+        空振りが起きるので、同じように開き直す。
+
+        トークンが他人に引き継がれた場合（`adoptPendingEntry`）や
+        ルーターが遷移した場合は `history.state` のトークンが変わるため、
+        進んでもここには当たらない
+      */
+      if (onReopenRef.current) {
+        rememberDormantOverlay(token, () => onReopenRef.current?.());
+      }
+
       // 購読の解除は畳む判断の後。先に外すと、自分で起こした戻りの
       // popstate を読み飛ばせず、次の戻るを飲み込んでしまう
       stopListening();
     };
   }, [open]);
+
+  /*
+    アンマウント時に、自分の休止登録を取り消す。
+    残すと、進むで**消えたコンポーネント**を開き直そうとする。
+
+    ⚠️ **この effect は上の主 effect より後ろに置くこと。** React は
+    アンマウント時に cleanup を**定義順**で走らせるので、前に置くと
+    ここで消した直後に主 effect の cleanup が `rememberDormantOverlay` で
+    **登録し直してしまう**（実測で、消えたコンポーネントの `onReopen` が
+    呼ばれた）。
+  */
+  useEffect(() => {
+    const ownTokens = ownTokensRef.current;
+
+    return () => {
+      for (const token of ownTokens) {
+        dormantOverlays.delete(token);
+        resurrectedTokens.delete(token);
+      }
+      ownTokens.clear();
+      stopListening();
+    };
+  }, []);
 
   return { shouldReplaceNavigation: hasEntry, notifyNavigating };
 }

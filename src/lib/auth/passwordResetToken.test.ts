@@ -266,6 +266,38 @@ describe('consumePasswordResetToken', () => {
       consumePasswordResetToken(client, 'used-token'),
     ).resolves.toBeNull();
   });
+
+  /**
+   * DB障害を「無効なトークン」に化かさない（#1167）
+   *
+   * `null` を返すと呼び出し側（`password-reset/confirm`）が
+   * `invalidTokenResponse()` を返すため、上の3本と区別がつかない。
+   * 利用者はリセットの再申請へ誘導される。パスワードを忘れている＝
+   * 他にログイン手段が無い状態なので、黙って弾くより投げるほうがよい
+   */
+  it('読み取りに失敗したら null ではなく投げる', async () => {
+    const client = {
+      from: () => ({
+        update: () => ({
+          eq: () => ({
+            is: () => ({
+              gt: () => ({
+                select: () =>
+                  Promise.resolve({
+                    data: null,
+                    error: { code: '57P01', message: 'connection terminated' },
+                  }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      consumePasswordResetToken(client, 'any-token'),
+    ).rejects.toMatchObject({ code: '57P01' });
+  });
 });
 
 describe('isPasswordResetTokenValid', () => {
@@ -283,6 +315,32 @@ describe('isPasswordResetTokenValid', () => {
     await isPasswordResetTokenValid(client, 'valid-token');
 
     expect(rows[0].used_at).toBeNull();
+  });
+
+  // consume 側と同じ理由（#1167）。この関数は現時点で呼び出し元が無いが、
+  // 罠を残すと新しい呼び出し側が同じ誤りを引き継ぐ
+  it('読み取りに失敗したら false ではなく投げる', async () => {
+    const client = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            is: () => ({
+              gt: () => ({
+                maybeSingle: () =>
+                  Promise.resolve({
+                    data: null,
+                    error: { code: '57P01', message: 'connection terminated' },
+                  }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      isPasswordResetTokenValid(client, 'any-token'),
+    ).rejects.toMatchObject({ code: '57P01' });
   });
 
   it.each([

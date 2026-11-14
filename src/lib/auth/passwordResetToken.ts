@@ -74,13 +74,22 @@ export async function consumePasswordResetToken(
   supabase: SupabaseClient,
   token: string,
 ): Promise<string | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('password_reset_tokens')
     .update({ used_at: new Date().toISOString() })
     .eq('token_hash', hashVerificationToken(token))
     .is('used_at', null)
     .gt('expires_at', new Date().toISOString())
     .select('user_id');
+
+  // ⚠️ error を捨てると `data: null` → 下の `return null` に化け、呼び出し側が
+  // 「リンクが無効」（400）を返す。無効・期限切れ・使用済みと区別がつかず、
+  // 利用者はリセットの再申請へ誘導される。投げて 500 にする（#1167）。
+  // この経路では UPDATE 自体が失敗している＝トークンは焼かれていないので、
+  // 再試行は成功しうる
+  if (error) {
+    throw error;
+  }
 
   if (!data || data.length === 0) {
     return null;
@@ -103,13 +112,20 @@ export async function isPasswordResetTokenValid(
   supabase: SupabaseClient,
   token: string,
 ): Promise<boolean> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('password_reset_tokens')
     .select('id')
     .eq('token_hash', hashVerificationToken(token))
     .is('used_at', null)
     .gt('expires_at', new Date().toISOString())
     .maybeSingle();
+
+  // 上の `consumePasswordResetToken` と同じ理由（#1167）。
+  // ⚠️ この関数は現時点でどこからも呼ばれていないが、罠を残すと
+  // 新しい呼び出し側が同じ誤りを引き継ぐので揃えておく
+  if (error) {
+    throw error;
+  }
 
   return Boolean(data);
 }

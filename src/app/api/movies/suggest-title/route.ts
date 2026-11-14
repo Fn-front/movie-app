@@ -71,7 +71,10 @@ export async function GET(request: Request) {
       throw cacheError;
     }
 
-    if (!cacheError && cached) {
+    // 上のガードを抜けた時点で cacheError は NOT_FOUND だけ（そのとき
+    // cached は null）なので、`!cacheError &&` は恒真になる。残すと
+    // 「エラーがあっても cached が入りうる」と誤読させるので落とす
+    if (cached) {
       return NextResponse.json(
         {
           success: true,

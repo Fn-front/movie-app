@@ -450,12 +450,20 @@ export async function GET(request: Request) {
     if (session && moviesWithFavorites.length > 0) {
       const movieIds = moviesWithFavorites.map((m) => m.id);
 
-      const { data: favorites } = await supabase
+      const { data: favorites, error: favoritesError } = await supabase
         .from('favorites')
         .select('id, tmdb_movie_id, rating')
         .eq('user_id', session.user.id)
         .in('tmdb_movie_id', movieIds)
         .is('deleted_at', null);
+
+      // ⚠️ 握り潰すと、下の else 側で**一覧の全作品**に `favorite: null`
+      // （＝確定した「未登録」）が書かれる。空のハートが並び、押すと既存行と
+      // 衝突して 409 になる。0件なら `data: []` が返るので、ここに来る error は
+      // 本物の読み取り失敗だけ。`movies/[id]` と同じ方針（#1164）
+      if (favoritesError) {
+        throw favoritesError;
+      }
 
       if (favorites && favorites.length > 0) {
         const favoriteMap = new Map(

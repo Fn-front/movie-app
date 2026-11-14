@@ -191,16 +191,18 @@ describe('GET /api/movies/:id', () => {
   });
 
   /**
-   * 読み取りに失敗したら「未登録」ではなく**未確定**にする（#1164）
+   * 読み取りに失敗したら「未登録」と断定しない（#1164）
    *
    * `.single()` はどんなエラーでも `data: null` を返すため、`error` を
    * 見ないと DB の一時障害が上と同じ「お気に入り未登録」になる。UI は
-   * 「＋」を出すが、押すと既存行と衝突して 409 になる。
+   * 空のハートを出すが、押すと既存行と衝突して 409 になる。
    *
-   * 作品情報そのものは取れているので 500 にはしない。未認証時と同じく
-   * **キーごと省く**ことで、受け手が「分からない」として扱える
+   * ⚠️ キーごと省いて「分からない」を伝える案は採れない。`favorite` の
+   * 不在は**未認証**という別の意味で既に使われており、受け手
+   * （`movieDetailContent.tsx` の `movie.favorite ?? null`）は両者を
+   * 区別できないため、省いても結局 null に潰れる
    */
-  it('お気に入りの読み取りに失敗したら、未登録と断定せずキーを省く', async () => {
+  it('お気に入りの読み取りに失敗したら、未登録と断定せず500を返す', async () => {
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
     mockGetMovieDetail.mockResolvedValue({ id: 456, title: '障害中の映画' });
 
@@ -222,10 +224,8 @@ describe('GET /api/movies/:id', () => {
     const response = await GET(createRequest('456'), {
       params: createParams('456'),
     });
-    const json = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(json.data).not.toHaveProperty('favorite');
+    expect(response.status).toBe(500);
   });
 
   // === Cache-Controlヘッダー ===

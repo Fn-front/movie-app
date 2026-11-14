@@ -21,7 +21,10 @@ import {
   generateSyntheticEmail,
   generateUsername,
 } from './accountIdentityGenerator';
-import { USERNAME_CONFIG } from '@/constants/accountIdentity';
+import {
+  ACCOUNT_IDENTITY_ALPHABET,
+  USERNAME_CONFIG,
+} from '@/constants/accountIdentity';
 
 describe('normalizeUsername', () => {
   it.each([
@@ -126,10 +129,32 @@ describe('isUsernameShape', () => {
     },
   );
 
-  // ログイン欄はメールと兼用。`@` を打ち忘れたアドレスが長さだけ合っても
-  // ユーザー名として通ってはいけない
+  /*
+    ログイン欄はメールと兼用。`@` を打ち忘れたアドレスが長さだけ合っても
+    ユーザー名として通ってはいけない。
+
+    ⚠️ **`@` 以外はすべて正規の文字にすること。** 2回踏んだ:
+
+    1. `'user@exampl.c'`（13文字）→ 長さチェックで先に false になり、
+       文字種チェックまで到達しない
+    2. `'user@exam.co'`（12文字）→ 今度は `.` が弾いてしまう。
+       実装を「`@` を許す」に改悪しても**テストは通ったまま**だった
+
+    不正な文字が `@` ただ1つになるよう、文字集合から組み立てる。
+  */
   it('@ を含む文字列を拒否する', () => {
-    expect(isUsernameShape('user@exampl.c')).toBe(false);
+    const value = `${ACCOUNT_IDENTITY_ALPHABET.slice(
+      0,
+      USERNAME_CONFIG.LENGTH - 1,
+    )}@`;
+
+    expect(value).toHaveLength(USERNAME_CONFIG.LENGTH);
+    // `@` 以外に不正な文字が混ざっていないこと（混ざると検査が空振りする）
+    expect(
+      [...value].filter((char) => !ACCOUNT_IDENTITY_ALPHABET.includes(char)),
+    ).toEqual(['@']);
+
+    expect(isUsernameShape(value)).toBe(false);
   });
 });
 
@@ -149,9 +174,20 @@ describe('クライアントのバンドルに乗る制約', () => {
   it('crypto を import していない', () => {
     const source = readFileSync(join(__dirname, 'accountIdentity.ts'), 'utf8');
 
-    const cryptoImports = source
-      .split('\n')
-      .filter((line) => /^\s*import[^;]*['"](node:)?crypto['"]/.test(line));
+    /*
+      ⚠️ **行ごとに見ないこと。** シンボルが増えると Prettier が
+
+          import {
+            randomInt,
+            randomBytes,
+          } from 'crypto';
+
+      と折り返す。行で分割すると `[^;]*` が改行を跨げず**素通りする**
+      （実測でこの形は検出できなかった）。全文に `m` フラグで当てる。
+    */
+    const cryptoImports = [
+      ...source.matchAll(/^\s*import[^;]*['"](?:node:)?crypto['"]/gm),
+    ].map((m) => m[0].replace(/\s+/g, ' ').trim());
 
     expect(cryptoImports).toEqual([]);
   });

@@ -149,7 +149,30 @@ test.describe('script-src の enforce 違反', () => {
  * ⚠️ **dev では再現しない。** dev の CSP には `'unsafe-eval'` が付く
  * （`cspDirectives.mjs`）。必ず `npm run build && npm start` で確かめること。
  */
-test.describe('eval の違反が1件も無い（発生源を問わない）', () => {
+
+/** そのページで `eval` が遮断されなかったことを検証する */
+async function expectNoBlockedEval(page: Page, path: string): Promise<void> {
+  await collectCspViolations(page);
+
+  await page.goto(path);
+  // ⚠️ 読み込み途中で測らない。ポリフィルの `Function(...)` は
+  // チャンクの評価時に走るので、待たずに読むと「まだ起きていないだけ」で緑になる
+  await expect(page.locator('h1').first()).toBeAttached({ timeout: 20000 });
+  await page.waitForLoadState('networkidle');
+
+  const blockedEval = (await readCspViolations(page)).filter(
+    (v) => v.blockedURI === 'eval',
+  );
+
+  expect(
+    blockedEval.map((v) => `${v.disposition} ${v.sourceFile}`),
+    'eval が遮断された。クライアントへ Node の crypto / stream / buffer を' +
+      '読むモジュールが混ざり、crypto-browserify ポリフィルが同梱された' +
+      '可能性がある（#1104）',
+  ).toEqual([]);
+}
+
+test.describe('eval の違反が1件も無い（未認証ページ）', () => {
   test.describe.configure({ timeout: 90000 });
 
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -169,24 +192,37 @@ test.describe('eval の違反が1件も無い（発生源を問わない）', ()
 
   for (const path of POLYFILL_PATHS) {
     test(`${path} で eval が遮断されない`, async ({ page }) => {
-      await collectCspViolations(page);
+      await expectNoBlockedEval(page, path);
+    });
+  }
+});
 
-      await page.goto(path);
-      // ⚠️ 読み込み途中で測らない。ポリフィルの `Function(...)` は
-      // チャンクの評価時に走るので、待たずに読むと「まだ起きていないだけ」で緑になる
-      await expect(page.locator('h1').first()).toBeAttached({ timeout: 20000 });
-      await page.waitForLoadState('networkidle');
+/**
+ * 認証が要るページ（#1104 のレビュー指摘）
+ *
+ * ⚠️ **未認証では検査にならない。** ログインへリダイレクトされ、
+ * `/auth/signin` を見るだけになる。`storageState` を上書きしないことで
+ * プロジェクト既定の認証済みセッションを使う。
+ *
+ * この2ページは `@/schema/auth` 以外のモジュールも読むため、
+ * 上の3ページとは別の経路でポリフィルが戻りうる。
+ */
+test.describe('eval の違反が1件も無い（認証済みページ）', () => {
+  test.describe.configure({ timeout: 90000 });
 
-      const blockedEval = (await readCspViolations(page)).filter(
-        (v) => v.blockedURI === 'eval',
-      );
+  const AUTHENTICATED_PATHS = ['/settings', '/settings/change-password'];
 
-      expect(
-        blockedEval.map((v) => `${v.disposition} ${v.sourceFile}`),
-        'eval が遮断された。クライアントへ Node の crypto / stream / buffer を' +
-          '読むモジュールが混ざり、crypto-browserify ポリフィルが同梱された' +
-          '可能性がある（#1104）',
-      ).toEqual([]);
+  for (const path of AUTHENTICATED_PATHS) {
+    test(`${path} で eval が遮断されない`, async ({ page }) => {
+      await expectNoBlockedEval(page, path);
+
+      /*
+        ⚠️ **到達したことを固定する。** セッションが切れていると
+        `/auth/signin` へリダイレクトされるが、あちらにも h1 はあるので
+        **緑のまま「ログイン画面を2回検査しただけ」**になる。
+        このファイルが防ごうとしているのはまさにこの種の見落とし
+      */
+      expect(new URL(page.url()).pathname).toBe(path);
     });
   }
 });

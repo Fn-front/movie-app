@@ -186,24 +186,19 @@
     @include button-reset;
 
     position: fixed;
-    inset: 0;
-    // ⚠️ ここが依存しているのは**ヘッダーではなく展開時の検索フォーム**の高さ。
-    // フォームは position: fixed / top: 0 なので、その下端に合わせる。
-    // （以前のコメントは「ヘッダー高さに依存」と書いていたが誤り。
-    //   ヘッダーは 69px で、$header-height に寄せると 5px ずれる）
+    // ⚠️ **フォームの高さに合わせた `top` を置かないこと**（#1113）。
     //
-    // 内訳を式のまま残しているのは、入力欄の font-size を変えると下端も動く
-    // ため。実際 #1113 で 14px → 16px にしたとき 63px → 66px に伸びた。
-    //   フォームの上下 padding : --spacing-3 × 2      = 24px
-    //   入力欄の上下 padding   : --spacing-2 × 2      = 16px
-    //   入力欄の枠線           : --border-width-1 × 2 =  2px
-    //   入力欄の1行            : 16px × --line-height-normal = 24px
-    //                            （input-reset の font: inherit で body の
-    //                              1.5 を受け継ぐ）
-    top: calc(
-      var(--spacing-3) * 2 + var(--spacing-2) * 2 + var(--border-width-1) * 2 +
-        var(--font-size-base) * var(--line-height-normal)
-    );
+    // 以前は `calc(var(--spacing-3) * 2 + 4rem)` でフォームの下端（実測63px）に
+    // 合わせていたが、入力欄の font-size を 14px → 16px にしたら下端が 66px に
+    // 伸びて 3px ずれた。**ずれても何も起きない**ので誰も気づかない。
+    //
+    // 合わせる必要がそもそも無い。このオーバーレイはフォームより下の層
+    // （`--z-index-fixed - 1`）にあり、フォームの背景は不透明
+    // （`--background-paper` はライト #ffffff / ダーク --gray-800）。
+    // 全面に広げてもフォームの領域はフォームが受け取るので、
+    // 「入力欄をタップしても閉じない／フォームの下をタップすると閉じる」は
+    // そのまま成立する（chromium / webkit で実測）。
+    inset: 0;
     z-index: calc(var(--z-index-fixed) - 1);
     background-color: $overlay-light;
 

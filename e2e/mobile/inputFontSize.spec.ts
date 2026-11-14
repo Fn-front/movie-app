@@ -13,8 +13,9 @@
  * 下がるため（`src/styles/global/_theme.scss`）、**SP 幅での computed 値**を
  * 見ないと判定を誤る。デスクトップ幅で測ると SP の実態と違う値が出る。
  *
- * `e2e/a11y/*.spec.ts` はどれも viewport 未指定＝デスクトップ幅で走るため、
- * ここには入れられない。また axe にこの観点のルールは無い。
+ * `e2e/a11y/` には SP 幅の describe もある（`publicPages.spec.ts` /
+ * `authenticatedPages.spec.ts`）が、そちらへは入れない。**axe にこの観点の
+ * ルールが無い**ので、axe を走らせる spec に混ぜても得るものが無い。
  */
 
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -140,12 +141,18 @@ test.describe('iOS の自動ズームを招く入力欄が無い', () => {
  */
 test.describe('16px 化に追従すべき箇所', () => {
   /**
-   * 展開オーバーレイの `top` は検索フォームの下端に合わせた決め打ちで、
-   * 入力欄の行の高さが変わると**ずれたまま誰も気づかない**。
-   * ずれると、フォームのすぐ下に「押しても閉じない帯」か
-   * 「フォームに重なる閉じ領域」ができる
+   * 展開オーバーレイとフォームの当たり判定
+   *
+   * 以前はオーバーレイの `top` をフォームの下端（決め打ち63px）に合わせており、
+   * 入力欄の行が伸びると**ずれたまま誰も気づかなかった**。#1113 で
+   * その結合を外した（`inset: 0` のみ）。
+   *
+   * ⚠️ **矩形の一致ではなく挙動を見る。** 結合を外した以上、上端が
+   * どこにあるかは仕様ではない。利用者にとっての事実は
+   * 「入力欄をタップしても閉じない」「フォームの下をタップすると閉じる」の2つで、
+   * これは `top` をどう書こうが満たされていなければならない。
    */
-  test('展開オーバーレイの上端が検索フォームの下端と一致する', async ({
+  test('展開中、入力欄のタップでは閉じず、フォームの下をタップすると閉じる', async ({
     page,
   }) => {
     await page.goto('/movies/now-showing');
@@ -160,15 +167,15 @@ test.describe('16px 化に追従すべき箇所', () => {
 
     // オーバーレイは閉じるボタンと同じ aria-label を持つので、
     // `tabIndex=-1` を足したクラス名側で引く
-    const overlay = page.locator('[class*="c_search_bar__overlay"]');
-    await expect(overlay).toBeVisible();
+    await expect(
+      page.locator('[class*="c_search_bar__overlay"]'),
+    ).toBeVisible();
 
     /*
-      ⚠️ **スライドインが終わるまで測らない。** フォームは
+      ⚠️ **スライドインが終わるまで押さない。** フォームは
       `searchBarSlideDown`（translateY(-100%) → 0）で降りてくるので、
       `toBeVisible()` の直後はまだ画面の上にはみ出している（実測 y = -53）。
-      ここで測ると**必ず**ずれて落ちる。`position: fixed; top: 0` なので、
-      上端が 0 に落ち着いたことを待てばよい
+      その位置で座標クリックすると、狙いと違うものを押す
     */
     await expect
       .poll(() => form.evaluate((el) => el.getBoundingClientRect().top), {
@@ -176,16 +183,23 @@ test.describe('16px 化に追従すべき箇所', () => {
       })
       .toBeCloseTo(0, 0);
 
-    const formBox = await form.boundingBox();
-    const overlayBox = await overlay.boundingBox();
-    expect(formBox, 'フォームの矩形が取れない').not.toBeNull();
-    expect(overlayBox, 'オーバーレイの矩形が取れない').not.toBeNull();
+    // 1. 入力欄をタップしても閉じない（オーバーレイが手前に被っていない）
+    const input = form.getByRole('textbox', {
+      name: ARIA_LABELS.SEARCH_MOVIES,
+    });
+    await input.click();
+    await expect(input).toBeFocused();
+    await expect(form).toBeVisible();
 
-    // 小数の丸めだけ許容する。3px ずれた #1113 の状態は落ちる
-    expect(
-      overlayBox!.y,
-      'オーバーレイの上端がフォームの下端とずれている',
-    ).toBeCloseTo(formBox!.y + formBox!.height, 0);
+    // 2. フォームの下をタップすると閉じる（オーバーレイが受け取る）
+    const formBox = await form.boundingBox();
+    expect(formBox, 'フォームの矩形が取れない').not.toBeNull();
+
+    await page.mouse.click(
+      SP_VIEWPORT_WIDTH / 2,
+      formBox!.y + formBox!.height + 40,
+    );
+    await expect(form).not.toBeVisible();
   });
 
   /**

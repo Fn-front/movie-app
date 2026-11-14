@@ -141,7 +141,17 @@ describe('GET /api/user/settings', () => {
     expect(json.error.message).toBe(SETTINGS_ERROR_MESSAGES.FETCH_FAILED);
   });
 
-  it('DBエラー時（data無し）はデフォルト値を返す', async () => {
+  /**
+   * ⚠️ これが実際に起きる組み合わせ（#1153）
+   *
+   * `.single()` は**任意のエラーで `data: null`** を返すため、DB 障害は
+   * 必ずこの形になる（上の「data有り」は実際には起こらない組み合わせ）。
+   *
+   * 既定値で 200 を返すと、クライアントは「通知オフ」「配信範囲はすべて」を
+   * **確定値として描く**。しかも誤った表示のままチェックを入れ直すと
+   * `updateSettings` が走り、表示の誤りがデータの誤りに変わる
+   */
+  it('DBエラー時（data無し）に500を返す', async () => {
     mockFrom.mockReturnValueOnce({
       select: () => ({
         eq: () => ({
@@ -156,16 +166,9 @@ describe('GET /api/user/settings', () => {
     const response = await GET();
     const json = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(json.success).toBe(true);
-    expect(json.data).toEqual({
-      theme: 'system',
-      notificationEnabled: false,
-      streamingNoticeScope: 'any',
-      cookieConsent: 'unset',
-      cookieConsentAt: null,
-      cookieConsentVersion: null,
-    });
+    expect(response.status).toBe(500);
+    expect(json.success).toBe(false);
+    expect(json.error.message).toBe(SETTINGS_ERROR_MESSAGES.FETCH_FAILED);
   });
 
   describe('レート制限（#934）', () => {

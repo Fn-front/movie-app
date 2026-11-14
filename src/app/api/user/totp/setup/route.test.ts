@@ -8,6 +8,8 @@
 
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
 
+import { TotpAlreadyEnabledError } from '@/lib/auth/totpSetup';
+
 import { POST } from './route';
 
 // --- Mocks ---
@@ -32,9 +34,15 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 }));
 
 const mockStartTotpSetup = jest.fn();
-jest.mock('@/lib/auth/totpSetup', () => ({
-  startTotpSetup: (...args: unknown[]) => mockStartTotpSetup(...args),
-}));
+jest.mock('@/lib/auth/totpSetup', () => {
+  // 実物の TotpAlreadyEnabledError を使う。ここを模造品にすると
+  // ルート側の instanceof が常に false になり、テストが実態とずれる
+  const actual = jest.requireActual('@/lib/auth/totpSetup');
+  return {
+    TotpAlreadyEnabledError: actual.TotpAlreadyEnabledError,
+    startTotpSetup: (...args: unknown[]) => mockStartTotpSetup(...args),
+  };
+});
 
 // --- Helpers ---
 
@@ -44,6 +52,24 @@ const mockUserLookup = (email: string | null) => {
     select: () => ({
       eq: () => ({
         single: () => Promise.resolve({ data: email ? { email } : null }),
+      }),
+    }),
+  });
+};
+
+/** users の取得が DB エラーで失敗する場合をモックする */
+const mockUserLookupFailure = () => {
+  mockFrom.mockReturnValueOnce({
+    select: () => ({
+      eq: () => ({
+        single: () =>
+          Promise.resolve({
+            data: null,
+            error: {
+              message: 'connection terminated unexpectedly',
+              code: '57P01',
+            },
+          }),
       }),
     }),
   });
@@ -122,13 +148,50 @@ describe('POST /api/user/totp/setup', () => {
 
   it('既に有効化済みなら400を返す', async () => {
     mockUserLookup('user@example.com');
-    mockStartTotpSetup.mockRejectedValue(new Error('TOTP is already enabled'));
+    mockStartTotpSetup.mockRejectedValue(new TotpAlreadyEnabledError());
 
     const response = await POST();
     const json = await response.json();
 
     expect(response.status).toBe(400);
     expect(json.error.message).toBe(TOTP_ERROR_MESSAGES.ALREADY_ENABLED);
+  });
+
+  it('users の取得が DB エラーなら 401 ではなく500を返す', async () => {
+    // 401 を返すと axios のインターセプタが「未認証」と解釈して
+    // 強制ログアウトへ倒す。DB の不調でセッションごと破棄されてしまう
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mockUserLookupFailure();
+
+      const response = await POST();
+
+      expect(response.status).toBe(500);
+      expect(mockStartTotpSetup).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('DB 障害は「既に有効」ではなく500を返す', async () => {
+    // 例外をすべて 400 ALREADY_ENABLED に潰していると、接続断も
+    // INSERT 失敗も「もう有効です」と表示されて切り分けができない
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mockUserLookup('user@example.com');
+      mockStartTotpSetup.mockRejectedValue({
+        message: 'connection terminated unexpectedly',
+        code: '57P01',
+      });
+
+      const response = await POST();
+      const json = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(json.error.message).not.toBe(TOTP_ERROR_MESSAGES.ALREADY_ENABLED);
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('試行上限を超えたら429を返す', async () => {

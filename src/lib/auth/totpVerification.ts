@@ -21,6 +21,8 @@ import {
 } from '@/lib/totp/recoveryCodes';
 import { findMatchingCounter } from '@/lib/totp/totp';
 
+import { toDbError } from './dbError';
+
 /**
  * 検証結果
  *
@@ -59,12 +61,26 @@ export async function isTotpEnabled(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<boolean> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('user_totp')
     .select('confirmed_at')
     .eq('user_id', userId)
     .not('confirmed_at', 'is', null)
     .maybeSingle();
+
+  // ⚠️ **error を握り潰して false に倒してはいけない。**
+  //
+  // `Error` でラップするのは、素の PostgREST オブジェクトのまま投げると
+  // NextAuth が原因を保存せず、ログイン経路で診断情報が消えるため
+  // （理由は dbError.ts）。
+  // Supabase は「行が無い」ときも「接続断・タイムアウト・PostgREST エラー」の
+  // ときも data: null を返す。区別できるのは error だけ。
+  //
+  // 呼び出し元（auth.ts のログイン3経路）はいずれも「有効なら止める」側の
+  // ガードなので、false は**第2要素を飛ばす**ことを意味する。DB の不調だけで
+  // パスワードのみのログインが成立し、7日間有効なセッションが発行されてしまう。
+  // 判定できないなら拒否側へ倒す（rateLimit.ts の undeterminedResult と同じ方針）
+  if (error) throw toDbError(error, 'read user_totp');
 
   return Boolean(data);
 }
@@ -82,12 +98,16 @@ async function verifyAuthenticatorCode(
   userId: string,
   code: string,
 ): Promise<TotpVerifyResult> {
-  const { data: row } = await supabase
+  const { data: row, error } = await supabase
     .from('user_totp')
     .select('encrypted_secret, last_used_counter')
     .eq('user_id', userId)
     .not('confirmed_at', 'is', null)
     .maybeSingle();
+
+  // 拒否側（NOT_ENABLED）に倒れるので直ちに危険ではないが、障害が
+  // 「二段階認証が未設定」に化けて切り分けができない
+  if (error) throw toDbError(error, 'read user_totp for verification');
 
   if (!row) {
     return TOTP_VERIFY_RESULT.NOT_ENABLED;
@@ -132,11 +152,15 @@ async function verifyRecoveryCode(
   userId: string,
   code: string,
 ): Promise<TotpVerifyResult> {
-  const { data: rows } = await supabase
+  const { data: rows, error } = await supabase
     .from('totp_recovery_codes')
     .select('id, code_hash')
     .eq('user_id', userId)
     .is('used_at', null);
+
+  // 拒否側（INVALID）に倒れるので直ちに危険ではないが、障害が
+  // 「コードが違う」に化けて利用者も運用も原因に辿り着けない
+  if (error) throw toDbError(error, 'read totp_recovery_codes');
 
   if (!rows || rows.length === 0) {
     return TOTP_VERIFY_RESULT.INVALID;
@@ -207,11 +231,15 @@ export async function countUnusedRecoveryCodes(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<number> {
-  const { count } = await supabase
+  const { count, error } = await supabase
     .from('totp_recovery_codes')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
     .is('used_at', null);
+
+  // 0 に倒すと、設定画面が `role='alert'` で「リカバリーコードを使い切って
+  // います」と警告する。障害時に誤った危機感を与え、不要な再発行を誘発する
+  if (error) throw toDbError(error, 'count totp_recovery_codes');
 
   return count ?? 0;
 }

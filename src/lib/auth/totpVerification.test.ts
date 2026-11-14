@@ -139,6 +139,36 @@ function createSupabaseMock(db: FakeDb): SupabaseClient {
   return { from: jest.fn(from) } as unknown as SupabaseClient;
 }
 
+/**
+ * すべてのクエリが error を返す模擬（DB障害を模す）
+ *
+ * Supabase は接続断・タイムアウト・PostgREST エラーのいずれでも
+ * `data: null` を返す。「行が無い」と区別できるのは `error` だけなので、
+ * それを無視すると障害が「未設定」「未登録」に化ける
+ */
+function createFailingSupabaseMock(): SupabaseClient {
+  const result = {
+    data: null,
+    error: { message: 'connection terminated unexpectedly', code: '57P01' },
+  };
+
+  const builder: Record<string, unknown> = {};
+  const self = () => builder;
+
+  builder.select = jest.fn(self);
+  builder.eq = jest.fn(self);
+  builder.not = jest.fn(self);
+  builder.is = jest.fn(self);
+  builder.or = jest.fn(self);
+  builder.update = jest.fn(self);
+  builder.maybeSingle = jest.fn(() => Promise.resolve(result));
+  (builder as { then: unknown }).then = (
+    onFulfilled: (value: unknown) => unknown,
+  ) => Promise.resolve(result).then(onFulfilled);
+
+  return { from: jest.fn(() => builder) } as unknown as SupabaseClient;
+}
+
 const originalKey = process.env.TOTP_ENCRYPTION_KEY;
 
 beforeEach(() => {
@@ -188,6 +218,35 @@ describe('isTotpEnabled', () => {
     await expect(isTotpEnabled(createSupabaseMock(db), USER_ID)).resolves.toBe(
       false,
     );
+  });
+
+  /**
+   * ⚠️ ここが false に倒れると**第2要素が丸ごと飛ぶ**
+   *
+   * `auth.ts` のログイン3経路（パスワード / OTP / OAuth）はいずれも
+   * 「有効なら止める」側のガードなので、false は素通りを意味する。
+   * DB の不調だけで 7日間有効なセッションが発行されてしまう
+   */
+  it('DB エラーなら throw する（未設定として扱わない）', async () => {
+    await expect(
+      isTotpEnabled(createFailingSupabaseMock(), USER_ID),
+    ).rejects.toThrow(/connection terminated/);
+  });
+});
+
+describe('verifySecondFactor（DB エラー）', () => {
+  // 現状は NOT_ENABLED / INVALID（＝拒否側）に倒れるので直ちに危険では
+  // ないが、障害が「未設定」「コード違い」に化けて切り分けができない
+  it('認証アプリのコードの検証中に DB エラーなら throw する', async () => {
+    await expect(
+      verifySecondFactor(createFailingSupabaseMock(), USER_ID, '123456'),
+    ).rejects.toThrow(/connection terminated/);
+  });
+
+  it('リカバリーコードの検証中に DB エラーなら throw する', async () => {
+    await expect(
+      verifySecondFactor(createFailingSupabaseMock(), USER_ID, 'AAAAA-BBBBB'),
+    ).rejects.toThrow(/connection terminated/);
   });
 });
 

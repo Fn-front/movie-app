@@ -130,7 +130,79 @@ afterAll(() => {
 
 const emptyDb = (): FakeDb => ({ totp: null, recoveryCodes: [] });
 
+/**
+ * 既存行の読み取りだけが失敗する模擬
+ *
+ * Supabase は「行が無い」ときも「接続断・タイムアウト」のときも
+ * `data: null` を返す。区別できるのは `error` だけ
+ */
+function createReadFailingSupabaseMock(db: FakeDb): {
+  client: SupabaseClient;
+  deleted: { called: boolean };
+} {
+  const deleted = { called: false };
+  const error = {
+    message: 'connection terminated unexpectedly',
+    code: '57P01',
+  };
+
+  const from = () => {
+    const builder: Record<string, unknown> = {};
+    const self = () => builder;
+
+    builder.select = jest.fn(self);
+    builder.eq = jest.fn(self);
+    builder.is = jest.fn(self);
+    builder.insert = jest.fn(self);
+    builder.update = jest.fn(self);
+    builder.delete = jest.fn(() => {
+      deleted.called = true;
+      db.totp = null;
+      return builder;
+    });
+    builder.maybeSingle = jest.fn(() => Promise.resolve({ data: null, error }));
+    (builder as { then: unknown }).then = (
+      onFulfilled: (value: unknown) => unknown,
+    ) => Promise.resolve({ data: null, error: null }).then(onFulfilled);
+
+    return builder;
+  };
+
+  return {
+    client: { from: jest.fn(from) } as unknown as SupabaseClient,
+    deleted,
+  };
+}
+
 describe('startTotpSetup', () => {
+  /**
+   * ⚠️ 読み取りに失敗したときに消してはいけない
+   *
+   * `existing === null` を「まだ設定していない」と断定すると、
+   * 「既に有効化済み」ガードを通過して**無条件 DELETE** に進む。
+   * 暗号化済みの共有鍵が失われ、認証アプリの登録が無効になるうえ、
+   * 新しい行は confirmed_at が NULL なので当人の2FAが黙って解除される
+   */
+  it('既存行の読み取りに失敗したら、何も消さずに throw する', async () => {
+    const db: FakeDb = {
+      totp: {
+        user_id: USER_ID,
+        encrypted_secret: encryptTotpSecret(generateTotpSecret()),
+        confirmed_at: '2026-10-18T00:00:00Z',
+        last_used_counter: 5,
+      },
+      recoveryCodes: [],
+    };
+    const { client, deleted } = createReadFailingSupabaseMock(db);
+
+    await expect(startTotpSetup(client, USER_ID, EMAIL)).rejects.toThrow(
+      /connection terminated/,
+    );
+
+    expect(deleted.called).toBe(false);
+    expect(db.totp).not.toBeNull();
+  });
+
   it('otpauth URI と手入力用の鍵を返す', async () => {
     const result = await startTotpSetup(
       createSupabaseMock(emptyDb()),
@@ -355,6 +427,58 @@ describe('disableTotp', () => {
 });
 
 describe('regenerateRecoveryCodes', () => {
+  /**
+   * ⚠️ 削除が失敗したまま挿入に進むと、**旧コードが生き続ける**
+   *
+   * `verifyRecoveryCode` は `used_at IS NULL` の行を全件突き合わせるため、
+   * 消し損ねた旧コードがそのまま通る。「コードが漏れたので再発行する」
+   * という最も重要な場面で保護が消えるうえ、ルートは 200 で
+   * 「以前のコードはすべて使えなくなります」と答えてしまう
+   */
+  it('削除に失敗したら、新しいコードを入れずに throw する', async () => {
+    const db: FakeDb = {
+      totp: null,
+      recoveryCodes: [{ user_id: USER_ID, code_hash: 'old-hash' }],
+    };
+    const inserted: string[] = [];
+
+    const client = {
+      from: jest.fn(() => {
+        const builder: Record<string, unknown> = {};
+        const self = () => builder;
+        builder.eq = jest.fn(self);
+        builder.delete = jest.fn(() => {
+          // 削除は失敗する（＝旧コードが残る）
+          (builder as { then: unknown }).then = (
+            onFulfilled: (value: unknown) => unknown,
+          ) =>
+            Promise.resolve({
+              data: null,
+              error: { message: 'deadlock detected', code: '40P01' },
+            }).then(onFulfilled);
+          return builder;
+        });
+        builder.insert = jest.fn((rows: Array<{ code_hash: string }>) => {
+          inserted.push(...rows.map((row) => row.code_hash));
+          return builder;
+        });
+        (builder as { then: unknown }).then = (
+          onFulfilled: (value: unknown) => unknown,
+        ) => Promise.resolve({ data: null, error: null }).then(onFulfilled);
+        return builder;
+      }),
+    } as unknown as SupabaseClient;
+
+    await expect(regenerateRecoveryCodes(client, USER_ID)).rejects.toThrow(
+      /deadlock detected/,
+    );
+
+    expect(inserted).toHaveLength(0);
+    expect(db.recoveryCodes).toEqual([
+      { user_id: USER_ID, code_hash: 'old-hash' },
+    ]);
+  });
+
   it('設定どおりの個数を発行する', async () => {
     const db = emptyDb();
 

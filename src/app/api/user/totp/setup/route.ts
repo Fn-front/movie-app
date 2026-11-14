@@ -14,7 +14,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { startTotpSetup } from '@/lib/auth/totpSetup';
+import { startTotpSetup, TotpAlreadyEnabledError } from '@/lib/auth/totpSetup';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
@@ -50,18 +50,27 @@ export async function POST() {
       );
     }
 
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('email')
       .eq('id', session.user.id)
       .single();
+
+    // 読み取りに失敗しただけで 401 を返さない。axios のインターセプタが
+    // 401 を「未認証」と解釈して強制ログアウトへ倒すため、DB の不調で
+    // セッションごと破棄されてしまう。下の catch で 500 にする
+    if (userError) throw userError;
 
     if (!user) return unauthorizedResponse();
 
     let setup;
     try {
       setup = await startTotpSetup(supabase, session.user.id, user.email);
-    } catch {
+    } catch (error) {
+      // ⚠️ 例外をすべてここで潰さないこと。DB の接続断も INSERT 失敗も
+      // 「もう有効です」と表示され、障害の切り分けができなくなる
+      if (!(error instanceof TotpAlreadyEnabledError)) throw error;
+
       // 既に有効化済み。やり直させず、まず無効化してもらう
       return NextResponse.json(
         {

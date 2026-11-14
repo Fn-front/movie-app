@@ -536,11 +536,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           );
 
           if (totpLimitResult.allowed) {
-            const verifyResult = await verifySecondFactor(
-              supabase,
-              token.id,
-              totpCode.trim(),
-            );
+            // ⚠️ ここから例外を外へ出さないこと。
+            // `@auth/core` は jwt コールバックの例外を**すべて**捕まえて
+            // セッションCookieを削除する（`lib/actions/session.js` の catch。
+            // 「JWT が検証できない」ケースを想定した後始末だが、例外の種類を
+            // 見ない）。Cookie が消えると認証コード画面は「正しくありません」を
+            // 出し続け、利用者は OAuth ログインからやり直すしかなくなる。
+            //
+            // 第2要素を通さないのは DB エラーでも同じ（fail-closed は保つ）。
+            // 変えるのは「セッションごと壊すか、画面に留まって再試行できるか」
+            let verifyResult;
+            try {
+              verifyResult = await verifySecondFactor(
+                supabase,
+                token.id,
+                totpCode.trim(),
+              );
+            } catch (error) {
+              console.error('TOTP verification failed:', error);
+            }
 
             if (verifyResult === TOTP_VERIFY_RESULT.SUCCESS) {
               token.totpPending = false;

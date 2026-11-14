@@ -67,11 +67,48 @@ jobs:
           path: '**/node_modules'
           key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
 
+      # `.next/cache` のキーは「週 + package-lock.json」だけで作る。
+      #
+      # ⚠️ **ソースのハッシュを足さないのは意図的**（#1082）。以前は
+      # `hashFiles('**.[jt]s', '**.[jt]sx')` が付いていたが、`**` は
+      # **パスセグメント全体として書いたときだけ**任意の深さを意味するため、
+      # 実際に見ていたのはリポジトリ直下の5ファイル（jest.config.js /
+      # jest.setup.js / next-env.d.ts / playwright.config.ts /
+      # playwright.ga.config.ts）だけだった。`src/` は1ファイルも入らず、
+      # 無関係なブランチが同じアーカイブを共有していた。
+      #
+      # グロブを `**/*.[jt]s` 形式へ直す案もあるが、採らない。理由は2つ。
+      #
+      # 1. **共有して困らない**: `.next/cache` はコンパイル結果をコンテンツ
+      #    アドレスで持つため、入力が違えば別エントリになる。古いキャッシュを
+      #    読んでも誤ったチャンクを再利用することはない
+      # 2. **鮮度を上げても速くならない**: このキーは完全一致でヒットするので
+      #    `.next/cache` は週の初回ビルドの内容で据え置かれる
+      #    （`Cache hit occurred on the primary key ..., not saving cache.`）。
+      #    実測で **4日・53コミット古い**キャッシュを使っていたが、
+      #    `app-build` の所要は 23〜39 秒で横ばいだった。
+      #    一方グロブを直すと毎コミットでキーが変わり、**1 push あたり
+      #    約185MB**（実測 184,965,896 B）を保存し続ける。リポジトリの
+      #    キャッシュは 10GB 上限に対しすでに 7.19GB 埋まっている
+      #
+      # ⚠️ **「案Aにすると node_modules が追い出される」ではない。** GitHub の
+      # 削除順は**最終アクセスが古い順**なので、毎 run 触る node_modules
+      # （173MB）や Playwright ブラウザ（249MB）は最後まで残る。実際に押し
+      # 出されるのは二度と参照されない CodeQL の overlay（117件中106件）で、
+      # 消えても無害。容量を理由にするならここまで込みで考えること
+      #
+      # ⚠️ このキーは build.yml と4シャードで共有している。保存に成功するのは
+      # 先着1ジョブだけで、残りは `Failed to save: Unable to reserve cache ...,
+      # another job may be creating this cache.` を出す。**これは正常**
+      #
+      # ⚠️ GA 有効ジョブとはキーを分けること（下の `-ga-` を参照）。
+      # ただし GA ジョブは PR では動かない（main への push と
+      # workflow_dispatch のみ）ので、PR 1本あたりの保存は上の約185MBだけ
       - name: cache-nextjs-build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # ratchet:actions/cache@v6.1.0
         with:
           path: .next/cache
-          key: ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          key: ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-
 
@@ -292,11 +329,13 @@ jobs:
       # ⚠️ e2e ジョブとはキーを分ける。NEXT_PUBLIC_* はビルド時に静的置換されるため、
       # GA ID の有無で成果物が変わる。同じキーでコンパイルキャッシュを共有すると
       # 「GA ID が埋まっていないチャンク」を再利用しうる
+      #
+      # ソースのハッシュを足さない理由は上の e2e ジョブ側のコメントに書いてある（#1082）
       - name: cache-nextjs-build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # ratchet:actions/cache@v6.1.0
         with:
           path: .next/cache
-          key: ${{ runner.os }}-nextjs-build-ga-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          key: ${{ runner.os }}-nextjs-build-ga-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-build-ga-${{ steps.date.outputs.week }}-
 

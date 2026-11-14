@@ -37,12 +37,20 @@ jobs:
           path: '**/node_modules'
           key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
 
+      # ⚠️ キーにソースのハッシュを入れないのは意図的（#1082）。
+      # `.next/cache` はコンパイル結果をコンテンツアドレスで持つので、
+      # ブランチ間で共有しても誤ったチャンクを再利用しない。
+      # 鮮度を上げても速くならないことの実測は e2e.yml のコメントに。
+      #
+      # ⚠️ e2e.yml の4シャードと同じキーなので、**保存に成功するのは先着1ジョブ
+      # だけ**。このジョブが勝つことが多いが、負けた側が出す
+      # `Failed to save: Unable to reserve cache ...` は正常
       - name: cache-nextjs-build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # ratchet:actions/cache@v6.1.0
         with:
           path: |
             .next/cache
-          key: ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          key: ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-
 

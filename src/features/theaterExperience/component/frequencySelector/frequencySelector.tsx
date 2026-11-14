@@ -61,10 +61,36 @@ export const FrequencySelector = memo<FrequencySelectorProps>(
           className={styles.c_frequency_selector__group}
         >
           {FREQUENCY_OPTIONS.map((option) => (
+            /*
+              ⚠️ `aria-label` を付けないこと（#1106）。
+
+              Radix の ToggleGroup（type='single'）は role="radio" を付ける。
+              radio は name-from-content なので、名前は可視テキスト
+              （`低音` + `80 Hz`）からそのまま作られる。
+
+              以前は `低音（80 Hz）` を `aria-label` に入れていたが、
+              axe の `label-content-name-mismatch` は NFKD 正規化で全角括弧を
+              半角へ落としたあと**括弧内を除去**してから単語列を比較するため、
+              名前側が `["低音"]`、可視側が `["低音","80","hz"]` となって
+              一致しない（WCAG 2.5.3 Label in Name）。
+              音声入力で「低音 80 ヘルツ」と読み上げても反応しない。
+
+              ⚠️ 実測の結果は **violation ではなく incomplete**（要確認）。
+              axe 4.14 の `valueTextRoles` に `radio` が含まれており、
+              一致しなかった radio は判定が保留されるため。ただし共通ヘルパー
+              `expectNoA11yViolations` は incomplete でも落とすので、
+              #1065 で `/theater-experience` を a11y E2E に入れた時点で
+              必ず赤くなる。
+
+              ⚠️ 兄弟の OccupancySelector / HeatmapToggle は同じ書き方に
+              見えるが問題ない。`客席を満席にする` は Intl.Segmenter で
+              `["客席","を","満席","に","する"]` に分かれ、可視の `["満席"]` を
+              連続部分列として含む（実測で passes に入ることを確認済み）。
+              **括弧を使った本件だけ**が外れる。
+            */
             <ToggleGroup.Item
               key={option.value}
               value={option.value}
-              aria-label={`${option.label}（${option.frequency}）`}
               className={styles.c_frequency_selector__item}
             >
               <span className={styles.c_frequency_selector__item_label}>

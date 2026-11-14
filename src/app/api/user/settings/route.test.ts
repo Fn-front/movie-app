@@ -141,7 +141,17 @@ describe('GET /api/user/settings', () => {
     expect(json.error.message).toBe(SETTINGS_ERROR_MESSAGES.FETCH_FAILED);
   });
 
-  it('DBエラー時（data無し）はデフォルト値を返す', async () => {
+  /**
+   * ⚠️ これが実際に起きる組み合わせ（#1153）
+   *
+   * `.single()` は**任意のエラーで `data: null`** を返すため、DB 障害は
+   * 必ずこの形になる（上の「data有り」は実際には起こらない組み合わせ）。
+   *
+   * 既定値で 200 を返すと、クライアントは「通知オフ」「配信範囲はすべて」を
+   * **確定値として描く**。しかも誤った表示のままチェックを入れ直すと
+   * `updateSettings` が走り、表示の誤りがデータの誤りに変わる
+   */
+  it('DBエラー時（data無し）に500を返す', async () => {
     mockFrom.mockReturnValueOnce({
       select: () => ({
         eq: () => ({
@@ -156,16 +166,9 @@ describe('GET /api/user/settings', () => {
     const response = await GET();
     const json = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(json.success).toBe(true);
-    expect(json.data).toEqual({
-      theme: 'system',
-      notificationEnabled: false,
-      streamingNoticeScope: 'any',
-      cookieConsent: 'unset',
-      cookieConsentAt: null,
-      cookieConsentVersion: null,
-    });
+    expect(response.status).toBe(500);
+    expect(json.success).toBe(false);
+    expect(json.error.message).toBe(SETTINGS_ERROR_MESSAGES.FETCH_FAILED);
   });
 
   describe('レート制限（#934）', () => {
@@ -602,6 +605,43 @@ describe('Cookie同意', () => {
 
       expect(upsertedData.cookie_consent).toBe('unset');
       expect(upsertedData.cookie_consent_at).toBeNull();
+    });
+
+    /**
+     * GET と同じ罠が PUT にもあった
+     *
+     * 現在値の select は `error` を捨てていたため、読み取りに失敗すると
+     * `current` が null になる。すると版の比較が
+     * `undefined !== COOKIE_CONSENT_VERSION` で成立し、
+     * **最初の意思表示の日時をクライアント申告値で上書き**していた。
+     * 上のコメントが「証跡として保つ」と書いている当の値が、黙って消える
+     */
+    it('現在値の読み取りに失敗したら、日時を書き換えずに500を返す', async () => {
+      let upsertCalled = false;
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () => ({
+              data: null,
+              error: { code: '57P01', message: 'connection terminated' },
+            }),
+          }),
+        }),
+      });
+      mockFrom.mockReturnValueOnce({
+        upsert: () => {
+          upsertCalled = true;
+          return { error: null };
+        },
+      });
+
+      const response = await PUT(
+        createPutRequest({ cookieConsent: 'granted', cookieConsentAt: AT }),
+      );
+
+      expect(response.status).toBe(500);
+      // 500 を返すだけでなく、書き込みに到達していないこと
+      expect(upsertCalled).toBe(false);
     });
 
     it('他の設定だけ更新しても同意に触れない', async () => {

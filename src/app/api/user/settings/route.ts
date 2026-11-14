@@ -105,8 +105,21 @@ export async function GET() {
       .eq('user_id', session.user.id)
       .single();
 
+    // ⚠️ **`|| !data` で DB エラーを吸わないこと**（#1153）。
+    // `.single()` は任意のエラーで `data: null` を返すため、以前は
+    // 「行が無い」以外の障害もすべて 200＋既定値に化けていた（下の
+    // `throw error` には到達しなかった）。
+    //
+    // クライアントは既定値を**確定値として描く**ので、実際はオンの通知が
+    // 「オフ」と表示される。そこでチェックを入れ直すと `updateSettings` が
+    // 走り、表示の誤りがデータの誤りに変わる。
+    // 分け方は `src/app/api/filters/route.ts:55-57` に揃えてある
+    if (error && error.code !== SUPABASE_ERROR_CODE.NOT_FOUND) {
+      throw error;
+    }
+
     // レコードが存在しない場合はデフォルト値を返す
-    if (error?.code === SUPABASE_ERROR_CODE.NOT_FOUND || !data) {
+    if (!data) {
       return NextResponse.json(
         {
           success: true,
@@ -114,10 +127,6 @@ export async function GET() {
         },
         { status: HTTP_STATUS.OK },
       );
-    }
-
-    if (error) {
-      throw error;
     }
 
     return NextResponse.json(
@@ -249,11 +258,21 @@ export async function PUT(request: Request) {
       // 現在値を読んで、状態が変わらないなら日時を据え置く
       // （最初の意思表示時刻を証跡として保つ）。
       // 行が無い利用者（初回同意がまさにそれ）で落ちないよう maybeSingle を使う
-      const { data: current } = await supabase
+      const { data: current, error: currentError } = await supabase
         .from('user_settings')
         .select('cookie_consent, cookie_consent_version')
         .eq('user_id', session.user.id)
         .maybeSingle();
+
+      // ⚠️ ここで error を捨ててはいけない。`current` が null になると
+      // 下の版の比較が `undefined !== COOKIE_CONSENT_VERSION` で成立し、
+      // **最初の意思表示の日時をクライアント申告値で上書き**する。
+      // 行が無いだけなら maybeSingle は error を返さないので、
+      // ここに来る error は本物の読み取り失敗だけ。
+      // 証跡を黙って失うより、書かずに失敗したほうがよい
+      if (currentError) {
+        throw currentError;
+      }
 
       // 版が上がったあとの再同意では、状態が granted のままでも日時を
       // 更新する。据え置くと「v2 がまだ存在しなかった日付で v2 に同意した」

@@ -265,6 +265,50 @@ describe('レスポンスインターセプター（エラー時）', () => {
     await flush();
 
     expect(mockSignOut).toHaveBeenCalledTimes(1);
+    // 抑止の本体は「2回目は確認すら飛ばす」こと。signOut の回数だけ見ると、
+    // 確認を2回走らせてから1回に絞る実装でも通ってしまう
+    expect(mockConfirmSignedOut).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * 抑止フラグは必ず戻せること
+   *
+   * `logout()` は遷移が始まらなかったとき rethrow する
+   * （`src/lib/auth/logout.ts`）。`void logout()` はそれを握り潰すので、
+   * フラグを戻す責任はこちら側にある。戻さないと、**同意レコードは消えた・
+   * ログイン状態は残る・以降どれだけ 401 が来てもログアウト経路が死んでいる**
+   * という状態でSPAが続く
+   */
+  it('ログアウトに失敗したら、次の401でもう一度試みる', async () => {
+    mockSignOut.mockRejectedValueOnce(new Error('csrf fetch failed'));
+
+    const first = unauthorizedError();
+    await expect(resHandlers[0].rejected!(first)).rejects.toEqual(first);
+    await flush();
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+
+    const second = unauthorizedError();
+    await expect(resHandlers[0].rejected!(second)).rejects.toEqual(second);
+    await flush();
+
+    expect(mockSignOut).toHaveBeenCalledTimes(2);
+  });
+
+  it('確認そのものが失敗したら、次の401で判定し直す', async () => {
+    // 現在の confirmSignedOut は内部で握り潰すので実際には reject しないが、
+    // フラグの寿命を確認側の実装に依存させない
+    mockConfirmSignedOut.mockRejectedValueOnce(new Error('network down'));
+
+    const first = unauthorizedError();
+    await expect(resHandlers[0].rejected!(first)).rejects.toEqual(first);
+    await flush();
+    expect(mockSignOut).not.toHaveBeenCalled();
+
+    const second = unauthorizedError();
+    await expect(resHandlers[0].rejected!(second)).rejects.toEqual(second);
+    await flush();
+
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
   });
 
   it('401エラー時にsignOutが呼ばれる', async () => {

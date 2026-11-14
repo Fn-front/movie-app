@@ -11,8 +11,11 @@ import { confirmSignedOut } from '@/lib/auth/sessionProbe';
 /**
  * ログアウト処理の多重実行を止めるフラグ
  *
- * 確認できなかったときだけ false へ戻す。ログアウトを始めたら完全遷移に
- * 入るので、戻す必要はない
+ * 戻すのは「確認できなかった」「確認にもログアウトにも失敗した」の2つ。
+ * ログアウトが**成功**したときだけ立てたままにする（完全遷移に入るため）。
+ *
+ * ⚠️ `logout()` が失敗する経路は実在する（csrf 取得か `/signout` の POST の
+ * 失敗）。`void logout()` では rethrow を握り潰してフラグが戻らない
  */
 let isSigningOut = false;
 
@@ -99,13 +102,23 @@ axiosInstance.interceptors.response.use(
       if (typeof window !== 'undefined' && !isSigningOut) {
         isSigningOut = true;
 
-        void confirmSignedOut().then((signedOut) => {
-          if (signedOut) {
-            void logout();
-            return;
-          }
-          isSigningOut = false;
-        });
+        void confirmSignedOut()
+          .then(async (signedOut) => {
+            if (!signedOut) {
+              isSigningOut = false;
+              return;
+            }
+            // `logout()` は遷移が始まらなかったとき rethrow する。
+            // await しないと下の catch に渡らない
+            await logout();
+          })
+          .catch(() => {
+            // 確認にもログアウトにも失敗した。ここで戻さないと、
+            // **この SPA セッションでは二度とログアウトできない**。
+            // `logout()` は失敗しても先に同意レコードを消しているので、
+            // 「同意は消えた・ログイン状態は残る・経路は死んでいる」になる
+            isSigningOut = false;
+          });
       }
     }
 

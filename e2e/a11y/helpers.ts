@@ -130,16 +130,17 @@ interface ScrollRegion {
   label: string;
   /** 掃引前の `scrollTop`。終わったらここへ戻す */
   initialTop: number;
+  /** 送る位置（`scrollTop` の絶対値）。列挙時に確定させる */
+  stops: number[];
 }
 
 /**
- * 1つの領域を送る段数の上限
+ * 1つの領域を送る段数の上限（異常検知用）
  *
- * ⚠️ **上限が要る。** 一覧の無限スクロールは下端へ送ると次のページを読み、
- * `scrollHeight` が伸びる。上限が無いと読み込みが続くかぎり止まらない。
- * 実測で `/movies/now-showing` はタイル 40→80・`scrollHeight` 2167→4127 まで伸びた。
+ * 送る位置は**列挙時の高さから先に確定させる**ので、普通はここに当たらない。
+ * 当たったら領域の取り方が壊れているので、黙って打ち切らず落とす。
  */
-const MAX_SCROLL_STEPS = 12;
+const MAX_SCROLL_STEPS = 24;
 
 declare global {
   interface Window {
@@ -150,15 +151,39 @@ declare global {
 /**
  * スクロールする領域を列挙し、ページ側に参照を残す
  *
- * ⚠️ `overflow: hidden` は**対象にしない**。実測では
- * **プログラムからもキーボードのフォーカス移動からも送れる**ので
- * 「送れないから」が理由ではない。このアプリに該当が無いためで、
- * （`overflow: hidden` かつ中身がはみ出すのは `span.sr-only` だけ。
- * モーダルの器は `hidden` だが中身は `__body { overflow-y: auto }` が吸収する）
- * **もし該当が出てきたら、それ自体が別の不具合**として扱う。
+ * ## 何を対象にするか
+ *
+ * **利用者が自分で送れる縦スクロール領域**だけ。判定は2つ。
+ *
+ * 1. `overflow-y` が `auto` / `scroll`
+ * 2. ドキュメント自身（`html` / `body`）の場合は、**スクロールロックが
+ *    掛かっていないこと**
+ *
+ * ⚠️ 2 が要る。オーバーレイ表示中、Radix は `body` に `overflow: hidden` と
+ * `data-scroll-locked` を付けるが、**`html` の `overflow-y` は `auto` のまま**。
+ * 1 だけだと `html` を対象にしてしまい、**利用者がホイールで1pxも動かせない
+ * 背景**をプログラムから送ることになる。実測ではそこで背景の一覧が
+ * 無限スクロールし（`scrollHeight` 4103 → 7741）、固定されたドロワーの
+ * メールアドレスが新しく読み込まれた要素と重なって `color-contrast` が
+ * `elmPartiallyObscuring` で incomplete になり、**CI が落ちた**。
+ *
+ * ## `overflow: hidden` を対象にしない理由
+ *
+ * ⚠️ 「送れないから」ではない。実測では**プログラムからもキーボードの
+ * フォーカス移動からも送れる**。見ているのは**利用者が自分の意思で
+ * 送れるか**で、`hidden` はスクロールバーもホイールも効かない。
+ *
+ * なお「`hidden` かつ中身がはみ出す＝不具合」でもない。`/search` の
+ * `c_movie_tile__title` は 2行クランプ（`text-truncate-multiline(2)`）で
+ * 意図どおり。クランプされた文字は axe の可視判定でも対象外になる。
  */
 async function findScrollRegions(page: Page): Promise<ScrollRegion[]> {
   return page.evaluate(() => {
+    /** ドキュメントのスクロールがロックされているか */
+    const isDocumentScrollLocked = (): boolean =>
+      getComputedStyle(document.body).overflowY === 'hidden' ||
+      document.body.hasAttribute('data-scroll-locked');
+
     const regions: HTMLElement[] = [];
 
     document.querySelectorAll('*').forEach((el) => {
@@ -170,44 +195,66 @@ async function findScrollRegions(page: Page): Promise<ScrollRegion[]> {
       if (element.scrollHeight - element.clientHeight <= 1) return;
       if (element.clientHeight === 0) return;
 
+      const isDocumentScroller =
+        element === document.documentElement || element === document.body;
+      if (isDocumentScroller && isDocumentScrollLocked()) return;
+
       regions.push(element);
     });
 
     window.__a11ySweepRegions = regions;
 
-    return regions.map((element, index) => ({
-      index,
-      label: `${element.tagName}${
-        typeof element.className === 'string' && element.className
-          ? `.${element.className.split(' ')[0]}`
-          : ''
-      }`,
-      initialTop: element.scrollTop,
-    }));
+    return regions.map((element, index) => {
+      const step = element.clientHeight;
+      /*
+        ⚠️ **送る位置は列挙時の高さから先に確定させる。**
+
+        毎回「いま送れるか」で判断すると、一覧の無限スクロールが読み込むたびに
+        `scrollHeight` が伸びて終わらない。上限で打ち切ると、**どこまで見たかが
+        日によって変わる**（TMDb のデータ量次第）うえ、打ち切ったことが
+        誰にも伝わらない。検査の範囲は**テスト開始時点の中身**に固定する。
+      */
+      const maxTop = Math.max(element.scrollHeight - step, 0);
+      const stops: number[] = [];
+      for (let top = element.scrollTop + step; top < maxTop; top += step) {
+        stops.push(top);
+      }
+      if (maxTop > element.scrollTop) stops.push(maxTop);
+
+      return {
+        index,
+        label: `${element.tagName}${
+          typeof element.className === 'string' && element.className
+            ? `.${element.className.split(' ')[0]}`
+            : ''
+        }`,
+        initialTop: element.scrollTop,
+        stops,
+      };
+    });
   });
 }
 
 /**
- * 領域を1段送る。送れたら送った後の `scrollTop`、もう送れなければ `null`
+ * 領域を指定の位置へ送る
  *
- * ⚠️ **送り幅は毎回測り直す。** 列挙時の値と突き合わせて一致を要求すると、
- * データが後から届いて `scrollHeight` が変わるページで**毎回不一致になり、
- * 1段も送れないまま黙って終わる**（実測で一覧ページがこの状態だった）。
- * 「送ったら実際に増えたか」だけを見る。
+ * @returns 要素が生きていて送れたか
  */
-async function advanceScrollRegion(
+async function scrollRegionTo(
   page: Page,
   index: number,
-): Promise<number | null> {
-  return page.evaluate((i) => {
-    const element = window.__a11ySweepRegions?.[i];
-    if (!element || !element.isConnected) return null;
+  top: number,
+): Promise<boolean> {
+  return page.evaluate(
+    ([i, value]) => {
+      const element = window.__a11ySweepRegions?.[i];
+      if (!element || !element.isConnected) return false;
 
-    const before = element.scrollTop;
-    element.scrollTop = before + Math.max(element.clientHeight, 1);
-
-    return element.scrollTop > before ? element.scrollTop : null;
-  }, index);
+      element.scrollTop = value;
+      return true;
+    },
+    [index, top] as const,
+  );
 }
 
 /**
@@ -366,9 +413,9 @@ export async function expectNoA11yViolations(
  *
  * ## ⚠️ ページを変える副作用がある
  *
- * 一覧の無限スクロールは下端へ送ると次のページを読む。検査の対象が
- * 実行ごとに変わり、TMDb への追加リクエストも起きる。中身まで見たい一覧では
- * `waitForMovieTiles()` で読み込みを落ち着かせてから呼ぶこと。
+ * 一覧の無限スクロールは下端へ送ると次のページを読む。**検査する範囲は
+ * テスト開始時点の中身に固定している**ので結果は変わらないが、TMDb への
+ * 追加リクエストは起きるし、戻したあとも読み込まれたタイルは残る。
  *
  * @param extraDisabledRules この検査だけ除外するルール
  * @param onlyRules 指定するとこのルールだけを実行する（positive control 用）
@@ -428,12 +475,24 @@ async function analyzeAcrossScrollRegions(
   await runOnce();
 
   for (const region of regions) {
-    for (let step = 0; step < MAX_SCROLL_STEPS; step += 1) {
-      // 送り幅は毎回測り直す（`advanceScrollRegion` のコメント参照）。
-      // もう送れないところまで来たら次の領域へ
-      if ((await advanceScrollRegion(page, region.index)) === null) break;
+    /*
+      ⚠️ **黙って打ち切らない。** 送る位置は列挙時に確定しているので、
+      ここに当たるのは領域の取り方が壊れているとき。打ち切りを握りつぶすと
+      「検査したつもりで見ていない範囲」が静かに生まれる（このPRが
+      潰そうとしているものそのもの）
+    */
+    if (region.stops.length > MAX_SCROLL_STEPS) {
+      throw new Error(
+        `${region.label} の送り位置が ${region.stops.length} 段と多すぎる` +
+          `（上限 ${MAX_SCROLL_STEPS}）。領域の取り方を見直すこと`,
+      );
+    }
+
+    for (const top of region.stops) {
+      if (!(await scrollRegionTo(page, region.index, top))) break;
       await runOnce();
     }
+
     /*
       次の領域を見る前に、この領域を**掃引前の位置へ**戻す。
       戻さないと「複数の領域を同時に送った状態」という、実際には誰も見ない

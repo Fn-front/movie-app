@@ -1,0 +1,23 @@
+@use '@/styles/variables' as *;
+
+.c_settings_load_error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: $spacing-2;
+}
+
+.c_settings_load_error__message {
+  margin: 0;
+  font-size: $font-size-sm;
+  // ⚠️ パレット（$error-main）を直接テキスト色にしない。14px の通常
+  // テキストではコントラストが AA（4.5:1）に届かない。用途トークンを使う
+  // （`src/styles/global/_theme.scss` の方針）
+  color: $text-danger;
+}
+
+.c_settings_load_error__note {
+  margin: 0;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+}

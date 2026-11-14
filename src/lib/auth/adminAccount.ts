@@ -15,11 +15,12 @@ import {
 } from '@/constants/adminAccount';
 import { USER_ROLE } from '@/constants/auth';
 
+import { normalizeUsername } from './accountIdentity';
+// 生成側は crypto を読むのでサーバー専用。判定側と分けてある（#1104）
 import {
   generateSyntheticEmail,
   generateUsername,
-  normalizeUsername,
-} from './accountIdentity';
+} from './accountIdentityGenerator';
 
 /** 一覧に出すアカウント */
 export interface IssuedAccount {

@@ -1355,6 +1355,9 @@ describe('GET /api/movies', () => {
     mockDiscoverMovies.mockResolvedValue({
       results: [],
       total_pages: 0,
+      // フィルタ前から空＝TMDb が本当に空を返した（#1166）。
+      // ここを省くと「ローカルのフィルタで全件落ちた」と区別できない
+      raw_results_count: 0,
     });
 
     setupExpiredCacheFromMock({

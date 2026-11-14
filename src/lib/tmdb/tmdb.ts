@@ -30,6 +30,7 @@ import {
 import { normalizeWatchProviderIds } from '@/lib/movies/watchProviders';
 import type {
   DismissSignals,
+  FilteredTMDbResponse,
   Movie,
   MovieCacheStats,
   MovieDetail,
@@ -151,7 +152,7 @@ function excludeInappropriateMovies<
  */
 export async function getNowPlayingMovies(
   page: number = 1,
-): Promise<TMDbResponse<Movie>> {
+): Promise<FilteredTMDbResponse<Movie>> {
   const response = await tmdbClient.get<TMDbResponse<Movie>>(
     TMDB_ENDPOINTS.NOW_PLAYING,
     {
@@ -161,6 +162,8 @@ export async function getNowPlayingMovies(
   return {
     ...response.data,
     results: excludeInappropriateMovies(response.data.results),
+    // 同期処理が「TMDb が空」と「フィルタで全件落ちた」を区別するため（#1166）
+    raw_results_count: response.data.results.length,
   };
 }
 
@@ -464,7 +467,7 @@ export interface DiscoverMoviesParams {
  */
 export async function discoverMovies(
   params: DiscoverMoviesParams = {},
-): Promise<TMDbResponse<Movie>> {
+): Promise<FilteredTMDbResponse<Movie>> {
   const { page = 1, ...rest } = params;
   const response = await tmdbClient.get<TMDbResponse<Movie>>(
     TMDB_ENDPOINTS.DISCOVER,
@@ -480,6 +483,8 @@ export async function discoverMovies(
   return {
     ...response.data,
     results: excludeInappropriateMovies(response.data.results),
+    // 同期処理が「TMDb が空」と「フィルタで全件落ちた」を区別するため（#1166）
+    raw_results_count: response.data.results.length,
   };
 }
 

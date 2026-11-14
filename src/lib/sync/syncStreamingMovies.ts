@@ -137,8 +137,10 @@ function chunk<T>(items: T[], size: number): T[][] {
 async function fetchStreamingCandidates(
   windows: DateWindow[],
   result: StreamingSyncResult,
-): Promise<Movie[]> {
+): Promise<{ movies: Movie[]; truncated: boolean }> {
   const candidates = new Map<number, Movie>();
+  /** TMDb 側の異常で途中打ち切りになったか（#1166） */
+  let truncated = false;
 
   for (const window of windows) {
     for (let page = 1; page <= DISCOVER_API_MAX_PAGES; page++) {
@@ -152,7 +154,24 @@ async function fetchStreamingCandidates(
         });
         result.tmdbRequests++;
 
-        if (response.results.length === 0) break;
+        // ⚠️ 判定は**フィルタ前の件数**で行う（#1166）。`discoverMovies` は
+        // `excludeInappropriateMovies` を通した配列を返すため、
+        // `results.length === 0` は「TMDb が空を返した」とは限らず
+        // 「ローカルのフィルタで全件落ちた」でも成立する。後者で打ち切ると
+        // 残りのページの作品が `streamingIds` にも `unresolvedIds` にも
+        // 入らないまま、下のクリアで「配信終了」にされる
+        const rawCount = response.raw_results_count;
+
+        if (rawCount === 0) {
+          // 終端に到達して空なら正常。手前で空なら TMDb 側の異常
+          if (page < response.total_pages) {
+            truncated = true;
+            result.errors.push(
+              `${window.timeFrame}: TMDb が ${page}/${response.total_pages} ページ目で空を返したため取得を打ち切った`,
+            );
+          }
+          break;
+        }
 
         result.fetched += response.results.length;
 
@@ -169,11 +188,27 @@ async function fetchStreamingCandidates(
         }
 
         if (page >= response.total_pages) break;
+
+        // ⚠️ 上限に当たって抜けるのも「全部は見ていない」状態（#1166）。
+        // 見ていない作品をクリアするのは、途中で空を返されたときと同じ事故。
+        //
+        // 実測（2026-11）では total_pages は upcoming=1 / now_showing=3 で
+        // 上限 5 に届かない。今は到達しないが、配信カタログが増えれば
+        // 黙ってクリア対象が広がるため、ここで止める
+        if (page === DISCOVER_API_MAX_PAGES) {
+          truncated = true;
+          result.errors.push(
+            `${window.timeFrame}: 取得が上限 ${DISCOVER_API_MAX_PAGES} ページに達した（全 ${response.total_pages} ページ）。クリアを見送る`,
+          );
+        }
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Unknown error';
         result.errors.push(`${window.timeFrame} page ${page}: ${message}`);
-        // 当該 time_frame の残ページはスキップし、次の time_frame へ進む
+        // 当該 time_frame の残ページはスキップし、次の time_frame へ進む。
+        // 取り逃したページの作品はどの集合にも入らないので、クリアも止める
+        // （上の「TMDb が空」と同じ理由。#1166）
+        truncated = true;
         break;
       }
     }
@@ -192,7 +227,7 @@ async function fetchStreamingCandidates(
   const filtered = stageFiltered.filter((_, index) => !concertFlags[index]);
   result.skipped += uniqueCandidates.length - filtered.length;
 
-  return filtered;
+  return { movies: filtered, truncated };
 }
 
 /**
@@ -301,7 +336,7 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
   const now = new Date();
   const cachedAt = now.toISOString();
 
-  const candidates = await fetchStreamingCandidates(
+  const { movies: candidates, truncated } = await fetchStreamingCandidates(
     buildDateWindows(now),
     result,
   );
@@ -363,7 +398,10 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
   //
   // 1件も配信中を確認できなかった場合はクリアしない。TMDb 障害やキー失効で
   // 一覧全体が空になるのを避けるため、異常時は既存の表示を維持する。
-  if (streamingIds.size > 0) {
+  // ⚠️ 途中打ち切りのときもクリアしない（#1166）。取れなかったページの作品は
+  // `streamingIds` にも `unresolvedIds` にも入らない（ループを回っていないので
+  // catch にも来ない）ため、両方の防御をすり抜ける
+  if (streamingIds.size > 0 && !truncated) {
     // 判定に失敗した作品は現状維持にしたいので、保持対象に含める
     const keepIds = [...streamingIds, ...unresolvedIds];
     const { data: clearedData, error: clearError } = await supabase

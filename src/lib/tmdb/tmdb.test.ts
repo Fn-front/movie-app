@@ -185,6 +185,11 @@ describe('TMDb APIクライアント', () => {
       expect(result.page).toBe(1);
       expect(result.total_pages).toBe(1);
       expect(result.total_results).toBe(4);
+
+      // フィルタ前の件数も添える（#1166）。ここは `results` が2件まで減る
+      // ケースなので、**フィルタ後の件数を入れてしまう実装**も落とせる
+      expect(result.results).toHaveLength(2);
+      expect(result.raw_results_count).toBe(4);
     });
   });
 
@@ -840,7 +845,12 @@ describe('TMDb APIクライアント', () => {
       const { discoverMovies } = require('./tmdb');
       const result = await discoverMovies();
 
-      expect(result).toEqual(mockResponse.data);
+      // フィルタ前の件数を添える（#1166）。同期処理が「TMDb が空」と
+      // 「ローカルのフィルタで全件落ちた」を区別するために使う
+      expect(result).toEqual({
+        ...mockResponse.data,
+        raw_results_count: mockResponse.data.results.length,
+      });
     });
 
     it('API側で漏れたadult作品・除外ジャンルを結果側でも除外する', async () => {

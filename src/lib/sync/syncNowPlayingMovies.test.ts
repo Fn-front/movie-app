@@ -890,14 +890,140 @@ describe('syncNowPlayingMovies', () => {
       expect(getNowPlayingMovies).toHaveBeenCalledTimes(2);
     });
 
+    /**
+     * フィルタで空になっただけのページで打ち切らない（#1166）
+     *
+     * `getNowPlayingMovies` は `excludeInappropriateMovies` を通した配列を
+     * 返す。`results.length === 0` は「TMDb が空を返した」とは限らず、
+     * **ローカルのフィルタで全件落ちた**でも成立する。そこで打ち切ると
+     * 以降のページの作品が `nowPlayingIds` に入らず、クリア対象になる
+     */
+    it('フィルタで全件落ちたページがあっても次のページを取りにいく', async () => {
+      setValidEnv();
+
+      const movie = createMockMovie({ id: 820, title: '3ページ目の映画' });
+
+      (getNowPlayingMovies as jest.Mock)
+        .mockResolvedValueOnce({
+          page: 1,
+          total_pages: 3,
+          total_results: 60,
+          results: [createMockMovie({ id: 819, title: '1ページ目の映画' })],
+          raw_results_count: 20,
+        })
+        .mockResolvedValueOnce({
+          page: 2,
+          total_pages: 3,
+          total_results: 60,
+          // TMDb は返したが、adult / 除外ジャンルで全件落ちた
+          results: [],
+          raw_results_count: 20,
+        })
+        .mockResolvedValueOnce({
+          page: 3,
+          total_pages: 3,
+          total_results: 60,
+          results: [movie],
+          raw_results_count: 20,
+        });
+      (getMovieKeywordIds as jest.Mock).mockResolvedValue([]);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(getNowPlayingMovies).toHaveBeenCalledTimes(3);
+      expect(result.fetched).toBe(2);
+    });
+
+    /**
+     * 途中でTMDbが空を返したらクリアしない（#1166）
+     *
+     * `page < total_pages` なのにフィルタ前が空＝TMDb 側の異常。残りの
+     * ページの作品は `nowPlayingIds` にも `unresolvedIds` にも入らないため、
+     * クリアを撃つと丸ごと「上映終了」になる
+     */
+    it('TMDbが途中で空を返したらクリアを実行しない', async () => {
+      setValidEnv();
+
+      (getNowPlayingMovies as jest.Mock)
+        .mockResolvedValueOnce({
+          page: 1,
+          total_pages: 5,
+          total_results: 100,
+          results: [createMockMovie({ id: 830, title: '取れた映画' })],
+          raw_results_count: 20,
+        })
+        .mockResolvedValueOnce({
+          page: 2,
+          total_pages: 5,
+          total_results: 100,
+          results: [],
+          // フィルタ前から空＝TMDb の異常
+          raw_results_count: 0,
+        });
+      (getMovieKeywordIds as jest.Mock).mockResolvedValue([]);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      // 取れたぶんの UPSERT は行う（rpc）。クリア（from）だけ撃たない
+      expect(supabaseMock.fromMock).not.toHaveBeenCalled();
+      expect(result.errors.join('\n')).toContain('打ち切');
+    });
+
+    /**
+     * 誤検知の方向も見る（#1166）
+     *
+     * 「異常」と判定しすぎると**クリアが永久に走らなくなり**、上映終了が
+     * 一生反映されない。`page < total_pages` を `<=` に変える変異で
+     * ここが落ちる
+     */
+    it('最終ページでフィルタ前が空でも、クリアは従来どおり実行する', async () => {
+      setValidEnv();
+
+      (getNowPlayingMovies as jest.Mock)
+        .mockResolvedValueOnce({
+          page: 1,
+          total_pages: 2,
+          total_results: 20,
+          results: [createMockMovie({ id: 840, title: '取れた映画' })],
+          raw_results_count: 20,
+        })
+        // 最終ページが空。終端なので異常ではない
+        .mockResolvedValueOnce({
+          page: 2,
+          total_pages: 2,
+          total_results: 20,
+          results: [],
+          raw_results_count: 0,
+        });
+      (getMovieKeywordIds as jest.Mock).mockResolvedValue([]);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(supabaseMock.fromMock).toHaveBeenCalled();
+      expect(result.errors.join('\n')).not.toContain('打ち切');
+    });
+
     it('空のresultsが返された場合ページ取得を停止する', async () => {
       setValidEnv();
 
       (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
         page: 1,
-        total_pages: 5,
+        // 1ページしか無い＝終端なので、打ち切りの異常扱いにはならない。
+        // ここが `total_pages: 5` のままだと、テスト名と違って
+        // truncated の経路を通ってしまう
+        total_pages: 1,
         total_results: 0,
         results: [],
+        raw_results_count: 0,
       });
 
       const supabaseMock = createSupabaseMock({});

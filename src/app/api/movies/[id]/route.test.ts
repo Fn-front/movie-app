@@ -190,6 +190,44 @@ describe('GET /api/movies/:id', () => {
     expect(json.data.favorite).toBeNull();
   });
 
+  /**
+   * 読み取りに失敗したら「未登録」と断定しない（#1164）
+   *
+   * `.single()` はどんなエラーでも `data: null` を返すため、`error` を
+   * 見ないと DB の一時障害が上と同じ「お気に入り未登録」になる。UI は
+   * 空のハートを出すが、押すと既存行と衝突して 409 になる。
+   *
+   * ⚠️ キーごと省いて「分からない」を伝える案は採れない。`favorite` の
+   * 不在は**未認証**という別の意味で既に使われており、受け手
+   * （`movieDetailContent.tsx` の `movie.favorite ?? null`）は両者を
+   * 区別できないため、省いても結局 null に潰れる
+   */
+  it('お気に入りの読み取りに失敗したら、未登録と断定せず500を返す', async () => {
+    mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
+    mockGetMovieDetail.mockResolvedValue({ id: 456, title: '障害中の映画' });
+
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: jest.fn().mockReturnValue({
+          eq: () => ({
+            is: () => ({
+              single: () => ({
+                data: null,
+                error: { code: '57P01', message: 'connection terminated' },
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET(createRequest('456'), {
+      params: createParams('456'),
+    });
+
+    expect(response.status).toBe(500);
+  });
+
   // === Cache-Controlヘッダー ===
 
   it('未認証時はpublic Cache-Controlヘッダーが設定される', async () => {

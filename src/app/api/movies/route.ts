@@ -32,6 +32,7 @@ import {
   GENRE_CACHE_DURATION_MS,
   DISCOVER_API_MAX_PAGES,
   GENRE_NAME_OVERRIDES,
+  SUPABASE_ERROR_CODE,
 } from '@/constants';
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
@@ -222,13 +223,24 @@ export async function GET(request: Request) {
       //
       // そのため、キャッシュ失効時の同期をCRONへ移すには先に
       // Discover専用のCRONが要る。揃えるのはそれからにする。
-      const { data: cacheInfo } = await supabase
+      const { data: cacheInfo, error: cacheInfoError } = await supabase
         .from('movie_cache')
         .select('cached_at')
         .eq('release_type', release_type)
         .order('cached_at', { ascending: false })
         .limit(1)
         .single();
+
+      // ⚠️ error を捨てると「キャッシュなし」に化け、DB が詰まっている間
+      // ずっと失効と判定して TMDb を余分に叩く。障害中はこの後のクエリも
+      // 失敗するので、ここで止めたほうが分かりやすい。
+      // 行が無い（PGRST116）＝本当にキャッシュ未作成は従来どおり通す（#1164）
+      if (
+        cacheInfoError &&
+        cacheInfoError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
+      ) {
+        throw cacheInfoError;
+      }
 
       const cacheExpired =
         !cacheInfo ||
@@ -438,12 +450,20 @@ export async function GET(request: Request) {
     if (session && moviesWithFavorites.length > 0) {
       const movieIds = moviesWithFavorites.map((m) => m.id);
 
-      const { data: favorites } = await supabase
+      const { data: favorites, error: favoritesError } = await supabase
         .from('favorites')
         .select('id, tmdb_movie_id, rating')
         .eq('user_id', session.user.id)
         .in('tmdb_movie_id', movieIds)
         .is('deleted_at', null);
+
+      // ⚠️ 握り潰すと、下の else 側で**一覧の全作品**に `favorite: null`
+      // （＝確定した「未登録」）が書かれる。空のハートが並び、押すと既存行と
+      // 衝突して 409 になる。0件なら `data: []` が返るので、ここに来る error は
+      // 本物の読み取り失敗だけ。`movies/[id]` と同じ方針（#1164）
+      if (favoritesError) {
+        throw favoritesError;
+      }
 
       if (favorites && favorites.length > 0) {
         const favoriteMap = new Map(

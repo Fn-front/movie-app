@@ -134,6 +134,34 @@ describe('POST /api/auth/password-reset/request', () => {
       expect(mockIssueToken).not.toHaveBeenCalled();
     });
 
+    /**
+     * DB障害を「未登録」に化かさない（#1164）
+     *
+     * 上の3本は**意図した仕様**（列挙防止）で、未登録でも成功を返す。
+     * ところが `error` を捨てると DB の一時障害まで同じ応答になり、
+     * 利用者には「送信しました」と出るのに**リンクは送られない**。
+     * 列挙防止は維持し、DB エラーだけを 500 に分ける
+     */
+    it('ユーザーの読み取りに失敗したら、送っていないのに成功を返さない', async () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () =>
+              Promise.resolve({
+                data: null,
+                error: { code: '57P01', message: 'connection terminated' },
+              }),
+          }),
+        }),
+      });
+
+      const response = await POST(createRequest({ email: 'user@example.com' }));
+
+      expect(response.status).toBe(500);
+      expect(mockSendEmail).not.toHaveBeenCalled();
+      expect(mockIssueToken).not.toHaveBeenCalled();
+    });
+
     it('未登録のときも所要時間を揃えるため遅延を挟む', async () => {
       // 応答時間の差だけでも登録の有無を判別できる
       mockUserLookup(null);

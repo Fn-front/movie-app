@@ -123,6 +123,39 @@ describe('GET /api/movies/suggest-title', () => {
     );
   });
 
+  /**
+   * キャッシュの読み取り失敗を「ミス」に化かさない（#1164）
+   *
+   * `!cacheError && cached` で判定しているため、DB の一時障害がそのまま
+   * キャッシュミスになり、**OpenAI を呼んで課金が発生する**。しかも
+   * レートリミットの消費もここより後ろなので、障害中は枠を使い切るまで
+   * 呼び続ける。守っている資源が費用である以上、読めないなら止める。
+   *
+   * 行が無い（PGRST116）＝本当にキャッシュ未作成は従来どおり OpenAI へ
+   */
+  it('キャッシュの読み取りに失敗したら、ミスと断定してOpenAIを呼ばない', async () => {
+    mockSingle.mockResolvedValue({
+      data: null,
+      error: { code: '57P01', message: 'connection terminated' },
+    });
+
+    const response = await GET(createRequest('ショーシャンクの空に'));
+
+    expect(response.status).toBe(500);
+    expect(mockFetchTitleSuggestions).not.toHaveBeenCalled();
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
+  });
+
+  it('キャッシュが無いだけなら従来どおりOpenAIを呼ぶ', async () => {
+    mockSingle.mockResolvedValue({ data: null, error: { code: 'PGRST116' } });
+    mockFetchTitleSuggestions.mockResolvedValue(['Shawshank']);
+
+    const response = await GET(createRequest('ショーシャンクの空に'));
+
+    expect(response.status).toBe(200);
+    expect(mockFetchTitleSuggestions).toHaveBeenCalled();
+  });
+
   it('OpenAIが空配列を返した場合は提案なしを返しDBにもキャッシュする', async () => {
     mockFetchTitleSuggestions.mockResolvedValue([]);
 

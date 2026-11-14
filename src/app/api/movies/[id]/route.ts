@@ -19,6 +19,7 @@ import {
   CACHE_CONTROL,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  SUPABASE_ERROR_CODE,
 } from '@/constants';
 
 /**
@@ -73,13 +74,29 @@ export async function GET(
       const supabase = createServiceRoleClient();
 
       if (supabase) {
-        const { data: favoriteData } = await supabase
+        const { data: favoriteData, error: favoriteError } = await supabase
           .from('favorites')
           .select('id, rating')
           .eq('user_id', session.user.id)
           .eq('tmdb_movie_id', movieId)
           .is('deleted_at', null)
           .single();
+
+        // ⚠️ 読み取りに失敗したときは `null`（＝確定した「未登録」）を
+        // 入れない。UI が空のハートを出し、押すと既存行と衝突して 409 になる。
+        //
+        // キーごと省いて「分からない」を伝える案は採れない。`favorite` の
+        // 不在は**未認証**という別の意味で既に使われており、受け手
+        // （`movieDetailContent.tsx` の `movie.favorite ?? null`）は
+        // 両者を区別できない。第3の状態を増やすより、他のルートと同じく
+        // 500 に倒す（#1164）。
+        // 行が無い（PGRST116）のは本当に未登録なので、そちらは null のまま
+        if (
+          favoriteError &&
+          favoriteError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
+        ) {
+          throw favoriteError;
+        }
 
         favorite = favoriteData ?? null;
       }

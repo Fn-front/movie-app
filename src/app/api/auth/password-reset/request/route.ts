@@ -112,11 +112,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('id, is_verified')
       .eq('email', email)
       .maybeSingle();
+
+    // ⚠️ 下の「未登録でも成功を返す」は列挙防止の**意図した仕様**だが、
+    // error を捨てると DB の一時障害まで同じ応答になる。利用者には
+    // 「送信しました」と出るのにリンクは届かない。列挙防止は保ったまま、
+    // **DB エラーだけ**を 500 に分ける（#1164）。
+    // `.maybeSingle()` は行が無いだけなら error を返さないので、ここに来る
+    // error は本物の読み取り失敗だけ
+    if (userError) {
+      throw userError;
+    }
 
     // 未登録、またはメール未確認のアカウント。
     //

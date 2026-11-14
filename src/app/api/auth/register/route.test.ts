@@ -76,7 +76,16 @@ const setupSuccessMocks = () => {
   // 既存ユーザーなし
   mockFrom.mockReturnValueOnce({
     select: () => ({
-      eq: () => ({ single: () => ({ data: null, error: null }) }),
+      eq: () => ({
+        single: () => ({
+          data: null,
+          // 行が無いときに PostgREST が返すのは PGRST116。`error: null` に
+          // していると、実装が「本当に新規」と「読み取り失敗」を分ける
+          // 分岐を検証できず、**全新規登録が 500 になる退行**を素通りさせる
+          // （#1164）
+          error: { code: 'PGRST116', message: 'not found' },
+        }),
+      }),
     }),
   });
   // ユーザーINSERT成功
@@ -173,6 +182,35 @@ describe('POST /api/auth/register', () => {
     expect(mockSendOtpEmail).not.toHaveBeenCalled();
     // タイミング均一化: 既存メール分岐も randomDelay を通す
     expect(mockRandomDelay).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * DB障害を「新規メール」に化かさない（#1164）
+   *
+   * 握り潰すと新規扱いで INSERT へ進み、一意制約違反で 500 になる。
+   * 結果の 500 は同じでも、**既存アカウントへ INSERT を試みる**経路を
+   * 通るのは意図と違う。読めなかった時点で止める
+   */
+  it('既存ユーザーの読み取りに失敗したら、新規扱いで作成を試みない', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: null,
+            error: { code: '57P01', message: 'connection terminated' },
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({ email: 'new@example.com', password: 'Password1234' }),
+    );
+
+    expect(response.status).toBe(500);
+    // 既存チェックのSELECTだけで止まり、INSERT へ進んでいない
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
   });
 
   it('既存メール時のレスポンス形状が新規登録時と区別できない', async () => {

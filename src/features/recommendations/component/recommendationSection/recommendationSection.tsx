@@ -50,6 +50,7 @@ export const RecommendationSection = memo(function RecommendationSection() {
     hasFavorites,
     isAuthenticated,
     isPending,
+    isError,
     setRecommendations,
   } = useRecommendations();
 
@@ -59,6 +60,26 @@ export const RecommendationSection = memo(function RecommendationSection() {
   // 一瞬だけ出して消すとレイアウトが跳ねる（#1048 と同種）
   if (!isAuthenticated || isPending) {
     return null;
+  }
+
+  // 取得に失敗 → そのことを出す。
+  //
+  // ⚠️ **下の `hasFavorites` の分岐に落とさないこと。** 失敗時は false に
+  // なるため、お気に入りを登録済みの利用者にまで登録促進の文言が出る（#1115）
+  if (isError) {
+    return (
+      <section
+        aria-label={RECOMMENDATIONS_MESSAGES.SECTION_TITLE}
+        className={styles.c_recommendation_section}
+      >
+        <h2 className={styles.c_recommendation_section__title}>
+          {RECOMMENDATIONS_MESSAGES.SECTION_TITLE}
+        </h2>
+        <p className={styles.c_recommendation_section__message}>
+          {RECOMMENDATIONS_MESSAGES.FETCH_FAILED}
+        </p>
+      </section>
+    );
   }
 
   return (

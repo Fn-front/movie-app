@@ -67,6 +67,12 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
+      # ホーム（/）が動的（ƒ）に戻っていないかをビルド出力で確かめる。
+      # 単体テストは page.tsx の中身しか見られないため、配下のコンポーネントで
+      # cookie を読まれると素通りする（#1115）
+      - name: assert-static-routes
+        run: node scripts/assert-static-routes.mjs
+
       - name: Clear old cache
         run: |
           find .next/cache -type f -mtime +30 -delete 2>/dev/null || true

@@ -106,6 +106,10 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: 1
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          # ホーム（/）は静的プリレンダなので、**ビルド時に**公開中映画を
+          # Supabase から取る（#1115）。無いと `/` のプリレンダで落ちる
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: run-e2e-tests
         run: npm run test:e2e -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
@@ -329,6 +333,9 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           NEXT_PUBLIC_GA_ID: G-TEST1234567
+          # 上の build と同じ理由（#1115）
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: run-e2e-ga-tests
         run: npm run test:e2e:ga

@@ -62,7 +62,9 @@ export async function fetchRecommendationData(
   ]);
 
   if (recsResult.error) {
-    console.error('Recommendations fetch error:', recsResult.error);
+    // ルートの例外ログ（`Recommendations fetch error`）と接頭辞を分ける。
+    // 同じ文言だと「DBエラーで空返却」と「例外で500」をログから区別できない
+    console.error('Recommendations query error:', recsResult.error);
     return EMPTY_RECOMMENDATION_DATA;
   }
 

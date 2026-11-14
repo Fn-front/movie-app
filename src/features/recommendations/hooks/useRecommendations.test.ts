@@ -111,6 +111,32 @@ describe('useRecommendations', () => {
   });
 
   /**
+   * 取得失敗を「お気に入り0件」と区別できるようにする。
+   *
+   * ⚠️ react-query の `isPending` はエラー時 false になるため、これが無いと
+   * **ゲートを通過して登録促進の文言が出る**（お気に入り登録済みでも）
+   */
+  it('取得に失敗したら isError を立てる', async () => {
+    mockGetRecommendations.mockRejectedValue(new Error('boom'));
+
+    const { result } = renderUseRecommendations();
+
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+    expect(result.current.isPending).toBe(false);
+    expect(result.current.hasFavorites).toBe(false);
+  });
+
+  it('未認証なら isError は立たない', () => {
+    mockUseSession.mockReturnValue({ status: 'unauthenticated' });
+
+    const { result } = renderUseRecommendations();
+
+    expect(result.current.isError).toBe(false);
+  });
+
+  /**
    * 手動更新の結果はローカル state ではなくキャッシュへ書く。
    * 詳細モーダルが同じキーを読むので、更新後の作品にも名前が付く
    */

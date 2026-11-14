@@ -14,11 +14,17 @@ import { useCallback, useMemo } from 'react';
 
 import { recommendationKeys } from '@/constants';
 import { getRecommendations } from '@/lib/api/recommendations/recommendations';
-import {
-  EMPTY_RECOMMENDATION_DATA,
-  type RecommendationData,
-} from '@/lib/api/recommendations/recommendationData';
+// ⚠️ 型だけを取る。`recommendationData.ts` はサーバー側のDBアクセスを持つので、
+// 値を import するとクライアントのモジュールグラフに引き込むことになる
+import type { RecommendationData } from '@/lib/api/recommendations/recommendationData';
 import type { Recommendation } from '@/schema/recommendations';
+
+/** キャッシュが空のときの土台（差し替え時に他のフィールドを消さないため） */
+const EMPTY_DATA: RecommendationData = {
+  recommendations: [],
+  generatedAt: null,
+  hasFavorites: false,
+};
 
 /** useRecommendations の返り値 */
 export interface UseRecommendationsReturn {
@@ -35,6 +41,15 @@ export interface UseRecommendationsReturn {
    * 一瞬セクションが消えて見える。描画の判断はこれが false になってから行う
    */
   isPending: boolean;
+  /**
+   * 取得に失敗したかどうか
+   *
+   * ⚠️ **これを無視すると、取得失敗が「お気に入り0件」と区別できない。**
+   * 失敗時は `hasFavorites` が false に落ちるため、お気に入りを登録済みの
+   * 利用者にまで登録促進の文言が出る（#1115 でクライアント取得へ移して
+   * 増えた失敗経路）
+   */
+  isError: boolean;
   /** 取得したレコメンドでキャッシュを差し替える（手動更新用） */
   setRecommendations: (next: Recommendation[]) => void;
 }
@@ -47,7 +62,11 @@ export function useRecommendations(): UseRecommendationsReturn {
   const isAuthenticated = status === 'authenticated';
   const queryClient = useQueryClient();
 
-  const { data, isPending: isQueryPending } = useQuery({
+  const {
+    data,
+    isPending: isQueryPending,
+    isError,
+  } = useQuery({
     queryKey: recommendationKeys.list,
     queryFn: getRecommendations,
     enabled: isAuthenticated,
@@ -60,7 +79,7 @@ export function useRecommendations(): UseRecommendationsReturn {
       queryClient.setQueryData<RecommendationData>(
         recommendationKeys.list,
         (prev) => ({
-          ...(prev ?? EMPTY_RECOMMENDATION_DATA),
+          ...(prev ?? EMPTY_DATA),
           recommendations: next,
         }),
       );
@@ -75,8 +94,16 @@ export function useRecommendations(): UseRecommendationsReturn {
       isAuthenticated,
       // 未認証と確定するまでは「未確定」。認証済みなら取得完了までが未確定
       isPending: status === 'loading' || (isAuthenticated && isQueryPending),
+      isError: isAuthenticated && isError,
       setRecommendations,
     }),
-    [data, isAuthenticated, status, isQueryPending, setRecommendations],
+    [
+      data,
+      isAuthenticated,
+      status,
+      isQueryPending,
+      isError,
+      setRecommendations,
+    ],
   );
 }

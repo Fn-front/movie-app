@@ -228,11 +228,13 @@ let mockRecommendationsState: {
   hasFavorites: boolean;
   isAuthenticated: boolean;
   isPending: boolean;
+  isError: boolean;
 } = {
   recommendations: [],
   hasFavorites: false,
   isAuthenticated: true,
   isPending: false,
+  isError: false,
 };
 
 jest.mock('@/features/recommendations/hooks/useRecommendations', () => ({
@@ -287,6 +289,7 @@ describe('RecommendationSection', () => {
       hasFavorites: false,
       isAuthenticated: true,
       isPending: false,
+      isError: false,
     };
     mockRefreshState = {
       isRefreshing: false,
@@ -777,6 +780,28 @@ describe('RecommendationSection', () => {
 
       expect(mockUseRecommendationRefresh).not.toHaveBeenCalled();
       expect(mockUseRecommendationEvents).not.toHaveBeenCalled();
+    });
+
+    /**
+     * 取得に失敗したとき、`hasFavorites` は false に落ちる。
+     * そのまま下の分岐へ行くと、お気に入りを登録済みの利用者にまで
+     * 「お気に入りを登録すると…」が出る（#1115）
+     */
+    it('取得に失敗したら登録促進ではなく失敗を知らせる', () => {
+      renderSection({ isError: true, hasFavorites: false });
+
+      expect(screen.getByText('おすすめの取得に失敗しました')).toBeVisible();
+      expect(
+        screen.queryByText(
+          'お気に入りを登録すると、AIがおすすめ映画を提案します',
+        ),
+      ).not.toBeInTheDocument();
+    });
+
+    it('取得に失敗したら中身のフックを動かさない', () => {
+      renderSection({ isError: true });
+
+      expect(mockUseRecommendationRefresh).not.toHaveBeenCalled();
     });
 
     it('セッション未確定の間も中身のフックを動かさない', () => {

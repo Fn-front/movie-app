@@ -112,26 +112,40 @@ export const BottomNav = memo(function BottomNav() {
    * ドロワーと揃えないと、同じ SP 画面でドロワーは保護導線を隠しボトムナビは
    * 出す、という食い違いが起きる
    *
-   * ⚠️ `isResolving` をここで使って「未確定の表示」を作ってはいけない。
-   * `bottomNav.module.scss` の `__item` は `flex: 1 1 0` の等幅なので、
-   * 件数が 2↔4 で変わると**全項目の位置が動く**。未確定の間に4枠を確保すると
-   * 今度は未ログインの利用者側に同じズレが移るだけ。クライアント側だけでは
-   * footprint が安定する選択肢が無いため、#1028 の判断を維持する
+   * ## セッション判定中は、ナビごと隠す（#1131 で #1028 の判断を変更）
+   *
+   * `__item` は `flex: 1 1 0` の等幅なので、件数が 2↔4 で変わると
+   * **全項目の位置が動く**。#1028 は「増える側へ倒す（＝2件で描く）」で
+   * 合意していたが、それはログイン済みの利用者に未ログインの導線を見せ、
+   * 確定時に 2→4 でズラす側でもあった。どちらの件数で描いても片方は
+   * 必ずズレるため、**確定するまで見せない**ことにした。
+   *
+   * 隠している間も**認証済みと同じ並びで描いておく**。現れる瞬間に
+   * 再配置が起きないので、ログイン済みの利用者にはズレが一切無い。
+   * 未ログインの利用者には、隠れている間に 4→2 の再配置が済む。
+   *
+   * ⚠️ `display: none` にはしない。ResizeObserver が 0×0 を報告して
+   * `--bottom-nav-height` が 0px に戻り、本文の padding-bottom が動く
+   * （`useBottomNavHeight.ts`）。枠は保ったまま隠すこと
    */
-  const { isAuthenticated } = useAuthStatus();
+  const { isAuthenticated, isResolving } = useAuthStatus();
+  const showsProtected = isAuthenticated || isResolving;
 
   const navItems = useMemo(
     () =>
       BOTTOM_NAV_ITEMS.filter(
-        (item) => !item.requiresAuth || isAuthenticated,
+        (item) => !item.requiresAuth || showsProtected,
       ).map((item) => ({ ...item, isActive: pathname === item.href })),
-    [isAuthenticated, pathname],
+    [showsProtected, pathname],
   );
 
   return (
     <nav
       ref={navRef}
-      className={styles.c_bottom_nav}
+      className={cn(
+        styles.c_bottom_nav,
+        isResolving && styles['c_bottom_nav--resolving'],
+      )}
       aria-label={ARIA_LABELS.PRIMARY_NAV}
     >
       <ul className={styles.c_bottom_nav__list}>

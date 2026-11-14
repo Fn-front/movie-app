@@ -282,6 +282,30 @@ describe('useWatchlist', () => {
     expect(mockGetWatchlist).not.toHaveBeenCalled();
   });
 
+  it('一覧を描いた後に未確定へ戻ってもスケルトンに差し替えない', () => {
+    // `useSession().update()`（表示名の保存など）は status を loading へ
+    // 戻す。未確定を無条件に読み込み中とすると、埋まっている一覧が
+    // スケルトンに化ける
+    const { result, rerender } = renderHook(() => useWatchlist(), {
+      wrapper: createWrapper(),
+    });
+
+    return waitFor(() =>
+      expect(result.current.watchlist.length).toBeGreaterThan(0),
+    ).then(() => {
+      const loaded = result.current.watchlist.length;
+
+      (useSession as jest.Mock).mockReturnValue({
+        data: null,
+        status: 'loading',
+      });
+      rerender();
+
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.watchlist).toHaveLength(loaded);
+    });
+  });
+
   it('次ページ読み込みが動作する', async () => {
     mockGetWatchlist
       .mockResolvedValueOnce({

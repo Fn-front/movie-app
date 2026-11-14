@@ -344,10 +344,15 @@ export function useWatchlist(
   return useMemo(
     () => ({
       watchlist,
-      // セッション未確定の間も読み込み中として返す。react-query は
-      // 無効化中のクエリの isLoading を false にするため、素通しすると
-      // 「0件が確定した」ように見えて空メッセージが先に出る（#1132）
-      isLoading: isResolving || watchlistQuery.isLoading,
+      // セッション未確定で、まだ何も無いときは読み込み中として返す。
+      // react-query は無効化中のクエリの isLoading を false にするため、
+      // 素通しすると「0件が確定した」ように見えて空メッセージが先に出る（#1132）。
+      //
+      // 件数を条件に入れるのは、`useSession().update()`（表示名の保存など）が
+      // status を loading へ戻すため。無条件だと埋まっている一覧が
+      // スケルトンに化ける
+      isLoading:
+        (isResolving && watchlist.length === 0) || watchlistQuery.isLoading,
       isFetchingNextPage: watchlistQuery.isFetchingNextPage,
       hasNextPage: watchlistQuery.hasNextPage,
       fetchNextPage,

@@ -42,7 +42,7 @@ import styles from './userMenu.module.scss';
  */
 export const UserMenu = memo(function UserMenu() {
   const { data: session } = useSession();
-  const { isAuthenticated } = useAuthStatus();
+  const { isAuthenticated, isResolving } = useAuthStatus();
   const {
     handleNavigateToSettings,
     handleNavigateToAdminAccounts,
@@ -76,13 +76,18 @@ export const UserMenu = memo(function UserMenu() {
   );
 
   // 判定は useAuthStatus に集約（無効化済みセッションの扱いを含む / #1134）。
-  // ⚠️ 未確定（isResolving）もここでは未ログイン扱いのままにしている。
-  // ログイン導線とアバターで footprint が違うため、中立の表示を置くと
-  // 未ログインの利用者に逆のちらつきが出る。#1131 で別途判断する
+  //
+  // 未確定（isResolving）の間は**ログイン導線を見せない**（#1131）。
+  // 出してしまうと、ログイン済みの利用者がフルロードするたびに
+  // 「ログイン」ボタンが一瞬見える。枠は保ったまま隠し、確定後に
+  // 正しいほうを出す（隠し方の理由は userMenu.module.scss）
   if (!isAuthenticated) {
     return (
       <button
-        className={styles.c_user_menu__login_button}
+        className={cn(
+          styles.c_user_menu__login_button,
+          isResolving && styles['c_user_menu--resolving'],
+        )}
         onClick={handleLogin}
         aria-label={MENU_LABELS.LOGIN}
       >

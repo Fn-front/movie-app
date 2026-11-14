@@ -55,6 +55,12 @@ export function useAuthStatus(): AuthStatus {
   // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が空文字で
   // 埋められたオブジェクトとして返るため、存在確認では判定できない。
   // id の有無で見る（`getAuthSession` / `proxy.ts` と同じ基準 / #699）
+  //
+  // この基準に揃えると、無効化済みセッションでは認証必須のリクエストを
+  // そもそも投げなくなるため、401 →『axios のインターセプタが強制ログアウト』
+  // という解消経路は通らなくなる。代わりに `proxy.ts` が
+  // 「セッションCookieはあるが user.id が無い」リクエストでCookieを削除するので、
+  // 次にページ遷移した時点で解消する（#1134）
   const userId = session?.user?.id;
 
   return useMemo(

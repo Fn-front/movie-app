@@ -32,6 +32,20 @@
   // この余白も込みの高さが --bottom-nav-height に出る
   padding-bottom: env(safe-area-inset-bottom);
 
+  // セッション判定中は見せない（#1131）
+  //
+  // 件数が 2↔4 で変わると等幅（`__item` の flex: 1 1 0）の全項目が動くため、
+  // どちらの件数で描いても片方の利用者が必ずズレる。確定するまで隠し、
+  // 隠れている間に再配置を済ませる。
+  //
+  // ⚠️ `display: none` にしないこと。ResizeObserver が 0×0 を報告して
+  // `--bottom-nav-height` が 0px に戻り、本文の padding-bottom が動く。
+  // `visibility: hidden` なら枠は残り、Tab 順と支援技術からも外れる
+  // （`opacity: 0` だと見えないままフォーカスできてしまう）
+  &--resolving {
+    visibility: hidden;
+  }
+
   // lg 以上はサイドバーのナビで足りるので出さない。
   // display: none になると ResizeObserver が 0×0 を報告し、
   // --bottom-nav-height も 0px に戻るため本文に余計な padding は残らない

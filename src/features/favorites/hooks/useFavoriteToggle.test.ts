@@ -277,6 +277,8 @@ describe('useFavoriteToggle', () => {
     });
 
     expect(mockOpenLoginPrompt).not.toHaveBeenCalled();
+    // 誘導を出さない代わりにモーダルを開いてしまっては意味がない
+    expect(result.current.modalState.isOpen).toBe(false);
   });
 
   it('無効化済みセッションはログイン誘導を出す', () => {

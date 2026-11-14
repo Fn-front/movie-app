@@ -4,16 +4,38 @@
  * ログイン誘導モーダルが表示されることを確認する。
  */
 
+import type { Page } from '@playwright/test';
+
 import { test, expect } from '../fixtures/auth';
 
 test.describe('ナビゲーションからのログイン誘導（未認証）', () => {
   // storageStateを空にして未認証状態にする
   test.use({ storageState: { cookies: [], origins: [] } });
 
+  /**
+   * セッションの判定が終わるまで待つ
+   *
+   * `useNavAuthGuard` は**未確定の間は遷移を通す**（ログイン済みの利用者に
+   * 誤ってログイン誘導を出さないため / #1131）。判定前にクリックすると
+   * モーダルではなく `/auth/signin` へ飛ぶので、このテストは必ず落ちる。
+   *
+   * ログイン導線は判定中 `visibility: hidden` で隠れている（#1131）。
+   * 見えたら判定が終わっている
+   */
+  const waitForSessionResolved = async (page: Page) => {
+    // サイドバーに限定する。モーダルを開いた後は同名のボタンが増えるため
+    await expect(
+      page
+        .getByRole('complementary', { name: 'サイドバー' })
+        .getByRole('button', { name: 'ログイン' }),
+    ).toBeVisible();
+  };
+
   test('未認証でお気に入りリンクを押すとログイン誘導モーダルが表示される', async ({
     page,
   }) => {
     await page.goto('/');
+    await waitForSessionResolved(page);
 
     await page.getByRole('link', { name: 'お気に入り' }).click();
 
@@ -30,6 +52,7 @@ test.describe('ナビゲーションからのログイン誘導（未認証）',
     page,
   }) => {
     await page.goto('/');
+    await waitForSessionResolved(page);
 
     await page.getByRole('link', { name: 'ウォッチリスト' }).click();
 
@@ -57,6 +80,7 @@ test.describe('ナビゲーションからのログイン誘導（未認証）',
       page,
     }) => {
       await page.goto('/');
+      await waitForSessionResolved(page);
 
       await page.getByRole('link', { name: link }).click();
 

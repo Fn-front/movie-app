@@ -187,6 +187,30 @@ describe('AppLayout', () => {
       render(<AppLayout>コンテンツ</AppLayout>);
       expect(screen.queryByTestId('calendar-button')).not.toBeInTheDocument();
     });
+
+    it('無効化済みセッションでは保護導線を出さない', () => {
+      // パスワード変更・絶対期限切れは status が authenticated のまま
+      // user が空文字で埋められて返る。status だけで判定していた頃は、
+      // API が 401 を返す状態なのにサイドバーの導線を出していた（#1134）
+      mockUseSession.mockReturnValue({
+        data: { user: { id: '', name: '', email: '', image: null } },
+        status: 'authenticated',
+      });
+      render(<AppLayout>コンテンツ</AppLayout>);
+
+      expect(screen.queryByTestId('watchlist-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('calendar-button')).not.toBeInTheDocument();
+    });
+
+    it('セッション判定中は保護導線を出さない', () => {
+      // 出してから消すと未ログインの利用者にちらつきが出る。
+      // ここは「まだ何も出ていない」だけで、誤った状態は見せていない（#1131）
+      mockUseSession.mockReturnValue({ data: null, status: 'loading' });
+      render(<AppLayout>コンテンツ</AppLayout>);
+
+      expect(screen.queryByTestId('watchlist-panel')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('calendar-button')).not.toBeInTheDocument();
+    });
   });
 
   describe('公開カレンダー', () => {

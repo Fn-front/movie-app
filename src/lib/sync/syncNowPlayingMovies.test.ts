@@ -907,6 +907,10 @@ describe('syncNowPlayingMovies', () => {
 
       expect(result.fetched).toBe(0);
       expect(getNowPlayingMovies).toHaveBeenCalledTimes(1);
+      // `nowPlayingIds` が空になる唯一の経路。ここでクリアを撃つと
+      // `.not('id','in','()')` を発行することになり、PostgREST は構文エラーに
+      // せず**全件にマッチ**する（本番で実測）。つまり公開中タブが全滅する
+      expect(supabaseMock.fromMock).not.toHaveBeenCalled();
     });
   });
 

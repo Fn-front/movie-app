@@ -97,10 +97,14 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
   /**
    * 公開中かどうかを判定できなかった作品
    *
-   * TMDb への問い合わせ（キーワード取得・コンサート映像判定）が失敗すると、
-   * `nowPlayingIds.add()` に到達しないまま catch へ落ちる。これを
+   * `nowPlayingIds.add()` に到達しないまま catch へ落ちた作品。これを
    * 「公開中ではない」と扱うと、一時障害だけで作品が公開中タブから消える。
    * クリアの対象から外して現状維持にする（#1154）
+   *
+   * 実際に throw しうるのは `getMovieKeywordIds` と `supabase.rpc` の2つだけ。
+   * `isConcertFilm` は内部で握り潰す（`concertFilm.ts` の `catch` が false を
+   * 返す）のでここには来ない。**あちらを fail-closed に変えるなら、この除外も
+   * 効くようになる**点に注意
    */
   const unresolvedIds = new Set<number>();
   const now = new Date().toISOString();
@@ -175,7 +179,10 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
   // ⚠️ 1件も判定できなかった場合はクリアしない。TMDb の全面障害やキー失効で
   // 公開中タブが空になるのを避けるため、異常時は既存の表示を維持する
   // （`syncStreamingMovies.ts` と同じ方針）。
-  // ガードが無いと `.not('id', 'in', '()')` を発行することになる
+  // ガードが無いと `.not('id', 'in', '()')` を発行することになる。
+  // PostgREST はこれを構文エラーにせず**全件にマッチ**する（本番で実測:
+  // `id=not.in.()` はフィルタ無しと同じ content-range を返す）。
+  // つまりガードが無い場合、異常時に公開中タブが全滅する
   if (nowPlayingIds.size > 0) {
     // 判定に失敗した作品は現状維持にしたいので、保持対象に含める
     const keepIds = [...nowPlayingIds, ...unresolvedIds];
@@ -183,7 +190,7 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
       .from('movie_cache')
       .update({ is_now_playing: false })
       .eq('is_now_playing', true)
-      .eq('release_type', 'theatrical')
+      .eq('release_type', RELEASE_TYPE.THEATRICAL)
       .not('id', 'in', `(${keepIds.join(',')})`)
       .select('id');
 

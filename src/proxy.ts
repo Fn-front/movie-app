@@ -92,9 +92,17 @@ export const proxy = auth((req) => {
   }
 
   // セッション期限切れ検知: cookieはあるがJWT検証に失敗 → cookieを削除してログアウト
+  //
+  // ⚠️ **第2要素が未了のセッションを除く**（#1150）。`totpPending` のとき
+  // session コールバックは `user.id` を空文字にするため `isAuthenticated` が
+  // false になるが、これは「JWT が壊れている」のではなく**認証の途中**。
+  // `/auth/two-factor` は `AUTH_REQUIRED_ROUTES` に含まれず保護パス判定も
+  // 通らないので、除外しないと画面を開いた瞬間に Cookie が消える。
+  // そうなると `update({ totpCode })` が成立せず、何度入力しても
+  // 「認証コードが正しくありません」が出続けてログインできない。
   const hasSessionCookie = req.cookies.has(SESSION_COOKIE_NAME);
 
-  if (!isAuthenticated && hasSessionCookie) {
+  if (!isAuthenticated && !isTotpPending && hasSessionCookie) {
     const response = isProtectedPath
       ? NextResponse.redirect(buildSignInUrl())
       : NextResponse.next();

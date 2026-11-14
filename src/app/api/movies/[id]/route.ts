@@ -19,6 +19,7 @@ import {
   CACHE_CONTROL,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  SUPABASE_ERROR_CODE,
 } from '@/constants';
 
 /**
@@ -73,7 +74,7 @@ export async function GET(
       const supabase = createServiceRoleClient();
 
       if (supabase) {
-        const { data: favoriteData } = await supabase
+        const { data: favoriteData, error: favoriteError } = await supabase
           .from('favorites')
           .select('id, rating')
           .eq('user_id', session.user.id)
@@ -81,7 +82,17 @@ export async function GET(
           .is('deleted_at', null)
           .single();
 
-        favorite = favoriteData ?? null;
+        // ⚠️ 読み取りに失敗したときは `null`（＝確定した「未登録」）を
+        // 入れない。UI が「＋」を出し、押すと既存行と衝突して 409 になる。
+        // 作品情報そのものは取れているので 500 にもしない。未認証時と同じく
+        // **キーごと省いて**「分からない」を伝える（#1164）。
+        // 行が無い（PGRST116）のは本当に未登録なので、そちらは null のまま
+        if (
+          !favoriteError ||
+          favoriteError.code === SUPABASE_ERROR_CODE.NOT_FOUND
+        ) {
+          favorite = favoriteData ?? null;
+        }
       }
     }
 

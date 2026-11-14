@@ -17,7 +17,12 @@ import {
   BCRYPT_COST,
   VALIDATION_MESSAGES,
 } from '@/constants/auth';
-import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
+import {
+  HTTP_STATUS,
+  ERROR_CODE,
+  RATE_LIMIT_ACTION,
+  SUPABASE_ERROR_CODE,
+} from '@/constants';
 import { OTP_ACTION, OTP_CONFIG, OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import { hashVerificationToken } from '@/lib/otp';
@@ -104,12 +109,22 @@ export async function POST(request: Request) {
     // OTP検証チェック: otp/verify が発行した検証済みトークンで確認する。
     // メールアドレスで引くと「検証済みの行が存在する」だけで通ってしまうため、
     // 検証を完了した当人しか持たないトークンのハッシュで引く
-    const { data: verifiedOtp } = await supabase
+    const { data: verifiedOtp, error: verifiedOtpError } = await supabase
       .from('otp_codes')
       .select('id, email, verified_at')
       .eq('verification_token_hash', hashVerificationToken(verificationToken))
       .eq('action_type', OTP_ACTION.PASSWORD_CHANGE)
       .single();
+
+    // ⚠️ error を捨てると DB の一時障害が下の「OTP未検証」(400) に化ける。
+    // 確認コードの検証を終えた利用者が弾かれ、再送からやり直しになる。
+    // 行が無い（PGRST116）のは本当に未検証なので、そちらは従来どおり 400（#1164）
+    if (
+      verifiedOtpError &&
+      verifiedOtpError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
+    ) {
+      throw verifiedOtpError;
+    }
 
     // トークンが示す行が、セッションユーザー本人のものであること
     if (!verifiedOtp || verifiedOtp.email !== user.email) {

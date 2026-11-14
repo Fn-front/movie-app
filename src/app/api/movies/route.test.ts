@@ -918,6 +918,41 @@ describe('GET /api/movies', () => {
 
       expect(mockDiscoverMovies).toHaveBeenCalled();
     });
+
+    /**
+     * 読み取り失敗を「キャッシュなし」に化かさない（#1164）
+     *
+     * `.single()` はどんなエラーでも `data: null` を返すため、`error` を
+     * 見ないと DB の一時障害が毎回「失効」と判定され、**TMDb を余分に叩く**。
+     * 障害中はこの後のクエリも失敗するので、ここで止めたほうが分かりやすい。
+     *
+     * 行が無い（PGRST116）＝本当にキャッシュ未作成は従来どおり失効扱い
+     */
+    it('キャッシュの読み取りに失敗したら、失効と断定してTMDbを叩かない', async () => {
+      const handler = await loadGET();
+      setupFromMock({
+        cacheResult: {
+          data: null,
+          error: { code: '57P01', message: 'connection terminated' },
+        },
+      });
+
+      const response = await handler(createRequest());
+
+      expect(response.status).toBe(500);
+      expect(mockDiscoverMovies).not.toHaveBeenCalled();
+    });
+
+    it('キャッシュが1件も無いときは従来どおりTMDbを叩く', async () => {
+      const handler = await loadGET();
+      setupFromMock({
+        cacheResult: { data: null, error: { code: 'PGRST116' } },
+      });
+
+      await handler(createRequest());
+
+      expect(mockDiscoverMovies).toHaveBeenCalled();
+    });
   });
 
   // === now_showing + theatrical パス ===

@@ -90,7 +90,7 @@ export const CookieConsentBanner = memo(function CookieConsentBanner() {
       // トーストが浮いたままになる
       setBannerHeightVar(null);
     };
-  }, [isVisible]);
+  }, []);
 
   const handleGrant = useCallback(() => {
     grant();

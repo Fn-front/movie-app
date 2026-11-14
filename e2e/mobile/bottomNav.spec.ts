@@ -121,7 +121,10 @@ test.describe('SP のボトムナビゲーション（認証済み）', () => {
     const navBox = await nav.boundingBox();
     expect(navBox).not.toBeNull();
 
-    // ResizeObserver 経由なので1フレーム遅れる。実装は切り上げて書き込む
+    // 初回はレイアウト効果が同期で書くので待ちは要らない（#1028 の時点で
+    // そうなっている）。poll のままにしてあるのは、安全領域や折り返しの
+    // 変化で RO が後から上書きする経路が残っているため。
+    // 実装は切り上げて書き込む
     const expected = `${Math.ceil(navBox!.height)}px`;
     await expect.poll(() => readNavHeightVar(page)).toBe(expected);
 

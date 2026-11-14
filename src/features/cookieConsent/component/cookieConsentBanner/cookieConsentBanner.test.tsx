@@ -93,19 +93,22 @@ describe('CookieConsentBanner', () => {
    * ⚠️ jsdom の ResizeObserver はダミー（`jest.setup.js`）でコールバックを
    * 発火しない。つまり**同期書き込みが無いと変数は一度も設定されない**ので、
    * ここで「設定されていること」を見れば同期書き込みの有無を検証できる。
-   * 実際の高さは jsdom がレイアウトしないため 0 になる
+   * 実際の高さは jsdom がレイアウトしないため 0 になる。
+   *
+   * ⚠️ ここで守れるのは**同期書き込みがあること**だけ。#1155 はそれと
+   * 「ペイント前に走ること」の合成バグで、後者は jsdom にペイントが無い以上
+   * テストでは守れない。`useIsomorphicLayoutEffect` を `useEffect` に戻しても
+   * このファイルは全件通る（実測）。依存配列のほうは eslint の
+   * `exhaustive-deps` に `additionalHooks` で拾わせてある
    */
   describe('高さの CSS 変数', () => {
-    afterEach(() => {
-      document.documentElement.style.removeProperty(BANNER_HEIGHT_VAR);
-    });
-
     it('描画した時点で既に書かれている（ResizeObserver を待たない）', () => {
       render(<CookieConsentBanner />);
 
+      // 値まで見る。単位落ちや Math.ceil 抜けも同時に捕まえる
       expect(
         document.documentElement.style.getPropertyValue(BANNER_HEIGHT_VAR),
-      ).not.toBe('');
+      ).toBe('0px');
     });
 
     it('バナーが消えたら変数も外す', () => {

@@ -39,7 +39,9 @@ test.describe('Cookie同意 / バナー表示中のレイアウト', () => {
     // ResizeObserver から渡す値と同じく切り上げる
     const expected = `${Math.ceil(geometry.borderBoxHeight)}px`;
 
-    // ResizeObserver 経由なので1フレーム遅れる
+    // 初回はレイアウト効果が同期で書くので待ちは要らない（#1155）。
+    // poll のままにしてあるのは、折り返しの変化で RO が後から上書きする
+    // 経路が残っているため
     await expect.poll(() => readBannerHeightVar(page)).toBe(expected);
 
     const paddingBottom = await page.evaluate(

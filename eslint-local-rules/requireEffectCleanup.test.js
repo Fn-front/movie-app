@@ -139,6 +139,21 @@ ruleTester.run('require-effect-cleanup', rule, {
       `,
       errors: [{ messageId: 'missingCleanup' }],
     },
+    // useIsomorphicLayoutEffect + async、クリーンアップなし
+    //
+    // 中身は useEffect / useLayoutEffect そのもの（`useIsomorphicLayoutEffect.ts`）。
+    // 名前が違うだけで検査を素通りしていた（#1155）
+    {
+      code: `
+        useIsomorphicLayoutEffect(() => {
+          async function measure() {
+            await something();
+          }
+          measure();
+        }, []);
+      `,
+      errors: [{ messageId: 'missingCleanup' }],
+    },
     // IIFE async、クリーンアップなし
     {
       code: `

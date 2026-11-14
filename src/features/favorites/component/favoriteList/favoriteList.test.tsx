@@ -239,6 +239,29 @@ describe('FavoriteList', () => {
       ).toBeInTheDocument();
     });
 
+    /**
+     * 10個のチップは `sm` でも 258px 要る。リスト行の情報欄は 375px 幅で
+     * 213px しかなく、そのまま置くと幅だけが縮んで潰れる（実測 21.5px、
+     * 320px では 16px）。リストでは点数1つに畳む
+     */
+    it('リスト行の評価は点数1つに畳む', () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+      const { container } = renderList();
+
+      expect(
+        container.querySelectorAll('[class*="rating_indicator__item"]'),
+      ).toHaveLength(mockFavorites.length);
+    });
+
+    it('グリッドでは10段階をそのまま出す', () => {
+      const { container } = renderList();
+
+      expect(
+        container.querySelectorAll('[class*="rating_indicator__item"]'),
+      ).toHaveLength(mockFavorites.length * 10);
+    });
+
     // #1050 の完了条件「リスト行でも評価の表示と編集が維持される」
     it('リスト行でも評価の表示と編集が残る', async () => {
       localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');

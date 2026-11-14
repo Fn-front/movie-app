@@ -112,10 +112,6 @@
       @include text-truncate;
     }
 
-    .c_watchlist_tile__streaming {
-      flex-shrink: 0;
-    }
-
     // ポスターへの重ねをやめて、メタ行・ボタン列の実要素として並べる。
     // 絶対配置のままだとボタンぶんの右余白を `__info` 側で言い当てる
     // 必要があり、56px のポスターにはバッジも収まらない
@@ -126,8 +122,13 @@
       position: static;
     }
 
-    .c_watchlist_tile__watched_badge {
+    // バッジは縮めても情報が減るだけなので、公開日から先に詰めさせる
+    .c_watchlist_tile__watched_badge,
+    .c_watchlist_tile__streaming {
       flex-shrink: 0;
+    }
+
+    .c_watchlist_tile__watched_badge {
       white-space: nowrap;
     }
   }

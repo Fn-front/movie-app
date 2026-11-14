@@ -482,6 +482,7 @@ async function insertRows(
  */
 const WATCHLIST_SEED_ID_OFFSET = 40;
 const FAVORITES_SEED_ID_OFFSET = 50;
+const WATCHED_RATED_SEED_ID_OFFSET = 60;
 
 /**
  * 指定ユーザーのウォッチリストに作品をシードする
@@ -536,6 +537,57 @@ export async function seedFavoritesForUser(
     })),
     'お気に入りのシード',
   );
+}
+
+/**
+ * ウォッチリストに「視聴済み＋評価あり」の作品を1件シードする
+ *
+ * `/watchlist` のカードは視聴済みのときだけ評価を出す（未視聴だと
+ * お気に入り登録が残っていても出さない）。評価が入ると行の横幅が
+ * いちばん厳しくなるので、レイアウトの回帰はこの組み合わせで見る。
+ *
+ * ⚠️ ウォッチリストとお気に入りは `tmdb_movie_id` で突き合わせる。
+ * 別のIDで入れると評価が出ず、**テストは通るが何も検証していない**状態になる
+ *
+ * @param userId - 対象ユーザーのID
+ * @param rating - 付ける評価（1〜10）
+ * @returns シードした作品のタイトル
+ */
+export async function seedWatchedRatedWatchlistItemForUser(
+  userId: string,
+  rating = 8,
+): Promise<string> {
+  const tmdbMovieId = runScopedMovieId(WATCHED_RATED_SEED_ID_OFFSET);
+  const title = 'E2E視聴済み評価あり';
+
+  await insertRows(
+    'watchlist',
+    [
+      {
+        user_id: userId,
+        tmdb_movie_id: tmdbMovieId,
+        title,
+        release_date: '2026-03-01',
+        watched_at: '2026-04-01T00:00:00Z',
+      },
+    ],
+    '視聴済み作品のシード',
+  );
+  await insertRows(
+    'favorites',
+    [
+      {
+        user_id: userId,
+        tmdb_movie_id: tmdbMovieId,
+        title,
+        release_date: '2026-03-01',
+        rating,
+      },
+    ],
+    '視聴済み作品の評価シード',
+  );
+
+  return title;
 }
 
 /**

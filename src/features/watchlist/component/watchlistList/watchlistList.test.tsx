@@ -253,6 +253,61 @@ describe('WatchlistList', () => {
       ).toBe(true);
     });
 
+    /**
+     * 評価は視聴済みの行にだけ出る。10個のチップ（`sm` でも 258px）を
+     * そのまま置くと、情報欄（375px 幅で 213px）に収まらず
+     * **同じ行の公開日が 0px まで潰れる**。リストでは点数1つに畳む
+     */
+    describe('評価の畳み込み', () => {
+      const watchedRatedItems = () =>
+        createMockItems(1).map((item) => ({
+          ...item,
+          watched_at: '2026-04-01T00:00:00Z',
+        }));
+
+      const renderRated = () =>
+        render(
+          <WatchlistList
+            watchlist={watchedRatedItems()}
+            isLoading={false}
+            getFavoriteInfo={() => ({ id: 'fav-1', rating: 8 })}
+          />,
+        );
+
+      it('リスト行の評価は点数1つに畳む', () => {
+        localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+        const { container } = renderRated();
+
+        expect(
+          container.querySelectorAll('[class*="rating_indicator__item"]'),
+        ).toHaveLength(1);
+        // 読み上げは畳んでも変わらない
+        expect(
+          screen.getByRole('img', { name: '評価: 8/10' }),
+        ).toBeInTheDocument();
+      });
+
+      it('グリッドでは10段階をそのまま出す', () => {
+        const { container } = renderRated();
+
+        expect(
+          container.querySelectorAll('[class*="rating_indicator__item"]'),
+        ).toHaveLength(10);
+      });
+
+      // 評価が入っても公開日の行は残す（幅の取り合いで消えないこと）
+      it('リスト行で評価が出ても公開日を描く', () => {
+        localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+        const { container } = renderRated();
+
+        expect(
+          container.querySelector('[class*="c_watchlist_tile__date"]'),
+        ).toHaveTextContent('2026年03月01日');
+      });
+    });
+
     // グリッド用の 190px のままだと、56px の枠へ3倍以上大きい候補を取りに行く
     it('リスト行のポスターはリスト幅のsizesを使う', () => {
       localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');

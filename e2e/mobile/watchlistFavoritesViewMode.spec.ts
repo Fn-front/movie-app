@@ -17,7 +17,11 @@ import {
   openDedicatedSession,
   type DedicatedSession,
 } from '../fixtures/dedicatedSession';
-import { seedFavoritesForUser, seedWatchlistForUser } from '../helpers/api';
+import {
+  seedFavoritesForUser,
+  seedWatchedRatedWatchlistItemForUser,
+  seedWatchlistForUser,
+} from '../helpers/api';
 import { runScopedEmail } from '../helpers/runScope';
 import { expectTapAreaAtLeast } from '../helpers/tapTarget';
 
@@ -42,9 +46,14 @@ const MIN_VISIBLE_ROWS = 6;
 /** シードする件数。1画面に収まるかを見るので最低件数より多く積む */
 const SEED_COUNT = 8;
 
-/** ウォッチリストのタイル（カード直下だけを引く） */
-const WATCHLIST_TILE =
-  '[class*="c_card"][class*="c_watchlist_tile"]:not([class*="c_watchlist_tile_skeleton"])';
+/**
+ * ウォッチリストのタイル（カード直下だけを引く）
+ *
+ * `movieViewMode.spec.ts` と違いスケルトンの除外は要らない。読み込み中に
+ * 出るのは共通の `MovieTileSkeleton`（`c_movie_tile_skeleton`）で、
+ * `c_watchlist_tile` には当たらない
+ */
+const WATCHLIST_TILE = '[class*="c_card"][class*="c_watchlist_tile"]';
 
 /** お気に入りのタイル */
 const FAVORITE_TILE = '[class*="c_card"][class*="c_favorite_tile"]';
@@ -53,7 +62,13 @@ const FAVORITE_TILE = '[class*="c_card"][class*="c_favorite_tile"]';
 const WATCHLIST_LIST_TILE = `${WATCHLIST_TILE}[class*="watchlist_tile--list"]`;
 const FAVORITE_LIST_TILE = `${FAVORITE_TILE}[class*="favorite_tile--list"]`;
 
+/** 視聴済み＋評価ありの行に付ける点数 */
+const RATED_SCORE = 8;
+
 let session: DedicatedSession;
+
+/** 視聴済み＋評価ありでシードした作品のタイトル */
+let watchedRatedTitle: string;
 
 /** 表示切替のトグル */
 const viewToggle = (page: Page) =>
@@ -97,6 +112,11 @@ test.beforeAll(async ({ browser }, testInfo) => {
 
   await seedWatchlistForUser(session.userId, SEED_COUNT);
   await seedFavoritesForUser(session.userId, SEED_COUNT);
+  // 評価が入った行は横幅がいちばん厳しい。素の行だけだと潰れを検知できない
+  watchedRatedTitle = await seedWatchedRatedWatchlistItemForUser(
+    session.userId,
+    RATED_SCORE,
+  );
 });
 
 test.afterAll(async () => {
@@ -172,14 +192,18 @@ test.describe('ウォッチリストの表示モード切替', () => {
     await expect(firstRow).toBeVisible();
 
     // DOM 順（＝タブ順）が視覚の左右と食い違うと、1行ごとに
-    // 右端のボタンから左のタイトルへ逆走する（WCAG 1.3.2 / 2.4.3）
+    // 右端のボタンから左のタイトルへ逆走する（WCAG 1.3.2 / 2.4.3）。
+    //
+    // ⚠️ **タイトルのリンク（`<a>`）を必ず含めること。** button だけを見ると、
+    // 操作列を `__info` の前へ移しても2つのボタンは左→右のままなので、
+    // 守りたい逆走そのものを検知できない
     const lefts = await firstRow.evaluate((tile) =>
-      Array.from(tile.querySelectorAll('button')).map(
+      Array.from(tile.querySelectorAll('a, button')).map(
         (el) => el.getBoundingClientRect().left,
       ),
     );
 
-    expect(lefts.length).toBeGreaterThan(1);
+    expect(lefts.length).toBeGreaterThan(2);
     for (let i = 1; i < lefts.length; i += 1) {
       expect(lefts[i]).toBeGreaterThanOrEqual(lefts[i - 1]);
     }
@@ -227,6 +251,44 @@ test.describe('ウォッチリストの表示モード切替', () => {
       // 16px 空けないと領域が重なり、DOM で後ろの削除が視聴済みを食う
       expect(gap).toBeGreaterThanOrEqual(44 - 28);
     }
+  });
+
+  /**
+   * 評価は視聴済みの行にだけ出る。10段階のチップ（`sm` でも 258px）をそのまま
+   * 置くと、情報欄（375px 幅で 213px）に収まらず**公開日が 0px まで潰れた**。
+   * リストでは点数1つに畳んである（#1049）
+   */
+  test('評価のある行でも公開日が消えない', async () => {
+    const { page } = session;
+
+    await viewToggle(page).click();
+
+    const ratedRow = page
+      .locator(WATCHLIST_LIST_TILE)
+      .filter({ hasText: watchedRatedTitle });
+    await expect(ratedRow).toHaveCount(1);
+    await expect(
+      ratedRow.getByRole('img', { name: `評価: ${RATED_SCORE}/10` }),
+    ).toBeVisible();
+
+    const measured = await ratedRow.evaluate((row) => {
+      const date = row.querySelector('[class*="c_watchlist_tile__date"]');
+      const chips = Array.from(
+        row.querySelectorAll('[class*="c_rating_indicator__item"]'),
+      ).map((el) => el.getBoundingClientRect());
+
+      return {
+        dateWidth: date?.getBoundingClientRect().width ?? 0,
+        dateText: date?.textContent ?? '',
+        chips: chips.map((r) => ({ w: r.width, h: r.height })),
+      };
+    });
+
+    expect(measured.dateText).not.toBe('');
+    expect(measured.dateWidth).toBeGreaterThan(0);
+    // 10個のままだと幅だけ縮んで非正方形に潰れる（実測 24 → 21.5px）
+    expect(measured.chips).toHaveLength(1);
+    expect(measured.chips[0].w).toBe(measured.chips[0].h);
   });
 
   // 破壊的操作なので、このブロックの最後に置く（以降の件数が1件減る）
@@ -300,8 +362,22 @@ test.describe('お気に入りの表示モード切替', () => {
     await expect(firstRow).toBeVisible();
     await expect(firstRow.getByRole('img', { name: /評価:/ })).toBeVisible();
 
+    // 10段階のチップのままだと、情報欄に収まらず幅だけ縮んで潰れる
+    // （実測 24 → 21.5px、320px では 16px）。リストは点数1つに畳む（#1050）
+    const chips = await firstRow.evaluate((row) =>
+      Array.from(
+        row.querySelectorAll('[class*="c_rating_indicator__item"]'),
+      ).map((el) => {
+        const rect = el.getBoundingClientRect();
+        return { w: rect.width, h: rect.height };
+      }),
+    );
+    expect(chips).toHaveLength(1);
+    expect(chips[0].w).toBe(chips[0].h);
+
     await firstRow.getByRole('button', { name: 'お気に入りを編集' }).click();
 
+    // 畳んでも編集導線は残る（評価の変更は常にモーダルが担う）
     await expect(
       page.getByRole('dialog', { name: 'お気に入りを編集' }),
     ).toBeVisible();

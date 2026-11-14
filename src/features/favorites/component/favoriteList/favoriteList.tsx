@@ -237,7 +237,9 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
           )}
         </h2>
         <div className={styles.c_favorite_tile__rating}>
-          <RatingIndicator rating={item.rating} size='sm' />
+          {/* リスト行は 10 個のチップ（258px）が入らず、幅だけ縮んで潰れる。
+              点数のチップ1つに畳む（読み上げは変わらない） */}
+          <RatingIndicator rating={item.rating} size='sm' compact={isList} />
         </div>
       </div>
       {isList && (

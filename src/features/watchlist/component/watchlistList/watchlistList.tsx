@@ -348,7 +348,13 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
             <p className={styles.c_watchlist_tile__date}>{formattedDate}</p>
           )}
           {showsRating && (
-            <RatingIndicator rating={favorite.rating} size='sm' />
+            // リスト行は 10 個のチップ（258px）が情報欄（375px 幅で 213px）に
+            // 入らず、同じ行の公開日が 0px まで押し出される。点数1つに畳む
+            <RatingIndicator
+              rating={favorite.rating}
+              size='sm'
+              compact={isList}
+            />
           )}
           {isList && badges}
         </div>

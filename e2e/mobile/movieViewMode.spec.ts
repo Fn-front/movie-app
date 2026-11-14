@@ -9,6 +9,7 @@ import type { Page } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 import { test, expect } from '../fixtures/auth';
+import { expectTapAreaAtLeast } from '../helpers/tapTarget';
 
 /** SP 表示幅 */
 const SP_VIEWPORT_WIDTH = 375;
@@ -187,7 +188,14 @@ test.describe('映画一覧の表示モード切替', () => {
     }
   });
 
-  test('リスト行の操作ボタンが重ならず8px以上空く', async ({
+  /**
+   * ポスターから行の右端へ移したときに重ねてしまうと誤爆する（#1017）。
+   *
+   * ⚠️ **間隔だけでは重なりを検知できない。** 8px しか見ていなかったため、
+   * `$spacing-4` がスマホで 12px に下がっても通り続けていた（#1119）。
+   * 実際に押したら何に当たるかを `expectTapAreaAtLeast` で併せて見る
+   */
+  test('リスト行の操作ボタンが重ならず16px以上空く', async ({
     authenticatedPage: page,
   }) => {
     await page.goto('/movies/now-showing');
@@ -198,7 +206,20 @@ test.describe('映画一覧の表示モード切替', () => {
     const listTile = page.locator(LIST_TILE_SELECTOR).first();
     await expect(listTile).toBeVisible();
 
-    // ポスターから行の右端へ移したときに重ねてしまうと誤爆する（#1017）
+    const actionButtons = listTile.locator(
+      '[class*="c_movie_tile__list_actions"] button',
+    );
+    const actionCount = await actionButtons.count();
+    expect(actionCount).toBeGreaterThan(0);
+
+    for (let index = 0; index < actionCount; index += 1) {
+      const button = actionButtons.nth(index);
+      await expectTapAreaAtLeast(
+        button,
+        `リスト行の操作ボタン ${await button.getAttribute('aria-label')}`,
+      );
+    }
+
     const gaps = await listTile.evaluate((tile) => {
       const buttons = Array.from(tile.querySelectorAll('button'))
         .map((el) => el.getBoundingClientRect())
@@ -211,9 +232,32 @@ test.describe('映画一覧の表示モード切替', () => {
         .map((rect, index) => rect.left - buttons[index].right);
     });
 
-    expect(gaps.length).toBeGreaterThan(0);
+    // 44px のヒット領域は見た目 28px の左右へ 8px ずつはみ出す。
+    // 16px 空けないと領域が重なり、DOM で後ろのボタンが手前を食う
     for (const gap of gaps) {
-      expect(gap).toBeGreaterThanOrEqual(8);
+      expect(gap).toBeGreaterThanOrEqual(44 - 28);
     }
+  });
+
+  /**
+   * 間隔を広げたぶん右の列が 4px 広がる。最狭幅で横へ溢れないことを見る
+   * （タイトルは省略されるので、溢れるとしたら操作列）
+   */
+  test('最狭幅でもリスト行が横に溢れない', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: SP_VIEWPORT_HEIGHT });
+    await page.goto('/movies/now-showing');
+    test.skip((await waitForTiles(page)) === 0, '映画データが無いためスキップ');
+
+    await viewToggle(page).click();
+    await expect(page.locator(LIST_TILE_SELECTOR).first()).toBeVisible();
+
+    const overflow = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
   });
 });

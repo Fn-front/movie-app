@@ -95,8 +95,12 @@
     flex-shrink: 0;
     align-items: center;
     // 広げたヒット領域（44px）どうしが重ならないよう、見た目 28px との
-    // 差分 16px を空ける。隣の操作を誤爆しない最低限（#1017）
-    gap: $spacing-4;
+    // 差分を空ける。隣の操作を誤爆しない最低限（#1017）
+    //
+    // ⚠️ **余白のスケールを使わない。** $spacing-4 はスマホで 16px → 12px に
+    // 下がるため（`_theme.scss`）、4px ぶん領域が重なって隣を誤爆する（#1119）。
+    // グリッド側の `__dismiss_button` が #1111 で同じ理由から calc へ直っている
+    gap: calc($tap-target-min - 28px);
     padding-right: $spacing-2;
     // タイトル button の ::after（カード全面の当たり判定）より上に置く
     position: relative;

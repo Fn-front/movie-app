@@ -8,12 +8,17 @@ jest.mock('next-auth/react', () => ({
   signOut: jest.fn(),
 }));
 
+const mockConfirmSignedOut = jest.fn();
+jest.mock('@/lib/auth/sessionProbe', () => ({
+  confirmSignedOut: () => mockConfirmSignedOut(),
+}));
+
 // --- Tests ---
 
 import axios, { AxiosError, AxiosHeaders } from 'axios';
 import { signOut } from 'next-auth/react';
 
-import { axiosInstance } from './axios';
+import { axiosInstance, __resetSignOutGuardForTest } from './axios';
 import { API, HTTP_STATUS, ROUTES } from '@/constants';
 
 const mockSignOut = signOut as jest.MockedFunction<typeof signOut>;
@@ -203,6 +208,63 @@ describe('レスポンスインターセプター（成功時）', () => {
 describe('レスポンスインターセプター（エラー時）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    __resetSignOutGuardForTest();
+    // 既定は「ログアウト済みだとサーバーが明示した」
+    mockConfirmSignedOut.mockResolvedValue(true);
+  });
+
+  /** 確認の Promise が解決するまで待つ */
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  /** 401 を返す AxiosError を作る */
+  const unauthorizedError = () => {
+    const headers = new AxiosHeaders();
+    return new AxiosError(
+      'Unauthorized',
+      'ERR_BAD_REQUEST',
+      { headers, url: '/test', method: 'get' },
+      null,
+      {
+        status: HTTP_STATUS.UNAUTHORIZED,
+        data: {},
+        statusText: 'Unauthorized',
+        headers: {},
+        config: { headers },
+      } as unknown as import('axios').AxiosResponse,
+    );
+  };
+
+  /**
+   * ⚠️ 401 は「未認証」とは限らない（#1151）
+   *
+   * DB の読み取り失敗を 401 で返すルートがある（`auth/otp/send` など）。
+   * 確認せずにログアウトすると、サーバーセッションの破棄と Cookie 同意
+   * レコードの削除が走る。#1136 で `sessionExpiryHandler` だけ直していた
+   */
+  it('セッションの不在を確認できなければ signOut しない', async () => {
+    mockConfirmSignedOut.mockResolvedValue(false);
+
+    const error = unauthorizedError();
+    await expect(resHandlers[0].rejected!(error)).rejects.toEqual(error);
+    await flush();
+
+    expect(mockConfirmSignedOut).toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it('401が並列で複数返っても signOut は1回だけ', async () => {
+    // 画面の初期化で複数のリクエストが同時に飛ぶため、抑止しないと
+    // その回数だけ signOut が走る
+    const errors = [unauthorizedError(), unauthorizedError()];
+
+    await Promise.all(
+      errors.map((error) =>
+        expect(resHandlers[0].rejected!(error)).rejects.toEqual(error),
+      ),
+    );
+    await flush();
+
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
   });
 
   it('401エラー時にsignOutが呼ばれる', async () => {
@@ -222,6 +284,7 @@ describe('レスポンスインターセプター（エラー時）', () => {
     );
 
     await expect(resHandlers[0].rejected!(error)).rejects.toEqual(error);
+    await flush();
 
     expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: ROUTES.LOGIN });
   });

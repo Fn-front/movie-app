@@ -6,6 +6,20 @@ import axios, { type AxiosError, type AxiosResponse } from 'axios';
 
 import { API, HTTP_STATUS } from '@/constants';
 import { logout } from '@/lib/auth/logout';
+import { confirmSignedOut } from '@/lib/auth/sessionProbe';
+
+/**
+ * ログアウト処理の多重実行を止めるフラグ
+ *
+ * 確認できなかったときだけ false へ戻す。ログアウトを始めたら完全遷移に
+ * 入るので、戻す必要はない
+ */
+let isSigningOut = false;
+
+/** テスト用。モジュールスコープの状態は Jest のモジュールキャッシュを跨ぐ */
+export function __resetSignOutGuardForTest(): void {
+  isSigningOut = false;
+}
 
 /**
  * 基本Axiosインスタンス
@@ -72,9 +86,26 @@ axiosInstance.interceptors.response.use(
     }
 
     // 認証エラー（401）の場合、セッションをクリアしてログインページにリダイレクト
+    //
+    // ⚠️ **401 だけを根拠にログアウトしない**（#1151）。
+    // `unauthorizedResponse()` を返すルートの中には、DB の読み取りに失敗した
+    // だけで 401 を返すものがある（`auth/otp/send` など）。確認せずに
+    // `logout()` を呼ぶと、サーバーセッションの破棄と Cookie 同意レコードの
+    // 削除が走る。#1136 で `sessionExpiryHandler` に入れたのと同じ確認を通す。
+    //
+    // 画面の初期化では複数のリクエストが同時に飛ぶため、フラグで多重実行を
+    // 止める。確認できなかった場合はフラグを戻し、次の 401 で再判定する
     if (error.response?.status === HTTP_STATUS.UNAUTHORIZED) {
-      if (typeof window !== 'undefined') {
-        void logout();
+      if (typeof window !== 'undefined' && !isSigningOut) {
+        isSigningOut = true;
+
+        void confirmSignedOut().then((signedOut) => {
+          if (signedOut) {
+            void logout();
+            return;
+          }
+          isSigningOut = false;
+        });
       }
     }
 

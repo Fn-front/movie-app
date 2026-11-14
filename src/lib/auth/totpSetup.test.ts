@@ -195,9 +195,9 @@ describe('startTotpSetup', () => {
     };
     const { client, deleted } = createReadFailingSupabaseMock(db);
 
-    await expect(startTotpSetup(client, USER_ID, EMAIL)).rejects.toMatchObject({
-      code: '57P01',
-    });
+    await expect(startTotpSetup(client, USER_ID, EMAIL)).rejects.toThrow(
+      /connection terminated/,
+    );
 
     expect(deleted.called).toBe(false);
     expect(db.totp).not.toBeNull();
@@ -427,6 +427,58 @@ describe('disableTotp', () => {
 });
 
 describe('regenerateRecoveryCodes', () => {
+  /**
+   * ⚠️ 削除が失敗したまま挿入に進むと、**旧コードが生き続ける**
+   *
+   * `verifyRecoveryCode` は `used_at IS NULL` の行を全件突き合わせるため、
+   * 消し損ねた旧コードがそのまま通る。「コードが漏れたので再発行する」
+   * という最も重要な場面で保護が消えるうえ、ルートは 200 で
+   * 「以前のコードはすべて使えなくなります」と答えてしまう
+   */
+  it('削除に失敗したら、新しいコードを入れずに throw する', async () => {
+    const db: FakeDb = {
+      totp: null,
+      recoveryCodes: [{ user_id: USER_ID, code_hash: 'old-hash' }],
+    };
+    const inserted: string[] = [];
+
+    const client = {
+      from: jest.fn(() => {
+        const builder: Record<string, unknown> = {};
+        const self = () => builder;
+        builder.eq = jest.fn(self);
+        builder.delete = jest.fn(() => {
+          // 削除は失敗する（＝旧コードが残る）
+          (builder as { then: unknown }).then = (
+            onFulfilled: (value: unknown) => unknown,
+          ) =>
+            Promise.resolve({
+              data: null,
+              error: { message: 'deadlock detected', code: '40P01' },
+            }).then(onFulfilled);
+          return builder;
+        });
+        builder.insert = jest.fn((rows: Array<{ code_hash: string }>) => {
+          inserted.push(...rows.map((row) => row.code_hash));
+          return builder;
+        });
+        (builder as { then: unknown }).then = (
+          onFulfilled: (value: unknown) => unknown,
+        ) => Promise.resolve({ data: null, error: null }).then(onFulfilled);
+        return builder;
+      }),
+    } as unknown as SupabaseClient;
+
+    await expect(regenerateRecoveryCodes(client, USER_ID)).rejects.toThrow(
+      /deadlock detected/,
+    );
+
+    expect(inserted).toHaveLength(0);
+    expect(db.recoveryCodes).toEqual([
+      { user_id: USER_ID, code_hash: 'old-hash' },
+    ]);
+  });
+
   it('設定どおりの個数を発行する', async () => {
     const db = emptyDb();
 

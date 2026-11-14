@@ -230,7 +230,7 @@ describe('isTotpEnabled', () => {
   it('DB エラーなら throw する（未設定として扱わない）', async () => {
     await expect(
       isTotpEnabled(createFailingSupabaseMock(), USER_ID),
-    ).rejects.toMatchObject({ code: '57P01' });
+    ).rejects.toThrow(/connection terminated/);
   });
 });
 
@@ -240,17 +240,13 @@ describe('verifySecondFactor（DB エラー）', () => {
   it('認証アプリのコードの検証中に DB エラーなら throw する', async () => {
     await expect(
       verifySecondFactor(createFailingSupabaseMock(), USER_ID, '123456'),
-    ).rejects.toMatchObject({ code: '57P01' });
+    ).rejects.toThrow(/connection terminated/);
   });
 
   it('リカバリーコードの検証中に DB エラーなら throw する', async () => {
     await expect(
-      verifySecondFactor(
-        createFailingSupabaseMock(),
-        USER_ID,
-        'AAAA-BBBB-CCCC',
-      ),
-    ).rejects.toMatchObject({ code: '57P01' });
+      verifySecondFactor(createFailingSupabaseMock(), USER_ID, 'AAAAA-BBBBB'),
+    ).rejects.toThrow(/connection terminated/);
   });
 });
 

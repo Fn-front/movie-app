@@ -57,6 +57,24 @@ const mockUserLookup = (email: string | null) => {
   });
 };
 
+/** users の取得が DB エラーで失敗する場合をモックする */
+const mockUserLookupFailure = () => {
+  mockFrom.mockReturnValueOnce({
+    select: () => ({
+      eq: () => ({
+        single: () =>
+          Promise.resolve({
+            data: null,
+            error: {
+              message: 'connection terminated unexpectedly',
+              code: '57P01',
+            },
+          }),
+      }),
+    }),
+  });
+};
+
 // --- Tests ---
 
 describe('POST /api/user/totp/setup', () => {
@@ -137,6 +155,22 @@ describe('POST /api/user/totp/setup', () => {
 
     expect(response.status).toBe(400);
     expect(json.error.message).toBe(TOTP_ERROR_MESSAGES.ALREADY_ENABLED);
+  });
+
+  it('users の取得が DB エラーなら 401 ではなく500を返す', async () => {
+    // 401 を返すと axios のインターセプタが「未認証」と解釈して
+    // 強制ログアウトへ倒す。DB の不調でセッションごと破棄されてしまう
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mockUserLookupFailure();
+
+      const response = await POST();
+
+      expect(response.status).toBe(500);
+      expect(mockStartTotpSetup).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+    }
   });
 
   it('DB 障害は「既に有効」ではなく500を返す', async () => {

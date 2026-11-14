@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 
 import { MovieListContent } from './movieListContent';
-import { ARIA_LABELS } from '@/constants';
+import { ARIA_LABELS, FILTER_LABELS } from '@/constants';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
@@ -120,6 +120,7 @@ const createMockMovieList = (
   selectedWatchProviderIds: [],
   selectedOfferTypes: [],
   selectedRegions: [],
+  hasActiveFilters: false,
   isFilterModalOpen: false,
   handleSortChange: jest.fn(),
   handleReleaseTypeChange: jest.fn(),
@@ -322,51 +323,57 @@ describe('MovieListContent', () => {
   });
 
   describe('フィルターバッジ', () => {
-    it('ジャンルが選択されている場合バッジが表示される', () => {
+    /*
+      ⚠️ **どの条件で絞り込み中になるかは、ここでは見ない**（#1063）。
+      判定は useMovieList が buildFilterConditions から導出する
+      （useMovieList.test.ts の「絞り込み中の判定」を参照）。
+      表示側で条件を並べ直していたせいで、配信プロバイダー・提供形態・地域の
+      3つが漏れていた。ここは「印と説明が出るか」だけを見る。
+    */
+    it('絞り込み中なら印が出て、ボタンに説明が付く', () => {
       const { container } = render(
         <MovieListContent
           title='公開予定'
-          movieList={createMockMovieList({ selectedGenreIds: [28] })}
+          movieList={createMockMovieList({ hasActiveFilters: true })}
         />,
       );
+
       expect(
         container.querySelector('.c_movie_list__filter_count'),
       ).toBeInTheDocument();
+
+      // 名前は状態で変えない（#1046）。状態は説明で伝える
+      const button = screen.getByRole('button', { name: 'フィルター' });
+      expect(button).toHaveAccessibleName('フィルター');
+      expect(button).toHaveAccessibleDescription(FILTER_LABELS.FILTER_ACTIVE);
     });
 
-    it('日付範囲gteがある場合バッジが表示される', () => {
-      const { container } = render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({
-            dateRange: { gte: '2026-03-01' },
-          })}
-        />,
-      );
-      expect(
-        container.querySelector('.c_movie_list__filter_count'),
-      ).toBeInTheDocument();
-    });
-
-    it('isRevivalFilterが設定されている場合バッジが表示される', () => {
-      const { container } = render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({ isRevivalFilter: false })}
-        />,
-      );
-      expect(
-        container.querySelector('.c_movie_list__filter_count'),
-      ).toBeInTheDocument();
-    });
-
-    it('フィルターが無効な場合バッジが表示されない', () => {
+    it('絞り込みが無ければ印も説明も出ない', () => {
       const { container } = render(
         <MovieListContent title='公開予定' movieList={createMockMovieList()} />,
       );
+
       expect(
         container.querySelector('.c_movie_list__filter_count'),
       ).not.toBeInTheDocument();
+
+      const button = screen.getByRole('button', { name: 'フィルター' });
+      expect(button).toHaveAccessibleName('フィルター');
+      expect(button).toHaveAccessibleDescription('');
+    });
+
+    // 青いドットは装飾。意味は説明側が持つので、二重に読まれてはいけない
+    it('印そのものは読み上げから外れている', () => {
+      const { container } = render(
+        <MovieListContent
+          title='公開予定'
+          movieList={createMockMovieList({ hasActiveFilters: true })}
+        />,
+      );
+
+      expect(
+        container.querySelector('.c_movie_list__filter_count'),
+      ).toHaveAttribute('aria-hidden', 'true');
     });
   });
 
@@ -414,34 +421,6 @@ describe('MovieListContent', () => {
         'href',
         '/movies/42',
       );
-    });
-  });
-
-  describe('フィルターバッジ（追加分岐）', () => {
-    it('日付範囲lteのみがある場合もバッジが表示される', () => {
-      const { container } = render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({
-            dateRange: { lte: '2026-12-31' },
-          })}
-        />,
-      );
-      expect(
-        container.querySelector('.c_movie_list__filter_count'),
-      ).toBeInTheDocument();
-    });
-
-    it('isRevivalFilter=trueの場合もバッジが表示される', () => {
-      const { container } = render(
-        <MovieListContent
-          title='公開予定'
-          movieList={createMockMovieList({ isRevivalFilter: true })}
-        />,
-      );
-      expect(
-        container.querySelector('.c_movie_list__filter_count'),
-      ).toBeInTheDocument();
     });
   });
 

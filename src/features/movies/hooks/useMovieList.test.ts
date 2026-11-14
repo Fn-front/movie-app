@@ -1,11 +1,13 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 
-import { useMovieList } from './useMovieList';
+import { useMovieList, hasActiveFilterConditions } from './useMovieList';
 import type { UseMovieListOptions } from './useMovieList';
 import type { GetMoviesResponse } from '@/lib/api/movies/movies';
 import { createQueryWrapper } from '@/test/queryTestUtils';
 import { STORAGE_KEYS } from '@/constants/common';
 import { FILTER_ERROR_MESSAGES } from '@/constants/filters';
+import { filterConditionsSchema } from '@/schema/filters';
+import type { FilterConditions } from '@/schema/filters';
 
 // --- Mocks ---
 
@@ -1728,6 +1730,124 @@ describe('useMovieList', () => {
       rerender();
 
       expect(result.current.selectedGenreIds).toEqual([12, 16]);
+    });
+  });
+  /**
+   * 絞り込み中の判定（#1063）
+   *
+   * 以前は表示側（`movieListToolbar`）が条件を手で並べており、配信プロバイダー・
+   * 提供形態・地域の3つが漏れていた。**一覧は絞り込まれているのに印が出ない**。
+   *
+   * ⚠️ **ここでキーを手で並べないこと。** 並べたら同じ漏れが起きる。
+   * zod スキーマ（`filterConditionsSchema`）が条件の唯一の出どころなので、
+   * そこから列挙する。新しい条件が増えたら、このテストが自動で面倒を見る。
+   */
+  describe('絞り込み中の判定', () => {
+    /** 並び順とタブの切り替えは「絞り込み」ではない */
+    const NON_FILTER_KEYS = ['sort_by', 'release_type'] as const;
+
+    const ALL_KEYS = Object.keys(
+      filterConditionsSchema.shape,
+    ) as (keyof FilterConditions)[];
+
+    const FILTER_KEYS = ALL_KEYS.filter(
+      (key) =>
+        !NON_FILTER_KEYS.includes(key as (typeof NON_FILTER_KEYS)[number]),
+    );
+
+    /** 各条件の代表値 */
+    const SAMPLE: Partial<Record<keyof FilterConditions, unknown>> = {
+      genre_ids: [28],
+      date_range_gte: '2026-03-01',
+      date_range_lte: '2026-12-31',
+      is_revival: false,
+      watch_providers: [8],
+      offer_types: ['flatrate'],
+      include_regions: ['korea'],
+    };
+
+    /** 常に入るキーだけを持つ、絞り込み無しの状態 */
+    const baseConditions = {
+      sort_by: 'release_date',
+      release_type: 'theatrical',
+    } as FilterConditions;
+
+    it('スキーマの条件すべてに代表値を用意している', () => {
+      // 条件が増えたのに SAMPLE を足し忘れると、下の it.each が
+      // undefined を入れて素通りする。先にここで気づく
+      const missing = FILTER_KEYS.filter((key) => SAMPLE[key] === undefined);
+
+      expect(missing).toEqual([]);
+      expect(FILTER_KEYS.length).toBeGreaterThan(0);
+    });
+
+    it.each(FILTER_KEYS)('%s だけでも絞り込み中になる', (key) => {
+      expect(
+        hasActiveFilterConditions({
+          ...baseConditions,
+          [key]: SAMPLE[key],
+        } as FilterConditions),
+      ).toBe(true);
+    });
+
+    it('並び順とタブだけなら絞り込み中にならない', () => {
+      expect(hasActiveFilterConditions(baseConditions)).toBe(false);
+    });
+
+    it('条件が1つも無ければ絞り込み中にならない', () => {
+      expect(hasActiveFilterConditions({})).toBe(false);
+    });
+  });
+
+  /**
+   * 配信プロバイダーだけで絞り込んだときに印が出るか（#1063 の実害）
+   *
+   * 上の判定の単体テストと別に、**フックが実際にその値を返すか**を見る。
+   * 判定関数が正しくても、呼び出し側が古い条件を渡していたら意味が無い。
+   */
+  describe('hasActiveFilters（フックの返り値）', () => {
+    it('初期状態では false', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.hasActiveFilters).toBe(false);
+    });
+
+    it('配信プロバイダーだけを適用しても true になる', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleFilterApply([], {}, undefined, [8]);
+      });
+
+      expect(result.current.hasActiveFilters).toBe(true);
+    });
+
+    it('地域だけを適用しても true になる', async () => {
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      act(() => {
+        result.current.handleFilterApply([], {}, undefined, [], [], ['korea']);
+      });
+
+      expect(result.current.hasActiveFilters).toBe(true);
     });
   });
 });

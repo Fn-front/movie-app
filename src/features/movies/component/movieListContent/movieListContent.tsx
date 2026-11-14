@@ -52,6 +52,7 @@ export const MovieListContent = memo<MovieListContentProps>(
       selectedWatchProviderIds,
       selectedOfferTypes,
       selectedRegions,
+      hasActiveFilters,
       isFilterModalOpen,
       handleSortChange,
       handleReleaseTypeChange,
@@ -93,9 +94,7 @@ export const MovieListContent = memo<MovieListContentProps>(
           <MovieListToolbar
             title={title}
             sortBy={sortBy}
-            selectedGenreIds={selectedGenreIds}
-            dateRange={dateRange}
-            isRevivalFilter={isRevivalFilter}
+            hasActiveFilters={hasActiveFilters}
             onSortChange={handleSortChange}
             onFilterModalOpen={handleFilterModalOpen}
           />

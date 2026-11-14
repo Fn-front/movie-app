@@ -72,6 +72,8 @@ export interface UseMovieListReturn {
   selectedOfferTypes: WatchProviderOfferType[];
   /** 表示に含める地域グループ（空配列なら全地域を除外） */
   selectedRegions: RegionGroupKey[];
+  /** 絞り込みが掛かっているか（ツールバーの印に使う） */
+  hasActiveFilters: boolean;
   isFilterModalOpen: boolean;
   handleSortChange: (value: string) => void;
   handleReleaseTypeChange: (value: 'theatrical' | 'streaming') => void;
@@ -137,6 +139,44 @@ function buildFilterConditions(state: FilterState): FilterConditions {
     conditions.include_regions = state.regions;
   }
   return conditions;
+}
+
+/**
+ * 絞り込みの条件として数えないキー
+ *
+ * `sort_by` と `release_type` は `buildFilterConditions` が**常に入れる**
+ * （既定値も省略しない。上のコメント参照）。並び順とタブの切り替えは
+ * 「絞り込み」ではないので、ここだけ除く。
+ */
+const NON_FILTER_CONDITION_KEYS: readonly string[] = [
+  'sort_by',
+  'release_type',
+];
+
+/**
+ * 絞り込みが掛かっているかを判定する
+ *
+ * ⚠️ **条件を列挙しないこと。** 以前は呼び出し側が
+ * `genreIds.length > 0 || dateRange.gte || …` と手で並べており、
+ * 配信プロバイダー・提供形態・地域の3つが漏れていた（#1063）。
+ * **一覧は絞り込まれているのに印が出ない**状態だった。
+ *
+ * `buildFilterConditions` が作ったものから数えれば、条件が増えても
+ * 自動で追従する。こちらが絞り込み条件の唯一の出どころ。
+ *
+ * ⚠️ 渡すのは**ページ既定の日付範囲を取り除いたあと**の条件。
+ * 取り除かないと、既定を持つページで常に「絞り込み中」になる
+ * （`stripDefaultDateRange` を通すこと）。
+ *
+ * @param conditions `buildFilterConditions()` の結果
+ * @returns 1つでも絞り込み条件があれば true
+ */
+export function hasActiveFilterConditions(
+  conditions: FilterConditions,
+): boolean {
+  return Object.keys(conditions).some(
+    (key) => !NON_FILTER_CONDITION_KEYS.includes(key),
+  );
 }
 
 /**
@@ -655,6 +695,42 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     moviesQuery.fetchNextPage();
   }, [moviesQuery]);
 
+  /**
+   * 絞り込みが掛かっているか（ツールバーの印に使う）
+   *
+   * ⚠️ **ここで組み立てて渡すこと。** 表示側で条件を並べ直すと、条件が
+   * 増えたときに片方だけ更新されて漏れる（#1063 で実際に3つ漏れていた）。
+   * 一覧に投げる条件と同じ `buildFilterConditions` から数える。
+   */
+  const hasActiveFilters = useMemo(
+    () =>
+      hasActiveFilterConditions(
+        stripDefaultDateRange(
+          buildFilterConditions({
+            sortBy,
+            releaseType,
+            genreIds: selectedGenreIds,
+            dateRange,
+            isRevival: isRevivalFilter,
+            watchProviderIds: selectedWatchProviderIds,
+            offerTypes: selectedOfferTypes,
+            regions: selectedRegions,
+          }),
+        ),
+      ),
+    [
+      sortBy,
+      releaseType,
+      selectedGenreIds,
+      dateRange,
+      isRevivalFilter,
+      selectedWatchProviderIds,
+      selectedOfferTypes,
+      selectedRegions,
+      stripDefaultDateRange,
+    ],
+  );
+
   return useMemo(
     () => ({
       movies,
@@ -672,6 +748,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       selectedWatchProviderIds,
       selectedOfferTypes,
       selectedRegions,
+      hasActiveFilters,
       isFilterModalOpen,
       handleSortChange,
       handleReleaseTypeChange,
@@ -695,6 +772,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
       selectedWatchProviderIds,
       selectedOfferTypes,
       selectedRegions,
+      hasActiveFilters,
       isFilterModalOpen,
       handleSortChange,
       handleReleaseTypeChange,

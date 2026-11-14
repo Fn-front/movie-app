@@ -319,7 +319,91 @@ describe('syncNowPlayingMovies', () => {
       expect(result.skipped).toBe(0);
       expect(result.upserted).toBe(1);
     });
+  });
 
+  /**
+   * TMDb の一時障害で判定できなかった作品を「上映終了」にしない（#1154）
+   *
+   * `nowPlayingIds.add()` は判定を通過した**後**にあるため、
+   * `getMovieKeywordIds` が throw した作品は「取得できなかった」ではなく
+   * 「公開中ではない」側に落ちる。直後の一括 UPDATE で
+   * `is_now_playing = false` にされ、全ユーザーの公開中タブから消える。
+   *
+   * 兄弟の `syncStreamingMovies.ts` は判定失敗分を keep 対象に含めており、
+   * now_playing 側だけ同じ防御が無かった。
+   */
+  describe('TMDbの部分障害', () => {
+    /** 一括 UPDATE に渡された keep 条件の文字列を取り出す */
+    const getKeepFilter = (supabaseMock: {
+      fromMock: jest.Mock;
+    }): string | undefined => {
+      for (const call of supabaseMock.fromMock.mock.results) {
+        const notMock = call.value?.update?.mock?.results?.[0]?.value?.eq?.mock
+          ?.results?.[0]?.value?.eq?.mock?.results?.[0]?.value?.not as
+          | jest.Mock
+          | undefined;
+        if (notMock?.mock.calls.length) {
+          return notMock.mock.calls[0][2] as string;
+        }
+      }
+      return undefined;
+    };
+
+    it('判定に失敗した作品をクリア対象から除外する', async () => {
+      setValidEnv();
+
+      const ok = createMockMovie({ id: 201, title: '判定できた作品' });
+      const failed = createMockMovie({ id: 202, title: '判定に失敗した作品' });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 2,
+        results: [ok, failed],
+      });
+      (getMovieKeywordIds as jest.Mock)
+        .mockResolvedValueOnce([])
+        .mockRejectedValueOnce(new Error('TMDb 503'));
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(result.errors).toHaveLength(1);
+      // 判定できた 201 だけでなく、失敗した 202 も残す
+      const keepFilter = getKeepFilter(supabaseMock);
+      expect(keepFilter).toContain('201');
+      expect(keepFilter).toContain('202');
+    });
+
+    it('1件も判定できなければクリアを実行しない', async () => {
+      // 全件失敗は TMDb の全面障害。既存の表示を維持する
+      setValidEnv();
+
+      const movie = createMockMovie({ id: 203 });
+
+      (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
+        results: [movie],
+      });
+      (getMovieKeywordIds as jest.Mock).mockRejectedValueOnce(
+        new Error('TMDb 503'),
+      );
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(getKeepFilter(supabaseMock)).toBeUndefined();
+      expect(result.cleared).toBe(0);
+    });
+  });
+
+  describe('既存IDの扱い（続き）', () => {
     it('別release_typeの既存ID取得クエリ（1000行制限の原因）を発行しない', async () => {
       setValidEnv();
 
@@ -697,12 +781,15 @@ describe('syncNowPlayingMovies', () => {
     it('クリア処理でエラーが発生した場合errorsに記録される', async () => {
       setValidEnv();
 
+      // ⚠️ 1件は判定を通しておくこと。0件だとクリア自体を実行しない
+      //    （TMDb の全面障害で公開中タブが空になるのを避けるガード / #1154）
       (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
         page: 1,
         total_pages: 1,
-        total_results: 0,
-        results: [],
+        total_results: 1,
+        results: [createMockMovie({ id: 301 })],
       });
+      (getMovieKeywordIds as jest.Mock).mockResolvedValueOnce([]);
 
       const supabaseMock = createSupabaseMock({
         clearError: { message: 'clear failed' },

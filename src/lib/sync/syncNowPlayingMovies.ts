@@ -94,6 +94,15 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
   // 除外すると「配信済みだが劇場でリバイバル上映中」の作品が公開中タブから
   // 消える。加えて Supabase-js の暗黙1000行制限で除外自体が静かに壊れていた。
   const nowPlayingIds = new Set<number>();
+  /**
+   * 公開中かどうかを判定できなかった作品
+   *
+   * TMDb への問い合わせ（キーワード取得・コンサート映像判定）が失敗すると、
+   * `nowPlayingIds.add()` に到達しないまま catch へ落ちる。これを
+   * 「公開中ではない」と扱うと、一時障害だけで作品が公開中タブから消える。
+   * クリアの対象から外して現状維持にする（#1154）
+   */
+  const unresolvedIds = new Set<number>();
   const now = new Date().toISOString();
 
   for (const movie of filteredMovies) {
@@ -156,23 +165,33 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`${movie.title}: ${message}`);
+      // 判定できなかっただけなので、クリアの対象から外す
+      unresolvedIds.add(movie.id);
     }
   }
 
   // 4. リストから外れた映画の is_now_playing をクリア
-  const nowPlayingIdsArray = Array.from(nowPlayingIds);
-  const { data: clearedData, error: clearError } = await supabase
-    .from('movie_cache')
-    .update({ is_now_playing: false })
-    .eq('is_now_playing', true)
-    .eq('release_type', 'theatrical')
-    .not('id', 'in', `(${nowPlayingIdsArray.join(',')})`)
-    .select('id');
+  //
+  // ⚠️ 1件も判定できなかった場合はクリアしない。TMDb の全面障害やキー失効で
+  // 公開中タブが空になるのを避けるため、異常時は既存の表示を維持する
+  // （`syncStreamingMovies.ts` と同じ方針）。
+  // ガードが無いと `.not('id', 'in', '()')` を発行することになる
+  if (nowPlayingIds.size > 0) {
+    // 判定に失敗した作品は現状維持にしたいので、保持対象に含める
+    const keepIds = [...nowPlayingIds, ...unresolvedIds];
+    const { data: clearedData, error: clearError } = await supabase
+      .from('movie_cache')
+      .update({ is_now_playing: false })
+      .eq('is_now_playing', true)
+      .eq('release_type', 'theatrical')
+      .not('id', 'in', `(${keepIds.join(',')})`)
+      .select('id');
 
-  if (clearError) {
-    result.errors.push(`Clear error: ${clearError.message}`);
-  } else {
-    result.cleared = clearedData?.length ?? 0;
+    if (clearError) {
+      result.errors.push(`Clear error: ${clearError.message}`);
+    } else {
+      result.cleared = clearedData?.length ?? 0;
+    }
   }
 
   return result;

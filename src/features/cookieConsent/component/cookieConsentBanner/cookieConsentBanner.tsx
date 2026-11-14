@@ -90,7 +90,12 @@ export const CookieConsentBanner = memo(function CookieConsentBanner() {
       // トーストが浮いたままになる
       setBannerHeightVar(null);
     };
-  }, []);
+    // ⚠️ `isVisible` を外さないこと。効果の本体は `isVisible` を参照しない
+    // ので `exhaustive-deps` は何も言わないが、`[]` にすると**マウント時に
+    // 一度しか走らない**。本番ではサーバー同期の応答待ちで一度抑止される
+    // ため、バナーが出るのはほぼ必ず2回目以降のレンダーで、変数が一度も
+    // 書かれなくなる（#1160 で実際に起きた）
+  }, [isVisible]);
 
   const handleGrant = useCallback(() => {
     grant();

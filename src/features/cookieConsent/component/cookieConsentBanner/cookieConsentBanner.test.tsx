@@ -111,6 +111,35 @@ describe('CookieConsentBanner', () => {
       ).toBe('0px');
     });
 
+    /**
+     * ⚠️ **抑止が解けて出てきた場合も書くこと。**
+     *
+     * 上のテストは最初から表示される経路しか通らないため、依存配列が `[]`
+     * でも通ってしまう。実際にそれで main を壊した（#1160）。本番では
+     * サーバー同期の応答待ちで一度抑止されるので、**バナーが出るのは
+     * ほぼ必ず2回目以降のレンダー**。初回だけ走る実装では一度も書かれない。
+     *
+     * 依存配列に `isVisible` が要るのに、効果の本体が `isVisible` を参照
+     * しないため `exhaustive-deps` も警告しない。テストで固定するしかない
+     */
+    it('抑止が解けて表示されたときも書かれる', () => {
+      setConsentSyncPending(true);
+      render(<CookieConsentBanner />);
+
+      // 抑止中は要素が無いので何も書かれていない
+      expect(
+        document.documentElement.style.getPropertyValue(BANNER_HEIGHT_VAR),
+      ).toBe('');
+
+      act(() => {
+        setConsentSyncPending(false);
+      });
+
+      expect(
+        document.documentElement.style.getPropertyValue(BANNER_HEIGHT_VAR),
+      ).toBe('0px');
+    });
+
     it('バナーが消えたら変数も外す', () => {
       const { unmount } = render(<CookieConsentBanner />);
 

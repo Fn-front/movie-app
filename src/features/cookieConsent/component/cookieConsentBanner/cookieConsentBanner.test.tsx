@@ -2,7 +2,7 @@
  * Cookie同意バナーのテスト
  */
 
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { ARIA_LABELS, COOKIE_CONSENT_VERSION, ROUTES } from '@/constants';
@@ -11,6 +11,11 @@ import {
   getStoredConsentState,
   recordConsentDecision,
 } from '@/utils/cookieConsent';
+import {
+  __resetBannerSuppressionForTest,
+  markSigningOut,
+  setConsentSyncPending,
+} from '../../utils/bannerSuppression';
 import { CookieConsentBanner } from './cookieConsentBanner';
 
 jest.mock('next-auth/react', () => ({
@@ -27,10 +32,53 @@ describe('CookieConsentBanner', () => {
   beforeEach(() => {
     localStorage.clear();
     process.env.NEXT_PUBLIC_GA_ID = VALID_GA_ID;
+    __resetBannerSuppressionForTest();
   });
 
   afterEach(() => {
     process.env.NEXT_PUBLIC_GA_ID = ORIGINAL_GA_ID;
+  });
+
+  /**
+   * 同意状態が確定するまで出さない（#1137 / #1133）
+   *
+   * localStorage が「未決定」でも最終的な答えとは限らない。サーバー同期の
+   * 往復中はサーバー側の記録が降りてくるかもしれず、ログアウト中はもう
+   * 画面を離れる
+   */
+  describe('抑止', () => {
+    it('サーバー同期の応答待ちでは表示しない', () => {
+      setConsentSyncPending(true);
+
+      render(<CookieConsentBanner />);
+
+      expect(
+        screen.queryByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('ログアウト処理中は表示しない', () => {
+      markSigningOut();
+
+      render(<CookieConsentBanner />);
+
+      expect(
+        screen.queryByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('抑止が解けたら表示する', () => {
+      setConsentSyncPending(true);
+      render(<CookieConsentBanner />);
+
+      act(() => {
+        setConsentSyncPending(false);
+      });
+
+      expect(
+        screen.getByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),
+      ).toBeInTheDocument();
+    });
   });
 
   describe('表示条件', () => {

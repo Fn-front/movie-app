@@ -13,14 +13,9 @@
 
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
+import { useRef, type RefObject } from 'react';
 
-/**
- * SSR では `useLayoutEffect` が動かず警告になるので、サーバーでは `useEffect` に倒す。
- * この成分はクライアント専用の処理しか持たないため、どちらでも結果は変わらない
- */
-const useIsomorphicLayoutEffect =
-  typeof window === 'undefined' ? useEffect : useLayoutEffect;
+import { useIsomorphicLayoutEffect } from '@/hooks/useIsomorphicLayoutEffect';
 
 /**
  * ボトムナビの実高を持つ CSS 変数名

@@ -20,7 +20,16 @@ html {
   overflow-x: hidden;
   // sticky なヘッダーの下にジャンプ先が潜らないようにする。
   // scrollIntoView / ハッシュ遷移 / スキップリンクはビューポートの上端に
-  // 揃えるため、何もしないと見出しがヘッダーに完全に隠れる
+  // 揃えるため、何もしないと見出しがヘッダーに完全に隠れる。
+  //
+  // ⚠️ **効くのは lg 未満だけ**（#1128）。lg 以上は appLayout が内部
+  // スクロールへ切り替わり（#1027）、スクローラーが .c_app_layout__main に
+  // なる。scroll-padding は継承しないので、html に付けたこの値は参照されない
+  // （main 側は auto＝0）。main の上端はヘッダーの下端なので、そもそも
+  // 潜り込まない。
+  //
+  // つまり `--header-height` が lg の実高（75px）とずれていても害は無い。
+  // 詳しい内訳は `_theme.scss` の定義側コメントに書いてある
   scroll-padding-top: $header-height;
 }
 

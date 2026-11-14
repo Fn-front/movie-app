@@ -67,11 +67,34 @@ jobs:
           path: '**/node_modules'
           key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
 
+      # `.next/cache` のキーは「週 + package-lock.json」だけで作る。
+      #
+      # ⚠️ **ソースのハッシュを足さないのは意図的**（#1082）。以前は
+      # `hashFiles('**.[jt]s', '**.[jt]sx')` が付いていたが、`**` は
+      # **パスセグメント全体として書いたときだけ**任意の深さを意味するため、
+      # 実際に見ていたのはリポジトリ直下の5ファイル（jest.config.js /
+      # jest.setup.js / next-env.d.ts / playwright.config.ts /
+      # playwright.ga.config.ts）だけだった。`src/` は1ファイルも入らず、
+      # 無関係なブランチが同じアーカイブを共有していた。
+      #
+      # 直し方は2つあり、**共有してよい**と判断してこちらを採った。
+      #
+      # 1. 共有して困らない: `.next/cache` はコンパイル結果をコンテンツ
+      #    アドレスで持つため、入力が違えば別エントリになる。古いキャッシュを
+      #    読んでも誤ったチャンクを再利用することはない
+      # 2. グロブを直すと容量を壊す: 毎コミットでキーが変わる＝毎回
+      #    `.next/cache` を保存することになる。実測で1エントリ **124MB**、
+      #    これを e2e と GA の2ジョブが書くので1 push あたり約 248MB。
+      #    リポジトリのキャッシュは **7.19GB / 10GB** まで埋まっており
+      #    （うち CodeQL が 5.10GB）、LRU で node_modules（173MB）や
+      #    Playwright ブラウザ（249MB）が追い出されて**かえって遅くなる**
+      #
+      # ⚠️ GA 有効ジョブとはキーを分けること（下の `-ga-` を参照）
       - name: cache-nextjs-build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # ratchet:actions/cache@v6.1.0
         with:
           path: .next/cache
-          key: ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          key: ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-build-${{ steps.date.outputs.week }}-
 
@@ -292,11 +315,13 @@ jobs:
       # ⚠️ e2e ジョブとはキーを分ける。NEXT_PUBLIC_* はビルド時に静的置換されるため、
       # GA ID の有無で成果物が変わる。同じキーでコンパイルキャッシュを共有すると
       # 「GA ID が埋まっていないチャンク」を再利用しうる
+      #
+      # ソースのハッシュを足さない理由は上の e2e ジョブ側のコメントに書いてある（#1082）
       - name: cache-nextjs-build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # ratchet:actions/cache@v6.1.0
         with:
           path: .next/cache
-          key: ${{ runner.os }}-nextjs-build-ga-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          key: ${{ runner.os }}-nextjs-build-ga-${{ steps.date.outputs.week }}-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-build-ga-${{ steps.date.outputs.week }}-
 

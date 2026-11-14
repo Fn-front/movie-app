@@ -66,7 +66,12 @@ describe('FrequencySelector', () => {
    * `aria-label='低音（80 Hz）'` が付いていたとき、axe の
    * `label-content-name-mismatch` は**括弧内を除去**してから単語列を
    * 比較するため、名前が `["低音"]` になり可視テキスト
-   * `["低音","80","hz"]` を含まず violation になっていた。
+   * `["低音","80","hz"]` を含まなかった。
+   *
+   * ⚠️ 実測の結果は **violation ではなく incomplete（要確認）**。
+   * axe 4.14 の `valueTextRoles` に `radio` が含まれており、一致しなかった
+   * radio は判定が保留されるため。ただし共通ヘルパー
+   * `expectNoA11yViolations` は incomplete でも落とす。
    *
    * ⚠️ **「違反が無いこと」は単体テストでは固定できない**（axe を
    * 動かさないため）。`aria-label` が戻ったことを属性で検出し、

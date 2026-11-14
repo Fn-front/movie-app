@@ -205,6 +205,13 @@ describe('syncStreamingMovies', () => {
       );
       // Discover の呼び出し + 配信実態チェック（重複排除後1件）
       expect(result.tmdbRequests).toBe(DISCOVER_API_MAX_PAGES * 2 + 1);
+
+      // ⚠️ 上限で抜けた＝全部は見ていないので、クリアは見送る（#1166）。
+      // 見ていない作品を「配信終了」にするのは、途中で空を返されたときと
+      // 同じ事故。実測では total_pages が上限に届かないが、カタログが
+      // 増えれば黙ってクリア対象が広がる
+      expect(mockClearNotIn).not.toHaveBeenCalled();
+      expect(result.errors.join('\n')).toContain('上限');
     });
 
     it('結果が0件のページでループを打ち切る', async () => {

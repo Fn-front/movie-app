@@ -75,8 +75,7 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
 
   for (let page = 1; page <= NOW_PLAYING_SYNC_MAX_PAGES; page++) {
     const response = await getNowPlayingMovies(page);
-    // フィルタを通さない経路のために `results.length` へ倒す
-    const rawCount = response.raw_results_count ?? response.results.length;
+    const rawCount = response.raw_results_count;
 
     if (rawCount === 0) {
       // 終端に到達して空なら正常。手前で空なら TMDb 側の異常
@@ -91,6 +90,20 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
 
     allMovies.push(...response.results);
     if (page >= response.total_pages) break;
+
+    // ⚠️ 上限に当たって抜けるのも「全部は見ていない」状態（#1166）。
+    // 見ていない作品をクリアするのは、途中で空を返されたときと同じ事故。
+    // 異常時は既存の表示を維持する方針に揃える。
+    //
+    // 実測（2026-11）では now_playing の total_pages は 5 で上限 10 の
+    // 半分。今は到達しないが、作品数が増えれば黙ってクリア対象が
+    // 広がるため、ここで止める
+    if (page === NOW_PLAYING_SYNC_MAX_PAGES) {
+      truncated = true;
+      result.errors.push(
+        `取得が上限 ${NOW_PLAYING_SYNC_MAX_PAGES} ページに達した（全 ${response.total_pages} ページ）。クリアを見送る`,
+      );
+    }
   }
 
   result.fetched = allMovies.length;

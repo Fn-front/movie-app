@@ -334,22 +334,26 @@ export interface TMDbResponse<T> {
   total_pages: number;
   /** 総結果数 */
   total_results: number;
-  /**
-   * フィルタを通す前の件数（#1166）
-   *
-   * `getNowPlayingMovies` / `discoverMovies` は `excludeInappropriateMovies`
-   * を通した配列を `results` に入れる。そのため `results.length === 0` は
-   * 「TMDb が空を返した」とは限らず、**ローカルのフィルタで全件落ちた**でも
-   * 成立する。
-   *
-   * 同期処理はこの2つを区別する必要がある。前者（TMDb の異常）で巡回を
-   * 打ち切ると残りのページの作品がクリア対象になり、一覧から丸ごと消える。
-   * 後者は単に次のページへ進めばよい。
-   *
-   * フィルタを通さないエンドポイントでは付かない（省略可）。
-   */
-  raw_results_count?: number;
 }
+
+/**
+ * フィルタ前の件数つきレスポンス（#1166）
+ *
+ * `excludeInappropriateMovies` を通して返す関数の戻り値に使う。
+ * `results.length === 0` は「TMDb が空を返した」とは限らず、
+ * **ローカルのフィルタで全件落ちた**でも成立する。ページを跨いで巡回する
+ * 側はこの2つを区別する必要があり、前者で打ち切ると残りのページの作品が
+ * クリア対象になって一覧から丸ごと消える。
+ *
+ * ⚠️ **必須にしてあるのは付け忘れを型で止めるため。** 省略可にすると、
+ * フィルタを足した新しい関数で付け忘れても何も起きず、呼び出し側の
+ * フォールバックで静かに元のバグへ戻る（実際に optional で書いて、
+ * 消してもテスト278件と `tsc` が素通りすることを確認した）。
+ */
+export type FilteredTMDbResponse<T> = TMDbResponse<T> & {
+  /** フィルタを通す前の件数 */
+  raw_results_count: number;
+};
 
 /**
  * ユーザー型

@@ -287,7 +287,14 @@ export async function GET(request: Request) {
             sort_by: 'popularity.desc',
           });
 
-          if (tmdbResponse.results.length === 0) break;
+          // ⚠️ 判定は**フィルタ前の件数**で行う（#1166）。`discoverMovies` は
+          // `excludeInappropriateMovies` を通した配列を返すため、
+          // `results.length === 0` は「ローカルのフィルタで全件落ちた」でも
+          // 成立し、そこで打ち切ると以降のページを取りにいかない。
+          // ここはクリアを持たないので一覧から消えることは無いが、
+          // 下の `filteredResults.length === 0` が `continue` にしているのと
+          // 同じ理由で `break` は誤り
+          if (tmdbResponse.raw_results_count === 0) break;
 
           // adultコンテンツ・除外言語・低品質コンテンツを除外
           const qualityResults = tmdbResponse.results.filter((movie) =>

@@ -185,6 +185,11 @@ describe('TMDb APIクライアント', () => {
       expect(result.page).toBe(1);
       expect(result.total_pages).toBe(1);
       expect(result.total_results).toBe(4);
+
+      // フィルタ前の件数も添える（#1166）。ここは `results` が2件まで減る
+      // ケースなので、**フィルタ後の件数を入れてしまう実装**も落とせる
+      expect(result.results).toHaveLength(2);
+      expect(result.raw_results_count).toBe(4);
     });
   });
 

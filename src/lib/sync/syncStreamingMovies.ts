@@ -160,7 +160,7 @@ async function fetchStreamingCandidates(
         // 「ローカルのフィルタで全件落ちた」でも成立する。後者で打ち切ると
         // 残りのページの作品が `streamingIds` にも `unresolvedIds` にも
         // 入らないまま、下のクリアで「配信終了」にされる
-        const rawCount = response.raw_results_count ?? response.results.length;
+        const rawCount = response.raw_results_count;
 
         if (rawCount === 0) {
           // 終端に到達して空なら正常。手前で空なら TMDb 側の異常
@@ -188,6 +188,19 @@ async function fetchStreamingCandidates(
         }
 
         if (page >= response.total_pages) break;
+
+        // ⚠️ 上限に当たって抜けるのも「全部は見ていない」状態（#1166）。
+        // 見ていない作品をクリアするのは、途中で空を返されたときと同じ事故。
+        //
+        // 実測（2026-11）では total_pages は upcoming=1 / now_showing=3 で
+        // 上限 5 に届かない。今は到達しないが、配信カタログが増えれば
+        // 黙ってクリア対象が広がるため、ここで止める
+        if (page === DISCOVER_API_MAX_PAGES) {
+          truncated = true;
+          result.errors.push(
+            `${window.timeFrame}: 取得が上限 ${DISCOVER_API_MAX_PAGES} ページに達した（全 ${response.total_pages} ページ）。クリアを見送る`,
+          );
+        }
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Unknown error';

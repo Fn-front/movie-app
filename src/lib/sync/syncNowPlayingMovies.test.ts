@@ -975,14 +975,55 @@ describe('syncNowPlayingMovies', () => {
       expect(result.errors.join('\n')).toContain('打ち切');
     });
 
+    /**
+     * 誤検知の方向も見る（#1166）
+     *
+     * 「異常」と判定しすぎると**クリアが永久に走らなくなり**、上映終了が
+     * 一生反映されない。`page < total_pages` を `<=` に変える変異で
+     * ここが落ちる
+     */
+    it('最終ページでフィルタ前が空でも、クリアは従来どおり実行する', async () => {
+      setValidEnv();
+
+      (getNowPlayingMovies as jest.Mock)
+        .mockResolvedValueOnce({
+          page: 1,
+          total_pages: 2,
+          total_results: 20,
+          results: [createMockMovie({ id: 840, title: '取れた映画' })],
+          raw_results_count: 20,
+        })
+        // 最終ページが空。終端なので異常ではない
+        .mockResolvedValueOnce({
+          page: 2,
+          total_pages: 2,
+          total_results: 20,
+          results: [],
+          raw_results_count: 0,
+        });
+      (getMovieKeywordIds as jest.Mock).mockResolvedValue([]);
+
+      const supabaseMock = createSupabaseMock({});
+      (createClient as jest.Mock).mockReturnValue(supabaseMock);
+
+      const result = await syncNowPlayingMovies();
+
+      expect(supabaseMock.fromMock).toHaveBeenCalled();
+      expect(result.errors.join('\n')).not.toContain('打ち切');
+    });
+
     it('空のresultsが返された場合ページ取得を停止する', async () => {
       setValidEnv();
 
       (getNowPlayingMovies as jest.Mock).mockResolvedValueOnce({
         page: 1,
-        total_pages: 5,
+        // 1ページしか無い＝終端なので、打ち切りの異常扱いにはならない。
+        // ここが `total_pages: 5` のままだと、テスト名と違って
+        // truncated の経路を通ってしまう
+        total_pages: 1,
         total_results: 0,
         results: [],
+        raw_results_count: 0,
       });
 
       const supabaseMock = createSupabaseMock({});

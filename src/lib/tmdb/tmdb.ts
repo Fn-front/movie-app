@@ -30,6 +30,7 @@ import {
 import { normalizeWatchProviderIds } from '@/lib/movies/watchProviders';
 import type {
   DismissSignals,
+  FilteredTMDbResponse,
   Movie,
   MovieCacheStats,
   MovieDetail,
@@ -151,7 +152,7 @@ function excludeInappropriateMovies<
  */
 export async function getNowPlayingMovies(
   page: number = 1,
-): Promise<TMDbResponse<Movie>> {
+): Promise<FilteredTMDbResponse<Movie>> {
   const response = await tmdbClient.get<TMDbResponse<Movie>>(
     TMDB_ENDPOINTS.NOW_PLAYING,
     {
@@ -466,7 +467,7 @@ export interface DiscoverMoviesParams {
  */
 export async function discoverMovies(
   params: DiscoverMoviesParams = {},
-): Promise<TMDbResponse<Movie>> {
+): Promise<FilteredTMDbResponse<Movie>> {
   const { page = 1, ...rest } = params;
   const response = await tmdbClient.get<TMDbResponse<Movie>>(
     TMDB_ENDPOINTS.DISCOVER,

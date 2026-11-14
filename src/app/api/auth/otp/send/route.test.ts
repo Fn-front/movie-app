@@ -9,6 +9,8 @@
 // hashOtpCode は pepper が無いと例外を投げる（平文フォールバック禁止）
 process.env.OTP_HASH_PEPPER = 'test-pepper-value';
 
+import { sendOtpEmail } from '@/lib/otp';
+
 import { POST } from './route';
 
 // --- Mocks ---
@@ -102,6 +104,11 @@ const setupOtpFlowMocks = () => {
 describe('POST /api/auth/otp/send', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks は mockReturnValueOnce のキューを捨てない（捨てるのは
+    // mockReset）。途中で返るテストが使い残したキューが次のテストへ漏れると、
+    // 以降すべてのモック応答が1つずれて不可解な失敗になる。
+    // 他のAPIテスト（settings / password-reset）は既にこうしている
+    mockFrom.mockReset();
   });
 
   it('registration: 正常にOTPを送信できる', async () => {
@@ -176,6 +183,111 @@ describe('POST /api/auth/otp/send', () => {
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
     expect(json.message).toBe('確認コードを送信しました。');
+  });
+
+  /**
+   * DB障害を「存在しないメール」に化かさない（#1164）
+   *
+   * 上の2本は**意図した仕様**（メール列挙防止）で、未登録でも成功を返す。
+   * ところが `.single()` は読み取りに失敗しても `data: null` を返すため、
+   * DB の一時障害まで同じ応答になる。利用者には「送信しました」と出るが
+   * **メールは1通も送られない**ので、届かないコードを待ち続ける。
+   *
+   * 列挙防止は維持すること。「本当に存在しない」は従来どおり 200 のまま、
+   * **DB エラーだけ**を 500 に分ける
+   */
+  it('registration: ユーザーの読み取りに失敗したら、送っていないのに成功を返さない', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: null,
+            error: { code: '57P01', message: 'connection terminated' },
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', action: 'registration' }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(sendOtpEmail).not.toHaveBeenCalled();
+  });
+
+  it('login: ユーザーの読み取りに失敗したら、送っていないのに成功を返さない', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: null,
+            error: { code: '57P01', message: 'connection terminated' },
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', action: 'login' }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(sendOtpEmail).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 再送クールダウンの読み取り失敗を「前回送信なし」に化かさない（#1164）
+   *
+   * 握り潰すと、DB が詰まっている間だけ 1分の再送間隔が素通りする。
+   * メールボックスへの連投を止める仕組みなので、効かない窓を作らない
+   */
+  it('再送間隔の読み取りに失敗したらクールダウンを素通りさせない', async () => {
+    // ユーザー検索（存在する・未認証）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'user-1', is_verified: false },
+            error: null,
+          }),
+        }),
+      }),
+    });
+    // 前回送信チェックが落ちる
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                single: () => ({
+                  data: null,
+                  error: { code: '57P01', message: 'connection terminated' },
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    // ⚠️ この先のモックも積んでおく。積まないと `mockFrom` が undefined を
+    // 返して TypeError で 500 になり、**ガードが無くても通ってしまう**
+    mockFrom.mockReturnValueOnce({
+      delete: () => ({
+        eq: () => ({
+          eq: () => ({ is: () => ({ data: null, error: null }) }),
+        }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({ insert: () => ({ error: null }) });
+
+    const response = await POST(
+      createRequest({ email: 'test@example.com', action: 'registration' }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(sendOtpEmail).not.toHaveBeenCalled();
   });
 
   it('再送間隔が短すぎる場合429を返す', async () => {

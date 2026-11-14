@@ -105,11 +105,19 @@ export async function POST(request: Request) {
     // アクション別チェック
     if (action === OTP_ACTION.REGISTRATION) {
       // 該当メールのユーザーが存在し is_verified = false であること
-      const { data: user } = await supabase
+      const { data: user, error: userError } = await supabase
         .from('users')
         .select('id, is_verified')
         .eq('email', email)
         .single();
+
+      // ⚠️ 下の「存在しなくても成功を返す」は列挙防止の**意図した仕様**だが、
+      // error を捨てると DB の一時障害まで同じ応答になる。利用者には
+      // 「送信しました」と出るのに1通も送られず、届かないコードを待ち続ける。
+      // 列挙防止は保ったまま、**DB エラーだけ**を分ける（#1164）
+      if (userError && userError.code !== SUPABASE_ERROR_CODE.NOT_FOUND) {
+        throw userError;
+      }
 
       if (!user) {
         // メール列挙防止: 存在しないメールでも成功レスポンス（遅延付き）
@@ -136,11 +144,16 @@ export async function POST(request: Request) {
       }
     } else if (action === OTP_ACTION.LOGIN) {
       // 該当メールのユーザーが存在すること
-      const { data: user } = await supabase
+      const { data: user, error: userError } = await supabase
         .from('users')
         .select('id')
         .eq('email', email)
         .single();
+
+      // 理由は上の registration と同じ（#1164）
+      if (userError && userError.code !== SUPABASE_ERROR_CODE.NOT_FOUND) {
+        throw userError;
+      }
 
       if (!user) {
         // メール列挙防止: 存在しないメールでも成功レスポンス（遅延付き）
@@ -157,7 +170,7 @@ export async function POST(request: Request) {
     // password_change の認証・宛先解決は上部で済ませている（ボディの email を使わない）
 
     // 前回送信から1分以上経過しているかチェック
-    const { data: recentOtp } = await supabase
+    const { data: recentOtp, error: recentOtpError } = await supabase
       .from('otp_codes')
       .select('created_at')
       .eq('email', email)
@@ -165,6 +178,16 @@ export async function POST(request: Request) {
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
+
+    // 握り潰すと「前回送信なし」に化け、DB が詰まっている間だけ再送間隔が
+    // 素通りする。メールボックスへの連投を止める仕組みなので、効かない窓を
+    // 作らない（#1164）。前回送信が無い場合は NOT_FOUND なので従来どおり通す
+    if (
+      recentOtpError &&
+      recentOtpError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
+    ) {
+      throw recentOtpError;
+    }
 
     if (recentOtp) {
       const lastSentAt = new Date(recentOtp.created_at);

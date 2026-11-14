@@ -176,9 +176,13 @@ test.describe('ウォッチリストボタン', () => {
       // 追加直後のサイドバーは楽観アイテム（id が `optimistic-...`）を
       // 出している。そのまま削除を押すと仮IDで DELETE して 400 になるため、
       // 本物のIDに入れ替わる再取得まで待つ
+      //
+      // ⚠️ **パスで厳密に照合する。** `includes('/api/watchlist')` だと
+      // `/api/watchlist/lookup`（#1145）にも当たり、一覧の再取得が
+      // 届く前に先へ進みうる。待ちたいのは**一覧**の再取得
       const refetched = page.waitForResponse(
         (res) =>
-          res.url().includes('/api/watchlist') &&
+          new URL(res.url()).pathname === '/api/watchlist' &&
           res.request().method() === 'GET' &&
           res.ok(),
       );

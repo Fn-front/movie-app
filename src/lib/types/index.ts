@@ -334,6 +334,21 @@ export interface TMDbResponse<T> {
   total_pages: number;
   /** 総結果数 */
   total_results: number;
+  /**
+   * フィルタを通す前の件数（#1166）
+   *
+   * `getNowPlayingMovies` / `discoverMovies` は `excludeInappropriateMovies`
+   * を通した配列を `results` に入れる。そのため `results.length === 0` は
+   * 「TMDb が空を返した」とは限らず、**ローカルのフィルタで全件落ちた**でも
+   * 成立する。
+   *
+   * 同期処理はこの2つを区別する必要がある。前者（TMDb の異常）で巡回を
+   * 打ち切ると残りのページの作品がクリア対象になり、一覧から丸ごと消える。
+   * 後者は単に次のページへ進めばよい。
+   *
+   * フィルタを通さないエンドポイントでは付かない（省略可）。
+   */
+  raw_results_count?: number;
 }
 
 /**

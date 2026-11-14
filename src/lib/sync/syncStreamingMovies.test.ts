@@ -85,9 +85,20 @@ const createMovie = (overrides: Record<string, unknown> = {}) => ({
 });
 
 /** 全ページ分のレスポンスを1件ずつ返す */
-const respondWith = (movies: Record<string, unknown>[], totalPages = 1) => ({
+const respondWith = (
+  movies: Record<string, unknown>[],
+  totalPages = 1,
+  /**
+   * フィルタ前の件数（#1166）
+   *
+   * 既定は `results` と同数。`results` が空でもここが正なら
+   * 「ローカルのフィルタで全件落ちた」を表せる
+   */
+  rawResultsCount = movies.length,
+) => ({
   results: movies,
   total_pages: totalPages,
+  raw_results_count: rawResultsCount,
 });
 
 /** JP配信実態のレスポンスを生成 */
@@ -204,6 +215,50 @@ describe('syncStreamingMovies', () => {
       // time_frame ごとに1回ずつで打ち切り
       expect(mockDiscoverMovies).toHaveBeenCalledTimes(2);
       expect(mockUpsert).not.toHaveBeenCalled();
+    });
+
+    /**
+     * フィルタで空になっただけのページで打ち切らない（#1166）
+     *
+     * `discoverMovies` は `excludeInappropriateMovies` を通した配列を返す。
+     * `results.length === 0` は「TMDb が空を返した」とは限らない
+     */
+    it('フィルタで全件落ちたページがあっても次のページを取りにいく', async () => {
+      mockDiscoverMovies
+        .mockResolvedValueOnce(respondWith([createMovie({ id: 11 })], 3))
+        // TMDb は返したが全件フィルタで落ちた
+        .mockResolvedValueOnce(respondWith([], 3, 20))
+        .mockResolvedValueOnce(respondWith([createMovie({ id: 12 })], 3))
+        // 2つ目の time_frame は1ページで終端
+        .mockResolvedValue(respondWith([createMovie({ id: 11 })], 1));
+
+      await syncStreamingMovies();
+
+      // 2ページ目で止まらず3ページ目まで取りにいく。
+      // 件数だけ見ると、2つ目の time_frame のぶんで水増しされて素通りする
+      const pages = mockDiscoverMovies.mock.calls.map(
+        (call) => (call[0] as { page: number }).page,
+      );
+      expect(pages).toContain(3);
+    });
+
+    /**
+     * 途中でTMDbが空を返したらクリアしない（#1166）
+     *
+     * 取れなかったページの作品は streamingIds にも unresolvedIds にも
+     * 入らないため、クリアを撃つと丸ごと「配信終了」になる
+     */
+    it('TMDbが途中で空を返したらクリアを実行しない', async () => {
+      mockDiscoverMovies
+        .mockResolvedValueOnce(respondWith([createMovie({ id: 21 })], 5))
+        // フィルタ前から空＝TMDb の異常
+        .mockResolvedValueOnce(respondWith([], 5, 0))
+        .mockResolvedValue(respondWith([createMovie({ id: 21 })], 1));
+
+      const result = await syncStreamingMovies();
+
+      expect(mockClearNotIn).not.toHaveBeenCalled();
+      expect(result.errors.join('\n')).toContain('打ち切');
     });
 
     it('両方のtime_frameに現れた映画は1件に重複排除する', async () => {

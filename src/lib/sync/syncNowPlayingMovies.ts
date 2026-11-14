@@ -62,10 +62,33 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
   };
 
   // 1. TMDb now_playing を全ページ取得
+  //
+  // ⚠️ 判定は**フィルタ前の件数**で行う（#1166）。`getNowPlayingMovies` は
+  // `excludeInappropriateMovies` を通した配列を返すため、`results.length === 0`
+  // は「TMDb が空を返した」とは限らず「ローカルのフィルタで全件落ちた」でも
+  // 成立する。後者で打ち切ると、残りのページの作品が `nowPlayingIds` にも
+  // `unresolvedIds` にも入らないまま下のクリア対象になり、丸ごと
+  // 「上映終了」にされる。
   const allMovies: Movie[] = [];
+  /** TMDb 側の異常で途中打ち切りになったか */
+  let truncated = false;
+
   for (let page = 1; page <= NOW_PLAYING_SYNC_MAX_PAGES; page++) {
     const response = await getNowPlayingMovies(page);
-    if (response.results.length === 0) break;
+    // フィルタを通さない経路のために `results.length` へ倒す
+    const rawCount = response.raw_results_count ?? response.results.length;
+
+    if (rawCount === 0) {
+      // 終端に到達して空なら正常。手前で空なら TMDb 側の異常
+      if (page < response.total_pages) {
+        truncated = true;
+        result.errors.push(
+          `TMDb が ${page}/${response.total_pages} ページ目で空を返したため取得を打ち切った`,
+        );
+      }
+      break;
+    }
+
     allMovies.push(...response.results);
     if (page >= response.total_pages) break;
   }
@@ -183,7 +206,10 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
   // PostgREST はこれを構文エラーにせず**全件にマッチ**する（本番で実測:
   // `id=not.in.()` はフィルタ無しと同じ content-range を返す）。
   // つまりガードが無い場合、異常時に公開中タブが全滅する
-  if (nowPlayingIds.size > 0) {
+  // ⚠️ 途中打ち切りのときもクリアしない（#1166）。取れなかったページの作品は
+  // `nowPlayingIds` にも `unresolvedIds` にも入らない（ループを回っていない
+  // ので catch にも来ない）ため、両方の防御をすり抜ける
+  if (nowPlayingIds.size > 0 && !truncated) {
     // 判定に失敗した作品は現状維持にしたいので、保持対象に含める
     const keepIds = [...nowPlayingIds, ...unresolvedIds];
     const { data: clearedData, error: clearError } = await supabase

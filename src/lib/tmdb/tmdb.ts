@@ -161,6 +161,8 @@ export async function getNowPlayingMovies(
   return {
     ...response.data,
     results: excludeInappropriateMovies(response.data.results),
+    // 同期処理が「TMDb が空」と「フィルタで全件落ちた」を区別するため（#1166）
+    raw_results_count: response.data.results.length,
   };
 }
 
@@ -480,6 +482,8 @@ export async function discoverMovies(
   return {
     ...response.data,
     results: excludeInappropriateMovies(response.data.results),
+    // 同期処理が「TMDb が空」と「フィルタで全件落ちた」を区別するため（#1166）
+    raw_results_count: response.data.results.length,
   };
 }
 

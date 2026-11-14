@@ -208,6 +208,35 @@ describe('POST /api/auth/password-reset/confirm', () => {
 
       expect(response.status).toBe(400);
     });
+
+    /**
+     * DB障害を「リンクが無効」に化かさない（#1167）
+     *
+     * `.maybeSingle()` はどんなエラーでも `data: null` を返すため、
+     * `error` を見ないと読み取り失敗が上のテストと同じ 400 になる。
+     * **トークンは直前に消費済み**なので、弾かれた利用者はリセットの
+     * 再申請からやり直しになる。パスワードを忘れている＝他に
+     * ログイン手段が無い状態なので、500 を返して再試行させるほうがよい
+     */
+    it('ユーザーの読み取りに失敗したら、無効なリンク扱いにせず500を返す', async () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () =>
+              Promise.resolve({
+                data: null,
+                error: { code: '57P01', message: 'connection terminated' },
+              }),
+          }),
+        }),
+      });
+
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+
+      expect(response.status).toBe(500);
+    });
   });
 
   describe('入力バリデーション', () => {

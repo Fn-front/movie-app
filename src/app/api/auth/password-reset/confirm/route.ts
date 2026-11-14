@@ -118,11 +118,22 @@ export async function POST(request: Request) {
       return invalidTokenResponse();
     }
 
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('id, password_hash')
       .eq('id', userId)
       .maybeSingle();
+
+    // ⚠️ error を捨ててはいけない。`.maybeSingle()` は読み取りに失敗しても
+    // `data: null` を返すため、DB の一時障害が下の「リンクが無効」に化ける。
+    // トークンは直前に消費済み（`consumePasswordResetToken`）なので、
+    // そうなった利用者はリセットの再申請からやり直しになる。パスワードを
+    // 忘れている＝他にログイン手段が無い状態なので傷が深い。
+    // 行が無いだけなら maybeSingle は error を返さないため、ここに来るのは
+    // 本物の読み取り失敗だけ。500 を返して再試行してもらう（#1167）
+    if (userError) {
+      throw userError;
+    }
 
     if (!user) {
       return invalidTokenResponse();

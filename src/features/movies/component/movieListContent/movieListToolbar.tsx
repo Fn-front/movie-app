@@ -61,8 +61,13 @@ export const MovieListToolbar = memo<MovieListToolbarProps>(
             ⚠️ 印の span に `aria-label` を付ける案は効かない。
             ボタンが `aria-label` を持つと中身は名前の計算に使われず、
             支援技術もボタンの子を個別には読まないため、**何も伝わらない**。
-            そのうえ role の無い span への `aria-label` は
-            `aria-prohibited-attr` に当たる。
+            実測（Chrome の AX ツリー）でも、その形ではボタンの
+            `description` が `null` のままだった。
+
+            ⚠️ 「role の無い span への `aria-label` は `aria-prohibited-attr`
+            に当たるから」ではない。**ボタンの子なら当たらない**（axe 4.14 で
+            pass を実測）。当たるのはボタンの外に単独で置いた場合。
+            ここで効かない理由は上の1点だけ。
           */}
           <Button
             variant='ghost'

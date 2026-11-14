@@ -83,9 +83,6 @@ async function mockCalendarWithOneMovie(page: Page): Promise<void> {
 const TILE_SELECTOR =
   '[class*="c_card"][class*="c_movie_tile"]:not([class*="c_movie_tile_skeleton"])';
 
-/** 絞り込み中を示すバッジ */
-// 絞り込み中は支援技術にも伝わる形で出る（#1063）。CSS クラス名では引かない
-
 /** 一覧が描画されるまで待つ（データ0件でも先へ進む） */
 const waitForList = (page: Page) =>
   page

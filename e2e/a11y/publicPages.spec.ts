@@ -31,6 +31,11 @@ const PUBLIC_PAGES = [
     allowedIncomplete: HOME_ALLOWED_INCOMPLETE,
   },
   { name: '公開中', path: '/movies/now-showing' },
+  // 絞り込み中の状態（#1063）。クエリなしでは「絞り込み中」の印とその説明
+  // （`aria-describedby` → sr-only のテキスト）に一度も到達しない。
+  // ⚠️ dangling IDREF は `aria-valid-attr-value` の **incomplete** に出る。
+  // violations だけ見ていると素通りする経路なので、走査対象に入れておく
+  { name: '公開中（絞り込み中）', path: '/movies/now-showing?genre_ids=28' },
   { name: '公開予定', path: '/movies/upcoming' },
   // 映画詳細の全画面ページ（#1033）。モーダルとは見出しレベル（h1/h2）も
   // スクロール領域の tabIndex も切り替わるため、別の回帰対象として見る

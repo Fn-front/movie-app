@@ -26,6 +26,20 @@ export interface TotpSetupStart {
 }
 
 /**
+ * 既に二段階認証が有効なユーザーが再セットアップを試みた
+ *
+ * 呼び出し側が**DB障害と区別できるようにする**ための型。素の `Error` だと
+ * ルートが「例外＝既に有効」と決め打ちせざるを得ず、接続断や INSERT 失敗まで
+ * 「もう有効です」と表示されて障害の切り分けができない
+ */
+export class TotpAlreadyEnabledError extends Error {
+  constructor() {
+    super('TOTP is already enabled');
+    this.name = 'TotpAlreadyEnabledError';
+  }
+}
+
+/**
  * 設定を開始する（まだ有効化はしない）
  *
  * 既に設定途中の行があれば作り直す。前回のQRを読み込んだまま放置された
@@ -42,14 +56,23 @@ export async function startTotpSetup(
   userId: string,
   accountName: string,
 ): Promise<TotpSetupStart> {
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await supabase
     .from('user_totp')
     .select('confirmed_at')
     .eq('user_id', userId)
     .maybeSingle();
 
+  // ⚠️ **読み取りに失敗したら何も消さずに抜ける。**
+  // Supabase は「行が無い」ときも「接続断・タイムアウト」のときも
+  // data: null を返す。error を握り潰すと `existing === null` を
+  // 「まだ設定していない」と断定し、下の無条件 DELETE に進んでしまう。
+  // 暗号化済みの共有鍵は復元できず、新しい行は confirmed_at が NULL なので
+  // **当人の二段階認証が黙って解除される**。削除は取り消せないので、
+  // 確証が無いときは何もしないのが正しい（sessionProbe.ts と同じ原則）
+  if (readError) throw readError;
+
   if (existing?.confirmed_at) {
-    throw new Error('TOTP is already enabled');
+    throw new TotpAlreadyEnabledError();
   }
 
   const secret = generateTotpSecret();

@@ -130,7 +130,79 @@ afterAll(() => {
 
 const emptyDb = (): FakeDb => ({ totp: null, recoveryCodes: [] });
 
+/**
+ * 既存行の読み取りだけが失敗する模擬
+ *
+ * Supabase は「行が無い」ときも「接続断・タイムアウト」のときも
+ * `data: null` を返す。区別できるのは `error` だけ
+ */
+function createReadFailingSupabaseMock(db: FakeDb): {
+  client: SupabaseClient;
+  deleted: { called: boolean };
+} {
+  const deleted = { called: false };
+  const error = {
+    message: 'connection terminated unexpectedly',
+    code: '57P01',
+  };
+
+  const from = () => {
+    const builder: Record<string, unknown> = {};
+    const self = () => builder;
+
+    builder.select = jest.fn(self);
+    builder.eq = jest.fn(self);
+    builder.is = jest.fn(self);
+    builder.insert = jest.fn(self);
+    builder.update = jest.fn(self);
+    builder.delete = jest.fn(() => {
+      deleted.called = true;
+      db.totp = null;
+      return builder;
+    });
+    builder.maybeSingle = jest.fn(() => Promise.resolve({ data: null, error }));
+    (builder as { then: unknown }).then = (
+      onFulfilled: (value: unknown) => unknown,
+    ) => Promise.resolve({ data: null, error: null }).then(onFulfilled);
+
+    return builder;
+  };
+
+  return {
+    client: { from: jest.fn(from) } as unknown as SupabaseClient,
+    deleted,
+  };
+}
+
 describe('startTotpSetup', () => {
+  /**
+   * ⚠️ 読み取りに失敗したときに消してはいけない
+   *
+   * `existing === null` を「まだ設定していない」と断定すると、
+   * 「既に有効化済み」ガードを通過して**無条件 DELETE** に進む。
+   * 暗号化済みの共有鍵が失われ、認証アプリの登録が無効になるうえ、
+   * 新しい行は confirmed_at が NULL なので当人の2FAが黙って解除される
+   */
+  it('既存行の読み取りに失敗したら、何も消さずに throw する', async () => {
+    const db: FakeDb = {
+      totp: {
+        user_id: USER_ID,
+        encrypted_secret: encryptTotpSecret(generateTotpSecret()),
+        confirmed_at: '2026-10-18T00:00:00Z',
+        last_used_counter: 5,
+      },
+      recoveryCodes: [],
+    };
+    const { client, deleted } = createReadFailingSupabaseMock(db);
+
+    await expect(startTotpSetup(client, USER_ID, EMAIL)).rejects.toMatchObject({
+      code: '57P01',
+    });
+
+    expect(deleted.called).toBe(false);
+    expect(db.totp).not.toBeNull();
+  });
+
   it('otpauth URI と手入力用の鍵を返す', async () => {
     const result = await startTotpSetup(
       createSupabaseMock(emptyDb()),

@@ -6,6 +6,23 @@ import axios, { type AxiosError, type AxiosResponse } from 'axios';
 
 import { API, HTTP_STATUS } from '@/constants';
 import { logout } from '@/lib/auth/logout';
+import { confirmSignedOut } from '@/lib/auth/sessionProbe';
+
+/**
+ * ログアウト処理の多重実行を止めるフラグ
+ *
+ * 戻すのは「確認できなかった」「確認にもログアウトにも失敗した」の2つ。
+ * ログアウトが**成功**したときだけ立てたままにする（完全遷移に入るため）。
+ *
+ * ⚠️ `logout()` が失敗する経路は実在する（csrf 取得か `/signout` の POST の
+ * 失敗）。`void logout()` では rethrow を握り潰してフラグが戻らない
+ */
+let isSigningOut = false;
+
+/** テスト用。モジュールスコープの状態は Jest のモジュールキャッシュを跨ぐ */
+export function __resetSignOutGuardForTest(): void {
+  isSigningOut = false;
+}
 
 /**
  * 基本Axiosインスタンス
@@ -72,9 +89,36 @@ axiosInstance.interceptors.response.use(
     }
 
     // 認証エラー（401）の場合、セッションをクリアしてログインページにリダイレクト
+    //
+    // ⚠️ **401 だけを根拠にログアウトしない**（#1151）。
+    // `unauthorizedResponse()` を返すルートの中には、DB の読み取りに失敗した
+    // だけで 401 を返すものがある（`auth/otp/send` など）。確認せずに
+    // `logout()` を呼ぶと、サーバーセッションの破棄と Cookie 同意レコードの
+    // 削除が走る。#1136 で `sessionExpiryHandler` に入れたのと同じ確認を通す。
+    //
+    // 画面の初期化では複数のリクエストが同時に飛ぶため、フラグで多重実行を
+    // 止める。確認できなかった場合はフラグを戻し、次の 401 で再判定する
     if (error.response?.status === HTTP_STATUS.UNAUTHORIZED) {
-      if (typeof window !== 'undefined') {
-        void logout();
+      if (typeof window !== 'undefined' && !isSigningOut) {
+        isSigningOut = true;
+
+        void confirmSignedOut()
+          .then(async (signedOut) => {
+            if (!signedOut) {
+              isSigningOut = false;
+              return;
+            }
+            // `logout()` は遷移が始まらなかったとき rethrow する。
+            // await しないと下の catch に渡らない
+            await logout();
+          })
+          .catch(() => {
+            // 確認にもログアウトにも失敗した。ここで戻さないと、
+            // **この SPA セッションでは二度とログアウトできない**。
+            // `logout()` は失敗しても先に同意レコードを消しているので、
+            // 「同意は消えた・ログイン状態は残る・経路は死んでいる」になる
+            isSigningOut = false;
+          });
       }
     }
 

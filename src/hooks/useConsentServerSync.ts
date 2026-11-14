@@ -20,10 +20,12 @@ import { COOKIE_CONSENT_MESSAGES, COOKIE_CONSENT_VERSION } from '@/constants';
 import { useToastDispatch } from '@/hooks/useToast';
 import type { CookieConsentState } from '@/hooks/useCookieConsent';
 import { getSettings, updateSettings } from '@/lib/api/user/user';
+import { confirmSignedOut } from '@/lib/auth/sessionProbe';
 import {
   clearConsentRecord,
   clearOwnedConsent,
   getSendableConsentAt,
+  getStoredConsentOwner,
   getStoredConsentRecord,
   getStoredConsentState,
   writeConsentRecord,
@@ -91,6 +93,12 @@ export function useConsentServerSync(consent: CookieConsentState): void {
   // 破棄される）。これは遷移を伴わない経路のための保険。
   // sessionExpiryHandler が loading → unauthenticated を除外しているのとは
   // 逆に、前の状態を問わず実行する。残骸を確実に掃除したいため。
+  //
+  // ⚠️ `status === 'unauthenticated'` だけで消してはいけない（#1136）。
+  // next-auth は `/api/auth/session` の通信失敗も非2xxも `null` に潰すため、
+  // この値は「ログアウトした」と「応答を得られなかった」の両方を意味する。
+  // 回線の瞬断や 5xx で利用者の意思表示が消えるので、消す前に確かめる。
+  // 確認の意味と「消さない側に倒す」理由は sessionProbe.ts を参照。
   useEffect(() => {
     if (status !== 'unauthenticated') return;
 
@@ -98,9 +106,25 @@ export function useConsentServerSync(consent: CookieConsentState): void {
     inFlight = null;
     mergeDoneRef.current = false;
     lastSentRef.current = null;
-    // 消えたことは購読経由で analyticsProvider に伝わり、
-    // そちらが consent update と _ga の削除を行う
-    clearOwnedConsent();
+
+    // 消す対象が無いなら確認も要らない。未認証の閲覧者が大半なので、
+    // ここで抜けないと「同意レコードを持たない利用者」全員に
+    // 毎ロード1往復を足すことになる（clearOwnedConsent も owner が
+    // 空文字なら何もしないので、挙動としては等価）
+    if (getStoredConsentOwner() === '') return;
+
+    let cancelled = false;
+
+    void confirmSignedOut().then((signedOut) => {
+      if (cancelled || !signedOut) return;
+      // 消えたことは購読経由で analyticsProvider に伝わり、
+      // そちらが consent update と _ga の削除を行う
+      clearOwnedConsent();
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [status]);
 
   // 初回マージ

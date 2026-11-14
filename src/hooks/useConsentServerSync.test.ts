@@ -37,6 +37,11 @@ jest.mock('@/lib/api/user/user', () => ({
   updateSettings: (...args: unknown[]) => mockUpdateSettings(...args),
 }));
 
+const mockConfirmSignedOut = jest.fn();
+jest.mock('@/lib/auth/sessionProbe', () => ({
+  confirmSignedOut: () => mockConfirmSignedOut(),
+}));
+
 const ME = 'user-me';
 const OTHER = 'user-other';
 const T1 = '2026-11-03T00:00:00.000Z';
@@ -75,6 +80,9 @@ describe('useConsentServerSync', () => {
     __resetConsentSyncForTest();
     mockUseSession.mockReturnValue(authenticated());
     mockUpdateSettings.mockResolvedValue(undefined);
+    // 既定は「ログアウト済みだとサーバーが明示した」。取得失敗の分岐は
+    // それを明示するテストだけが false に差し替える
+    mockConfirmSignedOut.mockResolvedValue(true);
   });
 
   describe('発火条件', () => {
@@ -463,13 +471,17 @@ describe('useConsentServerSync', () => {
     });
   });
 
-  describe('ログアウト', () => {
-    it('owner 付きのレコードを消す', async () => {
-      recordConsentDecision('granted', ME, T1);
+  describe('未認証になったときの後始末', () => {
+    const signedOut = () => {
       mockUseSession.mockReturnValue({
         data: null,
         status: 'unauthenticated',
       });
+    };
+
+    it('owner 付きのレコードを消す', async () => {
+      recordConsentDecision('granted', ME, T1);
+      signedOut();
 
       render();
 
@@ -478,15 +490,45 @@ describe('useConsentServerSync', () => {
 
     it('未認証時の同意は残す', async () => {
       recordConsentDecision('granted', '', T1);
-      mockUseSession.mockReturnValue({
-        data: null,
-        status: 'unauthenticated',
-      });
+      signedOut();
 
       render();
 
       await act(async () => {});
       expect(getStoredConsentRecord().state).toBe('granted');
+    });
+
+    // 以下3件は #1136。next-auth は通信失敗も非2xxも null に潰すため、
+    // status === 'unauthenticated' だけでは消す根拠にならない
+    it('セッションの不在を確認できなければ消さない', async () => {
+      mockConfirmSignedOut.mockResolvedValue(false);
+      recordConsentDecision('granted', ME, T1);
+      signedOut();
+
+      render();
+
+      await act(async () => {});
+      expect(getStoredConsentRecord().state).toBe('granted');
+      expect(getStoredConsentRecord().owner).toBe(ME);
+    });
+
+    it('消すものが無いときは確認しない（未認証の利用者に往復を足さない）', async () => {
+      signedOut();
+
+      render();
+
+      await act(async () => {});
+      expect(mockConfirmSignedOut).not.toHaveBeenCalled();
+    });
+
+    it('未認証時の同意しか無いときも確認しない', async () => {
+      recordConsentDecision('granted', '', T1);
+      signedOut();
+
+      render();
+
+      await act(async () => {});
+      expect(mockConfirmSignedOut).not.toHaveBeenCalled();
     });
 
     it('同期ガードを解除して再ログインで再同期できるようにする', async () => {

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button/button';
 import { Select } from '@/components/ui/select/select';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
 import { WATCHLIST_CLEANUP_LABELS } from '@/constants';
 import { StreamingSortHint } from '@/features/watchlist/component/streamingSortHint/streamingSortHint';
@@ -111,6 +112,7 @@ export const WatchlistPage = memo(function WatchlistPage() {
           <StreamingSortHint />
         </div>
         <div className={styles.c_watchlist_page__controls}>
+          <ViewModeToggle />
           <Select
             options={SORT_OPTIONS}
             value={sortBy}

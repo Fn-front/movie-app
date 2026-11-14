@@ -447,6 +447,98 @@ export async function cleanupFavoritesForUser(userId: string): Promise<void> {
 }
 
 /**
+ * 行を直接 INSERT する（シード用）
+ *
+ * 失敗を黙殺すると「0件で落ちた」ようにしか見えず、アサーションのバグなのか
+ * シードのバグなのか切り分けられない。PostgREST の本文をそのまま投げる
+ *
+ * @param table - 対象テーブル
+ * @param rows - 投入する行
+ * @param label - エラーメッセージに出す操作名
+ */
+async function insertRows(
+  table: string,
+  rows: unknown[],
+  label: string,
+): Promise<void> {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: { ...supabaseHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify(rows),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `${label}に失敗しました（${response.status}）: ${await response.text()}`,
+    );
+  }
+}
+
+/**
+ * シードに使う映画IDのブロック内オフセット
+ *
+ * `runScopedMovieId()` は 0〜99 しか受け付けない。既に 1 / 10-13 / 20-23 /
+ * 30-31 が埋まっているので、重ならない帯を取る（件数は10件まで）
+ */
+const WATCHLIST_SEED_ID_OFFSET = 40;
+const FAVORITES_SEED_ID_OFFSET = 50;
+
+/**
+ * 指定ユーザーのウォッチリストに作品をシードする
+ *
+ * 一覧の**並び方**を見る spec 向け。1件ずつ API から追加すると書き込みの
+ * レート制限に当たるうえ、「1画面に何件収まるか」を見るには件数が要る。
+ *
+ * ポスターは付けない（`No Image` になる）。行の高さはポスター枠の
+ * `aspect-ratio` で決まるため、画像の有無でレイアウトは変わらない。
+ * 専用ユーザー（`openDedicatedSession`）前提で、後片付けはユーザー削除の
+ * CASCADE に任せる
+ *
+ * @param userId - 対象ユーザーのID
+ * @param count - 投入する件数
+ */
+export async function seedWatchlistForUser(
+  userId: string,
+  count: number,
+): Promise<void> {
+  await insertRows(
+    'watchlist',
+    Array.from({ length: count }, (_, i) => ({
+      user_id: userId,
+      tmdb_movie_id: runScopedMovieId(WATCHLIST_SEED_ID_OFFSET + i),
+      title: `E2Eウォッチリスト${i + 1}`,
+      release_date: '2026-03-01',
+    })),
+    'ウォッチリストのシード',
+  );
+}
+
+/**
+ * 指定ユーザーのお気に入りに作品をシードする
+ *
+ * 用途・注意点は `seedWatchlistForUser` と同じ。
+ *
+ * @param userId - 対象ユーザーのID
+ * @param count - 投入する件数
+ */
+export async function seedFavoritesForUser(
+  userId: string,
+  count: number,
+): Promise<void> {
+  await insertRows(
+    'favorites',
+    Array.from({ length: count }, (_, i) => ({
+      user_id: userId,
+      tmdb_movie_id: runScopedMovieId(FAVORITES_SEED_ID_OFFSET + i),
+      title: `E2Eお気に入り${i + 1}`,
+      release_date: '2026-03-01',
+      rating: 8,
+    })),
+    'お気に入りのシード',
+  );
+}
+
+/**
  * テストユーザーのお気に入りを物理削除する（rate_limitsも同時にリセット）
  */
 export async function cleanupFavorites(): Promise<void> {

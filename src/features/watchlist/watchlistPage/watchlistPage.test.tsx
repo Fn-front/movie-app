@@ -6,6 +6,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { WatchlistPage } from './watchlistPage';
+import { ARIA_LABELS } from '@/constants';
 
 // --- Mocks ---
 // --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
@@ -156,6 +157,42 @@ describe('WatchlistPage', () => {
     mockUseWatchlistPage.sortBy = 'added_at';
     mockUseWatchlistPage.isUpdatingWatched = false;
     mockGetFavoriteInfo.mockReturnValue(null);
+    // 表示モードは localStorage に残るので、テスト間で引きずらせない
+    localStorage.clear();
+  });
+
+  /**
+   * グリッド／リストの表示切替（#1049）
+   *
+   * この画面だけトグルが無いと、設定を変えてもここだけグリッドのままになり
+   * 他の画面と一貫しない
+   */
+  describe('表示モード切替', () => {
+    it('ツールバーに切替トグルが出る', () => {
+      render(<WatchlistPage />);
+
+      expect(
+        screen.getByRole('button', { name: ARIA_LABELS.LIST_VIEW }),
+      ).toBeInTheDocument();
+    });
+
+    it('トグルを押すと一覧もタイルもリストになる', async () => {
+      const user = userEvent.setup();
+      mockUseWatchlistPage.watchlist = createMockItems(3);
+
+      const { container } = render(<WatchlistPage />);
+
+      await user.click(
+        screen.getByRole('button', { name: ARIA_LABELS.LIST_VIEW }),
+      );
+
+      expect(
+        container.querySelector('.c_watchlist_list__list'),
+      ).toBeInTheDocument();
+      expect(
+        container.querySelectorAll('.c_watchlist_tile--list'),
+      ).toHaveLength(3);
+    });
   });
 
   it('タイトルが表示される', () => {

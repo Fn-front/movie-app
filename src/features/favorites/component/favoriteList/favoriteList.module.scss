@@ -16,6 +16,73 @@
     transform: scale(0.98);
   }
 
+  // リスト表示（#1050）。構造は MovieTile の `--list`（#1014）をなぞる
+  //
+  // 自身のクラスを重ねて詳細度を (0,2,0) にする。`.c_card` の
+  // `flex-direction: column` と同点だと、勝ち負けが CSS Modules の
+  // 出力順に左右されて本番ビルドで反転しうる
+  &#{&}--list {
+    flex-direction: row;
+    align-items: stretch;
+    height: auto;
+
+    .c_favorite_tile__poster {
+      // 行の高さはポスター（56 ÷ 2 × 3 = 84px）で決める。
+      // stretch のままだとクロスサイズが確定値になって aspect-ratio を
+      // 上回り、ルートフォントを大きくした環境で縦に伸びる
+      align-self: flex-start;
+      flex-shrink: 0;
+      width: $movie-tile-list-poster-width;
+    }
+
+    .c_favorite_tile__info {
+      height: auto;
+      justify-content: center;
+      // 1行省略したタイトルの min-content 幅でカードから溢れるのを防ぐ
+      // （flex item の min-width は既定が auto）
+      min-width: 0;
+    }
+
+    // タイトルは1行に省略する。行数が揃わないと行の高さがばらつき、
+    // 1画面に入る件数が減る。
+    //
+    // `-webkit-line-clamp` は使えない。`__title` は `__info`（flex）の
+    // 子でブロック化されるため `display: -webkit-box` が `flow-root` に
+    // なり、クランプが効かない。省略記号は実際に溢れる要素＝ リンク側に出す
+    .c_favorite_tile__title,
+    .c_favorite_tile__title_link {
+      @include text-truncate;
+    }
+
+    // グリッドはカード下端へ寄せるが、リストは縦方向に詰めるので不要
+    .c_favorite_tile__rating {
+      margin-top: 0;
+    }
+
+    // 操作ボタンはカードの実要素として並べる。絶対配置のままだと
+    // ボタンぶんの右余白を `__info` 側で言い当てる必要がある
+    .c_favorite_tile__favorite_button {
+      position: static;
+    }
+  }
+
+  // リスト行の右端に置く操作ボタン列
+  &__list_actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    // 操作は1つだけだが、足したときに領域が重ならないよう、広げたヒット領域
+    // （44px）と見た目 28px の差分を空けておく（#1017）
+    //
+    // ⚠️ **余白のスケールを使わない。** $spacing-4 はスマホで 16px → 12px に
+    // 下がるため（`_theme.scss`）、4px ぶん領域が重なる
+    gap: calc($tap-target-min - 28px);
+    padding-right: $spacing-2;
+    // タイトルのリンクの ::after（カード全面の当たり判定）より上に置く
+    position: relative;
+    z-index: 1;
+  }
+
   &__poster {
     position: relative;
     aspect-ratio: 2 / 3;

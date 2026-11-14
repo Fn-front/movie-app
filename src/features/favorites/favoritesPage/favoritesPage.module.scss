@@ -15,6 +15,10 @@
     align-items: center;
     justify-content: space-between;
     gap: $spacing-3;
+    // 表示切替を足して、320px では見出しとコントロールが1行に並びきらない
+    // （実測で余裕 2px）。折り返さないと見出しが1文字ずつ縦に潰れる
+    // （#1015 と同じ事象 / #1050）
+    flex-wrap: wrap;
   }
 
   &__title {
@@ -31,8 +35,12 @@
   &__controls {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: $spacing-2;
-    flex-shrink: 0;
+    flex-wrap: wrap;
+    // ⚠️ ここに `flex-shrink: 0` を付けないこと。付けると幅が max-content で
+    // 確定し、**中が折り返す余地そのものが無くなる**（wrap を書いても効かない）
+    min-width: 0;
   }
 
   &__sort {

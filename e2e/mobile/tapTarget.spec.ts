@@ -35,7 +35,7 @@
  * 中身が描けるまで待ってから掛けること
  */
 
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 import {
@@ -47,6 +47,7 @@ import {
 import { movieTiles } from '../helpers/locators';
 import { addMovieToWatchlist } from '../helpers/watchlistFlows';
 import { runScopedEmail } from '../helpers/runScope';
+import { expectTapAreaAtLeast, TAP_TARGET_MIN } from '../helpers/tapTarget';
 import {
   openDedicatedSession,
   type DedicatedSession,
@@ -64,9 +65,6 @@ const USER = {
   email: runScopedEmail('e2e-tap-target'),
   password: 'TapTargetE2e1',
 } as const;
-
-/** 指で押せるタップ領域の最小サイズ（`$tap-target-min` と対） */
-const TAP_TARGET_MIN = 44;
 
 test.use({
   viewport: { width: SP_VIEWPORT_WIDTH, height: 812 },
@@ -107,52 +105,6 @@ async function expectNoTargetSizeViolations(
     results.incomplete,
     `${label} でタップ領域が要確認:\n${format(results.incomplete)}`,
   ).toEqual([]);
-}
-
-/**
- * 要素を中心とする `size`×`size` の正方形の四隅が、その要素に当たるかを返す
- *
- * `::after` で広げたヒット領域は矩形としては測れないので、実際に
- * そこを押したら何に当たるかで見る。擬似要素は親要素の一部として
- * `elementFromPoint` に返るため、広げた分がそのまま判定に出る。
- *
- * 端ちょうどは隣の要素と取り合いになるので 1px 内側を測る。
- */
-async function hitAreaCorners(
-  locator: Locator,
-  size = TAP_TARGET_MIN,
-): Promise<boolean[]> {
-  return locator.evaluate((el, targetSize) => {
-    const rect = el.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    // 端ちょうどは隣と取り合いになるうえ、カードの角丸（border-radius +
-    // overflow: hidden）で**クリップされる境界とほぼ一致**する。
-    // 実測で 21.0px は card、20.5px は button に当たった。2px 内側を見る
-    const offset = targetSize / 2 - 2;
-
-    return [
-      [centerX - offset, centerY - offset],
-      [centerX + offset, centerY - offset],
-      [centerX - offset, centerY + offset],
-      [centerX + offset, centerY + offset],
-    ].map(([x, y]) => {
-      const hit = document.elementFromPoint(x, y);
-      return hit === el || el.contains(hit);
-    });
-  }, size);
-}
-
-/** 四隅すべてがその要素に当たることを検証する */
-async function expectTapAreaAtLeast(
-  locator: Locator,
-  label: string,
-): Promise<void> {
-  const corners = await hitAreaCorners(locator);
-  expect(
-    corners,
-    `${label} の ${TAP_TARGET_MIN}px 四方のうち、押しても当たらない角がある`,
-  ).toEqual([true, true, true, true]);
 }
 
 test.describe('スマホ幅のタップ領域', () => {

@@ -154,4 +154,53 @@ describe('RatingIndicator', () => {
       ).toBeInTheDocument();
     });
   });
+
+  /**
+   * 一覧のリスト行向け（#1049 / #1050）。
+   *
+   * 10個のチップは `sm` でも 258px 要る。リスト行の情報欄は 375px 幅で
+   * 213px しかなく、そのまま置くと幅だけが縮んで潰れ、同じ行の公開日が
+   * 0px まで押し出される
+   */
+  describe('コンパクト表示', () => {
+    const chips = (container: HTMLElement) =>
+      container.querySelectorAll('[class*="rating_indicator__item"]');
+
+    it('チップが1つだけになる', () => {
+      const { container } = render(<RatingIndicator rating={8} compact />);
+
+      expect(chips(container)).toHaveLength(1);
+      expect(screen.getByText('8')).toBeInTheDocument();
+    });
+
+    it('点数以外の数値は出さない', () => {
+      render(<RatingIndicator rating={8} compact />);
+
+      expect(screen.queryByText('7')).not.toBeInTheDocument();
+      expect(screen.queryByText('10')).not.toBeInTheDocument();
+    });
+
+    // 読み上げは親の aria-label が担うので、畳んでも情報は減らない
+    it('読み上げの内容は通常表示と変わらない', () => {
+      render(<RatingIndicator rating={8} compact />);
+
+      expect(screen.getByRole('img')).toHaveAttribute(
+        'aria-label',
+        '評価: 8/10',
+      );
+    });
+
+    /**
+     * 10段階から選ぶ操作はチップ1つでは表せない。
+     * 誤って併用されても、選べる状態が壊れないことを固定する
+     */
+    it('インタラクティブモードでは無視される', () => {
+      const { container } = render(
+        <RatingIndicator rating={8} compact onRatingChange={jest.fn()} />,
+      );
+
+      expect(chips(container)).toHaveLength(10);
+      expect(screen.getAllByRole('radio')).toHaveLength(10);
+    });
+  });
 });

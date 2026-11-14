@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { FavoriteList } from './favoriteList';
-import { IMAGE_SIZES } from '@/constants';
+import { IMAGE_SIZES, STORAGE_KEYS } from '@/constants';
 import type { FavoriteItem } from '@/lib/api/favorites/favorites';
 
 // next/imageモック
@@ -61,6 +61,8 @@ describe('FavoriteList', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // 表示モードは localStorage に残るので、テスト間で引きずらせない
+    localStorage.clear();
   });
 
   it('複数件をグリッド表示する', () => {
@@ -177,6 +179,146 @@ describe('FavoriteList', () => {
     await user.click(screen.getByText('映画A'));
 
     expect(mockOnClick).toHaveBeenCalledWith(100);
+  });
+
+  /**
+   * グリッド／リストの表示切替（#1050）
+   *
+   * 設定は全画面共通（`useMovieViewMode` / localStorage）。
+   * **コンテナとタイルの両方**が切り替わることを固定する。`MovieGridContainer`
+   * にだけ渡しても、縦長カードが1列に並ぶだけで一覧性は上がらない
+   */
+  describe('表示モード', () => {
+    const renderList = (isLoading = false) =>
+      render(
+        <FavoriteList
+          favorites={isLoading ? [] : mockFavorites}
+          isLoading={isLoading}
+          onFavoriteToggle={mockOnFavoriteToggle}
+          onClick={jest.fn()}
+        />,
+      );
+
+    it('既定ではグリッドの並びで出す', () => {
+      const { container } = renderList();
+
+      expect(
+        container.querySelector('.c_movie_grid_container__grid'),
+      ).toBeInTheDocument();
+      expect(
+        container.querySelector('.c_favorite_tile--list'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('リスト設定なら一覧もタイルもリストになる', () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+      const { container } = renderList();
+
+      expect(
+        container.querySelector('.c_movie_grid_container__list'),
+      ).toBeInTheDocument();
+      expect(
+        container.querySelector('.c_movie_grid_container__grid'),
+      ).not.toBeInTheDocument();
+      expect(container.querySelectorAll('.c_favorite_tile--list')).toHaveLength(
+        mockFavorites.length,
+      );
+    });
+
+    it('読み込み中のスケルトンもリストの並びにする', () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+      const { container } = renderList(true);
+
+      expect(
+        container.querySelector('.c_movie_grid_container__list'),
+      ).toBeInTheDocument();
+      expect(
+        container.querySelector('.c_movie_tile_skeleton--list'),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * 10個のチップは `sm` でも 258px 要る。リスト行の情報欄は 375px 幅で
+     * 213px しかなく、そのまま置くと幅だけが縮んで潰れる（実測 21.5px、
+     * 320px では 16px）。リストでは点数1つに畳む
+     */
+    it('リスト行の評価は点数1つに畳む', () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+      const { container } = renderList();
+
+      expect(
+        container.querySelectorAll('[class*="rating_indicator__item"]'),
+      ).toHaveLength(mockFavorites.length);
+    });
+
+    it('グリッドでは10段階をそのまま出す', () => {
+      const { container } = renderList();
+
+      expect(
+        container.querySelectorAll('[class*="rating_indicator__item"]'),
+      ).toHaveLength(mockFavorites.length * 10);
+    });
+
+    // #1050 の完了条件「リスト行でも評価の表示と編集が維持される」
+    it('リスト行でも評価の表示と編集が残る', async () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+      const user = userEvent.setup();
+
+      renderList();
+
+      expect(screen.getAllByRole('img', { name: /評価:/ })).toHaveLength(
+        mockFavorites.length,
+      );
+
+      await user.click(
+        screen.getAllByRole('button', { name: 'お気に入りを編集' })[0],
+      );
+
+      expect(mockOnFavoriteToggle).toHaveBeenCalledWith(
+        {
+          id: 100,
+          title: '映画A',
+          poster_path: '/a.jpg',
+          release_date: '2026-01-01',
+        },
+        { id: 'fav-1', rating: 8 },
+      );
+    });
+
+    /**
+     * 視覚順と DOM 順（＝ Tab 順・読み上げ順）を揃える。
+     * ポスターの中に残すと「右端のボタン → 左のタイトル」と毎行逆走する
+     * （WCAG 1.3.2 / 2.4.3）
+     */
+    it('リスト行では操作ボタンがタイトルより後ろに来る', () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+      const { container } = renderList();
+
+      const title = screen.getByRole('link', { name: '映画A' });
+      const actions = container.querySelector('.c_favorite_tile__list_actions');
+
+      expect(actions).toBeInTheDocument();
+      expect(
+        title.compareDocumentPosition(actions as Node) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    // グリッド用の 190px のままだと、56px の枠へ3倍以上大きい候補を取りに行く
+    it('リスト行のポスターはリスト幅のsizesを使う', () => {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_VIEW_MODE, 'list');
+
+      renderList();
+
+      expect(screen.getByAltText('映画Aのポスター')).toHaveAttribute(
+        'sizes',
+        `${IMAGE_SIZES.CALENDAR_POSTER.WIDTH}px`,
+      );
+    });
   });
 
   // 先頭タイルは LCP 要素になりうるため即時読み込みにする。

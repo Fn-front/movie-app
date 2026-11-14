@@ -17,6 +17,19 @@
     }
   }
 
+  // リスト表示（#1049）
+  // 1件を1行に積む。グリッドの最小幅（140px）に縛られないので、
+  // 375px 幅でも6件以上が1画面に収まる（movieGridContainer の `__list` と同じ）
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-2;
+
+    @include sm {
+      gap: $spacing-3;
+    }
+  }
+
   &__empty {
     display: flex;
     justify-content: center;
@@ -40,6 +53,102 @@
   // （MovieTile と同じ / #1060）
   &:active {
     transform: scale(0.98);
+  }
+
+  // リスト表示（#1049）。構造は MovieTile の `--list`（#1014）をなぞる
+  //
+  // 自身のクラスを重ねて詳細度を (0,2,0) にする。`.c_card` の
+  // `flex-direction: column` と同点だと、勝ち負けが CSS Modules の
+  // 出力順に左右されて本番ビルドで反転しうる
+  &#{&}--list {
+    flex-direction: row;
+    align-items: stretch;
+    height: auto;
+
+    .c_watchlist_tile__poster {
+      // 行の高さはポスター（56 ÷ 2 × 3 = 84px）で決める。
+      // stretch のままだとクロスサイズが確定値になって aspect-ratio を
+      // 上回り、ルートフォントを大きくした環境で縦に伸びる
+      align-self: flex-start;
+      flex-shrink: 0;
+      width: $movie-tile-list-poster-width;
+    }
+
+    .c_watchlist_tile__info {
+      height: auto;
+      justify-content: center;
+      // 1行省略したタイトルの min-content 幅でカードから溢れるのを防ぐ
+      // （flex item の min-width は既定が auto）
+      min-width: 0;
+    }
+
+    // タイトルは1行に省略する。行数が揃わないと行の高さがばらつき、
+    // 1画面に入る件数が減る。
+    //
+    // `-webkit-line-clamp` は使えない。`__title` は `__info`（flex）の
+    // 子でブロック化されるため `display: -webkit-box` が `flow-root` に
+    // なり、クランプが効かない。省略記号は実際に溢れる要素＝ リンク側に出す
+    .c_watchlist_tile__title,
+    .c_watchlist_tile__title_link {
+      @include text-truncate;
+    }
+
+    // 公開日・評価・バッジを1行に並べる。グリッドの縦積みのままだと
+    // 行の高さがポスター（84px）を超えて1画面の件数が減る
+    .c_watchlist_tile__meta {
+      flex-direction: row;
+      align-items: center;
+      gap: $spacing-2;
+      margin-top: 0;
+      min-width: 0;
+      // バッジが入り切らない幅でも行の高さは変えない。
+      // 溢れたぶんは隠し、公開日（下の text-truncate）から先に詰める
+      overflow: hidden;
+    }
+
+    // 幅が足りないときに最初に縮むのは公開日。バッジは縮めても
+    // 情報が減るだけなので固定長のまま残す
+    .c_watchlist_tile__date {
+      @include text-truncate;
+    }
+
+    // ポスターへの重ねをやめて、メタ行・ボタン列の実要素として並べる。
+    // 絶対配置のままだとボタンぶんの右余白を `__info` 側で言い当てる
+    // 必要があり、56px のポスターにはバッジも収まらない
+    .c_watchlist_tile__watched_badge,
+    .c_watchlist_tile__streaming,
+    .c_watchlist_tile__watched_button,
+    .c_watchlist_tile__delete_button {
+      position: static;
+    }
+
+    // バッジは縮めても情報が減るだけなので、公開日から先に詰めさせる
+    .c_watchlist_tile__watched_badge,
+    .c_watchlist_tile__streaming {
+      flex-shrink: 0;
+    }
+
+    .c_watchlist_tile__watched_badge {
+      white-space: nowrap;
+    }
+  }
+
+  // リスト行の右端に置く操作ボタン列
+  &__list_actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    // 広げたヒット領域（44px）どうしが重ならないよう、見た目 28px との
+    // 差分を空ける。削除は破壊的操作なので誤爆を避ける（#1017）
+    //
+    // ⚠️ **余白のスケールを使わない。** $spacing-4 はスマホで 16px → 12px に
+    // 下がるため（`_theme.scss`）、4px ぶん領域が重なって削除を誤爆する。
+    // ポスター重ねの `__watched_button` が同じ理由で calc を使っている
+    gap: calc($tap-target-min - 28px);
+    padding-right: $spacing-2;
+    // タイトルのリンクの ::after（カード全面の当たり判定）より上に置く
+    position: relative;
+    z-index: 1;
   }
 
   &__poster {

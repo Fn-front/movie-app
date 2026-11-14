@@ -7,6 +7,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { FavoritesPage } from './favoritesPage';
+import { ARIA_LABELS } from '@/constants';
 
 // --- Mocks ---
 // --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
@@ -126,6 +127,41 @@ describe('FavoritesPage', () => {
         added_at: '2026-02-15T00:00:00Z',
       },
     ];
+    // 表示モードは localStorage に残るので、テスト間で引きずらせない
+    localStorage.clear();
+  });
+
+  /**
+   * グリッド／リストの表示切替（#1050）
+   *
+   * この画面だけトグルが無いと、設定を変えてもここだけグリッドのままになり
+   * 他の画面と一貫しない
+   */
+  describe('表示モード切替', () => {
+    it('ツールバーに切替トグルが出る', () => {
+      render(<FavoritesPage />);
+
+      expect(
+        screen.getByRole('button', { name: ARIA_LABELS.LIST_VIEW }),
+      ).toBeInTheDocument();
+    });
+
+    it('トグルを押すと一覧もタイルもリストになる', async () => {
+      const user = userEvent.setup();
+
+      const { container } = render(<FavoritesPage />);
+
+      await user.click(
+        screen.getByRole('button', { name: ARIA_LABELS.LIST_VIEW }),
+      );
+
+      expect(
+        container.querySelector('.c_movie_grid_container__list'),
+      ).toBeInTheDocument();
+      expect(container.querySelectorAll('.c_favorite_tile--list')).toHaveLength(
+        mockFavorites.length,
+      );
+    });
   });
 
   it('ページタイトル「お気に入り」が表示される', () => {

@@ -21,6 +21,12 @@ import {
 } from '@/constants';
 import { getTMDbPosterUrl } from '@/utils/image';
 import { shouldLetBrowserHandle } from '@/utils/linkClick';
+import { cn } from '@/utils/cn';
+import {
+  DEFAULT_MOVIE_VIEW_MODE,
+  useMovieViewMode,
+  type MovieViewMode,
+} from '@/hooks/useMovieViewMode';
 import type {
   FavoriteItem,
   MovieFavoriteInfo,
@@ -65,6 +71,10 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
   onClick,
   gridRef,
 }) {
+  // コンテナとタイルの両方へ同じ値を渡す。片方だけだと、1カラムに
+  // なっても縦長カードが並ぶだけで一覧性が上がらない（#1050）
+  const { viewMode } = useMovieViewMode();
+
   return (
     <MovieGridContainer
       gridRef={gridRef}
@@ -72,6 +82,7 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
       isEmpty={favorites.length === 0}
       emptyMessage={EMPTY_MESSAGES.FAVORITES}
       skeletonCount={DISPLAY_LIMITS.SKELETON_SMALL}
+      viewMode={viewMode}
     >
       {favorites.map((item, index) => (
         <FavoriteTile
@@ -81,6 +92,7 @@ export const FavoriteList = memo<FavoriteListProps>(function FavoriteList({
           favoriteDisabled={isFavoriteProcessing?.(item.tmdb_movie_id) ?? false}
           onClick={onClick}
           eager={index < DISPLAY_LIMITS.EAGER_TILE_MAX}
+          viewMode={viewMode}
         />
       ))}
     </MovieGridContainer>
@@ -108,6 +120,13 @@ interface FavoriteTileProps {
    * （MovieTile / WatchlistTile の同名 prop と同じ考え方）
    */
   eager?: boolean;
+  /**
+   * 表示モード（既定: グリッド）
+   *
+   * `list` では横並びへ組み替え、お気に入りボタンをポスターの重ねから
+   * 行の右端へ移す（視覚順と DOM 順を揃えるため / #1050）
+   */
+  viewMode?: MovieViewMode;
 }
 
 /**
@@ -119,8 +138,10 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
   favoriteDisabled,
   onClick,
   eager = false,
+  viewMode = DEFAULT_MOVIE_VIEW_MODE,
 }) {
   const posterUrl = getTMDbPosterUrl(item.poster_path);
+  const isList = viewMode === 'list';
 
   const handleFavoriteToggle = useCallback(() => {
     onFavoriteToggle(
@@ -148,6 +169,24 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
     [item.tmdb_movie_id, onClick],
   );
 
+  /**
+   * お気に入りボタン
+   *
+   * グリッドはポスターに重ねるので `__poster` の中、リストは行の右端に置くので
+   * `__info` の後ろに出す。**視覚順と DOM 順（＝ Tab 順・読み上げ順）を
+   * 揃えるため**で、リストでも `__poster` の中に置くと「右端のボタン →
+   * 左のタイトル」と毎行逆走する（WCAG 1.3.2 / 2.4.3）
+   */
+  const favoriteButton = (
+    <div className={styles.c_favorite_tile__favorite_button}>
+      <FavoriteButton
+        favorite={{ id: item.id, rating: item.rating }}
+        onClick={handleFavoriteToggle}
+        disabled={favoriteDisabled}
+      />
+    </div>
+  );
+
   return (
     <Card
       noPadding
@@ -156,7 +195,10 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
       // インタラクティブ要素の入れ子になり ARIA 上不正になる
       // （axe: nested-interactive / #1060）。代わりにタイトルを本物のリンクに
       // し、::after でカード全面を当たり判定にする（#719 の MovieTile と同じ）
-      className={styles.c_favorite_tile}
+      className={cn(
+        styles.c_favorite_tile,
+        isList && styles['c_favorite_tile--list'],
+      )}
     >
       <div className={styles.c_favorite_tile__poster}>
         {posterUrl ? (
@@ -165,20 +207,20 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
             alt={`${item.title}のポスター`}
             width={IMAGE_SIZES.POSTER.WIDTH}
             height={IMAGE_SIZES.POSTER.HEIGHT}
-            sizes={IMAGE_SIZES.POSTER.SIZES}
+            // リストの枠は 56px しかない。グリッド用の 190px のままだと
+            // 3倍以上大きい候補を取りに行く（#982 で sizes を入れた意図）
+            sizes={
+              isList
+                ? `${IMAGE_SIZES.CALENDAR_POSTER.WIDTH}px`
+                : IMAGE_SIZES.POSTER.SIZES
+            }
             loading={eager ? 'eager' : 'lazy'}
             className={styles.c_favorite_tile__image}
           />
         ) : (
           <div className={styles.c_favorite_tile__no_image}>No Image</div>
         )}
-        <div className={styles.c_favorite_tile__favorite_button}>
-          <FavoriteButton
-            favorite={{ id: item.id, rating: item.rating }}
-            onClick={handleFavoriteToggle}
-            disabled={favoriteDisabled}
-          />
-        </div>
+        {!isList && favoriteButton}
       </div>
       <div className={styles.c_favorite_tile__info}>
         <h2 className={styles.c_favorite_tile__title}>
@@ -195,9 +237,16 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
           )}
         </h2>
         <div className={styles.c_favorite_tile__rating}>
-          <RatingIndicator rating={item.rating} size='sm' />
+          {/* リスト行は 10 個のチップ（258px）が入らず、幅だけ縮んで潰れる。
+              点数のチップ1つに畳む（読み上げは変わらない） */}
+          <RatingIndicator rating={item.rating} size='sm' compact={isList} />
         </div>
       </div>
+      {isList && (
+        <div className={styles.c_favorite_tile__list_actions}>
+          {favoriteButton}
+        </div>
+      )}
     </Card>
   );
 });

@@ -10,6 +10,7 @@ import { memo, useCallback, useMemo } from 'react';
 import { Select } from '@/components/ui/select/select';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { FavoriteList } from '@/features/favorites/component/favoriteList/favoriteList';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useIntersectionObserver } from '@/hooks/useIntersectionObserver';
@@ -94,6 +95,7 @@ export const FavoritesPage = memo(function FavoritesPage() {
       <div className={styles.c_favorites_page__toolbar}>
         <h1 className={styles.c_favorites_page__title}>お気に入り</h1>
         <div className={styles.c_favorites_page__controls}>
+          <ViewModeToggle />
           <Select
             options={sortOptions}
             value={sortBy}

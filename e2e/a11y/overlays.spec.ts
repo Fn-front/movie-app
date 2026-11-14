@@ -11,7 +11,12 @@ import { ARIA_LABELS, MENU_LABELS } from '@/constants';
 
 import { movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
-import { THEMES, gotoWithTheme, expectNoA11yViolations } from './helpers';
+import {
+  THEMES,
+  gotoWithTheme,
+  expectNoA11yViolations,
+  expectAxeEvaluated,
+} from './helpers';
 
 /** 詳細モーダルの検査で使うキャスト（リンクが描画される最小構成） */
 const CAST_PRESENT = [
@@ -27,6 +32,40 @@ const CAST_PRESENT = [
  */
 const LONG_OVERVIEW = 'E2E用の長いあらすじテキストです。'.repeat(40);
 
+/**
+ * オーバーレイの開くアニメーションが終わるまで待つ
+ *
+ * ⚠️ **待たないと `color-contrast` が断続的に落ちる。** モーダルは
+ * `contentShow 200ms`（`modal.module.scss`）で不透明度が上がるため、
+ * 途中で axe を掛けると**ブレンド途中の色**を測る。実測で拾った値:
+ * light は前景 `#969696` / 背景 `#dedede`、dark は `#616161` / `#171717`。
+ * フィルターモーダルは 4.42 対 4.5 のきわどい値で出た。
+ *
+ * 公開カレンダーは以前から同じ待ちを持っており、30 run で1度も落ちていない。
+ * 他のオーバーレイにも同じ待ちを掛けて揃える。
+ *
+ * ⚠️ **ダイアログ要素だけを見ない。** `Element.getAnimations()` は
+ * その要素の分しか返さず、背景を暗くする `overlayShow`（`Dialog.Overlay` は
+ * **兄弟要素**）は含まれない。両方とも 200ms で同時に始まるため実害は
+ * 観測していないが、見ているつもりで見ていない状態になる。
+ *
+ * ⚠️ 無限に繰り返すアニメーション（読み込み中のスピナー等）は**除く**。
+ * `finished` が永遠に解決せず、待ちがそのままタイムアウトする。
+ */
+const waitForOverlayAnimations = async (page: Page) => {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.effect?.getComputedTiming().iterations !== Infinity,
+        )
+        .map((animation) => animation.finished),
+    ),
+  );
+};
+
 test.describe('アクセシビリティ（オーバーレイ・未認証）', () => {
   test.describe.configure({ timeout: 60000 });
 
@@ -38,7 +77,9 @@ test.describe('アクセシビリティ（オーバーレイ・未認証）', ()
 
       // 未認証で保護ルートのリンクを押すとログイン誘導が開く
       await page.getByRole('link', { name: 'お気に入り' }).click();
-      await expect(page.getByRole('dialog')).toBeVisible();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      await waitForOverlayAnimations(page);
 
       await expectNoA11yViolations(page, `ログイン誘導モーダル / ${theme}`);
     });
@@ -48,7 +89,9 @@ test.describe('アクセシビリティ（オーバーレイ・未認証）', ()
       await gotoWithTheme(page, '/movies/now-showing', theme);
 
       await page.getByRole('button', { name: 'メニュー' }).click();
-      await expect(page.getByRole('dialog')).toBeVisible();
+      const drawer = page.getByRole('dialog');
+      await expect(drawer).toBeVisible();
+      await waitForOverlayAnimations(page);
 
       await expectNoA11yViolations(page, `モバイルドロワー / ${theme}`);
     });
@@ -57,7 +100,9 @@ test.describe('アクセシビリティ（オーバーレイ・未認証）', ()
       await gotoWithTheme(page, '/movies/now-showing', theme);
 
       await page.getByRole('button', { name: /フィルター/ }).click();
-      await expect(page.getByRole('dialog')).toBeVisible();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      await waitForOverlayAnimations(page);
 
       await expectNoA11yViolations(page, `フィルターモーダル / ${theme}`);
     });
@@ -89,11 +134,38 @@ test.describe('アクセシビリティ（オーバーレイ・未認証）', ()
         await expect(dialog.getByText('詳細情報')).toBeVisible({
           timeout: 15000,
         });
+        await waitForOverlayAnimations(page);
 
         await expectNoA11yViolations(
           page,
           `映画詳細モーダル（${label}） / ${theme}`,
         );
+
+        /*
+          ⚠️ **ここが無いと、上の0件は「検査していない」と区別できない**（#1107）。
+
+          キャストは `max-height: 300px` のスクロール領域の中で、
+          `LONG_OVERVIEW` と「詳細情報」の後ろにある。axe の可視判定は
+          `overflow` を持つ祖先の矩形との重なりを見るため、送らないと
+          評価されない。実測（light / デスクトップ幅）:
+
+            キャスト名の矩形 937–1038 / スクロール領域 323–623 → 範囲外
+            送った後          522–623                        → 範囲内
+
+          **`color-contrast` を指定するのが要点。** `link-name` のように
+          可視判定を使わないルールは送らなくても評価されるので、
+          ルールを指定しないと掃引が壊れても気づけない。実測で、送った後に
+          だけ評価されるノードは9件あり、**全部 `color-contrast`** だった
+          （キャスト名・役名・プレースホルダ・詳細情報の dt/dd ほか）。
+        */
+        if (cast.length > 0) {
+          await expectAxeEvaluated(
+            page,
+            dialog.locator('[class*="c_movie_detail__cast_name"]').first(),
+            `映画詳細モーダルのキャスト名 / ${theme}`,
+            ['color-contrast'],
+          );
+        }
       });
     }
   }
@@ -182,6 +254,7 @@ test.describe('アクセシビリティ（オーバーレイ・認証済み）',
       await expect(
         drawer.getByRole('button', { name: ARIA_LABELS.OPEN_CALENDAR }),
       ).toBeVisible();
+      await waitForOverlayAnimations(page);
 
       await expectNoA11yViolations(
         page,

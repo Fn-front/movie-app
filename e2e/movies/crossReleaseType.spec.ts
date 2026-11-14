@@ -10,7 +10,8 @@
  * どちらのタブの一覧APIからも返る」ことを確認する。
  */
 
-import { test, expect, type APIRequestContext } from '@playwright/test';
+import { type APIRequestContext } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 import {
   CROSS_RELEASE_TYPE_MOVIE_ID,

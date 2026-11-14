@@ -251,16 +251,40 @@ async function getTestUserId(): Promise<string | null> {
 /**
  * 共有テストユーザーの rate_limits レコードを物理削除する。
  *
- * 背景: WRITE_FAVORITES / WRITE_WATCHLIST 等の DB-based レート制限は
- * user_id を identifier として制限する。E2E は短時間に多くのリクエストを
- * 発行するため、テスト毎にリセットしないと後続テストが 429 で失敗する。
- * 認証済みの読み取り系（READ_USER_DATA 等）も user_id 単位で積み上がる。
+ * ⚠️ **これが無いとシャードが無関係なテストで落ちる（#1177）。**
+ * `READ_USER_DATA`（200回/分・ユーザー単位）は**14ルート**で1つのカウンタを
+ * 共有している（`src/constants/rateLimit.ts`。filters / favorites /
+ * favorites/lookup / dismissed-movies / recommendations /
+ * recommendations/refresh-count / user/settings / user/totp / watchlist /
+ * watchlist/lookup / watchlist/calendar / watchlist/watched /
+ * watchlist/watched-years / admin/accounts）。画面を1つ開くたびに数本が飛ぶ。
+ *
+ * シャードは `fullyParallel` で**同じユーザー**として多数の画面を開くため、
+ * 200回/分は現実的に到達する。尽きると `/api/filters` `/api/watchlist`
+ * `/api/user/settings` などが一斉に 429 を返し、**どのテストが落ちるかは
+ * 実行順とシャード分配で変わる**。新しい spec を1本足すだけで落ちるテストが
+ * 入れ替わるため、個別のフレークとして追いかけても収束しない。
+ *
+ * 人間の最速は 70回/分（`rateLimit.ts` の見積もり）で上限の3分の1。
+ * 尽きるのは**テストの並列度という実運用に無い条件**なので、カウンタを
+ * 毎テスト戻すのが筋。制限そのものの検証は
+ * `e2e/rateLimit/writeApiRateLimit.spec.ts` が別の識別子で行っており、
+ * あちらは共有ユーザーの fixture を使っていないので影響しない。
  *
  * 専用ユーザーを使う spec は {@link cleanupRateLimitsForUser} を使う。
+ *
+ * ⚠️ ユーザーが引けないときは投げる。黙って return すると、唯一の防御が
+ * 外れたことに誰も気づかないまま元のフレークへ戻る
  */
-async function cleanupRateLimits(): Promise<void> {
+export async function cleanupSharedUserRateLimits(): Promise<void> {
   const userId = await getTestUserId();
-  if (!userId) return;
+
+  if (!userId) {
+    throw new Error(
+      `共有テストユーザー（${TEST_USER.email}）が見つからないため、` +
+        'レート制限カウンタをリセットできない',
+    );
+  }
 
   await cleanupRateLimitsForUser(userId);
 }
@@ -602,7 +626,7 @@ export async function cleanupFavorites(): Promise<void> {
       method: 'DELETE',
       headers: supabaseHeaders,
     }),
-    cleanupRateLimits(),
+    cleanupSharedUserRateLimits(),
   ]);
 }
 
@@ -1035,7 +1059,7 @@ export async function cleanupDismissedMovies(): Promise<void> {
       method: 'DELETE',
       headers: supabaseHeaders,
     }),
-    cleanupRateLimits(),
+    cleanupSharedUserRateLimits(),
   ]);
 }
 

@@ -9,7 +9,7 @@
  * - テーマ選択表示・説明テキスト・aria-label → themeSettings.test.tsx
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 test.describe('設定ページ（認証済み）— テーマ切り替え', () => {
   test('テーマを切り替えるとdata-theme属性が変わる', async ({ page }) => {

@@ -10,7 +10,7 @@
  * リグレッションガード。旧実装ではキャッシュ失効時に必ずタイムアウトしていた。
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 /** 一覧APIが返るまでに許容する時間（ミリ秒） */
 const RESPONSE_BUDGET_MS = 10000;

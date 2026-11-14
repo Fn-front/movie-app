@@ -4,7 +4,7 @@
  * axe-core では検出できない「実際に操作できるか」を担保する。
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 import { ARIA_LABELS } from '@/constants';
 

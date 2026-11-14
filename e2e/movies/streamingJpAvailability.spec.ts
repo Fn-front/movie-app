@@ -10,7 +10,8 @@
  * 正しく振り分けることを確認する。
  */
 
-import { test, expect, type APIResponse } from '@playwright/test';
+import { type APIResponse } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 import {
   JP_AVAILABILITY_MOVIE_IDS,

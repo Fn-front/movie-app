@@ -7,7 +7,7 @@
  * - 年度切替: 年度セレクト変更 → 一覧が更新される
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 test.describe('受賞作品（公開）', () => {
   test.use({ storageState: { cookies: [], origins: [] } });

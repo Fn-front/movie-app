@@ -7,7 +7,7 @@
  * - 空状態: 該当なし → 「検索結果が見つかりませんでした」
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 test.describe('検索（公開）', () => {
   test.use({ storageState: { cookies: [], origins: [] } });

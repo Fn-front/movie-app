@@ -46,7 +46,8 @@
  * a11y spec 全体の課題として #1071 で扱う。
  */
 
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from '../fixtures/auth';
 
 import { ARIA_LABELS } from '@/constants';
 

@@ -5,7 +5,8 @@
  * 展開した状態で axe-core を実行する。
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 import { ARIA_LABELS, MENU_LABELS } from '@/constants';
 

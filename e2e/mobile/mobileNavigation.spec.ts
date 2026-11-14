@@ -207,6 +207,56 @@ test.describe('SP幅のスクロール', () => {
     expect(scrollPaddingTop).toBeGreaterThanOrEqual(headerHeight);
   });
 
+  /**
+   * lg の直前（1023px）でも一致していること（#1128）
+   *
+   * `--header-height` が正しいのは **lg 未満だけ**。lg 以上は
+   * appLayout が内部スクロールへ切り替わり（#1027）、html の
+   * `scroll-padding-top` は参照されなくなる（スクローラーが
+   * `.c_app_layout__main` に移り、scroll-padding は継承しない）。
+   *
+   * ⚠️ **lg 以上では検査しないこと。** あちらは値が挙動を決めていないので、
+   * 通っても落ちても意味を持たない。検査すべきなのは
+   * 「scroll-padding が実際に効く帯の端」＝ lg の直前。
+   *
+   * この幅ではヘッダーの最長要素がまだタップ領域（44px）で、縦 padding も
+   * `--spacing-3` のままなので式どおり 69px になる。
+   */
+  test('lg の直前でも scroll-padding がヘッダー高以上である', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.setViewportSize({ width: 1023, height: 812 });
+    await page.goto('/awards');
+    await page.waitForLoadState('networkidle');
+
+    const { headerHeight, scrollPaddingTop, mainOverflowY } =
+      await page.evaluate(() => ({
+        headerHeight: Math.round(
+          document.querySelector('header')!.getBoundingClientRect().height,
+        ),
+        scrollPaddingTop:
+          parseFloat(
+            getComputedStyle(document.documentElement).scrollPaddingTop,
+          ) || 0,
+        /*
+          この帯ではドキュメント自身がスクロールする＝値が効いている。
+
+          「実際にスクロールするか」（scrollHeight > clientHeight）では測らない。
+          /awards が0件だと1画面に収まり、`--header-height` とは無関係な理由で
+          落ちるため。lg で内部スクロールへ切り替わるのは appLayout.module.scss の
+          `&__main { @include lg { overflow-y: auto } }` なので、そこを直接見れば
+          データ量に左右されずに「まだドキュメントがスクローラー」だと言える。
+        */
+        mainOverflowY: getComputedStyle(
+          document.querySelector('[class*="c_app_layout__main"]')!,
+        ).overflowY,
+      }));
+
+    expect(mainOverflowY).not.toBe('auto');
+    expect(headerHeight).toBeGreaterThan(0);
+    expect(scrollPaddingTop).toBeGreaterThanOrEqual(headerHeight);
+  });
+
   test('スクロール後もメニューボタンを押せる', async ({
     authenticatedPage: page,
   }) => {

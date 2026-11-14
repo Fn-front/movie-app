@@ -170,8 +170,40 @@
   --tap-target-min: 4.4rem;
   // ヘッダーの高さ（上下 padding + アイコンボタンの高さ + 下境界線）。
   // sticky なヘッダーの下にジャンプ先が潜らないよう scroll-padding に使う。
+  //
   // ⚠️ アイコンボタンの高さは --tap-target-min で決まる。直接 4rem 等と
-  // 書くと、ボタンを大きくしたときにジャンプ先がヘッダーの下へ潜る
+  // 書くと、ボタンを大きくしたときにジャンプ先がヘッダーの下へ潜る。
+  //
+  // ⚠️ **この値が正しいのは lg 未満だけ**（#1128）。lg 以上では実際の
+  // ヘッダーは 75px で、この式の 69px とは 6px ずれる。内訳が変わるため:
+  //
+  //   lg 未満 : 12px(--spacing-3) × 2 + 44px(--tap-target-min) + 1px = 69px
+  //   lg 以上 : 16px(--spacing-4) × 2 + 42px(検索フォーム)      + 1px = 75px
+  //
+  // lg では header__container の縦 padding が --spacing-4 へ切り替わり
+  // （header.module.scss）、44px のトグル・モバイルメニューは display: none に
+  // なって、**検索フォームが最長要素に入れ替わる**。
+  //
+  // ⚠️ **それでも実害は無いので式は直していない。** 唯一の消費者である
+  // scroll-padding-top（_global.scss）は、lg 以上では
+  // **AppLayout を通るページで**参照されない。lg は appLayout が内部スクロールへ
+  // 切り替わり（#1027）、スクローラーが .c_app_layout__main になるため
+  // （scroll-padding は継承しないので html の値は使われない）。
+  //
+  // AppLayout を通らないページ（/auth/* ・/admin/* ・/theater-experience）は
+  // lg でもドキュメントがスクローラーのままで、この値は生きている。
+  // ただしそれらには sticky なヘッダー自体が無い（sticky は
+  // appLayout.module.scss の1箇所、<Header> も appLayout.tsx でしか使われない）
+  // ので、やはり潜り込みは起きない。
+  //
+  // main の上端はヘッダーの下端なので、main 内でジャンプしても必ずその下に
+  // 着地する。実測（/awards の見出しへ scrollIntoView、ヘッダー下端 / 着地位置）:
+  //
+  //   375px  → 69 / 69     1023px → 69 / 69     1280px → 75 / 75
+  //
+  // いずれも潜り込み 0px。lg でずれている 6px は着地位置に出ない。
+  //
+  // 別の用途でこの値を使うなら、先に lg 側の内訳を式へ反映すること。
   --header-height: calc(var(--spacing-3) * 2 + var(--tap-target-min) + 1px);
   // 映画タイルのリスト表示のポスター幅。高さは aspect-ratio 2/3 で決まり、
   // それが行の高さ＝1画面に入る件数を決める（#1014）。

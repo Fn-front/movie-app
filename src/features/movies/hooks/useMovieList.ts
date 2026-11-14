@@ -16,6 +16,7 @@ import { getMovies } from '@/lib/api/movies/movies';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 import { getSavedFilter, saveFilter } from '@/lib/api/filters/filters';
 import { useAuthStatus } from '@/hooks/useAuthStatus';
+import { useIsomorphicLayoutEffect } from '@/hooks/useIsomorphicLayoutEffect';
 import { useToastDispatch } from '@/hooks/useToast';
 import {
   DEFAULT_SORT,
@@ -643,7 +644,7 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
    * 絞り込みを持つ利用者に限られるため現状は許容している。広げるときは
    * 「書き戻しの前にオーバーレイが開いていないか」を見ること
    */
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (urlWriteBackDoneRef.current) return;
     if (!pendingUrlWriteBack) return;
 
@@ -672,6 +673,28 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     // そこまで再現したいなら別途判断が要る
     if (
       !hasActiveFilterConditions(stripDefaultDateRange(pendingUrlWriteBack))
+    ) {
+      return;
+    }
+
+    // ⚠️ **オーバーレイのエントリは置き換えない。**
+    //
+    // `useOverlayHistory` は開くときに `pushState` で履歴を1つ積み、
+    // その印を `history.state.__overlayHistory` に置く（#1026）。
+    // その上で `router.replace` を打つと、**ページではなくオーバーレイの
+    // エントリ**を置き換えてしまい、閉じる・戻る・進むの辻褄が崩れる。
+    //
+    // 実測（CI）: 書き戻しの着地が遅れた run で、フィルターモーダルの
+    // 閉じるボタンを押そうとした瞬間にモーダルが DOM から外れ、
+    // `element was detached from the DOM` でテストが落ちた。
+    // ローカルでは書き戻しが先に着地するため再現しない。
+    //
+    // 開いている間は書き戻しを見送る。`done` は既に立てているので
+    // 閉じたあとに走り直すことはない＝その訪問の URL は直らないが、
+    // **履歴を壊すよりは軽い**。次にその画面へ入り直した時点で直る
+    if (
+      typeof window !== 'undefined' &&
+      window.history.state?.__overlayHistory !== undefined
     ) {
       return;
     }

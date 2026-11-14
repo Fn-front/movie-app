@@ -128,6 +128,85 @@ test.describe('フィルター条件がリロード後も保持される', () =>
    * （`resetFilters` はサーバー側しか消さない）。
    * この経路は従来 E2E カバレッジがゼロだった
    */
+  /**
+   * 書き戻しがオーバーレイの履歴エントリを置き換えない（#1062 / #1026）
+   *
+   * ⚠️ **CI でだけ落ちた回帰。** 書き戻しは effect でしか打てないため、
+   * 初期描画のあとに URL が変わる。`saved_filters` 由来の窓は
+   * 「セッション解決 + GET /api/filters の往復」で、ローカルでは
+   * クリックより先に着地してしまい再現しない。
+   *
+   * その間にオーバーレイを開くと `useOverlayHistory` が `pushState` で
+   * 履歴を積む。そこへ `router.replace` が着地すると**ページではなく
+   * オーバーレイのエントリ**を置き換え、`history.state.__overlayHistory` が
+   * 消える。閉じる・進むの辻褄が崩れ、実測では閉じるボタンを押す瞬間に
+   * モーダルが DOM から外れた（`element was detached from the DOM`）。
+   *
+   * ⚠️ **GET を遅らせないと窓が作れない。** 素直に書くと着地が先に終わる
+   */
+  // ⚠️ fixture の `page` を取らない（下の saved_filters テストと同じ理由）
+  test('書き戻しはオーバーレイの履歴エントリを置き換えない', async () => {
+    // 下準備: saved_filters に絞り込みを入れる
+    await page.goto('/movies/now-showing');
+    await movieTiles(page)
+      .first()
+      .or(page.getByText(/映画が見つかりませんでした/))
+      .waitFor({ timeout: 15000 });
+
+    const put = waitForWriteResponse(page, {
+      urlPart: '/api/filters',
+      methods: ['PUT'],
+      label: 'フィルター保存',
+    });
+    await filterButton(page).click();
+    const setup = page.getByRole('dialog');
+    await expect(setup).toBeVisible();
+    await setup
+      .locator('div[class*="c_filter__section"]')
+      .filter({ has: page.getByRole('heading', { name: 'ジャンル' }) })
+      .locator('label[class*="c_filter__tag"]')
+      .first()
+      .click();
+    await setup.getByRole('button', { name: '適用' }).click();
+    await put;
+    await expect(setup).not.toBeVisible();
+
+    // localStorage を消して saved_filters 経路へ寄せ、GET を遅らせる
+    await page.evaluate(() => window.localStorage.clear());
+    await page.route('**/api/filters**', async (route) => {
+      if (route.request().method() === 'GET') {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+      }
+      await route.continue();
+    });
+
+    await page.goto('/movies/now-showing');
+    await filterButton(page).waitFor({ timeout: 30000 });
+
+    // 書き戻しが着地する前にオーバーレイを開く
+    await filterButton(page).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 15000 });
+
+    // 開いたまま着地させる
+    await page.waitForTimeout(3500);
+
+    // オーバーレイのエントリが生きていること
+    expect(
+      await page.evaluate(
+        () => window.history.state?.__overlayHistory !== undefined,
+      ),
+    ).toBe(true);
+
+    await dialog.getByRole('button', { name: '閉じる' }).click();
+    await expect(dialog).not.toBeVisible({ timeout: 15000 });
+    await page.waitForTimeout(1500);
+
+    // 進むで開き直せること（#1053 と同じ契約）
+    await page.goForward();
+    await expect(dialog).toBeVisible({ timeout: 15000 });
+  });
+
   // ⚠️ fixture の `page` を取らない。この describe は専用ユーザーの
   // セッション（`beforeAll` で開いた `page`）を使い回す。fixture を取ると
   // 共有の TEST_USER になり、#1176 が避けた共有カウンタの枯渇に戻る

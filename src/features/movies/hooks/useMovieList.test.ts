@@ -1897,7 +1897,7 @@ describe('useMovieList', () => {
       navigateTo({});
       window.localStorage.setItem(
         STORAGE_KEYS.MOVIE_FILTERS,
-        JSON.stringify({ sort_by: 'popularity', release_type: 'streaming' }),
+        JSON.stringify({ sort_by: 'popularity' }),
       );
 
       const { result } = renderHook(() => useMovieList(defaultOptions), {
@@ -1909,6 +1909,52 @@ describe('useMovieList', () => {
       });
       // 復元はされるが URL は触らない
       expect(result.current.sortBy).toBe('popularity');
+      expect(mockRouterReplace).not.toHaveBeenCalled();
+    });
+
+    /**
+     * タブ（`release_type`）は「絞り込み中」の印には出さないが、URL には出す。
+     *
+     * 一覧の中身が丸ごと差し替わるため、URL に無いとストリーミングを見ている
+     * 人が共有した URL を開いた相手に劇場公開が出る（実測）
+     */
+    it('既定でないタブはURLへ書き戻す', async () => {
+      navigateTo({});
+      window.localStorage.setItem(
+        STORAGE_KEYS.MOVIE_FILTERS,
+        JSON.stringify({ sort_by: 'release_date', release_type: 'streaming' }),
+      );
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(mockRouterReplace).toHaveBeenCalled();
+      });
+      expect(replacedSearch()).toContain('release_type=streaming');
+      expect(result.current.releaseType).toBe('streaming');
+    });
+
+    /**
+     * ⚠️ `buildFilterConditions` は `release_type` を**常に**入れる。
+     * 既定のままでも書き戻すと、一度でも操作した利用者は全ページの読み込みで
+     * URL が書き換わる（`sort_by` を除いているのと同じ理由）
+     */
+    it('既定のタブだけなら書き戻さない', async () => {
+      navigateTo({});
+      window.localStorage.setItem(
+        STORAGE_KEYS.MOVIE_FILTERS,
+        JSON.stringify({ sort_by: 'release_date', release_type: 'theatrical' }),
+      );
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
       expect(mockRouterReplace).not.toHaveBeenCalled();
     });
 

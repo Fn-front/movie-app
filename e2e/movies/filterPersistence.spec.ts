@@ -419,6 +419,46 @@ test.describe('未認証でもフィルターがページ遷移後に保持さ�
   });
 
   /**
+   * タブ（`release_type`）も URL に出す（#1062）
+   *
+   * タブは一覧の中身を丸ごと差し替えるので、URL に無いと
+   * **ストリーミングを見ている人が共有した URL を開いた相手に劇場公開が出る**。
+   *
+   * ⚠️ 「絞り込み中」の印は**出ない**（タブは絞り込みではない）。
+   * URL と印で判定が分かれるのは意図どおりなので、ここでは印を見ない
+   */
+  test('ストリーミングタブもナビ往復後のURLに復元される', async ({ page }) => {
+    await page.goto('/movies/now-showing');
+    await movieTiles(page)
+      .first()
+      .or(page.getByText(/映画が見つかりませんでした/))
+      .waitFor({ timeout: 15000 });
+
+    await page.getByRole('tab', { name: 'ストリーミング' }).click();
+    await expect(page).toHaveURL(/release_type=streaming/);
+
+    await page.getByRole('link', { name: '公開予定' }).first().click();
+    await expect(page).toHaveURL(/\/movies\/upcoming/);
+    await movieTiles(page)
+      .first()
+      .or(page.getByText(/映画が見つかりませんでした/))
+      .waitFor({ timeout: 15000 });
+
+    await page.getByRole('link', { name: '公開中' }).first().click();
+    await expect(page).toHaveURL(/\/movies\/now-showing/);
+    await movieTiles(page)
+      .first()
+      .or(page.getByText(/映画が見つかりませんでした/))
+      .waitFor({ timeout: 15000 });
+
+    // URL と画面のタブが一致していること
+    await expect(page).toHaveURL(/release_type=streaming/);
+    await expect(
+      page.getByRole('tab', { name: 'ストリーミング' }),
+    ).toHaveAttribute('aria-selected', 'true');
+  });
+
+  /**
    * 書き戻しは `router.replace` なので履歴を積まない。
    * `push` になっていると、戻るが空振りして同じページに留まる
    */

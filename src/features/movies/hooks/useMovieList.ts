@@ -181,6 +181,38 @@ export function hasActiveFilterConditions(
 }
 
 /**
+ * 復元した条件を URL へ書き戻すべきかを判定する（#1062）
+ *
+ * ⚠️ **「絞り込み中」の印とは別の問い。** 印は利用者へ「絞り込みが掛かって
+ * いる」と伝えるためのもので、タブ（`release_type`）はそこに出さない。
+ * 一方 URL は**画面を再現できること**が役目なので、タブは出す必要がある。
+ *
+ * タブは一覧の中身を丸ごと差し替える。URL に出ないと、
+ * ストリーミングを見ている人が共有した URL を開いた相手には劇場公開が出る
+ * （実測で確認した食い違い）。
+ *
+ * 判定が2つに分かれるのは意図的。同じにすると、
+ * - 印に合わせる → タブが URL に出ない（上の食い違いが残る）
+ * - URL に合わせる → タブを切り替えただけで「絞り込み中」の印が出る
+ * のどちらかになる。
+ *
+ * ⚠️ **既定のタブは書き戻さない。** `buildFilterConditions` は
+ * `release_type` を**常に**入れるため、既定でも書き戻すと、一度でも
+ * 操作した利用者は全ページの読み込みで URL が書き換わる（`sort_by` を
+ * 除いているのと同じ理由）。
+ *
+ * @param conditions ページ既定の日付範囲を取り除いたあとの条件
+ */
+export function shouldWriteBackToUrl(conditions: FilterConditions): boolean {
+  if (hasActiveFilterConditions(conditions)) return true;
+
+  return (
+    conditions.release_type !== undefined &&
+    conditions.release_type !== DEFAULT_RELEASE_TYPE
+  );
+}
+
+/**
  * 映画一覧の共通カスタムフック
  */
 export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
@@ -658,22 +690,20 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     // 直したいのは「URL にクエリが無いのに一覧が絞り込まれている」食い違いで、
     // 並び順の restore はその食い違いを作らない（印も出ない）。
     //
-    // 判定は `hasActiveFilterConditions` に任せる。絞り込み条件が増えても
-    // ここを直さずに済み、ツールバーの印（#1063）と出どころを揃えられる。
+    // 判定は `shouldWriteBackToUrl` に任せる（定義側のコメント参照）。
+    // 絞り込み条件が増えても、そちらが `hasActiveFilterConditions` を
+    // 噛ませているので、ここを直さずに済む。
     //
-    // ⚠️ **印と「必ず」同じ答えになるとは書けない。** こちらは復元した生の条件を、
+    // ⚠️ **印と同じ答えになるとは限らない。** こちらは復元した生の条件を、
     // 印は `buildFilterConditions(state)` を食わせている。URL と localStorage は
     // `validateFilterConditions` が空配列を落とすので一致するが、
     // **`saved_filters` だけはその検証を通らない**（サーバーの JSONB をそのまま
     // 返す）。`{ genre_ids: [] }` のような行があるとここだけ true になる。
     // そのときは下の no-op ガードが拾う（URL は変わらないので実害は無い）。
     //
-    // ⚠️ 並び順（`sort_by`）とタブ（`release_type`）は復元しても URL に出ない、
-    // という境界がここで決まる。印と同じ土俵に乗せるためで、共有したときに
-    // そこまで再現したいなら別途判断が要る
-    if (
-      !hasActiveFilterConditions(stripDefaultDateRange(pendingUrlWriteBack))
-    ) {
+    // ⚠️ 並び順（`sort_by`）だけは復元しても URL に出ない、という境界が
+    // ここで決まる。タブと違って一覧の中身が入れ替わらないため
+    if (!shouldWriteBackToUrl(stripDefaultDateRange(pendingUrlWriteBack))) {
       return;
     }
 

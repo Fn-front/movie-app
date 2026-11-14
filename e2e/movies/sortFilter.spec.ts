@@ -1,12 +1,28 @@
 /**
  * 映画ページ ソート・フィルター操作 E2Eテスト（認証済み）
  * クリティカルユーザージャーニーのみ（クリアボタン動作は結合テストに移行済み）
- * UI操作の動作確認のみのため、フィルターリセットは不要
+ * ⚠️ 認証済みで走るため、適用したフィルターは saved_filters に残る。
  */
 
 import { test, expect } from '../fixtures/auth';
+import { clearSavedFiltersForTestUser, resetFilters } from '../helpers/api';
 
 test.describe('公開予定ページのソート・フィルター操作', () => {
+  /**
+   * 適用したフィルターを残さない。
+   *
+   * ⚠️ **この spec は共有の `TEST_USER` で `saved_filters` を書く。**
+   * 片付けないと、後に走る spec が「保存済みフィルターを持つ利用者」として
+   * 始まる。#1062 で復元結果を URL へ書き戻すようにしたため、それは
+   * **一覧ページの URL にクエリが付く**という形で現れ、`/…$/` で URL を
+   * 厳密に見ている spec が落ちる。
+   *
+   * ファイルの実行順では守れない。CI は `fullyParallel` かつ `--shard` で
+   * 分割され、全シャードが同じ `TEST_USER` の1行を共有する
+   */
+  test.afterEach(async () => {
+    await clearSavedFiltersForTestUser();
+  });
   test.beforeEach(async ({ page }) => {
     await page.goto('/movies/upcoming');
     // 映画データまたは空メッセージの表示を待つ
@@ -74,6 +90,21 @@ test.describe('公開予定ページのソート・フィルター操作', () =>
 });
 
 test.describe('公開中ページのソート・フィルター操作', () => {
+  /**
+   * 適用したフィルターを残さない。
+   *
+   * ⚠️ **この spec は共有の `TEST_USER` で `saved_filters` を書く。**
+   * 片付けないと、後に走る spec が「保存済みフィルターを持つ利用者」として
+   * 始まる。#1062 で復元結果を URL へ書き戻すようにしたため、それは
+   * **一覧ページの URL にクエリが付く**という形で現れ、`/…$/` で URL を
+   * 厳密に見ている spec が落ちる。
+   *
+   * ファイルの実行順では守れない。CI は `fullyParallel` かつ `--shard` で
+   * 分割され、全シャードが同じ `TEST_USER` の1行を共有する
+   */
+  test.afterEach(async () => {
+    await clearSavedFiltersForTestUser();
+  });
   test.beforeEach(async ({ page }) => {
     await page.goto('/movies/now-showing');
     await page

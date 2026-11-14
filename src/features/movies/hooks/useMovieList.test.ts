@@ -1850,4 +1850,168 @@ describe('useMovieList', () => {
       expect(result.current.hasActiveFilters).toBe(true);
     });
   });
+  /**
+   * 復元した絞り込みを URL へ書き戻す（#1062）
+   *
+   * #1051 で「URL が正」にしたのは履歴操作の経路だけで、マウント時の復元は
+   * URL と食い違ったまま残っていた。ナビリンクで往復すると「URL は空なのに
+   * 一覧だけ絞り込まれている」状態になる。
+   */
+  describe('復元結果のURL書き戻し（#1062）', () => {
+    const navigateTo = (query: Record<string, string>) => {
+      mockSearchParams = new URLSearchParams(query);
+    };
+
+    /** `router.replace` に渡ったクエリ文字列（呼ばれていなければ null） */
+    const replacedSearch = (): string | null => {
+      const call = mockRouterReplace.mock.calls[0];
+      if (!call) return null;
+      return (call[0] as string).split('?')[1] ?? '';
+    };
+
+    it('localStorage に絞り込みがあればURLへ書き戻す', async () => {
+      navigateTo({});
+      window.localStorage.setItem(
+        STORAGE_KEYS.MOVIE_FILTERS,
+        JSON.stringify({ sort_by: 'popularity', genre_ids: [28] }),
+      );
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(mockRouterReplace).toHaveBeenCalled();
+      });
+      expect(replacedSearch()).toContain('genre_ids=28');
+      expect(result.current.selectedGenreIds).toEqual([28]);
+    });
+
+    /**
+     * ⚠️ `buildFilterConditions` は sort_by と release_type を常に入れるため、
+     * 無条件に書き戻すと並び順を変えただけの利用者が全ページで URL を
+     * 書き換えられる。直すべき食い違い（URL は空なのに絞り込み中の印が出る）は
+     * そこには無い
+     */
+    it('並び順だけの復元では書き戻さない', async () => {
+      navigateTo({});
+      window.localStorage.setItem(
+        STORAGE_KEYS.MOVIE_FILTERS,
+        JSON.stringify({ sort_by: 'popularity', release_type: 'streaming' }),
+      );
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      // 復元はされるが URL は触らない
+      expect(result.current.sortBy).toBe('popularity');
+      expect(mockRouterReplace).not.toHaveBeenCalled();
+    });
+
+    it('URL に既にクエリがあるなら書き戻さない', async () => {
+      navigateTo({ genre_ids: '28' });
+      window.localStorage.setItem(
+        STORAGE_KEYS.MOVIE_FILTERS,
+        JSON.stringify({ genre_ids: [12] }),
+      );
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      // URL が正。localStorage で上書きしない
+      expect(result.current.selectedGenreIds).toEqual([28]);
+      expect(mockRouterReplace).not.toHaveBeenCalled();
+    });
+
+    it('復元が無ければ書き戻さない', async () => {
+      navigateTo({});
+
+      const { result } = renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+      expect(mockRouterReplace).not.toHaveBeenCalled();
+    });
+
+    // 履歴を積むと「戻る」が空振りして同じページに留まる
+    it('書き戻しは replace で行う（push しない）', async () => {
+      navigateTo({});
+      window.localStorage.setItem(
+        STORAGE_KEYS.MOVIE_FILTERS,
+        JSON.stringify({ genre_ids: [28] }),
+      );
+
+      renderHook(() => useMovieList(defaultOptions), {
+        wrapper: createQueryWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(mockRouterReplace).toHaveBeenCalled();
+      });
+      expect(mockRouterPush).not.toHaveBeenCalled();
+    });
+
+    describe('saved_filters からの復元', () => {
+      beforeEach(() => {
+        mockSessionStatus = 'authenticated';
+        mockSessionData = { user: { id: 'user-123', name: 'テストユーザー' } };
+      });
+
+      it('絞り込みがあればURLへ書き戻す', async () => {
+        navigateTo({});
+        mockGetSavedFilter.mockResolvedValue({ genre_ids: [28] });
+
+        const { result } = renderHook(() => useMovieList(defaultOptions), {
+          wrapper: createQueryWrapper(),
+        });
+
+        await waitFor(() => {
+          expect(result.current.selectedGenreIds).toEqual([28]);
+        });
+        await waitFor(() => {
+          expect(mockRouterReplace).toHaveBeenCalled();
+        });
+        expect(replacedSearch()).toContain('genre_ids=28');
+      });
+
+      /**
+       * ⚠️ saved_filters だけは `validateFilterConditions` を通らない
+       * （サーバーの JSONB をそのまま返す）ため、空配列が残りうる。
+       *
+       * ゲートは素通りするが URL は変わらないので実害は無い。重要なのは
+       * **その場合もガードを下ろすこと**。下ろさないと着地イベントが来ず、
+       * URL追従 effect がそのマウントの間ずっと死ぬ（#1051 が再発する）
+       */
+      it('空配列だけの保存では戻る操作を取りこぼさない', async () => {
+        navigateTo({});
+        mockGetSavedFilter.mockResolvedValue({ genre_ids: [] });
+
+        const { result, rerender } = renderHook(
+          () => useMovieList(defaultOptions),
+          { wrapper: createQueryWrapper() },
+        );
+
+        await waitFor(() => {
+          expect(result.current.isLoading).toBe(false);
+        });
+
+        // 「戻る」でクエリ付きのURLへ移動したら、追従すること
+        navigateTo({ genre_ids: '99' });
+        rerender();
+
+        expect(result.current.selectedGenreIds).toEqual([99]);
+      });
+    });
+  });
 });

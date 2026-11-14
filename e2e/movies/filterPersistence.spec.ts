@@ -321,6 +321,12 @@ test.describe('未認証でもフィルターがページ遷移後に保持さ�
       .or(page.getByText(/映画が見つかりませんでした/))
       .waitFor({ timeout: 15000 });
 
+    // ⚠️ localStorage のキーは画面共通なので、**移動先の URL にも**書き戻される。
+    // 一覧の絞り込み自体が以前から画面をまたいで復元されており、
+    // 書き戻しはそれを URL に見えるようにするだけ（挙動は増えていない）
+    await expect(page).toHaveURL(/genre_ids=/);
+    await expect(filterButton(page)).toHaveAccessibleDescription('絞り込み中');
+
     await page.getByRole('link', { name: '公開中' }).first().click();
     await expect(page).toHaveURL(/\/movies\/now-showing/);
     await movieTiles(page)

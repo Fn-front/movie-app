@@ -624,10 +624,24 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
    * URL追従 effect がこれを「戻る操作」と誤認しないことが前提。
    *
    * ⚠️ **effect でしか打てない**ので、初期描画のあとに URL が変わる。
-   * その窓で利用者が別のリンクを押すと、`router.replace` が**ページではなく
+   * その窓で利用者がオーバーレイを開くと、`router.replace` が**ページではなく
    * 直前に積まれたエントリ**を置き換えうる（#1026 / #1043 / #1051 と同系統）。
-   * 窓はコミット直後の1フレーム程度で、この経路は「クエリ無しで入り直した
-   * 直後」に限られるため許容する。広げるときはここを疑うこと
+   *
+   * 窓の長さは経路で違う。
+   *
+   * - localStorage 由来: マウント直後の1フレーム程度
+   * - **`saved_filters` 由来: セッション解決 + `GET /api/filters` の往復**
+   *
+   * 後者は無視できる長さではない。ツールバーは `isLoading` の外で描画される
+   * ので（`movieListContent.tsx`）、その間もフィルターボタンは押せる。
+   * 開くと `useOverlayHistory` が `pushState` で履歴を積み、そこへ書き戻しが
+   * 着地する形になる。
+   *
+   * 二重に畳む事故はトークン一致の判定（`useOverlayHistory` の `shouldFold`）が
+   * 防ぐが、「モーダルを開いている最中の戻るが、閉じると同時に復元したばかりの
+   * 絞り込みも消す」状態は残りうる。実際に踏んだ報告は無く、`saved_filters` が
+   * 絞り込みを持つ利用者に限られるため現状は許容している。広げるときは
+   * 「書き戻しの前にオーバーレイが開いていないか」を見ること
    */
   useEffect(() => {
     if (urlWriteBackDoneRef.current) return;
@@ -644,10 +658,18 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     // 並び順の restore はその食い違いを作らない（印も出ない）。
     //
     // 判定は `hasActiveFilterConditions` に任せる。絞り込み条件が増えても
-    // ここを直さずに済むうえ、ツールバーの印（#1063）と必ず同じ答えになる。
+    // ここを直さずに済み、ツールバーの印（#1063）と出どころを揃えられる。
     //
-    // ⚠️ 並び順だけは復元しても URL に出ない、という境界がここで決まる。
-    // 共有したときに並び順まで再現したいなら、別途判断が要る
+    // ⚠️ **印と「必ず」同じ答えになるとは書けない。** こちらは復元した生の条件を、
+    // 印は `buildFilterConditions(state)` を食わせている。URL と localStorage は
+    // `validateFilterConditions` が空配列を落とすので一致するが、
+    // **`saved_filters` だけはその検証を通らない**（サーバーの JSONB をそのまま
+    // 返す）。`{ genre_ids: [] }` のような行があるとここだけ true になる。
+    // そのときは下の no-op ガードが拾う（URL は変わらないので実害は無い）。
+    //
+    // ⚠️ 並び順（`sort_by`）とタブ（`release_type`）は復元しても URL に出ない、
+    // という境界がここで決まる。印と同じ土俵に乗せるためで、共有したときに
+    // そこまで再現したいなら別途判断が要る
     if (
       !hasActiveFilterConditions(stripDefaultDateRange(pendingUrlWriteBack))
     ) {
@@ -655,8 +677,22 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     }
 
     // 着地するまで URL追従 effect に「戻る操作」と誤認させない
+    const searchBeforeWriteBack = syncedSearchRef.current;
     urlWriteBackPendingRef.current = true;
     syncFiltersToUrl(pendingUrlWriteBack);
+
+    // ⚠️ **URL が変わらないならガードを下ろす。**
+    //
+    // ガードが下りる道は「着地（searchParams が syncedSearchRef に追いつく）を
+    // 観測したとき」の1本しかない。書き戻しが no-op（結果のクエリが今と同じ）
+    // だと着地イベントそのものが起きないので、**そのマウントの間ずっと
+    // URL追従 effect が死ぬ**。戻る／進むを取りこぼし続け、#1051 が再発する。
+    //
+    // `syncFiltersToUrl` は書き込む内容を `syncedSearchRef` へ先に入れるので、
+    // 呼ぶ前後で変わらなければ URL も変わらないと判る
+    if (syncedSearchRef.current === searchBeforeWriteBack) {
+      urlWriteBackPendingRef.current = false;
+    }
   }, [pendingUrlWriteBack, syncFiltersToUrl, stripDefaultDateRange]);
 
   /**

@@ -4,7 +4,7 @@
 
 'use client';
 
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 
 import { RadioGroup } from '@/components/ui/radioGroup/radioGroup';
 import { Skeleton } from '@/components/ui/skeleton/skeleton';
@@ -14,9 +14,11 @@ import {
 } from '@/constants';
 import type { StreamingScope } from '@/constants';
 import { useToastDispatch } from '@/hooks/useToast';
-import { getSettings, updateSettings } from '@/lib/api/user/user';
+import { updateSettings } from '@/lib/api/user/user';
 import { handleApiError } from '@/utils/error';
 
+import { useUserSettings } from '../hooks/useUserSettings';
+import { SettingsLoadError } from '../settingsLoadError/settingsLoadError';
 import styles from './streamingNoticeSettings.module.scss';
 
 /** ラジオの選択肢（ファイルスコープ定数） */
@@ -33,39 +35,20 @@ const SCOPE_OPTIONS = [
  */
 export const StreamingNoticeSettings = memo(function StreamingNoticeSettings() {
   const { toast } = useToastDispatch();
-  const [scope, setScope] = useState<StreamingScope>(STREAMING_SCOPE_DEFAULT);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const fetchSettings = async () => {
-      try {
-        const settings = await getSettings();
-        if (!cancelled) {
-          setScope(settings.streamingNoticeScope);
-        }
-      } catch {
-        // 既定値のまま表示する
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchSettings();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { settings, isLoading, hasFailed, retry } = useUserSettings();
+  // サーバーの値をそのまま描き、**操作した間だけ** override を上に被せる。
+  // 以前のように effect で state へ写すと、読めなかったときに既定値が
+  // 残って「レンタル・購入も含める」が選択済みとして確定表示される
+  const [override, setOverride] = useState<StreamingScope | null>(null);
+  const scope =
+    override ?? settings?.streamingNoticeScope ?? STREAMING_SCOPE_DEFAULT;
 
   const handleChange = useCallback(
     async (value: string) => {
       const next = value as StreamingScope;
+      // 失敗したら直前の**表示値**へ戻す
       const previous = scope;
-      setScope(next);
+      setOverride(next);
 
       try {
         await updateSettings({ streamingNoticeScope: next });
@@ -74,7 +57,7 @@ export const StreamingNoticeSettings = memo(function StreamingNoticeSettings() {
           variant: 'success',
         });
       } catch (error) {
-        setScope(previous);
+        setOverride(previous);
         const { message } = handleApiError(error);
         toast({
           title: '更新エラー',
@@ -92,6 +75,17 @@ export const StreamingNoticeSettings = memo(function StreamingNoticeSettings() {
       <div className={styles.c_streaming_notice_settings}>
         <Skeleton variant='text' width={280} height={14} />
         <Skeleton variant='rect' width={220} height={48} />
+      </div>
+    );
+  }
+
+  // ⚠️ 読めなかったら既定値を**確定値として描かない**（#1163）。
+  // 「定額見放題のみ」にしてある利用者に「レンタル・購入も含める」が
+  // 選択済みとして表示され、選び直すと設定そのものが変わる
+  if (hasFailed) {
+    return (
+      <div className={styles.c_streaming_notice_settings}>
+        <SettingsLoadError label='配信開始のお知らせ設定' onRetry={retry} />
       </div>
     );
   }

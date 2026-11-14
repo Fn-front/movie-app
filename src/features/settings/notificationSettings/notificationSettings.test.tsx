@@ -114,22 +114,104 @@ describe('NotificationSettings', () => {
     expect(checkbox).not.toBeChecked();
   });
 
-  it('設定取得失敗時にデフォルト値で表示される', async () => {
-    mockGetSettings.mockRejectedValue(new Error('Fetch failed'));
+  /**
+   * ロールバック先は「直前の表示値」であって、サーバー値ではない
+   *
+   * サーバー値へ戻すと、1回目の操作が成功したあと2回目が失敗したときに
+   * **1回目の成功ぶんまで巻き戻る**。`settings` は再取得していないので
+   * 古いままで、保存済みの値と画面が食い違う
+   */
+  it('2回目の更新が失敗しても、1回目の成功ぶんまで戻さない', async () => {
     render(<NotificationSettings />);
 
+    const checkbox = await screen.findByRole('checkbox', {
+      name: '公開日リマインダーを受け取る',
+    });
+
+    // 1回目: オフ → オン（成功）
+    mockUpdateSettings.mockResolvedValueOnce({});
+    await user.click(checkbox);
+    expect(checkbox).toBeChecked();
+
+    // 2回目: オン → オフ（失敗）
+    mockUpdateSettings.mockRejectedValueOnce(new Error('Update failed'));
+    await user.click(checkbox);
+
     await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'error' }),
+      );
+    });
+    // 保存済みの値（オン）に戻る。サーバー値へ戻すとオフになってしまう
+    expect(checkbox).toBeChecked();
+  });
+
+  /**
+   * 読み取り失敗を既定値で描かない（#1163）
+   *
+   * ⚠️ ここは以前「設定取得失敗時にデフォルト値で表示される」として
+   * **不具合のほうを期待値にしていた**。オンにしてある通知が「オフ」と
+   * 表示され、利用者がチェックを入れ直すと `updateSettings` が走って、
+   * 表示の誤りがデータの誤りに変わる
+   */
+  describe('読み取りに失敗したとき', () => {
+    beforeEach(() => {
+      mockGetSettings.mockRejectedValue(new Error('Fetch failed'));
+    });
+
+    it('既定値のチェックボックスを出さない', async () => {
+      render(<NotificationSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+      });
       expect(
-        screen.getByRole('checkbox', {
+        screen.queryByRole('checkbox', {
           name: '公開日リマインダーを受け取る',
         }),
-      ).toBeInTheDocument();
+      ).not.toBeInTheDocument();
     });
-    expect(
-      screen.getByRole('checkbox', {
-        name: '公開日リマインダーを受け取る',
-      }),
-    ).not.toBeChecked();
+
+    it('読み込めなかったことを伝える', async () => {
+      render(<NotificationSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          '通知設定を読み込めませんでした',
+        );
+      });
+    });
+
+    it('書き込みが発生しない', async () => {
+      render(<NotificationSettings />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+      });
+
+      expect(mockUpdateSettings).not.toHaveBeenCalled();
+    });
+
+    it('再読み込みで復帰できる', async () => {
+      render(<NotificationSettings />);
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+      });
+
+      mockGetSettings.mockResolvedValue({
+        theme: 'light',
+        notificationEnabled: true,
+      });
+      await user.click(screen.getByRole('button', { name: '再読み込み' }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('checkbox', {
+            name: '公開日リマインダーを受け取る',
+          }),
+        ).toBeChecked();
+      });
+    });
   });
 
   it('ローディング中はスケルトンが表示される', () => {

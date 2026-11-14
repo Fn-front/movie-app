@@ -101,13 +101,95 @@ describe('StreamingNoticeSettings', () => {
     ).toBeChecked();
   });
 
-  it('設定の取得に失敗しても既定値で表示する', async () => {
-    mockGetSettings.mockRejectedValue(new Error('boom'));
-
+  /**
+   * ロールバック先は「直前の表示値」であって、サーバー値ではない
+   *
+   * サーバー値へ戻すと、1回目の選択が成功したあと2回目が失敗したときに
+   * **1回目の成功ぶんまで巻き戻る**。`settings` は再取得していないので
+   * 古いままで、保存済みの値と画面が食い違う
+   */
+  it('2回目の更新が失敗しても、1回目の成功ぶんまで戻さない', async () => {
+    const user = userEvent.setup();
     render(<StreamingNoticeSettings />);
 
+    // 1回目: any → flatrate（成功）
+    mockUpdateSettings.mockResolvedValueOnce(undefined);
+    await user.click(
+      await screen.findByRole('radio', { name: '見放題になったときだけ' }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole('radio', { name: '見放題になったときだけ' }),
+      ).toBeChecked(),
+    );
+
+    // 2回目: flatrate → any（失敗）
+    mockUpdateSettings.mockRejectedValueOnce(new Error('boom'));
+    await user.click(
+      screen.getByRole('radio', { name: 'レンタル・購入も含める' }),
+    );
+
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'error' }),
+      ),
+    );
+    // 保存済みの値（flatrate）に戻る。サーバー値へ戻すと any になってしまう
     expect(
-      await screen.findByRole('radio', { name: 'レンタル・購入も含める' }),
+      screen.getByRole('radio', { name: '見放題になったときだけ' }),
     ).toBeChecked();
+  });
+
+  /**
+   * 読み取り失敗を既定値で描かない（#1163）
+   *
+   * ⚠️ ここは以前「設定の取得に失敗しても既定値で表示する」として
+   * **不具合のほうを期待値にしていた**。「定額見放題のみ」にしてある
+   * 利用者に「レンタル・購入も含める」が選択済みとして表示され、
+   * 選び直すと保存されて設定そのものが変わる
+   */
+  describe('読み取りに失敗したとき', () => {
+    beforeEach(() => {
+      mockGetSettings.mockRejectedValue(new Error('boom'));
+    });
+
+    it('既定値のラジオを出さない', async () => {
+      render(<StreamingNoticeSettings />);
+
+      await screen.findByRole('alert');
+
+      expect(
+        screen.queryByRole('radio', { name: 'レンタル・購入も含める' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('読み込めなかったことを伝える', async () => {
+      render(<StreamingNoticeSettings />);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        '配信開始のお知らせ設定を読み込めませんでした',
+      );
+    });
+
+    it('書き込みが発生しない', async () => {
+      render(<StreamingNoticeSettings />);
+
+      await screen.findByRole('alert');
+
+      expect(mockUpdateSettings).not.toHaveBeenCalled();
+    });
+
+    it('再読み込みで復帰できる', async () => {
+      const user = userEvent.setup();
+      render(<StreamingNoticeSettings />);
+      await screen.findByRole('alert');
+
+      mockGetSettings.mockResolvedValue({ streamingNoticeScope: 'flatrate' });
+      await user.click(screen.getByRole('button', { name: '再読み込み' }));
+
+      expect(
+        await screen.findByRole('radio', { name: '見放題になったときだけ' }),
+      ).toBeChecked();
+    });
   });
 });

@@ -117,95 +117,133 @@ type AxeResult = Awaited<
 >['violations'][number];
 
 /**
- * ページ内でスクロールする領域の情報
+ * ページ内でスクロールする領域の識別子
  *
- * `index` は `document.querySelectorAll('*')` の順。ページを跨がないので、
- * 1回の検査の中だけで有効
+ * ⚠️ **番号は `querySelectorAll('*')` の順ではない。** そちらは
+ * **再描画が入ると別の要素を指す**（実測で `LI` や SVG の `line` を指していた）。
+ * ページ側に要素の参照そのものを置き（`window.__a11ySweepRegions`）、
+ * その配列の添字で指す。
  */
 interface ScrollRegion {
   index: number;
-  /** 1段あたりの送り幅（px）。領域の表示高さ（＝`clientHeight`） */
-  stepPx: number;
-  /** 列挙時の `scrollHeight`。同じ要素を指しているかの確認に使う */
-  scrollHeight: number;
-  /** 何段に分けて送るか（1なら送らなくても全部見えている） */
-  steps: number;
+  /** 失敗時に読めるようにする要素名 */
+  label: string;
+  /** 掃引前の `scrollTop`。終わったらここへ戻す */
+  initialTop: number;
 }
 
 /**
- * スクロールする領域を列挙する
+ * 1つの領域を送る段数の上限
  *
- * ⚠️ `overflow: hidden` は**対象にしない**。利用者が自力で送れない領域なので、
- * そこに操作要素があること自体が別の不具合であり、スクロールして検査すると
- * 「見えないが検査は通る」という誤った安心を作る。見るのは `auto` / `scroll`
- * だけに絞る。
+ * ⚠️ **上限が要る。** 一覧の無限スクロールは下端へ送ると次のページを読み、
+ * `scrollHeight` が伸びる。上限が無いと読み込みが続くかぎり止まらない。
+ * 実測で `/movies/now-showing` はタイル 40→80・`scrollHeight` 2167→4127 まで伸びた。
+ */
+const MAX_SCROLL_STEPS = 12;
+
+declare global {
+  interface Window {
+    __a11ySweepRegions?: HTMLElement[];
+  }
+}
+
+/**
+ * スクロールする領域を列挙し、ページ側に参照を残す
+ *
+ * ⚠️ `overflow: hidden` は**対象にしない**。実測では
+ * **プログラムからもキーボードのフォーカス移動からも送れる**ので
+ * 「送れないから」が理由ではない。このアプリに該当が無いためで、
+ * （`overflow: hidden` かつ中身がはみ出すのは `span.sr-only` だけ。
+ * モーダルの器は `hidden` だが中身は `__body { overflow-y: auto }` が吸収する）
+ * **もし該当が出てきたら、それ自体が別の不具合**として扱う。
  */
 async function findScrollRegions(page: Page): Promise<ScrollRegion[]> {
   return page.evaluate(() => {
-    const regions: {
-      index: number;
-      stepPx: number;
-      scrollHeight: number;
-      steps: number;
-    }[] = [];
+    const regions: HTMLElement[] = [];
 
-    document.querySelectorAll('*').forEach((el, index) => {
+    document.querySelectorAll('*').forEach((el) => {
       const element = el as HTMLElement;
       const overflowY = getComputedStyle(element).overflowY;
       if (overflowY !== 'auto' && overflowY !== 'scroll') return;
 
-      const stepPx = element.clientHeight;
-      const scrollHeight = element.scrollHeight;
-      const hidden = scrollHeight - stepPx;
       // 1px の端数は丸め差。実際には送れない
-      if (hidden <= 1 || stepPx === 0) return;
+      if (element.scrollHeight - element.clientHeight <= 1) return;
+      if (element.clientHeight === 0) return;
 
-      // 表示高さぶんずつ送る。境界にまたがる要素はどちらの段でも一部が
-      // 見えており、axe の可視判定は矩形の**重なり**を見るので取りこぼさない
-      regions.push({
-        index,
-        stepPx,
-        scrollHeight,
-        steps: Math.ceil(hidden / stepPx) + 1,
-      });
+      regions.push(element);
     });
 
-    return regions;
+    window.__a11ySweepRegions = regions;
+
+    return regions.map((element, index) => ({
+      index,
+      label: `${element.tagName}${
+        typeof element.className === 'string' && element.className
+          ? `.${element.className.split(' ')[0]}`
+          : ''
+      }`,
+      initialTop: element.scrollTop,
+    }));
   });
 }
 
 /**
- * 指定した領域の `scrollTop` を設定し、意図どおり動いたかを返す
+ * 領域を1段送る。送れたら送った後の `scrollTop`、もう送れなければ `null`
  *
- * ⚠️ 番号は `querySelectorAll('*')` の順なので、**検査の途中で再描画が入ると
- * 別の要素を指す**。黙って別の場所を送ると、検査の範囲が静かに狭まる。
- * 送る前に `scrollHeight` / `clientHeight` が列挙時と一致するかを見て、
- * 違っていたら何もせず false を返す。
+ * ⚠️ **送り幅は毎回測り直す。** 列挙時の値と突き合わせて一致を要求すると、
+ * データが後から届いて `scrollHeight` が変わるページで**毎回不一致になり、
+ * 1段も送れないまま黙って終わる**（実測で一覧ページがこの状態だった）。
+ * 「送ったら実際に増えたか」だけを見る。
  */
-async function setScrollTop(
+async function advanceScrollRegion(
   page: Page,
-  region: ScrollRegion,
+  index: number,
+): Promise<number | null> {
+  return page.evaluate((i) => {
+    const element = window.__a11ySweepRegions?.[i];
+    if (!element || !element.isConnected) return null;
+
+    const before = element.scrollTop;
+    element.scrollTop = before + Math.max(element.clientHeight, 1);
+
+    return element.scrollTop > before ? element.scrollTop : null;
+  }, index);
+}
+
+/**
+ * 領域を掃引前の位置へ戻す
+ *
+ * ⚠️ **0 に戻すのではなく、元の位置に戻す。** 掃引より前にスクロール済みの
+ * 状態で呼ばれると、0 に倒すのは「戻す」ではなく「動かす」になり、
+ * 後続のアサーションが見る画面が変わる。
+ *
+ * ⚠️ **大きさが変わっていても無条件に戻す。** 掃引で無限スクロールが発火して
+ * `scrollHeight` が変わるのは普通に起きる。そこで戻すのをやめると、
+ * 検査のあと画面が下端に取り残される（実測でそうなっていた）。
+ */
+async function restoreScrollRegion(
+  page: Page,
+  index: number,
   top: number,
-): Promise<boolean> {
-  return page.evaluate(
-    ([{ index, stepPx, scrollHeight }, value]) => {
-      const el = document.querySelectorAll('*')[index] as
-        | HTMLElement
-        | undefined;
-      if (!el) return false;
-      if (el.clientHeight !== stepPx || el.scrollHeight !== scrollHeight) {
-        return false;
-      }
-      el.scrollTop = value;
-      return true;
+): Promise<void> {
+  await page.evaluate(
+    ([i, value]) => {
+      const element = window.__a11ySweepRegions?.[i];
+      if (element?.isConnected) element.scrollTop = value;
     },
-    [region, top] as const,
+    [index, top] as const,
   );
 }
 
-/** 結果のノードを「ルールID + セレクタ」で一意にする */
+/**
+ * 結果のノードを「ルールID + セレクタ」で一意にする
+ *
+ * ⚠️ `join(' ')` にしないこと。iframe の中は入れ子配列で返るため、
+ * `['#a', 'b c']` と `['#a b', 'c']` が同じ鍵になって別のノードが潰れる。
+ * 同じ目的の `allowedIncomplete.ts` に合わせて `JSON.stringify` で取る。
+ */
 function nodeKey(ruleId: string, target: readonly unknown[]): string {
-  return `${ruleId}|${target.join(' ')}`;
+  return `${ruleId}|${JSON.stringify(target)}`;
 }
 
 /**
@@ -322,8 +360,15 @@ export async function expectNoA11yViolations(
  * ## 取りこぼしが残る場合
  *
  * 横スクロール・入れ子のスクロール領域の組み合わせ・スクロールで内容が
- * 変わる領域（仮想リスト）は、これでも全部は見られない。**狙った要素が
- * 評価されたことを確かめたいときは `expectAxeEvaluated()` を併用する**こと。
+ * 変わる領域（仮想リスト）は、これでも全部は見られない。1領域あたりの段数も
+ * `MAX_SCROLL_STEPS` で打ち切る。**狙った要素が評価されたことを
+ * 確かめたいときは `expectAxeEvaluated()` を併用する**こと。
+ *
+ * ## ⚠️ ページを変える副作用がある
+ *
+ * 一覧の無限スクロールは下端へ送ると次のページを読む。検査の対象が
+ * 実行ごとに変わり、TMDb への追加リクエストも起きる。中身まで見たい一覧では
+ * `waitForMovieTiles()` で読み込みを落ち着かせてから呼ぶこと。
  *
  * @param extraDisabledRules この検査だけ除外するルール
  * @param onlyRules 指定するとこのルールだけを実行する（positive control 用）
@@ -338,9 +383,21 @@ async function analyzeAcrossScrollRegions(
   /** 評価されたノードのセレクタ（passes も含む）。検査の成立確認に使う */
   evaluatedTargets: string[];
 }> {
+  /*
+    ⚠️ **空配列を「指定なし」に倒さないこと。** `onlyRules?.length` で
+    分岐すると `[]` が既定のルールセット全部へフォールバックする。
+    positive control は「可視判定を使うルールで評価されたか」を見るものなので、
+    黙って全ルールに広がると**掃引が壊れていても通る**（いちばん危険な方向）。
+  */
+  if (onlyRules && onlyRules.length === 0) {
+    throw new Error(
+      'onlyRules に空配列を渡さないこと。全ルールで検査したいなら undefined を渡す',
+    );
+  }
+
   const analyze = () => {
     const builder = new AxeBuilder({ page });
-    return onlyRules?.length
+    return onlyRules
       ? builder.withRules([...onlyRules]).analyze()
       : builder
           .disableRules([...DISABLED_RULES, ...extraDisabledRules])
@@ -367,20 +424,22 @@ async function analyzeAcrossScrollRegions(
   };
 
   const regions = await findScrollRegions(page);
+  // 掃引前の位置で1回。各領域の1段目はここで見ている
   await runOnce();
 
   for (const region of regions) {
-    // 1段目は上の初回実行と同じ位置なので、2段目から送る
-    for (let step = 1; step < region.steps; step += 1) {
-      // 送れなかった（再描画で別要素を指している）ならこの領域は諦める。
-      // 無理に続けると、別の場所を送った状態を検査することになる
-      if (!(await setScrollTop(page, region, step * region.stepPx))) break;
+    for (let step = 0; step < MAX_SCROLL_STEPS; step += 1) {
+      // 送り幅は毎回測り直す（`advanceScrollRegion` のコメント参照）。
+      // もう送れないところまで来たら次の領域へ
+      if ((await advanceScrollRegion(page, region.index)) === null) break;
       await runOnce();
     }
-    // 次の領域を見るときに、前の領域は元の位置へ戻しておく。
-    // そうしないと「複数の領域を同時に送った状態」という、実際には
-    // 誰も見ない配置を検査することになる
-    await setScrollTop(page, region, 0);
+    /*
+      次の領域を見る前に、この領域を**掃引前の位置へ**戻す。
+      戻さないと「複数の領域を同時に送った状態」という、実際には誰も見ない
+      配置を検査することになる。検査のあと画面が下端に取り残されるのも防ぐ。
+    */
+    await restoreScrollRegion(page, region.index, region.initialTop);
   }
 
   return {

@@ -5,7 +5,7 @@
  * 展開した状態で axe-core を実行する。
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 
 import { ARIA_LABELS, MENU_LABELS } from '@/constants';
 
@@ -32,6 +32,24 @@ const CAST_PRESENT = [
  */
 const LONG_OVERVIEW = 'E2E用の長いあらすじテキストです。'.repeat(40);
 
+/**
+ * オーバーレイの開くアニメーションが終わるまで待つ
+ *
+ * ⚠️ **待たないと `color-contrast` が断続的に落ちる。** モーダルは
+ * `contentShow 200ms`（`modal.module.scss`）で不透明度が上がるため、
+ * 途中で axe を掛けると**ブレンド途中の色**を測る。実測で拾った値:
+ * light は前景 `#969696` / 背景 `#dedede`、dark は `#616161` / `#171717`。
+ * フィルターモーダルは 4.42 対 4.5 のきわどい値で出た。
+ *
+ * 公開カレンダーは以前から同じ待ちを持っており、30 run で1度も落ちていない。
+ * 他のオーバーレイにも同じ待ちを掛けて揃える。
+ */
+const waitForOverlayAnimations = async (dialog: Locator) => {
+  await dialog.evaluate((el) =>
+    Promise.all(el.getAnimations().map((animation) => animation.finished)),
+  );
+};
+
 test.describe('アクセシビリティ（オーバーレイ・未認証）', () => {
   test.describe.configure({ timeout: 60000 });
 
@@ -43,7 +61,9 @@ test.describe('アクセシビリティ（オーバーレイ・未認証）', ()
 
       // 未認証で保護ルートのリンクを押すとログイン誘導が開く
       await page.getByRole('link', { name: 'お気に入り' }).click();
-      await expect(page.getByRole('dialog')).toBeVisible();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      await waitForOverlayAnimations(dialog);
 
       await expectNoA11yViolations(page, `ログイン誘導モーダル / ${theme}`);
     });
@@ -53,7 +73,9 @@ test.describe('アクセシビリティ（オーバーレイ・未認証）', ()
       await gotoWithTheme(page, '/movies/now-showing', theme);
 
       await page.getByRole('button', { name: 'メニュー' }).click();
-      await expect(page.getByRole('dialog')).toBeVisible();
+      const drawer = page.getByRole('dialog');
+      await expect(drawer).toBeVisible();
+      await waitForOverlayAnimations(drawer);
 
       await expectNoA11yViolations(page, `モバイルドロワー / ${theme}`);
     });
@@ -62,7 +84,9 @@ test.describe('アクセシビリティ（オーバーレイ・未認証）', ()
       await gotoWithTheme(page, '/movies/now-showing', theme);
 
       await page.getByRole('button', { name: /フィルター/ }).click();
-      await expect(page.getByRole('dialog')).toBeVisible();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      await waitForOverlayAnimations(dialog);
 
       await expectNoA11yViolations(page, `フィルターモーダル / ${theme}`);
     });
@@ -94,6 +118,7 @@ test.describe('アクセシビリティ（オーバーレイ・未認証）', ()
         await expect(dialog.getByText('詳細情報')).toBeVisible({
           timeout: 15000,
         });
+        await waitForOverlayAnimations(dialog);
 
         await expectNoA11yViolations(
           page,
@@ -213,6 +238,7 @@ test.describe('アクセシビリティ（オーバーレイ・認証済み）',
       await expect(
         drawer.getByRole('button', { name: ARIA_LABELS.OPEN_CALENDAR }),
       ).toBeVisible();
+      await waitForOverlayAnimations(drawer);
 
       await expectNoA11yViolations(
         page,

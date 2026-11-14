@@ -211,18 +211,27 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const [initialFilters] = useState<{
     conditions: FilterConditions;
     hasAny: boolean;
+    /**
+     * どこから復元したか。
+     *
+     * `storage` のときだけ URL へ書き戻す（#1062）。URL 由来なら書き戻す先が
+     * 既に正しく、何も復元していなければ書き戻す中身が無い
+     */
+    source: 'url' | 'storage' | 'none';
   }>(() => {
     const fromUrl = parseFilterConditionsFromParams(
       new URLSearchParams(searchParams.toString()),
     );
     if (Object.keys(fromUrl).length > 0) {
-      return { conditions: fromUrl, hasAny: true };
+      return { conditions: fromUrl, hasAny: true, source: 'url' };
     }
 
     const fromStorage = readStoredFilterConditions();
+    const hasStorage = Object.keys(fromStorage).length > 0;
     return {
       conditions: fromStorage,
-      hasAny: Object.keys(fromStorage).length > 0,
+      hasAny: hasStorage,
+      source: hasStorage ? 'storage' : 'none',
     };
   });
 
@@ -259,6 +268,28 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
   const { isAuthenticated, isResolving } = useAuthStatus();
   // URL または localStorage に値がある場合はそれを正とし、saved_filters で上書きしない
   const [savedFilterApplied, setSavedFilterApplied] = useState(hasUrlFilters);
+
+  /**
+   * URL へ書き戻すべき復元結果（#1062）。`null` なら書き戻し不要。
+   *
+   * ⚠️ **復元したのに URL へ書かないと、URL と一覧が食い違ったまま残る。**
+   * #1051 で「URL が正」にしたのは履歴操作（戻る／進む）の経路だけで、
+   * マウント時の復元は従来どおり `URL > localStorage > saved_filters` の
+   * 優先順位。クエリを持たないナビリンクで入り直すと、URL は空なのに
+   * 一覧だけ絞り込まれる。
+   *
+   * 利用者から見ると「戻ると絞り込みが消えるのに、ナビリンクで往復すると
+   * 絞り込みが戻ってくる」という説明しづらい非対称になる。
+   *
+   * ⚠️ localStorage のキーは画面共通（`STORAGE_KEYS.MOVIE_FILTERS`）なので、
+   * now-showing で付けた条件が upcoming の URL にも書き戻される。これは
+   * **意図どおり**。一覧の絞り込み自体が以前から画面をまたいで復元されており、
+   * 書き戻しはそれを URL に見えるようにするだけで、挙動を増やしてはいない
+   */
+  const [pendingUrlWriteBack, setPendingUrlWriteBack] =
+    useState<FilterConditions | null>(
+      initialFilters.source === 'storage' ? initialFilters.conditions : null,
+    );
   const queryClient = useQueryClient();
 
   /**
@@ -307,6 +338,24 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
    */
   const syncedSearchRef = useRef(extractFilterSearch(searchParams));
 
+  /**
+   * 復元結果の書き戻し（#1062）が、まだ URL へ着地していない。
+   *
+   * `router.replace` はトランジションなので、`syncedSearchRef` が先に進んでも
+   * `searchParams` はしばらく古いまま。その差分を「戻る操作」と誤認しないための印。
+   * 着地（両者が一致）を観測した時点で下ろす
+   */
+  const urlWriteBackPendingRef = useRef(false);
+
+  /**
+   * 復元結果を URL へ書き戻したか（#1062）。
+   *
+   * state ではなく ref で持つ。書き戻しは**1回きり**で、以降の URL 更新は
+   * `persistFilters` が担う。state にすると書き戻し自体が再レンダーを呼び、
+   * `syncFiltersToUrl` の参照変化と合わさって二重に走りうる
+   */
+  const urlWriteBackDoneRef = useRef(false);
+
   // URL追従: 戻る／進むでURLが変わったら、フィルターstateをURLから作り直す。
   //
   // URLを正とする。クエリが消えたなら絞り込みも解除されるべきで、
@@ -330,7 +379,22 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     // フィルターに関係するキーだけを比べる。クエリ文字列そのものを比べると、
     // 映画詳細モーダルの movie_id（#1033）が増減しただけで作り直してしまう
     const search = extractFilterSearch(searchParams);
-    if (search === syncedSearchRef.current) return;
+    if (search === syncedSearchRef.current) {
+      // 書き戻しが着地した
+      urlWriteBackPendingRef.current = false;
+      return;
+    }
+
+    // ⚠️ 書き戻し（#1062）が着地するまでは、ここを「戻る操作」と見なさない。
+    //
+    // 復元直後は `syncedSearchRef` だけが先に進み、Next の `searchParams` は
+    // まだ空のまま。その窓で再レンダリングが起きると差分が出るが、これは
+    // **自分が起こした遷移の途中**であって利用者の履歴操作ではない。
+    // 素通りさせると、復元したばかりの絞り込みをその場で解除してしまう。
+    //
+    // 窓はマウント直後の1フレーム程度。その間の戻る／進むを取りこぼすが、
+    // 復元を消すより軽い。着地は上の一致判定で検出する
+    if (urlWriteBackPendingRef.current) return;
     syncedSearchRef.current = search;
 
     const conditions = parseFilterConditionsFromParams(
@@ -392,6 +456,10 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     setSelectedWatchProviderIds(conditions.watch_providers || []);
     setSelectedOfferTypes(conditions.offer_types || []);
     setSelectedRegions(conditions.include_regions || []);
+
+    // ここへ来るのは URL も localStorage も空だったときだけ
+    // （`savedFilterAppliedRef` が両方で立つ）。URL は空なので書き戻す（#1062）
+    setPendingUrlWriteBack(conditions);
   }, [savedFilterQuery.data, markSavedFilterApplied]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -547,6 +615,49 @@ export function useMovieList(options: UseMovieListOptions): UseMovieListReturn {
     },
     [router, pathname, searchParams, stripDefaultDateRange],
   );
+
+  /**
+   * localStorage / saved_filters から復元した条件を URL へ書き戻す（#1062）
+   *
+   * `router.replace` なので履歴は積まない。戻るが空振りしないこと、
+   * および `syncFiltersToUrl` が `syncedSearchRef` を先に進めるため
+   * URL追従 effect がこれを「戻る操作」と誤認しないことが前提。
+   *
+   * ⚠️ **effect でしか打てない**ので、初期描画のあとに URL が変わる。
+   * その窓で利用者が別のリンクを押すと、`router.replace` が**ページではなく
+   * 直前に積まれたエントリ**を置き換えうる（#1026 / #1043 / #1051 と同系統）。
+   * 窓はコミット直後の1フレーム程度で、この経路は「クエリ無しで入り直した
+   * 直後」に限られるため許容する。広げるときはここを疑うこと
+   */
+  useEffect(() => {
+    if (urlWriteBackDoneRef.current) return;
+    if (!pendingUrlWriteBack) return;
+
+    urlWriteBackDoneRef.current = true;
+
+    // ⚠️ **絞り込みが掛かっているときだけ書き戻す。**
+    //
+    // `buildFilterConditions` は `sort_by` と `release_type` を**常に**入れる
+    // ので、復元結果はほぼ空にならない。無条件に書き戻すと、並び順を一度でも
+    // 変えた利用者は**全ページの読み込みで URL が書き換わる**ことになる。
+    // 直したいのは「URL にクエリが無いのに一覧が絞り込まれている」食い違いで、
+    // 並び順の restore はその食い違いを作らない（印も出ない）。
+    //
+    // 判定は `hasActiveFilterConditions` に任せる。絞り込み条件が増えても
+    // ここを直さずに済むうえ、ツールバーの印（#1063）と必ず同じ答えになる。
+    //
+    // ⚠️ 並び順だけは復元しても URL に出ない、という境界がここで決まる。
+    // 共有したときに並び順まで再現したいなら、別途判断が要る
+    if (
+      !hasActiveFilterConditions(stripDefaultDateRange(pendingUrlWriteBack))
+    ) {
+      return;
+    }
+
+    // 着地するまで URL追従 effect に「戻る操作」と誤認させない
+    urlWriteBackPendingRef.current = true;
+    syncFiltersToUrl(pendingUrlWriteBack);
+  }, [pendingUrlWriteBack, syncFiltersToUrl, stripDefaultDateRange]);
 
   /**
    * フィルター変更を URL・localStorage・サーバーの3箇所に伝える

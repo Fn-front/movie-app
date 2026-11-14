@@ -721,6 +721,28 @@ describe('session コールバック', () => {
       role: '',
     });
   });
+
+  /**
+   * 失効と「第2要素が未了」はどちらも `user.id` を空にするため、
+   * **セッションだけ見ると区別がつかない**。区別しているのは
+   * `session.totpPending` の有無で、それは上の2分岐の**順序**だけが
+   * 担保している（invalidated が先に return する）。
+   *
+   * ここが入れ替わると、失効したセッションに `totpPending` が付き、
+   * `proxy.ts` の除外（#1150 で足した `!isTotpPending`）に当たって
+   * **Cookie が掃除されなくなる**。利用者は認証コード入力画面から
+   * 出られないまま留まる。実装側に順序を促すコメントが無いので、
+   * テストで固定しておく
+   */
+  it('invalidated が totpPending より優先される（失効セッションに totpPending を付けない）', async () => {
+    const result = await session({
+      session: { user: { id: 'u1', email: 'a@example.com' } },
+      token: { invalidated: true, totpPending: true },
+    });
+
+    expect(result.user).toMatchObject({ id: '', email: '', role: '' });
+    expect(result.totpPending).toBeUndefined();
+  });
 });
 
 // -------------------- authorize のレート制限（#644）--------------------

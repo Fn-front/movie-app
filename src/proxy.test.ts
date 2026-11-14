@@ -299,6 +299,30 @@ describe('proxy', () => {
       expect(response.headers.get('location')).toBeNull();
     });
 
+    /**
+     * ⚠️ 第2要素が未了のセッションを「期限切れ」と誤認しない
+     *
+     * `totpPending` のとき session コールバックは `user.id` を空文字にするため
+     * `isAuthenticated` が false になる。`/auth/two-factor` は
+     * `AUTH_REQUIRED_ROUTES` に含まれないので保護パス判定も通らず、
+     * そのままだと「cookieはあるがJWT検証に失敗」の分岐に落ちて
+     * **画面を開いた瞬間にセッションCookieが削除される**（#1150）。
+     *
+     * Cookie が消えると `update({ totpCode })` が成立せず、何度入力しても
+     * 「認証コードが正しくありません」が出続けてログインできない。
+     */
+    it('認証コード入力ページでセッションCookieを削除しない', () => {
+      const req = createMockRequest({
+        pathname: '/auth/two-factor',
+        auth: pendingAuth,
+        hasSessionCookie: true,
+      });
+
+      proxy(req);
+
+      expect(mockCookiesDelete).not.toHaveBeenCalled();
+    });
+
     it('ログインページへ戻ろうとしても認証コード入力へ向ける', () => {
       // 未了のまま他の経路でログインし直せると、第2要素を回避できてしまう
       const req = createMockRequest({

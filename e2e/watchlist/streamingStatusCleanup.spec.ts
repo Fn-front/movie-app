@@ -12,7 +12,7 @@
  * 実在作品に触れない。
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 import {
   cleanupStreamingStatus,

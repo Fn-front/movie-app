@@ -13,7 +13,7 @@
  */
 
 import type { Page } from '@playwright/test';
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 import { ARIA_LABELS } from '@/constants';
 

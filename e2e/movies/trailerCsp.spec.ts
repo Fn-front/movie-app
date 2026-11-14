@@ -40,7 +40,7 @@
  * **別オリジンである性質は保たれる**。
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../fixtures/auth';
 
 import { ARIA_LABELS } from '@/constants';
 

@@ -7,7 +7,8 @@
  * - デフォルトの OS 追従（prefers-color-scheme）と明示設定の優先
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 const THEME_STORAGE_KEY = 'movie-app:theme';
 

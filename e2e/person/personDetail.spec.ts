@@ -9,7 +9,7 @@
  * 実在が安定している PERSON_ID を使う。
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/auth';
 
 import { movieTiles } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';

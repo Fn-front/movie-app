@@ -219,10 +219,19 @@ export async function cleanupRateLimitsForEmail(email: string): Promise<void> {
  * @param userId - 対象ユーザーのID
  */
 export async function cleanupRateLimitsForUser(userId: string): Promise<void> {
-  await fetch(`${SUPABASE_URL}/rest/v1/rate_limits?identifier=eq.${userId}`, {
-    method: 'DELETE',
-    headers: supabaseHeaders,
-  });
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/rate_limits?identifier=eq.${userId}`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+
+  // ⚠️ 握りつぶさない。共有ユーザーの枠リセット（#1177）はこれが唯一の
+  // 防御で、黙って失敗すると「無関係なテストが 429 で落ちる」元の状態へ
+  // 戻る。しかも落ちるテストは実行順で変わるので原因に辿り着けない
+  if (!response.ok) {
+    throw new Error(
+      `rate_limits の削除に失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
 }
 
 /**

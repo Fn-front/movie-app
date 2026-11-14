@@ -97,7 +97,7 @@ export const test = base.extend<{
    *
    * `auto: true` にして、この fixture を使う全 spec へ自動で効かせる。
    * 理由は `cleanupSharedUserRateLimits` のコメントを参照。要点は
-   * 「`READ_USER_DATA` の 200回/分を7ルートで共有しており、`fullyParallel`
+   * 「`READ_USER_DATA` の 200回/分を14ルートで共有しており、`fullyParallel`
    * のシャードが同じユーザーで走ると尽きる」こと。
    *
    * ⚠️ **個別の spec に足して回らないこと。** 尽きた枠はシャード内の

@@ -607,6 +607,43 @@ describe('Cookie同意', () => {
       expect(upsertedData.cookie_consent_at).toBeNull();
     });
 
+    /**
+     * GET と同じ罠が PUT にもあった
+     *
+     * 現在値の select は `error` を捨てていたため、読み取りに失敗すると
+     * `current` が null になる。すると版の比較が
+     * `undefined !== COOKIE_CONSENT_VERSION` で成立し、
+     * **最初の意思表示の日時をクライアント申告値で上書き**していた。
+     * 上のコメントが「証跡として保つ」と書いている当の値が、黙って消える
+     */
+    it('現在値の読み取りに失敗したら、日時を書き換えずに500を返す', async () => {
+      let upsertCalled = false;
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () => ({
+              data: null,
+              error: { code: '57P01', message: 'connection terminated' },
+            }),
+          }),
+        }),
+      });
+      mockFrom.mockReturnValueOnce({
+        upsert: () => {
+          upsertCalled = true;
+          return { error: null };
+        },
+      });
+
+      const response = await PUT(
+        createPutRequest({ cookieConsent: 'granted', cookieConsentAt: AT }),
+      );
+
+      expect(response.status).toBe(500);
+      // 500 を返すだけでなく、書き込みに到達していないこと
+      expect(upsertCalled).toBe(false);
+    });
+
     it('他の設定だけ更新しても同意に触れない', async () => {
       upsertedData = {};
       mockFrom.mockReturnValueOnce({

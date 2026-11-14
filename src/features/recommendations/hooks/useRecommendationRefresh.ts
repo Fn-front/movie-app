@@ -94,6 +94,15 @@ export function useRecommendationRefresh(
         queryClient.invalidateQueries({
           queryKey: recommendationKeys.refreshCount,
         });
+        // レコメンド本体も同じ理由で取り直す。
+        //
+        // 下の onSuccess がキャッシュへ書き戻すが、**画面を離れると呼ばれない**。
+        // ホームがサーバー取得だった頃は戻るたびに取り直していたので表面化
+        // しなかったが、クライアント取得にした今は staleTime のあいだ
+        // 更新前の作品が残る（残回数だけ減って見える / #1115）
+        queryClient.invalidateQueries({
+          queryKey: recommendationKeys.list,
+        });
       }
     },
     onSuccess: (data) => {

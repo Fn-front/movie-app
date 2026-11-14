@@ -13,17 +13,22 @@
 
 import { renderHook, act } from '@testing-library/react';
 
-import { useMovieDetailQuery } from './useMovieDetailQuery';
+import { useMovieDetailQuery, useOpenMovieDetail } from './useMovieDetailQuery';
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
 let mockSearch = '';
+/** `useSearchParams()` が呼ばれた回数（レンダー時に読んでいないことの検証用） */
+let searchParamsCalls = 0;
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace, back: mockBack }),
   usePathname: () => '/movies/now-showing',
-  useSearchParams: () => new URLSearchParams(mockSearch),
+  useSearchParams: () => {
+    searchParamsCalls += 1;
+    return new URLSearchParams(mockSearch);
+  },
 }));
 
 /**
@@ -44,6 +49,23 @@ const pushedByUs = () => {
   window.history.replaceState({ ...NEXT_ENTRY, __movieDetailQuery: true }, '');
 };
 
+/**
+ * 現在のURLのクエリを差し替える
+ *
+ * 「開く」側は `useSearchParams()` ではなく `window.location` を読む
+ * （ホームを静的プリレンダに保つため / #1115）。フックのモックだけ動かしても
+ * 実装には届かないので、jsdom のURLも一緒に動かす。
+ * `history.state` は保つ（目印の有無がテストの主題のため）
+ */
+const setSearch = (search: string) => {
+  mockSearch = search;
+  window.history.replaceState(
+    window.history.state,
+    '',
+    search ? `/movies/now-showing?${search}` : '/movies/now-showing',
+  );
+};
+
 /** 直接着地したエントリ（目印なし）に見立てる */
 const landedDirectly = () => {
   window.history.replaceState({ ...NEXT_ENTRY }, '');
@@ -52,7 +74,7 @@ const landedDirectly = () => {
 describe('useMovieDetailQuery', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockSearch = '';
+    setSearch('');
     // 他のテストが残した history.state を持ち越さない
     landedDirectly();
   });
@@ -65,7 +87,7 @@ describe('useMovieDetailQuery', () => {
     });
 
     it('movie_id を数値として読む', () => {
-      mockSearch = 'movie_id=550';
+      setSearch('movie_id=550');
 
       const { result } = renderHook(() => useMovieDetailQuery());
 
@@ -114,7 +136,7 @@ describe('useMovieDetailQuery', () => {
     });
 
     it('既存のクエリ（フィルター）を保つ', () => {
-      mockSearch = 'sort_by=popularity&release_type=theatrical';
+      setSearch('sort_by=popularity&release_type=theatrical');
 
       const { result } = renderHook(() => useMovieDetailQuery());
 
@@ -127,7 +149,7 @@ describe('useMovieDetailQuery', () => {
     });
 
     it('別の映画を開くと movie_id を差し替える', () => {
-      mockSearch = 'movie_id=550';
+      setSearch('movie_id=550');
 
       const { result } = renderHook(() => useMovieDetailQuery());
 
@@ -142,7 +164,7 @@ describe('useMovieDetailQuery', () => {
      * **× を1回押しても閉じない**（back が同じ `movie_id` に着地する）
      */
     it('開いている作品をもう一度開いても履歴を積まない', () => {
-      mockSearch = 'movie_id=550';
+      setSearch('movie_id=550');
       const before = window.history.length;
 
       const { result } = renderHook(() => useMovieDetailQuery());
@@ -155,7 +177,7 @@ describe('useMovieDetailQuery', () => {
 
   describe('閉じる（自分が開いた場合）', () => {
     beforeEach(() => {
-      mockSearch = 'movie_id=550';
+      setSearch('movie_id=550');
       pushedByUs();
     });
 
@@ -184,7 +206,7 @@ describe('useMovieDetailQuery', () => {
     });
 
     it('戻らずにクエリだけ落とす', () => {
-      mockSearch = 'movie_id=550';
+      setSearch('movie_id=550');
 
       const { result } = renderHook(() => useMovieDetailQuery());
 
@@ -197,7 +219,7 @@ describe('useMovieDetailQuery', () => {
     });
 
     it('他のクエリ（フィルター）は残す', () => {
-      mockSearch = 'sort_by=popularity&movie_id=550';
+      setSearch('sort_by=popularity&movie_id=550');
 
       const { result } = renderHook(() => useMovieDetailQuery());
 
@@ -211,7 +233,7 @@ describe('useMovieDetailQuery', () => {
 
     // 先頭へ跳ぶと、一覧のどこを見ていたか分からなくなる
     it('スクロール位置を動かさない', () => {
-      mockSearch = 'movie_id=550';
+      setSearch('movie_id=550');
 
       const { result } = renderHook(() => useMovieDetailQuery());
 
@@ -220,6 +242,57 @@ describe('useMovieDetailQuery', () => {
       expect(mockReplace).toHaveBeenCalledWith(expect.any(String), {
         scroll: false,
       });
+    });
+  });
+
+  /**
+   * 「開く」だけのフック（#1115）
+   *
+   * ルーターのフックで URL を読むと、それを使うコンポーネントを含むページが
+   * 静的プリレンダから外れる（missing-suspense-with-csr-bailout）。
+   * 一覧タイルはこちらを使い、URL はクリック時に window.location から読む
+   */
+  describe('useOpenMovieDetail', () => {
+    it('クエリを保ったまま開き、目印を残す', () => {
+      setSearch('sort_by=popularity');
+
+      const { result } = renderHook(() => useOpenMovieDetail());
+
+      act(() => result.current(550));
+
+      const params = new URLSearchParams(window.location.search);
+      expect(params.get('movie_id')).toBe('550');
+      expect(params.get('sort_by')).toBe('popularity');
+      expect(window.history.state).toEqual({ __movieDetailQuery: true });
+      // ルーターは使わない。push だと目印を置けない（#1079）
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('開いている作品をもう一度開いても履歴を積まない', () => {
+      setSearch('movie_id=550');
+      const before = window.history.length;
+
+      const { result } = renderHook(() => useOpenMovieDetail());
+
+      act(() => result.current(550));
+
+      expect(window.history.length).toBe(before);
+    });
+
+    /**
+     * ⚠️ URL を**レンダー時に読んでいない**ことを固定する。
+     *
+     * `useSearchParams()` のモックは呼ばれた回数を数えられるので、
+     * フックの描画だけで呼ばれないことを見る。呼ぶようになると
+     * ホームが ƒ（動的）に戻る
+     */
+    it('レンダー時にクエリを読まない', () => {
+      setSearch('movie_id=550');
+      const callsBefore = searchParamsCalls;
+
+      renderHook(() => useOpenMovieDetail());
+
+      expect(searchParamsCalls).toBe(callsBefore);
     });
   });
 });

@@ -18,6 +18,11 @@ jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
     openMovieDetail: mockOpenMovieDetail,
     closeMovieDetail: mockCloseMovieDetail,
   }),
+  /**
+   * 一覧タイルは URL を読まない軽い方を使う（#1115）。
+   * ここを足し忘れると `undefined` を呼ぶことになり、描画ごと落ちる
+   */
+  useOpenMovieDetail: () => mockOpenMovieDetail,
 }));
 
 jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({

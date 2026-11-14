@@ -57,6 +57,26 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: 1
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          # ホーム（/）は静的プリレンダなので、**ビルド時に**公開中映画を
+          # Supabase から取る（#1115）。無いと `Supabase environment
+          # variables are not defined` でビルドが落ちる。
+          #
+          # ⚠️ **この2つは NEXT_PUBLIC_* だが、いま参照しているのはサーバー側
+          #    だけ**（`helpers/supabase.ts` の createAnonClient と
+          #    `nowShowing.server.ts`）。クライアントバンドルには入っていない
+          #    （`.next/static` に supabase の文字列が出ないことを実測で確認）。
+          #    接頭辞だけを根拠に「どうせ公開値だから」と扱わないこと。
+          #    クライアントから参照し始めた時点でブラウザへ出る
+          # ⚠️ Dependabot が起動した run は専用ストアだけを見る。
+          #    追加・削除はそちらにも反映すること（.claude/rules/ci-secrets.md）
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      # ホーム（/）が動的（ƒ）に戻っていないかをビルド出力で確かめる。
+      # 単体テストは page.tsx の中身しか見られないため、配下のコンポーネントで
+      # cookie を読まれると素通りする（#1115）
+      - name: assert-static-routes
+        run: node scripts/assert-static-routes.mjs
 
       - name: Clear old cache
         run: |

@@ -41,60 +41,31 @@ jest.mock(
 
 describe('HomePage', () => {
   it('AppLayout内にNowShowingMovieListが表示される', () => {
-    render(
-      <HomePage
-        nowShowingMovies={[]}
-        recommendations={[]}
-        hasFavorites={false}
-        isAuthenticated={true}
-      />,
-    );
+    render(<HomePage nowShowingMovies={[]} />);
 
     expect(screen.getByTestId('app-layout')).toBeInTheDocument();
     expect(screen.getByTestId('now-showing-movie-list')).toBeInTheDocument();
   });
 
   it('NowShowingMovieListがAppLayoutの子要素である', () => {
-    render(
-      <HomePage
-        nowShowingMovies={[]}
-        recommendations={[]}
-        hasFavorites={false}
-        isAuthenticated={true}
-      />,
-    );
+    render(<HomePage nowShowingMovies={[]} />);
 
     const appLayout = screen.getByTestId('app-layout');
     const nowShowingList = screen.getByTestId('now-showing-movie-list');
     expect(appLayout).toContainElement(nowShowingList);
   });
 
-  it('認証済みの場合RecommendationSectionが表示される', () => {
-    render(
-      <HomePage
-        nowShowingMovies={[]}
-        recommendations={[]}
-        hasFavorites={false}
-        isAuthenticated={true}
-      />,
-    );
+  /**
+   * 認証状態で出し分けないのは**意図した構成**（#1115）。
+   *
+   * ホームで `auth()` を呼ぶとルート全体が動的になり、遷移のたびに
+   * サーバー往復が発生する。出し分けはセクション側がクライアントで行う
+   * （`recommendationSection.test.tsx` の「表示の前提」が受け持つ）
+   */
+  it('RecommendationSectionは認証状態を見ずに常に置かれる', () => {
+    render(<HomePage nowShowingMovies={[]} />);
 
     expect(screen.getByTestId('recommendation-section')).toBeInTheDocument();
-  });
-
-  it('未認証の場合RecommendationSectionが表示されない', () => {
-    render(
-      <HomePage
-        nowShowingMovies={[]}
-        recommendations={[]}
-        hasFavorites={false}
-        isAuthenticated={false}
-      />,
-    );
-
-    expect(
-      screen.queryByTestId('recommendation-section'),
-    ).not.toBeInTheDocument();
   });
 
   /**
@@ -109,28 +80,9 @@ describe('HomePage', () => {
    * セクションを両方ともモックしているため、中身が見えないため。
    * その退行は各セクションのテスト（`nowShowingMovieList.test.tsx` /
    * `recommendationSection.test.tsx` の「モーダル自体は描かない」）が受け持つ。
-   * ここで見るのは「ホーム側のモーダルが認証状態で増減しないこと」だけ。
    */
-  it('詳細モーダルは認証状態にかかわらず1つだけ描かれる', () => {
-    const { rerender } = render(
-      <HomePage
-        nowShowingMovies={[]}
-        recommendations={[]}
-        hasFavorites={false}
-        isAuthenticated={true}
-      />,
-    );
-
-    expect(screen.getAllByTestId('home-movie-detail-modal')).toHaveLength(1);
-
-    rerender(
-      <HomePage
-        nowShowingMovies={[]}
-        recommendations={[]}
-        hasFavorites={false}
-        isAuthenticated={false}
-      />,
-    );
+  it('詳細モーダルは1つだけ描かれる', () => {
+    render(<HomePage nowShowingMovies={[]} />);
 
     expect(screen.getAllByTestId('home-movie-detail-modal')).toHaveLength(1);
   });

@@ -225,6 +225,7 @@ export const RECOMMENDATIONS_MESSAGES = {
   NOT_GENERATED: 'おすすめ映画を準備中です',
   SECTION_TITLE: 'あなたへのおすすめ',
   GENERATION_ERROR: 'レコメンド生成中にエラーが発生しました',
+  FETCH_FAILED: 'おすすめの取得に失敗しました',
 } as const;
 
 /**

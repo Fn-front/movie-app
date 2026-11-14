@@ -9,8 +9,8 @@ import { memo, useMemo } from 'react';
 
 import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
+import { useRecommendations } from '@/features/recommendations/hooks/useRecommendations';
 import type { NowShowingMovie } from '@/lib/types';
-import type { Recommendation } from '@/schema/recommendations';
 
 /**
  * HomeMovieDetailModalコンポーネントのプロパティ
@@ -18,8 +18,6 @@ import type { Recommendation } from '@/schema/recommendations';
 export interface HomeMovieDetailModalProps {
   /** 劇場公開中の人気映画一覧 */
   nowShowingMovies: NowShowingMovie[];
-  /** レコメンド一覧 */
-  recommendations: Recommendation[];
 }
 
 /**
@@ -31,15 +29,18 @@ export interface HomeMovieDetailModalProps {
  * `NowShowingMovieList` と `RecommendationSection` はタイルから
  * `openMovieDetail` を呼ぶだけで、モーダル自体は描かない。
  *
- * ⚠️ タイトル（ダイアログのアクセシブル名）はサーバーから渡った一覧からしか
- * 引けない。`RecommendationSection` の「他の作品を見る」で差し替わった
- * レコメンドはここに届かないため、`MovieDetailModal` の既定値
- * 「映画詳細」にフォールバックする。モーダルを `AppLayout` に1つだけ置く
- * （#1077）までは、セクションの state をここへ持ち上げない限り解消しない。
+ * タイトル（ダイアログのアクセシブル名）は公開中一覧とレコメンドから引く。
+ * レコメンドは `RecommendationSection` と**同じ react-query のキャッシュ**を
+ * 読むので（#1115）、手動更新で差し替わった作品でも名前が付く。
+ *
+ * ⚠️ `nowShowingMovies` は props のまま。サーバーで取った静的な一覧であり、
+ * ここでクライアント取得に変えるとホームの初期HTMLから公開中セクションが
+ * 消える（SEO・ファーストビューの劣化）。
  */
 export const HomeMovieDetailModal = memo<HomeMovieDetailModalProps>(
-  function HomeMovieDetailModal({ nowShowingMovies, recommendations }) {
+  function HomeMovieDetailModal({ nowShowingMovies }) {
     const { selectedMovieId, closeMovieDetail } = useMovieDetailQuery();
+    const { recommendations } = useRecommendations();
 
     const titleById = useMemo(() => {
       const map = new Map<number, string>();

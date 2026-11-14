@@ -20,6 +20,52 @@ import { parsePositiveIntId } from '@/lib/routeId';
  */
 const MOVIE_DETAIL_STATE_KEY = '__movieDetailQuery';
 
+/**
+ * 映画詳細モーダルを開く（URLに `movie_id` を足す）
+ *
+ * **`useSearchParams()` を使わずに `window.location` から読む。** 読むのは
+ * クリックされた瞬間（＝ハイドレーション後）なので、ルーターのフック経由と
+ * 同じ値が同期的に取れる。フックを使うと、それを呼ぶコンポーネントを含む
+ * ページが静的プリレンダから外れる（`missing-suspense-with-csr-bailout`）。
+ * ホームを静的に保つにはタイル側が読んではいけない（#1115）。
+ *
+ * 履歴の積み方（`pushState` と目印）は {@link useMovieDetailQuery} の
+ * ドキュメントコメントのとおりで、ここでも変えていない。
+ *
+ * @param movieId - 開く映画のTMDb ID
+ */
+function openMovieDetailAt(movieId: number): void {
+  const params = new URLSearchParams(window.location.search);
+
+  // 同じ作品をもう一度開いても積まない。`router.push` は同一URLのとき
+  // replace に倒していたが（`app-router.js:103-110`）、素の pushState には
+  // その判定が無いので、同じエントリが2つ並んで戻るが空振りする
+  if (params.get(MOVIE_DETAIL_QUERY_PARAM) === String(movieId)) {
+    return;
+  }
+
+  params.set(MOVIE_DETAIL_QUERY_PARAM, String(movieId));
+
+  window.history.pushState(
+    { [MOVIE_DETAIL_STATE_KEY]: true },
+    '',
+    `${window.location.pathname}?${params.toString()}`,
+  );
+}
+
+/**
+ * 映画詳細モーダルを「開く」だけのフック
+ *
+ * URL を読まないので、これを使うコンポーネントは静的プリレンダのままでいられる。
+ * 開いた先を描く側（モーダル）は `movie_id` を読む必要があるため
+ * {@link useMovieDetailQuery} を使い、`<Suspense>` で包むこと。
+ */
+export function useOpenMovieDetail(): (movieId: number) => void {
+  // モジュールスコープの関数をそのまま返す。参照が毎回同じなので、
+  // 受け取る側の useCallback / memo の依存にそのまま入れられる
+  return openMovieDetailAt;
+}
+
 /** {@link useMovieDetailQuery} の戻り値 */
 export interface UseMovieDetailQueryReturn {
   /** 表示中の映画ID。モーダルを開いていなければ null */
@@ -91,26 +137,7 @@ export function useMovieDetailQuery(): UseMovieDetailQueryReturn {
     [rawMovieId],
   );
 
-  const openMovieDetail = useCallback(
-    (movieId: number) => {
-      // 同じ作品をもう一度開いても積まない。`router.push` は同一URLのとき
-      // replace に倒していたが（`app-router.js:103-110`）、素の pushState には
-      // その判定が無いので、同じエントリが2つ並んで戻るが空振りする
-      if (searchParams.get(MOVIE_DETAIL_QUERY_PARAM) === String(movieId)) {
-        return;
-      }
-
-      const params = new URLSearchParams(searchParams.toString());
-      params.set(MOVIE_DETAIL_QUERY_PARAM, String(movieId));
-
-      window.history.pushState(
-        { [MOVIE_DETAIL_STATE_KEY]: true },
-        '',
-        `${pathname}?${params.toString()}`,
-      );
-    },
-    [pathname, searchParams],
-  );
+  const openMovieDetail = useOpenMovieDetail();
 
   const closeMovieDetail = useCallback(() => {
     // 自分が積んだエントリなら、push した1つ分をちょうど戻す。

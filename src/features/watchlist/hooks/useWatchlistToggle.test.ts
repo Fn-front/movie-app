@@ -18,6 +18,8 @@ const mockInvalidateQueries = jest.fn();
 const mockCancelQueries = jest.fn().mockResolvedValue(undefined);
 const mockGetQueriesData = jest.fn().mockReturnValue([]);
 const mockSetQueryData = jest.fn();
+/** 照会キャッシュの読み出し。既定は未取得（undefined） */
+const mockGetQueryData = jest.fn();
 
 /**
  * 本物の `useQueryClient` は同じインスタンスを返す。
@@ -29,6 +31,7 @@ const makeQueryClient = () => ({
   invalidateQueries: mockInvalidateQueries,
   cancelQueries: mockCancelQueries,
   setQueryData: mockSetQueryData,
+  getQueryData: mockGetQueryData,
   getQueryCache: () => mockQueryCache,
 });
 
@@ -301,6 +304,62 @@ describe('useWatchlistToggle', () => {
       });
 
       expect(mockRemoveWatchlist).toHaveBeenCalledWith('lookup-id');
+    });
+  });
+
+  /**
+   * 照会キャッシュの楽観更新（#1145）。
+   *
+   * 判定は照会を**先に**見るので、照会キャッシュを更新しないと
+   * 「削除が完了した瞬間に `removes` が解除され、まだ古い照会が
+   * ヒットして『登録済み』へ戻る」という鏡像の不具合が出る。
+   * その窓で押すと論理削除済みの行へ DELETE が飛び、404 になる。
+   *
+   * 前例は `useFavoriteMutations` の `updateLookupCache`
+   */
+  describe('照会キャッシュの楽観更新', () => {
+    /** 照会キャッシュへの書き込みだけを拾う */
+    const lookupWrites = () =>
+      mockSetQueryData.mock.calls.filter(
+        (call) =>
+          JSON.stringify(call[0]) === JSON.stringify(['watchlist', 'lookup']),
+      );
+
+    it('追加すると照会キャッシュにも積む', async () => {
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(lookupWrites().length).toBeGreaterThan(0);
+    });
+
+    it('削除すると照会キャッシュからも外す', async () => {
+      mockGetLookupWatchlistId.mockReturnValue('watchlist-id-999');
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      // 照会キャッシュの updater に「削除済み」を渡していること
+      const writes = lookupWrites();
+      expect(writes.length).toBeGreaterThan(0);
+      const updater = writes[0][1] as (
+        old: unknown,
+      ) => { data: { watchlist: { id: string }[] } } | undefined;
+      const next = updater({
+        success: true,
+        data: {
+          watchlist: [
+            { id: 'watchlist-id-999', tmdb_movie_id: 42 },
+            { id: 'other', tmdb_movie_id: 7 },
+          ],
+        },
+      });
+
+      expect(next?.data.watchlist.map((item) => item.id)).toEqual(['other']);
     });
   });
 

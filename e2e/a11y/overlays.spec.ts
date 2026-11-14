@@ -51,6 +51,13 @@ const LONG_OVERVIEW = 'E2E用の長いあらすじテキストです。'.repeat(
  *
  * ⚠️ 無限に繰り返すアニメーション（読み込み中のスピナー等）は**除く**。
  * `finished` が永遠に解決せず、待ちがそのままタイムアウトする。
+ *
+ * ⚠️ **`finished` の reject を握ること。** キャンセルされたアニメーションの
+ * `finished` は `AbortError` で reject する。`Promise.all` は1つでも reject
+ * すると全体が reject するので、**待ちではなくテストの失敗**になる。
+ * 実測で `モバイルドロワー - dark` が
+ * `page.evaluate: AbortError: The user aborted a request.` で落ちた。
+ * キャンセルされた＝もう動いていないので、待つ目的は果たせている。
  */
 const waitForOverlayAnimations = async (page: Page) => {
   await page.evaluate(() =>
@@ -61,7 +68,7 @@ const waitForOverlayAnimations = async (page: Page) => {
           (animation) =>
             animation.effect?.getComputedTiming().iterations !== Infinity,
         )
-        .map((animation) => animation.finished),
+        .map((animation) => animation.finished.catch(() => undefined)),
     ),
   );
 };

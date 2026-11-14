@@ -93,6 +93,17 @@ describe('logout', () => {
       expect(suppressedAtSignOut).toBe(true);
     });
 
+    it('signOut が失敗したら抑止を戻す', async () => {
+      // 遷移が始まらなかったのに抑止したままだと、バナーが二度と出ない。
+      // しかも同意レコードは既に消えているので再同意もできなくなる
+      recordConsentDecision('granted', ME, T1);
+      mockSignOut.mockRejectedValue(new Error('network'));
+
+      await expect(logout()).rejects.toThrow('network');
+
+      expect(isBannerSuppressed()).toBe(false);
+    });
+
     it('消すものが無くてもバナーは抑止する', async () => {
       // 未同意のままログアウトした場合。遷移するまで出す必要はない
       let suppressedAtSignOut = false;

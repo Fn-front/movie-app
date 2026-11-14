@@ -4,6 +4,7 @@
 
 import {
   __resetBannerSuppressionForTest,
+  clearSigningOut,
   isBannerSuppressed,
   markSigningOut,
   setConsentSyncPending,
@@ -30,6 +31,25 @@ describe('bannerSuppression', () => {
   it('ログアウト中は抑止する', () => {
     markSigningOut();
     expect(isBannerSuppressed()).toBe(true);
+  });
+
+  it('ログアウトが失敗したときは明示的に戻せる', () => {
+    // 遷移が始まらなかった場合だけ戻す。戻せないとバナーが二度と出ない
+    markSigningOut();
+
+    clearSigningOut();
+
+    expect(isBannerSuppressed()).toBe(false);
+  });
+
+  it('同じ理由を重ねても通知しない', () => {
+    const listener = jest.fn();
+    markSigningOut();
+    subscribeBannerSuppression(listener);
+
+    markSigningOut();
+
+    expect(listener).not.toHaveBeenCalled();
   });
 
   it('ログアウト中は同期の解除で戻らない', () => {

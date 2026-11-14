@@ -15,7 +15,10 @@
 import { signOut } from 'next-auth/react';
 
 import { ROUTES } from '@/constants';
-import { markSigningOut } from '@/features/cookieConsent/utils/bannerSuppression';
+import {
+  clearSigningOut,
+  markSigningOut,
+} from '@/features/cookieConsent/utils/bannerSuppression';
 import { deleteGaCookies, sendConsentUpdate } from '@/utils/analytics';
 import { clearOwnedConsent } from '@/utils/cookieConsent';
 
@@ -51,5 +54,15 @@ export async function logout(
   // 離れる画面で先に出す意味はない
   markSigningOut();
   cleanUpBeforeSignOut();
-  await signOut({ callbackUrl });
+
+  try {
+    await signOut({ callbackUrl });
+  } catch (error) {
+    // 遷移が始まらなかった（csrf 取得か /signout の POST が失敗した）。
+    // 抑止したままだとバナーが二度と出ず、同意レコードは既に消えているので
+    // 再同意もできない。呼び出し側は `void logout()` で握り潰すため、
+    // ここで戻さないと誰も戻せない
+    clearSigningOut();
+    throw error;
+  }
 }

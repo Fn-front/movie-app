@@ -57,6 +57,14 @@ let syncedUserId: string | null = null;
  */
 let inFlight: { userId: string; promise: Promise<UserSettings> } | null = null;
 
+/**
+ * セッションの解決を待つ上限（ミリ秒）
+ *
+ * これを過ぎたらバナーの抑止を諦める。確定を待てないまま黙って
+ * 出さないより、未決定として出すほうが安全側（#1137）
+ */
+export const CONSENT_SYNC_SUPPRESSION_TIMEOUT_MS = 5000;
+
 /** テスト用。モジュールスコープの状態は Jest のモジュールキャッシュを跨ぐ */
 export function __resetConsentSyncForTest(): void {
   syncedUserId = null;
@@ -136,11 +144,31 @@ export function useConsentServerSync(consent: CookieConsentState): void {
   // 1フレームの窓が開く。
   //
   // 「確定した」と言えるのは、未認証と分かったときか、初回マージが
-  // 終わったとき（成否は問わない）。マージの終了は run() の finally が伝える
+  // 終わったとき（成否は問わない）。マージの終了は run() の finally が伝える。
+  //
+  // ⚠️ **未認証の訪問者も `/api/auth/session` の1往復ぶん待つ**。ログイン中か
+  // 分からないうちは「確定した」と言えないため避けられない。#1137 の射程は
+  // ログイン済み利用者だったが、抑止の対象は全訪問者になる。
+  //
+  // ⚠️ run() の finally は `cancelled` を見ずに解除する。走り直しが起きると
+  // 前の run が新しい run の完了前に解除しうるが、userId が変わる経路
+  // （フルリロードを伴わないアカウント切替）が無く、`notifyFailure` も
+  // 安定参照なので現状は到達しない。レイアウト効果の deps が
+  // `[status, userId]` でマージ効果より1つ少ないのはこの前提に乗っている
   useIsomorphicLayoutEffect(() => {
     if (status === 'loading') {
       setConsentSyncPending(true);
-      return;
+
+      // ⚠️ 諦める期限を置く。next-auth のセッション取得にはタイムアウトが
+      // 無いため、応答が返らない回線では status が loading に貼り付く。
+      // 抑止したままだと**未認証の訪問者も含め誰にも**バナーが出ない
+      const timer = setTimeout(() => {
+        setConsentSyncPending(false);
+      }, CONSENT_SYNC_SUPPRESSION_TIMEOUT_MS);
+
+      return () => {
+        clearTimeout(timer);
+      };
     }
     if (status !== 'authenticated' || userId === '') {
       setConsentSyncPending(false);

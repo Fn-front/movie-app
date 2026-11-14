@@ -32,8 +32,9 @@ let syncPending = false;
 /**
  * ログアウト処理中か
  *
- * 一度立ったら戻さない。目的は「遷移するまで出さない」ことなので、
- * 同期側の都合で解除されては困る
+ * 同期側の都合（`setConsentSyncPending(false)`）では戻さない。目的が
+ * 「遷移するまで出さない」なので、そこで解除されては困る。
+ * 戻せるのは**遷移が始まらなかったと分かったときだけ**（`clearSigningOut`）
  */
 let signingOut = false;
 
@@ -63,6 +64,22 @@ export function markSigningOut(): void {
 
   const before = isBannerSuppressed();
   signingOut = true;
+  if (isBannerSuppressed() !== before) notify();
+}
+
+/**
+ * ログアウトの抑止を戻す
+ *
+ * ⚠️ **`signOut()` が失敗して遷移が始まらなかったときだけ呼ぶこと。**
+ * 抑止したままだとバナーが二度と出ず、しかも同意レコードは
+ * `cleanUpBeforeSignOut()` で既に消えているため、利用者は再同意すら
+ * できない状態で SPA セッションを続けることになる
+ */
+export function clearSigningOut(): void {
+  if (!signingOut) return;
+
+  const before = isBannerSuppressed();
+  signingOut = false;
   if (isBannerSuppressed() !== before) notify();
 }
 

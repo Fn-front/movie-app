@@ -14,6 +14,7 @@ import {
   writeConsentRecord,
 } from '@/utils/cookieConsent';
 import {
+  CONSENT_SYNC_SUPPRESSION_TIMEOUT_MS,
   __resetConsentSyncForTest,
   useConsentServerSync,
 } from './useConsentServerSync';
@@ -145,7 +146,31 @@ describe('useConsentServerSync', () => {
 
       render();
 
+      // 先に抑止が立っていることを確かめる。これが無いと
+      // 「一度も立たなかった」場合にも通ってしまう
+      expect(isBannerSuppressed()).toBe(true);
       await waitFor(() => expect(isBannerSuppressed()).toBe(false));
+    });
+
+    it('セッションの解決が長引いたら抑止を諦める', async () => {
+      // next-auth のセッション取得にはタイムアウトが無く、応答が返らない
+      // 回線では status が loading に貼り付く。諦めないと**未認証の訪問者も
+      // 含め誰にも**バナーが出なくなる
+      jest.useFakeTimers();
+      try {
+        mockUseSession.mockReturnValue({ data: null, status: 'loading' });
+
+        render();
+        expect(isBannerSuppressed()).toBe(true);
+
+        act(() => {
+          jest.advanceTimersByTime(CONSENT_SYNC_SUPPRESSION_TIMEOUT_MS);
+        });
+
+        expect(isBannerSuppressed()).toBe(false);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 

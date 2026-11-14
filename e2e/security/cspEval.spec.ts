@@ -28,6 +28,17 @@
  *
  * の両方が起きる。`sourceFile` のチャンクを実際に取得して、
  * **`jitless` という文字列を含むか**で zod 由来を判定する。
+ *
+ * ## ポリフィル側も塞いだ（#1104）
+ *
+ * 発生源は `src/lib/auth/accountIdentity.ts` の `import { randomInt } from 'crypto'`
+ * だった。同じファイルに `isEmailIdentifier` / `isUsernameShape` が同居しており、
+ * `@/schema/auth` 経由でログイン・新規登録・パスワード変更のフォームへ
+ * 引き込まれていた。生成側を `accountIdentityGenerator.ts` へ分けて解消した。
+ *
+ * 下の `eval の違反が1件も無い` は、**zod に限らず** `blockedURI === 'eval'` を
+ * 全部見る。発生源の判定を挟まないぶん、新しい経路でポリフィルが戻ってきても
+ * そのまま落ちる。
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -118,6 +129,63 @@ test.describe('script-src の enforce 違反', () => {
             null,
             2,
           )}`,
+      ).toEqual([]);
+    });
+  }
+});
+
+/**
+ * ポリフィル経路も含めて `eval` の違反を0件に保つ（#1104）
+ *
+ * 上の describe は**zod 由来だけ**を見ている。`crypto-browserify` ポリフィルの
+ * 分は当時まだ残っていたため、件数で見ると必ず落ちたからで、発生源を
+ * チャンクの中身で選り分ける作りになっている。
+ *
+ * #1104 でポリフィルを引き込んでいた import（`accountIdentity.ts` の
+ * `randomInt`）を切り離したので、**選り分けずに0件**を要求できるようになった。
+ * 新しい経路で `crypto` / `stream` / `buffer` がクライアントへ混ざっても、
+ * 発生源の判定を足さずにそのまま落ちる。
+ *
+ * ⚠️ **dev では再現しない。** dev の CSP には `'unsafe-eval'` が付く
+ * （`cspDirectives.mjs`）。必ず `npm run build && npm start` で確かめること。
+ */
+test.describe('eval の違反が1件も無い（発生源を問わない）', () => {
+  test.describe.configure({ timeout: 90000 });
+
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  /**
+   * ポリフィルを読んでいたページ
+   *
+   * どれも `@/schema/auth` の zod スキーマを使うフォームを持つ。
+   * 実測（修正前の本番ビルド）では3ページとも
+   * `enforce / eval / /_next/static/chunks/3dwdxndg__wbt.js` が1件ずつ出ていた。
+   */
+  const POLYFILL_PATHS = [
+    '/auth/signup',
+    '/auth/signin',
+    '/auth/forgot-password',
+  ] as const;
+
+  for (const path of POLYFILL_PATHS) {
+    test(`${path} で eval が遮断されない`, async ({ page }) => {
+      await collectCspViolations(page);
+
+      await page.goto(path);
+      // ⚠️ 読み込み途中で測らない。ポリフィルの `Function(...)` は
+      // チャンクの評価時に走るので、待たずに読むと「まだ起きていないだけ」で緑になる
+      await expect(page.locator('h1').first()).toBeAttached({ timeout: 20000 });
+      await page.waitForLoadState('networkidle');
+
+      const blockedEval = (await readCspViolations(page)).filter(
+        (v) => v.blockedURI === 'eval',
+      );
+
+      expect(
+        blockedEval.map((v) => `${v.disposition} ${v.sourceFile}`),
+        'eval が遮断された。クライアントへ Node の crypto / stream / buffer を' +
+          '読むモジュールが混ざり、crypto-browserify ポリフィルが同梱された' +
+          '可能性がある（#1104）',
       ).toEqual([]);
     });
   }

@@ -3,55 +3,25 @@
  */
 
 /**
- * 管理者発行アカウントの識別子 テスト
+ * 管理者発行アカウントの識別子（判定・正規化） テスト
+ *
+ * 生成側は `accountIdentityGenerator.test.ts`。
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
-  generateSyntheticEmail,
-  generateUsername,
   isEmailIdentifier,
   isSyntheticEmail,
+  isUsernameShape,
   normalizeUsername,
 } from './accountIdentity';
 import {
-  ACCOUNT_IDENTITY_ALPHABET,
-  USERNAME_CONFIG,
-} from '@/constants/accountIdentity';
-
-describe('generateUsername', () => {
-  it('XXXX-XXXX-XXXX 形式で返す', () => {
-    expect(generateUsername()).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-  });
-
-  it('区切りを除くと設定どおりの文字数になる', () => {
-    expect(normalizeUsername(generateUsername())).toHaveLength(
-      USERNAME_CONFIG.LENGTH,
-    );
-  });
-
-  // 読み違えやすい文字（0/O、1/I/L、U/V）が混ざると、メールで受け取った
-  // 利用者が打ち間違える
-  it('紛らわしい文字を含まない', () => {
-    const generated = Array.from({ length: 50 }, generateUsername).join('');
-
-    for (const char of normalizeUsername(generated)) {
-      expect(ACCOUNT_IDENTITY_ALPHABET).toContain(char);
-    }
-  });
-
-  // ログインフォームは `@` の有無でメールと振り分けるため、含まれると壊れる
-  it('@ を含まない', () => {
-    const generated = Array.from({ length: 50 }, generateUsername).join('');
-
-    expect(generated).not.toContain('@');
-  });
-
-  it('呼ぶたびに異なる値を返す', () => {
-    const values = new Set(Array.from({ length: 200 }, generateUsername));
-
-    expect(values.size).toBe(200);
-  });
-});
+  generateSyntheticEmail,
+  generateUsername,
+} from './accountIdentityGenerator';
+import { USERNAME_CONFIG } from '@/constants/accountIdentity';
 
 describe('normalizeUsername', () => {
   it.each([
@@ -69,31 +39,6 @@ describe('normalizeUsername', () => {
     expect(normalizeUsername(username.toLowerCase())).toBe(
       normalizeUsername(username),
     );
-  });
-});
-
-describe('generateSyntheticEmail', () => {
-  it('予約TLD .invalid を使う', () => {
-    expect(generateSyntheticEmail()).toMatch(/\.invalid$/);
-  });
-
-  it('ローカル部とサブドメインの両方がランダムになる', () => {
-    const emails = Array.from({ length: 50 }, generateSyntheticEmail);
-    const localParts = new Set(emails.map((e) => e.split('@')[0]));
-    const domains = new Set(emails.map((e) => e.split('@')[1]));
-
-    expect(localParts.size).toBe(50);
-    expect(domains.size).toBe(50);
-  });
-
-  it('小文字で返す（users.email の lower 索引と整合させる）', () => {
-    const email = generateSyntheticEmail();
-
-    expect(email).toBe(email.toLowerCase());
-  });
-
-  it('メールアドレスとして妥当な形をしている', () => {
-    expect(generateSyntheticEmail()).toMatch(/^[a-z0-9]+@[a-z0-9]+\.invalid$/);
   });
 });
 
@@ -140,5 +85,80 @@ describe('isEmailIdentifier', () => {
     for (let i = 0; i < 100; i += 1) {
       expect(isEmailIdentifier(generateSyntheticEmail())).toBe(true);
     }
+  });
+});
+
+/**
+ * `isUsernameShape` はクライアントのバンドルに乗る関数のひとつ（`@/schema/auth`
+ * 経由）だが、テストが1件も無かった。#1104 でファイルを分けるにあたって足す。
+ */
+describe('isUsernameShape', () => {
+  it('生成したユーザー名を受け入れる', () => {
+    for (let i = 0; i < 100; i += 1) {
+      expect(isUsernameShape(generateUsername())).toBe(true);
+    }
+  });
+
+  it.each([
+    ['K7M2QXPT9WFN', '区切り無し'],
+    ['k7m2-qxpt-9wfn', '小文字'],
+    ['K7M2 QXPT 9WFN', '空白区切り'],
+  ])('%s（%s）を受け入れる', (value) => {
+    expect(isUsernameShape(value)).toBe(true);
+  });
+
+  it.each([
+    ['K7M2-QXPT-9WF', '1文字足りない'],
+    ['K7M2-QXPT-9WFNN', '1文字多い'],
+    ['', '空文字'],
+  ])('%s（%s）を拒否する', (value) => {
+    expect(isUsernameShape(value)).toBe(false);
+  });
+
+  // 紛らわしいので生成時に使っていない文字。入力されても受け入れない
+  it.each(['O', 'I', 'L', 'U', 'V'])(
+    '生成に使わない文字 %s を含むと拒否する',
+    (char) => {
+      const value = char.repeat(USERNAME_CONFIG.LENGTH);
+
+      expect(value).toHaveLength(USERNAME_CONFIG.LENGTH);
+      expect(isUsernameShape(value)).toBe(false);
+    },
+  );
+
+  // ログイン欄はメールと兼用。`@` を打ち忘れたアドレスが長さだけ合っても
+  // ユーザー名として通ってはいけない
+  it('@ を含む文字列を拒否する', () => {
+    expect(isUsernameShape('user@exampl.c')).toBe(false);
+  });
+});
+
+/**
+ * ⚠️ **このファイルは `crypto` を import してはいけない**（#1104）
+ *
+ * `@/schema/auth` がここから `isEmailIdentifier` / `isUsernameShape` を読み、
+ * その zod スキーマをログイン・新規登録・パスワード変更のフォーム
+ * （クライアントコンポーネント）が import する。`crypto` が混ざると Next.js が
+ * `crypto-browserify` ポリフィルを同梱し、その中の `eval` / `Function(...)` が
+ * 本番の `script-src` に当たって enforce の違反を毎ロード報告する。
+ *
+ * **バンドルを見ないと分からない**ので、ソースの import を直接見て止める。
+ * ブラウザ側の実測は `e2e/security/cspEval.spec.ts` が受け持つ。
+ */
+describe('クライアントのバンドルに乗る制約', () => {
+  it('crypto を import していない', () => {
+    const source = readFileSync(join(__dirname, 'accountIdentity.ts'), 'utf8');
+
+    const cryptoImports = source
+      .split('\n')
+      .filter((line) => /^\s*import[^;]*['"](node:)?crypto['"]/.test(line));
+
+    expect(cryptoImports).toEqual([]);
+  });
+
+  it('生成側（crypto を読む）を import していない', () => {
+    const source = readFileSync(join(__dirname, 'accountIdentity.ts'), 'utf8');
+
+    expect(source).not.toMatch(/^\s*import[^;]*accountIdentityGenerator/m);
   });
 });

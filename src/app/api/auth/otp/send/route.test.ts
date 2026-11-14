@@ -353,6 +353,11 @@ describe('POST /api/auth/otp/send', () => {
     );
 
     expect(response.status).toBe(500);
+    // 宛先が決まらないまま先へ進んでいないこと。メールも送らず、
+    // 日次送信枠（メールボックス保護）も消費しない
+    const { sendOtpEmail } = await import('@/lib/otp');
+    expect(sendOtpEmail).not.toHaveBeenCalled();
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
   });
 
   it('login: 正常にOTPを送信できる', async () => {

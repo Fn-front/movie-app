@@ -76,7 +76,8 @@
   &__date_input {
     width: 100%;
     padding: $spacing-2;
-    font-size: $font-size-sm;
+    // ⚠️ 16px を下回らせない。iOS がフォーカス時にページを拡大する（#1113）
+    font-size: $font-size-base;
     color: $text-primary;
     background-color: $background-paper;
     border: $border-width-1 solid $border-color;

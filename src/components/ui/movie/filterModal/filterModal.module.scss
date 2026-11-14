@@ -32,6 +32,13 @@
     flex-direction: column;
     gap: $spacing-1;
     flex: 1;
+    // <input type="date"> の intrinsic width は font-size に比例する。
+    // flex アイテムの min-width は既定が auto（＝min-content 幅が下限）なので、
+    // これが無いと日付欄2つが縮まず溢れる。
+    // 実測（Chromium / 16px 化後）: 375px では収まるが、**320px では
+    // scrollWidth 314 / clientWidth 280 で 34px 溢れる**（#1113）。
+    // 隣の `movieFilter` には元から入っていた
+    min-width: 0;
   }
 
   &__date_label {
@@ -42,7 +49,8 @@
   &__date_input {
     width: 100%;
     padding: $spacing-2;
-    font-size: $font-size-sm;
+    // ⚠️ 16px を下回らせない。iOS がフォーカス時にページを拡大する（#1113）
+    font-size: $font-size-base;
     border: $border-width-1 solid $border-color;
     border-radius: $border-radius-md;
     background-color: $background-paper;

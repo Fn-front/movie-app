@@ -103,7 +103,10 @@
     flex: 1;
     padding: $spacing-2 $spacing-4;
     font-family: $font-family-base;
-    font-size: $font-size-sm;
+    // ⚠️ 16px を下回らせない。iOS Safari はフォーカスした入力欄の font-size が
+    // 16px 未満だと、読める大きさになるまでページを自動的に拡大する（#1113）。
+    // 共通の Input / Textarea と同じ基準に揃えている
+    font-size: $font-size-base;
     color: $text-primary;
     min-width: 0;
     background-color: $background-secondary;
@@ -185,11 +188,22 @@
     position: fixed;
     inset: 0;
     // ⚠️ ここが依存しているのは**ヘッダーではなく展開時の検索フォーム**の高さ。
-    // フォームは position: fixed / top: 0 で、padding 1.2rem × 2 と入力欄で
-    // 実測 63px。この 64px はその下端に合わせている。
+    // フォームは position: fixed / top: 0 なので、その下端に合わせる。
     // （以前のコメントは「ヘッダー高さに依存」と書いていたが誤り。
     //   ヘッダーは 69px で、$header-height に寄せると 5px ずれる）
-    top: calc(var(--spacing-3) * 2 + 4rem);
+    //
+    // 内訳を式のまま残しているのは、入力欄の font-size を変えると下端も動く
+    // ため。実際 #1113 で 14px → 16px にしたとき 63px → 66px に伸びた。
+    //   フォームの上下 padding : --spacing-3 × 2      = 24px
+    //   入力欄の上下 padding   : --spacing-2 × 2      = 16px
+    //   入力欄の枠線           : --border-width-1 × 2 =  2px
+    //   入力欄の1行            : 16px × --line-height-normal = 24px
+    //                            （input-reset の font: inherit で body の
+    //                              1.5 を受け継ぐ）
+    top: calc(
+      var(--spacing-3) * 2 + var(--spacing-2) * 2 + var(--border-width-1) * 2 +
+        var(--font-size-base) * var(--line-height-normal)
+    );
     z-index: calc(var(--z-index-fixed) - 1);
     background-color: $overlay-light;
 

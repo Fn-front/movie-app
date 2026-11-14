@@ -1,13 +1,17 @@
 /**
- * レコメンドデータ取得（サーバーサイド用）
+ * レコメンドデータの取得（DB アクセスのみ）
+ *
+ * ⚠️ **この中で `auth()` を呼ばないこと。** cookie を読むとルートが動的になる。
+ * ホーム（`/`）を静的プリレンダに保つため、認証は呼び出し側（API ルートの
+ * `withAuth`）が済ませてから `userId` を渡す（#1115）。
  */
 
-import { auth } from '@/lib/auth/auth';
-import { createServiceRoleClient } from '@/helpers/supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 import type { Recommendation } from '@/schema/recommendations';
 
 /**
- * サーバーサイドで返却するレコメンドデータの型
+ * レコメンドデータの型
  */
 export interface RecommendationData {
   recommendations: Recommendation[];
@@ -15,53 +19,51 @@ export interface RecommendationData {
   hasFavorites: boolean;
 }
 
+/** レコメンドが無い（または取得できない）ときに返す空のデータ */
+export const EMPTY_RECOMMENDATION_DATA: RecommendationData = {
+  recommendations: [],
+  generatedAt: null,
+  hasFavorites: false,
+};
+
 /**
- * 認証済みユーザーのレコメンドデータを取得する（Server Component用）
+ * 指定ユーザーのレコメンドデータを取得する
  *
- * 未ログイン時は空のデータを返す。
+ * 興味なしにした作品は結果から除く。お気に入りが0件の利用者には
+ * レコメンドそのものが生成されないため、件数の有無も併せて返す
+ * （セクションの文言を出し分けるのに要る）。
  *
- * @returns レコメンドデータ
+ * @param supabase - service role クライアント
+ * @param userId - 対象ユーザーのID
+ * @returns レコメンドデータ。取得に失敗したときは空のデータ
  */
-export async function getRecommendations(): Promise<RecommendationData> {
-  const emptyData: RecommendationData = {
-    recommendations: [],
-    generatedAt: null,
-    hasFavorites: false,
-  };
-
-  const session = await auth();
-  if (!session?.user?.id) {
-    return emptyData;
-  }
-
-  const supabase = createServiceRoleClient();
-  if (!supabase) {
-    return emptyData;
-  }
-
+export async function fetchRecommendationData(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<RecommendationData> {
   const [recsResult, favCountResult, dismissedResult] = await Promise.all([
     supabase
       .from('recommendations')
       .select(
         'id, tmdb_movie_id, title, poster_path, release_date, vote_average, vote_count, genre_ids, reason, display_order, generated_at',
       )
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .order('display_order', { ascending: true }),
     supabase
       .from('favorites')
       .select('id', { count: 'exact', head: true })
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .is('deleted_at', null),
     supabase
       .from('dismissed_movies')
       .select('tmdb_movie_id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .is('deleted_at', null),
   ]);
 
   if (recsResult.error) {
     console.error('Recommendations fetch error:', recsResult.error);
-    return emptyData;
+    return EMPTY_RECOMMENDATION_DATA;
   }
 
   const dismissedIds = new Set(

@@ -100,6 +100,8 @@ export const API_ENDPOINTS = {
   theaterBySlug: (slug: string) => `/api/theaters/${slug}`,
   /** 保存フィルタ取得・更新 */
   FILTERS: '/api/filters',
+  /** レコメンド一覧 */
+  RECOMMENDATIONS: '/api/recommendations',
   /** レコメンド手動更新 */
   RECOMMENDATIONS_REFRESH: '/api/recommendations/refresh',
   /** レコメンド利用イベントの記録 */

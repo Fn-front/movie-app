@@ -1,10 +1,31 @@
 /**
- * レコメンド手動更新API クライアント
+ * レコメンドAPI クライアント
  */
 
 import { API_ENDPOINTS } from '@/constants';
 import { axiosInstance } from '@/lib/axios/axios';
+import type { RecommendationData } from '@/lib/api/recommendations/recommendationData';
 import type { Recommendation } from '@/schema/recommendations';
+
+/**
+ * レコメンド一覧レスポンスの型
+ */
+export interface GetRecommendationsResponse {
+  success: true;
+  data: RecommendationData;
+}
+
+/**
+ * レコメンド一覧を取得する
+ *
+ * ホーム（`/`）を静的プリレンダに保つため、サーバー取得から移した（#1115）。
+ */
+export async function getRecommendations(): Promise<RecommendationData> {
+  const response = await axiosInstance.get<GetRecommendationsResponse>(
+    API_ENDPOINTS.RECOMMENDATIONS,
+  );
+  return response.data.data;
+}
 
 /**
  * レコメンド更新レスポンスの型

@@ -20,6 +20,14 @@ jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
 }));
 
 /**
+ * レコメンドはセクションと**同じ react-query のキャッシュ**から引く（#1115）。
+ * props で渡らなくなったので、ここではフックを差し替える
+ */
+jest.mock('@/features/recommendations/hooks/useRecommendations', () => ({
+  useRecommendations: () => ({ recommendations: mockRecommendations }),
+}));
+
+/**
  * `MovieDetailModal` は `MovieDetailContent` 経由で next-auth まで辿るため、
  * ここでは受け取ったプロパティだけを見る差し替えにする。
  */
@@ -66,7 +74,7 @@ const nowShowingMovies: NowShowingMovie[] = [
   },
 ];
 
-const recommendations: Recommendation[] = [
+const mockRecommendations: Recommendation[] = [
   {
     id: '11111111-1111-4111-8111-111111111111',
     tmdb_movie_id: 202,
@@ -82,12 +90,7 @@ const recommendations: Recommendation[] = [
 ];
 
 const renderModal = () =>
-  render(
-    <HomeMovieDetailModal
-      nowShowingMovies={nowShowingMovies}
-      recommendations={recommendations}
-    />,
-  );
+  render(<HomeMovieDetailModal nowShowingMovies={nowShowingMovies} />);
 
 // --- Tests ---
 

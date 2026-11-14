@@ -57,6 +57,15 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: 1
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          # ホーム（/）は静的プリレンダなので、**ビルド時に**公開中映画を
+          # Supabase から取る（#1115）。無いと `Supabase environment
+          # variables are not defined` でビルドが落ちる。
+          #
+          # どちらも NEXT_PUBLIC_* でクライアントバンドルに埋まる公開値。
+          # ⚠️ Dependabot が起動した run は専用ストアだけを見る。
+          #    追加・削除はそちらにも反映すること（.claude/rules/ci-secrets.md）
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Clear old cache
         run: |

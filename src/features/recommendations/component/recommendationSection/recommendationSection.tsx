@@ -5,19 +5,20 @@
 
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { IoRefreshOutline } from 'react-icons/io5';
 
 import { Button } from '@/components/ui/button/button';
 import { Loading } from '@/components/ui/loading/loading';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
-import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
+import { useOpenMovieDetail } from '@/features/movies/hooks/useMovieDetailQuery';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
 import { useWatchlistToggle } from '@/features/watchlist/hooks/useWatchlistToggle';
 import { useDismissMovie } from '@/features/dismissedMovies/hooks/useDismissMovie';
 import { useRecommendationEvents } from '@/features/recommendations/hooks/useRecommendationEvents';
 import { useRecommendationRefresh } from '@/features/recommendations/hooks/useRecommendationRefresh';
+import { useRecommendations } from '@/features/recommendations/hooks/useRecommendations';
 import {
   RECOMMENDATIONS_MESSAGES,
   RECOMMENDATION_EVENT_TYPE,
@@ -30,32 +31,75 @@ import { recommendationToMovieCacheItem } from '@/utils/toMovieCacheItem';
 import styles from './recommendationSection.module.scss';
 
 /**
- * RecommendationSectionコンポーネントのプロパティ
+ * RecommendationSectionコンポーネント
+ *
+ * ⚠️ **レコメンドを props で受け取らない。** サーバーで取ると cookie を読む
+ * ことになり、ホーム（`/`）全体が動的ルートになって遷移のたびにサーバー
+ * 往復が起きる（#1115）。
+ *
+ * ⚠️ **中身を同じコンポーネントに書かないこと。** 認証チェックの early return
+ * はフックより後ろにしか置けないため、1つにまとめると**未認証の訪問者でも
+ * 中身のフックが動いて API を叩く**。`useRecommendationRefresh` の残回数取得が
+ * 401 を返し、axios のインターセプタが強制サインアウトへ倒した（実際に
+ * `mobileLoginEntry.spec.ts` が落ちた）。ゲートと中身を分け、未認証では
+ * 中身をマウントしない。
  */
-export interface RecommendationSectionProps {
+export const RecommendationSection = memo(function RecommendationSection() {
+  const {
+    recommendations,
+    hasFavorites,
+    isAuthenticated,
+    isPending,
+    setRecommendations,
+  } = useRecommendations();
+
+  // 未認証、またはセッション・取得が未確定 → 何も描かない。
+  //
+  // ⚠️ ここで骨組みを出さないこと。未認証の利用者には出ないセクションなので、
+  // 一瞬だけ出して消すとレイアウトが跳ねる（#1048 と同種）
+  if (!isAuthenticated || isPending) {
+    return null;
+  }
+
+  return (
+    <RecommendationSectionContent
+      recommendations={recommendations}
+      hasFavorites={hasFavorites}
+      setRecommendations={setRecommendations}
+    />
+  );
+});
+
+RecommendationSection.displayName = 'RecommendationSection';
+
+/**
+ * RecommendationSectionContentコンポーネントのプロパティ
+ */
+interface RecommendationSectionContentProps {
   /** レコメンド一覧 */
   recommendations: Recommendation[];
   /** お気に入りが1件以上あるか */
   hasFavorites: boolean;
+  /** 取得したレコメンドでキャッシュを差し替える */
+  setRecommendations: (next: Recommendation[]) => void;
 }
 
 /**
- * RecommendationSectionコンポーネント
+ * レコメンドセクションの中身（認証済みのときだけマウントされる）
  */
-export const RecommendationSection = memo<RecommendationSectionProps>(
-  function RecommendationSection({
-    recommendations: initialRecommendations,
+const RecommendationSectionContent = memo<RecommendationSectionContentProps>(
+  function RecommendationSectionContent({
+    recommendations,
     hasFavorites,
+    setRecommendations,
   }) {
-    const [recommendations, setRecommendations] = useState<Recommendation[]>(
-      initialRecommendations,
-    );
-
     const handleRefreshSuccess = useCallback(
       (newRecommendations: Recommendation[]) => {
+        // ローカル state ではなくキャッシュへ書く。詳細モーダルが同じキーを
+        // 読むので、更新後の作品でもアクセシブル名が「映画詳細」に落ちない
         setRecommendations(newRecommendations);
       },
-      [],
+      [setRecommendations],
     );
 
     const {
@@ -132,7 +176,8 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
       [isInWatchlist, toggleWatchlist, trackEvent],
     );
 
-    const { openMovieDetail } = useMovieDetailQuery();
+    // URL を読まないフックを使う。読むとホームが静的プリレンダから外れる（#1115）
+    const openMovieDetail = useOpenMovieDetail();
 
     const reasonMap = useMemo(
       () => new Map(recommendations.map((r) => [r.tmdb_movie_id, r.reason])),
@@ -263,4 +308,4 @@ export const RecommendationSection = memo<RecommendationSectionProps>(
   },
 );
 
-RecommendationSection.displayName = 'RecommendationSection';
+RecommendationSectionContent.displayName = 'RecommendationSectionContent';

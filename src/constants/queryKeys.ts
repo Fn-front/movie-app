@@ -74,6 +74,13 @@ export const favoriteKeys = {
 
 export const recommendationKeys = {
   all: ['recommendations'] as const,
+  /**
+   * レコメンド一覧（#1115 でサーバー取得からクライアント取得へ移した）
+   *
+   * セクションと詳細モーダルが**同じキーを読む**ことで、モーダルの
+   * アクセシブル名に出す作品名を共有する
+   */
+  list: ['recommendations', 'list'] as const,
   refreshCount: ['recommendations', 'refreshCount'] as const,
 };
 

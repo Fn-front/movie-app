@@ -17,6 +17,11 @@ jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
     openMovieDetail: mockOpenMovieDetail,
     closeMovieDetail: mockCloseMovieDetail,
   }),
+  /**
+   * 一覧タイルは URL を読まない軽い方を使う（#1115）。
+   * ここを足し忘れると `undefined` を呼ぶことになり、描画ごと落ちる
+   */
+  useOpenMovieDetail: () => mockOpenMovieDetail,
 }));
 
 jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
@@ -181,11 +186,23 @@ let mockRefreshState = {
   isCountLoading: false,
 };
 
+/** 更新成功時に渡されるコールバック（キャッシュへの書き戻しを検証する） */
+let capturedRefreshSuccess: ((recs: unknown[]) => void) | undefined;
+
+/**
+ * 残回数取得フックが動いた回数
+ *
+ * 本物は `/api/recommendations/refresh-count` を叩く。未認証で動くと
+ * 401 を踏んで強制サインアウトへ倒れる（#1115 で実際に起きた）
+ */
+const mockUseRecommendationRefresh = jest.fn();
+
 jest.mock('@/features/recommendations/hooks/useRecommendationRefresh', () => ({
-  useRecommendationRefresh: () => ({
-    refresh: mockRefresh,
-    ...mockRefreshState,
-  }),
+  useRecommendationRefresh: (onSuccess?: (recs: unknown[]) => void) => {
+    mockUseRecommendationRefresh();
+    capturedRefreshSuccess = onSuccess;
+    return { refresh: mockRefresh, ...mockRefreshState };
+  },
 }));
 
 const mockObserveTile = jest.fn(() => () => {});
@@ -199,6 +216,31 @@ jest.mock('@/features/recommendations/hooks/useRecommendationEvents', () => ({
 }));
 
 const mockUseRecommendationEvents = jest.fn();
+
+/**
+ * レコメンドの取得（#1115 でサーバー取得からクライアント取得へ移した）
+ *
+ * ⚠️ セクションは props を受け取らなくなった。状態はここを書き換えて渡す
+ */
+const mockSetRecommendations = jest.fn();
+let mockRecommendationsState: {
+  recommendations: ReturnType<typeof createMockRecommendations>;
+  hasFavorites: boolean;
+  isAuthenticated: boolean;
+  isPending: boolean;
+} = {
+  recommendations: [],
+  hasFavorites: false,
+  isAuthenticated: true,
+  isPending: false,
+};
+
+jest.mock('@/features/recommendations/hooks/useRecommendations', () => ({
+  useRecommendations: () => ({
+    ...mockRecommendationsState,
+    setRecommendations: mockSetRecommendations,
+  }),
+}));
 
 // --- Helpers ---
 
@@ -216,6 +258,18 @@ const createMockRecommendations = (count: number) =>
     display_order: i + 1,
   }));
 
+/**
+ * セクションを描画する
+ *
+ * props が無くなったので、フックのモックへ状態を流し込んでから描く
+ */
+const renderSection = (
+  overrides: Partial<typeof mockRecommendationsState> = {},
+) => {
+  mockRecommendationsState = { ...mockRecommendationsState, ...overrides };
+  return render(<RecommendationSection />);
+};
+
 // --- Tests ---
 
 describe('RecommendationSection', () => {
@@ -228,6 +282,12 @@ describe('RecommendationSection', () => {
     mockIsInWatchlist.mockReturnValue(false);
     mockIsMovieToggling.mockReturnValue(false);
     mockIsDismissingMovie.mockReturnValue(false);
+    mockRecommendationsState = {
+      recommendations: [],
+      hasFavorites: false,
+      isAuthenticated: true,
+      isPending: false,
+    };
     mockRefreshState = {
       isRefreshing: false,
       isCoolingDown: false,
@@ -242,9 +302,7 @@ describe('RecommendationSection', () => {
 
   describe('お気に入り0件', () => {
     it('登録促進テキストが表示される', () => {
-      render(
-        <RecommendationSection recommendations={[]} hasFavorites={false} />,
-      );
+      renderSection({ recommendations: [], hasFavorites: false });
 
       expect(screen.getByText('あなたへのおすすめ')).toBeInTheDocument();
       expect(
@@ -257,9 +315,7 @@ describe('RecommendationSection', () => {
 
   describe('レコメンド未生成', () => {
     it('準備中テキストが表示される', () => {
-      render(
-        <RecommendationSection recommendations={[]} hasFavorites={true} />,
-      );
+      renderSection({ recommendations: [], hasFavorites: true });
 
       expect(screen.getByText('あなたへのおすすめ')).toBeInTheDocument();
       expect(screen.getByText('おすすめ映画を準備中です')).toBeInTheDocument();
@@ -271,9 +327,7 @@ describe('RecommendationSection', () => {
         isRefreshing: true,
       };
 
-      render(
-        <RecommendationSection recommendations={[]} hasFavorites={true} />,
-      );
+      renderSection({ recommendations: [], hasFavorites: true });
 
       // 準備中は表示されず、代わりに更新中オーバーレイのグリッドが出る
       expect(
@@ -285,12 +339,10 @@ describe('RecommendationSection', () => {
 
   describe('レコメンドあり', () => {
     it('MovieTileが表示される', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(3)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(3),
+        hasFavorites: true,
+      });
 
       expect(screen.getByText('あなたへのおすすめ')).toBeInTheDocument();
       expect(screen.getByText('おすすめ映画 1')).toBeInTheDocument();
@@ -299,35 +351,29 @@ describe('RecommendationSection', () => {
     });
 
     it('推薦理由が表示される', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(2)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(2),
+        hasFavorites: true,
+      });
 
       expect(screen.getByText('理由 1')).toBeInTheDocument();
       expect(screen.getByText('理由 2')).toBeInTheDocument();
     });
 
     it('グリッドにrole=listが設定される', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(screen.getByRole('list')).toBeInTheDocument();
     });
 
     it('各アイテムにrole=listitemが設定される', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(3)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(3),
+        hasFavorites: true,
+      });
 
       expect(screen.getAllByRole('listitem')).toHaveLength(3);
     });
@@ -337,12 +383,10 @@ describe('RecommendationSection', () => {
   // タイルは遷移せず「押された」ことだけを計測に渡す
   describe('詳細への導線', () => {
     it('タイルのタイトルが映画詳細へのリンクになる', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(
         screen.getByRole('link', { name: 'おすすめ映画 1' }),
@@ -351,12 +395,10 @@ describe('RecommendationSection', () => {
 
     it('タイルを押すとURLのクエリで詳細を開く', async () => {
       const user = userEvent.setup();
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       await user.click(screen.getByRole('link', { name: 'おすすめ映画 1' }));
 
@@ -374,12 +416,10 @@ describe('RecommendationSection', () => {
      */
     it('モーダル自体は描かない（ホームに1つだけ置くため）', () => {
       mockSelectedMovieId = 100;
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(
         screen.queryByTestId('movie-detail-modal'),
@@ -389,12 +429,10 @@ describe('RecommendationSection', () => {
 
   describe('ウォッチリストボタン', () => {
     it('各MovieTileにウォッチリストボタンが表示される', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(2)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(2),
+        hasFavorites: true,
+      });
 
       expect(screen.getByTestId('watchlist-btn-100')).toBeInTheDocument();
       expect(screen.getByTestId('watchlist-btn-101')).toBeInTheDocument();
@@ -403,24 +441,20 @@ describe('RecommendationSection', () => {
 
   describe('お気に入りボタン', () => {
     it('各MovieTileにお気に入りボタンが表示される', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(2)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(2),
+        hasFavorites: true,
+      });
 
       expect(screen.getByTestId('favorite-btn-100')).toBeInTheDocument();
       expect(screen.getByTestId('favorite-btn-101')).toBeInTheDocument();
     });
 
     it('FavoriteRatingModalがレンダリングされる', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(screen.getByTestId('favorite-rating-modal')).toBeInTheDocument();
     });
@@ -428,12 +462,10 @@ describe('RecommendationSection', () => {
 
   describe('興味なしボタン', () => {
     it('各MovieTileに興味なしボタンが表示される', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(2)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(2),
+        hasFavorites: true,
+      });
 
       expect(screen.getByTestId('dismiss-btn-100')).toBeInTheDocument();
       expect(screen.getByTestId('dismiss-btn-101')).toBeInTheDocument();
@@ -444,24 +476,20 @@ describe('RecommendationSection', () => {
         id === 100 ? { id: 'fav-1', rating: 8 } : null,
       );
 
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(2)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(2),
+        hasFavorites: true,
+      });
 
       expect(screen.getByTestId('dismiss-btn-100')).toBeDisabled();
       expect(screen.getByTestId('dismiss-btn-101')).not.toBeDisabled();
     });
 
     it('興味なしボタンクリックでdismissMovieが呼ばれる', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       fireEvent.click(screen.getByTestId('dismiss-btn-100'));
 
@@ -476,12 +504,10 @@ describe('RecommendationSection', () => {
     it('dismissされた映画がリストから除外される', () => {
       mockDismissedIds.add(100);
 
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(3)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(3),
+        hasFavorites: true,
+      });
 
       expect(screen.queryByTestId('movie-tile-100')).not.toBeInTheDocument();
       expect(screen.getByTestId('movie-tile-101')).toBeInTheDocument();
@@ -491,12 +517,10 @@ describe('RecommendationSection', () => {
 
   describe('アクセシビリティ', () => {
     it('sectionにaria-labelが設定される', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(
         screen.getByRole('region', { name: 'あなたへのおすすめ' }),
@@ -506,12 +530,10 @@ describe('RecommendationSection', () => {
 
   describe('更新ボタン', () => {
     it('更新ボタンが表示される', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(
         screen.getByRole('button', { name: 'おすすめを更新' }),
@@ -519,23 +541,19 @@ describe('RecommendationSection', () => {
     });
 
     it('残り回数が表示される', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(screen.getByText('残り7回 / 月10回')).toBeInTheDocument();
     });
 
     it('更新ボタンクリックでrefreshが呼ばれる', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       fireEvent.click(screen.getByRole('button', { name: 'おすすめを更新' }));
 
@@ -550,12 +568,10 @@ describe('RecommendationSection', () => {
         isRefreshDisabled: true,
       };
 
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(
         screen.getByRole('button', { name: 'おすすめを更新' }),
@@ -569,12 +585,10 @@ describe('RecommendationSection', () => {
         isLimitReached: true,
       };
 
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(screen.getByText('来月リセットされます')).toBeInTheDocument();
     });
@@ -586,12 +600,10 @@ describe('RecommendationSection', () => {
         isRefreshDisabled: true,
       };
 
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(
         screen.getByRole('button', { name: 'おすすめを更新' }),
@@ -605,12 +617,10 @@ describe('RecommendationSection', () => {
         isRefreshDisabled: true,
       };
 
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(
         screen.getByRole('button', { name: 'おすすめを更新' }),
@@ -623,24 +633,20 @@ describe('RecommendationSection', () => {
         isRefreshing: true,
       };
 
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(screen.getByText('おすすめを更新中...')).toBeInTheDocument();
       expect(screen.getByRole('status')).toBeInTheDocument();
     });
 
     it('更新中でないときはローディングオーバーレイが非表示', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(screen.queryByText('おすすめを更新中...')).not.toBeInTheDocument();
     });
@@ -651,20 +657,16 @@ describe('RecommendationSection', () => {
         isCountLoading: true,
       };
 
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       expect(screen.queryByText(/残り/)).not.toBeInTheDocument();
     });
 
     it('お気に入り0件の場合は更新ボタンが表示されない', () => {
-      render(
-        <RecommendationSection recommendations={[]} hasFavorites={false} />,
-      );
+      renderSection({ recommendations: [], hasFavorites: false });
 
       expect(
         screen.queryByRole('button', { name: 'おすすめを更新' }),
@@ -674,12 +676,10 @@ describe('RecommendationSection', () => {
 
   describe('利用イベントの計測', () => {
     it('各タイルを表示計測の対象として登録する', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(3)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(3),
+        hasFavorites: true,
+      });
 
       expect(mockObserveTile).toHaveBeenCalledWith(100);
       expect(mockObserveTile).toHaveBeenCalledWith(101);
@@ -687,12 +687,10 @@ describe('RecommendationSection', () => {
     });
 
     it('タイルのクリックでclickを記録する', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       fireEvent.click(screen.getByRole('link', { name: 'おすすめ映画 1' }));
 
@@ -702,12 +700,10 @@ describe('RecommendationSection', () => {
     it('ウォッチリスト追加でadd_to_watchlistを記録する', () => {
       mockIsInWatchlist.mockReturnValue(false);
 
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       fireEvent.click(screen.getByTestId('watchlist-btn-100'));
 
@@ -718,12 +714,10 @@ describe('RecommendationSection', () => {
     it('ウォッチリスト解除では記録しない（興味のシグナルではないため）', () => {
       mockIsInWatchlist.mockReturnValue(true);
 
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       fireEvent.click(screen.getByTestId('watchlist-btn-100'));
 
@@ -733,12 +727,10 @@ describe('RecommendationSection', () => {
     });
 
     it('興味なしでdismissを記録する', () => {
-      render(
-        <RecommendationSection
-          recommendations={createMockRecommendations(1)}
-          hasFavorites={true}
-        />,
-      );
+      renderSection({
+        recommendations: createMockRecommendations(1),
+        hasFavorites: true,
+      });
 
       fireEvent.click(screen.getByTestId('dismiss-btn-100'));
 
@@ -747,11 +739,82 @@ describe('RecommendationSection', () => {
     });
 
     it('お気に入り0件のときは計測を有効にしない', () => {
-      render(
-        <RecommendationSection recommendations={[]} hasFavorites={false} />,
-      );
+      renderSection({ recommendations: [], hasFavorites: false });
 
       expect(mockUseRecommendationEvents).toHaveBeenCalledWith([], false);
+    });
+  });
+
+  /**
+   * サーバー取得からクライアント取得へ移した（#1115）。
+   * ホーム全体が動的ルートになるのを避けるため、cookie を読む処理を
+   * このセクションの中に閉じ込めている
+   */
+  describe('表示の前提', () => {
+    it('未認証なら何も描かない', () => {
+      const { container } = renderSection({
+        isAuthenticated: false,
+        hasFavorites: true,
+        recommendations: createMockRecommendations(2),
+      });
+
+      expect(container).toBeEmptyDOMElement();
+    });
+
+    /**
+     * ⚠️ **中身のフックを動かさないこと。** early return はフックより後ろに
+     * しか置けないので、1コンポーネントにまとめると未認証でも
+     * `useRecommendationRefresh` が走り、`/api/recommendations/refresh-count`
+     * が 401 を返して axios のインターセプタが強制サインアウトへ倒す
+     * （`e2e/mobile/mobileLoginEntry.spec.ts` が落ちた / #1115）
+     */
+    it('未認証なら中身のフックを動かさない', () => {
+      renderSection({
+        isAuthenticated: false,
+        hasFavorites: true,
+        recommendations: createMockRecommendations(2),
+      });
+
+      expect(mockUseRecommendationRefresh).not.toHaveBeenCalled();
+      expect(mockUseRecommendationEvents).not.toHaveBeenCalled();
+    });
+
+    it('セッション未確定の間も中身のフックを動かさない', () => {
+      renderSection({
+        isPending: true,
+        hasFavorites: true,
+        recommendations: createMockRecommendations(2),
+      });
+
+      expect(mockUseRecommendationRefresh).not.toHaveBeenCalled();
+    });
+
+    // 未認証の利用者には出ないセクションなので、未確定の間に出して消すと跳ねる
+    it('セッション・取得が未確定の間は何も描かない', () => {
+      const { container } = renderSection({
+        isPending: true,
+        hasFavorites: true,
+        recommendations: createMockRecommendations(2),
+      });
+
+      expect(container).toBeEmptyDOMElement();
+    });
+
+    /**
+     * 更新結果をローカル state ではなくキャッシュへ書く。
+     * 詳細モーダルが同じキーを読むので、更新後の作品でもアクセシブル名が
+     * 「映画詳細」に落ちない
+     */
+    it('更新が成功したらキャッシュへ書き戻す', () => {
+      renderSection({
+        hasFavorites: true,
+        recommendations: createMockRecommendations(2),
+      });
+
+      const refreshed = createMockRecommendations(3);
+      capturedRefreshSuccess?.(refreshed);
+
+      expect(mockSetRecommendations).toHaveBeenCalledWith(refreshed);
     });
   });
 });

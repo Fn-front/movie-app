@@ -8,7 +8,7 @@
 import { memo, useMemo } from 'react';
 
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
-import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
+import { useOpenMovieDetail } from '@/features/movies/hooks/useMovieDetailQuery';
 import { NOW_SHOWING_SECTION_TITLE, DISPLAY_LIMITS } from '@/constants';
 import type { NowShowingMovie } from '@/lib/types';
 import { nowShowingToMovieCacheItem } from '@/utils/toMovieCacheItem';
@@ -33,7 +33,8 @@ export const NowShowingMovieList = memo<NowShowingMovieListProps>(
       [movies],
     );
 
-    const { openMovieDetail } = useMovieDetailQuery();
+    // URL を読まないフックを使う。読むとホームが静的プリレンダから外れる（#1115）
+    const openMovieDetail = useOpenMovieDetail();
 
     if (movies.length === 0) {
       return (

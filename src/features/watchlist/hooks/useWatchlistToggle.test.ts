@@ -113,6 +113,25 @@ jest.mock('@/lib/api/watchlist/watchlist', () => ({
   removeWatchlist: (...args: unknown[]) => mockRemoveWatchlist(...args),
 }));
 
+/**
+ * 照会フックはモックする（#1145）。
+ *
+ * 本物は `useQuery` を使うが、このファイルは `@tanstack/react-query` を
+ * 丸ごと差し替えているため呼べない。照会そのものの挙動は
+ * `useWatchlistLookup.test.ts` が見ているので、ここでは
+ * 「照会が何を返したときトグル側がどう振る舞うか」だけを操作する
+ */
+const mockGetLookupWatchlistId = jest.fn<string | undefined, [number]>();
+/** 変数名を `mock` で始めないと jest.mock のファクトリから参照できない */
+let mockLookupResolving = false;
+
+jest.mock('@/features/watchlist/hooks/useWatchlistLookup', () => ({
+  useWatchlistLookup: () => ({
+    getLookupWatchlistId: mockGetLookupWatchlistId,
+    isResolving: mockLookupResolving,
+  }),
+}));
+
 jest.mock('@/hooks/useToast', () => ({
   useToast: () => ({
     toasts: [],
@@ -203,6 +222,8 @@ describe('useWatchlistToggle', () => {
     mockQueryClient = makeQueryClient();
     cacheListeners.clear();
     mockGetQueriesData.mockReturnValue([]);
+    mockGetLookupWatchlistId.mockReturnValue(undefined);
+    mockLookupResolving = false;
     mockUseSession.mockReturnValue({
       data: { user: { id: 'user-1' } },
       status: 'authenticated',
@@ -215,7 +236,16 @@ describe('useWatchlistToggle', () => {
     expect(typeof result.current.isInWatchlist).toBe('function');
   });
 
-  it('キャッシュにない映画はisInWatchlistがfalseを返す', () => {
+  /**
+   * ⚠️ 以前は「キャッシュにない映画は false」を仕様として固定していたが、
+   * **それがバグ本体だった**（#1145）。
+   *
+   * キャッシュを埋めるのはサイドバーのパネルで、公開日が近い未視聴の
+   * 上位10件しか読まない。視聴済みにした作品と11件目以降はキャッシュに
+   * 入らないため、登録済みでも「未登録」と判定されていた。
+   * 今は照会（全件）を先に見るので、キャッシュの有無だけでは決まらない
+   */
+  it('照会にもキャッシュにも無ければisInWatchlistがfalseを返す', () => {
     const { result } = renderHook(() => useWatchlistToggle());
 
     expect(result.current.isInWatchlist(42)).toBe(false);
@@ -226,6 +256,91 @@ describe('useWatchlistToggle', () => {
     const { result } = renderHook(() => useWatchlistToggle());
 
     expect(result.current.isInWatchlist(42)).toBe(true);
+  });
+
+  /**
+   * 本件の回帰テスト（#1145）。
+   *
+   * 視聴済みの作品・11件目以降はサイドバーのキャッシュに載らない。
+   * 照会から引けなければ「＋」のままになり、押すと成功トーストの直後に
+   * 409 のエラートーストが重なる
+   */
+  describe('キャッシュに無い登録済みの作品（#1145）', () => {
+    it('照会から引ければisInWatchlistがtrueを返す', () => {
+      // キャッシュは空のまま＝サイドバーが読んでいない作品
+      mockGetLookupWatchlistId.mockReturnValue('watchlist-id-999');
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      expect(result.current.isInWatchlist(42)).toBe(true);
+    });
+
+    it('トグルすると追加ではなく削除になる', async () => {
+      mockGetLookupWatchlistId.mockReturnValue('watchlist-id-999');
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      // 登録済みと分かるので、409 になる追加リクエストは飛ばない
+      expect(mockAddWatchlist).not.toHaveBeenCalled();
+      expect(mockRemoveWatchlist).toHaveBeenCalledWith('watchlist-id-999');
+    });
+
+    it('照会のIDをキャッシュより優先する', async () => {
+      // 同じ作品がキャッシュにも載っている場合、権威あるのは照会側
+      setupCacheWithItem(42, 'stale-cache-id');
+      mockGetLookupWatchlistId.mockReturnValue('lookup-id');
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(mockRemoveWatchlist).toHaveBeenCalledWith('lookup-id');
+    });
+  });
+
+  /**
+   * 登録済みかが未確定のうちは触らせない（#1145）。
+   *
+   * ここを通すと、登録済みの作品を「未登録」と誤判定して追加APIへ投げ、
+   * 楽観的な成功トーストの直後に 409 のエラートーストが重なる
+   */
+  describe('照会が未確定のとき', () => {
+    it('未確定であることを返す', () => {
+      mockLookupResolving = true;
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      expect(result.current.isWatchlistResolving).toBe(true);
+    });
+
+    it('確定したら未確定ではなくなる', () => {
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      expect(result.current.isWatchlistResolving).toBe(false);
+    });
+
+    it('トグルしても何も起きない', async () => {
+      mockLookupResolving = true;
+
+      const { result } = renderHook(() => useWatchlistToggle());
+
+      await act(async () => {
+        result.current.toggleWatchlist(createMovie());
+      });
+
+      expect(mockAddWatchlist).not.toHaveBeenCalled();
+      expect(mockRemoveWatchlist).not.toHaveBeenCalled();
+      // 楽観的な成功トーストも出さない（出すと直後にエラーが重なる）
+      expect(mockToast).not.toHaveBeenCalled();
+      // ログイン誘導も出さない（ログイン済みなので誤誘導になる）
+      expect(mockOpenLoginPrompt).not.toHaveBeenCalled();
+    });
   });
 
   it('ウォッチリストにない映画のトグルでaddWatchlistが呼ばれる', async () => {

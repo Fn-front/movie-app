@@ -1,6 +1,19 @@
 @use '@/styles/variables' as *;
 @use '@/styles/mixins' as *;
 
+// 登録状況が未確定の間は見せない（#1145）
+//
+// `isInWatchlist` が false でも「未登録」とは限らない（照会がまだ終わって
+// いないだけのことがある）。「＋」を出すと、登録済みの作品でも追加できるように
+// 見え、押すと成功トーストの直後に 409 のエラートーストが重なる。
+//
+// `visibility` なので枠は残り、確定しても周りは動かない。見えないまま
+// ボタンがフォーカスでき支援技術にも読まれるのも同時に止まる
+// （`opacity: 0` では止まらない）
+.c_watchlist_add_button--resolving {
+  visibility: hidden;
+}
+
 .c_watchlist_add_button {
   display: flex;
   align-items: center;

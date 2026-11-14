@@ -37,6 +37,18 @@ export const watchlistKeys = {
    * 架空の年 0 に丸めるとキャッシュの意味がずれるため、null のまま持つ。
    */
   watched: (year: number | null) => ['watchlist', 'watched', year] as const,
+  /**
+   * 登録済み判定用の照会（全件・ページングなし）
+   *
+   * ソートも `excludeWatched` も持たないので、どの画面から呼んでも同じキーになる。
+   * `list` とキーが分かれているのは意図通りで、サイドバーが上位10件・未視聴のみ
+   * しか読まないせいで登録済みを取りこぼしていた問題を切り離すためにある（#1145）。
+   *
+   * ⚠️ プレフィックスが `watchlist` なので、`watchlistKeys.all` を指定した
+   * `invalidateQueries` / `cancelQueries` の対象に**自動的に含まれる**。
+   * 追加・削除のあとに照会が更新されるのはこれに依っている
+   */
+  lookup: () => ['watchlist', 'lookup'] as const,
 };
 
 export const calendarKeys = {

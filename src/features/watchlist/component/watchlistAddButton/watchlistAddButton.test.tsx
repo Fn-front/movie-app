@@ -1,8 +1,42 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 
 import { WatchlistAddButton } from './watchlistAddButton';
+import styles from './watchlistAddButton.module.scss';
 
 describe('WatchlistAddButton', () => {
+  /**
+   * 登録状況が分かるまでは見せない（#1145）
+   *
+   * `isInWatchlist` が false でも「未登録」とは限らない（照会がまだ
+   * 終わっていないだけのことがある）。「＋」を出すと、登録済みの作品でも
+   * 追加できるように見え、押すと成功トーストの直後に 409 のエラートーストが
+   * 重なる
+   */
+  describe('登録状況が未確定のとき', () => {
+    it('ボタンを見せない', () => {
+      render(
+        <WatchlistAddButton
+          isInWatchlist={false}
+          onClick={jest.fn()}
+          isResolving
+        />,
+      );
+
+      // jsdom は SCSS を評価しないのでクラスで確認する
+      expect(screen.getByRole('button')).toHaveClass(
+        styles['c_watchlist_add_button--resolving'],
+      );
+    });
+
+    it('確定したら見せる', () => {
+      render(<WatchlistAddButton isInWatchlist={false} onClick={jest.fn()} />);
+
+      expect(screen.getByRole('button')).not.toHaveClass(
+        styles['c_watchlist_add_button--resolving'],
+      );
+    });
+  });
+
   describe('未追加時', () => {
     it('aria-label「ウォッチリストに追加」が設定される', () => {
       render(<WatchlistAddButton isInWatchlist={false} onClick={jest.fn()} />);

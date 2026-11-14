@@ -67,6 +67,17 @@ export interface MovieTileProps {
   onWatchlistToggle?: (movie: MovieCacheItem) => void;
   /** ウォッチリストボタン無効化 */
   watchlistDisabled?: boolean;
+  /**
+   * ウォッチリストの登録状況がまだ分からない（既定: false）
+   *
+   * `isInWatchlist` が false でも「未登録」とは限らず、照会が終わって
+   * いないだけのことがある。確定するまで「＋」を出さないことで、登録済みの
+   * 作品を押して成功トースト → エラートーストが重なるのを防ぐ（#1145）。
+   *
+   * ⚠️ お気に入りと違い**全画面で渡す**。ウォッチリストは判定の取得元が
+   * 一覧APIではなく照会APIひとつなので、例外になる画面が無い
+   */
+  isWatchlistResolving?: boolean;
   /** お気に入りボタンクリック時のコールバック */
   onFavoriteToggle?: (
     movie: MovieCacheItem,
@@ -134,6 +145,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
   isInWatchlist = false,
   onWatchlistToggle,
   watchlistDisabled = false,
+  isWatchlistResolving = false,
   onFavoriteToggle,
   favoriteDisabled = false,
   isFavoriteResolving = false,
@@ -247,6 +259,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             isInWatchlist={isInWatchlist}
             onClick={handleWatchlistToggle}
             disabled={watchlistDisabled}
+            isResolving={isWatchlistResolving}
           />
         </div>
       )}

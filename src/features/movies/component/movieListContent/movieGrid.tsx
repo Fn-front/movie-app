@@ -39,8 +39,12 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
   onMovieSelect,
   preferDigitalReleaseDate = false,
 }) {
-  const { isInWatchlist, toggleWatchlist, isMovieToggling } =
-    useWatchlistToggle();
+  const {
+    isInWatchlist,
+    toggleWatchlist,
+    isMovieToggling,
+    isWatchlistResolving,
+  } = useWatchlistToggle();
   const {
     modalState: favoriteModalState,
     handleFavoriteToggle,
@@ -72,6 +76,7 @@ export const MovieGrid = memo<MovieGridProps>(function MovieGrid({
             isInWatchlist={isInWatchlist(movie.id)}
             onWatchlistToggle={toggleWatchlist}
             watchlistDisabled={isMovieToggling(movie.id)}
+            isWatchlistResolving={isWatchlistResolving}
             onFavoriteToggle={handleFavoriteToggle}
             favoriteDisabled={isFavoriteProcessing(movie.id)}
             preferDigitalReleaseDate={preferDigitalReleaseDate}

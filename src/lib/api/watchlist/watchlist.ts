@@ -70,6 +70,28 @@ export interface GetWatchlistResponse {
 }
 
 /**
+ * ウォッチリスト照会アイテムの型
+ *
+ * 「登録済みか・どの行か」の判定に必要な列だけを持つ軽量版。
+ */
+export interface WatchlistLookupItem {
+  /** ウォッチリストID（削除に使う） */
+  id: string;
+  /** TMDb映画ID */
+  tmdb_movie_id: number;
+}
+
+/**
+ * ウォッチリスト照会レスポンスの型
+ */
+export interface GetWatchlistLookupResponse {
+  success: true;
+  data: {
+    watchlist: WatchlistLookupItem[];
+  };
+}
+
+/**
  * ウォッチリスト追加レスポンスの型
  */
 export interface AddWatchlistResponse {
@@ -90,6 +112,20 @@ export async function getWatchlist(
   const response = await axiosInstance.get<GetWatchlistResponse>(
     API_ENDPOINTS.WATCHLIST,
     { params },
+  );
+  return response.data;
+}
+
+/**
+ * ウォッチリストの照会用データ（ID・映画ID）を全件取得
+ *
+ * ページングしない。理由は `src/app/api/watchlist/lookup/route.ts` を参照。
+ *
+ * @returns ウォッチリスト照会レスポンス
+ */
+export async function getWatchlistLookup(): Promise<GetWatchlistLookupResponse> {
+  const response = await axiosInstance.get<GetWatchlistLookupResponse>(
+    API_ENDPOINTS.WATCHLIST_LOOKUP,
   );
   return response.data;
 }

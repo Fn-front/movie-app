@@ -21,6 +21,33 @@ export const WATCHLIST_MAX_LIMIT = 50;
 export const WATCHLIST_SELECT =
   'id, tmdb_movie_id, title, poster_path, release_date, added_at, watched_at';
 
+/**
+ * ウォッチリスト照会SELECTカラム
+ *
+ * 「この映画は登録済みか・どの行か」の判定にしか使わないため、
+ * タイトルやポスターは載せない。全件返しても軽量に保つための絞り込み。
+ *
+ * ⚠️ `watched_at` は**入れない**。視聴済みかどうかで判定が変わると、
+ * サイドバーの `excludeWatched` と同じ穴（#1145）を別の場所に作ることになる。
+ * 視聴済みでもウォッチリストには載っているので、登録済みとして扱う
+ */
+export const WATCHLIST_LOOKUP_SELECT = 'id, tmdb_movie_id';
+
+/**
+ * ウォッチリスト照会の1回あたり取得件数
+ *
+ * PostgREST の max_rows（supabase/config.toml は 1000）以下にする。
+ * 超える値を指定しても黙って打ち切られ、続きがあるのか判別できなくなる
+ */
+export const WATCHLIST_LOOKUP_PAGE_SIZE = 1000;
+
+/**
+ * ウォッチリスト照会で読むページ数の上限
+ *
+ * 10ページ = 10,000件。暴走を止めるための保険で、現実的な利用では到達しない
+ */
+export const WATCHLIST_LOOKUP_MAX_PAGES = 10;
+
 const TARGET = 'ウォッチリスト';
 
 /**

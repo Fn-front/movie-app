@@ -16,7 +16,6 @@
 import { memo, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 
 import {
   ARIA_LABELS,
@@ -27,6 +26,7 @@ import {
   ROUTES,
 } from '@/constants';
 import type { NavIconRoute } from '@/constants';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { cn } from '@/utils/cn';
 
 import styles from './bottomNav.module.scss';
@@ -97,7 +97,6 @@ const BOTTOM_NAV_ITEMS: BottomNavItem[] = BOTTOM_NAV_HREFS.map((href) => ({
  */
 export const BottomNav = memo(function BottomNav() {
   const pathname = usePathname();
-  const { data: session, status } = useSession();
   const navRef = useBottomNavHeight();
 
   /**
@@ -108,13 +107,18 @@ export const BottomNav = memo(function BottomNav() {
    * 「先に5件出して未認証なら減らす」ほうが損失が大きい（押せる導線が消える）
    * ため、増える側に倒す。#1028 で承認済みのトレードオフ。
    *
-   * 無効化済みセッション（パスワード変更・絶対期限切れ）は user が空文字で
-   * 埋められたオブジェクトとして返るため、存在確認では判定できない。id の
-   * 有無で見る（`mobileDrawer.tsx` / `getAuthSession` と同じ基準）。ドロワーと
-   * 揃えないと、同じ SP 画面でドロワーは保護導線を隠しボトムナビは出す、
-   * という食い違いが起きる
+   * 判定そのものは `useAuthStatus` に集約した（#1134）。無効化済みセッション
+   * （パスワード変更・絶対期限切れ）を認証済みと誤認しない基準も含む。
+   * ドロワーと揃えないと、同じ SP 画面でドロワーは保護導線を隠しボトムナビは
+   * 出す、という食い違いが起きる
+   *
+   * ⚠️ `isResolving` をここで使って「未確定の表示」を作ってはいけない。
+   * `bottomNav.module.scss` の `__item` は `flex: 1 1 0` の等幅なので、
+   * 件数が 2↔4 で変わると**全項目の位置が動く**。未確定の間に4枠を確保すると
+   * 今度は未ログインの利用者側に同じズレが移るだけ。クライアント側だけでは
+   * footprint が安定する選択肢が無いため、#1028 の判断を維持する
    */
-  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+  const { isAuthenticated } = useAuthStatus();
 
   const navItems = useMemo(
     () =>

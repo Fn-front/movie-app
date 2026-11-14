@@ -7,13 +7,13 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
-import { useSession } from 'next-auth/react';
 
 import {
   WATCHLIST_ERROR_MESSAGES,
   WATCHLIST_SUCCESS_MESSAGES,
 } from '@/constants/watchlist';
 import { ANALYTICS_EVENTS, watchlistKeys } from '@/constants';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { addWatchlist, removeWatchlist } from '@/lib/api/watchlist/watchlist';
 import { sendEvent } from '@/utils/analytics';
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
@@ -297,11 +297,7 @@ function rollbackCaches(
  */
 export function useWatchlistToggle(): UseWatchlistToggleReturn {
   const queryClient = useQueryClient();
-  const { data: session, status } = useSession();
-  // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
-  // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
-  // id の有無で見る（getAuthSession と同じ基準）
-  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+  const { isAuthenticated, isResolving } = useAuthStatus();
   // トーストは送出するだけ。一覧は購読しない（#939 / #1009）
   const { toast } = useToastDispatch();
   const openLoginPrompt = useLoginPromptStore((s) => s.open);
@@ -494,6 +490,10 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
 
   const toggleWatchlist = useCallback(
     (movie: WatchlistToggleMovie) => {
+      // 未確定の間は誘導しない。ログイン済みの利用者がフルロード直後に
+      // 押したときだけ「ログインが必要です」が出ていた（#1131）
+      if (isResolving) return;
+
       if (!isAuthenticated) {
         openLoginPrompt('ウォッチリストに追加するにはログインが必要です。');
         return;
@@ -551,6 +551,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
     },
     [
       isAuthenticated,
+      isResolving,
       openLoginPrompt,
       checkInWatchlist,
       getWatchlistId,

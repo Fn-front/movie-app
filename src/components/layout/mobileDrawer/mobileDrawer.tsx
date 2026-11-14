@@ -34,6 +34,7 @@ import {
 } from '@/constants';
 import type { NavIconRoute } from '@/constants';
 import { getInitial } from '@/utils/user';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { useNavAuthGuard } from '@/hooks/useNavAuthGuard';
 import { useOverlayHistory } from '@/hooks/useOverlayHistory';
 import { logout } from '@/lib/auth/logout';
@@ -110,7 +111,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
   onOpenChange,
   onCalendarClick,
 }) {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   const pathname = usePathname();
   const router = useRouter();
   const { handleProtectedNavClick } = useNavAuthGuard();
@@ -193,10 +194,9 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
     await logout();
   }, []);
 
-  // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
-  // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
-  // id の有無で見る（getAuthSession と同じ基準）
-  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+  // 判定は useAuthStatus に集約（無効化済みセッションの扱いを含む / #1134）。
+  // 未確定を未ログイン扱いにする点はボトムナビと揃える（#1131）
+  const { isAuthenticated } = useAuthStatus();
 
   // 導線を出すかどうかの表示判定のみ。実際の認可は proxy.ts と withAdminAuth が担うため、
   // JWT の role が古く（最大5分）て剥奪直後に残っても、遷移はそちらで弾かれる

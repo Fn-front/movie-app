@@ -8,8 +8,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { useSession } from 'next-auth/react';
 
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { searchMoviesApi } from '@/lib/api/search/search';
 import type { SearchMoviesRequest } from '@/lib/api/search/search';
 import type { Movie } from '@/lib/types';
@@ -135,8 +135,7 @@ export function useSearch(): UseSearchReturn {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToastDispatch();
-  const { status } = useSession();
-  const isAuthenticated = status === 'authenticated';
+  const { isAuthenticated } = useAuthStatus();
 
   const requestParams = useMemo(
     () => buildSearchParams(searchParams),

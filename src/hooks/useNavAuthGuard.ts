@@ -10,7 +10,6 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useSession } from 'next-auth/react';
 import type { MouseEvent } from 'react';
 
 import {
@@ -18,20 +17,25 @@ import {
   NAV_AUTH_PROMPT_MESSAGES,
   NAV_AUTH_PROMPT_DEFAULT_MESSAGE,
 } from '@/constants';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
 
 /**
  * @returns handleProtectedNavClick - ナビリンクの href を受け取り、onClick ハンドラを返す
  */
 export function useNavAuthGuard() {
-  const { status } = useSession();
-  const isAuthenticated = status === 'authenticated';
+  const { isAuthenticated, isResolving } = useAuthStatus();
   const openLoginPrompt = useLoginPromptStore((s) => s.open);
 
   const handleProtectedNavClick = useCallback(
     (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
-      // 認証済みは通常遷移
-      if (isAuthenticated) {
+      // 認証済みは通常遷移。
+      //
+      // 未確定（セッションの応答待ち）も通す。ここで弾くと、ログイン済みの
+      // 利用者がフルロード直後に押したときだけ「ログインが必要です」が出る
+      // （#1131）。実際の認可は proxy.ts が担うので、本当に未認証なら
+      // 遷移先でサインインへ送られる
+      if (isAuthenticated || isResolving) {
         return;
       }
       // 「保護対象か」は proxy と共通の AUTH_REQUIRED_ROUTES を真実源に判定する
@@ -45,7 +49,7 @@ export function useNavAuthGuard() {
         NAV_AUTH_PROMPT_MESSAGES[href] ?? NAV_AUTH_PROMPT_DEFAULT_MESSAGE,
       );
     },
-    [isAuthenticated, openLoginPrompt],
+    [isAuthenticated, isResolving, openLoginPrompt],
   );
 
   return { handleProtectedNavClick };

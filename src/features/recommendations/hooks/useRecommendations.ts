@@ -9,10 +9,10 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSession } from 'next-auth/react';
 import { useCallback, useMemo } from 'react';
 
 import { recommendationKeys } from '@/constants';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { getRecommendations } from '@/lib/api/recommendations/recommendations';
 // ⚠️ 型だけを取る。`recommendationData.ts` はサーバー側のDBアクセスを持つので、
 // 値を import するとクライアントのモジュールグラフに引き込むことになる
@@ -58,8 +58,7 @@ export interface UseRecommendationsReturn {
  * レコメンド一覧を取得する
  */
 export function useRecommendations(): UseRecommendationsReturn {
-  const { status } = useSession();
-  const isAuthenticated = status === 'authenticated';
+  const { isAuthenticated, isResolving } = useAuthStatus();
   const queryClient = useQueryClient();
 
   const {
@@ -93,14 +92,14 @@ export function useRecommendations(): UseRecommendationsReturn {
       hasFavorites: data?.hasFavorites ?? false,
       isAuthenticated,
       // 未認証と確定するまでは「未確定」。認証済みなら取得完了までが未確定
-      isPending: status === 'loading' || (isAuthenticated && isQueryPending),
+      isPending: isResolving || (isAuthenticated && isQueryPending),
       isError: isAuthenticated && isError,
       setRecommendations,
     }),
     [
       data,
       isAuthenticated,
-      status,
+      isResolving,
       isQueryPending,
       isError,
       setRecommendations,

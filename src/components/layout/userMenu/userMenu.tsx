@@ -24,6 +24,7 @@ import { MENU_LABELS, IMAGE_SIZES } from '@/constants';
 import { USER_ROLE } from '@/constants/auth';
 import { ROUTES } from '@/constants/common';
 import { getInitial } from '@/utils/user';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/utils/cn';
 
@@ -40,7 +41,8 @@ import styles from './userMenu.module.scss';
  * ```
  */
 export const UserMenu = memo(function UserMenu() {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
+  const { isAuthenticated } = useAuthStatus();
   const {
     handleNavigateToSettings,
     handleNavigateToAdminAccounts,
@@ -73,8 +75,11 @@ export const UserMenu = memo(function UserMenu() {
     [toggleTheme],
   );
 
-  // 無効化済みセッションは user が空文字で埋められて返るため id で判定する
-  if (status !== 'authenticated' || !session?.user?.id) {
+  // 判定は useAuthStatus に集約（無効化済みセッションの扱いを含む / #1134）。
+  // ⚠️ 未確定（isResolving）もここでは未ログイン扱いのままにしている。
+  // ログイン導線とアバターで footprint が違うため、中立の表示を置くと
+  // 未ログインの利用者に逆のちらつきが出る。#1131 で別途判断する
+  if (!isAuthenticated) {
     return (
       <button
         className={styles.c_user_menu__login_button}

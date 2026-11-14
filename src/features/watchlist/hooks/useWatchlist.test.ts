@@ -91,6 +91,12 @@ describe('useWatchlist', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetWatchlist.mockResolvedValue(mockWatchlistResponse);
+    // セッションは毎回ここで戻す。テスト本体の末尾で戻す書き方だと、
+    // そのテストが落ちた時点で復元が実行されず後続を巻き込む
+    (useSession as jest.Mock).mockReturnValue({
+      data: { user: { id: 'user-123' } },
+      status: 'authenticated',
+    });
   });
 
   it('ウォッチリスト一覧を取得する', async () => {
@@ -257,6 +263,23 @@ describe('useWatchlist', () => {
       data: { user: { id: 'user-123' } },
       status: 'authenticated',
     });
+  });
+
+  it('セッション未確定の間は読み込み中として返す', () => {
+    // react-query は無効化中のクエリの isLoading を false にするため、
+    // 素通しすると「0件が確定した」ように見えて空メッセージが出る（#1132）
+    (useSession as jest.Mock).mockReturnValue({
+      data: null,
+      status: 'loading',
+    });
+
+    const { result } = renderHook(() => useWatchlist(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.watchlist).toHaveLength(0);
+    expect(mockGetWatchlist).not.toHaveBeenCalled();
   });
 
   it('次ページ読み込みが動作する', async () => {

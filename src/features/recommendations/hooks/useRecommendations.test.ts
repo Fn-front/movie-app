@@ -62,7 +62,10 @@ describe('useRecommendations', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetRecommendations.mockResolvedValue(sampleData);
-    mockUseSession.mockReturnValue({ status: 'authenticated' });
+    mockUseSession.mockReturnValue({
+      data: { user: { id: 'user-1' } },
+      status: 'authenticated',
+    });
   });
 
   it('認証済みならレコメンドを取得する', async () => {

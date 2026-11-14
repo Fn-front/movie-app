@@ -101,6 +101,12 @@ describe('useFavorites', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetFavorites.mockResolvedValue(mockFavoritesResponse);
+    // セッションは毎回ここで戻す。テスト本体の末尾で戻す書き方だと、
+    // そのテストが落ちた時点で復元が実行されず後続を巻き込む
+    (useSession as jest.Mock).mockReturnValue({
+      data: { user: { id: 'user-123' } },
+      status: 'authenticated',
+    });
   });
 
   it('お気に入り一覧を取得する', async () => {
@@ -795,6 +801,23 @@ describe('useFavorites', () => {
       data: { user: { id: 'user-123' } },
       status: 'authenticated',
     });
+  });
+
+  it('セッション未確定の間は読み込み中として返す', () => {
+    // react-query は無効化中のクエリの isLoading を false にするため、
+    // 素通しすると「0件が確定した」ように見えて空メッセージが出る（#1132）
+    (useSession as jest.Mock).mockReturnValue({
+      data: null,
+      status: 'loading',
+    });
+
+    const { result } = renderHook(() => useFavorites(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.favorites).toEqual([]);
+    expect(mockGetFavorites).not.toHaveBeenCalled();
   });
 
   describe('双方向ページング（#972）', () => {

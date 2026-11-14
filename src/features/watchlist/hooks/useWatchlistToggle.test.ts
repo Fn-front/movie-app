@@ -285,6 +285,20 @@ describe('useWatchlistToggle', () => {
     expect(mockAddWatchlist).not.toHaveBeenCalled();
   });
 
+  it('セッション未確定の間はログイン誘導を出さない', () => {
+    // ログイン済みの利用者がフルロードした直後に当たる窓（#1131）。
+    // ここで弾くと「ログイン済みなのにログインを求められる」になる
+    mockUseSession.mockReturnValue({ data: null, status: 'loading' });
+    const { result } = renderHook(() => useWatchlistToggle());
+
+    act(() => {
+      result.current.toggleWatchlist(createMovie());
+    });
+
+    expect(mockOpenLoginPrompt).not.toHaveBeenCalled();
+    expect(mockAddWatchlist).not.toHaveBeenCalled();
+  });
+
   /**
    * sendEvent はモックせず window.gtag を差し替える。
    * 実際に gtag へ渡る引数まで見ないと「余計な値を送っていないこと」を

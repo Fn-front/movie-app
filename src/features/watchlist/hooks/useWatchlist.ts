@@ -9,7 +9,6 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useSession } from 'next-auth/react';
 
 import {
   getWatchlist,
@@ -25,6 +24,7 @@ import type {
   WatchlistAddFormData,
   WatchlistSortOption,
 } from '@/schema/watchlist';
+import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { useToastDispatch } from '@/hooks/useToast';
 import {
   ANALYTICS_EVENTS,
@@ -92,11 +92,7 @@ export function useWatchlist(
     excludeWatched = false,
     prioritizeStreaming = false,
   } = options;
-  const { data: session, status } = useSession();
-  // 無効化済みセッション（パスワード変更・絶対期限切れ）は user が
-  // 空文字で埋められたオブジェクトとして返るため、存在確認では判定できない。
-  // id の有無で見る（getAuthSession と同じ基準）
-  const isAuthenticated = status === 'authenticated' && !!session?.user?.id;
+  const { isAuthenticated, isResolving } = useAuthStatus();
   const queryClient = useQueryClient();
   const { toast } = useToastDispatch();
 
@@ -348,7 +344,10 @@ export function useWatchlist(
   return useMemo(
     () => ({
       watchlist,
-      isLoading: watchlistQuery.isLoading,
+      // セッション未確定の間も読み込み中として返す。react-query は
+      // 無効化中のクエリの isLoading を false にするため、素通しすると
+      // 「0件が確定した」ように見えて空メッセージが先に出る（#1132）
+      isLoading: isResolving || watchlistQuery.isLoading,
       isFetchingNextPage: watchlistQuery.isFetchingNextPage,
       hasNextPage: watchlistQuery.hasNextPage,
       fetchNextPage,
@@ -363,6 +362,7 @@ export function useWatchlist(
     }),
     [
       watchlist,
+      isResolving,
       watchlistQuery.isLoading,
       watchlistQuery.isFetchingNextPage,
       watchlistQuery.hasNextPage,

@@ -34,6 +34,8 @@ export interface AwardCategorySectionProps {
   getFavoriteInfo: (tmdbMovieId: number) => MovieFavoriteInfo | null;
   /** お気に入りの登録状況がまだ分からない（既定: false / #1135） */
   isFavoriteResolving?: boolean;
+  /** ウォッチリストの登録状況がまだ分からない（#1145） */
+  isWatchlistResolving?: boolean;
   /**
    * このセクションがページ先頭かどうか（既定: false）
    *
@@ -55,6 +57,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
     isFavoriteProcessing,
     getFavoriteInfo,
     isFavoriteResolving = false,
+    isWatchlistResolving = false,
     isFirstSection = false,
   }) {
     // 受賞作品APIはお気に入りを返さない（公開API＋共有キャッシュのため）。
@@ -139,6 +142,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                     onFavoriteToggle={onFavoriteToggle}
                     favoriteDisabled={isFavoriteProcessing(movie.id)}
                     isFavoriteResolving={isFavoriteResolving}
+                    isWatchlistResolving={isWatchlistResolving}
                     viewMode={viewMode}
                   />
                   {award.personName && (
@@ -181,6 +185,7 @@ export const AwardCategorySection = memo<AwardCategorySectionProps>(
                     onFavoriteToggle={onFavoriteToggle}
                     favoriteDisabled={isFavoriteProcessing(movie.id)}
                     isFavoriteResolving={isFavoriteResolving}
+                    isWatchlistResolving={isWatchlistResolving}
                     viewMode={viewMode}
                   />
                   {award.personName && (

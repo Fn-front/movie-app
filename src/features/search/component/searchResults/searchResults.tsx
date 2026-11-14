@@ -72,8 +72,12 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
   suggestions,
   isSuggestionLoading,
 }) {
-  const { isInWatchlist, toggleWatchlist, isMovieToggling } =
-    useWatchlistToggle();
+  const {
+    isInWatchlist,
+    toggleWatchlist,
+    isMovieToggling,
+    isWatchlistResolving,
+  } = useWatchlistToggle();
   const {
     modalState: favoriteModalState,
     handleFavoriteToggle,
@@ -162,6 +166,7 @@ export const SearchResults = memo<SearchResultsProps>(function SearchResults({
             isInWatchlist={isInWatchlist(movie.id)}
             onWatchlistToggle={toggleWatchlist}
             watchlistDisabled={isMovieToggling(movie.id)}
+            isWatchlistResolving={isWatchlistResolving}
             onFavoriteToggle={handleFavoriteToggle}
             favoriteDisabled={isFavoriteProcessing(movie.id)}
             isFavoriteResolving={isFavoriteResolving}

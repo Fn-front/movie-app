@@ -39,8 +39,12 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
   function PersonFilmography({ credits }) {
     const [currentPage, setCurrentPage] = useState(1);
 
-    const { isInWatchlist, toggleWatchlist, isMovieToggling } =
-      useWatchlistToggle();
+    const {
+      isInWatchlist,
+      toggleWatchlist,
+      isMovieToggling,
+      isWatchlistResolving,
+    } = useWatchlistToggle();
     const {
       modalState: favoriteModalState,
       handleFavoriteToggle,
@@ -126,6 +130,7 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
                 isInWatchlist={isInWatchlist(movie.id)}
                 onWatchlistToggle={toggleWatchlist}
                 watchlistDisabled={isMovieToggling(movie.id)}
+                isWatchlistResolving={isWatchlistResolving}
                 onFavoriteToggle={handleFavoriteToggle}
                 favoriteDisabled={isFavoriteProcessing(movie.id)}
                 isFavoriteResolving={isFavoriteResolving}

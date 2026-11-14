@@ -65,6 +65,8 @@ export const API_ENDPOINTS = {
   // --- ウォッチリスト ---
   /** ウォッチリスト一覧・追加 */
   WATCHLIST: '/api/watchlist',
+  /** ウォッチリスト照会（登録済み判定用の軽量版・全件） */
+  WATCHLIST_LOOKUP: '/api/watchlist/lookup',
   /** ウォッチリスト個別（削除） */
   watchlistById: (id: string) => `/api/watchlist/${id}`,
   /** ウォッチリストのカレンダー */

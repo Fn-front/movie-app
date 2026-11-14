@@ -8,6 +8,8 @@
 import { memo, useCallback } from 'react';
 import { IoAdd, IoCheckmark } from 'react-icons/io5';
 
+import { cn } from '@/utils/cn';
+
 import styles from './watchlistAddButton.module.scss';
 
 /**
@@ -22,6 +24,16 @@ export interface WatchlistAddButtonProps {
   disabled?: boolean;
   /** サイズ */
   size?: 'sm' | 'md';
+  /**
+   * 登録状況がまだ分からない（既定: false）
+   *
+   * `isInWatchlist` が false でも「未登録」とは限らず、照会が終わって
+   * いないだけのことがある（`useWatchlistToggle` の
+   * `isWatchlistResolving`）。その間に「＋」を出すと、登録済みの作品でも
+   * 追加できるように見え、押すと成功トーストの直後に 409 のエラートーストが
+   * 重なる（#1145）
+   */
+  isResolving?: boolean;
 }
 
 /**
@@ -33,6 +45,7 @@ export const WatchlistAddButton = memo<WatchlistAddButtonProps>(
     onClick,
     disabled = false,
     size = 'sm',
+    isResolving = false,
   }) {
     const handleClick = useCallback(
       (event: React.MouseEvent) => {
@@ -61,7 +74,12 @@ export const WatchlistAddButton = memo<WatchlistAddButtonProps>(
     return (
       <button
         type='button'
-        className={`${styles.c_watchlist_add_button} ${sizeClassName} ${isInWatchlist ? styles.c_watchlist_add_button__active : ''}`}
+        className={cn(
+          styles.c_watchlist_add_button,
+          sizeClassName,
+          isInWatchlist && styles.c_watchlist_add_button__active,
+          isResolving && styles['c_watchlist_add_button--resolving'],
+        )}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         disabled={disabled}

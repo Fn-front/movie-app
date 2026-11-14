@@ -50,9 +50,17 @@ jest.mock('@/lib/store/useLoginPromptStore', () => ({
 }));
 
 // 通信は張らない。キャッシュの作られ方だけを見るため queryFn を差し込む
+//
+// `getWatchlistLookup` も必ず置くこと（#1145）。useWatchlistToggle が
+// 照会クエリを張るようになったので、未定義だと queryFn 無しのクエリができ、
+// react-query が console.error を出す。このファイルは「レンダー中に
+// console.error が1件も出ないこと」を見ているため、そこで落ちる
 jest.mock('@/lib/api/watchlist/watchlist', () => ({
   addWatchlist: jest.fn(),
   removeWatchlist: jest.fn(),
+  getWatchlistLookup: jest
+    .fn()
+    .mockResolvedValue({ success: true, data: { watchlist: [] } }),
 }));
 
 // --- Fixtures ---

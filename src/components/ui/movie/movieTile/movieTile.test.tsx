@@ -2,6 +2,7 @@ import { createEvent, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import favoriteButtonStyles from '@/features/favorites/component/favoriteButton/favoriteButton.module.scss';
+import watchlistAddButtonStyles from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton.module.scss';
 
 import { MovieTile } from './movieTile';
 import { IMAGE_SIZES } from '@/constants';
@@ -477,6 +478,24 @@ describe('MovieTile', () => {
       expect(
         screen.getByRole('button', { name: 'ウォッチリストから削除' }),
       ).toBeInTheDocument();
+    });
+
+    it('登録状況が未確定なら WatchlistAddButton へ伝える', () => {
+      // 照会が終わるまで「＋」を見せないため（#1145）。登録済みの作品に
+      // 「＋」を出すと、押したときに成功トースト → 409 のエラートーストが重なる
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onWatchlistToggle={jest.fn()}
+          isWatchlistResolving
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+      ).toHaveClass(
+        watchlistAddButtonStyles['c_watchlist_add_button--resolving'],
+      );
     });
   });
 

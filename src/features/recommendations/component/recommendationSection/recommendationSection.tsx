@@ -144,8 +144,12 @@ const RecommendationSectionContent = memo<RecommendationSectionContentProps>(
       isFavoriteResolving,
     } = useFavoriteToggle();
 
-    const { isInWatchlist, toggleWatchlist, isMovieToggling } =
-      useWatchlistToggle();
+    const {
+      isInWatchlist,
+      toggleWatchlist,
+      isMovieToggling,
+      isWatchlistResolving,
+    } = useWatchlistToggle();
 
     const { dismissMovie, isDismissingMovie, dismissedIds } = useDismissMovie();
 
@@ -302,6 +306,7 @@ const RecommendationSectionContent = memo<RecommendationSectionContentProps>(
                     isInWatchlist={isInWatchlist(movie.id)}
                     onWatchlistToggle={handleWatchlistToggle}
                     watchlistDisabled={isMovieToggling(movie.id)}
+                    isWatchlistResolving={isWatchlistResolving}
                     onFavoriteToggle={handleFavoriteToggle}
                     favoriteDisabled={isFavoriteProcessing(movie.id)}
                     isFavoriteResolving={isFavoriteResolving}

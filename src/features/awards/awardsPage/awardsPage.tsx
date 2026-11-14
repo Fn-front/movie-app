@@ -52,8 +52,12 @@ export const AwardsPage = memo(function AwardsPage() {
     isFavoriteResolving,
   } = useFavoriteToggle();
 
-  const { isInWatchlist, toggleWatchlist, isMovieToggling } =
-    useWatchlistToggle();
+  const {
+    isInWatchlist,
+    toggleWatchlist,
+    isMovieToggling,
+    isWatchlistResolving,
+  } = useWatchlistToggle();
 
   const { selectedMovieId, openMovieDetail, closeMovieDetail } =
     useMovieDetailQuery();
@@ -149,6 +153,7 @@ export const AwardsPage = memo(function AwardsPage() {
                   isFavoriteProcessing={isFavoriteProcessing}
                   getFavoriteInfo={getFavoriteInfo}
                   isFavoriteResolving={isFavoriteResolving}
+                  isWatchlistResolving={isWatchlistResolving}
                   hideTitle
                 />
               </Tabs>
@@ -163,6 +168,7 @@ export const AwardsPage = memo(function AwardsPage() {
                 isFavoriteProcessing={isFavoriteProcessing}
                 getFavoriteInfo={getFavoriteInfo}
                 isFavoriteResolving={isFavoriteResolving}
+                isWatchlistResolving={isWatchlistResolving}
               />
             )}
           </div>

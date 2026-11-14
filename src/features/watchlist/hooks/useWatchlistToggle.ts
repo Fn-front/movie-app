@@ -14,12 +14,15 @@ import {
 } from '@/constants/watchlist';
 import { ANALYTICS_EVENTS, watchlistKeys } from '@/constants';
 import { useAuthStatus } from '@/hooks/useAuthStatus';
+import { useWatchlistLookup } from '@/features/watchlist/hooks/useWatchlistLookup';
 import { addWatchlist, removeWatchlist } from '@/lib/api/watchlist/watchlist';
 import { sendEvent } from '@/utils/analytics';
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
 import type {
   WatchlistItem,
+  WatchlistLookupItem,
   GetWatchlistResponse,
+  GetWatchlistLookupResponse,
 } from '@/lib/api/watchlist/watchlist';
 import type { WatchlistAddFormData } from '@/schema/watchlist';
 import { useToastDispatch } from '@/hooks/useToast';
@@ -54,6 +57,14 @@ export interface UseWatchlistToggleReturn {
    * 廃止した（#1055）。1件だけ扱う画面でもこちらを使う
    */
   isMovieToggling: (tmdbMovieId: number) => boolean;
+  /**
+   * 登録状況がまだ分からない
+   *
+   * `isInWatchlist` は「まだ取れていない」と「登録されていない」を
+   * どちらも `false` で返す。この値が `true` の間は未登録（＝「＋」）として
+   * 描いてはいけない（#1145）
+   */
+  isWatchlistResolving: boolean;
 }
 
 /** InfiniteQueryのデータ型 */
@@ -63,15 +74,32 @@ type WatchlistInfiniteData = {
 };
 
 /**
+ * 一覧キャッシュ（`useInfiniteQuery` が作るもの）だけを取り出す。
+ *
+ * ⚠️ `watchlistKeys.all` をプレフィックスにすると、**照会キャッシュ
+ * （`['watchlist','lookup']`）も一緒に返る**。あちらは `pages` を持たない
+ * 別の形なので、`WatchlistInfiniteData` として扱うと型が実体と食い違う。
+ * 読み出しは `data?.pages` のガードで弾けるが、巻き戻しのように
+ * 無条件に書き戻す処理では古い照会を復活させてしまう。
+ * ここで**キーの時点で**落としておく（照会は専用の関数で扱う）
+ */
+function getListQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+): [readonly unknown[], WatchlistInfiniteData | undefined][] {
+  const lookupKey = JSON.stringify(watchlistKeys.lookup());
+  return queryClient
+    .getQueriesData<WatchlistInfiniteData>({ queryKey: watchlistKeys.all })
+    .filter(([key]) => JSON.stringify(key) !== lookupKey);
+}
+
+/**
  * 既存のウォッチリストキャッシュから全アイテムを取得する
  * watchlistKeys.all をプレフィックスとして、どのsortオプションのキャッシュからも読み取る
  */
 function getWatchlistItemsFromCache(
   queryClient: ReturnType<typeof useQueryClient>,
 ): WatchlistItem[] {
-  const queries = queryClient.getQueriesData<WatchlistInfiniteData>({
-    queryKey: watchlistKeys.all,
-  });
+  const queries = getListQueries(queryClient);
 
   const items: WatchlistItem[] = [];
   for (const [, data] of queries) {
@@ -96,9 +124,7 @@ function optimisticAddToAllCaches(
     WatchlistInfiniteData | undefined
   >();
 
-  const queries = queryClient.getQueriesData<WatchlistInfiniteData>({
-    queryKey: watchlistKeys.all,
-  });
+  const queries = getListQueries(queryClient);
 
   for (const [key, data] of queries) {
     previousDataMap.set(key, data);
@@ -135,9 +161,7 @@ function optimisticRemoveFromAllCaches(
     WatchlistInfiniteData | undefined
   >();
 
-  const queries = queryClient.getQueriesData<WatchlistInfiniteData>({
-    queryKey: watchlistKeys.all,
-  });
+  const queries = getListQueries(queryClient);
 
   for (const [key, data] of queries) {
     previousDataMap.set(key, data);
@@ -286,6 +310,56 @@ function rollbackCaches(
 }
 
 /**
+ * 照会キャッシュ（`watchlistKeys.lookup`）を書き換える。
+ *
+ * ⚠️ **これが無いと、削除した瞬間に「登録済み」へ戻る。** 判定は照会を
+ * 先に見るのに、照会は一覧と別キーなので `optimisticRemoveFromAllCaches`
+ * では追従しない。削除が完了した `onSettled` で `removes` が解除されると、
+ * 再取得が届くまでの1往復ぶん**古い照会がヒットして「✓」に戻る**。
+ * その窓で押すと論理削除済みの行へ DELETE が飛び、404 になる
+ * （#1145 で直したはずの「成功トーストの直後にエラートースト」の鏡像）。
+ *
+ * 前例は `useFavoriteMutations` の `updateLookupCache`。
+ *
+ * 未取得（`undefined`）のときは何もしない。空の照会を作ると、
+ * まだ読んでいないだけの状態を「0件」と確定させてしまう
+ */
+function updateLookupCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  updater: (items: WatchlistLookupItem[]) => WatchlistLookupItem[],
+): void {
+  queryClient.setQueryData<GetWatchlistLookupResponse>(
+    watchlistKeys.lookup(),
+    (old) =>
+      old
+        ? {
+            ...old,
+            data: { ...old.data, watchlist: updater(old.data.watchlist) },
+          }
+        : old,
+  );
+}
+
+/** 失敗時に巻き戻せるよう、書き換える前の照会キャッシュを控える */
+function snapshotLookupCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+): GetWatchlistLookupResponse | undefined {
+  return queryClient.getQueryData<GetWatchlistLookupResponse>(
+    watchlistKeys.lookup(),
+  );
+}
+
+/** 控えておいた照会キャッシュへ戻す */
+function restoreLookupCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  previous: GetWatchlistLookupResponse | undefined,
+): void {
+  // 未取得（undefined）だったときは楽観的更新も行われていないため戻さない
+  if (!previous) return;
+  queryClient.setQueryData(watchlistKeys.lookup(), previous);
+}
+
+/**
  * ウォッチリスト追加/削除トグル カスタムフック
  *
  * useWatchlist() を呼ばず、既存のウォッチリストキャッシュを直接参照することで
@@ -298,6 +372,11 @@ function rollbackCaches(
 export function useWatchlistToggle(): UseWatchlistToggleReturn {
   const queryClient = useQueryClient();
   const { isAuthenticated, isResolving } = useAuthStatus();
+  // 登録済み判定の権威ある取得元。キャッシュだけでは足りない（#1145）。
+  // キャッシュを埋めるのはサイドバーのパネルで、公開日が近い未視聴の
+  // 上位10件しか読まないため、視聴済みと11件目以降が未登録に落ちていた
+  const { getLookupWatchlistId, isResolving: isLookupResolving } =
+    useWatchlistLookup();
   // トーストは送出するだけ。一覧は購読しない（#939 / #1009）
   const { toast } = useToastDispatch();
   const openLoginPrompt = useLoginPromptStore((s) => s.open);
@@ -369,8 +448,16 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
     onMutate: async (newItem: WatchlistAddFormData) => {
       await queryClient.cancelQueries({ queryKey: watchlistKeys.all });
 
+      const previousLookup = snapshotLookupCache(queryClient);
+
+      // サーバーが採番するまでの仮ID。一覧・照会の両方で同じ値を使い、
+      // onSuccess でまとめて実際のIDに差し替える。
+      // 照会キャッシュの照合キーにも使うため、同一ミリ秒でも衝突しない値にする
+      // （`Date.now()` では連続操作で同じ値になりうる）
+      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+
       const optimisticItem: WatchlistItem = {
-        id: `optimistic-${Date.now()}`,
+        id: optimisticId,
         tmdb_movie_id: newItem.tmdb_movie_id,
         title: newItem.title,
         poster_path: newItem.poster_path ?? null,
@@ -387,12 +474,33 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         queryClient,
         optimisticItem,
       );
-      return { previousDataMap };
+      // 判定は照会を先に見るので、ここも一緒に進めないと一覧だけが先に進む
+      updateLookupCache(queryClient, (items) => [
+        ...items.filter((item) => item.tmdb_movie_id !== newItem.tmdb_movie_id),
+        { id: optimisticId, tmdb_movie_id: newItem.tmdb_movie_id },
+      ]);
+
+      return { previousDataMap, previousLookup, optimisticId };
+    },
+    onSuccess: (response, _newItem, context) => {
+      // 仮IDのままだと、再取得が届く前に削除を押したとき
+      // `optimistic-...` で DELETE して 400 になる
+      updateLookupCache(queryClient, (items) =>
+        items.map((item) =>
+          item.id === context?.optimisticId
+            ? {
+                id: response.data.id,
+                tmdb_movie_id: response.data.tmdb_movie_id,
+              }
+            : item,
+        ),
+      );
     },
     onError: (_error, _newItem, context) => {
       if (context?.previousDataMap) {
         rollbackCaches(queryClient, context.previousDataMap);
       }
+      restoreLookupCache(queryClient, context?.previousLookup);
       toast({
         title: 'エラー',
         description: WATCHLIST_ERROR_MESSAGES.ADD_FAILED,
@@ -414,16 +522,23 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
     onMutate: async ({ watchlistId }: RemoveVariables) => {
       await queryClient.cancelQueries({ queryKey: watchlistKeys.all });
 
+      const previousLookup = snapshotLookupCache(queryClient);
       const previousDataMap = optimisticRemoveFromAllCaches(
         queryClient,
         watchlistId,
       );
-      return { previousDataMap };
+      // ⚠️ ここを外すと、削除完了時に「登録済み」へ戻る（updateLookupCache 参照）
+      updateLookupCache(queryClient, (items) =>
+        items.filter((item) => item.id !== watchlistId),
+      );
+
+      return { previousDataMap, previousLookup };
     },
     onError: (_error, _variables, context) => {
       if (context?.previousDataMap) {
         rollbackCaches(queryClient, context.previousDataMap);
       }
+      restoreLookupCache(queryClient, context?.previousLookup);
       toast({
         title: 'エラー',
         description: WATCHLIST_ERROR_MESSAGES.REMOVE_FAILED,
@@ -443,22 +558,43 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
   const addMutate = addMutation.mutate;
   const removeMutate = removeMutation.mutate;
 
+  /**
+   * ウォッチリストIDを引く。
+   *
+   * **照会（全件）を先に見て、無ければキャッシュを見る。** 照会だけにすると、
+   * 往復が終わるまでの間だけ `/watchlist` ページのようにキャッシュを持つ画面で
+   * 判定が落ちる。キャッシュだけにすると #1145 そのもの。
+   *
+   * ⚠️ 楽観状態（adds / removes）はここでは見ない。「どの行か」と
+   * 「登録済みか」は別の問いで、削除の楽観状態が立っていても削除APIに渡す
+   * 行IDは要る。登録済みかの判定は呼び出し側で楽観状態を先に見ている
+   */
+  const resolveWatchlistId = useCallback(
+    (tmdbMovieId: number): string | undefined => {
+      const fromLookup = getLookupWatchlistId(tmdbMovieId);
+      if (fromLookup) return fromLookup;
+
+      const items = getWatchlistItemsFromCache(queryClient);
+      return items.find((item) => item.tmdb_movie_id === tmdbMovieId)?.id;
+    },
+    [getLookupWatchlistId, queryClient],
+  );
+
   const isInWatchlist = useCallback(
     (tmdbMovieId: number) => {
       if (!isAuthenticated) return false;
       // ローカル楽観状態を優先チェック
       if (store.adds.has(tmdbMovieId)) return true;
       if (store.removes.has(tmdbMovieId)) return false;
-      // キャッシュから確認
-      const items = getWatchlistItemsFromCache(queryClient);
-      return items.some((item) => item.tmdb_movie_id === tmdbMovieId);
+      // 照会 → キャッシュの順で確認
+      return resolveWatchlistId(tmdbMovieId) !== undefined;
     },
     // version は値としては使わないが、**参照を変えるために必須**。
     // 呼び出し側に useMemo(() => isInWatchlist(id), [isInWatchlist, id]) と
     // 書かれたものがあり（movieDetailContent.tsx）、外すと値が凍る。
     // ESLint は「不要」と言うが、消すと E2E 1本だけが落ちる壊れ方をする
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isAuthenticated, store, queryClient, version],
+    [isAuthenticated, store, resolveWatchlistId, version],
   );
 
   /**
@@ -474,25 +610,24 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       if (!isAuthenticated) return false;
       if (store.adds.has(tmdbMovieId)) return true;
       if (store.removes.has(tmdbMovieId)) return false;
-      const items = getWatchlistItemsFromCache(queryClient);
-      return items.some((item) => item.tmdb_movie_id === tmdbMovieId);
+      return resolveWatchlistId(tmdbMovieId) !== undefined;
     },
-    [isAuthenticated, store, queryClient],
+    [isAuthenticated, store, resolveWatchlistId],
   );
 
-  const getWatchlistId = useCallback(
-    (tmdbMovieId: number): string | undefined => {
-      const items = getWatchlistItemsFromCache(queryClient);
-      return items.find((item) => item.tmdb_movie_id === tmdbMovieId)?.id;
-    },
-    [queryClient],
-  );
+  const getWatchlistId = resolveWatchlistId;
 
   const toggleWatchlist = useCallback(
     (movie: WatchlistToggleMovie) => {
       // 未確定の間は誘導しない。ログイン済みの利用者がフルロード直後に
       // 押したときだけ「ログインが必要です」が出ていた（#1131）
       if (isResolving) return;
+
+      // 登録済みかが分からないうちは受け付けない（#1145）。
+      // ここを通すと、登録済みの作品を「未登録」と誤判定して追加APIへ投げ、
+      // 楽観的な成功トーストの直後に 409 のエラートーストが重なる。
+      // UI 側もこの間はボタンを見せないが、押せてしまった場合の最後の砦
+      if (isLookupResolving) return;
 
       if (!isAuthenticated) {
         openLoginPrompt('ウォッチリストに追加するにはログインが必要です。');
@@ -552,6 +687,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
     [
       isAuthenticated,
       isResolving,
+      isLookupResolving,
       openLoginPrompt,
       checkInWatchlist,
       getWatchlistId,
@@ -575,7 +711,9 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       isInWatchlist,
       toggleWatchlist,
       isMovieToggling,
+      // 照会側の isResolving はセッション未確定も含むので、そのまま渡せる
+      isWatchlistResolving: isLookupResolving,
     }),
-    [isInWatchlist, toggleWatchlist, isMovieToggling],
+    [isInWatchlist, toggleWatchlist, isMovieToggling, isLookupResolving],
   );
 }

@@ -176,8 +176,12 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
     const handleCastClick = useCallback(() => {
       notifyNavigating();
     }, [notifyNavigating]);
-    const { isInWatchlist, toggleWatchlist, isMovieToggling } =
-      useWatchlistToggle();
+    const {
+      isInWatchlist,
+      toggleWatchlist,
+      isMovieToggling,
+      isWatchlistResolving,
+    } = useWatchlistToggle();
     const { shareMovie } = useShareMovie();
     const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
 
@@ -378,6 +382,7 @@ export const MovieDetailContent = memo<MovieDetailContentProps>(
                     onClick={handleWatchlistToggle}
                     disabled={isWatchlistToggling}
                     size='md'
+                    isResolving={isWatchlistResolving}
                   />
                 </div>
               </div>

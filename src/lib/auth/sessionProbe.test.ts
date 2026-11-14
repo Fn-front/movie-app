@@ -86,12 +86,33 @@ describe('confirmSignedOut', () => {
     );
   });
 
-  it('応答が返らない回線で待ち続けない', async () => {
+  it('Cookie を載せて取得する', async () => {
+    // 載せないと常に未認証と答えられ、「確認できた」として消去が走る
     mockFetch.mockResolvedValue(response(true, null));
 
     await confirmSignedOut();
 
-    const { signal } = mockFetch.mock.calls[0][1] as RequestInit;
-    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/auth/session',
+      expect.objectContaining({ credentials: 'same-origin' }),
+    );
+  });
+
+  it('応答が返らない回線で待ち続けない', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetch.mockResolvedValue(response(true, null));
+
+      await confirmSignedOut();
+
+      const { signal } = mockFetch.mock.calls[0][1] as RequestInit;
+      expect(signal?.aborted).toBe(false);
+
+      jest.advanceTimersByTime(5000);
+
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

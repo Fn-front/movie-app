@@ -17,6 +17,7 @@ import { usePathname } from 'next/navigation';
 
 import { ROUTES } from '@/constants';
 import { logout } from '@/lib/auth/logout';
+import { confirmSignedOut } from '@/lib/auth/sessionProbe';
 
 /** signOut対象外のパス（認証ページ） */
 const AUTH_PATHS = [ROUTES.LOGIN, ROUTES.REGISTER];
@@ -32,11 +33,27 @@ export function useSessionExpiry() {
   useEffect(() => {
     const wasAuthenticated = prevStatusRef.current === 'authenticated';
     const isAuthPage = AUTH_PATHS.some((path) => pathname.startsWith(path));
-
-    if (wasAuthenticated && status === 'unauthenticated' && !isAuthPage) {
-      void logout();
-    }
     prevStatusRef.current = status;
+
+    if (!wasAuthenticated || status !== 'unauthenticated' || isAuthPage) return;
+
+    let cancelled = false;
+
+    // ⚠️ status の変化だけでログアウトしてはいけない（#1136）。
+    // next-auth は `/api/auth/session` の通信失敗も非2xxも null に潰すため、
+    // authenticated → unauthenticated は「期限切れ」と「応答を得られなかった」
+    // の両方を意味する。後者で logout() を呼ぶと、回線が1度こけただけで
+    // **サーバー側のセッションまで破棄**され（signOut は /api/auth/signout を
+    // POST する）、Cookie 同意レコードも消える。
+    void confirmSignedOut().then((signedOut) => {
+      // 応答待ちの間に再取得が成功していたら、もう期限切れではない
+      if (cancelled || !signedOut) return;
+      void logout();
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [status, pathname]);
 }
 

@@ -531,6 +531,31 @@ describe('useConsentServerSync', () => {
       expect(mockConfirmSignedOut).not.toHaveBeenCalled();
     });
 
+    it('確認中に認証済みへ戻ったら消さない', async () => {
+      let resolveProbe: (value: boolean) => void = () => {};
+      mockConfirmSignedOut.mockReturnValue(
+        new Promise<boolean>((resolve) => {
+          resolveProbe = resolve;
+        }),
+      );
+      // サーバーに記録が無い状態にする。消えてしまった場合に
+      // マージで書き戻されて「消えていない」と見えるのを防ぐため
+      mockGetSettings.mockResolvedValue(serverSettings('unset', null, null));
+      recordConsentDecision('granted', ME, T1);
+      signedOut();
+
+      const { rerender } = render();
+      await waitFor(() => expect(mockConfirmSignedOut).toHaveBeenCalled());
+
+      // 応答待ちの間に再取得が成功した
+      mockUseSession.mockReturnValue(authenticated());
+      rerender({ value: 'granted' });
+      resolveProbe(true);
+
+      await act(async () => {});
+      expect(getStoredConsentRecord().state).toBe('granted');
+    });
+
     it('同期ガードを解除して再ログインで再同期できるようにする', async () => {
       mockGetSettings.mockResolvedValue(serverSettings('unset', null, null));
       const first = render();

@@ -61,7 +61,12 @@ export async function confirmSignedOut(): Promise<boolean> {
 
     // 無効化済みセッション（パスワード変更・絶対期限切れ）は user を
     // 空文字で埋めて返るため、存在確認では判定できない。id の有無で見る
-    // （`getAuthSession` と同じ基準 / #699）
+    // （`getAuthSession` / `proxy.ts` と同じ基準 / #699）。
+    //
+    // なお現在の呼び出し元は status === 'unauthenticated' のときしか
+    // ここへ来ないので、この分岐に実際に当たることはない（無効化済みでも
+    // セッションオブジェクト自体は返るため status は authenticated になる）。
+    // 汎用の判定として正しい基準を置いている
     return !data?.user?.id;
   } catch {
     // 通信そのものに失敗した。未認証だとは言い切れない

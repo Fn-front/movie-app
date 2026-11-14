@@ -14,6 +14,7 @@ import type { Page } from '@playwright/test';
 
 import { ARIA_LABELS } from '@/constants';
 import { test, expect } from '../fixtures/auth';
+import { clearSavedFiltersForTestUser, resetFilters } from '../helpers/api';
 import { filterButton, movieTileDetailLinks } from '../helpers/locators';
 import { mockMovieDetail } from '../helpers/movieDetail';
 import {
@@ -118,6 +119,17 @@ const expectNoGhostEntry = async (
 // `e2e/helpers/overlayHistory.ts` に置いている（同じ判定を使う spec が複数あるため）
 
 test.describe('オーバーレイを閉じたあとの戻る', () => {
+  /**
+   * 適用したフィルターを残さない（#1062）。
+   *
+   * ⚠️ 共有の `TEST_USER` で `saved_filters` を書くため、片付けないと後に走る
+   * spec が「保存済みフィルターを持つ利用者」として始まる。復元結果は URL へ
+   * 書き戻されるので、`/…$/` で URL を厳密に見ている spec が落ちる。
+   * CI は `fullyParallel` ＋ `--shard` で、ファイルの実行順では守れない
+   */
+  test.afterEach(async () => {
+    await clearSavedFiltersForTestUser();
+  });
   test('ドロワーのナビリンクで遷移したあと、戻る1回で前のページへ出る', async ({
     authenticatedPage: page,
   }) => {

@@ -18,6 +18,7 @@ import { test, expect } from '@playwright/test';
 import { ARIA_LABELS } from '@/constants';
 
 import { movieTileDetailLinks, movieTiles } from '../helpers/locators';
+import { clearSavedFiltersForTestUser, resetFilters } from '../helpers/api';
 import {
   MISSING_MOVIE_ID,
   MOVIE_ID,
@@ -42,6 +43,17 @@ const MODAL_URL = /\/movies\/now-showing\?.*movie_id=\d+/;
 const PAGE_URL = /\/movies\/\d+$/;
 
 test.describe('映画詳細のURL化', () => {
+  /**
+   * 保存済みフィルターを持ち越さない（#1062）。
+   *
+   * ⚠️ この spec は URL を `/\/movies\/now-showing$/` と**末尾まで**見る。
+   * 共有の `TEST_USER` に別 spec の `saved_filters` が残っていると、復元結果が
+   * URL へ書き戻されてクエリが付き、ここが落ちる。漏らす側の片付けだけに
+   * 頼らず、**見る側でも**開始時に消す
+   */
+  test.beforeEach(async () => {
+    await clearSavedFiltersForTestUser();
+  });
   test.beforeEach(async ({ page }) => {
     await mockMovieDetail(page);
   });

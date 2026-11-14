@@ -76,7 +76,16 @@ const setupSuccessMocks = () => {
   // 既存ユーザーなし
   mockFrom.mockReturnValueOnce({
     select: () => ({
-      eq: () => ({ single: () => ({ data: null, error: null }) }),
+      eq: () => ({
+        single: () => ({
+          data: null,
+          // 行が無いときに PostgREST が返すのは PGRST116。`error: null` に
+          // していると、実装が「本当に新規」と「読み取り失敗」を分ける
+          // 分岐を検証できず、**全新規登録が 500 になる退行**を素通りさせる
+          // （#1164）
+          error: { code: 'PGRST116', message: 'not found' },
+        }),
+      }),
     }),
   });
   // ユーザーINSERT成功

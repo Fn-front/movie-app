@@ -83,16 +83,22 @@ export async function GET(
           .single();
 
         // ⚠️ 読み取りに失敗したときは `null`（＝確定した「未登録」）を
-        // 入れない。UI が「＋」を出し、押すと既存行と衝突して 409 になる。
-        // 作品情報そのものは取れているので 500 にもしない。未認証時と同じく
-        // **キーごと省いて**「分からない」を伝える（#1164）。
+        // 入れない。UI が空のハートを出し、押すと既存行と衝突して 409 になる。
+        //
+        // キーごと省いて「分からない」を伝える案は採れない。`favorite` の
+        // 不在は**未認証**という別の意味で既に使われており、受け手
+        // （`movieDetailContent.tsx` の `movie.favorite ?? null`）は
+        // 両者を区別できない。第3の状態を増やすより、他のルートと同じく
+        // 500 に倒す（#1164）。
         // 行が無い（PGRST116）のは本当に未登録なので、そちらは null のまま
         if (
-          !favoriteError ||
-          favoriteError.code === SUPABASE_ERROR_CODE.NOT_FOUND
+          favoriteError &&
+          favoriteError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
         ) {
-          favorite = favoriteData ?? null;
+          throw favoriteError;
         }
+
+        favorite = favoriteData ?? null;
       }
     }
 

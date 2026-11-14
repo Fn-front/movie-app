@@ -1961,6 +1961,62 @@ describe('GET /api/movies', () => {
     expect(json.data.movies[1].favorite).toBeNull();
   });
 
+  /**
+   * 読み取りに失敗したら全作品を「未登録」にしない（#1164）
+   *
+   * `error` を捨てると、DB の一時障害で**一覧の全作品**に
+   * `favorite: null` が書かれる。空のハートが並び、押すと既存行と
+   * 衝突して 409 になる。`movies/[id]` と同じ方針で 500 に倒す
+   */
+  it('お気に入りの読み取りに失敗したら、全作品を未登録にせず500を返す', async () => {
+    const handler = await loadGET();
+    mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+    const movies = [{ id: 1, title: '映画A' }];
+
+    const callTracker = { count: 0 };
+    mockSupabaseClient!.from.mockImplementation((table: string) => {
+      callTracker.count++;
+
+      if (table === 'favorites') {
+        return createChainMock({
+          data: null,
+          error: { code: '57P01', message: 'connection terminated' },
+        });
+      }
+
+      const currentCall = callTracker.count;
+      if (currentCall === 1) {
+        return createChainMock({
+          data: { cached_at: new Date().toISOString() },
+          error: null,
+        });
+      }
+      if (currentCall === 2) {
+        const chain = createChainMock({ count: 1 });
+        chain.select.mockImplementation(
+          (_cols: string, opts?: { count?: string }) => {
+            if (opts?.count === 'exact') {
+              return createThenableProxy(createChainMock({ count: 1 }), {
+                count: 1,
+              });
+            }
+            return createThenableProxy(
+              createChainMock({ data: movies, error: null }),
+              { data: movies, error: null },
+            );
+          },
+        );
+        return chain;
+      }
+      return createChainMock({ data: movies, error: null });
+    });
+
+    const response = await handler(createRequest());
+
+    expect(response.status).toBe(500);
+  });
+
   // === Cache-Controlヘッダー ===
 
   it('未認証時はpublic Cache-Controlヘッダーが設定される', async () => {

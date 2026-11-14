@@ -17,6 +17,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 
 import { COOKIE_CONSENT_MESSAGES, COOKIE_CONSENT_VERSION } from '@/constants';
+import { setConsentSyncPending } from '@/features/cookieConsent/utils/bannerSuppression';
+import { useIsomorphicLayoutEffect } from '@/hooks/useIsomorphicLayoutEffect';
 import { useToastDispatch } from '@/hooks/useToast';
 import type { CookieConsentState } from '@/hooks/useCookieConsent';
 import { getSettings, updateSettings } from '@/lib/api/user/user';
@@ -127,6 +129,26 @@ export function useConsentServerSync(consent: CookieConsentState): void {
     };
   }, [status]);
 
+  // バナーの抑止（#1137）
+  //
+  // ⚠️ レイアウト効果にするのは**ペイント前に決める**ため。`useEffect` だと
+  // 「localStorage は未決定 → バナーを描く → 抑止がかかって消える」という
+  // 1フレームの窓が開く。
+  //
+  // 「確定した」と言えるのは、未認証と分かったときか、初回マージが
+  // 終わったとき（成否は問わない）。マージの終了は run() の finally が伝える
+  useIsomorphicLayoutEffect(() => {
+    if (status === 'loading') {
+      setConsentSyncPending(true);
+      return;
+    }
+    if (status !== 'authenticated' || userId === '') {
+      setConsentSyncPending(false);
+      return;
+    }
+    setConsentSyncPending(syncedUserId !== userId);
+  }, [status, userId]);
+
   // 初回マージ
   useEffect(() => {
     if (status !== 'authenticated' || userId === '') return;
@@ -202,7 +224,10 @@ export function useConsentServerSync(consent: CookieConsentState): void {
       if (!cancelled) syncedUserId = userId;
     };
 
-    void run();
+    // 成否を問わず抑止を解く。解かないとバナーが永久に出ない（#1137）
+    void run().finally(() => {
+      setConsentSyncPending(false);
+    });
 
     return () => {
       cancelled = true;

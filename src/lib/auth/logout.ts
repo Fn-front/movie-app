@@ -15,6 +15,7 @@
 import { signOut } from 'next-auth/react';
 
 import { ROUTES } from '@/constants';
+import { markSigningOut } from '@/features/cookieConsent/utils/bannerSuppression';
 import { deleteGaCookies, sendConsentUpdate } from '@/utils/analytics';
 import { clearOwnedConsent } from '@/utils/cookieConsent';
 
@@ -45,6 +46,10 @@ export function cleanUpBeforeSignOut(): void {
 export async function logout(
   callbackUrl: string = ROUTES.LOGIN,
 ): Promise<void> {
+  // 同意バナーを止めるのが先。`signOut` は遷移の前に2往復するので、
+  // 後に回すとその間だけバナーが出る（#1133）。遷移先でも出るものなので、
+  // 離れる画面で先に出す意味はない
+  markSigningOut();
   cleanUpBeforeSignOut();
   await signOut({ callbackUrl });
 }

@@ -7,7 +7,13 @@
 
 'use client';
 
-import { memo, useCallback, useEffect, useRef } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button/button';
@@ -15,6 +21,10 @@ import { ARIA_LABELS, ROUTES } from '@/constants';
 import { useCookieConsent } from '@/hooks/useCookieConsent';
 import { getGaMeasurementId } from '@/utils/analytics';
 
+import {
+  isBannerSuppressed,
+  subscribeBannerSuppression,
+} from '../../utils/bannerSuppression';
 import {
   resolveBannerHeight,
   setBannerHeightVar,
@@ -40,8 +50,19 @@ export const CookieConsentBanner = memo(function CookieConsentBanner() {
   const { consent, grant, deny } = useCookieConsent();
   const bannerRef = useRef<HTMLElement>(null);
 
+  // 同意状態がまだ確定していない／もう画面を離れる間は出さない。
+  // 理由は bannerSuppression.ts（#1137 / #1133）
+  const isSuppressed = useSyncExternalStore(
+    subscribeBannerSuppression,
+    isBannerSuppressed,
+    // SSR とハイドレーション時は consent が 'unknown' で既に非表示なので、
+    // ここは抑止なしで揃えておけばよい
+    () => false,
+  );
+
   // 計測しない設定なら同意を求める対象が無い
-  const isVisible = getGaMeasurementId() !== null && consent === 'unset';
+  const isVisible =
+    getGaMeasurementId() !== null && consent === 'unset' && !isSuppressed;
 
   useEffect(() => {
     const element = bannerRef.current;

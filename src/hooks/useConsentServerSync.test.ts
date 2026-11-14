@@ -18,6 +18,10 @@ import {
   useConsentServerSync,
 } from './useConsentServerSync';
 import type { CookieConsentState } from './useCookieConsent';
+import {
+  __resetBannerSuppressionForTest,
+  isBannerSuppressed,
+} from '@/features/cookieConsent/utils/bannerSuppression';
 
 const mockUseSession = jest.fn();
 jest.mock('next-auth/react', () => ({
@@ -78,11 +82,71 @@ describe('useConsentServerSync', () => {
     jest.clearAllMocks();
     localStorage.clear();
     __resetConsentSyncForTest();
+    __resetBannerSuppressionForTest();
     mockUseSession.mockReturnValue(authenticated());
     mockUpdateSettings.mockResolvedValue(undefined);
     // 既定は「ログアウト済みだとサーバーが明示した」。取得失敗の分岐は
     // それを明示するテストだけが false に差し替える
     mockConfirmSignedOut.mockResolvedValue(true);
+  });
+
+  /**
+   * バナーの抑止（#1137）
+   *
+   * ログイン中の初回マージは応答を待ってから端末へ書き戻すため、その間
+   * localStorage は「未決定」に見える。サーバーに記録がある利用者には
+   * バナーが出てから消えるので、確定するまで出させない
+   */
+  describe('バナーの抑止', () => {
+    it('セッション解決中は抑止する', async () => {
+      mockUseSession.mockReturnValue({ data: null, status: 'loading' });
+
+      render();
+
+      await act(async () => {});
+      expect(isBannerSuppressed()).toBe(true);
+    });
+
+    it('未認証なら抑止しない（同期が走らないので確定している）', async () => {
+      mockUseSession.mockReturnValue({
+        data: null,
+        status: 'unauthenticated',
+      });
+
+      render();
+
+      await act(async () => {});
+      expect(isBannerSuppressed()).toBe(false);
+    });
+
+    it('初回マージの応答待ちは抑止し、終わったら解く', async () => {
+      let resolveGet: (value: unknown) => void = () => {};
+      mockGetSettings.mockReturnValue(
+        new Promise((resolve) => {
+          resolveGet = resolve;
+        }),
+      );
+
+      render();
+
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+      expect(isBannerSuppressed()).toBe(true);
+
+      await act(async () => {
+        resolveGet(serverSettings('granted', T1, COOKIE_CONSENT_VERSION));
+      });
+
+      expect(isBannerSuppressed()).toBe(false);
+    });
+
+    it('初回マージに失敗しても抑止を解く', async () => {
+      // 解かないとバナーが永久に出ない
+      mockGetSettings.mockRejectedValue(new Error('boom'));
+
+      render();
+
+      await waitFor(() => expect(isBannerSuppressed()).toBe(false));
+    });
   });
 
   describe('発火条件', () => {

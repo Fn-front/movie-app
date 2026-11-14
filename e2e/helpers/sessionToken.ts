@@ -13,7 +13,6 @@
  * TOTP コードを DB の共有鍵から計算する `helpers/totp.ts` と同じ考え方。
  */
 
-import { encode } from 'next-auth/jwt';
 import type { BrowserContext, Cookie } from '@playwright/test';
 
 /**
@@ -64,7 +63,6 @@ export interface PendingSessionUser {
   id: string;
   email: string;
   name?: string | null;
-  role?: string;
 }
 
 /**
@@ -93,6 +91,12 @@ export async function seedTotpPendingSession(
   const sessionCookie = await resolveSessionCookie(context);
   const now = Date.now();
 
+  // ⚠️ 動的 import にする。`package.json` に `type` が無いため Playwright は
+  // この .ts を CJS 扱いし、静的 import は `require('next-auth/jwt')` になる。
+  // next-auth は `"type": "module"` で `./jwt` に `require` 条件が無いので、
+  // Node の `require(esm)` が既定で無効な環境では ERR_REQUIRE_ESM になる
+  const { encode } = await import('next-auth/jwt');
+
   const value = await encode({
     // salt は Cookie 名と一致させる必要がある（@auth/core の仕様）
     salt: sessionCookie.name,
@@ -102,7 +106,10 @@ export async function seedTotpPendingSession(
       email: user.email,
       name: user.name ?? null,
       picture: null,
-      role: user.role ?? 'user',
+      // `totpPending` のあいだ session コールバックは role を空にするため、
+      // ここの値は proxy の admin 判定へ届かない（届く前に
+      // totpPending のリダイレクトが起きる）。形だけ埋めておく
+      role: 'user',
       hasPassword: true,
       passwordChangedAt: null,
       // 絶対有効期限（7日）の起点。古いと jwt コールバックが invalidated にする

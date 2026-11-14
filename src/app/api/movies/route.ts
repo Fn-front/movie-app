@@ -32,6 +32,7 @@ import {
   GENRE_CACHE_DURATION_MS,
   DISCOVER_API_MAX_PAGES,
   GENRE_NAME_OVERRIDES,
+  SUPABASE_ERROR_CODE,
 } from '@/constants';
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
@@ -222,13 +223,24 @@ export async function GET(request: Request) {
       //
       // そのため、キャッシュ失効時の同期をCRONへ移すには先に
       // Discover専用のCRONが要る。揃えるのはそれからにする。
-      const { data: cacheInfo } = await supabase
+      const { data: cacheInfo, error: cacheInfoError } = await supabase
         .from('movie_cache')
         .select('cached_at')
         .eq('release_type', release_type)
         .order('cached_at', { ascending: false })
         .limit(1)
         .single();
+
+      // ⚠️ error を捨てると「キャッシュなし」に化け、DB が詰まっている間
+      // ずっと失効と判定して TMDb を余分に叩く。障害中はこの後のクエリも
+      // 失敗するので、ここで止めたほうが分かりやすい。
+      // 行が無い（PGRST116）＝本当にキャッシュ未作成は従来どおり通す（#1164）
+      if (
+        cacheInfoError &&
+        cacheInfoError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
+      ) {
+        throw cacheInfoError;
+      }
 
       const cacheExpired =
         !cacheInfo ||

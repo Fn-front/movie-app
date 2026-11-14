@@ -22,6 +22,7 @@ import {
   ERROR_CODE,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  SUPABASE_ERROR_CODE,
 } from '@/constants';
 import {
   generateOtpCode,
@@ -104,11 +105,22 @@ export async function POST(request: Request) {
     if (pwnedResponse) return pwnedResponse;
 
     // 既存ユーザーチェック（is_verified も見る）
-    const { data: existingUser } = await supabase
+    const { data: existingUser, error: existingUserError } = await supabase
       .from('users')
       .select('id, is_verified')
       .eq('email', email)
       .single();
+
+    // ⚠️ error を捨てると「新規メール」に化け、そのまま INSERT へ進む。
+    // 既存アカウントがあれば一意制約違反で 500 になるので結果は同じだが、
+    // **既存アカウントへ書き込みを試みる**経路を通るのは意図と違う。
+    // 行が無い（PGRST116）のが本当の新規なので、そちらは従来どおり通す（#1164）
+    if (
+      existingUserError &&
+      existingUserError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
+    ) {
+      throw existingUserError;
+    }
 
     if (existingUser?.is_verified) {
       // メールアドレス列挙防止:

@@ -90,7 +90,10 @@ const mockOtpSelect = (otpData: Record<string, unknown> | null) => {
         eq: jest.fn().mockReturnValue({
           single: () => ({
             data: otpData,
-            error: otpData ? null : { message: 'not found' },
+            // 行が無いときに PostgREST が返すのは PGRST116。code を持たせ
+            // ないと、実装の「本当に無い」と「読み取り失敗」を分ける分岐を
+            // 検証できない（#1164）
+            error: otpData ? null : { code: 'PGRST116', message: 'not found' },
           }),
         }),
       }),
@@ -121,6 +124,10 @@ const mockOtpDelete = () => {
 describe('POST /api/user/change-password', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks は mockReturnValueOnce のキューを捨てない（捨てるのは
+    // mockReset）。途中で返るテストの使い残しが次のテストへ漏れると、
+    // 以降すべてのモック応答が1つずれて不可解な失敗になる
+    mockFrom.mockReset();
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -189,6 +196,37 @@ describe('POST /api/user/change-password', () => {
 
     expect(response.status).toBe(400);
     expect(json.error.message).toBe('OTP検証が完了していません。');
+  });
+
+  /**
+   * DB障害を「OTP未検証」に化かさない（#1164）
+   *
+   * `.single()` はどんなエラーでも `data: null` を返すため、`error` を
+   * 見ないと読み取り失敗が上と同じ 400 になる。確認コードの検証を終えた
+   * 利用者が「検証が完了していません」と言われ、再送からやり直すことになる
+   */
+  it('検証済みOTPの読み取りに失敗したら、未検証扱いにせず500を返す', async () => {
+    mockUserSelect({
+      id: 'user-123',
+      email: 'test@example.com',
+      password_hash: 'old_hash',
+    });
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            single: () => ({
+              data: null,
+              error: { code: '57P01', message: 'connection terminated' },
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await POST(createRequest(validBody()));
+
+    expect(response.status).toBe(500);
   });
 
   it('検証済みOTPが期限切れの場合400を返す', async () => {
@@ -286,6 +324,10 @@ describe('POST /api/user/change-password', () => {
 describe('POST /api/user/change-password — 現在のパスワード確認（#643）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks は mockReturnValueOnce のキューを捨てない（捨てるのは
+    // mockReset）。途中で返るテストの使い残しが次のテストへ漏れると、
+    // 以降すべてのモック応答が1つずれて不可解な失敗になる
+    mockFrom.mockReset();
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -395,6 +437,10 @@ describe('POST /api/user/change-password — 現在のパスワード確認（#6
 describe('POST /api/user/change-password — 漏洩パスワードの照合（#652）', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks は mockReturnValueOnce のキューを捨てない（捨てるのは
+    // mockReset）。途中で返るテストの使い残しが次のテストへ漏れると、
+    // 以降すべてのモック応答が1つずれて不可解な失敗になる
+    mockFrom.mockReset();
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -454,6 +500,10 @@ describe('POST /api/user/change-password — 処理順（#940）', () => {
   // currentPassword の総当たりを続けられる（`.claude/rules/api-route.md`）
   beforeEach(() => {
     jest.clearAllMocks();
+    // clearAllMocks は mockReturnValueOnce のキューを捨てない（捨てるのは
+    // mockReset）。途中で返るテストの使い残しが次のテストへ漏れると、
+    // 以降すべてのモック応答が1つずれて不可解な失敗になる
+    mockFrom.mockReset();
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });

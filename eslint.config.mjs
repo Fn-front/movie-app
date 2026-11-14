@@ -109,6 +109,15 @@ export default [
       // React Hooks
       ...reactHooksPlugin.configs.recommended.rules,
 
+      // `useIsomorphicLayoutEffect` は名前が `useEffect` / `useLayoutEffect` の
+      // どちらでもないため、既定では exhaustive-deps の検査対象外になる。
+      // 依存配列から必要な値を落としても警告が出ないまま通る（#1155 で実測。
+      // 同じコードで `useEffect` は警告1件、こちらは0件だった）
+      'react-hooks/exhaustive-deps': [
+        'warn',
+        { additionalHooks: '^useIsomorphicLayoutEffect$' },
+      ],
+
       // Next.js
       ...nextPlugin.configs.recommended.rules,
       ...nextPlugin.configs['core-web-vitals'].rules,

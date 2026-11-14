@@ -7,18 +7,13 @@
 
 'use client';
 
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useRef,
-  useSyncExternalStore,
-} from 'react';
+import { memo, useCallback, useRef, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button/button';
 import { ARIA_LABELS, ROUTES } from '@/constants';
 import { useCookieConsent } from '@/hooks/useCookieConsent';
+import { useIsomorphicLayoutEffect } from '@/hooks/useIsomorphicLayoutEffect';
 import { getGaMeasurementId } from '@/utils/analytics';
 
 import {
@@ -64,9 +59,19 @@ export const CookieConsentBanner = memo(function CookieConsentBanner() {
   const isVisible =
     getGaMeasurementId() !== null && consent === 'unset' && !isSuppressed;
 
-  useEffect(() => {
+  // レイアウト効果にするのは、下の同期書き込みを**初回ペイント前**に
+  // 済ませるため。useEffect だと1フレームぶん変数が未確定のまま描かれる
+  useIsomorphicLayoutEffect(() => {
     const element = bannerRef.current;
     if (!element) return;
+
+    // ⚠️ RO を張る前に一度**同期で**書く（#1155）。RO の初回観測は次フレーム
+    // なので、それだけに任せると変数が 0px のままの窓ができる。
+    // この変数は本文の padding-bottom・ボトムナビの bottom・レイアウトの
+    // height が読んでいるため、1フレームぶん全部が跳ねる。特にボトムナビは
+    // バナーの裏に潜って押せなくなる。
+    // `useBottomNavHeight.ts` が同じ理由で同じ形にしてある
+    setBannerHeightVar(element.getBoundingClientRect().height);
 
     const observer = new ResizeObserver(([entry]) => {
       // 境界ボックスで測る。切り上げは setBannerHeightVar 側で行う
@@ -85,7 +90,7 @@ export const CookieConsentBanner = memo(function CookieConsentBanner() {
       // トーストが浮いたままになる
       setBannerHeightVar(null);
     };
-  }, [isVisible]);
+  }, []);
 
   const handleGrant = useCallback(() => {
     grant();

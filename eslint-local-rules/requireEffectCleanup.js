@@ -48,13 +48,22 @@ const requireEffectCleanup = {
   },
 };
 
+/** 検査対象の効果フック */
+const EFFECT_HOOK_NAMES = new Set([
+  'useEffect',
+  'useLayoutEffect',
+  // 中身は useEffect / useLayoutEffect そのもの（`useIsomorphicLayoutEffect.ts`）。
+  // 名前が違うだけで検査を素通りしていた（#1155）
+  'useIsomorphicLayoutEffect',
+]);
+
 /**
- * useEffect / useLayoutEffect の呼び出しかどうか判定
+ * 効果フックの呼び出しかどうか判定
  */
 function isUseEffectCall(node) {
   const callee = node.callee;
   if (callee.type === 'Identifier') {
-    return callee.name === 'useEffect' || callee.name === 'useLayoutEffect';
+    return EFFECT_HOOK_NAMES.has(callee.name);
   }
   return false;
 }

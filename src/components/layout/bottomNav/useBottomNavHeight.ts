@@ -104,8 +104,10 @@ export function useBottomNavHeight(): RefObject<HTMLElement | null> {
     // removeProperty が先に走り、新しい観測が来るまでの間だけ本文の
     // padding-bottom とトーストの bottom が 0 に落ちる（`/privacy` →
     // `/search` を 8ms 間隔で採ると 372 サンプル中1件で再現）。
-    // 同意バナー（`bannerHeight.ts`）がこれを持たないのは、あちらが
-    // セッション中に一度しかマウントしないため
+    // 同意バナー（`cookieConsentBanner.tsx`）も同じ形にしてある。
+    // 以前は「あちらはセッション中に一度しかマウントしないので不要」と
+    // 書いていたが、それは**再マウントの窓**の話であって、**初回マウントの
+    // 窓**は塞がっていなかった（#1155）
     setBottomNavHeightVar(element.getBoundingClientRect().height);
 
     const observer = new ResizeObserver(([entry]) => {

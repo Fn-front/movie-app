@@ -499,6 +499,67 @@ describe('useOverlayHistory', () => {
       expect(onClose).not.toHaveBeenCalled();
     });
 
+    /*
+      アンマウントしたら開き直さない（レビュー指摘）
+
+      ⚠️ この取り消しは**主 effect の cleanup より後ろ**で走らないと効かない。
+      React はアンマウント時に cleanup を定義順で走らせるため、前に置くと
+      消した直後に主 effect が登録し直す
+    */
+    it('開いたままアンマウントしたあと、進んでも開き直さない', async () => {
+      const onReopen = jest.fn();
+      /*
+        ⚠️ **開いたままアンマウントすること。** 先に閉じてからだと主 effect は
+        早期 return していて cleanup を持たず、登録し直す経路を踏まない
+        （＝順序を入れ替えても落ちないテストになる）
+      */
+      const { unmount } = renderHook(() =>
+        useOverlayHistory(true, jest.fn(), onReopen),
+      );
+
+      const token = currentToken();
+      expect(token).toBeTruthy();
+
+      unmount();
+      await flushAsyncBack();
+
+      movePointerTo({ __overlayHistory: token });
+
+      expect(onReopen).not.toHaveBeenCalled();
+    });
+
+    /*
+      開かなかったオーバーレイの印を、別のオーバーレイが拾わない（レビュー指摘）
+
+      `onReopen` を渡していても呼び出し側が `open === true` を無視する
+      オーバーレイ（ログイン誘導・評価モーダル）では、進んでも開かないので
+      印が残る。自分のものか見ないと、次に開いた別のオーバーレイが
+      そのトークンを引き継ぎ、**自分のエントリを積まない**
+    */
+    it('開き直さなかった印を、別のオーバーレイが引き継がない', async () => {
+      // A: onReopen は渡すが、呼び出し側は開き直さない
+      const a = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), jest.fn()),
+        { initialProps: { open: true } },
+      );
+      const tokenA = currentToken();
+
+      movePointerTo(null);
+      a.rerender({ open: false });
+      await flushAsyncBack();
+
+      // 進む: A の印が立つが、A は開き直さない
+      movePointerTo({ __overlayHistory: tokenA });
+
+      // B: 別のオーバーレイを開く
+      const before = window.history.length;
+      renderHook(() => useOverlayHistory(true, jest.fn(), jest.fn()));
+
+      // B は自分のエントリを積む（A のトークンを引き継がない）
+      expect(window.history.length).toBe(before + 1);
+      expect(currentToken()).not.toBe(tokenA);
+    });
+
     // 進むで復活したエントリは、そのオーバーレイのものだけに届く
     it('入れ子では、進んだ先のエントリを持つオーバーレイだけが開き直す', async () => {
       const outerReopen = jest.fn();

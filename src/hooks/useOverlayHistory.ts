@@ -336,19 +336,6 @@ export function useOverlayHistory(
    */
   const ownTokensRef = useRef<Set<string>>(new Set());
 
-  useEffect(() => {
-    const ownTokens = ownTokensRef.current;
-
-    return () => {
-      for (const token of ownTokens) {
-        dormantOverlays.delete(token);
-        resurrectedTokens.delete(token);
-      }
-      ownTokens.clear();
-      stopListening();
-    };
-  }, []);
-
   /**
    * 閉じるのと同時にルーターが URL を変えるか。
    *
@@ -378,11 +365,19 @@ export function useOverlayHistory(
       進むで自分のエントリが復活し、その popstate で開き直された場合は
       **エントリがもう存在する**。積み直すと履歴が1つ増え、戻る回数が
       合わなくなる（#1053）。トークンもそのまま引き継いで、
-      cleanup のトークン一致判定が成立するようにする
+      cleanup のトークン一致判定が成立するようにする。
+
+      ⚠️ **自分が採番したトークンに限ること。** `onReopen` を渡していても
+      呼び出し側が `open === true` を無視するオーバーレイ（ログイン誘導・
+      評価モーダル）では、進んでも開かないので印が消えずに残る。
+      自分のものか見ないと、**次に開いた別のオーバーレイが他人のトークンを
+      引き継ぎ、自分のエントリを積まない**（実測で履歴が1つ足りなくなった）。
     */
     const resurrected = window.history.state?.[OVERLAY_STATE_KEY];
     const isResurrected =
-      typeof resurrected === 'string' && resurrectedTokens.has(resurrected);
+      typeof resurrected === 'string' &&
+      resurrectedTokens.has(resurrected) &&
+      ownTokensRef.current.has(resurrected);
     const token = isResurrected ? resurrected : createOverlayToken();
 
     ownTokensRef.current.add(token);
@@ -472,6 +467,29 @@ export function useOverlayHistory(
       stopListening();
     };
   }, [open]);
+
+  /*
+    アンマウント時に、自分の休止登録を取り消す。
+    残すと、進むで**消えたコンポーネント**を開き直そうとする。
+
+    ⚠️ **この effect は上の主 effect より後ろに置くこと。** React は
+    アンマウント時に cleanup を**定義順**で走らせるので、前に置くと
+    ここで消した直後に主 effect の cleanup が `rememberDormantOverlay` で
+    **登録し直してしまう**（実測で、消えたコンポーネントの `onReopen` が
+    呼ばれた）。
+  */
+  useEffect(() => {
+    const ownTokens = ownTokensRef.current;
+
+    return () => {
+      for (const token of ownTokens) {
+        dormantOverlays.delete(token);
+        resurrectedTokens.delete(token);
+      }
+      ownTokens.clear();
+      stopListening();
+    };
+  }, []);
 
   return { shouldReplaceNavigation: hasEntry, notifyNavigating };
 }

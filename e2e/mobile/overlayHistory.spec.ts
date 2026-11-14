@@ -536,3 +536,31 @@ test.describe('閉じたオーバーレイを進むで開き直す', () => {
     await expect(dialog).not.toBeVisible();
   });
 });
+
+/**
+ * ドロワーも進むで開き直す（#1053）
+ *
+ * `Modal` を使うモーダルとは別経路（`MobileDrawer` が直接
+ * `useOverlayHistory` を呼ぶ）なので、別に押さえる。
+ */
+test.describe('ドロワーを進むで開き直す', () => {
+  test('戻るで閉じたドロワーが、進むで開き直り、次の戻るで閉じる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+
+    await page.getByRole('button', { name: ARIA_LABELS.OPEN_MENU }).click();
+    const drawer = page.getByRole('dialog');
+    await expect(drawer).toBeVisible();
+    await expectEntryExists(page);
+
+    await page.goBack();
+    await expect(drawer).not.toBeVisible();
+
+    await page.goForward();
+    await expect(drawer).toBeVisible();
+
+    await page.goBack();
+    await expect(drawer).not.toBeVisible();
+  });
+});

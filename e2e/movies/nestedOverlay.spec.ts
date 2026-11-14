@@ -111,6 +111,30 @@ test.describe('入れ子オーバーレイ', () => {
     await expect(page).toHaveURL(/movie_id=\d+/);
   });
 
+  /**
+   * 戻るで閉じた予告動画を、進むで開き直す（#1053）
+   *
+   * 入れ子の内側だけが戻るで外れ、進むで同じ順に戻ってくること。
+   * ⚠️ 映画詳細は movie_id を持つ URL なので履歴の扱いが別系統
+   * （#1033）。ここで見ているのは**予告動画＝フックが面倒を見る側**
+   */
+  test('予告動画を戻るで閉じたあと、進むで開き直る', async ({
+    authenticatedPage: page,
+  }) => {
+    await openNestedOverlays(page);
+
+    await page.goBack();
+    await expectOnlyOuterRemains(page);
+
+    // #1053: ここでエントリだけ戻り、予告動画は閉じたままだった
+    await page.goForward();
+    await expect(page.locator(DIALOG_SELECTOR)).toHaveCount(2);
+
+    // 開き直したあとの戻るが空振りしないこと
+    await page.goBack();
+    await expectOnlyOuterRemains(page);
+  });
+
   test('入れ子を閉じた後、戻るで前のページまで出られる', async ({
     authenticatedPage: page,
   }) => {

@@ -10,7 +10,6 @@
 
 import { useCallback, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AxiosError } from 'axios';
 
 import {
   addFavorite,
@@ -27,25 +26,11 @@ import { useToastDispatch } from '@/hooks/useToast';
 import {
   favoriteKeys,
   movieKeys,
-  HTTP_STATUS,
   FAVORITES_ERROR_MESSAGES,
   FAVORITES_SUCCESS_MESSAGES,
 } from '@/constants';
+import { isConflictError } from '@/utils/error';
 import type { GetMoviesResponse } from '@/lib/api/movies/movies';
-
-/**
- * 他タブなどで先に登録されていて重複エラー（409）になったかどうか
- *
- * クライアントは自分が知っている状態でしか判断できないため、この経路は
- * 原理的に残る。汎用の「追加に失敗しました」だけだと何が起きたのか
- * 伝わらないので、文言を分けて onSettled の再取得で表示を追従させる
- */
-function isConflictError(error: unknown): boolean {
-  return (
-    error instanceof AxiosError &&
-    error.response?.status === HTTP_STATUS.CONFLICT
-  );
-}
 
 /**
  * useFavoriteMutationsフックの返り値

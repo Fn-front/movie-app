@@ -26,6 +26,7 @@ import type {
 } from '@/lib/api/watchlist/watchlist';
 import type { WatchlistAddFormData } from '@/schema/watchlist';
 import { useToastDispatch } from '@/hooks/useToast';
+import { isConflictError } from '@/utils/error';
 
 /**
  * トグル対象の映画データ（最小限のフィールド）
@@ -524,6 +525,19 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       return { previousDataMap, previousLookup, optimisticId };
     },
     onSuccess: (response, _newItem, context) => {
+      // ⚠️ 成功トーストはここで出す（#1149）。以前は押した時点で出していたため、
+      // 409 で `onError` が走ると「追加しました（緑）」と
+      // 「追加に失敗しました（赤）」が**2枚重なって**いた。
+      // 代償として往復1回ぶん遅れるが、お気に入り側（useFavoriteMutations）も
+      // 同じ位置で、2枚出る状態より誤解が少ない。
+      //
+      // ⚠️ 下の仮ID差し替えより**前**に出す。あちらは `optimisticId` が
+      // 取れなければ何もしないが、成功した事実はそれとは無関係
+      toast({
+        title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
+        variant: 'success',
+      });
+
       if (!context?.optimisticId) return;
 
       // 仮IDのままだと、再取得が届く前に削除を押したとき
@@ -548,11 +562,23 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         response.data.id,
       );
     },
-    onError: (_error, _newItem, context) => {
+    onError: (error, _newItem, context) => {
       if (context?.previousDataMap) {
         rollbackCaches(queryClient, context.previousDataMap);
       }
       restoreLookupCache(queryClient, context?.previousLookup);
+
+      // 重複（409）は失敗ではなく「すでに望みどおりの状態」なので赤いエラーに
+      // しない。別タブ・別端末で先に追加されていた場合などに出る。
+      // `onSettled` の invalidate で照会が取り直され、表示も登録済みに追従する
+      if (isConflictError(error)) {
+        toast({
+          title: WATCHLIST_ERROR_MESSAGES.ALREADY_EXISTS,
+          variant: 'warning',
+        });
+        return;
+      }
+
       toast({
         title: 'エラー',
         description: WATCHLIST_ERROR_MESSAGES.ADD_FAILED,
@@ -585,6 +611,14 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       );
 
       return { previousDataMap, previousLookup };
+    },
+    // 追加側と同じ位置に揃える（#1149）。片方だけ押した時点で出すと、
+    // 「追加は遅れて出るのに削除は即出る」という非対称になる
+    onSuccess: () => {
+      toast({
+        title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
+        variant: 'success',
+      });
     },
     onError: (_error, _variables, context) => {
       if (context?.previousDataMap) {
@@ -712,10 +746,6 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
           notifyOptimisticChange(store);
           removeMutate({ watchlistId, tmdbMovieId: movie.id });
           sendEvent(ANALYTICS_EVENTS.WATCHLIST_REMOVE, { movie_id: movie.id });
-          toast({
-            title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
-            variant: 'success',
-          });
         }
       } else {
         // 楽観状態を更新（即座にUIへ反映。他のインスタンスにも伝わる）
@@ -730,10 +760,6 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
           release_date: movie.release_date,
         });
         sendEvent(ANALYTICS_EVENTS.WATCHLIST_ADD, { movie_id: movie.id });
-        toast({
-          title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
-          variant: 'success',
-        });
       }
     },
     [
@@ -745,7 +771,6 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       getWatchlistId,
       addMutate,
       removeMutate,
-      toast,
       store,
     ],
   );

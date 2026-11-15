@@ -9,6 +9,7 @@ import {
   formatErrorMessage,
   isNetworkError,
   isAuthError,
+  isConflictError,
   logError,
   HTTP_ERROR_MESSAGES,
 } from './error';
@@ -271,6 +272,48 @@ describe('isAuthError', () => {
 
   it('その他のエラーの場合falseを返す', () => {
     expect(isAuthError(new Error('error'))).toBe(false);
+  });
+});
+
+describe('isConflictError', () => {
+  it('AxiosError 409の場合trueを返す', () => {
+    const error = createAxiosError(409);
+    expect(isConflictError(error)).toBe(true);
+  });
+
+  it('AxiosError 400の場合falseを返す', () => {
+    const error = createAxiosError(400);
+    expect(isConflictError(error)).toBe(false);
+  });
+
+  it('AxiosError 500の場合falseを返す', () => {
+    const error = createAxiosError(500);
+    expect(isConflictError(error)).toBe(false);
+  });
+
+  it('レスポンスを持たないAxiosErrorの場合falseを返す', () => {
+    // ネットワーク不通。`error.response` が undefined になる
+    expect(
+      isConflictError(new AxiosError('Network Error', 'ERR_NETWORK')),
+    ).toBe(false);
+  });
+
+  it('その他のエラーの場合falseを返す', () => {
+    expect(isConflictError(new Error('error'))).toBe(false);
+  });
+
+  /**
+   * ⚠️ `isAuthError` と違って `Response` は受け取らない。
+   *
+   * 409 を返すのはお気に入り・ウォッチリストの追加だけで、どちらも axios 経由。
+   * 使われない `instanceof Response` を足すと、`Response` が未定義の環境
+   * （jsdom）で判定そのものが ReferenceError になる
+   */
+  it('Responseを渡してもfalseを返す（例外にしない）', () => {
+    expect(() =>
+      isConflictError(new Response(null, { status: 409 })),
+    ).not.toThrow();
+    expect(isConflictError(new Response(null, { status: 409 }))).toBe(false);
   });
 });
 

@@ -213,6 +213,23 @@ export function useConsentServerSync(consent: CookieConsentState): void {
       inFlight = null;
       if (cancelled) return;
 
+      // ⚠️ **応答が返ってきた先がログアウトの最中なら、何もせず降りる。**
+      //
+      // このマージが「ログアウト中に新しく始まる」ことは無い（開始条件に
+      // `status === 'authenticated'` がある）。塞ぎたいのは**飛んでいた GET が
+      // ログアウト中に着地する**ほうで、そちらは `status` の反転を待たない。
+      //
+      // 端末のレコードが未認証同意（`owner` が空文字）のときに効く。
+      // `clearOwnedConsent()` は意図的にそれを消さないので、
+      // `cleanUpBeforeSignOut()` のあとも端末値が残り、マージが
+      // `adopt-local` を選んで PUT を投げてしまう。Cookie 削除より後ろへ
+      // 着地すれば 401 で落ち、ログアウト成功と同時に同期失敗のトーストが出る。
+      //
+      // 書き戻しも止まる。止めないと `cleanUpBeforeSignOut()` が消した
+      // owner 付きレコードが復活し、遷移先の `<head>` スクリプトが
+      // **1ページロードぶん前の利用者の同意を適用する**（#931 が閉じたかった窓）
+      if (isSigningOut()) return;
+
       // 3. 応答待ちの間に利用者が操作していないか確認する（compare-and-swap）
       //    比較するのは状態キーだけ。4キーすべてを見ると、別タブの書き込み
       //    途中（付随情報は新しいが状態はまだ古い）を操作と誤判定する

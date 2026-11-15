@@ -478,28 +478,89 @@ describe('useConsentServerSync', () => {
       expect(mockUpdateSettings).not.toHaveBeenCalled();
     });
 
+    /**
+     * ⚠️ 実際の失敗シーケンスを通すこと。`markSigningOut()` の直後に
+     * `clearSigningOut()` を呼ぶだけだと**ガードを無効化しても通ってしまい**、
+     * 「戻ったら再開する」しか見ていないテストになる
+     */
     it('ログアウトが失敗して戻ったら、同期は再開する', async () => {
-      mockGetSettings.mockResolvedValue(serverSettings('unset', null, null));
+      mockGetSettings.mockResolvedValue(
+        serverSettings('granted', T1, COOKIE_CONSENT_VERSION),
+      );
 
-      const { rerender } = render('unset');
+      const { rerender } = render('granted');
       await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
 
+      // ログアウトを試みる（ここでガードが効く）
       act(() => {
         markSigningOut();
+        clearOwnedConsent();
       });
+      rerender({ value: 'unset' });
+      await act(async () => {});
+      expect(mockUpdateSettings).not.toHaveBeenCalled();
+
       // `signOut` が失敗した場合は印が戻る（logout.ts の catch）
+      //
+      // ⚠️ 再開の確認には**別の値**を使う。初回マージで `lastSentRef` が
+      // `granted` にシードされているので、同じ値へ戻すと「同じ値を
+      // 繰り返し送らない」側で弾かれ、ガードの有無を問わず PUT が飛ばない
       act(() => {
         clearSigningOut();
-        recordConsentDecision('granted', ME, T2);
+        recordConsentDecision('denied', ME, T2);
       });
-      rerender({ value: 'granted' });
+      rerender({ value: 'denied' });
 
       await waitFor(() =>
         expect(mockUpdateSettings).toHaveBeenCalledWith({
-          cookieConsent: 'granted',
+          cookieConsent: 'denied',
           cookieConsentAt: T2,
         }),
       );
+    });
+
+    /**
+     * 飛んでいた初回マージの GET が、ログアウト中に着地した場合
+     *
+     * ⚠️ `clearOwnedConsent()` は未認証同意（`owner` が空文字）を**消さない**。
+     * そのため端末値が残り、マージが `adopt-local` を選んで PUT を投げていた。
+     * Cookie 削除より後ろへ着地すれば 401 で落ち、ログアウト成功と同時に
+     * 同期失敗のトーストが出る。書き戻しも起きて、消したはずの
+     * レコードが1ページロードぶん復活する
+     */
+    it('ログアウト中に着地した初回マージは、送信も書き戻しもしない', async () => {
+      // 未認証でした同意が端末に残っている状態から始める
+      writeConsentRecord({
+        state: 'granted',
+        at: T1,
+        owner: '',
+        version: COOKIE_CONSENT_VERSION,
+      });
+
+      let resolveGet: (value: unknown) => void = () => {};
+      mockGetSettings.mockReturnValue(
+        new Promise((resolve) => {
+          resolveGet = resolve;
+        }),
+      );
+
+      render('granted');
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+
+      // GET の応答が返る前にログアウトへ入る
+      act(() => {
+        markSigningOut();
+        clearOwnedConsent();
+      });
+
+      await act(async () => {
+        resolveGet(serverSettings('unset', null, null));
+      });
+
+      expect(mockUpdateSettings).not.toHaveBeenCalled();
+      // owner が空のレコードは残る（消すのは owner 付きだけ）。
+      // 書き戻しで owner が付け替わっていないことを見る
+      expect(getStoredConsentRecord().owner).toBe('');
     });
 
     it('unknown のままでは送らない', async () => {

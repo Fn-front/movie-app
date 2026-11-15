@@ -797,6 +797,23 @@ describe('useConsentServerSync', () => {
       expect(mockConfirmSignedOut).not.toHaveBeenCalled();
     });
 
+    /**
+     * ⚠️ 判定は `clearOwnedConsent()` と揃える（#1216）。
+     *
+     * 撤回を残すようにしたとき、こちらは `owner` しか見ていなかったため
+     * **消す対象が無いのに毎ロード `/api/auth/session` を1往復して必ず
+     * 空振り**していた。レコードは消えないので往復も続く
+     */
+    it('撤回しか無いときも確認しない', async () => {
+      recordConsentDecision('denied', ME, T1);
+      signedOut();
+
+      render();
+
+      await act(async () => {});
+      expect(mockConfirmSignedOut).not.toHaveBeenCalled();
+    });
+
     it('確認中に認証済みへ戻ったら消さない', async () => {
       let resolveProbe: (value: boolean) => void = () => {};
       mockConfirmSignedOut.mockReturnValue(

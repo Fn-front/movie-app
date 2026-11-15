@@ -296,7 +296,11 @@ export async function createAction(formData: FormData) {
 import { cookies } from 'next/headers';
 
 export async function setCookieAction() {
-  cookies().set('name', 'value', {
+  // ⚠️ `cookies()` は Promise を返す。await を忘れると型で弾かれる
+  const cookieStore = await cookies();
+
+  cookieStore.set('name', 'value', {
+    path: '/',
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
@@ -307,17 +311,46 @@ export async function setCookieAction() {
 }
 
 export async function getCookieAction() {
-  const value = cookies().get('name')?.value;
+  const cookieStore = await cookies();
+  const value = cookieStore.get('name')?.value;
 
   return { success: true, data: value };
 }
 
 export async function deleteCookieAction() {
-  cookies().delete('name');
+  const cookieStore = await cookies();
+
+  // 削除は発行時と同じ属性で空値を上書きする。
+  // ⚠️ `cookieStore.delete('name')` は使わない（後述）
+  cookieStore.set('name', '', {
+    path: '/',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 0,
+  });
 
   return { success: true };
 }
 ```
+
+### ⚠️ `cookies().delete(name)` は使わない
+
+`next/headers` の `cookies()` が返すストアは、middleware の
+`response.cookies` と**同じ `ResponseCookies`** を包んだもので
+（`node_modules/next/dist/server/web/spec-extension/adapters/request-cookies.js`）、
+`delete` も同じ実装へ委譲される。文字列だけを渡すと
+**セキュリティ属性が1つも付かない** `Set-Cookie` になる。
+
+```
+name=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
+```
+
+`__Secure-` / `__Host-` 接頭辞の付いた Cookie では、ブラウザがこれを
+**拒否する**（CookiePrefixes）。削除指示そのものが捨てられ、本番でだけ
+静かに効かなくなる（#1174 で実際に起きた）。
+
+詳細は `/middleware` スキルの同名セクションを参照。
 
 ## プログレッシブエンハンスメント
 

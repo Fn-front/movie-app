@@ -149,6 +149,7 @@ export function middleware(request: NextRequest) {
 
   // Cookieを設定
   response.cookies.set('custom-cookie', 'value', {
+    path: '/',
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
@@ -173,8 +174,8 @@ export function middleware(request: NextRequest) {
 
 ### ⚠️ `cookies.delete(name)` は使わない
 
-文字列だけを渡すと**属性が1つも付かない** `Set-Cookie` が返る。Next の実装
-（`node_modules/next/dist/compiled/@edge-runtime/cookies/index.js`）が
+文字列だけを渡すと**セキュリティ属性が1つも付かない** `Set-Cookie` が返る。
+Next の実装（`node_modules/next/dist/compiled/@edge-runtime/cookies/index.js`）が
 `options` を `undefined` のまま `set` へ渡すため。
 
 ```js
@@ -184,7 +185,8 @@ delete(...args) {
 }
 ```
 
-返るのはこれだけ。`Secure` も `HttpOnly` も `SameSite` も無い。
+返るのはこれだけ。`Path` と `Expires` は付くが、`Secure` も `HttpOnly` も
+`SameSite` も無い。
 
 ```
 custom-cookie=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT

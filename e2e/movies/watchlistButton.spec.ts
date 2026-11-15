@@ -173,9 +173,13 @@ test.describe('ウォッチリストボタン', () => {
 
     if (await tileAdd.isVisible().catch(() => false)) {
       const added = waitForWatchlistResponse(page);
-      // 追加直後のサイドバーは楽観アイテム（id が `optimistic-...`）を
-      // 出している。そのまま削除を押すと仮IDで DELETE して 400 になるため、
-      // 本物のIDに入れ替わる再取得まで待つ
+      // 一覧の再取得まで待って、サイドバーの状態を確定させてから先へ進む。
+      //
+      // ⚠️ **この待ちは「仮IDを避けるため」ではなくなった**（#1152）。
+      // 実IDへの差し替えは追加の `onSuccess`（＝`added` が解決する時点）で
+      // 済むようになったので、仮IDで DELETE される窓はここには無い。
+      // 残しているのは、再取得の到着を待たずに進むと後続のアサーションが
+      // 再描画と競合しうるため。
       //
       // ⚠️ **パスで厳密に照合する。** `includes('/api/watchlist')` だと
       // `/api/watchlist/lookup`（#1145）にも当たり、一覧の再取得が

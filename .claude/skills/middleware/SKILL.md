@@ -158,12 +158,50 @@ export function middleware(request: NextRequest) {
   // Cookieを取得
   const cookieValue = request.cookies.get('custom-cookie')?.value;
 
-  // Cookieを削除
-  response.cookies.delete('custom-cookie');
+  // Cookieを削除（発行時と同じ属性で空値を上書きする）
+  response.cookies.set('custom-cookie', '', {
+    path: '/',
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 0,
+  });
 
   return response;
 }
 ```
+
+### ⚠️ `cookies.delete(name)` は使わない
+
+文字列だけを渡すと**属性が1つも付かない** `Set-Cookie` が返る。Next の実装
+（`node_modules/next/dist/compiled/@edge-runtime/cookies/index.js`）が
+`options` を `undefined` のまま `set` へ渡すため。
+
+```js
+delete(...args) {
+  const [name, options] = typeof args[0] === "string" ? [args[0]] : [args[0].name, args[0]];
+  return this.set({ ...options, name, value: "", expires: new Date(0) });
+}
+```
+
+返るのはこれだけ。`Secure` も `HttpOnly` も `SameSite` も無い。
+
+```
+custom-cookie=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
+```
+
+**`__Secure-` / `__Host-` 接頭辞の付いた Cookie では、ブラウザがこの
+`Set-Cookie` を拒否する**（CookiePrefixes）。削除指示そのものが捨てられ、
+**本番でだけ静かに効かなくなる**。実際に `src/proxy.ts` の失効セッション
+削除がこれで動いていなかった（#1174）。
+
+削除は**発行時と同じ属性**で空値を `set` する。名前・`Path`・`Domain` の
+どれかが食い違うとブラウザは別の Cookie として扱い、やはり消えない
+（RFC 6265 §5.3）。
+
+> 発行側と削除側で定義を2箇所に書かないこと。このリポジトリでは
+> `src/constants/auth.ts` の `getSessionCookieName()` /
+> `getSessionCookieOptions()` に集約し、`auth.ts` と `proxy.ts` で共有している。
 
 ## Header操作
 

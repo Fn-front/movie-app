@@ -549,10 +549,19 @@ describe('jwt コールバック', () => {
   });
 
   it('パスワード変更後（DBのpassword_changed_atがトークンより新しい）はセッション無効化', async () => {
+    // ⚠️ 日時は**発行時刻を基準に相対で置く**（#1207）。
+    // `passwordChangedAt` が無いトークンのベースラインは 0 ではなく
+    // `issuedAt` なので、固定の過去日時を置くと「発行より前の変更」になり
+    // 失効しない。ここで見たいのは「ログイン後に変更された」ケース
+    const issuedAt = Date.now() - 60 * 60 * 1000;
+    const changedAfterLogin = new Date(
+      Date.now() - 30 * 60 * 1000,
+    ).toISOString();
+
     setResolver(({ table, ops }) => {
       if (table === 'users' && ops.includes('select'))
         return {
-          data: { password_changed_at: '2026-06-01T00:00:00Z' },
+          data: { password_changed_at: changedAfterLogin },
           error: null,
         };
       return { data: null, error: null };
@@ -561,10 +570,10 @@ describe('jwt コールバック', () => {
     const token = await jwt({
       token: {
         id: 'u1',
-        issuedAt: Date.now(), // 絶対期限は未超過
+        issuedAt, // 絶対期限は未超過
         lastPasswordCheck: 0, // チェック間隔を必ず超過させて照合を走らせる
         lastLoginUpdate: Date.now(),
-        passwordChangedAt: null, // トークン側は未変更(0)扱い → DB側が新しい
+        passwordChangedAt: null, // トークン側は不明 → ベースラインは issuedAt
       },
       user: undefined,
       account: null,
@@ -828,9 +837,18 @@ describe('jwt コールバック', () => {
      * 通して見る。ここが本件で唯一の end-to-end な回帰テスト
      */
     it('先送りしたあと、時間が経てば再確認して失効させる', async () => {
+      // ⚠️ 変更日時は**発行より後**に置く（#1207）。`passwordChangedAt` が
+      // 無いトークンのベースラインは 0 ではなく `issuedAt` なので、固定の
+      // 過去日時だと「発行より前の変更」になり失効しない。
+      // ここで見たいのは「障害の最中に変更された」ケース
+      const issuedAt = Date.now() - 60 * 60 * 1000;
+      const changedAfterLogin = new Date(
+        Date.now() - 30 * 60 * 1000,
+      ).toISOString();
+
       setFetchFailure();
       const afterFailure = await jwt({
-        token: staleToken(),
+        token: { ...staleToken(), issuedAt },
         user: undefined,
         account: null,
       });
@@ -840,7 +858,7 @@ describe('jwt コールバック', () => {
       setResolver(({ table, ops }) => {
         if (table === 'users' && ops.includes('select')) {
           return {
-            data: { password_changed_at: '2026-06-01T00:00:00Z', role: 'user' },
+            data: { password_changed_at: changedAfterLogin, role: 'user' },
             error: null,
           };
         }
@@ -1005,6 +1023,84 @@ describe('jwt コールバック', () => {
       expect(token.lastPasswordCheck).toBeTruthy();
       expect(token.role).toBe('user');
       expect(token.passwordChangedAt).toBeNull();
+    });
+
+    /**
+     * 取得に失敗したセッションを、DB 復旧と同時に失効させない（#1207）
+     *
+     * 失敗すると `passwordChangedAt` は `null` のまま残る。ベースラインを
+     * 0 に倒していた頃は、次の確認が成功した時点で `dbChangedAt > 0` となり、
+     * **パスワードは変更されていないのに失効していた**。
+     * セッションはそのパスワード変更より後に発行されているので、
+     * 発行時刻を基準にすれば失効しない
+     */
+    it('取得に失敗しても、過去のパスワード変更では失効しない', async () => {
+      let call = 0;
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          call += 1;
+          // 1回目（OAuth 初回）は失敗、2回目（引き直し）は成功
+          if (call === 1) {
+            return {
+              data: null,
+              error: {
+                message: 'TypeError: fetch failed',
+                details: '',
+                hint: '',
+                code: '',
+              },
+            };
+          }
+          return {
+            data: {
+              role: 'user',
+              password_hash: 'hashed',
+              // サインインより前に行われた変更
+              password_changed_at: new Date(Date.now() - 60_000).toISOString(),
+            },
+            error: null,
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      const token = await oauthSignIn();
+
+      expect(token.invalidated).toBeUndefined();
+    });
+
+    /** 発行より後の変更は従来どおり失効させる（ガードを緩めすぎない） */
+    it('発行より後のパスワード変更では失効する', async () => {
+      let call = 0;
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          call += 1;
+          if (call === 1) {
+            return {
+              data: null,
+              error: {
+                message: 'TypeError: fetch failed',
+                details: '',
+                hint: '',
+                code: '',
+              },
+            };
+          }
+          return {
+            data: {
+              role: 'user',
+              password_hash: 'hashed',
+              password_changed_at: new Date(Date.now() + 60_000).toISOString(),
+            },
+            error: null,
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      const token = await oauthSignIn();
+
+      expect(token.invalidated).toBe(true);
     });
 
     it('取得できたときは従来どおり反映して lastPasswordCheck を立てる', async () => {

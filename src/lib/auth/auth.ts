@@ -671,9 +671,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
             if (data?.password_changed_at) {
               const dbChangedAt = new Date(data.password_changed_at).getTime();
+
+              // ⚠️ ベースラインが無いときは **0 ではなく発行時刻**に倒す（#1207）。
+              //
+              // `passwordChangedAt` が無いのは2通りある。「一度も変更して
+              // いない」と「**取得に失敗して分からない**」。0 に倒すと後者が
+              // 必ず `dbChangedAt > 0` になり、変更されていないのに失効する。
+              //
+              // 実際に起きる。OAuth 初回で `users` の取得に失敗すると
+              // `passwordChangedAt: null` のままトークンが出来上がり、DB が
+              // 復旧した次の確認でこの比較に入る。対象は「一度でもパスワードを
+              // 変更・リセットし、かつ同じメールで OAuth ログインする利用者」。
+              //
+              // 発行時刻を基準にすれば意味が変わらない。セッションは
+              // 「そのパスワード変更より後」に認証されて発行されているので、
+              // 過去の変更で失効させる理由が無い。発行より後の変更は
+              // 従来どおり失効する
               const tokenChangedAt = token.passwordChangedAt
                 ? new Date(token.passwordChangedAt).getTime()
-                : 0;
+                : (token.issuedAt ?? 0);
 
               if (dbChangedAt > tokenChangedAt) {
                 // パスワードが変更された — セッション無効化

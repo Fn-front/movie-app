@@ -175,4 +175,92 @@ describe('TwoFactorChallenge', () => {
     expect(alert).not.toHaveTextContent('使用済み');
     expect(alert).not.toHaveTextContent('しばらく時間をおいて');
   });
+
+  /**
+   * 「コードが違う」と「確認できなかった」を分ける（#1148）
+   *
+   * jwt コールバックが DB の不調で検証そのものに失敗した場合、入れ直しても
+   * 直らない。同じ「認証コードが正しくありません」を出すと、利用者は
+   * 正しいコードを繰り返し打ち続けることになる。
+   *
+   * ⚠️ 失敗の**内訳**（不正 / 使い回し / 試行上限）は従来どおり伏せたまま。
+   * 分けるのは「そもそも確認できたかどうか」だけで、総当たりの手がかりには
+   * ならない（確認できなければコードの正誤は判定されていない）。
+   */
+  describe('検証できなかった場合', () => {
+    const unavailable = { totpPending: true, totpUnavailable: true };
+
+    it('一時的に確認できない旨を表示する', async () => {
+      mockUpdate.mockResolvedValue(unavailable);
+
+      render(<TwoFactorChallenge />);
+      await submitCode('123456');
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        '認証コードを確認できませんでした。時間をおいてもう一度お試しください。',
+      );
+    });
+
+    it('「正しくありません」とは言わない', async () => {
+      mockUpdate.mockResolvedValue(unavailable);
+
+      render(<TwoFactorChallenge />);
+      await submitCode('123456');
+
+      expect(await screen.findByRole('alert')).not.toHaveTextContent(
+        '正しくありません',
+      );
+    });
+
+    // 打ち直しではなく、時間をおいた再試行を促したい
+    it('入力を消さない', async () => {
+      mockUpdate.mockResolvedValue(unavailable);
+
+      render(<TwoFactorChallenge />);
+      await submitCode('123456');
+
+      await screen.findByRole('alert');
+      expect(screen.getByLabelText('認証コード')).toHaveValue('123456');
+    });
+
+    it('遷移しない', async () => {
+      mockUpdate.mockResolvedValue(unavailable);
+
+      render(<TwoFactorChallenge />);
+      await submitCode('123456');
+
+      await screen.findByRole('alert');
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    // 検証できたうえで弾かれた場合は従来どおり
+    it('コードが違うだけなら従来の文言のまま', async () => {
+      mockUpdate.mockResolvedValue({ totpPending: true });
+
+      render(<TwoFactorChallenge />);
+      await submitCode('000000');
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        '認証コードが正しくありません。',
+      );
+    });
+
+    // DB が復旧すればそのまま通過できる（#1148 の完了条件）
+    it('再試行して成功すれば遷移する', async () => {
+      mockUpdate.mockResolvedValueOnce(unavailable);
+
+      render(<TwoFactorChallenge />);
+      await submitCode('123456');
+      await screen.findByRole('alert');
+
+      mockUpdate.mockResolvedValue({ totpPending: false });
+      await user.click(
+        screen.getByRole('button', { name: '認証コードを確認' }),
+      );
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/');
+      });
+    });
+  });
 });

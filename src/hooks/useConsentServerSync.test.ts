@@ -307,9 +307,62 @@ describe('useConsentServerSync', () => {
           at: T1,
           owner: ME,
           version: COOKIE_CONSENT_VERSION,
+          // サーバー側の決定を降ろしたので「匿名でした決定」ではない
+          anonymous: false,
         }),
       );
       expect(mockUpdateSettings).not.toHaveBeenCalled();
+    });
+
+    /**
+     * 匿名由来の印は、所有者が付いても維持する（#1213）
+     *
+     * `owner` は claim-owner でユーザーIDへ付け替わるが、由来は別キーなので
+     * 残る。これが残っていないと `clearOwnedConsent()` が
+     * 「ログイン中の同意」と誤認し、ログアウトで消してしまう。
+     *
+     * ⚠️ **初回ログインの直後だけ見ても足りない。** 次のページ読み込みでは
+     * サーバーが同じ値を返して採用値がサーバー側になる（`in-sync` /
+     * `claim-owner`）。そこで落とすと翌ロードで元に戻るので、
+     * 2回目のマージまで通して見る
+     */
+    it('匿名由来の印は、所有者が付いても次のマージでも維持される', async () => {
+      recordConsentDecision('granted', '', T1);
+      mockGetSettings.mockResolvedValue(serverSettings('unset', null, null));
+
+      const first = render();
+      await waitFor(() => expect(mockUpdateSettings).toHaveBeenCalled());
+
+      expect(getStoredConsentRecord().owner).toBe(ME);
+      expect(getStoredConsentRecord().anonymous).toBe(true);
+
+      // 2回目のページ読み込み（サーバーは同じ値を返す）
+      first.unmount();
+      __resetConsentSyncForTest();
+      mockGetSettings.mockResolvedValue(
+        serverSettings('granted', T1, COOKIE_CONSENT_VERSION),
+      );
+
+      render('granted');
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalledTimes(2));
+      await act(async () => {});
+
+      expect(getStoredConsentRecord().anonymous).toBe(true);
+    });
+
+    /** サーバー側の決定を降ろしたときは、ログイン中の記録なので落とす */
+    it('サーバー値を降ろしたら匿名由来の印は落とす', async () => {
+      recordConsentDecision('granted', '', T1);
+      mockGetSettings.mockResolvedValue(
+        serverSettings('denied', T2, COOKIE_CONSENT_VERSION),
+      );
+
+      render();
+
+      await waitFor(() =>
+        expect(getStoredConsentRecord().state).toBe('denied'),
+      );
+      expect(getStoredConsentRecord().anonymous).toBe(false);
     });
 
     it('端末値をサーバーへ上げる（未認証で得た同意）', async () => {
@@ -535,6 +588,7 @@ describe('useConsentServerSync', () => {
         at: T1,
         owner: '',
         version: COOKIE_CONSENT_VERSION,
+        anonymous: false,
       });
 
       let resolveGet: (value: unknown) => void = () => {};
@@ -634,6 +688,7 @@ describe('useConsentServerSync', () => {
           at: 'not-a-date',
           owner: ME,
           version: COOKIE_CONSENT_VERSION,
+          anonymous: false,
         });
       });
       rerender({ value: 'denied' });
@@ -795,6 +850,7 @@ describe('useConsentServerSync', () => {
         at: T1,
         owner: ME,
         version: COOKIE_CONSENT_VERSION - 1,
+        anonymous: false,
       });
       mockGetSettings.mockResolvedValue(serverSettings('unset', null, null));
 

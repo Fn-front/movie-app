@@ -35,7 +35,10 @@ import {
   getStoredConsentState,
   writeConsentRecord,
 } from '@/utils/cookieConsent';
-import { resolveConsentMerge } from '@/utils/resolveConsentMerge';
+import {
+  resolveConsentMerge,
+  type ConsentMergeReason,
+} from '@/utils/resolveConsentMerge';
 import type { ConsentValue } from '@/constants/user';
 import type { UserSettings } from '@/schema/user';
 
@@ -67,6 +70,26 @@ let inFlight: { userId: string; promise: Promise<UserSettings> } | null = null;
  * 出さないより、未決定として出すほうが安全側（#1137）
  */
 export const CONSENT_SYNC_SUPPRESSION_TIMEOUT_MS = 5000;
+
+/**
+ * マージの結果が「端末が持っていた決定」をそのまま採ったか（#1213）
+ *
+ * 採ったなら由来（未認証でした決定か）も引き継ぐ。サーバー側の決定を
+ * 降ろした場合はログイン中の記録なので落とす。
+ *
+ * ⚠️ 由来を `resolveConsentMerge` に持ち込まない。あちらは設計書 §4.4 の
+ * 網羅表で固定された純関数で、引数を増やすと表を全行書き直すことになる。
+ * `reason` から導出すれば表に手を入れずに済む。
+ *
+ * - `adopt-local` / `in-sync` / `claim-owner` … 採用値は端末のものと同じ
+ * - `adopt-server` … サーバーの決定を降ろした
+ * - `clear-foreign` … レコードごと消すのでここへは来ない
+ */
+function keepsAnonymousOrigin(reason: ConsentMergeReason): boolean {
+  return (
+    reason === 'adopt-local' || reason === 'in-sync' || reason === 'claim-owner'
+  );
+}
 
 /** テスト用。モジュールスコープの状態は Jest のモジュールキャッシュを跨ぐ */
 export function __resetConsentSyncForTest(): void {
@@ -250,7 +273,10 @@ export function useConsentServerSync(consent: CookieConsentState): void {
       });
 
       if (result.localWrite?.action === 'write') {
-        writeConsentRecord(result.localWrite.record);
+        writeConsentRecord({
+          ...result.localWrite.record,
+          anonymous: keepsAnonymousOrigin(result.reason) && local.anonymous,
+        });
       } else if (result.localWrite?.action === 'clear') {
         clearConsentRecord();
       }

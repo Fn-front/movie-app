@@ -39,6 +39,18 @@ export const STORAGE_KEYS = {
   COOKIE_CONSENT_OWNER: 'movie-app:cookie-consent-owner',
   /** 同意を操作した時点のポリシー版（COOKIE_CONSENT_VERSION） */
   COOKIE_CONSENT_VERSION: 'movie-app:cookie-consent-version',
+  /**
+   * その決定が**未認証のときに行われたか**（'1' のときだけ真）
+   *
+   * ⚠️ `COOKIE_CONSENT_OWNER` では代用できない（#1213）。
+   * あちらは「誰のレコードか」を表し、ログイン時に現ユーザーへ付け替わる
+   * （`resolveConsentMerge` の claim-owner。他人のレコードを捨てる
+   * `isForeign` 判定がこれに乗っている）。付け替わると「未認証でした同意」
+   * だったことが分からなくなり、ログアウトで消えてしまう。
+   *
+   * `<head>` のブートストラップは読まない（状態と版しか見ない）。
+   */
+  COOKIE_CONSENT_ANONYMOUS: 'movie-app:cookie-consent-anonymous',
 } as const;
 
 /**

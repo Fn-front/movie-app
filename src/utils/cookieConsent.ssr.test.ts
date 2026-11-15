@@ -27,6 +27,7 @@ describe('cookieConsent（SSR）', () => {
       at: null,
       owner: '',
       version: null,
+      anonymous: false,
     });
     expect(getEffectiveConsentState()).toBe('unset');
   });

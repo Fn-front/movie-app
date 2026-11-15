@@ -178,15 +178,20 @@ export interface GaDedicatedSession {
  *
  * @param browser - `beforeAll` が受け取る browser
  * @param user - 作成する専用ユーザー。メールは `runScopedEmail()` で作る
+ * @param beforeLogin - ログイン前にコンテキストへ仕掛ける処理。未認証の状態を
+ *   作ってからログインしたい spec が使う（「未認証でした同意」の扱いなど）。
+ *   プローブを張った**あと**に呼ばれるので、ここでの操作も遮断・検知の対象になる
  */
 export async function openGaDedicatedSession(
   browser: Browser,
   user: DedicatedUser,
+  beforeLogin?: (context: BrowserContext) => Promise<void>,
 ): Promise<GaDedicatedSession> {
   let probe: GaProbe | null = null;
 
   const session = await openDedicatedSession(browser, user, async (context) => {
     probe = await attachGaProbe(context);
+    await beforeLogin?.(context);
   });
 
   if (probe === null) {
@@ -202,6 +207,8 @@ export interface StoredConsent {
   at: string | null;
   owner: string | null;
   version: string | null;
+  /** 未認証のときに行われた決定か（'1' のときだけ真。#1213） */
+  anonymous: string | null;
 }
 
 /** 同意レコードの localStorage キー（ブラウザ側へ渡すために平坦化する） */
@@ -210,6 +217,7 @@ const CONSENT_KEYS = {
   at: STORAGE_KEYS.COOKIE_CONSENT_AT,
   owner: STORAGE_KEYS.COOKIE_CONSENT_OWNER,
   version: STORAGE_KEYS.COOKIE_CONSENT_VERSION,
+  anonymous: STORAGE_KEYS.COOKIE_CONSENT_ANONYMOUS,
 } as const;
 
 /** 現行版の文字列表現（localStorage は文字列しか持てない） */
@@ -260,6 +268,7 @@ export async function readStoredConsent(page: Page): Promise<StoredConsent> {
       at: localStorage.getItem(keys.at),
       owner: localStorage.getItem(keys.owner),
       version: localStorage.getItem(keys.version),
+      anonymous: localStorage.getItem(keys.anonymous),
     }),
     CONSENT_KEYS,
   );

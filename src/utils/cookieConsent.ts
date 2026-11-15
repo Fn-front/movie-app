@@ -29,6 +29,13 @@ export interface LocalConsentRecord {
   owner: string;
   /** 操作時のポリシー版。不明・不正なら null */
   version: number | null;
+  /**
+   * 未認証のときに行われた決定か
+   *
+   * `owner` とは別に持つ。`owner` はログイン時に現ユーザーへ付け替わるため
+   * （`resolveConsentMerge` の claim-owner）、由来の記録には使えない（#1213）。
+   */
+  anonymous: boolean;
 }
 
 /** localStorage へ安全にアクセスする（プライベートモード等で throw しうる） */
@@ -135,13 +142,25 @@ export function getStoredConsentVersion(): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-/** 4キーをまとめて読む */
+/**
+ * その決定が未認証のときに行われたか
+ *
+ * 真を `'1'` で表し、偽はキーごと消す（未保存＝偽）。`'true'` のような
+ * 別表現を増やさないのは、`<head>` の同期読みと同じ「文字列の等値比較だけで
+ * 判定できる」形に揃えるため。
+ */
+export function isStoredConsentAnonymous(): boolean {
+  return readKey(STORAGE_KEYS.COOKIE_CONSENT_ANONYMOUS) === '1';
+}
+
+/** 全キーをまとめて読む */
 export function getStoredConsentRecord(): LocalConsentRecord {
   return {
     state: getStoredConsentState(),
     at: getStoredConsentAt(),
     owner: getStoredConsentOwner(),
     version: getStoredConsentVersion(),
+    anonymous: isStoredConsentAnonymous(),
   };
 }
 
@@ -158,6 +177,11 @@ export function getStoredConsentRecord(): LocalConsentRecord {
  */
 export function writeConsentRecord(record: LocalConsentRecord): void {
   writeKey(STORAGE_KEYS.COOKIE_CONSENT_OWNER, record.owner);
+  // 偽はキーごと消す（未保存＝偽）
+  writeKey(
+    STORAGE_KEYS.COOKIE_CONSENT_ANONYMOUS,
+    record.anonymous ? '1' : null,
+  );
   writeKey(
     STORAGE_KEYS.COOKIE_CONSENT_VERSION,
     record.version === null ? null : String(record.version),
@@ -183,6 +207,7 @@ export function clearConsentRecord(): void {
   writeKey(STORAGE_KEYS.COOKIE_CONSENT, null);
   writeKey(STORAGE_KEYS.COOKIE_CONSENT_AT, null);
   writeKey(STORAGE_KEYS.COOKIE_CONSENT_VERSION, null);
+  writeKey(STORAGE_KEYS.COOKIE_CONSENT_ANONYMOUS, null);
   writeKey(STORAGE_KEYS.COOKIE_CONSENT_OWNER, null);
   notifyChange();
 }
@@ -190,7 +215,12 @@ export function clearConsentRecord(): void {
 /**
  * ログイン中に行われた同意レコードだけを消す（ログアウト時に呼ぶ）
  *
- * 未認証時の同意（owner が空文字）は端末の匿名利用者の意思なので残す。
+ * 未認証時の同意は端末の匿名利用者の意思なので残す。
+ *
+ * ⚠️ **判定は `owner` ではなく `anonymous` で行う**（#1213）。
+ * `owner` はログイン時に現ユーザーへ付け替わる（`resolveConsentMerge` の
+ * claim-owner）。そこで判断すると、未認証でした同意が一度のログインで
+ * 「ログイン中の同意」に化け、ログアウトで消えてしまう。
  * ログイン中の同意を残すと、ログアウトした端末を未認証の第三者が使ったときに
  * 前の利用者の同意がそのまま適用される（<head> スクリプトは認証状態を
  * 同期読みできないため、React 側で補正しても一瞬の窓が残る）。
@@ -202,7 +232,8 @@ export function clearConsentRecord(): void {
  * @returns 消したかどうか（呼び出し側が _ga Cookie 削除の要否を判断する）
  */
 export function clearOwnedConsent(): boolean {
-  if (getStoredConsentOwner() === '') return false;
+  if (getStoredConsentState() === 'unset') return false;
+  if (isStoredConsentAnonymous()) return false;
   clearConsentRecord();
   return true;
 }
@@ -224,6 +255,9 @@ export function recordConsentDecision(
     at: nowIso,
     owner: userId,
     version: COOKIE_CONSENT_VERSION,
+    // 未ログインの操作だけが「匿名でした決定」。以後ログインしても
+    // この印は維持され、ログアウトでも消えない（#1213）
+    anonymous: userId === '',
   });
 }
 

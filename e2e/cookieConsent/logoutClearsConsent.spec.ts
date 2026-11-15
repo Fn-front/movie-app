@@ -81,6 +81,7 @@ test.describe('Cookie同意 / ログアウト', () => {
       at: null,
       owner: null,
       version: null,
+      anonymous: null,
     });
     expect(await gaCookieNames(page.context())).toEqual([]);
 
@@ -158,6 +159,84 @@ test.describe('Cookie同意 / 未認証でした同意の扱い', () => {
       probe.expectNoBeaconEscaped();
     } finally {
       await context.close();
+    }
+  });
+
+  /**
+   * ログインを挟んでも消えない（#1213）
+   *
+   * ⚠️ **ここが「一度もログインしていない端末でしか成り立っていなかった」
+   * ところ。** `clearOwnedConsent()` が `owner` で「ログイン中に意思表示したか」を
+   * 判断していたが、`owner` は初回マージでユーザーIDへ付け替わる（claim-owner）。
+   * そのため匿名でした同意が「ログイン中の同意」に化け、消えていた。
+   *
+   * 由来は別キー（`anonymous`）で持つようにした。`owner` は従来どおり
+   * 付け替わる（`isForeign` が他人のレコードを捨てる判定に使うため）ので、
+   * **`owner` が ME になっていること自体は正しい**。見るのは由来の印のほう。
+   *
+   * ⚠️ **ログアウト直後だけ見ても足りない。** サーバーが同じ値を返す
+   * **次のページ読み込み**で印を落とすと翌ロードで元に戻るので、
+   * ログイン後に1回読み直してからログアウトする
+   */
+  test('未認証でした同意は、ログインを挟んでもログアウトで消えない', async ({
+    browser,
+  }, testInfo) => {
+    // ユーザー作成（bcrypt）と初回アクセスのコンパイル待ちを含むため、
+    // 既定の60秒では足りないことがある（`dedicatedSession.ts` の指示）
+    testInfo.setTimeout(120000);
+
+    const user = {
+      email: runScopedEmail('e2e-consent-anon-keep'),
+      password: 'ConsentAnonE2e1',
+    } as const;
+
+    // ログインの前に匿名で同意しておく
+    const { session, probe } = await openGaDedicatedSession(
+      browser,
+      user,
+      async (context) => {
+        const page = await context.newPage();
+        await page.goto('/');
+        await grantButton(page).click();
+        await expect(consentBanner(page)).toBeHidden();
+
+        const anonymousRecord = await readStoredConsent(page);
+        expect(anonymousRecord.owner).toBe('');
+        expect(anonymousRecord.anonymous).toBe('1');
+
+        await page.close();
+      },
+    );
+
+    try {
+      const page = session.page;
+
+      await page.goto('/');
+      // 印を落とすとしたらここ（サーバーが同じ値を返す読み直し）
+      await page.reload();
+
+      // マージの着地を待つ。待たずに読むと「まだ付け替わっていないだけ」の
+      // 状態を見てしまい、付け替えが復活しても気づけない
+      await expect
+        .poll(async () => (await readStoredConsent(page)).owner)
+        .toBe(session.userId);
+      // `owner` が付くのは正しい。由来の印が残っていることが要件
+      expect((await readStoredConsent(page)).anonymous).toBe('1');
+
+      await page.getByRole('button', { name: /ユーザーメニュー/ }).click();
+      await page.getByRole('menuitem', { name: 'ログアウト' }).click();
+      await page.waitForURL('**/auth/signin');
+
+      // 匿名由来なので残る
+      expect((await readStoredConsent(page)).state).toBe('granted');
+
+      await page.goto('/');
+      await expect(consentBanner(page)).toBeHidden();
+
+      probe.expectNoBeaconEscaped();
+    } finally {
+      await cleanupUserSettings(session.userId);
+      await session.close();
     }
   });
 });

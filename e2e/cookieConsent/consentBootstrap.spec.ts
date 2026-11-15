@@ -74,6 +74,7 @@ test.describe('Cookie同意 / <head> のブートストラップ', () => {
       // 未ログインで同意した端末を想定する（owner は空文字）
       owner: '',
       version: CURRENT_CONSENT_VERSION,
+      anonymous: null,
     });
 
     // 最初の consent コマンドの時点で granted。denied → update の往復が無い
@@ -97,6 +98,7 @@ test.describe('Cookie同意 / <head> のブートストラップ', () => {
       owner: '',
       // 現行版より古い版で同意した記録
       version: String(Number(CURRENT_CONSENT_VERSION) - 1),
+      anonymous: null,
     });
 
     // <head> スクリプトは生文字列で版を比較する。一致しないので denied

@@ -82,4 +82,145 @@ describe('Button', () => {
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });
+
+  /**
+   * ローディング中のアクセシビリティ（#1196）
+   *
+   * 以前は本文を `visibility: hidden` で隠していたため、
+   * **アクセシビリティツリーから外れて読み上げが「ボタン」だけ**になり、
+   * さらに `disabled` 化でフォーカスが `<body>` へ落ちていた。
+   */
+  describe('ローディング中', () => {
+    it('アクセシブルネームが消えない', () => {
+      render(<Button isLoading>送信</Button>);
+
+      expect(screen.getByRole('button', { name: '送信' })).toBeInTheDocument();
+    });
+
+    it('処理中であることを aria-busy で伝える', () => {
+      render(<Button isLoading>送信</Button>);
+
+      expect(screen.getByRole('button')).toHaveAttribute('aria-busy', 'true');
+    });
+
+    it('ローディングでなければ aria-busy を付けない', () => {
+      render(<Button>送信</Button>);
+
+      expect(screen.getByRole('button')).not.toHaveAttribute('aria-busy');
+    });
+
+    it('アクセシビリティ違反がない', async () => {
+      const { container } = render(<Button isLoading>送信</Button>);
+
+      expect(await axe(container)).toHaveNoViolations();
+    });
+  });
+
+  /**
+   * 再び押せるようになったらフォーカスを戻す（#1196）
+   *
+   * `disabled` になるとブラウザがフォーカスを `<body>` へ落とす。
+   * キーボード利用者は、処理が終わっても Tab を打ち直すことになる。
+   */
+  describe('フォーカスの復帰', () => {
+    it('押したボタンならローディング終了後にフォーカスが戻る', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(<Button>送信</Button>);
+
+      await user.click(screen.getByRole('button'));
+
+      // ⚠️ jsdom は `disabled` 化によるフォーカス喪失を再現しない。しかも
+      // 無効化された後では `blur()` も効かない（フォーカス不能な要素なので
+      // no-op）。実ブラウザで起きる喪失を、無効化の直前に手で起こす
+      screen.getByRole('button').blur();
+
+      rerender(<Button isLoading>送信</Button>);
+      expect(screen.getByRole('button')).not.toHaveFocus();
+
+      rerender(<Button>送信</Button>);
+
+      expect(screen.getByRole('button')).toHaveFocus();
+    });
+
+    // 触っていないボタン（一覧の「もっと見る」等）が読み込みを終えた
+    // 瞬間にフォーカスを奪わない
+    it('押していないボタンはフォーカスを奪わない', () => {
+      const { rerender } = render(<Button isLoading>もっと見る</Button>);
+
+      rerender(<Button>もっと見る</Button>);
+
+      expect(screen.getByRole('button')).not.toHaveFocus();
+    });
+
+    it('他の要素がフォーカスを持っていれば奪わない', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <>
+          <Button>送信</Button>
+          <input aria-label='メモ' />
+        </>,
+      );
+
+      await user.click(screen.getByRole('button'));
+      rerender(
+        <>
+          <Button isLoading>送信</Button>
+          <input aria-label='メモ' />
+        </>,
+      );
+
+      // 待っているあいだに別の場所へ移った
+      screen.getByLabelText('メモ').focus();
+      rerender(
+        <>
+          <Button>送信</Button>
+          <input aria-label='メモ' />
+        </>,
+      );
+
+      expect(screen.getByLabelText('メモ')).toHaveFocus();
+    });
+
+    /**
+     * ⚠️ `isLoading` を共有する複数ボタンで取り違えない（#1196）
+     *
+     * 「押した印」をインスタンスごとの ref で持つと、**ローディングに
+     * 入らなかったクリック**の印が残り続ける。同じ `isLoading` を受ける
+     * 別のボタンがローディングを終えたとき、tree order で先に effect が
+     * 走ったほうがフォーカスを食う（`document.activeElement` のガードでは
+     * 防げない）。最後に押された1つだけを覚えることで取り違えない。
+     */
+    it('共有のローディングでも最後に押したボタンへ戻す', async () => {
+      const user = userEvent.setup();
+      const twoButtons = (loading: boolean) => (
+        <>
+          <Button isLoading={loading}>A</Button>
+          <Button isLoading={loading}>B</Button>
+        </>
+      );
+
+      const { rerender } = render(twoButtons(false));
+
+      // A を押しても（ローディングに入らない）、次に B を押す
+      await user.click(screen.getByRole('button', { name: 'A' }));
+      await user.click(screen.getByRole('button', { name: 'B' }));
+      screen.getByRole('button', { name: 'B' }).blur();
+
+      rerender(twoButtons(true));
+      rerender(twoButtons(false));
+
+      expect(screen.getByRole('button', { name: 'B' })).toHaveFocus();
+      expect(screen.getByRole('button', { name: 'A' })).not.toHaveFocus();
+    });
+
+    it('クリックのハンドラは従来どおり呼ばれる', async () => {
+      const user = userEvent.setup();
+      const handleClick = jest.fn();
+      render(<Button onClick={handleClick}>送信</Button>);
+
+      await user.click(screen.getByRole('button'));
+
+      expect(handleClick).toHaveBeenCalledTimes(1);
+    });
+  });
 });

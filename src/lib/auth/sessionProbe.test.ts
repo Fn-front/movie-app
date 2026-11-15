@@ -5,7 +5,7 @@
  * 区別を誤ると、取り消せない消去（同意レコード）が通信の都合で走る。
  */
 
-import { confirmSignedOut } from './sessionProbe';
+import { confirmSessionCleared, confirmSignedOut } from './sessionProbe';
 
 const mockFetch = jest.fn();
 
@@ -104,6 +104,88 @@ describe('confirmSignedOut', () => {
       mockFetch.mockResolvedValue(response(true, null));
 
       await confirmSignedOut();
+
+      const { signal } = mockFetch.mock.calls[0][1] as RequestInit;
+      expect(signal?.aborted).toBe(false);
+
+      jest.advanceTimersByTime(5000);
+
+      expect(signal?.aborted).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+/**
+ * confirmSessionCleared のテスト（#1195）
+ *
+ * `confirmSignedOut` と**判定基準が違う**。あちらは `user.id` の有無、
+ * こちらは本文が `null` かどうか。取り違えると、第2要素が未了の
+ * セッション（`user.id` が空文字）を「消えた」と誤判定する。
+ */
+describe('confirmSessionCleared', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    global.fetch = mockFetch as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  const response = (ok: boolean, body: unknown) =>
+    ({ ok, json: async () => body }) as Response;
+
+  it('本文が null なら消えたと判定する', async () => {
+    mockFetch.mockResolvedValue(response(true, null));
+
+    await expect(confirmSessionCleared()).resolves.toBe(true);
+  });
+
+  it('セッションが返ってきたら消えていないと判定する', async () => {
+    mockFetch.mockResolvedValue(
+      response(true, { user: { id: 'u1' }, expires: '2026-12-01' }),
+    );
+
+    await expect(confirmSessionCleared()).resolves.toBe(false);
+  });
+
+  /**
+   * ⚠️ ここが `confirmSignedOut` と分けた理由。
+   *
+   * `totpPending` のセッションは `user.id` が空文字で返るため、
+   * `user.id` で見ると**消えていないのに消えたと答える**
+   */
+  it('第2要素が未了のセッションが残っていたら消えていないと判定する', async () => {
+    mockFetch.mockResolvedValue(
+      response(true, { user: { id: '', email: '' }, totpPending: true }),
+    );
+
+    await expect(confirmSessionCleared()).resolves.toBe(false);
+  });
+
+  // 「訊けなかった」を「消えた」に倒さない（#1136 と同じ罠）
+  it('非2xxなら消えたと判定しない', async () => {
+    mockFetch.mockResolvedValue(response(false, null));
+
+    await expect(confirmSessionCleared()).resolves.toBe(false);
+  });
+
+  it('通信に失敗したら消えたと判定しない', async () => {
+    mockFetch.mockRejectedValue(new Error('network'));
+
+    await expect(confirmSessionCleared()).resolves.toBe(false);
+  });
+
+  it('応答が返らない回線で待ち続けない', async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetch.mockResolvedValue(response(true, null));
+
+      await confirmSessionCleared();
 
       const { signal } = mockFetch.mock.calls[0][1] as RequestInit;
       expect(signal?.aborted).toBe(false);

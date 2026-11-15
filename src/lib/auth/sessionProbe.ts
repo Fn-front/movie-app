@@ -73,3 +73,46 @@ export async function confirmSignedOut(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * セッションCookieが**実際に消えたか**を確かめる（#1195）
+ *
+ * ログアウトの成否判定に使う。`confirmSignedOut()` とは判定基準が違うので
+ * 使い分けること。
+ *
+ * | | 見るもの | 用途 |
+ * |---|---|---|
+ * | `confirmSignedOut` | `user.id` の有無 | 期限切れの検知 |
+ * | `confirmSessionCleared` | **本文が `null` か** | ログアウトの成否 |
+ *
+ * ⚠️ `user.id` で見てはいけない。第2要素が未了のセッション（`totpPending`）は
+ * `user.id` が空文字なので、**消えていないのに消えたと答える**。
+ * `@auth/core` は Cookie が無ければ本文 `null` を返す
+ * （`lib/actions/session.js` は `body: null` で始まる）ので、そこで見る。
+ *
+ * ⚠️ `getSession()`（next-auth/react）は使えない。内部の `fetchData` が
+ * **通信失敗も非2xxも `null` に潰す**ため、「訊けなかった」を
+ * 「消えた」と誤判定する（#1136 と同じ罠）。
+ *
+ * @returns `true` なら「消えた」と確認できた。
+ *          `false` は「残っている」と「確認できなかった」の両方を含む
+ */
+export async function confirmSessionCleared(): Promise<boolean> {
+  try {
+    const response = await fetch(API_ENDPOINTS.AUTH_SESSION, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
+
+    if (!response.ok) return false;
+
+    const data = (await response.json()) as SessionProbeResponse | null;
+
+    // 本文そのものが無ければ Cookie は消えている
+    return data === null;
+  } catch {
+    // 訊けなかった。消えたとは言い切れない
+    return false;
+  }
+}

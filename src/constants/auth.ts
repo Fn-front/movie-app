@@ -78,8 +78,14 @@ export const AUTH_ERROR_MESSAGES = {
   /**
    * ログアウトに失敗した。
    *
-   * `logout()` は csrf 取得か `/api/auth/signout` の POST が失敗すると
-   * 遷移を始めずに rethrow する。画面に留まるので、押し直せることを伝える。
+   * `logout()` は次のいずれかで遷移を始めずに rethrow する。
+   * 画面に留まるので、押し直せることを伝える。
+   *
+   * - csrf の取得に失敗した
+   * - `/api/auth/signout` の POST に失敗した
+   * - **セッションが消えたことを確認できなかった**（#1195）。
+   *   CSRF 検証に落ちた POST は遷移先だけ返して Cookie を消さないため、
+   *   成否は確認しないと分からない
    */
   LOGOUT_FAILED:
     'ログアウトできませんでした。通信状況を確認して、もう一度お試しください。',

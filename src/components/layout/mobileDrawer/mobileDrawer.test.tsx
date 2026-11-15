@@ -46,6 +46,13 @@ jest.mock('next-auth/react', () => ({
   signOut: (...args: unknown[]) => mockSignOut(...args),
 }));
 
+// logout() はサインアウト後にセッションが消えたかを確かめ、遷移も自前で行う（#1195）
+jest.mock('@/lib/auth/sessionProbe', () => ({
+  confirmSessionCleared: () => Promise.resolve(true),
+  confirmSignedOut: () => Promise.resolve(true),
+}));
+jest.mock('@/utils/navigate', () => ({ navigateTo: jest.fn() }));
+
 // ログイン誘導ストアのモック（useNavAuthGuard が使用）
 const mockOpenLoginPrompt = jest.fn();
 jest.mock('@/lib/store/useLoginPromptStore', () => ({
@@ -239,7 +246,10 @@ describe('MobileDrawer', () => {
     const user = userEvent.setup();
     render(<MobileDrawer {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /ログアウト/ }));
-    expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: '/auth/signin' });
+    expect(mockSignOut).toHaveBeenCalledWith({
+      redirect: false,
+      callbackUrl: '/auth/signin',
+    });
   });
 
   it('閉じるボタンでDrawerが閉じる', async () => {

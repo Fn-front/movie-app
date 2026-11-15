@@ -36,6 +36,8 @@ import type { NavIconRoute } from '@/constants';
 import { getInitial } from '@/utils/user';
 import { useAuthStatus } from '@/hooks/useAuthStatus';
 import { useNavAuthGuard } from '@/hooks/useNavAuthGuard';
+import { useToastDispatch } from '@/hooks/useToast';
+import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { useOverlayHistory } from '@/hooks/useOverlayHistory';
 import { logout } from '@/lib/auth/logout';
 
@@ -115,6 +117,7 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
   const pathname = usePathname();
   const router = useRouter();
   const { handleProtectedNavClick } = useNavAuthGuard();
+  const { toast } = useToastDispatch();
 
   const userName = session?.user?.name ?? '';
   const userEmail = session?.user?.email ?? '';
@@ -196,9 +199,21 @@ export const MobileDrawer = memo<MobileDrawerProps>(function MobileDrawer({
     navigateFromDrawer(ROUTES.LOGIN);
   }, [navigateFromDrawer]);
 
+  /**
+   * ⚠️ `logout()` は失敗すると throw して**遷移しない**（#1195）。
+   * 握り潰すと「押したのに何も起きない」になる
+   */
   const handleLogout = useCallback(async () => {
-    await logout();
-  }, []);
+    try {
+      await logout();
+    } catch {
+      toast({
+        title: 'エラー',
+        description: AUTH_ERROR_MESSAGES.LOGOUT_FAILED,
+        variant: 'error',
+      });
+    }
+  }, [toast]);
 
   // 判定は useAuthStatus に集約（無効化済みセッションの扱いを含む / #1134）。
   //

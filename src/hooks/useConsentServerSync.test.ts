@@ -9,6 +9,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 
 import { COOKIE_CONSENT_VERSION } from '@/constants/user';
 import {
+  clearOwnedConsent,
   getStoredConsentRecord,
   recordConsentDecision,
   writeConsentRecord,
@@ -21,7 +22,9 @@ import {
 import type { CookieConsentState } from './useCookieConsent';
 import {
   __resetBannerSuppressionForTest,
+  clearSigningOut,
   isBannerSuppressed,
+  markSigningOut,
 } from '@/features/cookieConsent/utils/bannerSuppression';
 
 const mockUseSession = jest.fn();
@@ -439,6 +442,64 @@ describe('useConsentServerSync', () => {
       await act(async () => {});
 
       expect(mockUpdateSettings).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ログアウト中は送らない
+     *
+     * `logout()` は `cleanUpBeforeSignOut()` で端末の同意レコードを同期的に
+     * 消す。これは「この端末に前の利用者の同意を残さない」ための後始末で、
+     * **利用者が撤回したわけではない**。にもかかわらず `consent` が `'unset'`
+     * へ変わり、`signOut` の完了前（まだ authenticated）にここが発火して
+     * サーバーの同意記録まで消していた。
+     *
+     * 実測では `PUT { cookieConsent: 'unset' }` が 200 で通り、
+     * `user_settings.cookie_consent` が `granted` → `unset` になっていた。
+     * その結果、再ログインしても採用する値が無く同意バナーが出直す。
+     * PUT が Cookie 削除より後ろへずれた場合は 401 で落ち、
+     * 「設定の同期に失敗しました」のトーストが出る（同じ原因の裏表）。
+     */
+    it('ログアウト中の消去をサーバーへ送らない', async () => {
+      mockGetSettings.mockResolvedValue(
+        serverSettings('granted', T1, COOKIE_CONSENT_VERSION),
+      );
+
+      const { rerender } = render('granted');
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+
+      // `logout()` と同じ順序。印を立ててから端末のレコードを消す
+      act(() => {
+        markSigningOut();
+        clearOwnedConsent();
+      });
+      rerender({ value: 'unset' });
+      await act(async () => {});
+
+      expect(mockUpdateSettings).not.toHaveBeenCalled();
+    });
+
+    it('ログアウトが失敗して戻ったら、同期は再開する', async () => {
+      mockGetSettings.mockResolvedValue(serverSettings('unset', null, null));
+
+      const { rerender } = render('unset');
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+
+      act(() => {
+        markSigningOut();
+      });
+      // `signOut` が失敗した場合は印が戻る（logout.ts の catch）
+      act(() => {
+        clearSigningOut();
+        recordConsentDecision('granted', ME, T2);
+      });
+      rerender({ value: 'granted' });
+
+      await waitFor(() =>
+        expect(mockUpdateSettings).toHaveBeenCalledWith({
+          cookieConsent: 'granted',
+          cookieConsentAt: T2,
+        }),
+      );
     });
 
     it('unknown のままでは送らない', async () => {

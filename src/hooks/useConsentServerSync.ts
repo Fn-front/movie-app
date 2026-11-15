@@ -17,7 +17,10 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 
 import { COOKIE_CONSENT_MESSAGES, COOKIE_CONSENT_VERSION } from '@/constants';
-import { setConsentSyncPending } from '@/features/cookieConsent/utils/bannerSuppression';
+import {
+  isSigningOut,
+  setConsentSyncPending,
+} from '@/features/cookieConsent/utils/bannerSuppression';
 import { useIsomorphicLayoutEffect } from '@/hooks/useIsomorphicLayoutEffect';
 import { useToastDispatch } from '@/hooks/useToast';
 import type { CookieConsentState } from '@/hooks/useCookieConsent';
@@ -265,6 +268,27 @@ export function useConsentServerSync(consent: CookieConsentState): void {
   // 変更の追随
   useEffect(() => {
     if (!mergeDoneRef.current) return;
+
+    // ⚠️ **ログアウト中は送らない。**
+    //
+    // `logout()` は `cleanUpBeforeSignOut()` で端末の同意レコードを同期的に
+    // 消す。これは「この端末に前の利用者の同意を残さない」ための後始末であって、
+    // **利用者が同意を撤回したわけではない**。
+    //
+    // ところがその消去で `consent` が `'unset'` に変わり、`signOut` の完了前
+    // （まだ `status === 'authenticated'`）にここが発火していた。実測では
+    // `PUT /api/user/settings { cookieConsent: 'unset' }` が 200 で通り、
+    // **サーバーの同意記録まで `granted` → `unset` に消えていた**。
+    // 結果、再ログインしてもマージで採用する値が無く同意バナーが出直す。
+    //
+    // PUT が Cookie 削除の後ろへずれた場合は 401 で落ち、「設定の同期に
+    // 失敗しました」のトーストがログアウト成功と同時に出る（同じ原因の裏表）。
+    //
+    // `markSigningOut()` は `cleanUpBeforeSignOut()` より前に呼ばれるので、
+    // ここに届く時点で必ず立っている。失敗して遷移しなかった場合は
+    // `clearSigningOut()` で戻るため、通常の同期は再開する
+    if (isSigningOut()) return;
+
     if (status !== 'authenticated' || userId === '') return;
     if (consent === 'unknown') return;
     if (lastSentRef.current === consent) return;

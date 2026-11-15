@@ -9,6 +9,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 
 import { COOKIE_CONSENT_VERSION } from '@/constants/user';
 import {
+  clearOwnedConsent,
   getStoredConsentRecord,
   recordConsentDecision,
   writeConsentRecord,
@@ -21,7 +22,9 @@ import {
 import type { CookieConsentState } from './useCookieConsent';
 import {
   __resetBannerSuppressionForTest,
+  clearSigningOut,
   isBannerSuppressed,
+  markSigningOut,
 } from '@/features/cookieConsent/utils/bannerSuppression';
 
 const mockUseSession = jest.fn();
@@ -439,6 +442,125 @@ describe('useConsentServerSync', () => {
       await act(async () => {});
 
       expect(mockUpdateSettings).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ログアウト中は送らない
+     *
+     * `logout()` は `cleanUpBeforeSignOut()` で端末の同意レコードを同期的に
+     * 消す。これは「この端末に前の利用者の同意を残さない」ための後始末で、
+     * **利用者が撤回したわけではない**。にもかかわらず `consent` が `'unset'`
+     * へ変わり、`signOut` の完了前（まだ authenticated）にここが発火して
+     * サーバーの同意記録まで消していた。
+     *
+     * 実測では `PUT { cookieConsent: 'unset' }` が 200 で通り、
+     * `user_settings.cookie_consent` が `granted` → `unset` になっていた。
+     * その結果、再ログインしても採用する値が無く同意バナーが出直す。
+     * PUT が Cookie 削除より後ろへずれた場合は 401 で落ち、
+     * 「設定の同期に失敗しました」のトーストが出る（同じ原因の裏表）。
+     */
+    it('ログアウト中の消去をサーバーへ送らない', async () => {
+      mockGetSettings.mockResolvedValue(
+        serverSettings('granted', T1, COOKIE_CONSENT_VERSION),
+      );
+
+      const { rerender } = render('granted');
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+
+      // `logout()` と同じ順序。印を立ててから端末のレコードを消す
+      act(() => {
+        markSigningOut();
+        clearOwnedConsent();
+      });
+      rerender({ value: 'unset' });
+      await act(async () => {});
+
+      expect(mockUpdateSettings).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⚠️ 実際の失敗シーケンスを通すこと。`markSigningOut()` の直後に
+     * `clearSigningOut()` を呼ぶだけだと**ガードを無効化しても通ってしまい**、
+     * 「戻ったら再開する」しか見ていないテストになる
+     */
+    it('ログアウトが失敗して戻ったら、同期は再開する', async () => {
+      mockGetSettings.mockResolvedValue(
+        serverSettings('granted', T1, COOKIE_CONSENT_VERSION),
+      );
+
+      const { rerender } = render('granted');
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+
+      // ログアウトを試みる（ここでガードが効く）
+      act(() => {
+        markSigningOut();
+        clearOwnedConsent();
+      });
+      rerender({ value: 'unset' });
+      await act(async () => {});
+      expect(mockUpdateSettings).not.toHaveBeenCalled();
+
+      // `signOut` が失敗した場合は印が戻る（logout.ts の catch）
+      //
+      // ⚠️ 再開の確認には**別の値**を使う。初回マージで `lastSentRef` が
+      // `granted` にシードされているので、同じ値へ戻すと「同じ値を
+      // 繰り返し送らない」側で弾かれ、ガードの有無を問わず PUT が飛ばない
+      act(() => {
+        clearSigningOut();
+        recordConsentDecision('denied', ME, T2);
+      });
+      rerender({ value: 'denied' });
+
+      await waitFor(() =>
+        expect(mockUpdateSettings).toHaveBeenCalledWith({
+          cookieConsent: 'denied',
+          cookieConsentAt: T2,
+        }),
+      );
+    });
+
+    /**
+     * 飛んでいた初回マージの GET が、ログアウト中に着地した場合
+     *
+     * ⚠️ `clearOwnedConsent()` は未認証同意（`owner` が空文字）を**消さない**。
+     * そのため端末値が残り、マージが `adopt-local` を選んで PUT を投げていた。
+     * Cookie 削除より後ろへ着地すれば 401 で落ち、ログアウト成功と同時に
+     * 同期失敗のトーストが出る。書き戻しも起きて、消したはずの
+     * レコードが1ページロードぶん復活する
+     */
+    it('ログアウト中に着地した初回マージは、送信も書き戻しもしない', async () => {
+      // 未認証でした同意が端末に残っている状態から始める
+      writeConsentRecord({
+        state: 'granted',
+        at: T1,
+        owner: '',
+        version: COOKIE_CONSENT_VERSION,
+      });
+
+      let resolveGet: (value: unknown) => void = () => {};
+      mockGetSettings.mockReturnValue(
+        new Promise((resolve) => {
+          resolveGet = resolve;
+        }),
+      );
+
+      render('granted');
+      await waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+
+      // GET の応答が返る前にログアウトへ入る
+      act(() => {
+        markSigningOut();
+        clearOwnedConsent();
+      });
+
+      await act(async () => {
+        resolveGet(serverSettings('unset', null, null));
+      });
+
+      expect(mockUpdateSettings).not.toHaveBeenCalled();
+      // owner が空のレコードは残る（消すのは owner 付きだけ）。
+      // 書き戻しで owner が付け替わっていないことを見る
+      expect(getStoredConsentRecord().owner).toBe('');
     });
 
     it('unknown のままでは送らない', async () => {

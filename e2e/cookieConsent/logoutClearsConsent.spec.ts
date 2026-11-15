@@ -15,8 +15,9 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
+import { performLogin } from '../fixtures/auth';
 import type { DedicatedSession } from '../fixtures/dedicatedSession';
-import { cleanupUserSettings } from '../helpers/api';
+import { cleanupUserSettings, getUserConsent } from '../helpers/api';
 import { runScopedEmail } from '../helpers/runScope';
 
 import {
@@ -89,6 +90,41 @@ test.describe('Cookie同意 / ログアウト', () => {
   test('ログアウト後は同意が未決定に戻り、バナーが出直す', async () => {
     await page.goto('/');
     await expect(consentBanner(page)).toBeVisible();
+
+    probe.expectNoBeaconEscaped();
+  });
+
+  /**
+   * 消すのは**端末のレコードだけ**。サーバーの記録は残す
+   *
+   * 端末から消すのは「この端末に前の利用者の同意を残さない」ための後始末で、
+   * **利用者が同意を撤回したわけではない**。サーバーまで消すと、同じ利用者が
+   * ログインし直したときに同意を訊き直すことになる。
+   *
+   * ⚠️ 実際に消えていた。`useConsentServerSync` の「変更の追随」に
+   * ログアウト中のガードが無く、`cleanUpBeforeSignOut()` の消去が
+   * `consent` を `'unset'` に変えた結果、`signOut` の完了前（まだ
+   * authenticated）に `PUT { cookieConsent: 'unset' }` が 200 で通っていた。
+   * PUT が Cookie 削除より後ろへずれた場合は 401 になり、ログアウト成功と
+   * 同時に「設定の同期に失敗しました」のトーストが出る（同じ原因の裏表）。
+   */
+  test('サーバーの同意記録はログアウトでは消えない', async () => {
+    expect(await getUserConsent(session.userId)).toMatchObject({
+      state: 'granted',
+    });
+  });
+
+  test('再ログインすると同意が復元され、バナーは出ない', async () => {
+    await performLogin(page, USER);
+    await page.goto('/');
+
+    // バナーはサーバー同期が終わるまで抑止される（#1137）。出るとすれば
+    // 抑止が解けた後なので、`toBeHidden` を待つだけでは不十分。
+    // 同意が復元されたことを端末側でも確かめる
+    await expect
+      .poll(async () => (await readStoredConsent(page)).state)
+      .toBe('granted');
+    await expect(consentBanner(page)).toBeHidden();
 
     probe.expectNoBeaconEscaped();
   });

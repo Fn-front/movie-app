@@ -41,20 +41,31 @@ const MOVIE = {
 } as const;
 
 /**
+ * サイドバー（`watchlistPanel.tsx`）が `useWatchlist` に渡す引数
+ *
+ * ⚠️ 1箇所に置く。キーの組み立てとフックの呼び出しで別々に書くと、
+ * 片方だけ直したときに黙って乖離してテストが通り続ける。
+ */
+const SIDEBAR_QUERY_ARGS = {
+  sort: 'release_date_proximity',
+  limit: 10,
+  excludeWatched: true,
+} as const;
+
+/**
  * サイドバーが実際に使っている一覧キャッシュのキー
  *
- * `watchlistPanel.tsx` が `useWatchlist({ sort: 'release_date_proximity',
- * limit: 10, excludeWatched: true })` を呼び、`useWatchlist` が
- * `watchlistKeys.list({ sort, excludeWatched, prioritizeStreaming })` を
- * 組む（`limit` はキーに入らない／`prioritizeStreaming` の既定は false）。
+ * `useWatchlist` は `watchlistKeys.list({ sort, excludeWatched,
+ * prioritizeStreaming })` を組む（`limit` はキーに入らない／
+ * `prioritizeStreaming` の既定は false）。
  *
  * ⚠️ 実キーを使う。`getListQueries` は `['watchlist']` プレフィックスを
  * 全部拾うのでどんなキーでもテストは通るが、**サイドバーの削除が仮IDで
  * DELETE する**という主張を検証したいので、そこと同じキーで見る。
  */
 const LIST_KEY = watchlistKeys.list({
-  sort: 'release_date_proximity',
-  excludeWatched: true,
+  sort: SIDEBAR_QUERY_ARGS.sort,
+  excludeWatched: SIDEBAR_QUERY_ARGS.excludeWatched,
   prioritizeStreaming: false,
 });
 
@@ -182,21 +193,13 @@ const renderSidebarWithToggle = () => {
     defaultOptions: { queries: { retry: false } },
   });
 
-  return {
-    queryClient,
-    ...renderHook(
-      () => ({
-        toggle: useWatchlistToggle(),
-        // watchlistPanel.tsx と同じ引数
-        sidebar: useWatchlist({
-          sort: 'release_date_proximity',
-          limit: 10,
-          excludeWatched: true,
-        }),
-      }),
-      { wrapper: createWrapper(queryClient) },
-    ),
-  };
+  return renderHook(
+    () => ({
+      toggle: useWatchlistToggle(),
+      sidebar: useWatchlist(SIDEBAR_QUERY_ARGS),
+    }),
+    { wrapper: createWrapper(queryClient) },
+  );
 };
 
 describe('useWatchlistToggle と一覧キャッシュの同期', () => {
@@ -291,11 +294,33 @@ describe('useWatchlistToggle と一覧キャッシュの同期', () => {
       expect(result.current.sidebar.watchlist[0]?.tmdb_movie_id).toBe(MOVIE_ID);
     });
 
-    // ここが仮IDだと DELETE /api/watchlist/optimistic-... になって 400
-    it('削除に渡すIDが実IDになっている', async () => {
+    it('一覧の先頭が実IDになっている', async () => {
       const { result } = await addViaToggle();
 
       expect(result.current.sidebar.watchlist[0]?.id).toBe(ROW_ID);
+    });
+
+    /**
+     * ⚠️ 本題。仮IDのままだと
+     * `DELETE /api/watchlist/optimistic-...` になって 400。
+     *
+     * `watchlistItem.tsx` の削除ボタンは `onDelete(item.id)` をそのまま
+     * 呼ぶので、一覧の先頭の ID がそのまま API へ渡る
+     */
+    it('削除APIに実IDを渡す', async () => {
+      const { result } = await addViaToggle();
+
+      await act(async () => {
+        result.current.sidebar.removeFromWatchlist(
+          result.current.sidebar.watchlist[0].id,
+        );
+      });
+
+      // react-query が第2引数に mutation の文脈を足すので、第1引数だけ見る
+      const [passedId] = mockRemoveWatchlist.mock.calls[0];
+
+      expect(passedId).toBe(ROW_ID);
+      expect(passedId).not.toMatch(/^optimistic-/);
     });
   });
 

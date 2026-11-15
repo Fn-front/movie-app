@@ -24,6 +24,7 @@ import {
   GA_COOKIE_NAMES,
   attachGaProbe,
   consentBanner,
+  consentToggleRadio,
   gaCookieNames,
   grantButton,
   openGaDedicatedSession,
@@ -126,6 +127,72 @@ test.describe('Cookie同意 / ログアウト', () => {
       .poll(async () => (await readStoredConsent(page)).state)
       .toBe('granted');
     await expect(consentBanner(page)).toBeHidden();
+
+    probe.expectNoBeaconEscaped();
+  });
+
+  /**
+   * 撤回はログアウトでも残す（#1216）
+   *
+   * 消す目的は「前の利用者の**同意**を引き継がせない」こと。撤回は計測を
+   * 止める方向なので、残っても次の利用者に不利益が無い。
+   *
+   * ⚠️ 消すと実害がある。撤回の PUT が失敗した直後にログアウトすると、
+   * 端末にしか無かった決定が失われ、サーバーは `granted` のまま残る。
+   * 「次のページロードのマージで送り直す」という復旧経路も一緒に消えるので、
+   * 再ログインすると `granted` が降りてきて**撤回したのに計測が戻る**。
+   *
+   * ⚠️ この時点でログイン済みであることが前提（直前のテストが再ログインして
+   * いる）。serial なので順序を入れ替えないこと
+   */
+  test('撤回の送信に失敗したままログアウトしても、再ログインで撤回が残る', async () => {
+    // ⚠️ **PUT を失敗させるのが肝。** 成功する経路だとサーバーにも denied が
+    //    入るので、#1216 の症状（端末にしか無い決定が消えて granted が戻る）を
+    //    再現できず、端末レコードが残ることしか見ていないテストになる
+    await page.route('**/api/user/settings', async (route) => {
+      if (route.request().method() === 'PUT') {
+        await route.fulfill({ status: 500, body: '{}' });
+        return;
+      }
+      await route.continue();
+    });
+
+    // 同意済みなのでバナーは出ない。撤回トグルから操作する
+    await page.goto('/privacy');
+    await consentToggleRadio(page, '同意しない').scrollIntoViewIfNeeded();
+    await consentToggleRadio(page, '同意しない').click();
+
+    await expect
+      .poll(async () => (await readStoredConsent(page)).state)
+      .toBe('denied');
+    // 送信は失敗しているので、サーバーは同意のまま
+    expect(await getUserConsent(session.userId)).toMatchObject({
+      state: 'granted',
+    });
+
+    await page.getByRole('button', { name: /ユーザーメニュー/ }).click();
+    await page.getByRole('menuitem', { name: 'ログアウト' }).click();
+    await page.waitForURL('**/auth/signin');
+
+    expect((await readStoredConsent(page)).state).toBe('denied');
+    // 撤回で計測は止まっているので、ログアウトで消し直す必要は無い。
+    // ここを見ておかないと、将来 `analyticsProvider` の削除が壊れたとき
+    // このテストが黙って `_ga` の残留を許す
+    expect(await gaCookieNames(page.context())).toEqual([]);
+
+    // 残っているのでバナーも出ない（未決定ではない）
+    await page.goto('/');
+    await expect(consentBanner(page)).toBeHidden();
+
+    // 送信を通し、再ログインで撤回がサーバーへ届くところまで見る
+    await page.unroute('**/api/user/settings');
+    await performLogin(page, USER);
+    await page.goto('/');
+
+    await expect
+      .poll(async () => (await getUserConsent(session.userId))?.state)
+      .toBe('denied');
+    expect((await readStoredConsent(page)).state).toBe('denied');
 
     probe.expectNoBeaconEscaped();
   });

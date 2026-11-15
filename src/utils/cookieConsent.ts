@@ -229,12 +229,41 @@ export function clearConsentRecord(): void {
  * 遷移を観測する前にドキュメントが破棄される。必ず signOut の「直前」に
  * 同期的に呼ぶこと。
  *
- * @returns 消したかどうか（呼び出し側が _ga Cookie 削除の要否を判断する）
+ * ⚠️ **撤回（denied）は消さない**（#1216）。
+ *
+ * 消す目的は「前の利用者の**同意**を次の利用者へ引き継がせない」こと。
+ * 撤回は計測を止める方向なので、残っても次の利用者に不利益が無い。
+ *
+ * 一方で消すと実害がある。撤回の PUT が失敗した直後にログアウトすると、
+ * 端末にしか無かった決定が失われ、サーバーは `granted` のまま残る。
+ * 「次のページロードのマージで送り直す」という復旧経路も一緒に消えるため、
+ * 再ログインすると `granted` が降りてきて**利用者が撤回したのに計測が戻る**。
+ * 残しておけば、次のログイン時のマージが日時で勝って再送される。
+ *
+ * @returns 消したかどうか（呼び出し側が _ga Cookie 削除の要否を判断する）。
+ *   撤回を残した場合は false。そのとき計測は既に止まっているので、
+ *   `_ga` の削除も consent update も不要
  */
 export function clearOwnedConsent(): boolean {
-  if (getStoredConsentState() === 'unset') return false;
-  if (isStoredConsentAnonymous()) return false;
+  if (!hasClearableConsent()) return false;
   clearConsentRecord();
+  return true;
+}
+
+/**
+ * ログアウトで消す対象のレコードを持っているか
+ *
+ * `clearOwnedConsent()` が何をするかの判定を1箇所にまとめる。
+ * 呼び出し側（`useConsentServerSync` のログアウト後始末）が
+ * 「消すものが無いなら確認の往復も省く」判断に使うため、**同じ条件**で
+ * なければならない。片方だけに条件が増えると、消す対象が無いのに
+ * 毎ロード `/api/auth/session` を叩いて必ず空振りする。
+ */
+export function hasClearableConsent(): boolean {
+  if (getStoredConsentState() === 'unset') return false;
+  // 匿名でした決定（#1213）と撤回（#1216）は残す
+  if (isStoredConsentAnonymous()) return false;
+  if (getStoredConsentState() === 'denied') return false;
   return true;
 }
 

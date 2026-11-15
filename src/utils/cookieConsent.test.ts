@@ -253,6 +253,24 @@ describe('cookieConsent', () => {
       expect(getStoredConsentOwner()).toBe('user-1');
     });
 
+    /**
+     * 撤回は残す（#1216）
+     *
+     * 消す目的は「前の利用者の**同意**を引き継がせない」こと。撤回は計測を
+     * 止める方向なので残っても不利益が無い。逆に消すと、PUT に失敗した直後の
+     * ログアウトで端末にしか無かった決定が失われ、サーバーは granted のまま
+     * 残るため、再ログインで計測が戻る
+     */
+    it('clearOwnedConsent はログイン中の撤回を残す', () => {
+      recordConsentDecision('denied', 'user-1', T1);
+
+      expect(clearOwnedConsent()).toBe(false);
+      expect(getStoredConsentState()).toBe('denied');
+      expect(getStoredConsentAt()).toBe(T1);
+      // 所有者も残す。次のログインで再送されるまでが一続きの記録
+      expect(getStoredConsentOwner()).toBe('user-1');
+    });
+
     it('clearOwnedConsent は未保存でも何もしない', () => {
       expect(clearOwnedConsent()).toBe(false);
     });

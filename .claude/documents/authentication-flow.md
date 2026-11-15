@@ -743,22 +743,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     maxAge: SESSION_CONFIG.IDLE_MAX_AGE_S, // 24時間（非アクティブ時）
   },
 
+  // ⚠️ 名前も属性も `src/constants/auth.ts` から取る。インラインで書かない。
+  // 失効セッションを消す proxy（src/proxy.ts）と同じ定義を使う必要があり、
+  // 片方だけずれるとブラウザは別のCookieとして扱って削除が効かない（#1174）
   cookies: {
     sessionToken: {
-      name:
-        process.env.NODE_ENV === 'production'
-          ? '__Secure-next-auth.session-token'
-          : 'next-auth.session-token',
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: process.env.NODE_ENV === 'production',
-      },
+      name: getSessionCookieName(),
+      options: getSessionCookieOptions(),
     },
   },
 })
 ```
+
+```typescript
+// src/constants/auth.ts — 発行側と削除側で共有する定義
+export const getSessionCookieName = (): string =>
+  process.env.NODE_ENV === 'production'
+    ? '__Secure-next-auth.session-token'
+    : 'next-auth.session-token';
+
+export const getSessionCookieOptions = () => ({
+  httpOnly: true,
+  sameSite: 'lax',
+  path: '/',
+  secure: process.env.NODE_ENV === 'production',
+});
+```
+
+> ⚠️ 本番の Cookie 名に付く `__Secure-` 接頭辞は、**`Secure` 属性の無い
+> `Set-Cookie` をブラウザが拒否する**（CookiePrefixes）。削除するときも
+> 属性を省けない。`response.cookies.delete(name)` は文字列を渡すと
+> options が undefined になり属性が一切付かないため、**使ってはいけない**。
+> 空値 + `maxAge: 0` を同じ属性で `set` する（`src/proxy.ts`）。
 
 ### セッションオブジェクト構造
 ```typescript

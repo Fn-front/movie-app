@@ -144,19 +144,21 @@ test.describe('第2要素の入力画面', () => {
     const response = await page.goto(ROUTES.TOTP_CHALLENGE);
     await expect(totpInput(page)).toBeVisible();
 
-    // ⚠️ **レスポンスヘッダで見る。** ブラウザの Cookie 壺だけを見ると
-    // CI（production）で回帰を検知できない。proxy が呼ぶ
-    // `response.cookies.delete(name)` は Next の実装上 `Secure` を付けず
-    // （`@edge-runtime/cookies` の delete は options を渡さない）、
-    // production の Cookie 名は `__Secure-` 接頭辞付きなので、
-    // **ブラウザがその Set-Cookie を拒否して Cookie が残ってしまう**。
-    // つまり「壺に残っている」は削除されなかった証明にならない
+    // ⚠️ **レスポンスヘッダで見る。**「削除指示が出ていないこと」を直接
+    // 確かめたいのであって、壺の中身は結果でしかない。
+    //
+    // 空値への上書き（`<name>=;`）が削除指示。発行時は
+    // `<name>=eyJ...` なのでマッチしない
     const setCookie = (await response!.headerValues('set-cookie')).join('\n');
     expect(setCookie).not.toMatch(/next-auth\.session-token=;/);
 
-    // 壺のほうも見ておく。jwt コールバックの例外で `@auth/core` が消す経路
-    // （`sessionStore.clean()`）は options ごと渡すので Secure が付き、
-    // こちらは実際に消える
+    // 壺のほうも見ておく。
+    //
+    // ⚠️ 以前は「proxy の `cookies.delete()` は `Secure` を付けないので
+    // production ではブラウザが拒否し、壺に残っていても削除されなかった
+    // 証明にならない」と書いていたが、**#1174 でそこを直したので
+    // この但し書きはもう成立しない**。いまは属性付きで返るため、
+    // 壺のアサーションも本物の回帰検知器になっている
     await expect(resolveSessionCookie(page.context())).resolves.toBeDefined();
   });
 

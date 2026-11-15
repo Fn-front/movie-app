@@ -311,9 +311,17 @@ describe('proxy', () => {
       expect(getDeletionCookie().attributes.get(attribute)).toBe(expected);
     });
 
-    // 発行側（auth.ts の cookies.sessionToken）と同じ定義を使う。
-    // 属性が1つでも食い違うと別のCookieとして扱われ、やはり消えない
-    it('発行時の名前・属性と一致する', () => {
+    /**
+     * 発行側（auth.ts の cookies.sessionToken）と同じ定義を使う。
+     * 属性が1つでも食い違うと別のCookieとして扱われ、やはり消えない。
+     *
+     * ⚠️ これはヘルパーを**自分自身と**突き合わせているだけで、
+     * `auth.ts` が実際にヘルパーを使っているかは見ていない。誰かが
+     * `auth.ts` に値をインライン展開し直してもここは通る。
+     * 実際の属性値は上の `it.each` がベタ書きで固定しているので、
+     * ずれれば**そちら**が落ちる。
+     */
+    it('削除Cookieが共有ヘルパーの定義どおりになっている', () => {
       setNodeEnv('production');
 
       const cookie = getDeletionCookie();

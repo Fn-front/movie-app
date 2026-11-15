@@ -604,11 +604,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             now - (token.lastPasswordCheck || 0) >
             SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS
           ) {
-            const { data } = await supabase
+            const { data, error: lookupError } = await supabase
               .from('users')
               .select('password_hash, password_changed_at, role')
               .eq('id', token.id)
               .single();
+
+            // ⚠️ **`error` を捨ててはいけない**（#1193）。
+            //
+            // postgrest-js はネットワーク障害を **throw せず**
+            // `{ data: null, error }` を返す（`PostgrestBuilder.ts` の
+            // `res.catch(...)`）。捨てると「取得に失敗した」と
+            // 「行が無い」を区別できず、確認を終えたことにして
+            // `lastPasswordCheck` を進めてしまう。
+            // その結果、**パスワード変更による強制失効の確認が5分間
+            // 静かにスキップされる**（admin 剥奪の追従も同じ）。
+            //
+            // 伝送路の失敗（`code` が空）は確認を先送りし、次のリクエストで
+            // 再確認する。`PGRST116`（0件）は「確定した答え」なので
+            // 先送りしない — 消えた行を毎リクエスト引き続けることになる。
+            if (
+              lookupError &&
+              lookupError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
+            ) {
+              console.error('Password change check failed:', lookupError);
+              return token;
+            }
 
             if (data?.password_changed_at) {
               const dbChangedAt = new Date(data.password_changed_at).getTime();

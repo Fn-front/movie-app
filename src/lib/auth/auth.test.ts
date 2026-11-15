@@ -664,6 +664,136 @@ describe('jwt コールバック', () => {
     });
   });
 
+  /**
+   * 取得に失敗したときは確認を終えたことにしない（#1193）
+   *
+   * ⚠️ postgrest-js はネットワーク障害を **throw せず**
+   * `{ data: null, error: { code: '' } }` を返す
+   * （`PostgrestBuilder.ts` の `res.catch(...)`）。`error` を捨てると
+   * 「取得に失敗した」と「行が無い」を区別できず、`lastPasswordCheck` を
+   * 進めてしまう＝**パスワード変更による強制失効の確認が5分間
+   * 静かにスキップされる**。
+   */
+  describe('パスワード変更チェックの取得失敗', () => {
+    let errorSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      errorSpy.mockRestore();
+    });
+
+    /** 伝送路の失敗。postgrest-js は code を空で返す */
+    const setFetchFailure = () => {
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: null,
+            error: {
+              message: 'TypeError: fetch failed',
+              details: '',
+              hint: '',
+              code: '',
+            },
+          };
+        }
+        return { data: null, error: null };
+      });
+    };
+
+    /** 確認間隔を必ず超過させたトークン */
+    const staleToken = () => ({
+      id: 'u1',
+      role: 'admin',
+      issuedAt: Date.now(),
+      lastPasswordCheck: 0,
+      lastLoginUpdate: Date.now(),
+      passwordChangedAt: null,
+    });
+
+    it('取得に失敗したら lastPasswordCheck を進めない', async () => {
+      setFetchFailure();
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      // 進めていなければ、次のリクエストでまた確認が走る
+      expect(token.lastPasswordCheck).toBe(0);
+    });
+
+    it('取得に失敗してもセッションは無効化しない', async () => {
+      // DB の一時的な不調で全利用者をログアウトさせない
+      setFetchFailure();
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      expect(token.invalidated).toBeUndefined();
+    });
+
+    it('取得に失敗したらロールも追従させない', async () => {
+      // 確認できていないのに DB の値を名乗らせない
+      setFetchFailure();
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      expect(token.role).toBe('admin');
+    });
+
+    it('取得の失敗をログに残す', async () => {
+      setFetchFailure();
+
+      await jwt({ token: staleToken(), user: undefined, account: null });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Password change check failed:',
+        expect.objectContaining({ code: '' }),
+      );
+    });
+
+    /**
+     * 0件（PGRST116）は「確定した答え」なので先送りしない。
+     * 先送りすると、消えた行を毎リクエスト引き続けることになる
+     */
+    it('0件なら従来どおり確認を終えたことにする', async () => {
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: null,
+            error: {
+              message: 'JSON object requested, multiple (or no) rows returned',
+              details: '',
+              hint: '',
+              code: 'PGRST116',
+            },
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      expect(token.lastPasswordCheck).not.toBe(0);
+      expect(token.invalidated).toBeUndefined();
+    });
+  });
+
   it('last_login はスロットリング間隔を超えていれば更新される', async () => {
     let userUpdated = false;
     setResolver(({ table, ops }) => {

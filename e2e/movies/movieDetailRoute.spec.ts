@@ -299,6 +299,155 @@ test.describe('映画詳細のURL化', () => {
   });
 
   /**
+   * スマホ幅ではモーダルのスクロールが1本（#1109）
+   *
+   * 以前は「あらすじ以降」だけが `max-height: 300px` で別にスクロールし、
+   * ポスター・配信アイコン側は伸びるに任せていた。モーダルは `overflow: hidden`
+   * の高さ上限つきなので、配信が3行揃う作品では**上が伸びた分だけ下が
+   * クリップ**され、スクロール領域が細い隙間になっていた。
+   *
+   * ⚠️ **md 以上は従来のまま**なので、デスクトップ幅で測ると落ちない（#1200）。
+   * ビューポートは必ずスマホ幅にすること。
+   *
+   * ⚠️ **`clientHeight` を見ても検出できない。** クリップしているのは祖先の
+   * `overflow: hidden` なので、潰れた側の `clientHeight` は `max-height` の
+   * 300px を返し続ける。実際に見えている高さ（祖先との重なり）で判定する。
+   *
+   * ⚠️ 単体テストでは検出できない（jsdom は CSS もメディアクエリも解釈しない）。
+   */
+  test('スマホ幅では配信が3行でもスクロール領域が潰れない', async ({
+    page,
+  }) => {
+    // ⚠️ **高さを上げると検出力が落ちる。** 症状の重さは幅ではなく**高さ**で
+    //    決まり、画面が高いほど修正前の可視高さも広がる（高さにほぼ比例し、
+    //    900 まで上げると 300px 近くになる）。下の閾値はそこまで見込んで
+    //    置いてあるが、さらに高くすると「修正前でも通る」側へ寄っていく。
+    //    幅は md（768px）未満であればよい
+    await page.setViewportSize({ width: 390, height: 740 });
+
+    // 配信・レンタル・購入が全部揃う作品（Issue の再現条件）
+    const providers = (ids: number[]) =>
+      ids.map((id) => ({
+        provider_id: id,
+        provider_name: `E2E配信${id}`,
+        logo_path: '/e2e-provider-logo.jpg',
+        display_priority: id,
+      }));
+
+    await mockMovieDetail(page, {
+      // 既定のモックは中身が足りず、このテストが成り立たない。実在作品（アメリ）に
+      // 寄せて埋める。どれが何を支えているかは実測で切り分けてある（修正前のコードで
+      // 1つずつ外して可視高さを測った）。
+      //
+      // - `backdrop_path` を外す → 299px。上を押し下げる要素が消え**通ってしまう**
+      // - `watch/providers` を外す → 260px。配信3行ぶん縮み**通ってしまう**
+      // - `overview` / `credits` を外す → そもそもスクロールが起きず `count` が 0 になる
+      //   （このときは可視高さではなく `toBe(1)` の側で落ちる）
+      // - `poster_path` は外しても 145px のまま。**可視高さには効いていない**が、
+      //   実作品に近い見た目で測るために残している
+      backdrop_path: '/e2e-backdrop.jpg',
+      poster_path: '/e2e-poster.jpg',
+      overview: 'あ'.repeat(400),
+      credits: {
+        // 描画されるのは `DISPLAY_LIMITS.CAST_MAX`（10件）まで。
+        // 上限に当たっていることを込みで測りたいので多めに渡す
+        cast: Array.from({ length: 12 }, (_, i) => ({
+          id: 1000 + i,
+          name: `E2E俳優${i}`,
+          character: `E2E役${i}`,
+          profile_path: null,
+          order: i,
+        })),
+      },
+      'watch/providers': {
+        results: {
+          JP: {
+            link: 'https://example.com',
+            flatrate: providers([1, 2, 3]),
+            rent: providers([4, 5, 6]),
+            buy: providers([7, 8]),
+          },
+        },
+      },
+    });
+
+    await page.goto(`/movies/now-showing?movie_id=${MOVIE_ID}`);
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 20000 });
+    await expect(dialog.getByText('詳細情報')).toBeVisible({ timeout: 15000 });
+
+    const scroll = await page.evaluate(() => {
+      const root = document.querySelector('[role="dialog"]');
+      if (!root) return null;
+
+      const scrollers = [...root.querySelectorAll('*')].filter((el) => {
+        const overflowY = getComputedStyle(el).overflowY;
+        const scrolls = overflowY === 'auto' || overflowY === 'scroll';
+        return scrolls && el.scrollHeight > el.clientHeight + 1;
+      });
+
+      const dialogBox = root.getBoundingClientRect();
+      const visibleHeights = scrollers.map((el) => {
+        const box = el.getBoundingClientRect();
+        return Math.round(
+          Math.max(
+            0,
+            Math.min(box.bottom, dialogBox.bottom) -
+              Math.max(box.top, dialogBox.top),
+          ),
+        );
+      });
+
+      return { count: scrollers.length, visibleHeights };
+    });
+
+    // null と「スクロール要素ゼロ」を取り違えないよう先に切り分ける
+    expect(scroll).not.toBeNull();
+
+    // スクロールするのは本文の1箇所だけ。2つあるとホイールが内側に吸われ、
+    // 外側へ抜けられなくなる（入れ子スクロール）
+    expect(scroll?.count).toBe(1);
+
+    // クリップされていないことを見る。本番ビルドでの実測（390x740）は
+    // 修正前 145px → 修正後 465px。
+    //
+    // 閾値 350 は両側に余裕を取ってある。修正後はいちばん低い想定
+    // （高さ667）でも 402px で通り、修正前は高さ900 まで上げても 300px 前後で
+    // 捕まる。⚠️ dev サーバーだと数十px 大きく出るので、測り直すときは
+    // 本番ビルド（`npm run build && npm start`）で揃えること
+    expect(scroll?.visibleHeights[0]).toBeGreaterThan(350);
+  });
+
+  /**
+   * 全画面ページ（`/movies/[id]`）は内部スクロールを持たない（#1023 / #1109）
+   *
+   * モーダルの高さ上限のための仕組みなので、ページでは本文のスクロールと
+   * 二重になるだけ。スクロールする要素が幅で入れ替わる（md 未満は `__body`、
+   * md 以上は `__scrollable`）ため、`--page` では**両方**外している。
+   * 片方を外し忘れても見た目には出にくく、スクロールが二重になって初めて気づく
+   */
+  test('全画面ページは詳細の中に内部スクロールを作らない', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 740 });
+
+    await page.goto(`/movies/${MOVIE_ID}`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({
+      timeout: 20000,
+    });
+
+    const innerScrollers = await page.evaluate(() =>
+      [...document.querySelectorAll('[class*="c_movie_detail"]')]
+        .filter((el) => {
+          const overflowY = getComputedStyle(el).overflowY;
+          const scrolls = overflowY === 'auto' || overflowY === 'scroll';
+          return scrolls && el.scrollHeight > el.clientHeight + 1;
+        })
+        .map((el) => el.className.toString()),
+    );
+
+    expect(innerScrollers).toEqual([]);
+  });
+
+  /**
    * 絞り込みとモーダルは別の関心事。`movie_id` の増減でフィルターが
    * 作り直されると、条件は同じでも配列の実体が差し替わって再描画が広がる
    * （#1051 / #1059 の作りと噛み合わせる必要がある）

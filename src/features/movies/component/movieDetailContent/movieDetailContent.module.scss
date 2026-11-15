@@ -1,19 +1,45 @@
 @use '@/styles/variables' as *;
 @use '@/styles/mixins' as *;
 
+// スマホ幅（md 未満）ではスクロールを `__body` の1本に統合する（#1109）
+//
+// `__scrollable` が max-height: 300px で**下半分だけ**スクロールし、上半分
+// （ポスター・配信アイコン）は伸びるに任せる作りだった。モーダルは
+// `overflow: hidden` の高さ上限つきなので、配信が3行揃うと上が伸びた分だけ
+// 下がクリップされ、スクロール領域が細い隙間になる。
+//
+// ⚠️ **md 以上は従来のまま据え置いている（#1200）。**
+// 症状の重さは幅ではなく**高さ**で決まるので、デスクトップが軽いわけではない。
+// 同じ作品での実測: 768x740 → 88px ／ 1280x720 → 69px ／ 1280x800 → 145px。
+// スマホ幅で「潰れている」と判定した 145px より悪い値がノートPCでも出る。
+// 今回スマホ幅に絞ったのは範囲を限定する判断であって、PC が無事だからではない。
 .c_movie_detail {
   position: relative;
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  @include md {
+    // 従来どおりの流し込み。`__body` は内容ぶんの高さになる
+    display: block;
+  }
 
   // 全画面ページ版（/movies/[id]）
   //
-  // 自身のクラスを重ねて詳細度を上げる。`__scrollable` の max-height と
-  // 同点だと、勝ち負けが CSS Modules の出力順に左右されて本番ビルドで
+  // 自身のクラスを重ねて詳細度を上げる。`__body` / `__scrollable` 側の
+  // 指定と同点だと、勝ち負けが CSS Modules の出力順に左右されて本番ビルドで
   // 反転しうる（movieTile のリスト表示と同じ理由）
   &#{&}--page {
     // 器の高さが決まっているモーダル用の内部スクロールを外す。
     // ページでは本文のスクロールと二重になるだけ（#1023）
+    //
+    // スクロールする要素が幅で入れ替わるので**両方**外す。
+    // md 未満は `__body`、md 以上は `__scrollable`
+    .c_movie_detail__body {
+      overflow-y: visible;
+    }
+
     .c_movie_detail__scrollable {
       overflow-y: visible;
       max-height: none;
@@ -40,10 +66,19 @@
   }
 
   // バックドロップ
+  //
+  // md 未満ではスクロールせず上に残るので、ここで使った高さはそのまま本文から
+  // 引かれる。200px あると低い画面で本文の取り分が無くなるため縮める（#1109）。
+  //
+  // variant で絞っていないので `/movies/[id]`（ページ版）でも 150px になる。
+  // ページは素直にスクロールするため本文の取り分は減らないが、
+  // 「モーダルとページで表示をずらさない」方針（`movieDetailPage.tsx`）に沿って
+  // 揃えている
   &__backdrop {
     position: relative;
     width: 100%;
-    height: 200px;
+    height: 150px;
+    flex-shrink: 0;
 
     @include md {
       height: 250px;
@@ -89,19 +124,38 @@
     @include focus-visible;
   }
 
-  // ボディ
+  // ボディ（md 未満では唯一のスクロール容器）
   &__body {
+    flex: 1;
+    min-height: 0;
     padding: $spacing-4;
+    overflow-y: auto;
+    // ⚠️ `overflow-x` を省略しない。片軸が非 visible だと、もう片軸の
+    // `visible` は `auto` に computed される（CSS Overflow 3）。省くと
+    // 折り返せない長い文字列で**モーダル内に横スクロールバーが出る**
+    // （実測 scrollWidth 581 > clientWidth 356）。従来は祖先の
+    // `.c_modal__content { overflow: hidden }` が黙って切っていた
+    overflow-x: hidden;
 
     @include md {
       padding: $spacing-6;
+      // 内側の `__scrollable` に戻す
+      overflow-y: visible;
+      overflow-x: visible;
     }
   }
 
   // スクロール領域（詳細情報 + キャスト）
+  //
+  // md 未満では `__body` が1本でスクロールするので、ここは流すだけにする。
+  // 入れ子にするとホイールが内側に吸われて外へ抜けられなくなる
   &__scrollable {
-    overflow-y: auto;
-    max-height: 300px;
+    overflow-y: visible;
+
+    @include md {
+      overflow-y: auto;
+      max-height: 300px;
+    }
 
     // tabindex="0" でタブストップになるため、到達したことが見えるようにする
     &:focus-visible {
@@ -122,6 +176,16 @@
   }
 
   // ポスター
+  //
+  // ⚠️ `margin-top` のマイナスは**効いていない**（#1109 の調査で判明）。
+  // `$spacing-10` / `$spacing-12` は `var(--spacing-10)` などの CSS 変数なので、
+  // `-$spacing-12` は `margin-top: -var(--spacing-12)` という無効な宣言に
+  // コンパイルされ、ブラウザが捨てる（実測 0px。ビルド成果物にも出ている）。
+  // 負の値にするなら `calc(-1 * var(--spacing-12))` が要る。
+  //
+  // 今回は挙動を変えないため**そのまま残す**。復活させるか仕様から落とすかは
+  // #1200 の補足に記録してある。なお md 未満は `__body` がスクロール容器に
+  // なったので、仮に効かせても padding を超える分はクリップされる
   &__poster {
     flex-shrink: 0;
     width: 100px;

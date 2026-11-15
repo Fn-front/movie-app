@@ -23,8 +23,15 @@ interface TwoFactorChallengeProps {
 
 export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
   function TwoFactorChallenge({ callbackUrl }) {
-    const { code, error, isSubmitting, onCodeChange, onSubmit } =
-      useTwoFactorChallenge({ callbackUrl });
+    const {
+      code,
+      error,
+      isSubmitting,
+      isCancelling,
+      onCodeChange,
+      onSubmit,
+      onCancel,
+    } = useTwoFactorChallenge({ callbackUrl });
 
     return (
       <div className={styles.c_two_factor}>
@@ -63,12 +70,37 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
               size='lg'
               fullWidth
               isLoading={isSubmitting}
+              disabled={isCancelling}
               aria-label='認証コードを確認'
             >
               確認
             </Button>
           </div>
         </form>
+
+        {/*
+          この画面からの出口（#1161）。
+          `totpPending` のセッションは proxy が他のすべての画面から押し戻すため、
+          認証アプリもリカバリーコードも手元に無い利用者は、これが無いと
+          Cookie を手で消すまで公開ページすら見られない
+        */}
+        <div className={styles.c_two_factor__escape}>
+          <p className={styles.c_two_factor__escape_lead}>
+            認証アプリもリカバリーコードも使えない場合は、ログアウトして別のアカウントでログインできます。
+          </p>
+
+          <Button
+            type='button'
+            variant='ghost'
+            size='md'
+            fullWidth
+            onClick={onCancel}
+            isLoading={isCancelling}
+            disabled={isSubmitting}
+          >
+            キャンセルしてログアウト
+          </Button>
+        </div>
       </div>
     );
   },

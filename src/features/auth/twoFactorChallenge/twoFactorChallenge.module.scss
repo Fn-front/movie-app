@@ -33,6 +33,19 @@
   gap: $spacing-5;
 }
 
+.c_two_factor__escape {
+  margin-top: $spacing-6;
+  padding-top: $spacing-6;
+  border-top: $border-width-1 solid $border-color;
+}
+
+.c_two_factor__escape_lead {
+  margin-bottom: $spacing-4;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  line-height: $line-height-loose;
+}
+
 .c_two_factor__error {
   padding: $spacing-3 $spacing-4;
   background-color: color-alpha(--error-main, 10%);

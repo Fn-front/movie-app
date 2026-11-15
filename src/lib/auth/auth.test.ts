@@ -146,6 +146,8 @@ type Callbacks = {
   session: (args: unknown) => Promise<Record<string, unknown>>;
 };
 
+import { SESSION_CONFIG } from '@/constants/auth';
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('@/lib/auth/auth');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -661,6 +663,249 @@ describe('jwt コールバック', () => {
       });
 
       expect(token.role).toBe('admin');
+    });
+  });
+
+  /**
+   * 取得に失敗したときは確認を終えたことにしない（#1193）
+   *
+   * ⚠️ postgrest-js はネットワーク障害を **throw せず**
+   * `{ data: null, error: { code: '' } }` を返す
+   * （`PostgrestBuilder.ts` の `res.catch(...)`）。`error` を捨てると
+   * 「取得に失敗した」と「行が無い」を区別できず、`lastPasswordCheck` を
+   * 進めてしまう＝**パスワード変更による強制失効の確認が5分間
+   * 静かにスキップされる**。
+   */
+  describe('パスワード変更チェックの取得失敗', () => {
+    let errorSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      errorSpy.mockRestore();
+    });
+
+    /** 伝送路の失敗。postgrest-js は code を空で返す */
+    const setFetchFailure = () => {
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: null,
+            error: {
+              message: 'TypeError: fetch failed',
+              details: '',
+              hint: '',
+              code: '',
+            },
+          };
+        }
+        return { data: null, error: null };
+      });
+    };
+
+    /** 確認間隔を必ず超過させたトークン */
+    const staleToken = () => ({
+      id: 'u1',
+      role: 'admin',
+      issuedAt: Date.now(),
+      lastPasswordCheck: 0,
+      lastLoginUpdate: Date.now(),
+      passwordChangedAt: null,
+    });
+
+    /** 次の確認が来るまでの残り時間（ミリ秒） */
+    const dueIn = (token: Record<string, unknown>) =>
+      (token.lastPasswordCheck as number) +
+      SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS -
+      Date.now();
+
+    it('取得に失敗したら確認を終えたことにしない', async () => {
+      setFetchFailure();
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      // 5分も待たずに再確認が来る（＝失効の窓が5分にならない）
+      expect(dueIn(token)).toBeLessThanOrEqual(
+        SESSION_CONFIG.PASSWORD_CHECK_RETRY_MS,
+      );
+    });
+
+    /**
+     * ⚠️ 据え置き（`lastPasswordCheck` をそのまま）にはしない。
+     *
+     * 権限事故（`42501`）やスキーマキャッシュのような**恒久的な**失敗では、
+     * 据え置くと毎リクエスト引き直して弱っているDBを押し続ける
+     */
+    it('毎リクエスト引き直しにはしない', async () => {
+      setFetchFailure();
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      expect(dueIn(token)).toBeGreaterThan(0);
+    });
+
+    /**
+     * ⚠️ `code` が空のときだけに狭めてはいけない。
+     *
+     * postgrest-js が `code: ''` を入れるのは**伝送路の失敗だけ**で、
+     * PostgREST が返すエラーは実際のコードが入る。狭めると権限事故や
+     * タイムアウトで #1193 が再発する
+     */
+    it.each([
+      ['権限エラー', '42501'],
+      ['タイムアウト', '57014'],
+      ['スキーマキャッシュ', 'PGRST205'],
+      ['非JSONのエラーボディ', undefined],
+    ])('%s でも確認を終えたことにしない', async (_label, code) => {
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: null,
+            error: { message: 'failed', details: '', hint: '', code },
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      expect(dueIn(token)).toBeLessThanOrEqual(
+        SESSION_CONFIG.PASSWORD_CHECK_RETRY_MS,
+      );
+    });
+
+    it('取得に失敗してもセッションは無効化しない', async () => {
+      // DB の一時的な不調で全利用者をログアウトさせない
+      setFetchFailure();
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      expect(token.invalidated).toBeUndefined();
+    });
+
+    /**
+     * ⚠️ これは「安全側」の固定ではない。
+     *
+     * 取得できなかったので DB の値には追従しない＝**剥奪された admin が
+     * 再確認まで admin のまま**になる。許容できるのは、サーバー側の
+     * admin 認可が毎回 DB を引き直すから（`src/helpers/adminAuth.ts`）で、
+     * トークンの `role` はメニュー表示の判定にしか使っていない
+     */
+    it('取得に失敗したらロールも追従させない（表示用の値なので許容する）', async () => {
+      setFetchFailure();
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      expect(token.role).toBe('admin');
+    });
+
+    /**
+     * Issue #1193 の完了条件「次の呼び出しで再確認が走る」の検証。
+     *
+     * 先送りしただけで終わらず、**時間が経てば実際に失効する**ところまで
+     * 通して見る。ここが本件で唯一の end-to-end な回帰テスト
+     */
+    it('先送りしたあと、時間が経てば再確認して失効させる', async () => {
+      setFetchFailure();
+      const afterFailure = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+      expect(afterFailure.invalidated).toBeUndefined();
+
+      // DB が復旧し、パスワードはその間に変更されていた
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: { password_changed_at: '2026-06-01T00:00:00Z', role: 'user' },
+            error: null,
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      // 再確認の時刻まで進める
+      const nowSpy = jest
+        .spyOn(Date, 'now')
+        .mockReturnValue(
+          Date.now() + SESSION_CONFIG.PASSWORD_CHECK_RETRY_MS + 1000,
+        );
+
+      try {
+        const recovered = await jwt({
+          token: { ...afterFailure },
+          user: undefined,
+          account: null,
+        });
+
+        expect(recovered.invalidated).toBe(true);
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
+
+    it('取得の失敗をログに残す', async () => {
+      setFetchFailure();
+
+      await jwt({ token: staleToken(), user: undefined, account: null });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Password change check failed:',
+        expect.objectContaining({ code: '' }),
+      );
+    });
+
+    /**
+     * 0件（PGRST116）は「確定した答え」なので先送りしない。
+     * 先送りすると、消えた行を毎リクエスト引き続けることになる
+     */
+    it('0件なら従来どおり確認を終えたことにする', async () => {
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: null,
+            error: {
+              message: 'JSON object requested, multiple (or no) rows returned',
+              details: '',
+              hint: '',
+              code: 'PGRST116',
+            },
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      expect(token.lastPasswordCheck).not.toBe(0);
+      expect(token.invalidated).toBeUndefined();
     });
   });
 

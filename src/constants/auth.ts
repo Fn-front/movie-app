@@ -2,7 +2,7 @@
  * 認証関連の定数
  */
 
-import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE } from './time';
+import { MS_PER_DAY, MS_PER_HOUR, MS_PER_MINUTE, MS_PER_SECOND } from './time';
 
 /**
  * 認証エラーメッセージ
@@ -193,6 +193,15 @@ export const SESSION_CONFIG = {
   LOGIN_UPDATE_INTERVAL_MS: MS_PER_HOUR,
   /** パスワード変更チェック間隔（ミリ秒） — 5分 */
   PASSWORD_CHECK_INTERVAL_MS: 5 * MS_PER_MINUTE,
+  /**
+   * パスワード変更チェックの取得に失敗したときの再確認間隔（ミリ秒）— 10秒
+   *
+   * 失敗したら確認を終えたことにしない（#1193）。ただし完全に据え置くと、
+   * 権限事故やスキーマキャッシュのような**恒久的な**失敗で毎リクエスト
+   * 引き直すことになり、弱っているDBを押し続ける。
+   * 失効の窓は 5分 → 10秒 に縮むので目的は果たせる。
+   */
+  PASSWORD_CHECK_RETRY_MS: 10 * MS_PER_SECOND,
 } as const;
 
 /**

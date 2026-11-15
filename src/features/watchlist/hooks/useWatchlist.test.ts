@@ -596,4 +596,105 @@ describe('useWatchlist', () => {
       );
     });
   });
+
+  /**
+   * 仮IDでは書き込みAPIを呼ばない（#1194）
+   *
+   * 追加の `onMutate` が積む行IDは `optimistic-...` で、実IDへ差し替わるのは
+   * POST の応答が返ってから（`onSuccess`）。その数百ミリ秒のあいだに削除や
+   * 視聴済みを押すと、`isValidUuid`（`api/watchlist/[id]/route.ts`）に
+   * 弾かれて **400** になり、赤いエラートーストが出る。
+   *
+   * UI 側でもボタンを無効にしているが、ここは押せてしまった場合の最後の砦。
+   */
+  describe('仮IDのガード', () => {
+    const OPTIMISTIC_ID = 'optimistic-11111111-2222-4333-8444-555555555555';
+
+    /**
+     * ⚠️ 呼んだ直後に `not.toHaveBeenCalled()` を見てはいけない。
+     *
+     * `mutate` は `onMutate`（`cancelQueries` を await する）のあとに
+     * `mutationFn` を呼ぶので、同期アサートはガードが無くても通る。
+     *
+     * ⚠️ 1件目が先に届く保証は「両パスの await 深さが同じ」ことに依る。
+     * `removeFromWatchlist` 側に await が1つ増えると前提が崩れる。
+     * **仮IDを先に、実IDを後に**出して、届いた1件目が実IDであることを見る。
+     */
+    it('仮IDでは削除APIを呼ばない', async () => {
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.removeFromWatchlist(OPTIMISTIC_ID);
+        result.current.removeFromWatchlist('wl-1');
+      });
+
+      await waitFor(() => {
+        expect(mockRemoveWatchlist).toHaveBeenCalled();
+      });
+      expect(mockRemoveWatchlist.mock.calls[0][0]).toBe('wl-1');
+    });
+
+    it('仮IDでは視聴済みAPIを呼ばない', async () => {
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.setWatched(OPTIMISTIC_ID, true);
+        result.current.setWatched('wl-1', true);
+      });
+
+      await waitFor(() => {
+        expect(mockUpdateWatched).toHaveBeenCalled();
+      });
+      expect(mockUpdateWatched.mock.calls[0][0]).toMatchObject({ id: 'wl-1' });
+    });
+
+    // 実IDは従来どおり通す（ガードが効きすぎていないこと）
+    it('実IDなら削除APIを呼ぶ', async () => {
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.removeFromWatchlist('wl-1');
+      });
+
+      await waitFor(() => {
+        expect(mockRemoveWatchlist).toHaveBeenCalled();
+      });
+    });
+
+    it('実IDなら視聴済みAPIを呼ぶ', async () => {
+      const { result } = renderHook(() => useWatchlist(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.watchlist).toHaveLength(2);
+      });
+
+      act(() => {
+        result.current.setWatched('wl-1', true);
+      });
+
+      await waitFor(() => {
+        expect(mockUpdateWatched).toHaveBeenCalled();
+      });
+    });
+  });
 });

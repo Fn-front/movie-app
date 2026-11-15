@@ -14,6 +14,7 @@ import { IMAGE_SIZES, ROUTES } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { getTMDbImageUrl } from '@/utils/image';
 import { shouldLetBrowserHandle } from '@/utils/linkClick';
+import { isOptimisticId } from '@/features/watchlist/utils/optimisticId';
 import type { WatchlistItem as WatchlistItemType } from '@/lib/api/watchlist/watchlist';
 
 import styles from './watchlistItem.module.scss';
@@ -105,6 +106,10 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
       <button
         className={styles.c_watchlist_item__delete}
         onClick={handleDelete}
+        // 追加の応答がまだ返っていない行は押させない（#1194）。
+        // 行IDが仮ID（`optimistic-...`）のあいだに DELETE すると
+        // `isValidUuid`（`api/watchlist/[id]/route.ts`）に弾かれて 400 になる
+        disabled={isOptimisticId(item.id)}
         aria-label={`${item.title}をウォッチリストから削除`}
         type='button'
       >

@@ -28,6 +28,7 @@ import {
 import { formatDate } from '@/utils/date';
 import { getTMDbPosterUrl } from '@/utils/image';
 import { shouldLetBrowserHandle } from '@/utils/linkClick';
+import { isOptimisticId } from '@/features/watchlist/utils/optimisticId';
 import { cn } from '@/utils/cn';
 import {
   DEFAULT_MOVIE_VIEW_MODE,
@@ -211,6 +212,15 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
   }, [item, isWatched, onWatchedToggle]);
 
   /**
+   * 追加の応答がまだ返っていない行（#1194）
+   *
+   * 行IDが仮ID（`optimistic-...`）のあいだは、削除も視聴済みも
+   * `isValidUuid`（`api/watchlist/[id]/route.ts`）に弾かれて 400 になる。
+   * 押せないことを見た目でも伝える
+   */
+  const isPendingRow = isOptimisticId(item.id);
+
+  /**
    * 視聴済み・配信のバッジ
    *
    * グリッドはポスターの左下に重ねる。リストのポスターは 56px しかなく、
@@ -252,7 +262,7 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
           <button
             type='button'
             onClick={handleWatchedToggle}
-            disabled={isWatchedUpdating}
+            disabled={isWatchedUpdating || isPendingRow}
             className={styles.c_watchlist_tile__watched}
             // 状態は aria-pressed だけで伝える。ラベルを状態で入れ替えると
             // 視聴済みの行が「○○を未視聴に戻す、オン」と読まれ、未視聴だと
@@ -273,6 +283,7 @@ const WatchlistTile = memo<WatchlistTileProps>(function WatchlistTile({
           <button
             type='button'
             onClick={handleDelete}
+            disabled={isPendingRow}
             className={styles.c_watchlist_tile__delete}
             aria-label={`${item.title}をウォッチリストから削除`}
           >

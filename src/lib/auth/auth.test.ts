@@ -548,7 +548,73 @@ describe('jwt コールバック', () => {
     expect(token.passwordChangedAt).toBeNull();
   });
 
-  it('パスワード変更後（DBのpassword_changed_atがトークンより新しい）はセッション無効化', async () => {
+  /**
+   * トークンがベースラインを持っている場合の比較
+   *
+   * ⚠️ **ここを見るテストが1本も無かった**（#1207 のレビューで判明）。
+   * 三項の truthy 側を「絶対に失効しない」値へ潰しても全件通る状態で、
+   * **本番の主経路——過去に変更した利用者のセッションを次の変更で切る——が
+   * 無防備だった**。
+   *
+   * ⚠️ `issuedAt` は**変更日時より後**に置く。`issuedAt` 基準なら失効しない
+   * 配置にすることで、`passwordChangedAt` 側が使われていることまで見える
+   */
+  it('トークンが持つ変更日時より DB が新しければ無効化する', async () => {
+    const tokenChangedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const dbChangedAt = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+    setResolver(({ table, ops }) => {
+      if (table === 'users' && ops.includes('select'))
+        return { data: { password_changed_at: dbChangedAt }, error: null };
+      return { data: null, error: null };
+    });
+
+    const token = await jwt({
+      token: {
+        id: 'u1',
+        // 発行は「今」。issuedAt を基準にすると失効しないので、
+        // トークンの passwordChangedAt が使われていることが分かる
+        issuedAt: Date.now(),
+        lastPasswordCheck: 0,
+        lastLoginUpdate: Date.now(),
+        passwordChangedAt: tokenChangedAt,
+      },
+      user: undefined,
+      account: null,
+    });
+
+    expect(token.invalidated).toBe(true);
+  });
+
+  /**
+   * ⚠️ `issuedAt` は**変更日時より前**に置く。`issuedAt` 基準だと失効して
+   * しまう配置なので、ここでもトークン側の値が使われていることが分かる
+   */
+  it('トークンと DB の変更日時が同じなら失効しない', async () => {
+    const changedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+    setResolver(({ table, ops }) => {
+      if (table === 'users' && ops.includes('select'))
+        return { data: { password_changed_at: changedAt }, error: null };
+      return { data: null, error: null };
+    });
+
+    const token = await jwt({
+      token: {
+        id: 'u1',
+        issuedAt: Date.now() - 2 * 60 * 60 * 1000,
+        lastPasswordCheck: 0,
+        lastLoginUpdate: Date.now(),
+        passwordChangedAt: changedAt,
+      },
+      user: undefined,
+      account: null,
+    });
+
+    expect(token.invalidated).toBeUndefined();
+  });
+
+  it('ベースラインが無いトークンは、発行後の変更で無効化する', async () => {
     // ⚠️ 日時は**発行時刻を基準に相対で置く**（#1207）。
     // `passwordChangedAt` が無いトークンのベースラインは 0 ではなく
     // `issuedAt` なので、固定の過去日時を置くと「発行より前の変更」になり
@@ -1071,6 +1137,10 @@ describe('jwt コールバック', () => {
 
     /** 発行より後の変更は従来どおり失効させる（ガードを緩めすぎない） */
     it('発行より後のパスワード変更では失効する', async () => {
+      // ⚠️ `oauthSignIn()` は `issuedAt` を「今」で押すため、「発行より後」を
+      //   素直に表すと未来日時になる。本番の `password_changed_at` は書き込み時に
+      //   必ず `new Date()` なので未来値は出ない。ここでは時計を進めて
+      //   「発行のあとに変更された」を実際の時間順で作る
       let call = 0;
       setResolver(({ table, ops }) => {
         if (table === 'users' && ops.includes('select')) {
@@ -1090,7 +1160,7 @@ describe('jwt コールバック', () => {
             data: {
               role: 'user',
               password_hash: 'hashed',
-              password_changed_at: new Date(Date.now() + 60_000).toISOString(),
+              password_changed_at: new Date().toISOString(),
             },
             error: null,
           };
@@ -1098,7 +1168,18 @@ describe('jwt コールバック', () => {
         return { data: null, error: null };
       });
 
-      const token = await oauthSignIn();
+      const issuedBefore = Date.now() - 60 * 60 * 1000;
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(issuedBefore);
+      let token;
+      try {
+        // サインインを1時間前として記録させる
+        token = await oauthSignIn();
+      } finally {
+        nowSpy.mockRestore();
+      }
+
+      // 時計を戻したあとの確認で、発行より後の変更として比較される
+      token = await jwt({ token, user: undefined, account: null });
 
       expect(token.invalidated).toBe(true);
     });

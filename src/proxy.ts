@@ -16,13 +16,11 @@ import {
   AUTH_REQUIRED_ROUTES,
   ADMIN_REQUIRED_ROUTES,
 } from '@/constants/common';
-import { USER_ROLE } from '@/constants/auth';
-
-/** セッションcookie名（環境に応じて切り替え） */
-const SESSION_COOKIE_NAME =
-  process.env.NODE_ENV === 'production'
-    ? '__Secure-next-auth.session-token'
-    : 'next-auth.session-token';
+import {
+  USER_ROLE,
+  getSessionCookieName,
+  getSessionCookieOptions,
+} from '@/constants/auth';
 
 /** 認証が必要なパス（ナビゲーションと共通定義） */
 const protectedPaths = AUTH_REQUIRED_ROUTES;
@@ -100,13 +98,24 @@ export const proxy = auth((req) => {
   // 通らないので、除外しないと画面を開いた瞬間に Cookie が消える。
   // そうなると `update({ totpCode })` が成立せず、何度入力しても
   // 「認証コードが正しくありません」が出続けてログインできない。
-  const hasSessionCookie = req.cookies.has(SESSION_COOKIE_NAME);
+  const sessionCookieName = getSessionCookieName();
+  const hasSessionCookie = req.cookies.has(sessionCookieName);
 
   if (!isAuthenticated && !isTotpPending && hasSessionCookie) {
     const response = isProtectedPath
       ? NextResponse.redirect(buildSignInUrl())
       : NextResponse.next();
-    response.cookies.delete(SESSION_COOKIE_NAME);
+
+    // ⚠️ `cookies.delete(name)` を使わない（#1174）。
+    // 文字列を渡すと options が undefined になり、`Secure` も `HttpOnly` も
+    // `SameSite` も付かない `Set-Cookie` が返る。本番の Cookie 名は
+    // `__Secure-` 接頭辞付きで、ブラウザは `Secure` の無い `Set-Cookie` を
+    // **拒否する**ため、削除指示そのものが捨てられていた。
+    // 発行時（auth.ts の cookies.sessionToken）と同じ属性で空値を上書きする。
+    response.cookies.set(sessionCookieName, '', {
+      ...getSessionCookieOptions(),
+      maxAge: 0,
+    });
     return response;
   }
 

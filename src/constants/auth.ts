@@ -130,6 +130,41 @@ export const TOAST_MESSAGES = {
 } as const;
 
 /**
+ * セッションCookieの名前
+ *
+ * 本番は `__Secure-` 接頭辞を付ける。この接頭辞が付いたCookieは、
+ * **`Secure` 属性の無い `Set-Cookie` をブラウザが拒否する**（CookiePrefixes）。
+ * そのため名前と属性は必ずセットで扱う（`getSessionCookieOptions`）。
+ *
+ * モジュール初期化時ではなく呼び出し時に `NODE_ENV` を読む。本番相当の挙動を
+ * テストから検証できるようにするため（バンドル時に定数畳み込みされるので
+ * 実行時コストは無い）。
+ */
+export const getSessionCookieName = (): string =>
+  process.env.NODE_ENV === 'production'
+    ? '__Secure-next-auth.session-token'
+    : 'next-auth.session-token';
+
+/**
+ * セッションCookieの属性
+ *
+ * NextAuth の発行時（`src/lib/auth/auth.ts` の `cookies.sessionToken.options`）と、
+ * 失効セッションを消す proxy（`src/proxy.ts`）で**同じ定義を使う**ためにここへ置く。
+ * 属性が1つでも食い違うとブラウザは別のCookieとして扱い、削除が効かない（#1174）。
+ */
+export const getSessionCookieOptions = (): {
+  httpOnly: boolean;
+  sameSite: 'lax';
+  path: string;
+  secure: boolean;
+} => ({
+  httpOnly: true,
+  sameSite: 'lax',
+  path: '/',
+  secure: process.env.NODE_ENV === 'production',
+});
+
+/**
  * セッション設定
  */
 export const SESSION_CONFIG = {

@@ -102,12 +102,13 @@ describe('cookieConsent', () => {
   });
 
   describe('書き込み', () => {
-    it('4キーをまとめて書き、未決定は状態キーを消す', () => {
+    it('全キーをまとめて書き、未決定は状態キーを消す', () => {
       writeConsentRecord({
         state: 'granted',
         at: T1,
         owner: 'user-1',
         version: 3,
+        anonymous: true,
       });
 
       expect(getStoredConsentRecord()).toEqual({
@@ -115,6 +116,7 @@ describe('cookieConsent', () => {
         at: T1,
         owner: 'user-1',
         version: 3,
+        anonymous: true,
       });
 
       writeConsentRecord({
@@ -122,6 +124,7 @@ describe('cookieConsent', () => {
         at: null,
         owner: '',
         version: null,
+        anonymous: false,
       });
 
       expect(
@@ -150,10 +153,12 @@ describe('cookieConsent', () => {
         at: T1,
         owner: 'user-1',
         version: 1,
+        anonymous: false,
       });
 
       expect(order).toEqual([
         STORAGE_KEYS.COOKIE_CONSENT_OWNER,
+        STORAGE_KEYS.COOKIE_CONSENT_ANONYMOUS,
         STORAGE_KEYS.COOKIE_CONSENT_VERSION,
         STORAGE_KEYS.COOKIE_CONSENT_AT,
         STORAGE_KEYS.COOKIE_CONSENT,
@@ -171,6 +176,7 @@ describe('cookieConsent', () => {
           at: T1,
           owner: 'user-1',
           version: 1,
+          anonymous: false,
         }),
       ).not.toThrow();
     });
@@ -205,6 +211,7 @@ describe('cookieConsent', () => {
         STORAGE_KEYS.COOKIE_CONSENT,
         STORAGE_KEYS.COOKIE_CONSENT_AT,
         STORAGE_KEYS.COOKIE_CONSENT_VERSION,
+        STORAGE_KEYS.COOKIE_CONSENT_ANONYMOUS,
         STORAGE_KEYS.COOKIE_CONSENT_OWNER,
       ]);
     });
@@ -223,6 +230,27 @@ describe('cookieConsent', () => {
       expect(clearOwnedConsent()).toBe(false);
       expect(getStoredConsentState()).toBe('granted');
       expect(getStoredConsentAt()).toBe(T1);
+    });
+
+    /**
+     * ⚠️ **判定は `owner` ではなく `anonymous`**（#1213）。
+     *
+     * `owner` はログイン時に現ユーザーへ付け替わる（claim-owner）。
+     * そこで判断していたため、未認証でした同意が一度のログインで
+     * 「ログイン中の同意」に化け、ログアウトで消えていた
+     */
+    it('clearOwnedConsent は所有者が付いていても匿名由来なら残す', () => {
+      writeConsentRecord({
+        state: 'granted',
+        at: T1,
+        owner: 'user-1',
+        version: COOKIE_CONSENT_VERSION,
+        anonymous: true,
+      });
+
+      expect(clearOwnedConsent()).toBe(false);
+      expect(getStoredConsentState()).toBe('granted');
+      expect(getStoredConsentOwner()).toBe('user-1');
     });
 
     it('clearOwnedConsent は未保存でも何もしない', () => {

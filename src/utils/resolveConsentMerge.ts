@@ -154,41 +154,14 @@ export function resolveConsentMerge({
   } else {
     // 日時がパース不能なら、値が実質同じでも書き直して修復する
     const atBroken = local.at !== null && toEpoch(local.at) === null;
-
-    // 採用した決定が端末のレコードと同じ中身か
-    const adoptedMatchesLocal =
+    const same =
       adopted.state === local.state &&
       toEpoch(adopted.at) === toEpoch(local.at) &&
-      adopted.version === local.version;
-
-    /**
-     * 書き込む所有者
-     *
-     * ⚠️ **匿名（`owner` が空文字）のレコードは付け替えない**（#1213）。
-     *
-     * `clearOwnedConsent()` は `owner` が空かどうかで「ログイン中に意思表示
-     * したか」を判断する。ここで付け替えると、**未認証でした同意が一度の
-     * ログインで「ログイン中の同意」に化け、ログアウトで消える**。
-     * 「未認証時の同意は端末の匿名利用者の意思なので残す」という規則
-     * （`cookieConsent.ts` / `logout.ts`）が、一度もログインしていない端末
-     * でしか成り立っていなかった。
-     *
-     * ⚠️ **`adoptedMatchesLocal` を外さないこと。** 外すと初回ログインでは
-     * 残るのに、**次のページ読み込みで再び付け替わる**。サーバーが同じ値を
-     * 返すと採用値がサーバー側になり（上の 3. の最後の else）、
-     * 「端末由来かどうか」だけで見ていると付け替え対象になってしまう。
-     *
-     * ⚠️ **`local.owner === ''` の条件も外さないこと。** 外すと、他人の
-     * レコードがたまたまサーバーと同値だったときに他人の `owner` が残る。
-     */
-    const nextOwner = local.owner === '' && adoptedMatchesLocal ? '' : userId;
-
-    const same = adoptedMatchesLocal && local.owner === nextOwner && !atBroken;
+      adopted.version === local.version &&
+      local.owner === userId &&
+      !atBroken;
     if (!same) {
-      localWrite = {
-        action: 'write',
-        record: { ...adopted, owner: nextOwner },
-      };
+      localWrite = { action: 'write', record: { ...adopted, owner: userId } };
     }
   }
 

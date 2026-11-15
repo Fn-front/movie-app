@@ -207,6 +207,8 @@ export interface StoredConsent {
   at: string | null;
   owner: string | null;
   version: string | null;
+  /** 未認証のときに行われた決定か（'1' のときだけ真。#1213） */
+  anonymous: string | null;
 }
 
 /** 同意レコードの localStorage キー（ブラウザ側へ渡すために平坦化する） */
@@ -215,6 +217,7 @@ const CONSENT_KEYS = {
   at: STORAGE_KEYS.COOKIE_CONSENT_AT,
   owner: STORAGE_KEYS.COOKIE_CONSENT_OWNER,
   version: STORAGE_KEYS.COOKIE_CONSENT_VERSION,
+  anonymous: STORAGE_KEYS.COOKIE_CONSENT_ANONYMOUS,
 } as const;
 
 /** 現行版の文字列表現（localStorage は文字列しか持てない） */
@@ -265,6 +268,7 @@ export async function readStoredConsent(page: Page): Promise<StoredConsent> {
       at: localStorage.getItem(keys.at),
       owner: localStorage.getItem(keys.owner),
       version: localStorage.getItem(keys.version),
+      anonymous: localStorage.getItem(keys.anonymous),
     }),
     CONSENT_KEYS,
   );

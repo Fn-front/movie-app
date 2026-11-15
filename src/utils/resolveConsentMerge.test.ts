@@ -78,23 +78,21 @@ const CASES: Case[] = [
   },
   {
     no: 4,
-    // 端末への書き込みは起きない。所有者を付け替えないため、
-    // 中身が同じレコードを書き直す理由が無い（#1213）
-    title: '未認証で得た同意をログイン時にサーバーへ上げる（所有者は付けない）',
+    title: '未認証で得た同意をログイン時にサーバーへ上げる',
     local: { state: 'granted', at: T1, owner: '', version: V },
     server: SERVER_UNSET,
     effectiveState: 'granted',
-    localWrite: null,
+    localWrite: { state: 'granted', at: T1, owner: ME, version: V },
     putBody: { cookieConsent: 'granted', cookieConsentAt: T1 },
     reason: 'adopt-local',
   },
   {
     no: 5,
-    title: '未認証で得た拒否をログイン時にサーバーへ上げる（所有者は付けない）',
+    title: '未認証で得た拒否をログイン時にサーバーへ上げる',
     local: { state: 'denied', at: T1, owner: '', version: V },
     server: SERVER_UNSET,
     effectiveState: 'denied',
-    localWrite: null,
+    localWrite: { state: 'denied', at: T1, owner: ME, version: V },
     putBody: { cookieConsent: 'denied', cookieConsentAt: T1 },
     reason: 'adopt-local',
   },
@@ -130,11 +128,11 @@ const CASES: Case[] = [
   },
   {
     no: 9,
-    title: '未認証で得た新しい同意は、所有者を付けずにサーバーだけ更新する',
+    title: '未認証で得た新しい同意は、所有者を付けつつサーバーも更新する',
     local: { state: 'granted', at: T2, owner: '', version: V },
     server: { state: 'denied', at: T1, version: V },
     effectiveState: 'granted',
-    localWrite: null,
+    localWrite: { state: 'granted', at: T2, owner: ME, version: V },
     putBody: { cookieConsent: 'granted', cookieConsentAt: T2 },
     reason: 'adopt-local',
   },
@@ -147,23 +145,6 @@ const CASES: Case[] = [
     localWrite: 'clear',
     putBody: null,
     reason: 'clear-foreign',
-  },
-  {
-    no: 10.5,
-    /**
-     * ⚠️ 所有者を温存するのは**匿名（空文字）のときだけ**（#1213）。
-     *
-     * 他人のレコードがたまたまサーバーと同値だと、中身の一致だけで
-     * 判断した場合に他人の `owner` が端末へ残る。自分の端末に他人の
-     * 識別子が残ると、次のログインで `isForeign` の判定が狂う
-     */
-    title: '他人のレコードがサーバーと同値でも、所有者は自分へ付け替える',
-    local: { state: 'granted', at: T1, owner: OTHER, version: V },
-    server: { state: 'granted', at: T1, version: V },
-    effectiveState: 'granted',
-    localWrite: { state: 'granted', at: T1, owner: ME, version: V },
-    putBody: null,
-    reason: 'claim-owner',
   },
   {
     no: 11,
@@ -237,21 +218,13 @@ const CASES: Case[] = [
   },
   {
     no: 18,
-    /**
-     * ⚠️ **ここが再発の入口**（#1213）。
-     *
-     * 初回ログインで PUT したあと、次のページ読み込みではサーバーが同じ値を
-     * 返すため採用値がサーバー側になる。`adoptedMatchesLocal` を見ずに
-     * 「端末由来か」だけで判断すると、ここで所有者が付き直し、
-     * ログアウトで消える状態へ戻る
-     */
-    title: '匿名のレコードはサーバーと同値でも所有者を付けない',
+    title: '値が同じでも所有者が違えば付け替えのために書く',
     local: { state: 'granted', at: T1, owner: '', version: V },
     server: { state: 'granted', at: T1, version: V },
     effectiveState: 'granted',
-    localWrite: null,
+    localWrite: { state: 'granted', at: T1, owner: ME, version: V },
     putBody: null,
-    reason: 'in-sync',
+    reason: 'claim-owner',
   },
   {
     no: 19,

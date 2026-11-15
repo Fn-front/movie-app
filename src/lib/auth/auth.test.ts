@@ -146,6 +146,8 @@ type Callbacks = {
   session: (args: unknown) => Promise<Record<string, unknown>>;
 };
 
+import { SESSION_CONFIG } from '@/constants/auth';
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('@/lib/auth/auth');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -713,7 +715,13 @@ describe('jwt コールバック', () => {
       passwordChangedAt: null,
     });
 
-    it('取得に失敗したら lastPasswordCheck を進めない', async () => {
+    /** 次の確認が来るまでの残り時間（ミリ秒） */
+    const dueIn = (token: Record<string, unknown>) =>
+      (token.lastPasswordCheck as number) +
+      SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS -
+      Date.now();
+
+    it('取得に失敗したら確認を終えたことにしない', async () => {
       setFetchFailure();
 
       const token = await jwt({
@@ -722,8 +730,62 @@ describe('jwt コールバック', () => {
         account: null,
       });
 
-      // 進めていなければ、次のリクエストでまた確認が走る
-      expect(token.lastPasswordCheck).toBe(0);
+      // 5分も待たずに再確認が来る（＝失効の窓が5分にならない）
+      expect(dueIn(token)).toBeLessThanOrEqual(
+        SESSION_CONFIG.PASSWORD_CHECK_RETRY_MS,
+      );
+    });
+
+    /**
+     * ⚠️ 据え置き（`lastPasswordCheck` をそのまま）にはしない。
+     *
+     * 権限事故（`42501`）やスキーマキャッシュのような**恒久的な**失敗では、
+     * 据え置くと毎リクエスト引き直して弱っているDBを押し続ける
+     */
+    it('毎リクエスト引き直しにはしない', async () => {
+      setFetchFailure();
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      expect(dueIn(token)).toBeGreaterThan(0);
+    });
+
+    /**
+     * ⚠️ `code` が空のときだけに狭めてはいけない。
+     *
+     * postgrest-js が `code: ''` を入れるのは**伝送路の失敗だけ**で、
+     * PostgREST が返すエラーは実際のコードが入る。狭めると権限事故や
+     * タイムアウトで #1193 が再発する
+     */
+    it.each([
+      ['権限エラー', '42501'],
+      ['タイムアウト', '57014'],
+      ['スキーマキャッシュ', 'PGRST205'],
+      ['非JSONのエラーボディ', undefined],
+    ])('%s でも確認を終えたことにしない', async (_label, code) => {
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: null,
+            error: { message: 'failed', details: '', hint: '', code },
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      const token = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+
+      expect(dueIn(token)).toBeLessThanOrEqual(
+        SESSION_CONFIG.PASSWORD_CHECK_RETRY_MS,
+      );
     });
 
     it('取得に失敗してもセッションは無効化しない', async () => {
@@ -739,8 +801,15 @@ describe('jwt コールバック', () => {
       expect(token.invalidated).toBeUndefined();
     });
 
-    it('取得に失敗したらロールも追従させない', async () => {
-      // 確認できていないのに DB の値を名乗らせない
+    /**
+     * ⚠️ これは「安全側」の固定ではない。
+     *
+     * 取得できなかったので DB の値には追従しない＝**剥奪された admin が
+     * 再確認まで admin のまま**になる。許容できるのは、サーバー側の
+     * admin 認可が毎回 DB を引き直すから（`src/helpers/adminAuth.ts`）で、
+     * トークンの `role` はメニュー表示の判定にしか使っていない
+     */
+    it('取得に失敗したらロールも追従させない（表示用の値なので許容する）', async () => {
       setFetchFailure();
 
       const token = await jwt({
@@ -750,6 +819,52 @@ describe('jwt コールバック', () => {
       });
 
       expect(token.role).toBe('admin');
+    });
+
+    /**
+     * Issue #1193 の完了条件「次の呼び出しで再確認が走る」の検証。
+     *
+     * 先送りしただけで終わらず、**時間が経てば実際に失効する**ところまで
+     * 通して見る。ここが本件で唯一の end-to-end な回帰テスト
+     */
+    it('先送りしたあと、時間が経てば再確認して失効させる', async () => {
+      setFetchFailure();
+      const afterFailure = await jwt({
+        token: staleToken(),
+        user: undefined,
+        account: null,
+      });
+      expect(afterFailure.invalidated).toBeUndefined();
+
+      // DB が復旧し、パスワードはその間に変更されていた
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: { password_changed_at: '2026-06-01T00:00:00Z', role: 'user' },
+            error: null,
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      // 再確認の時刻まで進める
+      const nowSpy = jest
+        .spyOn(Date, 'now')
+        .mockReturnValue(
+          Date.now() + SESSION_CONFIG.PASSWORD_CHECK_RETRY_MS + 1000,
+        );
+
+      try {
+        const recovered = await jwt({
+          token: { ...afterFailure },
+          user: undefined,
+          account: null,
+        });
+
+        expect(recovered.invalidated).toBe(true);
+      } finally {
+        nowSpy.mockRestore();
+      }
     });
 
     it('取得の失敗をログに残す', async () => {

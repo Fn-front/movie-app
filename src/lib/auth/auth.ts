@@ -620,14 +620,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // その結果、**パスワード変更による強制失効の確認が5分間
             // 静かにスキップされる**（admin 剥奪の追従も同じ）。
             //
-            // 伝送路の失敗（`code` が空）は確認を先送りし、次のリクエストで
-            // 再確認する。`PGRST116`（0件）は「確定した答え」なので
-            // 先送りしない — 消えた行を毎リクエスト引き続けることになる。
+            // ⚠️ **`PGRST116`（0件）以外はすべて先送りする。**
+            // 「`code` が空のときだけ」に狭めてはいけない。postgrest-js が
+            // `code: ''` を入れるのは伝送路の失敗だけで、PostgREST が返す
+            // エラー（権限 `42501` / タイムアウト `57014` 等）は実際のコード、
+            // 非JSONのエラーボディ（ゲートウェイの 502 等）では `undefined`
+            // になる。狭めるとそれらで本件が再発する。
+            //
+            // `PGRST116` だけは「確定した答え」なので先送りしない。
+            // 先送りすると、消えた行を毎リクエスト引き続けることになる。
             if (
               lookupError &&
               lookupError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
             ) {
               console.error('Password change check failed:', lookupError);
+
+              // ⚠️ 据え置きではなく**短く待つ**。権限事故やスキーマキャッシュの
+              // ような恒久的な失敗では、据え置くと毎リクエスト引き直して
+              // 弱っているDBを押し続ける。失効の窓は 5分 → 10秒 に縮む
+              token.lastPasswordCheck =
+                now -
+                SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS +
+                SESSION_CONFIG.PASSWORD_CHECK_RETRY_MS;
               return token;
             }
 

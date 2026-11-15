@@ -59,9 +59,18 @@
   }
 
   // ヘッダー
+  //
+  // 閉じるボタンは指で押せるように 44px まで広げてある（#1017）。`flex-start` だと
+  // タイトル（1行 20px / md は 25px）がその上端に揃うため、ボタンの中心より
+  // 9〜12px 上に寄って見えていた。縦中央で揃える。
+  //
+  // ⚠️ 揃うのは**タイトルではなく `__header_content` ブロックの中心**。
+  // 説明文つき（カレンダーダイアログだけ）ではブロックがボタンより背が高くなり、
+  // タイトル単体との差はむしろ開く。破綻はしない（ヘッダーの高さは変わらず、
+  // ボタンの移動量も 2〜5px）ので、1行タイトルが大多数である現状を優先する
   &__header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     padding: $spacing-4;
     border-bottom: $border-width-1 solid $border-color;

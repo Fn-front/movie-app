@@ -76,6 +76,17 @@ export function useTwoFactorChallenge({
           return;
         }
 
+        // 「コードが違う」のではなく「確認できなかった」（#1148）。
+        // DB の不調などで検証そのものが成立しなかった場合で、入れ直しても
+        // 直らない。同じ文言にすると、利用者は正しいコードを繰り返し打ち続ける。
+        //
+        // 入力は消さない。打ち直しではなく時間をおいた再試行を促したいため
+        // （コードの寿命は30秒なので、残しても総当たりの助けにはならない）
+        if (updated?.totpUnavailable) {
+          setError(AUTH_ERROR_MESSAGES.TOTP_UNAVAILABLE);
+          return;
+        }
+
         // 失敗の内訳（不正 / 使い回し / 試行上限）はここでは区別しない。
         // 区別すると、コードを総当たりする側に手がかりを与える
         setError(AUTH_ERROR_MESSAGES.TOTP_INVALID);

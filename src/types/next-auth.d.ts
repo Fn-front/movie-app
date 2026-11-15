@@ -24,6 +24,14 @@ declare module 'next-auth' {
      * 扱わない。画面遷移の判定にはこのフラグを使う。
      */
     totpPending?: boolean;
+    /**
+     * 第2要素を**検証できなかった**か（#1148）。
+     *
+     * DB の不調などで確認そのものが成立しなかったときに true になる。
+     * 「コードが違う」とは別物で、入れ直しても直らない。画面はこれを見て
+     * 「一時的に確認できません」を出し分ける。
+     */
+    totpUnavailable?: boolean;
   }
 
   interface User {
@@ -51,5 +59,12 @@ declare module 'next-auth/jwt' {
     invalidated?: boolean;
     /** 第2要素の入力が未了か。認証コードの検証に成功すると false になる */
     totpPending?: boolean;
+    /**
+     * 第2要素を検証できなかったか（#1148）。
+     *
+     * jwt コールバックの冒頭で毎回消すので、**その回の結果だけ**を表す。
+     * 残ると復旧後も「一時的に確認できません」が出続ける
+     */
+    totpUnavailable?: boolean;
   }
 }

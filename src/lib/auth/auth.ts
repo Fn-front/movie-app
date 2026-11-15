@@ -463,177 +463,210 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
 
     async jwt({ token, user, account, trigger, session }) {
-      // 初回ログイン時にユーザー情報をトークンに追加
-      if (user) {
-        if (account?.provider && account.provider !== 'credentials') {
-          // OAuthログイン: DBからユーザー情報を取得
-          token.id = user.id;
-          token.email = user.email;
-          token.name = user.name;
-          token.picture = user.image;
-          token.role = USER_ROLE.USER;
-          token.hasPassword = false;
-          token.passwordChangedAt = null;
-          token.lastPasswordCheck = Date.now();
-          token.lastLoginUpdate = Date.now();
-          token.issuedAt = Date.now();
-          token.totpPending = false;
+      // ⚠️ **このコールバックから例外を外へ出さないこと**（#1148）。
+      //
+      // `@auth/core` は jwt コールバックの例外を**すべて**捕まえて
+      // セッションCookieを削除する（`lib/actions/session.js` の catch）。
+      // 「JWT が検証できない」ケースを想定した後始末だが、例外の種類を見ない。
+      //
+      // Cookie が消えると認証コード画面（/auth/two-factor）は
+      // 「認証コードが正しくありません」を出し続け、利用者は OAuth ログインから
+      // やり直すしかなくなる。DB の不調で詰むのは割に合わない。
+      //
+      // ⚠️ **本当に JWT が壊れている場合はここへ来ない。** `jwt.decode()` の
+      // 失敗は同じ try の中で先に投げられ、従来どおり Cookie が消える
+      // （session.js:24）。握り潰しているのは自前のコールバックの中だけ。
+      try {
+        // 前回の失敗を引きずらない。再試行で復旧していれば消える
+        delete token.totpUnavailable;
 
-          if (supabase && user.id) {
-            const { data: dbUser } = await supabase
+        // 初回ログイン時にユーザー情報をトークンに追加
+        if (user) {
+          if (account?.provider && account.provider !== 'credentials') {
+            // OAuthログイン: DBからユーザー情報を取得
+            token.id = user.id;
+            token.email = user.email;
+            token.name = user.name;
+            token.picture = user.image;
+            token.role = USER_ROLE.USER;
+            token.hasPassword = false;
+            token.passwordChangedAt = null;
+            token.lastPasswordCheck = Date.now();
+            token.lastLoginUpdate = Date.now();
+            token.issuedAt = Date.now();
+            token.totpPending = false;
+
+            if (supabase && user.id) {
+              const { data: dbUser } = await supabase
+                .from('users')
+                .select('role, password_hash, password_changed_at')
+                .eq('id', user.id)
+                .single();
+
+              if (dbUser) {
+                token.role = dbUser.role ?? USER_ROLE.USER;
+                token.hasPassword = Boolean(dbUser.password_hash);
+                token.passwordChangedAt = dbUser.password_changed_at ?? null;
+              }
+
+              // OAuth は Credentials と違い authorize を通らないため、
+              // 第2要素はここで要求する。プロバイダ側の2FA設定に依存せず、
+              // このアプリ独自の第2要素を必ず挟む
+              token.totpPending = await isTotpEnabled(supabase, user.id);
+            }
+          } else {
+            // Credentialsログイン
+            token.id = user.id;
+            token.email = user.email;
+            token.name = user.name;
+            token.picture = user.image;
+            token.role = user.role;
+            token.hasPassword = Boolean(
+              (user as unknown as { hasPassword?: boolean }).hasPassword,
+            );
+            token.passwordChangedAt =
+              (user as unknown as { passwordChangedAt: string | null })
+                .passwordChangedAt ?? null;
+            token.lastPasswordCheck = Date.now();
+            token.lastLoginUpdate = Date.now();
+            token.issuedAt = Date.now();
+            // Credentials 経路は authorize で第2要素まで検証済み
+            token.totpPending = false;
+          }
+        }
+
+        // 第2要素の検証（OAuth 経路の続き）。
+        //
+        // 検証はここで行う。クライアントから渡せるのは入力されたコードだけで、
+        // 「検証済み」という結果そのものは渡せない。
+        if (trigger === 'update' && token.totpPending && supabase && token.id) {
+          const totpCode = (session as { totpCode?: unknown } | undefined)
+            ?.totpCode;
+
+          if (typeof totpCode === 'string' && totpCode.trim()) {
+            const totpLimitResult = await checkRateLimit(
+              supabase,
+              token.id,
+              RATE_LIMIT_ACTION.TOTP_VERIFY,
+              RATE_LIMIT_CONFIG.TOTP_VERIFY.maxAttempts,
+              RATE_LIMIT_CONFIG.TOTP_VERIFY.windowMinutes,
+            );
+
+            if (totpLimitResult.allowed) {
+              // ⚠️ ここから例外を外へ出さないこと。
+              // `@auth/core` は jwt コールバックの例外を**すべて**捕まえて
+              // セッションCookieを削除する（`lib/actions/session.js` の catch。
+              // 「JWT が検証できない」ケースを想定した後始末だが、例外の種類を
+              // 見ない）。Cookie が消えると認証コード画面は「正しくありません」を
+              // 出し続け、利用者は OAuth ログインからやり直すしかなくなる。
+              //
+              // 第2要素を通さないのは DB エラーでも同じ（fail-closed は保つ）。
+              // 変えるのは「セッションごと壊すか、画面に留まって再試行できるか」
+              let verifyResult;
+              try {
+                verifyResult = await verifySecondFactor(
+                  supabase,
+                  token.id,
+                  totpCode.trim(),
+                );
+              } catch (error) {
+                console.error('TOTP verification failed:', error);
+                // 「コードが違う」のではなく「確認できなかった」。
+                // 画面の文言を分けるために区別する（#1148）
+                token.totpUnavailable = true;
+              }
+
+              if (verifyResult === TOTP_VERIFY_RESULT.SUCCESS) {
+                token.totpPending = false;
+                await resetRateLimit(
+                  supabase,
+                  token.id,
+                  RATE_LIMIT_ACTION.TOTP_VERIFY,
+                );
+              }
+            }
+          }
+        }
+
+        // 絶対有効期限チェック（ログインから7日間）
+        if (!token.invalidated && isSessionExpired(token.issuedAt)) {
+          token.invalidated = true;
+          return token;
+        }
+
+        // パスワード変更によるセッション無効化チェック（5分間隔）
+        if (token.id && supabase && !token.invalidated) {
+          const now = Date.now();
+
+          if (
+            now - (token.lastPasswordCheck || 0) >
+            SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS
+          ) {
+            const { data } = await supabase
               .from('users')
-              .select('role, password_hash, password_changed_at')
-              .eq('id', user.id)
+              .select('password_hash, password_changed_at, role')
+              .eq('id', token.id)
               .single();
 
-            if (dbUser) {
-              token.role = dbUser.role ?? USER_ROLE.USER;
-              token.hasPassword = Boolean(dbUser.password_hash);
-              token.passwordChangedAt = dbUser.password_changed_at ?? null;
+            if (data?.password_changed_at) {
+              const dbChangedAt = new Date(data.password_changed_at).getTime();
+              const tokenChangedAt = token.passwordChangedAt
+                ? new Date(token.passwordChangedAt).getTime()
+                : 0;
+
+              if (dbChangedAt > tokenChangedAt) {
+                // パスワードが変更された — セッション無効化
+                token.invalidated = true;
+                return token;
+              }
             }
 
-            // OAuth は Credentials と違い authorize を通らないため、
-            // 第2要素はここで要求する。プロバイダ側の2FA設定に依存せず、
-            // このアプリ独自の第2要素を必ず挟む
-            token.totpPending = await isTotpEnabled(supabase, user.id);
-          }
-        } else {
-          // Credentialsログイン
-          token.id = user.id;
-          token.email = user.email;
-          token.name = user.name;
-          token.picture = user.image;
-          token.role = user.role;
-          token.hasPassword = Boolean(
-            (user as unknown as { hasPassword?: boolean }).hasPassword,
-          );
-          token.passwordChangedAt =
-            (user as unknown as { passwordChangedAt: string | null })
-              .passwordChangedAt ?? null;
-          token.lastPasswordCheck = Date.now();
-          token.lastLoginUpdate = Date.now();
-          token.issuedAt = Date.now();
-          // Credentials 経路は authorize で第2要素まで検証済み
-          token.totpPending = false;
-        }
-      }
+            // パスワード未設定だったユーザーが設定した場合に追従する
+            // （パスワード変更フォームが「現在のパスワード」欄を出すかの判定に使う）
+            if (data) {
+              token.hasPassword = Boolean(data.password_hash);
 
-      // 第2要素の検証（OAuth 経路の続き）。
-      //
-      // 検証はここで行う。クライアントから渡せるのは入力されたコードだけで、
-      // 「検証済み」という結果そのものは渡せない。
-      if (trigger === 'update' && token.totpPending && supabase && token.id) {
-        const totpCode = (session as { totpCode?: unknown } | undefined)
-          ?.totpCode;
-
-        if (typeof totpCode === 'string' && totpCode.trim()) {
-          const totpLimitResult = await checkRateLimit(
-            supabase,
-            token.id,
-            RATE_LIMIT_ACTION.TOTP_VERIFY,
-            RATE_LIMIT_CONFIG.TOTP_VERIFY.maxAttempts,
-            RATE_LIMIT_CONFIG.TOTP_VERIFY.windowMinutes,
-          );
-
-          if (totpLimitResult.allowed) {
-            // ⚠️ ここから例外を外へ出さないこと。
-            // `@auth/core` は jwt コールバックの例外を**すべて**捕まえて
-            // セッションCookieを削除する（`lib/actions/session.js` の catch。
-            // 「JWT が検証できない」ケースを想定した後始末だが、例外の種類を
-            // 見ない）。Cookie が消えると認証コード画面は「正しくありません」を
-            // 出し続け、利用者は OAuth ログインからやり直すしかなくなる。
-            //
-            // 第2要素を通さないのは DB エラーでも同じ（fail-closed は保つ）。
-            // 変えるのは「セッションごと壊すか、画面に留まって再試行できるか」
-            let verifyResult;
-            try {
-              verifyResult = await verifySecondFactor(
-                supabase,
-                token.id,
-                totpCode.trim(),
-              );
-            } catch (error) {
-              console.error('TOTP verification failed:', error);
+              // ロールも追従させる。ログイン時にしか取らないと、admin を剥奪しても
+              // トークンの絶対有効期限（7日）まで admin のまま管理機能を使えてしまう。
+              // 上のパスワード確認と同じ問い合わせに相乗りするため、クエリは増えない
+              token.role = data.role ?? USER_ROLE.USER;
             }
 
-            if (verifyResult === TOTP_VERIFY_RESULT.SUCCESS) {
-              token.totpPending = false;
-              await resetRateLimit(
-                supabase,
-                token.id,
-                RATE_LIMIT_ACTION.TOTP_VERIFY,
-              );
-            }
+            token.lastPasswordCheck = now;
           }
         }
-      }
 
-      // 絶対有効期限チェック（ログインから7日間）
-      if (!token.invalidated && isSessionExpired(token.issuedAt)) {
-        token.invalidated = true;
+        // last_login_at のスロットリング更新（1時間間隔）
+        if (token.id && supabase && !token.invalidated) {
+          const now = Date.now();
+
+          if (
+            now - (token.lastLoginUpdate || 0) >
+            SESSION_CONFIG.LOGIN_UPDATE_INTERVAL_MS
+          ) {
+            await supabase
+              .from('users')
+              .update({ last_login_at: new Date().toISOString() })
+              .eq('id', token.id);
+
+            token.lastLoginUpdate = now;
+          }
+        }
+
+        return token;
+      } catch (error) {
+        console.error('JWT callback failed:', error);
+
+        // トークンをそのまま返す。`totpPending` も `invalidated` も維持されるので
+        // 第2要素は通らないまま（fail-closed は保つ）。変わるのは
+        // 「セッションごと壊すか、画面に留まって再試行できるか」。
+        //
+        // ⚠️ 代償として、パスワード変更による強制失効の確認が**この1リクエスト
+        // だけ**素通りする。`lastPasswordCheck` を更新していないので次の
+        // リクエストで再確認が走り、窓は1往復に留まる
+        token.totpUnavailable = true;
         return token;
       }
-
-      // パスワード変更によるセッション無効化チェック（5分間隔）
-      if (token.id && supabase && !token.invalidated) {
-        const now = Date.now();
-
-        if (
-          now - (token.lastPasswordCheck || 0) >
-          SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS
-        ) {
-          const { data } = await supabase
-            .from('users')
-            .select('password_hash, password_changed_at, role')
-            .eq('id', token.id)
-            .single();
-
-          if (data?.password_changed_at) {
-            const dbChangedAt = new Date(data.password_changed_at).getTime();
-            const tokenChangedAt = token.passwordChangedAt
-              ? new Date(token.passwordChangedAt).getTime()
-              : 0;
-
-            if (dbChangedAt > tokenChangedAt) {
-              // パスワードが変更された — セッション無効化
-              token.invalidated = true;
-              return token;
-            }
-          }
-
-          // パスワード未設定だったユーザーが設定した場合に追従する
-          // （パスワード変更フォームが「現在のパスワード」欄を出すかの判定に使う）
-          if (data) {
-            token.hasPassword = Boolean(data.password_hash);
-
-            // ロールも追従させる。ログイン時にしか取らないと、admin を剥奪しても
-            // トークンの絶対有効期限（7日）まで admin のまま管理機能を使えてしまう。
-            // 上のパスワード確認と同じ問い合わせに相乗りするため、クエリは増えない
-            token.role = data.role ?? USER_ROLE.USER;
-          }
-
-          token.lastPasswordCheck = now;
-        }
-      }
-
-      // last_login_at のスロットリング更新（1時間間隔）
-      if (token.id && supabase && !token.invalidated) {
-        const now = Date.now();
-
-        if (
-          now - (token.lastLoginUpdate || 0) >
-          SESSION_CONFIG.LOGIN_UPDATE_INTERVAL_MS
-        ) {
-          await supabase
-            .from('users')
-            .update({ last_login_at: new Date().toISOString() })
-            .eq('id', token.id);
-
-          token.lastLoginUpdate = now;
-        }
-      }
-
-      return token;
     },
 
     async session({ session, token }) {
@@ -660,6 +693,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = '';
         session.user.hasPassword = false;
         session.totpPending = true;
+        // 第2要素を「確認できなかった」ことを画面へ伝える（#1148）。
+        // コードの正誤と区別しないと、正しいコードを入れ直しても
+        // 「正しくありません」が出続ける理由が利用者に分からない
+        session.totpUnavailable = Boolean(token.totpUnavailable);
         return session;
       }
 

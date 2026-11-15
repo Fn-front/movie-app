@@ -1250,6 +1250,138 @@ describe('jwt コールバックの第2要素', () => {
   });
 });
 
+/**
+ * jwt コールバックから例外を出さない（#1148）
+ *
+ * `@auth/core/lib/actions/session.js` は jwt コールバックの例外を**すべて**
+ * 捕まえて `sessionStore.clean()` でセッションCookieを削除する。
+ * PR #1146 で `verifySecondFactor` だけは囲んだが、**同じコールバック内の
+ * 他の処理**（レート制限の判定・パスワード変更チェック・last_login_at 更新）は
+ * 素通りしていた。
+ *
+ * Cookie が消えると認証コード画面は「正しくありません」を出し続け、
+ * 利用者は OAuth ログインからやり直すしかなくなる。
+ *
+ * ⚠️ **本当に JWT が壊れている場合はここへ来ない。** `jwt.decode()` の失敗は
+ * `callbacks.jwt` を呼ぶ前に同じ try の中で投げられる（session.js:24）ため、
+ * そちらは従来どおり Cookie が消える。
+ */
+describe('jwt コールバックの例外', () => {
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockResetRateLimit.mockReset();
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  /** 第2要素が未了のトークンで update する */
+  const updateWithCode = (code = '123456') =>
+    jwt({
+      token: { id: 'u1', totpPending: true, issuedAt: Date.now() },
+      user: undefined,
+      account: null,
+      trigger: 'update',
+      session: { totpCode: code },
+    });
+
+  // 完了条件（#1148）: checkRateLimit が throw しても totpPending が残ること
+  it('レート制限の判定が落ちても例外を外へ出さず totpPending を残す', async () => {
+    mockCheckRateLimit.mockRejectedValue(new Error('connection terminated'));
+
+    const token = await updateWithCode();
+
+    expect(token.totpPending).toBe(true);
+  });
+
+  it('レート制限の判定が落ちたら検証できなかったと伝える', async () => {
+    mockCheckRateLimit.mockRejectedValue(new Error('connection terminated'));
+
+    const token = await updateWithCode();
+
+    expect(token.totpUnavailable).toBe(true);
+  });
+
+  it('検証が DB エラーで落ちたら検証できなかったと伝える', async () => {
+    // コードの正誤とは別物。画面の文言を分けるために区別する
+    mockVerifySecondFactor.mockRejectedValue(new Error('decrypt failed'));
+
+    const token = await updateWithCode();
+
+    expect(token.totpPending).toBe(true);
+    expect(token.totpUnavailable).toBe(true);
+  });
+
+  it('誤ったコードは「検証できなかった」にしない', async () => {
+    mockVerifySecondFactor.mockResolvedValue('invalid');
+
+    const token = await updateWithCode('000000');
+
+    expect(token.totpPending).toBe(true);
+    expect(token.totpUnavailable).toBeUndefined();
+  });
+
+  /**
+   * 復旧したら消えること。
+   *
+   * 残ると「一時的に確認できません」が出続け、今度はそちらで詰む
+   */
+  it('次の呼び出しで前回の失敗を引きずらない', async () => {
+    mockVerifySecondFactor.mockRejectedValueOnce(new Error('decrypt failed'));
+    const failed = await updateWithCode();
+    expect(failed.totpUnavailable).toBe(true);
+
+    mockVerifySecondFactor.mockResolvedValue('success');
+    const recovered = await jwt({
+      token: { ...failed },
+      user: undefined,
+      account: null,
+      trigger: 'update',
+      session: { totpCode: '123456' },
+    });
+
+    expect(recovered.totpPending).toBe(false);
+    expect(recovered.totpUnavailable).toBeUndefined();
+  });
+
+  // 第2要素とは無関係な経路。ここで throw してもセッションは壊さない
+  it('パスワード変更チェックが落ちても例外を外へ出さない', async () => {
+    setResolver(() => {
+      throw new Error('connection terminated');
+    });
+
+    const token = await jwt({
+      token: {
+        id: 'u1',
+        totpPending: false,
+        issuedAt: Date.now(),
+        // 確認間隔（5分）を越えさせる
+        lastPasswordCheck: 0,
+      },
+      user: undefined,
+      account: null,
+    });
+
+    expect(token.id).toBe('u1');
+  });
+
+  // 握り潰しても調査できるよう、記録は残す
+  it('例外をログに残す', async () => {
+    mockCheckRateLimit.mockRejectedValue(new Error('connection terminated'));
+
+    await updateWithCode();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'JWT callback failed:',
+      expect.any(Error),
+    );
+  });
+});
+
 describe('session コールバックの第2要素', () => {
   /** 空のセッション雛形 */
   const emptySession = () => ({

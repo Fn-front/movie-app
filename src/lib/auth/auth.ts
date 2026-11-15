@@ -493,22 +493,46 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             token.role = USER_ROLE.USER;
             token.hasPassword = false;
             token.passwordChangedAt = null;
-            token.lastPasswordCheck = Date.now();
             token.lastLoginUpdate = Date.now();
             token.issuedAt = Date.now();
             token.totpPending = false;
 
             if (supabase && user.id) {
-              const { data: dbUser } = await supabase
+              const { data: dbUser, error: lookupError } = await supabase
                 .from('users')
                 .select('role, password_hash, password_changed_at')
                 .eq('id', user.id)
                 .single();
 
-              if (dbUser) {
-                token.role = dbUser.role ?? USER_ROLE.USER;
-                token.hasPassword = Boolean(dbUser.password_hash);
-                token.passwordChangedAt = dbUser.password_changed_at ?? null;
+              // ⚠️ **`error` を捨ててはいけない**（#1207。#1193 と同じ形）。
+              //
+              // postgrest-js はネットワーク障害を **throw せず**
+              // `{ data: null, error }` を返すため、捨てると「取得に失敗した」と
+              // 「行が無い」を区別できない。ここで取り損ねたまま
+              // `lastPasswordCheck` を立てると、`passwordChangedAt: null` の
+              // トークンのまま**5分間、パスワード変更による失効確認が
+              // 静かにスキップされる**。
+              //
+              // ⚠️ `PGRST116`（0件）だけは「確定した答え」なので先送りしない
+              // （#1193 と同じ判断。先送りすると消えた行を毎リクエスト引き続ける）。
+              const lookupFailed =
+                Boolean(lookupError) &&
+                lookupError?.code !== SUPABASE_ERROR_CODE.NOT_FOUND;
+
+              if (lookupFailed) {
+                console.error('OAuth sign-in user lookup failed:', lookupError);
+              } else {
+                if (dbUser) {
+                  token.role = dbUser.role ?? USER_ROLE.USER;
+                  token.hasPassword = Boolean(dbUser.password_hash);
+                  token.passwordChangedAt = dbUser.password_changed_at ?? null;
+                }
+
+                // ⚠️ **確認できたときだけ立てる。** 失敗時に立てないことで、
+                // 下の定期チェックが（`lastPasswordCheck` 未設定 ＝ 0 なので）
+                // すぐ引き直す。引き直しも失敗した場合は、そちらの #1193 の
+                // ガードが 10 秒後の再試行へ落とすので毎リクエストは叩かない
+                token.lastPasswordCheck = Date.now();
               }
 
               // OAuth は Credentials と違い authorize を通らないため、

@@ -909,6 +909,128 @@ describe('jwt コールバック', () => {
     });
   });
 
+  /**
+   * OAuth 初回ログインの `users` 取得も `error` を捨てない（#1207）
+   *
+   * 定期チェック（#1193）と**同じバグ class**。こちらは
+   * `lastPasswordCheck` をクエリより前に立てていたため、取得に失敗しても
+   * 巻き戻らず、`passwordChangedAt: null` のトークンで 5分間の盲目窓ができた。
+   *
+   * ⚠️ 到達には `users` の select **だけ**を失敗させる必要がある。
+   * 直後の `isTotpEnabled()` も DB を引くので、全テーブルを失敗させると
+   * そちらが throw して `if (user) throw error`（#1148）でサインインごと
+   * 失敗し、この分岐に用がなくなる
+   */
+  describe('OAuth 初回ログインの users 取得失敗', () => {
+    let errorSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      errorSpy.mockRestore();
+    });
+
+    /** `users` の select だけを落とす（user_totp は正常に応答させる） */
+    const setUsersSelectFailure = (code: string) => {
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: null,
+            error: {
+              message: 'TypeError: fetch failed',
+              details: '',
+              hint: '',
+              code,
+            },
+          };
+        }
+        return { data: null, error: null };
+      });
+    };
+
+    const oauthSignIn = () =>
+      jwt({
+        token: {},
+        user: { id: 'u1', email: 'a@example.com', name: 'A', image: null },
+        account: { provider: 'google' },
+      });
+
+    /**
+     * 確かめたいのは「5分間の盲目窓ができないこと」。
+     *
+     * 失敗時に `lastPasswordCheck` を立てないと、**同じ呼び出しの中で**
+     * 下の定期チェックが（未設定＝0 扱いで）引き直し、そちらも失敗して
+     * #1193 のガードが 10秒後の再試行値を入れる。結果として
+     * `lastPasswordCheck` は非ゼロになるが、次の確認は 10秒後に来る。
+     *
+     * 修正前はクエリより前に `Date.now()` を立てていたため、定期チェックが
+     * 間隔内と判断してスキップし、次の確認は**5分後**になっていた。
+     * この差を見る
+     */
+    it('取得に失敗したら5分の盲目窓を作らない', async () => {
+      setUsersSelectFailure('');
+
+      const token = await oauthSignIn();
+
+      const dueIn =
+        (token.lastPasswordCheck as number) +
+        SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS -
+        Date.now();
+
+      expect(dueIn).toBeLessThanOrEqual(SESSION_CONFIG.PASSWORD_CHECK_RETRY_MS);
+    });
+
+    it('取得に失敗したことをログに残す', async () => {
+      setUsersSelectFailure('');
+
+      await oauthSignIn();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'OAuth sign-in user lookup failed:',
+        expect.objectContaining({ code: '' }),
+      );
+    });
+
+    /**
+     * 0件（PGRST116）は「確定した答え」。OAuth の初回は signIn コールバックが
+     * 行を作った直後なので通常は起きないが、起きたとしても先送りする理由はない
+     */
+    it('0件なら確認を終えたことにする', async () => {
+      setUsersSelectFailure('PGRST116');
+
+      const token = await oauthSignIn();
+
+      expect(token.lastPasswordCheck).toBeTruthy();
+      expect(token.role).toBe('user');
+      expect(token.passwordChangedAt).toBeNull();
+    });
+
+    it('取得できたときは従来どおり反映して lastPasswordCheck を立てる', async () => {
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          return {
+            data: {
+              role: 'admin',
+              password_hash: 'hashed',
+              password_changed_at: '2026-01-01T00:00:00Z',
+            },
+            error: null,
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      const token = await oauthSignIn();
+
+      expect(token.role).toBe('admin');
+      expect(token.hasPassword).toBe(true);
+      expect(token.passwordChangedAt).toBe('2026-01-01T00:00:00Z');
+      expect(token.lastPasswordCheck).toBeTruthy();
+    });
+  });
+
   it('last_login はスロットリング間隔を超えていれば更新される', async () => {
     let userUpdated = false;
     setResolver(({ table, ops }) => {

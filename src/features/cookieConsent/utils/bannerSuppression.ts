@@ -49,6 +49,19 @@ export function isBannerSuppressed(): boolean {
   return syncPending || signingOut;
 }
 
+/**
+ * ログアウト処理中か
+ *
+ * バナー以外にも要る。`logout()` は `signOut({ redirect: false })` で
+ * セッションを消してから遷移するため、**遷移までの一瞬だけ
+ * `authenticated → unauthenticated` が観測できる**（#1195）。
+ * それを期限切れと解釈して `logout()` を呼び直す経路があるので
+ * （`sessionExpiryHandler`）、進行中は黙っていてもらう
+ */
+export function isSigningOut(): boolean {
+  return signingOut;
+}
+
 /** サーバー同期の進行状況を伝える */
 export function setConsentSyncPending(pending: boolean): void {
   if (syncPending === pending) return;

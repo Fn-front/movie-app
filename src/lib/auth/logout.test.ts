@@ -7,8 +7,22 @@
  */
 
 const mockSignOut = jest.fn();
+const mockGetSession = jest.fn();
 jest.mock('next-auth/react', () => ({
   signOut: (...args: unknown[]) => mockSignOut(...args),
+  getSession: (...args: unknown[]) => mockGetSession(...args),
+}));
+
+/**
+ * 遷移を止める
+ *
+ * `logout()` は `signOut({ redirect: false })` に変わったため、遷移は
+ * 自前で行う（#1195）。jsdom の `window.location` は差し替えられないので、
+ * 遷移を担うモジュールごとモックする
+ */
+const mockNavigateTo = jest.fn();
+jest.mock('@/utils/navigate', () => ({
+  navigateTo: (...args: unknown[]) => mockNavigateTo(...args),
 }));
 
 const mockSendConsentUpdate = jest.fn();
@@ -38,7 +52,9 @@ describe('logout', () => {
     jest.clearAllMocks();
     localStorage.clear();
     __resetBannerSuppressionForTest();
-    mockSignOut.mockResolvedValue(undefined);
+    // 既定は「サインアウト成功 → セッションも消えている」
+    mockSignOut.mockResolvedValue({ url: 'http://localhost/auth/signin' });
+    mockGetSession.mockResolvedValue(null);
   });
 
   describe('cleanUpBeforeSignOut', () => {
@@ -121,12 +137,86 @@ describe('logout', () => {
   it('既定ではログイン画面へ戻す', async () => {
     await logout();
 
-    expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: ROUTES.LOGIN });
+    expect(mockSignOut).toHaveBeenCalledWith({
+      redirect: false,
+      callbackUrl: ROUTES.LOGIN,
+    });
   });
 
   it('遷移先を指定できる', async () => {
     await logout('/privacy');
 
-    expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: '/privacy' });
+    expect(mockSignOut).toHaveBeenCalledWith({
+      redirect: false,
+      callbackUrl: '/privacy',
+    });
+  });
+
+  /**
+   * セッションが消えたことを確かめてから遷移する（#1195）
+   *
+   * ⚠️ `signOut` は `res.ok` を検査せず `window.location.href` へ進む
+   * （`node_modules/next-auth/react.js`）。CSRF 検証に落ちた POST は
+   * リダイレクト先だけ返して **Cookie を消さない**ため、`redirect: true` の
+   * ままだと「遷移はするが何も変わらない」失敗を成功として扱う。
+   */
+  describe('セッションの確認', () => {
+    it('消えていればサーバーが返した遷移先へ進む', async () => {
+      mockSignOut.mockResolvedValue({ url: 'http://localhost/privacy' });
+
+      await logout('/privacy');
+
+      expect(mockNavigateTo).toHaveBeenCalledWith('http://localhost/privacy');
+    });
+
+    // 呼び出し側が外部URLを渡してもオープンリダイレクトにしない。
+    // 遷移先はサーバーが検証した値だけを使う
+    it('遷移先を返さなければログイン画面へ倒す', async () => {
+      mockSignOut.mockResolvedValue({});
+
+      await logout('https://evil.example.com/');
+
+      expect(mockNavigateTo).toHaveBeenCalledWith(ROUTES.LOGIN);
+    });
+
+    it('セッションが残っていたら失敗として扱う', async () => {
+      mockGetSession.mockResolvedValue({ user: { id: 'u1' } });
+
+      await expect(logout()).rejects.toThrow(/did not clear the session/);
+    });
+
+    it('セッションが残っていたら遷移しない', async () => {
+      mockGetSession.mockResolvedValue({ user: { id: 'u1' } });
+
+      await expect(logout()).rejects.toThrow();
+
+      expect(mockNavigateTo).not.toHaveBeenCalled();
+    });
+
+    // 抑止したままだとバナーが二度と出ず、同意レコードは既に消えている
+    it('セッションが残っていたら抑止を戻す', async () => {
+      recordConsentDecision('granted', ME, T1);
+      mockGetSession.mockResolvedValue({ user: { id: 'u1' } });
+
+      await expect(logout()).rejects.toThrow();
+
+      expect(isBannerSuppressed()).toBe(false);
+    });
+
+    /**
+     * 第2要素が未了のセッションも「残っている」と判定する。
+     *
+     * `totpPending` のとき `session.user.id` は空文字なので、
+     * `user.id` で見ると**失敗を成功と誤判定**する。
+     * セッションオブジェクトの有無で見ること
+     */
+    it('第2要素が未了のセッションが残っていても失敗として扱う', async () => {
+      mockGetSession.mockResolvedValue({
+        user: { id: '', email: '' },
+        totpPending: true,
+      });
+
+      await expect(logout()).rejects.toThrow(/did not clear the session/);
+    });
   });
 });

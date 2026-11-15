@@ -4,6 +4,11 @@
 
 import { renderHook, waitFor } from '@testing-library/react';
 
+import {
+  __resetBannerSuppressionForTest,
+  markSigningOut,
+} from '@/features/cookieConsent/utils/bannerSuppression';
+
 import { useSessionExpiry } from './sessionExpiryHandler';
 
 // next-auth/reactのモック
@@ -13,7 +18,12 @@ let mockStatus = 'loading';
 jest.mock('next-auth/react', () => ({
   useSession: () => ({ status: mockStatus }),
   signOut: (...args: unknown[]) => mockSignOut(...args),
+  // logout() はサインアウト後にセッションが消えたかを確かめる（#1195）
+  getSession: () => Promise.resolve(null),
 }));
+
+// 遷移を止める（jsdom の window.location は差し替えられない）
+jest.mock('@/utils/navigate', () => ({ navigateTo: jest.fn() }));
 
 const mockConfirmSignedOut = jest.fn();
 jest.mock('@/lib/auth/sessionProbe', () => ({
@@ -36,6 +46,9 @@ describe('useSessionExpiry', () => {
     mockPathname = '/movies/now-showing';
     // 既定は「ログアウト済みだとサーバーが明示した」
     mockConfirmSignedOut.mockReset().mockResolvedValue(true);
+    // ⚠️ ログアウト中フラグはモジュールスコープ。logout() を通したテストの
+    // 後は立ったままで、次のテストが早期 return される（#1195）
+    __resetBannerSuppressionForTest();
   });
 
   it('初回レンダリング時にsignOutを呼ばないこと', () => {
@@ -53,6 +66,7 @@ describe('useSessionExpiry', () => {
 
     await waitFor(() =>
       expect(mockSignOut).toHaveBeenCalledWith({
+        redirect: false,
         callbackUrl: '/auth/signin',
       }),
     );
@@ -144,6 +158,28 @@ describe('useSessionExpiry', () => {
 
     rerender();
 
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 自分で始めたログアウトに反応しない（#1195）
+   *
+   * `logout()` は `signOut({ redirect: false })` でセッションを消してから
+   * 遷移するため、**遷移までの一瞬だけ** authenticated → unauthenticated が
+   * 観測できる。ここを通すと `logout()` を呼び直すことになる。
+   */
+  it('ログアウト処理中はsignOutを呼ばないこと', async () => {
+    markSigningOut();
+    mockStatus = 'authenticated';
+    const { rerender } = renderHook(() => useSessionExpiry());
+
+    mockStatus = 'unauthenticated';
+    rerender();
+
+    // 確認の問い合わせごと行わない（遷移を待つだけでよい）
+    await waitFor(() => {
+      expect(mockConfirmSignedOut).not.toHaveBeenCalled();
+    });
     expect(mockSignOut).not.toHaveBeenCalled();
   });
 

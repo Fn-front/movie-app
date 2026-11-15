@@ -12,7 +12,7 @@
 
 'use client';
 
-import { signOut } from 'next-auth/react';
+import { getSession, signOut } from 'next-auth/react';
 
 import { ROUTES } from '@/constants';
 import {
@@ -21,6 +21,7 @@ import {
 } from '@/features/cookieConsent/utils/bannerSuppression';
 import { deleteGaCookies, sendConsentUpdate } from '@/utils/analytics';
 import { clearOwnedConsent } from '@/utils/cookieConsent';
+import { navigateTo } from '@/utils/navigate';
 
 /**
  * ログアウト前の後始末
@@ -45,6 +46,7 @@ export function cleanUpBeforeSignOut(): void {
  * ログアウトする
  *
  * @param callbackUrl 遷移先。既定はログイン画面
+ * @throws セッションを消せなかった場合
  */
 export async function logout(
   callbackUrl: string = ROUTES.LOGIN,
@@ -55,14 +57,34 @@ export async function logout(
   markSigningOut();
   cleanUpBeforeSignOut();
 
+  let destination: string;
+
   try {
-    await signOut({ callbackUrl });
+    // ⚠️ `redirect: true`（既定）にしない（#1195）。
+    // `signOut` は `res.ok` を検査せず `window.location.href` へ進むため
+    // （`node_modules/next-auth/react.js`）、CSRF 検証に落ちた POST のように
+    // **リダイレクト先だけ返って Cookie が消えない**失敗を成功として扱う。
+    // 利用者は元の状態に戻るだけで、理由が分からない。
+    const result = await signOut({ redirect: false, callbackUrl });
+
+    // 実際に消えたかを確かめる。消えていれば `/api/auth/session` は
+    // JSON の null を返す（`@auth/core` の `lib/actions/session.js` は
+    // `body: null` で始まり、Cookie が無ければそのまま返す）
+    if (await getSession()) {
+      throw new Error('Sign out did not clear the session');
+    }
+
+    // 遷移先はサーバーが検証した値を使う。`callbackUrl` をそのまま
+    // 使うと、呼び出し側が外部URLを渡したときオープンリダイレクトになる
+    destination = result?.url ?? ROUTES.LOGIN;
   } catch (error) {
-    // 遷移が始まらなかった（csrf 取得か /signout の POST が失敗した）。
-    // 抑止したままだとバナーが二度と出ず、同意レコードは既に消えているので
-    // 再同意もできない。呼び出し側は `void logout()` で握り潰すため、
-    // ここで戻さないと誰も戻せない
+    // 遷移しない（csrf 取得・`/signout` の POST・セッションの確認のいずれかが
+    // 失敗した）。抑止したままだとバナーが二度と出ず、同意レコードは既に
+    // 消えているので再同意もできない。呼び出し側は `void logout()` で
+    // 握り潰すため、ここで戻さないと誰も戻せない
     clearSigningOut();
     throw error;
   }
+
+  navigateTo(destination);
 }

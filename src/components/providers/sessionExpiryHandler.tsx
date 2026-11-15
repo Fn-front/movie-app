@@ -18,6 +18,7 @@ import { usePathname } from 'next/navigation';
 import { ROUTES } from '@/constants';
 import { logout } from '@/lib/auth/logout';
 import { confirmSignedOut } from '@/lib/auth/sessionProbe';
+import { isSigningOut } from '@/features/cookieConsent/utils/bannerSuppression';
 
 /** signOut対象外のパス（認証ページ） */
 const AUTH_PATHS = [ROUTES.LOGIN, ROUTES.REGISTER];
@@ -36,6 +37,12 @@ export function useSessionExpiry() {
     prevStatusRef.current = status;
 
     if (!wasAuthenticated || status !== 'unauthenticated' || isAuthPage) return;
+
+    // ⚠️ 自分で始めたログアウトに反応しない（#1195）。
+    // `logout()` は `signOut({ redirect: false })` でセッションを消してから
+    // 遷移するため、**遷移までの一瞬だけ** authenticated → unauthenticated が
+    // 観測できる。ここを通すと `logout()` を呼び直すことになる
+    if (isSigningOut()) return;
 
     let cancelled = false;
 

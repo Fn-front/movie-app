@@ -299,6 +299,106 @@ test.describe('映画詳細のURL化', () => {
   });
 
   /**
+   * スマホ幅ではモーダルのスクロールが1本（#1109）
+   *
+   * 以前は「あらすじ以降」だけが `max-height: 300px` で別にスクロールし、
+   * ポスター・配信アイコン側は伸びるに任せていた。モーダルは `overflow: hidden`
+   * の高さ上限つきなので、配信が3行揃う作品では**上が伸びた分だけ下が
+   * クリップ**され、スクロール領域が細い隙間になっていた。
+   *
+   * ⚠️ **md 以上は従来のまま**なので、デスクトップ幅で測ると落ちない。
+   * ビューポートは必ずスマホ幅にすること。
+   *
+   * ⚠️ **`clientHeight` を見ても検出できない。** クリップしているのは祖先の
+   * `overflow: hidden` なので、潰れた側の `clientHeight` は `max-height` の
+   * 300px を返し続ける。実際に見えている高さ（祖先との重なり）で判定する。
+   *
+   * ⚠️ 単体テストでは検出できない（jsdom は CSS もメディアクエリも解釈しない）。
+   */
+  test('スマホ幅では配信が3行でもスクロール領域が潰れない', async ({
+    page,
+  }) => {
+    // md 未満。低い画面ほど悪化するので CI と実機で揃うよう明示的に決める
+    await page.setViewportSize({ width: 390, height: 740 });
+
+    // 配信・レンタル・購入が全部揃う作品（Issue の再現条件）
+    const providers = (ids: number[]) =>
+      ids.map((id) => ({
+        provider_id: id,
+        provider_name: `E2E配信${id}`,
+        logo_path: '/e2e-provider-logo.jpg',
+        display_priority: id,
+      }));
+
+    await mockMovieDetail(page, {
+      // ⚠️ **ここを削ると、修正前のコードでもテストが通ってしまう。**
+      //   既定のモックは `backdrop_path` が null でバックドロップを描画せず、
+      //   `poster_path` も null、あらすじも1行。つまり「上が伸びて下を押し潰す」
+      //   という再現条件がどれも揃わない。実在作品（アメリ）に寄せて埋める
+      backdrop_path: '/e2e-backdrop.jpg',
+      poster_path: '/e2e-poster.jpg',
+      overview: 'あ'.repeat(400),
+      credits: {
+        cast: Array.from({ length: 12 }, (_, i) => ({
+          id: 1000 + i,
+          name: `E2E俳優${i}`,
+          character: `E2E役${i}`,
+          profile_path: null,
+          order: i,
+        })),
+      },
+      'watch/providers': {
+        results: {
+          JP: {
+            link: 'https://example.com',
+            flatrate: providers([1, 2, 3]),
+            rent: providers([4, 5, 6]),
+            buy: providers([7, 8]),
+          },
+        },
+      },
+    });
+
+    await page.goto(`/movies/now-showing?movie_id=${MOVIE_ID}`);
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 20000 });
+    await expect(dialog.getByText('詳細情報')).toBeVisible({ timeout: 15000 });
+
+    const scroll = await page.evaluate(() => {
+      const root = document.querySelector('[role="dialog"]');
+      if (!root) return null;
+
+      const scrollers = [...root.querySelectorAll('*')].filter((el) => {
+        const overflowY = getComputedStyle(el).overflowY;
+        const scrolls = overflowY === 'auto' || overflowY === 'scroll';
+        return scrolls && el.scrollHeight > el.clientHeight + 1;
+      });
+
+      const dialogBox = root.getBoundingClientRect();
+      const visibleHeights = scrollers.map((el) => {
+        const box = el.getBoundingClientRect();
+        return Math.round(
+          Math.max(
+            0,
+            Math.min(box.bottom, dialogBox.bottom) -
+              Math.max(box.top, dialogBox.top),
+          ),
+        );
+      });
+
+      return { count: scrollers.length, visibleHeights };
+    });
+
+    // スクロールするのは本文の1箇所だけ。2つあるとホイールが内側に吸われ、
+    // 外側へ抜けられなくなる（入れ子スクロール）
+    expect(scroll?.count).toBe(1);
+
+    // クリップされていないことを見る。実測値は
+    // 修正前 66px / 修正後 411px（実在作品「アメリ」では 69px → 411px）
+    expect(scroll?.visibleHeights[0]).toBeGreaterThan(240);
+  });
+
+  /**
    * 絞り込みとモーダルは別の関心事。`movie_id` の増減でフィルターが
    * 作り直されると、条件は同じでも配列の実体が差し替わって再描画が広がる
    * （#1051 / #1059 の作りと噛み合わせる必要がある）

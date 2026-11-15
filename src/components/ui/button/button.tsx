@@ -18,6 +18,21 @@ import { cn } from '@/utils/cn';
 import styles from './button.module.scss';
 
 /**
+ * 文書内で最後に押された Button（#1196）
+ *
+ * `disabled` になるとブラウザがフォーカスを `<body>` へ落とすため、
+ * 処理が終わって再び押せるようになってもキーボード利用者は Tab を
+ * 打ち直すことになる。**押した本人にだけ**フォーカスを戻すための印。
+ *
+ * ⚠️ インスタンスごとの ref ではなくモジュールスコープで1つだけ持つ。
+ * ref だと「押したがローディングに入らなかった」クリックの印が残り、
+ * 同じ `isLoading` を共有する別のボタンがローディングを終えたときに
+ * 取り違える（`document.activeElement` のガードは tree order で先に
+ * effect が走ったほうを通してしまうので防げない）。
+ */
+let lastActivated: HTMLButtonElement | null = null;
+
+/**
  * Buttonのバリアント型
  */
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
@@ -66,24 +81,12 @@ export const Button = memo<ButtonProps>(function Button({
   ...props
 }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
-  /**
-   * このボタンを押してローディングに入ったか（#1196）
-   *
-   * `disabled` になるとブラウザがフォーカスを `<body>` へ落とす。
-   * キーボード利用者は、処理が終わって再び押せるようになっても
-   * Tab を打ち直すことになる。**押した本人にだけ**戻すための印。
-   *
-   * ⚠️ 「ローディングが終わったら戻す」だけにしてはいけない。
-   * 触っていないボタン（一覧の「もっと見る」等）が読み込みを終えた瞬間に
-   * フォーカスを奪う
-   */
-  const activatedRef = useRef(false);
   const wasLoadingRef = useRef(isLoading);
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       // Enter / Space での起動も click として届く
-      activatedRef.current = true;
+      lastActivated = buttonRef.current;
       onClick?.(event);
     },
     [onClick],
@@ -95,9 +98,15 @@ export const Button = memo<ButtonProps>(function Button({
 
     // ローディングが終わった瞬間だけ
     if (!wasLoading || isLoading) return;
-    if (!activatedRef.current) return;
 
-    activatedRef.current = false;
+    // ⚠️ 「押した本人か」をインスタンスごとの ref で持ってはいけない。
+    // ローディングに入らなかったクリックの印が残り続け、**別のボタンが**
+    // 同じ `isLoading` でローディングを終えたときに、tree order で先に
+    // effect が走ったほうがフォーカスを食う。
+    // 文書内で最後に押された1つだけを覚えることで、取り違えが起きない
+    if (lastActivated !== buttonRef.current) return;
+
+    lastActivated = null;
 
     // 誰かがフォーカスを持っていれば奪わない。`disabled` で落ちた場合だけ
     // `<body>` に居る
@@ -116,7 +125,12 @@ export const Button = memo<ButtonProps>(function Button({
   );
 
   return (
+    // ⚠️ `{...props}` を先に置く。後ろに置くと、呼び出し側が渡した値が
+    // ここの指定を上書きする。とくに `ref` を奪われると
+    // `buttonRef.current` が null のままフォーカス復帰が黙って死ぬ
+    // （Radix の `asChild` は型検査を抜けて runtime に ref を注入する）
     <button
+      {...props}
       ref={buttonRef}
       type={type}
       className={classNames}
@@ -125,7 +139,6 @@ export const Button = memo<ButtonProps>(function Button({
       // 「押せない」としか分からず、待てば押せるのかが伝わらない
       aria-busy={isLoading || undefined}
       onClick={handleClick}
-      {...props}
     >
       {isLoading ? (
         <span className={styles.c_button__spinner} aria-hidden='true' />

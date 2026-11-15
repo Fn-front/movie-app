@@ -181,6 +181,38 @@ describe('Button', () => {
       expect(screen.getByLabelText('メモ')).toHaveFocus();
     });
 
+    /**
+     * ⚠️ `isLoading` を共有する複数ボタンで取り違えない（#1196）
+     *
+     * 「押した印」をインスタンスごとの ref で持つと、**ローディングに
+     * 入らなかったクリック**の印が残り続ける。同じ `isLoading` を受ける
+     * 別のボタンがローディングを終えたとき、tree order で先に effect が
+     * 走ったほうがフォーカスを食う（`document.activeElement` のガードでは
+     * 防げない）。最後に押された1つだけを覚えることで取り違えない。
+     */
+    it('共有のローディングでも最後に押したボタンへ戻す', async () => {
+      const user = userEvent.setup();
+      const twoButtons = (loading: boolean) => (
+        <>
+          <Button isLoading={loading}>A</Button>
+          <Button isLoading={loading}>B</Button>
+        </>
+      );
+
+      const { rerender } = render(twoButtons(false));
+
+      // A を押しても（ローディングに入らない）、次に B を押す
+      await user.click(screen.getByRole('button', { name: 'A' }));
+      await user.click(screen.getByRole('button', { name: 'B' }));
+      screen.getByRole('button', { name: 'B' }).blur();
+
+      rerender(twoButtons(true));
+      rerender(twoButtons(false));
+
+      expect(screen.getByRole('button', { name: 'B' })).toHaveFocus();
+      expect(screen.getByRole('button', { name: 'A' })).not.toHaveFocus();
+    });
+
     it('クリックのハンドラは従来どおり呼ばれる', async () => {
       const user = userEvent.setup();
       const handleClick = jest.fn();

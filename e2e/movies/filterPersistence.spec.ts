@@ -37,9 +37,22 @@ const USER = {
 } as const;
 
 test.describe('フィルター条件がリロード後も保持される', () => {
-  // goto×2＋フィルタ操作＋PUT/GET待ち＋reload と重く、並列負荷下で30秒予算を
-  // 超過しうるためタイムアウトを延長する。ユーザー作成（bcrypt）も挟む
-  test.describe.configure({ timeout: 120000 });
+  // ⚠️ **`mode: 'serial'` を外さない。** この describe は `beforeAll` で作った
+  // 専用ユーザー1人を全テストで共有する。`fullyParallel` のままだとテストが
+  // 別ワーカーへ散り、ワーカーごとに `beforeAll` が走る。
+  // `createVerifiedUser` は**同じメールのユーザーを削除してから作り直す**ため、
+  // 後発ワーカーの作成が先行ワーカーの `users` 行を消す。
+  //
+  // セッションは JWT なので認証は通り続けるが、`saved_filters.user_id` は
+  // `REFERENCES users(id)` なので `PUT /api/filters` が外部キー違反（23503）で
+  // 落ち、500 になる（実測のエラー: `saved_filters_user_id_fkey`）。
+  // #1176 で専用ユーザーへ移したときに付け忘れ、main で
+  // 「フィルター保存が失敗した（500 PUT）」として表面化した。
+  // `openDedicatedSession` を使う他の spec はいずれも serial にしている。
+  //
+  // タイムアウトの延長は goto×2＋フィルタ操作＋PUT/GET待ち＋reload と重く、
+  // 並列負荷下で30秒予算を超過しうるため。ユーザー作成（bcrypt）も挟む
+  test.describe.configure({ mode: 'serial', timeout: 120000 });
 
   let session: DedicatedSession;
   let page: Page;

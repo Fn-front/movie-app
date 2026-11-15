@@ -150,6 +150,47 @@ function optimisticAddToAllCaches(
 }
 
 /**
+ * 一覧キャッシュの楽観アイテムのIDを、サーバーが返した実IDへ差し替える
+ *
+ * ⚠️ 照会キャッシュを直すだけでは足りない（#1152）。**削除に使うIDの
+ * 出どころが2つある**ため。
+ *
+ * | 削除の押し場所 | IDの出どころ |
+ * |---|---|
+ * | タイル・詳細モーダル（`toggleWatchlist`） | 照会キャッシュ |
+ * | サイドバー（`useWatchlist.removeFromWatchlist`） | **一覧キャッシュの `item.id`** |
+ *
+ * サイドバーはそれをそのまま `DELETE /api/watchlist/:id` へ渡すので、
+ * 仮IDのままだと `isValidUuid`（`api/watchlist/[id]/route.ts`）に弾かれて
+ * 400 になる。`onSettled` の再取得が届くまでの窓で起きる。
+ *
+ * ID 以外は触らない。配信状況などサーバーしか知らない列は再取得で確定する
+ * 作りで、ここで半端に埋めるとその前提が崩れる。
+ */
+function replaceOptimisticIdInAllCaches(
+  queryClient: ReturnType<typeof useQueryClient>,
+  optimisticId: string,
+  realId: string,
+): void {
+  for (const [key, data] of getListQueries(queryClient)) {
+    if (!data?.pages) continue;
+
+    queryClient.setQueryData<WatchlistInfiniteData>(key, {
+      ...data,
+      pages: data.pages.map((page) => ({
+        ...page,
+        data: {
+          ...page.data,
+          watchlist: page.data.watchlist.map((item) =>
+            item.id === optimisticId ? { ...item, id: realId } : item,
+          ),
+        },
+      })),
+    });
+  }
+}
+
+/**
  * 全ウォッチリストキャッシュから楽観的にアイテムを削除する
  */
 function optimisticRemoveFromAllCaches(
@@ -483,17 +524,28 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       return { previousDataMap, previousLookup, optimisticId };
     },
     onSuccess: (response, _newItem, context) => {
+      if (!context?.optimisticId) return;
+
       // 仮IDのままだと、再取得が届く前に削除を押したとき
       // `optimistic-...` で DELETE して 400 になる
       updateLookupCache(queryClient, (items) =>
         items.map((item) =>
-          item.id === context?.optimisticId
+          item.id === context.optimisticId
             ? {
                 id: response.data.id,
                 tmdb_movie_id: response.data.tmdb_movie_id,
               }
             : item,
         ),
+      );
+
+      // 一覧側も同じ理由で差し替える。サイドバーの削除は照会ではなく
+      // **一覧の `item.id`** を DELETE へ渡すので、照会だけ直しても
+      // 400 は塞がらない（#1152）
+      replaceOptimisticIdInAllCaches(
+        queryClient,
+        context.optimisticId,
+        response.data.id,
       );
     },
     onError: (_error, _newItem, context) => {

@@ -130,6 +130,47 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
   test.afterEach(async () => {
     await clearSavedFiltersForTestUser();
   });
+
+  /**
+   * 保存済みフィルターを「無い」状態に固定する（#1186）
+   *
+   * ⚠️ **上の後片付けだけでは足りない。** afterEach が解けるのは実行順だけで、
+   * **並走は解けない**。同じ describe の `フィルターを適用しても URL の更新が
+   * 取り消されない` は共有 `TEST_USER` の `saved_filters` を書くため、
+   * `fullyParallel` では別ワーカーで走りながら他テストの前提を壊す。
+   * CI の blob レポートで実測した区間:
+   *
+   *   `:307 詳細のキャストから…`      worker 1  16:06:01 → 16:06:21（失敗）
+   *   `:359 フィルターを適用しても…`  worker 2  16:06:03 → 16:06:12
+   *
+   * 復元された条件は URL へ書き戻される（`useMovieList.ts` / #1062）ので、
+   * 終端を見ている `toHaveURL(/\/movies\/now-showing$/)` が
+   * `?…&genre_ids=28`（アクション）で落ちた。一覧の中身も変わるため、
+   * `waitForList` が 0 件になって**黙って skip** する経路もある。
+   *
+   * この describe は保存済みフィルターを一切検証していない。前提を後片付けの
+   * 順序に委ねず、読み取りをここで固定する（同ファイルの `mockMovieDetail` /
+   * `mockCalendarWithOneMovie` と同じ方針）。
+   *
+   * PUT は素通しする。`フィルターを適用しても…` は実際に保存する経路を見ている
+   */
+  test.beforeEach(async ({ authenticatedPage: page }) => {
+    await page.route('**/api/filters**', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: { filter_conditions: {} },
+        }),
+      });
+    });
+  });
   test('ドロワーのナビリンクで遷移したあと、戻る1回で前のページへ出る', async ({
     authenticatedPage: page,
   }) => {

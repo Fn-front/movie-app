@@ -18,10 +18,12 @@ jest.mock('next/server', () => {
   // **実際に返る `Set-Cookie` ヘッダ**を検証できるようにする。
   // 呼び出しの記録だけを見ていたため、属性が付いていない（＝本番のブラウザが
   // 拒否する）ことに気付けなかった。
+  // ⚠️ 分割代入にしない。Prettier が複数行へ折り返すと
+  // `eslint-disable-next-line` が `const {` の行に当たり、`require()` 本体には
+  // 効かなくなる（ローカルで通って CI の `eslint .` だけが落ちる）
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const {
-    ResponseCookies,
-  } = require('next/dist/server/web/spec-extension/cookies');
+  const cookies = require('next/dist/server/web/spec-extension/cookies');
+  const ResponseCookies = cookies.ResponseCookies;
 
   // new NextResponse(null, { status: 404 }) 呼び出しに対応するためクラスとして定義する
   class MockNextResponse {

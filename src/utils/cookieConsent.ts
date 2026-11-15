@@ -245,10 +245,25 @@ export function clearConsentRecord(): void {
  *   `_ga` の削除も consent update も不要
  */
 export function clearOwnedConsent(): boolean {
+  if (!hasClearableConsent()) return false;
+  clearConsentRecord();
+  return true;
+}
+
+/**
+ * ログアウトで消す対象のレコードを持っているか
+ *
+ * `clearOwnedConsent()` が何をするかの判定を1箇所にまとめる。
+ * 呼び出し側（`useConsentServerSync` のログアウト後始末）が
+ * 「消すものが無いなら確認の往復も省く」判断に使うため、**同じ条件**で
+ * なければならない。片方だけに条件が増えると、消す対象が無いのに
+ * 毎ロード `/api/auth/session` を叩いて必ず空振りする。
+ */
+export function hasClearableConsent(): boolean {
   if (getStoredConsentState() === 'unset') return false;
+  // 匿名でした決定（#1213）と撤回（#1216）は残す
   if (isStoredConsentAnonymous()) return false;
   if (getStoredConsentState() === 'denied') return false;
-  clearConsentRecord();
   return true;
 }
 

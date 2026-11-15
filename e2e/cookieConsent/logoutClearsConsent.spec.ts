@@ -145,7 +145,18 @@ test.describe('Cookie同意 / ログアウト', () => {
    * ⚠️ この時点でログイン済みであることが前提（直前のテストが再ログインして
    * いる）。serial なので順序を入れ替えないこと
    */
-  test('ログイン中の撤回は、ログアウトしても端末に残る', async () => {
+  test('撤回の送信に失敗したままログアウトしても、再ログインで撤回が残る', async () => {
+    // ⚠️ **PUT を失敗させるのが肝。** 成功する経路だとサーバーにも denied が
+    //    入るので、#1216 の症状（端末にしか無い決定が消えて granted が戻る）を
+    //    再現できず、端末レコードが残ることしか見ていないテストになる
+    await page.route('**/api/user/settings', async (route) => {
+      if (route.request().method() === 'PUT') {
+        await route.fulfill({ status: 500, body: '{}' });
+        return;
+      }
+      await route.continue();
+    });
+
     // 同意済みなのでバナーは出ない。撤回トグルから操作する
     await page.goto('/privacy');
     await consentToggleRadio(page, '同意しない').scrollIntoViewIfNeeded();
@@ -154,16 +165,34 @@ test.describe('Cookie同意 / ログアウト', () => {
     await expect
       .poll(async () => (await readStoredConsent(page)).state)
       .toBe('denied');
+    // 送信は失敗しているので、サーバーは同意のまま
+    expect(await getUserConsent(session.userId)).toMatchObject({
+      state: 'granted',
+    });
 
     await page.getByRole('button', { name: /ユーザーメニュー/ }).click();
     await page.getByRole('menuitem', { name: 'ログアウト' }).click();
     await page.waitForURL('**/auth/signin');
 
     expect((await readStoredConsent(page)).state).toBe('denied');
+    // 撤回で計測は止まっているので、ログアウトで消し直す必要は無い。
+    // ここを見ておかないと、将来 `analyticsProvider` の削除が壊れたとき
+    // このテストが黙って `_ga` の残留を許す
+    expect(await gaCookieNames(page.context())).toEqual([]);
 
     // 残っているのでバナーも出ない（未決定ではない）
     await page.goto('/');
     await expect(consentBanner(page)).toBeHidden();
+
+    // 送信を通し、再ログインで撤回がサーバーへ届くところまで見る
+    await page.unroute('**/api/user/settings');
+    await performLogin(page, USER);
+    await page.goto('/');
+
+    await expect
+      .poll(async () => (await getUserConsent(session.userId))?.state)
+      .toBe('denied');
+    expect((await readStoredConsent(page)).state).toBe('denied');
 
     probe.expectNoBeaconEscaped();
   });

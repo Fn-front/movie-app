@@ -30,7 +30,7 @@ import {
   clearConsentRecord,
   clearOwnedConsent,
   getSendableConsentAt,
-  getStoredConsentOwner,
+  hasClearableConsent,
   getStoredConsentRecord,
   getStoredConsentState,
   writeConsentRecord,
@@ -145,9 +145,12 @@ export function useConsentServerSync(consent: CookieConsentState): void {
 
     // 消す対象が無いなら確認も要らない。未認証の閲覧者が大半なので、
     // ここで抜けないと「同意レコードを持たない利用者」全員に
-    // 毎ロード1往復を足すことになる（clearOwnedConsent も owner が
-    // 空文字なら何もしないので、挙動としては等価）
-    if (getStoredConsentOwner() === '') return;
+    // 毎ロード1往復を足すことになる。
+    //
+    // ⚠️ **判定は `clearOwnedConsent()` と必ず揃える。** 片方だけに条件が
+    // 増えると、消す対象が無いのに毎ロード `/api/auth/session` を1往復して
+    // 必ず空振りする。撤回を残すようにした時点（#1216）で実際にずれていた
+    if (!hasClearableConsent()) return;
 
     let cancelled = false;
 

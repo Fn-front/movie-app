@@ -4,7 +4,14 @@
 
 'use client';
 
-import { type ButtonHTMLAttributes, type ReactNode, memo } from 'react';
+import {
+  type ButtonHTMLAttributes,
+  type ReactNode,
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+} from 'react';
 
 import { cn } from '@/utils/cn';
 
@@ -55,8 +62,50 @@ export const Button = memo<ButtonProps>(function Button({
   className,
   disabled,
   type = 'button',
+  onClick,
   ...props
 }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  /**
+   * このボタンを押してローディングに入ったか（#1196）
+   *
+   * `disabled` になるとブラウザがフォーカスを `<body>` へ落とす。
+   * キーボード利用者は、処理が終わって再び押せるようになっても
+   * Tab を打ち直すことになる。**押した本人にだけ**戻すための印。
+   *
+   * ⚠️ 「ローディングが終わったら戻す」だけにしてはいけない。
+   * 触っていないボタン（一覧の「もっと見る」等）が読み込みを終えた瞬間に
+   * フォーカスを奪う
+   */
+  const activatedRef = useRef(false);
+  const wasLoadingRef = useRef(isLoading);
+
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      // Enter / Space での起動も click として届く
+      activatedRef.current = true;
+      onClick?.(event);
+    },
+    [onClick],
+  );
+
+  useEffect(() => {
+    const wasLoading = wasLoadingRef.current;
+    wasLoadingRef.current = isLoading;
+
+    // ローディングが終わった瞬間だけ
+    if (!wasLoading || isLoading) return;
+    if (!activatedRef.current) return;
+
+    activatedRef.current = false;
+
+    // 誰かがフォーカスを持っていれば奪わない。`disabled` で落ちた場合だけ
+    // `<body>` に居る
+    if (document.activeElement !== document.body) return;
+
+    buttonRef.current?.focus();
+  }, [isLoading]);
+
   const classNames = cn(
     styles.c_button,
     styles[`c_button__variant__${variant}`],
@@ -68,14 +117,25 @@ export const Button = memo<ButtonProps>(function Button({
 
   return (
     <button
+      ref={buttonRef}
       type={type}
       className={classNames}
       disabled={disabled || isLoading}
+      // 処理中であることを支援技術にも伝える。`disabled` だけだと
+      // 「押せない」としか分からず、待てば押せるのかが伝わらない
+      aria-busy={isLoading || undefined}
+      onClick={handleClick}
       {...props}
     >
       {isLoading ? (
         <span className={styles.c_button__spinner} aria-hidden='true' />
       ) : null}
+      {/*
+        ⚠️ ローディング中も**アクセシブルネームを消さない**（#1196）。
+        以前は `visibility: hidden` で隠していたが、それでは
+        アクセシビリティツリーから外れ、読み上げが「ボタン」だけになる。
+        `opacity: 0` なら見た目は同じまま名前が残る
+      */}
       <span
         className={cn(
           styles.c_button__content,

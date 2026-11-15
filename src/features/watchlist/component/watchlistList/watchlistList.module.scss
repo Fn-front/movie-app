@@ -201,8 +201,16 @@
     cursor: pointer;
     transition: $transition-all;
 
-    &:hover {
+    &:hover:not(:disabled) {
       background-color: rgba(0, 0, 0, 0.8);
+    }
+
+    // 追加の応答待ちで押せない行（#1194）。隣の `&__watched` と揃える。
+    // ⚠️ `:hover` は disabled にもマッチするため、`:not(:disabled)` を
+    // 付けないと押せないのにホバーが反応しカーソルも指のままになる
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     @include focus-visible;

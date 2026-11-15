@@ -615,6 +615,9 @@ describe('useWatchlist', () => {
      *
      * `mutate` は `onMutate`（`cancelQueries` を await する）のあとに
      * `mutationFn` を呼ぶので、同期アサートはガードが無くても通る。
+     *
+     * ⚠️ 1件目が先に届く保証は「両パスの await 深さが同じ」ことに依る。
+     * `removeFromWatchlist` 側に await が1つ増えると前提が崩れる。
      * **仮IDを先に、実IDを後に**出して、届いた1件目が実IDであることを見る。
      */
     it('仮IDでは削除APIを呼ばない', async () => {

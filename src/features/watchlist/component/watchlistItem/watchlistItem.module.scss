@@ -105,8 +105,16 @@
     transition: color $duration-fast $ease-in-out;
     font-size: $font-size-sm;
 
-    &:hover {
+    &:hover:not(:disabled) {
       color: $text-danger;
+    }
+
+    // 追加の応答待ちで押せない行（#1194）。
+    // ⚠️ `:hover` は disabled にもマッチするため、`:not(:disabled)` を
+    // 付けないと押せないのにホバーで赤くなりカーソルも指のままになる
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     &:focus-visible {

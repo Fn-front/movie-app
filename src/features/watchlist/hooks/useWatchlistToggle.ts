@@ -27,7 +27,10 @@ import type {
 import type { WatchlistAddFormData } from '@/schema/watchlist';
 import { useToastDispatch } from '@/hooks/useToast';
 import { isConflictError } from '@/utils/error';
-import { createOptimisticId } from '@/features/watchlist/utils/optimisticId';
+import {
+  createOptimisticId,
+  isOptimisticId,
+} from '@/features/watchlist/utils/optimisticId';
 
 /**
  * トグル対象の映画データ（最小限のフィールド）
@@ -742,7 +745,15 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       // 映画IDを載せたので、onSettled だけで作品が分かる（#1055）
       if (checkInWatchlist(movie.id)) {
         const watchlistId = getWatchlistId(movie.id);
-        if (watchlistId) {
+
+        // ⚠️ 仮IDでは呼ばない（#1194）。
+        //
+        // `resolveWatchlistId` は照会・一覧キャッシュから引くので
+        // **仮IDを返しうる**。現状は冒頭の `store.toggling` が追加の
+        // 通信中を塞いでいるため到達しないが、`optimisticId.ts` が
+        // 「書き込みAPIへ渡してはいけない」と宣言している以上、
+        // 最後の経路だけ無防備にしない
+        if (watchlistId && !isOptimisticId(watchlistId)) {
           // 楽観状態を更新（即座にUIへ反映。他のインスタンスにも伝わる）
           // 通信を出す分だけ印を付ける。冒頭で付けると、watchlistId が
           // 取れず**何も起きなかった**ときに消す相手がおらず、

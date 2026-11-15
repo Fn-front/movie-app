@@ -27,6 +27,7 @@ import { type ReactNode, createElement } from 'react';
 import { watchlistKeys } from '@/constants/queryKeys';
 import type { GetWatchlistResponse } from '@/lib/api/watchlist/watchlist';
 
+import { useWatchlist } from './useWatchlist';
 import { useWatchlistToggle } from './useWatchlistToggle';
 
 const MOVIE_ID = 42;
@@ -39,11 +40,22 @@ const MOVIE = {
   release_date: '2026-01-01',
 } as const;
 
-/** サイドバーが使っている一覧キャッシュのキー（`useWatchlist` の既定と同形） */
+/**
+ * サイドバーが実際に使っている一覧キャッシュのキー
+ *
+ * `watchlistPanel.tsx` が `useWatchlist({ sort: 'release_date_proximity',
+ * limit: 10, excludeWatched: true })` を呼び、`useWatchlist` が
+ * `watchlistKeys.list({ sort, excludeWatched, prioritizeStreaming })` を
+ * 組む（`limit` はキーに入らない／`prioritizeStreaming` の既定は false）。
+ *
+ * ⚠️ 実キーを使う。`getListQueries` は `['watchlist']` プレフィックスを
+ * 全部拾うのでどんなキーでもテストは通るが、**サイドバーの削除が仮IDで
+ * DELETE する**という主張を検証したいので、そこと同じキーで見る。
+ */
 const LIST_KEY = watchlistKeys.list({
-  sort: 'added_desc',
-  excludeWatched: false,
-  prioritizeStreaming: true,
+  sort: 'release_date_proximity',
+  excludeWatched: true,
+  prioritizeStreaming: false,
 });
 
 jest.mock('next-auth/react', () => ({
@@ -69,11 +81,15 @@ jest.mock('@/lib/store/useLoginPromptStore', () => ({
 const mockAddWatchlist = jest.fn();
 const mockRemoveWatchlist = jest.fn().mockResolvedValue(undefined);
 const mockGetWatchlistLookup = jest.fn();
+const mockGetWatchlist = jest.fn();
+const mockUpdateWatched = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('@/lib/api/watchlist/watchlist', () => ({
   addWatchlist: (...args: unknown[]) => mockAddWatchlist(...args),
   removeWatchlist: (...args: unknown[]) => mockRemoveWatchlist(...args),
   getWatchlistLookup: (...args: unknown[]) => mockGetWatchlistLookup(...args),
+  getWatchlist: (...args: unknown[]) => mockGetWatchlist(...args),
+  updateWatched: (...args: unknown[]) => mockUpdateWatched(...args),
 }));
 
 /** 初回だけ空を返し、以降の再取得は解決しないままにする */
@@ -83,6 +99,26 @@ const setupLookup = () => {
     calls += 1;
     if (calls === 1) {
       return Promise.resolve({ success: true, data: { watchlist: [] } });
+    }
+    return new Promise(() => {});
+  });
+};
+
+/**
+ * 一覧も同じく、初回だけ空を返して以降は解決しない
+ *
+ * 再取得が届くと仮IDは実IDへ置き換わってしまうので、**測りたい窓を
+ * 飛び越える**。開けたままにする
+ */
+const setupList = () => {
+  let calls = 0;
+  mockGetWatchlist.mockImplementation(() => {
+    calls += 1;
+    if (calls === 1) {
+      return Promise.resolve({
+        success: true,
+        data: { watchlist: [], next_cursor: null, has_more: false },
+      });
     }
     return new Promise(() => {});
   });
@@ -133,6 +169,35 @@ const renderToggleWithList = () => {
 const firstListItem = (queryClient: QueryClient) =>
   queryClient.getQueryData<{ pages: GetWatchlistResponse[] }>(LIST_KEY)
     ?.pages[0].data.watchlist[0];
+
+/**
+ * サイドバーと同じ `useWatchlist` を一緒に描画する
+ *
+ * キャッシュの中身だけを見ても「サイドバーが実IDで DELETE する」ことの
+ * 証明にはならない。サイドバー（`watchlistPanel.tsx`）が実際に読む経路を
+ * 通して、`watchlist[0].id` を確かめる。
+ */
+const renderSidebarWithToggle = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  return {
+    queryClient,
+    ...renderHook(
+      () => ({
+        toggle: useWatchlistToggle(),
+        // watchlistPanel.tsx と同じ引数
+        sidebar: useWatchlist({
+          sort: 'release_date_proximity',
+          limit: 10,
+          excludeWatched: true,
+        }),
+      }),
+      { wrapper: createWrapper(queryClient) },
+    ),
+  };
+};
 
 describe('useWatchlistToggle と一覧キャッシュの同期', () => {
   beforeEach(() => {
@@ -195,6 +260,43 @@ describe('useWatchlistToggle と一覧キャッシュの同期', () => {
     const { queryClient } = await addMovie();
 
     expect(firstListItem(queryClient)?.id).not.toMatch(/^optimistic-/);
+  });
+
+  /**
+   * 主張そのものの検証。
+   *
+   * キャッシュの中身だけを見ても「サイドバーが実IDで DELETE する」ことの
+   * 証明にはならないので、サイドバーが実際に読む `useWatchlist` を通す。
+   */
+  describe('サイドバーから見たとき', () => {
+    const addViaToggle = async () => {
+      setupList();
+      const view = renderSidebarWithToggle();
+
+      await waitFor(() => {
+        expect(view.result.current.sidebar.isLoading).toBe(false);
+      });
+
+      await act(async () => {
+        view.result.current.toggle.toggleWatchlist(MOVIE);
+      });
+
+      expect(mockAddWatchlist).toHaveBeenCalled();
+      return view;
+    };
+
+    it('追加した作品が並ぶ', async () => {
+      const { result } = await addViaToggle();
+
+      expect(result.current.sidebar.watchlist[0]?.tmdb_movie_id).toBe(MOVIE_ID);
+    });
+
+    // ここが仮IDだと DELETE /api/watchlist/optimistic-... になって 400
+    it('削除に渡すIDが実IDになっている', async () => {
+      const { result } = await addViaToggle();
+
+      expect(result.current.sidebar.watchlist[0]?.id).toBe(ROW_ID);
+    });
   });
 
   /**

@@ -655,15 +655,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         return token;
       } catch (error) {
+        // ⚠️⚠️ **初回サインインだけは握り潰さない。**
+        //
+        // この分岐（`user` がある）では `token.totpPending` の既定が false で、
+        // `isTotpEnabled()` の結果を待って初めて true になる。そして
+        // `isTotpEnabled` は DB エラーで**意図的に throw する**
+        // （`src/lib/auth/totpVerification.ts`。false に倒すと第2要素が
+        // 丸ごと飛ぶため）。
+        //
+        // ここで握り潰すと `totpPending: false` のトークンが返り、
+        // `@auth/core` はそれをそのまま署名して Cookie を発行する。
+        // **二段階認証を有効にしている OAuth 利用者が、コードを一度も
+        // 入れずに7日間有効なセッションを得る。**
+        //
+        // `user_totp` に限局した障害（GRANT/RLS の事故・PostgREST の
+        // スキーマキャッシュ・statement_timeout）では `signIn` コールバックが
+        // 通ってここだけ落ちるため、現実に起こりうる。
+        //
+        // #1148 が塞ぎたいのは「認証コードを入力している最中」（update 経路）
+        // なので、初回サインインを従来どおり失敗させても意図は損なわれない。
+        if (user) throw error;
+
         console.error('JWT callback failed:', error);
 
-        // トークンをそのまま返す。`totpPending` も `invalidated` も維持されるので
-        // 第2要素は通らないまま（fail-closed は保つ）。変わるのは
-        // 「セッションごと壊すか、画面に留まって再試行できるか」。
+        // 既存セッションの更新経路。トークンをそのまま返す。`totpPending` も
+        // `invalidated` も維持されるので第2要素は通らないまま（fail-closed は
+        // 保つ）。変わるのは「セッションごと壊すか、画面に留まって再試行
+        // できるか」。
         //
-        // ⚠️ 代償として、パスワード変更による強制失効の確認が**この1リクエスト
-        // だけ**素通りする。`lastPasswordCheck` を更新していないので次の
-        // リクエストで再確認が走り、窓は1往復に留まる
+        // ⚠️ 代償として、パスワード変更による強制失効の確認がこのリクエストで
+        // 素通りする。`lastPasswordCheck` はクエリの後でしか更新しないので
+        // 次のリクエストで再確認が走る。
+        // ただし **postgrest-js はネットワーク障害を throw せず
+        // `{ data: null, error }` を返す**ため、現実に多い失敗モードは
+        // そもそもこの catch に来ない（別の既存問題）。
         token.totpUnavailable = true;
         return token;
       }

@@ -1380,6 +1380,63 @@ describe('jwt コールバックの例外', () => {
       expect.any(Error),
     );
   });
+
+  /**
+   * ⚠️⚠️ **初回サインインは握り潰してはいけない**
+   *
+   * この分岐では `token.totpPending` の既定が false で、`isTotpEnabled()` の
+   * 結果を待って初めて true になる。`isTotpEnabled` は DB エラーで
+   * **意図的に throw する**（`totpVerification.ts`。false に倒すと第2要素が
+   * 丸ごと飛ぶため）。
+   *
+   * 握り潰すと `totpPending: false` のトークンが返り、`@auth/core` が
+   * そのまま署名して Cookie を発行する。**二段階認証を有効にしている
+   * OAuth 利用者が、コードを一度も入れずに7日間有効なセッションを得る。**
+   *
+   * `signIn` コールバックは `users` / `accounts` しか触らないため、
+   * `user_totp` に限局した障害ではここだけが落ちる＝現実に起こりうる。
+   */
+  describe('初回サインイン', () => {
+    /** OAuth 初回サインインの jwt 呼び出し */
+    const oauthSignIn = () =>
+      jwt({
+        token: {},
+        user: { id: 'u1', email: 'a@example.com', name: 'A', image: null },
+        account: { provider: 'google' },
+      });
+
+    it('二段階認証の判定が落ちたら例外を外へ出す（セッションを発行させない）', async () => {
+      setResolver(() => ({ data: { role: 'user' }, error: null }));
+      mockIsTotpEnabled.mockRejectedValue(new Error('read user_totp failed'));
+
+      await expect(oauthSignIn()).rejects.toThrow('read user_totp failed');
+    });
+
+    it('二段階認証の判定が落ちたとき totpPending が false のトークンを返さない', async () => {
+      setResolver(() => ({ data: { role: 'user' }, error: null }));
+      mockIsTotpEnabled.mockRejectedValue(new Error('read user_totp failed'));
+
+      // resolve してしまったら、その中身に関わらず fail-open
+      await expect(oauthSignIn()).rejects.toBeDefined();
+    });
+
+    it('ユーザー情報の取得が落ちても例外を外へ出す', async () => {
+      setResolver(() => {
+        throw new Error('connection terminated');
+      });
+
+      await expect(oauthSignIn()).rejects.toThrow('connection terminated');
+    });
+
+    // 対照: 既存セッションの更新経路は従来どおり握り潰す（#1148 の本題）
+    it('既存セッションの更新では握り潰す', async () => {
+      mockCheckRateLimit.mockRejectedValue(new Error('connection terminated'));
+
+      const token = await updateWithCode();
+
+      expect(token.totpPending).toBe(true);
+    });
+  });
 });
 
 describe('session コールバックの第2要素', () => {

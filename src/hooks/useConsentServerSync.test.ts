@@ -324,8 +324,10 @@ describe('useConsentServerSync', () => {
           cookieConsentAt: T1,
         }),
       );
-      // 所有者が現在のユーザーへ付け替わる
-      expect(getStoredConsentRecord().owner).toBe(ME);
+      // ⚠️ 所有者は**付け替えない**（#1213）。付け替えると
+      // `clearOwnedConsent()` が「ログイン中の同意」と見なして
+      // ログアウトで消してしまう
+      expect(getStoredConsentRecord().owner).toBe('');
     });
 
     it('完全に一致していれば何も書かない', async () => {

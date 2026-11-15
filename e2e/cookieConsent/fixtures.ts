@@ -178,15 +178,20 @@ export interface GaDedicatedSession {
  *
  * @param browser - `beforeAll` が受け取る browser
  * @param user - 作成する専用ユーザー。メールは `runScopedEmail()` で作る
+ * @param beforeLogin - ログイン前にコンテキストへ仕掛ける処理。未認証の状態を
+ *   作ってからログインしたい spec が使う（「未認証でした同意」の扱いなど）。
+ *   プローブを張った**あと**に呼ばれるので、ここでの操作も遮断・検知の対象になる
  */
 export async function openGaDedicatedSession(
   browser: Browser,
   user: DedicatedUser,
+  beforeLogin?: (context: BrowserContext) => Promise<void>,
 ): Promise<GaDedicatedSession> {
   let probe: GaProbe | null = null;
 
   const session = await openDedicatedSession(browser, user, async (context) => {
     probe = await attachGaProbe(context);
+    await beforeLogin?.(context);
   });
 
   if (probe === null) {

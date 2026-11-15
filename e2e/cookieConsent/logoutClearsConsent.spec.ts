@@ -160,4 +160,63 @@ test.describe('Cookie同意 / 未認証でした同意の扱い', () => {
       await context.close();
     }
   });
+
+  /**
+   * ログインを挟んでも消えない（#1213）
+   *
+   * ⚠️ **ここが「一度もログインしていない端末でしか成り立っていなかった」
+   * ところ。** 初回マージが `owner` をユーザーIDへ書き換えていたため、
+   * 匿名でした同意が「ログイン中の同意」に化け、`clearOwnedConsent()` の
+   * 対象になっていた。
+   *
+   * ⚠️ **ログアウト直後だけ見ても足りない。** 付け替えはサーバーが同じ値を
+   * 返す**次のページ読み込み**でも起こりうるので、ログイン後に1回読み直してから
+   * ログアウトする
+   */
+  test('未認証でした同意は、ログインを挟んでもログアウトで消えない', async ({
+    browser,
+  }) => {
+    const user = {
+      email: runScopedEmail('e2e-consent-anon-keep'),
+      password: 'ConsentAnonE2e1',
+    } as const;
+
+    // ログインの前に匿名で同意しておく
+    const { session, probe } = await openGaDedicatedSession(
+      browser,
+      user,
+      async (context) => {
+        const page = await context.newPage();
+        await page.goto('/');
+        await grantButton(page).click();
+        await expect(consentBanner(page)).toBeHidden();
+        expect((await readStoredConsent(page)).owner).toBe('');
+        await page.close();
+      },
+    );
+
+    try {
+      const page = session.page;
+
+      await page.goto('/');
+      // 付け替えが起きるとしたらここ（サーバーが同じ値を返す読み直し）
+      await page.reload();
+      expect((await readStoredConsent(page)).owner).toBe('');
+
+      await page.getByRole('button', { name: /ユーザーメニュー/ }).click();
+      await page.getByRole('menuitem', { name: 'ログアウト' }).click();
+      await page.waitForURL('**/auth/signin');
+
+      // 匿名の同意なので残る
+      expect((await readStoredConsent(page)).state).toBe('granted');
+
+      await page.goto('/');
+      await expect(consentBanner(page)).toBeHidden();
+
+      probe.expectNoBeaconEscaped();
+    } finally {
+      await cleanupUserSettings(session.userId);
+      await session.close();
+    }
+  });
 });

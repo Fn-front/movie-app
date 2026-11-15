@@ -24,6 +24,7 @@ import {
   GA_COOKIE_NAMES,
   attachGaProbe,
   consentBanner,
+  consentToggleRadio,
   gaCookieNames,
   grantButton,
   openGaDedicatedSession,
@@ -125,6 +126,43 @@ test.describe('Cookie同意 / ログアウト', () => {
     await expect
       .poll(async () => (await readStoredConsent(page)).state)
       .toBe('granted');
+    await expect(consentBanner(page)).toBeHidden();
+
+    probe.expectNoBeaconEscaped();
+  });
+
+  /**
+   * 撤回はログアウトでも残す（#1216）
+   *
+   * 消す目的は「前の利用者の**同意**を引き継がせない」こと。撤回は計測を
+   * 止める方向なので、残っても次の利用者に不利益が無い。
+   *
+   * ⚠️ 消すと実害がある。撤回の PUT が失敗した直後にログアウトすると、
+   * 端末にしか無かった決定が失われ、サーバーは `granted` のまま残る。
+   * 「次のページロードのマージで送り直す」という復旧経路も一緒に消えるので、
+   * 再ログインすると `granted` が降りてきて**撤回したのに計測が戻る**。
+   *
+   * ⚠️ この時点でログイン済みであることが前提（直前のテストが再ログインして
+   * いる）。serial なので順序を入れ替えないこと
+   */
+  test('ログイン中の撤回は、ログアウトしても端末に残る', async () => {
+    // 同意済みなのでバナーは出ない。撤回トグルから操作する
+    await page.goto('/privacy');
+    await consentToggleRadio(page, '同意しない').scrollIntoViewIfNeeded();
+    await consentToggleRadio(page, '同意しない').click();
+
+    await expect
+      .poll(async () => (await readStoredConsent(page)).state)
+      .toBe('denied');
+
+    await page.getByRole('button', { name: /ユーザーメニュー/ }).click();
+    await page.getByRole('menuitem', { name: 'ログアウト' }).click();
+    await page.waitForURL('**/auth/signin');
+
+    expect((await readStoredConsent(page)).state).toBe('denied');
+
+    // 残っているのでバナーも出ない（未決定ではない）
+    await page.goto('/');
     await expect(consentBanner(page)).toBeHidden();
 
     probe.expectNoBeaconEscaped();

@@ -53,8 +53,12 @@ export function useSessionExpiry() {
     // **サーバー側のセッションまで破棄**され（signOut は /api/auth/signout を
     // POST する）、Cookie 同意レコードも消える。
     void confirmSignedOut().then((signedOut) => {
-      // 応答待ちの間に再取得が成功していたら、もう期限切れではない
-      if (cancelled || !signedOut) return;
+      // 応答待ちの間に再取得が成功していたら、もう期限切れではない。
+      // ⚠️ `isSigningOut()` も**ここでも**見る（#1195）。確認は最大5秒
+      // 掛かるので、その間に利用者が自分でログアウトを始めうる。
+      // 通すと `logout()` が二重に走り、2本目が失敗すると
+      // `clearSigningOut()` が1本目の遷移前に抑止を解いてバナーが出る
+      if (cancelled || !signedOut || isSigningOut()) return;
       void logout();
     });
 

@@ -28,6 +28,8 @@ jest.mock('@/utils/navigate', () => ({ navigateTo: jest.fn() }));
 const mockConfirmSignedOut = jest.fn();
 jest.mock('@/lib/auth/sessionProbe', () => ({
   confirmSignedOut: () => mockConfirmSignedOut(),
+  // logout() はサインアウト後にセッションが消えたかを確かめる（#1195）
+  confirmSessionCleared: () => Promise.resolve(true),
 }));
 
 let mockPathname = '/movies/now-showing';

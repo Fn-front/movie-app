@@ -1,5 +1,14 @@
 const mockPush = jest.fn();
 const mockSignOut = jest.fn();
+const mockToast = jest.fn();
+
+jest.mock('@/hooks/useToast', () => ({
+  useToastDispatch: () => ({
+    toast: mockToast,
+    removeToast: jest.fn(),
+    clearToasts: jest.fn(),
+  }),
+}));
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -14,6 +23,13 @@ jest.mock('next-auth/react', () => ({
   signOut: (...args: unknown[]) => mockSignOut(...args),
 }));
 
+// logout() はサインアウト後にセッションが消えたかを確かめ、遷移も自前で行う（#1195）
+jest.mock('@/lib/auth/sessionProbe', () => ({
+  confirmSessionCleared: () => Promise.resolve(true),
+  confirmSignedOut: () => Promise.resolve(true),
+}));
+jest.mock('@/utils/navigate', () => ({ navigateTo: jest.fn() }));
+
 const mockToggleTheme = jest.fn();
 const mockTheme = { resolved: 'light' as 'light' | 'dark' };
 jest.mock('@/hooks/useTheme', () => ({
@@ -26,7 +42,7 @@ jest.mock('@/hooks/useTheme', () => ({
 }));
 
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { UserMenu } from './userMenu';
@@ -222,6 +238,7 @@ describe('UserMenu', () => {
     await user.click(screen.getByRole('menuitem', { name: /ログアウト/ }));
 
     expect(mockSignOut).toHaveBeenCalledWith({
+      redirect: false,
       callbackUrl: '/auth/signin',
     });
   });
@@ -372,6 +389,30 @@ describe('UserMenu', () => {
       render(<UserMenu />);
 
       expect(screen.queryByText('アカウント管理')).not.toBeInTheDocument();
+    });
+  });
+
+  /**
+   * ログアウトに失敗したときに黙らない（#1195）
+   *
+   * `logout()` はセッションを消せなければ throw して**遷移しない**。
+   * 握り潰すと「押したのに何も起きない」になり、しかも Radix の
+   * `onSelect` は返り値の Promise を見ないので unhandled rejection になる。
+   */
+  it('ログアウトに失敗したらエラーを知らせる', async () => {
+    const user = userEvent.setup();
+    mockSignOut.mockRejectedValue(new Error('network'));
+
+    render(<UserMenu />);
+    await user.click(
+      screen.getByRole('button', { name: 'テストユーザー ユーザーメニュー' }),
+    );
+    await user.click(screen.getByRole('menuitem', { name: /ログアウト/ }));
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: 'error' }),
+      );
     });
   });
 });

@@ -330,7 +330,12 @@ describe('レスポンスインターセプター（エラー時）', () => {
     await expect(resHandlers[0].rejected!(error)).rejects.toEqual(error);
     await flush();
 
-    expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: ROUTES.LOGIN });
+    // `redirect: false` にして、セッションが消えたことを確かめてから
+    // 自前で遷移する（#1195）
+    expect(mockSignOut).toHaveBeenCalledWith({
+      redirect: false,
+      callbackUrl: ROUTES.LOGIN,
+    });
   });
 
   it('401以外のエラー時にsignOutが呼ばれない', async () => {

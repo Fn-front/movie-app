@@ -1,10 +1,16 @@
 /**
  * ログアウトの共通処理
  *
- * `signOut` は `window.location.href` による完全遷移を行うため、React の
- * effect で `authenticated → unauthenticated` を観測する前にドキュメントが
- * 破棄される。ログアウト時にやるべき後始末は、必ず `signOut` を呼ぶ「前」に
- * 同期的に済ませる必要がある。
+ * 最後に `navigateTo()` で完全遷移するため、ログアウト時にやるべき後始末は
+ * 必ず**遷移より前に**同期的に済ませる必要がある。
+ *
+ * ⚠️ **遷移の前に「ログアウト済み」の状態が React から観測できる**（#1195）。
+ * `signOut({ redirect: false })` は返る前に内部でセッションを取り直すため、
+ * `status` が `authenticated → unauthenticated` に変わってから遷移までの
+ * 2往復ぶんの窓がある。以前は `signOut` が即座に遷移していたので
+ * この窓は無かった。
+ * → それを期限切れと解釈して `logout()` を呼び直さないよう、
+ *   `sessionExpiryHandler` は `isSigningOut()` を見ている。
  *
  * 素の `signOut()` を直接呼ばず、必ずこのモジュールを経由すること。
  * 呼び出しが増えたときに後始末が素通りするのを防ぐため、集約している。
@@ -12,7 +18,7 @@
 
 'use client';
 
-import { getSession, signOut } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 
 import { ROUTES } from '@/constants';
 import {
@@ -21,6 +27,7 @@ import {
 } from '@/features/cookieConsent/utils/bannerSuppression';
 import { deleteGaCookies, sendConsentUpdate } from '@/utils/analytics';
 import { clearOwnedConsent } from '@/utils/cookieConsent';
+import { confirmSessionCleared } from '@/lib/auth/sessionProbe';
 import { navigateTo } from '@/utils/navigate';
 
 /**
@@ -67,10 +74,13 @@ export async function logout(
     // 利用者は元の状態に戻るだけで、理由が分からない。
     const result = await signOut({ redirect: false, callbackUrl });
 
-    // 実際に消えたかを確かめる。消えていれば `/api/auth/session` は
-    // JSON の null を返す（`@auth/core` の `lib/actions/session.js` は
-    // `body: null` で始まり、Cookie が無ければそのまま返す）
-    if (await getSession()) {
+    // 実際に消えたかを確かめる。
+    //
+    // ⚠️ `getSession()`（next-auth/react）は使えない。内部の `fetchData` が
+    // **通信失敗も非2xxも `null` に潰す**ため、「訊けなかった」を
+    // 「消えた」と誤判定する（#1136 と同じ罠）。timeout も無い。
+    // 本文が `null` かどうかで見る専用の probe を使う
+    if (!(await confirmSessionCleared())) {
       throw new Error('Sign out did not clear the session');
     }
 

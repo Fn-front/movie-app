@@ -7,10 +7,19 @@
  */
 
 const mockSignOut = jest.fn();
-const mockGetSession = jest.fn();
 jest.mock('next-auth/react', () => ({
   signOut: (...args: unknown[]) => mockSignOut(...args),
-  getSession: (...args: unknown[]) => mockGetSession(...args),
+}));
+
+/**
+ * セッションが消えたかの確認（#1195）
+ *
+ * ⚠️ `getSession()` は使えない。内部の `fetchData` が通信失敗も非2xxも
+ * null に潰すため、「訊けなかった」を「消えた」と誤判定する
+ */
+const mockConfirmSessionCleared = jest.fn();
+jest.mock('@/lib/auth/sessionProbe', () => ({
+  confirmSessionCleared: () => mockConfirmSessionCleared(),
 }));
 
 /**
@@ -54,7 +63,7 @@ describe('logout', () => {
     __resetBannerSuppressionForTest();
     // 既定は「サインアウト成功 → セッションも消えている」
     mockSignOut.mockResolvedValue({ url: 'http://localhost/auth/signin' });
-    mockGetSession.mockResolvedValue(null);
+    mockConfirmSessionCleared.mockResolvedValue(true);
   });
 
   describe('cleanUpBeforeSignOut', () => {
@@ -180,13 +189,13 @@ describe('logout', () => {
     });
 
     it('セッションが残っていたら失敗として扱う', async () => {
-      mockGetSession.mockResolvedValue({ user: { id: 'u1' } });
+      mockConfirmSessionCleared.mockResolvedValue(false);
 
       await expect(logout()).rejects.toThrow(/did not clear the session/);
     });
 
     it('セッションが残っていたら遷移しない', async () => {
-      mockGetSession.mockResolvedValue({ user: { id: 'u1' } });
+      mockConfirmSessionCleared.mockResolvedValue(false);
 
       await expect(logout()).rejects.toThrow();
 
@@ -196,7 +205,7 @@ describe('logout', () => {
     // 抑止したままだとバナーが二度と出ず、同意レコードは既に消えている
     it('セッションが残っていたら抑止を戻す', async () => {
       recordConsentDecision('granted', ME, T1);
-      mockGetSession.mockResolvedValue({ user: { id: 'u1' } });
+      mockConfirmSessionCleared.mockResolvedValue(false);
 
       await expect(logout()).rejects.toThrow();
 
@@ -211,10 +220,7 @@ describe('logout', () => {
      * セッションオブジェクトの有無で見ること
      */
     it('第2要素が未了のセッションが残っていても失敗として扱う', async () => {
-      mockGetSession.mockResolvedValue({
-        user: { id: '', email: '' },
-        totpPending: true,
-      });
+      mockConfirmSessionCleared.mockResolvedValue(false);
 
       await expect(logout()).rejects.toThrow(/did not clear the session/);
     });

@@ -19,6 +19,8 @@ import {
   USER_ROLE,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  getSessionCookieName,
+  getSessionCookieOptions,
 } from '@/constants';
 import { OTP_ACTION, OTP_CONFIG } from '@/constants/otp';
 import { isSessionExpired } from '@/lib/auth/sessionExpiry';
@@ -680,16 +682,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   useSecureCookies: process.env.NODE_ENV === 'production',
   cookies: {
     sessionToken: {
-      name:
-        process.env.NODE_ENV === 'production'
-          ? '__Secure-next-auth.session-token'
-          : 'next-auth.session-token',
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: process.env.NODE_ENV === 'production',
-      },
+      // proxy（失効セッションのCookie削除）と定義を共有する。
+      // 片方だけ変えると別のCookieとして扱われ、削除が効かなくなる（#1174）
+      name: getSessionCookieName(),
+      options: getSessionCookieOptions(),
     },
   },
 

@@ -2,25 +2,39 @@
  * Next.js Proxy テスト（旧 middleware.test.ts / Next.js 16 対応）
  */
 
+import {
+  getSessionCookieName,
+  getSessionCookieOptions,
+} from '@/constants/auth';
+
 // next/serverをモック
 // mockNextResponseNext は NextResponse.next() の呼び出しを記録する。
 const mockNextResponseNext = jest.fn();
 const mockNextResponseRedirect = jest.fn();
-const mockCookiesDelete = jest.fn();
 
 jest.mock('next/server', () => {
+  // ⚠️ cookies は jest.fn() で置き換えない（#1174）。
+  // 本物の NextResponse と同じ ResponseCookies を headers に結び付けることで、
+  // **実際に返る `Set-Cookie` ヘッダ**を検証できるようにする。
+  // 呼び出しの記録だけを見ていたため、属性が付いていない（＝本番のブラウザが
+  // 拒否する）ことに気付けなかった。
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const {
+    ResponseCookies,
+  } = require('next/dist/server/web/spec-extension/cookies');
+
   // new NextResponse(null, { status: 404 }) 呼び出しに対応するためクラスとして定義する
   class MockNextResponse {
     headers: Headers;
     status: number;
-    cookies: { delete: jest.Mock };
+    cookies: InstanceType<typeof ResponseCookies>;
     constructor(
       _body?: unknown,
       init?: { status?: number; headers?: Record<string, string> },
     ) {
       this.headers = new Headers(init?.headers);
       this.status = init?.status ?? 200;
-      this.cookies = { delete: mockCookiesDelete };
+      this.cookies = new ResponseCookies(this.headers);
     }
     static next(init?: { request?: { headers?: Headers } }) {
       mockNextResponseNext(init);
@@ -65,8 +79,18 @@ jest.mock('@/lib/auth/auth', () => ({
 const proxy = require('./proxy').proxy as (req: unknown) => {
   headers: Headers;
   status?: number;
-  cookies?: { delete: jest.Mock };
 };
+
+/**
+ * 期待されるセッションCookie名
+ *
+ * 実装（`getSessionCookieName`）を import せず、テスト側で独立に書く。
+ * 名前が変わったことを検知できなくなるため。
+ */
+const expectedSessionCookieName = () =>
+  process.env.NODE_ENV === 'production'
+    ? '__Secure-next-auth.session-token'
+    : 'next-auth.session-token';
 
 /** テスト用のモックリクエストを生成 */
 function createMockRequest(options: {
@@ -82,7 +106,8 @@ function createMockRequest(options: {
     headers: new Headers(),
     cookies: {
       has: (name: string) =>
-        options.hasSessionCookie && name === 'next-auth.session-token',
+        Boolean(options.hasSessionCookie) &&
+        name === expectedSessionCookieName(),
     },
   };
 }
@@ -94,7 +119,6 @@ describe('proxy', () => {
   beforeEach(() => {
     mockNextResponseNext.mockClear();
     mockNextResponseRedirect.mockClear();
-    mockCookiesDelete.mockClear();
     // 既定はローカル環境として扱う
     delete process.env.VERCEL_ENV;
   });
@@ -181,7 +205,9 @@ describe('proxy', () => {
       // NextResponse.next()が返される（リダイレクトではない）
       expect(response.headers.get('location')).toBeNull();
       // cookieが削除される
-      expect(mockCookiesDelete).toHaveBeenCalledWith('next-auth.session-token');
+      expect(response.headers.get('set-cookie')).toContain(
+        'next-auth.session-token=;',
+      );
     });
 
     it('保護ページでcookieありauth無しの場合、cookieを削除してサインインにリダイレクトする', () => {
@@ -194,7 +220,122 @@ describe('proxy', () => {
       const response = proxy(req);
 
       expect(response.headers.get('location')).toContain('/auth/signin');
-      expect(mockCookiesDelete).toHaveBeenCalledWith('next-auth.session-token');
+      expect(response.headers.get('set-cookie')).toContain(
+        'next-auth.session-token=;',
+      );
+    });
+  });
+
+  /**
+   * 削除用の `Set-Cookie` に属性が載っていること（#1174）
+   *
+   * 以前は `response.cookies.delete(name)` を使っていた。Next の実装は
+   * 文字列を渡すと options が undefined になるため、返るのは
+   * `next-auth.session-token=; Path=/; Expires=...` だけで、
+   * `Secure` も `HttpOnly` も `SameSite` も付かなかった。
+   *
+   * 本番の Cookie 名は `__Secure-` 接頭辞付きで、ブラウザは `Secure` の無い
+   * `Set-Cookie` を**拒否する**（CookiePrefixes）。つまり本番では削除指示
+   * そのものが捨てられ、この分岐は一度も効いていなかった。
+   *
+   * 呼び出しの記録ではなく**実際のヘッダ**を見るのは、属性の欠落が
+   * 前者では検出できなかったため。
+   */
+  describe('失効セッションの Set-Cookie 属性', () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+
+    const setNodeEnv = (value: string) => {
+      (process.env as Record<string, string>).NODE_ENV = value;
+    };
+
+    afterEach(() => {
+      setNodeEnv(originalNodeEnv as string);
+    });
+
+    /**
+     * `Set-Cookie` を名前・値・属性に分解する
+     *
+     * ⚠️ 文字列の `toContain` で属性を見てはいけない。本番の Cookie 名は
+     * `__Secure-next-auth.session-token` なので、`toContain('Secure')` は
+     * **属性が1つも付いていなくても名前に当たって通る**。
+     */
+    const parseSetCookie = (header: string) => {
+      const [pair, ...rest] = header.split(';').map((part) => part.trim());
+      const separator = pair.indexOf('=');
+
+      return {
+        name: pair.slice(0, separator),
+        value: pair.slice(separator + 1),
+        attributes: new Map<string, string | true>(
+          rest.map((attribute) => {
+            const eq = attribute.indexOf('=');
+            return eq === -1
+              ? [attribute.toLowerCase(), true]
+              : [attribute.slice(0, eq).toLowerCase(), attribute.slice(eq + 1)];
+          }),
+        ),
+      };
+    };
+
+    /** 失効セッションで非保護ページを開いたときの Set-Cookie を分解して返す */
+    const getDeletionCookie = () => {
+      const req = createMockRequest({
+        pathname: '/movies/now-showing',
+        auth: null,
+        hasSessionCookie: true,
+      });
+
+      return parseSetCookie(proxy(req).headers.get('set-cookie') ?? '');
+    };
+
+    it('本番では __Secure- 接頭辞付きのCookieを空値で上書きする', () => {
+      setNodeEnv('production');
+
+      const cookie = getDeletionCookie();
+
+      expect(cookie.name).toBe('__Secure-next-auth.session-token');
+      expect(cookie.value).toBe('');
+    });
+
+    it.each([
+      ['Secure（これが無いと __Secure- のCookieは拒否される）', 'secure', true],
+      ['HttpOnly', 'httponly', true],
+      ['SameSite', 'samesite', 'lax'],
+      ['Path', 'path', '/'],
+      ['即時失効', 'max-age', '0'],
+    ])('本番の削除Cookieに %s が載る', (_label, attribute, expected) => {
+      setNodeEnv('production');
+
+      expect(getDeletionCookie().attributes.get(attribute)).toBe(expected);
+    });
+
+    // 発行側（auth.ts の cookies.sessionToken）と同じ定義を使う。
+    // 属性が1つでも食い違うと別のCookieとして扱われ、やはり消えない
+    it('発行時の名前・属性と一致する', () => {
+      setNodeEnv('production');
+
+      const cookie = getDeletionCookie();
+      const issued = getSessionCookieOptions();
+
+      expect(cookie.name).toBe(getSessionCookieName());
+      expect(cookie.attributes.get('secure')).toBe(issued.secure);
+      expect(cookie.attributes.get('httponly')).toBe(issued.httpOnly);
+      expect(cookie.attributes.get('samesite')).toBe(issued.sameSite);
+      expect(cookie.attributes.get('path')).toBe(issued.path);
+    });
+
+    // 開発は http なので Secure を付けると逆に消えない
+    it('開発では接頭辞なしのCookieを Secure なしで消す', () => {
+      setNodeEnv('development');
+
+      const cookie = getDeletionCookie();
+
+      expect(cookie.name).toBe('next-auth.session-token');
+      expect(cookie.attributes.has('secure')).toBe(false);
+      // 属性そのものは本番と同じく載せる
+      expect(cookie.attributes.get('httponly')).toBe(true);
+      expect(cookie.attributes.get('samesite')).toBe('lax');
+      expect(cookie.attributes.get('max-age')).toBe('0');
     });
   });
 
@@ -318,9 +459,9 @@ describe('proxy', () => {
         hasSessionCookie: true,
       });
 
-      proxy(req);
+      const response = proxy(req);
 
-      expect(mockCookiesDelete).not.toHaveBeenCalled();
+      expect(response.headers.get('set-cookie')).toBeNull();
     });
 
     it('ログインページへ戻ろうとしても認証コード入力へ向ける', () => {
@@ -672,9 +813,11 @@ describe('proxy', () => {
         hasSessionCookie: true,
       });
 
-      proxy(req);
+      const response = proxy(req);
 
-      expect(mockCookiesDelete).toHaveBeenCalledWith('next-auth.session-token');
+      expect(response.headers.get('set-cookie')).toContain(
+        'next-auth.session-token=;',
+      );
     });
 
     it('公開パスはそのまま表示できる', () => {

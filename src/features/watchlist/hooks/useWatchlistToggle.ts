@@ -26,6 +26,7 @@ import type {
 } from '@/lib/api/watchlist/watchlist';
 import type { WatchlistAddFormData } from '@/schema/watchlist';
 import { useToastDispatch } from '@/hooks/useToast';
+import { isConflictError } from '@/utils/error';
 
 /**
  * トグル対象の映画データ（最小限のフィールド）
@@ -357,8 +358,8 @@ function rollbackCaches(
  * 先に見るのに、照会は一覧と別キーなので `optimisticRemoveFromAllCaches`
  * では追従しない。削除が完了した `onSettled` で `removes` が解除されると、
  * 再取得が届くまでの1往復ぶん**古い照会がヒットして「✓」に戻る**。
- * その窓で押すと論理削除済みの行へ DELETE が飛び、404 になる
- * （#1145 で直したはずの「成功トーストの直後にエラートースト」の鏡像）。
+ * その窓で押すと論理削除済みの行へ DELETE が飛び、404 ＝ 赤いエラー
+ * トーストになる（#1145 で直したものの鏡像）。
  *
  * 前例は `useFavoriteMutations` の `updateLookupCache`。
  *
@@ -524,6 +525,19 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       return { previousDataMap, previousLookup, optimisticId };
     },
     onSuccess: (response, _newItem, context) => {
+      // ⚠️ 成功トーストはここで出す（#1149）。以前は押した時点で出していたため、
+      // 409 で `onError` が走ると「追加しました（緑）」と
+      // 「追加に失敗しました（赤）」が**2枚重なって**いた。
+      // 代償として往復1回ぶん遅れるが、お気に入り側（useFavoriteMutations）も
+      // 同じ位置で、2枚出る状態より誤解が少ない。
+      //
+      // ⚠️ 下の仮ID差し替えより**前**に出す。あちらは `optimisticId` が
+      // 取れなければ何もしないが、成功した事実はそれとは無関係
+      toast({
+        title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
+        variant: 'success',
+      });
+
       if (!context?.optimisticId) return;
 
       // 仮IDのままだと、再取得が届く前に削除を押したとき
@@ -548,11 +562,23 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         response.data.id,
       );
     },
-    onError: (_error, _newItem, context) => {
+    onError: (error, _newItem, context) => {
       if (context?.previousDataMap) {
         rollbackCaches(queryClient, context.previousDataMap);
       }
       restoreLookupCache(queryClient, context?.previousLookup);
+
+      // 重複（409）は失敗ではなく「すでに望みどおりの状態」なので赤いエラーに
+      // しない。別タブ・別端末で先に追加されていた場合などに出る。
+      // `onSettled` の invalidate で照会が取り直され、表示も登録済みに追従する
+      if (isConflictError(error)) {
+        toast({
+          title: WATCHLIST_ERROR_MESSAGES.ALREADY_EXISTS,
+          variant: 'warning',
+        });
+        return;
+      }
+
       toast({
         title: 'エラー',
         description: WATCHLIST_ERROR_MESSAGES.ADD_FAILED,
@@ -585,6 +611,14 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       );
 
       return { previousDataMap, previousLookup };
+    },
+    // 追加側と同じ位置に揃える（#1149）。片方だけ押した時点で出すと、
+    // 「追加は遅れて出るのに削除は即出る」という非対称になる
+    onSuccess: () => {
+      toast({
+        title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
+        variant: 'success',
+      });
     },
     onError: (_error, _variables, context) => {
       if (context?.previousDataMap) {
@@ -677,7 +711,8 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
 
       // 登録済みかが分からないうちは受け付けない（#1145）。
       // ここを通すと、登録済みの作品を「未登録」と誤判定して追加APIへ投げ、
-      // 楽観的な成功トーストの直後に 409 のエラートーストが重なる。
+      // 409 が返る。見せ方は warning 1枚に直したが（#1149）、そもそも
+      // 押させないのが本筋。
       // UI 側もこの間はボタンを見せないが、押せてしまった場合の最後の砦
       if (isLookupResolving) return;
 
@@ -693,12 +728,17 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       }
 
       // GA4 への送信は操作時点で行う（mutation の成否は待たない）。
-      // 楽観的なトーストと同じ位置に揃えるため。通信失敗分も計上される。
+      //
+      // ⚠️ **トーストと揃えるためではない。** 成功トーストは `onSuccess` へ
+      // 移した（#1149）が、こちらは意図して操作時点に残している。
+      // **数えたいのが「押された回数」だから**で、通信失敗分も計上する。
+      // 成否で数が変わると、失敗率の増減とクリック数の増減を区別できない。
+      // `useWatchlistToggle.test.ts` の「mutation の完了を待たずに送る
+      // （試行数を数える）」がこの位置を固定している。
       //
       // ⚠️ 以前は「完了時に解決すると、どの作品の完了かを別途持つ必要が出る」と
       // 書いていたが、**その理由はもう成立しない**。両 mutation が variables に
-      // 映画IDを載せたので、onSettled だけで作品が分かる（#1055）。
-      // 位置を変えない理由はトーストと揃えること1点
+      // 映画IDを載せたので、onSettled だけで作品が分かる（#1055）
       if (checkInWatchlist(movie.id)) {
         const watchlistId = getWatchlistId(movie.id);
         if (watchlistId) {
@@ -712,10 +752,6 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
           notifyOptimisticChange(store);
           removeMutate({ watchlistId, tmdbMovieId: movie.id });
           sendEvent(ANALYTICS_EVENTS.WATCHLIST_REMOVE, { movie_id: movie.id });
-          toast({
-            title: WATCHLIST_SUCCESS_MESSAGES.REMOVED,
-            variant: 'success',
-          });
         }
       } else {
         // 楽観状態を更新（即座にUIへ反映。他のインスタンスにも伝わる）
@@ -730,10 +766,6 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
           release_date: movie.release_date,
         });
         sendEvent(ANALYTICS_EVENTS.WATCHLIST_ADD, { movie_id: movie.id });
-        toast({
-          title: WATCHLIST_SUCCESS_MESSAGES.ADDED,
-          variant: 'success',
-        });
       }
     },
     [
@@ -745,7 +777,6 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       getWatchlistId,
       addMutate,
       removeMutate,
-      toast,
       store,
     ],
   );

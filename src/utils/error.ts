@@ -258,6 +258,38 @@ export function isAuthError(error: unknown): boolean {
 }
 
 /**
+ * エラーが重複エラー（409）かどうかを判定
+ *
+ * 「すでに望みどおりの状態」であって失敗ではない。赤いエラーではなく
+ * warning で伝え、再取得で表示を追従させる用途に使う。
+ *
+ * クライアントは自分が知っている状態でしか判断できないため、別タブ・別端末で
+ * 先に登録されていればこの経路は原理的に残る（お気に入り・ウォッチリストの
+ * 追加に共通）。
+ *
+ * @param error - エラーオブジェクト
+ * @returns 409の場合true
+ *
+ * @example
+ * ```ts
+ * if (isConflictError(error)) {
+ *   toast({ title: '既に登録されています', variant: 'warning' });
+ *   return;
+ * }
+ * ```
+ */
+export function isConflictError(error: unknown): boolean {
+  // ⚠️ `isAuthError` と違って `Response` は見ない。409 を返すのは
+  // お気に入り・ウォッチリストの追加だけで、どちらも axios 経由。
+  // 使われない分岐を足すと、`Response` が未定義の環境（jsdom）で
+  // 判定そのものが例外になる
+  return (
+    error instanceof AxiosError &&
+    error.response?.status === HTTP_STATUS.CONFLICT
+  );
+}
+
+/**
  * エラーメッセージを開発者向けに詳細に出力
  *
  * @param error - エラーオブジェクト

@@ -358,8 +358,8 @@ function rollbackCaches(
  * 先に見るのに、照会は一覧と別キーなので `optimisticRemoveFromAllCaches`
  * では追従しない。削除が完了した `onSettled` で `removes` が解除されると、
  * 再取得が届くまでの1往復ぶん**古い照会がヒットして「✓」に戻る**。
- * その窓で押すと論理削除済みの行へ DELETE が飛び、404 になる
- * （#1145 で直したはずの「成功トーストの直後にエラートースト」の鏡像）。
+ * その窓で押すと論理削除済みの行へ DELETE が飛び、404 ＝ 赤いエラー
+ * トーストになる（#1145 で直したものの鏡像）。
  *
  * 前例は `useFavoriteMutations` の `updateLookupCache`。
  *
@@ -711,7 +711,8 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
 
       // 登録済みかが分からないうちは受け付けない（#1145）。
       // ここを通すと、登録済みの作品を「未登録」と誤判定して追加APIへ投げ、
-      // 楽観的な成功トーストの直後に 409 のエラートーストが重なる。
+      // 409 が返る。見せ方は warning 1枚に直したが（#1149）、そもそも
+      // 押させないのが本筋。
       // UI 側もこの間はボタンを見せないが、押せてしまった場合の最後の砦
       if (isLookupResolving) return;
 
@@ -727,12 +728,17 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       }
 
       // GA4 への送信は操作時点で行う（mutation の成否は待たない）。
-      // 楽観的なトーストと同じ位置に揃えるため。通信失敗分も計上される。
+      //
+      // ⚠️ **トーストと揃えるためではない。** 成功トーストは `onSuccess` へ
+      // 移した（#1149）が、こちらは意図して操作時点に残している。
+      // **数えたいのが「押された回数」だから**で、通信失敗分も計上する。
+      // 成否で数が変わると、失敗率の増減とクリック数の増減を区別できない。
+      // `useWatchlistToggle.test.ts` の「mutation の完了を待たずに送る
+      // （試行数を数える）」がこの位置を固定している。
       //
       // ⚠️ 以前は「完了時に解決すると、どの作品の完了かを別途持つ必要が出る」と
       // 書いていたが、**その理由はもう成立しない**。両 mutation が variables に
-      // 映画IDを載せたので、onSettled だけで作品が分かる（#1055）。
-      // 位置を変えない理由はトーストと揃えること1点
+      // 映画IDを載せたので、onSettled だけで作品が分かる（#1055）
       if (checkInWatchlist(movie.id)) {
         const watchlistId = getWatchlistId(movie.id);
         if (watchlistId) {

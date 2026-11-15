@@ -81,8 +81,14 @@ jest.mock('@tanstack/react-query', () => ({
     mutationFn: (variables: never) => Promise<unknown>;
     onMutate?: (variables: never) => Promise<unknown> | unknown;
     // ⚠️ 本物と同じく onSuccess → onSettled の順で呼ぶ。以前は onSuccess を
-    // 呼んでいなかったため、そこに置いた処理（成功トースト・仮IDの差し替え）が
-    // このファイルからは**存在しないのと同じ**になっていた
+    // 呼んでいなかったため、そこに置いた成功トーストがこのファイルからは
+    // **存在しないのと同じ**になっていた。
+    //
+    // ⚠️ 仮IDの差し替えはこれでも動かない。`mockSetQueryData` は素の
+    // `jest.fn()` で updater を呼ばないため、`response.data.id` に到達しない
+    // （だから `mockAddWatchlist` の既定値が `{}` でも落ちない）。
+    // そちらは実 QueryClient を使う `useWatchlistToggle.lookupSync.test.tsx`
+    // と `.listSync.test.tsx` が見ている
     onSuccess?: (data: never, variables: never, context: unknown) => void;
     onError?: (error: unknown, variables: never, context: unknown) => void;
     onSettled?: (
@@ -334,6 +340,16 @@ describe('useWatchlistToggle', () => {
           JSON.stringify(call[0]) === JSON.stringify(['watchlist', 'lookup']),
       );
 
+    /**
+     * ⚠️ 件数だけを見てはいけない。
+     *
+     * 追加パスは照会キャッシュに**2回**書く（`onMutate` の楽観追加と
+     * `onSuccess` の仮ID差し替え）。`length > 0` だと `onMutate` を丸ごと
+     * 消しても `onSuccess` の1件で通ってしまい、ここが守っている
+     * 「押した瞬間に登録済みとして描ける」こと（#1145）を検証できない。
+     *
+     * 削除側（下）と同じく、**1回目の updater の中身**を見る。
+     */
     it('追加すると照会キャッシュにも積む', async () => {
       const { result } = renderHook(() => useWatchlistToggle());
 
@@ -341,7 +357,21 @@ describe('useWatchlistToggle', () => {
         result.current.toggleWatchlist(createMovie());
       });
 
-      expect(lookupWrites().length).toBeGreaterThan(0);
+      const writes = lookupWrites();
+      expect(writes.length).toBeGreaterThan(0);
+
+      const updater = writes[0][1] as (
+        old: unknown,
+      ) => { data: { watchlist: { tmdb_movie_id: number }[] } } | undefined;
+      const next = updater({
+        success: true,
+        data: { watchlist: [{ id: 'other', tmdb_movie_id: 7 }] },
+      });
+
+      // 操作した作品が、押した時点で照会キャッシュに載っていること
+      expect(next?.data.watchlist.map((item) => item.tmdb_movie_id)).toContain(
+        42,
+      );
     });
 
     it('削除すると照会キャッシュからも外す', async () => {
@@ -950,6 +980,24 @@ describe('useWatchlistToggle', () => {
    * お気に入り側の前例は `useFavorites.test.ts` の同名 describe。
    */
   describe('重複（409）のハンドリング', () => {
+    /**
+     * ⚠️ 直前の `通信中の判定` が残した実装を戻す。
+     *
+     * `jest.clearAllMocks()` は呼び出し履歴しか消さず `mockImplementation` は
+     * 残る（`jest.config.js` に `resetMocks` は無い）。あちらの `pendRemovals()`
+     * は**解決しない Promise** を仕込むので、戻さずに削除系のテストを足すと
+     * そちらがハングする。同ファイルの `:749-755` に書かれている約束。
+     *
+     * 追加側も `mockRejectedValue`（`Once` ではない）で上書きするため、
+     * この describe の後ろに何か足すと reject が漏れる。ここで断ち切る。
+     */
+    beforeEach(() => {
+      mockAddWatchlist.mockReset();
+      mockAddWatchlist.mockResolvedValue({});
+      mockRemoveWatchlist.mockReset();
+      mockRemoveWatchlist.mockResolvedValue(undefined);
+    });
+
     const createConflictError = () => {
       const error = new AxiosError('Request failed with status code 409');
       error.response = {

@@ -27,6 +27,7 @@ import type {
 import type { WatchlistAddFormData } from '@/schema/watchlist';
 import { useToastDispatch } from '@/hooks/useToast';
 import { isConflictError } from '@/utils/error';
+import { createOptimisticId } from '@/features/watchlist/utils/optimisticId';
 
 /**
  * トグル対象の映画データ（最小限のフィールド）
@@ -496,7 +497,7 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
       // onSuccess でまとめて実際のIDに差し替える。
       // 照会キャッシュの照合キーにも使うため、同一ミリ秒でも衝突しない値にする
       // （`Date.now()` では連続操作で同じ値になりうる）
-      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+      const optimisticId = createOptimisticId();
 
       const optimisticItem: WatchlistItem = {
         id: optimisticId,

@@ -269,4 +269,50 @@ describe('WatchlistItem', () => {
     expect(img).toHaveAttribute('src');
     expect(img.getAttribute('src')).toContain('abc.jpg');
   });
+
+  /**
+   * 追加の応答がまだ返っていない行（#1194）
+   *
+   * 行IDが仮ID（`optimistic-...`）のあいだに削除すると、
+   * `isValidUuid`（`api/watchlist/[id]/route.ts`）に弾かれて 400 になり
+   * 赤いエラートーストが出る。押せないことを見た目でも伝える
+   */
+  describe('仮IDの行', () => {
+    const optimisticItem = () =>
+      createMockItem({
+        id: 'optimistic-11111111-2222-4333-8444-555555555555',
+      });
+
+    it('削除ボタンを押せない', () => {
+      render(
+        <WatchlistItem
+          item={optimisticItem()}
+          onClick={jest.fn()}
+          onDelete={jest.fn()}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', {
+          name: 'テスト映画をウォッチリストから削除',
+        }),
+      ).toBeDisabled();
+    });
+
+    it('実IDなら押せる', () => {
+      render(
+        <WatchlistItem
+          item={createMockItem()}
+          onClick={jest.fn()}
+          onDelete={jest.fn()}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', {
+          name: 'テスト映画をウォッチリストから削除',
+        }),
+      ).toBeEnabled();
+    });
+  });
 });

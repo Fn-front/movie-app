@@ -33,6 +33,10 @@ import {
   WATCHLIST_ERROR_MESSAGES,
 } from '@/constants';
 import { sendEvent } from '@/utils/analytics';
+import {
+  createOptimisticId,
+  isOptimisticId,
+} from '@/features/watchlist/utils/optimisticId';
 
 /**
  * useWatchlistフックのオプション
@@ -134,7 +138,7 @@ export function useWatchlist(
 
       // 楽観的に追加
       const optimisticItem: WatchlistItem = {
-        id: `optimistic-${Date.now()}`,
+        id: createOptimisticId(),
         tmdb_movie_id: newItem.tmdb_movie_id,
         title: newItem.title,
         poster_path: newItem.poster_path ?? null,
@@ -299,6 +303,12 @@ export function useWatchlist(
 
   const removeFromWatchlist = useCallback(
     (id: string) => {
+      // ⚠️ 仮IDでは呼ばない（#1194）。追加の応答が返る前に押されると
+      // `DELETE /api/watchlist/optimistic-...` が飛んで 400 になり、
+      // 赤いエラートーストが出る。UI 側でもボタンを無効にしているが、
+      // 押せてしまった場合の最後の砦
+      if (isOptimisticId(id)) return;
+
       // 一覧ページとサイドバーの削除はこの経路を通る。useWatchlistToggle
       // （詳細モーダルのトグル）とは別実装なので、そちらだけに計測を置くと
       // 追加は全経路・削除は詳細モーダルのみとなり、追加/削除比が歪む。
@@ -318,6 +328,10 @@ export function useWatchlist(
 
   const setWatched = useCallback(
     (id: string, watched: boolean) => {
+      // 削除と同じ理由（#1194）。`PATCH /api/watchlist/:id` も
+      // `isValidUuid` で弾く
+      if (isOptimisticId(id)) return;
+
       watchedMutation.mutate({ id, watched });
     },
     [watchedMutation],

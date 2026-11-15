@@ -827,4 +827,52 @@ describe('WatchlistList', () => {
       expect(link.contains(rating)).toBe(false);
     });
   });
+
+  /**
+   * 追加の応答がまだ返っていない行（#1194）
+   *
+   * 行IDが仮ID（`optimistic-...`）のあいだは、削除も視聴済みも
+   * `isValidUuid`（`api/watchlist/[id]/route.ts`）に弾かれて 400 になる。
+   * 押せないことを見た目でも伝える
+   */
+  describe('仮IDの行', () => {
+    const renderWithId = (id: string) =>
+      render(
+        <WatchlistList
+          watchlist={createMockItems(1).map((item) => ({ ...item, id }))}
+          isLoading={false}
+          onDelete={jest.fn()}
+          onWatchedToggle={jest.fn()}
+        />,
+      );
+
+    const OPTIMISTIC_ID = 'optimistic-11111111-2222-4333-8444-555555555555';
+
+    it('削除ボタンを押せない', () => {
+      renderWithId(OPTIMISTIC_ID);
+
+      expect(
+        screen.getByRole('button', { name: '映画0をウォッチリストから削除' }),
+      ).toBeDisabled();
+    });
+
+    it('視聴済みボタンを押せない', () => {
+      renderWithId(OPTIMISTIC_ID);
+
+      expect(
+        screen.getByRole('button', { name: '映画0を視聴済みにする' }),
+      ).toBeDisabled();
+    });
+
+    it('実IDなら両方押せる', () => {
+      renderWithId('wl-0');
+
+      expect(
+        screen.getByRole('button', { name: '映画0をウォッチリストから削除' }),
+      ).toBeEnabled();
+      expect(
+        screen.getByRole('button', { name: '映画0を視聴済みにする' }),
+      ).toBeEnabled();
+    });
+  });
 });

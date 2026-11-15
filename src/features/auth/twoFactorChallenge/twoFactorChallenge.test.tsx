@@ -1,4 +1,10 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { TwoFactorChallenge } from './twoFactorChallenge';
@@ -365,10 +371,41 @@ describe('TwoFactorChallenge', () => {
       });
     });
 
+    // ログアウト中に検証が走ると、signOut の Cookie 削除と検証成功による
+    // 再発行の順序が決まらない。DOM の disabled だけに頼らない
+    it('ログアウト中はコードを検証しない', async () => {
+      let finishLogout: () => void = () => {};
+      mockLogout.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishLogout = resolve;
+        }),
+      );
+
+      render(<TwoFactorChallenge />);
+      await user.type(screen.getByLabelText('認証コード'), '123456');
+      await user.click(cancelButton());
+
+      await waitFor(() => {
+        expect(mockLogout).toHaveBeenCalled();
+      });
+
+      // disabled を迂回してフォームを直接送信しても受け付けない
+      fireEvent.submit(screen.getByLabelText('認証コード').closest('form')!);
+
+      expect(mockUpdate).not.toHaveBeenCalled();
+
+      await act(async () => {
+        finishLogout();
+      });
+    });
+
     it('コードの検証中は押せない', async () => {
-      // 二重操作で `update` と `signOut` が競合しないようにする
+      // 二重操作で `update` と `signOut` が競合しないようにする。
+      // ⚠️ `Once` にする。`jest.clearAllMocks()` は mockImplementation を
+      // 消さないので、`mockReturnValue` だと後ろに足したテストへ
+      // 「解決しない Promise」が漏れる
       let resolveUpdate: (value: unknown) => void = () => {};
-      mockUpdate.mockReturnValue(
+      mockUpdate.mockReturnValueOnce(
         new Promise((resolve) => {
           resolveUpdate = resolve;
         }),

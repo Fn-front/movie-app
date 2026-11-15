@@ -261,8 +261,13 @@ test.describe('第2要素の入力画面', () => {
 
     await page.waitForURL(ROUTES.LOGIN);
 
-    // セッションそのものが消えている。残っていると proxy がまた押し戻す
-    await expect(resolveSessionCookie(page.context())).rejects.toThrow();
+    // セッションそのものが消えている。残っていると proxy がまた押し戻す。
+    // ⚠️ メッセージで固定する。`resolveSessionCookie` はコンテキスト破棄など
+    // 別の理由でも throw するので、素の `rejects.toThrow()` だと
+    // 「Cookie が消えた」以外でも通ってしまう
+    await expect(resolveSessionCookie(page.context())).rejects.toThrow(
+      /セッションCookieが見つかりません/,
+    );
 
     // 未ログインとして公開ページを閲覧できる（修正前は同じ画面へ戻された）
     await page.goto(ROUTES.PRIVACY);

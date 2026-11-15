@@ -89,16 +89,27 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
             認証アプリもリカバリーコードも使えない場合は、ログアウトして別のアカウントでログインできます。
           </p>
 
+          {/*
+            ⚠️ `isLoading` は使わない。`Button` はローディング中に本文を
+            `visibility: hidden` にするため**アクセシブルネームごと消え**、
+            さらに ghost バリアントではスピナーが白で背景に埋もれる。
+            脱出導線が「空のボタン」になってしまう。
+            文言の差し替えで進行を伝え、二重押下は `disabled` で止める。
+
+            `size='lg'` は $tap-target-min（44px）に合わせるため。
+            主ボタンとの区別は variant で付ける
+          */}
           <Button
             type='button'
             variant='ghost'
-            size='md'
+            size='lg'
             fullWidth
             onClick={onCancel}
-            isLoading={isCancelling}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isCancelling}
           >
-            キャンセルしてログアウト
+            {isCancelling
+              ? 'ログアウトしています…'
+              : 'キャンセルしてログアウト'}
           </Button>
         </div>
       </div>

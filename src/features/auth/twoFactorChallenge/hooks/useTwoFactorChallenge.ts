@@ -63,7 +63,12 @@ export function useTwoFactorChallenge({
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
 
-      if (!code.trim() || isSubmitting) {
+      // ⚠️ `isCancelling` も見る。ログアウトと検証が同時に走ると、
+      // `signOut` の Cookie 削除と検証成功による再発行の順序が決まらず、
+      // 「キャンセルしたのにログイン済みのCookieが残る」ことがありうる。
+      // いまは DOM 側でも相互に `disabled` にしているが、片側だけ state で
+      // 守る非対称を残さない
+      if (!code.trim() || isSubmitting || isCancelling) {
         return;
       }
 
@@ -102,7 +107,7 @@ export function useTwoFactorChallenge({
         setIsSubmitting(false);
       }
     },
-    [code, isSubmitting, update, router, callbackUrl],
+    [code, isSubmitting, isCancelling, update, router, callbackUrl],
   );
 
   /**

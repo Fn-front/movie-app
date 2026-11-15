@@ -75,6 +75,14 @@ export const AUTH_ERROR_MESSAGES = {
    */
   OTP_LOGIN_DISABLED_BY_TOTP:
     '二段階認証が有効なため、メールでのログインは利用できません。パスワードと認証コードでログインしてください。',
+  /**
+   * ログアウトに失敗した。
+   *
+   * `logout()` は csrf 取得か `/api/auth/signout` の POST が失敗すると
+   * 遷移を始めずに rethrow する。画面に留まるので、押し直せることを伝える。
+   */
+  LOGOUT_FAILED:
+    'ログアウトできませんでした。通信状況を確認して、もう一度お試しください。',
 } as const;
 
 /**

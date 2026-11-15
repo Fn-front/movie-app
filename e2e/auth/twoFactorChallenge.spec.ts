@@ -53,7 +53,20 @@ const USER = {
   password: 'TotpChallengeE2e1',
 } as const;
 
+/**
+ * 「別のアカウント」役（#1161）
+ *
+ * 抜ける導線の検証で、ログアウト後に**実際に別アカウントでログインできる**
+ * ことまで見るために要る。共有の TEST_USER は使わない（3ブラウザで奪い合い、
+ * ログインのレート制限枠が枯れる）。
+ */
+const OTHER_USER = {
+  email: runScopedEmail('e2e-totp-challenge-other'),
+  password: 'TotpChallengeOther1',
+} as const;
+
 let userId = '';
+let otherUserId = '';
 
 /**
  * コード入力欄
@@ -109,15 +122,19 @@ test.describe('第2要素の入力画面', () => {
 
   test.beforeAll(async () => {
     userId = await createVerifiedUser(USER);
+    otherUserId = await createVerifiedUser(OTHER_USER);
   });
 
   test.afterAll(async () => {
     await deleteUserByEmail(USER.email);
+    await deleteUserByEmail(OTHER_USER.email);
   });
 
   const resetUserState = async (): Promise<void> => {
     await cleanupRateLimitsForEmail(USER.email);
     await cleanupRateLimitsForUser(userId);
+    await cleanupRateLimitsForEmail(OTHER_USER.email);
+    await cleanupRateLimitsForUser(otherUserId);
     await cleanupLoginIpRateLimits();
     await cleanupTotp(USER.email);
   };
@@ -218,6 +235,51 @@ test.describe('第2要素の入力画面', () => {
     ).toBeVisible();
     await expect(page).toHaveURL(ROUTES.TOTP_CHALLENGE);
     // ここでセッションが壊れていると、正しいコードを入れても復帰できない
+    await expect(resolveSessionCookie(page.context())).resolves.toBeDefined();
+  });
+
+  /**
+   * この画面からの出口（#1161）
+   *
+   * `totpPending` のセッションは proxy が他のすべての画面から押し戻すため、
+   * 修正前はこの画面が袋小路だった。認証アプリが手元に無い利用者は、
+   * Cookie を手で消すまで公開ページも別アカウントのログインも使えなかった。
+   */
+  test('キャンセルするとログアウトでき、袋小路から抜けられる', async ({
+    page,
+  }) => {
+    await setUpPendingSession(page);
+
+    await page.goto(ROUTES.TOTP_CHALLENGE);
+    await expect(totpInput(page)).toBeVisible();
+
+    const cancel = page.getByRole('button', {
+      name: 'キャンセルしてログアウト',
+    });
+    await expect(cancel).toBeEnabled();
+    await cancel.click();
+
+    await page.waitForURL(ROUTES.LOGIN);
+
+    // セッションそのものが消えている。残っていると proxy がまた押し戻す。
+    // ⚠️ メッセージで固定する。`resolveSessionCookie` はコンテキスト破棄など
+    // 別の理由でも throw するので、素の `rejects.toThrow()` だと
+    // 「Cookie が消えた」以外でも通ってしまう
+    await expect(resolveSessionCookie(page.context())).rejects.toThrow(
+      /セッションCookieが見つかりません/,
+    );
+
+    // 未ログインとして公開ページを閲覧できる（修正前は同じ画面へ戻された）
+    await page.goto(ROUTES.PRIVACY);
+    await expect(page).toHaveURL(ROUTES.PRIVACY);
+
+    // 別のアカウントでログインできる
+    await page.goto(ROUTES.LOGIN);
+    await page.getByLabel('メールアドレス').fill(OTHER_USER.email);
+    await page.getByLabel('パスワード').fill(OTHER_USER.password);
+    await page.getByRole('button', { name: 'ログイン', exact: true }).click();
+
+    await page.waitForURL('/');
     await expect(resolveSessionCookie(page.context())).resolves.toBeDefined();
   });
 });

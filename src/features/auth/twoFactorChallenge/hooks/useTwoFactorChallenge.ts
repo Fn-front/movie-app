@@ -17,6 +17,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
 import { AUTH_ERROR_MESSAGES } from '@/constants';
+import { logout } from '@/lib/auth/logout';
 import { resolveSafeCallbackUrl } from '@/utils/url';
 
 interface UseTwoFactorChallengeParams {
@@ -28,8 +29,11 @@ interface UseTwoFactorChallengeResult {
   code: string;
   error: string | null;
   isSubmitting: boolean;
+  /** ログアウト処理中（完了すると画面遷移するので false には戻らない） */
+  isCancelling: boolean;
   onCodeChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
 }
 
 /**
@@ -46,6 +50,7 @@ export function useTwoFactorChallenge({
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const onCodeChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,7 +63,12 @@ export function useTwoFactorChallenge({
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
 
-      if (!code.trim() || isSubmitting) {
+      // ⚠️ `isCancelling` も見る。ログアウトと検証が同時に走ると、
+      // `signOut` の Cookie 削除と検証成功による再発行の順序が決まらず、
+      // 「キャンセルしたのにログイン済みのCookieが残る」ことがありうる。
+      // いまは DOM 側でも相互に `disabled` にしているが、片側だけ state で
+      // 守る非対称を残さない
+      if (!code.trim() || isSubmitting || isCancelling) {
         return;
       }
 
@@ -97,8 +107,44 @@ export function useTwoFactorChallenge({
         setIsSubmitting(false);
       }
     },
-    [code, isSubmitting, update, router, callbackUrl],
+    [code, isSubmitting, isCancelling, update, router, callbackUrl],
   );
 
-  return { code, error, isSubmitting, onCodeChange, onSubmit };
+  /**
+   * この画面から抜ける
+   *
+   * `totpPending` のセッションは proxy が他のすべての画面から押し戻すため、
+   * ログアウト以外に出口が無い（#1161）。認証アプリが手元に無い利用者は、
+   * これが無いと Cookie を手で消すまで公開ページすら見られない。
+   *
+   * `signOut()` が叩く `/api/auth/csrf` と `/api/auth/signout` は
+   * `src/proxy.ts` の冒頭で素通りするので、この状態でも成立する。
+   */
+  const onCancel = useCallback(async () => {
+    if (isSubmitting || isCancelling) {
+      return;
+    }
+
+    setError(null);
+    setIsCancelling(true);
+
+    try {
+      await logout();
+    } catch {
+      // 遷移が始まらなかった（csrf 取得か /signout の POST が失敗）。
+      // 画面に留まるので、押し直せる状態へ戻す
+      setError(AUTH_ERROR_MESSAGES.LOGOUT_FAILED);
+      setIsCancelling(false);
+    }
+  }, [isSubmitting, isCancelling]);
+
+  return {
+    code,
+    error,
+    isSubmitting,
+    isCancelling,
+    onCodeChange,
+    onSubmit,
+    onCancel,
+  };
 }

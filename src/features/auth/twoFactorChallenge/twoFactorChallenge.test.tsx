@@ -1,4 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { TwoFactorChallenge } from './twoFactorChallenge';
@@ -16,6 +22,11 @@ jest.mock('next-auth/react', () => ({
   useSession: () => ({ update: mockUpdate }),
 }));
 
+const mockLogout = jest.fn();
+jest.mock('@/lib/auth/logout', () => ({
+  logout: (...args: unknown[]) => mockLogout(...args),
+}));
+
 // --- Tests ---
 
 describe('TwoFactorChallenge', () => {
@@ -23,6 +34,8 @@ describe('TwoFactorChallenge', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // 既定は成功（本物の logout は遷移するので解決後に戻ってこない）
+    mockLogout.mockResolvedValue(undefined);
   });
 
   /** 認証コードを入力して確認を押す */
@@ -30,6 +43,10 @@ describe('TwoFactorChallenge', () => {
     await user.type(screen.getByLabelText('認証コード'), code);
     await user.click(screen.getByRole('button', { name: '認証コードを確認' }));
   };
+
+  /** この画面から抜けるボタン */
+  const cancelButton = () =>
+    screen.getByRole('button', { name: 'キャンセルしてログアウト' });
 
   it('入力欄と説明を表示する', () => {
     render(<TwoFactorChallenge />);
@@ -44,10 +61,14 @@ describe('TwoFactorChallenge', () => {
   });
 
   it('リカバリーコードでも進めることを案内する', () => {
-    // 認証アプリを失った利用者がここで詰まないようにする
+    // 認証アプリを失った利用者がここで詰まないようにする。
+    // ⚠️ `/リカバリーコード/` だけだと、抜ける導線の案内文にも当たって
+    // 2件になる（#1161）。この案内が出ていることを文単位で見る
     render(<TwoFactorChallenge />);
 
-    expect(screen.getByText(/リカバリーコード/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/発行済みのリカバリーコードでも進めます/),
+    ).toBeInTheDocument();
   });
 
   it('入力したコードをサーバーへ渡す', async () => {
@@ -260,6 +281,146 @@ describe('TwoFactorChallenge', () => {
 
       await waitFor(() => {
         expect(mockPush).toHaveBeenCalledWith('/');
+      });
+    });
+  });
+
+  /**
+   * この画面からの出口（#1161）
+   *
+   * `totpPending` のセッションは proxy が他のすべての画面から押し戻すため、
+   * ログアウト以外に出口が無い。認証アプリもリカバリーコードも手元に無い
+   * 利用者は、これが無いと Cookie を手で消すまで公開ページすら見られない。
+   */
+  describe('コード入力画面から抜ける', () => {
+    it('ログアウトの導線を表示する', () => {
+      render(<TwoFactorChallenge />);
+
+      expect(cancelButton()).toBeInTheDocument();
+    });
+
+    it('別のアカウントでログインし直せることを案内する', () => {
+      render(<TwoFactorChallenge />);
+
+      expect(screen.getByText(/別のアカウントでログイン/)).toBeInTheDocument();
+    });
+
+    it('押すとログアウトする', async () => {
+      render(<TwoFactorChallenge />);
+
+      await user.click(cancelButton());
+
+      await waitFor(() => {
+        expect(mockLogout).toHaveBeenCalled();
+      });
+    });
+
+    // ログアウトはコードの検証と無関係なので、入力が空でも押せる必要がある。
+    // 認証アプリが手元に無い利用者はそもそも入力できない
+    it('コードが未入力でも押せる', async () => {
+      render(<TwoFactorChallenge />);
+
+      expect(cancelButton()).toBeEnabled();
+
+      await user.click(cancelButton());
+
+      await waitFor(() => {
+        expect(mockLogout).toHaveBeenCalled();
+      });
+    });
+
+    it('コードの検証を発火しない', async () => {
+      render(<TwoFactorChallenge />);
+
+      await user.click(cancelButton());
+
+      await waitFor(() => {
+        expect(mockLogout).toHaveBeenCalled();
+      });
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('ログアウトに失敗したらエラーを表示する', async () => {
+      // `logout()` は csrf 取得か /signout の POST が失敗すると rethrow する。
+      // 画面に留まるので、黙って固まらせない
+      mockLogout.mockRejectedValue(new Error('network'));
+
+      render(<TwoFactorChallenge />);
+      await user.click(cancelButton());
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'ログアウトできませんでした。',
+      );
+    });
+
+    it('ログアウトに失敗しても押し直せる', async () => {
+      mockLogout.mockRejectedValueOnce(new Error('network'));
+
+      render(<TwoFactorChallenge />);
+      await user.click(cancelButton());
+      await screen.findByRole('alert');
+
+      await waitFor(() => {
+        expect(cancelButton()).toBeEnabled();
+      });
+
+      await user.click(cancelButton());
+
+      await waitFor(() => {
+        expect(mockLogout).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    // ログアウト中に検証が走ると、signOut の Cookie 削除と検証成功による
+    // 再発行の順序が決まらない。DOM の disabled だけに頼らない
+    it('ログアウト中はコードを検証しない', async () => {
+      let finishLogout: () => void = () => {};
+      mockLogout.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          finishLogout = resolve;
+        }),
+      );
+
+      render(<TwoFactorChallenge />);
+      await user.type(screen.getByLabelText('認証コード'), '123456');
+      await user.click(cancelButton());
+
+      await waitFor(() => {
+        expect(mockLogout).toHaveBeenCalled();
+      });
+
+      // disabled を迂回してフォームを直接送信しても受け付けない
+      fireEvent.submit(screen.getByLabelText('認証コード').closest('form')!);
+
+      expect(mockUpdate).not.toHaveBeenCalled();
+
+      await act(async () => {
+        finishLogout();
+      });
+    });
+
+    it('コードの検証中は押せない', async () => {
+      // 二重操作で `update` と `signOut` が競合しないようにする。
+      // ⚠️ `Once` にする。`jest.clearAllMocks()` は mockImplementation を
+      // 消さないので、`mockReturnValue` だと後ろに足したテストへ
+      // 「解決しない Promise」が漏れる
+      let resolveUpdate: (value: unknown) => void = () => {};
+      mockUpdate.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveUpdate = resolve;
+        }),
+      );
+
+      render(<TwoFactorChallenge />);
+      await submitCode('123456');
+
+      await waitFor(() => {
+        expect(cancelButton()).toBeDisabled();
+      });
+
+      // 握ったままテストを終えると、後続の state 更新が act の外で走る
+      await act(async () => {
+        resolveUpdate({ totpPending: false });
       });
     });
   });

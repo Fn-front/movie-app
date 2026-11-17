@@ -34,6 +34,26 @@ export const ADMIN_ACCOUNT_CONFIG = {
 } as const;
 
 /**
+ * 設定リンクが「admin 発行経由」であることを示すクエリパラメータ。
+ *
+ * 発行アカウントの `users.email` は受信できない合成アドレスなので、
+ * 受け取り手は `/auth/forgot-password` から再送できない（列挙防止のため
+ * 応答は成功と同じで、理由も表示されない）。復旧は admin の再発行だけ。
+ * 設定ページが案内を出し分けられるように、**リンクを作る側**が印を付ける。
+ *
+ * 判定に DB を引かないのは、`/auth/reset-password` が未認証で叩ける公開
+ * ページで、レート制限の仕組みが無いため。`?token=` に任意の文字列を入れて
+ * 連打されると、ページ表示のたびに SELECT が走る。
+ *
+ * ⚠️ 手で付ければ誰でも案内を出せるが、**変わるのは文言だけ**で、
+ * トークンの検証も権限も一切この値に依存しない。
+ */
+export const ACCOUNT_SETUP_ISSUED_PARAM = {
+  NAME: 'issued',
+  VALUE: '1',
+} as const;
+
+/**
  * 監査ログに記録する操作の種別。
  *
  * DB 側の `chk_admin_audit_action` と**必ず一致させること**。

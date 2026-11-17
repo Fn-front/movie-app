@@ -177,4 +177,43 @@ describe('ResetPasswordForm', () => {
       screen.getByRole('link', { name: '再設定リンクを再送する' }),
     ).toHaveAttribute('href', '/auth/forgot-password');
   });
+
+  describe('admin 発行アカウントの設定リンクから来たとき', () => {
+    it('再送リンクを出さない', () => {
+      // 発行アカウントの `users.email` は受信できない合成アドレス
+      // （`<ランダム>@<ランダム>.invalid`）。再送を押しても列挙防止で
+      // 「送信しました」が返るだけで、何も届かない行き止まりになる
+      render(<ResetPasswordForm token='expired-token' isIssuedAccount />);
+
+      expect(
+        screen.queryByRole('link', { name: '再設定リンクを再送する' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('発行元の管理者へ依頼するよう案内する', () => {
+      // 復旧経路は admin の再発行だけ
+      render(<ResetPasswordForm token='expired-token' isIssuedAccount />);
+
+      expect(
+        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_RESEND),
+      ).toBeInTheDocument();
+    });
+
+    it('トークンが無くても案内は出す', () => {
+      // リンクが壊れて token が落ちた場合でも、次の行動が分かるようにする
+      render(<ResetPasswordForm isIssuedAccount />);
+
+      expect(
+        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_RESEND),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('通常の利用者には管理者への案内を出さない', () => {
+    render(<ResetPasswordForm token='expired-token' />);
+
+    expect(
+      screen.queryByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_RESEND),
+    ).not.toBeInTheDocument();
+  });
 });

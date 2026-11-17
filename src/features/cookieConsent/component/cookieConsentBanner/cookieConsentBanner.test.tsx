@@ -26,6 +26,12 @@ jest.mock('next-auth/react', () => ({
   }),
 }));
 
+/** 現在のパス。テストごとに差し替える */
+let mockPathname: string | null = '/';
+jest.mock('next/navigation', () => ({
+  usePathname: () => mockPathname,
+}));
+
 const VALID_GA_ID = 'G-PSW1MY7HB4';
 const ORIGINAL_GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
@@ -34,6 +40,7 @@ describe('CookieConsentBanner', () => {
     localStorage.clear();
     process.env.NEXT_PUBLIC_GA_ID = VALID_GA_ID;
     __resetBannerSuppressionForTest();
+    mockPathname = '/';
   });
 
   afterEach(() => {
@@ -75,6 +82,72 @@ describe('CookieConsentBanner', () => {
       act(() => {
         setConsentSyncPending(false);
       });
+
+      expect(
+        screen.getByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * 認証フローの画面では出さない（#1229）
+   *
+   * メールのリンクなどから1つの作業を終えるために来る場所なので、
+   * 無関係な同意の判断を割り込ませない。既定が `denied` で Cookie を
+   * 書かないため、聞くのを後ろへ倒せる
+   */
+  describe('認証フローのルート', () => {
+    it.each([
+      ['ログイン', ROUTES.LOGIN],
+      ['パスワード再設定', ROUTES.RESET_PASSWORD],
+      ['二段階認証', ROUTES.TOTP_CHALLENGE],
+    ])('%s では表示しない', (_label, route) => {
+      mockPathname = route;
+
+      render(<CookieConsentBanner />);
+
+      expect(
+        screen.queryByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('抜けた先では出る（同意状態を記録しないので聞き直せる）', () => {
+      // ⚠️ 「同意状態が unset のまま」だけを見ると、ボタンを押さない限り
+      // 常に真なので**判定を丸ごと外しても通る**。認証ルートで出ないことと
+      // 抜けた先で出ることを対にして、初めて退行を捕まえられる
+      mockPathname = ROUTES.RESET_PASSWORD;
+      const { unmount } = render(<CookieConsentBanner />);
+
+      expect(
+        screen.queryByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),
+      ).not.toBeInTheDocument();
+      unmount();
+
+      mockPathname = '/';
+      render(<CookieConsentBanner />);
+
+      expect(
+        screen.getByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),
+      ).toBeInTheDocument();
+      expect(getStoredConsentState()).toBe('unset');
+    });
+
+    it('高さの CSS 変数を残さない', () => {
+      // 枠だけ残すと本文とボトムナビの位置がずれる
+      mockPathname = ROUTES.RESET_PASSWORD;
+
+      render(<CookieConsentBanner />);
+
+      expect(
+        document.documentElement.style.getPropertyValue(BANNER_HEIGHT_VAR),
+      ).toBe('');
+    });
+
+    it('バナーからのリンク先であるプライバシーポリシーでは表示する', () => {
+      // ここで消えると、同意の判断材料を読みに行った先で戻る導線を失う
+      mockPathname = ROUTES.PRIVACY;
+
+      render(<CookieConsentBanner />);
 
       expect(
         screen.getByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),

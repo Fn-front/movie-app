@@ -9,6 +9,7 @@
 
 import { memo, useCallback, useRef, useSyncExternalStore } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 import { Button } from '@/components/ui/button/button';
 import { ARIA_LABELS, ROUTES } from '@/constants';
@@ -16,6 +17,7 @@ import { useCookieConsent } from '@/hooks/useCookieConsent';
 import { useIsomorphicLayoutEffect } from '@/hooks/useIsomorphicLayoutEffect';
 import { getGaMeasurementId } from '@/utils/analytics';
 
+import { isConsentBannerHiddenRoute } from '../../utils/bannerRoutes';
 import {
   isBannerSuppressed,
   subscribeBannerSuppression,
@@ -44,6 +46,7 @@ import styles from './cookieConsentBanner.module.scss';
 export const CookieConsentBanner = memo(function CookieConsentBanner() {
   const { consent, grant, deny } = useCookieConsent();
   const bannerRef = useRef<HTMLElement>(null);
+  const pathname = usePathname();
 
   // 同意状態がまだ確定していない／もう画面を離れる間は出さない。
   // 理由は bannerSuppression.ts（#1137 / #1133）
@@ -55,9 +58,16 @@ export const CookieConsentBanner = memo(function CookieConsentBanner() {
     () => false,
   );
 
-  // 計測しない設定なら同意を求める対象が無い
+  // 計測しない設定なら同意を求める対象が無い。
+  //
+  // 認証フローの画面でも出さない（#1229）。`isSuppressed` とは軸が違い、
+  // あちらは「同意状態がまだ確定していない」という時間の話、こちらは
+  // 場所の話なので分けて書く。理由は bannerRoutes.ts
   const isVisible =
-    getGaMeasurementId() !== null && consent === 'unset' && !isSuppressed;
+    getGaMeasurementId() !== null &&
+    consent === 'unset' &&
+    !isSuppressed &&
+    !isConsentBannerHiddenRoute(pathname);
 
   // レイアウト効果にするのは、下の同期書き込みを**初回ペイント前**に
   // 済ませるため。useEffect だと1フレームぶん変数が未確定のまま描かれる

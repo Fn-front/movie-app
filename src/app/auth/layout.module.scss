@@ -5,8 +5,10 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  // 同意バナー（position: fixed）の分を空ける。無いときは 0px
-  min-height: calc(100vh - var(--cookie-banner-height, 0px));
+  // 同意バナーはこの配下では描画しない（`bannerRoutes.ts`）。
+  // `--cookie-banner-height` を差し引く計算を残しておくと、常に 0px の
+  // 引き算になるうえ「ここにバナーが出る」と読めてしまう
+  min-height: 100vh;
   padding: $spacing-4;
 
   // プライバシーポリシーへの導線

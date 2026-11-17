@@ -127,9 +127,30 @@ export async function POST(request: Request) {
 順序を回帰テストしている。新しくそういうハンドラを足すときは、同じ describe を
 付けること。
 
-> 例外: `admin/accounts` POST と `admin/accounts/[id]/reissue` POST は未検証。
-> 前者は #934 でテストファイルを作ったが GET のみ、後者はファイルが無い。
-> 順序は実装で確認済み（どちらも原則どおり）。
+> 例外: `admin/accounts/[id]/reissue` POST は未検証（テストファイルが無い）。
+> 順序は実装で確認済み（原則どおり）。
+> `admin/accounts` POST は #1221 で `処理順` を追加した。
+
+#### ⚠️ `withAdminAuth` のルートはレート制限が2層ある
+
+`withAdminAuth` は handler を呼ぶ**前に**自前で `checkRateLimit` を回す
+（`ADMIN_ROLE_CHECK` / #965。`src/helpers/adminAuth.ts`）。ルート固有の制限は
+その後、handler の中にある。
+
+テストで `mockCheckRateLimit.mockResolvedValueOnce({ allowed: false })` を
+**1つだけ積むと1層目が消費し**、handler に入る前に 429 が返る。429 は観測
+できるのでテストは緑になるが、固定したい「handler 内のレート制限 → 検証」は
+何も検証していない。#934 で入れた GET のテストが実際にそうなっていた
+（`route.ts` のレート制限超過の return がカバレッジで未到達だった）。
+
+1層目を明示的に通してから2層目を落とすこと。`toHaveBeenNthCalledWith(2, ...)`
+で2層目の action 名まで確認すると、層の取り違えに気づける。
+
+```js
+mockCheckRateLimit
+  .mockResolvedValueOnce({ allowed: true })                    // admin_role_check
+  .mockResolvedValueOnce({ allowed: false, retryAfter: 600 }); // ルート固有
+```
 
 ### 棚卸しのしかた
 

@@ -14,7 +14,14 @@ describe('buildAccountSetupUrl', () => {
   });
 
   afterAll(() => {
-    process.env.NEXTAUTH_URL = originalBaseUrl;
+    // ⚠️ 未設定だったときに代入で戻すと、文字列 `'undefined'` が残る。
+    // CI の jest は `NEXTAUTH_URL` を渡していないので、同じ worker の
+    // 後続ファイルがそれを読む
+    if (originalBaseUrl === undefined) {
+      delete process.env.NEXTAUTH_URL;
+    } else {
+      process.env.NEXTAUTH_URL = originalBaseUrl;
+    }
   });
 
   it('NEXTAUTH_URL を基点に再設定ページのURLを作る', () => {

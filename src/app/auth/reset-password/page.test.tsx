@@ -1,79 +1,71 @@
 /**
  * パスワード再設定ページのテスト
  *
- * クエリをどうフォームへ渡すかだけを見る。表示は
- * `resetPasswordForm.test.tsx` が受け持つ。
+ * フォームをモックせず、**クエリから実際の表示まで**を通して見る。
+ * 片側だけを固定すると、受け渡しの取り違え（プロップ名の変更・渡し忘れ）を
+ * どちらのテストも検出できない。
  */
 
 import { render, screen } from '@testing-library/react';
 
+import { PASSWORD_RESET_MESSAGES } from '@/constants/passwordReset';
+
 import ResetPasswordPage, { metadata } from './page';
 
-jest.mock('@/features/auth/resetPasswordForm/resetPasswordForm', () => ({
-  ResetPasswordForm: ({
-    token,
-    isIssuedAccount,
-  }: {
-    token?: string;
-    isIssuedAccount?: boolean;
-  }) => (
-    <div
-      data-testid='reset-password-form'
-      data-token={token ?? ''}
-      data-issued={String(Boolean(isIssuedAccount))}
-    />
-  ),
+// フォームが `useRouter` を使う（再設定成功後にログイン画面へ送る）
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
 }));
 
 /** `searchParams` は Promise で渡る */
-const searchParams = (params: Record<string, string | string[]>) =>
-  Promise.resolve(params);
-
-const renderPage = async (params: Record<string, string | string[]>) => {
-  render(await ResetPasswordPage({ searchParams: searchParams(params) }));
-  return screen.getByTestId('reset-password-form');
-};
+const renderPage = async (params: Record<string, string | string[]>) =>
+  render(await ResetPasswordPage({ searchParams: Promise.resolve(params) }));
 
 describe('ResetPasswordPage', () => {
-  it('トークンをフォームへ渡す', async () => {
-    const form = await renderPage({ token: 'plain-token' });
+  it('トークンがあればフォームを出す', async () => {
+    await renderPage({ token: 'plain-token' });
 
-    expect(form).toHaveAttribute('data-token', 'plain-token');
+    expect(screen.getByLabelText('新しいパスワード')).toBeInTheDocument();
   });
 
-  it('トークンが配列なら渡さない', async () => {
+  it('トークンが配列ならフォームを出さない', async () => {
     // `?token=a&token=b` のような重複指定は不正として扱う
-    const form = await renderPage({ token: ['a', 'b'] });
+    await renderPage({ token: ['a', 'b'] });
 
-    expect(form).toHaveAttribute('data-token', '');
+    expect(screen.queryByLabelText('新しいパスワード')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      PASSWORD_RESET_MESSAGES.TOKEN_MISSING,
+    );
   });
 
-  describe('発行アカウントの印', () => {
-    it('印があれば発行経由として渡す', async () => {
-      const form = await renderPage({ token: 'plain-token', issued: '1' });
+  describe('admin 発行経由の印があるとき', () => {
+    it('再送リンクを出さず、発行元の管理者へ案内する', async () => {
+      // 発行アカウントの宛先は受信できない合成アドレス。再送を押しても
+      // 列挙防止で「送信しました」が返るだけで何も届かない
+      await renderPage({ token: 'plain-token', issued: '1' });
 
-      expect(form).toHaveAttribute('data-issued', 'true');
+      expect(
+        screen.queryByRole('link', { name: '再設定リンクを再送する' }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_RESEND),
+      ).toBeInTheDocument();
     });
 
-    it('印が無ければ通常の利用者として渡す', async () => {
-      const form = await renderPage({ token: 'plain-token' });
+    it.each([
+      ['印が無い', {}],
+      ['値が違う', { issued: 'yes' }],
+      ['空文字', { issued: '' }],
+      ['配列', { issued: ['1', '1'] }],
+    ])('%s なら従来どおり再送リンクを出す', async (_label, extra) => {
+      await renderPage({ token: 'plain-token', ...extra });
 
-      expect(form).toHaveAttribute('data-issued', 'false');
-    });
-
-    it('印の値が違えば通常の利用者として渡す', async () => {
-      const form = await renderPage({ token: 'plain-token', issued: 'yes' });
-
-      expect(form).toHaveAttribute('data-issued', 'false');
-    });
-
-    it('印が配列なら通常の利用者として渡す', async () => {
-      const form = await renderPage({
-        token: 'plain-token',
-        issued: ['1', '1'],
-      });
-
-      expect(form).toHaveAttribute('data-issued', 'false');
+      expect(
+        screen.getByRole('link', { name: '再設定リンクを再送する' }),
+      ).toHaveAttribute('href', '/auth/forgot-password');
+      expect(
+        screen.queryByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_RESEND),
+      ).not.toBeInTheDocument();
     });
   });
 

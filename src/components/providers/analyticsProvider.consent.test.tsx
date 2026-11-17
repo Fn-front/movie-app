@@ -133,6 +133,26 @@ describe('AnalyticsProvider（同意状態の反映）', () => {
       expect(pageViews().length).toBe(before + 1);
     });
 
+    it('granted → denied → granted では送り直さない', () => {
+      // 既に granted で送った page_view がある。送り直すと純粋な重複。
+      // 遷移を伴わずにこの順を辿る経路が実在する:
+      // - `/settings` と `/privacy` の同意トグル（cookieConsentToggle）
+      // - ログアウトの後始末（useConsentServerSync の clearOwnedConsent）
+      // - 別タブでの撤回・再同意（storage イベント）
+      recordConsentDecision('granted', '');
+      render(<AnalyticsProvider />);
+      const before = pageViews().length;
+
+      act(() => {
+        recordConsentDecision('denied', '');
+      });
+      act(() => {
+        recordConsentDecision('granted', '');
+      });
+
+      expect(pageViews().length).toBe(before);
+    });
+
     it('unset → denied では update のみ', () => {
       render(<AnalyticsProvider />);
       const before = pageViews().length;

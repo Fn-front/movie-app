@@ -21,6 +21,7 @@ import { usePathname } from 'next/navigation';
 
 import { useConsentServerSync } from '@/hooks/useConsentServerSync';
 import { useCookieConsent } from '@/hooks/useCookieConsent';
+import { getEffectiveConsentState } from '@/utils/cookieConsent';
 import {
   buildGtagInitScript,
   buildPageLocation,
@@ -38,9 +39,14 @@ export const AnalyticsProvider = memo(function AnalyticsProvider() {
   // 直近に送った page_view のパス。同一パスへの二重送信を防ぐ
   const lastPageViewRef = useRef<string | null>(null);
 
-  // 直前の同意状態。「同意が**成立した瞬間**」だけを捕まえるために持つ。
-  // `consent` の値だけでは、再訪問者（最初から granted）と区別がつかない
-  const previousConsentRef = useRef<typeof consent | null>(null);
+  // その page_view を **granted で送ったか**。
+  //
+  // 送り直してよいのは「まだ granted で送れていないページ」だけ。直前の
+  // 同意状態で判定すると `granted → denied → granted` を区別できず、
+  // 既に計上済みのページを二重に送る。遷移を伴わずにこの順を辿る経路は
+  // 実在する（`/settings` と `/privacy` の同意トグル、ログアウトの後始末、
+  // 別タブでの撤回・再同意）
+  const lastPageViewGrantedRef = useRef(false);
 
   // 1. 同意状態の反映
   //
@@ -62,9 +68,6 @@ export const AnalyticsProvider = memo(function AnalyticsProvider() {
   useEffect(() => {
     if (consent === 'unknown') return;
 
-    const previous = previousConsentRef.current;
-    previousConsentRef.current = consent;
-
     const granted = consent === 'granted';
 
     // gtag が未定義なのは GA ID 無効で <head> スクリプトを出していないとき。
@@ -78,23 +81,15 @@ export const AnalyticsProvider = memo(function AnalyticsProvider() {
       return;
     }
 
-    // 再訪問者（`previous` が null＝この granted が初回の確定値）では
-    // 送り直さない。`<head>` のブートストラップが granted で始まるので、
-    // 2 の page_view が既に granted で飛んでいる。
-    //
-    // `previous` が granted でないのは `unset`（バナー未回答）か `denied`
-    // （明示的に拒否）のどちらか。どちらも送ったヒットは捨てられている
-    // ので、区別せず送り直す。
-    // `lastPageViewRef` が null なら 2 がまだ送っていないので、そちらに任せる
-    if (
-      previous === null ||
-      previous === 'granted' ||
-      lastPageViewRef.current === null
-    ) {
-      return;
-    }
+    // 2 がまだ送っていないなら、そちらが granted で送るので任せる。
+    // 再訪問者（`<head>` のブートストラップが granted で始まる）はここを通る
+    if (lastPageViewRef.current === null) return;
+
+    // 既に granted で送ったページは送り直さない。重複になるだけ
+    if (lastPageViewGrantedRef.current) return;
 
     // consent update の後に送る。逆順だとまだ denied のまま飛ぶ
+    lastPageViewGrantedRef.current = true;
     sendPageView({
       pagePath: lastPageViewRef.current,
       pageLocation: buildPageLocation(),
@@ -118,6 +113,12 @@ export const AnalyticsProvider = memo(function AnalyticsProvider() {
     // async generateMetadata なので確実にずれる）。1フレーム待ってから読む
     const frame = requestAnimationFrame(() => {
       lastPageViewRef.current = pathname;
+      // ⚠️ React 側の `consent` ではなく保存値を読む。再訪問者は
+      // `<head>` のブートストラップが localStorage から granted で始めるため、
+      // `useCookieConsent` がまだ 'unknown' を返している間でも **gtag は
+      // 既に granted**。`consent` で判定すると「granted で送っていない」と
+      // 誤記録し、直後の 1 が同じページを送り直して重複する
+      lastPageViewGrantedRef.current = getEffectiveConsentState() === 'granted';
       sendPageView({
         pagePath: pathname,
         // window.location.href は使わない。クエリ文字列に検索キーワードや

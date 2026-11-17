@@ -18,8 +18,12 @@
  * 認証フローのパス接頭辞
  *
  * 個別に列挙しない。`/auth/` 配下にページが増えるたびに追従漏れが起きる。
- * 現在の対象は signin / signup / forgot-password / reset-password /
- * two-factor / error の6つ。
+ * 現在実在するのは signin / signup / forgot-password / reset-password /
+ * two-factor の5つ。
+ *
+ * ⚠️ `ROUTES.AUTH_ERROR`（`/auth/error`）は NextAuth の `pages.error` に
+ * 指定されているが**ページが無く 404 になる**（`src/lib/auth/auth.ts:333`）。
+ * 実装されればプレフィックスで自動的に対象へ入る。
  *
  * 末尾のスラッシュを含めるのは `/authors` のようなパスを巻き込まないため。
  */

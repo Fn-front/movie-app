@@ -111,11 +111,24 @@ describe('CookieConsentBanner', () => {
       ).not.toBeInTheDocument();
     });
 
-    it('同意状態は変えない（フローを抜けた先で聞く）', () => {
+    it('抜けた先では出る（同意状態を記録しないので聞き直せる）', () => {
+      // ⚠️ 「同意状態が unset のまま」だけを見ると、ボタンを押さない限り
+      // 常に真なので**判定を丸ごと外しても通る**。認証ルートで出ないことと
+      // 抜けた先で出ることを対にして、初めて退行を捕まえられる
       mockPathname = ROUTES.RESET_PASSWORD;
+      const { unmount } = render(<CookieConsentBanner />);
 
+      expect(
+        screen.queryByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),
+      ).not.toBeInTheDocument();
+      unmount();
+
+      mockPathname = '/';
       render(<CookieConsentBanner />);
 
+      expect(
+        screen.getByRole('region', { name: ARIA_LABELS.COOKIE_BANNER }),
+      ).toBeInTheDocument();
       expect(getStoredConsentState()).toBe('unset');
     });
 

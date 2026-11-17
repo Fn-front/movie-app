@@ -25,10 +25,18 @@ import styles from './resetPasswordForm.module.scss';
 interface ResetPasswordFormProps {
   /** メールのリンクに載っていたトークン */
   token?: string;
+  /**
+   * admin 発行アカウントの設定リンクから来たか
+   *
+   * 受け取り手は自力で再送できない（合成アドレス宛には届かず、列挙防止で
+   * 理由も表示されない）。復旧は admin の再発行だけなので、再送の導線を
+   * 出さずにそちらへ案内する
+   */
+  isIssuedAccount?: boolean;
 }
 
 export const ResetPasswordForm = memo<ResetPasswordFormProps>(
-  function ResetPasswordForm({ token }) {
+  function ResetPasswordForm({ token, isIssuedAccount = false }) {
     const { isSubmitting, error, submit } = useResetPassword({ token });
 
     const {
@@ -99,12 +107,16 @@ export const ResetPasswordForm = memo<ResetPasswordFormProps>(
         )}
 
         <p className={styles.c_reset_password__footer}>
-          <Link
-            href={ROUTES.FORGOT_PASSWORD}
-            className={styles.c_reset_password__link}
-          >
-            再設定リンクを再送する
-          </Link>
+          {isIssuedAccount ? (
+            PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_RESEND
+          ) : (
+            <Link
+              href={ROUTES.FORGOT_PASSWORD}
+              className={styles.c_reset_password__link}
+            >
+              再設定リンクを再送する
+            </Link>
+          )}
         </p>
       </div>
     );

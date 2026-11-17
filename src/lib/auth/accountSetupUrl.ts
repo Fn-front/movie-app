@@ -7,6 +7,7 @@
  */
 
 import { ROUTES } from '@/constants';
+import { ACCOUNT_SETUP_ISSUED_PARAM } from '@/constants/adminAccount';
 import { getRequiredEnv } from '@/utils/env';
 
 /**
@@ -22,5 +23,13 @@ import { getRequiredEnv } from '@/utils/env';
 export function buildAccountSetupUrl(token: string): string {
   const url = new URL(ROUTES.RESET_PASSWORD, getRequiredEnv('NEXTAUTH_URL'));
   url.searchParams.set('token', token);
+
+  // 発行経由であることを設定ページへ伝える。受け取り手は自力で再送できない
+  // ため、「再設定リンクを再送する」を出すと行き止まりになる
+  url.searchParams.set(
+    ACCOUNT_SETUP_ISSUED_PARAM.NAME,
+    ACCOUNT_SETUP_ISSUED_PARAM.VALUE,
+  );
+
   return url.toString();
 }

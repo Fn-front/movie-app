@@ -119,9 +119,32 @@ export const POST = withAdminAuth(
     });
 
     if (!sent) {
-      // 作成したアカウントは残す。削除すると、送信だけ失敗した場合に
-      // 「誰にも渡っていないアカウント」の有無が分からなくなる。
-      // 一覧に「パスワード未設定」として出るため、再発行で復旧できる
+      // 作成したアカウントを消す。メールが出ていない以上、設定リンクは誰にも
+      // 渡っておらず、このアカウントは誰にも使えない。
+      //
+      // 以前は「一覧にパスワード未設定として出るので再発行で復旧できる」として
+      // 残していたが、失敗時の画面は一覧を取り直さないため**その場では出ない**。
+      // admin から見えるのは「メールの送信に失敗しました。」だけで、作成された
+      // ことに気づけないまま押し直すと、使えないアカウントが毎回1件積まれる。
+      // 送信失敗でユーザー行を消す `auth/register` と方針を揃える。
+      //
+      // `password_reset_tokens.user_id`（20261018010000）と
+      // `admin_audit_logs.target_user_id`（20261030100000）はどちらも
+      // ON DELETE CASCADE なので、users 行を消せば一緒に消える
+      const { error: rollbackError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
+
+      // 消せなければ使えないアカウントが残る。admin は押し直せるので操作は
+      // 止めないが、黙って溜まると気づけないのでログには必ず出す
+      if (rollbackError) {
+        console.error(
+          `[adminAccount] 発行アカウントのロールバックに失敗しました username='${username}'`,
+          rollbackError,
+        );
+      }
+
       return NextResponse.json(
         {
           success: false,
@@ -129,7 +152,6 @@ export const POST = withAdminAuth(
             code: ERROR_CODE.SERVER_ERROR,
             message: ADMIN_ACCOUNT_MESSAGES.EMAIL_SEND_FAILED,
           },
-          data: { username },
         },
         { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
       );

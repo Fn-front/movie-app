@@ -3,13 +3,14 @@
  */
 
 /**
- * 管理者発行アカウント API Route テスト（GET のレート制限）
+ * 管理者発行アカウント API Route テスト
  *
  * #934 で `GET /api/admin/accounts` にレート制限を入れた際に新設した。
- * POST 側の発行フローは本ファイルの対象外（別途テストが要る）。
+ * POST 側は #1221（メール送信失敗時のロールバック）で足した。
  */
 
-import { GET } from './route';
+import { GET, POST } from './route';
+import { ADMIN_ACCOUNT_MESSAGES } from '@/constants/adminAccount';
 
 // --- Mocks ---
 
@@ -33,15 +34,40 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 }));
 
 const mockListIssuedAccounts = jest.fn();
+const mockCreateIssuedAccount = jest.fn();
 jest.mock('@/lib/auth/adminAccount', () => ({
   listIssuedAccounts: (...args: unknown[]) => mockListIssuedAccounts(...args),
-  createIssuedAccount: jest.fn(),
+  createIssuedAccount: (...args: unknown[]) => mockCreateIssuedAccount(...args),
+}));
+
+const mockIssuePasswordResetToken = jest.fn();
+jest.mock('@/lib/auth/passwordResetToken', () => ({
+  issuePasswordResetToken: (...args: unknown[]) =>
+    mockIssuePasswordResetToken(...args),
+}));
+
+const mockSendAdminAccountEmail = jest.fn();
+jest.mock('@/lib/auth/sendAdminAccountEmail', () => ({
+  sendAdminAccountEmail: (...args: unknown[]) =>
+    mockSendAdminAccountEmail(...args),
+}));
+
+jest.mock('@/lib/auth/accountSetupUrl', () => ({
+  buildAccountSetupUrl: (token: string) =>
+    `http://localhost/account/setup?token=${token}`,
 }));
 
 // --- Helpers ---
 
 const createGetRequest = () =>
   new Request('http://localhost/api/admin/accounts');
+
+const createPostRequest = (email = 'someone@example.com') =>
+  new Request('http://localhost/api/admin/accounts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
 
 /** withAdminAuth はロールをDBから読む（JWT を信用しない） */
 const mockAdminRoleLookup = (role: string | null) => {
@@ -148,6 +174,114 @@ describe('GET /api/admin/accounts', () => {
         expect.anything(),
         expect.anything(),
       );
+    });
+  });
+});
+
+describe('POST /api/admin/accounts', () => {
+  /** `supabase.from('users').delete().eq('id', ...)` を捕まえる */
+  const mockDeleteEq = jest.fn();
+
+  /**
+   * ロールバックの DELETE を1回ぶん積む
+   *
+   * `mockAdminRoleLookup` の後に積むこと。`withAdminAuth` のロール確認も
+   * 同じ `users` テーブルを引くため、区別できるのは呼び出し順だけ
+   */
+  const mockUserDelete = (error: unknown = null) => {
+    mockFrom.mockReturnValueOnce({
+      delete: () => ({
+        eq: (column: string, value: string) => {
+          mockDeleteEq(column, value);
+          return Promise.resolve({ error });
+        },
+      }),
+    });
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFrom.mockReset();
+    mockGetAuthSession.mockResolvedValue({ user: { id: 'admin-1' } });
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockCreateIssuedAccount.mockResolvedValue({
+      userId: 'issued-user-1',
+      username: '376DF4GD4BTZ',
+    });
+    mockIssuePasswordResetToken.mockResolvedValue('plain-token');
+    mockSendAdminAccountEmail.mockResolvedValue(true);
+  });
+
+  it('送信できたら201を返し、アカウントは消さない', async () => {
+    mockAdminRoleLookup('admin');
+
+    const response = await POST(createPostRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(json.data.username).toBe('376DF4GD4BTZ');
+    expect(mockDeleteEq).not.toHaveBeenCalled();
+  });
+
+  describe('メール送信に失敗したとき', () => {
+    it('発行したアカウントを削除する', async () => {
+      mockAdminRoleLookup('admin');
+      mockSendAdminAccountEmail.mockResolvedValue(false);
+      mockUserDelete();
+
+      const response = await POST(createPostRequest());
+      const json = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(json.error.message).toBe(ADMIN_ACCOUNT_MESSAGES.EMAIL_SEND_FAILED);
+      expect(mockDeleteEq).toHaveBeenCalledWith('id', 'issued-user-1');
+    });
+
+    it('消えたアカウント名をレスポンスに残さない', async () => {
+      // 残すと画面が「発行済み」として扱えてしまう。実体はもう無い
+      mockAdminRoleLookup('admin');
+      mockSendAdminAccountEmail.mockResolvedValue(false);
+      mockUserDelete();
+
+      const json = await (await POST(createPostRequest())).json();
+
+      expect(json.data).toBeUndefined();
+    });
+
+    it('削除に失敗しても500を返し、気づけるようログへ出す', async () => {
+      const consoleError = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      mockAdminRoleLookup('admin');
+      mockSendAdminAccountEmail.mockResolvedValue(false);
+      mockUserDelete({ code: '23503' });
+
+      const response = await POST(createPostRequest());
+
+      expect(response.status).toBe(500);
+      expect(consoleError).toHaveBeenCalledWith(
+        expect.stringContaining('376DF4GD4BTZ'),
+        expect.objectContaining({ code: '23503' }),
+      );
+
+      consoleError.mockRestore();
+    });
+  });
+
+  describe('処理順', () => {
+    it('レート制限超過なら、入力が不正でも429を返す', async () => {
+      // レート制限 → 検証 の順を固定する（`.claude/rules/api-route.md`）。
+      // 逆だと、形式だけ崩したリクエストでカウンタを消費せずに試行できる
+      mockAdminRoleLookup('admin');
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 600,
+      });
+
+      const response = await POST(createPostRequest('not-an-email'));
+
+      expect(response.status).toBe(429);
+      expect(mockCreateIssuedAccount).not.toHaveBeenCalled();
     });
   });
 });

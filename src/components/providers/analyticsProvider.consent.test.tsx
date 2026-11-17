@@ -79,9 +79,10 @@ describe('AnalyticsProvider（同意状態の反映）', () => {
       expect(pageViews()).toHaveLength(1);
     });
 
-    it('unset → granted では update のみ送り、page_view は再送しない', () => {
-      // Consent Mode advanced では未同意でも Cookie を伴わない page_view が
-      // 既に送られている。同意成立で送り直すと同じ閲覧が2件になる
+    it('unset → granted では page_view を送り直す', () => {
+      // 既に送った page_view は denied のヒットで、GA は identified な
+      // ユーザー／セッションを作らない。送り直さないとランディングページが
+      // 計測されない（#1227）
       render(<AnalyticsProvider />);
       const before = pageViews().length;
 
@@ -92,6 +93,63 @@ describe('AnalyticsProvider（同意状態の反映）', () => {
       expect(consentUpdates().at(-1)?.[2]).toEqual({
         analytics_storage: 'granted',
       });
+      expect(pageViews().length).toBe(before + 1);
+      expect(pageViews().at(-1)?.[2]).toMatchObject({ page_path: '/' });
+    });
+
+    it('再送は consent update の後に送る', () => {
+      // 逆順だと、送り直した page_view がまだ denied のまま飛ぶ
+      render(<AnalyticsProvider />);
+
+      const order: string[] = [];
+      window.gtag = (...args: unknown[]) => {
+        gtagCalls.push(args);
+        if (args[0] === 'consent' && args[1] === 'update') order.push('update');
+        if (args[0] === 'event' && args[1] === 'page_view')
+          order.push('page_view');
+      };
+
+      act(() => {
+        recordConsentDecision('granted', '');
+      });
+
+      expect(order).toEqual(['update', 'page_view']);
+    });
+
+    it('unset → denied → granted でも送り直す', () => {
+      // 一度断ってから同意し直した場合。denied のあいだのヒットは
+      // 同じく捨てられている
+      render(<AnalyticsProvider />);
+
+      act(() => {
+        recordConsentDecision('denied', '');
+      });
+      const before = pageViews().length;
+
+      act(() => {
+        recordConsentDecision('granted', '');
+      });
+
+      expect(pageViews().length).toBe(before + 1);
+    });
+
+    it('granted → denied → granted では送り直さない', () => {
+      // 既に granted で送った page_view がある。送り直すと純粋な重複。
+      // 遷移を伴わずにこの順を辿る経路が実在する:
+      // - `/settings` と `/privacy` の同意トグル（cookieConsentToggle）
+      // - ログアウトの後始末（useConsentServerSync の clearOwnedConsent）
+      // - 別タブでの撤回・再同意（storage イベント）
+      recordConsentDecision('granted', '');
+      render(<AnalyticsProvider />);
+      const before = pageViews().length;
+
+      act(() => {
+        recordConsentDecision('denied', '');
+      });
+      act(() => {
+        recordConsentDecision('granted', '');
+      });
+
       expect(pageViews().length).toBe(before);
     });
 
@@ -113,6 +171,7 @@ describe('AnalyticsProvider（同意状態の反映）', () => {
       recordConsentDecision('granted', '');
       document.cookie = '_ga=GA1.1.123';
       render(<AnalyticsProvider />);
+      const before = pageViews().length;
 
       act(() => {
         recordConsentDecision('denied', '');
@@ -122,6 +181,8 @@ describe('AnalyticsProvider（同意状態の反映）', () => {
         analytics_storage: 'denied',
       });
       expect(document.cookie).not.toContain('_ga=');
+      // 撤回で送り直さない。送れば denied のヒットが1件増えるだけ
+      expect(pageViews().length).toBe(before);
     });
 
     it('granted → unset（ログアウト・版の切り上げ）でも denied を送る', () => {

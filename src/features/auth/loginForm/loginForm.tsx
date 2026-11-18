@@ -174,7 +174,7 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
             label='メールアドレスまたはアカウント名'
             type='text'
             autoComplete='username'
-            placeholder='example@example.com または ABCD1234EFGH'
+            placeholder='example@example.com または 4KMPQ7RSTWX2'
             fullWidth
             error={errors.email?.message}
             {...register('email')}

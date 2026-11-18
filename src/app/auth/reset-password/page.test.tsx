@@ -75,6 +75,32 @@ describe('ResetPasswordPage', () => {
     });
   });
 
+  /**
+   * ログインに使うアカウント名（#1237）
+   *
+   * `issued` と同じ扱いをする。片方だけ緩いと、渡し忘れや不正な形を
+   * どちらのテストも検出できない
+   */
+  describe('アカウント名', () => {
+    it('渡されていれば表示する', async () => {
+      await renderPage({ token: 'plain-token', account: 'GQTDXC4QHWC3' });
+
+      expect(screen.getByText('GQTDXC4QHWC3')).toBeInTheDocument();
+    });
+
+    it.each([
+      ['無い', {}],
+      ['空文字', { account: '' }],
+      ['配列', { account: ['GQTDXC4QHWC3', 'OTHER'] }],
+    ])('%s なら出さない', async (_label, extra) => {
+      await renderPage({ token: 'plain-token', ...extra });
+
+      expect(
+        screen.queryByText(PASSWORD_RESET_MESSAGES.ACCOUNT_NAME_LABEL),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it('トークンがURLに載るため検索エンジンに拾わせない', () => {
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });

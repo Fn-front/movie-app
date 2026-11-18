@@ -66,22 +66,32 @@ export const ResetPasswordForm = memo<ResetPasswordFormProps>(
     // 以前は即 `/auth/signin` へ遷移していたため、成功したことも、ログインに
     // 使うアカウント名も伝わらなかった。実際に、設定は成功しているのに自分の
     // メールアドレスでログインを試みて失敗し、リンクを3回踏み直した人がいる
+    /** ログインに使う値。設定の前後どちらでも同じ形で見せる */
+    const accountName = username ? (
+      <p className={styles.c_reset_password__account}>
+        {PASSWORD_RESET_MESSAGES.ACCOUNT_NAME_LABEL}
+        <strong className={styles.c_reset_password__account_value}>
+          {username}
+        </strong>
+      </p>
+    ) : null;
+
     if (isCompleted) {
       return (
-        <div className={styles.c_reset_password}>
+        /*
+          ⚠️ `role='status'` を付ける。`isCompleted` でツリーごと差し替わる
+          ため、送信ボタンが消えた瞬間フォーカスが `<body>` へ落ち、成功が
+          支援技術に一切伝わらない。SPA では `<h1>` の差し替えは読まれない。
+          同系統の `forgotPasswordForm` も成功表示をライブリージョンにして
+          いる。`aria-atomic` は既定 true なので見出しごとまとめて読まれる
+        */
+        <div className={styles.c_reset_password} role='status'>
           <Heading level={1} align='center'>
-            パスワードを設定しました
+            {PASSWORD_RESET_MESSAGES.RESET_COMPLETED_HEADING}
           </Heading>
 
           <div className={styles.c_reset_password__body}>
-            {username && (
-              <p className={styles.c_reset_password__account}>
-                ログインに使うアカウント名
-                <strong className={styles.c_reset_password__account_value}>
-                  {username}
-                </strong>
-              </p>
-            )}
+            {accountName}
 
             {/*
               アカウント名が分かっていれば、ログイン欄に入れた状態で渡す。
@@ -96,7 +106,7 @@ export const ResetPasswordForm = memo<ResetPasswordFormProps>(
               }
               className={styles.c_reset_password__cta}
             >
-              ログイン画面へ
+              {PASSWORD_RESET_MESSAGES.GO_TO_LOGIN}
             </Link>
           </div>
         </div>
@@ -113,14 +123,7 @@ export const ResetPasswordForm = memo<ResetPasswordFormProps>(
           ログインに使う値を設定の前から見せる（#1237）。メール本文にしか
           無かったため、メールを閉じた利用者がメールアドレスを入れていた
         */}
-        {username && (
-          <p className={styles.c_reset_password__account}>
-            ログインに使うアカウント名
-            <strong className={styles.c_reset_password__account_value}>
-              {username}
-            </strong>
-          </p>
-        )}
+        {accountName}
 
         {token ? (
           <form

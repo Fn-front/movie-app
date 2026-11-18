@@ -60,42 +60,104 @@ export async function issuePasswordResetToken(
 }
 
 /**
+ * トークンの消費結果
+ *
+ * 消費できなかった理由まで返す。画面の文言を出し分けるため（#1232）。
+ * 実際に「設定を終えた人がリンクを開き直して『有効期限が切れています』と
+ * 言われる」事故が起きた
+ */
+export type ConsumePasswordResetTokenResult =
+  | { status: 'consumed'; userId: string }
+  | { status: 'used' }
+  | { status: 'expired' }
+  | { status: 'invalid' };
+
+/**
  * トークンを検証して消費する
  *
  * 「未使用かつ期限内のときだけ使用済みにする」を条件付きUPDATEの更新行数で
  * 判定する。先に読んでから書くと、同じリンクを同時に2回開かれたときに
  * 両方とも通ってしまう。
  *
+ * 0行だった理由は**そのあとで**引き直す。UPDATE の条件を緩めて理由を得る
+ * 作りにすると原子性が壊れるため、判定はあくまで更新行数で行う。
+ *
  * @param supabase - service_role のクライアント
  * @param token - メールのリンクに載っていた平文トークン
- * @returns 対象ユーザーのID。無効・期限切れ・使用済みなら null
+ * @returns 消費できたらユーザーID付き。できなければその理由
  */
 export async function consumePasswordResetToken(
   supabase: SupabaseClient,
   token: string,
-): Promise<string | null> {
+): Promise<ConsumePasswordResetTokenResult> {
+  const tokenHash = hashVerificationToken(token);
+
   const { data, error } = await supabase
     .from('password_reset_tokens')
     .update({ used_at: new Date().toISOString() })
-    .eq('token_hash', hashVerificationToken(token))
+    .eq('token_hash', tokenHash)
     .is('used_at', null)
     .gt('expires_at', new Date().toISOString())
     .select('user_id');
 
-  // ⚠️ error を捨てると `data: null` → 下の `return null` に化け、呼び出し側が
-  // 「リンクが無効」（400）を返す。無効・期限切れ・使用済みと区別がつかず、
-  // 利用者はリセットの再申請へ誘導される。投げて 500 にする（#1167）。
-  // この経路では UPDATE 自体が失敗している＝トークンは焼かれていないので、
-  // 再試行は成功しうる
+  // ⚠️ error を捨てると `data: null` → 理由の引き直しに落ち、行が無いので
+  // `invalid` に化ける。呼び出し側は「リンクが無効」（400）を返し、本当に
+  // 無効なトークンと区別がつかない。利用者はリセットの再申請へ誘導される。
+  // 投げて 500 にする（#1167）。この経路では UPDATE 自体が失敗している＝
+  // トークンは焼かれていないので、再試行は成功しうる
   if (error) {
     throw error;
   }
 
-  if (!data || data.length === 0) {
-    return null;
+  if (data && data.length > 0) {
+    return { status: 'consumed', userId: data[0].user_id as string };
   }
 
-  return data[0].user_id as string;
+  return resolveConsumeFailure(supabase, tokenHash);
+}
+
+/**
+ * 消費できなかった理由を引き直す
+ *
+ * ⚠️ 読み取りの失敗を `invalid` に化かさない。上と同じ理由で投げる。
+ *
+ * @param supabase - service_role のクライアント
+ * @param tokenHash - 照合に使ったハッシュ
+ * @returns `used` / `expired` / `invalid`
+ */
+async function resolveConsumeFailure(
+  supabase: SupabaseClient,
+  tokenHash: string,
+): Promise<ConsumePasswordResetTokenResult> {
+  const { data, error } = await supabase
+    .from('password_reset_tokens')
+    .select('used_at, expires_at')
+    .eq('token_hash', tokenHash)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  // 行が無い＝そもそも存在しないトークン。掃除で消えた場合もここに来るが、
+  // 利用者にとっては「使えないリンク」で同じ
+  if (!data) {
+    return { status: 'invalid' };
+  }
+
+  // 使用済みを先に見る。両方に当てはまる（使ったあと期限も切れた）ときは、
+  // 「期限切れ」より「使用済み」のほうが次にすること（ログイン）が分かる
+  if (data.used_at) {
+    return { status: 'used' };
+  }
+
+  if (new Date(data.expires_at as string).getTime() <= Date.now()) {
+    return { status: 'expired' };
+  }
+
+  // 未使用で期限内なのに UPDATE が0行＝この一瞬で別のリクエストが消費した。
+  // 同じリンクを同時に2回開いた場合。相手が使い切ったので使用済み扱いでよい
+  return { status: 'used' };
 }
 
 /**

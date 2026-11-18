@@ -29,7 +29,10 @@ import {
   RATE_LIMIT_ACTION,
 } from '@/constants';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
-import { consumePasswordResetToken } from '@/lib/auth/passwordResetToken';
+import {
+  consumePasswordResetToken,
+  peekPasswordResetToken,
+} from '@/lib/auth/passwordResetToken';
 import { getClientIp } from '@/lib/http/getClientIp';
 import { rejectPwnedPassword } from '@/helpers/pwnedPasswordGuard';
 
@@ -51,9 +54,10 @@ const TOKEN_FAILURE_MESSAGES = {
  * 総当たりで得られる情報は増えない。
  *
  * ⚠️ `used` の文言で「設定は完了している」と断定しないこと。トークンを
- * 消費したあとに失敗する経路がある（下の新旧同一チェック、users の更新
- * 失敗）。そこで弾かれた人が再送信するとこの応答に当たるが、その場合
- * パスワードは設定されていない。
+ * 消費したあとに失敗する経路が**まだ1つ残っている**（users の更新失敗）。
+ * そこで弾かれた人が再送信するとこの応答に当たるが、その場合パスワードは
+ * 設定されていない。新旧同一チェックは #1235 で消費より前へ移したので、
+ * もうここには来ない。
  *
  * 次に何をすればよいか（再送 / 管理者へ依頼）は画面のフッターが出し分ける
  * （#1225）。ここは**何が起きたか**だけを言う。
@@ -138,27 +142,32 @@ export async function POST(request: Request) {
     const pwnedResponse = await rejectPwnedPassword(password);
     if (pwnedResponse) return pwnedResponse;
 
-    // トークンの検証と消費を1文で行う。パスワードを更新してから消費すると、
-    // 同じリンクを同時に2回開かれたときに両方とも通る
-    const consumed = await consumePasswordResetToken(supabase, token);
+    // ⚠️ まだ消費しない（#1235）。
+    //
+    // 消費を先に置くと、この下の**回復可能なエラー**で弾かれた利用者が
+    // リンクを失う。現在と同じパスワードを打ち直しただけでも再発行が必要に
+    // なり、発行アカウントなら自力では再発行できない（#1226）。
+    //
+    // 原子性は失っていない。弾けるものを弾いたあと、最後に条件付き UPDATE
+    // （`consumePasswordResetToken`）で確定させる。読んでから書くまでに
+    // 別のリクエストが消費していれば、そこで 0 行になって `used` が返る
+    const peeked = await peekPasswordResetToken(supabase, token);
 
-    if (consumed.status !== 'consumed') {
-      return tokenFailureResponse(consumed.status);
+    if (peeked.status !== 'valid') {
+      return tokenFailureResponse(peeked.status);
     }
 
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('id, password_hash')
-      .eq('id', consumed.userId)
+      .eq('id', peeked.userId)
       .maybeSingle();
 
     // ⚠️ error を捨ててはいけない。`.maybeSingle()` は読み取りに失敗しても
     // `data: null` を返すため、DB の一時障害が下の「リンクが無効」に化ける。
-    // トークンは直前に消費済み（`consumePasswordResetToken`）なので、
-    // そうなった利用者はリセットの再申請からやり直しになる。パスワードを
-    // 忘れている＝他にログイン手段が無い状態なので傷が深い。
     // 行が無いだけなら maybeSingle は error を返さないため、ここに来るのは
-    // 本物の読み取り失敗だけ。500 を返して再試行してもらう（#1167）
+    // 本物の読み取り失敗だけ。500 を返して再試行してもらう（#1167）。
+    // トークンはまだ焼いていないので、再試行は成功しうる
     if (userError) {
       throw userError;
     }
@@ -169,9 +178,9 @@ export async function POST(request: Request) {
       return tokenFailureResponse('invalid');
     }
 
-    // 新旧同一チェック。トークンは既に消費済みなので、ここで弾かれた利用者は
-    // 再発行が必要になる。パスワードが変わっていないのに
-    // password_changed_at を進めてセッションを飛ばすよりは分かりやすい
+    // 新旧同一チェック。**トークンを消費する前**に行う（#1235）。
+    // ここで弾かれるのは入力の打ち直しで直せる類のミスなので、
+    // リンクを失わせる理由が無い
     if (user.password_hash) {
       const isSamePassword = await bcrypt.compare(password, user.password_hash);
 
@@ -191,6 +200,17 @@ export async function POST(request: Request) {
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
+    // ここで初めて焼く。弾けるものは上で弾き終えている。
+    //
+    // 判定は条件付き UPDATE の更新行数で行うため、`peek` から here までの
+    // 間に同じリンクを別のリクエストが使い切っていれば 0 行になる。
+    // 「同じリンクを同時に2回開いても両方は通らない」は保たれる
+    const consumed = await consumePasswordResetToken(supabase, token);
+
+    if (consumed.status !== 'consumed') {
+      return tokenFailureResponse(consumed.status);
+    }
+
     // password_changed_at を更新することで既存セッションが無効化される
     // （src/lib/auth/auth.ts の jwt コールバックが突き合わせている）。
     // リセットは「アカウントを取り戻す」操作なので、奪われていた側の
@@ -204,6 +224,7 @@ export async function POST(request: Request) {
         password_hash: passwordHash,
         password_changed_at: new Date().toISOString(),
       })
+      // 権威は『実際に焼いた行』側。peeked.userId と同値だが意図が読みやすい
       .eq('id', consumed.userId);
 
     if (updateError) {

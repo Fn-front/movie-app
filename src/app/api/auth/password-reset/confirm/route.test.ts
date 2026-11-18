@@ -29,8 +29,10 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 }));
 
 const mockConsumeToken = jest.fn();
+const mockPeekToken = jest.fn();
 jest.mock('@/lib/auth/passwordResetToken', () => ({
   consumePasswordResetToken: (...args: unknown[]) => mockConsumeToken(...args),
+  peekPasswordResetToken: (...args: unknown[]) => mockPeekToken(...args),
 }));
 
 // 漏洩パスワード照合（HIBP）。既定では「漏洩していない」として通す
@@ -95,6 +97,7 @@ describe('POST /api/auth/password-reset/confirm', () => {
     mockFrom.mockReset();
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockIsPasswordPwned.mockResolvedValue(false);
+    mockPeekToken.mockResolvedValue({ status: 'valid', userId: 'user-1' });
     mockConsumeToken.mockResolvedValue({
       status: 'consumed',
       userId: 'user-1',
@@ -291,7 +294,11 @@ describe('POST /api/auth/password-reset/confirm', () => {
     });
 
     it('トークンが使えなかったときは既存セッションに触れない', async () => {
-      // 設定していないのにログアウトさせられる理由が無い
+      // 設定していないのにログアウトさせられる理由が無い。
+      // ⚠️ #1235 で検証が consume より前へ移ったため、users の取得を
+      // 仕込まないと TypeError → 500 になり、400 を見ているつもりで
+      // 「route が落ちること」しか確かめられない
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
       mockConsumeToken.mockResolvedValue({ status: 'used' });
 
       const response = await POST(
@@ -333,7 +340,7 @@ describe('POST /api/auth/password-reset/confirm', () => {
     ])(
       '%s なトークンは400を返し、理由が分かる文言を出す',
       async (_label, status, message) => {
-        mockConsumeToken.mockResolvedValue({ status });
+        mockPeekToken.mockResolvedValue({ status });
 
         const response = await POST(
           createRequest({ token: 'bad-token', password: VALID_PASSWORD }),
@@ -348,7 +355,7 @@ describe('POST /api/auth/password-reset/confirm', () => {
     it('使用済みの文言はログインへ案内しつつ、完了を断定しない', async () => {
       // 「もう一度やり直してください」だけだと、完了しているのに失敗したと
       // 読める。かといって「設定したパスワードでログインしてください」と
-      // 断定もできない。トークンを消費したあとに失敗する経路（新旧同一・
+      // 断定もできない。トークンを消費したあとに失敗する経路（users の
       // 更新失敗）で弾かれた人も、再送信すればこの文言に当たるため
       const message = PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED;
 
@@ -359,7 +366,7 @@ describe('POST /api/auth/password-reset/confirm', () => {
     });
 
     it('トークンが無効ならパスワードを更新しない', async () => {
-      mockConsumeToken.mockResolvedValue({ status: 'invalid' });
+      mockPeekToken.mockResolvedValue({ status: 'invalid' });
 
       await POST(
         createRequest({ token: 'bad-token', password: VALID_PASSWORD }),
@@ -370,15 +377,71 @@ describe('POST /api/auth/password-reset/confirm', () => {
     });
 
     it('トークンの消費はパスワード更新より先に行う', async () => {
-      // 更新してから消費すると、同じリンクを同時に2回開かれて両方通る
-      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+      // 更新してから消費すると、同じリンクを同時に2回開かれて両方通る。
+      // #1235 で検証を消費より前へ移したが、**消費と更新の順序は変えない**
+      const updateSpy = mockUserAndUpdate({
+        id: 'user-1',
+        password_hash: 'old-hash',
+      });
 
       await POST(
         createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
       );
 
       expect(mockConsumeToken.mock.invocationCallOrder[0]).toBeLessThan(
-        mockHash.mock.invocationCallOrder[0],
+        updateSpy.mock.invocationCallOrder[0],
+      );
+    });
+
+    /**
+     * 回復可能なエラーでリンクを焼かない（#1235）
+     *
+     * 消費を先に置いていたときは、現在と同じパスワードを打ち直しただけで
+     * リンクを失い、再発行が必要になっていた。パスワードを忘れている＝
+     * 他にログイン手段が無い状態で、発行アカウントなら自力で再発行も
+     * できない（#1226）
+     */
+    describe('消費する前に弾くもの', () => {
+      it('新旧同一で弾かれてもトークンを消費しない', async () => {
+        mockCompare.mockResolvedValue(true);
+        mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+
+        const response = await POST(
+          createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+        );
+
+        expect(response.status).toBe(400);
+        expect(mockConsumeToken).not.toHaveBeenCalled();
+      });
+
+      it('対象ユーザーが消えていてもトークンを消費しない', async () => {
+        mockUserAndUpdate(null);
+
+        await POST(
+          createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+        );
+
+        expect(mockConsumeToken).not.toHaveBeenCalled();
+      });
+
+      // 読み取り失敗の経路は下の「無効なリンク扱いにせず500を返す」が
+      // 同じモックで見ているので、そちらに消費しないことの確認を足した
+    });
+
+    it('peek から consume までの間に使い切られたら used を返す', async () => {
+      // 同じリンクを同時に2回開いた場合。読んでから書くまでの窓は
+      // 条件付き UPDATE が 0 行になることで塞がれている
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+      mockConsumeToken.mockResolvedValue({ status: 'used' });
+
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.message).toBe(
+        PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED,
       );
     });
 
@@ -400,9 +463,10 @@ describe('POST /api/auth/password-reset/confirm', () => {
      *
      * `.maybeSingle()` はどんなエラーでも `data: null` を返すため、
      * `error` を見ないと読み取り失敗が上のテストと同じ 400 になる。
-     * **トークンは直前に消費済み**なので、弾かれた利用者はリセットの
-     * 再申請からやり直しになる。パスワードを忘れている＝他に
-     * ログイン手段が無い状態なので、500 を返して再試行させるほうがよい
+     * ここは #1235 以降**トークンを消費する前**なので、500 を返せば
+     * 同じリンクで再試行できる。400 に化かすと「使えないリンク」として
+     * 再申請へ誘導され、パスワードを忘れている＝他にログイン手段が無い
+     * 利用者を無駄に遠回りさせる
      */
     it('ユーザーの読み取りに失敗したら、無効なリンク扱いにせず500を返す', async () => {
       mockFrom.mockReturnValueOnce({
@@ -422,6 +486,8 @@ describe('POST /api/auth/password-reset/confirm', () => {
       );
 
       expect(response.status).toBe(500);
+      // 焼いてしまうと再試行しても直らない（#1235）
+      expect(mockConsumeToken).not.toHaveBeenCalled();
     });
   });
 
@@ -576,6 +642,8 @@ describe('POST /api/auth/password-reset/confirm', () => {
     });
 
     it('トークン消費が例外になったら500を返す', async () => {
+      // users の取得を仕込まないと consume に到達しない（#1235）
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
       mockConsumeToken.mockRejectedValue(new Error('db error'));
 
       const response = await POST(

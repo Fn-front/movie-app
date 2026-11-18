@@ -41,21 +41,22 @@ export const ForgotPasswordForm = memo(function ForgotPasswordForm() {
       </Heading>
 
       {isSent ? (
-        <>
+        /*
+          ⚠️ 2つの段落を**1つの** `role='status'` にまとめる（#1226）。
+          「送信しました」だけを包むと、届かない理由に心当たりを持てる
+          唯一の文言がライブリージョンの外に出て、支援技術には読まれない。
+          `role='status'` は `aria-atomic` が既定 true なのでまとめて読まれる
+        */
+        <div role='status'>
           {/* 登録の有無を明かさないため、送信後は常に同じ案内を出す */}
-          <p className={styles.c_forgot_password__notice} role='status'>
+          <p className={styles.c_forgot_password__notice}>
             {PASSWORD_RESET_MESSAGES.REQUEST_ACCEPTED}
           </p>
 
-          {/*
-            ⚠️ 送信**後**にも出す（#1226）。発行アカウントの利用者がここまで
-            来ると、列挙防止のせいで「送信しました」と出たまま永久に届かない。
-            届かない理由に心当たりを持てるのはこの文言だけ
-          */}
           <p className={styles.c_forgot_password__lead}>
             {PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED}
           </p>
-        </>
+        </div>
       ) : (
         <>
           <p className={styles.c_forgot_password__lead}>

@@ -116,13 +116,40 @@ describe('ForgotPasswordForm', () => {
       ).toBeInTheDocument();
     });
 
-    it('どのアカウントが該当するかは応答で明かさない', () => {
-      // 発行アカウントかどうかはサーバーしか知らず、それを出すと列挙を許す。
-      // 条件を添えて全員に見せる形にしている
-      const message = PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED;
+    it('送信後の案内と同じライブリージョンに入れる', async () => {
+      // 「送信しました」だけを包むと、届かない理由に心当たりを持てる唯一の
+      // 文言がライブリージョンの外に出て、支援技術には読まれない
+      mockFetch.mockResolvedValue(okResponse());
 
-      expect(message).toContain('アカウント名でログイン');
-      expect(message).toContain('管理者');
+      render(<ForgotPasswordForm />);
+      await submitEmail('user@example.com');
+
+      const status = await screen.findByRole('status');
+
+      expect(status).toHaveTextContent(
+        PASSWORD_RESET_MESSAGES.REQUEST_ACCEPTED,
+      );
+      expect(status).toHaveTextContent(
+        PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED,
+      );
+    });
+
+    it.each([
+      ['試行上限（429）', 429, 'しばらく時間をおいてから再度お試しください。'],
+      ['サーバーエラー（500）', 500, PASSWORD_RESET_MESSAGES.RESET_FAILED],
+    ])('%s でも案内は消えない', async (_label, status, message) => {
+      // 応答によって出たり消えたりすると、どのメールアドレスが登録済みかを
+      // 推測する手がかりになる
+      mockFetch.mockResolvedValue(errorResponse(status, message));
+
+      render(<ForgotPasswordForm />);
+      await submitEmail('user@example.com');
+
+      await screen.findByRole('alert');
+
+      expect(
+        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED),
+      ).toBeInTheDocument();
     });
   });
 

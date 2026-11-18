@@ -251,16 +251,32 @@ SELECT DISTINCT action_type FROM rate_limits;
 ROLLBACK;
 ```
 
-- [ ] **Step 7: 適用する**
+- [ ] **Step 7: 適用する（⏸ ユーザーの指示待ち。2026-11-18 時点で未実行）**
+
+⚠️ シェルから `.env.local` を source できない（worktree 隔離で拒否される）。
+node 経由で環境変数を読み込んでから CLI を起動する。トークンはコマンドラインに出さない。
 
 ```bash
-set -a; . ./.env.local; set +a
-npx supabase db push --dry-run   # 対象が自分の1件だけか確認
-npx supabase db push
+node --env-file=.env.local -e "
+const r = require('child_process').spawnSync('npx',['supabase','db','push','--dry-run'],{encoding:'utf8'});
+console.log(r.stdout, r.stderr);"
 ```
 
-「リモートにあるがローカルに無い」で拒否されたら `.claude/rules/supabase-db.md` の
-「安全な回避手順」に従う。**`migration repair --status reverted` は実行しない。**
+初回は `LegacyProjectNotLinkedError` になる。worktree は未リンクなのでリンクする
+（ref は `npx supabase projects list` で引く。movie-app = `ffadavddxvpijvizsznk`）。
+
+「リモートにあるがローカルに無い」（`LegacyDbPushMissingLocalError`）で拒否されたら
+`.claude/rules/supabase-db.md` の「安全な回避手順」に従い、先行分を一時的に置いてから
+push し、終わったら消す。**`migration repair --status reverted` は実行しない。**
+
+2026-11-18 時点では `20261118061430_release_rate_limit_rpc.sql`（#1260 のブランチ）が
+先行している。
+
+- [ ] **Step 7b: 適用後に型を再生成する（⏸ Step 7 とセット）**
+
+⚠️ **適用前でも実装は進められる。** `createServiceRoleClient`
+（`src/helpers/supabase.ts:24`）は `createClient` に `Database` ジェネリクスを
+渡していないため、`database.types.ts` は `from('user_totp')` のクエリを型で縛らない。
 
 - [ ] **Step 8: GRANT が増えていないことを実測する**
 
@@ -1138,17 +1154,35 @@ Task 8 の新ルートから使うので、ここで `export` する。
   ): Promise<SendSecondFactorResult>;
   ```
 
-### 枠の戻しに新しい RPC を作らない
+### 枠の戻しは `release_rate_limit` RPC を使う（マイグレーションは作らない）
 
-当初案は「1回ぶんだけ減算する `releaseRateLimit`」だったが、**作らない。**
+当初案は「`resetRateLimit`（行ごと削除）で代用し、専用 RPC を作らない」だったが、
+**別ブランチ（#1260 / `aecdd432`）が `release_rate_limit` RPC を既に作り、
+本番にも適用済み**であることが判明したため、それを使う。
 
-`attempts` を1戻しても `locked_until` は戻らない。ちょうど上限に達した回の
-送信が失敗すると**ロックが残ったまま**になり、戻したつもりでログイン不能になる。
-本機能でいちばん避けたい状態そのもの。
+```sql
+-- 20261118061430_release_rate_limit_rpc.sql（#1260 のブランチ。本番適用済み）
+UPDATE rate_limits
+SET attempts = GREATEST(attempts - 1, 0),
+    locked_until = NULL      -- ← ロックも解除する
+WHERE identifier = p_identifier AND action_type = p_action_type;
+```
 
-代わりに既存の `resetRateLimit`（行ごと削除）を使う。全戻しでも濫用にならない
-—— 送信に失敗する局面は Resend が落ちているときで実配送が起きず、
-60秒の再送間隔が別途効いている。
+専用 RPC を避けた理由（`attempts` を1戻しても `locked_until` が残る）は、
+この実装では `locked_until = NULL` で解決済み。
+
+`resetRateLimit` を使ってはいけない。行ごと削除するため、**別の正当な送信で
+積んだ分まで消える**（RPC のコメントにも同じ指摘がある）。
+
+#### このブランチでやること
+
+- **マイグレーションは作らない。** 重複定義になる
+- **`src/lib/rateLimit/rateLimit.ts` に TS ラッパー `releaseRateLimit` を自分で書く。**
+  #1260 のブランチにも同名のラッパーがあるため、**マージ時にコンフリクトしうる**。
+  PR のレビューポイントに書くこと
+- Task 9（ログイン枠の解放）は引き続き **`resetRateLimit`** を使う。
+  あちらは「パスワードが正しいと確認できたので全部チャラ」の意味で、
+  `auth.ts:324` の成功時リセットと同じ扱いが正しい
 
 - [ ] **Step 1: 失敗するテストを書く**
 

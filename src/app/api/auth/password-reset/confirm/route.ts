@@ -18,6 +18,10 @@ import {
   PASSWORD_RESET_MESSAGES,
 } from '@/constants/passwordReset';
 import {
+  getSessionCookieName,
+  getSessionCookieOptions,
+} from '@/constants/auth';
+import {
   HTTP_STATUS,
   ERROR_CODE,
   AUTH_ERROR_MESSAGES,
@@ -206,10 +210,35 @@ export async function POST(request: Request) {
       throw updateError;
     }
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       { success: true, message: PASSWORD_RESET_MESSAGES.RESET_COMPLETED },
       { status: HTTP_STATUS.OK },
     );
+
+    // このブラウザの前のセッションを失効させる（#1234）。
+    //
+    // 別アカウントでログインしたまま設定リンクを開くと、成功後に
+    // `/auth/signin` へ行っても proxy が「認証済み」と見て `/` へ送り返す
+    // （`src/proxy.ts:149-151`）。**設定したアカウントではなく前のアカウント
+    // のまま**使い続けることになり、共有端末では前の利用者の画面を操作して
+    // しまう。パスワードを設定した＝持ち主が入れ替わった（あるいは本人が
+    // 認証をやり直した）ので、前のセッションを残す理由が無い。
+    //
+    // 対象ユーザー自身のセッションは `password_changed_at` で失効するが、
+    // それは**別アカウント**のセッションには効かない。
+    //
+    // ⚠️ `cookies.delete(name)` を使わない（#1174）。文字列を渡すと options が
+    // undefined になり、`Secure` も `HttpOnly` も付かない `Set-Cookie` が返る。
+    // 本番の Cookie 名は `__Secure-` 接頭辞付きで、ブラウザは `Secure` の無い
+    // `Set-Cookie` を**拒否する**ため、削除指示そのものが捨てられる。
+    // 発行時（`auth.ts` の cookies.sessionToken）と同じ属性で空値を上書きする。
+    // `src/proxy.ts:114-118` が同じ形
+    response.cookies.set(getSessionCookieName(), '', {
+      ...getSessionCookieOptions(),
+      maxAge: 0,
+    });
+
+    return response;
   } catch (error) {
     console.error('Password reset confirm error:', error);
 

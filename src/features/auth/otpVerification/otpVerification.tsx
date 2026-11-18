@@ -28,10 +28,30 @@ interface OtpVerificationProps {
   action: OtpAction;
   /** 検証成功時のコールバック。login / password_change ではワンタイムトークンを受け取る */
   onVerifySuccess?: (verificationToken?: string) => void;
+  /**
+   * 見出しのレベル（#1249）
+   *
+   * このコンポーネントは2通りの使われ方をする。
+   *
+   * - **画面を置き換える**（`registerForm` / `otpLoginForm`）
+   *   → ページの `<h1>` ごと差し替わるので、ここが `1` でないと
+   *     **ページから h1 が消える**
+   * - **ステップとして埋め込む**（`changePasswordForm`）
+   *   → ページの `<h1>` が残るので `2`
+   *
+   * 既定は `2`。埋め込み側が多数派ではないが、**誤って h1 を2つ作るより
+   * 階層が1段深いほうが害が小さい**ため、明示した側だけ `1` にする
+   */
+  headingLevel?: 1 | 2;
 }
 
 export const OtpVerification = memo<OtpVerificationProps>(
-  function OtpVerification({ email, action, onVerifySuccess }) {
+  function OtpVerification({
+    email,
+    action,
+    onVerifySuccess,
+    headingLevel = 2,
+  }) {
     const {
       isSubmitting,
       isResending,
@@ -64,7 +84,7 @@ export const OtpVerification = memo<OtpVerificationProps>(
 
     return (
       <div className={styles.c_otp_verification}>
-        <Heading level={2} align='center'>
+        <Heading level={headingLevel} align='center'>
           {OTP_MESSAGES.HEADING}
         </Heading>
 

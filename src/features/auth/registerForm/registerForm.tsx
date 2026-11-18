@@ -99,10 +99,12 @@ export const RegisterForm = memo(function RegisterForm() {
   // OTP検証画面を表示
   if (registeredEmail) {
     return (
+      /* ページの h1（「新規登録」）ごと差し替わるので、ここが h1 になる（#1249） */
       <OtpVerification
         email={registeredEmail}
         action={OTP_ACTION.REGISTRATION}
         onVerifySuccess={handleOtpVerifySuccess}
+        headingLevel={1}
       />
     );
   }

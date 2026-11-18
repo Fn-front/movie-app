@@ -130,8 +130,10 @@ describe('OtpLoginForm', () => {
     );
 
     await waitFor(() => {
+      // 画面ごと置き換わるので、確認コード側が h1 を引き継ぐ（#1249）。
+      // 既定（h2）のままだとページから h1 が消える
       expect(
-        screen.getByRole('heading', { name: '確認コードを入力' }),
+        screen.getByRole('heading', { name: '確認コードを入力', level: 1 }),
       ).toBeInTheDocument();
     });
 

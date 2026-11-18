@@ -23,12 +23,17 @@ jest.mock('@/features/auth/otpVerification/otpVerification', () => ({
   OtpVerification: ({
     email,
     onVerifySuccess,
+    headingLevel,
   }: {
     email: string;
     action: string;
     onVerifySuccess?: (verificationToken?: string) => void;
+    headingLevel?: number;
   }) => (
-    <div data-testid='otp-verification'>
+    <div
+      data-testid='otp-verification'
+      data-heading-level={headingLevel ?? 'default'}
+    >
       <span data-testid='otp-email'>{email}</span>
       <button
         onClick={() => onVerifySuccess?.('verification-token')}
@@ -62,6 +67,11 @@ const goToNewPasswordStep = async () => {
 
   await waitFor(() => {
     expect(screen.getByTestId('otp-verification')).toBeInTheDocument();
+    // ここはステップとしての埋め込み。ページの h1 は残るので既定（h2）のまま（#1249）
+    expect(screen.getByTestId('otp-verification')).toHaveAttribute(
+      'data-heading-level',
+      'default',
+    );
   });
 
   await user.click(screen.getByTestId('otp-verify-success'));

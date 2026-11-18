@@ -41,6 +41,30 @@ describe('OtpVerification', () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * 見出しのレベル（#1249）
+   *
+   * このコンポーネントは「画面を置き換える」使われ方と「ステップとして
+   * 埋め込む」使われ方がある。前者で h2 のままだと**ページから h1 が消える**
+   */
+  describe('見出しのレベル', () => {
+    it('既定は h2（埋め込み用）', () => {
+      render(<OtpVerification {...defaultProps} />);
+
+      expect(
+        screen.getByRole('heading', { name: '確認コードを入力', level: 2 }),
+      ).toBeInTheDocument();
+    });
+
+    it('headingLevel=1 なら h1 になる', () => {
+      render(<OtpVerification {...defaultProps} headingLevel={1} />);
+
+      expect(
+        screen.getByRole('heading', { name: '確認コードを入力', level: 1 }),
+      ).toBeInTheDocument();
+    });
+  });
+
   it('初期状態でカウントダウンが表示される', () => {
     render(<OtpVerification {...defaultProps} />);
 

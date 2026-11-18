@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { signIn } from 'next-auth/react';
 import { AxiosError } from 'axios';
 
+import { AUTH_HINTS } from '@/constants/auth';
+
 import { LoginForm } from './loginForm';
 
 // --- Mocks ---
@@ -37,6 +39,42 @@ describe('LoginForm', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  /**
+   * ユーザー名でもログインできることを画面で伝える（#1237）
+   *
+   * ラベルは以前から両対応だったが、それでも自分のメールアドレスを入れて
+   * 失敗する人がいた。発行アカウントの利用者はメールを閉じていると自分の
+   * アカウント名を思い出せないため、どこに書いてあるかまで示す
+   */
+  it('発行アカウントの利用者に、アカウント名の在りかを案内する', () => {
+    render(<LoginForm />);
+
+    const hint = screen.getByText(AUTH_HINTS.USERNAME_LOGIN);
+
+    expect(hint).toBeInTheDocument();
+    expect(AUTH_HINTS.USERNAME_LOGIN).toContain('アカウント名');
+    // どこを見ればよいかまで言う。「アカウント名で」だけでは思い出せない
+    expect(AUTH_HINTS.USERNAME_LOGIN).toContain('メール');
+  });
+
+  it('渡されたアカウント名を入力欄に入れておく', () => {
+    // パスワード設定の完了画面から来た場合。値は分かっているのに、
+    // ここで思い出せずメールアドレスを入れて失敗していた（#1237）
+    render(<LoginForm initialIdentifier='ABCD1234EFGH' />);
+
+    expect(
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
+    ).toHaveValue('ABCD1234EFGH');
+  });
+
+  it('アカウント名が渡されなければ空のまま', () => {
+    render(<LoginForm />);
+
+    expect(
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
+    ).toHaveValue('');
   });
 
   it('フォームが正しく表示される', () => {

@@ -5,9 +5,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { useRouter } from 'next/navigation';
-
-import { API_ENDPOINTS, ROUTES, UI_ERROR_MESSAGES } from '@/constants';
+import { API_ENDPOINTS, UI_ERROR_MESSAGES } from '@/constants';
 import { PASSWORD_RESET_MESSAGES } from '@/constants/passwordReset';
 import { cleanUpBeforeSignOut } from '@/lib/auth/logout';
 import type { PasswordResetConfirmFormData } from '@/schema/auth';
@@ -34,7 +32,6 @@ interface UseResetPasswordResult {
 export function useResetPassword({
   token,
 }: UseResetPasswordParams): UseResetPasswordResult {
-  const router = useRouter();
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,15 +76,20 @@ export function useResetPassword({
         // 認証状態を同期読みできない）。`logout.ts` が塞いだ窓と同じ
         cleanUpBeforeSignOut();
 
-        // 再設定後は既存セッションが無効化されるため、ログインし直してもらう
-        router.push(ROUTES.LOGIN);
+        // ⚠️ ここで `/auth/signin` へ飛ばさない（#1237）。
+        //
+        // 成功したことも、ログインに使うアカウント名も伝わらないまま
+        // メールアドレスの入力欄に着地することになる。発行アカウントは
+        // ユーザー名でログインするため、実際にメールアドレスを入れて
+        // 失敗し、設定リンクを踏み直した人がいる。
+        // 遷移は完了画面のリンクから本人に選ばせる
       } catch {
         setError(UI_ERROR_MESSAGES.NETWORK_ERROR);
       } finally {
         setIsSubmitting(false);
       }
     },
-    [token, router],
+    [token],
   );
 
   return { isCompleted, isSubmitting, error, submit };

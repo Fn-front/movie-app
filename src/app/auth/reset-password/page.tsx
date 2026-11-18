@@ -5,7 +5,10 @@
 import type { Metadata } from 'next';
 
 import { ResetPasswordForm } from '@/features/auth/resetPasswordForm/resetPasswordForm';
-import { ACCOUNT_SETUP_ISSUED_PARAM } from '@/constants/adminAccount';
+import {
+  ACCOUNT_SETUP_ISSUED_PARAM,
+  ACCOUNT_SETUP_USERNAME_PARAM,
+} from '@/constants/adminAccount';
 
 export const metadata: Metadata = {
   title: '新しいパスワードの設定 | Movie App',
@@ -18,6 +21,7 @@ interface ResetPasswordPageProps {
   searchParams: Promise<{
     token?: string | string[];
     [ACCOUNT_SETUP_ISSUED_PARAM.NAME]?: string | string[];
+    [ACCOUNT_SETUP_USERNAME_PARAM]?: string | string[];
   }>;
 }
 
@@ -35,7 +39,16 @@ export default async function ResetPasswordPage({
     params[ACCOUNT_SETUP_ISSUED_PARAM.NAME] ===
     ACCOUNT_SETUP_ISSUED_PARAM.VALUE;
 
+  // ログインに使うアカウント名（#1237）。表示にしか使わないので、
+  // 配列などの不正な形は単に出さない
+  const account = params[ACCOUNT_SETUP_USERNAME_PARAM];
+  const username = typeof account === 'string' && account ? account : undefined;
+
   return (
-    <ResetPasswordForm token={tokenParam} isIssuedAccount={isIssuedAccount} />
+    <ResetPasswordForm
+      token={tokenParam}
+      isIssuedAccount={isIssuedAccount}
+      username={username}
+    />
   );
 }

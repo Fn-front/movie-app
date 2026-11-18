@@ -131,7 +131,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // 試行回数チェック
+    // 試行回数チェック（前回までの分）。
+    // ⚠️ 下の照合失敗側にも**加算後**の判定がある。両方必要で、片方では足りない。
+    // ここはコードを送らずに叩かれた場合や、別タブからの並行リクエストを弾く
     if (otpRecord.attempts >= OTP_CONFIG.MAX_ATTEMPTS) {
       return NextResponse.json(
         {
@@ -155,15 +157,31 @@ export async function POST(request: Request) {
         .update({ attempts: newAttempts })
         .eq('id', otpRecord.id);
 
+      // ⚠️ **加算後**の値で上限を見る（#1248）。入口の判定だけだと、上限に
+      // 達した回も「確認コードが間違っています。」としか返らず、再送信の
+      // 導線も出ない。利用者は必ず1回、もう使えないコードを打つことになる。
+      //
+      // 「あと何回で上限か」を教えることになるが、上限に達したことは
+      // どのみち次のリクエストで分かるので、攻撃者が得る情報は変わらない
+      const isExhausted = newAttempts >= OTP_CONFIG.MAX_ATTEMPTS;
+
       return NextResponse.json(
         {
           success: false,
           error: {
-            code: ERROR_CODE.BAD_REQUEST,
-            message: OTP_ERROR_MESSAGES.INVALID_CODE,
+            code: isExhausted
+              ? ERROR_CODE.RATE_LIMIT_EXCEEDED
+              : ERROR_CODE.BAD_REQUEST,
+            message: isExhausted
+              ? OTP_ERROR_MESSAGES.MAX_ATTEMPTS_EXCEEDED
+              : OTP_ERROR_MESSAGES.INVALID_CODE,
           },
         },
-        { status: HTTP_STATUS.BAD_REQUEST },
+        {
+          status: isExhausted
+            ? HTTP_STATUS.TOO_MANY_REQUESTS
+            : HTTP_STATUS.BAD_REQUEST,
+        },
       );
     }
 

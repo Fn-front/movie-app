@@ -11,6 +11,7 @@ process.env.OTP_HASH_PEPPER = 'test-pepper-value';
 
 import { POST } from './route';
 import { hashOtpCode } from '@/lib/otp';
+import { OTP_ERROR_MESSAGES } from '@/constants/otp';
 
 // --- Mocks ---
 
@@ -343,6 +344,117 @@ describe('POST /api/auth/otp/verify', () => {
 
     expect(response.status).toBe(400);
     expect(json.error.details).toBeUndefined();
+  });
+
+  /**
+   * 上限ちょうどの回を「間違っています」で終わらせない（#1248）
+   *
+   * 入口の判定（`route.ts:136`）は**前回までの** attempts しか見ないため、
+   * 上限に達した回は通常の失敗として返っていた。利用者は必ず1回、もう
+   * 使えないコードを打つことになる
+   */
+  describe('試行上限の境界', () => {
+    /** 指定の attempts を持つ OTP 行と、その更新をモックする */
+    const mockOtpWithAttempts = (attempts: number) => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              is: () => ({
+                order: () => ({
+                  limit: () => ({
+                    single: () => ({
+                      data: {
+                        id: 'otp-1',
+                        code_hash: hashOtpCode('123456', 'test@example.com'),
+                        attempts,
+                        expires_at: futureDate,
+                        verified_at: null,
+                      },
+                      error: null,
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      });
+      mockFrom.mockReturnValueOnce({
+        update: () => ({ eq: () => ({ data: null, error: null }) }),
+      });
+    };
+
+    const postWrongCode = () =>
+      POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '999999',
+          action: 'registration',
+        }),
+      );
+
+    it('加算後に上限へ達したら、その回で上限として返す', async () => {
+      // attempts=4 → 加算して 5（MAX_ATTEMPTS）
+      mockOtpWithAttempts(4);
+
+      const response = await postWrongCode();
+      const json = await response.json();
+
+      expect(response.status).toBe(429);
+      expect(json.error.message).toBe(OTP_ERROR_MESSAGES.MAX_ATTEMPTS_EXCEEDED);
+    });
+
+    it('上限の手前なら通常の失敗として返す', async () => {
+      // attempts=3 → 加算して 4。まだ1回残っている
+      mockOtpWithAttempts(3);
+
+      const response = await postWrongCode();
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.message).toBe(OTP_ERROR_MESSAGES.INVALID_CODE);
+    });
+
+    it('上限に達していても試行回数は加算する', async () => {
+      // 加算を省くと、入口の判定（次のリクエスト）が効かなくなる
+      let updated: Record<string, unknown> | null = null;
+
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              is: () => ({
+                order: () => ({
+                  limit: () => ({
+                    single: () => ({
+                      data: {
+                        id: 'otp-1',
+                        code_hash: hashOtpCode('123456', 'test@example.com'),
+                        attempts: 4,
+                        expires_at: futureDate,
+                        verified_at: null,
+                      },
+                      error: null,
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      });
+      mockFrom.mockReturnValueOnce({
+        update: (values: Record<string, unknown>) => {
+          updated = values;
+          return { eq: () => ({ data: null, error: null }) };
+        },
+      });
+
+      await postWrongCode();
+
+      expect(updated).toEqual({ attempts: 5 });
+    });
   });
 
   it('registration: is_verified更新失敗で500を返す', async () => {

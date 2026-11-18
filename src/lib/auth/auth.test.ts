@@ -114,6 +114,13 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 }));
 // --- 第2要素モック（authorize / jwt の分岐の検証用。検証ロジック自体は
 // secondFactor.test.ts で確認済み）---
+const mockSendSecondFactorCode = jest.fn();
+jest.mock('@/lib/auth/sendSecondFactorCode', () => ({
+  ...jest.requireActual('@/lib/auth/sendSecondFactorCode'),
+  sendSecondFactorCode: (...args: unknown[]) =>
+    mockSendSecondFactorCode(...args),
+}));
+
 const mockGetSecondFactorMethod = jest.fn();
 const mockVerifySecondFactor = jest.fn();
 jest.mock('@/lib/auth/secondFactor', () => ({
@@ -2452,5 +2459,209 @@ describe('authorize のユーザー名ログイン', () => {
         makeRequest(),
       ),
     ).rejects.toThrow();
+  });
+});
+
+// -------------------- 第2要素がメールOTP（パスワード経路） --------------------
+
+describe('authorize の第2要素（method=email_otp）', () => {
+  const PASSWORD = 'Password1';
+  const PASSWORD_HASH = bcrypt.hashSync(PASSWORD, 4);
+  const USER_ID = 'user-1';
+
+  function makeRequest(): Request {
+    return new Request('http://localhost/api/auth/callback/credentials', {
+      headers: new Headers({ 'x-vercel-forwarded-for': '203.0.113.1' }),
+    });
+  }
+
+  /** users の1行を差し替える */
+  const setUser = (overrides: Record<string, unknown> = {}) => {
+    setResolver(({ table }) =>
+      table === 'users'
+        ? {
+            data: {
+              id: USER_ID,
+              email: 'owner@example.com',
+              name: 'User',
+              avatar_url: null,
+              role: 'user',
+              is_verified: true,
+              password_hash: PASSWORD_HASH,
+              password_changed_at: null,
+              ...overrides,
+            },
+            error: null,
+          }
+        : { data: null, error: null },
+    );
+  };
+
+  beforeEach(() => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockResetRateLimit.mockReset();
+    mockVerifySecondFactor.mockReset();
+    mockSendSecondFactorCode.mockReset();
+    mockSendSecondFactorCode.mockResolvedValue('sent');
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.EMAIL_OTP);
+    setUser();
+  });
+
+  it('コード未入力なら email_otp_required を返し、コードを送る', async () => {
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED });
+
+    expect(mockSendSecondFactorCode).toHaveBeenCalled();
+  });
+
+  it('method=totp ではメールを送らない', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.TOTP_REQUIRED });
+
+    expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
+  });
+
+  /**
+   * ⚠️ 宛先は `user.email`。`authorize` スコープの `email` ローカル変数は
+   * ユーザー名ログインで空文字になり（`isEmailLogin ? ... : ''`）、
+   * 全ユーザー名アカウントが `otp_codes.email = ''` の1行を共有して
+   * コードが混線する。再送間隔も送信上限も1つに潰れる。
+   */
+  it('ユーザー名ログインでも user.email を宛先にする', async () => {
+    setUser({ username: 'alice' });
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'alice', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toThrow();
+
+    expect(mockSendSecondFactorCode).toHaveBeenCalledWith(
+      expect.anything(),
+      USER_ID,
+      'owner@example.com',
+    );
+  });
+
+  /**
+   * 「コードが違う」と区別する。打ち直しても直らないので、同じ文言だと
+   * 利用者は正しいコードを繰り返し打ち続ける（#1148 と同じ理由）。
+   */
+  it('送信に失敗したら second_factor_send_failed を返す', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('send_failed');
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({
+      code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED,
+    });
+  });
+
+  /**
+   * ⚠️ 1通も送っていないので「メールに送ったコードを入力してください」と
+   * 出してはいけない。届かないコードを待たせることになる。
+   * この状態の出口はリカバリーコードだけ。
+   */
+  it('送信上限なら second_factor_send_limited を返す', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('limit_exceeded');
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({
+      code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+    });
+  });
+
+  it('再送間隔に当たった場合は入力欄を出す（直前のコードが生きている）', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('throttled');
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED });
+  });
+
+  /**
+   * ⚠️ `login` の消費はそのまま残し、ここで解放する。
+   *
+   * 「コード未入力のときは消費しない」にすると判定がパスワード照合より後ろへ
+   * 動き、**アカウント単位の5回/30分が消滅する**（パスワードが違う
+   * リクエストは照合で先に throw されて枠を一度も消費しない）。
+   * 残るのは LOGIN_IP だけで、しかも clientIp が unknown なら丸ごと
+   * スキップされる。IP を変えれば総当たりが実質無制限になる。
+   *
+   * ここへ到達する＝パスワードは正しい。解放してもパスワードを知らない
+   * 相手には枠が減ったまま残る。
+   */
+  it('第2要素を要求するときは login 枠を解放する', async () => {
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toThrow();
+
+    // 消費はしている
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'login',
+      expect.anything(),
+      expect.anything(),
+    );
+    // そのうえで解放している
+    expect(mockResetRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'login',
+    );
+  });
+
+  it('パスワードが違うときは login 枠を解放しない', async () => {
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: 'WrongPassword1' },
+        makeRequest(),
+      ),
+    ).rejects.toThrow();
+
+    expect(mockResetRateLimit).not.toHaveBeenCalled();
+  });
+
+  it('正しいコードならログインできる', async () => {
+    mockVerifySecondFactor.mockResolvedValue('success');
+
+    await expect(
+      credentialsProvider.authorize(
+        {
+          email: 'owner@example.com',
+          password: PASSWORD,
+          totpCode: '123456',
+        },
+        makeRequest(),
+      ),
+    ).resolves.toMatchObject({ id: USER_ID });
+
+    // コードが来ているときは送り直さない
+    expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
   });
 });

@@ -19,6 +19,7 @@ import {
   USER_ROLE,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  SECOND_FACTOR_METHOD,
   getSessionCookieName,
   getSessionCookieOptions,
 } from '@/constants';
@@ -39,6 +40,10 @@ import {
   SECOND_FACTOR_VERIFY_RESULT,
   verifySecondFactor,
 } from '@/lib/auth/secondFactor';
+import {
+  SEND_SECOND_FACTOR_RESULT,
+  sendSecondFactorCode,
+} from '@/lib/auth/sendSecondFactorCode';
 import { CredentialsSignInError } from '@/lib/auth/authErrors';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -282,12 +287,65 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           // 第2要素。パスワードが正しいことを確かめてからでないと、
           // 「二段階認証を使っているアカウントかどうか」を第三者に教えてしまう
-          if (await getSecondFactorMethod(supabase, user.id)) {
+          const secondFactorMethod = await getSecondFactorMethod(
+            supabase,
+            user.id,
+          );
+
+          if (secondFactorMethod) {
             const totpCode = (
               credentials.totpCode as string | undefined
             )?.trim();
 
             if (!totpCode) {
+              // ⚠️ ここへ到達する＝**パスワードは正しい**。
+              //
+              // ログインの試行回数を消費したままにすると、このあとの
+              // 「コード入力 → 打ち間違え → 再送 → もう一度打ち間違え」で
+              // 5回/30分をすぐ使い切る。メールOTP は遅延・迷惑メール振り分け・
+              // コピペミスがあるぶん、TOTP より到達しやすい。
+              //
+              // 解放してもパスワードを知らない相手には枠が減ったまま残る
+              // （:324 の成功時リセットと同じ理屈）。
+              //
+              // ⚠️ 逆に「コード未入力のときは消費しない」と書いてはいけない。
+              // 判定がパスワード照合より後ろへ動き、パスワードが違う
+              // リクエストが枠を一度も消費しなくなって**アカウント単位の
+              // 5回/30分が消滅する**。残るのは LOGIN_IP だけで、
+              // clientIp が unknown なら丸ごとスキップされる
+              await resetRateLimit(supabase, loginIdentifier, OTP_ACTION.LOGIN);
+
+              if (secondFactorMethod === SECOND_FACTOR_METHOD.EMAIL_OTP) {
+                // ⚠️ 宛先は `user.email`。スコープにある `email` ローカル変数は
+                // ユーザー名ログインで空文字になり、全ユーザー名アカウントが
+                // `otp_codes.email = ''` の1行を共有してコードが混線する
+                const sendResult = await sendSecondFactorCode(
+                  supabase,
+                  user.id,
+                  user.email,
+                );
+
+                if (sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED) {
+                  // 「コードが違う」と区別する。打ち直しても直らない（#1148）
+                  throw new CredentialsSignInError(
+                    AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED,
+                  );
+                }
+
+                if (sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED) {
+                  // 1通も送っていない。コードを待たせず、
+                  // リカバリーコードへ誘導する
+                  throw new CredentialsSignInError(
+                    AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+                  );
+                }
+
+                // SENT / THROTTLED。THROTTLED は直前に送ったコードがまだ生きている
+                throw new CredentialsSignInError(
+                  AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
+                );
+              }
+
               // クライアントはこれを受けて認証コードの入力欄を出す
               throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REQUIRED);
             }

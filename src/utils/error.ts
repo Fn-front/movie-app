@@ -7,6 +7,24 @@ import { AxiosError } from 'axios';
 import { HTTP_STATUS } from '@/constants';
 
 /**
+ * fetch の `Response` かどうか
+ *
+ * ⚠️ 素の `error instanceof Response` を書かないこと。**jsdom には
+ * `Response` が無い**（jest-environment-jsdom 30.4.1 で実測）。
+ * 非 AxiosError を渡すと判定そのものが `ReferenceError` で落ちる（#1199）。
+ *
+ * ブラウザ・Node（18+）には存在するので本番では常に true 側を通るが、
+ * クライアントフックのテストは jsdom で走るため、ガードが無いと
+ * **原因の掴みにくい例外**になる。
+ *
+ * @param error - 判定対象
+ * @returns Response なら true
+ */
+function isResponseLike(error: unknown): error is Response {
+  return typeof Response !== 'undefined' && error instanceof Response;
+}
+
+/**
  * HTTPステータスコード別エラーメッセージ
  */
 export const HTTP_ERROR_MESSAGES = {
@@ -104,7 +122,7 @@ export function handleApiError(error: unknown): ErrorResponse {
   }
 
   // Fetchエラー
-  if (error instanceof Response) {
+  if (isResponseLike(error)) {
     return {
       message: `HTTPエラー: ${error.status} ${error.statusText}`,
       statusCode: error.status,
@@ -195,7 +213,7 @@ export function formatErrorMessage(error: unknown): string {
   }
 
   // Fetchエラー
-  if (error instanceof Response) {
+  if (isResponseLike(error)) {
     if (error.status >= 500) {
       return HTTP_ERROR_MESSAGES.SERVER_ERROR;
     }
@@ -251,7 +269,7 @@ export function isAuthError(error: unknown): boolean {
   if (error instanceof AxiosError) {
     return error.response?.status === HTTP_STATUS.UNAUTHORIZED;
   }
-  if (error instanceof Response) {
+  if (isResponseLike(error)) {
     return error.status === HTTP_STATUS.UNAUTHORIZED;
   }
   return false;
@@ -286,6 +304,36 @@ export function isConflictError(error: unknown): boolean {
   return (
     error instanceof AxiosError &&
     error.response?.status === HTTP_STATUS.CONFLICT
+  );
+}
+
+/**
+ * エラーが「対象が無い」（404）かどうかを判定
+ *
+ * 削除で 404 が返るのは**すでに消えている**＝望みどおりの状態であって
+ * 失敗ではない。赤いエラーではなく warning で伝える（#1199）。
+ *
+ * 論理削除済みの行へ DELETE したときにこの経路へ入る。別タブ・別端末で
+ * 先に消されていれば原理的に残るので、クライアント側では塞げない。
+ * `isConflictError`（409）と対になる判定。
+ *
+ * @param error - エラーオブジェクト
+ * @returns 404の場合true
+ *
+ * @example
+ * ```ts
+ * if (isNotFoundError(error)) {
+ *   toast({ title: 'すでに削除されています', variant: 'warning' });
+ *   return;
+ * }
+ * ```
+ */
+export function isNotFoundError(error: unknown): boolean {
+  // `isConflictError` と同じく axios 経由だけを見る。
+  // Response 分岐が要るようになったら `isResponseLike` を使うこと
+  return (
+    error instanceof AxiosError &&
+    error.response?.status === HTTP_STATUS.NOT_FOUND
   );
 }
 

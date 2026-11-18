@@ -4,7 +4,7 @@
 
 'use client';
 
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
@@ -123,9 +123,6 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
     OTP_CONFIG.RESEND_INTERVAL_SECONDS,
   );
 
-  /** 次の送信が「再送」か。state だと onSubmit が古い値を掴む */
-  const resendRequestedRef = useRef(false);
-
   const {
     register,
     handleSubmit,
@@ -145,21 +142,17 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
     [],
   );
 
-  const onSubmit = useCallback(
-    async (data: LoginFormData) => {
+  /**
+   * サインインを実行する
+   *
+   * @param data - 入力されたメールアドレス／アカウント名とパスワード
+   * @param isResend - 再送なら true。第2要素のコードを送らない
+   */
+  const performSignIn = useCallback(
+    async (data: LoginFormData, isResend: boolean) => {
       setApiError(null);
 
       try {
-        // 再送のときはコードを送らない。サーバーは「コード未指定」を
-        // 再送の合図として扱う。
-        //
-        // ⚠️ ref で持つ。`setTotpCode('')` は同期的に反映されず、
-        // この `useCallback` が捕まえた `totpCode` は古いままになる。
-        // 打ち間違えた状態で再送を押すとそのコードが検証され、
-        // `TOTP_VERIFY`（5回/15分）の枠を1つ失う
-        const isResend = resendRequestedRef.current;
-        resendRequestedRef.current = false;
-
         const result = await signIn('credentials', {
           redirect: false,
           email: data.email,
@@ -220,23 +213,30 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
     [router, toast, callbackUrl, totpRequired, totpCode, restart],
   );
 
+  const onSubmit = useCallback(
+    (data: LoginFormData) => performSignIn(data, false),
+    [performSignIn],
+  );
+
   /**
    * コードを送り直す
    *
-   * ⚠️ 先に入力欄を空にする。`onSubmit` は `totpRequired` のとき**常に**
-   * `totpCode` を送るため、打ち間違えた状態で再送を押すとそのコードが
-   * 検証され、`TOTP_VERIFY`（5回/15分）の枠を1つ失う。
+   * ⚠️ 再送では**入力済みのコードを送らない**。`performSignIn` は
+   * `totpRequired` のとき `totpCode` を送るため、打ち間違えた状態で
+   * 再送を押すとそのコードが検証され、`TOTP_VERIFY`（5回/15分）の枠を
+   * 1つ失う。サーバー側は「コード未指定」を再送の合図として扱う。
    *
-   * サーバー側は「コード未指定」を再送の合図として扱う。
+   * 「再送かどうか」を state や ref ではなく引数で渡すのは、
+   * `setTotpCode('')` が同期的に反映されず、クロージャが古い値を
+   * 掴むため。
    */
   const handleResend = useCallback(() => {
-    resendRequestedRef.current = true;
     setTotpCode('');
     restart();
     // パスワードごと送り直す。フォームが値を保持しているので、
     // 利用者はもう一度入力する必要がない
-    handleSubmit(onSubmit)();
-  }, [handleSubmit, onSubmit, restart]);
+    handleSubmit((data) => performSignIn(data, true))();
+  }, [handleSubmit, performSignIn, restart]);
 
   return (
     <div className={styles.c_login_form}>

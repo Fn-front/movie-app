@@ -1709,10 +1709,45 @@ describe('authorize の第2要素（メールOTP経路）', () => {
     );
   });
 
+  /**
+   * ⚠️ **有効な検証済みトークンを与える**（#1255）
+   *
+   * 以前はトークンが無くても `otp_login_disabled` が返っていた。
+   * つまりメールアドレスを知っているだけで「登録済み＋二段階認証あり」を
+   * 引けた。判定をトークン検証の後ろへ移したので、ここも正規の経路を通す
+   */
   it('二段階認証が有効ならメールOTP単独ログインを拒否する', async () => {
     // メールのコードだけで入れる経路は第2要素ではなくパスワードの代替であり、
     // 残すと最も弱い経路が全体の強度を決めてしまう（#642）
     mockIsTotpEnabled.mockResolvedValue(true);
+    setResolver(({ table }) => {
+      if (table === 'users') {
+        return {
+          data: {
+            id: 'user-1',
+            email: 'user@example.com',
+            name: 'User',
+            avatar_url: null,
+            role: 'user',
+            is_verified: true,
+            password_hash: null,
+            password_changed_at: null,
+          },
+          error: null,
+        };
+      }
+      if (table === 'otp_codes') {
+        return {
+          data: {
+            id: 'otp-1',
+            email: 'user@example.com',
+            verified_at: new Date().toISOString(),
+          },
+          error: null,
+        };
+      }
+      return { data: null, error: null };
+    });
 
     await expect(
       credentialsProvider.authorize(
@@ -1724,6 +1759,82 @@ describe('authorize の第2要素（メールOTP経路）', () => {
         makeRequest(),
       ),
     ).rejects.toMatchObject({ code: 'otp_login_disabled' });
+  });
+
+  it('二段階認証で弾くときも検証済みトークンを消費しない', async () => {
+    // 焼いてしまうと、パスワード経路へ切り替えるにもコードを取り直すことになる
+    // （#1235 と同じ形）
+    const deleted: string[] = [];
+    mockIsTotpEnabled.mockResolvedValue(true);
+    setResolver(({ table, ops }) => {
+      if (table === 'users') {
+        return {
+          data: {
+            id: 'user-1',
+            email: 'user@example.com',
+            name: 'User',
+            avatar_url: null,
+            role: 'user',
+            is_verified: true,
+            password_hash: null,
+            password_changed_at: null,
+          },
+          error: null,
+        };
+      }
+      if (table === 'otp_codes') {
+        if (ops.includes('delete')) {
+          deleted.push('otp_codes');
+          return { data: null, error: null };
+        }
+        return {
+          data: {
+            id: 'otp-1',
+            email: 'user@example.com',
+            verified_at: new Date().toISOString(),
+          },
+          error: null,
+        };
+      }
+      return { data: null, error: null };
+    });
+
+    await credentialsProvider
+      .authorize(
+        {
+          email: 'user@example.com',
+          loginMethod: 'otp',
+          verificationToken: 'token',
+        },
+        makeRequest(),
+      )
+      .catch(() => undefined);
+
+    expect(deleted).not.toContain('otp_codes');
+  });
+
+  /**
+   * ⚠️ 列挙対策（#1255）
+   *
+   * トークンが無ければ、二段階認証の有無を明かさない
+   */
+  it('検証済みトークンが無ければ二段階認証の有無を明かさない', async () => {
+    mockIsTotpEnabled.mockResolvedValue(true);
+
+    const error = await credentialsProvider
+      .authorize(
+        {
+          email: 'user@example.com',
+          loginMethod: 'otp',
+          verificationToken: 'token',
+        },
+        makeRequest(),
+      )
+      .catch((e: unknown) => e);
+
+    expect((error as { code?: string }).code).not.toBe('otp_login_disabled');
+    // そもそも問い合わせない
+    expect(mockIsTotpEnabled).not.toHaveBeenCalled();
   });
 
   it('二段階認証が無効ならメールOTP経路は従来どおり進む', async () => {

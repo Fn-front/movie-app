@@ -9,6 +9,8 @@
 // hashOtpCode は pepper が無いと例外を投げる（平文フォールバック禁止）
 process.env.OTP_HASH_PEPPER = 'test-pepper-value';
 
+import { OTP_CONFIG } from '@/constants/otp';
+
 import { POST } from './route';
 
 // --- Mocks ---
@@ -110,6 +112,63 @@ const setupSuccessMocks = () => {
 describe('POST /api/auth/register', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  /**
+   * コードの有効期限は定数から来る（#1258）
+   *
+   * 10分だった頃は、メールの遅延や迷惑メールを探しているうちに切れ、
+   * 再送を繰り返して日次5通を使い切る経路があった。使い切ると登録を
+   * 完了する手段が無くなる。
+   *
+   * ⚠️ ここをベタ書きの分数で固定しないこと。定数を変えたときに落ちて
+   * しまい、「テストを直す」方向に倒れる
+   */
+  it('OTPの有効期限を OTP_CONFIG.EXPIRY_MINUTES で保存する', async () => {
+    let savedExpiry: string | undefined;
+
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    // 既存ユーザーなし
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: null,
+            error: { code: 'PGRST116', message: 'not found' },
+          }),
+        }),
+      }),
+    });
+    // ユーザーINSERT成功
+    mockFrom.mockReturnValueOnce({
+      insert: () => ({
+        select: () => ({
+          single: () => ({ data: { id: 'user-123' }, error: null }),
+        }),
+      }),
+    });
+    // OTP INSERT。渡された expires_at を捕まえる
+    mockFrom.mockReturnValueOnce({
+      insert: (values: Record<string, unknown>) => {
+        savedExpiry = values.expires_at as string;
+        return { error: null };
+      },
+    });
+
+    const before = Date.now();
+    await POST(
+      createRequest({ email: 'test@example.com', password: 'Password1234' }),
+    );
+    const after = Date.now();
+
+    expect(savedExpiry).toBeDefined();
+
+    const expiresAt = new Date(savedExpiry as string).getTime();
+    const windowMs = OTP_CONFIG.EXPIRY_MINUTES * 60 * 1000;
+
+    // expires_at は POST 中のどこかの時刻 + 期限。前後の実測時刻で挟む
+    expect(expiresAt).toBeGreaterThanOrEqual(before + windowMs);
+    expect(expiresAt).toBeLessThanOrEqual(after + windowMs);
   });
 
   it('正常に登録でき、OTPメールが送信される', async () => {

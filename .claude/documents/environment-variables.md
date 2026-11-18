@@ -164,7 +164,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 **設定先:** `.env.local` / Vercel の環境変数 / GitHub Actions Secrets（E2E用）
 
 **ローテーション時の注意:** 値を変えると既存の未検証OTPが検証できなくなる。
-有効期限は最大10分なので、利用者は再送信で復帰できる。
+有効期限は最大30分なので、利用者は再送信で復帰できる。
 
 ---
 

@@ -178,7 +178,7 @@ UI Re-render
 
 **新規登録フロー:**
 1. メールアドレス・パスワードで登録（is_verified = false）
-2. OTPコード生成・メール送信（Resend、6桁、10分有効）
+2. OTPコード生成・メール送信（Resend、6桁、30分有効）
 3. OTP検証成功 → is_verified = true
 4. ログイン画面に遷移
 

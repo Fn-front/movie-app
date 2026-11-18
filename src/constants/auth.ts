@@ -124,24 +124,30 @@ export const AUTH_PAGE_ERROR_MESSAGES = {
  * Auth.js は失敗の飛び先をエラーの `kind` で分ける
  * （`node_modules/@auth/core/index.js:135`）。`SignInError` を継承した
  * ものだけが `kind = 'signIn'` で、**`pages.error` ではなく `pages.signIn`**
- * へ戻る。上の `AUTH_PAGE_ERROR_MESSAGES` とは**集合が重ならない**ので
- * 使い回せない（`AccessDenied` / `Verification` は `AuthError` 直系＝
- * `/auth/error` 側、`errors.js:64,395`）。
+ * へ戻る。`AccessDenied` / `Verification` は `AuthError` 直系なので
+ * signin 側には来ない（`errors.js:64,395`）。`Configuration` と `DEFAULT`
+ * は両方に要るため、`AUTH_PAGE_ERROR_MESSAGES` と文言が重複している。
  *
  * さらに `type` は「クライアントに見せてよい」集合
  * （`errors.js:412-421`）に無ければ **`Configuration` に差し替えられる**。
  * kind は元のまま signIn なので、`/auth/signin?error=Configuration` も来る。
  *
- * 実際に載りうる値はこれで全部:
+ * `Auth()` の catch から来るのは次の6つ。
  *
  * | code | 起きる場面 |
  * |---|---|
- * | `OAuthAccountNotLinked` | 同じメールアドレスで別のプロバイダを使った |
- * | `AccountNotLinked` | 同上（未ログイン時の自動連携は安全上されない） |
  * | `OAuthCallbackError` | プロバイダの同意画面で拒否した・中断した |
  * | `MissingCSRF` | CSRF トークンが合わない（画面を開いたまま放置等） |
  * | `CredentialsSignin` | `redirect: true` のパスワードログイン |
  * | `Configuration` | 上記以外の signIn 系（`OAuthSignInError` 等） |
+ * | `OAuthAccountNotLinked` | **現構成では起きない**（下記） |
+ * | `AccountNotLinked` | **現構成では起きない**（下記） |
+ *
+ * ⚠️ **ここに無い任意の値も来る。** `pages.signIn` を指定していると
+ * `GET /api/auth/signin?error=<任意>` の `error` がそのまま転送される
+ * （`lib/pages/index.js:56-60`）。`SessionRequired` もこの経路
+ * （`next-auth/react.js:80-86` の `useSession({ required: true })`。
+ * 本アプリは未使用）。だから `DEFAULT` への取りこぼしが必須になる。
  *
  * ⚠️ 知らないコードでも落とさず `DEFAULT` に倒す。`in` 演算子で引くと
  * `?error=__proto__` で描画が落ちる（#1240 で実際に踏んだ）。参照は
@@ -151,15 +157,27 @@ export const SIGN_IN_PAGE_ERROR_MESSAGES = {
   /**
    * 同じメールアドレスのアカウントが別の方法で既にある
    *
-   * **これを伝えてもアカウントの列挙にはならない。** この分岐へ来るのは
-   * プロバイダ側の認証を通過した＝そのメールアドレスを自分が持っていると
-   * 証明できた相手だけで、他人のアドレスでは到達しない。
+   * ⚠️ **現構成では到達しない。将来アダプタを入れたときの備え。**
+   * この2つを投げるのは Auth.js のアダプタ経路（`handle-login.js:106,149,
+   * 188,250`）だけで、そこは `adapter` 未設定のとき同ファイル `:23-26` で
+   * 早期 return される。本アプリは `adapter` を設定しておらず
+   * （`src/lib/auth/auth.ts`）、アカウントの突き合わせは `signIn`
+   * コールバックで自前にやっている（同 `:355-`）。
    *
-   * 逆に伏せると解決手段が無くなる。何度押しても同じ所に戻される
+   * そのため「Google で登録した人が GitHub を押す」は**エラーにならず、
+   * メール一致で黙ってリンクされてログインできる**（プロバイダ側が
+   * `email_verified: true` を返したときだけ）。失敗する経路
+   * （メール未検証・DB障害）は `return false` → `AccessDenied` で、
+   * これは `AuthError` 直系なので `/auth/error` 側に出る。
+   *
+   * 消さずに残すのは、アダプタを足した瞬間にこの2つが現れるため。
+   * 文言は**アカウントの列挙にならない**。ここへ来るのはプロバイダ側の
+   * 認証を通過した＝そのメールアドレスを持っていると証明できた相手だけで、
+   * 他人のアドレスでは到達しない。逆に伏せると解決手段が無くなる
    */
   OAuthAccountNotLinked:
     'このメールアドレスは別の方法で登録されています。最初に登録したときの方法（他のソーシャルログイン、またはメールアドレスとパスワード）でログインしてください。',
-  /** 上と同じ状況。Auth.js が投げ分けるので両方持つ */
+  /** 上と同じ状況。Auth.js が投げ分けるので両方持つ（同じく現構成では到達しない） */
   AccountNotLinked:
     'このメールアドレスは別の方法で登録されています。最初に登録したときの方法（他のソーシャルログイン、またはメールアドレスとパスワード）でログインしてください。',
   /**

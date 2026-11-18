@@ -99,6 +99,18 @@ describe('SignInPage', () => {
       );
     });
 
+    it('コードごとに違う文言を持つ', async () => {
+      // 上の it.each は期待値を実装と同じ定数から引いているので、
+      // 全部を同じ文言に書き換えても落ちない。区別できていることは
+      // ここで別に見る（OAuthAccountNotLinked と AccountNotLinked は
+      // 同じ状況なので意図的に同文言。それ以外は重複させない）
+      const { OAuthAccountNotLinked, AccountNotLinked, ...rest } =
+        SIGN_IN_PAGE_ERROR_MESSAGES;
+
+      expect(OAuthAccountNotLinked).toBe(AccountNotLinked);
+      expect(new Set(Object.values(rest)).size).toBe(Object.keys(rest).length);
+    });
+
     it('別のプロバイダで登録済みであることが分かる', async () => {
       // これが伝わらないと何度押しても同じ所に戻される。
       // プロバイダの認証を通過した＝そのアドレスの持ち主なので列挙にならない

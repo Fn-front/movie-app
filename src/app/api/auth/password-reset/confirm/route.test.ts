@@ -6,6 +6,10 @@
  * パスワード再設定API Route テスト
  */
 
+import {
+  getSessionCookieName,
+  getSessionCookieOptions,
+} from '@/constants/auth';
 import { PASSWORD_RESET_MESSAGES } from '@/constants/passwordReset';
 
 import { POST } from './route';
@@ -158,6 +162,94 @@ describe('POST /api/auth/password-reset/confirm', () => {
 
       expect(response.status).toBe(200);
       expect(mockCompare).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * 設定が済んだら、そのブラウザの前のセッションを消す（#1234）
+   *
+   * 別アカウントでログインしたまま設定リンクを開くと、成功後に
+   * `/auth/signin` へ行っても proxy が「認証済み」と見て `/` へ送り返す
+   * （`src/proxy.ts:149-151`）。設定したアカウントではなく前のアカウントの
+   * まま使い続けることになる
+   */
+  describe('セッションの後始末', () => {
+    /** レスポンスの Set-Cookie から属性を取り出す */
+    const parseSetCookie = (response: Response) => {
+      const raw = response.headers.get('set-cookie') ?? '';
+      const [pair, ...rest] = raw.split(';').map((part) => part.trim());
+      const [name, value] = pair.split('=');
+      const attributes = new Map(
+        rest.map((part) => {
+          const [key, attrValue] = part.split('=');
+          return [key.toLowerCase(), attrValue ?? ''];
+        }),
+      );
+      return { raw, name, value, attributes };
+    };
+
+    it('成功したらセッションCookieを失効させる', async () => {
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+      const cookie = parseSetCookie(response);
+
+      expect(cookie.name).toBe(getSessionCookieName());
+      expect(cookie.value).toBe('');
+      expect(cookie.attributes.get('max-age')).toBe('0');
+    });
+
+    /**
+     * ⚠️ 属性を発行時と揃える（#1174）
+     *
+     * 本番の Cookie 名は `__Secure-` 接頭辞付きで、ブラウザは `Secure` の
+     * 無い `Set-Cookie` を**拒否する**。属性が欠けると削除指示ごと捨てられ、
+     * 不具合がそのまま再現する
+     */
+    it('削除Cookieの属性が発行時と揃っている', async () => {
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+      const cookie = parseSetCookie(response);
+      const issued = getSessionCookieOptions();
+
+      expect(cookie.attributes.has('httponly')).toBe(issued.httpOnly);
+      expect(cookie.attributes.get('samesite')?.toLowerCase()).toBe(
+        issued.sameSite,
+      );
+      expect(cookie.attributes.get('path')).toBe(issued.path);
+      expect(cookie.attributes.has('secure')).toBe(issued.secure);
+    });
+
+    it('トークンが使えなかったときは既存セッションに触れない', async () => {
+      // 設定していないのにログアウトさせられる理由が無い
+      mockConsumeToken.mockResolvedValue({ status: 'used' });
+
+      const response = await POST(
+        createRequest({ token: 'used-token', password: VALID_PASSWORD }),
+      );
+
+      expect(response.headers.get('set-cookie')).toBeNull();
+    });
+
+    it('更新に失敗したときは既存セッションに触れない', async () => {
+      mockUserAndUpdate(
+        { id: 'user-1', password_hash: 'old-hash' },
+        {
+          code: '57P01',
+        },
+      );
+
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+
+      expect(response.status).toBe(500);
+      expect(response.headers.get('set-cookie')).toBeNull();
     });
   });
 

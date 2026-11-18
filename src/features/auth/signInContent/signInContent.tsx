@@ -24,11 +24,20 @@ interface SignInContentProps {
    * 入れておく
    */
   initialIdentifier?: string;
+  /**
+   * ソーシャルログインの失敗文言（#1242）
+   *
+   * `/auth/signin?error=` で戻ってきたときにページが解決して渡す。
+   * OTP ログインには渡さない。失敗したのはパスワード/ソーシャルの画面で、
+   * 切り替えた先に前の画面のエラーが残っていると文脈が合わない
+   */
+  initialError?: string;
 }
 
 export const SignInContent = memo<SignInContentProps>(function SignInContent({
   callbackUrl,
   initialIdentifier,
+  initialError,
 }) {
   const [loginMode, setLoginMode] = useState<LoginMode>('password');
 
@@ -54,6 +63,7 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
       onOtpLoginClick={handleOtpLoginClick}
       callbackUrl={callbackUrl}
       initialIdentifier={initialIdentifier}
+      initialError={initialError}
     />
   );
 });

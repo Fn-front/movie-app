@@ -119,6 +119,76 @@ export const AUTH_PAGE_ERROR_MESSAGES = {
 } as const;
 
 /**
+ * `/auth/signin?error=` に出す文言（#1242）
+ *
+ * Auth.js は失敗の飛び先をエラーの `kind` で分ける
+ * （`node_modules/@auth/core/index.js:135`）。`SignInError` を継承した
+ * ものだけが `kind = 'signIn'` で、**`pages.error` ではなく `pages.signIn`**
+ * へ戻る。上の `AUTH_PAGE_ERROR_MESSAGES` とは**集合が重ならない**ので
+ * 使い回せない（`AccessDenied` / `Verification` は `AuthError` 直系＝
+ * `/auth/error` 側、`errors.js:64,395`）。
+ *
+ * さらに `type` は「クライアントに見せてよい」集合
+ * （`errors.js:412-421`）に無ければ **`Configuration` に差し替えられる**。
+ * kind は元のまま signIn なので、`/auth/signin?error=Configuration` も来る。
+ *
+ * 実際に載りうる値はこれで全部:
+ *
+ * | code | 起きる場面 |
+ * |---|---|
+ * | `OAuthAccountNotLinked` | 同じメールアドレスで別のプロバイダを使った |
+ * | `AccountNotLinked` | 同上（未ログイン時の自動連携は安全上されない） |
+ * | `OAuthCallbackError` | プロバイダの同意画面で拒否した・中断した |
+ * | `MissingCSRF` | CSRF トークンが合わない（画面を開いたまま放置等） |
+ * | `CredentialsSignin` | `redirect: true` のパスワードログイン |
+ * | `Configuration` | 上記以外の signIn 系（`OAuthSignInError` 等） |
+ *
+ * ⚠️ 知らないコードでも落とさず `DEFAULT` に倒す。`in` 演算子で引くと
+ * `?error=__proto__` で描画が落ちる（#1240 で実際に踏んだ）。参照は
+ * `resolveAuthErrorMessage`（`src/utils/authErrorMessage.ts`）を使う。
+ */
+export const SIGN_IN_PAGE_ERROR_MESSAGES = {
+  /**
+   * 同じメールアドレスのアカウントが別の方法で既にある
+   *
+   * **これを伝えてもアカウントの列挙にはならない。** この分岐へ来るのは
+   * プロバイダ側の認証を通過した＝そのメールアドレスを自分が持っていると
+   * 証明できた相手だけで、他人のアドレスでは到達しない。
+   *
+   * 逆に伏せると解決手段が無くなる。何度押しても同じ所に戻される
+   */
+  OAuthAccountNotLinked:
+    'このメールアドレスは別の方法で登録されています。最初に登録したときの方法（他のソーシャルログイン、またはメールアドレスとパスワード）でログインしてください。',
+  /** 上と同じ状況。Auth.js が投げ分けるので両方持つ */
+  AccountNotLinked:
+    'このメールアドレスは別の方法で登録されています。最初に登録したときの方法（他のソーシャルログイン、またはメールアドレスとパスワード）でログインしてください。',
+  /**
+   * プロバイダ側で止まった
+   *
+   * 同意画面での拒否が大半だが、プロバイダの一時障害も同じコードで来る
+   * （RFC 6749 4.1.2.1 のエラー応答全般）。断定せず両方に当てはめる
+   */
+  OAuthCallbackError:
+    'ソーシャルログインが完了しませんでした。許可の画面でキャンセルした場合は、もう一度お試しください。',
+  /** 画面を長く開いたままだと起きる。再読み込みで直る */
+  MissingCSRF:
+    'ログインを受け付けられませんでした。画面を再読み込みしてから、もう一度お試しください。',
+  /**
+   * パスワードログインの失敗
+   *
+   * 通常は `redirect: false` で自前処理するためここには来ないが、
+   * 経路が増えたときに備える。**どのアカウントが存在するかを推測させない**
+   * よう、`AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS` と同じ粒度に丸める
+   */
+  CredentialsSignin: 'メールアドレスまたはパスワードが正しくありません。',
+  /** サーバー側の設定不備。利用者には直せない */
+  Configuration:
+    'ログインの設定に問題があるため、現在ログインできません。お手数ですが、管理者にご連絡ください。',
+  /** 上記以外。知らないコードはここへ倒す */
+  DEFAULT: 'ログインできませんでした。お手数ですが、もう一度お試しください。',
+} as const;
+
+/**
  * ログイン画面の補足
  */
 export const AUTH_HINTS = {

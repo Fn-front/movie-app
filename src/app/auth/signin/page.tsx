@@ -6,6 +6,8 @@ import type { Metadata } from 'next';
 
 import { SignInContent } from '@/features/auth/signInContent/signInContent';
 import { ACCOUNT_SETUP_USERNAME_PARAM } from '@/constants/adminAccount';
+import { SIGN_IN_PAGE_ERROR_MESSAGES } from '@/constants/auth';
+import { resolveAuthErrorMessage } from '@/utils/authErrorMessage';
 
 export const metadata: Metadata = {
   title: 'ログイン | Movie App',
@@ -15,6 +17,7 @@ export const metadata: Metadata = {
 interface SignInPageProps {
   searchParams: Promise<{
     callbackUrl?: string | string[];
+    error?: string | string[];
     [ACCOUNT_SETUP_USERNAME_PARAM]?: string | string[];
   }>;
 }
@@ -34,10 +37,26 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   const initialIdentifier =
     typeof account === 'string' && account ? account : undefined;
 
+  // ソーシャルログインの失敗（#1242）。Auth.js は `kind = 'signIn'` の
+  // エラーを `/auth/error` ではなくここへ戻すが、読んでいなかったため
+  // 「押したのに何も起きずログイン画面に戻された」ように見えていた。
+  //
+  // 配列（?error=a&error=b）は不正として既定の文言に倒す。undefined を
+  // 渡せば resolveAuthErrorMessage が DEFAULT を返す
+  const { error } = params;
+  const errorMessage =
+    error === undefined
+      ? undefined
+      : resolveAuthErrorMessage(
+          SIGN_IN_PAGE_ERROR_MESSAGES,
+          typeof error === 'string' ? error : undefined,
+        );
+
   return (
     <SignInContent
       callbackUrl={callbackUrlParam}
       initialIdentifier={initialIdentifier}
+      initialError={errorMessage}
     />
   );
 }

@@ -100,6 +100,39 @@ describe('SignInContent', () => {
     ).toHaveValue('');
   });
 
+  /**
+   * ソーシャルログインの失敗（#1242）
+   *
+   * `/auth/signin?error=` で戻された文言を LoginForm まで通す
+   */
+  describe('initialError', () => {
+    it('LoginForm に渡してエラーを表示する', () => {
+      render(<SignInContent initialError='ログインできませんでした' />);
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'ログインできませんでした',
+      );
+    });
+
+    it('OTPへ切り替えたら引きずらない', async () => {
+      // 失敗したのはパスワード/ソーシャルの画面。切り替えた先に残っていると
+      // 「メールでログイン」そのものが失敗したように読める
+      render(<SignInContent initialError='ログインできませんでした' />);
+
+      await user.click(
+        screen.getByRole('button', { name: 'メールでログイン' }),
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('heading', { name: 'メールでログイン' }),
+        ).toBeInTheDocument();
+      });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
+
   it('OTPモード切替後も callbackUrl が引き継がれる（OtpLoginForm 側）', async () => {
     render(<SignInContent callbackUrl='/watchlist' />);
 

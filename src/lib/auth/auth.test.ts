@@ -1367,7 +1367,15 @@ describe('authorize のレート制限', () => {
     expect(identifiers).not.toContain('victim@example.com');
   });
 
-  it('送信元IP単位の制限を超えたら拒否する', async () => {
+  /**
+   * ⚠️ 拒否するだけでなく **code を載せて** 投げる（#1254）
+   *
+   * プレーンな `Error` だと Auth.js が code を載せず
+   * （`@auth/core/index.js:133`）、クライアントで
+   * 「メールアドレスまたはパスワードが正しくありません」に丸められる。
+   * 待てば直ることが伝わらず、打ち直すほど悪化する
+   */
+  it('送信元IP単位の制限を超えたら rate_limited を返す', async () => {
     mockCheckRateLimit.mockResolvedValueOnce({
       allowed: false,
       retryAfter: 900,
@@ -1378,7 +1386,47 @@ describe('authorize のレート制限', () => {
         { email: 'user@example.com', password: 'pw' },
         makeRequest('203.0.113.1'),
       ),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+  });
+
+  it('アカウント単位の制限を超えたら rate_limited を返す', async () => {
+    // 1つ目（login_ip）は通し、2つ目（login）で落とす
+    mockCheckRateLimit
+      .mockResolvedValueOnce({ allowed: true })
+      .mockResolvedValueOnce({ allowed: false, retryAfter: 1800 });
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: 'pw' },
+        makeRequest('203.0.113.1'),
+      ),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+
+    // 2層目で落としたことを確認（1層目と取り違えていない）
+    expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      'user@example.com|203.0.113.1',
+      'login',
+      5,
+      30,
+    );
+  });
+
+  it('アカウントが存在しなくても同じコードを返す（列挙防止）', async () => {
+    // この判定は users を引く前なので、存在の有無で挙動が変わらない
+    setResolver(() => ({ data: null, error: { code: 'PGRST116' } }));
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 900,
+    });
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'nobody@example.com', password: 'pw' },
+        makeRequest('203.0.113.1'),
+      ),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
   });
 
   it('送信元が特定できない場合はメールアドレス単独にフォールバックし、IP制限を行わない', async () => {

@@ -111,8 +111,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             RATE_LIMIT_CONFIG.LOGIN_IP.windowMinutes,
           );
 
+          // ⚠️ `CredentialsSignInError` で投げる（#1254）。プレーンな `Error`
+          // だと Auth.js が `code` を載せないため（`@auth/core/index.js:133`）、
+          // クライアントで「メールアドレスまたはパスワードが正しくありません」に
+          // 丸められる。**待てば直る**ことが伝わらず、打ち直すほど悪化する。
+          //
+          // 列挙にはならない。この判定はユーザーを引く**前**なので、
+          // アカウントの有無に関係なく同じ条件で起きる
           if (!ipLimitResult.allowed) {
-            throw new Error(AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED);
+            throw new CredentialsSignInError(AUTH_ERROR_CODE.RATE_LIMITED);
           }
         }
 
@@ -127,8 +134,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           RATE_LIMIT_CONFIG.LOGIN_ACCOUNT.windowMinutes,
         );
 
+        // 理由は上の送信元単位と同じ（#1254）。こちらも識別子に
+        // メールアドレスを含むが、**行を引く前**なので存在の有無で
+        // 挙動が変わらず、列挙にはならない
         if (!rateLimitResult.allowed) {
-          throw new Error(AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED);
+          throw new CredentialsSignInError(AUTH_ERROR_CODE.RATE_LIMITED);
         }
 
         // ユーザー取得。

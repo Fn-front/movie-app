@@ -92,6 +92,33 @@ export const AUTH_ERROR_MESSAGES = {
 } as const;
 
 /**
+ * `/auth/error` に出す文言（#1231）
+ *
+ * Auth.js がエラー時に `pages.error` へ `?error=<コード>` を付けて飛ばす。
+ * 渡りうるのは `Configuration` / `AccessDenied` / `Verification` の3つ
+ * （`node_modules/@auth/core/types.d.ts:176` の `ErrorPageParam`）。
+ *
+ * ⚠️ 知らないコードが来ても落とさず `DEFAULT` に倒す。Auth.js の内部
+ * エラー種別は30以上あり（`node_modules/@auth/core/errors.d.ts:1`）、
+ * 将来増える可能性もある。利用者に見せる文面は**原因を断定せず、次の
+ * 行動が分かる**ものにする。
+ */
+export const AUTH_PAGE_ERROR_MESSAGES = {
+  /** サーバー側の設定不備。利用者には直せない */
+  Configuration:
+    'ログインの設定に問題があるため、現在ログインできません。お手数ですが、管理者にご連絡ください。',
+  /** プロバイダ側で拒否された、またはアカウントが許可されていない */
+  AccessDenied:
+    'ログインが許可されませんでした。別の方法でログインするか、管理者にご連絡ください。',
+  /** メールのリンクが期限切れ・使用済み */
+  Verification:
+    'リンクの有効期限が切れたか、既に使用されています。お手数ですが、もう一度やり直してください。',
+  /** 上記以外。コードが無い場合もここ */
+  DEFAULT:
+    'ログイン処理中にエラーが発生しました。お手数ですが、もう一度お試しください。',
+} as const;
+
+/**
  * Credentials 認証のエラーコード
  *
  * `authorize` が投げたエラーの種類をクライアントへ伝えるためのもの。

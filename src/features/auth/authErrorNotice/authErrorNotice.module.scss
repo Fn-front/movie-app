@@ -1,0 +1,46 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_auth_error {
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
+  padding: $spacing-4;
+
+  @include md {
+    padding: $spacing-8;
+  }
+}
+
+.c_auth_error__message {
+  margin-top: $spacing-6;
+  padding: $spacing-3 $spacing-4;
+  background-color: color-alpha(--error-main, 10%);
+  border: $border-width-1 solid $error-light;
+  border-radius: $border-radius-md;
+  color: $text-danger;
+  font-size: $font-size-sm;
+  line-height: $line-height-loose;
+}
+
+.c_auth_error__cta {
+  display: block;
+  margin-top: $spacing-6;
+  padding: $spacing-3;
+  border-radius: $border-radius-md;
+  background-color: $primary-500;
+  text-align: center;
+  text-decoration: none;
+  font-weight: $font-weight-medium;
+  // Button の primary と同じ扱い（`button.module.scss:25-33`）
+  color: white;
+
+  // ⚠️ hover に `--primary-600`（#0d7ec4）を使わない。白文字で 4.38:1 と
+  // AA を割る。Button も同じ理由で一段濃い側へずらしている
+  // （`button.module.scss:23-24`、`_theme.scss:111` も同じ根拠）
+  &:hover {
+    background-color: $primary-700;
+  }
+
+  @include focus-visible;
+}

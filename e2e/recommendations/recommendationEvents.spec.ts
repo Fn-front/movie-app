@@ -43,16 +43,62 @@ const EVENTS_ENDPOINT = '/api/recommendations/events';
 /** バッチ窓（500ms）が閉じて送信が終わるまでの余裕 */
 const FLUSH_WAIT_MS = 1500;
 
+/** 計測リクエストの応答を待つ上限。遅いシャードでも1秒前後で返る */
+const EVENTS_RESPONSE_TIMEOUT_MS = 15000;
+
+/**
+ * 計測APIへのPOSTの応答を待つ
+ *
+ * ⚠️ **飛ぶと分かっている場面で固定待ちに頼らないこと。** バッチ窓が閉じて
+ * から応答が返るまでの時間（CI実測で約1秒）は固定待ちに織り込めない。
+ * 応答を待たずに次の遷移へ進むとリクエストがナビゲーションで打ち切られ、
+ * `response` が1件も発火しないまま終わる。
+ *
+ * 実際に CI で落ちた。トレース上は `status: -1` の中断として残り、
+ * 「1本も飛ばなかった」のと見分けがつかない形で
+ * `expect(statuses.length).toBeGreaterThan(0)` が落ちていた。
+ *
+ * @param page - 対象のページ
+ * @returns 応答を受け取る Promise
+ */
+function waitForEventsResponse(page: Page): Promise<Response> {
+  return page.waitForResponse(
+    (response) =>
+      response.url().includes(EVENTS_ENDPOINT) &&
+      response.request().method() === 'POST',
+    { timeout: EVENTS_RESPONSE_TIMEOUT_MS },
+  );
+}
+
 /**
  * レコメンドを画面内に入れ、計測リクエストが飛び切るまで待つ
  *
  * 表示イベントは可視率 0.5 の交差で発火するため、セクションを
  * ビューポートに入れないと1件も送られない。
+ *
+ * @param page - 対象のページ
+ * @param options - `expectEvents` に true を渡すと、固定待ちではなく計測
+ *   リクエストの応答が返るまで待つ（理由は `waitForEventsResponse`）。
+ *   「飛ばないこと」を確かめる場面では待てないので固定待ちのままにする
  */
-async function showRecommendations(page: Page): Promise<void> {
+async function showRecommendations(
+  page: Page,
+  options: { expectEvents?: boolean } = {},
+): Promise<void> {
+  // 待ち受けはスクロールより前に張る。飛んでから張ると取りこぼす
+  const eventsResponse = options.expectEvents
+    ? waitForEventsResponse(page)
+    : null;
+
   const section = page.getByRole('region', { name: 'あなたへのおすすめ' });
   await expect(section).toBeVisible({ timeout: 15000 });
   await section.scrollIntoViewIfNeeded();
+
+  if (eventsResponse) {
+    await eventsResponse;
+    return;
+  }
+
   await page.waitForTimeout(FLUSH_WAIT_MS);
 }
 
@@ -119,7 +165,8 @@ test.describe('レコメンド利用イベントの計測', () => {
 
     try {
       await page.goto('/');
-      await showRecommendations(page);
+      // 初回表示では必ず1本飛ぶ。応答を見届けてから次の遷移へ進む
+      await showRecommendations(page, { expectEvents: true });
 
       for (let i = 0; i < 4; i += 1) {
         await page.reload();
@@ -141,7 +188,10 @@ test.describe('レコメンド利用イベントの計測', () => {
 
     try {
       await page.reload();
-      await showRecommendations(page);
+      // 送信済みキーを捨てた直後なので1本飛ぶ。ここで応答を待たずに次の
+      // テストへ進むと、リロードで打ち切られた送信が `forgetSentKeys` で
+      // 未送信に戻り、次のテストが「再送しない」ことを確かめられなくなる
+      await showRecommendations(page, { expectEvents: true });
     } finally {
       tracker.stop();
     }

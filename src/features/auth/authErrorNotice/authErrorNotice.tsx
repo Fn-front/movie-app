@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { Heading } from '@/components/ui/heading/heading';
 import { ROUTES } from '@/constants';
 import { AUTH_PAGE_ERROR_MESSAGES } from '@/constants/auth';
+import { resolveAuthErrorMessage } from '@/utils/authErrorMessage';
 
 import styles from './authErrorNotice.module.scss';
 
@@ -22,30 +23,6 @@ interface AuthErrorNoticeProps {
    * 知らない値や未指定でも落とさず既定の文言に倒す
    */
   code?: string;
-}
-
-/**
- * コードに対応する文言を返す。知らない値は既定へ
- *
- * ⚠️ `in` 演算子で判定しないこと。`Object.prototype` まで辿るため、
- * `?error=toString` で**関数**が、`?error=__proto__` で**オブジェクト**が
- * 返り、React が「Objects are not valid as a React child」で描画ごと落ちる。
- * `?error=` の値はそのまま渡るので URL だけで誰でも踏める。404 を直した
- * 代わりにクラッシュを埋めることになる。
- *
- * `hasOwnProperty` を借りて自前のキーだけを見る。
- */
-function resolveMessage(code: string | undefined): string {
-  if (
-    code &&
-    Object.prototype.hasOwnProperty.call(AUTH_PAGE_ERROR_MESSAGES, code)
-  ) {
-    return AUTH_PAGE_ERROR_MESSAGES[
-      code as keyof typeof AUTH_PAGE_ERROR_MESSAGES
-    ];
-  }
-
-  return AUTH_PAGE_ERROR_MESSAGES.DEFAULT;
 }
 
 export const AuthErrorNotice = memo<AuthErrorNoticeProps>(
@@ -62,7 +39,9 @@ export const AuthErrorNotice = memo<AuthErrorNoticeProps>(
           通常の読み上げ順で届く。付けると実装によっては二重に読まれる。
           見出し（「ログインできませんでした」）が先に状況を伝える
         */}
-        <p className={styles.c_auth_error__message}>{resolveMessage(code)}</p>
+        <p className={styles.c_auth_error__message}>
+          {resolveAuthErrorMessage(AUTH_PAGE_ERROR_MESSAGES, code)}
+        </p>
 
         <Link href={ROUTES.LOGIN} className={styles.c_auth_error__cta}>
           ログイン画面へ戻る

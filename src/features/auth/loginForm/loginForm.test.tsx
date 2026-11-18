@@ -77,6 +77,28 @@ describe('LoginForm', () => {
     ).toHaveValue('');
   });
 
+  /**
+   * ソーシャルログインの失敗（#1242）
+   *
+   * `/auth/signin?error=` へのリダイレクトで戻ってくる。ページごと
+   * 再読み込みされるので state には残らず、prop で受け取る
+   */
+  describe('初期エラー', () => {
+    it('渡された文言を最初から表示する', () => {
+      render(<LoginForm initialError='ソーシャルログインに失敗しました' />);
+
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'ソーシャルログインに失敗しました',
+      );
+    });
+
+    it('渡されなければエラーを出さない', () => {
+      render(<LoginForm />);
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
+
   it('フォームが正しく表示される', () => {
     render(<LoginForm />);
 

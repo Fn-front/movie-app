@@ -6,7 +6,7 @@
 
 'use client';
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 
 import { LoginForm } from '@/features/auth/loginForm/loginForm';
 import { OtpLoginForm } from '@/features/auth/otpLoginForm/otpLoginForm';
@@ -24,16 +24,67 @@ interface SignInContentProps {
    * 入れておく
    */
   initialIdentifier?: string;
+  /**
+   * ソーシャルログインの失敗文言（#1242）
+   *
+   * `/auth/signin?error=` で戻ってきたときにページが解決して渡す。
+   * OTP ログインには渡さない。失敗したのはパスワード/ソーシャルの画面で、
+   * 切り替えた先に前の画面のエラーが残っていると文脈が合わない
+   */
+  initialError?: string;
 }
 
 export const SignInContent = memo<SignInContentProps>(function SignInContent({
   callbackUrl,
   initialIdentifier,
+  initialError,
 }) {
   const [loginMode, setLoginMode] = useState<LoginMode>('password');
 
+  /**
+   * 最初に受け取った文言を抱えておく
+   *
+   * `initialError` をそのまま下へ流すと、`?error=` を落としたあとの再描画で
+   * prop が undefined になり文言が消えうる。読む前に消えたら、戻された
+   * 理由が分からないままになる
+   */
+  const [displayError, setDisplayError] = useState(initialError);
+
+  /**
+   * 表示したら URL から `?error=` を落とす（#1242）
+   *
+   * 残しておくと**同じエラーが何度でも蘇る**。
+   *
+   * - `MissingCSRF` の文言は「画面を再読み込みしてから」だが、リロードすると
+   *   クエリごと読み直して同じエラーが出る。言われたとおりにしても抜けられない
+   * - OTP に切り替えて戻ると `LoginForm` が再マウントされ、`useState` が
+   *   初期化し直される。送信して別のエラーを出したあとでも、往復するだけで
+   *   **古い文言に巻き戻る**
+   *
+   * ⚠️ `router.replace` を使ってはいけない。サーバーの再描画が走って
+   * **エラー表示ごと消える**（本番ビルドの E2E で実測。jsdom では
+   * `replace` がモックなので再描画が起きず、単体テストでは気づけない）。
+   *
+   * `window.history.replaceState` は Next.js がルーターに統合しているので、
+   * `usePathname` / `useSearchParams` は追従しつつ再描画は起きない
+   * （`next/dist/docs/01-app/01-getting-started/04-linking-and-navigating.md:346-348`）。
+   */
+  useEffect(() => {
+    if (!initialError || typeof window === 'undefined') return;
+
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('error')) return;
+
+    url.searchParams.delete('error');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}`);
+  }, [initialError]);
+
   const handleOtpLoginClick = useCallback(() => {
     setLoginMode('otp');
+    // 画面を離れたらサーバー由来のエラーは役目を終える。抱えたままだと
+    // パスワード画面へ戻ったときに `LoginForm` が再マウントされ、
+    // **古い文言に巻き戻る**
+    setDisplayError(undefined);
   }, []);
 
   const handlePasswordLoginClick = useCallback(() => {
@@ -54,6 +105,7 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
       onOtpLoginClick={handleOtpLoginClick}
       callbackUrl={callbackUrl}
       initialIdentifier={initialIdentifier}
+      initialError={displayError}
     />
   );
 });

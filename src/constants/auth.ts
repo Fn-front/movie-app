@@ -119,6 +119,94 @@ export const AUTH_PAGE_ERROR_MESSAGES = {
 } as const;
 
 /**
+ * `/auth/signin?error=` に出す文言（#1242）
+ *
+ * Auth.js は失敗の飛び先をエラーの `kind` で分ける
+ * （`node_modules/@auth/core/index.js:135`）。`SignInError` を継承した
+ * ものだけが `kind = 'signIn'` で、**`pages.error` ではなく `pages.signIn`**
+ * へ戻る。`AccessDenied` / `Verification` は `AuthError` 直系なので
+ * signin 側には来ない（`errors.js:64,395`）。`Configuration` と `DEFAULT`
+ * は両方に要るため、`AUTH_PAGE_ERROR_MESSAGES` と文言が重複している。
+ *
+ * さらに `type` は「クライアントに見せてよい」集合
+ * （`errors.js:412-421`）に無ければ **`Configuration` に差し替えられる**。
+ * kind は元のまま signIn なので、`/auth/signin?error=Configuration` も来る。
+ *
+ * `Auth()` の catch から来るのは次の6つ。
+ *
+ * | code | 起きる場面 |
+ * |---|---|
+ * | `OAuthCallbackError` | プロバイダの同意画面で拒否した・中断した |
+ * | `MissingCSRF` | CSRF トークンが合わない（画面を開いたまま放置等） |
+ * | `CredentialsSignin` | `redirect: true` のパスワードログイン |
+ * | `Configuration` | 上記以外の signIn 系（`OAuthSignInError` 等） |
+ * | `OAuthAccountNotLinked` | **現構成では起きない**（下記） |
+ * | `AccountNotLinked` | **現構成では起きない**（下記） |
+ *
+ * ⚠️ **ここに無い任意の値も来る。** `pages.signIn` を指定していると
+ * `GET /api/auth/signin?error=<任意>` の `error` がそのまま転送される
+ * （`lib/pages/index.js:56-60`）。`SessionRequired` もこの経路
+ * （`next-auth/react.js:80-86` の `useSession({ required: true })`。
+ * 本アプリは未使用）。だから `DEFAULT` への取りこぼしが必須になる。
+ *
+ * ⚠️ 知らないコードでも落とさず `DEFAULT` に倒す。`in` 演算子で引くと
+ * `?error=__proto__` で描画が落ちる（#1240 で実際に踏んだ）。参照は
+ * `resolveAuthErrorMessage`（`src/utils/authErrorMessage.ts`）を使う。
+ */
+export const SIGN_IN_PAGE_ERROR_MESSAGES = {
+  /**
+   * 同じメールアドレスのアカウントが別の方法で既にある
+   *
+   * ⚠️ **現構成では到達しない。将来アダプタを入れたときの備え。**
+   * この2つを投げるのは Auth.js のアダプタ経路（`handle-login.js:106,149,
+   * 188,250`）だけで、そこは `adapter` 未設定のとき同ファイル `:23-26` で
+   * 早期 return される。本アプリは `adapter` を設定しておらず
+   * （`src/lib/auth/auth.ts`）、アカウントの突き合わせは `signIn`
+   * コールバックで自前にやっている（同 `:355-`）。
+   *
+   * そのため「Google で登録した人が GitHub を押す」は**エラーにならず、
+   * メール一致で黙ってリンクされてログインできる**（プロバイダ側が
+   * `email_verified: true` を返したときだけ）。失敗する経路
+   * （メール未検証・DB障害）は `return false` → `AccessDenied` で、
+   * これは `AuthError` 直系なので `/auth/error` 側に出る。
+   *
+   * 消さずに残すのは、アダプタを足した瞬間にこの2つが現れるため。
+   * 文言は**アカウントの列挙にならない**。ここへ来るのはプロバイダ側の
+   * 認証を通過した＝そのメールアドレスを持っていると証明できた相手だけで、
+   * 他人のアドレスでは到達しない。逆に伏せると解決手段が無くなる
+   */
+  OAuthAccountNotLinked:
+    'このメールアドレスは別の方法で登録されています。最初に登録したときの方法（他のソーシャルログイン、またはメールアドレスとパスワード）でログインしてください。',
+  /** 上と同じ状況。Auth.js が投げ分けるので両方持つ（同じく現構成では到達しない） */
+  AccountNotLinked:
+    'このメールアドレスは別の方法で登録されています。最初に登録したときの方法（他のソーシャルログイン、またはメールアドレスとパスワード）でログインしてください。',
+  /**
+   * プロバイダ側で止まった
+   *
+   * 同意画面での拒否が大半だが、プロバイダの一時障害も同じコードで来る
+   * （RFC 6749 4.1.2.1 のエラー応答全般）。断定せず両方に当てはめる
+   */
+  OAuthCallbackError:
+    'ソーシャルログインが完了しませんでした。許可の画面でキャンセルした場合は、もう一度お試しください。',
+  /** 画面を長く開いたままだと起きる。再読み込みで直る */
+  MissingCSRF:
+    'ログインを受け付けられませんでした。画面を再読み込みしてから、もう一度お試しください。',
+  /**
+   * パスワードログインの失敗
+   *
+   * 通常は `redirect: false` で自前処理するためここには来ないが、
+   * 経路が増えたときに備える。**どのアカウントが存在するかを推測させない**
+   * よう、`AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS` と同じ粒度に丸める
+   */
+  CredentialsSignin: 'メールアドレスまたはパスワードが正しくありません。',
+  /** サーバー側の設定不備。利用者には直せない */
+  Configuration:
+    'ログインの設定に問題があるため、現在ログインできません。お手数ですが、管理者にご連絡ください。',
+  /** 上記以外。知らないコードはここへ倒す */
+  DEFAULT: 'ログインできませんでした。お手数ですが、もう一度お試しください。',
+} as const;
+
+/**
  * ログイン画面の補足
  */
 export const AUTH_HINTS = {

@@ -60,6 +60,17 @@ interface LoginFormProps {
    * 起きている。設定を終えた直後なら値は分かっているので入れておく
    */
   initialIdentifier?: string;
+  /**
+   * 最初から出しておくエラー文言（#1242）
+   *
+   * ソーシャルログインの失敗は `/auth/signin?error=<コード>` への
+   * リダイレクトとして戻ってくる。ページごと再読み込みされるため
+   * コンポーネントの state には残らず、サーバー側で文言に変換して渡す。
+   *
+   * 送信して失敗したときと同じ場所に出す。表示位置が増えると、
+   * どちらを読めばよいのか分からなくなる
+   */
+  initialError?: string;
 }
 
 /**
@@ -69,10 +80,11 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
   onOtpLoginClick,
   callbackUrl,
   initialIdentifier,
+  initialError,
 }) {
   const router = useRouter();
   const { toast } = useToastDispatch();
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(initialError ?? null);
   /**
    * 第2要素の入力欄を出すか。
    *

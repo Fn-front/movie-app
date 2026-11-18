@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
+
 import { OtpLoginForm } from './otpLoginForm';
 
 // --- Polyfills ---
@@ -341,6 +343,13 @@ describe('OtpLoginForm', () => {
       '二段階認証が有効',
       'otp_login_disabled',
       '二段階認証が有効なため、メールでのログインは利用できません。パスワードと認証コードでログインしてください。',
+    ],
+    [
+      'メール認証が未完了',
+      'email_not_verified',
+      // #1247。この画面には**パスワード欄すら無い**のに「メールアドレス
+      // またはパスワードが正しくありません」と出ていた。コードは正しい
+      AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED,
     ],
     [
       '判別できないコード',

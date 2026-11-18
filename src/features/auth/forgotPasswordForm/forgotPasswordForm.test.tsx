@@ -92,16 +92,28 @@ describe('ForgotPasswordForm', () => {
    * それを知らない。実アドレスを入れても引けないが、列挙防止のため応答は
    * 成功と同じ。「送信しました」と出たまま永久に届かない
    */
-  describe('発行アカウントの案内', () => {
-    it('送信する前に出す', () => {
+  describe('この画面では復旧できない人への案内', () => {
+    /**
+     * 対象は2種類。どちらも応答は成功と同じで、1通も届かない
+     *
+     * - 発行アカウント（#1226）: `users.email` が受信できない合成アドレス
+     * - メール未認証（#1247）: `request/route.ts:141` が黙って捨てる
+     */
+    const NOTICES = [
+      ['発行アカウント', PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED],
+      [
+        'メール未認証',
+        PASSWORD_RESET_MESSAGES.UNVERIFIED_ACCOUNT_NOT_SUPPORTED,
+      ],
+    ] as const;
+
+    it.each(NOTICES)('送信する前に出す: %s', (_label, message) => {
       render(<ForgotPasswordForm />);
 
-      expect(
-        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED),
-      ).toBeInTheDocument();
+      expect(screen.getByText(message)).toBeInTheDocument();
     });
 
-    it('送信した後にも出す', async () => {
+    it.each(NOTICES)('送信した後にも出す: %s', async (_label, message) => {
       // ⚠️ ここが本題。送信前の注記は読み飛ばされるが、届かないことに
       // 気づいたあと戻ってくる場所はこちら
       mockFetch.mockResolvedValue(okResponse());
@@ -111,9 +123,7 @@ describe('ForgotPasswordForm', () => {
 
       await screen.findByText(PASSWORD_RESET_MESSAGES.REQUEST_ACCEPTED);
 
-      expect(
-        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED),
-      ).toBeInTheDocument();
+      expect(screen.getByText(message)).toBeInTheDocument();
     });
 
     it('送信後の案内と同じライブリージョンに入れる', async () => {
@@ -132,6 +142,9 @@ describe('ForgotPasswordForm', () => {
       expect(status).toHaveTextContent(
         PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED,
       );
+      expect(status).toHaveTextContent(
+        PASSWORD_RESET_MESSAGES.UNVERIFIED_ACCOUNT_NOT_SUPPORTED,
+      );
     });
 
     it.each([
@@ -147,9 +160,9 @@ describe('ForgotPasswordForm', () => {
 
       await screen.findByRole('alert');
 
-      expect(
-        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED),
-      ).toBeInTheDocument();
+      for (const [, message] of NOTICES) {
+        expect(screen.getByText(message)).toBeInTheDocument();
+      }
     });
   });
 

@@ -30,12 +30,23 @@ type OtpLoginStep = 'email' | 'otp';
  * 「メールアドレスまたはパスワードが正しくありません」とだけ出て、
  * 利用者はパスワード＋認証コードで入り直せばよいと気づけず詰む。
  *
+ * メール未認証も同じ（#1247）。**この画面にはパスワード欄すら無い**のに
+ * 「メールアドレスまたはパスワードが正しくありません」と出ていた。
+ *
  * それ以外は認証情報エラーに丸める。どのアカウントが存在するかを推測させないため。
+ * 個別の文言を返す2つは、いずれも**コードの検証に成功した相手**＝そのメール
+ * アドレスの持ち主にしか返らないので、列挙にはならない。
  */
-const resolveSignInErrorMessage = (code: string | undefined): string =>
-  code === AUTH_ERROR_CODE.OTP_LOGIN_DISABLED
-    ? AUTH_ERROR_MESSAGES.OTP_LOGIN_DISABLED_BY_TOTP
-    : AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS;
+const resolveSignInErrorMessage = (code: string | undefined): string => {
+  switch (code) {
+    case AUTH_ERROR_CODE.OTP_LOGIN_DISABLED:
+      return AUTH_ERROR_MESSAGES.OTP_LOGIN_DISABLED_BY_TOTP;
+    case AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED:
+      return AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED;
+    default:
+      return AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS;
+  }
+};
 
 interface UseOtpLoginReturn {
   step: OtpLoginStep;

@@ -34,6 +34,10 @@ import styles from './loginForm.module.scss';
  *
  * 判別できないものはすべて「メールアドレスまたはパスワードが正しくありません」に
  * 丸める。どのアカウントが存在するかを推測させないため。
+ *
+ * ここで個別の文言を返すものは、いずれも**パスワード照合に成功した相手にしか
+ * 返らない**（`src/lib/auth/auth.ts` の `authorize`）。丸めをやめてよいのは
+ * その前提があるときだけ。
  */
 const resolveErrorMessage = (code: string | undefined): string => {
   switch (code) {
@@ -43,6 +47,10 @@ const resolveErrorMessage = (code: string | undefined): string => {
       return AUTH_ERROR_MESSAGES.TOTP_REUSED;
     case AUTH_ERROR_CODE.RATE_LIMITED:
       return AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED;
+    case AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED:
+      // 確認コードを入れる前に離脱した人（#1247）。丸めると、パスワードは
+      // 正しいのに「違う」と言われ続けて復帰できない
+      return AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED;
     default:
       return AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS;
   }

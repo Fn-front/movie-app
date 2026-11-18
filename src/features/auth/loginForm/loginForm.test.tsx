@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { signIn } from 'next-auth/react';
 import { AxiosError } from 'axios';
 
-import { AUTH_HINTS } from '@/constants/auth';
+import { AUTH_ERROR_MESSAGES, AUTH_HINTS } from '@/constants/auth';
 
 import { LoginForm } from './loginForm';
 
@@ -232,6 +232,46 @@ describe('LoginForm', () => {
     });
 
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  /**
+   * メール認証が未完了のアカウント（#1247）
+   *
+   * 登録して確認コードを入れる前に離脱した人。以前は丸められて
+   * 「メールアドレスまたはパスワードが正しくありません」と出ており、
+   * **パスワードは正しい**ので何度打ち直しても通らなかった
+   */
+  it('email_not_verified は理由と次の手順を出す', async () => {
+    mockSignIn.mockResolvedValue({
+      error: 'CredentialsSignin',
+      code: 'email_not_verified',
+      ok: false,
+      status: 401,
+      url: null,
+    });
+
+    render(<LoginForm />);
+
+    await user.type(
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
+      'test@example.com',
+    );
+    await user.type(screen.getByLabelText('パスワード'), 'Password1');
+    await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED,
+      );
+    });
+
+    // トーストにも同じ文言が出る（画面を見ていない人にも届く）
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED,
+        variant: 'error',
+      }),
+    );
   });
 
   it('onOtpLoginClick指定時にメールでログインボタンが表示される', async () => {

@@ -56,6 +56,14 @@ export const ForgotPasswordForm = memo(function ForgotPasswordForm() {
           <p className={styles.c_forgot_password__lead}>
             {PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED}
           </p>
+
+          {/*
+            メール認証が済んでいないアカウントも同じく届かない（#1247）。
+            サーバーは列挙防止のため黙って捨てるので、ここで条件を示す
+          */}
+          <p className={styles.c_forgot_password__lead}>
+            {PASSWORD_RESET_MESSAGES.UNVERIFIED_ACCOUNT_NOT_SUPPORTED}
+          </p>
         </div>
       ) : (
         <>
@@ -71,6 +79,15 @@ export const ForgotPasswordForm = memo(function ForgotPasswordForm() {
           */}
           <p className={styles.c_forgot_password__lead}>
             {PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED}
+          </p>
+
+          {/*
+            メール認証が済んでいないアカウントも同じ（#1247）。登録して
+            確認コードを入れる前に離れた人がここへ来るが、応答は成功と
+            同じで1通も届かない
+          */}
+          <p className={styles.c_forgot_password__lead}>
+            {PASSWORD_RESET_MESSAGES.UNVERIFIED_ACCOUNT_NOT_SUPPORTED}
           </p>
 
           <form

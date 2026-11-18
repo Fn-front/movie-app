@@ -153,10 +153,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         if (loginMethod === LOGIN_METHOD.OTP) {
-          // メール認証チェック
-          if (!user.is_verified) {
-            throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
-          }
+          // ⚠️ メール認証チェックはここには無い。検証済みトークンを
+          // 確かめたあと（下の「ワンタイム使用」の直前）に置いている。
+          // 理由は #1247 — パスワード経路と同じく、**未認証かどうか**を
+          // コードを知らない相手に教えないため。
+          //
+          // ⚠️ すぐ下の `isTotpEnabled` は**トークン検証より前**にあり、
+          // メールアドレスだけで「登録済み＋二段階認証あり」が引ける
+          // （#642 からの既存挙動）。ここで守っているのは `is_verified` の
+          // 一点だけで、この経路全体が列挙に強いわけではない
 
           // 二段階認証が有効なら、この経路は使わせない。
           // メールのコードだけで入れる経路は「第2要素」ではなく
@@ -205,6 +210,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
           }
 
+          // メール認証チェック（#1247）
+          //
+          // ⚠️ **トークンを消費する前**に置く。後ろに置くと、理由を返して
+          // 弾いた時点でトークンが焼けており、やり直すにもコードを
+          // 取り直すことになる（#1235 と同じ形）。
+          //
+          // ここまで来たのはコードを受け取れた＝メールアドレスの持ち主だけ
+          // なので、理由を返してもアカウント列挙にはならない
+          if (!user.is_verified) {
+            throw new CredentialsSignInError(
+              AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED,
+            );
+          }
+
           // 検証済みOTPを削除（ワンタイム使用）
           await supabase.from('otp_codes').delete().eq('id', verifiedOtp.id);
         } else {
@@ -214,11 +233,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
 
           const password = credentials.password as string;
-
-          // メール認証チェック（パスワード照合前に実施し、不要なbcrypt計算を回避）
-          if (!user.is_verified) {
-            throw new Error(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED);
-          }
 
           // パスワード未設定（ソーシャルログインのみのユーザー）
           if (!user.password_hash) {
@@ -233,6 +247,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           if (!isPasswordValid) {
             throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+          }
+
+          // メール認証チェック（#1247）
+          //
+          // ⚠️ **パスワード照合の後に置く。** 以前は前にあり
+          // （「不要なbcrypt計算を回避」）、プレーンな `Error` を投げていた。
+          // Auth.js はプレーンな Error に `code` を載せないため、画面には
+          // 「メールアドレスまたはパスワードが正しくありません」としか出ず、
+          // **パスワードは正しいのに**理由が分からないまま詰んでいた。
+          //
+          // 理由を返すには、パスワードを知らない相手に返さないことが前提に
+          // なる。でないと「このメールは登録済み」が漏れてアカウント列挙を
+          // 許す。すぐ下の第2要素と同じ理屈で、照合の後ろへ移した。
+          //
+          // 代償として未認証ユーザーへの試行でも bcrypt が走るが、ここは
+          // `login` のレート制限を通過した後なので許容する
+          if (!user.is_verified) {
+            throw new CredentialsSignInError(
+              AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED,
+            );
           }
 
           // 第2要素。パスワードが正しいことを確かめてからでないと、

@@ -17,6 +17,12 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
+// フォームは成功時に同意レコードを片付ける（#1234）。その実体は
+// `next-auth/react`（ESM）を引き込むため、素のままだと jest が解析できない
+jest.mock('@/lib/auth/logout', () => ({
+  cleanUpBeforeSignOut: jest.fn(),
+}));
+
 /** `searchParams` は Promise で渡る */
 const renderPage = async (params: Record<string, string | string[]>) =>
   render(await ResetPasswordPage({ searchParams: Promise.resolve(params) }));

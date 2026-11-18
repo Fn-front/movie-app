@@ -12,6 +12,11 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
+const mockCleanUpBeforeSignOut = jest.fn();
+jest.mock('@/lib/auth/logout', () => ({
+  cleanUpBeforeSignOut: () => mockCleanUpBeforeSignOut(),
+}));
+
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
@@ -106,6 +111,39 @@ describe('ResetPasswordForm', () => {
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith('/auth/signin');
     });
+  });
+
+  /**
+   * ログイン中に行われた同意を端末に残さない（#1234）
+   *
+   * サーバーがセッションCookieを失効させるが、`logout()` を通らないので
+   * 後始末が走らない。`useSession` はポーリングしないため status は
+   * `authenticated` のまま据え置かれ、`useConsentServerSync` の保険も
+   * 発火しない。残すと、このままタブを閉じた端末を次に使った人へ前の
+   * 利用者の同意が1ページロード分適用される
+   */
+  it('再設定に成功したら、ログイン中の同意レコードを消す', async () => {
+    mockFetch.mockResolvedValue(okResponse());
+
+    render(<ResetPasswordForm token='valid-token' />);
+    await submitPassword(VALID_PASSWORD);
+
+    await waitFor(() => {
+      expect(mockCleanUpBeforeSignOut).toHaveBeenCalled();
+    });
+  });
+
+  it('再設定に失敗したら同意レコードは消さない', async () => {
+    // 設定していないのに同意まで消される理由が無い
+    mockFetch.mockResolvedValue(
+      errorResponse(400, PASSWORD_RESET_MESSAGES.INVALID_TOKEN),
+    );
+
+    render(<ResetPasswordForm token='bad-token' />);
+    await submitPassword(VALID_PASSWORD);
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(mockCleanUpBeforeSignOut).not.toHaveBeenCalled();
   });
 
   it('確認用パスワードが一致しなければ送信しない', async () => {

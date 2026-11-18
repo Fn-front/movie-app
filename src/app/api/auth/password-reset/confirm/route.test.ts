@@ -174,55 +174,120 @@ describe('POST /api/auth/password-reset/confirm', () => {
    * まま使い続けることになる
    */
   describe('セッションの後始末', () => {
-    /** レスポンスの Set-Cookie から属性を取り出す */
-    const parseSetCookie = (response: Response) => {
-      const raw = response.headers.get('set-cookie') ?? '';
-      const [pair, ...rest] = raw.split(';').map((part) => part.trim());
-      const [name, value] = pair.split('=');
-      const attributes = new Map(
-        rest.map((part) => {
-          const [key, attrValue] = part.split('=');
-          return [key.toLowerCase(), attrValue ?? ''];
-        }),
-      );
-      return { raw, name, value, attributes };
+    const originalNodeEnv = process.env.NODE_ENV;
+
+    const setNodeEnv = (value: string) => {
+      (process.env as Record<string, string>).NODE_ENV = value;
     };
 
-    it('成功したらセッションCookieを失効させる', async () => {
-      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
-
-      const response = await POST(
-        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
-      );
-      const cookie = parseSetCookie(response);
-
-      expect(cookie.name).toBe(getSessionCookieName());
-      expect(cookie.value).toBe('');
-      expect(cookie.attributes.get('max-age')).toBe('0');
+    afterEach(() => {
+      setNodeEnv(originalNodeEnv as string);
     });
 
     /**
-     * ⚠️ 属性を発行時と揃える（#1174）
+     * `Set-Cookie` を名前・値・属性に分解する
      *
-     * 本番の Cookie 名は `__Secure-` 接頭辞付きで、ブラウザは `Secure` の
-     * 無い `Set-Cookie` を**拒否する**。属性が欠けると削除指示ごと捨てられ、
-     * 不具合がそのまま再現する
+     * ⚠️ 文字列の `toContain` で属性を見てはいけない。本番の Cookie 名は
+     * `__Secure-next-auth.session-token` なので、`toContain('Secure')` は
+     * **属性が1つも付いていなくても名前に当たって通る**。
+     * `src/proxy.test.ts:257-263` と同じ理由
      */
-    it('削除Cookieの属性が発行時と揃っている', async () => {
+    const parseSetCookie = (response: Response) => {
+      const header = response.headers.get('set-cookie') ?? '';
+      const [pair, ...rest] = header.split(';').map((part) => part.trim());
+      const separator = pair.indexOf('=');
+
+      return {
+        name: pair.slice(0, separator),
+        value: pair.slice(separator + 1),
+        // 値を持たない属性（Secure / HttpOnly）は true にする。
+        // 空文字にすると `toBe(true)` と噛み合わない
+        attributes: new Map<string, string | true>(
+          rest.map((attribute) => {
+            const eq = attribute.indexOf('=');
+            return eq === -1
+              ? [attribute.toLowerCase(), true]
+              : [attribute.slice(0, eq).toLowerCase(), attribute.slice(eq + 1)];
+          }),
+        ),
+      };
+    };
+
+    /** 成功レスポンスの Set-Cookie を取る */
+    const getDeletionCookie = async () => {
       mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
 
       const response = await POST(
         createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
       );
-      const cookie = parseSetCookie(response);
+
+      return parseSetCookie(response);
+    };
+
+    it('成功したらセッションCookieを空値で上書きする', async () => {
+      setNodeEnv('production');
+
+      const cookie = await getDeletionCookie();
+
+      expect(cookie.name).toBe('__Secure-next-auth.session-token');
+      expect(cookie.value).toBe('');
+    });
+
+    /**
+     * ⚠️ 属性値をベタ書きで固定する（#1174）
+     *
+     * `getSessionCookieOptions()` と突き合わせるだけだと、テスト環境では
+     * `secure` が false なので `expect(has('secure')).toBe(issued.secure)` が
+     * **恒真になる**。Cookie 名も接頭辞なしの値しか出ない。その形だと
+     * 「`secure: false` を足す」「名前をハードコードする」のどちらの退行も
+     * 素通りし、本番では削除指示ごとブラウザに拒否される。
+     * `src/proxy.test.ts:302-312` と同じ形にする
+     */
+    it.each([
+      ['Secure（これが無いと __Secure- のCookieは拒否される）', 'secure', true],
+      ['HttpOnly', 'httponly', true],
+      ['SameSite', 'samesite', 'lax'],
+      ['Path', 'path', '/'],
+      ['即時失効', 'max-age', '0'],
+    ])('本番の削除Cookieに %s が載る', async (_label, attribute, expected) => {
+      setNodeEnv('production');
+
+      const cookie = await getDeletionCookie();
+
+      expect(cookie.attributes.get(attribute)).toBe(expected);
+    });
+
+    /**
+     * 発行側（`auth.ts` の cookies.sessionToken）と同じ定義を使う。
+     * 属性が1つでも食い違うと別のCookieとして扱われ、やはり消えない。
+     *
+     * ⚠️ これはヘルパーを**自分自身と**突き合わせているだけ。実際の属性値は
+     * 上の `it.each` がベタ書きで固定しているので、ずれればそちらが落ちる
+     */
+    it('削除Cookieが共有ヘルパーの定義どおりになっている', async () => {
+      setNodeEnv('production');
+
+      const cookie = await getDeletionCookie();
       const issued = getSessionCookieOptions();
 
+      expect(cookie.name).toBe(getSessionCookieName());
+      expect(cookie.attributes.has('secure')).toBe(issued.secure);
       expect(cookie.attributes.has('httponly')).toBe(issued.httpOnly);
-      expect(cookie.attributes.get('samesite')?.toLowerCase()).toBe(
+      expect(String(cookie.attributes.get('samesite')).toLowerCase()).toBe(
         issued.sameSite,
       );
       expect(cookie.attributes.get('path')).toBe(issued.path);
-      expect(cookie.attributes.has('secure')).toBe(issued.secure);
+    });
+
+    // 開発は http なので Secure を付けると逆に消えない
+    it('開発では接頭辞なしのCookieを Secure なしで消す', async () => {
+      setNodeEnv('development');
+
+      const cookie = await getDeletionCookie();
+
+      expect(cookie.name).toBe('next-auth.session-token');
+      expect(cookie.attributes.has('secure')).toBe(false);
+      expect(cookie.attributes.get('max-age')).toBe('0');
     });
 
     it('トークンが使えなかったときは既存セッションに触れない', async () => {

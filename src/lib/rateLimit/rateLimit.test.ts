@@ -8,7 +8,12 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
-import { checkCooldown, checkRateLimit, resetRateLimit } from './rateLimit';
+import {
+  checkCooldown,
+  checkRateLimit,
+  releaseRateLimit,
+  resetRateLimit,
+} from './rateLimit';
 import { SUPABASE_ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import type { RateLimitActionType } from '@/constants/rateLimit';
 
@@ -658,6 +663,45 @@ describe('resetRateLimit', () => {
     expect(mockDelete).toHaveBeenCalled();
     expect(mockEq1).toHaveBeenCalledWith('identifier', 'user-1');
     expect(mockEq2).toHaveBeenCalledWith('action_type', 'login');
+  });
+});
+
+describe('releaseRateLimit', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  /**
+   * ⚠️ 行ごと削除する `resetRateLimit` では代用できない。あちらは
+   * 「検証に成功したので全部チャラ」の操作で、ここで使うと**別の正当な試行で
+   * 積んだ分まで消える**。RPC 側で `attempts` を1つ減らし、`locked_until` も
+   * 解除する（1通も送っていないのにロックが残らないようにする）。
+   */
+  it('release_rate_limit RPC を識別子とアクションで呼ぶ', async () => {
+    const mockRpc = jest.fn().mockResolvedValue({ error: null });
+    const supabase = { rpc: mockRpc } as unknown as SupabaseClient;
+
+    await releaseRateLimit(supabase, 'user-1', 'two_factor_send');
+
+    expect(mockRpc).toHaveBeenCalledWith('release_rate_limit', {
+      p_identifier: 'user-1',
+      p_action_type: 'two_factor_send',
+    });
+  });
+
+  /**
+   * 呼び出し側は「送信に失敗した」という本題のエラーを返す途中にある。
+   * ここで throw すると、その原因が 500 に化けて切り分けができない。
+   */
+  it('RPC が失敗しても throw しない', async () => {
+    const mockRpc = jest
+      .fn()
+      .mockResolvedValue({ error: { message: 'rpc failed' } });
+    const supabase = { rpc: mockRpc } as unknown as SupabaseClient;
+
+    await expect(
+      releaseRateLimit(supabase, 'user-1', 'two_factor_send'),
+    ).resolves.toBeUndefined();
   });
 });
 

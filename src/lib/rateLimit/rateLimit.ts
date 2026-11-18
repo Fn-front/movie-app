@@ -351,3 +351,42 @@ export async function resetRateLimit(
     .eq('identifier', identifier)
     .eq('action_type', actionType);
 }
+
+/**
+ * 直近に消費した1回分のカウントを取り消す
+ *
+ * `checkRateLimit` で数えたあと、守ろうとした資源を**実際には消費しなかった**
+ * ときに使う（メール送信が失敗した場合など）。
+ *
+ * `resetRateLimit` では代用できない。あちらは行ごと削除する「検証に成功した
+ * ので全部チャラ」の操作で、ここで使うと**別の正当な試行で積んだ分まで消える**。
+ *
+ * ロックも解除する。`consume_rate_limit` は上限到達時に `attempts` を増やしつつ
+ * `locked_until` を立てるため、`attempts` だけ戻すと「1通も送っていないのに
+ * ロックされたまま」が残る。
+ *
+ * 原子性が要る理由は consume 側と同じ（#646）。SELECT → UPDATE に分けると、
+ * 同時に失敗した2つのリクエストが同じ `attempts` を読み、片方のデクリメントが
+ * 失われる。PostgREST からは `attempts = attempts - 1` を書けないため RPC を使う。
+ *
+ * ⚠️ 失敗しても throw しない。呼び出し側は「送信に失敗した」という本題の
+ * エラーを返す途中であり、ここで throw するとその原因が 500 に化ける。
+ *
+ * @param supabase - Supabaseクライアント
+ * @param identifier - 識別子
+ * @param actionType - アクション種別
+ */
+export async function releaseRateLimit(
+  supabase: SupabaseClient,
+  identifier: string,
+  actionType: RateLimitActionType,
+): Promise<void> {
+  const { error } = await supabase.rpc('release_rate_limit', {
+    p_identifier: identifier,
+    p_action_type: actionType,
+  });
+
+  if (error) {
+    console.error('Failed to release rate limit:', error);
+  }
+}

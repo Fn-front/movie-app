@@ -12,16 +12,16 @@ Issue: #1261
 
 ## 決定事項
 
-| 論点 | 決定 |
-|---|---|
-| 排他性 | **どちらか1つだけ**。`user_totp` の主キーがDB側で保証する |
-| データモデル | `user_totp` に `method` 列を足すだけ。**テーブルはリネームしない** |
-| 型の表現 | `VARCHAR + CHECK`。ENUM は使わない（既存に `CREATE TYPE` は0件） |
-| メール送信の上限 | 専用カウンタ `two_factor_send`（20通/日・ユーザー単位）を新設 |
-| リカバリーコード | 方式を問わず発行 |
-| パスワードレスOTPログイン | 方式によらず**引き続き塞ぐ**（#642 を維持） |
-| admin 発行アカウント | **メールOTP を選ばせない**（宛先が `.invalid` で配送不能） |
-| 既存ユーザー | `method` の既定値 `'totp'` で現状維持。移行作業なし |
+| 論点                      | 決定                                                               |
+| ------------------------- | ------------------------------------------------------------------ |
+| 排他性                    | **どちらか1つだけ**。`user_totp` の主キーがDB側で保証する          |
+| データモデル              | `user_totp` に `method` 列を足すだけ。**テーブルはリネームしない** |
+| 型の表現                  | `VARCHAR + CHECK`。ENUM は使わない（既存に `CREATE TYPE` は0件）   |
+| メール送信の上限          | 専用カウンタ `two_factor_send`（20通/日・ユーザー単位）を新設      |
+| リカバリーコード          | 方式を問わず発行                                                   |
+| パスワードレスOTPログイン | 方式によらず**引き続き塞ぐ**（#642 を維持）                        |
+| admin 発行アカウント      | **メールOTP を選ばせない**（宛先が `.invalid` で配送不能）         |
+| 既存ユーザー              | `method` の既定値 `'totp'` で現状維持。移行作業なし                |
 
 ### リネームしない理由
 
@@ -41,14 +41,14 @@ Issue: #1261
 
 **TypeScript 側のリネームは行う**（コンパイル時に解決され、デプロイ窓を作らないため）。
 
-| 対象 | 扱い |
-|---|---|
-| `user_totp` / `totp_recovery_codes` | 据え置き。`COMMENT ON TABLE` で両方式を扱う旨を記す |
-| `/api/user/totp/**` | 据え置き（クライアントとサーバーのデプロイ間に404窓を作らないため） |
-| `totpVerification.ts` → `secondFactor.ts` | リネームする |
-| `helpers/totpGuard.ts` → `secondFactorGuard.ts` | リネームする |
-| `isTotpEnabled` → `getSecondFactorMethod` | リネームする（戻り値の型も変わる） |
-| `TOTP_VERIFY_RESULT` → `SECOND_FACTOR_VERIFY_RESULT` | リネームする（値は不変） |
+| 対象                                                 | 扱い                                                                |
+| ---------------------------------------------------- | ------------------------------------------------------------------- |
+| `user_totp` / `totp_recovery_codes`                  | 据え置き。`COMMENT ON TABLE` で両方式を扱う旨を記す                 |
+| `/api/user/totp/**`                                  | 据え置き（クライアントとサーバーのデプロイ間に404窓を作らないため） |
+| `totpVerification.ts` → `secondFactor.ts`            | リネームする                                                        |
+| `helpers/totpGuard.ts` → `secondFactorGuard.ts`      | リネームする                                                        |
+| `isTotpEnabled` → `getSecondFactorMethod`            | リネームする（戻り値の型も変わる）                                  |
+| `TOTP_VERIFY_RESULT` → `SECOND_FACTOR_VERIFY_RESULT` | リネームする（値は不変）                                            |
 
 ### パスワードレスOTPログインを塞ぎ続ける理由
 
@@ -114,10 +114,10 @@ COMMENT ON TABLE user_totp IS
 
 ### `action_type` 許可リストの更新
 
-| テーブル | 制約 | 追加する値 | 漏れたときの症状 |
-|---|---|---|---|
-| `otp_codes` | `chk_otp_action_type` | `'two_factor'` | INSERT が `23514` で失敗（明示的に壊れる） |
-| `rate_limits` | `chk_action_type` | `'two_factor_send'` | **無言で制限が無効化**（#546 / #659） |
+| テーブル      | 制約                  | 追加する値          | 漏れたときの症状                           |
+| ------------- | --------------------- | ------------------- | ------------------------------------------ |
+| `otp_codes`   | `chk_otp_action_type` | `'two_factor'`      | INSERT が `23514` で失敗（明示的に壊れる） |
+| `rate_limits` | `chk_action_type`     | `'two_factor_send'` | **無言で制限が無効化**（#546 / #659）      |
 
 現在値は `chk_otp_action_type` が3値（`20260312000000:84` の1回きり）、
 `chk_action_type` が35値（最新定義は `20261106095759:22-71`）。
@@ -141,12 +141,12 @@ COMMENT ON TABLE user_totp IS
 
 **第2要素のコードを送れる経路を、以下の4本だけにする。**
 
-| # | 経路 | 送信する場所 | 宛先の決め方 | 認証 |
-|---|---|---|---|---|
-| 1 | パスワードログイン | `authorize` 内。パスワード照合の**後** | `user.email` | パスワード |
-| 2 | OAuth ログイン | `jwt` コールバック（`trigger==='update'`） | `token` のユーザー | OAuth 済み |
-| 3 | 設定画面での有効化 | `POST /api/user/totp/setup` | セッションのユーザー | セッション |
-| 4 | 設定変更の本人確認 | `POST /api/user/totp/send-challenge`（**新規**） | セッションのユーザー | セッション |
+| #   | 経路               | 送信する場所                                     | 宛先の決め方         | 認証       |
+| --- | ------------------ | ------------------------------------------------ | -------------------- | ---------- |
+| 1   | パスワードログイン | `authorize` 内。パスワード照合の**後**           | `user.email`         | パスワード |
+| 2   | OAuth ログイン     | `jwt` コールバック（`trigger==='update'`）       | `token` のユーザー   | OAuth 済み |
+| 3   | 設定画面での有効化 | `POST /api/user/totp/setup`                      | セッションのユーザー | セッション |
+| 4   | 設定変更の本人確認 | `POST /api/user/totp/send-challenge`（**新規**） | セッションのユーザー | セッション |
 
 いずれも**宛先がリクエストボディから来ない**ことが共通条件。これが満たされる限り、
 メール爆撃・列挙・踏み台には使えない。
@@ -160,7 +160,10 @@ COMMENT ON TABLE user_totp IS
 `src/schema/otp.ts:11-14` は zod の enum を `OTP_ACTION` から**機械的に導出**している。
 
 ```ts
-const otpActionValues = Object.values(OTP_ACTION) as [OtpAction, ...OtpAction[]];
+const otpActionValues = Object.values(OTP_ACTION) as [
+  OtpAction,
+  ...OtpAction[],
+];
 ```
 
 これが `otpSendSchema`（:35）と `otpVerifySchema`（:51）の両方に入るため、
@@ -204,6 +207,7 @@ const otpActionValues = Object.values(OTP_ACTION) as [OtpAction, ...OtpAction[]]
 コードを送るボタンが無い。TOTP は手元のアプリで生成できるので成立していた。
 
 メールOTP では:
+
 - 無効化（`disable/route.ts:60`）も再発行（`recovery-codes/route.ts:59`）も
   `requireSecondFactor` がコードを要求する
 - そのコードを取得する経路が無い
@@ -218,10 +222,10 @@ const otpActionValues = Object.values(OTP_ACTION) as [OtpAction, ...OtpAction[]]
 
 ### 2-3. レート制限
 
-| カウンタ | 上限 | 識別子 | 位置 | 使うルート |
-|---|---|---|---|---|
-| `two_factor_send`（新規） | 10回 / 60分アイドルで解除 | ユーザーID | **送信の直前**（例外2） | 送信（`setup` の email_otp 分岐・`send-challenge`） |
-| `TOTP_SETTINGS_VERIFY`（既存） | 5回/15分 | ユーザーID | **検証より前**（原則） | 検証（`enable` / `disable` / `recovery-codes`） |
+| カウンタ                       | 上限                      | 識別子     | 位置                    | 使うルート                                          |
+| ------------------------------ | ------------------------- | ---------- | ----------------------- | --------------------------------------------------- |
+| `two_factor_send`（新規）      | 10回 / 60分アイドルで解除 | ユーザーID | **送信の直前**（例外2） | 送信（`setup` の email_otp 分岐・`send-challenge`） |
+| `TOTP_SETTINGS_VERIFY`（既存） | 5回/15分                  | ユーザーID | **検証より前**（原則）  | 検証（`enable` / `disable` / `recovery-codes`）     |
 
 **送信系と検証系でカウンタを重ねない。** 両方消費させると、メールOTP 利用者は
 無効化のたびに「コード送信＋コード入力」で2枠使い、2回しくじるだけで15分間
@@ -275,12 +279,12 @@ const otpActionValues = Object.values(OTP_ACTION) as [OtpAction, ...OtpAction[]]
 「メールに送ったコードを入力してください」と表示すると、利用者は届かないコードを
 待ち続ける。この状態の唯一の出口はリカバリーコードなので、**その誘導を画面に出す**。
 
-| 結果 | 画面 |
-|---|---|
-| `SENT` | コード入力欄 + 再送（60秒カウントダウン） |
-| `THROTTLED` | コード入力欄（直前のコードがまだ生きている） |
+| 結果             | 画面                                                    |
+| ---------------- | ------------------------------------------------------- |
+| `SENT`           | コード入力欄 + 再送（60秒カウントダウン）               |
+| `THROTTLED`      | コード入力欄（直前のコードがまだ生きている）            |
 | `LIMIT_EXCEEDED` | コード入力欄 + **「リカバリーコードを使ってください」** |
-| `SEND_FAILED` | 送信失敗の文言（「コードが違う」と区別する） |
+| `SEND_FAILED`    | 送信失敗の文言（「コードが違う」と区別する）            |
 
 ### 2-4. ログイン画面の再送で `login` カウンタを消費しない
 
@@ -341,13 +345,13 @@ getSecondFactorMethod(supabase, userId): Promise<'totp' | 'email_otp' | null>
 
 呼び出し元は**5か所**。
 
-| 場所 | 用途 |
-|---|---|
-| `auth.ts:170` | メールOTPログインを塞ぐ |
-| `auth.ts:274` | パスワードログインの第2要素 |
-| `auth.ts:575` | OAuth の `totpPending` |
-| `helpers/totpGuard.ts:89` | 設定変更のガード |
-| `api/user/totp/route.ts:48` | 設定画面への状態返却 |
+| 場所                        | 用途                        |
+| --------------------------- | --------------------------- |
+| `auth.ts:170`               | メールOTPログインを塞ぐ     |
+| `auth.ts:274`               | パスワードログインの第2要素 |
+| `auth.ts:575`               | OAuth の `totpPending`      |
+| `helpers/totpGuard.ts:89`   | 設定変更のガード            |
+| `api/user/totp/route.ts:48` | 設定画面への状態返却        |
 
 **DBエラーを握り潰さない現行方針は維持する。** `totpVerification.ts:71-83` のとおり、
 `null` に倒すと第2要素が飛んだセッションが7日間発行される。
@@ -412,9 +416,9 @@ DISABLED ─┬→ [TOTP]      → SETUP（QR + 初回コード）      ─┐
 
 `authorize` が投げるエラーコードを2つに分ける。
 
-| コード | 表示 |
-|---|---|
-| `TOTP_REQUIRED` | 「認証アプリのコード」。現行どおり |
+| コード               | 表示                                                      |
+| -------------------- | --------------------------------------------------------- |
+| `TOTP_REQUIRED`      | 「認証アプリのコード」。現行どおり                        |
 | `EMAIL_OTP_REQUIRED` | 「メールに送ったコード」＋ 再送ボタン＋60秒カウントダウン |
 
 「パスワードが正しいときだけ入力欄を出す」現行の作法（`loginForm.tsx:97-102` のコメント）は維持。
@@ -505,25 +509,25 @@ E2E ヘルパーは `otp_codes` を PostgREST で直引きし、`findOtpCodeByHa
 
 ## 影響範囲
 
-| ファイル | 内容 |
-|---|---|
-| `supabase/migrations/<new>.sql` | `method` 列・CHECK 2本・許可リスト2本・COMMENT |
-| `src/types/database.types.ts` | 再生成 |
-| `src/lib/auth/totpVerification.ts` | → `secondFactor.ts`。方式分岐・`verifyEmailOtpCode` |
-| `src/lib/auth/totpSetup.ts` | **方式ごとの分岐が要る**（下記） |
-| `src/helpers/totpGuard.ts` | → `secondFactorGuard.ts` |
-| `src/lib/auth/auth.ts` | 5か所のうち3つ、送信、再送、`login` カウンタ、新エラーコード、`session.secondFactorMethod` |
-| `src/schema/otp.ts` | **公開許可リスト化**（`Object.values` をやめる） |
-| `src/app/api/auth/otp/send/route.ts` | 分岐末尾に `else { 400 }` |
-| `src/app/api/user/totp/send-challenge/route.ts` | **新規**（経路4） |
-| `src/app/api/user/totp/{setup,enable,disable,recovery-codes,route}.ts` | 方式対応 |
-| `src/constants/totp.ts` | 方式の定数・`'two_factor'`・文言 |
-| `src/constants/rateLimit.ts` | `TWO_FACTOR_SEND` と上限、**`FAIL_CLOSED_ACTIONS`** |
-| `src/constants/email.ts` | 第2要素メールの件名・本文 |
-| `src/constants/auth.ts` | `EMAIL_OTP_REQUIRED` / `SECOND_FACTOR_SEND_FAILED` |
-| `src/features/settings/twoFactorSettings/**` | 方式選択・送信ボタン・admin 発行の除外 |
-| `src/features/auth/loginForm/**` | 方式別表示・再送（コードのクリア） |
-| `src/features/auth/twoFactorChallenge/**` | 方式別表示・再送（相互排他） |
+| ファイル                                                               | 内容                                                                                       |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `supabase/migrations/<new>.sql`                                        | `method` 列・CHECK 2本・許可リスト2本・COMMENT                                             |
+| `src/types/database.types.ts`                                          | 再生成                                                                                     |
+| `src/lib/auth/totpVerification.ts`                                     | → `secondFactor.ts`。方式分岐・`verifyEmailOtpCode`                                        |
+| `src/lib/auth/totpSetup.ts`                                            | **方式ごとの分岐が要る**（下記）                                                           |
+| `src/helpers/totpGuard.ts`                                             | → `secondFactorGuard.ts`                                                                   |
+| `src/lib/auth/auth.ts`                                                 | 5か所のうち3つ、送信、再送、`login` カウンタ、新エラーコード、`session.secondFactorMethod` |
+| `src/schema/otp.ts`                                                    | **公開許可リスト化**（`Object.values` をやめる）                                           |
+| `src/app/api/auth/otp/send/route.ts`                                   | 分岐末尾に `else { 400 }`                                                                  |
+| `src/app/api/user/totp/send-challenge/route.ts`                        | **新規**（経路4）                                                                          |
+| `src/app/api/user/totp/{setup,enable,disable,recovery-codes,route}.ts` | 方式対応                                                                                   |
+| `src/constants/totp.ts`                                                | 方式の定数・`'two_factor'`・文言                                                           |
+| `src/constants/rateLimit.ts`                                           | `TWO_FACTOR_SEND` と上限、**`FAIL_CLOSED_ACTIONS`**                                        |
+| `src/constants/email.ts`                                               | 第2要素メールの件名・本文                                                                  |
+| `src/constants/auth.ts`                                                | `EMAIL_OTP_REQUIRED` / `SECOND_FACTOR_SEND_FAILED`                                         |
+| `src/features/settings/twoFactorSettings/**`                           | 方式選択・送信ボタン・admin 発行の除外                                                     |
+| `src/features/auth/loginForm/**`                                       | 方式別表示・再送（コードのクリア）                                                         |
+| `src/features/auth/twoFactorChallenge/**`                              | 方式別表示・再送（相互排他）                                                               |
 
 ### `totpSetup.ts` に必要な分岐
 

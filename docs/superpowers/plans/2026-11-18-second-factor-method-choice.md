@@ -36,26 +36,26 @@
 
 ### 用語
 
-| 語 | 意味 |
-|---|---|
-| **TOTP** | 認証アプリが生成する6桁。RFC 6238。通信しない |
-| **メールOTP（第2要素）** | `otp_codes.action_type='two_factor'` の6桁。本計画で追加 |
-| **メールOTPログイン** | 既存のパスワードレス経路（`OTP_ACTION.LOGIN`）。**第2要素とは別物。本計画では塞いだまま** |
+| 語                       | 意味                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| **TOTP**                 | 認証アプリが生成する6桁。RFC 6238。通信しない                                             |
+| **メールOTP（第2要素）** | `otp_codes.action_type='two_factor'` の6桁。本計画で追加                                  |
+| **メールOTPログイン**    | 既存のパスワードレス経路（`OTP_ACTION.LOGIN`）。**第2要素とは別物。本計画では塞いだまま** |
 
 ---
 
 ## File Structure
 
-| ファイル | 責務 |
-|---|---|
-| `supabase/migrations/<ts>_add_second_factor_method.sql` | `method` 列・CHECK 2本・`action_type` 許可リスト2本・COMMENT |
-| `src/constants/secondFactor.ts`（新規） | 方式の定数、`TWO_FACTOR_OTP_ACTION`、第2要素用の文言 |
-| `src/lib/auth/secondFactor.ts`（`totpVerification.ts` をリネーム） | 方式の取得と検証 |
-| `src/lib/auth/sendSecondFactorCode.ts`（新規） | 第2要素コードの生成・保存・送信。枠の消費と後始末を内包 |
-| `src/helpers/secondFactorGuard.ts`（`totpGuard.ts` をリネーム） | 設定変更のガード |
-| `src/lib/auth/totpSetup.ts` | 方式ごとの開始・確定。ファイル名は据え置き |
-| `src/app/api/user/totp/send-challenge/route.ts`（新規） | 設定変更のためのコード送信（経路4） |
-| `src/features/auth/hooks/useResendCountdown.ts`（新規） | 60秒カウントダウン。ログイン画面と第2要素画面で共用 |
+| ファイル                                                           | 責務                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `supabase/migrations/<ts>_add_second_factor_method.sql`            | `method` 列・CHECK 2本・`action_type` 許可リスト2本・COMMENT |
+| `src/constants/secondFactor.ts`（新規）                            | 方式の定数、`TWO_FACTOR_OTP_ACTION`、第2要素用の文言         |
+| `src/lib/auth/secondFactor.ts`（`totpVerification.ts` をリネーム） | 方式の取得と検証                                             |
+| `src/lib/auth/sendSecondFactorCode.ts`（新規）                     | 第2要素コードの生成・保存・送信。枠の消費と後始末を内包      |
+| `src/helpers/secondFactorGuard.ts`（`totpGuard.ts` をリネーム）    | 設定変更のガード                                             |
+| `src/lib/auth/totpSetup.ts`                                        | 方式ごとの開始・確定。ファイル名は据え置き                   |
+| `src/app/api/user/totp/send-challenge/route.ts`（新規）            | 設定変更のためのコード送信（経路4）                          |
+| `src/features/auth/hooks/useResendCountdown.ts`（新規）            | 60秒カウントダウン。ログイン画面と第2要素画面で共用          |
 
 ### 依存の順序
 
@@ -106,10 +106,12 @@ npx jest src/constants/ --silent
 ## Task 1: マイグレーションと型生成
 
 **Files:**
+
 - Create: `supabase/migrations/<timestamp>_add_second_factor_method.sql`
 - Modify: `src/types/database.types.ts`（再生成）
 
 **Interfaces:**
+
 - Produces: `user_totp.method`（`'totp' | 'email_otp'`）、`otp_codes.action_type` が `'two_factor'` を、`rate_limits.action_type` が `'two_factor_send'` を受理
 
 - [ ] **Step 1: マイグレーションファイルを作る**
@@ -322,11 +324,13 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ## Task 2: 定数を足す
 
 **Files:**
+
 - Create: `src/constants/secondFactor.ts` + `.test.ts`
 - Modify: `src/constants/rateLimit.ts`、`email.ts`、`auth.ts`、`apiEndpoints.ts`、`index.ts`
 - Modify: `src/lib/otp/sendOtpEmail.ts`（引数型を広げる）
 
 **Interfaces:**
+
 - Produces:
   - `SECOND_FACTOR_METHOD = { TOTP: 'totp', EMAIL_OTP: 'email_otp' }` / `type SecondFactorMethod`
   - `TWO_FACTOR_OTP_ACTION = 'two_factor'` / `type TwoFactorOtpAction`
@@ -596,10 +600,12 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 **このタスクは単独で価値がある。** 先に入れることで、以降の作業中に穴が開いた状態を作らない。
 
 **Files:**
+
 - Modify: `src/schema/otp.ts` + `.test.ts`
 - Modify: `src/app/api/auth/otp/send/route.ts` + `.test.ts`
 
 **Interfaces:**
+
 - Consumes: `TWO_FACTOR_OTP_ACTION`（Task 2）
 - Produces: `PUBLIC_OTP_ACTIONS`
 
@@ -723,6 +729,7 @@ npx jest src/schema/otp.test.ts src/app/api/auth/otp/
 **本機能と独立した既存バグの修正。** 先に単独で入れる。
 
 **Files:**
+
 - Modify: `src/lib/auth/auth.ts:115`、`:131`
 - Test: `src/lib/auth/auth.test.ts`
 
@@ -769,13 +776,13 @@ it('login（アカウント×IP）の上限超過も RATE_LIMITED', async () => 
 コメントを添える:
 
 ```ts
-            // プレーンな Error だと Auth.js が code を載せず（:254-259）、
-            // クライアントの resolveErrorMessage が default に落ちて
-            // 「メールアドレスまたはパスワードが正しくありません」と出る。
-            // パスワードが正しくてもそう言われ続ける（#1247 と同じ形）。
-            //
-            // 識別子にIPが入り、照合より前に消費されるので、
-            // rate_limited を返してもアカウント列挙にはならない
+// プレーンな Error だと Auth.js が code を載せず（:254-259）、
+// クライアントの resolveErrorMessage が default に落ちて
+// 「メールアドレスまたはパスワードが正しくありません」と出る。
+// パスワードが正しくてもそう言われ続ける（#1247 と同じ形）。
+//
+// 識別子にIPが入り、照合より前に消費されるので、
+// rate_limited を返してもアカウント列挙にはならない
 ```
 
 - [ ] **Step 4: ログイン画面に文言があることを確認する**
@@ -793,11 +800,13 @@ it('login（アカウント×IP）の上限超過も RATE_LIMITED', async () => 
 「名前の直し漏れ」か「ロジックの誤り」かを切り分けられない。
 
 **Files:**
+
 - Rename: `src/lib/auth/totpVerification.ts` → `secondFactor.ts`（+ `.test.ts`）
 - Modify: `src/lib/auth/auth.ts`、`src/helpers/totpGuard.ts`、`src/app/api/user/totp/route.ts`
 - Modify: `src/lib/auth/auth.test.ts`、`src/helpers/totpGuard.test.ts`、`src/app/api/user/totp/route.test.ts`
 
 **Interfaces:**
+
 - Produces: `getSecondFactorMethod(supabase, userId): Promise<SecondFactorMethod | null>`、`SECOND_FACTOR_VERIFY_RESULT`
 
 - [ ] **Step 1: ファイルをリネームする**
@@ -893,9 +902,11 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ## Task 4b: メールOTP の検証を足す
 
 **Files:**
+
 - Modify: `src/lib/auth/secondFactor.ts` + `.test.ts`
 
 **Interfaces:**
+
 - Produces: `verifySecondFactor` が `method` で分岐
 
 - [ ] **Step 1: フェイクDBを拡張する**
@@ -941,7 +952,9 @@ describe('verifySecondFactor（method=email_otp）', () => {
   });
 
   it('不一致なら attempts が1増える', async () => {
-    const db = fakeDb({ /* attempts: 0 の行 */ });
+    const db = fakeDb({
+      /* attempts: 0 の行 */
+    });
 
     await verifySecondFactor(mock(db), 'u1', '999999');
 
@@ -951,20 +964,24 @@ describe('verifySecondFactor（method=email_otp）', () => {
   // ⚠️ 5回上限が効いているか。attempts を直接与えるのではなく、
   // 5回失敗させてから6回目を見る
   it('5回失敗した後の6回目は照合に進まない', async () => {
-    const db = fakeDb({ /* attempts: 0 の行 */ });
+    const db = fakeDb({
+      /* attempts: 0 の行 */
+    });
 
     for (let i = 0; i < 5; i += 1) {
       await verifySecondFactor(mock(db), 'u1', '999999');
     }
     const callsBefore = db.deleteCalls;
-    await verifySecondFactor(mock(db), 'u1', '123456');  // 正解コード
+    await verifySecondFactor(mock(db), 'u1', '123456'); // 正解コード
 
-    expect(db.deleteCalls).toBe(callsBefore);   // 照合していない
-    expect(db.otpCodes[0].attempts).toBe(5);    // 23514 を避けて加算も止まる
+    expect(db.deleteCalls).toBe(callsBefore); // 照合していない
+    expect(db.otpCodes[0].attempts).toBe(5); // 23514 を避けて加算も止まる
   });
 
   it('同じコードの2回目は INVALID（削除行数で判定）', async () => {
-    const db = fakeDb({ /* 有効な行1件 */ });
+    const db = fakeDb({
+      /* 有効な行1件 */
+    });
 
     await verifySecondFactor(mock(db), 'u1', '123456');
     await expect(verifySecondFactor(mock(db), 'u1', '123456')).resolves.toBe(
@@ -1092,6 +1109,7 @@ export async function verifySecondFactor(
 ## Task 5: ガードをリネームして方式非依存にする
 
 **Files:**
+
 - Rename: `src/helpers/totpGuard.ts` → `secondFactorGuard.ts`（+ `.test.ts`）
 - Modify: `src/app/api/user/totp/disable/route.ts`、`recovery-codes/route.ts`（+ テスト2本の `jest.mock` パス）
 
@@ -1101,12 +1119,16 @@ export async function verifySecondFactor(
 it('method=email_otp でも、正しいコードなら通る', async () => {
   mockSecondFactorMethod('email_otp');
   mockVerifyResult(SECOND_FACTOR_VERIFY_RESULT.SUCCESS);
-  await expect(requireSecondFactor(supabase, 'u1', '123456')).resolves.toBeNull();
+  await expect(
+    requireSecondFactor(supabase, 'u1', '123456'),
+  ).resolves.toBeNull();
 });
 
 it('第2要素が未設定なら 400', async () => {
   mockSecondFactorMethod(null);
-  expect((await requireSecondFactor(supabase, 'u1', '123456'))?.status).toBe(400);
+  expect((await requireSecondFactor(supabase, 'u1', '123456'))?.status).toBe(
+    400,
+  );
 });
 ```
 
@@ -1138,19 +1160,23 @@ Task 8 の新ルートから使うので、ここで `export` する。
 **送信を1か所に集める。** ここを経由しない送信経路を作らない。
 
 **Files:**
+
 - Create: `src/lib/auth/sendSecondFactorCode.ts` + `.test.ts`
 
 **Interfaces:**
+
 - Produces:
   ```ts
   export const SEND_SECOND_FACTOR_RESULT = {
     SENT: 'sent',
-    THROTTLED: 'throttled',          // 再送間隔（60秒）内
+    THROTTLED: 'throttled', // 再送間隔（60秒）内
     LIMIT_EXCEEDED: 'limit_exceeded',
     SEND_FAILED: 'send_failed',
   } as const;
   export async function sendSecondFactorCode(
-    supabase: SupabaseClient, userId: string, email: string,
+    supabase: SupabaseClient,
+    userId: string,
+    email: string,
   ): Promise<SendSecondFactorResult>;
   ```
 
@@ -1213,7 +1239,11 @@ it('レート制限の識別子はユーザーID', async () => {
   await sendSecondFactorCode(supabase, 'u1', 'user@example.com');
 
   expect(mockCheckRateLimit).toHaveBeenCalledWith(
-    supabase, 'u1', 'two_factor_send', 10, 60,
+    supabase,
+    'u1',
+    'two_factor_send',
+    10,
+    60,
   );
 });
 
@@ -1249,9 +1279,11 @@ it('送信に失敗したら枠を戻し、行も残さない', async () => {
   ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.SEND_FAILED);
 
   expect(mockResetRateLimit).toHaveBeenCalledWith(
-    supabase, 'u1', 'two_factor_send',
+    supabase,
+    'u1',
+    'two_factor_send',
   );
-  expect(mockOtpDelete).toHaveBeenCalledTimes(2);  // 事前クリア + 後始末
+  expect(mockOtpDelete).toHaveBeenCalledTimes(2); // 事前クリア + 後始末
 });
 
 it('前のコードを消してから新しいコードを入れる', async () => {
@@ -1381,10 +1413,12 @@ export async function sendSecondFactorCode(
 ⚠️ シグネチャが変わるので、**呼び出し側を同じタスクで直さないと型チェックが通らない。**
 
 **Files:**
+
 - Modify: `src/lib/auth/totpSetup.ts` + `.test.ts`
 - Modify: `src/app/api/user/totp/setup/route.ts`、`enable/route.ts`（型を合わせるだけ。挙動は Task 8）
 
 **Interfaces:**
+
 - Produces:
   - `startSecondFactorSetup(supabase, userId, method, accountName, email)`
   - `confirmSecondFactorSetup(supabase, userId, code)`
@@ -1402,7 +1436,13 @@ it('method=totp の設定開始は method を明示して insert する', async 
 });
 
 it('method=email_otp は共有鍵を作らず、コードを送る', async () => {
-  await startSecondFactorSetup(supabase, 'u1', 'email_otp', 'u@e.com', 'u@e.com');
+  await startSecondFactorSetup(
+    supabase,
+    'u1',
+    'email_otp',
+    'u@e.com',
+    'u@e.com',
+  );
   expect(mockInsert).toHaveBeenCalledWith(
     expect.objectContaining({ method: 'email_otp', encrypted_secret: null }),
   );
@@ -1421,16 +1461,24 @@ it('既に有効なら方式によらず TotpAlreadyEnabledError', async () => {
 it('送信に失敗したら設定途中の行を消して SEND_FAILED を返す', async () => {
   mockSendResult('send_failed');
   const result = await startSecondFactorSetup(
-    supabase, 'u1', 'email_otp', 'u@e.com', 'u@e.com',
+    supabase,
+    'u1',
+    'email_otp',
+    'u@e.com',
+    'u@e.com',
   );
   expect(result.sendResult).toBe('send_failed');
-  expect(mockDelete).toHaveBeenCalledTimes(2);  // 事前クリア + 後始末
+  expect(mockDelete).toHaveBeenCalledTimes(2); // 事前クリア + 後始末
 });
 
 it('再送間隔に当たった場合も行を残さない（THROTTLED）', async () => {
   mockSendResult('throttled');
   const result = await startSecondFactorSetup(
-    supabase, 'u1', 'email_otp', 'u@e.com', 'u@e.com',
+    supabase,
+    'u1',
+    'email_otp',
+    'u@e.com',
+    'u@e.com',
   );
   expect(result.sendResult).toBe('throttled');
 });
@@ -1480,11 +1528,13 @@ npx tsc --noEmit
 ## Task 8: API ルートを方式対応にする
 
 **Files:**
+
 - Create: `src/app/api/user/totp/send-challenge/route.ts` + `.test.ts`
 - Modify: `setup/route.ts`、`enable/route.ts`、`route.ts`（+ 各テスト）、`src/schema/totp.ts`
 - Modify: `.claude/rules/api-route.md`
 
 **Interfaces:**
+
 - `POST /api/user/totp/setup` が `{ method }` を受ける
 - `GET /api/user/totp` が `{ enabled, method, emailOtpAvailable, remainingRecoveryCodes }` を返す
 - `POST /api/user/totp/send-challenge`
@@ -1493,7 +1543,9 @@ npx tsc --noEmit
 
 ```ts
 // send-challenge
-it('未認証なら 401', async () => { /* ... */ });
+it('未認証なら 401', async () => {
+  /* ... */
+});
 
 it('method=totp には送らない（アプリで生成できるため）', async () => {
   mockSecondFactorMethod('totp');
@@ -1506,7 +1558,9 @@ it('method=email_otp なら本人のアドレスへ送る', async () => {
   mockUserEmail('owner@example.com');
   expect((await POST(createRequest({}))).status).toBe(200);
   expect(mockSendSecondFactorCode).toHaveBeenCalledWith(
-    expect.anything(), 'u1', 'owner@example.com',
+    expect.anything(),
+    'u1',
+    'owner@example.com',
   );
 });
 
@@ -1516,7 +1570,9 @@ it('ボディの email は無視する', async () => {
   mockUserEmail('owner@example.com');
   await POST(createRequest({ email: 'attacker@example.com' }));
   expect(mockSendSecondFactorCode).toHaveBeenCalledWith(
-    expect.anything(), 'u1', 'owner@example.com',
+    expect.anything(),
+    'u1',
+    'owner@example.com',
   );
 });
 
@@ -1526,8 +1582,11 @@ it('TOTP_SETTINGS_VERIFY を消費しない', async () => {
   mockSecondFactorMethod('email_otp');
   await POST(createRequest({}));
   expect(mockCheckRateLimit).not.toHaveBeenCalledWith(
-    expect.anything(), expect.anything(), 'totp_settings_verify',
-    expect.anything(), expect.anything(),
+    expect.anything(),
+    expect.anything(),
+    'totp_settings_verify',
+    expect.anything(),
+    expect.anything(),
   );
 });
 
@@ -1601,16 +1660,16 @@ export const secondFactorSetupSchema = z.object({
 別クエリを足さない。
 
 ```ts
-    // admin 発行アカウントは users.email が generateSyntheticEmail() の
-    // `.invalid` TLD（RFC 2606、絶対に名前解決されない）。選ばせると
-    // コードが永久に届かず、設定途中のまま詰む
-    if (result.data.method === SECOND_FACTOR_METHOD.EMAIL_OTP && user.username) {
-      return errorResponse(
-        ERROR_CODE.BAD_REQUEST,
-        SECOND_FACTOR_MESSAGES.EMAIL_OTP_UNAVAILABLE,
-        HTTP_STATUS.BAD_REQUEST,
-      );
-    }
+// admin 発行アカウントは users.email が generateSyntheticEmail() の
+// `.invalid` TLD（RFC 2606、絶対に名前解決されない）。選ばせると
+// コードが永久に届かず、設定途中のまま詰む
+if (result.data.method === SECOND_FACTOR_METHOD.EMAIL_OTP && user.username) {
+  return errorResponse(
+    ERROR_CODE.BAD_REQUEST,
+    SECOND_FACTOR_MESSAGES.EMAIL_OTP_UNAVAILABLE,
+    HTTP_STATUS.BAD_REQUEST,
+  );
+}
 ```
 
 ⚠️ **email_otp 分岐では `TOTP_SETTINGS_VERIFY` を消費しない。**
@@ -1634,6 +1693,7 @@ export const secondFactorSetupSchema = z.object({
 ## Task 9: パスワードログイン経路
 
 **Files:**
+
 - Modify: `src/lib/auth/auth.ts`（`authorize` 内 :274 付近と :324 付近）
 - Test: `src/lib/auth/auth.test.ts`
 
@@ -1662,7 +1722,9 @@ it('ユーザー名ログインでも user.email を宛先にする', async () =
   mockSecondFactorMethod('email_otp');
   await expect(authorize({ email: 'alice', password: 'pw' })).rejects.toThrow();
   expect(mockSendSecondFactorCode).toHaveBeenCalledWith(
-    expect.anything(), 'u1', 'owner@example.com',
+    expect.anything(),
+    'u1',
+    'owner@example.com',
   );
 });
 
@@ -1691,11 +1753,16 @@ it('第2要素を要求するときは login 枠を解放する', async () => {
   await expect(authorize(validCredentials)).rejects.toThrow();
 
   expect(mockCheckRateLimit).toHaveBeenCalledWith(
-    expect.anything(), expect.anything(), 'login',
-    expect.anything(), expect.anything(),
+    expect.anything(),
+    expect.anything(),
+    'login',
+    expect.anything(),
+    expect.anything(),
   );
   expect(mockResetRateLimit).toHaveBeenCalledWith(
-    expect.anything(), expect.anything(), 'login',
+    expect.anything(),
+    expect.anything(),
+    'login',
   );
 });
 
@@ -1713,54 +1780,54 @@ it('パスワードが違うときは login 枠を解放しない', async () => 
 `auth.ts:274` の `if (await isTotpEnabled(...))` を:
 
 ```ts
-        // 第2要素。パスワードが正しいことを確かめてからでないと、
-        // 「二段階認証を使っているアカウントかどうか」を第三者に教えてしまう
-        const secondFactorMethod = await getSecondFactorMethod(supabase, user.id);
+// 第2要素。パスワードが正しいことを確かめてからでないと、
+// 「二段階認証を使っているアカウントかどうか」を第三者に教えてしまう
+const secondFactorMethod = await getSecondFactorMethod(supabase, user.id);
 
-        if (secondFactorMethod !== null) {
-          const totpCode = (credentials.totpCode as string | undefined)?.trim();
+if (secondFactorMethod !== null) {
+  const totpCode = (credentials.totpCode as string | undefined)?.trim();
 
-          if (!totpCode) {
-            // ここに来た＝パスワードは正しい。ログインの試行回数を
-            // 消費したままにすると、コードの入力・打ち間違え・再送で
-            // 5回/30分をすぐ使い切る。解放してもパスワードを知らない
-            // 相手には枠が減ったままなので安全（:324 の成功時と同じ理屈）
-            await resetRateLimit(supabase, loginIdentifier, OTP_ACTION.LOGIN);
+  if (!totpCode) {
+    // ここに来た＝パスワードは正しい。ログインの試行回数を
+    // 消費したままにすると、コードの入力・打ち間違え・再送で
+    // 5回/30分をすぐ使い切る。解放してもパスワードを知らない
+    // 相手には枠が減ったままなので安全（:324 の成功時と同じ理屈）
+    await resetRateLimit(supabase, loginIdentifier, OTP_ACTION.LOGIN);
 
-            if (secondFactorMethod === SECOND_FACTOR_METHOD.EMAIL_OTP) {
-              // ⚠️ 宛先は user.email。`email` ローカル変数はユーザー名
-              // ログインで空文字になり、全ユーザー名アカウントが
-              // otp_codes.email='' の1行を共有してコードが混線する
-              const sendResult = await sendSecondFactorCode(
-                supabase, user.id, user.email,
-              );
+    if (secondFactorMethod === SECOND_FACTOR_METHOD.EMAIL_OTP) {
+      // ⚠️ 宛先は user.email。`email` ローカル変数はユーザー名
+      // ログインで空文字になり、全ユーザー名アカウントが
+      // otp_codes.email='' の1行を共有してコードが混線する
+      const sendResult = await sendSecondFactorCode(
+        supabase,
+        user.id,
+        user.email,
+      );
 
-              if (sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED) {
-                // 「コードが違う」と区別する。打ち直しても直らない（#1148）
-                throw new CredentialsSignInError(
-                  AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED,
-                );
-              }
+      if (sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED) {
+        // 「コードが違う」と区別する。打ち直しても直らない（#1148）
+        throw new CredentialsSignInError(
+          AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED,
+        );
+      }
 
-              if (sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED) {
-                // 1通も送っていない。コードを待たせず、
-                // リカバリーコードへ誘導する
-                throw new CredentialsSignInError(
-                  AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
-                );
-              }
+      if (sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED) {
+        // 1通も送っていない。コードを待たせず、
+        // リカバリーコードへ誘導する
+        throw new CredentialsSignInError(
+          AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+        );
+      }
 
-              // SENT / THROTTLED。THROTTLED は直前のコードがまだ生きている
-              throw new CredentialsSignInError(
-                AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
-              );
-            }
+      // SENT / THROTTLED。THROTTLED は直前のコードがまだ生きている
+      throw new CredentialsSignInError(AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED);
+    }
 
-            throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REQUIRED);
-          }
+    throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REQUIRED);
+  }
 
-          // 以降の TOTP_VERIFY レート制限と verifySecondFactor は方式共通
-        }
+  // 以降の TOTP_VERIFY レート制限と verifySecondFactor は方式共通
+}
 ```
 
 - [ ] **Step 4: テストが通ることを確認する**
@@ -1779,6 +1846,7 @@ npx jest src/lib/auth/auth.test.ts
 ## Task 10: OAuth 経路とセッション
 
 **Files:**
+
 - Modify: `src/lib/auth/auth.ts`（`jwt` :575 / :602-649、`session` :824-837）、`src/types/next-auth.d.ts`
 - Test: `src/lib/auth/auth.test.ts`
 
@@ -1787,8 +1855,11 @@ npx jest src/lib/auth/auth.test.ts
 ```ts
 it('OAuth で method=email_otp なら totpPending を立ててコードを送る', async () => {
   mockSecondFactorMethod('email_otp');
-  const token = await jwt({ token: {}, user: { id: 'u1', email: 'u@e.com' },
-                            account: { provider: 'google' } });
+  const token = await jwt({
+    token: {},
+    user: { id: 'u1', email: 'u@e.com' },
+    account: { provider: 'google' },
+  });
   expect(token.totpPending).toBe(true);
   expect(mockSendSecondFactorCode).toHaveBeenCalled();
 });
@@ -1799,13 +1870,14 @@ it('session に方式を載せる（画面が出し分けるため）', async ()
     token: { totpPending: true, secondFactorMethod: 'email_otp' },
   });
   expect(result.secondFactorMethod).toBe('email_otp');
-  expect(result.user.id).toBe('');  // 第2要素が未了なので空のまま
+  expect(result.user.id).toBe(''); // 第2要素が未了なので空のまま
 });
 
 it('update({ resend: true }) はコードを送り直し、totpPending を維持する', async () => {
   const token = await jwt({
     token: { id: 'u1', totpPending: true, secondFactorMethod: 'email_otp' },
-    trigger: 'update', session: { resend: true },
+    trigger: 'update',
+    session: { resend: true },
   });
   expect(mockSendSecondFactorCode).toHaveBeenCalled();
   expect(token.totpPending).toBe(true);
@@ -1814,7 +1886,9 @@ it('update({ resend: true }) はコードを送り直し、totpPending を維持
 // ⚠️ jwt コールバックからは例外を出せない（#1148）。フラグで伝える
 it('送信に失敗したらトークンにフラグを立てる', async () => {
   mockSendResult('send_failed');
-  const token = await jwt({ /* resend */ });
+  const token = await jwt({
+    /* resend */
+  });
   expect(token.secondFactorSendFailed).toBe(true);
 });
 
@@ -1823,9 +1897,14 @@ it('送信に失敗したらトークンにフラグを立てる', async () => {
 it('再送に成功したら前回の失敗フラグが消える', async () => {
   mockSendResult('sent');
   const token = await jwt({
-    token: { id: 'u1', totpPending: true, secondFactorMethod: 'email_otp',
-             secondFactorSendFailed: true },
-    trigger: 'update', session: { resend: true },
+    token: {
+      id: 'u1',
+      totpPending: true,
+      secondFactorMethod: 'email_otp',
+      secondFactorSendFailed: true,
+    },
+    trigger: 'update',
+    session: { resend: true },
   });
   expect(token.secondFactorSendFailed).toBeUndefined();
 });
@@ -1845,6 +1924,7 @@ it('初回 OAuth で送信が DB エラーなら、サインインごと失敗�
 - [ ] **Step 3〜5: 実装 → テスト → コミット**
 
 実装の要点:
+
 - `:575` で方式を取り、`token.secondFactorMethod` に入れる。email_otp なら送信
 - `:517` の `delete token.totpUnavailable` の隣に
   `delete token.secondFactorSendFailed` を足す
@@ -1857,33 +1937,49 @@ it('初回 OAuth で送信が DB エラーなら、サインインごと失敗�
 ## Task 11: 設定画面
 
 **Files:**
+
 - Modify: `src/features/settings/twoFactorSettings/hooks/useTwoFactorSettings.ts`、`twoFactorSettings.tsx`、`.module.scss` + テスト
 
 - [ ] **Step 1: 失敗するテストを書く**
 
 ```tsx
-it('無効のとき、方式を選ぶボタンが2つ出る', async () => { /* ... */ });
+it('無効のとき、方式を選ぶボタンが2つ出る', async () => {
+  /* ... */
+});
 
-it('メールOTP を選ぶと安全性の注意が出る', async () => { /* ... */ });
+it('メールOTP を選ぶと安全性の注意が出る', async () => {
+  /* ... */
+});
 
 // admin 発行アカウント（users.username あり）は宛先が .invalid
-it('emailOtpAvailable が false ならメールの選択肢を出さない', async () => { /* ... */ });
+it('emailOtpAvailable が false ならメールの選択肢を出さない', async () => {
+  /* ... */
+});
 
 // ⚠️ これが無いと、メールOTP 利用者は無効化のコードを取得できない
-it('method=email_otp で有効なとき、コード送信ボタンが出る', async () => { /* ... */ });
+it('method=email_otp で有効なとき、コード送信ボタンが出る', async () => {
+  /* ... */
+});
 
-it('method=totp で有効なとき、コード送信ボタンは出ない', async () => { /* ... */ });
+it('method=totp で有効なとき、コード送信ボタンは出ない', async () => {
+  /* ... */
+});
 
 // ⚠️ post（useTwoFactorSettings.ts:101-131）は isSubmitting を持つが
 // 早期 return しない。連打すると60秒 throttle と枠に直撃する
-it('送信中は「コードを送信」を連打できない', async () => { /* ... */ });
+it('送信中は「コードを送信」を連打できない', async () => {
+  /* ... */
+});
 
-it('キーボードだけで方式を選べる', async () => { /* ... */ });
+it('キーボードだけで方式を選べる', async () => {
+  /* ... */
+});
 ```
 
 - [ ] **Step 2〜6**: 落ちることの確認 → 実装 → 確認 → コミット
 
 実装の要点:
+
 - `TWO_FACTOR_VIEW` に `METHOD_SELECT` / `SETUP_EMAIL` を足す
 - `startSetup(method)` に変える。`sendChallenge()` を足す
 - `post` に `if (isSubmitting) return null;` の再入ガードを足す
@@ -1905,6 +2001,7 @@ it('キーボードだけで方式を選べる', async () => { /* ... */ });
 `useOtpVerification` 側の置き換えは**本計画の範囲外**（触ると既存の3画面に波及する）。
 
 **Files:**
+
 - Create: `src/features/auth/hooks/useResendCountdown.ts` + `.test.ts`
 - Modify: `src/features/auth/loginForm/loginForm.tsx`、`.module.scss` + テスト
 
@@ -1921,27 +2018,44 @@ export function useResendCountdown(initialSeconds: number): {
 - [ ] **Step 2: ログイン画面の失敗するテストを書く**
 
 ```tsx
-it('EMAIL_OTP_REQUIRED ならメール向けの文言と再送ボタンを出す', async () => { /* ... */ });
-it('TOTP_REQUIRED では再送ボタンを出さない', async () => { /* ... */ });
+it('EMAIL_OTP_REQUIRED ならメール向けの文言と再送ボタンを出す', async () => {
+  /* ... */
+});
+it('TOTP_REQUIRED では再送ボタンを出さない', async () => {
+  /* ... */
+});
 
 // ⚠️ 打ち間違えた状態で再送を押すと、そのコードが検証されて
 // TOTP_VERIFY の枠（5回/15分）を1つ失う
-it('再送はコードを空にしてから送る', async () => { /* ... */ });
+it('再送はコードを空にしてから送る', async () => {
+  /* ... */
+});
 
-it('再送の直後は60秒のカウントダウンで押せない', async () => { /* ... */ });
-it('残り秒数が aria-live で読み上げられる', async () => { /* ... */ });
+it('再送の直後は60秒のカウントダウンで押せない', async () => {
+  /* ... */
+});
+it('残り秒数が aria-live で読み上げられる', async () => {
+  /* ... */
+});
 
-it('SECOND_FACTOR_SEND_FAILED は「コードが違う」と別の文言', async () => { /* ... */ });
+it('SECOND_FACTOR_SEND_FAILED は「コードが違う」と別の文言', async () => {
+  /* ... */
+});
 
 // ⚠️ 1通も送られていないので、コードを待たせない
-it('SECOND_FACTOR_SEND_LIMITED はリカバリーコードへ誘導する', async () => { /* ... */ });
+it('SECOND_FACTOR_SEND_LIMITED はリカバリーコードへ誘導する', async () => {
+  /* ... */
+});
 
-it('callbackUrl が第2要素を挟んでも保持される', async () => { /* ... */ });
+it('callbackUrl が第2要素を挟んでも保持される', async () => {
+  /* ... */
+});
 ```
 
 - [ ] **Step 3〜6**: 落ちることの確認 → 実装 → 確認 → コミット
 
 実装の要点:
+
 - `totpRequired` を `secondFactorMode: null | 'totp' | 'email_otp'` に変える
 - 再送ハンドラは `setTotpCode('')` してから `signIn` を呼ぶ
   （`loginForm.tsx:135` が `totpRequired` のとき常に `totpCode` を送るため）
@@ -1951,6 +2065,7 @@ it('callbackUrl が第2要素を挟んでも保持される', async () => { /* .
 ## Task 13: OAuth の第2要素画面
 
 **Files:**
+
 - Modify: `src/features/auth/twoFactorChallenge/hooks/useTwoFactorChallenge.ts`、`twoFactorChallenge.tsx` + テスト
 
 - [ ] **Step 1: 失敗するテストを書く**
@@ -1962,10 +2077,16 @@ it('method=email_otp なら再送ボタンと、メール向けのリード文�
 
 // ⚠️ 再送（Resend の往復で遅い）と検証（速い）が並行すると、
 // 再送が後から totpPending:true を書き戻して成功した検証が巻き戻る
-it('検証中は再送を押せない', async () => { /* ... */ });
-it('再送中は確認を押せない', async () => { /* ... */ });
+it('検証中は再送を押せない', async () => {
+  /* ... */
+});
+it('再送中は確認を押せない', async () => {
+  /* ... */
+});
 
-it('送信失敗のフラグが立っていたら専用の文言を出す', async () => { /* ... */ });
+it('送信失敗のフラグが立っていたら専用の文言を出す', async () => {
+  /* ... */
+});
 ```
 
 - [ ] **Step 2〜6**: 落ちることの確認 → 実装 → 確認 → コミット
@@ -1979,6 +2100,7 @@ it('送信失敗のフラグが立っていたら専用の文言を出す', asyn
 ## Task 14: E2E とドキュメント
 
 **Files:**
+
 - Modify: `e2e/auth/twoFactor.spec.ts`、`e2e/helpers/api.ts`、`e2e/helpers/totp.ts`
 - Modify: `.claude/documents/authentication-flow.md`
 
@@ -1993,10 +2115,16 @@ it('送信失敗のフラグが立っていたら専用の文言を出す', asyn
 - [ ] **Step 2: シナリオを足す**
 
 ```ts
-test('メールOTP を第2要素にしてログインできる', async ({ page }) => { /* ... */ });
-test('メールOTP から TOTP に切り替えられる', async ({ page }) => { /* ... */ });
+test('メールOTP を第2要素にしてログインできる', async ({ page }) => {
+  /* ... */
+});
+test('メールOTP から TOTP に切り替えられる', async ({ page }) => {
+  /* ... */
+});
 // ⚠️ メールOTP 利用者の唯一の自力復旧手段
-test('リカバリーコードでログインできる（方式を問わず）', async ({ page }) => { /* ... */ });
+test('リカバリーコードでログインできる（方式を問わず）', async ({ page }) => {
+  /* ... */
+});
 ```
 
 ⚠️ 実送信のバイパスには3条件すべてが要る:
@@ -2065,6 +2193,7 @@ gh pr create --assignee Fn-front \
 Before/After と動作動画を添付する。
 
 **レビューポイントに必ず書くこと:**
+
 - `src/schema/otp.ts` を許可リスト方式に変えた理由（`OTP_ACTION` への追加が公開ルートを開く結合）
 - テーブルをリネームしなかった理由（先行適用でログインが全滅する）
 - `send-challenge` を足した理由（無ければメールOTP 利用者が無効化できない）
@@ -2078,20 +2207,20 @@ PR 作成後は**マージ承認を待つ**。`gh pr merge` を自動で実行�
 
 **1. Spec coverage**
 
-| 仕様書の節 | タスク |
-|---|---|
-| §1 データモデル・許可リスト2本 | Task 1 |
-| §2 送信経路4本 | Task 6（集約）/ 8（経路4）/ 9（経路1）/ 10（経路2） |
-| §2-1 公開ルートを閉じる | Task 3 |
-| §2-2 経路4 | Task 8 |
-| §2-3 レート制限・FAIL_CLOSED・枠の戻し | Task 2、Task 6 |
-| §2-4-1 結果の伝え分け | Task 2（コード）/ 9（投げ分け）/ 12（表示） |
-| §2-4 login 枠の解放・RATE_LIMITED | Task 3.5、Task 9 |
-| §3 検証層 | Task 4a、Task 4b、Task 5 |
-| §4 設定画面 / ログイン画面 / OAuth 画面 | Task 11 / 12 / 13 |
-| §5 エラー処理 | Task 2、Task 9、Task 10 |
-| §6 テスト | 各タスクに内包、Task 14 で E2E とカバレッジ |
-| admin 発行アカウントの除外 | Task 8（サーバー）/ 11（画面） |
+| 仕様書の節                              | タスク                                              |
+| --------------------------------------- | --------------------------------------------------- |
+| §1 データモデル・許可リスト2本          | Task 1                                              |
+| §2 送信経路4本                          | Task 6（集約）/ 8（経路4）/ 9（経路1）/ 10（経路2） |
+| §2-1 公開ルートを閉じる                 | Task 3                                              |
+| §2-2 経路4                              | Task 8                                              |
+| §2-3 レート制限・FAIL_CLOSED・枠の戻し  | Task 2、Task 6                                      |
+| §2-4-1 結果の伝え分け                   | Task 2（コード）/ 9（投げ分け）/ 12（表示）         |
+| §2-4 login 枠の解放・RATE_LIMITED       | Task 3.5、Task 9                                    |
+| §3 検証層                               | Task 4a、Task 4b、Task 5                            |
+| §4 設定画面 / ログイン画面 / OAuth 画面 | Task 11 / 12 / 13                                   |
+| §5 エラー処理                           | Task 2、Task 9、Task 10                             |
+| §6 テスト                               | 各タスクに内包、Task 14 で E2E とカバレッジ         |
+| admin 発行アカウントの除外              | Task 8（サーバー）/ 11（画面）                      |
 
 **2. 仕様書との意図的な差分**
 

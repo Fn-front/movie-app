@@ -69,6 +69,22 @@ export const AUTH_ERROR_MESSAGES = {
    * パスワードが正しい相手にしか返さないため、これ自体は情報を漏らさない。
    */
   TOTP_REQUIRED: '認証コードを入力してください。',
+  /** 第2要素（メールのコード）の入力が必要 */
+  EMAIL_OTP_REQUIRED: 'メールに送信した確認コードを入力してください。',
+  /**
+   * 第2要素のコードを送信できなかった。
+   *
+   * `TOTP_INVALID` と**必ず分ける**（`TOTP_UNAVAILABLE` と同じ理由）。
+   */
+  SECOND_FACTOR_SEND_FAILED:
+    '確認コードを送信できませんでした。しばらく待ってからお試しください。',
+  /**
+   * 第2要素のコードの送信上限に達した。
+   *
+   * 1通も送っていないので、コードを待たせずリカバリーコードへ誘導する。
+   */
+  SECOND_FACTOR_SEND_LIMITED:
+    '確認コードの送信回数が上限に達しました。リカバリーコードを入力してログインしてください。',
   /** 第2要素が不正 */
   TOTP_INVALID: '認証コードが正しくありません。',
   /** 第2要素の使い回し */
@@ -253,8 +269,30 @@ export const AUTH_HINTS = {
  * 二段階認証の有無をパスワードを知らない第三者に教えることはない。
  */
 export const AUTH_ERROR_CODE = {
-  /** 第2要素の入力が必要（パスワードは正しい） */
+  /** 第2要素（認証アプリ）の入力が必要（パスワードは正しい） */
   TOTP_REQUIRED: 'totp_required',
+  /**
+   * 第2要素（メールのコード）の入力が必要（パスワードは正しい）
+   *
+   * `TOTP_REQUIRED` と分けるのは、クライアントが出す入力欄が変わるため。
+   * メールOTP では再送ボタンとカウントダウンが要る。
+   */
+  EMAIL_OTP_REQUIRED: 'email_otp_required',
+  /**
+   * 第2要素のコードを送信できなかった
+   *
+   * ⚠️ `TOTP_INVALID` と**必ず分ける**。入れ直しても直らないので、同じ文言だと
+   * 利用者は正しいコードを繰り返し打ち続ける（#1148 と同じ理由）。
+   */
+  SECOND_FACTOR_SEND_FAILED: 'second_factor_send_failed',
+  /**
+   * 第2要素のコードの送信上限に達した
+   *
+   * ⚠️ `EMAIL_OTP_REQUIRED` と**必ず分ける**。1通も送っていないので、
+   * 「メールに送ったコードを入力してください」と出すと届かないコードを
+   * 待たせることになる。この状態の出口はリカバリーコードだけ。
+   */
+  SECOND_FACTOR_SEND_LIMITED: 'second_factor_send_limited',
   /** 第2要素が不正 */
   TOTP_INVALID: 'totp_invalid',
   /** 第2要素の使い回し */

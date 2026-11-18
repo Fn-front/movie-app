@@ -53,6 +53,13 @@ export const API_ENDPOINTS = {
   USER_TOTP_DISABLE: '/api/user/totp/disable',
   /** リカバリーコードの再発行 */
   USER_TOTP_RECOVERY_CODES: '/api/user/totp/recovery-codes',
+  /**
+   * 設定変更のための第2要素コード送信
+   *
+   * 方式がメールOTP のとき、無効化・リカバリーコード再発行に要るコードを
+   * 本人のアドレスへ送る。これが無いとメールOTP の利用者は設定を変えられない。
+   */
+  USER_TOTP_SEND_CHALLENGE: '/api/user/totp/send-challenge',
 
   // --- お気に入り ---
   /** お気に入り一覧・追加 */

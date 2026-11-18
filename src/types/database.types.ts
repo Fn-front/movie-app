@@ -996,24 +996,27 @@ export type Database = {
         Row: {
           confirmed_at: string | null;
           created_at: string;
-          encrypted_secret: string;
+          encrypted_secret: string | null;
           last_used_counter: number | null;
+          method: string;
           updated_at: string;
           user_id: string;
         };
         Insert: {
           confirmed_at?: string | null;
           created_at?: string;
-          encrypted_secret: string;
+          encrypted_secret?: string | null;
           last_used_counter?: number | null;
+          method?: string;
           updated_at?: string;
           user_id: string;
         };
         Update: {
           confirmed_at?: string | null;
           created_at?: string;
-          encrypted_secret?: string;
+          encrypted_secret?: string | null;
           last_used_counter?: number | null;
+          method?: string;
           updated_at?: string;
           user_id?: string;
         };
@@ -1182,6 +1185,10 @@ export type Database = {
           unrated_count: number;
           watched_count: number;
         }[];
+      };
+      release_rate_limit: {
+        Args: { p_action_type: string; p_identifier: string };
+        Returns: undefined;
       };
       sync_now_showing_movies: { Args: { movies: Json }; Returns: number };
       upsert_movie_cache: {

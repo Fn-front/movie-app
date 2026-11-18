@@ -113,12 +113,13 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   resetRateLimit: (...args: unknown[]) => mockResetRateLimit(...args),
 }));
 // --- 第2要素モック（authorize / jwt の分岐の検証用。検証ロジック自体は
-// totpVerification.test.ts で確認済み）---
-const mockIsTotpEnabled = jest.fn();
+// secondFactor.test.ts で確認済み）---
+const mockGetSecondFactorMethod = jest.fn();
 const mockVerifySecondFactor = jest.fn();
-jest.mock('@/lib/auth/totpVerification', () => ({
-  ...jest.requireActual('@/lib/auth/totpVerification'),
-  isTotpEnabled: (...args: unknown[]) => mockIsTotpEnabled(...args),
+jest.mock('@/lib/auth/secondFactor', () => ({
+  ...jest.requireActual('@/lib/auth/secondFactor'),
+  getSecondFactorMethod: (...args: unknown[]) =>
+    mockGetSecondFactorMethod(...args),
   verifySecondFactor: (...args: unknown[]) => mockVerifySecondFactor(...args),
 }));
 
@@ -147,6 +148,7 @@ type Callbacks = {
 };
 
 import { AUTH_ERROR_CODE, SESSION_CONFIG } from '@/constants/auth';
+import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('@/lib/auth/auth');
@@ -183,8 +185,8 @@ beforeEach(() => {
   mockState.writes = [];
   // 既定は「二段階認証なし」。有効時の挙動は個別のテストで上書きする。
   // 呼び出し履歴も消す（「問い合わせていないこと」を検証するテストがあるため）
-  mockIsTotpEnabled.mockReset();
-  mockIsTotpEnabled.mockResolvedValue(false);
+  mockGetSecondFactorMethod.mockReset();
+  mockGetSecondFactorMethod.mockResolvedValue(null);
   mockVerifySecondFactor.mockReset();
 });
 
@@ -1001,7 +1003,7 @@ describe('jwt コールバック', () => {
    * 巻き戻らず、`passwordChangedAt: null` のトークンで 5分間の盲目窓ができた。
    *
    * ⚠️ 到達には `users` の select **だけ**を失敗させる必要がある。
-   * 直後の `isTotpEnabled()` も DB を引くので、全テーブルを失敗させると
+   * 直後の `getSecondFactorMethod()` も DB を引くので、全テーブルを失敗させると
    * そちらが throw して `if (user) throw error`（#1148）でサインインごと
    * 失敗し、この分岐に用がなくなる
    */
@@ -1481,7 +1483,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
   });
 
   it('二段階認証が無効なら第2要素を求めずにログインできる', async () => {
-    mockIsTotpEnabled.mockResolvedValue(false);
+    mockGetSecondFactorMethod.mockResolvedValue(null);
 
     await expect(
       credentialsProvider.authorize(
@@ -1493,7 +1495,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
   });
 
   it('二段階認証が有効でコード未入力なら totp_required を返す', async () => {
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
 
     await expect(
       credentialsProvider.authorize(
@@ -1506,7 +1508,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
   it('パスワードが誤っていれば第2要素の有無を問い合わせない', async () => {
     // 問い合わせると「二段階認証を使っているアカウントか」を
     // パスワードを知らない相手に教えることになる
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
 
     await expect(
       credentialsProvider.authorize(
@@ -1514,11 +1516,11 @@ describe('authorize の第2要素（パスワード経路）', () => {
         makeRequest(),
       ),
     ).rejects.toThrow();
-    expect(mockIsTotpEnabled).not.toHaveBeenCalled();
+    expect(mockGetSecondFactorMethod).not.toHaveBeenCalled();
   });
 
   it('正しいコードならログインできる', async () => {
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
     mockVerifySecondFactor.mockResolvedValue('success');
 
     await expect(
@@ -1530,7 +1532,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
   });
 
   it('誤ったコードは totp_invalid を返す', async () => {
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
     mockVerifySecondFactor.mockResolvedValue('invalid');
 
     await expect(
@@ -1542,7 +1544,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
   });
 
   it('使い回したコードは totp_reused を返す', async () => {
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
     mockVerifySecondFactor.mockResolvedValue('reused');
 
     await expect(
@@ -1555,7 +1557,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
 
   it('コードの試行にレート制限を掛ける', async () => {
     // 6桁を窓付きで受けるため、上限が無いと総当たりで抜かれる
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
     mockVerifySecondFactor.mockResolvedValue('success');
 
     await credentialsProvider.authorize(
@@ -1573,7 +1575,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
   });
 
   it('コードの試行上限を超えたら検証せずに拒否する', async () => {
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
     // login_ip → login → totp_verify の順。3回目だけ拒否する
     mockCheckRateLimit
       .mockResolvedValueOnce({ allowed: true })
@@ -1590,7 +1592,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
   });
 
   it('空白だけのコードは未入力として扱う', async () => {
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
 
     await expect(
       credentialsProvider.authorize(
@@ -1630,7 +1632,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
 
     it('パスワードが正しければ email_not_verified を返す', async () => {
       unverified();
-      mockIsTotpEnabled.mockResolvedValue(false);
+      mockGetSecondFactorMethod.mockResolvedValue(null);
 
       await expect(
         credentialsProvider.authorize(
@@ -1646,7 +1648,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
      */
     it('パスワードが誤っていれば理由を明かさない', async () => {
       unverified();
-      mockIsTotpEnabled.mockResolvedValue(false);
+      mockGetSecondFactorMethod.mockResolvedValue(null);
 
       await expect(
         credentialsProvider.authorize(
@@ -1659,7 +1661,7 @@ describe('authorize の第2要素（パスワード経路）', () => {
     it('第2要素の有無は問い合わせない', async () => {
       // 未認証の時点で弾くので、二段階認証を使っているかどうかも漏らさない
       unverified();
-      mockIsTotpEnabled.mockResolvedValue(true);
+      mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
 
       await expect(
         credentialsProvider.authorize(
@@ -1667,11 +1669,11 @@ describe('authorize の第2要素（パスワード経路）', () => {
           makeRequest(),
         ),
       ).rejects.toMatchObject({ code: 'email_not_verified' });
-      expect(mockIsTotpEnabled).not.toHaveBeenCalled();
+      expect(mockGetSecondFactorMethod).not.toHaveBeenCalled();
     });
 
     it('認証済みなら通常どおりログインできる', async () => {
-      mockIsTotpEnabled.mockResolvedValue(false);
+      mockGetSecondFactorMethod.mockResolvedValue(null);
 
       await expect(
         credentialsProvider.authorize(
@@ -1714,7 +1716,7 @@ describe('authorize の第2要素（メールOTP経路）', () => {
   it('二段階認証が有効ならメールOTP単独ログインを拒否する', async () => {
     // メールのコードだけで入れる経路は第2要素ではなくパスワードの代替であり、
     // 残すと最も弱い経路が全体の強度を決めてしまう（#642）
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
 
     await expect(
       credentialsProvider.authorize(
@@ -1729,7 +1731,7 @@ describe('authorize の第2要素（メールOTP経路）', () => {
   });
 
   it('二段階認証が無効ならメールOTP経路は従来どおり進む', async () => {
-    mockIsTotpEnabled.mockResolvedValue(false);
+    mockGetSecondFactorMethod.mockResolvedValue(null);
 
     // 検証済みトークンが見つからないので失敗するが、
     // otp_login_disabled では落ちないことを確認する
@@ -1756,7 +1758,7 @@ describe('authorize の第2要素（メールOTP経路）', () => {
    */
   it('ログインに成功したら検証済みトークンを消費する', async () => {
     const deleted: string[] = [];
-    mockIsTotpEnabled.mockResolvedValue(false);
+    mockGetSecondFactorMethod.mockResolvedValue(null);
 
     setResolver(({ table, ops }) => {
       if (table === 'users') {
@@ -1856,7 +1858,7 @@ describe('authorize の第2要素（メールOTP経路）', () => {
     it('コードが正しければ email_not_verified を返す', async () => {
       const deleted: string[] = [];
       setup(deleted);
-      mockIsTotpEnabled.mockResolvedValue(false);
+      mockGetSecondFactorMethod.mockResolvedValue(null);
 
       await expect(
         credentialsProvider.authorize(
@@ -1878,7 +1880,7 @@ describe('authorize の第2要素（メールOTP経路）', () => {
     it('弾くときに検証済みトークンを消費しない', async () => {
       const deleted: string[] = [];
       setup(deleted);
-      mockIsTotpEnabled.mockResolvedValue(false);
+      mockGetSecondFactorMethod.mockResolvedValue(null);
 
       await credentialsProvider
         .authorize(
@@ -1915,7 +1917,7 @@ describe('authorize の第2要素（メールOTP経路）', () => {
             }
           : { data: null, error: null },
       );
-      mockIsTotpEnabled.mockResolvedValue(false);
+      mockGetSecondFactorMethod.mockResolvedValue(null);
 
       const error = await credentialsProvider
         .authorize(
@@ -1942,7 +1944,7 @@ describe('jwt コールバックの第2要素', () => {
 
   it('OAuth初回で二段階認証が有効なら totpPending を立てる', async () => {
     // OAuth は authorize を通らないため、ここで第2要素を要求する
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
     setResolver(() => ({ data: { role: 'user' }, error: null }));
 
     const token = await jwt({
@@ -1955,7 +1957,7 @@ describe('jwt コールバックの第2要素', () => {
   });
 
   it('OAuth初回で二段階認証が無効なら totpPending は立たない', async () => {
-    mockIsTotpEnabled.mockResolvedValue(false);
+    mockGetSecondFactorMethod.mockResolvedValue(null);
     setResolver(() => ({ data: { role: 'user' }, error: null }));
 
     const token = await jwt({
@@ -2245,9 +2247,9 @@ describe('jwt コールバックの例外', () => {
   /**
    * ⚠️⚠️ **初回サインインは握り潰してはいけない**
    *
-   * この分岐では `token.totpPending` の既定が false で、`isTotpEnabled()` の
-   * 結果を待って初めて true になる。`isTotpEnabled` は DB エラーで
-   * **意図的に throw する**（`totpVerification.ts`。false に倒すと第2要素が
+   * この分岐では `token.totpPending` の既定が false で、`getSecondFactorMethod()` の
+   * 結果を待って初めて true になる。`getSecondFactorMethod` は DB エラーで
+   * **意図的に throw する**（`secondFactor.ts`。false に倒すと第2要素が
    * 丸ごと飛ぶため）。
    *
    * 握り潰すと `totpPending: false` のトークンが返り、`@auth/core` が
@@ -2268,14 +2270,18 @@ describe('jwt コールバックの例外', () => {
 
     it('二段階認証の判定が落ちたら例外を外へ出す（セッションを発行させない）', async () => {
       setResolver(() => ({ data: { role: 'user' }, error: null }));
-      mockIsTotpEnabled.mockRejectedValue(new Error('read user_totp failed'));
+      mockGetSecondFactorMethod.mockRejectedValue(
+        new Error('read user_totp failed'),
+      );
 
       await expect(oauthSignIn()).rejects.toThrow('read user_totp failed');
     });
 
     it('二段階認証の判定が落ちたとき totpPending が false のトークンを返さない', async () => {
       setResolver(() => ({ data: { role: 'user' }, error: null }));
-      mockIsTotpEnabled.mockRejectedValue(new Error('read user_totp failed'));
+      mockGetSecondFactorMethod.mockRejectedValue(
+        new Error('read user_totp failed'),
+      );
 
       // resolve してしまったら、その中身に関わらず fail-open
       await expect(oauthSignIn()).rejects.toBeDefined();

@@ -35,10 +35,10 @@ import {
 import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
-  isTotpEnabled,
-  TOTP_VERIFY_RESULT,
+  getSecondFactorMethod,
+  SECOND_FACTOR_VERIFY_RESULT,
   verifySecondFactor,
-} from '@/lib/auth/totpVerification';
+} from '@/lib/auth/secondFactor';
 import { CredentialsSignInError } from '@/lib/auth/authErrors';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -169,7 +169,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // 理由は #1247 — パスワード経路と同じく、**未認証かどうか**を
           // コードを知らない相手に教えないため。
           //
-          // ⚠️ すぐ下の `isTotpEnabled` は**トークン検証より前**にあり、
+          // ⚠️ すぐ下の `getSecondFactorMethod` は**トークン検証より前**にあり、
           // メールアドレスだけで「登録済み＋二段階認証あり」が引ける
           // （#642 からの既存挙動）。ここで守っているのは `is_verified` の
           // 一点だけで、この経路全体が列挙に強いわけではない
@@ -178,7 +178,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // メールのコードだけで入れる経路は「第2要素」ではなく
           // 「パスワードの代替」であり、残すと最も弱い経路が全体の強度を
           // 決めてしまう（#642）。パスワードを忘れた場合はリセットで復旧する
-          if (await isTotpEnabled(supabase, user.id)) {
+          if (await getSecondFactorMethod(supabase, user.id)) {
             throw new CredentialsSignInError(
               AUTH_ERROR_CODE.OTP_LOGIN_DISABLED,
             );
@@ -282,7 +282,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           // 第2要素。パスワードが正しいことを確かめてからでないと、
           // 「二段階認証を使っているアカウントかどうか」を第三者に教えてしまう
-          if (await isTotpEnabled(supabase, user.id)) {
+          if (await getSecondFactorMethod(supabase, user.id)) {
             const totpCode = (
               credentials.totpCode as string | undefined
             )?.trim();
@@ -313,11 +313,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               totpCode,
             );
 
-            if (verifyResult === TOTP_VERIFY_RESULT.REUSED) {
+            if (verifyResult === SECOND_FACTOR_VERIFY_RESULT.REUSED) {
               throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REUSED);
             }
 
-            if (verifyResult !== TOTP_VERIFY_RESULT.SUCCESS) {
+            if (verifyResult !== SECOND_FACTOR_VERIFY_RESULT.SUCCESS) {
               throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_INVALID);
             }
 
@@ -583,7 +583,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               // OAuth は Credentials と違い authorize を通らないため、
               // 第2要素はここで要求する。プロバイダ側の2FA設定に依存せず、
               // このアプリ独自の第2要素を必ず挟む
-              token.totpPending = await isTotpEnabled(supabase, user.id);
+              //
+              // ⚠️ `Boolean()` で包む。`!== null` だと、モックが未設定で
+              // `undefined` を返したときに true（第2要素が有効）へ倒れる
+              token.totpPending = Boolean(
+                await getSecondFactorMethod(supabase, user.id),
+              );
             }
           } else {
             // Credentialsログイン
@@ -647,7 +652,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 token.totpUnavailable = true;
               }
 
-              if (verifyResult === TOTP_VERIFY_RESULT.SUCCESS) {
+              if (verifyResult === SECOND_FACTOR_VERIFY_RESULT.SUCCESS) {
                 token.totpPending = false;
                 await resetRateLimit(
                   supabase,
@@ -780,9 +785,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // ⚠️⚠️ **初回サインインだけは握り潰さない。**
         //
         // この分岐（`user` がある）では `token.totpPending` の既定が false で、
-        // `isTotpEnabled()` の結果を待って初めて true になる。そして
-        // `isTotpEnabled` は DB エラーで**意図的に throw する**
-        // （`src/lib/auth/totpVerification.ts`。false に倒すと第2要素が
+        // `getSecondFactorMethod()` の結果を待って初めて true になる。そして
+        // `getSecondFactorMethod` は DB エラーで**意図的に throw する**
+        // （`src/lib/auth/secondFactor.ts`。false に倒すと第2要素が
         // 丸ごと飛ぶため）。
         //
         // ここで握り潰すと `totpPending: false` のトークンが返り、

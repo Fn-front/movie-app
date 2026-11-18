@@ -10,13 +10,17 @@ import { encryptTotpSecret } from '@/lib/totp/encryption';
 import { generateRecoveryCodes } from '@/lib/totp/recoveryCodes';
 import { generateTotpSecret } from '@/lib/totp/secret';
 import { generateTotpCode } from '@/lib/totp/totp';
+import {
+  SECOND_FACTOR_METHOD,
+  type SecondFactorMethod,
+} from '@/constants/secondFactor';
 
 import {
   countUnusedRecoveryCodes,
-  isTotpEnabled,
-  TOTP_VERIFY_RESULT,
+  getSecondFactorMethod,
+  SECOND_FACTOR_VERIFY_RESULT,
   verifySecondFactor,
-} from './totpVerification';
+} from './secondFactor';
 
 const TEST_KEY = randomBytes(32).toString('base64');
 const USER_ID = '11111111-1111-1111-1111-111111111111';
@@ -27,6 +31,8 @@ interface FakeDb {
     encrypted_secret: string;
     confirmed_at: string | null;
     last_used_counter: number | null;
+    /** 省略時は 'totp'（DB の DEFAULT と同じ） */
+    method?: SecondFactorMethod;
   } | null;
   recoveryCodes: Array<{
     id: string;
@@ -92,7 +98,13 @@ function createSupabaseMock(db: FakeDb): SupabaseClient {
       if (state.requireConfirmed && !db.totp.confirmed_at) {
         return Promise.resolve({ data: null });
       }
-      return Promise.resolve({ data: db.totp });
+      // method を省いた fixture は DB の DEFAULT と同じく totp として扱う
+      return Promise.resolve({
+        data: {
+          ...db.totp,
+          method: db.totp.method ?? SECOND_FACTOR_METHOD.TOTP,
+        },
+      });
     });
 
     const resolve = () => {
@@ -179,8 +191,8 @@ afterAll(() => {
   process.env.TOTP_ENCRYPTION_KEY = originalKey;
 });
 
-describe('isTotpEnabled', () => {
-  it('確認済みの行があれば true', async () => {
+describe('getSecondFactorMethod', () => {
+  it('確認済みの行があれば、その方式を返す', async () => {
     const db: FakeDb = {
       totp: {
         encrypted_secret: encryptTotpSecret(generateTotpSecret()),
@@ -190,12 +202,29 @@ describe('isTotpEnabled', () => {
       recoveryCodes: [],
     };
 
-    await expect(isTotpEnabled(createSupabaseMock(db), USER_ID)).resolves.toBe(
-      true,
-    );
+    await expect(
+      getSecondFactorMethod(createSupabaseMock(db), USER_ID),
+    ).resolves.toBe(SECOND_FACTOR_METHOD.TOTP);
   });
 
-  it('設定途中（confirmed_at が NULL）は false', async () => {
+  it('メールOTP の行なら email_otp を返す', async () => {
+    const db: FakeDb = {
+      totp: {
+        // method=email_otp では DB 側も NULL だが、模擬の型都合で空文字を置く
+        encrypted_secret: '',
+        confirmed_at: '2026-11-18T00:00:00Z',
+        last_used_counter: null,
+        method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+      },
+      recoveryCodes: [],
+    };
+
+    await expect(
+      getSecondFactorMethod(createSupabaseMock(db), USER_ID),
+    ).resolves.toBe(SECOND_FACTOR_METHOD.EMAIL_OTP);
+  });
+
+  it('設定途中（confirmed_at が NULL）は null', async () => {
     // QRを表示しただけの段階でログインを止めると、認証アプリに登録し損ねた
     // 利用者がそのままロックアウトされる
     const db: FakeDb = {
@@ -207,29 +236,29 @@ describe('isTotpEnabled', () => {
       recoveryCodes: [],
     };
 
-    await expect(isTotpEnabled(createSupabaseMock(db), USER_ID)).resolves.toBe(
-      false,
-    );
+    await expect(
+      getSecondFactorMethod(createSupabaseMock(db), USER_ID),
+    ).resolves.toBeNull();
   });
 
-  it('行が無ければ false', async () => {
+  it('行が無ければ null', async () => {
     const db: FakeDb = { totp: null, recoveryCodes: [] };
 
-    await expect(isTotpEnabled(createSupabaseMock(db), USER_ID)).resolves.toBe(
-      false,
-    );
+    await expect(
+      getSecondFactorMethod(createSupabaseMock(db), USER_ID),
+    ).resolves.toBeNull();
   });
 
   /**
-   * ⚠️ ここが false に倒れると**第2要素が丸ごと飛ぶ**
+   * ⚠️ ここが null に倒れると**第2要素が丸ごと飛ぶ**
    *
    * `auth.ts` のログイン3経路（パスワード / OTP / OAuth）はいずれも
-   * 「有効なら止める」側のガードなので、false は素通りを意味する。
+   * 「有効なら止める」側のガードなので、null は素通りを意味する。
    * DB の不調だけで 7日間有効なセッションが発行されてしまう
    */
   it('DB エラーなら throw する（未設定として扱わない）', async () => {
     await expect(
-      isTotpEnabled(createFailingSupabaseMock(), USER_ID),
+      getSecondFactorMethod(createFailingSupabaseMock(), USER_ID),
     ).rejects.toThrow(/connection terminated/);
   });
 });
@@ -271,7 +300,7 @@ describe('verifySecondFactor（認証アプリのコード）', () => {
         USER_ID,
         generateTotpCode(secret),
       ),
-    ).resolves.toBe(TOTP_VERIFY_RESULT.SUCCESS);
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.SUCCESS);
   });
 
   it('成功したステップを記録する', async () => {
@@ -292,7 +321,7 @@ describe('verifySecondFactor（認証アプリのコード）', () => {
 
     await expect(
       verifySecondFactor(createSupabaseMock(db), USER_ID, '000000'),
-    ).resolves.toBe(TOTP_VERIFY_RESULT.INVALID);
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.INVALID);
   });
 
   it('同じコードの2回目を拒否する', async () => {
@@ -301,10 +330,10 @@ describe('verifySecondFactor（認証アプリのコード）', () => {
     const code = generateTotpCode(secret);
 
     await expect(verifySecondFactor(supabase, USER_ID, code)).resolves.toBe(
-      TOTP_VERIFY_RESULT.SUCCESS,
+      SECOND_FACTOR_VERIFY_RESULT.SUCCESS,
     );
     await expect(verifySecondFactor(supabase, USER_ID, code)).resolves.toBe(
-      TOTP_VERIFY_RESULT.REUSED,
+      SECOND_FACTOR_VERIFY_RESULT.REUSED,
     );
   });
 
@@ -319,7 +348,7 @@ describe('verifySecondFactor（認証アプリのコード）', () => {
         USER_ID,
         generateTotpCode(secret),
       ),
-    ).resolves.toBe(TOTP_VERIFY_RESULT.REUSED);
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.REUSED);
   });
 
   it('前後の空白を無視する', async () => {
@@ -331,7 +360,7 @@ describe('verifySecondFactor（認証アプリのコード）', () => {
         USER_ID,
         `  ${generateTotpCode(secret)} `,
       ),
-    ).resolves.toBe(TOTP_VERIFY_RESULT.SUCCESS);
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.SUCCESS);
   });
 
   it('二段階認証が有効でなければ not_enabled', async () => {
@@ -339,7 +368,7 @@ describe('verifySecondFactor（認証アプリのコード）', () => {
 
     await expect(
       verifySecondFactor(createSupabaseMock(db), USER_ID, '123456'),
-    ).resolves.toBe(TOTP_VERIFY_RESULT.NOT_ENABLED);
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.NOT_ENABLED);
   });
 
   it('設定途中のユーザーは not_enabled', async () => {
@@ -358,7 +387,7 @@ describe('verifySecondFactor（認証アプリのコード）', () => {
         USER_ID,
         generateTotpCode(secret),
       ),
-    ).resolves.toBe(TOTP_VERIFY_RESULT.NOT_ENABLED);
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.NOT_ENABLED);
   });
 });
 
@@ -385,7 +414,7 @@ describe('verifySecondFactor（リカバリーコード）', () => {
 
     await expect(
       verifySecondFactor(createSupabaseMock(db), USER_ID, codes[0]),
-    ).resolves.toBe(TOTP_VERIFY_RESULT.SUCCESS);
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.SUCCESS);
   });
 
   it('使用したコードを使用済みにする', async () => {
@@ -403,10 +432,10 @@ describe('verifySecondFactor（リカバリーコード）', () => {
     const supabase = createSupabaseMock(db);
 
     await expect(verifySecondFactor(supabase, USER_ID, codes[0])).resolves.toBe(
-      TOTP_VERIFY_RESULT.SUCCESS,
+      SECOND_FACTOR_VERIFY_RESULT.SUCCESS,
     );
     await expect(verifySecondFactor(supabase, USER_ID, codes[0])).resolves.toBe(
-      TOTP_VERIFY_RESULT.INVALID,
+      SECOND_FACTOR_VERIFY_RESULT.INVALID,
     );
   });
 
@@ -419,7 +448,7 @@ describe('verifySecondFactor（リカバリーコード）', () => {
         USER_ID,
         codes[1].toLowerCase().replace('-', ''),
       ),
-    ).resolves.toBe(TOTP_VERIFY_RESULT.SUCCESS);
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.SUCCESS);
   });
 
   it('存在しないリカバリーコードを拒否する', async () => {
@@ -427,7 +456,7 @@ describe('verifySecondFactor（リカバリーコード）', () => {
 
     await expect(
       verifySecondFactor(createSupabaseMock(db), USER_ID, 'ZZZZZ-ZZZZZ'),
-    ).resolves.toBe(TOTP_VERIFY_RESULT.INVALID);
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.INVALID);
   });
 
   it('コードを使い切っていたら拒否する', async () => {
@@ -438,7 +467,7 @@ describe('verifySecondFactor（リカバリーコード）', () => {
 
     await expect(
       verifySecondFactor(createSupabaseMock(db), USER_ID, codes[0]),
-    ).resolves.toBe(TOTP_VERIFY_RESULT.INVALID);
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.INVALID);
   });
 });
 

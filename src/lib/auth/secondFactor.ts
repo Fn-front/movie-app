@@ -1,19 +1,25 @@
 /**
- * TOTP（二段階認証）のサーバー側検証
+ * 二段階認証（第2要素）のサーバー側検証
  *
  * `src/lib/totp/` が純粋な計算（RFC 6238 / 暗号化 / ハッシュ）を担うのに対し、
  * ここは DB と突き合わせる層を担う。具体的には:
  *
- * - 共有鍵の取り出しと復号
+ * - 有効になっている方式（TOTP / メールOTP）の判定
+ * - 共有鍵の取り出しと復号（TOTP）
  * - 同じコードの使い回しの拒否（RFC 6238 Section 5.2 の要求）
- * - リカバリーコードの1回限りの消費
+ * - リカバリーコードの1回限りの消費（方式に依存しない）
  *
  * 使い回し・消費の判定は**条件付きUPDATEの更新行数**で行う。先に読んでから
  * 書くと、同じコードを同時に2回投げられたときに両方とも通ってしまう。
+ *
+ * ⚠️ テーブル名が `user_totp` / `totp_recovery_codes` のままなのは、
+ * リネームすると旧コードが動いている本番DBに先に当たってログインが全滅する
+ * ため（#1261）。メールOTP も同じテーブルを使う。
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
+import type { SecondFactorMethod } from '@/constants/secondFactor';
 import { decryptTotpSecret } from '@/lib/totp/encryption';
 import {
   findMatchingRecoveryCodeHash,
@@ -29,7 +35,7 @@ import { toDbError } from './dbError';
  * 利用者に見せるメッセージは呼び出し側で決める。ここでは「なぜ通らなかったか」
  * だけを返す。
  */
-export const TOTP_VERIFY_RESULT = {
+export const SECOND_FACTOR_VERIFY_RESULT = {
   /** 検証成功 */
   SUCCESS: 'success',
   /** コードが一致しない */
@@ -40,35 +46,39 @@ export const TOTP_VERIFY_RESULT = {
   NOT_ENABLED: 'not_enabled',
 } as const;
 
-export type TotpVerifyResult =
-  (typeof TOTP_VERIFY_RESULT)[keyof typeof TOTP_VERIFY_RESULT];
+export type SecondFactorVerifyResult =
+  (typeof SECOND_FACTOR_VERIFY_RESULT)[keyof typeof SECOND_FACTOR_VERIFY_RESULT];
 
 /** リカバリーコードとして扱う形式（ハイフン・大文字小文字は正規化後に判定） */
 const RECOVERY_CODE_PATTERN = /^[2-9A-HJKMNP-TWXYZ]{10}$/;
 
 /**
- * 二段階認証が有効なユーザーかを返す
+ * 有効になっている第2要素の方式を返す
  *
  * `confirmed_at` が入っているものだけを「有効」とみなす。設定途中（QRを表示した
  * だけで初回コードを入れていない）状態でログインを止めてしまうと、
  * 認証アプリに登録できなかった利用者がそのままロックアウトされる。
  *
+ * ⚠️ 戻り値が `null` 以外かどうかを見る呼び出し側は、`!== null` ではなく
+ * `Boolean(...)` を使うこと。モックが未設定で `undefined` を返したとき
+ * `undefined !== null` は true（＝第2要素が有効）に倒れる。
+ *
  * @param supabase - service_role のクライアント
  * @param userId - 対象ユーザー
- * @returns 有効なら true
+ * @returns 有効な方式。設定していなければ null
  */
-export async function isTotpEnabled(
+export async function getSecondFactorMethod(
   supabase: SupabaseClient,
   userId: string,
-): Promise<boolean> {
+): Promise<SecondFactorMethod | null> {
   const { data, error } = await supabase
     .from('user_totp')
-    .select('confirmed_at')
+    .select('method')
     .eq('user_id', userId)
     .not('confirmed_at', 'is', null)
     .maybeSingle();
 
-  // ⚠️ **error を握り潰して false に倒してはいけない。**
+  // ⚠️ **error を握り潰して null に倒してはいけない。**
   //
   // `Error` でラップするのは、素の PostgREST オブジェクトのまま投げると
   // NextAuth が原因を保存せず、ログイン経路で診断情報が消えるため
@@ -77,12 +87,12 @@ export async function isTotpEnabled(
   // ときも data: null を返す。区別できるのは error だけ。
   //
   // 呼び出し元（auth.ts のログイン3経路）はいずれも「有効なら止める」側の
-  // ガードなので、false は**第2要素を飛ばす**ことを意味する。DB の不調だけで
+  // ガードなので、null は**第2要素を飛ばす**ことを意味する。DB の不調だけで
   // パスワードのみのログインが成立し、7日間有効なセッションが発行されてしまう。
   // 判定できないなら拒否側へ倒す（rateLimit.ts の undeterminedResult と同じ方針）
   if (error) throw toDbError(error, 'read user_totp');
 
-  return Boolean(data);
+  return (data?.method as SecondFactorMethod | undefined) ?? null;
 }
 
 /**
@@ -97,7 +107,7 @@ async function verifyAuthenticatorCode(
   supabase: SupabaseClient,
   userId: string,
   code: string,
-): Promise<TotpVerifyResult> {
+): Promise<SecondFactorVerifyResult> {
   const { data: row, error } = await supabase
     .from('user_totp')
     .select('encrypted_secret, last_used_counter')
@@ -110,7 +120,7 @@ async function verifyAuthenticatorCode(
   if (error) throw toDbError(error, 'read user_totp for verification');
 
   if (!row) {
-    return TOTP_VERIFY_RESULT.NOT_ENABLED;
+    return SECOND_FACTOR_VERIFY_RESULT.NOT_ENABLED;
   }
 
   const counter = findMatchingCounter(
@@ -119,7 +129,7 @@ async function verifyAuthenticatorCode(
   );
 
   if (counter === null) {
-    return TOTP_VERIFY_RESULT.INVALID;
+    return SECOND_FACTOR_VERIFY_RESULT.INVALID;
   }
 
   // 「まだ使われていないステップのときだけ記録する」を1文で行う。
@@ -133,10 +143,10 @@ async function verifyAuthenticatorCode(
     .select('user_id');
 
   if (!updated || updated.length === 0) {
-    return TOTP_VERIFY_RESULT.REUSED;
+    return SECOND_FACTOR_VERIFY_RESULT.REUSED;
   }
 
-  return TOTP_VERIFY_RESULT.SUCCESS;
+  return SECOND_FACTOR_VERIFY_RESULT.SUCCESS;
 }
 
 /**
@@ -151,7 +161,7 @@ async function verifyRecoveryCode(
   supabase: SupabaseClient,
   userId: string,
   code: string,
-): Promise<TotpVerifyResult> {
+): Promise<SecondFactorVerifyResult> {
   const { data: rows, error } = await supabase
     .from('totp_recovery_codes')
     .select('id, code_hash')
@@ -163,7 +173,7 @@ async function verifyRecoveryCode(
   if (error) throw toDbError(error, 'read totp_recovery_codes');
 
   if (!rows || rows.length === 0) {
-    return TOTP_VERIFY_RESULT.INVALID;
+    return SECOND_FACTOR_VERIFY_RESULT.INVALID;
   }
 
   const matchedHash = findMatchingRecoveryCodeHash(
@@ -172,7 +182,7 @@ async function verifyRecoveryCode(
   );
 
   if (!matchedHash) {
-    return TOTP_VERIFY_RESULT.INVALID;
+    return SECOND_FACTOR_VERIFY_RESULT.INVALID;
   }
 
   const matched = rows.find((row) => row.code_hash === matchedHash);
@@ -186,10 +196,10 @@ async function verifyRecoveryCode(
     .select('id');
 
   if (!updated || updated.length === 0) {
-    return TOTP_VERIFY_RESULT.REUSED;
+    return SECOND_FACTOR_VERIFY_RESULT.REUSED;
   }
 
-  return TOTP_VERIFY_RESULT.SUCCESS;
+  return SECOND_FACTOR_VERIFY_RESULT.SUCCESS;
 }
 
 /**
@@ -207,7 +217,7 @@ export async function verifySecondFactor(
   supabase: SupabaseClient,
   userId: string,
   code: string,
-): Promise<TotpVerifyResult> {
+): Promise<SecondFactorVerifyResult> {
   const normalized = normalizeRecoveryCode(code);
 
   if (RECOVERY_CODE_PATTERN.test(normalized)) {

@@ -12,8 +12,8 @@ import {
 } from '@/helpers/supabase';
 import {
   countUnusedRecoveryCodes,
-  isTotpEnabled,
-} from '@/lib/auth/totpVerification';
+  getSecondFactorMethod,
+} from '@/lib/auth/secondFactor';
 import { rateLimitExceededResponse } from '@/helpers/apiHelpers';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
@@ -45,15 +45,17 @@ export async function GET() {
       return rateLimitExceededResponse(rateLimitResult);
     }
 
-    const enabled = await isTotpEnabled(supabase, session.user.id);
+    const method = await getSecondFactorMethod(supabase, session.user.id);
 
     return NextResponse.json(
       {
         success: true,
         data: {
-          enabled,
+          enabled: Boolean(method),
+          // 有効な方式。無効なら null
+          method,
           // 残数は有効時のみ意味がある。無効なら0を返す
-          remainingRecoveryCodes: enabled
+          remainingRecoveryCodes: method
             ? await countUnusedRecoveryCodes(supabase, session.user.id)
             : 0,
         },

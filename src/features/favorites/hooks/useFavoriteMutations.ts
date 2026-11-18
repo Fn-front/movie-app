@@ -31,6 +31,7 @@ import {
 } from '@/constants';
 import { isConflictError } from '@/utils/error';
 import type { GetMoviesResponse } from '@/lib/api/movies/movies';
+import { createOptimisticId } from '@/utils/optimisticId';
 
 /**
  * useFavoriteMutationsフックの返り値
@@ -159,7 +160,7 @@ export function useFavoriteMutations(): UseFavoriteMutationsReturn {
       // サーバーが採番するまでの仮ID。一覧・照会の両方で同じ値を使い、
       // onSuccess でまとめて実際のIDに差し替える。
       // 照会キャッシュの照合キーにも使うため、同一ミリ秒でも衝突しない値にする
-      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+      const optimisticId = createOptimisticId();
 
       // 楽観的に映画一覧キャッシュを更新
       updateMovieCacheFavorite(newItem.tmdb_movie_id, {

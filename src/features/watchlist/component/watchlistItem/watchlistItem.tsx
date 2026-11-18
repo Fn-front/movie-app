@@ -14,7 +14,7 @@ import { IMAGE_SIZES, ROUTES } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { getTMDbImageUrl } from '@/utils/image';
 import { shouldLetBrowserHandle } from '@/utils/linkClick';
-import { isOptimisticId } from '@/features/watchlist/utils/optimisticId';
+import { isOptimisticId } from '@/utils/optimisticId';
 import type { WatchlistItem as WatchlistItemType } from '@/lib/api/watchlist/watchlist';
 
 import styles from './watchlistItem.module.scss';

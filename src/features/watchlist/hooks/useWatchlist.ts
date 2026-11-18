@@ -33,10 +33,7 @@ import {
   WATCHLIST_ERROR_MESSAGES,
 } from '@/constants';
 import { sendEvent } from '@/utils/analytics';
-import {
-  createOptimisticId,
-  isOptimisticId,
-} from '@/features/watchlist/utils/optimisticId';
+import { createOptimisticId, isOptimisticId } from '@/utils/optimisticId';
 
 /**
  * useWatchlistフックのオプション

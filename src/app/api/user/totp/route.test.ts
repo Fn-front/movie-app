@@ -12,8 +12,9 @@ import { GET } from './route';
 
 // --- Mocks ---
 
+const mockFrom = jest.fn();
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () => ({ from: jest.fn() }),
+  createServiceRoleClient: () => ({ from: mockFrom }),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -46,6 +47,14 @@ describe('GET /api/user/totp', () => {
     jest.clearAllMocks();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    // admin 発行アカウントかどうかの判定に users.username を引く
+    mockFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: () => Promise.resolve({ data: { username: null } }),
+        }),
+      }),
+    });
   });
 
   it('有効なユーザーの状態と残数を返す', async () => {
@@ -59,6 +68,7 @@ describe('GET /api/user/totp', () => {
     expect(json.data).toEqual({
       enabled: true,
       method: SECOND_FACTOR_METHOD.TOTP,
+      emailOtpAvailable: true,
       remainingRecoveryCodes: 7,
     });
   });
@@ -73,6 +83,7 @@ describe('GET /api/user/totp', () => {
     expect(json.data).toEqual({
       enabled: false,
       method: null,
+      emailOtpAvailable: true,
       remainingRecoveryCodes: 0,
     });
     expect(mockCountUnusedRecoveryCodes).not.toHaveBeenCalled();
@@ -121,5 +132,25 @@ describe('GET /api/user/totp', () => {
       expect(response.status).toBe(429);
       expect(mockGetSecondFactorMethod).not.toHaveBeenCalled();
     });
+  });
+  /**
+   * ⚠️ admin が発行したアカウントは `users.email` が
+   * `generateSyntheticEmail()` の `.invalid` TLD（RFC 2606、絶対に
+   * 名前解決されない）。メールOTP を選ばせるとコードが永久に届かない。
+   */
+  it('admin 発行アカウント（username あり）はメールOTP を選べない', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(null);
+    mockFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: () => Promise.resolve({ data: { username: 'alice' } }),
+        }),
+      }),
+    });
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(json.data.emailOtpAvailable).toBe(false);
   });
 });

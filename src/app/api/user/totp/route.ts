@@ -47,6 +47,18 @@ export async function GET() {
 
     const method = await getSecondFactorMethod(supabase, session.user.id);
 
+    // admin が発行したアカウントは `users.email` が `.invalid` TLD
+    // （RFC 2606、絶対に名前解決されない）なので、メールOTP を選ばせない。
+    // 画面に選択肢を出さないための判定材料として返す
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('username')
+      .eq('id', session.user.id)
+      .single();
+
+    // 読み取りに失敗しただけで 401 を返さない。下の catch で 500 にする
+    if (userError) throw userError;
+
     return NextResponse.json(
       {
         success: true,
@@ -54,6 +66,8 @@ export async function GET() {
           enabled: Boolean(method),
           // 有効な方式。無効なら null
           method,
+          // メールOTP を選べるか（admin 発行アカウントは選べない）
+          emailOtpAvailable: !user?.username,
           // 残数は有効時のみ意味がある。無効なら0を返す
           remainingRecoveryCodes: method
             ? await countUnusedRecoveryCodes(supabase, session.user.id)

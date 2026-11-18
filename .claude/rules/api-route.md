@@ -121,6 +121,19 @@ export async function POST(request: Request) {
 | `auth/register` POST（`OTP_SEND_DAILY`） | 例外2 |
 | `auth/password-reset/request` POST | 例外1 |
 | `movies/suggest-title` GET | 例外2 |
+| `user/totp/setup` POST（`TWO_FACTOR_SEND`） | 例外2 |
+| `user/totp/send-challenge` POST（`TWO_FACTOR_SEND`） | 例外2 |
+
+> ⚠️ この2つの `TWO_FACTOR_SEND` は `sendSecondFactorCode`
+> （`src/lib/auth/sendSecondFactorCode.ts`）の**中**にある。ルートの本文を
+> 読んでも `checkRateLimit` が見つからないので、棚卸しのときに取りこぼさないこと。
+>
+> なお `user/totp/send-challenge` は `TOTP_SETTINGS_VERIFY` を**消費しない**。
+> 送信系と検証系でカウンタを重ねると、メールOTP の利用者は無効化のたびに
+> 「コード送信＋コード入力」で2枠使い、2回しくじるだけで15分間
+> `setup` / `enable` / `disable` / `recovery-codes` / `send-challenge` が
+> すべて 429 になる。`user/totp/setup` も `method=email_otp` の分岐では
+> 消費しない（`method=totp` の分岐だけが `TOTP_SETTINGS_VERIFY` を使う）。
 
 レート制限と検証の両方を持つハンドラのテストには `処理順` の describe があり、
 「レート制限超過 かつ 入力が不正」のリクエストが 429 を返すか 400 を返すかで

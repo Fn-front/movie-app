@@ -6,9 +6,29 @@
 import { test, expect } from '@playwright/test';
 
 import { TEST_USER } from '../helpers/testUser';
+import {
+  cleanupLoginIpRateLimits,
+  cleanupRateLimitsForEmail,
+} from '../helpers/dedicatedUser';
 
 test.describe('ログイン認証フロー', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
+
+  /*
+    ⚠️ レート制限を消してから始める（#1254）。
+
+    以前はレート制限に当たっても「メールアドレスまたはパスワードが
+    正しくありません」に丸められていたため、下の「不正な認証情報」テストは
+    **制限に当たっていても通って**いた。理由を返すようにした結果、当たると
+    「しばらく時間をおいてから」に変わって落ちる。
+
+    `login_ip` は 20回/15分で shard 内の全 spec が共有するので、
+    メールアドレス単位だけでは足りない
+  */
+  test.beforeEach(async () => {
+    await cleanupRateLimitsForEmail(TEST_USER.email);
+    await cleanupLoginIpRateLimits();
+  });
 
   test('正常なログインでホームにリダイレクトされる', async ({ page }) => {
     await page.goto('/auth/signin');

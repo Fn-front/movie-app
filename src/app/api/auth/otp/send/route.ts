@@ -17,7 +17,7 @@ import {
   randomDelay,
   hashOtpCode,
 } from '@/lib/otp';
-import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { checkRateLimit, releaseRateLimit } from '@/lib/rateLimit/rateLimit';
 import { normalizeEmail } from '@/utils/email';
 import {
   OTP_ACTION,
@@ -293,6 +293,10 @@ export async function POST(request: Request) {
     });
 
     if (insertError) {
+      // 挿入に失敗した＝このリクエストでは1通も送らない。送信失敗と同じく
+      // 枠を戻す（#1260）。ここで戻さないと、DB が一時的に詰まっただけで
+      // 利用者の日次枠が削られる
+      await releaseRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_SEND_DAILY);
       throw insertError;
     }
 
@@ -300,6 +304,27 @@ export async function POST(request: Request) {
     const emailSent = await sendOtpEmail(email, code, action);
 
     if (!emailSent) {
+      // 1通も送れていないので、数えた日次枠を戻す（#1260）。
+      //
+      // 戻さないと「送信に失敗しました」を5回見た時点で
+      // 「本日の送信上限に達しました。明日再度お試しください。」に変わる。
+      // 届いていないのに上限扱いになり、#1258 の行き止まりへ落ちる。
+      //
+      // ⚠️ `resetRateLimit` ではなく `releaseRateLimit` を使う。前者は行ごと
+      // 消すので、同じ日に成功した送信の分まで帳消しになる
+      await releaseRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_SEND_DAILY);
+
+      // ⚠️ **挿入した OTP 行は消さない。**
+      //
+      // 上の60秒の再送間隔チェック（`:173-209`）は、この行の `created_at`
+      // だけを根拠にしている。消すと次のリクエストが「前回送信なし」に
+      // なって素通りし、日次枠も戻しているので**この経路の保護が全部
+      // 無くなる**。送信が失敗し続ける状況（Resend の障害・クォータ切れ、
+      // 送信できないアドレス）で、未認証のまま無制限に Resend を叩かせられる。
+      //
+      // 残しても害は無い。`attempts` は引き継がれない — 次の送信は必ず
+      // `:252-257` で未検証行を消してから insert するので、新しい行は
+      // 常に `attempts = 0` から始まる。
       return NextResponse.json(
         {
           success: false,

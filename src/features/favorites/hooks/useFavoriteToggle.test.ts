@@ -163,6 +163,66 @@ describe('useFavoriteToggle', () => {
     expect(result.current.modalState.isOpen).toBe(false);
   });
 
+  /**
+   * 仮IDを書き込みAPIへ渡さない（#1206 / watchlist の #1194 と同型）
+   *
+   * `currentFavorite.id` は照会キャッシュ由来で、追加直後の数百ミリ秒は
+   * `onMutate` が積んだ仮IDのまま。渡すと `isValidUuid` に弾かれて 400 になる
+   */
+  describe('仮IDのガード', () => {
+    const optimisticFavorite = { id: 'optimistic-abc-123', rating: 5 };
+
+    it('仮IDのあいだは updateRating を呼ばない', () => {
+      const { result } = renderHook(() => useFavoriteToggle());
+
+      act(() => {
+        result.current.handleFavoriteToggle(createMovie(), optimisticFavorite);
+      });
+
+      act(() => {
+        result.current.handleModalSubmit(9);
+      });
+
+      expect(mockUpdateRating).not.toHaveBeenCalled();
+      // 新規追加にも倒さない（二重登録になる）
+      expect(mockAddToFavorites).not.toHaveBeenCalled();
+      // モーダルは閉じる（押せたのに何も起きないまま開きっぱなしにしない）
+      expect(result.current.modalState.isOpen).toBe(false);
+    });
+
+    it('仮IDのあいだは removeFromFavorites を呼ばない', () => {
+      const { result } = renderHook(() => useFavoriteToggle());
+
+      act(() => {
+        result.current.handleFavoriteToggle(createMovie(), optimisticFavorite);
+      });
+
+      act(() => {
+        result.current.handleDelete();
+      });
+
+      expect(mockRemoveFromFavorites).not.toHaveBeenCalled();
+      expect(result.current.modalState.isOpen).toBe(false);
+    });
+
+    it('実IDになれば従来どおり呼ぶ', () => {
+      const { result } = renderHook(() => useFavoriteToggle());
+
+      act(() => {
+        result.current.handleFavoriteToggle(createMovie(), {
+          id: 'fav-1',
+          rating: 5,
+        });
+      });
+
+      act(() => {
+        result.current.handleModalSubmit(9);
+      });
+
+      expect(mockUpdateRating).toHaveBeenCalledWith('fav-1', 9);
+    });
+  });
+
   it('handleDeleteでremoveFromFavoritesが呼ばれモーダルが閉じる', () => {
     const { result } = renderHook(() => useFavoriteToggle());
     const favorite = { id: 'fav-1', rating: 5 };

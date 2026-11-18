@@ -12,6 +12,7 @@ import bcrypt from 'bcryptjs';
 import {
   AUTH_ERROR_CODE,
   AUTH_ERROR_MESSAGES,
+  DUMMY_PASSWORD_HASH,
   SESSION_CONFIG,
   ROUTES,
   SUPABASE_ERROR_CODE,
@@ -116,16 +117,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             RATE_LIMIT_CONFIG.LOGIN_IP.windowMinutes,
           );
 
+          // ⚠️ `CredentialsSignInError` で投げる（#1254）。プレーンな `Error`
+          // だと Auth.js が `code` を載せないため（`@auth/core/index.js:133`）、
+          // クライアントで「メールアドレスまたはパスワードが正しくありません」に
+          // 丸められる。**待てば直る**ことが伝わらず、打ち直すほど悪化する。
+          //
+          // 列挙にはならない。この判定はユーザーを引く**前**なので、
+          // アカウントの有無に関係なく同じ条件で起きる
           if (!ipLimitResult.allowed) {
-            // ⚠️ プレーンな `Error` にしない。Auth.js は `CredentialsSignin` を
-            // 継承したエラーの `code` しかクライアントへ載せないため（下の
-            // コメントと `authErrors.ts` 参照）、素の Error だと
-            // `resolveErrorMessage` が default に落ちて
-            // 「メールアドレスまたはパスワードが正しくありません」と表示される。
-            // パスワードが正しくても15分間そう言われ続ける（#1247 と同じ形）。
-            //
-            // 識別子は送信元IPで、パスワード照合より前に消費されるので、
-            // `rate_limited` を返してもアカウント列挙にはならない
             throw new CredentialsSignInError(AUTH_ERROR_CODE.RATE_LIMITED);
           }
         }
@@ -141,9 +140,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           RATE_LIMIT_CONFIG.LOGIN_ACCOUNT.windowMinutes,
         );
 
+        // 理由は上の送信元単位と同じ（#1254）。こちらも識別子に
+        // メールアドレスを含むが、**行を引く前**なので存在の有無で
+        // 挙動が変わらず、列挙にはならない
         if (!rateLimitResult.allowed) {
-          // 上の LOGIN_IP と同じ理由でコード付きにする。
-          // 識別子は `<アカウント>|<送信元IP>` で、照合より前に消費される
           throw new CredentialsSignInError(AUTH_ERROR_CODE.RATE_LIMITED);
         }
 
@@ -159,6 +159,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               .single();
 
         if (error || !user) {
+          // 応答時間でアカウントの有無を判定させない（#1256）。
+          //
+          // ここで即 return すると「存在しない: 1ms」「存在する: ~250ms」と
+          // 分かれ、メールアドレスの一覧を持つ相手が登録済みのものを時間差で
+          // 絞り込める。照合相手が居ないぶんをダミーで埋めて揃える。
+          //
+          // パスワード経路だけが対象。OTP 経路には照合するパスワードが無く、
+          // 待つ意味がない（そちらの時間差は別途 #1256 で扱う）
+          if (loginMethod === LOGIN_METHOD.PASSWORD && credentials?.password) {
+            await bcrypt.compare(
+              credentials.password as string,
+              DUMMY_PASSWORD_HASH,
+            );
+          }
+
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
@@ -169,25 +184,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         if (loginMethod === LOGIN_METHOD.OTP) {
-          // ⚠️ メール認証チェックはここには無い。検証済みトークンを
-          // 確かめたあと（下の「ワンタイム使用」の直前）に置いている。
-          // 理由は #1247 — パスワード経路と同じく、**未認証かどうか**を
-          // コードを知らない相手に教えないため。
+          // ⚠️ この経路の判定は**すべて検証済みトークンを確かめた後**に置く。
+          // 前に置くと、メールアドレスを知っているだけでアカウントの性質を
+          // 引ける（#1255 / #1247）。
           //
-          // ⚠️ すぐ下の `getSecondFactorMethod` は**トークン検証より前**にあり、
-          // メールアドレスだけで「登録済み＋二段階認証あり」が引ける
-          // （#642 からの既存挙動）。ここで守っているのは `is_verified` の
-          // 一点だけで、この経路全体が列挙に強いわけではない
-
-          // 二段階認証が有効なら、この経路は使わせない。
-          // メールのコードだけで入れる経路は「第2要素」ではなく
-          // 「パスワードの代替」であり、残すと最も弱い経路が全体の強度を
-          // 決めてしまう（#642）。パスワードを忘れた場合はリセットで復旧する
-          if (await getSecondFactorMethod(supabase, user.id)) {
-            throw new CredentialsSignInError(
-              AUTH_ERROR_CODE.OTP_LOGIN_DISABLED,
-            );
-          }
+          // | 判定 | 置く場所 | 理由 |
+          // |---|---|---|
+          // | 二段階認証の有無 | トークン検証の後 | 「登録済み＋2FAあり」が漏れる |
+          // | メール認証の有無 | 同上 | 「登録済み＋未認証」が漏れる |
+          //
+          // どちらもトークンを**消費する前**に置く。後ろだと、理由を返して
+          // 弾いた時点でコードが焼けており、やり直すにも取り直しになる（#1235）
 
           // OTPログイン: otp/verify が発行した検証済みトークンで本人確認する。
           // メールアドレスで行を引くと、被害者が検証を終えた直後に第三者が
@@ -226,14 +233,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
           }
 
+          // ここから下は**コードを受け取れた＝メールアドレスの持ち主**しか
+          // 到達しない。理由を返してもアカウント列挙にはならず、
+          // トークンもまだ焼けていない（#1235 / #1247 / #1255）
+
+          // 二段階認証が有効なら、この経路は使わせない。
+          // メールのコードだけで入れる経路は「第2要素」ではなく
+          // 「パスワードの代替」であり、残すと最も弱い経路が全体の強度を
+          // 決めてしまう（#642）。パスワードを忘れた場合はリセットで復旧する。
+          //
+          // ⚠️ **トークン検証より前に戻さないこと。** 前にあった頃は、
+          // メールアドレスを知っているだけで「登録済み＋二段階認証あり」を
+          // 引けた（#1255）。`otp_login_disabled` は固有の文言を持つため、
+          // 誰でも叩ける経路から返すとそのまま答えになる
+          // 方式は問わない。メールOTP を第2要素にしている利用者にも、
+          // 「メールのコードだけ」の経路は使わせない（#1261）
+          if (await getSecondFactorMethod(supabase, user.id)) {
+            throw new CredentialsSignInError(
+              AUTH_ERROR_CODE.OTP_LOGIN_DISABLED,
+            );
+          }
+
           // メール認証チェック（#1247）
-          //
-          // ⚠️ **トークンを消費する前**に置く。後ろに置くと、理由を返して
-          // 弾いた時点でトークンが焼けており、やり直すにもコードを
-          // 取り直すことになる（#1235 と同じ形）。
-          //
-          // ここまで来たのはコードを受け取れた＝メールアドレスの持ち主だけ
-          // なので、理由を返してもアカウント列挙にはならない
           if (!user.is_verified) {
             throw new CredentialsSignInError(
               AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED,
@@ -252,6 +273,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           // パスワード未設定（ソーシャルログインのみのユーザー）
           if (!user.password_hash) {
+            // 上と同じ理由（#1256）。ここも照合相手が居ないので、
+            // 即 return すると「ソーシャル専用アカウントである」ことが
+            // 応答時間で分かる
+            await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
             throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
           }
 

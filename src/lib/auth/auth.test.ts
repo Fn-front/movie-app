@@ -154,7 +154,11 @@ type Callbacks = {
   session: (args: unknown) => Promise<Record<string, unknown>>;
 };
 
-import { AUTH_ERROR_CODE, SESSION_CONFIG } from '@/constants/auth';
+import {
+  AUTH_ERROR_CODE,
+  DUMMY_PASSWORD_HASH,
+  SESSION_CONFIG,
+} from '@/constants/auth';
 import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -1376,7 +1380,15 @@ describe('authorize のレート制限', () => {
     expect(identifiers).not.toContain('victim@example.com');
   });
 
-  it('送信元IP単位の制限を超えたら拒否する', async () => {
+  /**
+   * ⚠️ 拒否するだけでなく **code を載せて** 投げる（#1254）
+   *
+   * プレーンな `Error` だと Auth.js が code を載せず
+   * （`@auth/core/index.js:133`）、クライアントで
+   * 「メールアドレスまたはパスワードが正しくありません」に丸められる。
+   * 待てば直ることが伝わらず、打ち直すほど悪化する
+   */
+  it('送信元IP単位の制限を超えたら rate_limited を返す', async () => {
     mockCheckRateLimit.mockResolvedValueOnce({
       allowed: false,
       retryAfter: 900,
@@ -1387,7 +1399,47 @@ describe('authorize のレート制限', () => {
         { email: 'user@example.com', password: 'pw' },
         makeRequest('203.0.113.1'),
       ),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+  });
+
+  it('アカウント単位の制限を超えたら rate_limited を返す', async () => {
+    // 1つ目（login_ip）は通し、2つ目（login）で落とす
+    mockCheckRateLimit
+      .mockResolvedValueOnce({ allowed: true })
+      .mockResolvedValueOnce({ allowed: false, retryAfter: 1800 });
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: 'pw' },
+        makeRequest('203.0.113.1'),
+      ),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
+
+    // 2層目で落としたことを確認（1層目と取り違えていない）
+    expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      'user@example.com|203.0.113.1',
+      'login',
+      5,
+      30,
+    );
+  });
+
+  it('アカウントが存在しなくても同じコードを返す（列挙防止）', async () => {
+    // この判定は users を引く前なので、存在の有無で挙動が変わらない
+    setResolver(() => ({ data: null, error: { code: 'PGRST116' } }));
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 900,
+    });
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'nobody@example.com', password: 'pw' },
+        makeRequest('203.0.113.1'),
+      ),
+    ).rejects.toMatchObject({ code: 'rate_limited' });
   });
 
   /**
@@ -1455,6 +1507,94 @@ describe('authorize のレート制限', () => {
 });
 
 // -------------------- 第2要素（二段階認証） --------------------
+/**
+ * 応答時間でアカウントの有無を判定させない（#1256）
+ *
+ * 照合相手が居ないとき bcrypt を回さずに即 return していたため、
+ * 「存在しない: 1ms」「存在する: ~250ms」と分かれていた。メールアドレスの
+ * 一覧を持つ相手が、登録済みのものを時間差で絞り込める
+ */
+describe('authorize のタイミング均一化', () => {
+  let compareSpy: jest.SpyInstance;
+
+  function makeRequest(): Request {
+    return new Request('http://localhost/api/auth/callback/credentials', {
+      headers: new Headers({ 'x-vercel-forwarded-for': '203.0.113.1' }),
+    });
+  }
+
+  beforeEach(() => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    compareSpy = jest.spyOn(bcrypt, 'compare');
+  });
+
+  afterEach(() => {
+    compareSpy.mockRestore();
+  });
+
+  it('ユーザーが存在しなくても bcrypt を回す', async () => {
+    setResolver(() => ({ data: null, error: { code: 'PGRST116' } }));
+
+    await credentialsProvider
+      .authorize(
+        { email: 'nobody@example.com', password: 'Password1' },
+        makeRequest(),
+      )
+      .catch(() => undefined);
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+    // 本物のハッシュとは比較しない（常に false になるダミー）
+    expect(compareSpy.mock.calls[0][1]).toBe(DUMMY_PASSWORD_HASH);
+  });
+
+  it('パスワード未設定のユーザーでも bcrypt を回す', async () => {
+    // 即 return すると「ソーシャル専用アカウントである」ことが時間で分かる
+    setResolver(({ table }) =>
+      table === 'users'
+        ? {
+            data: {
+              id: 'user-1',
+              email: 'social@example.com',
+              name: 'Social',
+              avatar_url: null,
+              role: 'user',
+              is_verified: true,
+              password_hash: null,
+              password_changed_at: null,
+            },
+            error: null,
+          }
+        : { data: null, error: null },
+    );
+
+    await credentialsProvider
+      .authorize(
+        { email: 'social@example.com', password: 'Password1' },
+        makeRequest(),
+      )
+      .catch(() => undefined);
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('OTP経路では回さない（照合するパスワードが無い）', async () => {
+    setResolver(() => ({ data: null, error: { code: 'PGRST116' } }));
+
+    await credentialsProvider
+      .authorize(
+        {
+          email: 'nobody@example.com',
+          loginMethod: 'otp',
+          verificationToken: 'token',
+        },
+        makeRequest(),
+      )
+      .catch(() => undefined);
+
+    expect(compareSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('authorize の第2要素（パスワード経路）', () => {
   const PASSWORD = 'Password1';
   /** PASSWORD の bcrypt ハッシュ */
@@ -1720,10 +1860,45 @@ describe('authorize の第2要素（メールOTP経路）', () => {
     );
   });
 
+  /**
+   * ⚠️ **有効な検証済みトークンを与える**（#1255）
+   *
+   * 以前はトークンが無くても `otp_login_disabled` が返っていた。
+   * つまりメールアドレスを知っているだけで「登録済み＋二段階認証あり」を
+   * 引けた。判定をトークン検証の後ろへ移したので、ここも正規の経路を通す
+   */
   it('二段階認証が有効ならメールOTP単独ログインを拒否する', async () => {
     // メールのコードだけで入れる経路は第2要素ではなくパスワードの代替であり、
     // 残すと最も弱い経路が全体の強度を決めてしまう（#642）
     mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
+    setResolver(({ table }) => {
+      if (table === 'users') {
+        return {
+          data: {
+            id: 'user-1',
+            email: 'user@example.com',
+            name: 'User',
+            avatar_url: null,
+            role: 'user',
+            is_verified: true,
+            password_hash: null,
+            password_changed_at: null,
+          },
+          error: null,
+        };
+      }
+      if (table === 'otp_codes') {
+        return {
+          data: {
+            id: 'otp-1',
+            email: 'user@example.com',
+            verified_at: new Date().toISOString(),
+          },
+          error: null,
+        };
+      }
+      return { data: null, error: null };
+    });
 
     await expect(
       credentialsProvider.authorize(
@@ -1735,6 +1910,82 @@ describe('authorize の第2要素（メールOTP経路）', () => {
         makeRequest(),
       ),
     ).rejects.toMatchObject({ code: 'otp_login_disabled' });
+  });
+
+  it('二段階認証で弾くときも検証済みトークンを消費しない', async () => {
+    // 焼いてしまうと、パスワード経路へ切り替えるにもコードを取り直すことになる
+    // （#1235 と同じ形）
+    const deleted: string[] = [];
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
+    setResolver(({ table, ops }) => {
+      if (table === 'users') {
+        return {
+          data: {
+            id: 'user-1',
+            email: 'user@example.com',
+            name: 'User',
+            avatar_url: null,
+            role: 'user',
+            is_verified: true,
+            password_hash: null,
+            password_changed_at: null,
+          },
+          error: null,
+        };
+      }
+      if (table === 'otp_codes') {
+        if (ops.includes('delete')) {
+          deleted.push('otp_codes');
+          return { data: null, error: null };
+        }
+        return {
+          data: {
+            id: 'otp-1',
+            email: 'user@example.com',
+            verified_at: new Date().toISOString(),
+          },
+          error: null,
+        };
+      }
+      return { data: null, error: null };
+    });
+
+    await credentialsProvider
+      .authorize(
+        {
+          email: 'user@example.com',
+          loginMethod: 'otp',
+          verificationToken: 'token',
+        },
+        makeRequest(),
+      )
+      .catch(() => undefined);
+
+    expect(deleted).not.toContain('otp_codes');
+  });
+
+  /**
+   * ⚠️ 列挙対策（#1255）
+   *
+   * トークンが無ければ、二段階認証の有無を明かさない
+   */
+  it('検証済みトークンが無ければ二段階認証の有無を明かさない', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
+
+    const error = await credentialsProvider
+      .authorize(
+        {
+          email: 'user@example.com',
+          loginMethod: 'otp',
+          verificationToken: 'token',
+        },
+        makeRequest(),
+      )
+      .catch((e: unknown) => e);
+
+    expect((error as { code?: string }).code).not.toBe('otp_login_disabled');
+    // そもそも問い合わせない
+    expect(mockGetSecondFactorMethod).not.toHaveBeenCalled();
   });
 
   it('二段階認証が無効ならメールOTP経路は従来どおり進む', async () => {

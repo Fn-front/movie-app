@@ -59,6 +59,14 @@ export const WATCHLIST_ERROR_MESSAGES = {
   REMOVE_FAILED: errorMessage.removeFailed(TARGET),
   WATCHED_UPDATE_FAILED: '視聴済みの更新に失敗しました',
   ALREADY_EXISTS: 'この映画はすでにウォッチリストに追加されています',
+  /**
+   * 削除で 404 が返ったとき（#1199）
+   *
+   * すでに消えている＝望みどおりの状態なので、赤いエラーにしない。
+   * 別タブ・別端末で先に消された場合や、論理削除済みの行へ DELETE した
+   * 場合に出る。`ALREADY_EXISTS`（409）と対になる文言
+   */
+  ALREADY_REMOVED: 'この映画はすでにウォッチリストから削除されています',
   NOT_FOUND: 'ウォッチリストに見つかりません',
   INVALID_ID: errorMessage.invalid('ウォッチリストID'),
   INVALID_QUERY: errorMessage.invalid('クエリパラメータ'),

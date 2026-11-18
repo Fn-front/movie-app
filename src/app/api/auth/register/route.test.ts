@@ -9,6 +9,8 @@
 // hashOtpCode は pepper が無いと例外を投げる（平文フォールバック禁止）
 process.env.OTP_HASH_PEPPER = 'test-pepper-value';
 
+import { OTP_CONFIG } from '@/constants/otp';
+
 import { POST } from './route';
 
 // --- Mocks ---
@@ -25,8 +27,10 @@ jest.mock('bcryptjs', () => ({
 }));
 
 const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+const mockReleaseRateLimit = jest.fn().mockResolvedValue(undefined);
 jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  releaseRateLimit: (...args: unknown[]) => mockReleaseRateLimit(...args),
 }));
 
 // 漏洩パスワード照合（HIBP）。既定では「漏洩していない」として通す
@@ -110,6 +114,63 @@ const setupSuccessMocks = () => {
 describe('POST /api/auth/register', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  /**
+   * コードの有効期限は定数から来る（#1258）
+   *
+   * 10分だった頃は、メールの遅延や迷惑メールを探しているうちに切れ、
+   * 再送を繰り返して日次5通を使い切る経路があった。使い切ると登録を
+   * 完了する手段が無くなる。
+   *
+   * ⚠️ ここをベタ書きの分数で固定しないこと。定数を変えたときに落ちて
+   * しまい、「テストを直す」方向に倒れる
+   */
+  it('OTPの有効期限を OTP_CONFIG.EXPIRY_MINUTES で保存する', async () => {
+    let savedExpiry: string | undefined;
+
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    // 既存ユーザーなし
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: null,
+            error: { code: 'PGRST116', message: 'not found' },
+          }),
+        }),
+      }),
+    });
+    // ユーザーINSERT成功
+    mockFrom.mockReturnValueOnce({
+      insert: () => ({
+        select: () => ({
+          single: () => ({ data: { id: 'user-123' }, error: null }),
+        }),
+      }),
+    });
+    // OTP INSERT。渡された expires_at を捕まえる
+    mockFrom.mockReturnValueOnce({
+      insert: (values: Record<string, unknown>) => {
+        savedExpiry = values.expires_at as string;
+        return { error: null };
+      },
+    });
+
+    const before = Date.now();
+    await POST(
+      createRequest({ email: 'test@example.com', password: 'Password1234' }),
+    );
+    const after = Date.now();
+
+    expect(savedExpiry).toBeDefined();
+
+    const expiresAt = new Date(savedExpiry as string).getTime();
+    const windowMs = OTP_CONFIG.EXPIRY_MINUTES * 60 * 1000;
+
+    // expires_at は POST 中のどこかの時刻 + 期限。前後の実測時刻で挟む
+    expect(expiresAt).toBeGreaterThanOrEqual(before + windowMs);
+    expect(expiresAt).toBeLessThanOrEqual(after + windowMs);
   });
 
   it('正常に登録でき、OTPメールが送信される', async () => {
@@ -329,6 +390,13 @@ describe('POST /api/auth/register', () => {
     // ロールバックが実行されたことを確認
     expect(mockOtpDelete).toHaveBeenCalled();
     expect(mockUserDelete).toHaveBeenCalled();
+    // 日次送信枠も戻す（#1260）。行だけ消して枠を残すと、1通も届かないまま
+    // 5回で「本日の送信上限に達しました」に変わる
+    expect(mockReleaseRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_send_daily',
+    );
   });
 
   it('レート制限超過で429を返す', async () => {
@@ -432,6 +500,69 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     mockFrom.mockReturnValueOnce({ insert: () => ({ error: null }) });
   };
 
+  /**
+   * 名前を入れずにやり直しても既存の表示名を消さない（#1253）
+   *
+   * ユーザー名は**任意**入力なので、やり直すときに入れ忘れるのが普通。
+   * #645 の目的は第三者が設定した `password_hash` を消すことで、
+   * 名前を消す必要はない
+   */
+  describe('表示名の扱い', () => {
+    it('名前が未入力なら name を更新しない', async () => {
+      const captured: { payload?: unknown } = {};
+      mockUnverifiedExistingUser();
+      mockUserUpdate(captured);
+      mockOtpReissue();
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'Password1234',
+        }),
+      );
+
+      // password_hash は必ず上書きする（#645 の目的）
+      expect(captured.payload).toHaveProperty('password_hash');
+      // name はペイロードに含めない（既存値が残る）
+      expect(captured.payload).not.toHaveProperty('name');
+    });
+
+    it('名前が入力されていれば更新する', async () => {
+      const captured: { payload?: unknown } = {};
+      mockUnverifiedExistingUser();
+      mockUserUpdate(captured);
+      mockOtpReissue();
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'Password1234',
+          name: '新しい表示名',
+        }),
+      );
+
+      expect(captured.payload).toMatchObject({ name: '新しい表示名' });
+    });
+
+    it('空文字の名前でも既存値を消さない', async () => {
+      // フォームが空文字を送ってくるケース
+      const captured: { payload?: unknown } = {};
+      mockUnverifiedExistingUser();
+      mockUserUpdate(captured);
+      mockOtpReissue();
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'Password1234',
+          name: '',
+        }),
+      );
+
+      expect(captured.payload).not.toHaveProperty('name');
+    });
+  });
+
   it('未検証ユーザーが居ても登録を完了できる（締め出しが起きない）', async () => {
     mockUnverifiedExistingUser();
     mockUserUpdate({});
@@ -464,10 +595,9 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
       createRequest({ email: 'victim@example.com', password: 'Password1234' }),
     );
 
-    expect(captured.payload).toEqual({
-      password_hash: 'hashed_password',
-      name: null,
-    });
+    // #1253 で name を含めなくなった。#645 の目的は password_hash を
+    // 消すことで、表示名まで巻き込む必要はない
+    expect(captured.payload).toEqual({ password_hash: 'hashed_password' });
   });
 
   it('上書き時に旧い未検証OTPを削除する（有効なコードを1つに保つ）', async () => {

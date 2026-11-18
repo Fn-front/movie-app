@@ -26,11 +26,8 @@ import type {
 } from '@/lib/api/watchlist/watchlist';
 import type { WatchlistAddFormData } from '@/schema/watchlist';
 import { useToastDispatch } from '@/hooks/useToast';
-import { isConflictError } from '@/utils/error';
-import {
-  createOptimisticId,
-  isOptimisticId,
-} from '@/features/watchlist/utils/optimisticId';
+import { isConflictError, isNotFoundError } from '@/utils/error';
+import { createOptimisticId, isOptimisticId } from '@/utils/optimisticId';
 
 /**
  * トグル対象の映画データ（最小限のフィールド）
@@ -624,11 +621,24 @@ export function useWatchlistToggle(): UseWatchlistToggleReturn {
         variant: 'success',
       });
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       if (context?.previousDataMap) {
         rollbackCaches(queryClient, context.previousDataMap);
       }
       restoreLookupCache(queryClient, context?.previousLookup);
+
+      // 404 は失敗ではなく「すでに消えている」＝望みどおりの状態なので
+      // 赤いエラーにしない（#1199）。別タブ・別端末で先に消された場合や、
+      // 論理削除済みの行へ DELETE したときに出る。追加側の 409 と同じ扱い。
+      // `onSettled` の invalidate で照会が取り直され、表示も追従する
+      if (isNotFoundError(error)) {
+        toast({
+          title: WATCHLIST_ERROR_MESSAGES.ALREADY_REMOVED,
+          variant: 'warning',
+        });
+        return;
+      }
+
       toast({
         title: 'エラー',
         description: WATCHLIST_ERROR_MESSAGES.REMOVE_FAILED,

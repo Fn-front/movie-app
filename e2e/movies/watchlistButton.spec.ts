@@ -160,7 +160,26 @@ test.describe('ウォッチリストボタン', () => {
   test('サイドバーから削除するとタイル側も追従する', async () => {
     // 直前のテストの後始末は API を直接叩くため、キャッシュが古いまま残る。
     // この spec は1つのページを使い回すので、ここで取り直す
+    // ⚠️ reload 由来の GET を**ここで消費しきる**（#1122）。
+    //
+    // 下の `refetched` は「最初の ok な GET」を待つだけなので、初回 GET が
+    // クリック時点でまだ in-flight だとそれを拾って先へ進む。テストが待つのは
+    // タイルとボタンの可視性だけで、`getWatchlistItemsFromCache` は
+    // キャッシュが空＝未登録として扱うため、**GET が終わっていなくても
+    // `tileAdd` は可視**になる。
+    //
+    // 結果、サーバーが重いと「POST より前のデータ」でガードが満たされ、
+    // サイドバーは楽観アイテムのまま → 仮IDで DELETE → 400。
+    // 先に `e2e/a11y` を流したときだけ落ちていたのはこれが理由
+    const initialWatchlistLoad = page.waitForResponse(
+      (res) =>
+        new URL(res.url()).pathname === '/api/watchlist' &&
+        res.request().method() === 'GET' &&
+        res.ok(),
+      { timeout: 20000 },
+    );
     await page.reload();
+    await initialWatchlistLoad;
     await expect(movieTiles(page).first()).toBeVisible({ timeout: 15000 });
 
     const tile = movieTiles(page).first();
@@ -184,6 +203,17 @@ test.describe('ウォッチリストボタン', () => {
       // ⚠️ **パスで厳密に照合する。** `includes('/api/watchlist')` だと
       // `/api/watchlist/lookup`（#1145）にも当たり、一覧の再取得が
       // 届く前に先へ進みうる。待ちたいのは**一覧**の再取得
+      // ⚠️ **このクリック以降に始まった GET だけ**を待つ（#1122）。
+      //
+      // 条件が「最初の ok な GET」だけだと、`page.reload()` 直後の初回 GET が
+      // まだ in-flight のときにそれを拾って先へ進む。テストが待っているのは
+      // タイルとボタンの可視性だけで、`getWatchlistItemsFromCache` は
+      // キャッシュが空＝未登録として扱うため、**GET が終わっていなくても
+      // `tileAdd` は可視**になる。
+      //
+      // 結果、サーバーが重いと「POST より前のデータ」でガードが満たされ、
+      // サイドバーは楽観アイテムのまま → 仮IDで DELETE → 400 になる。
+      // 先に `e2e/a11y` を流したときだけ落ちていたのはこれが理由
       const refetched = page.waitForResponse(
         (res) =>
           new URL(res.url()).pathname === '/api/watchlist' &&

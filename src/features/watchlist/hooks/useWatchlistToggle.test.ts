@@ -1055,6 +1055,77 @@ describe('useWatchlistToggle', () => {
       );
     });
 
+    /**
+     * 削除の 404 は「すでに消えている」＝望みどおりの状態（#1199）
+     *
+     * 論理削除済みの行へ DELETE したときや、別タブ・別端末で先に消された
+     * ときに出る。赤いエラーにすると「消せなかった」と誤解させる
+     */
+    describe('削除の404', () => {
+      const createNotFoundError = () => {
+        const error = new AxiosError('Request failed with status code 404');
+        error.response = {
+          status: 404,
+          statusText: 'Not Found',
+          data: {
+            success: false,
+            error: { code: 'NOT_FOUND', message: '見つかりません' },
+          },
+          headers: {},
+          config: { headers: new AxiosHeaders() },
+        };
+        return error;
+      };
+
+      /** 登録済みの作品を1件削除する */
+      const removeMovie = async () => {
+        mockGetLookupWatchlistId.mockReturnValue('watchlist-id-999');
+
+        const { result } = renderHook(() => useWatchlistToggle());
+
+        await act(async () => {
+          result.current.toggleWatchlist(createMovie());
+        });
+
+        return result;
+      };
+
+      it('404なら削除済みだと分かる警告トーストを出す', async () => {
+        mockRemoveWatchlist.mockRejectedValue(createNotFoundError());
+
+        await removeMovie();
+
+        expect(mockToast).toHaveBeenCalledWith({
+          title: WATCHLIST_ERROR_MESSAGES.ALREADY_REMOVED,
+          variant: 'warning',
+        });
+      });
+
+      it('404のとき赤いエラーを出さない', async () => {
+        mockRemoveWatchlist.mockRejectedValue(createNotFoundError());
+
+        await removeMovie();
+
+        expect(mockToast).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            description: WATCHLIST_ERROR_MESSAGES.REMOVE_FAILED,
+          }),
+        );
+      });
+
+      it('404以外は従来どおり赤いエラーを出す', async () => {
+        mockRemoveWatchlist.mockRejectedValue(new Error('network error'));
+
+        await removeMovie();
+
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'エラー',
+          description: WATCHLIST_ERROR_MESSAGES.REMOVE_FAILED,
+          variant: 'error',
+        });
+      });
+    });
+
     it('409以外は従来どおり赤いエラーを出す', async () => {
       mockAddWatchlist.mockRejectedValue(new Error('network error'));
 

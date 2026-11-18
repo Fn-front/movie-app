@@ -74,6 +74,35 @@ export async function POST(request: Request) {
 | `auth/otp/send` | メールボックス（日次通数） | 送信の直前（1通も送らないパスで枠を減らさない） |
 | `auth/register` | 同上 | ユーザー作成の前・早期returnの後 |
 
+#### 消費できなかったら戻す
+
+例外2のルートは「資源を消費する直前」で数えるが、**そこから先で失敗して
+1つも消費しなかったら枠を戻す**（#1260）。戻さないと、1通も届いていないのに
+`本日の送信上限に達しました` へ落ちる。
+
+```ts
+const emailSent = await sendOtpEmail(email, code, action);
+
+if (!emailSent) {
+  await releaseRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_SEND_DAILY);
+  return emailSendFailedResponse();
+}
+```
+
+⚠️ **`resetRateLimit` を使わない。** あちらは行ごと DELETE するので、
+同じ窓の中で成功した分まで帳消しになる。`releaseRateLimit`
+（`src/lib/rateLimit/rateLimit.ts`）は1回分だけ戻す。
+
+⚠️ **戻すのと一緒に「作ったもの」まで消さない。** `auth/otp/send` の
+60秒の再送間隔チェックは `otp_codes` の最新行だけを根拠にしているため、
+失敗した行を消すと次のリクエストが素通りする。枠も戻している状態では
+**この経路の保護が全部無くなる**（レビューで実測。50回連打が50回とも
+送信APIへ到達した）。
+
+⚠️ 戻す識別子は**数えたときと同じもの**。`password_change` は宛先を
+セッションユーザーに固定しているので（#641）、ボディ由来のアドレスで
+戻すと任意のアドレスの枠を減らせる。
+
 ### ヘルパーに同梱しない
 
 レート制限を「検証済みの入力を受け取るヘルパー」の中に書くと、**ヘルパーごと

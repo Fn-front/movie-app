@@ -352,6 +352,12 @@ describe('OtpLoginForm', () => {
       AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED,
     ],
     [
+      'レート制限',
+      'rate_limited',
+      // #1254。待てば直ることが伝わらないと、打ち直すほど悪化する
+      AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
+    ],
+    [
       '判別できないコード',
       'credentials',
       'メールアドレスまたはパスワードが正しくありません。',

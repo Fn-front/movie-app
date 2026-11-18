@@ -30,7 +30,7 @@ import {
   randomDelay,
   hashOtpCode,
 } from '@/lib/otp';
-import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { checkRateLimit, releaseRateLimit } from '@/lib/rateLimit/rateLimit';
 import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { getClientIp } from '@/lib/http/getClientIp';
 import { rejectPwnedPassword } from '@/helpers/pwnedPasswordGuard';
@@ -196,11 +196,19 @@ export async function POST(request: Request) {
     let userId: string;
 
     if (existingUser) {
+      // ⚠️ `name` は入力されたときだけ更新する（#1253）。
+      //
+      // `name: name || null` にしていた頃は、名前を入れずにやり直すと
+      // **既存の表示名が消えた**。ユーザー名は任意入力なので、やり直すときに
+      // 入れ忘れるのが普通。
+      //
+      // #645 の目的は**第三者が設定した `password_hash` を消すこと**で、
+      // 名前を消す必要はない
       const { data: updatedUser, error: updateError } = await supabase
         .from('users')
         .update({
           password_hash: passwordHash,
-          name: name || null,
+          ...(name ? { name } : {}),
         })
         .eq('id', existingUser.id)
         .select('id')
@@ -268,6 +276,10 @@ export async function POST(request: Request) {
       if (!existingUser) {
         await supabase.from('users').delete().eq('id', userId);
       }
+
+      // 日次送信枠も戻す（#1260）。行だけ消して枠を残すと、1通も届かないまま
+      // 5回で「本日の送信上限に達しました」に変わり、#1258 の行き止まりへ落ちる
+      await releaseRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_SEND_DAILY);
 
       return NextResponse.json(
         {

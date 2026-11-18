@@ -353,28 +353,27 @@ export async function resetRateLimit(
 }
 
 /**
- * 直近に消費した1回分のカウントを取り消す
+ * 数えた1回分を戻す（守る資源を消費できなかったときに呼ぶ）
  *
- * `checkRateLimit` で数えたあと、守ろうとした資源を**実際には消費しなかった**
- * ときに使う（メール送信が失敗した場合など）。
+ * `checkRateLimit` は資源を消費する**直前**に数える
+ * （`.claude/rules/api-route.md`）。そこから先で失敗して1つも消費しなかった
+ * 場合、数えたままだと**何も起きていないのに枠だけ減る**（#1260）。
  *
- * `resetRateLimit` では代用できない。あちらは行ごと削除する「検証に成功した
- * ので全部チャラ」の操作で、ここで使うと**別の正当な試行で積んだ分まで消える**。
+ * ⚠️ `resetRateLimit` と混同しないこと。あちらは行ごと消すので、
+ * **別の正当な試行で積んだ分まで消える**。「検証に成功したので全部チャラ」の
+ * 意味で使うものです。こちらは今回の1回分だけ戻す。
  *
- * ロックも解除する。`consume_rate_limit` は上限到達時に `attempts` を増やしつつ
- * `locked_until` を立てるため、`attempts` だけ戻すと「1通も送っていないのに
- * ロックされたまま」が残る。
+ * ⚠️ ロックも解除する。`consume_rate_limit` は上限到達時に `locked_until` を
+ * 立てるので、その回の消費が失敗したなら**ロックも成立していなかったことに
+ * しないと**「1通も送らずにロック」が残る。
  *
- * 原子性が要る理由は consume 側と同じ（#646）。SELECT → UPDATE に分けると、
- * 同時に失敗した2つのリクエストが同じ `attempts` を読み、片方のデクリメントが
- * 失われる。PostgREST からは `attempts = attempts - 1` を書けないため RPC を使う。
- *
- * ⚠️ 失敗しても throw しない。呼び出し側は「送信に失敗した」という本題の
- * エラーを返す途中であり、ここで throw するとその原因が 500 に化ける。
+ * 失敗しても例外にしない。呼び出し元は既に「資源を消費できなかった」という
+ * 本題のエラーを返そうとしており、後始末の失敗でそれを覆い隠さない。
+ * 枠が戻らなくても、窓が過ぎれば回復する。
  *
  * @param supabase - Supabaseクライアント
- * @param identifier - 識別子
- * @param actionType - アクション種別
+ * @param identifier - 識別子（`checkRateLimit` に渡したものと同じ）
+ * @param actionType - アクション種別（同上）
  */
 export async function releaseRateLimit(
   supabase: SupabaseClient,
@@ -387,6 +386,11 @@ export async function releaseRateLimit(
   });
 
   if (error) {
-    console.error('Failed to release rate limit:', error);
+    // 識別子（メールアドレス等）はログに出さない。このファイルの他のログも
+    // 含めていない
+    console.warn(
+      `[rateLimit] 枠の返却に失敗しました action='${actionType}'`,
+      error,
+    );
   }
 }

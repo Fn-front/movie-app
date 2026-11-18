@@ -29,6 +29,13 @@ import { consumePasswordResetToken } from '@/lib/auth/passwordResetToken';
 import { getClientIp } from '@/lib/http/getClientIp';
 import { rejectPwnedPassword } from '@/helpers/pwnedPasswordGuard';
 
+/** 消費できなかった理由ごとの文言 */
+const TOKEN_FAILURE_MESSAGES = {
+  used: PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED,
+  expired: PASSWORD_RESET_MESSAGES.TOKEN_EXPIRED,
+  invalid: PASSWORD_RESET_MESSAGES.INVALID_TOKEN,
+} as const;
+
 /**
  * トークンを使えなかったことを伝える
  *
@@ -38,6 +45,11 @@ import { rejectPwnedPassword } from '@/helpers/pwnedPasswordGuard';
  *
  * トークンは256bitの乱数で正規の所持者しか持てないため、理由を伝えても
  * 総当たりで得られる情報は増えない。
+ *
+ * ⚠️ `used` の文言で「設定は完了している」と断定しないこと。トークンを
+ * 消費したあとに失敗する経路がある（下の新旧同一チェック、users の更新
+ * 失敗）。そこで弾かれた人が再送信するとこの応答に当たるが、その場合
+ * パスワードは設定されていない。
  *
  * 次に何をすればよいか（再送 / 管理者へ依頼）は画面のフッターが出し分ける
  * （#1225）。ここは**何が起きたか**だけを言う。
@@ -53,12 +65,6 @@ const tokenFailureResponse = (status: 'used' | 'expired' | 'invalid') =>
     },
     { status: HTTP_STATUS.BAD_REQUEST },
   );
-
-const TOKEN_FAILURE_MESSAGES = {
-  used: PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED,
-  expired: PASSWORD_RESET_MESSAGES.TOKEN_EXPIRED,
-  invalid: PASSWORD_RESET_MESSAGES.INVALID_TOKEN,
-} as const;
 
 export async function POST(request: Request) {
   try {

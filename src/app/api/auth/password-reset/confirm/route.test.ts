@@ -188,13 +188,17 @@ describe('POST /api/auth/password-reset/confirm', () => {
       },
     );
 
-    it('使用済みの文言は、設定が終わっていることとログインを案内する', async () => {
-      // 「もう一度やり直してください」だと、完了しているのに失敗したと読める
-      expect(PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED).toContain('使用済み');
-      expect(PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED).toContain('ログイン');
-      expect(PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED).not.toContain(
-        '有効期限',
-      );
+    it('使用済みの文言はログインへ案内しつつ、完了を断定しない', async () => {
+      // 「もう一度やり直してください」だけだと、完了しているのに失敗したと
+      // 読める。かといって「設定したパスワードでログインしてください」と
+      // 断定もできない。トークンを消費したあとに失敗する経路（新旧同一・
+      // 更新失敗）で弾かれた人も、再送信すればこの文言に当たるため
+      const message = PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED;
+
+      expect(message).toContain('使用済み');
+      expect(message).toContain('ログイン');
+      expect(message).toContain('完了していれば');
+      expect(message).not.toContain('有効期限');
     });
 
     it('トークンが無効ならパスワードを更新しない', async () => {
@@ -221,14 +225,17 @@ describe('POST /api/auth/password-reset/confirm', () => {
       );
     });
 
-    it('トークンに対応するユーザーが消えていたら400を返す', async () => {
+    it('トークンに対応するユーザーが消えていたら invalid の文言で400を返す', async () => {
+      // 使用済み・期限切れではない。利用者から見れば使えないリンク
       mockUserAndUpdate(null);
 
       const response = await POST(
         createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
       );
+      const json = await response.json();
 
       expect(response.status).toBe(400);
+      expect(json.error.message).toBe(PASSWORD_RESET_MESSAGES.INVALID_TOKEN);
     });
 
     /**

@@ -286,6 +286,71 @@ describe('consumePasswordResetToken', () => {
         consumePasswordResetToken(client, 'unknown-token'),
       ).resolves.toEqual({ status: 'invalid' });
     });
+
+    it('未使用・期限内なのに0行なら used（同時に2回開かれた）', async () => {
+      // 相手のリクエストが先に消費し切った直後。こちらからは行が
+      // 未使用に見えることがある。使えないことに変わりはない
+      const client = {
+        from: () => ({
+          update: () => ({
+            eq: () => ({
+              is: () => ({
+                gt: () => ({ select: () => Promise.resolve({ data: [] }) }),
+              }),
+            }),
+          }),
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: {
+                    used_at: null,
+                    expires_at: new Date(Date.now() + 60_000).toISOString(),
+                  },
+                }),
+            }),
+          }),
+        }),
+      } as unknown as SupabaseClient;
+
+      await expect(
+        consumePasswordResetToken(client, 'raced-token'),
+      ).resolves.toEqual({ status: 'used' });
+    });
+
+    /**
+     * 引き直しの失敗も `invalid` に化かさない（#1167 と同じ理由）
+     *
+     * UPDATE が0行だったあとの SELECT が落ちたときに `invalid` を返すと、
+     * 本当に無効なトークンと区別がつかない。**トークンは焼かれていない**
+     * ので、投げて再試行させるほうがよい
+     */
+    it('理由の引き直しに失敗したら invalid ではなく投げる', async () => {
+      const client = {
+        from: () => ({
+          update: () => ({
+            eq: () => ({
+              is: () => ({
+                gt: () => ({ select: () => Promise.resolve({ data: [] }) }),
+              }),
+            }),
+          }),
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: null,
+                  error: { code: '57P01', message: 'connection terminated' },
+                }),
+            }),
+          }),
+        }),
+      } as unknown as SupabaseClient;
+
+      await expect(
+        consumePasswordResetToken(client, 'any-token'),
+      ).rejects.toMatchObject({ code: '57P01' });
+    });
   });
 
   it('期限切れのトークンは使用済みにしない', async () => {

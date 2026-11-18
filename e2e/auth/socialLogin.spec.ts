@@ -59,10 +59,26 @@ test.describe('ソーシャルログイン 表示確認（未認証）', () => {
    * 実プロバイダの往復は要らない。`?error=` を直接開けば同じ状態になる
    */
   test.describe('失敗して戻されたとき', () => {
+    /**
+     * 画面のエラー表示だけに絞る
+     *
+     * Next.js のルートアナウンサー（`#__next-route-announcer__`）も
+     * `role='alert'` を持つため、素の `getByRole('alert')` は2要素に当たって
+     * strict mode violation になる。jsdom には存在しないので単体テストでは
+     * 気づけない。
+     *
+     * ⚠️ `filter({ hasText: /\S/ })`（`changePassword.spec.ts:263-267` の形）
+     * では足りない。ここは `router.replace` でクライアント遷移を起こすため、
+     * **アナウンサーにページタイトルが入って中身を持つ**。単独実行では空の
+     * まま通り、全件実行で落ちるという質の悪い形になる。ID で確実に外す
+     */
+    const errorAlert = (page: import('@playwright/test').Page) =>
+      page.locator('[role="alert"]:not(#__next-route-announcer__)');
+
     test('理由が画面に表示される', async ({ page }) => {
       await page.goto('/auth/signin?error=OAuthCallbackError');
 
-      await expect(page.getByRole('alert')).toHaveText(
+      await expect(errorAlert(page)).toHaveText(
         SIGN_IN_PAGE_ERROR_MESSAGES.OAuthCallbackError,
       );
     });
@@ -72,7 +88,7 @@ test.describe('ソーシャルログイン 表示確認（未認証）', () => {
       // 素の添字参照だとオブジェクトが返り、描画ごと落ちる（#1240）
       await page.goto('/auth/signin?error=__proto__');
 
-      await expect(page.getByRole('alert')).toHaveText(
+      await expect(errorAlert(page)).toHaveText(
         SIGN_IN_PAGE_ERROR_MESSAGES.DEFAULT,
       );
       // 落ちていれば見出しごと消える
@@ -90,20 +106,20 @@ test.describe('ソーシャルログイン 表示確認（未認証）', () => {
         '/auth/signin?error=MissingCSRF&callbackUrl=%2Fwatchlist',
       );
 
-      await expect(page.getByRole('alert')).toHaveText(
+      await expect(errorAlert(page)).toHaveText(
         SIGN_IN_PAGE_ERROR_MESSAGES.MissingCSRF,
       );
 
       // URL からは消えるが、表示中の文言はそのまま残す
       await expect(page).toHaveURL(/\?callbackUrl=%2Fwatchlist$/);
-      await expect(page.getByRole('alert')).toBeVisible();
+      await expect(errorAlert(page)).toBeVisible();
 
       await page.reload();
 
       await expect(
         page.getByRole('heading', { name: 'ログイン' }),
       ).toBeVisible();
-      await expect(page.getByRole('alert')).toHaveCount(0);
+      await expect(errorAlert(page)).toHaveCount(0);
     });
   });
 });

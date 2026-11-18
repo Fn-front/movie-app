@@ -6,9 +6,8 @@ import { SignInContent } from './signInContent';
 // --- Mocks ---
 
 const mockPush = jest.fn();
-const mockReplace = jest.fn();
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 /** `?error=` 付きの URL でページを開いた状態にする */
@@ -127,15 +126,38 @@ describe('SignInContent', () => {
      * ください」なので、従うたびに同じ画面に戻ることになる
      */
     describe('URL の後始末', () => {
+      /**
+       * ⚠️ `router.replace` ではなく `window.history.replaceState` を見る
+       *
+       * `router.replace` はサーバーの再描画を起こし、**エラー表示ごと
+       * 消える**（本番ビルドの E2E で実測）。jsdom では `replace` が
+       * モックで再描画が起きないため、ここをルーター経由にすると
+       * 「単体テストは通るが本番で消える」実装を固定してしまう
+       */
+      let replaceStateSpy: jest.SpyInstance;
+
+      beforeEach(() => {
+        replaceStateSpy = jest.spyOn(window.history, 'replaceState');
+      });
+
+      afterEach(() => {
+        replaceStateSpy.mockRestore();
+      });
+
+      /** setLocation 自身の呼び出しを除いた、実装による呼び出し */
+      const calls = () => replaceStateSpy.mock.calls;
+
       it('?error= を除いた URL へ置き換える', async () => {
         setLocation('?error=OAuthCallbackError&callbackUrl=%2Fwatchlist');
+        replaceStateSpy.mockClear();
 
         render(<SignInContent initialError='ログインできませんでした' />);
 
         await waitFor(() => {
-          expect(mockReplace).toHaveBeenCalledWith(
+          expect(replaceStateSpy).toHaveBeenCalledWith(
+            null,
+            '',
             '/auth/signin?callbackUrl=%2Fwatchlist',
-            { scroll: false },
           );
         });
       });
@@ -143,26 +165,26 @@ describe('SignInContent', () => {
       it('callbackUrl は残す', async () => {
         // 落とすのは error だけ。戻り先まで消すとログイン後にホームへ飛ぶ
         setLocation('?error=MissingCSRF&callbackUrl=%2Ffavorites');
+        replaceStateSpy.mockClear();
 
         render(<SignInContent initialError='ログインできませんでした' />);
 
         await waitFor(() => {
-          expect(mockReplace).toHaveBeenCalled();
+          expect(replaceStateSpy).toHaveBeenCalled();
         });
-        expect(mockReplace.mock.calls[0][0]).toContain(
-          'callbackUrl=%2Ffavorites',
-        );
-        expect(mockReplace.mock.calls[0][0]).not.toContain('error=');
+        expect(calls()[0][2]).toContain('callbackUrl=%2Ffavorites');
+        expect(calls()[0][2]).not.toContain('error=');
       });
 
       it('表示中の文言はそのまま残す', async () => {
         // URL を消した拍子に文言まで消えると、戻された理由が分からない
         setLocation('?error=OAuthCallbackError');
+        replaceStateSpy.mockClear();
 
         render(<SignInContent initialError='ログインできませんでした' />);
 
         await waitFor(() => {
-          expect(mockReplace).toHaveBeenCalled();
+          expect(replaceStateSpy).toHaveBeenCalled();
         });
         expect(screen.getByRole('alert')).toHaveTextContent(
           'ログインできませんでした',
@@ -171,10 +193,11 @@ describe('SignInContent', () => {
 
       it('エラーが無ければ URL に触らない', () => {
         setLocation('?callbackUrl=%2Fwatchlist');
+        replaceStateSpy.mockClear();
 
         render(<SignInContent />);
 
-        expect(mockReplace).not.toHaveBeenCalled();
+        expect(replaceStateSpy).not.toHaveBeenCalled();
       });
     });
 
@@ -190,9 +213,8 @@ describe('SignInContent', () => {
     it('OTPへ切り替えて戻ってもエラーが蘇らない', async () => {
       setLocation('?error=OAuthCallbackError');
 
-      const { rerender } = render(
-        <SignInContent initialError='ログインできませんでした' />,
-      );
+      // prop は渡したまま。実装が自前で手放さないと落ちる
+      render(<SignInContent initialError='ログインできませんでした' />);
 
       await user.click(
         screen.getByRole('button', { name: 'メールでログイン' }),
@@ -203,10 +225,6 @@ describe('SignInContent', () => {
           screen.getByRole('heading', { name: 'メールでログイン' }),
         ).toBeInTheDocument();
       });
-
-      // router.replace で `?error=` が落ちた後のサーバー再描画を模す。
-      // 実機ではここで initialError が undefined になって渡ってくる
-      rerender(<SignInContent />);
 
       await user.click(
         screen.getByRole('button', { name: 'パスワードでログイン' }),

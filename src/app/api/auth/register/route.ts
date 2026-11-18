@@ -196,11 +196,19 @@ export async function POST(request: Request) {
     let userId: string;
 
     if (existingUser) {
+      // ⚠️ `name` は入力されたときだけ更新する（#1253）。
+      //
+      // `name: name || null` にしていた頃は、名前を入れずにやり直すと
+      // **既存の表示名が消えた**。ユーザー名は任意入力なので、やり直すときに
+      // 入れ忘れるのが普通。
+      //
+      // #645 の目的は**第三者が設定した `password_hash` を消すこと**で、
+      // 名前を消す必要はない
       const { data: updatedUser, error: updateError } = await supabase
         .from('users')
         .update({
           password_hash: passwordHash,
-          name: name || null,
+          ...(name ? { name } : {}),
         })
         .eq('id', existingUser.id)
         .select('id')

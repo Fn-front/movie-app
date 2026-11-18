@@ -500,6 +500,69 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     mockFrom.mockReturnValueOnce({ insert: () => ({ error: null }) });
   };
 
+  /**
+   * 名前を入れずにやり直しても既存の表示名を消さない（#1253）
+   *
+   * ユーザー名は**任意**入力なので、やり直すときに入れ忘れるのが普通。
+   * #645 の目的は第三者が設定した `password_hash` を消すことで、
+   * 名前を消す必要はない
+   */
+  describe('表示名の扱い', () => {
+    it('名前が未入力なら name を更新しない', async () => {
+      const captured: { payload?: unknown } = {};
+      mockUnverifiedExistingUser();
+      mockUserUpdate(captured);
+      mockOtpReissue();
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'Password1234',
+        }),
+      );
+
+      // password_hash は必ず上書きする（#645 の目的）
+      expect(captured.payload).toHaveProperty('password_hash');
+      // name はペイロードに含めない（既存値が残る）
+      expect(captured.payload).not.toHaveProperty('name');
+    });
+
+    it('名前が入力されていれば更新する', async () => {
+      const captured: { payload?: unknown } = {};
+      mockUnverifiedExistingUser();
+      mockUserUpdate(captured);
+      mockOtpReissue();
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'Password1234',
+          name: '新しい表示名',
+        }),
+      );
+
+      expect(captured.payload).toMatchObject({ name: '新しい表示名' });
+    });
+
+    it('空文字の名前でも既存値を消さない', async () => {
+      // フォームが空文字を送ってくるケース
+      const captured: { payload?: unknown } = {};
+      mockUnverifiedExistingUser();
+      mockUserUpdate(captured);
+      mockOtpReissue();
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'Password1234',
+          name: '',
+        }),
+      );
+
+      expect(captured.payload).not.toHaveProperty('name');
+    });
+  });
+
   it('未検証ユーザーが居ても登録を完了できる（締め出しが起きない）', async () => {
     mockUnverifiedExistingUser();
     mockUserUpdate({});
@@ -532,10 +595,9 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
       createRequest({ email: 'victim@example.com', password: 'Password1234' }),
     );
 
-    expect(captured.payload).toEqual({
-      password_hash: 'hashed_password',
-      name: null,
-    });
+    // #1253 で name を含めなくなった。#645 の目的は password_hash を
+    // 消すことで、表示名まで巻き込む必要はない
+    expect(captured.payload).toEqual({ password_hash: 'hashed_password' });
   });
 
   it('上書き時に旧い未検証OTPを削除する（有効なコードを1つに保つ）', async () => {

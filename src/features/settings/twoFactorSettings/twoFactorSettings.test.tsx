@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { RECOVERY_CODE_CONFIG } from '@/constants/totp';
+import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
 
 import { TwoFactorSettings } from './twoFactorSettings';
 
@@ -11,12 +12,22 @@ const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
 /** 状態取得のレスポンス */
-const statusResponse = (enabled: boolean, remaining = 0) => ({
+const statusResponse = (
+  enabled: boolean,
+  remaining = 0,
+  overrides: Record<string, unknown> = {},
+) => ({
   ok: true,
   status: 200,
   json: async () => ({
     success: true,
-    data: { enabled, remainingRecoveryCodes: remaining },
+    data: {
+      enabled,
+      method: enabled ? SECOND_FACTOR_METHOD.TOTP : null,
+      emailOtpAvailable: true,
+      remainingRecoveryCodes: remaining,
+      ...overrides,
+    },
   }),
 });
 
@@ -56,7 +67,7 @@ describe('TwoFactorSettings', () => {
       render(<TwoFactorSettings />);
 
       expect(
-        await screen.findByRole('button', { name: '二段階認証を設定する' }),
+        await screen.findByRole('button', { name: '認証アプリで設定する' }),
       ).toBeInTheDocument();
     });
 
@@ -67,7 +78,7 @@ describe('TwoFactorSettings', () => {
 
       render(<TwoFactorSettings />);
       await user.click(
-        await screen.findByRole('button', { name: '二段階認証を設定する' }),
+        await screen.findByRole('button', { name: '認証アプリで設定する' }),
       );
 
       const qr = await screen.findByRole('img', {
@@ -86,7 +97,7 @@ describe('TwoFactorSettings', () => {
 
       render(<TwoFactorSettings />);
       await user.click(
-        await screen.findByRole('button', { name: '二段階認証を設定する' }),
+        await screen.findByRole('button', { name: '認証アプリで設定する' }),
       );
 
       expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -105,7 +116,7 @@ describe('TwoFactorSettings', () => {
 
       render(<TwoFactorSettings />);
       await user.click(
-        await screen.findByRole('button', { name: '二段階認証を設定する' }),
+        await screen.findByRole('button', { name: '認証アプリで設定する' }),
       );
       await screen.findByLabelText('認証コード');
     };
@@ -188,7 +199,7 @@ describe('TwoFactorSettings', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: '二段階認証を設定する' }),
+        screen.getByRole('button', { name: '認証アプリで設定する' }),
       ).toBeInTheDocument();
       expect(screen.queryByLabelText('認証コード')).not.toBeInTheDocument();
     });
@@ -232,7 +243,7 @@ describe('TwoFactorSettings', () => {
       );
 
       expect(
-        await screen.findByRole('button', { name: '二段階認証を設定する' }),
+        await screen.findByRole('button', { name: '認証アプリで設定する' }),
       ).toBeInTheDocument();
     });
 
@@ -311,8 +322,180 @@ describe('TwoFactorSettings', () => {
     render(<TwoFactorSettings />);
 
     expect(
-      await screen.findByRole('button', { name: '二段階認証を設定する' }),
+      await screen.findByRole('button', { name: '認証アプリで設定する' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  describe('方式の選択', () => {
+    const user = userEvent.setup();
+
+    it('無効のとき、方式を選ぶボタンが2つ出る', async () => {
+      mockFetch.mockResolvedValueOnce(statusResponse(false));
+
+      render(<TwoFactorSettings />);
+
+      expect(
+        await screen.findByRole('button', { name: '認証アプリで設定する' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'メールで設定する' }),
+      ).toBeInTheDocument();
+    });
+
+    it('メールOTP には安全性の注意を添える', async () => {
+      mockFetch.mockResolvedValueOnce(statusResponse(false));
+
+      render(<TwoFactorSettings />);
+      await screen.findByRole('button', { name: 'メールで設定する' });
+
+      expect(
+        screen.getByText(/認証アプリより安全性が下がります/),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ admin が発行したアカウントは `users.email` が `.invalid` TLD
+     * （RFC 2606、絶対に名前解決されない）。選ばせるとコードが永久に届かない。
+     */
+    it('emailOtpAvailable が false ならメールの選択肢を出さない', async () => {
+      mockFetch.mockResolvedValueOnce(
+        statusResponse(false, 0, { emailOtpAvailable: false }),
+      );
+
+      render(<TwoFactorSettings />);
+
+      expect(
+        await screen.findByRole('button', { name: '認証アプリで設定する' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'メールで設定する' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('メールを選ぶとコード入力画面になる（QRは出さない）', async () => {
+      mockFetch
+        .mockResolvedValueOnce(statusResponse(false))
+        .mockResolvedValueOnce(okResponse({ method: 'email_otp' }));
+
+      render(<TwoFactorSettings />);
+      await user.click(
+        await screen.findByRole('button', { name: 'メールで設定する' }),
+      );
+
+      expect(
+        await screen.findByText(/確認コードを送りました/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByAltText('二段階認証のQRコード'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('設定開始のリクエストに方式を載せる', async () => {
+      mockFetch
+        .mockResolvedValueOnce(statusResponse(false))
+        .mockResolvedValueOnce(okResponse({ method: 'email_otp' }));
+
+      render(<TwoFactorSettings />);
+      await user.click(
+        await screen.findByRole('button', { name: 'メールで設定する' }),
+      );
+
+      expect(mockFetch).toHaveBeenLastCalledWith(
+        '/api/user/totp/setup',
+        expect.objectContaining({
+          body: JSON.stringify({ method: 'email_otp' }),
+        }),
+      );
+    });
+
+    it('キーボードだけで方式を選べる', async () => {
+      mockFetch.mockResolvedValueOnce(statusResponse(false));
+
+      render(<TwoFactorSettings />);
+      await screen.findByRole('button', { name: '認証アプリで設定する' });
+
+      await user.tab();
+
+      expect(
+        screen.getByRole('button', { name: '認証アプリで設定する' }),
+      ).toHaveFocus();
+    });
+  });
+
+  describe('有効な状態（メールOTP）', () => {
+    const user = userEvent.setup();
+
+    const enabledEmailOtp = (remaining = 7) =>
+      statusResponse(true, remaining, { method: 'email_otp' });
+
+    /**
+     * ⚠️ これが無いと、メールOTP の利用者はコードを取得できず
+     * 無効化もリカバリーコード再発行もできなくなる。
+     */
+    it('コードを送信するボタンを出す', async () => {
+      mockFetch.mockResolvedValueOnce(enabledEmailOtp());
+
+      render(<TwoFactorSettings />);
+
+      expect(
+        await screen.findByRole('button', { name: '確認コードを送信する' }),
+      ).toBeInTheDocument();
+    });
+
+    it('認証アプリの利用者には送信ボタンを出さない', async () => {
+      mockFetch.mockResolvedValueOnce(statusResponse(true, 7));
+
+      render(<TwoFactorSettings />);
+      await screen.findByRole('button', { name: '二段階認証を無効にする' });
+
+      expect(
+        screen.queryByRole('button', { name: '確認コードを送信する' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('送信ボタンで send-challenge を叩く', async () => {
+      mockFetch
+        .mockResolvedValueOnce(enabledEmailOtp())
+        .mockResolvedValueOnce(okResponse({}));
+
+      render(<TwoFactorSettings />);
+      await user.click(
+        await screen.findByRole('button', { name: '確認コードを送信する' }),
+      );
+
+      expect(mockFetch).toHaveBeenLastCalledWith(
+        '/api/user/totp/send-challenge',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('送信上限のエラーを表示する', async () => {
+      mockFetch
+        .mockResolvedValueOnce(enabledEmailOtp())
+        .mockResolvedValueOnce(
+          errorResponse(
+            429,
+            '確認コードの送信回数が上限に達しました。リカバリーコードを入力してログインしてください。',
+          ),
+        );
+
+      render(<TwoFactorSettings />);
+      await user.click(
+        await screen.findByRole('button', { name: '確認コードを送信する' }),
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        /リカバリーコード/,
+      );
+    });
+
+    it('方式に合わせて文言を変える', async () => {
+      mockFetch.mockResolvedValueOnce(enabledEmailOtp());
+
+      render(<TwoFactorSettings />);
+
+      expect(await screen.findByText(/メールのコード/)).toBeInTheDocument();
+    });
   });
 });

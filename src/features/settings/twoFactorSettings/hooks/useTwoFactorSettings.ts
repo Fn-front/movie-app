@@ -8,19 +8,25 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { API_ENDPOINTS, UI_ERROR_MESSAGES } from '@/constants';
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
+import {
+  SECOND_FACTOR_METHOD,
+  type SecondFactorMethod,
+} from '@/constants/secondFactor';
 
 /** 画面の状態 */
 export const TWO_FACTOR_VIEW = {
   /** 読み込み中 */
   LOADING: 'loading',
-  /** 無効（有効化ボタンを出す） */
+  /** 無効（方式の選択肢を出す） */
   DISABLED: 'disabled',
-  /** 設定中（QRコードと初回コード入力） */
+  /** 設定中（認証アプリ。QRコードと初回コード入力） */
   SETUP: 'setup',
+  /** 設定中（メールOTP。コードを送信済みで入力待ち） */
+  SETUP_EMAIL: 'setup_email',
   /** リカバリーコードの表示（控えてもらう） */
   RECOVERY_CODES: 'recovery_codes',
   /** 有効（無効化・再発行ができる） */
@@ -32,6 +38,15 @@ export type TwoFactorView =
 
 interface UseTwoFactorSettingsResult {
   view: TwoFactorView;
+  /** 有効になっている方式。無効なら null */
+  method: SecondFactorMethod | null;
+  /**
+   * メールOTP を選べるか
+   *
+   * admin が発行したアカウントは `users.email` が `.invalid` TLD
+   * （RFC 2606、絶対に名前解決されない）なので選ばせない。
+   */
+  emailOtpAvailable: boolean;
   /** 設定中に表示するQRコード（data URI） */
   qrCodeDataUri: string | null;
   /** 手入力用の共有鍵 */
@@ -42,10 +57,17 @@ interface UseTwoFactorSettingsResult {
   remainingRecoveryCodes: number;
   isSubmitting: boolean;
   error: string | null;
-  startSetup: () => Promise<void>;
+  startSetup: (method: SecondFactorMethod) => Promise<void>;
   enable: (code: string) => Promise<void>;
   disable: (code: string) => Promise<void>;
   regenerateRecoveryCodes: (code: string) => Promise<void>;
+  /**
+   * 設定変更に使うコードを送る（メールOTP のみ）
+   *
+   * これが無いと、メールOTP の利用者は無効化もリカバリーコード再発行も
+   * できない。手元でコードを作れないため。
+   */
+  sendChallenge: () => Promise<void>;
   /** リカバリーコードの表示を閉じる */
   dismissRecoveryCodes: () => void;
   cancelSetup: () => void;
@@ -56,12 +78,17 @@ interface UseTwoFactorSettingsResult {
  */
 export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
   const [view, setView] = useState<TwoFactorView>(TWO_FACTOR_VIEW.LOADING);
+  const [method, setMethod] = useState<SecondFactorMethod | null>(null);
+  const [emailOtpAvailable, setEmailOtpAvailable] = useState(true);
   const [qrCodeDataUri, setQrCodeDataUri] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [remainingRecoveryCodes, setRemainingRecoveryCodes] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /** 送信中かどうか。再入の判定に使う（state だと古い値を掴む） */
+  const inFlightRef = useRef(false);
 
   /** 現在の状態を取得して画面に反映する */
   const loadStatus = useCallback(async () => {
@@ -76,6 +103,10 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
       }
 
       setRemainingRecoveryCodes(json.data.remainingRecoveryCodes);
+      setMethod(json.data.method ?? null);
+      // 取得できなかったときは出さない側へ倒す。選べない方式を見せて
+      // 「設定したのにコードが届かない」より、選択肢が1つ少ないほうがよい
+      setEmailOtpAvailable(json.data.emailOtpAvailable === true);
       setView(
         json.data.enabled ? TWO_FACTOR_VIEW.ENABLED : TWO_FACTOR_VIEW.DISABLED,
       );
@@ -103,6 +134,15 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
       endpoint: string,
       body?: Record<string, unknown>,
     ): Promise<Record<string, unknown> | null> => {
+      // ⚠️ 再入を止める。`isSubmitting` はボタンの `disabled` には効くが、
+      // 連打や二重サブミットで同時に走るのは防げない。メールOTP では
+      // 1回の余分な送信が60秒の再送間隔と送信上限に直撃する。
+      //
+      // state ではなく ref で見るのは、`useCallback` が捕まえた
+      // `isSubmitting` が古い値のままになるため
+      if (inFlightRef.current) return null;
+
+      inFlightRef.current = true;
       setError(null);
       setIsSubmitting(true);
 
@@ -124,20 +164,47 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
         setError(UI_ERROR_MESSAGES.NETWORK_ERROR);
         return null;
       } finally {
+        inFlightRef.current = false;
         setIsSubmitting(false);
       }
     },
     [],
   );
 
-  const startSetup = useCallback(async () => {
-    const json = await post(API_ENDPOINTS.USER_TOTP_SETUP);
-    if (!json) return;
+  const startSetup = useCallback(
+    async (selected: SecondFactorMethod) => {
+      const json = await post(API_ENDPOINTS.USER_TOTP_SETUP, {
+        method: selected,
+      });
+      if (!json) return;
 
-    const data = json.data as { qrCodeDataUri: string; secret: string };
-    setQrCodeDataUri(data.qrCodeDataUri);
-    setSecret(data.secret);
-    setView(TWO_FACTOR_VIEW.SETUP);
+      setMethod(selected);
+
+      if (selected === SECOND_FACTOR_METHOD.EMAIL_OTP) {
+        // 共有鍵もQRも無い。コードはメールで届いている
+        setQrCodeDataUri(null);
+        setSecret(null);
+        setView(TWO_FACTOR_VIEW.SETUP_EMAIL);
+        return;
+      }
+
+      const data = json.data as { qrCodeDataUri: string; secret: string };
+      setQrCodeDataUri(data.qrCodeDataUri);
+      setSecret(data.secret);
+      setView(TWO_FACTOR_VIEW.SETUP);
+    },
+    [post],
+  );
+
+  /**
+   * 設定変更に使うコードを送る（メールOTP のみ）
+   *
+   * 無効化とリカバリーコード再発行はコードの所持を要求するが、メールOTP の
+   * 利用者は手元で作れない。この経路が無いと、設定を有効にしたあと
+   * 二度と無効化できなくなる。
+   */
+  const sendChallenge = useCallback(async () => {
+    await post(API_ENDPOINTS.USER_TOTP_SEND_CHALLENGE);
   }, [post]);
 
   const enable = useCallback(
@@ -163,6 +230,9 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
 
       setRecoveryCodes(null);
       setRemainingRecoveryCodes(0);
+      // 方式も戻す。残したままだと、無効化した直後の画面が
+      // 「メールOTP が有効」の前提で描かれる（＝方式を選び直せない）
+      setMethod(null);
       setView(TWO_FACTOR_VIEW.DISABLED);
     },
     [post],
@@ -190,11 +260,15 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
     setQrCodeDataUri(null);
     setSecret(null);
     setError(null);
+    // 方式の選択からやり直せるようにする
+    setMethod(null);
     setView(TWO_FACTOR_VIEW.DISABLED);
   }, []);
 
   return {
     view,
+    method,
+    emailOtpAvailable,
     qrCodeDataUri,
     secret,
     recoveryCodes,
@@ -202,6 +276,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
     isSubmitting,
     error,
     startSetup,
+    sendChallenge,
     enable,
     disable,
     regenerateRecoveryCodes,

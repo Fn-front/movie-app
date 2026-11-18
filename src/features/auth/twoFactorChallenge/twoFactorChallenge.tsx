@@ -28,8 +28,13 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
       error,
       isSubmitting,
       isCancelling,
+      isEmailOtp,
+      isResending,
+      resendRemaining,
+      canResend,
       onCodeChange,
       onSubmit,
+      onResend,
       onCancel,
     } = useTwoFactorChallenge({ callbackUrl });
 
@@ -40,8 +45,9 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
         </Heading>
 
         <p className={styles.c_two_factor__lead}>
-          認証アプリに表示されている6桁のコードを入力してください。
-          認証アプリが使えない場合は、発行済みのリカバリーコードでも進めます。
+          {isEmailOtp
+            ? 'メールに送信した6桁のコードを入力してください。メールが届かない場合は、発行済みのリカバリーコードでも進めます。'
+            : '認証アプリに表示されている6桁のコードを入力してください。認証アプリが使えない場合は、発行済みのリカバリーコードでも進めます。'}
         </p>
 
         <form className={styles.c_two_factor__body} onSubmit={onSubmit}>
@@ -70,13 +76,48 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
               size='lg'
               fullWidth
               isLoading={isSubmitting}
-              disabled={isCancelling}
+              disabled={isCancelling || isResending}
               aria-label='認証コードを確認'
             >
               確認
             </Button>
           </div>
         </form>
+
+        {/*
+          認証アプリは手元で作れるので再送の概念が無い。
+          メールのコードだけに出す
+        */}
+        {isEmailOtp && (
+          <div className={styles.c_two_factor__resend}>
+            {/*
+              ⚠️ `isLoading` は使わない。`Button` はローディング中に本文を
+              `visibility: hidden` にしてアクセシブルネームごと消すため、
+              下のログアウト導線と同じ理由で文言の差し替えにする
+            */}
+            <Button
+              type='button'
+              variant='secondary'
+              size='lg'
+              fullWidth
+              onClick={onResend}
+              disabled={!canResend || isResending}
+              aria-label='確認コードを再送信する'
+            >
+              {isResending ? '送信しています…' : '確認コードを再送信する'}
+            </Button>
+
+            {/*
+              残り秒数は読み上げる。視覚で待ち時間を読めない利用者が
+              「押せない理由」を知る手がかりがこれしかない
+            */}
+            <p className={styles.c_two_factor__resend_hint} aria-live='polite'>
+              {canResend
+                ? '再送信できます。'
+                : `再送信できるまで ${resendRemaining} 秒`}
+            </p>
+          </div>
+        )}
 
         {/*
           この画面からの出口（#1161）。
@@ -86,7 +127,8 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
         */}
         <div className={styles.c_two_factor__escape}>
           <p className={styles.c_two_factor__escape_lead}>
-            認証アプリもリカバリーコードも使えない場合は、ログアウトして別のアカウントでログインできます。
+            {isEmailOtp ? 'メールが受け取れず' : '認証アプリが使えず'}
+            リカバリーコードも手元に無い場合は、ログアウトして別のアカウントでログインできます。
           </p>
 
           {/*
@@ -105,7 +147,7 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
             size='lg'
             fullWidth
             onClick={onCancel}
-            disabled={isSubmitting || isCancelling}
+            disabled={isSubmitting || isCancelling || isResending}
           >
             {isCancelling
               ? 'ログアウトしています…'

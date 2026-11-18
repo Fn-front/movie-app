@@ -54,3 +54,17 @@
   color: $text-danger;
   font-size: $font-size-sm;
 }
+
+// 第2要素がメールのときだけ出る再送の導線
+.c_two_factor__resend {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+  margin-top: $spacing-4;
+}
+
+.c_two_factor__resend_hint {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  text-align: center;
+}

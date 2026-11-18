@@ -18,8 +18,9 @@ jest.mock('next/navigation', () => ({
 }));
 
 const mockUpdate = jest.fn();
+let mockSessionData: Record<string, unknown> | null = null;
 jest.mock('next-auth/react', () => ({
-  useSession: () => ({ update: mockUpdate }),
+  useSession: () => ({ data: mockSessionData, update: mockUpdate }),
 }));
 
 const mockLogout = jest.fn();
@@ -34,6 +35,8 @@ describe('TwoFactorChallenge', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // 既定は認証アプリ（既存テストの前提）
+    mockSessionData = null;
     // 既定は成功（本物の logout は遷移するので解決後に戻ってこない）
     mockLogout.mockResolvedValue(undefined);
   });
@@ -422,6 +425,147 @@ describe('TwoFactorChallenge', () => {
       await act(async () => {
         resolveUpdate({ totpPending: false });
       });
+    });
+  });
+
+  describe('第2要素がメールのコード', () => {
+    beforeEach(() => {
+      mockSessionData = {
+        totpPending: true,
+        secondFactorMethod: 'email_otp',
+      };
+    });
+
+    it('メール向けのリード文を出す', () => {
+      render(<TwoFactorChallenge />);
+
+      expect(
+        screen.getByText(/メールに送信した6桁のコード/),
+      ).toBeInTheDocument();
+    });
+
+    it('再送ボタンを出す', () => {
+      render(<TwoFactorChallenge />);
+
+      expect(
+        screen.getByRole('button', { name: '確認コードを再送信する' }),
+      ).toBeInTheDocument();
+    });
+
+    it('認証アプリのときは再送ボタンを出さない', () => {
+      mockSessionData = { totpPending: true, secondFactorMethod: 'totp' };
+
+      render(<TwoFactorChallenge />);
+
+      expect(
+        screen.queryByRole('button', { name: '確認コードを再送信する' }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/認証アプリに表示されている6桁のコード/),
+      ).toBeInTheDocument();
+    });
+
+    it('カウントダウン中は押せない', () => {
+      render(<TwoFactorChallenge />);
+
+      expect(
+        screen.getByRole('button', { name: '確認コードを再送信する' }),
+      ).toBeDisabled();
+      expect(screen.getByText(/再送信できるまで/)).toBeInTheDocument();
+    });
+
+    it('残り秒数を読み上げる', () => {
+      render(<TwoFactorChallenge />);
+
+      expect(screen.getByText(/再送信できるまで/)).toHaveAttribute(
+        'aria-live',
+        'polite',
+      );
+    });
+
+    it('脱出導線の文言もメール向けにする', () => {
+      render(<TwoFactorChallenge />);
+
+      expect(screen.getByText(/メールが受け取れず/)).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ NextAuth の JWT はステートレスで、update() は
+     * 「Cookie を読む → jwt → 書き戻す」を独立に行う。
+     * 再送（Resend の往復で遅い）と検証（速い）が並行すると、
+     * 再送が**後から** totpPending: true を書き戻し、
+     * 成功したはずの検証が巻き戻る。
+     */
+    it('検証中は再送を押せない', async () => {
+      // 解決しない update で「検証中」に固定する
+      mockUpdate.mockReturnValue(new Promise(() => {}));
+      render(<TwoFactorChallenge />);
+
+      await user.type(screen.getByLabelText('認証コード'), '123456');
+      await user.click(
+        screen.getByRole('button', { name: '認証コードを確認' }),
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: '確認コードを再送信する' }),
+        ).toBeDisabled();
+      });
+    });
+
+    it('再送中は確認もキャンセルも押せない', async () => {
+      jest.useFakeTimers();
+      const timerUser = userEvent.setup({
+        advanceTimers: jest.advanceTimersByTime,
+      });
+
+      try {
+        render(<TwoFactorChallenge />);
+
+        // カウントダウンを明けさせる
+        await act(async () => {
+          jest.advanceTimersByTime(60_000);
+        });
+
+        // 解決しない update で「再送中」に固定する
+        mockUpdate.mockReturnValue(new Promise(() => {}));
+        await timerUser.click(
+          screen.getByRole('button', { name: '確認コードを再送信する' }),
+        );
+
+        expect(
+          screen.getByRole('button', { name: '認証コードを確認' }),
+        ).toBeDisabled();
+        expect(
+          screen.getByRole('button', { name: 'キャンセルしてログアウト' }),
+        ).toBeDisabled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('再送は update({ resend: true }) を呼ぶ', async () => {
+      jest.useFakeTimers();
+      const timerUser = userEvent.setup({
+        advanceTimers: jest.advanceTimersByTime,
+      });
+
+      try {
+        mockUpdate.mockResolvedValue({ totpPending: true });
+        render(<TwoFactorChallenge />);
+
+        await act(async () => {
+          jest.advanceTimersByTime(60_000);
+        });
+
+        await timerUser.click(
+          screen.getByRole('button', { name: '確認コードを再送信する' }),
+        );
+
+        expect(mockUpdate).toHaveBeenCalledWith({ resend: true });
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });

@@ -386,8 +386,10 @@ export async function releaseRateLimit(
   });
 
   if (error) {
+    // 識別子（メールアドレス等）はログに出さない。このファイルの他のログも
+    // 含めていない
     console.warn(
-      `[rateLimit] 枠の返却に失敗しました identifier='${identifier}' action='${actionType}'`,
+      `[rateLimit] 枠の返却に失敗しました action='${actionType}'`,
       error,
     );
   }

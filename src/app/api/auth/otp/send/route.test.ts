@@ -95,13 +95,9 @@ const setupOtpFlowMocks = () => {
       }),
     }),
   });
-  // OTP挿入。#1260 で id を受け取るようになったため select().single() を返す
+  // OTP挿入
   mockFrom.mockReturnValueOnce({
-    insert: () => ({
-      select: () => ({
-        single: () => ({ data: { id: 'otp-1' }, error: null }),
-      }),
-    }),
+    insert: () => ({ error: null }),
   });
 };
 
@@ -115,6 +111,15 @@ describe('POST /api/auth/otp/send', () => {
     // 以降すべてのモック応答が1つずれて不可解な失敗になる。
     // 他のAPIテスト（settings / password-reset）は既にこうしている
     mockFrom.mockReset();
+
+    // ⚠️ 同じ理由でこの2つもリセットする。
+    // `mockResolvedValue`（Once なし）は**永続**なので、1つのテストが
+    // 設定すると以降すべてが汚染される（`:765` が実際にそう）。
+    // Once 版も、早期 return で消費されないまま次へ漏れる
+    mockCheckRateLimit.mockReset();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    (sendOtpEmail as jest.Mock).mockReset();
+    (sendOtpEmail as jest.Mock).mockResolvedValue(true);
   });
 
   it('registration: 正常にOTPを送信できる', async () => {
@@ -787,14 +792,6 @@ describe('POST /api/auth/otp/send', () => {
    * #1258 の行き止まり（最大24時間なにもできない）へ落ちる
    */
   describe('送信失敗時の後始末', () => {
-    beforeEach(() => {
-      // ⚠️ clearAllMocks は mockResolvedValueOnce のキューを捨てない
-      // （ファイル冒頭のコメントと同じ理由）。前のテストが積み残した
-      // { allowed: false } が漏れると、ここは 429 で終わって何も検証しない
-      mockCheckRateLimit.mockReset();
-      mockCheckRateLimit.mockResolvedValue({ allowed: true });
-    });
-
     /** login のユーザー検索（存在する）を積む */
     const mockUserFound = () => {
       mockFrom.mockReturnValueOnce({
@@ -832,15 +829,133 @@ describe('POST /api/auth/otp/send', () => {
       );
     });
 
-    it('作ったOTP行を消す', async () => {
-      // 誰も知らないコードを有効期限まで残さない。残すと次のコードが
-      // 古い attempts を背負う
+    /**
+     * ⚠️ **挿入した OTP 行は消さない**
+     *
+     * 60秒の再送間隔チェックはこの行の `created_at` だけを根拠にしている。
+     * 消すと次のリクエストが「前回送信なし」で素通りし、日次枠も戻して
+     * いるので**この経路の保護が全部無くなる**。送信が失敗し続ける状況で
+     * 無制限に Resend を叩かせられる
+     */
+    it('作ったOTP行は消さない（60秒間隔の根拠を残す）', async () => {
       await postWithFailedSend();
 
-      const deleted = mockFrom.mock.calls.filter(
+      const otpOps = mockFrom.mock.calls.filter(
         (call) => call[0] === 'otp_codes',
       );
-      expect(deleted.length).toBeGreaterThanOrEqual(2);
+
+      // 前回送信チェック（select）→ 既存削除 → insert の3回だけ。
+      // ロールバック用の delete が増えていないこと
+      expect(otpOps).toHaveLength(3);
+    });
+
+    it('次のリクエストは再送間隔で弾かれる', async () => {
+      // 本題。行が残っていれば60秒は通らない
+      await postWithFailedSend();
+
+      // 1回目の使い残しを持ち越さない（キューの取り違えを避ける）
+      mockFrom.mockReset();
+      mockUserFound();
+      // 直前に送信した行が見つかる
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: () => ({
+                  single: () => ({
+                    data: { created_at: new Date().toISOString() },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const second = await POST(
+        createRequest({ email: 'test@example.com', action: 'login' }),
+      );
+
+      expect(second.status).toBe(429);
+      // Resend へは1回しか到達しない
+      expect(sendOtpEmail).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * ⚠️ 戻す枠は**セッションユーザー**のもの（#641 と同じ理屈）
+     *
+     * ボディ由来のアドレスで戻すと、アカウントを1つ持つだけで
+     * **任意のアドレスの枠を減らせる**
+     */
+    it('password_change ではセッションユーザーの枠を戻す', async () => {
+      mockSessionUserEmail('session-user@example.com');
+      setupOtpFlowMocks();
+      (sendOtpEmail as jest.Mock).mockResolvedValueOnce(false);
+
+      const response = await POST(
+        createRequest({
+          email: 'victim@example.com',
+          action: 'password_change',
+        }),
+      );
+
+      expect(response.status).toBe(500);
+      expect(mockReleaseRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'session-user@example.com',
+        'otp_send_daily',
+      );
+      expect(mockReleaseRateLimit).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'victim@example.com',
+        expect.anything(),
+      );
+    });
+
+    it('挿入に失敗したときも戻す', async () => {
+      // DB が一時的に詰まっただけで利用者の日次枠を削らない
+      mockUserFound();
+      // 前回送信チェック（なし）
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: () => ({
+                  single: () => ({ data: null, error: { code: 'PGRST116' } }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      });
+      // 既存OTP削除
+      mockFrom.mockReturnValueOnce({
+        delete: () => ({
+          eq: () => ({ eq: () => ({ is: () => ({ error: null }) }) }),
+        }),
+      });
+      // OTP挿入が失敗する
+      mockFrom.mockReturnValueOnce({
+        insert: () => ({
+          error: { code: '57P01', message: 'connection terminated' },
+        }),
+      });
+
+      const response = await POST(
+        createRequest({ email: 'test@example.com', action: 'login' }),
+      );
+
+      expect(response.status).toBe(500);
+      expect(mockReleaseRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'test@example.com',
+        'otp_send_daily',
+      );
+      // 送信は試みていない
+      expect(sendOtpEmail).not.toHaveBeenCalled();
     });
 
     it('送信に成功したときは戻さない', async () => {

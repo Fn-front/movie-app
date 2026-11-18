@@ -707,6 +707,34 @@ describe('releaseRateLimit', () => {
     expect(from).not.toHaveBeenCalled();
   });
 
+  /**
+   * 同時に戻しても1回ずつ減る（#646 と同じ理由で RPC にしている）
+   *
+   * SELECT → UPDATE に分けていたら、同時に失敗した2つのリクエストが同じ
+   * `attempts` を読み、片方のデクリメントが失われる。RPC は単一 UPDATE
+   * なので行レベルロックで直列化される。
+   *
+   * ここで固定できるのは「呼んだ回数ぶん RPC が走る」ことまで。
+   * 原子性そのものは DB 側の保証で、マイグレーションの
+   * `GREATEST(attempts - 1, 0)` が単一ステートメントであることが根拠
+   */
+  it('同時に呼んでも回数ぶん RPC が走る', async () => {
+    const rpc = jest.fn().mockResolvedValue({ data: null, error: null });
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    await Promise.all([
+      releaseRateLimit(supabase, 'user@example.com', 'otp_send_daily'),
+      releaseRateLimit(supabase, 'user@example.com', 'otp_send_daily'),
+      releaseRateLimit(supabase, 'user@example.com', 'otp_send_daily'),
+    ]);
+
+    expect(rpc).toHaveBeenCalledTimes(3);
+    // 読み取り後書き込みに戻すと from() を使うことになる
+    expect(rpc.mock.calls.every((c) => c[0] === 'release_rate_limit')).toBe(
+      true,
+    );
+  });
+
   it('失敗しても例外にせず警告だけ出す', async () => {
     // 呼び出し元は既に本題のエラー（送信失敗）を返そうとしている。
     // 後始末の失敗でそれを覆い隠さない。枠は窓が過ぎれば回復する

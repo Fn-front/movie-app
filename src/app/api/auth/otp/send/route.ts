@@ -262,19 +262,19 @@ export async function POST(request: Request) {
       Date.now() + OTP_CONFIG.EXPIRY_MINUTES * 60 * 1000,
     );
 
-    const { data: inserted, error: insertError } = await supabase
-      .from('otp_codes')
-      .insert({
-        email,
-        // 平文は保存しない。鍵（OTP_HASH_PEPPER）はDBの外に置く（#640）
-        code_hash: hashOtpCode(code, email),
-        action_type: action,
-        expires_at: expiresAt.toISOString(),
-      })
-      .select('id')
-      .single();
+    const { error: insertError } = await supabase.from('otp_codes').insert({
+      email,
+      // 平文は保存しない。鍵（OTP_HASH_PEPPER）はDBの外に置く（#640）
+      code_hash: hashOtpCode(code, email),
+      action_type: action,
+      expires_at: expiresAt.toISOString(),
+    });
 
-    if (insertError || !inserted) {
+    if (insertError) {
+      // 挿入に失敗した＝このリクエストでは1通も送らない。送信失敗と同じく
+      // 枠を戻す（#1260）。ここで戻さないと、DB が一時的に詰まっただけで
+      // 利用者の日次枠が削られる
+      await releaseRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_SEND_DAILY);
       throw insertError;
     }
 
@@ -282,7 +282,7 @@ export async function POST(request: Request) {
     const emailSent = await sendOtpEmail(email, code, action);
 
     if (!emailSent) {
-      // 1通も送れていないので、数えた枠と作ったコードを戻す（#1260）。
+      // 1通も送れていないので、数えた日次枠を戻す（#1260）。
       //
       // 戻さないと「送信に失敗しました」を5回見た時点で
       // 「本日の送信上限に達しました。明日再度お試しください。」に変わる。
@@ -291,10 +291,18 @@ export async function POST(request: Request) {
       // ⚠️ `resetRateLimit` ではなく `releaseRateLimit` を使う。前者は行ごと
       // 消すので、同じ日に成功した送信の分まで帳消しになる
       await releaseRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_SEND_DAILY);
-      // 誰も知らないコードを有効期限まで残さない。`attempts` を引き継がせない
-      // ためでもある（残すと、次に送ったコードが古い試行回数を背負う）
-      await supabase.from('otp_codes').delete().eq('id', inserted.id);
 
+      // ⚠️ **挿入した OTP 行は消さない。**
+      //
+      // 上の60秒の再送間隔チェック（`:173-209`）は、この行の `created_at`
+      // だけを根拠にしている。消すと次のリクエストが「前回送信なし」に
+      // なって素通りし、日次枠も戻しているので**この経路の保護が全部
+      // 無くなる**。送信が失敗し続ける状況（Resend の障害・クォータ切れ、
+      // 送信できないアドレス）で、未認証のまま無制限に Resend を叩かせられる。
+      //
+      // 残しても害は無い。`attempts` は引き継がれない — 次の送信は必ず
+      // `:252-257` で未検証行を消してから insert するので、新しい行は
+      // 常に `attempts = 0` から始まる。
       return NextResponse.json(
         {
           success: false,

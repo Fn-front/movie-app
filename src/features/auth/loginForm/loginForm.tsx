@@ -4,7 +4,7 @@
 
 'use client';
 
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
@@ -27,6 +27,13 @@ import { useToastDispatch } from '@/hooks/useToast';
 import { handleApiError } from '@/utils/error';
 import { resolveSafeCallbackUrl } from '@/utils/url';
 import { SocialLoginButtons } from '@/features/auth/socialLoginButtons/socialLoginButtons';
+import {
+  SECOND_FACTOR_METHOD,
+  type SecondFactorMethod,
+} from '@/constants/secondFactor';
+import { OTP_CONFIG } from '@/constants/otp';
+import { useResendCountdown } from '@/features/auth/hooks/useResendCountdown';
+
 import styles from './loginForm.module.scss';
 
 /**
@@ -47,6 +54,11 @@ const resolveErrorMessage = (code: string | undefined): string => {
       return AUTH_ERROR_MESSAGES.TOTP_REUSED;
     case AUTH_ERROR_CODE.RATE_LIMITED:
       return AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED;
+    case AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED:
+      // 「コードが違う」と必ず分ける。打ち直しても直らない（#1148 と同じ理由）
+      return AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_FAILED;
+    case AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED:
+      return AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_LIMITED;
     case AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED:
       // 確認コードを入れる前に離脱した人（#1247）。丸めると、パスワードは
       // 正しいのに「違う」と言われ続けて復帰できない
@@ -100,8 +112,19 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
    * パスワードを知らない相手に見せないため。パスワードが正しかったときだけ
    * サーバーが totp_required を返し、そこで初めて表示する。
    */
-  const [totpRequired, setTotpRequired] = useState(false);
+  const [secondFactorMode, setSecondFactorMode] =
+    useState<SecondFactorMethod | null>(null);
   const [totpCode, setTotpCode] = useState('');
+
+  const totpRequired = secondFactorMode !== null;
+  const isEmailOtp = secondFactorMode === SECOND_FACTOR_METHOD.EMAIL_OTP;
+
+  const { remaining, canResend, restart } = useResendCountdown(
+    OTP_CONFIG.RESEND_INTERVAL_SECONDS,
+  );
+
+  /** 次の送信が「再送」か。state だと onSubmit が古い値を掴む */
+  const resendRequestedRef = useRef(false);
 
   const {
     register,
@@ -127,18 +150,43 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
       setApiError(null);
 
       try {
+        // 再送のときはコードを送らない。サーバーは「コード未指定」を
+        // 再送の合図として扱う。
+        //
+        // ⚠️ ref で持つ。`setTotpCode('')` は同期的に反映されず、
+        // この `useCallback` が捕まえた `totpCode` は古いままになる。
+        // 打ち間違えた状態で再送を押すとそのコードが検証され、
+        // `TOTP_VERIFY`（5回/15分）の枠を1つ失う
+        const isResend = resendRequestedRef.current;
+        resendRequestedRef.current = false;
+
         const result = await signIn('credentials', {
           redirect: false,
           email: data.email,
           password: data.password,
-          // 入力欄を出していないうちは送らない
-          ...(totpRequired ? { totpCode } : {}),
+          // 入力欄を出していないうち、および再送のときは送らない
+          ...(totpRequired && !isResend ? { totpCode } : {}),
         });
 
         if (result?.error) {
           if (result.code === AUTH_ERROR_CODE.TOTP_REQUIRED) {
-            // パスワードは正しい。第2要素の入力へ進む
-            setTotpRequired(true);
+            // パスワードは正しい。第2要素（認証アプリ）の入力へ進む
+            setSecondFactorMode(SECOND_FACTOR_METHOD.TOTP);
+            return;
+          }
+
+          if (result.code === AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED) {
+            // パスワードは正しい。コードはサーバーが送信済み
+            setSecondFactorMode(SECOND_FACTOR_METHOD.EMAIL_OTP);
+            restart();
+            return;
+          }
+
+          if (result.code === AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED) {
+            // ⚠️ 1通も送られていない。入力欄は出すが、コードを待たせず
+            // リカバリーコードへ誘導する
+            setSecondFactorMode(SECOND_FACTOR_METHOD.EMAIL_OTP);
+            setApiError(AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_LIMITED);
             return;
           }
 
@@ -169,8 +217,26 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
         });
       }
     },
-    [router, toast, callbackUrl, totpRequired, totpCode],
+    [router, toast, callbackUrl, totpRequired, totpCode, restart],
   );
+
+  /**
+   * コードを送り直す
+   *
+   * ⚠️ 先に入力欄を空にする。`onSubmit` は `totpRequired` のとき**常に**
+   * `totpCode` を送るため、打ち間違えた状態で再送を押すとそのコードが
+   * 検証され、`TOTP_VERIFY`（5回/15分）の枠を1つ失う。
+   *
+   * サーバー側は「コード未指定」を再送の合図として扱う。
+   */
+  const handleResend = useCallback(() => {
+    resendRequestedRef.current = true;
+    setTotpCode('');
+    restart();
+    // パスワードごと送り直す。フォームが値を保持しているので、
+    // 利用者はもう一度入力する必要がない
+    handleSubmit(onSubmit)();
+  }, [handleSubmit, onSubmit, restart]);
 
   return (
     <div className={styles.c_login_form}>
@@ -234,9 +300,34 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
                 onChange={handleTotpCodeChange}
               />
               <p className={styles.c_login_form__hint}>
-                認証アプリに表示されている6桁のコード、または発行済みの
-                リカバリーコードを入力してください。
+                {isEmailOtp
+                  ? 'メールに送信した6桁のコード、または発行済みのリカバリーコードを入力してください。'
+                  : '認証アプリに表示されている6桁のコード、または発行済みのリカバリーコードを入力してください。'}
               </p>
+
+              {/* 認証アプリは手元で作れるので再送の概念が無い */}
+              {isEmailOtp && (
+                <div className={styles.c_login_form__resend}>
+                  <Button
+                    type='button'
+                    variant='secondary'
+                    onClick={handleResend}
+                    disabled={!canResend || isSubmitting}
+                    aria-label='確認コードを再送信する'
+                  >
+                    確認コードを再送信する
+                  </Button>
+                  {/*
+                    残り秒数は読み上げる。視覚で待ち時間を読めない利用者が
+                    「押せない理由」を知る手がかりがこれしかない
+                  */}
+                  <p className={styles.c_login_form__hint} aria-live='polite'>
+                    {canResend
+                      ? '再送信できます。'
+                      : `再送信できるまで ${remaining} 秒`}
+                  </p>
+                </div>
+              )}
             </>
           )}
 

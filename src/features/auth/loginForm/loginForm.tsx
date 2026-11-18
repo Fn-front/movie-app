@@ -18,6 +18,7 @@ import { loginSchema, type LoginFormData } from '@/schema/auth';
 import {
   AUTH_ERROR_CODE,
   AUTH_ERROR_MESSAGES,
+  AUTH_HINTS,
   TOAST_TITLES,
   TOAST_MESSAGES,
   ROUTES,
@@ -51,6 +52,14 @@ interface LoginFormProps {
   onOtpLoginClick?: () => void;
   /** ログイン後の戻り先（callbackUrl） */
   callbackUrl?: string;
+  /**
+   * 入力欄の初期値（#1237）
+   *
+   * パスワード設定の完了画面から渡ってくるアカウント名。発行アカウントの
+   * 利用者はここで自分のメールアドレスを入れて失敗しがちで、実際に
+   * 起きている。設定を終えた直後なら値は分かっているので入れておく
+   */
+  initialIdentifier?: string;
 }
 
 /**
@@ -59,6 +68,7 @@ interface LoginFormProps {
 export const LoginForm = memo<LoginFormProps>(function LoginForm({
   onOtpLoginClick,
   callbackUrl,
+  initialIdentifier,
 }) {
   const router = useRouter();
   const { toast } = useToastDispatch();
@@ -80,7 +90,7 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: '',
+      email: initialIdentifier ?? '',
       password: '',
     },
   });
@@ -164,11 +174,21 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
             label='メールアドレスまたはアカウント名'
             type='text'
             autoComplete='username'
-            placeholder='example@example.com'
+            placeholder='example@example.com または 4KMPQ7RSTWX2'
             fullWidth
             error={errors.email?.message}
             {...register('email')}
           />
+
+          {/*
+            ラベルは以前から両対応だったが、それでもメールアドレスを入れて
+            失敗する人がいた（#1237）。発行アカウントの利用者はメールを
+            閉じていると自分のアカウント名を思い出せないため、どこに書いて
+            あるかまで示す
+          */}
+          <p className={styles.c_login_form__hint}>
+            {AUTH_HINTS.USERNAME_LOGIN}
+          </p>
 
           <Input
             label='パスワード'

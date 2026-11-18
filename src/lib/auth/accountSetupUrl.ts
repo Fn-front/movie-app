@@ -7,7 +7,10 @@
  */
 
 import { ROUTES } from '@/constants';
-import { ACCOUNT_SETUP_ISSUED_PARAM } from '@/constants/adminAccount';
+import {
+  ACCOUNT_SETUP_ISSUED_PARAM,
+  ACCOUNT_SETUP_USERNAME_PARAM,
+} from '@/constants/adminAccount';
 import { getRequiredEnv } from '@/utils/env';
 
 /**
@@ -18,9 +21,10 @@ import { getRequiredEnv } from '@/utils/env';
  * 新旧同一チェックを素通りするため、初回設定でもそのまま動く。
  *
  * @param token - 平文トークン
+ * @param username - ログインに使うアカウント名。設定ページに表示する
  * @returns 設定ページのURL
  */
-export function buildAccountSetupUrl(token: string): string {
+export function buildAccountSetupUrl(token: string, username: string): string {
   const url = new URL(ROUTES.RESET_PASSWORD, getRequiredEnv('NEXTAUTH_URL'));
   url.searchParams.set('token', token);
 
@@ -30,6 +34,10 @@ export function buildAccountSetupUrl(token: string): string {
     ACCOUNT_SETUP_ISSUED_PARAM.NAME,
     ACCOUNT_SETUP_ISSUED_PARAM.VALUE,
   );
+
+  // ログインに使う値を画面にも出す（#1237）。メール本文にしか無かったため、
+  // メールを閉じた利用者がメールアドレスを入れてログインに失敗していた
+  url.searchParams.set(ACCOUNT_SETUP_USERNAME_PARAM, username);
 
   return url.toString();
 }

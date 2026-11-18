@@ -101,16 +101,102 @@ describe('ResetPasswordForm', () => {
     });
   });
 
-  it('再設定に成功したらログイン画面へ遷移する', async () => {
-    // 再設定で既存セッションが失効するため、ログインし直してもらう
-    mockFetch.mockResolvedValue(okResponse());
+  /**
+   * 成功したら完了画面に差し替える（#1237）
+   *
+   * 以前は即 `/auth/signin` へ遷移していたため、成功したことも、ログインに
+   * 使うアカウント名も伝わらなかった。実際に、設定は成功しているのに自分の
+   * メールアドレスでログインを試みて失敗し、リンクを3回踏み直した人がいる
+   */
+  describe('再設定に成功したとき', () => {
+    it('完了画面を出し、自動では遷移しない', async () => {
+      mockFetch.mockResolvedValue(okResponse());
 
-    render(<ResetPasswordForm token='valid-token' />);
-    await submitPassword(VALID_PASSWORD);
+      render(<ResetPasswordForm token='valid-token' />);
+      await submitPassword(VALID_PASSWORD);
 
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/auth/signin');
+      expect(
+        await screen.findByRole('heading', {
+          name: 'パスワードを設定しました',
+        }),
+      ).toBeInTheDocument();
+      expect(mockPush).not.toHaveBeenCalled();
     });
+
+    it('ログイン画面への導線を出す', async () => {
+      mockFetch.mockResolvedValue(okResponse());
+
+      render(<ResetPasswordForm token='valid-token' />);
+      await submitPassword(VALID_PASSWORD);
+
+      expect(
+        await screen.findByRole('link', { name: 'ログイン画面へ' }),
+      ).toHaveAttribute('href', '/auth/signin');
+    });
+
+    it('アカウント名が分かっていれば、入力欄に入る形で渡す', async () => {
+      // 遷移先で思い出せずメールアドレスを入れてしまうのを防ぐ。
+      // ここまで来た人は値を持っている
+      mockFetch.mockResolvedValue(okResponse());
+
+      render(<ResetPasswordForm token='valid-token' username='ABCD1234EFGH' />);
+      await submitPassword(VALID_PASSWORD);
+
+      expect(
+        await screen.findByRole('link', { name: 'ログイン画面へ' }),
+      ).toHaveAttribute('href', '/auth/signin?account=ABCD1234EFGH');
+    });
+
+    it('アカウント名に記号が含まれてもURLを壊さない', async () => {
+      mockFetch.mockResolvedValue(okResponse());
+
+      render(<ResetPasswordForm token='valid-token' username='A B&C' />);
+      await submitPassword(VALID_PASSWORD);
+
+      expect(
+        await screen.findByRole('link', { name: 'ログイン画面へ' }),
+      ).toHaveAttribute('href', '/auth/signin?account=A%20B%26C');
+    });
+
+    it('アカウント名が分かっていれば完了画面にも出す', async () => {
+      // ログインに使う値。ここで見せないと、メールを閉じた利用者は
+      // 自分のメールアドレスを入れてしまう
+      mockFetch.mockResolvedValue(okResponse());
+
+      render(<ResetPasswordForm token='valid-token' username='ABCD1234EFGH' />);
+      await submitPassword(VALID_PASSWORD);
+
+      expect(await screen.findByText('ABCD1234EFGH')).toBeInTheDocument();
+    });
+
+    it('入力欄は残さない', async () => {
+      mockFetch.mockResolvedValue(okResponse());
+
+      render(<ResetPasswordForm token='valid-token' />);
+      await submitPassword(VALID_PASSWORD);
+
+      await screen.findByRole('heading', { name: 'パスワードを設定しました' });
+
+      expect(
+        screen.queryByLabelText('新しいパスワード'),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('アカウント名は設定前から表示する', async () => {
+    // 設定を終えてから初めて知るのでは遅い
+    render(<ResetPasswordForm token='valid-token' username='ABCD1234EFGH' />);
+
+    expect(screen.getByText('ABCD1234EFGH')).toBeInTheDocument();
+    expect(screen.getByLabelText('新しいパスワード')).toBeInTheDocument();
+  });
+
+  it('アカウント名が無ければ出さない（利用者自身のリセット）', () => {
+    render(<ResetPasswordForm token='valid-token' />);
+
+    expect(
+      screen.queryByText(/ログインに使うアカウント名/),
+    ).not.toBeInTheDocument();
   });
 
   /**

@@ -78,6 +78,28 @@ describe('SignInContent', () => {
     );
   });
 
+  /**
+   * パスワード設定の完了画面から渡ってくるアカウント名（#1237）
+   *
+   * 発行アカウントの利用者はここで自分のメールアドレスを入れて失敗
+   * しがちで、実際に起きている
+   */
+  it('initialIdentifier が LoginForm の入力欄に入る', () => {
+    render(<SignInContent initialIdentifier='GQTDXC4QHWC3' />);
+
+    expect(
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
+    ).toHaveValue('GQTDXC4QHWC3');
+  });
+
+  it('initialIdentifier が無ければ入力欄は空', () => {
+    render(<SignInContent />);
+
+    expect(
+      screen.getByLabelText('メールアドレスまたはアカウント名'),
+    ).toHaveValue('');
+  });
+
   it('OTPモード切替後も callbackUrl が引き継がれる（OtpLoginForm 側）', async () => {
     render(<SignInContent callbackUrl='/watchlist' />);
 

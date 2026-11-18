@@ -160,7 +160,7 @@ export const POST = withAdminAuth(
     const sent = await sendAdminAccountEmail({
       email,
       username,
-      setupUrl: buildAccountSetupUrl(token),
+      setupUrl: buildAccountSetupUrl(token, username),
       expiryMinutes: ADMIN_ACCOUNT_CONFIG.CREATE_LINK_EXPIRY_MINUTES,
       isReissue: false,
     });

@@ -11,6 +11,7 @@ import {
   consumePasswordResetToken,
   isPasswordResetTokenValid,
   issuePasswordResetToken,
+  peekPasswordResetToken,
 } from './passwordResetToken';
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
@@ -196,6 +197,97 @@ describe('issuePasswordResetToken', () => {
     const second = await issuePasswordResetToken(client, USER_ID);
 
     expect(first).not.toBe(second);
+  });
+});
+
+/**
+ * 消費せずに引く（#1235）
+ *
+ * 回復可能なエラー（新旧同一パスワードなど）で弾く場合に、リンクを焼かずに
+ * 済ませるために使う。焼いてしまうと入力を直してもやり直せない
+ */
+describe('peekPasswordResetToken', () => {
+  it('有効なトークンでユーザーIDを返す', async () => {
+    const { client } = createSupabaseMock([makeRow('valid-token')]);
+
+    await expect(
+      peekPasswordResetToken(client, 'valid-token'),
+    ).resolves.toEqual({ status: 'valid', userId: USER_ID });
+  });
+
+  it('⚠️ 消費しない', async () => {
+    // ここで焼いてしまうと、この関数を作った意味が無い
+    const { client, rows } = createSupabaseMock([makeRow('valid-token')]);
+
+    await peekPasswordResetToken(client, 'valid-token');
+
+    expect(rows[0].used_at).toBeNull();
+  });
+
+  it('使用済みなら used', async () => {
+    const used = makeRow('used-token', { used_at: new Date().toISOString() });
+    const { client } = createSupabaseMock([used]);
+
+    await expect(peekPasswordResetToken(client, 'used-token')).resolves.toEqual(
+      { status: 'used' },
+    );
+  });
+
+  it('期限切れなら expired', async () => {
+    const expired = makeRow('expired-token', {
+      expires_at: new Date(Date.now() - 1000).toISOString(),
+    });
+    const { client } = createSupabaseMock([expired]);
+
+    await expect(
+      peekPasswordResetToken(client, 'expired-token'),
+    ).resolves.toEqual({ status: 'expired' });
+  });
+
+  it('使用済みかつ期限切れなら used を優先する', async () => {
+    const both = makeRow('both-token', {
+      used_at: new Date(Date.now() - 2000).toISOString(),
+      expires_at: new Date(Date.now() - 1000).toISOString(),
+    });
+    const { client } = createSupabaseMock([both]);
+
+    await expect(peekPasswordResetToken(client, 'both-token')).resolves.toEqual(
+      { status: 'used' },
+    );
+  });
+
+  it('存在しなければ invalid', async () => {
+    const { client } = createSupabaseMock([makeRow('valid-token')]);
+
+    await expect(
+      peekPasswordResetToken(client, 'unknown-token'),
+    ).resolves.toEqual({ status: 'invalid' });
+  });
+
+  /**
+   * 読み取りの失敗を `invalid` に化かさない（#1167 と同じ理由）
+   *
+   * 本当に無効なトークンと区別がつかず、利用者はリセットの再申請へ
+   * 誘導される。トークンは焼いていないので再試行は成功しうる
+   */
+  it('読み取りに失敗したら invalid ではなく投げる', async () => {
+    const client = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () =>
+              Promise.resolve({
+                data: null,
+                error: { code: '57P01', message: 'connection terminated' },
+              }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      peekPasswordResetToken(client, 'any-token'),
+    ).rejects.toMatchObject({ code: '57P01' });
   });
 });
 

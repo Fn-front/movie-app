@@ -66,11 +66,69 @@ export async function issuePasswordResetToken(
  * 実際に「設定を終えた人がリンクを開き直して『有効期限が切れています』と
  * 言われる」事故が起きた
  */
+export type PasswordResetTokenFailure = {
+  status: 'used' | 'expired' | 'invalid';
+};
+
 export type ConsumePasswordResetTokenResult =
   | { status: 'consumed'; userId: string }
-  | { status: 'used' }
-  | { status: 'expired' }
-  | { status: 'invalid' };
+  | PasswordResetTokenFailure;
+
+/**
+ * 消費せずに引いた結果
+ *
+ * `valid` でも**まだ焼いていない**。呼び出し側は検証を済ませてから
+ * `consumePasswordResetToken` を呼ぶ
+ */
+export type PeekPasswordResetTokenResult =
+  | { status: 'valid'; userId: string }
+  | PasswordResetTokenFailure;
+
+/**
+ * トークンを消費せずに対象ユーザーを引く（#1235）
+ *
+ * 回復可能なエラー（新旧同一パスワード、対象ユーザーが居ない）で弾く場合に、
+ * リンクを焼かずに済ませるために使う。焼いてしまうと、入力を直したくても
+ * 同じリンクでやり直せず再発行が要る。パスワードを忘れている＝他に
+ * ログイン手段が無い状態で、発行アカウントなら自力で再発行もできない。
+ *
+ * ⚠️ **これだけで通してはいけない。** 読んでから書くまでの間に別の
+ * リクエストが消費しうるので、最後は必ず `consumePasswordResetToken` の
+ * 条件付き UPDATE で確定させる。この関数は「先に弾けるものを弾く」ためだけ。
+ *
+ * @param supabase - service_role のクライアント
+ * @param token - メールのリンクに載っていた平文トークン
+ * @returns 使えるならユーザーID付き。使えなければその理由
+ */
+export async function peekPasswordResetToken(
+  supabase: SupabaseClient,
+  token: string,
+): Promise<PeekPasswordResetTokenResult> {
+  const tokenHash = hashVerificationToken(token);
+
+  const { data, error } = await supabase
+    .from('password_reset_tokens')
+    .select('user_id, used_at, expires_at')
+    .eq('token_hash', tokenHash)
+    .maybeSingle();
+
+  // ⚠️ 読み取りの失敗を `invalid` に化かさない（#1167）。本当に無効な
+  // トークンと区別がつかず、利用者はリセットの再申請へ誘導される
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    return { status: 'invalid' };
+  }
+
+  const failure = resolveRowFailure(data.used_at, data.expires_at as string);
+  if (failure) {
+    return failure;
+  }
+
+  return { status: 'valid', userId: data.user_id as string };
+}
 
 /**
  * トークンを検証して消費する
@@ -145,19 +203,41 @@ async function resolveConsumeFailure(
     return { status: 'invalid' };
   }
 
-  // 使用済みを先に見る。両方に当てはまる（使ったあと期限も切れた）ときは、
-  // 「期限切れ」より「使用済み」のほうが次にすること（ログイン）が分かる
-  if (data.used_at) {
-    return { status: 'used' };
-  }
-
-  if (new Date(data.expires_at as string).getTime() <= Date.now()) {
-    return { status: 'expired' };
+  const failure = resolveRowFailure(data.used_at, data.expires_at as string);
+  if (failure) {
+    return failure;
   }
 
   // 未使用で期限内なのに UPDATE が0行＝この一瞬で別のリクエストが消費した。
   // 同じリンクを同時に2回開いた場合。相手が使い切ったので使用済み扱いでよい
   return { status: 'used' };
+}
+
+/**
+ * 行の内容から「使えない理由」を決める
+ *
+ * 消費の前（`peekPasswordResetToken`）と後（`resolveConsumeFailure`）の
+ * 両方から使う。判定が2箇所に散ると、片方だけ直して食い違う
+ *
+ * @param usedAt - `used_at`
+ * @param expiresAt - `expires_at`
+ * @returns 使えない理由。使えるなら null
+ */
+function resolveRowFailure(
+  usedAt: unknown,
+  expiresAt: string,
+): PasswordResetTokenFailure | null {
+  // 使用済みを先に見る。両方に当てはまる（使ったあと期限も切れた）ときは、
+  // 「期限切れ」より「使用済み」のほうが次にすること（ログイン）が分かる
+  if (usedAt) {
+    return { status: 'used' };
+  }
+
+  if (new Date(expiresAt).getTime() <= Date.now()) {
+    return { status: 'expired' };
+  }
+
+  return null;
 }
 
 /**

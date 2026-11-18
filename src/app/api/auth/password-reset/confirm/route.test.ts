@@ -29,8 +29,10 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 }));
 
 const mockConsumeToken = jest.fn();
+const mockPeekToken = jest.fn();
 jest.mock('@/lib/auth/passwordResetToken', () => ({
   consumePasswordResetToken: (...args: unknown[]) => mockConsumeToken(...args),
+  peekPasswordResetToken: (...args: unknown[]) => mockPeekToken(...args),
 }));
 
 // 漏洩パスワード照合（HIBP）。既定では「漏洩していない」として通す
@@ -95,6 +97,7 @@ describe('POST /api/auth/password-reset/confirm', () => {
     mockFrom.mockReset();
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockIsPasswordPwned.mockResolvedValue(false);
+    mockPeekToken.mockResolvedValue({ status: 'valid', userId: 'user-1' });
     mockConsumeToken.mockResolvedValue({
       status: 'consumed',
       userId: 'user-1',
@@ -333,7 +336,7 @@ describe('POST /api/auth/password-reset/confirm', () => {
     ])(
       '%s なトークンは400を返し、理由が分かる文言を出す',
       async (_label, status, message) => {
-        mockConsumeToken.mockResolvedValue({ status });
+        mockPeekToken.mockResolvedValue({ status });
 
         const response = await POST(
           createRequest({ token: 'bad-token', password: VALID_PASSWORD }),
@@ -359,7 +362,7 @@ describe('POST /api/auth/password-reset/confirm', () => {
     });
 
     it('トークンが無効ならパスワードを更新しない', async () => {
-      mockConsumeToken.mockResolvedValue({ status: 'invalid' });
+      mockPeekToken.mockResolvedValue({ status: 'invalid' });
 
       await POST(
         createRequest({ token: 'bad-token', password: VALID_PASSWORD }),
@@ -370,15 +373,90 @@ describe('POST /api/auth/password-reset/confirm', () => {
     });
 
     it('トークンの消費はパスワード更新より先に行う', async () => {
-      // 更新してから消費すると、同じリンクを同時に2回開かれて両方通る
-      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+      // 更新してから消費すると、同じリンクを同時に2回開かれて両方通る。
+      // #1235 で検証を消費より前へ移したが、**消費と更新の順序は変えない**
+      const updateSpy = mockUserAndUpdate({
+        id: 'user-1',
+        password_hash: 'old-hash',
+      });
 
       await POST(
         createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
       );
 
       expect(mockConsumeToken.mock.invocationCallOrder[0]).toBeLessThan(
-        mockHash.mock.invocationCallOrder[0],
+        updateSpy.mock.invocationCallOrder[0],
+      );
+    });
+
+    /**
+     * 回復可能なエラーでリンクを焼かない（#1235）
+     *
+     * 消費を先に置いていたときは、現在と同じパスワードを打ち直しただけで
+     * リンクを失い、再発行が必要になっていた。パスワードを忘れている＝
+     * 他にログイン手段が無い状態で、発行アカウントなら自力で再発行も
+     * できない（#1226）
+     */
+    describe('消費する前に弾くもの', () => {
+      it('新旧同一で弾かれてもトークンを消費しない', async () => {
+        mockCompare.mockResolvedValue(true);
+        mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+
+        const response = await POST(
+          createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+        );
+
+        expect(response.status).toBe(400);
+        expect(mockConsumeToken).not.toHaveBeenCalled();
+      });
+
+      it('対象ユーザーが消えていてもトークンを消費しない', async () => {
+        mockUserAndUpdate(null);
+
+        await POST(
+          createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+        );
+
+        expect(mockConsumeToken).not.toHaveBeenCalled();
+      });
+
+      it('ユーザーの読み取りに失敗してもトークンを消費しない', async () => {
+        // 一時障害。焼いてしまうと再試行しても直らない
+        mockFrom.mockReturnValueOnce({
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () =>
+                Promise.resolve({
+                  data: null,
+                  error: { code: '57P01', message: 'connection terminated' },
+                }),
+            }),
+          }),
+        });
+
+        const response = await POST(
+          createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+        );
+
+        expect(response.status).toBe(500);
+        expect(mockConsumeToken).not.toHaveBeenCalled();
+      });
+    });
+
+    it('peek から consume までの間に使い切られたら used を返す', async () => {
+      // 同じリンクを同時に2回開いた場合。読んでから書くまでの窓は
+      // 条件付き UPDATE が 0 行になることで塞がれている
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+      mockConsumeToken.mockResolvedValue({ status: 'used' });
+
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.message).toBe(
+        PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED,
       );
     });
 

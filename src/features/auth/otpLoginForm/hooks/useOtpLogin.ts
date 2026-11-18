@@ -33,9 +33,13 @@ type OtpLoginStep = 'email' | 'otp';
  * メール未認証も同じ（#1247）。**この画面にはパスワード欄すら無い**のに
  * 「メールアドレスまたはパスワードが正しくありません」と出ていた。
  *
+ * レート制限も同じ（#1254）。待てば直ることが伝わらないと、打ち直すほど
+ * 悪化する。こちらは**行を引く前**の判定なので、アカウントの有無に関係なく
+ * 同じ条件で起きる＝列挙にならない。
+ *
  * それ以外は認証情報エラーに丸める。どのアカウントが存在するかを推測させないため。
- * 個別の文言を返す2つは、いずれも**コードの検証に成功した相手**＝そのメール
- * アドレスの持ち主にしか返らないので、列挙にはならない。
+ * 個別の文言を返す OTP_LOGIN_DISABLED / EMAIL_NOT_VERIFIED は、いずれも
+ * **コードの検証に成功した相手**＝そのメールアドレスの持ち主にしか返らない。
  */
 const resolveSignInErrorMessage = (code: string | undefined): string => {
   switch (code) {
@@ -43,6 +47,8 @@ const resolveSignInErrorMessage = (code: string | undefined): string => {
       return AUTH_ERROR_MESSAGES.OTP_LOGIN_DISABLED_BY_TOTP;
     case AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED:
       return AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED;
+    case AUTH_ERROR_CODE.RATE_LIMITED:
+      return AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED;
     default:
       return AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS;
   }

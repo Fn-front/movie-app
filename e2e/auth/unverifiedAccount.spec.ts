@@ -26,6 +26,7 @@ import {
   createUnverifiedUser,
   deleteUserByEmail,
   cleanupRateLimitsForEmail,
+  cleanupLoginIpRateLimits,
 } from '../helpers/dedicatedUser';
 import { runScopedEmail } from '../helpers/runScope';
 
@@ -61,9 +62,23 @@ test.describe('メール認証が未完了のアカウント', () => {
   });
 
   test.beforeEach(async () => {
-    // 前のテストのログイン試行がレート制限に残っていると、理由ではなく
-    // 「しばらく時間をおいて」が出て検証にならない
+    /*
+      ⚠️ レート制限を消さないと、下の「理由を明かさない」テストが
+      **何も検証しなくなる**。
+
+      ログインのレート制限はプレーンな `Error` で投げられる
+      （`src/lib/auth/auth.ts:115,131`）。Auth.js が `code` を載せるのは
+      `CredentialsSignin` を継承したものだけなので（`@auth/core/index.js:133`）、
+      制限に当たると `code` が undefined になり、画面には
+      `INVALID_CREDENTIALS` が出る。**正しく丸めたときと同じ文言**なので
+      区別できない。
+
+      `login_ip` は 20回/15分で **shard 内の全 spec が共有する**ため、
+      メールアドレス単位の分だけでは足りない（`twoFactor.spec.ts:136` と
+      同じ理由）
+    */
     await cleanupRateLimitsForEmail(UNVERIFIED.email);
+    await cleanupLoginIpRateLimits();
   });
 
   test.afterAll(async () => {

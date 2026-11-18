@@ -265,12 +265,13 @@ describe('LoginForm', () => {
       );
     });
 
-    // 「パスワードが違う」に丸めない。丸めると復帰できない
-    expect(screen.getByRole('alert')).not.toHaveTextContent(
-      AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
+    // トーストにも同じ文言が出る（画面を見ていない人にも届く）
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED,
+        variant: 'error',
+      }),
     );
-    // 次に何をすればよいかが書いてある
-    expect(AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED).toContain('新規登録');
   });
 
   it('onOtpLoginClick指定時にメールでログインボタンが表示される', async () => {

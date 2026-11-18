@@ -1698,6 +1698,67 @@ describe('authorize の第2要素（メールOTP経路）', () => {
   });
 
   /**
+   * 通したときは検証済みトークンを消費する（ワンタイム）
+   *
+   * ⚠️ 下の「弾くときは消費しない」と**対で必要**。片方だけだと、
+   * 消費そのものを消しても全部グリーンで通る（実際そうなっていた）。
+   * トークンは `verified_at` から5分有効なので、残ると使い回せる
+   */
+  it('ログインに成功したら検証済みトークンを消費する', async () => {
+    const deleted: string[] = [];
+    mockIsTotpEnabled.mockResolvedValue(false);
+
+    setResolver(({ table, ops }) => {
+      if (table === 'users') {
+        return {
+          data: {
+            id: 'user-1',
+            email: 'user@example.com',
+            name: 'User',
+            avatar_url: null,
+            role: 'user',
+            is_verified: true,
+            password_hash: null,
+            password_changed_at: null,
+          },
+          error: null,
+        };
+      }
+
+      if (table === 'otp_codes') {
+        if (ops.includes('delete')) {
+          deleted.push('otp_codes');
+          return { data: null, error: null };
+        }
+
+        return {
+          data: {
+            id: 'otp-1',
+            email: 'user@example.com',
+            verified_at: new Date().toISOString(),
+          },
+          error: null,
+        };
+      }
+
+      return { data: null, error: null };
+    });
+
+    await expect(
+      credentialsProvider.authorize(
+        {
+          email: 'user@example.com',
+          loginMethod: 'otp',
+          verificationToken: 'token',
+        },
+        makeRequest(),
+      ),
+    ).resolves.toMatchObject({ id: 'user-1' });
+
+    expect(deleted).toContain('otp_codes');
+  });
+
+  /**
    * メール認証が未完了のアカウント（#1247）
    *
    * この画面には**パスワード欄すら無い**のに「メールアドレスまたは

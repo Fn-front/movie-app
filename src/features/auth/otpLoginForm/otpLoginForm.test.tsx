@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
+
 import { OtpLoginForm } from './otpLoginForm';
 
 // --- Polyfills ---
@@ -345,7 +347,7 @@ describe('OtpLoginForm', () => {
       'email_not_verified',
       // #1247。この画面には**パスワード欄すら無い**のに「メールアドレス
       // またはパスワードが正しくありません」と出ていた。コードは正しい
-      'メール認証が完了していません。お手数ですが、同じメールアドレスとパスワードで新規登録をやり直してください。確認コードを再送します。',
+      AUTH_ERROR_MESSAGES.EMAIL_NOT_VERIFIED,
     ],
     [
       '判別できないコード',

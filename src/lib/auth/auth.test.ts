@@ -146,7 +146,7 @@ type Callbacks = {
   session: (args: unknown) => Promise<Record<string, unknown>>;
 };
 
-import { SESSION_CONFIG } from '@/constants/auth';
+import { AUTH_ERROR_CODE, SESSION_CONFIG } from '@/constants/auth';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('@/lib/auth/auth');
@@ -1379,6 +1379,56 @@ describe('authorize のレート制限', () => {
         makeRequest('203.0.113.1'),
       ),
     ).rejects.toThrow();
+  });
+
+  /**
+   * ⚠️ レート制限の超過は `rate_limited` のコードで返す。
+   *
+   * プレーンな `Error` を投げると Auth.js が `code` を載せないため
+   * （`authErrors.ts` 参照）、クライアントの `resolveErrorMessage` が
+   * default に落ちて「メールアドレスまたはパスワードが正しくありません」と
+   * 表示される。パスワードが正しくてもそう言われ続ける（#1247 と同じ形）。
+   *
+   * 識別子にIPが入り、パスワード照合より前に消費されるので、
+   * `rate_limited` を返してもアカウント列挙にはならない。
+   */
+  it('送信元IP単位の超過は rate_limited のコードで返す', async () => {
+    mockCheckRateLimit.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 900,
+    });
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: 'pw' },
+        makeRequest('203.0.113.1'),
+      ),
+    ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.RATE_LIMITED });
+  });
+
+  it('アカウント×送信元単位の超過も rate_limited のコードで返す', async () => {
+    // ⚠️ 1層目（login_ip）を明示的に通してから2層目を落とす。
+    // mockResolvedValueOnce を1つだけ積むと1層目が消費してしまい、
+    // 固定したい2層目を何も検証しないまま緑になる
+    mockCheckRateLimit
+      .mockResolvedValueOnce({ allowed: true })
+      .mockResolvedValueOnce({ allowed: false, retryAfter: 1800 });
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'user@example.com', password: 'pw' },
+        makeRequest('203.0.113.1'),
+      ),
+    ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.RATE_LIMITED });
+
+    expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.anything(),
+      'login',
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('送信元が特定できない場合はメールアドレス単独にフォールバックし、IP制限を行わない', async () => {

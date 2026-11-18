@@ -112,7 +112,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           );
 
           if (!ipLimitResult.allowed) {
-            throw new Error(AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED);
+            // ⚠️ プレーンな `Error` にしない。Auth.js は `CredentialsSignin` を
+            // 継承したエラーの `code` しかクライアントへ載せないため（下の
+            // コメントと `authErrors.ts` 参照）、素の Error だと
+            // `resolveErrorMessage` が default に落ちて
+            // 「メールアドレスまたはパスワードが正しくありません」と表示される。
+            // パスワードが正しくても15分間そう言われ続ける（#1247 と同じ形）。
+            //
+            // 識別子は送信元IPで、パスワード照合より前に消費されるので、
+            // `rate_limited` を返してもアカウント列挙にはならない
+            throw new CredentialsSignInError(AUTH_ERROR_CODE.RATE_LIMITED);
           }
         }
 
@@ -128,7 +137,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         );
 
         if (!rateLimitResult.allowed) {
-          throw new Error(AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED);
+          // 上の LOGIN_IP と同じ理由でコード付きにする。
+          // 識別子は `<アカウント>|<送信元IP>` で、照合より前に消費される
+          throw new CredentialsSignInError(AUTH_ERROR_CODE.RATE_LIMITED);
         }
 
         // ユーザー取得。

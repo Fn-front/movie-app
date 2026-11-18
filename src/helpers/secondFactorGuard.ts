@@ -3,23 +3,34 @@
  *
  * 無効化・リカバリーコード再発行は、セッションだけでは通さない。
  * セッションを奪われただけで第2要素を外せたら、二段階認証の意味がない。
+ *
+ * 方式（認証アプリ / メールのコード）には依存しない。`verifySecondFactor` が
+ * 方式で分岐し、リカバリーコードはどちらでも受け付ける。
+ *
+ * ⚠️ メールOTP を使う利用者はコードを手元で作れないため、ここを通るには
+ * 先に `/api/user/totp/send-challenge` でコードを受け取る必要がある。
+ * その経路が無いと、設定を有効にしたあと二度と無効化できなくなる。
  */
 
 import { NextResponse } from 'next/server';
 import { SupabaseClient } from '@supabase/supabase-js';
 
 import {
-  isTotpEnabled,
-  TOTP_VERIFY_RESULT,
+  getSecondFactorMethod,
+  SECOND_FACTOR_VERIFY_RESULT,
   verifySecondFactor,
-} from '@/lib/auth/totpVerification';
+} from '@/lib/auth/secondFactor';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { TOTP_ERROR_MESSAGES, TOTP_SETTINGS_LIMIT } from '@/constants/totp';
 
-/** エラーレスポンスを組み立てる */
-const errorResponse = (code: string, message: string, status: number) =>
+/**
+ * エラーレスポンスを組み立てる
+ *
+ * 二段階認証まわりのルート（`/api/user/totp/**`）が共通で使う。
+ */
+export const errorResponse = (code: string, message: string, status: number) =>
   NextResponse.json({ success: false, error: { code, message } }, { status });
 
 /**
@@ -31,7 +42,7 @@ const errorResponse = (code: string, message: string, status: number) =>
  * 検証済みの `code` を要るため同じ位置に置けない。呼び出し側は認証の直後に
  * これを呼び、通過してから検証と `requireSecondFactor` に進むこと。
  *
- * なお #940 以前は `isTotpEnabled` の後で数えていたため、二段階認証が未設定の
+ * なお #940 以前は `getSecondFactorMethod` の後で数えていたため、二段階認証が未設定の
  * ユーザーは枠を消費しなかった。現在は先に数えるので、未設定のまま叩き続けると
  * `TOTP_SETTINGS_VERIFY` がロックされ、その間 `totp/setup` と `totp/enable` も
  * 429 になる。
@@ -86,7 +97,7 @@ export async function requireSecondFactor(
   userId: string,
   code: string,
 ): Promise<NextResponse | null> {
-  if (!(await isTotpEnabled(supabase, userId))) {
+  if (!(await getSecondFactorMethod(supabase, userId))) {
     return errorResponse(
       ERROR_CODE.BAD_REQUEST,
       TOTP_ERROR_MESSAGES.NOT_CONFIGURED,
@@ -96,7 +107,7 @@ export async function requireSecondFactor(
 
   const verifyResult = await verifySecondFactor(supabase, userId, code);
 
-  if (verifyResult === TOTP_VERIFY_RESULT.REUSED) {
+  if (verifyResult === SECOND_FACTOR_VERIFY_RESULT.REUSED) {
     return errorResponse(
       ERROR_CODE.BAD_REQUEST,
       TOTP_ERROR_MESSAGES.CODE_ALREADY_USED,
@@ -104,7 +115,7 @@ export async function requireSecondFactor(
     );
   }
 
-  if (verifyResult !== TOTP_VERIFY_RESULT.SUCCESS) {
+  if (verifyResult !== SECOND_FACTOR_VERIFY_RESULT.SUCCESS) {
     return errorResponse(
       ERROR_CODE.BAD_REQUEST,
       TOTP_ERROR_MESSAGES.INVALID_CODE,

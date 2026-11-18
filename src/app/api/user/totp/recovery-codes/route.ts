@@ -16,7 +16,7 @@ import {
 import {
   checkSecondFactorRateLimit,
   requireSecondFactor,
-} from '@/helpers/totpGuard';
+} from '@/helpers/secondFactorGuard';
 import { regenerateRecoveryCodes } from '@/lib/auth/totpSetup';
 import { totpVerifySchema } from '@/schema/totp';
 import { HTTP_STATUS, ERROR_CODE } from '@/constants';

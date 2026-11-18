@@ -7,6 +7,10 @@ import { randomBytes } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { RECOVERY_CODE_CONFIG, TOTP_CONFIG } from '@/constants/totp';
+import {
+  SECOND_FACTOR_METHOD,
+  type SecondFactorMethod,
+} from '@/constants/secondFactor';
 import { decryptTotpSecret, encryptTotpSecret } from '@/lib/totp/encryption';
 import { hashRecoveryCode } from '@/lib/totp/recoveryCodes';
 import { base32Decode } from '@/lib/totp/base32';
@@ -14,11 +18,28 @@ import { generateTotpCode } from '@/lib/totp/totp';
 import { generateTotpSecret } from '@/lib/totp/secret';
 
 import {
-  confirmTotpSetup,
+  confirmSecondFactorSetup,
   disableTotp,
   regenerateRecoveryCodes,
-  startTotpSetup,
+  startSecondFactorSetup,
+  TotpAlreadyEnabledError,
 } from './totpSetup';
+
+// --- Mocks ---
+
+const mockSendSecondFactorCode = jest.fn();
+jest.mock('./sendSecondFactorCode', () => ({
+  ...jest.requireActual('./sendSecondFactorCode'),
+  sendSecondFactorCode: (...args: unknown[]) =>
+    mockSendSecondFactorCode(...args),
+}));
+
+const mockConsumeSecondFactorEmailCode = jest.fn();
+jest.mock('./secondFactor', () => ({
+  ...jest.requireActual('./secondFactor'),
+  consumeSecondFactorEmailCode: (...args: unknown[]) =>
+    mockConsumeSecondFactorEmailCode(...args),
+}));
 
 const TEST_KEY = randomBytes(32).toString('base64');
 const USER_ID = '11111111-1111-1111-1111-111111111111';
@@ -27,9 +48,12 @@ const EMAIL = 'user@example.com';
 interface FakeDb {
   totp: {
     user_id: string;
-    encrypted_secret: string;
+    /** method=email_otp では NULL */
+    encrypted_secret: string | null;
     confirmed_at: string | null;
     last_used_counter: number | null;
+    /** 省略時は totp（DB の DEFAULT と同じ） */
+    method?: SecondFactorMethod;
   } | null;
   recoveryCodes: Array<{ user_id: string; code_hash: string }>;
 }
@@ -121,6 +145,7 @@ function createSupabaseMock(db: FakeDb): SupabaseClient {
 const originalKey = process.env.TOTP_ENCRYPTION_KEY;
 
 beforeEach(() => {
+  jest.clearAllMocks();
   process.env.TOTP_ENCRYPTION_KEY = TEST_KEY;
 });
 
@@ -174,7 +199,7 @@ function createReadFailingSupabaseMock(db: FakeDb): {
   };
 }
 
-describe('startTotpSetup', () => {
+describe('startSecondFactorSetup（method=totp）', () => {
   /**
    * ⚠️ 読み取りに失敗したときに消してはいけない
    *
@@ -195,52 +220,76 @@ describe('startTotpSetup', () => {
     };
     const { client, deleted } = createReadFailingSupabaseMock(db);
 
-    await expect(startTotpSetup(client, USER_ID, EMAIL)).rejects.toThrow(
-      /connection terminated/,
-    );
+    await expect(
+      startSecondFactorSetup(
+        client,
+        USER_ID,
+        SECOND_FACTOR_METHOD.TOTP,
+        EMAIL,
+        EMAIL,
+      ),
+    ).rejects.toThrow(/connection terminated/);
 
     expect(deleted.called).toBe(false);
     expect(db.totp).not.toBeNull();
   });
 
   it('otpauth URI と手入力用の鍵を返す', async () => {
-    const result = await startTotpSetup(
+    const result = await startSecondFactorSetup(
       createSupabaseMock(emptyDb()),
       USER_ID,
+      SECOND_FACTOR_METHOD.TOTP,
+      EMAIL,
       EMAIL,
     );
 
-    expect(result.otpauthUri).toMatch(/^otpauth:\/\/totp\//);
-    expect(result.secret).toMatch(/^[A-Z2-7]+$/);
+    expect(result.otpauthUri!).toMatch(/^otpauth:\/\/totp\//);
+    expect(result.secret!).toMatch(/^[A-Z2-7]+$/);
   });
 
   it('URI に含まれる鍵と手入力用の鍵が一致する', async () => {
     // ここがずれると、QRで登録した利用者と手入力した利用者で結果が変わる
-    const result = await startTotpSetup(
+    const result = await startSecondFactorSetup(
       createSupabaseMock(emptyDb()),
       USER_ID,
+      SECOND_FACTOR_METHOD.TOTP,
+      EMAIL,
       EMAIL,
     );
 
-    expect(new URL(result.otpauthUri).searchParams.get('secret')).toBe(
-      result.secret,
+    expect(new URL(result.otpauthUri!).searchParams.get('secret')).toBe(
+      result.secret!,
     );
   });
 
   it('鍵を暗号化して保存する', async () => {
     const db = emptyDb();
 
-    const result = await startTotpSetup(createSupabaseMock(db), USER_ID, EMAIL);
+    const result = await startSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      SECOND_FACTOR_METHOD.TOTP,
+      EMAIL,
+      EMAIL,
+    );
 
-    expect(db.totp?.encrypted_secret).not.toContain(result.secret);
-    expect(decryptTotpSecret(db.totp!.encrypted_secret)).toBe(result.secret);
+    expect(db.totp?.encrypted_secret).not.toContain(result.secret!);
+    expect(decryptTotpSecret(db.totp!.encrypted_secret as string)).toBe(
+      result.secret!,
+    );
   });
 
   it('設定途中として保存する（まだ有効化しない）', async () => {
     // QRを表示しただけで有効にすると、登録に失敗した利用者がロックアウトされる
     const db = emptyDb();
 
-    await startTotpSetup(createSupabaseMock(db), USER_ID, EMAIL);
+    await startSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      SECOND_FACTOR_METHOD.TOTP,
+      EMAIL,
+      EMAIL,
+    );
 
     expect(db.totp?.confirmed_at).toBeNull();
   });
@@ -256,9 +305,17 @@ describe('startTotpSetup', () => {
       recoveryCodes: [],
     };
 
-    const result = await startTotpSetup(createSupabaseMock(db), USER_ID, EMAIL);
+    const result = await startSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      SECOND_FACTOR_METHOD.TOTP,
+      EMAIL,
+      EMAIL,
+    );
 
-    expect(decryptTotpSecret(db.totp!.encrypted_secret)).toBe(result.secret);
+    expect(decryptTotpSecret(db.totp!.encrypted_secret as string)).toBe(
+      result.secret!,
+    );
     // 作り直しなので古いカウンタは残らない
     expect(db.totp?.last_used_counter).toBeNull();
   });
@@ -275,22 +332,30 @@ describe('startTotpSetup', () => {
     };
 
     await expect(
-      startTotpSetup(createSupabaseMock(db), USER_ID, EMAIL),
+      startSecondFactorSetup(
+        createSupabaseMock(db),
+        USER_ID,
+        SECOND_FACTOR_METHOD.TOTP,
+        EMAIL,
+        EMAIL,
+      ),
     ).rejects.toThrow('already enabled');
   });
 
   it('設定どおりのバイト長の鍵を生成する', async () => {
-    const result = await startTotpSetup(
+    const result = await startSecondFactorSetup(
       createSupabaseMock(emptyDb()),
       USER_ID,
+      SECOND_FACTOR_METHOD.TOTP,
+      EMAIL,
       EMAIL,
     );
 
-    expect(base32Decode(result.secret)).toHaveLength(TOTP_CONFIG.SECRET_BYTES);
+    expect(base32Decode(result.secret!)).toHaveLength(TOTP_CONFIG.SECRET_BYTES);
   });
 });
 
-describe('confirmTotpSetup', () => {
+describe('confirmSecondFactorSetup', () => {
   /** 設定途中の状態を作る */
   const setupInProgress = () => {
     const secret = generateTotpSecret();
@@ -309,10 +374,11 @@ describe('confirmTotpSetup', () => {
   it('正しいコードで有効化する', async () => {
     const { secret, db } = setupInProgress();
 
-    await confirmTotpSetup(
+    await confirmSecondFactorSetup(
       createSupabaseMock(db),
       USER_ID,
       generateTotpCode(secret),
+      EMAIL,
     );
 
     expect(db.totp?.confirmed_at).not.toBeNull();
@@ -321,10 +387,11 @@ describe('confirmTotpSetup', () => {
   it('リカバリーコードを発行して返す', async () => {
     const { secret, db } = setupInProgress();
 
-    const codes = await confirmTotpSetup(
+    const codes = await confirmSecondFactorSetup(
       createSupabaseMock(db),
       USER_ID,
       generateTotpCode(secret),
+      EMAIL,
     );
 
     expect(codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
@@ -334,10 +401,11 @@ describe('confirmTotpSetup', () => {
   it('返したコードのハッシュを保存する', async () => {
     const { secret, db } = setupInProgress();
 
-    const codes = await confirmTotpSetup(
+    const codes = await confirmSecondFactorSetup(
       createSupabaseMock(db),
       USER_ID,
       generateTotpCode(secret),
+      EMAIL,
     );
 
     codes!.forEach((code) => {
@@ -351,7 +419,12 @@ describe('confirmTotpSetup', () => {
     const { db } = setupInProgress();
 
     await expect(
-      confirmTotpSetup(createSupabaseMock(db), USER_ID, '000000'),
+      confirmSecondFactorSetup(
+        createSupabaseMock(db),
+        USER_ID,
+        '000000',
+        EMAIL,
+      ),
     ).resolves.toBeNull();
     expect(db.totp?.confirmed_at).toBeNull();
   });
@@ -361,14 +434,24 @@ describe('confirmTotpSetup', () => {
     // 無効、という中途半端な状態になる
     const { db } = setupInProgress();
 
-    await confirmTotpSetup(createSupabaseMock(db), USER_ID, '000000');
+    await confirmSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      '000000',
+      EMAIL,
+    );
 
     expect(db.recoveryCodes).toHaveLength(0);
   });
 
   it('設定を開始していなければ null を返す', async () => {
     await expect(
-      confirmTotpSetup(createSupabaseMock(emptyDb()), USER_ID, '123456'),
+      confirmSecondFactorSetup(
+        createSupabaseMock(emptyDb()),
+        USER_ID,
+        '123456',
+        EMAIL,
+      ),
     ).resolves.toBeNull();
   });
 
@@ -385,10 +468,11 @@ describe('confirmTotpSetup', () => {
     };
 
     await expect(
-      confirmTotpSetup(
+      confirmSecondFactorSetup(
         createSupabaseMock(db),
         USER_ID,
         generateTotpCode(secret),
+        EMAIL,
       ),
     ).resolves.toBeNull();
   });
@@ -397,10 +481,11 @@ describe('confirmTotpSetup', () => {
     const { secret, db } = setupInProgress();
 
     await expect(
-      confirmTotpSetup(
+      confirmSecondFactorSetup(
         createSupabaseMock(db),
         USER_ID,
         `  ${generateTotpCode(secret)} `,
+        EMAIL,
       ),
     ).resolves.toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
   });
@@ -516,5 +601,219 @@ describe('regenerateRecoveryCodes', () => {
     expect(db.recoveryCodes.map((row) => row.code_hash)).toEqual(
       codes.map(hashRecoveryCode),
     );
+  });
+});
+
+// -------------------- メールOTP 方式の設定 --------------------
+
+describe('startSecondFactorSetup（method=email_otp）', () => {
+  beforeEach(() => {
+    mockSendSecondFactorCode.mockResolvedValue('sent');
+  });
+
+  /**
+   * ⚠️ `method` を省くと DB の DEFAULT 'totp' が入り、`encrypted_secret` が
+   * NULL なので `chk_secret_matches_method` に 23514 で落ちる。
+   */
+  it('method と encrypted_secret: null を明示して保存する', async () => {
+    const db = emptyDb();
+
+    await startSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      SECOND_FACTOR_METHOD.EMAIL_OTP,
+      EMAIL,
+      EMAIL,
+    );
+
+    expect(db.totp?.method).toBe(SECOND_FACTOR_METHOD.EMAIL_OTP);
+    expect(db.totp?.encrypted_secret).toBeNull();
+  });
+
+  it('共有鍵もQRも作らず、コードを送る', async () => {
+    const result = await startSecondFactorSetup(
+      createSupabaseMock(emptyDb()),
+      USER_ID,
+      SECOND_FACTOR_METHOD.EMAIL_OTP,
+      EMAIL,
+      EMAIL,
+    );
+
+    expect(result.otpauthUri).toBeUndefined();
+    expect(result.secret).toBeUndefined();
+    expect(result.sendResult).toBe('sent');
+    expect(mockSendSecondFactorCode).toHaveBeenCalledWith(
+      expect.anything(),
+      USER_ID,
+      EMAIL,
+    );
+  });
+
+  it('method=totp ではコードを送らない', async () => {
+    await startSecondFactorSetup(
+      createSupabaseMock(emptyDb()),
+      USER_ID,
+      SECOND_FACTOR_METHOD.TOTP,
+      EMAIL,
+      EMAIL,
+    );
+
+    expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
+  });
+
+  it('既に有効なら方式によらず TotpAlreadyEnabledError', async () => {
+    const db = emptyDb();
+    db.totp = {
+      user_id: USER_ID,
+      encrypted_secret: encryptTotpSecret(generateTotpSecret()),
+      confirmed_at: '2026-11-18T00:00:00Z',
+      last_used_counter: null,
+    };
+
+    await expect(
+      startSecondFactorSetup(
+        createSupabaseMock(db),
+        USER_ID,
+        SECOND_FACTOR_METHOD.EMAIL_OTP,
+        EMAIL,
+        EMAIL,
+      ),
+    ).rejects.toThrow(TotpAlreadyEnabledError);
+  });
+
+  /**
+   * ⚠️ `SEND_FAILED` では `sendSecondFactorCode` が otp_codes の行も消して
+   * いるので、使えるコードが1つも無い。設定途中の行を残すと
+   * 「コード入力画面に来たのにコードが来ない」状態になる。
+   */
+  it('送信に失敗したら設定途中の行を残さない', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('send_failed');
+    const db = emptyDb();
+
+    const result = await startSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      SECOND_FACTOR_METHOD.EMAIL_OTP,
+      EMAIL,
+      EMAIL,
+    );
+
+    expect(result.sendResult).toBe('send_failed');
+    expect(db.totp).toBeNull();
+  });
+
+  /**
+   * ⚠️ 逆に `THROTTLED` では**直前に送ったコードがまだ生きている**。
+   * ここで行を消すと、受信箱にあるコードを入力できなくなる。
+   */
+  it('再送間隔に当たった場合は設定途中の行を残す', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('throttled');
+    const db = emptyDb();
+
+    const result = await startSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      SECOND_FACTOR_METHOD.EMAIL_OTP,
+      EMAIL,
+      EMAIL,
+    );
+
+    expect(result.sendResult).toBe('throttled');
+    expect(db.totp).not.toBeNull();
+  });
+
+  it('送信上限に当たった場合も設定途中の行を残す', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('limit_exceeded');
+    const db = emptyDb();
+
+    await startSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      SECOND_FACTOR_METHOD.EMAIL_OTP,
+      EMAIL,
+      EMAIL,
+    );
+
+    expect(db.totp).not.toBeNull();
+  });
+});
+
+describe('confirmSecondFactorSetup（method=email_otp）', () => {
+  /** メールOTP で設定途中の状態を作る */
+  const emailSetupInProgress = () => {
+    const db = emptyDb();
+    db.totp = {
+      user_id: USER_ID,
+      encrypted_secret: null as unknown as string,
+      confirmed_at: null,
+      last_used_counter: null,
+      method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+    } as FakeDb['totp'];
+    return db;
+  };
+
+  beforeEach(() => {
+    mockConsumeSecondFactorEmailCode.mockResolvedValue('success');
+  });
+
+  /**
+   * ⚠️ 設定途中は `confirmed_at` が NULL なので `getSecondFactorMethod` は
+   * null を返す。`verifySecondFactor` 経由では到達できないため、
+   * `consumeSecondFactorEmailCode` を直接使う。
+   */
+  it('メールのコードで有効化し、リカバリーコードを返す', async () => {
+    const db = emailSetupInProgress();
+
+    const codes = await confirmSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      '123456',
+      EMAIL,
+    );
+
+    expect(codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
+    expect(db.totp?.confirmed_at).not.toBeNull();
+    expect(mockConsumeSecondFactorEmailCode).toHaveBeenCalledWith(
+      expect.anything(),
+      EMAIL,
+      '123456',
+    );
+  });
+
+  it('コードが合わなければ null を返し、有効化もしない', async () => {
+    mockConsumeSecondFactorEmailCode.mockResolvedValue('invalid');
+    const db = emailSetupInProgress();
+
+    await expect(
+      confirmSecondFactorSetup(
+        createSupabaseMock(db),
+        USER_ID,
+        '999999',
+        EMAIL,
+      ),
+    ).resolves.toBeNull();
+
+    expect(db.totp?.confirmed_at).toBeNull();
+    expect(db.recoveryCodes).toHaveLength(0);
+  });
+
+  it('method=totp ではメールのコードを使わない', async () => {
+    const db = emptyDb();
+    const secret = generateTotpSecret();
+    db.totp = {
+      user_id: USER_ID,
+      encrypted_secret: encryptTotpSecret(secret),
+      confirmed_at: null,
+      last_used_counter: null,
+    };
+
+    await confirmSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      generateTotpCode(secret),
+      EMAIL,
+    );
+
+    expect(mockConsumeSecondFactorEmailCode).not.toHaveBeenCalled();
   });
 });

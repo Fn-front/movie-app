@@ -2,6 +2,8 @@
  * NextAuth.js 型定義拡張
  */
 
+import type { SecondFactorMethod } from '@/constants/secondFactor';
+
 import 'next-auth';
 import 'next-auth/jwt';
 
@@ -32,6 +34,29 @@ declare module 'next-auth' {
      * 「一時的に確認できません」を出し分ける。
      */
     totpUnavailable?: boolean;
+    /**
+     * 有効になっている第2要素の方式。
+     *
+     * `totpPending` のとき `user` を空にしているため、これが無いと画面は
+     * 「認証アプリのコード」と「メールに送ったコード」を出し分けられない。
+     * OAuth 側の認証は済んでいるので露出して問題ない。
+     */
+    secondFactorMethod?: SecondFactorMethod;
+    /**
+     * 第2要素のコードを**送信できなかった**か。
+     *
+     * `totpUnavailable`（検証できなかった）とは別物。どちらも
+     * 「コードが違う」と区別しないと、届いていないコードを打ち直し続ける。
+     */
+    secondFactorSendFailed?: boolean;
+    /**
+     * 第2要素のコードが**送信上限で1通も送られなかった**か。
+     *
+     * `secondFactorSendFailed`（送信そのものの失敗）とは分ける。
+     * どちらも「コードが違う」とは別物だが、出口が違う —— こちらは
+     * リカバリーコードしか残っていない。
+     */
+    secondFactorSendLimited?: boolean;
   }
 
   interface User {
@@ -66,5 +91,22 @@ declare module 'next-auth/jwt' {
      * 残ると復旧後も「一時的に確認できません」が出続ける
      */
     totpUnavailable?: boolean;
+    /** 有効になっている第2要素の方式。画面の出し分けと再送の判定に使う */
+    secondFactorMethod?: SecondFactorMethod;
+    /**
+     * 第2要素のコードを送信できなかったか。
+     *
+     * jwt コールバックの冒頭で毎回消すので、**その回の結果だけ**を表す。
+     * 残ると再送に成功しても「送信できませんでした」が出続ける
+     */
+    secondFactorSendFailed?: boolean;
+    /**
+     * 第2要素のコードが**送信上限で1通も送られなかった**か。
+     *
+     * `secondFactorSendFailed`（送信そのものの失敗）とは分ける。
+     * どちらも「コードが違う」とは別物だが、出口が違う —— こちらは
+     * リカバリーコードしか残っていない。
+     */
+    secondFactorSendLimited?: boolean;
   }
 }

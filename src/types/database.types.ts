@@ -996,24 +996,27 @@ export type Database = {
         Row: {
           confirmed_at: string | null;
           created_at: string;
-          encrypted_secret: string;
+          encrypted_secret: string | null;
           last_used_counter: number | null;
+          method: string;
           updated_at: string;
           user_id: string;
         };
         Insert: {
           confirmed_at?: string | null;
           created_at?: string;
-          encrypted_secret: string;
+          encrypted_secret?: string | null;
           last_used_counter?: number | null;
+          method?: string;
           updated_at?: string;
           user_id: string;
         };
         Update: {
           confirmed_at?: string | null;
           created_at?: string;
-          encrypted_secret?: string;
+          encrypted_secret?: string | null;
           last_used_counter?: number | null;
+          method?: string;
           updated_at?: string;
           user_id?: string;
         };

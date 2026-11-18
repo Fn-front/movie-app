@@ -41,6 +41,19 @@ export const RATE_LIMIT_ACTION = {
    * ロックされ、利用者が自力で解除できない（#940）。
    */
   TOTP_SETTINGS_VERIFY: 'totp_settings_verify',
+  /**
+   * 第2要素コードのメール送信の上限（ユーザー単位）
+   *
+   * `OTP_SEND_DAILY` とカウンタを分ける。共有すると、ログインの多さが
+   * 新規登録のメール確認（`auth/register`）とパスワード変更の本人確認
+   * （`auth/otp/send`）を巻き添えにする。`TOTP_VERIFY` をログインと設定で
+   * 分けた #940 と同じ発想。
+   *
+   * ⚠️ 検証側の `TOTP_SETTINGS_VERIFY` とも重ねない。重ねると、メールOTP の
+   * 利用者は無効化のたびに「コード送信 + コード入力」で2枠使い、2回しくじる
+   * だけで15分間すべての二段階認証操作が 429 になる。
+   */
+  TWO_FACTOR_SEND: 'two_factor_send',
   /** パスワードリセットの発行上限（メールアドレス単位） */
   PASSWORD_RESET_REQUEST: 'password_reset_request',
   /** パスワードリセットの検証試行の上限（送信元単位） */
@@ -121,6 +134,10 @@ export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
   // メールのワンタイムコード
   RATE_LIMIT_ACTION.OTP_VERIFY,
   RATE_LIMIT_ACTION.OTP_SEND_DAILY,
+  // 第2要素の送信。通さないとログインできなくなるが、通すと上限が無言で
+  // 消える。第2要素については「送れないこと」より「無制限に送れること」の
+  // ほうが危険なので、他の認証系と揃えて拒否側へ倒す
+  RATE_LIMIT_ACTION.TWO_FACTOR_SEND,
   'registration',
   // パスワードの変更・再設定
   RATE_LIMIT_ACTION.PASSWORD_RESET_REQUEST,
@@ -271,6 +288,22 @@ export const RATE_LIMIT_CONFIG = {
    * 第三者が他人のアカウントをロックすることはできない）。
    */
   TOTP_VERIFY: { maxAttempts: 5, windowMinutes: 15 },
+  /**
+   * 第2要素コードのメール送信。
+   *
+   * ⚠️ **窓を長くしてはいけない。** 上の #934 の説明のとおり、`maxAttempts` は
+   * 「◯回 / windowMinutes」というレートではなく**アイドルを挟むまでの通算回数**。
+   * `consume_rate_limit` がカウンタを戻すのは、その窓のあいだ一度も
+   * アクセスが無かったときだけ。
+   *
+   * 当初案の `{ 20, 1440 }`（「20通/日」のつもり）は成立しない。24時間まるごと
+   * 送信が無い日を挟まない限りカウンタが単調増加し、1日2回ログインする利用者は
+   * 10日ほどで到達して**24時間ログイン不能**になる。濫用ではなく通常利用で詰む。
+   *
+   * 1時間窓なら1時間の間隔でカウンタが戻り、超過してもロックは1時間で済む。
+   * 持続レートの上限は、別途かかる60秒の再送間隔が 60通/時 に抑える。
+   */
+  TWO_FACTOR_SEND: { maxAttempts: 10, windowMinutes: 60 },
   /**
    * 受賞作品の手動同期。
    *

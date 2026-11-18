@@ -12,8 +12,9 @@ import { POST } from './route';
 
 // --- Mocks ---
 
+const mockFrom = jest.fn();
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () => ({ from: jest.fn() }),
+  createServiceRoleClient: () => ({ from: mockFrom }),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -32,9 +33,10 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   resetRateLimit: (...args: unknown[]) => mockResetRateLimit(...args),
 }));
 
-const mockConfirmTotpSetup = jest.fn();
+const mockConfirmSecondFactorSetup = jest.fn();
 jest.mock('@/lib/auth/totpSetup', () => ({
-  confirmTotpSetup: (...args: unknown[]) => mockConfirmTotpSetup(...args),
+  confirmSecondFactorSetup: (...args: unknown[]) =>
+    mockConfirmSecondFactorSetup(...args),
 }));
 
 // --- Helpers ---
@@ -53,7 +55,19 @@ describe('POST /api/user/totp/enable', () => {
     jest.clearAllMocks();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
-    mockConfirmTotpSetup.mockResolvedValue(['ABCDE-FGHJK', 'MNPQR-STWXY']);
+    // メールOTP の照合に本人のアドレスが要るため users を引く
+    mockFrom.mockReturnValue({
+      select: () => ({
+        eq: () => ({
+          single: () =>
+            Promise.resolve({ data: { email: 'user@example.com' } }),
+        }),
+      }),
+    });
+    mockConfirmSecondFactorSetup.mockResolvedValue([
+      'ABCDE-FGHJK',
+      'MNPQR-STWXY',
+    ]);
   });
 
   it('正しいコードで有効化しリカバリーコードを返す', async () => {
@@ -76,7 +90,7 @@ describe('POST /api/user/totp/enable', () => {
   });
 
   it('誤ったコードなら400を返す', async () => {
-    mockConfirmTotpSetup.mockResolvedValue(null);
+    mockConfirmSecondFactorSetup.mockResolvedValue(null);
 
     const response = await POST(createRequest({ code: '000000' }));
     const json = await response.json();
@@ -96,7 +110,7 @@ describe('POST /api/user/totp/enable', () => {
     const response = await POST(createRequest(body));
 
     expect(response.status).toBe(400);
-    expect(mockConfirmTotpSetup).not.toHaveBeenCalled();
+    expect(mockConfirmSecondFactorSetup).not.toHaveBeenCalled();
   });
 
   it('未認証なら401を返す', async () => {
@@ -114,11 +128,11 @@ describe('POST /api/user/totp/enable', () => {
     const response = await POST(createRequest({ code: '123456' }));
 
     expect(response.status).toBe(429);
-    expect(mockConfirmTotpSetup).not.toHaveBeenCalled();
+    expect(mockConfirmSecondFactorSetup).not.toHaveBeenCalled();
   });
 
   it('例外時は500を返す', async () => {
-    mockConfirmTotpSetup.mockRejectedValue(new Error('db error'));
+    mockConfirmSecondFactorSetup.mockRejectedValue(new Error('db error'));
 
     const response = await POST(createRequest({ code: '123456' }));
 

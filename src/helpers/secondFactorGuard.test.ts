@@ -5,16 +5,21 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
+import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
 
-import { checkSecondFactorRateLimit, requireSecondFactor } from './totpGuard';
+import {
+  checkSecondFactorRateLimit,
+  requireSecondFactor,
+} from './secondFactorGuard';
 
 // --- Mocks ---
 
-const mockIsTotpEnabled = jest.fn();
+const mockGetSecondFactorMethod = jest.fn();
 const mockVerifySecondFactor = jest.fn();
-jest.mock('@/lib/auth/totpVerification', () => ({
-  ...jest.requireActual('@/lib/auth/totpVerification'),
-  isTotpEnabled: (...args: unknown[]) => mockIsTotpEnabled(...args),
+jest.mock('@/lib/auth/secondFactor', () => ({
+  ...jest.requireActual('@/lib/auth/secondFactor'),
+  getSecondFactorMethod: (...args: unknown[]) =>
+    mockGetSecondFactorMethod(...args),
   verifySecondFactor: (...args: unknown[]) => mockVerifySecondFactor(...args),
 }));
 
@@ -33,7 +38,7 @@ describe('requireSecondFactor', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockIsTotpEnabled.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockVerifySecondFactor.mockResolvedValue('success');
   });
@@ -42,6 +47,20 @@ describe('requireSecondFactor', () => {
     await expect(
       requireSecondFactor(supabase, USER_ID, '123456'),
     ).resolves.toBeNull();
+  });
+
+  // ガードは方式に依存しない。分岐は verifySecondFactor の中にある
+  it('method=email_otp でも、正しいコードなら通す', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.EMAIL_OTP);
+
+    await expect(
+      requireSecondFactor(supabase, USER_ID, '123456'),
+    ).resolves.toBeNull();
+    expect(mockVerifySecondFactor).toHaveBeenCalledWith(
+      supabase,
+      USER_ID,
+      '123456',
+    );
   });
 
   it('成功時にレート制限をリセットする', async () => {
@@ -55,7 +74,7 @@ describe('requireSecondFactor', () => {
   });
 
   it('二段階認証が無効なら400を返す', async () => {
-    mockIsTotpEnabled.mockResolvedValue(false);
+    mockGetSecondFactorMethod.mockResolvedValue(null);
 
     const response = await requireSecondFactor(supabase, USER_ID, '123456');
     const json = await response!.json();
@@ -154,11 +173,11 @@ describe('checkSecondFactorRateLimit', () => {
   });
 
   it('二段階認証の設定有無を問わず数える', async () => {
-    // #940 以前は isTotpEnabled の後で数えていた。画面からここへ到達できるのは
+    // #940 以前は getSecondFactorMethod の後で数えていた。画面からここへ到達できるのは
     // 設定済みの利用者だけなので、先に数えても実害は無い
     await checkSecondFactorRateLimit(supabase, USER_ID);
 
-    expect(mockIsTotpEnabled).not.toHaveBeenCalled();
+    expect(mockGetSecondFactorMethod).not.toHaveBeenCalled();
     expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
   });
 });

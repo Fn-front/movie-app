@@ -11,6 +11,11 @@ import { Input } from '@/components/ui/input/input';
 import { Skeleton } from '@/components/ui/skeleton/skeleton';
 
 import {
+  SECOND_FACTOR_MESSAGES,
+  SECOND_FACTOR_METHOD,
+} from '@/constants/secondFactor';
+
+import {
   TWO_FACTOR_VIEW,
   useTwoFactorSettings,
 } from './hooks/useTwoFactorSettings';
@@ -19,13 +24,17 @@ import styles from './twoFactorSettings.module.scss';
 export const TwoFactorSettings = memo(function TwoFactorSettings() {
   const {
     view,
+    method,
+    emailOtpAvailable,
     qrCodeDataUri,
     secret,
     recoveryCodes,
     remainingRecoveryCodes,
     isSubmitting,
     error,
+    notice,
     startSetup,
+    sendChallenge,
     enable,
     disable,
     regenerateRecoveryCodes,
@@ -65,6 +74,16 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
     setCode('');
   }, [regenerateRecoveryCodes, code]);
 
+  const handleStartTotp = useCallback(async () => {
+    await startSetup(SECOND_FACTOR_METHOD.TOTP);
+  }, [startSetup]);
+
+  const handleStartEmailOtp = useCallback(async () => {
+    await startSetup(SECOND_FACTOR_METHOD.EMAIL_OTP);
+  }, [startSetup]);
+
+  const isEmailOtp = method === SECOND_FACTOR_METHOD.EMAIL_OTP;
+
   if (view === TWO_FACTOR_VIEW.LOADING) {
     return <Skeleton variant='rect' width='100%' height={48} />;
   }
@@ -77,22 +96,112 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
         </p>
       )}
 
+      {/*
+        コード送信は画面の状態を変えないため、これが無いと利用者は
+        送られたのかどうか分からない。
+        `role='status'` にして、読み上げを割り込ませずに伝える
+      */}
+      {notice && (
+        <p className={styles.c_two_factor_settings__notice} role='status'>
+          {notice}
+        </p>
+      )}
+
       {view === TWO_FACTOR_VIEW.DISABLED && (
         <>
           <p className={styles.c_two_factor_settings__lead}>
-            認証アプリで生成するコードを、パスワードに加えて要求します。
-            メールやパスワードが漏れても、認証アプリが無ければログインできません。
+            パスワードに加えて、もう1つのコードを要求します。
+            パスワードが漏れても、そのコードが無ければログインできません。
           </p>
-          <Button
-            type='button'
-            variant='primary'
-            onClick={startSetup}
-            isLoading={isSubmitting}
-            aria-label='二段階認証を設定する'
-          >
-            二段階認証を設定する
-          </Button>
+
+          <div className={styles.c_two_factor_settings__methods}>
+            <div className={styles.c_two_factor_settings__method}>
+              <Button
+                type='button'
+                variant='primary'
+                onClick={handleStartTotp}
+                isLoading={isSubmitting}
+                aria-label='認証アプリで設定する'
+              >
+                認証アプリで設定する
+              </Button>
+              <p className={styles.c_two_factor_settings__method_note}>
+                {SECOND_FACTOR_MESSAGES.TOTP_DESCRIPTION}
+              </p>
+            </div>
+
+            {/*
+              admin が発行したアカウントは users.email が .invalid TLD
+              （RFC 2606、絶対に名前解決されない）なので選ばせない。
+              サーバー側でも拒否している（画面だけの制限にしない）
+            */}
+            {emailOtpAvailable && (
+              <div className={styles.c_two_factor_settings__method}>
+                <Button
+                  type='button'
+                  variant='secondary'
+                  onClick={handleStartEmailOtp}
+                  isLoading={isSubmitting}
+                  aria-label='メールで設定する'
+                >
+                  メールで設定する
+                </Button>
+                <p className={styles.c_two_factor_settings__method_note}>
+                  {SECOND_FACTOR_MESSAGES.EMAIL_OTP_DESCRIPTION}
+                </p>
+                {/*
+                  ⚠️ role='alert' にしない。選ぶ前の説明であってエラーではなく、
+                  読み上げを割り込ませる筋合いがない
+                */}
+                <p className={styles.c_two_factor_settings__method_warning}>
+                  {SECOND_FACTOR_MESSAGES.EMAIL_OTP_WARNING}
+                </p>
+              </div>
+            )}
+          </div>
         </>
+      )}
+
+      {view === TWO_FACTOR_VIEW.SETUP_EMAIL && (
+        <form
+          className={styles.c_two_factor_settings__setup}
+          onSubmit={handleEnable}
+        >
+          <p className={styles.c_two_factor_settings__lead}>
+            登録しているメールアドレスに確認コードを送りました。
+            届いた6桁のコードを入力してください。
+          </p>
+
+          <Input
+            label='確認コード'
+            type='text'
+            inputMode='numeric'
+            autoComplete='one-time-code'
+            placeholder='123456'
+            fullWidth
+            value={code}
+            onChange={handleCodeChange}
+          />
+
+          <div className={styles.c_two_factor_settings__actions}>
+            <Button
+              type='submit'
+              variant='primary'
+              isLoading={isSubmitting}
+              aria-label='二段階認証を有効にする'
+            >
+              有効にする
+            </Button>
+            <Button
+              type='button'
+              variant='secondary'
+              onClick={cancelSetup}
+              aria-label='二段階認証の設定をやめる'
+            >
+              やめる
+            </Button>
+          </div>
+        </form>
       )}
 
       {view === TWO_FACTOR_VIEW.SETUP && (
@@ -200,13 +309,15 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
       {view === TWO_FACTOR_VIEW.ENABLED && (
         <>
           <p className={styles.c_two_factor_settings__status}>
-            二段階認証は<strong>有効</strong>です。 未使用のリカバリーコードは{' '}
-            {remainingRecoveryCodes} 個あります。
+            二段階認証は<strong>有効</strong>です（
+            {isEmailOtp ? 'メールのコード' : '認証アプリ'}）。
+            未使用のリカバリーコードは {remainingRecoveryCodes} 個あります。
           </p>
 
           {remainingRecoveryCodes === 0 && (
             <p className={styles.c_two_factor_settings__warning} role='alert'>
-              リカバリーコードを使い切っています。認証アプリを失うと
+              リカバリーコードを使い切っています。
+              {isEmailOtp ? 'メールを受け取れなくなると' : '認証アプリを失うと'}
               ログインできなくなるため、再発行してください。
             </p>
           )}
@@ -216,10 +327,38 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
             onSubmit={handleDisable}
           >
             <p className={styles.c_two_factor_settings__lead}>
-              無効化とリカバリーコードの再発行には、認証アプリのコード
+              無効化とリカバリーコードの再発行には、
+              {isEmailOtp ? 'メールに送る確認コード' : '認証アプリのコード'}
               （またはリカバリーコード）が必要です。
             </p>
 
+            {/*
+              ⚠️ メールOTP の利用者はコードを手元で作れない。
+              この導線が無いと、一度有効にしたら二度と無効化できなくなる
+              （再セットアップは「既に有効」で弾かれ、パスワードリセットは
+              意図的に第2要素へ触れないため）
+            */}
+            {isEmailOtp && (
+              <Button
+                type='button'
+                variant='secondary'
+                onClick={sendChallenge}
+                isLoading={isSubmitting}
+                /*
+                  ⚠️ 「確認コードを送信」にしない。同じ設定画面の
+                  パスワード変更セクションに同名のボタンがあり、
+                  部分一致のロケータ（getByLabel 等）で衝突する
+                */
+                aria-label='二段階認証の確認コードを送信'
+              >
+                二段階認証の確認コードを送信
+              </Button>
+            )}
+
+            {/*
+              ラベルは方式で変えない。リカバリーコードもここに入れるので、
+              「確認コード」だと認証アプリ利用者に誤解を与える
+            */}
             <Input
               label='認証コード'
               type='text'

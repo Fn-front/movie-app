@@ -4,6 +4,16 @@
 
 import { APP_NAME } from './app';
 import { OTP_ACTION, OTP_CONFIG, type OtpAction } from './otp';
+import { TWO_FACTOR_OTP_ACTION, type TwoFactorOtpAction } from './secondFactor';
+
+/**
+ * 確認コードメールに書く用途の種別
+ *
+ * 公開ルートが受け付ける `OtpAction` に、第2要素（公開ルートからは到達しない）
+ * を足したもの。`OTP_ACTION` 自体を広げてはいけない理由は
+ * `secondFactor.ts` の `TWO_FACTOR_OTP_ACTION` を参照。
+ */
+export type OtpEmailAction = OtpAction | TwoFactorOtpAction;
 
 /**
  * デフォルトの送信元メールアドレス（フォールバック）
@@ -17,10 +27,14 @@ export const DEFAULT_FROM_EMAIL = 'noreply@example.com';
  * 届いたコードが何のためのものか判断できず、「サポートを装って読み上げさせる」
  * 類のソーシャルエンジニアリングに弱くなる（#648）。
  */
-const OTP_PURPOSE_LABEL: Record<OtpAction, string> = {
+const OTP_PURPOSE_LABEL: Record<OtpEmailAction, string> = {
   [OTP_ACTION.REGISTRATION]: 'メールアドレスの確認',
   [OTP_ACTION.LOGIN]: 'ログイン',
   [OTP_ACTION.PASSWORD_CHANGE]: 'パスワード変更',
+  // 「ログイン」とは分ける。第2要素のコードは**パスワードが破られたときだけ**
+  // 届くので、利用者が「自分で始めていないログイン」と区別できないと、
+  // 侵害に気づく唯一の機会を失う
+  [TWO_FACTOR_OTP_ACTION]: '二段階認証',
 };
 
 /**
@@ -29,7 +43,7 @@ const OTP_PURPOSE_LABEL: Record<OtpAction, string> = {
  * @param action - OTPの用途
  * @returns 用途を含む件名
  */
-export function buildOtpEmailSubject(action: OtpAction): string {
+export function buildOtpEmailSubject(action: OtpEmailAction): string {
   return `[${APP_NAME}] ${OTP_PURPOSE_LABEL[action]}の確認コード`;
 }
 
@@ -76,7 +90,10 @@ ${APP_NAME}からお客様にこのリンクをお尋ねすることはありま
 パスワードは変更されません。第三者がお客様のメールアドレスを入力した可能性があります。`;
 }
 
-export function buildOtpEmailText(code: string, action: OtpAction): string {
+export function buildOtpEmailText(
+  code: string,
+  action: OtpEmailAction,
+): string {
   return `${APP_NAME}の確認コードです。
 このコードは「${OTP_PURPOSE_LABEL[action]}」のために発行されました。
 

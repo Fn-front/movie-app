@@ -20,6 +20,7 @@ import {
   USER_ROLE,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  SECOND_FACTOR_METHOD,
   getSessionCookieName,
   getSessionCookieOptions,
 } from '@/constants';
@@ -36,10 +37,14 @@ import {
 import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
-  isTotpEnabled,
-  TOTP_VERIFY_RESULT,
+  getSecondFactorMethod,
+  SECOND_FACTOR_VERIFY_RESULT,
   verifySecondFactor,
-} from '@/lib/auth/totpVerification';
+} from '@/lib/auth/secondFactor';
+import {
+  SEND_SECOND_FACTOR_RESULT,
+  sendSecondFactorCode,
+} from '@/lib/auth/sendSecondFactorCode';
 import { CredentialsSignInError } from '@/lib/auth/authErrors';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -241,7 +246,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // メールアドレスを知っているだけで「登録済み＋二段階認証あり」を
           // 引けた（#1255）。`otp_login_disabled` は固有の文言を持つため、
           // 誰でも叩ける経路から返すとそのまま答えになる
-          if (await isTotpEnabled(supabase, user.id)) {
+          // 方式は問わない。メールOTP を第2要素にしている利用者にも、
+          // 「メールのコードだけ」の経路は使わせない（#1261）
+          if (await getSecondFactorMethod(supabase, user.id)) {
             throw new CredentialsSignInError(
               AUTH_ERROR_CODE.OTP_LOGIN_DISABLED,
             );
@@ -305,12 +312,65 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           // 第2要素。パスワードが正しいことを確かめてからでないと、
           // 「二段階認証を使っているアカウントかどうか」を第三者に教えてしまう
-          if (await isTotpEnabled(supabase, user.id)) {
+          const secondFactorMethod = await getSecondFactorMethod(
+            supabase,
+            user.id,
+          );
+
+          if (secondFactorMethod) {
             const totpCode = (
               credentials.totpCode as string | undefined
             )?.trim();
 
             if (!totpCode) {
+              // ⚠️ ここへ到達する＝**パスワードは正しい**。
+              //
+              // ログインの試行回数を消費したままにすると、このあとの
+              // 「コード入力 → 打ち間違え → 再送 → もう一度打ち間違え」で
+              // 5回/30分をすぐ使い切る。メールOTP は遅延・迷惑メール振り分け・
+              // コピペミスがあるぶん、TOTP より到達しやすい。
+              //
+              // 解放してもパスワードを知らない相手には枠が減ったまま残る
+              // （:324 の成功時リセットと同じ理屈）。
+              //
+              // ⚠️ 逆に「コード未入力のときは消費しない」と書いてはいけない。
+              // 判定がパスワード照合より後ろへ動き、パスワードが違う
+              // リクエストが枠を一度も消費しなくなって**アカウント単位の
+              // 5回/30分が消滅する**。残るのは LOGIN_IP だけで、
+              // clientIp が unknown なら丸ごとスキップされる
+              await resetRateLimit(supabase, loginIdentifier, OTP_ACTION.LOGIN);
+
+              if (secondFactorMethod === SECOND_FACTOR_METHOD.EMAIL_OTP) {
+                // ⚠️ 宛先は `user.email`。スコープにある `email` ローカル変数は
+                // ユーザー名ログインで空文字になり、全ユーザー名アカウントが
+                // `otp_codes.email = ''` の1行を共有してコードが混線する
+                const sendResult = await sendSecondFactorCode(
+                  supabase,
+                  user.id,
+                  user.email,
+                );
+
+                if (sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED) {
+                  // 「コードが違う」と区別する。打ち直しても直らない（#1148）
+                  throw new CredentialsSignInError(
+                    AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED,
+                  );
+                }
+
+                if (sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED) {
+                  // 1通も送っていない。コードを待たせず、
+                  // リカバリーコードへ誘導する
+                  throw new CredentialsSignInError(
+                    AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+                  );
+                }
+
+                // SENT / THROTTLED。THROTTLED は直前に送ったコードがまだ生きている
+                throw new CredentialsSignInError(
+                  AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
+                );
+              }
+
               // クライアントはこれを受けて認証コードの入力欄を出す
               throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REQUIRED);
             }
@@ -336,11 +396,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               totpCode,
             );
 
-            if (verifyResult === TOTP_VERIFY_RESULT.REUSED) {
+            if (verifyResult === SECOND_FACTOR_VERIFY_RESULT.REUSED) {
               throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REUSED);
             }
 
-            if (verifyResult !== TOTP_VERIFY_RESULT.SUCCESS) {
+            if (verifyResult !== SECOND_FACTOR_VERIFY_RESULT.SUCCESS) {
               throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_INVALID);
             }
 
@@ -549,6 +609,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       try {
         // 前回の失敗を引きずらない。再試行で復旧していれば消える
         delete token.totpUnavailable;
+        // 同上。消さないと「送信できませんでした」が画面に出続ける
+        delete token.secondFactorSendFailed;
+        delete token.secondFactorSendLimited;
 
         // 初回ログイン時にユーザー情報をトークンに追加
         if (user) {
@@ -606,7 +669,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               // OAuth は Credentials と違い authorize を通らないため、
               // 第2要素はここで要求する。プロバイダ側の2FA設定に依存せず、
               // このアプリ独自の第2要素を必ず挟む
-              token.totpPending = await isTotpEnabled(supabase, user.id);
+              //
+              // ⚠️ `Boolean()` で包む。`!== null` だと、モックが未設定で
+              // `undefined` を返したときに true（第2要素が有効）へ倒れる
+              const oauthMethod = await getSecondFactorMethod(
+                supabase,
+                user.id,
+              );
+
+              token.totpPending = Boolean(oauthMethod);
+              token.secondFactorMethod = oauthMethod ?? undefined;
+
+              // メールOTP は手元でコードを作れないので、この場で送る。
+              // 画面（/auth/two-factor）は `session.secondFactorMethod` を見て
+              // 入力欄と再送ボタンを出し分ける
+              if (
+                oauthMethod === SECOND_FACTOR_METHOD.EMAIL_OTP &&
+                user.email
+              ) {
+                const sendResult = await sendSecondFactorCode(
+                  supabase,
+                  user.id,
+                  user.email,
+                );
+
+                // ⚠️ このコールバックからは例外を出せない（上の #1148 の注記）。
+                // 送信できなかったことはフラグで画面へ伝える。
+                //
+                // ⚠️ `LIMIT_EXCEEDED` を取りこぼさないこと。1通も送っていないのに
+                // 「メールに送ったコードを入力してください」と出すと、届かない
+                // コードを待たせることになる。出口はリカバリーコードだけ
+                token.secondFactorSendFailed =
+                  sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED
+                    ? true
+                    : undefined;
+                token.secondFactorSendLimited =
+                  sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED
+                    ? true
+                    : undefined;
+              }
             }
           } else {
             // Credentialsログイン
@@ -636,6 +737,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (trigger === 'update' && token.totpPending && supabase && token.id) {
           const totpCode = (session as { totpCode?: unknown } | undefined)
             ?.totpCode;
+          const resend = (session as { resend?: unknown } | undefined)?.resend;
+
+          // メールOTP の再送。検証と同じ `update()` 経路を共有する。
+          //
+          // ⚠️ 画面側で検証と相互排他にすること。NextAuth の JWT は
+          // ステートレスで、`update()` は「Cookie を読む → jwt → 書き戻す」を
+          // 独立に行う。再送（Resend の往復で遅い）と検証（速い）が並行すると、
+          // 再送が後から `totpPending: true` を書き戻して**成功した検証が
+          // 巻き戻る**（`useTwoFactorChallenge` の `isSubmitting` と同じ形）。
+          if (
+            resend === true &&
+            token.secondFactorMethod === SECOND_FACTOR_METHOD.EMAIL_OTP
+          ) {
+            // ⚠️ 宛先は `token.email` ではなく `users` から引く。
+            // 検証側（`verifyEmailOtpCode`）も `users` を見ているので、
+            // トークンの値を使うとメールアドレスを変更した利用者で
+            // 送信先と照合先がずれ、コードが永久に一致しなくなる
+            const { data: resendUser } = await supabase
+              .from('users')
+              .select('email')
+              .eq('id', token.id)
+              .single();
+
+            if (resendUser?.email) {
+              const sendResult = await sendSecondFactorCode(
+                supabase,
+                token.id,
+                resendUser.email,
+              );
+
+              // 初回送信と同じ理由で LIMIT_EXCEEDED も伝える
+              token.secondFactorSendFailed =
+                sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED
+                  ? true
+                  : undefined;
+              token.secondFactorSendLimited =
+                sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED
+                  ? true
+                  : undefined;
+            }
+          }
 
           if (typeof totpCode === 'string' && totpCode.trim()) {
             const totpLimitResult = await checkRateLimit(
@@ -670,7 +812,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 token.totpUnavailable = true;
               }
 
-              if (verifyResult === TOTP_VERIFY_RESULT.SUCCESS) {
+              if (verifyResult === SECOND_FACTOR_VERIFY_RESULT.SUCCESS) {
                 token.totpPending = false;
                 await resetRateLimit(
                   supabase,
@@ -803,9 +945,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // ⚠️⚠️ **初回サインインだけは握り潰さない。**
         //
         // この分岐（`user` がある）では `token.totpPending` の既定が false で、
-        // `isTotpEnabled()` の結果を待って初めて true になる。そして
-        // `isTotpEnabled` は DB エラーで**意図的に throw する**
-        // （`src/lib/auth/totpVerification.ts`。false に倒すと第2要素が
+        // `getSecondFactorMethod()` の結果を待って初めて true になる。そして
+        // `getSecondFactorMethod` は DB エラーで**意図的に throw する**
+        // （`src/lib/auth/secondFactor.ts`。false に倒すと第2要素が
         // 丸ごと飛ぶため）。
         //
         // ここで握り潰すと `totpPending: false` のトークンが返り、
@@ -867,6 +1009,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // コードの正誤と区別しないと、正しいコードを入れ直しても
         // 「正しくありません」が出続ける理由が利用者に分からない
         session.totpUnavailable = Boolean(token.totpUnavailable);
+        // 方式を渡す。上でユーザー情報を空にしているため、これが無いと
+        // 画面は「認証アプリのコード」と「メールに送ったコード」を
+        // 出し分けられない。OAuth 認証は済んでいるので露出して問題ない
+        session.secondFactorMethod = token.secondFactorMethod;
+        // 送信そのものが成立しなかったことを伝える。
+        // 「コードが違う」と同じ文言にすると、届いていないコードを
+        // 打ち直し続けることになる
+        session.secondFactorSendFailed = Boolean(token.secondFactorSendFailed);
+        // 1通も送れていないので、コードを待たせずリカバリーコードへ誘導する
+        session.secondFactorSendLimited = Boolean(
+          token.secondFactorSendLimited,
+        );
         return session;
       }
 

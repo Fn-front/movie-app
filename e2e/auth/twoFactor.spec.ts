@@ -21,6 +21,9 @@
  * - 重複・競合: 同じコードの使い回しを拒否
  * - 設定変更の保護: 所持の証明なしでは無効化できない
  * - 最も弱い経路: 二段階認証が有効ならメールOTP単独ログインを使えない
+ * - 方式の選択: メールOTP を第2要素にしてログイン / 無効化 / 方式の切り替え
+ *   （メールOTP の利用者はコードを手元で作れないため、設定変更には
+ *    「確認コードを送信する」が要る。これが無いと二度と無効化できない）
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -79,7 +82,7 @@ async function loginAndOpenSettings(page: Page): Promise<void> {
  * @returns 画面に表示されたリカバリーコード
  */
 async function enableTwoFactor(page: Page): Promise<string[]> {
-  await page.getByRole('button', { name: '二段階認証を設定する' }).click();
+  await page.getByRole('button', { name: '認証アプリで設定する' }).click();
 
   // QRが出た時点で共有鍵がDBに入る。認証アプリで読み取る操作の代わり
   await expect(
@@ -311,7 +314,7 @@ test.describe('二段階認証', () => {
     await page.getByRole('button', { name: '二段階認証を無効にする' }).click();
 
     await expect(
-      page.getByRole('button', { name: '二段階認証を設定する' }),
+      page.getByRole('button', { name: '認証アプリで設定する' }),
     ).toBeVisible();
 
     // 無効化後はパスワードだけでログインできる
@@ -321,5 +324,160 @@ test.describe('二段階認証', () => {
 
     await page.waitForURL('/');
     await expect(page).toHaveURL('/');
+  });
+
+  /**
+   * 設定画面でメールOTP を方式に選んで有効化する
+   *
+   * @returns 画面に表示されたリカバリーコード
+   */
+  async function enableEmailOtp(page: Page): Promise<string[]> {
+    await page.getByRole('button', { name: 'メールで設定する' }).click();
+
+    // コードはサーバーが送信済み。DB から取り出して入力する
+    await expect(page.getByText(/確認コードを送りました/)).toBeVisible();
+
+    const code = await getLatestOtpCode(USER.email, 'two_factor');
+    expect(code).not.toBeNull();
+
+    // ⚠️ getByLabel は既定で**部分一致**する。同じ設定画面の
+    // パスワード変更セクションにも『確認コード』を含むボタンがあるため、
+    // ロールと exact で絞らないと strict mode 違反になる
+    await page
+      .getByRole('textbox', { name: '確認コード', exact: true })
+      .fill(code!);
+    await page.getByRole('button', { name: '二段階認証を有効にする' }).click();
+
+    const codeList = page.getByRole('list', { name: 'リカバリーコード' });
+    await expect(codeList).toBeVisible();
+
+    return (await codeList.getByRole('listitem').allInnerTexts()).map((text) =>
+      text.trim(),
+    );
+  }
+
+  test('メールOTP を第2要素にしてログインできる', async ({ page }) => {
+    await loginAndOpenSettings(page);
+    await enableEmailOtp(page);
+
+    await page
+      .getByRole('button', { name: 'リカバリーコードを控えました' })
+      .click();
+    await expect(page.getByText('二段階認証は')).toBeVisible();
+
+    await page.context().clearCookies();
+    await page.goto('/auth/signin');
+
+    // パスワードだけでは通らず、コードの入力欄が出る。
+    // このときサーバーが新しいコードを送っている
+    await submitCredentials(page);
+    const codeField = page.getByLabel('認証コード');
+    await expect(codeField).toBeVisible();
+    await expect(page).toHaveURL(/\/auth\/signin/);
+
+    // 認証アプリとの違い。再送の導線が出る
+    await expect(
+      page.getByRole('button', { name: '確認コードを再送信する' }),
+    ).toBeVisible();
+
+    const loginCode = await getLatestOtpCode(USER.email, 'two_factor');
+    expect(loginCode).not.toBeNull();
+
+    await codeField.fill(loginCode!);
+    await page.getByRole('button', { name: 'ログイン', exact: true }).click();
+
+    await page.waitForURL('/');
+    await expect(page).toHaveURL('/');
+  });
+
+  /**
+   * ⚠️ メールOTP の利用者は手元でコードを作れない。
+   * 「確認コードを送信する」が無いと、一度有効にしたら二度と無効化できない。
+   */
+  test('メールOTP でも無効化できる（コードを送って本人確認する）', async ({
+    page,
+  }) => {
+    await loginAndOpenSettings(page);
+    await enableEmailOtp(page);
+    await page
+      .getByRole('button', { name: 'リカバリーコードを控えました' })
+      .click();
+
+    // 有効化で使ったコードは消費済み。送信ボタンで新しいコードを受け取る
+    await page
+      .getByRole('button', { name: '二段階認証の確認コードを送信' })
+      .click();
+
+    // ⚠️ クリックは即座に返る。送信完了を待たずにDBを読むと
+    // まだ行が無く、コードが取れない
+    await expect(
+      page.getByText('確認コードをメールに送信しました。'),
+    ).toBeVisible();
+
+    const code = await getLatestOtpCode(USER.email, 'two_factor');
+    expect(code).not.toBeNull();
+
+    await page.getByLabel('認証コード').fill(code!);
+    await page.getByRole('button', { name: '二段階認証を無効にする' }).click();
+
+    // 無効に戻ると方式の選択肢が出る
+    await expect(
+      page.getByRole('button', { name: '認証アプリで設定する' }),
+    ).toBeVisible();
+  });
+
+  test('方式を切り替えられる（メールOTP → 認証アプリ）', async ({ page }) => {
+    await loginAndOpenSettings(page);
+    await enableEmailOtp(page);
+    await page
+      .getByRole('button', { name: 'リカバリーコードを控えました' })
+      .click();
+
+    // いったん無効化する
+    await page
+      .getByRole('button', { name: '二段階認証の確認コードを送信' })
+      .click();
+
+    // ⚠️ クリックは即座に返る。送信完了を待たずにDBを読むと
+    // まだ行が無く、コードが取れない
+    await expect(
+      page.getByText('確認コードをメールに送信しました。'),
+    ).toBeVisible();
+    const code = await getLatestOtpCode(USER.email, 'two_factor');
+    await page.getByLabel('認証コード').fill(code!);
+    await page.getByRole('button', { name: '二段階認証を無効にする' }).click();
+
+    // 認証アプリで設定し直す
+    await enableTwoFactor(page);
+    await page
+      .getByRole('button', { name: 'リカバリーコードを控えました' })
+      .click();
+
+    // 認証アプリ方式では送信ボタンが出ない
+    await expect(page.getByText('二段階認証は')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: '二段階認証の確認コードを送信' }),
+    ).toBeHidden();
+  });
+
+  test('メールOTP でもリカバリーコードでログインできる', async ({ page }) => {
+    await loginAndOpenSettings(page);
+    const recoveryCodes = await enableEmailOtp(page);
+
+    expect(recoveryCodes.length).toBeGreaterThan(0);
+    expect(await isRecoveryCodeStored(USER.email, recoveryCodes[0])).toBe(true);
+
+    await page.context().clearCookies();
+    await page.goto('/auth/signin');
+    await submitCredentials(page);
+
+    // メールを待たずにリカバリーコードで入れる
+    await page.getByLabel('認証コード').fill(recoveryCodes[0]);
+    await page.getByRole('button', { name: 'ログイン', exact: true }).click();
+
+    await page.waitForURL('/');
+    expect(await isRecoveryCodeStored(USER.email, recoveryCodes[0])).toBe(
+      false,
+    );
   });
 });

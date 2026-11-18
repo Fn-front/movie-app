@@ -17,6 +17,9 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 
 import { AUTH_ERROR_MESSAGES } from '@/constants';
+import { OTP_CONFIG } from '@/constants/otp';
+import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
+import { useResendCountdown } from '@/features/auth/hooks/useResendCountdown';
 import { logout } from '@/lib/auth/logout';
 import { resolveSafeCallbackUrl } from '@/utils/url';
 
@@ -31,8 +34,23 @@ interface UseTwoFactorChallengeResult {
   isSubmitting: boolean;
   /** ログアウト処理中（完了すると画面遷移するので false には戻らない） */
   isCancelling: boolean;
+  /** 第2要素がメールのコードか。再送の導線を出すかの判定に使う */
+  isEmailOtp: boolean;
+  /**
+   * コードを送れなかったことを伝える文言。送れていれば null
+   *
+   * 「コードが違う」とは別物。打ち直しても直らないので分ける（#1148）
+   */
+  sendNotice: string | null;
+  /** コードを送り直している最中か */
+  isResending: boolean;
+  /** 再送までの残り秒数 */
+  resendRemaining: number;
+  /** 再送できるか */
+  canResend: boolean;
   onCodeChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onResend: () => void;
   onCancel: () => void;
 }
 
@@ -46,11 +64,43 @@ export function useTwoFactorChallenge({
   callbackUrl,
 }: UseTwoFactorChallengeParams = {}): UseTwoFactorChallengeResult {
   const router = useRouter();
-  const { update } = useSession();
+  const { data: session, update } = useSession();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+
+  const isEmailOtp =
+    session?.secondFactorMethod === SECOND_FACTOR_METHOD.EMAIL_OTP;
+
+  /**
+   * サーバーが「コードを送れなかった」と伝えてきたか
+   *
+   * ⚠️ `jwt` コールバックからは例外を出せないため（#1148）、送信の失敗は
+   * セッションのフラグでしか届かない。**これを読まないと**、1通も
+   * 送られていないのに「メールに送信した6桁のコードを入力してください」と
+   * 表示され、利用者は届かないコードを待ち続ける。
+   */
+  const sendFailed = Boolean(session?.secondFactorSendFailed);
+  const sendLimited = Boolean(session?.secondFactorSendLimited);
+
+  const {
+    remaining: resendRemaining,
+    canResend: countdownDone,
+    restart,
+  } = useResendCountdown(OTP_CONFIG.RESEND_INTERVAL_SECONDS);
+
+  // 検証中・ログアウト中は押させない（理由は `onResend` のコメント）
+  const canResend = countdownDone && !isSubmitting && !isCancelling;
+
+  // 送信上限のほうを優先する。こちらは「待っても送られない」ので、
+  // リカバリーコードへ誘導しないと利用者の手が止まる
+  const sendNotice = sendLimited
+    ? AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_LIMITED
+    : sendFailed
+      ? AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_FAILED
+      : null;
 
   const onCodeChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,7 +118,9 @@ export function useTwoFactorChallenge({
       // 「キャンセルしたのにログイン済みのCookieが残る」ことがありうる。
       // いまは DOM 側でも相互に `disabled` にしているが、片側だけ state で
       // 守る非対称を残さない
-      if (!code.trim() || isSubmitting || isCancelling) {
+      // 再送中も止める。並行すると、再送が後から totpPending: true を
+      // 書き戻して**成功した検証が巻き戻る**（理由は `onResend`）
+      if (!code.trim() || isSubmitting || isCancelling || isResending) {
         return;
       }
 
@@ -107,8 +159,44 @@ export function useTwoFactorChallenge({
         setIsSubmitting(false);
       }
     },
-    [code, isSubmitting, isCancelling, update, router, callbackUrl],
+    [
+      code,
+      isSubmitting,
+      isCancelling,
+      isResending,
+      update,
+      router,
+      callbackUrl,
+    ],
   );
+
+  /**
+   * コードを送り直す（メールOTP のみ）
+   *
+   * ⚠️ **検証と相互排他にする。**
+   *
+   * NextAuth の JWT はステートレスで、`update()` は「Cookie を読む →
+   * jwt コールバック → 書き戻す」を独立に行う。再送（Resend の往復で遅い）と
+   * 検証（速い）が並行すると、再送が**後から** `totpPending: true` の Cookie を
+   * 書き戻し、成功したはずの検証が巻き戻る。利用者からは「正しいコードを
+   * 入れたのに画面に戻された」ように見え、そのコードは消費済みなので
+   * もう一度再送が要る。
+   */
+  const onResend = useCallback(async () => {
+    if (!canResend || isResending) return;
+
+    setError(null);
+    setIsResending(true);
+
+    try {
+      await update({ resend: true });
+      restart();
+    } catch {
+      setError(AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_FAILED);
+    } finally {
+      setIsResending(false);
+    }
+  }, [canResend, isResending, update, restart]);
 
   /**
    * この画面から抜ける
@@ -121,7 +209,7 @@ export function useTwoFactorChallenge({
    * `src/proxy.ts` の冒頭で素通りするので、この状態でも成立する。
    */
   const onCancel = useCallback(async () => {
-    if (isSubmitting || isCancelling) {
+    if (isSubmitting || isCancelling || isResending) {
       return;
     }
 
@@ -136,15 +224,21 @@ export function useTwoFactorChallenge({
       setError(AUTH_ERROR_MESSAGES.LOGOUT_FAILED);
       setIsCancelling(false);
     }
-  }, [isSubmitting, isCancelling]);
+  }, [isSubmitting, isCancelling, isResending]);
 
   return {
     code,
     error,
+    sendNotice,
     isSubmitting,
     isCancelling,
+    isEmailOtp,
+    isResending,
+    resendRemaining,
+    canResend,
     onCodeChange,
     onSubmit,
+    onResend,
     onCancel,
   };
 }

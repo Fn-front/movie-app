@@ -10,7 +10,7 @@ import {
   buildOtpEmailSubject,
   buildOtpEmailText,
 } from '@/constants/email';
-import type { OtpAction } from '@/constants/otp';
+import type { OtpEmailAction } from '@/constants/email';
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM_EMAIL;
@@ -26,7 +26,7 @@ const fromEmail = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM_EMAIL;
 export async function sendOtpEmail(
   email: string,
   code: string,
-  action: OtpAction,
+  action: OtpEmailAction,
 ): Promise<boolean> {
   // E2E/テスト用バイパス: メールの実送信をスキップして成功扱いにする。
   // OTPコードはDBに保存されるため、テストはDBから取得して検証できる。

@@ -1,9 +1,14 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { signIn } from 'next-auth/react';
 import { AxiosError } from 'axios';
 
-import { AUTH_ERROR_MESSAGES, AUTH_HINTS } from '@/constants/auth';
+import {
+  AUTH_ERROR_CODE,
+  AUTH_ERROR_MESSAGES,
+  AUTH_HINTS,
+} from '@/constants/auth';
+import { OTP_CONFIG } from '@/constants/otp';
 
 import { LoginForm } from './loginForm';
 
@@ -505,6 +510,236 @@ describe('LoginForm', () => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({ variant: 'error' }),
       );
+    });
+  });
+
+  describe('第2要素（メールOTP）', () => {
+    // 再送のカウントダウンを進めるため。userEvent にも同じクロックを渡す
+    const user = userEvent.setup({
+      advanceTimers: jest.advanceTimersByTime,
+    });
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    /** 認証情報を入れて送信する */
+    const submitCredentials = async () => {
+      await user.type(
+        screen.getByLabelText('メールアドレスまたはアカウント名'),
+        'user@example.com',
+      );
+      await user.type(screen.getByLabelText('パスワード'), 'Password1');
+      await user.click(screen.getByRole('button', { name: 'ログイン' }));
+    };
+
+    const requireEmailOtp = () =>
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
+      } as never);
+
+    it('メール向けの文言と再送ボタンを出す', async () => {
+      requireEmailOtp();
+      render(<LoginForm />);
+
+      await submitCredentials();
+
+      expect(await screen.findByLabelText('認証コード')).toBeInTheDocument();
+      expect(
+        screen.getByText(/メールに送信した6桁のコード/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: '確認コードを再送信する' }),
+      ).toBeInTheDocument();
+    });
+
+    it('認証アプリのときは再送ボタンを出さない', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: AUTH_ERROR_CODE.TOTP_REQUIRED,
+      } as never);
+      render(<LoginForm />);
+
+      await submitCredentials();
+
+      expect(await screen.findByLabelText('認証コード')).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: '確認コードを再送信する' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('再送の直後は押せない（カウントダウン中）', async () => {
+      requireEmailOtp();
+      render(<LoginForm />);
+
+      await submitCredentials();
+
+      expect(
+        await screen.findByRole('button', { name: '確認コードを再送信する' }),
+      ).toBeDisabled();
+      expect(screen.getByText(/再送信できるまで/)).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ 1通も送られていないので「メールを確認してください」で終わらせない。
+     * この状態の出口はリカバリーコードだけ。
+     */
+    it('送信上限ならリカバリーコードへ誘導する', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+      } as never);
+      render(<LoginForm />);
+
+      await submitCredentials();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        /リカバリーコード/,
+      );
+      // 入力欄は出す。手元にリカバリーコードがあれば今すぐ入れられる
+      expect(screen.getByLabelText('認証コード')).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ 1通も送られていないのに「再送信できます」と出ると、
+     * エラー文と矛盾する。押しても同じエラーが返るだけ
+     */
+    it('送信上限のときは再送ボタンを出さない', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+      } as never);
+      render(<LoginForm />);
+
+      await submitCredentials();
+      await screen.findByRole('alert');
+
+      expect(
+        screen.queryByRole('button', { name: '確認コードを再送信する' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('送信上限のときはメールのコードを待たせない', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+      } as never);
+      render(<LoginForm />);
+
+      await submitCredentials();
+      await screen.findByRole('alert');
+
+      expect(
+        screen.queryByText(/メールに送信した6桁のコード/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/発行済みのリカバリーコードを入力してください/),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ 「コードが違う」と同じ文言にすると、届いていないコードを
+     * 打ち直し続けることになる（#1148 と同じ理由）。
+     */
+    it('送信に失敗したら専用の文言を出す', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED,
+      } as never);
+      render(<LoginForm />);
+
+      await submitCredentials();
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(/送信できませんでした/);
+      expect(alert).not.toHaveTextContent(/正しくありません/);
+    });
+
+    /**
+     * ⚠️ **入力欄を出さないとログインできなくなる。**
+     *
+     * 1通も送られていないが、だからこそリカバリーコードが唯一の出口。
+     * 入力欄が無いと、手元にコードがあっても入れる場所が無く、
+     * Resend の障害が続く限りそのアカウントは一切ログインできない。
+     */
+    it('送信に失敗してもリカバリーコードを入れられる', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED,
+      } as never);
+      render(<LoginForm />);
+
+      await submitCredentials();
+
+      expect(await screen.findByLabelText('認証コード')).toBeInTheDocument();
+      expect(
+        screen.getByText(/発行済みのリカバリーコードを入力してください/),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ 毎秒変わる値を live region に入れない。polite のキューに60件の
+     * アナウンスが積まれ、読み上げが追いつかずカウント中は実質
+     * スクリーンリーダーで操作できなくなる
+     */
+    it('残り秒数を live region にしない', async () => {
+      requireEmailOtp();
+      render(<LoginForm />);
+
+      await submitCredentials();
+
+      const hint = await screen.findByText(/再送信できるまで/);
+      expect(hint).not.toHaveAttribute('aria-live');
+    });
+
+    /**
+     * ⚠️ onSubmit は totpRequired のとき**常に** totpCode を送る。
+     * 打ち間違えた状態で再送を押すとそのコードが検証され、
+     * TOTP_VERIFY（5回/15分）の枠を1つ失う。
+     *
+     * state のクリアは同期的に反映されないので、ref で確実に飛ばしている。
+     */
+    it('再送は入力済みのコードを送らない', async () => {
+      requireEmailOtp();
+      render(<LoginForm />);
+      await submitCredentials();
+
+      await user.type(await screen.findByLabelText('認証コード'), '000000');
+
+      // ⚠️ removeAttribute では React 管理の disabled を外せず、
+      // userEvent がクリックを握り潰して最初の送信を見てしまう。
+      // タイマーを進めて本当に押せる状態にする
+      await act(async () => {
+        jest.advanceTimersByTime(OTP_CONFIG.RESEND_INTERVAL_SECONDS * 1000);
+      });
+
+      await user.click(
+        screen.getByRole('button', { name: '確認コードを再送信する' }),
+      );
+
+      // ⚠️ クリックが実際に発火したことを先に確かめる。
+      // 発火していないと、最初の送信（コード未入力）を見て緑になる
+      expect(mockSignIn).toHaveBeenCalledTimes(2);
+
+      const lastCall = mockSignIn.mock.calls.at(-1);
+      expect(lastCall?.[1]).not.toHaveProperty('totpCode');
+    });
+
+    it('コードを入れて送信するときは totpCode を送る', async () => {
+      requireEmailOtp();
+      render(<LoginForm />);
+      await submitCredentials();
+
+      await user.type(await screen.findByLabelText('認証コード'), '123456');
+      await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+      const lastCall = mockSignIn.mock.calls.at(-1);
+      expect(lastCall?.[1]).toMatchObject({ totpCode: '123456' });
     });
   });
 });

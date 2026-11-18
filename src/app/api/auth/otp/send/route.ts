@@ -166,6 +166,28 @@ export async function POST(request: Request) {
           { status: HTTP_STATUS.OK },
         );
       }
+    } else if (action !== OTP_ACTION.PASSWORD_CHANGE) {
+      // ⚠️ 二重の歯止め。一次防御は zod（`PUBLIC_OTP_ACTIONS`）側にあり、
+      // **現時点ではこの分岐に到達しない**（＝カバレッジにも出ない）。
+      //
+      // この分岐チェーンに else が無かった頃は、許可リストに無い action が
+      // ユーザー存在チェックも宛先固定（上部の password_change 分岐）も
+      // 通らないまま、再送間隔 → 日次上限 → INSERT → sendOtpEmail へ
+      // 素通りした。公開ルートなので未認証で到達でき、任意のアドレスへ
+      // 自サービス名義の確認コードを送れる（#641 の穴の再発）。
+      //
+      // `PUBLIC_OTP_ACTIONS` に用途が足されたとき、ここを通って 400 になる
+      // ほうが「気づかないまま送信される」よりはるかに安全。消さないこと。
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
     }
     // password_change の認証・宛先解決は上部で済ませている（ボディの email を使わない）
 

@@ -1,4 +1,11 @@
-import { otpSendSchema, otpVerifySchema, otpFormSchema } from './otp';
+import { TWO_FACTOR_OTP_ACTION } from '@/constants/secondFactor';
+
+import {
+  otpSendSchema,
+  otpVerifySchema,
+  otpFormSchema,
+  PUBLIC_OTP_ACTIONS,
+} from './otp';
 
 describe('otpSendSchema', () => {
   it('有効な入力でパースが成功する', () => {
@@ -107,5 +114,45 @@ describe('otpFormSchema', () => {
 
   it('6桁未満はエラーになる', () => {
     expect(otpFormSchema.safeParse({ otp: '123' }).success).toBe(false);
+  });
+});
+
+/**
+ * 公開ルートが受け付ける action を固定する
+ *
+ * ⚠️ これは設計の前提そのもの。以前は `Object.values(OTP_ACTION)` から
+ * zod enum を導出していたため、`OTP_ACTION` に用途を足すだけで
+ * `/api/auth/otp/send` と `/api/auth/otp/verify` が自動的にそれを受理した。
+ *
+ * 第2要素（`two_factor`）が入ると、send の action 分岐は宛先固定を
+ * password_change のときしか行わないため、**未認証のまま任意のアドレスへ
+ * 自サービス名義の確認コードを送れる**状態になる（#641 の穴の再発）。
+ *
+ * 現行実装でも通る（回帰テスト）。赤→緑にはならない。
+ */
+describe('公開ルートの action 許可リスト', () => {
+  it('公開するのは registration / login / password_change の3つだけ', () => {
+    expect([...PUBLIC_OTP_ACTIONS].sort()).toEqual([
+      'login',
+      'password_change',
+      'registration',
+    ]);
+  });
+
+  it('otpSendSchema は two_factor を拒否する', () => {
+    const result = otpSendSchema.safeParse({
+      email: 'user@example.com',
+      action: TWO_FACTOR_OTP_ACTION,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('otpVerifySchema は two_factor を拒否する', () => {
+    const result = otpVerifySchema.safeParse({
+      email: 'user@example.com',
+      code: '123456',
+      action: TWO_FACTOR_OTP_ACTION,
+    });
+    expect(result.success).toBe(false);
   });
 });

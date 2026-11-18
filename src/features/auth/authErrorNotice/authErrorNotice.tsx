@@ -43,9 +43,13 @@ export const AuthErrorNotice = memo<AuthErrorNoticeProps>(
           ログインできませんでした
         </Heading>
 
-        <p className={styles.c_auth_error__message} role='alert'>
-          {resolveMessage(code)}
-        </p>
+        {/*
+          ⚠️ `role='alert'` は付けない。この文言はページの初期描画から
+          存在するので、ライブリージョンにしても「変化」が起きず、支援技術には
+          通常の読み上げ順で届く。付けると実装によっては二重に読まれる。
+          見出し（「ログインできませんでした」）が先に状況を伝える
+        */}
+        <p className={styles.c_auth_error__message}>{resolveMessage(code)}</p>
 
         <Link href={ROUTES.LOGIN} className={styles.c_auth_error__cta}>
           ログイン画面へ戻る

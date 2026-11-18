@@ -22,7 +22,7 @@ describe('AuthErrorPage', () => {
   ])('error=%s に対応する文言を出す', async (code, message) => {
     await renderPage({ error: code });
 
-    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByText(message)).toBeInTheDocument();
   });
 
   it.each([
@@ -35,9 +35,9 @@ describe('AuthErrorPage', () => {
     // 知らない値で落としたり空白を出したりしない
     await renderPage(params);
 
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      AUTH_PAGE_ERROR_MESSAGES.DEFAULT,
-    );
+    expect(
+      screen.getByText(AUTH_PAGE_ERROR_MESSAGES.DEFAULT),
+    ).toBeInTheDocument();
   });
 
   it('ログイン画面へ戻る導線を出す', async () => {

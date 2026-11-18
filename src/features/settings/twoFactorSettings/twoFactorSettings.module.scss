@@ -139,3 +139,13 @@
   font-size: $font-size-xs;
   line-height: $line-height-loose;
 }
+
+// 操作の完了を伝える文言（エラーではないので色味を分ける）
+.c_two_factor_settings__notice {
+  padding: $spacing-3 $spacing-4;
+  background-color: color-alpha(--success-main, 10%);
+  border: $border-width-1 solid $success-light;
+  border-radius: $border-radius-md;
+  color: $text-primary;
+  font-size: $font-size-sm;
+}

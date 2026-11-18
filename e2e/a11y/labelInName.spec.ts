@@ -194,7 +194,7 @@ test.describe('Label in Name（データを入れた状態）', () => {
   test('二段階認証の設定画面', async () => {
     await page.goto('/settings');
 
-    await page.getByRole('button', { name: '二段階認証を設定する' }).click();
+    await page.getByRole('button', { name: '認証アプリで設定する' }).click();
     await expect(
       page.getByRole('img', { name: '二段階認証のQRコード' }),
     ).toBeVisible({ timeout: 30000 });

@@ -1109,9 +1109,22 @@ export async function resetFilters(request: APIRequestContext): Promise<void> {
  * HMAC を計算できないため同じことはできない（それがこの設計の要点）。
  * 実測で1秒前後。
  */
+/**
+ * `otp_codes.action_type` の値
+ *
+ * `two_factor`（第2要素）は公開ルートからは作れず、
+ * サーバー側の `sendSecondFactorCode` だけが発行する。E2E は DB を直接
+ * 読むので、ここに含めておけば同じヘルパーで扱える。
+ */
+export type OtpCodeAction =
+  | 'registration'
+  | 'login'
+  | 'password_change'
+  | 'two_factor';
+
 export async function getLatestOtpCode(
   email: string,
-  action: 'registration' | 'login' | 'password_change',
+  action: OtpCodeAction,
 ): Promise<string | null> {
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/otp_codes?email=eq.${encodeURIComponent(email)}` +
@@ -1182,7 +1195,7 @@ async function patchUnverifiedOtp(
  */
 export async function expireOtpCode(
   email: string,
-  action: 'registration' | 'login' | 'password_change',
+  action: OtpCodeAction,
 ): Promise<void> {
   await patchUnverifiedOtp(email, action, {
     expires_at: new Date(Date.now() - 60_000).toISOString(),
@@ -1194,7 +1207,7 @@ export async function expireOtpCode(
  */
 export async function maxOutOtpAttempts(
   email: string,
-  action: 'registration' | 'login' | 'password_change',
+  action: OtpCodeAction,
   maxAttempts = 5,
 ): Promise<void> {
   await patchUnverifiedOtp(email, action, { attempts: maxAttempts });
@@ -1249,7 +1262,7 @@ export async function cleanupRateLimit(
  */
 export async function cleanupOtpCodes(
   email: string,
-  action?: 'registration' | 'login' | 'password_change',
+  action?: OtpCodeAction,
 ): Promise<void> {
   const enc = encodeURIComponent(email);
   const actionFilter = action ? `&action_type=eq.${action}` : '';

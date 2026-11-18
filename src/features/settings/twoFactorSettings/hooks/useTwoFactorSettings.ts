@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_ENDPOINTS, UI_ERROR_MESSAGES } from '@/constants';
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
 import {
+  SECOND_FACTOR_MESSAGES,
   SECOND_FACTOR_METHOD,
   type SecondFactorMethod,
 } from '@/constants/secondFactor';
@@ -57,6 +58,13 @@ interface UseTwoFactorSettingsResult {
   remainingRecoveryCodes: number;
   isSubmitting: boolean;
   error: string | null;
+  /**
+   * 操作の完了を伝える文言
+   *
+   * コード送信は画面の状態を変えないため、これが無いと利用者は
+   * 送られたのかどうか分からない。
+   */
+  notice: string | null;
   startSetup: (method: SecondFactorMethod) => Promise<void>;
   enable: (code: string) => Promise<void>;
   disable: (code: string) => Promise<void>;
@@ -86,6 +94,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
   const [remainingRecoveryCodes, setRemainingRecoveryCodes] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   /** 送信中かどうか。再入の判定に使う（state だと古い値を掴む） */
   const inFlightRef = useRef(false);
@@ -144,6 +153,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
 
       inFlightRef.current = true;
       setError(null);
+      setNotice(null);
       setIsSubmitting(true);
 
       try {
@@ -204,7 +214,11 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
    * 二度と無効化できなくなる。
    */
   const sendChallenge = useCallback(async () => {
-    await post(API_ENDPOINTS.USER_TOTP_SEND_CHALLENGE);
+    const json = await post(API_ENDPOINTS.USER_TOTP_SEND_CHALLENGE);
+    if (!json) return;
+
+    // 画面の状態が変わらないので、送れたことを文言で伝える
+    setNotice(SECOND_FACTOR_MESSAGES.CODE_SENT);
   }, [post]);
 
   const enable = useCallback(
@@ -275,6 +289,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
     remainingRecoveryCodes,
     isSubmitting,
     error,
+    notice,
     startSetup,
     sendChallenge,
     enable,

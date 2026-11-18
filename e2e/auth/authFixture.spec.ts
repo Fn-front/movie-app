@@ -38,7 +38,7 @@ let userId = '';
 /** 設定画面から二段階認証を有効化する */
 async function enableTwoFactor(page: Page): Promise<void> {
   await page.goto('/settings');
-  await page.getByRole('button', { name: '二段階認証を設定する' }).click();
+  await page.getByRole('button', { name: '認証アプリで設定する' }).click();
 
   // QRが出た時点で共有鍵がDBに入る。認証アプリで読み取る操作の代わり
   await expect(

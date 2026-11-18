@@ -32,6 +32,7 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
     remainingRecoveryCodes,
     isSubmitting,
     error,
+    notice,
     startSetup,
     sendChallenge,
     enable,
@@ -92,6 +93,17 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
       {error && (
         <p className={styles.c_two_factor_settings__error} role='alert'>
           {error}
+        </p>
+      )}
+
+      {/*
+        コード送信は画面の状態を変えないため、これが無いと利用者は
+        送られたのかどうか分からない。
+        `role='status'` にして、読み上げを割り込ませずに伝える
+      */}
+      {notice && (
+        <p className={styles.c_two_factor_settings__notice} role='status'>
+          {notice}
         </p>
       )}
 
@@ -332,9 +344,14 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
                 variant='secondary'
                 onClick={sendChallenge}
                 isLoading={isSubmitting}
-                aria-label='確認コードを送信する'
+                /*
+                  ⚠️ 「確認コードを送信」にしない。同じ設定画面の
+                  パスワード変更セクションに同名のボタンがあり、
+                  部分一致のロケータ（getByLabel 等）で衝突する
+                */
+                aria-label='二段階認証の確認コードを送信'
               >
-                確認コードを送信する
+                二段階認証の確認コードを送信
               </Button>
             )}
 

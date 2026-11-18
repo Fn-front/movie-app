@@ -93,7 +93,13 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
             {/*
               ⚠️ `isLoading` は使わない。`Button` はローディング中に本文を
               `visibility: hidden` にしてアクセシブルネームごと消すため、
-              下のログアウト導線と同じ理由で文言の差し替えにする
+              下のログアウト導線と同じ理由で文言の差し替えにする。
+
+              ⚠️ `aria-label` も付けない。本文が「送信しています…」に
+              変わるのに固定のラベルを置くと、見えている文字が
+              アクセシブルネームに含まれなくなる（WCAG 2.5.3 Label in Name）。
+              音声入力で見えているとおりに言っても反応しない。
+              本文がそのまま名前になるほうが正しい
             */}
             <Button
               type='button'
@@ -102,7 +108,6 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
               fullWidth
               onClick={onResend}
               disabled={!canResend || isResending}
-              aria-label='確認コードを再送信する'
             >
               {isResending ? '送信しています…' : '確認コードを再送信する'}
             </Button>

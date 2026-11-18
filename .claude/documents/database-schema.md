@@ -84,7 +84,7 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 | id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
 | email | VARCHAR(255) | NOT NULL | - | 送信先メールアドレス |
 | code_hash | TEXT | NOT NULL | - | OTPコードの HMAC-SHA256（鍵は `OTP_HASH_PEPPER`） |
-| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（registration / login / password_change） |
+| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（registration / login / password_change / two_factor） |
 | attempts | INTEGER | NOT NULL | 0 | 検証試行回数 |
 | expires_at | TIMESTAMPTZ | NOT NULL | - | 有効期限（作成時刻 + 10分） |
 | verified_at | TIMESTAMPTZ | NULL | - | 検証完了日時 |
@@ -97,7 +97,11 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 - `verification_token_hash` - 検証済みトークンでの照合用
 
 **制約:**
-- `action_type` は 'registration', 'login', 'password_change' のいずれか（CHECK制約）
+- `action_type` は 'registration', 'login', 'password_change', 'two_factor' のいずれか（CHECK制約）
+- ⚠️ `two_factor`（二段階認証の第2要素）は**公開ルートからは作れない**。
+  `src/schema/otp.ts` の `PUBLIC_OTP_ACTIONS` に入れていないため、
+  `/api/auth/otp/send` と `/verify` は 400 で拒否する。発行できるのは
+  サーバー側の `sendSecondFactorCode` だけ（#1261）
 - `attempts` は 0〜5 の範囲（CHECK制約）
 
 **設計判断 — 平文を保存しない理由（#640 / #698）:**
@@ -148,17 +152,33 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 
 ---
 
-### user_totp（二段階認証の共有鍵）
-TOTP（認証アプリ）の共有鍵を管理
+### user_totp（二段階認証の設定）
+第2要素の方式と、TOTP の共有鍵を管理
 
 | カラム名 | 型 | NULL | デフォルト | 説明 |
 |---------|-----|------|-----------|------|
 | user_id | UUID | NOT NULL | - | ユーザーID（主キー / users.id への外部キー） |
-| encrypted_secret | TEXT | NOT NULL | - | AES-256-GCM で暗号化した共有鍵（`iv:authTag:暗号文`、base64） |
+| method | VARCHAR(20) | NOT NULL | 'totp' | 第2要素の方式（`totp` / `email_otp`） |
+| encrypted_secret | TEXT | NULL | - | AES-256-GCM で暗号化した共有鍵（`iv:authTag:暗号文`、base64）。`email_otp` では NULL |
 | confirmed_at | TIMESTAMPTZ | NULL | - | 初回コード入力で所持確認が取れた日時。NULL は設定途中 |
-| last_used_counter | BIGINT | NULL | - | 最後に検証を通した時間ステップ（使い回し防止） |
+| last_used_counter | BIGINT | NULL | - | 最後に検証を通した時間ステップ（使い回し防止）。`email_otp` では使わない |
 | created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
 | updated_at | TIMESTAMPTZ | NOT NULL | now() | 更新日時 |
+
+**制約:**
+- `chk_second_factor_method`: `method IN ('totp', 'email_otp')`
+- `chk_secret_matches_method`: `method='totp'` なら鍵が必須、`method='email_otp'` なら NULL
+
+**設計判断 — 1行で方式を表す理由（#1261）:**
+- `user_id` が主キーなので、**「どちらか1つだけ」がDB側で保証される**。アプリ側の整合チェックが要らない
+- メールOTP のコードは `otp_codes`（`action_type='two_factor'`）に持つ。このテーブルには鍵もカウンタも無い
+
+> ⚠️ **テーブル名は `user_totp` のまま据え置いている。** メールOTP も扱うので
+> 名前は実態とずれるが、リネームすると旧コードが動いている本番DBに先に当たり、
+> `from('user_totp')` が 42P01 を返して**全ログインが落ちる**
+> （`getSecondFactorMethod` は二段階認証を設定していない利用者も含め全ログインで
+> 呼ばれ、DBエラーで fail-closed に throw するため）。
+> 同じ理由で `totp_recovery_codes` も据え置き（リカバリーコードは方式を問わず使う）。
 
 **設計判断 — user_settings に置かない理由:**
 - `user_settings` は `authenticated` に SELECT を付与しているため、RLS をすり抜ける経路が1つでも生まれると共有鍵が読まれる

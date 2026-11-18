@@ -439,7 +439,9 @@ describe('TwoFactorSettings', () => {
       render(<TwoFactorSettings />);
 
       expect(
-        await screen.findByRole('button', { name: '確認コードを送信する' }),
+        await screen.findByRole('button', {
+          name: '二段階認証の確認コードを送信',
+        }),
       ).toBeInTheDocument();
     });
 
@@ -450,7 +452,7 @@ describe('TwoFactorSettings', () => {
       await screen.findByRole('button', { name: '二段階認証を無効にする' });
 
       expect(
-        screen.queryByRole('button', { name: '確認コードを送信する' }),
+        screen.queryByRole('button', { name: '二段階認証の確認コードを送信' }),
       ).not.toBeInTheDocument();
     });
 
@@ -461,7 +463,9 @@ describe('TwoFactorSettings', () => {
 
       render(<TwoFactorSettings />);
       await user.click(
-        await screen.findByRole('button', { name: '確認コードを送信する' }),
+        await screen.findByRole('button', {
+          name: '二段階認証の確認コードを送信',
+        }),
       );
 
       expect(mockFetch).toHaveBeenLastCalledWith(
@@ -482,7 +486,9 @@ describe('TwoFactorSettings', () => {
 
       render(<TwoFactorSettings />);
       await user.click(
-        await screen.findByRole('button', { name: '確認コードを送信する' }),
+        await screen.findByRole('button', {
+          name: '二段階認証の確認コードを送信',
+        }),
       );
 
       expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -497,5 +503,43 @@ describe('TwoFactorSettings', () => {
 
       expect(await screen.findByText(/メールのコード/)).toBeInTheDocument();
     });
+  });
+
+  /**
+   * ⚠️ コード送信は画面の状態を変えない。これが無いと利用者は
+   * 送られたのかどうか分からない。
+   */
+  it('コードを送信したことを画面で伝える', async () => {
+    const user = userEvent.setup();
+    mockFetch
+      .mockResolvedValueOnce(statusResponse(true, 7, { method: 'email_otp' }))
+      .mockResolvedValueOnce(okResponse({}));
+
+    render(<TwoFactorSettings />);
+    await user.click(
+      await screen.findByRole('button', {
+        name: '二段階認証の確認コードを送信',
+      }),
+    );
+
+    const notice = await screen.findByRole('status');
+    expect(notice).toHaveTextContent('確認コードをメールに送信しました。');
+  });
+
+  it('送信に失敗したら完了の文言を出さない', async () => {
+    const user = userEvent.setup();
+    mockFetch
+      .mockResolvedValueOnce(statusResponse(true, 7, { method: 'email_otp' }))
+      .mockResolvedValueOnce(errorResponse(500, '送信できませんでした'));
+
+    render(<TwoFactorSettings />);
+    await user.click(
+      await screen.findByRole('button', {
+        name: '二段階認証の確認コードを送信',
+      }),
+    );
+
+    await screen.findByRole('alert');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

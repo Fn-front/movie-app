@@ -7,7 +7,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
 import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
 
-import { checkSecondFactorRateLimit, requireSecondFactor } from './totpGuard';
+import {
+  checkSecondFactorRateLimit,
+  requireSecondFactor,
+} from './secondFactorGuard';
 
 // --- Mocks ---
 
@@ -44,6 +47,20 @@ describe('requireSecondFactor', () => {
     await expect(
       requireSecondFactor(supabase, USER_ID, '123456'),
     ).resolves.toBeNull();
+  });
+
+  // ガードは方式に依存しない。分岐は verifySecondFactor の中にある
+  it('method=email_otp でも、正しいコードなら通す', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.EMAIL_OTP);
+
+    await expect(
+      requireSecondFactor(supabase, USER_ID, '123456'),
+    ).resolves.toBeNull();
+    expect(mockVerifySecondFactor).toHaveBeenCalledWith(
+      supabase,
+      USER_ID,
+      '123456',
+    );
   });
 
   it('成功時にレート制限をリセットする', async () => {

@@ -3,6 +3,13 @@
  *
  * 無効化・リカバリーコード再発行は、セッションだけでは通さない。
  * セッションを奪われただけで第2要素を外せたら、二段階認証の意味がない。
+ *
+ * 方式（認証アプリ / メールのコード）には依存しない。`verifySecondFactor` が
+ * 方式で分岐し、リカバリーコードはどちらでも受け付ける。
+ *
+ * ⚠️ メールOTP を使う利用者はコードを手元で作れないため、ここを通るには
+ * 先に `/api/user/totp/send-challenge` でコードを受け取る必要がある。
+ * その経路が無いと、設定を有効にしたあと二度と無効化できなくなる。
  */
 
 import { NextResponse } from 'next/server';
@@ -18,8 +25,12 @@ import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { TOTP_ERROR_MESSAGES, TOTP_SETTINGS_LIMIT } from '@/constants/totp';
 
-/** エラーレスポンスを組み立てる */
-const errorResponse = (code: string, message: string, status: number) =>
+/**
+ * エラーレスポンスを組み立てる
+ *
+ * 二段階認証まわりのルート（`/api/user/totp/**`）が共通で使う。
+ */
+export const errorResponse = (code: string, message: string, status: number) =>
   NextResponse.json({ success: false, error: { code, message } }, { status });
 
 /**

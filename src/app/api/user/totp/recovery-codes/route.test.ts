@@ -27,7 +27,7 @@ jest.mock('@/helpers/auth', () => ({
 
 const mockRequireSecondFactor = jest.fn();
 const mockCheckSecondFactorRateLimit = jest.fn();
-jest.mock('@/helpers/totpGuard', () => ({
+jest.mock('@/helpers/secondFactorGuard', () => ({
   requireSecondFactor: (...args: unknown[]) => mockRequireSecondFactor(...args),
   checkSecondFactorRateLimit: (...args: unknown[]) =>
     mockCheckSecondFactorRateLimit(...args),

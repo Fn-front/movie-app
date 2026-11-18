@@ -42,8 +42,5 @@
     background-color: $primary-700;
   }
 
-  &:focus-visible {
-    outline: 2px solid $primary-500;
-    outline-offset: 2px;
-  }
+  @include focus-visible;
 }

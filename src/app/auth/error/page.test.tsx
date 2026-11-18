@@ -28,12 +28,45 @@ describe('AuthErrorPage', () => {
   it.each([
     ['コードが無い', {}],
     ['知らないコード', { error: 'SomethingNew' }],
-    ['配列', { error: ['Configuration', 'AccessDenied'] }],
     ['空文字', { error: '' }],
   ])('%s なら既定の文言に倒す', async (_label, params) => {
     // Auth.js の内部エラー種別は30以上あり、将来増えうる。
     // 知らない値で落としたり空白を出したりしない
     await renderPage(params);
+
+    expect(
+      screen.getByText(AUTH_PAGE_ERROR_MESSAGES.DEFAULT),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * ⚠️ `Object.prototype` のキーを踏ませない
+   *
+   * `code in AUTH_PAGE_ERROR_MESSAGES` で判定すると、`toString` で関数が、
+   * `__proto__` でオブジェクトが返り、React が描画ごと落ちる。`?error=` の
+   * 値はそのまま渡るので URL だけで誰でも踏める。404 を直した代わりに
+   * クラッシュを埋めることになる
+   */
+  it.each([
+    ['toString'],
+    ['constructor'],
+    ['valueOf'],
+    ['hasOwnProperty'],
+    ['__proto__'],
+  ])('error=%s でも落ちず既定の文言を出す', async (code) => {
+    await renderPage({ error: code });
+
+    expect(
+      screen.getByText(AUTH_PAGE_ERROR_MESSAGES.DEFAULT),
+    ).toBeInTheDocument();
+  });
+
+  it('配列なら既定に倒す（文字列化して拾わない）', async () => {
+    // ⚠️ `['Configuration', 'AccessDenied']` だと、ガードを外しても
+    // 文字列化で `"Configuration,AccessDenied"` になりどのキーにも当たらず、
+    // **ガードの有無を区別できない**。要素1つにすると、ガードが無いときだけ
+    // `"Configuration"` に当たって通ってしまう
+    await renderPage({ error: ['Configuration'] });
 
     expect(
       screen.getByText(AUTH_PAGE_ERROR_MESSAGES.DEFAULT),
@@ -53,7 +86,10 @@ describe('AuthErrorPage', () => {
     await renderPage({ error: 'AccessDenied' });
 
     expect(
-      screen.getByRole('heading', { name: 'ログインできませんでした' }),
+      screen.getByRole('heading', {
+        name: 'ログインできませんでした',
+        level: 1,
+      }),
     ).toBeInTheDocument();
   });
 

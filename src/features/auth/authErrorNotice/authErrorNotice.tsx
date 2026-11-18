@@ -24,9 +24,22 @@ interface AuthErrorNoticeProps {
   code?: string;
 }
 
-/** コードに対応する文言を返す。知らない値は既定へ */
+/**
+ * コードに対応する文言を返す。知らない値は既定へ
+ *
+ * ⚠️ `in` 演算子で判定しないこと。`Object.prototype` まで辿るため、
+ * `?error=toString` で**関数**が、`?error=__proto__` で**オブジェクト**が
+ * 返り、React が「Objects are not valid as a React child」で描画ごと落ちる。
+ * `?error=` の値はそのまま渡るので URL だけで誰でも踏める。404 を直した
+ * 代わりにクラッシュを埋めることになる。
+ *
+ * `hasOwnProperty` を借りて自前のキーだけを見る。
+ */
 function resolveMessage(code: string | undefined): string {
-  if (code && code in AUTH_PAGE_ERROR_MESSAGES) {
+  if (
+    code &&
+    Object.prototype.hasOwnProperty.call(AUTH_PAGE_ERROR_MESSAGES, code)
+  ) {
     return AUTH_PAGE_ERROR_MESSAGES[
       code as keyof typeof AUTH_PAGE_ERROR_MESSAGES
     ];

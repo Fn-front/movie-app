@@ -85,6 +85,74 @@ describe('ForgotPasswordForm', () => {
     expect(screen.queryByLabelText('メールアドレス')).not.toBeInTheDocument();
   });
 
+  /**
+   * この画面では復旧できない人に、理由の心当たりを渡す（#1226）
+   *
+   * 発行アカウントの `users.email` は受信できない合成アドレスで、本人も
+   * それを知らない。実アドレスを入れても引けないが、列挙防止のため応答は
+   * 成功と同じ。「送信しました」と出たまま永久に届かない
+   */
+  describe('発行アカウントの案内', () => {
+    it('送信する前に出す', () => {
+      render(<ForgotPasswordForm />);
+
+      expect(
+        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED),
+      ).toBeInTheDocument();
+    });
+
+    it('送信した後にも出す', async () => {
+      // ⚠️ ここが本題。送信前の注記は読み飛ばされるが、届かないことに
+      // 気づいたあと戻ってくる場所はこちら
+      mockFetch.mockResolvedValue(okResponse());
+
+      render(<ForgotPasswordForm />);
+      await submitEmail('user@example.com');
+
+      await screen.findByText(PASSWORD_RESET_MESSAGES.REQUEST_ACCEPTED);
+
+      expect(
+        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED),
+      ).toBeInTheDocument();
+    });
+
+    it('送信後の案内と同じライブリージョンに入れる', async () => {
+      // 「送信しました」だけを包むと、届かない理由に心当たりを持てる唯一の
+      // 文言がライブリージョンの外に出て、支援技術には読まれない
+      mockFetch.mockResolvedValue(okResponse());
+
+      render(<ForgotPasswordForm />);
+      await submitEmail('user@example.com');
+
+      const status = await screen.findByRole('status');
+
+      expect(status).toHaveTextContent(
+        PASSWORD_RESET_MESSAGES.REQUEST_ACCEPTED,
+      );
+      expect(status).toHaveTextContent(
+        PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED,
+      );
+    });
+
+    it.each([
+      ['試行上限（429）', 429, 'しばらく時間をおいてから再度お試しください。'],
+      ['サーバーエラー（500）', 500, PASSWORD_RESET_MESSAGES.RESET_FAILED],
+    ])('%s でも案内は消えない', async (_label, status, message) => {
+      // 応答によって出たり消えたりすると、どのメールアドレスが登録済みかを
+      // 推測する手がかりになる
+      mockFetch.mockResolvedValue(errorResponse(status, message));
+
+      render(<ForgotPasswordForm />);
+      await submitEmail('user@example.com');
+
+      await screen.findByRole('alert');
+
+      expect(
+        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED),
+      ).toBeInTheDocument();
+    });
+  });
+
   it('未登録のメールでも同じ案内を表示する', async () => {
     // 文面が変わると、どのメールアドレスが登録済みかを総当たりで調べられる
     mockFetch.mockResolvedValue(okResponse());

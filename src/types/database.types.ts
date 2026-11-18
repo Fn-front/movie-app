@@ -1183,6 +1183,10 @@ export type Database = {
           watched_count: number;
         }[];
       };
+      release_rate_limit: {
+        Args: { p_action_type: string; p_identifier: string };
+        Returns: undefined;
+      };
       sync_now_showing_movies: { Args: { movies: Json }; Returns: number };
       upsert_movie_cache: {
         Args: { movies: Json; set_now_playing?: boolean };

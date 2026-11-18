@@ -29,8 +29,10 @@ jest.mock('@/helpers/auth', () => ({
 }));
 
 const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+const mockReleaseRateLimit = jest.fn().mockResolvedValue(undefined);
 jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  releaseRateLimit: (...args: unknown[]) => mockReleaseRateLimit(...args),
 }));
 
 jest.mock('@/lib/otp', () => ({
@@ -109,6 +111,15 @@ describe('POST /api/auth/otp/send', () => {
     // 以降すべてのモック応答が1つずれて不可解な失敗になる。
     // 他のAPIテスト（settings / password-reset）は既にこうしている
     mockFrom.mockReset();
+
+    // ⚠️ 同じ理由でこの2つもリセットする。
+    // `mockResolvedValue`（Once なし）は**永続**なので、1つのテストが
+    // 設定すると以降すべてが汚染される（`:765` が実際にそう）。
+    // Once 版も、早期 return で消費されないまま次へ漏れる
+    mockCheckRateLimit.mockReset();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    (sendOtpEmail as jest.Mock).mockReset();
+    (sendOtpEmail as jest.Mock).mockResolvedValue(true);
   });
 
   it('registration: 正常にOTPを送信できる', async () => {
@@ -770,6 +781,193 @@ describe('POST /api/auth/otp/send', () => {
       );
 
       expect(response.status).toBe(400);
+    });
+  });
+
+  /**
+   * 送信に失敗したら数えた分を戻す（#1260）
+   *
+   * 戻さないと「送信に失敗しました」を5回見た時点で「本日の送信上限に
+   * 達しました」に変わる。1通も届いていないのに上限扱いになり、
+   * #1258 の行き止まり（最大24時間なにもできない）へ落ちる
+   */
+  describe('送信失敗時の後始末', () => {
+    /** login のユーザー検索（存在する）を積む */
+    const mockUserFound = () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            single: () => ({ data: { id: 'user-1' }, error: null }),
+          }),
+        }),
+      });
+    };
+
+    /** 送信が失敗する状態にして POST を叩く */
+    const postWithFailedSend = async () => {
+      mockUserFound();
+      setupOtpFlowMocks();
+      // OTP行の削除（ロールバック）
+      mockFrom.mockReturnValueOnce({
+        delete: () => ({ eq: () => ({ data: null, error: null }) }),
+      });
+      (sendOtpEmail as jest.Mock).mockResolvedValueOnce(false);
+
+      return POST(
+        createRequest({ email: 'test@example.com', action: 'login' }),
+      );
+    };
+
+    it('日次送信枠を戻す', async () => {
+      const response = await postWithFailedSend();
+
+      expect(response.status).toBe(500);
+      expect(mockReleaseRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'test@example.com',
+        'otp_send_daily',
+      );
+    });
+
+    /**
+     * ⚠️ **挿入した OTP 行は消さない**
+     *
+     * 60秒の再送間隔チェックはこの行の `created_at` だけを根拠にしている。
+     * 消すと次のリクエストが「前回送信なし」で素通りし、日次枠も戻して
+     * いるので**この経路の保護が全部無くなる**。送信が失敗し続ける状況で
+     * 無制限に Resend を叩かせられる
+     */
+    it('作ったOTP行は消さない（60秒間隔の根拠を残す）', async () => {
+      await postWithFailedSend();
+
+      const otpOps = mockFrom.mock.calls.filter(
+        (call) => call[0] === 'otp_codes',
+      );
+
+      // 前回送信チェック（select）→ 既存削除 → insert の3回だけ。
+      // ロールバック用の delete が増えていないこと
+      expect(otpOps).toHaveLength(3);
+    });
+
+    it('次のリクエストは再送間隔で弾かれる', async () => {
+      // 本題。行が残っていれば60秒は通らない
+      await postWithFailedSend();
+
+      // 1回目の使い残しを持ち越さない（キューの取り違えを避ける）
+      mockFrom.mockReset();
+      mockUserFound();
+      // 直前に送信した行が見つかる
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: () => ({
+                  single: () => ({
+                    data: { created_at: new Date().toISOString() },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      });
+
+      const second = await POST(
+        createRequest({ email: 'test@example.com', action: 'login' }),
+      );
+
+      expect(second.status).toBe(429);
+      // Resend へは1回しか到達しない
+      expect(sendOtpEmail).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * ⚠️ 戻す枠は**セッションユーザー**のもの（#641 と同じ理屈）
+     *
+     * ボディ由来のアドレスで戻すと、アカウントを1つ持つだけで
+     * **任意のアドレスの枠を減らせる**
+     */
+    it('password_change ではセッションユーザーの枠を戻す', async () => {
+      mockSessionUserEmail('session-user@example.com');
+      setupOtpFlowMocks();
+      (sendOtpEmail as jest.Mock).mockResolvedValueOnce(false);
+
+      const response = await POST(
+        createRequest({
+          email: 'victim@example.com',
+          action: 'password_change',
+        }),
+      );
+
+      expect(response.status).toBe(500);
+      expect(mockReleaseRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'session-user@example.com',
+        'otp_send_daily',
+      );
+      expect(mockReleaseRateLimit).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'victim@example.com',
+        expect.anything(),
+      );
+    });
+
+    it('挿入に失敗したときも戻す', async () => {
+      // DB が一時的に詰まっただけで利用者の日次枠を削らない
+      mockUserFound();
+      // 前回送信チェック（なし）
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: () => ({
+                  single: () => ({ data: null, error: { code: 'PGRST116' } }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      });
+      // 既存OTP削除
+      mockFrom.mockReturnValueOnce({
+        delete: () => ({
+          eq: () => ({ eq: () => ({ is: () => ({ error: null }) }) }),
+        }),
+      });
+      // OTP挿入が失敗する
+      mockFrom.mockReturnValueOnce({
+        insert: () => ({
+          error: { code: '57P01', message: 'connection terminated' },
+        }),
+      });
+
+      const response = await POST(
+        createRequest({ email: 'test@example.com', action: 'login' }),
+      );
+
+      expect(response.status).toBe(500);
+      expect(mockReleaseRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'test@example.com',
+        'otp_send_daily',
+      );
+      // 送信は試みていない
+      expect(sendOtpEmail).not.toHaveBeenCalled();
+    });
+
+    it('送信に成功したときは戻さない', async () => {
+      mockUserFound();
+      setupOtpFlowMocks();
+
+      const response = await POST(
+        createRequest({ email: 'test@example.com', action: 'login' }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(mockReleaseRateLimit).not.toHaveBeenCalled();
     });
   });
 });

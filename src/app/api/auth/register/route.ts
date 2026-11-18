@@ -30,7 +30,7 @@ import {
   randomDelay,
   hashOtpCode,
 } from '@/lib/otp';
-import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { checkRateLimit, releaseRateLimit } from '@/lib/rateLimit/rateLimit';
 import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { getClientIp } from '@/lib/http/getClientIp';
 import { rejectPwnedPassword } from '@/helpers/pwnedPasswordGuard';
@@ -268,6 +268,10 @@ export async function POST(request: Request) {
       if (!existingUser) {
         await supabase.from('users').delete().eq('id', userId);
       }
+
+      // 日次送信枠も戻す（#1260）。行だけ消して枠を残すと、1通も届かないまま
+      // 5回で「本日の送信上限に達しました」に変わり、#1258 の行き止まりへ落ちる
+      await releaseRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_SEND_DAILY);
 
       return NextResponse.json(
         {

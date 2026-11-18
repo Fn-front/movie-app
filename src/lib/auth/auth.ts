@@ -12,6 +12,7 @@ import bcrypt from 'bcryptjs';
 import {
   AUTH_ERROR_CODE,
   AUTH_ERROR_MESSAGES,
+  DUMMY_PASSWORD_HASH,
   SESSION_CONFIG,
   ROUTES,
   SUPABASE_ERROR_CODE,
@@ -153,6 +154,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               .single();
 
         if (error || !user) {
+          // 応答時間でアカウントの有無を判定させない（#1256）。
+          //
+          // ここで即 return すると「存在しない: 1ms」「存在する: ~250ms」と
+          // 分かれ、メールアドレスの一覧を持つ相手が登録済みのものを時間差で
+          // 絞り込める。照合相手が居ないぶんをダミーで埋めて揃える。
+          //
+          // パスワード経路だけが対象。OTP 経路には照合するパスワードが無く、
+          // 待つ意味がない（そちらの時間差は別途 #1256 で扱う）
+          if (loginMethod === LOGIN_METHOD.PASSWORD && credentials?.password) {
+            await bcrypt.compare(
+              credentials.password as string,
+              DUMMY_PASSWORD_HASH,
+            );
+          }
+
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
@@ -250,6 +266,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
           // パスワード未設定（ソーシャルログインのみのユーザー）
           if (!user.password_hash) {
+            // 上と同じ理由（#1256）。ここも照合相手が居ないので、
+            // 即 return すると「ソーシャル専用アカウントである」ことが
+            // 応答時間で分かる
+            await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
             throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
           }
 

@@ -371,6 +371,27 @@ export const SESSION_CONFIG = {
 export const BCRYPT_COST = 12;
 
 /**
+ * 照合相手が居ないときに時間を合わせるためのダミーハッシュ（#1256）
+ *
+ * ログインは、ユーザーが見つからない場合や `password_hash` が無い場合に
+ * **bcrypt を回さずに即 return** していた。そのため応答時間が
+ * 「存在しない: 1ms」「存在する: ~250ms」と分かれ、**そのメールアドレスが
+ * 登録済みかどうかを時間差で判定できた**。
+ *
+ * 照合相手が居ないときはこれと比較して、計算時間だけ揃える。
+ * `register` が列挙防止のためだけに `bcrypt.hash` を回しているのと同じ考え方
+ * （`src/app/api/auth/register/route.ts:132`）。
+ *
+ * ⚠️ **コストは `BCRYPT_COST` と一致させること。** ずれると逆に差が出る。
+ * この値は `$2b$12$` で始まる必要がある（12 = `BCRYPT_COST`）。
+ *
+ * ⚠️ 平文の由来は無い（`bcrypt.compare` は常に false を返す）。
+ * ここに本物のパスワードのハッシュを置かないこと
+ */
+export const DUMMY_PASSWORD_HASH =
+  '$2b$12$C6UzMDM.H6dfI/f/IKcEe.Op7n5YZ3gCFfKBDQ0BN2hEm9MKnqp4K';
+
+/**
  * 漏洩パスワード照合（HIBP Pwned Passwords API）の設定
  *
  * NIST SP 800-63B は文字種の強制よりも漏洩パスワードリストとの照合を

@@ -146,7 +146,7 @@ type Callbacks = {
   session: (args: unknown) => Promise<Record<string, unknown>>;
 };
 
-import { SESSION_CONFIG } from '@/constants/auth';
+import { DUMMY_PASSWORD_HASH, SESSION_CONFIG } from '@/constants/auth';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('@/lib/auth/auth');
@@ -1444,6 +1444,94 @@ describe('authorize のレート制限', () => {
 });
 
 // -------------------- 第2要素（二段階認証） --------------------
+/**
+ * 応答時間でアカウントの有無を判定させない（#1256）
+ *
+ * 照合相手が居ないとき bcrypt を回さずに即 return していたため、
+ * 「存在しない: 1ms」「存在する: ~250ms」と分かれていた。メールアドレスの
+ * 一覧を持つ相手が、登録済みのものを時間差で絞り込める
+ */
+describe('authorize のタイミング均一化', () => {
+  let compareSpy: jest.SpyInstance;
+
+  function makeRequest(): Request {
+    return new Request('http://localhost/api/auth/callback/credentials', {
+      headers: new Headers({ 'x-vercel-forwarded-for': '203.0.113.1' }),
+    });
+  }
+
+  beforeEach(() => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    compareSpy = jest.spyOn(bcrypt, 'compare');
+  });
+
+  afterEach(() => {
+    compareSpy.mockRestore();
+  });
+
+  it('ユーザーが存在しなくても bcrypt を回す', async () => {
+    setResolver(() => ({ data: null, error: { code: 'PGRST116' } }));
+
+    await credentialsProvider
+      .authorize(
+        { email: 'nobody@example.com', password: 'Password1' },
+        makeRequest(),
+      )
+      .catch(() => undefined);
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+    // 本物のハッシュとは比較しない（常に false になるダミー）
+    expect(compareSpy.mock.calls[0][1]).toBe(DUMMY_PASSWORD_HASH);
+  });
+
+  it('パスワード未設定のユーザーでも bcrypt を回す', async () => {
+    // 即 return すると「ソーシャル専用アカウントである」ことが時間で分かる
+    setResolver(({ table }) =>
+      table === 'users'
+        ? {
+            data: {
+              id: 'user-1',
+              email: 'social@example.com',
+              name: 'Social',
+              avatar_url: null,
+              role: 'user',
+              is_verified: true,
+              password_hash: null,
+              password_changed_at: null,
+            },
+            error: null,
+          }
+        : { data: null, error: null },
+    );
+
+    await credentialsProvider
+      .authorize(
+        { email: 'social@example.com', password: 'Password1' },
+        makeRequest(),
+      )
+      .catch(() => undefined);
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('OTP経路では回さない（照合するパスワードが無い）', async () => {
+    setResolver(() => ({ data: null, error: { code: 'PGRST116' } }));
+
+    await credentialsProvider
+      .authorize(
+        {
+          email: 'nobody@example.com',
+          loginMethod: 'otp',
+          verificationToken: 'token',
+        },
+        makeRequest(),
+      )
+      .catch(() => undefined);
+
+    expect(compareSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('authorize の第2要素（パスワード経路）', () => {
   const PASSWORD = 'Password1';
   /** PASSWORD の bcrypt ハッシュ */

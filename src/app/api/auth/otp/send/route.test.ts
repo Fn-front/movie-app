@@ -29,8 +29,10 @@ jest.mock('@/helpers/auth', () => ({
 }));
 
 const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+const mockReleaseRateLimit = jest.fn().mockResolvedValue(undefined);
 jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  releaseRateLimit: (...args: unknown[]) => mockReleaseRateLimit(...args),
 }));
 
 jest.mock('@/lib/otp', () => ({
@@ -93,9 +95,13 @@ const setupOtpFlowMocks = () => {
       }),
     }),
   });
-  // OTP挿入
+  // OTP挿入。#1260 で id を受け取るようになったため select().single() を返す
   mockFrom.mockReturnValueOnce({
-    insert: () => ({ error: null }),
+    insert: () => ({
+      select: () => ({
+        single: () => ({ data: { id: 'otp-1' }, error: null }),
+      }),
+    }),
   });
 };
 
@@ -770,6 +776,83 @@ describe('POST /api/auth/otp/send', () => {
       );
 
       expect(response.status).toBe(400);
+    });
+  });
+
+  /**
+   * 送信に失敗したら数えた分を戻す（#1260）
+   *
+   * 戻さないと「送信に失敗しました」を5回見た時点で「本日の送信上限に
+   * 達しました」に変わる。1通も届いていないのに上限扱いになり、
+   * #1258 の行き止まり（最大24時間なにもできない）へ落ちる
+   */
+  describe('送信失敗時の後始末', () => {
+    beforeEach(() => {
+      // ⚠️ clearAllMocks は mockResolvedValueOnce のキューを捨てない
+      // （ファイル冒頭のコメントと同じ理由）。前のテストが積み残した
+      // { allowed: false } が漏れると、ここは 429 で終わって何も検証しない
+      mockCheckRateLimit.mockReset();
+      mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    });
+
+    /** login のユーザー検索（存在する）を積む */
+    const mockUserFound = () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            single: () => ({ data: { id: 'user-1' }, error: null }),
+          }),
+        }),
+      });
+    };
+
+    /** 送信が失敗する状態にして POST を叩く */
+    const postWithFailedSend = async () => {
+      mockUserFound();
+      setupOtpFlowMocks();
+      // OTP行の削除（ロールバック）
+      mockFrom.mockReturnValueOnce({
+        delete: () => ({ eq: () => ({ data: null, error: null }) }),
+      });
+      (sendOtpEmail as jest.Mock).mockResolvedValueOnce(false);
+
+      return POST(
+        createRequest({ email: 'test@example.com', action: 'login' }),
+      );
+    };
+
+    it('日次送信枠を戻す', async () => {
+      const response = await postWithFailedSend();
+
+      expect(response.status).toBe(500);
+      expect(mockReleaseRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'test@example.com',
+        'otp_send_daily',
+      );
+    });
+
+    it('作ったOTP行を消す', async () => {
+      // 誰も知らないコードを有効期限まで残さない。残すと次のコードが
+      // 古い attempts を背負う
+      await postWithFailedSend();
+
+      const deleted = mockFrom.mock.calls.filter(
+        (call) => call[0] === 'otp_codes',
+      );
+      expect(deleted.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('送信に成功したときは戻さない', async () => {
+      mockUserFound();
+      setupOtpFlowMocks();
+
+      const response = await POST(
+        createRequest({ email: 'test@example.com', action: 'login' }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(mockReleaseRateLimit).not.toHaveBeenCalled();
     });
   });
 });

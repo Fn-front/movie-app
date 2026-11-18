@@ -25,8 +25,10 @@ jest.mock('bcryptjs', () => ({
 }));
 
 const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
+const mockReleaseRateLimit = jest.fn().mockResolvedValue(undefined);
 jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  releaseRateLimit: (...args: unknown[]) => mockReleaseRateLimit(...args),
 }));
 
 // 漏洩パスワード照合（HIBP）。既定では「漏洩していない」として通す
@@ -329,6 +331,13 @@ describe('POST /api/auth/register', () => {
     // ロールバックが実行されたことを確認
     expect(mockOtpDelete).toHaveBeenCalled();
     expect(mockUserDelete).toHaveBeenCalled();
+    // 日次送信枠も戻す（#1260）。行だけ消して枠を残すと、1通も届かないまま
+    // 5回で「本日の送信上限に達しました」に変わる
+    expect(mockReleaseRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'test@example.com',
+      'otp_send_daily',
+    );
   });
 
   it('レート制限超過で429を返す', async () => {

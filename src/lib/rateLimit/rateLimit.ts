@@ -351,3 +351,44 @@ export async function resetRateLimit(
     .eq('identifier', identifier)
     .eq('action_type', actionType);
 }
+
+/**
+ * 数えた1回分を戻す（守る資源を消費できなかったときに呼ぶ）
+ *
+ * `checkRateLimit` は資源を消費する**直前**に数える
+ * （`.claude/rules/api-route.md`）。そこから先で失敗して1つも消費しなかった
+ * 場合、数えたままだと**何も起きていないのに枠だけ減る**（#1260）。
+ *
+ * ⚠️ `resetRateLimit` と混同しないこと。あちらは行ごと消すので、
+ * **別の正当な試行で積んだ分まで消える**。「検証に成功したので全部チャラ」の
+ * 意味で使うものです。こちらは今回の1回分だけ戻す。
+ *
+ * ⚠️ ロックも解除する。`consume_rate_limit` は上限到達時に `locked_until` を
+ * 立てるので、その回の消費が失敗したなら**ロックも成立していなかったことに
+ * しないと**「1通も送らずにロック」が残る。
+ *
+ * 失敗しても例外にしない。呼び出し元は既に「資源を消費できなかった」という
+ * 本題のエラーを返そうとしており、後始末の失敗でそれを覆い隠さない。
+ * 枠が戻らなくても、窓が過ぎれば回復する。
+ *
+ * @param supabase - Supabaseクライアント
+ * @param identifier - 識別子（`checkRateLimit` に渡したものと同じ）
+ * @param actionType - アクション種別（同上）
+ */
+export async function releaseRateLimit(
+  supabase: SupabaseClient,
+  identifier: string,
+  actionType: RateLimitActionType,
+): Promise<void> {
+  const { error } = await supabase.rpc('release_rate_limit', {
+    p_identifier: identifier,
+    p_action_type: actionType,
+  });
+
+  if (error) {
+    console.warn(
+      `[rateLimit] 枠の返却に失敗しました identifier='${identifier}' action='${actionType}'`,
+      error,
+    );
+  }
+}

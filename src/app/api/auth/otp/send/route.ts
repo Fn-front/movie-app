@@ -17,7 +17,7 @@ import {
   randomDelay,
   hashOtpCode,
 } from '@/lib/otp';
-import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { checkRateLimit, releaseRateLimit } from '@/lib/rateLimit/rateLimit';
 import { normalizeEmail } from '@/utils/email';
 import {
   OTP_ACTION,
@@ -262,15 +262,19 @@ export async function POST(request: Request) {
       Date.now() + OTP_CONFIG.EXPIRY_MINUTES * 60 * 1000,
     );
 
-    const { error: insertError } = await supabase.from('otp_codes').insert({
-      email,
-      // 平文は保存しない。鍵（OTP_HASH_PEPPER）はDBの外に置く（#640）
-      code_hash: hashOtpCode(code, email),
-      action_type: action,
-      expires_at: expiresAt.toISOString(),
-    });
+    const { data: inserted, error: insertError } = await supabase
+      .from('otp_codes')
+      .insert({
+        email,
+        // 平文は保存しない。鍵（OTP_HASH_PEPPER）はDBの外に置く（#640）
+        code_hash: hashOtpCode(code, email),
+        action_type: action,
+        expires_at: expiresAt.toISOString(),
+      })
+      .select('id')
+      .single();
 
-    if (insertError) {
+    if (insertError || !inserted) {
       throw insertError;
     }
 
@@ -278,6 +282,19 @@ export async function POST(request: Request) {
     const emailSent = await sendOtpEmail(email, code, action);
 
     if (!emailSent) {
+      // 1通も送れていないので、数えた枠と作ったコードを戻す（#1260）。
+      //
+      // 戻さないと「送信に失敗しました」を5回見た時点で
+      // 「本日の送信上限に達しました。明日再度お試しください。」に変わる。
+      // 届いていないのに上限扱いになり、#1258 の行き止まりへ落ちる。
+      //
+      // ⚠️ `resetRateLimit` ではなく `releaseRateLimit` を使う。前者は行ごと
+      // 消すので、同じ日に成功した送信の分まで帳消しになる
+      await releaseRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_SEND_DAILY);
+      // 誰も知らないコードを有効期限まで残さない。`attempts` を引き継がせない
+      // ためでもある（残すと、次に送ったコードが古い試行回数を背負う）
+      await supabase.from('otp_codes').delete().eq('id', inserted.id);
+
       return NextResponse.json(
         {
           success: false,

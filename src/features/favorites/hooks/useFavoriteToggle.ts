@@ -12,6 +12,7 @@ import { useFavoriteLookup } from '@/features/favorites/hooks/useFavoriteLookup'
 import { useLoginPromptStore } from '@/lib/store/useLoginPromptStore';
 import { sendEvent } from '@/utils/analytics';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
+import { isOptimisticId } from '@/utils/optimisticId';
 
 /**
  * トグル対象の映画データ
@@ -145,9 +146,22 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
       // GA4 へは作品IDだけを送る。rating（★の数）は送らない。
       // Consent Mode advanced では未同意の利用者の分も Google へ届くため、
       // 作品に対する評価という嗜好情報を渡さない（#938）
-      if (currentFavorite) {
+      // ⚠️ 仮IDを書き込みAPIへ渡さない（#1206 / watchlist の #1194 と同型）。
+      //
+      // `currentFavorite.id` は照会キャッシュ由来で、追加直後の数百ミリ秒は
+      // `onMutate` が積んだ仮IDのまま。`PATCH /api/favorites/:id` は
+      // `isValidUuid` で弾くので 400 になる。
+      //
+      // 現状は `isFavoriteProcessing` による UI の無効化で到達しないが、
+      // `optimisticId.ts` が「書き込みAPIへ渡してはいけない」と宣言している
+      // 以上、最後の経路を無防備にしない
+      if (currentFavorite && !isOptimisticId(currentFavorite.id)) {
         updateRating(currentFavorite.id, rating);
         sendEvent(ANALYTICS_EVENTS.FAVORITE_UPDATE, { movie_id: movie.id });
+      } else if (currentFavorite) {
+        // 仮IDのあいだは何もしない。閉じるだけ
+        closeModal();
+        return;
       } else {
         addToFavorites({
           tmdb_movie_id: movie.id,
@@ -165,6 +179,11 @@ export function useFavoriteToggle(): UseFavoriteToggleReturn {
 
   const handleDelete = useCallback(() => {
     if (!currentFavorite || !movie) return;
+    // 評価更新と同じ理由（#1206）
+    if (isOptimisticId(currentFavorite.id)) {
+      closeModal();
+      return;
+    }
 
     processingIdRef.current = movie.id;
     removeFromFavorites(currentFavorite.id);

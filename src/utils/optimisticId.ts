@@ -2,13 +2,15 @@
  * 楽観アイテムの仮ID
  *
  * サーバーが行IDを採番するまでのあいだ、キャッシュに積む仮の値。
- * **書き込みAPIへ渡してはいけない。** `DELETE /api/watchlist/:id` と
- * `PATCH /api/watchlist/:id` は `isValidUuid`
- * （`src/app/api/watchlist/[id]/route.ts`）で弾くため 400 になる（#1194）。
+ * **書き込みAPIへ渡してはいけない。** 各 `[id]` ルートが `isValidUuid` で
+ * 弾くため 400 になる（watchlist: #1194 / favorites: #1206）。
  *
  * 追加の `onSuccess` で実IDへ差し替えるが（#1152）、それは **POST の応答が
  * 返ったあと**。`onMutate` から `onSuccess` までの数百ミリ秒は仮IDのままで、
- * その間に削除や視聴済みを押せてしまう。
+ * その間に削除や更新を押せてしまう。
+ *
+ * ⚠️ watchlist と favorites で**同じ接頭辞を共有する**。別々に持つと、
+ * 片方だけ直したときにもう片方が同型の不具合を抱えたまま残る（実際そうなった）。
  */
 
 /** 仮IDの接頭辞。判定と生成で同じ値を使う */
@@ -31,7 +33,7 @@ export function createOptimisticId(): string {
  *
  * 書き込みAPIを呼ぶ前のガードと、操作ボタンの無効化に使う。
  *
- * @param id - ウォッチリストの行ID
+ * @param id - 行ID
  * @returns 仮IDなら true
  */
 export function isOptimisticId(id: string): boolean {

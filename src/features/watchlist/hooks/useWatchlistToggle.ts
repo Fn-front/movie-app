@@ -27,10 +27,7 @@ import type {
 import type { WatchlistAddFormData } from '@/schema/watchlist';
 import { useToastDispatch } from '@/hooks/useToast';
 import { isConflictError } from '@/utils/error';
-import {
-  createOptimisticId,
-  isOptimisticId,
-} from '@/features/watchlist/utils/optimisticId';
+import { createOptimisticId, isOptimisticId } from '@/utils/optimisticId';
 
 /**
  * トグル対象の映画データ（最小限のフィールド）

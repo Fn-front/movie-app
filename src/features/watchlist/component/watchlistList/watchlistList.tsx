@@ -28,7 +28,7 @@ import {
 import { formatDate } from '@/utils/date';
 import { getTMDbPosterUrl } from '@/utils/image';
 import { shouldLetBrowserHandle } from '@/utils/linkClick';
-import { isOptimisticId } from '@/features/watchlist/utils/optimisticId';
+import { isOptimisticId } from '@/utils/optimisticId';
 import { cn } from '@/utils/cn';
 import {
   DEFAULT_MOVIE_VIEW_MODE,

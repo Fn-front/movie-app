@@ -224,7 +224,8 @@ export async function POST(request: Request) {
         password_hash: passwordHash,
         password_changed_at: new Date().toISOString(),
       })
-      .eq('id', peeked.userId);
+      // 権威は『実際に焼いた行』側。peeked.userId と同値だが意図が読みやすい
+      .eq('id', consumed.userId);
 
     if (updateError) {
       throw updateError;

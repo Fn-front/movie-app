@@ -32,12 +32,14 @@ jest.mock('@/features/auth/otpVerification/otpVerification', () => ({
   OtpVerification: ({
     email,
     onVerifySuccess,
+    headingLevel,
   }: {
     email: string;
     action: string;
     onVerifySuccess?: () => void;
+    headingLevel?: number;
   }) => (
-    <div data-testid='otp-verification'>
+    <div data-testid='otp-verification' data-heading-level={headingLevel}>
       <span data-testid='otp-email'>{email}</span>
       <button onClick={onVerifySuccess} data-testid='otp-verify-success'>
         検証成功
@@ -233,6 +235,13 @@ describe('RegisterForm', () => {
         'test@example.com',
       );
     });
+
+    // 画面ごと置き換わるので、確認コード側が h1 を引き継ぐ（#1249）。
+    // 既定（h2）のままだとページから h1 が消える
+    expect(screen.getByTestId('otp-verification')).toHaveAttribute(
+      'data-heading-level',
+      '1',
+    );
 
     // フォームは非表示
     expect(screen.queryByLabelText('メールアドレス')).not.toBeInTheDocument();

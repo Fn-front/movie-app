@@ -60,10 +60,15 @@ export const OtpLoginForm = memo<OtpLoginFormProps>(function OtpLoginForm({
   if (step === 'otp') {
     return (
       <div className={styles.c_otp_login_form}>
+        {/*
+          ページの h1（「ログイン」）ごと差し替わるので、ここが h1 になる。
+          既定の 2 のままだと**ページから h1 が消える**（#1249）
+        */}
         <OtpVerification
           email={email}
           action={OTP_ACTION.LOGIN}
           onVerifySuccess={handleOtpVerifySuccess}
+          headingLevel={1}
         />
 
         {/*

@@ -210,7 +210,14 @@ async function verifyRecoveryCode(
 }
 
 /**
- * メールで送った第2要素のコードを検証する
+ * メールで送った第2要素のコードを消費する
+ *
+ * 宛先を引数で受けるのは、**設定途中（`confirmed_at` が NULL）でも使える
+ * ようにする**ため。そのとき `getSecondFactorMethod` は null を返すので、
+ * `verifySecondFactor` 経由では到達できない。
+ *
+ * ⚠️ `email` をリクエストボディから渡してはいけない。必ずセッション、
+ * または `users` テーブルから引いた値を渡すこと。
  *
  * ⚠️ **有効期限と試行回数はDB制約では強制されていない。**
  * `chk_otp_attempts`（0〜5）は列のドメイン制約にすぎず、実際の判定は
@@ -221,26 +228,16 @@ async function verifyRecoveryCode(
  * 同じコードを同時に2回投げられたときに両方とも通る。
  *
  * @param supabase - service_role のクライアント
- * @param userId - 対象ユーザー
+ * @param email - 送信先。サーバー側で確定した値のみ
  * @param code - 利用者が入力した6桁のコード
  * @returns 検証結果
  */
-async function verifyEmailOtpCode(
+export async function consumeSecondFactorEmailCode(
   supabase: SupabaseClient,
-  userId: string,
+  email: string,
   code: string,
 ): Promise<SecondFactorVerifyResult> {
-  // 宛先はDBから引く。呼び出し側から受け取ると、ボディ由来の値が紛れ込みうる
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .select('email')
-    .eq('id', userId)
-    .single();
-
-  if (userError) throw toDbError(userError, 'read users for second factor');
-  if (!user?.email) return SECOND_FACTOR_VERIFY_RESULT.NOT_ENABLED;
-
-  const email = normalizeEmail(user.email);
+  const normalizedEmail = normalizeEmail(email);
 
   // 試行回数を先に見る。上限に達していたら照合せずに弾く。
   // 素の UPDATE で加算すると6回目に chk_otp_attempts で 23514 になり、
@@ -248,7 +245,7 @@ async function verifyEmailOtpCode(
   const { data: row, error: rowError } = await supabase
     .from('otp_codes')
     .select('id, attempts')
-    .eq('email', email)
+    .eq('email', normalizedEmail)
     .eq('action_type', TWO_FACTOR_OTP_ACTION)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -267,9 +264,9 @@ async function verifyEmailOtpCode(
   const { data: deleted, error: deleteError } = await supabase
     .from('otp_codes')
     .delete()
-    .eq('email', email)
+    .eq('email', normalizedEmail)
     .eq('action_type', TWO_FACTOR_OTP_ACTION)
-    .eq('code_hash', hashOtpCode(code.trim(), email))
+    .eq('code_hash', hashOtpCode(code.trim(), normalizedEmail))
     .gt('expires_at', new Date().toISOString())
     .select('id');
 
@@ -289,6 +286,34 @@ async function verifyEmailOtpCode(
   }
 
   return SECOND_FACTOR_VERIFY_RESULT.SUCCESS;
+}
+
+/**
+ * ログイン時のメールOTP を検証する
+ *
+ * 宛先は `users` から引く。呼び出し側（`authorize` / `jwt`）から渡すと、
+ * ボディ由来の値が紛れ込む余地が生まれる。
+ *
+ * @param supabase - service_role のクライアント
+ * @param userId - 対象ユーザー
+ * @param code - 利用者が入力した6桁のコード
+ * @returns 検証結果
+ */
+async function verifyEmailOtpCode(
+  supabase: SupabaseClient,
+  userId: string,
+  code: string,
+): Promise<SecondFactorVerifyResult> {
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('email')
+    .eq('id', userId)
+    .single();
+
+  if (userError) throw toDbError(userError, 'read users for second factor');
+  if (!user?.email) return SECOND_FACTOR_VERIFY_RESULT.NOT_ENABLED;
+
+  return consumeSecondFactorEmailCode(supabase, user.email, code);
 }
 
 /**

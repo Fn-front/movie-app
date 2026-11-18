@@ -12,19 +12,41 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
+import {
+  SECOND_FACTOR_METHOD,
+  type SecondFactorMethod,
+} from '@/constants/secondFactor';
 import { decryptTotpSecret, encryptTotpSecret } from '@/lib/totp/encryption';
 import { generateRecoveryCodes } from '@/lib/totp/recoveryCodes';
 import { buildOtpAuthUri, generateTotpSecret } from '@/lib/totp/secret';
 import { verifyTotpCode } from '@/lib/totp/totp';
 
 import { toDbError } from './dbError';
+import {
+  consumeSecondFactorEmailCode,
+  SECOND_FACTOR_VERIFY_RESULT,
+} from './secondFactor';
+import {
+  SEND_SECOND_FACTOR_RESULT,
+  sendSecondFactorCode,
+  type SendSecondFactorResult,
+} from './sendSecondFactorCode';
 
 /** 設定開始の結果 */
-export interface TotpSetupStart {
-  /** 認証アプリに読み込ませる URI（QRコードの中身） */
-  otpauthUri: string;
-  /** 手入力用の共有鍵（QRを読めない端末向け） */
-  secret: string;
+export interface SecondFactorSetupStart {
+  /** 開始した方式 */
+  method: SecondFactorMethod;
+  /** 認証アプリに読み込ませる URI（QRコードの中身）。method=totp のときのみ */
+  otpauthUri?: string;
+  /** 手入力用の共有鍵（QRを読めない端末向け）。method=totp のときのみ */
+  secret?: string;
+  /**
+   * コード送信の結果。method=email_otp のときのみ
+   *
+   * `SENT` 以外なら設定途中の行は残していない。呼び出し側は利用者に
+   * 理由を伝え、やり直させること。
+   */
+  sendResult?: SendSecondFactorResult;
 }
 
 /**
@@ -49,15 +71,19 @@ export class TotpAlreadyEnabledError extends Error {
  *
  * @param supabase - service_role のクライアント
  * @param userId - 対象ユーザー
- * @param accountName - 認証アプリ上の表示名（メールアドレス）
- * @returns QRコードの中身と手入力用の鍵
+ * @param method - 設定する方式
+ * @param accountName - 認証アプリ上の表示名（メールアドレス）。method=totp で使う
+ * @param email - コードの送信先。method=email_otp で使う。サーバー側で確定した値のみ
+ * @returns 方式に応じた設定情報
  * @throws 既に有効化済みの場合
  */
-export async function startTotpSetup(
+export async function startSecondFactorSetup(
   supabase: SupabaseClient,
   userId: string,
+  method: SecondFactorMethod,
   accountName: string,
-): Promise<TotpSetupStart> {
+  email: string,
+): Promise<SecondFactorSetupStart> {
   const { data: existing, error: readError } = await supabase
     .from('user_totp')
     .select('confirmed_at')
@@ -77,7 +103,8 @@ export async function startTotpSetup(
     throw new TotpAlreadyEnabledError();
   }
 
-  const secret = generateTotpSecret();
+  const isTotp = method === SECOND_FACTOR_METHOD.TOTP;
+  const secret = isTotp ? generateTotpSecret() : null;
 
   // 設定途中の行は作り直す（upsert だと古い last_used_counter が残る）。
   //
@@ -93,16 +120,42 @@ export async function startTotpSetup(
     throw toDbError(deleteError, 'delete user_totp for setup');
   }
 
+  // ⚠️ `method` を必ず書く。省くと DB の DEFAULT 'totp' が入り、
+  // メールOTP では `encrypted_secret` が NULL なので
+  // `chk_secret_matches_method` に 23514 で落ちる
   const { error } = await supabase.from('user_totp').insert({
     user_id: userId,
-    encrypted_secret: encryptTotpSecret(secret),
+    method,
+    encrypted_secret: secret ? encryptTotpSecret(secret) : null,
   });
 
   if (error) {
     throw toDbError(error, 'insert user_totp');
   }
 
-  return { otpauthUri: buildOtpAuthUri(secret, accountName), secret };
+  if (isTotp) {
+    return {
+      method,
+      otpauthUri: buildOtpAuthUri(secret as string, accountName),
+      secret: secret as string,
+    };
+  }
+
+  const sendResult = await sendSecondFactorCode(supabase, userId, email);
+
+  // ⚠️ 消すのは `SEND_FAILED` のときだけ。
+  //
+  // そのパスでは `sendSecondFactorCode` が `otp_codes` の行も消しているので、
+  // 使えるコードが1つも無い。設定途中の行を残すと「コード入力画面に来たのに
+  // コードが来ない」状態になる。
+  //
+  // 逆に `THROTTLED` / `LIMIT_EXCEEDED` では**直前に送ったコードがまだ
+  // 生きている**。ここで行を消すと、受信箱にあるコードを入力できなくなる。
+  if (sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED) {
+    await supabase.from('user_totp').delete().eq('user_id', userId);
+  }
+
+  return { method, sendResult };
 }
 
 /**
@@ -113,17 +166,19 @@ export async function startTotpSetup(
  *
  * @param supabase - service_role のクライアント
  * @param userId - 対象ユーザー
- * @param code - 認証アプリに表示されている6桁のコード
+ * @param code - 認証アプリ、またはメールで届いた6桁のコード
+ * @param email - 本人のメールアドレス。method=email_otp の照合に使う
  * @returns 平文のリカバリーコード（この一度だけ利用者へ見せる）。コードが合わなければ null
  */
-export async function confirmTotpSetup(
+export async function confirmSecondFactorSetup(
   supabase: SupabaseClient,
   userId: string,
   code: string,
+  email: string,
 ): Promise<string[] | null> {
   const { data: row, error: readError } = await supabase
     .from('user_totp')
-    .select('encrypted_secret, confirmed_at')
+    .select('encrypted_secret, confirmed_at, method')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -136,7 +191,17 @@ export async function confirmTotpSetup(
     return null;
   }
 
-  if (!verifyTotpCode(code.trim(), decryptTotpSecret(row.encrypted_secret))) {
+  // ⚠️ 設定途中（`confirmed_at` が NULL）なので `verifySecondFactor` は使えない。
+  // あちらは `getSecondFactorMethod` を通り、未確定の行を「未設定」と見る
+  if (row.method === SECOND_FACTOR_METHOD.EMAIL_OTP) {
+    const result = await consumeSecondFactorEmailCode(supabase, email, code);
+
+    if (result !== SECOND_FACTOR_VERIFY_RESULT.SUCCESS) {
+      return null;
+    }
+  } else if (
+    !verifyTotpCode(code.trim(), decryptTotpSecret(row.encrypted_secret))
+  ) {
     return null;
   }
 

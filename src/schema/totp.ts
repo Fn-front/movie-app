@@ -5,6 +5,7 @@
 import { z } from 'zod';
 
 import { TOTP_CONFIG } from '@/constants/totp';
+import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
 
 /**
  * 認証コード（認証アプリの6桁、またはリカバリーコード）
@@ -20,9 +21,20 @@ const secondFactorCodeSchema = z
   .max(32, '認証コードの形式が正しくありません');
 
 /**
+ * 設定開始（方式の選択）
+ */
+export const secondFactorSetupSchema = z.object({
+  method: z.enum([SECOND_FACTOR_METHOD.TOTP, SECOND_FACTOR_METHOD.EMAIL_OTP], {
+    error: '不正な方式です',
+  }),
+});
+
+/**
  * 有効化（初回コードの検証）
  *
- * 有効化だけは認証アプリのコードに限る。リカバリーコードはまだ発行されていない。
+ * 有効化は方式のコード（認証アプリの6桁 / メールで届いた6桁）に限る。
+ * リカバリーコードはまだ発行されていない。どちらの方式でも6桁の数字なので
+ * 同じ形式でよい。
  */
 export const totpEnableSchema = z.object({
   code: z
@@ -44,5 +56,6 @@ export const totpVerifySchema = z.object({
   code: secondFactorCodeSchema,
 });
 
+export type SecondFactorSetupData = z.infer<typeof secondFactorSetupSchema>;
 export type TotpEnableFormData = z.infer<typeof totpEnableSchema>;
 export type TotpVerifyFormData = z.infer<typeof totpVerifySchema>;

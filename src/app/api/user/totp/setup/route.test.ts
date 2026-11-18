@@ -33,25 +33,30 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
 }));
 
-const mockStartTotpSetup = jest.fn();
+const mockStartSecondFactorSetup = jest.fn();
 jest.mock('@/lib/auth/totpSetup', () => {
   // 実物の TotpAlreadyEnabledError を使う。ここを模造品にすると
   // ルート側の instanceof が常に false になり、テストが実態とずれる
   const actual = jest.requireActual('@/lib/auth/totpSetup');
   return {
     TotpAlreadyEnabledError: actual.TotpAlreadyEnabledError,
-    startTotpSetup: (...args: unknown[]) => mockStartTotpSetup(...args),
+    startSecondFactorSetup: (...args: unknown[]) =>
+      mockStartSecondFactorSetup(...args),
   };
 });
 
 // --- Helpers ---
 
 /** users の取得をモックする */
-const mockUserLookup = (email: string | null) => {
+const mockUserLookup = (
+  email: string | null,
+  username: string | null = null,
+) => {
   mockFrom.mockReturnValueOnce({
     select: () => ({
       eq: () => ({
-        single: () => Promise.resolve({ data: email ? { email } : null }),
+        single: () =>
+          Promise.resolve({ data: email ? { email, username } : null }),
       }),
     }),
   });
@@ -75,6 +80,13 @@ const mockUserLookupFailure = () => {
   });
 };
 
+const createRequest = (body: Record<string, unknown> = { method: 'totp' }) =>
+  new Request('http://localhost/api/user/totp/setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
 // --- Tests ---
 
 describe('POST /api/user/totp/setup', () => {
@@ -83,7 +95,7 @@ describe('POST /api/user/totp/setup', () => {
     mockFrom.mockReset();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
-    mockStartTotpSetup.mockResolvedValue({
+    mockStartSecondFactorSetup.mockResolvedValue({
       otpauthUri: 'otpauth://totp/Movie%20App:user@example.com?secret=ABC',
       secret: 'ABCDEFGHIJKLMNOP',
     });
@@ -92,7 +104,7 @@ describe('POST /api/user/totp/setup', () => {
   it('QRコードと手入力用の鍵を返す', async () => {
     mockUserLookup('user@example.com');
 
-    const response = await POST();
+    const response = await POST(createRequest());
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -105,7 +117,7 @@ describe('POST /api/user/totp/setup', () => {
     // XSSのsinkを1つ増やすことになる
     mockUserLookup('user@example.com');
 
-    const response = await POST();
+    const response = await POST(createRequest());
     const json = await response.json();
 
     expect(json.data).not.toHaveProperty('qrCodeSvg');
@@ -120,11 +132,13 @@ describe('POST /api/user/totp/setup', () => {
   it('認証アプリの表示名にはDBのメールアドレスを使う', async () => {
     mockUserLookup('user@example.com');
 
-    await POST();
+    await POST(createRequest());
 
-    expect(mockStartTotpSetup).toHaveBeenCalledWith(
+    expect(mockStartSecondFactorSetup).toHaveBeenCalledWith(
       expect.anything(),
       'user-1',
+      'totp',
+      'user@example.com',
       'user@example.com',
     );
   });
@@ -132,25 +146,25 @@ describe('POST /api/user/totp/setup', () => {
   it('未認証なら401を返す', async () => {
     mockGetAuthSession.mockResolvedValue(null);
 
-    const response = await POST();
+    const response = await POST(createRequest());
 
     expect(response.status).toBe(401);
-    expect(mockStartTotpSetup).not.toHaveBeenCalled();
+    expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
   });
 
   it('ユーザーが見つからなければ401を返す', async () => {
     mockUserLookup(null);
 
-    const response = await POST();
+    const response = await POST(createRequest());
 
     expect(response.status).toBe(401);
   });
 
   it('既に有効化済みなら400を返す', async () => {
     mockUserLookup('user@example.com');
-    mockStartTotpSetup.mockRejectedValue(new TotpAlreadyEnabledError());
+    mockStartSecondFactorSetup.mockRejectedValue(new TotpAlreadyEnabledError());
 
-    const response = await POST();
+    const response = await POST(createRequest());
     const json = await response.json();
 
     expect(response.status).toBe(400);
@@ -164,10 +178,10 @@ describe('POST /api/user/totp/setup', () => {
     try {
       mockUserLookupFailure();
 
-      const response = await POST();
+      const response = await POST(createRequest());
 
       expect(response.status).toBe(500);
-      expect(mockStartTotpSetup).not.toHaveBeenCalled();
+      expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
     } finally {
       error.mockRestore();
     }
@@ -179,12 +193,12 @@ describe('POST /api/user/totp/setup', () => {
     const error = jest.spyOn(console, 'error').mockImplementation(() => {});
     try {
       mockUserLookup('user@example.com');
-      mockStartTotpSetup.mockRejectedValue({
+      mockStartSecondFactorSetup.mockRejectedValue({
         message: 'connection terminated unexpectedly',
         code: '57P01',
       });
 
-      const response = await POST();
+      const response = await POST(createRequest());
       const json = await response.json();
 
       expect(response.status).toBe(500);
@@ -197,9 +211,9 @@ describe('POST /api/user/totp/setup', () => {
   it('試行上限を超えたら429を返す', async () => {
     mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 900 });
 
-    const response = await POST();
+    const response = await POST(createRequest());
 
     expect(response.status).toBe(429);
-    expect(mockStartTotpSetup).not.toHaveBeenCalled();
+    expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
   });
 });

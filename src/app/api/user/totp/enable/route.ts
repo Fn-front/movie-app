@@ -2,8 +2,9 @@
  * 二段階認証の有効化API
  * POST /api/user/totp/enable
  *
- * 認証アプリに表示されている初回コードを検証し、成功した場合だけ有効化する。
- * QRを表示しただけで有効にすると、登録に失敗した利用者がロックアウトされる。
+ * 初回コード（認証アプリの6桁 / メールで届いた6桁）を検証し、成功した場合だけ
+ * 有効化する。QRを表示しただけで有効にすると、登録に失敗した利用者が
+ * ロックアウトされる。
  */
 
 import { NextResponse } from 'next/server';
@@ -13,7 +14,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { confirmTotpSetup } from '@/lib/auth/totpSetup';
+import { confirmSecondFactorSetup } from '@/lib/auth/totpSetup';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import { totpEnableSchema } from '@/schema/totp';
 import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
@@ -71,10 +72,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const recoveryCodes = await confirmTotpSetup(
+    // メールOTP の照合に本人のアドレスが要る。
+    // 読み取りに失敗しただけで 401 を返さない（axios のインターセプタが
+    // 401 を「未認証」と解釈して強制ログアウトへ倒すため）
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', session.user.id)
+      .single();
+
+    if (userError) throw userError;
+    if (!user) return unauthorizedResponse();
+
+    const recoveryCodes = await confirmSecondFactorSetup(
       supabase,
       session.user.id,
       result.data.code,
+      user.email,
     );
 
     if (!recoveryCodes) {

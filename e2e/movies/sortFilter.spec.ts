@@ -41,12 +41,16 @@ test.describe('公開予定ページのソート・フィルター操作', () =>
     await page.getByRole('option', { name: '人気順' }).click();
 
     // ソート変更後もページが正常に表示される（キャッシュヒット時はAPI呼び出しなし）
+    //
+    // ⚠️ タイムアウトを明示する（#1122）。既定の5秒だと、前に別ディレクトリを
+    // 流したあとで TMDb の応答が遅いときに落ちる。同ファイルの beforeEach
+    // （`:110-114`）が 15 秒を見ているのと揃える
     await expect(
       page
         .locator('[class*="movie_tile"]')
         .first()
         .or(page.getByText(/映画が見つかりませんでした/)),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15000 });
   });
 
   test('フィルターモーダルでジャンルを選択して適用できる', async ({ page }) => {

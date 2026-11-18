@@ -500,6 +500,31 @@ test.describe('映画詳細のURL化', () => {
       await expect(page.getByRole('dialog')).toBeVisible({ timeout: 20000 });
     };
 
+    /**
+     * Esc が効く状態になるまで待ってから押す（#1122）
+     *
+     * Radix の Esc は `document` へのネイティブ `keydown` リスナを
+     * `useEffect` の中で登録する（`react-use-escape-keydown` →
+     * `react-dismissable-layer`）。`toBeVisible()` は DOM の可視性しか
+     * 保証せず、**effect が走ったことは保証しない**。
+     *
+     * Playwright 側も非対称で、`click()` はアクショナビリティ待ちを
+     * タイムアウトまで再試行するが **`keyboard.press()` は待たない**。
+     * そのため Esc だけが隙間に落ちる。
+     *
+     * ⚠️ フォーカス位置は関係ない（document 上の capture リスナ）。
+     * 待つべきは「レイヤーが dismissable として登録済みか」なので、
+     * 閉じるまで Esc を再試行する
+     */
+    const pressEscapeUntilClosed = async (page: Page) => {
+      await expect(async () => {
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('dialog')).toHaveCount(0, {
+          timeout: 1000,
+        });
+      }).toPass({ timeout: 15000 });
+    };
+
     test('閉じてもアプリの外へ出ず、一覧が残る', async ({ page }) => {
       await landFromOutside(page);
 
@@ -516,9 +541,8 @@ test.describe('映画詳細のURL化', () => {
     test('Esc でも閉じる', async ({ page }) => {
       await landFromOutside(page);
 
-      await page.keyboard.press('Escape');
+      await pressEscapeUntilClosed(page);
 
-      await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(page).toHaveURL(/\/movies\/now-showing$/);
     });
 

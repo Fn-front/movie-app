@@ -150,7 +150,7 @@ if (!emailSent) {
 | `auth/register` POST（`OTP_SEND_DAILY`） | 例外2 |
 | `auth/password-reset/request` POST | 例外1 |
 | `movies/suggest-title` GET | 例外2 |
-| `user/totp/setup` POST（`TWO_FACTOR_SEND`） | 例外2 |
+| `user/totp/setup` POST（`TWO_FACTOR_SEND`） | 例外2（`TOTP_SETTINGS_VERIFY` のほうは原則どおり） |
 | `user/totp/send-challenge` POST（`TWO_FACTOR_SEND`） | 例外2 |
 
 > ⚠️ この2つの `TWO_FACTOR_SEND` は `sendSecondFactorCode`
@@ -161,8 +161,14 @@ if (!emailSent) {
 > 送信系と検証系でカウンタを重ねると、メールOTP の利用者は無効化のたびに
 > 「コード送信＋コード入力」で2枠使い、2回しくじるだけで15分間
 > `setup` / `enable` / `disable` / `recovery-codes` / `send-challenge` が
-> すべて 429 になる。`user/totp/setup` も `method=email_otp` の分岐では
-> 消費しない（`method=totp` の分岐だけが `TOTP_SETTINGS_VERIFY` を使う）。
+> すべて 429 になる。
+>
+> ⚠️ 一方 `user/totp/setup` は **方式によらず** `TOTP_SETTINGS_VERIFY` を
+> 原則どおり（検証より前に）消費する。一度これを `method=totp` の分岐だけに
+> 移したが後退だった —— メールOTP 側で効くはずの `TWO_FACTOR_SEND` は
+> `sendSecondFactorCode` の中にあり、**再送間隔に当たると `checkRateLimit` へ
+> 到達しない**ため、60秒以内の連打が1件もカウントされないまま
+> `user_totp` の DELETE + INSERT を繰り返せた。
 
 レート制限と検証の両方を持つハンドラのテストには `処理順` の describe があり、
 「レート制限超過 かつ 入力が不正」のリクエストが 429 を返すか 400 を返すかで

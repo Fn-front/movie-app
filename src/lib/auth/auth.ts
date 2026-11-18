@@ -611,6 +611,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         delete token.totpUnavailable;
         // 同上。消さないと「送信できませんでした」が画面に出続ける
         delete token.secondFactorSendFailed;
+        delete token.secondFactorSendLimited;
 
         // 初回ログイン時にユーザー情報をトークンに追加
         if (user) {
@@ -693,10 +694,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 );
 
                 // ⚠️ このコールバックからは例外を出せない（上の #1148 の注記）。
-                // 送信できなかったことはフラグで画面へ伝える
-                if (sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED) {
-                  token.secondFactorSendFailed = true;
-                }
+                // 送信できなかったことはフラグで画面へ伝える。
+                //
+                // ⚠️ `LIMIT_EXCEEDED` を取りこぼさないこと。1通も送っていないのに
+                // 「メールに送ったコードを入力してください」と出すと、届かない
+                // コードを待たせることになる。出口はリカバリーコードだけ
+                token.secondFactorSendFailed =
+                  sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED
+                    ? true
+                    : undefined;
+                token.secondFactorSendLimited =
+                  sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED
+                    ? true
+                    : undefined;
               }
             }
           } else {
@@ -757,9 +767,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 resendUser.email,
               );
 
-              if (sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED) {
-                token.secondFactorSendFailed = true;
-              }
+              // 初回送信と同じ理由で LIMIT_EXCEEDED も伝える
+              token.secondFactorSendFailed =
+                sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED
+                  ? true
+                  : undefined;
+              token.secondFactorSendLimited =
+                sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED
+                  ? true
+                  : undefined;
             }
           }
 
@@ -1001,6 +1017,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // 「コードが違う」と同じ文言にすると、届いていないコードを
         // 打ち直し続けることになる
         session.secondFactorSendFailed = Boolean(token.secondFactorSendFailed);
+        // 1通も送れていないので、コードを待たせずリカバリーコードへ誘導する
+        session.secondFactorSendLimited = Boolean(
+          token.secondFactorSendLimited,
+        );
         return session;
       }
 

@@ -116,6 +116,14 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
     useState<SecondFactorMethod | null>(null);
   const [totpCode, setTotpCode] = useState('');
 
+  /**
+   * コードが1通も送られていないか
+   *
+   * 送信上限に達した状態。ヒント文と再送ボタンをこの事実に合わせないと、
+   * 「メールに送信した6桁のコード」「再送信できます」と出て矛盾する
+   */
+  const [sendLimited, setSendLimited] = useState(false);
+
   const totpRequired = secondFactorMode !== null;
   const isEmailOtp = secondFactorMode === SECOND_FACTOR_METHOD.EMAIL_OTP;
 
@@ -171,15 +179,27 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
           if (result.code === AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED) {
             // パスワードは正しい。コードはサーバーが送信済み
             setSecondFactorMode(SECOND_FACTOR_METHOD.EMAIL_OTP);
+            setSendLimited(false);
             restart();
             return;
           }
 
-          if (result.code === AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED) {
-            // ⚠️ 1通も送られていない。入力欄は出すが、コードを待たせず
-            // リカバリーコードへ誘導する
+          // ⚠️ **どちらも入力欄を出す。**
+          //
+          // 1通も送られていないが、だからこそリカバリーコードが唯一の出口に
+          // なる。入力欄を出さないと、手元にコードがあっても入れる場所が
+          // 無く、Resend の障害が続く限りそのアカウントは一切ログイン
+          // できない。
+          //
+          // パスワードは照合済みなので、方式を露出しても列挙にはならない
+          // （上の2分岐と同じ理屈）。
+          if (
+            result.code === AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED ||
+            result.code === AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED
+          ) {
             setSecondFactorMode(SECOND_FACTOR_METHOD.EMAIL_OTP);
-            setApiError(AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_LIMITED);
+            setSendLimited(true);
+            setApiError(resolveErrorMessage(result.code));
             return;
           }
 
@@ -300,13 +320,18 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
                 onChange={handleTotpCodeChange}
               />
               <p className={styles.c_login_form__hint}>
-                {isEmailOtp
-                  ? 'メールに送信した6桁のコード、または発行済みのリカバリーコードを入力してください。'
-                  : '認証アプリに表示されている6桁のコード、または発行済みのリカバリーコードを入力してください。'}
+                {!isEmailOtp
+                  ? '認証アプリに表示されている6桁のコード、または発行済みのリカバリーコードを入力してください。'
+                  : sendLimited
+                    ? // 1通も送っていない。コードを待たせない
+                      '発行済みのリカバリーコードを入力してください。'
+                    : 'メールに送信した6桁のコード、または発行済みのリカバリーコードを入力してください。'}
               </p>
 
               {/* 認証アプリは手元で作れるので再送の概念が無い */}
-              {isEmailOtp && (
+              {/* 送信上限のときは出さない。押しても同じエラーが返るだけで、
+                  「再送信できます」と出ると案内と矛盾する */}
+              {isEmailOtp && !sendLimited && (
                 <div className={styles.c_login_form__resend}>
                   <Button
                     type='button'
@@ -318,10 +343,12 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
                     確認コードを再送信する
                   </Button>
                   {/*
-                    残り秒数は読み上げる。視覚で待ち時間を読めない利用者が
-                    「押せない理由」を知る手がかりがこれしかない
+                    ⚠️ `aria-live` を付けない。本文が毎秒変わるため、polite の
+                    キューに60件のアナウンスが積まれ、読み上げが追いつかなくなる。
+                    カウント中は実質スクリーンリーダーで操作できない。
+                    既存の `otpVerification` も同じカウントダウンに付けていない
                   */}
-                  <p className={styles.c_login_form__hint} aria-live='polite'>
+                  <p className={styles.c_login_form__hint}>
                     {canResend
                       ? '再送信できます。'
                       : `再送信できるまで ${remaining} 秒`}

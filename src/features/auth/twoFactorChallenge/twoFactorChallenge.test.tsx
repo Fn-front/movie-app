@@ -474,12 +474,17 @@ describe('TwoFactorChallenge', () => {
       expect(screen.getByText(/再送信できるまで/)).toBeInTheDocument();
     });
 
-    it('残り秒数を読み上げる', () => {
+    /**
+     * ⚠️ 毎秒変わる値を live region に入れない。polite のキューに60件の
+     * アナウンスが積まれ、読み上げが追いつかずカウント中は実質
+     * スクリーンリーダーで操作できなくなる。
+     * 既存の `otpVerification` も同じカウントダウンに付けていない。
+     */
+    it('残り秒数を live region にしない', () => {
       render(<TwoFactorChallenge />);
 
-      expect(screen.getByText(/再送信できるまで/)).toHaveAttribute(
+      expect(screen.getByText(/再送信できるまで/)).not.toHaveAttribute(
         'aria-live',
-        'polite',
       );
     });
 
@@ -566,6 +571,56 @@ describe('TwoFactorChallenge', () => {
       } finally {
         jest.useRealTimers();
       }
+    });
+
+    /**
+     * ⚠️ jwt コールバックからは例外を出せないため（#1148）、送信の失敗は
+     * セッションのフラグでしか届かない。読まないと、1通も送られていないのに
+     * 「メールに送信した6桁のコードを入力してください」と出て、利用者は
+     * 届かないコードを待ち続ける。
+     */
+    it('送信に失敗したら「送った」と言わない', () => {
+      mockSessionData = {
+        totpPending: true,
+        secondFactorMethod: 'email_otp',
+        secondFactorSendFailed: true,
+      };
+
+      render(<TwoFactorChallenge />);
+
+      expect(
+        screen.queryByText(/メールに送信した6桁のコード/),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /送信できませんでした/,
+      );
+    });
+
+    /**
+     * ⚠️ 送信上限は「待っても送られない」。リカバリーコードへ誘導しないと
+     * 利用者の手が止まる。
+     */
+    it('送信上限ならリカバリーコードへ誘導する', () => {
+      mockSessionData = {
+        totpPending: true,
+        secondFactorMethod: 'email_otp',
+        secondFactorSendLimited: true,
+      };
+
+      render(<TwoFactorChallenge />);
+
+      expect(
+        screen.queryByText(/メールに送信した6桁のコード/),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(/リカバリーコード/);
+    });
+
+    it('送信できていれば通常のリード文を出す', () => {
+      render(<TwoFactorChallenge />);
+
+      expect(
+        screen.getByText(/メールに送信した6桁のコード/),
+      ).toBeInTheDocument();
     });
   });
 });

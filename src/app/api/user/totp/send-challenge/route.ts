@@ -89,7 +89,8 @@ export async function POST() {
       // 1通も送っていない。コードを待たせず、リカバリーコードへ誘導する
       return errorResponse(
         ERROR_CODE.RATE_LIMIT_EXCEEDED,
-        SECOND_FACTOR_MESSAGES.SEND_LIMIT_EXCEEDED,
+        // ここはリカバリーコードを持っているが、する操作は「ログイン」ではない
+        SECOND_FACTOR_MESSAGES.SEND_LIMIT_EXCEEDED_SETTINGS,
         HTTP_STATUS.TOO_MANY_REQUESTS,
       );
     }

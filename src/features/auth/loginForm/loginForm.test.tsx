@@ -606,6 +606,43 @@ describe('LoginForm', () => {
     });
 
     /**
+     * ⚠️ 1通も送られていないのに「再送信できます」と出ると、
+     * エラー文と矛盾する。押しても同じエラーが返るだけ
+     */
+    it('送信上限のときは再送ボタンを出さない', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+      } as never);
+      render(<LoginForm />);
+
+      await submitCredentials();
+      await screen.findByRole('alert');
+
+      expect(
+        screen.queryByRole('button', { name: '確認コードを再送信する' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('送信上限のときはメールのコードを待たせない', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+      } as never);
+      render(<LoginForm />);
+
+      await submitCredentials();
+      await screen.findByRole('alert');
+
+      expect(
+        screen.queryByText(/メールに送信した6桁のコード/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText(/発行済みのリカバリーコードを入力してください/),
+      ).toBeInTheDocument();
+    });
+
+    /**
      * ⚠️ 「コードが違う」と同じ文言にすると、届いていないコードを
      * 打ち直し続けることになる（#1148 と同じ理由）。
      */
@@ -623,14 +660,41 @@ describe('LoginForm', () => {
       expect(alert).not.toHaveTextContent(/正しくありません/);
     });
 
-    it('残り秒数を読み上げる', async () => {
+    /**
+     * ⚠️ **入力欄を出さないとログインできなくなる。**
+     *
+     * 1通も送られていないが、だからこそリカバリーコードが唯一の出口。
+     * 入力欄が無いと、手元にコードがあっても入れる場所が無く、
+     * Resend の障害が続く限りそのアカウントは一切ログインできない。
+     */
+    it('送信に失敗してもリカバリーコードを入れられる', async () => {
+      mockSignIn.mockResolvedValue({
+        error: 'CredentialsSignin',
+        code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED,
+      } as never);
+      render(<LoginForm />);
+
+      await submitCredentials();
+
+      expect(await screen.findByLabelText('認証コード')).toBeInTheDocument();
+      expect(
+        screen.getByText(/発行済みのリカバリーコードを入力してください/),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ 毎秒変わる値を live region に入れない。polite のキューに60件の
+     * アナウンスが積まれ、読み上げが追いつかずカウント中は実質
+     * スクリーンリーダーで操作できなくなる
+     */
+    it('残り秒数を live region にしない', async () => {
       requireEmailOtp();
       render(<LoginForm />);
 
       await submitCredentials();
 
       const hint = await screen.findByText(/再送信できるまで/);
-      expect(hint).toHaveAttribute('aria-live', 'polite');
+      expect(hint).not.toHaveAttribute('aria-live');
     });
 
     /**

@@ -39,6 +39,33 @@ export async function POST(request: Request) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
+    // ⚠️ **方式によらず・検証より前に**消費する（原則どおり）。
+    //
+    // 一度これを `method === 'totp'` の分岐だけに移したが、それは後退だった。
+    // メールOTP 側で唯一効くはずの `TWO_FACTOR_SEND` は
+    // `sendSecondFactorCode` の中にあり、**再送間隔に当たると
+    // `checkRateLimit` へ到達しない**（`sendSecondFactorCode.ts` の
+    // THROTTLED は枠の消費より前にある）。結果、60秒以内の連打が
+    // 1件もカウントされないまま `user_totp` の DELETE + INSERT を
+    // 繰り返せる状態になっていた。
+    //
+    // 鍵の生成と保存を繰り返させない、という本来の目的は方式に依存しない。
+    const limitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
+      TOTP_SETTINGS_LIMIT.maxAttempts,
+      TOTP_SETTINGS_LIMIT.windowMinutes,
+    );
+
+    if (!limitResult.allowed) {
+      return errorResponse(
+        ERROR_CODE.RATE_LIMIT_EXCEEDED,
+        AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
+        HTTP_STATUS.TOO_MANY_REQUESTS,
+      );
+    }
+
     const body = await request.json().catch(() => ({}));
     const parsed = secondFactorSetupSchema.safeParse(body);
 
@@ -57,31 +84,6 @@ export async function POST(request: Request) {
     }
 
     const { method } = parsed.data;
-
-    // ⚠️ レート制限は方式で分ける。
-    //
-    // TOTP は鍵の生成と保存を繰り返させないために `TOTP_SETTINGS_VERIFY` で
-    // 数える。メールOTP は `sendSecondFactorCode` の中で `TWO_FACTOR_SEND` を
-    // 消費するので、ここで重ねない。重ねると、無効化のたびに
-    // 「コード送信＋コード入力」で2枠使い、2回しくじるだけで15分間
-    // すべての二段階認証操作が 429 になる。
-    if (method === SECOND_FACTOR_METHOD.TOTP) {
-      const limitResult = await checkRateLimit(
-        supabase,
-        session.user.id,
-        RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
-        TOTP_SETTINGS_LIMIT.maxAttempts,
-        TOTP_SETTINGS_LIMIT.windowMinutes,
-      );
-
-      if (!limitResult.allowed) {
-        return errorResponse(
-          ERROR_CODE.RATE_LIMIT_EXCEEDED,
-          AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
-          HTTP_STATUS.TOO_MANY_REQUESTS,
-        );
-      }
-    }
 
     const { data: user, error: userError } = await supabase
       .from('users')
@@ -146,7 +148,8 @@ export async function POST(request: Request) {
       if (setup.sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED) {
         return errorResponse(
           ERROR_CODE.RATE_LIMIT_EXCEEDED,
-          SECOND_FACTOR_MESSAGES.SEND_LIMIT_EXCEEDED,
+          // まだ有効化していないのでリカバリーコードは存在しない
+          SECOND_FACTOR_MESSAGES.SEND_LIMIT_EXCEEDED_SETUP,
           HTTP_STATUS.TOO_MANY_REQUESTS,
         );
       }

@@ -36,6 +36,12 @@ interface UseTwoFactorChallengeResult {
   isCancelling: boolean;
   /** 第2要素がメールのコードか。再送の導線を出すかの判定に使う */
   isEmailOtp: boolean;
+  /**
+   * コードを送れなかったことを伝える文言。送れていれば null
+   *
+   * 「コードが違う」とは別物。打ち直しても直らないので分ける（#1148）
+   */
+  sendNotice: string | null;
   /** コードを送り直している最中か */
   isResending: boolean;
   /** 再送までの残り秒数 */
@@ -68,6 +74,17 @@ export function useTwoFactorChallenge({
   const isEmailOtp =
     session?.secondFactorMethod === SECOND_FACTOR_METHOD.EMAIL_OTP;
 
+  /**
+   * サーバーが「コードを送れなかった」と伝えてきたか
+   *
+   * ⚠️ `jwt` コールバックからは例外を出せないため（#1148）、送信の失敗は
+   * セッションのフラグでしか届かない。**これを読まないと**、1通も
+   * 送られていないのに「メールに送信した6桁のコードを入力してください」と
+   * 表示され、利用者は届かないコードを待ち続ける。
+   */
+  const sendFailed = Boolean(session?.secondFactorSendFailed);
+  const sendLimited = Boolean(session?.secondFactorSendLimited);
+
   const {
     remaining: resendRemaining,
     canResend: countdownDone,
@@ -76,6 +93,14 @@ export function useTwoFactorChallenge({
 
   // 検証中・ログアウト中は押させない（理由は `onResend` のコメント）
   const canResend = countdownDone && !isSubmitting && !isCancelling;
+
+  // 送信上限のほうを優先する。こちらは「待っても送られない」ので、
+  // リカバリーコードへ誘導しないと利用者の手が止まる
+  const sendNotice = sendLimited
+    ? AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_LIMITED
+    : sendFailed
+      ? AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_FAILED
+      : null;
 
   const onCodeChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,6 +229,7 @@ export function useTwoFactorChallenge({
   return {
     code,
     error,
+    sendNotice,
     isSubmitting,
     isCancelling,
     isEmailOtp,

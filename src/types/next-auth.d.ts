@@ -49,6 +49,14 @@ declare module 'next-auth' {
      * 「コードが違う」と区別しないと、届いていないコードを打ち直し続ける。
      */
     secondFactorSendFailed?: boolean;
+    /**
+     * 第2要素のコードが**送信上限で1通も送られなかった**か。
+     *
+     * `secondFactorSendFailed`（送信そのものの失敗）とは分ける。
+     * どちらも「コードが違う」とは別物だが、出口が違う —— こちらは
+     * リカバリーコードしか残っていない。
+     */
+    secondFactorSendLimited?: boolean;
   }
 
   interface User {
@@ -92,5 +100,13 @@ declare module 'next-auth/jwt' {
      * 残ると再送に成功しても「送信できませんでした」が出続ける
      */
     secondFactorSendFailed?: boolean;
+    /**
+     * 第2要素のコードが**送信上限で1通も送られなかった**か。
+     *
+     * `secondFactorSendFailed`（送信そのものの失敗）とは分ける。
+     * どちらも「コードが違う」とは別物だが、出口が違う —— こちらは
+     * リカバリーコードしか残っていない。
+     */
+    secondFactorSendLimited?: boolean;
   }
 }

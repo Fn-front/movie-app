@@ -216,4 +216,135 @@ describe('POST /api/user/totp/setup', () => {
     expect(response.status).toBe(429);
     expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
   });
+
+  describe('方式ごとの扱い', () => {
+    /**
+     * ⚠️ 画面だけの制限はAPIを直接叩けば抜けられる。
+     * admin 発行アカウントは users.email が .invalid TLD（RFC 2606、
+     * 絶対に名前解決されない）なので、選ばせるとコードが永久に届かない。
+     */
+    it('admin 発行アカウント（username あり）は email_otp を拒否する', async () => {
+      mockUserLookup('abc@def.invalid', 'alice');
+
+      const response = await POST(createRequest({ method: 'email_otp' }));
+
+      expect(response.status).toBe(400);
+      expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
+    });
+
+    it('admin 発行アカウントでも totp は選べる', async () => {
+      mockUserLookup('abc@def.invalid', 'alice');
+
+      const response = await POST(createRequest({ method: 'totp' }));
+
+      expect(response.status).toBe(200);
+    });
+
+    it('通常のアカウントは email_otp を選べる', async () => {
+      mockUserLookup('user@example.com');
+      mockStartSecondFactorSetup.mockResolvedValue({
+        method: 'email_otp',
+        sendResult: 'sent',
+      });
+
+      const response = await POST(createRequest({ method: 'email_otp' }));
+
+      expect(response.status).toBe(200);
+      expect(mockStartSecondFactorSetup).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        'email_otp',
+        'user@example.com',
+        'user@example.com',
+      );
+    });
+
+    it('不正な方式は400で、設定を開始しない', async () => {
+      mockUserLookup('user@example.com');
+
+      const response = await POST(createRequest({ method: 'bogus' }));
+
+      expect(response.status).toBe(400);
+      expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
+    });
+
+    it('送信に失敗したら500を返す', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        mockUserLookup('user@example.com');
+        mockStartSecondFactorSetup.mockResolvedValue({
+          method: 'email_otp',
+          sendResult: 'send_failed',
+        });
+
+        expect(
+          (await POST(createRequest({ method: 'email_otp' }))).status,
+        ).toBe(500);
+      } finally {
+        error.mockRestore();
+      }
+    });
+
+    /**
+     * ⚠️ まだ有効化していないのでリカバリーコードは存在しない。
+     * 「リカバリーコードを入力してログインしてください」と出すと、
+     * 指示された行動が物理的に実行できない。
+     */
+    it('送信上限では、存在しないリカバリーコードを案内しない', async () => {
+      mockUserLookup('user@example.com');
+      mockStartSecondFactorSetup.mockResolvedValue({
+        method: 'email_otp',
+        sendResult: 'limit_exceeded',
+      });
+
+      const response = await POST(createRequest({ method: 'email_otp' }));
+      const json = await response.json();
+
+      expect(response.status).toBe(429);
+      expect(json.error.message).not.toMatch(/リカバリーコード/);
+      expect(json.error.message).toMatch(/認証アプリ/);
+    });
+
+    /**
+     * ⚠️ レート制限は**方式によらず**消費する。
+     *
+     * method=totp の分岐だけに置くと、メールOTP 側は
+     * sendSecondFactorCode の中の TWO_FACTOR_SEND しか無くなる。
+     * あちらは再送間隔に当たると checkRateLimit へ到達しないため、
+     * 60秒以内の連打が1件もカウントされないまま user_totp の
+     * DELETE + INSERT を繰り返せる。
+     */
+    it('method=email_otp でもレート制限を消費する', async () => {
+      mockUserLookup('user@example.com');
+      mockStartSecondFactorSetup.mockResolvedValue({
+        method: 'email_otp',
+        sendResult: 'sent',
+      });
+
+      await POST(createRequest({ method: 'email_otp' }));
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        'totp_settings_verify',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    describe('処理順', () => {
+      // レート制限は原則どおり検証より前。入力が不正でも 429 が先
+      it('レート制限超過なら、入力が不正でも429', async () => {
+        mockCheckRateLimit.mockResolvedValue({
+          allowed: false,
+          retryAfter: 900,
+        });
+
+        const response = await POST(createRequest({ method: 'bogus' }));
+
+        expect(response.status).toBe(429);
+        expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
+      });
+    });
+  });
 });

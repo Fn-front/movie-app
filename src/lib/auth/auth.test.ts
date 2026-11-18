@@ -2665,3 +2665,171 @@ describe('authorize の第2要素（method=email_otp）', () => {
     expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
   });
 });
+
+// -------------------- OAuth 経路の第2要素（方式対応） --------------------
+
+describe('jwt / session の第2要素（OAuth 経路）', () => {
+  const USER_ID = 'user-1';
+
+  beforeEach(() => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockResetRateLimit.mockReset();
+    mockSendSecondFactorCode.mockReset();
+    mockSendSecondFactorCode.mockResolvedValue('sent');
+    mockVerifySecondFactor.mockReset();
+    setResolver(({ table }) =>
+      table === 'users'
+        ? {
+            data: {
+              id: USER_ID,
+              email: 'owner@example.com',
+              role: 'user',
+              password_hash: null,
+              password_changed_at: null,
+            },
+            error: null,
+          }
+        : { data: null, error: null },
+    );
+  });
+
+  it('method=email_otp なら totpPending を立ててコードを送る', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.EMAIL_OTP);
+
+    const token = await jwt({
+      token: {},
+      user: { id: USER_ID, email: 'owner@example.com' },
+      account: { provider: 'google' },
+    });
+
+    expect(token.totpPending).toBe(true);
+    expect(token.secondFactorMethod).toBe(SECOND_FACTOR_METHOD.EMAIL_OTP);
+    expect(mockSendSecondFactorCode).toHaveBeenCalledWith(
+      expect.anything(),
+      USER_ID,
+      'owner@example.com',
+    );
+  });
+
+  it('method=totp ではコードを送らない', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
+
+    const token = await jwt({
+      token: {},
+      user: { id: USER_ID, email: 'owner@example.com' },
+      account: { provider: 'google' },
+    });
+
+    expect(token.totpPending).toBe(true);
+    expect(token.secondFactorMethod).toBe(SECOND_FACTOR_METHOD.TOTP);
+    expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
+  });
+
+  it('二段階認証が無効なら totpPending を立てない', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(null);
+
+    const token = await jwt({
+      token: {},
+      user: { id: USER_ID, email: 'owner@example.com' },
+      account: { provider: 'google' },
+    });
+
+    expect(token.totpPending).toBe(false);
+    expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
+  });
+
+  /**
+   * ⚠️ `jwt` コールバックからは例外を出せない（#1148）。
+   * 送信の失敗はトークンのフラグで画面へ伝える。
+   */
+  it('送信に失敗したらフラグを立てる', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.EMAIL_OTP);
+    mockSendSecondFactorCode.mockResolvedValue('send_failed');
+
+    const token = await jwt({
+      token: {},
+      user: { id: USER_ID, email: 'owner@example.com' },
+      account: { provider: 'google' },
+    });
+
+    expect(token.secondFactorSendFailed).toBe(true);
+  });
+
+  /**
+   * ⚠️ `:586` が `totpUnavailable` を消しているのと同じ理由。
+   * 消さないと「送信できませんでした」が画面に出続ける。
+   */
+  it('再送に成功したら前回の失敗フラグが消える', async () => {
+    const token = await jwt({
+      token: {
+        id: USER_ID,
+        totpPending: true,
+        secondFactorMethod: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        secondFactorSendFailed: true,
+      },
+      trigger: 'update',
+      session: { resend: true },
+    });
+
+    expect(token.secondFactorSendFailed).toBeUndefined();
+    expect(mockSendSecondFactorCode).toHaveBeenCalled();
+  });
+
+  it('update({ resend: true }) は totpPending を維持する', async () => {
+    const token = await jwt({
+      token: {
+        id: USER_ID,
+        totpPending: true,
+        secondFactorMethod: SECOND_FACTOR_METHOD.EMAIL_OTP,
+      },
+      trigger: 'update',
+      session: { resend: true },
+    });
+
+    expect(token.totpPending).toBe(true);
+  });
+
+  it('method=totp では resend を無視する', async () => {
+    const token = await jwt({
+      token: {
+        id: USER_ID,
+        totpPending: true,
+        secondFactorMethod: SECOND_FACTOR_METHOD.TOTP,
+      },
+      trigger: 'update',
+      session: { resend: true },
+    });
+
+    expect(token.totpPending).toBe(true);
+    expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
+  });
+
+  it('session に方式を載せる（画面が出し分けるため）', async () => {
+    const result = await session({
+      session: { user: {}, expires: '' },
+      token: {
+        id: USER_ID,
+        totpPending: true,
+        secondFactorMethod: SECOND_FACTOR_METHOD.EMAIL_OTP,
+      },
+    });
+
+    expect(result.secondFactorMethod).toBe(SECOND_FACTOR_METHOD.EMAIL_OTP);
+    // 第2要素が未了なのでユーザー情報は空のまま
+    expect((result.user as { id: string }).id).toBe('');
+  });
+
+  it('session に送信失敗のフラグを載せる', async () => {
+    const result = await session({
+      session: { user: {}, expires: '' },
+      token: {
+        id: USER_ID,
+        totpPending: true,
+        secondFactorMethod: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        secondFactorSendFailed: true,
+      },
+    });
+
+    expect(result.secondFactorSendFailed).toBe(true);
+  });
+});

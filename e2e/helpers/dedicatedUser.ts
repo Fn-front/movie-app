@@ -83,6 +83,44 @@ export async function createVerifiedUser(user: DedicatedUser): Promise<string> {
 }
 
 /**
+ * メール確認が**済んでいない**ユーザーを作成する（#1247）
+ *
+ * 新規登録して確認コードを入れる前に画面を離れた状態と同じ。アプリの
+ * 登録フローを通すと OTP の送信上限に引っかかるため、直接作る。
+ *
+ * @param user - 作成するユーザー
+ * @returns 作成したユーザーのID
+ */
+export async function createUnverifiedUser(
+  user: DedicatedUser,
+): Promise<string> {
+  await deleteUserByEmail(user.email);
+
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
+    method: 'POST',
+    headers: { ...jsonHeaders, Prefer: 'return=representation' },
+    body: JSON.stringify({
+      email: user.email,
+      name: 'E2E Unverified',
+      password_hash: await bcrypt.hash(user.password, TEST_BCRYPT_COST),
+      is_verified: false,
+      role: user.role ?? 'user',
+    }),
+  });
+
+  const data = await res.json();
+  const id: string | undefined = data?.[0]?.id;
+
+  if (!id) {
+    throw new Error(
+      `未認証テストユーザーの作成に失敗した: ${user.email} (${res.status} ${JSON.stringify(data)})`,
+    );
+  }
+
+  return id;
+}
+
+/**
  * メールアドレスでユーザーと関連レコードを削除する
  *
  * `users` を参照する外部キーはおおむね ON DELETE CASCADE なので、

@@ -1549,6 +1549,88 @@ describe('authorize の第2要素（パスワード経路）', () => {
       ),
     ).rejects.toMatchObject({ code: 'totp_required' });
   });
+
+  /**
+   * メール認証が未完了のアカウント（#1247）
+   *
+   * 登録して確認コードを入れる前に画面を離れた人がここへ来る。以前は
+   * プレーンな `Error` を投げていたため `code` が載らず、画面には
+   * 「メールアドレスまたはパスワードが正しくありません」としか出なかった。
+   * **パスワードは正しい**ので、何度打ち直しても通らない
+   */
+  describe('メール未認証', () => {
+    const unverified = () =>
+      setResolver(({ table }) =>
+        table === 'users'
+          ? {
+              data: {
+                id: USER_ID,
+                email: 'user@example.com',
+                name: 'User',
+                avatar_url: null,
+                role: 'user',
+                is_verified: false,
+                password_hash: PASSWORD_HASH,
+                password_changed_at: null,
+              },
+              error: null,
+            }
+          : { data: null, error: null },
+      );
+
+    it('パスワードが正しければ email_not_verified を返す', async () => {
+      unverified();
+      mockIsTotpEnabled.mockResolvedValue(false);
+
+      await expect(
+        credentialsProvider.authorize(
+          { email: 'user@example.com', password: PASSWORD },
+          makeRequest(),
+        ),
+      ).rejects.toMatchObject({ code: 'email_not_verified' });
+    });
+
+    /**
+     * ⚠️ 列挙対策。これが崩れると、パスワードを知らない相手に
+     * 「このメールアドレスは登録済み」が分かる
+     */
+    it('パスワードが誤っていれば理由を明かさない', async () => {
+      unverified();
+      mockIsTotpEnabled.mockResolvedValue(false);
+
+      await expect(
+        credentialsProvider.authorize(
+          { email: 'user@example.com', password: 'WrongPassword1' },
+          makeRequest(),
+        ),
+      ).rejects.not.toMatchObject({ code: 'email_not_verified' });
+    });
+
+    it('第2要素の有無は問い合わせない', async () => {
+      // 未認証の時点で弾くので、二段階認証を使っているかどうかも漏らさない
+      unverified();
+      mockIsTotpEnabled.mockResolvedValue(true);
+
+      await expect(
+        credentialsProvider.authorize(
+          { email: 'user@example.com', password: PASSWORD },
+          makeRequest(),
+        ),
+      ).rejects.toMatchObject({ code: 'email_not_verified' });
+      expect(mockIsTotpEnabled).not.toHaveBeenCalled();
+    });
+
+    it('認証済みなら通常どおりログインできる', async () => {
+      mockIsTotpEnabled.mockResolvedValue(false);
+
+      await expect(
+        credentialsProvider.authorize(
+          { email: 'user@example.com', password: PASSWORD },
+          makeRequest(),
+        ),
+      ).resolves.toMatchObject({ id: USER_ID });
+    });
+  });
 });
 
 describe('authorize の第2要素（メールOTP経路）', () => {
@@ -1613,6 +1695,130 @@ describe('authorize の第2要素（メールOTP経路）', () => {
       .catch((e: unknown) => e);
 
     expect((error as { code?: string }).code).not.toBe('otp_login_disabled');
+  });
+
+  /**
+   * メール認証が未完了のアカウント（#1247）
+   *
+   * この画面には**パスワード欄すら無い**のに「メールアドレスまたは
+   * パスワードが正しくありません」と出ていた。コードは正しいのに
+   */
+  describe('メール未認証', () => {
+    /** 未認証ユーザー + 有効な検証済みトークンを返す */
+    const setup = (deleted: string[]) =>
+      setResolver(({ table, ops }) => {
+        if (table === 'users') {
+          return {
+            data: {
+              id: 'user-1',
+              email: 'user@example.com',
+              name: 'User',
+              avatar_url: null,
+              role: 'user',
+              is_verified: false,
+              password_hash: null,
+              password_changed_at: null,
+            },
+            error: null,
+          };
+        }
+
+        if (table === 'otp_codes') {
+          if (ops.includes('delete')) {
+            deleted.push('otp_codes');
+            return { data: null, error: null };
+          }
+
+          return {
+            data: {
+              id: 'otp-1',
+              email: 'user@example.com',
+              verified_at: new Date().toISOString(),
+            },
+            error: null,
+          };
+        }
+
+        return { data: null, error: null };
+      });
+
+    it('コードが正しければ email_not_verified を返す', async () => {
+      const deleted: string[] = [];
+      setup(deleted);
+      mockIsTotpEnabled.mockResolvedValue(false);
+
+      await expect(
+        credentialsProvider.authorize(
+          {
+            email: 'user@example.com',
+            loginMethod: 'otp',
+            verificationToken: 'token',
+          },
+          makeRequest(),
+        ),
+      ).rejects.toMatchObject({ code: 'email_not_verified' });
+    });
+
+    /**
+     * ⚠️ 弾くのはトークンを消費する前。後ろに置くと、理由を伝えた時点で
+     * トークンが焼けており、やり直すにもコードを取り直すことになる
+     * （#1235 と同じ形）
+     */
+    it('弾くときに検証済みトークンを消費しない', async () => {
+      const deleted: string[] = [];
+      setup(deleted);
+      mockIsTotpEnabled.mockResolvedValue(false);
+
+      await credentialsProvider
+        .authorize(
+          {
+            email: 'user@example.com',
+            loginMethod: 'otp',
+            verificationToken: 'token',
+          },
+          makeRequest(),
+        )
+        .catch(() => undefined);
+
+      expect(deleted).not.toContain('otp_codes');
+    });
+
+    /**
+     * ⚠️ 列挙対策。トークンが無効なら、未認証かどうかを明かさない
+     */
+    it('トークンが無効なら理由を明かさない', async () => {
+      setResolver(({ table }) =>
+        table === 'users'
+          ? {
+              data: {
+                id: 'user-1',
+                email: 'user@example.com',
+                name: 'User',
+                avatar_url: null,
+                role: 'user',
+                is_verified: false,
+                password_hash: null,
+                password_changed_at: null,
+              },
+              error: null,
+            }
+          : { data: null, error: null },
+      );
+      mockIsTotpEnabled.mockResolvedValue(false);
+
+      const error = await credentialsProvider
+        .authorize(
+          {
+            email: 'user@example.com',
+            loginMethod: 'otp',
+            verificationToken: 'token',
+          },
+          makeRequest(),
+        )
+        .catch((e: unknown) => e);
+
+      expect((error as { code?: string }).code).not.toBe('email_not_verified');
+    });
   });
 });
 

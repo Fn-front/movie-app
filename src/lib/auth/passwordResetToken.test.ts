@@ -205,7 +205,7 @@ describe('consumePasswordResetToken', () => {
 
     await expect(
       consumePasswordResetToken(client, 'valid-token'),
-    ).resolves.toBe(USER_ID);
+    ).resolves.toEqual({ status: 'consumed', userId: USER_ID });
   });
 
   it('使用したトークンを使用済みにする', async () => {
@@ -216,25 +216,76 @@ describe('consumePasswordResetToken', () => {
     expect(rows[0].used_at).not.toBeNull();
   });
 
-  it('同じトークンの2回目は null を返す', async () => {
+  it('成功したときは理由を引き直さない', async () => {
+    // 失敗したときだけ追加の SELECT を出す。最頻パスを1往復に保つ
     const { client } = createSupabaseMock([makeRow('valid-token')]);
 
     await consumePasswordResetToken(client, 'valid-token');
 
-    await expect(
-      consumePasswordResetToken(client, 'valid-token'),
-    ).resolves.toBeNull();
+    expect(client.from).toHaveBeenCalledTimes(1);
   });
 
-  it('期限切れのトークンは null を返す', async () => {
-    const expired = makeRow('expired-token', {
-      expires_at: new Date(Date.now() - 1000).toISOString(),
-    });
-    const { client } = createSupabaseMock([expired]);
+  /**
+   * 0行だった理由を伝える（#1232）
+   *
+   * 条件付き UPDATE の更新行数だけでは「見つからない」「使用済み」
+   * 「期限切れ」を区別できない。すべて同じ文言になると、設定を終えた人が
+   * リンクを開き直したときに「有効期限が切れています」と出る
+   */
+  describe('消費できなかった理由', () => {
+    it('同じトークンの2回目は used を返す', async () => {
+      const { client } = createSupabaseMock([makeRow('valid-token')]);
 
-    await expect(
-      consumePasswordResetToken(client, 'expired-token'),
-    ).resolves.toBeNull();
+      await consumePasswordResetToken(client, 'valid-token');
+
+      await expect(
+        consumePasswordResetToken(client, 'valid-token'),
+      ).resolves.toEqual({ status: 'used' });
+    });
+
+    it('最初から使用済みのトークンは used を返す', async () => {
+      const used = makeRow('used-token', {
+        used_at: new Date().toISOString(),
+      });
+      const { client } = createSupabaseMock([used]);
+
+      await expect(
+        consumePasswordResetToken(client, 'used-token'),
+      ).resolves.toEqual({ status: 'used' });
+    });
+
+    it('期限切れのトークンは expired を返す', async () => {
+      const expired = makeRow('expired-token', {
+        expires_at: new Date(Date.now() - 1000).toISOString(),
+      });
+      const { client } = createSupabaseMock([expired]);
+
+      await expect(
+        consumePasswordResetToken(client, 'expired-token'),
+      ).resolves.toEqual({ status: 'expired' });
+    });
+
+    it('使用済みかつ期限切れなら used を優先する', async () => {
+      // 設定を終えた人が後から開き直す経路。「期限切れ」と言われるより
+      // 「使用済み」と言われたほうが、次にすること（ログイン）が分かる
+      const both = makeRow('both-token', {
+        used_at: new Date(Date.now() - 2000).toISOString(),
+        expires_at: new Date(Date.now() - 1000).toISOString(),
+      });
+      const { client } = createSupabaseMock([both]);
+
+      await expect(
+        consumePasswordResetToken(client, 'both-token'),
+      ).resolves.toEqual({ status: 'used' });
+    });
+
+    it('存在しないトークンは invalid を返す', async () => {
+      const { client } = createSupabaseMock([makeRow('valid-token')]);
+
+      await expect(
+        consumePasswordResetToken(client, 'unknown-token'),
+      ).resolves.toEqual({ status: 'invalid' });
+    });
   });
 
   it('期限切れのトークンは使用済みにしない', async () => {
@@ -248,34 +299,15 @@ describe('consumePasswordResetToken', () => {
     expect(rows[0].used_at).toBeNull();
   });
 
-  it('存在しないトークンは null を返す', async () => {
-    const { client } = createSupabaseMock([makeRow('valid-token')]);
-
-    await expect(
-      consumePasswordResetToken(client, 'unknown-token'),
-    ).resolves.toBeNull();
-  });
-
-  it('既に使用済みのトークンは null を返す', async () => {
-    const used = makeRow('used-token', {
-      used_at: new Date().toISOString(),
-    });
-    const { client } = createSupabaseMock([used]);
-
-    await expect(
-      consumePasswordResetToken(client, 'used-token'),
-    ).resolves.toBeNull();
-  });
-
   /**
    * DB障害を「無効なトークン」に化かさない（#1167）
    *
-   * `null` を返すと呼び出し側（`password-reset/confirm`）が
-   * `invalidTokenResponse()` を返すため、上の3本と区別がつかない。
+   * `invalid` を返すと呼び出し側（`password-reset/confirm`）が
+   * 400 を返すため、本当に無効なトークンと区別がつかない。
    * 利用者はリセットの再申請へ誘導される。パスワードを忘れている＝
    * 他にログイン手段が無い状態なので、黙って弾くより投げるほうがよい
    */
-  it('読み取りに失敗したら null ではなく投げる', async () => {
+  it('読み取りに失敗したら理由を返さず投げる', async () => {
     const client = {
       from: () => ({
         update: () => ({

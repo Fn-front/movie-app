@@ -29,18 +29,36 @@ import { consumePasswordResetToken } from '@/lib/auth/passwordResetToken';
 import { getClientIp } from '@/lib/http/getClientIp';
 import { rejectPwnedPassword } from '@/helpers/pwnedPasswordGuard';
 
-/** トークンが無効・期限切れ・使用済み */
-const invalidTokenResponse = () =>
+/**
+ * トークンを使えなかったことを伝える
+ *
+ * 理由ごとに文言を変える（#1232）。1本に潰していたときは、設定を終えた人が
+ * リンクを開き直すと「有効期限が切れています」と出ていた。期限は切れて
+ * おらず使用済みなだけで、本人は設定が失敗したと受け取ってしまう。
+ *
+ * トークンは256bitの乱数で正規の所持者しか持てないため、理由を伝えても
+ * 総当たりで得られる情報は増えない。
+ *
+ * 次に何をすればよいか（再送 / 管理者へ依頼）は画面のフッターが出し分ける
+ * （#1225）。ここは**何が起きたか**だけを言う。
+ */
+const tokenFailureResponse = (status: 'used' | 'expired' | 'invalid') =>
   NextResponse.json(
     {
       success: false,
       error: {
         code: ERROR_CODE.BAD_REQUEST,
-        message: PASSWORD_RESET_MESSAGES.INVALID_TOKEN,
+        message: TOKEN_FAILURE_MESSAGES[status],
       },
     },
     { status: HTTP_STATUS.BAD_REQUEST },
   );
+
+const TOKEN_FAILURE_MESSAGES = {
+  used: PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED,
+  expired: PASSWORD_RESET_MESSAGES.TOKEN_EXPIRED,
+  invalid: PASSWORD_RESET_MESSAGES.INVALID_TOKEN,
+} as const;
 
 export async function POST(request: Request) {
   try {
@@ -112,16 +130,16 @@ export async function POST(request: Request) {
 
     // トークンの検証と消費を1文で行う。パスワードを更新してから消費すると、
     // 同じリンクを同時に2回開かれたときに両方とも通る
-    const userId = await consumePasswordResetToken(supabase, token);
+    const consumed = await consumePasswordResetToken(supabase, token);
 
-    if (!userId) {
-      return invalidTokenResponse();
+    if (consumed.status !== 'consumed') {
+      return tokenFailureResponse(consumed.status);
     }
 
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('id, password_hash')
-      .eq('id', userId)
+      .eq('id', consumed.userId)
       .maybeSingle();
 
     // ⚠️ error を捨ててはいけない。`.maybeSingle()` は読み取りに失敗しても
@@ -135,8 +153,10 @@ export async function POST(request: Request) {
       throw userError;
     }
 
+    // トークンは有効だったのに対象ユーザーが居ない（削除直後など）。
+    // 利用者から見れば使えないリンクなので `invalid` として扱う
     if (!user) {
-      return invalidTokenResponse();
+      return tokenFailureResponse('invalid');
     }
 
     // 新旧同一チェック。トークンは既に消費済みなので、ここで弾かれた利用者は
@@ -174,7 +194,7 @@ export async function POST(request: Request) {
         password_hash: passwordHash,
         password_changed_at: new Date().toISOString(),
       })
-      .eq('id', userId);
+      .eq('id', consumed.userId);
 
     if (updateError) {
       throw updateError;

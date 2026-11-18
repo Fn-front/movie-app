@@ -91,7 +91,10 @@ describe('POST /api/auth/password-reset/confirm', () => {
     mockFrom.mockReset();
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockIsPasswordPwned.mockResolvedValue(false);
-    mockConsumeToken.mockResolvedValue('user-1');
+    mockConsumeToken.mockResolvedValue({
+      status: 'consumed',
+      userId: 'user-1',
+    });
     mockCompare.mockResolvedValue(false);
     mockHash.mockResolvedValue('new-hash');
   });
@@ -159,24 +162,43 @@ describe('POST /api/auth/password-reset/confirm', () => {
   });
 
   describe('トークンの検証', () => {
+    /**
+     * 理由ごとに文言を変える（#1232）
+     *
+     * 1本に潰していたときは、設定を終えた人がリンクを開き直すと
+     * 「有効期限が切れています」と出た。期限は切れておらず使用済みなだけで、
+     * 本人は設定が失敗したと受け取ってしまう
+     */
     it.each([
-      ['無効', null],
-      ['期限切れ', null],
-      ['使用済み', null],
-    ])('%s なトークンは400を返す', async (_label, consumed) => {
-      mockConsumeToken.mockResolvedValue(consumed);
+      ['無効', 'invalid', PASSWORD_RESET_MESSAGES.INVALID_TOKEN],
+      ['期限切れ', 'expired', PASSWORD_RESET_MESSAGES.TOKEN_EXPIRED],
+      ['使用済み', 'used', PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED],
+    ])(
+      '%s なトークンは400を返し、理由が分かる文言を出す',
+      async (_label, status, message) => {
+        mockConsumeToken.mockResolvedValue({ status });
 
-      const response = await POST(
-        createRequest({ token: 'bad-token', password: VALID_PASSWORD }),
+        const response = await POST(
+          createRequest({ token: 'bad-token', password: VALID_PASSWORD }),
+        );
+        const json = await response.json();
+
+        expect(response.status).toBe(400);
+        expect(json.error.message).toBe(message);
+      },
+    );
+
+    it('使用済みの文言は、設定が終わっていることとログインを案内する', async () => {
+      // 「もう一度やり直してください」だと、完了しているのに失敗したと読める
+      expect(PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED).toContain('使用済み');
+      expect(PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED).toContain('ログイン');
+      expect(PASSWORD_RESET_MESSAGES.TOKEN_ALREADY_USED).not.toContain(
+        '有効期限',
       );
-      const json = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(json.error.message).toBe(PASSWORD_RESET_MESSAGES.INVALID_TOKEN);
     });
 
     it('トークンが無効ならパスワードを更新しない', async () => {
-      mockConsumeToken.mockResolvedValue(null);
+      mockConsumeToken.mockResolvedValue({ status: 'invalid' });
 
       await POST(
         createRequest({ token: 'bad-token', password: VALID_PASSWORD }),

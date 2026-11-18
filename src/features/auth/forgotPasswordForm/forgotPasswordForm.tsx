@@ -41,15 +41,35 @@ export const ForgotPasswordForm = memo(function ForgotPasswordForm() {
       </Heading>
 
       {isSent ? (
-        // 登録の有無を明かさないため、送信後は常に同じ案内を出す
-        <p className={styles.c_forgot_password__notice} role='status'>
-          {PASSWORD_RESET_MESSAGES.REQUEST_ACCEPTED}
-        </p>
+        <>
+          {/* 登録の有無を明かさないため、送信後は常に同じ案内を出す */}
+          <p className={styles.c_forgot_password__notice} role='status'>
+            {PASSWORD_RESET_MESSAGES.REQUEST_ACCEPTED}
+          </p>
+
+          {/*
+            ⚠️ 送信**後**にも出す（#1226）。発行アカウントの利用者がここまで
+            来ると、列挙防止のせいで「送信しました」と出たまま永久に届かない。
+            届かない理由に心当たりを持てるのはこの文言だけ
+          */}
+          <p className={styles.c_forgot_password__lead}>
+            {PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED}
+          </p>
+        </>
       ) : (
         <>
           <p className={styles.c_forgot_password__lead}>
             ご登録のメールアドレスを入力してください。パスワード再設定用の
             リンクをお送りします。
+          </p>
+
+          {/*
+            送信する前に気づけるようにする。発行アカウントはユーザー名で
+            ログインし、`users.email` は受信できない合成アドレスなので、
+            この画面では復旧できない
+          */}
+          <p className={styles.c_forgot_password__lead}>
+            {PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED}
           </p>
 
           <form

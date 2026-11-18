@@ -85,6 +85,47 @@ describe('ForgotPasswordForm', () => {
     expect(screen.queryByLabelText('メールアドレス')).not.toBeInTheDocument();
   });
 
+  /**
+   * この画面では復旧できない人に、理由の心当たりを渡す（#1226）
+   *
+   * 発行アカウントの `users.email` は受信できない合成アドレスで、本人も
+   * それを知らない。実アドレスを入れても引けないが、列挙防止のため応答は
+   * 成功と同じ。「送信しました」と出たまま永久に届かない
+   */
+  describe('発行アカウントの案内', () => {
+    it('送信する前に出す', () => {
+      render(<ForgotPasswordForm />);
+
+      expect(
+        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED),
+      ).toBeInTheDocument();
+    });
+
+    it('送信した後にも出す', async () => {
+      // ⚠️ ここが本題。送信前の注記は読み飛ばされるが、届かないことに
+      // 気づいたあと戻ってくる場所はこちら
+      mockFetch.mockResolvedValue(okResponse());
+
+      render(<ForgotPasswordForm />);
+      await submitEmail('user@example.com');
+
+      await screen.findByText(PASSWORD_RESET_MESSAGES.REQUEST_ACCEPTED);
+
+      expect(
+        screen.getByText(PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED),
+      ).toBeInTheDocument();
+    });
+
+    it('どのアカウントが該当するかは応答で明かさない', () => {
+      // 発行アカウントかどうかはサーバーしか知らず、それを出すと列挙を許す。
+      // 条件を添えて全員に見せる形にしている
+      const message = PASSWORD_RESET_MESSAGES.ISSUED_ACCOUNT_NOT_SUPPORTED;
+
+      expect(message).toContain('アカウント名でログイン');
+      expect(message).toContain('管理者');
+    });
+  });
+
   it('未登録のメールでも同じ案内を表示する', async () => {
     // 文面が変わると、どのメールアドレスが登録済みかを総当たりで調べられる
     mockFetch.mockResolvedValue(okResponse());

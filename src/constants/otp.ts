@@ -22,9 +22,28 @@ export type OtpAction = (typeof OTP_ACTION)[keyof typeof OTP_ACTION];
 export const OTP_CONFIG = {
   /** OTPコードの桁数 */
   CODE_LENGTH: 6,
-  /** 有効期限（分） */
-  EXPIRY_MINUTES: 10,
-  /** 最大検証試行回数 */
+  /**
+   * 有効期限（分）
+   *
+   * 10分から延ばした（#1258）。メールの遅延や迷惑メールフォルダを探している
+   * うちに切れ、そのたびに再送して**日次5通を使い切る**経路があった。使い切ると
+   * 登録を完了する手段が無くなり、最大24時間なにもできなくなる。
+   *
+   * ⚠️ 延ばしても総当たり耐性は落ちない。6桁＝100万通りに対して守っているのは
+   * `MAX_ATTEMPTS`（下の5回）で、**時間ではなく試行回数**。期限は「受信箱を
+   * 後から覗かれる窓」を狭めるためのもので、パスワードリセットのトークンも
+   * 同じ30分（`PASSWORD_RESET_CONFIG.EXPIRY_MINUTES`）。
+   *
+   * ⚠️ この値はメール本文にも出る（`src/constants/email.ts:85`）。
+   * 直接書かずに必ずここを参照すること
+   */
+  EXPIRY_MINUTES: 30,
+  /**
+   * 最大検証試行回数
+   *
+   * ⚠️ コードの総当たりを止めているのは**こちら**。`EXPIRY_MINUTES` を
+   * 変えるときは、ここが効いていることを前提にしてよい
+   */
   MAX_ATTEMPTS: 5,
   /** 再送間隔（秒） */
   RESEND_INTERVAL_SECONDS: 60,

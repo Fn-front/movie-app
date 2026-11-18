@@ -12,8 +12,10 @@ import { generateTotpSecret } from '@/lib/totp/secret';
 import { generateTotpCode } from '@/lib/totp/totp';
 import {
   SECOND_FACTOR_METHOD,
+  TWO_FACTOR_OTP_ACTION,
   type SecondFactorMethod,
 } from '@/constants/secondFactor';
+import { hashOtpCode } from '@/lib/otp/hashOtpCode';
 
 import {
   countUnusedRecoveryCodes,
@@ -21,6 +23,9 @@ import {
   SECOND_FACTOR_VERIFY_RESULT,
   verifySecondFactor,
 } from './secondFactor';
+
+// hashOtpCode は pepper が無いと例外を投げる（平文フォールバック禁止）
+process.env.OTP_HASH_PEPPER = 'test-pepper-value';
 
 const TEST_KEY = randomBytes(32).toString('base64');
 const USER_ID = '11111111-1111-1111-1111-111111111111';
@@ -39,6 +44,18 @@ interface FakeDb {
     code_hash: string;
     used_at: string | null;
   }>;
+  /** `users` の1行。メールOTP の宛先解決に使う */
+  user?: { email: string } | null;
+  /** `otp_codes` の行（action_type='two_factor'） */
+  otpCodes?: Array<{
+    id: string;
+    email: string;
+    action_type: string;
+    code_hash: string;
+    attempts: number;
+    expires_at: string;
+    created_at: string;
+  }>;
 }
 
 /**
@@ -51,12 +68,16 @@ interface FakeDb {
 function createSupabaseMock(db: FakeDb): SupabaseClient {
   const from = (table: string) => {
     const state: {
-      action: 'select' | 'update';
+      action: 'select' | 'update' | 'delete';
       payload: Record<string, unknown>;
       requireUnusedCounter: number | null;
       requireUnusedAt: boolean;
       requireConfirmed: boolean;
       matchedId: string | null;
+      /** `.eq(column, value)` をそのまま保持して resolve で評価する */
+      eqs: Record<string, unknown>;
+      /** `.gt(column, value)` — 期限チェックの評価に使う */
+      gt: { column: string; value: string } | null;
     } = {
       action: 'select',
       payload: {},
@@ -64,6 +85,8 @@ function createSupabaseMock(db: FakeDb): SupabaseClient {
       requireUnusedAt: false,
       requireConfirmed: false,
       matchedId: null,
+      eqs: {},
+      gt: null,
     };
 
     const builder: Record<string, unknown> = {};
@@ -71,6 +94,7 @@ function createSupabaseMock(db: FakeDb): SupabaseClient {
     builder.select = jest.fn(() => builder);
     builder.eq = jest.fn((column: string, value: unknown) => {
       if (column === 'id') state.matchedId = value as string;
+      state.eqs[column] = value;
       return builder;
     });
     builder.not = jest.fn((column: string) => {
@@ -86,26 +110,67 @@ function createSupabaseMock(db: FakeDb): SupabaseClient {
       if (match) state.requireUnusedCounter = Number(match[1]);
       return builder;
     });
+    builder.gt = jest.fn((column: string, value: string) => {
+      state.gt = { column, value };
+      return builder;
+    });
+    builder.order = jest.fn(() => builder);
+    builder.limit = jest.fn(() => builder);
     builder.update = jest.fn((payload: Record<string, unknown>) => {
       state.action = 'update';
       state.payload = payload;
       return builder;
     });
-
-    builder.maybeSingle = jest.fn(() => {
-      if (table !== 'user_totp') return Promise.resolve({ data: null });
-      if (!db.totp) return Promise.resolve({ data: null });
-      if (state.requireConfirmed && !db.totp.confirmed_at) {
-        return Promise.resolve({ data: null });
-      }
-      // method を省いた fixture は DB の DEFAULT と同じく totp として扱う
-      return Promise.resolve({
-        data: {
-          ...db.totp,
-          method: db.totp.method ?? SECOND_FACTOR_METHOD.TOTP,
-        },
-      });
+    builder.delete = jest.fn(() => {
+      state.action = 'delete';
+      return builder;
     });
+
+    /** `otp_codes` から state の条件に合う行を引く */
+    const matchingOtpCodes = () =>
+      (db.otpCodes ?? []).filter((row) => {
+        for (const [column, value] of Object.entries(state.eqs)) {
+          if ((row as unknown as Record<string, unknown>)[column] !== value) {
+            return false;
+          }
+        }
+        // ⚠️ 期限を実際に評価する。ここを素通りさせると、実装から
+        // `.gt('expires_at', now)` を消してもテストが緑のままになる
+        if (state.gt && state.gt.column === 'expires_at') {
+          if (!(row.expires_at > state.gt.value)) return false;
+        }
+        return true;
+      });
+
+    const singleResult = () => {
+      if (table === 'user_totp') {
+        if (!db.totp) return { data: null };
+        if (state.requireConfirmed && !db.totp.confirmed_at) {
+          return { data: null };
+        }
+        // method を省いた fixture は DB の DEFAULT と同じく totp として扱う
+        return {
+          data: {
+            ...db.totp,
+            method: db.totp.method ?? SECOND_FACTOR_METHOD.TOTP,
+          },
+        };
+      }
+
+      if (table === 'users') {
+        return db.user ? { data: db.user } : { data: null };
+      }
+
+      if (table === 'otp_codes') {
+        const rows = matchingOtpCodes();
+        return { data: rows[0] ?? null };
+      }
+
+      return { data: null };
+    };
+
+    builder.maybeSingle = jest.fn(() => Promise.resolve(singleResult()));
+    builder.single = jest.fn(() => Promise.resolve(singleResult()));
 
     const resolve = () => {
       if (table === 'user_totp' && state.action === 'update') {
@@ -136,6 +201,24 @@ function createSupabaseMock(db: FakeDb): SupabaseClient {
             (c) => !state.requireUnusedAt || !c.used_at,
           ),
         };
+      }
+
+      if (table === 'otp_codes' && state.action === 'delete') {
+        const matched = matchingOtpCodes();
+        db.otpCodes = (db.otpCodes ?? []).filter((r) => !matched.includes(r));
+        return { data: matched.map((r) => ({ id: r.id })) };
+      }
+
+      if (table === 'otp_codes' && state.action === 'update') {
+        const row = (db.otpCodes ?? []).find((r) => r.id === state.matchedId);
+        if (!row) return { data: [] };
+
+        Object.assign(row, state.payload);
+        return { data: [{ id: row.id }] };
+      }
+
+      if (table === 'otp_codes') {
+        return { data: matchingOtpCodes() };
       }
 
       return { data: null };
@@ -494,5 +577,148 @@ describe('countUnusedRecoveryCodes', () => {
     } as unknown as SupabaseClient;
 
     await expect(countUnusedRecoveryCodes(supabase, USER_ID)).resolves.toBe(0);
+  });
+});
+
+// -------------------- メールOTP（method = email_otp） --------------------
+
+const EMAIL = 'user@example.com';
+
+/** 有効な第2要素コードの行を1件持つ DB を組み立てる */
+const emailOtpDb = (
+  code: string,
+  overrides: Partial<{ attempts: number; expiresAt: string }> = {},
+): FakeDb => ({
+  totp: {
+    // method=email_otp では DB 上 NULL。模擬の型都合で空文字を置く
+    encrypted_secret: '',
+    confirmed_at: '2026-11-18T00:00:00Z',
+    last_used_counter: null,
+    method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+  },
+  recoveryCodes: [],
+  user: { email: EMAIL },
+  otpCodes: [
+    {
+      id: 'otp-1',
+      email: EMAIL,
+      action_type: TWO_FACTOR_OTP_ACTION,
+      code_hash: hashOtpCode(code, EMAIL),
+      attempts: overrides.attempts ?? 0,
+      expires_at: overrides.expiresAt ?? '2099-01-01T00:00:00.000Z',
+      created_at: '2026-11-18T00:00:00.000Z',
+    },
+  ],
+});
+
+describe('verifySecondFactor（method = email_otp）', () => {
+  it('期限内の一致するコードで SUCCESS を返し、行を消す', async () => {
+    const db = emailOtpDb('123456');
+
+    await expect(
+      verifySecondFactor(createSupabaseMock(db), USER_ID, '123456'),
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.SUCCESS);
+
+    expect(db.otpCodes).toHaveLength(0);
+  });
+
+  /**
+   * ⚠️ 期限はDB制約では強制されていない。chk_otp_attempts は attempts の
+   * ドメイン制約にすぎず、期限の判定はルートコード側にしかない。
+   * 実装から expires_at の比較を落としても気づけるよう、結果だけでなく
+   * **行が残っていること**も確かめる。
+   */
+  it('期限切れのコードは通らず、行も消えない', async () => {
+    const db = emailOtpDb('123456', { expiresAt: '2000-01-01T00:00:00.000Z' });
+
+    await expect(
+      verifySecondFactor(createSupabaseMock(db), USER_ID, '123456'),
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.INVALID);
+
+    expect(db.otpCodes).toHaveLength(1);
+  });
+
+  it('一致しないコードは INVALID で、行も消えない', async () => {
+    const db = emailOtpDb('123456');
+
+    await expect(
+      verifySecondFactor(createSupabaseMock(db), USER_ID, '999999'),
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.INVALID);
+
+    expect(db.otpCodes).toHaveLength(1);
+  });
+
+  it('不一致なら attempts が1増える', async () => {
+    const db = emailOtpDb('123456');
+
+    await verifySecondFactor(createSupabaseMock(db), USER_ID, '999999');
+
+    expect(db.otpCodes?.[0].attempts).toBe(1);
+  });
+
+  /**
+   * ⚠️ 試行上限もルートコード側でしか強制されていない。attempts を直接
+   * 与えるのではなく**5回失敗させてから**6回目を見ることで、加算と上限の
+   * 両方が実装されていることを確かめる。
+   *
+   * 加算を止めないと6回目で chk_otp_attempts（0〜5）に当たって 23514 で
+   * 落ちる。エラーを見ないと静かにカウントが止まる。
+   */
+  it('5回失敗した後は、正しいコードでも照合に進まない', async () => {
+    const db = emailOtpDb('123456');
+    const supabase = createSupabaseMock(db);
+
+    for (let i = 0; i < 5; i += 1) {
+      await verifySecondFactor(supabase, USER_ID, '999999');
+    }
+
+    expect(db.otpCodes?.[0].attempts).toBe(5);
+
+    await expect(verifySecondFactor(supabase, USER_ID, '123456')).resolves.toBe(
+      SECOND_FACTOR_VERIFY_RESULT.INVALID,
+    );
+
+    // 照合に進んでいれば行が消えている
+    expect(db.otpCodes).toHaveLength(1);
+    // 上限を超えて加算していない（超えると 23514 で落ちる）
+    expect(db.otpCodes?.[0].attempts).toBe(5);
+  });
+
+  it('同じコードの2回目は INVALID（削除行数で判定している）', async () => {
+    const db = emailOtpDb('123456');
+    const supabase = createSupabaseMock(db);
+
+    await verifySecondFactor(supabase, USER_ID, '123456');
+
+    await expect(verifySecondFactor(supabase, USER_ID, '123456')).resolves.toBe(
+      SECOND_FACTOR_VERIFY_RESULT.INVALID,
+    );
+  });
+
+  it('コードが1件も無ければ INVALID', async () => {
+    const db = emailOtpDb('123456');
+    db.otpCodes = [];
+
+    await expect(
+      verifySecondFactor(createSupabaseMock(db), USER_ID, '123456'),
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.INVALID);
+  });
+
+  /**
+   * リカバリーコードは方式に依存しない。RECOVERY_CODE_PATTERN は
+   * [2-9A-HJKMNP-TWXYZ]{10} で、6桁の数字とは長さも文字種も交わらない。
+   */
+  it('リカバリーコードはメールOTP の利用者でも使える', async () => {
+    const generated = generateRecoveryCodes();
+    const db = emailOtpDb('123456');
+    db.recoveryCodes = generated.hashes.map((hash, index) => ({
+      id: `recovery-${index}`,
+      code_hash: hash,
+      used_at: null,
+    }));
+
+    await expect(
+      verifySecondFactor(createSupabaseMock(db), USER_ID, generated.codes[0]),
+    ).resolves.toBe(SECOND_FACTOR_VERIFY_RESULT.SUCCESS);
   });
 });

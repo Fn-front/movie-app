@@ -19,13 +19,20 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
-import type { SecondFactorMethod } from '@/constants/secondFactor';
+import {
+  SECOND_FACTOR_METHOD,
+  TWO_FACTOR_OTP_ACTION,
+  type SecondFactorMethod,
+} from '@/constants/secondFactor';
+import { OTP_CONFIG } from '@/constants/otp';
 import { decryptTotpSecret } from '@/lib/totp/encryption';
+import { hashOtpCode } from '@/lib/otp/hashOtpCode';
 import {
   findMatchingRecoveryCodeHash,
   normalizeRecoveryCode,
 } from '@/lib/totp/recoveryCodes';
 import { findMatchingCounter } from '@/lib/totp/totp';
+import { normalizeEmail } from '@/utils/email';
 
 import { toDbError } from './dbError';
 
@@ -203,10 +210,96 @@ async function verifyRecoveryCode(
 }
 
 /**
+ * メールで送った第2要素のコードを検証する
+ *
+ * ⚠️ **有効期限と試行回数はDB制約では強制されていない。**
+ * `chk_otp_attempts`（0〜5）は列のドメイン制約にすぎず、実際の判定は
+ * `/api/auth/otp/verify` の**ルートコード側**にある。第2要素はそのルートを
+ * 通らないため、ここで自前で書かないと多層防御が1枚減ったことに誰も気づけない。
+ *
+ * 消費は**条件付き DELETE の削除行数**で判定する。先に読んでから消すと、
+ * 同じコードを同時に2回投げられたときに両方とも通る。
+ *
+ * @param supabase - service_role のクライアント
+ * @param userId - 対象ユーザー
+ * @param code - 利用者が入力した6桁のコード
+ * @returns 検証結果
+ */
+async function verifyEmailOtpCode(
+  supabase: SupabaseClient,
+  userId: string,
+  code: string,
+): Promise<SecondFactorVerifyResult> {
+  // 宛先はDBから引く。呼び出し側から受け取ると、ボディ由来の値が紛れ込みうる
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('email')
+    .eq('id', userId)
+    .single();
+
+  if (userError) throw toDbError(userError, 'read users for second factor');
+  if (!user?.email) return SECOND_FACTOR_VERIFY_RESULT.NOT_ENABLED;
+
+  const email = normalizeEmail(user.email);
+
+  // 試行回数を先に見る。上限に達していたら照合せずに弾く。
+  // 素の UPDATE で加算すると6回目に chk_otp_attempts で 23514 になり、
+  // エラーを見ないと静かにカウントが止まる
+  const { data: row, error: rowError } = await supabase
+    .from('otp_codes')
+    .select('id, attempts')
+    .eq('email', email)
+    .eq('action_type', TWO_FACTOR_OTP_ACTION)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (rowError) throw toDbError(rowError, 'read otp_codes for second factor');
+
+  if (!row) return SECOND_FACTOR_VERIFY_RESULT.INVALID;
+
+  if (row.attempts >= OTP_CONFIG.MAX_ATTEMPTS) {
+    return SECOND_FACTOR_VERIFY_RESULT.INVALID;
+  }
+
+  // 「一致して・期限内の行だけを消す」を1文で行う。
+  // 消せた行数が1なら、この呼び出しがそのコードを消費したことが確定する
+  const { data: deleted, error: deleteError } = await supabase
+    .from('otp_codes')
+    .delete()
+    .eq('email', email)
+    .eq('action_type', TWO_FACTOR_OTP_ACTION)
+    .eq('code_hash', hashOtpCode(code.trim(), email))
+    .gt('expires_at', new Date().toISOString())
+    .select('id');
+
+  if (deleteError) {
+    throw toDbError(deleteError, 'consume otp_codes for second factor');
+  }
+
+  if (!deleted || deleted.length === 0) {
+    // 不一致・期限切れのどちらでも加算する。
+    // 利用者には区別して返さないので、区別して数える意味もない
+    await supabase
+      .from('otp_codes')
+      .update({ attempts: row.attempts + 1 })
+      .eq('id', row.id);
+
+    return SECOND_FACTOR_VERIFY_RESULT.INVALID;
+  }
+
+  return SECOND_FACTOR_VERIFY_RESULT.SUCCESS;
+}
+
+/**
  * 第2要素を検証する
  *
- * 認証アプリのコードとリカバリーコードのどちらが来ても受け付ける。入力形式で
- * 振り分けるため、利用者はどちらを入れるか選ぶ必要がない。
+ * 方式（認証アプリ / メールのコード）とリカバリーコードのどれが来ても
+ * 受け付ける。リカバリーコードは入力形式で振り分けるため、利用者は
+ * どちらを入れるか選ぶ必要がない。
+ *
+ * `RECOVERY_CODE_PATTERN` は `[2-9A-HJKMNP-TWXYZ]{10}` で、6桁の数字とは
+ * 長さも文字種も交わらないため、方式が増えても取り違えは起きない。
  *
  * @param supabase - service_role のクライアント
  * @param userId - 対象ユーザー
@@ -220,8 +313,19 @@ export async function verifySecondFactor(
 ): Promise<SecondFactorVerifyResult> {
   const normalized = normalizeRecoveryCode(code);
 
+  // リカバリーコードは方式に依存しない
   if (RECOVERY_CODE_PATTERN.test(normalized)) {
     return verifyRecoveryCode(supabase, userId, code);
+  }
+
+  const method = await getSecondFactorMethod(supabase, userId);
+
+  if (method === null) {
+    return SECOND_FACTOR_VERIFY_RESULT.NOT_ENABLED;
+  }
+
+  if (method === SECOND_FACTOR_METHOD.EMAIL_OTP) {
+    return verifyEmailOtpCode(supabase, userId, code);
   }
 
   return verifyAuthenticatorCode(supabase, userId, code.trim());

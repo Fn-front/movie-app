@@ -85,6 +85,13 @@ const mockSpeakers = [
   },
 ];
 
+/**
+ * 直近の `.select()` に渡された文字列
+ *
+ * 埋め込みの取りこぼしを検知するために記録する（awards 側と同じ作法）
+ */
+let lastSelectColumns: string | undefined;
+
 /** 埋め込み1本のクエリをモックする（#1275 で3本から1本になった） */
 function setupQuery(
   result: { data: unknown; error: unknown },
@@ -101,12 +108,17 @@ function setupQuery(
   };
 
   mockFrom.mockImplementation(() => ({
-    select: jest.fn().mockReturnValue({
-      eq: jest.fn().mockReturnValue({
+    // ⚠️ 引数を捨てない。捨てると埋め込みから
+    // `theater_speakers(...)` を落としても全テストが緑のまま通る（#1275）
+    select: jest.fn((columns: string) => {
+      lastSelectColumns = columns;
+      return {
         eq: jest.fn().mockReturnValue({
-          is: jest.fn().mockReturnValue(chain),
+          eq: jest.fn().mockReturnValue({
+            is: jest.fn().mockReturnValue(chain),
+          }),
         }),
-      }),
+      };
     }),
   }));
 
@@ -136,6 +148,7 @@ function setupNotFound() {
 describe('GET /api/theaters/[slug]', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    lastSelectColumns = undefined;
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -229,6 +242,46 @@ describe('GET /api/theaters/[slug]', () => {
     expect(response.status).toBe(200);
     expect(json.data.theater.seats).toEqual([]);
     expect(json.data.theater.speakers).toEqual([]);
+  });
+
+  /**
+   * 埋め込みの取りこぼしを検知する（#1275）
+   *
+   * `theater_speakers(...)` を落としても、モックが常にスピーカー入りの
+   * 行を返すため他のテストは緑のまま通る。本番では `speakers` が
+   * `undefined` → `?? []` で空配列になり、スピーカーが静かに消える
+   */
+  it('劇場・座席・スピーカーを1つのSELECTで指定する', async () => {
+    setupFullQuery();
+
+    await GET(createGetRequest(), createContext('standard-medium'));
+
+    expect(lastSelectColumns).toContain('theater_seats(');
+    expect(lastSelectColumns).toContain('theater_speakers(');
+    // 座席・スピーカーの列も取り漏れていないこと
+    expect(lastSelectColumns).toContain('seat_type');
+    expect(lastSelectColumns).toContain('directivity_alpha');
+  });
+
+  /**
+   * 埋め込みの生キーをレスポンスに残さない
+   *
+   * `...theaterFields` を `...theater` に書き戻すと `theater_seats` /
+   * `theater_speakers` が二重に載る（imax-gt なら544席ぶん）
+   */
+  it('埋め込みの生キーをレスポンスに含めない', async () => {
+    setupFullQuery();
+
+    const response = await GET(
+      createGetRequest(),
+      createContext('standard-medium'),
+    );
+    const json = await response.json();
+
+    expect(json.data.theater).not.toHaveProperty('theater_seats');
+    expect(json.data.theater).not.toHaveProperty('theater_speakers');
+    expect(json.data.theater.seats).toHaveLength(1);
+    expect(json.data.theater.speakers).toHaveLength(1);
   });
 
   it('Cache-Controlヘッダーが設定される', async () => {

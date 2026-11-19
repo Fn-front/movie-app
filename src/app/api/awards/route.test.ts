@@ -85,23 +85,43 @@ function mockYearQuery(years: number[]) {
 /** 直近の `.select()` に渡された文字列。カラムの取り漏れを検知するために記録する */
 let lastSelectColumns: string | undefined;
 
+/**
+ * 受賞作品クエリが**実際に送信された**ことを記録するフック
+ *
+ * ⚠️ `from()` の呼び出しはビルダーを組み立てるだけで、HTTP は `then()` が
+ * 呼ばれて初めて飛ぶ（postgrest-js は lazy）。`from()` を数えるだけだと
+ * 「ビルダーを先に作って後から直列に await する」実装でも緑になる
+ */
+let awardQuerySent = false;
+
 function mockAwardDataQuery(rows: Record<string, unknown>[]) {
   mockAnonFrom.mockReturnValueOnce({
     select: (columns: string) => {
       lastSelectColumns = columns;
       return {
         eq: () => ({
-          order: () => Promise.resolve({ data: rows, error: null }),
+          order: () => ({
+            then: (resolve: (value: unknown) => unknown) => {
+              awardQuerySent = true;
+              return Promise.resolve({ data: rows, error: null }).then(resolve);
+            },
+          }),
         }),
       };
     },
   });
 }
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { handleRouteError } = require('@/helpers/routeError') as {
+  handleRouteError: jest.Mock;
+};
+
 // --- Tests ---
 
 describe('GET /api/awards', () => {
   beforeEach(() => {
+    awardQuerySent = false;
     jest.clearAllMocks();
     lastSelectColumns = undefined;
     (checkRateLimit as jest.Mock).mockResolvedValue({ allowed: true });
@@ -451,9 +471,10 @@ describe('GET /api/awards', () => {
 
     const pending = GET(createRequest('2026'));
 
-    // 年度一覧がまだ返っていない時点で、受賞作品のクエリが出ていること
-    await Promise.resolve();
-    expect(mockAnonFrom).toHaveBeenCalledWith('award_movies');
+    // 年度一覧がまだ返っていない時点で、受賞作品のクエリが**送信済み**であること。
+    // `from()` が呼ばれただけでは足りない（ビルダーの生成は同期的で lazy）
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(awardQuerySent).toBe(true);
 
     resolveYears!({ data: [2026], error: null });
     const response = await pending;
@@ -461,7 +482,13 @@ describe('GET /api/awards', () => {
     expect(response.status).toBe(200);
   });
 
-  // 両方が失敗したときは、直列だったころと同じく年度一覧のエラーを投げる
+  /**
+   * 両方が失敗したときは、直列だったころと同じく年度一覧のエラーを投げる
+   *
+   * ⚠️ ステータスだけ見ても意味が無い。`handleRouteError` のモックは
+   * 第1引数の error を捨てて常に同じ 500 を返すので、判定順を入れ替えても
+   * レスポンスは一字一句同じになる。**渡された error を見ること**
+   */
   it('両方エラーなら年度一覧のエラーを優先する', async () => {
     mockAnonRpc.mockResolvedValueOnce({
       data: null,
@@ -480,7 +507,13 @@ describe('GET /api/awards', () => {
     });
 
     const response = await GET(createRequest('2026'));
+
     expect(response.status).toBe(500);
+    expect(handleRouteError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'years failed' }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('受賞作品取得でDBエラーの場合500を返す', async () => {

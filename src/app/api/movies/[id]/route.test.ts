@@ -31,7 +31,9 @@ jest.mock('@/helpers/auth', () => ({
 }));
 
 const mockFrom = jest.fn();
-const mockCreateServiceRoleClient = jest.fn(() => ({ from: mockFrom }));
+const mockCreateServiceRoleClient = jest.fn<{ from: jest.Mock } | null, []>(
+  () => ({ from: mockFrom }),
+);
 jest.mock('@/helpers/supabase', () => ({
   createServiceRoleClient: () => mockCreateServiceRoleClient(),
 }));

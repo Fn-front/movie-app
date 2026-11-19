@@ -333,15 +333,26 @@ describe('POST /api/favorites', () => {
     expect(json.data.rating).toBe(8);
   });
 
-  // 重複は部分UNIQUEインデックスが保証しており、事前の SELECT は無い（#1277）。
-  // INSERT の 23505 を 409 に変換する経路で同じ応答になる
-  it('重複時に409を返す', async () => {
+  /**
+   * 重複追加は INSERT の 23505 を 409 に変換して返す
+   *
+   * 事前の SELECT は無い（#1277）。重複を検出する経路はここだけなので、
+   * ステータス・コード・本文をまとめて固定する。
+   *
+   * supabase-js が実際に `code: '23505'` を返すことは、本番DBへ重複
+   * INSERT を投げて確認済み（2026-11-19）。
+   */
+  it('重複時は409とメッセージを返す', async () => {
     mockFrom.mockReturnValueOnce({
       insert: () => ({
         select: () => ({
           single: () => ({
             data: null,
-            error: { code: '23505', message: 'duplicate key' },
+            error: {
+              code: '23505',
+              message:
+                'duplicate key value violates unique constraint "idx_favorites_user_movie"',
+            },
           }),
         }),
       }),
@@ -359,6 +370,9 @@ describe('POST /api/favorites', () => {
     expect(response.status).toBe(409);
     expect(json.success).toBe(false);
     expect(json.error.code).toBe('CONFLICT');
+    expect(json.error.message).toBe(
+      'この映画は既にお気に入りに登録されています',
+    );
   });
 
   /**
@@ -368,7 +382,7 @@ describe('POST /api/favorites', () => {
    * 防げない。成功時に必ず1往復ムダになっていたので外した。
    * 戻すとこのテストが落ちる
    */
-  it('追加時にDBへ投げるのは INSERT の1回だけ', async () => {
+  it('追加時に from() を呼ぶのは INSERT の1回だけ', async () => {
     mockFrom.mockReturnValueOnce({
       insert: () => ({
         select: () => ({
@@ -386,36 +400,10 @@ describe('POST /api/favorites', () => {
     );
 
     expect(response.status).toBe(201);
+    // ⚠️ 数えているのは `from()` だけ。レート制限は `rpc()` 経由なので
+    // ここには出ない（往復が1回という意味ではない）
     expect(mockFrom).toHaveBeenCalledTimes(1);
     expect(mockFrom).toHaveBeenCalledWith('favorites');
-  });
-
-  // 409 の本文は事前チェックのときと同じであること
-  it('重複時のメッセージが従来と変わらない', async () => {
-    mockFrom.mockReturnValueOnce({
-      insert: () => ({
-        select: () => ({
-          single: () => ({
-            data: null,
-            error: { code: '23505', message: 'duplicate key' },
-          }),
-        }),
-      }),
-    });
-
-    const response = await POST(
-      createPostRequest({
-        tmdb_movie_id: 12345,
-        title: 'テスト映画',
-        rating: 8,
-      }),
-    );
-    const json = await response.json();
-
-    expect(response.status).toBe(409);
-    expect(json.error.message).toBe(
-      'この映画は既にお気に入りに登録されています',
-    );
   });
 
   it('バリデーションエラーで400を返す', async () => {
@@ -461,35 +449,7 @@ describe('POST /api/favorites', () => {
     expect(response.status).toBe(401);
   });
 
-  it('INSERT時にUNIQUE違反(23505)が発生したら409を返す', async () => {
-    // INSERT: UNIQUE violation
-    mockFrom.mockReturnValueOnce({
-      insert: () => ({
-        select: () => ({
-          single: () => ({
-            data: null,
-            error: { code: '23505', message: 'duplicate key' },
-          }),
-        }),
-      }),
-    });
-
-    const response = await POST(
-      createPostRequest({
-        tmdb_movie_id: 12345,
-        title: 'テスト映画',
-        rating: 8,
-      }),
-    );
-    const json = await response.json();
-
-    expect(response.status).toBe(409);
-    expect(json.success).toBe(false);
-    expect(json.error.code).toBe('CONFLICT');
-  });
-
   it('INSERTエラー時に500を返す', async () => {
-    // 重複チェック: 存在しない
     // INSERT失敗
     mockFrom.mockReturnValueOnce({
       insert: () => ({

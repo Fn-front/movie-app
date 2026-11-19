@@ -6,6 +6,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
   HTTP_STATUS,
@@ -17,7 +18,6 @@ import {
   RATE_LIMIT_CONFIG,
 } from '@/constants';
 import {
-  checkDuplicate,
   conflictResponse,
   isUniqueViolation,
   rateLimitExceededResponse,
@@ -28,6 +28,28 @@ import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { getMovieDismissSignals } from '@/lib/tmdb/tmdb';
 import type { DismissSignals } from '@/lib/types';
 import { dismissedMoviesAddSchema } from '@/schema/dismissedMovies';
+
+/**
+ * 同じ作品の「興味なし」が既にあるか
+ *
+ * TMDb を叩く前に重複を弾くためだけの確認。他のルートへ広げないこと
+ * （理由は POST の中のコメント / #1277）。
+ */
+async function hasActiveDismissedMovie(
+  supabase: SupabaseClient,
+  userId: string,
+  tmdbMovieId: number,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('dismissed_movies')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('tmdb_movie_id', tmdbMovieId)
+    .is('deleted_at', null)
+    .single();
+
+  return !!data;
+}
 
 export const GET = withAuth(
   async ({ session, supabase }) => {
@@ -98,10 +120,13 @@ export const POST = withAuth(
     // このルートは事情が違う。すぐ下に TMDb の呼び出し
     // （`getMovieDismissSignals`）がある。外すと重複リクエストでも
     // TMDb を叩いてから 409 を返すことになり、**かえって遅くなる**。
-    // ここで弾けば外部APIに触らずに済む
-    const isDuplicate = await checkDuplicate(
+    // ここで弾けば外部APIに触らずに済む。
+    //
+    // ⚠️ 汎用ヘルパーには置かない。`apiHelpers` に `checkDuplicate` として
+    // 置いていたときは、同じ事情が無いルートからも呼ばれて往復が増えた。
+    // 例外である以上、例外の側に閉じ込める
+    const isDuplicate = await hasActiveDismissedMovie(
       supabase,
-      'dismissed_movies',
       session.user.id,
       parsed.data.tmdb_movie_id,
     );

@@ -35,42 +35,25 @@ export async function softDeleteById(
 }
 
 /**
- * 重複チェック（同一ユーザー・同一映画の未削除レコードが存在するか）
- *
- * ⚠️ **INSERT の前に通すための関数ではない**（#1277）。重複は部分UNIQUE
- * インデックスが保証しており、INSERT が返す 23505 を `isUniqueViolation`
- * で 409 に変換すれば同じ応答になる。事前チェックは race も防げないので、
- * 足すと「防げない競合のために成功時も必ず1往復増やす」ことになる。
- *
- * 残っている唯一の呼び出し元は `POST /api/dismissed-movies`。あちらは
- * **INSERT の前に TMDb の呼び出しがある**ため、先に弾かないと重複
- * リクエストでも外部APIを叩いてから 409 を返すことになる。
- *
- * 同じ事情（検証の後ろに高価な処理がある）が無い限り、新しい呼び出しを
- * 足さないこと。
- *
- * @returns 重複が存在する場合true
- */
-export async function checkDuplicate(
-  supabase: SupabaseClient,
-  table: string,
-  userId: string,
-  tmdbMovieId: number,
-): Promise<boolean> {
-  const { data } = await supabase
-    .from(table)
-    .select('id')
-    .eq('user_id', userId)
-    .eq('tmdb_movie_id', tmdbMovieId)
-    .is('deleted_at', null)
-    .single();
-
-  return !!data;
-}
-
-/**
  * Postgres の UNIQUE 制約違反（SQLSTATE 23505）判定。
- * checkDuplicate と INSERT の間に生じる race を安全側で吸収するために使う。
+ *
+ * ⚠️ `favorites` / `watchlist` の POST では、これが**重複を検出する唯一の
+ * 経路**（#1277 で事前チェックの SELECT を外した）。保険ではない。
+ *
+ * 重複は部分UNIQUEインデックス
+ * （`idx_favorites_user_movie` / `idx_watchlist_user_movie`。どちらも
+ * `WHERE deleted_at IS NULL`）が保証している。実際に重複 INSERT を投げて、
+ * supabase-js が `code: '23505'` と制約名入りの message を返すことを
+ * 確認済み（2026-11-19）。
+ *
+ * ⚠️ 副作用として、**重複 POST は毎回 Postgres の ERROR ログに出る**。
+ * かつて #547 はそのログ（`duplicate key value violates unique constraint`）
+ * を見て起票された。これは想定どおりで、同じ観測で起票し直さないこと。
+ *
+ * ⚠️ `upsert` / `ON CONFLICT DO NOTHING` には置き換えられない。対象が
+ * 部分UNIQUEインデックスなので ON CONFLICT の推論に index_predicate
+ * （`WHERE deleted_at IS NULL`）が要るが、PostgREST の `on_conflict` は
+ * 列名しか送れず推論に失敗する。
  */
 export function isUniqueViolation(error: unknown): boolean {
   return (

@@ -317,10 +317,11 @@ export const RATE_LIMIT_CONFIG = {
   /**
    * 手動同期ジョブの進捗ポーリング。
    *
-   * AWARD_SYNC_POLL_INTERVAL_MS = 5000 で AWARD_SYNC_STALE_MINUTES = 25 分
-   * 回すと300回。読み取りのみで外部APIを呼ばないため、倍の余裕を取る。
+   * AWARD_SYNC_POLL_SCHEDULE で AWARD_SYNC_STALE_MINUTES = 25 分
+   * 回すと68回（#1282 以前は5秒等間隔で300回だった）。
+   * 読み取りのみで外部APIを呼ばないため、上限には大きく余裕を残す。
    *
-   * ⚠️ READ_USER_DATA に相乗りさせないこと。1ジョブで300回使うため、
+   * ⚠️ READ_USER_DATA に相乗りさせないこと。1ジョブで数十回使うため、
    *    共有カウンタだと他の認証必須読み取りを巻き込んで枯らす。
    */
   ADMIN_AWARD_SYNC_STATUS: { maxAttempts: 600, windowMinutes: 30 },
@@ -334,9 +335,9 @@ export const RATE_LIMIT_CONFIG = {
    * 識別子はセッションのユーザーID。admin かどうかの判定前なので、
    * **非 admin も含めた全ログインユーザー**がこのカウンタを持つ。
    *
-   * 上限は受賞同期の進捗ポーリング（5秒間隔 = 12回/分、
-   * `AWARD_SYNC_POLL_INTERVAL_MS`）の10倍を取る。admin の正常操作では
-   * 到達せず、連打は止まる。
+   * 上限は受賞同期の進捗ポーリングのピーク（開始直後の1分は5秒間隔 =
+   * 12回/分。`AWARD_SYNC_POLL_SCHEDULE` の先頭段）の10倍を取る。
+   * admin の正常操作では到達せず、連打は止まる。
    *
    * ⚠️ `FAIL_CLOSED_ACTIONS` には入れない。ここは全 admin ルートの入口なので、
    * rate_limits の不調で拒否側へ倒すと admin 自身の復旧手段まで塞ぐ

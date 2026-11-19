@@ -96,12 +96,63 @@ export type AwardSyncStatus =
 export const AWARD_SYNC_STALE_MINUTES = 25;
 
 /**
- * 進捗ポーリングの間隔（ミリ秒）
+ * 進捗ポーリングの間隔スケジュール（開始からの経過時間 → 次の間隔）
  *
- * AWARD_SYNC_STALE_MINUTES の間回すと300回。
- * RATE_LIMIT_CONFIG.ADMIN_AWARD_SYNC_STATUS（600回/30分）の半分に収まる。
+ * 1回のポーリングは `award_sync_jobs` の1行を読むだけだが、
+ * `withAdminAuth` のロール確認とレート制限が付いてDBを4往復する
+ * （うち2回は `rate_limits` への書き込み。#1282）。
+ * 同期は分単位で終わるので、後半を5秒刻みで見ても得るものが無い。
+ *
+ * 等間隔5秒なら AWARD_SYNC_STALE_MINUTES の間で300回だったが、
+ * この段階的な間隔では68回に減る（`countAwardSyncPolls` で検算）。
+ * ピークは最初の1分の12回/分で、ここは据え置き（進捗の出だしの体感を
+ * 落とさないため）。`ADMIN_ROLE_CHECK`（120回/分）の前提も変わらない。
+ *
+ * ⚠️ 段を足すときの決まりは2つ。`awardSync.test.ts` が両方を検査している。
+ *    1. `withinMs` の**昇順**に並べること。`getAwardSyncPollIntervalMs` は
+ *       `.find()` で最初に当たった段を採るため、順序が崩れると**足した段が
+ *       一度も使われない**（回数もテストも変わらないので気づけない）
+ *    2. `countAwardSyncPolls` の結果が
+ *       `RATE_LIMIT_CONFIG.ADMIN_AWARD_SYNC_STATUS.maxAttempts` に収まること
  */
-export const AWARD_SYNC_POLL_INTERVAL_MS = 5_000;
+export const AWARD_SYNC_POLL_SCHEDULE = [
+  { withinMs: 60_000, intervalMs: 5_000 },
+  { withinMs: 5 * 60_000, intervalMs: 15_000 },
+] as const;
+
+/** スケジュールの最終段を過ぎたあとの間隔（ミリ秒） */
+export const AWARD_SYNC_POLL_MAX_INTERVAL_MS = 30_000;
+
+/**
+ * 開始から `elapsedMs` 経過した時点での次のポーリング間隔
+ */
+export function getAwardSyncPollIntervalMs(elapsedMs: number): number {
+  const stage = AWARD_SYNC_POLL_SCHEDULE.find(
+    ({ withinMs }) => elapsedMs < withinMs,
+  );
+
+  return stage ? stage.intervalMs : AWARD_SYNC_POLL_MAX_INTERVAL_MS;
+}
+
+/**
+ * `durationMs` の間に発生するポーリング回数
+ *
+ * レート制限の上限に収まるかを検算するために使う。実装（useAwardSync）と
+ * 同じく「1回ぶん待ってから叩く」ので、0ms では1回も叩かない。
+ */
+export function countAwardSyncPolls(durationMs: number): number {
+  let elapsedMs = 0;
+  let count = 0;
+
+  for (;;) {
+    const nextMs = elapsedMs + getAwardSyncPollIntervalMs(elapsedMs);
+
+    if (nextMs > durationMs) return count;
+
+    elapsedMs = nextMs;
+    count += 1;
+  }
+}
 
 /** ポーリングを打ち切るまでの連続失敗回数 */
 export const AWARD_SYNC_MAX_POLL_FAILURES = 3;

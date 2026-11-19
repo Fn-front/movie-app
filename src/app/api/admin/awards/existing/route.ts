@@ -44,7 +44,8 @@ function badRequest(message: string) {
 export const GET = withAdminAuth(
   async ({ session, supabase, request }) => {
     // ポーリングと同じカウンタを共有する。デバウンス済みで呼び出し頻度が低く、
-    // ポーリング（最大300回/25分）に対して上限600回/30分の余裕に収まるため、
+    // ポーリング（最大68回/25分。AWARD_SYNC_POLL_SCHEDULE）に対して
+    // 上限600回/30分の余裕に収まるため、
     // 専用アクションを切って chk_action_type のマイグレーションを増やさない
     const limitResult = await checkRateLimit(
       supabase,

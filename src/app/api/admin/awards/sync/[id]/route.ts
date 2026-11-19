@@ -2,7 +2,7 @@
  * 受賞作品の手動同期ジョブの進捗取得 API
  * GET /api/admin/awards/sync/[id]
  *
- * 画面が AWARD_SYNC_POLL_INTERVAL_MS 間隔でポーリングする。
+ * 画面が AWARD_SYNC_POLL_SCHEDULE の間隔でポーリングする（経過とともに伸びる）。
  * admin ロール必須（`withAdminAuth` がDBで毎回確認する）。
  */
 
@@ -27,7 +27,7 @@ import {
 export const GET = withAdminAuth(
   async ({ session, supabase, params }) => {
     // ポーリングで最も多く叩かれる。READ_USER_DATA に相乗りさせると
-    // 1ジョブで300回使って他の認証必須読み取りを巻き込んで枯らすため専用カウンタ
+    // 1ジョブで数十回使って他の認証必須読み取りを巻き込んで枯らすため専用カウンタ
     const limitResult = await checkRateLimit(
       supabase,
       session.user.id,

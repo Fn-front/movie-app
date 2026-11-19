@@ -111,7 +111,8 @@ if (process.env.VERCEL_ENV === 'production') {
              取得 → TMDb解決 → 世代付き入れ替え
              status=succeeded | failed
 
-[画面] GET /api/admin/awards/sync/[id] を一定間隔でポーリング
+[画面] GET /api/admin/awards/sync/[id] をポーリング（間隔は経過とともに
+       5秒 → 15秒 → 30秒 と伸びる。AWARD_SYNC_POLL_SCHEDULE / #1282）
         終端状態（succeeded/failed）で停止
 ```
 
@@ -341,7 +342,8 @@ GRANT SELECT, INSERT, UPDATE ON public.award_sync_jobs TO service_role;
 
 **`useAwardSync` の責務**（`.claude/rules/custom-hook.md`）
 
-- ポーリングの開始・停止。終端状態で停止、**アンマウント時に必ず `clearInterval`**、多重起動防止、連続失敗時の打ち切り
+- ポーリングの開始・停止。終端状態で停止、**アンマウント時に必ず `clearTimeout`**、多重起動防止、連続失敗時の打ち切り
+  - 間隔が一定でないため `setInterval` ではなく `setTimeout` を繋ぐ（#1282）。停止後に解決した fetch がタイマーを積み直さないよう世代カウンタで無効化する
 - ジョブIDの持ち回り。「全体で1件」なので**最新ジョブを返す API** が素直（localStorage や URL クエリより状態がずれにくい）
 - 409 のボディから実行中ジョブ情報を取り出し、`started_at` と閾値を比較して強制操作の出し分けを決める
 

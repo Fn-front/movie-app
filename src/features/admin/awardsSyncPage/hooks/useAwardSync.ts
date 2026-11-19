@@ -9,6 +9,9 @@
  *   3. 多重起動しない
  *   4. 連続失敗で打ち切る
  *
+ * 間隔は `AWARD_SYNC_POLL_SCHEDULE` で経過に応じて伸びる（#1282）。
+ * 一定でないため setInterval ではなく setTimeout を繋ぐ。
+ *
  * 設計: `.claude/documents/admin-award-sync-design.md`
  */
 
@@ -31,8 +34,8 @@ import {
   AWARD_SYNC_COUNT_DEBOUNCE_MS,
   AWARD_SYNC_MAX_POLL_FAILURES,
   AWARD_SYNC_MESSAGES,
-  AWARD_SYNC_POLL_INTERVAL_MS,
   AWARD_SYNC_STATUS,
+  getAwardSyncPollIntervalMs,
   isSyncableYear,
   SYNCABLE_AWARD_OPTIONS,
 } from '@/constants/awardSync';
@@ -62,6 +65,21 @@ function isTerminal(job: AwardSyncJobView | null): boolean {
   return job !== null && job.status !== AWARD_SYNC_STATUS.RUNNING;
 }
 
+/**
+ * ジョブの開始からの経過時間（ミリ秒）
+ *
+ * リロードでポーリング間隔が最初の段へ戻らないようにするために使う。
+ * `startedAt` が読めない・未来の値だったときは 0 に倒す（間隔が短い側＝
+ * 安全側で、レート制限の見積もりも超えない）。
+ */
+function elapsedSinceStart(job: AwardSyncJobView): number {
+  const startedAt = Date.parse(job.startedAt);
+
+  if (Number.isNaN(startedAt)) return 0;
+
+  return Math.max(0, Date.now() - startedAt);
+}
+
 export function useAwardSync(): UseAwardSyncResult {
   // Select の onValueChange が (value: string) => void なので string で持つ。
   // 賞キーの妥当性はサーバー側の zod（awardSyncCreateSchema）が最終判定する
@@ -79,13 +97,23 @@ export function useAwardSync(): UseAwardSyncResult {
   /** 同期完了のたびに件数を取り直すためのトリガー */
   const [countRevision, setCountRevision] = useState(0);
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failureCountRef = useRef(0);
+  /**
+   * ポーリングの世代。
+   *
+   * 間隔が一定でないので setInterval ではなく setTimeout を繋いでいる。
+   * 次の1回は「応答が返ってから」積むため、停止した後に解決した fetch が
+   * タイマーを積み直しうる。世代を進めて、その継続を無効にする。
+   */
+  const pollGenerationRef = useRef(0);
 
   const stopPolling = useCallback(() => {
+    pollGenerationRef.current += 1;
+
     if (timerRef.current === null) return;
 
-    clearInterval(timerRef.current);
+    clearTimeout(timerRef.current);
     timerRef.current = null;
   }, []);
 
@@ -104,29 +132,70 @@ export function useAwardSync(): UseAwardSyncResult {
   );
 
   const startPolling = useCallback(
-    (jobId: string) => {
-      // 多重起動を防ぐ。start を連打しても interval は1本に保つ
+    (jobId: string, alreadyElapsedMs = 0) => {
+      // 多重起動を防ぐ。start を連打してもタイマーは1本に保つ
       stopPolling();
       failureCountRef.current = 0;
 
-      timerRef.current = setInterval(() => {
-        void (async () => {
-          try {
-            const snapshot = await fetchAwardSyncJob(jobId);
-            failureCountRef.current = 0;
-            applySnapshot(snapshot);
-          } catch (cause) {
-            failureCountRef.current += 1;
+      const generation = pollGenerationRef.current;
+      // 経過時間は積んだ間隔の合計で持つ。実時計を見ないので
+      // タブが止まっていた間に間隔を飛ばすことがない。
+      //
+      // ⚠️ ただしリロードはここが 0 に戻る。18分走っているジョブの画面を
+      // 開き直すたびに5秒間隔が1分ぶん復活してしまうので、復元経路は
+      // ジョブの開始時刻から経過を渡す（#1282）
+      let elapsedMs = alreadyElapsedMs;
 
-            // 一時的な失敗で止めると進捗を見失うが、延々と叩き続けると
-            // レート制限を食い潰す。数回で打ち切って理由を出す
-            if (failureCountRef.current >= AWARD_SYNC_MAX_POLL_FAILURES) {
-              stopPolling();
-              setError(extractMessage(cause, AWARD_SYNC_MESSAGES.FETCH_ERROR));
+      const scheduleNext = (overrideIntervalMs?: number) => {
+        const intervalMs =
+          overrideIntervalMs ?? getAwardSyncPollIntervalMs(elapsedMs);
+        elapsedMs += intervalMs;
+
+        timerRef.current = setTimeout(() => {
+          timerRef.current = null;
+
+          void (async () => {
+            try {
+              const snapshot = await fetchAwardSyncJob(jobId);
+
+              if (pollGenerationRef.current !== generation) return;
+
+              failureCountRef.current = 0;
+              applySnapshot(snapshot);
+            } catch (cause) {
+              if (pollGenerationRef.current !== generation) return;
+
+              failureCountRef.current += 1;
+
+              // 一時的な失敗で止めると進捗を見失うが、延々と叩き続けると
+              // レート制限を食い潰す。数回で打ち切って理由を出す
+              if (failureCountRef.current >= AWARD_SYNC_MAX_POLL_FAILURES) {
+                stopPolling();
+                setError(
+                  extractMessage(cause, AWARD_SYNC_MESSAGES.FETCH_ERROR),
+                );
+                return;
+              }
             }
-          }
-        })();
-      }, AWARD_SYNC_POLL_INTERVAL_MS);
+
+            // 終端到達・アンマウント・打ち切りは stopPolling が世代を進める
+            if (pollGenerationRef.current !== generation) return;
+
+            scheduleNext();
+          })();
+        }, intervalMs);
+      };
+
+      // ⚠️ 復元直後の1回だけは最短の間隔で引く。
+      //
+      // 経過だけで決めると、10分走っているジョブの画面を開き直したとき
+      // 最初の更新まで30秒待たされる（E2E の「リロードしても実行中の進捗を
+      // 復元する」が実際にこれで落ちた）。段（ランプの位置）は保ったまま、
+      // 入口の1回だけ早くする。増えるのはリロードごとに1回で、
+      // 経過を 0 に戻していたとき（12回ぶん）とは桁が違う
+      scheduleNext(
+        alreadyElapsedMs > 0 ? getAwardSyncPollIntervalMs(0) : undefined,
+      );
     },
     [applySnapshot, stopPolling],
   );
@@ -144,7 +213,7 @@ export function useAwardSync(): UseAwardSyncResult {
         setIsStale(snapshot.isStale);
 
         if (snapshot.job?.status === AWARD_SYNC_STATUS.RUNNING) {
-          startPolling(snapshot.job.id);
+          startPolling(snapshot.job.id, elapsedSinceStart(snapshot.job));
         }
       } catch (cause) {
         if (!cancelled) {

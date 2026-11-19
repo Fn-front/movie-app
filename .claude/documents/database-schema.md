@@ -278,8 +278,10 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 | cached_at | TIMESTAMP | NOT NULL | NOW() | 初回キャッシュ日時 |
 | updated_at | TIMESTAMP | NOT NULL | NOW() | 最終更新日時 |
 
-> ⚠️ 上の列の一覧は実体から遅れている（`digital_release_date` /
-> `is_currently_streaming` / `watch_provider_*` が未記載）。列の追従は #1209 の範囲。
+> ⚠️ 上の列の一覧は実体から遅れている。実体は21列で、`vote_count` /
+> `original_language` / `digital_release_date` / `is_currently_streaming` /
+> `watch_provider_flatrate` / `watch_provider_rent` / `watch_provider_buy` が
+> 未記載。列の追従は #1209 の範囲。
 > 下の索引の一覧は 2026-11-19 に実DBと突き合わせ済み。
 
 **インデックス（14本。2026-11-19 時点の実体）:**
@@ -301,35 +303,83 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 #### 索引を追加しない判断（#1279・2026-11-19 実測）
 
 `genre_ids` / `vote_average` / `digital_release_date` には索引が無い。
-**測ったうえで追加していない。** 行数が少なく、プランナが索引を選ばないか、
-選んでも差がサブミリ秒に収まるため。
+**測ったうえで追加していない。**
 
 本番の行数: **1,258行**（theatrical 1,104 / streaming 154）。
+増加は **約133行/月**（最古の `cached_at` 2026-02-08 からの実測）。
 
-`EXPLAIN (ANALYZE, BUFFERS)` の実行時間（3回流した定常値。1回目はキャッシュが
-冷えていて 16ms 前後になるが、これは索引の有無と関係ない）:
+##### `/api/movies` が実際に投げるクエリでは Seq Scan が起きない
 
-| 代表クエリ | 現状 | 候補索引を張った場合 | プランナの選択 |
+`applyMovieCacheFilters` は**必ず** `original_language` の除外 OR を付ける
+（`getExcludedLanguages` は未指定でも13言語を返す）。さらに `movies/route.ts`
+のタブ分岐で `release_date >= 今日` / `is_now_playing = true` /
+`is_currently_streaming` のいずれかが必ず入る。この3つのどれかが既存索引に
+当たるため、**実クエリは1本も全件走査しない。**
+
+`EXPLAIN (ANALYZE, BUFFERS)` の定常値（2回目以降。1回目はキャッシュが冷えて
+十数ms〜40ms になるが、索引の有無と関係ない）:
+
+| 実クエリ | 実行時間 | 使われた索引 |
+|---|---|---|
+| upcoming ＋ ジャンル2件 ＋ 公開日順 | 0.34 ms | `release_type_release_date_idx`（逆方向） |
+| 同・件数クエリ（`count exact`） | 0.36 ms | 同上 |
+| upcoming ＋ 評価順 | 0.39 ms | 同上 ＋ top-N ソート |
+| now_showing ＋ ジャンル | 0.23 ms | `idx_movie_cache_is_now_playing` |
+| 配信予定タブ（`digital_release_date` の `gt` ＋同列ソート） | 0.29 ms | `idx_movie_cache_release_type` |
+
+##### 候補索引を張った場合との差
+
+条件を素にした（`original_language` とタブ絞り込みを外した）クエリでのみ
+Seq Scan になり、そこで初めて候補索引が効く。**実クエリでの差ではない**
+ことに注意:
+
+| 条件を素にしたクエリ | 索引なし | 候補索引あり | プランナの選択 |
 |---|---|---|---|
-| ジャンル絞り込み＋theatrical＋公開日順 | 1.05 ms | 0.46 ms | GIN を使う（Bitmap Index Scan） |
-| 評価順（`vote_average`） | 0.99 ms | 0.88 ms | **索引を使わない**（Seq Scan のまま） |
-| 配信予定タブ（`digital_release_date` の `gt` ＋同列ソート） | 0.29 ms | 0.07 ms | 部分索引を使う |
+| `release_type` ＋ ジャンル ＋ 公開日順 | 1.05 ms | 0.46 ms | GIN を使う（Bitmap Index Scan） |
+| `release_type` ＋ 評価順 | 0.99 ms | 0.99 ms（**同値**） | **索引を使わない**（Seq Scan のまま） |
+| `release_type='streaming'` ＋ `digital_release_date` | 0.29 ms | 0.07 ms | 部分索引を使う |
+
+実クエリに候補索引（GIN）を足した場合の改善幅は **0.35 ms → 0.17 ms**
+程度で、上の表の 0.6 ms よりさらに小さい。
 
 検証は `BEGIN` → `CREATE INDEX` → `ANALYZE` → `EXPLAIN` → `ROLLBACK` で行い、
 索引は残していない（確認済み: 実行後も14本のまま）。
 
-判断の根拠:
+##### 判断の根拠
 
-- **効果が出ても 0.2〜0.6 ms。** Supabase はネットワーク越しなので、API 1本の
-  往復（数十ms）に埋もれて体感に出ない
+- **実クエリは最も遅いもので 0.4 ms。** Supabase はネットワーク越しなので、
+  API 1本の往復（数十ms）に埋もれて体感に出ない
 - `(release_type, vote_average DESC)` は**張っても使われない**。この規模では
   Seq Scan のほうが安いとプランナが判断する。張るだけ無駄になる
-- `movie_cache` は CRON（`sync-movies` / `update-movies` / `sync-streaming`）が
-  一括 UPSERT するテーブルで、索引を増やすと書き込みが重くなる。既に14本ある
+- `movie_cache` は `sync-movies`（映画.com iCal）/ `sync-now-playing` /
+  `sync-streaming` / `update-movies` の4つの CRON と `/api/movies` の Discover
+  分岐が一括 UPSERT するテーブルで、索引を増やすと書き込みが重くなる。
+  既に14本ある
 
-**再検討のきっかけ**: 行数が 10,000 を超えたとき、または上の代表クエリの
-Seq Scan が 10 ms を超えたとき。`/api/movies` は件数クエリとデータクエリで
-同じ条件を2回走らせているので、先に #1272 を片付けるほうが効く。
+##### 再検討のきっかけ
+
+**総行数ではなく「1クエリが触る範囲」を見ること。** 総行数が増えても、
+実クエリが触るのは以下だけで、これらは時間とともに伸びる量ではない。
+
+| タブ | 対象行数（2026-11-19） | 性質 |
+|---|---|---|
+| theatrical / upcoming | 145 | 「今日以降」の移動窓。過去作は自動的に外れる |
+| theatrical / now_showing | 57 | `sync-now-playing` が入れ替える |
+| streaming | 154 | `sync-streaming` が入れ替える |
+
+`movie_cache` に DELETE の経路が無いため総行数は単調増加するが、増えるのは
+**公開日が過去の行**で、上の対象には入らない。したがって「1万行を超えたら」
+のような総行数の線では発火しない。
+
+次のどちらかが起きたら測り直す。
+
+- いずれかの対象行数が **1,000 を超えた**とき（移動窓の幅や CRON の取得範囲を
+  広げると起こりうる）
+- 上の実クエリの `EXPLAIN` で **Seq Scan が現れた**とき（絞り込み条件を増減
+  させると、既存索引に当たらない組み合わせができる）
+
+`/api/movies` は件数クエリとデータクエリで同じ条件を2回走らせているので、
+先に #1272 を片付けるほうが効く。
 
 **キャッシュ戦略:**
 - 初回取得: 今日から3ヶ月先の映画を取得

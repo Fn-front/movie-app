@@ -16,6 +16,10 @@ import {
 } from './rateLimit';
 import { SUPABASE_ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import type { RateLimitActionType } from '@/constants/rateLimit';
+import {
+  FAIL_CLOSED_ACTIONS,
+  RELEASABLE_RATE_LIMIT_ACTIONS,
+} from '@/constants/rateLimit';
 
 // --- Helpers ---
 
@@ -682,6 +686,69 @@ describe('releaseRateLimit', () => {
 
   afterEach(() => {
     warnSpy.mockRestore();
+  });
+
+  /**
+   * 戻してよいアクションを許可リストで縛る（#1266）
+   *
+   * `release_rate_limit` は `locked_until` も消すため、検証の試行回数を
+   * 数えるアクション（`login` / `otp_verify` / `totp_verify` 等）に使うと
+   * **総当たりのロックを解除する手段**になる。
+   *
+   * ⚠️ `FAIL_CLOSED_ACTIONS` を拒否リストにする案は採れない。
+   * 許可する2つもそちらに入っているため、正当な呼び出し元まで弾く。
+   */
+  describe('許可リスト', () => {
+    it('送信枠を数えるアクションだけを許可する', () => {
+      expect([...RELEASABLE_RATE_LIMIT_ACTIONS]).toEqual([
+        'otp_send_daily',
+        'two_factor_send',
+      ]);
+    });
+
+    // 戻すと総当たりのロックが解除できてしまうもの
+    it.each([
+      'login',
+      'login_ip',
+      'otp_verify',
+      'totp_verify',
+      'totp_settings_verify',
+      'password_reset_confirm',
+    ])('%s は許可しない', (action) => {
+      expect([...RELEASABLE_RATE_LIMIT_ACTIONS]).not.toContain(action);
+    });
+
+    /**
+     * ⚠️ 許可リストは DB 側にもある
+     * （`20261119090502_allow_two_factor_send_release.sql`）。
+     * ここを増やすだけでは効かず、RPC が例外を投げる。食い違っても
+     * 「枠が戻らないだけ」で安全側に倒れるが、気づけるようにしておく
+     */
+    it('許可した全アクションが FAIL_CLOSED_ACTIONS にも入っている', () => {
+      // 拒否リスト方式が成立しないことの裏付け
+      for (const action of RELEASABLE_RATE_LIMIT_ACTIONS) {
+        expect(FAIL_CLOSED_ACTIONS.has(action)).toBe(true);
+      }
+    });
+  });
+
+  // DB 側が許可リストで弾いたときも、呼び出し元の本題のエラーを覆い隠さない
+  it('RPC が拒否しても例外にせず警告だけ出す', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: '22023',
+        message:
+          'release_rate_limit は許可リストに無いアクションには使えません',
+      },
+    });
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    await expect(
+      releaseRateLimit(supabase, 'user@example.com', 'otp_send_daily'),
+    ).resolves.toBeUndefined();
+
+    expect(warnSpy).toHaveBeenCalled();
   });
 
   it('RPC を識別子とアクション種別で呼ぶ', async () => {

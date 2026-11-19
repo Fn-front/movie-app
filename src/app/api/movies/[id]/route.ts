@@ -75,8 +75,9 @@ export async function GET(
     // `/movies/[id]` の `generateMetadata` とページ本体（`movieDetailRoute`）が
     // 既に同じ関数を通しているので、ここも通せばキャッシュを共有できる。
     //
-    // ⚠️ キャッシュキーは `movieId` だけ。`append_to_response` /
-    // `include_video_language` を可変にするならキーへ含めること
+    // ⚠️ キャッシュキーは `movies.server.ts` 側で指定している。
+    // `append_to_response` 等の**値を変えただけではキーが変わらない**ため、
+    // 取得内容を決める定数はキーに含めてある（#1273 のレビュー指摘）
     const userId = session?.user.id;
     const supabase = userId ? createServiceRoleClient() : null;
 

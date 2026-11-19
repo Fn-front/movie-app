@@ -284,10 +284,17 @@ describe('GET /api/movies/:id', () => {
 
   // キャッシュ済みのほうを呼ぶ（素の getMovieDetail に戻すと落ちる）
   it('キャッシュ済みの取得関数を movieId で呼ぶ', async () => {
+    // ⚠️ 未認証を明示する。`jest.clearAllMocks()` は実装を消さないので、
+    // 前のテストが残した「認証済み」と消費済みの `mockFrom` が効いて
+    // 500 を通ってしまい、呼び出しだけ見ていると緑になる
+    mockGetAuthSession.mockResolvedValue(null);
     mockGetMovieDetail.mockResolvedValue({ id: 123, title: 'テスト映画' });
 
-    await GET(createRequest('123'), { params: createParams('123') });
+    const response = await GET(createRequest('123'), {
+      params: createParams('123'),
+    });
 
+    expect(response.status).toBe(200);
     expect(mockGetMovieDetail).toHaveBeenCalledWith(123);
     expect(mockGetMovieDetail).toHaveBeenCalledTimes(1);
   });

@@ -10,6 +10,21 @@ import { errorMessage, successMessage } from './common';
 export const DISMISSED_MOVIES_SELECT =
   'id, tmdb_movie_id, title, poster_path, genre_ids, created_at';
 
+/**
+ * 興味なし照会の1ページあたりの件数
+ *
+ * PostgREST の `max_rows`（1000 / `supabase/config.toml`）と同じ値。
+ * これを超えると黙って打ち切られる（#1274）
+ */
+export const DISMISSED_MOVIES_PAGE_SIZE = 1000;
+
+/**
+ * 興味なし照会で読むページ数の上限
+ *
+ * 10ページ = 10,000件。暴走を止めるための保険で、現実的な利用では到達しない
+ */
+export const DISMISSED_MOVIES_MAX_PAGES = 10;
+
 const TARGET = '興味なしリスト';
 
 /**

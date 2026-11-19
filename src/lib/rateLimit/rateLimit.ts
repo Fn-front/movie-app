@@ -391,9 +391,13 @@ export async function releaseRateLimit(
   });
 
   if (error) {
+    // ⚠️ `error` にする。セキュリティ的には安全側（ロックは解除されない）だが、
+    // 帰結は「枠が戻らず利用者が締め出される」という可用性の事故。
+    // 許可リストの食い違い（22023）もここに出るので、warn だと埋もれる。
+    //
     // 識別子（メールアドレス等）はログに出さない。このファイルの他のログも
     // 含めていない
-    console.warn(
+    console.error(
       `[rateLimit] 枠の返却に失敗しました action='${actionType}'`,
       error,
     );

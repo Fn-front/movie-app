@@ -6,6 +6,9 @@
  * レート制限ユーティリティ テスト
  */
 
+import fs from 'fs';
+import path from 'path';
+
 import { SupabaseClient } from '@supabase/supabase-js';
 
 import {
@@ -678,14 +681,17 @@ describe('resetRateLimit', () => {
  */
 describe('releaseRateLimit', () => {
   let warnSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   /**
@@ -700,20 +706,55 @@ describe('releaseRateLimit', () => {
    */
   describe('許可リスト', () => {
     it('送信枠を数えるアクションだけを許可する', () => {
-      expect([...RELEASABLE_RATE_LIMIT_ACTIONS]).toEqual([
-        'otp_send_daily',
-        'two_factor_send',
-      ]);
+      // 順序には依存させない
+      expect([...RELEASABLE_RATE_LIMIT_ACTIONS].sort()).toEqual(
+        ['otp_send_daily', 'two_factor_send'].sort(),
+      );
+    });
+
+    /**
+     * ⚠️ 許可リストは DB 側にもある。**TS を増やすだけでは効かない。**
+     *
+     * 食い違うと RPC が 22023 を投げ、枠が戻らず利用者が締め出される
+     * （ロックは解除されないのでセキュリティは安全側だが、可用性の事故に
+     * なる）。実際にこのPRで1つ見落としているので、ここで突き合わせる。
+     *
+     * `cleanupRateLimits.test.ts` が定数を実走査して不変条件を守っているのと
+     * 同じ考え方。値を固定するだけのテストでは、あとから片方だけ増やした人を
+     * 止められない。
+     */
+    it('DB 側の許可リストと一致している', () => {
+      const migrationsDir = path.join(process.cwd(), 'supabase', 'migrations');
+      // 許可リストを定義している最新のマイグレーションを使う
+      const latest = fs
+        .readdirSync(migrationsDir)
+        .filter((file) => /release.*\.sql$/.test(file))
+        .sort()
+        .pop();
+
+      expect(latest).toBeDefined();
+
+      const sql = fs.readFileSync(path.join(migrationsDir, latest!), 'utf8');
+      const match = sql.match(/<>\s*ALL\s*\(ARRAY\[([^\]]+)\]\)/);
+
+      expect(match).not.toBeNull();
+
+      const dbActions = match![1]
+        .split(',')
+        .map((part) => part.trim().replace(/^'|'$/g, ''))
+        .sort();
+
+      expect(dbActions).toEqual([...RELEASABLE_RATE_LIMIT_ACTIONS].sort());
     });
 
     // 戻すと総当たりのロックが解除できてしまうもの
     it.each([
+      RATE_LIMIT_ACTION.LOGIN_IP,
+      RATE_LIMIT_ACTION.OTP_VERIFY,
+      RATE_LIMIT_ACTION.TOTP_VERIFY,
+      RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
+      RATE_LIMIT_ACTION.PASSWORD_RESET_CONFIRM,
       'login',
-      'login_ip',
-      'otp_verify',
-      'totp_verify',
-      'totp_settings_verify',
-      'password_reset_confirm',
     ])('%s は許可しない', (action) => {
       expect([...RELEASABLE_RATE_LIMIT_ACTIONS]).not.toContain(action);
     });
@@ -748,7 +789,7 @@ describe('releaseRateLimit', () => {
       releaseRateLimit(supabase, 'user@example.com', 'otp_send_daily'),
     ).resolves.toBeUndefined();
 
-    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
   });
 
   it('RPC を識別子とアクション種別で呼ぶ', async () => {
@@ -814,7 +855,7 @@ describe('releaseRateLimit', () => {
     await expect(
       releaseRateLimit(supabase, 'user@example.com', 'otp_send_daily'),
     ).resolves.toBeUndefined();
-    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
   });
 });
 

@@ -124,34 +124,6 @@ export type RateLimitActionType =
  * ⚠️ 認証・本人確認に関わるアクションを追加したら、ここにも必ず足すこと。
  * ここに無いアクションは従来どおり fail-open のままになる。
  */
-/**
- * `releaseRateLimit` で枠を戻してよいアクション（#1266）
- *
- * `release_rate_limit` RPC は `locked_until` も消すため、総当たりを止める
- * アクションへ転用すると**ロック解除の手段**になる。戻してよいのは
- * 「数えた資源を実際には消費しなかった」と言い切れるものだけ。
- *
- * ⚠️ `FAIL_CLOSED_ACTIONS` を拒否リストにする案は採れない。
- * ここの2つはどちらもそちらに入っており、正当な呼び出し元まで弾いてしまう。
- *
- * 判断の基準は**何を数えているか**。「送った通数」なら戻してよく、
- * 「検証の試行回数」（`otp_verify` / `totp_verify` / `login` 等）なら
- * 戻してはいけない。後者で戻すと総当たりのロックを解除する手段になる。
- *
- * ⚠️ **ここを増やすだけでは効かない。** DB 側の `release_rate_limit` にも
- * 同じ許可リストがあり（`20261119090254_restrict_release_rate_limit_to_allowlist.sql`）、
- * そちらに無いアクションは例外になる。食い違っても「枠が戻らないだけ」で
- * ロックは解除されないため、安全側に倒れる。
- */
-export const RELEASABLE_RATE_LIMIT_ACTIONS = [
-  RATE_LIMIT_ACTION.OTP_SEND_DAILY,
-  RATE_LIMIT_ACTION.TWO_FACTOR_SEND,
-] as const;
-
-/** 枠を戻してよいアクションの型 */
-export type ReleasableRateLimitAction =
-  (typeof RELEASABLE_RATE_LIMIT_ACTIONS)[number];
-
 export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
   // ログイン試行
   RATE_LIMIT_ACTION.LOGIN_IP,
@@ -182,6 +154,34 @@ export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
   //    復旧手段まで塞ぐ。OpenAI の課金は伴うが、上限超過のリスクより
   //    可用性を取る。
 ]);
+
+/**
+ * `releaseRateLimit` で枠を戻してよいアクション（#1266）
+ *
+ * `release_rate_limit` RPC は `locked_until` も消すため、総当たりを止める
+ * アクションへ転用すると**ロック解除の手段**になる。戻してよいのは
+ * 「数えた資源を実際には消費しなかった」と言い切れるものだけ。
+ *
+ * ⚠️ `FAIL_CLOSED_ACTIONS` を拒否リストにする案は採れない。
+ * ここの2つはどちらもそちらに入っており、正当な呼び出し元まで弾いてしまう。
+ *
+ * 判断の基準は**何を数えているか**。「送った通数」なら戻してよく、
+ * 「検証の試行回数」（`otp_verify` / `totp_verify` / `login` 等）なら
+ * 戻してはいけない。後者で戻すと総当たりのロックを解除する手段になる。
+ *
+ * ⚠️ **ここを増やすだけでは効かない。** DB 側の `release_rate_limit` にも
+ * 同じ許可リストがあり（`20261119090254_restrict_release_rate_limit_to_allowlist.sql`）、
+ * そちらに無いアクションは例外になる。食い違っても「枠が戻らないだけ」で
+ * ロックは解除されないため、安全側に倒れる。
+ */
+export const RELEASABLE_RATE_LIMIT_ACTIONS = [
+  RATE_LIMIT_ACTION.OTP_SEND_DAILY,
+  RATE_LIMIT_ACTION.TWO_FACTOR_SEND,
+] as const;
+
+/** 枠を戻してよいアクションの型 */
+export type ReleasableRateLimitAction =
+  (typeof RELEASABLE_RATE_LIMIT_ACTIONS)[number];
 
 /**
  * 判定不能時に拒否するアクションかどうか

@@ -36,8 +36,17 @@ const LAST_UPDATED = '2026年11月7日';
  */
 const YOUTUBE_EMBED_HOST = new URL(EXTERNAL_URLS.YOUTUBE_EMBED).hostname;
 
-/** 問い合わせ・開示請求の窓口 */
-const CONTACT_EMAIL = 'support@example.com';
+/**
+ * 問い合わせ・開示請求の窓口
+ *
+ * 法32条1項4号の「苦情の申出先」は公表義務があるため、到達しないアドレスを
+ * 置くと窓口が無いのと同じ扱いになる。`example.com` は RFC 2606 の予約ドメインで
+ * 絶対に届かないので、プレースホルダへ戻さないこと。
+ *
+ * 受信は Cloudflare Email Routing の転送で成り立っている（MX は
+ * route1-3.mx.cloudflare.net）。転送を止めるならこの記述ごと見直す。
+ */
+const CONTACT_EMAIL = 'support@movie-app-fn.com';
 
 /**
  * ご利用の端末から外部へ送信される情報（電気通信事業法 外部送信規律）

@@ -611,4 +611,132 @@ describe('useOverlayHistory', () => {
 
     expect(backSpy).not.toHaveBeenCalled();
   });
+  /**
+   * 閉じた直後、cleanup より先に「進む」が届く（#1304）
+   *
+   * 休止登録（`dormantOverlays`）はオーバーレイの cleanup で行うが、
+   * React の passive effect は**閉じた描画の後**に走る。遅いマシンでは
+   * その隙に進むの popstate が届き、登録がまだ空のまま素通りして
+   * **閉じているものをもう一度閉じて**進むを握り潰していた。
+   *
+   * CI の E2E（`e2e/mobile/overlayHistory.spec.ts`）で実際に落ちた。
+   * trace では `goForward()` 直後の `toBeVisible()` が10秒タイムアウトし、
+   * コンソールエラーは0件だった
+   */
+  describe('cleanup より先に進むが届く', () => {
+    /** 進むでエントリが復活した状態の popstate */
+    const dispatchForward = (token: unknown) => {
+      act(() => {
+        window.history.replaceState(
+          { __overlayHistory: token },
+          '',
+          window.location.href,
+        );
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+    };
+
+    it('cleanup が走っていなくても開き直す', () => {
+      const onClose = jest.fn();
+      const onReopen = jest.fn();
+      renderHook(() => useOverlayHistory(true, onClose, onReopen));
+      const token = window.history.state?.__overlayHistory;
+
+      // 戻るで閉じる。再描画しない＝ cleanup はまだ走っていない
+      dispatchPopState();
+      expect(onClose).toHaveBeenCalledTimes(1);
+      onClose.mockClear();
+
+      dispatchForward(token);
+
+      expect(onReopen).toHaveBeenCalledTimes(1);
+      // ⚠️ 同じ popstate を閉じる方向にも解釈しないこと。
+      // 解釈すると開き直した直後に閉じ、#1304 の症状のまま
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('遅れて cleanup が走っても、復活したエントリを畳まない', async () => {
+      // 畳むと history.back() で進むを打ち消してしまう
+      const onReopen = jest.fn();
+      const { rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), onReopen),
+        { initialProps: { open: true } },
+      );
+      const token = window.history.state?.__overlayHistory;
+
+      dispatchPopState();
+      dispatchForward(token);
+
+      // ここで React が溜めていた cleanup（open: false）を走らせ、
+      // 続けて開き直しの setup（open: true）を走らせる
+      rerender({ open: false });
+      rerender({ open: true });
+      await flushAsyncBack();
+
+      expect(backSpy).not.toHaveBeenCalled();
+    });
+
+    it('開き直したあと履歴は増えない', () => {
+      // 進むでエントリは既に戻っている。積み直すと戻る回数が合わなくなる
+      const onReopen = jest.fn();
+      const { rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), onReopen),
+        { initialProps: { open: true } },
+      );
+      const token = window.history.state?.__overlayHistory;
+      const length = window.history.length;
+
+      dispatchPopState();
+      dispatchForward(token);
+      rerender({ open: false });
+      rerender({ open: true });
+
+      expect(window.history.length).toBe(length);
+    });
+
+    it('開き直したあと、入れ子の戻るを握り潰さない', () => {
+      // 遅れて走る cleanup が休止登録を**無条件に**行うため、既に復活して
+      // 開いているトークンが `dormantOverlays` に残りうる。残ると、上に
+      // 積んだオーバーレイを戻るで閉じようとしたときに、そちらが先に
+      // 当たって**内側が閉じない**
+      const outerReopen = jest.fn();
+      const outer = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), outerReopen),
+        { initialProps: { open: true } },
+      );
+      const token = window.history.state?.__overlayHistory;
+
+      // 戻る → cleanup 前に進む → 遅れて cleanup/setup
+      dispatchPopState();
+      dispatchForward(token);
+      outer.rerender({ open: false });
+      outer.rerender({ open: true });
+
+      // 進むでの開き直しはここまでで済んでいる。以降は呼ばれてはいけない
+      expect(outerReopen).toHaveBeenCalledTimes(1);
+      outerReopen.mockClear();
+
+      // 上に別のオーバーレイを積む
+      const innerClose = jest.fn();
+      renderHook(() => useOverlayHistory(true, innerClose));
+
+      // 戻ると内側のエントリが外れ、下の外側のエントリ（token）が最前面に戻る。
+      // 閉じるべきは**内側**
+      dispatchForward(token);
+
+      expect(innerClose).toHaveBeenCalledTimes(1);
+      expect(outerReopen).not.toHaveBeenCalled();
+    });
+
+    it('他人のトークンでは開き直さない', () => {
+      // 自分のエントリでないものに反応すると、別のオーバーレイを巻き込む
+      const onReopen = jest.fn();
+      renderHook(() => useOverlayHistory(true, jest.fn(), onReopen));
+
+      dispatchPopState();
+      dispatchForward('overlay-999');
+
+      expect(onReopen).not.toHaveBeenCalled();
+    });
+  });
 });

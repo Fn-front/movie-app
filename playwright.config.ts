@@ -12,6 +12,75 @@ dotenv.config({ path: path.resolve(__dirname, '.env.local') });
 const isCI = !!process.env.CI;
 
 /**
+ * ローカルの Supabase（`supabase start`）へ向けるかどうか（#1331）
+ *
+ * CI はランナー内に Supabase を立てて `e2e.yml` が接続先を渡すため、ここは
+ * 素通りする。手元で `npm run test:e2e` を叩くと**本番 Supabase を叩く**ので、
+ * 向き先を切り替える口を用意する。
+ *
+ * 使い方はどちらでもよい:
+ *   - `.env.local` に `E2E_USE_LOCAL_SUPABASE=true` を書く（以後ずっとローカル）
+ *   - `E2E_USE_LOCAL_SUPABASE=true npm run test:e2e`（その場限り）
+ *
+ * 事前に `supabase start` が要る。
+ *
+ * ⚠️ 効くのは **webServer が `npm run dev` のとき**＝ローカルの既定の経路だけ。
+ *   `NEXT_PUBLIC_*` はビルド時に静的置換されるため、`CI=true`（`npm start`）で
+ *   手元の本番ビルドを使うと **URL だけ `.env.local` の本番のまま**になり、
+ *   サーバーはローカルの鍵を本番URLへ送って `Invalid API key` で落ちる。
+ *   手元で本番ビルドを使いたいなら build にも同じ値を渡すこと:
+ *     E2E_USE_LOCAL_SUPABASE=true NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 \
+ *       NEXT_PUBLIC_SUPABASE_ANON_KEY=<下の anonKey> npm run build
+ *   CI は `e2e.yml` が build step に接続先を渡しているので問題ない。
+ */
+const useLocalSupabase = process.env.E2E_USE_LOCAL_SUPABASE === 'true';
+
+/**
+ * ローカル Supabase の接続情報
+ *
+ * ⚠️ これはシークレットではない。Supabase CLI が**全ユーザー共通の固定値**として
+ * 配布しているローカル開発用のデモ鍵で、署名鍵も公開されている。
+ * 127.0.0.1 のポートにしか通用せず、本番プロジェクトには一切効かない。
+ * `.github/workflows/e2e.yml` が平文で持っているのと同じ値・同じ理由。
+ */
+const LOCAL_SUPABASE = {
+  url: 'http://127.0.0.1:54321',
+  anonKey:
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0',
+  serviceRoleKey:
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU',
+} as const;
+
+if (useLocalSupabase) {
+  // ⚠️ `process.env` を書き換えること。`use` や `webServer.env` に足すだけでは
+  //   足りない。Playwright は webServer を `{ ...process.env, ...webServer.env }`
+  //   で起動する（playwright/lib/plugins/webServerPlugin.js）ため、ここで
+  //   process.env を直せば Next.js 側にも同じ値が渡る。
+  //
+  //   なお `dotenv.config()` は override を指定していないので、**既に
+  //   process.env にある値が .env.local より優先される**。つまり
+  //   `E2E_USE_LOCAL_SUPABASE=true npm run test:e2e` のような前置きも効く。
+  process.env.NEXT_PUBLIC_SUPABASE_URL = LOCAL_SUPABASE.url;
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = LOCAL_SUPABASE.anonKey;
+  process.env.SUPABASE_SERVICE_ROLE_KEY = LOCAL_SUPABASE.serviceRoleKey;
+} else if (!isCI) {
+  // 向き先は `.env.local` にあり gitignore されているため、**外から見えない**。
+  // 黙って本番を叩くと、run ごとの利用者作成・削除や
+  // `runDeleteExpiredRateLimits()` が本番データに届く（#1331）。
+  console.warn(
+    [
+      '',
+      '⚠️  E2E が本番 Supabase を向いています。',
+      '    ローカルの Supabase で回すなら:',
+      '      1. supabase start',
+      '      2. .env.local に E2E_USE_LOCAL_SUPABASE=true を追記',
+      '    詳細は .claude/rules/testing.md（#1331）',
+      '',
+    ].join('\n'),
+  );
+}
+
+/**
  * storageStateの保存先パス
  *
  * ログインするユーザーが run ごとに変わるため、保存先も run 単位にする（#793）。

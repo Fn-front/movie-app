@@ -162,7 +162,17 @@ jobs:
       - name: setup-supabase-cli
         uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # ratchet:supabase/setup-cli@v3.2.0
         with:
-          version: latest
+          # ⛔ `latest` にしないこと。CLI がリリースされるたび CI が壊れうる。
+          #   実際に `latest`（= v3.2.0）で全4シャードが落ちた:
+          #     inbucket in supabase/config.toml is no longer supported.
+          #     Use local_smtp instead.
+          #   v3 で `[inbucket]` が `[local_smtp]` に変わったため。
+          #
+          # 値は**手元で使っている CLI に合わせる**（config.toml の書式が
+          # CLI のメジャーバージョンに紐づくため）。上げるときは config.toml の
+          # 書式変更と、開発者の手元の CLI 更新をセットで行うこと。
+          # ここだけ上げると CI が通って手元の `supabase db push` が壊れる。
+          version: 2.117.0
 
       # `supabase start` は初回にマイグレーションを全件適用する。
       # 本番と同じスキーマがまっさらな DB 上に再現される。
@@ -401,7 +411,17 @@ jobs:
       - name: setup-supabase-cli
         uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # ratchet:supabase/setup-cli@v3.2.0
         with:
-          version: latest
+          # ⛔ `latest` にしないこと。CLI がリリースされるたび CI が壊れうる。
+          #   実際に `latest`（= v3.2.0）で全4シャードが落ちた:
+          #     inbucket in supabase/config.toml is no longer supported.
+          #     Use local_smtp instead.
+          #   v3 で `[inbucket]` が `[local_smtp]` に変わったため。
+          #
+          # 値は**手元で使っている CLI に合わせる**（config.toml の書式が
+          # CLI のメジャーバージョンに紐づくため）。上げるときは config.toml の
+          # 書式変更と、開発者の手元の CLI 更新をセットで行うこと。
+          # ここだけ上げると CI が通って手元の `supabase db push` が壊れる。
+          version: 2.117.0
 
       - name: start-supabase
         run: supabase start -x "$SUPABASE_EXCLUDED_CONTAINERS"

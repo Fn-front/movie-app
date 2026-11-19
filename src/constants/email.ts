@@ -48,13 +48,6 @@ export function buildOtpEmailSubject(action: OtpEmailAction): string {
 }
 
 /**
- * OTPメール本文を生成する
- *
- * @param code - 6桁の確認コード
- * @param action - OTPの用途
- * @returns 用途の明記と共有禁止の警告を含む本文
- */
-/**
  * パスワードリセットメールの件名
  */
 export function buildPasswordResetEmailSubject(): string {
@@ -90,6 +83,55 @@ ${APP_NAME}からお客様にこのリンクをお尋ねすることはありま
 パスワードは変更されません。第三者がお客様のメールアドレスを入力した可能性があります。`;
 }
 
+/**
+ * パスワード失効通知メールの件名
+ */
+export function buildPasswordInvalidatedEmailSubject(): string {
+  return `[${APP_NAME}] パスワードを無効にしました`;
+}
+
+/**
+ * パスワード失効通知メール本文を生成する
+ *
+ * 未検証のまま放置されたアカウントが「メールでログイン」で認証済みへ
+ * 昇格したときに送る（#1302）。未検証の間に設定されたパスワードは、
+ * `register` が未検証ユーザーの `password_hash` を無条件で上書きする
+ * 仕様（#645）のせいで**本人が設定したものとは限らない**ため、昇格と
+ * 同時に失効させている。
+ *
+ * 失効させたこと自体を伝えないと、利用者は次のパスワードログインが
+ * 「メールアドレスまたはパスワードが正しくありません。」で弾かれる
+ * 理由を知るすべがない。
+ *
+ * @param settingsUrl - パスワードを設定し直す設定ページのURL
+ * @returns 失効の事実と再設定の案内を含む本文
+ */
+export function buildPasswordInvalidatedEmailText(settingsUrl: string): string {
+  return `${APP_NAME}のメールアドレス確認が完了しました。
+
+あわせて、このアカウントに設定されていたパスワードを無効にしました。
+メールアドレスの確認が済む前に設定されたパスワードは、第三者が設定したもので
+ある可能性を否定できないためです。
+
+パスワードは以下のページから設定し直せます。
+設定するまでの間も「メールでログイン」はこれまでどおりご利用いただけます。
+
+${settingsUrl}
+
+⚠ ${APP_NAME}からお客様にパスワードをお尋ねすることはありません。
+
+心当たりがない場合は、お客様宛の確認コードが第三者に使われた可能性があります。
+メールアカウントの安全性をご確認のうえ、上記のページからパスワードを設定して
+ください。`;
+}
+
+/**
+ * OTPメール本文を生成する
+ *
+ * @param code - 6桁の確認コード
+ * @param action - OTPの用途
+ * @returns 用途の明記と共有禁止の警告を含む本文
+ */
 export function buildOtpEmailText(
   code: string,
   action: OtpEmailAction,

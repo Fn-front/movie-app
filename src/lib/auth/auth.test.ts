@@ -156,6 +156,7 @@ type Callbacks = {
 
 import {
   AUTH_ERROR_CODE,
+  AUTH_ERROR_MESSAGES,
   DUMMY_PASSWORD_HASH,
   SESSION_CONFIG,
 } from '@/constants/auth';
@@ -1684,6 +1685,54 @@ describe('authorize のタイミング均一化', () => {
       .catch(() => undefined);
 
     expect(compareSpy).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 失効したパスワードではログインできない（#1302）
+ *
+ * `auth/otp/verify` は未検証 → 認証済みの昇格と同時に `password_hash` を
+ * null にする。未検証の間に設定されたパスワードは、`register` が未検証
+ * ユーザーの行を無条件で上書きする仕様（#645）のせいで**第三者のもので
+ * あり得る**ため。失効が実際にログインを塞ぐところまでを固定する
+ */
+describe('失効したパスワードでのログイン', () => {
+  function makeRequest(): Request {
+    return new Request('http://localhost/api/auth/callback/credentials', {
+      headers: new Headers({ 'x-vercel-forwarded-for': '203.0.113.1' }),
+    });
+  }
+
+  beforeEach(() => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+  });
+
+  it('password_hash が null なら認証済みでもパスワードログインを拒否する', async () => {
+    setResolver(({ table }) =>
+      table === 'users'
+        ? {
+            data: {
+              id: 'user-1',
+              email: 'victim@example.com',
+              name: 'Victim',
+              avatar_url: null,
+              role: 'user',
+              // 昇格時に失効させた状態
+              is_verified: true,
+              password_hash: null,
+              password_changed_at: null,
+            },
+            error: null,
+          }
+        : { data: null, error: null },
+    );
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'victim@example.com', password: 'ThirdPartyPass1' },
+        makeRequest(),
+      ),
+    ).rejects.toThrow(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
   });
 });
 

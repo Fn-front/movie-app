@@ -5,7 +5,12 @@
  * エンジニアリングに弱くなるため、用途の明記と共有禁止の警告を検証する（#648）。
  */
 
-import { buildOtpEmailSubject, buildOtpEmailText } from './email';
+import {
+  buildOtpEmailSubject,
+  buildOtpEmailText,
+  buildPasswordInvalidatedEmailSubject,
+  buildPasswordInvalidatedEmailText,
+} from './email';
 import { OTP_ACTION, OTP_CONFIG, type OtpAction } from './otp';
 
 const ALL_ACTIONS: OtpAction[] = [
@@ -71,5 +76,50 @@ describe('buildOtpEmailText', () => {
     it('有効期限を定数から出力する', () => {
       expect(text).toContain(`${OTP_CONFIG.EXPIRY_MINUTES}分間有効`);
     });
+  });
+});
+
+/**
+ * パスワード失効の通知（#1302）
+ *
+ * 未検証のまま放置されたアカウントが「メールでログイン」で認証済みへ昇格する
+ * とき、出自の分からない `password_hash` を失効させる。伝えないと、利用者は
+ * 次のパスワードログインが弾かれる理由を知るすべがない。
+ */
+describe('パスワード失効の通知メール', () => {
+  const settingsUrl = 'https://example.com/settings';
+  const text = buildPasswordInvalidatedEmailText(settingsUrl);
+
+  it('件名でパスワードを無効にしたことが分かる', () => {
+    expect(buildPasswordInvalidatedEmailSubject()).toContain(
+      'パスワードを無効にしました',
+    );
+  });
+
+  it('無効にした事実を本文に書く', () => {
+    expect(text).toContain('パスワードを無効にしました');
+  });
+
+  it('無効にした理由を本文に書く', () => {
+    // 理由が無いと、利用者には「勝手に消された」としか読めない
+    expect(text).toContain('第三者が設定したもの');
+  });
+
+  it('再設定先のURLを本文に含む', () => {
+    expect(text).toContain(settingsUrl);
+  });
+
+  it('失効中もメールでログインできる旨を書く', () => {
+    // ここが抜けると、パスワードを失った利用者が締め出されたと誤解する
+    expect(text).toContain('メールでログイン');
+  });
+
+  it('サービス側から尋ねない旨の警告を含む', () => {
+    expect(text).toContain('パスワードをお尋ねすることはありません');
+  });
+
+  it('心当たりがない場合の案内を含む', () => {
+    // 身に覚えがなければ、確認コードが届く受信箱を第三者に見られている
+    expect(text).toContain('心当たりがない場合');
   });
 });

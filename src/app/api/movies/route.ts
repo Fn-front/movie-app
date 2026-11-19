@@ -68,7 +68,11 @@ function formatDateToString(date: Date): string {
  * ジャンルID → 表示名のマップを作る
  *
  * キャッシュは `getGenres()` 側が持つ（#1278）。ここに置いていたときは
- * `/api/movies/genres` に効かず、同じ一覧を別々に取りに行っていた
+ * `/api/movies/genres` に効かなかった。
+ *
+ * ⚠️ 移しても**2つのルート間でキャッシュが共有されるわけではない**
+ * （Vercel ではルートごとに関数が分かれ、モジュールの実体も別）。
+ * 効くのは各ルートの中での重複と、同時リクエストの合流まで
  */
 async function getGenreMap(): Promise<Record<number, string>> {
   const genreMap: Record<number, string> = {};

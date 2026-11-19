@@ -16,7 +16,9 @@ import { SEARCH_VALIDATION } from '@/constants/search';
 
 // --- Mocks ---
 
-// genreCacheをリセットするために、モジュールを都度リロード
+// モジュールスコープの状態を持ち越さないよう、テストごとにリロードする
+// （ジャンルキャッシュは #1278 で getGenres 側へ移ったが、ルートの
+//  module-level の初期化はここでリセットしておく）
 let GET: typeof import('./route').GET;
 
 const mockGetAuthSession = jest.fn().mockResolvedValue(null);
@@ -392,7 +394,7 @@ describe('GET /api/movies', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     createdChains.length = 0;
-    // genreCacheをリセットするためにモジュールをリロード
+    // モジュールスコープの状態を持ち越さないようリロードする
     jest.resetModules();
 
     // 既定は上限内（null を返すと通過）
@@ -1627,7 +1629,7 @@ describe('GET /api/movies', () => {
     expect(json.error.code).toBe('SERVER_ERROR');
   });
 
-  // === ジャンルキャッシュ ===
+  // === ジャンルマップ ===
 
   it('ジャンルマップが正しく返される', async () => {
     const handler = await loadGET();

@@ -82,6 +82,7 @@ export const GET = withAuth(
       pageSize: DISMISSED_MOVIES_PAGE_SIZE,
       maxPages: DISMISSED_MOVIES_MAX_PAGES,
       label: 'dismissed-movies',
+      context: `user=${session.user.id}`,
       query: (from, to) =>
         supabase
           .from('dismissed_movies')

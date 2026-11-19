@@ -20,7 +20,17 @@ type QueryResult = { data?: unknown; error?: unknown; count?: number };
  * 実装は3つのクエリを `Promise.all` で並列に投げる。テーブル名で引けるように
  * しておかないと、順序に依存した脆いスタブになる
  */
+/**
+ * `range()` が呼ばれたテーブルと回数
+ *
+ * ⚠️ スタブは thenable なので、`.range()` を外しても `await` は解決する。
+ * これを数えないと、#1274 のページング対策を丸ごと消してもテストが緑になる
+ */
+let rangeCalls: Record<string, number> = {};
+
 const createSupabase = (results: Record<string, QueryResult>) => {
+  rangeCalls = {};
+
   const builder = (table: string) => {
     const result = results[table] ?? { data: [], error: null };
     // `order` はチェーンを返す。`dismissed_movies` は #1274 で
@@ -31,7 +41,10 @@ const createSupabase = (results: Record<string, QueryResult>) => {
       eq: () => chain,
       is: () => chain,
       order: () => chain,
-      range: () => Promise.resolve(result),
+      range: () => {
+        rangeCalls[table] = (rangeCalls[table] ?? 0) + 1;
+        return Promise.resolve(result);
+      },
       then: (resolve: (value: QueryResult) => unknown) =>
         Promise.resolve(result).then(resolve),
     };
@@ -77,6 +90,53 @@ describe('fetchRecommendationData', () => {
   });
 
   // 興味なしは生成後に付けられるので、保存済みのレコメンドにも混ざりうる
+  /**
+   * 興味なしの取得をページングで読み切る（#1274）
+   *
+   * `range()` を外すと PostgREST の `max_rows`（1000）で黙って打ち切られ、
+   * 1001件目以降が除外されなくなる。スタブは thenable なので、
+   * `range` の呼び出しを数えないと外しても緑のまま通る
+   */
+  it('興味なしはページングで読み切る', async () => {
+    const supabase = createSupabase({
+      recommendations: { data: [recommendationRow()], error: null },
+      favorites: { count: 1 },
+      dismissed_movies: { data: [], error: null },
+    });
+
+    await fetchRecommendationData(supabase, 'user-123');
+
+    expect(rangeCalls.dismissed_movies).toBeGreaterThan(0);
+  });
+
+  /**
+   * 興味なしの取得に失敗しても、レコメンド自体は返す（従来どおり）
+   *
+   * 除外が効かずに作品が出るだけで、レコメンドは返せる。ただし黙って
+   * 握らずログには残す
+   */
+  it('興味なしの取得に失敗してもレコメンドを返し、ログに残す', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const supabase = createSupabase({
+        recommendations: { data: [recommendationRow()], error: null },
+        favorites: { count: 1 },
+        dismissed_movies: { data: null, error: { message: 'boom' } },
+      });
+
+      const result = await fetchRecommendationData(supabase, 'user-123');
+
+      expect(result.recommendations).toHaveLength(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Dismissed movies query error:',
+        expect.anything(),
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it('興味なしにした作品を除く', async () => {
     const supabase = createSupabase({
       recommendations: {

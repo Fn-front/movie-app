@@ -126,6 +126,25 @@ describe('fetchAllPages', () => {
     });
 
     // 黙って切ると、まさに #1274 と同じ「気づけない取りこぼし」になる
+    // 「誰で起きたか」が分からないと調査に入れない（既存2本と揃える）
+    it('警告に context を添える', async () => {
+      const { query } = createQuery(
+        Array.from({ length: 10 }, () => ({ data: [row(1), row(2)] })),
+      );
+
+      await fetchAllPages({
+        pageSize: 2,
+        maxPages: 3,
+        label: 'dismissed-movies',
+        context: 'user=user-123',
+        query,
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('user=user-123'),
+      );
+    });
+
     it('上限に達したら label 付きで警告する', async () => {
       const { query } = createQuery(
         Array.from({ length: 10 }, () => ({ data: [row(1), row(2)] })),

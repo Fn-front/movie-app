@@ -16,25 +16,6 @@
  * こちらを使うこと。
  */
 
-/**
- * 1ページの既定件数
- *
- * PostgREST の `max_rows`（`supabase/config.toml` の 1000）と同じ値。
- * これを**超えてはいけない**（超えると最終ページを誤認する）。
- *
- * ⚠️ `favorites/lookup` / `watchlist/lookup` / `dismissed-movies` は
- * このヘルパーより前に個別の定数を持っている（いずれも同じ 1000 / 10）。
- * 新しく書く場所ではこちらを使うこと。
- */
-export const FETCH_ALL_PAGES_SIZE = 1000;
-
-/**
- * 読むページ数の既定上限
- *
- * 10ページ = 10,000件。暴走を止めるための保険で、現実的な利用では到達しない
- */
-export const FETCH_ALL_PAGES_MAX = 10;
-
 /** 1ページぶんの問い合わせ結果のうち、ここで見るぶんだけ */
 export interface PageResult<T> {
   data: T[] | null;

@@ -10,9 +10,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
-  FETCH_ALL_PAGES_MAX,
-  FETCH_ALL_PAGES_SIZE,
-} from '@/helpers/fetchAllPages';
+  FAVORITES_LOOKUP_MAX_PAGES,
+  FAVORITES_LOOKUP_PAGE_SIZE,
+} from '@/constants/favorites';
 
 import {
   OPENAI_CONFIG,
@@ -90,19 +90,23 @@ const mockActiveUsersQuery = (userIds: string[]) => {
  * `.order().range()` を通るようになったので、チェーンの末端を range にする。
  * `range` の呼び出しを数えて、ページングを外したときに検知できるようにする
  */
-let rangeCalls = 0;
+const rangeSpy = jest.fn();
+const orderSpy = jest.fn();
 
 const mockPagedQuery = (rows: unknown[], error: unknown = null) => {
   mockFrom.mockReturnValueOnce({
     select: () => ({
       eq: () => ({
         is: () => ({
-          order: () => ({
-            range: () => {
-              rangeCalls += 1;
-              return Promise.resolve({ data: error ? null : rows, error });
-            },
-          }),
+          order: (column: string, opts?: { ascending?: boolean }) => {
+            orderSpy(column, opts);
+            return {
+              range: (from: number, to: number) => {
+                rangeSpy(from, to);
+                return Promise.resolve({ data: error ? null : rows, error });
+              },
+            };
+          },
         }),
       }),
     }),
@@ -241,6 +245,11 @@ describe('generateRecommendationsService', () => {
   });
 
   describe('collectUserMovieData', () => {
+    beforeEach(() => {
+      rangeSpy.mockClear();
+      orderSpy.mockClear();
+    });
+
     it('ユーザーの映画データを正しく収集する', async () => {
       mockFavoritesQuery([{ tmdb_movie_id: 1, title: '映画A', rating: 8 }]);
       mockWatchlistQuery([{ tmdb_movie_id: 2, title: '映画B' }]);
@@ -268,11 +277,14 @@ describe('generateRecommendationsService', () => {
      * レコメンドに出る
      */
     it('お気に入りがちょうど1ページぶんなら次のページも読む', async () => {
-      const full = Array.from({ length: FETCH_ALL_PAGES_SIZE }, (_, i) => ({
-        tmdb_movie_id: i + 1,
-        title: `映画${i + 1}`,
-        rating: 8,
-      }));
+      const full = Array.from(
+        { length: FAVORITES_LOOKUP_PAGE_SIZE },
+        (_, i) => ({
+          tmdb_movie_id: i + 1,
+          title: `映画${i + 1}`,
+          rating: 8,
+        }),
+      );
 
       mockPagedQuery(full);
       mockPagedQuery([{ tmdb_movie_id: 99999, title: '最後', rating: 7 }]);
@@ -281,13 +293,14 @@ describe('generateRecommendationsService', () => {
 
       const result = await collectUserMovieData(mockSupabase, 'user-1');
 
-      expect(result!.favoriteMovies).toHaveLength(FETCH_ALL_PAGES_SIZE + 1);
+      expect(result!.favoriteMovies).toHaveLength(
+        FAVORITES_LOOKUP_PAGE_SIZE + 1,
+      );
       expect(result!.baseExcludedIds.has(99999)).toBe(true);
     });
 
     // 3本とも range を通ること（1本でも素の全件読みに戻すと落ちる）
     it('3本とも range で区切って読む', async () => {
-      rangeCalls = 0;
       mockFavoritesQuery([{ tmdb_movie_id: 1, title: '映画A', rating: 8 }]);
       mockWatchlistQuery([{ tmdb_movie_id: 2, title: '映画B' }]);
       mockDismissedMoviesQuery([
@@ -296,31 +309,33 @@ describe('generateRecommendationsService', () => {
 
       await collectUserMovieData(mockSupabase, 'user-1');
 
-      expect(rangeCalls).toBe(3);
+      expect(rangeSpy).toHaveBeenCalledTimes(3);
+      // ⚠️ 引数まで見る。回数だけだと range(0, 0) でも通ってしまい、
+      // ページサイズの取り違えを検知できない
+      expect(rangeSpy).toHaveBeenCalledWith(0, FAVORITES_LOOKUP_PAGE_SIZE - 1);
     });
 
-    // 並びが不定だとページ間で行が重複・欠落する
-    it('安定した並び（id 昇順）を指定する', async () => {
-      const orderSpy = jest.fn();
-
-      mockFrom.mockReturnValue({
-        select: () => ({
-          eq: () => ({
-            is: () => ({
-              order: (column: string, opts?: { ascending?: boolean }) => {
-                orderSpy(column, opts);
-                return {
-                  range: () => Promise.resolve({ data: [], error: null }),
-                };
-              },
-            }),
-          }),
-        }),
-      });
+    /**
+     * 並びが不定だとページ間で行が重複・欠落する
+     *
+     * ⚠️ favorites が0件だと `collectUserMovieData` はそこで return するので、
+     * 1件返して3本とも通す。`mockReturnValue`（Once でない）も使わない
+     * ——`clearAllMocks` では既定戻り値が消えず、以降のテストで
+     * 「モックし忘れ」が静かに通るようになる
+     */
+    it('3本とも安定した並び（id 昇順）を指定する', async () => {
+      mockFavoritesQuery([{ tmdb_movie_id: 1, title: '映画A', rating: 8 }]);
+      mockWatchlistQuery([{ tmdb_movie_id: 2, title: '映画B' }]);
+      mockDismissedMoviesQuery([
+        { tmdb_movie_id: 3, title: '映画C', genre_ids: [27] },
+      ]);
 
       await collectUserMovieData(mockSupabase, 'user-1');
 
-      expect(orderSpy).toHaveBeenCalledWith('id', { ascending: true });
+      expect(orderSpy).toHaveBeenCalledTimes(3);
+      for (let i = 1; i <= 3; i += 1) {
+        expect(orderSpy).toHaveBeenNthCalledWith(i, 'id', { ascending: true });
+      }
     });
 
     /**
@@ -379,13 +394,16 @@ describe('generateRecommendationsService', () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 
       try {
-        const full = Array.from({ length: FETCH_ALL_PAGES_SIZE }, (_, i) => ({
-          tmdb_movie_id: i + 1,
-          title: `映画${i + 1}`,
-          rating: 8,
-        }));
+        const full = Array.from(
+          { length: FAVORITES_LOOKUP_PAGE_SIZE },
+          (_, i) => ({
+            tmdb_movie_id: i + 1,
+            title: `映画${i + 1}`,
+            rating: 8,
+          }),
+        );
 
-        for (let i = 0; i < FETCH_ALL_PAGES_MAX; i += 1) {
+        for (let i = 0; i < FAVORITES_LOOKUP_MAX_PAGES; i += 1) {
           mockPagedQuery(full);
         }
         mockWatchlistQuery([]);
@@ -412,18 +430,75 @@ describe('generateRecommendationsService', () => {
       expect(result).toBeNull();
     });
 
+    // ⚠️ 旧チェーン（`is` 止まり）のままだと TypeError で null になり、
+    // 「DBエラーで null」を検証したことにならない（#1318 のレビュー指摘）
     it('お気に入り取得エラーでnullを返す', async () => {
+      const errorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      try {
+        mockPagedQuery([], { message: 'err' });
+
+        const result = await collectUserMovieData(mockSupabase, 'user-1');
+
+        expect(result).toBeNull();
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Favorites query error:',
+          expect.anything(),
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    /**
+     * ⚠️ 握るのは PostgREST が返したエラーだけ（#1318 のレビュー指摘）
+     *
+     * 全部握ると、空の除外集合のまま生成を続けて upsert_recommendations が
+     * 洗い替えるため、劣化した内容で既存のレコメンドを上書きする
+     */
+    it('ウォッチリストが例外で落ちたら投げ直す', async () => {
+      mockFavoritesQuery([{ tmdb_movie_id: 1, title: '映画A', rating: 8 }]);
       mockFrom.mockReturnValueOnce({
         select: () => ({
           eq: () => ({
-            is: () => Promise.resolve({ data: null, error: new Error('err') }),
+            is: () => ({
+              order: () => ({
+                range: () => Promise.reject(new Error('network down')),
+              }),
+            }),
           }),
         }),
       });
 
-      const result = await collectUserMovieData(mockSupabase, 'user-1');
+      await expect(
+        collectUserMovieData(mockSupabase, 'user-1'),
+      ).rejects.toThrow('network down');
+    });
 
-      expect(result).toBeNull();
+    // 興味なし側も空として続ける（ウォッチリストと同じ扱い）
+    it('興味なしの取得に失敗しても生成は続ける', async () => {
+      const errorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      try {
+        mockFavoritesQuery([{ tmdb_movie_id: 1, title: '映画A', rating: 8 }]);
+        mockWatchlistQuery([]);
+        mockPagedQuery([], { message: 'boom' });
+
+        const result = await collectUserMovieData(mockSupabase, 'user-1');
+
+        expect(result).not.toBeNull();
+        expect(result!.dismissedMovies).toEqual([]);
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Dismissed movies query error:',
+          expect.anything(),
+        );
+      } finally {
+        errorSpy.mockRestore();
+      }
     });
   });
 
@@ -967,14 +1042,10 @@ describe('generateRecommendationsService', () => {
       expect(result.recommendationCount).toBe(1);
     });
 
+    // ⚠️ 旧チェーンのままだと TypeError で skipped になり、
+    // 「お気に入り0件で skipped」を検証したことにならない
     it('映画データなしでskippedを返す', async () => {
-      mockFrom.mockReturnValueOnce({
-        select: () => ({
-          eq: () => ({
-            is: () => Promise.resolve({ data: [], error: null }),
-          }),
-        }),
-      });
+      mockPagedQuery([]);
 
       const result = await processUserRecommendations(mockSupabase, 'user-1');
 

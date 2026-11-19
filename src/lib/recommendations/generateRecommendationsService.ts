@@ -6,11 +6,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
-  fetchAllPages,
-  FETCH_ALL_PAGES_MAX,
-  FETCH_ALL_PAGES_SIZE,
-  type PageResult,
-} from '@/helpers/fetchAllPages';
+  DISMISSED_MOVIES_MAX_PAGES,
+  DISMISSED_MOVIES_PAGE_SIZE,
+} from '@/constants/dismissedMovies';
+import {
+  FAVORITES_LOOKUP_MAX_PAGES,
+  FAVORITES_LOOKUP_PAGE_SIZE,
+} from '@/constants/favorites';
+import {
+  WATCHLIST_LOOKUP_MAX_PAGES,
+  WATCHLIST_LOOKUP_PAGE_SIZE,
+} from '@/constants/watchlist';
+import { fetchAllPages, type PageResult } from '@/helpers/fetchAllPages';
 
 import {
   RECOMMENDATIONS_MAX_COUNT,
@@ -204,17 +211,34 @@ export async function collectUserMovieData(
   // 弾けず、読み取り側（#1274 で対策済み）で落ちてレコメンド枠が黙って減る。
   //
   // ⚠️ ページングには安定した並びが要る。`id` は主キーなので全順序になる。
+  // ⚠️ 定数は**既存のドメインごとのもの**を使い回す（新設しない）。
+  // 値はいずれも PostgREST の `max_rows` 由来で同じだが、置き場所を
+  // `src/constants/` に揃えないと「同じ 1000 が4箇所」になる
   const page = <T>(
     label: string,
+    limits: { pageSize: number; maxPages: number },
     query: (from: number, to: number) => PromiseLike<PageResult<T>>,
   ) =>
     fetchAllPages<T>({
-      pageSize: FETCH_ALL_PAGES_SIZE,
-      maxPages: FETCH_ALL_PAGES_MAX,
+      pageSize: limits.pageSize,
+      maxPages: limits.maxPages,
       label,
       context: `user=${userId}`,
       query,
     });
+
+  const FAVORITES_LIMITS = {
+    pageSize: FAVORITES_LOOKUP_PAGE_SIZE,
+    maxPages: FAVORITES_LOOKUP_MAX_PAGES,
+  };
+  const WATCHLIST_LIMITS = {
+    pageSize: WATCHLIST_LOOKUP_PAGE_SIZE,
+    maxPages: WATCHLIST_LOOKUP_MAX_PAGES,
+  };
+  const DISMISSED_LIMITS = {
+    pageSize: DISMISSED_MOVIES_PAGE_SIZE,
+    maxPages: DISMISSED_MOVIES_MAX_PAGES,
+  };
 
   // ⚠️ お気に入りだけは取得失敗を握らない。0件と区別できないまま進むと
   // 「お気に入りが無いので生成しない」と同じ扱いになり、実際には
@@ -222,14 +246,17 @@ export async function collectUserMovieData(
   let favorites: { tmdb_movie_id: number; title: string; rating: number }[];
 
   try {
-    favorites = await page('recommendations-favorites', (from, to) =>
-      supabase
-        .from('favorites')
-        .select('tmdb_movie_id, title, rating')
-        .eq('user_id', userId)
-        .is('deleted_at', null)
-        .order('id', { ascending: true })
-        .range(from, to),
+    favorites = await page(
+      'recommendations-favorites',
+      FAVORITES_LIMITS,
+      (from, to) =>
+        supabase
+          .from('favorites')
+          .select('tmdb_movie_id, title, rating')
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .order('id', { ascending: true })
+          .range(from, to),
     );
   } catch (error) {
     console.error('Favorites query error:', error);
@@ -245,10 +272,33 @@ export async function collectUserMovieData(
     rating: f.rating,
   }));
 
-  // ウォッチリストと興味なしは従来どおり取得失敗を空として扱う
-  // （除外が甘くなるだけで、レコメンド自体は作れる）。ただしログには残す
+  /**
+   * ウォッチリストと興味なしの取得失敗を「空」として扱う
+   *
+   * 従来どおり、除外が甘くなるだけでレコメンド自体は作れる。ただしログには残す。
+   *
+   * ⚠️ **握るのは PostgREST が返したエラーだけ。** `Error` は投げ直す。
+   *
+   * 変更前は `{ error }` を無視して続行し、fetch 自体の reject は
+   * そのまま伝播していた（＝そのユーザーは skip され、**既存のレコメンドは
+   * 残った**）。全部握ると、空の除外集合のまま生成を続けて
+   * `upsert_recommendations` が洗い替えるため、**劣化した内容で既存の
+   * レコメンドを上書きする**。その非対称さを保つ。
+   */
+  const swallowQueryError =
+    <T>(label: string, fallback: T[]) =>
+    (cause: unknown): T[] => {
+      if (cause instanceof Error) {
+        throw cause;
+      }
+
+      console.error(`${label} query error:`, cause);
+      return fallback;
+    };
+
   const watchlistItems = await page<{ tmdb_movie_id: number; title: string }>(
     'recommendations-watchlist',
+    WATCHLIST_LIMITS,
     (from, to) =>
       supabase
         .from('watchlist')
@@ -257,13 +307,16 @@ export async function collectUserMovieData(
         .is('deleted_at', null)
         .order('id', { ascending: true })
         .range(from, to),
-  ).catch((error: unknown) => {
-    console.error('Watchlist query error:', error);
-    return [];
-  });
+  ).catch(
+    swallowQueryError<{ tmdb_movie_id: number; title: string }>(
+      'Watchlist',
+      [],
+    ),
+  );
 
   const dismissedMovies = await page<DismissedMovie>(
     'recommendations-dismissed',
+    DISMISSED_LIMITS,
     (from, to) =>
       supabase
         .from('dismissed_movies')
@@ -274,10 +327,7 @@ export async function collectUserMovieData(
         .is('deleted_at', null)
         .order('id', { ascending: true })
         .range(from, to),
-  ).catch((error: unknown) => {
-    console.error('Dismissed movies query error:', error);
-    return [] as DismissedMovie[];
-  });
+  ).catch(swallowQueryError<DismissedMovie>('Dismissed movies', []));
 
   const excludedMovies: ExcludedMovie[] = [
     ...favorites.map((f) => ({

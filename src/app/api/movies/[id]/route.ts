@@ -10,7 +10,7 @@ import { isAxiosError } from 'axios';
 import { getAuthSession } from '@/helpers/auth';
 import { createServiceRoleClient } from '@/helpers/supabase';
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
-import { getMovieDetail } from '@/lib/tmdb/tmdb';
+import { getCachedMovieDetail } from '@/lib/api/movies/movies.server';
 import {
   HTTP_STATUS,
   ERROR_CODE,
@@ -65,41 +65,61 @@ export async function GET(
       );
     }
 
-    const movie = await getMovieDetail(movieId);
+    // ⚠️ 素の `getMovieDetail` ではなく**キャッシュ済みのほう**を呼ぶ（#1273）。
+    //
+    // 未認証なら CDN（`PUBLIC_24H_SWR_7D`）が効くが、認証済みは
+    // `PRIVATE_NO_STORE` なので CDN も効かず、ログインユーザーが詳細を開く
+    // たびに必ず TMDb を叩いていた。`append_to_response` で配信情報と予告
+    // 動画まで取るため、レスポンスは人物詳細より大きい。
+    //
+    // `/movies/[id]` の `generateMetadata` とページ本体（`movieDetailRoute`）が
+    // 既に同じ関数を通しているので、ここも通せばキャッシュを共有できる。
+    //
+    // ⚠️ キャッシュキーは `movies.server.ts` 側で指定している。
+    // `append_to_response` 等の**値を変えただけではキーが変わらない**ため、
+    // 取得内容を決める定数はキーに含めてある（#1273 のレビュー指摘）
+    const userId = session?.user.id;
+    const supabase = userId ? createServiceRoleClient() : null;
+
+    // TMDb と favorites は互いに独立。`movieId` が確定した時点で両方投げる。
+    // 以前は TMDb（数百ms）を待ってから DB を引いていた
+    const [movie, favoriteResult] = await Promise.all([
+      getCachedMovieDetail(movieId),
+      supabase && userId
+        ? supabase
+            .from('favorites')
+            .select('id, rating')
+            .eq('user_id', userId)
+            .eq('tmdb_movie_id', movieId)
+            .is('deleted_at', null)
+            .single()
+        : null,
+    ]);
 
     // 認証済みの場合、お気に入り情報を付与
+    // （未認証、または service role クライアントを作れないときはキーごと省く）
     let favorite = undefined;
 
-    if (session) {
-      const supabase = createServiceRoleClient();
+    if (favoriteResult) {
+      const { data: favoriteData, error: favoriteError } = favoriteResult;
 
-      if (supabase) {
-        const { data: favoriteData, error: favoriteError } = await supabase
-          .from('favorites')
-          .select('id, rating')
-          .eq('user_id', session.user.id)
-          .eq('tmdb_movie_id', movieId)
-          .is('deleted_at', null)
-          .single();
-
-        // ⚠️ 読み取りに失敗したときは `null`（＝確定した「未登録」）を
-        // 入れない。UI が空のハートを出し、押すと既存行と衝突して 409 になる。
-        //
-        // キーごと省いて「分からない」を伝える案は採れない。`favorite` の
-        // 不在は**未認証**という別の意味で既に使われており、受け手
-        // （`movieDetailContent.tsx` の `movie.favorite ?? null`）は
-        // 両者を区別できない。第3の状態を増やすより、他のルートと同じく
-        // 500 に倒す（#1164）。
-        // 行が無い（PGRST116）のは本当に未登録なので、そちらは null のまま
-        if (
-          favoriteError &&
-          favoriteError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
-        ) {
-          throw favoriteError;
-        }
-
-        favorite = favoriteData ?? null;
+      // ⚠️ 読み取りに失敗したときは `null`（＝確定した「未登録」）を
+      // 入れない。UI が空のハートを出し、押すと既存行と衝突して 409 になる。
+      //
+      // キーごと省いて「分からない」を伝える案は採れない。`favorite` の
+      // 不在は**未認証**という別の意味で既に使われており、受け手
+      // （`movieDetailContent.tsx` の `movie.favorite ?? null`）は
+      // 両者を区別できない。第3の状態を増やすより、他のルートと同じく
+      // 500 に倒す（#1164）。
+      // 行が無い（PGRST116）のは本当に未登録なので、そちらは null のまま
+      if (
+        favoriteError &&
+        favoriteError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
+      ) {
+        throw favoriteError;
       }
+
+      favorite = favoriteData ?? null;
     }
 
     return NextResponse.json(

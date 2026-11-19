@@ -207,7 +207,7 @@ describe('useAwardSync', () => {
    * `startPolling` の経過は 0 から積むので、復元経路でジョブの開始時刻を
    * 渡さないと、画面を開き直すたびに5秒間隔が1分ぶん復活する
    */
-  it('実行中ジョブを復元したら、開始からの経過に応じた間隔で再開する', async () => {
+  it('実行中ジョブの復元は、1回目を早く引いてから経過に応じた段で続ける', async () => {
     // 10分前から走っているジョブ（= 30秒間隔の段）
     const startedAt = new Date(Date.now() - 10 * 60_000).toISOString();
     mockFetchLatestAwardSync.mockResolvedValue({
@@ -221,17 +221,22 @@ describe('useAwardSync', () => {
 
     await renderReady();
 
-    // 5秒では来ない（最初の段へ戻っていない）
+    // 復元直後の1回だけは最短の間隔で引く（開き直した人を待たせない）
     await act(async () => {
       jest.advanceTimersByTime(5_000);
     });
-    expect(mockFetchAwardSyncJob).not.toHaveBeenCalled();
+    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(1);
 
-    // 30秒まで進めれば来る
+    // 2回目からは経過に応じた段（10分経過 → 30秒）。5秒では来ない
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(1);
+
     await act(async () => {
       jest.advanceTimersByTime(25_000);
     });
-    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(1);
+    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(2);
   });
 
   // startedAt が読めないときは安全側（間隔が短い側）に倒す

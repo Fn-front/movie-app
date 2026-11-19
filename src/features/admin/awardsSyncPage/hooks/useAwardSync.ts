@@ -146,8 +146,9 @@ export function useAwardSync(): UseAwardSyncResult {
       // ジョブの開始時刻から経過を渡す（#1282）
       let elapsedMs = alreadyElapsedMs;
 
-      const scheduleNext = () => {
-        const intervalMs = getAwardSyncPollIntervalMs(elapsedMs);
+      const scheduleNext = (overrideIntervalMs?: number) => {
+        const intervalMs =
+          overrideIntervalMs ?? getAwardSyncPollIntervalMs(elapsedMs);
         elapsedMs += intervalMs;
 
         timerRef.current = setTimeout(() => {
@@ -185,7 +186,16 @@ export function useAwardSync(): UseAwardSyncResult {
         }, intervalMs);
       };
 
-      scheduleNext();
+      // ⚠️ 復元直後の1回だけは最短の間隔で引く。
+      //
+      // 経過だけで決めると、10分走っているジョブの画面を開き直したとき
+      // 最初の更新まで30秒待たされる（E2E の「リロードしても実行中の進捗を
+      // 復元する」が実際にこれで落ちた）。段（ランプの位置）は保ったまま、
+      // 入口の1回だけ早くする。増えるのはリロードごとに1回で、
+      // 経過を 0 に戻していたとき（12回ぶん）とは桁が違う
+      scheduleNext(
+        alreadyElapsedMs > 0 ? getAwardSyncPollIntervalMs(0) : undefined,
+      );
     },
     [applySnapshot, stopPolling],
   );

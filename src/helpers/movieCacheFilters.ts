@@ -1,5 +1,20 @@
 /**
  * movie_cache クエリのフィルタ適用ヘルパ
+ *
+ * ⚠️ ここで絞る `genre_ids` / `digital_release_date` と、呼び出し元が並べる
+ * `vote_average` には**索引が無い**。欠けているのではなく、測ったうえで
+ * 張っていない（#1279）。
+ *
+ * この関数が必ず付ける `original_language` の除外 OR と、呼び出し元が付ける
+ * タブ絞り込み（`release_date >= 今日` / `is_now_playing` /
+ * `is_currently_streaming`）のどれかが既存索引に当たるため、**実クエリは
+ * 全件走査しない**（実測 0.23〜0.39ms）。候補索引を足しても 0.2ms 程度しか
+ * 縮まない。
+ *
+ * ⚠️ 逆に言うと、**絞り込み条件を減らすと索引から外れる**。条件を変えるときは
+ * `EXPLAIN` に Seq Scan が出ていないか確認すること。実測値と再検討の
+ * きっかけは `.claude/documents/database-schema.md` の
+ * 「索引を追加しない判断」にある。
  */
 
 import {

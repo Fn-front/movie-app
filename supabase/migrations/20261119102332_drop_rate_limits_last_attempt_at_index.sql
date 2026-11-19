@@ -1,0 +1,65 @@
+-- idx_rate_limits_last_attempt_at を外して HOT 更新を取り戻す
+--
+-- 背景:
+--   Supabase から「Disk IO Budget が枯渇しそう」の警告が出たので実測したところ、
+--   読み取りは原因ではなかった（DB 27 MB・キャッシュヒット率 100.00%・
+--   ディスク読み込みは heap 130 / index 296 ブロックのみ）。WAL の発生源が
+--   `consume_rate_limit` に集中していた。
+--
+--     consume_rate_limit  呼び出し 1,529,641回 / WAL 878 MB / WAL レコード 8,837,679
+--     次点 movie_cache UPDATE                     111 MB
+--
+-- 原因:
+--   `consume_rate_limit` は呼ばれるたびに `last_attempt_at = now()` を書く
+--   （20261019013008）。更新対象の列に索引があると Postgres は HOT 更新を
+--   選べないため、1回ごとに新しいヒープタプルに加えて**4本すべての索引**へ
+--   新エントリを書く。
+--
+--   実測（本番・PostgREST 経由で 200 回、1回=1トランザクション）:
+--     n_tup_upd +197 に対し n_tup_hot_upd +0    ← HOT 率 0%
+--     575.7 bytes/call ・ 7.05 WAL レコード/call
+--
+--   索引の肥大もここから来ている。ヒープ 544 kB（1,226行）に対し
+--   索引が 7,696 kB、うち idx_rate_limits_last_attempt_at だけで 6,856 kB。
+--   autovacuum はこの1テーブルで 2,886 回走っていた。
+--
+-- なぜ落とす判断になるか:
+--   読み手はこの索引をほとんど使っていない。
+--
+--     idx_rate_limits_identifier_action   スキャン 1,931,437回    432 kB
+--     idx_rate_limits_last_attempt_at     スキャン       979回  6,856 kB  ← これ
+--
+--   唯一の読み手は日次 Cron（/api/cron/cleanup-rate-limits →
+--   delete_expired_rate_limits）の DELETE 1本。対象はヒープ 544 kB = 68 ページで、
+--   seq scan でも一瞬で終わる。193万回の書き込みコストを払って日次1回の
+--   DELETE を速くするのは割に合わない。
+--
+--   database-schema.md には #933 の時点で「行数が増えないなら索引を外して
+--   seq scan に任せる選択も成立する」と書いてあり、残した理由は
+--   「掃除が止まったときに DELETE が重くならないように」だった。その保険は
+--   効果より代償が大きいと実測で判断できたので外す。
+--
+--   行数が暴走しない根拠: 行は (identifier, action_type) の UNIQUE に対する
+--   upsert で再利用されるので、行数は「異なる識別子の数」で頭打ちになる。
+--   試行回数ではない。保持期間48時間の掃除が止まっても線形には増えない。
+--
+-- 部分索引や BRIN では代替にならない:
+--   HOT が使えるかの判定は「更新された列が索引に含まれるか」で行われ、
+--   索引の種類や WHERE 句は関係しない。last_attempt_at に索引がある限り
+--   どの形でも HOT は復活しない。外す以外に手段がない。
+--
+-- ⚠️ CONCURRENTLY は付けない。db push はマイグレーションをトランザクションで
+--   包むため `DROP INDEX CONCURRENTLY` は実行できない。対象は 6,856 kB の
+--   索引1本で、ACCESS EXCLUSIVE を取る時間はミリ秒に収まる。
+--
+-- 復活させたくなったら:
+--   rate_limits の行数が桁で増え、日次 DELETE が実際に遅くなったときだけ
+--   検討する。その場合も HOT が死ぬ代償は変わらないので、先に
+--   「なぜ行数が増えたのか」（掃除の停止 / 識別子の設計）を疑うこと。
+
+DROP INDEX IF EXISTS idx_rate_limits_last_attempt_at;
+
+-- ⚠️ 20261019012324 の TIMESTAMPTZ の記述を消さずに引き継ぐこと。
+--   COMMENT ON COLUMN は上書きなので、書き直すと型の理由が失われる。
+COMMENT ON COLUMN rate_limits.last_attempt_at IS
+  '直近の試行時刻。checkCooldown が JS 側で new Date() 比較するため TIMESTAMPTZ 必須（naive に戻すと非UTC環境でクールダウンが素通りする）。consume_rate_limit が毎回更新するため索引を張らない。張ると HOT 更新が無効になり、1回の更新で全索引への書き込みが発生する（#1326）。';

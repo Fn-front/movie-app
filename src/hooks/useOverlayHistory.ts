@@ -498,8 +498,17 @@ export function useOverlayHistory(
         トークンが他人に引き継がれた場合（`adoptPendingEntry`）や
         ルーターが遷移した場合は `history.state` のトークンが変わるため、
         進んでもここには当たらない
+
+        ⚠️ **既に復活済みのトークンは預けない。** `handlePopState` が
+        cleanup より先に開き直した場合（#1304）、この cleanup は**その後に**
+        走る。無条件に預けると「いま開いているトークン」が休止側に残り、
+        上に積んだオーバーレイを戻るで閉じるときに
+        `dormantOverlays.get(token)` が先に当たって**内側が閉じない**
+        （詳細モーダルの上の予告動画で起きる）。
+        通常の #1053 経路は `handlePopState` が `delete` してから
+        `reopen()` するのでこの状態にならない
       */
-      if (onReopenRef.current) {
+      if (onReopenRef.current && !resurrectedTokens.has(token)) {
         rememberDormantOverlay(token, () => onReopenRef.current?.());
       }
 

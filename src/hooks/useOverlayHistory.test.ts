@@ -637,16 +637,22 @@ describe('useOverlayHistory', () => {
     };
 
     it('cleanup が走っていなくても開き直す', () => {
+      const onClose = jest.fn();
       const onReopen = jest.fn();
-      renderHook(() => useOverlayHistory(true, jest.fn(), onReopen));
+      renderHook(() => useOverlayHistory(true, onClose, onReopen));
       const token = window.history.state?.__overlayHistory;
 
       // 戻るで閉じる。再描画しない＝ cleanup はまだ走っていない
       dispatchPopState();
+      expect(onClose).toHaveBeenCalledTimes(1);
+      onClose.mockClear();
 
       dispatchForward(token);
 
       expect(onReopen).toHaveBeenCalledTimes(1);
+      // ⚠️ 同じ popstate を閉じる方向にも解釈しないこと。
+      // 解釈すると開き直した直後に閉じ、#1304 の症状のまま
+      expect(onClose).not.toHaveBeenCalled();
     });
 
     it('遅れて cleanup が走っても、復活したエントリを畳まない', async () => {
@@ -686,6 +692,40 @@ describe('useOverlayHistory', () => {
       rerender({ open: true });
 
       expect(window.history.length).toBe(length);
+    });
+
+    it('開き直したあと、入れ子の戻るを握り潰さない', () => {
+      // 遅れて走る cleanup が休止登録を**無条件に**行うため、既に復活して
+      // 開いているトークンが `dormantOverlays` に残りうる。残ると、上に
+      // 積んだオーバーレイを戻るで閉じようとしたときに、そちらが先に
+      // 当たって**内側が閉じない**
+      const outerReopen = jest.fn();
+      const outer = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), outerReopen),
+        { initialProps: { open: true } },
+      );
+      const token = window.history.state?.__overlayHistory;
+
+      // 戻る → cleanup 前に進む → 遅れて cleanup/setup
+      dispatchPopState();
+      dispatchForward(token);
+      outer.rerender({ open: false });
+      outer.rerender({ open: true });
+
+      // 進むでの開き直しはここまでで済んでいる。以降は呼ばれてはいけない
+      expect(outerReopen).toHaveBeenCalledTimes(1);
+      outerReopen.mockClear();
+
+      // 上に別のオーバーレイを積む
+      const innerClose = jest.fn();
+      renderHook(() => useOverlayHistory(true, innerClose));
+
+      // 戻ると内側のエントリが外れ、下の外側のエントリ（token）が最前面に戻る。
+      // 閉じるべきは**内側**
+      dispatchForward(token);
+
+      expect(innerClose).toHaveBeenCalledTimes(1);
+      expect(outerReopen).not.toHaveBeenCalled();
     });
 
     it('他人のトークンでは開き直さない', () => {

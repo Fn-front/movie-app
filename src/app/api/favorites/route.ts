@@ -24,6 +24,7 @@ import {
   FAVORITES_SUCCESS_MESSAGES,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
+  SUPABASE_ERROR_CODE,
 } from '@/constants';
 
 /**
@@ -91,11 +92,34 @@ export const GET = withAuth(
       .order(sort_by, { ascending: sort_order === 'asc' })
       .range(offset, offset + limit - 1);
 
-    if (error) {
-      throw error;
-    }
+    // ⚠️ 最終ページより後ろは「空ページ」であってエラーではない（#1311）。
+    //
+    // PostgREST は `count: 'exact'` を付けたクエリに限り、
+    // `offset > 総件数` で **416 (PGRST103)** を返す（count 無しなら 200 +
+    // 空配列）。件数とデータを1本にまとめた副作用でこの条件に当たるように
+    // なったため、ここで潰さないと 200 から 500 へ変わる。
+    //
+    // お気に入り一覧は useInfiniteQuery が保持している全ページを再取得する
+    // ので、削除で総件数が縮むと実際に到達する。
+    let total: number;
 
-    const total = count ?? 0;
+    if (error && error.code === SUPABASE_ERROR_CODE.RANGE_NOT_SATISFIABLE) {
+      const { count: outOfRangeTotal, error: countError } = await supabase
+        .from('favorites')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .is('deleted_at', null);
+
+      if (countError) {
+        throw countError;
+      }
+
+      total = outOfRangeTotal ?? 0;
+    } else if (error) {
+      throw error;
+    } else {
+      total = count ?? 0;
+    }
 
     const totalPages = Math.ceil(total / limit);
     const hasNextPage = page < totalPages;

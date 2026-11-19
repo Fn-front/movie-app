@@ -162,9 +162,20 @@ const createRequest = (params: Record<string, string> = {}) => {
  * dataResult: データクエリの結果
  * existingOtherType: 他のrelease_typeで既存のID
  */
+/**
+ * 一覧クエリ（`count: 'exact'` 付き）に渡された select の内容
+ *
+ * カラムの取り漏れと `head: true` の付け足しを検知するために記録する。
+ * `from()` の**呼び出し順に依存しない**のが狙い（#1311）
+ */
+let lastListSelect: { columns: string; opts: Record<string, unknown> } | null =
+  null;
+
 function setupFromMock(options: {
   cacheResult?: { data: unknown; error: unknown };
+  /** 一覧クエリが返す件数（Content-Range 由来 / #1272） */
   countResult?: { count: number };
+  /** 一覧クエリが返す行とエラー */
   dataResult?: { data: unknown[]; error: unknown };
   existingOtherType?: { data: unknown[]; error: unknown };
 }) {
@@ -194,9 +205,17 @@ function setupFromMock(options: {
       const listResult = { ...dataResult, count: countResult.count };
       const chain = createChainMock(listResult);
       chain.select.mockImplementation(
-        (_cols: string, opts?: { count?: string }) => {
+        (cols: string, opts?: { count?: string; head?: boolean }) => {
           if (opts?.count === 'exact') {
-            return createThenableProxy(createChainMock(listResult), listResult);
+            lastListSelect = { columns: cols, opts };
+
+            // ⚠️ `head: true` を付けると PostgREST は本体を返さない。
+            // モックでも同じにしないと、付け足す退行を検知できない（#1311）
+            const result = opts.head
+              ? { ...listResult, data: null }
+              : listResult;
+
+            return createThenableProxy(createChainMock(result), result);
           }
           // neqが呼ばれる → existingOtherType用
           return createThenableProxy(
@@ -390,6 +409,7 @@ describe('GET /api/movies', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     createdChains.length = 0;
+    lastListSelect = null;
     // モジュールスコープの状態を持ち越さないようリロードする
     jest.resetModules();
 
@@ -1625,6 +1645,94 @@ describe('GET /api/movies', () => {
     expect(json.error.code).toBe('SERVER_ERROR');
   });
 
+  /**
+   * 件数とデータを1クエリで取る（#1272）
+   *
+   * もとは `count: 'exact', head: true` の件数専用クエリを別に投げていた。
+   * 戻すとデータクエリ側が `existingOtherType` の枝に落ちて落ちる
+   */
+  it('一覧は count: exact 付きの1クエリで取る', async () => {
+    const handler = await loadGET();
+    setupFromMock({
+      countResult: { count: 3 },
+      dataResult: { data: [{ id: 1, title: '映画A' }], error: null },
+    });
+
+    const response = await handler(createRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(lastListSelect?.opts).toEqual({ count: 'exact' });
+    expect(json.data.pagination.totalItems).toBe(3);
+  });
+
+  /**
+   * ⚠️ `head: true` を付けると本体が返らない
+   *
+   * 件数専用クエリから移すときの事故ポイント。モックも PostgREST と同じく
+   * `head: true` で `data: null` を返すので、付け足すとここで落ちる
+   */
+  it('一覧クエリに head を付けない', async () => {
+    const handler = await loadGET();
+    setupFromMock({
+      countResult: { count: 1 },
+      dataResult: { data: [{ id: 1, title: '映画A' }], error: null },
+    });
+
+    const response = await handler(createRequest());
+    const json = await response.json();
+
+    expect(lastListSelect?.opts.head).toBeUndefined();
+    expect(json.data.movies).toHaveLength(1);
+  });
+
+  /**
+   * 最終ページより後ろは「空ページ」であってエラーではない（#1311）
+   *
+   * `count: 'exact'` のクエリは `offset > 総件数` で 416 (PGRST103) を返す。
+   * 潰さないと公開エンドポイントの `?page=500` が 200 → 500 の回帰になる
+   */
+  it('範囲外のページは500ではなく空ページを返す', async () => {
+    const handler = await loadGET();
+
+    // 1本目: キャッシュ確認 / 2本目: 一覧（416） / 3本目: 件数の取り直し
+    const rangeError = {
+      data: null,
+      count: null,
+      error: { code: 'PGRST103', message: 'Requested range not satisfiable' },
+    };
+    const callTracker = { count: 0 };
+
+    mockSupabaseClient!.from.mockImplementation(() => {
+      callTracker.count += 1;
+
+      if (callTracker.count === 1) {
+        return createChainMock({
+          data: { cached_at: new Date().toISOString() },
+          error: null,
+        });
+      }
+
+      const chain = createChainMock(rangeError);
+      chain.select.mockImplementation(
+        (_cols: string, opts?: { count?: string; head?: boolean }) => {
+          // 取り直しは head: true の件数専用クエリ
+          const result = opts?.head ? { count: 40, error: null } : rangeError;
+          return createThenableProxy(createChainMock(result), result);
+        },
+      );
+      return chain;
+    });
+
+    const response = await handler(createRequest({ page: '500' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.movies).toEqual([]);
+    expect(json.data.pagination.totalItems).toBe(40);
+    expect(json.data.pagination.hasNextPage).toBe(false);
+  });
+
   // === ジャンルマップ ===
 
   it('ジャンルマップが正しく返される', async () => {
@@ -2426,16 +2534,9 @@ describe('GET /api/movies', () => {
     expect(json.data.movies[0].vote_count).toBe(1234);
 
     // ⚠️ from() の**何回目か**で決め打ちしない。#1272 で件数クエリが
-    // 消えて呼び出し位置がずれた。一覧の SELECT 句を中身で探す
-    const selectCalls = createdChains.flatMap((chain) =>
-      chain.select.mock.calls.map((call) => call[0]),
-    );
-    expect(
-      selectCalls.some(
-        (columns) =>
-          typeof columns === 'string' && columns.includes('vote_count'),
-      ),
-    ).toBe(true);
+    // 消えて呼び出し位置がずれた。`count: 'exact'` が付いた一覧クエリを
+    // 記録しておき、その SELECT 句だけを見る
+    expect(lastListSelect?.columns).toContain('vote_count');
   });
 
   it('TMDb同期時のUPSERTにvote_countが含まれる', async () => {

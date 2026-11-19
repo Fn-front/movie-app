@@ -69,9 +69,10 @@ const LANGUAGE_CODE_PATTERN = /^[a-z]{2,3}$/;
 /**
  * フィルタ適用に必要な最小限のクエリビルダー
  *
- * 総件数クエリ（`select('id', { count: 'exact', head: true })`）と
- * データ取得クエリでは select の型が異なるため、PostgrestFilterBuilder を
- * 直接受けず、使用するメソッドだけを構造的に要求する
+ * 一覧クエリ（`select(カラム, { count: 'exact' })`）と、範囲外アクセス時に
+ * 件数だけ取り直すクエリ（`select('id', { count: 'exact', head: true })`）で
+ * select の型が異なるため、PostgrestFilterBuilder を直接受けず、使用する
+ * メソッドだけを構造的に要求する
  */
 interface MovieCacheQueryBuilder {
   eq(column: string, value: string | boolean): this;
@@ -84,9 +85,10 @@ interface MovieCacheQueryBuilder {
 /**
  * movie_cache クエリにフィルタ条件を適用する
  *
- * 総件数クエリとデータ取得クエリで条件がずれると、総件数と実データが
- * 食い違ってページング（hasNextPage）判定が壊れる。両クエリを必ず
- * この関数に通すことで、条件の適用漏れを構造的に防ぐ。
+ * 条件がずれると総件数と実データが食い違い、ページング（hasNextPage）判定が
+ * 壊れる。#1272 で件数とデータを1クエリにまとめたため通常は1本だけだが、
+ * 範囲外アクセス時の件数の取り直し（PGRST103 のフォールバック / #1311）にも
+ * 同じ条件が要る。必ずこの関数に通すことで適用漏れを構造的に防ぐ。
  *
  * @param query - フィルタを適用するクエリ
  * @param filters - 適用するフィルタ条件

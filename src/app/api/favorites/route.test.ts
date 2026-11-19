@@ -41,6 +41,7 @@ jest.mock('next/server', () => ({
 }));
 
 import { getAuthSession } from '@/helpers/auth';
+import { FAVORITES_SELECT } from '@/constants/favorites';
 
 // --- Helpers ---
 
@@ -169,7 +170,7 @@ describe('GET /api/favorites', () => {
     mockFrom.mockReturnValueOnce({
       select: jest.fn((columns: string, opts?: { count?: string }) => {
         expect(opts).toEqual({ count: 'exact' });
-        expect(columns).not.toBe('id');
+        expect(columns).toBe(FAVORITES_SELECT);
         return {
           eq: () => ({
             is: () => ({
@@ -216,6 +217,81 @@ describe('GET /api/favorites', () => {
       hasNextPage: true,
       nextPage: 3,
     });
+  });
+
+  /**
+   * 最終ページより後ろは「空ページ」であってエラーではない（#1311）
+   *
+   * PostgREST は `count: 'exact'` のクエリに限り `offset > 総件数` で
+   * 416 (PGRST103) を返す。潰さないと 200 → 500 の回帰になる。
+   * useInfiniteQuery は保持している全ページを再取得するので、削除で
+   * 総件数が縮むと実際に到達する
+   */
+  it('範囲外のページは500ではなく空ページを返す', async () => {
+    // 1本目: 範囲外で 416
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () => ({
+              range: () => ({
+                data: null,
+                count: null,
+                error: {
+                  code: 'PGRST103',
+                  message: 'Requested range not satisfiable',
+                },
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    // 2本目: 件数だけ取り直す
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({ is: () => ({ count: 12, error: null }) }),
+      }),
+    });
+
+    const response = await GET(createGetRequest({ page: '500' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.favorites).toEqual([]);
+    expect(json.data.pagination.totalItems).toBe(12);
+    expect(json.data.pagination.hasNextPage).toBe(false);
+    expect(mockFrom).toHaveBeenCalledTimes(2);
+  });
+
+  // 範囲外の取り直しが失敗したら、握らず500にする
+  it('範囲外の件数取り直しが失敗したら500を返す', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () => ({
+              range: () => ({
+                data: null,
+                count: null,
+                error: { code: 'PGRST103', message: 'range' },
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({ count: null, error: new Error('DB error') }),
+        }),
+      }),
+    });
+
+    const response = await GET(createGetRequest({ page: '500' }));
+
+    expect(response.status).toBe(500);
   });
 
   it('不正なsort_byで400を返す', async () => {

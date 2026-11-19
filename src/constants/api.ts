@@ -92,6 +92,20 @@ export const ERROR_CODE = {
 export const SUPABASE_ERROR_CODE = {
   /** レコードが見つからない（.single()で0件） */
   NOT_FOUND: 'PGRST116',
+  /**
+   * 要求した offset が総件数を超えている（HTTP 416）
+   *
+   * ⚠️ `count: 'exact'` を付けたクエリでのみ起きる（#1311）。
+   * count 無しなら範囲外でも 200 + 空配列が返る。実測（2026-11-19）:
+   *
+   *   総件数 1,104 / offset 1,103 → 206
+   *   総件数 1,104 / offset 1,104 → 206（ちょうどは通る）
+   *   総件数 1,104 / offset 1,105 → **416 PGRST103**
+   *
+   * 一覧APIは「最終ページより後ろ」を空ページとして返す必要があるため、
+   * このコードだけはエラー扱いにしない。
+   */
+  RANGE_NOT_SATISFIABLE: 'PGRST103',
 } as const;
 
 /**

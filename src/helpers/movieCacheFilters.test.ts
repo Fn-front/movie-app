@@ -391,16 +391,25 @@ describe('applyMovieCacheFilters', () => {
       },
     ];
 
+    /**
+     * ⚠️ 守る対象が変わった（#1272 / #1311）。
+     *
+     * もとは「総件数クエリとデータクエリの2本に同じ条件が乗ること」を
+     * 見ていたが、1クエリにまとまったので2本は存在しない。いま揃える
+     * 相手は**範囲外アクセス時に件数だけ取り直すクエリ**で、そちらは
+     * `select('id', { count: 'exact', head: true })` と select が違う。
+     * 同じ `filters` から同じ条件列が出ることを固定する。
+     */
     it.each(filterPatterns)(
-      '$name で両クエリに同じ条件が適用されること',
+      '$name で一覧クエリと件数の取り直しに同じ条件が適用されること',
       ({ filters }) => {
-        const countQuery = createQueryBuilderSpy();
-        const dataQuery = createQueryBuilderSpy();
+        const listQuery = createQueryBuilderSpy();
+        const countRetryQuery = createQueryBuilderSpy();
 
-        applyMovieCacheFilters(countQuery, filters);
-        applyMovieCacheFilters(dataQuery, filters);
+        applyMovieCacheFilters(listQuery, filters);
+        applyMovieCacheFilters(countRetryQuery, filters);
 
-        expect(countQuery.calls).toEqual(dataQuery.calls);
+        expect(listQuery.calls).toEqual(countRetryQuery.calls);
       },
     );
   });

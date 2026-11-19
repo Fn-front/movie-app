@@ -388,8 +388,9 @@ export async function GET(request: Request) {
       dateLte = release_date_lte;
     }
 
-    // 総件数クエリとデータクエリで条件がずれるとページング判定が壊れるため、
-    // フィルタ条件は1箇所で組み立てて両方に同じものを適用する
+    // フィルタ条件は1箇所で組み立てる。#1272 で件数とデータを1クエリに
+    // まとめたので適用先は1本だが、範囲外アクセス時の件数の取り直しにも
+    // 同じ条件が要る（ずれると totalItems だけが別の母数になる）
     // 配信タブは「日本で実際に配信されているか」で振り分ける。
     // Discover の with_release_type=4 はどこかの国でのデジタル公開しか
     // 意味せず、JP未配信作品や配信終了作品が混ざるため
@@ -441,13 +442,43 @@ export async function GET(request: Request) {
       filters,
     );
 
-    // もとは件数クエリのエラーを見ていなかった（`count` だけ取り出していた）。
-    // 1本になったことで、どちらの失敗もここで拾える
-    if (fetchError) {
+    // ⚠️ 最終ページより後ろは「空ページ」であってエラーではない（#1311）。
+    //
+    // PostgREST は `count: 'exact'` を付けたクエリに限り、
+    // `offset > 総件数` で **416 (PGRST103)** を返す（count 無しなら 200 +
+    // 空配列）。件数とデータを1本にまとめた副作用でこの条件に当たるように
+    // なったため、ここで潰さないと `?page=500` が 200 から 500 へ変わる。
+    //
+    // 416 のレスポンスにも総件数は載っている（`Content-Range: */1104`）が、
+    // postgrest-js は `res.ok` のときしか読まないので取り直すしかない。
+    // 範囲外アクセスは稀なので、そのときだけ件数クエリを足す
+    let total: number;
+
+    if (
+      fetchError &&
+      fetchError.code === SUPABASE_ERROR_CODE.RANGE_NOT_SATISFIABLE
+    ) {
+      const { count: outOfRangeTotal, error: countError } =
+        await applyMovieCacheFilters(
+          supabase
+            .from('movie_cache')
+            .select('id', { count: 'exact', head: true }),
+          filters,
+        );
+
+      if (countError) {
+        throw countError;
+      }
+
+      total = outOfRangeTotal ?? 0;
+    } else if (fetchError) {
+      // もとは件数クエリのエラーを見ていなかった（`count` だけ取り出していた）。
+      // 1本になったことで、どちらの失敗もここで拾える
       throw fetchError;
+    } else {
+      total = totalItems ?? 0;
     }
 
-    const total = totalItems ?? 0;
     const totalPages = Math.ceil(total / PAGINATION.ITEMS_PER_PAGE);
 
     const hasNextPage = page < totalPages;

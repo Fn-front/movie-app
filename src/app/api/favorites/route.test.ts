@@ -91,18 +91,7 @@ describe('GET /api/favorites', () => {
       },
     ];
 
-    // 件数取得
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            count: 2,
-            error: null,
-          }),
-        }),
-      }),
-    });
-    // データ取得
+    // 件数とデータを1クエリで取る（#1272）
     mockFrom.mockReturnValueOnce({
       select: () => ({
         eq: () => ({
@@ -110,6 +99,7 @@ describe('GET /api/favorites', () => {
             order: () => ({
               range: () => ({
                 data: mockItems,
+                count: mockItems.length,
                 error: null,
               }),
             }),
@@ -135,18 +125,7 @@ describe('GET /api/favorites', () => {
   });
 
   it('ソートとページ指定で取得できる', async () => {
-    // 件数取得
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            count: 0,
-            error: null,
-          }),
-        }),
-      }),
-    });
-    // データ取得
+    // 件数とデータを1クエリで取る（#1272）
     mockFrom.mockReturnValueOnce({
       select: () => ({
         eq: () => ({
@@ -154,6 +133,7 @@ describe('GET /api/favorites', () => {
             order: () => ({
               range: () => ({
                 data: [],
+                count: 0,
                 error: null,
               }),
             }),
@@ -179,6 +159,65 @@ describe('GET /api/favorites', () => {
     expect(response.status).toBe(401);
   });
 
+  /**
+   * 件数とデータを1クエリで取る（#1272）
+   *
+   * もとは `count: 'exact', head: true` の件数専用クエリを別に投げていた。
+   * 戻すとこのテストが落ちる
+   */
+  it('件数取得のために別のクエリを投げない', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: jest.fn((columns: string, opts?: { count?: string }) => {
+        expect(opts).toEqual({ count: 'exact' });
+        expect(columns).not.toBe('id');
+        return {
+          eq: () => ({
+            is: () => ({
+              order: () => ({
+                range: () => ({ data: [], count: 7, error: null }),
+              }),
+            }),
+          }),
+        };
+      }),
+    });
+
+    const response = await GET(createGetRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+    // 件数は Content-Range 由来の count がそのまま使われる
+    expect(json.data.pagination.totalItems).toBe(7);
+  });
+
+  // 総件数から導く値が従来と一致すること
+  it('ページング値が件数から正しく導かれる', async () => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () => ({
+              range: () => ({ data: [], count: 45, error: null }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const response = await GET(createGetRequest({ page: '2' }));
+    const json = await response.json();
+
+    expect(json.data.pagination).toEqual({
+      currentPage: 2,
+      totalPages: 3,
+      totalItems: 45,
+      itemsPerPage: 20,
+      hasNextPage: true,
+      nextPage: 3,
+    });
+  });
+
   it('不正なsort_byで400を返す', async () => {
     const response = await GET(createGetRequest({ sort_by: 'invalid' }));
     const json = await response.json();
@@ -197,13 +236,19 @@ describe('GET /api/favorites', () => {
   });
 
   it('DBエラー時に500を返す', async () => {
-    // 件数取得でエラー
+    // ⚠️ もとは件数クエリのエラーを見ていなかった。1本にしたので
+    // ここで拾える（#1272）
     mockFrom.mockReturnValueOnce({
       select: () => ({
         eq: () => ({
           is: () => ({
-            count: null,
-            error: new Error('DB error'),
+            order: () => ({
+              range: () => ({
+                data: null,
+                count: null,
+                error: new Error('DB error'),
+              }),
+            }),
           }),
         }),
       }),
@@ -215,18 +260,15 @@ describe('GET /api/favorites', () => {
   });
 
   describe('レート制限（#934）', () => {
-    /** 正常系の件数取得＋データ取得をモックする */
+    /** 正常系（件数とデータを1クエリ）をモックする */
     const mockEmptyList = () => {
-      mockFrom.mockReturnValueOnce({
-        select: () => ({
-          eq: () => ({ is: () => ({ count: 0, error: null }) }),
-        }),
-      });
       mockFrom.mockReturnValueOnce({
         select: () => ({
           eq: () => ({
             is: () => ({
-              order: () => ({ range: () => ({ data: [], error: null }) }),
+              order: () => ({
+                range: () => ({ data: [], count: 0, error: null }),
+              }),
             }),
           }),
         }),

@@ -188,15 +188,15 @@ function setupFromMock(options: {
       // キャッシュチェッククエリ
       return createChainMock(cacheResult);
     }
-    if (currentCall === 2) {
-      // カウントクエリ or 他release_type既存IDクエリ
-      // selectのoptsを見て判定
-      const chain = createChainMock(countResult);
+    if (currentCall === 2 || currentCall === 3) {
+      // 一覧クエリ（件数とデータを1本で取る / #1272）か、
+      // 他release_type既存IDクエリ。select の opts を見て判定する
+      const listResult = { ...dataResult, count: countResult.count };
+      const chain = createChainMock(listResult);
       chain.select.mockImplementation(
         (_cols: string, opts?: { count?: string }) => {
           if (opts?.count === 'exact') {
-            const countProxy = createChainMock(countResult);
-            return createThenableProxy(countProxy, countResult);
+            return createThenableProxy(createChainMock(listResult), listResult);
           }
           // neqが呼ばれる → existingOtherType用
           return createThenableProxy(
@@ -206,10 +206,6 @@ function setupFromMock(options: {
         },
       );
       return chain;
-    }
-    if (currentCall === 3) {
-      // データクエリ
-      return createChainMock(dataResult);
     }
     // それ以降（upsert等）
     return createChainMock({ error: null });
@@ -1949,13 +1945,16 @@ describe('GET /api/movies', () => {
         });
       }
       if (currentCall === 2) {
-        const chain = createChainMock({ count: 2 });
+        // 件数とデータを1本で取る（#1272）
+        const listResult = { data: movies, count: movies.length, error: null };
+        const chain = createChainMock(listResult);
         chain.select.mockImplementation(
           (_cols: string, opts?: { count?: string }) => {
             if (opts?.count === 'exact') {
-              return createThenableProxy(createChainMock({ count: 2 }), {
-                count: 2,
-              });
+              return createThenableProxy(
+                createChainMock(listResult),
+                listResult,
+              );
             }
             return createThenableProxy(
               createChainMock({ data: movies, error: null }),
@@ -2008,13 +2007,16 @@ describe('GET /api/movies', () => {
         });
       }
       if (currentCall === 2) {
-        const chain = createChainMock({ count: 1 });
+        // 件数とデータを1本で取る（#1272）
+        const listResult = { data: movies, count: movies.length, error: null };
+        const chain = createChainMock(listResult);
         chain.select.mockImplementation(
           (_cols: string, opts?: { count?: string }) => {
             if (opts?.count === 'exact') {
-              return createThenableProxy(createChainMock({ count: 1 }), {
-                count: 1,
-              });
+              return createThenableProxy(
+                createChainMock(listResult),
+                listResult,
+              );
             }
             return createThenableProxy(
               createChainMock({ data: movies, error: null }),
@@ -2423,9 +2425,17 @@ describe('GET /api/movies', () => {
     expect(response.status).toBe(200);
     expect(json.data.movies[0].vote_count).toBe(1234);
 
-    // 3回目のfrom()がデータクエリ。SELECT句にvote_countが含まれること
-    const dataQueryChain = mockSupabaseClient!.from.mock.results[2].value;
-    expect(dataQueryChain.select.mock.calls[0][0]).toContain('vote_count');
+    // ⚠️ from() の**何回目か**で決め打ちしない。#1272 で件数クエリが
+    // 消えて呼び出し位置がずれた。一覧の SELECT 句を中身で探す
+    const selectCalls = createdChains.flatMap((chain) =>
+      chain.select.mock.calls.map((call) => call[0]),
+    );
+    expect(
+      selectCalls.some(
+        (columns) =>
+          typeof columns === 'string' && columns.includes('vote_count'),
+      ),
+    ).toBe(true);
   });
 
   it('TMDb同期時のUPSERTにvote_countが含まれる', async () => {

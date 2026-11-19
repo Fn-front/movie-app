@@ -74,25 +74,18 @@ export const GET = withAuth(
 
     const { sort_by, sort_order, page, limit } = queryResult.data;
 
-    // 件数取得（カウントのみのため id 列だけ指定して転送量を削減）
-    const { count, error: countError } = await supabase
-      .from('favorites')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', session.user.id)
-      .is('deleted_at', null);
-
-    if (countError) {
-      throw countError;
-    }
-
-    const total = count ?? 0;
-
-    // お気に入り取得（ページベースページング）
+    // 件数とデータを1クエリで取る（#1272）
+    //
+    // もとは `count: 'exact', head: true` の件数専用クエリを投げてから
+    // データを取っていた。PostgREST は `Content-Range` で件数を返せるので、
+    // 同じ条件の走査を2回する理由が無い（`watchlist/watched` が前例）。
+    //
+    // ⚠️ `head: true` を**付けない**こと。付けると本体が返らず `data` が空になる
     const offset = (page - 1) * limit;
 
-    const { data, error } = await supabase
+    const { data, count, error } = await supabase
       .from('favorites')
-      .select(FAVORITES_SELECT)
+      .select(FAVORITES_SELECT, { count: 'exact' })
       .eq('user_id', session.user.id)
       .is('deleted_at', null)
       .order(sort_by, { ascending: sort_order === 'asc' })
@@ -101,6 +94,8 @@ export const GET = withAuth(
     if (error) {
       throw error;
     }
+
+    const total = count ?? 0;
 
     const totalPages = Math.ceil(total / limit);
     const hasNextPage = page < totalPages;

@@ -412,18 +412,28 @@ export async function GET(request: Request) {
       excludedLanguages: getExcludedLanguages(include_regions),
     };
 
-    // 総件数クエリを構築
-    const countQuery = applyMovieCacheFilters(
-      supabase.from('movie_cache').select('id', { count: 'exact', head: true }),
-      filters,
-    );
-
-    // データクエリを構築
-    const dataQuery = applyMovieCacheFilters(
+    // 件数とデータを1クエリで取る（#1272）
+    //
+    // もとは `count: 'exact', head: true` の件数専用クエリとデータクエリを
+    // 別々に、しかも直列に投げていた。`count: 'exact'` は条件に一致する行を
+    // 全件数えるので、**同じ走査を1リクエストで2回**していたことになる。
+    // PostgREST は `Content-Range` で件数も返せる（`watchlist/watched` が前例）。
+    //
+    // 条件を揃えるための `applyMovieCacheFilters` も1回で済む。
+    // 2本に分けていたころは、片方にだけ条件を足すと総件数と実データが
+    // 食い違ってページング判定が壊れる形だった。
+    //
+    // ⚠️ `head: true` を**付けない**こと。付けると本体が返らず `data` が空になる
+    const {
+      data: movies,
+      count: totalItems,
+      error: fetchError,
+    } = await applyMovieCacheFilters(
       supabase
         .from('movie_cache')
         .select(
           'id, title, poster_path, backdrop_path, release_date, digital_release_date, overview, vote_average, vote_count, popularity, genre_ids, release_type, is_now_playing, is_revival',
+          { count: 'exact' },
         )
         .order(sortColumn, { ascending, nullsFirst: false })
         .order('id', { ascending: true })
@@ -431,9 +441,8 @@ export async function GET(request: Request) {
       filters,
     );
 
-    const { count: totalItems } = await countQuery;
-    const { data: movies, error: fetchError } = await dataQuery;
-
+    // もとは件数クエリのエラーを見ていなかった（`count` だけ取り出していた）。
+    // 1本になったことで、どちらの失敗もここで拾える
     if (fetchError) {
       throw fetchError;
     }

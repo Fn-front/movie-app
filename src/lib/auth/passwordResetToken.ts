@@ -75,6 +75,22 @@ export async function issuePasswordResetToken(
  * 未使用トークン全件」なので、除外しないと**今メールで送った新しいリンクごと
  * 消える**。
  *
+ * ⚠️ **`neq` だけでは足りない。`lt('created_at', 自分の発行時刻)` が要る。**
+ * `neq` は「自分以外」なので、**同時に走っている別リクエストが入れた
+ * トークンも消してしまう**。2つのリクエストが交差すると互いの行を消し合い、
+ * 2通のメールを送ったのに**有効なリンクが0本**になる（#1223 と同じ
+ * 行き止まり）。
+ *
+ * ```
+ * issue(A) → issue(B) → invalidate(keep=A)  // B を消す
+ *                     → invalidate(keep=B)  // A を消す  ⇒ 0本
+ * ```
+ *
+ * 旧実装（INSERT の前に DELETE）はこの形にならず、どう交差しても1本以上
+ * 残っていた。DELETE を後ろへ動かしたことで生まれた穴なので、ここで塞ぐ。
+ * 自分より古い行だけを消せば、**最後に発行した1本が必ず残る**（旧実装の
+ * 成功時の挙動と同じ）。
+ *
  * 削除に失敗しても投げない。送信は既に済んでいて相手の手元には使える
  * リンクがあり、ここで 500 を返すと admin は押し直してもう1通送ることに
  * なる（枠も消費する）。保証が崩れたことは気づけるようログには必ず出す。
@@ -88,12 +104,34 @@ export async function invalidateOtherPasswordResetTokens(
   userId: string,
   keepToken: string,
 ): Promise<void> {
+  const keepHash = hashVerificationToken(keepToken);
+
+  // 自分の行の発行時刻を引く。これより**古い**ものだけを消す。
+  // 見つからなければ、後から発行した別のリクエストが既に消したあと。
+  // その相手が掃除を済ませているので、ここで何もしなくてよい
+  const { data: keepRow, error: lookupError } = await supabase
+    .from('password_reset_tokens')
+    .select('created_at')
+    .eq('token_hash', keepHash)
+    .maybeSingle();
+
+  if (lookupError) {
+    console.error(
+      `[passwordResetToken] 残すトークンの発行時刻を引けませんでした userId='${userId}'`,
+      lookupError,
+    );
+    return;
+  }
+
+  if (!keepRow) return;
+
   const { error } = await supabase
     .from('password_reset_tokens')
     .delete()
     .eq('user_id', userId)
     .is('used_at', null)
-    .neq('token_hash', hashVerificationToken(keepToken));
+    .neq('token_hash', keepHash)
+    .lt('created_at', keepRow.created_at as string);
 
   if (error) {
     console.error(

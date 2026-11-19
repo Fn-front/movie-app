@@ -17,12 +17,16 @@ import {
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 
+/** 行の発行時刻の基準。DB の `now()` の代わりに単調増加させる */
+const BASE_CREATED_AT = new Date('2026-01-01T00:00:00.000Z').getTime();
+
 interface TokenRow {
   id: string;
   user_id: string;
   token_hash: string;
   expires_at: string;
   used_at: string | null;
+  created_at: string;
 }
 
 /**
@@ -38,6 +42,7 @@ function createSupabaseMock(rows: TokenRow[]): {
   inserted: Array<Record<string, unknown>>;
 } {
   const inserted: Array<Record<string, unknown>> = [];
+  let insertSeq = 0;
 
   const from = () => {
     const state: {
@@ -45,6 +50,7 @@ function createSupabaseMock(rows: TokenRow[]): {
       payload: Record<string, unknown>;
       tokenHash: string | null;
       excludeTokenHash: string | null;
+      beforeCreatedAt: string | null;
       userId: string | null;
       requireUnused: boolean;
       notExpired: boolean;
@@ -53,6 +59,7 @@ function createSupabaseMock(rows: TokenRow[]): {
       payload: {},
       tokenHash: null,
       excludeTokenHash: null,
+      beforeCreatedAt: null,
       userId: null,
       requireUnused: false,
       notExpired: false,
@@ -64,6 +71,10 @@ function createSupabaseMock(rows: TokenRow[]): {
     builder.eq = jest.fn((column: string, value: unknown) => {
       if (column === 'token_hash') state.tokenHash = value as string;
       if (column === 'user_id') state.userId = value as string;
+      return builder;
+    });
+    builder.lt = jest.fn((column: string, value: unknown) => {
+      if (column === 'created_at') state.beforeCreatedAt = value as string;
       return builder;
     });
     builder.neq = jest.fn((column: string, value: unknown) => {
@@ -92,12 +103,15 @@ function createSupabaseMock(rows: TokenRow[]): {
       inserted.push(payload);
       // 実DBと同じく、挿入した行はその後の検索・削除の対象になる。
       // 載せないと「今発行した行が消えていないか」を検証できない
+      insertSeq += 1;
       rows.push({
         id: `row-${rows.length + 1}`,
         user_id: payload.user_id as string,
         token_hash: payload.token_hash as string,
         expires_at: payload.expires_at as string,
         used_at: null,
+        // DB の `now()` 既定値に相当。発行順に単調増加させる
+        created_at: new Date(BASE_CREATED_AT + insertSeq * 1000).toISOString(),
       });
       return Promise.resolve({ error: null });
     });
@@ -111,6 +125,12 @@ function createSupabaseMock(rows: TokenRow[]): {
         if (
           state.excludeTokenHash !== null &&
           row.token_hash === state.excludeTokenHash
+        ) {
+          return false;
+        }
+        if (
+          state.beforeCreatedAt !== null &&
+          row.created_at >= state.beforeCreatedAt
         ) {
           return false;
         }
@@ -168,6 +188,8 @@ const makeRow = (
   token_hash: hashVerificationToken(token),
   expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
   used_at: null,
+  // 既存行は必ず「発行より前」。`lt('created_at', ...)` の対象になる
+  created_at: new Date(BASE_CREATED_AT).toISOString(),
   ...overrides,
 });
 
@@ -273,6 +295,56 @@ describe('invalidateOtherPasswordResetTokens', () => {
     expect(rows).toContain(other);
   });
 
+  /**
+   * 同時リクエストの交差（レビュー指摘）
+   *
+   * `neq` だけで「自分以外」を消すと、同時に走っている別リクエストが
+   * 入れたトークンまで消してしまい、互いの行を消し合って**有効なリンクが
+   * 0本**になる。2通のメールを送ったのにどちらも使えない＝ #1223 と同じ
+   * 行き止まり。`lt('created_at', 自分の発行時刻)` で塞いでいる
+   */
+  describe('同時に2本発行されたとき', () => {
+    it('どちらの無効化が先でも、有効なリンクが1本は残る', async () => {
+      const old = makeRow('old-token');
+      const { client, rows } = createSupabaseMock([old]);
+
+      const tokenA = await issuePasswordResetToken(client, USER_ID);
+      const tokenB = await issuePasswordResetToken(client, USER_ID);
+
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenA);
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenB);
+
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows).not.toContain(old);
+    });
+
+    it('無効化の順序が逆でも1本は残る', async () => {
+      const { client, rows } = createSupabaseMock([makeRow('old-token')]);
+
+      const tokenA = await issuePasswordResetToken(client, USER_ID);
+      const tokenB = await issuePasswordResetToken(client, USER_ID);
+
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenB);
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenA);
+
+      expect(rows.length).toBeGreaterThan(0);
+    });
+
+    it('最後に発行した1本が残る（古いほうは消える）', async () => {
+      // 旧実装（INSERT の前に DELETE）の成功時と同じ挙動に揃える
+      const { client, rows } = createSupabaseMock([makeRow('old-token')]);
+
+      const tokenA = await issuePasswordResetToken(client, USER_ID);
+      const tokenB = await issuePasswordResetToken(client, USER_ID);
+
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenA);
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenB);
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0].token_hash).toBe(hashVerificationToken(tokenB));
+    });
+  });
+
   it('削除に失敗しても投げず、ログに残す', async () => {
     // 送信は既に済んでいる。ここで 500 を返すと admin は押し直して
     // もう1通送ることになり、枠も減る
@@ -281,11 +353,23 @@ describe('invalidateOtherPasswordResetTokens', () => {
       .mockImplementation(() => {});
     const client = {
       from: () => ({
+        // 残すトークンの発行時刻の引き直し
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () =>
+              Promise.resolve({
+                data: { created_at: '2026-01-01T00:00:01.000Z' },
+                error: null,
+              }),
+          }),
+        }),
         delete: () => ({
           eq: () => ({
             is: () => ({
-              neq: () =>
-                Promise.resolve({ error: { message: 'delete failed' } }),
+              neq: () => ({
+                lt: () =>
+                  Promise.resolve({ error: { message: 'delete failed' } }),
+              }),
             }),
           }),
         }),

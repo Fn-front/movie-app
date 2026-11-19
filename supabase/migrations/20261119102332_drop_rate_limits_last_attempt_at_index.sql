@@ -121,5 +121,9 @@ DROP INDEX IF EXISTS idx_rate_limits_last_attempt_at;
 
 -- ⚠️ 20261019012324 の TIMESTAMPTZ の記述を消さずに引き継ぐこと。
 --   COMMENT ON COLUMN は上書きなので、書き直すと型の理由が失われる。
+--
+-- ⚠️ この COMMENT は 20261119105819 が上書きする（最終的な文面はそちら）。
+--   ここを編集しても本番には反映されない。このマイグレーションは適用済みとして
+--   記録されており、db push はバージョン単位でスキップするため。
 COMMENT ON COLUMN rate_limits.last_attempt_at IS
   '直近の試行時刻。checkCooldown が JS 側で new Date() 比較するため TIMESTAMPTZ 必須（naive に戻すと非UTC環境でクールダウンが素通りする）。consume_rate_limit が毎回更新するため索引を張らない。張ると HOT 更新が無効になり、1回の更新で全索引への書き込みが発生する（#1326）。';

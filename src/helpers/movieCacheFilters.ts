@@ -1,5 +1,12 @@
 /**
  * movie_cache クエリのフィルタ適用ヘルパ
+ *
+ * ⚠️ ここで絞る `genre_ids` / `digital_release_date` と、呼び出し元が並べる
+ * `vote_average` には**索引が無い**。欠けているのではなく、測ったうえで
+ * 張っていない（#1279）。1,258行では Seq Scan が約1ms で、索引を張っても
+ * 0.2〜0.6ms しか縮まず、`vote_average` に至ってはプランナが索引を選ばない。
+ * 実測値と再検討のきっかけは `.claude/documents/database-schema.md` の
+ * 「索引を追加しない判断」にある。張る前にそちらを読むこと。
  */
 
 import {

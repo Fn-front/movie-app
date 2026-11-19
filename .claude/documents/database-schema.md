@@ -278,13 +278,58 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 | cached_at | TIMESTAMP | NOT NULL | NOW() | 初回キャッシュ日時 |
 | updated_at | TIMESTAMP | NOT NULL | NOW() | 最終更新日時 |
 
-**インデックス:**
+> ⚠️ 上の列の一覧は実体から遅れている（`digital_release_date` /
+> `is_currently_streaming` / `watch_provider_*` が未記載）。列の追従は #1209 の範囲。
+> 下の索引の一覧は 2026-11-19 に実DBと突き合わせ済み。
+
+**インデックス（14本。2026-11-19 時点の実体）:**
 - `id, release_type` (UNIQUE) - 複合主キー
 - `release_date` - 公開日順ソート用
 - `popularity` - 人気順ソート用
 - `cached_at` - 差分取得時の最新日時確認用
 - `updated_at` - バッチ更新管理用
 - `is_now_playing` - Now Playing フィルタ用
+- `release_type` - タブ絞り込み用
+- `release_type, release_date DESC` - タブ＋公開日順
+- `release_type, popularity DESC` - タブ＋人気順
+- `release_type, cached_at DESC` - 差分取得用
+- `is_currently_streaming` (部分索引 `WHERE is_currently_streaming = true`) - 配信中フィルタ用
+- `watch_provider_flatrate` (GIN) - 配信プロバイダー絞り込み用
+- `watch_provider_rent` (GIN) - 同上
+- `watch_provider_buy` (GIN) - 同上
+
+#### 索引を追加しない判断（#1279・2026-11-19 実測）
+
+`genre_ids` / `vote_average` / `digital_release_date` には索引が無い。
+**測ったうえで追加していない。** 行数が少なく、プランナが索引を選ばないか、
+選んでも差がサブミリ秒に収まるため。
+
+本番の行数: **1,258行**（theatrical 1,104 / streaming 154）。
+
+`EXPLAIN (ANALYZE, BUFFERS)` の実行時間（3回流した定常値。1回目はキャッシュが
+冷えていて 16ms 前後になるが、これは索引の有無と関係ない）:
+
+| 代表クエリ | 現状 | 候補索引を張った場合 | プランナの選択 |
+|---|---|---|---|
+| ジャンル絞り込み＋theatrical＋公開日順 | 1.05 ms | 0.46 ms | GIN を使う（Bitmap Index Scan） |
+| 評価順（`vote_average`） | 0.99 ms | 0.88 ms | **索引を使わない**（Seq Scan のまま） |
+| 配信予定タブ（`digital_release_date` の `gt` ＋同列ソート） | 0.29 ms | 0.07 ms | 部分索引を使う |
+
+検証は `BEGIN` → `CREATE INDEX` → `ANALYZE` → `EXPLAIN` → `ROLLBACK` で行い、
+索引は残していない（確認済み: 実行後も14本のまま）。
+
+判断の根拠:
+
+- **効果が出ても 0.2〜0.6 ms。** Supabase はネットワーク越しなので、API 1本の
+  往復（数十ms）に埋もれて体感に出ない
+- `(release_type, vote_average DESC)` は**張っても使われない**。この規模では
+  Seq Scan のほうが安いとプランナが判断する。張るだけ無駄になる
+- `movie_cache` は CRON（`sync-movies` / `update-movies` / `sync-streaming`）が
+  一括 UPSERT するテーブルで、索引を増やすと書き込みが重くなる。既に14本ある
+
+**再検討のきっかけ**: 行数が 10,000 を超えたとき、または上の代表クエリの
+Seq Scan が 10 ms を超えたとき。`/api/movies` は件数クエリとデータクエリで
+同じ条件を2回走らせているので、先に #1272 を片付けるほうが効く。
 
 **キャッシュ戦略:**
 - 初回取得: 今日から3ヶ月先の映画を取得

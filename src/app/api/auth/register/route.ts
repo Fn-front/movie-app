@@ -283,7 +283,18 @@ export async function POST(request: Request) {
       // メール送信失敗時はロールバックする。
       // users 行を消すのは「このリクエストで作成した場合」のみ。既存の未検証
       // ユーザーを上書きしたケースで消すと、元々あった行まで巻き添えになる
-      await supabase.from('otp_codes').delete().eq('email', email);
+      //
+      // ⚠️ OTP の削除条件は、上で挿入したときと**同じに絞る**（#1267）。
+      // `email` だけで消すと全 action_type の、しかも**検証済みの行まで**
+      // 巻き込む。消えると OTP ログイン（`auth.ts`）とパスワード変更
+      // （`user/change-password`）が参照している検証済みトークンが失われる。
+      // このリクエストが作ったのは registration の未検証行だけ
+      await supabase
+        .from('otp_codes')
+        .delete()
+        .eq('email', email)
+        .eq('action_type', OTP_ACTION.REGISTRATION)
+        .is('verified_at', null);
 
       if (!existingUser) {
         await supabase.from('users').delete().eq('id', userId);
@@ -291,6 +302,13 @@ export async function POST(request: Request) {
 
       // 日次送信枠も戻す（#1260）。行だけ消して枠を残すと、1通も届かないまま
       // 5回で「本日の送信上限に達しました」に変わり、#1258 の行き止まりへ落ちる
+      //
+      // ⚠️ 上部の `REGISTER`（5回/60分）は**戻さない**（#1267）。
+      // あちらが数えているのは「送った通数」ではなく**登録の試行回数**で、
+      // 失敗も試行のうち。戻せるようにすると、失敗を誘発できる相手が
+      // 試行回数の上限を実質無効化できる（`release_rate_limit` の許可リストに
+      // 入れていないのも同じ理由 / #1266）。
+      // メールボックスを守るのは `OTP_SEND_DAILY` の役目で、そちらは戻す
       await releaseRateLimit(supabase, email, RATE_LIMIT_ACTION.OTP_SEND_DAILY);
 
       return NextResponse.json(

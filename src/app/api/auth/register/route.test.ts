@@ -370,8 +370,20 @@ describe('POST /api/auth/register', () => {
 
     mockSendOtpEmail.mockResolvedValueOnce(false);
 
-    // ロールバック: OTPレコード削除
-    const mockOtpDelete = jest.fn().mockReturnValue({ eq: jest.fn() });
+    // ロールバック: OTPレコード削除（#1267 で条件を絞った）
+    const otpDeleteFilters: Array<[string, unknown]> = [];
+    // 自身を返すチェーンなので、型注釈が無いと TS7022 になる
+    const otpDeleteChain: { eq: jest.Mock; is: jest.Mock } = {
+      eq: jest.fn((column: string, value: unknown) => {
+        otpDeleteFilters.push([column, value]);
+        return otpDeleteChain;
+      }),
+      is: jest.fn((column: string, value: unknown) => {
+        otpDeleteFilters.push([column, value]);
+        return otpDeleteChain;
+      }),
+    };
+    const mockOtpDelete = jest.fn().mockReturnValue(otpDeleteChain);
     mockFrom.mockReturnValueOnce({ delete: mockOtpDelete });
     // ロールバック: ユーザーレコード削除
     const mockUserDelete = jest.fn().mockReturnValue({ eq: jest.fn() });
@@ -389,6 +401,14 @@ describe('POST /api/auth/register', () => {
     expect(json.success).toBe(false);
     // ロールバックが実行されたことを確認
     expect(mockOtpDelete).toHaveBeenCalled();
+    // ⚠️ `email` だけで消さない（#1267）。全 action_type の、しかも
+    // **検証済みの行まで**巻き込むと、OTPログインとパスワード変更が
+    // 参照している検証済みトークンが失われる
+    expect(otpDeleteFilters).toEqual([
+      ['email', 'test@example.com'],
+      ['action_type', 'registration'],
+      ['verified_at', null],
+    ]);
     expect(mockUserDelete).toHaveBeenCalled();
     // 日次送信枠も戻す（#1260）。行だけ消して枠を残すと、1通も届かないまま
     // 5回で「本日の送信上限に達しました」に変わる

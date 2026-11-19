@@ -23,7 +23,13 @@ export interface PageResult<T> {
 }
 
 export interface FetchAllPagesOptions<T> {
-  /** 1ページの件数。PostgREST の `max_rows` を超えない値にすること */
+  /**
+   * 1ページの件数
+   *
+   * ⚠️ PostgREST の `max_rows`（1000）を**超えないこと**。超えると
+   * 「要求より少ない＝最終ページ」と誤認して、このヘルパー自体が
+   * 静かな打ち切り装置になる
+   */
   pageSize: number;
   /**
    * 読むページ数の上限
@@ -33,6 +39,13 @@ export interface FetchAllPagesOptions<T> {
   maxPages: number;
   /** 警告ログの識別子（例: `dismissed-movies`） */
   label: string;
+  /**
+   * 警告ログに添える文脈（例: `user=<id>`）
+   *
+   * ⚠️ 上限に到達したとき「誰で起きたか」が分からないと調査に入れない。
+   * 既存の `favorites/lookup` / `watchlist/lookup` は `user=` を出している
+   */
+  context?: string;
   /**
    * 1ページを取る問い合わせ
    *
@@ -51,6 +64,7 @@ export async function fetchAllPages<T>({
   pageSize,
   maxPages,
   label,
+  context,
   query,
 }: FetchAllPagesOptions<T>): Promise<T[]> {
   const rows: T[] = [];
@@ -73,7 +87,9 @@ export async function fetchAllPages<T>({
 
   // 上限まで読み切った。これ以上は読まないが、黙って切るのではなく
   // 気づけるようにしておく（現実的な利用では到達しない）
-  console.warn(`[${label}] 取得上限に到達した count=${rows.length}`);
+  console.warn(
+    `[${label}] 取得上限に到達した ${context ? `${context} ` : ''}count=${rows.length}`,
+  );
 
   return rows;
 }

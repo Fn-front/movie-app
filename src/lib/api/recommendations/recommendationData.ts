@@ -69,6 +69,7 @@ export async function fetchRecommendationData(
       pageSize: DISMISSED_MOVIES_PAGE_SIZE,
       maxPages: DISMISSED_MOVIES_MAX_PAGES,
       label: 'recommendations-dismissed',
+      context: `user=${userId}`,
       query: (from, to) =>
         supabase
           .from('dismissed_movies')

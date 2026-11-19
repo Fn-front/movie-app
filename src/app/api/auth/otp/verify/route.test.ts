@@ -61,6 +61,10 @@ const pastDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 describe('POST /api/auth/otp/verify', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // ⚠️ clearAllMocks は mockReturnValueOnce のキューを消さない。
+    // 消し忘れると、消費しきれなかった分が**後続のテストに漏れて**
+    // 関係ないテストが落ちる（実測）
+    mockFrom.mockReset();
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
   });
 
@@ -153,16 +157,16 @@ describe('POST /api/auth/otp/verify', () => {
         }),
       }),
     });
+    // users の is_verified 更新（#1257）。トークン発行より前に走る
+    mockFrom.mockReturnValueOnce({
+      update: () => ({
+        eq: () => ({ eq: () => ({ data: null, error: null }) }),
+      }),
+    });
     // OTPレコード更新
     mockFrom.mockReturnValueOnce({
       update: () => ({
         eq: () => ({ data: null, error: null }),
-      }),
-    });
-    // users の is_verified 更新（#1257）
-    mockFrom.mockReturnValueOnce({
-      update: () => ({
-        eq: () => ({ eq: () => ({ data: null, error: null }) }),
       }),
     });
 
@@ -194,8 +198,8 @@ describe('POST /api/auth/otp/verify', () => {
    * 枠を使う
    */
   describe('LOGIN のメール認証', () => {
-    /** OTP取得 → OTP更新 のモックを積む */
-    const mockOtpVerified = (actionType: string) => {
+    /** OTP行の取得を積む */
+    const mockOtpFetch = (actionType: string) => {
       mockFrom.mockReturnValueOnce({
         select: () => ({
           eq: () => ({
@@ -222,20 +226,48 @@ describe('POST /api/auth/otp/verify', () => {
           }),
         }),
       });
+    };
+
+    /** otp_codes の検証済み更新を積む（users 更新より後に走る） */
+    const mockOtpCodeUpdate = () => {
       mockFrom.mockReturnValueOnce({
         update: () => ({ eq: () => ({ data: null, error: null }) }),
       });
     };
 
-    it('users を is_verified = true に更新する', async () => {
-      let updated: Record<string, unknown> | null = null;
-      mockOtpVerified('login');
+    /**
+     * users の更新を積み、ペイロードと絞り込み条件を記録する
+     *
+     * ⚠️ `.eq` の引数まで記録する。記録しないと、対象を別のメールアドレスへ
+     * 差し替えても、`is_verified = false` の条件を別のカラムに変えても
+     * **テストが緑のまま通る**（レビューの変異で実測）
+     */
+    const captureUsersUpdate = (error: unknown = null) => {
+      const captured: {
+        values?: Record<string, unknown>;
+        eq: unknown[][];
+      } = { eq: [] };
+
       mockFrom.mockReturnValueOnce({
         update: (values: Record<string, unknown>) => {
-          updated = values;
-          return { eq: () => ({ eq: () => ({ data: null, error: null }) }) };
+          captured.values = values;
+          const chain = {
+            eq: (column: string, value: unknown) => {
+              captured.eq.push([column, value]);
+              return captured.eq.length < 2 ? chain : { data: null, error };
+            },
+          };
+          return chain;
         },
       });
+
+      return captured;
+    };
+
+    it('users を is_verified = true に更新する', async () => {
+      mockOtpFetch('login');
+      const usersUpdate = captureUsersUpdate();
+      mockOtpCodeUpdate();
 
       const response = await POST(
         createRequest({
@@ -246,8 +278,13 @@ describe('POST /api/auth/otp/verify', () => {
       );
 
       expect(response.status).toBe(200);
-      expect(updated).toEqual({ is_verified: true });
-      // users テーブルを触っていること
+      expect(usersUpdate.values).toEqual({ is_verified: true });
+      // 対象の絞り込みまで固定する。宛先のアドレスで引き、既に認証済みの
+      // 行は触らない（無駄な書き込みをしない）
+      expect(usersUpdate.eq).toEqual([
+        ['email', 'test@example.com'],
+        ['is_verified', false],
+      ]);
       expect(mockFrom.mock.calls.map((c) => c[0])).toContain('users');
     });
 
@@ -257,17 +294,8 @@ describe('POST /api/auth/otp/verify', () => {
      * 噛み合わない状態になる
      */
     it('更新に失敗したら500を返す', async () => {
-      mockOtpVerified('login');
-      mockFrom.mockReturnValueOnce({
-        update: () => ({
-          eq: () => ({
-            eq: () => ({
-              data: null,
-              error: { code: '57P01', message: 'connection terminated' },
-            }),
-          }),
-        }),
-      });
+      mockOtpFetch('login');
+      captureUsersUpdate({ code: '57P01', message: 'connection terminated' });
 
       const response = await POST(
         createRequest({
@@ -283,7 +311,8 @@ describe('POST /api/auth/otp/verify', () => {
     it('password_change では更新しない', async () => {
       // ログイン中の本人確認なので対象は必ず認証済み。
       // 「どの操作で認証済みになるか」を広げない
-      mockOtpVerified('password_change');
+      mockOtpFetch('password_change');
+      mockOtpCodeUpdate();
 
       const response = await POST(
         createRequest({

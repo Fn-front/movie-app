@@ -639,10 +639,15 @@ OpenAI APIによるレコメンド映画を管理（日次Cronで全件入れ替
 | generated_at | TIMESTAMPTZ | NOT NULL | now() | 生成日時 |
 | created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
 
-**インデックス:**
+**インデックス（4本。2026-11-19 に実DBと突き合わせ済み）:**
+- `id` (UNIQUE) - 主キー（`award_movies_pkey`）
 - `tmdb_movie_id, award_name, award_year, category, person_name` (UNIQUE NULLS NOT DISTINCT) - 重複防止・UPSERT用。演技賞で同じ作品から複数人がノミネートされるため人名まで含める。`NULLS NOT DISTINCT` は作品賞系（`person_name` が NULL）の重複を防ぐため
-- `award_name, award_year` - 賞・年ごとの絞り込み用
-- `is_winner` - 受賞作品フィルタ用
+- `award_name, award_year`（`idx_award_movies_name_year`） - admin の `/api/admin/awards/existing` 用。**`award_year` 単独では使えない**（B-tree は先頭列の条件が要る）
+- `award_year, display_order`（`idx_award_movies_year_display_order`） - 公開API `/api/awards` の絞り込みと並び替え、および `get_award_years()` 用（#1276）
+
+> ⚠️ `is_winner` の単独索引は #1276 で**削除済み**。`is_winner` を WHERE / ORDER BY に
+> 使うクエリはアプリにもDB関数にもRLSポリシーにも無く、統計上も3 scans しか
+> 無かった。boolean 単独は選択性が低く、受賞同期の UPSERT で書き込みコストだけ乗る。
 
 **RLSポリシー:**
 - SELECT: 全ユーザー参照可能（公開データ）

@@ -10,6 +10,7 @@ import { memo, useCallback, useEffect, useState } from 'react';
 
 import { LoginForm } from '@/features/auth/loginForm/loginForm';
 import { OtpLoginForm } from '@/features/auth/otpLoginForm/otpLoginForm';
+import { takePendingCallbackUrl } from '@/features/auth/utils/pendingCallbackUrl';
 
 type LoginMode = 'password' | 'otp';
 
@@ -49,6 +50,48 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
    * 理由が分からないままになる
    */
   const [displayError, setDisplayError] = useState(initialError);
+
+  /**
+   * ソーシャルログインに失敗したときの戻り先を復元する（#1246）
+   *
+   * Auth.js は失敗時のリダイレクトに `error` と `code` しか載せないため
+   * （`@auth/core/index.js:132-137`）、`proxy.ts` が付けた `callbackUrl` は
+   * OAuth の往復で消える。`/watchlist` を見ようとして誘導された人が、
+   * ログインし直すとホームに着地していた。
+   *
+   * ⚠️ `initialError` があるときだけ**採る**。無条件に採ると、ソーシャル
+   * ログインを始めたまま別タブでログイン画面を開いた人が、身に覚えのない
+   * 場所へ飛ばされる。
+   *
+   * ⚠️ URL の `callbackUrl` を優先する。そちらは `proxy.ts` が今まさに
+   * 付けた値で、預かっていたものより新しい。ただし**採らない場合も消す**。
+   * 残すと、次に別の理由で戻されたときに古い戻り先が蘇る。
+   * 失敗せずにこの画面へ来たときも同じで、預かり分は役目を終えている。
+   *
+   * 戻り先は `LoginForm` / `useOtpLogin` が `resolveSafeCallbackUrl` を
+   * 通してから遷移するので、ここで検証はしない（預ける側も通している）。
+   *
+   * ⚠️ `useState` の遅延初期化でやらない。`takePendingCallbackUrl` は
+   * 読むと同時に消す＝**副作用**で、レンダー中に置くと StrictMode や
+   * 並行レンダリングで破棄・再実行されたときに戻り先が黙って失われる
+   */
+  const [restoredCallbackUrl, setRestoredCallbackUrl] = useState<
+    string | undefined
+  >(undefined);
+
+  // `sessionStorage`（レンダーの外にある状態）を読み込むためのeffect。
+  // 遷移に使うだけで描画はしないので、追加のレンダーは画面に出ない
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const pending = takePendingCallbackUrl();
+
+    if (initialError) {
+      setRestoredCallbackUrl(pending);
+    }
+  }, [initialError]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const effectiveCallbackUrl = callbackUrl ?? restoredCallbackUrl;
 
   /**
    * 表示したら URL から `?error=` を落とす（#1242）
@@ -95,7 +138,7 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
     return (
       <OtpLoginForm
         onPasswordLoginClick={handlePasswordLoginClick}
-        callbackUrl={callbackUrl}
+        callbackUrl={effectiveCallbackUrl}
       />
     );
   }
@@ -103,7 +146,7 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
   return (
     <LoginForm
       onOtpLoginClick={handleOtpLoginClick}
-      callbackUrl={callbackUrl}
+      callbackUrl={effectiveCallbackUrl}
       initialIdentifier={initialIdentifier}
       initialError={displayError}
     />

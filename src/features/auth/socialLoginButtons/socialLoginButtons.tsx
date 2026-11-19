@@ -12,6 +12,7 @@ import { FaGoogle, FaGithub } from 'react-icons/fa';
 
 import { Button } from '@/components/ui/button/button';
 import { resolveSafeCallbackUrl } from '@/utils/url';
+import { savePendingCallbackUrl } from '@/features/auth/utils/pendingCallbackUrl';
 import styles from './socialLoginButtons.module.scss';
 
 interface SocialLoginButtonsProps {
@@ -27,6 +28,10 @@ export const SocialLoginButtons = memo<SocialLoginButtonsProps>(
     const handleGoogleLogin = useCallback(async () => {
       try {
         setLoadingProvider('google');
+        // 失敗して戻されたときに復元する（#1246）。Auth.js は失敗時の
+        // リダイレクトに error と code しか載せないため、callbackUrl は
+        // OAuth の往復で消える
+        savePendingCallbackUrl(callbackUrl);
         await signIn('google', {
           callbackUrl: resolveSafeCallbackUrl(callbackUrl),
         });
@@ -38,6 +43,8 @@ export const SocialLoginButtons = memo<SocialLoginButtonsProps>(
     const handleGithubLogin = useCallback(async () => {
       try {
         setLoadingProvider('github');
+        // 理由は Google と同じ（#1246）
+        savePendingCallbackUrl(callbackUrl);
         await signIn('github', {
           callbackUrl: resolveSafeCallbackUrl(callbackUrl),
         });

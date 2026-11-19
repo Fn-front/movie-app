@@ -127,4 +127,65 @@ describe('SocialLoginButtons', () => {
       ).toBeDisabled();
     });
   });
+  describe('戻り先の退避（#1246）', () => {
+    const KEY = 'auth:pendingCallbackUrl';
+
+    beforeEach(() => {
+      window.sessionStorage.clear();
+      mockSignIn.mockResolvedValue(undefined as never);
+    });
+
+    // ⚠️ テスト本体の末尾で restore すると、途中で失敗したときにスパイが
+    // 残って**後続テストを汚す**。外側の clearAllMocks は履歴を消すだけで
+    // スパイは戻さない（jest.config.js に restoreMocks の指定も無い）
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it.each([['Googleでログイン'], ['GitHubでログイン']])(
+      '%s で signIn の前に戻り先を預ける',
+      async (name) => {
+        // Auth.js は失敗時のリダイレクトに error と code しか載せないので、
+        // 往復で消える callbackUrl をクライアント側で持っておく
+        const order: string[] = [];
+        jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+          order.push('save');
+        });
+        mockSignIn.mockImplementation((async () => {
+          order.push('signIn');
+          return undefined;
+        }) as never);
+
+        render(<SocialLoginButtons callbackUrl='/watchlist' />);
+
+        await user.click(screen.getByRole('button', { name }));
+
+        await waitFor(() => expect(mockSignIn).toHaveBeenCalled());
+        expect(order).toEqual(['save', 'signIn']);
+      },
+    );
+
+    it('預けた値は callbackUrl そのもの', async () => {
+      render(<SocialLoginButtons callbackUrl='/watchlist' />);
+
+      await user.click(
+        screen.getByRole('button', { name: 'Googleでログイン' }),
+      );
+
+      await waitFor(() =>
+        expect(window.sessionStorage.getItem(KEY)).toBe('/watchlist'),
+      );
+    });
+
+    it('callbackUrl が無ければ何も預けない', async () => {
+      render(<SocialLoginButtons />);
+
+      await user.click(
+        screen.getByRole('button', { name: 'Googleでログイン' }),
+      );
+
+      await waitFor(() => expect(mockSignIn).toHaveBeenCalled());
+      expect(window.sessionStorage.getItem(KEY)).toBeNull();
+    });
+  });
 });

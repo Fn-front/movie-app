@@ -7,13 +7,12 @@
  */
 
 import { memo } from 'react';
-import Link from 'next/link';
 
 import { Heading } from '@/components/ui/heading/heading';
-import { ROUTES } from '@/constants';
 import { AUTH_PAGE_ERROR_MESSAGES } from '@/constants/auth';
 import { resolveAuthErrorMessage } from '@/utils/authErrorMessage';
 
+import { SignInBackLink } from './signInBackLink';
 import styles from './authErrorNotice.module.scss';
 
 interface AuthErrorNoticeProps {
@@ -43,9 +42,12 @@ export const AuthErrorNotice = memo<AuthErrorNoticeProps>(
           {resolveAuthErrorMessage(AUTH_PAGE_ERROR_MESSAGES, code)}
         </p>
 
-        <Link href={ROUTES.LOGIN} className={styles.c_auth_error__cta}>
-          ログイン画面へ戻る
-        </Link>
+        {/*
+          ⚠️ 単なる `<Link href={ROUTES.LOGIN}>` にしない。それだと
+          ソーシャルログインを始める前の戻り先を落とす（#1246）。
+          詳しい理由は `signInBackLink.tsx` の冒頭に書いてある
+        */}
+        <SignInBackLink className={styles.c_auth_error__cta} />
       </div>
     );
   },

@@ -283,4 +283,107 @@ describe('SignInContent', () => {
       expect(screen.getByLabelText('パスワード')).toBeInTheDocument();
     });
   });
+  describe('ソーシャルログイン失敗後の戻り先復元（#1246）', () => {
+    const KEY = 'auth:pendingCallbackUrl';
+
+    beforeEach(() => {
+      window.sessionStorage.clear();
+      setLocation('');
+    });
+
+    it('error 付きで戻ったら、預かっていた戻り先をフォームへ渡す', () => {
+      // Auth.js は失敗時のリダイレクトに error と code しか載せないため、
+      // proxy.ts が付けた callbackUrl は OAuth の往復で消えている
+      window.sessionStorage.setItem(KEY, '/watchlist');
+      setLocation('?error=OAuthSignin');
+
+      render(<SignInContent initialError='ログインに失敗しました' />);
+
+      expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
+        'data-callback',
+        '/watchlist',
+      );
+    });
+
+    it('復元したら sessionStorage から消す', () => {
+      window.sessionStorage.setItem(KEY, '/watchlist');
+      setLocation('?error=OAuthSignin');
+
+      render(<SignInContent initialError='ログインに失敗しました' />);
+
+      expect(window.sessionStorage.getItem(KEY)).toBeNull();
+    });
+
+    it('error が無ければ採らない', async () => {
+      // 無条件に採ると、ソーシャルログインを始めたまま別タブでログイン画面を
+      // 開いた人が、身に覚えのない場所へ飛ばされる
+      window.sessionStorage.setItem(KEY, '/watchlist');
+
+      render(<SignInContent />);
+
+      await waitFor(() =>
+        expect(window.sessionStorage.getItem(KEY)).toBeNull(),
+      );
+      expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
+        'data-callback',
+        '',
+      );
+    });
+
+    it('error が無くても預かり分は捨てる', async () => {
+      // 失敗せずにこの画面へ来た＝預かり分は役目を終えている。残すと
+      // 次に別の理由で戻されたときに古い戻り先が蘇る
+      window.sessionStorage.setItem(KEY, '/watchlist');
+
+      render(<SignInContent />);
+
+      await waitFor(() =>
+        expect(window.sessionStorage.getItem(KEY)).toBeNull(),
+      );
+    });
+
+    it('URL の callbackUrl を優先する', () => {
+      // proxy.ts が今まさに付けた値のほうが新しい
+      window.sessionStorage.setItem(KEY, '/watchlist');
+      setLocation('?error=OAuthSignin');
+
+      render(
+        <SignInContent
+          initialError='ログインに失敗しました'
+          callbackUrl='/settings'
+        />,
+      );
+
+      expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
+        'data-callback',
+        '/settings',
+      );
+    });
+
+    it('URL の callbackUrl を採る場合も預かり分は消す', () => {
+      // 残すと、次に別の理由で戻されたときに古い戻り先が蘇る
+      window.sessionStorage.setItem(KEY, '/watchlist');
+      setLocation('?error=OAuthSignin');
+
+      render(
+        <SignInContent
+          initialError='ログインに失敗しました'
+          callbackUrl='/settings'
+        />,
+      );
+
+      expect(window.sessionStorage.getItem(KEY)).toBeNull();
+    });
+
+    it('預けていなければ戻り先なしのまま（例外にしない）', () => {
+      setLocation('?error=OAuthSignin');
+
+      render(<SignInContent initialError='ログインに失敗しました' />);
+
+      expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
+        'data-callback',
+        '',
+      );
+    });
+  });
 });

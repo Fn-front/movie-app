@@ -580,7 +580,7 @@ Movie Appの確認コードです。
 | action | 用途 | 備考 |
 |--------|------|------|
 | registration | 新規登録時のメール認証 | is_verified = false → true |
-| login | メールOTPログイン | セッション発行 |
+| login | メールOTPログイン | セッション発行。未認証なら is_verified = false → true（#1257） |
 | password_change | パスワード変更の本人確認 | ログイン済みユーザーのみ |
 
 ---

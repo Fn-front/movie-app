@@ -61,6 +61,10 @@ const pastDate = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 describe('POST /api/auth/otp/verify', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // ⚠️ clearAllMocks は mockReturnValueOnce のキューを消さない。
+    // 消し忘れると、消費しきれなかった分が**後続のテストに漏れて**
+    // 関係ないテストが落ちる（実測）
+    mockFrom.mockReset();
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
   });
 
@@ -153,6 +157,12 @@ describe('POST /api/auth/otp/verify', () => {
         }),
       }),
     });
+    // users の is_verified 更新（#1257）。トークン発行より前に走る
+    mockFrom.mockReturnValueOnce({
+      update: () => ({
+        eq: () => ({ eq: () => ({ data: null, error: null }) }),
+      }),
+    });
     // OTPレコード更新
     mockFrom.mockReturnValueOnce({
       update: () => ({
@@ -177,6 +187,146 @@ describe('POST /api/auth/otp/verify', () => {
       'test@example.com',
       'otp_verify',
     );
+  });
+
+  /**
+   * LOGIN の検証でもメール認証済みにする（#1257）
+   *
+   * 登録して確認コードを入れる前に離脱した人が「メールでログイン」を選ぶと、
+   * **正しいコードを入れたのに最後の signIn で弾かれて**いた。しかもその
+   * 送信で日次枠を1つ消費済みで、案内される「新規登録をやり直す」も同じ
+   * 枠を使う
+   */
+  describe('LOGIN のメール認証', () => {
+    /** OTP行の取得を積む */
+    const mockOtpFetch = (actionType: string) => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              is: () => ({
+                order: () => ({
+                  limit: () => ({
+                    single: () => ({
+                      data: {
+                        id: 'otp-1',
+                        email: 'test@example.com',
+                        code_hash: hashOtpCode('123456', 'test@example.com'),
+                        action_type: actionType,
+                        attempts: 0,
+                        expires_at: futureDate,
+                        verified_at: null,
+                      },
+                      error: null,
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      });
+    };
+
+    /** otp_codes の検証済み更新を積む（users 更新より後に走る） */
+    const mockOtpCodeUpdate = () => {
+      mockFrom.mockReturnValueOnce({
+        update: () => ({ eq: () => ({ data: null, error: null }) }),
+      });
+    };
+
+    /**
+     * users の更新を積み、ペイロードと絞り込み条件を記録する
+     *
+     * ⚠️ `.eq` の引数まで記録する。記録しないと、対象を別のメールアドレスへ
+     * 差し替えても、`is_verified = false` の条件を別のカラムに変えても
+     * **テストが緑のまま通る**（レビューの変異で実測）
+     */
+    const captureUsersUpdate = (error: unknown = null) => {
+      const captured: {
+        values?: Record<string, unknown>;
+        eq: unknown[][];
+      } = { eq: [] };
+
+      mockFrom.mockReturnValueOnce({
+        update: (values: Record<string, unknown>) => {
+          captured.values = values;
+          const chain = {
+            eq: (column: string, value: unknown) => {
+              captured.eq.push([column, value]);
+              return captured.eq.length < 2 ? chain : { data: null, error };
+            },
+          };
+          return chain;
+        },
+      });
+
+      return captured;
+    };
+
+    it('users を is_verified = true に更新する', async () => {
+      mockOtpFetch('login');
+      const usersUpdate = captureUsersUpdate();
+      mockOtpCodeUpdate();
+
+      const response = await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'login',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(usersUpdate.values).toEqual({ is_verified: true });
+      // 対象の絞り込みまで固定する。宛先のアドレスで引き、既に認証済みの
+      // 行は触らない（無駄な書き込みをしない）
+      expect(usersUpdate.eq).toEqual([
+        ['email', 'test@example.com'],
+        ['is_verified', false],
+      ]);
+      expect(mockFrom.mock.calls.map((c) => c[0])).toContain('users');
+    });
+
+    /**
+     * ⚠️ 握り潰さない。失敗したまま進むと、検証済みトークンは発行された
+     * のに `authorize` が `email_not_verified` で弾く（#1247）という
+     * 噛み合わない状態になる
+     */
+    it('更新に失敗したら500を返す', async () => {
+      mockOtpFetch('login');
+      captureUsersUpdate({ code: '57P01', message: 'connection terminated' });
+
+      const response = await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'login',
+        }),
+      );
+
+      expect(response.status).toBe(500);
+    });
+
+    it('password_change では更新しない', async () => {
+      // ログイン中の本人確認なので対象は必ず認証済み。
+      // 「どの操作で認証済みになるか」を広げない
+      mockOtpFetch('password_change');
+      mockOtpCodeUpdate();
+
+      const response = await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'password_change',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      // OTP行の取得と更新だけ。users への UPDATE は無い
+      const tables = mockFrom.mock.calls.map((c) => c[0]);
+      expect(tables.filter((t) => t === 'users')).toHaveLength(0);
+    });
   });
 
   it('バリデーションエラーで400を返す', async () => {

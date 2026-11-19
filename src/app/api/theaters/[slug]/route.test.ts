@@ -85,63 +85,49 @@ const mockSpeakers = [
   },
 ];
 
-function setupFullQuery() {
-  mockFrom.mockImplementation((table?: string) => {
-    if (table === 'theaters') {
-      return {
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              is: jest.fn().mockReturnValue({
-                single: jest
-                  .fn()
-                  .mockResolvedValue({ data: mockTheater, error: null }),
-              }),
-            }),
-          }),
-        }),
-      };
-    }
-    if (table === 'theater_seats') {
-      return {
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              order: jest
-                .fn()
-                .mockResolvedValue({ data: mockSeats, error: null }),
-            }),
-          }),
-        }),
-      };
-    }
-    if (table === 'theater_speakers') {
-      return {
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockResolvedValue({ data: mockSpeakers, error: null }),
-        }),
-      };
-    }
-    return { select: jest.fn() };
-  });
-}
+/** 埋め込み1本のクエリをモックする（#1275 で3本から1本になった） */
+function setupQuery(
+  result: { data: unknown; error: unknown },
+  orderSpy?: jest.Mock,
+) {
+  const order = orderSpy ?? jest.fn();
+  const chain = {
+    order: jest.fn((...args: unknown[]) => {
+      order(...args);
+      return chain;
+    }),
+    single: jest.fn().mockResolvedValue(result),
+  };
 
-function setupNotFound() {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  mockFrom.mockImplementation((_table?: string) => ({
+  mockFrom.mockImplementation(() => ({
     select: jest.fn().mockReturnValue({
       eq: jest.fn().mockReturnValue({
         eq: jest.fn().mockReturnValue({
-          is: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: null,
-              error: { code: 'PGRST116', message: 'not found' },
-            }),
-          }),
+          is: jest.fn().mockReturnValue(chain),
         }),
       }),
     }),
   }));
+
+  return chain;
+}
+
+/** 埋め込みの戻り（theater_seats / theater_speakers がネストする） */
+const mockEmbedded = {
+  ...mockTheater,
+  theater_seats: mockSeats,
+  theater_speakers: mockSpeakers,
+};
+
+function setupFullQuery(orderSpy?: jest.Mock) {
+  return setupQuery({ data: mockEmbedded, error: null }, orderSpy);
+}
+
+function setupNotFound() {
+  return setupQuery({
+    data: null,
+    error: { code: 'PGRST116', message: 'not found' },
+  });
 }
 
 // --- Tests ---
@@ -168,6 +154,80 @@ describe('GET /api/theaters/[slug]', () => {
     expect(json.data.theater.slug).toBe('standard-medium');
     expect(json.data.theater.seats).toEqual(mockSeats);
     expect(json.data.theater.speakers).toEqual(mockSpeakers);
+  });
+
+  /**
+   * 座席の並び順が従来と一致する（#1275）
+   *
+   * 3本の直列クエリを埋め込み1本にまとめたので、`.order()` に
+   * `referencedTable` を付けないと**埋め込み側には効かない**。
+   * 付け忘れると座席が任意順で返り、座席表の描画が崩れる。
+   */
+  it('座席は row_label → seat_number の順で取る', async () => {
+    const orderSpy = jest.fn();
+    setupFullQuery(orderSpy);
+
+    await GET(createGetRequest(), createContext('standard-medium'));
+
+    expect(orderSpy).toHaveBeenNthCalledWith(1, 'row_label', {
+      referencedTable: 'theater_seats',
+    });
+    expect(orderSpy).toHaveBeenNthCalledWith(2, 'seat_number', {
+      referencedTable: 'theater_seats',
+    });
+  });
+
+  // 3本の直列クエリを1本にまとめた（#1275）。戻すとこのテストが落ちる
+  it('DBへ投げるのは1本だけ', async () => {
+    setupFullQuery();
+
+    const response = await GET(
+      createGetRequest(),
+      createContext('standard-medium'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+    expect(mockFrom).toHaveBeenCalledWith('theaters');
+  });
+
+  /**
+   * ⚠️ 取得失敗を「存在しない」と偽らない
+   *
+   * 1往復にまとめたことで、以前は座席・スピーカーの取得失敗として 500 に
+   * なっていた経路もここへ合流する。`PGRST116` 以外まで 404 に倒すと、
+   * DB の不調が「劇場が無い」として返る
+   */
+  it('PGRST116 以外のエラーは404ではなく500を返す', async () => {
+    setupQuery({
+      data: null,
+      error: { code: '57014', message: 'canceling statement due to timeout' },
+    });
+
+    const response = await GET(
+      createGetRequest(),
+      createContext('standard-medium'),
+    );
+
+    expect(response.status).toBe(500);
+  });
+
+  // 埋め込みが空（座席・スピーカー未登録）でも落ちない
+  it('座席・スピーカーが無い劇場は空配列を返す', async () => {
+    setupQuery({
+      data: { ...mockTheater, theater_seats: [], theater_speakers: [] },
+      error: null,
+    });
+
+    const response = await GET(
+      createGetRequest(),
+      createContext('standard-medium'),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.theater.seats).toEqual([]);
+    expect(json.data.theater.speakers).toEqual([]);
   });
 
   it('Cache-Controlヘッダーが設定される', async () => {

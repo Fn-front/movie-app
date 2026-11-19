@@ -148,20 +148,29 @@ export async function GET(request: Request) {
     const supabase = createAnonClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    // 利用可能な年度一覧を取得（DB 側で DISTINCT・降順ソート）
-    const { data: availableYears, error: yearError } =
-      await supabase.rpc('get_award_years');
+    // 年度一覧と受賞作品を並列で取る（#1275）
+    //
+    // `get_award_years()` は引数を取らず、受賞作品の取得結果にも依存しない。
+    // 直列に await していたぶん、DB の往復1回ぶん待っていた。
+    //
+    // ⚠️ `Promise.all` は片方が reject しても両方投げたあとになる。
+    // ここは supabase-js なので reject ではなく `{ error }` で返るが、
+    // **どちらを優先して投げるかは明示する**（従来の直列と同じく年度一覧を先に）。
+    const [
+      { data: availableYears, error: yearError },
+      { data: rawAwardRows, error: awardError },
+    ] = await Promise.all([
+      supabase.rpc('get_award_years'),
+      supabase
+        .from('award_movies')
+        .select(AWARD_MOVIES_SELECT)
+        .eq('award_year', year)
+        .order('display_order', { ascending: true }),
+    ]);
 
     if (yearError) {
       throw yearError;
     }
-
-    // 指定年度の受賞作品データを取得（必要カラムのみ）
-    const { data: rawAwardRows, error: awardError } = await supabase
-      .from('award_movies')
-      .select(AWARD_MOVIES_SELECT)
-      .eq('award_year', year)
-      .order('display_order', { ascending: true });
 
     if (awardError) {
       throw awardError;

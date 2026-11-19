@@ -425,6 +425,59 @@ describe('GET /api/awards', () => {
       data: null,
       error: { message: 'DB error', code: 'INTERNAL' },
     });
+    // ⚠️ 並列化したので受賞作品側も必ず投げられる（#1275）。
+    // 積んでおかないと「モックが無くて落ちた500」になり、
+    // 年度一覧のエラーを見ていることにならない
+    mockAwardDataQuery([createAwardRow()]);
+
+    const response = await GET(createRequest('2026'));
+    expect(response.status).toBe(500);
+  });
+
+  /**
+   * 年度一覧と受賞作品が並列に投げられる（#1275）
+   *
+   * `get_award_years()` は引数を取らず受賞作品にも依存しないのに、
+   * 直列に await していたぶん DB の往復1回ぶん待っていた。
+   */
+  it('年度一覧の応答を待たずに受賞作品を投げる', async () => {
+    let resolveYears: ((value: unknown) => void) | null = null;
+    mockAnonRpc.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveYears = resolve;
+      }),
+    );
+    mockAwardDataQuery([createAwardRow()]);
+
+    const pending = GET(createRequest('2026'));
+
+    // 年度一覧がまだ返っていない時点で、受賞作品のクエリが出ていること
+    await Promise.resolve();
+    expect(mockAnonFrom).toHaveBeenCalledWith('award_movies');
+
+    resolveYears!({ data: [2026], error: null });
+    const response = await pending;
+
+    expect(response.status).toBe(200);
+  });
+
+  // 両方が失敗したときは、直列だったころと同じく年度一覧のエラーを投げる
+  it('両方エラーなら年度一覧のエラーを優先する', async () => {
+    mockAnonRpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'years failed', code: 'INTERNAL' },
+    });
+    mockAnonFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          order: () =>
+            Promise.resolve({
+              data: null,
+              error: { message: 'awards failed', code: 'INTERNAL' },
+            }),
+        }),
+      }),
+    });
 
     const response = await GET(createRequest('2026'));
     expect(response.status).toBe(500);

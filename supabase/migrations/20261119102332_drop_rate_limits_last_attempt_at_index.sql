@@ -10,10 +10,14 @@
 --     次点 movie_cache UPDATE                     111 MB
 --
 -- 原因:
---   `consume_rate_limit` は呼ばれるたびに `last_attempt_at = now()` を書く
---   （20261019013008）。更新対象の列に索引があると Postgres は HOT 更新を
---   選べないため、1回ごとに新しいヒープタプルに加えて**4本すべての索引**へ
---   新エントリを書く。
+--   `consume_rate_limit` は `last_attempt_at = now()` を書く（20261019013008）。
+--   更新対象の列に btree 索引があると Postgres は HOT 更新を選べないため、
+--   1回ごとに新しいヒープタプルに加えて**4本すべての索引**へ新エントリを書く。
+--
+--   ⚠️ 「毎回書く」ではない。ロック中（locked_until > now()）は
+--   last_attempt_at を更新しない分岐があるため（同ファイル :84-90）、
+--   その間は HOT が成立する。累積の HOT 率が 0% ではなく 13.5% だったのは
+--   これが理由で、通常経路に限れば 0% だった。
 --
 --   実測（本番・PostgREST 経由で 200 回、1回=1トランザクション）:
 --     n_tup_upd +197 に対し n_tup_hot_upd +0    ← HOT 率 0%
@@ -29,24 +33,57 @@
 --     idx_rate_limits_identifier_action   スキャン 1,931,437回    432 kB
 --     idx_rate_limits_last_attempt_at     スキャン       979回  6,856 kB  ← これ
 --
---   唯一の読み手は日次 Cron（/api/cron/cleanup-rate-limits →
---   delete_expired_rate_limits）の DELETE 1本。対象はヒープ 544 kB = 68 ページで、
---   seq scan でも一瞬で終わる。193万回の書き込みコストを払って日次1回の
---   DELETE を速くするのは割に合わない。
+--   last_attempt_at を範囲検索に使うのは delete_expired_rate_limits
+--   （日次 Cron /api/cron/cleanup-rate-limits、vercel.json の "0 17 * * *"）
+--   だけ。対象はヒープ 544 kB = 68 ページで、seq scan でも一瞬で終わる。
+--   193万回の書き込みコストを払ってこの DELETE を速くするのは割に合わない。
+--
+--   （スキャン 979 回は日次1回×稼働日数より多い。E2E の
+--   runDeleteExpiredRateLimits 由来と思われるが、判断は変わらない）
 --
 --   database-schema.md には #933 の時点で「行数が増えないなら索引を外して
 --   seq scan に任せる選択も成立する」と書いてあり、残した理由は
 --   「掃除が止まったときに DELETE が重くならないように」だった。その保険は
 --   効果より代償が大きいと実測で判断できたので外す。
 --
---   行数が暴走しない根拠: 行は (identifier, action_type) の UNIQUE に対する
---   upsert で再利用されるので、行数は「異なる識別子の数」で頭打ちになる。
---   試行回数ではない。保持期間48時間の掃除が止まっても線形には増えない。
+--   行数について（⚠️ ここは当初「頭打ちになる」と断定していたが誤り。
+--   レビューの指摘で修正した）:
 --
--- 部分索引や BRIN では代替にならない:
---   HOT が使えるかの判定は「更新された列が索引に含まれるか」で行われ、
---   索引の種類や WHERE 句は関係しない。last_attempt_at に索引がある限り
---   どの形でも HOT は復活しない。外す以外に手段がない。
+--   行は (identifier, action_type) の UNIQUE に対する upsert で再利用されるので、
+--   **試行回数には比例しない**。ただし上限は「異なる識別子の数 ×
+--   異なる action_type の数」であって識別子の数ではない（実測: 1,234行 /
+--   識別子 899 / action_type 22）。
+--
+--   そして**識別子の数自体には現状これといった上限が無い**ので、
+--   「頭打ちになる」とは言えない。正しくは「試行回数には比例しないが、
+--   時間に対しては緩やかに増える」。実測の増加ペースは約 617 行/日
+--   （保持48時間で 1,234 行）。仮に掃除が1年止まっても約 225k 行 ≒ 100 MB で、
+--   日次1回の seq scan としては許容範囲。
+--
+--   索引を外す判断は変わらないが、**行数が小さいままである前提は
+--   無条件には成り立たない**。行数の監視と、掃除が大きいテーブルでも
+--   完走すること（#1330 の分割削除）をもって担保する。
+--
+-- 代替案の検討:
+--   部分索引は代替にならない。HOT の判定に WHERE 句は関係せず、
+--   last_attempt_at が btree 索引に含まれる時点で HOT は死ぬ。
+--
+--   ⚠️ BRIN は「HOT を殺すから」では落とせない。**PostgreSQL 16 以降、
+--   BRIN のような summarizing index の列だけを更新する場合は HOT が成立する**
+--   （PG16 リリースノート "Allow HOT updates if only BRIN-indexed columns are
+--   updated" / PG17 ドキュメント storage-hot.html「not including summarizing
+--   indexes. The only summarizing index method in the core PostgreSQL
+--   distribution is BRIN」）。本番は PostgreSQL 17.6 なので該当する。
+--
+--   BRIN を採らないのは**サイズが理由**。このヒープは 68 ページしかなく、
+--   BRIN の既定 pages_per_range = 128 では表全体が1レンジに収まるため、
+--   枝刈りが一切効かず seq scan と変わらない。索引を維持する分だけ損をする。
+--   （last_attempt_at の correlation は 0.809 と良好なので、
+--   「相関が悪いから使えない」ではない）
+--
+--   ⚠️ この「サイズが理由」は rate_limits 固有の事情。大きいテーブルで
+--   同じ問題を扱うとき（#1327 の movie_cache など）は BRIN が有効な
+--   選択肢になりうるので、ここの結論をそのまま持ち出さないこと。
 --
 -- ⚠️ CONCURRENTLY は付けない。db push はマイグレーションをトランザクションで
 --   包むため `DROP INDEX CONCURRENTLY` は実行できない。対象は 6,856 kB の
@@ -55,7 +92,30 @@
 -- 復活させたくなったら:
 --   rate_limits の行数が桁で増え、日次 DELETE が実際に遅くなったときだけ
 --   検討する。その場合も HOT が死ぬ代償は変わらないので、先に
---   「なぜ行数が増えたのか」（掃除の停止 / 識別子の設計）を疑うこと。
+--   「なぜ行数が増えたのか」（掃除の停止 / 識別子の作られ方）を疑うこと。
+--
+--   ⛔ 戻すときに db push（＝素の CREATE INDEX）を使わないこと。
+--   素の CREATE INDEX は SHARE ロックで書き込みを止める。そこへ
+--   authenticator ロールの lock_timeout = 8s が効くと checkRateLimit が
+--   エラーになり、login / otp_verify / totp_verify などは
+--   FAIL_CLOSED_ACTIONS（src/constants/rateLimit.ts:127）で拒否側へ倒れる。
+--   **索引を作っている間ログインできなくなる。**
+--
+--   CONCURRENTLY はトランザクションに入れられないので db push では流せない。
+--   psql / supabase db query から直接実行する:
+--
+--     CREATE INDEX CONCURRENTLY idx_rate_limits_last_attempt_at
+--       ON rate_limits(last_attempt_at);
+--     -- 失敗すると INVALID な索引が残る。必ず確認する:
+--     --   SELECT indexrelid::regclass, indisvalid FROM pg_index
+--     --    WHERE indrelid = 'rate_limits'::regclass;
+--     -- INVALID なら DROP INDEX CONCURRENTLY してやり直す
+--
+--   ⚠️ 掃除 RPC は PostgREST 経由なので authenticator の
+--   statement_timeout = 8s が効く。行数が増えた状態では DELETE 自体が
+--   8秒を超えて全ロールバックし、「1行も消えないまま翌日さらに増える」
+--   という詰み方をしうる。その場合は索引を戻すより先に、
+--   delete_expired_rate_limits を分割削除にすること（#1330）。
 
 DROP INDEX IF EXISTS idx_rate_limits_last_attempt_at;
 

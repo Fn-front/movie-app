@@ -9,7 +9,6 @@ import { NextResponse, after } from 'next/server';
 import { withAuth } from '@/helpers/routeHandler';
 import { parseAndValidate } from '@/helpers/requestValidation';
 import {
-  checkDuplicate,
   conflictResponse,
   isUniqueViolation,
   rateLimitExceededResponse,
@@ -152,18 +151,15 @@ export const POST = withAuth(
     );
     if (parsed.error) return parsed.error;
 
-    // 重複チェック
-    const isDuplicate = await checkDuplicate(
-      supabase,
-      'favorites',
-      session.user.id,
-      parsed.data.tmdb_movie_id,
-    );
-    if (isDuplicate) {
-      return conflictResponse(FAVORITES_ERROR_MESSAGES.ALREADY_EXISTS);
-    }
-
-    // お気に入りに追加
+    // ⚠️ INSERT の前に重複を SELECT しない（#1277）。
+    //
+    // 重複は部分UNIQUEインデックス
+    // （`idx_favorites_user_movie ... WHERE deleted_at IS NULL`）が保証して
+    // おり、下の 23505 → 409 で同じ応答を返せる。事前チェックは race も
+    // 防げない（だから `isUniqueViolation` がある）ので、**防げない競合の
+    // ために成功時も必ず1往復増やしていた**だけだった。
+    //
+    // お気に入り追加
     const { data: inserted, error: insertError } = await supabase
       .from('favorites')
       .insert({

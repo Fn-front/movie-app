@@ -89,6 +89,16 @@ export const POST = withAuth(
 
     if (parsed.error) return parsed.error;
 
+    // ⚠️ **ここだけは事前チェックを残す**（#1277）。
+    //
+    // `favorites` / `watchlist` の POST からは外した。重複は部分UNIQUE
+    // インデックスが保証していて、INSERT の 23505 → 409 で同じ応答を
+    // 返せるので、成功時に1往復ムダになるだけだったため。
+    //
+    // このルートは事情が違う。すぐ下に TMDb の呼び出し
+    // （`getMovieDismissSignals`）がある。外すと重複リクエストでも
+    // TMDb を叩いてから 409 を返すことになり、**かえって遅くなる**。
+    // ここで弾けば外部APIに触らずに済む
     const isDuplicate = await checkDuplicate(
       supabase,
       'dismissed_movies',

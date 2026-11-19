@@ -37,6 +37,18 @@ export async function softDeleteById(
 /**
  * 重複チェック（同一ユーザー・同一映画の未削除レコードが存在するか）
  *
+ * ⚠️ **INSERT の前に通すための関数ではない**（#1277）。重複は部分UNIQUE
+ * インデックスが保証しており、INSERT が返す 23505 を `isUniqueViolation`
+ * で 409 に変換すれば同じ応答になる。事前チェックは race も防げないので、
+ * 足すと「防げない競合のために成功時も必ず1往復増やす」ことになる。
+ *
+ * 残っている唯一の呼び出し元は `POST /api/dismissed-movies`。あちらは
+ * **INSERT の前に TMDb の呼び出しがある**ため、先に弾かないと重複
+ * リクエストでも外部APIを叩いてから 409 を返すことになる。
+ *
+ * 同じ事情（検証の後ろに高価な処理がある）が無い限り、新しい呼び出しを
+ * 足さないこと。
+ *
  * @returns 重複が存在する場合true
  */
 export async function checkDuplicate(

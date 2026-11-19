@@ -12,10 +12,17 @@ import { GET } from './route';
 
 // --- Mocks ---
 
+/**
+ * ⚠️ モックするのは `movies.server` のキャッシュ済み関数（#1273）。
+ *
+ * ルートは素の `getMovieDetail` ではなく `getCachedMovieDetail` を呼ぶ。
+ * `unstable_cache` は Next のキャッシュ文脈が要るので、ここでは
+ * `/movies/[id]` のページテストと同じくラッパーごと差し替える
+ */
 const mockGetMovieDetail = jest.fn();
 
-jest.mock('@/lib/tmdb/tmdb', () => ({
-  getMovieDetail: (...args: unknown[]) => mockGetMovieDetail(...args),
+jest.mock('@/lib/api/movies/movies.server', () => ({
+  getCachedMovieDetail: (...args: unknown[]) => mockGetMovieDetail(...args),
 }));
 
 const mockGetAuthSession = jest.fn().mockResolvedValue(null);
@@ -24,8 +31,9 @@ jest.mock('@/helpers/auth', () => ({
 }));
 
 const mockFrom = jest.fn();
+const mockCreateServiceRoleClient = jest.fn(() => ({ from: mockFrom }));
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () => ({ from: mockFrom }),
+  createServiceRoleClient: () => mockCreateServiceRoleClient(),
 }));
 
 const mockEnforcePublicRateLimit = jest.fn();
@@ -229,6 +237,74 @@ describe('GET /api/movies/:id', () => {
   });
 
   // === Cache-Controlヘッダー ===
+
+  /**
+   * TMDb と favorites を並列に投げる（#1273）
+   *
+   * もとは TMDb（数百ms）を待ってから DB を引いていた。どちらも
+   * `movieId` にしか依存しないので待つ理由が無い。
+   */
+  it('TMDbの応答を待たずにお気に入りを引く', async () => {
+    mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
+
+    let resolveMovie: ((value: unknown) => void) | null = null;
+    mockGetMovieDetail.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveMovie = resolve;
+      }),
+    );
+
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: jest.fn().mockReturnValue({
+          eq: () => ({
+            is: () => ({
+              single: () => ({ data: { id: 'fav-1', rating: 8 }, error: null }),
+            }),
+          }),
+        }),
+      }),
+    });
+
+    const pending = GET(createRequest('123'), { params: createParams('123') });
+
+    // TMDb がまだ返っていない時点で favorites のクエリが出ていること。
+    // ルートはここへ来るまでにレート制限・params・session を await するので、
+    // マイクロタスク1つでは足りない
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(mockFrom).toHaveBeenCalledWith('favorites');
+
+    resolveMovie!({ id: 123, title: 'テスト映画', overview: '' });
+    const response = await pending;
+
+    expect(response.status).toBe(200);
+  });
+
+  // キャッシュ済みのほうを呼ぶ（素の getMovieDetail に戻すと落ちる）
+  it('キャッシュ済みの取得関数を movieId で呼ぶ', async () => {
+    mockGetMovieDetail.mockResolvedValue({ id: 123, title: 'テスト映画' });
+
+    await GET(createRequest('123'), { params: createParams('123') });
+
+    expect(mockGetMovieDetail).toHaveBeenCalledWith(123);
+    expect(mockGetMovieDetail).toHaveBeenCalledTimes(1);
+  });
+
+  // 認証済みでも service role クライアントを作れないときはキーごと省く
+  it('service roleクライアントが無ければfavoriteを付けない', async () => {
+    mockGetAuthSession.mockResolvedValue({ user: { id: 'user-123' } });
+    mockCreateServiceRoleClient.mockReturnValueOnce(null);
+    mockGetMovieDetail.mockResolvedValue({ id: 123, title: 'テスト映画' });
+
+    const response = await GET(createRequest('123'), {
+      params: createParams('123'),
+    });
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect('favorite' in json.data).toBe(false);
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
 
   it('未認証時はpublic Cache-Controlヘッダーが設定される', async () => {
     mockGetAuthSession.mockResolvedValue(null);

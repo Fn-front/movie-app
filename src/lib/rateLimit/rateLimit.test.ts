@@ -804,6 +804,27 @@ describe('releaseRateLimit', () => {
     });
   });
 
+  /**
+   * reject も捕まえる（#1267）
+   *
+   * supabase-js は fetch の失敗を `error` に畳むので現状これは起きないが、
+   * 「失敗しても例外にしない」契約を満たすには要る。投げると呼び出し元の
+   * 後続（本題のエラーレスポンスの生成）まで飛ぶ
+   */
+  it('RPC が reject しても例外にせず警告だけ出す', async () => {
+    const rpc = jest.fn().mockRejectedValue(new Error('network down'));
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    await expect(
+      releaseRateLimit(supabase, 'user@example.com', 'otp_send_daily'),
+    ).resolves.toBeUndefined();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('例外になりました'),
+      expect.any(Error),
+    );
+  });
+
   it('行を消さない（DELETE を使わない）', async () => {
     // 消すと、同じ日に成功した送信の分まで帳消しになる
     const rpc = jest.fn().mockResolvedValue({ data: null, error: null });

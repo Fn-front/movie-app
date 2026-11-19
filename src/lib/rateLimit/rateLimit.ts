@@ -376,6 +376,12 @@ export async function resetRateLimit(
  * 本題のエラーを返そうとしており、後始末の失敗でそれを覆い隠さない。
  * 枠が戻らなくても、窓が過ぎれば回復する。
  *
+ * ⚠️ **`consume` の逆操作ではない**（#1267）。戻すのは `attempts` と
+ * `locked_until` だけで、`last_attempt_at` はそのまま。スライディング
+ * ウィンドウの起点は「失敗した試行」の時刻に残るため、それ以前の正当な
+ * 試行の枠は**最後の成功ではなく失敗した試行から**窓のぶん待つことになる。
+ * 向きとしては保守側（過小計上にならない）なので穴ではない。
+ *
  * @param supabase - Supabaseクライアント
  * @param identifier - 識別子（`checkRateLimit` に渡したものと同じ）
  * @param actionType - アクション種別（同上）
@@ -385,15 +391,34 @@ export async function releaseRateLimit(
   identifier: string,
   actionType: ReleasableRateLimitAction,
 ): Promise<void> {
-  const { error } = await supabase.rpc('release_rate_limit', {
-    p_identifier: identifier,
-    p_action_type: actionType,
-  });
+  // ⚠️ `{ error }` だけでなく reject も捕まえる（#1267）。
+  //
+  // supabase-js は fetch の失敗を `error` に畳むので現状これが投げることは
+  // 無いが、「失敗しても例外にしない」という上の契約を満たすには要る。
+  // 投げると呼び出し元の後続（本題のエラーレスポンスの生成）まで飛ぶ。
+  //
+  // `try` は RPC の await だけに絞る。広げると、この先のプログラミング
+  // ミスまで「枠の返却が例外になりました」に丸められて気づけなくなる
+  let error: unknown = null;
+
+  try {
+    ({ error } = await supabase.rpc('release_rate_limit', {
+      p_identifier: identifier,
+      p_action_type: actionType,
+    }));
+  } catch (cause) {
+    console.warn(
+      `[rateLimit] 枠の返却が例外になりました action='${actionType}'`,
+      cause,
+    );
+    return;
+  }
 
   if (error) {
-    // ⚠️ `error` にする。セキュリティ的には安全側（ロックは解除されない）だが、
-    // 帰結は「枠が戻らず利用者が締め出される」という可用性の事故。
-    // 許可リストの食い違い（22023）もここに出るので、warn だと埋もれる。
+    // ⚠️ `error` にする（#1266）。セキュリティ的には安全側（ロックは解除
+    // されない）だが、帰結は「枠が戻らず利用者が締め出される」という
+    // 可用性の事故。許可リストの食い違い（22023）もここに出るので、
+    // warn だと埋もれる。
     //
     // 識別子（メールアドレス等）はログに出さない。このファイルの他のログも
     // 含めていない

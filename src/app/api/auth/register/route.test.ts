@@ -370,8 +370,18 @@ describe('POST /api/auth/register', () => {
 
     mockSendOtpEmail.mockResolvedValueOnce(false);
 
-    // ロールバック: OTPレコード削除
-    const mockOtpDelete = jest.fn().mockReturnValue({ eq: jest.fn() });
+    // ロールバック: OTPレコード削除（#1267 で条件を絞った）
+    //
+    // ⚠️ `eq` と `is` を**別々に**記録する。同じ配列に積むと、
+    // `.is('verified_at', null)` を `.eq('verified_at', null)` に変えても
+    // 通ってしまう。PostgREST では `eq.null` は NULL 一致にならないので、
+    // 実際には1行も消えずロールバックが無効化される
+    // 自身を返すチェーンなので、型注釈が無いと TS7022 になる
+    const otpDeleteChain: { eq: jest.Mock; is: jest.Mock } = {
+      eq: jest.fn(() => otpDeleteChain),
+      is: jest.fn(() => otpDeleteChain),
+    };
+    const mockOtpDelete = jest.fn().mockReturnValue(otpDeleteChain);
     mockFrom.mockReturnValueOnce({ delete: mockOtpDelete });
     // ロールバック: ユーザーレコード削除
     const mockUserDelete = jest.fn().mockReturnValue({ eq: jest.fn() });
@@ -389,6 +399,19 @@ describe('POST /api/auth/register', () => {
     expect(json.success).toBe(false);
     // ロールバックが実行されたことを確認
     expect(mockOtpDelete).toHaveBeenCalled();
+    // ⚠️ `email` だけで消さない（#1267）。全 action_type の、しかも
+    // **検証済みの行まで**巻き込むと、OTPログインとパスワード変更が
+    // 参照している検証済みトークンが失われる。
+    //
+    // 呼び出し順には依存させない（生成されるSQLは同じ）
+    expect(otpDeleteChain.eq).toHaveBeenCalledWith('email', 'test@example.com');
+    expect(otpDeleteChain.eq).toHaveBeenCalledWith(
+      'action_type',
+      'registration',
+    );
+    expect(otpDeleteChain.is).toHaveBeenCalledWith('verified_at', null);
+    // email だけに戻すと落ちる
+    expect(otpDeleteChain.eq).toHaveBeenCalledTimes(2);
     expect(mockUserDelete).toHaveBeenCalled();
     // 日次送信枠も戻す（#1260）。行だけ消して枠を残すと、1通も届かないまま
     // 5回で「本日の送信上限に達しました」に変わる
@@ -658,10 +681,27 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     });
     mockFrom.mockReturnValueOnce({ insert: () => ({ error: null }) });
     // ロールバック: otp_codes の削除のみが呼ばれるはず
+    //
+    // ⚠️ チェーンを3段にすること（#1267）。1段のままだと新実装の2段目で
+    // TypeError になり、外側の catch で 500 になって**テストは緑のまま
+    // 通る**。だが users の削除に到達していないだけなので、
+    // 「`!existingUser` のガードが効いた」ことを検証できていない
+    const rollbackEq = jest.fn();
+    const rollbackIs = jest.fn();
     mockFrom.mockImplementation(() => ({
       delete: () => {
         deletedTables.push('delete');
-        return { eq: () => ({ error: null }) };
+        const chain: { eq: jest.Mock; is: jest.Mock } = {
+          eq: jest.fn((column: string, value: unknown) => {
+            rollbackEq(column, value);
+            return chain;
+          }),
+          is: jest.fn((column: string, value: unknown) => {
+            rollbackIs(column, value);
+            return { error: null };
+          }),
+        };
+        return chain;
       },
     }));
 
@@ -672,6 +712,16 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     expect(response.status).toBe(500);
     // otp_codes の1回だけ（users の削除が走っていない）
     expect(deletedTables).toHaveLength(1);
+    // 上書き経路でも削除条件を絞っていること
+    expect(rollbackEq).toHaveBeenCalledWith('email', 'victim@example.com');
+    expect(rollbackEq).toHaveBeenCalledWith('action_type', 'registration');
+    expect(rollbackIs).toHaveBeenCalledWith('verified_at', null);
+    // 送信枠も戻すこと（#1260）。TypeError で手前が落ちていると実行されない
+    expect(mockReleaseRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'victim@example.com',
+      'otp_send_daily',
+    );
   });
 
   // === レート制限の識別子と送信カウンタ ===

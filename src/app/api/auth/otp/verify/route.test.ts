@@ -319,6 +319,9 @@ describe('POST /api/auth/otp/verify', () => {
         ['email', 'test@example.com'],
         ['is_verified', false],
       ]);
+      // 返却列も固定する。昇格の有無はここで返る件数でしか判定できないため、
+      // `.select()` を落とすと通知が送られなくなる
+      expect(usersUpdate.selected).toBe('id');
       expect(mockFrom.mock.calls.map((c) => c[0])).toContain('users');
     });
 

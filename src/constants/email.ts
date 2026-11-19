@@ -125,6 +125,13 @@ ${settingsUrl}
 ください。`;
 }
 
+/**
+ * OTPメール本文を生成する
+ *
+ * @param code - 6桁の確認コード
+ * @param action - OTPの用途
+ * @returns 用途の明記と共有禁止の警告を含む本文
+ */
 export function buildOtpEmailText(
   code: string,
   action: OtpEmailAction,

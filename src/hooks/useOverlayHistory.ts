@@ -41,6 +41,15 @@ interface OverlayEntry {
   close: () => void;
   /** 戻る操作で外れたか（× やEscで閉じた場合と区別する） */
   popped: boolean;
+  /**
+   * このオーバーレイが載っている履歴エントリのトークン
+   *
+   * 「閉じたが cleanup がまだ走っていない」状態の自分を、進むの popstate から
+   * 見つけるために持つ（#1304）
+   */
+  token: string;
+  /** 開き直す手段。`onReopen` が無ければ undefined */
+  reopen?: () => void;
 }
 
 const openOverlays: OverlayEntry[] = [];
@@ -201,6 +210,34 @@ function handlePopState(): void {
       reopen();
       return;
     }
+
+    /*
+      休止登録が**まだ無い**ケース（#1304）。
+
+      登録は閉じたオーバーレイの cleanup で行うが、React の passive effect は
+      閉じた描画の**後**に走る。遅いマシンでは、その隙に進むの popstate が
+      届く。以前はここを素通りして下の close 側へ落ち、**閉じているものを
+      もう一度閉じて**進むを握り潰していた（CI の E2E で実測。trace では
+      `goForward()` 直後の `toBeVisible()` が10秒タイムアウトし、
+      コンソールエラーは0件だった）。
+
+      `openOverlays` にはまだ自分のエントリが `popped` のまま残っているので、
+      そこから開き直す手段を取る。
+
+      ⚠️ `popped` は**戻さない**。遅れて走る cleanup が `shouldFold` を
+      真と判断し、`history.back()` で**いま復活させたエントリを畳んで**
+      しまう。開き直しの effect が `isResurrected` としてこのエントリを
+      引き継ぐので、`popped` が false の新しい entry に差し替わる
+    */
+    const awaitingCleanup = openOverlays.find(
+      (candidate) => candidate.token === token && candidate.popped,
+    );
+
+    if (awaitingCleanup?.reopen) {
+      resurrectedTokens.add(token);
+      awaitingCleanup.reopen();
+      return;
+    }
   }
 
   const top = openOverlays[openOverlays.length - 1];
@@ -357,10 +394,6 @@ export function useOverlayHistory(
 
     navigatingRef.current = false;
 
-    const entry: OverlayEntry = {
-      close: () => onCloseRef.current(),
-      popped: false,
-    };
     /*
       進むで自分のエントリが復活し、その popstate で開き直された場合は
       **エントリがもう存在する**。積み直すと履歴が1つ増え、戻る回数が
@@ -379,6 +412,14 @@ export function useOverlayHistory(
       resurrectedTokens.has(resurrected) &&
       ownTokensRef.current.has(resurrected);
     const token = isResurrected ? resurrected : createOverlayToken();
+
+    const entry: OverlayEntry = {
+      close: () => onCloseRef.current(),
+      popped: false,
+      token,
+      // 休止登録が間に合わなかったときの開き直し口（#1304）
+      reopen: onReopenRef.current ? () => onReopenRef.current?.() : undefined,
+    };
 
     ownTokensRef.current.add(token);
     openOverlays.push(entry);

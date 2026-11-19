@@ -611,4 +611,92 @@ describe('useOverlayHistory', () => {
 
     expect(backSpy).not.toHaveBeenCalled();
   });
+  /**
+   * 閉じた直後、cleanup より先に「進む」が届く（#1304）
+   *
+   * 休止登録（`dormantOverlays`）はオーバーレイの cleanup で行うが、
+   * React の passive effect は**閉じた描画の後**に走る。遅いマシンでは
+   * その隙に進むの popstate が届き、登録がまだ空のまま素通りして
+   * **閉じているものをもう一度閉じて**進むを握り潰していた。
+   *
+   * CI の E2E（`e2e/mobile/overlayHistory.spec.ts`）で実際に落ちた。
+   * trace では `goForward()` 直後の `toBeVisible()` が10秒タイムアウトし、
+   * コンソールエラーは0件だった
+   */
+  describe('cleanup より先に進むが届く', () => {
+    /** 進むでエントリが復活した状態の popstate */
+    const dispatchForward = (token: unknown) => {
+      act(() => {
+        window.history.replaceState(
+          { __overlayHistory: token },
+          '',
+          window.location.href,
+        );
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+    };
+
+    it('cleanup が走っていなくても開き直す', () => {
+      const onReopen = jest.fn();
+      renderHook(() => useOverlayHistory(true, jest.fn(), onReopen));
+      const token = window.history.state?.__overlayHistory;
+
+      // 戻るで閉じる。再描画しない＝ cleanup はまだ走っていない
+      dispatchPopState();
+
+      dispatchForward(token);
+
+      expect(onReopen).toHaveBeenCalledTimes(1);
+    });
+
+    it('遅れて cleanup が走っても、復活したエントリを畳まない', async () => {
+      // 畳むと history.back() で進むを打ち消してしまう
+      const onReopen = jest.fn();
+      const { rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), onReopen),
+        { initialProps: { open: true } },
+      );
+      const token = window.history.state?.__overlayHistory;
+
+      dispatchPopState();
+      dispatchForward(token);
+
+      // ここで React が溜めていた cleanup（open: false）を走らせ、
+      // 続けて開き直しの setup（open: true）を走らせる
+      rerender({ open: false });
+      rerender({ open: true });
+      await flushAsyncBack();
+
+      expect(backSpy).not.toHaveBeenCalled();
+    });
+
+    it('開き直したあと履歴は増えない', () => {
+      // 進むでエントリは既に戻っている。積み直すと戻る回数が合わなくなる
+      const onReopen = jest.fn();
+      const { rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), onReopen),
+        { initialProps: { open: true } },
+      );
+      const token = window.history.state?.__overlayHistory;
+      const length = window.history.length;
+
+      dispatchPopState();
+      dispatchForward(token);
+      rerender({ open: false });
+      rerender({ open: true });
+
+      expect(window.history.length).toBe(length);
+    });
+
+    it('他人のトークンでは開き直さない', () => {
+      // 自分のエントリでないものに反応すると、別のオーバーレイを巻き込む
+      const onReopen = jest.fn();
+      renderHook(() => useOverlayHistory(true, jest.fn(), onReopen));
+
+      dispatchPopState();
+      dispatchForward('overlay-999');
+
+      expect(onReopen).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -29,6 +29,12 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
   resetRateLimit: (...args: unknown[]) => mockResetRateLimit(...args),
 }));
 
+const mockSendPasswordInvalidatedEmail = jest.fn().mockResolvedValue(true);
+jest.mock('@/lib/auth/sendPasswordInvalidatedEmail', () => ({
+  sendPasswordInvalidatedEmail: (...args: unknown[]) =>
+    mockSendPasswordInvalidatedEmail(...args),
+}));
+
 // --- Helpers ---
 
 const createRequest = (body: Record<string, unknown>) =>
@@ -66,6 +72,7 @@ describe('POST /api/auth/otp/verify', () => {
     // 関係ないテストが落ちる（実測）
     mockFrom.mockReset();
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockSendPasswordInvalidatedEmail.mockResolvedValue(true);
   });
 
   it('registration: 正常にOTPを検証して認証完了できる', async () => {
@@ -160,7 +167,11 @@ describe('POST /api/auth/otp/verify', () => {
     // users の is_verified 更新（#1257）。トークン発行より前に走る
     mockFrom.mockReturnValueOnce({
       update: () => ({
-        eq: () => ({ eq: () => ({ data: null, error: null }) }),
+        eq: () => ({
+          eq: () => ({
+            select: () => ({ data: [{ id: 'user-1' }], error: null }),
+          }),
+        }),
       }),
     });
     // OTPレコード更新
@@ -236,16 +247,23 @@ describe('POST /api/auth/otp/verify', () => {
     };
 
     /**
-     * users の更新を積み、ペイロードと絞り込み条件を記録する
+     * users の更新を積み、ペイロード・絞り込み条件・返却列を記録する
      *
      * ⚠️ `.eq` の引数まで記録する。記録しないと、対象を別のメールアドレスへ
      * 差し替えても、`is_verified = false` の条件を別のカラムに変えても
      * **テストが緑のまま通る**（レビューの変異で実測）
+     *
+     * @param options.error - 更新時に返すエラー
+     * @param options.promoted - 実際に昇格した行があったか（#1302 の通知判定）
      */
-    const captureUsersUpdate = (error: unknown = null) => {
+    const captureUsersUpdate = ({
+      error = null,
+      promoted = true,
+    }: { error?: unknown; promoted?: boolean } = {}) => {
       const captured: {
         values?: Record<string, unknown>;
         eq: unknown[][];
+        selected?: string;
       } = { eq: [] };
 
       mockFrom.mockReturnValueOnce({
@@ -254,7 +272,17 @@ describe('POST /api/auth/otp/verify', () => {
           const chain = {
             eq: (column: string, value: unknown) => {
               captured.eq.push([column, value]);
-              return captured.eq.length < 2 ? chain : { data: null, error };
+              return captured.eq.length < 2
+                ? chain
+                : {
+                    select: (columns: string) => {
+                      captured.selected = columns;
+                      return {
+                        data: promoted ? [{ id: 'user-1' }] : [],
+                        error,
+                      };
+                    },
+                  };
             },
           };
           return chain;
@@ -264,7 +292,7 @@ describe('POST /api/auth/otp/verify', () => {
       return captured;
     };
 
-    it('users を is_verified = true に更新する', async () => {
+    it('users を is_verified = true に更新し、password_hash を失効させる', async () => {
       mockOtpFetch('login');
       const usersUpdate = captureUsersUpdate();
       mockOtpCodeUpdate();
@@ -278,9 +306,15 @@ describe('POST /api/auth/otp/verify', () => {
       );
 
       expect(response.status).toBe(200);
-      expect(usersUpdate.values).toEqual({ is_verified: true });
+      // password_hash の失効まで固定する（#1302）。未検証の間に設定された
+      // パスワードは第三者のものかもしれず、出自を区別する手段が無い
+      expect(usersUpdate.values).toEqual({
+        is_verified: true,
+        password_hash: null,
+      });
       // 対象の絞り込みまで固定する。宛先のアドレスで引き、既に認証済みの
-      // 行は触らない（無駄な書き込みをしない）
+      // 行は触らない。**この条件が外れると認証済みユーザーのパスワードまで
+      // 消える**ので、無駄な書き込みの回避ではなく安全性の要になっている
       expect(usersUpdate.eq).toEqual([
         ['email', 'test@example.com'],
         ['is_verified', false],
@@ -295,7 +329,9 @@ describe('POST /api/auth/otp/verify', () => {
      */
     it('更新に失敗したら500を返す', async () => {
       mockOtpFetch('login');
-      captureUsersUpdate({ code: '57P01', message: 'connection terminated' });
+      captureUsersUpdate({
+        error: { code: '57P01', message: 'connection terminated' },
+      });
 
       const response = await POST(
         createRequest({
@@ -326,6 +362,109 @@ describe('POST /api/auth/otp/verify', () => {
       // OTP行の取得と更新だけ。users への UPDATE は無い
       const tables = mockFrom.mock.calls.map((c) => c[0]);
       expect(tables.filter((t) => t === 'users')).toHaveLength(0);
+      expect(mockSendPasswordInvalidatedEmail).not.toHaveBeenCalled();
+    });
+
+    /**
+     * パスワードの失効（#1302）
+     *
+     * 「被害者が未検証で登録 → 離脱 → 第三者が同じアドレスで register」の順だと
+     * `password_hash` は第三者のものに上書きされている（#645）。認証済みへ
+     * 昇格すると register 側の上書きが止まるため、自動回復ループも閉じる。
+     * 昇格と同時に失効させて、第三者のパスワードでログインできない状態にする。
+     */
+    describe('パスワードの失効', () => {
+      it('昇格した行があれば失効を通知する', async () => {
+        mockOtpFetch('login');
+        captureUsersUpdate({ promoted: true });
+        mockOtpCodeUpdate();
+
+        const response = await POST(
+          createRequest({
+            email: 'test@example.com',
+            code: '123456',
+            action: 'login',
+          }),
+        );
+
+        expect(response.status).toBe(200);
+        // 伝えないと、利用者は次のパスワードログインが
+        // 「メールアドレスまたはパスワードが正しくありません。」で弾かれる
+        // 理由を知るすべがない
+        expect(mockSendPasswordInvalidatedEmail).toHaveBeenCalledWith(
+          'test@example.com',
+        );
+      });
+
+      it('既に認証済みで昇格しなかったときは通知しない', async () => {
+        // `.eq('is_verified', false)` に当たらず0件。パスワードは消えて
+        // いないので、通知すると「無効にした」という嘘になる
+        mockOtpFetch('login');
+        captureUsersUpdate({ promoted: false });
+        mockOtpCodeUpdate();
+
+        const response = await POST(
+          createRequest({
+            email: 'test@example.com',
+            code: '123456',
+            action: 'login',
+          }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(mockSendPasswordInvalidatedEmail).not.toHaveBeenCalled();
+      });
+
+      it('通知の送信に失敗してもログインは成功する', async () => {
+        // 失効そのものは済んでおり保護は効いている。ここで 500 にすると
+        // 正しいコードを入れた利用者がログインできない行き止まりになる
+        mockSendPasswordInvalidatedEmail.mockResolvedValue(false);
+        mockOtpFetch('login');
+        captureUsersUpdate({ promoted: true });
+        mockOtpCodeUpdate();
+
+        const response = await POST(
+          createRequest({
+            email: 'test@example.com',
+            code: '123456',
+            action: 'login',
+          }),
+        );
+        const json = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(json.data.verificationToken).toEqual(expect.any(String));
+      });
+
+      it('registration では失効させない', async () => {
+        // 利用者がいま登録フォームで決めたパスワード。消すと通常の
+        // 新規登録が毎回パスワード無しで終わる
+        let updated: Record<string, unknown> | null = null;
+
+        mockOtpFetch('registration');
+        mockFrom.mockReturnValueOnce({
+          update: (values: Record<string, unknown>) => {
+            updated = values;
+            return { eq: () => ({ data: null, error: null }) };
+          },
+        });
+        // OTPレコード削除
+        mockFrom.mockReturnValueOnce({
+          delete: () => ({ eq: () => ({ data: null, error: null }) }),
+        });
+
+        const response = await POST(
+          createRequest({
+            email: 'test@example.com',
+            code: '123456',
+            action: 'registration',
+          }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(updated).toEqual({ is_verified: true });
+        expect(mockSendPasswordInvalidatedEmail).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -816,10 +955,17 @@ describe('POST /api/auth/otp/verify', () => {
         }),
       }),
     });
+    // users の昇格（`.eq` 2段 + `.select`）
     mockFrom.mockReturnValueOnce({
       update: () => ({
-        eq: () => ({ data: null, error: null }),
+        eq: () => ({
+          eq: () => ({ select: () => ({ data: [], error: null }) }),
+        }),
       }),
+    });
+    // OTPレコード更新
+    mockFrom.mockReturnValueOnce({
+      update: () => ({ eq: () => ({ data: null, error: null }) }),
     });
 
     await POST(

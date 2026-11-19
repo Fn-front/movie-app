@@ -13,6 +13,7 @@ import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { getClientIp } from '@/lib/http/getClientIp';
 import { generateVerificationToken, verifyOtpCode } from '@/lib/otp';
+import { sendPasswordInvalidatedEmail } from '@/lib/auth/sendPasswordInvalidatedEmail';
 import { otpVerifySchema } from '@/schema/otp';
 import {
   OTP_ACTION,
@@ -233,30 +234,61 @@ export async function POST(request: Request) {
       // やり直せる（立つのはメールボックス所有の証明だけで、それ自体に害は
       // ない）。REGISTRATION 分岐も同じ理由で users 更新が先にある。
       //
-      // ⚠️ **乗っ取りを完全には塞がない。** 「被害者が未検証で登録 → 離脱 →
-      // 第三者が同じアドレスで register」の順だと、`password_hash` は第三者の
-      // ものに上書きされている（`auth/register/route.ts` の既存ユーザー分岐）。
-      // 修正前はここで弾かれ、画面の案内どおり再登録すれば上書きで回復できた
-      // が、認証済みにすると register 側が「認証済みなら上書きしない」で止める
-      // ため**その回復経路が閉じる**。最終状態（第三者のパスワードで入れる）は
-      // 修正前にも「第三者の register が送ったコードを被害者が入力する」で
-      // 到達できたので新しい穴ではないが、回復手段は減る。残件は #1302。
+      // ⚠️ **昇格と同時に `password_hash` を失効させる（#1302）。**
+      // 「被害者が未検証で登録 → 離脱 → 第三者が同じアドレスで register」の
+      // 順だと、`password_hash` は第三者のものに上書きされている
+      // （`auth/register/route.ts` の既存ユーザー分岐／#645）。認証済みにすると
+      // register 側が「認証済みなら上書きしない」で止めるため、#645 が用意して
+      // いた「行き止まり → 再登録 → 上書き」という自動回復ループも閉じる。
+      //
+      // **未検証の間に設定されたパスワードは、出自を区別する手段が無い。**
+      // 上書きは旧パスワードとの照合なしに行われるので、本人のものか第三者の
+      // ものかはDBを見ても分からない。ここはメールボックスを押さえている本人
+      // だけが通る経路なので、安全側に倒して一律で失効させる。
+      //
+      // ⚠️ `.eq('is_verified', false)` が効くので、**既に認証済みのユーザーの
+      // パスワードは絶対に消えない**。影響は「未検証で放置 → メールでログイン」
+      // の一度きりで、本人は設定画面（`hasPassword: false` なら現在の
+      // パスワード欄が出ない）か再設定リンクから設定し直せる。
+      //
+      // ⚠️ `password_changed_at` は触らない。昇格前はパスワードログイン自体が
+      // `email_not_verified` で弾かれる（#1247）ので、失効させるべき第三者の
+      // セッションがそもそも存在しない。
+      //
+      // ⚠️ `REGISTRATION` 分岐には入れない。あちらは利用者がいま登録フォームで
+      // 決めたパスワードなので、消すと通常の新規登録が毎回パスワード無しで
+      // 終わる。
       //
       // ⚠️ `PASSWORD_CHANGE` では立てない。あちらはログイン中の本人確認で、
       // 対象は必ず認証済みのユーザー。立てる意味がないうえ、
       // 「どの操作で認証済みになるか」を広げすぎない
       if (action === OTP_ACTION.LOGIN) {
-        const { error: verifyError } = await supabase
+        const { data: promotedUsers, error: verifyError } = await supabase
           .from('users')
-          .update({ is_verified: true })
+          .update({ is_verified: true, password_hash: null })
           .eq('email', email)
-          .eq('is_verified', false);
+          .eq('is_verified', false)
+          .select('id');
 
         // ⚠️ 握り潰さない。失敗したまま進むと、検証済みトークンは発行された
         // のに `authorize` が `email_not_verified` で弾く（#1247）という
         // 噛み合わない状態になる
         if (verifyError) {
           throw verifyError;
+        }
+
+        // 実際に昇格した（＝パスワードを消した）ときだけ通知する。
+        // 失効させたことを伝えないと、利用者は次のパスワードログインが
+        // 「メールアドレスまたはパスワードが正しくありません。」で弾かれる
+        // 理由を知るすべがない。
+        //
+        // ⚠️ 送信結果でログインを止めない。失効そのものは上で確定しており、
+        // ここで 500 にすると正しいコードを入れた利用者がログインできない
+        // 行き止まりを作る（#1258 と同種）。送信側も throw しない契約なので
+        // ここで囲わない。日次送信枠も消費しない
+        // （OTPではなくセキュリティ通知で、昇格1回につき高々1通）
+        if (promotedUsers && promotedUsers.length > 0) {
+          await sendPasswordInvalidatedEmail(email);
         }
       }
 

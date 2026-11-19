@@ -67,7 +67,14 @@ const viewToggle = (page: Page) =>
  * `firstFavoritableTile()`（`e2e/helpers/locators.ts`）と同じ考え方で、
  * 一度だけ位置を解決して `nth()` を返す。
  *
- * @returns 2つ以上ある最初の行。1つも無ければ null
+ * ⚠️ 見つからなければ**投げる**（skip しない）。`firstFavoritableTile` と
+ * 同じ条件・同じデータを見ているので挙動を揃える。「一覧にタイルはあるが
+ * 公開済みが1件も無い」はデータの異常であって、静かに緑にすると**次に
+ * #1296 と同種のことが起きたとき気づけない**。データ不在という正当な
+ * スキップ事由は、呼び出し側の `waitForTiles(page) === 0` が別に押さえている。
+ *
+ * @returns 操作ボタンが2つ以上ある最初の行
+ * @throws 1つも無いとき
  */
 async function firstMultiActionListTile(page: Page) {
   const tiles = page.locator(LIST_TILE_SELECTOR);
@@ -81,7 +88,10 @@ async function firstMultiActionListTile(page: Page) {
     }
   }
 
-  return null;
+  throw new Error(
+    `操作ボタンが2つ以上あるリスト行が見つかりません（行総数: ${total}）。` +
+      '一覧が未公開作品のみになっている可能性があります。',
+  );
 }
 
 /**
@@ -203,18 +213,32 @@ test.describe('映画一覧の表示モード切替', () => {
 
     await viewToggle(page).click();
 
-    const listTile = page.locator(LIST_TILE_SELECTOR).first();
+    // ⚠️ `first()` を決め打ちしない。お気に入りは未公開作に出ないので、
+    // 一覧の先頭が未公開作ばかりの日は**ボタンが1つしか無い行**に当たり、
+    // 下の件数チェックが落ちる（#1296。実際に全PRで落ちた）
+    const listTile = await firstMultiActionListTile(page);
     await expect(listTile).toBeVisible();
 
     // DOM 順（＝タブ順）が視覚の左右と食い違うと、1行ごとに
-    // 右端のボタンから左のタイトルへ逆走する（WCAG 1.3.2 / 2.4.3）
+    // 右端のボタンから左のタイトルへ逆走する（WCAG 1.3.2 / 2.4.3）。
+    //
+    // タイトルのリンク（`<a>`）も含める。タブ順に乗る要素はボタンだけでは
+    // ないので、順序を見るならリンクも対象に入れる。姉妹テストの
+    // `watchlistFavoritesViewMode.spec.ts:197-206` と形を揃えてある。
+    //
+    // ⚠️ **検知力が上がるわけではない**（実測）。`movieTile.tsx` のコメントが
+    // 挙げる退行（リストでも操作列を `__poster` の中に置く）は `button` だけの
+    // 版でも落ちる。逆に「操作列を `__info` の前へ移す」はどちらの版でも
+    // 落ちないが、あれは DOM と一緒に視覚順も動くので違反ではない
     const lefts = await listTile.evaluate((tile) =>
-      Array.from(tile.querySelectorAll('button')).map(
+      Array.from(tile.querySelectorAll('a, button')).map(
         (el) => el.getBoundingClientRect().left,
       ),
     );
 
-    expect(lefts.length).toBeGreaterThan(1);
+    // リストではジャンルタグが落ちるので `<a>` はタイトルリンク1つ。
+    // タイトル + 操作ボタン2つで3要素になる
+    expect(lefts.length).toBeGreaterThan(2);
     for (let i = 1; i < lefts.length; i += 1) {
       expect(lefts[i]).toBeGreaterThanOrEqual(lefts[i - 1]);
     }
@@ -236,12 +260,8 @@ test.describe('映画一覧の表示モード切替', () => {
     await viewToggle(page).click();
 
     const listTile = await firstMultiActionListTile(page);
-    test.skip(
-      listTile === null,
-      '操作ボタンが2つ以上ある行が無いためスキップ（未公開作のみだとお気に入りが出ない）',
-    );
 
-    const actionButtons = listTile!.locator(ACTION_BUTTON_SELECTOR);
+    const actionButtons = listTile.locator(ACTION_BUTTON_SELECTOR);
     const actionCount = await actionButtons.count();
 
     for (let index = 0; index < actionCount; index += 1) {
@@ -252,7 +272,7 @@ test.describe('映画一覧の表示モード切替', () => {
       );
     }
 
-    const gaps = await listTile!.evaluate((tile, selector) => {
+    const gaps = await listTile.evaluate((tile, selector) => {
       const rects = Array.from(tile.querySelectorAll(selector))
         .map((el) => el.getBoundingClientRect())
         .sort((a, b) => a.left - b.left);

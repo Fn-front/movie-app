@@ -66,12 +66,19 @@ export function watchedToggles(page: Page, pressed: boolean): Locator {
  * 「追加」から「編集」へ変わった瞬間にフィルタから外れ、**同じ変数が別のタイルを
  * 指すようになる**。そのため、ここで一度だけ位置を解決して `nth()` を返す。
  *
- * @param page - 対象ページ（タイルの描画が済んでいること）
+ * ⚠️ 描画を**この中で待つ**。`count()` は待たずに即座に返るため、呼び出し側が
+ * 待ちを書き忘れると「タイル総数: 0」で即 throw する。呼び出しのたびに
+ * `await expect(movieTiles(page).first()).toBeVisible()` を書く定型文が
+ * 増えていたので、ここへ寄せた（`firstMultiActionListTile` も同じ形）。
+ *
+ * @param page - 対象ページ
  * @returns 位置で固定されたタイルのロケータ
  * @throws お気に入りに追加できるタイルが1つも無い場合
  */
 export async function firstFavoritableTile(page: Page): Promise<Locator> {
   const tiles = movieTiles(page);
+  await tiles.first().waitFor({ state: 'visible', timeout: 20000 });
+
   const total = await tiles.count();
 
   for (let index = 0; index < total; index += 1) {

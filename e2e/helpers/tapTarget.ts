@@ -30,6 +30,26 @@ export async function hitAreaCorners(
   size = TAP_TARGET_MIN,
 ): Promise<boolean[]> {
   return locator.evaluate((el, targetSize) => {
+    // ⚠️ **測る前に画面内へ入れる。** `elementFromPoint` はビューポート座標で
+    // 引くため、画面外の要素はどの隅も `null` を返し、**四隅すべて false＝
+    // 「押しても当たらない」と誤って落ちる**（#1296）。
+    //
+    // 一覧の先頭が未公開作ばかりの日は、お気に入りを持つ最初のタイルが
+    // 9件目まで下がり、SP の高さ（812px）では画面外になる。実際に全PRで落ちた。
+    //
+    // `block: 'center'` にするのは、最小スクロール（`nearest`）だと固定
+    // ヘッダーや下部ナビ（57px）の裏に入り、`elementFromPoint` がそちらを
+    // 返すため。`tapTarget.spec.ts` の設定画面テストが同じ理由で同じ対処を
+    // していたのを、ここへ集約した。
+    //
+    // `behavior` は既定の即時（`scroll-behavior` の指定はリポジトリに無い）
+    // なので、直後の `getBoundingClientRect` に反映される。
+    //
+    // ⚠️ `scrollIntoView` は**祖先のスクロールコンテナをすべて動かす**。
+    // 内部スクロールを持つモーダル（`movieDetailContent.module.scss`）の中で
+    // 使うときは、背後のページも動くことに注意する
+    el.scrollIntoView({ block: 'center' });
+
     const rect = el.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;

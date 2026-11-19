@@ -44,7 +44,7 @@ import {
   WATCHLIST_STREAMING_HINT_LABELS,
 } from '@/constants';
 
-import { movieTiles } from '../helpers/locators';
+import { firstFavoritableTile, movieTiles } from '../helpers/locators';
 import { addMovieToWatchlist } from '../helpers/watchlistFlows';
 import { runScopedEmail } from '../helpers/runScope';
 import { expectTapAreaAtLeast, TAP_TARGET_MIN } from '../helpers/tapTarget';
@@ -169,8 +169,11 @@ test.describe('スマホ幅のタップ領域', () => {
   }) => {
     await page.goto('/movies/now-showing');
 
-    const tile = movieTiles(page).first();
-    await expect(tile).toBeVisible({ timeout: 20000 });
+    // ⚠️ `first()` を決め打ちしない。お気に入りは未公開作に出ないので
+    // （`movieTile.tsx` の `canFavorite`）、一覧の先頭が未公開作の日は
+    // ボタンごと存在せず `element(s) not found` で落ちる（#1296）。
+    // 描画待ちはヘルパーの中にある
+    const tile = await firstFavoritableTile(page);
 
     const button = tile.getByRole('button', { name: /お気に入り/ });
     await expect(button).toBeVisible();
@@ -189,7 +192,13 @@ test.describe('スマホ幅のタップ領域', () => {
   }) => {
     await page.goto('/movies/now-showing');
 
-    await page.locator('[class*="c_movie_tile__title_link"]').first().click();
+    // ⚠️ 先頭の作品を開かない。未公開作だと詳細モーダルにもお気に入りが
+    // 出ず、下の `favoriteButton` が `element(s) not found` になる（#1296）
+    const favoritableTile = await firstFavoritableTile(page);
+    await favoritableTile
+      .locator('[class*="c_movie_tile__title_link"]')
+      .first()
+      .click();
 
     const detail = page.getByRole('dialog');
     await expect(detail).toBeVisible({ timeout: 30000 });

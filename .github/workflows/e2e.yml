@@ -25,6 +25,26 @@ on:
 #
 # 衝突の原因だった固定の識別子（メールアドレス・movie_cache のID・送信元IP）は
 # run 単位に分離した（e2e/helpers/runScope.ts）。直列化は不要になったため外す。
+
+# ランナー内に立てる Supabase の接続情報（#1331）
+#
+# E2E はクラウドの Supabase を使わない。`supabase start` がランナーの Docker 上に
+# Postgres + PostgREST を立て、そこへ向ける。
+#
+# ⚠️ 下の鍵はシークレットではない。Supabase CLI が**全ユーザー共通の固定値**として
+#   配布しているローカル開発用のデモ鍵で、署名鍵は公開されている
+#   （`super-secret-jwt-token-with-at-least-32-characters-long`）。
+#   ランナー内のポートにしか通用せず、本番プロジェクトには一切効かない。
+#   secrets に入れると「本物に見える」ぶん誤解を生むため、あえて平文で置く。
+env:
+  SUPABASE_LOCAL_URL: http://127.0.0.1:54321
+  SUPABASE_LOCAL_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+  SUPABASE_LOCAL_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+  # CI で起動しないコンテナ。E2E が使うのは PostgREST だけで、その入口が Kong。
+  # Postgres / PostgREST / Kong 以外は起動時間とメモリを食うだけなので落とす。
+  # （アプリは Supabase Auth / Storage / Realtime / Edge Functions を未使用）
+  SUPABASE_EXCLUDED_CONTAINERS: gotrue,realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
 jobs:
   # シャード分割した本体（#834）
   #
@@ -135,6 +155,20 @@ jobs:
         if: ${{ steps.playwright_cache.outputs.cache-hit == 'true' }}
         run: npx playwright install-deps chromium
 
+      # ランナー内に Supabase を立てる（#1331）
+      #
+      # ⚠️ build より前に置くこと。ホーム（/）は静的プリレンダで、
+      #   **ビルド時に** Supabase から公開中映画を取る（#1115）。
+      - name: setup-supabase-cli
+        uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # ratchet:supabase/setup-cli@v3.2.0
+        with:
+          version: latest
+
+      # `supabase start` は初回にマイグレーションを全件適用する。
+      # 本番と同じスキーマがまっさらな DB 上に再現される。
+      - name: start-supabase
+        run: supabase start -x "$SUPABASE_EXCLUDED_CONTAINERS"
+
       # next/font/google の仮想モジュール解決が非決定的に失敗することがあるため
       # リトライを挟む。ここで落ちると E2E ごと再実行になり待ち時間が大きい。
       # 詳細は scripts/ci-build-with-retry.sh と #787
@@ -145,17 +179,17 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           # ホーム（/）は静的プリレンダなので、**ビルド時に**公開中映画を
           # Supabase から取る（#1115）。無いと `/` のプリレンダで落ちる
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_LOCAL_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_LOCAL_ANON_KEY }}
 
       - name: run-e2e-tests
         run: npm run test:e2e -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
         env:
           CI: true
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_LOCAL_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_LOCAL_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_LOCAL_SERVICE_ROLE_KEY }}
           OTP_HASH_PEPPER: ${{ secrets.OTP_HASH_PEPPER }}
           # 二段階認証のE2Eで、DBの暗号文から共有鍵を復号してコードを計算する。
           # アプリ側（認証コードの検証）も同じ値を使う
@@ -362,6 +396,16 @@ jobs:
         if: ${{ steps.playwright_cache.outputs.cache-hit == 'true' }}
         run: npx playwright install-deps chromium
 
+      # ランナー内に Supabase を立てる（#1331）。上の e2e ジョブと同じ理由で
+      # build より前に置くこと
+      - name: setup-supabase-cli
+        uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # ratchet:supabase/setup-cli@v3.2.0
+        with:
+          version: latest
+
+      - name: start-supabase
+        run: supabase start -x "$SUPABASE_EXCLUDED_CONTAINERS"
+
       # ⚠️ GA を有効にできるのはこの step だけ。NEXT_PUBLIC_* はビルド時に
       # 静的置換されるため、playwright.ga.config.ts の webServer.env は
       # `npm start`（CI）には効かない。ここに渡していることが CI での根拠になる。
@@ -373,17 +417,17 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           NEXT_PUBLIC_GA_ID: G-TEST1234567
           # 上の build と同じ理由（#1115）
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_LOCAL_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_LOCAL_ANON_KEY }}
 
       - name: run-e2e-ga-tests
         run: npm run test:e2e:ga
         env:
           CI: true
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ env.SUPABASE_LOCAL_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ env.SUPABASE_LOCAL_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_LOCAL_SERVICE_ROLE_KEY }}
           OTP_HASH_PEPPER: ${{ secrets.OTP_HASH_PEPPER }}
           TOTP_ENCRYPTION_KEY: ${{ secrets.TOTP_ENCRYPTION_KEY }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}

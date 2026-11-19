@@ -91,7 +91,8 @@ function setupQuery(
   orderSpy?: jest.Mock,
 ) {
   const order = orderSpy ?? jest.fn();
-  const chain = {
+  // `order` が自身を返すチェーンなので、型注釈が無いと TS7022 になる
+  const chain: { order: jest.Mock; single: jest.Mock } = {
     order: jest.fn((...args: unknown[]) => {
       order(...args);
       return chain;

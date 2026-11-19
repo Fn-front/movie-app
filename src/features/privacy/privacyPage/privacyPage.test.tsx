@@ -89,10 +89,14 @@ describe('PrivacyPage', () => {
     });
 
     it('開示請求の窓口を示す', () => {
+      // `mailto:` を含むことだけを見ていると、到達しないアドレスでも緑になる。
+      // 実際に support@example.com（RFC 2606 の予約ドメイン）のまま公開されていた
+      // ので、アドレスの実体まで固定する
       render(<PrivacyPage />);
 
       const link = screen.getByRole('link', { name: /@/ });
-      expect(link).toHaveAttribute('href', expect.stringContaining('mailto:'));
+      expect(link).toHaveAttribute('href', 'mailto:support@movie-app-fn.com');
+      expect(link).toHaveTextContent('support@movie-app-fn.com');
     });
   });
 

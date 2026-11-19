@@ -12,6 +12,7 @@ import {
 import {
   isFailClosedAction,
   type RateLimitActionType,
+  type ReleasableRateLimitAction,
 } from '@/constants/rateLimit';
 
 /** Postgres の CHECK 制約違反 */
@@ -367,6 +368,10 @@ export async function resetRateLimit(
  * 立てるので、その回の消費が失敗したなら**ロックも成立していなかったことに
  * しないと**「1通も送らずにロック」が残る。
  *
+ * ⚠️ そのため**戻してよいアクションは許可リストで縛っている**
+ * （`RELEASABLE_RATE_LIMIT_ACTIONS` / #1266）。総当たりを止めるアクションに
+ * 使うとロック解除の手段になる。型でも DB 側でも弾く。
+ *
  * 失敗しても例外にしない。呼び出し元は既に「資源を消費できなかった」という
  * 本題のエラーを返そうとしており、後始末の失敗でそれを覆い隠さない。
  * 枠が戻らなくても、窓が過ぎれば回復する。
@@ -378,7 +383,7 @@ export async function resetRateLimit(
 export async function releaseRateLimit(
   supabase: SupabaseClient,
   identifier: string,
-  actionType: RateLimitActionType,
+  actionType: ReleasableRateLimitAction,
 ): Promise<void> {
   const { error } = await supabase.rpc('release_rate_limit', {
     p_identifier: identifier,
@@ -386,9 +391,13 @@ export async function releaseRateLimit(
   });
 
   if (error) {
+    // ⚠️ `error` にする。セキュリティ的には安全側（ロックは解除されない）だが、
+    // 帰結は「枠が戻らず利用者が締め出される」という可用性の事故。
+    // 許可リストの食い違い（22023）もここに出るので、warn だと埋もれる。
+    //
     // 識別子（メールアドレス等）はログに出さない。このファイルの他のログも
     // 含めていない
-    console.warn(
+    console.error(
       `[rateLimit] 枠の返却に失敗しました action='${actionType}'`,
       error,
     );

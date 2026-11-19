@@ -6,6 +6,9 @@
  * レート制限ユーティリティ テスト
  */
 
+import fs from 'fs';
+import path from 'path';
+
 import { SupabaseClient } from '@supabase/supabase-js';
 
 import {
@@ -16,6 +19,10 @@ import {
 } from './rateLimit';
 import { SUPABASE_ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import type { RateLimitActionType } from '@/constants/rateLimit';
+import {
+  FAIL_CLOSED_ACTIONS,
+  RELEASABLE_RATE_LIMIT_ACTIONS,
+} from '@/constants/rateLimit';
 
 // --- Helpers ---
 
@@ -674,14 +681,115 @@ describe('resetRateLimit', () => {
  */
 describe('releaseRateLimit', () => {
   let warnSpy: jest.SpyInstance;
+  let errorSpy: jest.SpyInstance;
 
   beforeEach(() => {
     jest.clearAllMocks();
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
     warnSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  /**
+   * 戻してよいアクションを許可リストで縛る（#1266）
+   *
+   * `release_rate_limit` は `locked_until` も消すため、検証の試行回数を
+   * 数えるアクション（`login` / `otp_verify` / `totp_verify` 等）に使うと
+   * **総当たりのロックを解除する手段**になる。
+   *
+   * ⚠️ `FAIL_CLOSED_ACTIONS` を拒否リストにする案は採れない。
+   * 許可する2つもそちらに入っているため、正当な呼び出し元まで弾く。
+   */
+  describe('許可リスト', () => {
+    it('送信枠を数えるアクションだけを許可する', () => {
+      // 順序には依存させない
+      expect([...RELEASABLE_RATE_LIMIT_ACTIONS].sort()).toEqual(
+        ['otp_send_daily', 'two_factor_send'].sort(),
+      );
+    });
+
+    /**
+     * ⚠️ 許可リストは DB 側にもある。**TS を増やすだけでは効かない。**
+     *
+     * 食い違うと RPC が 22023 を投げ、枠が戻らず利用者が締め出される
+     * （ロックは解除されないのでセキュリティは安全側だが、可用性の事故に
+     * なる）。実際にこのPRで1つ見落としているので、ここで突き合わせる。
+     *
+     * `cleanupRateLimits.test.ts` が定数を実走査して不変条件を守っているのと
+     * 同じ考え方。値を固定するだけのテストでは、あとから片方だけ増やした人を
+     * 止められない。
+     */
+    it('DB 側の許可リストと一致している', () => {
+      const migrationsDir = path.join(process.cwd(), 'supabase', 'migrations');
+      // 許可リストを定義している最新のマイグレーションを使う
+      const latest = fs
+        .readdirSync(migrationsDir)
+        .filter((file) => /release.*\.sql$/.test(file))
+        .sort()
+        .pop();
+
+      expect(latest).toBeDefined();
+
+      const sql = fs.readFileSync(path.join(migrationsDir, latest!), 'utf8');
+      const match = sql.match(/<>\s*ALL\s*\(ARRAY\[([^\]]+)\]\)/);
+
+      expect(match).not.toBeNull();
+
+      const dbActions = match![1]
+        .split(',')
+        .map((part) => part.trim().replace(/^'|'$/g, ''))
+        .sort();
+
+      expect(dbActions).toEqual([...RELEASABLE_RATE_LIMIT_ACTIONS].sort());
+    });
+
+    // 戻すと総当たりのロックが解除できてしまうもの
+    it.each([
+      RATE_LIMIT_ACTION.LOGIN_IP,
+      RATE_LIMIT_ACTION.OTP_VERIFY,
+      RATE_LIMIT_ACTION.TOTP_VERIFY,
+      RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
+      RATE_LIMIT_ACTION.PASSWORD_RESET_CONFIRM,
+      'login',
+    ])('%s は許可しない', (action) => {
+      expect([...RELEASABLE_RATE_LIMIT_ACTIONS]).not.toContain(action);
+    });
+
+    /**
+     * ⚠️ 許可リストは DB 側にもある
+     * （`20261119090502_allow_two_factor_send_release.sql`）。
+     * ここを増やすだけでは効かず、RPC が例外を投げる。食い違っても
+     * 「枠が戻らないだけ」で安全側に倒れるが、気づけるようにしておく
+     */
+    it('許可した全アクションが FAIL_CLOSED_ACTIONS にも入っている', () => {
+      // 拒否リスト方式が成立しないことの裏付け
+      for (const action of RELEASABLE_RATE_LIMIT_ACTIONS) {
+        expect(FAIL_CLOSED_ACTIONS.has(action)).toBe(true);
+      }
+    });
+  });
+
+  // DB 側が許可リストで弾いたときも、呼び出し元の本題のエラーを覆い隠さない
+  it('RPC が拒否しても例外にせず警告だけ出す', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: '22023',
+        message:
+          'release_rate_limit は許可リストに無いアクションには使えません',
+      },
+    });
+    const supabase = { rpc } as unknown as SupabaseClient;
+
+    await expect(
+      releaseRateLimit(supabase, 'user@example.com', 'otp_send_daily'),
+    ).resolves.toBeUndefined();
+
+    expect(errorSpy).toHaveBeenCalled();
   });
 
   it('RPC を識別子とアクション種別で呼ぶ', async () => {
@@ -747,7 +855,7 @@ describe('releaseRateLimit', () => {
     await expect(
       releaseRateLimit(supabase, 'user@example.com', 'otp_send_daily'),
     ).resolves.toBeUndefined();
-    expect(warnSpy).toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalled();
   });
 });
 

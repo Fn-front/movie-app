@@ -30,6 +30,18 @@ export async function hitAreaCorners(
   size = TAP_TARGET_MIN,
 ): Promise<boolean[]> {
   return locator.evaluate((el, targetSize) => {
+    // ⚠️ **測る前に画面内へ入れる。** `elementFromPoint` はビューポート座標で
+    // 引くため、画面外の要素はどの隅も `null` を返し、**四隅すべて false＝
+    // 「押しても当たらない」と誤って落ちる**（#1296）。
+    //
+    // 一覧の先頭が未公開作ばかりの日は、お気に入りを持つ最初のタイルが
+    // 9件目まで下がり、SP 幅（812px）では画面外になる。実際に全PRで落ちた。
+    //
+    // `block: 'center'` にするのは、最小スクロール（`nearest`）だと固定
+    // ヘッダーや下部ナビの裏に入り、`elementFromPoint` がそちらを返すため。
+    // `behavior` は既定の即時なので、直後の `getBoundingClientRect` に反映される
+    el.scrollIntoView({ block: 'center', inline: 'center' });
+
     const rect = el.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;

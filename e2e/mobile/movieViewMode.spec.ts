@@ -203,12 +203,19 @@ test.describe('映画一覧の表示モード切替', () => {
 
     await viewToggle(page).click();
 
-    const listTile = page.locator(LIST_TILE_SELECTOR).first();
-    await expect(listTile).toBeVisible();
+    // ⚠️ `first()` を決め打ちしない。お気に入りは未公開作に出ないので、
+    // 一覧の先頭が未公開作ばかりの日は**ボタンが1つしか無い行**に当たり、
+    // 下の `toBeGreaterThan(1)` が落ちる（#1296。実際に全PRで落ちた）
+    const listTile = await firstMultiActionListTile(page);
+    test.skip(
+      listTile === null,
+      '操作ボタンが2つ以上ある行が無いためスキップ（未公開作のみだとお気に入りが出ない）',
+    );
+    await expect(listTile!).toBeVisible();
 
     // DOM 順（＝タブ順）が視覚の左右と食い違うと、1行ごとに
     // 右端のボタンから左のタイトルへ逆走する（WCAG 1.3.2 / 2.4.3）
-    const lefts = await listTile.evaluate((tile) =>
+    const lefts = await listTile!.evaluate((tile) =>
       Array.from(tile.querySelectorAll('button')).map(
         (el) => el.getBoundingClientRect().left,
       ),

@@ -13,19 +13,29 @@
  * 文脈で、残しておく価値が無い。
  */
 
+import { resolveSafeCallbackUrl } from '@/utils/url';
+
 /** 預け先のキー。生成と読み出しで同じ値を使う */
 const PENDING_CALLBACK_URL_KEY = 'auth:pendingCallbackUrl';
 
 /**
  * ソーシャルログインを始める前に戻り先を預ける
  *
+ * ⚠️ **`resolveSafeCallbackUrl` を通らない値は預けない。** 遷移の直前でも
+ * 検証しているので二重だが、境界で潰しておかないと**取り出す側が1箇所でも
+ * 検証を忘れた瞬間にオープンリダイレクトになる**。`sessionStorage` は
+ * 同一オリジンのスクリプトなら誰でも書けるため、ここを信用してはいけない。
+ *
  * `sessionStorage` はプライベートブラウジングや容量超過で例外を投げる。
  * 戻り先はあれば嬉しい程度のものなので、失敗してもログインを止めない。
  *
- * @param callbackUrl - 預ける戻り先。空なら何もしない
+ * @param callbackUrl - 預ける戻り先。空や外部URLなら何もしない
  */
 export function savePendingCallbackUrl(callbackUrl: string | undefined): void {
   if (!callbackUrl || typeof window === 'undefined') return;
+
+  // 返ってくるのがホーム＝弾かれた値。預ける意味が無い
+  if (resolveSafeCallbackUrl(callbackUrl) !== callbackUrl) return;
 
   try {
     window.sessionStorage.setItem(PENDING_CALLBACK_URL_KEY, callbackUrl);

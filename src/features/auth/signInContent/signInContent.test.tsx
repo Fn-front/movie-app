@@ -314,18 +314,32 @@ describe('SignInContent', () => {
       expect(window.sessionStorage.getItem(KEY)).toBeNull();
     });
 
-    it('error が無ければ取り出さない（預けたまま残る）', () => {
-      // 無条件に読むと、ソーシャルログインを始めたまま別タブでログイン画面を
+    it('error が無ければ採らない', async () => {
+      // 無条件に採ると、ソーシャルログインを始めたまま別タブでログイン画面を
       // 開いた人が、身に覚えのない場所へ飛ばされる
       window.sessionStorage.setItem(KEY, '/watchlist');
 
       render(<SignInContent />);
 
+      await waitFor(() =>
+        expect(window.sessionStorage.getItem(KEY)).toBeNull(),
+      );
       expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
         'data-callback',
         '',
       );
-      expect(window.sessionStorage.getItem(KEY)).toBe('/watchlist');
+    });
+
+    it('error が無くても預かり分は捨てる', async () => {
+      // 失敗せずにこの画面へ来た＝預かり分は役目を終えている。残すと
+      // 次に別の理由で戻されたときに古い戻り先が蘇る
+      window.sessionStorage.setItem(KEY, '/watchlist');
+
+      render(<SignInContent />);
+
+      await waitFor(() =>
+        expect(window.sessionStorage.getItem(KEY)).toBeNull(),
+      );
     });
 
     it('URL の callbackUrl を優先する', () => {

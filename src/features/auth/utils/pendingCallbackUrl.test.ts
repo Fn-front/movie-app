@@ -34,6 +34,19 @@ describe('pendingCallbackUrl', () => {
       expect(window.sessionStorage.getItem(KEY)).toBeNull();
     });
 
+    it.each([
+      ['https://evil.com'],
+      ['//evil.com'],
+      ['/\\evil.com'],
+      ['/auth/signin?next=/watchlist'],
+    ])('%s のような危険な値は預けない', (unsafe) => {
+      // 取り出す側が1箇所でも検証を忘れた瞬間にオープンリダイレクトになる。
+      // sessionStorage は同一オリジンのスクリプトなら誰でも書ける
+      savePendingCallbackUrl(unsafe);
+
+      expect(window.sessionStorage.getItem(KEY)).toBeNull();
+    });
+
     it('sessionStorage が例外を投げても呼び出し側へ伝播しない', () => {
       // プライベートブラウジングや容量超過で起きる。戻り先はあれば嬉しい
       // 程度のものなので、ログインを止めてはいけない

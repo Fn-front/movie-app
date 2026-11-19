@@ -135,6 +135,13 @@ describe('SocialLoginButtons', () => {
       mockSignIn.mockResolvedValue(undefined as never);
     });
 
+    // ⚠️ テスト本体の末尾で restore すると、途中で失敗したときにスパイが
+    // 残って**後続テストを汚す**。外側の clearAllMocks は履歴を消すだけで
+    // スパイは戻さない（jest.config.js に restoreMocks の指定も無い）
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     it.each([['Googleでログイン'], ['GitHubでログイン']])(
       '%s で signIn の前に戻り先を預ける',
       async (name) => {
@@ -155,8 +162,6 @@ describe('SocialLoginButtons', () => {
 
         await waitFor(() => expect(mockSignIn).toHaveBeenCalled());
         expect(order).toEqual(['save', 'signIn']);
-
-        jest.restoreAllMocks();
       },
     );
 

@@ -11,6 +11,31 @@ import { GET, POST, DELETE } from './route';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
+
+/**
+ * GET のページング（#1274）をモックする
+ *
+ * `.order().order().range()` の順に呼ばれる。ページごとの戻りを順に渡す
+ */
+function mockDismissedPages(
+  pages: { data: unknown[] | null; error: unknown }[],
+) {
+  for (const page of pages) {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          is: () => ({
+            order: () => ({
+              order: () => ({
+                range: () => Promise.resolve(page),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+  }
+}
 jest.mock('@/helpers/supabase', () => ({
   createServiceRoleClient: () => ({ from: mockFrom }),
   dbConnectionErrorResponse: () =>
@@ -35,6 +60,10 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
 }));
 
 import { getAuthSession } from '@/helpers/auth';
+import {
+  DISMISSED_MOVIES_MAX_PAGES,
+  DISMISSED_MOVIES_PAGE_SIZE,
+} from '@/constants/dismissedMovies';
 
 // --- Helpers ---
 
@@ -94,15 +123,7 @@ describe('GET /api/dismissed-movies', () => {
       },
     ];
 
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            order: () => Promise.resolve({ data: mockData, error: null }),
-          }),
-        }),
-      }),
-    });
+    mockDismissedPages([{ data: mockData, error: null }]);
 
     const response = await GET(createGetRequest());
     const json = await response.json();
@@ -114,16 +135,101 @@ describe('GET /api/dismissed-movies', () => {
     expect(json.data[1].tmdb_movie_id).toBe(67890);
   });
 
-  it('レコードがない場合は空配列を返す', async () => {
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            order: () => Promise.resolve({ data: [], error: null }),
-          }),
+  /**
+   * PostgREST の `max_rows`（1000）で黙って打ち切られないこと（#1274）
+   *
+   * 1ページ目がページサイズちょうどなら「まだ続きがある」ので2ページ目を
+   * 取りに行く。ここを `<` ではなく `<=` で判定すると、ちょうど 1000 件の
+   * 利用者で2ページ目を読まず、以降が静かに消える
+   */
+  it('ちょうど1ページぶんなら次のページも読む', async () => {
+    const full = Array.from({ length: DISMISSED_MOVIES_PAGE_SIZE }, (_, i) => ({
+      id: `d-${i}`,
+      tmdb_movie_id: i,
+      title: `映画${i}`,
+      poster_path: null,
+      genre_ids: [],
+      created_at: '2026-03-10T00:00:00Z',
+    }));
+
+    mockDismissedPages([
+      { data: full, error: null },
+      {
+        data: [{ ...full[0], id: 'last', tmdb_movie_id: 999999 }],
+        error: null,
+      },
+    ]);
+
+    const response = await GET(createGetRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data).toHaveLength(DISMISSED_MOVIES_PAGE_SIZE + 1);
+    expect(mockFrom).toHaveBeenCalledTimes(2);
+  });
+
+  // ページサイズ未満で止まる（余計な往復をしない）
+  it('ページサイズに満たなければ1往復で終える', async () => {
+    mockDismissedPages([
+      {
+        data: [
+          {
+            id: 'd-1',
+            tmdb_movie_id: 1,
+            title: '映画',
+            poster_path: null,
+            genre_ids: [],
+            created_at: '2026-03-10T00:00:00Z',
+          },
+        ],
+        error: null,
+      },
+    ]);
+
+    const response = await GET(createGetRequest());
+
+    expect(response.status).toBe(200);
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+  });
+
+  // 上限に達したら黙って切らず警告を出す
+  it('読み取り上限に達したら警告を出す', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const full = Array.from(
+        { length: DISMISSED_MOVIES_PAGE_SIZE },
+        (_, i) => ({
+          id: `d-${i}`,
+          tmdb_movie_id: i,
+          title: `映画${i}`,
+          poster_path: null,
+          genre_ids: [],
+          created_at: '2026-03-10T00:00:00Z',
         }),
-      }),
-    });
+      );
+
+      mockDismissedPages(
+        Array.from({ length: DISMISSED_MOVIES_MAX_PAGES }, () => ({
+          data: full,
+          error: null,
+        })),
+      );
+
+      const response = await GET(createGetRequest());
+
+      expect(response.status).toBe(200);
+      expect(mockFrom).toHaveBeenCalledTimes(DISMISSED_MOVIES_MAX_PAGES);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('dismissed-movies'),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('レコードがない場合は空配列を返す', async () => {
+    mockDismissedPages([{ data: [], error: null }]);
 
     const response = await GET(createGetRequest());
     const json = await response.json();
@@ -134,16 +240,7 @@ describe('GET /api/dismissed-movies', () => {
   });
 
   it('DBエラー時に500を返す', async () => {
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          is: () => ({
-            order: () =>
-              Promise.resolve({ data: null, error: new Error('DB error') }),
-          }),
-        }),
-      }),
-    });
+    mockDismissedPages([{ data: null, error: { message: 'DB error' } }]);
 
     const response = await GET(createGetRequest());
     const json = await response.json();
@@ -175,13 +272,7 @@ describe('GET /api/dismissed-movies', () => {
       // beforeEach は clearAllMocks のみ（実装は消えない）。
       // mockReturnValue にすると POST / DELETE の describe まで
       // GET 用のチェーンを返し続ける
-      mockFrom.mockReturnValueOnce({
-        select: () => ({
-          eq: () => ({
-            is: () => ({ order: () => ({ data: [], error: null }) }),
-          }),
-        }),
-      });
+      mockDismissedPages([{ data: [], error: null }]);
 
       const response = await GET(
         new Request('http://localhost/api/dismissed-movies'),

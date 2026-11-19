@@ -23,11 +23,15 @@ type QueryResult = { data?: unknown; error?: unknown; count?: number };
 const createSupabase = (results: Record<string, QueryResult>) => {
   const builder = (table: string) => {
     const result = results[table] ?? { data: [], error: null };
+    // `order` はチェーンを返す。`dismissed_movies` は #1274 で
+    // `.order().range()` に変わったため、ここで解決してしまうと
+    // `.range` が無くて落ちる。末端は thenable と `range` の両方で受ける
     const chain = {
       select: () => chain,
       eq: () => chain,
       is: () => chain,
-      order: () => Promise.resolve(result),
+      order: () => chain,
+      range: () => Promise.resolve(result),
       then: (resolve: (value: QueryResult) => unknown) =>
         Promise.resolve(result).then(resolve),
     };

@@ -12,6 +12,8 @@ import {
   HTTP_STATUS,
   ERROR_CODE,
   DISMISSED_MOVIES_SELECT,
+  DISMISSED_MOVIES_PAGE_SIZE,
+  DISMISSED_MOVIES_MAX_PAGES,
   DISMISSED_MOVIES_ERROR_MESSAGES,
   DISMISSED_MOVIES_SUCCESS_MESSAGES,
   RATE_LIMIT_ACTION,
@@ -22,6 +24,7 @@ import {
   isUniqueViolation,
   rateLimitExceededResponse,
 } from '@/helpers/apiHelpers';
+import { fetchAllPages } from '@/helpers/fetchAllPages';
 import { parseAndValidate } from '@/helpers/requestValidation';
 import { withAuth } from '@/helpers/routeHandler';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
@@ -66,19 +69,32 @@ export const GET = withAuth(
       return rateLimitExceededResponse(rateLimitResult);
     }
 
-    const { data, error } = await supabase
-      .from('dismissed_movies')
-      .select(DISMISSED_MOVIES_SELECT)
-      .eq('user_id', session.user.id)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw error;
-    }
+    // ⚠️ `range()` で区切る。PostgREST は `max_rows`（1000）を超えた結果を
+    // エラーも truncation フラグも返さずに打ち切るため、絞り込み無しで
+    // 投げると 1001件目以降が静かに消える（#1274）。
+    //
+    // 消えると、除外されるはずの作品がレコメンドに再び出る。件数が少ない
+    // うちは症状が出ないので、**閾値を超えたことに気づけない**。
+    //
+    // 並びは `created_at` だけだと同時刻の行でページ間の重複・抜けが起きうる
+    // ので、`id` をタイブレークに足す
+    const data = await fetchAllPages({
+      pageSize: DISMISSED_MOVIES_PAGE_SIZE,
+      maxPages: DISMISSED_MOVIES_MAX_PAGES,
+      label: 'dismissed-movies',
+      query: (from, to) =>
+        supabase
+          .from('dismissed_movies')
+          .select(DISMISSED_MOVIES_SELECT)
+          .eq('user_id', session.user.id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, to),
+    });
 
     return NextResponse.json(
-      { success: true, data: data ?? [] },
+      { success: true, data },
       { status: HTTP_STATUS.OK },
     );
   },

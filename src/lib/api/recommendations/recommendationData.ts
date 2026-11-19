@@ -8,6 +8,11 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import {
+  DISMISSED_MOVIES_MAX_PAGES,
+  DISMISSED_MOVIES_PAGE_SIZE,
+} from '@/constants/dismissedMovies';
+import { fetchAllPages } from '@/helpers/fetchAllPages';
 import type { Recommendation } from '@/schema/recommendations';
 
 /**
@@ -41,7 +46,7 @@ export async function fetchRecommendationData(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<RecommendationData> {
-  const [recsResult, favCountResult, dismissedResult] = await Promise.all([
+  const [recsResult, favCountResult, dismissedRows] = await Promise.all([
     supabase
       .from('recommendations')
       .select(
@@ -54,11 +59,28 @@ export async function fetchRecommendationData(
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .is('deleted_at', null),
-    supabase
-      .from('dismissed_movies')
-      .select('tmdb_movie_id')
-      .eq('user_id', userId)
-      .is('deleted_at', null),
+    // ⚠️ `range()` で区切る。絞り込み無しだと PostgREST の `max_rows`（1000）で
+    // 黙って打ち切られ、1001件目以降の「興味なし」が除外されなくなる（#1274）。
+    //
+    // ここは取得に失敗しても空として扱う（従来どおり）。除外が効かずに
+    // 作品が出るだけで、レコメンド自体は返せるため。ただし黙って握らず
+    // ログには残す
+    fetchAllPages<{ tmdb_movie_id: number }>({
+      pageSize: DISMISSED_MOVIES_PAGE_SIZE,
+      maxPages: DISMISSED_MOVIES_MAX_PAGES,
+      label: 'recommendations-dismissed',
+      query: (from, to) =>
+        supabase
+          .from('dismissed_movies')
+          .select('tmdb_movie_id')
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .order('id', { ascending: true })
+          .range(from, to),
+    }).catch((error: unknown) => {
+      console.error('Dismissed movies query error:', error);
+      return [] as { tmdb_movie_id: number }[];
+    }),
   ]);
 
   if (recsResult.error) {
@@ -68,9 +90,7 @@ export async function fetchRecommendationData(
     return EMPTY_RECOMMENDATION_DATA;
   }
 
-  const dismissedIds = new Set(
-    (dismissedResult.data ?? []).map((d) => d.tmdb_movie_id as number),
-  );
+  const dismissedIds = new Set(dismissedRows.map((row) => row.tmdb_movie_id));
   const rows = (recsResult.data ?? []).filter(
     (row) => !dismissedIds.has(row.tmdb_movie_id as number),
   );

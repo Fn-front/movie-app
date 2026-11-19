@@ -9,6 +9,7 @@ import { hashVerificationToken } from '@/lib/otp/verificationToken';
 
 import {
   consumePasswordResetToken,
+  invalidateOtherPasswordResetTokens,
   isPasswordResetTokenValid,
   issuePasswordResetToken,
   peekPasswordResetToken,
@@ -43,6 +44,7 @@ function createSupabaseMock(rows: TokenRow[]): {
       action: 'select' | 'update' | 'delete' | 'insert';
       payload: Record<string, unknown>;
       tokenHash: string | null;
+      excludeTokenHash: string | null;
       userId: string | null;
       requireUnused: boolean;
       notExpired: boolean;
@@ -50,6 +52,7 @@ function createSupabaseMock(rows: TokenRow[]): {
       action: 'select',
       payload: {},
       tokenHash: null,
+      excludeTokenHash: null,
       userId: null,
       requireUnused: false,
       notExpired: false,
@@ -61,6 +64,10 @@ function createSupabaseMock(rows: TokenRow[]): {
     builder.eq = jest.fn((column: string, value: unknown) => {
       if (column === 'token_hash') state.tokenHash = value as string;
       if (column === 'user_id') state.userId = value as string;
+      return builder;
+    });
+    builder.neq = jest.fn((column: string, value: unknown) => {
+      if (column === 'token_hash') state.excludeTokenHash = value as string;
       return builder;
     });
     builder.is = jest.fn((column: string) => {
@@ -83,6 +90,15 @@ function createSupabaseMock(rows: TokenRow[]): {
     builder.insert = jest.fn((payload: Record<string, unknown>) => {
       state.action = 'insert';
       inserted.push(payload);
+      // 実DBと同じく、挿入した行はその後の検索・削除の対象になる。
+      // 載せないと「今発行した行が消えていないか」を検証できない
+      rows.push({
+        id: `row-${rows.length + 1}`,
+        user_id: payload.user_id as string,
+        token_hash: payload.token_hash as string,
+        expires_at: payload.expires_at as string,
+        used_at: null,
+      });
       return Promise.resolve({ error: null });
     });
 
@@ -90,6 +106,12 @@ function createSupabaseMock(rows: TokenRow[]): {
     const matching = () =>
       rows.filter((row) => {
         if (state.tokenHash !== null && row.token_hash !== state.tokenHash) {
+          return false;
+        }
+        if (
+          state.excludeTokenHash !== null &&
+          row.token_hash === state.excludeTokenHash
+        ) {
           return false;
         }
         if (state.userId !== null && row.user_id !== state.userId) return false;
@@ -180,14 +202,15 @@ describe('issuePasswordResetToken', () => {
     expect(Math.abs(expiresAt - expected)).toBeLessThan(5000);
   });
 
-  it('同一ユーザーの未使用トークンを無効化する', async () => {
-    // 複数のリンクが同時に生きていると、古いメールを拾った第三者にも窓が残る
+  it('古いトークンは消さない（送信前に消さない / #1223）', async () => {
+    // 先に消すと、送信に失敗したとき相手の手元にあった有効なリンクだけが
+    // 死に、新しいリンクは誰にも届かない
     const old = makeRow('old-token');
     const { client, rows } = createSupabaseMock([old]);
 
     await issuePasswordResetToken(client, USER_ID);
 
-    expect(rows).not.toContain(old);
+    expect(rows).toContain(old);
   });
 
   it('呼ぶたびに異なるトークンを返す', async () => {
@@ -197,6 +220,84 @@ describe('issuePasswordResetToken', () => {
     const second = await issuePasswordResetToken(client, USER_ID);
 
     expect(first).not.toBe(second);
+  });
+});
+
+/**
+ * 古いリンクの無効化（#1223）
+ *
+ * 発行と切り離してある。送信に成功したあとだけ呼ぶことで、送れなかった
+ * ときに相手の手元のリンクを壊さない
+ */
+describe('invalidateOtherPasswordResetTokens', () => {
+  it('同一ユーザーの古い未使用トークンを消す', async () => {
+    // 複数のリンクが同時に生きていると、古いメールを拾った第三者にも窓が残る
+    const old = makeRow('old-token');
+    const { client, rows } = createSupabaseMock([old]);
+
+    const token = await issuePasswordResetToken(client, USER_ID);
+    await invalidateOtherPasswordResetTokens(client, USER_ID, token);
+
+    expect(rows).not.toContain(old);
+  });
+
+  it('今発行したトークンは残す', async () => {
+    // 除外しないと、今メールで送った新しいリンクごと消える
+    const { client, rows } = createSupabaseMock([makeRow('old-token')]);
+
+    const token = await issuePasswordResetToken(client, USER_ID);
+    await invalidateOtherPasswordResetTokens(client, USER_ID, token);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].token_hash).toBe(hashVerificationToken(token));
+  });
+
+  it('使用済みのトークンは消さない', async () => {
+    // 消す理由がない。履歴としても残す
+    const used = makeRow('used-token', { used_at: new Date().toISOString() });
+    const { client, rows } = createSupabaseMock([used]);
+
+    const token = await issuePasswordResetToken(client, USER_ID);
+    await invalidateOtherPasswordResetTokens(client, USER_ID, token);
+
+    expect(rows).toContain(used);
+  });
+
+  it('他のユーザーのトークンは消さない', async () => {
+    const other = makeRow('other-token', { user_id: 'other-user' });
+    const { client, rows } = createSupabaseMock([other]);
+
+    const token = await issuePasswordResetToken(client, USER_ID);
+    await invalidateOtherPasswordResetTokens(client, USER_ID, token);
+
+    expect(rows).toContain(other);
+  });
+
+  it('削除に失敗しても投げず、ログに残す', async () => {
+    // 送信は既に済んでいる。ここで 500 を返すと admin は押し直して
+    // もう1通送ることになり、枠も減る
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const client = {
+      from: () => ({
+        delete: () => ({
+          eq: () => ({
+            is: () => ({
+              neq: () =>
+                Promise.resolve({ error: { message: 'delete failed' } }),
+            }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      invalidateOtherPasswordResetTokens(client, USER_ID, 'token'),
+    ).resolves.toBeUndefined();
+    expect(consoleError).toHaveBeenCalled();
+
+    consoleError.mockRestore();
   });
 });
 

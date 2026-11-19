@@ -145,6 +145,11 @@ export const POST = withAdminAuth(
 
     // 設定リンクが用意できなければ、発行したアカウントは誰にも使えない。
     // ここで消さないと、下の送信失敗と同じ「気づけないまま残る」状態になる
+    //
+    // ⚠️ 再発行（`[id]/reissue`）と違い、送信後の
+    // `invalidateOtherPasswordResetTokens` は呼ばない。`userId` はこの
+    // リクエストで作ったばかりで、無効化すべき古いトークンが存在しえない
+    // （#1223）
     let token: string;
     try {
       token = await issuePasswordResetToken(

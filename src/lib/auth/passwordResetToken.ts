@@ -20,8 +20,18 @@ import {
 /**
  * リセットトークンを発行し、保存する
  *
- * 同一ユーザーの未使用トークンは先に無効化する。複数のリンクが同時に生きていると、
- * 古いメールを拾った第三者にも窓が残る。
+ * ⚠️ **古いリンクはここでは消さない。** 消すのは
+ * `invalidateOtherPasswordResetTokens` で、**メールの送信に成功したあと**。
+ *
+ * 以前はここで先に消していた。すると送信に失敗したとき、**相手の手元にあった
+ * 有効なリンクだけが死に、新しいリンクは誰にも届かない**（#1223）。平文は
+ * 送れなかったメールにしか載っていないので、DBに行があっても誰も使えない。
+ * admin 画面には「メールの送信に失敗しました。」としか出ないため、相手の
+ * リンクを壊したことすら伝わらない。
+ *
+ * 代償として、送信に失敗すると古いリンクが**自身の期限切れまで**生き残る
+ * （新規発行なら最長24時間 / `ADMIN_ACCOUNT_CONFIG.CREATE_LINK_EXPIRY_MINUTES`）。
+ * 相手が到達不能になるより、古いリンクが残るほうがましだと判断した。
  *
  * @param supabase - service_role のクライアント
  * @param userId - 対象ユーザー
@@ -37,13 +47,6 @@ export async function issuePasswordResetToken(
 ): Promise<string> {
   const { token, tokenHash } = generateVerificationToken();
 
-  // 以前のリンクを生かしておく理由がない
-  await supabase
-    .from('password_reset_tokens')
-    .delete()
-    .eq('user_id', userId)
-    .is('used_at', null);
-
   const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
 
   const { error } = await supabase.from('password_reset_tokens').insert({
@@ -57,6 +60,47 @@ export async function issuePasswordResetToken(
   }
 
   return token;
+}
+
+/**
+ * 今発行したもの以外の未使用トークンを無効化する
+ *
+ * 複数のリンクが同時に生きていると、古いメールを拾った第三者にも窓が残る。
+ *
+ * ⚠️ **メールの送信に成功してから呼ぶこと。** 送る前に呼ぶと #1223 に戻る。
+ * 送信前に古いリンクを消してしまうと、送信に失敗したときに相手が到達不能に
+ * なる。
+ *
+ * ⚠️ 発行したばかりのトークンを `neq` で除外する。条件は「このユーザーの
+ * 未使用トークン全件」なので、除外しないと**今メールで送った新しいリンクごと
+ * 消える**。
+ *
+ * 削除に失敗しても投げない。送信は既に済んでいて相手の手元には使える
+ * リンクがあり、ここで 500 を返すと admin は押し直してもう1通送ることに
+ * なる（枠も消費する）。保証が崩れたことは気づけるようログには必ず出す。
+ *
+ * @param supabase - service_role のクライアント
+ * @param userId - 対象ユーザー
+ * @param keepToken - 残す平文トークン（`issuePasswordResetToken` の戻り値）
+ */
+export async function invalidateOtherPasswordResetTokens(
+  supabase: SupabaseClient,
+  userId: string,
+  keepToken: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('password_reset_tokens')
+    .delete()
+    .eq('user_id', userId)
+    .is('used_at', null)
+    .neq('token_hash', hashVerificationToken(keepToken));
+
+  if (error) {
+    console.error(
+      `[passwordResetToken] 古いリセットリンクの無効化に失敗しました userId='${userId}'`,
+      error,
+    );
+  }
 }
 
 /**

@@ -26,7 +26,10 @@ import {
   ROUTES,
 } from '@/constants';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
-import { issuePasswordResetToken } from '@/lib/auth/passwordResetToken';
+import {
+  invalidateOtherPasswordResetTokens,
+  issuePasswordResetToken,
+} from '@/lib/auth/passwordResetToken';
 import { sendPasswordResetEmail } from '@/lib/auth/sendPasswordResetEmail';
 import { randomDelay } from '@/lib/otp';
 import { isSyntheticEmail } from '@/lib/auth/accountIdentity';
@@ -155,6 +158,10 @@ export async function POST(request: Request) {
       // 送信できなかったことは利用者に伝える必要がある。
       // ここは「登録済みである」ことを明かすが、送信失敗はメールアドレスの
       // 登録有無に依存しない事象なので列挙には使えない
+      //
+      // ⚠️ 古いリンクはそのまま残す（#1223）。ここで消すと、**先ほど届いた
+      // メールのリンクだけが死に、新しいリンクは届かない**。申請し直しても
+      // 送信障害が続いていれば同じで、枠（5回/60分）だけ減る
       return NextResponse.json(
         {
           success: false,
@@ -166,6 +173,9 @@ export async function POST(request: Request) {
         { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
       );
     }
+
+    // 新しいリンクが届いたので、古いリンクを生かしておく理由がなくなった
+    await invalidateOtherPasswordResetTokens(supabase, user.id, token);
 
     return acceptedResponse();
   } catch (error) {

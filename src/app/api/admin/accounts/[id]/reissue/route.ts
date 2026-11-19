@@ -25,7 +25,10 @@ import {
   findReissuableAccount,
   recordReissueAudit,
 } from '@/lib/auth/adminAccount';
-import { issuePasswordResetToken } from '@/lib/auth/passwordResetToken';
+import {
+  invalidateOtherPasswordResetTokens,
+  issuePasswordResetToken,
+} from '@/lib/auth/passwordResetToken';
 import { sendAdminAccountEmail } from '@/lib/auth/sendAdminAccountEmail';
 import { buildAccountSetupUrl } from '@/lib/auth/accountSetupUrl';
 import { adminAccountReissueSchema } from '@/schema/adminAccount';
@@ -98,6 +101,10 @@ export const POST = withAdminAuth(
     });
 
     if (!sent) {
+      // ⚠️ 古いリンクはそのまま残す（#1223）。ここで消すと、**相手の手元に
+      // あった有効なリンクだけが死に、新しいリンクは誰にも届かない**。
+      // admin には送信失敗としか出ないので、壊したことが伝わらない。
+      // 新トークンの行は残るが、下の無効化が次の再発行時に掃除する
       return NextResponse.json(
         {
           success: false,
@@ -109,6 +116,9 @@ export const POST = withAdminAuth(
         { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
       );
     }
+
+    // 相手に新しいリンクが渡ったので、古いリンクを生かしておく理由がなくなった
+    await invalidateOtherPasswordResetTokens(supabase, id, token);
 
     await recordReissueAudit(supabase, session.user.id, id);
 

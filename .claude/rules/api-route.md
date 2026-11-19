@@ -175,8 +175,7 @@ if (!emailSent) {
 順序を回帰テストしている。新しくそういうハンドラを足すときは、同じ describe を
 付けること。
 
-> 例外: `admin/accounts/[id]/reissue` POST は未検証（テストファイルが無い）。
-> 順序は実装で確認済み（原則どおり）。
+> `admin/accounts/[id]/reissue` POST は #1223 で `処理順` を追加した。
 > `admin/accounts` POST は #1221 で `処理順` を追加した。
 
 #### ⚠️ `withAdminAuth` のルートはレート制限が2層ある

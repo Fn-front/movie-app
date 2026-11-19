@@ -29,14 +29,12 @@ import {
   ERROR_CODE,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
-  GENRE_CACHE_DURATION_MS,
   DISCOVER_API_MAX_PAGES,
-  GENRE_NAME_OVERRIDES,
   SUPABASE_ERROR_CODE,
 } from '@/constants';
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
-import { toSelectableGenres } from '@/lib/movies/genreFilter';
+import { toDisplayGenres } from '@/lib/movies/genreFilter';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { getExcludedLanguages } from '@/lib/movies/regionFilter';
 import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
@@ -67,29 +65,23 @@ function formatDateToString(date: Date): string {
 }
 
 /**
- * ジャンルキャッシュ（module-level、1日有効）
- */
-let genreCache: { data: Record<number, string>; cachedAt: number } | null =
-  null;
-
-/**
- * ジャンルマップを取得（キャッシュ付き）
+ * ジャンルID → 表示名のマップを作る
+ *
+ * キャッシュは `getGenres()` 側が持つ（#1278）。ここに置いていたときは
+ * `/api/movies/genres` に効かなかった。
+ *
+ * ⚠️ 移しても**2つのルート間でキャッシュが共有されるわけではない**
+ * （Vercel ではルートごとに関数が分かれ、モジュールの実体も別）。
+ * 効くのは各ルートの中での重複と、同時リクエストの合流まで
  */
 async function getGenreMap(): Promise<Record<number, string>> {
-  const now = Date.now();
-
-  if (genreCache && now - genreCache.cachedAt < GENRE_CACHE_DURATION_MS) {
-    return genreCache.data;
-  }
-
-  const genres: { id: number; name: string }[] = await getGenres();
   const genreMap: Record<number, string> = {};
+
   // 保存前フィルタで弾いているジャンルは、選んでも必ず0件になるため出さない
-  for (const genre of toSelectableGenres(genres)) {
-    genreMap[genre.id] = GENRE_NAME_OVERRIDES[genre.name] ?? genre.name;
+  for (const genre of toDisplayGenres(await getGenres())) {
+    genreMap[genre.id] = genre.name;
   }
 
-  genreCache = { data: genreMap, cachedAt: now };
   return genreMap;
 }
 

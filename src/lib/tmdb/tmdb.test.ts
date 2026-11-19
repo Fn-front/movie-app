@@ -46,6 +46,7 @@ import {
   EXCLUDED_GENRE_IDS,
   EXCLUDED_GENRES_PARAM,
   EXCLUDED_KEYWORDS_PARAM,
+  GENRE_CACHE_DURATION_MS,
 } from '@/constants/movies';
 import {
   TMDB_MOVIE_DETAIL_APPEND,
@@ -140,6 +141,10 @@ const mockKeywordsResponse = {
 describe('TMDb APIクライアント', () => {
   beforeEach(() => {
     mockGet.mockReset();
+    // ⚠️ 必須（#1278）。getGenres はプロセス内に24時間キャッシュを持つため、
+    // 消さないと「2回目が呼ばれない」ことで後続のテストが落ちる
+    const { __resetGenreCacheForTest } = require('./tmdb');
+    __resetGenreCacheForTest();
   });
 
   describe('tmdbClientの既定パラメータ', () => {
@@ -875,6 +880,148 @@ describe('TMDb APIクライアント', () => {
         { id: 28, name: 'アクション' },
         { id: 35, name: 'コメディ' },
       ]);
+    });
+
+    /**
+     * ジャンル一覧は年単位でしか変わらないのに、呼ぶたびに取りに行っていた
+     * （#1278）。TMDb のレート制限（50req/s）を無駄に削る
+     */
+    describe('プロセス内キャッシュ', () => {
+      it('連続2回の呼び出しで TMDb は1回しか叩かれない', async () => {
+        mockGet.mockResolvedValue(mockGenresResponse);
+
+        const { getGenres } = require('./tmdb');
+        const first = await getGenres();
+        const second = await getGenres();
+
+        expect(mockGet).toHaveBeenCalledTimes(1);
+        expect(second).toEqual(first);
+      });
+
+      // 結果だけを持つと、起動直後に重なったリクエストが人数ぶん叩く
+      it('進行中の取得も共有する', async () => {
+        let resolveGet: ((value: unknown) => void) | null = null;
+        mockGet.mockReturnValue(
+          new Promise((resolve) => {
+            resolveGet = resolve;
+          }),
+        );
+
+        const { getGenres } = require('./tmdb');
+        const pending = Promise.all([getGenres(), getGenres(), getGenres()]);
+
+        expect(mockGet).toHaveBeenCalledTimes(1);
+
+        resolveGet!(mockGenresResponse);
+        const results = await pending;
+
+        // 同じ配列の実体が返ること。toEqual だと「別々に取得して
+        // たまたま中身が同じ」でも通ってしまう
+        expect(results[0]).toBe(results[1]);
+        expect(results[1]).toBe(results[2]);
+      });
+
+      // 失敗を24時間持ち続けると、一時的な不調が1日続く
+      it('失敗は保持せず、次の呼び出しで引き直す', async () => {
+        mockGet.mockRejectedValueOnce(new Error('TMDb API Error'));
+
+        const { getGenres } = require('./tmdb');
+        await expect(getGenres()).rejects.toThrow('TMDb API Error');
+
+        mockGet.mockResolvedValue(mockGenresResponse);
+        await expect(getGenres()).resolves.toEqual([
+          { id: 28, name: 'アクション' },
+          { id: 35, name: 'コメディ' },
+        ]);
+
+        expect(mockGet).toHaveBeenCalledTimes(2);
+      });
+
+      it('有効期間を過ぎたら取り直す', async () => {
+        mockGet.mockResolvedValue(mockGenresResponse);
+
+        const { getGenres } = require('./tmdb');
+        const nowSpy = jest.spyOn(Date, 'now');
+
+        // 途中の expect が落ちても Date.now のモックを後続テストへ
+        // 持ち越さない（jest.config.js に restoreMocks が無い）
+        try {
+          nowSpy.mockReturnValue(0);
+          await getGenres();
+
+          nowSpy.mockReturnValue(GENRE_CACHE_DURATION_MS - 1);
+          await getGenres();
+          expect(mockGet).toHaveBeenCalledTimes(1);
+
+          nowSpy.mockReturnValue(GENRE_CACHE_DURATION_MS);
+          await getGenres();
+          expect(mockGet).toHaveBeenCalledTimes(2);
+        } finally {
+          nowSpy.mockRestore();
+        }
+      });
+
+      /**
+       * HTTP 200 なのに `genres` が配列でない応答をキャッシュしない
+       *
+       * `get<T>()` の型引数は実行時には何も保証しない。素通しすると
+       * `undefined` が「成功」としてキャッシュに乗り、呼び出し側が
+       * TypeError で落ちる。reject ではないので失敗の破棄も効かず、
+       * **24時間ずっと 500 を返し続ける**ことになる
+       */
+      it.each([
+        ['genres が無い', { data: {} }],
+        ['genres が配列でない', { data: { genres: { 28: 'アクション' } } }],
+        ['data が無い', {}],
+      ])('200 でも %s なら失敗扱いにする', async (_label, response) => {
+        mockGet.mockResolvedValueOnce(response);
+
+        const { getGenres } = require('./tmdb');
+        await expect(getGenres()).rejects.toThrow(
+          'TMDb genres response is malformed',
+        );
+
+        // 壊れた応答を24時間持ち続けず、次の呼び出しで引き直す
+        mockGet.mockResolvedValue(mockGenresResponse);
+        await expect(getGenres()).resolves.toEqual([
+          { id: 28, name: 'アクション' },
+          { id: 35, name: 'コメディ' },
+        ]);
+        expect(mockGet).toHaveBeenCalledTimes(2);
+      });
+
+      /**
+       * 遅い取得の失敗が、別の有効なキャッシュを巻き込んで消さない
+       *
+       * tmdbClient のタイムアウト（10秒 × リトライ）がある限り、1回の
+       * 取得が有効期間（24時間）を跨ぐことは無い。ただし前提に
+       * 寄りかからず、`catch` 側で自分のエントリかを確認している
+       */
+      it('古い取得の失敗が新しいキャッシュを消さない', async () => {
+        const { getGenres, __resetGenreCacheForTest } = require('./tmdb');
+
+        let rejectFirst: ((cause: unknown) => void) | null = null;
+        mockGet.mockReturnValueOnce(
+          new Promise((_resolve, reject) => {
+            rejectFirst = reject;
+          }),
+        );
+
+        const first = getGenres();
+        // 1本目が飛行中のまま、キャッシュを空にして2本目を始める
+        __resetGenreCacheForTest();
+
+        mockGet.mockResolvedValue(mockGenresResponse);
+        await getGenres();
+        expect(mockGet).toHaveBeenCalledTimes(2);
+
+        rejectFirst!(new Error('slow failure'));
+        await expect(first).rejects.toThrow('slow failure');
+
+        // 2本目のキャッシュが生きていれば、3回目は叩かない
+        await getGenres();
+        expect(mockGet).toHaveBeenCalledTimes(2);
+      });
     });
   });
 

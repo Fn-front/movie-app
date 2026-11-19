@@ -9,6 +9,7 @@ import {
   EXCLUDED_GENRES_PARAM,
   EXCLUDED_KEYWORD_IDS,
   EXCLUDED_KEYWORDS_PARAM,
+  GENRE_CACHE_DURATION_MS,
   HTTP_STATUS,
   PAGINATION,
   PERSON_NON_ACTING_CHARACTER_PATTERN,
@@ -31,6 +32,7 @@ import { normalizeWatchProviderIds } from '@/lib/movies/watchProviders';
 import type {
   DismissSignals,
   FilteredTMDbResponse,
+  Genre,
   Movie,
   MovieCacheStats,
   MovieDetail,
@@ -489,13 +491,79 @@ export async function discoverMovies(
 }
 
 /**
- * ジャンル一覧を取得
+ * ジャンル一覧のプロセス内キャッシュ
  *
- * @returns ジャンル一覧
+ * TMDb のジャンル一覧は年単位でしか変わらないのに、呼ぶたびに取りに行って
+ * いた（#1278）。キャッシュは `/api/movies` のルートファイルにだけあり、
+ * `/api/movies/genres` は素通りだった。置き場所がルートではなくここ。
+ *
+ * ⚠️ **進行中の取得も共有する**（`promise` を持つ）。結果だけを持つと、
+ * 起動直後に複数のリクエストが重なったときに人数ぶん TMDb を叩く。
+ * TMDb のレート制限（50req/s）を無駄に削らないため。
+ *
+ * ⚠️ 失敗は保持しない。`catch` でキャッシュを捨てるので、次の呼び出しが
+ * 引き直す。失敗を24時間持ち続けると、一時的な不調が1日続く
  */
-export async function getGenres() {
-  const response = await tmdbClient.get(TMDB_ENDPOINTS.GENRES);
-  return response.data.genres;
+let genreCache: { promise: Promise<Genre[]>; cachedAt: number } | null = null;
+
+/**
+ * ジャンル一覧を取得（プロセス内で24時間キャッシュ）
+ *
+ * ⚠️ 返す配列は**キャッシュと共有している**。呼び出し側で破壊的に
+ * 書き換えないこと（`toDisplayGenres` は spread で複製している）。
+ *
+ * @returns ジャンル一覧（TMDb の生の並び・名前。絞り込みと表示名の
+ *   置き換えは `toDisplayGenres` が行う）
+ */
+export async function getGenres(): Promise<Genre[]> {
+  const now = Date.now();
+
+  if (genreCache && now - genreCache.cachedAt < GENRE_CACHE_DURATION_MS) {
+    return genreCache.promise;
+  }
+
+  const promise = tmdbClient
+    .get<{ genres: Genre[] }>(TMDB_ENDPOINTS.GENRES)
+    .then((response) => {
+      // ⚠️ 形を検査してから返す。`get<T>()` の型引数は実行時には**何も
+      // 保証しない**ただのアサーションで、間に挟まる CDN やプロキシが
+      // HTTP 200 で別の形のボディを返すことはある。
+      //
+      // 素通しすると `undefined` が「成功」としてキャッシュに乗り、
+      // 呼び出し側（`toSelectableGenres` の `genres.filter`）が
+      // TypeError で落ちる。reject ではないので下の `catch` も発火せず、
+      // **24時間ずっと 500 を返し続ける**。throw して捨てるのが正しい
+      if (!Array.isArray(response.data?.genres)) {
+        throw new Error('TMDb genres response is malformed');
+      }
+
+      return response.data.genres;
+    })
+    .catch((cause: unknown) => {
+      // ⚠️ 自分のエントリのときだけ捨てる。無条件に null を書くと、
+      // 遅い取得が失敗したときに、その間に始まった**別の有効な取得**を
+      // 巻き込んで消す（tmdbClient のタイムアウトがある限り
+      // 24時間の有効期間を跨ぐことは無いが、前提に寄りかからない）
+      if (genreCache?.promise === promise) {
+        genreCache = null;
+      }
+
+      throw cause;
+    });
+
+  genreCache = { promise, cachedAt: now };
+
+  return promise;
+}
+
+/**
+ * テスト用。ジャンルキャッシュを空にする
+ *
+ * ⚠️ TMDb をモックしているテストは、キャッシュが挟まると「2回目が
+ * 呼ばれない」ことで落ちる。`beforeEach` で呼ぶこと
+ */
+export function __resetGenreCacheForTest(): void {
+  genreCache = null;
 }
 
 /**

@@ -114,7 +114,8 @@ describe('GET /api/movies/genres', () => {
       const response = await GET(createRequest());
 
       expect(response.status).toBe(429);
-      // getGenres は in-process キャッシュを持たないため、呼ぶ前に止める必要がある
+      // getGenres はプロセス内キャッシュを持つが、インスタンスごとに別で
+      // 起動直後は空（#1278）。レート制限で止めないと TMDb を叩きうる
       expect(mockGetGenres).not.toHaveBeenCalled();
     });
 

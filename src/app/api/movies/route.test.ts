@@ -16,7 +16,9 @@ import { SEARCH_VALIDATION } from '@/constants/search';
 
 // --- Mocks ---
 
-// genreCacheをリセットするために、モジュールを都度リロード
+// モジュールスコープの状態を持ち越さないよう、テストごとにリロードする
+// （ジャンルキャッシュは #1278 で getGenres 側へ移ったが、ルートの
+//  module-level の初期化はここでリセットしておく）
 let GET: typeof import('./route').GET;
 
 const mockGetAuthSession = jest.fn().mockResolvedValue(null);
@@ -392,7 +394,7 @@ describe('GET /api/movies', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     createdChains.length = 0;
-    // genreCacheをリセットするためにモジュールをリロード
+    // モジュールスコープの状態を持ち越さないようリロードする
     jest.resetModules();
 
     // 既定は上限内（null を返すと通過）
@@ -1627,7 +1629,7 @@ describe('GET /api/movies', () => {
     expect(json.error.code).toBe('SERVER_ERROR');
   });
 
-  // === ジャンルキャッシュ ===
+  // === ジャンルマップ ===
 
   it('ジャンルマップが正しく返される', async () => {
     const handler = await loadGET();
@@ -1646,7 +1648,18 @@ describe('GET /api/movies', () => {
     expect(mockGetGenres).toHaveBeenCalledTimes(1);
   });
 
-  it('2回目のリクエストではジャンルキャッシュが使われる', async () => {
+  /**
+   * ⚠️ このルートは**ジャンルキャッシュを持たない**（#1278）。
+   *
+   * かつてここに module-level のキャッシュがあり、`/api/movies/genres` には
+   * 効いていなかった。キャッシュは `getGenres()` 側へ移したので、ルートは
+   * 毎回呼んでよい。TMDb を1回しか叩かないことは
+   * `src/lib/tmdb/tmdb.test.ts` が検証している。
+   *
+   * ここにキャッシュを戻すと二重管理になり、失効のタイミングが
+   * ルートごとにずれる
+   */
+  it('ルートはジャンルを自前でキャッシュせず、毎回 getGenres に任せる', async () => {
     const handler = await loadGET();
 
     // 1回目のリクエスト
@@ -1663,8 +1676,7 @@ describe('GET /api/movies', () => {
     });
     await handler(createRequest());
 
-    // getGenresは1回だけ呼ばれる（キャッシュ使用）
-    expect(mockGetGenres).toHaveBeenCalledTimes(1);
+    expect(mockGetGenres).toHaveBeenCalledTimes(2);
   });
 
   // === moviesがnullの場合 ===

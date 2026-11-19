@@ -480,8 +480,30 @@ Seq Scan になり、そこで初めて候補索引が効く。**実クエリで
 **インデックス:**
 - `identifier, action_type` (UNIQUE) - 重複防止
 - `locked_until` - ロック解除チェック用
-- `last_attempt_at` - 保持期間切れの削除用（#933）
-  - ⚠️ **書き込み側に代償がある。** `last_attempt_at` は `consume_rate_limit` のたびに更新されるため、この索引があると当該 UPDATE が HOT 更新の対象外になり、毎回の索引書き込みとページ膨張が発生する。読み手は日次1回の DELETE だけで、しかもこの掃除が機能していればテーブルは小さいまま（実測で pkey 88 kB / UNIQUE 144 kB）。**行数が増えないなら索引を外して seq scan に任せる選択も成立する。** 残しているのは、掃除が止まったときに DELETE が重くならないようにするため
+
+> ⛔ **`last_attempt_at` に索引を張らないこと（#1326）。** #933 で保持期間切れ DELETE 用に張っていたが、Supabase の Disk IO Budget 枯渇警告を受けて実測し、外した。
+>
+> `consume_rate_limit` は `last_attempt_at = now()` を書く。更新対象の列に btree 索引があると Postgres は HOT 更新を選べず、1回ごとに新しいヒープタプルに加えて**全索引**へ新エントリを書く。
+>
+> ⚠️ 「呼ばれるたび」ではない。ロック中（`locked_until > now()`）は `last_attempt_at` を更新しない分岐があり、その間は HOT が成立する。累積の HOT 率が 0% ではなく 13.5% だったのはこれが理由で、通常経路に限れば 0% だった。
+>
+> 本番で PostgREST 経由（1回=1トランザクション）に 200 回ずつ流した実測:
+>
+> | | 索引あり | 索引なし |
+> |---|---|---|
+> | HOT 更新率 | **0%**（197回中0回） | **100%**（197回中197回） |
+> | WAL | 575.7 bytes/call | **253.7 bytes/call** |
+> | WAL レコード | 7.05 件/call | **3.0 件/call** |
+>
+> 索引の肥大もここから来ていた。外して REINDEX した結果、索引合計は **7,696 kB → 184 kB**（ヒープは 544 kB / 68 ページ）。ただし 184 kB は REINDEX 直後の値で、`rate_limits` は INSERT/DELETE の回転が激しいため定常状態では 280 kB 前後に戻る。いずれにせよ 96% 減。
+>
+> **部分索引は代替にならない。** HOT の判定に WHERE 句は関係せず、`last_attempt_at` が btree 索引に含まれる時点で HOT は死ぬ。
+>
+> ⚠️ **BRIN は「HOT を殺すから」では落とせない。** PostgreSQL 16 以降、BRIN のような summarizing index の列だけを更新する場合は HOT が成立する（PG17 ドキュメント `storage-hot.html`「not including summarizing indexes. The only summarizing index method in the core PostgreSQL distribution is BRIN」）。本番は PostgreSQL 17.6。
+>
+> `rate_limits` で BRIN を採らないのは**サイズが理由**。ヒープが 68 ページしかなく、BRIN の既定 `pages_per_range = 128` では表全体が1レンジに収まるため枝刈りが一切効かない（`last_attempt_at` の correlation は 0.809 と良好なので、相関が理由ではない）。**大きいテーブルで同じ問題を扱うとき（#1327 の `movie_cache` など）は BRIN が有効な選択肢になりうるので、ここの結論をそのまま持ち出さないこと。**
+>
+> 日次 DELETE はヒープ 68 ページの seq scan になる（実測 0.324 ms）。行は `(identifier, action_type)` の upsert で再利用されるため**試行回数には比例しない**が、上限は「異なる識別子の数 × 異なる action_type の数」であって識別子の数ではない（実測: 1,234行 / 識別子 899 / action_type 22）。識別子の数自体に上限が無いので**時間に対しては緩やかに増える**（実測 約 617 行/日）。掃除が1年止まっても約 225k 行 ≒ 100 MB で日次1回の seq scan としては許容範囲だが、行数が小さいままという前提は無条件には成り立たない。掃除が大きいテーブルでも完走すること（#1330 の分割削除）で担保する。
 
 **制約:**
 - `action_type` は 'login', 'change_password', 'otp_verify' 等（CHECK制約）

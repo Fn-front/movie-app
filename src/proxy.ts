@@ -179,11 +179,12 @@ export const config = {
      * **除外すると DB の往復はむしろ増える。**
      *
      * proxy は `getSession()` のついでに更新後のセッション Cookie を保存する
-     * **唯一の経路**だからで、除外すると `/api/*` ではトークンが一切
-     * リフレッシュされなくなる。`lastPasswordCheck` の5分窓が開いたままに
-     * なり、Route Handler 側の確認が毎回 `users` を引く。
+     * ので、除外すると `/api/*` のリクエスト自身ではトークンがリフレッシュ
+     * されなくなる。`lastPasswordCheck` の5分窓が開いたままになり、
+     * Route Handler 側の確認が毎回 `users` を引く。
      *
-     * `next dev` での実測（2026-11-19。`users` への SELECT 回数）:
+     * `next dev` での実測（2026-11-19。`users` への SELECT 回数。
+     * ブラウザを介さず `fetch` で Cookie を持ち回った場合）:
      *
      *   | | 現状 | `/api/*` を除外 |
      *   |---|---|---|
@@ -193,6 +194,13 @@ export const config = {
      * 1本だけ見ると改善に見えるが、2本目以降が効かなくなるので
      * 叩くほど悪化する。省けるのは JWT の復号（HMAC。1ミリ秒未満）だけで、
      * 代わりにネットワーク越しの DB 往復が増える取引になる。
+     *
+     * ⚠️ 補足。proxy は Cookie を保存する**唯一の**経路ではない。
+     * `/api/auth/[...nextauth]` の `handlers` も更新後の Cookie を返し、
+     * `SessionProvider`（`src/components/providers/sessionProvider.tsx`）が
+     * 画面マウント時に `/api/auth/session` を叩く。実ブラウザでは
+     * そちらでも窓が閉じるため、上の「5」は上界であって実環境の値では
+     * ない。それでも**除外する側が不利**という向きは変わらない。
      *
      * 同時並行で重なるぶんは `src/lib/auth/sessionUserLookup.ts` が畳む。
      */

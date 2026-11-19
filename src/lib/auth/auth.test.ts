@@ -160,7 +160,7 @@ import {
   SESSION_CONFIG,
 } from '@/constants/auth';
 import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
-import { __resetSessionUserLookup } from '@/lib/auth/sessionUserLookup';
+import { __resetSessionUserLookupForTest } from '@/lib/auth/sessionUserLookup';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('@/lib/auth/auth');
@@ -196,7 +196,7 @@ beforeEach(() => {
   // ⚠️ 必須（#1281）。`users` の問い合わせは1秒だけ共有される。
   // テストは同じユーザーIDを1秒以内に何度も使うため、消さないと
   // 前のテストの resolver の結果を引き継いでしまう
-  __resetSessionUserLookup();
+  __resetSessionUserLookupForTest();
   setResolver(() => ({ data: null, error: null }));
   mockState.writes = [];
   // 既定は「二段階認証なし」。有効時の挙動は個別のテストで上書きする。

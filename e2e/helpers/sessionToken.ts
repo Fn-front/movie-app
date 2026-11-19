@@ -125,3 +125,72 @@ export async function seedTotpPendingSession(
 
   await context.addCookies([{ ...sessionCookie, value }]);
 }
+
+/** 確認窓を開いたセッションに入れる利用者の情報 */
+export interface StaleCheckSessionUser extends PendingSessionUser {
+  /** トークンに載せるロール。画面側の admin ゲートの判定に使う */
+  role?: 'user' | 'admin';
+  /**
+   * 失効判定のベースライン（`token.passwordChangedAt`）
+   *
+   * 省略すると `issuedAt`（＝この関数を呼んだ時刻）に倒れる（#1207）。
+   * 「DBの値のほうが新しい」状況を作りたいテストでは、**十分に過去の
+   * 値を明示すること**。省略すると差がミリ秒になり、`SessionProvider` の
+   * バックグラウンド更新が先に確認窓を消費したかどうかで結果が揺れる
+   */
+  passwordChangedAt?: string | null;
+}
+
+/**
+ * 「パスワード変更の確認窓が開いた」セッションに差し替える（#1281）
+ *
+ * `lastPasswordCheck` を `SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS`（5分）
+ * より古くする。ログイン直後のトークンは確認済みなので、そのままでは
+ * 5分待たないと `jwt` コールバックが `users` を引かない。
+ *
+ * ⚠️ **製品コードにテスト用の抜け道は作らない。** 署名も暗号化も本物の
+ * `AUTH_SECRET` で行い、サーバー側は通常のセッションとして扱う
+ * （`seedTotpPendingSession` と同じ考え方）。
+ *
+ * @param context - ブラウザコンテキスト（ログイン済みであること）
+ * @param user - セッションの持ち主
+ */
+export async function seedStaleCheckSession(
+  context: BrowserContext,
+  user: StaleCheckSessionUser,
+): Promise<void> {
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    throw new Error(
+      'AUTH_SECRET / NEXTAUTH_SECRET が未設定です（.env.local / CI の env）',
+    );
+  }
+
+  const sessionCookie = await resolveSessionCookie(context);
+  const now = Date.now();
+
+  const { encode } = await import('next-auth/jwt');
+
+  const value = await encode({
+    salt: sessionCookie.name,
+    secret,
+    token: {
+      id: user.id,
+      email: user.email,
+      name: user.name ?? null,
+      picture: null,
+      role: user.role ?? 'user',
+      hasPassword: true,
+      // 失効判定のベースライン。未指定なら issuedAt に倒れる（#1207）
+      passwordChangedAt: user.passwordChangedAt ?? null,
+      issuedAt: now,
+      // ここが本題。確認窓を開いた状態にする
+      lastPasswordCheck: 0,
+      // last_login_at の更新まで走らせると余計なDB往復が増える
+      lastLoginUpdate: now,
+      totpPending: false,
+    },
+  });
+
+  await context.addCookies([{ ...sessionCookie, value }]);
+}

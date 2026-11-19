@@ -849,12 +849,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // TTL は1秒。伸ばすと強制失効・admin 剥奪の検知が遅れる
             const { data, error: lookupError } = await lookupSessionUser(
               token.id,
-              () =>
-                supabase
+              async () => {
+                const { data: row, error } = await supabase
                   .from('users')
                   .select(SESSION_USER_COLUMNS)
                   .eq('id', token.id as string)
-                  .single(),
+                  .single();
+
+                // ⚠️ `password_hash` はキャッシュに載せる前に捨てる。
+                // 要るのは「設定されているか」だけで、bcrypt ハッシュを
+                // プロセス内に置き続ける理由が無い
+                return {
+                  data: row
+                    ? {
+                        hasPassword: Boolean(row.password_hash),
+                        passwordChangedAt: row.password_changed_at,
+                        role: row.role,
+                      }
+                    : null,
+                  error,
+                };
+              },
               now,
             );
 
@@ -893,8 +908,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               return token;
             }
 
-            if (data?.password_changed_at) {
-              const dbChangedAt = new Date(data.password_changed_at).getTime();
+            if (data?.passwordChangedAt) {
+              const dbChangedAt = new Date(data.passwordChangedAt).getTime();
 
               // ⚠️ ベースラインが無いときは **0 ではなく発行時刻**に倒す（#1207）。
               //
@@ -925,7 +940,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // パスワード未設定だったユーザーが設定した場合に追従する
             // （パスワード変更フォームが「現在のパスワード」欄を出すかの判定に使う）
             if (data) {
-              token.hasPassword = Boolean(data.password_hash);
+              token.hasPassword = data.hasPassword;
 
               // ロールも追従させる。ログイン時にしか取らないと、admin を剥奪しても
               // トークンの絶対有効期限（7日）まで admin のまま管理機能を使えてしまう。

@@ -1,14 +1,16 @@
 import {
-  __resetSessionUserLookup,
+  __getSessionUserLookupSizeForTest,
+  __resetSessionUserLookupForTest,
   lookupSessionUser,
+  SESSION_USER_LOOKUP_MAX_ENTRIES,
   SESSION_USER_LOOKUP_TTL_MS,
   type SessionUserLookupResult,
 } from './sessionUserLookup';
 import { SUPABASE_ERROR_CODE } from '@/constants/api';
 
 const row = {
-  password_hash: 'hash',
-  password_changed_at: '2026-11-01T00:00:00.000Z',
+  hasPassword: true,
+  passwordChangedAt: '2026-11-01T00:00:00.000Z',
   role: 'user',
 };
 
@@ -27,7 +29,7 @@ function deferredQuery() {
 }
 
 beforeEach(() => {
-  __resetSessionUserLookup();
+  __resetSessionUserLookupForTest();
 });
 
 describe('lookupSessionUser', () => {
@@ -96,6 +98,43 @@ describe('lookupSessionUser', () => {
    */
   it('TTL は1秒を超えない', () => {
     expect(SESSION_USER_LOOKUP_TTL_MS).toBeLessThanOrEqual(1_000);
+  });
+
+  /**
+   * 相乗りの判定も開始時刻 + TTL で行う。TTL を 0 にすると
+   * 「相乗りだけ残す」ことはできず、何も畳まれなくなる（#1294 のレビュー）
+   */
+  it('TTL は0より大きい（0だと相乗りも消える）', () => {
+    expect(SESSION_USER_LOOKUP_TTL_MS).toBeGreaterThan(0);
+  });
+
+  // 開始から TTL を過ぎると、まだ返ってきていなくても引き直す
+  it('進行中でも開始から TTL を過ぎたら引き直す', async () => {
+    const { query } = deferredQuery();
+
+    void lookupSessionUser('user-1', query, 0);
+    void lookupSessionUser('user-1', query, SESSION_USER_LOOKUP_TTL_MS);
+
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  // 遅い問い合わせの失敗が、別の進行中の問い合わせを道連れにしない
+  it('古い問い合わせの失敗が新しいエントリを消さない', async () => {
+    const first = deferredQuery();
+    const second = deferredQuery();
+
+    const firstResult = lookupSessionUser('user-1', first.query, 0);
+    // 1本目が未解決のまま TTL を越え、2本目が始まる
+    void lookupSessionUser('user-1', second.query, SESSION_USER_LOOKUP_TTL_MS);
+    expect(second.query).toHaveBeenCalledTimes(1);
+
+    // 1本目が失敗で解決する
+    first.calls[0]({ data: null, error: { code: '' } });
+    await firstResult;
+
+    // 2本目のエントリが残っていれば、相乗りして追加の問い合わせは起きない
+    void lookupSessionUser('user-1', second.query, SESSION_USER_LOOKUP_TTL_MS);
+    expect(second.query).toHaveBeenCalledTimes(1);
   });
 
   describe('失敗は使い回さない', () => {
@@ -168,19 +207,48 @@ describe('lookupSessionUser', () => {
     });
   });
 
-  it('エントリが溜まっても期限切れは掃除される', async () => {
-    const query = jest.fn().mockResolvedValue({ data: row, error: null });
+  describe('エントリの解放', () => {
+    /**
+     * ⚠️ 呼び出し回数では掃除の有無を区別できない（期限切れのエントリは
+     * どのみちミスになる）。エントリ数そのものを見ること
+     */
+    it('期限切れのエントリは次の取得開始時に捨てられる', async () => {
+      const query = jest.fn().mockResolvedValue({ data: row, error: null });
 
-    for (let i = 0; i < 1_000; i += 1) {
-      await lookupSessionUser(`user-${i}`, query, 0);
-    }
-    expect(query).toHaveBeenCalledTimes(1_000);
+      for (let i = 0; i < 10; i += 1) {
+        await lookupSessionUser(`user-${i}`, query, 0);
+      }
+      expect(__getSessionUserLookupSizeForTest()).toBe(10);
 
-    // 期限切れ後に新しい利用者を入れると掃除が走る。
-    // 掃除後は古い利用者も当然引き直しになる
-    await lookupSessionUser('user-new', query, SESSION_USER_LOOKUP_TTL_MS);
-    await lookupSessionUser('user-0', query, SESSION_USER_LOOKUP_TTL_MS);
+      // TTL を過ぎてから1件引くと、古い10件は消えて新しい1件だけ残る
+      await lookupSessionUser('user-new', query, SESSION_USER_LOOKUP_TTL_MS);
 
-    expect(query).toHaveBeenCalledTimes(1_002);
+      expect(__getSessionUserLookupSizeForTest()).toBe(1);
+    });
+
+    // bcrypt ハッシュをプロセス内に置き続けない
+    it('password_hash をキャッシュに載せない', async () => {
+      const query = jest.fn().mockResolvedValue({ data: row, error: null });
+
+      const { data } = await lookupSessionUser('user-1', query, 0);
+
+      expect(data).not.toHaveProperty('password_hash');
+      expect(data?.hasPassword).toBe(true);
+    });
+
+    // TTL 内の別IDだけで埋まった場合の歯止め
+    it('上限を超えないよう古いものから捨てる', async () => {
+      const query = jest.fn().mockResolvedValue({ data: row, error: null });
+
+      // すべて同じ時刻＝1件も期限切れにならない状態で上限を超えて詰める。
+      // 歯止めが無ければ 1,050 まで伸びる
+      for (let i = 0; i < SESSION_USER_LOOKUP_MAX_ENTRIES + 50; i += 1) {
+        await lookupSessionUser(`user-${i}`, query, 0);
+      }
+
+      expect(__getSessionUserLookupSizeForTest()).toBeLessThanOrEqual(
+        SESSION_USER_LOOKUP_MAX_ENTRIES,
+      );
+    });
   });
 });

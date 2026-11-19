@@ -22,33 +22,49 @@
  * 逐次が2回で済むのは、1本目で proxy が Cookie を更新し、以降は窓の内側に
  * 入るため。**同時だと更新が間に合わず、ほぼ全部が DB を引く。**
  *
+ * ⚠️ **この数値は `next dev`（単一プロセス）での実測。** 本番（Vercel）では
+ * proxy と各 Route Handler が別の関数として動くため、畳める範囲は
+ * 「同じ関数インスタンスに同時に入ったぶん」だけ。別インスタンスへ
+ * 振られたリクエストは畳めない。
+ *
  * ## どう直すか
  *
- * 同じ利用者の問い合わせを、進行中なら相乗りさせ、終わった直後なら
- * `SESSION_USER_LOOKUP_TTL_MS` のあいだ使い回す。
+ * 同じ利用者の問い合わせを、`SESSION_USER_LOOKUP_TTL_MS` のあいだ共有する。
+ * 開始時刻を基準に数えるので、**進行中のものに相乗りできるのも開始から
+ * TTL まで**（それを過ぎたら、まだ返ってきていなくても新しく引き直す）。
+ * 結果の古さが必ず TTL 以内に収まるようにするため、この基準で正しい。
  *
  * ⚠️ **TTL を伸ばさないこと。** この問い合わせはパスワード変更による強制失効と
  * admin 剥奪の追従そのもので、TTL はその検知が遅れる時間に直接乗る
  * （`SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS` の5分 ＋ TTL が最悪値）。
  * 1秒なら「同時に飛んできた束」を畳むには十分で、5分に対して無視できる。
  * 束を畳む以上の効果（リクエストをまたいだ削減）を狙って伸ばすと、
- * **剥奪した admin が管理機能を使える時間がそのぶん延びる。**
+ * **剥奪された admin の画面側のゲートが素通りする時間がそのぶん延びる。**
  *
- * ⚠️ proxy と Route Handler は**別のバンドル**なので、このキャッシュは
- * 2回のうち片方ずつにしか効かない（モジュールの実体が別）。2回を1回に
- * するものではなく、**同時に重なった束を1回にする**もの。
+ * ⚠️ TTL を 0 にすると**何も畳まれない**（`now - startedAt < 0` が常に偽で、
+ * 進行中の相乗りも消える）。「相乗りだけ残す」ことはできない。
  */
 
 import { SUPABASE_ERROR_CODE } from '@/constants/api';
+import type { Database } from '@/types/database.types';
+
+type UsersRow = Database['public']['Tables']['users']['Row'];
 
 /** セッション確認で読む列 */
 export const SESSION_USER_COLUMNS = 'password_hash, password_changed_at, role';
 
-/** セッション確認で読む行の形 */
+/**
+ * キャッシュに載せるセッション確認の結果
+ *
+ * ⚠️ `password_hash` を**そのまま持たない**。呼び出し側が要るのは
+ * 「設定されているか」だけ（`token.hasPassword`）で、bcrypt ハッシュを
+ * プロセス内に置き続ける理由が無い。問い合わせ直後に畳む。
+ */
 export interface SessionUserRow {
-  password_hash: string | null;
-  password_changed_at: string | null;
-  role: string | null;
+  /** パスワードが設定されているか（`password_hash` の有無） */
+  hasPassword: boolean;
+  passwordChangedAt: UsersRow['password_changed_at'];
+  role: UsersRow['role'] | null;
 }
 
 /** `.single()` の戻り値のうち、呼び出し側が見るぶんだけ */
@@ -65,26 +81,41 @@ export interface SessionUserLookupResult {
 export const SESSION_USER_LOOKUP_TTL_MS = 1_000;
 
 /**
- * 保持するエントリの上限
+ * 保持するエントリ数の上限
  *
- * TTL が1秒なので通常は同時アクセス中の利用者ぶんしか入らない。
- * 溢れたときに古いものを捨てるだけの歯止めで、容量設計ではない。
+ * 通常は掃除（取得を開始するたびに走る）だけで TTL 内の利用者ぶんに収まる。
+ * これは「1秒のあいだに数千人ぶんの別IDが来た」ような場合に備えた
+ * 歯止めで、到達したら最も古いものから捨てる。
  */
-const MAX_ENTRIES = 1_000;
+export const SESSION_USER_LOOKUP_MAX_ENTRIES = 1_000;
 
 interface Entry {
   startedAt: number;
   promise: Promise<SessionUserLookupResult>;
 }
 
+/**
+ * 挿入順で保持する（Map は挿入順を保つ）。
+ * 溢れたときに先頭＝最も古いものから捨てられる
+ */
 const entries = new Map<string, Entry>();
 
-/** 期限切れを掃除する。Map が膨らんだときだけ走らせる */
-function sweep(now: number): void {
+/** 期限切れを掃除し、それでも溢れていれば古い順に捨てる */
+function evict(now: number): void {
   for (const [userId, entry] of entries) {
     if (now - entry.startedAt >= SESSION_USER_LOOKUP_TTL_MS) {
       entries.delete(userId);
     }
+  }
+
+  // 掃除しても上限に届いている＝TTL 内の別IDだけで埋まっている。
+  // 新しいものを入れる余地を作るため、挿入順で古いものから落とす
+  while (entries.size >= SESSION_USER_LOOKUP_MAX_ENTRIES) {
+    const oldest = entries.keys().next();
+
+    if (oldest.done) break;
+
+    entries.delete(oldest.value);
   }
 }
 
@@ -101,14 +132,31 @@ function isFailure(result: SessionUserLookupResult): boolean {
   );
 }
 
+/**
+ * 自分が入れたエントリのときだけ捨てる
+ *
+ * ⚠️ 無条件に `delete` すると、遅い問い合わせが失敗したときに、その間に
+ * 始まった**別の進行中の問い合わせ**を道連れにして相乗りが効かなくなる。
+ * 安全側（引き直し）には倒れるが、DBが弱っているとき＝畳む価値が最も
+ * 高いときに機能が止まる
+ */
+function discardIfMine(
+  userId: string,
+  promise: Promise<SessionUserLookupResult>,
+): void {
+  if (entries.get(userId)?.promise === promise) {
+    entries.delete(userId);
+  }
+}
+
 /** `.single()` を呼べる最小限の形。テストから差し替えられるようにする */
 export type SessionUserQuery = () => PromiseLike<SessionUserLookupResult>;
 
 /**
  * セッション確認用に `users` の行を引く
  *
- * 同じ `userId` の問い合わせが進行中なら相乗りし、直前に終わっていれば
- * TTL のあいだ使い回す。失敗は使い回さない。
+ * 同じ `userId` の問い合わせが開始から TTL 以内なら、進行中・完了済みを
+ * 問わず相乗りする。失敗は使い回さない。
  *
  * @param userId - 対象の利用者ID
  * @param query - 実際の問い合わせ（呼び出し側が supabase クライアントを閉じ込める）
@@ -125,21 +173,23 @@ export function lookupSessionUser(
     return cached.promise;
   }
 
-  if (entries.size >= MAX_ENTRIES) {
-    sweep(now);
-  }
+  // 新しく引くときだけ掃除する。TTL が1秒なので、これだけで
+  // Map は「直近1秒に来た利用者＋進行中」の大きさに収まる
+  evict(now);
 
-  const promise = Promise.resolve(query()).then(
+  const promise: Promise<SessionUserLookupResult> = Promise.resolve(
+    query(),
+  ).then(
     (result) => {
       // 失敗は共有しない。次の確認が10秒後に引き直せるようにしておく
       if (isFailure(result)) {
-        entries.delete(userId);
+        discardIfMine(userId, promise);
       }
 
       return result;
     },
     (cause: unknown) => {
-      entries.delete(userId);
+      discardIfMine(userId, promise);
       throw cause;
     },
   );
@@ -150,6 +200,11 @@ export function lookupSessionUser(
 }
 
 /** テスト用。キャッシュを空にする */
-export function __resetSessionUserLookup(): void {
+export function __resetSessionUserLookupForTest(): void {
   entries.clear();
+}
+
+/** テスト用。保持しているエントリ数（掃除が効いているかの検証に使う） */
+export function __getSessionUserLookupSizeForTest(): number {
+  return entries.size;
 }

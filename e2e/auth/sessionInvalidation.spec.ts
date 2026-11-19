@@ -66,6 +66,44 @@ async function signIn(page: Page): Promise<void> {
   await page.waitForURL(ROUTES.HOME);
 }
 
+/**
+ * 確認窓を開き直しながら、締め出されるまで再試行する
+ *
+ * ⚠️ 1回の `goto` に賭けると CI で断続的に落ちる。
+ *
+ * 確認窓（`lastPasswordCheck` の5分間隔）は**最初に通ったリクエストが
+ * 消費する**。アプリのページに留まったまま Cookie を差し替えると、
+ * `SessionProvider` の `/api/auth/session` やページ自身の API 呼び出しが
+ * 同時に走り、全部が同じ（窓の開いた）Cookie で検査を始める。
+ * それぞれが更新後の Cookie を返すため**最後に届いた Set-Cookie が勝ち**、
+ * 失効させた Cookie が失効していない Cookie に上書きされうる。そうなると
+ * 窓は閉じているので、続く `goto` では何も起きない。
+ *
+ * 対策は2つ重ねる。
+ *   1. 差し替える前に空ページへ移して、背景のリクエストを止める
+ *   2. それでも競り負けたときのために、窓を開き直して再試行する
+ *
+ * @param page - 対象のページ
+ * @param from - アクセスするパス
+ * @param to - 締め出された結果たどり着くべきパス
+ * @param seed - セッションを差し替える処理
+ */
+async function expectLockedOut(
+  page: Page,
+  from: string,
+  to: string,
+  seed: () => Promise<void>,
+): Promise<void> {
+  await expect(async () => {
+    // 背景のリクエストに窓を奪われないよう、静止してから差し替える
+    await page.goto('about:blank');
+    await seed();
+    await page.goto(from);
+
+    expect(new URL(page.url()).pathname).toBe(to);
+  }).toPass({ timeout: 60000 });
+}
+
 // ログイン（bcrypt）＋DB往復＋画面遷移を行うため、既定の30秒では足りない
 test.describe.configure({ mode: 'serial', timeout: 90000 });
 
@@ -108,21 +146,18 @@ test.describe('セッションの強制失効と admin 剥奪の追従', () => {
       password_changed_at: new Date().toISOString(),
     });
 
-    await seedStaleCheckSession(page.context(), {
-      id: userId,
-      email: USER.email,
-      role: 'admin',
-      // ⚠️ 十分に過去を明示する。省略すると発行時刻（＝上のDB更新より後）に
-      // 倒れ、「DBのほうが新しい」が成立しなくなる
-      passwordChangedAt: BASELINE_PASSWORD_CHANGED_AT,
-    });
-
-    await page.goto(ROUTES.SETTINGS);
-
     // 失効したセッションは user.id が空になり、保護パスでログインへ送られる
-    await page.waitForURL((url) => url.pathname === ROUTES.LOGIN, {
-      timeout: 30000,
-    });
+    await expectLockedOut(page, ROUTES.SETTINGS, ROUTES.LOGIN, () =>
+      seedStaleCheckSession(page.context(), {
+        id: userId,
+        email: USER.email,
+        role: 'admin',
+        // ⚠️ 十分に過去を明示する。省略すると発行時刻（＝上のDB更新より後）に
+        // 倒れ、「DBのほうが新しい」が成立しなくなる
+        passwordChangedAt: BASELINE_PASSWORD_CHANGED_AT,
+      }),
+    );
+
     await expect(
       page.getByRole('button', { name: 'ログイン', exact: true }),
     ).toBeVisible();
@@ -137,18 +172,14 @@ test.describe('セッションの強制失効と admin 剥奪の追従', () => {
     // 上のテストと同じ理由で、セッションを差し替える前に更新しておく
     await updateUserColumns(userId, { role: 'user' });
 
-    await seedStaleCheckSession(page.context(), {
-      id: userId,
-      email: USER.email,
-      role: 'admin',
-    });
-
-    await page.goto(ROUTES.ADMIN_AWARDS);
-
     // 権限不足はホームへ送る（存在を隠しても守りにならないため 404 にしない）
-    await page.waitForURL((url) => url.pathname === ROUTES.HOME, {
-      timeout: 30000,
-    });
+    await expectLockedOut(page, ROUTES.ADMIN_AWARDS, ROUTES.HOME, () =>
+      seedStaleCheckSession(page.context(), {
+        id: userId,
+        email: USER.email,
+        role: 'admin',
+      }),
+    );
   });
 
   /**
@@ -157,6 +188,9 @@ test.describe('セッションの強制失効と admin 剥奪の追従', () => {
    */
   test('DBが変わっていなければ締め出されない', async ({ page }) => {
     await signIn(page);
+
+    // 締め出される側と条件を揃える（背景リクエストで窓を消費させない）
+    await page.goto('about:blank');
     await seedStaleCheckSession(page.context(), {
       id: userId,
       email: USER.email,

@@ -611,4 +611,81 @@ describe('useOverlayHistory', () => {
 
     expect(backSpy).not.toHaveBeenCalled();
   });
+  /**
+   * ルーターの書き込みからトークンを守る（#1304）
+   *
+   * Next はハイドレーション時に `replaceState` で自分の状態を書き込む。
+   * それがオーバーレイの `pushState` より後に来ると、エントリの state が
+   * 丸ごと置き換わって `__overlayHistory` が落ちる。落ちるとトークンを
+   * 拠り所にする処理（進むで開き直す / 閉じたエントリを畳む）が無言で死ぬ
+   */
+  describe('ルーターの replaceState に上書きされない', () => {
+    /** Next のルーターがハイドレーション時にする書き込みを再現する */
+    const routerWrite = () => {
+      window.history.replaceState(
+        { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: {} },
+        '',
+        window.location.href,
+      );
+    };
+
+    it('同一URLへの書き込みではトークンが残る', () => {
+      renderHook(() => useOverlayHistory(true, jest.fn()));
+      expect(window.history.state?.__overlayHistory).toEqual(
+        expect.any(String),
+      );
+
+      act(() => routerWrite());
+
+      expect(window.history.state?.__overlayHistory).toEqual(
+        expect.any(String),
+      );
+      // ルーター側の内容も失わない
+      expect(window.history.state?.__NA).toBe(true);
+    });
+
+    it('トークンが残るので、進むで開き直せる', () => {
+      const onReopen = jest.fn();
+      const { rerender } = renderHook(
+        ({ open }) => useOverlayHistory(open, jest.fn(), onReopen),
+        { initialProps: { open: true } },
+      );
+
+      act(() => routerWrite());
+
+      // 戻るで閉じる
+      dispatchPopState();
+      rerender({ open: false });
+
+      // 進むで同じエントリへ入り直す
+      dispatchPopState();
+
+      expect(onReopen).toHaveBeenCalledTimes(1);
+    });
+
+    it('URL が変わる書き込みでは引き継がない（遷移を取り消さない）', () => {
+      renderHook(() => useOverlayHistory(true, jest.fn()));
+
+      act(() => {
+        window.history.replaceState({ __NA: true }, '', '/watchlist');
+      });
+
+      // トークンが残ると、閉じるときに history.back() で遷移を打ち消す
+      expect(window.history.state?.__overlayHistory).toBeUndefined();
+    });
+
+    it('呼び出し側が明示したトークンは書き換えない', () => {
+      renderHook(() => useOverlayHistory(true, jest.fn()));
+
+      act(() => {
+        window.history.replaceState(
+          { __overlayHistory: 'explicit' },
+          '',
+          window.location.href,
+        );
+      });
+
+      expect(window.history.state?.__overlayHistory).toBe('explicit');
+    });
+  });
 });

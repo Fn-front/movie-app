@@ -87,6 +87,79 @@ function rememberDormantOverlay(token: string, reopen: () => void): void {
   dormantOverlays.set(token, reopen);
 }
 
+/**
+ * 他所からの `replaceState` でトークンが消えるのを防ぐ（#1304）
+ *
+ * Next のルーターは**ハイドレーション時に1回 `replaceState`** して自分の
+ * 状態を書き込む（実測: `{__NA, __PRIVATE_NEXTJS_INTERNALS_TREE}`。同一URL）。
+ * これが**オーバーレイの `pushState` より後に来る**と、我々が積んだエントリの
+ * state を丸ごと置き換えて `__overlayHistory` が落ちる。
+ *
+ * 落ちると、トークンを拠り所にしている処理がすべて無言で失敗する。
+ *
+ * - 進むで開き直す経路（#1053）が空振りする
+ * - `shouldFold` / `flushPendingFolds` のトークン一致が成立せず、
+ *   閉じてもエントリが畳まれない（次の戻るが画面を変えない）
+ *
+ * CI の E2E で実際に踏んだ。遅いマシンほどハイドレーションが遅れるため、
+ * 「ページが描き終わる前にドロワーを開く」と再現する。
+ *
+ * ⚠️ **URL が変わる書き込みでは引き継がない。** 「ルーターが遷移したら
+ * トークンが変わる」ことを畳む判定が前提にしており（`shouldFold` の
+ * コメント参照）、そこまで引き継ぐと遷移を `history.back()` で
+ * 取り消してしまう。
+ *
+ * ⚠️ 呼び出し側が明示的に `__overlayHistory` を含めてきた場合は触らない。
+ * 自分たちの `replaceState`（引き継ぎ・畳み）を上書きしないため。
+ */
+let patchedReplaceState: typeof window.history.replaceState | null = null;
+
+/** 現在のエントリを指す同一URLへの書き込みか */
+function isSameDocumentUrl(url?: string | URL | null): boolean {
+  if (url === undefined || url === null) return true;
+
+  try {
+    return new URL(String(url), window.location.href).href === location.href;
+  } catch {
+    // 解釈できない URL は「別の場所」として扱い、引き継がない
+    return false;
+  }
+}
+
+function installTokenPreserver(): void {
+  if (patchedReplaceState || typeof window === 'undefined') {
+    return;
+  }
+
+  const original = window.history.replaceState.bind(window.history);
+
+  const patched: typeof window.history.replaceState = (data, unused, url) => {
+    const current = window.history.state?.[OVERLAY_STATE_KEY];
+    const incomingHasToken =
+      !!data &&
+      typeof data === 'object' &&
+      OVERLAY_STATE_KEY in (data as Record<string, unknown>);
+
+    if (
+      typeof current !== 'string' ||
+      incomingHasToken ||
+      !isSameDocumentUrl(url)
+    ) {
+      original(data, unused, url);
+      return;
+    }
+
+    original(
+      { ...(data as Record<string, unknown>), [OVERLAY_STATE_KEY]: current },
+      unused,
+      url,
+    );
+  };
+
+  window.history.replaceState = patched;
+  patchedReplaceState = patched;
+}
+
 let isListening = false;
 
 /**
@@ -383,6 +456,9 @@ export function useOverlayHistory(
     ownTokensRef.current.add(token);
     openOverlays.push(entry);
     startListening();
+    // ⚠️ `pushState` より前に仕込むこと。守るのは**これから積むエントリ**で、
+    // Next のハイドレーション時 `replaceState` はその直後に来うる（#1304）
+    installTokenPreserver();
 
     if (isResurrected) {
       resurrectedTokens.delete(token);

@@ -85,63 +85,62 @@ const mockSpeakers = [
   },
 ];
 
-function setupFullQuery() {
-  mockFrom.mockImplementation((table?: string) => {
-    if (table === 'theaters') {
+/**
+ * 直近の `.select()` に渡された文字列
+ *
+ * 埋め込みの取りこぼしを検知するために記録する（awards 側と同じ作法）
+ */
+let lastSelectColumns: string | undefined;
+
+/** 埋め込み1本のクエリをモックする（#1275 で3本から1本になった） */
+function setupQuery(
+  result: { data: unknown; error: unknown },
+  orderSpy?: jest.Mock,
+) {
+  const order = orderSpy ?? jest.fn();
+  // `order` が自身を返すチェーンなので、型注釈が無いと TS7022 になる
+  const chain: { order: jest.Mock; single: jest.Mock } = {
+    order: jest.fn((...args: unknown[]) => {
+      order(...args);
+      return chain;
+    }),
+    single: jest.fn().mockResolvedValue(result),
+  };
+
+  mockFrom.mockImplementation(() => ({
+    // ⚠️ 引数を捨てない。捨てると埋め込みから
+    // `theater_speakers(...)` を落としても全テストが緑のまま通る（#1275）
+    select: jest.fn((columns: string) => {
+      lastSelectColumns = columns;
       return {
-        select: jest.fn().mockReturnValue({
+        eq: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
-            eq: jest.fn().mockReturnValue({
-              is: jest.fn().mockReturnValue({
-                single: jest
-                  .fn()
-                  .mockResolvedValue({ data: mockTheater, error: null }),
-              }),
-            }),
+            is: jest.fn().mockReturnValue(chain),
           }),
         }),
       };
-    }
-    if (table === 'theater_seats') {
-      return {
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              order: jest
-                .fn()
-                .mockResolvedValue({ data: mockSeats, error: null }),
-            }),
-          }),
-        }),
-      };
-    }
-    if (table === 'theater_speakers') {
-      return {
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockResolvedValue({ data: mockSpeakers, error: null }),
-        }),
-      };
-    }
-    return { select: jest.fn() };
-  });
+    }),
+  }));
+
+  return chain;
+}
+
+/** 埋め込みの戻り（theater_seats / theater_speakers がネストする） */
+const mockEmbedded = {
+  ...mockTheater,
+  theater_seats: mockSeats,
+  theater_speakers: mockSpeakers,
+};
+
+function setupFullQuery(orderSpy?: jest.Mock) {
+  return setupQuery({ data: mockEmbedded, error: null }, orderSpy);
 }
 
 function setupNotFound() {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  mockFrom.mockImplementation((_table?: string) => ({
-    select: jest.fn().mockReturnValue({
-      eq: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          is: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({
-              data: null,
-              error: { code: 'PGRST116', message: 'not found' },
-            }),
-          }),
-        }),
-      }),
-    }),
-  }));
+  return setupQuery({
+    data: null,
+    error: { code: 'PGRST116', message: 'not found' },
+  });
 }
 
 // --- Tests ---
@@ -149,6 +148,7 @@ function setupNotFound() {
 describe('GET /api/theaters/[slug]', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    lastSelectColumns = undefined;
     (getAuthSession as jest.Mock).mockResolvedValue({
       user: { id: 'user-123' },
     });
@@ -168,6 +168,120 @@ describe('GET /api/theaters/[slug]', () => {
     expect(json.data.theater.slug).toBe('standard-medium');
     expect(json.data.theater.seats).toEqual(mockSeats);
     expect(json.data.theater.speakers).toEqual(mockSpeakers);
+  });
+
+  /**
+   * 座席の並び順が従来と一致する（#1275）
+   *
+   * 3本の直列クエリを埋め込み1本にまとめたので、`.order()` に
+   * `referencedTable` を付けないと**埋め込み側には効かない**。
+   * 付け忘れると座席が任意順で返り、座席表の描画が崩れる。
+   */
+  it('座席は row_label → seat_number の順で取る', async () => {
+    const orderSpy = jest.fn();
+    setupFullQuery(orderSpy);
+
+    await GET(createGetRequest(), createContext('standard-medium'));
+
+    expect(orderSpy).toHaveBeenNthCalledWith(1, 'row_label', {
+      referencedTable: 'theater_seats',
+    });
+    expect(orderSpy).toHaveBeenNthCalledWith(2, 'seat_number', {
+      referencedTable: 'theater_seats',
+    });
+  });
+
+  // 3本の直列クエリを1本にまとめた（#1275）。戻すとこのテストが落ちる
+  it('DBへ投げるのは1本だけ', async () => {
+    setupFullQuery();
+
+    const response = await GET(
+      createGetRequest(),
+      createContext('standard-medium'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+    expect(mockFrom).toHaveBeenCalledWith('theaters');
+  });
+
+  /**
+   * ⚠️ 取得失敗を「存在しない」と偽らない
+   *
+   * 1往復にまとめたことで、以前は座席・スピーカーの取得失敗として 500 に
+   * なっていた経路もここへ合流する。`PGRST116` 以外まで 404 に倒すと、
+   * DB の不調が「劇場が無い」として返る
+   */
+  it('PGRST116 以外のエラーは404ではなく500を返す', async () => {
+    setupQuery({
+      data: null,
+      error: { code: '57014', message: 'canceling statement due to timeout' },
+    });
+
+    const response = await GET(
+      createGetRequest(),
+      createContext('standard-medium'),
+    );
+
+    expect(response.status).toBe(500);
+  });
+
+  // 埋め込みが空（座席・スピーカー未登録）でも落ちない
+  it('座席・スピーカーが無い劇場は空配列を返す', async () => {
+    setupQuery({
+      data: { ...mockTheater, theater_seats: [], theater_speakers: [] },
+      error: null,
+    });
+
+    const response = await GET(
+      createGetRequest(),
+      createContext('standard-medium'),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.theater.seats).toEqual([]);
+    expect(json.data.theater.speakers).toEqual([]);
+  });
+
+  /**
+   * 埋め込みの取りこぼしを検知する（#1275）
+   *
+   * `theater_speakers(...)` を落としても、モックが常にスピーカー入りの
+   * 行を返すため他のテストは緑のまま通る。本番では `speakers` が
+   * `undefined` → `?? []` で空配列になり、スピーカーが静かに消える
+   */
+  it('劇場・座席・スピーカーを1つのSELECTで指定する', async () => {
+    setupFullQuery();
+
+    await GET(createGetRequest(), createContext('standard-medium'));
+
+    expect(lastSelectColumns).toContain('theater_seats(');
+    expect(lastSelectColumns).toContain('theater_speakers(');
+    // 座席・スピーカーの列も取り漏れていないこと
+    expect(lastSelectColumns).toContain('seat_type');
+    expect(lastSelectColumns).toContain('directivity_alpha');
+  });
+
+  /**
+   * 埋め込みの生キーをレスポンスに残さない
+   *
+   * `...theaterFields` を `...theater` に書き戻すと `theater_seats` /
+   * `theater_speakers` が二重に載る（imax-gt なら544席ぶん）
+   */
+  it('埋め込みの生キーをレスポンスに含めない', async () => {
+    setupFullQuery();
+
+    const response = await GET(
+      createGetRequest(),
+      createContext('standard-medium'),
+    );
+    const json = await response.json();
+
+    expect(json.data.theater).not.toHaveProperty('theater_seats');
+    expect(json.data.theater).not.toHaveProperty('theater_speakers');
+    expect(json.data.theater.seats).toHaveLength(1);
+    expect(json.data.theater.speakers).toHaveLength(1);
   });
 
   it('Cache-Controlヘッダーが設定される', async () => {

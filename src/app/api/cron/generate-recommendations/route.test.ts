@@ -83,7 +83,11 @@ const mockFavoritesQuery = (
   mockFrom.mockReturnValueOnce({
     select: () => ({
       eq: () => ({
-        is: () => Promise.resolve({ data: favorites, error: null }),
+        is: () => ({
+          order: () => ({
+            range: () => Promise.resolve({ data: favorites, error: null }),
+          }),
+        }),
       }),
     }),
   });
@@ -96,7 +100,11 @@ const mockWatchlistQuery = (
   mockFrom.mockReturnValueOnce({
     select: () => ({
       eq: () => ({
-        is: () => Promise.resolve({ data: items, error: null }),
+        is: () => ({
+          order: () => ({
+            range: () => Promise.resolve({ data: items, error: null }),
+          }),
+        }),
       }),
     }),
   });
@@ -113,7 +121,11 @@ const mockDismissedMoviesQuery = (
   mockFrom.mockReturnValueOnce({
     select: () => ({
       eq: () => ({
-        is: () => Promise.resolve({ data: items, error: null }),
+        is: () => ({
+          order: () => ({
+            range: () => Promise.resolve({ data: items, error: null }),
+          }),
+        }),
       }),
     }),
   });

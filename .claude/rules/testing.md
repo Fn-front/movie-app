@@ -8,6 +8,64 @@ globs:
 
 # テスト作成ルール
 
+## 【必須】E2E はローカルの Supabase で回す（#1331）
+
+**手元で `npm run test:e2e` を叩くと、既定では本番 Supabase を叩く。**
+CI はランナー内に Supabase を立てるので影響しないが、手元は別。
+
+本番を叩くと実害がある。
+
+- run ごとにテスト利用者を作って消すため、本番 `users` に出入りする
+- `e2e/helpers/api.ts` の `runDeleteExpiredRateLimits()` は**任意の保持時間を
+  受け取る**ので、短い値を渡すと実利用者の `rate_limits` 行まで消える
+- Free プランのログ取り込み・Egress を消費する（#1331 で CI 分は解消済み）
+
+### 切り替え方
+
+```bash
+supabase start
+# .env.local に追記
+E2E_USE_LOCAL_SUPABASE=true
+```
+
+接続情報は `playwright.config.ts` が固定値で持っているので `.env.local` には
+書かない。Supabase CLI が全ユーザー共通で配っているローカル用のデモ鍵で、
+127.0.0.1 にしか通用しない。
+
+その場限りで切り替えるなら前置きでもよい。`dotenv` は `override` を
+指定していないため、**既に `process.env` にある値が `.env.local` より優先される**。
+
+```bash
+E2E_USE_LOCAL_SUPABASE=true npm run test:e2e
+```
+
+未設定のまま実行すると警告が1行出る。CI では出ない。
+
+### ⚠️ 効くのは dev サーバー経路だけ
+
+`NEXT_PUBLIC_*` は**ビルド時に静的置換される**ため、このフラグが効くのは
+webServer が `npm run dev` のとき＝ローカルの既定の経路だけ。
+
+手元で `CI=true`（`npm start` ＝ 本番ビルド）を使うと、**URL だけ `.env.local` の
+本番のまま**になり、サーバーはローカルの鍵を本番URLへ送って
+`Invalid API key` で落ちる（実測）。本番ビルドで回したいなら build にも渡す。
+
+```bash
+E2E_USE_LOCAL_SUPABASE=true \
+  NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 \
+  NEXT_PUBLIC_SUPABASE_ANON_KEY=<playwright.config.ts の anonKey> \
+  npm run build
+```
+
+CI は `e2e.yml` が build step にも接続先を渡しているのでこの問題は起きない。
+
+### ⚠️ ローカルは本番と同じデータ量ではない
+
+`supabase/seed.sql` が入れるのは**各ページが描画できる最小限**だけ
+（受賞17件、映画は「劇場/配信 × 公開中/公開予定」の4象限で66件）。
+本番は `movie_cache` だけで 1,258 件ある。データ量を前提にした手動確認
+（ページング・大量件数の見た目など）には向かない。
+
 ## 【必須】配置・カバレッジ
 
 - テストファイルは対象ファイルと同じディレクトリに `<filename>.test.ts(x)` で配置する

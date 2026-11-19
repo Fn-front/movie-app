@@ -65,6 +65,21 @@ function isTerminal(job: AwardSyncJobView | null): boolean {
   return job !== null && job.status !== AWARD_SYNC_STATUS.RUNNING;
 }
 
+/**
+ * ジョブの開始からの経過時間（ミリ秒）
+ *
+ * リロードでポーリング間隔が最初の段へ戻らないようにするために使う。
+ * `startedAt` が読めない・未来の値だったときは 0 に倒す（間隔が短い側＝
+ * 安全側で、レート制限の見積もりも超えない）。
+ */
+function elapsedSinceStart(job: AwardSyncJobView): number {
+  const startedAt = Date.parse(job.startedAt);
+
+  if (Number.isNaN(startedAt)) return 0;
+
+  return Math.max(0, Date.now() - startedAt);
+}
+
 export function useAwardSync(): UseAwardSyncResult {
   // Select の onValueChange が (value: string) => void なので string で持つ。
   // 賞キーの妥当性はサーバー側の zod（awardSyncCreateSchema）が最終判定する
@@ -117,15 +132,19 @@ export function useAwardSync(): UseAwardSyncResult {
   );
 
   const startPolling = useCallback(
-    (jobId: string) => {
+    (jobId: string, alreadyElapsedMs = 0) => {
       // 多重起動を防ぐ。start を連打してもタイマーは1本に保つ
       stopPolling();
       failureCountRef.current = 0;
 
       const generation = pollGenerationRef.current;
       // 経過時間は積んだ間隔の合計で持つ。実時計を見ないので
-      // タブが止まっていた間に間隔を飛ばすことがない
-      let elapsedMs = 0;
+      // タブが止まっていた間に間隔を飛ばすことがない。
+      //
+      // ⚠️ ただしリロードはここが 0 に戻る。18分走っているジョブの画面を
+      // 開き直すたびに5秒間隔が1分ぶん復活してしまうので、復元経路は
+      // ジョブの開始時刻から経過を渡す（#1282）
+      let elapsedMs = alreadyElapsedMs;
 
       const scheduleNext = () => {
         const intervalMs = getAwardSyncPollIntervalMs(elapsedMs);
@@ -184,7 +203,7 @@ export function useAwardSync(): UseAwardSyncResult {
         setIsStale(snapshot.isStale);
 
         if (snapshot.job?.status === AWARD_SYNC_STATUS.RUNNING) {
-          startPolling(snapshot.job.id);
+          startPolling(snapshot.job.id, elapsedSinceStart(snapshot.job));
         }
       } catch (cause) {
         if (!cancelled) {

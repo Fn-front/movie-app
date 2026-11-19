@@ -3,7 +3,7 @@ import {
   SYNCABLE_AWARD_OPTIONS,
   AWARD_SYNC_MIN_YEAR,
   AWARD_SYNC_STALE_MINUTES,
-  AWARD_SYNC_POLL_MAX_INTERVAL_MS,
+  AWARD_SYNC_POLL_SCHEDULE,
   countAwardSyncPolls,
   getAwardSyncPollIntervalMs,
   isSyncableYear,
@@ -93,14 +93,24 @@ describe('awardSync constants', () => {
   });
 
   describe('ポーリング間隔のスケジュール', () => {
+    /**
+     * `getAwardSyncPollIntervalMs` は `.find()` で最初に当たった段を採る。
+     * 昇順でないと、後ろに足した段が一度も使われない（回数も「縮まない」
+     * テストも変わらないので気づけない）
+     */
+    it('段が withinMs の昇順に並んでいる', () => {
+      const withins = AWARD_SYNC_POLL_SCHEDULE.map((stage) => stage.withinMs);
+
+      expect(withins).toEqual([...withins].sort((a, b) => a - b));
+      expect(new Set(withins).size).toBe(withins.length);
+    });
+
     it('経過に応じて間隔が伸びる', () => {
       expect(getAwardSyncPollIntervalMs(0)).toBe(5_000);
       expect(getAwardSyncPollIntervalMs(59_999)).toBe(5_000);
       expect(getAwardSyncPollIntervalMs(60_000)).toBe(15_000);
       expect(getAwardSyncPollIntervalMs(299_999)).toBe(15_000);
-      expect(getAwardSyncPollIntervalMs(300_000)).toBe(
-        AWARD_SYNC_POLL_MAX_INTERVAL_MS,
-      );
+      expect(getAwardSyncPollIntervalMs(300_000)).toBe(30_000);
     });
 
     // 間隔は単調非減少。途中で縮むと「後半ほど粗く」の前提が崩れる

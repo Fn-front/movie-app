@@ -108,9 +108,12 @@ export const AWARD_SYNC_STALE_MINUTES = 25;
  * ピークは最初の1分の12回/分で、ここは据え置き（進捗の出だしの体感を
  * 落とさないため）。`ADMIN_ROLE_CHECK`（120回/分）の前提も変わらない。
  *
- * ⚠️ 段を足すときは `countAwardSyncPolls` の結果が
- *    `RATE_LIMIT_CONFIG.ADMIN_AWARD_SYNC_STATUS.maxAttempts` に収まることを
- *    確認すること（`awardSync.test.ts` が検算している）。
+ * ⚠️ 段を足すときの決まりは2つ。`awardSync.test.ts` が両方を検査している。
+ *    1. `withinMs` の**昇順**に並べること。`getAwardSyncPollIntervalMs` は
+ *       `.find()` で最初に当たった段を採るため、順序が崩れると**足した段が
+ *       一度も使われない**（回数もテストも変わらないので気づけない）
+ *    2. `countAwardSyncPolls` の結果が
+ *       `RATE_LIMIT_CONFIG.ADMIN_AWARD_SYNC_STATUS.maxAttempts` に収まること
  */
 export const AWARD_SYNC_POLL_SCHEDULE = [
   { withinMs: 60_000, intervalMs: 5_000 },

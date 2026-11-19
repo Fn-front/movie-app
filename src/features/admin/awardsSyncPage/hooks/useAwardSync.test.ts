@@ -2,10 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { AxiosError, AxiosHeaders } from 'axios';
 
 import { useAwardSync } from './useAwardSync';
-import {
-  AWARD_SYNC_POLL_MAX_INTERVAL_MS,
-  getAwardSyncPollIntervalMs,
-} from '@/constants/awardSync';
+import { getAwardSyncPollIntervalMs } from '@/constants/awardSync';
 
 const mockStartAwardSync = jest.fn();
 const mockFetchAwardSyncJob = jest.fn();
@@ -64,14 +61,22 @@ async function renderReady() {
 }
 
 /**
+ * どの段の間隔でも必ず1回は発火する長さ
+ *
+ * 定数に追従させない。`AWARD_SYNC_POLL_MAX_INTERVAL_MS` を使うと、
+ * 将来それが伸びたときに黙って「1周ぶん」でなくなる
+ */
+const ONE_POLL_MS = 60_000;
+
+/**
  * ポーリング1周ぶん時間を進める
  *
- * 間隔は経過とともに伸びるが、次の1回は応答が返ってから積まれるので、
- * 最長の間隔まで進めても積まれているタイマーは1本しか発火しない。
+ * 大きく進めても発火するのは1本だけ。次の1回は `await` の後の
+ * マイクロタスクで積まれ、`advanceTimersByTime` の内側では実行されないため。
  */
 async function advanceOnePoll() {
   await act(async () => {
-    jest.advanceTimersByTime(AWARD_SYNC_POLL_MAX_INTERVAL_MS);
+    jest.advanceTimersByTime(ONE_POLL_MS);
   });
 }
 
@@ -154,7 +159,7 @@ describe('useAwardSync', () => {
     unmount();
     const callsAtUnmount = mockFetchAwardSyncJob.mock.calls.length;
 
-    jest.advanceTimersByTime(AWARD_SYNC_POLL_MAX_INTERVAL_MS * 5);
+    jest.advanceTimersByTime(ONE_POLL_MS * 5);
 
     expect(mockFetchAwardSyncJob.mock.calls.length).toBe(callsAtUnmount);
   });
@@ -180,7 +185,7 @@ describe('useAwardSync', () => {
 
     // 1回目を発火させ、応答を返さないまま止める
     await act(async () => {
-      jest.advanceTimersByTime(AWARD_SYNC_POLL_MAX_INTERVAL_MS);
+      jest.advanceTimersByTime(ONE_POLL_MS);
     });
     expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(1);
 
@@ -190,9 +195,61 @@ describe('useAwardSync', () => {
       resolveFetch?.({ job: runningJob, isStale: false });
     });
     await act(async () => {
-      jest.advanceTimersByTime(AWARD_SYNC_POLL_MAX_INTERVAL_MS * 5);
+      jest.advanceTimersByTime(ONE_POLL_MS * 5);
     });
 
+    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * リロードしても間隔が最初の段へ戻らない（#1282 のレビュー指摘）
+   *
+   * `startPolling` の経過は 0 から積むので、復元経路でジョブの開始時刻を
+   * 渡さないと、画面を開き直すたびに5秒間隔が1分ぶん復活する
+   */
+  it('実行中ジョブを復元したら、開始からの経過に応じた間隔で再開する', async () => {
+    // 10分前から走っているジョブ（= 30秒間隔の段）
+    const startedAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    mockFetchLatestAwardSync.mockResolvedValue({
+      job: { ...runningJob, startedAt },
+      isStale: false,
+    });
+    mockFetchAwardSyncJob.mockResolvedValue({
+      job: runningJob,
+      isStale: false,
+    });
+
+    await renderReady();
+
+    // 5秒では来ない（最初の段へ戻っていない）
+    await act(async () => {
+      jest.advanceTimersByTime(5_000);
+    });
+    expect(mockFetchAwardSyncJob).not.toHaveBeenCalled();
+
+    // 30秒まで進めれば来る
+    await act(async () => {
+      jest.advanceTimersByTime(25_000);
+    });
+    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(1);
+  });
+
+  // startedAt が読めないときは安全側（間隔が短い側）に倒す
+  it('開始時刻が不正なら最初の段から始める', async () => {
+    mockFetchLatestAwardSync.mockResolvedValue({
+      job: { ...runningJob, startedAt: 'not-a-date' },
+      isStale: false,
+    });
+    mockFetchAwardSyncJob.mockResolvedValue({
+      job: runningJob,
+      isStale: false,
+    });
+
+    await renderReady();
+
+    await act(async () => {
+      jest.advanceTimersByTime(getAwardSyncPollIntervalMs(0));
+    });
     expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(1);
   });
 

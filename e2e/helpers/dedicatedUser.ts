@@ -121,6 +121,37 @@ export async function createUnverifiedUser(
 }
 
 /**
+ * `users` の列をIDで直接書き換える（#1281）
+ *
+ * セッションの強制失効・admin 剥奪は「DB の値が変わってから、次の確認で
+ * 追従する」という作りなので、画面操作では再現できない（パスワード変更
+ * 画面はOTPを伴ううえ、変更すると storageState が壊れる）。値だけ直接
+ * 動かして、サーバー側が追従するかを見る。
+ *
+ * @param userId - 対象の利用者ID
+ * @param patch - 書き換える列
+ */
+export async function updateUserColumns(
+  userId: string,
+  patch: Record<string, string | null>,
+): Promise<void> {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/users?id=eq.${encodeURIComponent(userId)}`,
+    {
+      method: 'PATCH',
+      headers: { ...jsonHeaders, Prefer: 'return=minimal' },
+      body: JSON.stringify(patch),
+    },
+  );
+
+  if (!res.ok) {
+    throw new Error(
+      `users の更新に失敗した: ${userId} (${res.status} ${await res.text()})`,
+    );
+  }
+}
+
+/**
  * メールアドレスでユーザーと関連レコードを削除する
  *
  * `users` を参照する外部キーはおおむね ON DELETE CASCADE なので、

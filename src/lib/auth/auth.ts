@@ -46,6 +46,10 @@ import {
   sendSecondFactorCode,
 } from '@/lib/auth/sendSecondFactorCode';
 import { CredentialsSignInError } from '@/lib/auth/authErrors';
+import {
+  lookupSessionUser,
+  SESSION_USER_COLUMNS,
+} from '@/lib/auth/sessionUserLookup';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -838,11 +842,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             now - (token.lastPasswordCheck || 0) >
             SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS
           ) {
-            const { data, error: lookupError } = await supabase
-              .from('users')
-              .select('password_hash, password_changed_at, role')
-              .eq('id', token.id)
-              .single();
+            // ⚠️ 直接 supabase を叩かず `lookupSessionUser` を通す（#1281）。
+            // 画面読み込みで複数のAPIが同時に飛ぶと、全部が同じ（古い）Cookie を
+            // 持つのでこの窓が一斉に切れ、同じ行を人数ぶんではなく**本数ぶん**
+            // 引いていた（実測: 同時5本で8回）。束を1回に畳む。
+            // TTL は1秒。伸ばすと強制失効・admin 剥奪の検知が遅れる
+            const { data, error: lookupError } = await lookupSessionUser(
+              token.id,
+              async () => {
+                const { data: row, error } = await supabase
+                  .from('users')
+                  .select(SESSION_USER_COLUMNS)
+                  .eq('id', token.id as string)
+                  .single();
+
+                // ⚠️ `password_hash` はキャッシュに載せる前に捨てる。
+                // 要るのは「設定されているか」だけで、bcrypt ハッシュを
+                // プロセス内に置き続ける理由が無い
+                return {
+                  data: row
+                    ? {
+                        hasPassword: Boolean(row.password_hash),
+                        passwordChangedAt: row.password_changed_at,
+                        role: row.role,
+                      }
+                    : null,
+                  error,
+                };
+              },
+              now,
+            );
 
             // ⚠️ **`error` を捨ててはいけない**（#1193）。
             //
@@ -879,8 +908,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               return token;
             }
 
-            if (data?.password_changed_at) {
-              const dbChangedAt = new Date(data.password_changed_at).getTime();
+            if (data?.passwordChangedAt) {
+              const dbChangedAt = new Date(data.passwordChangedAt).getTime();
 
               // ⚠️ ベースラインが無いときは **0 ではなく発行時刻**に倒す（#1207）。
               //
@@ -911,7 +940,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // パスワード未設定だったユーザーが設定した場合に追従する
             // （パスワード変更フォームが「現在のパスワード」欄を出すかの判定に使う）
             if (data) {
-              token.hasPassword = Boolean(data.password_hash);
+              token.hasPassword = data.hasPassword;
 
               // ロールも追従させる。ログイン時にしか取らないと、admin を剥奪しても
               // トークンの絶対有効期限（7日）まで admin のまま管理機能を使えてしまう。

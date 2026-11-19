@@ -160,6 +160,7 @@ import {
   SESSION_CONFIG,
 } from '@/constants/auth';
 import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
+import { __resetSessionUserLookupForTest } from '@/lib/auth/sessionUserLookup';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 require('@/lib/auth/auth');
@@ -192,6 +193,10 @@ function setResolver(fn: typeof mockState.resolver) {
 }
 
 beforeEach(() => {
+  // ⚠️ 必須（#1281）。`users` の問い合わせは1秒だけ共有される。
+  // テストは同じユーザーIDを1秒以内に何度も使うため、消さないと
+  // 前のテストの resolver の結果を引き継いでしまう
+  __resetSessionUserLookupForTest();
   setResolver(() => ({ data: null, error: null }));
   mockState.writes = [];
   // 既定は「二段階認証なし」。有効時の挙動は個別のテストで上書きする。
@@ -751,6 +756,93 @@ describe('jwt コールバック', () => {
       });
 
       expect(token.role).toBe('admin');
+    });
+  });
+
+  /**
+   * 同時に重なった確認を1回に畳む（#1281）
+   *
+   * 画面読み込みでクライアントが複数のAPIを同時に叩くと、全部が同じ（古い）
+   * Cookie を持つので5分窓が一斉に切れ、同じ行を**本数ぶん**引いていた。
+   * `lookupSessionUser` が束を畳む。
+   */
+  describe('確認の問い合わせの共有', () => {
+    /** `users` への SELECT 回数を数えるトークンと resolver */
+    function setupCounting() {
+      let selects = 0;
+
+      setResolver(({ table, ops }) => {
+        if (table === 'users' && ops.includes('select')) {
+          selects += 1;
+          return {
+            data: {
+              password_hash: 'hash',
+              password_changed_at: null,
+              role: 'user',
+            },
+            error: null,
+          };
+        }
+        return { data: null, error: null };
+      });
+
+      return () => selects;
+    }
+
+    const staleToken = (id: string) => ({
+      id,
+      role: 'user',
+      issuedAt: Date.now(),
+      lastPasswordCheck: 0,
+      lastLoginUpdate: Date.now(),
+      passwordChangedAt: null,
+    });
+
+    it('同じ利用者の確認が重なっても1回しか引かない', async () => {
+      const selects = setupCounting();
+
+      await Promise.all([
+        jwt({ token: staleToken('u1'), user: undefined, account: null }),
+        jwt({ token: staleToken('u1'), user: undefined, account: null }),
+        jwt({ token: staleToken('u1'), user: undefined, account: null }),
+      ]);
+
+      expect(selects()).toBe(1);
+    });
+
+    it('利用者が違えばそれぞれ引く', async () => {
+      const selects = setupCounting();
+
+      await Promise.all([
+        jwt({ token: staleToken('u1'), user: undefined, account: null }),
+        jwt({ token: staleToken('u2'), user: undefined, account: null }),
+      ]);
+
+      expect(selects()).toBe(2);
+    });
+
+    // 畳んでも結果は全員に行き渡る。片方だけ失効し損ねると穴になる
+    it('重なったぶんにも失効が伝わる', async () => {
+      setResolver(({ table, ops }) =>
+        table === 'users' && ops.includes('select')
+          ? {
+              data: {
+                password_hash: 'hash',
+                // トークン発行より後の変更 → 失効させる
+                password_changed_at: new Date(Date.now() + 1_000).toISOString(),
+                role: 'user',
+              },
+              error: null,
+            }
+          : { data: null, error: null },
+      );
+
+      const tokens = await Promise.all([
+        jwt({ token: staleToken('u1'), user: undefined, account: null }),
+        jwt({ token: staleToken('u1'), user: undefined, account: null }),
+      ]);
+
+      expect(tokens.map((t) => t.invalidated)).toEqual([true, true]);
     });
   });
 

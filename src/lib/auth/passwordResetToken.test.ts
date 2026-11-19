@@ -9,6 +9,7 @@ import { hashVerificationToken } from '@/lib/otp/verificationToken';
 
 import {
   consumePasswordResetToken,
+  invalidateOtherPasswordResetTokens,
   isPasswordResetTokenValid,
   issuePasswordResetToken,
   peekPasswordResetToken,
@@ -16,12 +17,16 @@ import {
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 
+/** 行の発行時刻の基準。DB の `now()` の代わりに単調増加させる */
+const BASE_CREATED_AT = new Date('2026-01-01T00:00:00.000Z').getTime();
+
 interface TokenRow {
   id: string;
   user_id: string;
   token_hash: string;
   expires_at: string;
   used_at: string | null;
+  created_at: string;
 }
 
 /**
@@ -37,12 +42,15 @@ function createSupabaseMock(rows: TokenRow[]): {
   inserted: Array<Record<string, unknown>>;
 } {
   const inserted: Array<Record<string, unknown>> = [];
+  let insertSeq = 0;
 
   const from = () => {
     const state: {
       action: 'select' | 'update' | 'delete' | 'insert';
       payload: Record<string, unknown>;
       tokenHash: string | null;
+      excludeTokenHash: string | null;
+      beforeCreatedAt: string | null;
       userId: string | null;
       requireUnused: boolean;
       notExpired: boolean;
@@ -50,6 +58,8 @@ function createSupabaseMock(rows: TokenRow[]): {
       action: 'select',
       payload: {},
       tokenHash: null,
+      excludeTokenHash: null,
+      beforeCreatedAt: null,
       userId: null,
       requireUnused: false,
       notExpired: false,
@@ -61,6 +71,14 @@ function createSupabaseMock(rows: TokenRow[]): {
     builder.eq = jest.fn((column: string, value: unknown) => {
       if (column === 'token_hash') state.tokenHash = value as string;
       if (column === 'user_id') state.userId = value as string;
+      return builder;
+    });
+    builder.lt = jest.fn((column: string, value: unknown) => {
+      if (column === 'created_at') state.beforeCreatedAt = value as string;
+      return builder;
+    });
+    builder.neq = jest.fn((column: string, value: unknown) => {
+      if (column === 'token_hash') state.excludeTokenHash = value as string;
       return builder;
     });
     builder.is = jest.fn((column: string) => {
@@ -83,6 +101,18 @@ function createSupabaseMock(rows: TokenRow[]): {
     builder.insert = jest.fn((payload: Record<string, unknown>) => {
       state.action = 'insert';
       inserted.push(payload);
+      // 実DBと同じく、挿入した行はその後の検索・削除の対象になる。
+      // 載せないと「今発行した行が消えていないか」を検証できない
+      insertSeq += 1;
+      rows.push({
+        id: `row-${rows.length + 1}`,
+        user_id: payload.user_id as string,
+        token_hash: payload.token_hash as string,
+        expires_at: payload.expires_at as string,
+        used_at: null,
+        // DB の `now()` 既定値に相当。発行順に単調増加させる
+        created_at: new Date(BASE_CREATED_AT + insertSeq * 1000).toISOString(),
+      });
       return Promise.resolve({ error: null });
     });
 
@@ -90,6 +120,18 @@ function createSupabaseMock(rows: TokenRow[]): {
     const matching = () =>
       rows.filter((row) => {
         if (state.tokenHash !== null && row.token_hash !== state.tokenHash) {
+          return false;
+        }
+        if (
+          state.excludeTokenHash !== null &&
+          row.token_hash === state.excludeTokenHash
+        ) {
+          return false;
+        }
+        if (
+          state.beforeCreatedAt !== null &&
+          row.created_at >= state.beforeCreatedAt
+        ) {
           return false;
         }
         if (state.userId !== null && row.user_id !== state.userId) return false;
@@ -146,6 +188,8 @@ const makeRow = (
   token_hash: hashVerificationToken(token),
   expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
   used_at: null,
+  // 既存行は必ず「発行より前」。`lt('created_at', ...)` の対象になる
+  created_at: new Date(BASE_CREATED_AT).toISOString(),
   ...overrides,
 });
 
@@ -180,14 +224,15 @@ describe('issuePasswordResetToken', () => {
     expect(Math.abs(expiresAt - expected)).toBeLessThan(5000);
   });
 
-  it('同一ユーザーの未使用トークンを無効化する', async () => {
-    // 複数のリンクが同時に生きていると、古いメールを拾った第三者にも窓が残る
+  it('古いトークンは消さない（送信前に消さない / #1223）', async () => {
+    // 先に消すと、送信に失敗したとき相手の手元にあった有効なリンクだけが
+    // 死に、新しいリンクは誰にも届かない
     const old = makeRow('old-token');
     const { client, rows } = createSupabaseMock([old]);
 
     await issuePasswordResetToken(client, USER_ID);
 
-    expect(rows).not.toContain(old);
+    expect(rows).toContain(old);
   });
 
   it('呼ぶたびに異なるトークンを返す', async () => {
@@ -197,6 +242,146 @@ describe('issuePasswordResetToken', () => {
     const second = await issuePasswordResetToken(client, USER_ID);
 
     expect(first).not.toBe(second);
+  });
+});
+
+/**
+ * 古いリンクの無効化（#1223）
+ *
+ * 発行と切り離してある。送信に成功したあとだけ呼ぶことで、送れなかった
+ * ときに相手の手元のリンクを壊さない
+ */
+describe('invalidateOtherPasswordResetTokens', () => {
+  it('同一ユーザーの古い未使用トークンを消す', async () => {
+    // 複数のリンクが同時に生きていると、古いメールを拾った第三者にも窓が残る
+    const old = makeRow('old-token');
+    const { client, rows } = createSupabaseMock([old]);
+
+    const token = await issuePasswordResetToken(client, USER_ID);
+    await invalidateOtherPasswordResetTokens(client, USER_ID, token);
+
+    expect(rows).not.toContain(old);
+  });
+
+  it('今発行したトークンは残す', async () => {
+    // 除外しないと、今メールで送った新しいリンクごと消える
+    const { client, rows } = createSupabaseMock([makeRow('old-token')]);
+
+    const token = await issuePasswordResetToken(client, USER_ID);
+    await invalidateOtherPasswordResetTokens(client, USER_ID, token);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].token_hash).toBe(hashVerificationToken(token));
+  });
+
+  it('使用済みのトークンは消さない', async () => {
+    // 消す理由がない。履歴としても残す
+    const used = makeRow('used-token', { used_at: new Date().toISOString() });
+    const { client, rows } = createSupabaseMock([used]);
+
+    const token = await issuePasswordResetToken(client, USER_ID);
+    await invalidateOtherPasswordResetTokens(client, USER_ID, token);
+
+    expect(rows).toContain(used);
+  });
+
+  it('他のユーザーのトークンは消さない', async () => {
+    const other = makeRow('other-token', { user_id: 'other-user' });
+    const { client, rows } = createSupabaseMock([other]);
+
+    const token = await issuePasswordResetToken(client, USER_ID);
+    await invalidateOtherPasswordResetTokens(client, USER_ID, token);
+
+    expect(rows).toContain(other);
+  });
+
+  /**
+   * 同時リクエストの交差（レビュー指摘）
+   *
+   * `neq` だけで「自分以外」を消すと、同時に走っている別リクエストが
+   * 入れたトークンまで消してしまい、互いの行を消し合って**有効なリンクが
+   * 0本**になる。2通のメールを送ったのにどちらも使えない＝ #1223 と同じ
+   * 行き止まり。`lt('created_at', 自分の発行時刻)` で塞いでいる
+   */
+  describe('同時に2本発行されたとき', () => {
+    it('どちらの無効化が先でも、有効なリンクが1本は残る', async () => {
+      const old = makeRow('old-token');
+      const { client, rows } = createSupabaseMock([old]);
+
+      const tokenA = await issuePasswordResetToken(client, USER_ID);
+      const tokenB = await issuePasswordResetToken(client, USER_ID);
+
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenA);
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenB);
+
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows).not.toContain(old);
+    });
+
+    it('無効化の順序が逆でも1本は残る', async () => {
+      const { client, rows } = createSupabaseMock([makeRow('old-token')]);
+
+      const tokenA = await issuePasswordResetToken(client, USER_ID);
+      const tokenB = await issuePasswordResetToken(client, USER_ID);
+
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenB);
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenA);
+
+      expect(rows.length).toBeGreaterThan(0);
+    });
+
+    it('最後に発行した1本が残る（古いほうは消える）', async () => {
+      // 旧実装（INSERT の前に DELETE）の成功時と同じ挙動に揃える
+      const { client, rows } = createSupabaseMock([makeRow('old-token')]);
+
+      const tokenA = await issuePasswordResetToken(client, USER_ID);
+      const tokenB = await issuePasswordResetToken(client, USER_ID);
+
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenA);
+      await invalidateOtherPasswordResetTokens(client, USER_ID, tokenB);
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0].token_hash).toBe(hashVerificationToken(tokenB));
+    });
+  });
+
+  it('削除に失敗しても投げず、ログに残す', async () => {
+    // 送信は既に済んでいる。ここで 500 を返すと admin は押し直して
+    // もう1通送ることになり、枠も減る
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const client = {
+      from: () => ({
+        // 残すトークンの発行時刻の引き直し
+        select: () => ({
+          eq: () => ({
+            maybeSingle: () =>
+              Promise.resolve({
+                data: { created_at: '2026-01-01T00:00:01.000Z' },
+                error: null,
+              }),
+          }),
+        }),
+        delete: () => ({
+          eq: () => ({
+            is: () => ({
+              neq: () => ({
+                lt: () =>
+                  Promise.resolve({ error: { message: 'delete failed' } }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    } as unknown as SupabaseClient;
+
+    await expect(
+      invalidateOtherPasswordResetTokens(client, USER_ID, 'token'),
+    ).resolves.toBeUndefined();
+    expect(consoleError).toHaveBeenCalled();
+
+    consoleError.mockRestore();
   });
 });
 

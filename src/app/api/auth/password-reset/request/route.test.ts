@@ -27,8 +27,11 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 }));
 
 const mockIssueToken = jest.fn();
+const mockInvalidateOtherTokens = jest.fn();
 jest.mock('@/lib/auth/passwordResetToken', () => ({
   issuePasswordResetToken: (...args: unknown[]) => mockIssueToken(...args),
+  invalidateOtherPasswordResetTokens: (...args: unknown[]) =>
+    mockInvalidateOtherTokens(...args),
 }));
 
 const mockSendEmail = jest.fn();
@@ -70,6 +73,7 @@ describe('POST /api/auth/password-reset/request', () => {
     mockFrom.mockReset();
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockIssueToken.mockResolvedValue('plain-token');
+    mockInvalidateOtherTokens.mockResolvedValue(undefined);
     mockSendEmail.mockResolvedValue(true);
     mockRandomDelay.mockResolvedValue(undefined);
   });
@@ -273,6 +277,53 @@ describe('POST /api/auth/password-reset/request', () => {
       const response = await POST(createRequest({ email: 'user@example.com' }));
 
       expect(response.status).toBe(500);
+    });
+  });
+  /**
+   * 古いリンクの無効化（#1223）
+   *
+   * 送信前に消していたため、送信に失敗すると先ほど届いたメールのリンクだけが
+   * 死に、新しいリンクは届かなかった
+   */
+  describe('古いリンクの無効化', () => {
+    it('送信に成功したら古いリンクを無効化する', async () => {
+      mockUserLookup({ id: 'user-1', is_verified: true });
+
+      await POST(createRequest({ email: 'user@example.com' }));
+
+      expect(mockInvalidateOtherTokens).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        'plain-token',
+      );
+    });
+
+    it('送信に失敗したら古いリンクを残す', async () => {
+      // 申請し直しても送信障害が続いていれば同じで、枠だけ減る
+      mockUserLookup({ id: 'user-1', is_verified: true });
+      mockSendEmail.mockResolvedValue(false);
+
+      const response = await POST(createRequest({ email: 'user@example.com' }));
+
+      expect(response.status).toBe(500);
+      expect(mockInvalidateOtherTokens).not.toHaveBeenCalled();
+    });
+
+    it('送信より後に無効化する', async () => {
+      // 順序が逆だと #1223 に戻る
+      mockUserLookup({ id: 'user-1', is_verified: true });
+      const order: string[] = [];
+      mockSendEmail.mockImplementation(async () => {
+        order.push('send');
+        return true;
+      });
+      mockInvalidateOtherTokens.mockImplementation(async () => {
+        order.push('invalidate');
+      });
+
+      await POST(createRequest({ email: 'user@example.com' }));
+
+      expect(order).toEqual(['send', 'invalidate']);
     });
   });
 });

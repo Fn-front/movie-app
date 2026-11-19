@@ -3,7 +3,9 @@ import {
   SYNCABLE_AWARD_OPTIONS,
   AWARD_SYNC_MIN_YEAR,
   AWARD_SYNC_STALE_MINUTES,
-  AWARD_SYNC_POLL_INTERVAL_MS,
+  AWARD_SYNC_POLL_MAX_INTERVAL_MS,
+  countAwardSyncPolls,
+  getAwardSyncPollIntervalMs,
   isSyncableYear,
 } from './awardSync';
 import { OPENAI_CONFIG } from './openai';
@@ -83,11 +85,58 @@ describe('awardSync constants', () => {
 
   /** ポーリング回数がレート制限の上限に収まることを保証する */
   it('閾値いっぱいまでポーリングしても上限を超えない', () => {
-    const maxPolls =
-      (AWARD_SYNC_STALE_MINUTES * 60_000) / AWARD_SYNC_POLL_INTERVAL_MS;
+    const maxPolls = countAwardSyncPolls(AWARD_SYNC_STALE_MINUTES * 60_000);
 
     expect(maxPolls).toBeLessThanOrEqual(
       RATE_LIMIT_CONFIG.ADMIN_AWARD_SYNC_STATUS.maxAttempts,
     );
+  });
+
+  describe('ポーリング間隔のスケジュール', () => {
+    it('経過に応じて間隔が伸びる', () => {
+      expect(getAwardSyncPollIntervalMs(0)).toBe(5_000);
+      expect(getAwardSyncPollIntervalMs(59_999)).toBe(5_000);
+      expect(getAwardSyncPollIntervalMs(60_000)).toBe(15_000);
+      expect(getAwardSyncPollIntervalMs(299_999)).toBe(15_000);
+      expect(getAwardSyncPollIntervalMs(300_000)).toBe(
+        AWARD_SYNC_POLL_MAX_INTERVAL_MS,
+      );
+    });
+
+    // 間隔は単調非減少。途中で縮むと「後半ほど粗く」の前提が崩れる
+    it('間隔が途中で縮まない', () => {
+      let previous = 0;
+
+      for (let elapsedMs = 0; elapsedMs <= 1_800_000; elapsedMs += 1_000) {
+        const intervalMs = getAwardSyncPollIntervalMs(elapsedMs);
+
+        expect(intervalMs).toBeGreaterThanOrEqual(previous);
+        previous = intervalMs;
+      }
+    });
+
+    /**
+     * 等間隔5秒なら300回だった。段階的にすることで68回まで減る（#1282）。
+     * 回数が変わったらDB往復の見積もり（4往復/回）も変わるので、
+     * ここを更新するときは #1282 の記録も揃えること。
+     */
+    it('25分ぶんのポーリングは68回', () => {
+      expect(countAwardSyncPolls(AWARD_SYNC_STALE_MINUTES * 60_000)).toBe(68);
+    });
+
+    // 1回ぶん待ってから叩くので、間隔に満たない間は0回
+    it('最初の間隔に満たない間は叩かない', () => {
+      expect(countAwardSyncPolls(0)).toBe(0);
+      expect(countAwardSyncPolls(4_999)).toBe(0);
+      expect(countAwardSyncPolls(5_000)).toBe(1);
+    });
+
+    // 最初の1分のピークは据え置き。ADMIN_ROLE_CHECK（120回/分）の前提
+    it('最初の1分は12回で、ADMIN_ROLE_CHECK の上限に収まる', () => {
+      expect(countAwardSyncPolls(60_000)).toBe(12);
+      expect(countAwardSyncPolls(60_000)).toBeLessThanOrEqual(
+        RATE_LIMIT_CONFIG.ADMIN_ROLE_CHECK.maxAttempts,
+      );
+    });
   });
 });

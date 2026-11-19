@@ -2,7 +2,10 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { AxiosError, AxiosHeaders } from 'axios';
 
 import { useAwardSync } from './useAwardSync';
-import { AWARD_SYNC_POLL_INTERVAL_MS } from '@/constants/awardSync';
+import {
+  AWARD_SYNC_POLL_MAX_INTERVAL_MS,
+  getAwardSyncPollIntervalMs,
+} from '@/constants/awardSync';
 
 const mockStartAwardSync = jest.fn();
 const mockFetchAwardSyncJob = jest.fn();
@@ -60,10 +63,15 @@ async function renderReady() {
   return view;
 }
 
-/** ポーリング1周ぶん時間を進める */
+/**
+ * ポーリング1周ぶん時間を進める
+ *
+ * 間隔は経過とともに伸びるが、次の1回は応答が返ってから積まれるので、
+ * 最長の間隔まで進めても積まれているタイマーは1本しか発火しない。
+ */
 async function advanceOnePoll() {
   await act(async () => {
-    jest.advanceTimersByTime(AWARD_SYNC_POLL_INTERVAL_MS);
+    jest.advanceTimersByTime(AWARD_SYNC_POLL_MAX_INTERVAL_MS);
   });
 }
 
@@ -146,9 +154,81 @@ describe('useAwardSync', () => {
     unmount();
     const callsAtUnmount = mockFetchAwardSyncJob.mock.calls.length;
 
-    jest.advanceTimersByTime(AWARD_SYNC_POLL_INTERVAL_MS * 5);
+    jest.advanceTimersByTime(AWARD_SYNC_POLL_MAX_INTERVAL_MS * 5);
 
     expect(mockFetchAwardSyncJob.mock.calls.length).toBe(callsAtUnmount);
+  });
+
+  // 応答が返ってから次を積むため、停止後に解決した fetch が
+  // タイマーを積み直しうる。世代で無効化している（#1282）
+  it('応答待ちの最中にアンマウントしてもポーリングが再開しない', async () => {
+    mockStartAwardSync.mockResolvedValue(runningJob);
+
+    let resolveFetch: ((value: unknown) => void) | null = null;
+    mockFetchAwardSyncJob.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    const { result, unmount } = await renderReady();
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    // 1回目を発火させ、応答を返さないまま止める
+    await act(async () => {
+      jest.advanceTimersByTime(AWARD_SYNC_POLL_MAX_INTERVAL_MS);
+    });
+    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(1);
+
+    unmount();
+
+    await act(async () => {
+      resolveFetch?.({ job: runningJob, isStale: false });
+    });
+    await act(async () => {
+      jest.advanceTimersByTime(AWARD_SYNC_POLL_MAX_INTERVAL_MS * 5);
+    });
+
+    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(1);
+  });
+
+  // 開始直後は5秒、1分を過ぎたら15秒（#1282）
+  it('経過に応じてポーリング間隔が伸びる', async () => {
+    mockStartAwardSync.mockResolvedValue(runningJob);
+    mockFetchAwardSyncJob.mockResolvedValue({
+      job: runningJob,
+      isStale: false,
+    });
+
+    const { result } = await renderReady();
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    // 最初の1分ぶん（12回）は5秒間隔
+    for (let i = 0; i < 12; i += 1) {
+      await act(async () => {
+        jest.advanceTimersByTime(getAwardSyncPollIntervalMs(0));
+      });
+    }
+    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(12);
+
+    // 13回目は5秒では来ない
+    await act(async () => {
+      jest.advanceTimersByTime(getAwardSyncPollIntervalMs(0));
+    });
+    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(12);
+
+    // 15秒まで進めれば来る
+    await act(async () => {
+      jest.advanceTimersByTime(getAwardSyncPollIntervalMs(60_000) - 5_000);
+    });
+    expect(mockFetchAwardSyncJob).toHaveBeenCalledTimes(13);
   });
 
   it('start を連打してもポーリングは1本に保つ', async () => {

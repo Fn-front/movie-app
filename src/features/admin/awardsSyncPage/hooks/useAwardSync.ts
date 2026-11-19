@@ -9,6 +9,9 @@
  *   3. 多重起動しない
  *   4. 連続失敗で打ち切る
  *
+ * 間隔は `AWARD_SYNC_POLL_SCHEDULE` で経過に応じて伸びる（#1282）。
+ * 一定でないため setInterval ではなく setTimeout を繋ぐ。
+ *
  * 設計: `.claude/documents/admin-award-sync-design.md`
  */
 
@@ -31,8 +34,8 @@ import {
   AWARD_SYNC_COUNT_DEBOUNCE_MS,
   AWARD_SYNC_MAX_POLL_FAILURES,
   AWARD_SYNC_MESSAGES,
-  AWARD_SYNC_POLL_INTERVAL_MS,
   AWARD_SYNC_STATUS,
+  getAwardSyncPollIntervalMs,
   isSyncableYear,
   SYNCABLE_AWARD_OPTIONS,
 } from '@/constants/awardSync';
@@ -79,13 +82,23 @@ export function useAwardSync(): UseAwardSyncResult {
   /** 同期完了のたびに件数を取り直すためのトリガー */
   const [countRevision, setCountRevision] = useState(0);
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const failureCountRef = useRef(0);
+  /**
+   * ポーリングの世代。
+   *
+   * 間隔が一定でないので setInterval ではなく setTimeout を繋いでいる。
+   * 次の1回は「応答が返ってから」積むため、停止した後に解決した fetch が
+   * タイマーを積み直しうる。世代を進めて、その継続を無効にする。
+   */
+  const pollGenerationRef = useRef(0);
 
   const stopPolling = useCallback(() => {
+    pollGenerationRef.current += 1;
+
     if (timerRef.current === null) return;
 
-    clearInterval(timerRef.current);
+    clearTimeout(timerRef.current);
     timerRef.current = null;
   }, []);
 
@@ -105,28 +118,55 @@ export function useAwardSync(): UseAwardSyncResult {
 
   const startPolling = useCallback(
     (jobId: string) => {
-      // 多重起動を防ぐ。start を連打しても interval は1本に保つ
+      // 多重起動を防ぐ。start を連打してもタイマーは1本に保つ
       stopPolling();
       failureCountRef.current = 0;
 
-      timerRef.current = setInterval(() => {
-        void (async () => {
-          try {
-            const snapshot = await fetchAwardSyncJob(jobId);
-            failureCountRef.current = 0;
-            applySnapshot(snapshot);
-          } catch (cause) {
-            failureCountRef.current += 1;
+      const generation = pollGenerationRef.current;
+      // 経過時間は積んだ間隔の合計で持つ。実時計を見ないので
+      // タブが止まっていた間に間隔を飛ばすことがない
+      let elapsedMs = 0;
 
-            // 一時的な失敗で止めると進捗を見失うが、延々と叩き続けると
-            // レート制限を食い潰す。数回で打ち切って理由を出す
-            if (failureCountRef.current >= AWARD_SYNC_MAX_POLL_FAILURES) {
-              stopPolling();
-              setError(extractMessage(cause, AWARD_SYNC_MESSAGES.FETCH_ERROR));
+      const scheduleNext = () => {
+        const intervalMs = getAwardSyncPollIntervalMs(elapsedMs);
+        elapsedMs += intervalMs;
+
+        timerRef.current = setTimeout(() => {
+          timerRef.current = null;
+
+          void (async () => {
+            try {
+              const snapshot = await fetchAwardSyncJob(jobId);
+
+              if (pollGenerationRef.current !== generation) return;
+
+              failureCountRef.current = 0;
+              applySnapshot(snapshot);
+            } catch (cause) {
+              if (pollGenerationRef.current !== generation) return;
+
+              failureCountRef.current += 1;
+
+              // 一時的な失敗で止めると進捗を見失うが、延々と叩き続けると
+              // レート制限を食い潰す。数回で打ち切って理由を出す
+              if (failureCountRef.current >= AWARD_SYNC_MAX_POLL_FAILURES) {
+                stopPolling();
+                setError(
+                  extractMessage(cause, AWARD_SYNC_MESSAGES.FETCH_ERROR),
+                );
+                return;
+              }
             }
-          }
-        })();
-      }, AWARD_SYNC_POLL_INTERVAL_MS);
+
+            // 終端到達・アンマウント・打ち切りは stopPolling が世代を進める
+            if (pollGenerationRef.current !== generation) return;
+
+            scheduleNext();
+          })();
+        }, intervalMs);
+      };
+
+      scheduleNext();
     },
     [applySnapshot, stopPolling],
   );

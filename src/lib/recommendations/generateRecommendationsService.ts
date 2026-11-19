@@ -6,6 +6,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import {
+  fetchAllPages,
+  FETCH_ALL_PAGES_MAX,
+  FETCH_ALL_PAGES_SIZE,
+  type PageResult,
+} from '@/helpers/fetchAllPages';
+
+import {
   RECOMMENDATIONS_MAX_COUNT,
   RECOMMENDATIONS_MAX_RETRIES,
   RECOMMENDATIONS_INITIAL_HIT_RATE,
@@ -186,13 +193,50 @@ export async function collectUserMovieData(
   baseExcludedIds: Set<number>;
   dismissedMovies: DismissedMovie[];
 } | null> {
-  const { data: favorites, error: favError } = await supabase
-    .from('favorites')
-    .select('tmdb_movie_id, title, rating')
-    .eq('user_id', userId)
-    .is('deleted_at', null);
+  // ⚠️ 3本とも `range()` で区切る（#1318）。
+  //
+  // PostgREST は `max_rows`（1000 / `supabase/config.toml`）を超えた結果を
+  // エラーも truncation フラグも返さずに打ち切る。絞り込み無しで投げると
+  // 1001件目以降が静かに消え、**除外集合に入らない**。
+  //
+  // 症状は対象で変わる。お気に入り／ウォッチリストが欠けると
+  // 「既に登録済みの作品」がレコメンドに出る。興味なしが欠けると生成時に
+  // 弾けず、読み取り側（#1274 で対策済み）で落ちてレコメンド枠が黙って減る。
+  //
+  // ⚠️ ページングには安定した並びが要る。`id` は主キーなので全順序になる。
+  const page = <T>(
+    label: string,
+    query: (from: number, to: number) => PromiseLike<PageResult<T>>,
+  ) =>
+    fetchAllPages<T>({
+      pageSize: FETCH_ALL_PAGES_SIZE,
+      maxPages: FETCH_ALL_PAGES_MAX,
+      label,
+      context: `user=${userId}`,
+      query,
+    });
 
-  if (favError || !favorites || favorites.length === 0) {
+  // ⚠️ お気に入りだけは取得失敗を握らない。0件と区別できないまま進むと
+  // 「お気に入りが無いので生成しない」と同じ扱いになり、実際には
+  // 持っている利用者のレコメンドが黙って作られなくなる
+  let favorites: { tmdb_movie_id: number; title: string; rating: number }[];
+
+  try {
+    favorites = await page('recommendations-favorites', (from, to) =>
+      supabase
+        .from('favorites')
+        .select('tmdb_movie_id, title, rating')
+        .eq('user_id', userId)
+        .is('deleted_at', null)
+        .order('id', { ascending: true })
+        .range(from, to),
+    );
+  } catch (error) {
+    console.error('Favorites query error:', error);
+    return null;
+  }
+
+  if (favorites.length === 0) {
     return null;
   }
 
@@ -201,28 +245,46 @@ export async function collectUserMovieData(
     rating: f.rating,
   }));
 
-  const { data: watchlistItems } = await supabase
-    .from('watchlist')
-    .select('tmdb_movie_id, title')
-    .eq('user_id', userId)
-    .is('deleted_at', null);
+  // ウォッチリストと興味なしは従来どおり取得失敗を空として扱う
+  // （除外が甘くなるだけで、レコメンド自体は作れる）。ただしログには残す
+  const watchlistItems = await page<{ tmdb_movie_id: number; title: string }>(
+    'recommendations-watchlist',
+    (from, to) =>
+      supabase
+        .from('watchlist')
+        .select('tmdb_movie_id, title')
+        .eq('user_id', userId)
+        .is('deleted_at', null)
+        .order('id', { ascending: true })
+        .range(from, to),
+  ).catch((error: unknown) => {
+    console.error('Watchlist query error:', error);
+    return [];
+  });
 
-  const { data: dismissedItems } = await supabase
-    .from('dismissed_movies')
-    .select(
-      'tmdb_movie_id, title, genre_ids, keywords, director_name, release_year',
-    )
-    .eq('user_id', userId)
-    .is('deleted_at', null);
-
-  const dismissedMovies = (dismissedItems || []) as DismissedMovie[];
+  const dismissedMovies = await page<DismissedMovie>(
+    'recommendations-dismissed',
+    (from, to) =>
+      supabase
+        .from('dismissed_movies')
+        .select(
+          'tmdb_movie_id, title, genre_ids, keywords, director_name, release_year',
+        )
+        .eq('user_id', userId)
+        .is('deleted_at', null)
+        .order('id', { ascending: true })
+        .range(from, to),
+  ).catch((error: unknown) => {
+    console.error('Dismissed movies query error:', error);
+    return [] as DismissedMovie[];
+  });
 
   const excludedMovies: ExcludedMovie[] = [
     ...favorites.map((f) => ({
       tmdb_movie_id: f.tmdb_movie_id,
       title: f.title,
     })),
-    ...(watchlistItems || []).map((w) => ({
+    ...watchlistItems.map((w) => ({
       tmdb_movie_id: w.tmdb_movie_id,
       title: w.title,
     })),
@@ -232,7 +294,7 @@ export async function collectUserMovieData(
     })),
   ];
 
-  const watchlistTitles = (watchlistItems || []).map((w) => w.title as string);
+  const watchlistTitles = watchlistItems.map((w) => w.title);
   const baseExcludedIds = new Set(excludedMovies.map((m) => m.tmdb_movie_id));
 
   return { favoriteMovies, watchlistTitles, baseExcludedIds, dismissedMovies };

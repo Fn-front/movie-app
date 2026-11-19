@@ -22,8 +22,13 @@
 -- 1. 公開APIの絞り込みと並び替えを索引で解決する
 --
 -- `display_order` を含めるのは `/api/awards` の `ORDER BY display_order` まで
--- 賄うため。実測で Sort（quicksort 42kB）が消え 0.24ms → 0.06ms になった。
--- `get_award_years()` も Index Only Scan に載り 0.27ms → 0.10ms。
+-- 賄うため。実測で Sort（quicksort 42kB）が消え **0.24ms → 0.16ms** になった。
+--
+-- ⚠️ `get_award_years()` の改善はほぼ名目（0.27ms → 0.23ms）。
+-- Index Only Scan にはなるが `Heap Fetches: 157`（230行中）で、バッファ読み取りは
+-- 12 → 62 に**増える**。可視性マップが all-visible でないためで、月次の UPSERT の
+-- たびに落ちるので恒常的には期待できない。この索引を正当化しているのは
+-- `/api/awards` 側であって `get_award_years()` ではない。
 CREATE INDEX IF NOT EXISTS idx_award_movies_year_display_order
   ON public.award_movies (award_year, display_order);
 

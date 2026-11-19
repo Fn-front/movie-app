@@ -40,6 +40,11 @@ export const proxy = auth((req) => {
   // API の認可は各 Route Handler が自前で行うため（`withAuth` / `withAdminAuth`
   // / `verifyCronAuth`）。**画面側の判定に頼らない**ことが前提の設計で、
   // ロールの最終判定もルート側にある。
+  //
+  // ⚠️ 判定を飛ばすだけで、**セッション読み取りは既に終わっている**。
+  // ここより手前の `handleAuth` が実行済みで、更新後のCookieの保存も
+  // そこで行われる。matcher から外して「通さない」ようにすると、その
+  // 保存ごと失われて DB 往復が増える（下の `config` の⚠️ / #1281）。
   if (nextUrl.pathname.startsWith('/api/')) {
     return NextResponse.next();
   }
@@ -164,10 +169,32 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public (public files)
      *
-     * `/api/*` は matcher から除外していないが、ハンドラ冒頭で素通しにしている。
-     * 除外しても動作は同じで、除外すれば1リクエストあたり数ミリ秒を省ける。
-     * ただし「API は proxy を通らない」という前提を暗黙にしたくないため、
-     * あえて通してハンドラ側に明示の分岐を置いている。
+     * ⚠️ **`/api/*` をここから除外しないこと**（#1281 で実測）。
+     *
+     * `auth((req) => ...)` のラッパー形式は、ハンドラを呼ぶ**前に**
+     * `getSession()` を実行する（`node_modules/next-auth/lib/index.js` の
+     * `handleAuth`）。つまり下の早期 return に入る時点でセッション読み取りは
+     * 終わっている。「除外すれば1リクエストあたり数ミリ秒を省ける」と
+     * 書いてあったが、省けるのは分岐ではなくその `getSession()` 一式で、
+     * **除外すると DB の往復はむしろ増える。**
+     *
+     * proxy は `getSession()` のついでに更新後のセッション Cookie を保存する
+     * **唯一の経路**だからで、除外すると `/api/*` ではトークンが一切
+     * リフレッシュされなくなる。`lastPasswordCheck` の5分窓が開いたままに
+     * なり、Route Handler 側の確認が毎回 `users` を引く。
+     *
+     * `next dev` での実測（2026-11-19。`users` への SELECT 回数）:
+     *
+     *   | | 現状 | `/api/*` を除外 |
+     *   |---|---|---|
+     *   | API 1本 | 2 | 1 |
+     *   | API 5本・逐次（Cookieを持ち回る） | **2** | **5** |
+     *
+     * 1本だけ見ると改善に見えるが、2本目以降が効かなくなるので
+     * 叩くほど悪化する。省けるのは JWT の復号（HMAC。1ミリ秒未満）だけで、
+     * 代わりにネットワーク越しの DB 往復が増える取引になる。
+     *
+     * 同時並行で重なるぶんは `src/lib/auth/sessionUserLookup.ts` が畳む。
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],

@@ -159,6 +159,12 @@ describe('POST /api/auth/otp/verify', () => {
         eq: () => ({ data: null, error: null }),
       }),
     });
+    // users の is_verified 更新（#1257）
+    mockFrom.mockReturnValueOnce({
+      update: () => ({
+        eq: () => ({ eq: () => ({ data: null, error: null }) }),
+      }),
+    });
 
     const response = await POST(
       createRequest({
@@ -177,6 +183,121 @@ describe('POST /api/auth/otp/verify', () => {
       'test@example.com',
       'otp_verify',
     );
+  });
+
+  /**
+   * LOGIN の検証でもメール認証済みにする（#1257）
+   *
+   * 登録して確認コードを入れる前に離脱した人が「メールでログイン」を選ぶと、
+   * **正しいコードを入れたのに最後の signIn で弾かれて**いた。しかもその
+   * 送信で日次枠を1つ消費済みで、案内される「新規登録をやり直す」も同じ
+   * 枠を使う
+   */
+  describe('LOGIN のメール認証', () => {
+    /** OTP取得 → OTP更新 のモックを積む */
+    const mockOtpVerified = (actionType: string) => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              is: () => ({
+                order: () => ({
+                  limit: () => ({
+                    single: () => ({
+                      data: {
+                        id: 'otp-1',
+                        email: 'test@example.com',
+                        code_hash: hashOtpCode('123456', 'test@example.com'),
+                        action_type: actionType,
+                        attempts: 0,
+                        expires_at: futureDate,
+                        verified_at: null,
+                      },
+                      error: null,
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      });
+      mockFrom.mockReturnValueOnce({
+        update: () => ({ eq: () => ({ data: null, error: null }) }),
+      });
+    };
+
+    it('users を is_verified = true に更新する', async () => {
+      let updated: Record<string, unknown> | null = null;
+      mockOtpVerified('login');
+      mockFrom.mockReturnValueOnce({
+        update: (values: Record<string, unknown>) => {
+          updated = values;
+          return { eq: () => ({ eq: () => ({ data: null, error: null }) }) };
+        },
+      });
+
+      const response = await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'login',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(updated).toEqual({ is_verified: true });
+      // users テーブルを触っていること
+      expect(mockFrom.mock.calls.map((c) => c[0])).toContain('users');
+    });
+
+    /**
+     * ⚠️ 握り潰さない。失敗したまま進むと、検証済みトークンは発行された
+     * のに `authorize` が `email_not_verified` で弾く（#1247）という
+     * 噛み合わない状態になる
+     */
+    it('更新に失敗したら500を返す', async () => {
+      mockOtpVerified('login');
+      mockFrom.mockReturnValueOnce({
+        update: () => ({
+          eq: () => ({
+            eq: () => ({
+              data: null,
+              error: { code: '57P01', message: 'connection terminated' },
+            }),
+          }),
+        }),
+      });
+
+      const response = await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'login',
+        }),
+      );
+
+      expect(response.status).toBe(500);
+    });
+
+    it('password_change では更新しない', async () => {
+      // ログイン中の本人確認なので対象は必ず認証済み。
+      // 「どの操作で認証済みになるか」を広げない
+      mockOtpVerified('password_change');
+
+      const response = await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'password_change',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      // OTP行の取得と更新だけ。users への UPDATE は無い
+      const tables = mockFrom.mock.calls.map((c) => c[0]);
+      expect(tables.filter((t) => t === 'users')).toHaveLength(0);
+    });
   });
 
   it('バリデーションエラーで400を返す', async () => {

@@ -235,6 +235,37 @@ export async function POST(request: Request) {
         throw updateError;
       }
 
+      // LOGIN のコードを受け取れた＝そのメールアドレスの持ち主だと証明できた
+      // ので、未認証なら認証済みにする（#1257）。
+      //
+      // 以前は REGISTRATION でしか立てなかったため、登録して確認コードを
+      // 入れる前に離脱した人が「メールでログイン」を選ぶと、**正しいコードを
+      // 入れたのに最後の signIn で弾かれて**いた。しかもその送信で日次枠を
+      // 1つ消費済みで、案内される「新規登録をやり直す」も同じ枠を使う。
+      //
+      // ⚠️ パスワードを設定したのは**登録した本人**なので（未認証でも
+      // `password_hash` は入っている）、ここで認証済みにしても第三者の
+      // 乗っ取りにはならない。第三者が先に未検証登録していた場合は
+      // `register` が上書きで塞ぐ（#645）。
+      //
+      // ⚠️ `PASSWORD_CHANGE` では立てない。あちらはログイン中の本人確認で、
+      // 対象は必ず認証済みのユーザー。立てる意味がないうえ、
+      // 「どの操作で認証済みになるか」を広げすぎない
+      if (action === OTP_ACTION.LOGIN) {
+        const { error: verifyError } = await supabase
+          .from('users')
+          .update({ is_verified: true })
+          .eq('email', email)
+          .eq('is_verified', false);
+
+        // ⚠️ 握り潰さない。失敗したまま進むと、検証済みトークンは発行された
+        // のに `authorize` が `email_not_verified` で弾く（#1247）という
+        // 噛み合わない状態になる
+        if (verifyError) {
+          throw verifyError;
+        }
+      }
+
       // 検証成功のためレート制限をリセット（正当なユーザーの再検証を妨げない）
       await resetRateLimit(
         supabase,

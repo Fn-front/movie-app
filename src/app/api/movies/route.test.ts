@@ -1646,7 +1646,18 @@ describe('GET /api/movies', () => {
     expect(mockGetGenres).toHaveBeenCalledTimes(1);
   });
 
-  it('2回目のリクエストではジャンルキャッシュが使われる', async () => {
+  /**
+   * ⚠️ このルートは**ジャンルキャッシュを持たない**（#1278）。
+   *
+   * かつてここに module-level のキャッシュがあり、`/api/movies/genres` には
+   * 効いていなかった。キャッシュは `getGenres()` 側へ移したので、ルートは
+   * 毎回呼んでよい。TMDb を1回しか叩かないことは
+   * `src/lib/tmdb/tmdb.test.ts` が検証している。
+   *
+   * ここにキャッシュを戻すと二重管理になり、失効のタイミングが
+   * ルートごとにずれる
+   */
+  it('ルートはジャンルを自前でキャッシュせず、毎回 getGenres に任せる', async () => {
     const handler = await loadGET();
 
     // 1回目のリクエスト
@@ -1663,8 +1674,7 @@ describe('GET /api/movies', () => {
     });
     await handler(createRequest());
 
-    // getGenresは1回だけ呼ばれる（キャッシュ使用）
-    expect(mockGetGenres).toHaveBeenCalledTimes(1);
+    expect(mockGetGenres).toHaveBeenCalledTimes(2);
   });
 
   // === moviesがnullの場合 ===

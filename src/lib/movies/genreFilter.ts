@@ -2,7 +2,7 @@
  * ジャンル一覧のフィルタ
  */
 
-import { EXCLUDED_GENRE_IDS } from '@/constants';
+import { EXCLUDED_GENRE_IDS, GENRE_NAME_OVERRIDES } from '@/constants';
 
 /**
  * 絞り込みの選択肢として提示してよいジャンルだけを残す
@@ -18,6 +18,26 @@ import { EXCLUDED_GENRE_IDS } from '@/constants';
 export function toSelectableGenres<T extends { id: number }>(genres: T[]): T[] {
   const excludedIds: readonly number[] = EXCLUDED_GENRE_IDS;
   return genres.filter((genre) => !excludedIds.includes(genre.id));
+}
+
+/**
+ * TMDbのジャンル一覧を、画面に出せる形に整える
+ *
+ * 「選択肢から除外ジャンルを落とす」と「表示名を置き換える」は、
+ * `/api/movies`（ジャンル名マップ）と `/api/movies/genres`（選択肢）で
+ * 同じ処理を別々に書いていた（#1278）。片方だけ直すと名前がずれるので
+ * 1箇所にまとめる。
+ *
+ * @param genres - TMDbから取得したジャンル一覧
+ * @returns 除外ジャンルを取り除き、表示名を置き換えた一覧
+ */
+export function toDisplayGenres<T extends { id: number; name: string }>(
+  genres: T[],
+): T[] {
+  return toSelectableGenres(genres).map((genre) => ({
+    ...genre,
+    name: GENRE_NAME_OVERRIDES[genre.name] ?? genre.name,
+  }));
 }
 
 /**

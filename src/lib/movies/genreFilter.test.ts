@@ -4,7 +4,11 @@
 
 import { EXCLUDED_GENRE_IDS } from '@/constants';
 
-import { hasExcludedGenre, toSelectableGenres } from './genreFilter';
+import {
+  hasExcludedGenre,
+  toDisplayGenres,
+  toSelectableGenres,
+} from './genreFilter';
 
 /** TMDbのジャンル一覧を模した入力 */
 const GENRES = [
@@ -63,5 +67,40 @@ describe('hasExcludedGenre', () => {
 
   it('空配列の場合 false を返すこと', () => {
     expect(hasExcludedGenre([])).toBe(false);
+  });
+});
+
+describe('toDisplayGenres', () => {
+  it('除外ジャンルを落として表示名を置き換えること', () => {
+    expect(
+      toDisplayGenres([
+        { id: 28, name: 'アクション' },
+        { id: 36, name: '履歴' },
+        { id: 10770, name: 'TVムービー' },
+      ]),
+    ).toEqual([
+      { id: 28, name: 'アクション' },
+      { id: 36, name: '歴史' },
+    ]);
+  });
+
+  it('上書き対象でない名前はそのまま残ること', () => {
+    expect(toDisplayGenres([{ id: 35, name: 'コメディ' }])).toEqual([
+      { id: 35, name: 'コメディ' },
+    ]);
+  });
+
+  // 呼び出し元（/api/movies と /api/movies/genres）が同じ配列を共有するので、
+  // 破壊的に書き換えると片方の変更がもう片方に漏れる
+  it('入力を破壊しないこと', () => {
+    const input = [{ id: 36, name: '履歴' }];
+
+    toDisplayGenres(input);
+
+    expect(input).toEqual([{ id: 36, name: '履歴' }]);
+  });
+
+  it('空配列を渡しても空配列を返すこと', () => {
+    expect(toDisplayGenres([])).toEqual([]);
   });
 });

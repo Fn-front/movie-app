@@ -46,6 +46,7 @@ import {
   EXCLUDED_GENRE_IDS,
   EXCLUDED_GENRES_PARAM,
   EXCLUDED_KEYWORDS_PARAM,
+  GENRE_CACHE_DURATION_MS,
 } from '@/constants/movies';
 import {
   TMDB_MOVIE_DETAIL_APPEND,
@@ -140,6 +141,10 @@ const mockKeywordsResponse = {
 describe('TMDb APIクライアント', () => {
   beforeEach(() => {
     mockGet.mockReset();
+    // ⚠️ 必須（#1278）。getGenres はプロセス内に24時間キャッシュを持つため、
+    // 消さないと「2回目が呼ばれない」ことで後続のテストが落ちる
+    const { __resetGenreCache } = require('./tmdb');
+    __resetGenreCache();
   });
 
   describe('tmdbClientの既定パラメータ', () => {
@@ -875,6 +880,80 @@ describe('TMDb APIクライアント', () => {
         { id: 28, name: 'アクション' },
         { id: 35, name: 'コメディ' },
       ]);
+    });
+
+    /**
+     * ジャンル一覧は年単位でしか変わらないのに、呼ぶたびに取りに行っていた
+     * （#1278）。TMDb のレート制限（50req/s）を無駄に削る
+     */
+    describe('プロセス内キャッシュ', () => {
+      it('連続2回の呼び出しで TMDb は1回しか叩かれない', async () => {
+        mockGet.mockResolvedValue(mockGenresResponse);
+
+        const { getGenres } = require('./tmdb');
+        const first = await getGenres();
+        const second = await getGenres();
+
+        expect(mockGet).toHaveBeenCalledTimes(1);
+        expect(second).toEqual(first);
+      });
+
+      // 結果だけを持つと、起動直後に重なったリクエストが人数ぶん叩く
+      it('進行中の取得も共有する', async () => {
+        let resolveGet: ((value: unknown) => void) | null = null;
+        mockGet.mockReturnValue(
+          new Promise((resolve) => {
+            resolveGet = resolve;
+          }),
+        );
+
+        const { getGenres } = require('./tmdb');
+        const pending = Promise.all([getGenres(), getGenres(), getGenres()]);
+
+        expect(mockGet).toHaveBeenCalledTimes(1);
+
+        resolveGet!(mockGenresResponse);
+        const results = await pending;
+
+        expect(results[0]).toEqual(results[1]);
+        expect(results[1]).toEqual(results[2]);
+      });
+
+      // 失敗を24時間持ち続けると、一時的な不調が1日続く
+      it('失敗は保持せず、次の呼び出しで引き直す', async () => {
+        mockGet.mockRejectedValueOnce(new Error('TMDb API Error'));
+
+        const { getGenres } = require('./tmdb');
+        await expect(getGenres()).rejects.toThrow('TMDb API Error');
+
+        mockGet.mockResolvedValue(mockGenresResponse);
+        await expect(getGenres()).resolves.toEqual([
+          { id: 28, name: 'アクション' },
+          { id: 35, name: 'コメディ' },
+        ]);
+
+        expect(mockGet).toHaveBeenCalledTimes(2);
+      });
+
+      it('有効期間を過ぎたら取り直す', async () => {
+        mockGet.mockResolvedValue(mockGenresResponse);
+
+        const { getGenres } = require('./tmdb');
+        const nowSpy = jest.spyOn(Date, 'now');
+
+        nowSpy.mockReturnValue(0);
+        await getGenres();
+
+        nowSpy.mockReturnValue(GENRE_CACHE_DURATION_MS - 1);
+        await getGenres();
+        expect(mockGet).toHaveBeenCalledTimes(1);
+
+        nowSpy.mockReturnValue(GENRE_CACHE_DURATION_MS);
+        await getGenres();
+        expect(mockGet).toHaveBeenCalledTimes(2);
+
+        nowSpy.mockRestore();
+      });
     });
   });
 

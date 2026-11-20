@@ -18,6 +18,7 @@ import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { EMAIL_CHANGE_MESSAGES } from '@/constants/emailChange';
 import { OTP_ERROR_MESSAGES } from '@/constants/otp';
 import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
+import { requireSecondFactor } from '@/helpers/secondFactorGuard';
 import { parseAndValidate } from '@/helpers/requestValidation';
 import {
   createServiceRoleClient,
@@ -27,6 +28,7 @@ import {
   EMAIL_CHANGE_VERIFY_RESULT,
   consumeEmailChangeCode,
 } from '@/lib/auth/emailChange';
+import { getSecondFactorMethod } from '@/lib/auth/secondFactor';
 import { sendEmailChangedNotice } from '@/lib/auth/sendEmailChangedNotice';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { emailChangeConfirmSchema } from '@/schema/auth';
@@ -88,7 +90,14 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const { newEmail, code } = parsed.data;
 
-    const verifyResult = await consumeEmailChangeCode(supabase, newEmail, code);
+    // ⛔ `session.user.id` を渡すこと。外すと、攻撃者が自分のアカウントで
+    //   取ったコードを奪った被害者のセッションで使える（#1359 critical）
+    const verifyResult = await consumeEmailChangeCode(
+      supabase,
+      session.user.id,
+      newEmail,
+      code,
+    );
 
     if (verifyResult !== EMAIL_CHANGE_VERIFY_RESULT.SUCCESS) {
       return errorResponse(
@@ -96,6 +105,29 @@ export async function POST(request: Request): Promise<NextResponse> {
         OTP_ERROR_MESSAGES.INVALID_CODE,
         HTTP_STATUS.BAD_REQUEST,
       );
+    }
+
+    // ⚠️ **第2要素を設定しているなら要求する**（#1359 のレビュー）。
+    //
+    //   アドレス変更の結果は**復旧経路の喪失**で、パスワード変更より重い。
+    //   退会（#932）・二段階認証の無効化・リカバリーコードの再発行が
+    //   いずれも第2要素を要求しているのに、ここだけ外れていた。
+    //
+    // ⚠️ 設定している人にだけ要求する。`requireSecondFactor` は未設定だと
+    //   400 を返すため、無条件に呼ぶと未設定の利用者が変更できなくなる
+    const secondFactorMethod = await getSecondFactorMethod(
+      supabase,
+      session.user.id,
+    );
+
+    if (secondFactorMethod) {
+      const guardResponse = await requireSecondFactor(
+        supabase,
+        session.user.id,
+        parsed.data.secondFactorCode ?? '',
+      );
+
+      if (guardResponse) return guardResponse;
     }
 
     // ⚠️ 旧アドレスの `rate_limits` / `otp_codes` も同じトランザクションで消す。

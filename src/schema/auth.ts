@@ -295,6 +295,13 @@ export const emailChangeRequestSchema = z.object({
 export const emailChangeConfirmSchema = z.object({
   newEmail: normalizedEmailSchema,
   code: z.string().trim().min(1).max(32),
+  /**
+   * 第2要素のコード
+   *
+   * ⚠️ **任意**にする。設定していない利用者に必須だと変更できなくなる。
+   * 誰に要求するかはサーバー側が決める。
+   */
+  secondFactorCode: z.string().trim().max(32).optional(),
 });
 
 export type EmailChangeRequestData = z.infer<typeof emailChangeRequestSchema>;

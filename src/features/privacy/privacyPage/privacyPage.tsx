@@ -18,6 +18,7 @@
  * - 保存期間 … 32条1項に保存期間は含まれない（GDPR 13条と混同しやすい）
  */
 
+import { CONTACT_EMAIL } from '@/constants/email';
 import { Heading } from '@/components/ui/heading/heading';
 import { EXTERNAL_URLS } from '@/constants/external';
 import { CookieConsentToggle } from '@/features/cookieConsent/component/cookieConsentToggle/cookieConsentToggle';
@@ -46,7 +47,6 @@ const YOUTUBE_EMBED_HOST = new URL(EXTERNAL_URLS.YOUTUBE_EMBED).hostname;
  * 受信は Cloudflare Email Routing の転送で成り立っている（MX は
  * route1-3.mx.cloudflare.net）。転送を止めるならこの記述ごと見直す。
  */
-const CONTACT_EMAIL = 'support@movie-app-fn.com';
 
 /**
  * ご利用の端末から外部へ送信される情報（電気通信事業法 外部送信規律）

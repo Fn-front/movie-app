@@ -16,10 +16,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { EMAIL_CHANGE_OTP_ACTION } from '@/constants/emailChange';
 import { OTP_CONFIG } from '@/constants/otp';
-import { RATE_LIMIT_ACTION, RATE_LIMIT_CONFIG } from '@/constants/rateLimit';
 import { toDbError } from '@/lib/auth/dbError';
 import { generateOtpCode, hashOtpCode, sendOtpEmail } from '@/lib/otp';
-import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { normalizeEmail } from '@/utils/email';
 
 /** 送信の結果 */
@@ -27,8 +25,6 @@ export const SEND_EMAIL_CHANGE_RESULT = {
   SENT: 'sent',
   /** 再送間隔の内側 */
   THROTTLED: 'throttled',
-  /** 送信枠を使い切った */
-  LIMIT_EXCEEDED: 'limit_exceeded',
   /** 送信そのものに失敗した */
   SEND_FAILED: 'send_failed',
 } as const;
@@ -69,6 +65,8 @@ export async function sendEmailChangeCode(
   const { data: recent, error: recentError } = await supabase
     .from('otp_codes')
     .select('created_at')
+    // ⚠️ 利用者で絞る。宛先だけだと別の利用者の送信で自分が弾かれる
+    .eq('user_id', userId)
     .eq('email', normalizedEmail)
     .eq('action_type', EMAIL_CHANGE_OTP_ACTION)
     .order('created_at', { ascending: false })
@@ -91,26 +89,20 @@ export async function sendEmailChangeCode(
     }
   }
 
-  // ここから先は実際に送る。枠を消費する
-  // （`.claude/rules/api-route.md` の例外2 — 守る資源はメールボックス）
-  const limitResult = await checkRateLimit(
-    supabase,
-    userId,
-    RATE_LIMIT_ACTION.EMAIL_CHANGE_REQUEST,
-    RATE_LIMIT_CONFIG.EMAIL_CHANGE_REQUEST.maxAttempts,
-    RATE_LIMIT_CONFIG.EMAIL_CHANGE_REQUEST.windowMinutes,
-  );
-
-  if (!limitResult.allowed) {
-    return SEND_EMAIL_CHANGE_RESULT.LIMIT_EXCEEDED;
-  }
+  // ⚠️ **送信枠はここで数えない。** 呼び出し側（ルート）が認証の直後に
+  //   原則どおり消費する。ここに置くと、重複チェックで弾くパスが
+  //   到達せず**枠を1つも消費しないまま列挙できた**（#1359 のレビュー）。
 
   const code = generateOtpCode();
 
-  // 前のコードは無効にする。複数生きていると、古いコードでも通ってしまう
+  // 前のコードは無効にする。複数生きていると、古いコードでも通ってしまう。
+  //
+  // ⚠️ **利用者でも絞る。** 宛先だけで消すと、同じ未登録アドレスを狙った
+  //    別の利用者の行まで消し合う
   const { error: clearError } = await supabase
     .from('otp_codes')
     .delete()
+    .eq('user_id', userId)
     .eq('email', normalizedEmail)
     .eq('action_type', EMAIL_CHANGE_OTP_ACTION);
 
@@ -120,6 +112,10 @@ export async function sendEmailChangeCode(
 
   const { error: insertError } = await supabase.from('otp_codes').insert({
     email: normalizedEmail,
+    // ⛔ **これが無いと発行者と差し替え対象の一致を確認できない**（#1359 critical）。
+    //   攻撃者が自分のアカウントで取ったコードを、奪った被害者のセッションで
+    //   使えてしまう
+    user_id: userId,
     code_hash: hashOtpCode(code, normalizedEmail),
     action_type: EMAIL_CHANGE_OTP_ACTION,
     expires_at: new Date(
@@ -148,6 +144,7 @@ export async function sendEmailChangeCode(
     await supabase
       .from('otp_codes')
       .delete()
+      .eq('user_id', userId)
       .eq('email', normalizedEmail)
       .eq('action_type', EMAIL_CHANGE_OTP_ACTION);
 
@@ -163,13 +160,19 @@ export async function sendEmailChangeCode(
  * ⚠️ 消費は**条件付き DELETE の削除行数**で判定する。先に読んでから消すと、
  * 同じコードを同時に2回投げられたときに両方とも通る。
  *
+ * ⛔ **`userId` を必ず照合条件に含める。** 外すと、攻撃者が自分の
+ * アカウントで取ったコードを奪った被害者のセッションで使えてしまう
+ * （#1359 のレビューで critical）。
+ *
  * @param supabase - service_role のクライアント
+ * @param userId - セッションの利用者ID
  * @param newEmail - 送信先。検証済みの値のみ
  * @param code - 利用者が入力した6桁のコード
  * @returns 検証結果
  */
 export async function consumeEmailChangeCode(
   supabase: SupabaseClient,
+  userId: string,
   newEmail: string,
   code: string,
 ): Promise<EmailChangeVerifyResult> {
@@ -181,6 +184,7 @@ export async function consumeEmailChangeCode(
   const { data: row, error: rowError } = await supabase
     .from('otp_codes')
     .select('id, attempts')
+    .eq('user_id', userId)
     .eq('email', normalizedEmail)
     .eq('action_type', EMAIL_CHANGE_OTP_ACTION)
     .order('created_at', { ascending: false })
@@ -198,6 +202,7 @@ export async function consumeEmailChangeCode(
   const { data: deleted, error: deleteError } = await supabase
     .from('otp_codes')
     .delete()
+    .eq('user_id', userId)
     .eq('email', normalizedEmail)
     .eq('action_type', EMAIL_CHANGE_OTP_ACTION)
     .eq('code_hash', hashOtpCode(code.trim(), normalizedEmail))

@@ -103,7 +103,22 @@ IP 層には `enforcePublicRateLimit`（`src/helpers/publicRateLimit.ts`）を�
 | `movies/suggest-title` | OpenAI の呼び出し費用 | キャッシュ照合の後（ヒット時は消費しない） |
 | `auth/otp/send` | メールボックス（日次通数） | 送信の直前（1通も送らないパスで枠を減らさない） |
 | `auth/register` | 同上 | ユーザー作成の前・早期returnの後 |
-| `user/email-change/request` | メールボックス（**まだ本人のものでない宛先**） | 送信の直前（重複・同一アドレスで返すパスで枠を減らさない） |
+
+#### ⚠️ 例外2 を選べるのは「早期 return が外から誘発できない」ときだけ
+
+例外2 の利点は「1通も送らないパスで枠を減らさない」こと。だがその早期 return が
+**攻撃者の入力で自由に踏める**なら、**枠を1つも消費しない経路**を与えることになる。
+
+`user/email-change/request` が実際にそうなった（#1359 のレビュー）。枠を
+`sendEmailChangeCode` の中に置いたため、**重複チェックで弾くパスが到達せず**、
+認証済みアカウント1つで全登録アドレスを無制限に列挙でき、各リクエストが
+`bcrypt.compare` を1回ずつ消費した。**原則どおり（検証より前）へ戻した。**
+
+代償として、同じ間違いを繰り返すと1通も届かないまま枠が減る。これは
+**原則が元から承知している代償**（上記）で、列挙と bcrypt の消費を止めるほうが重い。
+
+上の3ルートが例外2 のままでよい理由は、早期 return が外から踏めないか、
+踏めても安い（`movies/suggest-title` のキャッシュヒットは DB 1回）から。
 
 #### 消費できなかったら戻す
 
@@ -146,6 +161,7 @@ if (!emailSent) {
 | `auth/otp/send`（送信失敗） | 戻す | **残す** | 再送間隔（60秒）＋ `otp_send_ip` |
 | `sendSecondFactorCode`（送信失敗） | **戻さない** | 消す | `TWO_FACTOR_SEND`（10回/60分） |
 | `auth/register`（送信失敗） | 戻す（`OTP_SEND_DAILY`） | 消す | **`REGISTER`（5回/60分）を戻していない**＋ `register_ip` |
+| `user/email-change/request`（送信失敗） | **戻さない** | 消す | `EMAIL_CHANGE_REQUEST`（5回/60分） |
 
 - `auth/otp/send` が行を残せるのは、残っても害が無いから。
 - **第2要素が逆なのは**、行を残すと届いていないコードの行が根拠になって
@@ -155,6 +171,9 @@ if (!emailSent) {
 - **`auth/register` が両方手放せるのは**、そもそも再送間隔チェックが無く
   （`RESEND_INTERVAL` を見ているのは `otp/send` だけ）、`REGISTER` の枠を
   意図的に戻していないから。3番目の歯止めが残っている。
+- **`user/email-change/request` は第2要素と同じ形**。行を残すと届いていない
+  コードが根拠になって次の試行が再送間隔に当たるので消し、代わりに枠を
+  数える。枠は原則どおり認証の直後に消費済みで、戻していない。
 
 ⛔ 新しい送信経路を足すときは、**失敗パスで何が残るかを数えること**。
 「利用者を締め出したくない」で全部戻すと歯止めが消える。
@@ -217,15 +236,13 @@ if (!emailSent) {
 | `movies/suggest-title` GET | 例外2 |
 | `user/totp/setup` POST（`TWO_FACTOR_SEND`） | 例外2（`TOTP_SETTINGS_VERIFY` のほうは原則どおり） |
 | `user/totp/send-challenge` POST（`TWO_FACTOR_SEND`） | 例外2 |
-| `user/email-change/request` POST（`EMAIL_CHANGE_REQUEST`） | 例外2 |
 
-> ⚠️ `user/email-change/request` の `EMAIL_CHANGE_REQUEST` も
-> `sendEmailChangeCode`（`src/lib/auth/emailChange.ts`）の**中**にある。
-> ルート本文に `checkRateLimit` が無いので棚卸しで取りこぼさないこと。
+> ⚠️ `user/email-change/request` / `confirm` は**どちらも原則どおり**
+> （`EMAIL_CHANGE_REQUEST` / `EMAIL_CHANGE_VERIFY` を検証より前に消費）。
+> request を例外2 にして失敗した経緯は上記「例外2 を選べるのは」を参照。
 >
-> なお検証側（`user/email-change/confirm`）は `EMAIL_CHANGE_VERIFY` を
-> **原則どおり**（検証より前に）消費する。送信枠と同じカウンタにすると、
-> 失敗した検証が送信枠を食って**コードを送り直せなくなる**。
+> 送信と検証でカウンタを分けているのは、失敗した検証が送信枠を食うと
+> **コードを送り直せなくなる**ため。
 
 > ⚠️ この2つの `TWO_FACTOR_SEND` は `sendSecondFactorCode`
 > （`src/lib/auth/sendSecondFactorCode.ts`）の**中**にある。ルートの本文を

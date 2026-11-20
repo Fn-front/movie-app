@@ -3258,3 +3258,95 @@ describe('jwt / session の第2要素（OAuth 経路）', () => {
     expect(result.secondFactorSendFailed).toBe(true);
   });
 });
+
+// -------------------- jwt: メールアドレス変更の反映（#1359） --------------------
+describe('jwt コールバックのアドレス読み直し', () => {
+  const CHANGE_USER_ID = 'user-email-change';
+
+  /** users の SELECT だけ email を返す resolver */
+  const resolveUsersEmail = (email: string | null, error: unknown = null) =>
+    setResolver(({ table, ops, single }) => {
+      if (table === 'users' && ops.includes('select') && single) {
+        return { data: email === null ? null : { email }, error };
+      }
+
+      return { data: null, error: null };
+    });
+
+  /** 期限・定期チェックの分岐に引っかからないトークン */
+  const freshToken = (overrides: Record<string, unknown> = {}) => ({
+    id: CHANGE_USER_ID,
+    email: 'old@example.com',
+    issuedAt: Date.now(),
+    lastPasswordCheck: Date.now(),
+    lastLoginUpdate: Date.now(),
+    ...overrides,
+  });
+
+  /**
+   * ⚠️ **反映しないと表示が古いだけでは済まない。**
+   *
+   * パスワード変更は画面が持つ旧アドレスで OTP を要求するが、送信は DB から
+   * 引き直すため**コードは新アドレスへ届き、検証は旧アドレスで引いて必ず
+   * 400** になる。再ログインするまでパスワードを変更できなくなる。
+   *
+   * `token.email` への代入は `if (user)`（初回サインイン）の中にしか無く、
+   * `@auth/core` の `session` アクションも `newSession` をトークンへ
+   * マージしないので、ここで読み直すしかない。
+   */
+  it('update のときに users から読み直す', async () => {
+    resolveUsersEmail('new@example.com');
+
+    const token = await jwt({
+      token: freshToken(),
+      trigger: 'update',
+      session: {},
+    });
+
+    expect(token.email).toBe('new@example.com');
+  });
+
+  // 通常の呼び出しで毎回 users を引くと、ページ遷移のたびに1問い合わせ増える
+  it('update でなければ読み直さない', async () => {
+    resolveUsersEmail('new@example.com');
+
+    const token = await jwt({ token: freshToken(), user: undefined });
+
+    expect(token.email).toBe('old@example.com');
+  });
+
+  /**
+   * ⚠️ 第2要素の確認中は**まだ認証が終わっていない**。保留中のトークンを
+   * 触らないこと。ここを外すと、コードを投げるたびに `users` を1回引く。
+   */
+  it('第2要素の確認中は読み直さない', async () => {
+    resolveUsersEmail('new@example.com');
+
+    const token = await jwt({
+      token: freshToken({
+        totpPending: true,
+        secondFactorMethod: SECOND_FACTOR_METHOD.TOTP,
+      }),
+      trigger: 'update',
+      session: {},
+    });
+
+    expect(token.email).toBe('old@example.com');
+  });
+
+  /**
+   * ⚠️ 握り潰してよい。ここで失敗しても古い値が残るだけで、認証の判断には
+   * 使わない。**例外を投げるとセッションごと落ちる**ほうが損。
+   */
+  it('取得に失敗しても落とさず据え置く', async () => {
+    resolveUsersEmail(null, { message: 'db down' });
+
+    const token = await jwt({
+      token: freshToken(),
+      trigger: 'update',
+      session: {},
+    });
+
+    expect(token.email).toBe('old@example.com');
+  });
+});

@@ -28,6 +28,15 @@ export type OtpEmailAction =
 export const DEFAULT_FROM_EMAIL = 'noreply@example.com';
 
 /**
+ * 問い合わせ窓口
+ *
+ * ⚠️ **本文に「窓口へご連絡ください」と書くなら必ず載せる。**
+ * 宛先を書かずに案内だけすると、受け取った人は辿り着けない
+ * （#1315 で直した「窓口が届かない」と同系統）。
+ */
+export const CONTACT_EMAIL = 'support@movie-app-fn.com';
+
+/**
  * OTPの用途ごとの表示名。
  *
  * 件名・本文に用途を明記するために使う。3用途で文面が同一だと、受信者は

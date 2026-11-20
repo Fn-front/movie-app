@@ -10,7 +10,12 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 
-import { ERROR_CODE, HTTP_STATUS } from '@/constants';
+import {
+  ERROR_CODE,
+  HTTP_STATUS,
+  RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
+} from '@/constants';
 import { AUTH_ERROR_MESSAGES } from '@/constants/auth';
 import { EMAIL_CHANGE_MESSAGES } from '@/constants/emailChange';
 import { OTP_ERROR_MESSAGES } from '@/constants/otp';
@@ -24,6 +29,7 @@ import {
   SEND_EMAIL_CHANGE_RESULT,
   sendEmailChangeCode,
 } from '@/lib/auth/emailChange';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { emailChangeRequestSchema } from '@/schema/auth';
 
 /** 統一エラーレスポンス */
@@ -42,10 +48,38 @@ export async function POST(request: Request): Promise<NextResponse> {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    // ⚠️ **レート制限は `sendEmailChangeCode` の中**（例外2）。
-    //   守る資源はメールボックスで、そこへ到達するのは検証の後になる。
-    //   `.claude/rules/api-route.md` の例外表に追記済み。
-    //   `TWO_FACTOR_SEND` と同じ形で、ルート本文には `checkRateLimit` が無い
+    // ⚠️ **レート制限は原則どおり、検証より前に置く**（#1359 のレビュー）。
+    //
+    //   当初は `sendEmailChangeCode` の中（例外2）に置いていたが、
+    //   **重複チェックで弾くパスが `sendEmailChangeCode` へ到達しない**ため
+    //   枠を1つも消費しなかった。認証済みアカウントが1つあれば
+    //   **全登録アドレスを無制限に列挙でき**、各リクエストが
+    //   `bcrypt.compare` を1回ずつ消費する状態だった。
+    //
+    //   代償として、同じ間違いを繰り返すと1通も届かないまま枠が減る。
+    //   列挙と bcrypt の消費を止めるほうを優先した。
+    const rateLimitResult = await checkRateLimit(
+      supabase,
+      session.user.id,
+      RATE_LIMIT_ACTION.EMAIL_CHANGE_REQUEST,
+      RATE_LIMIT_CONFIG.EMAIL_CHANGE_REQUEST.maxAttempts,
+      RATE_LIMIT_CONFIG.EMAIL_CHANGE_REQUEST.windowMinutes,
+    );
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.RATE_LIMIT_EXCEEDED,
+            message: AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
+            details: { retryAfter: rateLimitResult.retryAfter },
+          },
+        },
+        { status: HTTP_STATUS.TOO_MANY_REQUESTS },
+      );
+    }
+
     const parsed = await parseAndValidate(
       request,
       emailChangeRequestSchema,
@@ -129,14 +163,6 @@ export async function POST(request: Request): Promise<NextResponse> {
       session.user.id,
       newEmail,
     );
-
-    if (result === SEND_EMAIL_CHANGE_RESULT.LIMIT_EXCEEDED) {
-      return errorResponse(
-        ERROR_CODE.RATE_LIMIT_EXCEEDED,
-        AUTH_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
-        HTTP_STATUS.TOO_MANY_REQUESTS,
-      );
-    }
 
     if (result === SEND_EMAIL_CHANGE_RESULT.THROTTLED) {
       return errorResponse(

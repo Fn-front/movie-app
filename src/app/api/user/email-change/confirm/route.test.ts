@@ -40,6 +40,17 @@ jest.mock('@/lib/auth/emailChange', () => ({
     mockConsumeEmailChangeCode(...args),
 }));
 
+const mockGetSecondFactorMethod = jest.fn();
+jest.mock('@/lib/auth/secondFactor', () => ({
+  getSecondFactorMethod: (...args: unknown[]) =>
+    mockGetSecondFactorMethod(...args),
+}));
+
+const mockRequireSecondFactor = jest.fn();
+jest.mock('@/helpers/secondFactorGuard', () => ({
+  requireSecondFactor: (...args: unknown[]) => mockRequireSecondFactor(...args),
+}));
+
 const mockSendEmailChangedNotice = jest.fn();
 jest.mock('@/lib/auth/sendEmailChangedNotice', () => ({
   sendEmailChangedNotice: (...args: unknown[]) =>
@@ -67,6 +78,8 @@ describe('POST /api/user/email-change/confirm', () => {
     mockConsumeEmailChangeCode.mockResolvedValue('success');
     mockRpc.mockResolvedValue({ data: 'old@example.com', error: null });
     mockSendEmailChangedNotice.mockResolvedValue(true);
+    mockGetSecondFactorMethod.mockResolvedValue(null);
+    mockRequireSecondFactor.mockResolvedValue(null);
   });
 
   describe('認証', () => {
@@ -145,11 +158,55 @@ describe('POST /api/user/email-change/confirm', () => {
     it('正規化したアドレスで照合する', async () => {
       await POST(createRequest({ ...validBody, newEmail: 'New@Example.COM' }));
 
+      // ⛔ 利用者IDを渡していないと、他人が取ったコードで通る（critical）
       expect(mockConsumeEmailChangeCode).toHaveBeenCalledWith(
         expect.anything(),
+        'user-1',
         'new@example.com',
         '123456',
       );
+    });
+  });
+
+  /**
+   * ⚠️ アドレス変更の結果は**復旧経路の喪失**で、パスワード変更より重い。
+   * 退会・二段階認証の無効化・リカバリーコードの再発行がいずれも
+   * 第2要素を要求しているのに、ここだけ外れていた（#1359 のレビュー）。
+   */
+  describe('第2要素の確認', () => {
+    it('設定済みならコードを検証する', async () => {
+      mockGetSecondFactorMethod.mockResolvedValue('totp');
+
+      await POST(createRequest({ ...validBody, secondFactorCode: '654321' }));
+
+      expect(mockRequireSecondFactor).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        '654321',
+      );
+    });
+
+    it('コードが不正なら差し替えない', async () => {
+      mockGetSecondFactorMethod.mockResolvedValue('totp');
+      mockRequireSecondFactor.mockResolvedValue(
+        new Response(JSON.stringify({ success: false }), { status: 400 }),
+      );
+
+      const response = await POST(createRequest(validBody));
+
+      expect(response.status).toBe(400);
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⚠️ `requireSecondFactor` は未設定だと 400 を返す。無条件に呼ぶと
+     * 第2要素を使っていない利用者が変更できなくなる。
+     */
+    it('未設定なら検証そのものを呼ばない', async () => {
+      const response = await POST(createRequest(validBody));
+
+      expect(response.status).toBe(200);
+      expect(mockRequireSecondFactor).not.toHaveBeenCalled();
     });
   });
 

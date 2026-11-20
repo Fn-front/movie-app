@@ -30,6 +30,11 @@ jest.mock('@/helpers/auth', () => ({
     new Response(JSON.stringify({ success: false }), { status: 401 }),
 }));
 
+const mockCheckRateLimit = jest.fn();
+jest.mock('@/lib/rateLimit/rateLimit', () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+}));
+
 const mockSendEmailChangeCode = jest.fn();
 jest.mock('@/lib/auth/emailChange', () => ({
   ...jest.requireActual('@/lib/auth/emailChange'),
@@ -111,6 +116,7 @@ describe('POST /api/user/email-change/request', () => {
     //    前のテストが使い残した応答があると順序がずれ、別の分岐に入る
     mockFrom.mockReset();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockCompare.mockResolvedValue(true);
     mockSendEmailChangeCode.mockResolvedValue('sent');
   });
@@ -123,6 +129,73 @@ describe('POST /api/user/email-change/request', () => {
 
       expect(response.status).toBe(401);
       expect(mockSendEmailChangeCode).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * ⚠️ **原則どおり、検証より前に消費する**（#1359 のレビュー）。
+   *
+   * 当初は `sendEmailChangeCode` の中（例外2）に置いていたが、重複チェックで
+   * 弾くパスが到達せず**枠を1つも消費しなかった**。認証済みアカウントが
+   * 1つあれば全登録アドレスを無制限に列挙でき、各リクエストが
+   * `bcrypt.compare` を1回ずつ消費していた。
+   */
+  describe('レート制限', () => {
+    it('上限超過で429を返し、照合も送信もしない', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 600 });
+
+      const response = await POST(createRequest(validBody));
+
+      expect(response.status).toBe(429);
+      expect(mockCompare).not.toHaveBeenCalled();
+      expect(mockSendEmailChangeCode).not.toHaveBeenCalled();
+    });
+
+    it('セッションのユーザーIDで数える', async () => {
+      mockQueries({});
+
+      await POST(createRequest(validBody));
+
+      expect(mockCheckRateLimit).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        'email_change_request',
+        expect.any(Number),
+        expect.any(Number),
+      );
+    });
+
+    /**
+     * ⚠️ **重複で弾くパスでも枠を消費すること。** ここが消費しないと
+     * 列挙が無制限になる（当初の実装がそうだった）。
+     */
+    it('重複で弾いても枠を消費する', async () => {
+      mockQueries({ existingCount: 1 });
+
+      const response = await POST(createRequest(validBody));
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  /**
+   * 認証 → レート制限 → バリデーション の順（#940）。
+   */
+  describe('処理順', () => {
+    it('バリデーションエラー時もレート制限を消費する', async () => {
+      const response = await POST(createRequest({ newEmail: 'x' }));
+
+      expect(response.status).toBe(400);
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it('上限超過と不正入力が重なったら429を返す', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 600 });
+
+      const response = await POST(createRequest({ newEmail: 'x' }));
+
+      expect(response.status).toBe(429);
     });
   });
 
@@ -242,7 +315,6 @@ describe('POST /api/user/email-change/request', () => {
     });
 
     it.each([
-      ['送信枠を使い切った', 'limit_exceeded', 429],
       ['再送間隔の内側', 'throttled', 429],
       ['送信そのものに失敗', 'send_failed', 500],
     ])('%s なら %s を返す', async (_label, result, status) => {

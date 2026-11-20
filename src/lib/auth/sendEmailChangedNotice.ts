@@ -8,7 +8,7 @@
 import { Resend } from 'resend';
 
 import { APP_NAME } from '@/constants/app';
-import { DEFAULT_FROM_EMAIL } from '@/constants/email';
+import { CONTACT_EMAIL, DEFAULT_FROM_EMAIL } from '@/constants/email';
 import { EMAIL_CHANGE_MESSAGES } from '@/constants/emailChange';
 
 const resendApiKey = process.env.RESEND_API_KEY;
@@ -69,8 +69,10 @@ export async function sendEmailChangedNotice(
         '',
         'この操作に心当たりがない場合、アカウントが第三者に使われた可能性があります。',
         // ⚠️ 旧アドレスではもうログインできない。「ログインして確認してください」
-        //   とは書けないので、窓口へ誘導する
-        'ご自身でログインできない状態になっているため、お問い合わせ窓口までご連絡ください。',
+        //   とは書けないので、窓口へ誘導する。宛先を書かずに「窓口へご連絡
+        //   ください」とだけ書くと辿り着けない（#1315）
+        'ご自身でログインできない状態になっているため、下記までご連絡ください。',
+        `  ${CONTACT_EMAIL}`,
         '',
         `⚠ ${APP_NAME}からお客様にパスワードをお尋ねすることはありません。`,
       ].join('\n'),

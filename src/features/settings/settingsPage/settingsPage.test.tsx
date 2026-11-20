@@ -33,6 +33,22 @@ jest.mock('@/features/settings/changePasswordForm/changePasswordForm', () => ({
   ),
 }));
 
+jest.mock('@/features/settings/emailChangeForm/emailChangeForm', () => ({
+  EmailChangeForm: ({
+    email,
+    hasPassword,
+  }: {
+    email: string;
+    hasPassword: boolean;
+  }) => (
+    <div
+      data-testid='email-change-form'
+      data-email={email}
+      data-has-password={String(hasPassword)}
+    />
+  ),
+}));
+
 jest.mock(
   '@/features/dismissedMovies/component/dismissedMoviesList/dismissedMoviesList',
   () => ({
@@ -86,6 +102,48 @@ describe('SettingsPage', () => {
     expect(changePasswordForm).toHaveAttribute(
       'data-email',
       'test@example.com',
+    );
+  });
+
+  /**
+   * ⚠️ 現在のアドレスを渡すのは**変更前の値を画面に出す**ため。
+   * 空のまま渡すと、利用者はどのアドレスから変えようとしているのか
+   * 分からないまま操作することになる。
+   */
+  it('メールアドレスセクションが表示される', () => {
+    render(<SettingsPage />);
+
+    expect(
+      screen.getByRole('heading', { name: 'メールアドレス' }),
+    ).toBeInTheDocument();
+
+    const emailChangeForm = screen.getByTestId('email-change-form');
+
+    expect(emailChangeForm).toHaveAttribute('data-email', 'test@example.com');
+  });
+
+  /**
+   * ⛔ **`hasPassword` を落とさない。** パスワード未設定（ソーシャルのみ）の
+   * 利用者に「現在のパスワード」を求めると、入れようのない欄で行き止まりになる。
+   */
+  it('パスワード未設定を下のフォームへ伝える', () => {
+    mockUseSession.mockReturnValue({
+      data: {
+        user: {
+          name: 'テストユーザー',
+          email: 'test@example.com',
+          hasPassword: false,
+        },
+      },
+      status: 'authenticated',
+      update: jest.fn(),
+    });
+
+    render(<SettingsPage />);
+
+    expect(screen.getByTestId('email-change-form')).toHaveAttribute(
+      'data-has-password',
+      'false',
     );
   });
 
@@ -160,6 +218,13 @@ describe('SettingsPage', () => {
     expect(
       screen.queryByTestId('change-password-form'),
     ).not.toBeInTheDocument();
+
+    // ⚠️ メールアドレスの変更も同じ条件で消える。アドレスを持たない
+    //    （管理者発行の）アカウントには変更する元が無い
+    expect(
+      screen.queryByRole('heading', { name: 'メールアドレス' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('email-change-form')).not.toBeInTheDocument();
   });
 
   it('sessionがnullの場合パスワード変更セクションが非表示になる', () => {
@@ -191,6 +256,10 @@ describe('SettingsPage', () => {
     expect(
       screen.queryByTestId('change-password-form'),
     ).not.toBeInTheDocument();
+
+    // ⚠️ セッションが来るまでアドレスが確定しないので、空のまま
+    //    フォームを描かない（「変更前: 」が空欄で出てしまう）
+    expect(screen.queryByTestId('email-change-form')).not.toBeInTheDocument();
   });
   describe('Cookie セクション', () => {
     it('同意済みなら表示する', () => {

@@ -339,6 +339,116 @@ OTPコード検証
 
 ---
 
+### POST /api/user/email-change/request
+メールアドレス変更: 新しいアドレスへ確認コードを送る（#1359）
+
+**認証**: NextAuth.jsセッション必須
+
+**Request Body:**
+```json
+{
+  "newEmail": "new@example.com",
+  "currentPassword": "CurrentPassword123"
+}
+```
+
+**内部処理:**
+1. レート制限 `email_change_request`（5回/60分・**利用者ID**単位）を**検証より前**に消費
+2. 入力の検証 → `users` から現在のアドレスと `password_hash` を取得
+3. `password_hash` が無い（ソーシャル連携のみ）なら 400。provider 側のアドレスと食い違うため対象外
+4. `bcrypt.compare` で現在のパスワードを照合
+5. 現在のアドレスと同じなら 400 / 既に他の利用者が使っていれば 400
+6. 60秒の再送間隔を確認 → 既存の未使用コードを消して新しいコードを `otp_codes`（`action_type='email_change'`, `user_id`付き）へ INSERT → 新アドレスへ送信
+
+> ⚠️ **レート制限は原則どおり検証より前**。当初 `sendEmailChangeCode` の中に
+> 置いていたが、重複チェックで弾くパスが到達せず**枠を1つも消費しないまま
+> 全登録アドレスを列挙できた**（#1359 のレビュー）。
+>
+> ⚠️ 送信に失敗したときは**枠を戻さず、`otp_codes` の行だけ消す**。
+> 行を残すと届いていないコードが再送間隔の根拠になる
+> （`.claude/rules/api-route.md`「失敗したとき、歯止めを全部手放さない」）。
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "新しいメールアドレスに確認コードを送りました。"
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized`: 未ログイン
+- `400 Bad Request`: 入力不正 / パスワード不一致 / 現在と同じアドレス / 既に使われているアドレス / パスワード未設定
+- `429 Too Many Requests`: レート制限超過、または再送間隔（60秒）の内側
+- `500 Internal Server Error`: メール送信失敗
+
+---
+
+### POST /api/user/email-change/confirm
+メールアドレス変更: 確認コードを検証して差し替える（#1359）
+
+**認証**: NextAuth.jsセッション必須
+
+**Request Body:**
+```json
+{
+  "newEmail": "new@example.com",
+  "code": "123456"
+}
+```
+
+**内部処理:**
+1. レート制限 `email_change_verify` を**検証より前**に消費（送信枠とは別カウンタ。失敗した検証が送信枠を食うとコードを送り直せなくなる）
+2. 入力の検証
+3. `otp_codes` を **`user_id` + email + action_type + code_hash + 有効期限**の条件付き DELETE で消費（削除行数で判定）
+4. 二段階認証を設定している利用者には第2要素を要求
+5. `change_user_email` RPC で `users.email` を差し替え、**旧アドレスの `rate_limits` / `otp_codes` を同じトランザクションで削除**
+6. 旧アドレスへ変更を知らせる通知を送る（失敗しても 500 にしない）
+
+> ⛔ **コードの照合に `user_id` を必ず含める。** 外すと、攻撃者が自分の
+> アカウントで取ったコードを**奪った被害者のセッション**で使えてしまう
+> （#1359 のレビューで critical）。
+>
+> ⚠️ 通知は**旧アドレス**へ送る。新アドレスへ送っても乗っ取った側に届くだけ。
+>
+> ⚠️ 変更後はセッションの `token.email` も更新が要る（`auth.ts` の jwt
+> callback、`trigger === 'update'`）。放置するとパスワード変更が
+> 古いアドレスを見て**永久に失敗する**。
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "メールアドレスを変更しました。"
+}
+```
+
+**Error Responses:**
+- `401 Unauthorized`: 未ログイン
+- `400 Bad Request`: 入力不正 / コードが不一致・期限切れ・試行回数超過 / 既に使われているアドレス（23505）
+- `403 Forbidden`: 第2要素が未提出・不一致
+- `429 Too Many Requests`: レート制限超過
+
+---
+
+### DELETE /api/user
+アカウント削除（#932）
+
+**認証**: NextAuth.jsセッション必須
+
+**内部処理:**
+1. レート制限 `account_delete` を検証より前に消費
+2. パスワードを設定している利用者には現在のパスワードを要求、二段階認証を設定している利用者には第2要素を要求
+3. `delete_user_account` RPC で関連レコードごと削除（`otp_codes` / `rate_limits` は FK で連鎖しないため関数内で明示的に削除）
+
+**Error Responses:**
+- `401 Unauthorized`: 未ログイン
+- `400 Bad Request`: パスワード不一致
+- `403 Forbidden`: 第2要素が未提出・不一致
+- `429 Too Many Requests`: レート制限超過
+
+---
+
 ## 映画API
 
 ### GET /api/movies

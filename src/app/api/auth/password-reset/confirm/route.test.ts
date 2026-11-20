@@ -183,14 +183,21 @@ describe('POST /api/auth/password-reset/confirm', () => {
     it('パスワード未設定のアカウントにも設定できる', async () => {
       // ソーシャルログイン専用のユーザー。
       // 「ソーシャル専用です」と返すとアカウント種別が漏れるため同じ扱いにする
-      mockUserAndUpdate({ id: 'user-1', password_hash: null });
+      const updateSpy = mockUserAndUpdate({
+        id: 'user-1',
+        password_hash: null,
+      });
 
       const response = await POST(
         createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
       );
 
       expect(response.status).toBe(200);
-      expect(mockCompare).not.toHaveBeenCalled();
+      // ⚠️ 照合しないことは「現在のパスワードのオラクルにしない」側で
+      //    固定している（#1243）。ここは実際に設定できることを見る
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ password_hash: 'new-hash' }),
+      );
     });
   });
 
@@ -422,10 +429,12 @@ describe('POST /api/auth/password-reset/confirm', () => {
     /**
      * 回復可能なエラーでリンクを焼かない（#1235）
      *
-     * 消費を先に置いていたときは、現在と同じパスワードを打ち直しただけで
-     * リンクを失い、再発行が必要になっていた。パスワードを忘れている＝
-     * 他にログイン手段が無い状態で、発行アカウントなら自力で再発行も
-     * できない（#1226）
+     * 消費を先に置いていたときは、回復可能なエラーでリンクを失い、
+     * 再発行が必要になっていた。パスワードを忘れている＝他にログイン手段が
+     * 無い状態で、発行アカウントなら自力で再発行もできない（#1226）。
+     *
+     * ⚠️ かつての代表例「現在と同じパスワードを打ち直した」は #1243 で
+     * 検査ごと外した（オラクルになるため）
      */
     describe('消費する前に弾くもの', () => {
       it('対象ユーザーが消えていてもトークンを消費しない', async () => {

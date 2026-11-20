@@ -73,7 +73,6 @@ RFC 2606 の予約TLDで**絶対に名前解決されない**。`@example.com` �
 | 対象 | 根拠 |
 |---|---|
 | `src/app/api/auth/password-reset/confirm/route.ts` | **email への依存ゼロ**（grep 確認済み）。トークンから `user_id` を引く |
-| 同上の「新旧同一チェック」 | `if (user.password_hash)` で囲まれており、`null` なら素通り → **初回設定にそのまま使える** |
 | `src/app/auth/reset-password/page.tsx` | `token` クエリのみ。`robots: noindex` 設定済み |
 | `issuePasswordResetToken(supabase, userId)` | `user_id` 起点。メール不要 |
 | `sendPasswordResetEmail(email, url)` | メールは単なる配送先引数 |

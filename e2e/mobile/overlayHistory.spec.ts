@@ -529,6 +529,13 @@ test.describe('未認証のログイン誘導を閉じたあとの戻る', () =>
  * オーバーレイのほう。
  */
 test.describe('閉じたオーバーレイを進むで開き直す', () => {
+  // 上の describe と同じ理由（#1333）。並列の別 spec が書いた saved_filters が
+  // 残っていると、復元の router.replace が history.state を置き換えて
+  // オーバーレイのトークンが消える
+  test.beforeEach(async () => {
+    await clearSavedFiltersForTestUser();
+  });
+
   test('戻るで閉じたフィルターが、進むで開き直り、次の戻るで閉じる', async ({
     authenticatedPage: page,
   }) => {
@@ -593,6 +600,23 @@ test.describe('閉じたオーバーレイを進むで開き直す', () => {
  * `useOverlayHistory` を呼ぶ）なので、別に押さえる。
  */
 test.describe('ドロワーを進むで開き直す', () => {
+  /**
+   * 保存済みフィルターを持ち越さない（#1333）
+   *
+   * ⚠️ 片付ける側（上の describe の `afterEach`）だけでは足りない。
+   * 共有の `TEST_USER` を使う**並列の別 spec** が書いた `saved_filters` が
+   * 残っていると、`/movies/now-showing` を開いた時点で `useMovieList` の
+   * 復元が走り、`syncFiltersToUrl` の `router.replace` が URL を書き戻す。
+   * このとき `history.state` ごと置き換わるため、ドロワーが積んだ
+   * `__overlayHistory` のトークンが消え、`expectEntryExists` が落ちる。
+   *
+   * `movieDetailRoute.spec.ts` が同じ理由で「見る側でも消す」を入れている。
+   * CI は `fullyParallel` ＋ `--shard` なので、ファイルの実行順では守れない。
+   */
+  test.beforeEach(async () => {
+    await clearSavedFiltersForTestUser();
+  });
+
   test('戻るで閉じたドロワーが、進むで開き直り、次の戻るで閉じる', async ({
     authenticatedPage: page,
   }) => {

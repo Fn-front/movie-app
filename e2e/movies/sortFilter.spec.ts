@@ -116,6 +116,18 @@ test.describe('公開中ページのソート・フィルター操作', () => {
       .first()
       .or(page.getByText(/映画が見つかりませんでした/))
       .waitFor({ timeout: 15000 });
+
+    // ⚠️ タイルが1枚見えただけでは足りない（#1333）。一覧はお気に入り等を
+    //   クライアント側で結合してから描き直すため、その最中に Radix の
+    //   ドロップダウンを開くと、option がクリックの最中に DOM から外れる。
+    //
+    //     element was detached from the DOM, retrying
+    //
+    //   Playwright は再試行するが、再描画が続くと 30 秒の予算を使い切って
+    //   テストごと落ちる。スケルトンの不在で「描き終わった」ことを待つ
+    await expect(page.locator('[class*="c_skeleton"]')).toHaveCount(0, {
+      timeout: 15000,
+    });
   });
 
   test('ソートを変更できる', async ({ page }) => {

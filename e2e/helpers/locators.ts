@@ -3,6 +3,7 @@
  * 2つ以上のspecファイルで使用するロケータを集約
  */
 
+import { expect } from '@playwright/test';
 import type { Page, Locator } from '@playwright/test';
 
 /**
@@ -77,23 +78,52 @@ export function watchedToggles(page: Page, pressed: boolean): Locator {
  */
 export async function firstFavoritableTile(page: Page): Promise<Locator> {
   const tiles = movieTiles(page);
-  await tiles.first().waitFor({ state: 'visible', timeout: 20000 });
 
-  const total = await tiles.count();
+  // ⚠️ 1回の走査で決めてはいけない（#1333）。
+  //
+  // 一覧はお気に入り・ウォッチリストの状態をクライアント側で結合してから
+  // 描き直す。`waitFor` を抜けた直後でも、その再描画でタイルのDOMが
+  // 差し替わっている最中なら `count()` が 0 を返す。
+  // CI（遅いランナー・workers:2）でここを踏み、
+  // 「タイル総数: 0」で落ちていた。実際の失敗時スナップショットには
+  // 映画もお気に入りボタンも写っており、**描画途中を掴んでいた**。
+  //
+  // 走査ごと `expect.poll` で再試行する。中で見つけた位置を使うのは、
+  // 返したあとにボタン名が「追加」→「編集」へ変わっても**別のカードを
+  // 指し始めない**ようにするため（`filter` で絞ったロケータを使い回すと
+  // そうなる。awardsFavorite.spec.ts の `firstFavoritableAwardTile` も同じ理由）。
+  let foundIndex = -1;
+  let lastTotal = 0;
 
-  for (let index = 0; index < total; index += 1) {
-    const tile = tiles.nth(index);
-    const addButton = tile.getByRole('button', { name: 'お気に入りに追加' });
+  await expect
+    .poll(
+      async () => {
+        lastTotal = await tiles.count();
 
-    if ((await addButton.count()) > 0) {
-      return tile;
-    }
-  }
+        for (let index = 0; index < lastTotal; index += 1) {
+          const addButton = tiles
+            .nth(index)
+            .getByRole('button', { name: 'お気に入りに追加' });
 
-  throw new Error(
-    `お気に入りに追加できるタイルが見つかりません（タイル総数: ${total}）。` +
-      '一覧が未公開作品のみになっている可能性があります。',
-  );
+          if ((await addButton.count()) > 0) {
+            foundIndex = index;
+            return true;
+          }
+        }
+
+        return false;
+      },
+      {
+        timeout: 20000,
+        message:
+          'お気に入りに追加できるタイルが現れませんでした。' +
+          '一覧が未公開作品のみになっている可能性があります' +
+          '（お気に入りボタンは公開済み作品にしか出ない / movieTile.tsx の canFavorite）',
+      },
+    )
+    .toBe(true);
+
+  return tiles.nth(foundIndex);
 }
 
 /**

@@ -78,20 +78,40 @@ const viewToggle = (page: Page) =>
  */
 async function firstMultiActionListTile(page: Page) {
   const tiles = page.locator(LIST_TILE_SELECTOR);
-  await tiles.first().waitFor({ state: 'visible', timeout: 15000 });
 
-  const total = await tiles.count();
-  for (let index = 0; index < total; index += 1) {
-    const tile = tiles.nth(index);
-    if ((await tile.locator(ACTION_BUTTON_SELECTOR).count()) >= 2) {
-      return tile;
-    }
-  }
+  // ⚠️ 1回の走査で決めてはいけない（#1333）。一覧はお気に入り等をクライアント
+  // 側で結合してから描き直すため、`waitFor` を抜けた直後でも `count()` が
+  // 0 を返しうる。`firstFavoritableTile`（e2e/helpers/locators.ts）と同じ対処。
+  // 位置で返すのは、返したあとの再描画で別の行を指し始めないようにするため
+  let foundIndex = -1;
 
-  throw new Error(
-    `操作ボタンが2つ以上あるリスト行が見つかりません（行総数: ${total}）。` +
-      '一覧が未公開作品のみになっている可能性があります。',
-  );
+  await expect
+    .poll(
+      async () => {
+        const total = await tiles.count();
+
+        for (let index = 0; index < total; index += 1) {
+          const actions = tiles.nth(index).locator(ACTION_BUTTON_SELECTOR);
+
+          if ((await actions.count()) >= 2) {
+            foundIndex = index;
+            return true;
+          }
+        }
+
+        return false;
+      },
+      {
+        timeout: 20000,
+        message:
+          '操作ボタンが2つ以上あるリスト行が現れませんでした。' +
+          '一覧が未公開作品のみになっている可能性があります' +
+          '（お気に入りボタンは公開済み作品にしか出ない / movieTile.tsx の canFavorite）',
+      },
+    )
+    .toBe(true);
+
+  return tiles.nth(foundIndex);
 }
 
 /**

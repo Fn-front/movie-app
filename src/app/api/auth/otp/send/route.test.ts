@@ -804,11 +804,23 @@ describe('POST /api/auth/otp/send', () => {
     });
 
     it('送信元が特定できないときは消費しない（fail-open）', async () => {
+      // users の SELECT をモックしないと 500 に落ちる（上のテストのコメント参照）。
+      // 否定アサーションなので 500 でも緑になってしまう
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            single: () => ({ data: null, error: { code: 'PGRST116' } }),
+          }),
+        }),
+      });
       mockCheckRateLimit.mockResolvedValue({ allowed: true });
 
       // createRequest は転送ヘッダを付けないため getClientIp は 'unknown'
-      await POST(createRequest({ email: 'user@example.com', action: 'login' }));
+      const response = await POST(
+        createRequest({ email: 'user@example.com', action: 'login' }),
+      );
 
+      expect(response.status).toBe(200);
       expect(mockCheckRateLimit).not.toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
@@ -822,14 +834,30 @@ describe('POST /api/auth/otp/send', () => {
       // ここが肝。未登録だと OTP_SEND_DAILY は消費されないが、
       // IP層は**その手前**にあるので必ず数える。
       // 数えないと users の SELECT と randomDelay を無制限に踏ませられる
+      //
+      // ⚠️ users の SELECT を必ずモックすること。`beforeEach` の
+      // `mockFrom.mockReset()` で `from()` が undefined を返すため、
+      // モックしないと `route.ts` の users 検索で例外 → catch → **500** になる。
+      // 500 でも `toHaveBeenNthCalledWith(1, ...)` は通ってしまうので、
+      // 列挙防止の早期return へ到達しないまま緑になる（レビューで実測）
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            single: () => ({ data: null, error: { code: 'PGRST116' } }),
+          }),
+        }),
+      });
       mockCheckRateLimit.mockResolvedValue({ allowed: true });
 
-      await POST(
+      const response = await POST(
         createRequestFromIp(
           { email: 'unknown@example.com', action: 'login' },
           '203.0.113.11',
         ),
       );
+
+      // 列挙防止の早期return を通っている（500 ではない）
+      expect(response.status).toBe(200);
 
       expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
         1,
@@ -839,6 +867,9 @@ describe('POST /api/auth/otp/send', () => {
         expect.anything(),
         expect.anything(),
       );
+
+      // ここが主張の本体。IP層の1回だけで、OTP_SEND_DAILY は消費していない
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
     });
   });
 

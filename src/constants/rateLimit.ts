@@ -294,8 +294,23 @@ export const RATE_LIMIT_CONFIG = {
    *
    * 再送（60秒間隔）と新規登録・ログインの両方が通るため REGISTER_IP より
    * 厚くする。メールボックス側の保護は OTP_SEND_DAILY（メール単位）が担う。
+   *
+   * ⚠️ 窓は **15分**。上の REGISTER_IP / PASSWORD_RESET_REQUEST_IP（60分）
+   * ではなく、同じログインのジャーニーを構成する LOGIN_IP（20回/15分）・
+   * OTP_VERIFY_IP（50回/15分）に合わせる。
+   *
+   * 一度 60分 で入れたが、**超過したときのロックも60分**になるため、
+   * NAT や社内プロキシの共有IPだと OTPログインが1時間止まる。しかも相方の
+   * OTP_VERIFY_IP が持続レートで 200回/時なのに対し送信側だけ 40回/時となり、
+   * 同じジャーニーの中で送信側が5倍きついという歪みがあった。
+   *
+   * ⚠️ **これはレートではない。**「15分あたり40回」ではなく、
+   * **そのカウンタに15分の空白が入るまでの通算40回**（#934）。
+   * `consume_rate_limit` のリセット条件は
+   * `last_attempt_at <= v_window_start` だけなので、断続的に叩かれ続ける
+   * 共有IPではカウンタが減らない。
    */
-  OTP_SEND_IP: { maxAttempts: 40, windowMinutes: 60 },
+  OTP_SEND_IP: { maxAttempts: 40, windowMinutes: 15 },
   PASSWORD_RESET_REQUEST_IP: { maxAttempts: 20, windowMinutes: 60 },
   /**
    * OTP検証は登録・ログインの途中で**打ち間違いの再入力**が起きるため、

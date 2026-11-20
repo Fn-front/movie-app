@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { RECOVERY_CODE_CONFIG } from '@/constants/totp';
@@ -148,6 +148,27 @@ describe('TwoFactorSettings', () => {
      * ⚠️ パスワードを持たない利用者（OAuth のみ）は照合する材料が無い。
      * 登録アドレスへ送る使い捨てコードで受信箱の所持を確かめる。
      */
+    /**
+     * ⛔ **E2E がこの名前で欄を絞っている**（`e2e/helpers/totp.ts` の
+     * `reauthForSecondFactorSetup`）。同じ設定画面のメールアドレス変更にも
+     * 『現在のパスワード』があり、名前が無いと strict mode 違反になる。
+     *
+     * 支援技術でも同じ問題が起きる（どちらの欄か読み上げでは分からない）。
+     */
+    it('入力欄に名前付きのグループを付ける', async () => {
+      mockFetch.mockResolvedValueOnce(statusResponse(false));
+
+      render(<TwoFactorSettings hasPassword />);
+
+      const group = await screen.findByRole('group', {
+        name: '二段階認証の設定の本人確認',
+      });
+
+      expect(
+        within(group).getByLabelText('現在のパスワード'),
+      ).toBeInTheDocument();
+    });
+
     it('パスワードを持たない利用者には確認コードを求める', async () => {
       mockFetch.mockResolvedValueOnce(statusResponse(false));
 

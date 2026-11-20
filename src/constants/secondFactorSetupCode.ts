@@ -25,6 +25,13 @@ export type SecondFactorSetupOtpAction = typeof SECOND_FACTOR_SETUP_OTP_ACTION;
 
 /** 利用者向けの文言 */
 export const SECOND_FACTOR_SETUP_CODE_MESSAGES = {
+  /**
+   * 再認証の入力欄をまとめたグループの名前
+   *
+   * ⚠️ 同じ設定画面のメールアドレス変更にも『現在のパスワード』がある。
+   * 名前を付けないと、支援技術でも E2E でもどちらの欄か区別できない。
+   */
+  REAUTH_GROUP_LABEL: '二段階認証の設定の本人確認',
   /** 画面の説明（パスワードを持つ利用者） */
   PASSWORD_DESCRIPTION:
     'ご本人確認のため、現在のパスワードを入力してください。',

@@ -39,6 +39,7 @@ import {
 import {
   cleanupTotp,
   getTotpSecret,
+  reauthForSecondFactorSetup,
   totpCodeFromSecret,
 } from '../helpers/totp';
 
@@ -91,6 +92,8 @@ async function setUpPendingSession(page: Page): Promise<void> {
   await page.waitForURL('/');
 
   await page.goto('/settings');
+  // ⛔ 再認証（#1368）
+  await reauthForSecondFactorSetup(page, USER.password);
   await page.getByRole('button', { name: '認証アプリで設定する' }).click();
   await expect(
     page.getByRole('img', { name: '二段階認証のQRコード' }),

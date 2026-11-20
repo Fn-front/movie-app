@@ -177,7 +177,16 @@ export const TwoFactorSettings = memo<TwoFactorSettingsProps>(
             `setup` → `enable` の2手で被害者のアカウントに自分の第2要素を
             登録できる。登録された第2要素は乗っ取りの固定手段になる
           */}
-            <div className={styles.c_two_factor_settings__reauth}>
+            {/*
+              ⚠️ `role='group'` と名前を付ける。同じ設定画面の
+              メールアドレス変更にも『現在のパスワード』があり、名前だけでは
+              どちらの欄か区別できない（支援技術でも E2E でも）
+            */}
+            <div
+              className={styles.c_two_factor_settings__reauth}
+              role='group'
+              aria-label={SECOND_FACTOR_SETUP_CODE_MESSAGES.REAUTH_GROUP_LABEL}
+            >
               <p className={styles.c_two_factor_settings__method_note}>
                 {hasPassword
                   ? SECOND_FACTOR_SETUP_CODE_MESSAGES.PASSWORD_DESCRIPTION

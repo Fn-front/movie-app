@@ -11,6 +11,8 @@
 
 import { createDecipheriv, createHmac, hkdfSync } from 'crypto';
 
+import type { Page } from '@playwright/test';
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -236,4 +238,27 @@ export async function cleanupTotp(email: string): Promise<void> {
     method: 'DELETE',
     headers: supabaseHeaders,
   });
+}
+
+/**
+ * 二段階認証の設定を始める前の再認証を済ませる（#1368）
+ *
+ * ⛔ これが無いと方式のボタンが押せない。`setup` はセッションだけでは
+ * 通らなくなった（セッションを奪った第三者が被害者のアカウントに自分の
+ * 第2要素を登録できたため）。
+ *
+ * ⚠️ 同じ設定画面のメールアドレス変更にも『現在のパスワード』があるため、
+ * 名前付きのグループで絞ること。素の `getByLabel` は strict mode 違反になる。
+ *
+ * @param page - Playwright のページ
+ * @param password - 対象ユーザーの現在のパスワード
+ */
+export async function reauthForSecondFactorSetup(
+  page: Page,
+  password: string,
+): Promise<void> {
+  await page
+    .getByRole('group', { name: '二段階認証の設定の本人確認' })
+    .getByLabel('現在のパスワード')
+    .fill(password);
 }

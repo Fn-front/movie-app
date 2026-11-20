@@ -24,8 +24,9 @@
  * - 二段階認証あり（メールOTP）: 「コードを送る」で受け取って通る
  * - 二段階認証あり: 第2要素を入れないと送信できない（コードを焼かせない）
  * - 入力バリデーション: パスワード不一致 / 現在と同じ / 形式不正
- * - 重複: 既に使われているアドレス
- * - 期限切れ / 試行回数上限
+ * - 重複: 既に使われているアドレス / 再送クールダウン（60秒）
+ * - 期限切れ / 試行回数上限 / 送信の上限（5回/60分）
+ * - セキュリティ: 画面を介さず第2要素を省いても、サーバーが拒む
  * - 状態保持: 変更後のパスワード変更が**新しいアドレス**へコードを送る
  * - 対象外: パスワード未設定 / ソーシャル連携あり
  */
@@ -90,6 +91,9 @@ const MESSAGE = {
   PASSWORD_REQUIRED:
     'ソーシャルログインのみのアカウントではメールアドレスを変更できません。',
   SECOND_FACTOR_SENT: '確認コードをメールに送信しました。',
+  RESEND_TOO_SOON: 'しばらく待ってから再送信してください。',
+  RATE_LIMIT_EXCEEDED: 'しばらく時間をおいてから再度お試しください。',
+  SECOND_FACTOR_REQUIRED: '認証コードが正しくありません。',
 } as const;
 
 /** ログインして設定画面を開く */
@@ -228,14 +232,18 @@ test.describe('メールアドレス変更', () => {
   });
 
   /**
-   * ⚠️ 変更後のパスワード変更が**新しいアドレス**へコードを送るか。
+   * ⛔ **変更後にパスワードを変更できるか**（セッションの追従の本丸）。
    *
-   * `token.email` が追従していないと、旧アドレス宛に送られて利用者は
-   * 受け取れない（しかも旧アドレスはもう自分のものとは限らない）。
+   * ⚠️ **送信先だけ見ても何も固定できない**（#1364 のレビュー）。
+   * `/api/auth/otp/send` は `password_change` のとき**ボディを捨てて
+   * `users.email` から引き直す**ので、セッションが古くても新アドレスへ届く。
+   *
+   * 壊れるのは**検証側**。`/api/auth/otp/verify` は**ボディの** email で
+   * 引くため、画面が旧アドレスを持っていると必ず 400 になる
+   * （`auth.ts` のコメントが説明している状態そのもの）。だからコードを
+   * 実際に入れて、次のステップまで進むことを見る。
    */
-  test('変更後のパスワード変更は新しいアドレスへコードを送る', async ({
-    page,
-  }) => {
+  test('変更後のパスワード変更が最後まで通る', async ({ page }) => {
     await loginAndOpenSettings(page);
     await requestCodeAndWait(page, NEW_EMAIL);
 
@@ -252,8 +260,19 @@ test.describe('メールアドレス変更', () => {
       page.getByRole('heading', { name: '確認コードを入力' }),
     ).toBeVisible();
 
-    expect(await getLatestOtpCode(NEW_EMAIL, 'password_change')).not.toBeNull();
+    // 送信先は新アドレス（ここは `users.email` から引くので古くても通る）
+    const code = await getLatestOtpCode(NEW_EMAIL, 'password_change');
+    expect(code).not.toBeNull();
     expect(await getLatestOtpCode(USER.email, 'password_change')).toBeNull();
+
+    // ⛔ ここが本題。検証はボディの email で引くので、画面が旧アドレスを
+    //   持っていると 400 になって次のステップへ進めない
+    await page
+      .getByRole('textbox', { name: '確認コード', exact: true })
+      .fill(code!);
+    await page.getByRole('button', { name: '確認コードを検証' }).click();
+
+    await expect(page.getByRole('button', { name: '変更する' })).toBeVisible();
   });
 
   test.describe('二段階認証あり', () => {
@@ -330,6 +349,11 @@ test.describe('メールアドレス変更', () => {
       await requestCodeAndWait(page, NEW_EMAIL);
 
       const section = emailSection(page);
+
+      // ⚠️ **先に欄が出るのを待つ。** 送信ボタンは「方式の判定前」でも
+      //   disabled なので、待たないと**別の理由で通る**（#1364 のレビュー）
+      await expect(section.getByLabel('二段階認証のコード')).toBeVisible();
+
       await section
         .getByRole('textbox', { name: '確認コード', exact: true })
         .fill(await latestChangeCode(NEW_EMAIL));
@@ -356,6 +380,7 @@ test.describe('メールアドレス変更', () => {
       await requestCode(page, USER.email);
 
       await expect(page.getByText(MESSAGE.SAME_AS_CURRENT)).toBeVisible();
+      expect(await getLatestOtpCode(USER.email, 'email_change')).toBeNull();
     });
 
     test('形式が不正なアドレスは拒否する', async ({ page }) => {
@@ -364,6 +389,7 @@ test.describe('メールアドレス変更', () => {
       await requestCode(page, 'not-an-email');
 
       await expect(page.getByText(MESSAGE.INVALID_FORMAT)).toBeVisible();
+      expect(await getLatestOtpCode('not-an-email', 'email_change')).toBeNull();
     });
 
     /**
@@ -378,6 +404,44 @@ test.describe('メールアドレス変更', () => {
 
       await expect(page.getByText(MESSAGE.ALREADY_USED)).toBeVisible();
       expect(await getLatestOtpCode(OTHER.email, 'email_change')).toBeNull();
+    });
+  });
+
+  test.describe('送信の制限', () => {
+    /**
+     * ⚠️ 二度押しでメールボックスへ連投しない。60秒の再送間隔は
+     * `otp_codes` の直前の行だけが根拠（`sendEmailChangeCode`）。
+     */
+    test('60秒の内側で送り直すと断られる', async ({ page }) => {
+      await loginAndOpenSettings(page);
+      await requestCodeAndWait(page, NEW_EMAIL);
+
+      // 入力画面へ戻って同じ宛先でもう一度送る
+      await emailSection(page)
+        .getByRole('button', { name: 'やり直す' })
+        .click();
+      await requestCode(page, NEW_EMAIL);
+
+      await expect(page.getByText(MESSAGE.RESEND_TOO_SOON)).toBeVisible();
+    });
+
+    /**
+     * ⚠️ 送信枠は**検証より前**に消費する（`.claude/rules/api-route.md` の原則）。
+     * 弾かれるパスでも枠が減るのは承知のうえ —— 枠を消費しない経路があると、
+     * 認証済みアカウント1つで全登録アドレスを無制限に列挙できる（#1359）。
+     */
+    test('送信を繰り返すと上限で断られる', async ({ page }) => {
+      await loginAndOpenSettings(page);
+
+      // 5回目までは理由つきで弾かれ、6回目で枠が尽きる
+      for (let i = 0; i < 5; i++) {
+        await requestCode(page, USER.email);
+        await expect(page.getByText(MESSAGE.SAME_AS_CURRENT)).toBeVisible();
+      }
+
+      await requestCode(page, USER.email);
+
+      await expect(page.getByText(MESSAGE.RATE_LIMIT_EXCEEDED)).toBeVisible();
     });
   });
 
@@ -454,6 +518,34 @@ test.describe('メールアドレス変更', () => {
         MESSAGE.PASSWORD_REQUIRED,
       );
       expect(await getLatestOtpCode(NEW_EMAIL, 'email_change')).toBeNull();
+    });
+
+    /**
+     * ⛔ **画面を介さず第2要素を省いても、サーバーが拒む**（#1364 のレビュー）。
+     *
+     * route のテストは `requireSecondFactor` をモックし、コンポーネントの
+     * テストは `useEmailChange` をモックするので、**400 の経路は誰も
+     * 通していない**。画面の `disabled` を外されたら何が起きるかを固定する。
+     */
+    test('第2要素を省いたリクエストはサーバーが拒む', async ({ page }) => {
+      await loginAndOpenSettings(page);
+      await seedConfirmedSecondFactor(USER.email, 'totp');
+      await requestCodeAndWait(page, NEW_EMAIL);
+
+      const code = await latestChangeCode(NEW_EMAIL);
+      const response = await page.request.post(
+        '/api/user/email-change/confirm',
+        { data: { newEmail: NEW_EMAIL, code } },
+      );
+
+      expect(response.status()).toBe(400);
+      expect((await response.json())?.error?.message).toBe(
+        MESSAGE.SECOND_FACTOR_REQUIRED,
+      );
+
+      // ⚠️ 第2要素は**確認コードを消費する前**に見る。弾かれた時点で
+      //    使い捨てのコードが焼けていないこと（#1363 の2回目レビュー）
+      expect(await getLatestOtpCode(NEW_EMAIL, 'email_change')).toBe(code);
     });
 
     /**

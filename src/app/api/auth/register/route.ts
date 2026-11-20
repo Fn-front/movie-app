@@ -24,6 +24,7 @@ import {
   RATE_LIMIT_CONFIG,
   SUPABASE_ERROR_CODE,
 } from '@/constants';
+import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import {
   generateOtpCode,
   sendOtpEmail,
@@ -40,6 +41,22 @@ export async function POST(request: Request) {
     // Supabaseクライアント検証
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
+
+    // 送信元単位のブレーキ。**検証より前**に置く（原則どおり）。
+    // 送信元IPはボディを読まなくても確定するため、例外1には当たらない。
+    //
+    // 下の REGISTER（email|ip）と OTP_SEND_DAILY（email）はどちらも
+    // 「同一の宛先で何回試せるか」しか抑えておらず、**宛先を変えるだけで
+    // `rate_limits` の行を無制限に増やせた**。しかもこのルートは1リクエストで
+    // 2行作る。メール単位をIPに置き換えると送信数をIP数だけ掛け算できるので
+    // （#641 / #644）、置き換えずに手前へ重ねる。
+    const ipLimitResponse = await enforcePublicRateLimit({
+      request,
+      action: RATE_LIMIT_ACTION.REGISTER_IP,
+      limit: RATE_LIMIT_CONFIG.REGISTER_IP,
+      supabase,
+    });
+    if (ipLimitResponse) return ipLimitResponse;
 
     // リクエストボディの取得・バリデーション
     const body = await request.json();

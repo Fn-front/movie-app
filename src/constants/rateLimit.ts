@@ -27,6 +27,26 @@ export const RATE_LIMIT_ACTION = {
   WRITE_RECOMMENDATION_EVENTS: 'write_api_recommendation_events',
   /** ログイン試行の送信元単位の上限（IPアドレス単位） */
   LOGIN_IP: 'login_ip',
+  /**
+   * 未認証の認証系ルートの送信元単位の上限（IPアドレス単位）
+   *
+   * ⚠️ メールアドレス単位の上限と**置き換えるのではなく、手前に重ねる**。
+   * メール単位は「同一の宛先へ何通送れるか」を抑えるもので、
+   * 識別子を**いくつ作れるか**は抑えていない。宛先を変えるだけで
+   * `rate_limits` の行が無制限に増やせる状態だった。
+   *
+   * ⛔ メール単位の識別子をIPに置き換えてはいけない。IPごとにカウンタが
+   * 分かれると、同一メールボックスへの送信数をIP数だけ掛け算できる
+   * （#641 / #644。`.claude/rules/api-route.md`「例外1」）。
+   *
+   * ルートごとにカウンタを分ける。1つにまとめると、パスワードを忘れた
+   * 利用者が連続で再発行しただけで、同じ回線の別の人が新規登録できなくなる。
+   */
+  REGISTER_IP: 'register_ip',
+  /** OTP検証の送信元単位の上限（IPアドレス単位。上の REGISTER_IP と同じ理由） */
+  OTP_VERIFY_IP: 'otp_verify_ip',
+  /** パスワード再設定の発行の送信元単位の上限（IPアドレス単位。同上） */
+  PASSWORD_RESET_REQUEST_IP: 'password_reset_request_ip',
   /** OTP の日次送信上限（メールアドレス単位） */
   OTP_SEND_DAILY: 'otp_send_daily',
   /** OTP 検証試行の上限（メールアドレス単位。OTP行の attempts とは独立した多層防御） */
@@ -128,6 +148,10 @@ export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
   // ログイン試行
   RATE_LIMIT_ACTION.LOGIN_IP,
   'login',
+  // 未認証の認証系ルートの送信元単位（LOGIN_IP と同じ扱い）
+  RATE_LIMIT_ACTION.REGISTER_IP,
+  RATE_LIMIT_ACTION.OTP_VERIFY_IP,
+  RATE_LIMIT_ACTION.PASSWORD_RESET_REQUEST_IP,
   // 二段階認証コード（6桁。上限が唯一の防御）
   RATE_LIMIT_ACTION.TOTP_VERIFY,
   RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
@@ -242,6 +266,24 @@ export const RATE_LIMIT_CONFIG = {
    * 利用者をまとめて巻き込む。
    */
   LOGIN_IP: { maxAttempts: 20, windowMinutes: 15 },
+  /**
+   * 未認証の認証系ルートの送信元単位の上限。
+   *
+   * メール単位の上限（REGISTER = 5回/60分 など）より**緩く**する。ここの役目は
+   * 1つの宛先への試行を止めることではなく、**識別子を無制限に作らせないこと**。
+   * 厳しくすると LOGIN_IP と同じく NAT や社内プロキシを巻き込む。
+   *
+   * 新規登録とパスワード再発行はどちらも頻度の低い操作なので 20回/60分。
+   * 同一回線から1時間に20人が登録する状況は通常利用では起きない。
+   */
+  REGISTER_IP: { maxAttempts: 20, windowMinutes: 60 },
+  PASSWORD_RESET_REQUEST_IP: { maxAttempts: 20, windowMinutes: 60 },
+  /**
+   * OTP検証は登録・ログインの途中で**打ち間違いの再入力**が起きるため、
+   * 上の2つより厚く取る。メール単位の上限（OTP_CONFIG.VERIFY_RATE_LIMIT）が
+   * 本来の総当たり対策で、ここは行数の天井が目的。
+   */
+  OTP_VERIFY_IP: { maxAttempts: 50, windowMinutes: 15 },
   /**
    * 公開映画APIの上限。
    *

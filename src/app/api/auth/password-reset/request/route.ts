@@ -23,8 +23,10 @@ import {
   ERROR_CODE,
   AUTH_ERROR_MESSAGES,
   RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
   ROUTES,
 } from '@/constants';
+import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
   invalidateOtherPasswordResetTokens,
@@ -62,6 +64,21 @@ export async function POST(request: Request) {
   try {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
+
+    // 送信元単位のブレーキ。**検証より前**に置く（原則どおり）。
+    // 送信元IPはボディを読まなくても確定するため、例外1には当たらない。
+    //
+    // 下のメール単位の上限（PASSWORD_RESET_REQUEST）は「同一の宛先へ何通
+    // 送れるか」しか抑えておらず、**宛先を変えるだけで `rate_limits` の行を
+    // 無制限に増やせた**。メール単位をIPに置き換えると送信数をIP数だけ
+    // 掛け算できてしまうので（#641 / #644）、置き換えずに手前へ重ねる。
+    const ipLimitResponse = await enforcePublicRateLimit({
+      request,
+      action: RATE_LIMIT_ACTION.PASSWORD_RESET_REQUEST_IP,
+      limit: RATE_LIMIT_CONFIG.PASSWORD_RESET_REQUEST_IP,
+      supabase,
+    });
+    if (ipLimitResponse) return ipLimitResponse;
 
     const body = await request.json();
     const result = passwordResetRequestSchema.safeParse(body);

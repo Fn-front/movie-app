@@ -63,6 +63,28 @@ export async function POST(request: Request) {
 数えることが保護の目的そのもので、IP ごとにカウンタが分かれると送信数を IP 数だけ
 掛け算できる（#641 / #644）。
 
+#### ⚠️ 代わりに IP 単位の層を手前へ重ねる（#1331）
+
+メール単位は「**同一の宛先で何回試せるか**」しか抑えていない。**識別子を
+いくつ作れるか**は抑えていないので、宛先を変えるだけで `rate_limits` の行を
+無制限に増やせる。未認証ルートはこれが外部から自由にできる。
+
+行が膨らむと保持期間の掃除が `statement_timeout = 8s` を超えて全ロールバックし、
+1行も消えないまま翌日さらに増える詰み方をしうる（#1330）。
+
+置き換えではなく**手前に1層足す**。送信元IPは検証より前に確定するので、
+IP 層は**原則どおり検証より前**に置く。
+
+| ルート | 1層目（検証より前） | 2層目（検証の後 / 例外1） |
+|---|---|---|
+| `auth/password-reset/request` | `password_reset_request_ip` | `password_reset_request` |
+| `auth/register` | `register_ip` | `register` / `otp_send_daily` |
+| `auth/otp/verify` | `otp_verify_ip` | `otp_verify` |
+| NextAuth `credentials` | `login_ip`（`auth.ts`） | `login` |
+
+IP 層には `enforcePublicRateLimit`（`src/helpers/publicRateLimit.ts`）を使う。
+`clientIp === 'unknown'` のときは**消費せず通す**（fail-open）点に注意。
+
 ### 例外2: 守る資源が検証の後ろにあるルート
 
 レート制限が守っているのが DB ではなく**外部APIの費用やメールボックス**で、
@@ -178,7 +200,19 @@ if (!emailSent) {
 > `admin/accounts/[id]/reissue` POST は #1223 で `処理順` を追加した。
 > `admin/accounts` POST は #1221 で `処理順` を追加した。
 
-#### ⚠️ `withAdminAuth` のルートはレート制限が2層ある
+#### ⚠️ レート制限が2層あるルートのテスト
+
+**該当するのは `withAdminAuth` のルートだけではない。** #1331 で
+`auth/password-reset/request` / `auth/register` / `auth/otp/verify` も
+IP 層が手前に付いて2層になった。下の注意はそのまま当てはまる。
+
+> ⚠️ ただしこの3ルートは、テストのリクエストに転送ヘッダが無いと
+> `getClientIp` が `'unknown'` を返し、**1層目がそもそも呼ばれない**。
+> 1層目を観測したいテストは `x-vercel-forwarded-for` を付けること
+> （各 route.test.ts の `createRequestFromIp`）。逆に、2層目だけを見たい
+> 既存の `処理順` テストはヘッダ無しの `createRequest` のままでよい。
+
+##### `withAdminAuth` の場合
 
 `withAdminAuth` は handler を呼ぶ**前に**自前で `checkRateLimit` を回す
 （`ADMIN_ROLE_CHECK` / #965。`src/helpers/adminAuth.ts`）。ルート固有の制限は

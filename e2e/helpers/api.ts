@@ -1128,7 +1128,10 @@ export type OtpCodeAction =
   | 'registration'
   | 'login'
   | 'password_change'
-  | 'two_factor';
+  | 'two_factor'
+  // ⚠️ 宛先は**まだ本人のものでない新しいアドレス**（#1359）。
+  //    `getLatestOtpCode` には旧アドレスではなく新アドレスを渡すこと
+  | 'email_change';
 
 export async function getLatestOtpCode(
   email: string,

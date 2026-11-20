@@ -242,6 +242,29 @@ describe('useEmailChange', () => {
       expect(result.current.notice).toBe(EMAIL_CHANGE_MESSAGES.CHANGED);
     });
 
+    /**
+     * ⛔ **引数を省くと `update()` は何もしない**（#1364 の E2E で発覚）。
+     *
+     * `next-auth/react` の `update` は `typeof data === 'undefined'` のとき
+     * **ボディ無しで GET する**（`node_modules/next-auth/react.js`）。GET では
+     * `trigger: 'update'` が立たず、`auth.ts` の「メールアドレスの変更を
+     * セッションへ反映する」ブロックへ到達しない。
+     *
+     * 実測: 引数なしだと変更後もリロード後も旧アドレスのままで、パスワード
+     * 変更が旧アドレスで OTP を引いて必ず 400 になる。
+     */
+    it('セッションの更新は引数付きで呼ぶ（GET に落とさない）', async () => {
+      const { result } = renderHook(() => useEmailChange());
+      await advanceToCode(result);
+
+      await act(async () => {
+        await result.current.confirmCode('123456');
+      });
+
+      expect(mockUpdate).toHaveBeenCalledWith(expect.anything());
+      expect(mockUpdate.mock.calls[0][0]).toBeDefined();
+    });
+
     // 失敗したら入れ直せるよう、コード入力のまま留まる
     it('失敗したらコード入力に留まる', async () => {
       const { result } = renderHook(() => useEmailChange());

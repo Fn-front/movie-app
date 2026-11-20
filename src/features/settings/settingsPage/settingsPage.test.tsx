@@ -261,6 +261,34 @@ describe('SettingsPage', () => {
     //    フォームを描かない（「変更前: 」が空欄で出てしまう）
     expect(screen.queryByTestId('email-change-form')).not.toBeInTheDocument();
   });
+
+  /**
+   * ⛔ **再取得中にフォームをアンマウントしない**（#1364 の E2E で発覚）。
+   *
+   * `useSession().update()` は再取得のあいだ `status` を `loading` に戻す
+   * （`node_modules/next-auth/react.js` の `setLoading(true)`）。`loading`
+   * だけで判定すると `EmailChangeForm` がアンマウントされ、**state が消える**。
+   *
+   * 実測: メールアドレスの変更に成功しても「メールアドレスを変更しました。」
+   * が一度も出ず、利用者からは入力欄が空に戻っただけに見えた。
+   */
+  it('再取得中でもアドレスを持っていればフォームを残す', () => {
+    mockUseSession.mockReturnValue({
+      data: { user: { email: 'user@example.com', hasPassword: true } },
+      status: 'loading',
+      update: jest.fn(),
+    });
+
+    render(<SettingsPage />);
+
+    expect(screen.getByTestId('email-change-form')).toBeInTheDocument();
+    expect(screen.getByTestId('change-password-form')).toBeInTheDocument();
+    // 退会セクションも消さない（同じ判定を使っている）
+    expect(
+      screen.getByRole('heading', { name: 'アカウントの削除' }),
+    ).toBeInTheDocument();
+  });
+
   describe('Cookie セクション', () => {
     it('同意済みなら表示する', () => {
       recordConsentDecision('granted', 'user-1');

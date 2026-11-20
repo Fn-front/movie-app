@@ -9,6 +9,7 @@ import { hashVerificationToken } from '@/lib/otp/verificationToken';
 
 import {
   consumePasswordResetToken,
+  invalidateAllPasswordResetTokens,
   invalidateOtherPasswordResetTokens,
   isPasswordResetTokenValid,
   issuePasswordResetToken,
@@ -251,6 +252,95 @@ describe('issuePasswordResetToken', () => {
  * 発行と切り離してある。送信に成功したあとだけ呼ぶことで、送れなかった
  * ときに相手の手元のリンクを壊さない
  */
+/**
+ * 再設定の完了後に残りを無効化する（#1301）
+ *
+ * ⛔ **`invalidateOtherPasswordResetTokens` とは条件が違う。** あちらは
+ * 「いま配ったリンクだけ残す」ためのもので、こちらは**残すものが無い**。
+ *
+ * 以前は不要だった。発行の前に未使用を全削除していたため未使用は常に
+ * 高々1本だったが、#1223 で掃除が「送信に成功したあと」へ移り、
+ * **送信に失敗すると2本以上残る**ようになった。
+ */
+describe('invalidateAllPasswordResetTokens', () => {
+  it('同一ユーザーの未使用トークンをすべて消す', async () => {
+    const a = makeRow('token-a');
+    const b = makeRow('token-b');
+    const { client, rows } = createSupabaseMock([a, b]);
+
+    await invalidateAllPasswordResetTokens(client, USER_ID);
+
+    expect(rows).toHaveLength(0);
+  });
+
+  /**
+   * ⛔ **いま使ったリンクも含めて消すのではない。**
+   *
+   * 消費は条件付き UPDATE で `used_at` が入っているので、ここの
+   * `.is('used_at', null)` には当たらない。使用済みを消すと履歴が消える。
+   */
+  it('使用済みのトークンは消さない', async () => {
+    const used = makeRow('used-token', { used_at: new Date().toISOString() });
+    const { client, rows } = createSupabaseMock([used]);
+
+    await invalidateAllPasswordResetTokens(client, USER_ID);
+
+    expect(rows).toContain(used);
+  });
+
+  it('他のユーザーのトークンは消さない', async () => {
+    const other = makeRow('other-token', { user_id: 'other-user' });
+    const { client, rows } = createSupabaseMock([other]);
+
+    await invalidateAllPasswordResetTokens(client, USER_ID);
+
+    expect(rows).toContain(other);
+  });
+
+  /**
+   * ⚠️ **投げない。** 呼ぶのは再設定が確定したあと。ここで例外を漏らすと、
+   * パスワードは変わっているのに利用者には「失敗しました」と出て、
+   * 古いパスワードで何度もやり直すことになる（#1223 と同じ判断）。
+   */
+  it('削除に失敗しても投げず、ログに出す', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { client } = createSupabaseMock([]);
+    jest.spyOn(client, 'from').mockReturnValue({
+      delete: () => ({
+        eq: () => ({
+          is: () => Promise.resolve({ error: { message: 'db down' } }),
+        }),
+      }),
+    } as never);
+
+    await expect(
+      invalidateAllPasswordResetTokens(client, USER_ID),
+    ).resolves.toBeUndefined();
+    expect(spy).toHaveBeenCalled();
+
+    spy.mockRestore();
+  });
+
+  /**
+   * ⚠️ `error` を見るだけでは足りない。クライアントが**同期的に投げる**
+   * 経路（接続断など）が残り、呼び出し側の catch に落ちて 500 になる。
+   */
+  it('クライアントが投げても飲み込む', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { client } = createSupabaseMock([]);
+    jest.spyOn(client, 'from').mockImplementation(() => {
+      throw new Error('connection lost');
+    });
+
+    await expect(
+      invalidateAllPasswordResetTokens(client, USER_ID),
+    ).resolves.toBeUndefined();
+    expect(spy).toHaveBeenCalled();
+
+    spy.mockRestore();
+  });
+});
+
 describe('invalidateOtherPasswordResetTokens', () => {
   it('同一ユーザーの古い未使用トークンを消す', async () => {
     // 複数のリンクが同時に生きていると、古いメールを拾った第三者にも窓が残る

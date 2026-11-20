@@ -31,6 +31,7 @@ import {
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import {
   consumePasswordResetToken,
+  invalidateAllPasswordResetTokens,
   peekPasswordResetToken,
 } from '@/lib/auth/passwordResetToken';
 import { getClientIp } from '@/lib/http/getClientIp';
@@ -240,6 +241,19 @@ export async function POST(request: Request) {
     if (updateError) {
       throw updateError;
     }
+
+    // ⛔ **残りの未使用リンクを無効化する**（#1301）。
+    //
+    //   `issuePasswordResetToken` の掃除が「送信に成功したあと」へ移った
+    //   ため（#1223）、送信に失敗すると未使用トークンが2本以上残る。
+    //   送信側が受理したのにクライアントがエラー扱いした場合、**届いて
+    //   いるのに無効化されないリンク**が残り、再設定後も期限内なら
+    //   もう一度パスワードを変えられる。
+    //
+    // ⚠️ **投げない。** 再設定はもう確定している。ここで 500 にすると、
+    //   パスワードは変わっているのに「失敗しました」と出て、利用者が
+    //   古いパスワードで何度もやり直す（ヘルパー側でログに出す）
+    await invalidateAllPasswordResetTokens(supabase, consumed.userId);
 
     const response = NextResponse.json(
       { success: true, message: PASSWORD_RESET_MESSAGES.RESET_COMPLETED },

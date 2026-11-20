@@ -30,9 +30,12 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 
 const mockConsumeToken = jest.fn();
 const mockPeekToken = jest.fn();
+const mockInvalidateAll = jest.fn();
 jest.mock('@/lib/auth/passwordResetToken', () => ({
   consumePasswordResetToken: (...args: unknown[]) => mockConsumeToken(...args),
   peekPasswordResetToken: (...args: unknown[]) => mockPeekToken(...args),
+  invalidateAllPasswordResetTokens: (...args: unknown[]) =>
+    mockInvalidateAll(...args),
 }));
 
 // 漏洩パスワード照合（HIBP）。既定では「漏洩していない」として通す
@@ -118,6 +121,53 @@ describe('POST /api/auth/password-reset/confirm', () => {
       expect(response.status).toBe(200);
       expect(json.success).toBe(true);
       expect(json.message).toBe(PASSWORD_RESET_MESSAGES.RESET_COMPLETED);
+    });
+
+    /**
+     * ⛔ **残りの未使用リンクを無効化する**（#1301）
+     *
+     * `issuePasswordResetToken` の掃除が「送信に成功したあと」へ移った
+     * ため（#1223）、送信に失敗すると未使用トークンが2本以上残る。
+     * 送信側が受理したのにクライアントがエラー扱いした場合、**届いて
+     * いるのに無効化されないリンク**が残り、再設定後も期限内なら
+     * もう一度パスワードを変えられる。
+     */
+    it('残りの未使用リンクを無効化する', async () => {
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+
+      await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+
+      // ⚠️ 権威は「実際に焼いた行」側の利用者ID
+      expect(mockInvalidateAll).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+      );
+    });
+
+    /**
+     * ⛔ **消費した後に呼ぶこと。**
+     *
+     * 前に置くと、**利用者がいま開いているリンクの行そのもの**が
+     * `used_at IS NULL` に当たって消える。`consumePasswordResetToken` の
+     * 条件付き UPDATE が0行になり、**正しいリンクなのに再設定できない**。
+     *
+     * ⚠️ 「投げないこと」はヘルパー側の契約（`passwordResetToken.test.ts`）。
+     * ここでモックを reject させても本物の try/catch は走らないので、
+     * 起こりえない状態を作って緑にするだけになる。
+     */
+    it('トークンを消費した後に無効化する', async () => {
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+
+      await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+
+      const consumedAt = mockConsumeToken.mock.invocationCallOrder[0];
+      const invalidatedAt = mockInvalidateAll.mock.invocationCallOrder[0];
+
+      expect(consumedAt).toBeLessThan(invalidatedAt);
     });
 
     it('password_changed_at を更新して既存セッションを失効させる', async () => {

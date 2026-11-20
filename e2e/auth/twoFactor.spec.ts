@@ -42,6 +42,7 @@ import {
   cleanupTotp,
   getCurrentTotpCode,
   getTotpSecret,
+  expectSetupBlockedWithoutReauth,
   isRecoveryCodeStored,
   reauthForSecondFactorSetup,
   totpCodeFromSecret,
@@ -83,13 +84,7 @@ async function loginAndOpenSettings(page: Page): Promise<void> {
  * @returns 画面に表示されたリカバリーコード
  */
 async function enableTwoFactor(page: Page): Promise<string[]> {
-  // ⛔ **再認証なしでは始められない**（#1368）。セッションだけで第2要素を
-  //   自己登録できた穴を塞いだ本体で、画面側の歯止めをここで固定する
-  //   （サーバー側の拒否は `totp/setup` の route テストが見ている）
-  await expect(
-    page.getByRole('button', { name: '認証アプリで設定する' }),
-  ).toBeDisabled();
-
+  await expectSetupBlockedWithoutReauth(page);
   await reauthForSecondFactorSetup(page, USER.password);
   await page.getByRole('button', { name: '認証アプリで設定する' }).click();
 

@@ -125,6 +125,11 @@ export const TwoFactorSettings = memo<TwoFactorSettingsProps>(
         event.preventDefault();
         await disable(code);
         setCode('');
+        // ⚠️ 再認証の入力も捨てる。無効化すると方式の選択へ戻るので、
+        //    もう一度設定するなら本人確認をやり直してもらう（残っていると
+        //    画面だけ素通りして見える）
+        setReauthPassword('');
+        setReauthCode('');
       },
       [disable, code],
     );

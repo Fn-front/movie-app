@@ -11,7 +11,7 @@
 
 import { createDecipheriv, createHmac, hkdfSync } from 'crypto';
 
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -257,8 +257,33 @@ export async function reauthForSecondFactorSetup(
   page: Page,
   password: string,
 ): Promise<void> {
-  await page
+  await reauthPasswordField(page).fill(password);
+}
+
+/** 再認証のパスワード欄 */
+function reauthPasswordField(page: Page) {
+  return page
     .getByRole('group', { name: '二段階認証の設定の本人確認' })
-    .getByLabel('現在のパスワード')
-    .fill(password);
+    .getByLabel('現在のパスワード');
+}
+
+/**
+ * 再認証なしでは設定を始められないことを確かめる（#1368）
+ *
+ * ⛔ セッションだけで第2要素を自己登録できた穴を塞いだ本体。画面側の
+ * 歯止めをここで固定する（サーバー側の拒否は route のテストが見ている）。
+ *
+ * ⚠️ **先に欄を空にする。** 無効化 → もう一度設定、のように同じページで
+ * 2周する spec があり、前の入力が残っているとボタンが有効なままになる。
+ *
+ * @param page - Playwright のページ
+ */
+export async function expectSetupBlockedWithoutReauth(
+  page: Page,
+): Promise<void> {
+  await reauthPasswordField(page).fill('');
+
+  await expect(
+    page.getByRole('button', { name: '認証アプリで設定する' }),
+  ).toBeDisabled();
 }

@@ -13,6 +13,7 @@ import { WATCHLIST_STREAMING_SCOPE_LABELS } from '@/constants';
 import { DisplayNameForm } from '@/features/settings/displayNameForm/displayNameForm';
 import { ChangePasswordForm } from '@/features/settings/changePasswordForm/changePasswordForm';
 import { TwoFactorSettings } from '@/features/settings/twoFactorSettings/twoFactorSettings';
+import { DeleteAccount } from '@/features/settings/deleteAccount/deleteAccount';
 import { NotificationSettings } from '@/features/settings/notificationSettings/notificationSettings';
 import { StreamingNoticeSettings } from '@/features/settings/streamingNoticeSettings/streamingNoticeSettings';
 import { ThemeSettings } from '@/features/settings/themeSettings/themeSettings';
@@ -96,6 +97,17 @@ export const SettingsPage = memo(function SettingsPage() {
           <Heading level={2}>興味なし一覧</Heading>
           <DismissedMoviesList />
         </section>
+
+        {/*
+          ⚠️ 取り消せない操作なので**一番下**に置く。上のほうに置くと
+          ほかの設定を触りにきた利用者の目に先に入る
+        */}
+        {!isSessionLoading && (
+          <section className={styles.c_settings_page__section}>
+            <Heading level={2}>アカウントの削除</Heading>
+            <DeleteAccount hasPassword={hasPassword} />
+          </section>
+        )}
       </div>
     </div>
   );

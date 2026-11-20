@@ -1,0 +1,36 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_delete_account {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+  align-items: flex-start;
+}
+
+.c_delete_account__description {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  line-height: $line-height-loose;
+}
+
+.c_delete_account__form {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+}
+
+.c_delete_account__error {
+  padding: $spacing-3 $spacing-4;
+  background-color: color-alpha(--error-main, 10%);
+  border: $border-width-1 solid $error-light;
+  border-radius: $border-radius-md;
+  color: $error-dark;
+  font-size: $font-size-sm;
+}
+
+.c_delete_account__actions {
+  display: flex;
+  gap: $spacing-3;
+  justify-content: flex-end;
+}

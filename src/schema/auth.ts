@@ -253,3 +253,23 @@ export const passwordResetConfirmApiSchema = z.object({
   token: z.string().min(1, VALIDATION_MESSAGES.OTP_TOKEN_REQUIRED),
   password: passwordSchema,
 });
+
+/**
+ * アカウント削除（#932）
+ *
+ * ⚠️ **どちらも任意**にしている。必須にできないのは利用者ごとに要求する
+ * ものが違うため。
+ *
+ *   パスワードを持つ利用者   … `currentPassword` が要る
+ *   ソーシャル連携のみ       … `password_hash` が NULL なので照合できない
+ *   第2要素を設定済み        … `code` が要る
+ *
+ * **どれを要求するかはサーバー側が決める。** スキーマで必須にすると、
+ * 片方しか持たない利用者が永久に退会できなくなる。
+ */
+export const accountDeleteApiSchema = z.object({
+  currentPassword: z.string().optional(),
+  code: z.string().optional(),
+});
+
+export type AccountDeleteApiData = z.infer<typeof accountDeleteApiSchema>;

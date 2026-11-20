@@ -147,6 +147,33 @@ describe('POST /api/auth/password-reset/confirm', () => {
     });
 
     /**
+     * ⚠️ **権威は `consume` の戻り値。** `peek` の値を使うと、読んでから
+     * 焼くまでの間に別のリクエストが使い切った場合に**別の行の利用者**を
+     * 指しうる。同値なので普段は区別が付かず、テストで分けないと
+     * 取り違える変異が素通りする。
+     */
+    it('無効化は実際に焼いた行の利用者IDで行う', async () => {
+      mockUserAndUpdate({ id: 'consumed-user', password_hash: 'old-hash' });
+      mockPeekToken.mockResolvedValue({
+        status: 'valid',
+        userId: 'peeked-user',
+      });
+      mockConsumeToken.mockResolvedValue({
+        status: 'consumed',
+        userId: 'consumed-user',
+      });
+
+      await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+
+      expect(mockInvalidateAll).toHaveBeenCalledWith(
+        expect.anything(),
+        'consumed-user',
+      );
+    });
+
+    /**
      * ⛔ **消費した後に呼ぶこと。**
      *
      * 前に置くと、**利用者がいま開いているリンクの行そのもの**が
@@ -398,6 +425,15 @@ describe('POST /api/auth/password-reset/confirm', () => {
 
       expect(response.status).toBe(500);
       expect(response.headers.get('set-cookie')).toBeNull();
+
+      /**
+       * ⚠️ **リンクも消さない。**
+       *
+       * `updateError` の判定より前に無効化を置くと、**パスワードは
+       * 変わっていないのに全リンクが消える**。利用者は再発行からやり直しで、
+       * 発行アカウントなら自力では不可（#1226 の行き止まり）。
+       */
+      expect(mockInvalidateAll).not.toHaveBeenCalled();
     });
   });
 

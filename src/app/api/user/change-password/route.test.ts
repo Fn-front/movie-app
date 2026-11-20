@@ -34,6 +34,12 @@ jest.mock('bcryptjs', () => ({
 }));
 
 // 漏洩パスワード照合（HIBP）。既定では「漏洩していない」として通す
+const mockInvalidateAll = jest.fn();
+jest.mock('@/lib/auth/passwordResetToken', () => ({
+  invalidateAllPasswordResetTokens: (...args: unknown[]) =>
+    mockInvalidateAll(...args),
+}));
+
 jest.mock('@/lib/auth/pwnedPassword', () => ({
   isPasswordPwned: jest.fn().mockResolvedValue(false),
 }));
@@ -110,6 +116,15 @@ const mockUpdateSuccess = () => {
   });
 };
 
+/** UPDATE失敗のモック */
+const mockUpdateFailure = () => {
+  mockFrom.mockReturnValueOnce({
+    update: () => ({
+      eq: () => ({ error: { message: 'db down' } }),
+    }),
+  });
+};
+
 /** OTP削除のモック */
 const mockOtpDelete = () => {
   mockFrom.mockReturnValueOnce({
@@ -156,6 +171,65 @@ describe('POST /api/user/change-password', () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
+  });
+
+  /**
+   * ⛔ **残りのリセットリンクを無効化する**（#1301 のレビュー）
+   *
+   * 「パスワードを変えたら古いリンクは死ぬ」という期待にとっては
+   * **こちらが本命の経路**。侵害に気づいた利用者がまずやるのは設定画面
+   * からのパスワード変更で、再設定画面ではない。
+   *
+   * 残したままだと、攻撃者が握っているリンクで**変更したそばから上書きし
+   * 返せる**（利用者自身の再発行なら30分、admin 発行なら最長24時間）。
+   */
+  it('成功したらリセットリンクを無効化する', async () => {
+    mockUserSelect({
+      id: 'user-123',
+      email: 'test@example.com',
+      password_hash: 'old_hash',
+    });
+    mockOtpSelect({
+      id: 'otp-1',
+      email: 'test@example.com',
+      verified_at: new Date().toISOString(),
+    });
+    mockBcryptCompare.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mockOtpDelete();
+    mockUpdateSuccess();
+
+    await POST(createRequest(validBody()));
+
+    expect(mockInvalidateAll).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-123',
+    );
+  });
+
+  /**
+   * ⚠️ **更新が確定した後に置く。** 前に置くと、`users` の更新が失敗して
+   * 500 になった状況で**パスワードは変わっていないのにリンクだけ消える**。
+   * 利用者は再発行からやり直しで、発行アカウントなら自力では不可（#1226）。
+   */
+  it('更新に失敗したらリセットリンクを無効化しない', async () => {
+    mockUserSelect({
+      id: 'user-123',
+      email: 'test@example.com',
+      password_hash: 'old_hash',
+    });
+    mockOtpSelect({
+      id: 'otp-1',
+      email: 'test@example.com',
+      verified_at: new Date().toISOString(),
+    });
+    mockBcryptCompare.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    mockOtpDelete();
+    mockUpdateFailure();
+
+    const response = await POST(createRequest(validBody()));
+
+    expect(response.status).toBe(500);
+    expect(mockInvalidateAll).not.toHaveBeenCalled();
   });
 
   it('未認証で401を返す', async () => {

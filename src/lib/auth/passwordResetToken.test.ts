@@ -247,12 +247,6 @@ describe('issuePasswordResetToken', () => {
 });
 
 /**
- * 古いリンクの無効化（#1223）
- *
- * 発行と切り離してある。送信に成功したあとだけ呼ぶことで、送れなかった
- * ときに相手の手元のリンクを壊さない
- */
-/**
  * 再設定の完了後に残りを無効化する（#1301）
  *
  * ⛔ **`invalidateOtherPasswordResetTokens` とは条件が違う。** あちらは
@@ -341,6 +335,12 @@ describe('invalidateAllPasswordResetTokens', () => {
   });
 });
 
+/**
+ * 古いリンクの無効化（#1223）
+ *
+ * 発行と切り離してある。送信に成功したあとだけ呼ぶことで、送れなかった
+ * ときに相手の手元のリンクを壊さない
+ */
 describe('invalidateOtherPasswordResetTokens', () => {
   it('同一ユーザーの古い未使用トークンを消す', async () => {
     // 複数のリンクが同時に生きていると、古いメールを拾った第三者にも窓が残る

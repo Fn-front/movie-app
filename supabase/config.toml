@@ -90,7 +90,16 @@ openai_api_key = "env(OPENAI_API_KEY)"
 
 # Email testing server. Emails sent with the local dev setup are not actually sent - rather, they
 # are monitored, and you can view the emails that would have been sent from the web interface.
-[inbucket]
+#
+# ⚠️ [local_smtp] は v2.x 以降の正式名称で、**v2 / v3 のどちらも解釈する**（v2.117.0 の
+# `init` 雛形も [local_smtp] を出力する）。旧名 [inbucket] は v2 では
+# deprecation 警告どまりだったが、**v3 でエラー化した**（#1335）。
+#   inbucket in supabase/config.toml is no longer supported. Use local_smtp instead.
+# つまり v3 がやったのは改名ではなく、既存 deprecation の打ち切り。
+#
+# なお E2E はこのメールサーバーを使わない。OTP は OTP_EMAIL_TEST_BYPASS=true で
+# 送信を飛ばし、コードは DB から直接読む。CI では -x mailpit で起動もしていない。
+[local_smtp]
 enabled = true
 # Port to use for the email testing server web interface.
 port = 54324

@@ -89,6 +89,7 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 | expires_at | TIMESTAMPTZ | NOT NULL | - | 有効期限（作成時刻 + 10分） |
 | verified_at | TIMESTAMPTZ | NULL | - | 検証完了日時 |
 | verification_token_hash | TEXT | NULL | - | 検証済みトークンの SHA-256（ログイン・パスワード変更の本人確認に使う） |
+| password_contested | BOOLEAN | NOT NULL | false | このコードに対応する `users.password_hash` が、他人の未検証登録を上書きして設定されたか（#1325） |
 | created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
 
 **インデックス:**
@@ -103,6 +104,22 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
   `/api/auth/otp/send` と `/verify` は 400 で拒否する。発行できるのは
   サーバー側の `sendSecondFactorCode` だけ（#1261）
 - `attempts` は 0〜5 の範囲（CHECK制約）
+
+**設計判断 — `password_contested`（#1325）:**
+
+未検証アカウントのパスワードが**2回以上設定された**ことを記録する。
+`auth/otp/verify` の REGISTRATION 分岐は、これが立っていれば
+`password_hash` を NULL にして昇格させる。
+
+- 立てるのは `auth/register` の既存ユーザー分岐（＝未検証ユーザーの上書き）だけ。
+  ただし `bcrypt.compare` で**同じパスワードでのやり直しは除外**する
+- `auth/otp/send`（再送）は直前のコードの値を**引き継ぐ**。
+  ⚠️ ここが攻撃の成立経路なので、落とすと保護が無くなる
+
+⛔ 「発行時の `password_hash` の指紋を持たせて検証時に突き合わせる」案は
+**効かない**。攻撃者の register 呼び出しはパスワードとコードを同時に設定する
+ので指紋は必ず一致し、被害者が受信箱で新しいほうのメールを使えば再送すら
+要らない。詳細は `20261120043554_add_password_contested_to_otp_codes.sql`。
 
 **設計判断 — 平文を保存しない理由（#640 / #698）:**
 - OTPは6桁 = 100万通りしかなく、ソルト付きSHA-256でも特定の行を狙った総当たりは1秒未満で終わる

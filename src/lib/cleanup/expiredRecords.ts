@@ -16,7 +16,7 @@ import { OTP_CODE_RETENTION_HOURS } from '@/constants/otp';
 import { PASSWORD_RESET_TOKEN_RETENTION_HOURS } from '@/constants/passwordReset';
 import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
 
-import { runBatchedDelete } from './batchedDelete';
+import { BatchedDeleteError, runBatchedDelete } from './batchedDelete';
 
 /**
  * Vercel Function の `maxDuration`（60秒）に対する時間予算
@@ -129,7 +129,9 @@ export async function cleanupExpiredRecords(
       targets.push({
         name: target.name,
         retention_hours: target.retentionHours,
-        deleted_count: 0,
+        // ⚠️ 0 で握り直さない。失敗までに確定した削除は**確定している**ので、
+        //   件数を合計する監視が過少申告しないよう構造化データにも残す
+        deleted_count: error instanceof BatchedDeleteError ? error.deleted : 0,
         completed: false,
         error: error instanceof Error ? error.message : String(error),
       });

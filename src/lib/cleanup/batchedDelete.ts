@@ -31,6 +31,25 @@ export const DELETE_BATCH_SIZE = 500;
  */
 export const MAX_BATCHES = 200;
 
+/**
+ * 削除の途中で失敗したことを表すエラー
+ *
+ * ⚠️ **確定済みの削除件数を持たせる。** 各 RPC は独立したトランザクション
+ * なので、N-1 バッチ分の削除は確定している。メッセージの文字列にしか
+ * 残さないと、呼び出し側が `deleted_count: 0` で握り直して
+ * **構造化データから消える**（件数を合計する監視が過少申告する）。
+ */
+export class BatchedDeleteError extends Error {
+  constructor(
+    message: string,
+    /** throw までに確定した削除件数 */
+    readonly deleted: number,
+  ) {
+    super(message);
+    this.name = 'BatchedDeleteError';
+  }
+}
+
 /** 分割削除の結果 */
 export interface BatchedDeleteResult {
   /** 実際に削除した件数の合計 */
@@ -77,6 +96,30 @@ export async function runBatchedDelete(
   let total = 0;
 
   for (let batch = 0; batch < MAX_BATCHES; batch += 1) {
+    // 時間切れ。**RPC を投げる前に見る**。
+    //
+    // ⚠️ 末尾で判定していた頃は、予算を使い切っていても**対象ごとに必ず
+    //   1バッチ走った**。対象が増えるほど超過幅が伸びる:
+    //
+    //     35秒（予算）+ 対象数 × 8秒（statement_timeout）
+    //
+    //   3対象で 59秒 ＝ `maxDuration`（60秒）に対して余裕1秒しか無く、
+    //   4対象目を足した瞬間に超える。しかも `statement_timeout` が縛るのは
+    //   SQL の実行時間だけで、コネクション取得やネットワークは含まない。
+    //
+    //   先頭で見れば、**対象数によらず** 35 + 8 = 43秒 で収まる。
+    //
+    // ⚠️ **黙って打ち切らない**。消し残しがあること自体が「保持期間を
+    //   超えた個人データが残っている」状態なので、気づけるようにする
+    if (Date.now() >= deadlineAt) {
+      console.warn(
+        `[${label}] 時間切れで打ち切りました（${total}件削除）。` +
+          '消し残しがあります。翌日のCRONが続きを消しますが、毎日これが出るなら' +
+          '行の増加ペースが掃除を追い越しています',
+      );
+      return { deleted: total, completed: false };
+    }
+
     const { data, error } = await supabase.rpc(rpc, {
       retention_hours: retentionHours,
       p_limit: DELETE_BATCH_SIZE,
@@ -89,8 +132,9 @@ export async function runBatchedDelete(
     // トランザクションなので、N-1 バッチ分の削除は**確定している**。
     // 件数を捨てると「何件消えたのか分からない失敗」になる
     if (error) {
-      throw new Error(
+      throw new BatchedDeleteError(
         `${label}の削除に失敗しました（${total}件は削除済み）: ${error.message}`,
+        total,
       );
     }
 
@@ -117,17 +161,6 @@ export async function runBatchedDelete(
     //   「要求より少ない＝最終ページ と誤認する」のと同じ構図。
     if (deleted === 0) {
       return { deleted: total, completed: true };
-    }
-
-    // 時間切れ。**黙って打ち切らない**。消し残しがあること自体が
-    // 「保持期間を超えた個人データが残っている」状態なので、気づけるようにする
-    if (Date.now() >= deadlineAt) {
-      console.warn(
-        `[${label}] 時間切れで打ち切りました（${total}件削除）。` +
-          '消し残しがあります。翌日のCRONが続きを消しますが、毎日これが出るなら' +
-          '行の増加ペースが掃除を追い越しています',
-      );
-      return { deleted: total, completed: false };
     }
   }
 

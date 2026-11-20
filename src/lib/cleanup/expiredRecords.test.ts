@@ -125,26 +125,34 @@ describe('cleanupExpiredRecords', () => {
    */
   it('時間予算を全対象で共有する（対象ごとに持たせない）', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      // 常に満杯を返す＝0件に到達しないので、止まるのは時間予算だけ
-      const rpc = jest.fn().mockResolvedValue({ data: 500, error: null });
-      const supabase = { rpc } as unknown as SupabaseClient;
+    jest.useFakeTimers();
 
-      // 予算を使い切った状態を作る
-      const nowSpy = jest.spyOn(Date, 'now');
-      // 1回目（deadline の算出）だけ 0、以降はずっと予算超過
-      nowSpy.mockReturnValueOnce(0).mockReturnValue(TIME_BUDGET_MS + 1);
+    try {
+      // ⚠️ `Date.now` を `mockReturnValueOnce` で積まない。**実装の
+      //   `Date.now()` 呼び出し回数に依存**し、挙動を変えないリファクタ
+      //   （計測用に1行足す等）で壊れる。時計そのものを進める
+      //
+      // 1バッチごとに20秒進む＝2バッチで予算（35秒）を使い切る。
+      // 常に満杯を返すので、止まるのは時間予算だけ
+      const rpc = jest.fn().mockImplementation(() => {
+        jest.setSystemTime(Date.now() + 20_000);
+        return Promise.resolve({ data: 500, error: null });
+      });
+      const supabase = { rpc } as unknown as SupabaseClient;
 
       const result = await cleanupExpiredRecords(supabase);
 
-      // 共有していれば、どの対象も1バッチで打ち切られる（3対象 = 3回）。
-      // 対象ごとに予算を作っていると、2つ目以降は deadline が未来になり
-      // MAX_BATCHES（200）まで回るのでここが跳ね上がる
-      expect(rpc).toHaveBeenCalledTimes(CLEANUP_TARGETS.length);
+      // 共有していれば、1つ目が予算を使い切った時点で残りは1回も投げない。
+      //
+      // ⛔ 対象ごとに予算を作っていると、2つ目以降は deadline が未来になり
+      //    それぞれ2バッチずつ回る（3対象 × 2 = 6回）
+      expect(rpc).toHaveBeenCalledTimes(2);
       expect(result.completed).toBe(false);
-
-      nowSpy.mockRestore();
+      // 残りの対象も「消し残しあり」として報告される（黙って飛ばさない）
+      expect(result.targets).toHaveLength(CLEANUP_TARGETS.length);
+      expect(result.targets.every((t) => !t.completed)).toBe(true);
     } finally {
+      jest.useRealTimers();
       warn.mockRestore();
     }
   });
@@ -164,6 +172,41 @@ describe('cleanupExpiredRecords', () => {
       expect(byName.otp_codes.deleted_count).toBe(0);
       expect(byName.otp_codes.completed).toBe(false);
       expect(byName.password_reset_tokens.completed).toBe(true);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  /**
+   * ⚠️ 失敗までに確定した削除件数を**構造化データに残す**。
+   *
+   * 各 RPC は独立したトランザクションなので、N-1 バッチ分の削除は確定して
+   * いる。`deleted_count: 0` で握り直すと、件数を合計する監視が過少申告する
+   * （メッセージの文字列にしか残らない）。
+   */
+  it('途中で失敗しても、確定した削除件数は deleted_count に残る', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      // 1バッチ目は成功（500件）、2バッチ目で失敗
+      let calls = 0;
+      const supabase = {
+        rpc: jest.fn((name: string) => {
+          if (name !== 'delete_expired_otp_codes') {
+            return Promise.resolve({ data: 0, error: null });
+          }
+          calls += 1;
+          return calls === 1
+            ? Promise.resolve({ data: 500, error: null })
+            : Promise.resolve({ data: null, error: { message: 'boom' } });
+        }),
+      } as unknown as SupabaseClient;
+
+      const result = await cleanupExpiredRecords(supabase);
+      const otp = result.targets.find((t) => t.name === 'otp_codes');
+
+      expect(otp?.deleted_count).toBe(500);
+      expect(otp?.completed).toBe(false);
+      expect(otp?.error).toContain('500件は削除済み');
     } finally {
       error.mockRestore();
     }

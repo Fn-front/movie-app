@@ -22,7 +22,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { HTTP_STATUS, CRON_ERROR_MESSAGES } from '@/constants';
+import { HTTP_STATUS, CRON_ERROR_MESSAGES, ERROR_CODE } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
 import { handleRouteError } from '@/helpers/routeError';
 import {
@@ -68,7 +68,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: !hasError,
+        // ⚠️ 失敗しても `data` を落とさない。部分的に成功した掃除なので、
+        //   消えた件数と、どの対象が失敗したかを呼び出し側へ残す
         data: { targets, completed },
+        // 他のエラー経路（`handleRouteError`）と同じ形を揃える。
+        // 500 なのに `error` が無いと、形で分岐する監視が取りこぼす
+        ...(hasError
+          ? {
+              error: {
+                code: ERROR_CODE.SERVER_ERROR,
+                message: CRON_ERROR_MESSAGES.CLEANUP_EXPIRED_RECORDS,
+              },
+            }
+          : {}),
       },
       {
         status: hasError ? HTTP_STATUS.INTERNAL_SERVER_ERROR : HTTP_STATUS.OK,

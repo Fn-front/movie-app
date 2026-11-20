@@ -111,22 +111,58 @@ describe('runBatchedDelete', () => {
     expect(supabase.rpc).toHaveBeenCalledTimes(1);
   });
 
-  it('締め切りを過ぎたら打ち切り、警告を出す', async () => {
-    // 黙って打ち切らない。消し残し＝保持期間を超えた個人データが残っている
+  /**
+   * ⚠️ 判定は **RPC を投げる前**。
+   *
+   * 末尾で判定していた頃は、予算を使い切っていても**必ず1バッチ走った**。
+   * 対象が増えるほど超過幅が伸びる（35秒 + 対象数 × 8秒）ので、
+   * 先頭で見て「対象数によらず 35 + 8 = 43秒」に収める。
+   */
+  it('締め切りを過ぎていたら RPC を投げない', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-    // 既に過ぎている締め切りを渡す＝1回目の判定で打ち切り
     const supabase = createSupabase({ data: DELETE_BATCH_SIZE });
 
     const result = await run(supabase, Date.now() - 1);
 
-    expect(supabase.rpc).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ deleted: DELETE_BATCH_SIZE, completed: false });
+    // ⛔ 1回でも投げたら、対象数ぶんの statement_timeout が予算の外に出る
+    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(result).toEqual({ deleted: 0, completed: false });
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('消し残しがあります'),
     );
 
     warn.mockRestore();
+  });
+
+  it('途中で締め切りを過ぎたら、そこまでの件数を返して打ち切る', async () => {
+    // 黙って打ち切らない。消し残し＝保持期間を超えた個人データが残っている
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.useFakeTimers();
+
+    try {
+      const start = Date.now();
+      // 1バッチごとに20秒進む＝2バッチで予算（35秒）を超える
+      const supabase = {
+        rpc: jest.fn().mockImplementation(() => {
+          jest.setSystemTime(Date.now() + 20_000);
+          return Promise.resolve({ data: DELETE_BATCH_SIZE, error: null });
+        }),
+      } as unknown as SupabaseClient;
+
+      const result = await run(supabase, start + 35_000);
+
+      expect(supabase.rpc).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        deleted: DELETE_BATCH_SIZE * 2,
+        completed: false,
+      });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('消し残しがあります'),
+      );
+    } finally {
+      jest.useRealTimers();
+      warn.mockRestore();
+    }
   });
 
   it('反復上限に達したら打ち切り、警告を出す', async () => {

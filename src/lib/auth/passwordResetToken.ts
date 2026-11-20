@@ -142,6 +142,77 @@ export async function invalidateOtherPasswordResetTokens(
 }
 
 /**
+ * そのユーザーの未使用リセットリンクをすべて無効化する（#1301）
+ *
+ * ⛔ **再設定が終わった時点で、未使用リンクを生かす理由は無い。**
+ *
+ * 以前は不要だった。`issuePasswordResetToken` が発行の**前に**同一ユーザーの
+ * 未使用トークンを全削除していたため、未使用は常に高々1本だったからである。
+ * #1223 でその削除を「送信に成功したあと」へ移したので、**送信に失敗すると
+ * 未使用トークンが2本以上残る**ようになった。
+ *
+ * 送信側（Resend）が受理したのにクライアントがエラー扱いした場合、
+ * **届いているのに無効化されないリンク**が残る。その状態で別のリンクから
+ * 再設定すると、期限内はもう一度パスワードを変えられてしまう。
+ *
+ * ⚠️ `invalidateOtherPasswordResetTokens` とは条件が違う。あちらは
+ * 「いま配ったリンクだけ残す」ためのもので、こちらは**残すものが無い**。
+ *
+ * ⚠️ **あちらの `lt('created_at', ...)` に相当するガードは置かない。**
+ * あれは同時に走る別の発行リクエストと行を消し合って「2通送ったのに
+ * どちらも使えない」になるのを防ぐためのもの。こちらは「申請した直後に
+ * 古いリンクで再設定が通って新しいリンクが消える」が起きうるが、
+ * **再設定はもう成立している**ので申請し直せばよく、行き止まりにならない。
+ *
+ * ⚠️ 行は DELETE する（`used_at` を立てない）。`invalidateOther` と同じ形。
+ * 消した側のリンクを後から開くと `#1232` の出し分けでは「使用済み」ではなく
+ * 「無効」として返る点に注意。
+ *
+ * ⛔ **呼ぶべき経路はここだけではない。** 「パスワードを変えたら古いリンクは
+ * 死ぬ」を成立させるには、`users.password_hash` を更新するすべての経路から
+ * 呼ぶ必要がある。現在は次の2つ。
+ *
+ *   - `auth/password-reset/confirm`（リンクから再設定）
+ *   - `user/change-password`（設定画面から変更。**侵害に気づいた利用者が
+ *     まず使うのはこちら**）
+ *
+ * ⚠️ **投げない。** 呼ぶのは再設定が確定したあと。ここで 500 にすると、
+ * パスワードは変わっているのに利用者には「失敗しました」と出て、
+ * 古いパスワードで何度もやり直すことになる（#1223 と同じ判断）。
+ * 保証が崩れたことに気づけるようログには必ず出す。
+ *
+ * @param supabase - service_role のクライアント
+ * @param userId - 対象ユーザー
+ */
+export async function invalidateAllPasswordResetTokens(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<void> {
+  // ⚠️ **try で囲う。** `error` を見るだけでは足りない —— クライアントが
+  //   同期的に投げる経路（接続断など）が残り、呼び出し側の catch に
+  //   落ちて 500 になる。「投げない」は契約なのでここで閉じる
+  try {
+    const { error } = await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('user_id', userId)
+      .is('used_at', null);
+
+    if (error) {
+      console.error(
+        `[passwordResetToken] 再設定後のリセットリンク無効化に失敗しました userId='${userId}'`,
+        error,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `[passwordResetToken] 再設定後のリセットリンク無効化に失敗しました userId='${userId}'`,
+      error,
+    );
+  }
+}
+
+/**
  * トークンの消費結果
  *
  * 消費できなかった理由まで返す。画面の文言を出し分けるため（#1232）。

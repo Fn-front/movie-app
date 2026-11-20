@@ -189,7 +189,7 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 
 **インデックス:**
 - `token_hash`（UNIQUE） - 照合はハッシュ値の一致で行う
-- `user_id`（`used_at IS NULL` の部分インデックス） - 発行時に既存の未使用トークンを無効化する用途
+- `user_id`（`used_at IS NULL` の部分インデックス） - 未使用トークンを無効化する用途。**発行時**（`issuePasswordResetToken`）に加え、**パスワードを変えた時**（`password-reset/confirm` / `user/change-password` / #1301）にも使う
 - `expires_at` - 期限切れレコードの削除用
 
 **設計判断 — 平文を保存しない理由:**

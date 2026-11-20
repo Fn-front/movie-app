@@ -11,6 +11,7 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
+import { invalidateAllPasswordResetTokens } from '@/lib/auth/passwordResetToken';
 import { changePasswordApiSchema } from '@/schema/auth';
 import {
   AUTH_ERROR_MESSAGES,
@@ -243,6 +244,23 @@ export async function POST(request: Request) {
     if (updateError) {
       throw updateError;
     }
+
+    // ⛔ **残りのリセットリンクを無効化する**（#1301 のレビュー）。
+    //
+    //   「パスワードを変えたら古いリンクは死ぬ」という期待にとっては
+    //   **こちらが本命の経路**。侵害に気づいた利用者がまずやるのは
+    //   設定画面からのパスワード変更で、再設定画面ではない。
+    //
+    //   残したままだと、攻撃者が握っているリンクで**変更したそばから
+    //   上書きし返せる**（利用者自身の再発行なら30分、admin 発行なら
+    //   最長24時間）。
+    //
+    // ⚠️ **更新が確定した後に置く。** 前に置くと、`users` の更新が失敗して
+    //   500 になった状況で**パスワードは変わっていないのにリンクだけ消える**。
+    //   利用者は再発行からやり直しで、発行アカウントなら自力では不可（#1226）。
+    //
+    // ⚠️ **投げない。** パスワードはもう変わっている（ヘルパー側でログに出す）
+    await invalidateAllPasswordResetTokens(supabase, session.user.id);
 
     // レート制限リセット（成功時）
     await resetRateLimit(

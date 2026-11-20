@@ -1,18 +1,20 @@
 /**
  * ログインページコンテンツ
  *
- * LoginForm（パスワードログイン）と OtpLoginForm（メールOTPログイン）を切り替える。
+ * LoginForm（パスワード／ソーシャル）の周りで、戻り先の復元と
+ * `?error=` の後始末だけを受け持つ。
+ *
+ * ⚠️ メールOTPログイン（パスワード不要の経路）は #1361 で削除した。
+ *   受信箱を押さえられるとログインできてしまう経路が、パスワード再設定と
+ *   二重に存在していたため。復旧手段はリセットが残る。
  */
 
 'use client';
 
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 
 import { LoginForm } from '@/features/auth/loginForm/loginForm';
-import { OtpLoginForm } from '@/features/auth/otpLoginForm/otpLoginForm';
 import { takePendingCallbackUrl } from '@/features/auth/utils/pendingCallbackUrl';
-
-type LoginMode = 'password' | 'otp';
 
 interface SignInContentProps {
   /** ログイン後の戻り先（proxyが付与する callbackUrl） */
@@ -29,8 +31,6 @@ interface SignInContentProps {
    * ソーシャルログインの失敗文言（#1242）
    *
    * `/auth/signin?error=` で戻ってきたときにページが解決して渡す。
-   * OTP ログインには渡さない。失敗したのはパスワード/ソーシャルの画面で、
-   * 切り替えた先に前の画面のエラーが残っていると文脈が合わない
    */
   initialError?: string;
 }
@@ -40,8 +40,6 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
   initialIdentifier,
   initialError,
 }) {
-  const [loginMode, setLoginMode] = useState<LoginMode>('password');
-
   /**
    * 最初に受け取った文言を抱えておく
    *
@@ -49,7 +47,7 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
    * prop が undefined になり文言が消えうる。読む前に消えたら、戻された
    * 理由が分からないままになる
    */
-  const [displayError, setDisplayError] = useState(initialError);
+  const [displayError] = useState(initialError);
 
   /**
    * ソーシャルログインに失敗したときの戻り先を復元する（#1246）
@@ -68,8 +66,8 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
    * 残すと、次に別の理由で戻されたときに古い戻り先が蘇る。
    * 失敗せずにこの画面へ来たときも同じで、預かり分は役目を終えている。
    *
-   * 戻り先は `LoginForm` / `useOtpLogin` が `resolveSafeCallbackUrl` を
-   * 通してから遷移するので、ここで検証はしない（預ける側も通している）。
+   * 戻り先は `LoginForm` が `resolveSafeCallbackUrl` を通してから遷移するので、
+   * ここで検証はしない（預ける側も通している）。
    *
    * ⚠️ `useState` の遅延初期化でやらない。`takePendingCallbackUrl` は
    * 読むと同時に消す＝**副作用**で、レンダー中に置くと StrictMode や
@@ -100,9 +98,6 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
    *
    * - `MissingCSRF` の文言は「画面を再読み込みしてから」だが、リロードすると
    *   クエリごと読み直して同じエラーが出る。言われたとおりにしても抜けられない
-   * - OTP に切り替えて戻ると `LoginForm` が再マウントされ、`useState` が
-   *   初期化し直される。送信して別のエラーを出したあとでも、往復するだけで
-   *   **古い文言に巻き戻る**
    *
    * ⚠️ `router.replace` を使ってはいけない。サーバーの再描画が走って
    * **エラー表示ごと消える**（本番ビルドの E2E で実測。jsdom では
@@ -122,30 +117,8 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
     window.history.replaceState(null, '', `${url.pathname}${url.search}`);
   }, [initialError]);
 
-  const handleOtpLoginClick = useCallback(() => {
-    setLoginMode('otp');
-    // 画面を離れたらサーバー由来のエラーは役目を終える。抱えたままだと
-    // パスワード画面へ戻ったときに `LoginForm` が再マウントされ、
-    // **古い文言に巻き戻る**
-    setDisplayError(undefined);
-  }, []);
-
-  const handlePasswordLoginClick = useCallback(() => {
-    setLoginMode('password');
-  }, []);
-
-  if (loginMode === 'otp') {
-    return (
-      <OtpLoginForm
-        onPasswordLoginClick={handlePasswordLoginClick}
-        callbackUrl={effectiveCallbackUrl}
-      />
-    );
-  }
-
   return (
     <LoginForm
-      onOtpLoginClick={handleOtpLoginClick}
       callbackUrl={effectiveCallbackUrl}
       initialIdentifier={initialIdentifier}
       initialError={displayError}

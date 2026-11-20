@@ -15,14 +15,12 @@ import { OTP_ACTION, OTP_CONFIG, type OtpAction } from './otp';
 
 const ALL_ACTIONS: OtpAction[] = [
   OTP_ACTION.REGISTRATION,
-  OTP_ACTION.LOGIN,
   OTP_ACTION.PASSWORD_CHANGE,
 ];
 
 describe('buildOtpEmailSubject', () => {
   it.each([
     [OTP_ACTION.REGISTRATION, 'メールアドレスの確認'],
-    [OTP_ACTION.LOGIN, 'ログイン'],
     [OTP_ACTION.PASSWORD_CHANGE, 'パスワード変更'],
   ])('%s の件名に用途「%s」を含む', (action, label) => {
     expect(buildOtpEmailSubject(action)).toContain(label);
@@ -38,7 +36,6 @@ describe('buildOtpEmailSubject', () => {
 describe('buildOtpEmailText', () => {
   it.each([
     [OTP_ACTION.REGISTRATION, 'メールアドレスの確認'],
-    [OTP_ACTION.LOGIN, 'ログイン'],
     [OTP_ACTION.PASSWORD_CHANGE, 'パスワード変更'],
   ])('%s の本文に用途「%s」を明記する', (action, label) => {
     expect(buildOtpEmailText('123456', action)).toContain(

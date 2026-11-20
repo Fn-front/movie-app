@@ -28,7 +28,6 @@ import { normalizeEmail } from '@/utils/email';
  */
 export const PUBLIC_OTP_ACTIONS = [
   OTP_ACTION.REGISTRATION,
-  OTP_ACTION.LOGIN,
   OTP_ACTION.PASSWORD_CHANGE,
 ] as const satisfies readonly OtpAction[];
 

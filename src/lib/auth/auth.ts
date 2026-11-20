@@ -16,7 +16,6 @@ import {
   SESSION_CONFIG,
   ROUTES,
   SUPABASE_ERROR_CODE,
-  LOGIN_METHOD,
   USER_ROLE,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
@@ -24,9 +23,7 @@ import {
   getSessionCookieName,
   getSessionCookieOptions,
 } from '@/constants';
-import { OTP_ACTION, OTP_CONFIG } from '@/constants/otp';
 import { isSessionExpired } from '@/lib/auth/sessionExpiry';
-import { hashVerificationToken } from '@/lib/otp/verificationToken';
 import { fetchVerifiedGitHubProfile } from '@/lib/auth/githubProfile';
 import { getClientIp } from '@/lib/http/getClientIp';
 import { normalizeEmail } from '@/utils/email';
@@ -77,7 +74,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
-        loginMethod: { label: 'Login Method', type: 'text' },
         verificationToken: { label: 'Verification Token', type: 'text' },
         totpCode: { label: 'TOTP Code', type: 'text' },
       },
@@ -98,9 +94,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // 表記揺れで別アカウント扱いにならないよう、DBを引く前に正規化する
         const email = isEmailLogin ? normalizeEmail(rawIdentifier) : '';
         const username = isEmailLogin ? '' : normalizeUsername(rawIdentifier);
-
-        const loginMethod =
-          (credentials.loginMethod as string) || LOGIN_METHOD.PASSWORD;
 
         const clientIp = getClientIp(request);
         // レート制限の識別子は「アカウントを特定する文字列」であればよく、
@@ -139,7 +132,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const rateLimitResult = await checkRateLimit(
           supabase,
           loginIdentifier,
-          OTP_ACTION.LOGIN,
+          RATE_LIMIT_ACTION.LOGIN,
           RATE_LIMIT_CONFIG.LOGIN_ACCOUNT.maxAttempts,
           RATE_LIMIT_CONFIG.LOGIN_ACCOUNT.windowMinutes,
         );
@@ -169,9 +162,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // 分かれ、メールアドレスの一覧を持つ相手が登録済みのものを時間差で
           // 絞り込める。照合相手が居ないぶんをダミーで埋めて揃える。
           //
-          // パスワード経路だけが対象。OTP 経路には照合するパスワードが無く、
-          // 待つ意味がない（そちらの時間差は別途 #1256 で扱う）
-          if (loginMethod === LOGIN_METHOD.PASSWORD && credentials?.password) {
+          if (credentials?.password) {
             await bcrypt.compare(
               credentials.password as string,
               DUMMY_PASSWORD_HASH,
@@ -181,245 +172,161 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
-        // ユーザー名ログインはメールを持たないアカウント専用の経路。
-        // メール確認コードを前提とする OTP ログインは成立しない。
-        if (!isEmailLogin && loginMethod === LOGIN_METHOD.OTP) {
+        // パスワードログイン
+        if (!credentials?.password) {
+          throw new Error(AUTH_ERROR_MESSAGES.CREDENTIALS_REQUIRED);
+        }
+
+        const password = credentials.password as string;
+
+        // パスワード未設定（ソーシャルログインのみのユーザー）
+        if (!user.password_hash) {
+          // 上と同じ理由（#1256）。ここも照合相手が居ないので、
+          // 即 return すると「ソーシャル専用アカウントである」ことが
+          // 応答時間で分かる
+          await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
           throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
         }
 
-        if (loginMethod === LOGIN_METHOD.OTP) {
-          // ⚠️ この経路の判定は**すべて検証済みトークンを確かめた後**に置く。
-          // 前に置くと、メールアドレスを知っているだけでアカウントの性質を
-          // 引ける（#1255 / #1247）。
-          //
-          // | 判定 | 置く場所 | 理由 |
-          // |---|---|---|
-          // | 二段階認証の有無 | トークン検証の後 | 「登録済み＋2FAあり」が漏れる |
-          // | メール認証の有無 | 同上 | 「登録済み＋未認証」が漏れる |
-          //
-          // どちらもトークンを**消費する前**に置く。後ろだと、理由を返して
-          // 弾いた時点でコードが焼けており、やり直すにも取り直しになる（#1235）
+        // パスワード照合
+        const isPasswordValid = await bcrypt.compare(
+          password,
+          user.password_hash,
+        );
 
-          // OTPログイン: otp/verify が発行した検証済みトークンで本人確認する。
-          // メールアドレスで行を引くと、被害者が検証を終えた直後に第三者が
-          // email だけでログインできてしまうため、トークンハッシュで引く。
-          const verificationToken = credentials.verificationToken as
-            | string
-            | undefined;
+        if (!isPasswordValid) {
+          throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+        }
 
-          if (!verificationToken) {
-            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
-          }
+        // メール認証チェック（#1247）
+        //
+        // ⚠️ **パスワード照合の後に置く。** 以前は前にあり
+        // （「不要なbcrypt計算を回避」）、プレーンな `Error` を投げていた。
+        // Auth.js はプレーンな Error に `code` を載せないため、画面には
+        // 「メールアドレスまたはパスワードが正しくありません」としか出ず、
+        // **パスワードは正しいのに**理由が分からないまま詰んでいた。
+        //
+        // 理由を返すには、パスワードを知らない相手に返さないことが前提に
+        // なる。でないと「このメールは登録済み」が漏れてアカウント列挙を
+        // 許す。すぐ下の第2要素と同じ理屈で、照合の後ろへ移した。
+        //
+        // 代償として未認証ユーザーへの試行でも bcrypt が走るが、ここは
+        // `login` のレート制限を通過した後なので許容する
+        if (!user.is_verified) {
+          throw new CredentialsSignInError(AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED);
+        }
 
-          const { data: verifiedOtp } = await supabase
-            .from('otp_codes')
-            .select('id, email, verified_at')
-            .eq(
-              'verification_token_hash',
-              hashVerificationToken(verificationToken),
-            )
-            .eq('action_type', OTP_ACTION.LOGIN)
-            .single();
+        // 第2要素。パスワードが正しいことを確かめてからでないと、
+        // 「二段階認証を使っているアカウントかどうか」を第三者に教えてしまう
+        const secondFactorMethod = await getSecondFactorMethod(
+          supabase,
+          user.id,
+        );
 
-          // トークンが示す行のメールアドレスと、ログイン対象が一致すること。
-          // 別アカウントのトークンで成り代わるのを防ぐ
-          if (!verifiedOtp || verifiedOtp.email !== email) {
-            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
-          }
+        if (secondFactorMethod) {
+          const totpCode = (credentials.totpCode as string | undefined)?.trim();
 
-          // 検証済みOTPの有効期限チェック（verified_atから5分以内）
-          const verifiedAt = new Date(verifiedOtp.verified_at).getTime();
-          const expiryMs = OTP_CONFIG.VERIFIED_TOKEN_EXPIRY_MINUTES * 60 * 1000;
-
-          if (Date.now() - verifiedAt > expiryMs) {
-            // 期限切れのOTPを削除
-            await supabase.from('otp_codes').delete().eq('id', verifiedOtp.id);
-            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
-          }
-
-          // ここから下は**コードを受け取れた＝メールアドレスの持ち主**しか
-          // 到達しない。理由を返してもアカウント列挙にはならず、
-          // トークンもまだ焼けていない（#1235 / #1247 / #1255）
-
-          // 二段階認証が有効なら、この経路は使わせない。
-          // メールのコードだけで入れる経路は「第2要素」ではなく
-          // 「パスワードの代替」であり、残すと最も弱い経路が全体の強度を
-          // 決めてしまう（#642）。パスワードを忘れた場合はリセットで復旧する。
-          //
-          // ⚠️ **トークン検証より前に戻さないこと。** 前にあった頃は、
-          // メールアドレスを知っているだけで「登録済み＋二段階認証あり」を
-          // 引けた（#1255）。`otp_login_disabled` は固有の文言を持つため、
-          // 誰でも叩ける経路から返すとそのまま答えになる
-          // 方式は問わない。メールOTP を第2要素にしている利用者にも、
-          // 「メールのコードだけ」の経路は使わせない（#1261）
-          if (await getSecondFactorMethod(supabase, user.id)) {
-            throw new CredentialsSignInError(
-              AUTH_ERROR_CODE.OTP_LOGIN_DISABLED,
+          if (!totpCode) {
+            // ⚠️ ここへ到達する＝**パスワードは正しい**。
+            //
+            // ログインの試行回数を消費したままにすると、このあとの
+            // 「コード入力 → 打ち間違え → 再送 → もう一度打ち間違え」で
+            // 5回/30分をすぐ使い切る。メールOTP は遅延・迷惑メール振り分け・
+            // コピペミスがあるぶん、TOTP より到達しやすい。
+            //
+            // 解放してもパスワードを知らない相手には枠が減ったまま残る
+            // （:324 の成功時リセットと同じ理屈）。
+            //
+            // ⚠️ 逆に「コード未入力のときは消費しない」と書いてはいけない。
+            // 判定がパスワード照合より後ろへ動き、パスワードが違う
+            // リクエストが枠を一度も消費しなくなって**アカウント単位の
+            // 5回/30分が消滅する**。残るのは LOGIN_IP だけで、
+            // clientIp が unknown なら丸ごとスキップされる
+            await resetRateLimit(
+              supabase,
+              loginIdentifier,
+              RATE_LIMIT_ACTION.LOGIN,
             );
-          }
 
-          // メール認証チェック（#1247）
-          if (!user.is_verified) {
-            throw new CredentialsSignInError(
-              AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED,
-            );
-          }
+            if (secondFactorMethod === SECOND_FACTOR_METHOD.EMAIL_OTP) {
+              // ⚠️ 宛先は `user.email`。スコープにある `email` ローカル変数は
+              // ユーザー名ログインで空文字になり、全ユーザー名アカウントが
+              // `otp_codes.email = ''` の1行を共有してコードが混線する
+              const sendResult = await sendSecondFactorCode(
+                supabase,
+                user.id,
+                user.email,
+              );
 
-          // 検証済みOTPを削除（ワンタイム使用）
-          await supabase.from('otp_codes').delete().eq('id', verifiedOtp.id);
-        } else {
-          // パスワードログイン
-          if (!credentials?.password) {
-            throw new Error(AUTH_ERROR_MESSAGES.CREDENTIALS_REQUIRED);
-          }
-
-          const password = credentials.password as string;
-
-          // パスワード未設定（ソーシャルログインのみのユーザー）
-          if (!user.password_hash) {
-            // 上と同じ理由（#1256）。ここも照合相手が居ないので、
-            // 即 return すると「ソーシャル専用アカウントである」ことが
-            // 応答時間で分かる
-            await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
-            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
-          }
-
-          // パスワード照合
-          const isPasswordValid = await bcrypt.compare(
-            password,
-            user.password_hash,
-          );
-
-          if (!isPasswordValid) {
-            throw new Error(AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
-          }
-
-          // メール認証チェック（#1247）
-          //
-          // ⚠️ **パスワード照合の後に置く。** 以前は前にあり
-          // （「不要なbcrypt計算を回避」）、プレーンな `Error` を投げていた。
-          // Auth.js はプレーンな Error に `code` を載せないため、画面には
-          // 「メールアドレスまたはパスワードが正しくありません」としか出ず、
-          // **パスワードは正しいのに**理由が分からないまま詰んでいた。
-          //
-          // 理由を返すには、パスワードを知らない相手に返さないことが前提に
-          // なる。でないと「このメールは登録済み」が漏れてアカウント列挙を
-          // 許す。すぐ下の第2要素と同じ理屈で、照合の後ろへ移した。
-          //
-          // 代償として未認証ユーザーへの試行でも bcrypt が走るが、ここは
-          // `login` のレート制限を通過した後なので許容する
-          if (!user.is_verified) {
-            throw new CredentialsSignInError(
-              AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED,
-            );
-          }
-
-          // 第2要素。パスワードが正しいことを確かめてからでないと、
-          // 「二段階認証を使っているアカウントかどうか」を第三者に教えてしまう
-          const secondFactorMethod = await getSecondFactorMethod(
-            supabase,
-            user.id,
-          );
-
-          if (secondFactorMethod) {
-            const totpCode = (
-              credentials.totpCode as string | undefined
-            )?.trim();
-
-            if (!totpCode) {
-              // ⚠️ ここへ到達する＝**パスワードは正しい**。
-              //
-              // ログインの試行回数を消費したままにすると、このあとの
-              // 「コード入力 → 打ち間違え → 再送 → もう一度打ち間違え」で
-              // 5回/30分をすぐ使い切る。メールOTP は遅延・迷惑メール振り分け・
-              // コピペミスがあるぶん、TOTP より到達しやすい。
-              //
-              // 解放してもパスワードを知らない相手には枠が減ったまま残る
-              // （:324 の成功時リセットと同じ理屈）。
-              //
-              // ⚠️ 逆に「コード未入力のときは消費しない」と書いてはいけない。
-              // 判定がパスワード照合より後ろへ動き、パスワードが違う
-              // リクエストが枠を一度も消費しなくなって**アカウント単位の
-              // 5回/30分が消滅する**。残るのは LOGIN_IP だけで、
-              // clientIp が unknown なら丸ごとスキップされる
-              await resetRateLimit(supabase, loginIdentifier, OTP_ACTION.LOGIN);
-
-              if (secondFactorMethod === SECOND_FACTOR_METHOD.EMAIL_OTP) {
-                // ⚠️ 宛先は `user.email`。スコープにある `email` ローカル変数は
-                // ユーザー名ログインで空文字になり、全ユーザー名アカウントが
-                // `otp_codes.email = ''` の1行を共有してコードが混線する
-                const sendResult = await sendSecondFactorCode(
-                  supabase,
-                  user.id,
-                  user.email,
-                );
-
-                if (sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED) {
-                  // 「コードが違う」と区別する。打ち直しても直らない（#1148）
-                  throw new CredentialsSignInError(
-                    AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED,
-                  );
-                }
-
-                if (sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED) {
-                  // 1通も送っていない。コードを待たせず、
-                  // リカバリーコードへ誘導する
-                  throw new CredentialsSignInError(
-                    AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
-                  );
-                }
-
-                // SENT / THROTTLED。THROTTLED は直前に送ったコードがまだ生きている
+              if (sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED) {
+                // 「コードが違う」と区別する。打ち直しても直らない（#1148）
                 throw new CredentialsSignInError(
-                  AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
+                  AUTH_ERROR_CODE.SECOND_FACTOR_SEND_FAILED,
                 );
               }
 
-              // クライアントはこれを受けて認証コードの入力欄を出す
-              throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REQUIRED);
+              if (sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED) {
+                // 1通も送っていない。コードを待たせず、
+                // リカバリーコードへ誘導する
+                throw new CredentialsSignInError(
+                  AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+                );
+              }
+
+              // SENT / THROTTLED。THROTTLED は直前に送ったコードがまだ生きている
+              throw new CredentialsSignInError(
+                AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
+              );
             }
 
-            // コード自体の総当たりを止める。識別子はユーザーIDを使う
-            // （ここに到達するにはパスワードが要るため、第三者が他人の
-            // アカウントをロックすることはできない）
-            const totpLimitResult = await checkRateLimit(
-              supabase,
-              user.id,
-              RATE_LIMIT_ACTION.TOTP_VERIFY,
-              RATE_LIMIT_CONFIG.TOTP_VERIFY.maxAttempts,
-              RATE_LIMIT_CONFIG.TOTP_VERIFY.windowMinutes,
-            );
-
-            if (!totpLimitResult.allowed) {
-              throw new CredentialsSignInError(AUTH_ERROR_CODE.RATE_LIMITED);
-            }
-
-            const verifyResult = await verifySecondFactor(
-              supabase,
-              user.id,
-              totpCode,
-            );
-
-            if (verifyResult === SECOND_FACTOR_VERIFY_RESULT.REUSED) {
-              throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REUSED);
-            }
-
-            if (verifyResult !== SECOND_FACTOR_VERIFY_RESULT.SUCCESS) {
-              throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_INVALID);
-            }
-
-            await resetRateLimit(
-              supabase,
-              user.id,
-              RATE_LIMIT_ACTION.TOTP_VERIFY,
-            );
+            // クライアントはこれを受けて認証コードの入力欄を出す
+            throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REQUIRED);
           }
+
+          // コード自体の総当たりを止める。識別子はユーザーIDを使う
+          // （ここに到達するにはパスワードが要るため、第三者が他人の
+          // アカウントをロックすることはできない）
+          const totpLimitResult = await checkRateLimit(
+            supabase,
+            user.id,
+            RATE_LIMIT_ACTION.TOTP_VERIFY,
+            RATE_LIMIT_CONFIG.TOTP_VERIFY.maxAttempts,
+            RATE_LIMIT_CONFIG.TOTP_VERIFY.windowMinutes,
+          );
+
+          if (!totpLimitResult.allowed) {
+            throw new CredentialsSignInError(AUTH_ERROR_CODE.RATE_LIMITED);
+          }
+
+          const verifyResult = await verifySecondFactor(
+            supabase,
+            user.id,
+            totpCode,
+          );
+
+          if (verifyResult === SECOND_FACTOR_VERIFY_RESULT.REUSED) {
+            throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_REUSED);
+          }
+
+          if (verifyResult !== SECOND_FACTOR_VERIFY_RESULT.SUCCESS) {
+            throw new CredentialsSignInError(AUTH_ERROR_CODE.TOTP_INVALID);
+          }
+
+          await resetRateLimit(
+            supabase,
+            user.id,
+            RATE_LIMIT_ACTION.TOTP_VERIFY,
+          );
         }
 
         // 認証成功 — レート制限リセット。
         // 送信元単位（LOGIN_IP）はリセットしない。正当なログイン1回で、
         // 同じ送信元からの総当たり分までご破算になってしまうため
-        await resetRateLimit(supabase, loginIdentifier, OTP_ACTION.LOGIN);
+        await resetRateLimit(
+          supabase,
+          loginIdentifier,
+          RATE_LIMIT_ACTION.LOGIN,
+        );
 
         return {
           id: user.id,

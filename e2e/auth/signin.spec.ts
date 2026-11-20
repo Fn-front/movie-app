@@ -75,6 +75,31 @@ test.describe('ログイン認証フロー', () => {
       }),
     ).toBeVisible();
   });
+
+  /**
+   * ⛔ **メールOTPログインの導線を戻さない**（#1361）
+   *
+   * 受信箱を押さえられるとパスワードを知らなくてもログインできる経路で、
+   * パスワード再設定と二重に存在していた。消しても復旧手段は残る。
+   *
+   * ⚠️ 単体テストだけでは足りない。`LoginForm` から消しても、別の画面に
+   * 導線を足し直せば単体テストは緑のまま通る。
+   */
+  test('メールでログインの導線が無い', async ({ page }) => {
+    await page.goto('/auth/signin');
+
+    await expect(
+      page.getByRole('button', { name: 'ログイン', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'メールでログイン' }),
+    ).toHaveCount(0);
+
+    // 再設定の導線は残す。これが唯一の復旧経路になった
+    await expect(
+      page.getByRole('link', { name: 'パスワードをお忘れの方' }),
+    ).toBeVisible();
+  });
 });
 
 test.describe('認証済みユーザーのリダイレクト', () => {

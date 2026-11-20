@@ -162,30 +162,6 @@ export async function POST(request: Request) {
           { status: HTTP_STATUS.OK },
         );
       }
-    } else if (action === OTP_ACTION.LOGIN) {
-      // 該当メールのユーザーが存在すること
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', email)
-        .single();
-
-      // 理由は上の registration と同じ（#1164）
-      if (userError && userError.code !== SUPABASE_ERROR_CODE.NOT_FOUND) {
-        throw userError;
-      }
-
-      if (!user) {
-        // メール列挙防止: 存在しないメールでも成功レスポンス（遅延付き）
-        await randomDelay();
-        return NextResponse.json(
-          {
-            success: true,
-            message: OTP_SUCCESS_MESSAGES.CODE_SENT,
-          },
-          { status: HTTP_STATUS.OK },
-        );
-      }
     } else if (action !== OTP_ACTION.PASSWORD_CHANGE) {
       // ⚠️ 二重の歯止め。一次防御は zod（`PUBLIC_OTP_ACTIONS`）側にあり、
       // **現時点ではこの分岐に到達しない**（＝カバレッジにも出ない）。

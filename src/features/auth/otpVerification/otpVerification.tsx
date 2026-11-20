@@ -33,7 +33,7 @@ interface OtpVerificationProps {
    *
    * このコンポーネントは2通りの使われ方をする。
    *
-   * - **画面を置き換える**（`registerForm` / `otpLoginForm`）
+   * - **画面を置き換える**（`registerForm`）
    *   → ページの `<h1>` ごと差し替わるので、ここが `1` でないと
    *     **ページから h1 が消える**
    * - **ステップとして埋め込む**（`changePasswordForm`）

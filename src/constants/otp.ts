@@ -8,8 +8,6 @@
 export const OTP_ACTION = {
   /** 新規登録時のメール認証 */
   REGISTRATION: 'registration',
-  /** メールOTPログイン */
-  LOGIN: 'login',
   /** パスワード変更の本人確認 */
   PASSWORD_CHANGE: 'password_change',
 } as const;

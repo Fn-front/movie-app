@@ -242,26 +242,6 @@ describe('POST /api/auth/otp/send', () => {
     expect(sendOtpEmail).not.toHaveBeenCalled();
   });
 
-  it('login: ユーザーの読み取りに失敗したら、送っていないのに成功を返さない', async () => {
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          single: () => ({
-            data: null,
-            error: { code: '57P01', message: 'connection terminated' },
-          }),
-        }),
-      }),
-    });
-
-    const response = await POST(
-      createRequest({ email: 'test@example.com', action: 'login' }),
-    );
-
-    expect(response.status).toBe(500);
-    expect(sendOtpEmail).not.toHaveBeenCalled();
-  });
-
   /**
    * 再送クールダウンの読み取り失敗を「前回送信なし」に化かさない（#1164）
    *
@@ -351,25 +331,6 @@ describe('POST /api/auth/otp/send', () => {
     );
 
     expect(response.status).toBe(429);
-  });
-
-  it('login: 存在しないメールでも成功レスポンスを返す（メール列挙防止）', async () => {
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          single: () => ({ data: null, error: { code: 'PGRST116' } }),
-        }),
-      }),
-    });
-
-    const response = await POST(
-      createRequest({ email: 'nouser@example.com', action: 'login' }),
-    );
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.success).toBe(true);
-    expect(json.message).toBe('確認コードを送信しました。');
   });
 
   it('password_change: 未認証の場合401を返す', async () => {
@@ -498,26 +459,6 @@ describe('POST /api/auth/otp/send', () => {
     expect(mockCheckRateLimit).not.toHaveBeenCalled();
   });
 
-  it('login: 正常にOTPを送信できる', async () => {
-    // ユーザー検索
-    mockFrom.mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          single: () => ({ data: { id: 'user-1' }, error: null }),
-        }),
-      }),
-    });
-    setupOtpFlowMocks();
-
-    const response = await POST(
-      createRequest({ email: 'test@example.com', action: 'login' }),
-    );
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.success).toBe(true);
-  });
-
   it('OTP挿入時のDBエラーで500を返す', async () => {
     // ユーザー検索
     mockFrom.mockReturnValueOnce({
@@ -623,7 +564,7 @@ describe('POST /api/auth/otp/send', () => {
     });
 
     const response = await POST(
-      createRequest({ email: 'test@example.com', action: 'login' }),
+      createRequest({ email: 'test@example.com', action: 'registration' }),
     );
 
     expect(response.status).toBe(429);
@@ -647,7 +588,9 @@ describe('POST /api/auth/otp/send', () => {
     });
     setupOtpFlowMocks();
 
-    await POST(createRequest({ email: 'test@example.com', action: 'login' }));
+    await POST(
+      createRequest({ email: 'test@example.com', action: 'registration' }),
+    );
 
     expect(mockCheckRateLimit).toHaveBeenCalledWith(
       expect.anything(),
@@ -673,7 +616,7 @@ describe('POST /api/auth/otp/send', () => {
     });
 
     const response = await POST(
-      createRequest({ email: 'nobody@example.com', action: 'login' }),
+      createRequest({ email: 'nobody@example.com', action: 'registration' }),
     );
 
     expect(response.status).toBe(200);
@@ -729,7 +672,7 @@ describe('POST /api/auth/otp/send', () => {
     });
 
     const response = await POST(
-      createRequest({ email: 'test@example.com', action: 'login' }),
+      createRequest({ email: 'test@example.com', action: 'registration' }),
     );
 
     expect(response.status).toBe(429);
@@ -752,7 +695,7 @@ describe('POST /api/auth/otp/send', () => {
     const { sendOtpEmail } = await import('@/lib/otp');
 
     await POST(
-      createRequest({ email: '  TeSt@ExAmPle.COM  ', action: 'login' }),
+      createRequest({ email: '  TeSt@ExAmPle.COM  ', action: 'registration' }),
     );
 
     // レート制限の識別子が正規化済みであること（表記を変えても枠を分けられない）
@@ -767,7 +710,7 @@ describe('POST /api/auth/otp/send', () => {
     expect(sendOtpEmail).toHaveBeenCalledWith(
       'test@example.com',
       expect.any(String),
-      'login',
+      'registration',
     );
   });
 
@@ -786,7 +729,7 @@ describe('POST /api/auth/otp/send', () => {
 
       const response = await POST(
         createRequestFromIp(
-          { email: 'not-an-email', action: 'login' },
+          { email: 'not-an-email', action: 'registration' },
           '203.0.113.10',
         ),
       );
@@ -817,7 +760,7 @@ describe('POST /api/auth/otp/send', () => {
 
       // createRequest は転送ヘッダを付けないため getClientIp は 'unknown'
       const response = await POST(
-        createRequest({ email: 'user@example.com', action: 'login' }),
+        createRequest({ email: 'user@example.com', action: 'registration' }),
       );
 
       expect(response.status).toBe(200);
@@ -851,7 +794,7 @@ describe('POST /api/auth/otp/send', () => {
 
       const response = await POST(
         createRequestFromIp(
-          { email: 'unknown@example.com', action: 'login' },
+          { email: 'unknown@example.com', action: 'registration' },
           '203.0.113.11',
         ),
       );
@@ -884,7 +827,7 @@ describe('POST /api/auth/otp/send', () => {
     // createRequest は転送ヘッダを持たないため1層目はスキップされる
     it('バリデーションエラー時はレート制限を消費しない', async () => {
       const response = await POST(
-        createRequest({ email: 'not-an-email', action: 'login' }),
+        createRequest({ email: 'not-an-email', action: 'registration' }),
       );
 
       expect(response.status).toBe(400);
@@ -898,7 +841,7 @@ describe('POST /api/auth/otp/send', () => {
       });
 
       const response = await POST(
-        createRequest({ email: 'not-an-email', action: 'login' }),
+        createRequest({ email: 'not-an-email', action: 'registration' }),
       );
 
       expect(response.status).toBe(400);
@@ -935,7 +878,7 @@ describe('POST /api/auth/otp/send', () => {
       (sendOtpEmail as jest.Mock).mockResolvedValueOnce(false);
 
       return POST(
-        createRequest({ email: 'test@example.com', action: 'login' }),
+        createRequest({ email: 'test@example.com', action: 'registration' }),
       );
     };
 
@@ -996,7 +939,7 @@ describe('POST /api/auth/otp/send', () => {
       });
 
       const second = await POST(
-        createRequest({ email: 'test@example.com', action: 'login' }),
+        createRequest({ email: 'test@example.com', action: 'registration' }),
       );
 
       expect(second.status).toBe(429);
@@ -1066,7 +1009,7 @@ describe('POST /api/auth/otp/send', () => {
       });
 
       const response = await POST(
-        createRequest({ email: 'test@example.com', action: 'login' }),
+        createRequest({ email: 'test@example.com', action: 'registration' }),
       );
 
       expect(response.status).toBe(500);
@@ -1084,7 +1027,7 @@ describe('POST /api/auth/otp/send', () => {
       setupOtpFlowMocks();
 
       const response = await POST(
-        createRequest({ email: 'test@example.com', action: 'login' }),
+        createRequest({ email: 'test@example.com', action: 'registration' }),
       );
 
       expect(response.status).toBe(200);

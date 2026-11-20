@@ -829,15 +829,6 @@ interface LoginFormProps {
 
 ---
 
-### OtpLoginForm
-メールOTPログインフォーム
-
-**Props:**
-- `onSubmit`: (email: string) => Promise<void>
-- `onBackToLogin`: () => void
-
----
-
 ### OTPVerification
 OTP検証フォーム
 
@@ -845,7 +836,7 @@ OTP検証フォーム
 - `onSubmit`: (otp: string) => Promise<void>
 - `onResend`: () => Promise<void>
 - `email`: string
-- `action`: 'registration' | 'login' | 'password_change'
+- `action`: 'registration' | 'password_change'（`login` は #1361 で削除）
 
 ---
 

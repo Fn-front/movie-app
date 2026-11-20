@@ -45,7 +45,6 @@ export const CONTACT_EMAIL = 'support@movie-app-fn.com';
  */
 const OTP_PURPOSE_LABEL: Record<OtpEmailAction, string> = {
   [OTP_ACTION.REGISTRATION]: 'メールアドレスの確認',
-  [OTP_ACTION.LOGIN]: 'ログイン',
   [OTP_ACTION.PASSWORD_CHANGE]: 'パスワード変更',
   // 「ログイン」とは分ける。第2要素のコードは**パスワードが破られたときだけ**
   // 届くので、利用者が「自分で始めていないログイン」と区別できないと、

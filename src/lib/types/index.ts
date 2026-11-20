@@ -410,7 +410,7 @@ export interface Account {
 /**
  * OTPアクション種別
  */
-export type OtpActionType = 'registration' | 'login' | 'password_change';
+export type OtpActionType = 'registration' | 'password_change';
 
 /**
  * OTP検証コード型（DBレコード）

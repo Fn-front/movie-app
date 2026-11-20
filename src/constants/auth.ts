@@ -472,17 +472,6 @@ export const USER_ROLE = {
 export type UserRole = (typeof USER_ROLE)[keyof typeof USER_ROLE];
 
 /**
- * NextAuth credentials provider の loginMethod パラメータ
- *
- * パスワードログイン ('password') と OTP ログイン ('otp') を区別する。
- */
-export const LOGIN_METHOD = {
-  PASSWORD: 'password',
-  OTP: 'otp',
-} as const;
-export type LoginMethod = (typeof LOGIN_METHOD)[keyof typeof LOGIN_METHOD];
-
-/**
  * バリデーションメッセージ
  */
 export const VALIDATION_MESSAGES = {

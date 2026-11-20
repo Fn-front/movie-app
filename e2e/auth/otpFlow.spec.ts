@@ -168,29 +168,4 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
       ),
     ).toBeVisible();
   });
-
-  test('メールOTPログイン → 確認コード入力 → ログイン成功', async ({
-    page,
-  }) => {
-    await page.goto('/auth/signin');
-    await page.getByRole('button', { name: 'メールでログイン' }).click();
-
-    // メール入力 → ログインコード送信
-    await page.getByLabel('メールアドレス').fill(TEST_USER.email);
-    await page.getByRole('button', { name: 'ログインコードを送信' }).click();
-
-    await expect(
-      page.getByRole('heading', { name: '確認コードを入力' }),
-    ).toBeVisible();
-
-    // DBからログイン用OTPコードを取得して入力
-    const code = await getLatestOtpCode(TEST_USER.email, 'login');
-    expect(code).toBeTruthy();
-    await page.getByLabel('確認コード', { exact: true }).fill(code!);
-    await page.getByRole('button', { name: '確認コードを検証' }).click();
-
-    // ログイン成功でホームへ
-    await page.waitForURL('/');
-    await expect(page).toHaveURL('/');
-  });
 });

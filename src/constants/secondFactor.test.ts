@@ -27,9 +27,8 @@ describe('第2要素の定数', () => {
     expect(Object.values(OTP_ACTION)).not.toContain(TWO_FACTOR_OTP_ACTION);
   });
 
-  it('OTP_ACTION は公開ルートが受け付ける3つだけ', () => {
+  it('OTP_ACTION は公開ルートが受け付ける2つだけ', () => {
     expect(Object.values(OTP_ACTION).sort()).toEqual([
-      'login',
       'password_change',
       'registration',
     ]);

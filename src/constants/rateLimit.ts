@@ -25,6 +25,17 @@ export const RATE_LIMIT_ACTION = {
   CHANGE_PASSWORD: 'change_password',
   RECOMMENDATION_REFRESH: 'recommendation_refresh',
   WRITE_RECOMMENDATION_EVENTS: 'write_api_recommendation_events',
+  /**
+   * ログイン試行のアカウント×送信元単位の上限
+   *
+   * ⚠️ **値 `'login'` は変えない。** `rate_limits` に既存行があり、
+   * `delete_user_account` も `メール|IP` 形式の識別子で引いている。
+   *
+   * 以前は `OTP_ACTION.LOGIN` を流用していた（#1361 で分離）。メールOTP
+   * ログインを消しても**この制限は NextAuth の credentials が使い続ける**ので、
+   * OTP の用途と同じ定数を指していると一緒に消してしまう。
+   */
+  LOGIN: 'login',
   /** ログイン試行の送信元単位の上限（IPアドレス単位） */
   LOGIN_IP: 'login_ip',
   /**

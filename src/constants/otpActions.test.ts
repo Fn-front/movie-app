@@ -69,6 +69,19 @@ const INTERNAL_ACTIONS: string[] = [
   EMAIL_CHANGE_OTP_ACTION,
 ];
 
+/**
+ * TS からは消したが、DB の許可リストには残す用途
+ *
+ * ⚠️ **外すと、まだ有効な未使用コードを持つ利用者が壊れる。** `otp_codes` は
+ * 保持期間（`OTP_CODE_RETENTION_HOURS` = 48時間）を過ぎるまで行が残り、
+ * CHECK 制約から値を落とすと既存行を読む側ではなく**書く側**が 23514 で
+ * 落ちる。保持期間を過ぎてから別マイグレーションで外すこと（#1361）。
+ */
+const RETIRED_ACTIONS: string[] = [
+  // メールOTPログイン（パスワード不要の経路）。#1361 でコードから削除した
+  'login',
+];
+
 // --- Tests ---
 
 describe('chk_otp_action_type と定数の突き合わせ', () => {
@@ -85,9 +98,32 @@ describe('chk_otp_action_type と定数の突き合わせ', () => {
 
   it('DB 側に見覚えの無い用途が増えていない', () => {
     const allowed = readLatestOtpActions();
-    const known = [...PUBLIC_ACTIONS, ...INTERNAL_ACTIONS];
+    const known = [...PUBLIC_ACTIONS, ...INTERNAL_ACTIONS, ...RETIRED_ACTIONS];
 
     expect(allowed.filter((action) => !known.includes(action))).toEqual([]);
+  });
+
+  /**
+   * ⛔ **退役した用途は TS の定数へ戻さない。**
+   *
+   * DB に残しているのは既存行のためで、「まだ使ってよい」という意味ではない。
+   * `OTP_ACTION` へ戻すと `PUBLIC_OTP_ACTIONS` 経由で公開ルートが再び受理する。
+   */
+  it('退役した用途は TS の定数に無い', () => {
+    const current = [...PUBLIC_ACTIONS, ...INTERNAL_ACTIONS];
+
+    for (const action of RETIRED_ACTIONS) {
+      expect(current).not.toContain(action);
+    }
+  });
+
+  // 退役リストが空振りしていたら上の2件は何も守らない
+  it('退役した用途は DB 側にまだ残っている', () => {
+    const allowed = readLatestOtpActions();
+
+    for (const action of RETIRED_ACTIONS) {
+      expect(allowed).toContain(action);
+    }
   });
 
   /**

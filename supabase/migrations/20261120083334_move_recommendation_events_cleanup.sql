@@ -34,8 +34,15 @@
 --   - `p_limit` で1回の削除件数を絞れる（`statement_timeout = 8s` 対策）
 --   - `LIMIT p_limit` は NULL なら上限なしとして働くので分岐を書かない
 --
--- ⚠️ `ctid IN (...)` を使う理由も同じ。素朴な `id IN (SELECT id ... LIMIT n)` は
---   同時 UPDATE された行が EvalPlanQual の再検査を**通過して**しまう。
+-- ⚠️ `ctid IN (...)` も揃えるが、**理由は otp_codes とは違う**。
+--   あちらは検証のたびに `attempts` が UPDATE されるが、`recommendation_events`
+--   は `ON CONFLICT DO NOTHING` の INSERT しかなく UPDATE は1行も発行しない
+--   （`src/app/api/recommendations/events/route.ts`）。
+--
+--   それでも `ctid` を使うのは、利用者削除の `ON DELETE CASCADE` による
+--   同時 DELETE がありうるのと、`runBatchedDelete` が外側の WHERE に期限条件を
+--   再掲しない前提で `deleted < BATCH_SIZE` を打ち切り条件にしているため、
+--   選んだ行と消す行がずれる余地を残したくないから。
 
 DROP FUNCTION IF EXISTS public.delete_expired_recommendation_events(INTEGER);
 

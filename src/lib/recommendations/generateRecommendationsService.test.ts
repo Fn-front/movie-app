@@ -892,9 +892,12 @@ describe('generateRecommendationsService', () => {
 
       await executeGenerateRecommendationsCron(mockSupabase);
 
-      expect(mockRpc).not.toHaveBeenCalledWith(
+      // ⚠️ `not.toHaveBeenCalledWith(name, expect.anything())` にしない。
+      //    `expect.anything()` は `undefined` にマッチしないので、
+      //    **引数なしで呼び戻す変異を素通りさせる**（レビューで実測）。
+      //    呼ばれた RPC 名だけを見る
+      expect(mockRpc.mock.calls.map((call) => call[0])).not.toContain(
         'delete_expired_recommendation_events',
-        expect.anything(),
       );
     });
   });

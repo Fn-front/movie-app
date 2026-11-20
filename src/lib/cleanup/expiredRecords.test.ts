@@ -85,6 +85,39 @@ describe('CLEANUP_TARGETS', () => {
       RECOMMENDATION_EVENT_RETENTION_DAYS * 24,
     );
   });
+
+  /**
+   * ⚠️ **換算の式を固定するだけでは足りない。**
+   *
+   * 上のテストは両辺が同じ定数から出ているため、`90 → 1` と書き換えると
+   * **一緒に動いて素通りする**（レビューで実測）。90日は仕様そのもので、
+   * 短くすると利用者の行動ログを予定より早く消すことになる。
+   *
+   * ⚠️ このPR以降 `RECOMMENDATION_EVENT_RETENTION_DAYS` を読むのは
+   * 下の導出だけになった。値を守るのはここしかない。
+   */
+  it('保持期間は90日', () => {
+    expect(RECOMMENDATION_EVENT_RETENTION_DAYS).toBe(90);
+    expect(RECOMMENDATION_EVENT_RETENTION_HOURS).toBe(2160);
+  });
+
+  /**
+   * ⚠️ **RPC 名は typo しても気づけない。**
+   *
+   * 既存3つは失敗注入テストが RPC 名をキーにしているので**偶然**
+   * 固定されているが、新しい対象は `{ data: 0 }` でしか登場せず、
+   * モックのフォールバックが任意の名前を受け入れる。
+   * 本番では PGRST202 → `hasError` → 500 + 通知で気づけるが、
+   * 「気づけない状態を直す」PR で配線が無保護なのは弱い。
+   */
+  it('対象ごとに正しい RPC を呼ぶ', () => {
+    expect(CLEANUP_TARGETS.map((t) => t.rpc)).toEqual([
+      'delete_expired_rate_limits',
+      'delete_expired_otp_codes',
+      'delete_expired_password_reset_tokens',
+      'delete_expired_recommendation_events',
+    ]);
+  });
 });
 
 describe('cleanupExpiredRecords', () => {
@@ -139,7 +172,7 @@ describe('cleanupExpiredRecords', () => {
   /**
    * ⚠️ 時間予算は**全対象で共有する**。
    *
-   * 対象ごとに `Date.now() + TIME_BUDGET_MS` を作ると、3対象で
+   * 対象ごとに `Date.now() + TIME_BUDGET_MS` を作ると、4対象で
    * 3 × 35秒 = 105秒 になり `maxDuration`（60秒）を超えて強制終了される。
    * 削除件数のログすら残らない。
    *
@@ -173,7 +206,7 @@ describe('cleanupExpiredRecords', () => {
       // 共有していれば、1つ目が予算を使い切った時点で残りは1回も投げない。
       //
       // ⛔ 対象ごとに予算を作っていると、2つ目以降は deadline が未来になり
-      //    それぞれ2バッチずつ回る（3対象 × 2 = 6回）
+      //    それぞれ2バッチずつ回る（4対象 × 2 = 8回）
       expect(rpc).toHaveBeenCalledTimes(2);
       expect(result.completed).toBe(false);
       // 残りの対象も「消し残しあり」として報告される（黙って飛ばさない）
@@ -243,7 +276,7 @@ describe('cleanupExpiredRecords', () => {
 });
 
 describe('保持期間', () => {
-  it('3テーブルとも48時間で揃えている', () => {
+  it('認証まわりの3テーブルは48時間で揃えている', () => {
     // 別々の値にすると privacy の説明が増えるだけで意味が無い
     expect(RATE_LIMIT_RETENTION_HOURS).toBe(48);
     expect(OTP_CODE_RETENTION_HOURS).toBe(48);
@@ -253,7 +286,7 @@ describe('保持期間', () => {
   /**
    * 時間予算と maxDuration の関係を固定する（#1342）
    *
-   * 予算の判定はループ**末尾**にあるため、最後の1回の所要時間は予算の外側。
+   * 予算の判定はループ**先頭**にあるため、最後の1回の所要時間は予算の外側。
    * `statement_timeout = 8s` が縛るのは SQL の実行時間だけで、コネクション
    * 取得待ちやネットワークは含まない。
    *

@@ -1,8 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { RECOVERY_CODE_CONFIG } from '@/constants/totp';
-import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
+import {
+  SECOND_FACTOR_MESSAGES,
+  SECOND_FACTOR_METHOD,
+} from '@/constants/secondFactor';
 
 import { TwoFactorSettings } from './twoFactorSettings';
 
@@ -451,6 +454,136 @@ describe('TwoFactorSettings', () => {
       expect(
         await screen.findByText(/確認コードを送りました/),
       ).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * 設定中（メールOTP）の再送（#1285）
+   *
+   * これが無いと、コードの試行回数（5回）を使い切った利用者は
+   * 「やめる → メールで設定する」でやり直すしかない。60秒以内だと
+   * 再送間隔に当たって1通も届かないまま同じ画面に戻るため、
+   * 最大60秒のあいだ何をしても進めない窓ができていた。
+   */
+  describe('設定中（メールOTP）の再送', () => {
+    /** メールOTP の設定中画面まで進める */
+    const enterSetupEmail = async (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      clickUser: any,
+      setupResponse: Record<string, unknown> = {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: { method: 'email_otp', throttled: false },
+          message: SECOND_FACTOR_MESSAGES.CODE_SENT,
+        }),
+      },
+    ) => {
+      mockFetch
+        .mockResolvedValueOnce(statusResponse(false))
+        .mockResolvedValueOnce(setupResponse);
+
+      render(<TwoFactorSettings />);
+      await clickUser.click(
+        await screen.findByRole('button', { name: 'メールで設定する' }),
+      );
+    };
+
+    it('再送ボタンを出す', async () => {
+      await enterSetupEmail(user);
+
+      expect(
+        await screen.findByRole('button', { name: '確認コードを再送信する' }),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ サーバー側の再送間隔（60秒）より先に押させない。
+     * 押せても `THROTTLED` で1通も送られないので、押せる顔をしているほうが
+     * 不親切（この Issue の元の症状と同じ誤解を生む）。
+     */
+    it('カウントダウン中は押せず、残り秒数を出す', async () => {
+      await enterSetupEmail(user);
+
+      expect(
+        await screen.findByRole('button', { name: '確認コードを再送信する' }),
+      ).toBeDisabled();
+      expect(screen.getByText(/再送信できるまで \d+ 秒/)).toBeInTheDocument();
+    });
+
+    it('60秒経つと押せるようになり、setup を叩き直す', async () => {
+      jest.useFakeTimers();
+      const timerUser = userEvent.setup({
+        advanceTimers: jest.advanceTimersByTime,
+      });
+
+      try {
+        await enterSetupEmail(timerUser);
+        await screen.findByRole('button', { name: '確認コードを再送信する' });
+
+        await act(async () => {
+          jest.advanceTimersByTime(60_000);
+        });
+
+        const resendButton = screen.getByRole('button', {
+          name: '確認コードを再送信する',
+        });
+        expect(resendButton).toBeEnabled();
+        expect(screen.getByText('再送信できます。')).toBeInTheDocument();
+
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: { method: 'email_otp', throttled: false },
+            message: SECOND_FACTOR_MESSAGES.CODE_SENT,
+          }),
+        });
+
+        await timerUser.click(resendButton);
+
+        // ⚠️ send-challenge ではなく setup。あちらは confirmed_at が
+        // 立っていないと何も送れない
+        expect(mockFetch).toHaveBeenLastCalledWith(
+          '/api/user/totp/setup',
+          expect.objectContaining({
+            body: JSON.stringify({ method: 'email_otp' }),
+          }),
+        );
+        expect(
+          await screen.findByText(SECOND_FACTOR_MESSAGES.CODE_SENT),
+        ).toBeInTheDocument();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    /**
+     * ⚠️ ここがこの Issue の本体。
+     *
+     * 再送間隔に当たると `setup` は 200 を返すが**1通も送っていない**。
+     * 「確認コードを送りました」のままだと、利用者は届かないコードを
+     * 待ち続けるか、受信箱の古いコードを入れて弾かれ続ける。
+     */
+    it('再送間隔に当たったら「送信しました」と言わない', async () => {
+      await enterSetupEmail(user, {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: { method: 'email_otp', throttled: true },
+          message: SECOND_FACTOR_MESSAGES.CODE_ALREADY_SENT,
+        }),
+      });
+
+      expect(
+        await screen.findByText(SECOND_FACTOR_MESSAGES.CODE_ALREADY_SENT),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(SECOND_FACTOR_MESSAGES.CODE_SENT),
+      ).not.toBeInTheDocument();
     });
   });
 

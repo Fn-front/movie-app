@@ -154,12 +154,29 @@ export async function POST(request: Request) {
         );
       }
 
-      // SENT / THROTTLED。THROTTLED は直前に送ったコードがまだ生きている
+      // SENT / THROTTLED。THROTTLED は直前に送ったコードがまだ生きている。
+      //
+      // ⚠️ **どちらも 200 だが、文言を同じにしない（#1285）。**
+      //
+      // THROTTLED でも `CODE_SENT`（「確認コードをメールに送信しました。」）を
+      // 返していたため、再送間隔に当たった利用者には**新しいコードが届かない
+      // のに「送信しました」と出ていた**。受信箱の古いコードを試しても
+      // 試行回数を使い切っていれば弾かれ続けるので、利用者は自分の入力が
+      // 悪いと誤解する。
+      //
+      // 429 にはしない。直前のコードは**まだ有効**で、利用者がやることは
+      // 「受信箱を見る」であって「待つ」ではない。失敗として扱うと
+      // 設定画面が先へ進めなくなる。
+      const throttled =
+        setup.sendResult === SEND_SECOND_FACTOR_RESULT.THROTTLED;
+
       return NextResponse.json(
         {
           success: true,
-          data: { method },
-          message: SECOND_FACTOR_MESSAGES.CODE_SENT,
+          data: { method, throttled },
+          message: throttled
+            ? SECOND_FACTOR_MESSAGES.CODE_ALREADY_SENT
+            : SECOND_FACTOR_MESSAGES.CODE_SENT,
         },
         { status: HTTP_STATUS.OK },
       );

@@ -123,12 +123,12 @@ export async function POST(request: Request) {
 
     // 既存ユーザーチェック（is_verified も見る）。
     //
-    // `password_hash` も引く（#1325）。未検証ユーザーを上書きするとき、
-    // **同じパスワードでのやり直しかどうか**を判定するのに使う。
-    // 詳しくは下の `password_contested` のコメント
+    // `password_hash` と `password_contested` も引く（#1325）。未検証ユーザーを
+    // 上書きするとき、**同じパスワードでのやり直しかどうか**と
+    // **既に係争中か**を判定するのに使う。詳しくは下の `passwordContested`
     const { data: existingUser, error: existingUserError } = await supabase
       .from('users')
-      .select('id, is_verified, password_hash')
+      .select('id, is_verified, password_hash, password_contested')
       .eq('email', email)
       .single();
 
@@ -227,32 +227,41 @@ export async function POST(request: Request) {
     let userId: string;
 
     /**
-     * このリクエストが設定するパスワードは「係争中」か（#1325）
+     * このリクエストの後、`users.password_hash` は「係争中」か（#1325）
      *
      * 未検証の既存ユーザーを上書きするということは、**同じアドレスで
      * 2人目がパスワードを設定した**ということ。どちらが本人かはサーバーから
      * 区別できないので、安全側に倒して検証時に失効させる。
-     *
-     * ⚠️ 例外は「同じパスワードでのやり直し」。本人が登録し直しただけなら
-     * 失効させる理由がない。攻撃者は被害者のパスワードを知らないので、
-     * ここを通しても安全性は落ちない。
      */
     let passwordContested = false;
 
     if (existingUser) {
-      // ⚠️ 既存のパスワードと同じなら係争ではない（#1325）。
+      // ⚠️ **既に立っている印は決して下ろさない（OR で畳む）。**
       //
-      // 本人が「もう一度やり直そう」と同じパスワードで送り直すのは普通の
-      // 操作で、これを係争扱いにすると検証後にパスワードが消えてしまう。
+      // 「同じパスワードでのやり直しは係争にしない」という緩和だけだと、
+      // **攻撃者が同じリクエストを2回送るだけで保護が外れる**（レビューで実測）。
+      // 比較相手は「本人が設定したパスワード」ではなく**直前に誰かが設定した
+      // ハッシュ**なので、攻撃者の2回目は compare が true になってしまう。
       //
-      // 攻撃者は被害者のパスワードを知らないため、この抜け道は使えない
-      // （使えるなら最初から乗っ取る必要がない）。
+      //   1. 被害者が登録 → H(VictimPass)
+      //   2. 攻撃者が register{AttackerPass} → compare=false → 係争 true
+      //   3. 攻撃者が**同じリクエストをもう一度** → compare=true
+      //      → OR が無いと係争 false に戻り、#1325 が再成立する
+      //
+      // 下ろすのは「本人だと証明できたとき」＝昇格（`auth/otp/verify`）か
+      // パスワード再設定（`auth/password-reset/confirm`）の2箇所だけ。
+      //
+      // ⚠️ 緩和そのものは残す。本人が同じパスワードでやり直すのは普通の操作で、
+      // これを係争扱いにすると検証後にパスワードが消える。印がまだ立って
+      // いなければ（＝第三者が介在していなければ）このケースは通る。
       //
       // `password_hash` が NULL（OAuth のみ・#1302 で失効済み等）のときは
       // 比較対象が無いので係争扱いにする
-      passwordContested = existingUser.password_hash
-        ? !(await bcrypt.compare(password, existingUser.password_hash))
-        : true;
+      const samePassword = existingUser.password_hash
+        ? await bcrypt.compare(password, existingUser.password_hash)
+        : false;
+
+      passwordContested = existingUser.password_contested || !samePassword;
 
       // ⚠️ `name` は入力されたときだけ更新する（#1253）。
       //
@@ -266,6 +275,9 @@ export async function POST(request: Request) {
         .from('users')
         .update({
           password_hash: passwordHash,
+          // 印はパスワードと一緒に動く（#1325）。`auth/otp/verify` の
+          // REGISTRATION 分岐がこれを見て失効を決める
+          password_contested: passwordContested,
           ...(name ? { name } : {}),
         })
         .eq('id', existingUser.id)
@@ -316,10 +328,6 @@ export async function POST(request: Request) {
       code_hash: hashOtpCode(code, email),
       action_type: OTP_ACTION.REGISTRATION,
       expires_at: expiresAt.toISOString(),
-      // 他人の未検証登録を上書きして設定したパスワードには印を付ける（#1325）。
-      // `auth/otp/verify` が昇格と同時に失効させる。再送（`auth/otp/send`）は
-      // この値を引き継ぐので、本人が再送しても印は消えない
-      password_contested: passwordContested,
     });
 
     if (otpInsertError) {

@@ -223,6 +223,16 @@ export async function POST(request: Request) {
       .update({
         password_hash: passwordHash,
         password_changed_at: new Date().toISOString(),
+        // 係争の印を下ろす（#1325）。
+        //
+        // ここへ来られるのはメールボックスの所有を証明した本人だけで、
+        // そのうえで自分でパスワードを設定し直している。印を残すと
+        // 「過去に係争があった」という別の意味にずれて読めなくなる。
+        //
+        // ⚠️ 印を下ろせるのはここと `auth/otp/verify` の昇格の2箇所だけ。
+        // `register` 側では **OR で畳むだけ**にする（下ろすと、攻撃者が
+        // 同じリクエストを2回送るだけで保護が外れる）
+        password_contested: false,
       })
       // 権威は『実際に焼いた行』側。peeked.userId と同値だが意図が読みやすい
       .eq('id', consumed.userId);

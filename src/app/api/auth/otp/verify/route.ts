@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     // otp_codesテーブルから該当レコード検索（最新の未検証OTP）
     const { data: otpRecord, error: fetchError } = await supabase
       .from('otp_codes')
-      .select('id, code_hash, attempts, expires_at, password_contested')
+      .select('id, code_hash, attempts, expires_at')
       .eq('email', email)
       .eq('action_type', action)
       .is('verified_at', null)
@@ -221,18 +221,47 @@ export async function POST(request: Request) {
       // 採ったのと同じ判断で、安全側に倒して失効させる。
       //
       // ⛔ 無条件に消してはいけない。通常の新規登録が毎回パスワード無しで
-      //   終わる。消すのは `password_contested` が立っているときだけ ——
+      //   終わる。消すのは `users.password_contested` が立っているときだけ ——
       //   つまり**他人の未検証登録を上書きして設定された**パスワード。
       //   「同じパスワードでのやり直し」は register 側で除外済み。
-      const passwordContested = otpRecord.password_contested === true;
+      //
+      // ⚠️ 印は **`users`** に持つ。`otp_codes` に持たせると、
+      //   (1) 攻撃者が同じ register を2回送るだけで印の付いた行ごと
+      //       消えて印なしの行に置き換わる、
+      //   (2) 引き継ぎ元の行が無いと「係争なし」に倒れる（fail-open）、
+      //   の2つの穴が開く。どちらもレビューで実測した。
+      const { data: userRow, error: userLookupError } = await supabase
+        .from('users')
+        .select('password_contested')
+        .eq('email', email)
+        .single();
 
+      // 握りつぶさない。読めないまま昇格させると「消さない」側に倒れ、
+      // 保護が無言で外れる
+      if (userLookupError) {
+        throw userLookupError;
+      }
+
+      const passwordContested = userRow?.password_contested === true;
+
+      // ⚠️ `.eq('is_verified', false)` を付ける。LOGIN 分岐と同じ不変条件で、
+      //   **既に認証済みのユーザーのパスワードは絶対に消えない**。
+      //   これが無いと、別経路（メールでログイン）で先に昇格した後に古い
+      //   REGISTRATION のコードを投入して、認証済みユーザーの password_hash を
+      //   NULL にできてしまう。
       const { data: promotedUsers, error: updateError } = await supabase
         .from('users')
         .update({
           is_verified: true,
-          ...(passwordContested ? { password_hash: null } : {}),
+          ...(passwordContested
+            ? // 印も一緒に下ろす。ここで下ろさないと、再設定したパスワードが
+              // 次の昇格（起きないが）で消えうるし、印の意味が「過去に係争が
+              // あった」へずれて読めなくなる
+              { password_hash: null, password_contested: false }
+            : {}),
         })
         .eq('email', email)
+        .eq('is_verified', false)
         .select('id');
 
       if (updateError) {

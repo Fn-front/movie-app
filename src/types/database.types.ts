@@ -482,7 +482,6 @@ export type Database = {
           email: string;
           expires_at: string;
           id: string;
-          password_contested: boolean;
           verification_token_hash: string | null;
           verified_at: string | null;
         };
@@ -494,7 +493,6 @@ export type Database = {
           email: string;
           expires_at: string;
           id?: string;
-          password_contested?: boolean;
           verification_token_hash?: string | null;
           verified_at?: string | null;
         };
@@ -506,7 +504,6 @@ export type Database = {
           email?: string;
           expires_at?: string;
           id?: string;
-          password_contested?: boolean;
           verification_token_hash?: string | null;
           verified_at?: string | null;
         };
@@ -1044,6 +1041,7 @@ export type Database = {
           last_login_at: string | null;
           name: string | null;
           password_changed_at: string | null;
+          password_contested: boolean;
           password_hash: string | null;
           role: string;
           updated_at: string;
@@ -1059,6 +1057,7 @@ export type Database = {
           last_login_at?: string | null;
           name?: string | null;
           password_changed_at?: string | null;
+          password_contested?: boolean;
           password_hash?: string | null;
           role?: string;
           updated_at?: string;
@@ -1074,6 +1073,7 @@ export type Database = {
           last_login_at?: string | null;
           name?: string | null;
           password_changed_at?: string | null;
+          password_contested?: boolean;
           password_hash?: string | null;
           role?: string;
           updated_at?: string;

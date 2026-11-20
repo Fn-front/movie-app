@@ -1058,3 +1058,84 @@ describe('checkRateLimitLegacy の INSERT 失敗時（RPC未適用時のフォ�
     ).toEqual({ allowed: true });
   });
 });
+
+/**
+ * `chk_action_type`（DB の許可リスト）と `RATE_LIMIT_ACTION`（TS）の突き合わせ
+ *
+ * ⚠️ **TS に値を足すだけでは効かない。** DB 側の CHECK 制約に無い
+ * `action_type` を INSERT すると 23514 で落ち、`checkRateLimit` は
+ * `FAIL_CLOSED_ACTIONS` 以外を**通してしまう**（`undeterminedResult`）。
+ * つまり **その制限が無言で無効化される**。#546 / #659 で2度起きている。
+ *
+ * マイグレーションは DROP → ADD で**全量を再定義する**方式なので、
+ * 既存の値を1つ落としただけでも同じ事故になる。値を並べて固定するテストでは
+ * 新しく足した人を止められないため、定数とマイグレーションを実走査する。
+ */
+describe('chk_action_type と RATE_LIMIT_ACTION の突き合わせ', () => {
+  /** 最新の `chk_action_type` 定義（DROP → ADD の全量再定義）を読む */
+  const readLatestAllowList = (): string[] => {
+    const migrationsDir = path.join(process.cwd(), 'supabase', 'migrations');
+    const latest = fs
+      .readdirSync(migrationsDir)
+      .filter((file) => file.endsWith('.sql'))
+      .filter((file) =>
+        /ADD CONSTRAINT chk_action_type/.test(
+          fs.readFileSync(path.join(migrationsDir, file), 'utf8'),
+        ),
+      )
+      .sort()
+      .pop();
+
+    expect(latest).toBeDefined();
+
+    const sql = fs.readFileSync(path.join(migrationsDir, latest!), 'utf8');
+    const match = sql.match(/action_type IN \(([\s\S]*?)\n\s*\)/);
+
+    expect(match).not.toBeNull();
+
+    return [...match![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  };
+
+  it('TS のアクションはすべて DB の許可リストに入っている', () => {
+    const dbActions = readLatestAllowList();
+    const missing = Object.values(RATE_LIMIT_ACTION).filter(
+      (action) => !dbActions.includes(action),
+    );
+
+    // 落ちたら: 最新の chk_action_type マイグレーションに値を足す。
+    // ⚠️ 既存の値は1つも落とさず引き継ぐこと（全量再定義のため）
+    expect(missing).toEqual([]);
+  });
+
+  /**
+   * ⚠️ 逆向きは完全一致にできない。
+   *
+   * DB 側には TS に無い値が残っている:
+   *   - `login` は `auth.ts` がリテラルで使っている（定数化されていない）
+   *   - `registration` / `password_change` / `otp_resend` は過去に使っていた値。
+   *     既存行が残っている可能性があるため許可リストから外さない
+   *
+   * 想定外の値が増えていないかだけを見る。
+   */
+  it('DB 側の余剰は既知のものだけ', () => {
+    const dbActions = readLatestAllowList();
+    const tsActions: string[] = Object.values(RATE_LIMIT_ACTION);
+    const extra = dbActions.filter((action) => !tsActions.includes(action));
+
+    expect(extra.sort()).toEqual(
+      ['registration', 'login', 'password_change', 'otp_resend'].sort(),
+    );
+  });
+
+  /**
+   * ⚠️ 連投抑止は **`FAIL_CLOSED_ACTIONS` に入れない**（#979）。
+   *
+   * 数えているのは「通知を送った回数」だけ。判定できないときに拒否側へ
+   * 倒すと**アラートそのものが失われる**。重複して届くほうがまし。
+   */
+  it('CRON_FAILURE_NOTICE は FAIL_CLOSED_ACTIONS に入れない', () => {
+    expect([...FAIL_CLOSED_ACTIONS]).not.toContain(
+      RATE_LIMIT_ACTION.CRON_FAILURE_NOTICE,
+    );
+  });
+});

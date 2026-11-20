@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { HTTP_STATUS, ERROR_CODE, CRON_ERROR_MESSAGES } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
+import { notifyCronFailure } from '@/lib/cron/notifyCronFailure';
 import { handleCronError } from '@/helpers/cronError';
 import {
   createServiceRoleClient,
@@ -27,15 +28,31 @@ export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   try {
-    const authError = verifyCronAuth(request);
+    const authError = await verifyCronAuth(request, 'generate-recommendations');
     if (authError) return authError;
 
     const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
+
+    // ⚠️ ここも throw しないので catch の通知に乗らない（#979）。
+    //   service role キーの失効は Issue が挙げた主要シナリオの1つ
+    if (!supabase) {
+      await notifyCronFailure(null, {
+        cronName: 'generate-recommendations',
+        reason: 'service role クライアントを作れません（環境変数を確認）',
+      });
+      return dbConnectionErrorResponse();
+    }
 
     const result = await executeGenerateRecommendationsCron(supabase);
 
+    // ⚠️ **ここも throw しないので catch の通知に乗らない**（#979）。
+    //   500 を返しているのに通知だけ出ないのは一番紛らわしい
     if (result.type === 'error') {
+      await notifyCronFailure(supabase, {
+        cronName: 'generate-recommendations',
+        reason: result.error,
+      });
+
       return NextResponse.json(
         {
           success: false,

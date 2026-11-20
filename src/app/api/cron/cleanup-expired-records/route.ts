@@ -37,11 +37,20 @@ export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   try {
-    const authError = verifyCronAuth(request);
+    const authError = await verifyCronAuth(request, 'cleanup-expired-records');
     if (authError) return authError;
 
     const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
+
+    // ⚠️ ここも throw しないので catch の通知に乗らない（#979）。
+    //   service role キーの失効は Issue が挙げた主要シナリオの1つ
+    if (!supabase) {
+      await notifyCronFailure(null, {
+        cronName: 'cleanup-expired-records',
+        reason: 'service role クライアントを作れません（環境変数を確認）',
+      });
+      return dbConnectionErrorResponse();
+    }
 
     const { targets, completed, hasError } =
       await cleanupExpiredRecords(supabase);

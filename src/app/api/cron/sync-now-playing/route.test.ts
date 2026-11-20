@@ -12,6 +12,18 @@ import { GET, maxDuration, dynamic } from './route';
 
 // --- Mocks ---
 
+/**
+ * ⚠️ 通知をモックする（#979）。
+ *
+ * モックしないと `handleCronError` から **実際に Resend API を叩く**。
+ * jest は next/jest 経由で `.env.local` を読むので、`RESEND_API_KEY` と
+ * `CRON_ALERT_EMAIL` が入っている手元では**本物のメールが飛ぶ**。
+ */
+const mockNotifyCronFailure = jest.fn().mockResolvedValue(true);
+jest.mock('@/lib/cron/notifyCronFailure', () => ({
+  notifyCronFailure: (...args: unknown[]) => mockNotifyCronFailure(...args),
+}));
+
 const mockSyncNowPlaying = jest.fn();
 jest.mock('@/lib/sync/syncNowPlayingMovies', () => ({
   syncNowPlayingMovies: () => mockSyncNowPlaying(),
@@ -80,5 +92,11 @@ describe('GET /api/cron/sync-now-playing', () => {
     const response = await GET(createRequest('Bearer test-secret'));
 
     expect(response.status).toBe(500);
+
+    // ⚠️ 500 を返すだけで終わらせない（#979）。
+    //   通知の呼び出しを消したらここが落ちる
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ cronName: 'sync-now-playing' }),
+    );
   });
 });

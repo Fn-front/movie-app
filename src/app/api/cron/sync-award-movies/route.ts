@@ -21,6 +21,7 @@ import {
   AWARD_YEAR_RANGE,
 } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
+import { notifyCronFailure } from '@/lib/cron/notifyCronFailure';
 import { handleCronError } from '@/helpers/cronError';
 import {
   createServiceRoleClient,
@@ -33,11 +34,20 @@ export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   try {
-    const authError = verifyCronAuth(request);
+    const authError = await verifyCronAuth(request, 'sync-award-movies');
     if (authError) return authError;
 
     const supabase = createServiceRoleClient();
-    if (!supabase) return dbConnectionErrorResponse();
+
+    // ⚠️ ここも throw しないので catch の通知に乗らない（#979）。
+    //   service role キーの失効は Issue が挙げた主要シナリオの1つ
+    if (!supabase) {
+      await notifyCronFailure(null, {
+        cronName: 'sync-award-movies',
+        reason: 'service role クライアントを作れません（環境変数を確認）',
+      });
+      return dbConnectionErrorResponse();
+    }
 
     // 手動同期用: ?year=2025 で特定年のアカデミー賞を同期
     const yearParam = request.nextUrl.searchParams.get('year');

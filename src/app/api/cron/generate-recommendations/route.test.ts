@@ -18,6 +18,18 @@ import { GET } from './route';
 
 // --- Mocks ---
 
+/**
+ * ⚠️ 通知をモックする（#979）。
+ *
+ * モックしないと `handleCronError` から **実際に Resend API を叩く**。
+ * jest は next/jest 経由で `.env.local` を読むので、`RESEND_API_KEY` と
+ * `CRON_ALERT_EMAIL` が入っている手元では**本物のメールが飛ぶ**。
+ */
+const mockNotifyCronFailure = jest.fn().mockResolvedValue(true);
+jest.mock('@/lib/cron/notifyCronFailure', () => ({
+  notifyCronFailure: (...args: unknown[]) => mockNotifyCronFailure(...args),
+}));
+
 const mockFrom = jest.fn();
 const mockRpc = jest.fn();
 jest.mock('@/helpers/supabase', () => ({
@@ -180,6 +192,44 @@ describe('GET /api/cron/generate-recommendations', () => {
     const response = await GET(createRequest('Bearer test-secret'));
 
     expect(response.status).toBe(500);
+  });
+
+  /**
+   * ⚠️ **throw しない失敗経路**（#979）。
+   *
+   * `dbConnectionErrorResponse` も `result.type === 'error'` も catch へ
+   * 入らないので、`handleCronError` の通知に乗らない。500 を返しているのに
+   * 通知だけ出ないのが一番紛らわしいため、明示的に通知している。
+   */
+  describe('失敗通知（#979）', () => {
+    it('service role クライアントを作れなければ通知する', async () => {
+      const { createServiceRoleClient } = await import('@/helpers/supabase');
+      (createServiceRoleClient as jest.Mock).mockReturnValueOnce(null);
+
+      await GET(createRequest('Bearer test-secret'));
+
+      // 連投抑止に使う DB が無いので null を渡して送り切る
+      expect(mockNotifyCronFailure).toHaveBeenCalledWith(
+        null,
+        expect.objectContaining({ cronName: 'generate-recommendations' }),
+      );
+    });
+
+    it('ユーザー取得に失敗したら通知する', async () => {
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          is: () =>
+            Promise.resolve({ data: null, error: { message: 'db down' } }),
+        }),
+      });
+
+      const response = await GET(createRequest('Bearer test-secret'));
+
+      expect(response.status).toBe(500);
+      expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+        expect.objectContaining({ cronName: 'generate-recommendations' }),
+      );
+    });
   });
 
   it('正常にレコメンドを生成する', async () => {

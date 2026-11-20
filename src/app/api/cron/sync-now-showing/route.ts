@@ -18,7 +18,7 @@ export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   try {
-    const authError = verifyCronAuth(request);
+    const authError = await verifyCronAuth(request, 'sync-now-showing');
     if (authError) return authError;
 
     const result = await syncNowShowingMovies();

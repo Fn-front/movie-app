@@ -19,7 +19,7 @@ export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   try {
-    const authError = verifyCronAuth(request);
+    const authError = await verifyCronAuth(request, 'sync-watchlist-streaming');
     if (authError) return authError;
 
     const result = await syncWatchlistStreaming();

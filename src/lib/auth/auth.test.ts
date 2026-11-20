@@ -3167,6 +3167,39 @@ describe('jwt / session の第2要素（OAuth 経路）', () => {
     expect(mockSendSecondFactorCode).toHaveBeenCalled();
   });
 
+  /**
+   * ⚠️ 再送の宛先は `token.email` ではなく **`users` から引いた値**（#1287）。
+   *
+   * 検証側（`verifyEmailOtpCode`）も `users` を見ているので、トークンの値を
+   * 使うとメールアドレスを変更した利用者で送信先と照合先がずれ、
+   * **コードが永久に一致しなくなる**。
+   *
+   * もとは `toHaveBeenCalled()` しか見ておらず、どちらを使っても落ちなかった。
+   * トークンと `users` に**別のアドレス**を持たせて区別できるようにする。
+   */
+  it('再送の宛先は users から引いた値（トークンの値は使わない）', async () => {
+    // `users` は beforeEach のとおり owner@example.com。
+    // トークンだけ変更前の古いアドレスにしておく
+
+    await jwt({
+      token: {
+        id: USER_ID,
+        totpPending: true,
+        secondFactorMethod: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        // 変更前の古いアドレスがトークンに残っている状況
+        email: 'stale@example.com',
+      },
+      trigger: 'update',
+      session: { resend: true },
+    });
+
+    expect(mockSendSecondFactorCode).toHaveBeenCalledWith(
+      expect.anything(),
+      USER_ID,
+      'owner@example.com',
+    );
+  });
+
   it('update({ resend: true }) は totpPending を維持する', async () => {
     const token = await jwt({
       token: {

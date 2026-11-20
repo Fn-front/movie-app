@@ -1092,3 +1092,78 @@ describe('POST /api/auth/otp/send', () => {
     });
   });
 });
+
+/**
+ * 許可リストに無い action の二重の歯止め（#1287）
+ *
+ * 一次防御は zod（`PUBLIC_OTP_ACTIONS`）側にあるため、**通常の経路では
+ * この分岐に到達しない**（カバレッジにも出ない）。zod をすり抜けた場合に
+ * 何が起きるかを固定するため、スキーマだけを差し替えて直接叩く。
+ *
+ * この else が無かった頃は、許可リストに無い action がユーザー存在チェックも
+ * 宛先固定も通らないまま INSERT と sendOtpEmail まで素通りした。公開ルート
+ * なので未認証で到達でき、**任意のアドレスへ自サービス名義の確認コードを
+ * 送れる**（#641 の穴の再発）。
+ */
+describe('許可リストに無い action（zod をすり抜けた場合）', () => {
+  // ⚠️ `jest.isolateModules` を使う。この describe だけスキーマを緩めるので、
+  // 同じモジュールを共有すると他のテストの一次防御まで外れる
+  const postWithLooseSchema = async (body: Record<string, unknown>) => {
+    let response!: Response;
+
+    await jest.isolateModulesAsync(async () => {
+      jest.doMock('@/schema/otp', () => ({
+        otpSendSchema: {
+          safeParse: (b: unknown) => ({ success: true, data: b }),
+        },
+      }));
+
+      const { POST: loosePost } = await import('./route');
+      response = await loosePost(createRequest(body));
+    });
+
+    return response;
+  };
+
+  // ⚠️ この describe は最上位の `describe` の外にあるため、
+  // そちらの `beforeEach`（mockReset 一式）が効かない。自前で戻す
+  beforeEach(() => {
+    mockFrom.mockReset();
+    mockCheckRateLimit.mockReset();
+    (sendOtpEmail as jest.Mock).mockReset();
+  });
+
+  afterEach(() => {
+    jest.dontMock('@/schema/otp');
+  });
+
+  it('400を返し、メールを送らない', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+    const response = await postWithLooseSchema({
+      email: 'victim@example.com',
+      action: 'two_factor',
+    });
+
+    expect(response.status).toBe(400);
+    // ここが肝。1通も送らない
+    expect(sendOtpEmail).not.toHaveBeenCalled();
+  });
+
+  it('日次送信枠も消費しない', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+    await postWithLooseSchema({
+      email: 'victim@example.com',
+      action: 'two_factor',
+    });
+
+    expect(mockCheckRateLimit).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'otp_send_daily',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+});

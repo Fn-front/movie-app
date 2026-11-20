@@ -631,11 +631,15 @@ describe('startSecondFactorSetup（method=email_otp）', () => {
   });
 
   it('共有鍵もQRも作らず、コードを送る', async () => {
+    // ⚠️ `accountName`（認証アプリの表示名）と `email`（送信先）に
+    // **別の値**を渡す（#1287）。両方に EMAIL を渡していた頃は、実装が
+    // 引数を取り違えても落ちなかった。送信先は #641 のベクタそのものなので、
+    // どちらの値が使われたかを区別できる状態にしておく
     const result = await startSecondFactorSetup(
       createSupabaseMock(emptyDb()),
       USER_ID,
       SECOND_FACTOR_METHOD.EMAIL_OTP,
-      EMAIL,
+      'display-name@example.com',
       EMAIL,
     );
 
@@ -698,7 +702,11 @@ describe('startSecondFactorSetup（method=email_otp）', () => {
       EMAIL,
     );
 
+    // ⚠️ sendResult はモックの戻り値を読み返すだけで、保証にはならない（#1287）。
+    // 呼び出し側（route）へ素通しすることだけを固定している
     expect(result.sendResult).toBe('send_failed');
+    // こちらが本体。SEND_FAILED では otp_codes の行も消えているので、
+    // 設定途中の行を残すと「コード入力画面に来たのにコードが来ない」になる
     expect(db.totp).toBeNull();
   });
 
@@ -719,6 +727,8 @@ describe('startSecondFactorSetup（method=email_otp）', () => {
     );
 
     expect(result.sendResult).toBe('throttled');
+    // こちらが本体。直前に送ったコードがまだ生きているので、行を消すと
+    // 受信箱にあるコードを入力できなくなる
     expect(db.totp).not.toBeNull();
   });
 

@@ -409,17 +409,48 @@ describe('TwoFactorSettings', () => {
       );
     });
 
-    it('キーボードだけで方式を選べる', async () => {
-      mockFetch.mockResolvedValueOnce(statusResponse(false));
+    /**
+     * ⚠️ フォーカス位置だけを見ない（#1287）。
+     *
+     * もとは `user.tab()` 1回のあとフォーカスを確認するだけで、**Enter で
+     * 実行できるか**も**どの方式が送られるか**も見ていなかった。
+     * ボタンの `onClick` を外しても通る状態。
+     *
+     * 両方の選択肢に Tab で到達でき、Enter で**その方式の**設定が始まる
+     * ところまで固定する。
+     */
+    it('キーボードだけで方式を選べる（Tab で到達し Enter で始まる）', async () => {
+      mockFetch
+        .mockResolvedValueOnce(statusResponse(false))
+        .mockResolvedValueOnce(okResponse({ method: 'email_otp' }));
 
       render(<TwoFactorSettings />);
       await screen.findByRole('button', { name: '認証アプリで設定する' });
 
       await user.tab();
-
       expect(
         screen.getByRole('button', { name: '認証アプリで設定する' }),
       ).toHaveFocus();
+
+      // 2つ目の選択肢にも Tab だけで到達できる
+      await user.tab();
+      expect(
+        screen.getByRole('button', { name: 'メールで設定する' }),
+      ).toHaveFocus();
+
+      await user.keyboard('{Enter}');
+
+      // フォーカスしていた方式がそのまま送られる（取り違えない）
+      expect(mockFetch).toHaveBeenLastCalledWith(
+        '/api/user/totp/setup',
+        expect.objectContaining({
+          body: JSON.stringify({ method: 'email_otp' }),
+        }),
+      );
+      // 画面も進む。リクエストが飛ぶだけで止まっていないこと
+      expect(
+        await screen.findByText(/確認コードを送りました/),
+      ).toBeInTheDocument();
     });
   });
 

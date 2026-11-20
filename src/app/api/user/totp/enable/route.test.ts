@@ -79,6 +79,62 @@ describe('POST /api/user/totp/enable', () => {
     expect(json.data.recoveryCodes).toEqual(['ABCDE-FGHJK', 'MNPQR-STWXY']);
   });
 
+  /**
+   * ⚠️ 照合に使うアドレスは **`users` から引いた値**（#641 / #1287）。
+   *
+   * セッションの `user.email` やボディの値を使うと、第三者が宛先を差し替えて
+   * 自分のメールボックスに届いたコードで他人の二段階認証を有効化できる。
+   * ボディに紛れ込ませたアドレスが**使われないこと**も併せて固定する。
+   */
+  it('照合に使うアドレスは users から引いた値（セッションもボディも見ない）', async () => {
+    // ⚠️ セッションにも**別の**アドレスを持たせる。ここを空にしておくと
+    // `session.user.email ?? user.email` のような実装でも落ちない（実測）
+    mockGetAuthSession.mockResolvedValue({
+      user: { id: 'user-1', email: 'session@example.com' },
+    });
+
+    await POST(
+      createRequest({ code: '123456', email: 'attacker@example.com' }),
+    );
+
+    expect(mockConfirmSecondFactorSetup).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      '123456',
+      'user@example.com',
+    );
+  });
+
+  /**
+   * ⚠️ 読み取りに失敗したら 401 を返さない。
+   *
+   * axios のインターセプタが 401 を「未認証」と解釈して強制ログアウトへ
+   * 倒すため、DB障害で利用者が蹴り出される。
+   */
+  it('users の読み取りに失敗したら500（401にしない）', async () => {
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mockFrom.mockReturnValue({
+        select: () => ({
+          eq: () => ({
+            single: () =>
+              Promise.resolve({
+                data: null,
+                error: { message: 'connection terminated' },
+              }),
+          }),
+        }),
+      });
+
+      const response = await POST(createRequest({ code: '123456' }));
+
+      expect(response.status).toBe(500);
+      expect(mockConfirmSecondFactorSetup).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+    }
+  });
+
   it('成功時にレート制限をリセットする', async () => {
     await POST(createRequest({ code: '123456' }));
 

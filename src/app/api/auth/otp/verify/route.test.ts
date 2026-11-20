@@ -318,6 +318,230 @@ describe('POST /api/auth/otp/verify', () => {
   });
 
   /**
+   * REGISTRATION 分岐のパスワード失効（#1325）
+   *
+   * ⚠️ **#1361 でメールOTPログインを消したとき、この describe を巻き添えで
+   * 消した。** 旧 `LOGIN のメール認証` の中に入れ子になっていたためだが、
+   * 中身は**いまも生きている REGISTRATION 分岐**のテストだった。
+   * 変異テストで `passwordContested = false` を当てても誰も落ちない状態に
+   * なっていた（レビューで実測）。
+   */
+  /** OTP行の取得を積む */
+  const mockOtpFetch = (actionType: string) => {
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            is: () => ({
+              order: () => ({
+                limit: () => ({
+                  single: () => ({
+                    data: {
+                      id: 'otp-1',
+                      email: 'test@example.com',
+                      code_hash: hashOtpCode('123456', 'test@example.com'),
+                      action_type: actionType,
+                      attempts: 0,
+                      expires_at: futureDate,
+                      verified_at: null,
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+  };
+
+  describe('registration の失効（#1325）', () => {
+    /**
+     * REGISTRATION 分岐のモックを積む
+     *
+     * ⚠️ 印は **`users`** から読む。`otp_codes` に持たせると、
+     * 攻撃者が同じ register を2回送るだけで印の付いた行ごと消えて
+     * 印なしの行に置き換わる（レビューで実測した critical）。
+     *
+     * @param contested - `users.password_contested`
+     * @param promoted - UPDATE が行を返すか（`is_verified=false` に
+     *   当たったか）
+     * @returns UPDATE に渡された値と、`.eq()` の呼び出し履歴
+     */
+    const mockRegistrationBranch = (contested: boolean, promoted = true) => {
+      const captured: {
+        values?: Record<string, unknown>;
+        eq: unknown[][];
+      } = { eq: [] };
+
+      // users の印を読む
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            single: () => ({
+              data: { password_contested: contested },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      // users の UPDATE（eq 2つ + select）
+      mockFrom.mockReturnValueOnce({
+        update: (values: Record<string, unknown>) => {
+          captured.values = values;
+          const chain = {
+            eq: (column: string, value: unknown) => {
+              captured.eq.push([column, value]);
+              return captured.eq.length < 2
+                ? chain
+                : {
+                    select: () => ({
+                      data: promoted ? [{ id: 'user-1' }] : [],
+                      error: null,
+                    }),
+                  };
+            },
+          };
+          return chain;
+        },
+      });
+
+      // OTPレコード削除
+      mockFrom.mockReturnValueOnce({
+        delete: () => ({ eq: () => ({ data: null, error: null }) }),
+      });
+
+      return captured;
+    };
+
+    it('係争していなければ失効させない（通常の新規登録）', async () => {
+      // 利用者がいま登録フォームで決めたパスワード。消すと通常の
+      // 新規登録が毎回パスワード無しで終わる
+      mockOtpFetch('registration');
+      const captured = mockRegistrationBranch(false);
+
+      const response = await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'registration',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(captured.values).toEqual({ is_verified: true });
+      expect(mockSendPasswordInvalidatedEmail).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⚠️ ここが #1325 の本体。
+     *
+     * 第三者に上書きされたパスワードを載せたまま昇格させると、
+     * 攻撃者が `victim@example.com / AttackerPass` でログインできる。
+     */
+    it('係争中なら昇格と同時にパスワードを失効させる', async () => {
+      mockOtpFetch('registration');
+      const captured = mockRegistrationBranch(true);
+
+      const response = await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'registration',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(captured.values).toEqual({
+        is_verified: true,
+        password_hash: null,
+        // 印も一緒に下ろす。残すと意味が「過去に係争があった」へずれる
+        password_contested: false,
+      });
+    });
+
+    /**
+     * ⚠️ LOGIN 分岐と同じ不変条件（`.eq('is_verified', false)`）。
+     *
+     * これが無いと、別経路（メールでログイン）で先に昇格した後に古い
+     * REGISTRATION のコードを投入して、**認証済みユーザーの
+     * `password_hash` を NULL にできる**。
+     */
+    it('既に認証済みのユーザーには当たらない（is_verified=false で絞る）', async () => {
+      mockOtpFetch('registration');
+      const captured = mockRegistrationBranch(true);
+
+      await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'registration',
+        }),
+      );
+
+      expect(captured.eq).toEqual([
+        ['email', 'test@example.com'],
+        ['is_verified', false],
+      ]);
+    });
+
+    it('係争中に失効させたら通知する', async () => {
+      // 伝えないと、利用者は次のパスワードログインが弾かれる理由を
+      // 知るすべがない
+      mockOtpFetch('registration');
+      mockRegistrationBranch(true, true);
+
+      await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'registration',
+        }),
+      );
+
+      expect(mockSendPasswordInvalidatedEmail).toHaveBeenCalledWith(
+        'test@example.com',
+      );
+    });
+
+    it('更新対象が0件なら通知しない', async () => {
+      // パスワードは消えていないので、通知すると「無効にした」という嘘になる
+      mockOtpFetch('registration');
+      mockRegistrationBranch(true, false);
+
+      await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'registration',
+        }),
+      );
+
+      expect(mockSendPasswordInvalidatedEmail).not.toHaveBeenCalled();
+    });
+
+    it('通知の送信に失敗しても検証は成功する', async () => {
+      // 失効そのものは済んでおり保護は効いている。ここで 500 にすると
+      // 正しいコードを入れた利用者が行き止まりに入る
+      mockSendPasswordInvalidatedEmail.mockResolvedValue(false);
+      mockOtpFetch('registration');
+      mockRegistrationBranch(true, true);
+
+      const response = await POST(
+        createRequest({
+          email: 'test@example.com',
+          code: '123456',
+          action: 'registration',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+    });
+  });
+
+  /**
    * 上限ちょうどの回を「間違っています」で終わらせない（#1248）
    *
    * 入口の判定（`route.ts:136`）は**前回までの** attempts しか見ないため、

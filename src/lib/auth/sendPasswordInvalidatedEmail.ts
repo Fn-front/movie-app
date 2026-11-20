@@ -63,8 +63,11 @@ export async function sendPasswordInvalidatedEmail(
   try {
     const resend = new Resend(resendApiKey);
 
-    const settingsUrl = new URL(
-      ROUTES.SETTINGS,
+    // ⛔ **設定ページではない。** 受け取った時点でパスワードは NULL で
+    //    セッションも無く、設定ページは開けない（#1361 でメールOTP
+    //    ログインを消したため、ログインする手段が1つも無い）
+    const resetUrl = new URL(
+      ROUTES.FORGOT_PASSWORD,
       getRequiredEnv('NEXTAUTH_URL'),
     ).toString();
 
@@ -72,7 +75,7 @@ export async function sendPasswordInvalidatedEmail(
       from: `${APP_NAME} <${fromEmail}>`,
       to: email,
       subject: buildPasswordInvalidatedEmailSubject(),
-      text: buildPasswordInvalidatedEmailText(settingsUrl),
+      text: buildPasswordInvalidatedEmailText(resetUrl),
     });
 
     if (error) {

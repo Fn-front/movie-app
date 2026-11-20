@@ -244,11 +244,10 @@ export async function POST(request: Request) {
 
       const passwordContested = userRow?.password_contested === true;
 
-      // ⚠️ `.eq('is_verified', false)` を付ける。LOGIN 分岐と同じ不変条件で、
-      //   **既に認証済みのユーザーのパスワードは絶対に消えない**。
-      //   これが無いと、別経路（メールでログイン）で先に昇格した後に古い
-      //   REGISTRATION のコードを投入して、認証済みユーザーの password_hash を
-      //   NULL にできてしまう。
+      // ⚠️ `.eq('is_verified', false)` を付ける。これで**既に認証済みの
+      //   ユーザーのパスワードは絶対に消えない**。無いと、何らかの経路で
+      //   先に昇格した後に古い REGISTRATION のコードを投入して、
+      //   認証済みユーザーの password_hash を NULL にできてしまう。
       const { data: promotedUsers, error: updateError } = await supabase
         .from('users')
         .update({
@@ -274,7 +273,7 @@ export async function POST(request: Request) {
       //
       // ⚠️ 送信結果で検証を止めない。失効そのものは上で確定しており、
       // ここで 500 にすると正しいコードを入れた利用者が行き止まりに入る
-      // （#1258 と同種）。LOGIN 分岐と同じ扱い
+      // （#1258 と同種）
       if (passwordContested && promotedUsers && promotedUsers.length > 0) {
         await sendPasswordInvalidatedEmail(email);
       }

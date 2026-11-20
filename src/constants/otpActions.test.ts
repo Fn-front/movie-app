@@ -107,7 +107,11 @@ describe('chk_otp_action_type と定数の突き合わせ', () => {
    * ⛔ **退役した用途は TS の定数へ戻さない。**
    *
    * DB に残しているのは既存行のためで、「まだ使ってよい」という意味ではない。
-   * `OTP_ACTION` へ戻すと `PUBLIC_OTP_ACTIONS` 経由で公開ルートが再び受理する。
+   *
+   * ⚠️ `PUBLIC_OTP_ACTIONS` は明示配列なので、`OTP_ACTION` へ戻しただけでは
+   * 公開ルートは受理しない（#1261 でそう作り直した）。だが `OTP_ACTION` は
+   * 「公開ルートが受け付ける用途」という意味を持たせている場所なので、
+   * 戻すと次の人が許可リストへ足す判断材料になる。手前で止める。
    */
   it('退役した用途は TS の定数に無い', () => {
     const current = [...PUBLIC_ACTIONS, ...INTERNAL_ACTIONS];

@@ -8,8 +8,11 @@
  * DB-based レート制限のアクション種別（`rate_limits.action_type` の値）。
  *
  * ⚠️ これらは DB に保存されるキーのため、値を変更しないこと（変更すると既存の
- * レート制限レコードと不整合になる）。OTP 系（registration / login / password_change 等）は
+ * レート制限レコードと不整合になる）。OTP 系（registration / password_change）は
  * `OTP_ACTION`（otp.ts）を参照。
+ *
+ * ⚠️ `'login'` は OTP の用途ではなく**ログイン試行**のカウンタ。#1361 で
+ * メールOTPログインを消したときに `RATE_LIMIT_ACTION.LOGIN` へ分離した。
  */
 export const RATE_LIMIT_ACTION = {
   WRITE_FAVORITES: 'write_api_favorites',
@@ -158,7 +161,6 @@ export const RATE_LIMIT_ACTION = {
 export type RateLimitActionType =
   | (typeof RATE_LIMIT_ACTION)[keyof typeof RATE_LIMIT_ACTION]
   | 'registration'
-  | 'login'
   | 'password_change';
 
 /**
@@ -182,7 +184,7 @@ export type RateLimitActionType =
 export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
   // ログイン試行
   RATE_LIMIT_ACTION.LOGIN_IP,
-  'login',
+  RATE_LIMIT_ACTION.LOGIN,
   // 未認証の認証系ルートの送信元単位（LOGIN_IP と同じ扱い）
   RATE_LIMIT_ACTION.REGISTER_IP,
   RATE_LIMIT_ACTION.OTP_SEND_IP,
@@ -316,7 +318,7 @@ export const RATE_LIMIT_CONFIG = {
   /**
    * OTP送信の送信元単位の上限。
    *
-   * 再送（60秒間隔）と新規登録・ログインの両方が通るため REGISTER_IP より
+   * 再送（60秒間隔）と新規登録・パスワード変更の両方が通るため REGISTER_IP より
    * 厚くする。メールボックス側の保護は OTP_SEND_DAILY（メール単位）が担う。
    *
    * ⚠️ 窓は **15分**。上の REGISTER_IP / PASSWORD_RESET_REQUEST_IP（60分）
@@ -324,7 +326,7 @@ export const RATE_LIMIT_CONFIG = {
    * OTP_VERIFY_IP（50回/15分）に合わせる。
    *
    * 一度 60分 で入れたが、**超過したときのロックも60分**になるため、
-   * NAT や社内プロキシの共有IPだと OTPログインが1時間止まる。しかも相方の
+   * NAT や社内プロキシの共有IPだと確認コードの送信が1時間止まる。しかも相方の
    * OTP_VERIFY_IP が持続レートで 200回/時なのに対し送信側だけ 40回/時となり、
    * 同じジャーニーの中で送信側が5倍きついという歪みがあった。
    *
@@ -337,7 +339,7 @@ export const RATE_LIMIT_CONFIG = {
   OTP_SEND_IP: { maxAttempts: 40, windowMinutes: 15 },
   PASSWORD_RESET_REQUEST_IP: { maxAttempts: 20, windowMinutes: 60 },
   /**
-   * OTP検証は登録・ログインの途中で**打ち間違いの再入力**が起きるため、
+   * OTP検証は登録・パスワード変更の途中で**打ち間違いの再入力**が起きるため、
    * 上の2つより厚く取る。メール単位の上限（OTP_CONFIG.VERIFY_RATE_LIMIT）が
    * 本来の総当たり対策で、ここは行数の天井が目的。
    */

@@ -100,14 +100,6 @@ export const AUTH_ERROR_MESSAGES = {
   TOTP_UNAVAILABLE:
     '認証コードを確認できませんでした。時間をおいてもう一度お試しください。',
   /**
-   * 二段階認証が有効なためメールOTP単独ログインを使えない。
-   *
-   * メールのコードだけでログインできる経路は「第2要素」ではなく
-   * 「パスワードの代替」であり、残すと二段階認証の意味が無くなる（#642）。
-   */
-  OTP_LOGIN_DISABLED_BY_TOTP:
-    '二段階認証が有効なため、メールでのログインは利用できません。パスワードと認証コードでログインしてください。',
-  /**
    * ログアウトに失敗した。
    *
    * `logout()` は次のいずれかで遷移を始めずに rethrow する。
@@ -297,8 +289,6 @@ export const AUTH_ERROR_CODE = {
   TOTP_INVALID: 'totp_invalid',
   /** 第2要素の使い回し */
   TOTP_REUSED: 'totp_reused',
-  /** 二段階認証が有効なためメールOTP単独ログインを使えない */
-  OTP_LOGIN_DISABLED: 'otp_login_disabled',
   /**
    * メール認証が未完了（#1247）
    *

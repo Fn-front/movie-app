@@ -1437,6 +1437,54 @@ describe('authorize のレート制限', () => {
     );
   });
 
+  /**
+   * ⛔ **成功時にリセットするのは `login` だけ。**
+   *
+   * `login_ip` まで戻すと、正当なログイン1回で**同じ送信元からの総当たり分が
+   * ご破算になる**。NAT や社内プロキシの裏に攻撃者がいる状況で、本人が
+   * ログインするたびに相手の試行枠が回復してしまう。
+   *
+   * ⚠️ 識別子ではなくカウンタ名まで見る。`login_ip` へ差し替える変異が
+   * 生き残っていた（レビューで実測）。
+   */
+  it('成功時は login だけリセットし、login_ip は戻さない', async () => {
+    allowAll();
+    const password = 'Password1';
+    setResolver(({ table }) =>
+      table === 'users'
+        ? {
+            data: {
+              id: 'u1',
+              email: 'user@example.com',
+              name: 'User',
+              avatar_url: null,
+              role: 'user',
+              is_verified: true,
+              password_hash: bcrypt.hashSync(password, 4),
+              password_changed_at: null,
+            },
+            error: null,
+          }
+        : { data: null, error: null },
+    );
+
+    await credentialsProvider.authorize(
+      { email: 'user@example.com', password },
+      makeRequest('203.0.113.1'),
+    );
+
+    expect(mockResetRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'user@example.com|203.0.113.1',
+      'login',
+    );
+    expect(mockResetRateLimit).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'login_ip',
+    );
+  });
+
   it('アカウント単位の識別子に送信元IPを含める', async () => {
     allowAll();
 
@@ -1670,18 +1718,12 @@ describe('authorize のタイミング均一化', () => {
     expect(compareSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('OTP経路では回さない（照合するパスワードが無い）', async () => {
+  // パスワードが来ていなければ照合しようがない。ダミー照合も回さない
+  it('パスワードが来ていなければ回さない', async () => {
     setResolver(() => ({ data: null, error: { code: 'PGRST116' } }));
 
     await credentialsProvider
-      .authorize(
-        {
-          email: 'nobody@example.com',
-          loginMethod: 'otp',
-          verificationToken: 'token',
-        },
-        makeRequest(),
-      )
+      .authorize({ email: 'nobody@example.com' }, makeRequest())
       .catch(() => undefined);
 
     expect(compareSpy).not.toHaveBeenCalled();
@@ -2471,25 +2513,80 @@ describe('authorize のユーザー名ログイン', () => {
     );
   });
 
-  // メールを持たないアカウントに確認コードは送れない。
-  // この経路を残すと「コードを受け取れないのに検証を求める」状態になる
-  it('ユーザー名でのOTPログインは拒否する', async () => {
-    setResolver(({ table }) =>
-      table === 'users'
-        ? { data: { id: 'u1', username: 'K7M2QXPT9WFN', is_verified: true } }
-        : { data: null, error: null },
+  /**
+   * ⛔ **メールOTPログインを復活させない**（#1361）
+   *
+   * 消したのは「パスワード無しで、メールの確認コードだけ通る経路」。
+   * 画面から導線を消すだけでは足りず、`authorize` が
+   * `verificationToken` / `loginMethod` を受け付けたままだと
+   * **API を直接叩けば入れる**。
+   *
+   * ⚠️ `rejects.toThrow()` だけでは弱い。投げた理由が
+   * 「パスワードが無い」なのか「トークンを見た結果」なのか区別できないので、
+   * `credentials` 必須のエラーであることまで見る。
+   */
+  it.each([
+    ['メール', 'otp-login@example.com'],
+    ['ユーザー名', 'K7M2-QXPT-9WFN'],
+  ])(
+    '%sと verificationToken だけでは authorize を通さない',
+    async (_label, identifier) => {
+      setResolver(({ table }) =>
+        table === 'users'
+          ? {
+              data: {
+                id: 'u1',
+                email: 'otp-login@example.com',
+                username: 'K7M2QXPT9WFN',
+                is_verified: true,
+                // ⚠️ パスワードを持つアカウントにする。持たないと
+                //    「ソーシャル専用だから落ちた」とも読めてしまう
+                password_hash: bcrypt.hashSync('Password1', 4),
+                role: 'user',
+                password_changed_at: null,
+                avatar_url: null,
+                name: 'User',
+              },
+              error: null,
+            }
+          : { data: null, error: null },
+      );
+
+      const error = await credentialsProvider
+        .authorize(
+          {
+            email: identifier,
+            loginMethod: 'otp',
+            verificationToken: 'token',
+          },
+          makeRequest(),
+        )
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(
+        AUTH_ERROR_MESSAGES.CREDENTIALS_REQUIRED,
+      );
+    },
+  );
+
+  // 渡せる口そのものを残さない。読まない値を宣言したままだと、
+  // 次の人が「使っているのかも」と判断を保留する
+  it('credentials に verificationToken / loginMethod を宣言しない', () => {
+    const declared = Object.keys(
+      (
+        credentialsProvider as unknown as {
+          credentials: Record<string, unknown>;
+        }
+      ).credentials,
     );
 
-    await expect(
-      credentialsProvider.authorize(
-        {
-          email: 'K7M2-QXPT-9WFN',
-          loginMethod: 'otp',
-          verificationToken: 'token',
-        },
-        makeRequest(),
-      ),
-    ).rejects.toThrow();
+    expect(declared).not.toContain('verificationToken');
+    expect(declared).not.toContain('loginMethod');
+    // 消しすぎていないことも見る
+    expect(declared).toEqual(
+      expect.arrayContaining(['email', 'password', 'totpCode']),
+    );
   });
 });
 

@@ -1109,6 +1109,25 @@ describe('許可リストに無い action（zod をすり抜けた場合）', ()
       expect.anything(),
     );
   });
+
+  /**
+   * ⛔ **退役した `login` も同じ扱い**（#1361）
+   *
+   * `otp_codes.chk_otp_action_type` には既存行のために `'login'` を残して
+   * いるため、**DB は受け取れてしまう**。一次防御の zod を緩めたときに
+   * ここで止まることを固定する。
+   */
+  it('退役した login も400で止め、送らない', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+    const response = await postWithLooseSchema({
+      email: 'victim@example.com',
+      action: 'login',
+    });
+
+    expect(response.status).toBe(400);
+    expect(sendOtpEmail).not.toHaveBeenCalled();
+  });
 });
 
 /**

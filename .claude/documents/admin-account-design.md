@@ -147,7 +147,7 @@ chk_user_role          CHECK (role IN ('user','admin'))   ← admin は既に許
   - レート制限・`bcrypt.compare`・TOTP 検証は**既存の共有パスをそのまま通す**
 - [x] `loginSchema` をユーザー名入力に対応
 - [x] 単体テスト（`auth.test.ts` に追加）
-- [x] **完了条件**: アカウントを作る手段がまだ無いため、既存4経路（メール+パスワード / メールOTP / Google / GitHub）が無傷であることを E2E で確認できる
+- [x] **完了条件**: アカウントを作る手段がまだ無いため、既存3経路（メール+パスワード / Google / GitHub。メールOTP は #1361 で削除）が無傷であることを E2E で確認できる
 
 ### PR 2 — admin 認可の土台
 

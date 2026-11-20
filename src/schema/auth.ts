@@ -141,18 +141,6 @@ export const registerApiSchema = z.object({
 });
 
 /**
- * OTPログイン用メールアドレスのバリデーションスキーマ
- */
-export const otpLoginEmailSchema = z.object({
-  email: normalizedEmailSchema,
-});
-
-/**
- * OTPログイン用メールアドレスの型
- */
-export type OtpLoginEmailFormData = z.infer<typeof otpLoginEmailSchema>;
-
-/**
  * パスワード変更フォームのバリデーションスキーマを生成する
  *
  * @param requireCurrentPassword - 現在のパスワードを要求するか。

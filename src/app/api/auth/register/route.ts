@@ -217,11 +217,11 @@ export async function POST(request: Request) {
     //
     // ⚠️ これが効くのは「第三者が先・本人が後」の順だけ。逆順（本人が未検証で
     // 放置 → 第三者が上書き）では、本人がここを通らずに昇格できてしまい、
-    // 第三者の password_hash が残る。塞げているのは**「メールでログイン」
-    // 経由の昇格だけ**で、`auth/otp/verify` の LOGIN 分岐が昇格と同時に
-    // 失効させている（#1302）。
+    // 第三者の password_hash が残る。
     //
-    // ⚠️ **REGISTRATION 経由の昇格も #1325 で塞いだ。** 下の
+    // ⚠️ **その逆順を塞いでいるのは #1325 の `password_contested`。**
+    // #1302 では「メールでログイン」経由の昇格でも失効させていたが、
+    // その経路は #1361 で削除したので、**いまは下の仕組みが唯一の防御**。
     // `password_contested` を参照。この分岐で発行したコードには印が付き、
     // `auth/otp/verify` が昇格と同時に `password_hash` を失効させる。
     let userId: string;
@@ -344,8 +344,8 @@ export async function POST(request: Request) {
       //
       // ⚠️ OTP の削除条件は、上で挿入したときと**同じに絞る**（#1267）。
       // `email` だけで消すと全 action_type の、しかも**検証済みの行まで**
-      // 巻き込む。消えると OTP ログイン（`auth.ts`）とパスワード変更
-      // （`user/change-password`）が参照している検証済みトークンが失われる。
+      // 巻き込む。消えるとパスワード変更（`user/change-password`）が
+      // 参照している検証済みトークンが失われる。
       // このリクエストが作ったのは registration の未検証行だけ
       await supabase
         .from('otp_codes')

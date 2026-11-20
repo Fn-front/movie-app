@@ -74,7 +74,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
-        verificationToken: { label: 'Verification Token', type: 'text' },
         totpCode: { label: 'TOTP Code', type: 'text' },
       },
       async authorize(credentials, request) {

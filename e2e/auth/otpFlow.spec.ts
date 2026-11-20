@@ -7,7 +7,9 @@
  *
  * カバーするストーリー:
  * 1. 新規登録 → 確認コード入力 → 認証完了 → サインイン
- * 2. メールOTPログイン → 確認コード入力 → ログイン成功
+ *
+ * ⚠️ メールOTPログイン（パスワード不要の経路）は #1361 で削除した。
+ *   導線が復活していないことは `signin.spec.ts` が見ている。
  */
 
 import { test, expect } from '@playwright/test';
@@ -15,13 +17,11 @@ import { test, expect } from '@playwright/test';
 import {
   getLatestOtpCode,
   cleanupAuthUser,
-  cleanupOtpCodes,
   cleanupRateLimit,
   expireOtpCode,
   maxOutOtpAttempts,
 } from '../helpers/api';
 import { runScopedEmail } from '../helpers/runScope';
-import { TEST_USER } from '../helpers/testUser';
 
 // 同一メールのOTPを直列で扱うためシリアル実行
 test.describe.configure({ mode: 'serial' });
@@ -51,20 +51,15 @@ test.describe('確認コード(OTP)フロー（未認証）', () => {
     await cleanupAuthUser(maxAttemptsEmail);
   });
 
-  // OTP系レート制限（送信日次上限・検証/ログインのバースト上限など）はCI/ローカルの
+  // OTP系レート制限（送信日次上限・検証のバースト上限など）はCI/ローカルの
   // 繰り返し実行で rate_limits に累積し、送信/検証が弾かれてflakyになる。各テスト前に
   // 使用メールの関連レート制限をすべてリセットする（cleanupRateLimit の既定挙動）。
-  // さらに login フローは「前回送信から60秒」の再送クールダウン（otp_codes.created_at 基準）
-  // があり、前回実行で残った login OTP が近接実行を弾く。TEST_USER の login OTP も削除して
-  // クールダウンをリセットする。
   test.beforeEach(async () => {
     await Promise.all([
-      cleanupRateLimit(TEST_USER.email),
       cleanupRateLimit(signupEmail),
       cleanupRateLimit(errEmail),
       cleanupRateLimit(expiredEmail),
       cleanupRateLimit(maxAttemptsEmail),
-      cleanupOtpCodes(TEST_USER.email, 'login'),
     ]);
   });
 

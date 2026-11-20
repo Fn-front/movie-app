@@ -661,24 +661,20 @@ import GitHub from 'next-auth/providers/github'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
-    // メール+パスワード認証 / メールOTPログイン（統一）
+    // メール+パスワード認証（#1361 でメールOTPログインの分岐を削除）
     Credentials({
       name: 'Credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
-        loginMethod: { label: 'Login Method', type: 'text' }, // "password" | "otp"
+        totpCode: { label: 'TOTP Code', type: 'text' },
       },
       async authorize(credentials) {
-        const loginMethod = credentials.loginMethod || 'password'
-
-        if (loginMethod === 'otp') {
-          // OTPログイン: otp_codesのverified_atを確認
-          // 検証済みOTPが存在すればユーザー情報を返却
-        } else {
-          // パスワードログイン: パスワードハッシュ照合
-          // is_verified チェック必須
-        }
+        // ⛔ `loginMethod` / `verificationToken` は受け付けない。
+        //    宣言を残すと「API を直接叩けばパスワード無しで入れるのでは」と
+        //    読めてしまう（`auth.test.ts` が宣言の不在まで検査する）
+        // パスワードログイン: パスワードハッシュ照合
+        // is_verified チェック必須（照合の後）
 
         return {
           id: user.id,

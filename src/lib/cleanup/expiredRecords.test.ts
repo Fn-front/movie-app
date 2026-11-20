@@ -108,6 +108,47 @@ describe('cleanupExpiredRecords', () => {
     }
   });
 
+  /**
+   * ⚠️ 時間予算は**全対象で共有する**。
+   *
+   * 対象ごとに `Date.now() + TIME_BUDGET_MS` を作ると、3対象で
+   * 3 × 35秒 = 105秒 になり `maxDuration`（60秒）を超えて強制終了される。
+   * 削除件数のログすら残らない。
+   *
+   * 下の `expiredRecords.test.ts` の不変条件テストは「1対象ぶんの予算 <
+   * maxDuration」しか見ないので、**共有しているかどうかは別に固定する**。
+   * 実際、予算を対象ごとに持たせる変異を当てても他のテストは全部緑だった。
+   *
+   * 既に予算を使い切った状態から始めれば、共有していれば**1対象目で
+   * 打ち切られて残りは1バッチずつで終わる**。対象ごとに持たせていると
+   * どの対象も最初の判定を通過してしまう。
+   */
+  it('時間予算を全対象で共有する（対象ごとに持たせない）', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      // 常に満杯を返す＝0件に到達しないので、止まるのは時間予算だけ
+      const rpc = jest.fn().mockResolvedValue({ data: 500, error: null });
+      const supabase = { rpc } as unknown as SupabaseClient;
+
+      // 予算を使い切った状態を作る
+      const nowSpy = jest.spyOn(Date, 'now');
+      // 1回目（deadline の算出）だけ 0、以降はずっと予算超過
+      nowSpy.mockReturnValueOnce(0).mockReturnValue(TIME_BUDGET_MS + 1);
+
+      const result = await cleanupExpiredRecords(supabase);
+
+      // 共有していれば、どの対象も1バッチで打ち切られる（3対象 = 3回）。
+      // 対象ごとに予算を作っていると、2つ目以降は deadline が未来になり
+      // MAX_BATCHES（200）まで回るのでここが跳ね上がる
+      expect(rpc).toHaveBeenCalledTimes(CLEANUP_TARGETS.length);
+      expect(result.completed).toBe(false);
+
+      nowSpy.mockRestore();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('失敗した対象の削除件数は0で、成功した対象の件数は残る', async () => {
     const error = jest.spyOn(console, 'error').mockImplementation(() => {});
     try {

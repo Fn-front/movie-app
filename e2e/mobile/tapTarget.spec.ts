@@ -105,9 +105,31 @@ async function expectNoTargetSizeViolations(
     results.incomplete,
     `${label} でタップ領域が要確認:\n${format(results.incomplete)}`,
   ).toEqual([]);
+
+  // ⚠️ violations / incomplete が空なだけでは「問題が無い」と断定できない。
+  //   描画を待てていない（＝評価対象がほとんど無い）ときも空になるため、
+  //   **緑でも何も見ていない**状態と区別がつかない（#1071 / #1333）。
+  //   `passes` を含めた評価ノード総数に下限を置いて、それを構造的に塞ぐ。
+  const evaluatedNodes = [
+    ...results.passes,
+    ...results.violations,
+    ...results.incomplete,
+  ].reduce((total, rule) => total + rule.nodes.length, 0);
+
+  expect(
+    evaluatedNodes,
+    `${label} で評価対象がほとんど無い（${evaluatedNodes}ノード）。` +
+      '描画を待てていない可能性が高い',
+  ).toBeGreaterThan(10);
 }
 
 test.describe('スマホ幅のタップ領域', () => {
+  // ⚠️ 既定の 30 秒だと足りない（#1333）。下の網羅テストは
+  // h1(最大20s) + networkidle(最大10s) + スケルトン不在(最大20s) + axe を
+  // 直列に待つ。遅いランナーで予算を使い切ると、#1333 と同じ形で
+  // 「テストごとタイムアウト」に戻る
+  test.describe.configure({ timeout: 90000 });
+
   /**
    * ⓘ は 18×18 で、**唯一 WCAG 2.5.8 AA の 24px を下回って**いた（#1017）。
    * ラベル等による拡張も無いので、要素そのものを広げるしかない。
@@ -386,10 +408,21 @@ test.describe('スマホ幅のタップ領域', () => {
 
       // 本当に見たいのは通信の収束ではなく**中身が描かれたこと**。
       // スケルトンが消えていれば、データ取得は終わって本体が描かれている。
-      // 一覧を持たないページ（/settings）はそもそも0件なので即座に通る
-      await expect(
-        page.locator('[class*="c_movie_tile_skeleton"]'),
-      ).toHaveCount(0, { timeout: 20000 });
+      //
+      // ⚠️ `c_movie_tile_skeleton` で絞らないこと。あれは一覧タイル専用で、
+      //   `/settings` には**1つも出ない**ため、あのパスではゲートが no-op になる。
+      //   設定画面は汎用の `Skeleton`（`c_skeleton`）を使っており、
+      //   axe が見るべき checkbox / radio はその後ろにある
+      //   （notificationSettings.tsx:80 / streamingNoticeSettings.tsx:98）。
+      //   基底クラスで見れば4パスを同じ基準で待てる
+      //   （`MovieTileSkeleton` も内部で `Skeleton` を使うため一覧側も捕まる）。
+      await expect(page.locator('[class*="c_skeleton"]')).toHaveCount(0, {
+        timeout: 20000,
+      });
+      // `Loading` を使うページ（dismissedMoviesList）も同様に待つ
+      await expect(page.locator('[class*="c_loading"]')).toHaveCount(0, {
+        timeout: 20000,
+      });
 
       await expectNoTargetSizeViolations(page, `${path}（SP幅）`);
     });

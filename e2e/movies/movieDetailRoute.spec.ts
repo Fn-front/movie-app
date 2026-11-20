@@ -83,6 +83,10 @@ test.describe('映画詳細のURL化', () => {
     // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
     //   背後が `aria-hidden` になるため role では拾えず、element not found で
     //   必ず落ちる（置き換えて実測した）。CSS ロケータのまま先頭を見る
+    // 一瞬の重複は許容しつつ、**恒常的な重複は落とす**。
+    // toHaveCount はリトライされるため、strict mode violation
+    // （リトライされず数ミリ秒の重複でも落ちる）より正確な canary になる
+    await expect(page.locator('h1')).toHaveCount(1);
     await expect(page.locator('h1').first()).toHaveText('公開中の映画');
 
     // 増えてよいのは history.pushState の1つだけ。`Modal` が `useOverlayHistory` で
@@ -117,6 +121,10 @@ test.describe('映画詳細のURL化', () => {
     // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
     //   背後が `aria-hidden` になるため role では拾えず、element not found で
     //   必ず落ちる（置き換えて実測した）。CSS ロケータのまま先頭を見る
+    // 一瞬の重複は許容しつつ、**恒常的な重複は落とす**。
+    // toHaveCount はリトライされるため、strict mode violation
+    // （リトライされず数ミリ秒の重複でも落ちる）より正確な canary になる
+    await expect(page.locator('h1')).toHaveCount(1);
     await expect(page.locator('h1').first()).toHaveText('公開中の映画');
   });
 
@@ -556,6 +564,10 @@ test.describe('映画詳細のURL化', () => {
       // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
       //   背後が `aria-hidden` になるため role では拾えず、element not found で
       //   必ず落ちる（置き換えて実測した）。CSS ロケータのまま先頭を見る
+      // 一瞬の重複は許容しつつ、**恒常的な重複は落とす**。
+      // toHaveCount はリトライされるため、strict mode violation
+      // （リトライされず数ミリ秒の重複でも落ちる）より正確な canary になる
+      await expect(page.locator('h1')).toHaveCount(1);
       await expect(page.locator('h1').first()).toHaveText('公開中の映画');
     });
 

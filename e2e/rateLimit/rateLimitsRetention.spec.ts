@@ -100,7 +100,17 @@ test.describe('レート制限レコードの保持期間', () => {
       });
     }
 
-    await runDeleteExpiredRateLimits(RETENTION_HOURS);
+    // ⚠️ 上限を**必ず渡す**こと（#1342）。本番の CRON は常に `p_limit` 付きで
+    //   呼ぶため、省くとこの spec は**本番が通らない経路**を検証することになる。
+    //   削除条件は SQL の1箇所にしかないが、将来 ctid 版だけを壊されたときに
+    //   ここが気づけるようにしておく。
+    //
+    //   ⚠️ `LIMIT` が掛かるのは**テーブル全体の候補集合**であって、仕込んだ
+    //   4行ではない。`ORDER BY` も無いので、候補が 500 件を超えると仕込んだ行が
+    //   選ばれる保証がなくなり、下の削除アサーションが false negative で落ちる。
+    //   つまりこの spec が成立するのは**期限切れ候補が 500 件未満の間だけ**。
+    //   #1330 が想定した「掃除が追いつかず滞留している」状態では前提が崩れる。
+    await runDeleteExpiredRateLimits(RETENTION_HOURS, 500);
   });
 
   test.afterAll(async () => {

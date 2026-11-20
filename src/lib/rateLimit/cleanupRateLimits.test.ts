@@ -9,7 +9,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
 
-import { deleteExpiredRateLimits } from './cleanupRateLimits';
+import {
+  deleteExpiredRateLimits,
+  MAX_BATCHES,
+  TIME_BUDGET_MS,
+} from './cleanupRateLimits';
 
 /** 実装と揃える（#1330）。ここがずれるとループのテストが無意味になる */
 const DELETE_BATCH_SIZE = 500;
@@ -33,7 +37,11 @@ const createSupabaseSequence = (counts: number[]) =>
 
 describe('deleteExpiredRateLimits', () => {
   it('保持期間と1回あたりの上限を引数にして RPC を呼ぶ', async () => {
-    const supabase = createSupabase({ data: 5 });
+    // ⚠️ `createSupabase({ data: 5 })` のような固定モックを使わないこと。
+    // 停止条件は `deleted === 0`（#1342）なので、常に 5 を返すと
+    // MAX_BATCHES まで 200 回まわる。引数を1つ見たいだけのテストが
+    // RPC を200回呼び、未モックの警告が CI のログに残る
+    const supabase = createSupabaseSequence([5, 0]);
 
     await deleteExpiredRateLimits(supabase);
 
@@ -51,13 +59,24 @@ describe('deleteExpiredRateLimits', () => {
    * ロールバックして1行も消えず、翌日さらに悪化して自力で回復しない。
    */
   describe('分割削除', () => {
-    it('上限未満が返ったら1回で終わる', async () => {
-      const supabase = createSupabaseSequence([DELETE_BATCH_SIZE - 1]);
+    /**
+     * ⚠️ 「上限未満＝消し切った」で止めてはいけない（#1342）
+     *
+     * 外側 DELETE の WHERE は `ctid IN (...)` だけで期限条件を再掲して
+     * いないため、サブクエリ確定後に候補行が同時更新・削除されると
+     * `ROW_COUNT` が上限未満になる。そこで止めると**滞留が残っていても
+     * 終了する**（静かな打ち切り）。0件を見るまで続ける。
+     */
+    it('上限未満でも0件になるまで続ける', async () => {
+      const supabase = createSupabaseSequence([DELETE_BATCH_SIZE - 1, 3, 0]);
 
-      const total = await deleteExpiredRateLimits(supabase);
+      const { deleted: total, completed } =
+        await deleteExpiredRateLimits(supabase);
 
-      expect(total).toBe(DELETE_BATCH_SIZE - 1);
-      expect(supabase.rpc).toHaveBeenCalledTimes(1);
+      // 499 で止めていたら 1回・499件になる
+      expect(supabase.rpc).toHaveBeenCalledTimes(3);
+      expect(total).toBe(DELETE_BATCH_SIZE - 1 + 3);
+      expect(completed).toBe(true);
     });
 
     it('上限ちょうどが返る限り繰り返し、合計を返す', async () => {
@@ -65,18 +84,22 @@ describe('deleteExpiredRateLimits', () => {
         DELETE_BATCH_SIZE,
         DELETE_BATCH_SIZE,
         7,
+        0,
       ]);
 
-      const total = await deleteExpiredRateLimits(supabase);
+      const { deleted: total } = await deleteExpiredRateLimits(supabase);
 
-      expect(supabase.rpc).toHaveBeenCalledTimes(3);
+      expect(supabase.rpc).toHaveBeenCalledTimes(4);
       expect(total).toBe(DELETE_BATCH_SIZE * 2 + 7);
     });
 
     it('0件なら繰り返さない', async () => {
       const supabase = createSupabaseSequence([0]);
 
-      await expect(deleteExpiredRateLimits(supabase)).resolves.toBe(0);
+      await expect(deleteExpiredRateLimits(supabase)).resolves.toEqual({
+        deleted: 0,
+        completed: true,
+      });
       expect(supabase.rpc).toHaveBeenCalledTimes(1);
     });
 
@@ -95,10 +118,13 @@ describe('deleteExpiredRateLimits', () => {
           .mockResolvedValue({ data: DELETE_BATCH_SIZE, error: null }),
       } as unknown as SupabaseClient;
 
-      const total = await deleteExpiredRateLimits(supabase);
+      const { deleted: total, completed } =
+        await deleteExpiredRateLimits(supabase);
 
       expect(supabase.rpc).toHaveBeenCalledTimes(1);
       expect(total).toBe(DELETE_BATCH_SIZE);
+      // 呼び出し側が観測できるよう completed:false を返す（#1342）
+      expect(completed).toBe(false);
       // 黙って打ち切らない。消し残し＝保持期間を超えた個人データが残っている
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining('消し残しがあります'),
@@ -107,10 +133,73 @@ describe('deleteExpiredRateLimits', () => {
       nowSpy.mockRestore();
       warn.mockRestore();
     });
+
+    it('反復上限に達したら打ち切り、警告を出す', async () => {
+      // 時間予算と MAX_BATCHES の二重で有界にしている。時間予算だけだと
+      // 1回あたりが極端に速い場合に回り続けるので、回数側も固定する。
+      //
+      // ⚠️ このテストが無いと MAX_BATCHES 到達のカバレッジは
+      // 「他のテストが固定モックで偶然200回まわっている」だけになり、
+      // そのテストを直した瞬間に静かに落ちる（レビューで実測）
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // 常に1件返す＝0件に到達しないので回数側でしか止まらない
+      const supabase = {
+        rpc: jest.fn().mockResolvedValue({ data: 1, error: null }),
+      } as unknown as SupabaseClient;
+
+      const { deleted: total, completed } =
+        await deleteExpiredRateLimits(supabase);
+
+      expect(supabase.rpc).toHaveBeenCalledTimes(MAX_BATCHES);
+      expect(total).toBe(MAX_BATCHES);
+      expect(completed).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(`反復上限（${MAX_BATCHES}回）`),
+      );
+
+      warn.mockRestore();
+    });
   });
 
   it('保持期間は48時間（最長ウィンドウの24時間では足りない）', () => {
     expect(RATE_LIMIT_RETENTION_HOURS).toBe(48);
+  });
+
+  /**
+   * 時間予算と maxDuration の関係を固定する（#1342）
+   *
+   * 予算の判定はループ**末尾**にあるため、最後の1回の所要時間は予算の外側。
+   * `statement_timeout = 8s` が縛るのは SQL の実行時間だけで、コネクション
+   * 取得待ちやネットワークは含まない。
+   *
+   * 値だけを固定するテストでは、後から予算を伸ばした人を止められない。
+   * 両者の関係そのものを不変条件にする。
+   */
+  it('時間予算は maxDuration から statement_timeout ぶんの余裕を残している', () => {
+    // 8s は authenticator ロールの statement_timeout（本番で実測）
+    const STATEMENT_TIMEOUT_MS = 8_000;
+
+    // ⚠️ route.ts を import しない。jsdom 環境には `Request` が無く
+    //   `ReferenceError: Request is not defined` でスイートごと落ちる。
+    //   ソースから読み取って、値がずれたらここが落ちるようにする
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path') as typeof import('path');
+
+    const routeSource = fs.readFileSync(
+      path.join(__dirname, '../../app/api/cron/cleanup-rate-limits/route.ts'),
+      'utf8',
+    );
+    const matched = routeSource.match(/export const maxDuration = (\d+)/);
+
+    // 読み取りが壊れていたら気づけるようにする（undefined なら常に通る比較を避ける）
+    expect(matched).not.toBeNull();
+
+    const maxDurationMs = Number(matched![1]) * 1000;
+
+    expect(TIME_BUDGET_MS + STATEMENT_TIMEOUT_MS).toBeLessThan(maxDurationMs);
   });
 
   /**
@@ -193,15 +282,30 @@ describe('deleteExpiredRateLimits', () => {
   });
 
   it('削除件数を返す', async () => {
-    const supabase = createSupabase({ data: 42 });
+    // 0 を返すまで続ける仕様（#1342）なので、2回目に 0 を返させる
+    const supabase = createSupabaseSequence([42, 0]);
 
-    await expect(deleteExpiredRateLimits(supabase)).resolves.toBe(42);
+    await expect(deleteExpiredRateLimits(supabase)).resolves.toEqual({
+      deleted: 42,
+      completed: true,
+    });
   });
 
-  it('件数が数値でなければ0として扱う', async () => {
+  it('件数が数値で返らなければ completed:false で止める', async () => {
+    // 「消し切った」側に倒すと、滞留があるのに完走として記録される。
+    // `completed` は消し残しを観測するための値なので、分からないときは false
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const supabase = createSupabase({ data: null });
 
-    await expect(deleteExpiredRateLimits(supabase)).resolves.toBe(0);
+    await expect(deleteExpiredRateLimits(supabase)).resolves.toEqual({
+      deleted: 0,
+      completed: false,
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('削除件数が数値で返りませんでした'),
+    );
+
+    warn.mockRestore();
   });
 
   it('RPC が失敗したら throw する（握りつぶさない）', async () => {

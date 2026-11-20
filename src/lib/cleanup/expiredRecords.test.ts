@@ -14,7 +14,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { OTP_CODE_RETENTION_HOURS } from '@/constants/otp';
 import { PASSWORD_RESET_TOKEN_RETENTION_HOURS } from '@/constants/passwordReset';
 import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
-import { RECOMMENDATION_EVENT_RETENTION_HOURS } from '@/constants/recommendations';
+import {
+  RECOMMENDATION_EVENT_RETENTION_DAYS,
+  RECOMMENDATION_EVENT_RETENTION_HOURS,
+} from '@/constants/recommendations';
 
 import {
   CLEANUP_TARGETS,
@@ -64,6 +67,22 @@ describe('CLEANUP_TARGETS', () => {
     );
     expect(byName.recommendation_events.retentionHours).toBe(
       RECOMMENDATION_EVENT_RETENTION_HOURS,
+    );
+  });
+
+  /**
+   * ⚠️ 上のテストだけではトートロジーになる（#1355）。
+   *
+   * 定数どうしを突き合わせているので、`RECOMMENDATION_EVENT_RETENTION_HOURS`
+   * の**導出そのものが壊れても両辺が同じ値になって通る**（実測。`* 24` を
+   * 消しても1件も落ちなかった）。換算をここで独立に組み直す。
+   *
+   * 仕様は日数（90日）。RPC の引数は時間で揃えてあるので、ここがずれると
+   * **保持期間が 1/24 になって、まだ消してはいけない行動ログが消える**。
+   */
+  it('保持時間は保持日数から正しく換算されている', () => {
+    expect(RECOMMENDATION_EVENT_RETENTION_HOURS).toBe(
+      RECOMMENDATION_EVENT_RETENTION_DAYS * 24,
     );
   });
 });

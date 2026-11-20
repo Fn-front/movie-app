@@ -18,7 +18,7 @@ import { OTP_CONFIG } from '@/constants/otp';
 import { RATE_LIMIT_ACTION, RATE_LIMIT_CONFIG } from '@/constants/rateLimit';
 import { TWO_FACTOR_OTP_ACTION } from '@/constants/secondFactor';
 import { generateOtpCode, hashOtpCode, sendOtpEmail } from '@/lib/otp';
-import { checkRateLimit, releaseRateLimit } from '@/lib/rateLimit/rateLimit';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { normalizeEmail } from '@/utils/email';
 
 import { toDbError } from './dbError';
@@ -146,14 +146,29 @@ export async function sendSecondFactorCode(
   const sent = await sendOtpEmail(normalizedEmail, code, TWO_FACTOR_OTP_ACTION);
 
   if (!sent) {
-    // ⚠️ 枠と行の両方を戻す。
+    // ⚠️ **枠は戻さない。** 行だけ消す。
     //
-    // 現行の `/api/auth/otp/send` は送信失敗でも枠を戻さない（#1260）。
-    // 登録確認なら「後で再試行」で済むが、第2要素では**ログインそのものが
-    // できなくなる** — 数回の失敗で1時間締め出される。
+    // この経路を押さえているのは2つしかない。
     //
-    // 行も消す。残すと、届いていないコードの再送が再送間隔に阻まれる。
-    await releaseRateLimit(supabase, userId, RATE_LIMIT_ACTION.TWO_FACTOR_SEND);
+    //   | 防御 | 根拠 |
+    //   |---|---|
+    //   | `TWO_FACTOR_SEND`（10回/60分） | `rate_limits` の `attempts` |
+    //   | 再送間隔（60秒） | **直前の `otp_codes` 行の `created_at` だけ** |
+    //
+    // 以前はここで枠を戻し、かつ行も消していた。行が消えると次の
+    // リクエストは「前回送信なし」と判定されて再送間隔を素通りし、枠も
+    // 戻っているので `TWO_FACTOR_SEND` にも当たらない。**両方同時に
+    // 外れるため、送信が失敗し続ける状況では歯止めが無くなる**
+    // （1リクエスト = 送信APIの1コール）。
+    //
+    // 行を残す手もあるが（`/api/auth/otp/send` はそちら）、第2要素では
+    // 届いていないコードの行が残るせいで、次の試行が「先ほど送った
+    // 確認コードがまだ有効です」になる。1通も届いていないのにそう出るのは
+    // #1285 で直したばかりの誤解そのものなので採らない。
+    //
+    // 枠を数えるのは**失敗した送信も外部APIを1回消費している**ため。
+    // 10回失敗する状況は送信側の障害で、11回目が通る見込みは薄い。
+    // その間は recovery code でログインできる（そのための仕組み）。
     await clearExistingCodes();
 
     return SEND_SECOND_FACTOR_RESULT.SEND_FAILED;

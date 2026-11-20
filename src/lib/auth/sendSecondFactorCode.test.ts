@@ -258,12 +258,23 @@ describe('sendSecondFactorCode', () => {
   });
 
   /**
-   * ⚠️ #1260: 現行の `/api/auth/otp/send` は送信に失敗しても枠を戻さない。
+   * ⚠️ **送信失敗でも枠を戻さない。**
    *
-   * 登録確認なら「後で再試行」で済むが、第2要素では**ログインそのものが
-   * できなくなる**。数回の送信失敗で1時間締め出される。
+   * この経路を押さえているのは2つだけで、以前は**両方同時に外れていた**。
+   *
+   *   | 防御 | 根拠 | 旧実装 |
+   *   |---|---|---|
+   *   | `TWO_FACTOR_SEND`（10回/60分） | `rate_limits` の `attempts` | `releaseRateLimit` で戻していた |
+   *   | 再送間隔（60秒） | 直前の `otp_codes` 行の `created_at` だけ | 行ごと消していた |
+   *
+   * 行が消えると次のリクエストは「前回送信なし」と判定されて再送間隔を
+   * 素通りし、枠も戻っているので `TWO_FACTOR_SEND` にも当たらない。
+   * 送信が失敗し続ける状況では歯止めが無くなり、1リクエストにつき
+   * 送信APIを1回呼べてしまう。
+   *
+   * 失敗した送信も外部APIを1回消費しているので、数えるのが正しい。
    */
-  it('送信に失敗したら枠を戻し、行も残さない', async () => {
+  it('送信に失敗しても枠は戻さない', async () => {
     mockSendOtpEmail.mockResolvedValue(false);
     const state = freshState();
 
@@ -271,11 +282,22 @@ describe('sendSecondFactorCode', () => {
       sendSecondFactorCode(createSupabaseMock(state), USER_ID, EMAIL),
     ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.SEND_FAILED);
 
-    expect(mockReleaseRateLimit).toHaveBeenCalledWith(
-      expect.anything(),
-      USER_ID,
-      'two_factor_send',
-    );
+    expect(mockReleaseRateLimit).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 行は消す。
+   *
+   * 残すと、届いていないコードの行が根拠になって次の試行が
+   * 「先ほど送った確認コードがまだ有効です」になる（#1285 で直した誤解）。
+   * 枠を戻さないことで歯止めは効いているので、こちらは消してよい。
+   */
+  it('送信に失敗したら行は残さない', async () => {
+    mockSendOtpEmail.mockResolvedValue(false);
+    const state = freshState();
+
+    await sendSecondFactorCode(createSupabaseMock(state), USER_ID, EMAIL);
+
     // 事前クリア + 送信失敗後の後始末
     expect(state.deleteCalls).toBe(2);
   });
@@ -288,6 +310,36 @@ describe('sendSecondFactorCode', () => {
     );
 
     expect(mockReleaseRateLimit).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 失敗が続いても歯止めが残る
+   *
+   * ⚠️ ここが本題。失敗のたびに行は消える（再送間隔は効かない）ので、
+   * **残る歯止めは `TWO_FACTOR_SEND` だけ**。枠を戻していると両方外れて
+   * 無制限に送信APIを呼べる。
+   *
+   * 上限に達したら `LIMIT_EXCEEDED` で止まり、**送信そのものを試みない**
+   * ことまで見る。`SEND_FAILED` が返るうちは1回ずつ数えている。
+   */
+  it('送信が失敗し続けても、上限に達したら送信を試みなくなる', async () => {
+    mockSendOtpEmail.mockResolvedValue(false);
+
+    // 1回目〜: 枠はまだある
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    await expect(
+      sendSecondFactorCode(createSupabaseMock(freshState()), USER_ID, EMAIL),
+    ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.SEND_FAILED);
+    expect(mockSendOtpEmail).toHaveBeenCalledTimes(1);
+
+    // 失敗ぶんも数えているので、いずれ上限に達する
+    mockCheckRateLimit.mockResolvedValue({ allowed: false });
+    await expect(
+      sendSecondFactorCode(createSupabaseMock(freshState()), USER_ID, EMAIL),
+    ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED);
+
+    // 上限後は1通も送らない（送信APIを呼ばない）
+    expect(mockSendOtpEmail).toHaveBeenCalledTimes(1);
   });
 
   /**

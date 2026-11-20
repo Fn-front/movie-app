@@ -22,8 +22,17 @@ jest.mock('@/helpers/supabase', () => ({
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
 
+/**
+ * ⚠️ `compare` は「同じパスワードでのやり直しか」の判定に使う（#1325）。
+ *
+ * 既定は **false**（＝違うパスワード＝係争）。`register` の既存ユーザー分岐は
+ * 「他人の未検証登録を上書きした」とみなして `password_contested` を立てる。
+ * 同一パスワードのケースを見たいテストだけが `true` に差し替える。
+ */
+const mockBcryptCompare = jest.fn().mockResolvedValue(false);
 jest.mock('bcryptjs', () => ({
   hash: jest.fn().mockResolvedValue('hashed_password'),
+  compare: (...args: unknown[]) => mockBcryptCompare(...args),
 }));
 
 const mockCheckRateLimit = jest.fn().mockResolvedValue({ allowed: true });
@@ -481,15 +490,38 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockSendOtpEmail.mockResolvedValue(true);
     mockGenerateOtpCode.mockReturnValue('123456');
+    // ⚠️ `clearAllMocks` は呼び出し履歴を消すだけで**実装は残す**。
+    // 1本が `mockResolvedValue(true)` に差し替えると以降すべてに漏れるので、
+    // 既定（＝違うパスワード＝係争）へ毎回戻す
+    mockBcryptCompare.mockResolvedValue(false);
   });
 
-  /** 未検証の既存ユーザーが見つかる状態のモック */
-  const mockUnverifiedExistingUser = () => {
+  /**
+   * 未検証の既存ユーザーが見つかる状態のモック
+   *
+   * #1325 の判定に使う2つを渡せる。
+   *
+   * @param passwordHash - 既存のハッシュ。今回のパスワードと一致するかで
+   *   「同じパスワードでのやり直し」かが決まる。NULL なら比較対象が無いので
+   *   **係争扱い**
+   * @param passwordContested - 既に立っている印。`register` は**これを
+   *   下ろさない**（OR で畳む）。下ろすと攻撃者が同じリクエストを2回送る
+   *   だけで保護が外れる
+   */
+  const mockUnverifiedExistingUser = (
+    passwordHash: string | null = null,
+    passwordContested = false,
+  ) => {
     mockFrom.mockReturnValueOnce({
       select: () => ({
         eq: () => ({
           single: () => ({
-            data: { id: 'squatted-user-id', is_verified: false },
+            data: {
+              id: 'squatted-user-id',
+              is_verified: false,
+              password_hash: passwordHash,
+              password_contested: passwordContested,
+            },
             error: null,
           }),
         }),
@@ -513,14 +545,24 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     });
   };
 
-  /** 旧OTP削除 → OTP INSERT のモック */
-  const mockOtpReissue = () => {
+  /**
+   * 旧OTP削除 → OTP INSERT のモック
+   *
+   * `captured` を渡すと INSERT の中身を記録する（#1325 の
+   * `password_contested` を観測するため）
+   */
+  const mockOtpReissue = (captured?: { otpRow?: Record<string, unknown> }) => {
     mockFrom.mockReturnValueOnce({
       delete: () => ({
         eq: () => ({ eq: () => ({ is: () => ({ error: null }) }) }),
       }),
     });
-    mockFrom.mockReturnValueOnce({ insert: () => ({ error: null }) });
+    mockFrom.mockReturnValueOnce({
+      insert: (row: Record<string, unknown>) => {
+        if (captured) captured.otpRow = row;
+        return { error: null };
+      },
+    });
   };
 
   /**
@@ -530,6 +572,138 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
    * #645 の目的は第三者が設定した `password_hash` を消すことで、
    * 名前を消す必要はない
    */
+  /**
+   * 係争中のパスワードに印を付ける（#1325）
+   *
+   * 「被害者が未検証で登録 → 第三者が同じアドレスで register」の順だと、
+   * `password_hash` は第三者のものに上書きされる。第三者の register は
+   * 被害者宛の未検証コードを DELETE するので、被害者は「コードが違う」を
+   * 見て**再送**し、そのコードで検証を終える。再送は `password_hash` に
+   * 触らないため、第三者のハッシュを載せたまま `is_verified` が立っていた。
+   *
+   * ここで印を付けておき、`auth/otp/verify` が昇格と同時に失効させる。
+   */
+  describe('パスワードの係争判定', () => {
+    it('未検証ユーザーを別のパスワードで上書きしたら係争として印を付ける', async () => {
+      const captured: { payload?: unknown } = {};
+      // 既存ハッシュはあるが、今回のパスワードとは一致しない
+      mockBcryptCompare.mockResolvedValue(false);
+      mockUnverifiedExistingUser('$2a$04$existing.hash.of.victim.password');
+      mockUserUpdate(captured);
+      mockOtpReissue();
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'AttackerPass1',
+        }),
+      );
+
+      expect(captured.payload).toMatchObject({ password_contested: true });
+    });
+
+    /**
+     * ⚠️ 本人が同じパスワードでやり直しただけなら失効させない。
+     *
+     * これを係争扱いにすると、登録をやり直した本人が検証後に
+     * パスワードを失う。
+     */
+    it('同じパスワードでのやり直しは係争にしない', async () => {
+      const captured: { payload?: unknown } = {};
+      mockBcryptCompare.mockResolvedValue(true);
+      mockUnverifiedExistingUser('$2a$04$existing.hash.of.victim.password');
+      mockUserUpdate(captured);
+      mockOtpReissue();
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'Password1234',
+        }),
+      );
+
+      expect(captured.payload).toMatchObject({ password_contested: false });
+    });
+
+    /**
+     * ⚠️ ここが保護の要（レビューで実測した critical の修正）。
+     *
+     * 「同じパスワードなら係争にしない」緩和だけだと、**攻撃者が同じ
+     * リクエストを2回送るだけで印が落ちる**。比較相手は「本人が設定した
+     * パスワード」ではなく**直前に誰かが設定したハッシュ**なので、
+     * 攻撃者の2回目は compare が true になってしまう。
+     *
+     *   1. 被害者が登録 → H(VictimPass)
+     *   2. 攻撃者が register{AttackerPass} → compare=false → 係争 true
+     *   3. 攻撃者が**同じリクエストをもう一度** → compare=true
+     *      → OR が無ければ係争 false に戻り、#1325 が再成立する
+     */
+    it('既に係争中なら、同じパスワードで送り直されても印を下ろさない', async () => {
+      const captured: { payload?: unknown } = {};
+      // 攻撃者の2回目。直前に自分が設定したハッシュと一致する
+      mockBcryptCompare.mockResolvedValue(true);
+      mockUnverifiedExistingUser('$2a$04$hash.of.attacker.password', true);
+      mockUserUpdate(captured);
+      mockOtpReissue();
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'AttackerPass1',
+        }),
+      );
+
+      expect(captured.payload).toMatchObject({ password_contested: true });
+    });
+
+    /**
+     * ⚠️ 比較対象が無いときは係争側へ倒す。
+     *
+     * `password_hash` が NULL になるのは OAuth のみの利用者か、
+     * #1302 / 本件で既に失効させた後。どちらも「本人が設定した値」の
+     * 証拠が無いので、安全側に寄せる。
+     */
+    it('既存のパスワードが未設定なら係争として扱う', async () => {
+      const captured: { payload?: unknown } = {};
+      mockUnverifiedExistingUser(null);
+      mockUserUpdate(captured);
+      mockOtpReissue();
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'Password1234',
+        }),
+      );
+
+      expect(captured.payload).toMatchObject({ password_contested: true });
+      // 比較対象が無いので bcrypt.compare は呼ばない
+      expect(mockBcryptCompare).not.toHaveBeenCalled();
+    });
+
+    /**
+     * 印は **`users`** に持つ。`otp_codes` に持たせると、攻撃者が同じ
+     * register を2回送るだけで**印の付いた行ごと DELETE されて**
+     * 印なしの行に置き換わる（既存ユーザー分岐は未検証OTPを消してから
+     * 作り直すため）。OTP行側には持たせないことを固定する。
+     */
+    it('印は otp_codes には持たせない', async () => {
+      const otp: { otpRow?: Record<string, unknown> } = {};
+      mockUnverifiedExistingUser('$2a$04$existing.hash.of.victim.password');
+      mockUserUpdate({});
+      mockOtpReissue(otp);
+
+      await POST(
+        createRequest({
+          email: 'victim@example.com',
+          password: 'AttackerPass1',
+        }),
+      );
+
+      expect(otp.otpRow).not.toHaveProperty('password_contested');
+    });
+  });
+
   describe('表示名の扱い', () => {
     it('名前が未入力なら name を更新しない', async () => {
       const captured: { payload?: unknown } = {};
@@ -619,8 +793,12 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     );
 
     // #1253 で name を含めなくなった。#645 の目的は password_hash を
-    // 消すことで、表示名まで巻き込む必要はない
-    expect(captured.payload).toEqual({ password_hash: 'hashed_password' });
+    // 消すことで、表示名まで巻き込む必要はない。
+    // `password_contested` は #1325 で足した（判定は専用の describe で見る）
+    expect(captured.payload).toEqual({
+      password_hash: 'hashed_password',
+      password_contested: true,
+    });
   });
 
   it('上書き時に旧い未検証OTPを削除する（有効なコードを1つに保つ）', async () => {

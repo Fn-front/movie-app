@@ -1167,3 +1167,140 @@ describe('許可リストに無い action（zod をすり抜けた場合）', ()
     );
   });
 });
+
+/**
+ * 係争中の印はこのルートで触らない（#1325）
+ *
+ * 印は `users.password_contested` に持つ。当初は `otp_codes` に持たせて
+ * 再送で引き継ぐ設計にしたが、**2つの穴が実測された**ので置き場所を変えた。
+ *
+ *   1. 攻撃者が同じ register を2回送ると、既存ユーザー分岐が未検証OTPを
+ *      DELETE してから作り直すため、**印の付いた行ごと消えて印なしの行に
+ *      置き換わる**
+ *   2. 引き継ぎ元の行が無いと `?? false` で「係争なし」に倒れる（fail-open）
+ *
+ * このルートが印に触らないことを固定する。触り始めたら上の穴が戻る。
+ */
+describe('password_contested を持ち込まない（#1325）', () => {
+  // ⚠️ 最上位 describe の外にあるため、そちらの beforeEach が効かない
+  beforeEach(() => {
+    mockFrom.mockReset();
+    mockCheckRateLimit.mockReset();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    (sendOtpEmail as jest.Mock).mockReset();
+    (sendOtpEmail as jest.Mock).mockResolvedValue(true);
+  });
+
+  it('OTP行に password_contested を入れない', async () => {
+    const captured: { otpRow?: Record<string, unknown> } = {};
+
+    // ユーザー検索（未検証で存在する）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'user-1', is_verified: false },
+            error: null,
+          }),
+        }),
+      }),
+    });
+    // 前回送信チェック（60秒より前に送信済み＝再送できる）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                single: () => ({
+                  data: {
+                    created_at: new Date(Date.now() - 120_000).toISOString(),
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    // 既存OTP削除
+    mockFrom.mockReturnValueOnce({
+      delete: () => ({
+        eq: () => ({ eq: () => ({ is: () => ({ data: null, error: null }) }) }),
+      }),
+    });
+    // OTP挿入
+    mockFrom.mockReturnValueOnce({
+      insert: (row: Record<string, unknown>) => {
+        captured.otpRow = row;
+        return { error: null };
+      },
+    });
+
+    const response = await POST(
+      createRequest({ email: 'victim@example.com', action: 'registration' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(captured.otpRow).not.toHaveProperty('password_contested');
+  });
+
+  /**
+   * 印は users 側にあるので、このルートは users を書き換えない。
+   * 書き換えると、再送を押すだけで印を下ろせることになる。
+   */
+  it('users を更新しない（印を下ろせない）', async () => {
+    const updates: string[] = [];
+
+    const trackingFrom = (table: string) => {
+      if (table === 'users') {
+        return {
+          select: () => ({
+            eq: () => ({
+              single: () => ({
+                data: { id: 'user-1', is_verified: false },
+                error: null,
+              }),
+            }),
+          }),
+          update: () => {
+            updates.push(table);
+            return { eq: () => ({ data: null, error: null }) };
+          },
+        };
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: () => ({
+                  single: () => ({ data: null, error: { code: 'PGRST116' } }),
+                }),
+              }),
+            }),
+          }),
+        }),
+        delete: () => ({
+          eq: () => ({
+            eq: () => ({ is: () => ({ data: null, error: null }) }),
+          }),
+        }),
+        insert: () => ({ error: null }),
+        update: () => {
+          updates.push(table);
+          return { eq: () => ({ data: null, error: null }) };
+        },
+      };
+    };
+
+    mockFrom.mockImplementation(trackingFrom);
+
+    await POST(
+      createRequest({ email: 'victim@example.com', action: 'registration' }),
+    );
+
+    expect(updates).not.toContain('users');
+  });
+});

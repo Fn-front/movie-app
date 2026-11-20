@@ -140,6 +140,32 @@ describe('POST /api/auth/password-reset/confirm', () => {
       );
     });
 
+    /**
+     * 係争の印を下ろす（#1325）
+     *
+     * ここへ来られるのはメールボックスの所有を証明した本人だけで、
+     * そのうえで自分でパスワードを設定し直している。印を残すと意味が
+     * 「過去に係争があった」へずれて読めなくなる。
+     *
+     * ⚠️ 印を下ろせるのはここと `auth/otp/verify` の昇格の2箇所だけ。
+     * `register` 側では **OR で畳むだけ**にする（下ろすと、攻撃者が
+     * 同じリクエストを2回送るだけで保護が外れる）。
+     */
+    it('係争の印を下ろす', async () => {
+      const updateSpy = mockUserAndUpdate({
+        id: 'user-1',
+        password_hash: 'old-hash',
+      });
+
+      await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ password_contested: false }),
+      );
+    });
+
     it('二段階認証には触れない', async () => {
       // 解除できると、メール受信箱を押さえただけで第2要素を外せてしまう（#642）
       mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });

@@ -615,6 +615,32 @@ describe('TwoFactorChallenge', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(/リカバリーコード/);
     });
 
+    /**
+     * ⚠️ 上限中は再送ボタンを出さない。
+     *
+     * 押しても同じ 429 が返るだけで、出口はリカバリーコードしかない。
+     * 「リカバリーコードを入力してください」の隣に「再送信できます。」が
+     * 並ぶと、利用者はそちらを押し続けてしまう。
+     *
+     * `loginForm` は以前から `!sendLimited` で隠していたが、こちらは
+     * 見ていなかった。第2要素の送信失敗で枠を戻さなくなり（歯止めを
+     * 残すため）、この状態に現実的に到達するようになった。
+     */
+    it('送信上限なら再送ボタンを出さない', () => {
+      mockSessionData = {
+        totpPending: true,
+        secondFactorMethod: 'email_otp',
+        secondFactorSendLimited: true,
+      };
+
+      render(<TwoFactorChallenge />);
+
+      expect(
+        screen.queryByRole('button', { name: '確認コードを再送信する' }),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByText('再送信できます。')).not.toBeInTheDocument();
+    });
+
     it('送信できていれば通常のリード文を出す', () => {
       render(<TwoFactorChallenge />);
 

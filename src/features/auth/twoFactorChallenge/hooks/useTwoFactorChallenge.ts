@@ -42,6 +42,14 @@ interface UseTwoFactorChallengeResult {
    * 「コードが違う」とは別物。打ち直しても直らないので分ける（#1148）
    */
   sendNotice: string | null;
+  /**
+   * 送信回数の上限に達しているか（#1280 系）
+   *
+   * ⚠️ 上限中は再送ボタンを**出さない**。押しても同じ 429 が返るだけで、
+   * 利用者の出口はリカバリーコードしかない。
+   * `loginForm` は `!sendLimited` で隠しており、こちらだけ出ていた。
+   */
+  sendLimited: boolean;
   /** コードを送り直している最中か */
   isResending: boolean;
   /** 再送までの残り秒数 */
@@ -230,6 +238,7 @@ export function useTwoFactorChallenge({
     code,
     error,
     sendNotice,
+    sendLimited,
     isSubmitting,
     isCancelling,
     isEmailOtp,

@@ -27,6 +27,7 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
       code,
       error,
       sendNotice,
+      sendLimited,
       isSubmitting,
       isCancelling,
       isEmailOtp,
@@ -99,9 +100,12 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
 
         {/*
           認証アプリは手元で作れるので再送の概念が無い。
-          メールのコードだけに出す
+          メールのコードだけに出す。
+
+          ⚠️ 送信上限に達しているときも出さない。押しても同じ 429 が返る
+          だけで、出口はリカバリーコードしかない（`loginForm` と揃える）。
         */}
-        {isEmailOtp && (
+        {isEmailOtp && !sendLimited && (
           <div className={styles.c_two_factor__resend}>
             {/*
               `isLoading` ではなく文言の差し替えで進行を伝える。

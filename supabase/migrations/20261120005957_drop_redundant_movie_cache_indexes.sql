@@ -1,0 +1,71 @@
+-- movie_cache の死んだ索引と重複した索引を落とす（#1327）
+--
+-- 背景:
+--   #1326 の調査で movie_cache が書き込み増幅を起こしているのが分かった。
+--   索引が14本あり、HOT 更新がほぼ成立していない。
+--
+--     n_tup_upd 170,943 に対し n_tup_hot_upd 4
+--     UPDATE movie_cache SET popularity = ...   79,034回 / WAL 111 MB
+--
+-- ⚠️ まず結論から: **HOT はこの変更では戻らない。**
+--   HOT が成立するには「更新される列が**どの索引にも**含まれない」必要がある。
+--   このテーブルの UPDATE は popularity / cached_at / updated_at を書き換えるが、
+--   popularity と cached_at は**よく使われている索引に含まれている**。
+--
+--     movie_cache_release_type_release_date_idx  スキャン 116,332回
+--     movie_cache_release_type_cached_at_idx     スキャン  46,874回
+--
+--   これらを落とすと読み取りが壊れる。HOT の完全復活と読み取り性能は
+--   両立しないので、ここでは**1回の更新で書く索引の本数を減らす**ことだけを狙う。
+--   14本 → 12本。
+--
+-- ⛔ スキャン0回の索引をまとめて落としてはいけない:
+--   以下の4本はスキャン0回だが**機能を支えている**。落とさない。
+--
+--     idx_movie_cache_watch_provider_flatrate / _rent / _buy
+--       → 配信サービスでの絞り込み（利用者向け機能）。
+--         src/helpers/movieCacheFilters.ts:160 が `watch_provider_<形態>.cs.[id]`
+--         の containment で引く。GIN 索引が効く形
+--     movie_cache_release_type_popularity_idx
+--       → sort_by=popularity の並び替え（src/schema/filters.ts:15）
+--
+--   スキャン0回なのは、このテーブルが 1,258行・2.3 MB しかなく、
+--   **プランナが索引を使うより seq scan を選ぶ**ため。実ユーザーが4人で
+--   配信フィルタが使われていないという事情もある。カタログが育てば効いてくる。
+--   「スキャン0回＝不要」で機械的に落とすと、増えたときに戻せない。
+--
+-- 落とす2本の根拠:
+--
+-- 1. idx_movie_cache_updated_at（200 kB / スキャン2回）
+--    `updated_at` はトリガー `update_movie_cache_updated_at` が**毎回の
+--    UPDATE で書き換える**のに、**読み取りに一度も使われていない**。
+--    src/ 全体を見ても updated_at は書き込み側にしか現れない
+--    （filters/route.ts:129 / syncEigaMovies.ts:249 /
+--    updateMoviesCacheByBatch.ts:166 はいずれも代入）。
+--    書かれるだけで読まれない索引で、unused 4本の中で最大。
+--
+-- 2. idx_movie_cache_popularity（104 kB / スキャン6回）
+--    `movie_cache_release_type_popularity_idx (release_type, popularity DESC)`
+--    と役割が重複している。一覧の並び替えは
+--    `applyMovieCacheFilters`（src/helpers/movieCacheFilters.ts:106）が
+--    **必ず `.eq('release_type', ...)` を付ける**ため、popularity 単独で
+--    引く経路が無い。`.order(sortColumn)` は route.ts:439 の1箇所だけで、
+--    そこも applyMovieCacheFilters を通る。複合索引のほうが厳密に上位。
+--
+-- ⚠️ CONCURRENTLY は付けない。db push はマイグレーションをトランザクションで
+--   包むため実行できない。対象は 200 kB と 104 kB で、ACCESS EXCLUSIVE を
+--   取る時間はミリ秒に収まる。
+--
+-- 戻すときは db push（素の CREATE INDEX）を使わないこと。SHARE ロックで
+-- 書き込みを止める。psql / supabase db query から CONCURRENTLY で直接実行する:
+--
+--   CREATE INDEX CONCURRENTLY idx_movie_cache_updated_at
+--     ON movie_cache(updated_at);
+--   CREATE INDEX CONCURRENTLY idx_movie_cache_popularity
+--     ON movie_cache(popularity);
+
+DROP INDEX IF EXISTS idx_movie_cache_updated_at;
+DROP INDEX IF EXISTS idx_movie_cache_popularity;
+
+COMMENT ON COLUMN movie_cache.updated_at IS
+  '更新日時。トリガー update_movie_cache_updated_at が毎回書き換える。読み取りに使っていないため索引を張らない（#1327）';

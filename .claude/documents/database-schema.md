@@ -284,12 +284,10 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 > 未記載。列の追従は #1209 の範囲。
 > 下の索引の一覧は 2026-11-19 に実DBと突き合わせ済み。
 
-**インデックス（14本。2026-11-19 時点の実体）:**
+**インデックス（12本。2026-11-20 時点の実体）:**
 - `id, release_type` (UNIQUE) - 複合主キー
 - `release_date` - 公開日順ソート用
-- `popularity` - 人気順ソート用
 - `cached_at` - 差分取得時の最新日時確認用
-- `updated_at` - バッチ更新管理用
 - `is_now_playing` - Now Playing フィルタ用
 - `release_type` - タブ絞り込み用
 - `release_type, release_date DESC` - タブ＋公開日順
@@ -299,6 +297,35 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 - `watch_provider_flatrate` (GIN) - 配信プロバイダー絞り込み用
 - `watch_provider_rent` (GIN) - 同上
 - `watch_provider_buy` (GIN) - 同上
+
+#### 落とした索引（#1327・2026-11-20）
+
+`popularity` 単独と `updated_at` を削除した。14本 → 12本。
+
+| 索引 | スキャン | サイズ | 落とした理由 |
+|---|---|---|---|
+| `idx_movie_cache_updated_at` | 2回 | 200 kB | トリガー `update_movie_cache_updated_at` が**毎回書き換える**のに、**読み取りに一度も使われていない**（src/ では代入にしか現れない） |
+| `idx_movie_cache_popularity` | 6回 | 104 kB | `release_type, popularity DESC` と重複。一覧の並び替えは `applyMovieCacheFilters` が**必ず** `.eq('release_type', ...)` を付けるため、popularity 単独で引く経路が無い |
+
+> ⚠️ **HOT 更新はこれでは戻らない。** HOT の成立には「更新される列がどの索引にも
+> 含まれない」ことが要る。この UPDATE は popularity / cached_at / updated_at を
+> 書き換えるが、popularity と cached_at は**よく使われている複合索引**
+> （スキャン 116,332回 / 46,874回）に含まれている。落とせば読み取りが壊れる。
+> HOT の完全復活と読み取り性能は両立しない。ここで狙ったのは
+> 「1回の更新で書く索引の本数を減らす」ことだけ。
+
+#### ⛔ スキャン0回でも落としてはいけない索引
+
+以下の4本はスキャン0回だが**機能を支えている**。棚卸しで機械的に落とさないこと。
+
+| 索引 | 支えている機能 |
+|---|---|
+| `watch_provider_flatrate` / `_rent` / `_buy` (GIN) | 配信サービスでの絞り込み。`movieCacheFilters.ts:160` が `watch_provider_<形態>.cs.[id]` の containment で引く |
+| `release_type, popularity DESC` | `sort_by=popularity` の並び替え（`src/schema/filters.ts:15`） |
+
+スキャン0回なのは、このテーブルが **1,258行・2.3 MB しかなく、プランナが索引より
+seq scan を選ぶ**ため。実ユーザーが4人で配信フィルタが使われていないという事情も
+ある。カタログが育てば効いてくるので、**「スキャン0回＝不要」で判断しない**。
 
 #### 索引を追加しない判断（#1279・2026-11-19 実測）
 

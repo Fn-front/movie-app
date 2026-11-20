@@ -260,14 +260,21 @@ describe('POST /api/auth/password-reset/confirm', () => {
     it('パスワード未設定のアカウントにも設定できる', async () => {
       // ソーシャルログイン専用のユーザー。
       // 「ソーシャル専用です」と返すとアカウント種別が漏れるため同じ扱いにする
-      mockUserAndUpdate({ id: 'user-1', password_hash: null });
+      const updateSpy = mockUserAndUpdate({
+        id: 'user-1',
+        password_hash: null,
+      });
 
       const response = await POST(
         createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
       );
 
       expect(response.status).toBe(200);
-      expect(mockCompare).not.toHaveBeenCalled();
+      // ⚠️ 照合しないことは「現在のパスワードのオラクルにしない」側で
+      //    固定している（#1243）。ここは実際に設定できることを見る
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ password_hash: 'new-hash' }),
+      );
     });
   });
 
@@ -508,24 +515,14 @@ describe('POST /api/auth/password-reset/confirm', () => {
     /**
      * 回復可能なエラーでリンクを焼かない（#1235）
      *
-     * 消費を先に置いていたときは、現在と同じパスワードを打ち直しただけで
-     * リンクを失い、再発行が必要になっていた。パスワードを忘れている＝
-     * 他にログイン手段が無い状態で、発行アカウントなら自力で再発行も
-     * できない（#1226）
+     * 消費を先に置いていたときは、回復可能なエラーでリンクを失い、
+     * 再発行が必要になっていた。パスワードを忘れている＝他にログイン手段が
+     * 無い状態で、発行アカウントなら自力で再発行もできない（#1226）。
+     *
+     * ⚠️ かつての代表例「現在と同じパスワードを打ち直した」は #1243 で
+     * 検査ごと外した（オラクルになるため）
      */
     describe('消費する前に弾くもの', () => {
-      it('新旧同一で弾かれてもトークンを消費しない', async () => {
-        mockCompare.mockResolvedValue(true);
-        mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
-
-        const response = await POST(
-          createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
-        );
-
-        expect(response.status).toBe(400);
-        expect(mockConsumeToken).not.toHaveBeenCalled();
-      });
-
       it('対象ユーザーが消えていてもトークンを消費しない', async () => {
         mockUserAndUpdate(null);
 
@@ -627,9 +624,26 @@ describe('POST /api/auth/password-reset/confirm', () => {
 
       expect(mockConsumeToken).not.toHaveBeenCalled();
     });
+  });
 
-    it('新旧パスワードが同じなら400を返す', async () => {
+  /**
+   * ⛔ **新旧同一チェックを置かない**（#1243）
+   *
+   * `bcrypt.compare(新パスワード, 既存ハッシュ)` の結果を 400 と 200 で
+   * 返し分けると、**有効なリンクを握っている人にとって現在のパスワードを
+   * 判定するオラクル**になる。
+   *
+   * #1235 でトークンの消費を後ろへ動かしたため、弾かれてもリンクが焼けない。
+   * 同じリンクで候補を何度でも投げられ、レート制限は識別子が送信元IPなので
+   * IP を変えれば実質無制限。
+   *
+   * リンクを握っていればパスワードは上書きできるので、追加で失われるのは
+   * 「**変更せずに**現在のパスワードを知れる」＝侵害に気づかれないこと。
+   */
+  describe('現在のパスワードのオラクルにしない', () => {
+    it('同じパスワードでも成功させる', async () => {
       mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+      // 「一致した」と答える状態にしても、挙動が変わってはいけない
       mockCompare.mockResolvedValue(true);
 
       const response = await POST(
@@ -637,8 +651,42 @@ describe('POST /api/auth/password-reset/confirm', () => {
       );
       const json = await response.json();
 
-      expect(response.status).toBe(400);
-      expect(json.error.message).toBe(PASSWORD_RESET_MESSAGES.SAME_PASSWORD);
+      expect(response.status).toBe(200);
+      expect(json.message).toBe(PASSWORD_RESET_MESSAGES.RESET_COMPLETED);
+    });
+
+    /**
+     * ⚠️ **照合そのものを行わない。** 比較結果を使わなくても、
+     * `bcrypt.compare` を呼ぶだけで応答時間に差が出る（ハッシュ1回分）。
+     */
+    it('既存ハッシュと照合しない', async () => {
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+
+      await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+
+      expect(mockCompare).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⚠️ **一致・不一致で応答が変わらないこと。** 片方だけ見ると、
+     * 将来どちらかの分岐を戻しても気づけない。
+     */
+    it.each([
+      ['一致する', true],
+      ['一致しない', false],
+    ])('%s場合でも同じ応答を返す', async (_label, matches) => {
+      mockUserAndUpdate({ id: 'user-1', password_hash: 'old-hash' });
+      mockCompare.mockResolvedValue(matches);
+
+      const response = await POST(
+        createRequest({ token: 'valid-token', password: VALID_PASSWORD }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.success).toBe(true);
     });
   });
 

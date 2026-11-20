@@ -120,8 +120,6 @@ export const PASSWORD_RESET_MESSAGES = {
    */
   ISSUED_ACCOUNT_RESEND:
     'リンクの期限が切れた場合は、発行元の管理者に再発行を依頼してください。',
-  /** 新旧パスワード同一 */
-  SAME_PASSWORD: '現在のパスワードと同じパスワードには変更できません。',
   /** リセット失敗（サーバーエラー） */
   RESET_FAILED: 'パスワードの再設定に失敗しました。',
 } as const;

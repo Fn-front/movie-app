@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { VALIDATION_MESSAGES } from '@/constants/auth';
 import { PASSWORD_RESET_MESSAGES } from '@/constants/passwordReset';
 
 import { ResetPasswordForm } from './resetPasswordForm';
@@ -270,16 +271,22 @@ describe('ResetPasswordForm', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('新旧パスワード同一のエラーを表示する', async () => {
+  /**
+   * ⚠️ 以前はここで「新旧パスワード同一」を使っていたが、その検査は
+   * #1243 でリセット経路から外した（現在のパスワードのオラクルになるため）。
+   * サーバー由来の 400 を画面に出すこと自体は変わらないので、実際に
+   * 返りうる文言へ差し替えている。
+   */
+  it('サーバーが返した入力エラーを表示する', async () => {
     mockFetch.mockResolvedValue(
-      errorResponse(400, PASSWORD_RESET_MESSAGES.SAME_PASSWORD),
+      errorResponse(400, VALIDATION_MESSAGES.PASSWORD_PWNED),
     );
 
     render(<ResetPasswordForm token='valid-token' />);
     await submitPassword(VALID_PASSWORD);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      PASSWORD_RESET_MESSAGES.SAME_PASSWORD,
+      VALIDATION_MESSAGES.PASSWORD_PWNED,
     );
   });
 

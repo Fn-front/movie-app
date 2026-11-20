@@ -222,14 +222,20 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
         setSecret(null);
         setView(TWO_FACTOR_VIEW.SETUP_EMAIL);
 
-        // ⚠️ 再送間隔に当たったときは画面の「確認コードを送りました」が嘘に
-        //   なる（#1285）。1通も送っていないので、受信箱にある前のメールを
-        //   見てもらうよう文言で打ち消す。
-        //   やめる→メールで設定する を60秒以内にやり直すと必ずここを通る
+        // ⚠️ 送信の結果を言うのは**ここだけ**（#1285）。
+        //
+        //   画面のリード文は「届いたコードを入力してください」に留めてある。
+        //   以前は「確認コードを送りました」と断定していたため、再送間隔に
+        //   当たって**1通も送っていない**ときでもそう表示され、しかも
+        //   `CODE_ALREADY_SENT` と同時に出て矛盾していた。
+        //
+        //   やめる→メールで設定する を60秒以内にやり直すと必ず throttled を通る
         const data = json.data as { throttled?: boolean } | undefined;
-        if (data?.throttled) {
-          setNotice(SECOND_FACTOR_MESSAGES.CODE_ALREADY_SENT);
-        }
+        setNotice(
+          data?.throttled
+            ? SECOND_FACTOR_MESSAGES.CODE_ALREADY_SENT
+            : SECOND_FACTOR_MESSAGES.CODE_SENT,
+        );
 
         // ⚠️ THROTTLED のときも60秒から数え直す。サーバーは「あと何秒で
         //   押せるか」を返さないため、ここでは上限しか分からない。
@@ -250,27 +256,28 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
   /**
    * 設定中（メールOTP）にコードを送り直す（#1285）
    *
-   * ⚠️ `sendChallenge` は使えない。あちらが叩く `send-challenge` は
-   * `getSecondFactorMethod` を通るため **`confirmed_at IS NOT NULL` が前提**で、
-   * まだ有効化していない設定中のユーザーには何も送れない。
-   * ここは `setup` を呼び直す。
-   *
    * これが無いと、コードの試行回数（5回）を使い切った利用者は
    * 「やめる → メールで設定する」でやり直すしかなく、60秒以内だと
    * `THROTTLED` で1通も届かないまま同じ画面に戻される。
+   *
+   * ⚠️ **`setup` を叩き直さないこと。** あちらは `TOTP_SETTINGS_VERIFY`
+   * （5回/15分）を消費するので、
+   *
+   *   setup(1) + 再送×4 = 5 → 6回目の「有効にする」が 429 で15分ロック
+   *
+   * となり、**この Issue が直そうとしている行き止まりを別の形で作る**。
+   * `send-challenge` は設定途中も対象にしてあり（#1285）、効くのは
+   * `TWO_FACTOR_SEND`（10回/60分）だけ。`user_totp` も作り直さない。
+   *
+   * ⚠️ 失敗しても `restart` しない。`post` が `error` を立てているので
+   * 押せる状態のまま理由が出るほうが正しい（押し直せる）。
    */
   const resendSetupCode = useCallback(async () => {
-    const json = await post(API_ENDPOINTS.USER_TOTP_SETUP, {
-      method: SECOND_FACTOR_METHOD.EMAIL_OTP,
-    });
+    const json = await post(API_ENDPOINTS.USER_TOTP_SEND_CHALLENGE);
     if (!json) return;
 
-    // 画面の状態が変わらないので、結果を文言で伝える。
-    // 送れたのか（CODE_SENT）、前のコードが生きているのか
-    // （CODE_ALREADY_SENT）はサーバーが出し分けている
-    setNotice(
-      (json.message as string | undefined) ?? SECOND_FACTOR_MESSAGES.CODE_SENT,
-    );
+    // 画面の状態が変わらないので、送れたことを文言で伝える
+    setNotice(SECOND_FACTOR_MESSAGES.CODE_SENT);
     restartResendCountdown();
   }, [post, restartResendCountdown]);
 

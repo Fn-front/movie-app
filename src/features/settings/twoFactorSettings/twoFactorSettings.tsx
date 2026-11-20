@@ -170,9 +170,14 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
           className={styles.c_two_factor_settings__setup}
           onSubmit={handleEnable}
         >
+          {/*
+            ⚠️ ここで「送りました」と断定しない（#1285）。
+            再送間隔に当たると**1通も送っていない**のにこの文が出て、
+            上の `notice`（「先ほど送った確認コードがまだ有効です」）と
+            矛盾する。送信の結果は notice 側だけが言う。
+          */}
           <p className={styles.c_two_factor_settings__lead}>
-            登録しているメールアドレスに確認コードを送りました。
-            届いた6桁のコードを入力してください。
+            登録しているメールアドレスに届いた6桁のコードを入力してください。
           </p>
 
           <Input

@@ -387,7 +387,7 @@ describe('TwoFactorSettings', () => {
       );
 
       expect(
-        await screen.findByText(/確認コードを送りました/),
+        await screen.findByText(SECOND_FACTOR_MESSAGES.CODE_SENT),
       ).toBeInTheDocument();
       expect(
         screen.queryByAltText('二段階認証のQRコード'),
@@ -512,7 +512,16 @@ describe('TwoFactorSettings', () => {
       expect(screen.getByText(/再送信できるまで \d+ 秒/)).toBeInTheDocument();
     });
 
-    it('60秒経つと押せるようになり、setup を叩き直す', async () => {
+    /**
+     * ⚠️ 叩き先は **`send-challenge`**（#1285）。
+     *
+     * `setup` を叩き直すと `TOTP_SETTINGS_VERIFY`（5回/15分）を消費するので、
+     *
+     *   setup(1) + 再送×4 = 5 → 6回目の「有効にする」が 429 で15分ロック
+     *
+     * となり、**この Issue が直そうとしている行き止まりを別の形で作る**。
+     */
+    it('60秒経つと押せるようになり、send-challenge を叩く', async () => {
       jest.useFakeTimers();
       const timerUser = userEvent.setup({
         advanceTimers: jest.advanceTimersByTime,
@@ -532,29 +541,139 @@ describe('TwoFactorSettings', () => {
         expect(resendButton).toBeEnabled();
         expect(screen.getByText('再送信できます。')).toBeInTheDocument();
 
-        mockFetch.mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            success: true,
-            data: { method: 'email_otp', throttled: false },
-            message: SECOND_FACTOR_MESSAGES.CODE_SENT,
-          }),
-        });
+        mockFetch.mockResolvedValueOnce(okResponse({}));
 
         await timerUser.click(resendButton);
 
-        // ⚠️ send-challenge ではなく setup。あちらは confirmed_at が
-        // 立っていないと何も送れない
+        // ⛔ `/api/user/totp/setup` を叩いてはいけない（上のコメント）
         expect(mockFetch).toHaveBeenLastCalledWith(
-          '/api/user/totp/setup',
-          expect.objectContaining({
-            body: JSON.stringify({ method: 'email_otp' }),
-          }),
+          '/api/user/totp/send-challenge',
+          expect.objectContaining({ method: 'POST' }),
         );
+        // 状態取得(1) + 設定開始(1) + 再送(1)
+        expect(mockFetch).toHaveBeenCalledTimes(3);
         expect(
           await screen.findByText(SECOND_FACTOR_MESSAGES.CODE_SENT),
         ).toBeInTheDocument();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    /**
+     * ⚠️ 再送したらクールダウンを掛け直す。
+     *
+     * 掛け直さないと、押した直後からまた押せてしまい、サーバー側の
+     * 60秒間隔に当たって**1通も届かない**。この Issue の元の症状と同じ
+     * 誤解（「送信しました」と出るのに届かない）を再生産する。
+     */
+    it('再送したらカウントダウンを掛け直す', async () => {
+      jest.useFakeTimers();
+      const timerUser = userEvent.setup({
+        advanceTimers: jest.advanceTimersByTime,
+      });
+
+      try {
+        await enterSetupEmail(timerUser);
+        await screen.findByRole('button', { name: '確認コードを再送信する' });
+
+        await act(async () => {
+          jest.advanceTimersByTime(60_000);
+        });
+
+        mockFetch.mockResolvedValueOnce(okResponse({}));
+        await timerUser.click(
+          screen.getByRole('button', { name: '確認コードを再送信する' }),
+        );
+
+        // ⚠️ 送信が終わるまで待つ。飛行中はボタンの文言が
+        // 「送信しています…」なので、待たずに引くと見つからない
+        await screen.findByText(SECOND_FACTOR_MESSAGES.CODE_SENT);
+
+        expect(
+          screen.getByRole('button', { name: '確認コードを再送信する' }),
+        ).toBeDisabled();
+        expect(screen.getByText(/再送信できるまで \d+ 秒/)).toBeInTheDocument();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    /**
+     * ⚠️ 失敗したらクールダウンを掛け直さない。
+     *
+     * 1通も送れていないので、60秒待たせる理由がない。エラー文言を見て
+     * すぐ押し直せるほうが正しい。
+     */
+    it('再送に失敗したらカウントダウンを掛け直さない', async () => {
+      jest.useFakeTimers();
+      const timerUser = userEvent.setup({
+        advanceTimers: jest.advanceTimersByTime,
+      });
+
+      try {
+        await enterSetupEmail(timerUser);
+        await screen.findByRole('button', { name: '確認コードを再送信する' });
+
+        await act(async () => {
+          jest.advanceTimersByTime(60_000);
+        });
+
+        mockFetch.mockResolvedValueOnce(errorResponse(429, '送信上限です'));
+        await timerUser.click(
+          screen.getByRole('button', { name: '確認コードを再送信する' }),
+        );
+
+        expect(await screen.findByText('送信上限です')).toBeInTheDocument();
+        expect(
+          screen.getByRole('button', { name: '確認コードを再送信する' }),
+        ).toBeEnabled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    /**
+     * ⚠️ 設定を開始した時点から数え始める。
+     *
+     * `useResendCountdown` はマウント時から数えるので、`startSetup` で
+     * `restart()` しないと「設定画面を開いて放置した時間」ぶん短くなり、
+     * サーバーの60秒より先に押せてしまう。
+     */
+    it('設定を開始した時点からカウントダウンを始める', async () => {
+      jest.useFakeTimers();
+      const timerUser = userEvent.setup({
+        advanceTimers: jest.advanceTimersByTime,
+      });
+
+      try {
+        mockFetch
+          .mockResolvedValueOnce(statusResponse(false))
+          .mockResolvedValueOnce(
+            okResponse({ method: 'email_otp', throttled: false }),
+          );
+
+        render(<TwoFactorSettings />);
+        await screen.findByRole('button', { name: 'メールで設定する' });
+
+        // 設定を始める前に放置する
+        await act(async () => {
+          jest.advanceTimersByTime(50_000);
+        });
+
+        await timerUser.click(
+          screen.getByRole('button', { name: 'メールで設定する' }),
+        );
+        await screen.findByRole('button', { name: '確認コードを再送信する' });
+
+        // 放置ぶんが引かれていたら、残り10秒で押せてしまう
+        await act(async () => {
+          jest.advanceTimersByTime(30_000);
+        });
+
+        expect(
+          screen.getByRole('button', { name: '確認コードを再送信する' }),
+        ).toBeDisabled();
       } finally {
         jest.useRealTimers();
       }
@@ -584,6 +703,12 @@ describe('TwoFactorSettings', () => {
       expect(
         screen.queryByText(SECOND_FACTOR_MESSAGES.CODE_SENT),
       ).not.toBeInTheDocument();
+
+      // ⚠️ 固定のリード文も見る。`CODE_SENT` だけ見ていた頃は、
+      // 「確認コードを送りました」という**別文字列**のリード文が残って
+      // いても素通りした（レビューで実測）。画面のどこにも「送った」が
+      // 出ていないことを固定する
+      expect(screen.queryByText(/送りました|送信しました/)).toBeNull();
     });
   });
 

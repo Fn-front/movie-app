@@ -8,6 +8,8 @@
 export const CRON_ERROR_MESSAGES = {
   /** 映画.com同期エラー */
   SYNC_MOVIES: '映画同期中にエラーが発生しました。',
+  /** 公開予定の劇場公開作品 同期エラー（#1000） */
+  SYNC_UPCOMING: '公開予定映画の同期中にエラーが発生しました。',
   /** Now Playing同期エラー */
   SYNC_NOW_PLAYING: 'Now Playing映画同期中にエラーが発生しました。',
   /** 劇場公開中映画同期エラー */

@@ -186,3 +186,23 @@ export function isRealCalendarDate(value: string): boolean {
 
   return isValid(parseISO(value));
 }
+
+/**
+ * 日付を YYYY-MM-DD 形式にフォーマットする
+ *
+ * ⚠️ **ローカル時刻で組み立てる。** `toISOString().split('T')[0]` は UTC に
+ * 寄るため、JST では深夜帯に前日の日付になる。TMDb の `release_date.gte` へ
+ * 渡すと公開初日の作品が落ちるので揃えないこと。
+ *
+ * 元は `/api/movies` のローカル関数だったが、#1000 で
+ * `syncUpcomingMovies` が同じ基準を要るようになったため共有する。
+ *
+ * @param date - 対象の日付
+ * @returns `YYYY-MM-DD`
+ */
+export function formatDateToString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}

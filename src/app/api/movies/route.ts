@@ -20,27 +20,22 @@ import {
   HTTP_STATUS,
   CACHE_CONTROL,
   PAGINATION,
-  CACHE_DURATION_HOURS,
-  MOVIES_FETCH_MONTHS_AHEAD,
   NOW_SHOWING_MONTHS_BACK,
   RELEASE_TYPE,
-  RELEASE_TYPE_MAP,
   MOVIES_ERROR_MESSAGES,
   ERROR_CODE,
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
-  DISCOVER_API_MAX_PAGES,
   SUPABASE_ERROR_CODE,
 } from '@/constants';
 import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
-import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { toDisplayGenres } from '@/lib/movies/genreFilter';
-import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { getExcludedLanguages } from '@/lib/movies/regionFilter';
-import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
-import { discoverMovies, getGenres } from '@/lib/tmdb/tmdb';
+import { getGenres } from '@/lib/tmdb/tmdb';
 import { syncNowPlayingMovies } from '@/lib/sync/syncNowPlayingMovies';
 import { syncStreamingMovies } from '@/lib/sync/syncStreamingMovies';
+import { syncUpcomingMovies } from '@/lib/sync/syncUpcomingMovies';
+import { formatDateToString } from '@/utils/date';
 
 /**
  * ソートカラムのマッピング
@@ -53,16 +48,6 @@ const SORT_COLUMN_MAP: Record<MoviesQueryParams['sort_by'], string> = {
   popularity: 'popularity',
   vote_average: 'vote_average',
 };
-
-/**
- * 日付をYYYY-MM-DD形式にフォーマット
- */
-function formatDateToString(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 /**
  * ジャンルID → 表示名のマップを作る
@@ -162,7 +147,6 @@ export async function GET(request: Request) {
     // ジャンルマップを取得
     const genreMap = await getGenreMap();
 
-    const now = new Date();
     const isNowPlayingTheatrical =
       time_frame === 'now_showing' && release_type === 'theatrical';
     const isStreaming = release_type === RELEASE_TYPE.STREAMING;
@@ -199,140 +183,22 @@ export async function GET(request: Request) {
         await syncStreamingMovies();
       }
     } else {
-      // theatrical + upcoming: 従来のDiscover APIロジック
+      // theatrical + upcoming: CRON（/api/cron/sync-upcoming、日次）で
+      // 事前同期する。キャッシュが単に古いだけのケースでDiscoverを直列実行
+      // すると、失効直後のユーザーが数十秒待たされるため同期は行わない（#1000）。
+      // CRONが一度も走っていない場合に一覧が空になるのを避けるため、
+      // レコードが1件も無いときだけフォールバックとして同期する。
       //
-      // ⚠️ ここだけ他の2分岐と揃えていない（#983）。揃えると
-      // **公開予定一覧に新作が入ってこなくなる**ため。
-      //
-      // 他の2分岐は事前同期するCRONがあるので、リクエスト起点の同期を
-      // 0件フォールバックへ落とせる（now_showing → /api/cron/sync-now-playing、
-      // streaming → /api/cron/sync-streaming）。これに対し TMDb Discover で
-      // 公開予定を拾ってくるのは**この分岐だけ**で、対応するCRONが無い。
-      // `updateMoviesCacheByBatch`（/api/cron/update-movies）は既存行の
-      // vote_average・popularity・表示列を更新するだけで、新しい作品を
-      // 追加しない。残る追加経路は週次の映画.com iCal（/api/cron/sync-movies）
-      // のみになり、TMDb由来の作品が一覧から失われる。
-      //
-      // そのため、キャッシュ失効時の同期をCRONへ移すには先に
-      // Discover専用のCRONが要る。揃えるのはそれからにする。
-      const { data: cacheInfo, error: cacheInfoError } = await supabase
+      // ⚠️ 件数は **is_now_playing で絞らない**。公開中の作品も
+      //   `theatrical` 行として同じテーブルに入るため、絞ると
+      //   「公開予定が0件の日」に毎回フォールバックが走る
+      const { count: theatricalCount } = await supabase
         .from('movie_cache')
-        .select('cached_at')
-        .eq('release_type', release_type)
-        .order('cached_at', { ascending: false })
-        .limit(1)
-        .single();
+        .select('id', { count: 'exact', head: true })
+        .eq('release_type', RELEASE_TYPE.THEATRICAL);
 
-      // ⚠️ error を捨てると「キャッシュなし」に化け、DB が詰まっている間
-      // ずっと失効と判定して TMDb を余分に叩く。障害中はこの後のクエリも
-      // 失敗するので、ここで止めたほうが分かりやすい。
-      // 行が無い（PGRST116）＝本当にキャッシュ未作成は従来どおり通す（#1164）
-      if (
-        cacheInfoError &&
-        cacheInfoError.code !== SUPABASE_ERROR_CODE.NOT_FOUND
-      ) {
-        throw cacheInfoError;
-      }
-
-      const cacheExpired =
-        !cacheInfo ||
-        now.getTime() - new Date(cacheInfo.cached_at).getTime() >
-          CACHE_DURATION_HOURS * 60 * 60 * 1000;
-
-      // キャッシュが古い or 存在しない場合、TMDb APIから取得
-      if (cacheExpired) {
-        const today = formatDateToString(now);
-
-        // time_frameに応じて日付範囲を決定
-        let fetchDateGte: string;
-        let fetchDateLte: string;
-
-        if (time_frame === 'now_showing') {
-          // streaming の now_showing
-          const pastDate = new Date(now);
-          pastDate.setMonth(pastDate.getMonth() - NOW_SHOWING_MONTHS_BACK);
-          fetchDateGte = formatDateToString(pastDate);
-          fetchDateLte = today;
-        } else {
-          fetchDateGte = today;
-          const futureDate = new Date(now);
-          futureDate.setMonth(
-            futureDate.getMonth() + MOVIES_FETCH_MONTHS_AHEAD,
-          );
-          fetchDateLte = formatDateToString(futureDate);
-        }
-
-        const withReleaseType = RELEASE_TYPE_MAP[release_type];
-
-        // 別release_typeに存在するIDの除外は行わない。
-        // movie_cache の PK は (id, release_type) のため DB 側で自然に共存でき、
-        // 除外すると「劇場公開後に配信化された作品」が配信タブに一生出なくなる。
-        // 加えて Supabase-js の暗黙1000行制限により除外自体が静かに壊れていた。
-
-        // TMDb discover APIで映画を取得
-        for (let p = 1; p <= DISCOVER_API_MAX_PAGES; p++) {
-          const tmdbResponse = await discoverMovies({
-            page: p,
-            'release_date.gte': fetchDateGte,
-            'release_date.lte': fetchDateLte,
-            with_release_type: withReleaseType,
-            sort_by: 'popularity.desc',
-          });
-
-          // ⚠️ 判定は**フィルタ前の件数**で行う（#1166）。`discoverMovies` は
-          // `excludeInappropriateMovies` を通した配列を返すため、
-          // `results.length === 0` は「ローカルのフィルタで全件落ちた」でも
-          // 成立し、そこで打ち切ると以降のページを取りにいかない。
-          // ここはクリアを持たないので一覧から消えることは無いが、
-          // 下の `filteredResults.length === 0` が `continue` にしているのと
-          // 同じ理由で `break` は誤り
-          if (tmdbResponse.raw_results_count === 0) break;
-
-          // adultコンテンツ・除外言語・低品質コンテンツを除外
-          const qualityResults = tmdbResponse.results.filter((movie) =>
-            isQualityMovie(movie),
-          );
-
-          // 舞台・演劇の中継を除外する（タイトル判定のみで完結する）
-          const stageFiltered = qualityResults.filter(
-            (movie) => !isStageBroadcast(movie),
-          );
-
-          // ライブビューイング・コンサート映像を除外する。
-          // 判定にTMDbへの問い合わせを伴うが、候補はMusic系ジャンルのみの
-          // 作品に限られるため1ページあたり数件で済む
-          const concertFlags = await Promise.all(
-            stageFiltered.map((movie) => isConcertFilm(movie)),
-          );
-          const filteredResults = stageFiltered.filter(
-            (_, index) => !concertFlags[index],
-          );
-
-          if (filteredResults.length === 0) continue;
-
-          // UPSERTでmovie_cacheに保存
-          const movieRows = filteredResults.map((movie) => ({
-            id: movie.id,
-            title: movie.title,
-            poster_path: movie.poster_path,
-            backdrop_path: movie.backdrop_path,
-            release_date: movie.release_date || null,
-            overview: movie.overview || null,
-            vote_average: movie.vote_average,
-            vote_count: movie.vote_count ?? 0,
-            popularity: movie.popularity,
-            genre_ids: movie.genre_ids,
-            original_language: movie.original_language,
-            release_type,
-            cached_at: now.toISOString(),
-          }));
-
-          // リバイバル行の release_date を上書きしないため RPC 経由で UPSERT する
-          // （set_now_playing は指定せず、既存の is_now_playing を保持する）
-          await supabase.rpc('upsert_movie_cache', { movies: movieRows });
-
-          if (p >= tmdbResponse.total_pages) break;
-        }
+      if (!theatricalCount) {
+        await syncUpcomingMovies();
       }
     }
 

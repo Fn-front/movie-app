@@ -17,9 +17,12 @@ import { DeleteAccount } from './deleteAccount';
 const mockDeleteAccount = jest.fn();
 const mockLoadRequirement = jest.fn();
 const mockClearError = jest.fn();
+const mockSendDeleteCode = jest.fn();
 const hookState = {
   isSubmitting: false,
+  isSendingCode: false,
   error: null as string | null,
+  notice: null as string | null,
   secondFactorRequired: false as boolean | null,
 };
 
@@ -28,6 +31,7 @@ jest.mock('./hooks/useDeleteAccount', () => ({
     ...hookState,
     deleteAccount: mockDeleteAccount,
     loadRequirement: mockLoadRequirement,
+    sendDeleteCode: mockSendDeleteCode,
     clearError: mockClearError,
   }),
 }));
@@ -46,7 +50,9 @@ const openDialog = async () => {
 beforeEach(() => {
   jest.clearAllMocks();
   hookState.isSubmitting = false;
+  hookState.isSendingCode = false;
   hookState.error = null;
+  hookState.notice = null;
   hookState.secondFactorRequired = false;
 });
 
@@ -113,6 +119,108 @@ describe('DeleteAccount', () => {
       await openDialog();
 
       expect(screen.queryByLabelText('認証コード')).not.toBeInTheDocument();
+    });
+
+    /**
+     * ⛔ **ここが #1362 の本体。**
+     *
+     * パスワードも第2要素も持たない利用者（OAuth のみで登録し二段階認証を
+     * 設定していない層）には、**再確認が1つも掛からなかった**。
+     * セッションを奪った第三者がそのまま2クリックで消せる。
+     */
+    it('どちらも持たない利用者には確認コードを要求する', async () => {
+      render(<DeleteAccount hasPassword={false} />);
+      await openDialog();
+
+      expect(screen.getByLabelText('確認コード')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: '確認コードを送る' }),
+      ).toBeInTheDocument();
+    });
+
+    // ⚠️ パスワードを持つ利用者には要求しない。記憶の照合が済んでいる
+    it('パスワードを持つ利用者には確認コードを求めない', async () => {
+      render(<DeleteAccount hasPassword />);
+      await openDialog();
+
+      expect(screen.queryByLabelText('確認コード')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: '確認コードを送る' }),
+      ).not.toBeInTheDocument();
+    });
+
+    /**
+     * ⛔ **第2要素を持っていても免除しない**（1回目レビューで critical）。
+     *
+     * 第2要素は**セッションだけで自己登録できる**ため、セッションを奪った
+     * 第三者が自分で設定して自分で通せる。
+     */
+    it('第2要素を持っていても確認コードを求める', async () => {
+      hookState.secondFactorRequired = true;
+      render(<DeleteAccount hasPassword={false} />);
+      await openDialog();
+
+      expect(screen.getByLabelText('確認コード')).toBeInTheDocument();
+      expect(screen.getByLabelText('認証コード')).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ 判定に失敗して「要る側」へ倒れても確認コード欄は消えない。
+     * 消えると、コードを取る手段が無いまま必ず 400 になる。
+     */
+    it('第2要素の判定前でも確認コード欄は出す', async () => {
+      hookState.secondFactorRequired = null;
+      render(<DeleteAccount hasPassword={false} />);
+      await openDialog();
+
+      expect(screen.getByLabelText('確認コード')).toBeInTheDocument();
+    });
+  });
+
+  describe('確認コードの送信', () => {
+    it('押すとコードを送る', async () => {
+      render(<DeleteAccount hasPassword={false} />);
+      const user = await openDialog();
+
+      await user.click(
+        screen.getByRole('button', { name: '確認コードを送る' }),
+      );
+
+      expect(mockSendDeleteCode).toHaveBeenCalled();
+    });
+
+    // 送れたことを伝えないと、利用者は届くまで何が起きたか分からない
+    it('送れたことを読み上げられる形で出す', async () => {
+      hookState.notice = '登録のメールアドレスに確認コードを送りました。';
+      render(<DeleteAccount hasPassword={false} />);
+      await openDialog();
+
+      await waitFor(() =>
+        expect(screen.getByRole('status')).toHaveTextContent(
+          '確認コードを送りました',
+        ),
+      );
+    });
+
+    it('コード未入力では削除できない', async () => {
+      render(<DeleteAccount hasPassword={false} />);
+      await openDialog();
+
+      expect(screen.getByRole('button', { name: '削除する' })).toBeDisabled();
+    });
+
+    /**
+     * ⚠️ 連打すると2本目が再送間隔（60秒）に当たって 429 になり、
+     * 成功した直後にエラーが出る。
+     */
+    it('送信中は押せない', async () => {
+      hookState.isSendingCode = true;
+      render(<DeleteAccount hasPassword={false} />);
+      await openDialog();
+
+      expect(
+        screen.getByRole('button', { name: '送信しています…' }),
+      ).toBeDisabled();
     });
   });
 
@@ -181,9 +289,29 @@ describe('DeleteAccount', () => {
       render(<DeleteAccount hasPassword={false} />);
       const user = await openDialog();
 
+      await user.type(screen.getByLabelText('確認コード'), '123456');
       await user.click(screen.getByRole('button', { name: '削除する' }));
 
-      expect(mockDeleteAccount).toHaveBeenCalledWith({});
+      expect(mockDeleteAccount).toHaveBeenCalledWith({ deleteCode: '123456' });
+    });
+
+    /**
+     * ⚠️ **別フィールドで送る。** 同じ `code` だと、第2要素と退会コードを
+     * 同時に要求されたときにどちらか一方しか満たせない。
+     */
+    it('第2要素と退会コードを別々に送る', async () => {
+      hookState.secondFactorRequired = true;
+      render(<DeleteAccount hasPassword={false} />);
+      const user = await openDialog();
+
+      await user.type(screen.getByLabelText('認証コード'), '111111');
+      await user.type(screen.getByLabelText('確認コード'), '222222');
+      await user.click(screen.getByRole('button', { name: '削除する' }));
+
+      expect(mockDeleteAccount).toHaveBeenCalledWith({
+        code: '111111',
+        deleteCode: '222222',
+      });
     });
 
     it('送信中は操作できない', async () => {

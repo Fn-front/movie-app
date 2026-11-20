@@ -11,6 +11,7 @@
 import { useCallback, useState } from 'react';
 
 import { API_ENDPOINTS, ROUTES } from '@/constants';
+import { ACCOUNT_DELETE_CODE_MESSAGES } from '@/constants/accountDeleteCode';
 import { ACCOUNT_DELETE_MESSAGES } from '@/constants/auth';
 import { cleanUpBeforeSignOut, logout } from '@/lib/auth/logout';
 import { clearConsentRecord } from '@/utils/cookieConsent';
@@ -21,6 +22,13 @@ export interface DeleteAccountInput {
   currentPassword?: string;
   /** 第2要素のコード。未設定の利用者は省く */
   code?: string;
+  /**
+   * 退会の確認コード（#1362）
+   *
+   * ⛔ **`code` と分ける。** 第2要素と同時に要求しうるため、1つの欄では
+   * どちらか一方しか満たせない。
+   */
+  deleteCode?: string;
 }
 
 interface UseDeleteAccountResult {
@@ -35,6 +43,17 @@ interface UseDeleteAccountResult {
   secondFactorRequired: boolean | null;
   /** ダイアログを開くときに呼ぶ。第2要素の有無を取りにいく */
   loadRequirement: () => Promise<void>;
+  /**
+   * 退会の確認コードを送る（#1362）
+   *
+   * ⚠️ パスワードも第2要素も持たない利用者のための経路。この層は照合する
+   * 材料が無く、**再確認が1つも掛からないまま削除できていた**。
+   */
+  sendDeleteCode: () => Promise<void>;
+  /** コードを送れたか（画面に「送りました」を出すため） */
+  notice: string | null;
+  /** 確認コードを送信中か（連打で2本目が 429 になるのを防ぐ） */
+  isSendingCode: boolean;
   /** 削除する。成功するとログアウトして遷移するため、通常は戻ってこない */
   deleteAccount: (input: DeleteAccountInput) => Promise<void>;
   clearError: () => void;
@@ -51,8 +70,49 @@ export function useDeleteAccount(): UseDeleteAccountResult {
   const [secondFactorRequired, setSecondFactorRequired] = useState<
     boolean | null
   >(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [isSendingCode, setIsSendingCode] = useState(false);
 
-  const clearError = useCallback(() => setError(null), []);
+  const clearError = useCallback(() => {
+    setError(null);
+    setNotice(null);
+  }, []);
+
+  /**
+   * 退会の確認コードを送る
+   *
+   * ⚠️ **宛先は渡さない。** サーバーが `users.email` から引く。渡せる形に
+   * すると、アカウントを1つ持つだけで任意のアドレスへ自サービス名義の
+   * 「退会の確認コード」を送れる（#641）。
+   */
+  const sendDeleteCode = useCallback(async () => {
+    setError(null);
+    setNotice(null);
+    // ⚠️ 連打すると2本目が再送間隔（60秒）に当たって 429 になり、
+    //    成功した直後にエラーが出る
+    setIsSendingCode(true);
+
+    try {
+      const response = await fetch(API_ENDPOINTS.USER_DELETE_CODE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const json = await response.json().catch(() => null);
+
+      if (!response.ok || !json?.success) {
+        setError(json?.error?.message ?? ACCOUNT_DELETE_MESSAGES.FAILED);
+
+        return;
+      }
+
+      setNotice(ACCOUNT_DELETE_CODE_MESSAGES.CODE_SENT);
+    } catch {
+      setError(ACCOUNT_DELETE_MESSAGES.FAILED);
+    } finally {
+      setIsSendingCode(false);
+    }
+  }, []);
 
   /**
    * 第2要素の有無を取りにいく
@@ -116,9 +176,12 @@ export function useDeleteAccount(): UseDeleteAccountResult {
 
   return {
     isSubmitting,
+    isSendingCode,
     error,
+    notice,
     secondFactorRequired,
     loadRequirement,
+    sendDeleteCode,
     deleteAccount,
     clearError,
   };

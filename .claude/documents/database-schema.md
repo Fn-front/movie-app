@@ -117,9 +117,9 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 |---------|-----|------|-----------|------|
 | id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
 | email | VARCHAR(255) | NOT NULL | - | 送信先メールアドレス |
-| user_id | UUID | NULL | - | コードを要求した利用者（users.id / ON DELETE CASCADE）。`email_change` では必須（#1359） |
+| user_id | UUID | NULL | - | コードを要求した利用者（users.id / ON DELETE CASCADE）。`email_change` / `account_delete` では必須（#1359 / #1362） |
 | code_hash | TEXT | NOT NULL | - | OTPコードの HMAC-SHA256（鍵は `OTP_HASH_PEPPER`） |
-| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（registration / password_change / two_factor / email_change）。`login` は #1361 で退役（CHECK 制約には既存行のため残す） |
+| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（registration / password_change / two_factor / email_change / account_delete）。`login` は #1361 で退役（CHECK 制約には既存行のため残す） |
 | attempts | INTEGER | NOT NULL | 0 | 検証試行回数 |
 | expires_at | TIMESTAMPTZ | NOT NULL | - | 有効期限（作成時刻 + 10分） |
 | verified_at | TIMESTAMPTZ | NULL | - | 検証完了日時 |

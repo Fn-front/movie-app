@@ -50,6 +50,12 @@ export const API_ENDPOINTS = {
   ADMIN_AWARD_SYNC_JOB: (id: string) => `/api/admin/awards/sync/${id}`,
   /** 指定した賞・年に既に入っている件数（admin 専用） */
   ADMIN_AWARD_EXISTING: '/api/admin/awards/existing',
+  /**
+   * 退会の確認コード送信（#1362）
+   *
+   * ⚠️ 宛先は渡さない。サーバーが `users.email` から引く
+   */
+  USER_DELETE_CODE: '/api/user/delete-code',
   /** 二段階認証の状態取得 */
   USER_TOTP: '/api/user/totp',
   /** 二段階認証の設定開始（QRコード取得） */

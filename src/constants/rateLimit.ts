@@ -144,6 +144,14 @@ export const RATE_LIMIT_ACTION = {
   CRON_FAILURE_NOTICE: 'cron_failure_notice',
   /** アカウントの自己削除（#932） */
   ACCOUNT_DELETE: 'account_delete',
+  /**
+   * 退会の確認コード送信（#1362）
+   *
+   * ⚠️ `ACCOUNT_DELETE`（削除の試行）とは**別カウンタ**。同じにすると、
+   * コードを送り直すだけで削除の試行枠を食い尽くし、**正しいコードを
+   * 持っていても消せなくなる**（#1359 で送信枠と検証枠を分けたのと同じ理由）。
+   */
+  ACCOUNT_DELETE_CODE_SEND: 'account_delete_code_send',
   /** メールアドレス変更の確認コード送信（#1359） */
   EMAIL_CHANGE_REQUEST: 'email_change_request',
   /** メールアドレス変更の確認コード検証（#1359） */
@@ -478,6 +486,13 @@ export const RATE_LIMIT_CONFIG = {
    * `delete_user_account` が消す（識別子は利用者ID）。
    */
   ACCOUNT_DELETE: { maxAttempts: 5, windowMinutes: 60 },
+  /**
+   * 退会の確認コード送信（#1362）
+   *
+   * 再送間隔（60秒）と合わせて、メールボックスへの連投を抑える。
+   * 削除の試行（`ACCOUNT_DELETE`）と同じ5回/60分だが別カウンタ。
+   */
+  ACCOUNT_DELETE_CODE_SEND: { maxAttempts: 5, windowMinutes: 60 },
 
   /**
    * メールアドレス変更の確認コード送信（#1359）

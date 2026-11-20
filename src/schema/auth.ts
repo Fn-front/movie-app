@@ -257,7 +257,16 @@ export const passwordResetConfirmApiSchema = z.object({
  */
 export const accountDeleteApiSchema = z.object({
   currentPassword: z.string().optional(),
-  code: z.string().optional(),
+  /** 第2要素（認証アプリ / メールOTP / リカバリーコード） */
+  code: z.string().trim().max(32).optional(),
+  /**
+   * 退会の確認コード（#1362）
+   *
+   * ⛔ **`code` と分ける。** 第2要素と同時に要求しうるため、1つの欄では
+   * どちらか一方しか満たせない。パスワードを持たない利用者は
+   * 「第2要素（設定していれば）＋退会コード」の両方を出す。
+   */
+  deleteCode: z.string().trim().max(32).optional(),
 });
 
 export type AccountDeleteApiData = z.infer<typeof accountDeleteApiSchema>;

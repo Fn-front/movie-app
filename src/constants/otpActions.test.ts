@@ -19,6 +19,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { ACCOUNT_DELETE_OTP_ACTION } from './accountDeleteCode';
 import { EMAIL_CHANGE_OTP_ACTION } from './emailChange';
 import { OTP_ACTION } from './otp';
 import { TWO_FACTOR_OTP_ACTION } from './secondFactor';
@@ -67,6 +68,7 @@ const PUBLIC_ACTIONS: string[] = Object.values(OTP_ACTION);
 const INTERNAL_ACTIONS: string[] = [
   TWO_FACTOR_OTP_ACTION,
   EMAIL_CHANGE_OTP_ACTION,
+  ACCOUNT_DELETE_OTP_ACTION,
 ];
 
 /**
@@ -133,8 +135,8 @@ describe('chk_otp_action_type と定数の突き合わせ', () => {
   /**
    * ⛔ **これが崩れると #641 の穴が再発する。**
    *
-   * `two_factor` と `email_change` は宛先がサーバー側で決まらないまま
-   * 送信へ到達しうるため、公開ルートから到達させてはいけない。
+   * `two_factor` / `email_change` / `account_delete` は宛先がサーバー側で
+   * 決まらないまま送信へ到達しうるため、公開ルートから到達させてはいけない。
    * とくに `email_change` は**宛先がまだ本人のものでないアドレス**。
    */
   it('認証済み専用の用途を OTP_ACTION に入れない', () => {

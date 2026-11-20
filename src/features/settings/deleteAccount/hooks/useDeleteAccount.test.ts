@@ -7,6 +7,7 @@
 
 import { act, renderHook, waitFor } from '@testing-library/react';
 
+import { ACCOUNT_DELETE_CODE_MESSAGES } from '@/constants/accountDeleteCode';
 import { ACCOUNT_DELETE_MESSAGES } from '@/constants/auth';
 
 import { useDeleteAccount } from './useDeleteAccount';
@@ -201,6 +202,105 @@ describe('useDeleteAccount', () => {
       act(() => result.current.clearError());
 
       expect(result.current.error).toBeNull();
+    });
+  });
+
+  /**
+   * ⛔ **ここが無いと「確認コードを送る」ボタンが何もしなくても緑のまま。**
+   *
+   * `deleteAccount.test.tsx` はこのフックを丸ごとモックし、
+   * `delete-code/route.ts` は引数なしの `POST()` なので**URL とメソッドは
+   * ここでしか固定できない**。#1359 で「route 側は guard を、UI 側は hook を
+   * モックするため境界だけが無防備」と指摘されたのと同じ構造（実測で
+   * `if (1) return;` を入れても 278 件すべて緑だった）。
+   */
+  describe('確認コードの送信', () => {
+    it('専用のエンドポイントへ POST する', async () => {
+      const { result } = renderHook(() => useDeleteAccount());
+
+      await act(async () => {
+        await result.current.sendDeleteCode();
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/user/delete-code',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    /**
+     * ⛔ **宛先を載せない。** 受け付ける形にすると、アカウントを1つ持つだけで
+     * 任意のアドレスへ自サービス名義の「退会の確認コード」を送れる（#641）。
+     */
+    it('本文を送らない（宛先はサーバーが引く）', async () => {
+      const { result } = renderHook(() => useDeleteAccount());
+
+      await act(async () => {
+        await result.current.sendDeleteCode();
+      });
+
+      const init = (global.fetch as jest.Mock).mock.calls[0][1] as {
+        body?: unknown;
+      };
+
+      expect(init.body).toBeUndefined();
+    });
+
+    it('送れたら文言を出す', async () => {
+      const { result } = renderHook(() => useDeleteAccount());
+
+      await act(async () => {
+        await result.current.sendDeleteCode();
+      });
+
+      expect(result.current.notice).toBe(
+        ACCOUNT_DELETE_CODE_MESSAGES.CODE_SENT,
+      );
+      expect(result.current.error).toBeNull();
+    });
+
+    /**
+     * ⚠️ 失敗したのに「送りました」と出すと、利用者は届かないコードを
+     * 待ち続ける。
+     */
+    it('失敗したらサーバーの文言を出し、送れたとは言わない', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        errorResponse(429, '再送信は60秒後にお試しください。'),
+      );
+
+      const { result } = renderHook(() => useDeleteAccount());
+
+      await act(async () => {
+        await result.current.sendDeleteCode();
+      });
+
+      expect(result.current.error).toBe('再送信は60秒後にお試しください。');
+      expect(result.current.notice).toBeNull();
+    });
+
+    it('通信に失敗してもメッセージを出す', async () => {
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('offline'));
+
+      const { result } = renderHook(() => useDeleteAccount());
+
+      await act(async () => {
+        await result.current.sendDeleteCode();
+      });
+
+      expect(result.current.error).toBe(ACCOUNT_DELETE_MESSAGES.FAILED);
+    });
+
+    // ⚠️ 連打すると2本目が再送間隔（60秒）に当たって 429 になる
+    it('送信が終われば送信中フラグを下ろす', async () => {
+      const { result } = renderHook(() => useDeleteAccount());
+
+      expect(result.current.isSendingCode).toBe(false);
+
+      await act(async () => {
+        await result.current.sendDeleteCode();
+      });
+
+      expect(result.current.isSendingCode).toBe(false);
     });
   });
 

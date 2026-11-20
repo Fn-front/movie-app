@@ -14,6 +14,7 @@ import { memo, useCallback, useId, useState } from 'react';
 import { Button } from '@/components/ui/button/button';
 import { Input } from '@/components/ui/input/input';
 import { Modal } from '@/components/ui/modal/modal';
+import { ACCOUNT_DELETE_CODE_MESSAGES } from '@/constants/accountDeleteCode';
 import { ACCOUNT_DELETE_MESSAGES } from '@/constants/auth';
 import { useDeleteAccount } from './hooks/useDeleteAccount';
 
@@ -38,22 +39,45 @@ export const DeleteAccount = memo(function DeleteAccount({
   const [isOpen, setIsOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [code, setCode] = useState('');
+  const [deleteCode, setDeleteCode] = useState('');
   const {
     isSubmitting,
+    isSendingCode,
     error,
+    notice,
     secondFactorRequired,
     loadRequirement,
+    sendDeleteCode,
     deleteAccount,
     clearError,
   } = useDeleteAccount();
 
+  /**
+   * 退会の確認コードが要るか（#1362）
+   *
+   * ⛔ パスワードを持たない利用者（OAuth のみで登録）は照合する材料が無く、
+   * **再確認が1つも掛からないまま削除できていた**。登録アドレスへ送る
+   * 使い捨てコードで塞ぐ。
+   *
+   * ⛔ **第2要素の有無で出し分けない**（1回目レビューで critical）。
+   * 第2要素は**セッションだけで自己登録できる**ため、セッションを奪った
+   * 第三者が自分で設定して自分で通せる。パスワードを持たないなら、
+   * 第2要素を持っていてもこのコードは要る。
+   *
+   * ⚠️ これにより `secondFactorRequired` の判定を待たずに出せる。
+   * 取得に失敗して「要る側」へ倒れても、この欄は消えない。
+   */
+  const needsDeleteCode = !hasPassword;
+
   const passwordFieldId = useId();
   const codeFieldId = useId();
+  const deleteCodeFieldId = useId();
 
   const handleOpen = useCallback(() => {
     clearError();
     setCurrentPassword('');
     setCode('');
+    setDeleteCode('');
     setIsOpen(true);
     // 開いてから取りにいく。設定ページの初期表示にリクエストを足さない
     void loadRequirement();
@@ -73,16 +97,28 @@ export const DeleteAccount = memo(function DeleteAccount({
   const handleSubmit = useCallback(async () => {
     await deleteAccount({
       ...(hasPassword ? { currentPassword } : {}),
+      // ⚠️ 第2要素と退会コードは**別のフィールド**。両方要求されうるので、
+      //    1つの欄ではどちらか一方しか満たせない
       ...(secondFactorRequired ? { code } : {}),
+      ...(needsDeleteCode ? { deleteCode } : {}),
     });
-  }, [code, currentPassword, deleteAccount, hasPassword, secondFactorRequired]);
+  }, [
+    code,
+    currentPassword,
+    deleteAccount,
+    deleteCode,
+    hasPassword,
+    needsDeleteCode,
+    secondFactorRequired,
+  ]);
 
   // ⚠️ 入力が足りないまま送ると 400 が返るだけなので手前で止める。
   //    判定前（null）も止める —— 設定済みの利用者がコード無しで押せてしまう
   const canSubmit =
     secondFactorRequired !== null &&
     (!hasPassword || currentPassword.length > 0) &&
-    (!secondFactorRequired || code.length > 0);
+    (!secondFactorRequired || code.length > 0) &&
+    (!needsDeleteCode || deleteCode.length > 0);
 
   return (
     <div className={styles.c_delete_account}>
@@ -125,6 +161,42 @@ export const DeleteAccount = memo(function DeleteAccount({
               onChange={(event) => setCode(event.target.value)}
               fullWidth
             />
+          )}
+
+          {/*
+            ⛔ パスワードも第2要素も持たない利用者のための経路（#1362）。
+            この層は照合する材料が無く、再確認が1つも掛からないまま
+            削除できていた
+          */}
+          {needsDeleteCode && (
+            <>
+              <p className={styles.c_delete_account__description}>
+                {ACCOUNT_DELETE_CODE_MESSAGES.DESCRIPTION}
+              </p>
+              <Button
+                variant='secondary'
+                onClick={sendDeleteCode}
+                disabled={isSubmitting || isSendingCode}
+              >
+                {isSendingCode ? '送信しています…' : '確認コードを送る'}
+              </Button>
+              <Input
+                id={deleteCodeFieldId}
+                type='text'
+                inputMode='numeric'
+                label='確認コード'
+                autoComplete='one-time-code'
+                value={deleteCode}
+                onChange={(event) => setDeleteCode(event.target.value)}
+                fullWidth
+              />
+            </>
+          )}
+
+          {notice && (
+            <p role='status' className={styles.c_delete_account__description}>
+              {notice}
+            </p>
           )}
 
           {error && (

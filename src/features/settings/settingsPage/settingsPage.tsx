@@ -13,6 +13,7 @@ import { WATCHLIST_STREAMING_SCOPE_LABELS } from '@/constants';
 import { DisplayNameForm } from '@/features/settings/displayNameForm/displayNameForm';
 import { ChangePasswordForm } from '@/features/settings/changePasswordForm/changePasswordForm';
 import { TwoFactorSettings } from '@/features/settings/twoFactorSettings/twoFactorSettings';
+import { EmailChangeForm } from '@/features/settings/emailChangeForm/emailChangeForm';
 import { DeleteAccount } from '@/features/settings/deleteAccount/deleteAccount';
 import { NotificationSettings } from '@/features/settings/notificationSettings/notificationSettings';
 import { StreamingNoticeSettings } from '@/features/settings/streamingNoticeSettings/streamingNoticeSettings';
@@ -53,10 +54,16 @@ export const SettingsPage = memo(function SettingsPage() {
           </section>
         ) : (
           email && (
-            <section className={styles.c_settings_page__section}>
-              <Heading level={2}>パスワード変更</Heading>
-              <ChangePasswordForm email={email} hasPassword={hasPassword} />
-            </section>
+            <>
+              <section className={styles.c_settings_page__section}>
+                <Heading level={2}>メールアドレス</Heading>
+                <EmailChangeForm email={email} hasPassword={hasPassword} />
+              </section>
+              <section className={styles.c_settings_page__section}>
+                <Heading level={2}>パスワード変更</Heading>
+                <ChangePasswordForm email={email} hasPassword={hasPassword} />
+              </section>
+            </>
           )
         )}
 

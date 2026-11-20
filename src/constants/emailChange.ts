@@ -48,3 +48,20 @@ export const EMAIL_CHANGE_MESSAGES = {
   /** 旧アドレスへの通知の件名 */
   NOTICE_SUBJECT: 'メールアドレスが変更されました',
 } as const;
+
+/**
+ * 変更フォームの画面状態
+ *
+ * ⚠️ **フックではなくここに置く。** フックは `next-auth/react` を
+ * import するため、テストが `jest.requireActual` でこの定数だけ
+ * 取りにいくと ESM の読み込みで落ちる（実測）。
+ */
+export const EMAIL_CHANGE_VIEW = {
+  /** 新しいアドレスとパスワードの入力 */
+  INPUT: 'input',
+  /** 確認コードの入力 */
+  CODE: 'code',
+} as const;
+
+export type EmailChangeView =
+  (typeof EMAIL_CHANGE_VIEW)[keyof typeof EMAIL_CHANGE_VIEW];

@@ -1,0 +1,44 @@
+@use '@/styles/variables' as *;
+@use '@/styles/mixins' as *;
+
+.c_email_change_form {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-4;
+  align-items: flex-start;
+}
+
+.c_email_change_form__description {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  line-height: $line-height-loose;
+}
+
+.c_email_change_form__current {
+  font-size: $font-size-sm;
+  color: $text-primary;
+}
+
+.c_email_change_form__pending {
+  font-size: $font-size-sm;
+  color: $text-primary;
+}
+
+.c_email_change_form__actions {
+  display: flex;
+  gap: $spacing-3;
+}
+
+.c_email_change_form__notice {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+}
+
+.c_email_change_form__error {
+  padding: $spacing-3 $spacing-4;
+  background-color: color-alpha(--error-main, 10%);
+  border: $border-width-1 solid $error-light;
+  border-radius: $border-radius-md;
+  color: $error-dark;
+  font-size: $font-size-sm;
+}

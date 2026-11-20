@@ -214,7 +214,10 @@ export async function POST(request: Request) {
     // 前回送信から1分以上経過しているかチェック
     const { data: recentOtp, error: recentOtpError } = await supabase
       .from('otp_codes')
-      .select('created_at')
+      // `password_contested` も引く（#1325）。再送は直前のコードの印を
+      // **引き継ぐ**。引き継がないと、第三者に上書きされた被害者が再送を
+      // 押すだけで印が消え、攻撃者のパスワードが残ったまま昇格できる
+      .select('created_at, password_contested')
       .eq('email', email)
       .eq('action_type', action)
       .order('created_at', { ascending: false })
@@ -310,6 +313,14 @@ export async function POST(request: Request) {
       code_hash: hashOtpCode(code, email),
       action_type: action,
       expires_at: expiresAt.toISOString(),
+      // 直前のコードの印をそのまま引き継ぐ（#1325）。
+      //
+      // ⚠️ 落とすと保護が無くなる。被害者は「コードが違う」を見て再送を
+      // 押すので、**再送こそが攻撃の成立経路**だった。ここで false に
+      // 戻すと、攻撃者のパスワードを載せたまま is_verified が立つ。
+      //
+      // 引き継ぎ元が無い（初回送信・移行前の行）場合は false ＝ 係争なし
+      password_contested: recentOtp?.password_contested ?? false,
     });
 
     if (insertError) {

@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     // otp_codesテーブルから該当レコード検索（最新の未検証OTP）
     const { data: otpRecord, error: fetchError } = await supabase
       .from('otp_codes')
-      .select('id, code_hash, attempts, expires_at')
+      .select('id, code_hash, attempts, expires_at, password_contested')
       .eq('email', email)
       .eq('action_type', action)
       .is('verified_at', null)
@@ -205,14 +205,49 @@ export async function POST(request: Request) {
 
     // アクション別後処理
     if (action === OTP_ACTION.REGISTRATION) {
-      // is_verified = true に更新
-      const { error: updateError } = await supabase
+      // ⚠️ **係争中のパスワードは昇格と同時に失効させる（#1325）。**
+      //
+      // 「被害者が未検証で登録 → 第三者が同じアドレスで register」の順だと、
+      // `password_hash` は第三者のものに上書きされている
+      // （`auth/register/route.ts` の既存ユーザー分岐／#645）。第三者の
+      // register は被害者宛の未検証コードを DELETE するので、被害者は
+      // 「コードが違う」を見て**再送**し、そのコードで検証を終える。
+      // 再送（`auth/otp/send`）は `password_hash` に触らないため、
+      // 第三者のハッシュを載せたまま `is_verified` が立っていた。
+      //
+      // 未検証の間に設定されたパスワードは**出自を区別する手段が無い**。
+      // 上書きは旧パスワードとの照合なしに行われるので、本人のものか
+      // 第三者のものかはDBを見ても分からない。#1302 が LOGIN 経路で
+      // 採ったのと同じ判断で、安全側に倒して失効させる。
+      //
+      // ⛔ 無条件に消してはいけない。通常の新規登録が毎回パスワード無しで
+      //   終わる。消すのは `password_contested` が立っているときだけ ——
+      //   つまり**他人の未検証登録を上書きして設定された**パスワード。
+      //   「同じパスワードでのやり直し」は register 側で除外済み。
+      const passwordContested = otpRecord.password_contested === true;
+
+      const { data: promotedUsers, error: updateError } = await supabase
         .from('users')
-        .update({ is_verified: true })
-        .eq('email', email);
+        .update({
+          is_verified: true,
+          ...(passwordContested ? { password_hash: null } : {}),
+        })
+        .eq('email', email)
+        .select('id');
 
       if (updateError) {
         throw updateError;
+      }
+
+      // 失効させたことを伝えないと、利用者は次のパスワードログインが
+      // 「メールアドレスまたはパスワードが正しくありません。」で弾かれる
+      // 理由を知るすべがない。
+      //
+      // ⚠️ 送信結果で検証を止めない。失効そのものは上で確定しており、
+      // ここで 500 にすると正しいコードを入れた利用者が行き止まりに入る
+      // （#1258 と同種）。LOGIN 分岐と同じ扱い
+      if (passwordContested && promotedUsers && promotedUsers.length > 0) {
+        await sendPasswordInvalidatedEmail(email);
       }
 
       // OTPレコード削除
@@ -276,12 +311,9 @@ export async function POST(request: Request) {
       // パスワード無しで終わる**（登録フォームで決めた値がそのまま消える）。
       //
       // ⚠️ ただし `REGISTRATION` のコードも「いま登録した本人のもの」とは
-      // 限らない。第三者の register は本人宛の未検証コードを消す
-      // （`auth/register/route.ts` の DELETE）ので、本人は「コードが違う」を
-      // 見て再送する。再送（`auth/otp/send`）は password_hash に触らないため、
-      // そのコードで検証を終えると第三者のハッシュを載せたまま is_verified が
-      // 立つ。**この経路は塞げていない**（#1302 の影響範囲にある既知の穴で、
-      // OTP行とパスワードの出自を紐付ける設計が要る）。残件は #1325。
+      // 限らない。そちらは **`otp_codes.password_contested` で選んで消す**
+      // （#1325）。無条件に消せないのが LOGIN との違いで、通常の新規登録まで
+      // パスワード無しで終わってしまうため。上の REGISTRATION 分岐を参照。
       //
       // ⚠️ `PASSWORD_CHANGE` では立てない。あちらはログイン中の本人確認で、
       // 対象は必ず認証済みのユーザー。立てる意味がないうえ、

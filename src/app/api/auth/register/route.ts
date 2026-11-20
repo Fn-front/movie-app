@@ -121,10 +121,14 @@ export async function POST(request: Request) {
     const pwnedResponse = await rejectPwnedPassword(password);
     if (pwnedResponse) return pwnedResponse;
 
-    // 既存ユーザーチェック（is_verified も見る）
+    // 既存ユーザーチェック（is_verified も見る）。
+    //
+    // `password_hash` も引く（#1325）。未検証ユーザーを上書きするとき、
+    // **同じパスワードでのやり直しかどうか**を判定するのに使う。
+    // 詳しくは下の `password_contested` のコメント
     const { data: existingUser, error: existingUserError } = await supabase
       .from('users')
-      .select('id, is_verified')
+      .select('id, is_verified, password_hash')
       .eq('email', email)
       .single();
 
@@ -217,14 +221,39 @@ export async function POST(request: Request) {
     // 経由の昇格だけ**で、`auth/otp/verify` の LOGIN 分岐が昇格と同時に
     // 失効させている（#1302）。
     //
-    // ⚠️ **REGISTRATION 経由の昇格では今も残る。** 上の DELETE が本人宛の
-    // 有効なコードを消すため、本人は「コードが違う」を見て再送する。再送
-    // （`auth/otp/send`）は password_hash に触らないので、そのコードで
-    // 検証を終えると第三者のハッシュを載せたまま is_verified が立つ。
-    // 残件は #1325。
+    // ⚠️ **REGISTRATION 経由の昇格も #1325 で塞いだ。** 下の
+    // `password_contested` を参照。この分岐で発行したコードには印が付き、
+    // `auth/otp/verify` が昇格と同時に `password_hash` を失効させる。
     let userId: string;
 
+    /**
+     * このリクエストが設定するパスワードは「係争中」か（#1325）
+     *
+     * 未検証の既存ユーザーを上書きするということは、**同じアドレスで
+     * 2人目がパスワードを設定した**ということ。どちらが本人かはサーバーから
+     * 区別できないので、安全側に倒して検証時に失効させる。
+     *
+     * ⚠️ 例外は「同じパスワードでのやり直し」。本人が登録し直しただけなら
+     * 失効させる理由がない。攻撃者は被害者のパスワードを知らないので、
+     * ここを通しても安全性は落ちない。
+     */
+    let passwordContested = false;
+
     if (existingUser) {
+      // ⚠️ 既存のパスワードと同じなら係争ではない（#1325）。
+      //
+      // 本人が「もう一度やり直そう」と同じパスワードで送り直すのは普通の
+      // 操作で、これを係争扱いにすると検証後にパスワードが消えてしまう。
+      //
+      // 攻撃者は被害者のパスワードを知らないため、この抜け道は使えない
+      // （使えるなら最初から乗っ取る必要がない）。
+      //
+      // `password_hash` が NULL（OAuth のみ・#1302 で失効済み等）のときは
+      // 比較対象が無いので係争扱いにする
+      passwordContested = existingUser.password_hash
+        ? !(await bcrypt.compare(password, existingUser.password_hash))
+        : true;
+
       // ⚠️ `name` は入力されたときだけ更新する（#1253）。
       //
       // `name: name || null` にしていた頃は、名前を入れずにやり直すと
@@ -287,6 +316,10 @@ export async function POST(request: Request) {
       code_hash: hashOtpCode(code, email),
       action_type: OTP_ACTION.REGISTRATION,
       expires_at: expiresAt.toISOString(),
+      // 他人の未検証登録を上書きして設定したパスワードには印を付ける（#1325）。
+      // `auth/otp/verify` が昇格と同時に失効させる。再送（`auth/otp/send`）は
+      // この値を引き継ぐので、本人が再送しても印は消えない
+      password_contested: passwordContested,
     });
 
     if (otpInsertError) {

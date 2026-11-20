@@ -103,10 +103,14 @@ describe('POST /api/auth/otp/verify', () => {
         }),
       }),
     });
-    // usersテーブル更新
+    // usersテーブル更新。
+    // ⚠️ `.select('id')` まで繋ぐ（#1325）。失効の有無を呼び出し側が
+    // 知るために件数を見ているので、ここを省くと 500 に落ちる
     mockFrom.mockReturnValueOnce({
       update: () => ({
-        eq: () => ({ data: null, error: null }),
+        eq: () => ({
+          select: () => ({ data: [{ id: 'user-1' }], error: null }),
+        }),
       }),
     });
     // OTPレコード削除
@@ -210,7 +214,12 @@ describe('POST /api/auth/otp/verify', () => {
    */
   describe('LOGIN のメール認証', () => {
     /** OTP行の取得を積む */
-    const mockOtpFetch = (actionType: string) => {
+    /**
+     * @param actionType - OTP の action
+     * @param passwordContested - 係争中の印（#1325）。REGISTRATION の
+     *   検証でこれが true だと `password_hash` を失効させる
+     */
+    const mockOtpFetch = (actionType: string, passwordContested = false) => {
       mockFrom.mockReturnValueOnce({
         select: () => ({
           eq: () => ({
@@ -227,6 +236,7 @@ describe('POST /api/auth/otp/verify', () => {
                         attempts: 0,
                         expires_at: futureDate,
                         verified_at: null,
+                        password_contested: passwordContested,
                       },
                       error: null,
                     }),
@@ -439,34 +449,134 @@ describe('POST /api/auth/otp/verify', () => {
         expect(json.data.verificationToken).toEqual(expect.any(String));
       });
 
-      it('registration では失効させない', async () => {
-        // 利用者がいま登録フォームで決めたパスワード。消すと通常の
-        // 新規登録が毎回パスワード無しで終わる
-        let updated: Record<string, unknown> | null = null;
+      /**
+       * registration の失効は **`password_contested` で選ぶ**（#1325）
+       *
+       * LOGIN と違って無条件には消せない。通常の新規登録が毎回パスワード
+       * 無しで終わってしまうため。
+       */
+      describe('registration の失効（#1325）', () => {
+        /** users の UPDATE を記録する（registration 分岐は eq 1つ + select） */
+        const captureRegistrationUpdate = (promoted = true) => {
+          const captured: { values?: Record<string, unknown> } = {};
 
-        mockOtpFetch('registration');
-        mockFrom.mockReturnValueOnce({
-          update: (values: Record<string, unknown>) => {
-            updated = values;
-            return { eq: () => ({ data: null, error: null }) };
-          },
+          mockFrom.mockReturnValueOnce({
+            update: (values: Record<string, unknown>) => {
+              captured.values = values;
+              return {
+                eq: () => ({
+                  select: () => ({
+                    data: promoted ? [{ id: 'user-1' }] : [],
+                    error: null,
+                  }),
+                }),
+              };
+            },
+          });
+          // OTPレコード削除
+          mockFrom.mockReturnValueOnce({
+            delete: () => ({ eq: () => ({ data: null, error: null }) }),
+          });
+
+          return captured;
+        };
+
+        it('係争していなければ失効させない（通常の新規登録）', async () => {
+          // 利用者がいま登録フォームで決めたパスワード。消すと通常の
+          // 新規登録が毎回パスワード無しで終わる
+          mockOtpFetch('registration', false);
+          const captured = captureRegistrationUpdate();
+
+          const response = await POST(
+            createRequest({
+              email: 'test@example.com',
+              code: '123456',
+              action: 'registration',
+            }),
+          );
+
+          expect(response.status).toBe(200);
+          expect(captured.values).toEqual({ is_verified: true });
+          expect(mockSendPasswordInvalidatedEmail).not.toHaveBeenCalled();
         });
-        // OTPレコード削除
-        mockFrom.mockReturnValueOnce({
-          delete: () => ({ eq: () => ({ data: null, error: null }) }),
+
+        /**
+         * ⚠️ ここが #1325 の本体。
+         *
+         * 第三者に上書きされたパスワードを載せたまま昇格させると、
+         * 攻撃者が `victim@example.com / AttackerPass` でログインできる。
+         */
+        it('係争中なら昇格と同時にパスワードを失効させる', async () => {
+          mockOtpFetch('registration', true);
+          const captured = captureRegistrationUpdate();
+
+          const response = await POST(
+            createRequest({
+              email: 'test@example.com',
+              code: '123456',
+              action: 'registration',
+            }),
+          );
+
+          expect(response.status).toBe(200);
+          expect(captured.values).toEqual({
+            is_verified: true,
+            password_hash: null,
+          });
         });
 
-        const response = await POST(
-          createRequest({
-            email: 'test@example.com',
-            code: '123456',
-            action: 'registration',
-          }),
-        );
+        it('係争中に失効させたら通知する', async () => {
+          // 伝えないと、利用者は次のパスワードログインが弾かれる理由を
+          // 知るすべがない
+          mockOtpFetch('registration', true);
+          captureRegistrationUpdate(true);
 
-        expect(response.status).toBe(200);
-        expect(updated).toEqual({ is_verified: true });
-        expect(mockSendPasswordInvalidatedEmail).not.toHaveBeenCalled();
+          await POST(
+            createRequest({
+              email: 'test@example.com',
+              code: '123456',
+              action: 'registration',
+            }),
+          );
+
+          expect(mockSendPasswordInvalidatedEmail).toHaveBeenCalledWith(
+            'test@example.com',
+          );
+        });
+
+        it('更新対象が0件なら通知しない', async () => {
+          // パスワードは消えていないので、通知すると「無効にした」という嘘になる
+          mockOtpFetch('registration', true);
+          captureRegistrationUpdate(false);
+
+          await POST(
+            createRequest({
+              email: 'test@example.com',
+              code: '123456',
+              action: 'registration',
+            }),
+          );
+
+          expect(mockSendPasswordInvalidatedEmail).not.toHaveBeenCalled();
+        });
+
+        it('通知の送信に失敗しても検証は成功する', async () => {
+          // 失効そのものは済んでおり保護は効いている。ここで 500 にすると
+          // 正しいコードを入れた利用者が行き止まりに入る
+          mockSendPasswordInvalidatedEmail.mockResolvedValue(false);
+          mockOtpFetch('registration', true);
+          captureRegistrationUpdate(true);
+
+          const response = await POST(
+            createRequest({
+              email: 'test@example.com',
+              code: '123456',
+              action: 'registration',
+            }),
+          );
+
+          expect(response.status).toBe(200);
+        });
       });
     });
   });
@@ -1014,9 +1124,13 @@ describe('POST /api/auth/otp/verify', () => {
         }),
       }),
     });
-    // usersテーブル更新
+    // usersテーブル更新。`.select('id')` まで繋ぐ（#1325）
     mockFrom.mockReturnValueOnce({
-      update: () => ({ eq: () => ({ data: null, error: null }) }),
+      update: () => ({
+        eq: () => ({
+          select: () => ({ data: [{ id: 'user-1' }], error: null }),
+        }),
+      }),
     });
     // OTPレコード削除
     mockFrom.mockReturnValueOnce({

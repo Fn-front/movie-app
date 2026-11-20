@@ -482,6 +482,7 @@ export type Database = {
           email: string;
           expires_at: string;
           id: string;
+          password_contested: boolean;
           verification_token_hash: string | null;
           verified_at: string | null;
         };
@@ -493,6 +494,7 @@ export type Database = {
           email: string;
           expires_at: string;
           id?: string;
+          password_contested?: boolean;
           verification_token_hash?: string | null;
           verified_at?: string | null;
         };
@@ -504,6 +506,7 @@ export type Database = {
           email?: string;
           expires_at?: string;
           id?: string;
+          password_contested?: boolean;
           verification_token_hash?: string | null;
           verified_at?: string | null;
         };

@@ -1165,5 +1165,144 @@ describe('許可リストに無い action（zod をすり抜けた場合）', ()
       expect.anything(),
       expect.anything(),
     );
+ * 係争中の印を再送で引き継ぐ（#1325）
+ *
+ * ⚠️ ここが攻撃の成立経路だった。第三者の register は被害者宛の未検証コードを
+ * DELETE するので、被害者は「コードが違う」を見て**再送**する。印を引き継がない
+ * と再送でリセットされ、攻撃者のパスワードを載せたまま `is_verified` が立つ。
+ */
+describe('password_contested の引き継ぎ（#1325）', () => {
+  // ⚠️ 最上位 describe の外にあるため、そちらの beforeEach が効かない
+  beforeEach(() => {
+    mockFrom.mockReset();
+    mockCheckRateLimit.mockReset();
+    mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    (sendOtpEmail as jest.Mock).mockReset();
+    (sendOtpEmail as jest.Mock).mockResolvedValue(true);
+  });
+
+  /**
+   * 直前のコードを返すモック
+   *
+   * @param contested - 直前のコードに係争の印が付いていたか
+   * @param captured - INSERT の中身を記録する
+   */
+  const mockResendFrom = (
+    contested: boolean,
+    captured: { otpRow?: Record<string, unknown> },
+  ) => {
+    // ユーザー検索（未検証で存在する）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'user-1', is_verified: false },
+            error: null,
+          }),
+        }),
+      }),
+    });
+    // 前回送信チェック（60秒より前に送信済み＝再送できる）
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                single: () => ({
+                  data: {
+                    created_at: new Date(Date.now() - 120_000).toISOString(),
+                    password_contested: contested,
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    // 既存OTP削除
+    mockFrom.mockReturnValueOnce({
+      delete: () => ({
+        eq: () => ({ eq: () => ({ is: () => ({ data: null, error: null }) }) }),
+      }),
+    });
+    // OTP挿入
+    mockFrom.mockReturnValueOnce({
+      insert: (row: Record<string, unknown>) => {
+        captured.otpRow = row;
+        return { error: null };
+      },
+    });
+  };
+
+  it('直前のコードが係争中なら、再送したコードにも印を付ける', async () => {
+    const captured: { otpRow?: Record<string, unknown> } = {};
+    mockResendFrom(true, captured);
+
+    const response = await POST(
+      createRequest({ email: 'victim@example.com', action: 'registration' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(captured.otpRow?.password_contested).toBe(true);
+  });
+
+  it('係争していなければ印を付けない（通常の再送）', async () => {
+    const captured: { otpRow?: Record<string, unknown> } = {};
+    mockResendFrom(false, captured);
+
+    await POST(
+      createRequest({ email: 'victim@example.com', action: 'registration' }),
+    );
+
+    expect(captured.otpRow?.password_contested).toBe(false);
+  });
+
+  it('引き継ぎ元が無ければ印を付けない（初回送信・移行前の行）', async () => {
+    const captured: { otpRow?: Record<string, unknown> } = {};
+    // ユーザー検索
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => ({
+            data: { id: 'user-1', is_verified: false },
+            error: null,
+          }),
+        }),
+      }),
+    });
+    // 前回送信なし
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({
+                single: () => ({ data: null, error: { code: 'PGRST116' } }),
+              }),
+            }),
+          }),
+        }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({
+      delete: () => ({
+        eq: () => ({ eq: () => ({ is: () => ({ data: null, error: null }) }) }),
+      }),
+    });
+    mockFrom.mockReturnValueOnce({
+      insert: (row: Record<string, unknown>) => {
+        captured.otpRow = row;
+        return { error: null };
+      },
+    });
+
+    await POST(
+      createRequest({ email: 'new@example.com', action: 'registration' }),
+    );
+
+    expect(captured.otpRow?.password_contested).toBe(false);
   });
 });

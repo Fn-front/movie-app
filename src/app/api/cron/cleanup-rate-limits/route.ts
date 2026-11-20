@@ -36,17 +36,26 @@ export async function GET(request: NextRequest) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    const deletedCount = await deleteExpiredRateLimits(supabase);
+    const { deleted, completed } = await deleteExpiredRateLimits(supabase);
 
     console.log(
-      `Deleted ${deletedCount} expired rate limit records (retention: ${RATE_LIMIT_RETENTION_HOURS}h)`,
+      `Deleted ${deleted} expired rate limit records (retention: ${RATE_LIMIT_RETENTION_HOURS}h, completed: ${completed})`,
     );
 
+    // ⚠️ `completed` をレスポンスに載せること（#1342）。
+    //   時間切れや反復上限で打ち切っても 200 を返すため、**ステータスコードしか
+    //   見ない Vercel の Cron 監視からは完走と区別がつかない**。
+    //   このリポジトリには監視系の依存が一つも入っておらず、`console.warn` は
+    //   誰も tail していなければ観測されない。
+    //
+    //   ⛔ 打ち切りを throw に変えないこと。部分的に成功した掃除であり、
+    //   throw すると削除済み件数が失われたうえ全失敗として扱われる。
     return NextResponse.json(
       {
         success: true,
         data: {
-          deleted_count: deletedCount,
+          deleted_count: deleted,
+          completed,
           retention_hours: RATE_LIMIT_RETENTION_HOURS,
         },
       },

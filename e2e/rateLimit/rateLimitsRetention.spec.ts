@@ -100,7 +100,12 @@ test.describe('レート制限レコードの保持期間', () => {
       });
     }
 
-    await runDeleteExpiredRateLimits(RETENTION_HOURS);
+    // ⚠️ 上限を**必ず渡す**こと（#1342）。本番の CRON は常に `p_limit` 付きで
+    //   呼ぶため、省くとこの spec は**本番が通らない経路**を検証することになる。
+    //   削除条件は SQL の1箇所にしかないが、将来 ctid 版だけを壊されたときに
+    //   ここが気づけるようにしておく。
+    //   仕込むのは4行なので 500 でも全件が対象のまま。
+    await runDeleteExpiredRateLimits(RETENTION_HOURS, 500);
   });
 
   test.afterAll(async () => {

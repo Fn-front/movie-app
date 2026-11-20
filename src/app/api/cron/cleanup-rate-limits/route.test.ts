@@ -69,19 +69,29 @@ describe('GET /api/cron/cleanup-rate-limits', () => {
 
   it('正しい認証で削除が実行され、件数と保持期間を返す', async () => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
-    mockDeleteExpiredRateLimits.mockResolvedValue(12);
+    mockDeleteExpiredRateLimits.mockResolvedValue({
+      deleted: 12,
+      completed: true,
+    });
 
     const response = await GET(createRequest('Bearer test-secret'));
     const json = await response.json();
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.data).toEqual({ deleted_count: 12, retention_hours: 48 });
+    expect(json.data).toEqual({
+      deleted_count: 12,
+      completed: true,
+      retention_hours: 48,
+    });
   });
 
   it('削除対象が無くても成功で返す', async () => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
-    mockDeleteExpiredRateLimits.mockResolvedValue(0);
+    mockDeleteExpiredRateLimits.mockResolvedValue({
+      deleted: 0,
+      completed: true,
+    });
 
     const response = await GET(createRequest('Bearer test-secret'));
     const json = await response.json();

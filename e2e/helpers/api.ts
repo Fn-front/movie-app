@@ -416,13 +416,17 @@ export async function getRateLimitRow(
  */
 export async function runDeleteExpiredRateLimits(
   retentionHours: number,
+  limit?: number,
 ): Promise<number> {
   const response = await fetch(
     `${SUPABASE_URL}/rest/v1/rpc/delete_expired_rate_limits`,
     {
       method: 'POST',
       headers: { ...supabaseHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ retention_hours: retentionHours }),
+      body: JSON.stringify({
+        retention_hours: retentionHours,
+        ...(limit === undefined ? {} : { p_limit: limit }),
+      }),
     },
   );
 

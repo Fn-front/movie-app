@@ -450,10 +450,11 @@ describe('TwoFactorSettings', () => {
           body: JSON.stringify({ method: 'email_otp' }),
         }),
       );
-      // 画面も進む。リクエストが飛ぶだけで止まっていないこと
-      expect(
-        await screen.findByText(/確認コードを送りました/),
-      ).toBeInTheDocument();
+      // 画面も進む。リクエストが飛ぶだけで止まっていないこと。
+      //
+      // ⚠️ リード文は「送りました」と断定しなくなった（#1285）。
+      // 送信の結果は notice 側だけが言う
+      expect(await screen.findByText(/6桁のコードを入力/)).toBeInTheDocument();
     });
   });
 

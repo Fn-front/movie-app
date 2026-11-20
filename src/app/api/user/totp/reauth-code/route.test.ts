@@ -182,12 +182,32 @@ describe('POST /api/user/totp/reauth-code', () => {
     });
 
     it('行が無ければ404を返し、送信しない', async () => {
-      mockUserQuery(null, { code: 'PGRST116' });
+      mockUserQuery(null);
 
       const response = await POST();
 
       expect(response.status).toBe(404);
       expect(mockSendUserBoundOtp).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⚠️ **読み取りの失敗を 404 に丸めない**（#1368 のレビュー）。
+     *
+     * 404 の文言は「このアカウントには確認コードをお送りできません。
+     * お手数ですが窓口までご連絡ください。」で、待てば直る障害の利用者を
+     * サポート窓口へ送ってしまう。同じ `users` の読み取りについて
+     * `totp/setup` も 500 に倒している。
+     */
+    it('読み取りに失敗したら500を返す（404に丸めない）', async () => {
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockUserQuery(null, { code: '57P01', message: 'connection lost' });
+
+      const response = await POST();
+
+      expect(response.status).toBe(500);
+      expect(mockSendUserBoundOtp).not.toHaveBeenCalled();
+
+      spy.mockRestore();
     });
   });
 

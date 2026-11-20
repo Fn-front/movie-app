@@ -145,10 +145,6 @@ describe('TwoFactorSettings', () => {
     });
 
     /**
-     * ⚠️ パスワードを持たない利用者（OAuth のみ）は照合する材料が無い。
-     * 登録アドレスへ送る使い捨てコードで受信箱の所持を確かめる。
-     */
-    /**
      * ⛔ **E2E がこの名前で欄を絞っている**（`e2e/helpers/totp.ts` の
      * `reauthForSecondFactorSetup`）。同じ設定画面のメールアドレス変更にも
      * 『現在のパスワード』があり、名前が無いと strict mode 違反になる。
@@ -169,6 +165,10 @@ describe('TwoFactorSettings', () => {
       ).toBeInTheDocument();
     });
 
+    /**
+     * ⚠️ パスワードを持たない利用者（OAuth のみ）は照合する材料が無い。
+     * 登録アドレスへ送る使い捨てコードで受信箱の所持を確かめる。
+     */
     it('パスワードを持たない利用者には確認コードを求める', async () => {
       mockFetch.mockResolvedValueOnce(statusResponse(false));
 
@@ -363,6 +363,40 @@ describe('TwoFactorSettings', () => {
         screen.getByRole('button', { name: '認証アプリで設定する' }),
       ).toBeInTheDocument();
       expect(screen.queryByLabelText('認証コード')).not.toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ **やめたら再認証の入力も捨てる**（#1368 のレビュー）。
+     *
+     * 残すと、OAuth のみの利用者が「始める → やめる → もう一度」をしたときに
+     * **消費済みのコード**が欄に残る。ボタンは押せるのにサーバーは必ず 400 を
+     * 返し、再送は60秒の間隔と 5回/60分 の枠に当たる。
+     */
+    it('やめると再認証の入力も捨てる', async () => {
+      // ⚠️ この describe の beforeEach は状態の応答を積まない
+      //    （`startSetup()` が自分で積むため）。ここでも自分で積む
+      mockFetch.mockResolvedValueOnce(statusResponse(false));
+      mockFetch.mockResolvedValueOnce(
+        okResponse({ qrCodeDataUri: QR_DATA_URI, secret: 'ABCDEFGH' }),
+      );
+
+      render(<TwoFactorSettings hasPassword={false} />);
+
+      await user.type(await screen.findByLabelText('確認コード'), '123456');
+      await user.click(
+        screen.getByRole('button', { name: '認証アプリで設定する' }),
+      );
+      await user.click(
+        await screen.findByRole('button', {
+          name: '二段階認証の設定をやめる',
+        }),
+      );
+
+      expect(await screen.findByLabelText('確認コード')).toHaveValue('');
+      // 入力が空なので、もう一度は始められない
+      expect(
+        screen.getByRole('button', { name: '認証アプリで設定する' }),
+      ).toBeDisabled();
     });
   });
 

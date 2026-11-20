@@ -75,6 +75,21 @@ export const TwoFactorSettings = memo<TwoFactorSettingsProps>(
       ? reauthPassword.length > 0
       : reauthCode.length > 0;
 
+    /**
+     * 設定をやめる（#1368 のレビュー）
+     *
+     * ⚠️ **再認証の入力も捨てる。** 残すと、OAuth のみの利用者が
+     * 「始める → やめる → もう一度」をしたときに**消費済みのコード**が
+     * 欄に残ったままになり、ボタンは押せるのにサーバーが必ず 400 を返す。
+     * 再送は60秒の間隔と 5回/60分 の枠に当たるので行き止まりに近い。
+     */
+    const handleCancelSetup = useCallback(() => {
+      setReauthPassword('');
+      setReauthCode('');
+      setCode('');
+      cancelSetup();
+    }, [cancelSetup]);
+
     const handleReauthPasswordChange = useCallback(
       (event: React.ChangeEvent<HTMLInputElement>) => {
         setReauthPassword(event.target.value);
@@ -315,7 +330,7 @@ export const TwoFactorSettings = memo<TwoFactorSettingsProps>(
               <Button
                 type='button'
                 variant='secondary'
-                onClick={cancelSetup}
+                onClick={handleCancelSetup}
                 aria-label='二段階認証の設定をやめる'
               >
                 やめる
@@ -421,7 +436,7 @@ export const TwoFactorSettings = memo<TwoFactorSettingsProps>(
               <Button
                 type='button'
                 variant='secondary'
-                onClick={cancelSetup}
+                onClick={handleCancelSetup}
                 aria-label='二段階認証の設定をやめる'
               >
                 やめる

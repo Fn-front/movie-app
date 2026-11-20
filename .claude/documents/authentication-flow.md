@@ -933,6 +933,11 @@ DB側で排他**になる。
 > 5 は**第2要素を設定してよいか確かめるコード**（`second_factor_setup`）。
 > 第2要素をまだ持っていない利用者に送るので、`sendSecondFactorCode` では
 > なく `src/lib/auth/userBoundOtp.ts` を通る。
+>
+> `userBoundOtp.ts` は**退会の確認コード（#1362）と共通の実装**。どちらも
+> 「宛先は登録アドレス」「`user_id` と `action_type` の両方で照合」「公開
+> ルートからは到達しない」という同じ性質を持つ。`accountDeleteCode.ts` は
+> 用途を固定して渡すだけの薄い層になっている。
 
 > ⚠️ **`OTP_ACTION` に `two_factor` を足してはいけない。** `src/schema/otp.ts` の
 > `PUBLIC_OTP_ACTIONS` が公開ルートの受け口で、かつては `OTP_ACTION` から
@@ -970,6 +975,17 @@ DB側で排他**になる。
 > ⚠️ `requireReauth` は **`startSecondFactorSetup` より前**に呼ぶ。後ろに置くと、
 > 再認証で落ちたときにはもう `user_totp` の行が作り直されている。
 
+#### 設定途中の行は60分で無効になる
+
+`enable` は `setup` が作った**未確認の行**（`user_totp.confirmed_at IS NULL`）
+だけを見る。保留行が無期限に生きると、**再認証を通り抜けた行を後から
+いつでも有効化できる**（再認証を入れる前にセッションを奪って `setup` を1回
+叩いていれば、修正後もそのまま通る）。
+
+`TOTP_SETUP_PENDING_TTL_MINUTES`（60分）を過ぎた保留行は `confirmSecondFactorSetup`
+が拒否する。再認証を入れる前から残っていた行は
+`20261121090000_cleanup_unconfirmed_user_totp.sql` で1回だけ掃除した。
+
 #### 有効化したら登録アドレスへ知らせる
 
 再認証で入口は塞いだが、**塞ぎ漏れがあったときに気づける手段が要る**。
@@ -979,6 +995,10 @@ DB側で排他**になる。
 > ⚠️ この送信の結果で有効化を止めない。有効化はもう確定しており、ここで
 > 500 にすると**リカバリーコードを一度も表示できない**まま終わる
 > （平文はあの応答にしか出ない）。
+>
+> ⛔ 同じ理由で、**有効化が確定した後ろに throw しうる処理を増やさない。**
+> 通知の方式は `confirmSecondFactorSetup` が返す（`getSecondFactorMethod` を
+> 呼び直すと DB エラーで投げる）。
 
 ### 経路4（`send-challenge`）が必要な理由
 

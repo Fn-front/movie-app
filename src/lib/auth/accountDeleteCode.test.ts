@@ -73,6 +73,8 @@ function storedRow(overrides: Partial<StoredRow> = {}): StoredRow {
 
 const insertCalls: Record<string, unknown>[] = [];
 const updateCalls: Record<string, unknown>[] = [];
+/** RPC の呼び出し（試行回数の加算） */
+const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
 /** DELETE に積まれた条件（何件消そうとしたかの観測用） */
 const deleteFilters: Record<string, unknown>[] = [];
 
@@ -228,13 +230,23 @@ function createSupabase(
     },
   }));
 
-  return { from } as unknown as SupabaseClient;
+  // ⚠️ 試行回数の加算は **RPC**（#1284）。モックしないと
+  //    `incrementOtpAttempts` の中の catch に落ち、加算を観測できないまま
+  //    テストが緑になる
+  const rpc = (name: string, args: Record<string, unknown>) => {
+    rpcCalls.push({ name, args });
+
+    return Promise.resolve({ data: 1, error: null });
+  };
+
+  return { from, rpc } as unknown as SupabaseClient;
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
   insertCalls.length = 0;
   updateCalls.length = 0;
+  rpcCalls.length = 0;
   deleteFilters.length = 0;
   mockSendOtpEmail.mockResolvedValue(true);
 });
@@ -506,13 +518,24 @@ describe('consumeAccountDeleteCode', () => {
     expect(deleteFilters).toHaveLength(0);
   });
 
-  // 加算しないと、総当たりの天井が無くなる
-  it('一致しなければ試行回数を加算する', async () => {
+  /**
+   * 加算しないと、総当たりの天井が無くなる。
+   *
+   * ⛔ **read-then-write で書き戻さない**（#1284）。読んだ値に +1 して
+   * UPDATE すると、同時に投げられた分の加算が失われて **0→1 が N 回**
+   * 起きるだけになる。#1368 で `userBoundOtp` に寄せるまで、この経路にだけ
+   * 古い実装（`attempts: row.attempts + 1`）が残っていた。
+   */
+  it('一致しなければ試行回数を RPC で加算する（読んで書き戻さない）', async () => {
     const supabase = createSupabase({ rows: [storedRow({ attempts: 2 })] });
 
     await consumeAccountDeleteCode(supabase, USER_ID, EMAIL, '000000');
 
-    expect(updateCalls[0]).toEqual({ attempts: 3 });
+    expect(rpcCalls).toEqual([
+      { name: 'increment_otp_attempts', args: { p_id: 'row-1' } },
+    ]);
+    // 読んだ値を書き戻していないこと
+    expect(updateCalls).toHaveLength(0);
   });
 
   /**

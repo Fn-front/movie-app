@@ -79,10 +79,10 @@ describe('POST /api/user/totp/enable', () => {
         }),
       }),
     });
-    mockConfirmSecondFactorSetup.mockResolvedValue([
-      'ABCDE-FGHJK',
-      'MNPQR-STWXY',
-    ]);
+    mockConfirmSecondFactorSetup.mockResolvedValue({
+      codes: ['ABCDE-FGHJK', 'MNPQR-STWXY'],
+      method: 'totp',
+    });
   });
 
   it('正しいコードで有効化しリカバリーコードを返す', async () => {
@@ -107,6 +107,28 @@ describe('POST /api/user/totp/enable', () => {
     expect(mockSendEnabledNotice).toHaveBeenCalledWith(
       'user@example.com',
       'totp',
+    );
+  });
+
+  /**
+   * ⛔ **方式は `confirmSecondFactorSetup` の返り値から取る**（#1368 のレビュー）。
+   *
+   * 以前はここで `getSecondFactorMethod` を呼び直していたが、あれは DB エラーで
+   * **throw する**。有効化はもう確定しているので、投げられると 500 になり
+   * **平文のリカバリーコードを一度も表示できない**まま終わる。
+   */
+  it('方式を取り直さずに知らせる（メールOTP）', async () => {
+    mockConfirmSecondFactorSetup.mockResolvedValue({
+      codes: ['ABCDE-FGHJK'],
+      method: 'email_otp',
+    });
+
+    const response = await POST(createRequest({ code: '123456' }));
+
+    expect(response.status).toBe(200);
+    expect(mockSendEnabledNotice).toHaveBeenCalledWith(
+      'user@example.com',
+      'email_otp',
     );
   });
 

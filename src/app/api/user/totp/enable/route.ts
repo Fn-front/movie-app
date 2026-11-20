@@ -10,7 +10,6 @@
 import { NextResponse } from 'next/server';
 
 import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
-import { getSecondFactorMethod } from '@/lib/auth/secondFactor';
 import { sendSecondFactorEnabledNotice } from '@/lib/auth/sendSecondFactorEnabledNotice';
 import {
   createServiceRoleClient,
@@ -86,14 +85,14 @@ export async function POST(request: Request) {
     if (userError) throw userError;
     if (!user) return unauthorizedResponse();
 
-    const recoveryCodes = await confirmSecondFactorSetup(
+    const confirmed = await confirmSecondFactorSetup(
       supabase,
       session.user.id,
       result.data.code,
       user.email,
     );
 
-    if (!recoveryCodes) {
+    if (!confirmed) {
       return NextResponse.json(
         {
           success: false,
@@ -121,24 +120,24 @@ export async function POST(request: Request) {
     //   `totp/setup` の再認証で登録そのものは塞いだが、**通知が無いと
     //   塞ぎ漏れがあったときに誰も気づけない**。
     //
-    // ⚠️ **戻り値で止めない。** 有効化はもう確定しており、ここで 500 に
-    //   すると**リカバリーコードを一度も表示できない**まま終わる
-    //   （平文はこの応答にしか出ない）
-    const enabledMethod = await getSecondFactorMethod(
-      supabase,
-      session.user.id,
-    );
-
-    if (enabledMethod) {
-      await sendSecondFactorEnabledNotice(user.email, enabledMethod);
-    }
+    // ⚠️ **有効化が確定した後ろに、throw しうる処理を増やさない。**
+    //   ここで 500 にすると**リカバリーコードを一度も表示できない**まま
+    //   終わる（平文はこの応答にしか出ない）。
+    //
+    //   一度この通知のために `getSecondFactorMethod` を呼んでいたが、
+    //   あれは DB エラーで throw する（`secondFactor.ts` の `toDbError`）。
+    //   方式は `confirmSecondFactorSetup` が既に読んでいるので返させる。
+    //
+    //   `sendSecondFactorEnabledNotice` 自体は throw しない契約
+    //   （送信失敗は false を返すだけ）。戻り値も見ない
+    await sendSecondFactorEnabledNotice(user.email, confirmed.method);
 
     return NextResponse.json(
       {
         success: true,
         message: TOTP_ERROR_MESSAGES.ENABLED,
         // 平文はここでしか返さない。利用者が控えそこねたら再発行してもらう
-        data: { recoveryCodes },
+        data: { recoveryCodes: confirmed.codes },
       },
       { status: HTTP_STATUS.OK },
     );

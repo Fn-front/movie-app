@@ -90,3 +90,18 @@ export const TOTP_SETTINGS_LIMIT = {
   maxAttempts: 5,
   windowMinutes: 15,
 } as const;
+
+/**
+ * 設定途中の行（`user_totp.confirmed_at IS NULL`）が有効でいられる時間（分）
+ *
+ * ⛔ **無期限にしない**（#1368 のレビュー）。`totp/enable` は保留行だけを
+ * 見るので、`totp/setup` の再認証を通り抜けた保留行が1つでもあると、
+ * **後からいつでも有効化できる**。再認証を足す前に作られた行がまさにそれで、
+ * 1回だけの掃除（`20261121090000_cleanup_unconfirmed_user_totp.sql`）に
+ * 加えて、ここで時間の上限も設ける。
+ *
+ * ⚠️ 短くしすぎない。QRを読み取って6桁を入れるまでの時間で、
+ * 認証アプリの追加に手間取る利用者もいる。メールOTP のコード自体は
+ * `OTP_CONFIG.EXPIRY_MINUTES`（30分）で別途切れる。
+ */
+export const TOTP_SETUP_PENDING_TTL_MINUTES = 60;

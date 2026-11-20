@@ -6,7 +6,11 @@ import { randomBytes } from 'crypto';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { RECOVERY_CODE_CONFIG, TOTP_CONFIG } from '@/constants/totp';
+import {
+  RECOVERY_CODE_CONFIG,
+  TOTP_CONFIG,
+  TOTP_SETUP_PENDING_TTL_MINUTES,
+} from '@/constants/totp';
 import {
   SECOND_FACTOR_METHOD,
   type SecondFactorMethod,
@@ -54,6 +58,8 @@ interface FakeDb {
     last_used_counter: number | null;
     /** 省略時は totp（DB の DEFAULT と同じ） */
     method?: SecondFactorMethod;
+    /** 設定を開始した日時。保留行の TTL（#1368）に使う */
+    created_at?: string;
   } | null;
   recoveryCodes: Array<{ user_id: string; code_hash: string }>;
 }
@@ -365,6 +371,11 @@ describe('confirmSecondFactorSetup', () => {
         encrypted_secret: encryptTotpSecret(secret),
         confirmed_at: null,
         last_used_counter: null,
+        // ⚠️ 列は NOT NULL。省くと「方式も返す」の検証が undefined で素通りする
+        method: SECOND_FACTOR_METHOD.TOTP,
+        // ⚠️ 省くと `new Date(undefined)` が NaN になり、保留行の TTL の
+        //    比較が常に false へ倒れて**検証をすり抜ける**
+        created_at: new Date().toISOString(),
       },
       recoveryCodes: [],
     };
@@ -387,32 +398,94 @@ describe('confirmSecondFactorSetup', () => {
   it('リカバリーコードを発行して返す', async () => {
     const { secret, db } = setupInProgress();
 
-    const codes = await confirmSecondFactorSetup(
+    const result = await confirmSecondFactorSetup(
       createSupabaseMock(db),
       USER_ID,
       generateTotpCode(secret),
       EMAIL,
     );
 
-    expect(codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
+    expect(result?.codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
     expect(db.recoveryCodes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
+  });
+
+  /**
+   * ⛔ **方式も返すこと**（#1368 のレビュー）。有効化の通知に使う。
+   *
+   * 返さないと呼び出し側が `getSecondFactorMethod` をもう一度呼ぶことになり、
+   * **有効化が確定した後ろに throw しうる処理が1つ増える**。500 になると
+   * 平文のリカバリーコードを一度も表示できないまま終わる。
+   */
+  it('有効化した方式も返す', async () => {
+    const { secret, db } = setupInProgress();
+
+    const result = await confirmSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      generateTotpCode(secret),
+      EMAIL,
+    );
+
+    expect(result?.method).toBe(SECOND_FACTOR_METHOD.TOTP);
   });
 
   it('返したコードのハッシュを保存する', async () => {
     const { secret, db } = setupInProgress();
 
-    const codes = await confirmSecondFactorSetup(
+    const result = await confirmSecondFactorSetup(
       createSupabaseMock(db),
       USER_ID,
       generateTotpCode(secret),
       EMAIL,
     );
 
-    codes!.forEach((code) => {
+    result!.codes.forEach((code: string) => {
       expect(db.recoveryCodes.map((row) => row.code_hash)).toContain(
         hashRecoveryCode(code),
       );
     });
+  });
+
+  /**
+   * ⛔ **古い保留行は使わせない**（#1368 のレビュー）。
+   *
+   * `enable` は `setup` が作った保留行だけを見るため、保留行が無期限に生きると
+   * **`setup` の再認証を通り抜けた行を後からいつでも有効化できる**。
+   * 再認証を足す前にセッションを奪って `setup` を1回叩いていれば、修正後も
+   * そのまま有効化できてしまう。
+   */
+  it('保留のまま期限を過ぎた行では有効化しない', async () => {
+    const { secret, db } = setupInProgress();
+    db.totp!.created_at = new Date(
+      Date.now() - (TOTP_SETUP_PENDING_TTL_MINUTES + 1) * 60 * 1000,
+    ).toISOString();
+
+    await expect(
+      confirmSecondFactorSetup(
+        createSupabaseMock(db),
+        USER_ID,
+        generateTotpCode(secret),
+        EMAIL,
+      ),
+    ).resolves.toBeNull();
+    expect(db.totp?.confirmed_at).toBeNull();
+  });
+
+  // 期限の内側は通る（短すぎて正規の利用者を締め出していないこと）
+  it('期限の内側なら有効化できる', async () => {
+    const { secret, db } = setupInProgress();
+    db.totp!.created_at = new Date(
+      Date.now() - (TOTP_SETUP_PENDING_TTL_MINUTES - 1) * 60 * 1000,
+    ).toISOString();
+
+    await expect(
+      confirmSecondFactorSetup(
+        createSupabaseMock(db),
+        USER_ID,
+        generateTotpCode(secret),
+        EMAIL,
+      ),
+    ).resolves.not.toBeNull();
   });
 
   it('誤ったコードでは有効化しない', async () => {
@@ -480,14 +553,14 @@ describe('confirmSecondFactorSetup', () => {
   it('前後の空白を無視する', async () => {
     const { secret, db } = setupInProgress();
 
-    await expect(
-      confirmSecondFactorSetup(
-        createSupabaseMock(db),
-        USER_ID,
-        `  ${generateTotpCode(secret)} `,
-        EMAIL,
-      ),
-    ).resolves.toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
+    const result = await confirmSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      `  ${generateTotpCode(secret)} `,
+      EMAIL,
+    );
+
+    expect(result?.codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
   });
 });
 
@@ -774,14 +847,16 @@ describe('confirmSecondFactorSetup（method=email_otp）', () => {
   it('メールのコードで有効化し、リカバリーコードを返す', async () => {
     const db = emailSetupInProgress();
 
-    const codes = await confirmSecondFactorSetup(
+    const result = await confirmSecondFactorSetup(
       createSupabaseMock(db),
       USER_ID,
       '123456',
       EMAIL,
     );
 
-    expect(codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
+    expect(result?.codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
+    // ⛔ メールOTP でも方式を返す（#1368 のレビュー）
+    expect(result?.method).toBe(SECOND_FACTOR_METHOD.EMAIL_OTP);
     expect(db.totp?.confirmed_at).not.toBeNull();
     expect(mockConsumeSecondFactorEmailCode).toHaveBeenCalledWith(
       expect.anything(),

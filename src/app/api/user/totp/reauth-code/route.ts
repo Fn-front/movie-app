@@ -86,7 +86,14 @@ export async function POST(): Promise<NextResponse> {
       .eq('id', session.user.id)
       .single();
 
-    if (userError || !user) {
+    // ⚠️ **読み取りの失敗と「行が無い」を分ける**（#1368 のレビュー）。
+    //   まとめると、DB の一時的な不調が「このアカウントには確認コードを
+    //   お送りできません。お手数ですが窓口までご連絡ください。」になり、
+    //   待てば直る障害で利用者を窓口へ送ってしまう。
+    //   同じ `users` の読み取りについて `totp/setup` は 500 に倒している
+    if (userError) throw userError;
+
+    if (!user) {
       return errorResponse(
         ERROR_CODE.NOT_FOUND,
         SECOND_FACTOR_SETUP_CODE_MESSAGES.EMAIL_UNAVAILABLE,

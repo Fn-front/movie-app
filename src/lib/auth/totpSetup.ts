@@ -16,6 +16,7 @@ import {
   SECOND_FACTOR_METHOD,
   type SecondFactorMethod,
 } from '@/constants/secondFactor';
+import { TOTP_SETUP_PENDING_TTL_MINUTES } from '@/constants/totp';
 import { decryptTotpSecret, encryptTotpSecret } from '@/lib/totp/encryption';
 import { generateRecoveryCodes } from '@/lib/totp/recoveryCodes';
 import { buildOtpAuthUri, generateTotpSecret } from '@/lib/totp/secret';
@@ -168,17 +169,26 @@ export async function startSecondFactorSetup(
  * @param userId - 対象ユーザー
  * @param code - 認証アプリ、またはメールで届いた6桁のコード
  * @param email - 本人のメールアドレス。method=email_otp の照合に使う
- * @returns 平文のリカバリーコード（この一度だけ利用者へ見せる）。コードが合わなければ null
+ * @returns 平文のリカバリーコード（この一度だけ利用者へ見せる）と有効化した方式。
+ *   コードが合わなければ null
  */
+/** `confirmSecondFactorSetup` の戻り値 */
+export interface ConfirmSecondFactorSetupResult {
+  /** 平文のリカバリーコード。利用者へ見せられるのはこの一度だけ */
+  codes: string[];
+  /** 有効化した方式。通知の本文に出す */
+  method: SecondFactorMethod;
+}
+
 export async function confirmSecondFactorSetup(
   supabase: SupabaseClient,
   userId: string,
   code: string,
   email: string,
-): Promise<string[] | null> {
+): Promise<ConfirmSecondFactorSetupResult | null> {
   const { data: row, error: readError } = await supabase
     .from('user_totp')
-    .select('encrypted_secret, confirmed_at, method')
+    .select('encrypted_secret, confirmed_at, method, created_at')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -188,6 +198,20 @@ export async function confirmSecondFactorSetup(
 
   // 設定を開始していない、または既に有効
   if (!row || row.confirmed_at) {
+    return null;
+  }
+
+  // ⛔ **古い保留行は使わせない**（#1368 のレビュー）。
+  //
+  //   ここは `setup` が作った保留行だけを見るため、保留行が無期限に生きると
+  //   **`setup` の再認証を通り抜けた行を後からいつでも有効化できる**。
+  //   再認証を足す前にセッションを奪って `setup` を1回叩いていれば、
+  //   修正後もそのまま有効化できてしまう（既存の行はマイグレーションで
+  //   1回掃除したが、同じ形を再発させない）。
+  if (
+    Date.now() - new Date(row.created_at).getTime() >
+    TOTP_SETUP_PENDING_TTL_MINUTES * 60 * 1000
+  ) {
     return null;
   }
 
@@ -223,7 +247,11 @@ export async function confirmSecondFactorSetup(
 
   await replaceRecoveryCodes(supabase, userId, hashes);
 
-  return codes;
+  // ⚠️ **方式も返す。** 呼び出し側は有効化の通知に使う。ここで返さないと
+  //   `getSecondFactorMethod` をもう一度呼ぶことになり、**有効化が確定した
+  //   後ろに throw しうる処理が1つ増える**（#1368 のレビュー）。
+  //   500 になると平文のリカバリーコードを一度も表示できないまま終わる
+  return { codes, method: row.method as SecondFactorMethod };
 }
 
 /**

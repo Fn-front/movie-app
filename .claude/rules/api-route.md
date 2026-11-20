@@ -103,6 +103,7 @@ IP 層には `enforcePublicRateLimit`（`src/helpers/publicRateLimit.ts`）を�
 | `movies/suggest-title` | OpenAI の呼び出し費用 | キャッシュ照合の後（ヒット時は消費しない） |
 | `auth/otp/send` | メールボックス（日次通数） | 送信の直前（1通も送らないパスで枠を減らさない） |
 | `auth/register` | 同上 | ユーザー作成の前・早期returnの後 |
+| `user/email-change/request` | メールボックス（**まだ本人のものでない宛先**） | 送信の直前（重複・同一アドレスで返すパスで枠を減らさない） |
 
 #### 消費できなかったら戻す
 
@@ -216,6 +217,15 @@ if (!emailSent) {
 | `movies/suggest-title` GET | 例外2 |
 | `user/totp/setup` POST（`TWO_FACTOR_SEND`） | 例外2（`TOTP_SETTINGS_VERIFY` のほうは原則どおり） |
 | `user/totp/send-challenge` POST（`TWO_FACTOR_SEND`） | 例外2 |
+| `user/email-change/request` POST（`EMAIL_CHANGE_REQUEST`） | 例外2 |
+
+> ⚠️ `user/email-change/request` の `EMAIL_CHANGE_REQUEST` も
+> `sendEmailChangeCode`（`src/lib/auth/emailChange.ts`）の**中**にある。
+> ルート本文に `checkRateLimit` が無いので棚卸しで取りこぼさないこと。
+>
+> なお検証側（`user/email-change/confirm`）は `EMAIL_CHANGE_VERIFY` を
+> **原則どおり**（検証より前に）消費する。送信枠と同じカウンタにすると、
+> 失敗した検証が送信枠を食って**コードを送り直せなくなる**。
 
 > ⚠️ この2つの `TWO_FACTOR_SEND` は `sendSecondFactorCode`
 > （`src/lib/auth/sendSecondFactorCode.ts`）の**中**にある。ルートの本文を

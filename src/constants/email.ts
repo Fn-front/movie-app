@@ -5,6 +5,10 @@
 import { APP_NAME } from './app';
 import { OTP_ACTION, OTP_CONFIG, type OtpAction } from './otp';
 import { TWO_FACTOR_OTP_ACTION, type TwoFactorOtpAction } from './secondFactor';
+import {
+  EMAIL_CHANGE_OTP_ACTION,
+  type EmailChangeOtpAction,
+} from './emailChange';
 
 /**
  * 確認コードメールに書く用途の種別
@@ -13,7 +17,10 @@ import { TWO_FACTOR_OTP_ACTION, type TwoFactorOtpAction } from './secondFactor';
  * を足したもの。`OTP_ACTION` 自体を広げてはいけない理由は
  * `secondFactor.ts` の `TWO_FACTOR_OTP_ACTION` を参照。
  */
-export type OtpEmailAction = OtpAction | TwoFactorOtpAction;
+export type OtpEmailAction =
+  | OtpAction
+  | TwoFactorOtpAction
+  | EmailChangeOtpAction;
 
 /**
  * デフォルトの送信元メールアドレス（フォールバック）
@@ -35,6 +42,9 @@ const OTP_PURPOSE_LABEL: Record<OtpEmailAction, string> = {
   // 届くので、利用者が「自分で始めていないログイン」と区別できないと、
   // 侵害に気づく唯一の機会を失う
   [TWO_FACTOR_OTP_ACTION]: '二段階認証',
+  // ⚠️ 宛先は**まだ本人のものでないアドレス**。受け取った人が
+  //   「身に覚えがない」と分かる文言にする（#1359）
+  [EMAIL_CHANGE_OTP_ACTION]: 'メールアドレスの変更',
 };
 
 /**

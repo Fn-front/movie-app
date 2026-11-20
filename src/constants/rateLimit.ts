@@ -130,6 +130,10 @@ export const RATE_LIMIT_ACTION = {
   CRON_FAILURE_NOTICE: 'cron_failure_notice',
   /** アカウントの自己削除（#932） */
   ACCOUNT_DELETE: 'account_delete',
+  /** メールアドレス変更の確認コード送信（#1359） */
+  EMAIL_CHANGE_REQUEST: 'email_change_request',
+  /** メールアドレス変更の確認コード検証（#1359） */
+  EMAIL_CHANGE_VERIFY: 'email_change_verify',
 } as const;
 
 /**
@@ -461,6 +465,29 @@ export const RATE_LIMIT_CONFIG = {
    * `delete_user_account` が消す（識別子は利用者ID）。
    */
   ACCOUNT_DELETE: { maxAttempts: 5, windowMinutes: 60 },
+
+  /**
+   * メールアドレス変更の確認コード送信（#1359）
+   *
+   * ⚠️ 識別子は**セッションの利用者ID**。新しいアドレスで数えると、
+   * 宛先を変えるだけで送信数を掛け算でき、未登録アドレスへの送信枠の
+   * 回避になる（#641 / #644 と同じ形）。
+   *
+   * ⚠️ 検証側に別のカウンタは置かない。コードごとの試行は
+   * `otp_codes.attempts`（上限5）が数えており、**コードを何本作れるか**を
+   * 抑えるのはこちらの役目。第2要素（`TWO_FACTOR_SEND` ＋ attempts）と
+   * 同じ組み合わせ。
+   */
+  EMAIL_CHANGE_REQUEST: { maxAttempts: 5, windowMinutes: 60 },
+
+  /**
+   * メールアドレス変更の確認コード検証（#1359）
+   *
+   * ⚠️ `otp_codes.attempts`（上限5）は**コード1本あたり**の試行しか
+   * 数えない。送信枠と同じカウンタを使うと、失敗した検証が送信枠を
+   * 食って**コードを送り直せなくなる**ので別に持つ。
+   */
+  EMAIL_CHANGE_VERIFY: { maxAttempts: 10, windowMinutes: 60 },
   /**
    * 手動同期ジョブの進捗ポーリング。
    *

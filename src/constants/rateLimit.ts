@@ -43,6 +43,17 @@ export const RATE_LIMIT_ACTION = {
    * 利用者が連続で再発行しただけで、同じ回線の別の人が新規登録できなくなる。
    */
   REGISTER_IP: 'register_ip',
+  /**
+   * OTP送信の送信元単位の上限（IPアドレス単位）
+   *
+   * ⚠️ 他の `*_IP` とは塞いでいる穴が違う（#1341）。このルートは未登録
+   * アドレスだと列挙防止の early return に落ちて `OTP_SEND_DAILY` を
+   * 消費しないため、`rate_limits` の行は増えない。守っているのは
+   * 「1リクエストごとの `users` SELECT と `randomDelay()` の 200〜500ms」。
+   * 列挙を防ぐために**わざと重くしている**処理なので、天井が無いと
+   * そのコストがそのまま攻撃者の武器になる。
+   */
+  OTP_SEND_IP: 'otp_send_ip',
   /** OTP検証の送信元単位の上限（IPアドレス単位。上の REGISTER_IP と同じ理由） */
   OTP_VERIFY_IP: 'otp_verify_ip',
   /** パスワード再設定の発行の送信元単位の上限（IPアドレス単位。同上） */
@@ -150,6 +161,7 @@ export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
   'login',
   // 未認証の認証系ルートの送信元単位（LOGIN_IP と同じ扱い）
   RATE_LIMIT_ACTION.REGISTER_IP,
+  RATE_LIMIT_ACTION.OTP_SEND_IP,
   RATE_LIMIT_ACTION.OTP_VERIFY_IP,
   RATE_LIMIT_ACTION.PASSWORD_RESET_REQUEST_IP,
   // 二段階認証コード（6桁。上限が唯一の防御）
@@ -277,6 +289,13 @@ export const RATE_LIMIT_CONFIG = {
    * 同一回線から1時間に20人が登録する状況は通常利用では起きない。
    */
   REGISTER_IP: { maxAttempts: 20, windowMinutes: 60 },
+  /**
+   * OTP送信の送信元単位の上限。
+   *
+   * 再送（60秒間隔）と新規登録・ログインの両方が通るため REGISTER_IP より
+   * 厚くする。メールボックス側の保護は OTP_SEND_DAILY（メール単位）が担う。
+   */
+  OTP_SEND_IP: { maxAttempts: 40, windowMinutes: 60 },
   PASSWORD_RESET_REQUEST_IP: { maxAttempts: 20, windowMinutes: 60 },
   /**
    * OTP検証は登録・ログインの途中で**打ち間違いの再入力**が起きるため、

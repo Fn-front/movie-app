@@ -28,13 +28,33 @@ import {
   ERROR_CODE,
   AUTH_ERROR_MESSAGES,
   RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
   SUPABASE_ERROR_CODE,
 } from '@/constants';
+import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 
 export async function POST(request: Request) {
   try {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
+
+    // 送信元単位のブレーキ。**検証より前**に置く（原則どおり）。
+    // 送信元IPはボディを読まなくても確定するため、例外1には当たらない。
+    //
+    // ⚠️ ここは他の3ルート（#1331）と穴の性質が違う。
+    //   未登録アドレスだと下の列挙防止の early return に落ちて
+    //   `OTP_SEND_DAILY` の消費へ到達しないため、`rate_limits` の行は増えない。
+    //   残っていたのは「1リクエストごとに users の SELECT と
+    //   randomDelay() の 200〜500ms を、単一IPから無制限に踏ませられる」ほう。
+    //   列挙防止のために**わざと重くしている**処理なので、天井が無いと
+    //   そのコストがそのまま攻撃者の武器になる（#1341）。
+    const ipLimitResponse = await enforcePublicRateLimit({
+      request,
+      action: RATE_LIMIT_ACTION.OTP_SEND_IP,
+      limit: RATE_LIMIT_CONFIG.OTP_SEND_IP,
+      supabase,
+    });
+    if (ipLimitResponse) return ipLimitResponse;
 
     // リクエストボディのバリデーション
     const body = await request.json();

@@ -80,10 +80,18 @@ IP 層は**原則どおり検証より前**に置く。
 | `auth/password-reset/request` | `password_reset_request_ip` | `password_reset_request` |
 | `auth/register` | `register_ip` | `register` / `otp_send_daily` |
 | `auth/otp/verify` | `otp_verify_ip` | `otp_verify` |
+| `auth/otp/send` | `otp_send_ip` | `otp_send_daily`（例外2） |
 | NextAuth `credentials` | `login_ip`（`auth.ts`） | `login` |
 
 IP 層には `enforcePublicRateLimit`（`src/helpers/publicRateLimit.ts`）を使う。
 `clientIp === 'unknown'` のときは**消費せず通す**（fail-open）点に注意。
+
+> ⚠️ `auth/otp/send` だけ塞いでいる穴が違う（#1341）。未登録アドレスだと
+> 列挙防止の early return に落ちて `OTP_SEND_DAILY` を消費しないため、
+> **`rate_limits` の行は増えない**。IP 層が守っているのは
+> 「1リクエストごとの `users` SELECT と `randomDelay()` の 200〜500ms」。
+> 列挙を防ぐために**わざと重くしている**処理なので、天井が無いとそのコストが
+> そのまま攻撃者の武器になる。
 
 ### 例外2: 守る資源が検証の後ろにあるルート
 

@@ -163,6 +163,7 @@ UI Re-render
 | GET | `/api/cron/update-movies` | 映画評価・人気度更新（日次） |
 | GET | `/api/awards` | 受賞作品一覧取得 |
 | GET | `/api/cron/generate-recommendations` | AIレコメンド生成（日次） |
+| GET | `/api/cron/sync-upcoming` | 公開予定の劇場公開作品同期（日次 / #1000） |
 | GET | `/api/cron/sync-award-movies` | 受賞作品同期（月次） |
 | GET | `/api/cron/cleanup-expired-records` | `rate_limits` / `otp_codes` / `password_reset_tokens` / `recommendation_events` の保持期間切れ削除（日次） |
 
@@ -312,10 +313,14 @@ UI Re-render
 | `/api/cron/sync-streaming` | `0 19 * * *` | 毎日 04:00 | 配信作品同期（日次） |
 | `/api/cron/sync-watchlist-streaming` | `0 20 * * *` | 毎日 05:00 | ウォッチリストの配信状況同期（日次） |
 | `/api/cron/generate-recommendations` | `0 18 * * *` | 毎日 03:00 | AIレコメンド生成（日次） |
+| `/api/cron/sync-upcoming` | `0 21 * * *` | 毎日 06:00 | 公開予定の劇場公開作品同期（日次 / #1000）。**止まると公開予定に新作が入らなくなる** |
 | `/api/cron/sync-award-movies` | `0 18 28 * *` | 毎月28日 03:00 | 受賞作品同期（月次） |
 | `/api/cron/cleanup-expired-records` | `0 17 * * *` | 毎日 02:00 | 保持期間切れレコードの削除（`rate_limits` #933 / `otp_codes` #978 / `password_reset_tokens` #1300 / `recommendation_events` #1355） |
 
-> この表は `vercel.json` と手で同期している。`sync-streaming` / `sync-watchlist-streaming` の欠落と、`generate-recommendations` のスケジュール誤記（`0 3 * * *` → 実際は `0 18 * * *`）は #933 の作業中に発見して直した。
+> ⚠️ この表は `vercel.json` と手で同期している。**登録漏れ自体は
+> `cronNames.test.ts` が検知する**（#1000）が、この表の記述は見ていない。
+>
+> 旧記述: `sync-streaming` / `sync-watchlist-streaming` の欠落と、`generate-recommendations` のスケジュール誤記（`0 3 * * *` → 実際は `0 18 * * *`）は #933 の作業中に発見して直した。
 
 ## セキュリティヘッダー
 

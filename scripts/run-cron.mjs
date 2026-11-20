@@ -19,14 +19,21 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
 /** vercel.json の crons と対応するエンドポイント（name = パス末尾） */
+// ⚠️ 手で保守している一覧。**登録漏れ自体は `cronNames.test.ts` が
+//   `vercel.json` と突き合わせて検知するが、この配列は見ていない**。
+//   #1000 の時点で sync-watchlist-streaming / cleanup-expired-records の
+//   2本が既に漏れていた。ルートを足したらここにも足すこと
 const CRON_ENDPOINTS = [
   'sync-movies',
   'sync-now-playing',
+  'sync-upcoming',
   'update-movies',
   'sync-now-showing',
   'sync-streaming',
+  'sync-watchlist-streaming',
   'generate-recommendations',
   'sync-award-movies',
+  'cleanup-expired-records',
 ];
 
 const BASE_URL = (

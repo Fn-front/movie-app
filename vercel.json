@@ -9,6 +9,10 @@
       "schedule": "0 18 * * *"
     },
     {
+      "path": "/api/cron/sync-upcoming",
+      "schedule": "0 21 * * *"
+    },
+    {
       "path": "/api/cron/update-movies",
       "schedule": "0 18 * * *"
     },

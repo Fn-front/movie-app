@@ -5,6 +5,7 @@ import {
   getJstYearRange,
   getYear,
   isRealCalendarDate,
+  formatDateToString,
 } from './date';
 
 describe('formatDate', () => {
@@ -177,5 +178,48 @@ describe('isRealCalendarDate', () => {
   it('繰り上がる日付をパース成功とみなさない', () => {
     expect(Number.isNaN(new Date('2026-02-30').getTime())).toBe(false);
     expect(isRealCalendarDate('2026-02-30')).toBe(false);
+  });
+});
+
+describe('formatDateToString', () => {
+  it('YYYY-MM-DD 形式にする', () => {
+    expect(formatDateToString(new Date(2026, 4, 1))).toBe('2026-05-01');
+  });
+
+  it('1桁の月日をゼロ埋めする', () => {
+    expect(formatDateToString(new Date(2026, 0, 9))).toBe('2026-01-09');
+  });
+
+  /**
+   * ⚠️ **ローカル時刻で組み立てることが仕様**（#1000）。
+   *
+   * `toISOString().split('T')[0]` は UTC に寄るため、JST では深夜帯に
+   * **前日の日付**になる。TMDb の `release_date.gte` へ渡すと公開初日の
+   * 作品が落ちる。
+   *
+   * JSDoc がこの置き換えを明示的に禁じているのに、テストが無いまま
+   * 共有ユーティリティへ昇格していた（レビューで実測。UTC 実装に
+   * 置き換えても1件も落ちなかった）。
+   */
+  it('UTC ではなくローカル時刻で組み立てる', () => {
+    // ⚠️ **実行環境のタイムゾーンに依存させない。**
+    //
+    //   「JST の深夜なら UTC では前日」という実例で書くと、UTC で動く CI では
+    //   両者が一致して成立しない（実際に CI だけ落ちた）。Jest は各テストを
+    //   独立した VM コンテキストで実行するため、`process.env.TZ` への代入でも
+    //   Date の解釈は変わらない。
+    //
+    //   そこで**どのAPIを読んでいるか**を直接見る。ローカル時刻の getter と
+    //   `toISOString()` が食い違う値を返すオブジェクトを渡せば、UTC 実装に
+    //   置き換えたときだけ結果が変わる。
+    const localGetters = {
+      getFullYear: () => 2026,
+      getMonth: () => 5,
+      getDate: () => 1,
+      // 同じ瞬間を UTC で見ると前日
+      toISOString: () => '2026-05-31T15:30:00.000Z',
+    } as unknown as Date;
+
+    expect(formatDateToString(localGetters)).toBe('2026-06-01');
   });
 });

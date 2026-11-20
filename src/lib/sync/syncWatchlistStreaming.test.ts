@@ -191,6 +191,10 @@ describe('syncWatchlistStreaming', () => {
     const result = await syncWatchlistStreaming();
 
     expect(result.errors.length).toBeGreaterThan(0);
+    // ⚠️ 通知の分子に使う（#1354）。問い合わせは全部通ったのに書き込みが
+    //    落ちた場合、ここを数えないと `failed` が 0 のまま 200 で返る
+    expect(result.failed).toBeGreaterThan(0);
+    expect(result.updated).toBe(0);
   });
 
   it('Supabase の環境変数が無ければ例外を投げる', async () => {

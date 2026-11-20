@@ -684,6 +684,11 @@ describe('syncStreamingMovies', () => {
 
       expect(result.errors[0]).toContain('upsert failed');
       expect(result.upserted).toBe(0);
+      // ⚠️ 作品単位の失敗として数える（#1354）。`errors` だけに積むと、
+      //    **書き込みが1件も通っていないのに `failed` が 0** になって
+      //    通知に乗らない
+      expect(result.items.failed).toBe(result.items.attempted);
+      expect(result.items.attempted).toBeGreaterThan(0);
     });
   });
 

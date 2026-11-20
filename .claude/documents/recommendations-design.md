@@ -135,15 +135,31 @@ CREATE POLICY "Users can view own recommendations"
   "data": {
     "processed_users": 5,
     "skipped_users": 2,
+    "failed_users": 0,
     "total_recommendations": 48
   }
 }
 ```
 
 **エラーハンドリング**:
-- OpenAI APIエラー: 該当ユーザーをスキップし、既存レコメンドを維持
-- TMDb検索で見つからない映画: スキップ（10件未満になる可能性あり）
 - 1ユーザーの失敗が他ユーザーに影響しないよう、ユーザー単位でtry-catch
+- いずれの場合も既存レコメンドは維持する（洗い替えは成功時のみ）
+
+⚠️ **「対象外（`skipped_users`）」と「失敗（`failed_users`）」を分ける**（#1354）。
+一緒に数えると、全員ぶん失敗しても正常な実行と見分けがつかず、CRON の失敗通知に
+乗らない。
+
+| 事象 | 分類 |
+|---|---|
+| お気に入りが0件 | `skipped` |
+| TMDb で候補が1件も解決しなかった | `skipped` |
+| 生成を中断した（クライアント離脱） | `skipped` |
+| OpenAI の呼び出しが失敗した（キー失効・HTTPエラー・JSON破損・スキーマ違反） | `failed` |
+| お気に入りの取得に失敗した | `failed` |
+| レコメンドの洗い替え（RPC）に失敗した | `failed` |
+
+⚠️ `fetchRecommendationsFromOpenAI` は **throw せず `null` を返す**。
+呼び出し側で「候補が0件」と区別すること。
 
 ## OpenAI プロンプト設計
 

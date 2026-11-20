@@ -24,9 +24,13 @@ const NOT_YET_PUBLISHED_REASONS: SkippedAward['reason'][] = [
 /**
  * 同期できなかった賞のうち、人が動かないと直らないものを数える
  *
- * `source_unavailable`（eiga.com / OpenAI へ到達できない）・
- * `openai_not_configured`（キー未設定）・`source_changed`（構造変更）・
- * `article_unavailable`（取得失敗）・`write_failed`・`error` が対象。
+ * ⚠️ **除外リスト方式**なので、`NOT_YET_PUBLISHED_REASONS` に無い理由は
+ * すべて失敗に数える。`AwardFetchFailure` に `type` を足したら、
+ * **何もしなければ失敗側に入る**（安全側だが、意図したか確認すること）。
+ *
+ * 現在の対象は `article_unavailable` / `source_unavailable` /
+ * `source_changed` / `openai_not_configured` / `no_tmdb_match` /
+ * `all_hallucinated` / `no_items` / `write_failed` / `error`。
  *
  * @param skipped - 同期できなかった賞
  * @returns 失敗と見なす件数

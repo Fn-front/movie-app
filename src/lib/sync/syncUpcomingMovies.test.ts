@@ -134,13 +134,30 @@ describe('syncUpcomingMovies', () => {
 
       expect(discoverMovies).toHaveBeenCalled();
       expect(result.upserted).toBe(1);
-      // ⚠️ `fetched` は**フィルタ前**の件数（#1166）
-      expect(result.fetched).toBe(1);
       expect(upsertedRows()[0]).toMatchObject({
         id: 100,
         title: 'テスト映画',
         release_type: RELEASE_TYPE.THEATRICAL,
       });
+    });
+
+    /**
+     * ⚠️ `fetched` は**フィルタ前**の件数（#1166）。
+     *
+     * `results.length` と同値になるケースだけだと入れ替えても通る。
+     * TMDb が返した件数とフィルタ後の件数が**食い違う**ケースで固定する。
+     */
+    it('フィルタ前の件数を fetched に積む', async () => {
+      (discoverMovies as jest.Mock).mockResolvedValue({
+        results: [createMockMovie()],
+        total_pages: 1,
+        // TMDb は20件返したが、excludeInappropriateMovies が19件落とした
+        raw_results_count: 20,
+      });
+
+      const result = await syncUpcomingMovies();
+
+      expect(result.fetched).toBe(20);
     });
 
     /**

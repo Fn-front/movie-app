@@ -81,6 +81,11 @@ function countEqCalls(): unknown[][] {
   return createdChains[0]?.eq?.mock.calls ?? [];
 }
 
+/** 件数チェッククエリに渡された範囲条件 */
+function countGteCalls(): unknown[][] {
+  return createdChains[0]?.gte?.mock.calls ?? [];
+}
+
 /**
  * Supabaseチェイン可能なクエリビルダーのモックを作成
  */
@@ -189,6 +194,8 @@ let lastListSelect: { columns: string; opts: Record<string, unknown> } | null =
 
 function setupFromMock(options: {
   existingCount?: number;
+  /** 件数チェッククエリが返すエラー（#1164 の退行検知） */
+  countError?: { code: string; message: string };
   /** 一覧クエリが返す件数（Content-Range 由来 / #1272） */
   countResult?: { count: number };
   /** 一覧クエリが返す行とエラー */
@@ -197,6 +204,7 @@ function setupFromMock(options: {
 }) {
   const {
     existingCount = 100,
+    countError,
     countResult = { count: 0 },
     dataResult = { data: [], error: null },
     existingOtherType = { data: [], error: null },
@@ -210,7 +218,14 @@ function setupFromMock(options: {
 
     if (currentCall === 1) {
       // theatrical 行の件数チェック（フォールバック判定 / #1000）
-      return createChainMock({ count: existingCount });
+      //
+      // ⚠️ エラー時は count が null になる。実際の Supabase と同じにしないと
+      //    「error を捨てる」退行を検知できない
+      return createChainMock(
+        countError
+          ? { count: null, error: countError }
+          : { count: existingCount, error: null },
+      );
     }
     if (currentCall === 2 || currentCall === 3) {
       // 一覧クエリ（件数とデータを1本で取る / #1272）か、
@@ -961,15 +976,45 @@ describe('GET /api/movies', () => {
      * 公開中の作品も `theatrical` 行として同じテーブルに入る。絞ると
      * 「公開予定が0件の日」に毎回フォールバックが走り、CRON化の意味が消える。
      */
-    it('件数の絞り込みは release_type だけ', async () => {
+    /**
+     * ⚠️ **母数は公開予定タブが実際に出す集合に合わせる。**
+     *
+     * `release_type` だけで数えると公開中・公開済みの行まで入る
+     * （本番の実測で 1,105件 対 公開予定 134件）。表示が0件になっても
+     * 母数が三桁残るので**フォールバックが実質発火しない**。
+     *
+     * ⛔ `is_now_playing` では絞らない。公開予定タブの条件ではない。
+     */
+    it('件数は release_type と今日以降の公開日で絞る', async () => {
       const handler = await loadGET();
       setupFromMock({ existingCount: 100 });
 
       await handler(createRequest());
 
-      const eqCalls = countEqCalls();
-      expect(eqCalls).toContainEqual(['release_type', 'theatrical']);
-      expect(eqCalls.map((call) => call[0])).not.toContain('is_now_playing');
+      expect(countEqCalls()).toContainEqual(['release_type', 'theatrical']);
+      expect(countGteCalls().map((call) => call[0])).toContain('release_date');
+      expect(countEqCalls().map((call) => call[0])).not.toContain(
+        'is_now_playing',
+      );
+    });
+
+    /**
+     * ⚠️ **`error` を捨てると DB障害がフォールバックの発火条件に化ける**。
+     *
+     * Supabase はエラー時に `count` を `null` で返すため `!count` が成立し、
+     * リクエスト処理の中でフル同期が走る。`read_api_movies` は 300回/10分
+     * なので、10分で最大300回の同期を誘発できる（#1164 の形の退行）。
+     */
+    it('件数の読み取りに失敗したら500を返し、同期を呼ばない', async () => {
+      const handler = await loadGET();
+      setupFromMock({
+        countError: { code: '57P01', message: 'connection terminated' },
+      });
+
+      const response = await handler(createRequest());
+
+      expect(response.status).toBe(500);
+      expect(mockSyncUpcomingMovies).not.toHaveBeenCalled();
     });
   });
 

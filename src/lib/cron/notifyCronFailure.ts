@@ -4,9 +4,12 @@
  * CRON の失敗は `console.error` と Vercel の実行履歴に残るだけで、
  * 誰も見なければ気づけなかった。**単発の失敗より恒常的な失敗が怖い。**
  *
- *   `CRON_SECRET` の不一致      → 全 CRON が 401 で素通り。画面は正常に見える
+ *   `CRON_SECRET` の未設定      → 全 CRON が 401 で素通り。画面は正常に見える
  *   service role キーの失効     → 全 CRON が DB 接続エラー
- *   TMDb / OpenAI のキーの失効  → 同期とレコメンドだけが静かに止まる
+ *
+ * ⚠️ **この2つしか拾えていない。** 鍵の「不一致」は意図的に通知しない
+ * （`cronAuth.ts` 参照）。TMDb / OpenAI のキーが失効して同期が全件失敗する
+ * ケースも、作品ごとに catch して 200 を返す設計のため乗らない（#1354）。
  *
  * とくに `/api/cron/cleanup-expired-records` は**個人データの消去**なので、
  * 止まっていることに気づけないのが問題そのもの（#933 / #978 / #1300）。
@@ -21,10 +24,45 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { APP_NAME } from '@/constants/app';
 import { DEFAULT_FROM_EMAIL } from '@/constants/email';
 import { RATE_LIMIT_ACTION, RATE_LIMIT_CONFIG } from '@/constants/rateLimit';
+import { createInMemoryRateLimiter } from '@/lib/rateLimit/inMemoryRateLimit';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const fromEmail = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM_EMAIL;
+
+/**
+ * DB に依存しない最低限の歯止め（プロセス内・60秒に1通）
+ *
+ * ⚠️ **これが無いと「1リクエスト = Resend 1コール」になる経路がある。**
+ *
+ * 下の `shouldNotify` は判定できないとき通す（fail-open）。判定できないのは
+ * 次の2つで、どちらも**同時に起きやすい**:
+ *
+ *   - service role クライアントを作れない（環境変数が入っていない）
+ *   - `consume_rate_limit` が例外を返す（DB障害）
+ *
+ * `verifyCronAuth` は `CRON_SECRET` 未設定で通知するが、`/api/cron/*` は
+ * **未認証で誰でも叩ける**。新しい環境に環境変数を入れ忘れた状態
+ * ——`CRON_SECRET` も Supabase の鍵も無い —— はまさにこの組み合わせで、
+ * DB の抑止が効かないまま外部から連打できてしまう。
+ *
+ * `.claude/rules/api-route.md` の「失敗したとき、歯止めを**全部**手放さない」
+ * と同じ話。fail-open は保ったまま、DB を見なくても効く層を手前に置く。
+ *
+ * ⚠️ インスタンス単位なので厳密ではない（コールドスタートでリセットされる）。
+ * 横断の重複排除は DB 側（1日1通）が引き続き担う。ここは
+ * **桁を落とすためだけ**の層。
+ *
+ * ⚠️ 窓を DB と同じ24時間にしない。インスタンスごとに1通で頭打ちになり、
+ * 障害時に「どのインスタンスも既に送った」状態が長く残って**本物の通知を
+ * 落とす**。60秒は日次 CRON には十分長く、連打には十分短い。
+ */
+const localThrottle = createInMemoryRateLimiter({
+  maxRequests: 1,
+  windowMs: 60_000,
+  // CRON は9本しかない。識別子は外部から増やせない
+  maxKeys: 100,
+});
 
 /** 通知の内容 */
 export interface CronFailureNotice {
@@ -100,6 +138,16 @@ export async function notifyCronFailure(
 
   // ⚠️ 以降はすべて try の中に閉じる（この関数は throw しない契約）
   try {
+    // ⚠️ **DB より先に見る。** DB の抑止が効かない状況（鍵が無い・DB障害）でも
+    // 必ず通る層にしておく。ここを後ろに置くと `shouldNotify` の fail-open を
+    // 通り抜けた分がそのまま送信APIへ出ていく
+    if (!localThrottle.check(cronName)) {
+      console.warn(
+        `[notifyCronFailure] 直前に通知済みのため送りません（60秒）: ${cronName}`,
+      );
+      return false;
+    }
+
     // supabase が無いのは「DB へ繋げないこと自体が失敗の原因」のケース。
     // 連投抑止はできないが、そういうときこそ通知が要る
     if (supabase && !(await shouldNotify(supabase, cronName))) {

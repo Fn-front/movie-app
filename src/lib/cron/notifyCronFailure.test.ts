@@ -173,6 +173,85 @@ describe('notifyCronFailure', () => {
    * ロック中は `last_attempt_at` が更新されないため、**明けた後の失敗では
    * 送られる**（約24時間ごとに1通）。読み手に誤った期待を持たせない。
    */
+  /**
+   * DB に依存しない歯止め（プロセス内・60秒に1通）
+   *
+   * ⚠️ `shouldNotify` は判定できないとき通す（fail-open）。`/api/cron/*` は
+   * 未認証で叩けるので、鍵が無い環境では **1リクエスト = Resend 1コール**に
+   * なりうる。この層が無いと外部から送信APIを無制限に叩かせられる。
+   *
+   * ⚠️ この describe だけ `jest.resetModules()` を挟まない。上の
+   * `notifyCronFailure` ヘルパーは**毎回モジュールを作り直す**ため、
+   * プロセス内の状態を持つこの層は観測できない。
+   */
+  describe('DB に依存しない歯止め', () => {
+    /** モジュールを作り直さずに同じインスタンスを使い回す */
+    const loadOnce = async () => {
+      jest.resetModules();
+      return (await import('./notifyCronFailure')).notifyCronFailure;
+    };
+
+    it('DB が使えなくても2通目は送らない', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const notify = await loadOnce();
+
+      // supabase が null ＝ DB の抑止がまったく効かない状況
+      await expect(notify(null, notice)).resolves.toBe(true);
+      await expect(notify(null, notice)).resolves.toBe(false);
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+
+      warn.mockRestore();
+    });
+
+    it('連投抑止の判定が落ちても2通目は送らない', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockCheckRateLimit.mockRejectedValue(new Error('db down'));
+      const notify = await loadOnce();
+
+      await expect(notify(supabase, notice)).resolves.toBe(true);
+      await expect(notify(supabase, notice)).resolves.toBe(false);
+
+      expect(mockSend).toHaveBeenCalledTimes(1);
+
+      warn.mockRestore();
+      error.mockRestore();
+    });
+
+    /**
+     * ⚠️ 歯止めは **CRON ごと**。固定キーにすると、1本が失敗している間
+     * ほかの CRON の通知が60秒間まとめて消える。
+     */
+    it('別の CRON は止めない', async () => {
+      const notify = await loadOnce();
+
+      await expect(notify(null, notice)).resolves.toBe(true);
+      await expect(
+        notify(null, { cronName: 'sync-movies', reason: 'boom' }),
+      ).resolves.toBe(true);
+
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    /**
+     * ⚠️ **DB より先に見ること。** 後ろに置くと、`shouldNotify` の
+     * fail-open を通り抜けた分がそのまま送信APIへ出ていくうえ、
+     * 連打1回ごとに `consume_rate_limit` の往復が走る。
+     */
+    it('DB を見る前に止める', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const notify = await loadOnce();
+
+      await notify(supabase, notice);
+      await notify(supabase, notice);
+
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+
+      warn.mockRestore();
+    });
+  });
+
   it('沈黙が正常を意味しないことを本文に書く', async () => {
     await notifyCronFailure(supabase, notice);
 

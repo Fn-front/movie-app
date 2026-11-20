@@ -1072,24 +1072,40 @@ describe('checkRateLimitLegacy の INSERT 失敗時（RPC未適用時のフォ�
  * 新しく足した人を止められないため、定数とマイグレーションを実走査する。
  */
 describe('chk_action_type と RATE_LIMIT_ACTION の突き合わせ', () => {
-  /** 最新の `chk_action_type` 定義（DROP → ADD の全量再定義）を読む */
+  /**
+   * 最新の `chk_action_type` 定義（DROP → ADD の全量再定義）を読む
+   *
+   * ⚠️ **SQL コメントを先に落とすこと。** 許可リストの中に
+   * `-- legacy: ...` のような行が実際にある。落とさずに `'...'` を拾うと、
+   * `-- 'xxx' は別マイグレーションで足す` と書いただけの値を
+   * **許可リストに入っていると誤認して緑になる**（実測で確認）。
+   * 守ろうとしている #546 / #659 の事故がそのまま通る方向の誤検出。
+   */
   const readLatestAllowList = (): string[] => {
     const migrationsDir = path.join(process.cwd(), 'supabase', 'migrations');
+    const stripComments = (sql: string) => sql.replace(/--[^\n]*/g, '');
+
     const latest = fs
       .readdirSync(migrationsDir)
       .filter((file) => file.endsWith('.sql'))
       .filter((file) =>
         /ADD CONSTRAINT chk_action_type/.test(
-          fs.readFileSync(path.join(migrationsDir, file), 'utf8'),
+          stripComments(
+            fs.readFileSync(path.join(migrationsDir, file), 'utf8'),
+          ),
         ),
       )
       .sort()
       .pop();
 
+    // 落ちたら: ADD CONSTRAINT chk_action_type を含む migration が見つからない。
+    // 定義の書き方を変えたなら、この抽出も一緒に直すこと
     expect(latest).toBeDefined();
 
-    const sql = fs.readFileSync(path.join(migrationsDir, latest!), 'utf8');
-    const match = sql.match(/action_type IN \(([\s\S]*?)\n\s*\)/);
+    const sql = stripComments(
+      fs.readFileSync(path.join(migrationsDir, latest!), 'utf8'),
+    );
+    const match = sql.match(/action_type IN \(([\s\S]*?)\)\s*\)/);
 
     expect(match).not.toBeNull();
 

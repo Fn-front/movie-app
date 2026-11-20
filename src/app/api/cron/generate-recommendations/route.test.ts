@@ -183,6 +183,12 @@ describe('GET /api/cron/generate-recommendations', () => {
     const response = await GET(createRequest('Bearer test-secret'));
 
     expect(response.status).toBe(401);
+
+    // ⚠️ verifyCronAuth へ渡す CRON 名がずれると、連投抑止のカウンタを
+    //   別の CRON と共有して相手の通知まで止める（#979）
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ cronName: 'generate-recommendations' }),
+    );
   });
 
   it('DB接続エラーで500を返す', async () => {
@@ -213,6 +219,28 @@ describe('GET /api/cron/generate-recommendations', () => {
         null,
         expect.objectContaining({ cronName: 'generate-recommendations' }),
       );
+    });
+
+    /**
+     * ⚠️ catch 経路のテストが1本も無かった。`handleCronError` を
+     * `handleRouteError` に戻しても全件緑になる状態だったので、
+     * 例外で通知が出ることをここで固定する。
+     */
+    it('想定外の例外でも通知する', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockFrom.mockImplementation(() => {
+        throw new Error('boom');
+      });
+
+      const response = await GET(createRequest('Bearer test-secret'));
+
+      expect(response.status).toBe(500);
+      expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual({
+        cronName: 'generate-recommendations',
+        reason: 'boom',
+      });
+
+      error.mockRestore();
     });
 
     it('ユーザー取得に失敗したら通知する', async () => {

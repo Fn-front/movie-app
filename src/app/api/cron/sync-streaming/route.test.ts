@@ -103,6 +103,12 @@ describe('GET /api/cron/sync-streaming', () => {
     const response = await GET(createRequest('Bearer test-secret'));
 
     expect(response.status).toBe(401);
+
+    // ⚠️ verifyCronAuth へ渡す CRON 名がずれると、連投抑止のカウンタを
+    //   別の CRON と共有して相手の通知まで止める（#979）
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ cronName: 'sync-streaming' }),
+    );
     expect(mockSyncStreaming).not.toHaveBeenCalled();
   });
 

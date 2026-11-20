@@ -72,7 +72,16 @@ export async function GET(request: NextRequest) {
 
     const result = await executeSyncAwardMoviesCron(supabase, targetYear);
 
+    // ⚠️ **throw しないので catch の通知に乗らない**（#979）。
+    //   generate-recommendations と同じ形。今は executeSyncAwardMoviesCron が
+    //   'error' を返さないが、route.test.ts に分岐のテストがあるぶん
+    //   生きているように見える。将来 error を返したときに黙らないようにする
     if (result.type === 'error') {
+      await notifyCronFailure(supabase, {
+        cronName: 'sync-award-movies',
+        reason: result.error,
+      });
+
       return NextResponse.json(
         {
           success: false,

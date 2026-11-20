@@ -128,11 +128,17 @@ describe('handleCronError', () => {
   /**
    * ⚠️ 投げっぱなしにしない。Vercel Function は応答を返した時点で
    * 止まりうるので、await して送り切る。
+   *
+   * ⚠️ **モックは `setTimeout` で止めること。** `await Promise.resolve()`
+   * だけだとマイクロタスクが1つ挟まるだけで、`handleCronError` 自体が
+   * async なので **`await` を外しても継続が先に流れてしまい、このテストが
+   * 何も検出しない**（実測。`await` を `void` に変えても6件とも緑だった）。
+   * 実際の送信はネットワーク＝マクロタスクなので、こちらが実態にも合う。
    */
   it('通知を await してから返す', async () => {
     let sent = false;
     mockNotifyCronFailure.mockImplementation(async () => {
-      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
       sent = true;
       return true;
     });

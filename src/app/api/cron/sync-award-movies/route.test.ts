@@ -89,6 +89,10 @@ describe('GET /api/cron/sync-award-movies', () => {
     const response = await GET(createRequest('Bearer test-secret'));
 
     expect(response.status).toBe(500);
+    // ⚠️ 通知を消したらここが落ちる（#979）
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ cronName: 'sync-award-movies' }),
+    );
   });
 
   it('正常に同期が完了した場合200を返す', async () => {
@@ -141,6 +145,10 @@ describe('GET /api/cron/sync-award-movies', () => {
 
     expect(response.status).toBe(500);
     expect(json.success).toBe(false);
+    // ⚠️ 通知を消したらここが落ちる（#979）
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ cronName: 'sync-award-movies' }),
+    );
   });
 
   it('yearパラメータが不正な場合400を返す', async () => {

@@ -52,6 +52,21 @@ const createRequest = (body: Record<string, unknown>) =>
   });
 
 /**
+ * 送信元IPが取れるリクエスト。
+ * Vercel のエッジが付与する x-vercel-forwarded-for はクライアントから改変できない
+ * ため、getClientIp はこれを最優先で採用する。
+ */
+const createRequestFromIp = (body: Record<string, unknown>, ip: string) =>
+  new Request('http://localhost/api/auth/otp/send', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-vercel-forwarded-for': ip,
+    },
+    body: JSON.stringify(body),
+  });
+
+/**
  * password_change の宛先解決で引く `users.email` をモックする。
  * ボディの email ではなくセッションユーザーのメールを使う仕様（#641）のため、
  * この取得が最初のクエリになる。
@@ -756,11 +771,117 @@ describe('POST /api/auth/otp/send', () => {
     );
   });
 
+  // === 送信元単位のブレーキ（#1341） ===
+  //
+  // ⚠️ 他の `*_IP` とは塞いでいる穴が違う。このルートは未登録アドレスだと
+  // 列挙防止の early return に落ちて `OTP_SEND_DAILY` を消費しないため、
+  // `rate_limits` の行は増えない。守っているのは
+  // 「1リクエストごとの users SELECT と randomDelay() の 200〜500ms」。
+  describe('送信元単位の上限（otp_send_ip）', () => {
+    it('検証より前に消費する — 入力が不正でも上限超過なら429を返す', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 3600,
+      });
+
+      const response = await POST(
+        createRequestFromIp(
+          { email: 'not-an-email', action: 'login' },
+          '203.0.113.10',
+        ),
+      );
+
+      // 400 が返るなら IP層が検証の後ろに落ちている
+      expect(response.status).toBe(429);
+      expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+        1,
+        expect.anything(),
+        '203.0.113.10',
+        'otp_send_ip',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('送信元が特定できないときは消費しない（fail-open）', async () => {
+      // users の SELECT をモックしないと 500 に落ちる（上のテストのコメント参照）。
+      // 否定アサーションなので 500 でも緑になってしまう
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            single: () => ({ data: null, error: { code: 'PGRST116' } }),
+          }),
+        }),
+      });
+      mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+      // createRequest は転送ヘッダを付けないため getClientIp は 'unknown'
+      const response = await POST(
+        createRequest({ email: 'user@example.com', action: 'login' }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(mockCheckRateLimit).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'otp_send_ip',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('未登録アドレスでも消費する（列挙防止の early return より前にある）', async () => {
+      // ここが肝。未登録だと OTP_SEND_DAILY は消費されないが、
+      // IP層は**その手前**にあるので必ず数える。
+      // 数えないと users の SELECT と randomDelay を無制限に踏ませられる
+      //
+      // ⚠️ users の SELECT を必ずモックすること。`beforeEach` の
+      // `mockFrom.mockReset()` で `from()` が undefined を返すため、
+      // モックしないと `route.ts` の users 検索で例外 → catch → **500** になる。
+      // 500 でも `toHaveBeenNthCalledWith(1, ...)` は通ってしまうので、
+      // 列挙防止の早期return へ到達しないまま緑になる（レビューで実測）
+      mockFrom.mockReturnValueOnce({
+        select: () => ({
+          eq: () => ({
+            single: () => ({ data: null, error: { code: 'PGRST116' } }),
+          }),
+        }),
+      });
+      mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+      const response = await POST(
+        createRequestFromIp(
+          { email: 'unknown@example.com', action: 'login' },
+          '203.0.113.11',
+        ),
+      );
+
+      // 列挙防止の早期return を通っている（500 ではない）
+      expect(response.status).toBe(200);
+
+      expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+        1,
+        expect.anything(),
+        '203.0.113.11',
+        'otp_send_ip',
+        expect.anything(),
+        expect.anything(),
+      );
+
+      // ここが主張の本体。IP層の1回だけで、OTP_SEND_DAILY は消費していない
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('処理順', () => {
     // バリデーション → … → レート制限（#940 の例外1・例外2の両方）。
     // 識別子が検証済みのメールアドレスであること、守る資源がメールボックスで
     // 送信の実行と1対1に対応させる必要があることの2つが理由
     // （`.claude/rules/api-route.md`）
+    //
+    // ⚠️ ここで見ているのは**2層目**（OTP_SEND_DAILY）の順序。1層目の
+    // `otp_send_ip` は検証より前にある（上の describe）。
+    // createRequest は転送ヘッダを持たないため1層目はスキップされる
     it('バリデーションエラー時はレート制限を消費しない', async () => {
       const response = await POST(
         createRequest({ email: 'not-an-email', action: 'login' }),

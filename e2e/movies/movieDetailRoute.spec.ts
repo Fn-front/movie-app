@@ -550,13 +550,13 @@ test.describe('映画詳細のURL化', () => {
       await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(page).toHaveURL(/\/movies\/now-showing$/);
       // ⚠️ `.first()` を外さないこと（#1333）。遷移中は Radix のタブパネルが
-    // 新旧2つ並ぶ瞬間があり、同じ文言の h1 が2件になって strict mode
-    // violation で落ちる（実測で3回に1回ほど）。
-    //
-    // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
-    //   背後が `aria-hidden` になるため role では拾えず、element not found で
-    //   必ず落ちる（置き換えて実測した）。CSS ロケータのまま先頭を見る
-    await expect(page.locator('h1').first()).toHaveText('公開中の映画');
+      // 新旧2つ並ぶ瞬間があり、同じ文言の h1 が2件になって strict mode
+      // violation で落ちる（実測で3回に1回ほど）。
+      //
+      // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
+      //   背後が `aria-hidden` になるため role では拾えず、element not found で
+      //   必ず落ちる（置き換えて実測した）。CSS ロケータのまま先頭を見る
+      await expect(page.locator('h1').first()).toHaveText('公開中の映画');
     });
 
     test('Esc でも閉じる', async ({ page }) => {

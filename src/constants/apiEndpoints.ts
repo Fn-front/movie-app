@@ -56,6 +56,12 @@ export const API_ENDPOINTS = {
    * ⚠️ 宛先は渡さない。サーバーが `users.email` から引く
    */
   USER_DELETE_CODE: '/api/user/delete-code',
+  /**
+   * 二段階認証の設定の再認証コード送信（#1368）
+   *
+   * ⚠️ 宛先は渡さない。サーバーが `users.email` から引く
+   */
+  USER_TOTP_REAUTH_CODE: '/api/user/totp/reauth-code',
   /** 二段階認証の状態取得 */
   USER_TOTP: '/api/user/totp',
   /** 二段階認証の設定開始（QRコード取得） */

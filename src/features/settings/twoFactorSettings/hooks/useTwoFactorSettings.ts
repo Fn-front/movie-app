@@ -18,6 +18,7 @@ import {
   type SecondFactorMethod,
 } from '@/constants/secondFactor';
 import { OTP_CONFIG } from '@/constants/otp';
+import { SECOND_FACTOR_SETUP_CODE_MESSAGES } from '@/constants/secondFactorSetupCode';
 import { useResendCountdown } from '@/features/auth/hooks/useResendCountdown';
 
 /** 画面の状態 */
@@ -67,7 +68,23 @@ interface UseTwoFactorSettingsResult {
    * 送られたのかどうか分からない。
    */
   notice: string | null;
-  startSetup: (method: SecondFactorMethod) => Promise<void>;
+  /**
+   * 設定を始める（#1368）
+   *
+   * ⛔ **再認証の材料が要る。** セッションだけで通すと、セッションを奪った
+   * 第三者が被害者のアカウントに自分の第2要素を登録できる。
+   */
+  startSetup: (
+    method: SecondFactorMethod,
+    reauth: { currentPassword?: string; reauthCode?: string },
+  ) => Promise<void>;
+  /**
+   * 再認証の確認コードを送る（パスワードを持たない利用者 / #1368）
+   *
+   * ⚠️ 宛先は渡さない。サーバーが `users.email` から引く。渡せる形にすると、
+   * アカウントを1つ持つだけで任意のアドレスへ送れる（#641）。
+   */
+  sendReauthCode: () => Promise<void>;
   enable: (code: string) => Promise<void>;
   disable: (code: string) => Promise<void>;
   regenerateRecoveryCodes: (code: string) => Promise<void>;
@@ -207,10 +224,25 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
     [],
   );
 
+  const sendReauthCode = useCallback(async () => {
+    const json = await post(API_ENDPOINTS.USER_TOTP_REAUTH_CODE);
+    if (!json) return;
+
+    // 画面の状態が変わらないので、送れたことを文言で伝える
+    setNotice(SECOND_FACTOR_SETUP_CODE_MESSAGES.CODE_SENT);
+  }, [post]);
+
   const startSetup = useCallback(
-    async (selected: SecondFactorMethod) => {
+    async (
+      selected: SecondFactorMethod,
+      reauth: { currentPassword?: string; reauthCode?: string },
+    ) => {
       const json = await post(API_ENDPOINTS.USER_TOTP_SETUP, {
         method: selected,
+        ...(reauth.currentPassword
+          ? { currentPassword: reauth.currentPassword }
+          : {}),
+        ...(reauth.reauthCode ? { reauthCode: reauth.reauthCode } : {}),
       });
       if (!json) return;
 
@@ -366,6 +398,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
     error,
     notice,
     startSetup,
+    sendReauthCode,
     sendChallenge,
     resendSetupCode,
     resendRemaining,

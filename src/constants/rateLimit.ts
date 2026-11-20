@@ -152,6 +152,14 @@ export const RATE_LIMIT_ACTION = {
    * 持っていても消せなくなる**（#1359 で送信枠と検証枠を分けたのと同じ理由）。
    */
   ACCOUNT_DELETE_CODE_SEND: 'account_delete_code_send',
+  /**
+   * 二段階認証の設定の再認証コード送信（#1368）
+   *
+   * ⚠️ `TOTP_SETTINGS_VERIFY`（設定変更の試行）とは**別カウンタ**。同じに
+   * すると、コードを送り直すだけで設定の試行枠を食い尽くし、**正しいコードを
+   * 持っていても設定できなくなる**。
+   */
+  SECOND_FACTOR_SETUP_CODE_SEND: 'second_factor_setup_code_send',
   /** メールアドレス変更の確認コード送信（#1359） */
   EMAIL_CHANGE_REQUEST: 'email_change_request',
   /** メールアドレス変更の確認コード検証（#1359） */
@@ -493,6 +501,12 @@ export const RATE_LIMIT_CONFIG = {
    * 削除の試行（`ACCOUNT_DELETE`）と同じ5回/60分だが別カウンタ。
    */
   ACCOUNT_DELETE_CODE_SEND: { maxAttempts: 5, windowMinutes: 60 },
+  /**
+   * 二段階認証の設定の再認証コード送信（#1368）
+   *
+   * 再送間隔（60秒）と合わせて、メールボックスへの連投を抑える。
+   */
+  SECOND_FACTOR_SETUP_CODE_SEND: { maxAttempts: 5, windowMinutes: 60 },
 
   /**
    * メールアドレス変更の確認コード送信（#1359）

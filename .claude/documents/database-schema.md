@@ -117,9 +117,9 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 |---------|-----|------|-----------|------|
 | id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
 | email | VARCHAR(255) | NOT NULL | - | 送信先メールアドレス |
-| user_id | UUID | NULL | - | コードを要求した利用者（users.id / ON DELETE CASCADE）。`email_change` / `account_delete` では必須（#1359 / #1362） |
+| user_id | UUID | NULL | - | コードを要求した利用者（users.id / ON DELETE CASCADE）。`email_change` / `account_delete` / `second_factor_setup` では必須（#1359 / #1362 / #1368） |
 | code_hash | TEXT | NOT NULL | - | OTPコードの HMAC-SHA256（鍵は `OTP_HASH_PEPPER`） |
-| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（registration / password_change / two_factor / email_change / account_delete）。`login` は #1361 で退役（CHECK 制約には既存行のため残す） |
+| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（registration / password_change / two_factor / email_change / account_delete / second_factor_setup）。`login` は #1361 で退役（CHECK 制約には既存行のため残す） |
 | attempts | INTEGER | NOT NULL | 0 | 検証試行回数 |
 | expires_at | TIMESTAMPTZ | NOT NULL | - | 有効期限（作成時刻 + 10分） |
 | verified_at | TIMESTAMPTZ | NULL | - | 検証完了日時 |
@@ -133,12 +133,13 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 - `verification_token_hash` - 検証済みトークンでの照合用
 
 **制約:**
-- `action_type` は 'registration', 'login', 'password_change', 'two_factor', 'email_change' のいずれか（CHECK制約）
-- ⚠️ `two_factor`（二段階認証の第2要素）と `email_change`（アドレス変更）は
+- `action_type` は 'registration', 'login', 'password_change', 'two_factor', 'email_change', 'account_delete', 'second_factor_setup' のいずれか（CHECK制約）
+- ⚠️ `two_factor`（二段階認証の第2要素）/ `email_change`（アドレス変更）/
+  `account_delete`（退会）/ `second_factor_setup`（二段階認証の設定前の再認証）は
   **公開ルートからは作れない**。`src/schema/otp.ts` の `PUBLIC_OTP_ACTIONS` に
   入れていないため、`/api/auth/otp/send` と `/verify` は 400 で拒否する。
   発行できるのはサーバー側の `sendSecondFactorCode` ／ `sendEmailChangeCode`
-  だけ（#1261 / #1359）
+  ／ `sendUserBoundOtp` だけ（#1261 / #1359 / #1362 / #1368）
 - `attempts` は 0〜5 の範囲（CHECK制約）
 - `src/constants/otpActions.test.ts` がこの CHECK 制約を**マイグレーションから実走査**して
   TS 側の定数と突き合わせる。許可リストを変えたら全量再定義すること（既存の値を落とさない）
@@ -150,12 +151,17 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 
 **設計判断 — user_id は NULL 許容（#1359）:**
 - 既存の用途（registration / password_change / two_factor）は**利用者が確定する前**にも行を作るため、必須にできない。emailベースの照合もそのまま残す
-- ⛔ **`email_change` だけは必須。** この用途は「コードが届いた宛先」と
-  「差し替える対象の利用者」が別物で、宛先は**まだ本人のものでないアドレス**。
-  `(email, action_type, code_hash)` だけで照合していたため、
+- ⛔ **`email_change` / `account_delete` / `second_factor_setup` では必須**
+  （それぞれ `chk_email_change_has_user` / `chk_account_delete_has_user` /
+  `chk_second_factor_setup_has_user`）。いずれも**セッションの利用者に対して
+  何かを確定させる**用途で、`(email, action_type, code_hash)` だけで照合すると
   **攻撃者が自分のアカウントで取ったコードを、奪った被害者のセッションで
-  使える**状態だった（#1359 のレビューで critical）。発行時も消費時も
-  `user_id` を条件に含めること
+  使える**（#1359 のレビューで critical）。発行時も消費時も `user_id` を
+  条件に含めること
+  - とくに `email_change` は「コードが届いた宛先」と「差し替える対象の利用者」が
+    別物で、宛先は**まだ本人のものでないアドレス**。穴が最も見えにくい
+- ⚠️ 列そのものは NOT NULL にしない。用途ごとの CHECK で縛る（上記3用途以外は
+  利用者が確定する前にも行を作る）
 - FK は `ON DELETE CASCADE`。退会時の消し残り（#932）も、この列を持つ行は自動で連鎖する
   （`user_id` が NULL の行は `delete_user_account` がメールアドレス一致で消す）
 

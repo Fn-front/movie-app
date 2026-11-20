@@ -8,6 +8,19 @@
 
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
 
+const mockGetSecondFactorMethod = jest.fn();
+jest.mock('@/lib/auth/secondFactor', () => ({
+  ...jest.requireActual('@/lib/auth/secondFactor'),
+  getSecondFactorMethod: (...args: unknown[]) =>
+    mockGetSecondFactorMethod(...args),
+}));
+
+const mockSendEnabledNotice = jest.fn();
+jest.mock('@/lib/auth/sendSecondFactorEnabledNotice', () => ({
+  sendSecondFactorEnabledNotice: (...args: unknown[]) =>
+    mockSendEnabledNotice(...args),
+}));
+
 import { POST } from './route';
 
 // --- Mocks ---
@@ -55,6 +68,8 @@ describe('POST /api/user/totp/enable', () => {
     jest.clearAllMocks();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockGetSecondFactorMethod.mockResolvedValue('totp');
+    mockSendEnabledNotice.mockResolvedValue(true);
     // メールOTP の照合に本人のアドレスが要るため users を引く
     mockFrom.mockReturnValue({
       select: () => ({
@@ -77,6 +92,46 @@ describe('POST /api/user/totp/enable', () => {
     expect(response.status).toBe(200);
     expect(json.message).toBe(TOTP_ERROR_MESSAGES.ENABLED);
     expect(json.data.recoveryCodes).toEqual(['ABCDE-FGHJK', 'MNPQR-STWXY']);
+  });
+
+  /**
+   * ⛔ **身に覚えのない登録に気づける唯一の手段**（#1368）。
+   *
+   * 第2要素が登録されると以降のログインにそのコードが要る。攻撃者が
+   * 登録した場合、被害者は自分が設定していない第2要素を求められ、
+   * リカバリーコードも持っていない。
+   */
+  it('有効化したら登録アドレスへ知らせる', async () => {
+    await POST(createRequest({ code: '123456' }));
+
+    expect(mockSendEnabledNotice).toHaveBeenCalledWith(
+      'user@example.com',
+      'totp',
+    );
+  });
+
+  /**
+   * ⚠️ **戻り値で止めない。** 有効化はもう確定しており、ここで 500 にすると
+   * **リカバリーコードを一度も表示できない**まま終わる（平文はこの応答に
+   * しか出ない）。
+   */
+  it('通知に失敗しても200を返し、リカバリーコードを出す', async () => {
+    mockSendEnabledNotice.mockResolvedValue(false);
+
+    const response = await POST(createRequest({ code: '123456' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.recoveryCodes).toBeDefined();
+  });
+
+  // 有効化に失敗したら通知しない（嘘の通知を送らない）
+  it('有効化に失敗したら知らせない', async () => {
+    mockConfirmSecondFactorSetup.mockResolvedValue(null);
+
+    await POST(createRequest({ code: '000000' }));
+
+    expect(mockSendEnabledNotice).not.toHaveBeenCalled();
   });
 
   /**

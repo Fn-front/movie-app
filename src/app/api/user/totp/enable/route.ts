@@ -10,6 +10,8 @@
 import { NextResponse } from 'next/server';
 
 import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
+import { getSecondFactorMethod } from '@/lib/auth/secondFactor';
+import { sendSecondFactorEnabledNotice } from '@/lib/auth/sendSecondFactorEnabledNotice';
 import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
@@ -109,6 +111,27 @@ export async function POST(request: Request) {
       session.user.id,
       RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
     );
+
+    // ⛔ **身に覚えのない登録に気づける唯一の手段**（#1368）。
+    //
+    //   第2要素が登録されると以降のログインにそのコードが要る。攻撃者が
+    //   登録した場合、被害者は自分が設定していない第2要素を求められ、
+    //   リカバリーコードも持っていない。
+    //
+    //   `totp/setup` の再認証で登録そのものは塞いだが、**通知が無いと
+    //   塞ぎ漏れがあったときに誰も気づけない**。
+    //
+    // ⚠️ **戻り値で止めない。** 有効化はもう確定しており、ここで 500 に
+    //   すると**リカバリーコードを一度も表示できない**まま終わる
+    //   （平文はこの応答にしか出ない）
+    const enabledMethod = await getSecondFactorMethod(
+      supabase,
+      session.user.id,
+    );
+
+    if (enabledMethod) {
+      await sendSecondFactorEnabledNotice(user.email, enabledMethod);
+    }
 
     return NextResponse.json(
       {

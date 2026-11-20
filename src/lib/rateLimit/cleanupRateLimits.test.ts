@@ -11,6 +11,9 @@ import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
 
 import { deleteExpiredRateLimits } from './cleanupRateLimits';
 
+/** 実装と揃える（#1330）。ここがずれるとループのテストが無意味になる */
+const DELETE_BATCH_SIZE = 500;
+
 const createSupabase = (result: { data?: unknown; error?: unknown }) =>
   ({
     rpc: jest.fn().mockResolvedValue({
@@ -19,14 +22,90 @@ const createSupabase = (result: { data?: unknown; error?: unknown }) =>
     }),
   }) as unknown as SupabaseClient;
 
+/** 呼び出しごとに異なる削除件数を返すクライアント */
+const createSupabaseSequence = (counts: number[]) =>
+  ({
+    rpc: jest.fn().mockImplementation(() => {
+      const next = counts.shift() ?? 0;
+      return Promise.resolve({ data: next, error: null });
+    }),
+  }) as unknown as SupabaseClient;
+
 describe('deleteExpiredRateLimits', () => {
-  it('保持期間を引数にして RPC を呼ぶ', async () => {
+  it('保持期間と1回あたりの上限を引数にして RPC を呼ぶ', async () => {
     const supabase = createSupabase({ data: 5 });
 
     await deleteExpiredRateLimits(supabase);
 
     expect(supabase.rpc).toHaveBeenCalledWith('delete_expired_rate_limits', {
       retention_hours: RATE_LIMIT_RETENTION_HOURS,
+      p_limit: DELETE_BATCH_SIZE,
+    });
+  });
+
+  /**
+   * 分割削除（#1330）
+   *
+   * この RPC は PostgREST 経由なので `authenticator` の
+   * `statement_timeout = 8s` が効く。一括 DELETE のままだと行が増えたときに
+   * ロールバックして1行も消えず、翌日さらに悪化して自力で回復しない。
+   */
+  describe('分割削除', () => {
+    it('上限未満が返ったら1回で終わる', async () => {
+      const supabase = createSupabaseSequence([DELETE_BATCH_SIZE - 1]);
+
+      const total = await deleteExpiredRateLimits(supabase);
+
+      expect(total).toBe(DELETE_BATCH_SIZE - 1);
+      expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    });
+
+    it('上限ちょうどが返る限り繰り返し、合計を返す', async () => {
+      const supabase = createSupabaseSequence([
+        DELETE_BATCH_SIZE,
+        DELETE_BATCH_SIZE,
+        7,
+      ]);
+
+      const total = await deleteExpiredRateLimits(supabase);
+
+      expect(supabase.rpc).toHaveBeenCalledTimes(3);
+      expect(total).toBe(DELETE_BATCH_SIZE * 2 + 7);
+    });
+
+    it('0件なら繰り返さない', async () => {
+      const supabase = createSupabaseSequence([0]);
+
+      await expect(deleteExpiredRateLimits(supabase)).resolves.toBe(0);
+      expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    });
+
+    it('時間切れになったら打ち切り、警告を出す', async () => {
+      // Vercel Function の maxDuration(60s) の内側で切り上げる。
+      // 強制終了されると削除件数のログすら残らない
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const nowSpy = jest.spyOn(Date, 'now');
+      // 開始時刻 → 1回目の判定で予算超過
+      nowSpy.mockReturnValueOnce(0).mockReturnValue(999_999);
+
+      // 常に上限ちょうどを返す＝放置すれば無限に回る
+      const supabase = {
+        rpc: jest
+          .fn()
+          .mockResolvedValue({ data: DELETE_BATCH_SIZE, error: null }),
+      } as unknown as SupabaseClient;
+
+      const total = await deleteExpiredRateLimits(supabase);
+
+      expect(supabase.rpc).toHaveBeenCalledTimes(1);
+      expect(total).toBe(DELETE_BATCH_SIZE);
+      // 黙って打ち切らない。消し残し＝保持期間を超えた個人データが残っている
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('消し残しがあります'),
+      );
+
+      nowSpy.mockRestore();
+      warn.mockRestore();
     });
   });
 

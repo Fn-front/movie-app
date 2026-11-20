@@ -1,0 +1,77 @@
+-- movie_cache の HOT 更新を取り戻す（#1327。20261120005957 の判断を訂正する）
+--
+-- ⚠️ 直前の 20261120005957 で「HOT は戻らない」「スキャン0回でも機能を
+--   支えているので残す」と判断したが、**どちらも誤りだった**。
+--   レビュー指摘を受けて実測し、覆ったので訂正する。
+--   （あのファイルは適用済みで db push がスキップするため、DDL はこちらに書く）
+--
+-- ⛔ 誤り1: 「popularity は よく使われている複合索引に含まれている」
+--
+--   含まれていない。実測:
+--
+--     movie_cache_release_type_release_date_idx  116,332回  (release_type, release_date DESC)
+--     movie_cache_release_type_cached_at_idx      46,874回  (release_type, cached_at DESC)
+--     movie_cache_release_type_popularity_idx          0回  (release_type, popularity DESC)
+--
+--   popularity を含む索引は最後の1本だけで、スキャンは0回。
+--   116,332回の索引が popularity を含むと読み違えていた。
+--
+-- ⛔ 誤り2: 「この索引は sort_by=popularity を支えている」
+--
+--   支えられない。アプリは `.order(sortColumn, { nullsFirst: false })`
+--   （src/app/api/movies/route.ts:439）＝ `popularity DESC NULLS LAST` を投げるが、
+--   索引は `popularity DESC`（＝ Postgres 既定の NULLS FIRST）。
+--   順序が一致しないため走査順を提供できない。
+--
+--   enable_seqscan=off で NULLS 位置だけを変えて切り分けた実測:
+--
+--     ORDER BY popularity DESC            → Index Scan using ..._popularity_idx
+--     ORDER BY popularity DESC NULLS LAST → Sort（索引を使えない）← アプリの形
+--
+--   **行数が増えても永久に使われない。** 「カタログが育てば効いてくる」も誤り。
+--
+-- ✅ 落とすと HOT が戻る（実測で確認）
+--
+--   支配的な UPDATE（src/lib/sync/updateMoviesCacheByBatch.ts:157-168、
+--   79,034回 / WAL 111 MB）が書くのは
+--     vote_average / vote_count / popularity / original_language /
+--     title / overview / poster_path / backdrop_path / updated_at
+--
+--   **cached_at と release_date は書かない。** 前者は対象外、後者は
+--   buildDisplayColumns が意図的に除外している（:40-45。リバイバル上映の
+--   補正を TMDb の代表公開日で毎日塗り潰さないため）。
+--
+--   updated_at の索引は 20261120005957 で落としたので、この UPDATE が触る
+--   索引付き列は **popularity ただ1つ**。これを落とせば HOT の条件を満たす。
+--
+--   本番で同じ列構成の UPDATE を30回流した実測:
+--
+--     削除前  n_tup_upd 172,326 / n_tup_hot_upd      4   （累積 0.002%）
+--     削除後  n_tup_upd 172,356 / n_tup_hot_upd     20   （+30 のうち +16 が HOT）
+--
+--   同一行を連続更新したためページ空きの制約で全部は HOT にならないが、
+--   阻害要因が消えたことは確認できた。
+--
+-- idx_movie_cache_cached_at も落とす理由:
+--   唯一の読み手（src/app/api/movies/route.ts:219-225）は
+--   `.eq('release_type', ...)` 付きで、複合索引のほうが選ばれる。実測:
+--
+--     WHERE release_type='theatrical' ORDER BY cached_at DESC LIMIT 1
+--       → Index Only Scan using movie_cache_release_type_cached_at_idx
+--
+--   グローバルな MAX(cached_at) は architecture.md / api-specification.md に
+--   記述が残るだけで src/ に実装が無い。cached_at は upsert と各 sync が
+--   毎回書くので、落とせば書き込みがもう1本分減る。
+--
+-- ⚠️ CONCURRENTLY は付けない。db push はトランザクションで包むため実行できない。
+--   対象は 152 kB と 40 kB で、ACCESS EXCLUSIVE はミリ秒に収まる。
+--
+-- 戻すときは db push（素の CREATE INDEX）を使わないこと。SHARE ロックで
+-- 書き込みを止める。CONCURRENTLY で直接実行する。なお popularity を戻すなら
+-- アプリの ORDER BY に合わせて NULLS LAST を明示しないと**また使われない**:
+--
+--   CREATE INDEX CONCURRENTLY movie_cache_release_type_popularity_idx
+--     ON movie_cache (release_type, popularity DESC NULLS LAST, id);
+
+DROP INDEX IF EXISTS movie_cache_release_type_popularity_idx;
+DROP INDEX IF EXISTS idx_movie_cache_cached_at;

@@ -284,48 +284,65 @@ TMDb APIから取得した映画一覧情報をキャッシュ（ホーム画面
 > 未記載。列の追従は #1209 の範囲。
 > 下の索引の一覧は 2026-11-19 に実DBと突き合わせ済み。
 
-**インデックス（12本。2026-11-20 時点の実体）:**
+**インデックス（10本。2026-11-20 時点の実体）:**
 - `id, release_type` (UNIQUE) - 複合主キー
 - `release_date` - 公開日順ソート用
-- `cached_at` - 差分取得時の最新日時確認用
 - `is_now_playing` - Now Playing フィルタ用
 - `release_type` - タブ絞り込み用
 - `release_type, release_date DESC` - タブ＋公開日順
-- `release_type, popularity DESC` - タブ＋人気順
 - `release_type, cached_at DESC` - 差分取得用
 - `is_currently_streaming` (部分索引 `WHERE is_currently_streaming = true`) - 配信中フィルタ用
 - `watch_provider_flatrate` (GIN) - 配信プロバイダー絞り込み用
 - `watch_provider_rent` (GIN) - 同上
 - `watch_provider_buy` (GIN) - 同上
 
-#### 落とした索引（#1327・2026-11-20）
+#### 落とした索引と、HOT 更新（#1327・2026-11-20）
 
-`popularity` 単独と `updated_at` を削除した。14本 → 12本。
+14本 → 10本。**目的は HOT 更新を取り戻すこと**で、実際に戻った。
 
-| 索引 | スキャン | サイズ | 落とした理由 |
-|---|---|---|---|
-| `idx_movie_cache_updated_at` | 2回 | 200 kB | トリガー `update_movie_cache_updated_at` が**毎回書き換える**のに、**読み取りに一度も使われていない**（src/ では代入にしか現れない） |
-| `idx_movie_cache_popularity` | 6回 | 104 kB | `release_type, popularity DESC` と重複。一覧の並び替えは `applyMovieCacheFilters` が**必ず** `.eq('release_type', ...)` を付けるため、popularity 単独で引く経路が無い |
+| 索引 | スキャン | 落とした理由 |
+|---|---|---|
+| `idx_movie_cache_updated_at` | 2回 | トリガーが**毎回書き換える**のに**読み取りに一度も使われていない**（src/ では代入にしか現れない） |
+| `idx_movie_cache_popularity` | 6回 | 複合索引と重複。並び替えは `applyMovieCacheFilters` が必ず `.eq('release_type', ...)` を付ける |
+| `movie_cache_release_type_popularity_idx` | **0回** | **アプリの ORDER BY に使えない**（下記） |
+| `idx_movie_cache_cached_at` | 380回 | 唯一の読み手は `.eq('release_type', ...)` 付きで、複合索引のほうが選ばれる（実測で Index Only Scan） |
 
-> ⚠️ **HOT 更新はこれでは戻らない。** HOT の成立には「更新される列がどの索引にも
-> 含まれない」ことが要る。この UPDATE は popularity / cached_at / updated_at を
-> 書き換えるが、popularity と cached_at は**よく使われている複合索引**
-> （スキャン 116,332回 / 46,874回）に含まれている。落とせば読み取りが壊れる。
-> HOT の完全復活と読み取り性能は両立しない。ここで狙ったのは
-> 「1回の更新で書く索引の本数を減らす」ことだけ。
+##### HOT が戻った根拠（実測）
+
+支配的な UPDATE（`updateMoviesCacheByBatch.ts:157-168`、79,034回 / WAL 111 MB）が書くのは
+`vote_average` / `vote_count` / `popularity` / `original_language` / 表示列 / `updated_at` で、
+**`cached_at` と `release_date` は書かない**（後者は `buildDisplayColumns` がリバイバル補正を
+守るため意図的に除外）。したがって索引付き列との交差は **`popularity` ただ1つ**だった。
+
+| | n_tup_upd | n_tup_hot_upd |
+|---|---|---|
+| 削除前 | 172,326 | **4**（累積 0.002%） |
+| 削除後（30回更新） | 172,356 | **20**（+16 が HOT） |
+
+##### ⛔ `popularity` の索引は ORDER BY に使えなかった
+
+アプリは `.order(sortColumn, { nullsFirst: false })`（`movies/route.ts:439`）＝
+`popularity DESC NULLS LAST` を投げるが、索引は `popularity DESC`（＝既定の NULLS FIRST）。
+順序が一致しないため走査順を提供できない。`enable_seqscan=off` で切り分けた実測:
+
+```
+ORDER BY popularity DESC            → Index Scan using ..._popularity_idx
+ORDER BY popularity DESC NULLS LAST → Sort（索引を使えない）← アプリの形
+```
+
+**行数が増えても永久に使われない。** 戻すなら `(release_type, popularity DESC NULLS LAST, id)`
+にしないと同じことになる。
 
 #### ⛔ スキャン0回でも落としてはいけない索引
 
-以下の4本はスキャン0回だが**機能を支えている**。棚卸しで機械的に落とさないこと。
+`watch_provider_flatrate` / `_rent` / `_buy`（GIN）はスキャン0回だが**配信サービスの
+絞り込みを支えている**（`movieCacheFilters.ts:160` が `watch_provider_<形態>.cs.[id]` の
+containment で引く）。0回なのは 1,259行・2 MB でプランナが seq scan を選ぶためで、
+カタログが育てば効いてくる。**「スキャン0回＝不要」で機械的に判断しない。**
 
-| 索引 | 支えている機能 |
-|---|---|
-| `watch_provider_flatrate` / `_rent` / `_buy` (GIN) | 配信サービスでの絞り込み。`movieCacheFilters.ts:160` が `watch_provider_<形態>.cs.[id]` の containment で引く |
-| `release_type, popularity DESC` | `sort_by=popularity` の並び替え（`src/schema/filters.ts:15`） |
-
-スキャン0回なのは、このテーブルが **1,258行・2.3 MB しかなく、プランナが索引より
-seq scan を選ぶ**ため。実ユーザーが4人で配信フィルタが使われていないという事情も
-ある。カタログが育てば効いてくるので、**「スキャン0回＝不要」で判断しない**。
+> ⚠️ ただし上の `movie_cache_release_type_popularity_idx` は、スキャン0回**かつ**
+> 原理的に使えないことを実測で確かめたうえで落としている。0回の索引は
+> 「使われていないだけか」「使えないのか」を切り分けること。
 
 #### 索引を追加しない判断（#1279・2026-11-19 実測）
 

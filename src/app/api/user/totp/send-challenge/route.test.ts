@@ -34,6 +34,17 @@ jest.mock('@/lib/auth/secondFactor', () => ({
 }));
 
 const mockSendSecondFactorCode = jest.fn();
+/**
+ * ⚠️ どのテストもこれを assert しない。
+ *
+ * このルートは `checkRateLimit` を import していないので、**呼び出しは常に
+ * 0回**。それを `not.toHaveBeenCalledWith` で確かめても、空のハンドラでも
+ * 通るアサーションにしかならない（#1287）。
+ *
+ * 「消費しないこと」は下のソース不変条件テストが見る。ここでモックを
+ * 残しているのは、将来 import された場合に**実際のレート制限が走るのを
+ * 防ぐ**ため（テストが本番の経路へ落ちないようにする安全弁）。
+ */
 const mockCheckRateLimit = jest.fn();
 jest.mock('@/lib/auth/sendSecondFactorCode', () => ({
   ...jest.requireActual('@/lib/auth/sendSecondFactorCode'),
@@ -151,16 +162,37 @@ describe('POST /api/user/totp/send-challenge', () => {
       path.join(__dirname, 'route.ts'),
       'utf8',
     );
-    // コメントで理由を説明しているので、コードだけを見る
+    // コメントで理由を説明しているので、コードだけを見る。
+    //
+    // ⚠️ 文字列リテラル中の `//`（`'https://…'` 等）も行コメント開始と
+    //   見なして削ってしまう。いまは禁止語が import 行に出るため実害は
+    //   無いが、完全な字句解析ではないことを承知で使っている
     const code = routeSource.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+
+    // ⚠️ 大文字小文字を潰してから見る。`TOTP_SETTINGS_VERIFY`（定数）だけを
+    //   見ていると、小文字のリテラル `'totp_settings_verify'` を素通りさせる
+    const normalized = code.toUpperCase();
 
     // 送信系と検証系でカウンタを重ねると、メールOTP の利用者は無効化のたびに
     // 2枠使い、2回しくじるだけで15分間すべての二段階認証操作が 429 になる
-    expect(code).not.toContain('TOTP_SETTINGS_VERIFY');
-    expect(code).not.toContain('checkSecondFactorRateLimit');
-    expect(code).not.toContain('checkRateLimit');
-    // requireSecondFactor は TOTP_SETTINGS_VERIFY を消費する側
-    expect(code).not.toContain('requireSecondFactor');
+    expect(normalized).not.toContain('TOTP_SETTINGS_VERIFY');
+
+    // ⚠️ レート制限の入口は `.claude/rules/api-route.md` の棚卸し表にある
+    //   **5つすべて**を見る。`checkRateLimit` だけ見ていた頃は
+    //   `enforcePublicRateLimit(..., 'totp_settings_verify')` を足しても
+    //   緑のままだった（レビューで実測）
+    const RATE_LIMIT_ENTRY_POINTS = [
+      'checkRateLimit',
+      'checkSecondFactorRateLimit',
+      'enforcePublicRateLimit',
+      'createInMemoryRateLimiter',
+      // requireSecondFactor は TOTP_SETTINGS_VERIFY を消費する側
+      'requireSecondFactor',
+    ];
+
+    for (const entryPoint of RATE_LIMIT_ENTRY_POINTS) {
+      expect(normalized).not.toContain(entryPoint.toUpperCase());
+    }
   });
 
   /**
@@ -168,7 +200,7 @@ describe('POST /api/user/totp/send-challenge', () => {
    * **`sendSecondFactorCode` の中の `TWO_FACTOR_SEND` 1本だけ**が効く。
    * 呼び出しが消えると送信そのものが無くなるので、ここで到達を固定する。
    */
-  it('レート制限は sendSecondFactorCode の中の1本だけ', async () => {
+  it('TWO_FACTOR_SEND を持つ sendSecondFactorCode に必ず到達する', async () => {
     mockSendSecondFactorCode.mockResolvedValue('sent');
 
     await POST();

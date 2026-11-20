@@ -151,10 +151,16 @@ describe('sendSecondFactorCode', () => {
     expect(row.code_hash).toBe(`hashed:${EMAIL}:123456`);
     expect(row.action_type).toBe(TWO_FACTOR_OTP_ACTION);
 
-    // 有効期限は OTP_CONFIG.EXPIRY_MINUTES 後。実行時間ぶんの幅を見る
+    // 有効期限は OTP_CONFIG.EXPIRY_MINUTES 後。
+    //
+    // ⚠️ 実装は `before` より**後**に `Date.now()` を読むので、
+    //   `expiresAt - before >= expected` は構造上つねに成り立つ。
+    //   下限を `expected - 1000` にしても落ちることはない（死んだ
+    //   アサーションになる）ため、下限は厳密に `expected` で見る。
+    //   実行時間ぶんの遊びが要るのは上限側だけ
     const expiresAt = new Date(row.expires_at as string).getTime();
     const expected = OTP_CONFIG.EXPIRY_MINUTES * 60 * 1000;
-    expect(expiresAt - before).toBeGreaterThanOrEqual(expected - 1000);
+    expect(expiresAt - before).toBeGreaterThanOrEqual(expected);
     expect(expiresAt - before).toBeLessThanOrEqual(expected + 1000);
   });
 

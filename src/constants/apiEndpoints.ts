@@ -30,6 +30,10 @@ export const API_ENDPOINTS = {
   /** プロフィール更新 */
   /** アカウント削除（#932） */
   USER: '/api/user',
+  /** メールアドレス変更: 確認コードの送信（#1359） */
+  USER_EMAIL_CHANGE_REQUEST: '/api/user/email-change/request',
+  /** メールアドレス変更: 確認コードの検証（#1359） */
+  USER_EMAIL_CHANGE_CONFIRM: '/api/user/email-change/confirm',
   /** プロフィール更新 */
   USER_PROFILE: '/api/user/profile',
   /** 設定取得・更新 */

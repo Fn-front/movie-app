@@ -1105,7 +1105,15 @@ describe('chk_action_type と RATE_LIMIT_ACTION の突き合わせ', () => {
     const sql = stripComments(
       fs.readFileSync(path.join(migrationsDir, latest!), 'utf8'),
     );
-    const match = sql.match(/action_type IN \(([\s\S]*?)\)\s*\)/);
+    // ⚠️ **`chk_action_type` の block に限定する。**
+    //
+    //   素の `action_type IN (` で引くと、同じファイルにある
+    //   `chk_otp_action_type`（otp_codes の許可リスト）を先に拾う。
+    //   実際 #1359 のマイグレーションで両方を書いたとき、5値しか
+    //   取れずに「41件が許可リストに無い」と出た。
+    const match = sql.match(
+      /ADD CONSTRAINT chk_action_type CHECK \(\s*action_type IN \(([\s\S]*?)\)\s*\)/,
+    );
 
     expect(match).not.toBeNull();
 

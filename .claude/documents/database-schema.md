@@ -117,8 +117,9 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 |---------|-----|------|-----------|------|
 | id | UUID | NOT NULL | gen_random_uuid() | レコードID（主キー） |
 | email | VARCHAR(255) | NOT NULL | - | 送信先メールアドレス |
+| user_id | UUID | NULL | - | コードを要求した利用者（users.id / ON DELETE CASCADE）。`email_change` では必須（#1359） |
 | code_hash | TEXT | NOT NULL | - | OTPコードの HMAC-SHA256（鍵は `OTP_HASH_PEPPER`） |
-| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（registration / login / password_change / two_factor） |
+| action_type | VARCHAR(50) | NOT NULL | - | アクション種別（registration / login / password_change / two_factor / email_change） |
 | attempts | INTEGER | NOT NULL | 0 | 検証試行回数 |
 | expires_at | TIMESTAMPTZ | NOT NULL | - | 有効期限（作成時刻 + 10分） |
 | verified_at | TIMESTAMPTZ | NULL | - | 検証完了日時 |
@@ -127,28 +128,36 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 
 **インデックス:**
 - `email, action_type, created_at` - メール・アクション・日時での検索用
+- `user_id, action_type, created_at DESC`（`WHERE user_id IS NOT NULL` の部分索引） - 利用者ごとの最新行を引く用
 - `expires_at` - 期限切れレコードのクリーンアップ用
 - `verification_token_hash` - 検証済みトークンでの照合用
 
 **制約:**
-- `action_type` は 'registration', 'login', 'password_change', 'two_factor' のいずれか（CHECK制約）
-- ⚠️ `two_factor`（二段階認証の第2要素）は**公開ルートからは作れない**。
-  `src/schema/otp.ts` の `PUBLIC_OTP_ACTIONS` に入れていないため、
-  `/api/auth/otp/send` と `/verify` は 400 で拒否する。発行できるのは
-  サーバー側の `sendSecondFactorCode` だけ（#1261）
+- `action_type` は 'registration', 'login', 'password_change', 'two_factor', 'email_change' のいずれか（CHECK制約）
+- ⚠️ `two_factor`（二段階認証の第2要素）と `email_change`（アドレス変更）は
+  **公開ルートからは作れない**。`src/schema/otp.ts` の `PUBLIC_OTP_ACTIONS` に
+  入れていないため、`/api/auth/otp/send` と `/verify` は 400 で拒否する。
+  発行できるのはサーバー側の `sendSecondFactorCode` ／ `sendEmailChangeCode`
+  だけ（#1261 / #1359）
 - `attempts` は 0〜5 の範囲（CHECK制約）
+- `src/constants/otpActions.test.ts` がこの CHECK 制約を**マイグレーションから実走査**して
+  TS 側の定数と突き合わせる。許可リストを変えたら全量再定義すること（既存の値を落とさない）
 
 **設計判断 — 平文を保存しない理由（#640 / #698）:**
 - OTPは6桁 = 100万通りしかなく、ソルト付きSHA-256でも特定の行を狙った総当たりは1秒未満で終わる
 - 鍵（`OTP_HASH_PEPPER`）をDBの外に置くことで、DBだけを手に入れた攻撃者がHMACを計算できないようにする
 - 移行期間は `code`（平文）と `code_hash` を並行させていたが、全レコードが新方式になった時点で `code` を削除し、`code_hash` に `NOT NULL` を付けた（#698）
 
-**設計判断 — user_id FKを持たない理由:**
-- 現在の設計では新規登録時にユーザーが先に作成される（is_verified = false）ため、user_id FKを持たせることは可能
-- しかし、emailベースにすることで以下のメリットがある:
-  - OTPテーブルがusersテーブルに依存しないシンプルな設計
-  - 将来的にユーザー作成前にメール到達確認を行うフローに変更しやすい
-  - RLSを使わずservice roleでの操作に統一できる（OTPはサーバー側でのみ操作）
+**設計判断 — user_id は NULL 許容（#1359）:**
+- 既存の用途（registration / login / password_change / two_factor）は**利用者が確定する前**にも行を作るため、必須にできない。emailベースの照合もそのまま残す
+- ⛔ **`email_change` だけは必須。** この用途は「コードが届いた宛先」と
+  「差し替える対象の利用者」が別物で、宛先は**まだ本人のものでないアドレス**。
+  `(email, action_type, code_hash)` だけで照合していたため、
+  **攻撃者が自分のアカウントで取ったコードを、奪った被害者のセッションで
+  使える**状態だった（#1359 のレビューで critical）。発行時も消費時も
+  `user_id` を条件に含めること
+- FK は `ON DELETE CASCADE`。退会時の消し残り（#932）も、この列を持つ行は自動で連鎖する
+  （`user_id` が NULL の行は `delete_user_account` がメールアドレス一致で消す）
 
 **クリーンアップ:**
 - 検証成功時のレコードは即座に削除
@@ -799,7 +808,7 @@ users (1) ----< (N) watchlist
   |
   +----< (N) dismissed_movies
 
-otp_codes（usersと直接FKなし、emailで紐付け）
+otp_codes（原則 email で紐付け。user_id FK は NULL 許容で、email_change だけ必須 / #1359）
 award_movies（usersと紐付かない公開データ）
 ```
 

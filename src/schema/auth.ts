@@ -273,3 +273,36 @@ export const accountDeleteApiSchema = z.object({
 });
 
 export type AccountDeleteApiData = z.infer<typeof accountDeleteApiSchema>;
+
+/**
+ * メールアドレス変更: 確認コードの送信（#1359）
+ */
+export const emailChangeRequestSchema = z.object({
+  newEmail: normalizedEmailSchema,
+  /**
+   * 現在のパスワード
+   *
+   * ⚠️ **必須にする。** 退会（#932）と違い、こちらは
+   * 「パスワードを持つ利用者」に限る機能なので照合する材料が必ずある。
+   * ソーシャル連携のみの利用者はサーバー側で弾く。
+   */
+  currentPassword: z.string().min(1),
+});
+
+/**
+ * メールアドレス変更: 確認コードの検証（#1359）
+ */
+export const emailChangeConfirmSchema = z.object({
+  newEmail: normalizedEmailSchema,
+  code: z.string().trim().min(1).max(32),
+  /**
+   * 第2要素のコード
+   *
+   * ⚠️ **任意**にする。設定していない利用者に必須だと変更できなくなる。
+   * 誰に要求するかはサーバー側が決める。
+   */
+  secondFactorCode: z.string().trim().max(32).optional(),
+});
+
+export type EmailChangeRequestData = z.infer<typeof emailChangeRequestSchema>;
+export type EmailChangeConfirmData = z.infer<typeof emailChangeConfirmSchema>;

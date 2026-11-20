@@ -80,21 +80,21 @@ export type Database = {
       admin_audit_logs: {
         Row: {
           action: string;
-          actor_user_id: string;
+          actor_user_id: string | null;
           created_at: string;
           id: string;
           target_user_id: string;
         };
         Insert: {
           action: string;
-          actor_user_id: string;
+          actor_user_id?: string | null;
           created_at?: string;
           id?: string;
           target_user_id: string;
         };
         Update: {
           action?: string;
-          actor_user_id?: string;
+          actor_user_id?: string | null;
           created_at?: string;
           id?: string;
           target_user_id?: string;
@@ -181,7 +181,7 @@ export type Database = {
           error_message: string | null;
           finished_at: string | null;
           id: string;
-          requested_by: string;
+          requested_by: string | null;
           started_at: string;
           status: string;
           total_upserted: number | null;
@@ -194,7 +194,7 @@ export type Database = {
           error_message?: string | null;
           finished_at?: string | null;
           id?: string;
-          requested_by: string;
+          requested_by?: string | null;
           started_at?: string;
           status: string;
           total_upserted?: number | null;
@@ -207,7 +207,7 @@ export type Database = {
           error_message?: string | null;
           finished_at?: string | null;
           id?: string;
-          requested_by?: string;
+          requested_by?: string | null;
           started_at?: string;
           status?: string;
           total_upserted?: number | null;
@@ -482,6 +482,7 @@ export type Database = {
           email: string;
           expires_at: string;
           id: string;
+          user_id: string | null;
           verification_token_hash: string | null;
           verified_at: string | null;
         };
@@ -493,6 +494,7 @@ export type Database = {
           email: string;
           expires_at: string;
           id?: string;
+          user_id?: string | null;
           verification_token_hash?: string | null;
           verified_at?: string | null;
         };
@@ -504,10 +506,19 @@ export type Database = {
           email?: string;
           expires_at?: string;
           id?: string;
+          user_id?: string | null;
           verification_token_hash?: string | null;
           verified_at?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'otp_codes_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       password_reset_tokens: {
         Row: {
@@ -1136,6 +1147,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      change_user_email: {
+        Args: { p_new_email: string; p_user_id: string };
+        Returns: string;
+      };
       consume_rate_limit: {
         Args: {
           p_action_type: string;
@@ -1164,6 +1179,7 @@ export type Database = {
         Args: { p_limit?: number; retention_hours: number };
         Returns: number;
       };
+      delete_user_account: { Args: { p_user_id: string }; Returns: number };
       get_award_years: { Args: never; Returns: number[] };
       get_watchlist_sorted: {
         Args: {

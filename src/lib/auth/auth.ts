@@ -734,6 +734,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         }
 
+        // メールアドレスの変更をセッションへ反映する（#1359）。
+        //
+        // ⚠️ **`token.email` は初回サインイン時にしか入らない。**
+        //   代入は `if (user)` の中の2箇所だけで、`trigger === 'update'` では
+        //   更新されない。`@auth/core` の `session` アクションも `newSession` を
+        //   トークンへマージせず、jwt コールバックへ渡すだけ。
+        //
+        //   反映しないと表示が古いだけでは済まない。パスワード変更は
+        //   画面が持つ旧アドレスで OTP を要求するが、送信は DB から引き直すため
+        //   **コードは新アドレスへ届き、検証は旧アドレスで引いて必ず 400** になる。
+        //   再ログインするまでパスワードを変更できなくなる。
+        //
+        // ⚠️ 第2要素の分岐（`token.totpPending` でガード）より前に置く。
+        //   あちらに混ぜると、変更の反映が二段階認証の途中でしか効かない
+        if (
+          trigger === 'update' &&
+          supabase &&
+          token.id &&
+          !token.totpPending
+        ) {
+          const { data: refreshed } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', token.id as string)
+            .single();
+
+          // 取れなければ据え置く。握り潰してよいのは、ここで失敗しても
+          // 古い値が残るだけで認証の判断には使わないため
+          if (refreshed?.email) {
+            token.email = refreshed.email;
+          }
+        }
+
         // 第2要素の検証（OAuth 経路の続き）。
         //
         // 検証はここで行う。クライアントから渡せるのは入力されたコードだけで、

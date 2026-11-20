@@ -152,7 +152,9 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 
 **クリーンアップ:**
 - 検証成功時のレコードは即座に削除
-- ⚠️ **有効期限切れレコードの定期削除は未実装（#978）。** かつて「rate_limits と同一ジョブで削除」と書かれていたが、そのようなジョブは存在しなかった。rate_limits 側は #933 で `/api/cron/cleanup-rate-limits` を用意したが、otp_codes は対象外
+- 有効期限切れレコードは日次 Cron `/api/cron/cleanup-expired-records` が `delete_expired_otp_codes` RPC で削除する（#978）。保持期間は **48時間**（`OTP_CODE_RETENTION_HOURS`）
+  - ⚠️ 期限切れ直後に消さない。`auth/otp/send` の**60秒の再送間隔は直前の行の `created_at` だけ**を根拠にしているため、消すと再送間隔が素通りする
+  - かつて「rate_limits と同一ジョブで削除」と書かれていた時期があるが、**そのようなジョブは存在しなかった**（#933 で訂正し #978 で実装した）
 
 ---
 
@@ -177,8 +179,9 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 - トークンはパスワードをバイパスできる資格情報。DBが漏れた時点で有効なリンクを作られると意味がない
 - 256bit の乱数なので総当たりは成立せず、bcrypt のようなストレッチは不要（`src/lib/otp/verificationToken.ts` と同じ方式）
 
-**設計判断 — 使用済みの行を削除しない理由:**
+**設計判断 — 使用済みの行をすぐ削除しない理由:**
 - 使い回しを「見つからない」ではなく「使用済み」として判定できるようにするため
+- ただしその判定が要るのは**有効期限の内側だけ**。期限切れの行はどのみち拒否されるので、日次 Cron `/api/cron/cleanup-expired-records` が `delete_expired_password_reset_tokens` RPC で消す（#1300）。保持期間は **48時間**（`PASSWORD_RESET_TOKEN_RETENTION_HOURS`）
 
 **GRANT:**
 - `service_role` のみ。`anon` / `authenticated` には一切付与しない
@@ -592,16 +595,20 @@ Seq Scan になり、そこで初めて候補索引が効く。**実クエリで
 - **otp_verify**: 5回失敗で該当OTP無効化
 
 **クリーンアップ（#933）:**
-- 日次 Cron `/api/cron/cleanup-rate-limits` が `delete_expired_rate_limits` RPC を呼ぶ
+- 日次 Cron `/api/cron/cleanup-expired-records` が `delete_expired_rate_limits` RPC を呼ぶ
 - **1回500件ずつの分割削除**（#1330 / #1342）。この RPC は PostgREST 経由で呼ぶため
   `authenticator` ロールの `statement_timeout = 8s` が効く。一括 DELETE だと行が
   増えたとき全ロールバックして**1行も消えず、翌日さらに悪化して回復しない**
-  - ループは**クライアント側**（`cleanupRateLimits.ts`）。plpgsql 内のループでは
-    `statement_timeout` が RPC 全体に掛かるため分割にならない
+  - ループは**クライアント側**（`src/lib/cleanup/batchedDelete.ts`）。plpgsql 内の
+    ループでは `statement_timeout` が RPC 全体に掛かるため分割にならない
   - **0件を見るまで**続ける。「上限未満＝消し切った」で止めると、同時更新で
     `ROW_COUNT` が減ったときに滞留を残したまま終了する
   - 時間予算 35秒（`maxDuration` は 60）。超えたら打ち切り、**1回の run が
     未完で終わりうる**。残りは翌日のCRONが続きから消す
+    - ⚠️ この予算は**3対象で共有**する（`cleanupExpiredRecords` が1つ作って配る）。
+      対象ごとに持たせると 3 × 35秒 = 105秒 で `maxDuration` を超える
+    - ⚠️ 判定は **RPC を投げる前**。末尾で見ていた頃は予算を使い切っていても
+      対象ごとに必ず1バッチ走り、超過幅が「35秒 + 対象数 × 8秒」で伸びた
   - 反復上限 **200回**（`MAX_BATCHES`）でも打ち切る。時間予算だけだと1回あたりが
     極端に速いときに回り続けるため、回数側にも天井を置いている
   - 打ち切りはレスポンスの `completed: false` で観測できる。200 を返すため

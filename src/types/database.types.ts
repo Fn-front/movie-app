@@ -1148,6 +1148,14 @@ export type Database = {
           retry_after: number;
         }[];
       };
+      delete_expired_otp_codes: {
+        Args: { p_limit?: number; retention_hours: number };
+        Returns: number;
+      };
+      delete_expired_password_reset_tokens: {
+        Args: { p_limit?: number; retention_hours: number };
+        Returns: number;
+      };
       delete_expired_rate_limits: {
         Args: { p_limit?: number; retention_hours?: number };
         Returns: number;

@@ -3,11 +3,11 @@
  */
 
 /**
- * レート制限レコードの保持期間切れ削除 Cron API テスト
+ * 保持期間切れレコードの削除 Cron API テスト
  *
  * SQL の削除条件そのもの（ロック中・カウント中の行を消さないこと）は実DBでしか
  * 検証できないため、`e2e/rateLimit/rateLimitsRetention.spec.ts` が担当する。
- * ここはルートの責務（認証・DB接続失敗・RPC失敗の扱い・レスポンス形）を見る。
+ * ここはルートの責務（認証・DB接続失敗・失敗の扱い・レスポンス形）を見る。
  */
 
 import { NextRequest } from 'next/server';
@@ -16,11 +16,20 @@ import { GET, maxDuration, dynamic } from './route';
 
 // --- Mocks ---
 
-const mockDeleteExpiredRateLimits = jest.fn();
-jest.mock('@/lib/rateLimit/cleanupRateLimits', () => ({
-  deleteExpiredRateLimits: (...args: unknown[]) =>
-    mockDeleteExpiredRateLimits(...args),
+const mockCleanupExpiredRecords = jest.fn();
+jest.mock('@/lib/cleanup/expiredRecords', () => ({
+  cleanupExpiredRecords: (...args: unknown[]) =>
+    mockCleanupExpiredRecords(...args),
 }));
+
+/** 対象1つぶんの結果を作る */
+const target = (name: string, overrides: Record<string, unknown> = {}) => ({
+  name,
+  retention_hours: 48,
+  deleted_count: 0,
+  completed: true,
+  ...overrides,
+});
 
 const mockCreateServiceRoleClient = jest.fn();
 jest.mock('@/helpers/supabase', () => {
@@ -38,14 +47,14 @@ const createRequest = (authHeader?: string) => {
   if (authHeader) {
     headers.set('authorization', authHeader);
   }
-  return new NextRequest('http://localhost/api/cron/cleanup-rate-limits', {
+  return new NextRequest('http://localhost/api/cron/cleanup-expired-records', {
     headers,
   });
 };
 
 // --- Tests ---
 
-describe('GET /api/cron/cleanup-rate-limits', () => {
+describe('GET /api/cron/cleanup-expired-records', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
@@ -67,11 +76,16 @@ describe('GET /api/cron/cleanup-rate-limits', () => {
     expect(dynamic).toBe('force-dynamic');
   });
 
-  it('正しい認証で削除が実行され、件数と保持期間を返す', async () => {
+  it('正しい認証で全対象を掃除し、対象ごとの結果を返す', async () => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
-    mockDeleteExpiredRateLimits.mockResolvedValue({
-      deleted: 12,
+    mockCleanupExpiredRecords.mockResolvedValue({
+      targets: [
+        target('rate_limits', { deleted_count: 12 }),
+        target('otp_codes', { deleted_count: 3 }),
+        target('password_reset_tokens', { deleted_count: 1 }),
+      ],
       completed: true,
+      hasError: false,
     });
 
     const response = await GET(createRequest('Bearer test-secret'));
@@ -79,11 +93,14 @@ describe('GET /api/cron/cleanup-rate-limits', () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.data).toEqual({
-      deleted_count: 12,
-      completed: true,
-      retention_hours: 48,
-    });
+    expect(json.data.completed).toBe(true);
+    // ⚠️ 対象名を本文に載せる。件数だけだと「どのテーブルが消えていないか」が
+    //   分からず、#978 のように「掃除しているつもりで対象外」に気づけない
+    expect(json.data.targets.map((t: { name: string }) => t.name)).toEqual([
+      'rate_limits',
+      'otp_codes',
+      'password_reset_tokens',
+    ]);
   });
 
   it('打ち切られても200で返し、completed:false をそのまま載せる', async () => {
@@ -91,9 +108,12 @@ describe('GET /api/cron/cleanup-rate-limits', () => {
     // 消し残しは保持期間を超えた個人データが残っている状態なので、
     // 監視側が本文で気づけるようにしてある。throw に変えられたら落ちること
     jest.spyOn(console, 'log').mockImplementation(() => {});
-    mockDeleteExpiredRateLimits.mockResolvedValue({
-      deleted: 100_000,
+    mockCleanupExpiredRecords.mockResolvedValue({
+      targets: [
+        target('rate_limits', { deleted_count: 100_000, completed: false }),
+      ],
       completed: false,
+      hasError: false,
     });
 
     const response = await GET(createRequest('Bearer test-secret'));
@@ -101,39 +121,66 @@ describe('GET /api/cron/cleanup-rate-limits', () => {
 
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
-    expect(json.data).toEqual({
-      deleted_count: 100_000,
+    expect(json.data.completed).toBe(false);
+  });
+
+  /**
+   * ⚠️ 打ち切り（200）と RPC の失敗（500）を分ける。
+   *
+   * 打ち切りは「翌日のCRONが続きを消す」で回復するが、失敗は権限不足や
+   * 関数の欠落など設定の問題が多く、放っておいても直らない。
+   */
+  it('1つでも失敗したら500で返し、成功した対象の結果は残す', async () => {
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    mockCleanupExpiredRecords.mockResolvedValue({
+      targets: [
+        target('rate_limits', { deleted_count: 12 }),
+        target('otp_codes', {
+          completed: false,
+          error: 'function does not exist',
+        }),
+      ],
       completed: false,
-      retention_hours: 48,
+      hasError: true,
     });
+
+    const response = await GET(createRequest('Bearer test-secret'));
+    const json = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(json.success).toBe(false);
+    // 失敗しても、成功した対象の削除件数は捨てない
+    expect(json.data.targets[0].deleted_count).toBe(12);
+    expect(json.data.targets[1].error).toBe('function does not exist');
   });
 
   it('削除対象が無くても成功で返す', async () => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
-    mockDeleteExpiredRateLimits.mockResolvedValue({
-      deleted: 0,
+    mockCleanupExpiredRecords.mockResolvedValue({
+      targets: [target('rate_limits')],
       completed: true,
+      hasError: false,
     });
 
     const response = await GET(createRequest('Bearer test-secret'));
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data.deleted_count).toBe(0);
+    expect(json.data.targets[0].deleted_count).toBe(0);
   });
 
   it('認証ヘッダが無いと401で、削除は実行されない', async () => {
     const response = await GET(createRequest());
 
     expect(response.status).toBe(401);
-    expect(mockDeleteExpiredRateLimits).not.toHaveBeenCalled();
+    expect(mockCleanupExpiredRecords).not.toHaveBeenCalled();
   });
 
   it('認証トークンが違うと401で、削除は実行されない', async () => {
     const response = await GET(createRequest('Bearer wrong-secret'));
 
     expect(response.status).toBe(401);
-    expect(mockDeleteExpiredRateLimits).not.toHaveBeenCalled();
+    expect(mockCleanupExpiredRecords).not.toHaveBeenCalled();
   });
 
   it('service role クライアントを作れないとDB接続エラーを返す', async () => {
@@ -142,12 +189,12 @@ describe('GET /api/cron/cleanup-rate-limits', () => {
     const response = await GET(createRequest('Bearer test-secret'));
 
     expect(response.status).toBe(500);
-    expect(mockDeleteExpiredRateLimits).not.toHaveBeenCalled();
+    expect(mockCleanupExpiredRecords).not.toHaveBeenCalled();
   });
 
-  it('削除に失敗したら500を返す（成功扱いにしない）', async () => {
+  it('想定外の例外でも500を返す（成功扱いにしない）', async () => {
     jest.spyOn(console, 'error').mockImplementation(() => {});
-    mockDeleteExpiredRateLimits.mockRejectedValue(new Error('rpc failed'));
+    mockCleanupExpiredRecords.mockRejectedValue(new Error('rpc failed'));
 
     const response = await GET(createRequest('Bearer test-secret'));
     const json = await response.json();

@@ -125,3 +125,17 @@ export const PASSWORD_RESET_MESSAGES = {
   /** リセット失敗（サーバーエラー） */
   RESET_FAILED: 'パスワードの再設定に失敗しました。',
 } as const;
+
+/**
+ * `password_reset_tokens` の保持期間（時間）— #1300
+ *
+ * 有効期限（`PASSWORD_RESET_CONFIG.EXPIRY_MINUTES` = 30分）を過ぎてから、
+ * さらにこの時間が経ったレコードを日次CRONが消す。
+ *
+ * ⚠️ 期限切れ直後に消さない。使用済み（`used_at` あり）の行は
+ * 「使い回しを『見つからない』ではなく『使用済み』として判定する」ために
+ * 残しているので、その判定が要る窓（＝有効期限）より十分あとに消す。
+ *
+ * `otp_codes` / `rate_limits` と同じ値に揃える。
+ */
+export const PASSWORD_RESET_TOKEN_RETENTION_HOURS = 48;

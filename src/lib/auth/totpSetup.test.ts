@@ -81,10 +81,13 @@ function createSupabaseMock(
       action: 'select' | 'update' | 'delete' | 'insert';
       payload: Record<string, unknown>;
       requireUnconfirmed: boolean;
+      /** `created_at` の上限（期限切れの行だけを消す条件／#1368） */
+      createdBefore: string | null;
     } = {
       action: 'select',
       payload: {},
       requireUnconfirmed: false,
+      createdBefore: null,
     };
 
     const builder: Record<string, unknown> = {};
@@ -93,6 +96,12 @@ function createSupabaseMock(
     builder.eq = jest.fn(() => builder);
     builder.is = jest.fn((column: string) => {
       if (column === 'confirmed_at') state.requireUnconfirmed = true;
+      return builder;
+    });
+    // ⚠️ 実際に評価する。無視すると「期限切れの行だけを消す」条件を
+    //    落とした変異が素通りする
+    builder.lt = jest.fn((column: string, value: string) => {
+      if (column === 'created_at') state.createdBefore = value;
       return builder;
     });
     builder.update = jest.fn((payload: Record<string, unknown>) => {
@@ -130,8 +139,19 @@ function createSupabaseMock(
 
     const resolve = () => {
       if (state.action === 'delete') {
-        if (table === 'user_totp') db.totp = null;
-        else db.recoveryCodes = [];
+        if (table === 'user_totp') {
+          const blocked =
+            (state.requireUnconfirmed && db.totp?.confirmed_at) ||
+            (state.createdBefore &&
+              db.totp &&
+              new Date(db.totp.created_at ?? 0).getTime() >=
+                new Date(state.createdBefore).getTime());
+
+          if (!blocked) db.totp = null;
+        } else {
+          db.recoveryCodes = [];
+        }
+
         return { data: null, error: null };
       }
 
@@ -514,6 +534,28 @@ describe('confirmSecondFactorSetup', () => {
   });
 
   /**
+   * ⚠️ 上のテストは `.not.toBeNull()` なので **`'expired'` でも成立する**
+   * （#1368 の3回目レビュー）。「締め出していない」ことは成功の形まで見る。
+   */
+  it('期限の内側なら有効化して、期限切れ扱いにしない', async () => {
+    const { secret, db } = setupInProgress();
+    db.totp!.created_at = new Date(
+      Date.now() - (TOTP_SETUP_PENDING_TTL_MINUTES - 1) * 60 * 1000,
+    ).toISOString();
+
+    const result = await confirmSecondFactorSetup(
+      createSupabaseMock(db),
+      USER_ID,
+      generateTotpCode(secret),
+      EMAIL,
+    );
+
+    expect(result).not.toBe(SECOND_FACTOR_SETUP_EXPIRED);
+    expect(asSuccess(result).codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
+    expect(db.totp?.confirmed_at).not.toBeNull();
+  });
+
+  /**
    * ⛔ **リカバリーコードの保存は `confirmed_at` より前**（#1368 の2回目レビュー）。
    *
    * 逆順だと、保存に失敗したときに**二段階認証は有効なのにリカバリーコードが
@@ -541,6 +583,46 @@ describe('confirmSecondFactorSetup', () => {
     // ⛔ ここが本題。有効化が先に通っていると、この行が入ったまま
     //    リカバリーコード0件で二段階認証だけ有効になる
     expect(db.totp?.confirmed_at).toBeNull();
+  });
+
+  /**
+   * ⛔ **期限切れの DELETE は「古い行だけ」を消す**（#1368 の3回目レビュー）。
+   *
+   * 判定に使う `created_at` は SELECT 時点のスナップショット。条件を
+   * `confirmed_at IS NULL` だけにすると、別タブが `startSecondFactorSetup` を
+   * 通して作った**新しい保留行まで消える**。消えた側は以降「認証コードが
+   * 正しくありません」になり、画面も戻らない。
+   */
+  it('期限切れの掃除で、やり直した新しい保留行を消さない', async () => {
+    const { db } = setupInProgress();
+    db.totp!.created_at = new Date(
+      Date.now() - (TOTP_SETUP_PENDING_TTL_MINUTES + 1) * 60 * 1000,
+    ).toISOString();
+
+    const supabase = createSupabaseMock(db);
+
+    // SELECT と DELETE のあいだに別タブがやり直した状況を作る
+    const original = db.totp!;
+    const swap = () => {
+      db.totp = { ...original, created_at: new Date().toISOString() };
+    };
+
+    await expect(
+      (async () => {
+        const promise = confirmSecondFactorSetup(
+          supabase,
+          USER_ID,
+          '123456',
+          EMAIL,
+        );
+        swap();
+
+        return promise;
+      })(),
+    ).resolves.toBe(SECOND_FACTOR_SETUP_EXPIRED);
+
+    // 新しい行は残っていること
+    expect(db.totp).not.toBeNull();
   });
 
   it('誤ったコードでは有効化しない', async () => {

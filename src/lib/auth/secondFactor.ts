@@ -123,6 +123,40 @@ export async function getSecondFactorMethodIncludingPending(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<SecondFactorMethod | null> {
+  return (await getSecondFactorSetupState(supabase, userId)).method;
+}
+
+/** 設定の状態（期限切れかどうかを呼び出し側で出し分けるため） */
+export interface SecondFactorSetupState {
+  /** 使える方式。期限切れの保留行は含めない */
+  method: SecondFactorMethod | null;
+  /** 保留行はあったが期限を過ぎていた */
+  pendingExpired: boolean;
+}
+
+/**
+ * 設定の状態を読む（期限切れを区別する）
+ *
+ * ⛔ **期限を過ぎた保留行は「無い」ものとして扱う**（#1368 の2回目レビュー）。
+ *
+ * `confirmSecondFactorSetup` は `TOTP_SETUP_PENDING_TTL_MINUTES` を過ぎた
+ * 保留行を拒否する。ここがそれを知らないと、`send-challenge` が
+ * **使えないコードを送り続ける**。届いたばかりの正しいコードが
+ * 「認証コードが正しくありません」になり、利用者は再送と入力を繰り返して
+ * `TOTP_SETTINGS_VERIFY` を使い切る（5回で15分 429）。
+ *
+ * ⚠️ `pendingExpired` を返すのは、**「未設定」と「期限切れ」で文言を
+ * 分けるため**（#1368 の3回目レビュー）。設定中の画面に「二段階認証が
+ * 設定されていません。」が出ると、利用者には矛盾として映る。
+ *
+ * @param supabase - service_role のクライアント
+ * @param userId - 対象ユーザー
+ * @returns 方式と、期限切れの保留行があったかどうか
+ */
+export async function getSecondFactorSetupState(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<SecondFactorSetupState> {
   const { data, error } = await supabase
     .from('user_totp')
     .select('method, confirmed_at, created_at')
@@ -132,24 +166,20 @@ export async function getSecondFactorMethodIncludingPending(
   // 握り潰さない理由は上と同じ。読めないなら拒否側へ倒す
   if (error) throw toDbError(error, 'read user_totp including pending');
 
-  if (!data) return null;
+  if (!data) return { method: null, pendingExpired: false };
 
-  // ⛔ **期限を過ぎた保留行は「無い」ものとして扱う**（#1368 の2回目レビュー）。
-  //
-  //   `confirmSecondFactorSetup` は `TOTP_SETUP_PENDING_TTL_MINUTES` を過ぎた
-  //   保留行を拒否する。ここがそれを知らないと、`send-challenge` が
-  //   **使えないコードを送り続ける**。届いたばかりの正しいコードが
-  //   「認証コードが正しくありません」になり、利用者は再送と入力を繰り返して
-  //   `TOTP_SETTINGS_VERIFY` を使い切る（5回で15分 429）。
   if (
     !data.confirmed_at &&
     Date.now() - new Date(data.created_at).getTime() >
       TOTP_SETUP_PENDING_TTL_MINUTES * 60 * 1000
   ) {
-    return null;
+    return { method: null, pendingExpired: true };
   }
 
-  return (data.method as SecondFactorMethod | undefined) ?? null;
+  return {
+    method: (data.method as SecondFactorMethod | undefined) ?? null,
+    pendingExpired: false,
+  };
 }
 
 /**

@@ -316,14 +316,46 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
    * ⚠️ 失敗しても `restart` しない。`post` が `error` を立てているので
    * 押せる状態のまま理由が出るほうが正しい（押し直せる）。
    */
+  /**
+   * 設定の期限切れだったら方式の選択へ戻す
+   *
+   * ⛔ 出口は2つある（#1368 の3回目レビュー）。「有効にする」と「再送」の
+   * どちらから期限切れに当たっても、同じ場所へ戻さないと画面に留まったまま
+   * 同じ操作を繰り返させることになる。保留行はもう無いので、やり直す以外に
+   * やることが無い。
+   *
+   * ⚠️ 文言で判定しているのは、`post` が本文の `error.code` を捨てて
+   * いるため。サーバーと同じ定数を参照しているので、文言を変えても
+   * 両側が同時に変わる（テストで固定してある）。
+   *
+   * @returns 期限切れとして処理したかどうか
+   */
+  const handleSetupExpired = useCallback((): boolean => {
+    if (lastErrorRef.current !== TOTP_ERROR_MESSAGES.SETUP_EXPIRED) {
+      return false;
+    }
+
+    setQrCodeDataUri(null);
+    setSecret(null);
+    setMethod(null);
+    setView(TWO_FACTOR_VIEW.DISABLED);
+
+    return true;
+  }, []);
+
   const resendSetupCode = useCallback(async () => {
     const json = await post(API_ENDPOINTS.USER_TOTP_SEND_CHALLENGE);
-    if (!json) return;
+
+    if (!json) {
+      handleSetupExpired();
+
+      return;
+    }
 
     // 画面の状態が変わらないので、送れたことを文言で伝える
     setNotice(SECOND_FACTOR_MESSAGES.CODE_SENT);
     restartResendCountdown();
-  }, [post, restartResendCountdown]);
+  }, [handleSetupExpired, post, restartResendCountdown]);
 
   /**
    * 設定変更に使うコードを送る（メールOTP のみ）
@@ -347,17 +379,8 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
       if (!json) {
         // ⚠️ **設定の期限切れは画面も戻す**（#1368 の2回目レビュー）。
         //   文言だけ出して `SETUP` に留まると、利用者は同じ画面で再送と入力を
-        //   繰り返す。保留行はもう消えているので、やり直すしか道が無い。
-        //
-        //   文言で判定しているのは、`post` が本文の `error.code` を捨てて
-        //   いるため。定数と比較しているので、文言を変えるときはここも
-        //   追従すること（テストで固定してある）
-        if (lastErrorRef.current === TOTP_ERROR_MESSAGES.SETUP_EXPIRED) {
-          setQrCodeDataUri(null);
-          setSecret(null);
-          setMethod(null);
-          setView(TWO_FACTOR_VIEW.DISABLED);
-        }
+        //   繰り返す。保留行はもう消えているので、やり直すしか道が無い
+        handleSetupExpired();
 
         return;
       }
@@ -370,7 +393,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
       setSecret(null);
       setView(TWO_FACTOR_VIEW.RECOVERY_CODES);
     },
-    [post],
+    [handleSetupExpired, post],
   );
 
   const disable = useCallback(

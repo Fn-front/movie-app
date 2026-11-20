@@ -817,6 +817,49 @@ describe('TwoFactorSettings', () => {
     });
 
     /**
+     * ⛔ **期限切れからの出口は2つある**（#1368 の3回目レビュー）。
+     *
+     * コードが来ないとき利用者がまず押すのは**再送**。そこで画面が戻らないと、
+     * 「二段階認証が設定されていません。」と出たまま設定画面に留まり、
+     * 同じ操作を繰り返させることになる。
+     */
+    it('再送が期限切れなら方式の選択へ戻す', async () => {
+      jest.useFakeTimers();
+      const timerUser = userEvent.setup({
+        advanceTimers: jest.advanceTimersByTime,
+      });
+
+      try {
+        await enterSetupEmail(timerUser);
+        await screen.findByRole('button', { name: '確認コードを再送信する' });
+
+        await act(async () => {
+          jest.advanceTimersByTime(60_000);
+        });
+
+        mockFetch.mockResolvedValueOnce(
+          errorResponse(400, TOTP_ERROR_MESSAGES.SETUP_EXPIRED),
+        );
+
+        await timerUser.click(
+          screen.getByRole('button', { name: '確認コードを再送信する' }),
+        );
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+          TOTP_ERROR_MESSAGES.SETUP_EXPIRED,
+        );
+        expect(
+          screen.queryByRole('button', { name: '確認コードを再送信する' }),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.getByRole('button', { name: 'メールで設定する' }),
+        ).toBeInTheDocument();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    /**
      * ⚠️ 再送したらクールダウンを掛け直す。
      *
      * 掛け直さないと、押した直後からまた押せてしまい、サーバー側の

@@ -167,8 +167,14 @@ export async function startSecondFactorSetup(
  *
  * | 順序 | 途中で失敗したときの状態 | 重さ |
  * |---|---|---|
- * | 先に保存 → 確定 | 使えるリカバリーコードがあるが二段階認証は**無効** | `getSecondFactorMethod` が null を返すので第2要素は発動せず、`verifyRecoveryCode` にも到達しない。次に成功したとき全件差し替わるので**自然に片付く** |
+ * | 先に保存 → 確定 | 使えるリカバリーコードがあるが二段階認証は**無効** | **平文は失敗パスで捨てられる**ので、一致する値を出せる人間がいない。加えて `verifySecondFactor` の呼び出し元（`secondFactorGuard` / `auth.ts` の2か所）はすべて手前で `getSecondFactorMethod` を見ている。次に成功したとき全件差し替わるので**自然に片付く** |
  * | 先に確定 → 保存 | 二段階認証が**有効なのにリカバリーコードが0件** | `replaceRecoveryCodes` は「全件 DELETE → INSERT」なので、INSERT だけ失敗すると DB にも画面にも1件も残らない。認証アプリを失うと**恒久的にロックアウト**（`disableTotp` が順序まで固定して避けている状態そのもの） |
+ *
+ * ⛔ **`verifySecondFactor` を直接呼ぶ経路を足すなら、自分でガードを置くこと。**
+ * あの関数は**リカバリーコードを形式だけで振り分け**、`getSecondFactorMethod`
+ * より**前**に `verifyRecoveryCode` を呼ぶ（`secondFactor.ts`）。孤児の
+ * リカバリーコードが安全なのは平文が存在しないからであって、到達できない
+ * からではない。
  *
  * ⚠️ **確定した後ろに throw しうる処理を置かない。** 500 になると平文の
  * リカバリーコードを一度も表示できないまま終わり（平文はこの戻り値にしか
@@ -229,17 +235,24 @@ export async function confirmSecondFactorSetup(
   //   再認証を足す前にセッションを奪って `setup` を1回叩いていれば、
   //   修正後もそのまま有効化できてしまう（既存の行はマイグレーションで
   //   1回掃除したが、同じ形を再発させない）。
-  if (
-    Date.now() - new Date(row.created_at).getTime() >
-    TOTP_SETUP_PENDING_TTL_MINUTES * 60 * 1000
-  ) {
+  const expiredBefore = new Date(
+    Date.now() - TOTP_SETUP_PENDING_TTL_MINUTES * 60 * 1000,
+  ).toISOString();
+
+  if (new Date(row.created_at).getTime() < new Date(expiredBefore).getTime()) {
     // ⚠️ 行ごと消す。残すと `send-challenge` が**使えないコードを送り続ける**
     //   （あちらは保留行があるかどうかしか見ない）
+    // ⚠️ **期限の条件も入れる**（#1368 の3回目レビュー）。判定に使った
+    //   `row.created_at` は SELECT 時点のスナップショットなので、ここまでの
+    //   あいだに別タブが `startSecondFactorSetup` を通していると、
+    //   **その新しい保留行まで消える**（消えた側は以降「認証コードが
+    //   正しくありません」になり、画面も戻らない）
     const { error: deleteError } = await supabase
       .from('user_totp')
       .delete()
       .eq('user_id', userId)
-      .is('confirmed_at', null);
+      .is('confirmed_at', null)
+      .lt('created_at', expiredBefore);
 
     if (deleteError) {
       throw toDbError(deleteError, 'delete expired user_totp');

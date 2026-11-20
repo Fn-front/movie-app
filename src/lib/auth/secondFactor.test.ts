@@ -22,6 +22,7 @@ import {
   countUnusedRecoveryCodes,
   getSecondFactorMethod,
   getSecondFactorMethodIncludingPending,
+  getSecondFactorSetupState,
   SECOND_FACTOR_VERIFY_RESULT,
   verifySecondFactor,
 } from './secondFactor';
@@ -460,6 +461,7 @@ describe('getSecondFactorMethodIncludingPending', () => {
         confirmed_at: '2026-11-18T00:00:00Z',
         last_used_counter: null,
         method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        created_at: '2026-11-18T00:00:00Z',
       },
       recoveryCodes: [],
     };
@@ -484,6 +486,57 @@ describe('getSecondFactorMethodIncludingPending', () => {
         USER_ID,
       ),
     ).rejects.toThrow(/connection terminated/);
+  });
+
+  /**
+   * ⛔ **「未設定」と「期限切れ」を区別する**（#1368 の3回目レビュー）。
+   *
+   * `send-challenge` は文言を出し分けるためにこのフラグを見る。区別が
+   * 無いと、設定中の画面に「二段階認証が設定されていません。」が出る。
+   */
+  describe('getSecondFactorSetupState', () => {
+    const buildDb = (overrides: Partial<NonNullable<FakeDb['totp']>>) => ({
+      totp: {
+        encrypted_secret: '',
+        confirmed_at: null,
+        last_used_counter: null,
+        method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        created_at: new Date().toISOString(),
+        ...overrides,
+      },
+      recoveryCodes: [],
+    });
+
+    it('期限内の保留行は pendingExpired にしない', async () => {
+      await expect(
+        getSecondFactorSetupState(createSupabaseMock(buildDb({})), USER_ID),
+      ).resolves.toEqual({
+        method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        pendingExpired: false,
+      });
+    });
+
+    it('期限切れの保留行は pendingExpired を立てる', async () => {
+      const db = buildDb({
+        created_at: new Date(
+          Date.now() - (TOTP_SETUP_PENDING_TTL_MINUTES + 1) * 60 * 1000,
+        ).toISOString(),
+      });
+
+      await expect(
+        getSecondFactorSetupState(createSupabaseMock(db), USER_ID),
+      ).resolves.toEqual({ method: null, pendingExpired: true });
+    });
+
+    /** ⚠️ 行が無いのは「未設定」。期限切れと混ぜない */
+    it('行が無ければ pendingExpired は false', async () => {
+      await expect(
+        getSecondFactorSetupState(
+          createSupabaseMock({ totp: null, recoveryCodes: [] }),
+          USER_ID,
+        ),
+      ).resolves.toEqual({ method: null, pendingExpired: false });
+    });
   });
 });
 

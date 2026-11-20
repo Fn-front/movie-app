@@ -79,7 +79,7 @@ export async function POST(): Promise<NextResponse> {
 
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('email, username')
+      .select('email, username, password_hash')
       .eq('id', session.user.id)
       .single();
 
@@ -88,6 +88,24 @@ export async function POST(): Promise<NextResponse> {
         ERROR_CODE.NOT_FOUND,
         ACCOUNT_DELETE_MESSAGES.NOT_FOUND,
         HTTP_STATUS.NOT_FOUND,
+      );
+    }
+
+    // ⚠️ **コードが要らない利用者には送らない**（レビュー指摘）。
+    //
+    //   `DELETE /api/user` はパスワードを持つ利用者にはパスワードを要求し、
+    //   このコードを使わない。送ると「アカウントの削除」という件名のメールが
+    //   無駄に届き、`otp_codes` に使われない行が増える。セッションを奪った
+    //   第三者が被害者の受信箱へ5通/60分を送り込む経路にもなる。
+    //
+    // ⚠️ 判定は `DELETE /api/user` と同じ条件（`password_hash` だけを見る）。
+    //   第2要素はセッションだけで自己登録できるため、独立した再確認として
+    //   数えない（あちらのコメント参照）
+    if (user.password_hash) {
+      return errorResponse(
+        ERROR_CODE.BAD_REQUEST,
+        ACCOUNT_DELETE_CODE_MESSAGES.CODE_NOT_REQUIRED,
+        HTTP_STATUS.BAD_REQUEST,
       );
     }
 

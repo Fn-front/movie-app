@@ -201,7 +201,7 @@ describe('DELETE /api/user', () => {
       mockUserQuery(null);
       mockConsumeAccountDeleteCode.mockResolvedValue('success');
 
-      const response = await DELETE(createRequest({ code: '123456' }));
+      const response = await DELETE(createRequest({ deleteCode: '123456' }));
 
       expect(response.status).toBe(200);
       expect(mockCompare).not.toHaveBeenCalled();
@@ -238,7 +238,7 @@ describe('DELETE /api/user', () => {
      * 取ったコードを奪った被害者のセッションで使える（#1359 の critical）。
      */
     it('セッションの利用者IDと登録アドレスで照合する', async () => {
-      await DELETE(createRequest({ code: '123456' }));
+      await DELETE(createRequest({ deleteCode: '123456' }));
 
       expect(mockConsumeAccountDeleteCode).toHaveBeenCalledWith(
         expect.anything(),
@@ -249,7 +249,7 @@ describe('DELETE /api/user', () => {
     });
 
     it('コードが正しければ削除する', async () => {
-      const response = await DELETE(createRequest({ code: '123456' }));
+      const response = await DELETE(createRequest({ deleteCode: '123456' }));
 
       expect(response.status).toBe(200);
       expect(mockRpc).toHaveBeenCalled();
@@ -258,7 +258,7 @@ describe('DELETE /api/user', () => {
     it('コードが不正なら400を返し、削除しない', async () => {
       mockConsumeAccountDeleteCode.mockResolvedValue('invalid');
 
-      const response = await DELETE(createRequest({ code: '000000' }));
+      const response = await DELETE(createRequest({ deleteCode: '000000' }));
 
       expect(response.status).toBe(400);
       expect(mockRpc).not.toHaveBeenCalled();
@@ -277,14 +277,51 @@ describe('DELETE /api/user', () => {
       expect(mockConsumeAccountDeleteCode).not.toHaveBeenCalled();
     });
 
-    it('第2要素を持つ利用者にはコードを求めない', async () => {
+    /**
+     * ⛔ **第2要素を持っていても免除しない**（1回目レビューで critical）。
+     *
+     * 第2要素は**セッションだけで自己登録できる**。`totp/setup` も
+     * `totp/enable` も再認証を要求しないため、セッションを奪った第三者は
+     * 自分で設定して自分で `requireSecondFactor` を通せる。被害者には
+     * **メールが1通も届かない**。
+     */
+    it('第2要素を持っていても確認コードを求める', async () => {
       mockGetSecondFactorMethod.mockResolvedValue('totp');
 
       const response = await DELETE(createRequest({ code: '123456' }));
 
+      expect(response.status).toBe(400);
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    // 両方出せば通る。片方では足りない
+    it('第2要素と確認コードの両方で削除できる', async () => {
+      mockGetSecondFactorMethod.mockResolvedValue('totp');
+
+      const response = await DELETE(
+        createRequest({ code: '123456', deleteCode: '654321' }),
+      );
+
       expect(response.status).toBe(200);
-      // 第2要素のガードが消費する。退会コードの経路は通らない
       expect(mockRequireSecondFactor).toHaveBeenCalled();
+      expect(mockConsumeAccountDeleteCode).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        'user@example.com',
+        '654321',
+      );
+    });
+
+    /**
+     * ⚠️ **フィールドを分ける。** 同じ `code` だと、第2要素と退会コードを
+     * 同時に要求されたときにどちらか一方しか満たせない。
+     */
+    it('第2要素の欄に退会コードを入れても通らない', async () => {
+      mockGetSecondFactorMethod.mockResolvedValue('totp');
+
+      const response = await DELETE(createRequest({ code: '654321' }));
+
+      expect(response.status).toBe(400);
       expect(mockConsumeAccountDeleteCode).not.toHaveBeenCalled();
     });
   });

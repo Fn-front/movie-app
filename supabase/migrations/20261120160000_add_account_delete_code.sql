@@ -59,6 +59,11 @@ COMMENT ON CONSTRAINT chk_otp_action_type ON otp_codes IS
 --   （`emailChangeMigration.test.ts`）が制約名と本文を実走査で固定している。
 --   同じ形の制約をもう1つ足す。
 
+-- ⚠️ 同ファイルの他2つに合わせて冪等にする。新規環境（ローカル / CI）で
+--   作り直すときに落ちないため。適用済みの本番では最終状態が変わらない
+ALTER TABLE otp_codes
+  DROP CONSTRAINT IF EXISTS chk_account_delete_has_user;
+
 ALTER TABLE otp_codes
   ADD CONSTRAINT chk_account_delete_has_user
   CHECK (action_type <> 'account_delete' OR user_id IS NOT NULL);

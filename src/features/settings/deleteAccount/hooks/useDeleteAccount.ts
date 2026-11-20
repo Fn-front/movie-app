@@ -22,6 +22,13 @@ export interface DeleteAccountInput {
   currentPassword?: string;
   /** 第2要素のコード。未設定の利用者は省く */
   code?: string;
+  /**
+   * 退会の確認コード（#1362）
+   *
+   * ⛔ **`code` と分ける。** 第2要素と同時に要求しうるため、1つの欄では
+   * どちらか一方しか満たせない。
+   */
+  deleteCode?: string;
 }
 
 interface UseDeleteAccountResult {
@@ -45,6 +52,8 @@ interface UseDeleteAccountResult {
   sendDeleteCode: () => Promise<void>;
   /** コードを送れたか（画面に「送りました」を出すため） */
   notice: string | null;
+  /** 確認コードを送信中か（連打で2本目が 429 になるのを防ぐ） */
+  isSendingCode: boolean;
   /** 削除する。成功するとログアウトして遷移するため、通常は戻ってこない */
   deleteAccount: (input: DeleteAccountInput) => Promise<void>;
   clearError: () => void;
@@ -62,6 +71,7 @@ export function useDeleteAccount(): UseDeleteAccountResult {
     boolean | null
   >(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isSendingCode, setIsSendingCode] = useState(false);
 
   const clearError = useCallback(() => {
     setError(null);
@@ -78,6 +88,9 @@ export function useDeleteAccount(): UseDeleteAccountResult {
   const sendDeleteCode = useCallback(async () => {
     setError(null);
     setNotice(null);
+    // ⚠️ 連打すると2本目が再送間隔（60秒）に当たって 429 になり、
+    //    成功した直後にエラーが出る
+    setIsSendingCode(true);
 
     try {
       const response = await fetch(API_ENDPOINTS.USER_DELETE_CODE, {
@@ -96,6 +109,8 @@ export function useDeleteAccount(): UseDeleteAccountResult {
       setNotice(ACCOUNT_DELETE_CODE_MESSAGES.CODE_SENT);
     } catch {
       setError(ACCOUNT_DELETE_MESSAGES.FAILED);
+    } finally {
+      setIsSendingCode(false);
     }
   }, []);
 
@@ -161,6 +176,7 @@ export function useDeleteAccount(): UseDeleteAccountResult {
 
   return {
     isSubmitting,
+    isSendingCode,
     error,
     notice,
     secondFactorRequired,

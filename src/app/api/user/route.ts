@@ -173,18 +173,32 @@ export async function DELETE(request: Request): Promise<NextResponse> {
       if (guardResponse) return guardResponse;
     }
 
-    // ⛔ **ここが #1362 の本体。** パスワードも第2要素も持たない利用者は
-    //   上の2つをどちらも通らないため、**再確認が1つも掛からないまま
-    //   削除へ到達していた**。登録アドレスへ送った使い捨てコードで
-    //   受信箱の所持を確かめる。
+    // ⛔ **ここが #1362 の本体。** パスワードを持たない利用者は上の照合を
+    //   通らないため、**再確認が1つも掛からないまま削除へ到達していた**。
+    //   登録アドレスへ送った使い捨てコードで受信箱の所持を確かめる。
+    //
+    // ⛔ **条件に第2要素を含めない**（#1362 の1回目レビューで critical）。
+    //
+    //   第2要素は**セッションだけで自己登録できる**。`totp/setup` も
+    //   `totp/enable` も再認証を要求しないので、セッションを奪った第三者は
+    //
+    //     1. `POST /api/user/totp/setup {"method":"totp"}` で共有鍵を受け取る
+    //     2. `POST /api/user/totp/enable` に自分で計算したコードを入れる
+    //     3. `DELETE /api/user` でそのコードを出す
+    //
+    //   という2手で `requireSecondFactor` を自分で通せる。被害者には
+    //   **メールが1通も届かない**。「第2要素を持っている」を独立した
+    //   再確認として数えてよいのは**パスワードを持つ利用者だけ**。
+    //
+    //   根治（`totp/setup` 自体に再認証を課す）は範囲が広いので別Issue。
     //
     // ⚠️ 入力確認フレーズ（"delete" と打たせる等）では代わりにならない。
     //   誤操作にしか効かず、セッションを持つ攻撃者は同じ文字列を打てる。
     //
-    // ⚠️ 持っている人には要求しない。3つとも求めると、パスワードを持つ
-    //   利用者がメールを待たないと退会できなくなる
-    if (!user.password_hash && !secondFactorMethod) {
-      if (!parsed.data.code) {
+    // ⚠️ パスワードを持つ利用者には要求しない。あちらは記憶の照合が
+    //   済んでおり、メールを待たせる理由が無い
+    if (!user.password_hash) {
+      if (!parsed.data.deleteCode) {
         return errorResponse(
           ERROR_CODE.VALIDATION_ERROR,
           ACCOUNT_DELETE_CODE_MESSAGES.CODE_REQUIRED,
@@ -198,7 +212,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
         supabase,
         session.user.id,
         user.email,
-        parsed.data.code,
+        parsed.data.deleteCode,
       );
 
       if (verifyResult !== ACCOUNT_DELETE_VERIFY_RESULT.SUCCESS) {

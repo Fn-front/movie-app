@@ -46,7 +46,11 @@ jest.mock('@/lib/auth/accountDeleteCode', () => ({
 
 /** `users` の1行を返す */
 const mockUserQuery = (
-  user: { email: string; username: string | null } | null,
+  user: {
+    email: string;
+    username: string | null;
+    password_hash?: string | null;
+  } | null,
   error: unknown = null,
 ) => {
   mockFrom.mockReturnValue({
@@ -67,7 +71,11 @@ describe('POST /api/user/delete-code', () => {
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockSendAccountDeleteCode.mockResolvedValue('sent');
-    mockUserQuery({ email: 'owner@example.com', username: null });
+    mockUserQuery({
+      email: 'owner@example.com',
+      username: null,
+      password_hash: null,
+    });
   });
 
   describe('認証', () => {
@@ -134,6 +142,43 @@ describe('POST /api/user/delete-code', () => {
       );
     });
 
+    /**
+     * ⚠️ **コードが要らない利用者には送らない**（レビュー指摘）。
+     *
+     * `DELETE /api/user` はパスワードを持つ利用者にパスワードを要求し、
+     * このコードを使わない。送ると「アカウントの削除」という件名のメールが
+     * 無駄に届き、セッションを奪った第三者が被害者の受信箱へ
+     * 5通/60分を送り込む経路にもなる。
+     */
+    it('パスワードを持つ利用者には送らない', async () => {
+      mockUserQuery({
+        email: 'owner@example.com',
+        username: null,
+        password_hash: 'hashed',
+      });
+
+      const response = await POST();
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.message).toBe(
+        ACCOUNT_DELETE_CODE_MESSAGES.CODE_NOT_REQUIRED,
+      );
+      expect(mockSendAccountDeleteCode).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⛔ **第2要素の有無では出し分けない**（`DELETE /api/user` と同じ条件）。
+     * 第2要素はセッションだけで自己登録できるため、独立した再確認として
+     * 数えない。
+     */
+    it('第2要素を持っていても送る', async () => {
+      const response = await POST();
+
+      expect(response.status).toBe(200);
+      expect(mockSendAccountDeleteCode).toHaveBeenCalled();
+    });
+
     it('行が無ければ404を返し、送信しない', async () => {
       mockUserQuery(null, { code: 'PGRST116' });
 
@@ -154,6 +199,7 @@ describe('POST /api/user/delete-code', () => {
       mockUserQuery({
         email: 'abc@def.invalid',
         username: 'K7M2QXPT9WFN',
+        password_hash: null,
       });
 
       const response = await POST();

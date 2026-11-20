@@ -736,6 +736,10 @@ describe('syncNowPlayingMovies', () => {
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]).toContain('エラー映画');
       expect(result.errors[0]).toContain('duplicate key violation');
+
+      // ⚠️ UPSERT の失敗も作品単位の失敗として数える（#1354）。
+      //    例外の経路とは記録点が別なので、両方を固定する
+      expect(result.items).toEqual({ attempted: 1, failed: 1 });
     });
   });
 

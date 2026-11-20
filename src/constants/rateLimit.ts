@@ -128,6 +128,8 @@ export const RATE_LIMIT_ACTION = {
    * メールを1日1通に抑えるためだけに使う。
    */
   CRON_FAILURE_NOTICE: 'cron_failure_notice',
+  /** アカウントの自己削除（#932） */
+  ACCOUNT_DELETE: 'account_delete',
 } as const;
 
 /**
@@ -447,6 +449,18 @@ export const RATE_LIMIT_CONFIG = {
    * 成功を検知したいなら別の仕組み（ハートビート）が要る。
    */
   CRON_FAILURE_NOTICE: { maxAttempts: 1, windowMinutes: 1440 },
+
+  /**
+   * アカウントの自己削除（#932）
+   *
+   * ⚠️ **取り返しがつかない操作**なので、パスワード・第2要素の試行を
+   * 何度も許す必要が無い。むしろセッションを奪った第三者に総当たりの
+   * 余地を与えないほうが大事。
+   *
+   * ⚠️ 成功すれば `users` ごと消えるため、この行も
+   * `delete_user_account` が消す（識別子は利用者ID）。
+   */
+  ACCOUNT_DELETE: { maxAttempts: 5, windowMinutes: 60 },
   /**
    * 手動同期ジョブの進捗ポーリング。
    *

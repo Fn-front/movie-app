@@ -7,14 +7,15 @@
  *
  * 対象は `src/lib/cleanup/expiredRecords.ts` の `CLEANUP_TARGETS`。
  * 現在は `rate_limits`（#933）/ `otp_codes`（#978）/
- * `password_reset_tokens`（#1300）の3つ。
+ * `password_reset_tokens`（#1300）/ `recommendation_events`（#1355）の4つ。
  *
  * 専用CRONにしている理由（#933）:
  *   個人情報保護法22条（不要となった個人データの消去）に関わる処理なので、
  *   無関係な処理の失敗でスキップされないようにする。
- *   `delete_expired_recommendation_events` はレコメンド生成CRONに相乗りして
- *   いるが、あちらは冒頭の `fetchActiveUserIds` が失敗すると早期 return で
- *   到達しない。
+ *   `recommendation_events` は長らくレコメンド生成CRONに相乗りしていたが、
+ *   あちらは冒頭の `fetchActiveUserIds` が失敗すると早期 return で到達せず、
+ *   しかも**失敗を catch して 0 を返す**ので消えていないことに気づけなかった。
+ *   #1355 でここへ移した。
  *
  * ⚠️ 同じ理由で、**対象どうしも互いに巻き込まない**。1つの RPC が失敗しても
  * 残りは実行する（`cleanupExpiredRecords` が対象ごとに catch する）。

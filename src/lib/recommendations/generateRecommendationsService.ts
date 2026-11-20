@@ -26,7 +26,6 @@ import {
   RECOMMENDATIONS_MIN_HIT_RATE,
   RECOMMENDATIONS_MAX_REQUEST_COUNT,
   RECOMMENDATIONS_ACTIVE_USER_DAYS,
-  RECOMMENDATION_EVENT_RETENTION_DAYS,
   RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
   RECOMMENDATIONS_BATCH_SIZE,
   CRON_ERROR_MESSAGES,
@@ -111,8 +110,6 @@ export interface GenerateRecommendationsSummary {
   inactive_users: number;
   total_recommendations: number;
   metrics: GenerationMetrics;
-  /** 保持期間を超えて削除した利用イベント数 */
-  deleted_events: number;
 }
 
 /** Discriminated Union: 成功結果 */
@@ -602,37 +599,6 @@ export async function processUserRecommendations(
 }
 
 /**
- * 保持期間を超えたレコメンド利用イベントを削除する
- *
- * 行動ログは個人の嗜好に直結するため無期限に保持しない。
- * 削除に失敗しても生成処理は続行する（計測データの掃除は副次処理のため）。
- *
- * @returns 削除件数。失敗時は 0
- */
-export async function deleteExpiredRecommendationEvents(
-  supabase: SupabaseClient,
-): Promise<number> {
-  try {
-    const { data, error } = await supabase.rpc(
-      'delete_expired_recommendation_events',
-      { retention_days: RECOMMENDATION_EVENT_RETENTION_DAYS },
-    );
-
-    if (error) {
-      console.error('Failed to delete expired recommendation events:', error);
-      return 0;
-    }
-
-    return typeof data === 'number' ? data : 0;
-  } catch (error) {
-    // 生成が全て終わったあとの掃除処理。ここで落ちて
-    // CRON全体を失敗扱いにしない。
-    console.error('Failed to delete expired recommendation events:', error);
-    return 0;
-  }
-}
-
-/**
  * レコメンド生成CRONのメイン処理
  * ユーザーをバッチ単位（5件ずつ）で並行処理し、リソース負荷を制限する
  */
@@ -707,12 +673,14 @@ export async function executeGenerateRecommendationsCron(
     );
   }
 
-  // 生成のついでに保持期間切れの行動ログを掃除する。
-  // 専用CRONを増やさずに済み、日次で確実に回る。
-  const deletedEvents = await deleteExpiredRecommendationEvents(supabase);
+  // ⚠️ 保持期間切れの行動ログの掃除は**ここでやらない**（#1355）。
+  //    `/api/cron/cleanup-expired-records` の `CLEANUP_TARGETS` が持つ。
+  //    以前はここに相乗りしていたが、失敗を catch して 0 を返していたため
+  //    **消えていないことに誰も気づけなかった**。あちらは失敗すると
+  //    500 + 通知になる。
 
   console.log(
-    `Generation metrics: openai_calls=${metrics.openai_calls} ai_candidates=${metrics.ai_candidates} unresolved=${metrics.unresolved_candidates} retries=${metrics.retries_used} deleted_events=${deletedEvents}`,
+    `Generation metrics: openai_calls=${metrics.openai_calls} ai_candidates=${metrics.ai_candidates} unresolved=${metrics.unresolved_candidates} retries=${metrics.retries_used}`,
   );
 
   return {
@@ -724,7 +692,6 @@ export async function executeGenerateRecommendationsCron(
       inactive_users: inactiveUsers,
       total_recommendations: totalRecommendations,
       metrics,
-      deleted_events: deletedEvents,
     },
   };
 }

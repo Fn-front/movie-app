@@ -75,7 +75,7 @@ export interface BatchedDeleteOptions {
    * この時刻を過ぎたら打ち切る（`Date.now()` と比較する絶対時刻）
    *
    * ⚠️ **呼び出し側が1つ作って全対象で共有すること。** 対象ごとに
-   * 予算を持たせると、3対象 × 35秒 = 105秒 で Vercel Function の
+   * 予算を持たせると、4対象 × 35秒 = 140秒 で Vercel Function の
    * `maxDuration`（60秒）を超え、強制終了されて削除件数のログすら残らない。
    */
   deadlineAt: number;

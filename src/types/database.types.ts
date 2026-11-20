@@ -1161,7 +1161,7 @@ export type Database = {
         Returns: number;
       };
       delete_expired_recommendation_events: {
-        Args: { retention_days?: number };
+        Args: { p_limit?: number; retention_hours: number };
         Returns: number;
       };
       get_award_years: { Args: never; Returns: number[] };

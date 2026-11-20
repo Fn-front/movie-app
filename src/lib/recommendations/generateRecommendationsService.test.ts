@@ -21,13 +21,11 @@ import {
   RECOMMENDATIONS_INITIAL_HIT_RATE,
   RECOMMENDATIONS_MIN_HIT_RATE,
   RECOMMENDATIONS_MAX_REQUEST_COUNT,
-  RECOMMENDATION_EVENT_RETENTION_DAYS,
   RECOMMENDATIONS_BATCH_SIZE,
 } from '@/constants';
 
 import {
   calculateRequestCount,
-  deleteExpiredRecommendationEvents,
   executeGenerateRecommendationsCron,
   fetchActiveUserIds,
   collectUserMovieData,
@@ -881,37 +879,26 @@ describe('generateRecommendationsService', () => {
     });
   });
 
-  describe('deleteExpiredRecommendationEvents', () => {
-    it('削除件数を返す', async () => {
-      mockRpc.mockResolvedValueOnce({ data: 42, error: null });
+  /**
+   * ⚠️ 保持期間切れの行動ログの掃除は**ここから外した**（#1355）。
+   *
+   * `/api/cron/cleanup-expired-records` の `CLEANUP_TARGETS` が持つ。
+   * 戻すと、失敗が握り潰されて消えていないことに気づけない状態に戻る。
+   */
+  describe('保持期間切れの掃除を持たない（#1355）', () => {
+    it('生成の最後に削除RPCを呼ばない', async () => {
+      mockFavoritesUserQuery([]);
+      mockActiveUsersQuery([]);
 
-      const result = await deleteExpiredRecommendationEvents(mockSupabase);
+      await executeGenerateRecommendationsCron(mockSupabase);
 
-      expect(result).toBe(42);
-      expect(mockRpc).toHaveBeenCalledWith(
+      // ⚠️ `not.toHaveBeenCalledWith(name, expect.anything())` にしない。
+      //    `expect.anything()` は `undefined` にマッチしないので、
+      //    **引数なしで呼び戻す変異を素通りさせる**（レビューで実測）。
+      //    呼ばれた RPC 名だけを見る
+      expect(mockRpc.mock.calls.map((call) => call[0])).not.toContain(
         'delete_expired_recommendation_events',
-        { retention_days: RECOMMENDATION_EVENT_RETENTION_DAYS },
       );
-    });
-
-    it('RPCがエラーを返しても0を返して続行する', async () => {
-      mockRpc.mockResolvedValueOnce({
-        data: null,
-        error: new Error('RPC failed'),
-      });
-
-      const result = await deleteExpiredRecommendationEvents(mockSupabase);
-
-      expect(result).toBe(0);
-    });
-
-    it('RPCが例外を投げても0を返して続行する', async () => {
-      // 掃除処理でCRON全体を落とさない
-      mockRpc.mockRejectedValueOnce(new Error('network'));
-
-      const result = await deleteExpiredRecommendationEvents(mockSupabase);
-
-      expect(result).toBe(0);
     });
   });
 

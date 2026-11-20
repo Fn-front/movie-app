@@ -14,6 +14,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { OTP_CODE_RETENTION_HOURS } from '@/constants/otp';
 import { PASSWORD_RESET_TOKEN_RETENTION_HOURS } from '@/constants/passwordReset';
 import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
+import { RECOMMENDATION_EVENT_RETENTION_HOURS } from '@/constants/recommendations';
 
 import {
   CLEANUP_TARGETS,
@@ -42,11 +43,14 @@ describe('CLEANUP_TARGETS', () => {
    * #978 は「ドキュメントには定期削除と書いてあるがジョブは存在しない」
    * 状態が長く続いた。個人データを持つテーブルが増えたらここに足す。
    */
-  it('個人データを持つ3テーブルを対象にしている', () => {
+  it('個人データを持つ4テーブルを対象にしている', () => {
     expect(CLEANUP_TARGETS.map((t) => t.name)).toEqual([
       'rate_limits',
       'otp_codes',
       'password_reset_tokens',
+      // ⚠️ #1355 でレコメンド生成CRONから移した。あちらは失敗を catch して
+      //    0 を返していたため、消えていないことに気づけなかった
+      'recommendation_events',
     ]);
   });
 
@@ -58,6 +62,9 @@ describe('CLEANUP_TARGETS', () => {
     expect(byName.password_reset_tokens.retentionHours).toBe(
       PASSWORD_RESET_TOKEN_RETENTION_HOURS,
     );
+    expect(byName.recommendation_events.retentionHours).toBe(
+      RECOMMENDATION_EVENT_RETENTION_HOURS,
+    );
   });
 });
 
@@ -67,6 +74,7 @@ describe('cleanupExpiredRecords', () => {
       delete_expired_rate_limits: { data: 0 },
       delete_expired_otp_codes: { data: 0 },
       delete_expired_password_reset_tokens: { data: 0 },
+      delete_expired_recommendation_events: { data: 0 },
     });
 
     const result = await cleanupExpiredRecords(supabase);
@@ -89,6 +97,7 @@ describe('cleanupExpiredRecords', () => {
         delete_expired_rate_limits: { error: { message: 'boom' } },
         delete_expired_otp_codes: { data: 0 },
         delete_expired_password_reset_tokens: { data: 0 },
+        delete_expired_recommendation_events: { data: 0 },
       });
 
       const result = await cleanupExpiredRecords(supabase);
@@ -98,7 +107,7 @@ describe('cleanupExpiredRecords', () => {
 
       // 後続は実行されている
       const others = result.targets.filter((t) => t.name !== 'rate_limits');
-      expect(others).toHaveLength(2);
+      expect(others).toHaveLength(3);
       expect(others.every((t) => t.completed)).toBe(true);
 
       expect(result.hasError).toBe(true);
@@ -164,6 +173,7 @@ describe('cleanupExpiredRecords', () => {
         delete_expired_rate_limits: { data: 0 },
         delete_expired_otp_codes: { error: { message: 'boom' } },
         delete_expired_password_reset_tokens: { data: 0 },
+        delete_expired_recommendation_events: { data: 0 },
       });
 
       const result = await cleanupExpiredRecords(supabase);

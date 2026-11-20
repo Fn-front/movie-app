@@ -5,9 +5,12 @@
  * 1か所に集める。日次CRON（`/api/cron/cleanup-expired-records`）から呼ぶ。
  *
  * ⚠️ **専用CRONにしている理由（#933）。** 無関係な処理の失敗でスキップされない
- * ようにするため。`delete_expired_recommendation_events` はレコメンド生成CRONに
- * 相乗りしているが、あちらは冒頭の `fetchActiveUserIds` が失敗すると早期 return で
- * 到達しない。
+ * ようにするため。
+ *
+ * `recommendation_events` は長らくレコメンド生成CRONに相乗りしていたが、
+ * #1355 でここへ移した。あちらは冒頭の `fetchActiveUserIds` が失敗すると
+ * 早期 return で到達しないうえ、**失敗を catch して 0 を返す**ので
+ * 消えていないことに気づけなかった。
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -15,6 +18,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { OTP_CODE_RETENTION_HOURS } from '@/constants/otp';
 import { PASSWORD_RESET_TOKEN_RETENTION_HOURS } from '@/constants/passwordReset';
 import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
+import { RECOMMENDATION_EVENT_RETENTION_HOURS } from '@/constants/recommendations';
 
 import { BatchedDeleteError, runBatchedDelete } from './batchedDelete';
 
@@ -64,6 +68,11 @@ export const CLEANUP_TARGETS: readonly CleanupTarget[] = [
     name: 'password_reset_tokens',
     rpc: 'delete_expired_password_reset_tokens',
     retentionHours: PASSWORD_RESET_TOKEN_RETENTION_HOURS,
+  },
+  {
+    name: 'recommendation_events',
+    rpc: 'delete_expired_recommendation_events',
+    retentionHours: RECOMMENDATION_EVENT_RETENTION_HOURS,
   },
 ] as const;
 

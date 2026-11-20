@@ -170,6 +170,16 @@ export const RECOMMENDATION_IMPRESSION_THRESHOLD = 0.5;
 export const RECOMMENDATION_EVENT_RETENTION_DAYS = 90;
 
 /**
+ * 利用イベントの保持時間（#1355）
+ *
+ * ⚠️ 掃除は `/api/cron/cleanup-expired-records` が持つ。保持期間切れの
+ * 個人データ削除は**時間**で揃えてあり（`CLEANUP_TARGETS`）、RPC の引数も
+ * `retention_hours` で統一している。日数から導出して食い違いを防ぐ。
+ */
+export const RECOMMENDATION_EVENT_RETENTION_HOURS =
+  RECOMMENDATION_EVENT_RETENTION_DAYS * 24;
+
+/**
  * 1リクエストで記録できるイベント件数の上限
  * 表示イベントはまとめて送るため複数件を許容するが、
  * 1画面のレコメンド最大件数（10件）に各種別が付く程度を想定した上限とする。

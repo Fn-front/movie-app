@@ -35,6 +35,7 @@ import { findMatchingCounter } from '@/lib/totp/totp';
 import { normalizeEmail } from '@/utils/email';
 
 import { toDbError } from './dbError';
+import { incrementOtpAttempts } from './otpAttempts';
 
 /**
  * 検証結果
@@ -271,8 +272,10 @@ export async function consumeSecondFactorEmailCode(
   const normalizedEmail = normalizeEmail(email);
 
   // 試行回数を先に見る。上限に達していたら照合せずに弾く。
-  // 素の UPDATE で加算すると6回目に chk_otp_attempts で 23514 になり、
-  // エラーを見ないと静かにカウントが止まる
+  // ⚠️ 上限に達していたら**照合せずに**弾く。到達後も照合を続けると、
+  //    攻撃者は上限の有無に関係なく総当たりを続けられる。
+  //    （加算側の 23514 は `increment_otp_attempts` が `LEAST` で
+  //     頭打ちにするのでもう起きない / #1284）
   const { data: row, error: rowError } = await supabase
     .from('otp_codes')
     .select('id, attempts')
@@ -307,11 +310,12 @@ export async function consumeSecondFactorEmailCode(
 
   if (!deleted || deleted.length === 0) {
     // 不一致・期限切れのどちらでも加算する。
-    // 利用者には区別して返さないので、区別して数える意味もない
-    await supabase
-      .from('otp_codes')
-      .update({ attempts: row.attempts + 1 })
-      .eq('id', row.id);
+    // 利用者には区別して返さないので、区別して数える意味もない。
+    //
+    // ⛔ **read-then-write で書き戻さない**（#1284）。N 並列だと全員が
+    //    同じ `attempts` を読んで同じ値を書くため、**0→1 が N 回**起きる
+    //    だけになり、5回上限が機能しない
+    await incrementOtpAttempts(supabase, row.id);
 
     return SECOND_FACTOR_VERIFY_RESULT.INVALID;
   }

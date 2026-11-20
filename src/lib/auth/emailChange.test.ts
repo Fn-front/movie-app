@@ -228,7 +228,27 @@ function createSupabase(
     },
   }));
 
-  return { from } as unknown as SupabaseClient;
+  /**
+   * `increment_otp_attempts` RPC（#1284）
+   *
+   * ⚠️ **行を実際に書き換える。** 呼ばれたことだけを見ると、加算を
+   * やめる変異が素通りする。
+   */
+  const rpc = jest.fn((name: string, args: Record<string, unknown>) => {
+    if (name !== 'increment_otp_attempts') {
+      return Promise.resolve({ data: null, error: null });
+    }
+
+    const row = rows.find((r) => r.id === args.p_id);
+
+    if (!row) return Promise.resolve({ data: 5, error: null });
+
+    row.attempts = Math.min(row.attempts + 1, 5);
+
+    return Promise.resolve({ data: row.attempts, error: null });
+  });
+
+  return { from, rpc } as unknown as SupabaseClient;
 }
 
 beforeEach(() => {
@@ -553,11 +573,34 @@ describe('consumeEmailChangeCode', () => {
     expect(updateCalls).toHaveLength(0);
   });
 
+  /**
+   * ⛔ **read-then-write で書き戻さない**（#1284）。
+   *
+   * N 並列だと全員が同じ `attempts` を読んで同じ値を書くため、
+   * **0→1 が N 回**起きるだけになり、5回上限が機能しない。
+   */
   it('一致しなければ試行回数を加算する', async () => {
-    const supabase = createSupabase({ rows: [storedRow({ attempts: 2 })] });
+    const rows = [storedRow({ attempts: 2 })];
+    const supabase = createSupabase({ rows });
 
     await consumeEmailChangeCode(supabase, USER_ID, NEW_EMAIL, '000000');
 
-    expect(updateCalls[0]).toEqual({ attempts: 3 });
+    expect(rows[0].attempts).toBe(3);
+    // ⚠️ 直接 UPDATE してはいけない（式は PostgREST から書けない）
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  // 同時に投げられても取りこぼさない
+  it('同時に投げられても加算が失われない', async () => {
+    const rows = [storedRow({ attempts: 0 })];
+    const supabase = createSupabase({ rows });
+
+    await Promise.all(
+      Array.from({ length: 3 }, () =>
+        consumeEmailChangeCode(supabase, USER_ID, NEW_EMAIL, '000000'),
+      ),
+    );
+
+    expect(rows[0].attempts).toBe(3);
   });
 });

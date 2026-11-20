@@ -232,7 +232,28 @@ function createSupabaseMock(db: FakeDb): SupabaseClient {
     return builder;
   };
 
-  return { from: jest.fn(from) } as unknown as SupabaseClient;
+  /**
+   * `increment_otp_attempts` RPC（#1284）
+   *
+   * ⚠️ **行を実際に書き換える。** 呼ばれたことだけを見ると、加算を
+   * やめる変異が素通りする。read-then-write に戻す変異も、ここで
+   * 値が動くからこそ検知できる。
+   */
+  const rpc = jest.fn((name: string, args: Record<string, unknown>) => {
+    if (name !== 'increment_otp_attempts') {
+      return Promise.resolve({ data: null, error: null });
+    }
+
+    const row = db.otpCodes?.find((r) => r.id === args.p_id);
+
+    if (!row) return Promise.resolve({ data: 5, error: null });
+
+    row.attempts = Math.min(row.attempts + 1, 5);
+
+    return Promise.resolve({ data: row.attempts, error: null });
+  });
+
+  return { from: jest.fn(from), rpc } as unknown as SupabaseClient;
 }
 
 /**
@@ -715,6 +736,54 @@ describe('verifySecondFactor（method = email_otp）', () => {
     await verifySecondFactor(createSupabaseMock(db), USER_ID, '999999');
 
     expect(db.otpCodes?.[0].attempts).toBe(1);
+  });
+
+  /**
+   * ⛔ **read-then-write で書き戻さない**（#1284）。
+   *
+   * N 並列だと全員が同じ `attempts` を読んで同じ値を書くため、
+   * **0→1 が N 回**起きるだけになり、5回上限が機能しない。
+   *
+   * ⚠️ 値が増えたことだけを見ても足りない。模擬の UPDATE も値を動かすので、
+   * **RPC を通ったこと**と**直接 UPDATE していないこと**の両方を見る。
+   */
+  it('加算は RPC で行う（直接 UPDATE しない）', async () => {
+    const db = emailOtpDb('123456');
+    const client = createSupabaseMock(db);
+    const rpc = client.rpc as unknown as jest.Mock;
+    const from = client.from as unknown as jest.Mock;
+
+    await verifySecondFactor(client, USER_ID, '999999');
+
+    expect(rpc).toHaveBeenCalledWith('increment_otp_attempts', {
+      p_id: db.otpCodes![0].id,
+    });
+
+    // `from('otp_codes')` のチェーンに update が現れていないこと
+    const usedUpdate = from.mock.results.some((result) => {
+      const builder = result.value as { update?: unknown } | undefined;
+
+      return (
+        typeof builder?.update === 'function' &&
+        (builder.update as jest.Mock).mock?.calls?.length > 0
+      );
+    });
+
+    expect(usedUpdate).toBe(false);
+  });
+
+  // 同時に投げられても取りこぼさない
+  it('同時に投げられても加算が失われない', async () => {
+    const db = emailOtpDb('123456');
+    const client = createSupabaseMock(db);
+
+    await Promise.all(
+      Array.from({ length: 3 }, () =>
+        verifySecondFactor(client, USER_ID, '999999'),
+      ),
+    );
+
+    expect(db.otpCodes?.[0].attempts).toBe(3);
   });
 
   /**

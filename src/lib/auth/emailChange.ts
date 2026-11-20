@@ -17,6 +17,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { EMAIL_CHANGE_OTP_ACTION } from '@/constants/emailChange';
 import { OTP_CONFIG } from '@/constants/otp';
 import { toDbError } from '@/lib/auth/dbError';
+import { incrementOtpAttempts } from '@/lib/auth/otpAttempts';
 import { generateOtpCode, hashOtpCode, sendOtpEmail } from '@/lib/otp';
 import { normalizeEmail } from '@/utils/email';
 
@@ -183,8 +184,10 @@ export async function consumeEmailChangeCode(
   const normalizedEmail = normalizeEmail(newEmail);
 
   // 試行回数を先に見る。上限に達していたら照合せずに弾く。
-  // 素の UPDATE で加算すると6回目に chk_otp_attempts で 23514 になり、
-  // エラーを見ないと静かにカウントが止まる
+  // ⚠️ 上限に達していたら**照合せずに**弾く。到達後も照合を続けると、
+  //    攻撃者は上限の有無に関係なく総当たりを続けられる。
+  //    （加算側の 23514 は `increment_otp_attempts` が `LEAST` で
+  //     頭打ちにするのでもう起きない / #1284）
   const { data: row, error: rowError } = await supabase
     .from('otp_codes')
     .select('id, attempts')
@@ -219,11 +222,10 @@ export async function consumeEmailChangeCode(
 
   if (!deleted || deleted.length === 0) {
     // 不一致・期限切れのどちらでも加算する。
-    // 利用者には区別して返さないので、区別して数える意味もない
-    await supabase
-      .from('otp_codes')
-      .update({ attempts: row.attempts + 1 })
-      .eq('id', row.id);
+    // 利用者には区別して返さないので、区別して数える意味もない。
+    //
+    // ⛔ **read-then-write で書き戻さない**（#1284）
+    await incrementOtpAttempts(supabase, row.id);
 
     return EMAIL_CHANGE_VERIFY_RESULT.INVALID;
   }

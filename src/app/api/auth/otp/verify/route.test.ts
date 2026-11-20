@@ -16,8 +16,15 @@ import { OTP_ERROR_MESSAGES } from '@/constants/otp';
 // --- Mocks ---
 
 const mockFrom = jest.fn();
+/**
+ * `increment_otp_attempts` RPC（#1284）
+ *
+ * ⚠️ 既定は「加算後 1」。加算後の値で上限を判定しているため（#1248）、
+ * 境界のテストはここを上書きして返す値を決める。
+ */
+const mockRpc = jest.fn();
 jest.mock('@/helpers/supabase', () => ({
-  createServiceRoleClient: () => ({ from: mockFrom }),
+  createServiceRoleClient: () => ({ from: mockFrom, rpc: mockRpc }),
   dbConnectionErrorResponse: () =>
     new Response(JSON.stringify({ success: false }), { status: 500 }),
 }));
@@ -71,6 +78,8 @@ describe('POST /api/auth/otp/verify', () => {
     // 消し忘れると、消費しきれなかった分が**後続のテストに漏れて**
     // 関係ないテストが落ちる（実測）
     mockFrom.mockReset();
+    mockRpc.mockReset();
+    mockRpc.mockResolvedValue({ data: 1, error: null });
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockSendPasswordInvalidatedEmail.mockResolvedValue(true);
   });
@@ -575,8 +584,11 @@ describe('POST /api/auth/otp/verify', () => {
           }),
         }),
       });
-      mockFrom.mockReturnValueOnce({
-        update: () => ({ eq: () => ({ data: null, error: null }) }),
+      // ⚠️ 上限の判定は**加算後**の値で行う（#1248）。その値を返すのは
+      //    RPC なので、ここで returnする値が境界そのものになる（#1284）
+      mockRpc.mockResolvedValue({
+        data: Math.min(attempts + 1, 5),
+        error: null,
       });
     };
 
@@ -611,44 +623,35 @@ describe('POST /api/auth/otp/verify', () => {
       expect(json.error.message).toBe(OTP_ERROR_MESSAGES.INVALID_CODE);
     });
 
+    /**
+     * 加算を省くと、入口の判定（次のリクエスト）が効かなくなる。
+     *
+     * ⛔ **read-then-write で書き戻さない**（#1284）。N 並列だと全員が
+     * 同じ `attempts` を読んで同じ値を書くため、**0→1 が N 回**起きる
+     * だけになり、5回上限が機能しない。
+     */
     it('上限に達していても試行回数は加算する', async () => {
-      // 加算を省くと、入口の判定（次のリクエスト）が効かなくなる
-      let updated: Record<string, unknown> | null = null;
-
-      mockFrom.mockReturnValueOnce({
-        select: () => ({
-          eq: () => ({
-            eq: () => ({
-              is: () => ({
-                order: () => ({
-                  limit: () => ({
-                    single: () => ({
-                      data: {
-                        id: 'otp-1',
-                        code_hash: hashOtpCode('123456', 'test@example.com'),
-                        attempts: 4,
-                        expires_at: futureDate,
-                        verified_at: null,
-                      },
-                      error: null,
-                    }),
-                  }),
-                }),
-              }),
-            }),
-          }),
-        }),
-      });
-      mockFrom.mockReturnValueOnce({
-        update: (values: Record<string, unknown>) => {
-          updated = values;
-          return { eq: () => ({ data: null, error: null }) };
-        },
-      });
+      mockOtpWithAttempts(4);
 
       await postWrongCode();
 
-      expect(updated).toEqual({ attempts: 5 });
+      expect(mockRpc).toHaveBeenCalledWith('increment_otp_attempts', {
+        p_id: 'otp-1',
+      });
+    });
+
+    // ⚠️ 直接 UPDATE してはいけない（式は PostgREST から書けない）
+    it('otp_codes を直接 UPDATE しない', async () => {
+      const update = jest.fn(() => ({
+        eq: () => ({ data: null, error: null }),
+      }));
+
+      mockOtpWithAttempts(2);
+      mockFrom.mockReturnValue({ update });
+
+      await postWrongCode();
+
+      expect(update).not.toHaveBeenCalled();
     });
   });
 

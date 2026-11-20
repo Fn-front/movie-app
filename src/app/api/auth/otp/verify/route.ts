@@ -13,6 +13,7 @@ import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import { buildLoginIdentifier } from '@/lib/rateLimit/loginIdentifier';
 import { getClientIp } from '@/lib/http/getClientIp';
 import { generateVerificationToken, verifyOtpCode } from '@/lib/otp';
+import { incrementOtpAttempts } from '@/lib/auth/otpAttempts';
 import { sendPasswordInvalidatedEmail } from '@/lib/auth/sendPasswordInvalidatedEmail';
 import { otpVerifySchema } from '@/schema/otp';
 import {
@@ -168,12 +169,12 @@ export async function POST(request: Request) {
     // コード照合
     // 平文比較ではなく HMAC の timingSafeEqual 照合（#640）
     if (!verifyOtpCode(code, email, otpRecord.code_hash)) {
-      // 試行回数をインクリメント
-      const newAttempts = otpRecord.attempts + 1;
-      await supabase
-        .from('otp_codes')
-        .update({ attempts: newAttempts })
-        .eq('id', otpRecord.id);
+      // 試行回数をインクリメント。
+      //
+      // ⛔ **read-then-write で書き戻さない**（#1284）。N 並列だと全員が
+      //    同じ `attempts` を読んで同じ値を書くため、**0→1 が N 回**起きる
+      //    だけになり、5回上限が機能しない。加算後の値は RPC が返す
+      const newAttempts = await incrementOtpAttempts(supabase, otpRecord.id);
 
       // ⚠️ **加算後**の値で上限を見る（#1248）。入口の判定だけだと、上限に
       // 達した回も「確認コードが間違っています。」としか返らず、再送信の

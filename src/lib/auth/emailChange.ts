@@ -17,6 +17,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { EMAIL_CHANGE_OTP_ACTION } from '@/constants/emailChange';
 import { OTP_CONFIG } from '@/constants/otp';
 import { toDbError } from '@/lib/auth/dbError';
+import { incrementOtpAttempts } from '@/lib/auth/otpAttempts';
 import { generateOtpCode, hashOtpCode, sendOtpEmail } from '@/lib/otp';
 import { normalizeEmail } from '@/utils/email';
 
@@ -219,11 +220,10 @@ export async function consumeEmailChangeCode(
 
   if (!deleted || deleted.length === 0) {
     // 不一致・期限切れのどちらでも加算する。
-    // 利用者には区別して返さないので、区別して数える意味もない
-    await supabase
-      .from('otp_codes')
-      .update({ attempts: row.attempts + 1 })
-      .eq('id', row.id);
+    // 利用者には区別して返さないので、区別して数える意味もない。
+    //
+    // ⛔ **read-then-write で書き戻さない**（#1284）
+    await incrementOtpAttempts(supabase, row.id);
 
     return EMAIL_CHANGE_VERIFY_RESULT.INVALID;
   }

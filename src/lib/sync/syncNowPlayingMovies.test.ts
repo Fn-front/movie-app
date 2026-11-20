@@ -118,6 +118,7 @@ describe('syncNowPlayingMovies', () => {
       cleared: 3,
       skipped: 5,
       errors: [],
+      items: { attempted: 40, failed: 0 },
     };
 
     expect(result.fetched).toBe(40);
@@ -134,6 +135,7 @@ describe('syncNowPlayingMovies', () => {
       cleared: 0,
       skipped: 2,
       errors: ['UPSERT error: connection failed'],
+      items: { attempted: 20, failed: 2 },
     };
 
     expect(result.errors).toHaveLength(1);
@@ -375,6 +377,10 @@ describe('syncNowPlayingMovies', () => {
       const keepFilter = getKeepFilter(supabaseMock);
       expect(keepFilter).toContain('201');
       expect(keepFilter).toContain('202');
+
+      // ⚠️ `errors.length` では代用できない（#1354）。あの配列には作品単位
+      //    ではないエラーも混ざる。通知の分子・分母はここで数える
+      expect(result.items).toEqual({ attempted: 2, failed: 1 });
     });
 
     it('1件も判定できなければクリアを実行しない', async () => {
@@ -730,6 +736,10 @@ describe('syncNowPlayingMovies', () => {
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]).toContain('エラー映画');
       expect(result.errors[0]).toContain('duplicate key violation');
+
+      // ⚠️ UPSERT の失敗も作品単位の失敗として数える（#1354）。
+      //    例外の経路とは記録点が別なので、両方を固定する
+      expect(result.items).toEqual({ attempted: 1, failed: 1 });
     });
   });
 

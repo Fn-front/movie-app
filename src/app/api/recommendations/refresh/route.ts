@@ -139,7 +139,11 @@ export const POST = withAuth(
       throw error;
     }
 
-    if (result.status === 'skipped') {
+    // ⚠️ **`!== 'processed'` で判定する（#1354）。**
+    //   `'skipped'` だけを見ていると、新しく足した `'failed'` が
+    //   素通りして**空のレコメンドで 200 を返す**。状態を増やすたびに
+    //   ここを直す運びになるのを避ける
+    if (result.status !== 'processed') {
       await releaseReservation();
 
       return NextResponse.json(

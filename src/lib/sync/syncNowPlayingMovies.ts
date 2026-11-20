@@ -2,6 +2,7 @@
  * TMDb now_playing エンドポイントから映画データを取得し movie_cache に同期する
  */
 
+import { createItemOutcome, type ItemOutcome } from '@/lib/cron/itemOutcome';
 import { createClient } from '@supabase/supabase-js';
 
 import {
@@ -34,6 +35,13 @@ export interface NowPlayingSyncResult {
   skipped: number;
   /** エラーメッセージ */
   errors: string[];
+  /**
+   * 作品単位の集計（#1354）
+   *
+   * ⚠️ `errors.length` では代用できない。あの配列にはクリア処理の失敗
+   * （作品単位ではない）も入る。
+   */
+  items: ItemOutcome;
 }
 
 /**
@@ -59,6 +67,7 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
     cleared: 0,
     skipped: 0,
     errors: [],
+    items: createItemOutcome(),
   };
 
   // 1. TMDb now_playing を全ページ取得
@@ -146,6 +155,10 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
   const now = new Date().toISOString();
 
   for (const movie of filteredMovies) {
+    // ⚠️ 除外キーワードで `skipped` になる分も分母に数える。そこへ至る
+    //   `getMovieKeywordIds` が失敗しうる処理であり、通り抜けたのは成功だから
+    result.items.attempted++;
+
     try {
       // 除外キーワードと興行判定で同じキーワードを使うため、取得は1回に留める
       const keywordIds = await getMovieKeywordIds(movie.id);
@@ -199,12 +212,14 @@ export async function syncNowPlayingMovies(): Promise<NowPlayingSyncResult> {
 
       if (error) {
         result.errors.push(`${movie.title}: ${error.message}`);
+        result.items.failed++;
       } else {
         result.upserted++;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`${movie.title}: ${message}`);
+      result.items.failed++;
       // 判定できなかっただけなので、クリアの対象から外す
       unresolvedIds.add(movie.id);
     }

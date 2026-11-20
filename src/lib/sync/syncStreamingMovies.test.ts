@@ -560,6 +560,11 @@ describe('syncStreamingMovies', () => {
       expect(mockUpsert).not.toHaveBeenCalled();
       expect(result.upserted).toBe(0);
       expect(result.errors[0]).toContain('TMDb unavailable');
+
+      // ⚠️ `errors.length` では代用できない（#1354）。あの配列には作品単位
+      //    ではないエラーも混ざる。通知の分子・分母はここで数える
+      expect(result.items.failed).toBe(result.items.attempted);
+      expect(result.items.attempted).toBeGreaterThan(0);
     });
 
     it('同時実行数を超える候補は分割して問い合わせる', async () => {
@@ -679,6 +684,11 @@ describe('syncStreamingMovies', () => {
 
       expect(result.errors[0]).toContain('upsert failed');
       expect(result.upserted).toBe(0);
+      // ⚠️ 作品単位の失敗として数える（#1354）。`errors` だけに積むと、
+      //    **書き込みが1件も通っていないのに `failed` が 0** になって
+      //    通知に乗らない
+      expect(result.items.failed).toBe(result.items.attempted);
+      expect(result.items.attempted).toBeGreaterThan(0);
     });
   });
 

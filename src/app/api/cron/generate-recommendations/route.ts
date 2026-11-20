@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { HTTP_STATUS, ERROR_CODE, CRON_ERROR_MESSAGES } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
 import { notifyCronFailure } from '@/lib/cron/notifyCronFailure';
+import { notifyIfMostlyFailed } from '@/lib/cron/notifyHighFailureRate';
 import { handleCronError } from '@/helpers/cronError';
 import {
   createServiceRoleClient,
@@ -64,6 +65,19 @@ export async function GET(request: NextRequest) {
         { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
       );
     }
+
+    // ⚠️ **利用者単位に catch するので、全員ぶん失敗しても 200**（#1354）。
+    //   分母はお気に入りがあるアクティブ利用者の数。`skipped_users`
+    //   （お気に入り不足などで対象外）は失敗に数えない
+    await notifyIfMostlyFailed(supabase, {
+      cronName: 'generate-recommendations',
+      attempted:
+        result.data.processed_users +
+        result.data.skipped_users +
+        result.data.failed_users,
+      failed: result.data.failed_users,
+      detail: 'レコメンドを生成できなかった利用者がいます',
+    });
 
     return NextResponse.json(
       { success: true, data: result.data },

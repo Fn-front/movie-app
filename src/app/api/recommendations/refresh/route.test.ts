@@ -255,6 +255,31 @@ describe('POST /api/recommendations/refresh', () => {
     expect(mockReservationDelete).toHaveBeenCalledWith('id', 'refresh-skip');
   });
 
+  /**
+   * ⚠️ **`'skipped'` だけを見ない（#1354）。**
+   *
+   * `'failed'` を足したとき、`status === 'skipped'` のままだと
+   * 素通りして**空のレコメンドで 200 を返す**。判定は
+   * `!== 'processed'` にしてある。
+   */
+  it('レコメンド生成がfailedの場合も500を返し、予約した回数枠を取り消す', async () => {
+    mockCountChain(0);
+    mockReservationSuccess('refresh-failed');
+    mockProcessUserRecommendations.mockResolvedValueOnce({
+      status: 'failed',
+      recommendationCount: 0,
+    });
+    mockReleaseReservation();
+
+    const response = await POST(createPostRequest());
+    const json = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(json.success).toBe(false);
+    expect(json.error.code).toBe('GENERATION_FAILED');
+    expect(mockReservationDelete).toHaveBeenCalledWith('id', 'refresh-failed');
+  });
+
   it('カウント取得時のDBエラーで500を返す', async () => {
     mockFrom.mockReturnValueOnce({
       select: () => ({

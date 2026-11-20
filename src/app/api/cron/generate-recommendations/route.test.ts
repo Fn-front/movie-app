@@ -315,7 +315,11 @@ describe('GET /api/cron/generate-recommendations', () => {
     expect(json.data.processed_users).toBe(0);
   });
 
-  it('OpenAI APIが失敗した場合、ユーザーをスキップする', async () => {
+  /**
+   * ⚠️ 「対象外」ではなく**失敗**として数える（#1354）。
+   * ここを `skipped` にすると、鍵が失効しても CRON の通知に乗らない。
+   */
+  it('OpenAI APIが失敗した場合、失敗として数える', async () => {
     mockFavoritesUserQuery(['user-1']);
     mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
@@ -329,7 +333,8 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.processed_users).toBe(0);
-    expect(json.data.skipped_users).toBe(1);
+    expect(json.data.failed_users).toBe(1);
+    expect(json.data.skipped_users).toBe(0);
   });
 
   it('TMDb検索で結果が0件の場合、ユーザーをスキップする', async () => {
@@ -379,7 +384,8 @@ describe('GET /api/cron/generate-recommendations', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data.skipped_users).toBe(1);
+    // ⚠️ 書き込みの失敗は**失敗**。利用者の事情では起きない（#1354）
+    expect(json.data.failed_users).toBe(1);
   });
 
   it('レコメンド洗い替えはRPC1回で行い、DELETE/INSERTを個別発行しない', async () => {
@@ -461,7 +467,8 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.processed_users).toBe(1);
-    expect(json.data.skipped_users).toBe(1);
+    // 例外で落ちた利用者は失敗として数える（#1354）
+    expect(json.data.failed_users).toBe(1);
   });
 
   it('TMDb解決が10件未満の場合、リトライして不足分を補う', async () => {
@@ -743,5 +750,131 @@ describe('GET /api/cron/generate-recommendations', () => {
       RECOMMENDATIONS_MAX_COUNT + RECOMMENDATIONS_DIVERSITY_POOL_EXTRA,
       undefined,
     );
+  });
+  /**
+   * ⚠️ **利用者単位に catch するので、全員ぶん失敗しても 200**（#1354）。
+   *
+   * 以前は例外も「スキップ」として数えていたため、全員が落ちても
+   * `skipped_users` が増えるだけで正常な実行と見分けがつかなかった。
+   */
+  describe('ほぼ全滅したときの通知（#1354）', () => {
+    /**
+     * ⚠️ `jest.clearAllMocks()` は **`mockReturnValueOnce` の積みを消さない**。
+     * 前のテストが使い残した応答があると、ここで積んだ順序がずれて
+     * `from()` が undefined を返し、**観測したい分岐に入る前に 500 になる**。
+     */
+    beforeEach(() => {
+      mockFrom.mockReset();
+      mockRpc.mockReset();
+    });
+
+    /** 1人ぶんの問い合わせを積む */
+    const queueOneUser = () => {
+      mockFavoritesUserQuery(['user-1']);
+      mockActiveUsersQuery(['user-1']);
+      mockFavoritesQuery([
+        { tmdb_movie_id: 1, title: 'インターステラー', rating: 9 },
+      ]);
+      mockWatchlistQuery([{ tmdb_movie_id: 2, title: 'ダークナイト' }]);
+      mockDismissedMoviesQuery([]);
+    };
+
+    /**
+     * ⚠️ **`mockRejectedValue` を使わない。**
+     *
+     * `fetchRecommendationsFromOpenAI` は throw しない。キー未設定も
+     * HTTPエラーも JSON 破損も `null` を返す。reject で書くと
+     * **本番では起こり得ない事象**を検証することになり、実際の経路
+     * （`null` → `skipped` に落ちて無言）を見逃す（#1354 のレビューで実測）。
+     */
+    it('OpenAI が落ちて全員ぶん失敗したら通知する', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+      queueOneUser();
+      mockFetchRecommendations.mockResolvedValue(null);
+
+      const response = await GET(createRequest('Bearer test-secret'));
+      const json = await response.json();
+
+      // ⚠️ ステータスは 200 のまま。届くかどうかだけを変えている
+      expect(response.status).toBe(200);
+      expect(json.data.failed_users).toBe(1);
+      expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+        expect.objectContaining({ cronName: 'generate-recommendations' }),
+      );
+
+      error.mockRestore();
+    });
+
+    /**
+     * ⛔ **「対象外」を失敗に数えない。**
+     *
+     * お気に入りが基準に満たない利用者は毎日スキップされる。ここで鳴ると
+     * 常時通知が出て無視されるようになる。
+     */
+    it('お気に入り不足でスキップされても通知しない', async () => {
+      mockFavoritesUserQuery(['user-1']);
+      mockActiveUsersQuery(['user-1']);
+      // お気に入り0件 → 生成対象にならない
+      mockFavoritesQuery([]);
+      mockWatchlistQuery([]);
+      mockDismissedMoviesQuery([]);
+
+      const response = await GET(createRequest('Bearer test-secret'));
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.data.skipped_users).toBe(1);
+      expect(json.data.failed_users).toBe(0);
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⚠️ **スキップも分母に数える**（#1354）。
+     *
+     * 外すと「失敗 / 失敗」で常に 100% になり、1人でも例外が出た日は
+     * 必ず通知が飛ぶ。毎日スキップされる利用者がいる以上、ここを外すと
+     * 鳴り続けて無視されるようになる。
+     */
+    it('スキップが多くて失敗が少なければ通知しない', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      mockFavoritesUserQuery(['user-1', 'user-2', 'user-3', 'user-4']);
+      mockActiveUsersQuery(['user-1', 'user-2', 'user-3', 'user-4']);
+
+      // user-1 だけ生成に進み、OpenAI で落とす
+      mockFavoritesQuery([
+        { tmdb_movie_id: 1, title: 'インターステラー', rating: 9 },
+      ]);
+      mockWatchlistQuery([]);
+      mockDismissedMoviesQuery([]);
+      mockFetchRecommendations.mockRejectedValue(new Error('openai down'));
+
+      // 残り3人はお気に入り0件で対象外
+      for (let i = 0; i < 3; i += 1) {
+        mockFavoritesQuery([]);
+        mockWatchlistQuery([]);
+        mockDismissedMoviesQuery([]);
+      }
+
+      const response = await GET(createRequest('Bearer test-secret'));
+      const json = await response.json();
+
+      expect(json.data.failed_users).toBe(1);
+      expect(json.data.skipped_users).toBe(3);
+      // 1 / 4 = 25% なのでしきい値に届かない
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+
+      error.mockRestore();
+    });
+
+    it('対象の利用者が1人もいなければ通知しない', async () => {
+      mockFavoritesUserQuery([]);
+      mockActiveUsersQuery([]);
+
+      const response = await GET(createRequest('Bearer test-secret'));
+
+      expect(response.status).toBe(200);
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+    });
   });
 });

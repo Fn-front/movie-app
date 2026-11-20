@@ -186,6 +186,10 @@ export async function syncWatchlistStreaming(): Promise<WatchlistStreamingSyncRe
 
     if (upsertError) {
       result.errors.push(`upsert: ${upsertError.message}`);
+      // ⚠️ 作品単位の失敗として数える（#1354）。問い合わせは全部通ったのに
+      //    書き込みが落ちた場合、ここを数えないと `failed` が 0 のまま
+      //    200 で返る
+      result.failed += rowsToUpsert.length;
     } else {
       result.updated = rowsToUpsert.length;
     }

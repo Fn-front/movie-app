@@ -88,7 +88,15 @@ function addMetrics(
 
 /** ユーザー単位の処理結果 */
 interface UserProcessResult {
-  status: 'processed' | 'skipped';
+  /**
+   * ⚠️ **`failed` を `skipped` と分けること（#1354）。**
+   *
+   * 以前はどちらも `skipped` で、サマリーの `skipped_users` が
+   * 「お気に入りが足りない」と「例外で落ちた」の両方を指していた。
+   * 全員が例外で落ちても `skipped_users` が増えるだけなので、
+   * 正常な実行と見分けがつかなかった。
+   */
+  status: 'processed' | 'skipped' | 'failed';
   recommendationCount: number;
   metrics: GenerationMetrics;
 }
@@ -96,7 +104,10 @@ interface UserProcessResult {
 /** 全体の処理サマリー */
 export interface GenerateRecommendationsSummary {
   processed_users: number;
+  /** 対象外だった利用者（お気に入り不足など）。失敗ではない */
   skipped_users: number;
+  /** 例外で処理できなかった利用者（#1354） */
+  failed_users: number;
   inactive_users: number;
   total_recommendations: number;
   metrics: GenerationMetrics;
@@ -243,6 +254,11 @@ export async function collectUserMovieData(
   // ⚠️ お気に入りだけは取得失敗を握らない。0件と区別できないまま進むと
   // 「お気に入りが無いので生成しない」と同じ扱いになり、実際には
   // 持っている利用者のレコメンドが黙って作られなくなる
+  //
+  // ⛔ **`null` を2つの意味に使わない（#1354）。** 以前はここも `null` を
+  //   返していたため、呼び出し側が「対象外」と区別できず `skipped` に
+  //   落ちていた。CRON の通知は `failed` しか数えないので、DBエラーで
+  //   全員ぶん生成できなくても無言だった。失敗は投げて区別する
   let favorites: { tmdb_movie_id: number; title: string; rating: number }[];
 
   try {
@@ -260,9 +276,10 @@ export async function collectUserMovieData(
     );
   } catch (error) {
     console.error('Favorites query error:', error);
-    return null;
+    throw error;
   }
 
+  // ここから先の `null` は「対象外」だけを意味する
   if (favorites.length === 0) {
     return null;
   }
@@ -392,9 +409,19 @@ export async function generateRecommendationsWithRetry(
 ): Promise<{
   resolved: ResolvedRecommendation[];
   metrics: GenerationMetrics;
+  /**
+   * OpenAI の呼び出し自体が失敗したか（#1354）
+   *
+   * ⚠️ `fetchRecommendationsFromOpenAI` は **throw しない**。キー未設定も
+   * HTTPエラーも JSON 破損もスキーマ違反も `null` を返す。呼び出し側は
+   * 「候補が0件だった」と区別できず、**鍵が失効しても `skipped` に落ちて
+   * 無言になっていた**。
+   */
+  aiUnavailable: boolean;
 }> {
   const allResolved: ResolvedRecommendation[] = [];
   const metrics = createEmptyMetrics();
+  let aiUnavailable = false;
   let remainingCount = RECOMMENDATIONS_MAX_COUNT;
   let retryExcludedIds = baseExcludedIds;
   let previousHitRate: number | undefined;
@@ -421,6 +448,7 @@ export async function generateRecommendationsWithRetry(
     );
 
     if (!aiRecommendations) {
+      aiUnavailable = true;
       break;
     }
 
@@ -470,7 +498,7 @@ export async function generateRecommendationsWithRetry(
     ]);
   }
 
-  return { resolved: allResolved, metrics };
+  return { resolved: allResolved, metrics, aiUnavailable };
 }
 
 /**
@@ -531,17 +559,27 @@ export async function processUserRecommendations(
     };
   }
 
-  const { resolved, metrics } = await generateRecommendationsWithRetry(
-    movieData.favoriteMovies,
-    movieData.watchlistTitles,
-    movieData.baseExcludedIds,
-    movieData.dismissedMovies,
-    signal,
-  );
+  const { resolved, metrics, aiUnavailable } =
+    await generateRecommendationsWithRetry(
+      movieData.favoriteMovies,
+      movieData.watchlistTitles,
+      movieData.baseExcludedIds,
+      movieData.dismissedMovies,
+      signal,
+    );
 
   // スキップした場合もAI・TMDbは消費しているため、メトリクスは必ず返す
+  //
+  // ⚠️ **「候補が0件」と「OpenAI が落ちた」を分ける（#1354）。**
+  //   前者は利用者の嗜好しだいで普通に起きるが、後者は鍵の失効や
+  //   API 障害で、人が動かないと直らない。同じ `skipped` にすると
+  //   CRON の通知（`failed` を数える）に一切乗らない
   if (resolved.length === 0) {
-    return { status: 'skipped', recommendationCount: 0, metrics };
+    return {
+      status: aiUnavailable ? 'failed' : 'skipped',
+      recommendationCount: 0,
+      metrics,
+    };
   }
 
   // 中断済みなら書き込まない。中途半端な件数で洗い替えすると
@@ -550,9 +588,10 @@ export async function processUserRecommendations(
     return { status: 'skipped', recommendationCount: 0, metrics };
   }
 
+  // ⚠️ 書き込みの失敗は**失敗**。利用者の事情では起きない（#1354）
   const success = await upsertRecommendations(supabase, userId, resolved);
   if (!success) {
-    return { status: 'skipped', recommendationCount: 0, metrics };
+    return { status: 'failed', recommendationCount: 0, metrics };
   }
 
   return {
@@ -608,6 +647,7 @@ export async function executeGenerateRecommendationsCron(
   const { activeUserIds, inactiveUsers } = userResult;
   let processedUsers = 0;
   let skippedUsers = 0;
+  let failedUsers = 0;
   let totalRecommendations = 0;
   let metrics = createEmptyMetrics();
 
@@ -636,7 +676,7 @@ export async function executeGenerateRecommendationsCron(
             error,
           );
           return {
-            status: 'skipped' as const,
+            status: 'failed' as const,
             recommendationCount: 0,
             metrics: createEmptyMetrics(),
           };
@@ -650,10 +690,16 @@ export async function executeGenerateRecommendationsCron(
         processedUsers++;
         batchSuccess++;
         totalRecommendations += result.recommendationCount;
-      } else {
-        skippedUsers++;
-        batchFailed++;
+        continue;
       }
+
+      if (result.status === 'failed') {
+        failedUsers++;
+        batchFailed++;
+        continue;
+      }
+
+      skippedUsers++;
     }
 
     console.log(
@@ -674,6 +720,7 @@ export async function executeGenerateRecommendationsCron(
     data: {
       processed_users: processedUsers,
       skipped_users: skippedUsers,
+      failed_users: failedUsers,
       inactive_users: inactiveUsers,
       total_recommendations: totalRecommendations,
       metrics,

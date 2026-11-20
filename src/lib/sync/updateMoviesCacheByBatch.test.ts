@@ -126,6 +126,7 @@ describe('updateMoviesCacheByBatch', () => {
       removed: 2,
       removedNotFound: 1,
       errors: ['ID 1: error'],
+      items: { attempted: 98, failed: 1 },
     };
 
     expect(result.total).toBe(100);
@@ -197,6 +198,10 @@ describe('updateMoviesCacheByBatch', () => {
       expect(fromMock.deleteMock).not.toHaveBeenCalled();
       expect(result.removedNotFound).toBe(0);
       expect(result.errors).toHaveLength(1);
+
+      // ⚠️ 分母は `total`（`movie_cache` の行数）ではない（#1354）。
+      //    ループが回るのは重複を除いた映画IDの数
+      expect(result.items).toEqual({ attempted: 1, failed: 1 });
     });
 
     it('削除に失敗した場合はerrorsに積む', async () => {
@@ -215,6 +220,8 @@ describe('updateMoviesCacheByBatch', () => {
 
       expect(result.removedNotFound).toBe(0);
       expect(result.errors).toEqual(['ID 956160: permission denied']);
+      // ⚠️ 記録点ごとに数える（#1354）。404 を受けての削除が失敗した経路
+      expect(result.items).toEqual({ attempted: 1, failed: 1 });
     });
 
     it('同じIDが複数のrelease_typeにある場合はまとめて数える', async () => {
@@ -596,6 +603,8 @@ describe('updateMoviesCacheByBatch', () => {
       expect(result.removed).toBe(0);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]).toContain('delete failed');
+      // ⚠️ 記録点ごとに数える（#1354）。除外ジャンルの削除が失敗した経路
+      expect(result.items).toEqual({ attempted: 1, failed: 1 });
     });
   });
 
@@ -768,6 +777,8 @@ describe('updateMoviesCacheByBatch', () => {
       expect(result.updated).toBe(0);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]).toContain('ID 1');
+      // ⚠️ 記録点ごとに数える（#1354）。UPDATE が失敗した経路
+      expect(result.items).toEqual({ attempted: 1, failed: 1 });
       expect(result.errors[0]).toContain('update failed');
     });
 

@@ -11,6 +11,7 @@
  * （digital_release_date）を併せて保存する。
  */
 
+import { createItemOutcome, type ItemOutcome } from '@/lib/cron/itemOutcome';
 import { createClient } from '@supabase/supabase-js';
 
 import {
@@ -50,6 +51,14 @@ export interface StreamingSyncResult {
   durationMs: number;
   /** エラーメッセージ */
   errors: string[];
+  /**
+   * 作品単位の集計（#1354）
+   *
+   * ⚠️ 分母に `fetched` を使わないこと。配信判定に通すのはフィルタ後の
+   * 候補だけで、取得件数とは大きく食い違う。`tmdbRequests` も discover の
+   * 回数が混ざるので使えない。
+   */
+  items: ItemOutcome;
 }
 
 /** 同期対象の time_frame ごとの公開日範囲 */
@@ -265,11 +274,13 @@ async function resolveJpAvailability(
       }),
     );
     result.tmdbRequests += batch.length;
+    result.items.attempted += batch.length;
 
     for (const { movie, availability, error } of settled) {
       if (!availability) {
         unresolvedIds.add(movie.id);
         result.errors.push(`availability ${movie.title}: ${error}`);
+        result.items.failed++;
         continue;
       }
 
@@ -328,6 +339,7 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
     tmdbRequests: 0,
     durationMs: 0,
     errors: [],
+    items: createItemOutcome(),
   };
 
   // 別release_type（theatrical）に存在するIDの除外は行わない。
@@ -385,6 +397,10 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
 
     if (error) {
       result.errors.push(`upsert: ${error.message}`);
+      // ⚠️ 作品単位の失敗として数える（#1354）。ここを `errors` だけに
+      //    積むと、**書き込みが1件も通っていないのに `failed` が 0** になり
+      //    通知に乗らない。syncNowPlayingMovies は数えているので形も揃える
+      result.items.failed += movieRows.length;
       continue;
     }
 

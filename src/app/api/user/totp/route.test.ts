@@ -73,6 +73,28 @@ describe('GET /api/user/totp', () => {
     });
   });
 
+  /**
+   * ⚠️ `method` は素通しであって `totp` 固定ではない（#1287）。
+   *
+   * 設定画面はこの値で「コードを送信する」ボタンを出すかを決める。
+   * メールOTP の利用者にこのボタンが出ないと、無効化もリカバリーコード
+   * 再発行もできなくなる（`send-challenge` のコメント参照）。
+   */
+  it('メールOTP の利用者には method=email_otp を返す', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.EMAIL_OTP);
+    mockCountUnusedRecoveryCodes.mockResolvedValue(3);
+
+    const response = await GET();
+    const json = await response.json();
+
+    expect(json.data).toEqual({
+      enabled: true,
+      method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+      emailOtpAvailable: true,
+      remainingRecoveryCodes: 3,
+    });
+  });
+
   it('無効なユーザーには残数を問い合わせない', async () => {
     // 無効なら残数に意味がない
     mockGetSecondFactorMethod.mockResolvedValue(null);

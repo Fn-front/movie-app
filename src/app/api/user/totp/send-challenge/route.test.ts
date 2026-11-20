@@ -129,16 +129,51 @@ describe('POST /api/user/totp/send-challenge', () => {
    * 無効化のたびに2枠使い、2回しくじるだけで15分間すべての二段階認証操作が
    * 429 になる。
    */
-  it('TOTP_SETTINGS_VERIFY を消費しない', async () => {
+  /**
+   * ⚠️ これはソースに対する不変条件テスト（#1287）
+   *
+   * もとは `expect(mockCheckRateLimit).not.toHaveBeenCalledWith(...)` だったが、
+   * **このルートは `checkRateLimit` を import していない**ので、
+   * モックの呼び出しは全テストで0回。つまり**空のハンドラでも通る**
+   * アサーションになっていた。
+   *
+   * 唯一のレート制限 `TWO_FACTOR_SEND` は `sendSecondFactorCode` の中にあり、
+   * そのモジュールはここでモックされている。実行時に観測できるものが無いため、
+   * 「消費しないこと」はソースを読んで固定するしかない。
+   */
+  it('TOTP_SETTINGS_VERIFY を消費しない（レート制限を一切持ち込まない）', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path') as typeof import('path');
+
+    const routeSource = fs.readFileSync(
+      path.join(__dirname, 'route.ts'),
+      'utf8',
+    );
+    // コメントで理由を説明しているので、コードだけを見る
+    const code = routeSource.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+
+    // 送信系と検証系でカウンタを重ねると、メールOTP の利用者は無効化のたびに
+    // 2枠使い、2回しくじるだけで15分間すべての二段階認証操作が 429 になる
+    expect(code).not.toContain('TOTP_SETTINGS_VERIFY');
+    expect(code).not.toContain('checkSecondFactorRateLimit');
+    expect(code).not.toContain('checkRateLimit');
+    // requireSecondFactor は TOTP_SETTINGS_VERIFY を消費する側
+    expect(code).not.toContain('requireSecondFactor');
+  });
+
+  /**
+   * 上の不変条件と対になる。「何も消費しない」のではなく、
+   * **`sendSecondFactorCode` の中の `TWO_FACTOR_SEND` 1本だけ**が効く。
+   * 呼び出しが消えると送信そのものが無くなるので、ここで到達を固定する。
+   */
+  it('レート制限は sendSecondFactorCode の中の1本だけ', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('sent');
+
     await POST();
 
-    expect(mockCheckRateLimit).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      'totp_settings_verify',
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(mockSendSecondFactorCode).toHaveBeenCalledTimes(1);
   });
 
   it('送信に失敗したら500を返す', async () => {

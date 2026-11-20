@@ -50,6 +50,16 @@ describe('requireSecondFactor', () => {
   });
 
   // ガードは方式に依存しない。分岐は verifySecondFactor の中にある
+  /**
+   * ⚠️ 「既存の正常系と同じ経路を通るだけ」ではない（#1287 で実測）。
+   *
+   * `requireSecondFactor` は `getSecondFactorMethod` の**真偽しか見ない**
+   * （`secondFactorGuard.ts:100`）。その「方式に依存しない」という契約を
+   * 固定しているのがこのテスト。
+   *
+   * 変異テストで確認済み: `if (method === 'email_otp') return error` を
+   * 足すと、13本のうち**このテストだけ**が落ちる。消さないこと。
+   */
   it('method=email_otp でも、正しいコードなら通す', async () => {
     mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.EMAIL_OTP);
 

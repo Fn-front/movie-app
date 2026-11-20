@@ -43,6 +43,14 @@ interface MockState {
   readError: boolean;
   deleteCalls: number;
   insertCalls: number;
+  /**
+   * INSERT に渡された行。
+   *
+   * ⚠️ 引数を捨てると、`code_hash` / `action_type` / `expires_at` / 宛先の
+   * どれも未検証になる。実際に**正規化前のアドレスで INSERT する実装でも
+   * 全テストが通る**状態だった（#1287。変異テストで実測）
+   */
+  insertedRows: Record<string, unknown>[];
   /** delete と insert の呼び出し順を記録する */
   order: string[];
 }
@@ -73,8 +81,9 @@ const createSupabaseMock = (state: MockState): SupabaseClient => {
       state.order.push('delete');
       return builder;
     });
-    builder.insert = jest.fn(() => {
+    builder.insert = jest.fn((row: Record<string, unknown>) => {
       state.insertCalls += 1;
+      state.insertedRows.push(row);
       state.order.push('insert');
       return Promise.resolve({ error: null });
     });
@@ -94,6 +103,7 @@ const freshState = (): MockState => ({
   readError: false,
   deleteCalls: 0,
   insertCalls: 0,
+  insertedRows: [],
   order: [],
 });
 
@@ -119,6 +129,56 @@ describe('sendSecondFactorCode', () => {
       TWO_FACTOR_OTP_ACTION,
     );
     expect(state.insertCalls).toBe(1);
+  });
+
+  /**
+   * INSERT の中身を固定する（#1287）
+   *
+   * ⚠️ モックが引数を捨てていた頃は、`code_hash` / `action_type` /
+   * `expires_at` / 宛先のどれも未検証だった。**正規化前のアドレスで
+   * INSERT する実装でも10テスト全通過する**ことを変異テストで実測している。
+   */
+  it('otp_codes に入れる行の中身', async () => {
+    const state = freshState();
+    const before = Date.now();
+
+    await sendSecondFactorCode(createSupabaseMock(state), USER_ID, EMAIL);
+
+    const row = state.insertedRows[0];
+
+    expect(row.email).toBe(EMAIL);
+    // 平文は保存しない（#640）。hashOtpCode のモックは `hashed:<email>:<code>`
+    expect(row.code_hash).toBe(`hashed:${EMAIL}:123456`);
+    expect(row.action_type).toBe(TWO_FACTOR_OTP_ACTION);
+
+    // 有効期限は OTP_CONFIG.EXPIRY_MINUTES 後。実行時間ぶんの幅を見る
+    const expiresAt = new Date(row.expires_at as string).getTime();
+    const expected = OTP_CONFIG.EXPIRY_MINUTES * 60 * 1000;
+    expect(expiresAt - before).toBeGreaterThanOrEqual(expected - 1000);
+    expect(expiresAt - before).toBeLessThanOrEqual(expected + 1000);
+  });
+
+  /**
+   * ⚠️ 宛先は**正規化してから**保存する。
+   *
+   * `otp_codes` の照合は `email` の完全一致なので、保存側と検証側で表記が
+   * 違うと「正しいコードを入れたのに見つからない」になる。
+   * `auth/otp/verify` は zod の `.email()` 経由（小文字化済み）で引くため、
+   * ここが生のアドレスだと大文字を含む利用者だけ二段階認証を通過できない。
+   */
+  it('宛先は正規化してから保存する（大文字・前後の空白を落とす）', async () => {
+    const state = freshState();
+
+    await sendSecondFactorCode(
+      createSupabaseMock(state),
+      USER_ID,
+      '  User@Example.COM  ',
+    );
+
+    const row = state.insertedRows[0];
+
+    expect(row.email).toBe(EMAIL);
+    expect(row.code_hash).toBe(`hashed:${EMAIL}:123456`);
   });
 
   /**

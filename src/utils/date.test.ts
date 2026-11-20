@@ -202,12 +202,24 @@ describe('formatDateToString', () => {
    * 置き換えても1件も落ちなかった）。
    */
   it('UTC ではなくローカル時刻で組み立てる', () => {
-    // JST の深夜。UTC では前日の 2026-05-31 になる時刻
-    const midnightJst = new Date(2026, 5, 1, 0, 30);
+    // ⚠️ **実行環境のタイムゾーンに依存させない。**
+    //
+    //   「JST の深夜なら UTC では前日」という実例で書くと、UTC で動く CI では
+    //   両者が一致して成立しない（実際に CI だけ落ちた）。Jest は各テストを
+    //   独立した VM コンテキストで実行するため、`process.env.TZ` への代入でも
+    //   Date の解釈は変わらない。
+    //
+    //   そこで**どのAPIを読んでいるか**を直接見る。ローカル時刻の getter と
+    //   `toISOString()` が食い違う値を返すオブジェクトを渡せば、UTC 実装に
+    //   置き換えたときだけ結果が変わる。
+    const localGetters = {
+      getFullYear: () => 2026,
+      getMonth: () => 5,
+      getDate: () => 1,
+      // 同じ瞬間を UTC で見ると前日
+      toISOString: () => '2026-05-31T15:30:00.000Z',
+    } as unknown as Date;
 
-    expect(formatDateToString(midnightJst)).toBe('2026-06-01');
-    expect(formatDateToString(midnightJst)).not.toBe(
-      midnightJst.toISOString().split('T')[0],
-    );
+    expect(formatDateToString(localGetters)).toBe('2026-06-01');
   });
 });

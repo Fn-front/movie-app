@@ -42,7 +42,41 @@ const cronDirs = fs
 describe('CRON 名とディレクトリ名の突き合わせ', () => {
   it('ルートを取りこぼしていない', () => {
     // 走査対象が0件でも全テストが緑になってしまうため、件数を押さえる
-    expect(cronDirs.length).toBeGreaterThanOrEqual(9);
+    expect(cronDirs.length).toBeGreaterThanOrEqual(10);
+  });
+
+  /**
+   * ⚠️ **`vercel.json` に登録しないと、ルートがあっても一度も走らない。**
+   *
+   * スケジュールを消しても、消し忘れても、テストは1本も落ちなかった
+   * （#1000 のレビューで実測）。`vercel.json` を読むテストが
+   * リポジトリに1本も無かった。
+   *
+   * とくに `sync-upcoming` は止まると**新作が入ってこなくなる**経路で、
+   * API 側のフォールバックは0件にならない限り発火しない。
+   */
+  it('すべての CRON ルートが vercel.json に登録されている', () => {
+    const config = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), 'vercel.json'), 'utf8'),
+    ) as { crons: { path: string; schedule: string }[] };
+
+    const scheduled = config.crons.map((cron) => cron.path).sort();
+    const expected = cronDirs.map((dir) => `/api/cron/${dir}`).sort();
+
+    // 落ちたら: ルートを足したなら vercel.json へ、
+    //          消したなら vercel.json からも消す
+    expect(scheduled).toEqual(expected);
+  });
+
+  // 同じ時刻に固まると TMDb のレート制限に当たりやすい
+  it('スケジュールの書式が cron 式になっている', () => {
+    const config = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), 'vercel.json'), 'utf8'),
+    ) as { crons: { path: string; schedule: string }[] };
+
+    for (const cron of config.crons) {
+      expect(cron.schedule.split(' ')).toHaveLength(5);
+    }
   });
 
   it.each(cronDirs)('%s は自分の名前だけを使う', (dir) => {

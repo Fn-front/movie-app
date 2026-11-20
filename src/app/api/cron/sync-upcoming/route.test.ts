@@ -75,9 +75,9 @@ describe('GET /api/cron/sync-upcoming', () => {
   });
 
   /**
-   * ⚠️ 最大5ページの Discover を**直列**で叩き、ページごとに
-   * `isConcertFilm` の追加問い合わせが入る。同じ構成の
-   * `sync-now-playing` に合わせてある。
+   * ⚠️ `sync-now-playing` と同じ値だが**構成は同じではない**。
+   * あちらは上限10ページ＋作品ごとの逐次問い合わせで、こちらより重い。
+   * 120秒は安全側に倒した値。
    */
   it('maxDurationが120に設定されている', () => {
     expect(maxDuration).toBe(120);

@@ -153,17 +153,30 @@ export async function GET(request: Request) {
     // 配信予定タブ: まだ配信されておらず、JPのデジタル公開日が未来の作品
     const isUpcomingStreaming = isStreaming && time_frame === 'upcoming';
 
+    // ⚠️ **件数クエリの `error` を捨てないこと（#1164 / #1000）。**
+    //
+    //   Supabase はエラー時に `count` を `null` で返す。受け取らずに
+    //   `!count` で判定すると**DB障害がフォールバックの発火条件に化け**、
+    //   アクセスのたびにリクエスト処理の中でフル同期が走る。
+    //   `read_api_movies` は 300回/10分なので、10分で最大300回の同期を
+    //   誘発できる。この分岐が無くそうとしている「数十秒待たせる」経路が、
+    //   キャッシュ失効ではなくDB障害を引き金に復活する。
+    //
+    //   障害中はこの後のクエリも失敗するので、ここで止めたほうが分かりやすい。
     if (isNowPlayingTheatrical) {
       // now_showing + theatrical: CRON（/api/cron/sync-now-playing、日次）で
       // 事前同期する。キャッシュが単に古いだけのケースで同期を直列実行すると、
       // 失効直後のユーザーが数十秒待たされるため同期は行わない（#983）。
       // CRONが一度も走っていない場合に一覧が空になるのを避けるため、
       // レコードが1件も無いときだけフォールバックとして同期する。
-      const { count: nowPlayingCount } = await supabase
-        .from('movie_cache')
-        .select('id', { count: 'exact', head: true })
-        .eq('is_now_playing', true)
-        .eq('release_type', RELEASE_TYPE.THEATRICAL);
+      const { count: nowPlayingCount, error: nowPlayingCountError } =
+        await supabase
+          .from('movie_cache')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_now_playing', true)
+          .eq('release_type', RELEASE_TYPE.THEATRICAL);
+
+      if (nowPlayingCountError) throw nowPlayingCountError;
 
       if (!nowPlayingCount) {
         await syncNowPlayingMovies();
@@ -174,10 +187,13 @@ export async function GET(request: Request) {
       // 失効直後のユーザーが数十秒待たされるため同期は行わない。
       // CRONが一度も走っていない場合に一覧が空になるのを避けるため、
       // レコードが1件も無いときだけフォールバックとして同期する。
-      const { count: streamingCount } = await supabase
-        .from('movie_cache')
-        .select('id', { count: 'exact', head: true })
-        .eq('release_type', RELEASE_TYPE.STREAMING);
+      const { count: streamingCount, error: streamingCountError } =
+        await supabase
+          .from('movie_cache')
+          .select('id', { count: 'exact', head: true })
+          .eq('release_type', RELEASE_TYPE.STREAMING);
+
+      if (streamingCountError) throw streamingCountError;
 
       if (!streamingCount) {
         await syncStreamingMovies();
@@ -189,15 +205,25 @@ export async function GET(request: Request) {
       // CRONが一度も走っていない場合に一覧が空になるのを避けるため、
       // レコードが1件も無いときだけフォールバックとして同期する。
       //
-      // ⚠️ 件数は **is_now_playing で絞らない**。公開中の作品も
-      //   `theatrical` 行として同じテーブルに入るため、絞ると
-      //   「公開予定が0件の日」に毎回フォールバックが走る
-      const { count: theatricalCount } = await supabase
+      // ⚠️ **母数は公開予定タブが実際に出す集合に合わせる。**
+      //
+      //   `release_type='theatrical'` だけで数えると公開中・公開済みの行まで
+      //   入る（本番の実測で 1,105件 対 公開予定 134件）。表示が0件になっても
+      //   母数が三桁残るので、**フォールバックが実質発火しない**。
+      //   CRON が静かに止まった場合、`MOVIES_FETCH_MONTHS_AHEAD` ぶんを
+      //   消化した約3ヶ月後にタブが空になり、それでも同期は走らない。
+      //
+      //   兄弟の2分岐も母数とタブのスコープが一致している
+      //   （now_showing は `is_now_playing`、streaming は `release_type`）。
+      const { count: upcomingCount, error: upcomingCountError } = await supabase
         .from('movie_cache')
         .select('id', { count: 'exact', head: true })
-        .eq('release_type', RELEASE_TYPE.THEATRICAL);
+        .eq('release_type', RELEASE_TYPE.THEATRICAL)
+        .gte('release_date', formatDateToString(new Date()));
 
-      if (!theatricalCount) {
+      if (upcomingCountError) throw upcomingCountError;
+
+      if (!upcomingCount) {
         await syncUpcomingMovies();
       }
     }

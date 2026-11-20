@@ -5,6 +5,7 @@ import {
   getJstYearRange,
   getYear,
   isRealCalendarDate,
+  formatDateToString,
 } from './date';
 
 describe('formatDate', () => {
@@ -177,5 +178,36 @@ describe('isRealCalendarDate', () => {
   it('繰り上がる日付をパース成功とみなさない', () => {
     expect(Number.isNaN(new Date('2026-02-30').getTime())).toBe(false);
     expect(isRealCalendarDate('2026-02-30')).toBe(false);
+  });
+});
+
+describe('formatDateToString', () => {
+  it('YYYY-MM-DD 形式にする', () => {
+    expect(formatDateToString(new Date(2026, 4, 1))).toBe('2026-05-01');
+  });
+
+  it('1桁の月日をゼロ埋めする', () => {
+    expect(formatDateToString(new Date(2026, 0, 9))).toBe('2026-01-09');
+  });
+
+  /**
+   * ⚠️ **ローカル時刻で組み立てることが仕様**（#1000）。
+   *
+   * `toISOString().split('T')[0]` は UTC に寄るため、JST では深夜帯に
+   * **前日の日付**になる。TMDb の `release_date.gte` へ渡すと公開初日の
+   * 作品が落ちる。
+   *
+   * JSDoc がこの置き換えを明示的に禁じているのに、テストが無いまま
+   * 共有ユーティリティへ昇格していた（レビューで実測。UTC 実装に
+   * 置き換えても1件も落ちなかった）。
+   */
+  it('UTC ではなくローカル時刻で組み立てる', () => {
+    // JST の深夜。UTC では前日の 2026-05-31 になる時刻
+    const midnightJst = new Date(2026, 5, 1, 0, 30);
+
+    expect(formatDateToString(midnightJst)).toBe('2026-06-01');
+    expect(formatDateToString(midnightJst)).not.toBe(
+      midnightJst.toISOString().split('T')[0],
+    );
   });
 });

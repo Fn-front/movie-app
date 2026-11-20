@@ -23,7 +23,11 @@ export const dynamic = 'force-dynamic';
 
 /**
  * ⚠️ 最大5ページの Discover を**直列**で叩き、ページごとに `isConcertFilm` の
- * 追加問い合わせが入る。`sync-now-playing`（同じ構成・5ページ）に合わせて 120 秒。
+ * 追加問い合わせが入る（こちらは `Promise.all` で並列、対象は Music 系のみ）。
+ *
+ * `sync-now-playing` と同じ 120 秒にしてあるが、**構成は同じではない**。
+ * あちらは上限10ページで、作品ごとに `getMovieKeywordIds` を逐次で叩く。
+ * 処理量はこちらのほうが1桁軽いので、120秒は安全側に倒した値。
  */
 export const maxDuration = 120;
 

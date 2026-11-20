@@ -20,11 +20,6 @@ export const SORT_OPTIONS = [
 export const DEFAULT_SORT = 'release_date' as const;
 
 /**
- * キャッシュ有効時間（時間）
- */
-export const CACHE_DURATION_HOURS = 6;
-
-/**
  * 映画詳細のキャッシュ秒数（24時間）。
  *
  * `/movies/[id]` の `generateMetadata` がサーバー側で TMDb を引くときに使う。

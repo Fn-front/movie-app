@@ -6,12 +6,7 @@
  * 映画一覧API Route テスト
  */
 
-import {
-  CACHE_DURATION_HOURS,
-  DOCUMENTARY_GENRE_ID,
-  MOVIES_ERROR_MESSAGES,
-  MUSIC_GENRE_ID,
-} from '@/constants/movies';
+import { MOVIES_ERROR_MESSAGES } from '@/constants/movies';
 import { SEARCH_VALIDATION } from '@/constants/search';
 
 // --- Mocks ---
@@ -1337,96 +1332,6 @@ describe('GET /api/movies', () => {
 
   // === upcoming + theatrical (キャッシュ期限切れでDiscover API呼び出し) ===
 
-  it('adultコンテンツが除外される', async () => {
-    const handler = await loadGET();
-
-    mockDiscoverMovies.mockResolvedValueOnce({
-      results: [
-        {
-          id: 200,
-          title: 'アダルト映画',
-          adult: true,
-          original_language: 'ja',
-          genre_ids: [28],
-          vote_average: 5.0,
-          popularity: 10,
-        },
-      ],
-      total_pages: 1,
-    });
-
-    setupExpiredCacheFromMock({
-      countResult: { count: 0 },
-      dataResult: { data: [], error: null },
-    });
-
-    const response = await handler(createRequest());
-    expect(response.status).toBe(200);
-  });
-
-  it('除外言語の映画が除外される', async () => {
-    const handler = await loadGET();
-
-    mockDiscoverMovies.mockResolvedValueOnce({
-      results: [
-        {
-          id: 201,
-          title: '韓国映画',
-          adult: false,
-          original_language: 'ko',
-          genre_ids: [28],
-          vote_average: 7.0,
-          popularity: 50,
-        },
-        {
-          id: 202,
-          title: '中国映画',
-          adult: false,
-          original_language: 'zh',
-          genre_ids: [35],
-          vote_average: 6.0,
-          popularity: 30,
-        },
-      ],
-      total_pages: 1,
-    });
-
-    setupExpiredCacheFromMock({
-      countResult: { count: 0 },
-      dataResult: { data: [], error: null },
-    });
-
-    const response = await handler(createRequest());
-    expect(response.status).toBe(200);
-  });
-
-  it('genre_idsが空の映画が除外される', async () => {
-    const handler = await loadGET();
-
-    mockDiscoverMovies.mockResolvedValueOnce({
-      results: [
-        {
-          id: 203,
-          title: 'ジャンルなし映画',
-          adult: false,
-          original_language: 'ja',
-          genre_ids: [],
-          vote_average: 7.0,
-          popularity: 50,
-        },
-      ],
-      total_pages: 1,
-    });
-
-    setupExpiredCacheFromMock({
-      countResult: { count: 0 },
-      dataResult: { data: [], error: null },
-    });
-
-    const response = await handler(createRequest());
-    expect(response.status).toBe(200);
-  });
-
   it('低評価の映画が除外される（vote_average < MIN_VOTE_AVERAGE）', async () => {
     const handler = await loadGET();
 
@@ -1472,34 +1377,6 @@ describe('GET /api/movies', () => {
       total_pages: 1,
     });
 
-    setupExpiredCacheFromMock({
-      countResult: { count: 0 },
-      dataResult: { data: [], error: null },
-    });
-
-    const response = await handler(createRequest());
-    expect(response.status).toBe(200);
-  });
-
-  it('別のrelease_typeで既に存在するIDの映画が除外される', async () => {
-    const handler = await loadGET();
-
-    mockDiscoverMovies.mockResolvedValueOnce({
-      results: [
-        {
-          id: 300,
-          title: '重複映画',
-          adult: false,
-          original_language: 'ja',
-          genre_ids: [28],
-          vote_average: 7.0,
-          popularity: 50,
-        },
-      ],
-      total_pages: 1,
-    });
-
-    // 既にstreaming側にid=300が存在
     setupExpiredCacheFromMock({
       countResult: { count: 0 },
       dataResult: { data: [], error: null },

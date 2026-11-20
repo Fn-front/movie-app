@@ -29,9 +29,11 @@ import {
   DISCOVER_API_MAX_PAGES,
   MOVIES_FETCH_MONTHS_AHEAD,
   RELEASE_TYPE,
+  RELEASE_TYPE_MAP,
 } from '@/constants/movies';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { discoverMovies } from '@/lib/tmdb/tmdb';
+import { formatDateToString } from '@/utils/date';
 import type { Movie } from '@/lib/types';
 
 import { syncUpcomingMovies } from './syncUpcomingMovies';
@@ -132,6 +134,8 @@ describe('syncUpcomingMovies', () => {
 
       expect(discoverMovies).toHaveBeenCalled();
       expect(result.upserted).toBe(1);
+      // ⚠️ `fetched` は**フィルタ前**の件数（#1166）
+      expect(result.fetched).toBe(1);
       expect(upsertedRows()[0]).toMatchObject({
         id: 100,
         title: 'テスト映画',
@@ -159,6 +163,28 @@ describe('syncUpcomingMovies', () => {
 
       expect(monthsAhead).toBe(MOVIES_FETCH_MONTHS_AHEAD);
       expect(params.sort_by).toBe('popularity.desc');
+
+      // ⚠️ 月数の差だけでは**窓ごと未来へずらす変異を見逃す**。
+      //    起点が今日であることを別に固定する（レビューで実測）
+      expect(params['release_date.gte']).toBe(formatDateToString(new Date()));
+    });
+
+    /**
+     * ⚠️ **`with_release_type` がこの同期を「劇場公開作品の同期」に
+     * している値**。配信（`4`）に変わると、公開予定タブに配信作品が
+     * 劇場公開として入る。
+     *
+     * 兄弟の `syncNowShowingMovies` / `syncStreamingMovies` のテストも
+     * ここをアサートしている。
+     */
+    it('劇場公開の release_type で問い合わせる', async () => {
+      (discoverMovies as jest.Mock).mockResolvedValue(discoverResponse([]));
+
+      await syncUpcomingMovies();
+
+      expect(
+        (discoverMovies as jest.Mock).mock.calls[0][0].with_release_type,
+      ).toBe(RELEASE_TYPE_MAP[RELEASE_TYPE.THEATRICAL]);
     });
 
     /**
@@ -239,6 +265,43 @@ describe('syncUpcomingMovies', () => {
       (discoverMovies as jest.Mock).mockResolvedValue(
         discoverResponse([
           createMockMovie({ id: 1 }),
+          createMockMovie({ id: 2 }),
+        ]),
+      );
+
+      await syncUpcomingMovies();
+
+      expect(upsertedRows().map((row) => row.id)).toEqual([2]);
+    });
+
+    /**
+     * ⚠️ 除外数と採用数が同値になるケースだけだと、`skipped` の式を
+     * 逆にしても通る。**非対称な件数**で固定する。
+     */
+    it('除外した件数を skipped に積む（採用数ではない）', async () => {
+      (discoverMovies as jest.Mock).mockResolvedValue(
+        discoverResponse([
+          createMockMovie({ id: 1, title: 'ナショナル・シアター・ライブ A' }),
+          createMockMovie({ id: 2, title: 'ナショナル・シアター・ライブ B' }),
+          createMockMovie({ id: 3, title: 'ナショナル・シアター・ライブ C' }),
+          createMockMovie({ id: 4, title: '普通の映画' }),
+        ]),
+      );
+
+      const result = await syncUpcomingMovies();
+
+      expect(result.skipped).toBe(3);
+      expect(result.upserted).toBe(1);
+    });
+
+    /**
+     * ⚠️ `isQualityMovie` は adult・除外言語・低評価・低人気度をまとめて
+     * 落とす。移設前は `/api/movies` の route.test.ts が見ていた観点。
+     */
+    it('低品質の作品は保存しない', async () => {
+      (discoverMovies as jest.Mock).mockResolvedValue(
+        discoverResponse([
+          createMockMovie({ id: 1, adult: true }),
           createMockMovie({ id: 2 }),
         ]),
       );

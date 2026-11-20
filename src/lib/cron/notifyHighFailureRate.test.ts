@@ -104,7 +104,6 @@ describe('notifyIfMostlyFailed', () => {
    */
   it.each([
     ['対象が無い', 0, 0],
-    ['対象が無いのに失敗だけある', 0, 5],
     ['全件成功', 50, 0],
   ])('%s なら通知しない', async (_label, attempted, failed) => {
     await expect(
@@ -116,6 +115,74 @@ describe('notifyIfMostlyFailed', () => {
     ).resolves.toBe(false);
 
     expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+  });
+
+  /**
+   * ⚠️ **取得段階で全滅すると `attempted` が 0 になる**（#1354）。
+   *
+   * `syncStreamingMovies` は discover の例外を time_frame 単位で catch して
+   * 続行するため、両方落ちると候補が0件になり作品単位の処理へ進まない。
+   * 失敗率では表現できないが、**これが一番まずい状態**なので通知する。
+   */
+  describe('1件も処理できなかったとき', () => {
+    it('エラーがあれば通知する', async () => {
+      await expect(
+        notifyIfMostlyFailed(supabase, {
+          cronName: 'sync-streaming',
+          attempted: 0,
+          failed: 0,
+          errorCount: 2,
+        }),
+      ).resolves.toBe(true);
+
+      expect(mockNotifyCronFailure).toHaveBeenCalledWith(
+        supabase,
+        expect.objectContaining({
+          reason: expect.stringContaining('1件も取得できませんでした'),
+        }),
+      );
+    });
+
+    // 単に対象が無い日は失敗ではない
+    it('エラーが無ければ通知しない', async () => {
+      await expect(
+        notifyIfMostlyFailed(supabase, {
+          cronName: 'sync-streaming',
+          attempted: 0,
+          failed: 0,
+          errorCount: 0,
+        }),
+      ).resolves.toBe(false);
+
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+    });
+
+    it('errorCount が無ければ通知しない', async () => {
+      await expect(
+        notifyIfMostlyFailed(supabase, {
+          cronName: 'sync-streaming',
+          attempted: 0,
+          failed: 0,
+        }),
+      ).resolves.toBe(false);
+    });
+
+    /**
+     * ⚠️ 率の計算より前に分けること。0 で割ると NaN になり、比較が常に
+     * false になって**たまたま動いている**状態になる。
+     */
+    it('本文に NaN を出さない', async () => {
+      await notifyIfMostlyFailed(supabase, {
+        cronName: 'sync-streaming',
+        attempted: 0,
+        failed: 0,
+        errorCount: 1,
+      });
+
+      expect(mockNotifyCronFailure.mock.calls[0][1].reason).not.toContain(
+        'NaN',
+      );
+    });
   });
 
   it('手がかりを本文に載せる', async () => {
@@ -138,6 +205,20 @@ describe('notifyIfMostlyFailed', () => {
    * ⚠️ 連投抑止の識別子は CRON 名。渡した名前がそのまま
    * `notifyCronFailure` へ行くことを確かめる。
    */
+  /**
+   * ⚠️ パーセントを落とすと「40件中 20件」だけになり、しきい値との
+   * 関係が読めなくなる。受け取る側が毎回割り算する羽目になる。
+   */
+  it('失敗率をパーセントで本文に出す', async () => {
+    await notifyIfMostlyFailed(supabase, {
+      cronName: 'sync-streaming',
+      attempted: 40,
+      failed: 30,
+    });
+
+    expect(mockNotifyCronFailure.mock.calls[0][1].reason).toContain('75%');
+  });
+
   it('CRON 名をそのまま渡す', async () => {
     await notifyIfMostlyFailed(supabase, {
       cronName: 'update-movies',

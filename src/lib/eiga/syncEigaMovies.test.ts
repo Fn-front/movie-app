@@ -1081,6 +1081,8 @@ describe('syncEigaMovies', () => {
 
       expect(result.revivalCorrected).toBe(0);
       expect(result.errors).toEqual(['南極料理人: DB書き込みエラー']);
+      // ⚠️ 記録点ごとに数える（#1354）。リバイバル補正の UPDATE が失敗した経路
+      expect(result.items).toEqual({ attempted: 1, failed: 1 });
     });
 
     it('同じ既存映画が複数エントリにマッチしても補正は1回だけ行う', async () => {
@@ -1193,6 +1195,8 @@ describe('syncEigaMovies', () => {
     expect(result.added).toBe(1);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toBe('例外映画: API接続エラー');
+    // ⚠️ 記録点ごとに数える（#1354）。検索ループの catch。分母は2件、失敗は1件
+    expect(result.items).toEqual({ attempted: 2, failed: 1 });
   });
 
   it('Error以外の例外が発生した場合、Unknown errorとしてerrorsに追加する', async () => {

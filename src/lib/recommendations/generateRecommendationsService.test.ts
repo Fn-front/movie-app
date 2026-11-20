@@ -345,7 +345,14 @@ describe('generateRecommendationsService', () => {
      * 同じ扱いになり、実際には持っている利用者のレコメンドが黙って
      * 作られなくなる
      */
-    it('お気に入りの取得に失敗したら null を返してログに残す', async () => {
+    /**
+     * ⛔ **`null` を返さない（#1354）。**
+     *
+     * 0件と同じ戻り値にすると呼び出し側が「対象外」と区別できず、
+     * CRON の通知が数える `failed` に乗らない。DBエラーで全員ぶん
+     * 生成できなくても無言になる。
+     */
+    it('お気に入りの取得に失敗したら投げてログに残す', async () => {
       const errorSpy = jest
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -353,9 +360,12 @@ describe('generateRecommendationsService', () => {
       try {
         mockPagedQuery([], { message: 'boom' });
 
-        const result = await collectUserMovieData(mockSupabase, 'user-1');
+        // ⚠️ PostgREST のエラーは `Error` ではなくプレーンなオブジェクト。
+        //    `rejects.toThrow()` は中身を見ないまま「投げていない」と判定する
+        await expect(
+          collectUserMovieData(mockSupabase, 'user-1'),
+        ).rejects.toMatchObject({ message: 'boom' });
 
-        expect(result).toBeNull();
         expect(errorSpy).toHaveBeenCalledWith(
           'Favorites query error:',
           expect.anything(),
@@ -432,7 +442,7 @@ describe('generateRecommendationsService', () => {
 
     // ⚠️ 旧チェーン（`is` 止まり）のままだと TypeError で null になり、
     // 「DBエラーで null」を検証したことにならない（#1318 のレビュー指摘）
-    it('お気に入り取得エラーでnullを返す', async () => {
+    it('お気に入り取得エラーは投げる', async () => {
       const errorSpy = jest
         .spyOn(console, 'error')
         .mockImplementation(() => {});
@@ -440,9 +450,10 @@ describe('generateRecommendationsService', () => {
       try {
         mockPagedQuery([], { message: 'err' });
 
-        const result = await collectUserMovieData(mockSupabase, 'user-1');
+        await expect(
+          collectUserMovieData(mockSupabase, 'user-1'),
+        ).rejects.toMatchObject({ message: 'err' });
 
-        expect(result).toBeNull();
         expect(errorSpy).toHaveBeenCalledWith(
           'Favorites query error:',
           expect.anything(),
@@ -1152,7 +1163,14 @@ describe('generateRecommendationsService', () => {
       expect(mockRpc).not.toHaveBeenCalled();
     });
 
-    it('レコメンド0件でskippedを返す', async () => {
+    /**
+     * ⚠️ **`fetchRecommendationsFromOpenAI` は throw しない。**
+     *
+     * キー未設定も HTTPエラーも JSON 破損もスキーマ違反も `null` を返す。
+     * これを「候補が0件」と同じ `skipped` にしていたため、**鍵が失効しても
+     * CRON の通知に一切乗らなかった**（#1354）。
+     */
+    it('OpenAI の呼び出しが失敗したら failed を返す', async () => {
       mockFavoritesQuery([
         { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
       ]);
@@ -1163,7 +1181,66 @@ describe('generateRecommendationsService', () => {
 
       const result = await processUserRecommendations(mockSupabase, 'user-1');
 
+      expect(result.status).toBe('failed');
+    });
+
+    /**
+     * ⚠️ こちらは失敗ではない。候補が1件も残らないのは利用者の嗜好しだいで
+     * 普通に起きる（全部が既視聴・興味なしだった等）。
+     */
+    it('候補が0件なら skipped を返す', async () => {
+      mockFavoritesQuery([
+        { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
+      ]);
+      mockWatchlistQuery([]);
+      mockDismissedMoviesQuery([]);
+
+      mockFetchRecommendations.mockResolvedValue([
+        { title: 'Arrival', year: 2016, reason: 'SF好きに' },
+      ]);
+      mockResolveRecommendations.mockResolvedValue([]);
+
+      const result = await processUserRecommendations(mockSupabase, 'user-1');
+
       expect(result.status).toBe('skipped');
+    });
+
+    /**
+     * ⚠️ 書き込みの失敗は**失敗**。利用者の事情では起きない。
+     */
+    it('洗い替えRPCが失敗したら failed を返す', async () => {
+      const errorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      mockFavoritesQuery([
+        { tmdb_movie_id: 1, title: 'テスト映画', rating: 5 },
+      ]);
+      mockWatchlistQuery([]);
+      mockDismissedMoviesQuery([]);
+
+      mockFetchRecommendations.mockResolvedValue([
+        { title: 'Arrival', year: 2016, reason: 'SF好きに' },
+      ]);
+      mockResolveRecommendations.mockResolvedValue([
+        {
+          tmdb_movie_id: 100,
+          title: 'メッセージ',
+          poster_path: null,
+          release_date: '2016-11-11',
+          vote_average: 7.9,
+          genre_ids: [878],
+          reason: 'SF好きに',
+          display_order: 1,
+        },
+      ]);
+      mockRpc.mockResolvedValueOnce({ data: null, error: new Error('boom') });
+
+      const result = await processUserRecommendations(mockSupabase, 'user-1');
+
+      expect(result.status).toBe('failed');
+
+      errorSpy.mockRestore();
     });
   });
 

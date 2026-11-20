@@ -151,6 +151,42 @@ describe('GET /api/cron/sync-streaming', () => {
       );
     });
 
+    /**
+     * ⚠️ **discover が全滅すると `attempted` が 0 になる**（#1354）。
+     *
+     * このルートだけ取得の例外を time_frame 単位で catch して続行するため、
+     * 両方落ちても 200 / `success: true` / `fetched: 0` で返る。
+     * 率では表現できないので errorCount で拾う。
+     */
+    it('1件も取得できずエラーがあれば通知する', async () => {
+      mockSyncStreaming.mockResolvedValue({
+        fetched: 0,
+        errors: ['early page 1: TMDb 503', 'late page 1: TMDb 503'],
+        items: { attempted: 0, failed: 0 },
+      });
+
+      const response = await GET(createRequest('Bearer test-secret'));
+
+      expect(response.status).toBe(200);
+      expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+        expect.objectContaining({ cronName: 'sync-streaming' }),
+      );
+    });
+
+    // 単に対象が無い日は失敗ではない
+    it('1件も取得できずエラーも無ければ通知しない', async () => {
+      mockSyncStreaming.mockResolvedValue({
+        fetched: 0,
+        errors: [],
+        items: { attempted: 0, failed: 0 },
+      });
+
+      const response = await GET(createRequest('Bearer test-secret'));
+
+      expect(response.status).toBe(200);
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+    });
+
     // ⚠️ 作品側の事情で数件落ちるのは日常。ここで鳴ると無視されるようになる
     it('数件の失敗では通知しない', async () => {
       mockSyncStreaming.mockResolvedValue({

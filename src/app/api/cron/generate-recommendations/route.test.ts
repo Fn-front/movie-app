@@ -315,7 +315,11 @@ describe('GET /api/cron/generate-recommendations', () => {
     expect(json.data.processed_users).toBe(0);
   });
 
-  it('OpenAI APIが失敗した場合、ユーザーをスキップする', async () => {
+  /**
+   * ⚠️ 「対象外」ではなく**失敗**として数える（#1354）。
+   * ここを `skipped` にすると、鍵が失効しても CRON の通知に乗らない。
+   */
+  it('OpenAI APIが失敗した場合、失敗として数える', async () => {
     mockFavoritesUserQuery(['user-1']);
     mockActiveUsersQuery(['user-1']);
     mockFavoritesQuery([{ tmdb_movie_id: 1, title: 'テスト映画', rating: 5 }]);
@@ -329,7 +333,8 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.processed_users).toBe(0);
-    expect(json.data.skipped_users).toBe(1);
+    expect(json.data.failed_users).toBe(1);
+    expect(json.data.skipped_users).toBe(0);
   });
 
   it('TMDb検索で結果が0件の場合、ユーザーをスキップする', async () => {
@@ -379,7 +384,8 @@ describe('GET /api/cron/generate-recommendations', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data.skipped_users).toBe(1);
+    // ⚠️ 書き込みの失敗は**失敗**。利用者の事情では起きない（#1354）
+    expect(json.data.failed_users).toBe(1);
   });
 
   it('レコメンド洗い替えはRPC1回で行い、DELETE/INSERTを個別発行しない', async () => {
@@ -461,7 +467,8 @@ describe('GET /api/cron/generate-recommendations', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.processed_users).toBe(1);
-    expect(json.data.skipped_users).toBe(1);
+    // 例外で落ちた利用者は失敗として数える（#1354）
+    expect(json.data.failed_users).toBe(1);
   });
 
   it('TMDb解決が10件未満の場合、リトライして不足分を補う', async () => {
@@ -772,10 +779,18 @@ describe('GET /api/cron/generate-recommendations', () => {
       mockDismissedMoviesQuery([]);
     };
 
-    it('全員ぶん失敗したら通知する', async () => {
+    /**
+     * ⚠️ **`mockRejectedValue` を使わない。**
+     *
+     * `fetchRecommendationsFromOpenAI` は throw しない。キー未設定も
+     * HTTPエラーも JSON 破損も `null` を返す。reject で書くと
+     * **本番では起こり得ない事象**を検証することになり、実際の経路
+     * （`null` → `skipped` に落ちて無言）を見逃す（#1354 のレビューで実測）。
+     */
+    it('OpenAI が落ちて全員ぶん失敗したら通知する', async () => {
       const error = jest.spyOn(console, 'error').mockImplementation(() => {});
       queueOneUser();
-      mockFetchRecommendations.mockRejectedValue(new Error('openai down'));
+      mockFetchRecommendations.mockResolvedValue(null);
 
       const response = await GET(createRequest('Bearer test-secret'));
       const json = await response.json();

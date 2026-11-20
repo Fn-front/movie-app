@@ -397,6 +397,10 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
 
     if (error) {
       result.errors.push(`upsert: ${error.message}`);
+      // ⚠️ 作品単位の失敗として数える（#1354）。ここを `errors` だけに
+      //    積むと、**書き込みが1件も通っていないのに `failed` が 0** になり
+      //    通知に乗らない。syncNowPlayingMovies は数えているので形も揃える
+      result.items.failed += movieRows.length;
       continue;
     }
 

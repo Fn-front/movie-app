@@ -34,6 +34,8 @@ export async function GET(request: NextRequest) {
       cronName: 'sync-watchlist-streaming',
       attempted: result.targets,
       failed: result.failed,
+      // 取得段階で全滅すると attempted が 0 になり、率では表現できない（#1354）
+      errorCount: result.errors.length,
       detail: result.errors.slice(0, 3).join('\n'),
     });
 

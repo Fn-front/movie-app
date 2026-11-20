@@ -35,8 +35,28 @@ export interface FailureRateNotice {
    * 一緒に数えると、正常な実行で通知が出る。
    */
   failed: number;
+  /**
+   * 全体のエラー件数（作品単位でないものを含む）
+   *
+   * ⚠️ **`attempted === 0` のときだけ見る。** 取得段階で全滅すると
+   * 作品単位の処理へ1件も進まないため `attempted` が 0 になり、
+   * 失敗率では表現できない。それでも 200 / `success: true` で返るので
+   * 誰にも届かない（#1354 のレビューで実測）。
+   *
+   * 実際に当たるのは `syncStreamingMovies` だけ。あちらは discover の
+   * 例外を time_frame 単位で catch して続行する。他の同期は取得段階の
+   * 例外がそのまま上がるので 500 → `handleCronError` の通知に乗る。
+   */
+  errorCount?: number;
   /** 原因の手がかり。メール本文に入る */
   detail?: string;
+}
+
+/** 件数とパーセントの行 */
+function formatRate(attempted: number, failed: number): string {
+  return `${attempted}件中 ${failed}件が失敗しました（${Math.round(
+    (failed / attempted) * 100,
+  )}%）`;
 }
 
 /**
@@ -51,24 +71,32 @@ export interface FailureRateNotice {
  */
 export async function notifyIfMostlyFailed(
   supabase: SupabaseClient | null,
-  { cronName, attempted, failed, detail }: FailureRateNotice,
+  { cronName, attempted, failed, errorCount, detail }: FailureRateNotice,
 ): Promise<boolean> {
-  // 対象が無い実行は失敗ではない。
+  // ⚠️ 1件も処理に入れなかったとき。
   //
-  // ⚠️ ここを通すと 0/0 が NaN になり、比較が常に false になって
-  // 「たまたま動いている」状態になる。明示的に弾く
-  if (attempted <= 0 || failed <= 0) return false;
+  //   エラーが無ければ単に対象が無い日なので何もしない。エラーがあるなら
+  //   **取得段階で全滅している**ので、失敗率を計算できなくても通知する。
+  //   ここを素通りさせると「最悪のケースだけが黙る」ことになる。
+  //
+  //   0 で割らないよう、率の計算より前に分ける
+  if (attempted <= 0) {
+    if (!errorCount) return false;
 
-  const rate = failed / attempted;
+    return notifyCronFailure(supabase, {
+      cronName,
+      reason:
+        `処理対象を1件も取得できませんでした（エラー ${errorCount}件）` +
+        (detail ? `\n${detail}` : ''),
+    });
+  }
 
-  if (rate < CRON_FAILURE_RATE_THRESHOLD) return false;
-
-  const percent = Math.round(rate * 100);
+  // ⚠️ `failed <= 0` を別に弾かない。率が 0 になってしきい値を下回るので
+  //    同じ結果になり、**条件が2つあると片方が死んでいても気づけない**
+  if (failed / attempted < CRON_FAILURE_RATE_THRESHOLD) return false;
 
   return notifyCronFailure(supabase, {
     cronName,
-    reason:
-      `${attempted}件中 ${failed}件が失敗しました（${percent}%）` +
-      (detail ? `\n${detail}` : ''),
+    reason: formatRate(attempted, failed) + (detail ? `\n${detail}` : ''),
   });
 }

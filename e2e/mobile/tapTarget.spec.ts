@@ -369,9 +369,27 @@ test.describe('スマホ幅のタップ領域', () => {
     }) => {
       await page.goto(path);
       await expect(page.locator('h1').first()).toBeAttached({ timeout: 20000 });
+
       // ⚠️ h1 はデータ取得より先に出る。待たずに掛けると数ノードしか
-      // 評価されず、緑でも何も見ていないのと同じになる（#1071 と同じ罠）
-      await page.waitForLoadState('networkidle');
+      // 評価されず、緑でも何も見ていないのと同じになる（#1071 と同じ罠）。
+      //
+      // ⛔ `waitForLoadState('networkidle')` だけに頼らない（#1333）。
+      //   ポスターは Next.js の画像最適化を通るため、一覧ページでは
+      //   表示件数ぶんの `/_next/image` が走る。CI の遅いランナーでは
+      //   「500ms 無通信」に到達せず 30秒で**テストごと落ちていた**。
+      //   到達すれば嬉しいが、到達しなくても続行する。
+      await page
+        .waitForLoadState('networkidle', { timeout: 10000 })
+        .catch(() => {
+          // 画像の取得が続いているだけ。下の「中身が描かれたか」で判断する
+        });
+
+      // 本当に見たいのは通信の収束ではなく**中身が描かれたこと**。
+      // スケルトンが消えていれば、データ取得は終わって本体が描かれている。
+      // 一覧を持たないページ（/settings）はそもそも0件なので即座に通る
+      await expect(
+        page.locator('[class*="c_movie_tile_skeleton"]'),
+      ).toHaveCount(0, { timeout: 20000 });
 
       await expectNoTargetSizeViolations(page, `${path}（SP幅）`);
     });

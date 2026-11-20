@@ -76,7 +76,14 @@ test.describe('映画詳細のURL化', () => {
       timeout: 15000,
     });
     // 一覧は残っている（Radix が背景を aria-hidden にするので CSS で見る）
-    await expect(page.locator('h1')).toHaveText('公開中の映画');
+    // ⚠️ `.first()` を外さないこと（#1333）。遷移中は Radix のタブパネルが
+    // 新旧2つ並ぶ瞬間があり、同じ文言の h1 が2件になって strict mode
+    // violation で落ちる（実測で3回に1回ほど）。
+    //
+    // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
+    //   背後が `aria-hidden` になるため role では拾えず、element not found で
+    //   必ず落ちる（置き換えて実測した）。CSS ロケータのまま先頭を見る
+    await expect(page.locator('h1').first()).toHaveText('公開中の映画');
 
     // 増えてよいのは history.pushState の1つだけ。`Modal` が `useOverlayHistory` で
     // 自前のエントリも積むと2つ伸びる。戻る／進む／× の見え方は二重でも
@@ -103,7 +110,14 @@ test.describe('映画詳細のURL化', () => {
 
     await expect(page).toHaveURL(MODAL_URL);
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 20000 });
-    await expect(page.locator('h1')).toHaveText('公開中の映画');
+    // ⚠️ `.first()` を外さないこと（#1333）。遷移中は Radix のタブパネルが
+    // 新旧2つ並ぶ瞬間があり、同じ文言の h1 が2件になって strict mode
+    // violation で落ちる（実測で3回に1回ほど）。
+    //
+    // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
+    //   背後が `aria-hidden` になるため role では拾えず、element not found で
+    //   必ず落ちる（置き換えて実測した）。CSS ロケータのまま先頭を見る
+    await expect(page.locator('h1').first()).toHaveText('公開中の映画');
   });
 
   test('戻るでモーダルが閉じ、進むで再び開く', async ({ page }) => {
@@ -535,7 +549,14 @@ test.describe('映画詳細のURL化', () => {
 
       await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(page).toHaveURL(/\/movies\/now-showing$/);
-      await expect(page.locator('h1')).toHaveText('公開中の映画');
+      // ⚠️ `.first()` を外さないこと（#1333）。遷移中は Radix のタブパネルが
+    // 新旧2つ並ぶ瞬間があり、同じ文言の h1 が2件になって strict mode
+    // violation で落ちる（実測で3回に1回ほど）。
+    //
+    // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
+    //   背後が `aria-hidden` になるため role では拾えず、element not found で
+    //   必ず落ちる（置き換えて実測した）。CSS ロケータのまま先頭を見る
+    await expect(page.locator('h1').first()).toHaveText('公開中の映画');
     });
 
     test('Esc でも閉じる', async ({ page }) => {

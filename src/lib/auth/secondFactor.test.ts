@@ -20,6 +20,7 @@ import { hashOtpCode } from '@/lib/otp/hashOtpCode';
 import {
   countUnusedRecoveryCodes,
   getSecondFactorMethod,
+  getSecondFactorMethodIncludingPending,
   SECOND_FACTOR_VERIFY_RESULT,
   verifySecondFactor,
 } from './secondFactor';
@@ -342,6 +343,66 @@ describe('getSecondFactorMethod', () => {
   it('DB エラーなら throw する（未設定として扱わない）', async () => {
     await expect(
       getSecondFactorMethod(createFailingSupabaseMock(), USER_ID),
+    ).rejects.toThrow(/connection terminated/);
+  });
+});
+
+/**
+ * 設定途中も含めて方式を返す（#1285）
+ *
+ * `user/totp/send-challenge` だけがこちらを使う。設定中の再送を
+ * `setup` の叩き直しでやると `TOTP_SETTINGS_VERIFY`（5回/15分）を
+ * 消費し、4回再送しただけで「有効にする」が 429 になる。
+ *
+ * ⛔ ログインのガードには使わない（そちらは `getSecondFactorMethod`）。
+ */
+describe('getSecondFactorMethodIncludingPending', () => {
+  it('設定途中（confirmed_at が NULL）でも方式を返す', async () => {
+    const db: FakeDb = {
+      totp: {
+        encrypted_secret: '',
+        confirmed_at: null,
+        last_used_counter: null,
+        method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+      },
+      recoveryCodes: [],
+    };
+
+    await expect(
+      getSecondFactorMethodIncludingPending(createSupabaseMock(db), USER_ID),
+    ).resolves.toBe(SECOND_FACTOR_METHOD.EMAIL_OTP);
+  });
+
+  it('確認済みの行でも方式を返す', async () => {
+    const db: FakeDb = {
+      totp: {
+        encrypted_secret: '',
+        confirmed_at: '2026-11-18T00:00:00Z',
+        last_used_counter: null,
+        method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+      },
+      recoveryCodes: [],
+    };
+
+    await expect(
+      getSecondFactorMethodIncludingPending(createSupabaseMock(db), USER_ID),
+    ).resolves.toBe(SECOND_FACTOR_METHOD.EMAIL_OTP);
+  });
+
+  it('行が無ければ null', async () => {
+    const db: FakeDb = { totp: null, recoveryCodes: [] };
+
+    await expect(
+      getSecondFactorMethodIncludingPending(createSupabaseMock(db), USER_ID),
+    ).resolves.toBeNull();
+  });
+
+  it('DB エラーなら throw する（未設定として扱わない）', async () => {
+    await expect(
+      getSecondFactorMethodIncludingPending(
+        createFailingSupabaseMock(),
+        USER_ID,
+      ),
     ).rejects.toThrow(/connection terminated/);
   });
 });

@@ -35,6 +35,9 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
     notice,
     startSetup,
     sendChallenge,
+    resendSetupCode,
+    resendRemaining,
+    canResendSetupCode,
     enable,
     disable,
     regenerateRecoveryCodes,
@@ -167,9 +170,14 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
           className={styles.c_two_factor_settings__setup}
           onSubmit={handleEnable}
         >
+          {/*
+            ⚠️ ここで「送りました」と断定しない（#1285）。
+            再送間隔に当たると**1通も送っていない**のにこの文が出て、
+            上の `notice`（「先ほど送った確認コードがまだ有効です」）と
+            矛盾する。送信の結果は notice 側だけが言う。
+          */}
           <p className={styles.c_two_factor_settings__lead}>
-            登録しているメールアドレスに確認コードを送りました。
-            届いた6桁のコードを入力してください。
+            登録しているメールアドレスに届いた6桁のコードを入力してください。
           </p>
 
           <Input
@@ -200,6 +208,45 @@ export const TwoFactorSettings = memo(function TwoFactorSettings() {
             >
               やめる
             </Button>
+          </div>
+
+          {/*
+            設定中の再送（#1285）
+
+            これが無いと、コードの試行回数（5回）を使い切った利用者は
+            「やめる → メールで設定する」でやり直すしかない。60秒以内だと
+            再送間隔に当たって1通も届かないまま同じ画面に戻るため、
+            最大60秒のあいだ何をしても進めない窓ができていた。
+
+            ⚠️ `sendChallenge`（`ENABLED` の再送）は使えない。あちらが叩く
+            `send-challenge` は `confirmed_at IS NOT NULL` が前提で、
+            まだ有効化していない設定中のユーザーには何も送れない。
+
+            ⚠️ `aria-label` は付けない。本文が「送信しています…」に変わるのに
+            固定のラベルを置くと、見えている文字がアクセシブルネームに
+            含まれなくなる（WCAG 2.5.3 Label in Name）。
+            他の再送ボタン（`twoFactorChallenge`）と同じ扱い
+          */}
+          <div className={styles.c_two_factor_settings__resend}>
+            <Button
+              type='button'
+              variant='secondary'
+              onClick={resendSetupCode}
+              disabled={!canResendSetupCode || isSubmitting}
+            >
+              {isSubmitting ? '送信しています…' : '確認コードを再送信する'}
+            </Button>
+
+            {/*
+              ⚠️ `aria-live` を付けない。本文が毎秒変わるため、polite の
+              キューに60件のアナウンスが積まれ、読み上げが追いつかなくなる。
+              押せない理由はボタンの `disabled` が伝える
+            */}
+            <p className={styles.c_two_factor_settings__resend_hint}>
+              {canResendSetupCode
+                ? '再送信できます。'
+                : `再送信できるまで ${resendRemaining} 秒`}
+            </p>
           </div>
         </form>
       )}

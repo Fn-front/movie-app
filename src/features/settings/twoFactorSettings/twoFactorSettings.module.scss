@@ -63,6 +63,19 @@
   gap: $spacing-3;
 }
 
+// 設定中（メールOTP）だけに出る再送の導線（#1285）
+.c_two_factor_settings__resend {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+  margin-top: $spacing-4;
+}
+
+.c_two_factor_settings__resend_hint {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+}
+
 .c_two_factor_settings__recovery {
   display: flex;
   flex-direction: column;

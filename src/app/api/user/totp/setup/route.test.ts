@@ -7,6 +7,7 @@
  */
 
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
+import { SECOND_FACTOR_MESSAGES } from '@/constants/secondFactor';
 
 import { TotpAlreadyEnabledError } from '@/lib/auth/totpSetup';
 
@@ -257,6 +258,46 @@ describe('POST /api/user/totp/setup', () => {
         'user@example.com',
         'user@example.com',
       );
+    });
+
+    /**
+     * ⚠️ 送れたときだけ「送信しました」と言う（#1285）
+     *
+     * SENT と THROTTLED はどちらも 200 だが、THROTTLED では**1通も
+     * 送っていない**。同じ文言を返していたため、再送間隔に当たった利用者は
+     * 届かないコードを待つか、受信箱の古いコードを入れて弾かれ続けた。
+     */
+    it('送信できたら CODE_SENT と throttled:false を返す', async () => {
+      mockUserLookup('user@example.com');
+      mockStartSecondFactorSetup.mockResolvedValue({
+        method: 'email_otp',
+        sendResult: 'sent',
+      });
+
+      const response = await POST(createRequest({ method: 'email_otp' }));
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.message).toBe(SECOND_FACTOR_MESSAGES.CODE_SENT);
+      expect(json.data.throttled).toBe(false);
+    });
+
+    it('再送間隔に当たったら CODE_ALREADY_SENT と throttled:true を返す', async () => {
+      mockUserLookup('user@example.com');
+      mockStartSecondFactorSetup.mockResolvedValue({
+        method: 'email_otp',
+        sendResult: 'throttled',
+      });
+
+      const response = await POST(createRequest({ method: 'email_otp' }));
+      const json = await response.json();
+
+      // ⚠️ 429 にはしない。直前のコードはまだ有効で、利用者がやることは
+      // 「受信箱を見る」であって「待つ」ではない
+      expect(response.status).toBe(200);
+      expect(json.message).toBe(SECOND_FACTOR_MESSAGES.CODE_ALREADY_SENT);
+      expect(json.message).not.toBe(SECOND_FACTOR_MESSAGES.CODE_SENT);
+      expect(json.data.throttled).toBe(true);
     });
 
     it('不正な方式は400で、設定を開始しない', async () => {

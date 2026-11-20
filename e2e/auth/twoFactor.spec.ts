@@ -335,7 +335,11 @@ test.describe('二段階認証', () => {
     await page.getByRole('button', { name: 'メールで設定する' }).click();
 
     // コードはサーバーが送信済み。DB から取り出して入力する
-    await expect(page.getByText(/確認コードを送りました/)).toBeVisible();
+    // リード文は「送りました」と断定しなくなった（#1285）。送信の結果は
+    // notice 側が言う
+    await expect(
+      page.getByText('確認コードをメールに送信しました。'),
+    ).toBeVisible();
 
     const code = await getLatestOtpCode(USER.email, 'two_factor');
     expect(code).not.toBeNull();

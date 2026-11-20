@@ -103,6 +103,37 @@ export async function getSecondFactorMethod(
 }
 
 /**
+ * **設定途中も含めた**方式を返す（#1285）
+ *
+ * `getSecondFactorMethod` は `confirmed_at IS NOT NULL` で絞るため、
+ * まだ有効化していない利用者には使えない。設定中にコードを送り直す経路
+ * （`user/totp/send-challenge`）だけがこちらを使う。
+ *
+ * ⛔ **ログインのガードには使わないこと。** あちらは「有効なら第2要素を
+ * 要求する」判定で、設定途中の行まで有効とみなすと、まだ使えない方式で
+ * ログインを止めてしまう。
+ *
+ * @param supabase - service_role のクライアント
+ * @param userId - 対象ユーザー
+ * @returns 有効または設定途中の方式。どちらも無ければ null
+ */
+export async function getSecondFactorMethodIncludingPending(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<SecondFactorMethod | null> {
+  const { data, error } = await supabase
+    .from('user_totp')
+    .select('method')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  // 握り潰さない理由は上と同じ。読めないなら拒否側へ倒す
+  if (error) throw toDbError(error, 'read user_totp including pending');
+
+  return (data?.method as SecondFactorMethod | undefined) ?? null;
+}
+
+/**
  * 認証アプリのコードを検証する
  *
  * @param supabase - service_role のクライアント

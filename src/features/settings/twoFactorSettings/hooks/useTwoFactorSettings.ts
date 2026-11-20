@@ -17,6 +17,8 @@ import {
   SECOND_FACTOR_METHOD,
   type SecondFactorMethod,
 } from '@/constants/secondFactor';
+import { OTP_CONFIG } from '@/constants/otp';
+import { useResendCountdown } from '@/features/auth/hooks/useResendCountdown';
 
 /** 画面の状態 */
 export const TWO_FACTOR_VIEW = {
@@ -76,6 +78,16 @@ interface UseTwoFactorSettingsResult {
    * できない。手元でコードを作れないため。
    */
   sendChallenge: () => Promise<void>;
+  /**
+   * 設定中（メールOTP）にコードを送り直す（#1285）
+   *
+   * `sendChallenge` は有効化済みのユーザーにしか効かないため別にする。
+   */
+  resendSetupCode: () => Promise<void>;
+  /** 設定中の再送が押せるようになるまでの秒数 */
+  resendRemaining: number;
+  /** 設定中の再送が押せるか */
+  canResendSetupCode: boolean;
   /** リカバリーコードの表示を閉じる */
   dismissRecoveryCodes: () => void;
   cancelSetup: () => void;
@@ -98,6 +110,20 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
 
   /** 送信中かどうか。再入の判定に使う（state だと古い値を掴む） */
   const inFlightRef = useRef(false);
+
+  /**
+   * 設定中（メールOTP）の再送クールダウン（#1285）
+   *
+   * サーバー側の再送間隔は `OTP_CONFIG.RESEND_INTERVAL_SECONDS`。ここを
+   * 超えて押させても `THROTTLED` で何も送られないので、押せる時刻まで
+   * ボタンを無効にして理由を見せる。他の画面（ログイン・OAuth の第2要素）と
+   * 同じ作法に揃える。
+   */
+  const {
+    remaining: resendRemaining,
+    canResend,
+    restart: restartResendCountdown,
+  } = useResendCountdown(OTP_CONFIG.RESEND_INTERVAL_SECONDS);
 
   /** 現在の状態を取得して画面に反映する */
   const loadStatus = useCallback(async () => {
@@ -195,6 +221,27 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
         setQrCodeDataUri(null);
         setSecret(null);
         setView(TWO_FACTOR_VIEW.SETUP_EMAIL);
+
+        // ⚠️ 送信の結果を言うのは**ここだけ**（#1285）。
+        //
+        //   画面のリード文は「届いたコードを入力してください」に留めてある。
+        //   以前は「確認コードを送りました」と断定していたため、再送間隔に
+        //   当たって**1通も送っていない**ときでもそう表示され、しかも
+        //   `CODE_ALREADY_SENT` と同時に出て矛盾していた。
+        //
+        //   やめる→メールで設定する を60秒以内にやり直すと必ず throttled を通る
+        const data = json.data as { throttled?: boolean } | undefined;
+        setNotice(
+          data?.throttled
+            ? SECOND_FACTOR_MESSAGES.CODE_ALREADY_SENT
+            : SECOND_FACTOR_MESSAGES.CODE_SENT,
+        );
+
+        // ⚠️ THROTTLED のときも60秒から数え直す。サーバーは「あと何秒で
+        //   押せるか」を返さないため、ここでは上限しか分からない。
+        //   手元のコードは生きているので待つ必要は無く、余分に待つのは
+        //   「もう1通ほしい」人だけ。押せるのに弾かれるより軽い
+        restartResendCountdown();
         return;
       }
 
@@ -203,8 +250,36 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
       setSecret(data.secret);
       setView(TWO_FACTOR_VIEW.SETUP);
     },
-    [post],
+    [post, restartResendCountdown],
   );
+
+  /**
+   * 設定中（メールOTP）にコードを送り直す（#1285）
+   *
+   * これが無いと、コードの試行回数（5回）を使い切った利用者は
+   * 「やめる → メールで設定する」でやり直すしかなく、60秒以内だと
+   * `THROTTLED` で1通も届かないまま同じ画面に戻される。
+   *
+   * ⚠️ **`setup` を叩き直さないこと。** あちらは `TOTP_SETTINGS_VERIFY`
+   * （5回/15分）を消費するので、
+   *
+   *   setup(1) + 再送×4 = 5 → 6回目の「有効にする」が 429 で15分ロック
+   *
+   * となり、**この Issue が直そうとしている行き止まりを別の形で作る**。
+   * `send-challenge` は設定途中も対象にしてあり（#1285）、効くのは
+   * `TWO_FACTOR_SEND`（10回/60分）だけ。`user_totp` も作り直さない。
+   *
+   * ⚠️ 失敗しても `restart` しない。`post` が `error` を立てているので
+   * 押せる状態のまま理由が出るほうが正しい（押し直せる）。
+   */
+  const resendSetupCode = useCallback(async () => {
+    const json = await post(API_ENDPOINTS.USER_TOTP_SEND_CHALLENGE);
+    if (!json) return;
+
+    // 画面の状態が変わらないので、送れたことを文言で伝える
+    setNotice(SECOND_FACTOR_MESSAGES.CODE_SENT);
+    restartResendCountdown();
+  }, [post, restartResendCountdown]);
 
   /**
    * 設定変更に使うコードを送る（メールOTP のみ）
@@ -292,6 +367,9 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
     notice,
     startSetup,
     sendChallenge,
+    resendSetupCode,
+    resendRemaining,
+    canResendSetupCode: canResend,
     enable,
     disable,
     regenerateRecoveryCodes,

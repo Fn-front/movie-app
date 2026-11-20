@@ -27,7 +27,7 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { errorResponse } from '@/helpers/secondFactorGuard';
-import { getSecondFactorMethod } from '@/lib/auth/secondFactor';
+import { getSecondFactorMethodIncludingPending } from '@/lib/auth/secondFactor';
 import {
   SEND_SECOND_FACTOR_RESULT,
   sendSecondFactorCode,
@@ -48,7 +48,26 @@ export async function POST() {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    const method = await getSecondFactorMethod(supabase, session.user.id);
+    // ⚠️ **設定途中も対象にする**（#1285）。
+    //
+    // `getSecondFactorMethod` は `confirmed_at IS NOT NULL` で絞るため、
+    // 設定している最中の利用者には何も送れなかった。そのせいで設定中の
+    // 再送は `setup` を叩き直すしかなく、**`TOTP_SETTINGS_VERIFY`
+    // （5回/15分）を再送のたびに消費**していた。
+    //
+    //   setup(1) + 再送×4 = 5 → 6回目の「有効にする」が 429 で15分ロック
+    //
+    // これはこのルートが最初から避けようとしていた形そのもの（上のコメント）。
+    // 設定中もここを通せば、効くのは `sendSecondFactorCode` の中の
+    // `TWO_FACTOR_SEND`（10回/60分）だけになり、`user_totp` の
+    // DELETE + INSERT も起きない。
+    //
+    // 送り先はセッションのユーザーに固定されたまま（下の users 検索）なので、
+    // 対象を広げても新しい攻撃面は増えない。
+    const method = await getSecondFactorMethodIncludingPending(
+      supabase,
+      session.user.id,
+    );
 
     // TOTP の利用者には送らない。手元の認証アプリで作れるので不要だし、
     // 送れてしまうと「送信経路を1つ増やしただけ」になる

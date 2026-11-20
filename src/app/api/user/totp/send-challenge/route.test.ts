@@ -26,10 +26,17 @@ jest.mock('@/helpers/auth', () => ({
     new Response(JSON.stringify({ success: false }), { status: 401 }),
 }));
 
+/**
+ * ⚠️ 差し替えるのは **`...IncludingPending`** のほう（#1285）。
+ *
+ * このルートは設定途中の利用者にも送る（再送の経路）。
+ * `getSecondFactorMethod` は `confirmed_at IS NOT NULL` で絞るため、
+ * そちらをモックしても実装は別の関数を呼んでいて噛み合わない。
+ */
 const mockGetSecondFactorMethod = jest.fn();
 jest.mock('@/lib/auth/secondFactor', () => ({
   ...jest.requireActual('@/lib/auth/secondFactor'),
-  getSecondFactorMethod: (...args: unknown[]) =>
+  getSecondFactorMethodIncludingPending: (...args: unknown[]) =>
     mockGetSecondFactorMethod(...args),
 }));
 
@@ -123,6 +130,34 @@ describe('POST /api/user/totp/send-challenge', () => {
 
     expect(response.status).toBe(400);
     expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 設定途中の利用者にも送る（#1285）
+   *
+   * ⚠️ `confirmed_at IS NOT NULL` で絞っていた頃は、設定中の再送が
+   * `setup` を叩き直すしかなく、**`TOTP_SETTINGS_VERIFY`（5回/15分）を
+   * 再送のたびに消費**していた。
+   *
+   *   setup(1) + 再送×4 = 5 → 6回目の「有効にする」が 429 で15分ロック
+   *
+   * これはこのルートが最初から避けようとしていた形そのもの。
+   */
+  it('設定途中（confirmed_at が未設定）の方式も対象にする', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path') as typeof import('path');
+
+    const routeSource = fs.readFileSync(
+      path.join(__dirname, 'route.ts'),
+      'utf8',
+    );
+    const code = routeSource.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
+
+    // ⛔ `confirmed_at` で絞る側を使わない
+    expect(code).toContain('getSecondFactorMethodIncludingPending');
+    expect(code).not.toMatch(/\bgetSecondFactorMethod\s*\(/);
   });
 
   /**

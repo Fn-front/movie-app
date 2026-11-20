@@ -15,7 +15,10 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { confirmSecondFactorSetup } from '@/lib/auth/totpSetup';
+import {
+  SECOND_FACTOR_SETUP_EXPIRED,
+  confirmSecondFactorSetup,
+} from '@/lib/auth/totpSetup';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import { totpEnableSchema } from '@/schema/totp';
 import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
@@ -91,6 +94,23 @@ export async function POST(request: Request) {
       result.data.code,
       user.email,
     );
+
+    // ⚠️ **「コードが違う」と区別する**（#1368 の2回目レビュー）。
+    //   同じ文言にすると、届いたばかりの正しいコードを入れた利用者が
+    //   自分の入力を疑って再送と入力を繰り返し、`TOTP_SETTINGS_VERIFY` を
+    //   使い切る（5回で設定操作がまとめて15分 429）
+    if (confirmed === SECOND_FACTOR_SETUP_EXPIRED) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.BAD_REQUEST,
+            message: TOTP_ERROR_MESSAGES.SETUP_EXPIRED,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
+    }
 
     if (!confirmed) {
       return NextResponse.json(

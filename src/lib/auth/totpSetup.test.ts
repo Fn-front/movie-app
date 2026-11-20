@@ -25,8 +25,10 @@ import {
   confirmSecondFactorSetup,
   disableTotp,
   regenerateRecoveryCodes,
+  SECOND_FACTOR_SETUP_EXPIRED,
   startSecondFactorSetup,
   TotpAlreadyEnabledError,
+  type ConfirmSecondFactorSetupResult,
 } from './totpSetup';
 
 // --- Mocks ---
@@ -70,7 +72,10 @@ interface FakeDb {
  * 有効化は「設定途中の行だけを更新する」条件付きUPDATEなので、
  * `.is('confirmed_at', null)` を実際に評価する。
  */
-function createSupabaseMock(db: FakeDb): SupabaseClient {
+function createSupabaseMock(
+  db: FakeDb,
+  options: { recoveryCodeInsertError?: unknown } = {},
+): SupabaseClient {
   const from = (table: string) => {
     const state: {
       action: 'select' | 'update' | 'delete' | 'insert';
@@ -108,6 +113,10 @@ function createSupabaseMock(db: FakeDb): SupabaseClient {
           last_used_counter: null,
         } as FakeDb['totp'];
       } else {
+        if (options.recoveryCodeInsertError) {
+          return Promise.resolve({ error: options.recoveryCodeInsertError });
+        }
+
         db.recoveryCodes.push(
           ...(payload as Array<{ user_id: string; code_hash: string }>),
         );
@@ -361,6 +370,21 @@ describe('startSecondFactorSetup（method=totp）', () => {
   });
 });
 
+/**
+ * 成功した結果として扱う（型を絞る）
+ *
+ * ⚠️ `confirmSecondFactorSetup` は期限切れのとき文字列を返す。
+ * 成功を見るテストでは、その可能性をここで潰す。
+ */
+function asSuccess(
+  result: Awaited<ReturnType<typeof confirmSecondFactorSetup>>,
+) {
+  expect(result).not.toBeNull();
+  expect(typeof result).not.toBe('string');
+
+  return result as ConfirmSecondFactorSetupResult;
+}
+
 describe('confirmSecondFactorSetup', () => {
   /** 設定途中の状態を作る */
   const setupInProgress = () => {
@@ -405,7 +429,7 @@ describe('confirmSecondFactorSetup', () => {
       EMAIL,
     );
 
-    expect(result?.codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
+    expect(asSuccess(result).codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
     expect(db.recoveryCodes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
   });
 
@@ -426,7 +450,7 @@ describe('confirmSecondFactorSetup', () => {
       EMAIL,
     );
 
-    expect(result?.method).toBe(SECOND_FACTOR_METHOD.TOTP);
+    expect(asSuccess(result).method).toBe(SECOND_FACTOR_METHOD.TOTP);
   });
 
   it('返したコードのハッシュを保存する', async () => {
@@ -439,7 +463,7 @@ describe('confirmSecondFactorSetup', () => {
       EMAIL,
     );
 
-    result!.codes.forEach((code: string) => {
+    asSuccess(result).codes.forEach((code: string) => {
       expect(db.recoveryCodes.map((row) => row.code_hash)).toContain(
         hashRecoveryCode(code),
       );
@@ -467,8 +491,9 @@ describe('confirmSecondFactorSetup', () => {
         generateTotpCode(secret),
         EMAIL,
       ),
-    ).resolves.toBeNull();
-    expect(db.totp?.confirmed_at).toBeNull();
+    ).resolves.toBe(SECOND_FACTOR_SETUP_EXPIRED);
+    // ⚠️ 行ごと消す。残すと `send-challenge` が使えないコードを送り続ける
+    expect(db.totp).toBeNull();
   });
 
   // 期限の内側は通る（短すぎて正規の利用者を締め出していないこと）
@@ -486,6 +511,36 @@ describe('confirmSecondFactorSetup', () => {
         EMAIL,
       ),
     ).resolves.not.toBeNull();
+  });
+
+  /**
+   * ⛔ **リカバリーコードの保存は `confirmed_at` より前**（#1368 の2回目レビュー）。
+   *
+   * 逆順だと、保存に失敗したときに**二段階認証は有効なのにリカバリーコードが
+   * 0件**になる。`replaceRecoveryCodes` は「全件 DELETE → INSERT」なので、
+   * INSERT だけ失敗すると DB にも画面にも1件も残らない。認証アプリを失えば
+   * 恒久的にロックアウトされる。
+   *
+   * 逆に、先に保存して確定に失敗した場合は二段階認証が無効のままなので、
+   * 使えないコードが残るだけで実害が無い（次の成功時に全件差し替わる）。
+   */
+  it('リカバリーコードを保存できなければ有効化しない', async () => {
+    const { secret, db } = setupInProgress();
+
+    await expect(
+      confirmSecondFactorSetup(
+        createSupabaseMock(db, {
+          recoveryCodeInsertError: { message: 'insert failed' },
+        }),
+        USER_ID,
+        generateTotpCode(secret),
+        EMAIL,
+      ),
+    ).rejects.toThrow();
+
+    // ⛔ ここが本題。有効化が先に通っていると、この行が入ったまま
+    //    リカバリーコード0件で二段階認証だけ有効になる
+    expect(db.totp?.confirmed_at).toBeNull();
   });
 
   it('誤ったコードでは有効化しない', async () => {
@@ -560,7 +615,7 @@ describe('confirmSecondFactorSetup', () => {
       EMAIL,
     );
 
-    expect(result?.codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
+    expect(asSuccess(result).codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
   });
 });
 
@@ -831,6 +886,10 @@ describe('confirmSecondFactorSetup（method=email_otp）', () => {
       confirmed_at: null,
       last_used_counter: null,
       method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+      // ⚠️ 省くと `new Date(undefined)` が NaN になり、保留行の TTL の
+      //    比較が常に false へ倒れて**この describe 全体が検証をすり抜ける**
+      //    （#1368 の2回目レビューで実測）
+      created_at: new Date().toISOString(),
     } as FakeDb['totp'];
     return db;
   };
@@ -854,15 +913,36 @@ describe('confirmSecondFactorSetup（method=email_otp）', () => {
       EMAIL,
     );
 
-    expect(result?.codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
+    expect(asSuccess(result).codes).toHaveLength(RECOVERY_CODE_CONFIG.COUNT);
     // ⛔ メールOTP でも方式を返す（#1368 のレビュー）
-    expect(result?.method).toBe(SECOND_FACTOR_METHOD.EMAIL_OTP);
+    expect(asSuccess(result).method).toBe(SECOND_FACTOR_METHOD.EMAIL_OTP);
     expect(db.totp?.confirmed_at).not.toBeNull();
     expect(mockConsumeSecondFactorEmailCode).toHaveBeenCalledWith(
       expect.anything(),
       EMAIL,
       '123456',
     );
+  });
+
+  // TTL は方式によらず効く（#1368 の2回目レビュー）
+  it('保留のまま期限を過ぎた行では有効化しない', async () => {
+    const db = emailSetupInProgress();
+    db.totp!.created_at = new Date(
+      Date.now() - (TOTP_SETUP_PENDING_TTL_MINUTES + 1) * 60 * 1000,
+    ).toISOString();
+
+    await expect(
+      confirmSecondFactorSetup(
+        createSupabaseMock(db),
+        USER_ID,
+        '123456',
+        EMAIL,
+      ),
+    ).resolves.toBe(SECOND_FACTOR_SETUP_EXPIRED);
+    // ⚠️ 行ごと消す。残すと `send-challenge` が使えないコードを送り続ける
+    expect(db.totp).toBeNull();
+    // 期限切れなら照合そのものを行わない（コードを無駄に消費しない）
+    expect(mockConsumeSecondFactorEmailCode).not.toHaveBeenCalled();
   });
 
   it('コードが合わなければ null を返し、有効化もしない', async () => {

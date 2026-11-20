@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { RECOVERY_CODE_CONFIG } from '@/constants/totp';
+import { RECOVERY_CODE_CONFIG, TOTP_ERROR_MESSAGES } from '@/constants/totp';
 import {
   SECOND_FACTOR_MESSAGES,
   SECOND_FACTOR_METHOD,
@@ -346,6 +346,60 @@ describe('TwoFactorSettings', () => {
 
       expect(await screen.findByRole('alert')).toHaveTextContent(
         '認証コードが正しくありません。',
+      );
+      expect(
+        screen.getByRole('img', { name: '二段階認証のQRコード' }),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * ⛔ **設定の期限切れは画面も戻す**（#1368 の2回目レビュー）。
+     *
+     * 文言だけ出して設定画面に留まると、利用者は同じ画面で再送と入力を
+     * 繰り返す。保留行はサーバー側でもう消えているので、やり直すしか道が
+     * 無い。繰り返すたび `TOTP_SETTINGS_VERIFY` を消費し、5回で設定操作が
+     * まとめて15分 429 になる。
+     */
+    it('設定の期限切れなら方式の選択へ戻す', async () => {
+      await startSetup();
+      mockFetch.mockResolvedValueOnce(
+        errorResponse(400, TOTP_ERROR_MESSAGES.SETUP_EXPIRED),
+      );
+
+      await user.type(screen.getByLabelText('認証コード'), '123456');
+      await user.click(
+        screen.getByRole('button', { name: '二段階認証を有効にする' }),
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        TOTP_ERROR_MESSAGES.SETUP_EXPIRED,
+      );
+      // QRの画面に留まらない
+      expect(
+        screen.queryByRole('img', { name: '二段階認証のQRコード' }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: '認証アプリで設定する' }),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ **ほかのエラーでは戻さない。** 打ち間違いのたびに最初から
+     * やり直させることになる。
+     */
+    it('コード違いでは設定画面に留まる', async () => {
+      await startSetup();
+      mockFetch.mockResolvedValueOnce(
+        errorResponse(400, TOTP_ERROR_MESSAGES.INVALID_CODE),
+      );
+
+      await user.type(screen.getByLabelText('認証コード'), '000000');
+      await user.click(
+        screen.getByRole('button', { name: '二段階認証を有効にする' }),
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        TOTP_ERROR_MESSAGES.INVALID_CODE,
       );
       expect(
         screen.getByRole('img', { name: '二段階認証のQRコード' }),

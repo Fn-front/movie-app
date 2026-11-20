@@ -7,6 +7,7 @@
  */
 
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
+import { SECOND_FACTOR_SETUP_EXPIRED } from '@/lib/auth/totpSetup';
 
 const mockGetSecondFactorMethod = jest.fn();
 jest.mock('@/lib/auth/secondFactor', () => ({
@@ -48,6 +49,10 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 
 const mockConfirmSecondFactorSetup = jest.fn();
 jest.mock('@/lib/auth/totpSetup', () => ({
+  // ⚠️ **定数は実物を使う**。モジュール全体を差し替えると
+  //    `SECOND_FACTOR_SETUP_EXPIRED` が undefined になり、ルートの
+  //    期限切れ分岐が**永久に偽**になる（テストは 200 で緑になる）
+  ...jest.requireActual('@/lib/auth/totpSetup'),
   confirmSecondFactorSetup: (...args: unknown[]) =>
     mockConfirmSecondFactorSetup(...args),
 }));
@@ -145,6 +150,25 @@ describe('POST /api/user/totp/enable', () => {
 
     expect(response.status).toBe(200);
     expect(json.data.recoveryCodes).toBeDefined();
+  });
+
+  /**
+   * ⚠️ **「コードが違う」と区別する**（#1368 の2回目レビュー）。
+   *
+   * 同じ文言にすると、届いたばかりの正しいコードを入れた利用者が自分の入力を
+   * 疑って再送と入力を繰り返し、`TOTP_SETTINGS_VERIFY`（5回/15分）を使い切る。
+   * 設定操作がまとめて15分 429 になる。
+   */
+  it('設定の期限切れは専用の文言で返す', async () => {
+    mockConfirmSecondFactorSetup.mockResolvedValue(SECOND_FACTOR_SETUP_EXPIRED);
+
+    const response = await POST(createRequest({ code: '123456' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.message).toBe(TOTP_ERROR_MESSAGES.SETUP_EXPIRED);
+    expect(json.error.message).not.toBe(TOTP_ERROR_MESSAGES.INVALID_CODE);
+    expect(mockSendEnabledNotice).not.toHaveBeenCalled();
   });
 
   // 有効化に失敗したら通知しない（嘘の通知を送らない）

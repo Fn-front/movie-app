@@ -127,6 +127,8 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
 
   /** 送信中かどうか。再入の判定に使う（state だと古い値を掴む） */
   const inFlightRef = useRef(false);
+  /** 直前の失敗の文言。呼び出し側がエラーの種類で分岐するために使う */
+  const lastErrorRef = useRef<string | null>(null);
 
   /**
    * 設定中（メールOTP）の再送クールダウン（#1285）
@@ -195,6 +197,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
       if (inFlightRef.current) return null;
 
       inFlightRef.current = true;
+      lastErrorRef.current = null;
       setError(null);
       setNotice(null);
       setIsSubmitting(true);
@@ -208,13 +211,22 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
         const json = await response.json();
 
         if (!response.ok) {
-          setError(json.error?.message || TOTP_ERROR_MESSAGES.OPERATION_FAILED);
+          const message: string =
+            json.error?.message || TOTP_ERROR_MESSAGES.OPERATION_FAILED;
+
+          // ⚠️ state だけだと、同じターンで読む呼び出し側が古い値を見る。
+          //   「どのエラーだったか」で分岐する箇所があるので ref にも残す
+          lastErrorRef.current = message;
+          setError(message);
+
           return null;
         }
 
         return json;
       } catch {
+        lastErrorRef.current = UI_ERROR_MESSAGES.NETWORK_ERROR;
         setError(UI_ERROR_MESSAGES.NETWORK_ERROR);
+
         return null;
       } finally {
         inFlightRef.current = false;
@@ -331,7 +343,24 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
   const enable = useCallback(
     async (code: string) => {
       const json = await post(API_ENDPOINTS.USER_TOTP_ENABLE, { code });
-      if (!json) return;
+
+      if (!json) {
+        // ⚠️ **設定の期限切れは画面も戻す**（#1368 の2回目レビュー）。
+        //   文言だけ出して `SETUP` に留まると、利用者は同じ画面で再送と入力を
+        //   繰り返す。保留行はもう消えているので、やり直すしか道が無い。
+        //
+        //   文言で判定しているのは、`post` が本文の `error.code` を捨てて
+        //   いるため。定数と比較しているので、文言を変えるときはここも
+        //   追従すること（テストで固定してある）
+        if (lastErrorRef.current === TOTP_ERROR_MESSAGES.SETUP_EXPIRED) {
+          setQrCodeDataUri(null);
+          setSecret(null);
+          setMethod(null);
+          setView(TWO_FACTOR_VIEW.DISABLED);
+        }
+
+        return;
+      }
 
       const data = json.data as { recoveryCodes: string[] };
       // 平文はこの一度しか返ってこない。控えるまで画面に残す

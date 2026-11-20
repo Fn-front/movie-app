@@ -69,7 +69,6 @@ const resolveErrorMessage = (code: string | undefined): string => {
 };
 
 interface LoginFormProps {
-  onOtpLoginClick?: () => void;
   /** ログイン後の戻り先（callbackUrl） */
   callbackUrl?: string;
   /**
@@ -97,7 +96,6 @@ interface LoginFormProps {
  * ログインフォーム
  */
 export const LoginForm = memo<LoginFormProps>(function LoginForm({
-  onOtpLoginClick,
   callbackUrl,
   initialIdentifier,
   initialError,
@@ -389,18 +387,6 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
           パスワードをお忘れの方
         </Link>
       </p>
-
-      {onOtpLoginClick && (
-        <p className={styles.c_login_form__footer}>
-          <button
-            type='button'
-            className={styles.c_login_form__link}
-            onClick={onOtpLoginClick}
-          >
-            メールでログイン
-          </button>
-        </p>
-      )}
 
       <p className={styles.c_login_form__footer}>
         アカウントをお持ちでない方は{' '}

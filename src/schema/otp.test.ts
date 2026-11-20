@@ -11,7 +11,7 @@ describe('otpSendSchema', () => {
   it('有効な入力でパースが成功する', () => {
     const result = otpSendSchema.safeParse({
       email: 'test@example.com',
-      action: 'login',
+      action: 'registration',
     });
     expect(result.success).toBe(true);
   });
@@ -19,7 +19,7 @@ describe('otpSendSchema', () => {
   it('メールアドレスを小文字に正規化する', () => {
     const result = otpSendSchema.safeParse({
       email: 'TeSt@ExAmPle.COM',
-      action: 'login',
+      action: 'registration',
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -41,7 +41,7 @@ describe('otpSendSchema', () => {
   it('大小文字違いの表記はすべて同じ値に収束する（送信上限を分割できない）', () => {
     const variants = ['a@b.com', 'A@B.com', 'a@B.COM', 'A@B.COM'];
     const parsed = variants.map((email) => {
-      const result = otpSendSchema.safeParse({ email, action: 'login' });
+      const result = otpSendSchema.safeParse({ email, action: 'registration' });
       return result.success ? result.data.email : null;
     });
     expect(new Set(parsed)).toEqual(new Set(['a@b.com']));
@@ -50,7 +50,7 @@ describe('otpSendSchema', () => {
   it('メールアドレスの形式が不正な場合エラーになる', () => {
     const result = otpSendSchema.safeParse({
       email: 'invalid-email',
-      action: 'login',
+      action: 'registration',
     });
     expect(result.success).toBe(false);
   });
@@ -69,7 +69,7 @@ describe('otpVerifySchema', () => {
     const result = otpVerifySchema.safeParse({
       email: 'test@example.com',
       code: '123456',
-      action: 'login',
+      action: 'registration',
     });
     expect(result.success).toBe(true);
   });
@@ -78,7 +78,7 @@ describe('otpVerifySchema', () => {
     const result = otpVerifySchema.safeParse({
       email: 'TeSt@ExAmPle.COM',
       code: '123456',
-      action: 'login',
+      action: 'registration',
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -91,7 +91,7 @@ describe('otpVerifySchema', () => {
       otpVerifySchema.safeParse({
         email: 'test@example.com',
         code: '12345',
-        action: 'login',
+        action: 'registration',
       }).success,
     ).toBe(false);
   });
@@ -101,7 +101,7 @@ describe('otpVerifySchema', () => {
       otpVerifySchema.safeParse({
         email: 'test@example.com',
         code: '12345a',
-        action: 'login',
+        action: 'registration',
       }).success,
     ).toBe(false);
   });
@@ -131,9 +131,8 @@ describe('otpFormSchema', () => {
  * 現行実装でも通る（回帰テスト）。赤→緑にはならない。
  */
 describe('公開ルートの action 許可リスト', () => {
-  it('公開するのは registration / login / password_change の3つだけ', () => {
+  it('公開するのは registration / password_change の2つだけ', () => {
     expect([...PUBLIC_OTP_ACTIONS].sort()).toEqual([
-      'login',
       'password_change',
       'registration',
     ]);

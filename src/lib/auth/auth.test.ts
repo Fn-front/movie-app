@@ -1437,6 +1437,54 @@ describe('authorize のレート制限', () => {
     );
   });
 
+  /**
+   * ⛔ **成功時にリセットするのは `login` だけ。**
+   *
+   * `login_ip` まで戻すと、正当なログイン1回で**同じ送信元からの総当たり分が
+   * ご破算になる**。NAT や社内プロキシの裏に攻撃者がいる状況で、本人が
+   * ログインするたびに相手の試行枠が回復してしまう。
+   *
+   * ⚠️ 識別子ではなくカウンタ名まで見る。`login_ip` へ差し替える変異が
+   * 生き残っていた（レビューで実測）。
+   */
+  it('成功時は login だけリセットし、login_ip は戻さない', async () => {
+    allowAll();
+    const password = 'Password1';
+    setResolver(({ table }) =>
+      table === 'users'
+        ? {
+            data: {
+              id: 'u1',
+              email: 'user@example.com',
+              name: 'User',
+              avatar_url: null,
+              role: 'user',
+              is_verified: true,
+              password_hash: bcrypt.hashSync(password, 4),
+              password_changed_at: null,
+            },
+            error: null,
+          }
+        : { data: null, error: null },
+    );
+
+    await credentialsProvider.authorize(
+      { email: 'user@example.com', password },
+      makeRequest('203.0.113.1'),
+    );
+
+    expect(mockResetRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'user@example.com|203.0.113.1',
+      'login',
+    );
+    expect(mockResetRateLimit).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'login_ip',
+    );
+  });
+
   it('アカウント単位の識別子に送信元IPを含める', async () => {
     allowAll();
 
@@ -1670,18 +1718,12 @@ describe('authorize のタイミング均一化', () => {
     expect(compareSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('OTP経路では回さない（照合するパスワードが無い）', async () => {
+  // パスワードが来ていなければ照合しようがない。ダミー照合も回さない
+  it('パスワードが来ていなければ回さない', async () => {
     setResolver(() => ({ data: null, error: { code: 'PGRST116' } }));
 
     await credentialsProvider
-      .authorize(
-        {
-          email: 'nobody@example.com',
-          loginMethod: 'otp',
-          verificationToken: 'token',
-        },
-        makeRequest(),
-      )
+      .authorize({ email: 'nobody@example.com' }, makeRequest())
       .catch(() => undefined);
 
     expect(compareSpy).not.toHaveBeenCalled();
@@ -1969,367 +2011,6 @@ describe('authorize の第2要素（パスワード経路）', () => {
           makeRequest(),
         ),
       ).resolves.toMatchObject({ id: USER_ID });
-    });
-  });
-});
-
-describe('authorize の第2要素（メールOTP経路）', () => {
-  function makeRequest(): Request {
-    return new Request('http://localhost/api/auth/callback/credentials', {
-      headers: new Headers({ 'x-vercel-forwarded-for': '203.0.113.1' }),
-    });
-  }
-
-  beforeEach(() => {
-    mockCheckRateLimit.mockResolvedValue({ allowed: true });
-    setResolver(({ table }) =>
-      table === 'users'
-        ? {
-            data: {
-              id: 'user-1',
-              email: 'user@example.com',
-              name: 'User',
-              avatar_url: null,
-              role: 'user',
-              is_verified: true,
-              password_hash: null,
-              password_changed_at: null,
-            },
-            error: null,
-          }
-        : { data: null, error: null },
-    );
-  });
-
-  /**
-   * ⚠️ **有効な検証済みトークンを与える**（#1255）
-   *
-   * 以前はトークンが無くても `otp_login_disabled` が返っていた。
-   * つまりメールアドレスを知っているだけで「登録済み＋二段階認証あり」を
-   * 引けた。判定をトークン検証の後ろへ移したので、ここも正規の経路を通す
-   */
-  it('二段階認証が有効ならメールOTP単独ログインを拒否する', async () => {
-    // メールのコードだけで入れる経路は第2要素ではなくパスワードの代替であり、
-    // 残すと最も弱い経路が全体の強度を決めてしまう（#642）
-    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
-    setResolver(({ table }) => {
-      if (table === 'users') {
-        return {
-          data: {
-            id: 'user-1',
-            email: 'user@example.com',
-            name: 'User',
-            avatar_url: null,
-            role: 'user',
-            is_verified: true,
-            password_hash: null,
-            password_changed_at: null,
-          },
-          error: null,
-        };
-      }
-      if (table === 'otp_codes') {
-        return {
-          data: {
-            id: 'otp-1',
-            email: 'user@example.com',
-            verified_at: new Date().toISOString(),
-          },
-          error: null,
-        };
-      }
-      return { data: null, error: null };
-    });
-
-    await expect(
-      credentialsProvider.authorize(
-        {
-          email: 'user@example.com',
-          loginMethod: 'otp',
-          verificationToken: 'token',
-        },
-        makeRequest(),
-      ),
-    ).rejects.toMatchObject({ code: 'otp_login_disabled' });
-  });
-
-  it('二段階認証で弾くときも検証済みトークンを消費しない', async () => {
-    // 焼いてしまうと、パスワード経路へ切り替えるにもコードを取り直すことになる
-    // （#1235 と同じ形）
-    const deleted: string[] = [];
-    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
-    setResolver(({ table, ops }) => {
-      if (table === 'users') {
-        return {
-          data: {
-            id: 'user-1',
-            email: 'user@example.com',
-            name: 'User',
-            avatar_url: null,
-            role: 'user',
-            is_verified: true,
-            password_hash: null,
-            password_changed_at: null,
-          },
-          error: null,
-        };
-      }
-      if (table === 'otp_codes') {
-        if (ops.includes('delete')) {
-          deleted.push('otp_codes');
-          return { data: null, error: null };
-        }
-        return {
-          data: {
-            id: 'otp-1',
-            email: 'user@example.com',
-            verified_at: new Date().toISOString(),
-          },
-          error: null,
-        };
-      }
-      return { data: null, error: null };
-    });
-
-    await credentialsProvider
-      .authorize(
-        {
-          email: 'user@example.com',
-          loginMethod: 'otp',
-          verificationToken: 'token',
-        },
-        makeRequest(),
-      )
-      .catch(() => undefined);
-
-    expect(deleted).not.toContain('otp_codes');
-  });
-
-  /**
-   * ⚠️ 列挙対策（#1255）
-   *
-   * トークンが無ければ、二段階認証の有無を明かさない
-   */
-  it('検証済みトークンが無ければ二段階認証の有無を明かさない', async () => {
-    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
-
-    const error = await credentialsProvider
-      .authorize(
-        {
-          email: 'user@example.com',
-          loginMethod: 'otp',
-          verificationToken: 'token',
-        },
-        makeRequest(),
-      )
-      .catch((e: unknown) => e);
-
-    expect((error as { code?: string }).code).not.toBe('otp_login_disabled');
-    // そもそも問い合わせない
-    expect(mockGetSecondFactorMethod).not.toHaveBeenCalled();
-  });
-
-  it('二段階認証が無効ならメールOTP経路は従来どおり進む', async () => {
-    mockGetSecondFactorMethod.mockResolvedValue(null);
-
-    // 検証済みトークンが見つからないので失敗するが、
-    // otp_login_disabled では落ちないことを確認する
-    const error = await credentialsProvider
-      .authorize(
-        {
-          email: 'user@example.com',
-          loginMethod: 'otp',
-          verificationToken: 'token',
-        },
-        makeRequest(),
-      )
-      .catch((e: unknown) => e);
-
-    expect((error as { code?: string }).code).not.toBe('otp_login_disabled');
-  });
-
-  /**
-   * 通したときは検証済みトークンを消費する（ワンタイム）
-   *
-   * ⚠️ 下の「弾くときは消費しない」と**対で必要**。片方だけだと、
-   * 消費そのものを消しても全部グリーンで通る（実際そうなっていた）。
-   * トークンは `verified_at` から5分有効なので、残ると使い回せる
-   */
-  it('ログインに成功したら検証済みトークンを消費する', async () => {
-    const deleted: string[] = [];
-    mockGetSecondFactorMethod.mockResolvedValue(null);
-
-    setResolver(({ table, ops }) => {
-      if (table === 'users') {
-        return {
-          data: {
-            id: 'user-1',
-            email: 'user@example.com',
-            name: 'User',
-            avatar_url: null,
-            role: 'user',
-            is_verified: true,
-            password_hash: null,
-            password_changed_at: null,
-          },
-          error: null,
-        };
-      }
-
-      if (table === 'otp_codes') {
-        if (ops.includes('delete')) {
-          deleted.push('otp_codes');
-          return { data: null, error: null };
-        }
-
-        return {
-          data: {
-            id: 'otp-1',
-            email: 'user@example.com',
-            verified_at: new Date().toISOString(),
-          },
-          error: null,
-        };
-      }
-
-      return { data: null, error: null };
-    });
-
-    await expect(
-      credentialsProvider.authorize(
-        {
-          email: 'user@example.com',
-          loginMethod: 'otp',
-          verificationToken: 'token',
-        },
-        makeRequest(),
-      ),
-    ).resolves.toMatchObject({ id: 'user-1' });
-
-    expect(deleted).toContain('otp_codes');
-  });
-
-  /**
-   * メール認証が未完了のアカウント（#1247）
-   *
-   * この画面には**パスワード欄すら無い**のに「メールアドレスまたは
-   * パスワードが正しくありません」と出ていた。コードは正しいのに
-   */
-  describe('メール未認証', () => {
-    /** 未認証ユーザー + 有効な検証済みトークンを返す */
-    const setup = (deleted: string[]) =>
-      setResolver(({ table, ops }) => {
-        if (table === 'users') {
-          return {
-            data: {
-              id: 'user-1',
-              email: 'user@example.com',
-              name: 'User',
-              avatar_url: null,
-              role: 'user',
-              is_verified: false,
-              password_hash: null,
-              password_changed_at: null,
-            },
-            error: null,
-          };
-        }
-
-        if (table === 'otp_codes') {
-          if (ops.includes('delete')) {
-            deleted.push('otp_codes');
-            return { data: null, error: null };
-          }
-
-          return {
-            data: {
-              id: 'otp-1',
-              email: 'user@example.com',
-              verified_at: new Date().toISOString(),
-            },
-            error: null,
-          };
-        }
-
-        return { data: null, error: null };
-      });
-
-    it('コードが正しければ email_not_verified を返す', async () => {
-      const deleted: string[] = [];
-      setup(deleted);
-      mockGetSecondFactorMethod.mockResolvedValue(null);
-
-      await expect(
-        credentialsProvider.authorize(
-          {
-            email: 'user@example.com',
-            loginMethod: 'otp',
-            verificationToken: 'token',
-          },
-          makeRequest(),
-        ),
-      ).rejects.toMatchObject({ code: 'email_not_verified' });
-    });
-
-    /**
-     * ⚠️ 弾くのはトークンを消費する前。後ろに置くと、理由を伝えた時点で
-     * トークンが焼けており、やり直すにもコードを取り直すことになる
-     * （#1235 と同じ形）
-     */
-    it('弾くときに検証済みトークンを消費しない', async () => {
-      const deleted: string[] = [];
-      setup(deleted);
-      mockGetSecondFactorMethod.mockResolvedValue(null);
-
-      await credentialsProvider
-        .authorize(
-          {
-            email: 'user@example.com',
-            loginMethod: 'otp',
-            verificationToken: 'token',
-          },
-          makeRequest(),
-        )
-        .catch(() => undefined);
-
-      expect(deleted).not.toContain('otp_codes');
-    });
-
-    /**
-     * ⚠️ 列挙対策。トークンが無効なら、未認証かどうかを明かさない
-     */
-    it('トークンが無効なら理由を明かさない', async () => {
-      setResolver(({ table }) =>
-        table === 'users'
-          ? {
-              data: {
-                id: 'user-1',
-                email: 'user@example.com',
-                name: 'User',
-                avatar_url: null,
-                role: 'user',
-                is_verified: false,
-                password_hash: null,
-                password_changed_at: null,
-              },
-              error: null,
-            }
-          : { data: null, error: null },
-      );
-      mockGetSecondFactorMethod.mockResolvedValue(null);
-
-      const error = await credentialsProvider
-        .authorize(
-          {
-            email: 'user@example.com',
-            loginMethod: 'otp',
-            verificationToken: 'token',
-          },
-          makeRequest(),
-        )
-        .catch((e: unknown) => e);
-
-      expect((error as { code?: string }).code).not.toBe('email_not_verified');
     });
   });
 });
@@ -2832,25 +2513,80 @@ describe('authorize のユーザー名ログイン', () => {
     );
   });
 
-  // メールを持たないアカウントに確認コードは送れない。
-  // この経路を残すと「コードを受け取れないのに検証を求める」状態になる
-  it('ユーザー名でのOTPログインは拒否する', async () => {
-    setResolver(({ table }) =>
-      table === 'users'
-        ? { data: { id: 'u1', username: 'K7M2QXPT9WFN', is_verified: true } }
-        : { data: null, error: null },
+  /**
+   * ⛔ **メールOTPログインを復活させない**（#1361）
+   *
+   * 消したのは「パスワード無しで、メールの確認コードだけ通る経路」。
+   * 画面から導線を消すだけでは足りず、`authorize` が
+   * `verificationToken` / `loginMethod` を受け付けたままだと
+   * **API を直接叩けば入れる**。
+   *
+   * ⚠️ `rejects.toThrow()` だけでは弱い。投げた理由が
+   * 「パスワードが無い」なのか「トークンを見た結果」なのか区別できないので、
+   * `credentials` 必須のエラーであることまで見る。
+   */
+  it.each([
+    ['メール', 'otp-login@example.com'],
+    ['ユーザー名', 'K7M2-QXPT-9WFN'],
+  ])(
+    '%sと verificationToken だけでは authorize を通さない',
+    async (_label, identifier) => {
+      setResolver(({ table }) =>
+        table === 'users'
+          ? {
+              data: {
+                id: 'u1',
+                email: 'otp-login@example.com',
+                username: 'K7M2QXPT9WFN',
+                is_verified: true,
+                // ⚠️ パスワードを持つアカウントにする。持たないと
+                //    「ソーシャル専用だから落ちた」とも読めてしまう
+                password_hash: bcrypt.hashSync('Password1', 4),
+                role: 'user',
+                password_changed_at: null,
+                avatar_url: null,
+                name: 'User',
+              },
+              error: null,
+            }
+          : { data: null, error: null },
+      );
+
+      const error = await credentialsProvider
+        .authorize(
+          {
+            email: identifier,
+            loginMethod: 'otp',
+            verificationToken: 'token',
+          },
+          makeRequest(),
+        )
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(
+        AUTH_ERROR_MESSAGES.CREDENTIALS_REQUIRED,
+      );
+    },
+  );
+
+  // 渡せる口そのものを残さない。読まない値を宣言したままだと、
+  // 次の人が「使っているのかも」と判断を保留する
+  it('credentials に verificationToken / loginMethod を宣言しない', () => {
+    const declared = Object.keys(
+      (
+        credentialsProvider as unknown as {
+          credentials: Record<string, unknown>;
+        }
+      ).credentials,
     );
 
-    await expect(
-      credentialsProvider.authorize(
-        {
-          email: 'K7M2-QXPT-9WFN',
-          loginMethod: 'otp',
-          verificationToken: 'token',
-        },
-        makeRequest(),
-      ),
-    ).rejects.toThrow();
+    expect(declared).not.toContain('verificationToken');
+    expect(declared).not.toContain('loginMethod');
+    // 消しすぎていないことも見る
+    expect(declared).toEqual(
+      expect.arrayContaining(['email', 'password', 'totpCode']),
+    );
   });
 });
 

@@ -5,7 +5,6 @@
 | 方式 | 説明 | 用途 |
 |------|------|------|
 | メール+パスワード | 従来のメール/パスワード認証 | 新規登録・ログイン |
-| メールOTPログイン | メールにOTPコードを送信してログイン | パスワードレスログイン |
 | Google OAuth | Googleアカウントでログイン | ソーシャルログイン |
 | GitHub OAuth | GitHubアカウントでログイン | ソーシャルログイン |
 
@@ -175,73 +174,31 @@ POST /api/auth/login（NextAuth.js Credentials Provider）
 
 ---
 
-## メールOTPログインフロー（パスワードレス）
+## ~~メールOTPログインフロー（パスワードレス）~~（#1361 で削除）
 
-### 1. メールアドレス入力
-```
-ユーザー
-  ↓
-[ログインフォーム画面]
-  - 「メールでログイン」ボタンをクリック
-  - メールアドレス入力
-  ↓
-POST /api/auth/otp/send
-  {
-    email: "user@example.com",
-    action: "login"
-  }
-  ↓
-サーバー処理:
-  1. usersテーブルで該当ユーザーを検索
-     a. 存在しない → エラー「登録されていないメールアドレスです」
-     b. 存在する → 続行
-  2. OTPコードを生成（6桁数字）
-  3. otp_codesテーブルに保存（有効期限: 30分）
-  4. Resendでメール送信
-  ↓
-レスポンス
-  {
-    success: true,
-    message: "ログインコードをメールに送信しました"
-  }
-  ↓
-[OTP検証画面に遷移]
-```
+⛔ **パスワード不要でメールのコードだけログインできる経路は削除した。**
 
-### 2. OTP検証 → ログイン
-```
-ユーザー
-  ↓
-[OTP検証画面]
-  - 6桁のコードを入力
-  ↓
-クライアント処理:
-  1. POST /api/auth/otp/verify でOTPコードを検証
-  2. 検証成功後、NextAuth.js の signIn("credentials") を呼び出し
-     signIn("credentials", {
-       email: "user@example.com",
-       otpToken: "検証成功トークン",  // OTP検証APIが返すワンタイムトークン
-       loginMethod: "otp"
-     })
-  3. Credentials Provider の authorize 関数内で
-     loginMethod を判定し、otpToken の有効性を検証
-  ↓
-サーバー処理（Credentials Provider authorize）:
-  1. loginMethod === "otp" の場合:
-     a. otpToken の有効性を検証（DB上の検証済みフラグ確認）
-     b. ユーザー情報を返却 → セッション発行
-  2. loginMethod === "password"（通常ログイン）の場合:
-     a. パスワードハッシュ照合
-     b. ユーザー情報を返却 → セッション発行
-  ↓
-成功レスポンス（NextAuth.js自動処理）
-  セッションCookie発行 → ホーム画面に遷移
-```
+受信箱を押さえられるとログインできてしまう経路が、パスワード再設定と
+**二重に存在していた**。減らしても復旧手段は残る（再設定／未検証なら再登録）。
 
-**設計判断 — Credentials Provider統一の理由:**
-- NextAuth.jsはCredentials Provider以外からプログラマティックにセッションを発行する手段がない
-- OTPログインもCredentials Providerのauthorize関数を経由することで、JWT/セッションの発行を統一
-- loginMethodパラメータで認証方式を分岐し、authorize関数内でOTPトークン検証 or パスワード照合を切り替え
+消したもの:
+
+- `src/features/auth/otpLoginForm/`（画面・フック）と `LoginForm` の導線
+- `/api/auth/otp/send` の `action=login` 分岐、`/api/auth/otp/verify` の LOGIN 経路
+- NextAuth credentials の `loginMethod` 分岐（`LOGIN_METHOD` ごと）
+- `OTP_ACTION.LOGIN` と `PUBLIC_OTP_ACTIONS` の `'login'`
+
+残したもの:
+
+- **第2要素のメールOTP**（`two_factor`）。別の仕組みで、パスワードの後に来る
+- `registration` / `password_change` の OTP。`/api/auth/otp/send` 自体は残る
+- `rate_limits` の `'login'`。NextAuth の credentials が**いまも使う**ので
+  `RATE_LIMIT_ACTION.LOGIN` として定数化した（以前は `OTP_ACTION.LOGIN` を流用していた）
+- `otp_codes.chk_otp_action_type` の `'login'`。**保持期間（48時間）内の既存行が
+  あるため、すぐには外さない**。外すと未使用のコードを持つ利用者が壊れる
+  （`src/constants/otpActions.test.ts` の `RETIRED_ACTIONS` で固定している）
+
+`verification_token_hash` 列も残る。`password_change` が使い続けている。
 
 ---
 
@@ -647,7 +604,7 @@ Movie Appの確認コードです。
 | action | 用途 | 備考 |
 |--------|------|------|
 | registration | 新規登録時のメール認証 | is_verified = false → true |
-| login | メールOTPログイン | セッション発行。未認証なら is_verified = false → true（#1257） |
+| ~~login~~ | ~~メールOTPログイン~~ | **#1361 で削除。** DB の CHECK 制約には残している（保持期間内の既存行のため） |
 | password_change | パスワード変更の本人確認 | ログイン済みユーザーのみ |
 
 ---
@@ -704,24 +661,20 @@ import GitHub from 'next-auth/providers/github'
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
-    // メール+パスワード認証 / メールOTPログイン（統一）
+    // メール+パスワード認証（#1361 でメールOTPログインの分岐を削除）
     Credentials({
       name: 'Credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
-        loginMethod: { label: 'Login Method', type: 'text' }, // "password" | "otp"
+        totpCode: { label: 'TOTP Code', type: 'text' },
       },
       async authorize(credentials) {
-        const loginMethod = credentials.loginMethod || 'password'
-
-        if (loginMethod === 'otp') {
-          // OTPログイン: otp_codesのverified_atを確認
-          // 検証済みOTPが存在すればユーザー情報を返却
-        } else {
-          // パスワードログイン: パスワードハッシュ照合
-          // is_verified チェック必須
-        }
+        // ⛔ `loginMethod` / `verificationToken` は受け付けない。
+        //    宣言を残すと「API を直接叩けばパスワード無しで入れるのでは」と
+        //    読めてしまう（`auth.test.ts` が宣言の不在まで検査する）
+        // パスワードログイン: パスワードハッシュ照合
+        // is_verified チェック必須（照合の後）
 
         return {
           id: user.id,
@@ -909,7 +862,7 @@ export const getSessionCookieOptions = () => ({
 
 ### 将来的な拡張
 - [x] **ソーシャルログイン**: Google / GitHub
-- [x] **パスワードレス認証**: メールOTPログイン
+- [ ] ~~**パスワードレス認証**: メールOTPログイン~~（#1361 で削除）
 - [x] **二段階認証**: 実装済み（方式は選択制。下記「二段階認証（第2要素）」を参照）
 
 ---
@@ -1016,13 +969,14 @@ TOTP なら手元の認証アプリで作れるが、**メールOTP では作れ
 絶対に名前解決されない）なので、選ばせるとコードが永久に届かない。
 画面に選択肢を出さず、`setup` ルートでも拒否する（画面だけの制限にしない）。
 
-### パスワードレスOTPログインとの関係
+### パスワードレスOTPログインとの関係（#1361 で解消）
 
-二段階認証が有効なユーザーは、方式によらず「メールでログイン」を使えない
-（`OTP_LOGIN_DISABLED`）。
+かつては二段階認証が有効なユーザーだけ「メールでログイン」を使えない
+（`OTP_LOGIN_DISABLED`）という形で対処していた。
 
 - パスワードレスOTPログイン = 「メールのコードのみ」
 - 第2要素がメールOTP = 「パスワード + メールのコード」
 
-後者のほうが確実に強い。両方開けると前者が実効強度を決めてしまうため、
-#642 の判断をそのまま維持する。
+後者のほうが確実に強く、両方開けると前者が実効強度を決めてしまう。
+**#1361 で前者そのものを消した**ので、この分岐は無くなった
+（#642 の判断を全利用者へ広げた形）。

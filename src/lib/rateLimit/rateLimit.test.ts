@@ -1135,9 +1135,13 @@ describe('chk_action_type と RATE_LIMIT_ACTION の突き合わせ', () => {
    * ⚠️ 逆向きは完全一致にできない。
    *
    * DB 側には TS に無い値が残っている:
-   *   - `login` は `auth.ts` がリテラルで使っている（定数化されていない）
    *   - `registration` / `password_change` / `otp_resend` は過去に使っていた値。
    *     既存行が残っている可能性があるため許可リストから外さない
+   *
+   * ⚠️ `login` は #1361 で `RATE_LIMIT_ACTION.LOGIN` として定数化した。
+   *   それまでは `OTP_ACTION.LOGIN` を流用していたため TS 側に無かった。
+   *   メールOTPログインを消しても**この制限は NextAuth の credentials が
+   *   使い続ける**
    *
    * 想定外の値が増えていないかだけを見る。
    */
@@ -1147,7 +1151,7 @@ describe('chk_action_type と RATE_LIMIT_ACTION の突き合わせ', () => {
     const extra = dbActions.filter((action) => !tsActions.includes(action));
 
     expect(extra.sort()).toEqual(
-      ['registration', 'login', 'password_change', 'otp_resend'].sort(),
+      ['registration', 'password_change', 'otp_resend'].sort(),
     );
   });
 

@@ -154,12 +154,11 @@ OTPコード送信（再送信含む）
 
 **Validation:**
 - `email`: メール形式必須
-- `action`: 'registration' | 'login' | 'password_change'
+- `action`: 'registration' | 'password_change'（`login` は #1361 で削除。送ると 400）
 
 **内部処理:**
 1. アクション別チェック
    - `registration`: 該当メールのユーザーが存在し `is_verified = false` であること
-   - `login`: 該当メールのユーザーが存在すること
    - `password_change`: ログイン済みセッション必須
 2. 前回送信から1分以上経過しているかチェック
 3. 既存の未使用OTPを無効化
@@ -175,9 +174,10 @@ OTPコード送信（再送信含む）
 ```
 
 **Error Responses:**
-- `400 Bad Request`: バリデーションエラー
-- `404 Not Found`: ユーザーが見つからない（login時）
+- `400 Bad Request`: バリデーションエラー（`action: 'login'` もここ）
 - `429 Too Many Requests`: 再送間隔が短すぎる（1分未満）
+
+> ⚠️ 存在しないメールでも **200 を返す**（メールアドレス列挙防止）。404 は返さない。
 
 ---
 

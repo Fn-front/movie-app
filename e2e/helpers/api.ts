@@ -1228,7 +1228,8 @@ export async function maxOutOtpAttempts(
  * RATE_LIMIT_EXCEEDED / VERIFY_RATE_LIMIT_EXCEEDED で不安定に失敗する。
  * - otp_send_daily: OTP日次送信上限（src/app/api/auth/otp/send/route.ts）
  * - otp_verify:     OTP検証のバースト上限（src/app/api/auth/otp/verify/route.ts, #416）
- * - login:          メールOTPログインの試行上限（src/lib/auth/auth.ts）
+ * - login:          ログイン試行のアカウント単位上限（src/lib/auth/auth.ts の
+ *                   NextAuth credentials。メールOTPログインは #1361 で削除済みで無関係）
  * - register:       新規登録の試行上限（src/app/api/auth/register/route.ts）
  * - otp_resend:     OTP再送上限（DB制約で許可済み。将来の追従漏れを防ぐため含める）
  * ※ change_password は identifier が user.id（メール以外）かつ DB を叩く E2E で

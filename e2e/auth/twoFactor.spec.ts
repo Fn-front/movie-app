@@ -242,44 +242,6 @@ test.describe('二段階認証', () => {
     ).toBeVisible();
   });
 
-  test('二段階認証が有効ならメールOTP単独ログインを使えない', async ({
-    page,
-  }) => {
-    // メールのコードだけで入れる経路は第2要素ではなくパスワードの代替であり、
-    // 残すと最も弱い経路が全体の強度を決めてしまう（#642）
-    await loginAndOpenSettings(page);
-    await enableTwoFactor(page);
-
-    await page.context().clearCookies();
-    await page.goto('/auth/signin');
-    await page.getByRole('button', { name: 'メールでログイン' }).click();
-
-    await page.getByLabel('メールアドレス').fill(USER.email);
-    await page.getByRole('button', { name: 'ログインコードを送信' }).click();
-    await expect(
-      page.getByRole('heading', { name: '確認コードを入力' }),
-    ).toBeVisible();
-
-    const otpCode = await getLatestOtpCode(USER.email, 'login');
-    // exact 指定が無いと「確認コードを検証」ボタンにも一致する
-    await page.getByLabel('確認コード', { exact: true }).fill(otpCode!);
-
-    // signIn の結果を待ってから表示を確認する。クリック直後に assert すると
-    // 応答前の状態を見てしまう（signin.spec.ts と同じ待ち方）
-    const authPromise = page.waitForResponse(
-      (res) => res.url().includes('/api/auth/callback') && res.status() < 500,
-    );
-    await page.getByRole('button', { name: '確認コードを検証' }).click();
-    await authPromise;
-
-    await expect(
-      page.getByRole('alert').filter({
-        hasText: '二段階認証が有効なため、メールでのログインは利用できません',
-      }),
-    ).toBeVisible();
-    await expect(page).toHaveURL(/\/auth\/signin/);
-  });
-
   test('所持の証明なしでは無効化できない', async ({ page }) => {
     // セッションだけで外せたら、セッションを奪った第三者が第2要素を無効化できる
     await loginAndOpenSettings(page);

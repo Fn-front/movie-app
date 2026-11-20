@@ -158,7 +158,7 @@
   - 送信元メールアドレス設定
   - 無料枠制約考慮（3,000通/月、100通/日、2req/s）
 - [x] OTP送信API実装（`POST /api/auth/otp/send`）
-  - action別バリデーション（registration / login / password_change）
+  - action別バリデーション（registration / password_change。`login` は #1361 で削除）
   - 再送間隔チェック（1分）
   - 既存OTP無効化
 - [x] OTP検証API実装（`POST /api/auth/otp/verify`）
@@ -166,7 +166,7 @@
   - 試行回数チェック（5回）
   - action別後処理
 - [x] OTPVerificationコンポーネント作成
-  - action prop対応（registration / login / password_change）
+  - action prop対応（registration / password_change）
   - 送信先メールアドレス表示
   - 再送カウントダウン表示（1分）
   - 残り試行回数表示（エラー時）
@@ -180,12 +180,13 @@
 - [x] OTP検証成功 → is_verified = true 更新
 - [x] ログイン時 is_verified チェック追加
 
-### Step 4: メールOTPログイン実装
-- [x] OtpLoginFormコンポーネント作成
-  - メールアドレス入力
-  - 「ログインコードを送信」ボタン
-- [x] OTP送信 → 検証 → セッション発行フロー
-- [x] LoginFormに「メールでログイン」リンク追加
+### ~~Step 4: メールOTPログイン実装~~（#1361 で削除）
+- [ ] ~~OtpLoginFormコンポーネント作成~~
+- [ ] ~~OTP送信 → 検証 → セッション発行フロー~~
+- [ ] ~~LoginFormに「メールでログイン」リンク追加~~
+
+> 受信箱を押さえられるとパスワードを知らなくてもログインできる経路で、
+> パスワード再設定と二重に存在していたため削除した。
 
 ### Step 5: ソーシャルログイン実装（Google / GitHub）
 - [x] NextAuth.js Provider設定
@@ -211,7 +212,7 @@
 - [x] OTP送信APIテスト
 - [x] OTP検証APIテスト
 - [x] 登録フロー改修テスト（OTP検証含む）
-- [x] メールOTPログインテスト
+- [ ] ~~メールOTPログインテスト~~（#1361 で削除）
 - [x] ソーシャルログインテスト（モック）
 - [x] パスワード変更フロー改修テスト
 - [x] OTPVerificationコンポーネントテスト

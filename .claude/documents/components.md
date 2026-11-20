@@ -802,12 +802,18 @@ interface ChangePasswordFormProps {
 **Props:**
 ```typescript
 interface LoginFormProps {
-  onOtpLoginClick?: () => void;
+  /** ログイン後の戻り先 */
+  callbackUrl?: string;
+  /** 入力欄の初期値（#1237） */
+  initialIdentifier?: string;
+  /** ソーシャルログイン失敗時に最初から出す文言（#1242） */
+  initialError?: string;
 }
 ```
 
 - ログイン処理は内部実装（onSubmit Props不要）
 - 新規登録への遷移も内部でルーター使用
+- ⛔ メールOTPログインへの導線（`onOtpLoginClick`）は #1361 で削除
 
 ---
 
@@ -829,15 +835,6 @@ interface LoginFormProps {
 
 ---
 
-### OtpLoginForm
-メールOTPログインフォーム
-
-**Props:**
-- `onSubmit`: (email: string) => Promise<void>
-- `onBackToLogin`: () => void
-
----
-
 ### OTPVerification
 OTP検証フォーム
 
@@ -845,7 +842,7 @@ OTP検証フォーム
 - `onSubmit`: (otp: string) => Promise<void>
 - `onResend`: () => Promise<void>
 - `email`: string
-- `action`: 'registration' | 'login' | 'password_change'
+- `action`: 'registration' | 'password_change'（`login` は #1361 で削除）
 
 ---
 

@@ -29,7 +29,6 @@ Web版はNextAuth.jsを使用しているが、Flutter版では**supabase_flutte
 | 機能 | Web版 | Flutter版 |
 |------|-------|-----------|
 | メール+パスワード | NextAuth.js | supabase_flutter Auth |
-| OTPログイン | NextAuth.js + カスタム | supabase_flutter Auth OTP |
 | Google OAuth | NextAuth.js | supabase_flutter Auth + google_sign_in |
 | GitHub OAuth | NextAuth.js | supabase_flutter Auth + OAuth |
 | セッション管理 | JWT (24h) | supabase_flutter セッション |

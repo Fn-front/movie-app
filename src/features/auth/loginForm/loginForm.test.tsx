@@ -279,25 +279,22 @@ describe('LoginForm', () => {
     );
   });
 
-  it('onOtpLoginClick指定時にメールでログインボタンが表示される', async () => {
-    const mockOtpClick = jest.fn();
-    render(<LoginForm onOtpLoginClick={mockOtpClick} />);
-
-    const otpLoginButton = screen.getByRole('button', {
-      name: 'メールでログイン',
-    });
-    expect(otpLoginButton).toBeInTheDocument();
-
-    await user.click(otpLoginButton);
-    expect(mockOtpClick).toHaveBeenCalled();
-  });
-
-  it('onOtpLoginClick未指定時にメールでログインボタンが表示されない', () => {
+  /**
+   * ⛔ **メールOTPログインの導線を戻さない**（#1361）。
+   *
+   * 受信箱を押さえられるとパスワードを知らなくてもログインできる経路で、
+   * パスワード再設定と二重に存在していた。消しても復旧手段は残る。
+   */
+  it('メールでログインの導線が無い', () => {
     render(<LoginForm />);
 
     expect(
       screen.queryByRole('button', { name: 'メールでログイン' }),
     ).not.toBeInTheDocument();
+    // 再設定の導線は残す。これが唯一の復旧経路になった
+    expect(
+      screen.getByRole('link', { name: 'パスワードをお忘れの方' }),
+    ).toBeInTheDocument();
   });
 
   it('callbackUrl 指定時、ログイン成功で callbackUrl に遷移する', async () => {

@@ -15,14 +15,12 @@ import { OTP_ACTION, OTP_CONFIG, type OtpAction } from './otp';
 
 const ALL_ACTIONS: OtpAction[] = [
   OTP_ACTION.REGISTRATION,
-  OTP_ACTION.LOGIN,
   OTP_ACTION.PASSWORD_CHANGE,
 ];
 
 describe('buildOtpEmailSubject', () => {
   it.each([
     [OTP_ACTION.REGISTRATION, 'メールアドレスの確認'],
-    [OTP_ACTION.LOGIN, 'ログイン'],
     [OTP_ACTION.PASSWORD_CHANGE, 'パスワード変更'],
   ])('%s の件名に用途「%s」を含む', (action, label) => {
     expect(buildOtpEmailSubject(action)).toContain(label);
@@ -38,7 +36,6 @@ describe('buildOtpEmailSubject', () => {
 describe('buildOtpEmailText', () => {
   it.each([
     [OTP_ACTION.REGISTRATION, 'メールアドレスの確認'],
-    [OTP_ACTION.LOGIN, 'ログイン'],
     [OTP_ACTION.PASSWORD_CHANGE, 'パスワード変更'],
   ])('%s の本文に用途「%s」を明記する', (action, label) => {
     expect(buildOtpEmailText('123456', action)).toContain(
@@ -80,15 +77,15 @@ describe('buildOtpEmailText', () => {
 });
 
 /**
- * パスワード失効の通知（#1302）
+ * パスワード失効の通知（#1302 / #1325）
  *
- * 未検証のまま放置されたアカウントが「メールでログイン」で認証済みへ昇格する
- * とき、出自の分からない `password_hash` を失効させる。伝えないと、利用者は
- * 次のパスワードログインが弾かれる理由を知るすべがない。
+ * 未検証のまま放置されたアカウントが `registration` の確認コードで認証済みへ
+ * 昇格するとき、出自の分からない `password_hash` を失効させる。伝えないと、
+ * 利用者は次のパスワードログインが弾かれる理由を知るすべがない。
  */
 describe('パスワード失効の通知メール', () => {
-  const settingsUrl = 'https://example.com/settings';
-  const text = buildPasswordInvalidatedEmailText(settingsUrl);
+  const resetUrl = 'https://example.com/auth/forgot-password';
+  const text = buildPasswordInvalidatedEmailText(resetUrl);
 
   it('件名でパスワードを無効にしたことが分かる', () => {
     expect(buildPasswordInvalidatedEmailSubject()).toContain(
@@ -106,12 +103,25 @@ describe('パスワード失効の通知メール', () => {
   });
 
   it('再設定先のURLを本文に含む', () => {
-    expect(text).toContain(settingsUrl);
+    expect(text).toContain(resetUrl);
   });
 
-  it('失効中もメールでログインできる旨を書く', () => {
-    // ここが抜けると、パスワードを失った利用者が締め出されたと誤解する
-    expect(text).toContain('メールでログイン');
+  /**
+   * ⛔ **設定ページへ誘導しない**（#1361）
+   *
+   * 受け取った時点で `password_hash` は NULL でセッションも無い。
+   * かつて案内していた「メールでログイン」は削除済みなので、
+   * **ログインする手段が1つも無い状態で設定ページのリンクだけ渡す**ことになる。
+   * 効くのはパスワード再設定（未検証でも通る）だけ。
+   */
+  it('削除済みの「メールでログイン」を案内しない', () => {
+    expect(text).not.toContain('メールでログイン');
+  });
+
+  it('いまログインできないことを伝える', () => {
+    // ここが抜けると、利用者は設定ページを探しに行って行き止まりに入る
+    expect(text).toContain('ログインできない状態');
+    expect(text).toContain('再設定');
   });
 
   it('サービス側から尋ねない旨の警告を含む', () => {

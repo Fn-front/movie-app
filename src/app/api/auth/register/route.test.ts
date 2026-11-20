@@ -775,6 +775,10 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     // ダミーUUIDではなく実際のユーザーIDが返る
     expect(json.data.userId).toBe('squatted-user-id');
     // 確認コードが実際に送信される（従来は何もせず成功を装っていた）
+    //
+    // ⚠️ **#1361 以降、これが未検証ユーザーの唯一の復旧経路。**
+    //   「メールでログイン」で昇格する道（#1257）を消したため、
+    //   ここが落ちると確認コードを入れ損ねた利用者は二度と入れなくなる
     expect(mockSendOtpEmail).toHaveBeenCalledWith(
       'victim@example.com',
       '123456',

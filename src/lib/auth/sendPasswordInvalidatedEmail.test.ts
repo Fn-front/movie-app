@@ -35,7 +35,7 @@ describe('sendPasswordInvalidatedEmail', () => {
     process.env = originalEnv;
   });
 
-  it('設定ページのリンクとともにメールを送る', async () => {
+  it('パスワード再設定のリンクとともにメールを送る', async () => {
     mockSend.mockResolvedValue({ error: null });
     const { sendPasswordInvalidatedEmail } = await loadModule();
 
@@ -46,7 +46,9 @@ describe('sendPasswordInvalidatedEmail', () => {
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'user@example.com',
-        text: expect.stringContaining('https://example.com/settings'),
+        text: expect.stringContaining(
+          'https://example.com/auth/forgot-password',
+        ),
       }),
     );
   });
@@ -62,7 +64,7 @@ describe('sendPasswordInvalidatedEmail', () => {
 
     const { text } = mockSend.mock.calls[0][0];
 
-    expect(text).toContain('https://www.movie-app-fn.com/settings');
+    expect(text).toContain('https://www.movie-app-fn.com/auth/forgot-password');
   });
 
   it('無効にした事実と理由を本文に含める', async () => {

@@ -121,6 +121,13 @@ export const RATE_LIMIT_ACTION = {
   ADMIN_AWARD_SYNC: 'admin_award_sync',
   /** 手動同期ジョブの進捗ポーリング（admin 単位） */
   ADMIN_AWARD_SYNC_STATUS: 'admin_award_sync_status',
+  /**
+   * CRON の失敗通知の連投抑止（CRON 名単位）— #979
+   *
+   * ⚠️ これは**保護のための制限ではない**。同じ CRON が何度も失敗したとき、
+   * メールを1日1通に抑えるためだけに使う。
+   */
+  CRON_FAILURE_NOTICE: 'cron_failure_notice',
 } as const;
 
 /**
@@ -418,6 +425,22 @@ export const RATE_LIMIT_CONFIG = {
    * 年を1件ずつ投入する運用なので10回/時で十分な余裕がある。
    */
   ADMIN_AWARD_SYNC: { maxAttempts: 10, windowMinutes: 60 },
+  /**
+   * CRON の失敗通知（#979）
+   *
+   * 同じ CRON の失敗は1日1通に抑える。CRON 自体が日次なので通常は1日1通
+   * だが、手で叩かれた場合や再実行で連投しないようにする。
+   *
+   * ⚠️ **`FAIL_CLOSED_ACTIONS` に入れない。** 判定できないときに黙ると
+   * **アラートそのものが失われる**。重複して届くほうがはるかにましなので、
+   * ここは fail-open のままにする（他の認証系とは逆向きの判断）。
+   *
+   * ⚠️ これは「レートではなく、窓に空白が入るまでの通算回数」（#934）。
+   * 失敗し続けている間は `last_attempt_at` が更新され続けるので、
+   * 24時間の空白が入るまで2通目は出ない。**復旧したときに通知は出ない**
+   * ので、沈黙＝正常とは読めない点に注意。
+   */
+  CRON_FAILURE_NOTICE: { maxAttempts: 1, windowMinutes: 1440 },
   /**
    * 手動同期ジョブの進捗ポーリング。
    *

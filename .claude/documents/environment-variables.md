@@ -201,7 +201,24 @@ RESEND_FROM_EMAIL=noreply@yourdomain.com
 # Cron Secret（バッチ更新API認証用）
 # 生成: openssl rand -base64 32
 CRON_SECRET=your_cron_secret_here_minimum_32_chars
+
+# CRON 失敗の通知先（オプション / #979）
+# 未設定なら通知しない（警告ログだけ出る）。送信には RESEND_API_KEY が要る。
+CRON_ALERT_EMAIL=ops@yourdomain.com
 ```
+
+⚠️ **`CRON_ALERT_EMAIL` を本番に設定しないと、CRON の失敗に気づけない。**
+失敗は `console.error` と Vercel の実行履歴に残るだけで、誰も見なければ
+そのまま。とくに怖いのは単発の失敗ではなく**恒常的な失敗**。
+
+| 想定 | 症状 |
+|---|---|
+| `CRON_SECRET` 未設定・不一致 | **全 CRON が 401 で素通り**。アプリは正常に見える |
+| service role キーの失効 | 全 CRON が DB 接続エラー |
+| TMDb / OpenAI キーの失効 | 同期・レコメンドだけが静かに止まる |
+
+通知は**同じ CRON について1日1通**に抑えている（`cron_failure_notice`）。
+⚠️ **復旧しても通知は出ない**ので、沈黙を「正常」と読まないこと。
 
 ---
 

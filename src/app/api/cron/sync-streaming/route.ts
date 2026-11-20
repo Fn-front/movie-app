@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { HTTP_STATUS, CRON_ERROR_MESSAGES } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
-import { handleRouteError } from '@/helpers/routeError';
+import { handleCronError } from '@/helpers/cronError';
 import { syncStreamingMovies } from '@/lib/sync/syncStreamingMovies';
 
 export const dynamic = 'force-dynamic';
@@ -30,9 +30,9 @@ export async function GET(request: NextRequest) {
       { status: HTTP_STATUS.OK },
     );
   } catch (error) {
-    return handleRouteError(
+    return handleCronError(
       error,
-      'Sync streaming movies error',
+      'sync-streaming',
       CRON_ERROR_MESSAGES.SYNC_STREAMING,
     );
   }

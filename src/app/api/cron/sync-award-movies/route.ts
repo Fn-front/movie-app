@@ -21,7 +21,7 @@ import {
   AWARD_YEAR_RANGE,
 } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
-import { handleRouteError } from '@/helpers/routeError';
+import { handleCronError } from '@/helpers/cronError';
 import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
@@ -80,9 +80,9 @@ export async function GET(request: NextRequest) {
       { status: HTTP_STATUS.OK },
     );
   } catch (error) {
-    return handleRouteError(
+    return handleCronError(
       error,
-      'Sync award movies error',
+      'sync-award-movies',
       CRON_ERROR_MESSAGES.SYNC_AWARD_MOVIES,
     );
   }

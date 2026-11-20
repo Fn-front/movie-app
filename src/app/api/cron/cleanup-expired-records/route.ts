@@ -24,12 +24,13 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { HTTP_STATUS, CRON_ERROR_MESSAGES, ERROR_CODE } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
-import { handleRouteError } from '@/helpers/routeError';
+import { handleCronError } from '@/helpers/cronError';
 import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { cleanupExpiredRecords } from '@/lib/cleanup/expiredRecords';
+import { notifyCronFailure } from '@/lib/cron/notifyCronFailure';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -65,6 +66,23 @@ export async function GET(request: NextRequest) {
     // ⚠️ ただし **RPC の失敗（`hasError`）は 500 にする**。打ち切りと違って
     //   「次回のCRONが続きを消す」では回復しない（権限不足・関数の欠落など
     //   設定の問題が多い）。部分的な結果は本文に残したまま、気づける形にする。
+    //
+    // ⚠️ **ここは throw しないので catch の通知に乗らない**（#979）。
+    //   個人データの消去が止まっていることに気づけないのが問題そのもの
+    //   （#933 / #978 / #1300）なので、明示的に通知する。
+    //   `notifyCronFailure` は throw しない契約なので応答には影響しない
+    if (hasError) {
+      const failed = targets
+        .filter((t) => t.error !== undefined)
+        .map((t) => `${t.name}: ${t.error}`)
+        .join(' / ');
+
+      await notifyCronFailure(supabase, {
+        cronName: 'cleanup-expired-records',
+        reason: `保持期間切れの削除に失敗しました（${failed}）`,
+      });
+    }
+
     return NextResponse.json(
       {
         success: !hasError,
@@ -87,9 +105,9 @@ export async function GET(request: NextRequest) {
       },
     );
   } catch (error) {
-    return handleRouteError(
+    return handleCronError(
       error,
-      'Cleanup expired records error',
+      'cleanup-expired-records',
       CRON_ERROR_MESSAGES.CLEANUP_EXPIRED_RECORDS,
     );
   }

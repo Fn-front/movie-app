@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { HTTP_STATUS, ERROR_CODE, CRON_ERROR_MESSAGES } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
-import { handleRouteError } from '@/helpers/routeError';
+import { handleCronError } from '@/helpers/cronError';
 import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
@@ -53,9 +53,9 @@ export async function GET(request: NextRequest) {
       { status: HTTP_STATUS.OK },
     );
   } catch (error) {
-    return handleRouteError(
+    return handleCronError(
       error,
-      'Generate recommendations error',
+      'generate-recommendations',
       CRON_ERROR_MESSAGES.GENERATE_RECOMMENDATIONS,
     );
   }

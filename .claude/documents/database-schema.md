@@ -23,9 +23,43 @@
 | role | VARCHAR(20) | NOT NULL | 'user' | ユーザー権限（user / admin） |
 | is_verified | BOOLEAN | NOT NULL | false | メール認証済みフラグ |
 | password_changed_at | TIMESTAMPTZ | NULL | - | パスワード最終変更日時 |
+| password_contested | BOOLEAN | NOT NULL | false | 現在の `password_hash` が、他人の未検証登録を上書きして設定されたか（#1325） |
 | last_login_at | TIMESTAMPTZ | NULL | - | 最終ログイン日時（signIn時 + セッション更新時に1時間間隔で更新） |
 | created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
 | updated_at | TIMESTAMPTZ | NOT NULL | now() | 更新日時 |
+
+**設計判断 — `password_contested`（#1325）:**
+
+未検証アカウントのパスワードが**2回以上設定された**ことを記録する。
+どちらが本人かサーバーから区別できないため、`auth/otp/verify` の
+REGISTRATION 分岐はこれが立っていれば `password_hash` を NULL にして昇格させる
+（#1302 が LOGIN 経路で採った判断を広げたもの）。
+
+| 操作 | 印の扱い |
+|---|---|
+| `auth/register`（新規作成） | false |
+| `auth/register`（未検証ユーザーの上書き） | **OR で畳む**（既存の印は下ろさない）。ただし `bcrypt.compare` が一致する「同じパスワードでのやり直し」は立てない |
+| `auth/otp/send`（再送） | **触らない** |
+| `auth/otp/verify`（昇格） | `password_hash` を NULL にしたうえで下ろす |
+| `auth/password-reset/confirm` | 下ろす |
+
+⛔ **`register` 側で印を下ろしてはいけない。** 比較相手は「本人が設定した
+パスワード」ではなく**直前に誰かが設定したハッシュ**なので、攻撃者が
+同じリクエストを2回送るだけで `compare` が true になり、保護が外れる
+（レビューで実測）。
+
+⛔ **印を `otp_codes` に持たせてはいけない。** 既存ユーザー分岐は未検証OTPを
+DELETE してから作り直すため、上の2回目で**印の付いた行ごと消える**。
+さらに引き継ぎ元の行が無いと「係争なし」に倒れる（fail-open）。
+
+⛔ 「発行時の `password_hash` の指紋を持たせて検証時に突き合わせる」案も
+**効かない**。攻撃者の register はパスワードとコードを同時に設定するので
+指紋は必ず一致し、被害者が受信箱で新しいほうのメールを使えば再送すら要らない。
+詳細は `20261120045605_move_password_contested_to_users.sql`。
+
+既知のトレードオフ: 攻撃者が先に squat したアドレスでは、本人の正規登録も
+係争になり昇格時にパスワードが消える（本人はパスワード再設定が必要）。
+#645 のトレードオフが一段重くなるが、乗っ取りより軽いとして受け入れる。
 
 **インデックス:**
 - `email` (UNIQUE)
@@ -89,7 +123,6 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 | expires_at | TIMESTAMPTZ | NOT NULL | - | 有効期限（作成時刻 + 10分） |
 | verified_at | TIMESTAMPTZ | NULL | - | 検証完了日時 |
 | verification_token_hash | TEXT | NULL | - | 検証済みトークンの SHA-256（ログイン・パスワード変更の本人確認に使う） |
-| password_contested | BOOLEAN | NOT NULL | false | このコードに対応する `users.password_hash` が、他人の未検証登録を上書きして設定されたか（#1325） |
 | created_at | TIMESTAMPTZ | NOT NULL | now() | 作成日時 |
 
 **インデックス:**
@@ -104,22 +137,6 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
   `/api/auth/otp/send` と `/verify` は 400 で拒否する。発行できるのは
   サーバー側の `sendSecondFactorCode` だけ（#1261）
 - `attempts` は 0〜5 の範囲（CHECK制約）
-
-**設計判断 — `password_contested`（#1325）:**
-
-未検証アカウントのパスワードが**2回以上設定された**ことを記録する。
-`auth/otp/verify` の REGISTRATION 分岐は、これが立っていれば
-`password_hash` を NULL にして昇格させる。
-
-- 立てるのは `auth/register` の既存ユーザー分岐（＝未検証ユーザーの上書き）だけ。
-  ただし `bcrypt.compare` で**同じパスワードでのやり直しは除外**する
-- `auth/otp/send`（再送）は直前のコードの値を**引き継ぐ**。
-  ⚠️ ここが攻撃の成立経路なので、落とすと保護が無くなる
-
-⛔ 「発行時の `password_hash` の指紋を持たせて検証時に突き合わせる」案は
-**効かない**。攻撃者の register 呼び出しはパスワードとコードを同時に設定する
-ので指紋は必ず一致し、被害者が受信箱で新しいほうのメールを使えば再送すら
-要らない。詳細は `20261120043554_add_password_contested_to_otp_codes.sql`。
 
 **設計判断 — 平文を保存しない理由（#640 / #698）:**
 - OTPは6桁 = 100万通りしかなく、ソルト付きSHA-256でも特定の行を狙った総当たりは1秒未満で終わる

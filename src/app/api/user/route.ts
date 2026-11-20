@@ -12,11 +12,17 @@
  * そのまま口封じにアカウントを消せてしまう。所持・記憶のいずれかを
  * 改めて要求する（`totp/disable` と同じ考え方）。
  *
- * ⛔ **ただしパスワードも第2要素も持たない層には効いていない**（#1362）。
- *   OAuth のみで登録し2FA 未設定の利用者は照合する材料が無く、
- *   セッションだけで消せる。必須にすると**その層が永久に退会できなく**
- *   なるため承知のうえで通しており、登録アドレスへの使い捨てコードで
- *   塞ぐのは #1362 で行う。
+ * ⚠️ **どの層にも必ず1つは要求する**（#1362）。照合の材料は3つあり、
+ *   持っているものを上から順に使う。
+ *
+ *   | 持っているもの | 要求するもの |
+ *   |---|---|
+ *   | パスワード | 現在のパスワード |
+ *   | 第2要素 | 認証アプリ / メールOTP / リカバリーコード |
+ *   | **どちらも無い（OAuth のみ）** | **登録アドレスへ送る使い捨てコード** |
+ *
+ *   3つ目が無かった頃は、OAuth のみで登録し二段階認証を設定していない層に
+ *   **再確認が1つも掛からず、セッションだけで2クリックで消せた**。
  */
 
 import { NextResponse } from 'next/server';
@@ -28,6 +34,7 @@ import {
   RATE_LIMIT_ACTION,
   RATE_LIMIT_CONFIG,
 } from '@/constants';
+import { ACCOUNT_DELETE_CODE_MESSAGES } from '@/constants/accountDeleteCode';
 import {
   ACCOUNT_DELETE_MESSAGES,
   AUTH_ERROR_MESSAGES,
@@ -40,6 +47,10 @@ import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
+import {
+  ACCOUNT_DELETE_VERIFY_RESULT,
+  consumeAccountDeleteCode,
+} from '@/lib/auth/accountDeleteCode';
 import { getSecondFactorMethod } from '@/lib/auth/secondFactor';
 import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 import { accountDeleteApiSchema } from '@/schema/auth';
@@ -100,7 +111,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
 
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('password_hash')
+      .select('email, password_hash')
       .eq('id', session.user.id)
       .single();
 
@@ -160,6 +171,43 @@ export async function DELETE(request: Request): Promise<NextResponse> {
       );
 
       if (guardResponse) return guardResponse;
+    }
+
+    // ⛔ **ここが #1362 の本体。** パスワードも第2要素も持たない利用者は
+    //   上の2つをどちらも通らないため、**再確認が1つも掛からないまま
+    //   削除へ到達していた**。登録アドレスへ送った使い捨てコードで
+    //   受信箱の所持を確かめる。
+    //
+    // ⚠️ 入力確認フレーズ（"delete" と打たせる等）では代わりにならない。
+    //   誤操作にしか効かず、セッションを持つ攻撃者は同じ文字列を打てる。
+    //
+    // ⚠️ 持っている人には要求しない。3つとも求めると、パスワードを持つ
+    //   利用者がメールを待たないと退会できなくなる
+    if (!user.password_hash && !secondFactorMethod) {
+      if (!parsed.data.code) {
+        return errorResponse(
+          ERROR_CODE.VALIDATION_ERROR,
+          ACCOUNT_DELETE_CODE_MESSAGES.CODE_REQUIRED,
+          HTTP_STATUS.BAD_REQUEST,
+        );
+      }
+
+      // ⛔ `session.user.id` を渡すこと。外すと、攻撃者が自分のアカウントで
+      //   取ったコードを奪った被害者のセッションで使える（#1359 の critical）
+      const verifyResult = await consumeAccountDeleteCode(
+        supabase,
+        session.user.id,
+        user.email,
+        parsed.data.code,
+      );
+
+      if (verifyResult !== ACCOUNT_DELETE_VERIFY_RESULT.SUCCESS) {
+        return errorResponse(
+          ERROR_CODE.VALIDATION_ERROR,
+          ACCOUNT_DELETE_CODE_MESSAGES.CODE_INVALID,
+          HTTP_STATUS.BAD_REQUEST,
+        );
+      }
     }
 
     // ⚠️ `rate_limits` は CASCADE で消えない（identifier 文字列で引くため）。

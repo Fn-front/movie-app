@@ -14,6 +14,7 @@ import { memo, useCallback, useId, useState } from 'react';
 import { Button } from '@/components/ui/button/button';
 import { Input } from '@/components/ui/input/input';
 import { Modal } from '@/components/ui/modal/modal';
+import { ACCOUNT_DELETE_CODE_MESSAGES } from '@/constants/accountDeleteCode';
 import { ACCOUNT_DELETE_MESSAGES } from '@/constants/auth';
 import { useDeleteAccount } from './hooks/useDeleteAccount';
 
@@ -41,11 +42,25 @@ export const DeleteAccount = memo(function DeleteAccount({
   const {
     isSubmitting,
     error,
+    notice,
     secondFactorRequired,
     loadRequirement,
+    sendDeleteCode,
     deleteAccount,
     clearError,
   } = useDeleteAccount();
+
+  /**
+   * 退会の確認コードが要るか（#1362）
+   *
+   * ⛔ パスワードも第2要素も持たない利用者（OAuth のみで登録し二段階認証を
+   * 設定していない層）は、照合する材料が無く**再確認が1つも掛からないまま
+   * 削除できていた**。登録アドレスへ送る使い捨てコードで塞ぐ。
+   *
+   * ⚠️ `secondFactorRequired === false`（判定済みで未設定）のときだけ。
+   * `null`（判定前）で出すと、設定済みの利用者に一瞬だけ別の入力欄を見せる。
+   */
+  const needsDeleteCode = !hasPassword && secondFactorRequired === false;
 
   const passwordFieldId = useId();
   const codeFieldId = useId();
@@ -73,16 +88,27 @@ export const DeleteAccount = memo(function DeleteAccount({
   const handleSubmit = useCallback(async () => {
     await deleteAccount({
       ...(hasPassword ? { currentPassword } : {}),
-      ...(secondFactorRequired ? { code } : {}),
+      // ⚠️ 第2要素と退会コードは同じ `code` フィールドで送る。
+      //    サーバー側はどちらを要求するかを自分で決めるので、
+      //    画面が種別を伝える必要はない
+      ...(secondFactorRequired || needsDeleteCode ? { code } : {}),
     });
-  }, [code, currentPassword, deleteAccount, hasPassword, secondFactorRequired]);
+  }, [
+    code,
+    currentPassword,
+    deleteAccount,
+    hasPassword,
+    needsDeleteCode,
+    secondFactorRequired,
+  ]);
 
   // ⚠️ 入力が足りないまま送ると 400 が返るだけなので手前で止める。
   //    判定前（null）も止める —— 設定済みの利用者がコード無しで押せてしまう
   const canSubmit =
     secondFactorRequired !== null &&
     (!hasPassword || currentPassword.length > 0) &&
-    (!secondFactorRequired || code.length > 0);
+    (!secondFactorRequired || code.length > 0) &&
+    (!needsDeleteCode || code.length > 0);
 
   return (
     <div className={styles.c_delete_account}>
@@ -125,6 +151,42 @@ export const DeleteAccount = memo(function DeleteAccount({
               onChange={(event) => setCode(event.target.value)}
               fullWidth
             />
+          )}
+
+          {/*
+            ⛔ パスワードも第2要素も持たない利用者のための経路（#1362）。
+            この層は照合する材料が無く、再確認が1つも掛からないまま
+            削除できていた
+          */}
+          {needsDeleteCode && (
+            <>
+              <p className={styles.c_delete_account__description}>
+                {ACCOUNT_DELETE_CODE_MESSAGES.DESCRIPTION}
+              </p>
+              <Button
+                variant='secondary'
+                onClick={sendDeleteCode}
+                disabled={isSubmitting}
+              >
+                確認コードを送る
+              </Button>
+              <Input
+                id={codeFieldId}
+                type='text'
+                inputMode='numeric'
+                label='確認コード'
+                autoComplete='one-time-code'
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                fullWidth
+              />
+            </>
+          )}
+
+          {notice && (
+            <p role='status' className={styles.c_delete_account__description}>
+              {notice}
+            </p>
           )}
 
           {error && (

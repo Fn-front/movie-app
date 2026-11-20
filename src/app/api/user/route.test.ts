@@ -43,6 +43,13 @@ jest.mock('@/lib/auth/secondFactor', () => ({
 }));
 
 const mockRequireSecondFactor = jest.fn();
+const mockConsumeAccountDeleteCode = jest.fn();
+jest.mock('@/lib/auth/accountDeleteCode', () => ({
+  ...jest.requireActual('@/lib/auth/accountDeleteCode'),
+  consumeAccountDeleteCode: (...args: unknown[]) =>
+    mockConsumeAccountDeleteCode(...args),
+}));
+
 jest.mock('@/helpers/secondFactorGuard', () => ({
   requireSecondFactor: (...args: unknown[]) => mockRequireSecondFactor(...args),
 }));
@@ -69,7 +76,9 @@ const mockUserQuery = (passwordHash: string | null, error: unknown = null) => {
       eq: () => ({
         single: () =>
           Promise.resolve({
-            data: error ? null : { password_hash: passwordHash },
+            data: error
+              ? null
+              : { email: 'user@example.com', password_hash: passwordHash },
             error,
           }),
       }),
@@ -186,15 +195,97 @@ describe('DELETE /api/user', () => {
      * （`20260312000000` で NULL 許容になった）。
      *
      * 必須にすると照合できる値が無いので**永久に退会できなくなる**。
+     * 代わりに確認コードを要求する（下の `確認コードの確認`）。
      */
-    it('パスワードを持たない利用者は再入力なしで削除できる', async () => {
+    it('パスワードを持たない利用者には現在のパスワードを求めない', async () => {
       mockUserQuery(null);
+      mockConsumeAccountDeleteCode.mockResolvedValue('success');
 
-      const response = await DELETE(createRequest({}));
+      const response = await DELETE(createRequest({ code: '123456' }));
 
       expect(response.status).toBe(200);
       expect(mockCompare).not.toHaveBeenCalled();
       expect(mockRpc).toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * ⛔ **ここが #1362 の本体。**
+   *
+   * パスワードも第2要素も持たない利用者（OAuth のみで登録し二段階認証を
+   * 設定していない層）は、上の2つの照合をどちらも通らない。コードが無いと
+   * **再確認が1つも掛からないまま削除へ到達する**＝セッションを奪われた
+   * 時点でデータを失う。
+   */
+  describe('確認コードの確認', () => {
+    beforeEach(() => {
+      // パスワードも第2要素も無い＝確認コードが要る層
+      mockUserQuery(null);
+      mockGetSecondFactorMethod.mockResolvedValue(null);
+      mockConsumeAccountDeleteCode.mockResolvedValue('success');
+    });
+
+    it('コード未入力なら400を返し、削除しない', async () => {
+      const response = await DELETE(createRequest({}));
+
+      expect(response.status).toBe(400);
+      expect(mockConsumeAccountDeleteCode).not.toHaveBeenCalled();
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⛔ `session.user.id` を渡すこと。外すと、攻撃者が自分のアカウントで
+     * 取ったコードを奪った被害者のセッションで使える（#1359 の critical）。
+     */
+    it('セッションの利用者IDと登録アドレスで照合する', async () => {
+      await DELETE(createRequest({ code: '123456' }));
+
+      expect(mockConsumeAccountDeleteCode).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        'user@example.com',
+        '123456',
+      );
+    });
+
+    it('コードが正しければ削除する', async () => {
+      const response = await DELETE(createRequest({ code: '123456' }));
+
+      expect(response.status).toBe(200);
+      expect(mockRpc).toHaveBeenCalled();
+    });
+
+    it('コードが不正なら400を返し、削除しない', async () => {
+      mockConsumeAccountDeleteCode.mockResolvedValue('invalid');
+
+      const response = await DELETE(createRequest({ code: '000000' }));
+
+      expect(response.status).toBe(400);
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⚠️ **持っている人には要求しない。** 3つとも求めると、パスワードを持つ
+     * 利用者がメールを待たないと退会できなくなる。
+     */
+    it('パスワードを持つ利用者にはコードを求めない', async () => {
+      mockUserQuery('hashed');
+
+      const response = await DELETE(createRequest({ currentPassword: 'pw' }));
+
+      expect(response.status).toBe(200);
+      expect(mockConsumeAccountDeleteCode).not.toHaveBeenCalled();
+    });
+
+    it('第2要素を持つ利用者にはコードを求めない', async () => {
+      mockGetSecondFactorMethod.mockResolvedValue('totp');
+
+      const response = await DELETE(createRequest({ code: '123456' }));
+
+      expect(response.status).toBe(200);
+      // 第2要素のガードが消費する。退会コードの経路は通らない
+      expect(mockRequireSecondFactor).toHaveBeenCalled();
+      expect(mockConsumeAccountDeleteCode).not.toHaveBeenCalled();
     });
   });
 

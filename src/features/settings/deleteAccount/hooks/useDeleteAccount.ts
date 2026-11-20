@@ -11,6 +11,7 @@
 import { useCallback, useState } from 'react';
 
 import { API_ENDPOINTS, ROUTES } from '@/constants';
+import { ACCOUNT_DELETE_CODE_MESSAGES } from '@/constants/accountDeleteCode';
 import { ACCOUNT_DELETE_MESSAGES } from '@/constants/auth';
 import { cleanUpBeforeSignOut, logout } from '@/lib/auth/logout';
 import { clearConsentRecord } from '@/utils/cookieConsent';
@@ -35,6 +36,15 @@ interface UseDeleteAccountResult {
   secondFactorRequired: boolean | null;
   /** ダイアログを開くときに呼ぶ。第2要素の有無を取りにいく */
   loadRequirement: () => Promise<void>;
+  /**
+   * 退会の確認コードを送る（#1362）
+   *
+   * ⚠️ パスワードも第2要素も持たない利用者のための経路。この層は照合する
+   * 材料が無く、**再確認が1つも掛からないまま削除できていた**。
+   */
+  sendDeleteCode: () => Promise<void>;
+  /** コードを送れたか（画面に「送りました」を出すため） */
+  notice: string | null;
   /** 削除する。成功するとログアウトして遷移するため、通常は戻ってこない */
   deleteAccount: (input: DeleteAccountInput) => Promise<void>;
   clearError: () => void;
@@ -51,8 +61,43 @@ export function useDeleteAccount(): UseDeleteAccountResult {
   const [secondFactorRequired, setSecondFactorRequired] = useState<
     boolean | null
   >(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const clearError = useCallback(() => setError(null), []);
+  const clearError = useCallback(() => {
+    setError(null);
+    setNotice(null);
+  }, []);
+
+  /**
+   * 退会の確認コードを送る
+   *
+   * ⚠️ **宛先は渡さない。** サーバーが `users.email` から引く。渡せる形に
+   * すると、アカウントを1つ持つだけで任意のアドレスへ自サービス名義の
+   * 「退会の確認コード」を送れる（#641）。
+   */
+  const sendDeleteCode = useCallback(async () => {
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(API_ENDPOINTS.USER_DELETE_CODE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const json = await response.json().catch(() => null);
+
+      if (!response.ok || !json?.success) {
+        setError(json?.error?.message ?? ACCOUNT_DELETE_MESSAGES.FAILED);
+
+        return;
+      }
+
+      setNotice(ACCOUNT_DELETE_CODE_MESSAGES.CODE_SENT);
+    } catch {
+      setError(ACCOUNT_DELETE_MESSAGES.FAILED);
+    }
+  }, []);
 
   /**
    * 第2要素の有無を取りにいく
@@ -117,8 +162,10 @@ export function useDeleteAccount(): UseDeleteAccountResult {
   return {
     isSubmitting,
     error,
+    notice,
     secondFactorRequired,
     loadRequirement,
+    sendDeleteCode,
     deleteAccount,
     clearError,
   };

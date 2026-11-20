@@ -9,6 +9,10 @@ import {
   EMAIL_CHANGE_OTP_ACTION,
   type EmailChangeOtpAction,
 } from './emailChange';
+import {
+  ACCOUNT_DELETE_OTP_ACTION,
+  type AccountDeleteOtpAction,
+} from './accountDeleteCode';
 
 /**
  * 確認コードメールに書く用途の種別
@@ -20,7 +24,8 @@ import {
 export type OtpEmailAction =
   | OtpAction
   | TwoFactorOtpAction
-  | EmailChangeOtpAction;
+  | EmailChangeOtpAction
+  | AccountDeleteOtpAction;
 
 /**
  * デフォルトの送信元メールアドレス（フォールバック）
@@ -53,6 +58,9 @@ const OTP_PURPOSE_LABEL: Record<OtpEmailAction, string> = {
   // ⚠️ 宛先は**まだ本人のものでないアドレス**。受け取った人が
   //   「身に覚えがない」と分かる文言にする（#1359）
   [EMAIL_CHANGE_OTP_ACTION]: 'メールアドレスの変更',
+  // ⚠️ **取り消せない操作**。身に覚えがないなら、セッションを奪われた
+  //   可能性がある。他と区別できる文言にする（#648 / #1362）
+  [ACCOUNT_DELETE_OTP_ACTION]: 'アカウントの削除',
 };
 
 /**

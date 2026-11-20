@@ -166,6 +166,8 @@ describe('syncWatchlistStreaming', () => {
 
     expect(result.failed).toBe(1);
     expect(result.updated).toBe(1);
+    // ⚠️ 通知はこの2つを分子・分母に使う（#1354）
+    expect(result.targets).toBe(2);
     expect(upsertedRows).toHaveLength(1);
     expect(upsertedRows[0].tmdb_movie_id).toBe(100);
   });

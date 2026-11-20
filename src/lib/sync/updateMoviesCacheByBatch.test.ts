@@ -198,6 +198,10 @@ describe('updateMoviesCacheByBatch', () => {
       expect(fromMock.deleteMock).not.toHaveBeenCalled();
       expect(result.removedNotFound).toBe(0);
       expect(result.errors).toHaveLength(1);
+
+      // ⚠️ 分母は `total`（`movie_cache` の行数）ではない（#1354）。
+      //    ループが回るのは重複を除いた映画IDの数
+      expect(result.items).toEqual({ attempted: 1, failed: 1 });
     });
 
     it('削除に失敗した場合はerrorsに積む', async () => {

@@ -377,6 +377,10 @@ describe('syncNowPlayingMovies', () => {
       const keepFilter = getKeepFilter(supabaseMock);
       expect(keepFilter).toContain('201');
       expect(keepFilter).toContain('202');
+
+      // ⚠️ `errors.length` では代用できない（#1354）。あの配列には作品単位
+      //    ではないエラーも混ざる。通知の分子・分母はここで数える
+      expect(result.items).toEqual({ attempted: 2, failed: 1 });
     });
 
     it('1件も判定できなければクリアを実行しない', async () => {

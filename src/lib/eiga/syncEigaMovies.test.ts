@@ -1161,6 +1161,10 @@ describe('syncEigaMovies', () => {
     expect(result.added).toBe(0);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toBe('エラー映画: DB書き込みエラー');
+
+    // ⚠️ `errors.length` では代用できない（#1354）。検索ループと書き込み
+    //    ループの2段構えなので、件数は記録点で数える
+    expect(result.items).toEqual({ attempted: 1, failed: 1 });
   });
 
   it('個別映画処理中に例外が発生した場合、errorsに追加して処理を継続する', async () => {

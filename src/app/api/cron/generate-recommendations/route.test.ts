@@ -813,6 +813,45 @@ describe('GET /api/cron/generate-recommendations', () => {
       expect(mockNotifyCronFailure).not.toHaveBeenCalled();
     });
 
+    /**
+     * ⚠️ **スキップも分母に数える**（#1354）。
+     *
+     * 外すと「失敗 / 失敗」で常に 100% になり、1人でも例外が出た日は
+     * 必ず通知が飛ぶ。毎日スキップされる利用者がいる以上、ここを外すと
+     * 鳴り続けて無視されるようになる。
+     */
+    it('スキップが多くて失敗が少なければ通知しない', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      mockFavoritesUserQuery(['user-1', 'user-2', 'user-3', 'user-4']);
+      mockActiveUsersQuery(['user-1', 'user-2', 'user-3', 'user-4']);
+
+      // user-1 だけ生成に進み、OpenAI で落とす
+      mockFavoritesQuery([
+        { tmdb_movie_id: 1, title: 'インターステラー', rating: 9 },
+      ]);
+      mockWatchlistQuery([]);
+      mockDismissedMoviesQuery([]);
+      mockFetchRecommendations.mockRejectedValue(new Error('openai down'));
+
+      // 残り3人はお気に入り0件で対象外
+      for (let i = 0; i < 3; i += 1) {
+        mockFavoritesQuery([]);
+        mockWatchlistQuery([]);
+        mockDismissedMoviesQuery([]);
+      }
+
+      const response = await GET(createRequest('Bearer test-secret'));
+      const json = await response.json();
+
+      expect(json.data.failed_users).toBe(1);
+      expect(json.data.skipped_users).toBe(3);
+      // 1 / 4 = 25% なのでしきい値に届かない
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+
+      error.mockRestore();
+    });
+
     it('対象の利用者が1人もいなければ通知しない', async () => {
       mockFavoritesUserQuery([]);
       mockActiveUsersQuery([]);

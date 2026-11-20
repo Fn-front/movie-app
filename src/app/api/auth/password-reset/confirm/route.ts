@@ -178,25 +178,27 @@ export async function POST(request: Request) {
       return tokenFailureResponse('invalid');
     }
 
-    // 新旧同一チェック。**トークンを消費する前**に行う（#1235）。
-    // ここで弾かれるのは入力の打ち直しで直せる類のミスなので、
-    // リンクを失わせる理由が無い
-    if (user.password_hash) {
-      const isSamePassword = await bcrypt.compare(password, user.password_hash);
-
-      if (isSamePassword) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: ERROR_CODE.BAD_REQUEST,
-              message: PASSWORD_RESET_MESSAGES.SAME_PASSWORD,
-            },
-          },
-          { status: HTTP_STATUS.BAD_REQUEST },
-        );
-      }
-    }
+    // ⛔ **新旧同一チェックはここに置かない**（#1243）。
+    //
+    //   `bcrypt.compare(新パスワード, 既存ハッシュ)` の結果を 400 と 200 で
+    //   返し分けると、**有効なリンクを握っている人にとって現在のパスワードを
+    //   判定するオラクル**になる。
+    //
+    //   #1235 でトークンの消費を後ろへ動かしたため、弾かれてもリンクが
+    //   焼けない。同じリンクで候補を何度でも投げられる。レート制限
+    //   （`CONFIRM_LIMIT` 10回/15分）は**識別子が送信元IP**なので、
+    //   IP を変えれば実質無制限。
+    //
+    //   リンクを握っていればパスワードは上書きできるので、追加で失われるのは
+    //   「**変更せずに**現在のパスワードを知れる」＝侵害に気づかれないこと。
+    //   使い回していれば他サービスへ波及する。
+    //
+    // ⚠️ 同じ値で上書きされても実害は無い。リセットは「アカウントを取り戻す」
+    //   操作で、`password_changed_at` は更新されるので既存セッションは失効する。
+    //
+    // ⚠️ **設定画面（`user/change-password`）の同一チェックはそのまま残す。**
+    //   あちらは現在のパスワードを知っている人しか到達できないのでオラクルに
+    //   ならない。
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 

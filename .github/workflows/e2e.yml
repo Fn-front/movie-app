@@ -38,10 +38,11 @@ on:
 #   secrets に入れると「本物に見える」ぶん誤解を生むため、あえて平文で置く。
 env:
   # ⛔ `latest` にしないこと。CLI がリリースされるたび CI が壊れうる。
-  #   実際に `latest`（= v3.2.0）で全4シャードが落ちた:
+  #   実際に `latest`（= v3.2.0）で全4シャードが落ちたことがある:
   #     inbucket in supabase/config.toml is no longer supported.
   #     Use local_smtp instead.
-  #   v3 で `[inbucket]` が `[local_smtp]` に変わったため。
+  #   v3 で `[inbucket]` が `[local_smtp]` に変わったため（#1335 で config を
+  #   改名して解消済み。v2 は知らないセクションを無視するので両対応）。
   #
   # 値は**手元で使っている CLI に合わせる**（config.toml の書式が CLI の
   # メジャーバージョンに紐づくため）。上げるときは config.toml の書式変更と、
@@ -49,7 +50,7 @@ env:
   # 手元の `supabase db push` が壊れる。
   #
   # ⚠️ e2e / e2e-ga の2ジョブが参照する。片方だけ変えられないよう1箇所に置く
-  SUPABASE_CLI_VERSION: 2.117.0
+  SUPABASE_CLI_VERSION: 3.2.0
   SUPABASE_LOCAL_URL: http://127.0.0.1:54321
   SUPABASE_LOCAL_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
   SUPABASE_LOCAL_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU

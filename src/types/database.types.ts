@@ -1213,6 +1213,7 @@ export type Database = {
           watched_count: number;
         }[];
       };
+      increment_otp_attempts: { Args: { p_id: string }; Returns: number };
       release_rate_limit: {
         Args: { p_action_type: string; p_identifier: string };
         Returns: undefined;

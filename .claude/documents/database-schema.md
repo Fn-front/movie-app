@@ -159,6 +159,14 @@ OAuthプロバイダーとのアカウント連携情報を管理（NextAuth.js�
 - FK は `ON DELETE CASCADE`。退会時の消し残り（#932）も、この列を持つ行は自動で連鎖する
   （`user_id` が NULL の行は `delete_user_account` がメールアドレス一致で消す）
 
+**更新:**
+- 検証失敗時の `attempts` 加算は **`increment_otp_attempts` RPC** で行う（#1284）。
+  read-then-write だと同時実行で加算が失われ、**0→1 が N 回**起きるだけになる
+  （PostgREST から `attempts = attempts + 1` という式は書けないため RPC が要る）
+  - `LEAST(attempts + 1, 5)` で頭打ちにして `chk_otp_attempts` の 23514 を避ける
+  - 戻り値は**加算後**の値。`auth/otp/verify` が「この回で上限に達したか」で
+    文言と導線を出し分けている（#1248）ため、読み直すとそこでまた競合する
+
 **クリーンアップ:**
 - 検証成功時のレコードは即座に削除
 - 有効期限切れレコードは日次 Cron `/api/cron/cleanup-expired-records` が `delete_expired_otp_codes` RPC で削除する（#978）。保持期間は **48時間**（`OTP_CODE_RETENTION_HOURS`）

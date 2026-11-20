@@ -104,12 +104,17 @@ describe('incrementOtpAttempts', () => {
 describe('increment_otp_attempts（マイグレーション）', () => {
   const sql = (() => {
     const dir = path.join(process.cwd(), 'supabase', 'migrations');
+    // ⚠️ **選択の時点でコメントを除去する。** 将来のマイグレーションが
+    //    コメント中でこの関数名に言及すると、そちらが `.sort().pop()` で
+    //    選ばれて全アサーションが壊れる（`otpActions.test.ts` と同じ対処）
+    const stripComments = (sql: string) => sql.replace(/--[^\n]*/g, '');
+
     const file = fs
       .readdirSync(dir)
       .filter((name) => name.endsWith('.sql'))
       .filter((name) =>
         /CREATE OR REPLACE FUNCTION public\.increment_otp_attempts/.test(
-          fs.readFileSync(path.join(dir, name), 'utf8'),
+          stripComments(fs.readFileSync(path.join(dir, name), 'utf8')),
         ),
       )
       .sort()
@@ -138,6 +143,29 @@ describe('increment_otp_attempts（マイグレーション）', () => {
   it('上限で頭打ちにする（23514 を投げない）', () => {
     expect(body).toMatch(/LEAST\(/);
     expect(body).not.toMatch(/SET attempts = attempts \+ 1\b(?!,)/);
+  });
+
+  /**
+   * ⛔ **対象の行を1行に絞る。**
+   *
+   * `WHERE` を落とすと `RETURNING ... INTO` が複数行を受けて 21000
+   * （`query returned more than one row`）で落ちる。ヘルパーが握り潰して
+   * `MAX_ATTEMPTS` を返すため、`auth/otp/verify` は**1回目の打ち間違いで
+   * 429**を返し、しかも `attempts` は永遠に増えない —— #1284 の穴が
+   * そのまま戻る（レビューで実測）。
+   */
+  it('対象の行だけを更新する', () => {
+    expect(body).toMatch(/WHERE id = p_id/);
+  });
+
+  /**
+   * ⚠️ **行が無いときは緩い側（0）ではなく上限値へ倒す。**
+   *
+   * 加算できていない以上「あと何回試せるか」は分からない。
+   * 0 を返すと fail-open になる。
+   */
+  it('行が無ければ上限値を返す', () => {
+    expect(body).toMatch(/IF NOT FOUND THEN\s*\n\s*RETURN 5;/);
   });
 
   // 加算後の値を返さないと、呼び出し側が読み直して再び競合する

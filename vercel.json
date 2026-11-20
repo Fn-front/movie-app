@@ -33,7 +33,7 @@
       "schedule": "0 18 28 * *"
     },
     {
-      "path": "/api/cron/cleanup-rate-limits",
+      "path": "/api/cron/cleanup-expired-records",
       "schedule": "0 17 * * *"
     }
   ]

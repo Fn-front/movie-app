@@ -1,9 +1,13 @@
 /**
- * レート制限レコードの保持期間切れ削除 Cron API
- * GET /api/cron/cleanup-rate-limits
+ * 保持期間切れレコードの削除 Cron API
+ * GET /api/cron/cleanup-expired-records
  *
  * Vercel Cronで日次自動実行される。
  * CRON_SECRET環境変数によるBearer認証が必要。
+ *
+ * 対象は `src/lib/cleanup/expiredRecords.ts` の `CLEANUP_TARGETS`。
+ * 現在は `rate_limits`（#933）/ `otp_codes`（#978）/
+ * `password_reset_tokens`（#1300）の3つ。
  *
  * 専用CRONにしている理由（#933）:
  *   個人情報保護法22条（不要となった個人データの消去）に関わる処理なので、
@@ -11,19 +15,21 @@
  *   `delete_expired_recommendation_events` はレコメンド生成CRONに相乗りして
  *   いるが、あちらは冒頭の `fetchActiveUserIds` が失敗すると早期 return で
  *   到達しない。
+ *
+ * ⚠️ 同じ理由で、**対象どうしも互いに巻き込まない**。1つの RPC が失敗しても
+ * 残りは実行する（`cleanupExpiredRecords` が対象ごとに catch する）。
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 
 import { HTTP_STATUS, CRON_ERROR_MESSAGES } from '@/constants';
-import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
 import { verifyCronAuth } from '@/helpers/cronAuth';
 import { handleRouteError } from '@/helpers/routeError';
 import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { deleteExpiredRateLimits } from '@/lib/rateLimit/cleanupRateLimits';
+import { cleanupExpiredRecords } from '@/lib/cleanup/expiredRecords';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -36,11 +42,16 @@ export async function GET(request: NextRequest) {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
 
-    const { deleted, completed } = await deleteExpiredRateLimits(supabase);
+    const { targets, completed, hasError } =
+      await cleanupExpiredRecords(supabase);
 
-    console.log(
-      `Deleted ${deleted} expired rate limit records (retention: ${RATE_LIMIT_RETENTION_HOURS}h, completed: ${completed})`,
-    );
+    for (const target of targets) {
+      console.log(
+        `[cleanup-expired-records] ${target.name}: deleted=${target.deleted_count} ` +
+          `retention=${target.retention_hours}h completed=${target.completed}` +
+          (target.error ? ` error=${target.error}` : ''),
+      );
+    }
 
     // ⚠️ `completed` をレスポンスに載せること（#1342）。
     //   時間切れや反復上限で打ち切っても 200 を返すため、**ステータスコードしか
@@ -50,22 +61,24 @@ export async function GET(request: NextRequest) {
     //
     //   ⛔ 打ち切りを throw に変えないこと。部分的に成功した掃除であり、
     //   throw すると削除済み件数が失われたうえ全失敗として扱われる。
+    //
+    // ⚠️ ただし **RPC の失敗（`hasError`）は 500 にする**。打ち切りと違って
+    //   「次回のCRONが続きを消す」では回復しない（権限不足・関数の欠落など
+    //   設定の問題が多い）。部分的な結果は本文に残したまま、気づける形にする。
     return NextResponse.json(
       {
-        success: true,
-        data: {
-          deleted_count: deleted,
-          completed,
-          retention_hours: RATE_LIMIT_RETENTION_HOURS,
-        },
+        success: !hasError,
+        data: { targets, completed },
       },
-      { status: HTTP_STATUS.OK },
+      {
+        status: hasError ? HTTP_STATUS.INTERNAL_SERVER_ERROR : HTTP_STATUS.OK,
+      },
     );
   } catch (error) {
     return handleRouteError(
       error,
-      'Cleanup rate limits error',
-      CRON_ERROR_MESSAGES.CLEANUP_RATE_LIMITS,
+      'Cleanup expired records error',
+      CRON_ERROR_MESSAGES.CLEANUP_EXPIRED_RECORDS,
     );
   }
 }

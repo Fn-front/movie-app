@@ -490,7 +490,7 @@ export const IN_MEMORY_RATE_LIMIT = {
  * 手で RPC を叩いたときの安全側の値として揃えておく。
  *
  * ⚠️ 「保持期間 > 全レート制限ウィンドウの最大値」は
- * `src/lib/rateLimit/cleanupRateLimits.test.ts` が自動で検証する。
+ * `src/lib/cleanup/expiredRecords.test.ts` が自動で検証する。
  * 新しいウィンドウを足して超えた瞬間にテストが落ちる。
  */
 export const RATE_LIMIT_RETENTION_HOURS = 48;

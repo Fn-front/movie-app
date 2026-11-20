@@ -109,3 +109,20 @@ export const OTP_SUCCESS_MESSAGES = {
   /** コード検証成功 */
   CODE_VERIFIED: 'コード検証に成功しました。',
 } as const;
+
+/**
+ * `otp_codes` の保持期間（時間）— #978
+ *
+ * 有効期限（`OTP_CONFIG.EXPIRY_MINUTES` = 30分）を過ぎてから、さらにこの時間が
+ * 経ったレコードを日次CRONが消す。
+ *
+ * ⚠️ 期限切れ直後に消さない理由は2つ。
+ *   1. `auth/otp/send` の **60秒の再送間隔は直前の行の `created_at` だけ**を
+ *      根拠にしている。消すと再送間隔が素通りする
+ *   2. 障害調査の余地を残す（「コードが届かない」の問い合わせは当日中に来る）
+ *
+ * `rate_limits`（`RATE_LIMIT_RETENTION_HOURS` = 48）と同じ値に揃える。
+ * 揃えるのは、どちらも「不要となった個人データの消去」という同じ関心事で、
+ * 別々の値にすると privacy の説明が増えるだけで意味が無いため。
+ */
+export const OTP_CODE_RETENTION_HOURS = 48;

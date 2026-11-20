@@ -412,6 +412,10 @@ export async function getRateLimitRow(
  * 誰の試行カウントでもないため、他の run には影響しない。
  *
  * @param retentionHours - 保持期間（時間）
+ * @param limit - 1回で消す上限。省くと上限なし（`LIMIT NULL`）。本番の CRON は
+ *   常に付けて呼ぶので、本番の経路を検証したいなら渡すこと。ただし上限は
+ *   **テーブル全体の候補集合**に掛かり `ORDER BY` も無いため、候補が上限を
+ *   超えていると狙った行が選ばれる保証はない
  * @returns 削除件数
  */
 export async function runDeleteExpiredRateLimits(

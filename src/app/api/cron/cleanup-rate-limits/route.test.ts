@@ -86,6 +86,28 @@ describe('GET /api/cron/cleanup-rate-limits', () => {
     });
   });
 
+  it('打ち切られても200で返し、completed:false をそのまま載せる', async () => {
+    // ⚠️ 打ち切りは throw ではなく「200 + completed:false」で返す契約（#1342）。
+    // 消し残しは保持期間を超えた個人データが残っている状態なので、
+    // 監視側が本文で気づけるようにしてある。throw に変えられたら落ちること
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    mockDeleteExpiredRateLimits.mockResolvedValue({
+      deleted: 100_000,
+      completed: false,
+    });
+
+    const response = await GET(createRequest('Bearer test-secret'));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.data).toEqual({
+      deleted_count: 100_000,
+      completed: false,
+      retention_hours: 48,
+    });
+  });
+
   it('削除対象が無くても成功で返す', async () => {
     jest.spyOn(console, 'log').mockImplementation(() => {});
     mockDeleteExpiredRateLimits.mockResolvedValue({

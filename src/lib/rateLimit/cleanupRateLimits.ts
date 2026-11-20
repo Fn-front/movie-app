@@ -53,7 +53,7 @@ export const TIME_BUDGET_MS = 35_000;
  * 500件 × 200回 = 10万件。これを超える滞留は掃除の問題ではないので、
  * ここで止めて警告を出すほうが気づける。
  */
-const MAX_BATCHES = 200;
+export const MAX_BATCHES = 200;
 
 /** 保持期間切れ削除の結果 */
 export interface DeleteExpiredRateLimitsResult {
@@ -106,7 +106,18 @@ export async function deleteExpiredRateLimits(
       );
     }
 
-    const deleted = typeof data === 'number' ? data : 0;
+    // ⚠️ 想定外のレスポンス形は「消し切った」側に倒さない。
+    //   RPC は `RETURNS INTEGER` なので実際には起きにくいが、起きたときに
+    //   `completed: true` を返すと**滞留があるのに完走として記録される**。
+    //   `completed` の目的は消し残しの観測なので、分からないときは false。
+    if (typeof data !== 'number') {
+      console.warn(
+        `[cleanupRateLimits] 削除件数が数値で返りませんでした（${total}件削除）。消し残しの有無は判定できません`,
+      );
+      return { deleted: total, completed: false };
+    }
+
+    const deleted = data;
     total += deleted;
 
     // ⚠️ `deleted < DELETE_BATCH_SIZE` で打ち切らないこと（#1342）。

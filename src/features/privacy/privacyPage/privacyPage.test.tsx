@@ -354,12 +354,22 @@ describe('PrivacyPage', () => {
   });
 
   describe('実態との整合', () => {
-    it('アカウント削除機能が未提供であることを正直に書く', () => {
+    /**
+     * ⚠️ **ポリシーと実装を食い違わせない。**
+     *
+     * #932 で画面からの削除を実装するまで「提供していません」と
+     * 断言していた。実装したのに記述が残ると、利用者が使える機能に
+     * 辿り着けないうえ、公開文書が虚偽になる。
+     */
+    it('設定画面から削除できることを書く', () => {
       render(<PrivacyPage />);
 
       expect(
-        screen.getByText(/アカウントを削除する機能は提供していません/),
+        screen.getByText(/設定画面からご自身で行えます/),
       ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/削除する機能は提供していません/),
+      ).not.toBeInTheDocument();
     });
   });
 });

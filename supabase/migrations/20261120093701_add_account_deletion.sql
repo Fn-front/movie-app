@@ -10,8 +10,11 @@
 -- ---------------------------------------------------------------------------
 -- 1. 物理削除を阻む FK を外す
 -- ---------------------------------------------------------------------------
--- `users(id)` を参照する FK は18本。16本は `ON DELETE CASCADE` だが、
+-- `users(id)` を参照する FK は15本。13本は `ON DELETE CASCADE` だが、
 -- **2本が `ON DELETE RESTRICT`** で、該当行があると `DELETE FROM users` が失敗する。
+--
+-- ⚠️ 当初このコメントは18本/16本と書いていたが、DROP 済みのテーブル
+--   （otp_tokens / user_preferences / reviews）を数えた誤り。
 -- 管理操作を行ったアカウントが対象。
 --
 -- `SET NULL` へ変える。**誰が操作したかは失うが、操作があった事実は残る。**
@@ -101,7 +104,9 @@ BEGIN
 
   GET DIAGNOSTICS v_deleted_rate_limits = ROW_COUNT;
 
-  -- 残り17テーブルは ON DELETE CASCADE で連鎖する
+  -- ⚠️ **この行は誤っていた**（#932 のレビュー）。`otp_codes` は FK を
+  --   持たないので連鎖しない。20261120102231 で明示的に消している。
+  --   FK を持つのは15本。
   DELETE FROM users WHERE id = p_user_id;
 
   RETURN v_deleted_rate_limits;

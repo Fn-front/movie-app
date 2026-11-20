@@ -11,6 +11,12 @@
  * ⚠️ **セッションだけでは消させない。** セッションを奪った第三者が
  * そのまま口封じにアカウントを消せてしまう。所持・記憶のいずれかを
  * 改めて要求する（`totp/disable` と同じ考え方）。
+ *
+ * ⛔ **ただしパスワードも第2要素も持たない層には効いていない**（#1362）。
+ *   OAuth のみで登録し2FA 未設定の利用者は照合する材料が無く、
+ *   セッションだけで消せる。必須にすると**その層が永久に退会できなく**
+ *   なるため承知のうえで通しており、登録アドレスへの使い捨てコードで
+ *   塞ぐのは #1362 で行う。
  */
 
 import { NextResponse } from 'next/server';
@@ -92,8 +98,6 @@ export async function DELETE(request: Request): Promise<NextResponse> {
 
     if (parsed.error) return parsed.error;
 
-    const result = { data: parsed.data };
-
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('password_hash')
@@ -111,7 +115,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     // ⚠️ パスワードを持たない利用者（ソーシャル連携のみ）は照合できない。
     //   必須にすると**永久に退会できなくなる**ので、持っている人にだけ要求する
     if (user.password_hash) {
-      if (!result.data.currentPassword) {
+      if (!parsed.data.currentPassword) {
         return errorResponse(
           ERROR_CODE.VALIDATION_ERROR,
           VALIDATION_MESSAGES.CURRENT_PASSWORD_REQUIRED,
@@ -120,7 +124,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
       }
 
       const passwordMatches = await bcrypt.compare(
-        result.data.currentPassword,
+        parsed.data.currentPassword,
         user.password_hash,
       );
 
@@ -133,6 +137,13 @@ export async function DELETE(request: Request): Promise<NextResponse> {
       }
     }
 
+    // ⚠️ `requireSecondFactor` の JSDoc は「呼ぶ前に
+    //   `checkSecondFactorRateLimit` を通していること」と書いているが、
+    //   **このルートは通さない**。上の `ACCOUNT_DELETE` が同じ利用者IDで
+    //   数えており、2つ重ねると退会の試行で第2要素の設定画面まで
+    //   巻き添えで 429 になる（`.claude/rules/api-route.md` の
+    //   `send-challenge` と同じ判断）。
+    //
     // ⚠️ 設定している人にだけ要求する。`requireSecondFactor` は未設定だと
     //   「設定されていません」の 400 を返すため、直接呼ぶと**未設定の利用者が
     //   退会できなくなる**
@@ -145,7 +156,7 @@ export async function DELETE(request: Request): Promise<NextResponse> {
       const guardResponse = await requireSecondFactor(
         supabase,
         session.user.id,
-        result.data.code ?? '',
+        parsed.data.code ?? '',
       );
 
       if (guardResponse) return guardResponse;

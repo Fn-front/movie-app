@@ -12,7 +12,7 @@ import { useCallback, useState } from 'react';
 
 import { API_ENDPOINTS, ROUTES } from '@/constants';
 import { ACCOUNT_DELETE_MESSAGES } from '@/constants/auth';
-import { logout } from '@/lib/auth/logout';
+import { cleanUpBeforeSignOut, logout } from '@/lib/auth/logout';
 import { clearConsentRecord } from '@/utils/cookieConsent';
 
 /** 削除に添える確認情報 */
@@ -95,8 +95,14 @@ export function useDeleteAccount(): UseDeleteAccountResult {
       // ⚠️ ここから先で失敗しても**アカウントは消えている**。
       //   `isSubmitting` を戻さないのは、再送信させないため
 
-      // ⚠️ `clearOwnedConsent()` ではない。あちらは owner が空なら
-      //   何もしないので、退会には無条件消去のほうが正しい（#932）
+      // ⚠️ **順序が重要。** 先に無条件消去すると同意の状態が `unset` になり、
+      //   `cleanUpBeforeSignOut()` の中の `clearOwnedConsent()` が false を
+      //   返して**GA への通知と `_ga` の削除が飛ぶ**。
+      //   ログアウトでは消える Cookie が退会でだけ残っていた（レビューで実測）。
+      cleanUpBeforeSignOut();
+
+      // ⚠️ そのうえで無条件に消す。`clearOwnedConsent()` は匿名・拒否の記録を
+      //   残す仕様なので、退会にはこちらが要る（#932）
       clearConsentRecord();
 
       await logout(ROUTES.HOME);

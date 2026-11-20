@@ -14,8 +14,10 @@ import { useDeleteAccount } from './useDeleteAccount';
 // --- Mocks ---
 
 const mockLogout = jest.fn();
+const mockCleanUpBeforeSignOut = jest.fn();
 jest.mock('@/lib/auth/logout', () => ({
   logout: (...args: unknown[]) => mockLogout(...args),
+  cleanUpBeforeSignOut: () => mockCleanUpBeforeSignOut(),
 }));
 
 const mockClearConsentRecord = jest.fn();
@@ -93,9 +95,17 @@ describe('useDeleteAccount', () => {
       expect(mockLogout).toHaveBeenCalled();
     });
 
-    // 消す前にログアウトすると、セッションが無くなって削除が 401 になる
-    it('同意レコードを消してからログアウトする', async () => {
+    /**
+     * ⚠️ **GA の後始末 → 無条件消去 → ログアウト**の順でなければならない。
+     *
+     * 先に `clearConsentRecord()` を呼ぶと同意の状態が `unset` になり、
+     * `cleanUpBeforeSignOut()` の中の `clearOwnedConsent()` が false を
+     * 返して **`sendConsentUpdate(false)` と `deleteGaCookies()` が飛ぶ**。
+     * ログアウトでは消える `_ga` が退会でだけ残っていた。
+     */
+    it('GAの後始末を済ませてから同意レコードを消し、最後にログアウトする', async () => {
       const order: string[] = [];
+      mockCleanUpBeforeSignOut.mockImplementation(() => order.push('ga'));
       mockClearConsentRecord.mockImplementation(() => order.push('consent'));
       mockLogout.mockImplementation(async () => {
         order.push('logout');
@@ -107,7 +117,7 @@ describe('useDeleteAccount', () => {
         await result.current.deleteAccount({ currentPassword: 'pw' });
       });
 
-      expect(order).toEqual(['consent', 'logout']);
+      expect(order).toEqual(['ga', 'consent', 'logout']);
     });
   });
 
@@ -126,6 +136,7 @@ describe('useDeleteAccount', () => {
       expect(result.current.error).toBe('パスワードが違います');
       expect(mockLogout).not.toHaveBeenCalled();
       expect(mockClearConsentRecord).not.toHaveBeenCalled();
+      expect(mockCleanUpBeforeSignOut).not.toHaveBeenCalled();
     });
 
     it('やり直せるよう送信状態を戻す', async () => {

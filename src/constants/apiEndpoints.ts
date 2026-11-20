@@ -30,6 +30,7 @@ export const API_ENDPOINTS = {
   /** プロフィール更新 */
   /** アカウント削除（#932） */
   USER: '/api/user',
+  /** プロフィール更新 */
   USER_PROFILE: '/api/user/profile',
   /** 設定取得・更新 */
   USER_SETTINGS: '/api/user/settings',

@@ -24,12 +24,29 @@ import {
   ERROR_CODE,
   AUTH_ERROR_MESSAGES,
   RATE_LIMIT_ACTION,
+  RATE_LIMIT_CONFIG,
 } from '@/constants';
+import { enforcePublicRateLimit } from '@/helpers/publicRateLimit';
 
 export async function POST(request: Request) {
   try {
     const supabase = createServiceRoleClient();
     if (!supabase) return dbConnectionErrorResponse();
+
+    // 送信元単位のブレーキ。**検証より前**に置く（原則どおり）。
+    // 送信元IPはボディを読まなくても確定するため、例外1には当たらない。
+    //
+    // 下の OTP_VERIFY（email|ip）は「同一の宛先で何回試せるか」しか
+    // 抑えておらず、**宛先を変えるだけで `rate_limits` の行を無制限に
+    // 増やせた**。コード総当たりへの備えは OTP行自身の attempts と
+    // OTP_VERIFY が担うので、ここは行数の天井が目的（枠は厚め）。
+    const ipLimitResponse = await enforcePublicRateLimit({
+      request,
+      action: RATE_LIMIT_ACTION.OTP_VERIFY_IP,
+      limit: RATE_LIMIT_CONFIG.OTP_VERIFY_IP,
+      supabase,
+    });
+    if (ipLimitResponse) return ipLimitResponse;
 
     // リクエストボディのバリデーション
     const body = await request.json();

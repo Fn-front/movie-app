@@ -53,6 +53,21 @@ const createRequest = (body: Record<string, unknown>) =>
     body: JSON.stringify(body),
   });
 
+/**
+ * 送信元IPが取れるリクエスト。
+ * Vercel のエッジが付与する x-vercel-forwarded-for はクライアントから改変できない
+ * ため、getClientIp はこれを最優先で採用する。
+ */
+const createRequestFromIp = (body: Record<string, unknown>, ip: string) =>
+  new Request('http://localhost/api/auth/password-reset/request', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-vercel-forwarded-for': ip,
+    },
+    body: JSON.stringify(body),
+  });
+
 /** users の検索結果をモックする */
 const mockUserLookup = (user: { id: string; is_verified: boolean } | null) => {
   mockFrom.mockReturnValueOnce({
@@ -236,11 +251,78 @@ describe('POST /api/auth/password-reset/request', () => {
       expect(mockSendEmail).not.toHaveBeenCalled();
     });
 
+    // === 送信元単位のブレーキ（#1331） ===
+    //
+    // メール単位の `password_reset_request` は「同一の宛先へ何通送れるか」しか
+    // 抑えておらず、宛先を変えるだけで `rate_limits` の行を無制限に増やせた。
+    // 置き換えではなく手前に1層重ねている。
+    describe('送信元単位の上限（password_reset_request_ip）', () => {
+      it('検証より前に消費する — 入力が不正でも上限超過なら429を返す', async () => {
+        mockCheckRateLimit.mockResolvedValueOnce({
+          allowed: false,
+          retryAfter: 3600,
+        });
+
+        const response = await POST(
+          createRequestFromIp({ email: 'not-an-email' }, '203.0.113.10'),
+        );
+
+        // 400 が返るなら IP層が検証の後ろに落ちている
+        expect(response.status).toBe(429);
+        expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+          1,
+          expect.anything(),
+          '203.0.113.10',
+          'password_reset_request_ip',
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
+      it('送信元が特定できないときは消費しない（fail-open）', async () => {
+        mockUserLookup({ id: 'user-1', is_verified: true });
+        mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+        // createRequest は転送ヘッダを付けないため getClientIp は 'unknown'
+        await POST(createRequest({ email: 'user@example.com' }));
+
+        expect(mockCheckRateLimit).not.toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          'password_reset_request_ip',
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+
+      it('上限内なら通し、メール単位の層まで進む', async () => {
+        mockUserLookup({ id: 'user-1', is_verified: true });
+        mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+        await POST(
+          createRequestFromIp({ email: 'user@example.com' }, '203.0.113.10'),
+        );
+
+        expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+          2,
+          expect.anything(),
+          'user@example.com',
+          'password_reset_request',
+          expect.anything(),
+          expect.anything(),
+        );
+      });
+    });
+
     describe('処理順', () => {
       // バリデーション → レート制限（#940 の例外1）。
       // 識別子が検証済みのメールアドレスなので、検証より前には出せない。
       // IP単独に替えて前倒しすると、同一メールボックスへの送信数を
       // IP数だけ掛け算できて保護の目的が壊れる（`.claude/rules/api-route.md`）
+      //
+      // ⚠️ ここで見ているのは**2層目**（password_reset_request）の順序。
+      // 1層目の `password_reset_request_ip` は検証より前にある（上の describe）。
+      // createRequest は転送ヘッダを持たないため1層目はスキップされる
       it('バリデーションエラー時はレート制限を消費しない', async () => {
         await POST(createRequest({ email: 'not-an-email' }));
 

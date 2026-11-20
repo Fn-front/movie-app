@@ -903,11 +903,85 @@ describe('POST /api/auth/register — 未検証ユーザーの上書き（#645�
     expect(mockFrom).not.toHaveBeenCalled();
   });
 
+  // === 送信元単位のブレーキ（#1331） ===
+  //
+  // このルートは1リクエストで `register`（email|ip）と `otp_send_daily`（email）の
+  // 2行を作る。どちらも「同一の宛先で何回試せるか」しか抑えておらず、
+  // 宛先を変えるだけで `rate_limits` の行を無制限に増やせた。
+  // 置き換えではなく手前に1層重ねている。
+  describe('送信元単位の上限（register_ip）', () => {
+    it('検証より前に消費する — 入力が不正でも上限超過なら429を返す', async () => {
+      mockCheckRateLimit.mockResolvedValueOnce({
+        allowed: false,
+        retryAfter: 3600,
+      });
+
+      const response = await POST(
+        createRequestFromIp(
+          { email: 'not-an-email', password: 'Password1234' },
+          '203.0.113.10',
+        ),
+      );
+
+      // 400 が返るなら IP層が検証の後ろに落ちている
+      expect(response.status).toBe(429);
+      expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+        1,
+        expect.anything(),
+        '203.0.113.10',
+        'register_ip',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('送信元が特定できないときは消費しない（fail-open）', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+      // createRequest は転送ヘッダを付けないため getClientIp は 'unknown'
+      await POST(
+        createRequest({ email: 'user@example.com', password: 'Password1234' }),
+      );
+
+      expect(mockCheckRateLimit).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'register_ip',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('上限内なら通し、メール単位の層まで進む', async () => {
+      mockCheckRateLimit.mockResolvedValue({ allowed: true });
+
+      await POST(
+        createRequestFromIp(
+          { email: 'user@example.com', password: 'Password1234' },
+          '203.0.113.10',
+        ),
+      );
+
+      expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        'user@example.com|203.0.113.10',
+        'register',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+  });
+
   describe('処理順', () => {
     // バリデーション → レート制限（#940 の例外1）。
     // 識別子 `email|ip` が検証済みのボディ由来なので、検証より前には出せない。
     // IP単独に替えて前倒しすると、同じIPの別アカウントまで巻き込む
     // （`.claude/rules/api-route.md`）
+    //
+    // ⚠️ ここで見ているのは**2層目以降**（register / otp_send_daily）の順序。
+    // 1層目の `register_ip` は検証より前にある（上の describe）。
+    // createRequest は転送ヘッダを持たないため1層目はスキップされる
     it('バリデーションエラー時はレート制限を消費しない', async () => {
       const response = await POST(
         createRequest({ email: 'not-an-email', password: 'Password1234' }),

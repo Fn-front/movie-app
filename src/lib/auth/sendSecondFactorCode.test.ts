@@ -9,6 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { TWO_FACTOR_OTP_ACTION } from '@/constants/secondFactor';
 import { OTP_CONFIG } from '@/constants/otp';
+import { RATE_LIMIT_CONFIG } from '@/constants/rateLimit';
 
 import {
   SEND_SECOND_FACTOR_RESULT,
@@ -319,27 +320,51 @@ describe('sendSecondFactorCode', () => {
    * **残る歯止めは `TWO_FACTOR_SEND` だけ**。枠を戻していると両方外れて
    * 無制限に送信APIを呼べる。
    *
-   * 上限に達したら `LIMIT_EXCEEDED` で止まり、**送信そのものを試みない**
-   * ことまで見る。`SEND_FAILED` が返るうちは1回ずつ数えている。
+   * ⚠️ **`mockCheckRateLimit` を `allowed: true/false` で手動に切り替えない。**
+   *   レート制限の状態がテスト側の固定値になり、実装が枠を戻そうが戻すまいが
+   *   結果が変わらない。最初そう書いていて、**枠を戻す実装に戻しても緑のまま**
+   *   だった（レビューで実測）。`consume_rate_limit` と同じく実際に数える。
    */
-  it('送信が失敗し続けても、上限に達したら送信を試みなくなる', async () => {
+  it('送信が失敗し続けても、送信APIの呼び出しは上限で頭打ちになる', async () => {
     mockSendOtpEmail.mockResolvedValue(false);
 
-    // 1回目〜: 枠はまだある
-    mockCheckRateLimit.mockResolvedValue({ allowed: true });
-    await expect(
-      sendSecondFactorCode(createSupabaseMock(freshState()), USER_ID, EMAIL),
-    ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.SEND_FAILED);
-    expect(mockSendOtpEmail).toHaveBeenCalledTimes(1);
+    const { maxAttempts } = RATE_LIMIT_CONFIG.TWO_FACTOR_SEND;
+    let attempts = 0;
 
-    // 失敗ぶんも数えているので、いずれ上限に達する
+    // DB 側（consume_rate_limit）と同じ数え方。上限を超えたら拒否する
+    mockCheckRateLimit.mockImplementation(async () => {
+      attempts += 1;
+      return { allowed: attempts <= maxAttempts };
+    });
+    // 枠を戻す実装ならここで減る＝いつまでも上限に達しない
+    mockReleaseRateLimit.mockImplementation(async () => {
+      attempts -= 1;
+    });
+
+    // 上限よりずっと多く叩く
+    for (let i = 0; i < maxAttempts * 5; i += 1) {
+      await sendSecondFactorCode(
+        createSupabaseMock(freshState()),
+        USER_ID,
+        EMAIL,
+      );
+    }
+
+    expect(mockSendOtpEmail).toHaveBeenCalledTimes(maxAttempts);
+  });
+
+  /**
+   * 上限に達したら `LIMIT_EXCEEDED` を返し、**送信そのものを試みない**
+   */
+  it('上限に達したら LIMIT_EXCEEDED を返す', async () => {
+    mockSendOtpEmail.mockResolvedValue(false);
     mockCheckRateLimit.mockResolvedValue({ allowed: false });
+
     await expect(
       sendSecondFactorCode(createSupabaseMock(freshState()), USER_ID, EMAIL),
     ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED);
 
-    // 上限後は1通も送らない（送信APIを呼ばない）
-    expect(mockSendOtpEmail).toHaveBeenCalledTimes(1);
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
   });
 
   /**

@@ -168,7 +168,14 @@ export async function sendSecondFactorCode(
     //
     // 枠を数えるのは**失敗した送信も外部APIを1回消費している**ため。
     // 10回失敗する状況は送信側の障害で、11回目が通る見込みは薄い。
-    // その間は recovery code でログインできる（そのための仕組み）。
+    //
+    // その間はリカバリーコードでログインできる（`verifySecondFactor` は
+    // 方式判定より前にリカバリーコードを分岐させるので、この枠を通らない）。
+    // ⚠️ ただし**使い切っている利用者は最大60分ログインできない**。
+    // 送信障害が前提なので、そもそもコードも届かない状態ではある。
+    //
+    // なおロックが始まるのは11回目のリクエストで、10回失敗して放置すれば
+    // `consume_rate_limit` のアイドル判定で枠は戻る（利用者に有利な側）。
     await clearExistingCodes();
 
     return SEND_SECOND_FACTOR_RESULT.SEND_FAILED;

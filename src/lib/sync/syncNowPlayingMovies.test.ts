@@ -118,6 +118,7 @@ describe('syncNowPlayingMovies', () => {
       cleared: 3,
       skipped: 5,
       errors: [],
+      items: { attempted: 40, failed: 0 },
     };
 
     expect(result.fetched).toBe(40);
@@ -134,6 +135,7 @@ describe('syncNowPlayingMovies', () => {
       cleared: 0,
       skipped: 2,
       errors: ['UPSERT error: connection failed'],
+      items: { attempted: 20, failed: 2 },
     };
 
     expect(result.errors).toHaveLength(1);

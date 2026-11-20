@@ -126,6 +126,7 @@ describe('updateMoviesCacheByBatch', () => {
       removed: 2,
       removedNotFound: 1,
       errors: ['ID 1: error'],
+      items: { attempted: 98, failed: 1 },
     };
 
     expect(result.total).toBe(100);

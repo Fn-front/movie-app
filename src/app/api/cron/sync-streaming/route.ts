@@ -12,6 +12,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { HTTP_STATUS, CRON_ERROR_MESSAGES } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
+import { createServiceRoleClient } from '@/helpers/supabase';
+import { notifyIfMostlyFailed } from '@/lib/cron/notifyHighFailureRate';
 import { handleCronError } from '@/helpers/cronError';
 import { syncStreamingMovies } from '@/lib/sync/syncStreamingMovies';
 
@@ -24,6 +26,16 @@ export async function GET(request: NextRequest) {
     if (authError) return authError;
 
     const result = await syncStreamingMovies();
+
+    // ⚠️ **ほぼ全滅でも 200 / `success: true` で返る**（#1354）。
+    //   作品単位に catch して処理を続ける設計なので、失敗は `errors` に
+    //   積まれるだけ。本文を読む監視が無い以上、人には届かない。
+    //   ステータスは変えず、届くかどうかだけを変える
+    await notifyIfMostlyFailed(createServiceRoleClient(), {
+      cronName: 'sync-streaming',
+      ...result.items,
+      detail: result.errors.slice(0, 3).join('\n'),
+    });
 
     return NextResponse.json(
       { success: true, data: result },

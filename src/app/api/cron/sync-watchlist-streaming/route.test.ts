@@ -92,4 +92,42 @@ describe('GET /api/cron/sync-watchlist-streaming', () => {
       expect.objectContaining({ cronName: 'sync-watchlist-streaming' }),
     );
   });
+  /**
+   * ⚠️ **ほぼ全滅でも 200 / `success: true`**（#1354）。
+   *
+   * 作品単位に catch して続ける設計なので、ステータスコードでは区別が
+   * つかない。レスポンスは変えず、人に届くかどうかだけを変えている。
+   */
+  describe('ほぼ全滅したときの通知（#1354）', () => {
+    it('全件失敗したら通知する', async () => {
+      mockSyncWatchlistStreaming.mockResolvedValue({
+        targets: 10,
+        failed: 10,
+        errors: ['boom'],
+      });
+
+      const response = await GET(createRequest());
+
+      // ⚠️ ステータスは 200 のまま。部分的には成功しうる処理なので、
+      //    500 にすると Vercel の再試行とも噛み合わない
+      expect(response.status).toBe(200);
+      expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+        expect.objectContaining({ cronName: 'sync-watchlist-streaming' }),
+      );
+    });
+
+    // ⚠️ 作品側の事情で数件落ちるのは日常。ここで鳴ると無視されるようになる
+    it('数件の失敗では通知しない', async () => {
+      mockSyncWatchlistStreaming.mockResolvedValue({
+        targets: 100,
+        failed: 3,
+        errors: ['boom'],
+      });
+
+      const response = await GET(createRequest());
+
+      expect(response.status).toBe(200);
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+    });
+  });
 });

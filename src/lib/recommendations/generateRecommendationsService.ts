@@ -88,7 +88,15 @@ function addMetrics(
 
 /** ユーザー単位の処理結果 */
 interface UserProcessResult {
-  status: 'processed' | 'skipped';
+  /**
+   * ⚠️ **`failed` を `skipped` と分けること（#1354）。**
+   *
+   * 以前はどちらも `skipped` で、サマリーの `skipped_users` が
+   * 「お気に入りが足りない」と「例外で落ちた」の両方を指していた。
+   * 全員が例外で落ちても `skipped_users` が増えるだけなので、
+   * 正常な実行と見分けがつかなかった。
+   */
+  status: 'processed' | 'skipped' | 'failed';
   recommendationCount: number;
   metrics: GenerationMetrics;
 }
@@ -96,7 +104,10 @@ interface UserProcessResult {
 /** 全体の処理サマリー */
 export interface GenerateRecommendationsSummary {
   processed_users: number;
+  /** 対象外だった利用者（お気に入り不足など）。失敗ではない */
   skipped_users: number;
+  /** 例外で処理できなかった利用者（#1354） */
+  failed_users: number;
   inactive_users: number;
   total_recommendations: number;
   metrics: GenerationMetrics;
@@ -608,6 +619,7 @@ export async function executeGenerateRecommendationsCron(
   const { activeUserIds, inactiveUsers } = userResult;
   let processedUsers = 0;
   let skippedUsers = 0;
+  let failedUsers = 0;
   let totalRecommendations = 0;
   let metrics = createEmptyMetrics();
 
@@ -636,7 +648,7 @@ export async function executeGenerateRecommendationsCron(
             error,
           );
           return {
-            status: 'skipped' as const,
+            status: 'failed' as const,
             recommendationCount: 0,
             metrics: createEmptyMetrics(),
           };
@@ -650,10 +662,16 @@ export async function executeGenerateRecommendationsCron(
         processedUsers++;
         batchSuccess++;
         totalRecommendations += result.recommendationCount;
-      } else {
-        skippedUsers++;
-        batchFailed++;
+        continue;
       }
+
+      if (result.status === 'failed') {
+        failedUsers++;
+        batchFailed++;
+        continue;
+      }
+
+      skippedUsers++;
     }
 
     console.log(
@@ -674,6 +692,7 @@ export async function executeGenerateRecommendationsCron(
     data: {
       processed_users: processedUsers,
       skipped_users: skippedUsers,
+      failed_users: failedUsers,
       inactive_users: inactiveUsers,
       total_recommendations: totalRecommendations,
       metrics,

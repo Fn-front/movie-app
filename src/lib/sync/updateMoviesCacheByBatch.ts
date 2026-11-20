@@ -2,6 +2,7 @@
  * movie_cache テーブルの vote_average, popularity をバッチ更新する
  */
 
+import { createItemOutcome, type ItemOutcome } from '@/lib/cron/itemOutcome';
 import { createClient } from '@supabase/supabase-js';
 
 import { BATCH_UPDATE_SIZE } from '@/constants/movies';
@@ -29,6 +30,14 @@ export interface BatchUpdateResult {
   removedNotFound: number;
   /** エラーメッセージ */
   errors: string[];
+  /**
+   * 作品単位の集計（#1354）
+   *
+   * ⚠️ 分母に `total` を使わないこと。あれは `movie_cache` の**行数**で、
+   * ループが回るのは重複を除いた映画IDの数。同一IDが theatrical / streaming の
+   * 2行になるため、行数は常に多めに出る。
+   */
+  items: ItemOutcome;
 }
 
 /**
@@ -81,6 +90,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
     removed: 0,
     removedNotFound: 0,
     errors: [],
+    items: createItemOutcome(),
   };
 
   // 1. DBからユニークな映画IDを全件取得
@@ -127,6 +137,8 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
 
     // バッチ内の各映画を順次処理（レート制限対策）
     for (const movieId of batchIds) {
+      result.items.attempted++;
+
       try {
         const stats = await getMovieCacheStats(movieId);
         const matchingRowCount = rows.filter(
@@ -146,6 +158,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
 
           if (deleteError) {
             result.errors.push(`ID ${movieId}: ${deleteError.message}`);
+            result.items.failed++;
           } else {
             result.removed += matchingRowCount;
           }
@@ -169,6 +182,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
 
         if (updateError) {
           result.errors.push(`ID ${movieId}: ${updateError.message}`);
+          result.items.failed++;
         } else {
           // 更新された行数をカウント（同じIDで複数行ある場合も考慮）
           result.updated += matchingRowCount;
@@ -192,6 +206,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
 
           if (deleteError) {
             result.errors.push(`ID ${movieId}: ${deleteError.message}`);
+            result.items.failed++;
           } else {
             result.removedNotFound += matchingRowCount;
           }
@@ -201,6 +216,7 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
         const message =
           error instanceof Error ? error.message : 'Unknown error';
         result.errors.push(`ID ${movieId}: ${message}`);
+        result.items.failed++;
       }
     }
   }

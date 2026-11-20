@@ -2,6 +2,7 @@
  * 映画.com iCalフィードとTMDb APIを照合してmovie_cacheに補完する
  */
 
+import { createItemOutcome, type ItemOutcome } from '@/lib/cron/itemOutcome';
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -52,6 +53,14 @@ export interface SyncResult {
   skipped: number;
   /** エラーが発生した映画タイトル */
   errors: string[];
+  /**
+   * 作品単位の集計（#1354）
+   *
+   * ⚠️ 分子に `errors.length` を使わないこと。この関数は検索ループと
+   * 書き込みループの2段構えで、作品によっては片方にしか到達しない。
+   * 件数は記録点で数える。
+   */
+  items: ItemOutcome;
 }
 
 /**
@@ -276,6 +285,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
 
   const result: SyncResult = {
     processed: eigaMovies.length,
+    items: createItemOutcome(),
     added: 0,
     revivalCorrected: 0,
     skipped: 0,
@@ -287,6 +297,10 @@ export async function syncEigaMovies(): Promise<SyncResult> {
   const candidates: { eigaMovie: EigaMovie; movie: Movie }[] = [];
 
   for (const eigaMovie of eigaMovies) {
+    // ⚠️ 分母はここだけで数える。2つ目のループ（書き込み）は候補だけを
+    //   回すので、そこで足すと同じ作品を二重に数える
+    result.items.attempted++;
+
     try {
       // TMDb検索（順次実行でレート制限対策）
       const searchResult = await searchMovies({
@@ -319,6 +333,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`${eigaMovie.title}: ${message}`);
+      result.items.failed++;
     }
   }
 
@@ -372,6 +387,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
 
         if (updateError) {
           result.errors.push(`${eigaMovie.title}: ${updateError}`);
+          result.items.failed++;
         } else {
           result.revivalCorrected++;
         }
@@ -436,6 +452,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
 
       if (error) {
         result.errors.push(`${eigaMovie.title}: ${error.message}`);
+        result.items.failed++;
         continue;
       }
 
@@ -443,6 +460,7 @@ export async function syncEigaMovies(): Promise<SyncResult> {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`${eigaMovie.title}: ${message}`);
+      result.items.failed++;
     }
   }
 

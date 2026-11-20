@@ -21,7 +21,9 @@ import {
   AWARD_YEAR_RANGE,
 } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
+import { countAwardFailures } from '@/lib/awards/awardFailures';
 import { notifyCronFailure } from '@/lib/cron/notifyCronFailure';
+import { notifyIfMostlyFailed } from '@/lib/cron/notifyHighFailureRate';
 import { handleCronError } from '@/helpers/cronError';
 import {
   createServiceRoleClient,
@@ -92,6 +94,25 @@ export async function GET(request: NextRequest) {
         },
         { status: HTTP_STATUS.INTERNAL_SERVER_ERROR },
       );
+    }
+
+    // ⚠️ **賞ごとに catch するので、全部取れなくても 200**（#1354）。
+    //   発表前で記事がまだ無いだけのものは失敗に数えない
+    //   （countAwardFailures が除外する）
+    //
+    // ⚠️ 「同期対象の賞が無い」ときは `data` の形が違う（`reason` だけ）。
+    //   その月に該当する賞が無いのは正常なので、何もしない
+    if ('skipped_awards' in result.data) {
+      const { synced_awards: synced, skipped_awards: skipped } = result.data;
+
+      await notifyIfMostlyFailed(supabase, {
+        cronName: 'sync-award-movies',
+        attempted: synced.length + skipped.length,
+        failed: countAwardFailures(skipped),
+        detail: skipped
+          .map((award) => `${award.award_name}: ${award.reason}`)
+          .join('\n'),
+      });
     }
 
     return NextResponse.json(

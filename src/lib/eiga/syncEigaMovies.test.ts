@@ -254,6 +254,7 @@ describe('syncEigaMovies', () => {
       revivalCorrected: 1,
       skipped: 4,
       errors: ['映画A: エラー'],
+      items: { attempted: 10, failed: 1 },
     };
 
     expect(result.processed).toBe(10);

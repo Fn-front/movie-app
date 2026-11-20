@@ -212,4 +212,86 @@ describe('GET /api/cron/sync-award-movies', () => {
       expect.objectContaining({ cronName: 'sync-award-movies' }),
     );
   });
+  /**
+   * ⚠️ **賞ごとに catch するので、全部取れなくても 200**（#1354）。
+   */
+  describe('ほぼ全滅したときの通知（#1354）', () => {
+    const skipped = (reason: string) => ({
+      award_name: `award-${reason}`,
+      reason,
+      detail: 'detail',
+    });
+
+    const resultWith = (skippedAwards: unknown[], synced: string[] = []) => ({
+      type: 'success',
+      data: {
+        year: 2026,
+        month: 3,
+        synced_awards: synced,
+        skipped_awards: skippedAwards,
+        delete_failed_awards: [],
+        total_upserted: 0,
+      },
+    });
+
+    it('全部の賞が取れなかったら通知する', async () => {
+      mockExecuteSyncAwardMoviesCron.mockResolvedValue(
+        resultWith([skipped('error'), skipped('source_unavailable')]),
+      );
+
+      const response = await GET(createRequest('Bearer test-secret'));
+
+      expect(response.status).toBe(200);
+      expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+        expect.objectContaining({ cronName: 'sync-award-movies' }),
+      );
+    });
+
+    /**
+     * ⛔ **発表前は失敗ではない。**
+     *
+     * 賞の発表までは Wikipedia に記事そのものが無い／受賞セクションが
+     * まだ無い、という状態が正常として続く。ここで鳴ると、発表待ちの
+     * 時期に毎日通知が出て無視されるようになる。
+     */
+    it.each(['no_article', 'no_section'])(
+      '%s しかなければ通知しない',
+      async (reason) => {
+        mockExecuteSyncAwardMoviesCron.mockResolvedValue(
+          resultWith([skipped(reason), skipped(reason)]),
+        );
+
+        const response = await GET(createRequest('Bearer test-secret'));
+
+        expect(response.status).toBe(200);
+        expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+      },
+    );
+
+    it('半分が成功していれば通知しない', async () => {
+      mockExecuteSyncAwardMoviesCron.mockResolvedValue(
+        resultWith([skipped('error')], ['academy_awards', 'japan_academy']),
+      );
+
+      await GET(createRequest('Bearer test-secret'));
+
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⚠️ 「同期対象の賞が無い」月は `data` の形が違う（`reason` だけ）。
+     * 分解しようとして落ちないこと。
+     */
+    it('同期対象の賞が無い月は何もしない', async () => {
+      mockExecuteSyncAwardMoviesCron.mockResolvedValue({
+        type: 'success',
+        data: { year: 2026, month: 3, reason: '3月に該当する賞はありません' },
+      });
+
+      const response = await GET(createRequest('Bearer test-secret'));
+
+      expect(response.status).toBe(200);
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -744,4 +744,83 @@ describe('GET /api/cron/generate-recommendations', () => {
       undefined,
     );
   });
+  /**
+   * ⚠️ **利用者単位に catch するので、全員ぶん失敗しても 200**（#1354）。
+   *
+   * 以前は例外も「スキップ」として数えていたため、全員が落ちても
+   * `skipped_users` が増えるだけで正常な実行と見分けがつかなかった。
+   */
+  describe('ほぼ全滅したときの通知（#1354）', () => {
+    /**
+     * ⚠️ `jest.clearAllMocks()` は **`mockReturnValueOnce` の積みを消さない**。
+     * 前のテストが使い残した応答があると、ここで積んだ順序がずれて
+     * `from()` が undefined を返し、**観測したい分岐に入る前に 500 になる**。
+     */
+    beforeEach(() => {
+      mockFrom.mockReset();
+      mockRpc.mockReset();
+    });
+
+    /** 1人ぶんの問い合わせを積む */
+    const queueOneUser = () => {
+      mockFavoritesUserQuery(['user-1']);
+      mockActiveUsersQuery(['user-1']);
+      mockFavoritesQuery([
+        { tmdb_movie_id: 1, title: 'インターステラー', rating: 9 },
+      ]);
+      mockWatchlistQuery([{ tmdb_movie_id: 2, title: 'ダークナイト' }]);
+      mockDismissedMoviesQuery([]);
+    };
+
+    it('全員ぶん失敗したら通知する', async () => {
+      const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+      queueOneUser();
+      mockFetchRecommendations.mockRejectedValue(new Error('openai down'));
+
+      const response = await GET(createRequest('Bearer test-secret'));
+      const json = await response.json();
+
+      // ⚠️ ステータスは 200 のまま。届くかどうかだけを変えている
+      expect(response.status).toBe(200);
+      expect(json.data.failed_users).toBe(1);
+      expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+        expect.objectContaining({ cronName: 'generate-recommendations' }),
+      );
+
+      error.mockRestore();
+    });
+
+    /**
+     * ⛔ **「対象外」を失敗に数えない。**
+     *
+     * お気に入りが基準に満たない利用者は毎日スキップされる。ここで鳴ると
+     * 常時通知が出て無視されるようになる。
+     */
+    it('お気に入り不足でスキップされても通知しない', async () => {
+      mockFavoritesUserQuery(['user-1']);
+      mockActiveUsersQuery(['user-1']);
+      // お気に入り0件 → 生成対象にならない
+      mockFavoritesQuery([]);
+      mockWatchlistQuery([]);
+      mockDismissedMoviesQuery([]);
+
+      const response = await GET(createRequest('Bearer test-secret'));
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.data.skipped_users).toBe(1);
+      expect(json.data.failed_users).toBe(0);
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+    });
+
+    it('対象の利用者が1人もいなければ通知しない', async () => {
+      mockFavoritesUserQuery([]);
+      mockActiveUsersQuery([]);
+
+      const response = await GET(createRequest('Bearer test-secret'));
+
+      expect(response.status).toBe(200);
+      expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+    });
+  });
 });

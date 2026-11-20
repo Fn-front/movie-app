@@ -16,13 +16,31 @@ globs:
 
 ## 【必須】マイグレーション適用
 
-- リモートDBへの反映は `supabase db push` で行う
+- リモートDBへの反映は **`supabase db push --linked`** で行う
+
+> ⛔ **`--linked` を省略しないこと（#1335）。** CLI v3 で `db push` の既定ターゲットが
+> **本番からローカルへ反転した**。
+>
+> ```
+> v2: Push new migrations to the remote database       ← 既定は本番
+> v3: TARGET  Local by default. Pass --remote ...      ← 既定はローカル
+> ```
+>
+> E2E のために `supabase start` を常用するようになったため（#1331 /
+> `.claude/rules/testing.md`）、素の `db push` は**ローカルに当たって「成功」で返る**。
+> 接続エラーすら出ないので、本番に入っていないことに気づけない。
+> `--dry-run` も同じくローカルを見るため事前確認として機能しない。
+>
+> `--linked` は v2 / v3 の**両方で動く唯一の指定**（v3 では deprecation 警告が出るが
+> v4 まで有効）。v4 に上げるときは `--remote` へ置き換えること。
+> 同じ反転は `db pull` / `db diff` / `db dump` / `db lint` / `db query` にも入っている。
 - 手動でSQLを直接実行してスキーマを変更しない
 
 ### 「リモートにあるがローカルに無い」で push が拒否されたら
 
 ```
-LegacyDbPushMissingLocalError: Remote migration versions not found in local migrations directory.
+DbPushMissingLocalError: Remote migration versions not found in local migrations directory.
+（v2 では LegacyDbPushMissingLocalError。v3 で Legacy 接頭辞が外れた）
 ```
 
 **これは異常ではない。** DBが1つしかなく、ローカル Postgres（`supabase start`）も使っていないため、作業中のブランチはスキーマ変更をリモートへ先行適用するしかない。その状態で main から push すると、main に無いマイグレーションを検出してこのエラーになる。**先行していたブランチがマージされれば自動的に解消する。**
@@ -49,8 +67,8 @@ git log --all --oneline --diff-filter=A --name-only -- 'supabase/migrations/<ver
 git show <branch>:supabase/migrations/<file>.sql > supabase/migrations/<file>.sql
 
 # 3. 適用（自分のマイグレーションが先行分より古い場合は --include-all が要る）
-npx supabase db push --dry-run   # 対象が自分の1件だけか確認してから
-npx supabase db push
+npx supabase db push --linked --dry-run   # 対象が自分の1件だけか確認してから
+npx supabase db push --linked
 
 # 4. 一時ファイルを消す
 rm supabase/migrations/<file>.sql
@@ -131,5 +149,6 @@ set -a; . ./.env.local; set +a
 npx supabase projects list
 
 # 例: マイグレーション反映（CLI が SUPABASE_ACCESS_TOKEN を利用）
-npx supabase db push
+# ⚠️ --linked は必須。省くと v3 ではローカルに当たる（#1335）
+npx supabase db push --linked
 ```

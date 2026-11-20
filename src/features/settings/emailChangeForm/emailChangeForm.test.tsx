@@ -16,6 +16,7 @@ import { EmailChangeForm } from './emailChangeForm';
 
 const mockRequestCode = jest.fn();
 const mockConfirmCode = jest.fn();
+const mockSendSecondFactorCode = jest.fn();
 const mockReset = jest.fn();
 const hookState = {
   view: EMAIL_CHANGE_VIEW.INPUT as string,
@@ -23,6 +24,8 @@ const hookState = {
   isSubmitting: false,
   error: null as string | null,
   notice: null as string | null,
+  // ⚠️ 既定は「未設定」。`undefined`（判定前）だと送信ボタンが押せない
+  secondFactorMethod: null as string | null | undefined,
 };
 
 jest.mock('./hooks/useEmailChange', () => ({
@@ -30,6 +33,7 @@ jest.mock('./hooks/useEmailChange', () => ({
     ...hookState,
     requestCode: mockRequestCode,
     confirmCode: mockConfirmCode,
+    sendSecondFactorCode: mockSendSecondFactorCode,
     reset: mockReset,
   }),
 }));
@@ -46,6 +50,7 @@ beforeEach(() => {
   hookState.isSubmitting = false;
   hookState.error = null;
   hookState.notice = null;
+  hookState.secondFactorMethod = null;
 });
 
 // --- Tests ---
@@ -162,7 +167,7 @@ describe('EmailChangeForm', () => {
         screen.getByRole('button', { name: 'メールアドレスを変更' }),
       );
 
-      expect(mockConfirmCode).toHaveBeenCalledWith('123456');
+      expect(mockConfirmCode).toHaveBeenCalledWith('123456', undefined);
     });
 
     it('やり直せる', async () => {
@@ -172,6 +177,101 @@ describe('EmailChangeForm', () => {
       await user.click(screen.getByRole('button', { name: 'やり直す' }));
 
       expect(mockReset).toHaveBeenCalled();
+    });
+
+    /**
+     * ⛔ **二段階認証を設定している利用者がここで詰んでいた**
+     * （#1359 の2回目レビュー）。
+     *
+     * サーバーは第2要素を要求するのに、画面に入力欄が無かった。
+     * 空文字で送るため必ず 400 になり、しかもその時点で確認コードは
+     * 焼けている。再送には60秒待ち＋枠1消費が要るので、**5回で60分ロック**。
+     */
+    describe('二段階認証', () => {
+      it('未設定なら入力欄を出さない', () => {
+        renderForm();
+
+        expect(
+          screen.queryByLabelText('二段階認証のコード'),
+        ).not.toBeInTheDocument();
+      });
+
+      it('設定済みなら入力欄を出す', () => {
+        hookState.secondFactorMethod = 'totp';
+
+        renderForm();
+
+        expect(screen.getByLabelText('二段階認証のコード')).toBeInTheDocument();
+      });
+
+      it('設定済みでコード未入力なら送れない', async () => {
+        const user = userEvent.setup();
+        hookState.secondFactorMethod = 'totp';
+
+        renderForm();
+        await user.type(screen.getByLabelText('確認コード'), '123456');
+
+        expect(
+          screen.getByRole('button', { name: 'メールアドレスを変更' }),
+        ).toBeDisabled();
+      });
+
+      it('入力した第2要素を一緒に渡す', async () => {
+        const user = userEvent.setup();
+        hookState.secondFactorMethod = 'totp';
+
+        renderForm();
+        await user.type(screen.getByLabelText('確認コード'), '123456');
+        await user.type(screen.getByLabelText('二段階認証のコード'), '654321');
+        await user.click(
+          screen.getByRole('button', { name: 'メールアドレスを変更' }),
+        );
+
+        expect(mockConfirmCode).toHaveBeenCalledWith('123456', '654321');
+      });
+
+      /**
+       * ⚠️ メールOTP の利用者は手元でコードを作れない。この導線が無いと、
+       * 二段階認証を有効にした時点でアドレスを変更できなくなる。
+       */
+      it('メールOTP なら第2要素のコードを送れる', async () => {
+        const user = userEvent.setup();
+        hookState.secondFactorMethod = 'email_otp';
+
+        renderForm();
+        await user.click(
+          screen.getByRole('button', { name: '二段階認証のコードを送る' }),
+        );
+
+        expect(mockSendSecondFactorCode).toHaveBeenCalled();
+      });
+
+      // TOTP は手元で作れるので送信の導線は要らない
+      it('TOTP なら送信の導線を出さない', () => {
+        hookState.secondFactorMethod = 'totp';
+
+        renderForm();
+
+        expect(
+          screen.queryByRole('button', { name: '二段階認証のコードを送る' }),
+        ).not.toBeInTheDocument();
+      });
+
+      /**
+       * ⚠️ 判定前（`undefined`）に押させない。設定済みの利用者が入力欄の
+       * 無いまま送ると、確認コードだけ焼けて 400 になる。
+       */
+      it('判定前は送れない', async () => {
+        const user = userEvent.setup();
+        hookState.secondFactorMethod = undefined;
+
+        renderForm();
+        await user.type(screen.getByLabelText('確認コード'), '123456');
+
+        expect(
+          screen.getByRole('button', { name: 'メールアドレスを変更' }),
+        ).toBeDisabled();
+      });
     });
 
     it('送信中は操作できない', () => {

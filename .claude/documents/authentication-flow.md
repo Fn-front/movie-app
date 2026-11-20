@@ -384,6 +384,9 @@ POST /api/user/email-change/request
   3. users から現在のアドレスと password_hash を取得
   4. password_hash が無い（ソーシャル連携のみ）→ 400
      ※ アプリ側だけ変えると provider 側のアドレスと食い違う
+  4-2. accounts に連携行がある → 400
+     ※ パスワードと連携を**両方**持つ利用者も対象外。signIn は既存ユーザーを
+       users.email で引くため、変更後のソーシャルログインで別アカウントが生える
   5. bcrypt で現在のパスワードを照合
   6. 現在と同じ / 既に他の利用者が使っている → 400
   7. 再送間隔（60秒）を確認 → 既存コードを消して新規 INSERT
@@ -400,9 +403,10 @@ POST /api/user/email-change/confirm
 サーバー処理:
   1. レート制限 email_change_verify ← 検証より前（送信枠とは別カウンタ）
   2. 入力の検証
-  3. otp_codes を条件付き DELETE で消費（削除行数で判定）
+  3. 二段階認証を設定しているなら第2要素を要求
+     ⚠️ 消費より前。後ろだと打ち間違えるたびに確認コードが焼ける
+  4. otp_codes を条件付き DELETE で消費（削除行数で判定）
      条件: user_id + email + action_type + code_hash + 有効期限
-  4. 二段階認証を設定しているなら第2要素を要求
   5. change_user_email RPC
      - users.email を差し替え
      - 旧アドレスの rate_limits（完全一致 + `メール|` の前方一致）を削除

@@ -356,9 +356,10 @@ OTPコード検証
 1. レート制限 `email_change_request`（5回/60分・**利用者ID**単位）を**検証より前**に消費
 2. 入力の検証 → `users` から現在のアドレスと `password_hash` を取得
 3. `password_hash` が無い（ソーシャル連携のみ）なら 400。provider 側のアドレスと食い違うため対象外
-4. `bcrypt.compare` で現在のパスワードを照合
-5. 現在のアドレスと同じなら 400 / 既に他の利用者が使っていれば 400
-6. 60秒の再送間隔を確認 → 既存の未使用コードを消して新しいコードを `otp_codes`（`action_type='email_change'`, `user_id`付き）へ INSERT → 新アドレスへ送信
+4. `accounts` に連携行があれば 400。**パスワードと連携を両方持つ利用者**も対象外（下記）
+5. `bcrypt.compare` で現在のパスワードを照合
+6. 現在のアドレスと同じなら 400 / 既に他の利用者が使っていれば 400
+7. 60秒の再送間隔を確認 → 既存の未使用コードを消して新しいコードを `otp_codes`（`action_type='email_change'`, `user_id`付き）へ INSERT → 新アドレスへ送信
 
 > ⚠️ **レート制限は原則どおり検証より前**。当初 `sendEmailChangeCode` の中に
 > 置いていたが、重複チェックで弾くパスが到達せず**枠を1つも消費しないまま
@@ -400,8 +401,8 @@ OTPコード検証
 **内部処理:**
 1. レート制限 `email_change_verify` を**検証より前**に消費（送信枠とは別カウンタ。失敗した検証が送信枠を食うとコードを送り直せなくなる）
 2. 入力の検証
-3. `otp_codes` を **`user_id` + email + action_type + code_hash + 有効期限**の条件付き DELETE で消費（削除行数で判定）
-4. 二段階認証を設定している利用者には第2要素を要求
+3. 二段階認証を設定している利用者には第2要素を要求
+4. `otp_codes` を **`user_id` + email + action_type + code_hash + 有効期限**の条件付き DELETE で消費（削除行数で判定）
 5. `change_user_email` RPC で `users.email` を差し替え、**旧アドレスの `rate_limits` / `otp_codes` を同じトランザクションで削除**
 6. 旧アドレスへ変更を知らせる通知を送る（失敗しても 500 にしない）
 
@@ -414,6 +415,11 @@ OTPコード検証
 > ⚠️ 変更後はセッションの `token.email` も更新が要る（`auth.ts` の jwt
 > callback、`trigger === 'update'`）。放置するとパスワード変更が
 > 古いアドレスを見て**永久に失敗する**。
+>
+> ⛔ **第2要素は確認コードを消費する前に見る。** 後ろに置くと、第2要素を
+> 1文字打ち間違えるたびに使い捨てのメール確認コードが先に焼ける。やり直すには
+> 再送（60秒待ち＋`EMAIL_CHANGE_REQUEST` を1枠消費）が要り、**5回の
+> タイプミスで60分ロック**になる。
 
 **Response (200 OK):**
 ```json
@@ -426,7 +432,7 @@ OTPコード検証
 **Error Responses:**
 - `401 Unauthorized`: 未ログイン
 - `400 Bad Request`: 入力不正 / コードが不一致・期限切れ・試行回数超過 / 既に使われているアドレス（23505）
-- `403 Forbidden`: 第2要素が未提出・不一致
+- `400 Bad Request`: 第2要素が未提出・不一致（`requireSecondFactor` は 400 を返す。403 ではない）
 - `429 Too Many Requests`: レート制限超過
 
 ---
@@ -439,12 +445,14 @@ OTPコード検証
 **内部処理:**
 1. レート制限 `account_delete` を検証より前に消費
 2. パスワードを設定している利用者には現在のパスワードを要求、二段階認証を設定している利用者には第2要素を要求
-3. `delete_user_account` RPC で関連レコードごと削除（`otp_codes` / `rate_limits` は FK で連鎖しないため関数内で明示的に削除）
+3. `delete_user_account` RPC で関連レコードごと削除
+   - `rate_limits` は識別子が**文字列**（利用者ID / 生のメール / `メール|IP` / `ユーザー名|IP` の4形態）なので FK に乗らない。関数内で4通りすべてを消す
+   - `otp_codes` は `user_id` を持つ行だけ FK（CASCADE）で連鎖する。**それ以外（登録前など `user_id` が NULL の行）はメールアドレス一致で消す**（#1359 で列を足したため、#932 当時の「FK を持たない」という説明は半分しか当たらない）
 
 **Error Responses:**
 - `401 Unauthorized`: 未ログイン
 - `400 Bad Request`: パスワード不一致
-- `403 Forbidden`: 第2要素が未提出・不一致
+- `400 Bad Request`: 第2要素が未提出・不一致（`requireSecondFactor` は 400 を返す。403 ではない）
 - `429 Too Many Requests`: レート制限超過
 
 ---

@@ -62,10 +62,15 @@ const validBody = {
 };
 
 /**
- * users の2本のクエリをモックする
+ * 3本のクエリをモックする
  *
- * 1本目: 自分の行（email / password_hash）
- * 2本目: 新アドレスの重複確認（count）
+ * - `users` / `email, password_hash` — 自分の行
+ * - `accounts` — ソーシャル連携の有無（count）
+ * - `users` / `id` — 新アドレスの重複確認（count）
+ *
+ * ⚠️ **テーブルと列で振り分ける。** `mockReturnValueOnce` を積む形だと、
+ * クエリを1本足すたびに全テストが**黙って別の分岐へずれる**（実際に
+ * ソーシャル連携のチェックを足したときに起きた）。
  */
 const mockQueries = (options: {
   passwordHash?: string | null;
@@ -73,6 +78,8 @@ const mockQueries = (options: {
   existingCount?: number;
   countError?: unknown;
   userError?: unknown;
+  linkedAccounts?: number;
+  accountsError?: unknown;
 }) => {
   const {
     passwordHash = 'hashed',
@@ -80,31 +87,38 @@ const mockQueries = (options: {
     existingCount = 0,
     countError = null,
     userError = null,
+    linkedAccounts = 0,
+    accountsError = null,
   } = options;
 
-  mockFrom
-    .mockReturnValueOnce({
-      select: () => ({
-        eq: () => ({
-          single: () =>
-            Promise.resolve({
-              data: userError
-                ? null
-                : { email: currentEmail, password_hash: passwordHash },
-              error: userError,
-            }),
-        }),
-      }),
-    })
-    .mockReturnValueOnce({
-      select: () => ({
-        eq: () =>
-          Promise.resolve({
-            count: countError ? null : existingCount,
-            error: countError,
+  const countResult = (count: number, error: unknown) => ({
+    eq: () => Promise.resolve({ count: error ? null : count, error }),
+  });
+
+  mockFrom.mockImplementation((table: string) => ({
+    select: (columns: string) => {
+      if (table === 'accounts') {
+        return countResult(linkedAccounts, accountsError);
+      }
+
+      // users は2本ある。列で見分ける
+      if (columns.includes('password_hash')) {
+        return {
+          eq: () => ({
+            single: () =>
+              Promise.resolve({
+                data: userError
+                  ? null
+                  : { email: currentEmail, password_hash: passwordHash },
+                error: userError,
+              }),
           }),
-      }),
-    });
+        };
+      }
+
+      return countResult(existingCount, countError);
+    },
+  }));
 };
 
 // --- Tests ---
@@ -218,6 +232,24 @@ describe('POST /api/user/email-change/request', () => {
     });
   });
 
+  describe('利用者の取得', () => {
+    /**
+     * ⚠️ セッションは有効なのに行が無い＝アカウントが消えた場合。
+     * 404 を返して送信しない。`user.password_hash` を読む前に止めないと
+     * TypeError で 500 になり、原因が分からなくなる。
+     */
+    it('行が無ければ404を返し、送信しない', async () => {
+      mockQueries({ userError: { code: 'PGRST116' } });
+
+      const response = await POST(createRequest(validBody));
+      const json = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(json.error.message).toBe(EMAIL_CHANGE_MESSAGES.FAILED);
+      expect(mockSendEmailChangeCode).not.toHaveBeenCalled();
+    });
+  });
+
   describe('パスワードの確認', () => {
     it('違えば400を返し、送信しない', async () => {
       mockQueries({});
@@ -248,6 +280,54 @@ describe('POST /api/user/email-change/request', () => {
       expect(response.status).toBe(400);
       expect(json.error.message).toBe(EMAIL_CHANGE_MESSAGES.PASSWORD_REQUIRED);
       expect(mockSendEmailChangeCode).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * ⛔ **パスワードの有無だけでは足りない**（#1359 の2回目レビュー）。
+   *
+   * パスワード**と**ソーシャル連携の両方を持つ利用者が素通りしていた。
+   * `auth.ts` の `signIn` は既存ユーザーを **`users.email` で**引くため、
+   * アドレスを変えたあとに同じ provider でログインすると該当行が無く、
+   * **新しい `users` 行が作られて `accounts` の連携行がそちらへ移る**。
+   * 元のアカウントのウォッチリストも二段階認証も、ソーシャル経路からは
+   * 見えなくなる。
+   */
+  describe('ソーシャル連携の確認', () => {
+    it('連携があれば400を返し、送信しない', async () => {
+      mockQueries({ linkedAccounts: 1 });
+
+      const response = await POST(createRequest(validBody));
+      const json = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(json.error.message).toBe(EMAIL_CHANGE_MESSAGES.SOCIAL_LINKED);
+      expect(mockSendEmailChangeCode).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⚠️ パスワード照合より前に弾く。後ろに置くと、連携済みの利用者が
+     * 必ず失敗する操作のために bcrypt を毎回1回消費する。
+     */
+    it('連携があればパスワードを照合しない', async () => {
+      mockQueries({ linkedAccounts: 1 });
+
+      await POST(createRequest(validBody));
+
+      expect(mockCompare).not.toHaveBeenCalled();
+    });
+
+    // error を捨てると「連携なし」に化け、DB障害中だけガードが外れる
+    it('取得に失敗したら500を返し、送信しない', async () => {
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      mockQueries({ accountsError: { message: 'db down' } });
+
+      const response = await POST(createRequest(validBody));
+
+      expect(response.status).toBe(500);
+      expect(mockSendEmailChangeCode).not.toHaveBeenCalled();
+
+      spy.mockRestore();
     });
   });
 

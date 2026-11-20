@@ -60,8 +60,12 @@ export async function sendEmailChangeCode(
 ): Promise<SendEmailChangeResult> {
   const normalizedEmail = normalizeEmail(newEmail);
 
-  // 再送間隔は**枠の消費より前に**判定する。ここで枠を消費すると、
-  // ボタンの二度押しだけで上限に達して1時間変更できなくなる
+  // ⚠️ **枠はここで触らない。** 送信枠（`EMAIL_CHANGE_REQUEST`）は
+  //    呼び出し側のルートが原則どおり認証の直後に消費済み（#1359 のレビュー）。
+  //
+  //    代償として、二度押しは枠を2つ消費する。重複チェックで弾くパスが
+  //    枠を1つも消費しないまま全登録アドレスを列挙できたほうが重いと
+  //    判断した（`.claude/rules/api-route.md`「例外2 を選べるのは」）。
   const { data: recent, error: recentError } = await supabase
     .from('otp_codes')
     .select('created_at')

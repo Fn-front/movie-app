@@ -115,6 +115,35 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    // ⛔ **ソーシャル連携があるアカウントも対象外**（#1359 の2回目レビュー）。
+    //
+    //   上の `password_hash` チェックだけでは「パスワード**と**連携の両方を
+    //   持つ利用者」を素通しする。`auth.ts` の `signIn` は既存ユーザーを
+    //   **`users.email` で**引くため（`accounts` ではない）、アドレスを変えた
+    //   あとに同じ provider でログインすると該当行が見つからず、
+    //   **新しい `users` 行が作られ、`accounts` の連携行がそちらへ
+    //   付け替わる**（upsert の onConflict が provider + provider_account_id）。
+    //
+    //   利用者から見ると、ソーシャルでログインしたら中身が空のアカウントが
+    //   出る＝「データが消えた」になる。
+    //
+    // ⚠️ パスワードを持たない利用者とは**別の条件**。文言も分ける。
+    const { count: linkedAccounts, error: accountsError } = await supabase
+      .from('accounts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', session.user.id);
+
+    // error を捨てると「連携なし」に化け、DB障害中だけこのガードが外れる
+    if (accountsError) throw accountsError;
+
+    if (linkedAccounts) {
+      return errorResponse(
+        ERROR_CODE.BAD_REQUEST,
+        EMAIL_CHANGE_MESSAGES.SOCIAL_LINKED,
+        HTTP_STATUS.BAD_REQUEST,
+      );
+    }
+
     const passwordMatches = await bcrypt.compare(
       currentPassword,
       user.password_hash,

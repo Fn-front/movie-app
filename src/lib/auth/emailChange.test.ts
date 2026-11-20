@@ -269,8 +269,8 @@ describe('sendEmailChangeCode', () => {
   });
 
   /**
-   * ⚠️ **再送間隔は枠の消費より前**。ここで枠を消費すると、ボタンの
-   * 二度押しだけで上限に達して1時間変更できなくなる。
+   * ⚠️ 送信枠（`EMAIL_CHANGE_REQUEST`）はルート側が原則どおり先に消費する。
+   * ここでは触らない（#1359 のレビュー）。
    */
   it('再送間隔の内側なら送らない', async () => {
     const supabase = createSupabase({

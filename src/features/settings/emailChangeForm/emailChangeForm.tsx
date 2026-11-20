@@ -15,6 +15,7 @@ import {
   EMAIL_CHANGE_MESSAGES,
   EMAIL_CHANGE_VIEW,
 } from '@/constants/emailChange';
+import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
 
 import { useEmailChange } from './hooks/useEmailChange';
 
@@ -42,20 +43,34 @@ export const EmailChangeForm = memo(function EmailChangeForm({
   const [newEmail, setNewEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [code, setCode] = useState('');
+  const [secondFactorCode, setSecondFactorCode] = useState('');
   const {
     view,
     pendingEmail,
     isSubmitting,
     error,
     notice,
+    secondFactorMethod,
     requestCode,
     confirmCode,
+    sendSecondFactorCode,
     reset,
   } = useEmailChange();
 
   const newEmailId = useId();
   const passwordId = useId();
   const codeId = useId();
+  const secondFactorId = useId();
+
+  /**
+   * 第2要素の入力欄を出すか
+   *
+   * ⚠️ **`undefined`（判定前）では出さないが、送信もさせない。** 設定済みの
+   * 利用者に入力欄の無い画面を見せて送らせると、確認コードだけ焼けて
+   * 400 になる（#1359 の2回目レビュー）。
+   */
+  const needsSecondFactor = Boolean(secondFactorMethod);
+  const isSecondFactorUnknown = secondFactorMethod === undefined;
 
   const handleNewEmailChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) =>
@@ -80,14 +95,22 @@ export const EmailChangeForm = memo(function EmailChangeForm({
     setCurrentPassword('');
   }, [currentPassword, newEmail, requestCode]);
 
+  const handleSecondFactorCodeChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) =>
+      setSecondFactorCode(event.target.value),
+    [],
+  );
+
   const handleConfirm = useCallback(async () => {
-    await confirmCode(code);
+    await confirmCode(code, secondFactorCode || undefined);
     setCode('');
+    setSecondFactorCode('');
     setNewEmail('');
-  }, [code, confirmCode]);
+  }, [code, confirmCode, secondFactorCode]);
 
   const handleBack = useCallback(() => {
     setCode('');
+    setSecondFactorCode('');
     reset();
   }, [reset]);
 
@@ -155,6 +178,34 @@ export const EmailChangeForm = memo(function EmailChangeForm({
             onChange={handleCodeChange}
             fullWidth
           />
+
+          {needsSecondFactor && (
+            <>
+              <Input
+                id={secondFactorId}
+                type='text'
+                label='二段階認証のコード'
+                autoComplete='one-time-code'
+                value={secondFactorCode}
+                onChange={handleSecondFactorCodeChange}
+                fullWidth
+              />
+              {/*
+                ⚠️ メールOTP の利用者は手元でコードを作れない。この導線が
+                無いと、二段階認証を有効にした時点でアドレスを変更できなくなる
+              */}
+              {secondFactorMethod === SECOND_FACTOR_METHOD.EMAIL_OTP && (
+                <Button
+                  variant='secondary'
+                  onClick={sendSecondFactorCode}
+                  disabled={isSubmitting}
+                >
+                  二段階認証のコードを送る
+                </Button>
+              )}
+            </>
+          )}
+
           <div className={styles.c_email_change_form__actions}>
             <Button
               variant='secondary'
@@ -165,7 +216,13 @@ export const EmailChangeForm = memo(function EmailChangeForm({
             </Button>
             <Button
               onClick={handleConfirm}
-              disabled={isSubmitting || code.length === 0}
+              disabled={
+                isSubmitting ||
+                code.length === 0 ||
+                // 判定前は押させない。入力欄の無いまま送ると確認コードだけ焼ける
+                isSecondFactorUnknown ||
+                (needsSecondFactor && secondFactorCode.length === 0)
+              }
             >
               {isSubmitting ? '変更しています…' : 'メールアドレスを変更'}
             </Button>

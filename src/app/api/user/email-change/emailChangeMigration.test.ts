@@ -114,3 +114,69 @@ describe('change_user_email', () => {
     expect(body).toMatch(/FOR UPDATE/);
   });
 });
+
+/**
+ * ⛔ **critical だった不変条件をスキーマで担保する**（2回目のレビュー / MIN-4）
+ *
+ * `user_id` が無いと、攻撃者が自分のアカウントで取ったコードを奪った
+ * 被害者のセッションで使えてしまう。`sendEmailChangeCode` の insert 1行に
+ * 頼らず、DB 側でも縛る。
+ */
+describe('otp_codes.user_id', () => {
+  /** 条件付き CHECK を定義しているマイグレーションを読む */
+  function readConstraint(): string {
+    const file = fs
+      .readdirSync(MIGRATIONS_DIR)
+      .filter((name) => name.endsWith('.sql'))
+      .filter((name) =>
+        /ADD CONSTRAINT chk_email_change_has_user/.test(
+          fs.readFileSync(path.join(MIGRATIONS_DIR, name), 'utf8'),
+        ),
+      )
+      .sort()
+      .pop();
+
+    // 落ちたら: 制約が消えている。アプリ側の INSERT だけが頼りになる
+    expect(file).toBeDefined();
+
+    return fs
+      .readFileSync(path.join(MIGRATIONS_DIR, file!), 'utf8')
+      .replace(/--[^\n]*/g, '');
+  }
+
+  it('email_change の行には user_id を必須にする', () => {
+    expect(readConstraint()).toMatch(
+      /CHECK \(action_type <> 'email_change' OR user_id IS NOT NULL\)/,
+    );
+  });
+
+  /**
+   * ⚠️ **他の用途まで必須にしない。** registration / login / password_change /
+   * two_factor は利用者が確定する前にも行を作るため、NOT NULL にすると
+   * 新規登録そのものが落ちる。
+   */
+  it('列そのものを NOT NULL にしない', () => {
+    const sql = readConstraint();
+
+    expect(sql).not.toMatch(/ALTER COLUMN user_id SET NOT NULL/);
+  });
+
+  // FK が無いと退会時に行が残る（#932 のレビューで critical になった件）
+  it('利用者が消えたら連鎖して消える', () => {
+    const file = fs
+      .readdirSync(MIGRATIONS_DIR)
+      .filter((name) => name.endsWith('.sql'))
+      .filter((name) =>
+        /ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users\(id\)/.test(
+          fs.readFileSync(path.join(MIGRATIONS_DIR, name), 'utf8'),
+        ),
+      )
+      .sort()
+      .pop();
+
+    expect(file).toBeDefined();
+    expect(fs.readFileSync(path.join(MIGRATIONS_DIR, file!), 'utf8')).toMatch(
+      /REFERENCES users\(id\) ON DELETE CASCADE/,
+    );
+  });
+});

@@ -32,10 +32,36 @@ const errorResponse = (message: string) =>
     json: () => Promise.resolve({ success: false, error: { message } }),
   }) as Response;
 
+/**
+ * URL で応答を振り分ける fetch
+ *
+ * ⚠️ 全部に同じ応答を返すと、`/api/user/totp` の取得を**実装から消しても
+ * テストが落ちない**。第2要素の有無はここでしか分からないので、
+ * 取りにいっていること自体を観測できるようにする。
+ */
+const mockFetchByUrl = (
+  overrides: Record<string, Response | Promise<Response>> = {},
+) => {
+  global.fetch = jest.fn((url: string) => {
+    for (const [fragment, response] of Object.entries(overrides)) {
+      if (url.includes(fragment)) return Promise.resolve(response);
+    }
+
+    return Promise.resolve(okResponse());
+  }) as unknown as typeof fetch;
+};
+
+/** 第2要素の方式を返す `/api/user/totp` */
+const totpResponse = (method: string | null) =>
+  ({
+    ok: true,
+    json: () => Promise.resolve({ success: true, data: { method } }),
+  }) as Response;
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockUpdate.mockResolvedValue(undefined);
-  global.fetch = jest.fn().mockResolvedValue(okResponse());
+  mockFetchByUrl();
 });
 
 // --- Tests ---
@@ -137,6 +163,69 @@ describe('useEmailChange', () => {
     });
 
     /**
+     * ⛔ **二段階認証を設定している利用者がここで詰んでいた**
+     * （#1359 の2回目レビュー）。サーバーは第2要素を要求するのに、
+     * フックは一度も送っていなかった。
+     */
+    it('第2要素も一緒に送る', async () => {
+      const { result } = renderHook(() => useEmailChange());
+      await advanceToCode(result);
+
+      await act(async () => {
+        await result.current.confirmCode('123456', '654321');
+      });
+
+      expect(global.fetch).toHaveBeenLastCalledWith(
+        '/api/user/email-change/confirm',
+        expect.objectContaining({
+          body: JSON.stringify({
+            newEmail: 'new@example.com',
+            code: '123456',
+            secondFactorCode: '654321',
+          }),
+        }),
+      );
+    });
+
+    /**
+     * ⚠️ 空文字では送らない。スキーマが長さを見ていると空文字で 400 になり、
+     * 第2要素を使っていない利用者まで弾かれる。
+     */
+    it('第2要素が無ければ載せない', async () => {
+      const { result } = renderHook(() => useEmailChange());
+      await advanceToCode(result);
+
+      await act(async () => {
+        await result.current.confirmCode('123456', '');
+      });
+
+      const body = (
+        (global.fetch as jest.Mock).mock.calls.at(-1)![1] as { body: string }
+      ).body;
+
+      expect(JSON.parse(body)).not.toHaveProperty('secondFactorCode');
+    });
+
+    /**
+     * ⚠️ 通信そのものが失敗しても文言を出す。黙って止まると、利用者は
+     * 変わったのかどうか分からないまま同じコードを入れ直す。
+     */
+    it('通信に失敗してもメッセージを出す', async () => {
+      const { result } = renderHook(() => useEmailChange());
+      await advanceToCode(result);
+
+      (global.fetch as jest.Mock).mockRejectedValue(new Error('offline'));
+
+      await act(async () => {
+        await result.current.confirmCode('123456');
+      });
+
+      expect(result.current.error).toBe(EMAIL_CHANGE_MESSAGES.FAILED);
+      expect(result.current.isSubmitting).toBe(false);
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    /**
      * ⚠️ **セッションを更新する。** しないと設定画面もパスワード変更
      * フォームも旧アドレスを出し続ける。
      */
@@ -169,6 +258,90 @@ describe('useEmailChange', () => {
       expect(result.current.view).toBe(EMAIL_CHANGE_VIEW.CODE);
       expect(result.current.error).toBe('確認コードが間違っています。');
       expect(mockUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * ⛔ **判定を画面へ渡せないと、第2要素の入力欄が出せない。**
+   *
+   * サーバーは設定済みの利用者に第2要素を要求する。画面が欄を出さないと
+   * 空文字で送って必ず 400 になり、しかもその時点で確認コードは焼けている。
+   */
+  describe('第2要素の方式', () => {
+    it('コード入力へ進むときに取りにいく', async () => {
+      mockFetchByUrl({ '/api/user/totp': totpResponse('totp') });
+
+      const { result } = renderHook(() => useEmailChange());
+
+      expect(result.current.secondFactorMethod).toBeUndefined();
+
+      await act(async () => {
+        await result.current.requestCode('new@example.com', 'pw');
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith('/api/user/totp');
+      expect(result.current.secondFactorMethod).toBe('totp');
+    });
+
+    it('未設定なら null になる', async () => {
+      mockFetchByUrl({ '/api/user/totp': totpResponse(null) });
+
+      const { result } = renderHook(() => useEmailChange());
+
+      await act(async () => {
+        await result.current.requestCode('new@example.com', 'pw');
+      });
+
+      expect(result.current.secondFactorMethod).toBeNull();
+    });
+
+    /**
+     * ⚠️ 取得に失敗したら「要る」側へ倒す。欄を出さずに送るとサーバーが
+     * 400 を返すだけで、利用者には理由が分からない。
+     */
+    it('取得に失敗したら要る側へ倒す', async () => {
+      mockFetchByUrl({
+        '/api/user/totp': Promise.reject(new Error('offline')) as never,
+      });
+
+      const { result } = renderHook(() => useEmailChange());
+
+      await act(async () => {
+        await result.current.requestCode('new@example.com', 'pw');
+      });
+
+      expect(result.current.secondFactorMethod).toBe('totp');
+    });
+
+    /**
+     * ⚠️ メールOTP の利用者は手元でコードを作れない。この経路が無いと、
+     * 二段階認証を有効にした時点でアドレスを変更できなくなる。
+     */
+    it('第2要素のコードを送れる', async () => {
+      const { result } = renderHook(() => useEmailChange());
+
+      await act(async () => {
+        await result.current.sendSecondFactorCode();
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/user/totp/send-challenge',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('送信に失敗したら理由を出す', async () => {
+      mockFetchByUrl({
+        'send-challenge': errorResponse('送信できませんでした'),
+      });
+
+      const { result } = renderHook(() => useEmailChange());
+
+      await act(async () => {
+        await result.current.sendSecondFactorCode();
+      });
+
+      expect(result.current.error).toBe('送信できませんでした');
     });
   });
 

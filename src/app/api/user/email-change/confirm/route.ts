@@ -90,6 +90,39 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const { newEmail, code } = parsed.data;
 
+    // ⚠️ **第2要素を設定しているなら要求する**（#1359 のレビュー）。
+    //
+    //   アドレス変更の結果は**復旧経路の喪失**で、パスワード変更より重い。
+    //   退会（#932）・二段階認証の無効化・リカバリーコードの再発行が
+    //   いずれも第2要素を要求しているのに、ここだけ外れていた。
+    //
+    // ⚠️ 設定している人にだけ要求する。`requireSecondFactor` は未設定だと
+    //   400 を返すため、無条件に呼ぶと未設定の利用者が変更できなくなる。
+    //
+    // ⛔ **確認コードを消費する前に置く**（2回目のレビュー）。後ろに置くと、
+    //   第2要素を1文字打ち間違えるたびに使い捨てのメール確認コードが
+    //   先に焼ける。やり直すには再送（60秒待ち＋`EMAIL_CHANGE_REQUEST` を
+    //   1枠消費）が要り、**5回のタイプミスで60分ロック**になる。
+    //   退会（`user/route.ts`）も第2要素の後ろに破壊的操作を置いている。
+    //
+    // ⚠️ `TOTP_SETTINGS_VERIFY` は消費しない。手前の `EMAIL_CHANGE_VERIFY` が
+    //   同じ利用者IDで数えており、重ねると1回の試行で2枠減る
+    //   （`user/route.ts` の `ACCOUNT_DELETE` と同じ判断）
+    const secondFactorMethod = await getSecondFactorMethod(
+      supabase,
+      session.user.id,
+    );
+
+    if (secondFactorMethod) {
+      const guardResponse = await requireSecondFactor(
+        supabase,
+        session.user.id,
+        parsed.data.secondFactorCode ?? '',
+      );
+
+      if (guardResponse) return guardResponse;
+    }
+
     // ⛔ `session.user.id` を渡すこと。外すと、攻撃者が自分のアカウントで
     //   取ったコードを奪った被害者のセッションで使える（#1359 critical）
     const verifyResult = await consumeEmailChangeCode(
@@ -105,29 +138,6 @@ export async function POST(request: Request): Promise<NextResponse> {
         OTP_ERROR_MESSAGES.INVALID_CODE,
         HTTP_STATUS.BAD_REQUEST,
       );
-    }
-
-    // ⚠️ **第2要素を設定しているなら要求する**（#1359 のレビュー）。
-    //
-    //   アドレス変更の結果は**復旧経路の喪失**で、パスワード変更より重い。
-    //   退会（#932）・二段階認証の無効化・リカバリーコードの再発行が
-    //   いずれも第2要素を要求しているのに、ここだけ外れていた。
-    //
-    // ⚠️ 設定している人にだけ要求する。`requireSecondFactor` は未設定だと
-    //   400 を返すため、無条件に呼ぶと未設定の利用者が変更できなくなる
-    const secondFactorMethod = await getSecondFactorMethod(
-      supabase,
-      session.user.id,
-    );
-
-    if (secondFactorMethod) {
-      const guardResponse = await requireSecondFactor(
-        supabase,
-        session.user.id,
-        parsed.data.secondFactorCode ?? '',
-      );
-
-      if (guardResponse) return guardResponse;
     }
 
     // ⚠️ 旧アドレスの `rate_limits` / `otp_codes` も同じトランザクションで消す。

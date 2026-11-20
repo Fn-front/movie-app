@@ -199,6 +199,28 @@ describe('POST /api/user/email-change/confirm', () => {
     });
 
     /**
+     * ⛔ **第2要素は確認コードを消費する前に見る**（2回目のレビュー）。
+     *
+     * 後ろに置くと、第2要素を1文字打ち間違えるたびに使い捨ての
+     * メール確認コードが先に焼ける。やり直すには再送（60秒待ち＋
+     * `EMAIL_CHANGE_REQUEST` を1枠消費）が要り、**5回のタイプミスで
+     * 60分ロック**になる。
+     *
+     * ⚠️ `mockRpc` を見るだけでは足りない。順序を入れ替えても RPC は
+     * どちらにせよ呼ばれないので、**`consumeEmailChangeCode` を直接見る**。
+     */
+    it('第2要素で落ちたら確認コードを消費しない', async () => {
+      mockGetSecondFactorMethod.mockResolvedValue('totp');
+      mockRequireSecondFactor.mockResolvedValue(
+        new Response(JSON.stringify({ success: false }), { status: 400 }),
+      );
+
+      await POST(createRequest(validBody));
+
+      expect(mockConsumeEmailChangeCode).not.toHaveBeenCalled();
+    });
+
+    /**
      * ⚠️ `requireSecondFactor` は未設定だと 400 を返す。無条件に呼ぶと
      * 第2要素を使っていない利用者が変更できなくなる。
      */

@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { HTTP_STATUS, CRON_ERROR_MESSAGES } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
-import { handleRouteError } from '@/helpers/routeError';
+import { handleCronError } from '@/helpers/cronError';
 import { syncNowShowingMovies } from '@/lib/sync/syncNowShowingMovies';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   try {
-    const authError = verifyCronAuth(request);
+    const authError = await verifyCronAuth(request, 'sync-now-showing');
     if (authError) return authError;
 
     const result = await syncNowShowingMovies();
@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
       { status: HTTP_STATUS.OK },
     );
   } catch (error) {
-    return handleRouteError(
+    return handleCronError(
       error,
-      'Sync now showing movies error',
+      'sync-now-showing',
       CRON_ERROR_MESSAGES.SYNC_NOW_SHOWING,
     );
   }

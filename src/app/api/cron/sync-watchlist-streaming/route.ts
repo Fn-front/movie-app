@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { HTTP_STATUS, CRON_ERROR_MESSAGES } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
-import { handleRouteError } from '@/helpers/routeError';
+import { handleCronError } from '@/helpers/cronError';
 import { syncWatchlistStreaming } from '@/lib/sync/syncWatchlistStreaming';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   try {
-    const authError = verifyCronAuth(request);
+    const authError = await verifyCronAuth(request, 'sync-watchlist-streaming');
     if (authError) return authError;
 
     const result = await syncWatchlistStreaming();
@@ -33,9 +33,9 @@ export async function GET(request: NextRequest) {
       { status: HTTP_STATUS.OK },
     );
   } catch (error) {
-    return handleRouteError(
+    return handleCronError(
       error,
-      'Sync watchlist streaming error',
+      'sync-watchlist-streaming',
       CRON_ERROR_MESSAGES.SYNC_WATCHLIST_STREAMING,
     );
   }

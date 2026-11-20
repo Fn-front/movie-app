@@ -16,6 +16,18 @@ import { GET, maxDuration, dynamic } from './route';
 
 // --- Mocks ---
 
+/**
+ * ⚠️ 通知をモックする（#979）。
+ *
+ * モックしないと `handleCronError` から **実際に Resend API を叩く**。
+ * jest は next/jest 経由で `.env.local` を読むので、`RESEND_API_KEY` と
+ * `CRON_ALERT_EMAIL` が入っている手元では**本物のメールが飛ぶ**。
+ */
+const mockNotifyCronFailure = jest.fn().mockResolvedValue(true);
+jest.mock('@/lib/cron/notifyCronFailure', () => ({
+  notifyCronFailure: (...args: unknown[]) => mockNotifyCronFailure(...args),
+}));
+
 const mockCleanupExpiredRecords = jest.fn();
 jest.mock('@/lib/cleanup/expiredRecords', () => ({
   cleanupExpiredRecords: (...args: unknown[]) =>
@@ -152,6 +164,10 @@ describe('GET /api/cron/cleanup-expired-records', () => {
     // 失敗しても、成功した対象の削除件数は捨てない
     expect(json.data.targets[0].deleted_count).toBe(12);
     expect(json.data.targets[1].error).toBe('function does not exist');
+    // ⚠️ 通知を消したらここが落ちる（#979）
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ cronName: 'cleanup-expired-records' }),
+    );
   });
 
   it('削除対象が無くても成功で返す', async () => {
@@ -174,6 +190,9 @@ describe('GET /api/cron/cleanup-expired-records', () => {
 
     expect(response.status).toBe(401);
     expect(mockCleanupExpiredRecords).not.toHaveBeenCalled();
+    // ⛔ ヘッダが無いだけでは通知しない。/api/cron/* は誰でも叩けるので、
+    //    ここで通知すると外部から1日1通の枠を使い切らせられる（#979）
+    expect(mockNotifyCronFailure).not.toHaveBeenCalled();
   });
 
   it('認証トークンが違うと401で、削除は実行されない', async () => {
@@ -189,6 +208,11 @@ describe('GET /api/cron/cleanup-expired-records', () => {
     const response = await GET(createRequest('Bearer test-secret'));
 
     expect(response.status).toBe(500);
+    // ⚠️ 通知を消したらここが落ちる（#979）。
+    //    個人データの消去が止まったことに気づけないのが問題そのもの
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ cronName: 'cleanup-expired-records' }),
+    );
     expect(mockCleanupExpiredRecords).not.toHaveBeenCalled();
   });
 
@@ -201,6 +225,12 @@ describe('GET /api/cron/cleanup-expired-records', () => {
 
     // 個人データの消去なので、失敗を握りつぶして success:true にしない
     expect(response.status).toBe(500);
+
+    // ⚠️ 500 を返すだけで終わらせない（#979）。
+    //   通知の呼び出しを消したらここが落ちる
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ cronName: 'cleanup-expired-records' }),
+    );
     expect(json.success).toBe(false);
   });
 });

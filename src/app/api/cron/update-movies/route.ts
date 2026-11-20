@@ -14,7 +14,7 @@ import {
   CRON_ERROR_MESSAGES,
 } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
-import { handleRouteError } from '@/helpers/routeError';
+import { handleCronError } from '@/helpers/cronError';
 import { updateMoviesCacheByBatch } from '@/lib/sync/updateMoviesCacheByBatch';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +22,7 @@ export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   try {
-    const authError = verifyCronAuth(request);
+    const authError = await verifyCronAuth(request, 'update-movies');
     if (authError) return authError;
 
     const result = await updateMoviesCacheByBatch();
@@ -37,9 +37,9 @@ export async function GET(request: NextRequest) {
       { status: HTTP_STATUS.OK },
     );
   } catch (error) {
-    return handleRouteError(
+    return handleCronError(
       error,
-      'Batch update movies error',
+      'update-movies',
       CRON_ERROR_MESSAGES.UPDATE_MOVIES,
     );
   }

@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { PASSWORD_CHANGE_EVENT } from '@/constants/auth';
 import { RECOVERY_CODE_CONFIG, TOTP_ERROR_MESSAGES } from '@/constants/totp';
 import {
   SECOND_FACTOR_MESSAGES,
@@ -263,6 +264,124 @@ describe('TwoFactorSettings', () => {
       expect(url).toBe('/api/user/totp/reauth-code');
       expect(init.method).toBe('POST');
       expect(init.body).toBeUndefined();
+    });
+
+    /**
+     * どちらの欄を出すかの**出どころ**（#1372）
+     *
+     * ⛔ セッション（JWT）だけを見ていたため、初回パスワードを設定した直後は
+     * 最大5分ズレていた。画面は「確認コードを送る」しか出さないのに、
+     * サーバー（`requireReauth`）は `users.password_hash` の実値を見て
+     * 「現在のパスワードを入力してください」と返す。**その欄が無い**ので
+     * 指示に従えず、リロードしても JWT が追いつくまで直らなかった。
+     *
+     * 状態取得APIは同じ列を返すので、取れたらそちらを優先する。
+     */
+    describe('パスワード有無の出どころ（#1372）', () => {
+      it('APIが true を返したらセッションが false でもパスワードを求める', async () => {
+        mockFetch.mockResolvedValueOnce(
+          statusResponse(false, 0, { hasPassword: true }),
+        );
+
+        render(<TwoFactorSettings hasPassword={false} />);
+
+        expect(
+          await screen.findByLabelText('現在のパスワード'),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByRole('button', { name: '確認コードを送る' }),
+        ).not.toBeInTheDocument();
+      });
+
+      it('APIが false を返したらセッションが true でも確認コードを求める', async () => {
+        mockFetch.mockResolvedValueOnce(
+          statusResponse(false, 0, { hasPassword: false }),
+        );
+
+        render(<TwoFactorSettings hasPassword />);
+
+        expect(await screen.findByLabelText('確認コード')).toBeInTheDocument();
+        expect(
+          screen.queryByLabelText('現在のパスワード'),
+        ).not.toBeInTheDocument();
+      });
+
+      /**
+       * ⚠️ 取得に失敗しても欄を消さない。APIを唯一の根拠にすると、
+       * 状態取得が落ちた利用者にはどちらの欄も出なくなる。
+       */
+      it('APIが返さなければセッション由来の値を使う', async () => {
+        mockFetch.mockResolvedValueOnce(statusResponse(false));
+
+        render(<TwoFactorSettings hasPassword={false} />);
+
+        expect(await screen.findByLabelText('確認コード')).toBeInTheDocument();
+      });
+
+      /**
+       * 同じ画面でパスワードを設定したときに追従する（#1372 の再現そのもの）
+       *
+       * 設定画面は1ページに全部載っているので、パスワードを設定しても
+       * この節は再マウントされない。合図が無いと行き止まりが続く。
+       */
+      it('パスワード設定の合図で取り直し、パスワード欄に切り替わる', async () => {
+        mockFetch.mockResolvedValueOnce(
+          statusResponse(false, 0, { hasPassword: false }),
+        );
+
+        render(<TwoFactorSettings hasPassword={false} />);
+        expect(await screen.findByLabelText('確認コード')).toBeInTheDocument();
+
+        mockFetch.mockResolvedValueOnce(
+          statusResponse(false, 0, { hasPassword: true }),
+        );
+
+        await act(async () => {
+          window.dispatchEvent(new Event(PASSWORD_CHANGE_EVENT));
+        });
+
+        expect(
+          await screen.findByLabelText('現在のパスワード'),
+        ).toBeInTheDocument();
+      });
+
+      /**
+       * ⛔ **リカバリーコードの平文を消さない。** 合図で状態取得をそのまま
+       * やり直すと `view` ごと書き換わり、控える前に画面から消える。
+       * サーバーは二度と返さないので復旧できない。
+       */
+      it('リカバリーコードの表示中に合図が来ても消さない', async () => {
+        mockFetch
+          .mockResolvedValueOnce(statusResponse(false))
+          .mockResolvedValueOnce(
+            okResponse({ qrCodeDataUri: QR_DATA_URI, secret: 'ABCDEFGH' }),
+          )
+          .mockResolvedValueOnce(okResponse({ recoveryCodes: RECOVERY_CODES }));
+
+        render(<TwoFactorSettings hasPassword />);
+        await enterReauthPassword();
+        await user.click(
+          await screen.findByRole('button', { name: '認証アプリで設定する' }),
+        );
+        await user.type(await screen.findByLabelText('認証コード'), '123456');
+        await user.click(
+          screen.getByRole('button', { name: '二段階認証を有効にする' }),
+        );
+
+        expect(await screen.findByText(RECOVERY_CODES[0])).toBeInTheDocument();
+
+        mockFetch.mockResolvedValueOnce(
+          statusResponse(true, RECOVERY_CODE_CONFIG.COUNT, {
+            hasPassword: true,
+          }),
+        );
+
+        await act(async () => {
+          window.dispatchEvent(new Event(PASSWORD_CHANGE_EVENT));
+        });
+
+        expect(screen.getByText(RECOVERY_CODES[0])).toBeInTheDocument();
+      });
     });
   });
 

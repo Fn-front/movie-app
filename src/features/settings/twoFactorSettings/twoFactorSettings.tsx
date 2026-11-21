@@ -24,20 +24,27 @@ import styles from './twoFactorSettings.module.scss';
 
 export interface TwoFactorSettingsProps {
   /**
-   * パスワードを持っているか（#1368）
+   * パスワードを持っているか（#1368）。**セッション由来**
    *
    * ⛔ 設定を始めるには**再認証**が要る。持っている人には現在のパスワード、
    * 持たない人（OAuth のみ）には登録アドレスへ送る使い捨てコードを求める。
+   *
+   * ⚠️ **これは最大5分ずれる**（#1372）。JWT の追従は
+   * `SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS` のスロットル付きなので、
+   * 初回パスワードを設定した直後はまだ `false` のまま。状態取得APIが
+   * `users.password_hash` の実値を返すので、取れたらそちらを使う。
+   * ここはその**取得前と取得失敗時のフォールバック**としてだけ残す。
    */
   hasPassword: boolean;
 }
 
 export const TwoFactorSettings = memo<TwoFactorSettingsProps>(
-  function TwoFactorSettings({ hasPassword }) {
+  function TwoFactorSettings({ hasPassword: sessionHasPassword }) {
     const {
       view,
       method,
       emailOtpAvailable,
+      hasPassword: fetchedHasPassword,
       qrCodeDataUri,
       secret,
       recoveryCodes,
@@ -57,6 +64,18 @@ export const TwoFactorSettings = memo<TwoFactorSettingsProps>(
       dismissRecoveryCodes,
       cancelSetup,
     } = useTwoFactorSettings();
+
+    /**
+     * 再認証でパスワードを求められるか（#1372）
+     *
+     * ⛔ **サーバーと同じ根拠で決める。** 画面は `hasPassword` で欄を出し分け、
+     * サーバーの `requireReauth` は `users.password_hash` の実値で要求を決める。
+     * セッションだけを見ていたため、初回パスワードを設定した直後は
+     * 「確認コードを送る」しか出ないのにサーバーは 400 CODE_NOT_REQUIRED で
+     * 「現在のパスワードを入力してください」と返し、**その欄が無い**まま
+     * 最大5分間なにもできない窓ができていた。
+     */
+    const hasPassword = fetchedHasPassword ?? sessionHasPassword;
 
     const [code, setCode] = useState('');
     // 再認証（#1368）。持っている材料に応じてどちらか一方を使う

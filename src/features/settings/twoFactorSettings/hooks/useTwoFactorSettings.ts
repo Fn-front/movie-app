@@ -10,7 +10,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { API_ENDPOINTS, UI_ERROR_MESSAGES } from '@/constants';
+import {
+  API_ENDPOINTS,
+  PASSWORD_CHANGE_EVENT,
+  UI_ERROR_MESSAGES,
+} from '@/constants';
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
 import {
   SECOND_FACTOR_MESSAGES,
@@ -51,6 +55,14 @@ interface UseTwoFactorSettingsResult {
    * （RFC 2606、絶対に名前解決されない）なので選ばせない。
    */
   emailOtpAvailable: boolean;
+  /**
+   * 再認証でパスワードを求められるか（#1372）
+   *
+   * ⚠️ **取得できるまでは `null`。** 呼び出し側はセッション由来の値へ
+   * 倒すこと。ここで `false` を既定にすると、パスワードを持つ人に
+   * 一瞬だけ「確認コードを送る」が出てしまう。
+   */
+  hasPassword: boolean | null;
   /** 設定中に表示するQRコード（data URI） */
   qrCodeDataUri: string | null;
   /** 手入力用の共有鍵 */
@@ -117,6 +129,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
   const [view, setView] = useState<TwoFactorView>(TWO_FACTOR_VIEW.LOADING);
   const [method, setMethod] = useState<SecondFactorMethod | null>(null);
   const [emailOtpAvailable, setEmailOtpAvailable] = useState(true);
+  const [hasPassword, setHasPassword] = useState<boolean | null>(null);
   const [qrCodeDataUri, setQrCodeDataUri] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
@@ -161,6 +174,13 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
       // 取得できなかったときは出さない側へ倒す。選べない方式を見せて
       // 「設定したのにコードが届かない」より、選択肢が1つ少ないほうがよい
       setEmailOtpAvailable(json.data.emailOtpAvailable === true);
+      // ⚠️ 真偽値でなければ `null` のまま残す（#1372）。呼び出し側が
+      //   セッション由来の値へ倒せるようにするため、ここで握り潰さない
+      setHasPassword(
+        typeof json.data.hasPassword === 'boolean'
+          ? json.data.hasPassword
+          : null,
+      );
       setView(
         json.data.enabled ? TWO_FACTOR_VIEW.ENABLED : TWO_FACTOR_VIEW.DISABLED,
       );
@@ -173,6 +193,48 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
   useEffect(() => {
     loadStatus();
   }, [loadStatus]);
+
+  /**
+   * パスワードの有無だけを取り直す（#1372）
+   *
+   * ⛔ **`loadStatus` を呼ばないこと。** あちらは `view` も書き換えるので、
+   * リカバリーコードを表示している最中に走ると**平文が画面から消える**
+   * （サーバーは二度と返さない）。設定中（QR・コード入力）も方式の選択へ
+   * 戻ってしまい、やり直しになる。
+   *
+   * ⚠️ 失敗しても `error` を立てない。利用者が触っているのは別の節
+   * （パスワード変更）なので、関係のないエラーを出す筋合いがない。
+   * 取れなければ今の値のまま＝これまでと同じ振る舞いに留まる。
+   */
+  const refreshHasPassword = useCallback(async () => {
+    try {
+      const response = await fetch(API_ENDPOINTS.USER_TOTP);
+      if (!response.ok) return;
+
+      const json = await response.json();
+
+      if (typeof json.data?.hasPassword === 'boolean') {
+        setHasPassword(json.data.hasPassword);
+      }
+    } catch {
+      // 取れなければ今の値を保つ
+    }
+  }, []);
+
+  /**
+   * 同じ画面でパスワードを設定・変更したら取り直す（#1372）
+   *
+   * これが無いと、初回パスワードを設定した利用者には「確認コードを送る」
+   * しか出ないのにサーバーはパスワードを要求する、という行き止まりが
+   * 再読み込みするまで続く。
+   */
+  useEffect(() => {
+    window.addEventListener(PASSWORD_CHANGE_EVENT, refreshHasPassword);
+
+    return () => {
+      window.removeEventListener(PASSWORD_CHANGE_EVENT, refreshHasPassword);
+    };
+  }, [refreshHasPassword]);
 
   /**
    * コードを伴う操作をまとめて行う
@@ -442,6 +504,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
     view,
     method,
     emailOtpAvailable,
+    hasPassword,
     qrCodeDataUri,
     secret,
     recoveryCodes,

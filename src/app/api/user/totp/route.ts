@@ -47,12 +47,16 @@ export async function GET() {
 
     const method = await getSecondFactorMethod(supabase, session.user.id);
 
-    // admin が発行したアカウントは `users.email` が `.invalid` TLD
-    // （RFC 2606、絶対に名前解決されない）なので、メールOTP を選ばせない。
-    // 画面に選択肢を出さないための判定材料として返す
+    // `username`: admin が発行したアカウントは `users.email` が `.invalid` TLD
+    //   （RFC 2606、絶対に名前解決されない）なので、メールOTP を選ばせない。
+    //   画面に選択肢を出さないための判定材料として返す
+    //
+    // `password_hash`: 再認証でどちらの材料を求めるかの判定材料（#1372）。
+    //   `requireReauth`（`src/helpers/reauthGuard.ts`）がこの列の実値で
+    //   決めているので、画面も同じ列を見ないとズレる
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('username')
+      .select('username, password_hash')
       .eq('id', session.user.id)
       .single();
 
@@ -68,6 +72,11 @@ export async function GET() {
           method,
           // メールOTP を選べるか（admin 発行アカウントは選べない）
           emailOtpAvailable: !user?.username,
+          // 再認証でパスワードを求められるか（#1372）
+          //
+          // ⛔ ハッシュそのものを返さない。画面が要るのは有無だけで、
+          //    値を渡すと総当たりの的を手渡すことになる
+          hasPassword: Boolean(user?.password_hash),
           // 残数は有効時のみ意味がある。無効なら0を返す
           remainingRecoveryCodes: method
             ? await countUnusedRecoveryCodes(supabase, session.user.id)

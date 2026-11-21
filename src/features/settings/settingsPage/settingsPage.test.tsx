@@ -28,8 +28,38 @@ jest.mock('@/hooks/useToast', () => ({
 }));
 
 jest.mock('@/features/settings/changePasswordForm/changePasswordForm', () => ({
-  ChangePasswordForm: ({ email }: { email: string }) => (
-    <div data-testid='change-password-form' data-email={email} />
+  ChangePasswordForm: ({
+    email,
+    hasPassword,
+  }: {
+    email: string;
+    hasPassword: boolean;
+  }) => (
+    <div
+      data-testid='change-password-form'
+      data-email={email}
+      data-has-password={String(hasPassword)}
+    />
+  ),
+}));
+
+/*
+  ⚠️ 二段階認証と退会も差し替える。どちらも `hasPassword` の受け取り先で、
+  かつ素のままだと自前で `/api/user/totp` を叩くため、下の fetch モックと
+  期待値が絡み合う
+*/
+jest.mock('@/features/settings/twoFactorSettings/twoFactorSettings', () => ({
+  TwoFactorSettings: ({ hasPassword }: { hasPassword: boolean }) => (
+    <div
+      data-testid='two-factor-settings'
+      data-has-password={String(hasPassword)}
+    />
+  ),
+}));
+
+jest.mock('@/features/settings/deleteAccount/deleteAccount', () => ({
+  DeleteAccount: ({ hasPassword }: { hasPassword: boolean }) => (
+    <div data-testid='delete-account' data-has-password={String(hasPassword)} />
   ),
 }));
 
@@ -62,11 +92,22 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { recordConsentDecision } from '@/utils/cookieConsent';
 import { SettingsPage } from './settingsPage';
 
+/** `useHasPassword` が叩く `GET /api/user/totp` */
+const mockFetch = jest.fn();
+global.fetch = mockFetch as unknown as typeof fetch;
+
 // --- Tests ---
 
 describe('SettingsPage', () => {
   beforeEach(() => {
     localStorage.clear();
+    // 既定では「パスワードの有無を取りにいっても分からない」状態にして、
+    // セッション由来の値がそのまま使われるようにする（#1388）
+    //
+    // ⚠️ 呼び出し回数を見るテストがあるので毎回リセットする。この describe は
+    // `clearAllMocks` を使っていないため、積み残すと前のテストの分を数える
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValue({ ok: false, json: async () => ({}) });
     mockUseSession.mockReturnValue({
       data: {
         user: {
@@ -145,6 +186,84 @@ describe('SettingsPage', () => {
       'data-has-password',
       'false',
     );
+  });
+
+  /**
+   * `hasPassword` の出どころ（#1388）
+   *
+   * ⛔ セッション（JWT）だけを根拠にしない。追従は5分間隔のスロットル付きで、
+   * サーバーは毎回 `users.password_hash` を見る。初回パスワードを設定した
+   * 直後は食い違い、**画面が出す欄とサーバーが求める材料が合わない**。
+   * 退会はいちばん重く、「確認コードを送る」しか出ないのにサーバーは
+   * 現在のパスワードを求め、その欄が無いので従えない。
+   */
+  describe('パスワードの有無の出どころ', () => {
+    /** セッションは「未設定」、実体は「設定済み」の状態を作る */
+    const sessionSaysNoPassword = () => {
+      mockUseSession.mockReturnValue({
+        data: {
+          user: {
+            name: 'テストユーザー',
+            email: 'test@example.com',
+            hasPassword: false,
+          },
+        },
+        status: 'authenticated',
+        update: jest.fn(),
+      });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { hasPassword: true } }),
+      });
+    };
+
+    it.each([
+      ['delete-account'],
+      ['change-password-form'],
+      ['email-change-form'],
+      ['two-factor-settings'],
+    ])('%s に API 由来の値が渡る', async (testId) => {
+      sessionSaysNoPassword();
+
+      render(<SettingsPage />);
+
+      await waitFor(() =>
+        expect(screen.getByTestId(testId)).toHaveAttribute(
+          'data-has-password',
+          'true',
+        ),
+      );
+    });
+
+    /*
+      ⛔ 取得に失敗した利用者から欄を消さない。API を唯一の根拠にすると、
+      これまで使えていた操作ができなくなる（#1378 のレビューで確認した判断）
+    */
+    it('取得に失敗したらセッション由来の値のまま', async () => {
+      sessionSaysNoPassword();
+      mockFetch.mockRejectedValue(new Error('network down'));
+
+      render(<SettingsPage />);
+
+      await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+      expect(screen.getByTestId('delete-account')).toHaveAttribute(
+        'data-has-password',
+        'false',
+      );
+    });
+
+    /*
+      ⚠️ 4つの節で1回しか取りにいかない。節ごとに取ると同じ問い合わせが並び、
+      同じ画面の中で値が揃わない時間も生まれる
+    */
+    it('問い合わせは1回だけ', async () => {
+      sessionSaysNoPassword();
+
+      render(<SettingsPage />);
+
+      await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('通知セクションが表示される', () => {

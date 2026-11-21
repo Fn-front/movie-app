@@ -20,6 +20,7 @@ import { StreamingNoticeSettings } from '@/features/settings/streamingNoticeSett
 import { ThemeSettings } from '@/features/settings/themeSettings/themeSettings';
 import { DismissedMoviesList } from '@/features/dismissedMovies/component/dismissedMoviesList/dismissedMoviesList';
 import { CookieConsentToggle } from '@/features/cookieConsent/component/cookieConsentToggle/cookieConsentToggle';
+import { useHasPassword } from '@/features/settings/hooks/useHasPassword';
 import { useCookieConsent } from '@/hooks/useCookieConsent';
 
 import styles from './settingsPage.module.scss';
@@ -32,9 +33,19 @@ export const SettingsPage = memo(function SettingsPage() {
   const hasConsentDecision = consent === 'granted' || consent === 'denied';
   const { data: session, status } = useSession();
   const email = session?.user?.email ?? '';
-  // パスワード未設定（ソーシャルログインのみ）のユーザーには
-  // 「現在のパスワード」欄を出さない
-  const hasPassword = session?.user?.hasPassword ?? true;
+  /**
+   * パスワード未設定（ソーシャルログインのみ）のユーザーには
+   * 「現在のパスワード」欄を出さない
+   *
+   * ⛔ **セッションだけを根拠にしない（#1388）。** JWT の追従は5分間隔の
+   * スロットル付きで、サーバーは毎回 `users.password_hash` を見る。初回
+   * パスワードを設定した直後は食い違い、退会・パスワード変更・メール
+   * アドレス変更のどれも行き止まりになる。
+   *
+   * ここで1回取って4つの節へ配る。節ごとに取りにいくと同じ問い合わせが
+   * 並ぶうえ、同じ画面の中で値が揃わない。
+   */
+  const hasPassword = useHasPassword(session?.user?.hasPassword ?? true);
   /**
    * セッションの**初回**読み込み中か
    *

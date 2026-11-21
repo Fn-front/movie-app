@@ -340,7 +340,12 @@ export const TOAST_TITLES = {
  * トースト通知メッセージ
  */
 export const TOAST_MESSAGES = {
-  /** ログイン成功時の説明（戻り先が無く、ホームへ行くとき） */
+  /**
+   * ログイン成功時の説明（**解決後の行き先が**ホームのとき）
+   *
+   * ⚠️ 「戻り先が無いとき」ではない。弾かれた `callbackUrl` もホームへ落ちる
+   * ので、prop の有無ではなく `resolveSafeCallbackUrl` の戻り値で選ぶ（#1385）。
+   */
   LOGIN_SUCCESS_DESCRIPTION: 'ホーム画面に移動します。',
   /**
    * ログイン成功時の説明（戻り先があるとき / #1385）

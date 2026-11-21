@@ -81,15 +81,30 @@ export async function GET(request: NextRequest) {
     //   個人データの消去が止まっていることに気づけないのが問題そのもの
     //   （#933 / #978 / #1300）なので、明示的に通知する。
     //   `notifyCronFailure` は throw しない契約なので応答には影響しない
-    if (hasError) {
+    //
+    // ⚠️ **打ち切りも通知する**（#433）。対象が4→7に増え、35秒の時間予算を
+    //   分け合うようになった。予算は先頭から使われるので、`rate_limits` が
+    //   滞留した日は末尾の対象が毎日0件で終わる。打ち切りは 200 で返すため
+    //   **ステータスコードしか見ない監視からは完走と区別がつかない**。
+    //   消し残しは「保持期間を超えた個人データ・TMDbコンテンツが残っている」
+    //   状態そのものなので、エラーと同じく気づける形にする。
+    const truncated = targets.filter((t) => !t.completed && !t.error);
+
+    if (hasError || truncated.length > 0) {
       const failed = targets
         .filter((t) => t.error !== undefined)
         .map((t) => `${t.name}: ${t.error}`)
         .join(' / ');
 
+      const reason = hasError
+        ? `保持期間切れの削除に失敗しました（${failed}）`
+        : `保持期間切れの削除が時間内に終わりませんでした（${truncated
+            .map((t) => t.name)
+            .join(' / ')}）`;
+
       await notifyCronFailure(supabase, {
         cronName: 'cleanup-expired-records',
-        reason: `保持期間切れの削除に失敗しました（${failed}）`,
+        reason,
       });
     }
 

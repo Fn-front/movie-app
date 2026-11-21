@@ -15,6 +15,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { SOFT_DELETED_LIST_RETENTION_HOURS } from '@/constants/cleanup';
 import { OTP_CODE_RETENTION_HOURS } from '@/constants/otp';
 import { PASSWORD_RESET_TOKEN_RETENTION_HOURS } from '@/constants/passwordReset';
 import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
@@ -73,6 +74,32 @@ export const CLEANUP_TARGETS: readonly CleanupTarget[] = [
     name: 'recommendation_events',
     rpc: 'delete_expired_recommendation_events',
     retentionHours: RECOMMENDATION_EVENT_RETENTION_HOURS,
+  },
+  // 以下3つは論理削除された利用者リスト（#433）。
+  //
+  // `deleted_at` が入っても行は残り、TMDb 由来の表示列を保持し続けていた。
+  // 利用者と結びついているので上の4つと同じ「不要となった個人データ」でもある。
+  //
+  // ⚠️ **末尾に足している。** 時間予算（`TIME_BUDGET_MS`）は全対象で共有する
+  //   ので、先頭の対象が滞留すると後ろは0件で終わる。先頭へ入れると今度は
+  //   `rate_limits`（最も行が増える／個人情報保護法22条の本丸）が飢えるため、
+  //   順番を入れ替えるのではなく**打ち切りを通知する**ことで塞いだ
+  //   （`cleanup-expired-records/route.ts` の `truncated`）。
+  //   この3つは対象行数が少なく（本番実測で合計21行）、滞留しにくい。
+  {
+    name: 'favorites',
+    rpc: 'delete_expired_favorites',
+    retentionHours: SOFT_DELETED_LIST_RETENTION_HOURS,
+  },
+  {
+    name: 'watchlist',
+    rpc: 'delete_expired_watchlist',
+    retentionHours: SOFT_DELETED_LIST_RETENTION_HOURS,
+  },
+  {
+    name: 'dismissed_movies',
+    rpc: 'delete_expired_dismissed_movies',
+    retentionHours: SOFT_DELETED_LIST_RETENTION_HOURS,
   },
 ] as const;
 

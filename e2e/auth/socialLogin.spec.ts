@@ -13,11 +13,15 @@
  * - 状態保持: 表示後に `?error=` が URL から落ち、リロードで蘇らない
  * - セキュリティ: 知らないコードでも落とさず既定の文言に倒す
  * - 状態保持（戻り先）: 失敗したあとに元のページへ戻れる（#1246 / #1293）
+ * - エラー応答: そもそも始められなかったとき、失敗が伝わり押し直せる（#1292）
  */
 
 import { test, expect, type Page } from '@playwright/test';
 
-import { SIGN_IN_PAGE_ERROR_MESSAGES } from '../../src/constants/auth';
+import {
+  AUTH_ERROR_MESSAGES,
+  SIGN_IN_PAGE_ERROR_MESSAGES,
+} from '../../src/constants/auth';
 import { PENDING_CALLBACK_URL_KEY } from '../../src/features/auth/utils/pendingCallbackUrl';
 import {
   cleanupLoginIpRateLimits,
@@ -129,6 +133,59 @@ test.describe('ソーシャルログイン 表示確認（未認証）', () => {
         page.getByRole('heading', { name: 'ログイン' }),
       ).toBeVisible();
       await expect(errorAlert(page)).toHaveCount(0);
+    });
+  });
+
+  /**
+   * そもそも始められなかったとき（#1292）
+   *
+   * ⛔ 以前は `signIn` に catch が無く、**ボタンが元に戻るだけで何も
+   * 起きなかったように見えていた**。押し直しても同じなので、利用者には
+   * 原因を知りようがない。
+   *
+   * ⚠️ 落とすのは **`POST /api/auth/signin/<provider>` だけ**。手前の
+   * providers / csrf の取得は `fetchData` が catch して null を返すため
+   * reject せず、providers が null だと `/api/auth/error` へ遷移してしまう
+   * （`next-auth/react.js`）。ここが唯一 catch へ到達する経路。
+   */
+  test.describe('ログインを始められなかったとき', () => {
+    test('失敗が画面に出て、ボタンは押し直せる', async ({ page }) => {
+      await page.goto(
+        `/auth/signin?callbackUrl=${encodeURIComponent('/watchlist')}`,
+      );
+
+      const google = page.getByRole('button', { name: 'Googleでログイン' });
+      await google.waitFor();
+
+      await page.route('**/api/auth/signin/**', (route) =>
+        route.abort('failed'),
+      );
+      await google.click();
+
+      const description = page.getByText(
+        AUTH_ERROR_MESSAGES.SOCIAL_LOGIN_START_FAILED,
+        { exact: true },
+      );
+      await expect(description).toBeVisible();
+
+      // ⛔ 預かり分を残さない。往復していないのに戻り先だけ残ると、
+      //    次にこの画面へ来た人が身に覚えのない場所へ飛ばされる（#1246）
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (key) => window.sessionStorage.getItem(key),
+            PENDING_CALLBACK_URL_KEY,
+          ),
+        )
+        .toBeNull();
+
+      // 押したのに何も起きない、にならない（押し直せる）
+      await expect(google).toBeEnabled();
+      await expect(page).toHaveURL(/\/auth\/signin/);
+
+      await page.getByRole('listitem').filter({ has: description }).screenshot({
+        path: 'docs/e2e-screenshots/social-login-start-failed.png',
+      });
     });
   });
 });

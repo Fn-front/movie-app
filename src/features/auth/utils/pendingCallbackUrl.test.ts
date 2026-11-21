@@ -4,6 +4,7 @@
 
 import {
   PENDING_CALLBACK_URL_KEY as KEY,
+  clearPendingCallbackUrl,
   savePendingCallbackUrl,
   takePendingCallbackUrl,
 } from './pendingCallbackUrl';
@@ -83,6 +84,32 @@ describe('pendingCallbackUrl', () => {
       });
 
       expect(takePendingCallbackUrl()).toBeUndefined();
+    });
+  });
+
+  /**
+   * ソーシャルログインを始められなかったときの巻き戻し（#1292）
+   */
+  describe('clearPendingCallbackUrl', () => {
+    it('預けた戻り先を消す', () => {
+      savePendingCallbackUrl('/watchlist');
+
+      clearPendingCallbackUrl();
+
+      expect(takePendingCallbackUrl()).toBeUndefined();
+    });
+
+    it('預けていなくても落ちない', () => {
+      expect(() => clearPendingCallbackUrl()).not.toThrow();
+    });
+
+    it('sessionStorage が例外を投げても呼び出し側へ伝播しない', () => {
+      // 消せなくても「始められなかった」こと自体はトーストで伝わる
+      jest.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+        throw new Error('SecurityError');
+      });
+
+      expect(() => clearPendingCallbackUrl()).not.toThrow();
     });
   });
 });

@@ -115,6 +115,25 @@ export const AUTH_ERROR_MESSAGES = {
    */
   LOGOUT_FAILED:
     'ログアウトできませんでした。通信状況を確認して、もう一度お試しください。',
+  /**
+   * ソーシャルログインを始められなかった（#1292）
+   *
+   * `signIn()` は通常ブラウザごと遷移させて戻ってこないが、**通信が途中で
+   * 切れた**とき（や、応答が JSON でないとき）に reject する。以前は catch が
+   * 無く、**ボタンが元に戻るだけで何も起きなかったように見えていた**。
+   *
+   * ⚠️ reject するのは `POST /api/auth/signin/<provider>`（と、その応答の
+   * `res.json()`）だけ。`next-auth/react.js:153` の裸の fetch がそれで、
+   * 手前の providers / csrf の取得は `fetchData` が catch して null を
+   * 返すため reject しない（providers が null だと `/api/auth/error` へ
+   * 遷移する。`react.js:130-135`）。
+   *
+   * ⚠️ `SIGN_IN_PAGE_ERROR_MESSAGES` 側と分ける。あちらはプロバイダから
+   * 戻された失敗で、こちらは**そこへ行けなかった**失敗。押し直しで直る
+   * ことが多いので、通信状況に触れる `LOGOUT_FAILED` と同じ形にする。
+   */
+  SOCIAL_LOGIN_START_FAILED:
+    'ログインを開始できませんでした。通信状況を確認して、もう一度お試しください。',
 } as const;
 
 /**
@@ -340,8 +359,20 @@ export const TOAST_TITLES = {
  * トースト通知メッセージ
  */
 export const TOAST_MESSAGES = {
-  /** ログイン成功時の説明 */
+  /**
+   * ログイン成功時の説明（**解決後の行き先が**ホームのとき）
+   *
+   * ⚠️ 「戻り先が無いとき」ではない。弾かれた `callbackUrl` もホームへ落ちる
+   * ので、prop の有無ではなく `resolveSafeCallbackUrl` の戻り値で選ぶ（#1385）。
+   */
   LOGIN_SUCCESS_DESCRIPTION: 'ホーム画面に移動します。',
+  /**
+   * ログイン成功時の説明（戻り先があるとき / #1385）
+   *
+   * ⚠️ **遷移先のパスを文面に入れない。** `callbackUrl` は外から渡る値で、
+   * `resolveSafeCallbackUrl` を通った後でもそのまま画面に出したくない。
+   */
+  LOGIN_SUCCESS_REDIRECT_DESCRIPTION: '元のページに戻ります。',
   /** 登録成功時の説明 */
   REGISTER_SUCCESS_DESCRIPTION: '確認コードをメールに送信しました。',
   /** メール認証完了時の説明 */

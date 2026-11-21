@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { signIn } from 'next-auth/react';
 
+import { PENDING_CALLBACK_URL_KEY as KEY } from '@/features/auth/utils/pendingCallbackUrl';
 import { SocialLoginButtons } from './socialLoginButtons';
 
 // --- Mocks ---
@@ -128,8 +129,6 @@ describe('SocialLoginButtons', () => {
     });
   });
   describe('戻り先の退避（#1246）', () => {
-    const KEY = 'auth:pendingCallbackUrl';
-
     beforeEach(() => {
       window.sessionStorage.clear();
       mockSignIn.mockResolvedValue(undefined as never);

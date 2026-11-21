@@ -207,31 +207,34 @@ test.describe('ソーシャルログイン失敗後の戻り先', () => {
    * 同じ `sessionStorage` の状態を直接作る。
    */
   const seedPendingCallbackUrl = async (page: Page): Promise<void> => {
-    // 同一オリジンでないと `sessionStorage` を触れない
-    await page.goto('/auth/signin');
-    await page.evaluate(
-      ([key, value]) => window.sessionStorage.setItem(key, value),
-      [PENDING_CALLBACK_URL_KEY, PROTECTED_PATH] as const,
-    );
-  };
-
-  /**
-   * 1. ソーシャルを押した時点で戻り先が預けられる
-   *
-   * ⚠️ プロバイダへの遷移は握りつぶす。飛んでしまうと別オリジンになり、
-   * `sessionStorage` を読めない。`savePendingCallbackUrl` は `signIn()` を
-   * 待つ前に走るので、遷移を止めても預け入れは観測できる。
-   */
-  test('ソーシャルログインを始めると戻り先が預けられる', async ({ page }) => {
-    await page.route(
-      /^https:\/\/(accounts\.google\.com|github\.com)\//,
-      (route) => route.abort(),
+    // ⚠️ プロバイダへの遷移は握りつぶす。飛んでしまうと別オリジンになり、
+    //    `sessionStorage` を読めない。`savePendingCallbackUrl` は `signIn()` を
+    //    待つ前に走るので、遷移を止めても預け入れは成立する
+    //
+    // ⛔ **Google ではなく GitHub を押す。** `page.route()` が止められるのは
+    //    ブラウザのリクエストだけで、Google は `issuer` しか持たないため
+    //    **サーバー側が** `accounts.google.com` へ OIDC ディスカバリを投げる
+    //    （`@auth/core/lib/actions/signin/authorization-url.js`）。この spec の
+    //    冒頭が「外部依存のため E2E では検証しない」と宣言しているので、
+    //    認可URLを直接持つ GitHub を使って外部通信を断つ
+    // ⚠️ `abort()` にしない。中断したナビゲーションの巻き戻しが、直後の
+    //    `page.goto` を `net::ERR_ABORTED` で道連れにする（実測）。
+    //    204 なら「遷移せず今のページに留まる」が正規の挙動になる
+    await page.route(/^https:\/\/github\.com\//, (route) =>
+      route.fulfill({ status: 204, body: '' }),
     );
 
     await page.goto(
       `/auth/signin?callbackUrl=${encodeURIComponent(PROTECTED_PATH)}`,
     );
-    await page.getByRole('button', { name: 'Googleでログイン' }).click();
+
+    // ⚠️ プロバイダへの遷移**要求が出るまで**待つ。`signIn()` は csrf 取得を
+    //    挟んでから `window.location.href` を書き換えるので、待たずに次の
+    //    `page.goto` を始めると後から走った遷移に打ち消され、
+    //    `net::ERR_ABORTED` になる（実測）
+    const providerRequest = page.waitForRequest(/^https:\/\/github\.com\//);
+    await page.getByRole('button', { name: 'GitHubでログイン' }).click();
+    await providerRequest;
 
     await expect
       .poll(() =>
@@ -241,6 +244,25 @@ test.describe('ソーシャルログイン失敗後の戻り先', () => {
         ),
       )
       .toBe(PROTECTED_PATH);
+  };
+
+  /**
+   * 1. ソーシャルを押した時点で戻り先が預けられる
+   *
+   * 預ける経路そのものをテストしている。以降のシナリオもこの手順で
+   * 「預かっている状態」を作る。
+   *
+   * ⛔ **`sessionStorage` へ直接書いて作らない。** 書き込み先に選べる
+   * 同一オリジンのページのうち `/auth/signin` は、マウント時に
+   * `takePendingCallbackUrl()` で**このキーを消す**唯一のページ
+   * （`signInContent.tsx:84`。`initialError` の有無に関わらず呼ぶ）。
+   * `page.goto` の既定は `waitUntil: 'load'` でハイドレーションの完了を
+   * 待たないため、effect が後から走って書いたそばから消されうる。
+   * クリック経由なら**ハイドレーション済みが保証される**うえ、
+   * 製品コードの `savePendingCallbackUrl` を通る本物の状態になる。
+   */
+  test('ソーシャルログインを始めると戻り先が預けられる', async ({ page }) => {
+    await seedPendingCallbackUrl(page);
   });
 
   /**
@@ -314,5 +336,30 @@ test.describe('ソーシャルログイン失敗後の戻り先', () => {
 
     await page.waitForURL(PROTECTED_PATH);
     await expect(page).toHaveURL(PROTECTED_PATH);
+  });
+
+  /**
+   * 4. 失敗していなければ、預かり分へ飛ばさない
+   *
+   * ⛔ 復元の**裏側**。`signInContent.tsx:60-67` が設計意図として書いている
+   * 「無条件に採ると、ソーシャルログインを始めたまま別タブでログイン画面を
+   * 開いた人が**身に覚えのない場所へ飛ばされる**」がこれ。
+   *
+   * ⚠️ 単体テスト（`signInContent.test.tsx`）にも対応するケースがあるが、
+   * あちらは `data-callback` 属性を見るだけで `router.push` はモック。
+   * **実際にどこへ着地するか**は E2E でしか分からない。
+   *
+   * ⚠️ #1383 を直すとき、代替案の `if (!pending) return;` を採ると
+   * 「採らない場合も消す」が壊れてこのストーリーが退行する。
+   */
+  test('失敗していなければ古い戻り先へ飛ばされない', async ({ page }) => {
+    await seedPendingCallbackUrl(page);
+
+    // `?error=` なし＝失敗して戻されたわけではない
+    await page.goto('/auth/signin');
+    await submitCredentials(page);
+
+    await page.waitForURL('/');
+    await expect(page).toHaveURL('/');
   });
 });

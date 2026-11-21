@@ -444,6 +444,226 @@ export async function runDeleteExpiredRateLimits(
 }
 
 /**
+ * 保持期間切れの行を消す RPC を呼ぶ（E2E用の共通部分 / #1352）
+ *
+ * ⛔ **本番に向けて呼ばない。** 保持期間を引数で受けるので、短い値を渡すと
+ * **まだ有効な**コードやトークンまで消える。`runDeleteExpiredRateLimits` と
+ * 同じ注意で、`.claude/rules/testing.md` の「E2E はローカルの Supabase で
+ * 回す」を必ず守ること。
+ *
+ * @param rpc - 呼ぶ関数名
+ * @param retentionHours - 保持期間（時間）
+ * @param limit - 1回で消す上限。省くと上限なし（`LIMIT NULL`）
+ * @returns 削除件数
+ */
+async function runDeleteExpired(
+  rpc: string,
+  retentionHours: number,
+  limit?: number,
+): Promise<number> {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${rpc}`, {
+    method: 'POST',
+    headers: { ...supabaseHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      retention_hours: retentionHours,
+      ...(limit === undefined ? {} : { p_limit: limit }),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `${rpc} の呼び出しに失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+
+  return (await response.json()) as number;
+}
+
+/** `otp_codes` の1行（保持期間テスト用 / #1352） */
+export interface OtpCodeRowSeed {
+  email: string;
+  actionType: OtpCodeAction;
+  /** 有効期限（ISO 8601）。削除条件はこの列だけを見る */
+  expiresAt: string;
+  /** 検証済みにするなら時刻（ISO 8601）。既定は未検証 */
+  verifiedAt?: string | null;
+}
+
+/**
+ * `otp_codes` に行を直接作る（E2E用 / #1352）
+ *
+ * アプリ経由では「有効期限が3日前」の行を作れない（常に now + 有効期間で
+ * 書かれる）。保持期間の削除条件を検証するには直接書くしかない。
+ *
+ * ⚠️ `code_hash` は検証に使わないのでダミーでよい。この spec が見るのは
+ * 削除条件（`expires_at`）だけ。
+ *
+ * @param seed - 作る行
+ * @returns 作った行のID
+ */
+export async function seedOtpCodeRow(seed: OtpCodeRowSeed): Promise<string> {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/otp_codes`, {
+    method: 'POST',
+    headers: {
+      ...supabaseHeaders,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify({
+      email: seed.email,
+      action_type: seed.actionType,
+      // 実在のコードに対応しないダミー。長さだけ本物に合わせる
+      code_hash: createHmac('sha256', 'e2e-seed')
+        .update(seed.email)
+        .digest('hex'),
+      expires_at: seed.expiresAt,
+      verified_at: seed.verifiedAt ?? null,
+    }),
+  });
+
+  const data = await response.json();
+  const id: string | undefined = data?.[0]?.id;
+
+  // 握りつぶさない。書けていないと、後続のアサーションが「消えた」と誤判定する
+  if (!id) {
+    throw new Error(
+      `otp_codes のseedに失敗した (${response.status}): ${JSON.stringify(data)}`,
+    );
+  }
+
+  return id;
+}
+
+/** `password_reset_tokens` の1行（保持期間テスト用 / #1352） */
+export interface PasswordResetTokenRowSeed {
+  userId: string;
+  /** 有効期限（ISO 8601）。削除条件はこの列だけを見る */
+  expiresAt: string;
+  /** 使用済みにするなら時刻（ISO 8601）。既定は未使用 */
+  usedAt?: string | null;
+}
+
+/**
+ * `password_reset_tokens` に行を直接作る（E2E用 / #1352）
+ *
+ * ⚠️ `token_hash` は一意。行ごとに別の値を作らないと2件目が 409 になる。
+ *
+ * @param seed - 作る行
+ * @returns 作った行のID
+ */
+export async function seedPasswordResetTokenRow(
+  seed: PasswordResetTokenRowSeed,
+): Promise<string> {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/password_reset_tokens`,
+    {
+      method: 'POST',
+      headers: {
+        ...supabaseHeaders,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({
+        user_id: seed.userId,
+        token_hash: createHmac('sha256', 'e2e-seed')
+          .update(`${seed.userId}:${seed.expiresAt}:${seed.usedAt ?? ''}`)
+          .digest('hex'),
+        expires_at: seed.expiresAt,
+        used_at: seed.usedAt ?? null,
+      }),
+    },
+  );
+
+  const data = await response.json();
+  const id: string | undefined = data?.[0]?.id;
+
+  if (!id) {
+    throw new Error(
+      `password_reset_tokens のseedに失敗した (${response.status}): ${JSON.stringify(data)}`,
+    );
+  }
+
+  return id;
+}
+
+/**
+ * IDの行が残っているか調べる（E2E用 / #1352）
+ *
+ * @param table - 対象テーブル
+ * @param id - 行のID
+ * @returns 残っていれば true
+ */
+export async function rowExistsById(
+  table: 'otp_codes' | 'password_reset_tokens',
+  id: string,
+): Promise<boolean> {
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}&select=id`,
+    { headers: supabaseHeaders },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `${table} の取得に失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+
+  const rows = (await response.json()) as { id: string }[];
+
+  return rows.length > 0;
+}
+
+/**
+ * 保持期間切れの `otp_codes` を削除する RPC を呼ぶ（E2E用 / #1352）
+ *
+ * ⛔ 本番に向けて呼ばない（`runDeleteExpired` の注意を参照）。
+ *
+ * @param retentionHours - 保持期間（時間）
+ * @param limit - 1回で消す上限
+ * @returns 削除件数
+ */
+export async function runDeleteExpiredOtpCodes(
+  retentionHours: number,
+  limit?: number,
+): Promise<number> {
+  return runDeleteExpired('delete_expired_otp_codes', retentionHours, limit);
+}
+
+/**
+ * 保持期間切れの `password_reset_tokens` を削除する RPC を呼ぶ（E2E用 / #1352）
+ *
+ * ⛔ 本番に向けて呼ばない（`runDeleteExpired` の注意を参照）。
+ *
+ * @param retentionHours - 保持期間（時間）
+ * @param limit - 1回で消す上限
+ * @returns 削除件数
+ */
+export async function runDeleteExpiredPasswordResetTokens(
+  retentionHours: number,
+  limit?: number,
+): Promise<number> {
+  return runDeleteExpired(
+    'delete_expired_password_reset_tokens',
+    retentionHours,
+    limit,
+  );
+}
+
+/**
+ * 指定ユーザーのパスワード再設定トークンを物理削除する（E2E用 / #1352）
+ *
+ * @param userId - 対象ユーザーのID
+ */
+export async function cleanupPasswordResetTokensForUser(
+  userId: string,
+): Promise<void> {
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/password_reset_tokens?user_id=eq.${encodeURIComponent(userId)}`,
+    { method: 'DELETE', headers: supabaseHeaders },
+  );
+}
+
+/**
  * 指定ユーザーのウォッチリストを物理削除する（rate_limitsも同時にリセット）
  *
  * ⚠️ そのユーザーの**全件**を消す。共有テストユーザーに対して複数の spec が

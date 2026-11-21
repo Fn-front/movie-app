@@ -42,7 +42,9 @@ import {
   cleanupTotp,
   getCurrentTotpCode,
   getTotpSecret,
+  expectSetupBlockedWithoutReauth,
   isRecoveryCodeStored,
+  reauthForSecondFactorSetup,
   totpCodeFromSecret,
 } from '../helpers/totp';
 
@@ -82,6 +84,8 @@ async function loginAndOpenSettings(page: Page): Promise<void> {
  * @returns 画面に表示されたリカバリーコード
  */
 async function enableTwoFactor(page: Page): Promise<string[]> {
+  await expectSetupBlockedWithoutReauth(page);
+  await reauthForSecondFactorSetup(page, USER.password);
   await page.getByRole('button', { name: '認証アプリで設定する' }).click();
 
   // QRが出た時点で共有鍵がDBに入る。認証アプリで読み取る操作の代わり
@@ -149,6 +153,15 @@ test.describe('二段階認証', () => {
     page,
   }) => {
     await loginAndOpenSettings(page);
+
+    // ⛔ #1368 の証跡。再認証の欄が出ていて、方式のボタンが押せない状態。
+    //    ⚠️ ページ全体だとボタンが画面の外へ出るので、節だけを撮る
+    await expectSetupBlockedWithoutReauth(page);
+    await page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: '二段階認証' }) })
+      .screenshot({ path: 'docs/e2e-screenshots/two-factor-reauth.png' });
+
     await enableTwoFactor(page);
 
     // 控えて有効状態へ
@@ -294,6 +307,8 @@ test.describe('二段階認証', () => {
    * @returns 画面に表示されたリカバリーコード
    */
   async function enableEmailOtp(page: Page): Promise<string[]> {
+    // ⛔ 再認証（#1368）
+    await reauthForSecondFactorSetup(page, USER.password);
     await page.getByRole('button', { name: 'メールで設定する' }).click();
 
     // コードはサーバーが送信済み。DB から取り出して入力する

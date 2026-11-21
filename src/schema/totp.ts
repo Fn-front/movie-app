@@ -27,6 +27,18 @@ export const secondFactorSetupSchema = z.object({
   method: z.enum([SECOND_FACTOR_METHOD.TOTP, SECOND_FACTOR_METHOD.EMAIL_OTP], {
     error: '不正な方式です',
   }),
+  /**
+   * 再認証の材料（#1368）
+   *
+   * ⛔ **どちらかが必ず要る。** セッションだけで通すと、セッションを奪った
+   * 第三者が**被害者のアカウントに自分の第2要素を登録できる**。
+   *
+   * ⚠️ zod では「どちらか必須」にしない。どちらを要求するかは
+   * `users.password_hash` の有無で決まり、スキーマからは分からない。
+   * 判定はサーバー側（`requireReauth`）に置く。
+   */
+  currentPassword: z.string().optional(),
+  reauthCode: z.string().trim().max(32).optional(),
 });
 
 /**

@@ -16,6 +16,7 @@ import {
   SECOND_FACTOR_METHOD,
   type SecondFactorMethod,
 } from '@/constants/secondFactor';
+import { TOTP_SETUP_PENDING_TTL_MINUTES } from '@/constants/totp';
 import { decryptTotpSecret, encryptTotpSecret } from '@/lib/totp/encryption';
 import { generateRecoveryCodes } from '@/lib/totp/recoveryCodes';
 import { buildOtpAuthUri, generateTotpSecret } from '@/lib/totp/secret';
@@ -161,24 +162,60 @@ export async function startSecondFactorSetup(
 /**
  * 初回コードを検証して有効化する
  *
- * 成功した場合だけリカバリーコードを発行する。発行してから有効化に失敗すると、
- * 「使えるリカバリーコードがあるのに二段階認証は無効」という中途半端な状態になる。
+ * ⛔ **リカバリーコードの保存は `confirmed_at` の UPDATE より前**
+ * （#1368 の2回目レビュー）。2つの失敗は**対称ではない**。
+ *
+ * | 順序 | 途中で失敗したときの状態 | 重さ |
+ * |---|---|---|
+ * | 先に保存 → 確定 | 使えるリカバリーコードがあるが二段階認証は**無効** | **平文は失敗パスで捨てられる**ので、一致する値を出せる人間がいない。加えて `verifySecondFactor` の呼び出し元（`secondFactorGuard` / `auth.ts` の2か所）はすべて手前で `getSecondFactorMethod` を見ている。次に成功したとき全件差し替わるので**自然に片付く** |
+ * | 先に確定 → 保存 | 二段階認証が**有効なのにリカバリーコードが0件** | `replaceRecoveryCodes` は「全件 DELETE → INSERT」なので、INSERT だけ失敗すると DB にも画面にも1件も残らない。認証アプリを失うと**恒久的にロックアウト**（`disableTotp` が順序まで固定して避けている状態そのもの） |
+ *
+ * ⛔ **`verifySecondFactor` を直接呼ぶ経路を足すなら、自分でガードを置くこと。**
+ * あの関数は**リカバリーコードを形式だけで振り分け**、`getSecondFactorMethod`
+ * より**前**に `verifyRecoveryCode` を呼ぶ（`secondFactor.ts`）。孤児の
+ * リカバリーコードが安全なのは平文が存在しないからであって、到達できない
+ * からではない。
+ *
+ * ⚠️ **確定した後ろに throw しうる処理を置かない。** 500 になると平文の
+ * リカバリーコードを一度も表示できないまま終わり（平文はこの戻り値にしか
+ * 出ない）、しかも `confirmed_at` は入っているので、もう一度押した利用者には
+ * 「認証コードが正しくありません」と出る。
  *
  * @param supabase - service_role のクライアント
  * @param userId - 対象ユーザー
  * @param code - 認証アプリ、またはメールで届いた6桁のコード
  * @param email - 本人のメールアドレス。method=email_otp の照合に使う
- * @returns 平文のリカバリーコード（この一度だけ利用者へ見せる）。コードが合わなければ null
+ * @returns 平文のリカバリーコード（この一度だけ利用者へ見せる）と有効化した方式。
+ *   コードが合わなければ null
  */
+/**
+ * 設定途中のまま期限を過ぎていた
+ *
+ * ⚠️ `null`（コードが合わない）と**区別する**。同じ文言にすると、届いた
+ * ばかりの正しいコードを入れた利用者が自分の入力を疑い、再送と入力を
+ * 繰り返して `TOTP_SETTINGS_VERIFY` を使い切る（#1368 の2回目レビュー）。
+ */
+export const SECOND_FACTOR_SETUP_EXPIRED = 'expired' as const;
+
+/** `confirmSecondFactorSetup` の戻り値 */
+export interface ConfirmSecondFactorSetupResult {
+  /** 平文のリカバリーコード。利用者へ見せられるのはこの一度だけ */
+  codes: string[];
+  /** 有効化した方式。通知の本文に出す */
+  method: SecondFactorMethod;
+}
+
 export async function confirmSecondFactorSetup(
   supabase: SupabaseClient,
   userId: string,
   code: string,
   email: string,
-): Promise<string[] | null> {
+): Promise<
+  ConfirmSecondFactorSetupResult | typeof SECOND_FACTOR_SETUP_EXPIRED | null
+> {
   const { data: row, error: readError } = await supabase
     .from('user_totp')
-    .select('encrypted_secret, confirmed_at, method')
+    .select('encrypted_secret, confirmed_at, method, created_at')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -189,6 +226,39 @@ export async function confirmSecondFactorSetup(
   // 設定を開始していない、または既に有効
   if (!row || row.confirmed_at) {
     return null;
+  }
+
+  // ⛔ **古い保留行は使わせない**（#1368 のレビュー）。
+  //
+  //   ここは `setup` が作った保留行だけを見るため、保留行が無期限に生きると
+  //   **`setup` の再認証を通り抜けた行を後からいつでも有効化できる**。
+  //   再認証を足す前にセッションを奪って `setup` を1回叩いていれば、
+  //   修正後もそのまま有効化できてしまう（既存の行はマイグレーションで
+  //   1回掃除したが、同じ形を再発させない）。
+  const expiredBefore = new Date(
+    Date.now() - TOTP_SETUP_PENDING_TTL_MINUTES * 60 * 1000,
+  ).toISOString();
+
+  if (new Date(row.created_at).getTime() < new Date(expiredBefore).getTime()) {
+    // ⚠️ 行ごと消す。残すと `send-challenge` が**使えないコードを送り続ける**
+    //   （あちらは保留行があるかどうかしか見ない）
+    // ⚠️ **期限の条件も入れる**（#1368 の3回目レビュー）。判定に使った
+    //   `row.created_at` は SELECT 時点のスナップショットなので、ここまでの
+    //   あいだに別タブが `startSecondFactorSetup` を通していると、
+    //   **その新しい保留行まで消える**（消えた側は以降「認証コードが
+    //   正しくありません」になり、画面も戻らない）
+    const { error: deleteError } = await supabase
+      .from('user_totp')
+      .delete()
+      .eq('user_id', userId)
+      .is('confirmed_at', null)
+      .lt('created_at', expiredBefore);
+
+    if (deleteError) {
+      throw toDbError(deleteError, 'delete expired user_totp');
+    }
+
+    return SECOND_FACTOR_SETUP_EXPIRED;
   }
 
   // ⚠️ 設定途中（`confirmed_at` が NULL）なので `verifySecondFactor` は使えない。
@@ -207,6 +277,11 @@ export async function confirmSecondFactorSetup(
 
   const { codes, hashes } = generateRecoveryCodes();
 
+  // ⛔ **確定より前に保存する**（上の表を参照）。ここで落ちても二段階認証は
+  //   無効のままで、使えないコードが残るだけ。逆順にすると
+  //   「有効なのにリカバリーコードが0件」になる
+  await replaceRecoveryCodes(supabase, userId, hashes);
+
   // 設定途中の行だけを有効化する。並行して無効化された場合は何も起きない
   const { data: updated, error: updateError } = await supabase
     .from('user_totp')
@@ -221,9 +296,11 @@ export async function confirmSecondFactorSetup(
     return null;
   }
 
-  await replaceRecoveryCodes(supabase, userId, hashes);
-
-  return codes;
+  // ⚠️ **方式も返す。** 呼び出し側は有効化の通知に使う。ここで返さないと
+  //   `getSecondFactorMethod` をもう一度呼ぶことになり、**有効化が確定した
+  //   後ろに throw しうる処理が1つ増える**（#1368 のレビュー）。
+  //   500 になると平文のリカバリーコードを一度も表示できないまま終わる
+  return { codes, method: row.method as SecondFactorMethod };
 }
 
 /**

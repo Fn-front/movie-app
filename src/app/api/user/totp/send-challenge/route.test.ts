@@ -8,6 +8,8 @@
 
 import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
 
+import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
+
 import { POST } from './route';
 
 // --- Mocks ---
@@ -27,17 +29,19 @@ jest.mock('@/helpers/auth', () => ({
 }));
 
 /**
- * ⚠️ 差し替えるのは **`...IncludingPending`** のほう（#1285）。
+ * ⚠️ 差し替えるのは **`getSecondFactorSetupState`**（#1285 / #1368）。
  *
  * このルートは設定途中の利用者にも送る（再送の経路）。
  * `getSecondFactorMethod` は `confirmed_at IS NOT NULL` で絞るため、
  * そちらをモックしても実装は別の関数を呼んでいて噛み合わない。
+ *
+ * ⚠️ 期限切れの保留行を「未設定」と区別するため、戻り値は
+ * `{ method, pendingExpired }` の形。
  */
-const mockGetSecondFactorMethod = jest.fn();
+const mockGetSetupState = jest.fn();
 jest.mock('@/lib/auth/secondFactor', () => ({
   ...jest.requireActual('@/lib/auth/secondFactor'),
-  getSecondFactorMethodIncludingPending: (...args: unknown[]) =>
-    mockGetSecondFactorMethod(...args),
+  getSecondFactorSetupState: (...args: unknown[]) => mockGetSetupState(...args),
 }));
 
 const mockSendSecondFactorCode = jest.fn();
@@ -84,7 +88,10 @@ describe('POST /api/user/totp/send-challenge', () => {
     jest.clearAllMocks();
     mockFrom.mockReset();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
-    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.EMAIL_OTP);
+    mockGetSetupState.mockResolvedValue({
+      method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+      pendingExpired: false,
+    });
     mockSendSecondFactorCode.mockResolvedValue('sent');
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockUserLookup('owner@example.com');
@@ -115,7 +122,10 @@ describe('POST /api/user/totp/send-challenge', () => {
    * 送れてしまうと「送信経路を1つ増やしただけ」になる。
    */
   it('method=totp には送らない', async () => {
-    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
+    mockGetSetupState.mockResolvedValue({
+      method: SECOND_FACTOR_METHOD.TOTP,
+      pendingExpired: false,
+    });
 
     const response = await POST();
 
@@ -124,7 +134,10 @@ describe('POST /api/user/totp/send-challenge', () => {
   });
 
   it('二段階認証が未設定なら送らない', async () => {
-    mockGetSecondFactorMethod.mockResolvedValue(null);
+    mockGetSetupState.mockResolvedValue({
+      method: null,
+      pendingExpired: false,
+    });
 
     const response = await POST();
 
@@ -156,8 +169,30 @@ describe('POST /api/user/totp/send-challenge', () => {
     const code = routeSource.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
 
     // ⛔ `confirmed_at` で絞る側を使わない
-    expect(code).toContain('getSecondFactorMethodIncludingPending');
+    expect(code).toContain('getSecondFactorSetupState');
     expect(code).not.toMatch(/\bgetSecondFactorMethod\s*\(/);
+  });
+
+  /**
+   * ⛔ **期限切れは「未設定」と文言を分ける**（#1368 の3回目レビュー）。
+   *
+   * コードが来ないとき利用者がまず押すのは再送。そこで「二段階認証が
+   * 設定されていません。」が返ると、設定中の画面と正面から矛盾する。
+   * 画面側はこの文言を見て設定をやり直させる。
+   */
+  it('設定が期限切れなら専用の文言で返し、送らない', async () => {
+    mockGetSetupState.mockResolvedValue({
+      method: null,
+      pendingExpired: true,
+    });
+
+    const response = await POST();
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.message).toBe(TOTP_ERROR_MESSAGES.SETUP_EXPIRED);
+    expect(json.error.message).not.toBe(TOTP_ERROR_MESSAGES.NOT_CONFIGURED);
+    expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
   });
 
   /**

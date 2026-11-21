@@ -83,7 +83,7 @@ export const SettingsPage = memo(function SettingsPage() {
 
         <section className={styles.c_settings_page__section}>
           <Heading level={2}>二段階認証</Heading>
-          <TwoFactorSettings />
+          <TwoFactorSettings hasPassword={hasPassword} />
         </section>
 
         <section className={styles.c_settings_page__section}>

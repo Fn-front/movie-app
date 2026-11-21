@@ -18,6 +18,7 @@ import {
   type SecondFactorMethod,
 } from '@/constants/secondFactor';
 import { OTP_CONFIG } from '@/constants/otp';
+import { SECOND_FACTOR_SETUP_CODE_MESSAGES } from '@/constants/secondFactorSetupCode';
 import { useResendCountdown } from '@/features/auth/hooks/useResendCountdown';
 
 /** 画面の状態 */
@@ -67,7 +68,23 @@ interface UseTwoFactorSettingsResult {
    * 送られたのかどうか分からない。
    */
   notice: string | null;
-  startSetup: (method: SecondFactorMethod) => Promise<void>;
+  /**
+   * 設定を始める（#1368）
+   *
+   * ⛔ **再認証の材料が要る。** セッションだけで通すと、セッションを奪った
+   * 第三者が被害者のアカウントに自分の第2要素を登録できる。
+   */
+  startSetup: (
+    method: SecondFactorMethod,
+    reauth: { currentPassword?: string; reauthCode?: string },
+  ) => Promise<void>;
+  /**
+   * 再認証の確認コードを送る（パスワードを持たない利用者 / #1368）
+   *
+   * ⚠️ 宛先は渡さない。サーバーが `users.email` から引く。渡せる形にすると、
+   * アカウントを1つ持つだけで任意のアドレスへ送れる（#641）。
+   */
+  sendReauthCode: () => Promise<void>;
   enable: (code: string) => Promise<void>;
   disable: (code: string) => Promise<void>;
   regenerateRecoveryCodes: (code: string) => Promise<void>;
@@ -110,6 +127,8 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
 
   /** 送信中かどうか。再入の判定に使う（state だと古い値を掴む） */
   const inFlightRef = useRef(false);
+  /** 直前の失敗の文言。呼び出し側がエラーの種類で分岐するために使う */
+  const lastErrorRef = useRef<string | null>(null);
 
   /**
    * 設定中（メールOTP）の再送クールダウン（#1285）
@@ -178,6 +197,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
       if (inFlightRef.current) return null;
 
       inFlightRef.current = true;
+      lastErrorRef.current = null;
       setError(null);
       setNotice(null);
       setIsSubmitting(true);
@@ -191,13 +211,22 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
         const json = await response.json();
 
         if (!response.ok) {
-          setError(json.error?.message || TOTP_ERROR_MESSAGES.OPERATION_FAILED);
+          const message: string =
+            json.error?.message || TOTP_ERROR_MESSAGES.OPERATION_FAILED;
+
+          // ⚠️ state だけだと、同じターンで読む呼び出し側が古い値を見る。
+          //   「どのエラーだったか」で分岐する箇所があるので ref にも残す
+          lastErrorRef.current = message;
+          setError(message);
+
           return null;
         }
 
         return json;
       } catch {
+        lastErrorRef.current = UI_ERROR_MESSAGES.NETWORK_ERROR;
         setError(UI_ERROR_MESSAGES.NETWORK_ERROR);
+
         return null;
       } finally {
         inFlightRef.current = false;
@@ -207,10 +236,25 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
     [],
   );
 
+  const sendReauthCode = useCallback(async () => {
+    const json = await post(API_ENDPOINTS.USER_TOTP_REAUTH_CODE);
+    if (!json) return;
+
+    // 画面の状態が変わらないので、送れたことを文言で伝える
+    setNotice(SECOND_FACTOR_SETUP_CODE_MESSAGES.CODE_SENT);
+  }, [post]);
+
   const startSetup = useCallback(
-    async (selected: SecondFactorMethod) => {
+    async (
+      selected: SecondFactorMethod,
+      reauth: { currentPassword?: string; reauthCode?: string },
+    ) => {
       const json = await post(API_ENDPOINTS.USER_TOTP_SETUP, {
         method: selected,
+        ...(reauth.currentPassword
+          ? { currentPassword: reauth.currentPassword }
+          : {}),
+        ...(reauth.reauthCode ? { reauthCode: reauth.reauthCode } : {}),
       });
       if (!json) return;
 
@@ -272,14 +316,46 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
    * ⚠️ 失敗しても `restart` しない。`post` が `error` を立てているので
    * 押せる状態のまま理由が出るほうが正しい（押し直せる）。
    */
+  /**
+   * 設定の期限切れだったら方式の選択へ戻す
+   *
+   * ⛔ 出口は2つある（#1368 の3回目レビュー）。「有効にする」と「再送」の
+   * どちらから期限切れに当たっても、同じ場所へ戻さないと画面に留まったまま
+   * 同じ操作を繰り返させることになる。保留行はもう無いので、やり直す以外に
+   * やることが無い。
+   *
+   * ⚠️ 文言で判定しているのは、`post` が本文の `error.code` を捨てて
+   * いるため。サーバーと同じ定数を参照しているので、文言を変えても
+   * 両側が同時に変わる（テストで固定してある）。
+   *
+   * @returns 期限切れとして処理したかどうか
+   */
+  const handleSetupExpired = useCallback((): boolean => {
+    if (lastErrorRef.current !== TOTP_ERROR_MESSAGES.SETUP_EXPIRED) {
+      return false;
+    }
+
+    setQrCodeDataUri(null);
+    setSecret(null);
+    setMethod(null);
+    setView(TWO_FACTOR_VIEW.DISABLED);
+
+    return true;
+  }, []);
+
   const resendSetupCode = useCallback(async () => {
     const json = await post(API_ENDPOINTS.USER_TOTP_SEND_CHALLENGE);
-    if (!json) return;
+
+    if (!json) {
+      handleSetupExpired();
+
+      return;
+    }
 
     // 画面の状態が変わらないので、送れたことを文言で伝える
     setNotice(SECOND_FACTOR_MESSAGES.CODE_SENT);
     restartResendCountdown();
-  }, [post, restartResendCountdown]);
+  }, [handleSetupExpired, post, restartResendCountdown]);
 
   /**
    * 設定変更に使うコードを送る（メールOTP のみ）
@@ -299,7 +375,15 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
   const enable = useCallback(
     async (code: string) => {
       const json = await post(API_ENDPOINTS.USER_TOTP_ENABLE, { code });
-      if (!json) return;
+
+      if (!json) {
+        // ⚠️ **設定の期限切れは画面も戻す**（#1368 の2回目レビュー）。
+        //   文言だけ出して `SETUP` に留まると、利用者は同じ画面で再送と入力を
+        //   繰り返す。保留行はもう消えているので、やり直すしか道が無い
+        handleSetupExpired();
+
+        return;
+      }
 
       const data = json.data as { recoveryCodes: string[] };
       // 平文はこの一度しか返ってこない。控えるまで画面に残す
@@ -309,7 +393,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
       setSecret(null);
       setView(TWO_FACTOR_VIEW.RECOVERY_CODES);
     },
-    [post],
+    [handleSetupExpired, post],
   );
 
   const disable = useCallback(
@@ -366,6 +450,7 @@ export function useTwoFactorSettings(): UseTwoFactorSettingsResult {
     error,
     notice,
     startSetup,
+    sendReauthCode,
     sendChallenge,
     resendSetupCode,
     resendRemaining,

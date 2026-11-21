@@ -16,11 +16,13 @@ import {
   type SecondFactorMethod,
 } from '@/constants/secondFactor';
 import { hashOtpCode } from '@/lib/otp/hashOtpCode';
+import { TOTP_SETUP_PENDING_TTL_MINUTES } from '@/constants/totp';
 
 import {
   countUnusedRecoveryCodes,
   getSecondFactorMethod,
   getSecondFactorMethodIncludingPending,
+  getSecondFactorSetupState,
   SECOND_FACTOR_VERIFY_RESULT,
   verifySecondFactor,
 } from './secondFactor';
@@ -39,6 +41,14 @@ interface FakeDb {
     last_used_counter: number | null;
     /** 省略時は 'totp'（DB の DEFAULT と同じ） */
     method?: SecondFactorMethod;
+    /**
+     * 設定を開始した日時
+     *
+     * ⚠️ **省かないこと。** `new Date(undefined)` は NaN になり、保留行の
+     * TTL（#1368）の比較が常に false へ倒れて検証をすり抜ける。
+     * 本番の列は NOT NULL DEFAULT now()。
+     */
+    created_at?: string;
   } | null;
   recoveryCodes: Array<{
     id: string;
@@ -320,6 +330,7 @@ describe('getSecondFactorMethod', () => {
         confirmed_at: '2026-11-18T00:00:00Z',
         last_used_counter: null,
         method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        created_at: '2026-11-18T00:00:00Z',
       },
       recoveryCodes: [],
     };
@@ -385,6 +396,55 @@ describe('getSecondFactorMethodIncludingPending', () => {
         confirmed_at: null,
         last_used_counter: null,
         method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        created_at: new Date().toISOString(),
+      },
+      recoveryCodes: [],
+    };
+
+    await expect(
+      getSecondFactorMethodIncludingPending(createSupabaseMock(db), USER_ID),
+    ).resolves.toBe(SECOND_FACTOR_METHOD.EMAIL_OTP);
+  });
+
+  /**
+   * ⛔ **期限を過ぎた保留行は「無い」ものとして扱う**（#1368 の2回目レビュー）。
+   *
+   * `confirmSecondFactorSetup` は TTL を過ぎた保留行を拒否する。ここが
+   * それを知らないと、`send-challenge` が**使えないコードを送り続ける**。
+   * 届いたばかりの正しいコードが「認証コードが正しくありません」になり、
+   * 利用者は再送と入力を繰り返して `TOTP_SETTINGS_VERIFY` を使い切る。
+   */
+  it('期限を過ぎた設定途中の行は null', async () => {
+    const db: FakeDb = {
+      totp: {
+        encrypted_secret: '',
+        confirmed_at: null,
+        last_used_counter: null,
+        method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        created_at: new Date(
+          Date.now() - (TOTP_SETUP_PENDING_TTL_MINUTES + 1) * 60 * 1000,
+        ).toISOString(),
+      },
+      recoveryCodes: [],
+    };
+
+    await expect(
+      getSecondFactorMethodIncludingPending(createSupabaseMock(db), USER_ID),
+    ).resolves.toBeNull();
+  });
+
+  /**
+   * ⚠️ **確認済みの行には TTL を当てない。** 当てると、設定から60分経った
+   * 利用者の二段階認証が「未設定」に化けて `send-challenge` が使えなくなる。
+   */
+  it('確認済みなら古くても方式を返す', async () => {
+    const db: FakeDb = {
+      totp: {
+        encrypted_secret: '',
+        confirmed_at: '2026-01-01T00:00:00Z',
+        last_used_counter: null,
+        method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        created_at: '2026-01-01T00:00:00Z',
       },
       recoveryCodes: [],
     };
@@ -401,6 +461,7 @@ describe('getSecondFactorMethodIncludingPending', () => {
         confirmed_at: '2026-11-18T00:00:00Z',
         last_used_counter: null,
         method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        created_at: '2026-11-18T00:00:00Z',
       },
       recoveryCodes: [],
     };
@@ -425,6 +486,57 @@ describe('getSecondFactorMethodIncludingPending', () => {
         USER_ID,
       ),
     ).rejects.toThrow(/connection terminated/);
+  });
+
+  /**
+   * ⛔ **「未設定」と「期限切れ」を区別する**（#1368 の3回目レビュー）。
+   *
+   * `send-challenge` は文言を出し分けるためにこのフラグを見る。区別が
+   * 無いと、設定中の画面に「二段階認証が設定されていません。」が出る。
+   */
+  describe('getSecondFactorSetupState', () => {
+    const buildDb = (overrides: Partial<NonNullable<FakeDb['totp']>>) => ({
+      totp: {
+        encrypted_secret: '',
+        confirmed_at: null,
+        last_used_counter: null,
+        method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        created_at: new Date().toISOString(),
+        ...overrides,
+      },
+      recoveryCodes: [],
+    });
+
+    it('期限内の保留行は pendingExpired にしない', async () => {
+      await expect(
+        getSecondFactorSetupState(createSupabaseMock(buildDb({})), USER_ID),
+      ).resolves.toEqual({
+        method: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        pendingExpired: false,
+      });
+    });
+
+    it('期限切れの保留行は pendingExpired を立てる', async () => {
+      const db = buildDb({
+        created_at: new Date(
+          Date.now() - (TOTP_SETUP_PENDING_TTL_MINUTES + 1) * 60 * 1000,
+        ).toISOString(),
+      });
+
+      await expect(
+        getSecondFactorSetupState(createSupabaseMock(db), USER_ID),
+      ).resolves.toEqual({ method: null, pendingExpired: true });
+    });
+
+    /** ⚠️ 行が無いのは「未設定」。期限切れと混ぜない */
+    it('行が無ければ pendingExpired は false', async () => {
+      await expect(
+        getSecondFactorSetupState(
+          createSupabaseMock({ totp: null, recoveryCodes: [] }),
+          USER_ID,
+        ),
+      ).resolves.toEqual({ method: null, pendingExpired: false });
+    });
   });
 });
 

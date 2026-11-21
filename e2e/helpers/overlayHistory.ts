@@ -39,78 +39,172 @@ export const expectEntryExists = (page: Page) =>
   expect.poll(() => overlayToken(page)).not.toBeNull();
 
 /**
- * オーバーレイを押す位置（上端からの距離, px）
+ * 押す点をコンテンツの縁からどれだけ離すか（px）
  *
- * コンテンツは中央寄せなので、上端付近は必ずオーバーレイ。小さすぎると
- * ビューポートの縁で丸められるため少し余裕を取る
+ * ぴったり境界を狙うと、小数の矩形がデバイスピクセルへ丸められたときに
+ * 内側へ落ちる。余白のある辺を選んだうえで、その余白の中央を押す。
  */
-const OVERLAY_CLICK_TOP = 10;
+const EDGE_MARGIN = 4;
 
 /**
- * モーダルのオーバーレイ（`modal.module.scss` の `&__overlay`）
+ * クリックの上限（ms）
  *
- * `position: fixed; inset: 0` で画面全体を覆い、コンテンツはその上に乗る。
- * **「ダイアログの外側」はこの要素そのもの**なので、座標を計算する必要が無い。
+ * 覆われていたときに `intercepts pointer events` の call log 付きで
+ * 落とすための上限。既定（無制限）だと素のテストタイムアウトになる。
  */
-const modalOverlay = (page: Page) =>
-  page.locator('[class*="c_modal__overlay"]');
+const OVERLAY_CLICK_TIMEOUT_MS = 10_000;
 
 /**
  * ダイアログの外側をクリックして閉じる。
  *
- * ## 座標クリックをやめた理由（#1075）
+ * ## 何が壊れていたか（#1075 で特定済み）
  *
  * 以前はダイアログの矩形を測って「上端より上」を `page.mouse.click` で
- * 押していた。これは**断続的に落ちていた**（#1058 で追加 → #1066 で
- * `waitForStableBox` を足して頻度は下がったが解消せず、#1067 のシャード3で
- * 再発）。落ち方は常に「外側を押したのにダイアログが閉じていない」。
+ * 押していた。フィルターモーダルはジャンル取得後に伸び、中央寄せなので
+ * **伸びると上端が上へ動く**。測った時点の座標は、押す頃にはコンテンツの
+ * 内側に入っている。
  *
- * ⛔ **`page.mouse.click` には当たり判定の検査が無い。** 指定した座標に何が
- * あろうと押すだけなので、
+ * Issue に CI の trace（`Page.mouseClick {"x":187.5,"y":64.75}` ＝
+ * ジャンル無しの上端 129.5 から計算）と、フルサイズ（上端 40.6px）の
+ * 失敗スクショの突き合わせがある。決定論的な再現手順も記録されている。
  *
- * - 測ったあとに中身が伸びて上端が座標より上へ来ていた
- * - トーストの viewport（`z-index: 1080`）がオーバーレイ（1050）より上に重なった
+ * ⛔ **`page.mouse.click` には当たり判定の検査が無い。** 指定座標に何が
+ * あろうと押すだけなので、内側を押しても**何も起きないまま成功したことに
+ * なる**。そのあと `expect(dialog).not.toBeVisible()` が落ちるので、
+ * 第一報は「閉じていない」だけになる。
  *
- * のどちらでも、**何も起きないまま成功したことになる**。そのうえで
- * `expect(dialog).not.toBeVisible()` が落ちるので、失敗を見ても原因が分からない。
- *
- * `locator.click()` ならオーバーレイが**実際に最前面であること**を
- * Playwright が検査し、違えば「intercepts pointer events」と要素名付きで
- * 落ちる。再現しない退行を「閉じない」ではなく「何に覆われたか」で受け取れる。
+ * `locator.click()` ならオーバーレイが実際に最前面であることを Playwright が
+ * 検査し、違えば「intercepts pointer events」と要素名付きで落ちる。
  *
  * ⚠️ **実際のポインタ操作であることは変わらない**（`dispatchEvent` には
  * 逃げていない）。Radix の `onPointerDownOutside` は
  * `ownerDocument.addEventListener('pointerdown', ...)` で待っており、
  * `locator.click()` は本物の pointerdown を出す。
  *
- * ⚠️ Radix はこのリスナーを `setTimeout(..., 0)` で登録する
- * （`@radix-ui/react-dismissable-layer` の `usePointerDownOutside`）。
- * 開いた直後は外側クリックが効かない窓があるため、**可視になるのを
- * 待ってから**押すこと（下の `waitFor`）。
+ * ## 仮説のうち外れたもの（Issue で検証済み）
  *
- * ⚠️ 中央寄せ専用ではなくなった。オーバーレイを持つモーダルなら
- * ドロワーでも使える（以前は上端の余白が要り、`MIN_TOP_GAP` を
- * 下回ると例外を投げていた）。
+ * - **Radix がマウント直後の pointerdown を無視する**: 外れ。リスナー登録は
+ *   `setTimeout(..., 0)` だが **0ms** で、テストは100ms以上待つ
+ * - **トーストが座標を奪う**: 外れ。`elementFromPoint` は常にオーバーレイを
+ *   返す。トーストの viewport は `bottom` 基準で画面上部に届かず、
+ *   Radix がモーダル表示中に body の `pointer-events` を切る
  *
- * @param page - 対象ページ
- * @param dialog - 閉じたいダイアログ（可視になるまで待つために使う）
+ * ## 他のモーダルでも使える形
+ *
+ * ⛔ 「上端を押す」は汎用の安全点ではない。ドロワー
+ * （`mobileDrawer.module.scss`）は左上を占めるし、`size='lg'` のモーダルは
+ * 左右の余白が 1.4px しかない。**オーバーレイの矩形からコンテンツの矩形を
+ * 除いて、余白のある辺を選ぶ**。
+ *
+ * オーバーレイは Radix の Portal 内でコンテンツの**直前の兄弟**
+ * （`Dialog.Overlay` → `Dialog.Content`）。`modal.tsx` も
+ * `mobileDrawer.tsx` も同じ形なので、クラス名に依存せず辿れる。
+ *
+ * @param page - 対象ページ（互換のため受けるが位置の計算には使わない）
+ * @param dialog - 閉じたいダイアログ
  */
 export const clickOutsideDialog = async (page: Page, dialog: Locator) => {
   await dialog.waitFor({ state: 'visible' });
 
-  const overlay = modalOverlay(page).last();
-  await overlay.waitFor({ state: 'visible' });
+  // Radix の Portal では Overlay が Content の直前の兄弟
+  const overlay = dialog.locator('xpath=preceding-sibling::*[1]');
+  await overlay.waitFor({ state: 'visible', timeout: 5000 });
 
-  /**
-   * ⚠️ 中央ではなく**上端付近**を押す。オーバーレイは画面全体を覆うので
-   * 中央はコンテンツに隠れており、`locator.click()` の既定（要素の中心）だと
-   * 「intercepts pointer events」で必ず落ちる。
-   */
-  const box = await overlay.boundingBox();
+  const [overlayBox, dialogBox] = await Promise.all([
+    overlay.boundingBox(),
+    dialog.boundingBox(),
+  ]);
 
-  if (!box) {
-    throw new Error('オーバーレイの位置を取得できませんでした');
+  if (!overlayBox || !dialogBox) {
+    throw new Error(
+      'オーバーレイまたはダイアログの位置を取得できませんでした。' +
+        'Radix の Portal 構造（Overlay が Content の直前の兄弟）が変わった可能性があります',
+    );
   }
 
-  await overlay.click({ position: { x: box.width / 2, y: OVERLAY_CLICK_TOP } });
+  const point = outsidePoint(overlayBox, dialogBox);
+
+  if (!point) {
+    throw new Error(
+      'オーバーレイに押せる余白がありません' +
+        `（overlay=${describeBox(overlayBox)} / dialog=${describeBox(dialogBox)}）。` +
+        '全面を覆うコンテンツには clickOutsideDialog を使えません',
+    );
+  }
+
+  /**
+   * ⚠️ **上限を入れる。** 既定の `actionTimeout` は 0（無制限）なので、
+   * 覆われていると**素のテストタイムアウト**になり、せっかくの
+   * 「何に覆われたか」が出ない（旧 `waitForStableBox` と同じ失敗の形）。
+   */
+  await overlay.click({ position: point, timeout: OVERLAY_CLICK_TIMEOUT_MS });
+};
+
+/** 失敗メッセージ用 */
+const describeBox = (box: Box) =>
+  `{x:${Math.round(box.x)},y:${Math.round(box.y)},w:${Math.round(box.width)},h:${Math.round(box.height)}}`;
+
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * オーバーレイの中で、コンテンツに覆われていない点を返す（overlay 相対）
+ *
+ * 上・下・左・右の順に、`EDGE_MARGIN * 2` 以上の余白がある辺を探して
+ * その中央を返す。どこにも無ければ `null`。
+ */
+const outsidePoint = (
+  overlay: Box,
+  dialog: Box,
+): { x: number; y: number } | null => {
+  const gaps = [
+    // 上
+    {
+      size: dialog.y - overlay.y,
+      point: {
+        x: dialog.x + dialog.width / 2 - overlay.x,
+        y: (dialog.y - overlay.y) / 2,
+      },
+    },
+    // 下
+    {
+      size: overlay.y + overlay.height - (dialog.y + dialog.height),
+      point: {
+        x: dialog.x + dialog.width / 2 - overlay.x,
+        y:
+          dialog.y +
+          dialog.height -
+          overlay.y +
+          (overlay.y + overlay.height - (dialog.y + dialog.height)) / 2,
+      },
+    },
+    // 左
+    {
+      size: dialog.x - overlay.x,
+      point: {
+        x: (dialog.x - overlay.x) / 2,
+        y: dialog.y + dialog.height / 2 - overlay.y,
+      },
+    },
+    // 右
+    {
+      size: overlay.x + overlay.width - (dialog.x + dialog.width),
+      point: {
+        x:
+          dialog.x +
+          dialog.width -
+          overlay.x +
+          (overlay.x + overlay.width - (dialog.x + dialog.width)) / 2,
+        y: dialog.y + dialog.height / 2 - overlay.y,
+      },
+    },
+  ];
+
+  const usable = gaps.find((gap) => gap.size >= EDGE_MARGIN * 2);
+
+  return usable ? usable.point : null;
 };

@@ -16,8 +16,14 @@ CI はランナー内に Supabase を立てるので影響しないが、手元�
 本番を叩くと実害がある。
 
 - run ごとにテスト利用者を作って消すため、本番 `users` に出入りする
-- `e2e/helpers/api.ts` の `runDeleteExpiredRateLimits()` は**任意の保持時間を
-  受け取る**ので、短い値を渡すと実利用者の `rate_limits` 行まで消える
+- `e2e/helpers/api.ts` の保持期間削除ヘルパーは**任意の保持時間を受け取る**。
+  短い値を渡すと**まだ有効な**行まで消える。3つとも同じ性質（#1352）
+  - `runDeleteExpiredRateLimits()` — 実利用者の `rate_limits`
+  - `runDeleteExpiredOtpCodes()` — **実利用者に届いている確認コード**
+  - `runDeleteExpiredPasswordResetTokens()` — **実利用者の再設定リンク**
+
+  ⚠️ 後ろ2つは認証材料そのもの。消えると「正しいコードを入れたのに
+  『確認コードが見つかりません』」になり、利用者側からは原因が分からない
 - Free プランのログ取り込み・Egress を消費する（#1331 で CI 分は解消済み）
 
 ### 切り替え方

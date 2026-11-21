@@ -40,7 +40,16 @@ const mockUpdate = jest.fn();
 const mockClearNotIn = jest.fn();
 const mockStaleLt = jest.fn();
 const mockStaleOr = jest.fn();
+const mockStaleOrder = jest.fn();
 const mockStaleLimit = jest.fn();
+/**
+ * `.update().eq(...)` に渡された引数
+ *
+ * ⚠️ **引数を捨てないこと。** ここを `() => chain` にすると、実装から
+ * `.eq('id', ...)` / `.eq('release_type', ...)` を**両方消してもテストが緑のまま**通る。
+ * 実際には `movie_cache` 全行を1件の配信情報で塗り潰す破壊的な UPDATE になる。
+ */
+const mockUpdateEq = jest.fn();
 
 /** クリアクエリ（.update().eq().eq().not().select()）の解決値 */
 let clearResult: {
@@ -74,7 +83,10 @@ jest.mock('@supabase/supabase-js', () => ({
             mockStaleOr(...args);
             return chain;
           },
-          order: () => chain,
+          order: (...args: unknown[]) => {
+            mockStaleOrder(...args);
+            return chain;
+          },
           limit: (...args: unknown[]) => {
             mockStaleLimit(...args);
             return Promise.resolve(staleSelectResult);
@@ -94,7 +106,10 @@ jest.mock('@supabase/supabase-js', () => ({
         const isStaleRefresh = 'watch_provider_flatrate' in payload;
 
         const chain = {
-          eq: () => chain,
+          eq: (...eqArgs: unknown[]) => {
+            mockUpdateEq(...eqArgs);
+            return chain;
+          },
           not: (...notArgs: unknown[]) => {
             mockClearNotIn(...notArgs);
             return chain;
@@ -790,6 +805,27 @@ describe('syncStreamingMovies', () => {
       release_type: 'streaming',
     };
 
+    /**
+     * 本筋（Discover の作品 id=1）と stale 行（id=777）で応答を出し分ける
+     *
+     * ⚠️ 一律のモックだと、stale の応答を「空」や「失敗」にした瞬間に
+     * **本筋も配信0件になり、取り直し自体がガードでスキップされる**。
+     * 検証したい経路に入らないまま緑になる
+     */
+    const respondPerMovie = (forStale: {
+      resolved?: unknown;
+      rejected?: unknown;
+    }) => {
+      mockGetJpStreamingAvailability.mockImplementation((movieId: number) => {
+        if (movieId !== staleRow.id) {
+          return Promise.resolve(availability(true, '2026-03-10'));
+        }
+        return forStale.rejected !== undefined
+          ? Promise.reject(forStale.rejected)
+          : Promise.resolve(forStale.resolved);
+      });
+    };
+
     /** 取り直しで呼ばれた update のペイロードを返す */
     const staleUpdatePayload = () =>
       mockUpdate.mock.calls
@@ -858,11 +894,13 @@ describe('syncStreamingMovies', () => {
     //    絞る）から「劇場公開は3ヶ月以上前・配信はこれから」の作品が落ちる
     it('TMDbが配信情報を返さなくなった作品は空を反映する', async () => {
       staleSelectResult = { data: [staleRow], error: null };
-      mockGetJpStreamingAvailability.mockResolvedValue({
-        isCurrentlyStreaming: false,
-        digitalReleaseDate: null,
-        watchProviderIds: { flatrate: [], rent: [], buy: [] },
-        keywordIds: [],
+      respondPerMovie({
+        resolved: {
+          isCurrentlyStreaming: false,
+          digitalReleaseDate: null,
+          watchProviderIds: { flatrate: [], rent: [], buy: [] },
+          keywordIds: [],
+        },
       });
 
       await syncStreamingMovies();
@@ -877,7 +915,7 @@ describe('syncStreamingMovies', () => {
 
     it('TMDbの取得に失敗した行は現状維持にする', async () => {
       staleSelectResult = { data: [staleRow], error: null };
-      mockGetJpStreamingAvailability.mockRejectedValue(new Error('503'));
+      respondPerMovie({ rejected: new Error('503') });
 
       const result = await syncStreamingMovies();
 
@@ -890,7 +928,7 @@ describe('syncStreamingMovies', () => {
 
     it('非Errorがスローされてもログに残して続行する', async () => {
       staleSelectResult = { data: [staleRow], error: null };
-      mockGetJpStreamingAvailability.mockRejectedValue('string error');
+      respondPerMovie({ rejected: 'string error' });
 
       const result = await syncStreamingMovies();
 
@@ -926,6 +964,88 @@ describe('syncStreamingMovies', () => {
       // Discover 経由の候補1件ぶんだけ
       expect(mockGetJpStreamingAvailability.mock.calls.length - before).toBe(1);
       expect(result.staleRefreshed).toBe(0);
+    });
+
+    // ⛔ **クリアより後ろに置くと、翌日のクリアが必ず取り消す。**
+    //   対象は定義上ウィンドウ外なので keepIds に入らず
+    //   .not('id','in',...) に引っかかる。しかも cached_at を進めるので
+    //   60日間は再抽出されない＝実質まったく直らない
+    it('配信中と確認した作品をクリアの保持対象に入れる', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+      respondPerMovie({
+        resolved: {
+          isCurrentlyStreaming: true,
+          digitalReleaseDate: '2026-05-01',
+          watchProviderIds: { flatrate: [8], rent: [], buy: [] },
+          keywordIds: [],
+        },
+      });
+
+      await syncStreamingMovies();
+
+      const [, , notInList] = mockClearNotIn.mock.calls[0];
+      expect(String(notInList)).toContain(String(staleRow.id));
+    });
+
+    it('取得に失敗した作品もクリアの保持対象に入れる', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+      respondPerMovie({ rejected: new Error('503') });
+
+      await syncStreamingMovies();
+
+      const [, , notInList] = mockClearNotIn.mock.calls[0];
+      expect(String(notInList)).toContain(String(staleRow.id));
+    });
+
+    // ⛔ getJpStreamingAvailability は watch/providers が欠けても例外を投げず、
+    //   HTTP 200 のまま「配信なし」を返す。TMDb 障害時に走らせると
+    //   digital_release_date を NULL で潰し、cached_at も進むので
+    //   60日間 配信予定タブから作品が消えたままになる
+    it('本筋が1件も配信中を確認できなかったら取り直さない', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+      mockGetJpStreamingAvailability.mockResolvedValue(availability(false));
+
+      const result = await syncStreamingMovies();
+
+      expect(mockStaleLt).not.toHaveBeenCalled();
+      expect(result.staleRefreshed).toBe(0);
+    });
+
+    it('本筋が途中で打ち切られたら取り直さない', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+      // 2ページ目で空を返す＝TMDb側の異常（#1166）
+      mockDiscoverMovies
+        .mockResolvedValueOnce(respondWith([createMovie()], 3))
+        .mockResolvedValueOnce(respondWith([], 3, 0))
+        .mockResolvedValue(respondWith([createMovie()], 1));
+
+      await syncStreamingMovies();
+
+      expect(mockStaleLt).not.toHaveBeenCalled();
+    });
+
+    // ⚠️ .eq() を両方消すと movie_cache 全行を1件の配信情報で塗り潰す
+    it('書き戻しは id と release_type で1行に絞る', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+
+      await syncStreamingMovies();
+
+      expect(mockUpdateEq).toHaveBeenCalledWith('id', staleRow.id);
+      expect(mockUpdateEq).toHaveBeenCalledWith(
+        'release_type',
+        staleRow.release_type,
+      );
+    });
+
+    // ⚠️ 逆順にすると、上限を超えたとき最も古い行が永久に後回しになる
+    it('古いものから順に取り直す', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+
+      await syncStreamingMovies();
+
+      expect(mockStaleOrder).toHaveBeenCalledWith('cached_at', {
+        ascending: true,
+      });
     });
 
     // ⚠️ 黙って切り捨てると「全部取り直した」ように見える

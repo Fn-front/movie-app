@@ -394,11 +394,25 @@ test.describe('二段階認証', () => {
    * となり、**直そうとしている行き止まりを別の形で作る**。単体テストは
    * 「`send-challenge` を叩く」までしか固定できない。
    *
-   * ⚠️ 60秒のカウントダウンを実時間で待つため、このテストだけ長めに取る。
+   * ⚠️ 60秒のカウントダウンを**実時間で待つ**ため、このテストだけ長めに取る。
+   *
+   * ⛔ **180秒では足りなかった**（CI のシャード2で実測。`waitForResponse` が
+   * テスト上限に当たって落ちた）。内訳は
+   *
+   *   ログイン（bcrypt）＋設定画面の到達 → 再認証 → setup
+   *   → **60秒のカウントダウン** → 再送 → 有効化
+   *
+   * で、CI は2ワーカーの共有ランナーなので前半だけで100秒を超えることが
+   * ある。カウントダウンの75秒を足すと上限に届く。
+   *
+   * ⚠️ カウントダウンはクライアントの state（`useResendCountdown`）なので、
+   * DB の `created_at` を戻しても縮まない。待つ以外の手は
+   * `page.clock` で時計ごと進めることだが、`Date` をモックすると
+   * セッションの有効期限など無関係なタイマーまで動く。**待つ時間は
+   * そのままに、上限だけ上げる**。
    */
   test('設定中（メールOTP）にコードを送り直せる（#1285）', async ({ page }) => {
-    // ログイン + 60秒の待機 + 有効化まで通すので、describe の 90 秒では足りない
-    test.setTimeout(180_000);
+    test.setTimeout(300_000);
 
     await loginAndOpenSettings(page);
 
@@ -453,8 +467,19 @@ test.describe('二段階認証', () => {
 
     // 2. カウントダウンが明けるのを待つ（60秒）
     await expect(resendButton).toBeEnabled({
-      timeout: (OTP_CONFIG.RESEND_INTERVAL_SECONDS + 15) * 1000,
+      timeout: (OTP_CONFIG.RESEND_INTERVAL_SECONDS + 30) * 1000,
     });
+
+    /**
+     * ⚠️ **境界に1秒の余裕を取る。**
+     *
+     * 画面のカウントダウンはクライアントの state、サーバーの判定は
+     * `otp_codes.created_at` からの経過秒。基準が別なので、押せるように
+     * なった直後は**サーバー側がまだ60秒に届いていない**ことがある。
+     * そうなると再送が `THROTTLED` で返り、下の待ちが**応答を取り違える**
+     * （CI のシャード2で実測）。
+     */
+    await page.waitForTimeout(1000);
     await section.screenshot({
       path: 'docs/e2e-screenshots/two-factor-setup-resend-ready.png',
     });
@@ -464,13 +489,23 @@ test.describe('二段階認証', () => {
     // ⚠️ 文言の出現で待たない。同じ `CODE_SENT` は `startSetup` が既に
     //    出していて、60秒待つあいだ画面に残っている。「同じ文字が見える」
     //    ことは再送の成功を意味しないので、**応答そのもの**を待つ
-    const resent = page.waitForResponse(
-      (response) =>
-        response.url().includes(API_ENDPOINTS.USER_TOTP_SEND_CHALLENGE) &&
-        response.ok(),
+    //
+    // ⚠️ **`response.ok()` を条件に入れない**（CI のシャード2で実測）。
+    //    再送が 429 / 400 で返ると述語が永久に一致せず、
+    //    `page.waitForResponse` がテスト上限まで**ハングする**。
+    //    失敗の第一報が「タイムアウト」になって原因が分からない。
+    //    応答そのものを待ってから、別に ok を主張する
+    const resent = page.waitForResponse((response) =>
+      response.url().includes(API_ENDPOINTS.USER_TOTP_SEND_CHALLENGE),
     );
     await resendButton.click();
-    await resent;
+    const resentResponse = await resent;
+
+    // 落ちたときに「何が返ったか」を出す
+    expect(
+      resentResponse.ok(),
+      `再送が ${resentResponse.status()} を返した: ${await resentResponse.text()}`,
+    ).toBe(true);
 
     await expect(
       page.getByText('確認コードをメールに送信しました。'),

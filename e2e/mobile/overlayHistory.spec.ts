@@ -246,6 +246,23 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
+
+    /**
+     * ⛔ **伸びる原因そのものを待つ**（#1075）
+     *
+     * フィルターはジャンル取得後に伸び、中央寄せなので**伸びると上端が
+     * 上へ動く**。ジャンルが出る前に押す位置を決めると、押す頃には
+     * コンテンツの内側に入っている。これが flaky の原因だった。
+     * 一覧タイルではなくモーダル内のジャンルを待つので予算は食わない。
+     */
+    const genreSection = dialog
+      .locator('div[class*="c_filter__section"]')
+      .filter({ has: page.getByRole('heading', { name: 'ジャンル' }) });
+
+    await expect(
+      genreSection.locator('label[class*="c_filter__tag"]').first(),
+    ).toBeVisible({ timeout: 15000 });
+
     // 閉じる前に実在を固定する。無いまま進むと waitForFold が素通りする
     await expectEntryExists(page);
 
@@ -256,6 +273,57 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
     await page.goBack();
 
     await expect(page).toHaveURL(/\/movies\/upcoming/);
+  });
+
+  /**
+   * ⛔ **修正前に必ず RED になる再現テスト**（#1075 の完了条件）
+   *
+   * flaky の正体は「押したのに閉じない」ではなく、**押せていないことに
+   * 気づけない**こと。座標クリック（`page.mouse.click`）は指定した点に何が
+   * あろうと押すだけなので、測ったあとにモーダルが伸びて点が内側へ入っても
+   * **成功したことになる**。第一報は `not.toBeVisible()` の失敗だけで、
+   * 原因の特定に trace とスクショの突き合わせが要った。
+   *
+   * ここでは点を覆って「外側を押せない」状況を作る。
+   *
+   * - 旧実装（座標クリック）: 黙って覆いを押し、**何も throw しない**
+   * - 新実装（オーバーレイ要素）: Playwright の当たり判定で
+   *   `intercepts pointer events` と**要素名付きで落ちる**
+   *
+   * ⚠️ `--repeat-each` は信号にならない。Issue の実測では修正前の実装でも
+   * 本番ビルドで 162/162 通っている。
+   */
+  test('外側を押せない状況では黙って素通りせずに落ちる', async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto('/movies/now-showing');
+
+    await filterButton(page).waitFor({ timeout: 15000 });
+    await filterButton(page).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    /**
+     * オーバーレイの上に当たり判定を持つ層を被せる。
+     *
+     * ⚠️ `pointer-events: auto` が要る。Radix はモーダル表示中に body の
+     * `pointer-events` を切るので、指定しないと当たり判定に出ない
+     * （Issue の仮説4が外れだった理由そのもの）。
+     */
+    await page.evaluate(() => {
+      const cover = document.createElement('div');
+      cover.id = 'e2e-overlay-cover';
+      cover.style.cssText =
+        'position:fixed;inset:0;z-index:2147483647;pointer-events:auto';
+      document.body.appendChild(cover);
+    });
+
+    await expect(clickOutsideDialog(page, dialog)).rejects.toThrow();
+
+    await page.evaluate(() => {
+      document.getElementById('e2e-overlay-cover')?.remove();
+    });
   });
 
   /**

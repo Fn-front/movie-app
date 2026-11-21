@@ -97,4 +97,28 @@ describe('DismissButton', () => {
       ).toBeInTheDocument();
     });
   });
+  /**
+   * 一覧では作品名を含める（#1047）
+   *
+   * ⚠️ 素の「興味なし」は**名詞**。作品名を足すときは動詞化しないと
+   * 「○○を興味なし」という非文になる。解除側の
+   * `${title}の興味なしを解除` と対になる。
+   */
+  describe('作品名入りのアクセシブルネーム（#1047）', () => {
+    it('movieTitle を渡すと動詞化した文言になる', () => {
+      render(<DismissButton onClick={jest.fn()} movieTitle='テスト映画' />);
+
+      expect(
+        screen.getByRole('button', { name: 'テスト映画を興味なしにする' }),
+      ).toBeInTheDocument();
+    });
+
+    it('movieTitle を渡さなければ従来どおりの文言', () => {
+      render(<DismissButton onClick={jest.fn()} />);
+
+      expect(
+        screen.getByRole('button', { name: '興味なし' }),
+      ).toBeInTheDocument();
+    });
+  });
 });

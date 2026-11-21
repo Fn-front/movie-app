@@ -8,6 +8,7 @@
 import { memo, useCallback } from 'react';
 import { IoHeart, IoHeartOutline } from 'react-icons/io5';
 
+import { MOVIE_ACTION_LABELS } from '@/constants';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import { cn } from '@/utils/cn';
 
@@ -33,6 +34,16 @@ export interface FavoriteButtonProps {
    * 空のハートを出すと、確定後に一斉に塗りつぶされる（#1135）
    */
   isResolving?: boolean;
+  /**
+   * アクセシブルネームに含める作品名（#1047）
+   *
+   * ⛔ **一覧では必ず渡す。** 同じ名前のボタンが最大20個並ぶため、
+   * 要素リストのように文脈から切り離して読むモードでは、どの作品への
+   * 操作か分からない。
+   *
+   * ⚠️ 詳細モーダルでは渡さない（1作品しか無いので冗長なだけ）。
+   */
+  movieTitle?: string;
 }
 
 /**
@@ -45,6 +56,7 @@ export const FavoriteButton = memo<FavoriteButtonProps>(
     disabled = false,
     size = 'sm',
     isResolving = false,
+    movieTitle,
   }) {
     const isFavorite = favorite !== null;
 
@@ -84,7 +96,11 @@ export const FavoriteButton = memo<FavoriteButtonProps>(
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         disabled={disabled}
-        aria-label={isFavorite ? 'お気に入りを編集' : 'お気に入りに追加'}
+        aria-label={
+          isFavorite
+            ? MOVIE_ACTION_LABELS.favoriteEdit(movieTitle)
+            : MOVIE_ACTION_LABELS.favoriteAdd(movieTitle)
+        }
       >
         {isFavorite ? <IoHeart /> : <IoHeartOutline />}
       </button>

@@ -240,7 +240,11 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
     <>
       {onDismiss && (
         <div className={styles.c_movie_tile__dismiss_button}>
-          <DismissButton onClick={handleDismiss} disabled={dismissDisabled} />
+          <DismissButton
+            onClick={handleDismiss}
+            disabled={dismissDisabled}
+            movieTitle={movie.title}
+          />
         </div>
       )}
       {onFavoriteToggle && canFavorite && (
@@ -250,6 +254,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             onClick={handleFavoriteToggle}
             disabled={favoriteDisabled}
             isResolving={isFavoriteResolving}
+            movieTitle={movie.title}
           />
         </div>
       )}
@@ -260,6 +265,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             onClick={handleWatchlistToggle}
             disabled={watchlistDisabled}
             isResolving={isWatchlistResolving}
+            movieTitle={movie.title}
           />
         </div>
       )}

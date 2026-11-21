@@ -55,8 +55,32 @@ function getSnapshot(): MovieViewMode {
 /**
  * SSR と、ハイドレーション時の初回レンダーで使われる値
  *
- * 静的プリレンダした HTML はグリッドなので、ここも既定を返して揃える。
- * リスト設定の利用者はマウント直後に1度だけ切り替わる
+ * ⛔ **保存値を返してはいけない。** サーバー出力と食い違って hydration
+ * mismatch になる（`useMovieViewMode.test.ts` に回帰テストがある）。
+ *
+ * ## リスト設定の利用者が1度グリッドを見るか（#1048 で実測）
+ *
+ * **本番ビルドではどのルートでも見ない。** ただし**理由はルートごとに違う**。
+ *
+ * | ルート | ハイドレーションされない理由 | `next dev` | `next start` |
+ * |---|---|---|---|
+ * | `/movies/now-showing` | `page.tsx` の `<Suspense>` ＋ 一覧の `useSearchParams`（CSR bailout） | グリッド相**あり** | 無し |
+ * | `/movies/upcoming` `/search` `/awards` `/person/[id]` `/favorites` `/watchlist` | `loader.tsx` の `dynamic(..., { ssr: false })` | 無し | 無し |
+ *
+ * ⚠️ **ひとまとめに「`useSearchParams` の CSR bailout」と書かない。**
+ * 前提が消える条件がルートごとに違うため、取り違えると警告が届かない。
+ *
+ * ⚠️ **#1048 の「影響範囲: 2画面」も誤り**（レビューで実測）。実際に
+ * 起きうるのは `/movies/now-showing` だけ。
+ *
+ * dev で見えるのは on-demand SSR でハイドレーションされるため。利用者が
+ * 触るのは本番ビルドだけなので**直さずに許容し**、退行だけを
+ * `e2e/mobile/movieViewModeFlash.spec.ts` で見張っている。
+ *
+ * ⚠️ 前提が消える条件:
+ * - `/movies/now-showing`: PPR / Cache Components の有効化、`force-dynamic`、
+ *   一覧から `useSearchParams` を外す、`<Suspense>` を動かす
+ * - その他: **loader の `ssr: false` を外す**
  */
 function getServerSnapshot(): MovieViewMode {
   return DEFAULT_MOVIE_VIEW_MODE;

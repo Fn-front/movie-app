@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { FavoriteList } from './favoriteList';
-import { IMAGE_SIZES, STORAGE_KEYS } from '@/constants';
+import { IMAGE_SIZES, MOVIE_ACTION_LABELS, STORAGE_KEYS } from '@/constants';
 import type { FavoriteItem } from '@/lib/api/favorites/favorites';
 
 // next/imageモック
@@ -134,8 +134,9 @@ describe('FavoriteList', () => {
       />,
     );
 
+    // 一覧のボタンは作品名入り（#1047）
     const favoriteButtons = screen.getAllByRole('button', {
-      name: 'お気に入りを編集',
+      name: /お気に入りを編集$/,
     });
     await user.click(favoriteButtons[0]);
 
@@ -274,7 +275,7 @@ describe('FavoriteList', () => {
       );
 
       await user.click(
-        screen.getAllByRole('button', { name: 'お気に入りを編集' })[0],
+        screen.getAllByRole('button', { name: /お気に入りを編集$/ })[0],
       );
 
       expect(mockOnFavoriteToggle).toHaveBeenCalledWith(
@@ -389,5 +390,33 @@ describe('FavoriteList', () => {
       'sizes',
       IMAGE_SIZES.POSTER.SIZES,
     );
+  });
+  /**
+   * ⛔ **作品名を含めること**（#1047）
+   *
+   * `/favorites` も一覧なので、同じ名前のボタンが並ぶ。要素リストの
+   * ように文脈から切り離して読むモードでは、どの作品への操作か分からない。
+   *
+   * ⚠️ **完全一致で固定する。** クリック用のロケータは末尾一致の正規表現に
+   * してあるが、あれは素の `お気に入りを編集` にも当たるので
+   * `movieTitle` を外す退行を検出できない（実測でテストが1件も落ちなかった）。
+   *
+   * ⚠️ 文言は直書きせず `MOVIE_ACTION_LABELS` から取る。二重管理にすると
+   * 片方だけ変えたときに気づけない。
+   */
+  it('お気に入りボタンのラベルに作品名が入る（#1047）', () => {
+    render(
+      <FavoriteList
+        favorites={mockFavorites}
+        isLoading={false}
+        onFavoriteToggle={jest.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', {
+        name: MOVIE_ACTION_LABELS.favoriteEdit(mockFavorites[0].title),
+      }),
+    ).toBeInTheDocument();
   });
 });

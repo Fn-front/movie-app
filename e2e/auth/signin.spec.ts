@@ -95,7 +95,7 @@ test.describe('ログイン認証フロー', () => {
       トーストに絞れば毎回同じ絵になる。
     */
     await toast.screenshot({
-      path: 'docs/e2e-screenshots/signin-callback-toast.png',
+      path: 'docs/tmp/e2e-screenshots/signin-callback-toast.png',
     });
   });
 

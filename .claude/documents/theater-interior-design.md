@@ -772,6 +772,12 @@ Atmos 9.1.6 レイアウトでは可視スピーカーは最大12個（16ch − 
 ### 11.4 E2E・ビジュアル証跡
 
 - 既存の E2E スクリーンショット4枚（`docs/e2e-screenshots/theater-types-{standard-medium,tcx,imax-gt,dolby-cinema}.png`）を撮り直し、**同名で上書き**する
+
+> ⚠️ **旧運用の記述。** #433 で `docs/e2e-screenshots/` へのコミットは廃止した。
+> 出力先は `docs/tmp/e2e-screenshots/`（gitignore 対象）で、PR への添付は
+> gh-image（user-attachments）を使う。撮影手順（実機 Chrome／ヘッド付き／
+> `fullPage` 禁止）自体は引き続き有効。権威は `.claude/CLAUDE.md` 側。
+
 - `.claude/rules/visual-evidence.md` に従い、各PRに Before/After スクリーンショットと動作動画を添付する。特に **一人称視点**（座席選択後）の Before/After を必ず含める。俯瞰だけでは本件の変化の大半が写らない
 - IMAX（最大席数544席）で E2E がタイムアウト・クラッシュしないことを確認する。これは過去に `ContactShadows` の撤去理由となった既知のリスクポイント
 

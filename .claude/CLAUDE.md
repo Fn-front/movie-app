@@ -176,9 +176,22 @@
 
 **【必須】E2E結果のスクショをPRに添付**：
 - PRでE2Eを実行したら、各シナリオの結果スクリーンショットをPR本文に埋め込む
-- 画像は `docs/e2e-screenshots/` 配下にコミットし、PR本文に raw URL で埋め込む
+- 画像は `docs/tmp/e2e-screenshots/` 配下に出力する（**gitignore 対象。コミットしない**）
 - ファイル名はシナリオ単位で安定させ、**同じテストの再取得は上書き**する（重複画像を増やさない）。例: `<feature>-<scenario>.png`
-- URLは**コミットSHA固定のpermalink**を使う（`https://github.com/Fn-front/movie-app/blob/<commit-sha>/docs/e2e-screenshots/<file>.png?raw=true`）。`<branch>` 指定はマージ後のブランチ削除でリンク切れ（404）になるため避ける
+- PR への添付は **gh-image（user-attachments）** を使う。手順は `.claude/rules/visual-evidence.md` と同じ
+
+> ⛔ **`docs/e2e-screenshots/` へコミットしない**（#433 で廃止）。
+>
+> TMDb 利用規約 Section 1.C は「TMDb から取得した情報を6ヶ月を超えて
+> キャッシュすること」を禁じている。受賞一覧・検索結果・ウォッチリスト等の
+> スクショには TMDb のポスターとタイトルが写っており、**public リポジトリに
+> コミットすると更新もエビクションも効かない**。実際、最古のコミットは
+> 2026-06-28 で 2026-12-28 に6ヶ月を超える状態だった。
+>
+> 旧 `docs/e2e-screenshots/` の65枚は削除済み。**過去PRに貼った
+> コミットSHA固定の permalink は引き続き表示される**（blob は履歴に残るため）。
+> 履歴そのものは書き換えない —— DBのバックアップ／PITR にも同じ性質があり、
+> そこだけ厳密にしても一貫しないため。
 
 ## 設計ドキュメント
 

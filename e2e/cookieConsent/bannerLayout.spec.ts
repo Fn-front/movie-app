@@ -56,7 +56,7 @@ test.describe('Cookie同意 / バナー表示中のレイアウト', () => {
     expect(footerBox!.y + footerBox!.height).toBeLessThanOrEqual(bannerBox!.y);
 
     await page.screenshot({
-      path: 'docs/e2e-screenshots/cookie-consent-banner.png',
+      path: 'docs/tmp/e2e-screenshots/cookie-consent-banner.png',
     });
   });
 

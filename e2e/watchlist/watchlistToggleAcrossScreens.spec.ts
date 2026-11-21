@@ -153,7 +153,7 @@ async function toggleAndExpectLabelSwap(
   if (screenshot) {
     // ⚠️ ページ全体ではなくタイルだけ撮る。一覧は作品が入れ替わるので、
     //    全体だと毎回ぜんぶ差分になる
-    await tile.screenshot({ path: `docs/e2e-screenshots/${screenshot}` });
+    await tile.screenshot({ path: `docs/tmp/e2e-screenshots/${screenshot}` });
   }
 
   // 片方向だけだと「追加しか効かない」退行に気づけない

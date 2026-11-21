@@ -166,7 +166,7 @@ test.describe('二段階認証', () => {
     await page
       .locator('section')
       .filter({ has: page.getByRole('heading', { name: '二段階認証' }) })
-      .screenshot({ path: 'docs/e2e-screenshots/two-factor-reauth.png' });
+      .screenshot({ path: 'docs/tmp/e2e-screenshots/two-factor-reauth.png' });
 
     await enableTwoFactor(page);
 
@@ -449,7 +449,7 @@ test.describe('二段階認証', () => {
     // 1. 送った直後は押せない（サーバー側の再送間隔に当たるだけなので手前で止める）
     await expect(resendButton).toBeDisabled();
     await section.screenshot({
-      path: 'docs/e2e-screenshots/two-factor-setup-resend-cooldown.png',
+      path: 'docs/tmp/e2e-screenshots/two-factor-setup-resend-cooldown.png',
     });
 
     const firstCode = await getLatestOtpCode(USER.email, 'two_factor');
@@ -481,7 +481,7 @@ test.describe('二段階認証', () => {
      */
     await page.waitForTimeout(1000);
     await section.screenshot({
-      path: 'docs/e2e-screenshots/two-factor-setup-resend-ready.png',
+      path: 'docs/tmp/e2e-screenshots/two-factor-setup-resend-ready.png',
     });
 
     // 3. 再送すると新しいコードが入る（古いコードは消える）
@@ -539,7 +539,7 @@ test.describe('二段階認証', () => {
       page.getByRole('list', { name: 'リカバリーコード' }),
     ).toBeVisible();
     await section.screenshot({
-      path: 'docs/e2e-screenshots/two-factor-setup-resend-enabled.png',
+      path: 'docs/tmp/e2e-screenshots/two-factor-setup-resend-enabled.png',
     });
   });
 

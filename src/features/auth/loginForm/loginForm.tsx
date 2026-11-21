@@ -243,13 +243,30 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
           return;
         }
 
+        /**
+         * 遷移先を**先に決めて**、文面と遷移の両方をこれ1つから導く（#1385）
+         *
+         * 2回呼ぶと、文面と実際の行き先が別々の判断になる。片方だけ直したときに
+         * また食い違うので、ここで確定させて使い回す。
+         *
+         * ⚠️ **着地点まで確定するわけではない。** `proxy.ts` は権限で弾く
+         * ルート（`/admin/*`）をホームへ再リダイレクトするので、非 admin が
+         * `/admin/accounts` へ誘導されてログインすると、文面は「元のページに
+         * 戻ります。」なのにホームへ着く。`resolveSafeCallbackUrl` は
+         * 外部URL・認証ページしか落とさないため、ここでは判別できない。
+         */
+        const destination = resolveSafeCallbackUrl(callbackUrl);
+
         toast({
           title: TOAST_TITLES.LOGIN_SUCCESS,
-          description: TOAST_MESSAGES.LOGIN_SUCCESS_DESCRIPTION,
+          description:
+            destination === ROUTES.HOME
+              ? TOAST_MESSAGES.LOGIN_SUCCESS_DESCRIPTION
+              : TOAST_MESSAGES.LOGIN_SUCCESS_REDIRECT_DESCRIPTION,
           variant: 'success',
         });
 
-        router.push(resolveSafeCallbackUrl(callbackUrl));
+        router.push(destination);
       } catch (error) {
         const { message } = handleApiError(error);
         setApiError(message);

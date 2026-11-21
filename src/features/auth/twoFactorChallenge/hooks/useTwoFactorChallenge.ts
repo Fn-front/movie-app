@@ -216,8 +216,10 @@ export function useTwoFactorChallenge({
     try {
       await update({ resend: true });
       // ⚠️ `restart()` は無条件。送信上限で1通も出なかった場合も
-      //    カウントダウンだけ振り出しに戻る形になるが、その状態は
-      //    `sendNotice` が文言で伝え、下の `canResend` が押せなくする
+      //    カウントダウンだけ振り出しに戻るが、その状態では
+      //    **ボタンそのものを描画していない**ので押されない
+      //    （`twoFactorChallenge.tsx` の `!sendLimited && !codeStillValid`）。
+      //    `canResend` は上限を見ていないので、あちらを外さないこと
       restart();
     } catch {
       setError(AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_FAILED);

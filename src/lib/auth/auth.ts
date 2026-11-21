@@ -553,6 +553,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // 同上。消さないと「送信できませんでした」が画面に出続ける
         delete token.secondFactorSendFailed;
         delete token.secondFactorSendLimited;
+        // ⛔ **ここに足し忘れると片道ラッチになる。**
+        //
+        //   `@auth/core` は `/api/auth/session` の**読み取りごとに**この
+        //   コールバックを呼び、結果を Cookie へ書き戻す
+        //   （`lib/actions/session.js`）。消さないフラグは**焼き付く**。
+        //
+        //   `secondFactorCodeStillValid` が残ると再送ボタンが二度と戻らない。
+        //   落とす唯一の経路は再送の中（`trigger === 'update'` かつ
+        //   `resend === true`）にあるので、ボタンが消えたまま手が無くなる。
+        //   枠が60分で回復しても、コードを打ち間違えた利用者は
+        //   ログアウトして入り直すしかない。
+        delete token.secondFactorCodeStillValid;
 
         // 初回ログイン時にユーザー情報をトークンに追加
         if (user) {

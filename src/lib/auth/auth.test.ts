@@ -3138,6 +3138,38 @@ describe('jwt / session の第2要素（OAuth 経路）', () => {
   });
 
   /**
+   * ⛔ **表示用のフラグは毎回消す。消さないと Cookie に焼き付く。**
+   *
+   * `@auth/core` は `/api/auth/session` の**読み取りごとに** jwt
+   * コールバックを呼び、結果を Cookie へ書き戻す
+   * （`lib/actions/session.js`）。消し忘れたフラグは片道ラッチになる。
+   *
+   * `secondFactorCodeStillValid` が残ると**再送ボタンが二度と戻らない**。
+   * 落とす唯一の経路が再送の中にあるので、ボタンが消えたまま手が無くなる。
+   * 実際に足し忘れてこの状態になっていた（レビューで実測）。
+   *
+   * ⚠️ **新しい表示用フラグを足したら、必ずここへ1行足すこと。**
+   * `it.each` なので、消し忘れると落ちる。
+   */
+  it.each([
+    ['totpUnavailable'],
+    ['secondFactorSendFailed'],
+    ['secondFactorSendLimited'],
+    ['secondFactorCodeStillValid'],
+  ])('%s は次のリクエストで消える', async (flag) => {
+    const token = await jwt({
+      token: {
+        id: USER_ID,
+        totpPending: true,
+        secondFactorMethod: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        [flag]: true,
+      },
+    });
+
+    expect(token[flag as keyof typeof token]).toBeUndefined();
+  });
+
+  /**
    * ⛔ **OAuth の再送でも出口を固定する**（GHSA-p899-6g7w-v7hg）。
    *
    * `secondFactorSendLimited` のアサーションが**1件も無かった**ため、

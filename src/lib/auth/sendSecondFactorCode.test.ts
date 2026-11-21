@@ -432,8 +432,8 @@ describe('sendSecondFactorCode', () => {
    *
    * 戻さないと、攻撃者に `TWO_FACTOR_SEND` を枯らされた被害者が、
    * 再試行するたびに自分の prompt 枠だけを減らす。上限に達すると
-   * 被害者自身の行にロックが立ち、攻撃者由来のロックが明けた後も
-   * さらに最大40分ログインできない（レビューで実測）。
+   * 被害者自身の行にロックが立ち、攻撃者由来のロックの明ける t 分前に
+   * 試していれば**そこからさらに t 分**（最長60分）ログインできない。
    */
   it('利用者単位の枠で弾かれたら送信元ごとの枠を戻す', async () => {
     mockCheckRateLimit.mockImplementation((_supabase, _id, action) =>
@@ -464,6 +464,48 @@ describe('sendSecondFactorCode', () => {
       RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT,
     );
     expect(mockSendOtpEmail).not.toHaveBeenCalled();
+  });
+
+  /**
+   * ⛔ **コードの有無で返却を変えない**（B-1 と同じ形の見落とし）。
+   *
+   * 上のテストは `recentExpiresAt` が既定（= 作成から30分後）なので
+   * `hasValidCode === true` の経路しか通らない。返却を
+   * `if (promptIdentifier && hasValidCode)` に絞る変異が1062件緑で
+   * 通った（レビューで実測）。
+   *
+   * その変異が入ると、**受信箱のコードが期限切れ／1通も無い被害者**
+   * だけ自傷ロックが復活する。守りたい相手の半分が無防備になる。
+   */
+  it.each([
+    ['期限切れ', () => new Date(Date.now() - 60 * 1000).toISOString()],
+    ['送信履歴なし', () => null],
+  ])('受信箱のコードが%sでも枠を戻す', async (_label, expiresAt) => {
+    mockCheckRateLimit.mockImplementation((_supabase, _id, action) =>
+      Promise.resolve(
+        action === RATE_LIMIT_ACTION.TWO_FACTOR_SEND
+          ? { allowed: false, retryAfter: 3600 }
+          : { allowed: true },
+      ),
+    );
+
+    const state = freshState();
+    const expires = expiresAt();
+    if (expires) {
+      state.recentCreatedAt = new Date(
+        Date.now() - (OTP_CONFIG.RESEND_INTERVAL_SECONDS + 5) * 1000,
+      ).toISOString();
+      state.recentExpiresAt = expires;
+    }
+
+    await sendSecondFactorCode(
+      createSupabaseMock(state),
+      USER_ID,
+      EMAIL,
+      PROMPT_IDENTIFIER,
+    );
+
+    expect(mockReleaseRateLimit).toHaveBeenCalledTimes(1);
   });
 
   /** ⚠️ 識別子を渡していない経路では戻すものが無い */

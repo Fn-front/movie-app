@@ -712,7 +712,10 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
    - `year`: レスポンスの`release_date`の年と一致するかチェック
    - `vote_average_gte`: レスポンスの`vote_average`が閾値以上かチェック
 3. フィルタリング後の結果を返却
-   - **注意**: サーバー側フィルタリングにより `totalResults` は TMDb の値と異なる（フィルタリング後の件数を返す）。適用されたかどうかは `isServerFiltered` で分かる
+   - **注意**: サーバー側フィルタリングが働くと `totalResults` は TMDb の値と異なる。
+     このとき実装は**1ページぶんに畳む**ため `totalResults` は絞り込み後の件数（最大20）、
+     `totalPages` は 1、`isServerFiltered` は `true` になる（`route.ts` 参照）。
+     上の例は適用されていない場合
 
 **パターン2: キーワードなし + フィルターあり**
 1. TMDb API `/discover/movie` を呼び出し
@@ -748,7 +751,7 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
       "page": 1,
       "totalPages": 10,
       "totalResults": 200,
-      "isServerFiltered": true
+      "isServerFiltered": false
     }
   }
 }

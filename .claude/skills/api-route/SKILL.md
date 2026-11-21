@@ -70,7 +70,8 @@ src/app/api/<route-path>/
 > - 500 は `SERVER_ERROR`
 > - OTP の失敗は **`BAD_REQUEST` + 文言**（`OTP_ERROR_MESSAGES`）。
 >   `auth/otp/verify` は `CODE_NOT_FOUND` / `CODE_EXPIRED` / `INVALID_CODE` を
->   **文言で出し分けている**（`VALIDATION_ERROR` は zod の不一致専用）
+>   **文言で出し分けている**。`VALIDATION_ERROR` は「入力の形が不正」のときで、
+>   zod に限らない（`movies/[id]` / `person/[id]` の `parsePositiveIntId` も同じ）
 > - 試行回数の超過だけ `RATE_LIMIT_EXCEEDED`
 >
 > ⚠️ メールの重複も 409 では返さない。**列挙防止のため新規登録と同じ 201**

@@ -19,10 +19,10 @@ argument-hint: <formName>
 
 ### アーキテクチャ原則
 
-- **zodスキーマ分離**: `src/schema/<domain>.ts` に定義し、API Route と共有する
+- **zodスキーマ分離**: `src/schema/<domain>.ts` に定義する（フォームの隣に置かない）
 - **エラーメッセージ**: ユーザーフレンドリーな日本語
 - **アクセシビリティ**: 適切なARIA属性とラベル
-- **バリデーション**: リアルタイム + 送信時
+- **バリデーション**: 送信時（`mode` は指定しない。既定の `onSubmit`）
 
 ## ファイル構成
 
@@ -36,14 +36,27 @@ src/schema/<domain>.ts       # ⚠️ zod スキーマはここ。フォーム�
 ```
 
 ⛔ **`types/schema.ts` は作らない。** スキーマは `src/schema/<domain>.ts` に
-置いて、**フォームと API Route の両方から import する**。同じ検証を2箇所に
-書くと、片方だけ直したときにクライアントで通ってサーバーで 400 になる。
+置く。フォームと API Route が**同じファイルから** import することで、
+片方だけ直して「クライアントで通ってサーバーで 400」になるのを防ぐ。
 
 ```typescript
-// フォーム側
 import { loginSchema, type LoginFormData } from '@/schema/auth';
-// ルート側（src/app/api/... ）も同じものを import する
 ```
+
+⚠️ **同じ定数を共有するとは限らない。** 画面とサーバーで要るものが違うため、
+同じファイルに**2本置く**のが実際の形。
+
+```typescript
+// src/schema/auth.ts
+export const registerSchema = …;     // 画面用（確認用パスワードの一致など）
+export const registerApiSchema = …;  // ルート用（画面にしか無い欄を含まない）
+```
+
+`changePassword` / `passwordResetConfirm` も同じ2本立て。
+そのままリテラルに共有しているのは `passwordResetRequestSchema` 程度。
+
+⚠️ ログイン（`loginSchema`）に対応する API Route は**無い**。NextAuth の
+credentials が受けるので、共有相手がいない唯一の例。
 
 ## zodスキーマテンプレート
 
@@ -361,8 +374,8 @@ export const LoginForm = memo(() => {
 ### OTP入力（6桁数字）
 
 ```typescript
-// schema.ts
-export const otpSchema = z.object({
+// src/schema/otp.ts（実物は otpFormSchema）
+export const otpFormSchema = z.object({
   otp: z
     .string()
     .length(6, 'OTPコードは6桁で入力してください')

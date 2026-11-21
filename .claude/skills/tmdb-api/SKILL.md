@@ -23,7 +23,7 @@ argument-hint: <endpoint>
 ### アーキテクチャ原則
 
 - **APIクライアント分離**: `src/lib/tmdb/tmdb.ts` に実装
-- **型定義**: TMDbレスポンスの型を定義
+- **型定義**: `src/lib/types/index.ts` の既存の型を使う（新しく作らない）
 - **エラーハンドリング**: try-catchで適切に処理
 - **レート制限対策**: 並列リクエストは10件程度に制限
 
@@ -119,9 +119,13 @@ export default tmdbClient;
 import type { Movie, MovieDetail, TMDbResponse } from '@/lib/types';
 ```
 
-⚠️ **接頭辞は `TMDb` ではない。** `TMDbMovie` / `TMDbMovieDetail` /
-`TMDbGenre` …はどれも存在しない。`TMDb` が付くのはレスポンスの外枠
-（`TMDbResponse` / `FilteredTMDbResponse`）だけ。
+⚠️ **映画そのものの型に `TMDb` は付かない。** `TMDbMovie` /
+`TMDbMovieDetail` / `TMDbGenre` はどれも存在せず、`Movie` / `MovieDetail` /
+`Genre` が正しい。
+
+`TMDb` が付くのはレスポンスの外枠（`TMDbResponse` / `FilteredTMDbResponse`）と、
+**TMDb の生の形をそのまま写した補助の型**（`TMDbNowShowingMovie` /
+`TMDbReleaseDate` / `TMDbReleaseDateCountry`）。
 
 ### ⚠️ `FilteredTMDbResponse` を素の `TMDbResponse` に替えない
 
@@ -131,150 +135,58 @@ import type { Movie, MovieDetail, TMDbResponse } from '@/lib/types';
 
 ## よく使うエンドポイント
 
-### 1. 映画検索
+⛔ **新しく書く前に `src/lib/tmdb/tmdb.ts` を見る。** 必要なものはたいてい
+もうある。以下は**実在する関数の署名**で、テンプレートではない。
+
+| 関数 | 戻り値 | 行 |
+|---|---|---|
+| `searchMovies(query, page)` | `Promise<TMDbResponse<Movie>>` | `:411` |
+| `getMovieDetail(id)` | `Promise<MovieDetail>` | `:178` |
+| `getNowPlayingMovies(...)` | `Promise<FilteredTMDbResponse<Movie>>` | `:155` |
+| `discoverMovies(params)` | `Promise<FilteredTMDbResponse<Movie>>` | `:470` |
+| `getGenres()` | `Promise<Genre[]>` | `:518` |
+| `getPersonDetail(id)` | — | `:868` |
+| `getJpTheatricalReleaseDates(id)` / `getJpStreamingAvailability(id)` | — | `:595` / `:652` |
+
+⚠️ **`getPopularMovies` / `getUpcomingMovies` / `getMoviesByDateRange` は
+存在しない。** 「人気」「公開予定」は `discoverMovies` にパラメータを渡して
+作る（`DiscoverMoviesParams`、`:438`）。
+
+```typescript
+// 公開予定 = discoverMovies にパラメータを渡す
+const upcoming = await discoverMovies({
+  'primary_release_date.gte': from,
+  'primary_release_date.lte': to,
+  sort_by: 'popularity.desc',
+  page,
+});
+```
+
+### 新しい関数を足すとき
+
+既存に倣う。除外フィルタを通すなら戻り値は `FilteredTMDbResponse<Movie>`
+（理由は上記）、素通しなら `TMDbResponse<Movie>`。
 
 ```typescript
 export async function searchMovies(
   query: string,
-  page: number = 1
-): Promise<TMDbSearchResponse> {
-  try {
-    const response = await tmdbClient.get<TMDbSearchResponse>('/search/movie', {
-      params: {
-        query,
-        page,
-      },
-    });
+  page: number = 1,
+): Promise<TMDbResponse<Movie>> {
+  const response = await tmdbClient.get<TMDbResponse<Movie>>(
+    TMDB_ENDPOINTS.SEARCH_MOVIE,
+    { params: { query, page } },
+  );
 
-    return response.data;
-  } catch (error) {
-    console.error('Failed to search movies:', error);
-    throw new Error('映画の検索に失敗しました');
-  }
+  return response.data;
 }
-
-// 使用例
-const results = await searchMovies('インセプション', 1);
 ```
 
-### 2. 映画詳細取得
-
-```typescript
-export async function getMovieDetail(movieId: number): Promise<TMDbMovieDetail> {
-  try {
-    const response = await tmdbClient.get<TMDbMovieDetail>(`/movie/${movieId}`);
-
-    return response.data;
-  } catch (error) {
-    console.error('Failed to get movie detail:', error);
-    throw new Error('映画詳細の取得に失敗しました');
-  }
-}
-
-// 使用例
-const movie = await getMovieDetail(27205);
-```
-
-### 3. 人気映画取得
-
-```typescript
-export async function getPopularMovies(
-  page: number = 1
-): Promise<TMDbMovieListResponse> {
-  try {
-    const response = await tmdbClient.get<TMDbMovieListResponse>('/movie/popular', {
-      params: { page },
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('Failed to get popular movies:', error);
-    throw new Error('人気映画の取得に失敗しました');
-  }
-}
-
-// 使用例
-const popularMovies = await getPopularMovies(1);
-```
-
-### 4. 公開予定映画取得
-
-```typescript
-export async function getUpcomingMovies(
-  page: number = 1
-): Promise<TMDbMovieListResponse> {
-  try {
-    const response = await tmdbClient.get<TMDbMovieListResponse>('/movie/upcoming', {
-      params: { page },
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('Failed to get upcoming movies:', error);
-    throw new Error('公開予定映画の取得に失敗しました');
-  }
-}
-
-// 使用例
-const upcomingMovies = await getUpcomingMovies(1);
-```
-
-### 5. 現在上映中の映画取得
-
-```typescript
-export async function getNowPlayingMovies(
-  page: number = 1
-): Promise<TMDbMovieListResponse> {
-  try {
-    const response = await tmdbClient.get<TMDbMovieListResponse>('/movie/now_playing', {
-      params: { page },
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('Failed to get now playing movies:', error);
-    throw new Error('現在上映中の映画の取得に失敗しました');
-  }
-}
-
-// 使用例
-const nowPlayingMovies = await getNowPlayingMovies(1);
-```
-
-### 6. 日付範囲で映画取得（カスタム）
-
-```typescript
-export async function getMoviesByDateRange(
-  startDate: string, // YYYY-MM-DD
-  endDate: string,   // YYYY-MM-DD
-  page: number = 1
-): Promise<TMDbMovieListResponse> {
-  try {
-    const response = await tmdbClient.get<TMDbMovieListResponse>('/discover/movie', {
-      params: {
-        'primary_release_date.gte': startDate,
-        'primary_release_date.lte': endDate,
-        sort_by: 'primary_release_date.asc',
-        page,
-      },
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('Failed to get movies by date range:', error);
-    throw new Error('期間指定での映画取得に失敗しました');
-  }
-}
-
-// 使用例
-const today = new Date().toISOString().split('T')[0];
-const threeMonthsLater = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
-  .toISOString()
-  .split('T')[0];
-const moviesInRange = await getMoviesByDateRange(today, threeMonthsLater, 1);
-```
+⚠️ エンドポイントのパスは直書きせず `TMDB_ENDPOINTS`（`@/constants`）を使う。
 
 ## 画像URL生成
+
+⛔ **自前で書かない。** `src/utils/image.ts` にある（`@/utils/image`）。
+以下は中身の説明で、コピーして新しく定義するためのものではない。
 
 ```typescript
 // TMDb画像のベースURL
@@ -313,8 +225,8 @@ const backdropUrl = getTMDbImageUrl(movie.backdrop_path, 'original');
 async function fetchMoviesInBatches(
   movieIds: number[],
   batchSize: number = 10
-): Promise<TMDbMovieDetail[]> {
-  const results: TMDbMovieDetail[] = [];
+): Promise<MovieDetail[]> {
+  const results: MovieDetail[] = [];
 
   for (let i = 0; i < movieIds.length; i += batchSize) {
     const batch = movieIds.slice(i, i + batchSize);
@@ -355,9 +267,9 @@ export class TMDbAPIError extends Error {
 
 export async function safeGetMovieDetail(
   movieId: number
-): Promise<TMDbMovieDetail | null> {
+): Promise<MovieDetail | null> {
   try {
-    const response = await tmdbClient.get<TMDbMovieDetail>(`/movie/${movieId}`);
+    const response = await tmdbClient.get<MovieDetail>(`/movie/${movieId}`);
     return response.data;
   } catch (error) {
     if (error instanceof AxiosError) {
@@ -386,7 +298,7 @@ export async function safeGetMovieDetail(
 // Next.js App Router Server Component
 export async function getPopularMoviesWithCache(
   page: number = 1
-): Promise<TMDbMovieListResponse> {
+): Promise<TMDbResponse<Movie>> {
   const response = await fetch(
     `${API.TMDB_BASE_URL}/movie/popular?language=${API.TMDB_LANGUAGE}&page=${page}`,
     {
@@ -429,7 +341,7 @@ export async function getMoviesFromCache(
 // 詳細画面用: TMDb APIから直接取得（キャッシュなし）
 export async function getMovieDetailForDisplay(
   movieId: number
-): Promise<TMDbMovieDetail> {
+): Promise<MovieDetail> {
   return getMovieDetail(movieId);
 }
 ```
@@ -455,7 +367,7 @@ TMDB_API_KEY=your_read_access_token_here
 
 ```typescript
 // __mocks__/tmdb.ts
-export const mockTMDbMovie: TMDbMovie = {
+export const mockMovie: Movie = {
   id: 27205,
   title: 'インセプション',
   original_title: 'Inception',
@@ -472,7 +384,7 @@ export const mockTMDbMovie: TMDbMovie = {
   original_language: 'en',
 };
 
-export const mockGetMovieDetail = jest.fn().mockResolvedValue(mockTMDbMovie);
+export const mockGetMovieDetail = jest.fn().mockResolvedValue(mockMovie);
 ```
 
 ## 参考ドキュメント

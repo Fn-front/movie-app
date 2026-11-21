@@ -384,7 +384,7 @@ const Modal = ({ isOpen, onClose, children }) => {
 - ARIAラベルを適切に付与
 
 ### ⚠️ 改善推奨項目
-- `src/components/MovieCard/movieCard.module.scss:15` - ハードコードされた色値 `#1878b9` → `$primary-500` を使用
+- `src/components/ui/card/card.module.scss:15` - ハードコードされた色値 `#1878b9` → `$primary-500` を使用
 - `src/components/SearchBar/searchBar.tsx:23` - displayNameが未設定
 
 ### ❌ 必須修正項目
@@ -401,7 +401,7 @@ const Modal = ({ isOpen, onClose, children }) => {
 
 ```bash
 # 特定のファイルをチェック
-/design-check src/components/MovieCard/movieCard.tsx
+/design-check src/components/ui/card/card.tsx
 
 # コンポーネントディレクトリ全体をチェック
 /design-check src/components/

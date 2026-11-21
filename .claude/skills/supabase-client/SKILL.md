@@ -1,13 +1,13 @@
 ---
 name: supabase-client
-description: Create Supabase client and implement database operations with RLS
+description: Create Supabase clients and implement server-side database operations
 disable-model-invocation: true
 argument-hint: <operation>
 ---
 
 # Supabaseクライアント操作スキル
 
-このスキルは、Supabaseクライアントの作成とRLS対応のデータベース操作を実装します。
+このスキルは、Supabase クライアントの作成とサーバー側のデータベース操作を実装します（認可は RLS ではなくクエリ側で書く）。
 
 ## 必須要件
 
@@ -31,10 +31,17 @@ src/types/database.types.ts # 自動生成の型定義
 > `types.ts` も無い。import すると解決できない。
 
 > ⚠️ **リクエスト外では `createClient()` を直接呼んでいる**（cron / sync /
-> `src/lib/auth/auth.ts` / `nowShowing.server.ts` の9ファイル）。ヘルパーは
-> 環境変数が無いと `null` を返す設計で、**「設定漏れに気づけないまま空の
-> ホームを配信する」ほうが困る**場所では throw したいため
-> （`nowShowing.server.ts` の冒頭コメント／#1115）。
+> `src/lib/auth/auth.ts` / `nowShowing.server.ts` の9ファイル）。
+>
+> うち8ファイルは**環境変数が無ければ即 throw** する。ヘルパーは `null` を
+> 返す設計で、**「設定漏れに気づけないまま空のホームを配信する」ほうが困る**
+> 場所では落としたいため（`nowShowing.server.ts` の冒頭コメント／#1115）。
+>
+> 残る `src/lib/auth/auth.ts` だけはヘルパーと同じく `console.warn` + `null`
+> で、throw は `authorize()` に入ってから。NextAuth の設定オブジェクトは
+> モジュール読み込み時に評価されるので、ここで throw するとアプリ全体が
+> 起動しない。
+>
 > **API Route では必ずヘルパー**、という切り分け。
 
 ## クライアント作成
@@ -338,14 +345,23 @@ if (error) throw error;
 
 ### 公開データ（未認証で叩ける）
 
+⛔ **anon を選ぶ理由にならない。** `/api/movies` も `/api/movies/search` も
+未認証で叩けるが `createServiceRoleClient()` を使っている。基準は
+「未認証で叩けるか」ではなく **「そのテーブルに anon の `SELECT` があるか」**。
+
 ```typescript
-const supabase = createAnonClient();
+// 既定。公開ルートでもこちら
+const supabase = createServiceRoleClient();
 if (!supabase) return dbConnectionErrorResponse();
 ```
 
-⚠️ anon は RLS が効くが、**`GRANT` が前提**。`ENABLE ROW LEVEL SECURITY` と
-`CREATE POLICY` だけでは Data API に公開されず、PostgREST は `42501` を返す
-（`.claude/rules/supabase-db.md`）。
+`createAnonClient()` を使ってよいのは `award_movies` / `now_showing_movies`
+の2テーブルだけで、実際の使用箇所も `src/app/api/awards/route.ts` の1本。
+他のテーブルを anon で読むと PostgREST が `42501` を返して全件失敗する。
+
+⚠️ anon GRANT のあるもう1つ（`now_showing_movies`）は `createAnonClient()`
+ではなく `src/lib/api/nowShowing/nowShowing.server.ts` が `createClient()` を
+直接呼んで読む（`unstable_cache` の中で `cookies()` が使えないため）。
 
 ## エラーハンドリング
 
@@ -445,6 +461,9 @@ const { data, error } = await supabase.rpc('get_watchlist_watched_years', {
   p_user_id: session.user.id,
 });
 ```
+
+⚠️ 上の SQL は**初版**（`20261101095647`）。現行は `unrated_count` を足した
+3列になっている（`20261101113410`）。権限と修飾子の書き方の見本として読むこと。
 
 ⚠️ **引数に `user_id` を渡す形は、関数側では検証できない。** 呼び出し側が
 必ずセッションの値を渡すこと（ボディの値を素通しにしない）。

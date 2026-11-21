@@ -1,13 +1,13 @@
 ---
 name: db-schema
-description: Create a Supabase table definition with RLS policies
+description: Create a Supabase table definition with grants and migrations
 disable-model-invocation: true
 argument-hint: <tableName>
 ---
 
 # Supabaseテーブル定義スキル
 
-このスキルは、プロジェクトのデータベース設計に従ってSupabaseテーブル定義とRLSポリシーを作成します。
+このスキルは、プロジェクトのデータベース設計に従って Supabase のテーブル定義（マイグレーション・GRANT・RLS）を作成します。
 
 ## 必須要件
 
@@ -94,16 +94,22 @@ $$;
 > `public` スキーマのテーブルはGRANTを明示しないとData API（supabase-js /
 > PostgREST / GraphQL）からアクセスできない。
 
-⛔ **このリポジトリでは `authenticated` に何も付与しない。**
+⛔ **新しいテーブルで `authenticated` に付与しない。**
 `20261018053616_declare_table_grants.sql` が
 
 ```sql
 ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
 ```
 
-を打ったうえで、**全テーブルに個別の `REVOKE ALL ... FROM anon, authenticated`**
-を並べている。`authenticated` ロールに切り替わる経路（Supabase の JWT）が
-そもそも無いため（下の「RLS」参照）、付与しても使われず、漏洩面が増えるだけ。
+を打ち、当時あった17テーブルには個別の
+`REVOKE ALL ... FROM anon, authenticated` も並べている。
+`authenticated` ロールに切り替わる経路（Supabase の JWT）が**そもそも無い**ので
+（下の「RLS」参照）、付与しても使われず漏洩面が増えるだけ。
+
+> ⚠️ **例外が1つ実在する。** `movie_streaming_status` は剥奪マイグレーションの
+> **後**（`20261101142314`）に `GRANT SELECT ... TO authenticated` を打ったまま
+> 残っている。到達経路が無いので実害は出ていないが、**手本にしない**。
+> 剥がす作業は #1381。
 
 ### パターンA: ユーザー固有データ（既定。ほぼ全テーブルがこれ）
 
@@ -111,7 +117,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authen
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
 ```
 
-### パターンB: 未認証のブラウザが直接読むデータ
+### パターンB: サーバーが anon キーで読むデータ
 
 ```sql
 GRANT SELECT ON public.<table_name> TO anon;
@@ -119,9 +125,16 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
 ```
 
 ⚠️ **現状これに当てはまるのは `award_movies` と `now_showing_movies` の2つだけ。**
-「公開API だから anon」ではない —— `/api/movies` のような未認証で叩けるルートも
-サーバー側で `createServiceRoleClient()` を使っている。anon を足すのは
-**ブラウザから直接叩く**ことが決まっているときだけにする。
+
+⛔ **「未認証で叩けるから anon」ではない。** `/api/movies` のような公開ルートも
+`createServiceRoleClient()` を使っている。**ブラウザから Supabase を叩く経路は
+1つも無い**（`@supabase/supabase-js` を import する `'use client'` のファイルは
+0件）ので、anon を選ぶ理由は「クライアント用だから」ではない。
+
+上の2つが anon なのは、**サーバー側で anon キーを使う事情**があるため。
+`now_showing_movies` は `unstable_cache` の中から読むので `cookies()` に
+依存するクライアントを作れない（`nowShowing.server.ts`）。
+新しく足すときは、同じ事情があるか確かめること。無ければ service_role でよい。
 
 ### パターンD: 関数（RPC・トリガー関数）
 
@@ -162,8 +175,12 @@ ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;
 - `USING (auth.uid() = user_id)` は **常に偽** → 実質 deny-all
 - 実アクセスは全部 `service_role` で、**RLS をバイパスする**
 
-つまり **RLS は現状どのリクエストも守っていない。** 既存マイグレーションに
+つまり **RLS は現状どのリクエストも制限していない。** 既存マイグレーションに
 `auth.uid()` のポリシーが並んでいるのは初期スキーマの名残で、**手本にしない。**
+
+> ⚠️ 厳密には、ポリシーが経路に乗っているテーブルが1つある
+> （`movie_streaming_status`。上記 #1381）。ただしそこへ到達する
+> `authenticated` のリクエストが存在しないので、結論は変わらない。
 
 ### 本当の認可はアプリ側にある
 
@@ -210,8 +227,14 @@ CREATE POLICY <table_name>_select_public ON <table_name>
 | 数値（整数） | `INTEGER` | `rating INTEGER` |
 | 数値（小数） | `DECIMAL(10,2)` | `price DECIMAL(10,2)` |
 | 真偽値 | `BOOLEAN` | `is_verified BOOLEAN DEFAULT false` |
-| 日時 | `TIMESTAMPTZ` | `created_at TIMESTAMPTZ DEFAULT now()` |（⚠️ `TIMESTAMP` は JST で年を切るとズレる。#1101 で移行済み）
+| 日時 | `TIMESTAMPTZ` | `created_at TIMESTAMPTZ DEFAULT now()` |
 | JSON | `JSONB` | `metadata JSONB` |
+
+⚠️ **新しい列は `TIMESTAMPTZ`。** `TIMESTAMP`（naive）だと、JST で年や日を
+切るときに `AT TIME ZONE` が逆変換になってズレる。`watchlist` は
+`20261101095646` で移行済みだが、**まだ naive のまま残っている列がある**
+（`accounts` / `rate_limits` / `user_settings` の各 `created_at` `updated_at`、
+`now_showing_movies.fetched_at`、`movie_cache.updated_at`）。既存に倣わないこと。
 
 ## 制約とバリデーション
 

@@ -106,10 +106,10 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authen
 `authenticated` ロールに切り替わる経路（Supabase の JWT）が**そもそも無い**ので
 （下の「RLS」参照）、付与しても使われず漏洩面が増えるだけ。
 
-> ⚠️ **例外が1つ実在する。** `movie_streaming_status` は剥奪マイグレーションの
-> **後**（`20261101142314`）に `GRANT SELECT ... TO authenticated` を打ったまま
-> 残っている。到達経路が無いので実害は出ていないが、**手本にしない**。
-> 剥がす作業は #1381。
+> 例外は無い。`movie_streaming_status` だけ剥奪マイグレーションの**後**
+> （`20261101142314`）に `GRANT SELECT ... TO authenticated` を打ったまま
+> 残っていたが、`20261121083007` で剥がした（#1381）。
+> **`public` スキーマで `authenticated` に付与されたテーブルは現在0件**（実測）。
 
 ### パターンA: ユーザー固有データ（既定。ほぼ全テーブルがこれ）
 
@@ -178,9 +178,8 @@ ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;
 つまり **RLS は現状どのリクエストも制限していない。** 既存マイグレーションに
 `auth.uid()` のポリシーが並んでいるのは初期スキーマの名残で、**手本にしない。**
 
-> ⚠️ 厳密には、ポリシーが経路に乗っているテーブルが1つある
-> （`movie_streaming_status`。上記 #1381）。ただしそこへ到達する
-> `authenticated` のリクエストが存在しないので、結論は変わらない。
+> 以前は `movie_streaming_status` のポリシーだけが経路に乗っていたが、
+> GRANT ごと落とした（#1381 / `20261121083007`）。
 
 ### 本当の認可はアプリ側にある
 

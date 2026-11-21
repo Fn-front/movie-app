@@ -211,6 +211,10 @@ test.describe('メールアドレス変更', () => {
     await requestCodeAndWait(page, NEW_EMAIL);
 
     const section = emailSection(page);
+    await page.screenshot({
+      path: 'docs/e2e-screenshots/email-change-code-sent.png',
+    });
+
     await section
       .getByRole('textbox', { name: '確認コード', exact: true })
       .fill(await latestChangeCode(NEW_EMAIL));
@@ -222,6 +226,9 @@ test.describe('メールアドレス変更', () => {
     await expect(
       page.getByText(`現在のメールアドレス: ${NEW_EMAIL}`),
     ).toBeVisible();
+    await page.screenshot({
+      path: 'docs/e2e-screenshots/email-change-done.png',
+    });
 
     // ⛔ ここが本題。アドレスは**ログイン識別子そのもの**
     await page.context().clearCookies();
@@ -295,6 +302,9 @@ test.describe('メールアドレス変更', () => {
       // ⛔ **入力欄が出ること自体が本題。** 無いまま送ると、確認コードだけ
       //   焼けて 400 になる（#1359 の2回目レビューで見つかった状態）
       await expect(secondFactorField).toBeVisible();
+      await page.screenshot({
+        path: 'docs/e2e-screenshots/email-change-second-factor.png',
+      });
 
       await section
         .getByRole('textbox', { name: '確認コード', exact: true })
@@ -564,6 +574,9 @@ test.describe('メールアドレス変更', () => {
 
       await expect(page.getByText(MESSAGE.SOCIAL_LINKED)).toBeVisible();
       expect(await getLatestOtpCode(NEW_EMAIL, 'email_change')).toBeNull();
+      await page.screenshot({
+        path: 'docs/e2e-screenshots/email-change-social-linked.png',
+      });
     });
   });
 });

@@ -89,16 +89,44 @@ rm supabase/migrations/<file>.sql
 
 - 新規テーブル作成マイグレーションでは、`CREATE TABLE` 直後に必ず以下のGRANTを記述する（不要なロールへの付与は省く）
 - `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` と `CREATE POLICY` だけでは公開されない。GRANTが前提
-- 公開読み取り（マスターデータ等）は `anon` にもSELECTを付与する。ユーザー固有データなら `authenticated` のみで十分
 - `service_role` は管理用ロールなので、サーバー側からアクセスするテーブルには付与する
 
+### ⛔ `authenticated` には付与しない（#1381）
+
+このアプリの認証は NextAuth で、**Supabase の JWT を発行する経路が1つも無い**
+（`setSession` / `global.headers` / `supabase.auth.*` が全て0件）。`authenticated`
+ロールに切り替わるリクエストが存在しないので、付与しても使われず漏洩面が増える
+だけになる。
+
+`20261018053616_declare_table_grants.sql` が既定権限ごと剥奪済み。
+
 ```sql
--- 例1: ユーザー固有データ（認証必須）
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+```
+
+> ⚠️ **ここの例文が実際に再発を生んだ。** `movie_streaming_status`
+> （`20261101142314`）は、かつてここに載っていた「例1: ユーザー固有データ →
+> `TO authenticated`」に忠実に従った結果、剥奪マイグレーションの後に
+> 例外を1つ作っていた。剥がしたのは `20261121083007`。
+>
+> 現在 `public` スキーマで `authenticated` に付与されたテーブルは**0件**。
+> 棚卸しは次の1本でできる（`award_movies` / `now_showing_movies` の anon 2行
+> だけが出るのが正しい状態）。
+>
+> ```sql
+> SELECT table_name, grantee FROM information_schema.role_table_grants
+> WHERE table_schema='public' AND grantee IN ('anon','authenticated')
+> GROUP BY table_name, grantee ORDER BY table_name;
+> ```
+
+```sql
+-- 例1: ユーザー固有データ（既定。ほぼ全テーブルがこれ）
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
 
--- 例2: 公開マスターデータ（未認証含む全員が閲覧可能）
-GRANT SELECT ON public.<table_name> TO anon, authenticated;
+-- 例2: サーバーが anon キーで読むデータ
+--   ⚠️ 現状これに当てはまるのは award_movies と now_showing_movies の2つだけで、
+--      どちらも歴史的経緯。新しいテーブルは例1にすること
+GRANT SELECT ON public.<table_name> TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
 ```
 

@@ -8,7 +8,7 @@
 import { memo, useCallback } from 'react';
 import { IoHeart, IoHeartOutline } from 'react-icons/io5';
 
-import { MOVIE_ACTION_LABELS } from '@/constants';
+import { MOVIE_ACTION_LABELS, MOVIE_ACTION_TEXT } from '@/constants';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import { cn } from '@/utils/cn';
 
@@ -44,6 +44,18 @@ export interface FavoriteButtonProps {
    * ⚠️ 詳細モーダルでは渡さない（1作品しか無いので冗長なだけ）。
    */
   movieTitle?: string;
+  /**
+   * 可視ラベルを添えるか（既定: false / #1030）
+   *
+   * ウォッチリストと並ぶとどちらも「保存」に見えて区別できないため、幅に
+   * 余裕のある**リスト行でだけ**言葉にする。グリッドのカード上は情報量を
+   * 圧迫するので渡さない。
+   *
+   * ラベルは `aria-hidden` にする。`aria-label` が既にアクセシブルネームを
+   * 決めており（作品名＋操作）、`aria-label` を持つ要素の中身はそもそも
+   * 読み上げられないため、明示して意図を残している。
+   */
+  showLabel?: boolean;
 }
 
 /**
@@ -57,6 +69,7 @@ export const FavoriteButton = memo<FavoriteButtonProps>(
     size = 'sm',
     isResolving = false,
     movieTitle,
+    showLabel = false,
   }) {
     const isFavorite = favorite !== null;
 
@@ -90,6 +103,7 @@ export const FavoriteButton = memo<FavoriteButtonProps>(
         className={cn(
           styles.c_favorite_button,
           sizeClassName,
+          showLabel && styles['c_favorite_button--with_label'],
           isFavorite && styles.c_favorite_button__active,
           isResolving && styles['c_favorite_button--resolving'],
         )}
@@ -103,6 +117,11 @@ export const FavoriteButton = memo<FavoriteButtonProps>(
         }
       >
         {isFavorite ? <IoHeart /> : <IoHeartOutline />}
+        {showLabel && (
+          <span className={styles.c_favorite_button__label} aria-hidden='true'>
+            {MOVIE_ACTION_TEXT.FAVORITE}
+          </span>
+        )}
       </button>
     );
   },

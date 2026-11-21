@@ -8,7 +8,7 @@ describe('WatchlistAddButton', () => {
    * 登録状況が分かるまでは見せない（#1145）
    *
    * `isInWatchlist` が false でも「未登録」とは限らない（照会がまだ
-   * 終わっていないだけのことがある）。「＋」を出すと、登録済みの作品でも
+   * 終わっていないだけのことがある）。輪郭のしおりを出すと、登録済みの作品でも
    * 追加できるように見え、押すと成功トーストの直後に 409 のエラートーストが
    * 重なる
    */
@@ -209,6 +209,95 @@ describe('WatchlistAddButton', () => {
       expect(
         screen.getByRole('button', { name: 'ウォッチリストに追加' }),
       ).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * 可視ラベル（#1030）
+   *
+   * お気に入りと並ぶとどちらも「保存」に見えて区別できないため、幅に余裕の
+   * あるリスト行でだけ言葉にする。
+   */
+  describe('可視ラベル（#1030）', () => {
+    it('既定ではラベルを出さない', () => {
+      render(<WatchlistAddButton isInWatchlist={false} onClick={jest.fn()} />);
+
+      expect(screen.queryByText('ウォッチリスト')).not.toBeInTheDocument();
+    });
+
+    it('showLabel を渡すとラベルを出す', () => {
+      render(
+        <WatchlistAddButton
+          isInWatchlist={false}
+          onClick={jest.fn()}
+          showLabel
+        />,
+      );
+
+      expect(screen.getByText('ウォッチリスト')).toBeInTheDocument();
+    });
+
+    it('登録済みでもラベルは変えない', () => {
+      render(
+        <WatchlistAddButton isInWatchlist onClick={jest.fn()} showLabel />,
+      );
+
+      // 状態は塗りつぶしたしおりが伝える。ラベルまで入れ替えると幅が
+      // 行ごとに変わり、一覧を縦に走査できなくなる
+      expect(screen.getByText('ウォッチリスト')).toBeInTheDocument();
+    });
+
+    /**
+     * ⛔ **可視ラベルをアクセシブルネームにしない。**
+     *
+     * `aria-label` が無くなると読み上げが「ウォッチリスト」だけになり、
+     * 一覧に同じ名前のボタンが最大20個並んでどの作品か分からなくなる
+     * （#1047 が解いた問題がそのまま戻る）。
+     */
+    it('ラベルを出してもアクセシブルネームは aria-label のまま', () => {
+      render(
+        <WatchlistAddButton
+          isInWatchlist={false}
+          onClick={jest.fn()}
+          movieTitle='テスト映画'
+          showLabel
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', {
+          name: 'テスト映画をウォッチリストに追加',
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('showLabel のときラベル付きのクラスが付く', () => {
+      render(
+        <WatchlistAddButton
+          isInWatchlist={false}
+          onClick={jest.fn()}
+          showLabel
+        />,
+      );
+
+      // jsdom は SCSS を評価しないのでクラスで確認する
+      expect(screen.getByRole('button')).toHaveClass(
+        styles['c_watchlist_add_button--with_label'],
+      );
+    });
+
+    it('ラベルを出してもクリックできる', () => {
+      const onClick = jest.fn();
+      render(
+        <WatchlistAddButton
+          isInWatchlist={false}
+          onClick={onClick}
+          showLabel
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button'));
+      expect(onClick).toHaveBeenCalledTimes(1);
     });
   });
 });

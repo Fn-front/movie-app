@@ -1,14 +1,14 @@
 /**
  * WatchlistAddButtonコンポーネント
- * ウォッチリスト追加/削除のトグルボタン（プラスアイコン / チェックアイコン切替）
+ * ウォッチリスト追加/削除のトグルボタン（しおりアイコンの輪郭 / 塗りつぶし切替）
  */
 
 'use client';
 
 import { memo, useCallback } from 'react';
-import { IoAdd, IoCheckmark } from 'react-icons/io5';
+import { IoBookmark, IoBookmarkOutline } from 'react-icons/io5';
 
-import { MOVIE_ACTION_LABELS } from '@/constants';
+import { MOVIE_ACTION_LABELS, MOVIE_ACTION_TEXT } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './watchlistAddButton.module.scss';
@@ -30,7 +30,7 @@ export interface WatchlistAddButtonProps {
    *
    * `isInWatchlist` が false でも「未登録」とは限らず、照会が終わって
    * いないだけのことがある（`useWatchlistToggle` の
-   * `isWatchlistResolving`）。その間に「＋」を出すと、登録済みの作品でも
+   * `isWatchlistResolving`）。その間に輪郭のしおりを出すと、登録済みの作品でも
    * 追加できるように見え、押すと成功トーストの直後に 409 のエラートーストが
    * 重なる（#1145）
    */
@@ -45,6 +45,18 @@ export interface WatchlistAddButtonProps {
    * ⚠️ 詳細モーダルでは渡さない（1作品しか無いので冗長なだけ）。
    */
   movieTitle?: string;
+  /**
+   * 可視ラベルを添えるか（既定: false / #1030）
+   *
+   * お気に入りと並ぶとどちらも「保存」に見えて区別できないため、幅に余裕の
+   * ある**リスト行でだけ**言葉にする。グリッドのカード上は情報量を圧迫する
+   * ので渡さない。
+   *
+   * ラベルは `aria-hidden` にする。`aria-label` が既にアクセシブルネームを
+   * 決めており（作品名＋操作）、`aria-label` を持つ要素の中身はそもそも
+   * 読み上げられないため、明示して意図を残している。
+   */
+  showLabel?: boolean;
 }
 
 /**
@@ -58,6 +70,7 @@ export const WatchlistAddButton = memo<WatchlistAddButtonProps>(
     size = 'sm',
     isResolving = false,
     movieTitle,
+    showLabel = false,
   }) {
     const handleClick = useCallback(
       (event: React.MouseEvent) => {
@@ -89,6 +102,7 @@ export const WatchlistAddButton = memo<WatchlistAddButtonProps>(
         className={cn(
           styles.c_watchlist_add_button,
           sizeClassName,
+          showLabel && styles['c_watchlist_add_button--with_label'],
           isInWatchlist && styles.c_watchlist_add_button__active,
           isResolving && styles['c_watchlist_add_button--resolving'],
         )}
@@ -101,7 +115,15 @@ export const WatchlistAddButton = memo<WatchlistAddButtonProps>(
             : MOVIE_ACTION_LABELS.watchlistAdd(movieTitle)
         }
       >
-        {isInWatchlist ? <IoCheckmark /> : <IoAdd />}
+        {isInWatchlist ? <IoBookmark /> : <IoBookmarkOutline />}
+        {showLabel && (
+          <span
+            className={styles.c_watchlist_add_button__label}
+            aria-hidden='true'
+          >
+            {MOVIE_ACTION_TEXT.WATCHLIST}
+          </span>
+        )}
       </button>
     );
   },

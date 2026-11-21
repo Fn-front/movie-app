@@ -71,7 +71,7 @@ export interface MovieTileProps {
    * ウォッチリストの登録状況がまだ分からない（既定: false）
    *
    * `isInWatchlist` が false でも「未登録」とは限らず、照会が終わって
-   * いないだけのことがある。確定するまで「＋」を出さないことで、登録済みの
+   * いないだけのことがある。確定するまで輪郭のしおりを出さないことで、登録済みの
    * 作品を押して成功トースト → エラートーストが重なるのを防ぐ（#1145）。
    *
    * ⚠️ お気に入りと違い**全画面で渡す**。ウォッチリストは判定の取得元が
@@ -235,6 +235,10 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
    * `__info` の後ろに出す。**視覚順と DOM 順（＝ Tab 順・読み上げ順）を
    * 揃えるため**で、リストでも `__poster` の中に置くと「右端のボタン →
    * 左のタイトル」と毎行逆走する（WCAG 1.3.2 / 2.4.3）
+   *
+   * お気に入りとウォッチリストは、どちらもラベルの無いアイコンとして隣り合うと
+   * 区別がつかない（#1030）。幅に余裕のあるリスト行でだけ `showLabel` で
+   * 言葉を添える。グリッドのカード上はアイコンのままにして情報量を保つ
    */
   const actionButtons = (
     <>
@@ -255,6 +259,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             disabled={favoriteDisabled}
             isResolving={isFavoriteResolving}
             movieTitle={movie.title}
+            showLabel={isList}
           />
         </div>
       )}
@@ -266,6 +271,7 @@ export const MovieTile = memo<MovieTileProps>(function MovieTile({
             disabled={watchlistDisabled}
             isResolving={isWatchlistResolving}
             movieTitle={movie.title}
+            showLabel={isList}
           />
         </div>
       )}

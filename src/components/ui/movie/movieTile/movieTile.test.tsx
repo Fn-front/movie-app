@@ -5,7 +5,11 @@ import favoriteButtonStyles from '@/features/favorites/component/favoriteButton/
 import watchlistAddButtonStyles from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton.module.scss';
 
 import { MovieTile } from './movieTile';
-import { IMAGE_SIZES, MOVIE_ACTION_LABELS } from '@/constants';
+import {
+  IMAGE_SIZES,
+  MOVIE_ACTION_LABELS,
+  MOVIE_ACTION_TEXT,
+} from '@/constants';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
 // --- Helpers ---
@@ -894,6 +898,68 @@ describe('MovieTile', () => {
       );
 
       expect(screen.queryByText('アクション')).not.toBeInTheDocument();
+    });
+
+    /**
+     * お気に入りとウォッチリストの区別（#1030）
+     *
+     * どちらもラベルの無い 28×28 の円形ボタンとして隣り合うため、押す前に
+     * 違いが分からない。タッチ端末にはホバーが無く `aria-label` も `title` も
+     * 押すまで読めない。幅に余裕のあるリスト行でだけ言葉にする。
+     */
+    it('リスト表示では操作ボタンに可視ラベルが付く', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          viewMode='list'
+          onWatchlistToggle={jest.fn()}
+          onFavoriteToggle={jest.fn()}
+        />,
+      );
+
+      expect(screen.getByText(MOVIE_ACTION_TEXT.FAVORITE)).toBeInTheDocument();
+      expect(screen.getByText(MOVIE_ACTION_TEXT.WATCHLIST)).toBeInTheDocument();
+    });
+
+    // カードの情報量を圧迫しないよう、グリッドはアイコンのままにする
+    it('グリッド表示では操作ボタンに可視ラベルを付けない', () => {
+      render(
+        <MovieTile
+          movie={createMockMovie()}
+          onWatchlistToggle={jest.fn()}
+          onFavoriteToggle={jest.fn()}
+        />,
+      );
+
+      expect(
+        screen.queryByText(MOVIE_ACTION_TEXT.FAVORITE),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(MOVIE_ACTION_TEXT.WATCHLIST),
+      ).not.toBeInTheDocument();
+    });
+
+    /**
+     * ⛔ 可視ラベルでアクセシブルネームを置き換えない
+     *
+     * 一覧には同じ操作のボタンが最大20個並ぶ。名前が「お気に入り」だけに
+     * 戻ると、要素リストで読むモードでどの作品か分からなくなる（#1047）
+     */
+    it('リスト表示でもアクセシブルネームは作品名入りのまま', () => {
+      const { container } = render(
+        <MovieTile
+          movie={createMockMovie()}
+          viewMode='list'
+          onWatchlistToggle={jest.fn()}
+          onFavoriteToggle={jest.fn()}
+        />,
+      );
+
+      expect(focusableNames(container)).toEqual([
+        'テスト映画',
+        LABEL.favoriteAdd,
+        LABEL.watchlistAdd,
+      ]);
     });
 
     // 枠は 56px しかないのに 190px のままだと3倍以上の候補を取りに行く

@@ -115,6 +115,25 @@ export const AUTH_ERROR_MESSAGES = {
    */
   LOGOUT_FAILED:
     'ログアウトできませんでした。通信状況を確認して、もう一度お試しください。',
+  /**
+   * ソーシャルログインを始められなかった（#1292）
+   *
+   * `signIn()` は通常ブラウザごと遷移させて戻ってこないが、通信断では
+   * reject する。以前は catch が無く、**ボタンが元に戻るだけで何も
+   * 起きなかったように見えていた**。
+   *
+   * ⚠️ reject するのは `POST /api/auth/signin/<provider>`（と、その応答の
+   * `res.json()`）だけ。`next-auth/react.js:153` の裸の fetch がそれで、
+   * 手前の providers / csrf の取得は `fetchData` が catch して null を
+   * 返すため reject しない（providers が null だと `/api/auth/error` へ
+   * 遷移する。`react.js:130-135`）。
+   *
+   * ⚠️ `SIGN_IN_PAGE_ERROR_MESSAGES` 側と分ける。あちらはプロバイダから
+   * 戻された失敗で、こちらは**そこへ行けなかった**失敗。押し直しで直る
+   * ことが多いので、通信状況に触れる `LOGOUT_FAILED` と同じ形にする。
+   */
+  SOCIAL_LOGIN_START_FAILED:
+    'ログインを開始できませんでした。通信状況を確認して、もう一度お試しください。',
 } as const;
 
 /**

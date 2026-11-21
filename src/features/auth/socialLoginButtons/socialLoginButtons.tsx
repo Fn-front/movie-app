@@ -11,9 +11,17 @@ import { signIn } from 'next-auth/react';
 import { FaGoogle, FaGithub } from 'react-icons/fa';
 
 import { Button } from '@/components/ui/button/button';
+import { AUTH_ERROR_MESSAGES, TOAST_TITLES } from '@/constants/auth';
+import { useToastDispatch } from '@/hooks/useToast';
 import { resolveSafeCallbackUrl } from '@/utils/url';
-import { savePendingCallbackUrl } from '@/features/auth/utils/pendingCallbackUrl';
+import {
+  clearPendingCallbackUrl,
+  savePendingCallbackUrl,
+} from '@/features/auth/utils/pendingCallbackUrl';
 import styles from './socialLoginButtons.module.scss';
+
+/** 対応しているプロバイダ */
+type SocialProvider = 'google' | 'github';
 
 interface SocialLoginButtonsProps {
   disabled?: boolean;
@@ -24,34 +32,56 @@ interface SocialLoginButtonsProps {
 export const SocialLoginButtons = memo<SocialLoginButtonsProps>(
   function SocialLoginButtons({ disabled = false, callbackUrl }) {
     const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
+    const { toast } = useToastDispatch();
 
-    const handleGoogleLogin = useCallback(async () => {
-      try {
-        setLoadingProvider('google');
-        // 失敗して戻されたときに復元する（#1246）。Auth.js は失敗時の
-        // リダイレクトに error と code しか載せないため、callbackUrl は
-        // OAuth の往復で消える
-        savePendingCallbackUrl(callbackUrl);
-        await signIn('google', {
-          callbackUrl: resolveSafeCallbackUrl(callbackUrl),
-        });
-      } finally {
-        setLoadingProvider(null);
-      }
-    }, [callbackUrl]);
+    /**
+     * ソーシャルログインを始める
+     *
+     * ⚠️ **プロバイダごとに書き分けない（#1292）。** 以前は Google と GitHub で
+     * ほぼ同じ本体を2つ持っており、失敗の扱いを片方にだけ足す形になりやすかった。
+     */
+    const startLogin = useCallback(
+      async (provider: SocialProvider) => {
+        try {
+          setLoadingProvider(provider);
+          // 失敗して戻されたときに復元する（#1246）。Auth.js は失敗時の
+          // リダイレクトに error と code しか載せないため、callbackUrl は
+          // OAuth の往復で消える
+          savePendingCallbackUrl(callbackUrl);
+          await signIn(provider, {
+            callbackUrl: resolveSafeCallbackUrl(callbackUrl),
+          });
+        } catch {
+          /*
+            ⚠️ **始められなかったときは預かり分を捨てる（#1292）。**
+            `savePendingCallbackUrl` は `signIn` の**前**に預けるので、
+            残すと次にこの画面へ来た人が身に覚えのない場所へ飛ばされうる。
 
-    const handleGithubLogin = useCallback(async () => {
-      try {
-        setLoadingProvider('github');
-        // 理由は Google と同じ（#1246）
-        savePendingCallbackUrl(callbackUrl);
-        await signIn('github', {
-          callbackUrl: resolveSafeCallbackUrl(callbackUrl),
-        });
-      } finally {
-        setLoadingProvider(null);
-      }
-    }, [callbackUrl]);
+            ⛔ 利用者に伝えるのを省かない。`finally` でボタンが戻るだけだと
+            「押したのに何も起きない」になり、原因を知りようがない。
+          */
+          clearPendingCallbackUrl();
+          toast({
+            title: TOAST_TITLES.LOGIN_ERROR,
+            description: AUTH_ERROR_MESSAGES.SOCIAL_LOGIN_START_FAILED,
+            variant: 'error',
+          });
+        } finally {
+          setLoadingProvider(null);
+        }
+      },
+      [callbackUrl, toast],
+    );
+
+    const handleGoogleLogin = useCallback(
+      () => startLogin('google'),
+      [startLogin],
+    );
+
+    const handleGithubLogin = useCallback(
+      () => startLogin('github'),
+      [startLogin],
+    );
 
     const isDisabled = disabled || loadingProvider !== null;
 

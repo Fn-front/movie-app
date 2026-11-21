@@ -75,3 +75,24 @@ export function takePendingCallbackUrl(): string | undefined {
     return undefined;
   }
 }
+
+/**
+ * 預けた戻り先を捨てる（#1292）
+ *
+ * ソーシャルログインを**始められなかった**ときの巻き戻しに使う。
+ * `savePendingCallbackUrl` は `signIn` を呼ぶ前に預けるので、そこで失敗すると
+ * 往復していないのに預かり分だけが残る。
+ *
+ * ⚠️ `takePendingCallbackUrl()` の戻り値を捨てる形で代用しない。
+ * 「読む」と「捨てる」は意図が違い、戻り値を無視するコードは次に読む人が
+ * 消し忘れと取り違える。
+ */
+export function clearPendingCallbackUrl(): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.sessionStorage.removeItem(PENDING_CALLBACK_URL_KEY);
+  } catch {
+    // 消せなくても始められなかったこと自体は利用者へ伝わる
+  }
+}

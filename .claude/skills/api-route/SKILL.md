@@ -356,6 +356,6 @@ catch (error) {
 # ウォッチリスト追加API
 /api-route watchlist/add
 
-# OTP検証API
-/api-route auth/verify-otp
+# OTP検証API（実在するのは auth/otp/verify）
+/api-route auth/otp/verify
 ```

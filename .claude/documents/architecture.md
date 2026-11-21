@@ -3,7 +3,8 @@
 ## 技術スタック
 
 ### フロントエンド
-- **Framework**: Next.js 15.5.11 (App Router)
+- **Framework**: Next.js 16.x (App Router)
+  - ⚠️ 16 で Middleware は **Proxy** に改名された。配置は `src/proxy.ts`
 - **言語**: TypeScript 5.x
 - **スタイリング**: SCSS Modules
 - **UIライブラリ**: Radix UI（ヘッドレスUI、拡張してカスタマイズ）
@@ -15,7 +16,9 @@
 - **パフォーマンス最適化**: React.memo + useCallback必須適用
 
 ### バックエンド
-- **Framework**: Next.js API Routes + Supabase Edge Functions
+- **Framework**: Next.js API Routes（`src/app/api/`）
+  - ⚠️ Supabase Edge Functions は**使っていない**（`supabase/functions/` が無い）。
+    定期実行は Vercel Cron + `src/app/api/cron/`
 - **認証**: NextAuth.js v5 (App Router対応)
 - **ORM**: Supabase SDK
 - **メール送信**: Resend（無料枠: 3,000通/月、100通/日、2req/s）
@@ -246,8 +249,15 @@ UI Re-render
 - **認証**: NextAuth.js v5 (App Router対応)
   - セッション有効期限: 24時間
   - セッションストレージ: ブラウザメモリ（JWT方式）
-  - Cookie設定: 厳密（HttpOnly: true, Secure: true, SameSite: 'strict'）
-- **レート制限**: 3回までの試行制限（DBテーブルで管理）
+  - Cookie設定: `getSessionCookieName()` / `getSessionCookieOptions()`
+    （`src/constants/auth.ts`）に集約。`httpOnly: true` / `sameSite: 'lax'` /
+    `secure: NODE_ENV === 'production'`
+- **レート制限**: DBテーブル（`rate_limits`）で管理。上限は用途ごとに違い、
+  `src/constants/rateLimit.ts` の `RATE_LIMIT_CONFIG` が正
+  - 例: ログインはアカウント単位 5回/30分（`LOGIN_ACCOUNT`）＋
+    送信元IP単位 20回/15分（`LOGIN_IP`）の2層
+  - ⚠️ `maxAttempts` は「◯回/◯分」というレートではなく、
+    **その窓のあいだ一度もアクセスが無いまでの通算回数**（#934）
 - **CSRF対策**: 厳し目の基本設定（NextAuth.js + カスタムトークン）
 
 ### インフラ・デプロイ

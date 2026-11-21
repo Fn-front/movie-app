@@ -62,9 +62,17 @@ export const config = {
 };
 ```
 
-> ⚠️ **`export function middleware` にしない。** Next 16 が探すのは
-> `proxy`（名前付き）か default export。名前が違うと**何も起きない**まま
-> 通過するので、認証保護を書いたつもりで無防備になる。
+> ⚠️ **`export function middleware` にしない。** `proxy.ts` で Next が探すのは
+> `proxy`（名前付き）か default export だけ。名前が違うと**本番ビルドが
+> 落ちる**（`get-page-static-info.js` の `hasValidExport` が false →
+> `The file "..." must export a function, either as a default export or as a
+> named "proxy" export.`）。dev は `errorOnce` でログに出るだけなので
+> 見落としやすい。
+>
+> 仮にビルドをすり抜けても、実行時に `handlerUserland` が関数でないため
+> `ProxyMissingExportError` が throw され、**全リクエストが落ちる**
+> （`node_modules/next/dist/build/templates/middleware.js`）。
+> 「黙って無防備になる」のではなく「**動かなくなる**」が正しい失敗モード。
 
 ## 実行環境（Edge ではない）
 
@@ -76,7 +84,8 @@ export const config = {
   `src/proxy.ts` は `@/lib/auth/auth`（Supabase クライアントを含む）を import している
 
 ⚠️ 「Edge だから Node API が使えない」という前提で書かないこと。
-Middleware が Edge 固定だったのは Next 15.2 より前の話。
+Middleware が Edge 固定だったのは昔の話で、**15.2 で実験的に Node 対応、
+15.5 で安定、16 で既定**（`proxy.md` の Version History）。
 
 ただし**重い処理を置かない**方針は変わらない。ここは全リクエストの手前で
 走るため、遅い取得を挟むと全ページが遅くなる。
@@ -246,18 +255,28 @@ export function proxy(request: NextRequest) {
 ### 条件付きリダイレクト
 
 ```typescript
+import { USER_ROLE } from '@/constants/auth';
+import { ROUTES } from '@/constants/common';
+
 export const proxy = auth((req) => {
   const { nextUrl } = req;
 
-  if (nextUrl.pathname === ROUTES.HOME) {
-    return req.auth?.user?.id
-      ? NextResponse.next()
-      : NextResponse.redirect(new URL(ROUTES.LOGIN, nextUrl));
+  // 権限が足りないときだけホームへ戻す（admin パスの例）
+  if (nextUrl.pathname.startsWith('/admin')) {
+    if (req.auth?.user?.role !== USER_ROLE.ADMIN) {
+      return NextResponse.redirect(new URL(ROUTES.HOME, nextUrl));
+    }
   }
 
   return NextResponse.next();
 });
 ```
+
+> ⛔ **`/`（`ROUTES.HOME`）を認証ゲートしない。** このリポジトリのトップは
+> **公開ページ**で、`AUTH_REQUIRED_ROUTES` にも入っていない。
+> `src/app/page.tsx` には「**cookie を読む処理をここへ戻さないこと**。
+> 動的になって遷移が約10倍遅くなる」と書いてある（#1115）。
+> ゲートすると未認証で開けなくなり、クローラからも見えなくなる。
 
 ### クエリパラメータ付きリダイレクト
 
@@ -270,9 +289,13 @@ export function proxy(request: NextRequest) {
 }
 ```
 
-> ⚠️ 相対URLの基準は **`request.nextUrl` に揃える**（`src/proxy.ts` が
-> そうしている）。`request.url` は素の URL だが、`nextUrl` は basePath を
-> 織り込んだ Next 側の表現なので、将来 basePath を入れても壊れない。
+> ⚠️ 基準は **`request.nextUrl` に揃える**（`src/proxy.ts` がそうしている）。
+> 揃える理由は**一貫性だけ**。
+>
+> ⛔ **basePath は守られない。** `new URL('/auth/signin', nextUrl)` の第1引数は
+> 絶対パスなので、WHATWG URL の規則でパス全体が置き換わる。実測でも
+> `request.url` を基準にしたときと**結果は同一**で、basePath は消える。
+> basePath を導入するなら、ここのリダイレクト先は別途組み立て直すこと。
 
 ## URL書き換え（Rewrite）
 
@@ -304,8 +327,12 @@ export function proxy(request: NextRequest) {
   `src/lib/http/getClientIp.ts` の `getClientIp()` で
   `x-vercel-forwarded-for` を読む。`x-forwarded-for` の先頭は
   **クライアントが詐称できる**ので使わない（#647）
-- **メモリに持てない。** サーバーレスの実行環境はリクエストごとに
-  入れ替わるため、`Map` に貯めたカウンタは当てにならない
+- **メモリに持てない。** サーバーレスの実行環境は**インスタンスごとに
+  独立**していて状態を共有せず、コールドスタートでリセットされる
+  （`src/lib/rateLimit/inMemoryRateLimit.ts` の説明）。
+  なおメモリ版が無いわけではない。**正確さを捨ててよい用途**
+  （`csp-report` の受け口、cron の失敗通知）では `createInMemoryRateLimiter`
+  を実際に使っている
 - このリポジトリのレート制限は **DB ベース**。`.claude/rules/api-route.md`
   に置き場所（検証より前／例外）まで決まっているので、API Route 側で実装する
 
@@ -331,6 +358,12 @@ export const config = {
 > ⚠️ 除外リスト方式と「特定のパスのみ」方式を混ぜない。後者は列挙漏れが
 > そのまま保護漏れになる。このリポジトリは前者を採り、`/api/*` は
 > matcher に含めたうえでハンドラの中で判定を飛ばしている（上記）。
+>
+> ⛔ **Server Functions は別ルートではない。** 使われているルートへの POST
+> として扱われるため、**matcher がそのパスを除外すると Server Function の
+> 呼び出しも proxy を通らない**（`proxy.md` の Good to know）。matcher の
+> 変更や Server Function の引っ越しで**黙って保護が外れる**ので、認証・認可は
+> 各 Server Function の中でも確かめること。
 
 ## デバッグ
 

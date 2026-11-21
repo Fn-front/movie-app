@@ -186,7 +186,7 @@ export async function addToWatchlist(params: AddMovieParams) {
       throw error;
     }
 
-    revalidatePath('/home');
+    revalidatePath('/watchlist');
 
     return {
       success: true,
@@ -253,13 +253,17 @@ export async function updateAction() {
   // 処理...
 
   // 特定のパスを再検証
-  revalidatePath('/home');
+  //
+  // ⚠️ **存在しないパスを渡してもエラーにならない**。黙って何もしないので、
+  //    打ち間違いは「キャッシュが更新されない」という形でしか現れない。
+  //    パスは `src/constants/common.ts` の `ROUTES` から取ること
+  revalidatePath('/watchlist');
 
   // 特定のパスとその子パスを再検証
-  revalidatePath('/home', 'page');
+  revalidatePath('/watchlist', 'page');
 
   // レイアウト全体を再検証
-  revalidatePath('/home', 'layout');
+  revalidatePath('/watchlist', 'layout');
 
   return { success: true };
 }
@@ -312,7 +316,7 @@ export async function setCookieAction() {
     path: '/',
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 7日間
   });
 
@@ -335,7 +339,7 @@ export async function deleteCookieAction() {
     path: '/',
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 0,
   });
 
@@ -358,6 +362,11 @@ name=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
 `__Secure-` / `__Host-` 接頭辞の付いた Cookie では、ブラウザがこれを
 **拒否する**（CookiePrefixes）。削除指示そのものが捨てられ、本番でだけ
 静かに効かなくなる（#1174 で実際に起きた）。
+
+⚠️ **発行と削除で属性を揃える。** 片方だけ `strict` にすると、ブラウザは
+別の Cookie として扱って**削除が効かない**（RFC 6265 §5.3）。セッション
+Cookie は `getSessionCookieName()` / `getSessionCookieOptions()`
+（`src/constants/auth.ts`）から取るので、自分で書かないこと。
 
 詳細は `/middleware` スキル（中身は proxy）の同名セクションを参照。
 
@@ -497,7 +506,7 @@ export async function deleteFromWatchlistAction(movieId: string) {
       throw error;
     }
 
-    revalidatePath('/home');
+    revalidatePath('/watchlist');
 
     return {
       success: true,

@@ -97,8 +97,9 @@ export const getSessionCookieOptions = () => ({
 
 ⚠️ `sameSite` は **`lax`**（`strict` ではない）。`strict` にすると、
 外部サイトからのリンクで入ってきたときに Cookie が送られず、**ログイン済み
-なのにログアウトして見える**。このアプリはパスワード再設定や公開日リマインダーを
-メールのリンクで送るため、そこを踏んだ利用者が必ずこれに当たる。
+なのにログアウトして見える**。このアプリはパスワード再設定のリンクを
+メールで送るので（`sendPasswordResetEmail`）、そこを踏んだ利用者が当たる。
+NextAuth の既定も `lax`。
 
 ⚠️ `secure` を `true` 固定にしない。ローカル（http://localhost）では
 ブラウザが Cookie を保存せず、**開発環境でログインできなくなる**。
@@ -486,7 +487,11 @@ export function validateEnv() {
 - [x] **セッション有効期限**: 24時間 - 確定
 - [x] **セッションストレージ**: ブラウザメモリ（JWT方式） - 確定
 - [x] **NEXTAUTH_SECRET**: openssl rand -base64 32で生成 - 確定
-- [x] **Cookie設定**: 厳密（HttpOnly: true, Secure: true, SameSite: 'strict'）- 確定
+- [x] **Cookie設定**: `getSessionCookieName()` / `getSessionCookieOptions()`
+      （`src/constants/auth.ts`）に集約 - 確定
+  - `httpOnly: true` / `sameSite: 'lax'` / `path: '/'` /
+    `secure: NODE_ENV === 'production'`
+  - ⚠️ `strict` にも `secure: true` 固定にもしない（理由は上の Cookie設定の節）
 
 ### 本番環境
 - [ ] **Vercel**: プロジェクト作成済み？

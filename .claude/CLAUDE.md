@@ -55,8 +55,10 @@
   - レート制限対策（50req/s）
   - 型定義・エラーハンドリング
 
-- `/middleware` - Next.js Middleware作成
-  - 認証チェック（NextAuth.js）
+- `/middleware` - Next.js **Proxy**（旧 Middleware）作成
+  - ⚠️ Next 16 で Middleware は Proxy に改名された。配置は **`src/proxy.ts`**、
+    export 名は `proxy`（または default）。`src/middleware.ts` は存在しない
+  - 認証チェック（NextAuth v5 の `auth()` ラッパ）
   - リダイレクト処理
   - Cookie/Header操作
   - matcher設定

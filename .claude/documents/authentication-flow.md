@@ -90,7 +90,7 @@ POST /api/auth/otp/verify
   1. 検証試行のレート制限チェック（email単位、10回/10分）
      - 超過 → 429 RATE_LIMIT_EXCEEDED（Retry-Afterヘッダ付き）、コード照合はスキップ
   2. otp_codesテーブルから該当レコード検索
-  3. 有効期限チェック（10分以内か）
+  3. 有効期限チェック（30分以内か。`OTP_CONFIG.EXPIRY_MINUTES`）
   4. 試行回数チェック（5回以内か）
   5. コード照合
      a. 一致 → is_verified = true に更新、OTPレコード削除、レート制限をリセット
@@ -149,7 +149,9 @@ POST /api/auth/otp/send
   - メールアドレス入力
   - パスワード入力
   ↓
-POST /api/auth/login（NextAuth.js Credentials Provider）
+POST /api/auth/callback/credentials（NextAuth.js Credentials Provider）
+  ※ `/api/auth/login` というルートは無い。`[...nextauth]` の handlers が
+    受ける。画面からは `signIn('credentials', ...)` を呼ぶ
   {
     email: "user@example.com",
     password: "Password123"
@@ -514,11 +516,11 @@ usersテーブルの password_changed_at を現在時刻に更新
 ```
 ユーザーがログアウトボタンをクリック
   ↓
-POST /api/auth/logout
+`signOut()`（`next-auth/react`）→ POST /api/auth/signout
+  ※ `/api/auth/logout` というルートは無い
   ↓
 サーバー処理:
-  - JWT方式: ブラックリストに追加（オプション）
-  - Session方式: セッション削除
+  - JWT方式: セッションCookieを削除
   ↓
 クライアント処理:
   - トークン削除
@@ -566,7 +568,7 @@ API Request
 | 項目 | 値 |
 |------|-----|
 | 桁数 | 6桁（数字のみ） |
-| 有効期限 | 10分 |
+| 有効期限 | 30分（`OTP_CONFIG.EXPIRY_MINUTES`。#1258 で10分から延長） |
 | 検証試行上限（OTP行のattempts） | 5回 |
 | 検証エンドポイントのレート制限（email単位） | 10回/10分（超過後ロック、検証成功でリセット） |
 | 再送間隔 | 1分 |
@@ -596,7 +598,7 @@ Movie Appの確認コードです。
 
 確認コード: 123456
 
-このコードは10分間有効です。
+このコードは30分間有効です。
 心当たりがない場合は、このメールを無視してください。
 ```
 
@@ -623,7 +625,7 @@ Movie Appの確認コードです。
 - **ブルートフォース対策**: 5回失敗で該当OTP無効化
 - **検証エンドポイントのレート制限**: email単位で10回/10分（OTP行のattemptsとは独立した多層防御、超過後ロック、検証成功でリセット）
 - **再送制限**: 1分間隔
-- **有効期限**: 10分で自動失効
+- **有効期限**: 30分で自動失効（`OTP_CONFIG.EXPIRY_MINUTES`）
 - **ワンタイム**: 検証成功後に即座に削除
 - **暗号的に安全な乱数**: `crypto.randomInt()` で生成
 
@@ -835,7 +837,7 @@ export const getSessionCookieOptions = () => ({
 
 ### OTP設定
 - [x] **桁数**: 6桁（数字のみ）
-- [x] **有効期限**: 10分
+- [x] **有効期限**: 30分（`OTP_CONFIG.EXPIRY_MINUTES`）
 - [x] **検証試行上限**: 5回
 - [x] **再送間隔**: 1分
 - [x] **メール送信**: Resend

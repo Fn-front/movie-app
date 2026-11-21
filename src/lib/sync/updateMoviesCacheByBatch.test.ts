@@ -21,6 +21,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { EXCLUDED_GENRE_IDS } from '@/constants';
 import { getMovieCacheStats, getMovieDetail } from '@/lib/tmdb/tmdb';
+import type { MovieCacheStats } from '@/lib/types';
 import {
   updateMoviesCacheByBatch,
   type BatchUpdateResult,
@@ -28,17 +29,46 @@ import {
 
 // ---------- ヘルパー ----------
 
-/** テスト用の同期指標データを生成する */
-function createMockCacheStats(overrides: Record<string, unknown> = {}) {
+/**
+ * テスト用の同期指標データを生成する
+ *
+ * ⚠️ **`MovieCacheStats` の全フィールドを埋めること。** 欠けていると
+ * `buildStatsRpcArgs` が `undefined` を作り、`JSON.stringify` がキーごと
+ * 落として PGRST202（関数が見つからない）になる。本番では**その映画の
+ * 全列が更新されない**のに、モックは引数を見ないので緑のまま通る。
+ */
+function createMockCacheStats(
+  overrides: Partial<MovieCacheStats> = {},
+): MovieCacheStats {
   return {
     genreIds: [],
     voteAverage: 8.0,
     voteCount: 0,
     popularity: 150.5,
     originalLanguage: null,
+    title: 'タイトル',
+    overview: 'あらすじ',
+    posterPath: '/poster.jpg',
+    backdropPath: '/backdrop.jpg',
+    releaseDate: '2026-01-01',
     ...overrides,
   };
 }
+
+/** RPC が受け取るべき引数名（11個） */
+const RPC_ARG_NAMES = [
+  'p_id',
+  'p_title',
+  'p_overview',
+  'p_poster_path',
+  'p_backdrop_path',
+  'p_genre_ids',
+  'p_release_date',
+  'p_vote_average',
+  'p_vote_count',
+  'p_popularity',
+  'p_original_language',
+] as const;
 
 /** 映画ID取得のページサイズ（実装と同じ値） */
 const SELECT_PAGE_SIZE = 1000;
@@ -52,13 +82,13 @@ const SELECT_PAGE_SIZE = 1000;
 function createFromMock(options: {
   selectData?: { id: number; release_type: string }[];
   selectError?: { message: string } | null;
-  updateError?: { message: string } | null;
+  rpcError?: { message: string } | null;
   deleteError?: { message: string } | null;
 }) {
   const {
     selectData = [],
     selectError = null,
-    updateError = null,
+    rpcError = null,
     deleteError = null,
   } = options;
 
@@ -72,28 +102,58 @@ function createFromMock(options: {
   const deleteEqMock = jest.fn().mockResolvedValue({ error: deleteError });
   const deleteMock = jest.fn().mockReturnValue({ eq: deleteEqMock });
 
-  const updateMock = jest.fn().mockReturnValue({
-    eq: jest.fn().mockResolvedValue({
-      error: updateError,
-    }),
-  });
+  // ⚠️ 固定値を返さない。実装は RPC の戻り値（更新された行数）を
+  //   `result.updated` に足すため、固定の 1 を返すと「同一IDが2行ある」
+  //   ケースの集計が検証できない
+  // `data` を `number | null` にしておく。件数が返らない場合の分岐を
+  // 個別のテストから `mockResolvedValue({ data: null })` で差し替えるため
+  const rpcMock = jest.fn(
+    (
+      _rpc: string,
+      args: { p_id: number },
+    ): Promise<{
+      data: number | null;
+      error: { message: string } | null;
+    }> =>
+      Promise.resolve({
+        data: selectData.filter((row) => row.id === args.p_id).length,
+        error: rpcError,
+      }),
+  );
 
+  // ⚠️ **`update` を生やさない**（#433）。表示列の書き込みは
+  //   `update_movie_cache_stats` RPC に集約した。素の `.update()` に戻すと
+  //   リバイバル行の公開日を守る DB 側の CASE を迂回するため、ここに
+  //   モックを置かないことで「戻したら落ちる」状態にしておく
   const fromMock = jest.fn().mockReturnValue({
     select: jest.fn().mockReturnValue({
       order: jest.fn().mockReturnValue({
         order: jest.fn().mockReturnValue({ range: rangeMock }),
       }),
     }),
-    update: updateMock,
     delete: deleteMock,
   });
 
   return Object.assign(fromMock, {
     rangeMock,
-    updateMock,
+    rpcMock,
     deleteMock,
     deleteEqMock,
   });
+}
+
+/**
+ * `createClient` が返すクライアントのモックを組み立てる
+ *
+ * 書き込みが `from().update()` から `rpc()` へ移ったため、クライアント直下に
+ * `rpc` が要る（#433）。
+ *
+ * ⚠️ `rpcMock` を省略できるようにしているのは、映画ID取得で早期に抜ける
+ * テスト（SELECT エラー / data が null）が `range` の挙動を個別に組むため。
+ * それらは RPC へ到達しない。
+ */
+function createClientMock(fromMock: jest.Mock & { rpcMock?: jest.Mock }) {
+  return { from: fromMock, rpc: fromMock.rpcMock };
 }
 
 // ---------- 環境変数の保存・復元 ----------
@@ -167,7 +227,7 @@ describe('updateMoviesCacheByBatch', () => {
       const fromMock = createFromMock({
         selectData: [{ id: 956160, release_type: 'theatrical' }],
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
       (getMovieCacheStats as jest.Mock).mockRejectedValue({
         response: { status: 404 },
       });
@@ -188,7 +248,7 @@ describe('updateMoviesCacheByBatch', () => {
       const fromMock = createFromMock({
         selectData: [{ id: 500100, release_type: 'theatrical' }],
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
       (getMovieCacheStats as jest.Mock).mockRejectedValue({
         response: { status: 503 },
       });
@@ -211,7 +271,7 @@ describe('updateMoviesCacheByBatch', () => {
         selectData: [{ id: 956160, release_type: 'theatrical' }],
         deleteError: { message: 'permission denied' },
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
       (getMovieCacheStats as jest.Mock).mockRejectedValue({
         response: { status: 404 },
       });
@@ -233,7 +293,7 @@ describe('updateMoviesCacheByBatch', () => {
           { id: 956160, release_type: 'streaming' },
         ],
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
       (getMovieCacheStats as jest.Mock).mockRejectedValue({
         response: { status: 404 },
       });
@@ -247,21 +307,22 @@ describe('updateMoviesCacheByBatch', () => {
   });
 
   describe('原語のバックフィル', () => {
-    it('UPDATE に original_language を含める', async () => {
+    it('RPC に original_language を含める', async () => {
       setValidEnv();
 
       const fromMock = createFromMock({
         selectData: [{ id: 901, release_type: 'theatrical' }],
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
       (getMovieCacheStats as jest.Mock).mockResolvedValue(
         createMockCacheStats({ originalLanguage: 'ko' }),
       );
 
       await updateMoviesCacheByBatch();
 
-      expect(fromMock.updateMock).toHaveBeenCalledWith(
-        expect.objectContaining({ original_language: 'ko' }),
+      expect(fromMock.rpcMock).toHaveBeenCalledWith(
+        'update_movie_cache_stats',
+        expect.objectContaining({ p_original_language: 'ko' }),
       );
     });
   });
@@ -269,75 +330,187 @@ describe('updateMoviesCacheByBatch', () => {
   // 表示列は行の作成時にしか書かれず、公開前に登録された作品は後から
   // ポスターや邦題が決まっても一覧に反映されなかった（#883）
   describe('表示列の追従', () => {
-    /** 表示列を指定して1件更新し、UPDATE に渡された値を返す */
+    /** 表示列を指定して1件更新し、RPC に渡された引数を返す */
     const updateOne = async (stats: Record<string, unknown>) => {
       setValidEnv();
 
       const fromMock = createFromMock({
         selectData: [{ id: 901, release_type: 'theatrical' }],
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
       (getMovieCacheStats as jest.Mock).mockResolvedValue(
         createMockCacheStats(stats),
       );
 
       await updateMoviesCacheByBatch();
 
-      return fromMock.updateMock.mock.calls[0][0];
+      return fromMock.rpcMock.mock.calls[0][1];
     };
 
-    it('後から付いたポスターを UPDATE に含める', async () => {
-      const payload = await updateOne({ posterPath: '/new-poster.jpg' });
+    it('後から付いたポスターを RPC に含める', async () => {
+      const args = await updateOne({ posterPath: '/new-poster.jpg' });
 
-      expect(payload).toEqual(
-        expect.objectContaining({ poster_path: '/new-poster.jpg' }),
+      expect(args).toEqual(
+        expect.objectContaining({ p_poster_path: '/new-poster.jpg' }),
       );
     });
 
     it('backdrop_path / title / overview も追従する', async () => {
-      const payload = await updateOne({
+      const args = await updateOne({
         backdropPath: '/new-backdrop.jpg',
         title: 'ハートランド',
         overview: '新しいあらすじ',
       });
 
-      expect(payload).toEqual(
+      expect(args).toEqual(
         expect.objectContaining({
-          backdrop_path: '/new-backdrop.jpg',
-          title: 'ハートランド',
-          overview: '新しいあらすじ',
+          p_backdrop_path: '/new-backdrop.jpg',
+          p_title: 'ハートランド',
+          p_overview: '新しいあらすじ',
         }),
       );
     });
 
     it('TMDbがポスターを持たない作品は null で上書きする', async () => {
-      const payload = await updateOne({ posterPath: null });
+      const args = await updateOne({ posterPath: null });
 
-      expect(payload).toEqual(expect.objectContaining({ poster_path: null }));
+      expect(args).toEqual(expect.objectContaining({ p_poster_path: null }));
     });
 
-    // title は NOT NULL 制約があり、空で上書きすると行が壊れる
+    // title は NOT NULL 制約があり、空で上書きすると行が壊れる。
+    // null を渡すと RPC 側の COALESCE(NULLIF(...), movie_cache.title) が既存値を残す
     it.each([null, ''])(
-      'title が %p のときは既存値を保つため UPDATE に含めない',
+      'title が %p のときは RPC に null を渡して既存値を保たせる',
       async (title) => {
-        const payload = await updateOne({ title });
+        const args = await updateOne({ title });
 
-        expect(payload).not.toHaveProperty('title');
+        expect(args).toEqual(expect.objectContaining({ p_title: null }));
       },
     );
 
     it('overview が空文字なら null に正規化する', async () => {
-      const payload = await updateOne({ overview: '' });
+      const args = await updateOne({ overview: '' });
 
-      expect(payload).toEqual(expect.objectContaining({ overview: null }));
+      expect(args).toEqual(expect.objectContaining({ p_overview: null }));
+    });
+  });
+
+  // #433: /movie/{id} のレスポンスに含まれているのに書いていなかった2列。
+  // ここが凍結していると TMDb 規約の「6ヶ月を超えて更新しない」に当たる
+  describe('凍結していた列の追従', () => {
+    const updateOne = async (stats: Record<string, unknown>) => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 901, release_type: 'theatrical' }],
+      });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
+      (getMovieCacheStats as jest.Mock).mockResolvedValue(
+        createMockCacheStats(stats),
+      );
+
+      await updateMoviesCacheByBatch();
+
+      return fromMock.rpcMock.mock.calls[0][1];
+    };
+
+    it('genre_ids を RPC に含める', async () => {
+      const args = await updateOne({ genreIds: [28, 12] });
+
+      expect(args).toEqual(expect.objectContaining({ p_genre_ids: [28, 12] }));
     });
 
-    // リバイバル上映は eiga 同期が release_date を意図的に上書きしている。
-    // 毎日 TMDb の代表公開日で塗り潰すとその補正が消える
-    it('release_date は UPDATE に含めない', async () => {
-      const payload = await updateOne({ posterPath: '/p.jpg' });
+    it('release_date を RPC に含める', async () => {
+      const args = await updateOne({ releaseDate: '2026-03-01' });
 
-      expect(payload).not.toHaveProperty('release_date');
+      expect(args).toEqual(
+        expect.objectContaining({ p_release_date: '2026-03-01' }),
+      );
+    });
+
+    // TMDbは公開日未定の作品に空文字を返す。DATE 列に '' を渡すと
+    // `invalid input syntax for type date` でその映画の UPDATE が丸ごと落ちる
+    it('release_date が null のときはそのまま null を渡す', async () => {
+      const args = await updateOne({ releaseDate: null });
+
+      expect(args).toEqual(expect.objectContaining({ p_release_date: null }));
+    });
+
+    // ⛔ PostgREST は**引数名の集合で関数を解決する**。1つでも欠けると
+    //   PGRST202 になり、その映画の全列が更新されない（ローカルで実測）。
+    //   objectContaining の表明だけでは欠落を検出できないため、ここで集合を固定する
+    it('RPC には11個の引数を必ず渡し、undefined を混ぜない', async () => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 901, release_type: 'theatrical' }],
+      });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
+      (getMovieCacheStats as jest.Mock).mockResolvedValue(
+        createMockCacheStats({}),
+      );
+
+      await updateMoviesCacheByBatch();
+
+      const args = fromMock.rpcMock.mock.calls[0][1];
+      expect(Object.keys(args).sort()).toEqual([...RPC_ARG_NAMES].sort());
+      // ⚠️ toEqual は「値が undefined のキー」と「キーが無い」を同一視するので
+      //    キー名の比較だけでは足りない
+      expect(
+        Object.entries(args).filter(([, value]) => value === undefined),
+      ).toEqual([]);
+    });
+
+    // TMDb が項目を返さなかったときも undefined にしない
+    it.each([
+      ['voteAverage', 'p_vote_average', null],
+      ['popularity', 'p_popularity', null],
+      ['voteCount', 'p_vote_count', 0],
+      ['originalLanguage', 'p_original_language', null],
+    ])(
+      '%s が欠けていても %s を null/既定値で送る',
+      async (statsKey, argKey, expected) => {
+        setValidEnv();
+
+        const fromMock = createFromMock({
+          selectData: [{ id: 901, release_type: 'theatrical' }],
+        });
+        (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
+        const stats = createMockCacheStats({});
+        delete (stats as unknown as Record<string, unknown>)[statsKey];
+        (getMovieCacheStats as jest.Mock).mockResolvedValue(stats);
+
+        await updateMoviesCacheByBatch();
+
+        const args = fromMock.rpcMock.mock.calls[0][1] as Record<
+          string,
+          unknown
+        >;
+        expect(args[argKey]).toBe(expected);
+      },
+    );
+
+    // ⚠️ リバイバル行の release_date を守る CASE は RPC の中にある。
+    //   素の .update() に戻すとその保護を迂回するため、書き込みが
+    //   必ず RPC を通ることをここで固定する
+    //   （SQL 自体の挙動は jest では検証できない。PR で実DB検証の結果を添付）
+    it('書き込みは update_movie_cache_stats RPC を通す', async () => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 901, release_type: 'theatrical' }],
+      });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
+      (getMovieCacheStats as jest.Mock).mockResolvedValue(
+        createMockCacheStats({}),
+      );
+
+      await updateMoviesCacheByBatch();
+
+      expect(fromMock.rpcMock).toHaveBeenCalledWith(
+        'update_movie_cache_stats',
+        expect.objectContaining({ p_id: 901 }),
+      );
     });
   });
 
@@ -348,7 +521,7 @@ describe('updateMoviesCacheByBatch', () => {
       const fromMock = createFromMock({
         selectError: { message: 'connection refused' },
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       await expect(updateMoviesCacheByBatch()).rejects.toThrow(
         '映画ID取得エラー: connection refused',
@@ -365,7 +538,7 @@ describe('updateMoviesCacheByBatch', () => {
       }));
 
       const fromMock = createFromMock({ selectData: rows });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
       (getMovieCacheStats as jest.Mock).mockResolvedValue(
         createMockCacheStats(),
       );
@@ -396,7 +569,7 @@ describe('updateMoviesCacheByBatch', () => {
       const fromMock = createFromMock({
         selectData: [{ id: 1, release_type: 'theatrical' }],
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
       (getMovieCacheStats as jest.Mock).mockResolvedValue(
         createMockCacheStats(),
       );
@@ -416,7 +589,7 @@ describe('updateMoviesCacheByBatch', () => {
       }));
 
       const fromMock = createFromMock({ selectData: rows });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
       (getMovieCacheStats as jest.Mock).mockResolvedValue(
         createMockCacheStats(),
       );
@@ -453,7 +626,7 @@ describe('updateMoviesCacheByBatch', () => {
           }),
         }),
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       await expect(updateMoviesCacheByBatch()).rejects.toThrow(
         '映画ID取得エラー: timeout',
@@ -464,7 +637,7 @@ describe('updateMoviesCacheByBatch', () => {
       setValidEnv();
 
       const fromMock = createFromMock({ selectData: [] });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       const result = await updateMoviesCacheByBatch();
 
@@ -485,7 +658,7 @@ describe('updateMoviesCacheByBatch', () => {
           }),
         }),
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       const result = await updateMoviesCacheByBatch();
 
@@ -502,11 +675,10 @@ describe('updateMoviesCacheByBatch', () => {
 
       const rows = [{ id: 1, release_type: 'theatrical' }];
       const fromMock = createFromMock({ selectData: rows });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
         createMockCacheStats({
-          id: 1,
           genreIds: [35, EXCLUDED_GENRE_IDS[0]],
         }),
       );
@@ -527,11 +699,10 @@ describe('updateMoviesCacheByBatch', () => {
         { id: 1, release_type: 'streaming' },
       ];
       const fromMock = createFromMock({ selectData: rows });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
         createMockCacheStats({
-          id: 1,
           genreIds: [EXCLUDED_GENRE_IDS[0]],
         }),
       );
@@ -548,11 +719,10 @@ describe('updateMoviesCacheByBatch', () => {
 
       const rows = [{ id: 1, release_type: 'theatrical' }];
       const fromMock = createFromMock({ selectData: rows });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
         createMockCacheStats({
-          id: 1,
           genreIds: [18],
         }),
       );
@@ -569,10 +739,10 @@ describe('updateMoviesCacheByBatch', () => {
 
       const rows = [{ id: 1, release_type: 'theatrical' }];
       const fromMock = createFromMock({ selectData: rows });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
-        createMockCacheStats({ id: 1 }),
+        createMockCacheStats({}),
       );
 
       const result = await updateMoviesCacheByBatch();
@@ -589,11 +759,10 @@ describe('updateMoviesCacheByBatch', () => {
         selectData: rows,
         deleteError: { message: 'delete failed' },
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
         createMockCacheStats({
-          id: 1,
           genreIds: [EXCLUDED_GENRE_IDS[0]],
         }),
       );
@@ -612,37 +781,20 @@ describe('updateMoviesCacheByBatch', () => {
     it('TMDb APIから最新情報を取得しDBを更新する', async () => {
       setValidEnv();
 
-      const rows = [
-        { id: 1, release_type: 'theatrical' },
-        { id: 2, release_type: 'theatrical' },
-      ];
-
-      const updateMock = jest.fn().mockReturnValue({
-        eq: jest.fn().mockResolvedValue({ error: null }),
+      const fromMock = createFromMock({
+        selectData: [
+          { id: 1, release_type: 'theatrical' },
+          { id: 2, release_type: 'theatrical' },
+        ],
       });
-      const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          order: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              range: jest.fn((from: number, to: number) =>
-                Promise.resolve({
-                  data: rows.slice(from, to + 1),
-                  error: null,
-                }),
-              ),
-            }),
-          }),
-        }),
-        update: updateMock,
-      });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock)
         .mockResolvedValueOnce(
-          createMockCacheStats({ id: 1, voteAverage: 8.5, popularity: 200 }),
+          createMockCacheStats({ voteAverage: 8.5, popularity: 200 }),
         )
         .mockResolvedValueOnce(
-          createMockCacheStats({ id: 2, voteAverage: 7.0, popularity: 100 }),
+          createMockCacheStats({ voteAverage: 7.0, popularity: 100 }),
         );
 
       const result = await updateMoviesCacheByBatch();
@@ -651,11 +803,12 @@ describe('updateMoviesCacheByBatch', () => {
       expect(result.updated).toBe(2);
       expect(result.errors).toHaveLength(0);
       expect(getMovieCacheStats).toHaveBeenCalledTimes(2);
-      expect(updateMock).toHaveBeenCalledTimes(2);
-      expect(updateMock).toHaveBeenCalledWith(
+      expect(fromMock.rpcMock).toHaveBeenCalledTimes(2);
+      expect(fromMock.rpcMock).toHaveBeenCalledWith(
+        'update_movie_cache_stats',
         expect.objectContaining({
-          vote_average: 8.5,
-          popularity: 200,
+          p_vote_average: 8.5,
+          p_popularity: 200,
         }),
       );
     });
@@ -663,38 +816,23 @@ describe('updateMoviesCacheByBatch', () => {
     it('同一IDで複数release_typeがある場合、ユニークIDで1回だけAPI呼び出しする', async () => {
       setValidEnv();
 
-      const rows = [
-        { id: 1, release_type: 'theatrical' },
-        { id: 1, release_type: 'streaming' },
-      ];
-
-      const updateMock = jest.fn().mockReturnValue({
-        eq: jest.fn().mockResolvedValue({ error: null }),
+      const fromMock = createFromMock({
+        selectData: [
+          { id: 1, release_type: 'theatrical' },
+          { id: 1, release_type: 'streaming' },
+        ],
       });
-      const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          order: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              range: jest.fn((from: number, to: number) =>
-                Promise.resolve({
-                  data: rows.slice(from, to + 1),
-                  error: null,
-                }),
-              ),
-            }),
-          }),
-        }),
-        update: updateMock,
-      });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
-        createMockCacheStats({ id: 1, voteAverage: 9.0, popularity: 300 }),
+        createMockCacheStats({ voteAverage: 9.0, popularity: 300 }),
       );
 
       const result = await updateMoviesCacheByBatch();
 
       expect(getMovieCacheStats).toHaveBeenCalledTimes(1);
+      // RPC も id 指定なので1回で両方の行が更新される
+      expect(fromMock.rpcMock).toHaveBeenCalledTimes(1);
       expect(result.total).toBe(2);
       expect(result.updated).toBe(2);
     });
@@ -702,35 +840,18 @@ describe('updateMoviesCacheByBatch', () => {
     it('TMDb APIエラーの場合errorsに記録して処理を続行する', async () => {
       setValidEnv();
 
-      const rows = [
-        { id: 1, release_type: 'theatrical' },
-        { id: 2, release_type: 'theatrical' },
-      ];
-
-      const updateMock = jest.fn().mockReturnValue({
-        eq: jest.fn().mockResolvedValue({ error: null }),
+      const fromMock = createFromMock({
+        selectData: [
+          { id: 1, release_type: 'theatrical' },
+          { id: 2, release_type: 'theatrical' },
+        ],
       });
-      const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          order: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              range: jest.fn((from: number, to: number) =>
-                Promise.resolve({
-                  data: rows.slice(from, to + 1),
-                  error: null,
-                }),
-              ),
-            }),
-          }),
-        }),
-        update: updateMock,
-      });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock)
         .mockRejectedValueOnce(new Error('Request failed with status 404'))
         .mockResolvedValueOnce(
-          createMockCacheStats({ id: 2, voteAverage: 7.5, popularity: 120 }),
+          createMockCacheStats({ voteAverage: 7.5, popularity: 120 }),
         );
 
       const result = await updateMoviesCacheByBatch();
@@ -744,32 +865,14 @@ describe('updateMoviesCacheByBatch', () => {
     it('DB更新エラーの場合errorsに記録する', async () => {
       setValidEnv();
 
-      const rows = [{ id: 1, release_type: 'theatrical' }];
-
-      const updateMock = jest.fn().mockReturnValue({
-        eq: jest
-          .fn()
-          .mockResolvedValue({ error: { message: 'update failed' } }),
+      const fromMock = createFromMock({
+        selectData: [{ id: 1, release_type: 'theatrical' }],
+        rpcError: { message: 'update failed' },
       });
-      const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          order: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              range: jest.fn((from: number, to: number) =>
-                Promise.resolve({
-                  data: rows.slice(from, to + 1),
-                  error: null,
-                }),
-              ),
-            }),
-          }),
-        }),
-        update: updateMock,
-      });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
-        createMockCacheStats({ id: 1 }),
+        createMockCacheStats({}),
       );
 
       const result = await updateMoviesCacheByBatch();
@@ -777,31 +880,40 @@ describe('updateMoviesCacheByBatch', () => {
       expect(result.updated).toBe(0);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]).toContain('ID 1');
-      // ⚠️ 記録点ごとに数える（#1354）。UPDATE が失敗した経路
+      // ⚠️ 記録点ごとに数える（#1354）。RPC が失敗した経路
       expect(result.items).toEqual({ attempted: 1, failed: 1 });
       expect(result.errors[0]).toContain('update failed');
+    });
+
+    // RPC は更新行数を返すが、PostgREST の応答が欠けた場合に備えて
+    // `?? 0` で受けている。成功として数えつつ件数は増やさない
+    it('RPC が件数を返さない場合は updated を増やさない', async () => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 1, release_type: 'theatrical' }],
+      });
+      fromMock.rpcMock.mockResolvedValue({ data: null, error: null });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
+
+      (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
+        createMockCacheStats({}),
+      );
+
+      const result = await updateMoviesCacheByBatch();
+
+      expect(result.updated).toBe(0);
+      expect(result.errors).toHaveLength(0);
+      expect(result.items).toEqual({ attempted: 1, failed: 0 });
     });
 
     it('非Errorオブジェクトがスローされた場合Unknown errorとして記録する', async () => {
       setValidEnv();
 
-      const rows = [{ id: 1, release_type: 'theatrical' }];
-
-      const fromMock = jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          order: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              range: jest.fn((from: number, to: number) =>
-                Promise.resolve({
-                  data: rows.slice(from, to + 1),
-                  error: null,
-                }),
-              ),
-            }),
-          }),
-        }),
+      const fromMock = createFromMock({
+        selectData: [{ id: 1, release_type: 'theatrical' }],
       });
-      (createClient as jest.Mock).mockReturnValue({ from: fromMock });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock).mockRejectedValueOnce('string error');
 

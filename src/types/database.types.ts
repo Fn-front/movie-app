@@ -1219,6 +1219,22 @@ export type Database = {
         Returns: undefined;
       };
       sync_now_showing_movies: { Args: { movies: Json }; Returns: number };
+      update_movie_cache_stats: {
+        Args: {
+          p_backdrop_path: string;
+          p_genre_ids: Json;
+          p_id: number;
+          p_original_language: string;
+          p_overview: string;
+          p_popularity: number;
+          p_poster_path: string;
+          p_release_date: string;
+          p_title: string;
+          p_vote_average: number;
+          p_vote_count: number;
+        };
+        Returns: number;
+      };
       upsert_movie_cache: {
         Args: { movies: Json; set_now_playing?: boolean };
         Returns: number;

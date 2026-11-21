@@ -597,6 +597,7 @@ describe('TMDb APIクライアント', () => {
         vote_count: 1200,
         popularity: 98.7,
         original_language: 'ja',
+        release_date: '2026-03-01',
       },
     };
 
@@ -630,7 +631,33 @@ describe('TMDb APIクライアント', () => {
         overview: 'あらすじ',
         posterPath: '/poster.jpg',
         backdropPath: '/backdrop.jpg',
+        // 日次同期が書いていなかったため凍結していた列（#433）
+        releaseDate: '2026-03-01',
       });
+    });
+
+    // TMDbは公開日未定の作品に**空文字**を返す。`movie_cache.release_date` は
+    // DATE 列なので、'' が素通りすると `invalid input syntax for type date` で
+    // その映画の UPDATE が丸ごと落ちる（評価もポスターも永久に更新されない）
+    it.each([
+      ['空文字', ''],
+      ['未設定', undefined],
+    ])('release_date が%sなら null を返す', async (_label, release_date) => {
+      mockGet.mockResolvedValue({
+        data: {
+          id: 1,
+          genres: [],
+          vote_average: 0,
+          vote_count: 0,
+          popularity: 0,
+          release_date,
+        },
+      });
+
+      const { getMovieCacheStats } = require('./tmdb');
+      const result = await getMovieCacheStats(1);
+
+      expect(result.releaseDate).toBeNull();
     });
 
     it('original_language が無ければ null を返す', async () => {

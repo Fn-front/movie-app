@@ -13,7 +13,7 @@ argument-hint: <operation>
 
 ### アーキテクチャ原則
 
-- **クライアントは `src/helpers/supabase.ts` のヘルパー経由で作る**
+- **API Route からは `src/helpers/supabase.ts` のヘルパーを使う**
   （`createClient()` を直接呼ばない）
 - **ブラウザからは Supabase を叩かない**。データ取得はすべて API Route 経由
 - **service role は RLS をバイパスする**。認可は自分で書く
@@ -30,9 +30,16 @@ src/types/database.types.ts # 自動生成の型定義
 > ⛔ **`src/lib/supabase/` は存在しない。** `client.ts` / `server.ts` /
 > `types.ts` も無い。import すると解決できない。
 
+> ⚠️ **リクエスト外では `createClient()` を直接呼んでいる**（cron / sync /
+> `src/lib/auth/auth.ts` / `nowShowing.server.ts` の9ファイル）。ヘルパーは
+> 環境変数が無いと `null` を返す設計で、**「設定漏れに気づけないまま空の
+> ホームを配信する」ほうが困る**場所では throw したいため
+> （`nowShowing.server.ts` の冒頭コメント／#1115）。
+> **API Route では必ずヘルパー**、という切り分け。
+
 ## クライアント作成
 
-このリポジトリのクライアントは **2種類だけ**。どちらもサーバーで使う。
+API Route から使うクライアントは **2種類**。どちらもサーバー側。
 
 ```typescript
 import {
@@ -44,8 +51,16 @@ import {
 
 | ヘルパー | 鍵 | RLS | 用途 |
 |---|---|---|---|
-| `createServiceRoleClient()` | service role | **バイパス** | 認証済みの操作全般。認可は自分で書く |
-| `createAnonClient()` | anon | 有効 | 公開API（未認証で叩ける読み取り） |
+| `createServiceRoleClient()` | service role | **バイパス** | ほぼすべて。公開ルートもこちら |
+| `createAnonClient()` | anon | 有効 | **anon に `SELECT` を付けたテーブルだけ** |
+
+⛔ **「公開API だから anon」ではない。** `20261018053616_declare_table_grants.sql`
+が `ALTER DEFAULT PRIVILEGES ... REVOKE ALL FROM anon, authenticated` を打って
+いるので、**anon が読めるのは `award_movies` と `now_showing_movies` の2つだけ**。
+ほかのテーブルを anon で読むと PostgREST が **42501** を返して全件失敗する。
+
+実際 `createAnonClient()` を使っているのは `src/app/api/awards/route.ts` の
+1本だけで、未認証で叩ける `/api/movies` も `createServiceRoleClient()` を使う。
 
 ```typescript
 const supabase = createServiceRoleClient();
@@ -59,13 +74,14 @@ if (!supabase) return dbConnectionErrorResponse();
 ### ブラウザからは叩かない
 
 `@supabase/supabase-js` を import しているファイルは**すべてサーバー側**
-（API Route / `src/lib/**`）で、`'use client'` のファイルからの import は
+（API Route / `src/lib/**` / `src/helpers/**`）で、`'use client'` のファイルからの import は
 **1つも無い**。画面はすべて `/api/*` を経由する。
 
 理由は2つ。
 
-- **anon キーでも RLS の設計を全部ブラウザに晒す**ことになる。どのテーブルに
-  何があるかが読める
+- **そもそも読めない。** `ALTER DEFAULT PRIVILEGES ... REVOKE ALL FROM anon,
+  authenticated` を打ってあるので、anon で読めるのは `award_movies` と
+  `now_showing_movies` の2つだけ。ほかは **42501** になる
 - このリポジトリの認証は **NextAuth（自前の `public.users`）** で、
   Supabase Auth ではない。ブラウザの Supabase クライアントに
   「ログイン中の利用者」は存在せず、RLS の `auth.uid()` も効かない
@@ -79,7 +95,7 @@ Cookie を読む作りで、NextAuth のセッションとは噛み合わない�
 サーバーコンポーネントでも同じヘルパーを使い、利用者の特定は
 `getAuthSession()`（`src/helpers/auth.ts`）で行う。
 
-## 基本CRUD操作## 基本CRUD操作
+## 基本CRUD操作
 
 ### SELECT - 取得
 
@@ -378,39 +394,60 @@ async function getWatchlist(userId: string) {
 }
 ```
 
-## トランザクション
+## トランザクション・集計（RPC）
+
+supabase-js からは複数文をまとめられないので、**PostgreSQL 関数**にして `rpc()`
+で呼ぶ。集計（`GROUP BY`）も PostgREST では表現できないので同じ扱い。
+
+⛔ **SQLエディタで作らない。** `supabase migration new <name>` でファイルを作り、
+`npx supabase db push --linked` で反映する（`.claude/rules/supabase-db.md`）。
+
+⛔ **`REVOKE` + `GRANT` を同じマイグレーションに書く。** `CREATE FUNCTION` は
+EXECUTE を **PUBLIC へ自動付与**するので、書かないと公開されている anon キーから
+`POST /rest/v1/rpc/<関数名>` で到達できる。`SET search_path` も必須
+（Supabase lint の `function_search_path_mutable`）。
+
+```sql
+-- supabase/migrations/<timestamp>_add_watchlist_watched_years_rpc.sql
+CREATE OR REPLACE FUNCTION public.get_watchlist_watched_years(
+  p_user_id UUID
+)
+RETURNS TABLE (
+  added_year INT,
+  watched_count BIGINT
+)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER              -- ⚠️ DEFINER は RLS をバイパスする。使うなら理由をコメントに
+SET search_path = public, pg_temp
+AS $$
+  SELECT
+    EXTRACT(YEAR FROM (w.added_at AT TIME ZONE 'Asia/Tokyo'))::INT AS added_year,
+    COUNT(*) AS watched_count
+  FROM watchlist w
+  WHERE w.user_id = p_user_id
+    AND w.deleted_at IS NULL
+    AND w.watched_at IS NOT NULL
+  GROUP BY 1
+  ORDER BY 1 DESC;
+$$;
+
+-- ⚠️ FROM PUBLIC だけでは足りない。anon / authenticated への既定付与が残る
+REVOKE EXECUTE ON FUNCTION public.get_watchlist_watched_years(UUID)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_watchlist_watched_years(UUID)
+  TO service_role;
+```
 
 ```typescript
-// Supabaseはトランザクションを直接サポートしていないため、
-// PostgreSQL関数を使用
-
-// 1. Supabase SQLエディタで関数を作成
-/*
-CREATE OR REPLACE FUNCTION add_movie_with_log(
-  p_user_id UUID,
-  p_tmdb_id INTEGER,
-  p_title VARCHAR
-)
-RETURNS void AS $$
-BEGIN
-  -- ウォッチリストに追加
-  INSERT INTO watchlist (user_id, tmdb_movie_id, title)
-  VALUES (p_user_id, p_tmdb_id, p_title);
-
-  -- ログ記録
-  INSERT INTO activity_logs (user_id, action, details)
-  VALUES (p_user_id, 'ADD_MOVIE', jsonb_build_object('tmdb_id', p_tmdb_id));
-END;
-$$ LANGUAGE plpgsql;
-*/
-
-// 2. クライアントから呼び出し
-const { data, error } = await supabase.rpc('add_movie_with_log', {
-  p_user_id: userId,
-  p_tmdb_id: 27205,
-  p_title: 'インセプション',
+// 呼び出しは API Route から。service_role のクライアントで叩く
+const { data, error } = await supabase.rpc('get_watchlist_watched_years', {
+  p_user_id: session.user.id,
 });
 ```
+
+⚠️ **引数に `user_id` を渡す形は、関数側では検証できない。** 呼び出し側が
+必ずセッションの値を渡すこと（ボディの値を素通しにしない）。
 
 ## 画面からのデータ取得
 
@@ -423,10 +460,12 @@ const { data, error } = await supabase.rpc('add_movie_with_log', {
 import { useQuery } from '@tanstack/react-query';
 
 import { API_ENDPOINTS } from '@/constants';
+import { watchlistKeys } from '@/constants/queryKeys';
 
 export function useWatchlist() {
   return useQuery({
-    queryKey: ['watchlist'],
+    // ⚠️ 生の配列にしない。`invalidateQueries` の対象が噛み合わなくなる
+    queryKey: watchlistKeys.all,
     queryFn: async () => {
       const response = await fetch(API_ENDPOINTS.WATCHLIST);
       const json = await response.json();

@@ -679,6 +679,11 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
 ---
 
 ### GET /api/movies/search
+
+> ⚠️ **ページングの形が `GET /api/movies` と違う。** 検索は TMDb の応答を
+> そのまま通すため `page` / `totalPages` / `totalResults` / `isServerFiltered`
+> （`SearchPaginationInfo`。`src/lib/api/search/search.ts`）。
+> 一覧側の `currentPage` / `totalItems` …とは**別物**なので取り違えないこと。
 映画検索（フィルタリング対応、キャッシュなし、都度TMDb API取得）
 
 **Query Parameters:**
@@ -707,7 +712,7 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
    - `year`: レスポンスの`release_date`の年と一致するかチェック
    - `vote_average_gte`: レスポンスの`vote_average`が閾値以上かチェック
 3. フィルタリング後の結果を返却
-   - **注意**: サーバー側フィルタリングにより`totalItems` は TMDb の値と異なる（フィルタリング後の件数を返す）
+   - **注意**: サーバー側フィルタリングにより `totalResults` は TMDb の値と異なる（フィルタリング後の件数を返す）。適用されたかどうかは `isServerFiltered` で分かる
 
 **パターン2: キーワードなし + フィルターあり**
 1. TMDb API `/discover/movie` を呼び出し
@@ -740,12 +745,10 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
       }
     ],
     "pagination": {
-      "currentPage": 1,
+      "page": 1,
       "totalPages": 10,
-      "totalItems": 200,
-      "itemsPerPage": 20,
-      "hasNextPage": true,
-      "nextPage": 2
+      "totalResults": 200,
+      "isServerFiltered": true
     }
   }
 }

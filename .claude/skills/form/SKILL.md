@@ -19,7 +19,7 @@ argument-hint: <formName>
 
 ### アーキテクチャ原則
 
-- **zodスキーマ分離**: `types/schema.ts`に定義
+- **zodスキーマ分離**: `src/schema/<domain>.ts` に定義し、API Route と共有する
 - **エラーメッセージ**: ユーザーフレンドリーな日本語
 - **アクセシビリティ**: 適切なARIA属性とラベル
 - **バリデーション**: リアルタイム + 送信時
@@ -27,16 +27,28 @@ argument-hint: <formName>
 ## ファイル構成
 
 ```
-src/components/<formName>/
-├── <formName>.tsx           # メインフォームコンポーネント
-├── <formName>.module.scss   # スタイル
-└── types/
-    └── schema.ts            # zodスキーマ定義
+src/features/<domain>/<formName>/
+├── <formName>.tsx           # フォームコンポーネント
+├── <formName>.test.tsx      # テスト（同じディレクトリに置く）
+└── <formName>.module.scss   # スタイル
+
+src/schema/<domain>.ts       # ⚠️ zod スキーマはここ。フォームの隣には置かない
+```
+
+⛔ **`types/schema.ts` は作らない。** スキーマは `src/schema/<domain>.ts` に
+置いて、**フォームと API Route の両方から import する**。同じ検証を2箇所に
+書くと、片方だけ直したときにクライアントで通ってサーバーで 400 になる。
+
+```typescript
+// フォーム側
+import { loginSchema, type LoginFormData } from '@/schema/auth';
+// ルート側（src/app/api/... ）も同じものを import する
 ```
 
 ## zodスキーマテンプレート
 
 ```typescript
+// src/schema/<domain>.ts
 import { z } from 'zod';
 
 export const <formName>Schema = z.object({
@@ -114,7 +126,7 @@ import React, { memo, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import styles from './<formName>.module.scss';
-import { <formName>Schema, <FormName>FormData } from './types/schema';
+import { <formName>Schema, type <FormName>FormData } from '@/schema/<domain>';
 
 interface <FormName>Props {
   onSubmit: (data: <FormName>FormData) => Promise<void>;
@@ -128,7 +140,6 @@ export const <FormName> = memo<<FormName>Props>(({ onSubmit, isLoading }) => {
     formState: { errors, isSubmitting },
   } = useForm<<FormName>FormData>({
     resolver: zodResolver(<formName>Schema),
-    mode: 'onBlur', // リアルタイムバリデーション
   });
 
   const handleFormSubmit = useCallback(
@@ -206,15 +217,16 @@ export const <FormName> = memo<<FormName>Props>(({ onSubmit, isLoading }) => {
 
 ## フォームモード
 
+**既定（`onSubmit`）のまま使う。** 既存フォームは `mode` を一つも指定していない。
+
 ```typescript
-useForm({
-  resolver: zodResolver(schema),
-  mode: 'onBlur',    // フィールドを離れたときにバリデーション
-  // mode: 'onChange',  // 入力中にバリデーション（UX注意）
-  // mode: 'onSubmit',  // 送信時のみバリデーション
-  // mode: 'onTouched', // タッチ後にバリデーション
+useForm<LoginFormData>({
+  resolver: zodResolver(loginSchema),
 });
 ```
+
+⚠️ `mode: 'onChange'` は入力のたびに全フィールドを検証するので、まだ触って
+いない欄にもエラーが出る。変えるなら理由をコメントに残すこと。
 
 ## デフォルト値
 

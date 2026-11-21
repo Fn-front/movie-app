@@ -65,11 +65,13 @@ src/app/api/<route-path>/
 | `SERVER_ERROR` | 500 | サーバーエラー |
 
 > ⛔ `INTERNAL_SERVER_ERROR` / `INVALID_OTP` / `EXPIRED_OTP` /
-> `EMAIL_ALREADY_EXISTS` は**存在しない**。500 は `SERVER_ERROR`、
-> OTP の失敗は `VALIDATION_ERROR` + 文言（`OTP_ERROR_MESSAGES`）で返す。
+> `EMAIL_ALREADY_EXISTS` は**存在しない**。
 >
-> ⚠️ OTP の失敗を細かく分けないのは意図的。「コードが違う」と「期限切れ」を
-> 区別して返すと、総当たりの手がかりになる。
+> - 500 は `SERVER_ERROR`
+> - OTP の失敗は **`BAD_REQUEST` + 文言**（`OTP_ERROR_MESSAGES`）。
+>   `auth/otp/verify` は `CODE_NOT_FOUND` / `CODE_EXPIRED` / `INVALID_CODE` を
+>   **文言で出し分けている**（`VALIDATION_ERROR` は zod の不一致専用）
+> - 試行回数の超過だけ `RATE_LIMIT_EXCEEDED`
 >
 > ⚠️ メールの重複も 409 では返さない。**列挙防止のため新規登録と同じ 201**
 > を返す（`auth/register`）。
@@ -304,8 +306,9 @@ if (!resource) {
 
 ### Supabase Client使用
 
-⛔ **`createClient()` を直接呼ばない。** `src/helpers/supabase.ts` の
-ヘルパーを使う。
+⛔ **API Route では `createClient()` を直接呼ばない。** `src/helpers/supabase.ts`
+のヘルパーを使う（リクエスト外の cron / sync は別。環境変数の欠落で throw
+したいので直接呼んでいる）。
 
 ```typescript
 import {
@@ -320,8 +323,8 @@ if (!supabase) return dbConnectionErrorResponse();
 
 | ヘルパー | 鍵 | RLS | 用途 |
 |---|---|---|---|
-| `createServiceRoleClient()` | service role | **バイパス** | 認証済みの操作全般。認可は自分で書く |
-| `createAnonClient()` | anon | 有効 | 公開API（未認証で叩ける読み取り） |
+| `createServiceRoleClient()` | service role | **バイパス** | ほぼすべて。公開ルートもこちら |
+| `createAnonClient()` | anon | 有効 | **anon に `SELECT` を付けたテーブルだけ**（`award_movies` / `now_showing_movies`） |
 
 ### RLS考慮
 
@@ -329,9 +332,11 @@ service role は **RLS をバイパスする**。「RLS があるから安全」
 ので、**どの行を触ってよいかの判定を必ず自分で書く**（`eq('user_id',
 session.user.id)` を落とさない）。
 
-⚠️ 公開APIで `createAnonClient()` を使うときも、`.claude/rules/supabase-db.md`
-の **GRANT** が前提。`ENABLE ROW LEVEL SECURITY` と `CREATE POLICY` だけでは
-Data API に公開されず、PostgREST が `42501` を返す。
+⛔ **「公開API だから anon」ではない。** 既定権限を
+`REVOKE ALL FROM anon, authenticated` で剥がしてあるので、anon で読めるのは
+**明示的に `GRANT SELECT` した2テーブルだけ**。未認証で叩ける `/api/movies` も
+`createServiceRoleClient()` を使っている。`ENABLE ROW LEVEL SECURITY` と
+`CREATE POLICY` だけでは公開されない（`.claude/rules/supabase-db.md`）。
 
 ## エラーロギング
 

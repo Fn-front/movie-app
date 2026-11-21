@@ -19,11 +19,14 @@ argument-hint: <tableName>
 
 ### アーキテクチャ原則
 
-- **Row Level Security (RLS)**: すべてのテーブルで必須
-- **GRANT付与**: Data API（supabase-js / PostgREST / GraphQL）公開のため必須（2026/10/30以降の既存プロジェクトに適用される仕様変更対応）
+- **Row Level Security (RLS)**: すべてのテーブルで有効化する。ただし
+  **`auth.uid()` のポリシーは書かない**（このリポジトリでは常に NULL。
+  後述の「Row Level Security (RLS)」を必ず読むこと）
+- **認可はアプリ側**: `.eq('user_id', session.user.id)` が唯一効いている防御
+- **GRANT付与**: `service_role` のみ。`authenticated` には付与しない
 - **UUID主キー**: `gen_random_uuid()`を使用
-- **タイムスタンプ**: `created_at`, `updated_at`を必ず含める
-- **論理削除**: ユーザーデータは`deleted_at`で論理削除
+- **タイムスタンプ**: `TIMESTAMPTZ` を使う（`TIMESTAMP` は JST 換算でズレる）
+- **論理削除**: ユーザーデータは`deleted_at`で論理削除。一意制約は部分インデックスに
 - **外部キー制約**: 適切な参照整合性を設定
 
 ## テーブル定義テンプレート
@@ -48,9 +51,9 @@ CREATE TABLE <table_name> (
   <field_name> <data_type> NULL,
 
   -- Metadata
-  created_at TIMESTAMP NOT NULL DEFAULT now(),
-  updated_at TIMESTAMP NOT NULL DEFAULT now(),
-  deleted_at TIMESTAMP NULL  -- 論理削除用（必要な場合）
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ NULL  -- 論理削除用（必要な場合）
 );
 
 -- Indexes
@@ -85,30 +88,40 @@ END;
 $$;
 ```
 
-## Data API公開のためのGRANT付与
+## GRANT（ロールごとのテーブル権限）
 
-> 2026/05/30以降の新規Supabaseプロジェクト、2026/10/30以降の既存プロジェクトでは、`public` スキーマで作成したテーブルはGRANTを明示しないとData API（supabase-js / PostgREST / GraphQL）からアクセスできない。RLSとは別に、必ずGRANTも付与する。
+> 2026/05/30以降の新規Supabaseプロジェクト、2026/10/30以降の既存プロジェクトでは、
+> `public` スキーマのテーブルはGRANTを明示しないとData API（supabase-js /
+> PostgREST / GraphQL）からアクセスできない。
 
-### パターンA: ユーザー固有データ（認証必須）
-
-```sql
-GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO service_role;
-```
-
-### パターンB: 公開データ（未認証含む全員が閲覧可能）
+⛔ **このリポジトリでは `authenticated` に何も付与しない。**
+`20261018053616_declare_table_grants.sql` が
 
 ```sql
-GRANT SELECT ON <table_name> TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
 ```
 
-### パターンC: マスターデータ（読み取り専用、サーバー側のみ書き込み）
+を打ったうえで、**全テーブルに個別の `REVOKE ALL ... FROM anon, authenticated`**
+を並べている。`authenticated` ロールに切り替わる経路（Supabase の JWT）が
+そもそも無いため（下の「RLS」参照）、付与しても使われず、漏洩面が増えるだけ。
+
+### パターンA: ユーザー固有データ（既定。ほぼ全テーブルがこれ）
 
 ```sql
-GRANT SELECT ON <table_name> TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON <table_name> TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
 ```
+
+### パターンB: 未認証のブラウザが直接読むデータ
+
+```sql
+GRANT SELECT ON public.<table_name> TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
+```
+
+⚠️ **現状これに当てはまるのは `award_movies` と `now_showing_movies` の2つだけ。**
+「公開API だから anon」ではない —— `/api/movies` のような未認証で叩けるルートも
+サーバー側で `createServiceRoleClient()` を使っている。anon を足すのは
+**ブラウザから直接叩く**ことが決まっているときだけにする。
 
 ### パターンD: 関数（RPC・トリガー関数）
 
@@ -132,87 +145,58 @@ GRANT EXECUTE ON FUNCTION public.<fn>(<argtypes>) TO service_role;
 - `CREATE OR REPLACE` は既存権限を保持するが、**`DROP FUNCTION` → `CREATE` では既定付与が復活しうる**
 - `RETURNS TRIGGER` の関数は PostgREST が RPC として公開しないため REVOKE 不要。ただし `search_path` は固定する
 
-## Row Level Security (RLS) ポリシー
-
-### RLS有効化
+## Row Level Security (RLS)
 
 ```sql
--- RLSを有効化
 ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;
 ```
 
-### 標準RLSポリシーパターン
+**有効化は必ずする。** ただし次を理解したうえで書くこと。
 
-#### パターン1: 自分のデータのみアクセス可能
+### ⛔ `auth.uid()` はこのリポジトリでは常に NULL
 
-```sql
--- SELECT: 自分のデータを閲覧
-CREATE POLICY "Users can view own data"
-  ON <table_name>
-  FOR SELECT
-  USING (auth.uid() = user_id AND deleted_at IS NULL);
+`auth.uid()` は **Supabase が発行した JWT** の `sub` を読む関数。このアプリの
+認証は NextAuth で、Supabase のセッションを作る経路が無い（`setSession` も
+`global.headers.Authorization` も使っていない）。したがって
 
--- INSERT: 自分のデータを作成
-CREATE POLICY "Users can insert own data"
-  ON <table_name>
-  FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+- `USING (auth.uid() = user_id)` は **常に偽** → 実質 deny-all
+- 実アクセスは全部 `service_role` で、**RLS をバイパスする**
 
--- UPDATE: 自分のデータを更新
-CREATE POLICY "Users can update own data"
-  ON <table_name>
-  FOR UPDATE
-  USING (auth.uid() = user_id AND deleted_at IS NULL)
-  WITH CHECK (auth.uid() = user_id);
+つまり **RLS は現状どのリクエストも守っていない。** 既存マイグレーションに
+`auth.uid()` のポリシーが並んでいるのは初期スキーマの名残で、**手本にしない。**
 
--- DELETE: 自分のデータを削除（論理削除の場合はUPDATEポリシーで対応）
-CREATE POLICY "Users can delete own data"
-  ON <table_name>
-  FOR DELETE
-  USING (auth.uid() = user_id);
+### 本当の認可はアプリ側にある
+
+`user_id` の絞り込みは**クエリに自分で書く**。これが唯一効いている防御なので、
+抜けると他人のデータが返る。
+
+```ts
+const { data } = await supabase
+  .from('watchlist')
+  .select('*')
+  .eq('user_id', session.user.id)   // ← ここが認可。消すと全件返る
+  .is('deleted_at', null);
 ```
 
-#### パターン2: 公開データ（全員閲覧可能、所有者のみ編集）
+### 新しいテーブルに書くポリシー
+
+**deny-all を明示する**のが実態に合う。将来 anon / authenticated 経路を
+足したときに、意図しない読み取りが開かない。
 
 ```sql
--- SELECT: 削除されていないデータは全員閲覧可能
-CREATE POLICY "Anyone can view non-deleted data"
-  ON <table_name>
-  FOR SELECT
-  USING (deleted_at IS NULL);
-
--- INSERT: 認証済みユーザーのみ作成可能
-CREATE POLICY "Authenticated users can insert data"
-  ON <table_name>
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
--- UPDATE: 所有者のみ更新可能
-CREATE POLICY "Users can update own data"
-  ON <table_name>
-  FOR UPDATE
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
-
--- DELETE: 所有者のみ削除可能
-CREATE POLICY "Users can delete own data"
-  ON <table_name>
-  FOR DELETE
-  USING (auth.uid() = user_id);
+ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;
+-- ポリシーを1つも作らない = deny-all（service_role はバイパスするので影響なし）
 ```
 
-#### パターン3: マスターデータ（読み取り専用）
+anon に読ませるテーブルだけ、明示的に開ける。
 
 ```sql
--- SELECT: 全員閲覧可能
-CREATE POLICY "Anyone can view data"
-  ON <table_name>
+CREATE POLICY <table_name>_select_public ON <table_name>
   FOR SELECT
   USING (true);
-
--- INSERT/UPDATE/DELETE: 禁止（管理者のみ直接SQL実行）
 ```
+
+⚠️ `CREATE POLICY` だけでは Data API に公開されない。**GRANT が前提**（上記）。
 
 ## データ型ガイドライン
 
@@ -220,13 +204,13 @@ CREATE POLICY "Anyone can view data"
 |------|----------|-----|
 | 主キー | `UUID` | `id UUID DEFAULT gen_random_uuid()` |
 | 外部キー（ユーザー） | `UUID` | `user_id UUID REFERENCES users(id)` |
-| 外部キー（TMDb） | `INTEGER` | `tmdb_id INTEGER NOT NULL` |
+| 外部キー（TMDb） | `INTEGER` | `tmdb_movie_id INTEGER NOT NULL` |
 | 文字列（短） | `VARCHAR(255)` | `email VARCHAR(255)` |
 | 文字列（長） | `TEXT` | `bio TEXT` |
 | 数値（整数） | `INTEGER` | `rating INTEGER` |
 | 数値（小数） | `DECIMAL(10,2)` | `price DECIMAL(10,2)` |
 | 真偽値 | `BOOLEAN` | `is_verified BOOLEAN DEFAULT false` |
-| 日時 | `TIMESTAMP` | `created_at TIMESTAMP DEFAULT now()` |
+| 日時 | `TIMESTAMPTZ` | `created_at TIMESTAMPTZ DEFAULT now()` |（⚠️ `TIMESTAMP` は JST で年を切るとズレる。#1101 で移行済み）
 | JSON | `JSONB` | `metadata JSONB` |
 
 ## 制約とバリデーション
@@ -246,7 +230,8 @@ password_hash VARCHAR(255) NOT NULL,
 email VARCHAR(255) NOT NULL UNIQUE,
 
 -- 複合UNIQUE制約
-CONSTRAINT unique_user_tmdb UNIQUE (user_id, tmdb_id)
+-- ⚠️ 論理削除するテーブルでは部分インデックスにする（下記「論理削除パターン」）
+CONSTRAINT unique_user_tmdb UNIQUE (user_id, tmdb_movie_id)
 ```
 
 ### CHECK制約
@@ -264,19 +249,28 @@ email VARCHAR(255) CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]
 ### ユーザーデータ（watchlist, reviews等）
 
 ```sql
--- deleted_atカラムを追加
-deleted_at TIMESTAMP NULL,
+-- deleted_at カラムを追加（TIMESTAMPTZ）
+deleted_at TIMESTAMPTZ NULL,
 
--- RLSで削除済みデータを除外
-CREATE POLICY "Users can view own non-deleted data"
-  ON watchlist
-  FOR SELECT
-  USING (auth.uid() = user_id AND deleted_at IS NULL);
+-- 一意制約は「生きている行」だけに掛ける。
+-- 素の UNIQUE だと、一度消した映画を再追加できない
+CREATE UNIQUE INDEX idx_watchlist_user_movie
+  ON watchlist (user_id, tmdb_movie_id)
+  WHERE deleted_at IS NULL;
+```
 
--- 論理削除の実装（アプリケーション側）
-UPDATE watchlist
-SET deleted_at = now()
-WHERE id = $1 AND user_id = $2;
+⚠️ **除外は RLS ではなくクエリに書く。** `auth.uid()` のポリシーは効いていない
+（上記）ので、`.is('deleted_at', null)` を書き忘れると削除済みが混ざる。
+
+```ts
+// 読み取り
+await supabase.from('watchlist').select('*')
+  .eq('user_id', session.user.id)
+  .is('deleted_at', null);
+
+// 論理削除
+await supabase.from('watchlist').update({ deleted_at: new Date().toISOString() })
+  .eq('id', id).eq('user_id', session.user.id);
 ```
 
 ### 認証トークン（OTP, password reset）
@@ -308,50 +302,29 @@ BEGIN;
 CREATE TABLE watchlist (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  tmdb_id INTEGER NOT NULL,
+  -- ⚠️ 実テーブルの列名は tmdb_movie_id（tmdb_id ではない）
+  tmdb_movie_id INTEGER NOT NULL,
   title VARCHAR(255) NOT NULL,
   poster_path VARCHAR(255),
-  added_at TIMESTAMP NOT NULL DEFAULT now(),
-  created_at TIMESTAMP NOT NULL DEFAULT now(),
-  updated_at TIMESTAMP NOT NULL DEFAULT now(),
-  deleted_at TIMESTAMP NULL,
-
-  CONSTRAINT unique_user_tmdb UNIQUE (user_id, tmdb_id)
+  added_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ NULL
 );
 
 -- Indexes
+-- 一意制約は生きている行だけ（再追加できるようにする）
+CREATE UNIQUE INDEX idx_watchlist_user_movie
+  ON watchlist (user_id, tmdb_movie_id)
+  WHERE deleted_at IS NULL;
 CREATE INDEX idx_watchlist_user_id ON watchlist(user_id);
-CREATE INDEX idx_watchlist_tmdb_id ON watchlist(tmdb_id);
 CREATE INDEX idx_watchlist_deleted_at ON watchlist(deleted_at);
 
--- Updated_at Trigger
-CREATE TRIGGER set_updated_at
-  BEFORE UPDATE ON watchlist
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
-
--- Data API GRANT（パターンA: ユーザー固有データ）
-GRANT SELECT, INSERT, UPDATE, DELETE ON watchlist TO authenticated;
+-- GRANT（パターンA）
+-- ⚠️ authenticated には付与しない。切り替わる経路が無い
 GRANT SELECT, INSERT, UPDATE, DELETE ON watchlist TO service_role;
 
--- RLS Policies
+-- RLS: 有効化してポリシーは作らない（deny-all）。
+-- 認可は API Route 側の .eq('user_id', session.user.id) が担う
 ALTER TABLE watchlist ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own non-deleted watchlist"
-  ON watchlist FOR SELECT
-  USING (auth.uid() = user_id AND deleted_at IS NULL);
-
-CREATE POLICY "Users can insert own watchlist"
-  ON watchlist FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update own watchlist"
-  ON watchlist FOR UPDATE
-  USING (auth.uid() = user_id AND deleted_at IS NULL)
-  WITH CHECK (auth.uid() = user_id);
-
--- 物理削除は許可しない（論理削除のみ）
--- DELETE policy is not created
 
 COMMIT;
 ```

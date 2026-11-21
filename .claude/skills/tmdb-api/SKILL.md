@@ -104,77 +104,30 @@ export default tmdbClient;
 
 ## 型定義
 
+⛔ **新しく作らない。** 型は **`src/lib/types/index.ts`** に既にある。
+`src/lib/api/types/tmdb.ts` は**存在しない**。
+
+| 型 | 用途 |
+|---|---|
+| `Movie` | 一覧・検索の1件 |
+| `MovieDetail` | 詳細（`Omit<Movie, 'genre_ids'>` + `genres` ほか） |
+| `Genre` / `ProductionCompany` / `ProductionCountry` / `SpokenLanguage` | 詳細の内訳 |
+| `TMDbResponse<T>` | ページング付きレスポンス（`page` / `results` / `total_pages` / `total_results`） |
+| `FilteredTMDbResponse<T>` | 上記 + フィルタ前の件数（#1166） |
+
 ```typescript
-// src/lib/api/types/tmdb.ts
-
-export interface TMDbMovie {
-  id: number;
-  title: string;
-  original_title: string;
-  overview: string;
-  poster_path: string | null;
-  backdrop_path: string | null;
-  release_date: string;
-  genre_ids: number[];
-  vote_average: number;
-  vote_count: number;
-  popularity: number;
-  adult: boolean;
-  video: boolean;
-  original_language: string;
-}
-
-export interface TMDbMovieDetail extends TMDbMovie {
-  genres: TMDbGenre[];
-  runtime: number;
-  budget: number;
-  revenue: number;
-  homepage: string;
-  imdb_id: string;
-  production_companies: TMDbProductionCompany[];
-  production_countries: TMDbProductionCountry[];
-  spoken_languages: TMDbSpokenLanguage[];
-  status: string;
-  tagline: string;
-}
-
-export interface TMDbGenre {
-  id: number;
-  name: string;
-}
-
-export interface TMDbProductionCompany {
-  id: number;
-  name: string;
-  logo_path: string | null;
-  origin_country: string;
-}
-
-export interface TMDbProductionCountry {
-  iso_3166_1: string;
-  name: string;
-}
-
-export interface TMDbSpokenLanguage {
-  iso_639_1: string;
-  name: string;
-  english_name: string;
-}
-
-export interface TMDbMovieListResponse {
-  page: number;
-  results: TMDbMovie[];
-  total_pages: number;
-  total_results: number;
-}
-
-export interface TMDbSearchResponse {
-  page: number;
-  results: TMDbMovie[];
-  total_pages: number;
-  total_results: number;
-}
+import type { Movie, MovieDetail, TMDbResponse } from '@/lib/types';
 ```
+
+⚠️ **接頭辞は `TMDb` ではない。** `TMDbMovie` / `TMDbMovieDetail` /
+`TMDbGenre` …はどれも存在しない。`TMDb` が付くのはレスポンスの外枠
+（`TMDbResponse` / `FilteredTMDbResponse`）だけ。
+
+### ⚠️ `FilteredTMDbResponse` を素の `TMDbResponse` に替えない
+
+`results.length === 0` が「TMDb が空を返した」とは限らず、**ローカルの
+除外フィルタで全件落ちた**でも成立する。ページを跨ぐ処理が前者と誤認して
+打ち切ると、以降のページの作品が丸ごと出なくなる（#1166）。
 
 ## よく使うエンドポイント
 

@@ -24,11 +24,15 @@
  * - 方式の選択: メールOTP を第2要素にしてログイン / 無効化 / 方式の切り替え
  *   （メールOTP の利用者はコードを手元で作れないため、設定変更には
  *    「確認コードを送信する」が要る。これが無いと二度と無効化できない）
+ * - 期限切れ / 試行回数上限: 設定中にコードを送り直せる（#1285 / #1349）。
+ *   再送が設定変更の枠を食わないことまで見る
  */
 
 import { test, expect, type Page } from '@playwright/test';
 
-import { getLatestOtpCode } from '../helpers/api';
+import { OTP_CONFIG } from '@/constants/otp';
+
+import { getLatestOtpCode, getRateLimitRow } from '../helpers/api';
 import {
   cleanupLoginIpRateLimits,
   cleanupOtpCodesForEmail,
@@ -369,6 +373,94 @@ test.describe('二段階認証', () => {
 
     await page.waitForURL('/');
     await expect(page).toHaveURL('/');
+  });
+
+  /**
+   * 設定中（メールOTP）の再送（#1285 / #1349）
+   *
+   * ⛔ これが無いと、コードの試行回数（5回）を使い切った利用者は
+   * 「やめる → メールで設定する」でやり直すしかない。60秒以内だと
+   * 再送間隔に当たって1通も届かないまま同じ画面に戻るため、最大60秒の
+   * あいだ何をしても進めない窓ができていた。
+   *
+   * ⛔ **枠を消費しないことが本命**（#1347 のレビューで major になった形）。
+   * 再送が `setup` を叩き直す実装だと `TOTP_SETTINGS_VERIFY`（5回/15分）を
+   * 食うので、
+   *
+   *   setup(1) + 再送×4 = 5 → 6回目の「有効にする」が 429 で15分ロック
+   *
+   * となり、**直そうとしている行き止まりを別の形で作る**。単体テストは
+   * 「`send-challenge` を叩く」までしか固定できない。
+   *
+   * ⚠️ 60秒のカウントダウンを実時間で待つため、このテストだけ長めに取る。
+   */
+  test('設定中（メールOTP）にコードを送り直せる（#1285）', async ({ page }) => {
+    // ログイン + 60秒の待機 + 有効化まで通すので、describe の 90 秒では足りない
+    test.setTimeout(180_000);
+
+    await loginAndOpenSettings(page);
+
+    // ⛔ 再認証（#1368）
+    await reauthForSecondFactorSetup(page, USER.password);
+    await page.getByRole('button', { name: 'メールで設定する' }).click();
+
+    /**
+     * ⚠️ 可視テキストでそのまま引く。固定の `aria-label` を付けると、
+     * 本文が「送信しています…」に変わったときに見えている文字が
+     * アクセシブルネームから外れる（WCAG 2.5.3 Label in Name）。
+     * ここで引けること自体が、その退行を捕まえる。
+     */
+    const resendButton = page.getByRole('button', {
+      name: '確認コードを再送信する',
+    });
+
+    // 1. 送った直後は押せない（サーバー側の再送間隔に当たるだけなので手前で止める）
+    await expect(resendButton).toBeDisabled();
+    await page.screenshot({
+      path: 'docs/e2e-screenshots/two-factor-setup-resend-cooldown.png',
+    });
+
+    const firstCode = await getLatestOtpCode(USER.email, 'two_factor');
+    expect(firstCode).not.toBeNull();
+
+    // 再送の前の消費量。`setup` のぶんで1回入っている
+    const beforeResend = await getRateLimitRow(userId, 'totp_settings_verify');
+    expect(beforeResend?.attempts).toBe(1);
+
+    // 2. カウントダウンが明けるのを待つ（60秒）
+    await expect(resendButton).toBeEnabled({
+      timeout: (OTP_CONFIG.RESEND_INTERVAL_SECONDS + 15) * 1000,
+    });
+
+    // 3. 再送すると新しいコードが入る（古いコードは消える）
+    await resendButton.click();
+    await expect(
+      page.getByText('確認コードをメールに送信しました。'),
+    ).toBeVisible();
+    await page.screenshot({
+      path: 'docs/e2e-screenshots/two-factor-setup-resend-sent.png',
+    });
+
+    const resentCode = await getLatestOtpCode(USER.email, 'two_factor');
+    expect(resentCode).not.toBeNull();
+    expect(resentCode).not.toBe(firstCode);
+
+    // 5. 再送は設定変更の枠を消費しない（`send-challenge` 経由であること）
+    const afterResend = await getRateLimitRow(userId, 'totp_settings_verify');
+    expect(afterResend?.attempts).toBe(1);
+
+    // 4. 送り直したコードで有効化まで到達できる
+    await page
+      .getByRole('textbox', { name: '確認コード', exact: true })
+      .fill(resentCode!);
+    await page.getByRole('button', { name: '二段階認証を有効にする' }).click();
+
+    await expect(
+      page.getByRole('list', { name: 'リカバリーコード' }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: 'docs/e2e-screenshots/two-factor-setup-resend-enabled.png',
+    });
   });
 
   /**

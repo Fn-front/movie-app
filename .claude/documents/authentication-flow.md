@@ -644,7 +644,9 @@ Movie Appの確認コードです。
 - **スコープ最小化**: email, profile のみ取得
 
 ### その他
-- **Rate Limiting**: 3回までの試行制限（ログイン）
+- **Rate Limiting**: ログインはアカウント単位 5回/30分（`LOGIN_ACCOUNT`）＋
+  送信元IP単位 20回/15分（`LOGIN_IP`）の2層。値は
+  `src/constants/rateLimit.ts` の `RATE_LIMIT_CONFIG` が正
 - **CSRF対策**: NextAuth.jsで自動対応
 - **XSS対策**: 入力サニタイズ、CSP設定
 

@@ -186,7 +186,10 @@ export async function addToWatchlist(params: AddMovieParams) {
       throw error;
     }
 
-    revalidatePath('/watchlist');
+    // ⚠️ **ここで `revalidatePath` を呼んでも意味が無い。**
+    //    ウォッチリストの画面はクライアント専用（`ssr: false` ＋ React Query）
+    //    なので、再検証すべきサーバー側のキャッシュが無い。
+    //    一覧の更新はクライアント側のクエリ無効化で行う
 
     return {
       success: true,
@@ -249,6 +252,8 @@ export async function protectedAction() {
 
 import { revalidatePath } from 'next/cache';
 
+import { ROUTES } from '@/constants/common';
+
 export async function updateAction() {
   // 処理...
 
@@ -257,13 +262,19 @@ export async function updateAction() {
   // ⚠️ **存在しないパスを渡してもエラーにならない**。黙って何もしないので、
   //    打ち間違いは「キャッシュが更新されない」という形でしか現れない。
   //    パスは `src/constants/common.ts` の `ROUTES` から取ること
-  revalidatePath('/watchlist');
+  //
+  // ⚠️ **再検証するものが無いパスを渡しても同じ**。このリポジトリで
+  //    `revalidatePath` が実際に効くのは `src/app/page.tsx`
+  //    （`export const revalidate = 3600` ＋ サーバー側の取得）くらいで、
+  //    `/watchlist` のようにクライアント専用（`ssr: false` ＋ React Query）の
+  //    画面に投げても何も起きない
+  revalidatePath(ROUTES.HOME);
 
   // 特定のパスとその子パスを再検証
-  revalidatePath('/watchlist', 'page');
+  revalidatePath(ROUTES.HOME, 'page');
 
   // レイアウト全体を再検証
-  revalidatePath('/watchlist', 'layout');
+  revalidatePath(ROUTES.HOME, 'layout');
 
   return { success: true };
 }
@@ -506,7 +517,7 @@ export async function deleteFromWatchlistAction(movieId: string) {
       throw error;
     }
 
-    revalidatePath('/watchlist');
+    // 同上。クライアント専用の画面には `revalidatePath` が効かない
 
     return {
       success: true,

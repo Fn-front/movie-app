@@ -257,7 +257,8 @@ UI Re-render
   - 例: ログインはアカウント単位 5回/30分（`LOGIN_ACCOUNT`）＋
     送信元IP単位 20回/15分（`LOGIN_IP`）の2層
   - ⚠️ `maxAttempts` は「◯回/◯分」というレートではなく、
-    **その窓のあいだ一度もアクセスが無いまでの通算回数**（#934）
+    **その窓のあいだ一度もアクセスが無いまでの通算回数**
+    （`src/constants/rateLimit.ts` の `RATE_LIMIT_ACTION` の JSDoc）
 - **CSRF対策**: 厳し目の基本設定（NextAuth.js + カスタムトークン）
 
 ### インフラ・デプロイ

@@ -6,7 +6,7 @@
 - **認証方式**: NextAuth.js (JWT, ブラウザメモリ)
 - **HTTP Client**: axios (クライアント側)
 - **Content-Type**: `application/json`
-- **Rate Limiting**: 3回までの試行制限（認証エンドポイント）
+- **Rate Limiting**: ログインはアカウント単位 5回/30分 ＋ 送信元IP単位 20回/15分（`RATE_LIMIT_CONFIG`）（認証エンドポイント）
 - **キャッシュ戦略**:
   - 一覧画面: DBキャッシュあり（差分更新方式）
   - 詳細画面: キャッシュなし（都度TMDb API取得）
@@ -268,9 +268,19 @@ NextAuth.js が `src/app/api/auth/[...nextauth]/route.ts` の `handlers` で
 | 操作 | 呼ぶもの | 実際に叩かれる先 |
 |---|---|---|
 | ログイン（メール+パスワード） | `signIn('credentials', { email, password })` | `POST /api/auth/callback/credentials` |
-| ログイン（OAuth） | `signIn('google')` / `signIn('github')` | `GET /api/auth/signin/<provider>` → provider → `/api/auth/callback/<provider>` |
+| ログイン（OAuth） | `signIn('google')` / `signIn('github')` | `POST /api/auth/signin/<provider>` → provider → `/api/auth/callback/<provider>` |
 | ログアウト | `signOut()` | `POST /api/auth/signout` |
-| セッション取得 | `useSession()` / `auth()` | `GET /api/auth/session` |
+| セッション取得（クライアント） | `useSession()` | `GET /api/auth/session` |
+| セッション取得（サーバー） | `auth()` | **HTTP を介さない** |
+
+⚠️ `signIn()` は**どの provider でも POST**（`node_modules/next-auth/react.js` の
+`method: 'post'`）。`GET /api/auth/signin/<provider>` は NextAuth の組み込み
+サインイン画面で、`signIn()` が叩く経路ではない。
+
+⚠️ **`auth()` はリクエストを飛ばさない。** `createActionURL('session', ...)` で
+URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` を
+**プロセス内で**呼ぶだけ（`node_modules/next-auth/lib/index.js`）。
+テストで `/api/auth/session` をモックしても `auth()` には効かない。
 
 ⚠️ 認証の成否は**レスポンスボディではなくセッション**で判断する。
 `signIn` の戻り値の `error` は `authorize` が投げたエラーの `code` で、
@@ -1230,7 +1240,7 @@ AIレコメンド生成（Vercel Cron Jobs、1日1回）
 
 ### 認証・セキュリティ
 - [x] **認証方式**: NextAuth.js (JWT, ブラウザメモリ) - 確定
-- [x] **Rate Limiting**: 3回までの試行制限 - 確定
+- [x] **Rate Limiting**: ログインはアカウント単位 5回/30分 ＋ 送信元IP単位 20回/15分（`RATE_LIMIT_CONFIG`） - 確定
 - [x] **セッションの有効期限**: 24時間 - 確定
 - [x] **セッションストレージ**: ブラウザメモリ（JWT方式） - 確定
 

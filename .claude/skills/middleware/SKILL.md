@@ -256,14 +256,26 @@ export function proxy(request: NextRequest) {
 
 ```typescript
 import { USER_ROLE } from '@/constants/auth';
-import { ROUTES } from '@/constants/common';
+import { ADMIN_REQUIRED_ROUTES, ROUTES } from '@/constants/common';
 
 export const proxy = auth((req) => {
   const { nextUrl } = req;
+  const isAuthenticated = !!req.auth?.user?.id;
 
-  // 権限が足りないときだけホームへ戻す（admin パスの例）
-  if (nextUrl.pathname.startsWith('/admin')) {
+  const isAdminPath = ADMIN_REQUIRED_ROUTES.some((path) =>
+    nextUrl.pathname.startsWith(path),
+  );
+
+  if (isAdminPath) {
+    // ⚠️ **未認証とロール不足を分ける。** 一緒にするとログインすれば
+    //    入れる利用者までホームへ流してしまう
+    if (!isAuthenticated) {
+      return NextResponse.redirect(new URL(ROUTES.LOGIN, nextUrl));
+    }
+
     if (req.auth?.user?.role !== USER_ROLE.ADMIN) {
+      // 404 ではなくホームへ。存在を隠しても守りにならない（APIを直接
+      // 叩けば分かる）ので、最終判定は `withAdminAuth` に置く
       return NextResponse.redirect(new URL(ROUTES.HOME, nextUrl));
     }
   }

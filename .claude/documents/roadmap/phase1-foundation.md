@@ -40,7 +40,7 @@
   - [x] Supabaseクライアント設定（lib/supabase/client.ts, server.ts）
   - [x] TMDb APIクライアント設定（lib/tmdb/tmdb.ts）
   - [x] axiosインスタンス設定（lib/axios/axios.ts）
-  - [ ] NextAuth.js設定（lib/auth/authOptions.ts）
+  - [ ] NextAuth.js設定（`src/lib/auth/auth.ts`。v5 なので `authOptions` は無い）
   - [x] 定数定義（lib/constants/index.ts）
   - [x] 型定義（lib/types/index.ts）
 - [x] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）

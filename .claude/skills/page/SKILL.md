@@ -166,13 +166,17 @@ src/app/
 ├── awards/
 ├── person/
 ├── privacy/
-├── theater-experience/
-└── admin/              # admin ロールのみ
+├── theater-experience/ # 要認証
+└── admin/              # admin ロールのみ（accounts / awards）
 ```
 
 > ⚠️ パスは `src/constants/common.ts` の `ROUTES` が正。`/login` `/home`
 > `/calendar` は**どれも存在しない**（それぞれ `/auth/signin`、`/`、
-> カレンダーは画面ではなくウォッチリスト内のUI）。
+> カレンダーは画面ではなく全ページ共通のダイアログ。`appLayout` が
+> マウントし、サイドバーとモバイルドロワーの2か所から開く）。
+>
+> ⚠️ 要認証は `AUTH_REQUIRED_ROUTES`（watchlist / settings / favorites /
+> theater-experience の4つ）、admin 専用は `ADMIN_REQUIRED_ROUTES` が正。
 
 ## レイアウトテンプレート
 

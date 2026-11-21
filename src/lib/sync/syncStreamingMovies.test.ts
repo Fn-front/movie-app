@@ -13,7 +13,9 @@ import {
   MIN_POPULARITY,
   MIN_VOTE_AVERAGE,
   MUSIC_GENRE_ID,
+  STREAMING_AVAILABILITY_STALE_DAYS,
   STREAMING_MIN_POPULARITY,
+  STREAMING_STALE_REFRESH_LIMIT,
 } from '@/constants/movies';
 import { TMDB_AVAILABILITY_CONCURRENCY } from '@/constants/tmdb';
 
@@ -36,6 +38,9 @@ const mockUpsert = jest.fn();
 const mockNeq = jest.fn();
 const mockUpdate = jest.fn();
 const mockClearNotIn = jest.fn();
+const mockStaleLt = jest.fn();
+const mockStaleOr = jest.fn();
+const mockStaleLimit = jest.fn();
 
 /** クリアクエリ（.update().eq().eq().not().select()）の解決値 */
 let clearResult: {
@@ -43,14 +48,51 @@ let clearResult: {
   error: { message: string } | null;
 };
 
+/** 古い配信情報の抽出（.select().lt().or().order().limit()）の解決値 */
+let staleSelectResult: {
+  data: { id: number; title: string; release_type: string }[] | null;
+  error: { message: string } | null;
+};
+
+/** 古い配信情報の書き戻し（.update().eq().eq()）の解決値 */
+let staleUpdateResult: { error: { message: string } | null };
+
 jest.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: () => ({
-      select: () => ({ neq: (...args: unknown[]) => mockNeq(...args) }),
+      // ⚠️ `select` は2通りのチェインを受ける。
+      //   既存: .select().neq()                       （未使用列のバックフィル）
+      //   #433: .select().lt().or().order().limit()   （古い配信情報の抽出）
+      select: () => {
+        const chain = {
+          neq: (...args: unknown[]) => mockNeq(...args),
+          lt: (...args: unknown[]) => {
+            mockStaleLt(...args);
+            return chain;
+          },
+          or: (...args: unknown[]) => {
+            mockStaleOr(...args);
+            return chain;
+          },
+          order: () => chain,
+          limit: (...args: unknown[]) => {
+            mockStaleLimit(...args);
+            return Promise.resolve(staleSelectResult);
+          },
+        };
+        return chain;
+      },
       upsert: (...args: unknown[]) => mockUpsert(...args),
-      update: (...args: unknown[]) => {
-        mockUpdate(...args);
-        // .eq().eq().not().select() のチェインを辿れるようにする
+      update: (payload: Record<string, unknown>) => {
+        mockUpdate(payload);
+
+        // 配信情報の書き戻しは `.select()` を付けずに await する。
+        // ⚠️ **PostgREST のビルダーは実物も thenable**（`.select()` を
+        //    呼ばずに await できる）ので、モックも同じ性質を持たせる。
+        //    付けないと await がビルダー自身に解決し、`error` が常に
+        //    undefined になって失敗経路を素通りする
+        const isStaleRefresh = 'watch_provider_flatrate' in payload;
+
         const chain = {
           eq: () => chain,
           not: (...notArgs: unknown[]) => {
@@ -58,6 +100,13 @@ jest.mock('@supabase/supabase-js', () => ({
             return chain;
           },
           select: () => Promise.resolve(clearResult),
+          then: (
+            resolve: (value: unknown) => unknown,
+            reject?: (reason: unknown) => unknown,
+          ) =>
+            Promise.resolve(
+              isStaleRefresh ? staleUpdateResult : clearResult,
+            ).then(resolve, reject),
         };
         return chain;
       },
@@ -134,6 +183,9 @@ describe('syncStreamingMovies', () => {
     mockNeq.mockResolvedValue({ data: [], error: null });
     mockUpsert.mockResolvedValue({ error: null });
     clearResult = { data: [], error: null };
+    // 既定では古い配信情報は無い（既存テストに影響させない）
+    staleSelectResult = { data: [], error: null };
+    staleUpdateResult = { error: null };
     mockDiscoverMovies.mockResolvedValue(respondWith([createMovie()]));
     mockGetJpStreamingAvailability.mockResolvedValue(
       availability(true, '2026-03-10'),
@@ -726,6 +778,173 @@ describe('syncStreamingMovies', () => {
       expect(logSpy).toHaveBeenCalledWith(
         expect.stringContaining('[sync-streaming]'),
       );
+    });
+  });
+
+  // #433: 同期ウィンドウから外れた行の配信情報は、以後どの経路も書き換えない。
+  // TMDb 規約 Section 1.C の「6ヶ月を超えてキャッシュしない」に当たる
+  describe('古い配信情報の取り直し', () => {
+    const staleRow = {
+      id: 777,
+      title: '窓の外の作品',
+      release_type: 'streaming',
+    };
+
+    /** 取り直しで呼ばれた update のペイロードを返す */
+    const staleUpdatePayload = () =>
+      mockUpdate.mock.calls
+        .map((call) => call[0])
+        .find((payload) => 'watch_provider_flatrate' in payload);
+
+    it('cached_at が古く配信情報を持つ行を抽出する', async () => {
+      await syncStreamingMovies();
+
+      expect(mockStaleLt).toHaveBeenCalledWith('cached_at', expect.any(String));
+
+      // ⚠️ 閾値の向きを固定する。符号を間違えると「新しい行だけ」を
+      //    取り直して、古い行が永久に残る
+      const [, threshold] = mockStaleLt.mock.calls[0];
+      const days =
+        (Date.now() - Date.parse(threshold as string)) / (24 * 60 * 60 * 1000);
+      expect(days).toBeCloseTo(STREAMING_AVAILABILITY_STALE_DAYS, 0);
+    });
+
+    it('配信情報を持つ行だけを対象にする', async () => {
+      await syncStreamingMovies();
+
+      const [condition] = mockStaleOr.mock.calls[0];
+      for (const column of [
+        'watch_provider_flatrate',
+        'watch_provider_rent',
+        'watch_provider_buy',
+        'digital_release_date',
+      ]) {
+        expect(condition).toContain(`${column}.not.is.null`);
+      }
+    });
+
+    it('1回の同期で取り直す件数に上限を設ける', async () => {
+      await syncStreamingMovies();
+
+      expect(mockStaleLimit).toHaveBeenCalledWith(
+        STREAMING_STALE_REFRESH_LIMIT,
+      );
+    });
+
+    it('取り直した値を書き戻し、cached_at を更新する', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+      mockGetJpStreamingAvailability.mockResolvedValue({
+        isCurrentlyStreaming: true,
+        digitalReleaseDate: '2026-05-01',
+        watchProviderIds: { flatrate: [8], rent: [], buy: [2] },
+        keywordIds: [],
+      });
+
+      const result = await syncStreamingMovies();
+
+      expect(staleUpdatePayload()).toEqual({
+        is_currently_streaming: true,
+        digital_release_date: '2026-05-01',
+        watch_provider_flatrate: [8],
+        watch_provider_rent: [],
+        watch_provider_buy: [2],
+        // ⚠️ これを書かないと同じ行を毎日取り直し続ける
+        cached_at: expect.any(String),
+      });
+      expect(result.staleRefreshed).toBe(1);
+    });
+
+    // ⛔ NULL で潰すと、配信予定タブ（digital_release_date > today だけで
+    //    絞る）から「劇場公開は3ヶ月以上前・配信はこれから」の作品が落ちる
+    it('TMDbが配信情報を返さなくなった作品は空を反映する', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+      mockGetJpStreamingAvailability.mockResolvedValue({
+        isCurrentlyStreaming: false,
+        digitalReleaseDate: null,
+        watchProviderIds: { flatrate: [], rent: [], buy: [] },
+        keywordIds: [],
+      });
+
+      await syncStreamingMovies();
+
+      expect(staleUpdatePayload()).toEqual(
+        expect.objectContaining({
+          is_currently_streaming: false,
+          digital_release_date: null,
+        }),
+      );
+    });
+
+    it('TMDbの取得に失敗した行は現状維持にする', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+      mockGetJpStreamingAvailability.mockRejectedValue(new Error('503'));
+
+      const result = await syncStreamingMovies();
+
+      expect(staleUpdatePayload()).toBeUndefined();
+      expect(result.staleRefreshed).toBe(0);
+      expect(result.errors.some((e) => e.includes('stale availability'))).toBe(
+        true,
+      );
+    });
+
+    it('非Errorがスローされてもログに残して続行する', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+      mockGetJpStreamingAvailability.mockRejectedValue('string error');
+
+      const result = await syncStreamingMovies();
+
+      expect(result.staleRefreshed).toBe(0);
+      expect(result.errors.some((e) => e.includes('Unknown error'))).toBe(true);
+    });
+
+    it('書き戻しに失敗したらerrorsに積み、件数を増やさない', async () => {
+      staleSelectResult = { data: [staleRow], error: null };
+      staleUpdateResult = { error: { message: 'update failed' } };
+
+      const result = await syncStreamingMovies();
+
+      expect(result.staleRefreshed).toBe(0);
+      expect(result.errors.some((e) => e.includes('stale update'))).toBe(true);
+    });
+
+    it('抽出に失敗しても本筋の同期結果は残す', async () => {
+      staleSelectResult = { data: null, error: { message: 'select failed' } };
+
+      const result = await syncStreamingMovies();
+
+      expect(result.upserted).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes('stale select'))).toBe(true);
+    });
+
+    it('対象が無ければTMDbを追加で呼ばない', async () => {
+      staleSelectResult = { data: [], error: null };
+
+      const before = mockGetJpStreamingAvailability.mock.calls.length;
+      const result = await syncStreamingMovies();
+
+      // Discover 経由の候補1件ぶんだけ
+      expect(mockGetJpStreamingAvailability.mock.calls.length - before).toBe(1);
+      expect(result.staleRefreshed).toBe(0);
+    });
+
+    // ⚠️ 黙って切り捨てると「全部取り直した」ように見える
+    it('上限に達したらログに残す', async () => {
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      staleSelectResult = {
+        data: Array.from({ length: STREAMING_STALE_REFRESH_LIMIT }, (_, i) => ({
+          ...staleRow,
+          id: 1000 + i,
+        })),
+        error: null,
+      };
+
+      await syncStreamingMovies();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(String(STREAMING_STALE_REFRESH_LIMIT)),
+      );
+      warnSpy.mockRestore();
     });
   });
 });

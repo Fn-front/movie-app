@@ -35,7 +35,21 @@ export const SettingsPage = memo(function SettingsPage() {
   // パスワード未設定（ソーシャルログインのみ）のユーザーには
   // 「現在のパスワード」欄を出さない
   const hasPassword = session?.user?.hasPassword ?? true;
-  const isSessionLoading = status === 'loading';
+  /**
+   * セッションの**初回**読み込み中か
+   *
+   * ⛔ **`status === 'loading'` だけで判定しない**（#1364 の E2E で発覚）。
+   * `useSession().update()` は再取得のあいだ `loading` に戻すため
+   * （`node_modules/next-auth/react.js:339` の `setLoading(true)`）、
+   * 下の分岐が `EmailChangeForm` を**アンマウント**する。
+   *
+   * アンマウントされるとフォームの state が消えるので、変更に成功しても
+   * 「メールアドレスを変更しました。」が一度も出ない（実測）。利用者からは
+   * 入力欄が空に戻っただけに見える。
+   *
+   * 既に `email` を持っているなら、再取得中は今の表示を保つ。
+   */
+  const isInitialSessionLoading = status === 'loading' && !email;
 
   return (
     <div className={styles.c_settings_page}>
@@ -47,7 +61,7 @@ export const SettingsPage = memo(function SettingsPage() {
           <DisplayNameForm />
         </section>
 
-        {isSessionLoading ? (
+        {isInitialSessionLoading ? (
           <section className={styles.c_settings_page__section}>
             <Heading level={2}>パスワード変更</Heading>
             <Skeleton variant='rect' width='100%' height={48} />
@@ -109,7 +123,7 @@ export const SettingsPage = memo(function SettingsPage() {
           ⚠️ 取り消せない操作なので**一番下**に置く。上のほうに置くと
           ほかの設定を触りにきた利用者の目に先に入る
         */}
-        {!isSessionLoading && (
+        {!isInitialSessionLoading && (
           <section className={styles.c_settings_page__section}>
             <Heading level={2}>アカウントの削除</Heading>
             <DeleteAccount hasPassword={hasPassword} />

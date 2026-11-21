@@ -152,6 +152,44 @@ export async function updateUserColumns(
 }
 
 /**
+ * ソーシャルログインの連携行を作る（#1364）
+ *
+ * ⚠️ OAuth の往復は E2E では通せない（provider 側の画面が要る）。
+ * `accounts` に行を1つ置いて「連携済み」の状態だけ作る。
+ *
+ * メールアドレス変更は**パスワードと連携の両方を持つ利用者**を拒否する。
+ * `auth.ts` の `signIn` は既存ユーザーを `users.email` で引くため、
+ * アドレスを変えると連携が新しい行へ付け替わってしまうからだ（#1359）。
+ *
+ * @param userId - 対象の利用者ID
+ * @param provider - provider 名。既定は `google`
+ */
+export async function linkSocialAccount(
+  userId: string,
+  provider = 'google',
+): Promise<void> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/accounts`, {
+    method: 'POST',
+    headers: { ...jsonHeaders, Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      user_id: userId,
+      provider,
+      // provider 側のIDは任意の一意な値でよい。利用者IDを流用する
+      provider_account_id: `e2e-${userId}`,
+      type: 'oauth',
+    }),
+  });
+
+  // 握りつぶすと「連携なし」のまま進み、拒否されないことを実装のバグと
+  // 読み違える
+  if (!res.ok) {
+    throw new Error(
+      `accounts の作成に失敗した: ${userId} (${res.status} ${await res.text()})`,
+    );
+  }
+}
+
+/**
  * メールアドレスでユーザーと関連レコードを削除する
  *
  * `users` を参照する外部キーはおおむね ON DELETE CASCADE なので、

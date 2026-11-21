@@ -9,7 +9,13 @@
  * OTPコードの総当たり（`findOtpCodeByHash`）と同じ考え方。
  */
 
-import { createDecipheriv, createHmac, hkdfSync } from 'crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHmac,
+  hkdfSync,
+  randomBytes,
+} from 'crypto';
 
 import { expect, type Page } from '@playwright/test';
 
@@ -238,6 +244,92 @@ export async function cleanupTotp(email: string): Promise<void> {
     method: 'DELETE',
     headers: supabaseHeaders,
   });
+}
+
+/**
+ * 共有鍵を保存形式へ暗号化する
+ *
+ * `src/lib/totp/secret.ts` と同じ形式（`iv:authTag:暗号文`、いずれも base64）。
+ *
+ * @param secretBase32 - base32 の共有鍵
+ * @returns 保存形式の暗号文
+ */
+function encryptSecret(secretBase32: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv(
+    'aes-256-gcm',
+    deriveKey(KEY_PURPOSE.SECRET_ENCRYPTION),
+    iv,
+  );
+  const encrypted = Buffer.concat([
+    cipher.update(secretBase32, 'utf8'),
+    cipher.final(),
+  ]);
+
+  return [
+    iv.toString('base64'),
+    cipher.getAuthTag().toString('base64'),
+    encrypted.toString('base64'),
+  ].join(':');
+}
+
+/**
+ * 二段階認証を**設定済み**の状態にする（DBへ直接書く）
+ *
+ * ⚠️ **画面の設定フローは通さない。** 第2要素を要求する機能（アドレス変更・
+ * 退会など）の spec が見たいのは「設定済みの利用者がその機能を使えるか」で
+ * あって、設定フローそのものではない。設定フローは
+ * `e2e/auth/twoFactor.spec.ts` が通しで見ている。
+ *
+ * 画面を経由すると、設定フロー側の変更（再認証の追加など）で無関係な spec が
+ * まとめて落ちる。
+ *
+ * @param email - 対象ユーザーのメールアドレス
+ * @param method - 方式。`totp` なら共有鍵も作る
+ * @returns `totp` のときは base32 の共有鍵、`email_otp` のときは null
+ */
+export async function seedConfirmedSecondFactor(
+  email: string,
+  method: 'totp' | 'email_otp' = 'totp',
+): Promise<string | null> {
+  const userId = await getUserId(email);
+
+  if (!userId) throw new Error(`ユーザーが見つからない: ${email}`);
+
+  // base32 の 32 文字（160 ビット）。RFC 4226 の推奨長
+  const secret =
+    method === 'totp'
+      ? Array.from(randomBytes(32))
+          .map((byte) => BASE32_ALPHABET[byte % 32])
+          .join('')
+      : null;
+
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/user_totp`, {
+    method: 'POST',
+    headers: {
+      ...supabaseHeaders,
+      'Content-Type': 'application/json',
+      // 同じ利用者で作り直せるようにする
+      Prefer: 'resolution=merge-duplicates',
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      method,
+      encrypted_secret: secret ? encryptSecret(secret) : null,
+      confirmed_at: new Date().toISOString(),
+      last_used_counter: null,
+    }),
+  });
+
+  // 握りつぶすと「二段階認証なし」で進み、第2要素の欄が出ないことを
+  // 実装のバグと読み違える
+  if (!response.ok) {
+    throw new Error(
+      `user_totp の作成に失敗した (${response.status}): ${await response.text()}`,
+    );
+  }
+
+  return secret;
 }
 
 /**

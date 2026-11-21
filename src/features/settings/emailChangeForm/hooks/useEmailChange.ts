@@ -4,7 +4,11 @@
  * 画面は「入力」→「コード入力」の2状態を行き来する。
  *
  * ⚠️ **成功するとログイン識別子が変わる。** セッションの `email` は古いままなので、
- * `update()` でセッションを更新しないと設定画面が旧アドレスを出し続ける。
+ * **`update({})`** でセッションを更新しないと設定画面が旧アドレスを出し続ける。
+ *
+ * ⛔ **引数を省かない。** 省くと `next-auth/react` が GET に落として
+ * `trigger: 'update'` が立たず、反映が一度も走らない（下の `confirmCode` の
+ * コメントを参照）。
  */
 
 'use client';
@@ -198,8 +202,18 @@ export function useEmailChange(): UseEmailChangeResult {
         }
 
         // ⚠️ **セッションを更新する。** しないと設定画面もパスワード変更
-        //   フォームも旧アドレスを出し続け、利用者は変わったのか分からない
-        await update();
+        //   フォームも旧アドレスを出し続け、利用者は変わったのか分からない。
+        //
+        // ⛔ **引数を省かない**（#1364 の E2E で発覚）。`next-auth/react` の
+        //   `update` は `typeof data === 'undefined'` のとき**ボディ無しで
+        //   GET する**（`node_modules/next-auth/react.js:340`）。GET では
+        //   `trigger: 'update'` が立たず、`auth.ts` の
+        //   「メールアドレスの変更をセッションへ反映する」ブロックへ到達しない。
+        //
+        //   実測: 引数なしだと変更後もリロード後も旧アドレスのままで、
+        //   パスワード変更が旧アドレスで OTP を引いて必ず 400 になる
+        //   （`auth.ts` のコメントが防ごうとしていた状態そのもの）。
+        await update({});
 
         setNotice(EMAIL_CHANGE_MESSAGES.CHANGED);
         setView(EMAIL_CHANGE_VIEW.INPUT);

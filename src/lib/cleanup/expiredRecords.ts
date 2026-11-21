@@ -30,7 +30,7 @@ import { BatchedDeleteError, runBatchedDelete } from './batchedDelete';
  * RPC が `statement_timeout`（8秒）いっぱい掛かる分の余裕が要る。
  *
  * ⚠️ **この予算は全対象で共有する。** 対象ごとに 35秒 を持たせると
- * 4対象で 140秒 になり、`maxDuration` を超えて強制終了される
+ * 7対象で 245秒 になり、`maxDuration` を超えて強制終了される
  * （削除件数のログすら残らない）。
  *
  * この関係は `expiredRecords.test.ts` の不変条件テストで固定している。

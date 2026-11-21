@@ -141,7 +141,10 @@ describe('GET /api/cron/cleanup-expired-records', () => {
     expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({
         cronName: 'cleanup-expired-records',
-        reason: expect.stringContaining('時間内に終わりませんでした'),
+        reason: expect.stringContaining('消し残し'),
+        // ⚠️ 200 で返している実行なので「失敗」と名乗らせない。
+        //    連投抑止のカウンタも失敗とは別になる
+        severity: 'incomplete',
       }),
     );
     expect(mockNotifyCronFailure.mock.calls[0]?.[1].reason).toContain(
@@ -186,9 +189,14 @@ describe('GET /api/cron/cleanup-expired-records', () => {
     const response = await GET(createRequest('Bearer test-secret'));
 
     expect(response.status).toBe(500);
-    expect(mockNotifyCronFailure.mock.calls[0]?.[1].reason).toContain(
-      '削除に失敗しました',
-    );
+
+    const notice = mockNotifyCronFailure.mock.calls[0]?.[1];
+    expect(notice.severity).toBe('failure');
+    expect(notice.reason).toContain('削除に失敗');
+    // ⚠️ 失敗と同時でも打ち切り対象名を落とさない。落とすと失敗が続く間
+    //    消し残しの存在が一度も報告されない
+    expect(notice.reason).toContain('消し残し');
+    expect(notice.reason).toContain('rate_limits');
   });
 
   /**

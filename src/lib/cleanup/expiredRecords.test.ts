@@ -9,7 +9,7 @@
  * 「どの対象を」「失敗したときどうするか」「保持期間が妥当か」を固定する。
  */
 
-import { readFileSync } from 'fs';
+import { readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -168,23 +168,37 @@ describe('CLEANUP_TARGETS', () => {
      * 定数だけ短くすると、CRON が毎日 RPC に蹴られて**1件も消えないまま
      * `hasError` で 500 を返し続ける**。ズレをここで検出する。
      */
-    it('RPC の下限ガードと同じ値を使っている', () => {
-      const migration = readFileSync(
-        join(
-          process.cwd(),
-          'supabase/migrations/20261122000000_add_soft_deleted_list_cleanup_rpcs.sql',
-        ),
-        'utf8',
-      );
+    it('RPC の下限ガードを下回っていない', () => {
+      // ⚠️ **固定のファイル名を読まないこと。** 後続のマイグレーションが
+      //    CREATE OR REPLACE でガードを書き換えても、古いファイルを読む限り
+      //    緑のまま通る（cleanup.ts のコメントが嘘になる）。
+      //    3つの RPC を定義している**最新の**マイグレーションを探す
+      const migrationsDir = join(__dirname, '../../../supabase/migrations');
+      const latest = readdirSync(migrationsDir)
+        .filter((name) => name.endsWith('.sql'))
+        .sort()
+        .reverse()
+        .map((name) => readFileSync(join(migrationsDir, name), 'utf8'))
+        .find((sql) =>
+          SOFT_DELETE_TARGETS.every((table) =>
+            sql.includes(`delete_expired_${table}(`),
+          ),
+        );
 
-      const guards = migration.match(/retention_hours < (\d+)/g) ?? [];
+      expect(latest).toBeDefined();
+
+      const guards = latest!.match(/retention_hours < (\d+)/g) ?? [];
 
       // 3つの RPC それぞれにガードがあること
       expect(guards).toHaveLength(SOFT_DELETE_TARGETS.length);
 
       for (const guard of guards) {
-        expect(Number(guard.replace('retention_hours < ', ''))).toBe(
-          SOFT_DELETED_LIST_RETENTION_HOURS,
+        // ⚠️ **同値を要求しない。** 保持期間を**伸ばす**のは RPC 側で何も
+        //    問題が無い（下限以上なので通る）のに、同値だと落ちる。直そうと
+        //    すると適用済みのマイグレーションを編集することになり、
+        //    それは本番へ届かない（.claude/rules/supabase-db.md）
+        expect(SOFT_DELETED_LIST_RETENTION_HOURS).toBeGreaterThanOrEqual(
+          Number(guard.replace('retention_hours < ', '')),
         );
       }
     });
@@ -215,7 +229,7 @@ describe('CLEANUP_TARGETS', () => {
      */
     it('E2E ヘルパーの RPC 一覧に入っていない', () => {
       const helper = readFileSync(
-        join(process.cwd(), 'e2e/helpers/api.ts'),
+        join(__dirname, '../../../e2e/helpers/api.ts'),
         'utf8',
       );
 

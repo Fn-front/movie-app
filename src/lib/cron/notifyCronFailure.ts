@@ -70,7 +70,35 @@ export interface CronFailureNotice {
   cronName: string;
   /** 何が起きたか。メール本文に入る */
   reason: string;
+  /**
+   * 深刻度（既定: `failure`）（#433）
+   *
+   * - `failure` … 処理が失敗した。放っておいても直らないことが多い
+   * - `incomplete` … 処理は走ったが終わり切らなかった（時間切れ・反復上限）
+   *
+   * ⚠️ **連投抑止のカウンタを分けるために使う。** 抑止は1日1通で識別子が
+   * `cronName` だけなので、分けないと**打ち切りの通知が本物の失敗の枠を
+   * 食う**。打ち切りが定常的に起きている CRON で翌日に本当の失敗が起きても
+   * 通知が出ない、という形で効く。
+   *
+   * ⚠️ 件名・本文も出し分ける。`incomplete` は 200 で返している実行なので、
+   * 「CRON が失敗しました」と書くと 500 との区別が文面で潰れ、
+   * アラート疲れで本物の失敗を無視する訓練になる。
+   */
+  severity?: 'failure' | 'incomplete';
 }
+
+/** 深刻度ごとの文言 */
+const SEVERITY_TEXT = {
+  failure: {
+    subject: 'CRON が失敗しました',
+    lead: 'CRON の実行に失敗しました。',
+  },
+  incomplete: {
+    subject: 'CRON が終わり切りませんでした',
+    lead: 'CRON は実行されましたが、処理を終え切れませんでした。',
+  },
+} as const;
 
 /**
  * 同じ CRON の通知を1日1通に抑えてよいか
@@ -82,11 +110,14 @@ export interface CronFailureNotice {
 async function shouldNotify(
   supabase: SupabaseClient,
   cronName: string,
+  severity: 'failure' | 'incomplete',
 ): Promise<boolean> {
   try {
     const result = await checkRateLimit(
       supabase,
-      cronName,
+      // ⚠️ 深刻度ごとに別カウンタ。同じ識別子にすると打ち切りの通知が
+      //    本物の失敗の枠（1日1通）を食う（#433）
+      severity === 'failure' ? cronName : `${cronName}:${severity}`,
       RATE_LIMIT_ACTION.CRON_FAILURE_NOTICE,
       RATE_LIMIT_CONFIG.CRON_FAILURE_NOTICE.maxAttempts,
       RATE_LIMIT_CONFIG.CRON_FAILURE_NOTICE.windowMinutes,
@@ -116,7 +147,7 @@ async function shouldNotify(
  */
 export async function notifyCronFailure(
   supabase: SupabaseClient | null,
-  { cronName, reason }: CronFailureNotice,
+  { cronName, reason, severity = 'failure' }: CronFailureNotice,
 ): Promise<boolean> {
   // 宛先が無ければ何もしない。
   //
@@ -141,7 +172,11 @@ export async function notifyCronFailure(
     // ⚠️ **DB より先に見る。** DB の抑止が効かない状況（鍵が無い・DB障害）でも
     // 必ず通る層にしておく。ここを後ろに置くと `shouldNotify` の fail-open を
     // 通り抜けた分がそのまま送信APIへ出ていく
-    if (!localThrottle.check(cronName)) {
+    // ⚠️ プロセス内の歯止めも深刻度ごとに分ける。同じキーだと打ち切りの
+    //    通知が60秒窓を占有して本物の失敗を落とす
+    const throttleKey = severity === 'failure' ? cronName : `${cronName}:${severity}`;
+
+    if (!localThrottle.check(throttleKey)) {
       console.warn(
         `[notifyCronFailure] 直前に通知済みのため送りません（60秒）: ${cronName}`,
       );
@@ -150,7 +185,7 @@ export async function notifyCronFailure(
 
     // supabase が無いのは「DB へ繋げないこと自体が失敗の原因」のケース。
     // 連投抑止はできないが、そういうときこそ通知が要る
-    if (supabase && !(await shouldNotify(supabase, cronName))) {
+    if (supabase && !(await shouldNotify(supabase, cronName, severity))) {
       return false;
     }
 
@@ -159,9 +194,9 @@ export async function notifyCronFailure(
     const { error } = await resend.emails.send({
       from: `${APP_NAME} <${fromEmail}>`,
       to,
-      subject: `[${APP_NAME}] CRON が失敗しました: ${cronName}`,
+      subject: `[${APP_NAME}] ${SEVERITY_TEXT[severity].subject}: ${cronName}`,
       text: [
-        'CRON の実行に失敗しました。',
+        SEVERITY_TEXT[severity].lead,
         '',
         `CRON: ${cronName}`,
         `理由: ${reason}`,

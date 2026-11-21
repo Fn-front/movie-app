@@ -7,7 +7,8 @@
  *
  * 対象は `src/lib/cleanup/expiredRecords.ts` の `CLEANUP_TARGETS`。
  * 現在は `rate_limits`（#933）/ `otp_codes`（#978）/
- * `password_reset_tokens`（#1300）/ `recommendation_events`（#1355）の4つ。
+ * `password_reset_tokens`（#1300）/ `recommendation_events`（#1355）/
+ * `favorites` / `watchlist` / `dismissed_movies`（#433）の7つ。
  *
  * 専用CRONにしている理由（#933）:
  *   個人情報保護法22条（不要となった個人データの消去）に関わる処理なので、
@@ -91,20 +92,30 @@ export async function GET(request: NextRequest) {
     const truncated = targets.filter((t) => !t.completed && !t.error);
 
     if (hasError || truncated.length > 0) {
-      const failed = targets
-        .filter((t) => t.error !== undefined)
-        .map((t) => `${t.name}: ${t.error}`)
-        .join(' / ');
+      const parts: string[] = [];
 
-      const reason = hasError
-        ? `保持期間切れの削除に失敗しました（${failed}）`
-        : `保持期間切れの削除が時間内に終わりませんでした（${truncated
-            .map((t) => t.name)
-            .join(' / ')}）`;
+      if (hasError) {
+        parts.push(
+          `削除に失敗: ${targets
+            .filter((t) => t.error !== undefined)
+            .map((t) => `${t.name}: ${t.error}`)
+            .join(' / ')}`,
+        );
+      }
+
+      // ⚠️ 失敗と同時でも打ち切り対象名を落とさない。落とすと、失敗が続く間
+      //    消し残しの存在が一度も報告されない（1日1通の抑止と重なる）
+      if (truncated.length > 0) {
+        parts.push(`消し残し: ${truncated.map((t) => t.name).join(' / ')}`);
+      }
 
       await notifyCronFailure(supabase, {
         cronName: 'cleanup-expired-records',
-        reason,
+        reason: `保持期間切れの掃除に問題があります（${parts.join(' ／ ')}）`,
+        // ⚠️ 打ち切りは 200 で返している実行。件名を「失敗」にすると 500 との
+        //    区別が文面で潰れ、アラート疲れで本物の失敗を無視する訓練になる。
+        //    連投抑止のカウンタも分かれる（#433 レビュー指摘）
+        severity: hasError ? 'failure' : 'incomplete',
       });
     }
 

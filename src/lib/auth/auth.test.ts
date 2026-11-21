@@ -2658,7 +2658,7 @@ describe('authorize の第2要素（method=email_otp）', () => {
    * 使い切って**メールOTPでのログインを妨害できる**。
    * 上の `resetRateLimit` で `login` も積み上がらない。
    */
-  it('送信の前に送信元ごとの枠を消費する', async () => {
+  it('送信元ごとの層の識別子を sendSecondFactorCode へ渡す', async () => {
     await expect(
       credentialsProvider.authorize(
         { email: 'owner@example.com', password: PASSWORD },
@@ -2666,31 +2666,51 @@ describe('authorize の第2要素（method=email_otp）', () => {
       ),
     ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED });
 
-    const identifiers = mockCheckRateLimit.mock.calls.map((call) => [
-      call[1],
-      call[2],
-    ]);
-
     // ⚠️ 識別子は `メール|IP`。利用者IDにすると送信元で分かれず、
     //    手前に層を足した意味が無くなる
-    expect(identifiers).toContainEqual([
+    //
+    // ⚠️ **消費そのものはヘルパーの中**（再送間隔の判定より後ろ）。
+    //    ここで数えると1通も送らないリクエストが枠を食う。
+    //    順序は sendSecondFactorCode.test.ts が固定している
+    expect(mockSendSecondFactorCode).toHaveBeenCalledWith(
+      expect.anything(),
+      USER_ID,
+      'owner@example.com',
       'owner@example.com|203.0.113.1',
-      RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT,
-    ]);
+    );
   });
 
   /**
-   * ⛔ **弾くほうが先**。後ろだと `TWO_FACTOR_SEND`（被害者の枠）を
-   * 消費してから弾くことになり、妨害を止められない。
+   * ⛔ **送信元IPが不明なら層を掛けない。**
+   *
+   * `buildLoginIdentifier` は unknown のときメール単独へ退化するので、
+   * 渡してしまうと**全員が同じカウンタを共有**する。誰でも上限ぶんの
+   * リクエストで被害者を締め出せて、**修正前より悪化する**。
+   * `LOGIN_IP` が unknown をスキップするのと同じ扱い。
    */
-  it('送信元ごとの枠を使い切ったら、1通も送らずに打ち切る', async () => {
-    mockCheckRateLimit.mockImplementation((_supabase, _id, action) =>
-      Promise.resolve(
-        action === RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT
-          ? { allowed: false, retryAfter: 3600 }
-          : { allowed: true },
+  it('送信元IPが不明なら識別子を渡さない', async () => {
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        // 転送ヘッダ無し = getClientIp が 'unknown'
+        new Request('https://example.com/api/auth/callback/credentials'),
       ),
+    ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED });
+
+    expect(mockSendSecondFactorCode).toHaveBeenCalledWith(
+      expect.anything(),
+      USER_ID,
+      'owner@example.com',
+      undefined,
     );
+  });
+
+  /**
+   * ⛔ 1通も送れず、受信箱にも生きたコードが無いときだけ
+   * リカバリーコードへ誘導する。
+   */
+  it('送信元ごとの枠を使い切ったら、リカバリーコードへ誘導する', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('limit_exceeded');
 
     await expect(
       credentialsProvider.authorize(
@@ -2700,8 +2720,24 @@ describe('authorize の第2要素（method=email_otp）', () => {
     ).rejects.toMatchObject({
       code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
     });
+  });
 
-    expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
+  /**
+   * ⛔ **受信箱のコードが生きているならリカバリーコードへ送らない**
+   * （GHSA-p899-6g7w-v7hg）。
+   *
+   * 妨害は「被害者の受信箱に有効なコードを送り込む」形でしか成立しない。
+   * その状態で別の出口へ誘導するのは、手元に答えがあるのに遠回りさせること。
+   */
+  it('上限でも有効なコードが残っていればコード入力を促す', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('limit_exceeded_code_valid');
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED });
   });
 
   /**
@@ -2756,6 +2792,7 @@ describe('authorize の第2要素（method=email_otp）', () => {
       expect.anything(),
       USER_ID,
       'owner@example.com',
+      expect.any(String),
     );
   });
 

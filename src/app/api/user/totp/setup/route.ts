@@ -194,8 +194,12 @@ export async function POST(request: Request) {
       // 429 にはしない。直前のコードは**まだ有効**で、利用者がやることは
       // 「受信箱を見る」であって「待つ」ではない。失敗として扱うと
       // 設定画面が先へ進めなくなる。
+      // LIMIT_EXCEEDED_CODE_VALID も同じ出口。新しくは送っていないが、
+      // 受信箱のコードはまだ有効なので「送信しました」と言わない（#1285）
       const throttled =
-        setup.sendResult === SEND_SECOND_FACTOR_RESULT.THROTTLED;
+        setup.sendResult === SEND_SECOND_FACTOR_RESULT.THROTTLED ||
+        setup.sendResult ===
+          SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID;
 
       return NextResponse.json(
         {

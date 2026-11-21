@@ -126,6 +126,19 @@ export async function POST() {
       );
     }
 
+    if (result === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID) {
+      // 送信上限だが、直前のコードはまだ有効（GHSA-p899-6g7w-v7hg）。
+      //
+      // ⚠️ `RESEND_TOO_SOON`（「しばらく待ってから再送信してください。」）を
+      // 使わない。直るまで最長60分で、「しばらく」では嘘になる。
+      // やることは「受信箱を見る」なので、そう言う
+      return errorResponse(
+        ERROR_CODE.RATE_LIMIT_EXCEEDED,
+        SECOND_FACTOR_MESSAGES.CODE_ALREADY_SENT,
+        HTTP_STATUS.TOO_MANY_REQUESTS,
+      );
+    }
+
     if (result === SEND_SECOND_FACTOR_RESULT.THROTTLED) {
       // 直前に送ったコードがまだ生きている。待ってもらう
       return errorResponse(

@@ -42,6 +42,70 @@ const MODAL_URL = /\/movies\/now-showing\?.*movie_id=\d+/;
 /** 全画面ページのURL（/movies/<数値>） */
 const PAGE_URL = /\/movies\/\d+$/;
 
+/*
+ * h1 が2件になる件の決着（#1333 → #1343 で調査）
+ *
+ * #1339（#1333 の対応PR）がこの spec へ書いた「遷移中は Radix のタブパネルが
+ * 新旧2つ並ぶ」は**誤り**だった。`Tabs`（`src/components/ui/tabs/tabs.tsx:112`）
+ * は選択中の1パネルしか描画しないので、タブ切替では増えない。
+ *
+ * ## 実際に何が2つあったか
+ *
+ * 報告された2要素の id は `radix-_r_0_-…` と `radix-_R_39bn5rhqbmlqlb_-…`。
+ * React の `useId` は**ハイドレート中に生成したものが `_R_`、ハイドレーションを
+ * 伴わずクライアントでマウントしたものが `_r_`**
+ * （`react-dom-client.development.js` の `if (isHydrating)` 分岐）。
+ * つまり「SSR されてハイドレートされたツリー」と「クライアントでマウントされた
+ * ツリー」が同居していた。タブではなくページツリーの二重化。
+ *
+ * ⚠️ #1343 の本文は `_r_` / `_R_` の対応を**逆に**書いている（Issue 側に
+ * 訂正コメントを残した）。
+ *
+ * ## 報告された組み合わせは本番ビルドでは成立しない
+ *
+ * 実測:
+ *
+ * | | 配信される初期HTMLの h1 | 同 radix id |
+ * |---|---|---|
+ * | `next dev` | 1件 | `radix-_R_39bn5rhqbmlqlb_-content-theatrical` |
+ * | `next start`（本番ビルド） | **0件** | **無し** |
+ *
+ * 本番ビルドでは `/movies/now-showing` が静的プリレンダで、`page.tsx` の
+ * `<Suspense>` が fallback に落ちる（一覧が `useSearchParams` を使うため）。
+ * **ハイドレート対象のツリーがそもそも無い**ので id は `_r_` 系だけになり、
+ * 報告された `_R_` + `_r_` の組み合わせは起こりえない。
+ *
+ * 報告された class 名も dev 固有の形
+ * （`movieListContent-module-scss-module__MbMQ1W__…`。本番は
+ * `MbMQ1W_c_movie_list__title`）で、観測が `next dev` だったことと一致する。
+ * #1339 のコミットメッセージにも「`next dev` で検証していたときは別の失敗が
+ * 多発した」とある。
+ *
+ * ⚠️ **構造から言えるのはここまで。** 本番にもクライアント由来のツリーは
+ * あるので、「`_r_` のツリーが2本同居する」経路までは排除できていない。
+ *
+ * ⚠️ この結論は `/movies/now-showing` が**静的プリレンダ＋CSR bailout の
+ * まま**であることに依存する。PPR / Cache Components を有効にする、
+ * `force-dynamic` にする、一覧から `useSearchParams` を外す、`page.tsx` の
+ * `<Suspense>` を動かす —— のいずれかをしたら前提が消えるので再評価すること
+ * （`.next/prerender-manifest.json` の `compute` で確認できる）。
+ *
+ * ## 判断: 許容する
+ *
+ * CI は `npm start`（本番ビルド）。本番ビルドで本 spec 全体を3周
+ * （CPU 6倍スロットリング + 毎フレーム採取 + MutationObserver）流して、
+ * h1 が2件になる瞬間は**1度も観測できなかった**。利用者影響も確認できて
+ * いない。**構造ではなくこの実測を根拠に許容する。**
+ *
+ * ⚠️ dev 側で「何が」2つ目のツリーをマウントするかは絞り切れていない
+ * （dev でも同条件で再現できなかった）。本番で起きないことを優先して
+ * 追跡を打ち切っている。
+ *
+ * ⚠️ canary（`toHaveCount(1)`）は**外さない**。ただし気づけるのは
+ * **恒常化した**重複だけ（`toHaveCount` はリトライするので一瞬の重複は
+ * 通る）。それでも本番へ波及したときの口はここしか無い。
+ */
+
 test.describe('映画詳細のURL化', () => {
   /**
    * 保存済みフィルターを持ち越さない（#1062）。
@@ -76,9 +140,10 @@ test.describe('映画詳細のURL化', () => {
       timeout: 15000,
     });
     // 一覧は残っている（Radix が背景を aria-hidden にするので CSS で見る）
-    // ⚠️ `.first()` を外さないこと（#1333）。遷移中は Radix のタブパネルが
-    // 新旧2つ並ぶ瞬間があり、同じ文言の h1 が2件になって strict mode
-    // violation で落ちる（実測で3回に1回ほど）。
+    // ⚠️ `.first()` を外さないこと（#1333 / #1343）。dev では SSR 由来の
+    // ツリーとクライアントでマウントされたツリーが一瞬同居し、同じ文言の
+    // h1 が2件になって strict mode violation で落ちる。原因と「許容する」
+    // 判断はファイル上部の『h1 が2件になる件の決着』を参照。
     //
     // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
     //   背後が `aria-hidden` になるため role では拾えず、element not found で
@@ -114,9 +179,10 @@ test.describe('映画詳細のURL化', () => {
 
     await expect(page).toHaveURL(MODAL_URL);
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 20000 });
-    // ⚠️ `.first()` を外さないこと（#1333）。遷移中は Radix のタブパネルが
-    // 新旧2つ並ぶ瞬間があり、同じ文言の h1 が2件になって strict mode
-    // violation で落ちる（実測で3回に1回ほど）。
+    // ⚠️ `.first()` を外さないこと（#1333 / #1343）。dev では SSR 由来の
+    // ツリーとクライアントでマウントされたツリーが一瞬同居し、同じ文言の
+    // h1 が2件になって strict mode violation で落ちる。原因と「許容する」
+    // 判断はファイル上部の『h1 が2件になる件の決着』を参照。
     //
     // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
     //   背後が `aria-hidden` になるため role では拾えず、element not found で
@@ -557,9 +623,10 @@ test.describe('映画詳細のURL化', () => {
 
       await expect(page.getByRole('dialog')).toHaveCount(0);
       await expect(page).toHaveURL(/\/movies\/now-showing$/);
-      // ⚠️ `.first()` を外さないこと（#1333）。遷移中は Radix のタブパネルが
-      // 新旧2つ並ぶ瞬間があり、同じ文言の h1 が2件になって strict mode
-      // violation で落ちる（実測で3回に1回ほど）。
+      // ⚠️ `.first()` を外さないこと（#1333 / #1343）。dev では SSR 由来の
+      // ツリーとクライアントでマウントされたツリーが一瞬同居し、同じ文言の
+      // h1 が2件になって strict mode violation で落ちる。原因と「許容する」
+      // 判断はファイル上部の『h1 が2件になる件の決着』を参照。
       //
       // ⛔ `getByRole('heading', ...)` に置き換えない。モーダルを開いている間は
       //   背後が `aria-hidden` になるため role では拾えず、element not found で

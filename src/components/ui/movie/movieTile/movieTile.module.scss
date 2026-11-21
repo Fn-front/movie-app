@@ -65,7 +65,9 @@
       // グリッドはカード下端へ寄せるが、リストは横幅をそのまま使うので
       // space-between だと日付と評価が画面幅ぶん離れる
       justify-content: flex-start;
-      gap: $spacing-3;
+      // 操作ボタンにラベルが付いたぶん（#1030）情報側が足りない。
+      // 360px で公開日が省略されるかどうかがこの 4px で決まる
+      gap: $spacing-2;
       margin-top: 0;
     }
 
@@ -121,7 +123,13 @@
     // 下がるため（`_theme.scss`）、4px ぶん領域が重なって隣を誤爆する（#1119）。
     // グリッド側の `__dismiss_button` が #1111 で同じ理由から calc へ直っている
     gap: calc($tap-target-min - 28px);
-    padding-right: $spacing-1;
+    // ⛔ **$spacing-2 より詰めない。** 28px のボタンのヒット領域（44px）は
+    // 右へ 8px はみ出す。カードは `overflow: hidden` なので見た目には出ないが、
+    // **`scrollWidth` には乗る**ので「行が溢れている」と判定される。
+    // #1030 で 4px に詰めたところ、320px の
+    // `e2e/mobile/movieViewMode.spec.ts`「リスト行の操作列がカードから溢れない」が
+    // 298 > 294 で落ちた。幅が要るなら他から取ること
+    padding-right: $spacing-2;
     // タイトル button の ::after（カード全面の当たり判定）より上に置く
     position: relative;
     z-index: 1;

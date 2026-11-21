@@ -138,25 +138,32 @@ import type { Movie, MovieDetail, TMDbResponse } from '@/lib/types';
 ⛔ **新しく書く前に `src/lib/tmdb/tmdb.ts` を見る。** 必要なものはたいてい
 もうある。以下は**実在する関数の署名**で、テンプレートではない。
 
-| 関数 | 戻り値 | 行 |
-|---|---|---|
-| `searchMovies(query, page)` | `Promise<TMDbResponse<Movie>>` | `:411` |
-| `getMovieDetail(id)` | `Promise<MovieDetail>` | `:178` |
-| `getNowPlayingMovies(...)` | `Promise<FilteredTMDbResponse<Movie>>` | `:155` |
-| `discoverMovies(params)` | `Promise<FilteredTMDbResponse<Movie>>` | `:470` |
-| `getGenres()` | `Promise<Genre[]>` | `:518` |
-| `getPersonDetail(id)` | — | `:868` |
-| `getJpTheatricalReleaseDates(id)` / `getJpStreamingAvailability(id)` | — | `:595` / `:652` |
+| 関数 | 戻り値 |
+|---|---|
+| `searchMovies(params: MovieSearchParams, options?)` | `Promise<TMDbResponse<Movie>>` |
+| `getMovieDetail(id)` | `Promise<MovieDetail>` |
+| `getNowPlayingMovies(page = 1)` | `Promise<FilteredTMDbResponse<Movie>>` |
+| `discoverMovies(params: DiscoverMoviesParams = {})` | `Promise<FilteredTMDbResponse<Movie>>` |
+| `getGenres()` | `Promise<Genre[]>` |
+| `getPersonDetail(id)` | `Promise<PersonDetail>` |
+| `getJpTheatricalReleaseDates(id)` | `Promise<string[]>` |
+| `getJpStreamingAvailability(id)` | `Promise<JpStreamingAvailability>` |
 
-⚠️ **`getPopularMovies` / `getUpcomingMovies` / `getMoviesByDateRange` は
-存在しない。** 「人気」「公開予定」は `discoverMovies` にパラメータを渡して
-作る（`DiscoverMoviesParams`、`:438`）。
+⚠️ **`searchMovies` の第1引数はオブジェクト。** 位置引数ではない。
 
 ```typescript
-// 公開予定 = discoverMovies にパラメータを渡す
+const results = await searchMovies({ query, page, year });
+```
+
+⚠️ **`getPopularMovies` / `getUpcomingMovies` / `getMoviesByDateRange` は
+存在しない。** 「人気」「公開予定」は `discoverMovies` に
+`DiscoverMoviesParams`（`tmdb.ts`）を渡して作る。
+
+```typescript
+// 公開予定。⚠️ キーは release_date.*（primary_release_date.* ではない）
 const upcoming = await discoverMovies({
-  'primary_release_date.gte': from,
-  'primary_release_date.lte': to,
+  'release_date.gte': from,
+  'release_date.lte': to,
   sort_by: 'popularity.desc',
   page,
 });
@@ -164,24 +171,34 @@ const upcoming = await discoverMovies({
 
 ### 新しい関数を足すとき
 
-既存に倣う。除外フィルタを通すなら戻り値は `FilteredTMDbResponse<Movie>`
-（理由は上記）、素通しなら `TMDbResponse<Movie>`。
+既存に倣う。パスは直書きせず `TMDB_ENDPOINTS`（`@/constants/api`）を使う。
 
 ```typescript
 export async function searchMovies(
-  query: string,
-  page: number = 1,
+  params: MovieSearchParams,
+  options?: { signal?: AbortSignal },
 ): Promise<TMDbResponse<Movie>> {
+  const { query, page = 1, year, genre } = params;
+
   const response = await tmdbClient.get<TMDbResponse<Movie>>(
-    TMDB_ENDPOINTS.SEARCH_MOVIE,
-    { params: { query, page } },
+    // ⚠️ キーは SEARCH。SEARCH_MOVIE は存在しない
+    TMDB_ENDPOINTS.SEARCH,
+    { params: { query, page, year, with_genres: genre }, signal: options?.signal },
   );
 
-  return response.data;
+  // ⛔ 除外フィルタを必ず通す。落とすと不適切コンテンツがそのまま出る
+  //    （tmdb.ts のモジュール内関数。export されていないので同じファイルに書く）
+  return {
+    ...response.data,
+    results: excludeInappropriateMovies(response.data.results),
+  };
 }
 ```
 
-⚠️ エンドポイントのパスは直書きせず `TMDB_ENDPOINTS`（`@/constants`）を使う。
+⚠️ **戻り値の型は「フィルタを通すか」とは一致していない。**
+`FilteredTMDbResponse<Movie>` はフィルタ前の件数を持たせたいときに使うもので
+（#1166）、`searchMovies` はフィルタを通すが `TMDbResponse<Movie>` を返す
+（ページを跨いで巡回しないため）。既存の関数に合わせること。
 
 ## 画像URL生成
 

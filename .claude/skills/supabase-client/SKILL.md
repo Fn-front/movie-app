@@ -345,7 +345,7 @@ if (error) throw error;
 
 ### 公開データ（未認証で叩ける）
 
-⛔ **anon を選ぶ理由にならない。** `/api/movies` も `/api/movies/search` も
+⛔ **anon を選ぶ理由にならない。** `/api/movies` も `/api/movies/[id]` も
 未認証で叩けるが `createServiceRoleClient()` を使っている。基準は
 「未認証で叩けるか」ではなく **「そのテーブルに anon の `SELECT` があるか」**。
 
@@ -359,9 +359,18 @@ if (!supabase) return dbConnectionErrorResponse();
 の2テーブルだけで、実際の使用箇所も `src/app/api/awards/route.ts` の1本。
 他のテーブルを anon で読むと PostgREST が `42501` を返して全件失敗する。
 
+⚠️ anon では RLS が効くが、**`GRANT` が前提**。`ENABLE ROW LEVEL SECURITY` と
+`CREATE POLICY` だけでは Data API に公開されず、やはり `42501` になる
+（`.claude/rules/supabase-db.md`）。
+
 ⚠️ anon GRANT のあるもう1つ（`now_showing_movies`）は `createAnonClient()`
 ではなく `src/lib/api/nowShowing/nowShowing.server.ts` が `createClient()` を
-直接呼んで読む（`unstable_cache` の中で `cookies()` が使えないため）。
+直接呼んで読む。
+
+⛔ **この2つが anon なのは歴史的経緯で、再現すべき判断基準は無い。**
+公開読み取りを最小権限へ寄せた名残。どちらもサーバーから読んでいるので
+service_role でも動く。**新しいテーブルは service_role にすること** ——
+anon を足すたびに、鍵が公開されている以上「誰でも読める面」が増える。
 
 ## エラーハンドリング
 

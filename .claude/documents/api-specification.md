@@ -707,15 +707,17 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
    - `query`: 検索キーワード
    - `page`: ページ番号
    - `language=ja-JP`, `region=JP`
-2. フィルターパラメータが指定されている場合、**サーバー側でフィルタリング**
-   - `genre`: レスポンスの`genre_ids`配列に指定ジャンルIDが含まれるかチェック
-   - `year`: レスポンスの`release_date`の年と一致するかチェック
-   - `vote_average_gte`: レスポンスの`vote_average`が閾値以上かチェック
+   - `year`: **TMDb へ渡す**（`/search/movie` がサポートしているため）
+2. 残りのフィルターが指定されている場合、**サーバー側でフィルタリング**
+   （`filterMovies`。`year` はここに**含まれない**）
+   - `genreIds`: レスポンスの`genre_ids`配列に指定ジャンルIDが含まれるかチェック
+   - `voteAverageGte`: レスポンスの`vote_average`が閾値以上かチェック
+   - `releaseDateGte` / `releaseDateLte`: 公開期間での絞り込み（#997）
 3. フィルタリング後の結果を返却
    - **注意**: サーバー側フィルタリングが働くと `totalResults` は TMDb の値と異なる。
      このとき実装は**1ページぶんに畳む**ため `totalResults` は絞り込み後の件数（最大20）、
      `totalPages` は 1、`isServerFiltered` は `true` になる（`route.ts` 参照）。
-     上の例は適用されていない場合
+     下のレスポンス例は適用されていない場合
 
 **パターン2: キーワードなし + フィルターあり**
 1. TMDb API `/discover/movie` を呼び出し

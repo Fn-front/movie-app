@@ -384,12 +384,12 @@ const Modal = ({ isOpen, onClose, children }) => {
 - ARIAラベルを適切に付与
 
 ### ⚠️ 改善推奨項目
-- `src/components/ui/card/card.module.scss:15` - ハードコードされた色値 `#1878b9` → `$primary-500` を使用
-- `src/components/SearchBar/searchBar.tsx:23` - displayNameが未設定
+- `<file>.module.scss:<line>` - ハードコードされた色値 `#1878b9` → `$primary-500` を使用
+- `<file>.tsx:<line>` - displayNameが未設定
 
 ### ❌ 必須修正項目
-- `src/components/Modal/modal.module.scss:8` - HTML要素 `div` を直接スタイリング → クラス名を付与
-- `src/components/Button/button.tsx:10` - React.memoを使用していない
+- `<file>.module.scss:<line>` - HTML要素 `div` を直接スタイリング → クラス名を付与
+- `<file>.tsx:<line>` - React.memoを使用していない
 ```
 
 ## 参考ドキュメント
@@ -401,7 +401,7 @@ const Modal = ({ isOpen, onClose, children }) => {
 
 ```bash
 # 特定のファイルをチェック
-/design-check src/components/ui/card/card.tsx
+/design-check src/components/ui/button/button.tsx
 
 # コンポーネントディレクトリ全体をチェック
 /design-check src/components/

@@ -131,10 +131,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table_name> TO service_role;
 1つも無い**（`@supabase/supabase-js` を import する `'use client'` のファイルは
 0件）ので、anon を選ぶ理由は「クライアント用だから」ではない。
 
-上の2つが anon なのは、**サーバー側で anon キーを使う事情**があるため。
-`now_showing_movies` は `unstable_cache` の中から読むので `cookies()` に
-依存するクライアントを作れない（`nowShowing.server.ts`）。
-新しく足すときは、同じ事情があるか確かめること。無ければ service_role でよい。
+⛔ **上の2つは歴史的経緯で、再現すべき判断基準は無い。** 公開読み取りを
+最小権限へ寄せた名残で、どちらもサーバーから読んでいるので service_role でも
+動く。**新しいテーブルはパターンA（service_role のみ）にすること。**
+anon を足すたびに、鍵が公開されている以上「誰でも読める面」が増える。
 
 ### パターンD: 関数（RPC・トリガー関数）
 

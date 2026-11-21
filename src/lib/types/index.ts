@@ -161,9 +161,6 @@ export interface Crew {
 }
 
 /**
- * 「興味なし」の傾向学習に使う映画のメタ情報
- */
-/**
  * 利用者リストの表示列を取り直すときに使う項目（#433）
  *
  * favorites / watchlist / dismissed_movies が保持している TMDb 由来の列を
@@ -186,6 +183,9 @@ export interface UserListRefreshFields {
   releaseYear: number | null;
 }
 
+/**
+ * 「興味なし」の傾向学習に使う映画のメタ情報
+ */
 export interface DismissSignals {
   /** TMDbキーワード名の配列（テーマ傾向） */
   keywords: string[];

@@ -33,6 +33,23 @@ export const USER_LIST_REFRESH_STALE_DAYS = 60;
 export const USER_LIST_REFRESH_LIMIT = 500;
 
 /**
+ * 404 がこの比率を超えたら削除予定の印付けを中止する（#433）
+ *
+ * ⛔ **これが無いと、TMDb 側の障害で本番の全行が黙って壊れる。**
+ *
+ * 404 の判定（`isTmdbNotFoundError`）は1件ごとには正しいが、
+ * **全体として異常かどうか**を見る層が無かった。エンドポイント変更や
+ * 認証事故で 404 が面で返ると、1回の実行で生存行すべてに
+ * `tmdb_deleted_at` が立つ。しかも 404 は失敗として数えないため
+ * 失敗率は 0% のままで、200 / `success: true` で終わり通知も飛ばない。
+ *
+ * 作品が TMDb から消えるのは本来まれなので、閾値は低めでよい。
+ * 中止しても印を付けないだけで `tmdb_refreshed_at` も進めないため、
+ * 次回の実行で拾い直せる。
+ */
+export const NOT_FOUND_ABORT_RATIO = 0.2;
+
+/**
  * TMDb へ同時に投げる問い合わせ数
  *
  * TMDb のレート制限（50 req/s）に収めるため、`syncStreamingMovies` と

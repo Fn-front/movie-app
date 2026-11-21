@@ -10,6 +10,19 @@
  */
 
 const mockGetMovieListRefreshFields = jest.fn();
+/**
+ * クエリに渡された引数
+ *
+ * ⚠️ **引数を捨てないこと。** `.or()` の書式を壊す / `nullsFirst` を外す /
+ * `.eq('id', row.id)` を取り違える、のいずれも**全テストが緑のまま通る**。
+ * 最後のひとつは他利用者の行まで更新する。
+ */
+const mockStaleIs = jest.fn();
+const mockStaleOr = jest.fn();
+const mockStaleOrder = jest.fn();
+const mockStaleLimit = jest.fn();
+const mockUpdateEq = jest.fn();
+const mockCacheEq = jest.fn();
 
 jest.mock('@/lib/tmdb/tmdb', () => ({
   getMovieListRefreshFields: (movieId: number) =>
@@ -23,7 +36,10 @@ jest.mock('@/lib/tmdb/tmdb', () => ({
 
 import { createClient } from '@supabase/supabase-js';
 
-import { USER_LIST_REFRESH_LIMIT } from '@/constants/userListRefresh';
+import {
+  USER_LIST_REFRESH_LIMIT,
+  USER_LIST_REFRESH_STALE_DAYS,
+} from '@/constants/userListRefresh';
 
 import { refreshUserListTmdbFields } from './refreshUserListTmdbFields';
 
@@ -64,30 +80,46 @@ function createSupabaseMock(options: {
       if (table === 'movie_cache') {
         const chain = {
           in: () => chain,
-          eq: () => Promise.resolve({ data: cache, error: null }),
+          eq: (...args: unknown[]) => {
+            mockCacheEq(...args);
+            return Promise.resolve({ data: cache, error: null });
+          },
         };
         return chain;
       }
       const chain = {
-        is: () => chain,
-        or: () => chain,
-        order: () => chain,
-        limit: () =>
-          Promise.resolve(
+        is: (...args: unknown[]) => {
+          mockStaleIs(...args);
+          return chain;
+        },
+        or: (...args: unknown[]) => {
+          mockStaleOr(...args);
+          return chain;
+        },
+        order: (...args: unknown[]) => {
+          mockStaleOrder(...args);
+          return chain;
+        },
+        limit: (...args: unknown[]) => {
+          mockStaleLimit(...args);
+          return Promise.resolve(
             selectError[table]
               ? { data: null, error: { message: selectError[table] } }
               : { data: rows[table] ?? [], error: null },
-          ),
+          );
+        },
       };
       return chain;
     },
     update: (payload: Record<string, unknown>) => {
       updates.push({ table, payload });
       return {
-        eq: () =>
-          Promise.resolve({
+        eq: (...args: unknown[]) => {
+          mockUpdateEq(...args);
+          return Promise.resolve({
             error: updateError ? { message: updateError } : null,
-          }),
+          });
+        },
       };
     },
   }));
@@ -284,56 +316,88 @@ describe('refreshUserListTmdbFields', () => {
   });
 
   describe('TMDbから消えた作品（案D）', () => {
-    const gone = () => {
-      mockGetMovieListRefreshFields.mockRejectedValue({
-        response: { status: 404 },
-      });
+    /**
+     * 1件だけ 404 にする
+     *
+     * ⚠️ 全件を404にすると比率のブレーカ（NOT_FOUND_ABORT_RATIO）が働き、
+     * 印付けそのものが中止される。検証したい経路に入らないまま緑になる
+     */
+    const goneOnly = (goneId: number) => {
+      mockGetMovieListRefreshFields.mockImplementation((movieId: number) =>
+        movieId === goneId
+          ? Promise.reject({ response: { status: 404 } })
+          : Promise.resolve(fields()),
+      );
     };
 
+    /** 404 を1件にするための「生きている」行を5件足す */
+    const aliveRows = Array.from({ length: 5 }, (_, i) => ({
+      id: `a${i}`,
+      tmdb_movie_id: 500 + i,
+    }));
+
     it('行を消さず tmdb_deleted_at を立てる', async () => {
-      gone();
+      goneOnly(1);
       const { updates } = createSupabaseMock({
-        rows: { favorites: [{ id: 'f1', tmdb_movie_id: 1 }] },
+        rows: { favorites: [{ id: 'f1', tmdb_movie_id: 1 }, ...aliveRows] },
       });
 
       const result = await refreshUserListTmdbFields();
 
-      const [payload] = payloadsFor(updates, 'favorites');
-      expect(payload.tmdb_deleted_at).toEqual(expect.any(String));
+      const marked = payloadsFor(updates, 'favorites').find(
+        (p) => 'tmdb_deleted_at' in p,
+      );
+      expect(marked?.tmdb_deleted_at).toEqual(expect.any(String));
       expect(
         result.tables.find((t) => t.name === 'favorites')?.markedDeleted,
       ).toBe(1);
     });
 
-    // ⚠️ title を残すのは、これが無いと「どれが消えたか」を伝えられないため
-    it('title は残し、他の TMDb 由来列は NULL にする', async () => {
-      gone();
+    // ⛔ **表示列を潰さない。** 解除する経路が無く、印の付いた行は抽出条件から
+    //    外れて二度と取り直されないため、潰すと誤検知1回で永久に失われる
+    it('表示列は一切書き換えない', async () => {
+      goneOnly(1);
       const { updates } = createSupabaseMock({
         rows: {
-          favorites: [{ id: 'f1', tmdb_movie_id: 1 }],
+          favorites: [{ id: 'f1', tmdb_movie_id: 1 }, ...aliveRows],
           dismissed_movies: [{ id: 'd1', tmdb_movie_id: 1 }],
         },
       });
 
       await refreshUserListTmdbFields();
 
-      const fav = payloadsFor(updates, 'favorites')[0];
-      expect(fav).not.toHaveProperty('title');
-      expect(fav.poster_path).toBeNull();
-      expect(fav.release_date).toBeNull();
+      for (const table of ['favorites', 'dismissed_movies']) {
+        const marked = payloadsFor(updates, table).find(
+          (p) => 'tmdb_deleted_at' in p,
+        );
+        expect(Object.keys(marked ?? {})).toEqual(['tmdb_deleted_at']);
+      }
+    });
 
-      const dis = payloadsFor(updates, 'dismissed_movies')[0];
-      expect(dis).not.toHaveProperty('title');
-      expect(dis.genre_ids).toBeNull();
-      expect(dis.director_name).toBeNull();
-      expect(dis.keywords).toBeNull();
-      expect(dis.release_year).toBeNull();
+    // ⛔ TMDb 側の障害で 404 が面で返ると、1回の実行で生存行すべてに印が付く。
+    //    404 は failed に数えないので失敗率は 0% のまま通知も飛ばない
+    it('404 の比率が高すぎたら印付けを中止する', async () => {
+      mockGetMovieListRefreshFields.mockRejectedValue({
+        response: { status: 404 },
+      });
+      const { updates } = createSupabaseMock({
+        rows: { favorites: [{ id: 'f1', tmdb_movie_id: 1 }, ...aliveRows] },
+      });
+
+      const result = await refreshUserListTmdbFields();
+
+      expect(result.abortedByNotFoundRatio).toBe(true);
+      expect(updates).toHaveLength(0);
+      expect(
+        result.tables.find((t) => t.name === 'favorites')?.markedDeleted,
+      ).toBe(0);
+      expect(result.errors.some((e) => e.includes('404 の比率'))).toBe(true);
     });
 
     it('印を付ける書き込みに失敗したらerrorsに積む', async () => {
-      gone();
+      goneOnly(1);
       createSupabaseMock({
-        rows: { favorites: [{ id: 'f1', tmdb_movie_id: 1 }] },
+        rows: { favorites: [{ id: 'f1', tmdb_movie_id: 1 }, ...aliveRows] },
         updateError: 'mark failed',
       });
 
@@ -345,6 +409,8 @@ describe('refreshUserListTmdbFields', () => {
       expect(
         result.errors.some((e) => e.includes('favorites mark-deleted')),
       ).toBe(true);
+      // ⚠️ errors だけに積むと率の判定に乗らない
+      expect(result.items.failed).toBeGreaterThan(0);
     });
 
     // 404 は TMDb 側の確定的な応答。一時障害（429/503）とは扱いを変える
@@ -416,6 +482,64 @@ describe('refreshUserListTmdbFields', () => {
       const result = await refreshUserListTmdbFields();
 
       expect(result.errors.some((e) => e.includes('Unknown error'))).toBe(true);
+    });
+  });
+
+  // ⚠️ ここが無いと、`.or()` の書式を壊す / `nullsFirst` を外す /
+  //    `.eq('id', ...)` を取り違える、のいずれも全テストが緑のまま通る
+  describe('クエリの形', () => {
+    const runOnce = async () => {
+      const mocks = createSupabaseMock({
+        rows: { favorites: [{ id: 'f1', tmdb_movie_id: 1 }] },
+      });
+      await refreshUserListTmdbFields();
+      return mocks;
+    };
+
+    it('生きている行だけを対象にする', async () => {
+      await runOnce();
+
+      expect(mockStaleIs).toHaveBeenCalledWith('deleted_at', null);
+      expect(mockStaleIs).toHaveBeenCalledWith('tmdb_deleted_at', null);
+    });
+
+    it('未取得と古いものを拾う条件を渡す', async () => {
+      await runOnce();
+
+      const [condition] = mockStaleOr.mock.calls[0];
+      expect(condition).toContain('tmdb_refreshed_at.is.null');
+      expect(condition).toContain('tmdb_refreshed_at.lt.');
+
+      // ⚠️ 閾値の向きを固定する。符号を間違えると「新しい行だけ」を
+      //    取り直して、古い行が永久に残る
+      const threshold = String(condition).split('tmdb_refreshed_at.lt.')[1];
+      const days = (Date.now() - Date.parse(threshold)) / (24 * 60 * 60 * 1000);
+      expect(days).toBeCloseTo(USER_LIST_REFRESH_STALE_DAYS, 0);
+    });
+
+    // ⚠️ 未取得（NULL）を先に消化する。外すと索引とも食い違う
+    it('未取得を先頭にして古い順で拾う', async () => {
+      await runOnce();
+
+      expect(mockStaleOrder).toHaveBeenCalledWith('tmdb_refreshed_at', {
+        ascending: true,
+        nullsFirst: true,
+      });
+      expect(mockStaleLimit).toHaveBeenCalledWith(USER_LIST_REFRESH_LIMIT);
+    });
+
+    // ⚠️ 取り違えると他の利用者の行まで更新する
+    it('書き戻しは行の id で1行に絞る', async () => {
+      await runOnce();
+
+      expect(mockUpdateEq).toHaveBeenCalledWith('id', 'f1');
+    });
+
+    // ⚠️ リバイバル行の release_date は映画.com の再上映日
+    it('キャッシュはリバイバル行を除外して引く', async () => {
+      await runOnce();
+
+      expect(mockCacheEq).toHaveBeenCalledWith('is_revival', false);
     });
   });
 

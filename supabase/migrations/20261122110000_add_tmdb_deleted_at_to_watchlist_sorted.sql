@@ -167,4 +167,4 @@ REVOKE EXECUTE ON FUNCTION public.get_watchlist_sorted(UUID, TEXT, INT, INT, BOO
 GRANT EXECUTE ON FUNCTION public.get_watchlist_sorted(UUID, TEXT, INT, INT, BOOLEAN, BOOLEAN, TEXT) TO service_role;
 
 COMMENT ON FUNCTION public.get_watchlist_sorted(UUID, TEXT, INT, INT, BOOLEAN, BOOLEAN, TEXT) IS
-  'ウォッチリストを並び替えて返す。tmdb_deleted_at は TMDb で404になった作品の検知時刻（#433）';
+  'ウォッチリストを並び替えて返す。p_prioritize_streaming=true で配信中を先頭へ、p_streaming_scope は配信中とみなす範囲（any=見放題/レンタル/購入、flatrate=見放題のみ）。バッジの表示は範囲に関わらず実態を返し、範囲は並び順の判定にのみ使う。tmdb_deleted_at は TMDb で404になった作品の検知時刻（#433）。EXECUTE は service_role のみ';

@@ -20,6 +20,7 @@ import { HTTP_STATUS, CRON_ERROR_MESSAGES } from '@/constants';
 import { verifyCronAuth } from '@/helpers/cronAuth';
 import { handleCronError } from '@/helpers/cronError';
 import { createServiceRoleClient } from '@/helpers/supabase';
+import { notifyCronFailure } from '@/lib/cron/notifyCronFailure';
 import { notifyIfMostlyFailed } from '@/lib/cron/notifyHighFailureRate';
 import { refreshUserListTmdbFields } from '@/lib/sync/refreshUserListTmdbFields';
 
@@ -37,6 +38,17 @@ export async function GET(request: NextRequest) {
     //   作品単位に catch して処理を続ける設計なので、失敗は `errors` に
     //   積まれるだけ。取り直せていない状態は規約違反が残っている状態なので、
     //   届くかどうかだけを変える
+    // ⚠️ **404 の多発は率の判定では拾えない**（#433 レビュー指摘）。
+    //   404 は `items.failed` に入らないため、全件404でも失敗率は 0% になる。
+    //   印付けを中止したこと自体が異常なので、無条件で通知する
+    if (result.abortedByNotFoundRatio) {
+      await notifyCronFailure(createServiceRoleClient(), {
+        cronName: 'refresh-user-lists',
+        reason:
+          result.errors[result.errors.length - 1] ?? '404 の比率が高すぎます',
+      });
+    }
+
     await notifyIfMostlyFailed(createServiceRoleClient(), {
       cronName: 'refresh-user-lists',
       attempted: result.items.attempted,

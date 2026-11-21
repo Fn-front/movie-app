@@ -56,6 +56,7 @@ const refreshResult = (overrides: Record<string, unknown> = {}) => ({
   durationMs: 4200,
   errors: [],
   items: { attempted: 135, failed: 0 },
+  abortedByNotFoundRatio: false,
   ...overrides,
 });
 
@@ -100,6 +101,38 @@ describe('GET /api/cron/refresh-user-lists', () => {
     expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({ cronName: 'refresh-user-lists' }),
     );
+  });
+
+  // ⛔ 404 の多発は率の判定では拾えない（404 は failed に入らないため、
+  //    全件404でも失敗率は 0%）。印付けを中止したこと自体が異常なので通知する
+  it('404が多すぎて印付けを中止したら通知する', async () => {
+    mockRefreshUserListTmdbFields.mockResolvedValue(
+      refreshResult({
+        abortedByNotFoundRatio: true,
+        errors: [
+          '404 の比率が高すぎます（170/170）。削除予定の印付けを中止しました',
+        ],
+        items: { attempted: 170, failed: 0 },
+      }),
+    );
+
+    const response = await GET(createRequest());
+
+    // ⚠️ ステータスは 200 のまま。部分的には成功している処理なので
+    expect(response.status).toBe(200);
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        cronName: 'refresh-user-lists',
+        reason: expect.stringContaining('404 の比率'),
+      }),
+    );
+  });
+
+  it('中止していなければ通知しない', async () => {
+    const response = await GET(createRequest());
+
+    expect(response.status).toBe(200);
+    expect(mockNotifyCronFailure).not.toHaveBeenCalled();
   });
 
   /**

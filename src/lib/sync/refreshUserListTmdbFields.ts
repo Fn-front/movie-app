@@ -19,6 +19,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import { MS_PER_DAY } from '@/constants/time';
 import {
+  NOT_FOUND_ABORT_RATIO,
   USER_LIST_REFRESH_CONCURRENCY,
   USER_LIST_REFRESH_LIMIT,
   USER_LIST_REFRESH_STALE_DAYS,
@@ -70,6 +71,13 @@ export interface UserListRefreshResult {
   errors: string[];
   /** 作品単位の集計（#1354） */
   items: ItemOutcome;
+  /**
+   * 404 が多すぎて印付けを中止したか（#433 レビュー指摘）
+   *
+   * ⚠️ これが true のとき、ルートは**無条件で通知する**。
+   * `notifyIfMostlyFailed` の率判定（failed/attempted）では拾えない。
+   */
+  abortedByNotFoundRatio: boolean;
 }
 
 /** 取り直し対象の行 */
@@ -194,28 +202,29 @@ async function loadFromMovieCache(
 /**
  * TMDb で消えた作品に印を付ける（#433 案D）
  *
- * 行は残し、`title` 以外の TMDb 由来列を NULL にする。利用者が自分で
- * 登録したものなので黙って消さず、画面で知らせてから猶予後に削除する。
+ * 行は残し、`tmdb_deleted_at` **だけ**を立てる。利用者が自分で登録した
+ * ものなので黙って消さず、画面で知らせてから猶予後に物理削除する。
  *
- * ⚠️ `title` を残すのは、これが無いと「どれが消えたか」を伝えられないため。
+ * ⛔ **表示列を NULL で潰さないこと。** 初版は `title` 以外を NULL に
+ * していたが、次の3つが同時に成り立つため危険だった。
+ *
+ *   1. 解除する経路が無い（`tmdb_deleted_at` を NULL へ戻すコードは1行も無い）
+ *   2. 印の付いた行は抽出条件 `.is('tmdb_deleted_at', null)` から外れ、
+ *      **二度と取り直されない**
+ *   3. つまり誤検知1回で、ポスターも公開日も**永久に失われる**
+ *
+ * TMDb 規約（6ヶ月）は NULL 化ではなく**猶予後の物理削除**で満たす。
+ * 画面のバッジに要るのは `tmdb_deleted_at` だけで、潰す必要が無い
+ * （`get_watchlist_sorted` が返すのもこの列）。
+ *
+ * ⚠️ 潰さないことで操作が可逆になり、将来「リフレッシュが成功したら印を
+ * 解除する」を足せる。初版の形では解除しても中身が戻らなかった。
  */
 function buildTmdbDeletedPayload(
-  table: TargetTable,
+  _table: TargetTable,
   deletedAt: string,
 ): Record<string, unknown> {
-  const common = { poster_path: null, tmdb_deleted_at: deletedAt };
-
-  if (table === 'dismissed_movies') {
-    return {
-      ...common,
-      genre_ids: null,
-      director_name: null,
-      keywords: null,
-      release_year: null,
-    };
-  }
-
-  return { ...common, release_date: null };
+  return { tmdb_deleted_at: deletedAt };
 }
 
 /**
@@ -245,6 +254,7 @@ export async function refreshUserListTmdbFields(): Promise<UserListRefreshResult
     durationMs: 0,
     errors: [],
     items: createItemOutcome(),
+    abortedByNotFoundRatio: false,
   };
 
   const staleBefore = new Date(
@@ -258,7 +268,11 @@ export async function refreshUserListTmdbFields(): Promise<UserListRefreshResult
     const { rows, error } = await selectStaleRows(supabase, table, staleBefore);
 
     if (error) {
+      // ⚠️ `errors` だけに積むと、**1件も処理していないのに failed が 0** に
+      //    なり率の判定（notifyIfMostlyFailed）に乗らない（#1354 と同じ形）
       result.errors.push(`${table} select: ${error}`);
+      result.items.attempted++;
+      result.items.failed++;
       result.tables.push({
         name: table,
         scanned: 0,
@@ -361,6 +375,33 @@ export async function refreshUserListTmdbFields(): Promise<UserListRefreshResult
   result.fromCache = cached.size;
   result.fromTmdb = fetched.size;
 
+  // ⛔ **404 が面で返ってきたら印を付けない**（#433 レビュー指摘）。
+  //
+  //   TMDb 側の障害・エンドポイント変更・認証事故で 404 が大量に返ると、
+  //   1回の実行で生存行すべてに `tmdb_deleted_at` が立つ。404 は
+  //   `items.failed` に入らないので**失敗率は 0%** のまま、200 /
+  //   `success: true` で終わり、通知も飛ばない。
+  //
+  //   1件ごとの 404 判定（`isTmdbNotFoundError`）は正しいが、
+  //   **全体として異常かどうか**を見る層がどこにも無かった。本筋の同期が
+  //   `streamingIds.size > 0 && !truncated` で自衛しているのと同じ発想で、
+  //   比率で足切りする。
+  //
+  //   作品が TMDb から消えるのは本来まれなので、閾値は低めでよい。
+  //   取りこぼしても次回の実行で拾い直せる（印を付けないだけで、
+  //   `tmdb_refreshed_at` も進めない）。
+  if (
+    result.tmdbRequests > 0 &&
+    notFound.size / result.tmdbRequests > NOT_FOUND_ABORT_RATIO
+  ) {
+    result.errors.push(
+      `404 の比率が高すぎます（${notFound.size}/${result.tmdbRequests}）。` +
+        '削除予定の印付けを中止しました',
+    );
+    result.abortedByNotFoundRatio = true;
+    notFound.clear();
+  }
+
   // 4. 行へ書き戻す
   const refreshedAt = new Date().toISOString();
 
@@ -380,6 +421,7 @@ export async function refreshUserListTmdbFields(): Promise<UserListRefreshResult
 
         if (error) {
           result.errors.push(`${table} mark-deleted: ${error.message}`);
+          result.items.failed++;
           continue;
         }
 
@@ -402,6 +444,9 @@ export async function refreshUserListTmdbFields(): Promise<UserListRefreshResult
 
       if (error) {
         result.errors.push(`${table} update: ${error.message}`);
+        // ⚠️ TMDb は成功していても書き込みが全滅する経路がある（列名の typo で
+        //    PGRST204 / GRANT 漏れ）。数えないと 200・通知なしで沈黙する
+        result.items.failed++;
         continue;
       }
 

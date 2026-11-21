@@ -17,21 +17,39 @@
  * 食い違って hydration mismatch になる（`useMovieViewMode.test.ts` に
  * 回帰テストがある）。
  *
- * ## 本番ビルドでは起きない（実測）
+ * ## 安全な理由はルートごとに違う（実測）
  *
- * `/movies/*` は静的プリレンダで、一覧は `useSearchParams` を使うため
- * `<Suspense>` 配下が CSR へ退避する。**ハイドレーション対象にならない**
- * ので `getSnapshot`（保存値）が直接使われ、最初からリストで描かれる。
+ * ⚠️ **ひとまとめに「`useSearchParams` の CSR bailout」と書かない。**
+ * この機序を持つのは `/movies/now-showing` だけで、他は loader の
+ * `ssr: false` が理由。混ぜると、前提が消える条件を取り違える。
  *
- * | | `/movies/now-showing` | `/search` |
- * |---|---|---|
- * | `next dev` | `G--` → `---` → `-LT` | `---` → `-LT` |
- * | `next start`（本番ビルド） | `---` → `-LT` | `---` → `-LT` |
+ * | ルート | ハイドレーションされない理由 | `next dev` | `next start` |
+ * |---|---|---|---|
+ * | `/movies/now-showing` | `page.tsx` の `<Suspense>` ＋ 一覧の `useSearchParams`（CSR bailout） | **`G--` あり** | 無し |
+ * | `/movies/upcoming` | `loader.tsx` の `dynamic(..., { ssr: false })` | 無し | 無し |
+ * | `/search` | 同上 | 無し | 無し |
  *
  * （`G` = グリッドのコンテナ / `L` = リストのコンテナ / `T` = リストのタイル）
  *
+ * `/movies/now-showing` だけ dev で `G--` が出るのは、dev の on-demand SSR では
+ * Suspense の CSR 退避が起きずハイドレーション対象になるから。
+ * `ssr: false` の2つは dev でもクライアントで新規マウントされるので出ない。
+ *
+ * ⚠️ **つまり #1048 の「影響範囲: `/movies/now-showing` と `/movies/upcoming` の
+ * 2画面」も誤り。** 実際に起きうるのは `/movies/now-showing` だけ。
+ * `/movies/upcoming` のケースは「別の理由で安全」の確認として残している。
+ *
  * CPU 6倍スロットリングで3周しても本番ビルドでは `G` が1度も現れなかった。
- * #1048 の観測が dev サーバーだったため「5画面で起きる」と読めていた。
+ *
+ * ## 前提が消える条件
+ *
+ * ⚠️ ルートごとに違う。
+ *
+ * - `/movies/now-showing`: PPR / Cache Components 有効化、`force-dynamic`、
+ *   一覧から `useSearchParams` を外す、`page.tsx` の `<Suspense>` を動かす
+ * - `/movies/upcoming` `/search`: **loader の `ssr: false` を外す**
+ *
+ * どれかで前提が消えると、このテストが落ちる。
  *
  * ⚠️ **dev では落ちる。** on-demand SSR でハイドレーションされるため、
  * 上の表のとおり1度グリッドになる。利用者が触るのは本番ビルドだけなので、
@@ -57,8 +75,12 @@ test.use({ viewport: { width: 375, height: 812 } });
  *
  * CPU 6倍スロットリングを掛けたうえで、`/movies/*` は react-query の
  * 取得を待つ。既定の 10 秒では足りない。
+ *
+ * ⚠️ テスト全体の上限（`playwright.config.ts` の `timeout: 30000`）より
+ * 短くする。同値だと expect が使い切る前にテストが死に、
+ * 「Test timeout of 30000ms exceeded」という情報量の無い失敗になる。
  */
-const LIST_VISIBLE_TIMEOUT_MS = 30_000;
+const LIST_VISIBLE_TIMEOUT_MS = 20_000;
 
 /** 記録を止めるフラグ名（観測そのものが負荷にならないよう、読む前に止める） */
 const STOP_FLAG = '__viewModeStop';
@@ -148,15 +170,6 @@ const readSequence = (page: Page) =>
 test.describe('リスト設定での初回描画（#1048）', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  /**
-   * ⚠️ `CI` は webServer が `npm start`（本番ビルド）になる条件そのもの
-   * （`playwright.config.ts` の `command: isCI ? 'npm start' : 'npm run dev'`）。
-   */
-  test.skip(
-    !process.env.CI,
-    '本番ビルドでのみ成立（dev は on-demand SSR でハイドレーションされ、1度グリッドになる）',
-  );
-
   /** ⚠️ `newCDPSession` は Chromium 専用。CI は chromium だけだが手元は3つ走る */
   test.skip(
     ({ browserName }) => browserName !== 'chromium',
@@ -202,6 +215,25 @@ test.describe('リスト設定での初回描画（#1048）', () => {
     '/search?query=バットマン',
   ]) {
     test(`${path} でグリッドのコンテナが一度も現れない`, async ({ page }) => {
+      /**
+       * ⚠️ **dev で落ちるのは `/movies/now-showing` だけ**（実測）。
+       *
+       * あそこだけ `<Suspense>` ＋ `useSearchParams` の CSR 退避が理由で、
+       * dev の on-demand SSR では退避が起きずハイドレーション対象になる。
+       * 他2つは loader の `ssr: false` なので dev でも出ない。
+       *
+       * describe 単位でスキップすると、dev で動く2本と下の生存確認まで
+       * 消える（＝クラス名を改名しても CI まで気づけない）ので、
+       * **このケースだけ**に絞る。
+       *
+       * ⚠️ `CI` は webServer が `npm start`（本番ビルド）になる条件そのもの
+       * （`playwright.config.ts` の `command: isCI ? 'npm start' : 'npm run dev'`）。
+       */
+      test.skip(
+        !process.env.CI && path === '/movies/now-showing',
+        '本番ビルドでのみ成立（dev は on-demand SSR でハイドレーションされ、1度グリッドになる）',
+      );
+
       const sequence = await openAndRecord(page, path, 'list');
 
       // 記録そのものが動いていないと、何も起きていないように見えて通る

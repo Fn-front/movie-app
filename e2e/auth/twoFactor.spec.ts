@@ -153,6 +153,15 @@ test.describe('二段階認証', () => {
     page,
   }) => {
     await loginAndOpenSettings(page);
+
+    // ⛔ #1368 の証跡。再認証の欄が出ていて、方式のボタンが押せない状態。
+    //    ⚠️ ページ全体だとボタンが画面の外へ出るので、節だけを撮る
+    await expectSetupBlockedWithoutReauth(page);
+    await page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: '二段階認証' }) })
+      .screenshot({ path: 'docs/e2e-screenshots/two-factor-reauth.png' });
+
     await enableTwoFactor(page);
 
     // 控えて有効状態へ

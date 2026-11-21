@@ -692,6 +692,8 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
 - `genre` (optional): ジャンルID（カンマ区切りで複数指定可: `28,12`）
 - `year` (optional): 公開年（YYYY形式: `2024`）
 - `vote_average_gte` (optional): 最低評価（0-10: `7.0`）
+- `release_date_gte` (optional): 公開期間の開始日（YYYY-MM-DD）
+- `release_date_lte` (optional): 公開期間の終了日（YYYY-MM-DD）
 
 **バリデーション（zod）:**
 - `query`と（`genre` or `year` or `vote_average_gte`）のいずれかは必須。両方なしの場合400エラー
@@ -699,6 +701,9 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
 - `genre`: カンマ区切りの正の整数
 - `year`: 4桁の正の整数
 - `vote_average_gte`: 0〜10の数値（0.5刻み）
+- `release_date_gte` / `release_date_lte`: `YYYY-MM-DD`。終了日は開始日以降
+- ⚠️ **`year` と `release_date_*` は排他**。同時指定は400エラー
+  （年＝代表公開日の年、期間＝いずれかの国のリリースで意味論が違うため）
 
 **内部処理フロー:**
 
@@ -710,9 +715,9 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
    - `year`: **TMDb へ渡す**（`/search/movie` がサポートしているため）
 2. 残りのフィルターが指定されている場合、**サーバー側でフィルタリング**
    （`filterMovies`。`year` はここに**含まれない**）
-   - `genreIds`: レスポンスの`genre_ids`配列に指定ジャンルIDが含まれるかチェック
-   - `voteAverageGte`: レスポンスの`vote_average`が閾値以上かチェック
-   - `releaseDateGte` / `releaseDateLte`: 公開期間での絞り込み（#997）
+   - `genre`: レスポンスの`genre_ids`配列に指定ジャンルIDが含まれるかチェック
+   - `vote_average_gte`: レスポンスの`vote_average`が閾値以上かチェック
+   - `release_date_gte` / `release_date_lte`: 公開期間での絞り込み（#997）
 3. フィルタリング後の結果を返却
    - **注意**: サーバー側フィルタリングが働くと `totalResults` は TMDb の値と異なる。
      このとき実装は**1ページぶんに畳む**ため `totalResults` は絞り込み後の件数（最大20）、
@@ -723,6 +728,7 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
 1. TMDb API `/discover/movie` を呼び出し
    - `with_genres`: ジャンルフィルター
    - `primary_release_year`: 年代フィルター
+   - `release_date.gte` / `release_date.lte`: 公開期間（#997）
    - `vote_average.gte`: 評価フィルター
    - `page`: ページ番号
    - `language=ja-JP`, `region=JP`

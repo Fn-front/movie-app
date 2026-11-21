@@ -21,6 +21,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { EXCLUDED_GENRE_IDS } from '@/constants';
 import { getMovieCacheStats, getMovieDetail } from '@/lib/tmdb/tmdb';
+import type { MovieCacheStats } from '@/lib/types';
 import {
   updateMoviesCacheByBatch,
   type BatchUpdateResult,
@@ -28,17 +29,46 @@ import {
 
 // ---------- ヘルパー ----------
 
-/** テスト用の同期指標データを生成する */
-function createMockCacheStats(overrides: Record<string, unknown> = {}) {
+/**
+ * テスト用の同期指標データを生成する
+ *
+ * ⚠️ **`MovieCacheStats` の全フィールドを埋めること。** 欠けていると
+ * `buildStatsRpcArgs` が `undefined` を作り、`JSON.stringify` がキーごと
+ * 落として PGRST202（関数が見つからない）になる。本番では**その映画の
+ * 全列が更新されない**のに、モックは引数を見ないので緑のまま通る。
+ */
+function createMockCacheStats(
+  overrides: Partial<MovieCacheStats> = {},
+): MovieCacheStats {
   return {
     genreIds: [],
     voteAverage: 8.0,
     voteCount: 0,
     popularity: 150.5,
     originalLanguage: null,
+    title: 'タイトル',
+    overview: 'あらすじ',
+    posterPath: '/poster.jpg',
+    backdropPath: '/backdrop.jpg',
+    releaseDate: '2026-01-01',
     ...overrides,
   };
 }
+
+/** RPC が受け取るべき引数名（11個） */
+const RPC_ARG_NAMES = [
+  'p_id',
+  'p_title',
+  'p_overview',
+  'p_poster_path',
+  'p_backdrop_path',
+  'p_genre_ids',
+  'p_release_date',
+  'p_vote_average',
+  'p_vote_count',
+  'p_popularity',
+  'p_original_language',
+] as const;
 
 /** 映画ID取得のページサイズ（実装と同じ値） */
 const SELECT_PAGE_SIZE = 1000;
@@ -406,6 +436,60 @@ describe('updateMoviesCacheByBatch', () => {
       expect(args).toEqual(expect.objectContaining({ p_release_date: null }));
     });
 
+    // ⛔ PostgREST は**引数名の集合で関数を解決する**。1つでも欠けると
+    //   PGRST202 になり、その映画の全列が更新されない（ローカルで実測）。
+    //   objectContaining の表明だけでは欠落を検出できないため、ここで集合を固定する
+    it('RPC には11個の引数を必ず渡し、undefined を混ぜない', async () => {
+      setValidEnv();
+
+      const fromMock = createFromMock({
+        selectData: [{ id: 901, release_type: 'theatrical' }],
+      });
+      (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
+      (getMovieCacheStats as jest.Mock).mockResolvedValue(
+        createMockCacheStats({}),
+      );
+
+      await updateMoviesCacheByBatch();
+
+      const args = fromMock.rpcMock.mock.calls[0][1];
+      expect(Object.keys(args).sort()).toEqual([...RPC_ARG_NAMES].sort());
+      // ⚠️ toEqual は「値が undefined のキー」と「キーが無い」を同一視するので
+      //    キー名の比較だけでは足りない
+      expect(
+        Object.entries(args).filter(([, value]) => value === undefined),
+      ).toEqual([]);
+    });
+
+    // TMDb が項目を返さなかったときも undefined にしない
+    it.each([
+      ['voteAverage', 'p_vote_average', null],
+      ['popularity', 'p_popularity', null],
+      ['voteCount', 'p_vote_count', 0],
+      ['originalLanguage', 'p_original_language', null],
+    ])(
+      '%s が欠けていても %s を null/既定値で送る',
+      async (statsKey, argKey, expected) => {
+        setValidEnv();
+
+        const fromMock = createFromMock({
+          selectData: [{ id: 901, release_type: 'theatrical' }],
+        });
+        (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
+        const stats = createMockCacheStats({});
+        delete (stats as unknown as Record<string, unknown>)[statsKey];
+        (getMovieCacheStats as jest.Mock).mockResolvedValue(stats);
+
+        await updateMoviesCacheByBatch();
+
+        const args = fromMock.rpcMock.mock.calls[0][1] as Record<
+          string,
+          unknown
+        >;
+        expect(args[argKey]).toBe(expected);
+      },
+    );
+
     // ⚠️ リバイバル行の release_date を守る CASE は RPC の中にある。
     //   素の .update() に戻すとその保護を迂回するため、書き込みが
     //   必ず RPC を通ることをここで固定する
@@ -595,7 +679,6 @@ describe('updateMoviesCacheByBatch', () => {
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
         createMockCacheStats({
-          id: 1,
           genreIds: [35, EXCLUDED_GENRE_IDS[0]],
         }),
       );
@@ -620,7 +703,6 @@ describe('updateMoviesCacheByBatch', () => {
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
         createMockCacheStats({
-          id: 1,
           genreIds: [EXCLUDED_GENRE_IDS[0]],
         }),
       );
@@ -641,7 +723,6 @@ describe('updateMoviesCacheByBatch', () => {
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
         createMockCacheStats({
-          id: 1,
           genreIds: [18],
         }),
       );
@@ -661,7 +742,7 @@ describe('updateMoviesCacheByBatch', () => {
       (createClient as jest.Mock).mockReturnValue(createClientMock(fromMock));
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
-        createMockCacheStats({ id: 1 }),
+        createMockCacheStats({}),
       );
 
       const result = await updateMoviesCacheByBatch();
@@ -682,7 +763,6 @@ describe('updateMoviesCacheByBatch', () => {
 
       (getMovieCacheStats as jest.Mock).mockResolvedValueOnce(
         createMockCacheStats({
-          id: 1,
           genreIds: [EXCLUDED_GENRE_IDS[0]],
         }),
       );

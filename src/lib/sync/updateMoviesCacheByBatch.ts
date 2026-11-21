@@ -82,10 +82,16 @@ function buildStatsRpcArgs(movieId: number, stats: MovieCacheStats) {
     p_genre_ids: stats.genreIds,
     // `getMovieCacheStats` が空文字を null に正規化済み
     p_release_date: stats.releaseDate,
-    p_vote_average: stats.voteAverage,
-    p_vote_count: stats.voteCount,
-    p_popularity: stats.popularity,
-    p_original_language: stats.originalLanguage,
+    // ⛔ **`undefined` を渡さないこと。** PostgREST は**引数名の集合で関数を
+    //   解決する**ため、`JSON.stringify` がキーごと落とすと PGRST202
+    //   （関数が見つからない）になり、**その映画の全列が更新されない**。
+    //   旧 `.update({ vote_average: undefined })` は「その列を SET しない」
+    //   だけで成功していたので、失敗の粒度が列1つから行全体へ広がっている。
+    //   200 / `success: true` で返るため気づけない（ローカルで実測）
+    p_vote_average: stats.voteAverage ?? null,
+    p_vote_count: stats.voteCount ?? 0,
+    p_popularity: stats.popularity ?? null,
+    p_original_language: stats.originalLanguage ?? null,
   };
 }
 

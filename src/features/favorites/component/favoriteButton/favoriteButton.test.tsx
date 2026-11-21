@@ -193,4 +193,77 @@ describe('FavoriteButton', () => {
       ).toBeInTheDocument();
     });
   });
+
+  /**
+   * 可視ラベル（#1030）
+   *
+   * ウォッチリストと並ぶとどちらも「保存」に見えて区別できないため、幅に
+   * 余裕のあるリスト行でだけ言葉にする。
+   */
+  describe('可視ラベル（#1030）', () => {
+    it('既定ではラベルを出さない', () => {
+      render(<FavoriteButton favorite={null} onClick={jest.fn()} />);
+
+      expect(screen.queryByText('お気に入り')).not.toBeInTheDocument();
+    });
+
+    it('showLabel を渡すとラベルを出す', () => {
+      render(<FavoriteButton favorite={null} onClick={jest.fn()} showLabel />);
+
+      expect(screen.getByText('お気に入り')).toBeInTheDocument();
+    });
+
+    it('登録済みでもラベルは変えない', () => {
+      render(
+        <FavoriteButton
+          favorite={{ id: 'fav-1', rating: 8 }}
+          onClick={jest.fn()}
+          showLabel
+        />,
+      );
+
+      // 状態は塗りつぶしたハートが伝える。ラベルまで入れ替えると幅が
+      // 行ごとに変わり、一覧を縦に走査できなくなる
+      expect(screen.getByText('お気に入り')).toBeInTheDocument();
+    });
+
+    /**
+     * ⛔ **可視ラベルをアクセシブルネームにしない。**
+     *
+     * `aria-label` が無くなると読み上げが「お気に入り」だけになり、一覧に
+     * 同じ名前のボタンが最大20個並んでどの作品か分からなくなる
+     * （#1047 が解いた問題がそのまま戻る）。
+     */
+    it('ラベルを出してもアクセシブルネームは aria-label のまま', () => {
+      render(
+        <FavoriteButton
+          favorite={null}
+          onClick={jest.fn()}
+          movieTitle='テスト映画'
+          showLabel
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'テスト映画をお気に入りに追加' }),
+      ).toBeInTheDocument();
+    });
+
+    it('showLabel のときラベル付きのクラスが付く', () => {
+      render(<FavoriteButton favorite={null} onClick={jest.fn()} showLabel />);
+
+      // jsdom は SCSS を評価しないのでクラスで確認する
+      expect(screen.getByRole('button')).toHaveClass(
+        styles['c_favorite_button--with_label'],
+      );
+    });
+
+    it('ラベルを出してもクリックできる', () => {
+      const onClick = jest.fn();
+      render(<FavoriteButton favorite={null} onClick={onClick} showLabel />);
+
+      fireEvent.click(screen.getByRole('button'));
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+  });
 });

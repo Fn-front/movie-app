@@ -43,6 +43,10 @@
       // 1行省略したタイトルの min-content 幅でカードから溢れるのを防ぐ
       // （flex item の min-width は既定が auto）
       min-width: 0;
+      // グリッドの 12px から詰める。行の高さはポスター（84px）で決まるので
+      // 縦は効かず、横は操作ボタンにラベルが付いたぶん（#1030）情報側が
+      // 足りない。375px 幅で日付が省略されるかどうかがこの 8px で決まる
+      padding: $spacing-2;
     }
 
     // タイトルは1行に省略する。行数が揃わないと行の高さがばらつき、
@@ -63,6 +67,22 @@
       justify-content: flex-start;
       gap: $spacing-3;
       margin-top: 0;
+    }
+
+    // 日付は1行に省略する。タイトルと同じ理由（行の高さを揃える）だが、
+    // こちらは**折り返しで**崩れる。
+    //
+    // 操作ボタンに可視ラベルが付いて操作列が広がったぶん（#1030）、
+    // 320px では評価バッジのある行だけ `2026年11` / `月20日` と折り返し、
+    // 行の高さが 86px と 120px に割れた。評価の有無で高さが変わるので、
+    // 一覧を縦に走査できなくなる
+    //
+    // ⚠️ `min-width: 0` が要る。flex item の既定は `auto`（＝ min-content を
+    // 下回らない）なので、省略記号を出す前に押し返して溢れる
+    .c_movie_tile__date {
+      min-width: 0;
+
+      @include text-truncate;
     }
 
     // 操作ボタンはカードの実要素として並べる。絶対配置のままだと
@@ -101,7 +121,7 @@
     // 下がるため（`_theme.scss`）、4px ぶん領域が重なって隣を誤爆する（#1119）。
     // グリッド側の `__dismiss_button` が #1111 で同じ理由から calc へ直っている
     gap: calc($tap-target-min - 28px);
-    padding-right: $spacing-2;
+    padding-right: $spacing-1;
     // タイトル button の ::after（カード全面の当たり判定）より上に置く
     position: relative;
     z-index: 1;

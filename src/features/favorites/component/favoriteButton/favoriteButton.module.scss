@@ -68,4 +68,65 @@
       color: $secondary-700;
     }
   }
+
+  // リスト行にだけ出す可視ラベル（#1030）
+  //
+  // ⛔ **最狭幅（320px）では出さない。** リスト行の横幅は
+  // 「ポスター56 + 情報 + 操作列」で、ラベルを足すと操作列が 80px → 140px に
+  // 広がる。320px では情報側が 54px まで削られ、タイトルが「魔法使い…」、
+  // 公開日が「2026年…」になる。**区別がついても作品が分からなければ意味がない**
+  // ので、入る幅になってから言葉にする（360px から成立するのを実測）。
+  //
+  // 既定で消しておき、`xs` 以上でだけ出す。span は `showLabel` で描画される
+  // ので、スタイルを当てないだけではアイコンの隣に素のテキストが残る
+  &__label {
+    display: none;
+  }
+
+  @include xs {
+    // リスト行のラベル付き表示（#1030）
+    //
+    // 自身のクラスを重ねて詳細度を (0,2,0) にする。`&__sm` の 28px 固定と
+    // 同点だと、勝ち負けが CSS Modules の出力順に左右されて本番ビルドで
+    // 反転しうる（`movieTile` の `--list` と同じ理由）
+    &#{&}--with_label {
+      flex-direction: column;
+      gap: $spacing-1;
+      // ラベルぶん広がるので寸法は中身に任せる
+      width: auto;
+      height: auto;
+      // ラベルが短くてもヒット領域が 44px を下回らないようにする（#1017）。
+      // tap-target の ::after は min-width/min-height: 100% なので、
+      // ボタンがこれより広ければヒット領域はボタンそのものになる
+      min-width: $tap-target-min;
+      // ⚠️ 横 padding を足さない。リスト行は幅が最も厳しく、左右 4px ずつでも
+      // 2ボタンで 16px を情報側から奪って 375px 幅で日付が省略される（実測）
+      padding: $spacing-1 0;
+      border-radius: $border-radius-md;
+      // アイコンの大きさはラベルから独立させる（ラベルは自前の font-size を持つ）
+      font-size: $font-size-base;
+
+      // ポスターに重ねないので、frosted なピルは要らない。カードの地の上では
+      // 浮いて見えるだけになる
+      background-color: transparent;
+      box-shadow: none;
+
+      &:hover {
+        background-color: $background-secondary;
+      }
+    }
+
+    &__label {
+      display: block;
+      // 折り返すと行の高さが揃わず、1画面に入る件数が減る（#1014）
+      white-space: nowrap;
+      font-size: $font-size-2xs;
+      line-height: $line-height-tight;
+      // ⛔ **状態色（$secondary-600 #ff9600）を継がせない。** あれは塗った
+      // ハート＝アイコン向けで、白背景に対して 1.9:1 しかない。10px は
+      // 大きな文字の扱いにならず 4.5:1 が要るため、文字は常に AA を満たす
+      // $text-secondary で出す（ライト 5.7:1 / ダーク 5.9:1）
+      color: $text-secondary;
+    }
+  }
 }

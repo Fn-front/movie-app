@@ -4,7 +4,7 @@
 // 登録状況が未確定の間は見せない（#1145）
 //
 // `isInWatchlist` が false でも「未登録」とは限らない（照会がまだ終わって
-// いないだけのことがある）。「＋」を出すと、登録済みの作品でも追加できるように
+// いないだけのことがある）。輪郭のしおりを出すと、登録済みの作品でも追加できるように
 // 見え、押すと成功トーストの直後に 409 のエラートーストが重なる。
 //
 // `visibility` なので枠は残り、確定しても周りは動かない。見えないまま
@@ -28,7 +28,7 @@
   background-color: color-alpha(--background-paper, 85%);
   // 同色サーフェス（詳細モーダルの paper 背景）上でも輪郭が出るよう極薄リングを付与。
   box-shadow: inset 0 0 0 $border-width-1 color-alpha(--text-primary, 12%);
-  // ＋は主要アクションのため text-primary（ライト濃色 / ダーク明色）で高コントラストに。
+  // しおりは主要アクションのため text-primary（ライト濃色 / ダーク明色）で高コントラストに。
   color: $text-primary;
   cursor: pointer;
   transition:
@@ -63,6 +63,86 @@
 
     &:hover {
       background-color: $primary-600;
+    }
+  }
+
+  // リスト行にだけ出す可視ラベル（#1030）
+  //
+  // ⛔ **最狭幅（320px）では出さない。** リスト行の横幅は
+  // 「ポスター56 + 情報 + 操作列」で、ラベルを足すと操作列が 80px → 140px に
+  // 広がる。320px では情報側が 54px まで削られ、タイトルが「魔法使い…」、
+  // 公開日が「2026年…」になる。**区別がついても作品が分からなければ意味がない**
+  // ので、入る幅になってから言葉にする（360px から成立するのを実測）。
+  //
+  // 既定で消しておき、`xs` 以上でだけ出す。span は `showLabel` で描画される
+  // ので、スタイルを当てないだけではアイコンの隣に素のテキストが残る
+  &__label {
+    display: none;
+  }
+
+  @include xs {
+    // リスト行のラベル付き表示（#1030）
+    //
+    // 自身のクラスを重ねて詳細度を (0,2,0) にする。`&__sm` の 28px 固定や
+    // `&__active` の塗りと同点だと、勝ち負けが CSS Modules の出力順に左右されて
+    // 本番ビルドで反転しうる（`movieTile` の `--list` と同じ理由）
+    &#{&}--with_label {
+      flex-direction: column;
+      gap: $spacing-1;
+      // ラベルぶん広がるので寸法は中身に任せる
+      width: auto;
+      height: auto;
+      // ラベルが短くてもヒット領域が 44px を下回らないようにする（#1017）。
+      // tap-target の ::after は min-width/min-height: 100% なので、
+      // ボタンがこれより広ければヒット領域はボタンそのものになる
+      min-width: $tap-target-min;
+      // ⚠️ 横 padding を足さない。リスト行は幅が最も厳しく、左右 4px ずつでも
+      // 2ボタンで 16px を情報側から奪って 375px 幅で日付が省略される（実測）
+      padding: $spacing-1 0;
+      border-radius: $border-radius-md;
+      // アイコンの大きさはラベルから独立させる（ラベルは自前の font-size を持つ）
+      font-size: $font-size-base;
+
+      // ポスターに重ねないので、frosted なピルは要らない。カードの地の上では
+      // 浮いて見えるだけになる
+      background-color: transparent;
+      box-shadow: none;
+
+      &:hover {
+        background-color: $background-secondary;
+      }
+
+      // ⛔ **登録済みでも面を塗りつぶさない。** $primary-500 の面に $text-primary を
+      // 乗せると 3.66:1 で、アイコン（3:1）は通るが**ラベルの文字（4.5:1）が
+      // 通らない**。状態は塗りつぶしたしおりと $text-link の色で伝える。
+      //
+      // ⚠️ `&#{&}__active` と書くと `&` が既に合成済みなので
+      // `...--with_label__active` という存在しないクラスになる。リテラルで書く
+      //
+      // ⚠️ $primary-500 を直に使わないこと。:root にしか無くテーマ非追従で、
+      // ダークの面では 2.90:1 まで落ちる（`_theme.scss`）。$text-link は
+      // ライト 4.74:1 / ダーク 4.98:1 でどちらも AA を満たす
+      &.c_watchlist_add_button__active {
+        background-color: transparent;
+        color: $text-link;
+
+        &:hover {
+          background-color: $background-secondary;
+          color: $text-link-hover;
+        }
+      }
+    }
+
+    &__label {
+      display: block;
+      // 折り返すと行の高さが揃わず、1画面に入る件数が減る（#1014）
+      white-space: nowrap;
+      font-size: $font-size-2xs;
+      line-height: $line-height-tight;
+      // 状態色（$text-link）を継がせない。10px は大きな文字の扱いにならず
+      // 4.5:1 が要るため、文字は常に AA を満たす $text-secondary で出す
+      // （ライト 5.7:1 / ダーク 5.9:1）
+      color: $text-secondary;
     }
   }
 }

@@ -151,4 +151,46 @@ describe('FavoriteButton', () => {
       ).toBeInTheDocument();
     });
   });
+  /** 一覧では作品名を含める（#1047）。理由は WatchlistAddButton と同じ */
+  describe('作品名入りのアクセシブルネーム（#1047）', () => {
+    it('movieTitle を渡すと未登録のラベルに作品名が入る', () => {
+      render(
+        <FavoriteButton
+          favorite={null}
+          onClick={jest.fn()}
+          movieTitle='テスト映画'
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'テスト映画をお気に入りに追加' }),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * ⚠️ 登録済みは助詞が「の」。対象は作品ではなく**その作品のお気に入り**で、
+     * `dismissedMoviesList.tsx` の `${title}の興味なしを解除` と同じ形。
+     */
+    it('movieTitle を渡すと登録済みのラベルは「の」で繋がる', () => {
+      render(
+        <FavoriteButton
+          favorite={{ id: 1, rating: 8 }}
+          onClick={jest.fn()}
+          movieTitle='テスト映画'
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'テスト映画のお気に入りを編集' }),
+      ).toBeInTheDocument();
+    });
+
+    it('movieTitle を渡さなければ従来どおりの文言', () => {
+      render(<FavoriteButton favorite={null} onClick={jest.fn()} />);
+
+      expect(
+        screen.getByRole('button', { name: 'お気に入りに追加' }),
+      ).toBeInTheDocument();
+    });
+  });
 });

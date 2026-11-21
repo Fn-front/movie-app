@@ -8,6 +8,8 @@
 import { memo, useCallback } from 'react';
 import { IoThumbsDown } from 'react-icons/io5';
 
+import { MOVIE_ACTION_LABELS } from '@/constants/strings';
+
 import styles from './dismissButton.module.scss';
 
 /**
@@ -20,6 +22,13 @@ export interface DismissButtonProps {
   disabled?: boolean;
   /** サイズ */
   size?: 'sm' | 'md';
+  /**
+   * アクセシブルネームに含める作品名（#1047）
+   *
+   * ⚠️ 素の「興味なし」は**名詞**なので、作品名を足すときは動詞化する
+   * （`${title}を興味なしにする`）。「○○を興味なし」は非文。
+   */
+  movieTitle?: string;
 }
 
 /**
@@ -29,6 +38,7 @@ export const DismissButton = memo<DismissButtonProps>(function DismissButton({
   onClick,
   disabled = false,
   size = 'sm',
+  movieTitle,
 }) {
   const handleClick = useCallback(
     (event: React.MouseEvent) => {
@@ -59,7 +69,7 @@ export const DismissButton = memo<DismissButtonProps>(function DismissButton({
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       disabled={disabled}
-      aria-label='興味なし'
+      aria-label={MOVIE_ACTION_LABELS.dismiss(movieTitle)}
     >
       <IoThumbsDown />
     </button>

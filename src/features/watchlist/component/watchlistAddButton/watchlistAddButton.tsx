@@ -8,6 +8,7 @@
 import { memo, useCallback } from 'react';
 import { IoAdd, IoCheckmark } from 'react-icons/io5';
 
+import { MOVIE_ACTION_LABELS } from '@/constants/strings';
 import { cn } from '@/utils/cn';
 
 import styles from './watchlistAddButton.module.scss';
@@ -34,6 +35,16 @@ export interface WatchlistAddButtonProps {
    * 重なる（#1145）
    */
   isResolving?: boolean;
+  /**
+   * アクセシブルネームに含める作品名（#1047）
+   *
+   * ⛔ **一覧では必ず渡す。** 同じ名前のボタンが最大20個並ぶため、
+   * 要素リストのように文脈から切り離して読むモードでは、どの作品への
+   * 操作か分からない。
+   *
+   * ⚠️ 詳細モーダルでは渡さない（1作品しか無いので冗長なだけ）。
+   */
+  movieTitle?: string;
 }
 
 /**
@@ -46,6 +57,7 @@ export const WatchlistAddButton = memo<WatchlistAddButtonProps>(
     disabled = false,
     size = 'sm',
     isResolving = false,
+    movieTitle,
   }) {
     const handleClick = useCallback(
       (event: React.MouseEvent) => {
@@ -84,7 +96,9 @@ export const WatchlistAddButton = memo<WatchlistAddButtonProps>(
         onKeyDown={handleKeyDown}
         disabled={disabled}
         aria-label={
-          isInWatchlist ? 'ウォッチリストから削除' : 'ウォッチリストに追加'
+          isInWatchlist
+            ? MOVIE_ACTION_LABELS.watchlistRemove(movieTitle)
+            : MOVIE_ACTION_LABELS.watchlistAdd(movieTitle)
         }
       >
         {isInWatchlist ? <IoCheckmark /> : <IoAdd />}

@@ -82,6 +82,59 @@ export const ARIA_LABELS = {
 } as const;
 
 /**
+ * 一覧カードの操作ボタンのアクセシブルネーム（#1047）
+ *
+ * ⛔ **一覧では作品名を含める。** 一覧には同じ名前のボタンが最大40個
+ * （お気に入り＋ウォッチリスト）並ぶため、スクリーンリーダーの要素リスト
+ * （NVDA `Insert + F7` / VoiceOver のローター）のように**文脈から切り離して
+ * 読むモード**では、どの作品への操作か分からない。
+ *
+ * ⚠️ **詳細モーダルでは渡さない。** 1作品しか無い文脈で作品名を足すと
+ * 冗長になるだけ。各ボタンは `movieTitle` が無ければ従来どおりの文言を返す。
+ *
+ * ⚠️ **機械的に `${title}を${操作}` にはできない。** 「興味なし」は名詞
+ * ラベルなので「○○を興味なし」は非文になる。操作ごとに決めること。
+ *
+ * ⚠️ 既存表現と語順を揃える。リポジトリには先例が3つある。
+ *
+ * | 箇所 | 文言 |
+ * |---|---|
+ * | `watchlistItem.tsx` | `${title}をウォッチリストから削除` |
+ * | `watchlistList.tsx` | `${title}を視聴済みにする` |
+ * | `dismissedMoviesList.tsx` | `${title}の興味なしを解除` ← 助詞が「の」 |
+ */
+export const MOVIE_ACTION_LABELS = {
+  /** お気に入りに追加（未登録） */
+  favoriteAdd: (movieTitle?: string) =>
+    movieTitle ? `${movieTitle}をお気に入りに追加` : 'お気に入りに追加',
+  /**
+   * お気に入りを編集（登録済み）
+   *
+   * ⚠️ 「を」ではなく「の」。対象は作品ではなく**その作品のお気に入り**で、
+   * `dismissedMoviesList.tsx` の `${title}の興味なしを解除` と同じ形。
+   */
+  favoriteEdit: (movieTitle?: string) =>
+    movieTitle ? `${movieTitle}のお気に入りを編集` : 'お気に入りを編集',
+  /** ウォッチリストに追加（未登録） */
+  watchlistAdd: (movieTitle?: string) =>
+    movieTitle ? `${movieTitle}をウォッチリストに追加` : 'ウォッチリストに追加',
+  /** ウォッチリストから削除（登録済み。`watchlistItem.tsx` と同じ文言） */
+  watchlistRemove: (movieTitle?: string) =>
+    movieTitle
+      ? `${movieTitle}をウォッチリストから削除`
+      : 'ウォッチリストから削除',
+  /**
+   * 興味なしに登録する
+   *
+   * ⚠️ 素の「興味なし」は**名詞**。作品名を足すなら動詞化しないと
+   * 「○○を興味なし」という非文になる。解除側の
+   * `${title}の興味なしを解除`（`dismissedMoviesList.tsx`）と対になる。
+   */
+  dismiss: (movieTitle?: string) =>
+    movieTitle ? `${movieTitle}を興味なしにする` : '興味なし',
+} as const;
+
+/**
  * 空状態メッセージ
  */
 export const EMPTY_MESSAGES = {

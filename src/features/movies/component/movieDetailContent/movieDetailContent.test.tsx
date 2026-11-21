@@ -333,6 +333,29 @@ describe('MovieDetailContent', () => {
       ).toBeInTheDocument();
     });
 
+    /**
+     * ⚠️ **モーダルでは作品名を入れない**（#1047）
+     *
+     * 一覧は同じ名前のボタンが20個並ぶので作品名で区別する必要があるが、
+     * ここは1作品しか無い。入れると「テストをウォッチリストに追加」と
+     * 毎回作品名を読み上げるだけで、区別には寄与しない。
+     *
+     * ⚠️ 上のテストは `getByRole` の**完全一致**で通っているため、
+     * 作品名が入った瞬間に落ちる。ここはその意図を明示するための控え。
+     */
+    it('モーダルのラベルには作品名を入れない', () => {
+      setupMovie(movieWithPoster);
+      mockUseWatchlistToggle.isInWatchlist.mockReturnValue(false);
+
+      render(<MovieDetailContent movieId={123} />);
+
+      expect(
+        screen.queryByRole('button', {
+          name: `${movieWithPoster.title}をウォッチリストに追加`,
+        }),
+      ).not.toBeInTheDocument();
+    });
+
     it('追加済みの場合は削除ボタンが表示される', () => {
       setupMovie(movieWithPoster);
       mockUseWatchlistToggle.isInWatchlist.mockReturnValue(true);

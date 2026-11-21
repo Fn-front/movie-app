@@ -35,7 +35,14 @@
  *
  * ⚠️ **dev では落ちる。** on-demand SSR でハイドレーションされるため、
  * 上の表のとおり1度グリッドになる。利用者が触るのは本番ビルドだけなので、
- * ここは CI（＝`npm start`）に限って見る。
+ * ここは CI（＝`npm start`）に限って見る。手元で確かめるなら `CI=true` を
+ * 付けること（`.claude/rules/testing.md` の本番ビルド手順と同じ）。
+ *
+ * ⚠️ **CSS Modules のクラス名に依存している。** 表示モードは DOM 構造ごと
+ * 変わる（グリッドとリストで別コンテナ）ため、生成の途中経過を見るには
+ * これしか手が無い（`e2e/mobile/movieViewMode.spec.ts` も同じ依存）。
+ * `c_movie_grid_container__grid` / `__list` を改名したら**ここも直すこと**。
+ * 直し忘れると、落ちずに「検出しなくなる」形で壊れる。
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -44,6 +51,17 @@ import { STORAGE_KEYS } from '@/constants';
 
 /** SP 表示（#1014 と同じ。リスト表示は SP の機能） */
 test.use({ viewport: { width: 375, height: 812 } });
+
+/**
+ * 一覧が出るまでの待ち時間
+ *
+ * CPU 6倍スロットリングを掛けたうえで、`/movies/*` は react-query の
+ * 取得を待つ。既定の 10 秒では足りない。
+ */
+const LIST_VISIBLE_TIMEOUT_MS = 30_000;
+
+/** 記録を止めるフラグ名（観測そのものが負荷にならないよう、読む前に止める） */
+const STOP_FLAG = '__viewModeStop';
 
 /**
  * 「どのコンテナが居たか」を1文字ずつ記録する
@@ -55,14 +73,24 @@ test.use({ viewport: { width: 375, height: 812 } });
  * ⚠️ `document.documentElement` は init script の時点ではまだ無い。
  * 先に rAF を回し、生えてから購読する。
  */
-const INSTALL = (storageKey: string) => {
+const installViewModeRecorder = ({
+  storageKey,
+  mode,
+}: {
+  storageKey: string;
+  mode: string;
+}) => {
   try {
-    window.localStorage.setItem(storageKey, 'list');
+    window.localStorage.setItem(storageKey, mode);
   } catch {
-    // 読み書きできない環境ではグリッドのまま。その場合この spec は意味を失う
+    // 読み書きできない環境ではグリッドのまま。その場合この spec は意味を失うが、
+    // 下の「記録が動いたか」のアサーションで気づける
   }
 
-  const w = window as unknown as { __viewModeSeq: string[] };
+  const w = window as unknown as {
+    __viewModeSeq: string[];
+    __viewModeStop?: boolean;
+  };
   w.__viewModeSeq = [];
 
   const read = () => {
@@ -80,6 +108,8 @@ const INSTALL = (storageKey: string) => {
   };
 
   const push = () => {
+    if (w.__viewModeStop) return;
+
     const state = read();
     const seq = w.__viewModeSeq;
     if (seq[seq.length - 1] !== state) seq.push(state);
@@ -87,6 +117,8 @@ const INSTALL = (storageKey: string) => {
 
   let observing = false;
   const loop = () => {
+    if (w.__viewModeStop) return;
+
     push();
 
     if (!observing && document.documentElement) {
@@ -104,10 +136,14 @@ const INSTALL = (storageKey: string) => {
   requestAnimationFrame(loop);
 };
 
+/** 採取を止めてから読む（読んでいる最中に伸びると判定がぶれる） */
 const readSequence = (page: Page) =>
-  page.evaluate(
-    () => (window as unknown as { __viewModeSeq: string[] }).__viewModeSeq,
-  );
+  page.evaluate((stopFlag) => {
+    const w = window as unknown as Record<string, unknown>;
+    w[stopFlag] = true;
+
+    return w.__viewModeSeq as string[];
+  }, STOP_FLAG);
 
 test.describe('リスト設定での初回描画（#1048）', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -115,34 +151,58 @@ test.describe('リスト設定での初回描画（#1048）', () => {
   /**
    * ⚠️ `CI` は webServer が `npm start`（本番ビルド）になる条件そのもの
    * （`playwright.config.ts` の `command: isCI ? 'npm start' : 'npm run dev'`）。
-   * 手元でも `CI=true` を付ければ走る。
    */
   test.skip(
     !process.env.CI,
     '本番ビルドでのみ成立（dev は on-demand SSR でハイドレーションされ、1度グリッドになる）',
   );
 
+  /** ⚠️ `newCDPSession` は Chromium 専用。CI は chromium だけだが手元は3つ走る */
+  test.skip(
+    ({ browserName }) => browserName !== 'chromium',
+    'CPU スロットリング（CDP）が Chromium 専用のため',
+  );
+
+  /** 指定の表示モードで開き、観測された遷移を返す */
+  const openAndRecord = async (
+    page: Page,
+    path: string,
+    mode: 'grid' | 'list',
+  ): Promise<string[]> => {
+    // ⚠️ `addInitScript` は**引数を1つしか渡せない**。2つ書くと2つ目が
+    //    黙って捨てられ、`localStorage` に `undefined` が入って既定
+    //    （グリッド）に落ちる。オブジェクトで1つにまとめる
+    await page.addInitScript(installViewModeRecorder, {
+      storageKey: STORAGE_KEYS.MOVIE_VIEW_MODE,
+      mode,
+    });
+
+    // 遷移の窓を広げる。速い環境では数ミリ秒で終わって見逃す
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
+
+    await page.goto(path);
+
+    const container =
+      mode === 'list'
+        ? '[class*="c_movie_grid_container__list"]'
+        : '[class*="c_movie_grid_container__grid"]';
+
+    await expect(page.locator(container)).toBeVisible({
+      timeout: LIST_VISIBLE_TIMEOUT_MS,
+    });
+
+    return readSequence(page);
+  };
+
   for (const path of [
     '/movies/now-showing',
     '/movies/upcoming',
     // 退行の比較対象。こちらは `ssr: false` なので元から起きない
-    '/search?query=mission',
+    '/search?query=バットマン',
   ]) {
     test(`${path} でグリッドのコンテナが一度も現れない`, async ({ page }) => {
-      await page.addInitScript(INSTALL, STORAGE_KEYS.MOVIE_VIEW_MODE);
-
-      // 遷移の窓を広げる。速い環境では数ミリ秒で終わって見逃す
-      const cdp = await page.context().newCDPSession(page);
-      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
-
-      await page.goto(path);
-
-      // リストのタイルが出るまで＝切り替えが終わるまで待つ
-      await expect(
-        page.locator('[class*="c_movie_grid_container__list"]'),
-      ).toBeVisible({ timeout: 30000 });
-
-      const sequence = await readSequence(page);
+      const sequence = await openAndRecord(page, path, 'list');
 
       // 記録そのものが動いていないと、何も起きていないように見えて通る
       expect(sequence.length).toBeGreaterThan(0);
@@ -150,4 +210,20 @@ test.describe('リスト設定での初回描画（#1048）', () => {
       expect(sequence[sequence.length - 1]).toContain('L');
     });
   }
+
+  /**
+   * ⛔ **検出器が生きていることの証明（positive control）。**
+   *
+   * 上の3本は「`G` が記録されなかった」ことしか見ていないので、
+   * **グリッドのクラス名を改名して検出できなくなった**場合も緑のまま通る
+   * （偽陰性）。グリッド設定で開けば `G` は必ず記録されるはずなので、
+   * ここが落ちたら「退行が無い」のではなく「見えていない」と分かる。
+   */
+  test('グリッド設定なら G が記録される（検出器の生存確認）', async ({
+    page,
+  }) => {
+    const sequence = await openAndRecord(page, '/movies/now-showing', 'grid');
+
+    expect(sequence.some((state) => state.startsWith('G'))).toBe(true);
+  });
 });

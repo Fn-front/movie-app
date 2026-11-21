@@ -162,4 +162,53 @@ describe('WatchlistAddButton', () => {
       ).toBeInTheDocument();
     });
   });
+  /**
+   * 一覧では作品名を含める（#1047）
+   *
+   * ⛔ 一覧には同じ名前のボタンが最大20個並ぶ。スクリーンリーダーの
+   * 要素リスト（NVDA `Insert + F7` / VoiceOver のローター）のように
+   * **文脈から切り離して読むモード**では、どの作品への操作か分からない。
+   */
+  describe('作品名入りのアクセシブルネーム（#1047）', () => {
+    it('movieTitle を渡すと未登録のラベルに作品名が入る', () => {
+      render(
+        <WatchlistAddButton
+          isInWatchlist={false}
+          onClick={jest.fn()}
+          movieTitle='テスト映画'
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', {
+          name: 'テスト映画をウォッチリストに追加',
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('movieTitle を渡すと登録済みのラベルにも作品名が入る', () => {
+      render(
+        <WatchlistAddButton
+          isInWatchlist
+          onClick={jest.fn()}
+          movieTitle='テスト映画'
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', {
+          name: 'テスト映画をウォッチリストから削除',
+        }),
+      ).toBeInTheDocument();
+    });
+
+    /** ⚠️ 詳細モーダルは1作品しか無いので冗長にしない */
+    it('movieTitle を渡さなければ従来どおりの文言', () => {
+      render(<WatchlistAddButton isInWatchlist={false} onClick={jest.fn()} />);
+
+      expect(
+        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+      ).toBeInTheDocument();
+    });
+  });
 });

@@ -5,7 +5,7 @@ import favoriteButtonStyles from '@/features/favorites/component/favoriteButton/
 import watchlistAddButtonStyles from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton.module.scss';
 
 import { MovieTile } from './movieTile';
-import { IMAGE_SIZES } from '@/constants';
+import { IMAGE_SIZES, MOVIE_ACTION_LABELS } from '@/constants';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
 // --- Helpers ---
@@ -27,6 +27,21 @@ const createMockMovie = (
   is_revival: false,
   ...overrides,
 });
+
+/**
+ * 一覧カードのボタンは作品名入りのアクセシブルネームを持つ（#1047）
+ *
+ * ⚠️ 文言を直書きしない。`MOVIE_ACTION_LABELS` と二重管理になり、
+ * どちらか片方だけ変えたときに気づけない。
+ */
+const MOVIE_TITLE = 'テスト映画';
+const LABEL = {
+  watchlistAdd: MOVIE_ACTION_LABELS.watchlistAdd(MOVIE_TITLE),
+  watchlistRemove: MOVIE_ACTION_LABELS.watchlistRemove(MOVIE_TITLE),
+  favoriteAdd: MOVIE_ACTION_LABELS.favoriteAdd(MOVIE_TITLE),
+  favoriteEdit: MOVIE_ACTION_LABELS.favoriteEdit(MOVIE_TITLE),
+  dismiss: MOVIE_ACTION_LABELS.dismiss(MOVIE_TITLE),
+} as const;
 
 const genres: Record<number, string> = {
   28: 'アクション',
@@ -245,9 +260,9 @@ describe('MovieTile', () => {
 
       const detailLink = screen.getByRole('link', { name: 'テスト映画' });
       for (const name of [
-        'ウォッチリストに追加',
-        'お気に入りに追加',
-        '興味なし',
+        LABEL.watchlistAdd,
+        LABEL.favoriteAdd,
+        LABEL.dismiss,
       ]) {
         expect(detailLink).not.toContainElement(
           screen.getByRole('button', { name }),
@@ -437,14 +452,14 @@ describe('MovieTile', () => {
         />,
       );
       expect(
-        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+        screen.getByRole('button', { name: LABEL.watchlistAdd }),
       ).toBeInTheDocument();
     });
 
     it('onWatchlistToggleが未指定の場合WatchlistAddButtonが表示されない', () => {
       render(<MovieTile movie={createMockMovie()} />);
       expect(
-        screen.queryByRole('button', { name: 'ウォッチリストに追加' }),
+        screen.queryByRole('button', { name: LABEL.watchlistAdd }),
       ).not.toBeInTheDocument();
     });
 
@@ -460,9 +475,7 @@ describe('MovieTile', () => {
         />,
       );
 
-      fireEvent.click(
-        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
-      );
+      fireEvent.click(screen.getByRole('button', { name: LABEL.watchlistAdd }));
       expect(onWatchlistToggle).toHaveBeenCalledTimes(1);
       expect(onClick).not.toHaveBeenCalled();
     });
@@ -476,7 +489,7 @@ describe('MovieTile', () => {
         />,
       );
       expect(
-        screen.getByRole('button', { name: 'ウォッチリストから削除' }),
+        screen.getByRole('button', { name: LABEL.watchlistRemove }),
       ).toBeInTheDocument();
     });
 
@@ -492,7 +505,7 @@ describe('MovieTile', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+        screen.getByRole('button', { name: LABEL.watchlistAdd }),
       ).toHaveClass(
         watchlistAddButtonStyles['c_watchlist_add_button--resolving'],
       );
@@ -530,7 +543,7 @@ describe('MovieTile', () => {
         />,
       );
       expect(
-        screen.getByRole('button', { name: 'お気に入りに追加' }),
+        screen.getByRole('button', { name: LABEL.favoriteAdd }),
       ).toBeInTheDocument();
     });
 
@@ -544,7 +557,7 @@ describe('MovieTile', () => {
         />,
       );
       expect(
-        screen.getByRole('button', { name: 'お気に入りを編集' }),
+        screen.getByRole('button', { name: LABEL.favoriteEdit }),
       ).toBeInTheDocument();
     });
 
@@ -559,7 +572,7 @@ describe('MovieTile', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: 'お気に入りに追加' }),
+        screen.getByRole('button', { name: LABEL.favoriteAdd }),
       ).toHaveClass(favoriteButtonStyles['c_favorite_button--resolving']);
     });
   });
@@ -568,14 +581,14 @@ describe('MovieTile', () => {
     it('onDismissが指定されるとDismissButtonが表示される', () => {
       render(<MovieTile movie={createMockMovie()} onDismiss={jest.fn()} />);
       expect(
-        screen.getByRole('button', { name: '興味なし' }),
+        screen.getByRole('button', { name: LABEL.dismiss }),
       ).toBeInTheDocument();
     });
 
     it('onDismissが未指定の場合DismissButtonが表示されない', () => {
       render(<MovieTile movie={createMockMovie()} />);
       expect(
-        screen.queryByRole('button', { name: '興味なし' }),
+        screen.queryByRole('button', { name: LABEL.dismiss }),
       ).not.toBeInTheDocument();
     });
 
@@ -590,7 +603,7 @@ describe('MovieTile', () => {
         />,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: '興味なし' }));
+      fireEvent.click(screen.getByRole('button', { name: LABEL.dismiss }));
       expect(onDismiss).toHaveBeenCalledTimes(1);
       expect(onClick).not.toHaveBeenCalled();
     });
@@ -603,7 +616,9 @@ describe('MovieTile', () => {
           dismissDisabled={true}
         />,
       );
-      expect(screen.getByRole('button', { name: '興味なし' })).toBeDisabled();
+      expect(
+        screen.getByRole('button', { name: LABEL.dismiss }),
+      ).toBeDisabled();
     });
   });
 
@@ -613,14 +628,14 @@ describe('MovieTile', () => {
         <MovieTile movie={createMockMovie()} onFavoriteToggle={jest.fn()} />,
       );
       expect(
-        screen.getByRole('button', { name: 'お気に入りに追加' }),
+        screen.getByRole('button', { name: LABEL.favoriteAdd }),
       ).toBeInTheDocument();
     });
 
     it('onFavoriteToggleが未指定の場合FavoriteButtonが表示されない', () => {
       render(<MovieTile movie={createMockMovie()} />);
       expect(
-        screen.queryByRole('button', { name: 'お気に入りに追加' }),
+        screen.queryByRole('button', { name: LABEL.favoriteAdd }),
       ).not.toBeInTheDocument();
     });
   });
@@ -647,7 +662,7 @@ describe('MovieTile', () => {
       );
 
       expect(
-        screen.queryByRole('button', { name: 'お気に入りに追加' }),
+        screen.queryByRole('button', { name: LABEL.favoriteAdd }),
       ).not.toBeInTheDocument();
     });
 
@@ -662,7 +677,7 @@ describe('MovieTile', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: 'お気に入りに追加' }),
+        screen.getByRole('button', { name: LABEL.favoriteAdd }),
       ).toBeInTheDocument();
     });
 
@@ -677,7 +692,7 @@ describe('MovieTile', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: 'お気に入りに追加' }),
+        screen.getByRole('button', { name: LABEL.favoriteAdd }),
       ).toBeInTheDocument();
     });
 
@@ -692,7 +707,7 @@ describe('MovieTile', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: 'お気に入りに追加' }),
+        screen.getByRole('button', { name: LABEL.favoriteAdd }),
       ).toBeInTheDocument();
     });
 
@@ -712,7 +727,7 @@ describe('MovieTile', () => {
       );
 
       expect(
-        screen.getByRole('button', { name: 'お気に入りに追加' }),
+        screen.getByRole('button', { name: LABEL.favoriteAdd }),
       ).toBeInTheDocument();
     });
 
@@ -729,7 +744,7 @@ describe('MovieTile', () => {
 
       // 公開前に「これから観る」と登録するのが本来の用途
       expect(
-        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+        screen.getByRole('button', { name: LABEL.watchlistAdd }),
       ).toBeInTheDocument();
     });
 
@@ -826,7 +841,7 @@ describe('MovieTile', () => {
       expect(onClick).toHaveBeenCalledWith(1);
 
       await user.click(
-        screen.getByRole('button', { name: 'ウォッチリストに追加' }),
+        screen.getByRole('button', { name: LABEL.watchlistAdd }),
       );
       expect(onWatchlistToggle).toHaveBeenCalledTimes(1);
     });
@@ -849,8 +864,8 @@ describe('MovieTile', () => {
 
       expect(focusableNames(container)).toEqual([
         'テスト映画',
-        'お気に入りに追加',
-        'ウォッチリストに追加',
+        LABEL.favoriteAdd,
+        LABEL.watchlistAdd,
       ]);
     });
 
@@ -865,8 +880,8 @@ describe('MovieTile', () => {
 
       // グリッドはボタンがポスターの上＝タイトルより視覚的に前
       expect(focusableNames(container)).toEqual([
-        'お気に入りに追加',
-        'ウォッチリストに追加',
+        LABEL.favoriteAdd,
+        LABEL.watchlistAdd,
         'テスト映画',
       ]);
     });

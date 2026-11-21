@@ -192,8 +192,9 @@ describe('FavoritesPage', () => {
 
     render(<FavoritesPage />);
 
+    // 一覧のボタンは作品名入り（#1047）
     const favoriteButtons = screen.getAllByRole('button', {
-      name: 'お気に入りを編集',
+      name: /お気に入りを編集$/,
     });
     await user.click(favoriteButtons[0]);
 

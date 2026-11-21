@@ -183,6 +183,7 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
         favorite={{ id: item.id, rating: item.rating }}
         onClick={handleFavoriteToggle}
         disabled={favoriteDisabled}
+        movieTitle={item.title}
       />
     </div>
   );

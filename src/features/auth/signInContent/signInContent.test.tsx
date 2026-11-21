@@ -337,18 +337,20 @@ describe('SignInContent', () => {
     });
 
     /**
-     * 預かり分を消費したあとに `initialError` が現れたら採る
+     * 一度「採らない」と決めた戻り先は蘇らせない
      *
-     * effect の deps が `[initialError]` なのはこのため。代替案の
-     * `if (!pending) return;` は**ここだけ**が壊れる（StrictMode の2回目は
-     * あちらでも防げるので、差が出るのはこのケースに限られる）。
+     * ⛔ `signInContent.tsx` の「採らない場合も消す」がこれ。消費した値を
+     * ref 等で抱えておくと、**後から `error` が付いたときに古い戻り先を採る**
+     * 作りになる。現状アプリ内から `?error=` 付きでソフト遷移する経路は
+     * 無いので実害は出ないが、足された瞬間に #1246 の docblock が避けている
+     * 「身に覚えのない場所へ飛ばされる」が復活する。
      */
-    it('error が後から来ても、消費済みの戻り先を採れる', async () => {
+    it('採らないと決めた戻り先は、後から error が来ても採らない', async () => {
       window.sessionStorage.setItem(KEY, '/watchlist');
 
       const { rerender } = render(<SignInContent />);
 
-      // 1回目で預かり分は消費されている（残すと別経路の人が飛ばされる）
+      // 1回目で預かり分は消費されている
       await waitFor(() =>
         expect(window.sessionStorage.getItem(KEY)).toBeNull(),
       );
@@ -358,8 +360,31 @@ describe('SignInContent', () => {
       await waitFor(() =>
         expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
           'data-callback',
-          '/watchlist',
+          '',
         ),
+      );
+    });
+
+    /**
+     * アンマウントを跨いで蘇らない
+     *
+     * ⚠️ 上と同じ不変条件を、インスタンスを作り直す側から固定する。
+     * 消費した値をモジュールスコープへ出す実装だとここが落ちる。
+     */
+    it('開き直しても消費済みの戻り先は復活しない', async () => {
+      window.sessionStorage.setItem(KEY, '/watchlist');
+
+      const { unmount } = render(<SignInContent />);
+      await waitFor(() =>
+        expect(window.sessionStorage.getItem(KEY)).toBeNull(),
+      );
+      unmount();
+
+      render(<SignInContent initialError='ログインに失敗しました' />);
+
+      expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
+        'data-callback',
+        '',
       );
     });
   });

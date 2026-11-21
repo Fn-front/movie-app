@@ -174,7 +174,8 @@ export async function notifyCronFailure(
     // 通り抜けた分がそのまま送信APIへ出ていく
     // ⚠️ プロセス内の歯止めも深刻度ごとに分ける。同じキーだと打ち切りの
     //    通知が60秒窓を占有して本物の失敗を落とす
-    const throttleKey = severity === 'failure' ? cronName : `${cronName}:${severity}`;
+    const throttleKey =
+      severity === 'failure' ? cronName : `${cronName}:${severity}`;
 
     if (!localThrottle.check(throttleKey)) {
       console.warn(

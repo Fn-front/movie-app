@@ -40,6 +40,13 @@ export interface WatchlistItem {
   added_at: string;
   /** 視聴済みにした日時。null は未視聴 */
   watched_at: string | null;
+  /**
+   * TMDb で削除されたことを検知した時刻。null は検知していない（#433 案D）
+   *
+   * 値が入っている作品は TMDb 側にもう存在しない。行は残して一覧で知らせ、
+   * 猶予後に掃除の CRON が物理削除する。
+   */
+  tmdb_deleted_at?: string | null;
   /** 配信情報。配信されていなければ null */
   streaming: WatchlistStreaming | null;
 }

@@ -143,4 +143,31 @@ describe('DismissedMoviesList', () => {
     expect(screen.getByText('テスト映画B')).toBeInTheDocument();
     expect(screen.queryByAltText('テスト映画B')).not.toBeInTheDocument();
   });
+
+  // #433 案D: TMDb から消えた作品は行を残して知らせる
+  describe('TMDbから削除された作品', () => {
+    const deletedAt = new Date(
+      Date.now() - 5 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    it('行を消さず、削除された旨と期限を知らせる', () => {
+      mockQueryData = [{ ...mockMovies[0], tmdb_deleted_at: deletedAt }];
+
+      render(<DismissedMoviesList />);
+
+      expect(screen.getByText('テスト映画A')).toBeInTheDocument();
+      expect(screen.getByText('TMDbから削除されました')).toBeInTheDocument();
+      expect(screen.getByText(/あと\d+日で消えます/)).toBeInTheDocument();
+    });
+
+    it('検知されていない作品には出さない', () => {
+      mockQueryData = mockMovies;
+
+      render(<DismissedMoviesList />);
+
+      expect(
+        screen.queryByText('TMDbから削除されました'),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

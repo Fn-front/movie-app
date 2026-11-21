@@ -13,6 +13,7 @@ import { IoCloseOutline } from 'react-icons/io5';
 import { IMAGE_SIZES, ROUTES } from '@/constants';
 import { formatDate } from '@/utils/date';
 import { getTMDbImageUrl } from '@/utils/image';
+import { TmdbDeletedNotice } from '@/components/ui/tmdbDeletedNotice/tmdbDeletedNotice';
 import { shouldLetBrowserHandle } from '@/utils/linkClick';
 import { isOptimisticId } from '@/utils/optimisticId';
 import type { WatchlistItem as WatchlistItemType } from '@/lib/api/watchlist/watchlist';
@@ -100,6 +101,16 @@ export const WatchlistItem = memo<WatchlistItemProps>(function WatchlistItem({
           <p className={styles.c_watchlist_item__release_date}>
             {formattedDate}
           </p>
+        )}
+        {/* TMDb から消えた作品は行を残して知らせる（#433 案D）。
+            右端の削除ボタンとは別に、理由と期限をここで伝える */}
+        {item.tmdb_deleted_at && (
+          <TmdbDeletedNotice
+            tmdbDeletedAt={item.tmdb_deleted_at}
+            onRemove={handleDelete}
+            disabled={isOptimisticId(item.id)}
+            movieTitle={item.title}
+          />
         )}
       </div>
 

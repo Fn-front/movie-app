@@ -27,6 +27,13 @@ export interface FavoriteItem {
   rating: number;
   /** 登録日時 */
   added_at: string;
+  /**
+   * TMDb で削除されたことを検知した時刻。null は検知していない（#433 案D）
+   *
+   * 値が入っている作品は TMDb 側にもう存在しない。行は残して一覧で知らせ、
+   * 猶予後に掃除の CRON が物理削除する。
+   */
+  tmdb_deleted_at?: string | null;
 }
 
 /**

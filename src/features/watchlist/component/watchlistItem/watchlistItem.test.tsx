@@ -315,4 +315,51 @@ describe('WatchlistItem', () => {
       ).toBeEnabled();
     });
   });
+
+  // #433 案D: TMDb から消えた作品は行を残して知らせる
+  describe('TMDbから削除された作品', () => {
+    const deletedAt = new Date(
+      Date.now() - 5 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    it('行を消さず、削除された旨と期限を知らせる', () => {
+      const item = createMockItem({ tmdb_deleted_at: deletedAt });
+      render(
+        <WatchlistItem item={item} onClick={jest.fn()} onDelete={jest.fn()} />,
+      );
+
+      expect(screen.getByText('テスト映画')).toBeInTheDocument();
+      expect(screen.getByText('TMDbから削除されました')).toBeInTheDocument();
+      expect(screen.getByText(/あと\d+日で消えます/)).toBeInTheDocument();
+    });
+
+    it('検知されていない作品には出さない', () => {
+      render(
+        <WatchlistItem
+          item={createMockItem()}
+          onClick={jest.fn()}
+          onDelete={jest.fn()}
+        />,
+      );
+
+      expect(
+        screen.queryByText('TMDbから削除されました'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('削除ボタンを押すとウォッチリストから外す', async () => {
+      const user = userEvent.setup();
+      const onDelete = jest.fn();
+      const item = createMockItem({ tmdb_deleted_at: deletedAt });
+      render(
+        <WatchlistItem item={item} onClick={jest.fn()} onDelete={onDelete} />,
+      );
+
+      await user.click(
+        screen.getByRole('button', { name: 'テスト映画を一覧から削除' }),
+      );
+
+      expect(onDelete).toHaveBeenCalledWith(item.id);
+    });
+  });
 });

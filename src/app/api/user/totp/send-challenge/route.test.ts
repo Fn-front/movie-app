@@ -6,7 +6,10 @@
  * 設定変更のための第2要素コード送信API Route テスト
  */
 
-import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
+import {
+  SECOND_FACTOR_MESSAGES,
+  SECOND_FACTOR_METHOD,
+} from '@/constants/secondFactor';
 
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
 
@@ -302,6 +305,30 @@ describe('POST /api/user/totp/send-challenge', () => {
 
     expect(response.status).toBe(429);
     expect(json.error.message).toMatch(/リカバリーコード/);
+  });
+
+  /**
+   * ⛔ **送信上限でも、受信箱のコードが生きていれば別の出口**
+   * （GHSA-p899-6g7w-v7hg）。
+   *
+   * この分岐を落とすと最後の `NextResponse.json` まで落ちて
+   * **200 +「確認コードをメールに送信しました。」**（0通）になる。
+   *
+   * ⚠️ `RESEND_TOO_SOON`（「しばらく待ってから再送信してください。」）にも
+   * しない。直るまで最長60分なので「しばらく」が嘘になる。
+   */
+  it('送信上限でもコードが有効なら、待たせずに受信箱へ誘導する', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('limit_exceeded_code_valid');
+
+    const response = await POST();
+    const json = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(json.success).toBe(false);
+    expect(json.error.message).toBe(SECOND_FACTOR_MESSAGES.CODE_ALREADY_SENT);
+    // 行き止まり（リカバリーコード）にも、待てば直る案内にもしない
+    expect(json.error.message).not.toMatch(/リカバリーコード/);
+    expect(json.error.message).not.toMatch(/しばらく/);
   });
 
   it('再送間隔に当たったら429を返す', async () => {

@@ -270,6 +270,9 @@ export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
 export const RELEASABLE_RATE_LIMIT_ACTIONS = [
   RATE_LIMIT_ACTION.OTP_SEND_DAILY,
   RATE_LIMIT_ACTION.TWO_FACTOR_SEND,
+  // 送信元ごとの層。`TWO_FACTOR_SEND` に弾かれて1通も送らなかったとき戻す。
+  // 戻さないと、枠を枯らされた被害者の再試行だけでロックが延長される
+  RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT,
 ] as const;
 
 /** 枠を戻してよいアクションの型 */

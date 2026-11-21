@@ -709,7 +709,14 @@ describe('releaseRateLimit', () => {
     it('送信枠を数えるアクションだけを許可する', () => {
       // 順序には依存させない
       expect([...RELEASABLE_RATE_LIMIT_ACTIONS].sort()).toEqual(
-        ['otp_send_daily', 'two_factor_send'].sort(),
+        [
+          'otp_send_daily',
+          'two_factor_send',
+          // 送信元ごとの層。`TWO_FACTOR_SEND` に弾かれて1通も送らなかった
+          // ときだけ戻す。数えているのは送った通数で、検証の試行回数では
+          // ないので総当たりのロック解除には使えない
+          'two_factor_send_prompt',
+        ].sort(),
       );
     });
 
@@ -1169,17 +1176,6 @@ describe('chk_action_type と RATE_LIMIT_ACTION の突き合わせ', () => {
   });
 
   /**
-   * ⛔ **送信元ごとの層は利用者単位より厳しくする**（GHSA-p899-6g7w-v7hg）。
-   *
-   * 1つの送信元で利用者の枠を使い切れると、手前に層を足した意味が無くなる。
-   * パスワードを知る第三者が被害者のログインを妨害できる状態に戻る。
-   *
-   * ⚠️ **`maxAttempts` だけを比べない。** 窓の長さを無視するので、
-   * `{ maxAttempts: 9, windowMinutes: 1 }`（540回/時 = 54倍ゆるい）でも
-   * 緑のままになる。初版が実際にそうなっていた（レビューで実測）。
-   * 比べるのは**単位時間あたりの回数**。
-   */
-  /**
    * ⛔ **送信元ごとの層も fail-closed**（GHSA-p899-6g7w-v7hg）。
    *
    * ここに無いと `checkRateLimit` が RPC の失敗で `{ allowed: true }` を返し
@@ -1195,6 +1191,17 @@ describe('chk_action_type と RATE_LIMIT_ACTION の突き合わせ', () => {
     ).toBe(true);
   });
 
+  /**
+   * ⛔ **送信元ごとの層は利用者単位より厳しくする**（GHSA-p899-6g7w-v7hg）。
+   *
+   * 1つの送信元で利用者の枠を使い切れると、手前に層を足した意味が無くなる。
+   * パスワードを知る第三者が被害者のログインを妨害できる状態に戻る。
+   *
+   * ⚠️ **`maxAttempts` だけを比べない。** 窓の長さを無視するので、
+   * `{ maxAttempts: 9, windowMinutes: 1 }`（540回/時 = 54倍ゆるい）でも
+   * 緑のままになる。初版が実際にそうなっていた（レビューで実測）。
+   * 比べるのは**単位時間あたりの回数**。
+   */
   it('two_factor_send_prompt は two_factor_send より厳しい', () => {
     const rate = (config: { maxAttempts: number; windowMinutes: number }) =>
       config.maxAttempts / config.windowMinutes;

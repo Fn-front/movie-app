@@ -621,6 +621,129 @@ describe('LoginForm', () => {
       ).not.toBeInTheDocument();
     });
 
+    /**
+     * ⛔ **送信上限でも、受信箱のコードが生きていれば別扱い**
+     * （GHSA-p899-6g7w-v7hg）。
+     *
+     * `EMAIL_OTP_REQUIRED` に混ぜると画面が「今送った」として再送の
+     * カウントダウンを振り出しに戻し、60秒後に押しても**メールは出ず・
+     * エラーも出ず・何も変わらない**無言の no-op になる。
+     * 上限を 10 → 3 に下げたぶん到達しやすい。
+     */
+    describe('送信上限だが受信箱のコードは有効', () => {
+      const mockCodeStillValid = () =>
+        mockSignIn.mockResolvedValue({
+          error: 'CredentialsSignin',
+          code: AUTH_ERROR_CODE.SECOND_FACTOR_CODE_STILL_VALID,
+        } as never);
+
+      it('新しくは送っていないことを伝える', async () => {
+        mockCodeStillValid();
+        render(<LoginForm />);
+
+        await submitCredentials();
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+          /新しいコードは送っていません/,
+        );
+        expect(screen.getByLabelText('認証コード')).toBeInTheDocument();
+      });
+
+      /** 押しても1通も出ないので出さない */
+      it('再送ボタンを出さない', async () => {
+        mockCodeStillValid();
+        render(<LoginForm />);
+
+        await submitCredentials();
+        await screen.findByRole('alert');
+
+        expect(
+          screen.queryByRole('button', { name: '確認コードを再送信する' }),
+        ).not.toBeInTheDocument();
+      });
+
+      /**
+       * ⛔ **`sendLimited` を必ず落とす。**
+       *
+       * 残っているとヒント文が「発行済みのリカバリーコードを入力して
+       * ください。」のままで、アラートの「先ほど届いた確認コードを…」と
+       * **矛盾した2つの案内が同時に出る**。
+       */
+      it('先に送信上限だったときも案内が矛盾しない', async () => {
+        // 1回目: 出口はリカバリーコードだけ
+        mockSignIn.mockResolvedValue({
+          error: 'CredentialsSignin',
+          code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+        } as never);
+        render(<LoginForm />);
+
+        await submitCredentials();
+        await screen.findByRole('alert');
+
+        // 2回目: 受信箱のコードが有効になった
+        mockCodeStillValid();
+        await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+        expect(
+          await screen.findByText(/新しいコードは送っていません/),
+        ).toBeInTheDocument();
+        // ⛔ 「リカバリーコードだけ」の案内に戻っていないこと。
+        //    通常のヒント（メールのコードも使える）が出ている
+        expect(
+          screen.getByText(/メールに送信した6桁のコード/),
+        ).toBeInTheDocument();
+      });
+
+      /**
+       * ⛔ **状態を引きずらない。** 次に送信が通ったら元へ戻す。
+       *
+       * 戻さないと、新しいコードが届いているのに再送ボタンが消えたまま、
+       * 「新しいコードは送っていません」も残り続ける。
+       */
+      it('次に送信が通ったら元へ戻る', async () => {
+        mockCodeStillValid();
+        render(<LoginForm />);
+
+        await submitCredentials();
+        await screen.findByRole('alert');
+
+        // 再送ボタンは消えている
+        expect(
+          screen.queryByRole('button', { name: '確認コードを再送信する' }),
+        ).not.toBeInTheDocument();
+
+        // コード欄を空のまま送ると `!totpCode` 分岐へ戻る。
+        // 2回目は送信できた
+        mockSignIn.mockResolvedValue({
+          error: 'CredentialsSignin',
+          code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
+        } as never);
+        await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+        expect(
+          await screen.findByRole('button', {
+            name: '確認コードを再送信する',
+          }),
+        ).toBeInTheDocument();
+      });
+
+      /**
+       * ⚠️ `sendLimited` と同じ扱いにしない。メールで届いたコードが
+       * そのまま使えるので、リカバリーコードだけに絞ると遠回りさせる。
+       */
+      it('リカバリーコードだけに絞らない', async () => {
+        mockCodeStillValid();
+        render(<LoginForm />);
+
+        await submitCredentials();
+        await screen.findByRole('alert');
+
+        expect(
+          screen.getByText(/メールに送信した6桁のコード/),
+        ).toBeInTheDocument();
+      });
+    });
+
     it('送信上限のときはメールのコードを待たせない', async () => {
       mockSignIn.mockResolvedValue({
         error: 'CredentialsSignin',

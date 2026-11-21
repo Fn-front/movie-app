@@ -40,6 +40,7 @@ import {
 } from '@/lib/auth/secondFactor';
 import {
   SEND_SECOND_FACTOR_RESULT,
+  isSecondFactorSendDeadEnd,
   sendSecondFactorCode,
 } from '@/lib/auth/sendSecondFactorCode';
 import { CredentialsSignInError } from '@/lib/auth/authErrors';
@@ -277,7 +278,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 );
               }
 
-              if (sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED) {
+              if (isSecondFactorSendDeadEnd(sendResult)) {
                 // 1通も送っておらず、受信箱に生きたコードも無い。
                 // 待たせず、リカバリーコードへ誘導する
                 throw new CredentialsSignInError(
@@ -285,10 +286,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 );
               }
 
-              // SENT / THROTTLED / LIMIT_EXCEEDED_CODE_VALID。
-              // 後ろ2つは新しく送っていないが、**受信箱のコードはまだ有効**
-              // なので入力欄を出す。ここでリカバリーコードへ誘導すると、
-              // 手元に答えがあるのに別の出口へ送ることになる
+              // ⚠️ 送信上限で**新しくは送っていない**場合を分ける。
+              //
+              //   受信箱のコードはまだ有効なので入力欄は出す（リカバリー
+              //   コードへは誘導しない）が、`EMAIL_OTP_REQUIRED` に混ぜると
+              //   画面が「今送った」として再送のカウントダウンを振り出しに
+              //   戻し、60秒後に押しても**メールは出ず・エラーも出ず・何も
+              //   変わらない**無言の no-op になる。
+              if (
+                sendResult ===
+                SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID
+              ) {
+                throw new CredentialsSignInError(
+                  AUTH_ERROR_CODE.SECOND_FACTOR_CODE_STILL_VALID,
+                );
+              }
+
+              // SENT / THROTTLED。THROTTLED は直前に送ったコードがまだ生きて
+              // いる（60秒以内の再送）。こちらは待てば送り直せる
               throw new CredentialsSignInError(
                 AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
               );
@@ -538,6 +553,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // 同上。消さないと「送信できませんでした」が画面に出続ける
         delete token.secondFactorSendFailed;
         delete token.secondFactorSendLimited;
+        // ⛔ **ここに足し忘れると片道ラッチになる。**
+        //
+        //   `@auth/core` は `/api/auth/session` の**読み取りごとに**この
+        //   コールバックを呼び、結果を Cookie へ書き戻す
+        //   （`lib/actions/session.js`）。消さないフラグは**焼き付く**。
+        //
+        //   `secondFactorCodeStillValid` が残ると再送ボタンが二度と戻らない。
+        //   落とす唯一の経路は再送の中（`trigger === 'update'` かつ
+        //   `resend === true`）にあるので、ボタンが消えたまま手が無くなる。
+        //   枠が60分で回復しても、コードを打ち間違えた利用者は
+        //   ログアウトして入り直すしかない。
+        delete token.secondFactorCodeStillValid;
 
         // 初回ログイン時にユーザー情報をトークンに追加
         if (user) {
@@ -629,8 +656,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                   sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED
                     ? true
                     : undefined;
-                token.secondFactorSendLimited =
-                  sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED
+                token.secondFactorSendLimited = isSecondFactorSendDeadEnd(
+                  sendResult,
+                )
+                  ? true
+                  : undefined;
+                // ⚠️ 上とは別物。受信箱のコードが使えるので、画面は
+                //    リカバリーコードへ誘導せず「新しくは送っていない」と出す
+                token.secondFactorCodeStillValid =
+                  sendResult ===
+                  SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID
                     ? true
                     : undefined;
               }
@@ -731,8 +766,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED
                   ? true
                   : undefined;
-              token.secondFactorSendLimited =
-                sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED
+              token.secondFactorSendLimited = isSecondFactorSendDeadEnd(
+                sendResult,
+              )
+                ? true
+                : undefined;
+              // ⚠️ 再送でこれが返ると、画面は新しいコードが来たと誤解して
+              //    カウントダウンを戻すだけになる（無言の no-op）
+              token.secondFactorCodeStillValid =
+                sendResult ===
+                SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID
                   ? true
                   : undefined;
             }
@@ -1004,6 +1047,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // 1通も送れていないので、コードを待たせずリカバリーコードへ誘導する
         session.secondFactorSendLimited = Boolean(
           token.secondFactorSendLimited,
+        );
+        // 新しくは送っていないが、受信箱のコードはまだ有効。
+        // 伝えないと、再送を押しても何も起きない無言の no-op になる
+        session.secondFactorCodeStillValid = Boolean(
+          token.secondFactorCodeStillValid,
         );
         return session;
       }

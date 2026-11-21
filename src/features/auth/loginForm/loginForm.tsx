@@ -59,6 +59,10 @@ const resolveErrorMessage = (code: string | undefined): string => {
       return AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_FAILED;
     case AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED:
       return AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_LIMITED;
+    case AUTH_ERROR_CODE.SECOND_FACTOR_CODE_STILL_VALID:
+      // ⚠️ 上と必ず分ける。あちらは出口がリカバリーコードだけだが、
+      // こちらは受信箱のコードがそのまま使える
+      return AUTH_ERROR_MESSAGES.SECOND_FACTOR_CODE_STILL_VALID;
     case AUTH_ERROR_CODE.EMAIL_NOT_VERIFIED:
       // 確認コードを入れる前に離脱した人（#1247）。丸めると、パスワードは
       // 正しいのに「違う」と言われ続けて復帰できない
@@ -121,6 +125,16 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
    * 「メールに送信した6桁のコード」「再送信できます」と出て矛盾する
    */
   const [sendLimited, setSendLimited] = useState(false);
+  /**
+   * 送信上限だが、受信箱のコードはまだ有効（GHSA-p899-6g7w-v7hg）
+   *
+   * ⚠️ `sendLimited` と分ける。あちらは「出口はリカバリーコードだけ」で、
+   * こちらは**メールで届いたコードがそのまま使える**。混ぜると
+   * 「発行済みのリカバリーコードを入力してください。」と案内してしまう。
+   *
+   * 再送ボタンは隠す（押しても1通も出ない）点は共通。
+   */
+  const [codeStillValid, setCodeStillValid] = useState(false);
 
   const totpRequired = secondFactorMode !== null;
   const isEmailOtp = secondFactorMode === SECOND_FACTOR_METHOD.EMAIL_OTP;
@@ -174,10 +188,26 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
             return;
           }
 
+          if (result.code === AUTH_ERROR_CODE.SECOND_FACTOR_CODE_STILL_VALID) {
+            // 送信上限。**新しくは送っていない**が、受信箱のコードは有効。
+            //
+            // ⚠️ `restart()` しない。カウントダウンを戻すと「60秒後に
+            // 再送できる」ように見えるが、押しても何も起きない
+            setSecondFactorMode(SECOND_FACTOR_METHOD.EMAIL_OTP);
+            setCodeStillValid(true);
+            // ⚠️ 必ず落とす。残っているとヒント文が
+            //    「発行済みのリカバリーコードを入力してください。」のままで、
+            //    アラートの「先ほど届いた確認コードを…」と矛盾する
+            setSendLimited(false);
+            setApiError(resolveErrorMessage(result.code));
+            return;
+          }
+
           if (result.code === AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED) {
             // パスワードは正しい。コードはサーバーが送信済み
             setSecondFactorMode(SECOND_FACTOR_METHOD.EMAIL_OTP);
             setSendLimited(false);
+            setCodeStillValid(false);
             restart();
             return;
           }
@@ -197,6 +227,8 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
           ) {
             setSecondFactorMode(SECOND_FACTOR_METHOD.EMAIL_OTP);
             setSendLimited(true);
+            // 逆向きも落とす（上と対称）
+            setCodeStillValid(false);
             setApiError(resolveErrorMessage(result.code));
             return;
           }
@@ -329,7 +361,7 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
               {/* 認証アプリは手元で作れるので再送の概念が無い */}
               {/* 送信上限のときは出さない。押しても同じエラーが返るだけで、
                   「再送信できます」と出ると案内と矛盾する */}
-              {isEmailOtp && !sendLimited && (
+              {isEmailOtp && !sendLimited && !codeStillValid && (
                 <div className={styles.c_login_form__resend}>
                   <Button
                     type='button'

@@ -616,6 +616,66 @@ describe('TwoFactorChallenge', () => {
     });
 
     /**
+     * ⛔ **送信上限でも、受信箱のコードが生きていれば別扱い**
+     * （GHSA-p899-6g7w-v7hg）。
+     *
+     * ログインフォーム側だけ直して、こちらに同じ欠陥が残っていた。
+     * `secondFactorCodeStillValid` を伝えないと、`sendNotice` が null の
+     * まま `update({ resend: true })` → `restart()` だけ走り、
+     * **メールは出ず・エラーも出ず・カウントダウンだけ振り出しに戻る**。
+     *
+     * 再送を10回押すと約10分で枠が尽き、直近のコードは30分有効なので
+     * 11回目がこの状態になる。メールが遅いときに普通に起きる。
+     */
+    describe('送信上限だが受信箱のコードは有効', () => {
+      const session = {
+        totpPending: true,
+        secondFactorMethod: 'email_otp',
+        secondFactorCodeStillValid: true,
+      };
+
+      it('新しくは送っていないことを伝える', () => {
+        mockSessionData = session;
+
+        render(<TwoFactorChallenge />);
+
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          /新しいコードは送っていません/,
+        );
+      });
+
+      /**
+       * 押しても1通も出ないので出さない（`sendLimited` と同じ扱い）。
+       *
+       * ⚠️ 「出ていないか、押せない」で済ませない。カウントダウン中は
+       * どのみち `disabled` なので、条件を外す変異が素通りする。
+       */
+      it('再送ボタンを出さない', () => {
+        mockSessionData = session;
+
+        render(<TwoFactorChallenge />);
+
+        expect(
+          screen.queryByRole('button', { name: '確認コードを再送信する' }),
+        ).not.toBeInTheDocument();
+      });
+
+      /**
+       * ⚠️ `sendLimited` と同じ扱いにしない。メールで届いたコードが
+       * そのまま使えるので、リカバリーコードだけに絞ると遠回りさせる。
+       */
+      it('リカバリーコードだけに絞らない', () => {
+        mockSessionData = session;
+
+        render(<TwoFactorChallenge />);
+
+        expect(screen.getByRole('alert')).not.toHaveTextContent(
+          /リカバリーコードを入力してください/,
+        );
+      });
+    });
+
+    /**
      * ⚠️ 上限中は再送ボタンを出さない。
      *
      * 押しても同じ 429 が返るだけで、出口はリカバリーコードしかない。

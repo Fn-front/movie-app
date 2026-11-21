@@ -18,7 +18,7 @@ import { OTP_CONFIG } from '@/constants/otp';
 import { RATE_LIMIT_ACTION, RATE_LIMIT_CONFIG } from '@/constants/rateLimit';
 import { TWO_FACTOR_OTP_ACTION } from '@/constants/secondFactor';
 import { generateOtpCode, hashOtpCode, sendOtpEmail } from '@/lib/otp';
-import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { checkRateLimit, releaseRateLimit } from '@/lib/rateLimit/rateLimit';
 import { normalizeEmail } from '@/utils/email';
 
 import { toDbError } from './dbError';
@@ -56,6 +56,27 @@ export const SEND_SECOND_FACTOR_RESULT = {
 
 export type SendSecondFactorResult =
   (typeof SEND_SECOND_FACTOR_RESULT)[keyof typeof SEND_SECOND_FACTOR_RESULT];
+
+/**
+ * 行き止まりか（リカバリーコードしか出口が無いか）
+ *
+ * ⛔ **`LIMIT_EXCEEDED_CODE_VALID` を含めない。** あちらは1通も送っていない
+ * 点は同じだが、**受信箱のコードがまだ有効**なので出口がある。
+ * 含めると、手元に答えがある利用者をリカバリーコードへ送ることになる。
+ *
+ * 呼び出し側3箇所（`authorize` / OAuth の jwt 2箇所）が同じ判定を
+ * 書いていたため、1つにまとめて取り違えを防ぐ。
+ *
+ * ⚠️ `user/totp/setup` と `user/totp/send-challenge` は**意図的にべた書き**。
+ * あの2本は `LIMIT_EXCEEDED_CODE_VALID` を別の分岐で明示的に扱っており、
+ * 「行き止まりか」ではなく「どの文言を返すか」で分けているため。
+ * **この関数の定義を変えるときは、あの2本も確認すること。**
+ */
+export function isSecondFactorSendDeadEnd(
+  result: SendSecondFactorResult,
+): boolean {
+  return result === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED;
+}
 
 /**
  * 第2要素のコードを送る
@@ -161,6 +182,32 @@ export async function sendSecondFactorCode(
   );
 
   if (!limitResult.allowed) {
+    // ⛔ **送信元ごとの枠を戻す。** ここまで来て弾かれた＝1通も送っていない。
+    //
+    //   戻さないと、攻撃者に `TWO_FACTOR_SEND` を枯らされた被害者が、
+    //   再試行するたびに**自分の prompt 枠だけを減らす**。上限に達すると
+    //   被害者自身の `メール|IP` 行にロックが立つ。被害者が気づいて
+    //   試したのが攻撃者由来のロックの明ける t 分前なら、そこから
+    //   **さらに t 分**（最長で60分）ログインできない。
+    //
+    // ⚠️ **戻すこと自体にも代償はある。** 枯らした後の攻撃者は、
+    //   単一の送信元から prompt 枠を積まずに叩き続けられるようになる。
+    //   ただし歯止めは残る —— 拒否中の `TWO_FACTOR_SEND` と、
+    //   リセットしていない `LOGIN_IP`（20回/15分）。
+    //   必要な送信元の数（`ceil(10/3) = 4`）も変わらない。
+    //   被害者の自傷ロックを止めるほうが重い、という判断。
+    //
+    // ⚠️ 戻るのは「prompt を通過して `TWO_FACTOR_SEND` で止まった」場合**だけ**。
+    //   これが枠の返却を安全だと言える根拠なので、崩さないこと
+    //   （prompt 拒否の早期 return と成功経路の両方にテストがある）。
+    if (promptIdentifier) {
+      await releaseRateLimit(
+        supabase,
+        promptIdentifier,
+        RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT,
+      );
+    }
+
     // ⚠️ **使えるコードが既に届いているなら行き止まりにしない**
     //    （GHSA-p899-6g7w-v7hg）。
     //

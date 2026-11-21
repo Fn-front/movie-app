@@ -437,6 +437,31 @@ describe('POST /api/user/totp/setup', () => {
       expect(json.data.throttled).toBe(true);
     });
 
+    /**
+     * ⛔ **送信上限でも、受信箱のコードが生きていれば同じ出口**
+     * （GHSA-p899-6g7w-v7hg）。
+     *
+     * この分岐を落とすと 200 + `CODE_SENT` に落ち、**1通も送っていないのに
+     * 「送信しました」**になる。#1285 で直したばかりの誤解がそのまま戻る。
+     */
+    it('送信上限でもコードが有効なら CODE_ALREADY_SENT と throttled:true', async () => {
+      mockUserLookup('user@example.com');
+      mockStartSecondFactorSetup.mockResolvedValue({
+        method: 'email_otp',
+        sendResult: 'limit_exceeded_code_valid',
+      });
+
+      const response = await POST(
+        createRequest({ method: 'email_otp', currentPassword: 'pw' }),
+      );
+      const json = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(json.message).toBe(SECOND_FACTOR_MESSAGES.CODE_ALREADY_SENT);
+      expect(json.message).not.toBe(SECOND_FACTOR_MESSAGES.CODE_SENT);
+      expect(json.data.throttled).toBe(true);
+    });
+
     it('不正な方式は400で、設定を開始しない', async () => {
       mockUserLookup('user@example.com');
 

@@ -13,67 +13,73 @@ argument-hint: <operation>
 
 ### アーキテクチャ原則
 
-- **クライアント種別**: anon key（クライアント）、service role（サーバー）
-- **Row Level Security**: RLSポリシーに準拠
-- **型定義**: Supabaseの型生成を活用
-- **エラーハンドリング**: try-catchで適切に処理
+- **クライアントは `src/helpers/supabase.ts` のヘルパー経由で作る**
+  （`createClient()` を直接呼ばない）
+- **ブラウザからは Supabase を叩かない**。データ取得はすべて API Route 経由
+- **service role は RLS をバイパスする**。認可は自分で書く
+- **型定義**: `src/types/database.types.ts`（自動生成。手で編集しない）
+- **エラーハンドリング**: `error` を握り潰さない
 
 ## ファイル構成
 
 ```
-src/lib/
-├── supabase/
-│   ├── client.ts        # クライアントサイド用
-│   ├── server.ts        # サーバーサイド用
-│   └── types.ts         # Supabase型定義
+src/helpers/supabase.ts     # クライアント生成ヘルパー（これだけ）
+src/types/database.types.ts # 自動生成の型定義
 ```
+
+> ⛔ **`src/lib/supabase/` は存在しない。** `client.ts` / `server.ts` /
+> `types.ts` も無い。import すると解決できない。
 
 ## クライアント作成
 
-### クライアントサイド（ブラウザ）
+このリポジトリのクライアントは **2種類だけ**。どちらもサーバーで使う。
 
 ```typescript
-// src/lib/supabase/client.ts
-import { createClient } from '@supabase/supabase-js';
-
-// RLS有効（ユーザーの権限で実行）
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import {
+  createAnonClient,
+  createServiceRoleClient,
+  dbConnectionErrorResponse,
+} from '@/helpers/supabase';
 ```
 
-### サーバーサイド（API Routes, Server Actions）
+| ヘルパー | 鍵 | RLS | 用途 |
+|---|---|---|---|
+| `createServiceRoleClient()` | service role | **バイパス** | 認証済みの操作全般。認可は自分で書く |
+| `createAnonClient()` | anon | 有効 | 公開API（未認証で叩ける読み取り） |
 
 ```typescript
-// src/lib/supabase/server.ts
-import { createClient } from '@supabase/supabase-js';
+const supabase = createServiceRoleClient();
 
-// RLSバイパス（管理者権限で実行）
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+// ⚠️ 環境変数が無いと **null** が返る。必ず見ること。
+//    見ないと `supabase.from(...)` が TypeError になり、
+//    「設定漏れ」が「サーバーエラー」に化ける
+if (!supabase) return dbConnectionErrorResponse();
 ```
 
-### Server Component用
+### ブラウザからは叩かない
 
-```typescript
-// src/lib/supabase/server.ts
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+`@supabase/supabase-js` を import しているファイルは**すべてサーバー側**
+（API Route / `src/lib/**`）で、`'use client'` のファイルからの import は
+**1つも無い**。画面はすべて `/api/*` を経由する。
 
-export function createServerClient() {
-  return createServerComponentClient({ cookies });
-}
-```
+理由は2つ。
 
-## 基本CRUD操作
+- **anon キーでも RLS の設計を全部ブラウザに晒す**ことになる。どのテーブルに
+  何があるかが読める
+- このリポジトリの認証は **NextAuth（自前の `public.users`）** で、
+  Supabase Auth ではない。ブラウザの Supabase クライアントに
+  「ログイン中の利用者」は存在せず、RLS の `auth.uid()` も効かない
+
+### Server Component から使うとき
+
+`createServerComponentClient`（`@supabase/auth-helpers-nextjs`）は
+**使わない**。あのパッケージは依存に入っていないし、Supabase Auth 前提の
+Cookie を読む作りで、NextAuth のセッションとは噛み合わない。
+
+サーバーコンポーネントでも同じヘルパーを使い、利用者の特定は
+`getAuthSession()`（`src/helpers/auth.ts`）で行う。
+
+## 基本CRUD操作## 基本CRUD操作
 
 ### SELECT - 取得
 
@@ -291,27 +297,39 @@ const totalPages = Math.ceil((count || 0) / limit);
 
 ### 自分のデータのみ取得
 
+⛔ **service role では RLS が効かない。** `eq('user_id', ...)` を落とすと
+**全利用者の行が返る**。「RLS があるから大丈夫」は成り立たない。
+
 ```typescript
-// クライアントサイド（RLS有効）
-const { data } = await supabase
+const session = await getAuthSession();
+if (!session) return unauthorizedResponse();
+
+const supabase = createServiceRoleClient();
+if (!supabase) return dbConnectionErrorResponse();
+
+const { data, error } = await supabase
   .from('watchlist')
   .select('*')
-  .eq('user_id', userId) // RLSで自動的にフィルタされるが明示的に指定
+  // ⛔ これが**唯一の**絞り込み。消すと全件返る
+  .eq('user_id', session.user.id)
   .is('deleted_at', null);
+
+if (error) throw error;
 ```
 
-### 管理者権限での操作（サーバーサイド）
+⚠️ 利用者IDは**必ずセッションから取る**。クエリやボディの `userId` を
+信用すると、値を差し替えるだけで他人のデータを読める。
+
+### 公開データ（未認証で叩ける）
 
 ```typescript
-// サーバーサイド（RLSバイパス）
-import { supabaseAdmin } from '@/lib/supabase/server';
-
-const { data } = await supabaseAdmin
-  .from('users')
-  .select('*')
-  .eq('email', email)
-  .single();
+const supabase = createAnonClient();
+if (!supabase) return dbConnectionErrorResponse();
 ```
+
+⚠️ anon は RLS が効くが、**`GRANT` が前提**。`ENABLE ROW LEVEL SECURITY` と
+`CREATE POLICY` だけでは Data API に公開されず、PostgREST は `42501` を返す
+（`.claude/rules/supabase-db.md`）。
 
 ## エラーハンドリング
 
@@ -394,142 +412,70 @@ const { data, error } = await supabase.rpc('add_movie_with_log', {
 });
 ```
 
-## カスタムフック例
+## 画面からのデータ取得
 
-### useWatchlist
+⛔ **ブラウザから Supabase を叩くフックを書かない。** 画面は `/api/*` を
+呼び、サーバー側のハンドラが Supabase を触る。
 
 ```typescript
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase/client';
+'use client';
 
-interface Movie {
-  id: string;
-  tmdb_movie_id: number;
-  title: string;
-  poster_path: string | null;
-  added_at: string;
-}
+import { useQuery } from '@tanstack/react-query';
 
-export function useWatchlist(userId: string | undefined) {
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+import { API_ENDPOINTS } from '@/constants';
 
-  useEffect(() => {
-    if (!userId) return;
+export function useWatchlist() {
+  return useQuery({
+    queryKey: ['watchlist'],
+    queryFn: async () => {
+      const response = await fetch(API_ENDPOINTS.WATCHLIST);
+      const json = await response.json();
 
-    const fetchWatchlist = async () => {
-      try {
-        setIsLoading(true);
-        const { data, error } = await supabase
-          .from('watchlist')
-          .select('*')
-          .eq('user_id', userId)
-          .is('deleted_at', null)
-          .order('added_at', { ascending: false });
-
-        if (error) throw error;
-
-        setMovies(data || []);
-      } catch (err) {
-        setError(err instanceof Error ? err : new Error('Unknown error'));
-      } finally {
-        setIsLoading(false);
+      if (!response.ok || !json.success) {
+        throw new Error(json.error?.message ?? '取得に失敗しました');
       }
-    };
 
-    fetchWatchlist();
-  }, [userId]);
-
-  return { movies, isLoading, error };
+      return json.data;
+    },
+  });
 }
 ```
 
-## Realtime購読（将来的に使用）
+⚠️ 更新後の反映は **`queryClient.invalidateQueries()`**。`revalidatePath()`
+ではない（ウォッチリストの画面はクライアント専用なので効かない）。
 
-```typescript
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase/client';
+### Realtime は使っていない
 
-export function useRealtimeWatchlist(userId: string) {
-  const [movies, setMovies] = useState<Movie[]>([]);
+`supabase.channel(...)` の購読はこのリポジトリに1つも無い。使うなら
+ブラウザから Supabase へ直接つなぐことになるため、上の「ブラウザからは
+叩かない」方針と衝突する。導入するなら方針ごと決め直すこと。
 
-  useEffect(() => {
-    // 初回取得
-    const fetchMovies = async () => {
-      const { data } = await supabase
-        .from('watchlist')
-        .select('*')
-        .eq('user_id', userId)
-        .is('deleted_at', null);
-
-      setMovies(data || []);
-    };
-
-    fetchMovies();
-
-    // リアルタイム購読
-    const subscription = supabase
-      .channel('watchlist_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'watchlist',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setMovies((prev) => [payload.new as Movie, ...prev]);
-          } else if (payload.eventType === 'UPDATE') {
-            setMovies((prev) =>
-              prev.map((m) =>
-                m.id === payload.new.id ? (payload.new as Movie) : m
-              )
-            );
-          } else if (payload.eventType === 'DELETE') {
-            setMovies((prev) => prev.filter((m) => m.id !== payload.old.id));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [userId]);
-
-  return movies;
-}
-```
 
 ## 型定義
 
 ### Supabase CLI型生成
 
 ```bash
-# Supabaseから型を生成
-npx supabase gen types typescript --project-id YOUR_PROJECT_ID > src/lib/supabase/types.ts
+npx supabase gen types typescript --project-id <project-id> > src/types/database.types.ts
 ```
+
+⚠️ **出力先は `src/types/database.types.ts`**。スキーマを変えたら必ず
+再生成する（`.claude/rules/supabase-db.md`）。**手で編集しない** ——
+次の生成で上書きされる。
 
 ### 型の使用
 
 ```typescript
-import { Database } from '@/lib/supabase/types';
+import type { Database } from '@/types/database.types';
 
 type Watchlist = Database['public']['Tables']['watchlist']['Row'];
 type WatchlistInsert = Database['public']['Tables']['watchlist']['Insert'];
 type WatchlistUpdate = Database['public']['Tables']['watchlist']['Update'];
-
-// 型付きクライアント
-import { createClient } from '@supabase/supabase-js';
-
-export const supabase = createClient<Database>(
-  supabaseUrl,
-  supabaseAnonKey
-);
 ```
+
+⚠️ `createClient<Database>()` の型付きクライアントは現状使っていない。
+`src/helpers/supabase.ts` のヘルパーは素の `SupabaseClient` を返すため、
+行の型は呼び出し側で付ける。
 
 ## バッチ操作
 

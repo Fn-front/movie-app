@@ -13,15 +13,16 @@ argument-hint: <endpoint>
 
 ### API情報
 
-- **Base URL**: `https://api.themoviedb.org/3`
-- **認証**: API Key（環境変数から取得）
-- **言語**: `ja-JP`（日本語）
+- **Base URL**: `API.TMDB_BASE_URL`（`src/constants/api.ts`）
+- **認証**: Read Access Token を `Authorization: Bearer` で送る
+  （環境変数 `TMDB_API_KEY`。**`NEXT_PUBLIC_` は付けない**）
+- **言語 / 地域**: `API.TMDB_LANGUAGE`（`ja-JP`）/ `API.TMDB_REGION`（`JP`）
 - **レート制限**: 50リクエスト/秒、20コネクション/IP
 - **HTTP Client**: axios（外部API用）
 
 ### アーキテクチャ原則
 
-- **APIクライアント分離**: `lib/api/tmdb.ts`に実装
+- **APIクライアント分離**: `src/lib/tmdb/tmdb.ts` に実装
 - **型定義**: TMDbレスポンスの型を定義
 - **エラーハンドリング**: try-catchで適切に処理
 - **レート制限対策**: 並列リクエストは10件程度に制限
@@ -29,28 +30,55 @@ argument-hint: <endpoint>
 ## ファイル構成
 
 ```
-src/lib/api/
-├── tmdb.ts              # TMDb APIクライアント
-└── types/
-    └── tmdb.ts          # TMDb型定義
+src/lib/tmdb/
+└── tmdb.ts              # TMDb APIクライアント（axios インスタンス＋取得関数）
+
+src/lib/types/            # TMDb の型定義
+src/constants/api.ts      # TMDB_BASE_URL / TMDB_LANGUAGE / TMDB_REGION
+src/constants/tmdb.ts     # TMDB_REQUEST_TIMEOUT_MS / TMDB_RETRY_CONFIG
 
 .env.local
-└── TMDB_API_KEY         # TMDb APIキー
+└── TMDB_API_KEY          # Read Access Token（**サーバー専用**）
 ```
+
+> ⛔ **`NEXT_PUBLIC_` を付けない。** `NEXT_PUBLIC_*` は**ビルド時に
+> クライアントのバンドルへ焼き込まれる**ので、付けた瞬間にトークンが
+> 公開される。TMDb の呼び出しはすべてサーバー側（Route Handler /
+> Server Component / cron）から行う。
 
 ## axiosインスタンス設定
 
 ```typescript
-// src/lib/api/tmdb.ts
+// src/lib/tmdb/tmdb.ts
 import axios from 'axios';
 
+import { API } from '@/constants/api';
+import { TMDB_REQUEST_TIMEOUT_MS } from '@/constants/tmdb';
+
+// ⛔ **Read Access Token は `Authorization: Bearer` で送る。**
+//    `api_key` のクエリは URL に乗るため、アクセスログ・Referer・
+//    プロキシの記録に残る
+const TMDB_ACCESS_TOKEN = process.env.TMDB_API_KEY;
+
+if (!TMDB_ACCESS_TOKEN) {
+  throw new Error('TMDB_API_KEY is not defined');
+}
+
 const tmdbClient = axios.create({
-  baseURL: 'https://api.themoviedb.org/3',
-  params: {
-    api_key: process.env.NEXT_PUBLIC_TMDB_API_KEY,
-    language: 'ja-JP',
+  baseURL: API.TMDB_BASE_URL,
+  // ⚠️ 既定（0 = 無制限）だと、TMDb が応答を返さないとき呼び出し側が
+  //    いつまでも待つ。対話的な書き込み経路からも呼ぶので上限を設ける
+  timeout: TMDB_REQUEST_TIMEOUT_MS,
+  headers: {
+    Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
   },
-  timeout: 10000, // 10秒タイムアウト
+  params: {
+    language: API.TMDB_LANGUAGE,
+    region: API.TMDB_REGION,
+    // ⚠️ 全エンドポイント共通でアダルト作品を除外する
+    //    （新しい関数を足すたびに付け忘れないよう既定値にしてある）
+    include_adult: false,
+  },
 });
 
 // レスポンスインターセプター（エラーハンドリング）
@@ -314,6 +342,17 @@ const backdropUrl = getTMDbImageUrl(movie.backdrop_path, 'original');
 
 ## レート制限対策
 
+### まず自動リトライが入っている
+
+`tmdbClient` のレスポンスインターセプタが **429 / 503 / 504 を自動で
+リトライ**する（`TMDB_RETRY_CONFIG`。最大3回、既定1秒待ち）。
+`Retry-After` が返ればそれに従うが、**`MAX_RETRY_DELAY_MS`（5秒）で
+頭を打つ** —— そのまま従うと `Retry-After: 30` で3回＝90秒待つことになり、
+対話的な経路から呼ぶには長すぎるため。
+
+新しい取得関数を足すときは `tmdbClient` を使うこと。素の `fetch` や
+別の axios インスタンスを作ると、このリトライが効かない。
+
 ### 並列リクエスト制限
 
 ```typescript
@@ -396,8 +435,10 @@ export async function getPopularMoviesWithCache(
   page: number = 1
 ): Promise<TMDbMovieListResponse> {
   const response = await fetch(
-    `https://api.themoviedb.org/3/movie/popular?api_key=${process.env.NEXT_PUBLIC_TMDB_API_KEY}&language=ja-JP&page=${page}`,
+    `${API.TMDB_BASE_URL}/movie/popular?language=${API.TMDB_LANGUAGE}&page=${page}`,
     {
+      // ⛔ キーはヘッダで送る。クエリに乗せると URL に残る
+      headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` },
       next: { revalidate: 3600 }, // 1時間キャッシュ
     }
   );
@@ -444,15 +485,18 @@ export async function getMovieDetailForDisplay(
 
 ```bash
 # .env.local
-NEXT_PUBLIC_TMDB_API_KEY=your_api_key_here
+# ⛔ `NEXT_PUBLIC_` を付けない（付けるとバンドルに焼き込まれて公開される）
+TMDB_API_KEY=your_read_access_token_here
 ```
 
-### APIキー取得方法
+### 取得方法
 
 1. https://www.themoviedb.org/ でアカウント作成
-2. Settings > API > Create > Developer を選択
-3. API Keyをコピー
-4. `.env.local`に追加
+2. Settings > API を開く
+3. **API Read Access Token**（`eyJ...` で始まる長い JWT）をコピー
+   - ⚠️ 同じ画面にある短い `API Key` ではない。こちらは
+     `Authorization: Bearer` で使うトークン
+4. `.env.local` に `TMDB_API_KEY` として追加
 
 ## テスト用モック
 

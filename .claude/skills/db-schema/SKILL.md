@@ -11,6 +11,12 @@ argument-hint: <tableName>
 
 ## 必須要件
 
+> ⛔ **`auth.users` を参照しない。** このリポジトリの認証は **NextAuth** で、
+> 利用者は自前の **`public.users`** にいる。Supabase Auth は使っていないので
+> `auth.users` に行が無く、参照すると**マイグレーションが外部キー違反で落ちる**。
+> `supabase/migrations/` 全件を見ても `auth.users` の参照は1つも無い。
+
+
 ### アーキテクチャ原則
 
 - **Row Level Security (RLS)**: すべてのテーブルで必須
@@ -35,7 +41,7 @@ CREATE TABLE <table_name> (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
 
   -- Foreign Keys
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
   -- Data Fields
   <field_name> <data_type> NOT NULL,
@@ -213,7 +219,7 @@ CREATE POLICY "Anyone can view data"
 | 用途 | データ型 | 例 |
 |------|----------|-----|
 | 主キー | `UUID` | `id UUID DEFAULT gen_random_uuid()` |
-| 外部キー（ユーザー） | `UUID` | `user_id UUID REFERENCES auth.users(id)` |
+| 外部キー（ユーザー） | `UUID` | `user_id UUID REFERENCES users(id)` |
 | 外部キー（TMDb） | `INTEGER` | `tmdb_id INTEGER NOT NULL` |
 | 文字列（短） | `VARCHAR(255)` | `email VARCHAR(255)` |
 | 文字列（長） | `TEXT` | `bio TEXT` |
@@ -301,7 +307,7 @@ BEGIN;
 -- Table Definition
 CREATE TABLE watchlist (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   tmdb_id INTEGER NOT NULL,
   title VARCHAR(255) NOT NULL,
   poster_path VARCHAR(255),

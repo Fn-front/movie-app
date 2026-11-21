@@ -629,9 +629,12 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
       }
     ],
     "pagination": {
-      "page": 1,
-      "total_pages": 10,
-      "total_results": 200
+      "currentPage": 1,
+      "totalPages": 10,
+      "totalItems": 200,
+      "itemsPerPage": 20,
+      "hasNextPage": true,
+      "nextPage": 2
     }
   }
 }
@@ -704,7 +707,7 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
    - `year`: レスポンスの`release_date`の年と一致するかチェック
    - `vote_average_gte`: レスポンスの`vote_average`が閾値以上かチェック
 3. フィルタリング後の結果を返却
-   - **注意**: サーバー側フィルタリングにより`total_results`はTMDbの値と異なる（フィルタリング後の件数を返す）
+   - **注意**: サーバー側フィルタリングにより`totalItems` は TMDb の値と異なる（フィルタリング後の件数を返す）
 
 **パターン2: キーワードなし + フィルターあり**
 1. TMDb API `/discover/movie` を呼び出し
@@ -737,9 +740,12 @@ URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` �
       }
     ],
     "pagination": {
-      "page": 1,
-      "total_pages": 10,
-      "total_results": 200
+      "currentPage": 1,
+      "totalPages": 10,
+      "totalItems": 200,
+      "itemsPerPage": 20,
+      "hasNextPage": true,
+      "nextPage": 2
     }
   }
 }

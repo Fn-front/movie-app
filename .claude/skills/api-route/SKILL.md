@@ -51,17 +51,28 @@ src/app/api/<route-path>/
 
 ### 標準エラーコード
 
+`src/constants/api.ts` の `ERROR_CODE` が正。**ここに無い値を書かない。**
+
 | コード | HTTPステータス | 用途 |
 |--------|---------------|------|
 | `VALIDATION_ERROR` | 400 | 入力バリデーションエラー |
+| `BAD_REQUEST` | 400 | 入力以外のクライアント起因 |
 | `UNAUTHORIZED` | 401 | 認証エラー |
-| `FORBIDDEN` | 403 | 認可エラー |
+| `FORBIDDEN` | 403 | ログイン済みだがロールが足りない |
 | `NOT_FOUND` | 404 | リソース未検出 |
+| `CONFLICT` | 409 | リソース競合 |
 | `RATE_LIMIT_EXCEEDED` | 429 | レート制限超過 |
-| `INTERNAL_SERVER_ERROR` | 500 | サーバーエラー |
-| `INVALID_OTP` | 400 | OTP検証エラー |
-| `EXPIRED_OTP` | 400 | OTP有効期限切れ |
-| `EMAIL_ALREADY_EXISTS` | 409 | メールアドレス重複 |
+| `SERVER_ERROR` | 500 | サーバーエラー |
+
+> ⛔ `INTERNAL_SERVER_ERROR` / `INVALID_OTP` / `EXPIRED_OTP` /
+> `EMAIL_ALREADY_EXISTS` は**存在しない**。500 は `SERVER_ERROR`、
+> OTP の失敗は `VALIDATION_ERROR` + 文言（`OTP_ERROR_MESSAGES`）で返す。
+>
+> ⚠️ OTP の失敗を細かく分けないのは意図的。「コードが違う」と「期限切れ」を
+> 区別して返すと、総当たりの手がかりになる。
+>
+> ⚠️ メールの重複も 409 では返さない。**列挙防止のため新規登録と同じ 201**
+> を返す（`auth/register`）。
 
 ## API Routeテンプレート
 
@@ -71,7 +82,13 @@ src/app/api/<route-path>/
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { ERROR_CODE, RATE_LIMIT_ACTION, RATE_LIMIT_CONFIG } from '@/constants';
 import { getAuthSession } from '@/helpers/auth';
+import {
+  createServiceRoleClient,
+  dbConnectionErrorResponse,
+} from '@/helpers/supabase';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 
 // リクエストボディのバリデーションスキーマ
 const requestSchema = z.object({
@@ -95,14 +112,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. リクエストボディの取得とバリデーション
-    const body = await request.json();
-    const validatedData = requestSchema.parse(body);
+    // 2. service role クライアント
+    const supabase = createServiceRoleClient();
+    if (!supabase) return dbConnectionErrorResponse();
 
-    // 3. レート制限チェック（必要な場合）
+    // 3. レート制限チェック
+    //
+    // ⛔ **検証より前に置く**（`.claude/rules/api-route.md` の【必須】）。
+    //    後ろに置くと、形式だけ崩したリクエストは 400 で返るが
+    //    **カウンタを消費しない**。不正な形式を挟むだけで試行回数を
+    //    いくらでも稼げる（#940）
+    //
+    // ⚠️ 第1引数は **supabase クライアント**。識別子ではない
     const rateLimitResult = await checkRateLimit(
+      supabase,
       session.user.id,
-      'ACTION_TYPE'
+      RATE_LIMIT_ACTION.ACTION_TYPE,
+      RATE_LIMIT_CONFIG.ACTION_TYPE.maxAttempts,
+      RATE_LIMIT_CONFIG.ACTION_TYPE.windowMinutes,
     );
     if (!rateLimitResult.allowed) {
       return NextResponse.json(
@@ -120,10 +147,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. ビジネスロジック実行
+    // 4. リクエストボディの取得とバリデーション
+    //
+    // ⚠️ `parse` ではなく **`safeParse`** を使う。例外を投げないので
+    //    catch 側で型を判別せずに済み、`flatten().fieldErrors` を
+    //    そのまま `details` に載せられる
+    const body = await request.json();
+    const result = requestSchema.safeParse(body);
+
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.VALIDATION_ERROR,
+            message: '入力内容に誤りがあります',
+            // ⚠️ zod v4 に `error.errors` は無い（`issues`）。
+            //    このリポジトリは `flatten().fieldErrors` で揃えている
+            details: result.error.flatten().fieldErrors,
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    const validatedData = result.data;
+
+    // 5. ビジネスロジック実行
     // ...
 
-    // 5. 成功レスポンス
+    // 6. 成功レスポンス
     return NextResponse.json({
       success: true,
       data: {
@@ -132,28 +185,13 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    // zodバリデーションエラー
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: '入力内容に誤りがあります',
-            details: error.errors,
-          },
-        },
-        { status: 400 }
-      );
-    }
-
     // その他のエラー
     console.error('API Error:', error);
     return NextResponse.json(
       {
         success: false,
         error: {
-          code: 'INTERNAL_SERVER_ERROR',
+          code: ERROR_CODE.SERVER_ERROR,
           message: 'サーバーエラーが発生しました',
         },
       },
@@ -163,99 +201,59 @@ export async function POST(request: NextRequest) {
 }
 ```
 
-## レート制限実装
+## レート制限
 
-### レート制限チェック関数
+### ⛔ 自作しない
+
+`src/lib/rateLimit/rateLimit.ts` の `checkRateLimit()` を使う。
 
 ```typescript
-import { supabase } from '@/lib/supabase';
+import { RATE_LIMIT_ACTION, RATE_LIMIT_CONFIG } from '@/constants';
+import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
 
-interface RateLimitResult {
-  allowed: boolean;
-  retryAfter?: number; // 秒数
-}
+const result = await checkRateLimit(
+  supabase,                                   // ← 第1引数は supabase
+  session.user.id,
+  RATE_LIMIT_ACTION.WRITE_WATCHLIST,
+  RATE_LIMIT_CONFIG.WRITE_WATCHLIST.maxAttempts,
+  RATE_LIMIT_CONFIG.WRITE_WATCHLIST.windowMinutes,
+);
 
-async function checkRateLimit(
-  identifier: string,
-  actionType: string,
-  maxAttempts: number = 3,
-  windowMinutes: number = 30
-): Promise<RateLimitResult> {
-  const { data, error } = await supabase
-    .from('rate_limits')
-    .select('*')
-    .eq('identifier', identifier)
-    .eq('action_type', actionType)
-    .single();
-
-  if (error && error.code !== 'PGRST116') {
-    // エラーハンドリング
-    throw error;
-  }
-
-  const now = new Date();
-
-  // レコードが存在しない場合は新規作成
-  if (!data) {
-    await supabase.from('rate_limits').insert({
-      identifier,
-      action_type: actionType,
-      attempts: 1,
-      last_attempt_at: now.toISOString(),
-    });
-    return { allowed: true };
-  }
-
-  // ロック中かチェック
-  if (data.locked_until && new Date(data.locked_until) > now) {
-    const retryAfter = Math.ceil(
-      (new Date(data.locked_until).getTime() - now.getTime()) / 1000
-    );
-    return { allowed: false, retryAfter };
-  }
-
-  // 試行回数チェック
-  if (data.attempts >= maxAttempts) {
-    const lockedUntil = new Date(now.getTime() + windowMinutes * 60 * 1000);
-    await supabase
-      .from('rate_limits')
-      .update({
-        locked_until: lockedUntil.toISOString(),
-        attempts: data.attempts + 1,
-        last_attempt_at: now.toISOString(),
-      })
-      .eq('id', data.id);
-
-    return { allowed: false, retryAfter: windowMinutes * 60 };
-  }
-
-  // 試行回数を増やす
-  await supabase
-    .from('rate_limits')
-    .update({
-      attempts: data.attempts + 1,
-      last_attempt_at: now.toISOString(),
-    })
-    .eq('id', data.id);
-
-  return { allowed: true };
+if (!result.allowed) {
+  // result.retryAfter（秒）を details に載せて 429
 }
 ```
 
-### レート制限リセット関数
+中身は **`consume_rate_limit` RPC の1ステートメント**。
 
-```typescript
-async function resetRateLimit(
-  identifier: string,
-  actionType: string
-): Promise<void> {
-  await supabase
-    .from('rate_limits')
-    .delete()
-    .eq('identifier', identifier)
-    .eq('action_type', actionType);
-}
-```
+⛔ **SELECT → 判定 → UPDATE に分けてはいけない。** その間に別のリクエストが
+同じ `attempts` を読み、全員が「上限未満」と判定して**実効上限を超えられる**
+（#646 で実際に直した）。自作すると必ずこの形に戻る。
+
+### `maxAttempts` は「◯回/◯分」のレートではない
+
+`consume_rate_limit` がカウンタを戻すのは、**その窓のあいだ一度も
+アクセスが無かったとき**だけ（#934）。断続的に叩かれ続けるとカウンタは
+減らないので、窓を長くすると通常利用で単調増加して利用者を締め出す。
+
+値は `src/constants/rateLimit.ts` の `RATE_LIMIT_CONFIG` が正。
+新しい用途を足すときは `RATE_LIMIT_ACTION` にも追加し、**DB の
+`chk_action_type` 制約**にも足すこと（足さないと upsert が 23514 で落ちる）。
+
+### 置く場所
+
+**検証より前**が原則。例外と判定手順は `.claude/rules/api-route.md` に
+まとめてあるので、新しいルートを書く前に必ず読むこと。
+
+### 未認証で叩けるルート
+
+`src/helpers/publicRateLimit.ts` の `enforcePublicRateLimit()` を使う。
+識別子は認証済みならユーザーID、そうでなければ送信元IP。
+
+⚠️ IPは `src/lib/http/getClientIp.ts` の `getClientIp()` で取る。
+`NextRequest.ip` は Next 15 で削除され、`x-forwarded-for` の先頭は
+**クライアントが詐称できる**（#647）。
+
 
 ## セキュリティ考慮事項
 
@@ -306,18 +304,34 @@ if (!resource) {
 
 ### Supabase Client使用
 
-```typescript
-import { createClient } from '@supabase/supabase-js';
+⛔ **`createClient()` を直接呼ばない。** `src/helpers/supabase.ts` の
+ヘルパーを使う。
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // サーバーサイドではService Role Key
-);
+```typescript
+import {
+  createServiceRoleClient,
+  dbConnectionErrorResponse,
+} from '@/helpers/supabase';
+
+const supabase = createServiceRoleClient();
+// ⚠️ 環境変数が無いと **null** が返る。必ず見ること
+if (!supabase) return dbConnectionErrorResponse();
 ```
+
+| ヘルパー | 鍵 | RLS | 用途 |
+|---|---|---|---|
+| `createServiceRoleClient()` | service role | **バイパス** | 認証済みの操作全般。認可は自分で書く |
+| `createAnonClient()` | anon | 有効 | 公開API（未認証で叩ける読み取り） |
 
 ### RLS考慮
 
-API Routeではサーバーサイドなので、Service Role Keyを使う場合はRLSをバイパスします。適切な認可チェックを手動で実装してください。
+service role は **RLS をバイパスする**。「RLS があるから安全」は成り立たない
+ので、**どの行を触ってよいかの判定を必ず自分で書く**（`eq('user_id',
+session.user.id)` を落とさない）。
+
+⚠️ 公開APIで `createAnonClient()` を使うときも、`.claude/rules/supabase-db.md`
+の **GRANT** が前提。`ENABLE ROW LEVEL SECURITY` と `CREATE POLICY` だけでは
+Data API に公開されず、PostgREST が `42501` を返す。
 
 ## エラーロギング
 
@@ -335,7 +349,7 @@ catch (error) {
     {
       success: false,
       error: {
-        code: 'INTERNAL_SERVER_ERROR',
+        code: ERROR_CODE.SERVER_ERROR,
         message: 'サーバーエラーが発生しました',
       },
     },

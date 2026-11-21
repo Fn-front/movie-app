@@ -9,6 +9,15 @@ argument-hint: <actionName>
 
 このスキルは、Next.js Server Actionsを使ったフォーム送信、サーバーサイド処理を実装します。
 
+> ⛔ **このリポジトリは Server Actions を採用していない。**
+> `'use server'` のファイルは1つも無く（`src/app/actions/` も存在しない）、
+> 書き込みはすべて **API Route**（`src/app/api/`）＋ クライアントからの
+> `fetch` で行っている。
+>
+> このスキルを使うのは**方針を変えて新しく導入するとき**。既存の経路に
+> 合わせるなら `/api-route` を使うこと。下のコード例に出てくる
+> `@/app/actions/...` も、採用したときに作られるパスで、今は存在しない。
+
 ## 必須要件
 
 ### アーキテクチャ原則
@@ -34,6 +43,8 @@ src/app/actions/
 
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
+
+import { ERROR_CODE } from '@/constants';
 
 // バリデーションスキーマ
 const schema = z.object({
@@ -81,7 +92,7 @@ export async function actionName(
         error: {
           code: 'VALIDATION_ERROR',
           message: '入力内容に誤りがあります',
-          details: error.errors,
+          details: error.flatten().fieldErrors,
         },
       };
     }
@@ -91,7 +102,7 @@ export async function actionName(
     return {
       success: false,
       error: {
-        code: 'INTERNAL_SERVER_ERROR',
+        code: ERROR_CODE.SERVER_ERROR,
         message: 'サーバーエラーが発生しました',
       },
     };
@@ -133,7 +144,7 @@ export async function loginAction(formData: FormData) {
         error: {
           code: 'VALIDATION_ERROR',
           message: '入力内容に誤りがあります',
-          details: error.errors,
+          details: error.flatten().fieldErrors,
         },
       };
     }
@@ -141,7 +152,7 @@ export async function loginAction(formData: FormData) {
     return {
       success: false,
       error: {
-        code: 'INTERNAL_SERVER_ERROR',
+        code: ERROR_CODE.SERVER_ERROR,
         message: 'サーバーエラーが発生しました',
       },
     };
@@ -389,7 +400,7 @@ Cookie は `getSessionCookieName()` / `getSessionCookieOptions()`
 
 ## プログレッシブエンハンスメント
 
-### useFormStateとの連携
+### useActionStateとの連携
 
 ```typescript
 'use server';
@@ -421,7 +432,8 @@ export async function submitFormAction(
   } catch (error) {
     if (error instanceof z.ZodError) {
       const errors: Record<string, string[]> = {};
-      error.errors.forEach((err) => {
+      // ⚠️ zod v4 に `error.errors` は無い（`issues`）
+      error.issues.forEach((err) => {
         const path = err.path.join('.');
         if (!errors[path]) {
           errors[path] = [];
@@ -448,7 +460,9 @@ export async function submitFormAction(
 ```typescript
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
+
 import { submitFormAction } from '@/app/actions/submitForm';
 
 function SubmitButton() {
@@ -462,7 +476,9 @@ function SubmitButton() {
 }
 
 export function Form() {
-  const [state, formAction] = useFormState(submitFormAction, {
+  // ⚠️ `useFormState`（`react-dom`）は React 19 で廃止された。
+  //    `useActionState`（`react`）を使う
+  const [state, formAction] = useActionState(submitFormAction, {
     success: false,
   });
 
@@ -589,13 +605,13 @@ export async function exampleAction(): Promise<ActionResult> {
       return createErrorResponse(
         'VALIDATION_ERROR',
         '入力内容に誤りがあります',
-        error.errors
+        error.issues
       );
     }
 
     console.error('Action error:', error);
     return createErrorResponse(
-      'INTERNAL_SERVER_ERROR',
+      ERROR_CODE.SERVER_ERROR,
       'サーバーエラーが発生しました'
     );
   }
@@ -727,7 +743,7 @@ export async function rateLimitedAction() {
     return {
       success: false,
       error: {
-        code: 'INTERNAL_SERVER_ERROR',
+        code: ERROR_CODE.SERVER_ERROR,
         message: 'サーバーエラーが発生しました',
       },
     };

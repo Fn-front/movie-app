@@ -302,33 +302,47 @@ const handleFormSubmit = async (data: FormData) => {
 <input {...register('email')} />
 ```
 
-## Radix UI統合
+## 自前の UI コンポーネントを使う
+
+⛔ **`@radix-ui/react-form` は依存に入っていない。** import すると解決
+できない。入っている Radix は `dialog` / `select` / `checkbox` /
+`radio-group` / `tabs` / `toast` / `tooltip` / `dropdown-menu` /
+`toggle-group` の9つだけで、Form は含まれていない。
+
+フォームの入力欄は `src/components/ui/` の `Input` / `Textarea` /
+`Select` / `Checkbox` / `RadioGroup` を使う。`Input` は `label` と
+`error` を受け取り、**ラベルの関連付けとエラー表示を内側で面倒を見る**。
 
 ```typescript
-import * as Form from '@radix-ui/react-form';
+import { Input } from '@/components/ui/input/input';
+import { Button } from '@/components/ui/button/button';
 
 export const LoginForm = memo(() => {
-  const { register, handleSubmit, formState: { errors } } = useForm();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) });
 
   return (
-    <Form.Root onSubmit={handleSubmit(onSubmit)}>
-      <Form.Field name="email">
-        <Form.Label>メールアドレス</Form.Label>
-        <Form.Control asChild>
-          <input type="email" {...register('email')} />
-        </Form.Control>
-        {errors.email && (
-          <Form.Message>{errors.email.message}</Form.Message>
-        )}
-      </Form.Field>
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <Input
+        type="email"
+        label="メールアドレス"
+        error={errors.email?.message}
+        fullWidth
+        {...register('email')}
+      />
 
-      <Form.Submit asChild>
-        <button type="submit">送信</button>
-      </Form.Submit>
-    </Form.Root>
+      <Button type="submit">送信</Button>
+    </form>
   );
 });
 ```
+
+⚠️ `label` を省いて自分で `<label>` を書かないこと。`Input` は `id` と
+`aria-label` の両方を出しており、省くと**支援技術からもテストからも
+名前で引けなくなる**。
 
 ## よくあるパターン
 

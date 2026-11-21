@@ -15,18 +15,30 @@ argument-hint: [file-path]
 
 #### プライマリカラー（ブルー系）
 
+値は `src/styles/global/_theme.scss` の **CSS 変数**が正。SCSS 側
+（`src/styles/_variables.scss`）はそれを参照しているだけ。
+
 ```scss
-$primary-50: #e3f2fd;
-$primary-100: #bbdefb;
-$primary-200: #90caf9;
-$primary-300: #64b5f6;
-$primary-400: #42a5f5;
-$primary-500: #2390d6;  // メインカラー
-$primary-600: #1e88e5;
-$primary-700: #1976d2;
-$primary-800: #1565c0;
-$primary-900: #0d47a1;
+// src/styles/global/_theme.scss（抜粋）
+--primary-900: #004a7c;
+--primary-800: #005a94;
+--primary-700: #006bac;
+--primary-600: #0d7ec4;
+--primary-500: #1878b9;  // メインカラー
+--primary-400: #4ca3dd;
+--primary-300: #75b7e5;
+--primary-200: #9ecbed;
+--primary-100: #c7dff5;
+--primary-50:  #e8f3fb;
 ```
+
+```scss
+// src/styles/_variables.scss — SCSS からはこちらを使う
+$primary-500: var(--primary-500);
+```
+
+⚠️ **ここに値をコピーしない。** テーマを変えたときに2箇所がズレ、
+「変数を使っているのに色が合わない」という形でしか現れない。
 
 #### セカンダリカラー（オレンジ系）
 
@@ -63,7 +75,7 @@ $dark-blue-900: #263238;
 - ❌ **ハードコードされた色値を使用していないか**
   ```scss
   // NG
-  background-color: #2390d6;
+  background-color: #1878b9;
   color: #ff9600;
 
   // OK
@@ -90,21 +102,26 @@ $font-family-base: 'Noto Sans JP', sans-serif;
 
 #### ブレークポイント
 
+`src/styles/_variables.scss` にあるのは**この5つだけ**。
+
 ```scss
-// モバイル
-$breakpoint-mobile: 375px;  // 最小幅
-
-// タブレット（現時点では未使用）
-$breakpoint-tablet: 768px;
-
-// PC
-$breakpoint-desktop: 1024px;
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+$breakpoint-2xl: 1536px;
 ```
+
+⛔ `$breakpoint-mobile` / `$breakpoint-tablet` / `$breakpoint-desktop` は
+**存在しない**。書くと SCSS のコンパイルが落ちる。
+
+⚠️ `@media` の中では CSS 変数が使えないため、ここだけ SCSS 変数のまま
+維持している（`_variables.scss` のコメント）。
 
 #### チェックポイント
 
 - ✅ **375px（モバイル）で表示が崩れないか**
-- ✅ **1024px以上（PC）で適切にレイアウトされているか**
+- ✅ **1024px以上（`$breakpoint-lg`）で適切にレイアウトされているか**
 - ✅ **メディアクエリを使用しているか**
 
 ```scss
@@ -112,7 +129,7 @@ $breakpoint-desktop: 1024px;
 .container {
   padding: 8px;
 
-  @media (min-width: $breakpoint-desktop) {
+  @media (min-width: $breakpoint-lg) {
     padding: 16px;
   }
 }
@@ -346,7 +363,7 @@ const Modal = ({ isOpen, onClose, children }) => {
 - ARIAラベルを適切に付与
 
 ### ⚠️ 改善推奨項目
-- `src/components/MovieCard/movieCard.module.scss:15` - ハードコードされた色値 `#2390d6` → `$primary-500`を使用
+- `src/components/MovieCard/movieCard.module.scss:15` - ハードコードされた色値 `#1878b9` → `$primary-500` を使用
 - `src/components/SearchBar/searchBar.tsx:23` - displayNameが未設定
 
 ### ❌ 必須修正項目
@@ -357,7 +374,6 @@ const Modal = ({ isOpen, onClose, children }) => {
 ## 参考ドキュメント
 
 - `.claude/documents/design-system.md` - デザインシステム詳細
-- `.claude/documents/component-patterns.md` - コンポーネントパターン
 - `.claude/documents/architecture.md` - アーキテクチャ設計
 
 ## 使用例

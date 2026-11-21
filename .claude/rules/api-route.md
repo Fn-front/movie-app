@@ -34,7 +34,21 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const result = schema.safeParse(body);
-  if (!result.success) return validationErrorResponse(result);
+  if (!result.success) {
+    // ⚠️ `validationErrorResponse` のような共通ヘルパーは無い。
+    //    各ルートが `VALIDATION_ERROR` + `flatten().fieldErrors` で返す
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: ERROR_CODE.VALIDATION_ERROR,
+          message: AUTH_ERROR_MESSAGES.VALIDATION_ERROR,
+          details: result.error.flatten().fieldErrors,
+        },
+      },
+      { status: HTTP_STATUS.BAD_REQUEST },
+    );
+  }
   // ...
 }
 ```
@@ -193,7 +207,7 @@ if (!emailSent) {
 検証の後ろに固定される**。原則を守れなくなるので、制限だけ別の関数に切り出して
 呼び出し側が認証の直後に呼ぶ。
 
-前例: `src/helpers/totpGuard.ts` の `checkSecondFactorRateLimit` ／
+前例: `src/helpers/secondFactorGuard.ts` の `checkSecondFactorRateLimit` ／
 `requireSecondFactor`（後者はコードの検証が要るため検証の後ろにしか置けない）。
 
 ### 新しいルートを書くとき
@@ -310,7 +324,7 @@ mockCheckRateLimit
 |---|---|
 | `safeParse(` | `checkRateLimit(` |
 | `parseAndValidate(`（`src/helpers/requestValidation.ts`） | `enforcePublicRateLimit(`（`src/helpers/publicRateLimit.ts`） |
-| 手書き（`Number.isNaN` / 範囲チェック等） | `checkSecondFactorRateLimit(`（`src/helpers/totpGuard.ts`） |
+| 手書き（`Number.isNaN` / 範囲チェック等） | `checkSecondFactorRateLimit(`（`src/helpers/secondFactorGuard.ts`） |
 | | `createInMemoryRateLimiter(`（`csp-report` のみ） |
 
 確実なのは `VALIDATION_ERROR` / `HTTP_STATUS.BAD_REQUEST` の出現行と、上記

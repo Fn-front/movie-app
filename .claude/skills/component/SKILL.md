@@ -128,14 +128,19 @@ h2 {
 
 ```scss
 // プライマリカラー（ブルー系）
-$primary-500: #2390d6;
+$primary-500;
 
 // セカンダリカラー（オレンジ系）
-$secondary-600: #ff9600;
+$secondary-600;
 
 // ダークブルーグレー（ナビゲーション・サイドバー用）
-$dark-blue-600: #2f3e51;
+$dark-blue-600;
 ```
+
+⚠️ **値はここに書かない。** 実体は `src/styles/global/_theme.scss` の
+CSS 変数で、SCSS 側（`src/styles/_variables.scss`）はそれを
+`var(--primary-500)` のように参照しているだけ。コピーするとテーマを
+変えたときにズレる。
 
 詳細は `.claude/documents/design-system.md` を参照してください。
 
@@ -190,7 +195,6 @@ export const Modal = memo(() => {
 
 - `.claude/documents/architecture.md` - アーキテクチャ設計
 - `.claude/documents/design-system.md` - デザインシステム
-- `.claude/documents/component-patterns.md` - コンポーネントパターン（存在する場合）
 
 ## 使用例
 

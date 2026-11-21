@@ -59,10 +59,16 @@ export function useHasPassword(sessionHasPassword: boolean): boolean {
     ⚠️ **マウント時に取る。** 同じ画面で設定した場合は下のイベントで足りるが、
     それだけだと「別の画面でパスワードを設定 → 設定ページへ来る」や
     「設定したあと離れて5分以内に戻る」で古いままになる。
+
+    サーバー（`users.password_hash`）はレンダーの外にある状態で、マウント後に
+    取りにいって差し替えるしかない。描画に使うまでの一瞬はセッション由来の値で
+    持たせるので、追加のレンダーは欄の有無を一度だけ変えうる
   */
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     void load();
   }, [load]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   /**
    * 同じ画面でパスワードを設定・変更したら取り直す

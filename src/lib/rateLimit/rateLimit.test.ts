@@ -21,6 +21,7 @@ import { SUPABASE_ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
 import type { RateLimitActionType } from '@/constants/rateLimit';
 import {
   FAIL_CLOSED_ACTIONS,
+  RATE_LIMIT_CONFIG,
   RELEASABLE_RATE_LIMIT_ACTIONS,
 } from '@/constants/rateLimit';
 
@@ -1165,5 +1166,60 @@ describe('chk_action_type と RATE_LIMIT_ACTION の突き合わせ', () => {
     expect([...FAIL_CLOSED_ACTIONS]).not.toContain(
       RATE_LIMIT_ACTION.CRON_FAILURE_NOTICE,
     );
+  });
+
+  /**
+   * ⛔ **送信元ごとの層は利用者単位より厳しくする**（GHSA-p899-6g7w-v7hg）。
+   *
+   * 1つの送信元で利用者の枠を使い切れると、手前に層を足した意味が無くなる。
+   * パスワードを知る第三者が被害者のログインを妨害できる状態に戻る。
+   *
+   * ⚠️ **`maxAttempts` だけを比べない。** 窓の長さを無視するので、
+   * `{ maxAttempts: 9, windowMinutes: 1 }`（540回/時 = 54倍ゆるい）でも
+   * 緑のままになる。初版が実際にそうなっていた（レビューで実測）。
+   * 比べるのは**単位時間あたりの回数**。
+   */
+  /**
+   * ⛔ **送信元ごとの層も fail-closed**（GHSA-p899-6g7w-v7hg）。
+   *
+   * ここに無いと `checkRateLimit` が RPC の失敗で `{ allowed: true }` を返し
+   * （`undeterminedResult`）、**この層だけ無言で素通し**になる。
+   * 23514（許可リスト漏れ）や接続障害で元の妨害が成立する。
+   *
+   * 可用性の代償は無い。同じ障害では `TWO_FACTOR_SEND` が先に拒否側へ
+   * 倒れるので、どのみちコードは送れない。
+   */
+  it('two_factor_send_prompt は FAIL_CLOSED_ACTIONS に入れる', () => {
+    expect(
+      FAIL_CLOSED_ACTIONS.has(RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT),
+    ).toBe(true);
+  });
+
+  it('two_factor_send_prompt は two_factor_send より厳しい', () => {
+    const rate = (config: { maxAttempts: number; windowMinutes: number }) =>
+      config.maxAttempts / config.windowMinutes;
+
+    expect(rate(RATE_LIMIT_CONFIG.TWO_FACTOR_SEND_PROMPT)).toBeLessThan(
+      rate(RATE_LIMIT_CONFIG.TWO_FACTOR_SEND),
+    );
+  });
+
+  /**
+   * ⛔ **必要な送信元の数を固定する。**
+   *
+   * 送信元を n 個使えば `n × maxAttempts` まで送れるので、被害者の
+   * `TWO_FACTOR_SEND` を使い切るのに要る数は `ceil(max / promptMax)`。
+   * 初版は「半分」にしたため **2 で成立**していた。
+   *
+   * 「厳しい」だけでは足りない —— 9回/60分でも上のテストは通るが、
+   * 必要な送信元は 2 のままになる。
+   */
+  it('被害者の枠を使い切るには4つ以上の送信元が要る', () => {
+    const required = Math.ceil(
+      RATE_LIMIT_CONFIG.TWO_FACTOR_SEND.maxAttempts /
+        RATE_LIMIT_CONFIG.TWO_FACTOR_SEND_PROMPT.maxAttempts,
+    );
+
+    expect(required).toBeGreaterThanOrEqual(4);
   });
 });

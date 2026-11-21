@@ -160,6 +160,17 @@ export const RATE_LIMIT_ACTION = {
    * 持っていても設定できなくなる**。
    */
   SECOND_FACTOR_SETUP_CODE_SEND: 'second_factor_setup_code_send',
+  /**
+   * 第2要素コードの送信プロンプト（送信元IPごと / GHSA-p899-6g7w-v7hg）
+   *
+   * ⛔ `TWO_FACTOR_SEND` は**利用者単位**なので、パスワードを知る第三者が
+   * コードを入れずにパスワードだけを投げ続けると、被害者の枠を使い切って
+   * **メールOTPでのログインを妨害できる**。
+   *
+   * こちらは `メール|IP` 単位。1つの送信元が使えるのは枠の半分までなので、
+   * **被害者の枠を使い切れない**（被害者は別のIPから来る）。
+   */
+  TWO_FACTOR_SEND_PROMPT: 'two_factor_send_prompt',
   /** メールアドレス変更の確認コード送信（#1359） */
   EMAIL_CHANGE_REQUEST: 'email_change_request',
   /** メールアドレス変更の確認コード検証（#1359） */
@@ -216,6 +227,10 @@ export const FAIL_CLOSED_ACTIONS: ReadonlySet<RateLimitActionType> = new Set([
   // 消える。第2要素については「送れないこと」より「無制限に送れること」の
   // ほうが危険なので、他の認証系と揃えて拒否側へ倒す
   RATE_LIMIT_ACTION.TWO_FACTOR_SEND,
+  // 送信元ごとの層も同じ扱い（GHSA-p899-6g7w-v7hg）。ここに無いと 23514 や
+  // 接続障害で**この層だけ無言で素通し**になり、元の妨害が成立する。
+  // 可用性の代償は無い —— 同じ障害では `TWO_FACTOR_SEND` が先に拒否側へ倒れる
+  RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT,
   'registration',
   // パスワードの変更・再設定
   RATE_LIMIT_ACTION.PASSWORD_RESET_REQUEST,
@@ -507,6 +522,31 @@ export const RATE_LIMIT_CONFIG = {
    * 再送間隔（60秒）と合わせて、メールボックスへの連投を抑える。
    */
   SECOND_FACTOR_SETUP_CODE_SEND: { maxAttempts: 5, windowMinutes: 60 },
+
+  /**
+   * 第2要素コードの送信プロンプト（`メール|IP` 単位 / GHSA-p899-6g7w-v7hg）
+   *
+   * ⚠️ **`TWO_FACTOR_SEND`（10回/60分）の半分**にしてある。1つの送信元が
+   * 利用者の枠を使い切れないことが目的なので、必ず下回らせること。
+   *
+   * ⚠️ 正規の利用者が1時間に同じ端末から5通も要求するのは異常な状態
+   * （届かない／迷惑メール）で、そのときはリカバリーコードが出口になる。
+   */
+  // ⚠️ **`TWO_FACTOR_SEND`（10回/60分）の「半分」では足りない**
+  //    （GHSA-p899-6g7w-v7hg のレビューで実測）。
+  //
+  //    送信元を n 個使えば `n × maxAttempts` まで送れるので、被害者の枠を
+  //    使い切るのに必要な送信元の数は `ceil(10 / maxAttempts)`。
+  //    5 なら **2 IP** で従来どおり成立してしまう。3 にして 4 IP へ上げる。
+  //
+  //    正規の利用者への影響は小さい。枠に当たっても受信箱のコードが
+  //    生きていれば `LIMIT_EXCEEDED_CODE_VALID` で入力欄が出るため、
+  //    行き止まりになるのは「30分以上前の送信が最後」の場合だけ。
+  //
+  // ⛔ **これで塞ぎ切れるわけではない。** 送信元を4つ用意できる相手には
+  //    依然として成立する。IPv6 は `getClientIp` が丸めていないため
+  //    回線1本で識別子を量産できる（#1379。`LOGIN_IP` 等も同じ）
+  TWO_FACTOR_SEND_PROMPT: { maxAttempts: 3, windowMinutes: 60 },
 
   /**
    * メールアドレス変更の確認コード送信（#1359）

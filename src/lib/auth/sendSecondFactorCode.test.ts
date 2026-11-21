@@ -9,7 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { TWO_FACTOR_OTP_ACTION } from '@/constants/secondFactor';
 import { OTP_CONFIG } from '@/constants/otp';
-import { RATE_LIMIT_CONFIG } from '@/constants/rateLimit';
+import { RATE_LIMIT_ACTION, RATE_LIMIT_CONFIG } from '@/constants/rateLimit';
 
 import {
   SEND_SECOND_FACTOR_RESULT,
@@ -36,10 +36,20 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 
 const USER_ID = 'user-1';
 const EMAIL = 'user@example.com';
+/** 送信元ごとの層の識別子（`buildLoginIdentifier` の形） */
+const PROMPT_IDENTIFIER = 'user@example.com|203.0.113.10';
 
 interface MockState {
   /** 直近の `two_factor` 行の作成日時。null なら「送信履歴なし」 */
   recentCreatedAt: string | null;
+  /**
+   * 直近の行の有効期限
+   *
+   * ⚠️ 省くと `new Date(undefined)` が NaN になり、「まだ使えるコードが
+   * 届いているか」の判定が常に false へ倒れる（GHSA-p899-6g7w-v7hg）。
+   * 既定は `recentCreatedAt` から30分後。
+   */
+  recentExpiresAt: string | null;
   /** 読み取りでエラーを返すか */
   readError: boolean;
   deleteCalls: number;
@@ -61,7 +71,19 @@ const createSupabaseMock = (state: MockState): SupabaseClient => {
     const builder: Record<string, unknown> = {};
     const self = () => builder;
 
-    builder.select = jest.fn(self);
+    // ⚠️ **選んだ列だけを返す。** 無視すると `select('created_at')` に
+    //    戻す変異を検知できない（実際に生き残った）。PostgREST は
+    //    指定していない列を返さないので、`expires_at` が undefined になり
+    //    `new Date(undefined)` が NaN へ化ける
+    let selected: string[] = [];
+    builder.select = jest.fn((columns?: string) => {
+      selected = (columns ?? '')
+        .split(',')
+        .map((column) => column.trim())
+        .filter(Boolean);
+
+      return builder;
+    });
     builder.eq = jest.fn(self);
     builder.order = jest.fn(self);
     builder.limit = jest.fn(self);
@@ -71,7 +93,17 @@ const createSupabaseMock = (state: MockState): SupabaseClient => {
           ? { data: null, error: { message: 'connection terminated' } }
           : {
               data: state.recentCreatedAt
-                ? { created_at: state.recentCreatedAt }
+                ? Object.fromEntries(
+                    Object.entries({
+                      created_at: state.recentCreatedAt,
+                      expires_at:
+                        state.recentExpiresAt ??
+                        new Date(
+                          new Date(state.recentCreatedAt).getTime() +
+                            30 * 60 * 1000,
+                        ).toISOString(),
+                    }).filter(([column]) => selected.includes(column)),
+                  )
                 : null,
               error: null,
             },
@@ -101,6 +133,7 @@ const createSupabaseMock = (state: MockState): SupabaseClient => {
 
 const freshState = (): MockState => ({
   recentCreatedAt: null,
+  recentExpiresAt: null,
   readError: false,
   deleteCalls: 0,
   insertCalls: 0,
@@ -235,6 +268,95 @@ describe('sendSecondFactorCode', () => {
     expect(state.insertCalls).toBe(0);
   });
 
+  /**
+   * ⛔ **送信元ごとの層も再送間隔より後ろ**（GHSA-p899-6g7w-v7hg のレビュー）。
+   *
+   * 初版はこれを `authorize` の中、`sendSecondFactorCode` を呼ぶ**前**に
+   * 置いていた。再送間隔の判定はこの関数の中にあるため、**1通も送らない
+   * リクエストが枠を食う**。しかも `TWO_FACTOR_SEND_PROMPT` は
+   * `RELEASABLE_RATE_LIMIT_ACTIONS` に無く戻せない。
+   *
+   * `loginSchema` は `totpCode` を持たないので、**コード欄が空のまま
+   * 「ログイン」を押すだけ**でこの経路に入る。送信ボタンは再送ボタンと違い
+   * カウントダウンで無効化されないため、二度押しが素通りする。
+   * 上限ぶん繰り返すと、1通も送っていないのに60分締め出される。
+   */
+  it('60秒以内の再送では送信元ごとの枠も消費しない', async () => {
+    const state = freshState();
+    state.recentCreatedAt = new Date(Date.now() - 10_000).toISOString();
+
+    await expect(
+      sendSecondFactorCode(
+        createSupabaseMock(state),
+        USER_ID,
+        EMAIL,
+        PROMPT_IDENTIFIER,
+      ),
+    ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.THROTTLED);
+
+    // 渡していても呼ばれない。ここが逆だと正規の利用者が締め出される
+    expect(mockCheckRateLimit).not.toHaveBeenCalled();
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
+  });
+
+  /**
+   * ⚠️ 識別子を渡さない経路（設定画面・OAuth）では層を掛けない。
+   * いずれもセッションが要るので、未認証からは到達できない。
+   */
+  it('識別子が無ければ送信元ごとの層は掛からない', async () => {
+    const state = freshState();
+    state.recentCreatedAt = new Date(
+      Date.now() - (OTP_CONFIG.RESEND_INTERVAL_SECONDS + 5) * 1000,
+    ).toISOString();
+
+    await sendSecondFactorCode(createSupabaseMock(state), USER_ID, EMAIL);
+
+    // TWO_FACTOR_SEND の1回だけ
+    expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      USER_ID,
+      RATE_LIMIT_ACTION.TWO_FACTOR_SEND,
+      expect.any(Number),
+      expect.any(Number),
+    );
+  });
+
+  /**
+   * ⚠️ 送信元ごとの層は `TWO_FACTOR_SEND` より**手前**。
+   * 逆だと、弾くより先に利用者の枠を消費して層の意味が無くなる。
+   */
+  it('送信元ごとの層は利用者単位の枠より先に判定する', async () => {
+    const state = freshState();
+    state.recentCreatedAt = new Date(
+      Date.now() - (OTP_CONFIG.RESEND_INTERVAL_SECONDS + 5) * 1000,
+    ).toISOString();
+
+    await sendSecondFactorCode(
+      createSupabaseMock(state),
+      USER_ID,
+      EMAIL,
+      PROMPT_IDENTIFIER,
+    );
+
+    expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      PROMPT_IDENTIFIER,
+      RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT,
+      expect.any(Number),
+      expect.any(Number),
+    );
+    expect(mockCheckRateLimit).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      USER_ID,
+      RATE_LIMIT_ACTION.TWO_FACTOR_SEND,
+      expect.any(Number),
+      expect.any(Number),
+    );
+  });
+
   it('再送間隔を過ぎていれば送る', async () => {
     const state = freshState();
     state.recentCreatedAt = new Date(
@@ -256,6 +378,51 @@ describe('sendSecondFactorCode', () => {
 
     expect(mockSendOtpEmail).not.toHaveBeenCalled();
     expect(state.insertCalls).toBe(0);
+  });
+
+  /**
+   * ⛔ **使えるコードが既に届いているなら行き止まりにしない**
+   * （GHSA-p899-6g7w-v7hg）。
+   *
+   * 枠を使い切らせる妨害は、宛先が `users.email` に固定されているため
+   * **被害者の受信箱に有効なコードを送り込む**形でしか成立しない。
+   * その状態で「リカバリーコードを使え」と案内するのは、手元に答えが
+   * あるのに別の出口へ誘導していることになる。
+   *
+   * ⚠️ **`THROTTLED` と同じ値にしない。** あちらは「60秒待てば送り直せる」で、
+   * こちらは最長60分送り直せない。初版は同じ値にしたため、`send-challenge` が
+   * 「しばらく待ってから再送信してください。」を返す形になっていた
+   * （待っても直らない案内。レビューで実測）。
+   */
+  it('上限でも有効なコードが残っていれば LIMIT_EXCEEDED_CODE_VALID を返す', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 3600 });
+    const state = freshState();
+    // 再送間隔（60秒）は過ぎているが、コード自体はまだ有効
+    state.recentCreatedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    state.recentExpiresAt = new Date(Date.now() + 25 * 60 * 1000).toISOString();
+
+    await expect(
+      sendSecondFactorCode(createSupabaseMock(state), USER_ID, EMAIL),
+    ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID);
+
+    // ⚠️ 1通も送らないことは変わらない。変わるのは呼び出し側への伝え方だけ
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
+    expect(state.insertCalls).toBe(0);
+  });
+
+  /**
+   * ⚠️ 期限切れの行で THROTTLED を返すと、**使えないコードの入力を
+   * 促す**ことになる。そちらは素直に行き止まり（リカバリーコード）へ。
+   */
+  it('上限で、残っているコードが期限切れなら LIMIT_EXCEEDED', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 3600 });
+    const state = freshState();
+    state.recentCreatedAt = new Date(Date.now() - 40 * 60 * 1000).toISOString();
+    state.recentExpiresAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+    await expect(
+      sendSecondFactorCode(createSupabaseMock(state), USER_ID, EMAIL),
+    ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED);
   });
 
   /**

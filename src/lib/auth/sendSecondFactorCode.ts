@@ -38,6 +38,18 @@ export const SEND_SECOND_FACTOR_RESULT = {
   THROTTLED: 'throttled',
   /** 送信回数の上限。1通も送っていない */
   LIMIT_EXCEEDED: 'limit_exceeded',
+  /**
+   * 送信回数の上限だが、**直前に送ったコードがまだ有効**（GHSA-p899-6g7w-v7hg）
+   *
+   * ⚠️ `THROTTLED` と混ぜない。あちらは「60秒待てば送り直せる」で、
+   * こちらは最長60分送り直せない。同じ値にすると
+   * `send-challenge` が「しばらく待ってから再送信してください。」を返し、
+   * **待っても直らない案内**になる（レビューで実測）。
+   *
+   * 出口は共通して「受信箱の有効なコードを入力する」。`LIMIT_EXCEEDED` と
+   * 違ってリカバリーコードへ誘導しない —— 手元に答えがあるため。
+   */
+  LIMIT_EXCEEDED_CODE_VALID: 'limit_exceeded_code_valid',
   /** 送信そのものが失敗した。打ち直しても直らない */
   SEND_FAILED: 'send_failed',
 } as const;
@@ -59,12 +71,15 @@ export type SendSecondFactorResult =
  * @param supabase - service_role のクライアント
  * @param userId - 対象ユーザー（レート制限の識別子にも使う）
  * @param email - 送信先。サーバー側で確定した値のみ
+ * @param promptIdentifier - 送信元ごとの層の識別子（`メール|IP`）。
+ *   ログイン経路だけが渡す。詳細は下の `TWO_FACTOR_SEND_PROMPT` のコメント
  * @returns 送信の結果
  */
 export async function sendSecondFactorCode(
   supabase: SupabaseClient,
   userId: string,
   email: string,
+  promptIdentifier?: string,
 ): Promise<SendSecondFactorResult> {
   const normalizedEmail = normalizeEmail(email);
 
@@ -73,7 +88,9 @@ export async function sendSecondFactorCode(
   // 1時間ログインできなくなる
   const { data: recent, error: recentError } = await supabase
     .from('otp_codes')
-    .select('created_at')
+    // ⚠️ `expires_at` も読む。上限に達したときに「まだ使えるコードが
+    //    届いているか」を判定するのに使う（下の LIMIT_EXCEEDED の分岐）
+    .select('created_at, expires_at')
     .eq('email', normalizedEmail)
     .eq('action_type', TWO_FACTOR_OTP_ACTION)
     .order('created_at', { ascending: false })
@@ -96,6 +113,40 @@ export async function sendSecondFactorCode(
     }
   }
 
+  /** 直前に送ったコードがまだ使えるか */
+  const hasValidCode = Boolean(
+    recent && new Date(recent.expires_at).getTime() > Date.now(),
+  );
+
+  // ⛔ **送信元ごとの層**（GHSA-p899-6g7w-v7hg）。
+  //
+  //   `TWO_FACTOR_SEND`（10回/60分）は**利用者単位**なので、パスワードを
+  //   知る第三者が「コードを入れずにパスワードだけ」を61秒間隔で投げ続けると、
+  //   被害者の枠を使い切って**メールOTPでのログインを妨害できる**。
+  //   `authorize` 側で `login` の枠も解放されるため積み上がらない。
+  //
+  // ⚠️ **再送間隔の判定より後ろに置くこと。** 前に置くと、1通も送らない
+  //   リクエスト（二度押し・コード欄が空のままの送信）が枠を食う。
+  //   枠は戻せない（`RELEASABLE_RATE_LIMIT_ACTIONS` に無く、DB側の許可リスト
+  //   にも無い）ので、正規の利用者が5回の二度押しで60分締め出される。
+  //   これは下の `TWO_FACTOR_SEND` が :71 で明示的に避けている失敗と同じ形で、
+  //   初版は**それをひとつ上の層で再現していた**（レビューで実測）。
+  if (promptIdentifier) {
+    const promptLimit = await checkRateLimit(
+      supabase,
+      promptIdentifier,
+      RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT,
+      RATE_LIMIT_CONFIG.TWO_FACTOR_SEND_PROMPT.maxAttempts,
+      RATE_LIMIT_CONFIG.TWO_FACTOR_SEND_PROMPT.windowMinutes,
+    );
+
+    if (!promptLimit.allowed) {
+      return hasValidCode
+        ? SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID
+        : SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED;
+    }
+  }
+
   // ここから先は実際に送る。枠を消費する
   // （`.claude/rules/api-route.md` の例外2 — 守る資源はメールボックス）
   //
@@ -110,7 +161,19 @@ export async function sendSecondFactorCode(
   );
 
   if (!limitResult.allowed) {
-    return SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED;
+    // ⚠️ **使えるコードが既に届いているなら行き止まりにしない**
+    //    （GHSA-p899-6g7w-v7hg）。
+    //
+    //    枠を使い切らせる妨害は、宛先が `users.email` に固定されているため
+    //    **被害者の受信箱に有効なコードを送り込む**形でしか成立しない。
+    //    その状態で「リカバリーコードを使え」と案内するのは、手元に答えが
+    //    あるのに別の出口へ誘導していることになる。
+    //
+    // ⚠️ ここを `THROTTLED` にしない。あちらは「60秒待てば送れる」の意味で、
+    //    `send-challenge` が待っても直らない案内を返す（初版の誤り）。
+    return hasValidCode
+      ? SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID
+      : SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED;
   }
 
   const code = generateOtpCode();

@@ -251,10 +251,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               // ⚠️ 宛先は `user.email`。スコープにある `email` ローカル変数は
               // ユーザー名ログインで空文字になり、全ユーザー名アカウントが
               // `otp_codes.email = ''` の1行を共有してコードが混線する
+              //
+              // 第4引数は**送信元ごとの層**の識別子（GHSA-p899-6g7w-v7hg）。
+              // `TWO_FACTOR_SEND` は利用者単位なので、パスワードを知る第三者が
+              // 被害者の枠を使い切ってメールOTPログインを妨害できた。
+              //
+              // ⚠️ 消費の位置は `sendSecondFactorCode` の中（再送間隔の判定の
+              // 後ろ）。ここで数えると1通も送らないリクエストが枠を食う。
+              //
+              // ⚠️ 送信元IPが不明なときは渡さない。`loginIdentifier` が
+              // メール単独へ退化し、**全員が同じカウンタを共有する**ため、
+              // 誰でも6リクエストで被害者を締め出せる（修正前より悪化する）。
+              // `LOGIN_IP` が unknown をスキップするのと同じ扱い
               const sendResult = await sendSecondFactorCode(
                 supabase,
                 user.id,
                 user.email,
+                clientIp === 'unknown' ? undefined : loginIdentifier,
               );
 
               if (sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED) {
@@ -265,14 +278,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               }
 
               if (sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED) {
-                // 1通も送っていない。コードを待たせず、
-                // リカバリーコードへ誘導する
+                // 1通も送っておらず、受信箱に生きたコードも無い。
+                // 待たせず、リカバリーコードへ誘導する
                 throw new CredentialsSignInError(
                   AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
                 );
               }
 
-              // SENT / THROTTLED。THROTTLED は直前に送ったコードがまだ生きている
+              // SENT / THROTTLED / LIMIT_EXCEEDED_CODE_VALID。
+              // 後ろ2つは新しく送っていないが、**受信箱のコードはまだ有効**
+              // なので入力欄を出す。ここでリカバリーコードへ誘導すると、
+              // 手元に答えがあるのに別の出口へ送ることになる
               throw new CredentialsSignInError(
                 AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
               );

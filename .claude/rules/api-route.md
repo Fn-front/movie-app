@@ -82,9 +82,52 @@ IP 層は**原則どおり検証より前**に置く。
 | `auth/otp/verify` | `otp_verify_ip` | `otp_verify` |
 | `auth/otp/send` | `otp_send_ip` | `otp_send_daily`（例外2） |
 | NextAuth `credentials` | `login_ip`（`auth.ts`） | `login` |
+| NextAuth `credentials` の第2要素の送信 | `two_factor_send_prompt`（`メール\|IP`） | `two_factor_send`（利用者） |
 
 IP 層には `enforcePublicRateLimit`（`src/helpers/publicRateLimit.ts`）を使う。
 `clientIp === 'unknown'` のときは**消費せず通す**（fail-open）点に注意。
+
+> ⚠️ **利用者単位の枠は、識別子を知っている相手から守れない**
+> （GHSA-p899-6g7w-v7hg）。`TWO_FACTOR_SEND` は利用者単位なので、
+> パスワードを知る第三者が「コードを入れずにパスワードだけ」を61秒間隔で
+> 投げ続けると、被害者の枠を使い切って**メールOTPでのログインを妨害できる**。
+> `login` は第2要素のプロンプト時に解放される（#1283）ので積み上がらない。
+>
+> ここでも対処は同じ **「手前に送信元ごとの層を重ねる」**。
+>
+> #### ⛔ 「半分」では足りない
+>
+> 送信元を n 個使えば `n × promptMax` まで送れるので、利用者の枠を使い切るのに
+> 要る送信元の数は **`ceil(利用者単位の上限 / 送信元ごとの上限)`**。
+> 半分にすると **2 で成立する** —— 初版が実際にそうで、レビューで指摘された。
+> `two_factor_send_prompt` は 3回/60分にして 4 まで上げている。
+>
+> **これは緩和であって、塞ぎ切ってはいない。** 送信元を揃えられる相手には
+> 依然として通る。IPv6 は `getClientIp` が丸めないため回線1本で識別子を
+> 量産でき、既存の `login_ip` 等も同じ穴を持つ（#1379）。
+>
+> ⚠️ 比べるのは **`maxAttempts / windowMinutes`**。`maxAttempts` だけだと
+> `{ maxAttempts: 9, windowMinutes: 1 }`（54倍ゆるい）でもテストが通る。
+> `src/lib/rateLimit/rateLimit.test.ts` で両方を固定している。
+>
+> #### ⛔ 消費は「1通送る直前」に置く
+>
+> 送信元ごとの層でも**資源はメールボックス**なので、**例外2 と同じ扱い**。
+> 再送間隔（60秒）の判定より後ろへ置くこと。
+>
+> 初版は `authorize` の中、`sendSecondFactorCode` を呼ぶ**前**に置いていた。
+> 再送間隔の判定はヘルパーの中なので、**1通も送らないリクエストが枠を食う**。
+> `loginSchema` は `totpCode` を持たないため、**コード欄が空のまま「ログイン」を
+> 押すだけ**でこの経路に入る（送信ボタンは再送ボタンと違いカウントダウンで
+> 無効化されない）。上限ぶん繰り返すと1通も届かないまま締め出される。
+>
+> これは `sendSecondFactorCode` が利用者単位の枠について**明示的に避けている**
+> 失敗と同じ形で、それをひとつ上の層で再現していた。
+>
+> ⚠️ 送信元IPが `unknown` のときは**層を掛けない**。`buildLoginIdentifier` が
+> メール単独へ退化し、全員が同じカウンタを共有するので、誰でも上限ぶんの
+> リクエストで被害者を締め出せる（修正前より悪化する）。`login_ip` が
+> unknown をスキップするのと同じ扱い。
 
 > ⚠️ `auth/otp/send` だけ塞いでいる穴が違う（#1341）。未登録アドレスだと
 > 列挙防止の early return に落ちて `OTP_SEND_DAILY` を消費しないため、

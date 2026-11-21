@@ -118,6 +118,19 @@
   font-size: $font-size-sm;
 }
 
+// --- 設定前の再認証（#1368） ---
+
+// 方式の選択より上に置く。先に入力させてからボタンを押させる
+.c_two_factor_settings__reauth {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: $spacing-3;
+  padding: $spacing-4;
+  border: $border-width-1 solid $border-color;
+  border-radius: $border-radius-md;
+}
+
 // --- 方式の選択（無効時） ---
 
 .c_two_factor_settings__methods {

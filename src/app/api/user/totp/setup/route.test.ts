@@ -49,15 +49,32 @@ jest.mock('@/lib/auth/totpSetup', () => {
 // --- Helpers ---
 
 /** users の取得をモックする */
+const mockConsumeUserBoundOtp = jest.fn();
+jest.mock('@/lib/auth/userBoundOtp', () => ({
+  ...jest.requireActual('@/lib/auth/userBoundOtp'),
+  consumeUserBoundOtp: (...args: unknown[]) => mockConsumeUserBoundOtp(...args),
+}));
+
+const mockCompare = jest.fn();
+jest.mock('bcryptjs', () => ({
+  __esModule: true,
+  default: { compare: (...args: unknown[]) => mockCompare(...args) },
+}));
+
 const mockUserLookup = (
   email: string | null,
   username: string | null = null,
+  passwordHash: string | null = 'hashed',
 ) => {
   mockFrom.mockReturnValueOnce({
     select: () => ({
       eq: () => ({
         single: () =>
-          Promise.resolve({ data: email ? { email, username } : null }),
+          Promise.resolve({
+            data: email
+              ? { id: 'user-1', email, username, password_hash: passwordHash }
+              : null,
+          }),
       }),
     }),
   });
@@ -81,7 +98,13 @@ const mockUserLookupFailure = () => {
   });
 };
 
-const createRequest = (body: Record<string, unknown> = { method: 'totp' }) =>
+/**
+ * ⚠️ **再認証の材料を既定で載せる**（#1368）。これが無いと、すべての
+ * テストが「再認証が足りない」の 400 で止まる。
+ */
+const createRequest = (
+  body: Record<string, unknown> = { method: 'totp', currentPassword: 'pw' },
+) =>
   new Request('http://localhost/api/user/totp/setup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -96,6 +119,8 @@ describe('POST /api/user/totp/setup', () => {
     mockFrom.mockReset();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    // 再認証は既定で通す（#1368）。落とすテストは個別に上書きする
+    mockCompare.mockResolvedValue(true);
     mockStartSecondFactorSetup.mockResolvedValue({
       otpauthUri: 'otpauth://totp/Movie%20App:user@example.com?secret=ABC',
       secret: 'ABCDEFGHIJKLMNOP',
@@ -218,6 +243,108 @@ describe('POST /api/user/totp/setup', () => {
     expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
   });
 
+  /**
+   * ⛔ **ここが #1368 の本体。**
+   *
+   * `totp/setup` も `totp/enable` も `getAuthSession()` 以外に何も要求して
+   * いなかったため、セッションを奪った第三者が2手で**被害者のアカウントに
+   * 自分の第2要素を登録できた**（被害者にはメールが1通も届かない）。
+   *
+   * 登録された第2要素は**乗っ取りの固定手段**になる。被害者が後から
+   * パスワードを変えても攻撃者の TOTP は残る。
+   */
+  describe('再認証', () => {
+    it('材料が無ければ400を返し、設定を始めない', async () => {
+      mockUserLookup('user@example.com');
+
+      const response = await POST(createRequest({ method: 'totp' }));
+
+      expect(response.status).toBe(400);
+      expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
+    });
+
+    it('パスワードが違えば400を返し、設定を始めない', async () => {
+      mockUserLookup('user@example.com');
+      mockCompare.mockResolvedValue(false);
+
+      const response = await POST(
+        createRequest({ method: 'totp', currentPassword: 'wrong' }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
+    });
+
+    it('パスワードが合えば設定を始める', async () => {
+      mockUserLookup('user@example.com');
+
+      const response = await POST(
+        createRequest({ method: 'totp', currentPassword: 'pw' }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(mockCompare).toHaveBeenCalledWith('pw', 'hashed');
+    });
+
+    /**
+     * ⚠️ パスワードを持たない利用者（OAuth のみ）は照合する材料が無い。
+     * 登録アドレスへ送った使い捨てコードで受信箱の所持を確かめる。
+     */
+    it('パスワードを持たない利用者には確認コードを求める', async () => {
+      mockUserLookup('user@example.com', null, null);
+
+      const response = await POST(createRequest({ method: 'totp' }));
+
+      expect(response.status).toBe(400);
+      expect(mockConsumeUserBoundOtp).not.toHaveBeenCalled();
+      expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
+    });
+
+    it('確認コードが合えば設定を始める', async () => {
+      mockUserLookup('user@example.com', null, null);
+      mockConsumeUserBoundOtp.mockResolvedValue('success');
+
+      const response = await POST(
+        createRequest({ method: 'totp', reauthCode: '123456' }),
+      );
+
+      expect(response.status).toBe(200);
+      // ⛔ 利用者IDを渡すこと。外すと攻撃者のコードを被害者のセッションで使える
+      expect(mockConsumeUserBoundOtp).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        'user@example.com',
+        'second_factor_setup',
+        '123456',
+      );
+    });
+
+    it('確認コードが不正なら400を返し、設定を始めない', async () => {
+      mockUserLookup('user@example.com', null, null);
+      mockConsumeUserBoundOtp.mockResolvedValue('invalid');
+
+      const response = await POST(
+        createRequest({ method: 'totp', reauthCode: '000000' }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
+    });
+
+    /**
+     * ⚠️ **再認証は `startSecondFactorSetup` より前。** 後ろだと、
+     * 落ちたときにはもう `user_totp` の行が作り直されている。
+     */
+    it('落ちたら user_totp を作り直さない', async () => {
+      mockUserLookup('user@example.com');
+      mockCompare.mockResolvedValue(false);
+
+      await POST(createRequest({ method: 'totp', currentPassword: 'wrong' }));
+
+      expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
+    });
+  });
+
   describe('方式ごとの扱い', () => {
     /**
      * ⚠️ 画面だけの制限はAPIを直接叩けば抜けられる。
@@ -227,7 +354,9 @@ describe('POST /api/user/totp/setup', () => {
     it('admin 発行アカウント（username あり）は email_otp を拒否する', async () => {
       mockUserLookup('abc@def.invalid', 'alice');
 
-      const response = await POST(createRequest({ method: 'email_otp' }));
+      const response = await POST(
+        createRequest({ method: 'email_otp', currentPassword: 'pw' }),
+      );
 
       expect(response.status).toBe(400);
       expect(mockStartSecondFactorSetup).not.toHaveBeenCalled();
@@ -236,7 +365,9 @@ describe('POST /api/user/totp/setup', () => {
     it('admin 発行アカウントでも totp は選べる', async () => {
       mockUserLookup('abc@def.invalid', 'alice');
 
-      const response = await POST(createRequest({ method: 'totp' }));
+      const response = await POST(
+        createRequest({ method: 'totp', currentPassword: 'pw' }),
+      );
 
       expect(response.status).toBe(200);
     });
@@ -248,7 +379,9 @@ describe('POST /api/user/totp/setup', () => {
         sendResult: 'sent',
       });
 
-      const response = await POST(createRequest({ method: 'email_otp' }));
+      const response = await POST(
+        createRequest({ method: 'email_otp', currentPassword: 'pw' }),
+      );
 
       expect(response.status).toBe(200);
       expect(mockStartSecondFactorSetup).toHaveBeenCalledWith(
@@ -274,7 +407,9 @@ describe('POST /api/user/totp/setup', () => {
         sendResult: 'sent',
       });
 
-      const response = await POST(createRequest({ method: 'email_otp' }));
+      const response = await POST(
+        createRequest({ method: 'email_otp', currentPassword: 'pw' }),
+      );
       const json = await response.json();
 
       expect(response.status).toBe(200);
@@ -289,7 +424,9 @@ describe('POST /api/user/totp/setup', () => {
         sendResult: 'throttled',
       });
 
-      const response = await POST(createRequest({ method: 'email_otp' }));
+      const response = await POST(
+        createRequest({ method: 'email_otp', currentPassword: 'pw' }),
+      );
       const json = await response.json();
 
       // ⚠️ 429 にはしない。直前のコードはまだ有効で、利用者がやることは
@@ -319,7 +456,11 @@ describe('POST /api/user/totp/setup', () => {
         });
 
         expect(
-          (await POST(createRequest({ method: 'email_otp' }))).status,
+          (
+            await POST(
+              createRequest({ method: 'email_otp', currentPassword: 'pw' }),
+            )
+          ).status,
         ).toBe(500);
       } finally {
         error.mockRestore();
@@ -338,7 +479,9 @@ describe('POST /api/user/totp/setup', () => {
         sendResult: 'limit_exceeded',
       });
 
-      const response = await POST(createRequest({ method: 'email_otp' }));
+      const response = await POST(
+        createRequest({ method: 'email_otp', currentPassword: 'pw' }),
+      );
       const json = await response.json();
 
       expect(response.status).toBe(429);
@@ -362,7 +505,7 @@ describe('POST /api/user/totp/setup', () => {
         sendResult: 'sent',
       });
 
-      await POST(createRequest({ method: 'email_otp' }));
+      await POST(createRequest({ method: 'email_otp', currentPassword: 'pw' }));
 
       expect(mockCheckRateLimit).toHaveBeenCalledWith(
         expect.anything(),

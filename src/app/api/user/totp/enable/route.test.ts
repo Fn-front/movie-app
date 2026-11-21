@@ -7,6 +7,20 @@
  */
 
 import { TOTP_ERROR_MESSAGES } from '@/constants/totp';
+import { SECOND_FACTOR_SETUP_EXPIRED } from '@/lib/auth/totpSetup';
+
+const mockGetSecondFactorMethod = jest.fn();
+jest.mock('@/lib/auth/secondFactor', () => ({
+  ...jest.requireActual('@/lib/auth/secondFactor'),
+  getSecondFactorMethod: (...args: unknown[]) =>
+    mockGetSecondFactorMethod(...args),
+}));
+
+const mockSendEnabledNotice = jest.fn();
+jest.mock('@/lib/auth/sendSecondFactorEnabledNotice', () => ({
+  sendSecondFactorEnabledNotice: (...args: unknown[]) =>
+    mockSendEnabledNotice(...args),
+}));
 
 import { POST } from './route';
 
@@ -35,6 +49,10 @@ jest.mock('@/lib/rateLimit/rateLimit', () => ({
 
 const mockConfirmSecondFactorSetup = jest.fn();
 jest.mock('@/lib/auth/totpSetup', () => ({
+  // ⚠️ **定数は実物を使う**。モジュール全体を差し替えると
+  //    `SECOND_FACTOR_SETUP_EXPIRED` が undefined になり、ルートの
+  //    期限切れ分岐が**永久に偽**になる（テストは 200 で緑になる）
+  ...jest.requireActual('@/lib/auth/totpSetup'),
   confirmSecondFactorSetup: (...args: unknown[]) =>
     mockConfirmSecondFactorSetup(...args),
 }));
@@ -55,6 +73,8 @@ describe('POST /api/user/totp/enable', () => {
     jest.clearAllMocks();
     mockGetAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
+    mockGetSecondFactorMethod.mockResolvedValue('totp');
+    mockSendEnabledNotice.mockResolvedValue(true);
     // メールOTP の照合に本人のアドレスが要るため users を引く
     mockFrom.mockReturnValue({
       select: () => ({
@@ -64,10 +84,10 @@ describe('POST /api/user/totp/enable', () => {
         }),
       }),
     });
-    mockConfirmSecondFactorSetup.mockResolvedValue([
-      'ABCDE-FGHJK',
-      'MNPQR-STWXY',
-    ]);
+    mockConfirmSecondFactorSetup.mockResolvedValue({
+      codes: ['ABCDE-FGHJK', 'MNPQR-STWXY'],
+      method: 'totp',
+    });
   });
 
   it('正しいコードで有効化しリカバリーコードを返す', async () => {
@@ -77,6 +97,87 @@ describe('POST /api/user/totp/enable', () => {
     expect(response.status).toBe(200);
     expect(json.message).toBe(TOTP_ERROR_MESSAGES.ENABLED);
     expect(json.data.recoveryCodes).toEqual(['ABCDE-FGHJK', 'MNPQR-STWXY']);
+  });
+
+  /**
+   * ⛔ **身に覚えのない登録に気づける唯一の手段**（#1368）。
+   *
+   * 第2要素が登録されると以降のログインにそのコードが要る。攻撃者が
+   * 登録した場合、被害者は自分が設定していない第2要素を求められ、
+   * リカバリーコードも持っていない。
+   */
+  it('有効化したら登録アドレスへ知らせる', async () => {
+    await POST(createRequest({ code: '123456' }));
+
+    expect(mockSendEnabledNotice).toHaveBeenCalledWith(
+      'user@example.com',
+      'totp',
+    );
+  });
+
+  /**
+   * ⛔ **方式は `confirmSecondFactorSetup` の返り値から取る**（#1368 のレビュー）。
+   *
+   * 以前はここで `getSecondFactorMethod` を呼び直していたが、あれは DB エラーで
+   * **throw する**。有効化はもう確定しているので、投げられると 500 になり
+   * **平文のリカバリーコードを一度も表示できない**まま終わる。
+   */
+  it('方式を取り直さずに知らせる（メールOTP）', async () => {
+    mockConfirmSecondFactorSetup.mockResolvedValue({
+      codes: ['ABCDE-FGHJK'],
+      method: 'email_otp',
+    });
+
+    const response = await POST(createRequest({ code: '123456' }));
+
+    expect(response.status).toBe(200);
+    expect(mockSendEnabledNotice).toHaveBeenCalledWith(
+      'user@example.com',
+      'email_otp',
+    );
+  });
+
+  /**
+   * ⚠️ **戻り値で止めない。** 有効化はもう確定しており、ここで 500 にすると
+   * **リカバリーコードを一度も表示できない**まま終わる（平文はこの応答に
+   * しか出ない）。
+   */
+  it('通知に失敗しても200を返し、リカバリーコードを出す', async () => {
+    mockSendEnabledNotice.mockResolvedValue(false);
+
+    const response = await POST(createRequest({ code: '123456' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.recoveryCodes).toBeDefined();
+  });
+
+  /**
+   * ⚠️ **「コードが違う」と区別する**（#1368 の2回目レビュー）。
+   *
+   * 同じ文言にすると、届いたばかりの正しいコードを入れた利用者が自分の入力を
+   * 疑って再送と入力を繰り返し、`TOTP_SETTINGS_VERIFY`（5回/15分）を使い切る。
+   * 設定操作がまとめて15分 429 になる。
+   */
+  it('設定の期限切れは専用の文言で返す', async () => {
+    mockConfirmSecondFactorSetup.mockResolvedValue(SECOND_FACTOR_SETUP_EXPIRED);
+
+    const response = await POST(createRequest({ code: '123456' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error.message).toBe(TOTP_ERROR_MESSAGES.SETUP_EXPIRED);
+    expect(json.error.message).not.toBe(TOTP_ERROR_MESSAGES.INVALID_CODE);
+    expect(mockSendEnabledNotice).not.toHaveBeenCalled();
+  });
+
+  // 有効化に失敗したら通知しない（嘘の通知を送らない）
+  it('有効化に失敗したら知らせない', async () => {
+    mockConfirmSecondFactorSetup.mockResolvedValue(null);
+
+    await POST(createRequest({ code: '000000' }));
+
+    expect(mockSendEnabledNotice).not.toHaveBeenCalled();
   });
 
   /**

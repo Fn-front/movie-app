@@ -13,6 +13,10 @@ import {
   ACCOUNT_DELETE_OTP_ACTION,
   type AccountDeleteOtpAction,
 } from './accountDeleteCode';
+import {
+  SECOND_FACTOR_SETUP_OTP_ACTION,
+  type SecondFactorSetupOtpAction,
+} from './secondFactorSetupCode';
 
 /**
  * 確認コードメールに書く用途の種別
@@ -25,7 +29,8 @@ export type OtpEmailAction =
   | OtpAction
   | TwoFactorOtpAction
   | EmailChangeOtpAction
-  | AccountDeleteOtpAction;
+  | AccountDeleteOtpAction
+  | SecondFactorSetupOtpAction;
 
 /**
  * デフォルトの送信元メールアドレス（フォールバック）
@@ -61,6 +66,9 @@ const OTP_PURPOSE_LABEL: Record<OtpEmailAction, string> = {
   // ⚠️ **取り消せない操作**。身に覚えがないなら、セッションを奪われた
   //   可能性がある。他と区別できる文言にする（#648 / #1362）
   [ACCOUNT_DELETE_OTP_ACTION]: 'アカウントの削除',
+  // ⚠️ `two_factor`（第2要素そのもの）と**別物**。こちらは「第2要素を
+  //   設定してよいか」の再認証。同じ文面にすると受信者が区別できない（#648）
+  [SECOND_FACTOR_SETUP_OTP_ACTION]: '二段階認証の設定',
 };
 
 /**

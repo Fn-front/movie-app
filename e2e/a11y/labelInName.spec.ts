@@ -29,7 +29,11 @@ import {
 import { MOVIE_ID, mockMovieDetail } from '../helpers/movieDetail';
 import { runScopedEmail } from '../helpers/runScope';
 import { addMovieToWatchlist } from '../helpers/watchlistFlows';
-import { totpCodeFromSecret, getTotpSecret } from '../helpers/totp';
+import {
+  getTotpSecret,
+  reauthForSecondFactorSetup,
+  totpCodeFromSecret,
+} from '../helpers/totp';
 
 /** カレンダーに必ず1件出すための作品名 */
 const CALENDAR_MOVIE_TITLE = 'ラベル検証用の作品';
@@ -194,6 +198,8 @@ test.describe('Label in Name（データを入れた状態）', () => {
   test('二段階認証の設定画面', async () => {
     await page.goto('/settings');
 
+    // ⛔ 再認証（#1368）
+    await reauthForSecondFactorSetup(page, USER.password);
     await page.getByRole('button', { name: '認証アプリで設定する' }).click();
     await expect(
       page.getByRole('img', { name: '二段階認証のQRコード' }),

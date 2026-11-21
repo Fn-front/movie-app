@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server';
 import { renderSVG } from 'uqr';
 
 import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
+import { requireReauth } from '@/helpers/reauthGuard';
 import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
@@ -83,11 +84,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const { method } = parsed.data;
+    const { method, currentPassword, reauthCode } = parsed.data;
 
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('email, username')
+      .select('id, email, username, password_hash')
       .eq('id', session.user.id)
       .single();
 
@@ -111,6 +112,32 @@ export async function POST(request: Request) {
         HTTP_STATUS.BAD_REQUEST,
       );
     }
+
+    // ⛔ **ここが #1368 の本体。** これが無いと、セッションを奪った第三者が
+    //   `setup` → `enable` の2手で**被害者のアカウントに自分の第2要素を
+    //   登録できる**。被害者にはメールが1通も届かない。
+    //
+    //   登録された第2要素は**乗っ取りの固定手段**になる。被害者が後から
+    //   パスワードを変えても攻撃者の TOTP は残り、被害者は自分が設定して
+    //   いない第2要素を求められる（リカバリーコードも持っていない）。
+    //
+    // ⚠️ **`startSecondFactorSetup` より前に置く。** 後ろだと、再認証で
+    //   落ちたときにはもう `user_totp` の行が作り直されている。
+    //
+    // ⚠️ `enable` 側には置かない。あちらは `setup` が作った保留行が無いと
+    //   何もできず、共有鍵も `setup` の応答にしか出ない。ここを塞げば
+    //   入口が無くなる。
+    const reauthResponse = await requireReauth(
+      supabase,
+      {
+        id: session.user.id,
+        email: user.email,
+        password_hash: user.password_hash,
+      },
+      { currentPassword, reauthCode },
+    );
+
+    if (reauthResponse) return reauthResponse;
 
     let setup;
     try {

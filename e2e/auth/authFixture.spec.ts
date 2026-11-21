@@ -23,6 +23,7 @@ import { runScopedEmail } from '../helpers/runScope';
 import {
   cleanupTotp,
   getTotpSecret,
+  reauthForSecondFactorSetup,
   totpCodeFromSecret,
 } from '../helpers/totp';
 
@@ -38,6 +39,8 @@ let userId = '';
 /** 設定画面から二段階認証を有効化する */
 async function enableTwoFactor(page: Page): Promise<void> {
   await page.goto('/settings');
+  // ⛔ 再認証（#1368）
+  await reauthForSecondFactorSetup(page, USER.password);
   await page.getByRole('button', { name: '認証アプリで設定する' }).click();
 
   // QRが出た時点で共有鍵がDBに入る。認証アプリで読み取る操作の代わり

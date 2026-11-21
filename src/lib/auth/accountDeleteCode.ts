@@ -12,34 +12,44 @@
  * ならない。`two_factor` を流用すると件名・本文が「二段階認証」になり、
  * 用途を明記して読み上げ型のソーシャルエンジニアリングを防ぐ設計（#648）が
  * 崩れる。
+ *
+ * ---
+ *
+ * **中身は `userBoundOtp.ts` に寄せてある（#1368）。**
+ *
+ * 二段階認証の設定（`second_factor_setup`）がまったく同じ形を必要としたため、
+ * 用途を引数にして1か所にまとめた。ここは用途を固定して渡すだけの薄い層で、
+ * 名前を残しているのは呼び出し側が「何のコードか」を取り違えないため。
+ *
+ * ⚠️ **複製に戻さないこと。** 以前はこのファイルが独自に実装しており、
+ * #1284 で直したはずの read-then-write（`attempts: row.attempts + 1`）が
+ * ここにだけ残っていた。同じ名前の2つの実装が逆のことをしている状態は、
+ * 片方を直してももう片方が腐る。
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { ACCOUNT_DELETE_OTP_ACTION } from '@/constants/accountDeleteCode';
-import { OTP_CONFIG } from '@/constants/otp';
-import { toDbError } from '@/lib/auth/dbError';
-import { generateOtpCode, hashOtpCode, sendOtpEmail } from '@/lib/otp';
-import { normalizeEmail } from '@/utils/email';
+import {
+  SEND_USER_BOUND_OTP_RESULT,
+  USER_BOUND_OTP_VERIFY_RESULT,
+  consumeUserBoundOtp,
+  sendUserBoundOtp,
+} from '@/lib/auth/userBoundOtp';
 
-/** 送信の結果 */
-export const SEND_ACCOUNT_DELETE_CODE_RESULT = {
-  SENT: 'sent',
-  /** 再送間隔の内側 */
-  THROTTLED: 'throttled',
-  /** 送信そのものに失敗した */
-  SEND_FAILED: 'send_failed',
-} as const;
+/**
+ * 送信の結果
+ *
+ * ⚠️ 値は `SEND_USER_BOUND_OTP_RESULT` と同一。別物にすると呼び出し側の
+ * 比較が静かに外れる
+ */
+export const SEND_ACCOUNT_DELETE_CODE_RESULT = SEND_USER_BOUND_OTP_RESULT;
 
 export type SendAccountDeleteCodeResult =
   (typeof SEND_ACCOUNT_DELETE_CODE_RESULT)[keyof typeof SEND_ACCOUNT_DELETE_CODE_RESULT];
 
 /** 検証の結果 */
-export const ACCOUNT_DELETE_VERIFY_RESULT = {
-  SUCCESS: 'success',
-  /** 不一致・期限切れ・試行回数超過。利用者には区別して返さない */
-  INVALID: 'invalid',
-} as const;
+export const ACCOUNT_DELETE_VERIFY_RESULT = USER_BOUND_OTP_VERIFY_RESULT;
 
 export type AccountDeleteVerifyResult =
   (typeof ACCOUNT_DELETE_VERIFY_RESULT)[keyof typeof ACCOUNT_DELETE_VERIFY_RESULT];
@@ -65,90 +75,7 @@ export async function sendAccountDeleteCode(
   userId: string,
   email: string,
 ): Promise<SendAccountDeleteCodeResult> {
-  const normalizedEmail = normalizeEmail(email);
-
-  // 再送間隔は**枠の消費より前に**判定する（枠はルート側が消費済み）。
-  //
-  // ⚠️ 利用者で絞る。宛先だけだと、同じアドレスを狙った別の行と混ざる
-  const { data: recent, error: recentError } = await supabase
-    .from('otp_codes')
-    .select('created_at')
-    .eq('user_id', userId)
-    .eq('action_type', ACCOUNT_DELETE_OTP_ACTION)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  // 握り潰すと「前回送信なし」に化け、DB が詰まっている間だけ再送間隔が
-  // 素通りする。メールボックスへの連投を止める仕組みなので、
-  // 効かない窓を作らない（#1164 と同じ理由）
-  if (recentError) {
-    throw toDbError(recentError, 'read otp_codes for account delete send');
-  }
-
-  if (recent) {
-    const elapsedSeconds =
-      (Date.now() - new Date(recent.created_at).getTime()) / 1000;
-
-    if (elapsedSeconds < OTP_CONFIG.RESEND_INTERVAL_SECONDS) {
-      return SEND_ACCOUNT_DELETE_CODE_RESULT.THROTTLED;
-    }
-  }
-
-  const code = generateOtpCode();
-
-  // 前のコードは無効にする。複数生きていると、古いコードでも通ってしまう
-  const { error: clearError } = await supabase
-    .from('otp_codes')
-    .delete()
-    .eq('user_id', userId)
-    .eq('action_type', ACCOUNT_DELETE_OTP_ACTION);
-
-  if (clearError) {
-    throw toDbError(clearError, 'clear previous account delete codes');
-  }
-
-  const { error: insertError } = await supabase.from('otp_codes').insert({
-    email: normalizedEmail,
-    // ⛔ **これが無いと発行者と削除対象の一致を確認できない**（#1359 の critical
-    //   と同じ形）。攻撃者が自分のアカウントで取ったコードを、奪った被害者の
-    //   セッションで使えてしまう
-    user_id: userId,
-    code_hash: hashOtpCode(code, normalizedEmail),
-    action_type: ACCOUNT_DELETE_OTP_ACTION,
-    expires_at: new Date(
-      Date.now() + OTP_CONFIG.EXPIRY_MINUTES * 60 * 1000,
-    ).toISOString(),
-  });
-
-  if (insertError) {
-    throw toDbError(insertError, 'insert account delete code');
-  }
-
-  const sent = await sendOtpEmail(
-    normalizedEmail,
-    code,
-    ACCOUNT_DELETE_OTP_ACTION,
-  );
-
-  if (!sent) {
-    // ⚠️ **枠は戻さない。行だけ消す。**
-    //
-    //   `.claude/rules/api-route.md`「失敗したとき、歯止めを全部手放さない」。
-    //   行を残すと、届いていないコードの行が根拠になって次の試行が
-    //   再送間隔に当たる（#1285 で直した誤解そのもの）。代わりに枠を数える
-    //   —— 失敗した送信も外部APIを1回消費しているので実態に合う。
-    //   残る歯止めは `ACCOUNT_DELETE_CODE_SEND`（5回/60分）。
-    await supabase
-      .from('otp_codes')
-      .delete()
-      .eq('user_id', userId)
-      .eq('action_type', ACCOUNT_DELETE_OTP_ACTION);
-
-    return SEND_ACCOUNT_DELETE_CODE_RESULT.SEND_FAILED;
-  }
-
-  return SEND_ACCOUNT_DELETE_CODE_RESULT.SENT;
+  return sendUserBoundOtp(supabase, userId, email, ACCOUNT_DELETE_OTP_ACTION);
 }
 
 /**
@@ -172,51 +99,11 @@ export async function consumeAccountDeleteCode(
   email: string,
   code: string,
 ): Promise<AccountDeleteVerifyResult> {
-  const normalizedEmail = normalizeEmail(email);
-
-  // 試行回数を先に見る。上限に達していたら照合せずに弾く。
-  // 素の UPDATE で加算すると6回目に chk_otp_attempts で 23514 になり、
-  // エラーを見ないと静かにカウントが止まる
-  const { data: row, error: rowError } = await supabase
-    .from('otp_codes')
-    .select('id, attempts')
-    .eq('user_id', userId)
-    .eq('action_type', ACCOUNT_DELETE_OTP_ACTION)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (rowError) throw toDbError(rowError, 'read otp_codes for account delete');
-
-  if (!row) return ACCOUNT_DELETE_VERIFY_RESULT.INVALID;
-
-  if (row.attempts >= OTP_CONFIG.MAX_ATTEMPTS) {
-    return ACCOUNT_DELETE_VERIFY_RESULT.INVALID;
-  }
-
-  const { data: deleted, error: deleteError } = await supabase
-    .from('otp_codes')
-    .delete()
-    .eq('user_id', userId)
-    .eq('action_type', ACCOUNT_DELETE_OTP_ACTION)
-    .eq('code_hash', hashOtpCode(code.trim(), normalizedEmail))
-    .gt('expires_at', new Date().toISOString())
-    .select('id');
-
-  if (deleteError) {
-    throw toDbError(deleteError, 'consume otp_codes for account delete');
-  }
-
-  if (!deleted || deleted.length === 0) {
-    // 不一致・期限切れのどちらでも加算する。
-    // 利用者には区別して返さないので、区別して数える意味もない
-    await supabase
-      .from('otp_codes')
-      .update({ attempts: row.attempts + 1 })
-      .eq('id', row.id);
-
-    return ACCOUNT_DELETE_VERIFY_RESULT.INVALID;
-  }
-
-  return ACCOUNT_DELETE_VERIFY_RESULT.SUCCESS;
+  return consumeUserBoundOtp(
+    supabase,
+    userId,
+    email,
+    ACCOUNT_DELETE_OTP_ACTION,
+    code,
+  );
 }

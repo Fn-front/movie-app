@@ -10,11 +10,15 @@
 import { NextResponse } from 'next/server';
 
 import { getAuthSession, unauthorizedResponse } from '@/helpers/auth';
+import { sendSecondFactorEnabledNotice } from '@/lib/auth/sendSecondFactorEnabledNotice';
 import {
   createServiceRoleClient,
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
-import { confirmSecondFactorSetup } from '@/lib/auth/totpSetup';
+import {
+  SECOND_FACTOR_SETUP_EXPIRED,
+  confirmSecondFactorSetup,
+} from '@/lib/auth/totpSetup';
 import { checkRateLimit, resetRateLimit } from '@/lib/rateLimit/rateLimit';
 import { totpEnableSchema } from '@/schema/totp';
 import { HTTP_STATUS, ERROR_CODE, RATE_LIMIT_ACTION } from '@/constants';
@@ -84,14 +88,31 @@ export async function POST(request: Request) {
     if (userError) throw userError;
     if (!user) return unauthorizedResponse();
 
-    const recoveryCodes = await confirmSecondFactorSetup(
+    const confirmed = await confirmSecondFactorSetup(
       supabase,
       session.user.id,
       result.data.code,
       user.email,
     );
 
-    if (!recoveryCodes) {
+    // ⚠️ **「コードが違う」と区別する**（#1368 の2回目レビュー）。
+    //   同じ文言にすると、届いたばかりの正しいコードを入れた利用者が
+    //   自分の入力を疑って再送と入力を繰り返し、`TOTP_SETTINGS_VERIFY` を
+    //   使い切る（5回で設定操作がまとめて15分 429）
+    if (confirmed === SECOND_FACTOR_SETUP_EXPIRED) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: ERROR_CODE.BAD_REQUEST,
+            message: TOTP_ERROR_MESSAGES.SETUP_EXPIRED,
+          },
+        },
+        { status: HTTP_STATUS.BAD_REQUEST },
+      );
+    }
+
+    if (!confirmed) {
       return NextResponse.json(
         {
           success: false,
@@ -110,12 +131,33 @@ export async function POST(request: Request) {
       RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
     );
 
+    // ⛔ **身に覚えのない登録に気づける唯一の手段**（#1368）。
+    //
+    //   第2要素が登録されると以降のログインにそのコードが要る。攻撃者が
+    //   登録した場合、被害者は自分が設定していない第2要素を求められ、
+    //   リカバリーコードも持っていない。
+    //
+    //   `totp/setup` の再認証で登録そのものは塞いだが、**通知が無いと
+    //   塞ぎ漏れがあったときに誰も気づけない**。
+    //
+    // ⚠️ **有効化が確定した後ろに、throw しうる処理を増やさない。**
+    //   ここで 500 にすると**リカバリーコードを一度も表示できない**まま
+    //   終わる（平文はこの応答にしか出ない）。
+    //
+    //   一度この通知のために `getSecondFactorMethod` を呼んでいたが、
+    //   あれは DB エラーで throw する（`secondFactor.ts` の `toDbError`）。
+    //   方式は `confirmSecondFactorSetup` が既に読んでいるので返させる。
+    //
+    //   `sendSecondFactorEnabledNotice` 自体は throw しない契約
+    //   （送信失敗は false を返すだけ）。戻り値も見ない
+    await sendSecondFactorEnabledNotice(user.email, confirmed.method);
+
     return NextResponse.json(
       {
         success: true,
         message: TOTP_ERROR_MESSAGES.ENABLED,
         // 平文はここでしか返さない。利用者が控えそこねたら再発行してもらう
-        data: { recoveryCodes },
+        data: { recoveryCodes: confirmed.codes },
       },
       { status: HTTP_STATUS.OK },
     );

@@ -62,6 +62,16 @@ export const TOTP_ERROR_MESSAGES = {
   ALREADY_ENABLED: '二段階認証は既に有効です。',
   /** 未設定 */
   NOT_CONFIGURED: '二段階認証が設定されていません。',
+  /**
+   * 設定途中のまま期限を過ぎた（#1368 の2回目レビュー）
+   *
+   * ⚠️ `INVALID_CODE`（「認証コードが正しくありません。」）にしない。
+   * 届いたばかりの正しいコードを入れた利用者が、自分の入力が悪いと誤解して
+   * **再送と入力を繰り返す**。失敗するたび `TOTP_SETTINGS_VERIFY` を消費し、
+   * 5回で設定操作がまとめて15分 429 になる。
+   */
+  SETUP_EXPIRED:
+    '設定の有効期限が切れました。お手数ですが最初からやり直してください。',
   /** 設定を開始していない */
   SETUP_NOT_STARTED: '設定が開始されていません。最初からやり直してください。',
   /** 有効化に成功 */
@@ -90,3 +100,18 @@ export const TOTP_SETTINGS_LIMIT = {
   maxAttempts: 5,
   windowMinutes: 15,
 } as const;
+
+/**
+ * 設定途中の行（`user_totp.confirmed_at IS NULL`）が有効でいられる時間（分）
+ *
+ * ⛔ **無期限にしない**（#1368 のレビュー）。`totp/enable` は保留行だけを
+ * 見るので、`totp/setup` の再認証を通り抜けた保留行が1つでもあると、
+ * **後からいつでも有効化できる**。再認証を足す前に作られた行がまさにそれで、
+ * 1回だけの掃除（`20261121090000_cleanup_unconfirmed_user_totp.sql`）に
+ * 加えて、ここで時間の上限も設ける。
+ *
+ * ⚠️ 短くしすぎない。QRを読み取って6桁を入れるまでの時間で、
+ * 認証アプリの追加に手間取る利用者もいる。メールOTP のコード自体は
+ * `OTP_CONFIG.EXPIRY_MINUTES`（30分）で別途切れる。
+ */
+export const TOTP_SETUP_PENDING_TTL_MINUTES = 60;

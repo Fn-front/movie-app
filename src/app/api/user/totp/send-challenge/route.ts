@@ -27,7 +27,7 @@ import {
   dbConnectionErrorResponse,
 } from '@/helpers/supabase';
 import { errorResponse } from '@/helpers/secondFactorGuard';
-import { getSecondFactorMethodIncludingPending } from '@/lib/auth/secondFactor';
+import { getSecondFactorSetupState } from '@/lib/auth/secondFactor';
 import {
   SEND_SECOND_FACTOR_RESULT,
   sendSecondFactorCode,
@@ -64,10 +64,22 @@ export async function POST() {
     //
     // 送り先はセッションのユーザーに固定されたまま（下の users 検索）なので、
     // 対象を広げても新しい攻撃面は増えない。
-    const method = await getSecondFactorMethodIncludingPending(
+    const { method, pendingExpired } = await getSecondFactorSetupState(
       supabase,
       session.user.id,
     );
+
+    // ⚠️ **期限切れは「未設定」と文言を分ける**（#1368 の3回目レビュー）。
+    //   コードが来ないとき利用者がまず押すのは再送で、そこで
+    //   「二段階認証が設定されていません。」が返ると、設定中の画面と
+    //   正面から矛盾する。画面側はこの文言で設定をやり直させる
+    if (pendingExpired) {
+      return errorResponse(
+        ERROR_CODE.BAD_REQUEST,
+        TOTP_ERROR_MESSAGES.SETUP_EXPIRED,
+        HTTP_STATUS.BAD_REQUEST,
+      );
+    }
 
     // TOTP の利用者には送らない。手元の認証アプリで作れるので不要だし、
     // 送れてしまうと「送信経路を1つ増やしただけ」になる

@@ -20,6 +20,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { ACCOUNT_DELETE_OTP_ACTION } from './accountDeleteCode';
+import { SECOND_FACTOR_SETUP_OTP_ACTION } from './secondFactorSetupCode';
 import { EMAIL_CHANGE_OTP_ACTION } from './emailChange';
 import { OTP_ACTION } from './otp';
 import { TWO_FACTOR_OTP_ACTION } from './secondFactor';
@@ -69,6 +70,7 @@ const INTERNAL_ACTIONS: string[] = [
   TWO_FACTOR_OTP_ACTION,
   EMAIL_CHANGE_OTP_ACTION,
   ACCOUNT_DELETE_OTP_ACTION,
+  SECOND_FACTOR_SETUP_OTP_ACTION,
 ];
 
 /**

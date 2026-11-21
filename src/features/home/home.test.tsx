@@ -28,15 +28,6 @@ jest.mock(
   }),
 );
 
-jest.mock(
-  '@/features/home/component/homeMovieDetailModal/homeMovieDetailModal',
-  () => ({
-    HomeMovieDetailModal: () => (
-      <div data-testid='home-movie-detail-modal'>映画詳細モーダル</div>
-    ),
-  }),
-);
-
 // --- Tests ---
 
 describe('HomePage', () => {
@@ -69,21 +60,20 @@ describe('HomePage', () => {
   });
 
   /**
-   * 詳細モーダルはホームに1つだけ
+   * ⛔ **ホームはモーダルを描かない**（#1077）
    *
-   * 以前は `NowShowingMovieList` と `RecommendationSection` が**両方**
-   * モーダルを描いていた。どちらも URL の `movie_id` を読むため、
-   * タイルを押すと2枚同時に開いていた（E2E が
-   * `getByRole('dialog') resolved to 2 elements` で落ちた / #1033）。
+   * 描くのは `AppLayout` の1箇所だけ。以前は `NowShowingMovieList` と
+   * `RecommendationSection` が両方描き、その後ホーム専用の1つにまとめ、
+   * 今回アプリ全体で1つに統合した。
    *
    * ⚠️ ここは**セクションがモーダルを描き直す退行は検出しない**。上で
-   * セクションを両方ともモックしているため、中身が見えないため。
-   * その退行は各セクションのテスト（`nowShowingMovieList.test.tsx` /
+   * セクションを両方ともモックしているため中身が見えない。その退行は
+   * 各セクションのテスト（`nowShowingMovieList.test.tsx` /
    * `recommendationSection.test.tsx` の「モーダル自体は描かない」）が受け持つ。
    */
-  it('詳細モーダルは1つだけ描かれる', () => {
+  it('ホーム自身はモーダルを描かない', () => {
     render(<HomePage nowShowingMovies={[]} />);
 
-    expect(screen.getAllByTestId('home-movie-detail-modal')).toHaveLength(1);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

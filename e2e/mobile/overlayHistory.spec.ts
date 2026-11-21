@@ -316,16 +316,21 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
 
     await movieButton.click();
 
-    // カレンダーが閉じて詳細が開く。エントリは引き継がれて残る
+    // カレンダーが閉じて詳細が開く
+    //
+    // ⚠️ **履歴の持ち方が変わった**（#1077）。以前はカレンダー経由だけ
+    //    ローカル state で開き、`useOverlayHistory` のエントリを積んでいた。
+    //    今は URL（`?movie_id=`）で開くので、積まれるのは**遷移のエントリ**。
+    //    リロードで復元でき、共有もできるようになった
     const detail = page.getByRole('dialog').last();
     await expect(detail).toBeVisible({ timeout: 15000 });
-    await expectEntryExists(page);
+    await expect(page).toHaveURL(/movie_id=\d+/);
 
     await page.goBack();
 
     // 1回目は詳細が閉じるだけ。ページからは出ない
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page).toHaveURL(/\/movies\/now-showing/);
+    await expect(page).toHaveURL(/\/movies\/now-showing$/);
     await waitForFold(page);
 
     await page.goBack();

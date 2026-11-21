@@ -9,6 +9,8 @@ import { memo, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { IoChevronForward } from 'react-icons/io5';
 
+import { useModalNavigation } from '@/components/ui/modal/modal';
+
 import {
   API,
   TMDB_IMAGE_SIZES,
@@ -50,11 +52,22 @@ export const CalendarMovieList = memo<CalendarMovieListProps>(
     selectedDate,
     onMovieClick,
   }) {
+    /**
+     * ⛔ **押す直前に申告する**（#1077）
+     *
+     * カレンダーは閉じると同時に詳細を開く。申告しないと、閉じる側の
+     * 畳み（`history.back()`。非同期）が後から届いて**詳細を開いた
+     * URL の更新を取り消す**。結果、押した直後にカレンダーが開き直る
+     * （実測）。`movieDetailContent` の人物ページ遷移と同じ経路。
+     */
+    const { notifyNavigating } = useModalNavigation();
+
     const handleMovieClick = useCallback(
       (tmdbMovieId: number) => {
+        notifyNavigating();
         onMovieClick?.(tmdbMovieId);
       },
-      [onMovieClick],
+      [notifyNavigating, onMovieClick],
     );
 
     // 選択日モードでは日付が見出しに出るため、行側では省略する

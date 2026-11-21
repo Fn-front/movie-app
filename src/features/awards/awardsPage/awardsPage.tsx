@@ -4,13 +4,11 @@
 
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 import { Loading } from '@/components/ui/loading/loading';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
-import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
-import { awardMovieToMovieCacheItem } from '@/utils/toMovieCacheItem';
+import { useOpenMovieDetail } from '@/features/movies/hooks/useMovieDetailQuery';
 import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
@@ -59,25 +57,15 @@ export const AwardsPage = memo(function AwardsPage() {
     isWatchlistResolving,
   } = useWatchlistToggle();
 
-  const { selectedMovieId, openMovieDetail, closeMovieDetail } =
-    useMovieDetailQuery();
-
-  // モーダルのタイトル用。お気に入りは結合しない（モーダル自体が
-  // 映画詳細APIの favorite を見るため、ここで結合しても効果が無い）
-  const selectedMovieTitle = useMemo(() => {
-    if (selectedMovieId === null) return undefined;
-
-    for (const award of data?.awards ?? []) {
-      for (const category of award.categories) {
-        const hit = category.nominees.find(
-          (nominee) => nominee.tmdbMovieId === selectedMovieId,
-        );
-        if (hit) return awardMovieToMovieCacheItem(hit).title;
-      }
-    }
-
-    return undefined;
-  }, [data?.awards, selectedMovieId]);
+  /**
+   * 詳細は URL（`?movie_id=`）で開く。モーダルを描くのは `AppLayout` の
+   * 1箇所だけ（#1077）。
+   *
+   * ⚠️ `useMovieDetailQuery` ではなく `useOpenMovieDetail` を使う。
+   * あちらは `useSearchParams` を読むので、開くだけの画面が使うと
+   * 静的プリレンダから外れる理由を増やすだけになる（#1115）。
+   */
+  const openMovieDetail = useOpenMovieDetail();
 
   if (isLoading) {
     return (
@@ -178,13 +166,6 @@ export const AwardsPage = memo(function AwardsPage() {
           </p>
         )}
       </div>
-      <MovieDetailModal
-        // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
-        manageHistory={false}
-        movieId={selectedMovieId}
-        title={selectedMovieTitle}
-        onClose={closeMovieDetail}
-      />
       <FavoriteRatingModal
         isOpen={favoriteModalState.isOpen}
         onClose={closeFavoriteModal}

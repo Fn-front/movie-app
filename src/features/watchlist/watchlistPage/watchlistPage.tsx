@@ -5,14 +5,13 @@
 
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 
 import { Button } from '@/components/ui/button/button';
 import { Select } from '@/components/ui/select/select';
 import { Loading } from '@/components/ui/loading/loading';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
 import { ViewModeToggle } from '@/components/ui/movie/viewModeToggle/viewModeToggle';
-import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
+import { useOpenMovieDetail } from '@/features/movies/hooks/useMovieDetailQuery';
 import { WATCHLIST_CLEANUP_LABELS } from '@/constants';
 import { StreamingSortHint } from '@/features/watchlist/component/streamingSortHint/streamingSortHint';
 import { WatchlistCleanupModal } from '@/features/watchlist/component/watchlistCleanupModal/watchlistCleanupModal';
@@ -60,8 +59,15 @@ export const WatchlistPage = memo(function WatchlistPage() {
     getFavoriteInfo,
   } = useFavoriteToggle();
 
-  const { selectedMovieId, openMovieDetail, closeMovieDetail } =
-    useMovieDetailQuery();
+  /**
+   * 詳細は URL（`?movie_id=`）で開く。モーダルを描くのは `AppLayout` の
+   * 1箇所だけ（#1077）。
+   *
+   * ⚠️ `useMovieDetailQuery` ではなく `useOpenMovieDetail` を使う。
+   * あちらは `useSearchParams` を読むので、開くだけの画面が使うと
+   * 静的プリレンダから外れる理由を増やすだけになる（#1115）。
+   */
+  const openMovieDetail = useOpenMovieDetail();
   const [isCleanupOpen, setIsCleanupOpen] = useState(false);
 
   const handleCleanupOpen = useCallback(() => {
@@ -91,12 +97,6 @@ export const WatchlistPage = memo(function WatchlistPage() {
       );
     },
     [setWatched, handleFavoriteToggle, getFavoriteInfo],
-  );
-
-  const selectedMovieTitle = useMemo(
-    () =>
-      watchlist.find((item) => item.tmdb_movie_id === selectedMovieId)?.title,
-    [watchlist, selectedMovieId],
   );
 
   const sentinelRef = useIntersectionObserver(fetchNextPage, {
@@ -147,15 +147,6 @@ export const WatchlistPage = memo(function WatchlistPage() {
           <Loading size='sm' />
         </div>
       )}
-
-      <MovieDetailModal
-        // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
-        manageHistory={false}
-        movieId={selectedMovieId}
-        title={selectedMovieTitle}
-        showFinancialInfo={false}
-        onClose={closeMovieDetail}
-      />
 
       <FavoriteRatingModal
         isOpen={favoriteModalState.isOpen}

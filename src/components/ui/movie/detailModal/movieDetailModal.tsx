@@ -9,6 +9,7 @@ import { memo, useCallback, useState } from 'react';
 
 import { Modal } from '@/components/ui/modal/modal';
 import { MovieDetailContent } from '@/features/movies/component/movieDetailContent/movieDetailContent';
+import { useMovieDetail } from '@/features/movies/hooks/useMovieDetail';
 import { MODAL_TITLES } from '@/constants';
 import { cn } from '@/utils/cn';
 
@@ -20,7 +21,12 @@ import styles from './movieDetailModal.module.scss';
 export interface MovieDetailModalProps {
   /** 表示する映画ID（nullの場合はモーダル非表示） */
   movieId: number | null;
-  /** モーダルタイトル（映画タイトルを表示） */
+  /**
+   * モーダルタイトル（映画タイトルを表示）
+   *
+   * ⚠️ **省略してよい。** 省くと取得済みの詳細から作品名を出す（#1077）。
+   * 一覧データを持たない呼び出し側（`AppLayout`）はこちらを使う。
+   */
   title?: string;
   /** 予算・興行収入を表示するか */
   showFinancialInfo?: boolean;
@@ -52,6 +58,19 @@ export const MovieDetailModal = memo<MovieDetailModalProps>(
   }) {
     const [isVideoDialogOpen, setIsVideoDialogOpen] = useState(false);
 
+    /**
+     * 作品名の出どころ（#1077）
+     *
+     * モーダルを描くのは `AppLayout` の1箇所だけになったが、あそこには
+     * 一覧データが無い。`MovieDetailContent` が使うのと**同じクエリキー**を
+     * 読むだけなので通信は増えない（React Query が購読を共有する）。
+     *
+     * ⚠️ 取得前は `undefined`。`MODAL_TITLES.MOVIE_DETAIL` に落ちてから
+     * 作品名へ変わるので、ダイアログのアクセシブルネームが一度変わる。
+     * 一覧データを持っている呼び出し側は `title` を渡せば従来どおり即座に出る。
+     */
+    const { movie } = useMovieDetail(movieId);
+
     const handleOpenChange = useCallback(
       (open: boolean) => {
         if (!open) {
@@ -65,7 +84,7 @@ export const MovieDetailModal = memo<MovieDetailModalProps>(
       <Modal
         open={movieId !== null}
         onOpenChange={handleOpenChange}
-        title={title ?? MODAL_TITLES.MOVIE_DETAIL}
+        title={title ?? movie?.title ?? MODAL_TITLES.MOVIE_DETAIL}
         size='lg'
         manageHistory={manageHistory}
         className={cn(isVideoDialogOpen && styles.c_movie_detail_modal__dimmed)}

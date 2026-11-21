@@ -16,40 +16,14 @@ jest.mock('@/features/movies/hooks/useShowFinancialInfo', () => ({
 
 // --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
 
-let mockSelectedMovieId: number | null = null;
 const mockOpenMovieDetail = jest.fn();
-const mockCloseMovieDetail = jest.fn();
 
+/**
+ * 詳細は URL（`?movie_id=`）で開く。モーダルを描くのは `AppLayout` の
+ * 1箇所だけ（#1077）。
+ */
 jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
-  useMovieDetailQuery: () => ({
-    selectedMovieId: mockSelectedMovieId,
-    openMovieDetail: mockOpenMovieDetail,
-    closeMovieDetail: mockCloseMovieDetail,
-  }),
-}));
-
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: ({
-    movieId,
-    title,
-    showFinancialInfo,
-    onClose,
-  }: {
-    movieId: number | null;
-    title?: string;
-    showFinancialInfo?: boolean;
-    onClose: () => void;
-  }) =>
-    movieId === null ? null : (
-      <div
-        data-testid='movie-detail-modal'
-        data-financial={String(Boolean(showFinancialInfo))}
-      >
-        <span>{`Movie ID: ${movieId}`}</span>
-        <span>{title}</span>
-        <button onClick={onClose}>閉じる</button>
-      </div>
-    ),
+  useOpenMovieDetail: () => mockOpenMovieDetail,
 }));
 
 jest.mock('@/hooks/useIntersectionObserver', () => ({
@@ -134,7 +108,6 @@ const createMockMovieList = (
 
 describe('MovieListContent', () => {
   beforeEach(() => {
-    mockSelectedMovieId = null;
     mockShowFinancialInfo = false;
   });
 

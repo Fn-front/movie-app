@@ -11,6 +11,24 @@ import { MovieDetailModal } from './movieDetailModal';
 
 let capturedOnOpenChange: ((open: boolean) => void) | undefined;
 
+/**
+ * 取得済みの詳細から作品名を出すようになった（#1077）
+ *
+ * ⚠️ 実体は API クライアント経由で `next-auth/react`（ESM）まで辿るため、
+ * モックしないと jest が読み込めない。
+ */
+const mockUseMovieDetail = jest.fn<
+  {
+    movie: { title: string } | undefined;
+    isLoading: boolean;
+    isError: boolean;
+  },
+  [number | null]
+>(() => ({ movie: undefined, isLoading: false, isError: false }));
+jest.mock('@/features/movies/hooks/useMovieDetail', () => ({
+  useMovieDetail: (movieId: number | null) => mockUseMovieDetail(movieId),
+}));
+
 jest.mock(
   '@/features/movies/component/movieDetailContent/movieDetailContent',
   () => ({
@@ -129,5 +147,65 @@ describe('MovieDetailModal', () => {
     expect(
       screen.queryByTestId('movie-detail-content'),
     ).not.toBeInTheDocument();
+  });
+  /**
+   * 作品名の出どころ（#1077）
+   *
+   * ⛔ モーダルを描くのは `AppLayout` の1箇所だけになったが、あそこには
+   * 一覧データが無い。取得済みの詳細から出せないと、どの作品を開いても
+   * ダイアログ名が「映画詳細」のままになる。
+   */
+  describe('作品名（#1077）', () => {
+    it('title を渡さなければ取得済みの詳細から出す', () => {
+      mockUseMovieDetail.mockReturnValue({
+        movie: { title: '取得した作品名' },
+        isLoading: false,
+        isError: false,
+      });
+
+      render(<MovieDetailModal movieId={123} onClose={jest.fn()} />);
+
+      expect(screen.getByTestId('modal')).toHaveAttribute(
+        'aria-label',
+        '取得した作品名',
+      );
+    });
+
+    /** ⚠️ 一覧データを持つ呼び出し側は従来どおり即座に出せる */
+    it('title を渡せばそちらが優先される', () => {
+      mockUseMovieDetail.mockReturnValue({
+        movie: { title: '取得した作品名' },
+        isLoading: false,
+        isError: false,
+      });
+
+      render(
+        <MovieDetailModal
+          movieId={123}
+          title='渡した名前'
+          onClose={jest.fn()}
+        />,
+      );
+
+      expect(screen.getByTestId('modal')).toHaveAttribute(
+        'aria-label',
+        '渡した名前',
+      );
+    });
+
+    it('取得前は既定の文言に落ちる', () => {
+      mockUseMovieDetail.mockReturnValue({
+        movie: undefined,
+        isLoading: true,
+        isError: false,
+      });
+
+      render(<MovieDetailModal movieId={123} onClose={jest.fn()} />);
+
+      expect(screen.getByTestId('modal')).toHaveAttribute(
+        'aria-label',
+        '映画詳細',
+      );
+    });
   });
 });

@@ -6,14 +6,12 @@
 
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 
 import { Tabs } from '@/components/ui/tabs/tabs';
 import { RELEASE_TYPE, RELEASE_TYPE_OPTIONS } from '@/constants';
 import { FilterModal } from '@/components/ui/movie/filterModal/filterModal';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
-import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
-import { useShowFinancialInfo } from '@/features/movies/hooks/useShowFinancialInfo';
+import { useOpenMovieDetail } from '@/features/movies/hooks/useMovieDetailQuery';
 import { useMovieListContent } from '@/features/movies/hooks/useMovieListContent';
 import type { UseMovieListReturn } from '@/features/movies/hooks/useMovieList';
 
@@ -68,17 +66,15 @@ export const MovieListContent = memo<MovieListContentProps>(
         handleFilterModalOpen,
       );
 
-    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
-      useMovieDetailQuery();
-
-    const selectedMovieTitle = useMemo(
-      () => movies.find((movie) => movie.id === selectedMovieId)?.title,
-      [movies, selectedMovieId],
-    );
-
-    // 予算・興行収入を出すのはこの一覧から開いたときだけ（main と同じ範囲）。
-    // 判定は一覧カードではなく詳細データで行う（#1033）
-    const showFinancialInfo = useShowFinancialInfo(selectedMovieId);
+    /**
+     * 詳細は URL（`?movie_id=`）で開く。モーダルを描くのは `AppLayout` の
+     * 1箇所だけ（#1077）。
+     *
+     * ⚠️ `useMovieDetailQuery` ではなく `useOpenMovieDetail` を使う。
+     * あちらは `useSearchParams` を読むので、開くだけの画面が使うと
+     * 静的プリレンダから外れる理由を増やすだけになる（#1115）。
+     */
+    const openMovieDetail = useOpenMovieDetail();
 
     // 配信予定タブだけは「いつ配信されるか」が知りたい情報のため、
     // release_date（多くは劇場公開日）ではなくデジタル公開日を見せる
@@ -131,15 +127,6 @@ export const MovieListContent = memo<MovieListContentProps>(
           selectedOfferTypes={selectedOfferTypes}
           selectedRegions={selectedRegions}
           onApply={handleFilterApply}
-        />
-
-        <MovieDetailModal
-          // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
-          manageHistory={false}
-          movieId={selectedMovieId}
-          title={selectedMovieTitle}
-          showFinancialInfo={showFinancialInfo}
-          onClose={closeMovieDetail}
         />
       </div>
     );

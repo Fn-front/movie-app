@@ -9,22 +9,15 @@ import { WatchlistPage } from './watchlistPage';
 import { ARIA_LABELS } from '@/constants';
 
 // --- Mocks ---
-// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
 
-let mockSelectedMovieId: number | null = null;
-const mockOpenMovieDetail = jest.fn((movieId: number) => {
-  mockSelectedMovieId = movieId;
-});
-const mockCloseMovieDetail = jest.fn(() => {
-  mockSelectedMovieId = null;
-});
+const mockOpenMovieDetail = jest.fn();
 
+/**
+ * 詳細は URL（`?movie_id=`）で開く。モーダルを描くのは `AppLayout` の
+ * 1箇所だけ（#1077）。
+ */
 jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
-  useMovieDetailQuery: () => ({
-    selectedMovieId: mockSelectedMovieId,
-    openMovieDetail: mockOpenMovieDetail,
-    closeMovieDetail: mockCloseMovieDetail,
-  }),
+  useOpenMovieDetail: () => mockOpenMovieDetail,
 }));
 
 const mockUseWatchlistPage = {
@@ -112,24 +105,6 @@ jest.mock('@/components/ui/movie/movieTileSkeleton/movieTileSkeleton', () => ({
   ),
 }));
 
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: ({
-    movieId,
-    onClose,
-  }: {
-    movieId: number | null;
-    onClose: () => void;
-  }) =>
-    movieId ? (
-      <div data-testid='movie-detail-modal'>
-        Movie {movieId}
-        <button data-testid='close-modal' onClick={onClose}>
-          閉じる
-        </button>
-      </div>
-    ) : null,
-}));
-
 // --- Helpers ---
 
 const createMockItems = (count: number) =>
@@ -149,7 +124,6 @@ describe('WatchlistPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // URL のクエリ相当。テスト間で持ち越すと前のテストのモーダルが残る
-    mockSelectedMovieId = null;
     mockUseWatchlistPage.watchlist = [];
     mockUseWatchlistPage.isLoading = false;
     mockUseWatchlistPage.isFetchingNextPage = false;
@@ -248,24 +222,18 @@ describe('WatchlistPage', () => {
     expect(mockOpenMovieDetail).toHaveBeenCalledWith(100);
   });
 
-  it('URLに movie_id があるとモーダルが出る', () => {
+  /**
+   * ⛔ **ページはモーダルを描かない**（#1077）
+   *
+   * 描くのは `AppLayout` の1箇所だけ。ここにも置くと、全ページに出る
+   * サイドバーと同じ `movie_id` を読んで2枚同時に開く（#1033 で実測）。
+   */
+  it('ページ自身はモーダルを描かない', () => {
     mockUseWatchlistPage.watchlist = createMockItems(1);
-    mockSelectedMovieId = 100;
 
     render(<WatchlistPage />);
 
-    expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
-  });
-
-  it('モーダルを閉じると closeMovieDetail が呼ばれる', async () => {
-    const user = userEvent.setup();
-    mockUseWatchlistPage.watchlist = createMockItems(1);
-    mockSelectedMovieId = 100;
-    render(<WatchlistPage />);
-
-    await user.click(screen.getByTestId('close-modal'));
-
-    expect(mockCloseMovieDetail).toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('削除でremoveFromWatchlistが呼ばれる', async () => {

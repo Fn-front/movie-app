@@ -39,80 +39,78 @@ export const expectEntryExists = (page: Page) =>
   expect.poll(() => overlayToken(page)).not.toBeNull();
 
 /**
- * 中央寄せのダイアログで、上端より上は必ずオーバーレイと言える最小の余白（px）。
+ * オーバーレイを押す位置（上端からの距離, px）
  *
- * これを下回るものは中央寄せではない（画面上端から始まるドロワー等）ので、
- * 座標クリックの前提が崩れる
+ * コンテンツは中央寄せなので、上端付近は必ずオーバーレイ。小さすぎると
+ * ビューポートの縁で丸められるため少し余裕を取る
  */
-const MIN_TOP_GAP = 8;
+const OVERLAY_CLICK_TOP = 10;
 
 /**
- * ダイアログの寸法が落ち着くまで待ってから位置を返す。
+ * モーダルのオーバーレイ（`modal.module.scss` の `&__overlay`）
  *
- * 中身を非同期に足すダイアログ（フィルターのジャンル一覧など）は、開いた直後は
- * まだ伸びている。中央寄せなので**伸びると上端が上へ動く**ため、先に測った
- * 「上端より上」の座標が、押す頃にはコンテンツの内側になっている。
- * そこを押すとダイアログの中を押すことになり、当然閉じない。
- *
- * もともと潜在していたレースで、`/movies/now-showing` のフィルターが
- * ジャンル取得を待つあいだに開くため表面化しやすい。ボトムナビ（#1028）が
- * 各ページで3〜5本の RSC プリフェッチを足したことで取得が後ろへずれ、
- * **毎回負けるようになった**（実測: 5回中5回失敗 → この待機で 5/5 成功）。
- *
- * 連続2回**同じ**矩形を読めたら落ち着いたとみなす。`expect.poll` の間隔は
- * 100ms 以上空くので、開くアニメーション（200ms）も自然に待てる
+ * `position: fixed; inset: 0` で画面全体を覆い、コンテンツはその上に乗る。
+ * **「ダイアログの外側」はこの要素そのもの**なので、座標を計算する必要が無い。
  */
-const waitForStableBox = async (dialog: Locator) => {
-  let previousKey = '';
-
-  await expect
-    .poll(
-      async () => {
-        const box = await dialog.boundingBox();
-        if (box === null) {
-          previousKey = '';
-          return false;
-        }
-
-        const key = [box.x, box.y, box.width, box.height]
-          .map((value) => Math.round(value))
-          .join(',');
-        const isStable = key === previousKey;
-        previousKey = key;
-        return isStable;
-      },
-      { message: 'ダイアログの寸法が落ち着きませんでした' },
-    )
-    .toBe(true);
-
-  return dialog.boundingBox();
-};
+const modalOverlay = (page: Page) =>
+  page.locator('[class*="c_modal__overlay"]');
 
 /**
  * ダイアログの外側をクリックして閉じる。
  *
- * コンテンツは中央寄せ（`modal.module.scss` の `top/left: 50%` + translate）なので、
- * **上端より上は必ずオーバーレイ**。`locator.click()` ではコンテンツに
- * 覆われた位置を押しに行くことがあるため、座標で指定する。
+ * ## 座標クリックをやめた理由（#1075）
  *
- * ⚠️ 中央寄せでないオーバーレイには使えない。ドロワー
- * （`mobileDrawer.module.scss` の `top: 0; left: 0; bottom: 0`）は上端が 0 なので、
- * 上半分を押すとドロワーの中身を押してしまう。**clamp して無理に押さず**、
- * 前提が崩れていることを失敗として出す
+ * 以前はダイアログの矩形を測って「上端より上」を `page.mouse.click` で
+ * 押していた。これは**断続的に落ちていた**（#1058 で追加 → #1066 で
+ * `waitForStableBox` を足して頻度は下がったが解消せず、#1067 のシャード3で
+ * 再発）。落ち方は常に「外側を押したのにダイアログが閉じていない」。
+ *
+ * ⛔ **`page.mouse.click` には当たり判定の検査が無い。** 指定した座標に何が
+ * あろうと押すだけなので、
+ *
+ * - 測ったあとに中身が伸びて上端が座標より上へ来ていた
+ * - トーストの viewport（`z-index: 1080`）がオーバーレイ（1050）より上に重なった
+ *
+ * のどちらでも、**何も起きないまま成功したことになる**。そのうえで
+ * `expect(dialog).not.toBeVisible()` が落ちるので、失敗を見ても原因が分からない。
+ *
+ * `locator.click()` ならオーバーレイが**実際に最前面であること**を
+ * Playwright が検査し、違えば「intercepts pointer events」と要素名付きで
+ * 落ちる。再現しない退行を「閉じない」ではなく「何に覆われたか」で受け取れる。
+ *
+ * ⚠️ **実際のポインタ操作であることは変わらない**（`dispatchEvent` には
+ * 逃げていない）。Radix の `onPointerDownOutside` は
+ * `ownerDocument.addEventListener('pointerdown', ...)` で待っており、
+ * `locator.click()` は本物の pointerdown を出す。
+ *
+ * ⚠️ Radix はこのリスナーを `setTimeout(..., 0)` で登録する
+ * （`@radix-ui/react-dismissable-layer` の `usePointerDownOutside`）。
+ * 開いた直後は外側クリックが効かない窓があるため、**可視になるのを
+ * 待ってから**押すこと（下の `waitFor`）。
+ *
+ * ⚠️ 中央寄せ専用ではなくなった。オーバーレイを持つモーダルなら
+ * ドロワーでも使える（以前は上端の余白が要り、`MIN_TOP_GAP` を
+ * 下回ると例外を投げていた）。
+ *
+ * @param page - 対象ページ
+ * @param dialog - 閉じたいダイアログ（可視になるまで待つために使う）
  */
 export const clickOutsideDialog = async (page: Page, dialog: Locator) => {
-  // 伸びている途中を測ると、押す頃には上端が座標より上へ来ている
-  const box = await waitForStableBox(dialog);
+  await dialog.waitFor({ state: 'visible' });
+
+  const overlay = modalOverlay(page).last();
+  await overlay.waitFor({ state: 'visible' });
+
+  /**
+   * ⚠️ 中央ではなく**上端付近**を押す。オーバーレイは画面全体を覆うので
+   * 中央はコンテンツに隠れており、`locator.click()` の既定（要素の中心）だと
+   * 「intercepts pointer events」で必ず落ちる。
+   */
+  const box = await overlay.boundingBox();
 
   if (!box) {
-    throw new Error('ダイアログの位置を取得できませんでした');
+    throw new Error('オーバーレイの位置を取得できませんでした');
   }
 
-  if (box.y < MIN_TOP_GAP) {
-    throw new Error(
-      `上端の余白が ${box.y}px しかありません。中央寄せでないオーバーレイには clickOutsideDialog を使えません`,
-    );
-  }
-
-  await page.mouse.click(box.x + box.width / 2, box.y / 2);
+  await overlay.click({ position: { x: box.width / 2, y: OVERLAY_CLICK_TOP } });
 };

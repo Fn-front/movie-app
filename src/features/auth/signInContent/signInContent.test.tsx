@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 
 import { PENDING_CALLBACK_URL_KEY as KEY } from '@/features/auth/utils/pendingCallbackUrl';
@@ -284,6 +285,81 @@ describe('SignInContent', () => {
       expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
         'data-callback',
         '',
+      );
+    });
+
+    /**
+     * effect が2回走っても失わない（#1383）
+     *
+     * `takePendingCallbackUrl` は**読むと同時に消す**ので、2回目は必ず
+     * `undefined` になる。結果をそのまま state へ入れていたため、2回目が
+     * 上書きして戻り先を失っていた。
+     *
+     * ⚠️ **`reactStrictMode: true` は本番ビルドでは effect を2回走らせない**
+     * ので、この退行は `npm run dev` でしか出なかった（#1293 の E2E が
+     * dev でだけ落ちていた）。単体テストでは `<StrictMode>` で明示的に
+     * 2回走らせて固定する。
+     */
+    describe('StrictMode（effect が2回走る）', () => {
+      it('2回目の undefined で上書きしない', () => {
+        window.sessionStorage.setItem(KEY, '/watchlist');
+        setLocation('?error=OAuthSignin');
+
+        render(
+          <StrictMode>
+            <SignInContent initialError='ログインに失敗しました' />
+          </StrictMode>,
+        );
+
+        expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
+          'data-callback',
+          '/watchlist',
+        );
+      });
+
+      it('error が無ければ、2回走っても預かり分は残らない', async () => {
+        window.sessionStorage.setItem(KEY, '/watchlist');
+
+        render(
+          <StrictMode>
+            <SignInContent />
+          </StrictMode>,
+        );
+
+        await waitFor(() =>
+          expect(window.sessionStorage.getItem(KEY)).toBeNull(),
+        );
+        expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
+          'data-callback',
+          '',
+        );
+      });
+    });
+
+    /**
+     * 預かり分を消費したあとに `initialError` が現れたら採る
+     *
+     * effect の deps が `[initialError]` なのはこのため。代替案の
+     * `if (!pending) return;` は**ここだけ**が壊れる（StrictMode の2回目は
+     * あちらでも防げるので、差が出るのはこのケースに限られる）。
+     */
+    it('error が後から来ても、消費済みの戻り先を採れる', async () => {
+      window.sessionStorage.setItem(KEY, '/watchlist');
+
+      const { rerender } = render(<SignInContent />);
+
+      // 1回目で預かり分は消費されている（残すと別経路の人が飛ばされる）
+      await waitFor(() =>
+        expect(window.sessionStorage.getItem(KEY)).toBeNull(),
+      );
+
+      rerender(<SignInContent initialError='ログインに失敗しました' />);
+
+      await waitFor(() =>
+        expect(screen.getByTestId('social-login-buttons')).toHaveAttribute(
+          'data-callback',
+          '/watchlist',
+        ),
       );
     });
   });

@@ -11,7 +11,7 @@
 
 'use client';
 
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 import { LoginForm } from '@/features/auth/loginForm/loginForm';
 import { takePendingCallbackUrl } from '@/features/auth/utils/pendingCallbackUrl';
@@ -77,17 +77,39 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
     string | undefined
   >(undefined);
 
+  /**
+   * 取り出せた戻り先を抱えておく（#1383）
+   *
+   * ⛔ **effect も1回で済むとは限らない。** `takePendingCallbackUrl` は
+   * 読むと同時に消すので、2回目は必ず `undefined` になる。結果をそのまま
+   * state へ入れていたため、**2回目が state を `undefined` で上書き**して
+   * 戻り先を失っていた。
+   *
+   * React StrictMode（`next.config.mjs` の `reactStrictMode: true`）の dev では
+   * effect が必ず2回走るため、**開発サーバーでは #1246 の修正が効いていない**
+   * 状態だった。本番は2回走らないので実害は出ていなかったが、再マウントで
+   * 同じことが起きる作りではある。
+   *
+   * ⚠️ 代替案の「`if (!pending) return;` で早期 return」**でも2回目は防げる**
+   * （実測。`takePendingCallbackUrl()` を return より前に呼ぶので
+   * 「採らない場合も消す」も壊れない）。それでも ref を採るのは、早期 return
+   * だと **`initialError` が後から来たときに採れなくなる**ため —— deps が
+   * `[initialError]` である理由がそれで、1回目で預かり分を消費したあとに
+   * エラーが現れると復元できない。この差は下のテストで固定している。
+   */
+  const pendingRef = useRef<string | undefined>(undefined);
+
   // `sessionStorage`（レンダーの外にある状態）を読み込むためのeffect。
   // 遷移に使うだけで描画はしないので、追加のレンダーは画面に出ない
-  /* eslint-disable react-hooks/set-state-in-effect */
+
   useEffect(() => {
-    const pending = takePendingCallbackUrl();
+    // 取り出せた回だけ覚える。2回目は undefined なので上書きしない
+    pendingRef.current = takePendingCallbackUrl() ?? pendingRef.current;
 
     if (initialError) {
-      setRestoredCallbackUrl(pending);
+      setRestoredCallbackUrl(pendingRef.current);
     }
   }, [initialError]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const effectiveCallbackUrl = callbackUrl ?? restoredCallbackUrl;
 

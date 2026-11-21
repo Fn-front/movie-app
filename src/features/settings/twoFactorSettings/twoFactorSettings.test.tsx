@@ -310,12 +310,50 @@ describe('TwoFactorSettings', () => {
        * ⚠️ 取得に失敗しても欄を消さない。APIを唯一の根拠にすると、
        * 状態取得が落ちた利用者にはどちらの欄も出なくなる。
        */
+      /**
+       * ⚠️ セッション側を `true` にすること。`false` だと「APIを唯一の
+       * 根拠にして `false` へ倒す」実装でも通ってしまい、名前と中身が
+       * ずれる（実測: `?? false` の変異でこのテストは緑のままだった）。
+       */
       it('APIが返さなければセッション由来の値を使う', async () => {
         mockFetch.mockResolvedValueOnce(statusResponse(false));
 
-        render(<TwoFactorSettings hasPassword={false} />);
+        render(<TwoFactorSettings hasPassword />);
 
+        expect(
+          await screen.findByLabelText('現在のパスワード'),
+        ).toBeInTheDocument();
+      });
+
+      /**
+       * 取得に失敗したときは今の値を保つ（#1372 のレビュー）
+       *
+       * ⚠️ `error` を立てないこと。利用者が触っているのは別の節
+       * （パスワード変更）なので、関係のないエラーを出す筋合いがない。
+       * 立てると、何もしていない節に赤いメッセージが出る。
+       */
+      it('合図のあと取得に失敗しても欄を変えず、エラーも出さない', async () => {
+        mockFetch.mockResolvedValueOnce(
+          statusResponse(false, 0, { hasPassword: false }),
+        );
+
+        render(<TwoFactorSettings hasPassword />);
         expect(await screen.findByLabelText('確認コード')).toBeInTheDocument();
+
+        mockFetch.mockResolvedValueOnce(
+          errorResponse(429, 'しばらく時間をおいてから再度お試しください。'),
+        );
+
+        await act(async () => {
+          window.dispatchEvent(new Event(PASSWORD_CHANGE_EVENT));
+        });
+
+        // 欄は取得できていた値のまま
+        expect(screen.getByLabelText('確認コード')).toBeInTheDocument();
+        expect(
+          screen.queryByLabelText('現在のパスワード'),
+        ).not.toBeInTheDocument();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       });
 
       /**

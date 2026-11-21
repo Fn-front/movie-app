@@ -340,8 +340,15 @@ export const TOAST_TITLES = {
  * トースト通知メッセージ
  */
 export const TOAST_MESSAGES = {
-  /** ログイン成功時の説明 */
+  /** ログイン成功時の説明（戻り先が無く、ホームへ行くとき） */
   LOGIN_SUCCESS_DESCRIPTION: 'ホーム画面に移動します。',
+  /**
+   * ログイン成功時の説明（戻り先があるとき / #1385）
+   *
+   * ⚠️ **遷移先のパスを文面に入れない。** `callbackUrl` は外から渡る値で、
+   * `resolveSafeCallbackUrl` を通った後でもそのまま画面に出したくない。
+   */
+  LOGIN_SUCCESS_REDIRECT_DESCRIPTION: '元のページに戻ります。',
   /** 登録成功時の説明 */
   REGISTER_SUCCESS_DESCRIPTION: '確認コードをメールに送信しました。',
   /** メール認証完了時の説明 */

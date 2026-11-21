@@ -7,6 +7,7 @@ import {
   AUTH_ERROR_CODE,
   AUTH_ERROR_MESSAGES,
   AUTH_HINTS,
+  TOAST_MESSAGES,
 } from '@/constants/auth';
 import { OTP_CONFIG } from '@/constants/otp';
 
@@ -340,6 +341,78 @@ describe('LoginForm', () => {
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith('/');
+    });
+  });
+
+  /**
+   * 成功トーストの文面が実際の行き先と一致する（#1385）
+   *
+   * 以前は固定で「ホーム画面に移動します。」だった。`/watchlist` へ誘導されて
+   * ログインした人は、ウォッチリストに着いているのにホームへ行くと言われる。
+   * 見えている画面と読み上げが食い違うので、スクリーンリーダー利用者に重い。
+   *
+   * ⚠️ 判定は**解決後の遷移先**で行う。prop の有無で分けると、弾かれた
+   * `callbackUrl`（ホームへ落ちる）で文面だけ「元のページに戻ります。」に
+   * なり、同じ食い違いが別の形で残る
+   */
+  describe('ログイン成功トーストの文面', () => {
+    /** 成功する signIn を仕込んでログインまで進める */
+    const loginWith = async (callbackUrl?: string) => {
+      mockSignIn.mockResolvedValue({
+        error: undefined,
+        code: undefined,
+        ok: true,
+        status: 200,
+        url: '/',
+      });
+
+      render(<LoginForm callbackUrl={callbackUrl} />);
+
+      await user.type(
+        screen.getByLabelText('メールアドレスまたはアカウント名'),
+        'test@example.com',
+      );
+      await user.type(screen.getByLabelText('パスワード'), 'Password1');
+      await user.click(screen.getByRole('button', { name: 'ログイン' }));
+    };
+
+    it('戻り先が無いときは「ホーム画面に移動します。」', async () => {
+      await loginWith();
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({
+            variant: 'success',
+            description: TOAST_MESSAGES.LOGIN_SUCCESS_DESCRIPTION,
+          }),
+        );
+      });
+    });
+
+    it('戻り先があるときは「元のページに戻ります。」', async () => {
+      await loginWith('/watchlist');
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({
+            variant: 'success',
+            description: TOAST_MESSAGES.LOGIN_SUCCESS_REDIRECT_DESCRIPTION,
+          }),
+        );
+      });
+    });
+
+    it('弾かれた callbackUrl はホームへ行くので、文面もホームになる', async () => {
+      await loginWith('https://evil.com/steal');
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/');
+      });
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: TOAST_MESSAGES.LOGIN_SUCCESS_DESCRIPTION,
+        }),
+      );
     });
   });
 

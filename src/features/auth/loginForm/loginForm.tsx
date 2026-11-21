@@ -243,13 +243,24 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
           return;
         }
 
+        /**
+         * 遷移先を**先に決めて**、文面と遷移の両方をこれ1つから導く（#1385）
+         *
+         * 2回呼ぶと、文面と実際の行き先が別々の判断になる。片方だけ直したときに
+         * また食い違うので、ここで確定させて使い回す。
+         */
+        const destination = resolveSafeCallbackUrl(callbackUrl);
+
         toast({
           title: TOAST_TITLES.LOGIN_SUCCESS,
-          description: TOAST_MESSAGES.LOGIN_SUCCESS_DESCRIPTION,
+          description:
+            destination === ROUTES.HOME
+              ? TOAST_MESSAGES.LOGIN_SUCCESS_DESCRIPTION
+              : TOAST_MESSAGES.LOGIN_SUCCESS_REDIRECT_DESCRIPTION,
           variant: 'success',
         });
 
-        router.push(resolveSafeCallbackUrl(callbackUrl));
+        router.push(destination);
       } catch (error) {
         const { message } = handleApiError(error);
         setApiError(message);

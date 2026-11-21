@@ -57,6 +57,13 @@ declare module 'next-auth' {
      * リカバリーコードしか残っていない。
      */
     secondFactorSendLimited?: boolean;
+    /**
+     * 送信上限だが、**受信箱のコードがまだ有効**（GHSA-p899-6g7w-v7hg）
+     *
+     * ⚠️ `secondFactorSendLimited` と分ける。あちらは出口がリカバリーコード
+     * しか無いが、こちらはメールで届いたコードがそのまま使える。
+     */
+    secondFactorCodeStillValid?: boolean;
   }
 
   interface User {
@@ -108,5 +115,7 @@ declare module 'next-auth/jwt' {
      * リカバリーコードしか残っていない。
      */
     secondFactorSendLimited?: boolean;
+    /** 送信上限だが受信箱のコードは有効（GHSA-p899-6g7w-v7hg） */
+    secondFactorCodeStillValid?: boolean;
   }
 }

@@ -663,6 +663,71 @@ describe('LoginForm', () => {
       });
 
       /**
+       * ⛔ **`sendLimited` を必ず落とす。**
+       *
+       * 残っているとヒント文が「発行済みのリカバリーコードを入力して
+       * ください。」のままで、アラートの「先ほど届いた確認コードを…」と
+       * **矛盾した2つの案内が同時に出る**。
+       */
+      it('先に送信上限だったときも案内が矛盾しない', async () => {
+        // 1回目: 出口はリカバリーコードだけ
+        mockSignIn.mockResolvedValue({
+          error: 'CredentialsSignin',
+          code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+        } as never);
+        render(<LoginForm />);
+
+        await submitCredentials();
+        await screen.findByRole('alert');
+
+        // 2回目: 受信箱のコードが有効になった
+        mockCodeStillValid();
+        await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+        expect(
+          await screen.findByText(/新しいコードは送っていません/),
+        ).toBeInTheDocument();
+        // ⛔ 「リカバリーコードだけ」の案内に戻っていないこと。
+        //    通常のヒント（メールのコードも使える）が出ている
+        expect(
+          screen.getByText(/メールに送信した6桁のコード/),
+        ).toBeInTheDocument();
+      });
+
+      /**
+       * ⛔ **状態を引きずらない。** 次に送信が通ったら元へ戻す。
+       *
+       * 戻さないと、新しいコードが届いているのに再送ボタンが消えたまま、
+       * 「新しいコードは送っていません」も残り続ける。
+       */
+      it('次に送信が通ったら元へ戻る', async () => {
+        mockCodeStillValid();
+        render(<LoginForm />);
+
+        await submitCredentials();
+        await screen.findByRole('alert');
+
+        // 再送ボタンは消えている
+        expect(
+          screen.queryByRole('button', { name: '確認コードを再送信する' }),
+        ).not.toBeInTheDocument();
+
+        // コード欄を空のまま送ると `!totpCode` 分岐へ戻る。
+        // 2回目は送信できた
+        mockSignIn.mockResolvedValue({
+          error: 'CredentialsSignin',
+          code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
+        } as never);
+        await user.click(screen.getByRole('button', { name: 'ログイン' }));
+
+        expect(
+          await screen.findByRole('button', {
+            name: '確認コードを再送信する',
+          }),
+        ).toBeInTheDocument();
+      });
+
+      /**
        * ⚠️ `sendLimited` と同じ扱いにしない。メールで届いたコードが
        * そのまま使えるので、リカバリーコードだけに絞ると遠回りさせる。
        */

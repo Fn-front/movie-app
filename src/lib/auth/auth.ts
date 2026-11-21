@@ -649,6 +649,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 )
                   ? true
                   : undefined;
+                // ⚠️ 上とは別物。受信箱のコードが使えるので、画面は
+                //    リカバリーコードへ誘導せず「新しくは送っていない」と出す
+                token.secondFactorCodeStillValid =
+                  sendResult ===
+                  SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID
+                    ? true
+                    : undefined;
               }
             }
           } else {
@@ -752,6 +759,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               )
                 ? true
                 : undefined;
+              // ⚠️ 再送でこれが返ると、画面は新しいコードが来たと誤解して
+              //    カウントダウンを戻すだけになる（無言の no-op）
+              token.secondFactorCodeStillValid =
+                sendResult ===
+                SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID
+                  ? true
+                  : undefined;
             }
           }
 
@@ -1021,6 +1035,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // 1通も送れていないので、コードを待たせずリカバリーコードへ誘導する
         session.secondFactorSendLimited = Boolean(
           token.secondFactorSendLimited,
+        );
+        // 新しくは送っていないが、受信箱のコードはまだ有効。
+        // 伝えないと、再送を押しても何も起きない無言の no-op になる
+        session.secondFactorCodeStillValid = Boolean(
+          token.secondFactorCodeStillValid,
         );
         return session;
       }

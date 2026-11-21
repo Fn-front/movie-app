@@ -346,6 +346,11 @@ describe('sendSecondFactorCode', () => {
       expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
       expect(mockSendOtpEmail).not.toHaveBeenCalled();
       expect(state.insertCalls).toBe(0);
+
+      // ⛔ **ここで戻さない。** 「戻すのは TWO_FACTOR_SEND に弾かれたときだけ」
+      //    が、枠の返却を安全だと言える唯一の根拠（マイグレーション参照）。
+      //    ここで戻すと、上限に達した送信元が何度でも叩けるようになる
+      expect(mockReleaseRateLimit).not.toHaveBeenCalled();
     });
 
     it('受信箱のコードが生きていれば LIMIT_EXCEEDED_CODE_VALID', async () => {
@@ -399,6 +404,30 @@ describe('sendSecondFactorCode', () => {
   });
 
   /**
+   * ⛔ **送れたら戻さない。** これが崩れると層そのものが消える。
+   *
+   * `releaseRateLimit` を `if (!limitResult.allowed)` の**外**へ出す変異
+   * （ごく普通のリファクタで起きうる形）で、消費と返却が毎回相殺し
+   * `TWO_FACTOR_SEND_PROMPT` が**上限に一度も到達しなくなる**。
+   * 単一IPで61秒間隔に10通送れる＝ GHSA-p899-6g7w-v7hg がそのまま復活する。
+   * それでも1044件すべて緑のまま通った（レビューで実測）。
+   */
+  it('送信できたら送信元ごとの枠を戻さない', async () => {
+    const state = freshState();
+
+    await expect(
+      sendSecondFactorCode(
+        createSupabaseMock(state),
+        USER_ID,
+        EMAIL,
+        PROMPT_IDENTIFIER,
+      ),
+    ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.SENT);
+
+    expect(mockReleaseRateLimit).not.toHaveBeenCalled();
+  });
+
+  /**
    * ⛔ **利用者単位の枠で弾かれたら、送信元ごとの枠を戻す。**
    *
    * 戻さないと、攻撃者に `TWO_FACTOR_SEND` を枯らされた被害者が、
@@ -427,6 +456,8 @@ describe('sendSecondFactorCode', () => {
       PROMPT_IDENTIFIER,
     );
 
+    // ⚠️ 回数も見る。`toHaveBeenCalledWith` だけだと2回呼ぶ変異が通る
+    expect(mockReleaseRateLimit).toHaveBeenCalledTimes(1);
     expect(mockReleaseRateLimit).toHaveBeenCalledWith(
       expect.anything(),
       PROMPT_IDENTIFIER,

@@ -50,6 +50,8 @@ interface UseTwoFactorChallengeResult {
    * `loginForm` は `!sendLimited` で隠しており、こちらだけ出ていた。
    */
   sendLimited: boolean;
+  /** 送信上限だが受信箱のコードは有効（GHSA-p899-6g7w-v7hg） */
+  codeStillValid: boolean;
   /** コードを送り直している最中か */
   isResending: boolean;
   /** 再送までの残り秒数 */
@@ -92,6 +94,13 @@ export function useTwoFactorChallenge({
    */
   const sendFailed = Boolean(session?.secondFactorSendFailed);
   const sendLimited = Boolean(session?.secondFactorSendLimited);
+  /**
+   * 送信上限だが、受信箱のコードはまだ有効（GHSA-p899-6g7w-v7hg）
+   *
+   * ⚠️ `sendLimited` と分ける。あちらは出口がリカバリーコードだけだが、
+   * こちらはメールで届いたコードがそのまま使える。
+   */
+  const codeStillValid = Boolean(session?.secondFactorCodeStillValid);
 
   const {
     remaining: resendRemaining,
@@ -100,6 +109,10 @@ export function useTwoFactorChallenge({
   } = useResendCountdown(OTP_CONFIG.RESEND_INTERVAL_SECONDS);
 
   // 検証中・ログアウト中は押させない（理由は `onResend` のコメント）
+  //
+  // ⚠️ `sendLimited` / `codeStillValid` はここで見ない。どちらも
+  //    **ボタンごと出さない**（`twoFactorChallenge.tsx`）ので、ここに足しても
+  //    観測できる違いが無く、テストで固定できない条件になる
   const canResend = countdownDone && !isSubmitting && !isCancelling;
 
   // 送信上限のほうを優先する。こちらは「待っても送られない」ので、
@@ -108,7 +121,11 @@ export function useTwoFactorChallenge({
     ? AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_LIMITED
     : sendFailed
       ? AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_FAILED
-      : null;
+      : // ⚠️ 上2つの後ろに置く。どちらも「1通も届いていない」ので先に出す。
+        // こちらは受信箱のコードが使えるぶん軽い
+        codeStillValid
+        ? AUTH_ERROR_MESSAGES.SECOND_FACTOR_CODE_STILL_VALID
+        : null;
 
   const onCodeChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -198,6 +215,9 @@ export function useTwoFactorChallenge({
 
     try {
       await update({ resend: true });
+      // ⚠️ `restart()` は無条件。送信上限で1通も出なかった場合も
+      //    カウントダウンだけ振り出しに戻る形になるが、その状態は
+      //    `sendNotice` が文言で伝え、下の `canResend` が押せなくする
       restart();
     } catch {
       setError(AUTH_ERROR_MESSAGES.SECOND_FACTOR_SEND_FAILED);
@@ -239,6 +259,7 @@ export function useTwoFactorChallenge({
     error,
     sendNotice,
     sendLimited,
+    codeStillValid,
     isSubmitting,
     isCancelling,
     isEmailOtp,

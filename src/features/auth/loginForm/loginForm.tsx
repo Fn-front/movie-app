@@ -195,6 +195,10 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
             // 再送できる」ように見えるが、押しても何も起きない
             setSecondFactorMode(SECOND_FACTOR_METHOD.EMAIL_OTP);
             setCodeStillValid(true);
+            // ⚠️ 必ず落とす。残っているとヒント文が
+            //    「発行済みのリカバリーコードを入力してください。」のままで、
+            //    アラートの「先ほど届いた確認コードを…」と矛盾する
+            setSendLimited(false);
             setApiError(resolveErrorMessage(result.code));
             return;
           }
@@ -223,6 +227,8 @@ export const LoginForm = memo<LoginFormProps>(function LoginForm({
           ) {
             setSecondFactorMode(SECOND_FACTOR_METHOD.EMAIL_OTP);
             setSendLimited(true);
+            // 逆向きも落とす（上と対称）
+            setCodeStillValid(false);
             setApiError(resolveErrorMessage(result.code));
             return;
           }

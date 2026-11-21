@@ -1385,6 +1385,35 @@ describe('session コールバック', () => {
    * 出られないまま留まる。実装側に順序を促すコメントが無いので、
    * テストで固定しておく
    */
+  /**
+   * ⛔ **第2要素の送信結果をセッションへ渡す**（GHSA-p899-6g7w-v7hg）。
+   *
+   * ここで落とすと画面は何も知らないまま再送ボタンを出し、押しても
+   * 1通も出ず・エラーも出ない無言の no-op になる。
+   */
+  it.each([
+    ['secondFactorSendFailed'],
+    ['secondFactorSendLimited'],
+    ['secondFactorCodeStillValid'],
+  ])('%s をセッションへ渡す', async (flag) => {
+    const result = await session({
+      session: { user: { id: 'u1', email: 'a@example.com' } },
+      token: { id: 'u1', totpPending: true, [flag]: true },
+    });
+
+    expect(result[flag as keyof typeof result]).toBe(true);
+  });
+
+  it('立っていないフラグは false で渡す', async () => {
+    const result = await session({
+      session: { user: { id: 'u1', email: 'a@example.com' } },
+      token: { id: 'u1', totpPending: true },
+    });
+
+    expect(result.secondFactorSendLimited).toBe(false);
+    expect(result.secondFactorCodeStillValid).toBe(false);
+  });
+
   it('invalidated が totpPending より優先される（失効セッションに totpPending を付けない）', async () => {
     const result = await session({
       session: { user: { id: 'u1', email: 'a@example.com' } },
@@ -2349,6 +2378,57 @@ describe('jwt コールバックの例外', () => {
         account: { provider: 'google' },
       });
 
+    /**
+     * ⛔ **OAuth の初回送信でも出口を固定する**（GHSA-p899-6g7w-v7hg）。
+     *
+     * この代入を `undefined` に潰す変異が1044件すべて緑のまま通った
+     * （レビューで実測）。`isSecondFactorSendDeadEnd` へ集約しても、
+     * 呼び出し側が実際にそれを使っている保証にはならない。
+     */
+    describe('メールOTP の初回送信', () => {
+      const signInWithSendResult = (sendResult: string) => {
+        setResolver(() => ({ data: { role: 'user' }, error: null }));
+        mockGetSecondFactorMethod.mockResolvedValue(
+          SECOND_FACTOR_METHOD.EMAIL_OTP,
+        );
+        mockSendSecondFactorCode.mockResolvedValue(sendResult);
+
+        return oauthSignIn();
+      };
+
+      it('送信上限なら sendLimited を立てる', async () => {
+        const token = await signInWithSendResult('limit_exceeded');
+
+        expect(token.secondFactorSendLimited).toBe(true);
+        expect(token.secondFactorCodeStillValid).toBeUndefined();
+      });
+
+      /**
+       * ⚠️ 受信箱のコードが有効なら **sendLimited は立てない**。
+       * リカバリーコードへ誘導してしまう。
+       */
+      it('上限でもコードが有効なら codeStillValid だけ立てる', async () => {
+        const token = await signInWithSendResult('limit_exceeded_code_valid');
+
+        expect(token.secondFactorCodeStillValid).toBe(true);
+        expect(token.secondFactorSendLimited).toBeUndefined();
+      });
+
+      it('送信できたらどちらも立てない', async () => {
+        const token = await signInWithSendResult('sent');
+
+        expect(token.secondFactorSendLimited).toBeUndefined();
+        expect(token.secondFactorCodeStillValid).toBeUndefined();
+      });
+
+      it('送信失敗なら sendFailed を立てる', async () => {
+        const token = await signInWithSendResult('send_failed');
+
+        expect(token.secondFactorSendFailed).toBe(true);
+        expect(token.secondFactorSendLimited).toBeUndefined();
+      });
+    });
+
     it('二段階認証の判定が落ちたら例外を外へ出す（セッションを発行させない）', async () => {
       setResolver(() => ({ data: { role: 'user' }, error: null }));
       mockGetSecondFactorMethod.mockRejectedValue(
@@ -3055,6 +3135,62 @@ describe('jwt / session の第2要素（OAuth 経路）', () => {
 
     expect(token.secondFactorSendFailed).toBeUndefined();
     expect(mockSendSecondFactorCode).toHaveBeenCalled();
+  });
+
+  /**
+   * ⛔ **OAuth の再送でも出口を固定する**（GHSA-p899-6g7w-v7hg）。
+   *
+   * `secondFactorSendLimited` のアサーションが**1件も無かった**ため、
+   * この代入を `undefined` に潰す変異が1044件すべて緑のまま通った
+   * （レビューで実測）。`isSecondFactorSendDeadEnd` へ集約しても、
+   * 呼び出し側が実際にそれを使っている保証にはならない。
+   */
+  describe('再送の結果をセッションへ伝える', () => {
+    const resend = (sendResult: string) => {
+      mockSendSecondFactorCode.mockResolvedValue(sendResult);
+
+      return jwt({
+        token: {
+          id: USER_ID,
+          totpPending: true,
+          secondFactorMethod: SECOND_FACTOR_METHOD.EMAIL_OTP,
+        },
+        trigger: 'update',
+        session: { resend: true },
+      });
+    };
+
+    it('送信上限なら sendLimited を立てる', async () => {
+      const token = await resend('limit_exceeded');
+
+      expect(token.secondFactorSendLimited).toBe(true);
+      expect(token.secondFactorCodeStillValid).toBeUndefined();
+    });
+
+    /**
+     * ⚠️ 受信箱のコードが有効なら **sendLimited は立てない**。
+     * リカバリーコードへ誘導してしまう。
+     */
+    it('上限でもコードが有効なら codeStillValid だけ立てる', async () => {
+      const token = await resend('limit_exceeded_code_valid');
+
+      expect(token.secondFactorCodeStillValid).toBe(true);
+      expect(token.secondFactorSendLimited).toBeUndefined();
+    });
+
+    it('送信できたらどちらも立てない', async () => {
+      const token = await resend('sent');
+
+      expect(token.secondFactorSendLimited).toBeUndefined();
+      expect(token.secondFactorCodeStillValid).toBeUndefined();
+    });
+
+    it('送信失敗なら sendFailed を立てる', async () => {
+      const token = await resend('send_failed');
+
+      expect(token.secondFactorSendFailed).toBe(true);
+      expect(token.secondFactorSendLimited).toBeUndefined();
+    });
   });
 
   /**

@@ -28,6 +28,7 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
       error,
       sendNotice,
       sendLimited,
+      codeStillValid,
       isSubmitting,
       isCancelling,
       isEmailOtp,
@@ -105,7 +106,7 @@ export const TwoFactorChallenge = memo<TwoFactorChallengeProps>(
           ⚠️ 送信上限に達しているときも出さない。押しても同じ 429 が返る
           だけで、出口はリカバリーコードしかない（`loginForm` と揃える）。
         */}
-        {isEmailOtp && !sendLimited && (
+        {isEmailOtp && !sendLimited && !codeStillValid && (
           <div className={styles.c_two_factor__resend}>
             {/*
               `isLoading` ではなく文言の差し替えで進行を伝える。

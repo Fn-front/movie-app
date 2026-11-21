@@ -55,8 +55,28 @@ function getSnapshot(): MovieViewMode {
 /**
  * SSR と、ハイドレーション時の初回レンダーで使われる値
  *
- * 静的プリレンダした HTML はグリッドなので、ここも既定を返して揃える。
- * リスト設定の利用者はマウント直後に1度だけ切り替わる
+ * ⛔ **保存値を返してはいけない。** サーバー出力と食い違って hydration
+ * mismatch になる（`useMovieViewMode.test.ts` に回帰テストがある）。
+ *
+ * ## リスト設定の利用者が1度グリッドを見るか（#1048 で実測）
+ *
+ * **本番ビルドでは見ない。** 一覧は `useSearchParams` を使うため
+ * `<Suspense>` 配下が CSR へ退避し、**ハイドレーション対象にならない**。
+ * React はここではなく `getSnapshot`（保存値）を直接使う。
+ *
+ * | | `/movies/now-showing` | `/search` |
+ * |---|---|---|
+ * | `next dev` | グリッド相**あり** | 無し |
+ * | `next start`（本番ビルド） | 無し | 無し |
+ *
+ * dev で見えるのは on-demand SSR でハイドレーションされるため。利用者が
+ * 触るのは本番ビルドだけなので**直さずに許容し**、退行だけを
+ * `e2e/mobile/movieViewModeFlash.spec.ts` で見張っている。
+ *
+ * ⚠️ この結論は `/movies/*` が**静的プリレンダ＋CSR bailout のまま**で
+ * あることに依存する。PPR / Cache Components を有効にする、
+ * `force-dynamic` にする、一覧から `useSearchParams` を外す —— のいずれかで
+ * 前提が消え、**本番でもグリッド相が出る**。そのとき上の E2E が落ちる。
  */
 function getServerSnapshot(): MovieViewMode {
   return DEFAULT_MOVIE_VIEW_MODE;

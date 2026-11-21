@@ -70,8 +70,8 @@ src/app/api/<route-path>/
 ```typescript
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+
+import { getAuthSession } from '@/helpers/auth';
 
 // リクエストボディのバリデーションスキーマ
 const requestSchema = z.object({
@@ -81,7 +81,7 @@ const requestSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     // 1. 認証チェック（必要な場合）
-    const session = await getServerSession(authOptions);
+    const session = await getAuthSession();
     if (!session) {
       return NextResponse.json(
         {
@@ -262,7 +262,7 @@ async function resetRateLimit(
 ### 認証チェック
 
 ```typescript
-const session = await getServerSession(authOptions);
+const session = await getAuthSession();
 if (!session) {
   return NextResponse.json(
     {

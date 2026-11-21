@@ -321,19 +321,27 @@ export default function Page() {
 
 ```typescript
 import { redirect } from 'next/navigation';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+
+import { ROUTES } from '@/constants/common';
+import { getAuthSession } from '@/helpers/auth';
 
 export default async function ProtectedPage() {
-  const session = await getServerSession(authOptions);
+  const session = await getAuthSession();
 
   if (!session) {
-    redirect('/login');
+    redirect(ROUTES.LOGIN);
   }
 
   return <div>保護されたコンテンツ</div>;
 }
 ```
+
+> ⚠️ 保護されたページは `src/proxy.ts` でもリダイレクトしているが、
+> **ここでも確認する**。proxy はネットワーク層の体裁に過ぎず、認可の最終
+> 判定はページ側・Route Handler 側に置く方針（`src/proxy.ts` の冒頭）。
+>
+> ⚠️ リダイレクト先をベタ書きしない。`ROUTES.LOGIN` は `/auth/signin` で、
+> `/login` は**このリポジトリに存在しない**。
 
 ### Client Componentで認証チェック
 

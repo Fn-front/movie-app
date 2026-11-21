@@ -1,28 +1,40 @@
 ---
 name: middleware
-description: Create Next.js Middleware for route protection and request handling
+description: Create Next.js Proxy (formerly Middleware) for route protection and request handling
 disable-model-invocation: true
 ---
 
-# Next.js Middleware作成スキル
+# Next.js Proxy（旧 Middleware）作成スキル
 
-このスキルは、Next.js Middlewareを使った認証チェック、リダイレクト、リクエスト処理を実装します。
+このスキルは、リクエストがアプリに届く前に走る処理 —— 認証チェック、
+リダイレクト、ヘッダ・Cookie 操作 —— を実装します。
+
+> ⚠️ **Next.js 16 で Middleware は Proxy に改名された。** 機能は同じ。
+> `middleware.js` の規約は**非推奨**で、`proxy.js` を見る
+> （`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/middleware.md`）。
+>
+> スキル名が `/middleware` のままなのは、呼び出し側の慣れを壊さないため。
+> **中身はすべて proxy 前提**で読むこと。
 
 ## 必須要件
 
 ### アーキテクチャ原則
 
-- **認証チェック**: NextAuth.jsセッション確認
-- **パフォーマンス**: 軽量な処理のみ実行
+- **認証チェック**: NextAuth.js（v5）の `auth()` ラッパを使う
+- **パフォーマンス**: 軽量な処理のみ。重いデータ取得は置かない
 - **matcher**: 対象ルートを明示的に指定
-- **Edge Runtime**: エッジで実行（制限あり）
+- **最終判定はここではない**: proxy はネットワーク層のリダイレクト／リライトに
+  徹し、認可の最終判定は Server Components / Route Handlers 側でも二重に行う
 
 ## ファイル配置
 
 ```
 src/
-└── middleware.ts
+└── proxy.ts
 ```
+
+- **プロジェクトに1つだけ**。`app` / `pages` と同じ階層に置く
+- ロジックを分けたいときは別ファイルへ切り出して `proxy.ts` から import する
 
 ## 基本テンプレート
 
@@ -30,9 +42,8 @@ src/
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
-  // Middleware処理
-
+// 名前付き `proxy`、または default export のどちらか
+export function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
@@ -40,103 +51,96 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
-     * - api/auth (NextAuth.js routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization)
-     * - favicon.ico (favicon)
-     * - public folder
+     * 次を除くすべてのパスにマッチ:
+     * - _next/static (静的ファイル)
+     * - _next/image (画像最適化)
+     * - favicon.ico
+     * - 画像の拡張子
      */
-    '/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
 ```
 
-## 認証保護パターン
+> ⚠️ **`export function middleware` にしない。** Next 16 が探すのは
+> `proxy`（名前付き）か default export。名前が違うと**何も起きない**まま
+> 通過するので、認証保護を書いたつもりで無防備になる。
 
-### NextAuth.jsセッションチェック
+## 実行環境（Edge ではない）
 
-```typescript
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+**Next 16 の Proxy は既定で Node.js ランタイム**で動く
+（`proxy.md` の「Proxy defaults to using the Node.js runtime」）。
 
-// 認証が必要なパス
-const protectedPaths = ['/home', '/calendar', '/search', '/settings'];
+- `runtime` の config は**指定できない**。書くとエラーになる
+- Node.js の標準ライブラリや DB クライアントも動く。実際に
+  `src/proxy.ts` は `@/lib/auth/auth`（Supabase クライアントを含む）を import している
 
-// 認証済みユーザーがアクセスできないパス
-const authPaths = ['/login', '/register', '/verify-otp'];
+⚠️ 「Edge だから Node API が使えない」という前提で書かないこと。
+Middleware が Edge 固定だったのは Next 15.2 より前の話。
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+ただし**重い処理を置かない**方針は変わらない。ここは全リクエストの手前で
+走るため、遅い取得を挟むと全ページが遅くなる。
 
-  // トークン取得
-  const token = await getToken({
-    req: request,
-    secret: process.env.NEXTAUTH_SECRET,
-  });
+## 認証保護パターン（このリポジトリの実装）
 
-  const isAuthenticated = !!token;
-
-  // 保護されたパスへのアクセス
-  if (protectedPaths.some((path) => pathname.startsWith(path))) {
-    if (!isAuthenticated) {
-      const url = new URL('/login', request.url);
-      url.searchParams.set('callbackUrl', pathname);
-      return NextResponse.redirect(url);
-    }
-  }
-
-  // 認証ページへのアクセス（既にログイン済み）
-  if (authPaths.some((path) => pathname.startsWith(path))) {
-    if (isAuthenticated) {
-      return NextResponse.redirect(new URL('/home', request.url));
-    }
-  }
-
-  return NextResponse.next();
-}
-
-export const config = {
-  matcher: [
-    '/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
-};
-```
-
-## メール認証チェック
+NextAuth v5 は `auth()` でハンドラを包むと `req.auth` にセッションが入る。
 
 ```typescript
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { getToken } from 'next-auth/jwt';
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+import { auth } from '@/lib/auth/auth';
+import { ROUTES, AUTH_REQUIRED_ROUTES } from '@/constants/common';
 
-  const token = await getToken({
-    req: request,
-    secret: process.env.NEXTAUTH_SECRET,
-  });
+export const proxy = auth((req) => {
+  const { nextUrl } = req;
 
-  // 保護されたパスへのアクセス
-  if (pathname.startsWith('/home') || pathname.startsWith('/calendar')) {
-    if (!token) {
-      // 未認証: ログインページへ
-      const url = new URL('/login', request.url);
-      url.searchParams.set('callbackUrl', pathname);
-      return NextResponse.redirect(url);
-    }
+  // ⚠️ 無効化済みセッションでも session コールバックは user を空文字で
+  //    埋めたオブジェクトを返すため `req.auth` 自体は truthy になる。
+  //    存在確認では判定できず、id の有無で見る必要がある
+  const isAuthenticated = !!req.auth?.user?.id;
 
-    // メール未認証: OTP検証ページへ
-    if (!token.isVerified) {
-      return NextResponse.redirect(new URL('/verify-otp', request.url));
-    }
+  const isProtectedPath = AUTH_REQUIRED_ROUTES.some((path) =>
+    nextUrl.pathname.startsWith(path),
+  );
+
+  if (isProtectedPath && !isAuthenticated) {
+    const signInUrl = new URL(ROUTES.LOGIN, nextUrl);
+    // ログイン後に元のページへ戻す
+    signInUrl.searchParams.set(
+      'callbackUrl',
+      nextUrl.pathname + nextUrl.search,
+    );
+
+    return NextResponse.redirect(signInUrl);
   }
 
   return NextResponse.next();
+});
+```
+
+> ⛔ **`getToken()` を使わない。** NextAuth v4 のAPIで、このリポジトリには
+> 1か所も無い。v5 では `auth()` ラッパが同じ役割を担う。
+>
+> ⚠️ パスは**ベタ書きしない**。`src/constants/common.ts` の `ROUTES` /
+> `AUTH_REQUIRED_ROUTES` / `ADMIN_REQUIRED_ROUTES` を使う。proxy と
+> ナビゲーションで定義を共有しており、片方だけ変えると
+> 「ナビには出るのにアクセスできない」状態になる。
+
+### `/api/*` は判定を飛ばすが、matcher からは外さない
+
+```typescript
+if (nextUrl.pathname.startsWith('/api/')) {
+  return NextResponse.next();
 }
 ```
+
+- NextAuth 自身のエンドポイント（`/api/auth/*`）を阻害しないため
+- API の認可は各 Route Handler が自前で行うため（`withAuth` / `withAdminAuth`）
+
+⚠️ **matcher から外さないこと。** 判定を飛ばしても**セッションの読み取りは
+既に終わっており**、更新後の Cookie の保存もそこで行われる。matcher から
+外すとその保存ごと失われ、API を叩くほど DB 往復が増える（#1281。実測は
+`src/proxy.ts` の `config` のコメント）。
 
 ## Cookie操作
 
@@ -144,7 +148,7 @@ export async function middleware(request: NextRequest) {
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const response = NextResponse.next();
 
   // Cookieを設定
@@ -152,7 +156,7 @@ export function middleware(request: NextRequest) {
     path: '/',
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 7日間
   });
 
@@ -164,7 +168,7 @@ export function middleware(request: NextRequest) {
     path: '/',
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 0,
   });
 
@@ -205,13 +209,22 @@ custom-cookie=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
 > `src/constants/auth.ts` の `getSessionCookieName()` /
 > `getSessionCookieOptions()` に集約し、`auth.ts` と `proxy.ts` で共有している。
 
+```typescript
+import { getSessionCookieName, getSessionCookieOptions } from '@/constants/auth';
+
+response.cookies.set(getSessionCookieName(), '', {
+  ...getSessionCookieOptions(),
+  maxAge: 0,
+});
+```
+
 ## Header操作
 
 ```typescript
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // リクエストヘッダーを取得
   const userAgent = request.headers.get('user-agent') || '';
 
@@ -220,53 +233,46 @@ export function middleware(request: NextRequest) {
   response.headers.set('x-custom-header', 'value');
   response.headers.set('x-user-agent', userAgent);
 
-  // セキュリティヘッダー
-  response.headers.set('X-Frame-Options', 'DENY');
-  response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-
   return response;
 }
 ```
+
+> ⚠️ **セキュリティヘッダ・CSP はここに書かない。** このリポジトリは
+> static prerender を維持するため `next.config.mjs` で静的配信している
+> （`src/proxy.ts` の冒頭コメント）。proxy で付け直すと二重になる。
 
 ## リダイレクトパターン
 
 ### 条件付きリダイレクト
 
 ```typescript
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+export const proxy = auth((req) => {
+  const { nextUrl } = req;
 
-  // ルートパスへのアクセス
-  if (pathname === '/') {
-    // 認証済みならホームへ、未認証ならログインへ
-    const token = await getToken({
-      req: request,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
-
-    if (token) {
-      return NextResponse.redirect(new URL('/home', request.url));
-    } else {
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
+  if (nextUrl.pathname === ROUTES.HOME) {
+    return req.auth?.user?.id
+      ? NextResponse.next()
+      : NextResponse.redirect(new URL(ROUTES.LOGIN, nextUrl));
   }
 
   return NextResponse.next();
-}
+});
 ```
 
 ### クエリパラメータ付きリダイレクト
 
 ```typescript
-export function middleware(request: NextRequest) {
-  const url = new URL('/login', request.url);
+export function proxy(request: NextRequest) {
+  const url = new URL(ROUTES.LOGIN, request.nextUrl);
   url.searchParams.set('callbackUrl', request.nextUrl.pathname);
-  url.searchParams.set('error', 'unauthorized');
 
   return NextResponse.redirect(url);
 }
 ```
+
+> ⚠️ 相対URLの基準は **`request.nextUrl` に揃える**（`src/proxy.ts` が
+> そうしている）。`request.url` は素の URL だが、`nextUrl` は basePath を
+> 織り込んだ Next 側の表現なので、将来 basePath を入れても壊れない。
 
 ## URL書き換え（Rewrite）
 
@@ -274,13 +280,14 @@ export function middleware(request: NextRequest) {
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // /blog/123 -> /posts/123 に内部的に書き換え
   if (pathname.startsWith('/blog')) {
     const url = request.nextUrl.clone();
     url.pathname = pathname.replace('/blog', '/posts');
+
     return NextResponse.rewrite(url);
   }
 
@@ -288,71 +295,19 @@ export function middleware(request: NextRequest) {
 }
 ```
 
-## レート制限（簡易版）
+## レート制限はここに置かない
 
-```typescript
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+⛔ **proxy でレート制限を実装しない。**
 
-// 簡易的なレート制限（メモリベース、本番環境ではDB使用推奨）
-const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
-
-export function middleware(request: NextRequest) {
-  const ip = request.ip || 'unknown';
-  const now = Date.now();
-  const windowMs = 60 * 1000; // 1分
-  const maxRequests = 100;
-
-  const rateLimit = rateLimitMap.get(ip);
-
-  if (rateLimit) {
-    if (now < rateLimit.resetTime) {
-      if (rateLimit.count >= maxRequests) {
-        return new NextResponse('Too Many Requests', { status: 429 });
-      }
-      rateLimit.count++;
-    } else {
-      rateLimitMap.set(ip, { count: 1, resetTime: now + windowMs });
-    }
-  } else {
-    rateLimitMap.set(ip, { count: 1, resetTime: now + windowMs });
-  }
-
-  return NextResponse.next();
-}
-```
-
-## 国際化（i18n）リダイレクト
-
-```typescript
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-
-const locales = ['ja', 'en'];
-const defaultLocale = 'ja';
-
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // パスにロケールが含まれているかチェック
-  const pathnameHasLocale = locales.some(
-    (locale) => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`
-  );
-
-  if (pathnameHasLocale) {
-    return NextResponse.next();
-  }
-
-  // ロケールがない場合、デフォルトロケールを追加
-  const url = request.nextUrl.clone();
-  url.pathname = `/${defaultLocale}${pathname}`;
-  return NextResponse.redirect(url);
-}
-
-export const config = {
-  matcher: ['/((?!_next|api|favicon.ico).*)'],
-};
-```
+- **IPが取れない。** `NextRequest.ip` は Next.js 15 で削除された
+  （IPの供給はホスティング事業者の責務になった）。このリポジトリは
+  `src/lib/http/getClientIp.ts` の `getClientIp()` で
+  `x-vercel-forwarded-for` を読む。`x-forwarded-for` の先頭は
+  **クライアントが詐称できる**ので使わない（#647）
+- **メモリに持てない。** サーバーレスの実行環境はリクエストごとに
+  入れ替わるため、`Map` に貯めたカウンタは当てにならない
+- このリポジトリのレート制限は **DB ベース**。`.claude/rules/api-route.md`
+  に置き場所（検証より前／例外）まで決まっているので、API Route 側で実装する
 
 ## Matcher設定パターン
 
@@ -364,161 +319,54 @@ export const config = {
 
 // 特定のパスのみ
 export const config = {
-  matcher: ['/home/:path*', '/calendar/:path*'],
+  matcher: ['/watchlist/:path*', '/settings/:path*'],
 };
 
-// 正規表現
+// 正規表現（除外リスト方式）
 export const config = {
-  matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
-  ],
-};
-
-// 複数パターン
-export const config = {
-  matcher: [
-    '/home/:path*',
-    '/calendar/:path*',
-    '/search/:path*',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
 ```
 
-## Edge Runtime制限
-
-### 使用可能
-- `fetch`
-- `crypto`
-- `URL`
-- `URLSearchParams`
-- `Headers`
-- `Request`
-- `Response`
-
-### 使用不可
-- Node.js標準ライブラリ（`fs`, `path`, etc.）
-- データベース接続（Supabase SDKの一部機能）
-- 重い計算処理
+> ⚠️ 除外リスト方式と「特定のパスのみ」方式を混ぜない。後者は列挙漏れが
+> そのまま保護漏れになる。このリポジトリは前者を採り、`/api/*` は
+> matcher に含めたうえでハンドラの中で判定を飛ばしている（上記）。
 
 ## デバッグ
 
 ```typescript
-export function middleware(request: NextRequest) {
-  console.log('Middleware executed:', {
+export function proxy(request: NextRequest) {
+  console.log('Proxy executed:', {
     pathname: request.nextUrl.pathname,
     method: request.method,
-    headers: Object.fromEntries(request.headers.entries()),
   });
 
   return NextResponse.next();
 }
 ```
 
-## プロジェクト要件に基づく実装例
+> ⚠️ ヘッダを丸ごと出さない。`cookie` と `authorization` が含まれ、
+> セッショントークンがそのままログへ流れる。
 
-```typescript
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+## 実装の実物
 
-// 認証が必要なパス
-const protectedPaths = ['/home', '/calendar', '/search', '/settings'];
+このリポジトリの `src/proxy.ts` が、上のパターンをすべて使った実例になっている。
 
-// 認証済みユーザーがアクセスできないパス
-const authPaths = ['/login', '/register'];
-
-// OTP検証ページ
-const otpPath = '/verify-otp';
-
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // 静的ファイル・API認証は除外
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/api/auth') ||
-    pathname.includes('.')
-  ) {
-    return NextResponse.next();
-  }
-
-  const token = await getToken({
-    req: request,
-    secret: process.env.NEXTAUTH_SECRET,
-  });
-
-  const isAuthenticated = !!token;
-  const isVerified = token?.isVerified === true;
-
-  // 1. 保護されたパスへのアクセス
-  if (protectedPaths.some((path) => pathname.startsWith(path))) {
-    if (!isAuthenticated) {
-      // 未認証: ログインページへ
-      const url = new URL('/login', request.url);
-      url.searchParams.set('callbackUrl', pathname);
-      return NextResponse.redirect(url);
-    }
-
-    if (!isVerified) {
-      // メール未認証: OTP検証ページへ
-      return NextResponse.redirect(new URL(otpPath, request.url));
-    }
-  }
-
-  // 2. 認証ページへのアクセス（既にログイン済み）
-  if (authPaths.some((path) => pathname.startsWith(path))) {
-    if (isAuthenticated && isVerified) {
-      return NextResponse.redirect(new URL('/home', request.url));
-    }
-  }
-
-  // 3. OTP検証ページへのアクセス
-  if (pathname === otpPath) {
-    if (!isAuthenticated) {
-      // 未認証: ログインページへ
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
-
-    if (isVerified) {
-      // 既に認証済み: ホームページへ
-      return NextResponse.redirect(new URL('/home', request.url));
-    }
-  }
-
-  // 4. ルートパスへのアクセス
-  if (pathname === '/') {
-    if (isAuthenticated && isVerified) {
-      return NextResponse.redirect(new URL('/home', request.url));
-    } else {
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
-  }
-
-  return NextResponse.next();
-}
-
-export const config = {
-  matcher: [
-    '/',
-    '/home/:path*',
-    '/calendar/:path*',
-    '/search/:path*',
-    '/settings/:path*',
-    '/login',
-    '/register',
-    '/verify-otp',
-  ],
-};
-```
+- 未認証 → `callbackUrl` 付きでサインインへ
+- 第2要素が未了のセッションを `/auth/two-factor` に閉じ込める
+- 失効セッションの Cookie 削除（`getSessionCookieOptions()` と同じ属性で）
+- admin パスのロール判定（**最終判定は `withAdminAuth` 側**）
 
 ## 参考ドキュメント
 
+- `src/proxy.ts` - 実装の実物
 - `.claude/documents/authentication-flow.md` - 認証フロー
-- [Next.js Middleware Documentation](https://nextjs.org/docs/app/building-your-application/routing/middleware)
+- `node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md` - 入門
+- `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md` - APIリファレンス
 
 ## 使用例
 
 ```bash
-# Middleware作成
+# Proxy 作成
 /middleware
 ```

@@ -18,7 +18,7 @@ import { OTP_CONFIG } from '@/constants/otp';
 import { RATE_LIMIT_ACTION, RATE_LIMIT_CONFIG } from '@/constants/rateLimit';
 import { TWO_FACTOR_OTP_ACTION } from '@/constants/secondFactor';
 import { generateOtpCode, hashOtpCode, sendOtpEmail } from '@/lib/otp';
-import { checkRateLimit } from '@/lib/rateLimit/rateLimit';
+import { checkRateLimit, releaseRateLimit } from '@/lib/rateLimit/rateLimit';
 import { normalizeEmail } from '@/utils/email';
 
 import { toDbError } from './dbError';
@@ -56,6 +56,22 @@ export const SEND_SECOND_FACTOR_RESULT = {
 
 export type SendSecondFactorResult =
   (typeof SEND_SECOND_FACTOR_RESULT)[keyof typeof SEND_SECOND_FACTOR_RESULT];
+
+/**
+ * 行き止まりか（リカバリーコードしか出口が無いか）
+ *
+ * ⛔ **`LIMIT_EXCEEDED_CODE_VALID` を含めない。** あちらは1通も送っていない
+ * 点は同じだが、**受信箱のコードがまだ有効**なので出口がある。
+ * 含めると、手元に答えがある利用者をリカバリーコードへ送ることになる。
+ *
+ * 呼び出し側3箇所（`authorize` / OAuth の jwt 2箇所）が同じ判定を
+ * 書いていたため、1つにまとめて取り違えを防ぐ。
+ */
+export function isSecondFactorSendDeadEnd(
+  result: SendSecondFactorResult,
+): boolean {
+  return result === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED;
+}
 
 /**
  * 第2要素のコードを送る
@@ -161,6 +177,24 @@ export async function sendSecondFactorCode(
   );
 
   if (!limitResult.allowed) {
+    // ⛔ **送信元ごとの枠を戻す。** ここまで来て弾かれた＝1通も送っていない。
+    //
+    //   戻さないと、攻撃者に `TWO_FACTOR_SEND` を枯らされた被害者が、
+    //   再試行するたびに**自分の prompt 枠だけを減らす**。上限に達すると
+    //   被害者自身の `メール|IP` 行にロックが立ち、攻撃者由来のロックが
+    //   明けた後もさらに最大40分ログインできない（レビューで実測）。
+    //
+    // ⚠️ 攻撃者には利得が無い。戻るのは「prompt を通過して
+    //   `TWO_FACTOR_SEND` で止まった」場合だけで、prompt 上限に達している
+    //   送信元はそもそもここへ到達しない。枯らした本人の枠は減ったまま。
+    if (promptIdentifier) {
+      await releaseRateLimit(
+        supabase,
+        promptIdentifier,
+        RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT,
+      );
+    }
+
     // ⚠️ **使えるコードが既に届いているなら行き止まりにしない**
     //    （GHSA-p899-6g7w-v7hg）。
     //

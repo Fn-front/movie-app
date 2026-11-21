@@ -71,6 +71,8 @@ export const AUTH_ERROR_MESSAGES = {
   TOTP_REQUIRED: '認証コードを入力してください。',
   /** 第2要素（メールのコード）の入力が必要 */
   EMAIL_OTP_REQUIRED: 'メールに送信した確認コードを入力してください。',
+  SECOND_FACTOR_CODE_STILL_VALID:
+    '送信回数の上限に達したため、新しいコードは送っていません。先ほど届いた確認コードを入力してください。',
   /**
    * 第2要素のコードを送信できなかった。
    *
@@ -285,6 +287,18 @@ export const AUTH_ERROR_CODE = {
    * 待たせることになる。この状態の出口はリカバリーコードだけ。
    */
   SECOND_FACTOR_SEND_LIMITED: 'second_factor_send_limited',
+  /**
+   * 送信上限だが、**受信箱のコードがまだ有効**（GHSA-p899-6g7w-v7hg）
+   *
+   * ⚠️ `EMAIL_OTP_REQUIRED` と分ける。あちらは「今送った」の意味で、
+   * 画面は再送のカウントダウンを振り出しに戻す。こちらを混ぜると、
+   * 60秒後に再送を押しても**メールは出ず・エラーも出ず・何も変わらない**
+   * 無言の no-op になる（レビューで指摘）。
+   *
+   * ⚠️ `SECOND_FACTOR_SEND_LIMITED` とも分ける。あちらは出口が
+   * リカバリーコードしか無いが、こちらは手元のコードで進める。
+   */
+  SECOND_FACTOR_CODE_STILL_VALID: 'second_factor_code_still_valid',
   /** 第2要素が不正 */
   TOTP_INVALID: 'totp_invalid',
   /** 第2要素の使い回し */

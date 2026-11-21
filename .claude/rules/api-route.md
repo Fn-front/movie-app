@@ -236,8 +236,17 @@ if (!emailSent) {
 検証の後ろに固定される**。原則を守れなくなるので、制限だけ別の関数に切り出して
 呼び出し側が認証の直後に呼ぶ。
 
-前例: `src/helpers/totpGuard.ts` の `checkSecondFactorRateLimit` ／
+前例: `src/helpers/secondFactorGuard.ts` の `checkSecondFactorRateLimit` ／
 `requireSecondFactor`（後者はコードの検証が要るため検証の後ろにしか置けない）。
+
+> ⚠️ **これは「検証より前に置けなくなる」ことを避ける規則**であって、
+> 「ヘルパーの中に書くな」ではない。
+>
+> `sendSecondFactorCode` の中にある3つ（`TWO_FACTOR_SEND` ×2 /
+> `TWO_FACTOR_SEND_PROMPT`）は**意図的にそこにある**。守る資源が
+> メールボックスで、消費位置が**再送間隔の判定より後ろ**でなければ
+> ならないため（例外2）。手前に出すと1通も送らないリクエストが枠を食う。
+> 経緯は上記「消費は『1通送る直前』に置く」。
 
 ### 新しいルートを書くとき
 
@@ -287,9 +296,15 @@ if (!emailSent) {
 > 送信と検証でカウンタを分けているのは、失敗した検証が送信枠を食うと
 > **コードを送り直せなくなる**ため。
 
-> ⚠️ この2つの `TWO_FACTOR_SEND` は `sendSecondFactorCode`
+> ⚠️ これらの `TWO_FACTOR_SEND` は `sendSecondFactorCode`
 > （`src/lib/auth/sendSecondFactorCode.ts`）の**中**にある。ルートの本文を
 > 読んでも `checkRateLimit` が見つからないので、棚卸しのときに取りこぼさないこと。
+>
+> ⚠️ 同じ関数の中に **`TWO_FACTOR_SEND_PROMPT`** もある（計3箇所）。
+> こちらは第4引数 `promptIdentifier` を渡した経路だけで効くので、
+> **呼び出し側を見ないと効いているか分からない**。渡しているのは
+> `auth.ts` の `authorize`（パスワードログイン）だけで、設定画面と
+> OAuth の経路では掛からない。
 >
 > なお `user/totp/send-challenge` は `TOTP_SETTINGS_VERIFY` を**消費しない**。
 > 送信系と検証系でカウンタを重ねると、メールOTP の利用者は無効化のたびに

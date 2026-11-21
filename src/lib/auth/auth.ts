@@ -40,6 +40,7 @@ import {
 } from '@/lib/auth/secondFactor';
 import {
   SEND_SECOND_FACTOR_RESULT,
+  isSecondFactorSendDeadEnd,
   sendSecondFactorCode,
 } from '@/lib/auth/sendSecondFactorCode';
 import { CredentialsSignInError } from '@/lib/auth/authErrors';
@@ -277,7 +278,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 );
               }
 
-              if (sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED) {
+              if (isSecondFactorSendDeadEnd(sendResult)) {
                 // 1通も送っておらず、受信箱に生きたコードも無い。
                 // 待たせず、リカバリーコードへ誘導する
                 throw new CredentialsSignInError(
@@ -285,10 +286,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 );
               }
 
-              // SENT / THROTTLED / LIMIT_EXCEEDED_CODE_VALID。
-              // 後ろ2つは新しく送っていないが、**受信箱のコードはまだ有効**
-              // なので入力欄を出す。ここでリカバリーコードへ誘導すると、
-              // 手元に答えがあるのに別の出口へ送ることになる
+              // ⚠️ 送信上限で**新しくは送っていない**場合を分ける。
+              //
+              //   受信箱のコードはまだ有効なので入力欄は出す（リカバリー
+              //   コードへは誘導しない）が、`EMAIL_OTP_REQUIRED` に混ぜると
+              //   画面が「今送った」として再送のカウントダウンを振り出しに
+              //   戻し、60秒後に押しても**メールは出ず・エラーも出ず・何も
+              //   変わらない**無言の no-op になる。
+              if (
+                sendResult ===
+                SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID
+              ) {
+                throw new CredentialsSignInError(
+                  AUTH_ERROR_CODE.SECOND_FACTOR_CODE_STILL_VALID,
+                );
+              }
+
+              // SENT / THROTTLED。THROTTLED は直前に送ったコードがまだ生きて
+              // いる（60秒以内の再送）。こちらは待てば送り直せる
               throw new CredentialsSignInError(
                 AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED,
               );
@@ -629,10 +644,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                   sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED
                     ? true
                     : undefined;
-                token.secondFactorSendLimited =
-                  sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED
-                    ? true
-                    : undefined;
+                token.secondFactorSendLimited = isSecondFactorSendDeadEnd(
+                  sendResult,
+                )
+                  ? true
+                  : undefined;
               }
             }
           } else {
@@ -731,10 +747,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 sendResult === SEND_SECOND_FACTOR_RESULT.SEND_FAILED
                   ? true
                   : undefined;
-              token.secondFactorSendLimited =
-                sendResult === SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED
-                  ? true
-                  : undefined;
+              token.secondFactorSendLimited = isSecondFactorSendDeadEnd(
+                sendResult,
+              )
+                ? true
+                : undefined;
             }
           }
 

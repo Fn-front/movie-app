@@ -2737,6 +2737,23 @@ describe('authorize の第2要素（method=email_otp）', () => {
         { email: 'owner@example.com', password: PASSWORD },
         makeRequest(),
       ),
+    ).rejects.toMatchObject({
+      // ⛔ **`EMAIL_OTP_REQUIRED` に混ぜない。** あちらは「今送った」の意味で、
+      //   画面が再送のカウントダウンを振り出しに戻す。60秒後に押しても
+      //   メールは出ず・エラーも出ず・何も変わらない無言の no-op になる
+      code: AUTH_ERROR_CODE.SECOND_FACTOR_CODE_STILL_VALID,
+    });
+  });
+
+  /** ⚠️ 60秒以内の再送（THROTTLED）は「待てば送れる」ので従来どおり */
+  it('再送間隔に当たったときは EMAIL_OTP_REQUIRED のまま', async () => {
+    mockSendSecondFactorCode.mockResolvedValue('throttled');
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
     ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED });
   });
 
@@ -2744,6 +2761,29 @@ describe('authorize の第2要素（method=email_otp）', () => {
    * ⚠️ **TOTP の利用者には掛けない。** メールを送らない方式なので、
    * 消費すると何も守らずに枠だけ減る。
    */
+  /**
+   * ⛔ **`authorize` はこの枠を自分で消費しない。** 方式によらず。
+   *
+   * 消費は `sendSecondFactorCode` の中（再送間隔の判定より後ろ）。
+   * ここで数えると**1通も送らないリクエストが枠を食う**ので、
+   * コード欄が空のまま「ログイン」を押すだけで正規の利用者が締め出される。
+   *
+   * ⚠️ 下の `method=totp` のテストだけでは不十分だった。`email_otp` の
+   * 分岐の**中**に戻す変異（＝元の不具合そのもの）が緑のまま通る。
+   */
+  it('email_otp でも authorize 自身は枠を消費しない', async () => {
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED });
+
+    const actions = mockCheckRateLimit.mock.calls.map((call) => call[2]);
+
+    expect(actions).not.toContain(RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT);
+  });
+
   it('method=totp では送信元ごとの枠を消費しない', async () => {
     mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
 

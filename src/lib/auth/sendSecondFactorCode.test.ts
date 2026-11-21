@@ -13,6 +13,7 @@ import { RATE_LIMIT_ACTION, RATE_LIMIT_CONFIG } from '@/constants/rateLimit';
 
 import {
   SEND_SECOND_FACTOR_RESULT,
+  isSecondFactorSendDeadEnd,
   sendSecondFactorCode,
 } from './sendSecondFactorCode';
 
@@ -300,6 +301,154 @@ describe('sendSecondFactorCode', () => {
   });
 
   /**
+   * ⛔ **層が実際に止めることを固定する**（レビューで指摘）。
+   *
+   * ここまで「識別子が渡る」「順序」「60秒以内は呼ばれない」しか見ておらず、
+   * **拒否されたときの挙動が1件もテストされていなかった**。
+   * `if (!promptLimit.allowed)` を `&& !hasValidCode` に変える変異
+   * （＝このPRが塞いだはずの穴そのもの。攻撃中は常に有効なコードが
+   * 受信箱にあるので実質すべてのケース）が、159件すべて緑のまま通った。
+   */
+  describe('送信元ごとの層が拒否したとき', () => {
+    const denyPrompt = () =>
+      mockCheckRateLimit.mockImplementation((_supabase, _id, action) =>
+        Promise.resolve(
+          action === RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT
+            ? { allowed: false, retryAfter: 3600 }
+            : { allowed: true },
+        ),
+      );
+
+    /** 再送間隔は過ぎている状態を作る */
+    const pastResendInterval = (expiresAt: string | null) => {
+      const state = freshState();
+      state.recentCreatedAt = new Date(
+        Date.now() - (OTP_CONFIG.RESEND_INTERVAL_SECONDS + 5) * 1000,
+      ).toISOString();
+      state.recentExpiresAt = expiresAt;
+      return state;
+    };
+
+    it('利用者単位の枠まで到達せず、1通も送らない', async () => {
+      denyPrompt();
+      const state = pastResendInterval(
+        new Date(Date.now() + 25 * 60 * 1000).toISOString(),
+      );
+
+      await sendSecondFactorCode(
+        createSupabaseMock(state),
+        USER_ID,
+        EMAIL,
+        PROMPT_IDENTIFIER,
+      );
+
+      // ⛔ TWO_FACTOR_SEND を消費してから弾いたら層の意味が無い
+      expect(mockCheckRateLimit).toHaveBeenCalledTimes(1);
+      expect(mockSendOtpEmail).not.toHaveBeenCalled();
+      expect(state.insertCalls).toBe(0);
+    });
+
+    it('受信箱のコードが生きていれば LIMIT_EXCEEDED_CODE_VALID', async () => {
+      denyPrompt();
+
+      await expect(
+        sendSecondFactorCode(
+          createSupabaseMock(
+            pastResendInterval(
+              new Date(Date.now() + 25 * 60 * 1000).toISOString(),
+            ),
+          ),
+          USER_ID,
+          EMAIL,
+          PROMPT_IDENTIFIER,
+        ),
+      ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID);
+    });
+
+    /**
+     * ⚠️ 期限切れのコードで `LIMIT_EXCEEDED_CODE_VALID` を返すと、
+     * **使えないコードの入力を促す**ことになる。
+     */
+    it('コードが期限切れなら LIMIT_EXCEEDED', async () => {
+      denyPrompt();
+
+      await expect(
+        sendSecondFactorCode(
+          createSupabaseMock(
+            pastResendInterval(new Date(Date.now() - 60 * 1000).toISOString()),
+          ),
+          USER_ID,
+          EMAIL,
+          PROMPT_IDENTIFIER,
+        ),
+      ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED);
+    });
+
+    it('送信履歴が無ければ LIMIT_EXCEEDED', async () => {
+      denyPrompt();
+
+      await expect(
+        sendSecondFactorCode(
+          createSupabaseMock(freshState()),
+          USER_ID,
+          EMAIL,
+          PROMPT_IDENTIFIER,
+        ),
+      ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED);
+    });
+  });
+
+  /**
+   * ⛔ **利用者単位の枠で弾かれたら、送信元ごとの枠を戻す。**
+   *
+   * 戻さないと、攻撃者に `TWO_FACTOR_SEND` を枯らされた被害者が、
+   * 再試行するたびに自分の prompt 枠だけを減らす。上限に達すると
+   * 被害者自身の行にロックが立ち、攻撃者由来のロックが明けた後も
+   * さらに最大40分ログインできない（レビューで実測）。
+   */
+  it('利用者単位の枠で弾かれたら送信元ごとの枠を戻す', async () => {
+    mockCheckRateLimit.mockImplementation((_supabase, _id, action) =>
+      Promise.resolve(
+        action === RATE_LIMIT_ACTION.TWO_FACTOR_SEND
+          ? { allowed: false, retryAfter: 3600 }
+          : { allowed: true },
+      ),
+    );
+
+    const state = freshState();
+    state.recentCreatedAt = new Date(
+      Date.now() - (OTP_CONFIG.RESEND_INTERVAL_SECONDS + 5) * 1000,
+    ).toISOString();
+
+    await sendSecondFactorCode(
+      createSupabaseMock(state),
+      USER_ID,
+      EMAIL,
+      PROMPT_IDENTIFIER,
+    );
+
+    expect(mockReleaseRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      PROMPT_IDENTIFIER,
+      RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT,
+    );
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
+  });
+
+  /** ⚠️ 識別子を渡していない経路では戻すものが無い */
+  it('識別子が無ければ戻さない', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 3600 });
+
+    await sendSecondFactorCode(
+      createSupabaseMock(freshState()),
+      USER_ID,
+      EMAIL,
+    );
+
+    expect(mockReleaseRateLimit).not.toHaveBeenCalled();
+  });
+
+  /**
    * ⚠️ 識別子を渡さない経路（設定画面・OAuth）では層を掛けない。
    * いずれもセッションが要るので、未認証からは到達できない。
    */
@@ -561,5 +710,25 @@ describe('sendSecondFactorCode', () => {
       '123456',
       TWO_FACTOR_OTP_ACTION,
     );
+  });
+});
+
+/**
+ * ⛔ **行き止まりの判定を1箇所で固定する。**
+ *
+ * `authorize` / OAuth の jwt 2箇所が同じ判定を書いており、どれかを
+ * `LIMIT_EXCEEDED_CODE_VALID` も含むように変えると、**受信箱に有効な
+ * コードがある利用者をリカバリーコードへ誘導する**退行になる。
+ * 3箇所とも回帰テストが無かった（レビューで実測）。
+ */
+describe('isSecondFactorSendDeadEnd', () => {
+  it.each([
+    [SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED, true],
+    [SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED_CODE_VALID, false],
+    [SEND_SECOND_FACTOR_RESULT.THROTTLED, false],
+    [SEND_SECOND_FACTOR_RESULT.SENT, false],
+    [SEND_SECOND_FACTOR_RESULT.SEND_FAILED, false],
+  ])('%s → %s', (result, expected) => {
+    expect(isSecondFactorSendDeadEnd(result)).toBe(expected);
   });
 });

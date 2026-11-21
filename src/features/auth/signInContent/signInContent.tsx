@@ -77,11 +77,27 @@ export const SignInContent = memo<SignInContentProps>(function SignInContent({
     string | undefined
   >(undefined);
 
-  // `sessionStorage`（レンダーの外にある状態）を読み込むためのeffect。
-  // 遷移に使うだけで描画はしないので、追加のレンダーは画面に出ない
+  /*
+    `sessionStorage`（レンダーの外にある状態）を読み込むためのeffect。
+    遷移に使うだけで描画はしないので、追加のレンダーは画面に出ない。
+    effect 内 setState は承知のうえ。
+
+    ⛔ **取り出せなかった回で上書きしない（#1383）。** `takePendingCallbackUrl`
+    は読むと同時に消すので、2回目は必ず `undefined` になる。結果をそのまま
+    state へ入れていたため、**2回目が `undefined` で上書き**して戻り先を
+    失っていた。StrictMode（`next.config.mjs` の `reactStrictMode: true`）の
+    dev では effect が必ず2回走るので、**開発サーバーでは #1246 の修正が
+    効いていなかった**。
+
+    `SignInBackLink`（`signInBackLink.tsx:48`）が同じ形で、あちらは壊れていない。
+
+    ⚠️ 消すのは**早期 return より前**。「採らない場合も消す」（上記）は
+    この順序で保たれている。
+  */
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const pending = takePendingCallbackUrl();
+    if (!pending) return;
 
     if (initialError) {
       setRestoredCallbackUrl(pending);

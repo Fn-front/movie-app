@@ -331,22 +331,21 @@ test.describe('ソーシャルログイン失敗後の戻り先', () => {
   test('失敗後にパスワードでログインすると元のページへ戻る', async ({
     page,
   }) => {
-    /**
-     * ⚠️ **dev では通らない（#1383）。** StrictMode が effect を2回走らせ、
-     * `takePendingCallbackUrl()` が**読むと同時に消す**ため、2回目は
-     * `undefined` で state を上書きする（`signInContent.tsx:83-89`）。
-     * 製品側の問題であってテストの都合ではないので、#1383 を直したら
-     * このスキップを外すこと。
-     *
-     * ⚠️ `CI` は Playwright の webServer が `npm start`（本番ビルド）に
-     * なる条件そのもの（`playwright.config.ts:212`）。CI だけでなく、
-     * 手元で `CI=true` を付けたときも走る。
-     */
-    test.skip(
-      !process.env.CI,
-      '本番ビルドでのみ通る（#1383。dev は StrictMode で戻り先が失われる）',
-    );
+    /*
+      ⚠️ 以前は dev をスキップしていた（#1383）。StrictMode が effect を
+      2回走らせ、`takePendingCallbackUrl()` が**読むと同時に消す**ため、
+      2回目の `undefined` が state を上書きしていた。製品側を直したので
+      **dev / 本番ビルドの両方で走る**。
 
+      ⛔ スキップを戻さないこと。このテストが dev で落ちたら、それは
+      **「effect の2回実行に弱い作りへ戻った」合図**で、テストの都合ではない。
+
+      ⚠️ CI は本番ビルド（`playwright.config.ts` の `webServer.command`）なので、
+      **この解除で CI の挙動は変わらない**。効くのは手元の dev 実行だけ。
+
+      ⚠️ 再マウント耐性は別の話で、#1383 では直していない。`sessionStorage`
+      から消えたあとに再マウントされれば本番でも戻り先は失われる。
+    */
     await seedPendingCallbackUrl(page);
 
     // プロバイダから失敗して戻された状態。`callbackUrl` は載っていない
@@ -406,8 +405,9 @@ test.describe('ソーシャルログイン失敗後の戻り先', () => {
    * あちらは `data-callback` 属性を見るだけで `router.push` はモック。
    * **実際にどこへ着地するか**は E2E でしか分からない。
    *
-   * ⚠️ #1383 を直すとき、代替案の `if (!pending) return;` を採ると
-   * 「採らない場合も消す」が壊れてこのストーリーが退行する。
+   * ⚠️ #1383 の修正（`if (!pending) return;`）は、`takePendingCallbackUrl()`
+   * を return より前に呼ぶので「採らない場合も消す」を壊していない。
+   * 消す処理を早期 return の後ろへ動かすとこのストーリーが退行する。
    */
   test('失敗していなければ古い戻り先へ飛ばされない', async ({ page }) => {
     await seedPendingCallbackUrl(page);

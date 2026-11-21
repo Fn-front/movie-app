@@ -8,7 +8,6 @@ import { ARIA_LABELS } from '@/constants';
 
 /** URL の ?t= を差し替えるための可変値（各テストで入れ替える） */
 let mockSearchParams = new URLSearchParams();
-// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
 
 const mockOpenMovieDetail = jest.fn();
 

@@ -90,7 +90,6 @@ jest.mock('@/hooks/useIntersectionObserver', () => ({
 describe('FavoritesPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // URL のクエリ相当。テスト間で持ち越すと前のテストのモーダルが残る
     mockSortBy = 'added_at';
     mockIsLoading = false;
     mockIsFetchingNextPage = false;

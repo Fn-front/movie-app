@@ -39,8 +39,9 @@ export interface MovieDetailModalProps {
    * 開く側の `history.pushState` が既にエントリを積んでいるので、ここでも積むと
    * 開くたびに履歴が2つ伸びる（#1033）。
    *
-   * 既定が true なのは、URL を持てない経路（`AppLayout` の公開カレンダー）が
-   * まだあるため。
+   * ⚠️ **現在の呼び出し元はすべて `false` を渡す**（#1077 で統合した結果、
+   * 唯一の呼び出し元は `AppMovieDetailModal`）。既定を true のまま残して
+   * いるのは、URL を持てない経路から使い回す余地を潰さないため。
    */
   manageHistory?: boolean;
 }

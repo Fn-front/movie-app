@@ -294,5 +294,49 @@ describe('useMovieDetailQuery', () => {
 
       expect(searchParamsCalls).toBe(callsBefore);
     });
+    /**
+     * オーバーレイの中から開く経路（#1077）
+     *
+     * ⛔ 公開カレンダーは「閉じると同時に詳細を開く」。push すると
+     * 閉じる側の畳み（`history.back()`）と競合して**押した直後に
+     * カレンダーが開き直る**ので、オーバーレイが既に持っている
+     * エントリを置き換える。
+     */
+    describe('replace で開く', () => {
+      it('履歴を積まずに置き換える', () => {
+        setSearch('');
+        const before = window.history.length;
+
+        const { result } = renderHook(() => useOpenMovieDetail());
+
+        act(() => result.current(550, { replace: true }));
+
+        expect(window.history.length).toBe(before);
+        expect(
+          new URLSearchParams(window.location.search).get('movie_id'),
+        ).toBe('550');
+      });
+
+      /**
+       * ⛔ **目印は push と同じく付ける。**
+       *
+       * 置き換える相手は `useOverlayHistory` が積んだエントリで、
+       * **URL は置き換え前のページと同一**。`router.back()` しても同じ
+       * ページに留まり、詳細が閉じるだけになる。
+       *
+       * 付け忘れると `closeMovieDetail` が `router.replace` に落ち、
+       * 同じ URL のエントリが2つ並んだまま残る。× で閉じたあと戻るが
+       * 空振りする（#1043 / #1052 で2度潰した退行）。
+       */
+      it('目印を残す（閉じたときに back を選ばせる）', () => {
+        setSearch('');
+
+        const { result } = renderHook(() => useOpenMovieDetail());
+
+        act(() => result.current(550, { replace: true }));
+
+        expect(window.history.state).toEqual({ __movieDetailQuery: true });
+      });
+    });
   });
 });

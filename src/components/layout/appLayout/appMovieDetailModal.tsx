@@ -27,12 +27,24 @@ import { useShowFinancialInfo } from '@/features/movies/hooks/useShowFinancialIn
 import { ROUTES } from '@/constants';
 
 /**
- * 予算・興行収入を出す画面（#1077 で挙動を変えないための一覧）
+ * 予算・興行収入を出す画面（#1077）
  *
  * ⚠️ 統合前にこの2つを出していたのは `movieListContent` だけで、
  * それを描くのは `/movies/now-showing` と `/movies/upcoming` の2ルート。
  * モーダルが1つになると「どの画面から開いたか」を modal 側が知らないため、
- * **パスで同じ出し分けを再現する**。
+ * **パスで近似している**。
+ *
+ * ⛔ **厳密には統合前と同じではない**（レビュー指摘）。この2ページで
+ * **サイドバーのウォッチリストから**開いた詳細にも出るようになる
+ * （統合前の `watchlistPanel` は渡していなかったので非表示だった）。
+ * 「どの一覧から開いたか」を modal へ伝える手段が無いので、
+ * **ページ単位へ粗くする**ことを選んだ。出る条件が広がる方向で、
+ * 公開前の作品では `useShowFinancialInfo` が false を返すため、
+ * 未確定の数字が出ることはない。
+ *
+ * ⚠️ 2ルートの出どころは `MovieListContent` を描く
+ * `src/features/movies/nowShowing/nowShowing.tsx` と `upcoming/upcoming.tsx`。
+ * あちらが増減してもここは落ちないので、動かすときは両方見ること。
  */
 const FINANCIAL_INFO_PATHS: readonly string[] = [
   ROUTES.NOW_SHOWING,

@@ -123,7 +123,6 @@ const createMockItems = (count: number) =>
 describe('WatchlistPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // URL のクエリ相当。テスト間で持ち越すと前のテストのモーダルが残る
     mockUseWatchlistPage.watchlist = [];
     mockUseWatchlistPage.isLoading = false;
     mockUseWatchlistPage.isFetchingNextPage = false;

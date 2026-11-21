@@ -339,6 +339,53 @@ test.describe('オーバーレイを閉じたあとの戻る', () => {
   });
 
   /**
+   * ⛔ **× で閉じる経路も見る**（#1077 のレビュー）
+   *
+   * 上のテストは `goBack()` で閉じているので、閉じるボタンの経路が
+   * 無検査だった。カレンダーから開いた詳細は**オーバーレイのエントリを
+   * 置き換えて**開くため、「自分が積んだ」目印を付け忘れると
+   * `closeMovieDetail` が `router.replace` に落ち、**同じ URL の
+   * エントリが2つ並んだまま残る**。× で閉じたあと戻るが空振りする
+   * （#1043 / #1052 で2度潰した退行。レビューで実測された）。
+   *
+   * このリポジトリの判定基準は「URL が変わらないこと」ではなく
+   * **「戻る1回で前のページへ出られること」**（このファイルの冒頭）。
+   */
+  test('カレンダーで作品を選び × で閉じたあと、戻る1回で前のページへ出る', async ({
+    authenticatedPage: page,
+  }) => {
+    await mockCalendarWithOneMovie(page);
+    await mockMovieDetail(page);
+
+    await page.goto('/movies/upcoming');
+    await page.goto('/movies/now-showing');
+
+    await page.getByRole('button', { name: ARIA_LABELS.OPEN_MENU }).click();
+    await page.getByRole('button', { name: ARIA_LABELS.OPEN_CALENDAR }).click();
+    await expect(page.getByRole('dialog').last()).toBeVisible();
+
+    await page
+      .locator('button[class*="calendarMovieList__button"]')
+      .first()
+      .click();
+
+    const detail = page.getByRole('dialog').last();
+    await expect(detail).toBeVisible({ timeout: 15000 });
+    await expect(page).toHaveURL(/movie_id=\d+/);
+
+    await detail.getByRole('button', { name: ARIA_LABELS.CLOSE }).click();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/movies\/now-showing$/);
+    await waitForFold(page);
+
+    // ⛔ ここが本題。空振りすると `/movies/now-showing` のまま止まる
+    await page.goBack();
+
+    await expect(page).toHaveURL(/\/movies\/upcoming/);
+  });
+
+  /**
    * 映画詳細のキャストから人物ページへ出る経路。
    *
    * 詳細モーダルは一覧の URL に `?movie_id=` を足して開く（#1033）。

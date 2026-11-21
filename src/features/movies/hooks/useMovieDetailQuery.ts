@@ -61,12 +61,19 @@ function openMovieDetailAt(
    * 履歴の本数も変わらない（`useOverlayHistory` の
    * `shouldReplaceNavigation` と同じ考え方）。
    *
-   * ⚠️ **目印は付けない。** 付けると `closeMovieDetail` が `router.back()`
-   * を選び、置き換え前のページまで戻ってしまう。目印が無ければクエリだけ
-   * 落とす経路に入る。
+   * ⚠️ **目印は push と同じく付ける。** 置き換える相手は
+   * `useOverlayHistory` がオーバーレイのために積んだエントリで、
+   * **URL は置き換え前のページと同一**（`pushState(state, '',
+   * window.location.href)`）。つまり `router.back()` しても同じページに
+   * 留まり、詳細が閉じるだけになる。
+   *
+   * ⛔ 目印を付けないと `closeMovieDetail` が `router.replace` に落ち、
+   * **同じ URL のエントリが2つ並んだまま**残る。× で閉じたあと戻るを
+   * 押しても何も起きない（#1043 / #1052 で2度潰した「戻るが空振りする」
+   * 退行そのもの。レビューで実測された）。
    */
   if (options?.replace) {
-    window.history.replaceState(null, '', url);
+    window.history.replaceState({ [MOVIE_DETAIL_STATE_KEY]: true }, '', url);
     return;
   }
 

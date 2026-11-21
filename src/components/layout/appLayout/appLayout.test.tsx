@@ -301,4 +301,29 @@ describe('AppLayout', () => {
       expect(screen.getByRole('link', { name: '本文へ移動' })).toHaveFocus();
     });
   });
+  /**
+   * ⛔ **アプリ全体で1つだけの詳細モーダル**（#1077）
+   *
+   * 以前は9箇所がそれぞれ描いており、サイドバーが全ページに出る都合で
+   * ページ側と2枚同時に開いていた。
+   *
+   * ⚠️ **`isAuthenticated` の外に置くこと。** 未ログインでも
+   * `?movie_id=` は直接開けるし、統合前の一覧側モーダルも認証を見て
+   * いなかった。中へ動かすとこのテストが落ちる。
+   */
+  describe('映画詳細モーダル（#1077）', () => {
+    it('認証済みで描かれる', () => {
+      render(<AppLayout>コンテンツ</AppLayout>);
+
+      expect(screen.getByTestId('app-movie-detail-modal')).toBeInTheDocument();
+    });
+
+    it('未ログインでも描かれる', () => {
+      mockUseSession.mockReturnValue(unauthenticatedSession);
+
+      render(<AppLayout>コンテンツ</AppLayout>);
+
+      expect(screen.getByTestId('app-movie-detail-modal')).toBeInTheDocument();
+    });
+  });
 });

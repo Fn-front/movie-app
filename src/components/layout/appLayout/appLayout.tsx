@@ -151,13 +151,11 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
         onCalendarClick={isAuthenticated ? openCalendar : undefined}
       />
       {isAuthenticated && (
-        <>
-          <CalendarDialog
-            open={isCalendarOpen}
-            onOpenChange={setCalendarOpen}
-            onMovieClick={selectMovie}
-          />
-        </>
+        <CalendarDialog
+          open={isCalendarOpen}
+          onOpenChange={setCalendarOpen}
+          onMovieClick={selectMovie}
+        />
       )}
 
       {/*

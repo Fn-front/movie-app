@@ -223,6 +223,39 @@ test.describe('ウォッチリスト', () => {
     ).toBeVisible({ timeout: 15000 });
   });
 
+  /**
+   * ⛔ **サイドバーから開いた詳細も URL を持つ**（#1077 の完了条件）
+   *
+   * サイドバーは `AppLayout` を通る全ページに出る。以前はページ側にも
+   * モーダルがあり、同じ `movie_id` を読んで2枚同時に開いた（#1033）。
+   * その回避としてサイドバーだけローカル state に戻していたため、
+   * **ここから開いた詳細はリロードで消え、共有もできなかった**。
+   *
+   * モーダルが `AppLayout` の1箇所になったので URL へ戻せた。
+   * リロードで復元できることまで見る。
+   */
+  test('サイドバーから開いた詳細は URL を持ち、リロードで復元される', async () => {
+    // サイドバーが出るページへ（詳細モーダルを持たない画面でも同じ）
+    await page.goto('/settings');
+
+    // beforeEach が1件積んでいる。作品名は一覧の先頭タイル由来なので固定しない
+    const sidebarItem = page
+      .locator('[class*="c_watchlist_item__title_link"]')
+      .first();
+    await expect(sidebarItem).toBeVisible({ timeout: 15000 });
+
+    await sidebarItem.click();
+
+    await expect(page).toHaveURL(/movie_id=\d+/);
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 15000 });
+
+    // ⛔ ここが本題。ローカル state だった頃はここで消えていた
+    await page.reload();
+
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 20000 });
+    await expect(page).toHaveURL(/movie_id=\d+/);
+  });
+
   test('視聴済みにすると評価モーダルが開き、閉じても視聴済みが残る', async () => {
     await page.goto('/watchlist');
     await markFirstAsWatched(page);

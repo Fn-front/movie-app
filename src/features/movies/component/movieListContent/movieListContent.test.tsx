@@ -8,11 +8,6 @@ import type { MovieCacheItem } from '@/lib/api/movies/movies';
 // --- Mocks ---
 
 // 予算・興行収入の判定は詳細APIを引くため、ここでは差し替える
-// （判定そのものは useShowFinancialInfo.test.ts が担保する）
-let mockShowFinancialInfo = false;
-jest.mock('@/features/movies/hooks/useShowFinancialInfo', () => ({
-  useShowFinancialInfo: () => mockShowFinancialInfo,
-}));
 
 // --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
 
@@ -107,9 +102,7 @@ const createMockMovieList = (
 // --- Tests ---
 
 describe('MovieListContent', () => {
-  beforeEach(() => {
-    mockShowFinancialInfo = false;
-  });
+  beforeEach(() => {});
 
   describe('表示', () => {
     it('タイトルが表示される', () => {

@@ -408,6 +408,19 @@ export const SESSION_CONFIG = {
 } as const;
 
 /**
+ * パスワードを設定・変更したことを同じ画面の他の節へ伝えるイベント（#1372）
+ *
+ * ⚠️ セッション（JWT）の `hasPassword` は
+ * `SESSION_CONFIG.PASSWORD_CHECK_INTERVAL_MS` のスロットル越しにしか
+ * 追従しないため、設定画面に並ぶ他の節（二段階認証）は変更に気づけない。
+ * 初回パスワードを設定した直後に二段階認証を設定しようとすると、画面は
+ * 確認コードを求めるのにサーバーはパスワードを求める、という行き止まりに
+ * なっていた。再読み込みの合図だけを流して、値そのものは各節が
+ * **サーバーから**取り直す。
+ */
+export const PASSWORD_CHANGE_EVENT = 'movie-app:password-change';
+
+/**
  * bcryptハッシュのコスト
  */
 export const BCRYPT_COST = 12;

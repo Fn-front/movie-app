@@ -22,6 +22,7 @@ import {
 import { OTP_ACTION } from '@/constants/otp';
 import {
   AUTH_ERROR_MESSAGES,
+  PASSWORD_CHANGE_EVENT,
   TOAST_TITLES,
   VALIDATION_MESSAGES,
 } from '@/constants';
@@ -129,6 +130,14 @@ export const ChangePasswordForm = memo<ChangePasswordFormProps>(
           reset();
           // トークンはワンタイムのため破棄する
           setVerificationToken(null);
+
+          // ⚠️ 同じ画面に並ぶ二段階認証の節へ知らせる（#1372）。
+          //   あちらは再認証でパスワードと確認コードのどちらを求めるかを
+          //   サーバーと同じ `users.password_hash` で決めるが、読むのは
+          //   マウント時の1回だけ。初回パスワードを設定した直後は
+          //   「確認コードを送る」しか出ていないのにサーバーはパスワードを
+          //   要求するので、合図が無いと再読み込みするまで行き止まりになる
+          window.dispatchEvent(new Event(PASSWORD_CHANGE_EVENT));
           // 成功後は初期画面に戻り、successMessageをステップ1で表示する
           setStep('send_otp');
         } catch (error) {

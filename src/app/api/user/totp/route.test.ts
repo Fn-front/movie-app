@@ -51,7 +51,10 @@ describe('GET /api/user/totp', () => {
     mockFrom.mockReturnValue({
       select: () => ({
         eq: () => ({
-          single: () => Promise.resolve({ data: { username: null } }),
+          single: () =>
+            Promise.resolve({
+              data: { username: null, password_hash: null },
+            }),
         }),
       }),
     });
@@ -69,6 +72,7 @@ describe('GET /api/user/totp', () => {
       enabled: true,
       method: SECOND_FACTOR_METHOD.TOTP,
       emailOtpAvailable: true,
+      hasPassword: false,
       remainingRecoveryCodes: 7,
     });
   });
@@ -91,6 +95,7 @@ describe('GET /api/user/totp', () => {
       enabled: true,
       method: SECOND_FACTOR_METHOD.EMAIL_OTP,
       emailOtpAvailable: true,
+      hasPassword: false,
       remainingRecoveryCodes: 3,
     });
   });
@@ -106,6 +111,7 @@ describe('GET /api/user/totp', () => {
       enabled: false,
       method: null,
       emailOtpAvailable: true,
+      hasPassword: false,
       remainingRecoveryCodes: 0,
     });
     expect(mockCountUnusedRecoveryCodes).not.toHaveBeenCalled();
@@ -174,5 +180,66 @@ describe('GET /api/user/totp', () => {
     const json = await response.json();
 
     expect(json.data.emailOtpAvailable).toBe(false);
+  });
+
+  /**
+   * 再認証でどちらの材料を求めるかの判定（#1372）
+   *
+   * ⚠️ 画面がセッション（JWT）の `hasPassword` で出し分けていたため、
+   * 初回パスワードを設定した直後は最大5分ズレていた。サーバーの
+   * `requireReauth` は `users.password_hash` の実値で決めるので、
+   * **同じ列**をここから返して画面に使わせる。
+   */
+  describe('hasPassword（#1372）', () => {
+    /** `users` の1行を返すモックを差し替える */
+    const mockUserRow = (row: Record<string, unknown>) => {
+      mockFrom.mockReturnValue({
+        select: (columns: string) => {
+          // 列を減らすと `password_hash` が undefined になり、
+          // パスワードを持つ利用者が持たない扱いに落ちる
+          expect(columns).toContain('password_hash');
+
+          return {
+            eq: () => ({ single: () => Promise.resolve({ data: row }) }),
+          };
+        },
+      });
+    };
+
+    beforeEach(() => {
+      mockGetSecondFactorMethod.mockResolvedValue(null);
+    });
+
+    it('password_hash があれば true を返す', async () => {
+      mockUserRow({ username: null, password_hash: '$2a$12$hash' });
+
+      const response = await GET();
+      const json = await response.json();
+
+      expect(json.data.hasPassword).toBe(true);
+    });
+
+    it('password_hash が NULL なら false を返す（OAuth のみ）', async () => {
+      mockUserRow({ username: null, password_hash: null });
+
+      const response = await GET();
+      const json = await response.json();
+
+      expect(json.data.hasPassword).toBe(false);
+    });
+
+    /**
+     * ⛔ ハッシュそのものを渡さない。画面が要るのは有無だけで、
+     * 値を返すと総当たりの的を手渡すことになる。
+     */
+    it('ハッシュそのものは応答に含めない', async () => {
+      mockUserRow({ username: null, password_hash: '$2a$12$hash' });
+
+      const response = await GET();
+      const body = await response.text();
+
+      expect(body).not.toContain('$2a$12$hash');
+      expect(body).not.toContain('password_hash');
+    });
   });
 });

@@ -2,6 +2,8 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AxiosError } from 'axios';
 
+import { PASSWORD_CHANGE_EVENT } from '@/constants/auth';
+
 import { ChangePasswordForm } from './changePasswordForm';
 
 // --- Mocks ---
@@ -251,6 +253,70 @@ describe('ChangePasswordForm', () => {
         'パスワードを変更しました。',
       );
     });
+  });
+
+  /**
+   * 同じ画面に並ぶ二段階認証の節へ知らせる（#1372）
+   *
+   * ⛔ あちらは再認証でパスワードと確認コードのどちらを求めるかを
+   * サーバーと同じ `users.password_hash` で決めるが、読むのはマウント時の
+   * 1回だけ。設定画面は1ページなので再マウントされない。合図が無いと、
+   * 初回パスワードを設定した直後は「確認コードを送る」しか出ないのに
+   * サーバーはパスワードを要求する行き止まりが再読み込みまで続く。
+   */
+  it('パスワード変更成功時に他の節へ合図を出す（#1372）', async () => {
+    mockChangePassword.mockResolvedValue({
+      success: true,
+      message: 'パスワードを変更しました。',
+    });
+
+    const listener = jest.fn();
+    window.addEventListener(PASSWORD_CHANGE_EVENT, listener);
+
+    await goToNewPasswordStep();
+
+    await user.type(
+      screen.getByLabelText('現在のパスワード'),
+      'CurrentPassword1',
+    );
+    await user.type(screen.getByLabelText('新しいパスワード'), 'NewPassword1');
+    await user.type(
+      screen.getByLabelText('新しいパスワード（確認）'),
+      'NewPassword1',
+    );
+    await user.click(screen.getByRole('button', { name: '変更する' }));
+
+    await waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+
+    window.removeEventListener(PASSWORD_CHANGE_EVENT, listener);
+  });
+
+  /** ⚠️ 失敗したときは出さない。出すと他の節が無駄に取り直す */
+  it('パスワード変更失敗時は合図を出さない（#1372）', async () => {
+    mockChangePassword.mockRejectedValue(
+      new AxiosError('Change failed', 'ERR_BAD_REQUEST'),
+    );
+
+    const listener = jest.fn();
+    window.addEventListener(PASSWORD_CHANGE_EVENT, listener);
+
+    await goToNewPasswordStep();
+
+    await user.type(
+      screen.getByLabelText('現在のパスワード'),
+      'CurrentPassword1',
+    );
+    await user.type(screen.getByLabelText('新しいパスワード'), 'NewPassword1');
+    await user.type(
+      screen.getByLabelText('新しいパスワード（確認）'),
+      'NewPassword1',
+    );
+    await user.click(screen.getByRole('button', { name: '変更する' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(listener).not.toHaveBeenCalled();
+
+    window.removeEventListener(PASSWORD_CHANGE_EVENT, listener);
   });
 
   it('パスワード変更失敗時にエラーが表示される', async () => {

@@ -160,6 +160,17 @@ export const RATE_LIMIT_ACTION = {
    * 持っていても設定できなくなる**。
    */
   SECOND_FACTOR_SETUP_CODE_SEND: 'second_factor_setup_code_send',
+  /**
+   * 第2要素コードの送信プロンプト（送信元IPごと / GHSA-p899-6g7w-v7hg）
+   *
+   * ⛔ `TWO_FACTOR_SEND` は**利用者単位**なので、パスワードを知る第三者が
+   * コードを入れずにパスワードだけを投げ続けると、被害者の枠を使い切って
+   * **メールOTPでのログインを妨害できる**。
+   *
+   * こちらは `メール|IP` 単位。1つの送信元が使えるのは枠の半分までなので、
+   * **被害者の枠を使い切れない**（被害者は別のIPから来る）。
+   */
+  TWO_FACTOR_SEND_PROMPT: 'two_factor_send_prompt',
   /** メールアドレス変更の確認コード送信（#1359） */
   EMAIL_CHANGE_REQUEST: 'email_change_request',
   /** メールアドレス変更の確認コード検証（#1359） */
@@ -507,6 +518,17 @@ export const RATE_LIMIT_CONFIG = {
    * 再送間隔（60秒）と合わせて、メールボックスへの連投を抑える。
    */
   SECOND_FACTOR_SETUP_CODE_SEND: { maxAttempts: 5, windowMinutes: 60 },
+
+  /**
+   * 第2要素コードの送信プロンプト（`メール|IP` 単位 / GHSA-p899-6g7w-v7hg）
+   *
+   * ⚠️ **`TWO_FACTOR_SEND`（10回/60分）の半分**にしてある。1つの送信元が
+   * 利用者の枠を使い切れないことが目的なので、必ず下回らせること。
+   *
+   * ⚠️ 正規の利用者が1時間に同じ端末から5通も要求するのは異常な状態
+   * （届かない／迷惑メール）で、そのときはリカバリーコードが出口になる。
+   */
+  TWO_FACTOR_SEND_PROMPT: { maxAttempts: 5, windowMinutes: 60 },
 
   /**
    * メールアドレス変更の確認コード送信（#1359）

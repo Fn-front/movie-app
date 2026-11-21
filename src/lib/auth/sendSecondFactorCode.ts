@@ -73,7 +73,9 @@ export async function sendSecondFactorCode(
   // 1時間ログインできなくなる
   const { data: recent, error: recentError } = await supabase
     .from('otp_codes')
-    .select('created_at')
+    // ⚠️ `expires_at` も読む。上限に達したときに「まだ使えるコードが
+    //    届いているか」を判定するのに使う（下の LIMIT_EXCEEDED の分岐）
+    .select('created_at, expires_at')
     .eq('email', normalizedEmail)
     .eq('action_type', TWO_FACTOR_OTP_ACTION)
     .order('created_at', { ascending: false })
@@ -110,6 +112,20 @@ export async function sendSecondFactorCode(
   );
 
   if (!limitResult.allowed) {
+    // ⚠️ **使えるコードが既に届いているなら行き止まりにしない**
+    //    （GHSA-p899-6g7w-v7hg）。
+    //
+    //    枠を使い切らせる妨害は、宛先が `users.email` に固定されているため
+    //    **被害者の受信箱に有効なコードを送り込む**形でしか成立しない。
+    //    その状態で「リカバリーコードを使え」と案内するのは、手元に答えが
+    //    あるのに別の出口へ誘導していることになる。
+    //
+    //    THROTTLED は呼び出し側で「直前に送ったコードがまだ有効」として
+    //    扱われ、コードの入力を促す。
+    if (recent && new Date(recent.expires_at).getTime() > Date.now()) {
+      return SEND_SECOND_FACTOR_RESULT.THROTTLED;
+    }
+
     return SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED;
   }
 

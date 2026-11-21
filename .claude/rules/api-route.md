@@ -82,9 +82,22 @@ IP 層は**原則どおり検証より前**に置く。
 | `auth/otp/verify` | `otp_verify_ip` | `otp_verify` |
 | `auth/otp/send` | `otp_send_ip` | `otp_send_daily`（例外2） |
 | NextAuth `credentials` | `login_ip`（`auth.ts`） | `login` |
+| NextAuth `credentials` の第2要素の送信 | `two_factor_send_prompt`（`メール\|IP`） | `two_factor_send`（利用者） |
 
 IP 層には `enforcePublicRateLimit`（`src/helpers/publicRateLimit.ts`）を使う。
 `clientIp === 'unknown'` のときは**消費せず通す**（fail-open）点に注意。
+
+> ⚠️ **利用者単位の枠は、識別子を知っている相手から守れない**
+> （GHSA-p899-6g7w-v7hg）。`TWO_FACTOR_SEND` は利用者単位なので、
+> パスワードを知る第三者が「コードを入れずにパスワードだけ」を61秒間隔で
+> 投げ続けると、被害者の枠を使い切って**メールOTPでのログインを妨害できる**。
+> `login` は第2要素のプロンプト時に解放される（#1283）ので積み上がらない。
+>
+> ここでも対処は同じ **「手前に送信元ごとの層を重ねる」**。上限は利用者単位の
+> **半分**にして、1つの送信元では枠を使い切れないようにする。
+>
+> ⚠️ 上限を同じにすると意味が無い。必ず下回らせること
+> （`src/constants/rateLimitActions.test.ts` で固定している）。
 
 > ⚠️ `auth/otp/send` だけ塞いでいる穴が違う（#1341）。未登録アドレスだと
 > 列挙防止の early return に落ちて `OTP_SEND_DAILY` を消費しないため、

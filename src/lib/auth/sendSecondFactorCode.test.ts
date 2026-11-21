@@ -40,6 +40,14 @@ const EMAIL = 'user@example.com';
 interface MockState {
   /** 直近の `two_factor` 行の作成日時。null なら「送信履歴なし」 */
   recentCreatedAt: string | null;
+  /**
+   * 直近の行の有効期限
+   *
+   * ⚠️ 省くと `new Date(undefined)` が NaN になり、「まだ使えるコードが
+   * 届いているか」の判定が常に false へ倒れる（GHSA-p899-6g7w-v7hg）。
+   * 既定は `recentCreatedAt` から30分後。
+   */
+  recentExpiresAt: string | null;
   /** 読み取りでエラーを返すか */
   readError: boolean;
   deleteCalls: number;
@@ -61,7 +69,19 @@ const createSupabaseMock = (state: MockState): SupabaseClient => {
     const builder: Record<string, unknown> = {};
     const self = () => builder;
 
-    builder.select = jest.fn(self);
+    // ⚠️ **選んだ列だけを返す。** 無視すると `select('created_at')` に
+    //    戻す変異を検知できない（実際に生き残った）。PostgREST は
+    //    指定していない列を返さないので、`expires_at` が undefined になり
+    //    `new Date(undefined)` が NaN へ化ける
+    let selected: string[] = [];
+    builder.select = jest.fn((columns?: string) => {
+      selected = (columns ?? '')
+        .split(',')
+        .map((column) => column.trim())
+        .filter(Boolean);
+
+      return builder;
+    });
     builder.eq = jest.fn(self);
     builder.order = jest.fn(self);
     builder.limit = jest.fn(self);
@@ -71,7 +91,17 @@ const createSupabaseMock = (state: MockState): SupabaseClient => {
           ? { data: null, error: { message: 'connection terminated' } }
           : {
               data: state.recentCreatedAt
-                ? { created_at: state.recentCreatedAt }
+                ? Object.fromEntries(
+                    Object.entries({
+                      created_at: state.recentCreatedAt,
+                      expires_at:
+                        state.recentExpiresAt ??
+                        new Date(
+                          new Date(state.recentCreatedAt).getTime() +
+                            30 * 60 * 1000,
+                        ).toISOString(),
+                    }).filter(([column]) => selected.includes(column)),
+                  )
                 : null,
               error: null,
             },
@@ -101,6 +131,7 @@ const createSupabaseMock = (state: MockState): SupabaseClient => {
 
 const freshState = (): MockState => ({
   recentCreatedAt: null,
+  recentExpiresAt: null,
   readError: false,
   deleteCalls: 0,
   insertCalls: 0,
@@ -256,6 +287,46 @@ describe('sendSecondFactorCode', () => {
 
     expect(mockSendOtpEmail).not.toHaveBeenCalled();
     expect(state.insertCalls).toBe(0);
+  });
+
+  /**
+   * ⛔ **使えるコードが既に届いているなら行き止まりにしない**
+   * （GHSA-p899-6g7w-v7hg）。
+   *
+   * 枠を使い切らせる妨害は、宛先が `users.email` に固定されているため
+   * **被害者の受信箱に有効なコードを送り込む**形でしか成立しない。
+   * その状態で「リカバリーコードを使え」と案内するのは、手元に答えが
+   * あるのに別の出口へ誘導していることになる。
+   */
+  it('上限でも有効なコードが残っていれば THROTTLED を返す', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 3600 });
+    const state = freshState();
+    // 再送間隔（60秒）は過ぎているが、コード自体はまだ有効
+    state.recentCreatedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    state.recentExpiresAt = new Date(Date.now() + 25 * 60 * 1000).toISOString();
+
+    await expect(
+      sendSecondFactorCode(createSupabaseMock(state), USER_ID, EMAIL),
+    ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.THROTTLED);
+
+    // ⚠️ 1通も送らないことは変わらない。変わるのは呼び出し側への伝え方だけ
+    expect(mockSendOtpEmail).not.toHaveBeenCalled();
+    expect(state.insertCalls).toBe(0);
+  });
+
+  /**
+   * ⚠️ 期限切れの行で THROTTLED を返すと、**使えないコードの入力を
+   * 促す**ことになる。そちらは素直に行き止まり（リカバリーコード）へ。
+   */
+  it('上限で、残っているコードが期限切れなら LIMIT_EXCEEDED', async () => {
+    mockCheckRateLimit.mockResolvedValue({ allowed: false, retryAfter: 3600 });
+    const state = freshState();
+    state.recentCreatedAt = new Date(Date.now() - 40 * 60 * 1000).toISOString();
+    state.recentExpiresAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+    await expect(
+      sendSecondFactorCode(createSupabaseMock(state), USER_ID, EMAIL),
+    ).resolves.toBe(SEND_SECOND_FACTOR_RESULT.LIMIT_EXCEEDED);
   });
 
   /**

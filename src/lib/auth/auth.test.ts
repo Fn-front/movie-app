@@ -160,6 +160,7 @@ import {
   DUMMY_PASSWORD_HASH,
   SESSION_CONFIG,
 } from '@/constants/auth';
+import { RATE_LIMIT_ACTION } from '@/constants/rateLimit';
 import { SECOND_FACTOR_METHOD } from '@/constants/secondFactor';
 import { __resetSessionUserLookupForTest } from '@/lib/auth/sessionUserLookup';
 
@@ -2626,6 +2627,9 @@ describe('authorize の第2要素（method=email_otp）', () => {
   };
 
   beforeEach(() => {
+    // ⚠️ `mockResolvedValue` だけでは**呼び出し履歴が残る**。
+    //    どの action を消費したかを見るテストがあるので、毎回捨てる
+    mockCheckRateLimit.mockReset();
     mockCheckRateLimit.mockResolvedValue({ allowed: true });
     mockResetRateLimit.mockReset();
     mockVerifySecondFactor.mockReset();
@@ -2644,6 +2648,79 @@ describe('authorize の第2要素（method=email_otp）', () => {
     ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED });
 
     expect(mockSendSecondFactorCode).toHaveBeenCalled();
+  });
+
+  /**
+   * ⛔ **送信元ごとの層を手前に置く**（GHSA-p899-6g7w-v7hg）。
+   *
+   * `TWO_FACTOR_SEND` は利用者単位なので、パスワードを知る第三者が
+   * 「コードを入れずにパスワードだけ」を投げ続けると、被害者の枠を
+   * 使い切って**メールOTPでのログインを妨害できる**。
+   * 上の `resetRateLimit` で `login` も積み上がらない。
+   */
+  it('送信の前に送信元ごとの枠を消費する', async () => {
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.EMAIL_OTP_REQUIRED });
+
+    const identifiers = mockCheckRateLimit.mock.calls.map((call) => [
+      call[1],
+      call[2],
+    ]);
+
+    // ⚠️ 識別子は `メール|IP`。利用者IDにすると送信元で分かれず、
+    //    手前に層を足した意味が無くなる
+    expect(identifiers).toContainEqual([
+      'owner@example.com|203.0.113.1',
+      RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT,
+    ]);
+  });
+
+  /**
+   * ⛔ **弾くほうが先**。後ろだと `TWO_FACTOR_SEND`（被害者の枠）を
+   * 消費してから弾くことになり、妨害を止められない。
+   */
+  it('送信元ごとの枠を使い切ったら、1通も送らずに打ち切る', async () => {
+    mockCheckRateLimit.mockImplementation((_supabase, _id, action) =>
+      Promise.resolve(
+        action === RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT
+          ? { allowed: false, retryAfter: 3600 }
+          : { allowed: true },
+      ),
+    );
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({
+      code: AUTH_ERROR_CODE.SECOND_FACTOR_SEND_LIMITED,
+    });
+
+    expect(mockSendSecondFactorCode).not.toHaveBeenCalled();
+  });
+
+  /**
+   * ⚠️ **TOTP の利用者には掛けない。** メールを送らない方式なので、
+   * 消費すると何も守らずに枠だけ減る。
+   */
+  it('method=totp では送信元ごとの枠を消費しない', async () => {
+    mockGetSecondFactorMethod.mockResolvedValue(SECOND_FACTOR_METHOD.TOTP);
+
+    await expect(
+      credentialsProvider.authorize(
+        { email: 'owner@example.com', password: PASSWORD },
+        makeRequest(),
+      ),
+    ).rejects.toMatchObject({ code: AUTH_ERROR_CODE.TOTP_REQUIRED });
+
+    const actions = mockCheckRateLimit.mock.calls.map((call) => call[2]);
+
+    expect(actions).not.toContain(RATE_LIMIT_ACTION.TWO_FACTOR_SEND_PROMPT);
   });
 
   it('method=totp ではメールを送らない', async () => {

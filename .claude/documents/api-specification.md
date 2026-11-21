@@ -6,7 +6,7 @@
 - **認証方式**: NextAuth.js (JWT, ブラウザメモリ)
 - **HTTP Client**: axios (クライアント側)
 - **Content-Type**: `application/json`
-- **Rate Limiting**: 3回までの試行制限（認証エンドポイント）
+- **Rate Limiting**: ログインはアカウント単位 5回/30分 ＋ 送信元IP単位 20回/15分（`RATE_LIMIT_CONFIG`）（認証エンドポイント）
 - **キャッシュ戦略**:
   - 一覧画面: DBキャッシュあり（差分更新方式）
   - 詳細画面: キャッシュなし（都度TMDb API取得）
@@ -174,7 +174,7 @@ OTPコード送信（再送信含む）
 ```
 
 **Error Responses:**
-- `400 Bad Request`: バリデーションエラー（`action: 'login'` もここ）
+- `400 Bad Request`: バリデーションエラー（`action: 'login'` は #1361 で退役したのでここに落ちる）
 - `429 Too Many Requests`: 再送間隔が短すぎる（1分未満）
 
 > ⚠️ 存在しないメールでも **200 を返す**（メールアドレス列挙防止）。404 は返さない。
@@ -196,7 +196,7 @@ OTPコード検証
 **Validation:**
 - `email`: メール形式必須
 - `code`: 6桁数字
-- `action`: 'registration' | 'login' | 'password_change'
+- `action`: 'registration' | 'password_change'（`PUBLIC_OTP_ACTIONS`）
 
 **内部処理:**
 1. 検証試行のレート制限チェック（email単位、10回/10分）— 超過時は 429 を返しコード照合をスキップ
@@ -256,46 +256,39 @@ OTPコード検証
 
 ---
 
-### POST /api/auth/login
-ログイン
+### ログイン / ログアウト
 
-**Request Body:**
-```json
-{
-  "email": "user@example.com",
-  "password": "ExamplePass1234"
-}
-```
+⚠️ **`POST /api/auth/login` も `POST /api/auth/logout` も存在しない。**
+NextAuth.js が `src/app/api/auth/[...nextauth]/route.ts` の `handlers` で
+`/api/auth/*` をまとめて受ける（あのファイルは
+`export const { GET, POST } = handlers;` の1行だけ）。
 
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "user": {
-    "id": "uuid-here",
-    "email": "user@example.com",
-    "name": "ユーザー名",
-    "avatar_url": "https://..."
-  },
-  "token": "jwt-token-or-session-id"
-}
-```
+画面からは `next-auth/react` の関数を呼ぶ。
 
-**Error Responses:**
-- `401 Unauthorized`: メールアドレスまたはパスワードが間違っている
+| 操作 | 呼ぶもの | 実際に叩かれる先 |
+|---|---|---|
+| ログイン（メール+パスワード） | `signIn('credentials', { email, password })` | `POST /api/auth/callback/credentials` |
+| ログイン（OAuth） | `signIn('google')` / `signIn('github')` | `POST /api/auth/signin/<provider>` → provider → `/api/auth/callback/<provider>` |
+| ログアウト | `signOut()` | `POST /api/auth/signout` |
+| セッション取得（クライアント） | `useSession()` | `GET /api/auth/session` |
+| セッション取得（サーバー） | `auth()` | **HTTP を介さない** |
 
----
+⚠️ `signIn()` は**どの provider でも POST**（`node_modules/next-auth/react.js` の
+`method: 'post'`）。`GET /api/auth/signin/<provider>` は NextAuth の組み込み
+サインイン画面で、`signIn()` が叩く経路ではない。
 
-### POST /api/auth/logout
-ログアウト
+⚠️ **`auth()` はリクエストを飛ばさない。** `createActionURL('session', ...)` で
+URL を組み立てて `new Request(...)` を作り、`Auth(request, config)` を
+**プロセス内で**呼ぶだけ（`node_modules/next-auth/lib/index.js`）。
+テストで `/api/auth/session` をモックしても `auth()` には効かない。
 
-**Response (200 OK):**
-```json
-{
-  "success": true,
-  "message": "ログアウトしました"
-}
-```
+⚠️ 認証の成否は**レスポンスボディではなくセッション**で判断する。
+`signIn` の戻り値の `error` は `authorize` が投げたエラーの `code` で、
+`CredentialsSignin` に丸められないよう `CredentialsSignInError` で投げる
+必要がある（`src/lib/auth/auth.ts`）。
+
+第2要素が未了のときは `session.totpPending` が立ち、`src/proxy.ts` が
+`/auth/two-factor` へ閉じ込める。コードの検証は `update({ totpCode })` で行う。
 
 ---
 
@@ -1336,7 +1329,7 @@ AIレコメンド生成（Vercel Cron Jobs、1日1回）
 
 ### 認証・セキュリティ
 - [x] **認証方式**: NextAuth.js (JWT, ブラウザメモリ) - 確定
-- [x] **Rate Limiting**: 3回までの試行制限 - 確定
+- [x] **Rate Limiting**: ログインはアカウント単位 5回/30分 ＋ 送信元IP単位 20回/15分（`RATE_LIMIT_CONFIG`） - 確定
 - [x] **セッションの有効期限**: 24時間 - 確定
 - [x] **セッションストレージ**: ブラウザメモリ（JWT方式） - 確定
 

@@ -162,7 +162,7 @@ interface AddMovieParams {
 
 export async function addToWatchlist(params: AddMovieParams) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getAuthSession();
 
     if (!session) {
       return {
@@ -186,7 +186,10 @@ export async function addToWatchlist(params: AddMovieParams) {
       throw error;
     }
 
-    revalidatePath('/home');
+    // ⚠️ **ここで `revalidatePath` を呼んでも一覧は更新されない。**
+    //    ウォッチリストの画面はクライアント専用（`ssr: false` ＋ React Query）。
+    //    シェルのキャッシュは無効化されるが、そこに一覧データが入っていない。
+    //    更新はクライアント側のクエリ無効化で行う
 
     return {
       success: true,
@@ -210,11 +213,10 @@ export async function addToWatchlist(params: AddMovieParams) {
 ```typescript
 'use server';
 
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { getAuthSession } from '@/helpers/auth';
 
 export async function protectedAction() {
-  const session = await getServerSession(authOptions);
+  const session = await getAuthSession();
 
   if (!session) {
     return {
@@ -226,10 +228,20 @@ export async function protectedAction() {
     };
   }
 
-  // 認証済みユーザーの処理
+  // 認証済みユーザーの処理（session.user.id が使える）
   // ...
 }
 ```
+
+> ⛔ **`getServerSession(authOptions)` を使わない。** NextAuth v4 のAPIで、
+> このリポジトリには1か所も無い。`authOptions` も
+> `app/api/auth/[...nextauth]/route.ts` から export していないので、
+> **import した時点で壊れる**。
+>
+> v5 では `auth()`（`src/lib/auth/auth.ts`）がその役割を担う。Server Action /
+> Route Handler からは `getAuthSession()`（`src/helpers/auth.ts`）を使う。
+> あちらは `session.user.id` の有無まで見て `null` に倒すので、
+> **失効済みセッションを「ログイン済み」と誤判定しない**。
 
 ## Revalidate
 
@@ -240,17 +252,35 @@ export async function protectedAction() {
 
 import { revalidatePath } from 'next/cache';
 
+import { ROUTES } from '@/constants/common';
+
 export async function updateAction() {
   // 処理...
 
   // 特定のパスを再検証
-  revalidatePath('/home');
+  //
+  // ⚠️ **存在しないパスを渡してもエラーにならない**。黙って何もしないので、
+  //    打ち間違いは「キャッシュが更新されない」という形でしか現れない。
+  //    パスは `src/constants/common.ts` の `ROUTES` から取ること
+  //
+  // ⚠️ **再検証するものが無いパスを渡しても同じ**。効くのは
+  //    **サーバーで描画・取得している**画面だけ。このリポジトリなら
+  //    `/`（`src/app/page.tsx`）、`/movies/[id]`、`/person/[id]` の3つで、
+  //    `/watchlist` のようにクライアント専用（`ssr: false` ＋ React Query）の
+  //    画面に投げても**一覧は更新されない**（シェルのキャッシュは無効化
+  //    されるが、そこにデータが入っていない）
+  revalidatePath(ROUTES.HOME);
 
-  // 特定のパスとその子パスを再検証
-  revalidatePath('/home', 'page');
+  // 動的セグメントを持つパスは **`type` が必須**。パターンで渡して
+  // 一致するページをまとめて再検証する
+  revalidatePath('/movies/[id]', 'page');
 
-  // レイアウト全体を再検証
-  revalidatePath('/home', 'layout');
+  // そのレイアウトと配下のページを再検証
+  revalidatePath('/movies/[id]', 'layout');
+
+  // ⛔ **`revalidatePath('/', 'layout')` は別物**。Next のドキュメントが
+  //    「Revalidating all data」として載せている形で、**Client Cache ごと
+  //    全キャッシュを捨てる**。「トップのレイアウトだけ」ではない
 
   return { success: true };
 }
@@ -303,7 +333,7 @@ export async function setCookieAction() {
     path: '/',
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 7日間
   });
 
@@ -326,7 +356,7 @@ export async function deleteCookieAction() {
     path: '/',
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 0,
   });
 
@@ -336,7 +366,7 @@ export async function deleteCookieAction() {
 
 ### ⚠️ `cookies().delete(name)` は使わない
 
-`next/headers` の `cookies()` が返すストアは、middleware の
+`next/headers` の `cookies()` が返すストアは、proxy（`src/proxy.ts`）の
 `response.cookies` と**同じ `ResponseCookies`** を包んだもので
 （`node_modules/next/dist/server/web/spec-extension/adapters/request-cookies.js`）、
 `delete` も同じ実装へ委譲される。文字列だけを渡すと
@@ -350,7 +380,12 @@ name=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
 **拒否する**（CookiePrefixes）。削除指示そのものが捨てられ、本番でだけ
 静かに効かなくなる（#1174 で実際に起きた）。
 
-詳細は `/middleware` スキルの同名セクションを参照。
+⚠️ **発行と削除で属性を揃える。** 片方だけ `strict` にすると、ブラウザは
+別の Cookie として扱って**削除が効かない**（RFC 6265 §5.3）。セッション
+Cookie は `getSessionCookieName()` / `getSessionCookieOptions()`
+（`src/constants/auth.ts`）から取るので、自分で書かないこと。
+
+詳細は `/middleware` スキル（中身は proxy）の同名セクションを参照。
 
 ## プログレッシブエンハンスメント
 
@@ -455,8 +490,8 @@ export function Form() {
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+
+import { getAuthSession } from '@/helpers/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -465,7 +500,7 @@ const supabase = createClient(
 
 export async function deleteFromWatchlistAction(movieId: string) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getAuthSession();
 
     if (!session) {
       return {
@@ -488,7 +523,7 @@ export async function deleteFromWatchlistAction(movieId: string) {
       throw error;
     }
 
-    revalidatePath('/home');
+    // 同上。クライアント専用の画面には `revalidatePath` が効かない
 
     return {
       success: true,
@@ -638,7 +673,7 @@ export async function uploadFileAction(formData: FormData) {
 ```typescript
 'use server';
 
-import { getServerSession } from 'next-auth';
+import { getAuthSession } from '@/helpers/auth';
 
 async function checkRateLimit(userId: string, action: string): Promise<boolean> {
   const { data } = await supabase
@@ -660,7 +695,7 @@ async function checkRateLimit(userId: string, action: string): Promise<boolean> 
 
 export async function rateLimitedAction() {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await getAuthSession();
 
     if (!session) {
       return {

@@ -37,10 +37,12 @@
   - [x] useClickOutside（外側クリック検知）
   - [x] useToggle（boolean状態管理）
 - [x] lib（ライブラリ・設定）の実装
-  - [x] Supabaseクライアント設定（lib/supabase/client.ts, server.ts）
+  - [x] Supabaseクライアント設定（`src/helpers/supabase.ts` の
+        `createServiceRoleClient()` / `createAnonClient()`。
+        `src/lib/supabase/` は存在しない）
   - [x] TMDb APIクライアント設定（lib/tmdb/tmdb.ts）
   - [x] axiosインスタンス設定（lib/axios/axios.ts）
-  - [ ] NextAuth.js設定（lib/auth/authOptions.ts）
+  - [ ] NextAuth.js設定（`src/lib/auth/auth.ts`。v5 なので `authOptions` は無い）
   - [x] 定数定義（lib/constants/index.ts）
   - [x] 型定義（lib/types/index.ts）
 - [x] 共通コンポーネントの基礎実装（Radix UIベース、React.memo必須）

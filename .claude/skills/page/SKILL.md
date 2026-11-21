@@ -137,31 +137,46 @@ export default async function Page({ params }: PageProps) {
 
 ## ルートグループ
 
-### 認証ページグループ
+### 認証ページ
+
+⚠️ **ルートグループ（`(auth)` のような括弧付きディレクトリ）は使っていない。**
+`src/app` 配下に素のディレクトリを置く。
 
 ```
-src/app/(auth)/
-├── layout.tsx       # 認証ページ共通レイアウト
-├── login/
-│   └── page.tsx
-├── register/
-│   └── page.tsx
-└── verify-otp/
-    └── page.tsx
+src/app/auth/
+├── layout.tsx          # 認証ページ共通レイアウト
+├── signin/             # ROUTES.LOGIN
+├── signup/             # ROUTES.REGISTER
+├── two-factor/         # 第2要素の入力（ROUTES.TOTP_CHALLENGE）
+├── forgot-password/
+├── reset-password/
+└── error/
 ```
 
-### メインアプリグループ
+### 通常のページ
 
 ```
-src/app/(main)/
-├── layout.tsx       # メインアプリ共通レイアウト
-├── home/
-│   └── page.tsx
-├── calendar/
-│   └── page.tsx
-└── search/
-    └── page.tsx
+src/app/
+├── page.tsx            # トップ（ROUTES.HOME = '/'。公開ページ）
+├── movies/
+├── search/
+├── watchlist/          # 要認証
+├── favorites/          # 要認証
+├── settings/           # 要認証
+├── awards/
+├── person/
+├── privacy/
+├── theater-experience/ # 要認証
+└── admin/              # admin ロールのみ（accounts / awards）
 ```
+
+> ⚠️ パスは `src/constants/common.ts` の `ROUTES` が正。`/login` `/home`
+> `/calendar` は**どれも存在しない**（それぞれ `/auth/signin`、`/`、
+> カレンダーは画面ではなく全ページ共通のダイアログ。`appLayout` が
+> マウントし、サイドバーとモバイルドロワーの2か所から開く）。
+>
+> ⚠️ 要認証は `AUTH_REQUIRED_ROUTES`（watchlist / settings / favorites /
+> theater-experience の4つ）、admin 専用は `ADMIN_REQUIRED_ROUTES` が正。
 
 ## レイアウトテンプレート
 
@@ -321,19 +336,27 @@ export default function Page() {
 
 ```typescript
 import { redirect } from 'next/navigation';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+
+import { ROUTES } from '@/constants/common';
+import { getAuthSession } from '@/helpers/auth';
 
 export default async function ProtectedPage() {
-  const session = await getServerSession(authOptions);
+  const session = await getAuthSession();
 
   if (!session) {
-    redirect('/login');
+    redirect(ROUTES.LOGIN);
   }
 
   return <div>保護されたコンテンツ</div>;
 }
 ```
+
+> ⚠️ 保護されたページは `src/proxy.ts` でもリダイレクトしているが、
+> **ここでも確認する**。proxy はネットワーク層の体裁に過ぎず、認可の最終
+> 判定はページ側・Route Handler 側に置く方針（`src/proxy.ts` の冒頭）。
+>
+> ⚠️ リダイレクト先をベタ書きしない。`ROUTES.LOGIN` は `/auth/signin` で、
+> `/login` は**このリポジトリに存在しない**。
 
 ### Client Componentで認証チェック
 
@@ -341,17 +364,20 @@ export default async function ProtectedPage() {
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+import { ROUTES } from '@/constants/common';
+
 export default function ProtectedPage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
+  const router = useRouter();
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      redirect('/login');
+      router.replace(ROUTES.LOGIN);
     }
-  }, [status]);
+  }, [router, status]);
 
   if (status === 'loading') {
     return <div>読み込み中...</div>;
@@ -360,6 +386,13 @@ export default function ProtectedPage() {
   return <div>保護されたコンテンツ</div>;
 }
 ```
+
+> ⚠️ **Client Component では `redirect()` を使わない。** あれは Server
+> Component / Server Action 用で、`useEffect` の中から呼ぶ経路ではない。
+> `useRouter().replace()` を使う。
+>
+> ⚠️ ここでも `ROUTES.LOGIN` を使う。`/login` は**このリポジトリに存在しない**
+> ので、ベタ書きすると proxy も素通りして **404** になる。
 
 ## パラメータ取得
 

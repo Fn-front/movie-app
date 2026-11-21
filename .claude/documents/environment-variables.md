@@ -60,21 +60,49 @@ NEXTAUTH_URL=http://localhost:3000  # 本番: https://yourdomain.com
 AUTH_DEBUG=true  # デフォルトはfalse、デバッグ時のみ有効化
 ```
 
-**Cookie設定（NextAuth.js設定ファイルで実装）:**
+**Cookie設定（`src/lib/auth/auth.ts`）:**
+
 ```typescript
-// app/api/auth/[...nextauth]/route.ts
 cookies: {
   sessionToken: {
-    name: `__Secure-next-auth.session-token`,
-    options: {
-      httpOnly: true,    // JavaScriptからアクセス不可
-      sameSite: 'strict', // CSRF対策
-      path: '/',
-      secure: true,      // HTTPS必須（本番環境）
-    },
+    // proxy（失効セッションのCookie削除）と定義を共有する
+    name: getSessionCookieName(),
+    options: getSessionCookieOptions(),
   },
-}
+},
 ```
+
+実体は `src/constants/auth.ts`。
+
+```typescript
+export const getSessionCookieName = (): string =>
+  process.env.NODE_ENV === 'production'
+    ? '__Secure-next-auth.session-token'
+    : 'next-auth.session-token';
+
+export const getSessionCookieOptions = () => ({
+  httpOnly: true, // JavaScriptからアクセス不可
+  sameSite: 'lax' as const,
+  path: '/',
+  secure: process.env.NODE_ENV === 'production', // HTTPS必須（本番のみ）
+});
+```
+
+⛔ **インラインで書かない**（#1174）。発行側（`auth.ts`）と削除側
+（`src/proxy.ts`）で属性が1つでも食い違うと、ブラウザは別の Cookie として
+扱い**削除が効かなくなる**。名前も属性も必ずこの2つのヘルパー経由で取る。
+
+> ⚠️ 名前と属性はセットで扱う。本番の `__Secure-` 接頭辞が付いた Cookie は、
+> **`Secure` 属性の無い `Set-Cookie` をブラウザが拒否する**（CookiePrefixes）。
+
+⚠️ `sameSite` は **`lax`**（`strict` ではない）。`strict` にすると、
+外部サイトからのリンクで入ってきたときに Cookie が送られず、**ログイン済み
+なのにログアウトして見える**。このアプリはパスワード再設定のリンクを
+メールで送るので（`sendPasswordResetEmail`）、そこを踏んだ利用者が当たる。
+NextAuth の既定も `lax`。
+
+⚠️ `secure` を `true` 固定にしない。ローカル（http://localhost）では
+ブラウザが Cookie を保存せず、**開発環境でログインできなくなる**。
 
 ---
 
@@ -459,7 +487,11 @@ export function validateEnv() {
 - [x] **セッション有効期限**: 24時間 - 確定
 - [x] **セッションストレージ**: ブラウザメモリ（JWT方式） - 確定
 - [x] **NEXTAUTH_SECRET**: openssl rand -base64 32で生成 - 確定
-- [x] **Cookie設定**: 厳密（HttpOnly: true, Secure: true, SameSite: 'strict'）- 確定
+- [x] **Cookie設定**: `getSessionCookieName()` / `getSessionCookieOptions()`
+      （`src/constants/auth.ts`）に集約 - 確定
+  - `httpOnly: true` / `sameSite: 'lax'` / `path: '/'` /
+    `secure: NODE_ENV === 'production'`
+  - ⚠️ `strict` にも `secure: true` 固定にもしない（理由は上の Cookie設定の節）
 
 ### 本番環境
 - [ ] **Vercel**: プロジェクト作成済み？

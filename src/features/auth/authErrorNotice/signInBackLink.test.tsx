@@ -1,9 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
 
+import { PENDING_CALLBACK_URL_KEY as KEY } from '@/features/auth/utils/pendingCallbackUrl';
 import { SignInBackLink } from './signInBackLink';
-
-const KEY = 'auth:pendingCallbackUrl';
 
 describe('SignInBackLink', () => {
   beforeEach(() => {

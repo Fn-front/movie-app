@@ -15,8 +15,15 @@
 
 import { resolveSafeCallbackUrl } from '@/utils/url';
 
-/** 預け先のキー。生成と読み出しで同じ値を使う */
-const PENDING_CALLBACK_URL_KEY = 'auth:pendingCallbackUrl';
+/**
+ * 預け先のキー。生成と読み出しで同じ値を使う
+ *
+ * ⚠️ テスト（単体・E2E とも）が「預かっている状態」を観測するために参照する。
+ * OAuth の往復そのものは実プロバイダが要って再現できないため、
+ * `sessionStorage` を直接読んで確かめるしかない。直書きさせると二重管理に
+ * なるので export している（参照側は全部ここから取ること）。
+ */
+export const PENDING_CALLBACK_URL_KEY = 'auth:pendingCallbackUrl';
 
 /**
  * ソーシャルログインを始める前に戻り先を預ける

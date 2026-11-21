@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 
+import { PENDING_CALLBACK_URL_KEY as KEY } from '@/features/auth/utils/pendingCallbackUrl';
 import { SignInContent } from './signInContent';
 
 // --- Mocks ---
@@ -186,8 +187,6 @@ describe('SignInContent', () => {
   });
 
   describe('ソーシャルログイン失敗後の戻り先復元（#1246）', () => {
-    const KEY = 'auth:pendingCallbackUrl';
-
     beforeEach(() => {
       window.sessionStorage.clear();
       setLocation('');

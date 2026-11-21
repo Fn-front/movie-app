@@ -3,11 +3,10 @@
  */
 
 import {
+  PENDING_CALLBACK_URL_KEY as KEY,
   savePendingCallbackUrl,
   takePendingCallbackUrl,
 } from './pendingCallbackUrl';
-
-const KEY = 'auth:pendingCallbackUrl';
 
 describe('pendingCallbackUrl', () => {
   beforeEach(() => {

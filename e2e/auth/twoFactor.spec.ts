@@ -30,7 +30,9 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
+import { API_ENDPOINTS } from '@/constants';
 import { OTP_CONFIG } from '@/constants/otp';
+import { RATE_LIMIT_ACTION } from '@/constants/rateLimit';
 
 import { getLatestOtpCode, getRateLimitRow } from '../helpers/api';
 import {
@@ -405,48 +407,91 @@ test.describe('二段階認証', () => {
     await page.getByRole('button', { name: 'メールで設定する' }).click();
 
     /**
-     * ⚠️ 可視テキストでそのまま引く。固定の `aria-label` を付けると、
-     * 本文が「送信しています…」に変わったときに見えている文字が
-     * アクセシブルネームから外れる（WCAG 2.5.3 Label in Name）。
-     * ここで引けること自体が、その退行を捕まえる。
+     * ⚠️ 可視テキストで引く（本文が「送信しています…」に変わるため、
+     * 固定の `aria-label` を付けると WCAG 2.5.3 Label in Name に反する）。
+     *
+     * ⚠️ **ただしここで引けること自体は Label in Name を守らない。**
+     * `getByRole(..., { name })` が見るのは**アクセシブルネーム**で、
+     * `aria-label='確認コードを再送信する'` を足してもネームは変わらず
+     * このロケータは一致し続ける。違反が出るのは `isSubmitting` の最中
+     * （可視テキストだけが変わる）で、そこは何もアサートしていない。
+     * axe での検査は `e2e/a11y/labelInName.spec.ts` の担当（現状は TOTP
+     * 経路のみ。メールOTP 経路は未カバー）。
      */
     const resendButton = page.getByRole('button', {
       name: '確認コードを再送信する',
     });
 
+    /**
+     * ⚠️ ページ全体ではなく節だけを撮る（`二段階認証の再認証` の撮影と同じ）。
+     * notice（「確認コードをメールに送信しました。」）は節の**最上部**に
+     * 出るのに、再送ボタンは下のほうにある。ビューポートで撮ると
+     * 送信前後で**1ピクセルも変わらない同じ画像**になる。
+     */
+    const section = page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: '二段階認証' }) });
+
     // 1. 送った直後は押せない（サーバー側の再送間隔に当たるだけなので手前で止める）
     await expect(resendButton).toBeDisabled();
-    await page.screenshot({
+    await section.screenshot({
       path: 'docs/e2e-screenshots/two-factor-setup-resend-cooldown.png',
     });
 
     const firstCode = await getLatestOtpCode(USER.email, 'two_factor');
     expect(firstCode).not.toBeNull();
 
-    // 再送の前の消費量。`setup` のぶんで1回入っている
-    const beforeResend = await getRateLimitRow(userId, 'totp_settings_verify');
+    // 再送の前の消費量。`setup` のぶんで1回入っている（`setup/route.ts` は
+    // 方式によらず検証より前に1回消費する）。
+    // ⚠️ 行そのものが無い退行と区別できるよう、先に存在を見る
+    const beforeResend = await getRateLimitRow(
+      userId,
+      RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
+    );
+    expect(beforeResend).not.toBeNull();
     expect(beforeResend?.attempts).toBe(1);
 
     // 2. カウントダウンが明けるのを待つ（60秒）
     await expect(resendButton).toBeEnabled({
       timeout: (OTP_CONFIG.RESEND_INTERVAL_SECONDS + 15) * 1000,
     });
+    await section.screenshot({
+      path: 'docs/e2e-screenshots/two-factor-setup-resend-ready.png',
+    });
 
     // 3. 再送すると新しいコードが入る（古いコードは消える）
+    //
+    // ⚠️ 文言の出現で待たない。同じ `CODE_SENT` は `startSetup` が既に
+    //    出していて、60秒待つあいだ画面に残っている。「同じ文字が見える」
+    //    ことは再送の成功を意味しないので、**応答そのもの**を待つ
+    const resent = page.waitForResponse(
+      (response) =>
+        response.url().includes(API_ENDPOINTS.USER_TOTP_SEND_CHALLENGE) &&
+        response.ok(),
+    );
     await resendButton.click();
+    await resent;
+
     await expect(
       page.getByText('確認コードをメールに送信しました。'),
     ).toBeVisible();
-    await page.screenshot({
-      path: 'docs/e2e-screenshots/two-factor-setup-resend-sent.png',
-    });
+
+    // ⚠️ ここでスクリーンショットを撮らない。notice は `startSetup` が既に
+    //    同じ文言で出していて、再送の前後で**見た目が変わらない**。
+    //    撮っても `-cooldown.png` とバイト同一の画像が増えるだけ
 
     const resentCode = await getLatestOtpCode(USER.email, 'two_factor');
     expect(resentCode).not.toBeNull();
     expect(resentCode).not.toBe(firstCode);
 
     // 5. 再送は設定変更の枠を消費しない（`send-challenge` 経由であること）
-    const afterResend = await getRateLimitRow(userId, 'totp_settings_verify');
+    //
+    // ⚠️ **「有効にする」より前に読む。** `enable` も同じカウンタを消費し、
+    //    成功すると `resetRateLimit` で行ごと消す。後ろに置くと観測できない
+    const afterResend = await getRateLimitRow(
+      userId,
+      RATE_LIMIT_ACTION.TOTP_SETTINGS_VERIFY,
+    );
     expect(afterResend?.attempts).toBe(1);
 
     // 4. 送り直したコードで有効化まで到達できる
@@ -458,7 +503,7 @@ test.describe('二段階認証', () => {
     await expect(
       page.getByRole('list', { name: 'リカバリーコード' }),
     ).toBeVisible();
-    await page.screenshot({
+    await section.screenshot({
       path: 'docs/e2e-screenshots/two-factor-setup-resend-enabled.png',
     });
   });

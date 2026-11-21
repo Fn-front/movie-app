@@ -31,7 +31,8 @@ interface SocialLoginButtonsProps {
 
 export const SocialLoginButtons = memo<SocialLoginButtonsProps>(
   function SocialLoginButtons({ disabled = false, callbackUrl }) {
-    const [loadingProvider, setLoadingProvider] = useState<string | null>(null);
+    const [loadingProvider, setLoadingProvider] =
+      useState<SocialProvider | null>(null);
     const { toast } = useToastDispatch();
 
     /**
@@ -56,6 +57,11 @@ export const SocialLoginButtons = memo<SocialLoginButtonsProps>(
             ⚠️ **始められなかったときは預かり分を捨てる（#1292）。**
             `savePendingCallbackUrl` は `signIn` の**前**に預けるので、
             残すと次にこの画面へ来た人が身に覚えのない場所へ飛ばされうる。
+
+            ⚠️ **このコンポーネントが預けたかに関わらず捨てる。** 新規登録
+            ページは `callbackUrl` 無しで描くので（`registerForm.tsx`）、
+            そこでは別の機会の預かり分を消すことになる。捨てる方向なので
+            安全側に倒れる。
 
             ⛔ 利用者に伝えるのを省かない。`finally` でボタンが戻るだけだと
             「押したのに何も起きない」になり、原因を知りようがない。

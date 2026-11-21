@@ -118,9 +118,9 @@ export const AUTH_ERROR_MESSAGES = {
   /**
    * ソーシャルログインを始められなかった（#1292）
    *
-   * `signIn()` は通常ブラウザごと遷移させて戻ってこないが、通信断では
-   * reject する。以前は catch が無く、**ボタンが元に戻るだけで何も
-   * 起きなかったように見えていた**。
+   * `signIn()` は通常ブラウザごと遷移させて戻ってこないが、**通信が途中で
+   * 切れた**とき（や、応答が JSON でないとき）に reject する。以前は catch が
+   * 無く、**ボタンが元に戻るだけで何も起きなかったように見えていた**。
    *
    * ⚠️ reject するのは `POST /api/auth/signin/<provider>`（と、その応答の
    * `res.json()`）だけ。`next-auth/react.js:153` の裸の fetch がそれで、

@@ -84,9 +84,9 @@ const removeButtonIn = (scope: Locator) =>
  * ⚠️ 見つからないときは**黙ってスキップしない**。「データが無い」のか
  * 「ボタンが壊れた」のかが区別できなくなる。件数を添えて落とす。
  *
- * ⚠️ ページ全体から探してよい。サイドバー（`watchlistPanel`）が出すのは
- * 登録済みの項目で、ボタンは**削除**しか持たないため「追加」の走査には
- * 当たらない。
+ * ⚠️ ページ全体から探してよい。サイドバー（`watchlistPanel`）の項目は
+ * `c_watchlist_item`（`watchlistItem.tsx`）で、`movieTiles` のセレクタ
+ * （`c_card` ＋ `c_movie_tile`）に**構造上当たらない**。
  */
 async function firstWatchlistableTile(
   page: Page,
@@ -96,29 +96,38 @@ async function firstWatchlistableTile(
   let foundIndex = -1;
   let lastTotal = 0;
 
-  await expect
-    .poll(
-      async () => {
-        lastTotal = await tiles.count();
+  /**
+   * ⚠️ **`expect.poll` の `message` に件数を埋め込まない。** オプションは
+   * poll が始まる前に組み立てられるので、`lastTotal` は**代入前の 0 のまま
+   * 固定される**。常に「総数: 0」と出て、#1333 の「0 件で落ちたのに
+   * スクショにはタイルが写っていた」という誤解をそのまま再生産する。
+   * 走査を抜けてから、その時点の値で投げる。
+   */
+  try {
+    await expect
+      .poll(
+        async () => {
+          lastTotal = await tiles.count();
 
-        for (let index = 0; index < lastTotal; index += 1) {
-          if ((await addButtonIn(tiles.nth(index)).count()) > 0) {
-            foundIndex = index;
-            return true;
+          for (let index = 0; index < lastTotal; index += 1) {
+            if ((await addButtonIn(tiles.nth(index)).count()) > 0) {
+              foundIndex = index;
+              return true;
+            }
           }
-        }
 
-        return false;
-      },
-      {
-        timeout: 30000,
-        message:
-          `${screen}: ウォッチリストに追加できるタイルが見つかりません` +
-          `（最後に数えたタイル総数: ${lastTotal}）。` +
-          'データが無いか、ボタンが描画されていません。',
-      },
-    )
-    .toBe(true);
+          return false;
+        },
+        { timeout: 30000 },
+      )
+      .toBe(true);
+  } catch {
+    throw new Error(
+      `${screen}: ウォッチリストに追加できるタイルが見つかりません` +
+        `（最後に数えたタイル総数: ${lastTotal}）。` +
+        'データが無いか、ボタンが描画されていません。',
+    );
+  }
 
   return tiles.nth(foundIndex);
 }
@@ -133,12 +142,19 @@ async function firstWatchlistableTile(
 async function toggleAndExpectLabelSwap(
   page: Page,
   tile: Locator,
+  screenshot?: string,
 ): Promise<void> {
   const added = waitForWatchlistResponse(page);
   await addButtonIn(tile).click();
   await added;
 
   await expect(removeButtonIn(tile)).toBeVisible({ timeout: 15000 });
+
+  if (screenshot) {
+    // ⚠️ ページ全体ではなくタイルだけ撮る。一覧は作品が入れ替わるので、
+    //    全体だと毎回ぜんぶ差分になる
+    await tile.screenshot({ path: `docs/e2e-screenshots/${screenshot}` });
+  }
 
   // 片方向だけだと「追加しか効かない」退行に気づけない
   const removed = waitForWatchlistResponse(page);
@@ -174,10 +190,18 @@ test.describe('ウォッチリストのトグル — 一覧を出す各画面', 
   });
 
   /**
-   * ⛔ **ここが一番壊れやすい。** `awardsPage.tsx` は `isInWatchlist` を
-   * **関数のまま** `memo` した `AwardSection` へ渡しており、「答えが変わる
-   * ときは参照も変わる」という暗黙の契約に依存している。参照を安定させる
-   * 変更が入ると、押しても表示が変わらなくなる。
+   * `awardsPage.tsx` は `isInWatchlist` を**関数のまま** `memo` した
+   * `AwardSection` へ渡している（他3画面は真偽値）。
+   *
+   * ⚠️ **ただしこのテストが固定しているのは「関数渡し＋memo の契約」では
+   * ない。** `useWatchlistToggle` の `version` 依存を外す変異を入れても
+   * 4本とも通る（実測）。`isInWatchlist` の deps には `resolveWatchlistId`
+   * があり、`onMutate` が照会キャッシュを同期で書き換えるため、`version`
+   * が無くても参照は変わる。
+   *
+   * ここで守れているのは**各画面でトグルが実際に動くこと**まで。契約
+   * そのものを固定したいなら `useWatchlistToggle.test.ts` に awards と
+   * 同じ形（関数を memo 化した子へ渡す）を足すのが確実。
    */
   test('受賞作品（関数のまま memo へ渡している）', async () => {
     await page.goto('/awards');
@@ -185,6 +209,7 @@ test.describe('ウォッチリストのトグル — 一覧を出す各画面', 
     await toggleAndExpectLabelSwap(
       page,
       await firstWatchlistableTile(page, '/awards'),
+      'watchlist-toggle-awards.png',
     );
   });
 
@@ -194,6 +219,7 @@ test.describe('ウォッチリストのトグル — 一覧を出す各画面', 
     await toggleAndExpectLabelSwap(
       page,
       await firstWatchlistableTile(page, '/search'),
+      'watchlist-toggle-search.png',
     );
   });
 
@@ -203,6 +229,7 @@ test.describe('ウォッチリストのトグル — 一覧を出す各画面', 
     await toggleAndExpectLabelSwap(
       page,
       await firstWatchlistableTile(page, `/person/${PERSON_ID}`),
+      'watchlist-toggle-person.png',
     );
   });
 
@@ -221,6 +248,10 @@ test.describe('ウォッチリストのトグル — 一覧を出す各画面', 
     const tile = section.getByRole('listitem').first();
     await expect(addButtonIn(tile)).toBeVisible({ timeout: 15000 });
 
-    await toggleAndExpectLabelSwap(page, tile);
+    await toggleAndExpectLabelSwap(
+      page,
+      tile,
+      'watchlist-toggle-recommendations.png',
+    );
   });
 });

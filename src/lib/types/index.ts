@@ -199,6 +199,17 @@ export interface MovieCacheStats {
   posterPath: string | null;
   /** 背景画像のパス。TMDbが返さない場合は null */
   backdropPath: string | null;
+  /**
+   * 代表公開日（YYYY-MM-DD）。TMDbが返さない場合は null
+   *
+   * ⚠️ TMDbは公開日未定の作品に**空文字**を返す。`movie_cache.release_date` は
+   * DATE 列なので、`''` をそのまま渡すと行ごと UPDATE が落ちる。
+   * `getMovieCacheStats` の時点で null に正規化しておくこと（#433）。
+   *
+   * ⚠️ リバイバル行では使われない。あちらの公開日は映画.com側が持ち主で、
+   * `update_movie_cache_stats` RPC が DB 側で上書きを拒む。
+   */
+  releaseDate: string | null;
 }
 
 /**

@@ -1,5 +1,9 @@
 /**
- * movie_cache テーブルの vote_average, popularity をバッチ更新する
+ * movie_cache テーブルの指標列・表示列をバッチ更新する
+ *
+ * TMDb の `/movie/{id}` を全行ぶん毎日叩いているので、そのレスポンスに
+ * 含まれる列はすべてここで追従させる（#433）。書き込みは
+ * `update_movie_cache_stats` RPC 経由。
  */
 
 import { createItemOutcome, type ItemOutcome } from '@/lib/cron/itemOutcome';
@@ -41,34 +45,55 @@ export interface BatchUpdateResult {
 }
 
 /**
- * 一覧が参照する表示列の更新値を組み立てる
+ * `update_movie_cache_stats` RPC へ渡す引数を組み立てる
  *
- * これらの列は行の作成時にしか書かれていなかった。公開前に登録された作品は
- * 後からポスターや邦題が決まっても反映されず、一覧だけ No Image や英題のまま
- * 残っていた（詳細画面はTMDbを直接引くため食い違う）。全件の詳細をここで
- * 毎日取得しているので、追加のTMDb呼び出し無しに追従できる。
+ * 表示列（title / overview / poster_path / backdrop_path）は行の作成時にしか
+ * 書かれていなかった。公開前に登録された作品は後からポスターや邦題が決まっても
+ * 反映されず、一覧だけ No Image や英題のまま残っていた（#883）。全件の詳細を
+ * ここで毎日取得しているので、追加のTMDb呼び出し無しに追従できる。
  *
- * `release_date` は対象にしない。リバイバル上映は eiga 同期が
- * `correctRevivalRow` で意図的に上書きしており、TMDbの代表公開日で
- * 毎日塗り潰すとその補正が消えるため。
+ * `genre_ids` / `release_date` も同じレスポンスに含まれているのに書いて
+ * いなかったため、この2列だけが凍結していた（#433）。
  *
+ * ⚠️ **素の `.update()` ではなく RPC なのは `release_date` のため。**
+ * リバイバル行の公開日は映画.com側が持ち主で、`.eq('id', movieId)` だけの
+ * UPDATE に足すと `upsert_movie_cache` の保護を毎日迂回する。かといって
+ * `.eq('is_revival', false)` を足すと、リバイバル行では他の列の日次更新まで
+ * 止まる。列ごとの条件分岐は postgrest で表現できないので DB 側に置いた。
+ * 詳細は `20261121160000_add_update_movie_cache_stats_rpc.sql`。
+ *
+ * @param movieId - 映画ID
  * @param stats - TMDbから取得した同期指標
- * @returns UPDATE に渡す表示列
+ * @returns RPC の引数
  */
-function buildDisplayColumns(stats: MovieCacheStats) {
+function buildStatsRpcArgs(movieId: number, stats: MovieCacheStats) {
   return {
-    // title は NOT NULL 制約がある。TMDbが空を返したときに上書きすると
-    // 行が壊れるため、そのときだけ既存値を残す
-    ...(stats.title ? { title: stats.title } : {}),
+    p_id: movieId,
+    // ⚠️ 空文字の正規化はここと RPC の両方で行う（二重）。
+    //   RPC 側（NULLIF / COALESCE）が本体の防御だが、SQL は jest から
+    //   検証できない。ここで潰しておけば「何を渡す約束か」をテストで固定できる
+    //
+    // title は NOT NULL 制約がある。null を渡すと RPC が既存値を残す
+    p_title: stats.title || null,
     // 空文字は「あらすじ無し」として保存経路と同じく null に寄せる
-    overview: stats.overview || null,
-    poster_path: stats.posterPath,
-    backdrop_path: stats.backdropPath,
+    p_overview: stats.overview || null,
+    p_poster_path: stats.posterPath,
+    p_backdrop_path: stats.backdropPath,
+    p_genre_ids: stats.genreIds,
+    // `getMovieCacheStats` が空文字を null に正規化済み
+    p_release_date: stats.releaseDate,
+    p_vote_average: stats.voteAverage,
+    p_vote_count: stats.voteCount,
+    p_popularity: stats.popularity,
+    p_original_language: stats.originalLanguage,
   };
 }
 
 /**
- * movie_cache の全映画に対して TMDb API から最新の vote_average, popularity を取得し更新する
+ * movie_cache の全映画に対して TMDb API から最新情報を取得し更新する
+ *
+ * 更新する列は `buildStatsRpcArgs` を参照。`/movie/{id}` のレスポンスに
+ * 含まれるものはすべて追従させる（#433）。
  *
  * @returns バッチ更新結果
  */
@@ -133,7 +158,6 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
   // 2. バッチ単位でTMDb APIから最新情報を取得し更新
   for (let i = 0; i < uniqueMovieIds.length; i += BATCH_UPDATE_SIZE) {
     const batchIds = uniqueMovieIds.slice(i, i + BATCH_UPDATE_SIZE);
-    const now = new Date().toISOString();
 
     // バッチ内の各映画を順次処理（レート制限対策）
     for (const movieId of batchIds) {
@@ -166,26 +190,20 @@ export async function updateMoviesCacheByBatch(): Promise<BatchUpdateResult> {
         }
 
         // 同じmovie IDを持つ全行（theatrical/streaming）を更新
-        const { error: updateError } = await supabase
-          .from('movie_cache')
-          .update({
-            vote_average: stats.voteAverage,
-            vote_count: stats.voteCount,
-            popularity: stats.popularity,
-            // 地域フィルタが参照する列。全件の詳細をここで毎日取得しているため、
-            // 追加のTMDb呼び出し無しに未取得の行が順次埋まる
-            original_language: stats.originalLanguage,
-            ...buildDisplayColumns(stats),
-            updated_at: now,
-          })
-          .eq('id', movieId);
+        const { data: updatedRowCount, error: updateError } =
+          await supabase.rpc(
+            'update_movie_cache_stats',
+            buildStatsRpcArgs(movieId, stats),
+          );
 
         if (updateError) {
           result.errors.push(`ID ${movieId}: ${updateError.message}`);
           result.items.failed++;
         } else {
-          // 更新された行数をカウント（同じIDで複数行ある場合も考慮）
-          result.updated += matchingRowCount;
+          // ⚠️ SELECT で数えた行数ではなく **RPC が返した ROW_COUNT** を足す。
+          //   一覧取得から UPDATE までの間に別経路が行を消していると、
+          //   前者は実際より多く出る（0件更新でも成功として数えてしまう）
+          result.updated += updatedRowCount ?? 0;
         }
       } catch (error) {
         // TMDbは映画でないエントリ（ゲームのOP映像、記念映像など）を後から

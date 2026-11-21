@@ -276,6 +276,7 @@ export async function getMovieCacheStats(
     overview,
     poster_path,
     backdrop_path,
+    release_date,
   } = response.data;
 
   return {
@@ -288,6 +289,10 @@ export async function getMovieCacheStats(
     overview: overview ?? null,
     posterPath: poster_path ?? null,
     backdropPath: backdrop_path ?? null,
+    // ⚠️ ここだけ `??` ではなく `||`。TMDbは公開日未定の作品に**空文字**を
+    //    返すため、`??` では素通りして DATE 列への UPDATE が落ちる。
+    //    既存の保存経路（syncNowPlayingMovies 等）も全員 `|| null` にしている
+    releaseDate: release_date || null,
   };
 }
 

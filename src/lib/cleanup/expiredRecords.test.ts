@@ -9,8 +9,12 @@
  * 「どの対象を」「失敗したときどうするか」「保持期間が妥当か」を固定する。
  */
 
+import { readdirSync, readFileSync } from 'fs';
+import { join } from 'path';
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { SOFT_DELETED_LIST_RETENTION_HOURS } from '@/constants/cleanup';
 import { OTP_CODE_RETENTION_HOURS } from '@/constants/otp';
 import { PASSWORD_RESET_TOKEN_RETENTION_HOURS } from '@/constants/passwordReset';
 import { RATE_LIMIT_RETENTION_HOURS } from '@/constants/rateLimit';
@@ -46,7 +50,7 @@ describe('CLEANUP_TARGETS', () => {
    * #978 は「ドキュメントには定期削除と書いてあるがジョブは存在しない」
    * 状態が長く続いた。個人データを持つテーブルが増えたらここに足す。
    */
-  it('個人データを持つ4テーブルを対象にしている', () => {
+  it('個人データを持つ7テーブルを対象にしている', () => {
     expect(CLEANUP_TARGETS.map((t) => t.name)).toEqual([
       'rate_limits',
       'otp_codes',
@@ -54,6 +58,13 @@ describe('CLEANUP_TARGETS', () => {
       // ⚠️ #1355 でレコメンド生成CRONから移した。あちらは失敗を catch して
       //    0 を返していたため、消えていないことに気づけなかった
       'recommendation_events',
+      // ⚠️ #433 で追加。論理削除された利用者リストは `deleted_at` が入っても
+      //    行が残り、TMDb 由来の表示列を保持し続けていた（本番実測で
+      //    6ヶ月超が21件）。順番は意図的に末尾
+      //    （`expiredRecords.ts` の CLEANUP_TARGETS のコメント参照）
+      'favorites',
+      'watchlist',
+      'dismissed_movies',
     ]);
   });
 
@@ -116,7 +127,122 @@ describe('CLEANUP_TARGETS', () => {
       'delete_expired_otp_codes',
       'delete_expired_password_reset_tokens',
       'delete_expired_recommendation_events',
+      'delete_expired_favorites',
+      'delete_expired_watchlist',
+      'delete_expired_dismissed_movies',
     ]);
+  });
+
+  /**
+   * 論理削除された利用者リストの保持期間（#433）
+   */
+  describe('論理削除された利用者リスト', () => {
+    const SOFT_DELETE_TARGETS = ['favorites', 'watchlist', 'dismissed_movies'];
+
+    it('3テーブルで同じ定数を共有する', () => {
+      const byName = Object.fromEntries(
+        CLEANUP_TARGETS.map((t) => [t.name, t]),
+      );
+
+      for (const name of SOFT_DELETE_TARGETS) {
+        expect(byName[name].retentionHours).toBe(
+          SOFT_DELETED_LIST_RETENTION_HOURS,
+        );
+      }
+    });
+
+    /**
+     * ⚠️ 定数どうしの突き合わせだけではトートロジーになる（#1355 で実測済み）。
+     * 30日という値そのものを独立に固定する。
+     */
+    it('保持期間は30日', () => {
+      expect(SOFT_DELETED_LIST_RETENTION_HOURS).toBe(720);
+    });
+
+    /**
+     * ⚠️ **RPC 側の下限ガードと対になっている。**
+     *
+     * `delete_expired_favorites` などは `retention_hours < 720` を
+     * RAISE EXCEPTION で弾く
+     * （`20261122000000_add_soft_deleted_list_cleanup_rpcs.sql`）。
+     * 定数だけ短くすると、CRON が毎日 RPC に蹴られて**1件も消えないまま
+     * `hasError` で 500 を返し続ける**。ズレをここで検出する。
+     */
+    it('RPC の下限ガードを下回っていない', () => {
+      // ⚠️ **固定のファイル名を読まないこと。** 後続のマイグレーションが
+      //    CREATE OR REPLACE でガードを書き換えても、古いファイルを読む限り
+      //    緑のまま通る（cleanup.ts のコメントが嘘になる）。
+      //    3つの RPC を定義している**最新の**マイグレーションを探す
+      const migrationsDir = join(__dirname, '../../../supabase/migrations');
+      const latest = readdirSync(migrationsDir)
+        .filter((name) => name.endsWith('.sql'))
+        .sort()
+        .reverse()
+        .map((name) => readFileSync(join(migrationsDir, name), 'utf8'))
+        .find((sql) =>
+          SOFT_DELETE_TARGETS.every((table) =>
+            sql.includes(`delete_expired_${table}(`),
+          ),
+        );
+
+      expect(latest).toBeDefined();
+
+      const guards = latest!.match(/retention_hours < (\d+)/g) ?? [];
+
+      // 3つの RPC それぞれにガードがあること
+      expect(guards).toHaveLength(SOFT_DELETE_TARGETS.length);
+
+      for (const guard of guards) {
+        // ⚠️ **同値を要求しない。** 保持期間を**伸ばす**のは RPC 側で何も
+        //    問題が無い（下限以上なので通る）のに、同値だと落ちる。直そうと
+        //    すると適用済みのマイグレーションを編集することになり、
+        //    それは本番へ届かない（.claude/rules/supabase-db.md）
+        expect(SOFT_DELETED_LIST_RETENTION_HOURS).toBeGreaterThanOrEqual(
+          Number(guard.replace('retention_hours < ', '')),
+        );
+      }
+    });
+
+    /**
+     * ⚠️ TMDb 利用規約 Section 1.C は6ヶ月を上限にしている。保持期間を
+     * そこへ近づけると、物理削除が間に合わずに規約違反へ戻る。
+     */
+    it('TMDb の6ヶ月ルールを大きく下回る', () => {
+      const SIX_MONTHS_HOURS = 24 * 30 * 6;
+
+      expect(SOFT_DELETED_LIST_RETENTION_HOURS).toBeLessThan(
+        SIX_MONTHS_HOURS / 2,
+      );
+    });
+
+    /**
+     * ⛔ **E2E のヘルパーから呼べるようにしない。**
+     *
+     * `e2e/helpers/api.ts` の `runDeleteExpired` は `retention_hours` を
+     * 引数でそのまま RPC へ流す。手元の `npm run test:e2e` は既定で
+     * **本番 Supabase を叩く**（`.claude/rules/testing.md`）ので、union に
+     * 足すと1回の呼び出しで全利用者のお気に入りが消える経路ができる。
+     *
+     * RPC 側の下限ガード（720時間）が最後の砦だが、そもそも呼べないように
+     * しておく。既存3つが認証の一時データ（再発行できる）なのに対し、
+     * こちらは**再発行できない利用者生成コンテンツ**。
+     */
+    it('E2E ヘルパーの RPC 一覧に入っていない', () => {
+      const helper = readFileSync(
+        join(__dirname, '../../../e2e/helpers/api.ts'),
+        'utf8',
+      );
+
+      const union = helper.match(/type DeleteExpiredRpc =[\s\S]*?;/)?.[0] ?? '';
+
+      expect(union).not.toBe('');
+
+      for (const target of CLEANUP_TARGETS.filter((t) =>
+        SOFT_DELETE_TARGETS.includes(t.name),
+      )) {
+        expect(union).not.toContain(target.rpc);
+      }
+    });
   });
 });
 
@@ -159,7 +285,7 @@ describe('cleanupExpiredRecords', () => {
 
       // 後続は実行されている
       const others = result.targets.filter((t) => t.name !== 'rate_limits');
-      expect(others).toHaveLength(3);
+      expect(others).toHaveLength(CLEANUP_TARGETS.length - 1);
       expect(others.every((t) => t.completed)).toBe(true);
 
       expect(result.hasError).toBe(true);

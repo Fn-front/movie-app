@@ -1163,6 +1163,14 @@ export type Database = {
           retry_after: number;
         }[];
       };
+      delete_expired_dismissed_movies: {
+        Args: { p_limit?: number; retention_hours: number };
+        Returns: number;
+      };
+      delete_expired_favorites: {
+        Args: { p_limit?: number; retention_hours: number };
+        Returns: number;
+      };
       delete_expired_otp_codes: {
         Args: { p_limit?: number; retention_hours: number };
         Returns: number;
@@ -1176,6 +1184,10 @@ export type Database = {
         Returns: number;
       };
       delete_expired_recommendation_events: {
+        Args: { p_limit?: number; retention_hours: number };
+        Returns: number;
+      };
+      delete_expired_watchlist: {
         Args: { p_limit?: number; retention_hours: number };
         Returns: number;
       };

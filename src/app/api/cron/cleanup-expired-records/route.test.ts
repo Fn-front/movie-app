@@ -134,6 +134,69 @@ describe('GET /api/cron/cleanup-expired-records', () => {
     expect(response.status).toBe(200);
     expect(json.success).toBe(true);
     expect(json.data.completed).toBe(false);
+
+    // ⚠️ 200 のまま**通知はする**（#433）。対象が7つになって35秒の予算を
+    //    分け合うため、先頭が滞留すると末尾は毎日0件で終わる。
+    //    ステータスコードしか見ない監視からは完走と区別がつかない
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({
+        cronName: 'cleanup-expired-records',
+        reason: expect.stringContaining('消し残し'),
+        // ⚠️ 200 で返している実行なので「失敗」と名乗らせない。
+        //    連投抑止のカウンタも失敗とは別になる
+        severity: 'incomplete',
+      }),
+    );
+    expect(mockNotifyCronFailure.mock.calls[0]?.[1].reason).toContain(
+      'rate_limits',
+    );
+  });
+
+  it('完走したら通知しない', async () => {
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    mockCleanupExpiredRecords.mockResolvedValue({
+      targets: [target('rate_limits', { deleted_count: 3 })],
+      completed: true,
+      hasError: false,
+    });
+
+    const response = await GET(createRequest('Bearer test-secret'));
+
+    expect(response.status).toBe(200);
+    expect(mockNotifyCronFailure).not.toHaveBeenCalled();
+  });
+
+  /**
+   * ⚠️ 失敗と打ち切りが同時に起きたら、**失敗のほうを通知する**。
+   *
+   * 打ち切りは翌日のCRONが続きを消すが、失敗は権限不足や関数の欠落など
+   * 放っておいても直らないものが多い。
+   */
+  it('失敗と打ち切りが同時なら失敗を通知する', async () => {
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    mockCleanupExpiredRecords.mockResolvedValue({
+      targets: [
+        target('rate_limits', { completed: false }),
+        target('favorites', {
+          completed: false,
+          error: 'function does not exist',
+        }),
+      ],
+      completed: false,
+      hasError: true,
+    });
+
+    const response = await GET(createRequest('Bearer test-secret'));
+
+    expect(response.status).toBe(500);
+
+    const notice = mockNotifyCronFailure.mock.calls[0]?.[1];
+    expect(notice.severity).toBe('failure');
+    expect(notice.reason).toContain('削除に失敗');
+    // ⚠️ 失敗と同時でも打ち切り対象名を落とさない。落とすと失敗が続く間
+    //    消し残しの存在が一度も報告されない
+    expect(notice.reason).toContain('消し残し');
+    expect(notice.reason).toContain('rate_limits');
   });
 
   /**

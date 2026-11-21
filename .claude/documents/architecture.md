@@ -168,7 +168,7 @@ UI Re-render
 | GET | `/api/cron/generate-recommendations` | AIレコメンド生成（日次） |
 | GET | `/api/cron/sync-upcoming` | 公開予定の劇場公開作品同期（日次 / #1000） |
 | GET | `/api/cron/sync-award-movies` | 受賞作品同期（月次） |
-| GET | `/api/cron/cleanup-expired-records` | `rate_limits` / `otp_codes` / `password_reset_tokens` / `recommendation_events` の保持期間切れ削除（日次） |
+| GET | `/api/cron/cleanup-expired-records` | `rate_limits` / `otp_codes` / `password_reset_tokens` / `recommendation_events` / `favorites` / `watchlist` / `dismissed_movies` の保持期間切れ削除（日次） |
 
 ## 主要機能のアーキテクチャ
 
@@ -331,7 +331,7 @@ UI Re-render
 | `/api/cron/generate-recommendations` | `0 18 * * *` | 毎日 03:00 | AIレコメンド生成（日次） |
 | `/api/cron/sync-upcoming` | `0 21 * * *` | 毎日 06:00 | 公開予定の劇場公開作品同期（日次 / #1000）。**止まると公開予定に新作が入らなくなる** |
 | `/api/cron/sync-award-movies` | `0 18 28 * *` | 毎月28日 03:00 | 受賞作品同期（月次） |
-| `/api/cron/cleanup-expired-records` | `0 17 * * *` | 毎日 02:00 | 保持期間切れレコードの削除（`rate_limits` #933 / `otp_codes` #978 / `password_reset_tokens` #1300 / `recommendation_events` #1355） |
+| `/api/cron/cleanup-expired-records` | `0 17 * * *` | 毎日 02:00 | 保持期間切れレコードの削除（`rate_limits` #933 / `otp_codes` #978 / `password_reset_tokens` #1300 / `recommendation_events` #1355 / 論理削除された `favorites` `watchlist` `dismissed_movies` #433） |
 
 > ⚠️ この表は `vercel.json` と手で同期している。**登録漏れ自体は
 > `cronNames.test.ts` が検知する**（#1000）が、この表の記述は見ていない。

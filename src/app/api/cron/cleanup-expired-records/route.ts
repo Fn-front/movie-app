@@ -7,7 +7,8 @@
  *
  * 対象は `src/lib/cleanup/expiredRecords.ts` の `CLEANUP_TARGETS`。
  * 現在は `rate_limits`（#933）/ `otp_codes`（#978）/
- * `password_reset_tokens`（#1300）/ `recommendation_events`（#1355）の4つ。
+ * `password_reset_tokens`（#1300）/ `recommendation_events`（#1355）/
+ * `favorites` / `watchlist` / `dismissed_movies`（#433）の7つ。
  *
  * 専用CRONにしている理由（#933）:
  *   個人情報保護法22条（不要となった個人データの消去）に関わる処理なので、
@@ -81,15 +82,40 @@ export async function GET(request: NextRequest) {
     //   個人データの消去が止まっていることに気づけないのが問題そのもの
     //   （#933 / #978 / #1300）なので、明示的に通知する。
     //   `notifyCronFailure` は throw しない契約なので応答には影響しない
-    if (hasError) {
-      const failed = targets
-        .filter((t) => t.error !== undefined)
-        .map((t) => `${t.name}: ${t.error}`)
-        .join(' / ');
+    //
+    // ⚠️ **打ち切りも通知する**（#433）。対象が4→7に増え、35秒の時間予算を
+    //   分け合うようになった。予算は先頭から使われるので、`rate_limits` が
+    //   滞留した日は末尾の対象が毎日0件で終わる。打ち切りは 200 で返すため
+    //   **ステータスコードしか見ない監視からは完走と区別がつかない**。
+    //   消し残しは「保持期間を超えた個人データ・TMDbコンテンツが残っている」
+    //   状態そのものなので、エラーと同じく気づける形にする。
+    const truncated = targets.filter((t) => !t.completed && !t.error);
+
+    if (hasError || truncated.length > 0) {
+      const parts: string[] = [];
+
+      if (hasError) {
+        parts.push(
+          `削除に失敗: ${targets
+            .filter((t) => t.error !== undefined)
+            .map((t) => `${t.name}: ${t.error}`)
+            .join(' / ')}`,
+        );
+      }
+
+      // ⚠️ 失敗と同時でも打ち切り対象名を落とさない。落とすと、失敗が続く間
+      //    消し残しの存在が一度も報告されない（1日1通の抑止と重なる）
+      if (truncated.length > 0) {
+        parts.push(`消し残し: ${truncated.map((t) => t.name).join(' / ')}`);
+      }
 
       await notifyCronFailure(supabase, {
         cronName: 'cleanup-expired-records',
-        reason: `保持期間切れの削除に失敗しました（${failed}）`,
+        reason: `保持期間切れの掃除に問題があります（${parts.join(' ／ ')}）`,
+        // ⚠️ 打ち切りは 200 で返している実行。件名を「失敗」にすると 500 との
+        //    区別が文面で潰れ、アラート疲れで本物の失敗を無視する訓練になる。
+        //    連投抑止のカウンタも分かれる（#433 レビュー指摘）
+        severity: hasError ? 'failure' : 'incomplete',
       });
     }
 

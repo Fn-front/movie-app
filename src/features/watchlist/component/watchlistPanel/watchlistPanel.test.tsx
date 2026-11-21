@@ -9,22 +9,18 @@ import { WatchlistPanel } from './watchlistPanel';
 import type { WatchlistItem } from '@/lib/api/watchlist/watchlist';
 
 // --- Mocks ---
-// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
 
-let mockSelectedMovieId: number | null = null;
-const mockOpenMovieDetail = jest.fn((movieId: number) => {
-  mockSelectedMovieId = movieId;
-});
-const mockCloseMovieDetail = jest.fn(() => {
-  mockSelectedMovieId = null;
-});
+/**
+ * 詳細は URL（`?movie_id=`）で開く（#1077）
+ *
+ * ⛔ サイドバーはモーダルを**描かない**。描くのは `AppLayout` の1箇所だけ。
+ * ここに置くと、サイドバーが全ページに出る都合でページ側のモーダルと
+ * 同じ `movie_id` を読み、2枚同時に開く（#1033 で実測）。
+ */
+const mockOpenMovieDetail = jest.fn();
 
 jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
-  useMovieDetailQuery: () => ({
-    selectedMovieId: mockSelectedMovieId,
-    openMovieDetail: mockOpenMovieDetail,
-    closeMovieDetail: mockCloseMovieDetail,
-  }),
+  useOpenMovieDetail: () => mockOpenMovieDetail,
 }));
 
 const mockUseWatchlist = {
@@ -49,24 +45,6 @@ jest.mock('@/features/watchlist/hooks/useWatchlist', () => ({
   },
 }));
 
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: ({
-    movieId,
-    onClose,
-  }: {
-    movieId: number | null;
-    onClose: () => void;
-  }) =>
-    movieId ? (
-      <div data-testid='movie-detail-modal'>
-        Movie {movieId}
-        <button data-testid='close-modal' onClick={onClose}>
-          閉じる
-        </button>
-      </div>
-    ) : null,
-}));
-
 // --- Helpers ---
 
 const createMockItems = (count: number): WatchlistItem[] =>
@@ -86,8 +64,6 @@ const createMockItems = (count: number): WatchlistItem[] =>
 describe('WatchlistPanel', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // URL のクエリ相当。テスト間で持ち越すと前のテストのモーダルが残る
-    mockSelectedMovieId = null;
     mockUseWatchlist.watchlist = [];
     mockUseWatchlist.isLoading = false;
   });
@@ -131,39 +107,33 @@ describe('WatchlistPanel', () => {
   });
 
   /**
-   * ⚠️ サイドバーだけは URL ではなくローカル state で開く。
-   * URL の movie_id を読むとページ側のモーダルと2枚同時に開くため（#1077）
+   * ⛔ **URL に載せる**（#1077）
+   *
+   * 以前はローカル state で開いていたため、サイドバーから開いた詳細だけ
+   * リロードで消え、共有もできなかった。
    */
-  it('タイトルのリンクで詳細モーダルが開く', async () => {
+  it('タイトルのリンクで詳細を URL で開く', async () => {
     const user = userEvent.setup();
     mockUseWatchlist.watchlist = createMockItems(1);
     render(<WatchlistPanel />);
 
     await user.click(screen.getByRole('link', { name: '映画0' }));
 
-    expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
-    expect(screen.getByText('Movie 100')).toBeInTheDocument();
+    expect(mockOpenMovieDetail).toHaveBeenCalledWith(100);
   });
 
-  it('モーダル閉じるで非表示になる', async () => {
-    const user = userEvent.setup();
+  /**
+   * ⛔ **サイドバーはモーダルを描かない**（#1077）
+   *
+   * サイドバーは全ページに出るので、ここに置くとページ側のモーダルと
+   * 同じ `movie_id` を読んで2枚同時に開く。
+   */
+  it('サイドバー自身はモーダルを描かない', () => {
     mockUseWatchlist.watchlist = createMockItems(1);
-    render(<WatchlistPanel />);
-
-    await user.click(screen.getByRole('link', { name: '映画0' }));
-    expect(screen.getByTestId('movie-detail-modal')).toBeInTheDocument();
-
-    await user.click(screen.getByTestId('close-modal'));
-    expect(screen.queryByTestId('movie-detail-modal')).not.toBeInTheDocument();
-  });
-
-  it('URLに movie_id があってもサイドバーのモーダルは開かない', () => {
-    mockUseWatchlist.watchlist = createMockItems(1);
-    mockSelectedMovieId = 100;
 
     render(<WatchlistPanel />);
 
-    expect(screen.queryByTestId('movie-detail-modal')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('削除ボタンクリックでremoveFromWatchlistが呼ばれる', async () => {

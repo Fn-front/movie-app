@@ -34,7 +34,10 @@ const MOVIE_DETAIL_STATE_KEY = '__movieDetailQuery';
  *
  * @param movieId - 開く映画のTMDb ID
  */
-function openMovieDetailAt(movieId: number): void {
+function openMovieDetailAt(
+  movieId: number,
+  options?: OpenMovieDetailOptions,
+): void {
   const params = new URLSearchParams(window.location.search);
 
   // 同じ作品をもう一度開いても積まない。`router.push` は同一URLのとき
@@ -46,11 +49,46 @@ function openMovieDetailAt(movieId: number): void {
 
   params.set(MOVIE_DETAIL_QUERY_PARAM, String(movieId));
 
-  window.history.pushState(
-    { [MOVIE_DETAIL_STATE_KEY]: true },
-    '',
-    `${window.location.pathname}?${params.toString()}`,
-  );
+  const url = `${window.location.pathname}?${params.toString()}`;
+
+  /**
+   * オーバーレイの中から開くときは**置き換える**（#1077）
+   *
+   * ⛔ 公開カレンダーのように「オーバーレイを閉じると同時に詳細を開く」
+   * 経路で push すると、閉じる側の畳み（`history.back()`）と競合して
+   * **押した直後にカレンダーが開き直る**（実測）。オーバーレイが既に
+   * 1つエントリを持っているので、それを詳細のエントリに置き換えれば
+   * 履歴の本数も変わらない（`useOverlayHistory` の
+   * `shouldReplaceNavigation` と同じ考え方）。
+   *
+   * ⚠️ **目印は push と同じく付ける。** 置き換える相手は
+   * `useOverlayHistory` がオーバーレイのために積んだエントリで、
+   * **URL は置き換え前のページと同一**（`pushState(state, '',
+   * window.location.href)`）。つまり `router.back()` しても同じページに
+   * 留まり、詳細が閉じるだけになる。
+   *
+   * ⛔ 目印を付けないと `closeMovieDetail` が `router.replace` に落ち、
+   * **同じ URL のエントリが2つ並んだまま**残る。× で閉じたあと戻るを
+   * 押しても何も起きない（#1043 / #1052 で2度潰した「戻るが空振りする」
+   * 退行そのもの。レビューで実測された）。
+   */
+  if (options?.replace) {
+    window.history.replaceState({ [MOVIE_DETAIL_STATE_KEY]: true }, '', url);
+    return;
+  }
+
+  window.history.pushState({ [MOVIE_DETAIL_STATE_KEY]: true }, '', url);
+}
+
+/** {@link useOpenMovieDetail} の挙動を変えるオプション */
+export interface OpenMovieDetailOptions {
+  /**
+   * 新しいエントリを積まず、今のエントリを置き換える
+   *
+   * オーバーレイ（公開カレンダー）の中から開くときに使う。理由は
+   * `openMovieDetailAt` のコメントを参照。
+   */
+  replace?: boolean;
 }
 
 /**
@@ -60,7 +98,10 @@ function openMovieDetailAt(movieId: number): void {
  * 開いた先を描く側（モーダル）は `movie_id` を読む必要があるため
  * {@link useMovieDetailQuery} を使い、`<Suspense>` で包むこと。
  */
-export function useOpenMovieDetail(): (movieId: number) => void {
+export function useOpenMovieDetail(): (
+  movieId: number,
+  options?: OpenMovieDetailOptions,
+) => void {
   // モジュールスコープの関数をそのまま返す。参照が毎回同じなので、
   // 受け取る側の useCallback / memo の依存にそのまま入れられる
   return openMovieDetailAt;

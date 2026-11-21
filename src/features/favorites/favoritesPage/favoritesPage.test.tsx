@@ -10,22 +10,15 @@ import { FavoritesPage } from './favoritesPage';
 import { ARIA_LABELS } from '@/constants';
 
 // --- Mocks ---
-// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
 
-let mockSelectedMovieId: number | null = null;
-const mockOpenMovieDetail = jest.fn((movieId: number) => {
-  mockSelectedMovieId = movieId;
-});
-const mockCloseMovieDetail = jest.fn(() => {
-  mockSelectedMovieId = null;
-});
+const mockOpenMovieDetail = jest.fn();
 
+/**
+ * 詳細は URL（`?movie_id=`）で開く。モーダルを描くのは `AppLayout` の
+ * 1箇所だけ（#1077）。
+ */
 jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
-  useMovieDetailQuery: () => ({
-    selectedMovieId: mockSelectedMovieId,
-    openMovieDetail: mockOpenMovieDetail,
-    closeMovieDetail: mockCloseMovieDetail,
-  }),
+  useOpenMovieDetail: () => mockOpenMovieDetail,
 }));
 
 const mockHandleFavoriteToggle = jest.fn();
@@ -88,10 +81,6 @@ jest.mock('@/utils/image', () => ({
     path ? `https://image.tmdb.org/t/p/w500${path}` : null,
 }));
 
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: jest.fn(() => null),
-}));
-
 jest.mock('@/hooks/useIntersectionObserver', () => ({
   useIntersectionObserver: jest.fn().mockReturnValue(jest.fn()),
 }));
@@ -101,8 +90,6 @@ jest.mock('@/hooks/useIntersectionObserver', () => ({
 describe('FavoritesPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // URL のクエリ相当。テスト間で持ち越すと前のテストのモーダルが残る
-    mockSelectedMovieId = null;
     mockSortBy = 'added_at';
     mockIsLoading = false;
     mockIsFetchingNextPage = false;
@@ -233,17 +220,10 @@ describe('FavoritesPage', () => {
     expect(mockOpenMovieDetail).toHaveBeenCalledWith(100);
   });
 
-  it('URLに movie_id があるとモーダルへ渡す', () => {
-    const { MovieDetailModal } = jest.requireMock(
-      '@/components/ui/movie/detailModal/movieDetailModal',
-    );
-    mockSelectedMovieId = 100;
-
+  /** ⛔ ページはモーダルを描かない。描くのは `AppLayout` の1箇所だけ（#1077） */
+  it('ページ自身はモーダルを描かない', () => {
     render(<FavoritesPage />);
 
-    expect(MovieDetailModal).toHaveBeenLastCalledWith(
-      expect.objectContaining({ movieId: 100, manageHistory: false }),
-      undefined,
-    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });

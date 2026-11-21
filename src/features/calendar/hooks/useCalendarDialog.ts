@@ -4,22 +4,20 @@
 
 import { useCallback, useMemo, useState } from 'react';
 
+import { useOpenMovieDetail } from '@/features/movies/hooks/useMovieDetailQuery';
+
 /**
  * useCalendarDialogフックの返り値
  */
 export interface UseCalendarDialogReturn {
   /** カレンダーダイアログの開閉状態 */
   isOpen: boolean;
-  /** 詳細を表示する映画のTMDb ID */
-  selectedMovieId: number | null;
   /** カレンダーダイアログを開く */
   openCalendar: () => void;
   /** カレンダーダイアログの開閉を設定する */
   setOpen: (open: boolean) => void;
   /** 映画を選ぶ（カレンダーを閉じて詳細モーダルへ） */
   selectMovie: (tmdbMovieId: number) => void;
-  /** 詳細モーダルを閉じる */
-  closeMovieDetail: () => void;
 }
 
 /**
@@ -31,7 +29,16 @@ export interface UseCalendarDialogReturn {
  */
 export function useCalendarDialog(): UseCalendarDialogReturn {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
+
+  /**
+   * ⛔ 詳細の開閉を**ここで持たない**（#1077）。
+   *
+   * 以前はローカル state に持ち、`AppLayout` が専用のモーダルを描いていた。
+   * その結果カレンダーから開いた詳細だけ URL を持たず、リロードで消え、
+   * 共有もできなかった。URL へ寄せれば `AppLayout` の唯一のモーダルが
+   * そのまま開く。
+   */
+  const openMovieDetail = useOpenMovieDetail();
 
   const openCalendar = useCallback(() => {
     setIsOpen(true);
@@ -41,31 +48,23 @@ export function useCalendarDialog(): UseCalendarDialogReturn {
     setIsOpen(open);
   }, []);
 
-  const selectMovie = useCallback((tmdbMovieId: number) => {
-    setIsOpen(false);
-    setSelectedMovieId(tmdbMovieId);
-  }, []);
-
-  const closeMovieDetail = useCallback(() => {
-    setSelectedMovieId(null);
-  }, []);
+  const selectMovie = useCallback(
+    (tmdbMovieId: number) => {
+      setIsOpen(false);
+      // ⚠️ **置き換える**。カレンダーは自分の履歴エントリを1つ持っており、
+      //    push すると閉じる側の畳みと競合して開き直る（#1077 で実測）
+      openMovieDetail(tmdbMovieId, { replace: true });
+    },
+    [openMovieDetail],
+  );
 
   return useMemo(
     () => ({
       isOpen,
-      selectedMovieId,
       openCalendar,
       setOpen,
       selectMovie,
-      closeMovieDetail,
     }),
-    [
-      isOpen,
-      selectedMovieId,
-      openCalendar,
-      setOpen,
-      selectMovie,
-      closeMovieDetail,
-    ],
+    [isOpen, openCalendar, setOpen, selectMovie],
   );
 }

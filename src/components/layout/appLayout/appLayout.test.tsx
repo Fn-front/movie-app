@@ -27,8 +27,22 @@ jest.mock('next/image', () => {
   return { __esModule: true, default: MockImage };
 });
 
+const mockOpenMovieDetail = jest.fn();
+
+/**
+ * アプリ全体で1つだけの詳細モーダル（#1077）
+ *
+ * ⚠️ 実体は react-query を使うので、`QueryClientProvider` の無いこのテストでは
+ * モックする。中身の検証は `appMovieDetailModal.test.tsx` の担当。
+ */
+jest.mock('@/components/layout/appLayout/appMovieDetailModal', () => ({
+  AppMovieDetailModal: () => <div data-testid='app-movie-detail-modal' />,
+}));
+
 jest.mock('next/navigation', () => ({
   usePathname: () => '/',
+  // 詳細モーダルが `movie_id` を読む（#1077）
+  useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({
     push: jest.fn(),
     replace: jest.fn(),
@@ -70,11 +84,14 @@ jest.mock('@/features/calendar/component/calendarDialog', () => ({
     ) : null,
 }));
 
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: ({ movieId }: { movieId: number | null }) =>
-    movieId ? (
-      <div data-testid='movie-detail-modal'>Movie {movieId}</div>
-    ) : null,
+/**
+ * カレンダーから選んだ作品は URL（`?movie_id=`）で開く（#1077）
+ *
+ * ⚠️ 以前はローカル state で、`AppLayout` が専用のモーダルを描いていた。
+ * そのためカレンダー経由の詳細だけリロードで消えていた。
+ */
+jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
+  useOpenMovieDetail: () => mockOpenMovieDetail,
 }));
 
 import React from 'react';
@@ -228,7 +245,7 @@ describe('AppLayout', () => {
       expect(screen.getByTestId('calendar-dialog')).toBeInTheDocument();
     });
 
-    it('カレンダーで映画を選ぶとカレンダーが閉じて詳細モーダルが開く', async () => {
+    it('カレンダーで映画を選ぶとカレンダーが閉じて、詳細を URL で開く', async () => {
       const user = userEvent.setup();
       render(<AppLayout>コンテンツ</AppLayout>);
 
@@ -236,9 +253,9 @@ describe('AppLayout', () => {
       await user.click(screen.getByRole('button', { name: '映画を選ぶ' }));
 
       expect(screen.queryByTestId('calendar-dialog')).not.toBeInTheDocument();
-      expect(screen.getByTestId('movie-detail-modal')).toHaveTextContent(
-        'Movie 42',
-      );
+      // ⚠️ **置き換える**。カレンダーは自分の履歴エントリを持っており、
+      //    push すると閉じる側の畳みと競合して開き直る（#1077 で実測）
+      expect(mockOpenMovieDetail).toHaveBeenCalledWith(42, { replace: true });
     });
 
     it('モバイルメニューからカレンダーを開ける', async () => {
@@ -282,6 +299,31 @@ describe('AppLayout', () => {
 
       await user.tab();
       expect(screen.getByRole('link', { name: '本文へ移動' })).toHaveFocus();
+    });
+  });
+  /**
+   * ⛔ **アプリ全体で1つだけの詳細モーダル**（#1077）
+   *
+   * 以前は9箇所がそれぞれ描いており、サイドバーが全ページに出る都合で
+   * ページ側と2枚同時に開いていた。
+   *
+   * ⚠️ **`isAuthenticated` の外に置くこと。** 未ログインでも
+   * `?movie_id=` は直接開けるし、統合前の一覧側モーダルも認証を見て
+   * いなかった。中へ動かすとこのテストが落ちる。
+   */
+  describe('映画詳細モーダル（#1077）', () => {
+    it('認証済みで描かれる', () => {
+      render(<AppLayout>コンテンツ</AppLayout>);
+
+      expect(screen.getByTestId('app-movie-detail-modal')).toBeInTheDocument();
+    });
+
+    it('未ログインでも描かれる', () => {
+      mockUseSession.mockReturnValue(unauthenticatedSession);
+
+      render(<AppLayout>コンテンツ</AppLayout>);
+
+      expect(screen.getByTestId('app-movie-detail-modal')).toBeInTheDocument();
     });
   });
 });

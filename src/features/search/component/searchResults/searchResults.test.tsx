@@ -13,40 +13,14 @@ import type { Movie } from '@/lib/types';
 // --- Mocks ---
 // --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
 
-let mockSelectedMovieId: number | null = null;
 const mockOpenMovieDetail = jest.fn();
-const mockCloseMovieDetail = jest.fn();
 
+/**
+ * 詳細は URL（`?movie_id=`）で開く。モーダルを描くのは `AppLayout` の
+ * 1箇所だけ（#1077）。
+ */
 jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
-  useMovieDetailQuery: () => ({
-    selectedMovieId: mockSelectedMovieId,
-    openMovieDetail: mockOpenMovieDetail,
-    closeMovieDetail: mockCloseMovieDetail,
-  }),
-}));
-
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: ({
-    movieId,
-    title,
-    showFinancialInfo,
-    onClose,
-  }: {
-    movieId: number | null;
-    title?: string;
-    showFinancialInfo?: boolean;
-    onClose: () => void;
-  }) =>
-    movieId === null ? null : (
-      <div
-        data-testid='movie-detail-modal'
-        data-financial={String(Boolean(showFinancialInfo))}
-      >
-        <span>{`Movie ID: ${movieId}`}</span>
-        <span>{title}</span>
-        <button onClick={onClose}>閉じる</button>
-      </div>
-    ),
+  useOpenMovieDetail: () => mockOpenMovieDetail,
 }));
 
 jest.mock('@/components/ui/movie/movieTile/movieTile', () => ({
@@ -170,7 +144,6 @@ const renderSearchResults = (overrides?: Partial<SearchResultsProps>) => {
 // --- Tests ---
 describe('SearchResults', () => {
   beforeEach(() => {
-    mockSelectedMovieId = null;
     jest.clearAllMocks();
     // 表示モードは localStorage に残るので、テスト間で引きずらせない
     localStorage.clear();

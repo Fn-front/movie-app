@@ -3,10 +3,7 @@
  * ホーム画面のメインコンポーネント（Server Component）
  */
 
-import { Suspense } from 'react';
-
 import { AppLayout } from '@/components/layout/appLayout/appLayout';
-import { HomeMovieDetailModal } from '@/features/home/component/homeMovieDetailModal/homeMovieDetailModal';
 import { NowShowingMovieList } from '@/features/nowShowing/component/nowShowingMovieList/nowShowingMovieList';
 import { RecommendationSection } from '@/features/recommendations/component/recommendationSection/recommendationSection';
 import type { NowShowingMovie } from '@/lib/types';
@@ -39,18 +36,9 @@ export function HomePage({ nowShowingMovies }: HomePageProps) {
       <NowShowingMovieList movies={nowShowingMovies} />
       <RecommendationSection />
       {/*
-        詳細モーダルはホームに1つだけ。各セクションに持たせると、どちらも
-        URL の `movie_id` を読むため2枚同時に開く（#1033）。
-
-        ⚠️ `<Suspense>` が要る。モーダルは `useSearchParams()` で `movie_id`
-        を読むので、包まないと**ページ全体が静的プリレンダから外れる**
-        （`missing-suspense-with-csr-bailout` / #1115）。`movie_id` が無い
-        ときは何も描かないコンポーネントなので、fallback は null でよい。
-        公開中セクションは URL を読まないため初期HTMLに載ったまま残る
+        詳細モーダルはここに置かない。アプリ全体で `AppLayout` の1つだけ
+        （#1077）。`useSearchParams` を読む `<Suspense>` もそちらへ移った
       */}
-      <Suspense fallback={null}>
-        <HomeMovieDetailModal nowShowingMovies={nowShowingMovies} />
-      </Suspense>
     </AppLayout>
   );
 }

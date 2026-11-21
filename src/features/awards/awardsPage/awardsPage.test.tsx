@@ -8,42 +8,15 @@ import { ARIA_LABELS } from '@/constants';
 
 /** URL の ?t= を差し替えるための可変値（各テストで入れ替える） */
 let mockSearchParams = new URLSearchParams();
-// --- 映画詳細モーダル（URLクエリで開閉する・#1033）---
 
-let mockSelectedMovieId: number | null = null;
 const mockOpenMovieDetail = jest.fn();
-const mockCloseMovieDetail = jest.fn();
 
+/**
+ * 詳細は URL（`?movie_id=`）で開く。モーダルを描くのは `AppLayout` の
+ * 1箇所だけ（#1077）。
+ */
 jest.mock('@/features/movies/hooks/useMovieDetailQuery', () => ({
-  useMovieDetailQuery: () => ({
-    selectedMovieId: mockSelectedMovieId,
-    openMovieDetail: mockOpenMovieDetail,
-    closeMovieDetail: mockCloseMovieDetail,
-  }),
-}));
-
-jest.mock('@/components/ui/movie/detailModal/movieDetailModal', () => ({
-  MovieDetailModal: ({
-    movieId,
-    title,
-    showFinancialInfo,
-    onClose,
-  }: {
-    movieId: number | null;
-    title?: string;
-    showFinancialInfo?: boolean;
-    onClose: () => void;
-  }) =>
-    movieId === null ? null : (
-      <div
-        data-testid='movie-detail-modal'
-        data-financial={String(Boolean(showFinancialInfo))}
-      >
-        <span>{`Movie ID: ${movieId}`}</span>
-        <span>{title}</span>
-        <button onClick={onClose}>閉じる</button>
-      </div>
-    ),
+  useOpenMovieDetail: () => mockOpenMovieDetail,
 }));
 
 jest.mock('next/navigation', () => ({
@@ -231,7 +204,6 @@ function setAwardsData(awards = createMockAwardsData()) {
 
 describe('AwardsPage', () => {
   beforeEach(() => {
-    mockSelectedMovieId = null;
     jest.clearAllMocks();
     mockUseAwardsReturn.data = undefined;
     mockUseAwardsReturn.isLoading = false;

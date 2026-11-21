@@ -5,11 +5,11 @@
 
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback } from 'react';
 import Link from 'next/link';
 
 import { Loading } from '@/components/ui/loading/loading';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { useOpenMovieDetail } from '@/features/movies/hooks/useMovieDetailQuery';
 import { useWatchlist } from '@/features/watchlist/hooks/useWatchlist';
 import { WatchlistItem } from '@/features/watchlist/component/watchlistItem/watchlistItem';
 import { ROUTES } from '@/constants';
@@ -32,31 +32,20 @@ export const WatchlistPanel = memo(function WatchlistPanel() {
   });
 
   /**
-   * ⚠️ ここだけ URL ではなくローカル state で持つ。
+   * 詳細は URL（`?movie_id=`）で開く（#1077）
    *
-   * サイドバーは `AppLayout` を通る**全ページ**に出る。URL の `movie_id` を
-   * 読むと、同じクエリを読んでいるページ側のモーダルと**2枚同時に開く**
-   * （実測: /watchlist で dialog が2つ）。かといってサイドバー側だけ
-   * モーダルを持たない形にすると、詳細モーダルを持たないページ
-   * （/settings など）で押しても何も開かなくなる。
+   * ⚠️ 以前はここだけローカル state だった。サイドバーは `AppLayout` を
+   * 通る**全ページ**に出るので、ページ側にも同じモーダルがあると
+   * **2枚同時に開く**（実測: /watchlist で dialog が2つ）。その回避として
+   * URL を手放していたため、ここから開いた詳細だけリロードで消えていた。
    *
-   * 本来はモーダルを `AppLayout` に1つだけ置くのが筋。→ #1077
+   * モーダルが `AppLayout` の1箇所になったので URL へ戻せる。
+   *
+   * ⚠️ `useOpenMovieDetail` は `useSearchParams` を使わない（`window` から
+   * 直接読む）。使うと**サイドバーを含む全ページ**が静的プリレンダから
+   * 外れる（#1115）。
    */
-  const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
-
-  const openMovieDetail = useCallback((tmdbMovieId: number) => {
-    setSelectedMovieId(tmdbMovieId);
-  }, []);
-
-  const closeMovieDetail = useCallback(() => {
-    setSelectedMovieId(null);
-  }, []);
-
-  const selectedMovieTitle = useMemo(
-    () =>
-      watchlist.find((item) => item.tmdb_movie_id === selectedMovieId)?.title,
-    [watchlist, selectedMovieId],
-  );
+  const openMovieDetail = useOpenMovieDetail();
 
   const handleDelete = useCallback(
     (id: string) => {
@@ -115,12 +104,6 @@ export const WatchlistPanel = memo(function WatchlistPanel() {
           </Link>
         </>
       )}
-
-      <MovieDetailModal
-        movieId={selectedMovieId}
-        title={selectedMovieTitle}
-        onClose={closeMovieDetail}
-      />
     </div>
   );
 });

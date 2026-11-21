@@ -10,8 +10,7 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/ui/emptyState/emptyState';
 import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
 import { MovieTile } from '@/components/ui/movie/movieTile/movieTile';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
-import { useMovieDetailQuery } from '@/features/movies/hooks/useMovieDetailQuery';
+import { useOpenMovieDetail } from '@/features/movies/hooks/useMovieDetailQuery';
 import { Pagination } from '@/components/ui/pagination/pagination';
 import { FavoriteRatingModal } from '@/features/favorites/component/favoriteRatingModal/favoriteRatingModal';
 import { useFavoriteToggle } from '@/features/favorites/hooks/useFavoriteToggle';
@@ -77,13 +76,15 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
       [visibleCredits, getFavoriteInfo],
     );
 
-    const { selectedMovieId, openMovieDetail, closeMovieDetail } =
-      useMovieDetailQuery();
-
-    const selectedMovieTitle = useMemo(
-      () => movieCacheItems.find((item) => item.id === selectedMovieId)?.title,
-      [movieCacheItems, selectedMovieId],
-    );
+    /**
+     * 詳細は URL（`?movie_id=`）で開く。モーダルを描くのは `AppLayout` の
+     * 1箇所だけ（#1077）。
+     *
+     * ⚠️ `useMovieDetailQuery` ではなく `useOpenMovieDetail` を使う。
+     * あちらは `useSearchParams` を読むので、開くだけの画面が使うと
+     * 静的プリレンダから外れる理由を増やすだけになる（#1115）。
+     */
+    const openMovieDetail = useOpenMovieDetail();
 
     const handlePageChange = useCallback((page: number) => {
       setCurrentPage(page);
@@ -150,14 +151,6 @@ export const PersonFilmography = memo<PersonFilmographyProps>(
           totalPages={totalPages}
           onPageChange={handlePageChange}
           className={styles.c_person_filmography__pagination}
-        />
-
-        <MovieDetailModal
-          // 開閉は URL の movie_id が持つ。ここでも履歴を積むと2つ伸びる（#1033）
-          manageHistory={false}
-          movieId={selectedMovieId}
-          title={selectedMovieTitle}
-          onClose={closeMovieDetail}
         />
 
         <FavoriteRatingModal

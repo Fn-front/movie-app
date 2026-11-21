@@ -5,7 +5,7 @@
 
 'use client';
 
-import { type ReactNode, memo } from 'react';
+import { type ReactNode, Suspense, memo } from 'react';
 import dynamic from 'next/dynamic';
 
 import { Header } from '@/components/layout/header/header';
@@ -21,7 +21,7 @@ import { useMobileDrawer } from '@/components/layout/mobileDrawer/useMobileDrawe
 import { WatchlistPanel } from '@/features/watchlist/component/watchlistPanel/watchlistPanel';
 import { CalendarButton } from '@/features/calendar/component/calendarButton';
 import { useCalendarDialog } from '@/features/calendar/hooks/useCalendarDialog';
-import { MovieDetailModal } from '@/components/ui/movie/detailModal/movieDetailModal';
+import { AppMovieDetailModal } from '@/components/layout/appLayout/appMovieDetailModal';
 import { LoginPromptModal } from '@/components/ui/loginPromptModal/loginPromptModal';
 import { MAIN_CONTENT_ID, ROUTES } from '@/constants';
 import { useAuthStatus } from '@/hooks/useAuthStatus';
@@ -77,11 +77,9 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
   // ドロワーは開くと同時に閉じてアンマウントされるため、ダイアログはここで持つ。
   const {
     isOpen: isCalendarOpen,
-    selectedMovieId,
     openCalendar,
     setOpen: setCalendarOpen,
     selectMovie,
-    closeMovieDetail,
   } = useCalendarDialog();
 
   return (
@@ -153,18 +151,30 @@ export const AppLayout = memo<AppLayoutProps>(function AppLayout({
         onCalendarClick={isAuthenticated ? openCalendar : undefined}
       />
       {isAuthenticated && (
-        <>
-          <CalendarDialog
-            open={isCalendarOpen}
-            onOpenChange={setCalendarOpen}
-            onMovieClick={selectMovie}
-          />
-          <MovieDetailModal
-            movieId={selectedMovieId}
-            onClose={closeMovieDetail}
-          />
-        </>
+        <CalendarDialog
+          open={isCalendarOpen}
+          onOpenChange={setCalendarOpen}
+          onMovieClick={selectMovie}
+        />
       )}
+
+      {/*
+        アプリ全体でただ1つの映画詳細モーダル（#1077）
+
+        ⛔ 各画面では描かない。サイドバーは全ページに出るので、ページ側にも
+        同じモーダルがあると**同じ `movie_id` を読んで2枚同時に開く**。
+
+        ⚠️ `<Suspense>` は必須。`useMovieDetailQuery` が `useSearchParams` を
+        使うため、包まないと `AppLayout` を通る全ページが静的プリレンダから
+        外れる（`missing-suspense-with-csr-bailout`）。
+
+        ⚠️ 認証の有無で出し分けない。未ログインでも `?movie_id=` を直接
+        開けるし、以前から一覧側のモーダルは認証を見ていなかった
+      */}
+      <Suspense fallback={null}>
+        <AppMovieDetailModal />
+      </Suspense>
+
       <LoginPromptModal />
     </div>
   );

@@ -6,7 +6,7 @@
  * ⚠️ 共有の `TEST_USER` は使わない。ウォッチリストを全件削除しながら進めるため、
  * 同じユーザーを使う他の spec を並列実行時に壊す（watchlist.spec.ts と同じ理由）。
  *
- * PR 用の証跡として docs/e2e-screenshots/ に撮る。ファイル名はシナリオ単位で
+ * PR 用の証跡として docs/tmp/e2e-screenshots/ に撮る。ファイル名はシナリオ単位で
  * 固定しており、再実行時は上書きされる（.claude/CLAUDE.md の運用）。
  */
 
@@ -65,7 +65,7 @@ test.describe('視聴済みの一括削除', () => {
     await expect(ratingModal(page)).not.toBeVisible();
 
     await page.screenshot({
-      path: 'docs/e2e-screenshots/watchlist-cleanup-toolbar.png',
+      path: 'docs/tmp/e2e-screenshots/watchlist-cleanup-toolbar.png',
     });
 
     // 整理モーダルを開く
@@ -93,7 +93,7 @@ test.describe('視聴済みの一括削除', () => {
     const targetTitle = (rowLabel ?? '').replace(/を削除対象にする$/, '');
 
     await page.screenshot({
-      path: 'docs/e2e-screenshots/watchlist-cleanup-modal.png',
+      path: 'docs/tmp/e2e-screenshots/watchlist-cleanup-modal.png',
     });
 
     // 削除する
@@ -113,7 +113,7 @@ test.describe('視聴済みの一括削除', () => {
     ).toHaveCount(0, { timeout: 15000 });
 
     await page.screenshot({
-      path: 'docs/e2e-screenshots/watchlist-cleanup-after.png',
+      path: 'docs/tmp/e2e-screenshots/watchlist-cleanup-after.png',
     });
   });
 
@@ -154,7 +154,7 @@ test.describe('視聴済みの一括削除', () => {
     ).toHaveCount(1, { timeout: 30000 });
 
     await page.screenshot({
-      path: 'docs/e2e-screenshots/watchlist-cleanup-favorites-kept.png',
+      path: 'docs/tmp/e2e-screenshots/watchlist-cleanup-favorites-kept.png',
     });
   });
 
@@ -187,7 +187,7 @@ test.describe('視聴済みの一括削除', () => {
     ).toBeEnabled();
 
     await page.screenshot({
-      path: 'docs/e2e-screenshots/watchlist-cleanup-unrated.png',
+      path: 'docs/tmp/e2e-screenshots/watchlist-cleanup-unrated.png',
     });
   });
 
@@ -209,7 +209,7 @@ test.describe('視聴済みの一括削除', () => {
     ).toHaveCount(0);
 
     await page.screenshot({
-      path: 'docs/e2e-screenshots/watchlist-cleanup-empty.png',
+      path: 'docs/tmp/e2e-screenshots/watchlist-cleanup-empty.png',
     });
   });
 });

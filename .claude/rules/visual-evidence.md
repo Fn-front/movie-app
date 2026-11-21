@@ -47,6 +47,16 @@ user-attachments のアップロードは GitHub の **web セッション cooki
 
 ## 既存運用との棲み分け
 
-- **E2E シナリオ結果**のスクショは従来どおり `docs/e2e-screenshots/` に**コミット**し、コミット SHA 固定の raw URL permalink で PR に埋め込む（`.claude/CLAUDE.md` 参照）。安定した回帰用証跡はリポに残す。
-- **画面修正の Before/After ＋デモ動画**は **gh-image（user-attachments）**を使い、リポにコミットしない（動画インライン再生・リポ肥大化回避のため）。
-- 一時ファイルは `docs/tmp/`（`.gitignore` 対象）に置き、アップロード後は残さない。
+- **E2E シナリオ結果**のスクショも、**画面修正の Before/After ＋デモ動画**も、どちらも **gh-image（user-attachments）** を使い、**リポにコミットしない**。
+- 一時ファイルは `docs/tmp/`（`.gitignore` 対象）に置き、アップロード後は残さない。E2E の出力先は `docs/tmp/e2e-screenshots/`。
+
+> ⛔ **かつては E2E のスクショだけ `docs/e2e-screenshots/` へコミットしていた**
+> （「安定した回帰用証跡はリポに残す」という理由）。#433 で廃止した。
+>
+> 受賞一覧・検索結果・ウォッチリスト等のスクショには TMDb のポスターと
+> タイトルが写っており、public リポジトリへコミットすると **TMDb 利用規約
+> Section 1.C（6ヶ月を超えてキャッシュしない）に対して更新もエビクションも
+> 効かない**置き場所になる。
+>
+> 回帰用の証跡としての価値は、**PR に貼った user-attachments の URL が
+> 残ることで担保する**（GitHub 側が保持し、リポは肥大化しない）。

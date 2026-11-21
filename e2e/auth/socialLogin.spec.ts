@@ -184,7 +184,7 @@ test.describe('ソーシャルログイン 表示確認（未認証）', () => {
       await expect(page).toHaveURL(/\/auth\/signin/);
 
       await page.getByRole('listitem').filter({ has: description }).screenshot({
-        path: 'docs/e2e-screenshots/social-login-start-failed.png',
+        path: 'docs/tmp/e2e-screenshots/social-login-start-failed.png',
       });
     });
   });
@@ -359,7 +359,7 @@ test.describe('ソーシャルログイン失敗後の戻り先', () => {
     await page.waitForURL(PROTECTED_PATH);
     await expect(page).toHaveURL(PROTECTED_PATH);
     await page.screenshot({
-      path: 'docs/e2e-screenshots/social-login-callback-restored.png',
+      path: 'docs/tmp/e2e-screenshots/social-login-callback-restored.png',
     });
   });
 
@@ -384,7 +384,7 @@ test.describe('ソーシャルログイン失敗後の戻り先', () => {
       `/auth/signin?callbackUrl=${encodeURIComponent(PROTECTED_PATH)}`,
     );
     await page.screenshot({
-      path: 'docs/e2e-screenshots/social-login-error-back-link.png',
+      path: 'docs/tmp/e2e-screenshots/social-login-error-back-link.png',
     });
 
     await backLink.click();

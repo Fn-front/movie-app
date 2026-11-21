@@ -74,7 +74,7 @@ test.describe('Cookie同意 / 同意と撤回', () => {
     // トグルは長い本文の最後にあるため、見える位置まで送ってから撮る
     await consentToggleRadio(page, '同意する').scrollIntoViewIfNeeded();
     await page.screenshot({
-      path: 'docs/e2e-screenshots/cookie-consent-toggle.png',
+      path: 'docs/tmp/e2e-screenshots/cookie-consent-toggle.png',
     });
 
     await consentToggleRadio(page, '同意しない').click();

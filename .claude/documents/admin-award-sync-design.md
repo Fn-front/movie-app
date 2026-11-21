@@ -522,7 +522,11 @@ eiga.com に `<EIGA_AWARD_BASE_URL>/<slug>/<year>/` という全賞共通レイ�
 
 **ビジュアル証跡**（`.claude/rules/visual-evidence.md`）: `/admin/awards` は新規画面なので PR 4 が対象。ただし Before が存在しないため、**After のスクリーンショットと動作動画**（年+賞選択 → 実行 → 進捗 → 完了、409、強制失効）を `gh-image` で user-attachments にアップして PR 本文に貼る。リポにはコミットしない（一時ファイルは `docs/tmp/`）。PR 1〜3 は UI 変化が無いので対象外。
 
-E2E のシナリオ結果スクショは別運用で、`docs/e2e-screenshots/` に**コミット**し、コミットSHA固定の permalink で埋め込む。
+E2E のシナリオ結果スクショも**同じ運用**（gh-image / user-attachments）。出力先は `docs/tmp/e2e-screenshots/` で、リポにはコミットしない。
+
+> ⚠️ 旧版は「E2E だけ `docs/e2e-screenshots/` にコミットして permalink で埋め込む」
+> と書いていた。#433 で廃止（TMDb のポスターが写るため）。`.claude/documents/` 配下の
+> 実装計画にも旧運用の記述が残っているが、権威は `.claude/CLAUDE.md` 側にある。
 
 **Issue とロードマップ**: 受賞作品機能は `.claude/documents/roadmap/phase12-future.md` が `#237` → `#276〜#281` の親子構造で管理している。本機能も同じ階層に Issue 番号付きで追加し、各PRの本文に `Closes #xxx` を書く。
 

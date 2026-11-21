@@ -95,7 +95,7 @@ test.describe('配信開始の優先表示', () => {
     await expect(main.getByAltText('U-NEXT')).toBeVisible();
 
     await page.screenshot({
-      path: 'docs/e2e-screenshots/watchlist-streaming-badge.png',
+      path: 'docs/tmp/e2e-screenshots/watchlist-streaming-badge.png',
     });
   });
 

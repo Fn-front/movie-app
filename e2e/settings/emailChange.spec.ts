@@ -212,7 +212,7 @@ test.describe('メールアドレス変更', () => {
 
     const section = emailSection(page);
     await page.screenshot({
-      path: 'docs/e2e-screenshots/email-change-code-sent.png',
+      path: 'docs/tmp/e2e-screenshots/email-change-code-sent.png',
     });
 
     await section
@@ -227,7 +227,7 @@ test.describe('メールアドレス変更', () => {
       page.getByText(`現在のメールアドレス: ${NEW_EMAIL}`),
     ).toBeVisible();
     await page.screenshot({
-      path: 'docs/e2e-screenshots/email-change-done.png',
+      path: 'docs/tmp/e2e-screenshots/email-change-done.png',
     });
 
     // ⛔ ここが本題。アドレスは**ログイン識別子そのもの**
@@ -303,7 +303,7 @@ test.describe('メールアドレス変更', () => {
       //   焼けて 400 になる（#1359 の2回目レビューで見つかった状態）
       await expect(secondFactorField).toBeVisible();
       await page.screenshot({
-        path: 'docs/e2e-screenshots/email-change-second-factor.png',
+        path: 'docs/tmp/e2e-screenshots/email-change-second-factor.png',
       });
 
       await section
@@ -575,7 +575,7 @@ test.describe('メールアドレス変更', () => {
       await expect(page.getByText(MESSAGE.SOCIAL_LINKED)).toBeVisible();
       expect(await getLatestOtpCode(NEW_EMAIL, 'email_change')).toBeNull();
       await page.screenshot({
-        path: 'docs/e2e-screenshots/email-change-social-linked.png',
+        path: 'docs/tmp/e2e-screenshots/email-change-social-linked.png',
       });
     });
   });

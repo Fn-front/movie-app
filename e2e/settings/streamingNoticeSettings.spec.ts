@@ -100,7 +100,7 @@ test.describe('配信開始のお知らせ設定', () => {
     ).toBeChecked({ timeout: 30000 });
 
     await page.screenshot({
-      path: 'docs/e2e-screenshots/settings-streaming-scope.png',
+      path: 'docs/tmp/e2e-screenshots/settings-streaming-scope.png',
     });
   });
 
@@ -119,7 +119,7 @@ test.describe('配信開始のお知らせ設定', () => {
     });
 
     await page.screenshot({
-      path: 'docs/e2e-screenshots/watchlist-streaming-hint.png',
+      path: 'docs/tmp/e2e-screenshots/watchlist-streaming-hint.png',
     });
   });
 

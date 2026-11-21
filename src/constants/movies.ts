@@ -39,6 +39,42 @@ export const MOVIES_FETCH_MONTHS_AHEAD = 3;
 export const NOW_SHOWING_MONTHS_BACK = 2;
 
 /**
+ * 配信情報を取り直すまでの日数（#433）
+ *
+ * `syncStreamingMovies` の Discover は公開日が
+ * `[今日 - NOW_SHOWING_MONTHS_BACK ヶ月, 今日 + MOVIES_FETCH_MONTHS_AHEAD ヶ月]`
+ * の作品しか拾わない。窓から外れた行の `watch_provider_*` /
+ * `digital_release_date` / `is_currently_streaming` は、以後どの経路も
+ * 書き換えないまま残る。
+ *
+ * TMDb 利用規約 Section 1.C は「TMDb から取得した情報を6ヶ月を超えて
+ * キャッシュすること」を禁じているため、その手前で取り直す。
+ *
+ * ⚠️ **6ヶ月（約180日）より十分短くすること。** 窓から外れた直後の行が
+ * 次に触られるのはこの日数の後なので、ここが上限そのものだと間に合わない。
+ *
+ * ⚠️ 鮮度の判定に `updated_at` は使えない。日次の `update-movies` が
+ * **全行の `updated_at` を毎日書き換える**（`updateMoviesCacheByBatch.ts`）。
+ * `cached_at` は upsert 経路だけが書き、streaming 行については
+ * `syncStreamingMovies` が唯一の書き手なので、こちらを使う。
+ */
+export const STREAMING_AVAILABILITY_STALE_DAYS = 60;
+
+/**
+ * 1回の同期で取り直す「古い配信情報」の上限件数
+ *
+ * `sync-streaming` は `maxDuration = 120` 秒。Discover の取得と配信判定を
+ * 終えた後に走るので、ここが無制限だと全体を押し出す。
+ *
+ * ⚠️ 上限に当たったら**ログに残す**こと。黙って切り捨てると
+ * 「全部取り直した」ように見える。
+ *
+ * 本番実測（2026-11-21）では `watch_provider_*` か `digital_release_date` を
+ * 持つ行は 65件しかなく、現状この上限には当たらない。
+ */
+export const STREAMING_STALE_REFRESH_LIMIT = 200;
+
+/**
  * リリースタイプ値（このファイル内のリリースタイプの単一ソース）
  */
 export const RELEASE_TYPE = {

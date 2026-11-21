@@ -12,7 +12,7 @@
  */
 
 import { createItemOutcome, type ItemOutcome } from '@/lib/cron/itemOutcome';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import {
   DISCOVER_API_MAX_PAGES,
@@ -20,10 +20,13 @@ import {
   NOW_SHOWING_MONTHS_BACK,
   RELEASE_TYPE,
   RELEASE_TYPE_MAP,
+  STREAMING_AVAILABILITY_STALE_DAYS,
   STREAMING_MIN_POPULARITY,
+  STREAMING_STALE_REFRESH_LIMIT,
   type WatchProviderOfferType,
 } from '@/constants/movies';
 import { TMDB_AVAILABILITY_CONCURRENCY, TMDB_SORT_BY } from '@/constants/tmdb';
+import { MS_PER_DAY } from '@/constants/time';
 import { isConcertFilm } from '@/lib/movies/concertFilm';
 import { isQualityMovie } from '@/lib/movies/qualityFilter';
 import { isStageBroadcast } from '@/lib/movies/stageBroadcast';
@@ -45,6 +48,8 @@ export interface StreamingSyncResult {
   availableInJp: number;
   /** is_currently_streaming をクリアした映画数（配信終了） */
   cleared: number;
+  /** 同期ウィンドウ外で古くなっていた配信情報を取り直した件数（#433） */
+  staleRefreshed: number;
   /** TMDb API の呼び出し回数 */
   tmdbRequests: number;
   /** 実行時間（ミリ秒） */
@@ -308,6 +313,135 @@ async function resolveJpAvailability(
 }
 
 /**
+ * 同期ウィンドウの外に落ちた行の配信情報を取り直す（#433）
+ *
+ * Discover が拾うのは公開日が
+ * `[今日 - NOW_SHOWING_MONTHS_BACK ヶ月, 今日 + MOVIES_FETCH_MONTHS_AHEAD ヶ月]`
+ * の作品だけ。窓から外れた行の `watch_provider_*` / `digital_release_date` /
+ * `is_currently_streaming` は、以後どの経路も書き換えない。TMDb 利用規約
+ * Section 1.C の「6ヶ月を超えてキャッシュしない」に当たるため取り直す。
+ *
+ * ⛔ **NULL で潰さない。** 配信予定タブの絞り込みは
+ * `digital_release_date > today` **だけ**で、`release_date` の既定範囲を持たない
+ * （`src/app/api/movies/route.ts`）。「劇場公開は3ヶ月以上前・配信はこれから」の
+ * 作品は窓の外にいながら配信予定の正規の住人なので、消すと一覧から静かに落ちる。
+ * 取り直して追従させる。
+ *
+ * TMDb が配信情報を返さなくなった作品は、その結果（空）をそのまま反映する。
+ * provider 配列と `digital_release_date` を実態へ戻せるのはこの経路だけ
+ * （後続のクリアは `is_currently_streaming` しか落とさない）。
+ *
+ * ⚠️ **クリアより前に呼び、配信中と確認できた ID を `streamingIds` へ足すこと。**
+ * 後ろに置くと、ここで `is_currently_streaming: true` を書いても
+ * **翌日のクリアが必ず取り消す**。対象は定義上ウィンドウ外なので
+ * `keepIds`（= `streamingIds` + `unresolvedIds`）に入らず、
+ * `.not('id','in',...)` に引っかかるため。しかも `cached_at` を進めているので
+ * そこから60日間は再抽出されない＝実質まったく直らない。
+ *
+ * ⚠️ 取得に失敗した作品は `unresolvedIds` へ足す。本筋と同じく「判定できて
+ * いないものはクリアしない」を守る。
+ *
+ * @param supabase - service role クライアント
+ * @param result - 同期結果（件数とエラーを積む）
+ * @param streamingIds - 配信中と確認できた作品ID（クリアの保持対象）
+ * @param unresolvedIds - 判定できなかった作品ID（クリアの保持対象）
+ */
+async function refreshStaleAvailability(
+  supabase: SupabaseClient,
+  result: StreamingSyncResult,
+  streamingIds: Set<number>,
+  unresolvedIds: Set<number>,
+): Promise<void> {
+  const staleBefore = new Date(
+    Date.now() - STREAMING_AVAILABILITY_STALE_DAYS * MS_PER_DAY,
+  ).toISOString();
+
+  const { data: staleRows, error: selectError } = await supabase
+    .from('movie_cache')
+    .select('id, title, release_type')
+    .lt('cached_at', staleBefore)
+    .or(
+      'watch_provider_flatrate.not.is.null,' +
+        'watch_provider_rent.not.is.null,' +
+        'watch_provider_buy.not.is.null,' +
+        'digital_release_date.not.is.null',
+    )
+    .order('cached_at', { ascending: true })
+    .limit(STREAMING_STALE_REFRESH_LIMIT);
+
+  if (selectError) {
+    result.errors.push(`stale select: ${selectError.message}`);
+    return;
+  }
+
+  if (!staleRows || staleRows.length === 0) return;
+
+  // ⚠️ 上限に当たったら残件があることをログに残す。黙って切ると
+  //    「全部取り直した」ように見え、規約違反が残っていることに気づけない
+  if (staleRows.length === STREAMING_STALE_REFRESH_LIMIT) {
+    console.warn(
+      `[sync-streaming] 古い配信情報が上限 ${STREAMING_STALE_REFRESH_LIMIT} 件に達しました。` +
+        '残りは次回の同期で取り直します',
+    );
+  }
+
+  for (const batch of chunk(staleRows, TMDB_AVAILABILITY_CONCURRENCY)) {
+    const settled = await Promise.all(
+      batch.map(async (row) => {
+        try {
+          return {
+            row,
+            availability: await getJpStreamingAvailability(row.id),
+          };
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Unknown error';
+          result.errors.push(`stale availability ${row.title}: ${message}`);
+          return { row, availability: null };
+        }
+      }),
+    );
+    result.tmdbRequests += batch.length;
+
+    const refreshedAt = new Date().toISOString();
+
+    for (const { row, availability } of settled) {
+      // 取得に失敗した行は現状維持。TMDb の一時障害で消さない。
+      // ⚠️ 後続のクリアにも触らせない（本筋の unresolvedIds と同じ扱い）
+      if (!availability) {
+        unresolvedIds.add(row.id);
+        continue;
+      }
+
+      // ⚠️ 配信中と確認できたら保持対象に入れる。入れないと後続のクリアが
+      //    「今回の Discover に出てこなかった作品」として false へ戻す
+      if (availability.isCurrentlyStreaming) streamingIds.add(row.id);
+
+      const { error: updateError } = await supabase
+        .from('movie_cache')
+        .update({
+          is_currently_streaming: availability.isCurrentlyStreaming,
+          digital_release_date: availability.digitalReleaseDate,
+          watch_provider_flatrate: availability.watchProviderIds.flatrate,
+          watch_provider_rent: availability.watchProviderIds.rent,
+          watch_provider_buy: availability.watchProviderIds.buy,
+          // ⚠️ ここを書かないと同じ行を毎日取り直し続ける
+          cached_at: refreshedAt,
+        })
+        .eq('id', row.id)
+        .eq('release_type', row.release_type);
+
+      if (updateError) {
+        result.errors.push(`stale update ${row.title}: ${updateError.message}`);
+        continue;
+      }
+
+      result.staleRefreshed++;
+    }
+  }
+}
+
+/**
  * TMDb Discover API から配信作品を取得し movie_cache に同期する
  *
  * upcoming / now_showing の両方の公開日範囲を事前生成する。
@@ -336,6 +470,7 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
     skipped: 0,
     availableInJp: 0,
     cleared: 0,
+    staleRefreshed: 0,
     tmdbRequests: 0,
     durationMs: 0,
     errors: [],
@@ -410,6 +545,28 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
     }
   }
 
+  // 同期ウィンドウの外に落ちた行の配信情報を取り直す（#433）。
+  //
+  // ⚠️ **クリアより前。** 後ろに置くと、ここで立てた `is_currently_streaming`
+  //   を翌日のクリアが必ず取り消す（対象は定義上ウィンドウ外なので
+  //   `keepIds` に入らない）。しかも `cached_at` を進めるので60日間は
+  //   再抽出されず、実質まったく直らない。
+  //
+  // ⚠️ **本筋が健全なときだけ走らせる。** 判定に使うのはクリアと同じ条件。
+  //   `getJpStreamingAvailability` は `watch/providers` が欠けても例外を
+  //   投げず、HTTP 200 のまま「配信なし」を返す。TMDb 障害時に走らせると
+  //   `digital_release_date` を NULL で潰し、しかも `cached_at` を進めるため
+  //   **60日間、配信予定タブから作品が消えたままになる**。本筋は翌日復旧
+  //   するのに、こちらだけ固定されるのは割に合わない。
+  if (streamingIds.size > 0 && !truncated) {
+    await refreshStaleAvailability(
+      supabase,
+      result,
+      streamingIds,
+      unresolvedIds,
+    );
+  }
+
   // 今回「配信中」と確認できなかった既存行のフラグを落とす（配信終了の反映）。
   //
   // 1件も配信中を確認できなかった場合はクリアしない。TMDb 障害やキー失効で
@@ -440,7 +597,8 @@ export async function syncStreamingMovies(): Promise<StreamingSyncResult> {
   console.log(
     `[sync-streaming] fetched=${result.fetched} upserted=${result.upserted} ` +
       `skipped=${result.skipped} availableInJp=${result.availableInJp} ` +
-      `cleared=${result.cleared} tmdbRequests=${result.tmdbRequests} ` +
+      `cleared=${result.cleared} staleRefreshed=${result.staleRefreshed} ` +
+      `tmdbRequests=${result.tmdbRequests} ` +
       `durationMs=${result.durationMs} errors=${result.errors.length}`,
   );
 

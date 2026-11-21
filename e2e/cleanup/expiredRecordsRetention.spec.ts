@@ -23,10 +23,10 @@ import { test, expect } from '@playwright/test';
 
 import { OTP_CODE_RETENTION_HOURS } from '@/constants/otp';
 import { PASSWORD_RESET_TOKEN_RETENTION_HOURS } from '@/constants/passwordReset';
+import { DELETE_BATCH_SIZE } from '@/lib/cleanup/batchedDelete';
 
 import {
   cleanupOtpCodes,
-  cleanupPasswordResetTokensForUser,
   rowExistsById,
   runDeleteExpiredOtpCodes,
   runDeleteExpiredPasswordResetTokens,
@@ -45,7 +45,7 @@ const hoursLater = (hours: number) =>
   new Date(Date.now() + hours * 3600_000).toISOString();
 
 /**
- * 1回で消す上限
+ * 1回で消す上限。**本番と同じ値を実装から取る**（二重管理にしない）
  *
  * ⚠️ 本番の CRON は常に `p_limit` 付きで呼ぶので、省くと**本番が通らない
  * 経路**を検証することになる。
@@ -54,8 +54,14 @@ const hoursLater = (hours: number) =>
  * 期限切れ候補がこの数を超えていると仕込んだ行が選ばれる保証がない。
  * つまりこの spec が成立するのは候補が上限未満の間だけ
  * （`rateLimitsRetention.spec.ts` と同じ前提）。
+ *
+ * ⚠️ **上限が効いていること自体は固定していない。** 仕込むのは期限切れ
+ * 2行だけなので、SQL から `LIMIT p_limit` を外す変異でも緑のまま通る。
+ * 件数を絞るテストは「候補がテーブル全体で2行だけ」という前提が要り、
+ * 共有DBでは成り立たない。ここで見ているのは**本番と同じ呼び方で
+ * 削除条件が正しいこと**まで。
  */
-const DELETE_LIMIT = 500;
+const DELETE_LIMIT = DELETE_BATCH_SIZE;
 
 test.describe('期限切れレコードの保持期間', () => {
   // RPC を1回だけ呼び、その結果を各テストで見る
@@ -63,6 +69,63 @@ test.describe('期限切れレコードの保持期間', () => {
 
   // 認証を使わないので storageState は空でよい
   test.use({ storageState: { cookies: [], origins: [] } });
+
+  /**
+   * ⚠️ ブラウザを使わないので1ブラウザで足りる。
+   *
+   * ⛔ それ以上に、**3プロジェクトで並走すると壊れる**。identifier は
+   * run 単位（`runScopedEmail`）でプロジェクト単位ではないため、先に
+   * 終わったプロジェクトの `afterAll`（`cleanupOtpCodes` / ユーザー削除）が、
+   * まだ assert 前の別プロジェクトの「残る」はずの行まで消す。
+   * CI は chromium だけだが、ローカルの `npm run test:e2e` は
+   * firefox / webkit も足す（`playwright.config.ts:181-208`）。
+   */
+  test.skip(
+    ({ browserName }) => browserName !== 'chromium',
+    'DBだけを見るテストなので chromium 1本で足りる（並走すると互いの行を消す）',
+  );
+
+  /**
+   * 保持期間の下限ガード（#1352 のレビュー）
+   *
+   * ⛔ ここが**最大の「消えすぎ」経路**。`make_interval(hours => -5)` は
+   * `-05:00:00` を返すので `now() - (-5時間)` が**未来**になり、
+   * **まだ有効なコードやトークンを全部消す**。SQL 側のコメントが自ら
+   * そう書いているのに、検証はどこにも無かった。
+   *
+   * ⚠️ jest 側は RPC をモックするので、ここは実DBでしか見られない。
+   */
+  test.describe('引数のガード', () => {
+    test('保持期間が0以下なら削除せずに落ちる', async () => {
+      await expect(
+        runDeleteExpiredOtpCodes(-1, DELETE_LIMIT),
+      ).rejects.toThrow();
+      await expect(runDeleteExpiredOtpCodes(0, DELETE_LIMIT)).rejects.toThrow();
+      await expect(
+        runDeleteExpiredPasswordResetTokens(-1, DELETE_LIMIT),
+      ).rejects.toThrow();
+      await expect(
+        runDeleteExpiredPasswordResetTokens(0, DELETE_LIMIT),
+      ).rejects.toThrow();
+    });
+
+    /**
+     * ⚠️ 0 や負数を黙って受けると「1件も消さないのに成功」を返し、
+     * 本番のループ（`runBatchedDelete`）が即座に打ち切られる。
+     * 滞留に気づけないまま成功扱いになるので、落とすほうが正しい。
+     */
+    test('上限が0以下なら削除せずに落ちる', async () => {
+      await expect(
+        runDeleteExpiredOtpCodes(OTP_CODE_RETENTION_HOURS, 0),
+      ).rejects.toThrow();
+      await expect(
+        runDeleteExpiredPasswordResetTokens(
+          PASSWORD_RESET_TOKEN_RETENTION_HOURS,
+          -1,
+        ),
+      ).rejects.toThrow();
+    });
+  });
 
   test.describe('otp_codes（#978）', () => {
     const EMAIL = runScopedEmail('e2e-otp-retention');
@@ -78,6 +141,9 @@ test.describe('期限切れレコードの保持期間', () => {
       /** まだ有効 → 残る */
       valid: '',
     };
+
+    /** RPC が返した削除件数 */
+    let deletedCount = 0;
 
     test.beforeAll(async () => {
       ids.expired = await seedOtpCodeRow({
@@ -102,11 +168,26 @@ test.describe('期限切れレコードの保持期間', () => {
         expiresAt: hoursLater(1),
       });
 
-      await runDeleteExpiredOtpCodes(OTP_CODE_RETENTION_HOURS, DELETE_LIMIT);
+      deletedCount = await runDeleteExpiredOtpCodes(
+        OTP_CODE_RETENTION_HOURS,
+        DELETE_LIMIT,
+      );
     });
 
     test.afterAll(async () => {
       await cleanupOtpCodes(EMAIL);
+    });
+
+    /**
+     * ⛔ 戻り値は本番の**打ち切り判定そのもの**（`batchedDelete.ts:162`）。
+     * `GET DIAGNOSTICS ... ROW_COUNT` が壊れて常に 0 を返すようになると、
+     * 行は消えているのに1バッチで `completed: true` となり、**滞留が
+     * 無言で残る**。jest 側はモック値を返すだけなので実DBでしか見られない。
+     *
+     * ⚠️ 共有DBには他の期限切れ候補もありうるので下限で見る。
+     */
+    test('削除件数を返す', () => {
+      expect(deletedCount).toBeGreaterThanOrEqual(2);
     });
 
     test('保持期間を過ぎた期限切れコードは消える', async () => {
@@ -154,6 +235,9 @@ test.describe('期限切れレコードの保持期間', () => {
       valid: '',
     };
 
+    /** RPC が返した削除件数 */
+    let deletedCount = 0;
+
     test.beforeAll(async () => {
       userId = await createVerifiedUser(USER);
 
@@ -175,15 +259,21 @@ test.describe('期限切れレコードの保持期間', () => {
         expiresAt: hoursLater(1),
       });
 
-      await runDeleteExpiredPasswordResetTokens(
+      deletedCount = await runDeleteExpiredPasswordResetTokens(
         PASSWORD_RESET_TOKEN_RETENTION_HOURS,
         DELETE_LIMIT,
       );
     });
 
     test.afterAll(async () => {
-      await cleanupPasswordResetTokensForUser(userId);
+      // `password_reset_tokens.user_id` は ON DELETE CASCADE なので、
+      // ユーザーを消せば仕込んだ4行も消える（個別削除は要らない）
       await deleteUserByEmail(USER.email);
+    });
+
+    /** ⛔ 理由は otp_codes 側と同じ（本番の打ち切り判定） */
+    test('削除件数を返す', () => {
+      expect(deletedCount).toBeGreaterThanOrEqual(2);
     });
 
     test('保持期間を過ぎた期限切れトークンは消える', async () => {

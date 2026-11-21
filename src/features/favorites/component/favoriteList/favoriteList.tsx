@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card/card';
 import { RatingIndicator } from '@/features/favorites/component/ratingIndicator/ratingIndicator';
 import { FavoriteButton } from '@/features/favorites/component/favoriteButton/favoriteButton';
 import { MovieGridContainer } from '@/components/ui/movie/movieGridContainer/movieGridContainer';
+import { TmdbDeletedNotice } from '@/components/ui/tmdbDeletedNotice/tmdbDeletedNotice';
 import {
   IMAGE_SIZES,
   DISPLAY_LIMITS,
@@ -242,6 +243,16 @@ const FavoriteTile = memo<FavoriteTileProps>(function FavoriteTile({
               点数のチップ1つに畳む（読み上げは変わらない） */}
           <RatingIndicator rating={item.rating} size='sm' compact={isList} />
         </div>
+        {/* TMDb から消えた作品は行を残して知らせる（#433 案D）。
+            タイトルの下に置くのは、どの作品の話かを先に読ませるため */}
+        {item.tmdb_deleted_at && (
+          <TmdbDeletedNotice
+            tmdbDeletedAt={item.tmdb_deleted_at}
+            onRemove={handleFavoriteToggle}
+            disabled={favoriteDisabled}
+            movieTitle={item.title}
+          />
+        )}
       </div>
       {isList && (
         <div className={styles.c_favorite_tile__list_actions}>

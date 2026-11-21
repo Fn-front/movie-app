@@ -103,6 +103,32 @@ export const ARIA_LABELS = {
  * | `watchlistList.tsx` | `${title}を視聴済みにする` |
  * | `dismissedMoviesList.tsx` | `${title}の興味なしを解除` ← 助詞が「の」 |
  */
+/**
+ * TMDb から消えた作品の通知（#433 案D）
+ *
+ * 利用者が自分で登録したものを黙って消さないための文言。行は残し、
+ * 猶予のあいだに気づいてもらう。放置しても掃除の CRON が物理削除する。
+ *
+ * ⚠️ **「エラー」と読ませない。** 利用者の操作でも不具合でもなく、
+ * TMDb 側で作品のデータが無くなっただけ。原因と次の行動だけを伝える。
+ *
+ * ⚠️ 削除ボタンの aria-label は既存の語順に揃える
+ * （`${title}をウォッチリストから削除` / MOVIE_ACTION_LABELS 参照）。
+ */
+export const TMDB_DELETED_NOTICE = {
+  /** 見出し */
+  TITLE: 'TMDbから削除されました',
+  /** 残り日数 */
+  // ⚠️ 短く保つ。グリッドのタイルは中身が約160pxしかなく、長いと
+  //   最後の1文字だけが次行に落ちる（「消えま/す」）。見出しで
+  //   「TMDbから削除されました」と伝えているので、ここは期限だけでよい
+  REMAINING: (days: number) => `あと${days}日で消えます`,
+  /** 削除ボタンの可視ラベル */
+  REMOVE: '削除',
+  /** 削除ボタンのアクセシブルネーム */
+  REMOVE_LABEL: (movieTitle: string) => `${movieTitle}を一覧から削除`,
+} as const;
+
 export const MOVIE_ACTION_LABELS = {
   /** お気に入りに追加（未登録） */
   favoriteAdd: (movieTitle?: string) =>

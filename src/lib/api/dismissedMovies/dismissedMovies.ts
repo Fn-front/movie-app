@@ -40,6 +40,13 @@ export interface DismissedMovieItem {
   poster_path: string | null;
   genre_ids: number[] | null;
   created_at: string;
+  /**
+   * TMDb で削除されたことを検知した時刻。null は検知していない（#433 案D）
+   *
+   * 値が入っている作品は TMDb 側にもう存在しない。行は残して一覧で知らせ、
+   * 猶予後に掃除の CRON が物理削除する。
+   */
+  tmdb_deleted_at?: string | null;
 }
 
 /**

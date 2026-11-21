@@ -18,6 +18,7 @@ import { EmptyState } from '@/components/ui/emptyState/emptyState';
 import { Loading } from '@/components/ui/loading/loading';
 import { useToastDispatch } from '@/hooks/useToast';
 import { getTMDbImageUrl } from '@/utils/image';
+import { TmdbDeletedNotice } from '@/components/ui/tmdbDeletedNotice/tmdbDeletedNotice';
 import {
   DISMISSED_MOVIES_SUCCESS_MESSAGES,
   DISMISSED_MOVIES_ERROR_MESSAGES,
@@ -172,6 +173,16 @@ const DismissedMovieItem = memo<DismissedMovieItemProps>(
           <span className={styles.c_dismissed_movies_list__title}>
             {movie.title}
           </span>
+          {/* TMDb から消えた作品は行を残して知らせる（#433 案D）。
+              右端の解除ボタンとは別に、理由と期限をここで伝える */}
+          {movie.tmdb_deleted_at && (
+            <TmdbDeletedNotice
+              tmdbDeletedAt={movie.tmdb_deleted_at}
+              onRemove={handleRemove}
+              disabled={isRemoving}
+              movieTitle={movie.title}
+            />
+          )}
         </div>
         <button
           type='button'

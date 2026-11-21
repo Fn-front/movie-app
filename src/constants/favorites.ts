@@ -18,7 +18,7 @@ export const FAVORITES_MAX_LIMIT = 50;
  * お気に入り取得SELECTカラム
  */
 export const FAVORITES_SELECT =
-  'id, tmdb_movie_id, title, poster_path, release_date, rating, added_at';
+  'id, tmdb_movie_id, title, poster_path, release_date, rating, added_at, tmdb_deleted_at';
 
 /**
  * お気に入り照会SELECTカラム

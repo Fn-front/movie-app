@@ -419,4 +419,62 @@ describe('FavoriteList', () => {
       }),
     ).toBeInTheDocument();
   });
+
+  // #433 案D: TMDb から消えた作品は行を残して知らせる
+  describe('TMDbから削除された作品', () => {
+    const deletedFavorite = {
+      ...mockFavorites[0],
+      tmdb_deleted_at: new Date(
+        Date.now() - 5 * 24 * 60 * 60 * 1000,
+      ).toISOString(),
+    };
+
+    it('行を消さず、削除された旨と期限を知らせる', () => {
+      render(
+        <FavoriteList
+          favorites={[deletedFavorite]}
+          isLoading={false}
+          onFavoriteToggle={mockOnFavoriteToggle}
+        />,
+      );
+
+      // ⚠️ 行自体は残す。利用者が自分で登録したものを黙って消さない
+      expect(screen.getByText(deletedFavorite.title)).toBeInTheDocument();
+      expect(screen.getByText('TMDbから削除されました')).toBeInTheDocument();
+      expect(screen.getByText(/あと\d+日で消えます/)).toBeInTheDocument();
+    });
+
+    it('検知されていない作品には出さない', () => {
+      render(
+        <FavoriteList
+          favorites={mockFavorites}
+          isLoading={false}
+          onFavoriteToggle={mockOnFavoriteToggle}
+        />,
+      );
+
+      expect(
+        screen.queryByText('TMDbから削除されました'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('削除ボタンを押すとお気に入りから外す', async () => {
+      const user = userEvent.setup();
+      render(
+        <FavoriteList
+          favorites={[deletedFavorite]}
+          isLoading={false}
+          onFavoriteToggle={mockOnFavoriteToggle}
+        />,
+      );
+
+      await user.click(
+        screen.getByRole('button', {
+          name: `${deletedFavorite.title}を一覧から削除`,
+        }),
+      );
+
+      expect(mockOnFavoriteToggle).toHaveBeenCalledTimes(1);
+    });
+  });
 });

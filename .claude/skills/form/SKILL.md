@@ -19,24 +19,49 @@ argument-hint: <formName>
 
 ### アーキテクチャ原則
 
-- **zodスキーマ分離**: `types/schema.ts`に定義
+- **zodスキーマ分離**: `src/schema/<domain>.ts` に定義する（フォームの隣に置かない）
 - **エラーメッセージ**: ユーザーフレンドリーな日本語
 - **アクセシビリティ**: 適切なARIA属性とラベル
-- **バリデーション**: リアルタイム + 送信時
+- **バリデーション**: 送信時（`mode` は指定しない。既定の `onSubmit`）
 
 ## ファイル構成
 
 ```
-src/components/<formName>/
-├── <formName>.tsx           # メインフォームコンポーネント
-├── <formName>.module.scss   # スタイル
-└── types/
-    └── schema.ts            # zodスキーマ定義
+src/features/<domain>/<formName>/
+├── <formName>.tsx           # フォームコンポーネント
+├── <formName>.test.tsx      # テスト（同じディレクトリに置く）
+└── <formName>.module.scss   # スタイル
+
+src/schema/<domain>.ts       # ⚠️ zod スキーマはここ。フォームの隣には置かない
 ```
+
+⛔ **`types/schema.ts` は作らない。** スキーマは `src/schema/<domain>.ts` に
+置く。フォームと API Route が**同じファイルから** import することで、
+片方だけ直して「クライアントで通ってサーバーで 400」になるのを防ぐ。
+
+```typescript
+import { loginSchema, type LoginFormData } from '@/schema/auth';
+```
+
+⚠️ **同じ定数を共有するとは限らない。** 画面とサーバーで要るものが違うため、
+同じファイルに**2本置く**のが実際の形。
+
+```typescript
+// src/schema/auth.ts
+export const registerSchema = …;     // 画面用（確認用パスワードの一致など）
+export const registerApiSchema = …;  // ルート用（画面にしか無い欄を含まない）
+```
+
+`changePassword` / `passwordResetConfirm` も同じ2本立て。
+そのままリテラルに共有しているのは `passwordResetRequestSchema` 程度。
+
+⚠️ ログイン（`loginSchema`）に対応する API Route は**無い**。NextAuth の
+credentials が受けるので、共有相手がいない唯一の例。
 
 ## zodスキーマテンプレート
 
 ```typescript
+// src/schema/<domain>.ts
 import { z } from 'zod';
 
 export const <formName>Schema = z.object({
@@ -114,7 +139,7 @@ import React, { memo, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import styles from './<formName>.module.scss';
-import { <formName>Schema, <FormName>FormData } from './types/schema';
+import { <formName>Schema, type <FormName>FormData } from '@/schema/<domain>';
 
 interface <FormName>Props {
   onSubmit: (data: <FormName>FormData) => Promise<void>;
@@ -128,7 +153,6 @@ export const <FormName> = memo<<FormName>Props>(({ onSubmit, isLoading }) => {
     formState: { errors, isSubmitting },
   } = useForm<<FormName>FormData>({
     resolver: zodResolver(<formName>Schema),
-    mode: 'onBlur', // リアルタイムバリデーション
   });
 
   const handleFormSubmit = useCallback(
@@ -206,15 +230,16 @@ export const <FormName> = memo<<FormName>Props>(({ onSubmit, isLoading }) => {
 
 ## フォームモード
 
+**既定（`onSubmit`）のまま使う。** 既存フォームは `mode` を一つも指定していない。
+
 ```typescript
-useForm({
-  resolver: zodResolver(schema),
-  mode: 'onBlur',    // フィールドを離れたときにバリデーション
-  // mode: 'onChange',  // 入力中にバリデーション（UX注意）
-  // mode: 'onSubmit',  // 送信時のみバリデーション
-  // mode: 'onTouched', // タッチ後にバリデーション
+useForm<LoginFormData>({
+  resolver: zodResolver(loginSchema),
 });
 ```
+
+⚠️ `mode: 'onChange'` は入力のたびに全フィールドを検証するので、まだ触って
+いない欄にもエラーが出る。変えるなら理由をコメントに残すこと。
 
 ## デフォルト値
 
@@ -302,41 +327,55 @@ const handleFormSubmit = async (data: FormData) => {
 <input {...register('email')} />
 ```
 
-## Radix UI統合
+## 自前の UI コンポーネントを使う
+
+⛔ **`@radix-ui/react-form` は依存に入っていない。** import すると解決
+できない。入っている Radix は `dialog` / `select` / `checkbox` /
+`radio-group` / `tabs` / `toast` / `tooltip` / `dropdown-menu` /
+`toggle-group` の9つだけで、Form は含まれていない。
+
+フォームの入力欄は `src/components/ui/` の `Input` / `Textarea` /
+`Select` / `Checkbox` / `RadioGroup` を使う。`Input` は `label` と
+`error` を受け取り、**ラベルの関連付けとエラー表示を内側で面倒を見る**。
 
 ```typescript
-import * as Form from '@radix-ui/react-form';
+import { Input } from '@/components/ui/input/input';
+import { Button } from '@/components/ui/button/button';
 
 export const LoginForm = memo(() => {
-  const { register, handleSubmit, formState: { errors } } = useForm();
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({ resolver: zodResolver(loginSchema) });
 
   return (
-    <Form.Root onSubmit={handleSubmit(onSubmit)}>
-      <Form.Field name="email">
-        <Form.Label>メールアドレス</Form.Label>
-        <Form.Control asChild>
-          <input type="email" {...register('email')} />
-        </Form.Control>
-        {errors.email && (
-          <Form.Message>{errors.email.message}</Form.Message>
-        )}
-      </Form.Field>
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <Input
+        type="email"
+        label="メールアドレス"
+        error={errors.email?.message}
+        fullWidth
+        {...register('email')}
+      />
 
-      <Form.Submit asChild>
-        <button type="submit">送信</button>
-      </Form.Submit>
-    </Form.Root>
+      <Button type="submit">送信</Button>
+    </form>
   );
 });
 ```
+
+⚠️ `label` を省いて自分で `<label>` を書かないこと。`Input` は `id` と
+`aria-label` の両方を出しており、省くと**支援技術からもテストからも
+名前で引けなくなる**。
 
 ## よくあるパターン
 
 ### OTP入力（6桁数字）
 
 ```typescript
-// schema.ts
-export const otpSchema = z.object({
+// src/schema/otp.ts（実物は otpFormSchema）
+export const otpFormSchema = z.object({
   otp: z
     .string()
     .length(6, 'OTPコードは6桁で入力してください')

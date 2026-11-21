@@ -15,55 +15,75 @@ argument-hint: [file-path]
 
 #### プライマリカラー（ブルー系）
 
+値は `src/styles/global/_theme.scss` の **CSS 変数**が正。SCSS 側
+（`src/styles/_variables.scss`）はそれを参照しているだけ。
+
 ```scss
-$primary-50: #e3f2fd;
-$primary-100: #bbdefb;
-$primary-200: #90caf9;
-$primary-300: #64b5f6;
-$primary-400: #42a5f5;
-$primary-500: #2390d6;  // メインカラー
-$primary-600: #1e88e5;
-$primary-700: #1976d2;
-$primary-800: #1565c0;
-$primary-900: #0d47a1;
+// src/styles/global/_theme.scss（抜粋）
+--primary-900: #004a7c;
+--primary-800: #005a94;
+--primary-700: #006bac;
+--primary-600: #0d7ec4;
+--primary-500: #1878b9;  // メインカラー
+--primary-400: #4ca3dd;
+--primary-300: #75b7e5;
+--primary-200: #9ecbed;
+--primary-100: #c7dff5;
+--primary-50:  #e8f3fb;
 ```
+
+```scss
+// src/styles/_variables.scss — SCSS からはこちらを使う
+$primary-500: var(--primary-500);
+```
+
+⚠️ **ここに値をコピーしない。** テーマを変えたときに2箇所がズレ、
+「変数を使っているのに色が合わない」という形でしか現れない。
 
 #### セカンダリカラー（オレンジ系）
 
 ```scss
-$secondary-50: #fff3e0;
-$secondary-100: #ffe0b2;
-$secondary-200: #ffcc80;
-$secondary-300: #ffb74d;
-$secondary-400: #ffa726;
-$secondary-500: #ff9800;
-$secondary-600: #ff9600;  // メインカラー
-$secondary-700: #f57c00;
-$secondary-800: #ef6c00;
-$secondary-900: #e65100;
+// src/styles/global/_theme.scss（抜粋）
+--secondary-900: #cc7700;
+--secondary-800: #e68600;
+--secondary-700: #ff9500;
+--secondary-600: #ff9600;  // メインカラー
+--secondary-500: #ffa31a;
+--secondary-400: #ffb044;
+--secondary-300: #ffbd6e;
+--secondary-200: #ffca98;
+--secondary-100: #ffd7c2;
+--secondary-50:  #fff0e5;
 ```
+
+⚠️ **Material の Orange パレットではない。** `#ffe0b2` `#f57c00` `#e65100` の
+ような値は**このリポジトリに存在しない**。番号が大きいほど濃い（primary と
+同じ向き）で、Material とは逆。
 
 #### ダークブルーグレー（ナビゲーション・サイドバー用）
 
 ```scss
-$dark-blue-50: #eceff1;
-$dark-blue-100: #cfd8dc;
-$dark-blue-200: #b0bec5;
-$dark-blue-300: #90a4ae;
-$dark-blue-400: #78909c;
-$dark-blue-500: #607d8b;
-$dark-blue-600: #2f3e51;  // メインカラー
-$dark-blue-700: #455a64;
-$dark-blue-800: #37474f;
-$dark-blue-900: #263238;
+// src/styles/global/_theme.scss（抜粋）
+--dark-blue-900: #1a2332;
+--dark-blue-800: #232d3f;
+--dark-blue-700: #2d3748;
+--dark-blue-600: #2f3e51;  // メインカラー
+--dark-blue-500: #3d4f65;
+--dark-blue-400: #546479;
+--dark-blue-300: #6b798d;
+--dark-blue-200: #8895a8;
+--dark-blue-100: #a5b1c2;
+--dark-blue-50:  #dce1e8;
 ```
+
+⚠️ こちらも Material の Blue Grey ではない。
 
 #### チェックポイント
 
 - ❌ **ハードコードされた色値を使用していないか**
   ```scss
   // NG
-  background-color: #2390d6;
+  background-color: #1878b9;
   color: #ff9600;
 
   // OK
@@ -72,6 +92,19 @@ $dark-blue-900: #263238;
   ```
 
 - ✅ **デザインシステムの変数を使用しているか**
+
+- ⚠️ **文字色にパレットを直接使わない。** `--text-*` のセマンティック変数を使う。
+  パレットを直に当てるとテーマ切替で背景との比が崩れる（`_theme.scss:106`）。
+  実例: `--primary-500` は暗い面では 2.90:1 で AA を満たさないため、
+  ダークテーマでは `--text-link` が `--primary-400` に差し替わる。
+
+  ```scss
+  // NG — テーマが変わると比が崩れる
+  color: $primary-500;
+
+  // OK
+  color: var(--text-link);
+  ```
 
 ### 2. タイポグラフィ
 
@@ -90,21 +123,26 @@ $font-family-base: 'Noto Sans JP', sans-serif;
 
 #### ブレークポイント
 
+`src/styles/_variables.scss` にあるのは**この5つだけ**。
+
 ```scss
-// モバイル
-$breakpoint-mobile: 375px;  // 最小幅
-
-// タブレット（現時点では未使用）
-$breakpoint-tablet: 768px;
-
-// PC
-$breakpoint-desktop: 1024px;
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+$breakpoint-2xl: 1536px;
 ```
+
+⛔ `$breakpoint-mobile` / `$breakpoint-tablet` / `$breakpoint-desktop` は
+**存在しない**。書くと SCSS のコンパイルが落ちる。
+
+⚠️ `@media` の中では CSS 変数が使えないため、ここだけ SCSS 変数のまま
+維持している（`_variables.scss` のコメント）。
 
 #### チェックポイント
 
 - ✅ **375px（モバイル）で表示が崩れないか**
-- ✅ **1024px以上（PC）で適切にレイアウトされているか**
+- ✅ **1024px以上（`$breakpoint-lg`）で適切にレイアウトされているか**
 - ✅ **メディアクエリを使用しているか**
 
 ```scss
@@ -112,7 +150,7 @@ $breakpoint-desktop: 1024px;
 .container {
   padding: 8px;
 
-  @media (min-width: $breakpoint-desktop) {
+  @media (min-width: $breakpoint-lg) {
     padding: 16px;
   }
 }
@@ -346,25 +384,24 @@ const Modal = ({ isOpen, onClose, children }) => {
 - ARIAラベルを適切に付与
 
 ### ⚠️ 改善推奨項目
-- `src/components/MovieCard/movieCard.module.scss:15` - ハードコードされた色値 `#2390d6` → `$primary-500`を使用
-- `src/components/SearchBar/searchBar.tsx:23` - displayNameが未設定
+- `<file>.module.scss:<line>` - ハードコードされた色値 `#1878b9` → `$primary-500` を使用
+- `<file>.tsx:<line>` - displayNameが未設定
 
 ### ❌ 必須修正項目
-- `src/components/Modal/modal.module.scss:8` - HTML要素 `div` を直接スタイリング → クラス名を付与
-- `src/components/Button/button.tsx:10` - React.memoを使用していない
+- `<file>.module.scss:<line>` - HTML要素 `div` を直接スタイリング → クラス名を付与
+- `<file>.tsx:<line>` - React.memoを使用していない
 ```
 
 ## 参考ドキュメント
 
 - `.claude/documents/design-system.md` - デザインシステム詳細
-- `.claude/documents/component-patterns.md` - コンポーネントパターン
 - `.claude/documents/architecture.md` - アーキテクチャ設計
 
 ## 使用例
 
 ```bash
 # 特定のファイルをチェック
-/design-check src/components/MovieCard/movieCard.tsx
+/design-check src/components/ui/button/button.tsx
 
 # コンポーネントディレクトリ全体をチェック
 /design-check src/components/

@@ -109,13 +109,15 @@ export const metadata: Metadata = {
 import { Metadata } from 'next';
 
 interface PageProps {
-  params: { id: string };
+  // ⚠️ Next 15 以降、`params` も `searchParams` も **Promise**
+  params: Promise<{ id: string }>;
 }
 
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
-  const data = await fetchData(params.id);
+  const { id } = await params;
+  const data = await fetchData(id);
 
   return {
     title: `${data.title} | Movie App`,
@@ -129,13 +131,18 @@ export async function generateMetadata({
 }
 
 export default async function Page({ params }: PageProps) {
-  const data = await fetchData(params.id);
+  const { id } = await params;
+  const data = await fetchData(id);
 
   return <div>{/* ... */}</div>;
 }
 ```
 
-## ルートグループ
+> ⚠️ `generateMetadata` とページ本体で**同じ取得を2回**走らせないこと。
+> `src/app/movies/[id]/page.tsx` は `findVisibleMovie`（内部が
+> `unstable_cache`）を両方から呼んで1回に畳んでいる。
+
+## ディレクトリ構成
 
 ### 認証ページ
 
@@ -401,13 +408,14 @@ export default function ProtectedPage() {
 ```typescript
 // src/app/movies/[id]/page.tsx
 interface PageProps {
-  params: { id: string };
-  searchParams: { [key: string]: string | string[] | undefined };
+  // ⛔ どちらも **Promise**。同期で読むと型で弾かれる
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function MoviePage({ params, searchParams }: PageProps) {
-  const { id } = params;
-  const { tab } = searchParams;
+  const { id } = await params;
+  const { tab } = await searchParams;
 
   return (
     <div>

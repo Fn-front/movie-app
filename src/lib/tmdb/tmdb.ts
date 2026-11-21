@@ -41,6 +41,7 @@ import type {
   PersonMovieCredit,
   TMDbReleaseDateCountry,
   TMDbResponse,
+  UserListRefreshFields,
   WatchProviders,
 } from '@/lib/types';
 
@@ -220,6 +221,50 @@ export async function getMovieDismissSignals(
   return {
     keywords: (keywords?.keywords ?? []).map((k) => k.name),
     directorName: director?.name ?? null,
+    releaseYear: Number.isNaN(releaseYear) ? null : releaseYear,
+  };
+}
+
+/**
+ * 利用者リストの表示列を取り直すために必要な項目をまとめて取得する（#433）
+ *
+ * favorites / watchlist / dismissed_movies の3テーブルぶんを**1リクエスト**で
+ * 賄う。`credits` は `TMDB_MOVIE_DETAIL_APPEND` にも入っているが、
+ * `keywords` は入っていないため、ここだけ append を書き下している。
+ *
+ * ⚠️ `getMovieDismissSignals` と同じエンドポイント・同じ append を叩くが、
+ * あちらは3項目しか返さない。統合しないのは、あちらの戻り値が
+ * **AIプロンプトの入力**という別の用途に固定されているため（キーワードを
+ * IDではなく名称で返しているのもその都合）。ここで列を足すと、
+ * 使わない項目がプロンプト側へ漏れていく。
+ *
+ * @param movieId - 映画ID
+ * @returns 表示列と推薦シグナル。取得できなかった項目は null または空配列
+ * @throws TMDbへの問い合わせに失敗した場合（404 は `isTmdbNotFoundError` で判定）
+ */
+export async function getMovieListRefreshFields(
+  movieId: number | string,
+): Promise<UserListRefreshFields> {
+  const response = await tmdbClient.get<
+    MovieDetail & { keywords?: { keywords?: { id: number; name: string }[] } }
+  >(TMDB_ENDPOINTS.MOVIE_DETAIL(movieId), {
+    params: { append_to_response: 'credits,keywords' },
+  });
+
+  const { title, poster_path, release_date, genres, credits, keywords } =
+    response.data;
+  const director = credits?.crew?.find((member) => member.job === 'Director');
+  const releaseYear = Number.parseInt((release_date ?? '').slice(0, 4), 10);
+
+  return {
+    title: title ?? null,
+    posterPath: poster_path ?? null,
+    // ⚠️ `??` ではなく `||`。TMDbは公開日未定の作品に**空文字**を返し、
+    //    DATE 列へ渡すと 22007 で UPDATE が丸ごと落ちる（#433 作業1と同じ）
+    releaseDate: release_date || null,
+    genreIds: (genres ?? []).map((genre) => genre.id),
+    directorName: director?.name ?? null,
+    keywords: (keywords?.keywords ?? []).map((k) => k.name),
     releaseYear: Number.isNaN(releaseYear) ? null : releaseYear,
   };
 }

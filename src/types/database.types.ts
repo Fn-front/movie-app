@@ -234,7 +234,9 @@ export type Database = {
           poster_path: string | null;
           release_year: number | null;
           title: string;
+          tmdb_deleted_at: string | null;
           tmdb_movie_id: number;
+          tmdb_refreshed_at: string | null;
           updated_at: string;
           user_id: string;
         };
@@ -248,7 +250,9 @@ export type Database = {
           poster_path?: string | null;
           release_year?: number | null;
           title: string;
+          tmdb_deleted_at?: string | null;
           tmdb_movie_id: number;
+          tmdb_refreshed_at?: string | null;
           updated_at?: string;
           user_id: string;
         };
@@ -262,7 +266,9 @@ export type Database = {
           poster_path?: string | null;
           release_year?: number | null;
           title?: string;
+          tmdb_deleted_at?: string | null;
           tmdb_movie_id?: number;
+          tmdb_refreshed_at?: string | null;
           updated_at?: string;
           user_id?: string;
         };
@@ -285,7 +291,9 @@ export type Database = {
           rating: number;
           release_date: string | null;
           title: string;
+          tmdb_deleted_at: string | null;
           tmdb_movie_id: number;
+          tmdb_refreshed_at: string | null;
           updated_at: string;
           user_id: string;
         };
@@ -297,7 +305,9 @@ export type Database = {
           rating: number;
           release_date?: string | null;
           title: string;
+          tmdb_deleted_at?: string | null;
           tmdb_movie_id: number;
+          tmdb_refreshed_at?: string | null;
           updated_at?: string;
           user_id: string;
         };
@@ -309,7 +319,9 @@ export type Database = {
           rating?: number;
           release_date?: string | null;
           title?: string;
+          tmdb_deleted_at?: string | null;
           tmdb_movie_id?: number;
+          tmdb_refreshed_at?: string | null;
           updated_at?: string;
           user_id?: string;
         };
@@ -1095,40 +1107,43 @@ export type Database = {
       watchlist: {
         Row: {
           added_at: string;
-          backdrop_path: string | null;
           deleted_at: string | null;
           id: string;
           notes: string | null;
           poster_path: string | null;
           release_date: string | null;
           title: string;
+          tmdb_deleted_at: string | null;
           tmdb_movie_id: number;
+          tmdb_refreshed_at: string | null;
           user_id: string;
           watched_at: string | null;
         };
         Insert: {
           added_at?: string;
-          backdrop_path?: string | null;
           deleted_at?: string | null;
           id?: string;
           notes?: string | null;
           poster_path?: string | null;
           release_date?: string | null;
           title: string;
+          tmdb_deleted_at?: string | null;
           tmdb_movie_id: number;
+          tmdb_refreshed_at?: string | null;
           user_id: string;
           watched_at?: string | null;
         };
         Update: {
           added_at?: string;
-          backdrop_path?: string | null;
           deleted_at?: string | null;
           id?: string;
           notes?: string | null;
           poster_path?: string | null;
           release_date?: string | null;
           title?: string;
+          tmdb_deleted_at?: string | null;
           tmdb_movie_id?: number;
+          tmdb_refreshed_at?: string | null;
           user_id?: string;
           watched_at?: string | null;
         };
@@ -1212,6 +1227,7 @@ export type Database = {
           streaming_provider_ids: Json;
           streaming_resumed: boolean;
           title: string;
+          tmdb_deleted_at: string;
           tmdb_movie_id: number;
           total_count: number;
           watched_at: string;

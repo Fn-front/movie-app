@@ -163,6 +163,29 @@ export interface Crew {
 /**
  * 「興味なし」の傾向学習に使う映画のメタ情報
  */
+/**
+ * 利用者リストの表示列を取り直すときに使う項目（#433）
+ *
+ * favorites / watchlist / dismissed_movies が保持している TMDb 由来の列を
+ * すべて賄う。テーブルごとに使う項目は違う。
+ */
+export interface UserListRefreshFields {
+  /** 邦題。TMDbが返さない場合は null */
+  title: string | null;
+  /** ポスター画像のパス。TMDbが返さない場合は null */
+  posterPath: string | null;
+  /** 公開日（YYYY-MM-DD）。空文字は null に正規化済み */
+  releaseDate: string | null;
+  /** ジャンルID配列 */
+  genreIds: number[];
+  /** 監督名。クレジットに無ければ null */
+  directorName: string | null;
+  /** TMDbキーワード名の配列 */
+  keywords: string[];
+  /** 公開年。公開日が不明なら null */
+  releaseYear: number | null;
+}
+
 export interface DismissSignals {
   /** TMDbキーワード名の配列（テーマ傾向） */
   keywords: string[];

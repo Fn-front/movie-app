@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/cleanup-expired-records",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-user-lists",
+      "schedule": "0 12 * * 1"
     }
   ]
 }

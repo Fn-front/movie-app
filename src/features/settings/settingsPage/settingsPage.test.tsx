@@ -253,10 +253,14 @@ describe('SettingsPage', () => {
     });
 
     /*
-      ⚠️ 4つの節で1回しか取りにいかない。節ごとに取ると同じ問い合わせが並び、
-      同じ画面の中で値が揃わない時間も生まれる
+      ⚠️ **これが数えているのはページ側の1本だけ。** 本番では二段階認証の節が
+      自前で `/api/user/totp` を叩く（`useTwoFactorSettings.loadStatus`）ので
+      計2本になる。ここではその節をモックに差し替えているため見えない。
+
+      それでも固定する価値はある。`useHasPassword` を節ごとに呼ぶ形へ戻すと
+      ここが増えて落ちる
     */
-    it('問い合わせは1回だけ', async () => {
+    it('useHasPassword の取得は1回だけ', async () => {
       sessionSaysNoPassword();
 
       render(<SettingsPage />);

@@ -108,6 +108,62 @@ describe('useHasPassword', () => {
     await waitFor(() => expect(result.current).toBe(true));
   });
 
+  /*
+    ⛔ `useState<boolean | null>(null)` を `useState(sessionHasPassword)` に
+    変える退行を捕まえる。初期化してしまうと、セッションが後から確定しても
+    古い値を抱えたままになり、**取得に失敗した利用者に逆の欄を出し続ける**
+  */
+  it('セッション由来の値が後から変わっても追従する', async () => {
+    mockFetch.mockRejectedValue(new Error('network down'));
+
+    const { result, rerender } = renderHook(
+      ({ session }) => useHasPassword(session),
+      { initialProps: { session: true } },
+    );
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    expect(result.current).toBe(true);
+
+    rerender({ session: false });
+
+    expect(result.current).toBe(false);
+  });
+
+  /*
+    ⚠️ 古い応答で新しい応答を上書きしない。マウント時の取得が遅れて
+    イベント由来の取得より後に解決すると、設定前の false が設定後の true を
+    潰し、直したはずの行き止まりが静かに戻る
+  */
+  it('追い越された応答は捨てる', async () => {
+    let resolveSlow: ((value: unknown) => void) | undefined;
+    mockFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSlow = resolve;
+      }),
+    );
+
+    const { result } = renderHook(() => useHasPassword(false));
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+
+    // 設定が終わった合図。こちらが先に解決する
+    respondWith({ data: { hasPassword: true } });
+    act(() => {
+      window.dispatchEvent(new Event(PASSWORD_CHANGE_EVENT));
+    });
+    await waitFor(() => expect(result.current).toBe(true));
+
+    // 遅れていたマウント時の応答（設定前の値）が後から届く
+    await act(async () => {
+      resolveSlow?.({
+        ok: true,
+        json: async () => ({ data: { hasPassword: false } }),
+      });
+    });
+
+    expect(result.current).toBe(true);
+  });
+
   it('アンマウント後は合図を受け取らない', async () => {
     respondWith({ data: { hasPassword: false } });
 

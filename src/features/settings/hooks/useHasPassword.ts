@@ -18,10 +18,9 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { API_ENDPOINTS } from '@/constants';
-import { PASSWORD_CHANGE_EVENT } from '@/constants/auth';
+import { API_ENDPOINTS, PASSWORD_CHANGE_EVENT } from '@/constants';
 
 /**
  * パスワードの有無
@@ -30,8 +29,23 @@ import { PASSWORD_CHANGE_EVENT } from '@/constants/auth';
  * @returns API で取れていればその値、取れていなければ `sessionHasPassword`
  */
 export function useHasPassword(sessionHasPassword: boolean): boolean {
-  /** API から取れた値。`null` は「まだ分からない」 */
+  /**
+   * API から取れた値
+   *
+   * ⛔ **`null`（まだ分からない）で始める。** `sessionHasPassword` で
+   * 初期化すると、セッションが後から確定しても古い値を抱えたままになる。
+   * `null` のあいだは毎レンダー最新の引数へ倒れる。
+   */
   const [fetched, setFetched] = useState<boolean | null>(null);
+
+  /**
+   * 何番目の取得か
+   *
+   * ⚠️ **古い応答で新しい応答を上書きしない。** マウント時の取得が遅れて
+   * `PASSWORD_CHANGE_EVENT` 由来の取得より後に解決すると、設定前の `false` が
+   * 設定後の `true` を潰し、**直したはずの行き止まりが静かに戻る**。
+   */
+  const latestRequestRef = useRef(0);
 
   /**
    * ⚠️ 失敗しても `error` を立てない。利用者が触っているのは別の節なので、
@@ -39,11 +53,17 @@ export function useHasPassword(sessionHasPassword: boolean): boolean {
    * これまでと同じ振る舞いに留まる。
    */
   const load = useCallback(async () => {
+    latestRequestRef.current += 1;
+    const requestId = latestRequestRef.current;
+
     try {
       const response = await fetch(API_ENDPOINTS.USER_TOTP);
       if (!response.ok) return;
 
       const json = await response.json();
+
+      // 追い越されていたら捨てる
+      if (requestId !== latestRequestRef.current) return;
 
       // 真偽値でなければ `null` のまま残す。呼び出し側がセッション由来の
       // 値へ倒せるようにするため、ここで握り潰さない
@@ -76,6 +96,10 @@ export function useHasPassword(sessionHasPassword: boolean): boolean {
    * 合図を出しているのは `ChangePasswordForm`（#1372 / #1378）。
    * これが無いと、初回パスワードを設定した利用者は再読み込みするまで
    * 行き止まりのままになる。
+   *
+   * ⚠️ **タブは跨がない。** 別タブで設定した場合はこの合図が届かないので、
+   * 開きっぱなしの画面は最大5分古いまま（再訪・リロードで直る）。
+   * セッション自体も同じだけ古いので、ここだけ塞いでも揃わない。
    */
   useEffect(() => {
     window.addEventListener(PASSWORD_CHANGE_EVENT, load);

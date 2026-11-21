@@ -8,7 +8,7 @@
 import { memo, useCallback } from 'react';
 import { IoAdd, IoCheckmark } from 'react-icons/io5';
 
-import { MOVIE_ACTION_LABELS } from '@/constants/strings';
+import { MOVIE_ACTION_LABELS } from '@/constants';
 import { cn } from '@/utils/cn';
 
 import styles from './watchlistAddButton.module.scss';

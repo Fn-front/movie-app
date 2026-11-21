@@ -174,7 +174,7 @@ describe('FavoriteButton', () => {
     it('movieTitle を渡すと登録済みのラベルは「の」で繋がる', () => {
       render(
         <FavoriteButton
-          favorite={{ id: 1, rating: 8 }}
+          favorite={{ id: 'fav-1', rating: 8 }}
           onClick={jest.fn()}
           movieTitle='テスト映画'
         />,

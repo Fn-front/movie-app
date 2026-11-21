@@ -5,8 +5,7 @@ import favoriteButtonStyles from '@/features/favorites/component/favoriteButton/
 import watchlistAddButtonStyles from '@/features/watchlist/component/watchlistAddButton/watchlistAddButton.module.scss';
 
 import { MovieTile } from './movieTile';
-import { IMAGE_SIZES } from '@/constants';
-import { MOVIE_ACTION_LABELS } from '@/constants/strings';
+import { IMAGE_SIZES, MOVIE_ACTION_LABELS } from '@/constants';
 import type { MovieCacheItem } from '@/lib/api/movies/movies';
 
 // --- Helpers ---

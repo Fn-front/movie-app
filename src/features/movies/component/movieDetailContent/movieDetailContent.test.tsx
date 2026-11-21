@@ -354,6 +354,12 @@ describe('MovieDetailContent', () => {
           name: `${movieWithPoster.title}をウォッチリストに追加`,
         }),
       ).not.toBeInTheDocument();
+      // お気に入り側も同じ（片方だけ固定すると意図表明として片手落ち）
+      expect(
+        screen.queryByRole('button', {
+          name: `${movieWithPoster.title}をお気に入りに追加`,
+        }),
+      ).not.toBeInTheDocument();
     });
 
     it('追加済みの場合は削除ボタンが表示される', () => {

@@ -8,7 +8,7 @@
 import { memo, useCallback } from 'react';
 import { IoHeart, IoHeartOutline } from 'react-icons/io5';
 
-import { MOVIE_ACTION_LABELS } from '@/constants/strings';
+import { MOVIE_ACTION_LABELS } from '@/constants';
 import type { MovieFavoriteInfo } from '@/lib/api/favorites/favorites';
 import { cn } from '@/utils/cn';
 

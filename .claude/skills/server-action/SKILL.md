@@ -186,10 +186,10 @@ export async function addToWatchlist(params: AddMovieParams) {
       throw error;
     }
 
-    // ⚠️ **ここで `revalidatePath` を呼んでも意味が無い。**
-    //    ウォッチリストの画面はクライアント専用（`ssr: false` ＋ React Query）
-    //    なので、再検証すべきサーバー側のキャッシュが無い。
-    //    一覧の更新はクライアント側のクエリ無効化で行う
+    // ⚠️ **ここで `revalidatePath` を呼んでも一覧は更新されない。**
+    //    ウォッチリストの画面はクライアント専用（`ssr: false` ＋ React Query）。
+    //    シェルのキャッシュは無効化されるが、そこに一覧データが入っていない。
+    //    更新はクライアント側のクエリ無効化で行う
 
     return {
       success: true,
@@ -263,18 +263,24 @@ export async function updateAction() {
   //    打ち間違いは「キャッシュが更新されない」という形でしか現れない。
   //    パスは `src/constants/common.ts` の `ROUTES` から取ること
   //
-  // ⚠️ **再検証するものが無いパスを渡しても同じ**。このリポジトリで
-  //    `revalidatePath` が実際に効くのは `src/app/page.tsx`
-  //    （`export const revalidate = 3600` ＋ サーバー側の取得）くらいで、
+  // ⚠️ **再検証するものが無いパスを渡しても同じ**。効くのは
+  //    **サーバーで描画・取得している**画面だけ。このリポジトリなら
+  //    `/`（`src/app/page.tsx`）、`/movies/[id]`、`/person/[id]` の3つで、
   //    `/watchlist` のようにクライアント専用（`ssr: false` ＋ React Query）の
-  //    画面に投げても何も起きない
+  //    画面に投げても**一覧は更新されない**（シェルのキャッシュは無効化
+  //    されるが、そこにデータが入っていない）
   revalidatePath(ROUTES.HOME);
 
-  // 特定のパスとその子パスを再検証
-  revalidatePath(ROUTES.HOME, 'page');
+  // 動的セグメントを持つパスは **`type` が必須**。パターンで渡して
+  // 一致するページをまとめて再検証する
+  revalidatePath('/movies/[id]', 'page');
 
-  // レイアウト全体を再検証
-  revalidatePath(ROUTES.HOME, 'layout');
+  // そのレイアウトと配下のページを再検証
+  revalidatePath('/movies/[id]', 'layout');
+
+  // ⛔ **`revalidatePath('/', 'layout')` は別物**。Next のドキュメントが
+  //    「Revalidating all data」として載せている形で、**Client Cache ごと
+  //    全キャッシュを捨てる**。「トップのレイアウトだけ」ではない
 
   return { success: true };
 }
